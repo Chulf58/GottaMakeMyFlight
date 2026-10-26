@@ -66,7 +66,7 @@ func test_the_result_opens_when_the_doors_close_with_made_missed_and_reasons() -
 	)
 
 
-func test_the_result_lists_at_most_three_reasons() -> void:
+func test_the_result_lists_three_reasons_and_sums_the_rest_as_other() -> void:
 	_close_doors_with_misses(4)
 	var stages := [
 		Passenger.Stage.CHECKIN_QUEUE,
@@ -80,11 +80,43 @@ func test_the_result_lists_at_most_three_reasons() -> void:
 		p.missed_stuck = Passenger.Stuck.NONE
 	_hud.dismiss_result()
 	_hud.show_result_for(PassengerTestWorld.FLIGHT)
-	var reason_lines := 0
-	for line in _hud.result_text().split("\n"):
-		if line.begins_with("1 "):
-			reason_lines += 1
-	assert_int(reason_lines).is_equal(3)
+	var lines := _hud.result_text().split("\n")
+	assert_int(lines.size()).is_equal(2 + 3 + 1)
+	assert_str(lines[lines.size() - 1]).is_equal("1  Other")
+
+
+func test_the_listed_rows_add_up_to_missed() -> void:
+	var summary := {
+		"flight": "GMF1",
+		"made": 32,
+		"missed": 292,
+		"reasons":
+		[
+			{"text": "a", "count": 262},
+			{"text": "b", "count": 15},
+			{"text": "c", "count": 10},
+			{"text": "d", "count": 3},
+			{"text": "e", "count": 2},
+		],
+	}
+	var lines := FlightResultPanel.text_for(summary).split("\n")
+	assert_array(Array(lines)).contains(["262  a", "15  b", "10  c", "5  Other"])
+	var total := 0
+	for line in lines.slice(2):
+		total += int(line.split(" ")[0])
+	assert_int(total).is_equal(292)
+
+
+func test_no_other_row_when_every_reason_is_listed() -> void:
+	var summary := {
+		"flight": "GMF1",
+		"made": 0,
+		"missed": 3,
+		"reasons": [{"text": "a", "count": 2}, {"text": "b", "count": 1}],
+	}
+	assert_str(FlightResultPanel.text_for(summary)).is_equal(
+		"GMF1 result\nMade 0   Missed 3\n2  a\n1  b"
+	)
 
 
 func test_dismissing_hides_the_result_and_it_stays_hidden() -> void:
