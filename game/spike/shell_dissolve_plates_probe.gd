@@ -183,10 +183,29 @@ func _static_plates() -> void:
 
 ## A world point in a doorway's frame: `along` the facade from its centre,
 ## `inward` toward the interior, at shell height `y`.
+## The outward direction comes from the Doorway_n glTF extras. A point asked
+## to lie inside (`inward` > 0) must sit against that outward direction, or the
+## probe is invalid; `inward` < 0 (outside) is not a sample this probe takes.
 func _doorway_point(doorway: ShellView.Doorway, along: float, inward: float, y: float) -> Vector3:
+	var number := String((doorway.door as Node3D).name).trim_prefix("Door_")
+	var marker := _shell.find_child("Doorway_" + number, true, false) as Node3D
+	var out: Array = (marker.get_meta("extras") as Dictionary).get("outward", [])
+	var outward := Vector3(out[0], out[1], out[2])
+	var along_dir := Vector3(1.0, 0.0, 0.0)
+	if absf(outward.x) > absf(outward.z):
+		along_dir = Vector3(0.0, 0.0, 1.0)
 	var centre := _shell.global_transform.affine_inverse() * doorway.centre_world
-	var outward := 1.0 if centre.z > 0.0 else -1.0
-	return _world(Vector3(centre.x + along, y, centre.z - outward * inward))
+	var local := centre + along_dir * along - outward * inward
+	local.y = y
+	var point := _world(local)
+	if inward != 0.0:
+		var shift := point - doorway.centre_world
+		shift.y = 0.0
+		var dot := shift.dot(_shell.global_basis * outward)
+		print("INWARD Door_%s inward=%.1f point=%s dot_outward=%.2f" % [number, inward, point, dot])
+		if inward < 0.0 or dot >= 0.0:
+			_invalid("Door_%s: an inside sample lies outside (dot %.2f)" % [number, dot])
+	return point
 
 
 ## Rays from the camera to the top of each jamb must first hit that jamb.
@@ -213,7 +232,7 @@ func _prove_open_doorway(label: String, doorway: ShellView.Doorway, img: Image) 
 	var kerb_top := ShellCutaway.FLOOR_Y + InteriorKit.STUB_HEIGHT - 0.01
 	var lintel := _doorway_point(doorway, 0.0, 0.0, kerb_top)
 	var kerb := _doorway_point(doorway, 2.3, 0.0, kerb_top)
-	var floor_inside := _doorway_point(doorway, 0.0, -2.0, ShellCutaway.FLOOR_Y)
+	var floor_inside := _doorway_point(doorway, 0.0, 2.0, ShellCutaway.FLOOR_Y)
 	var lum := [_luma(img, lintel), _luma(img, kerb), _luma(img, floor_inside)]
 	var open_ok := absf(lum[0] - lum[2]) < absf(lum[0] - lum[1]) and absf(lum[1] - lum[2]) > 0.1
 	print(
@@ -587,7 +606,7 @@ func _prove(label: String, subject: String) -> bool:
 			var doorway := _view.doorways[(6 if subject == "door6" else 3) - 1]
 			for jamb in doorway.jambs:
 				framed.append_array(_corners(_box_of(jamb.find_children("*", "MeshInstance3D"))))
-			var inside := _doorway_point(doorway, 0.0, -1.5, ShellCutaway.FLOOR_Y)
+			var inside := _doorway_point(doorway, 0.0, 1.5, ShellCutaway.FLOOR_Y)
 			floor_points = [inside]
 		"corner_se":
 			framed = _corners(_named_box(["Facade_E_12", "Facade_S_22"]))
