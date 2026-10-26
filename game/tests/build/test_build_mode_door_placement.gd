@@ -93,7 +93,7 @@ func test_the_ghost_shows_a_walled_edge_cell_as_placeable() -> void:
 	assert_bool(_mode.check(edit).ok).is_true()
 	_mode._update_ghost(point)
 	assert_bool(_mode._ghost.visible).is_true()
-	assert_str(_mode._status.text).is_equal("Facing auto")
+	assert_str(_mode.status_text()).is_equal("Facing auto")
 	assert_array(_mode.grid.object_ids()).is_empty()
 
 
@@ -119,7 +119,7 @@ func test_r_overrides_the_automatic_facing_until_the_tool_is_picked_again() -> v
 	_mode.set_tool(BuildMode.Tool.ENTRANCE)
 	_mode.rotate_facing()
 	assert_int(_mode.facing).is_equal(1)
-	assert_str(_mode._status.text).is_equal("Facing 1")
+	assert_str(_mode.status_text()).is_equal("Facing 1")
 	var sideways := _mode.apply_at(_mode.grid.cell_to_world(EDGE_CELLS[SOUTH]))
 	assert_int(sideways.reason).is_equal(BuildResult.Reason.DOOR_NOT_ON_EDGE)
 	_mode.set_tool(BuildMode.Tool.ENTRANCE)
@@ -134,7 +134,7 @@ func test_a_glass_wall_behind_the_door_is_not_replaced() -> void:
 	assert_int(result.reason).is_equal(BuildResult.Reason.DOOR_WALLED)
 	assert_int(_mode.grid.wall_kind(cell, NORTH)).is_equal(BuildGrid.WallKind.GLASS)
 	assert_array(_mode.grid.object_ids()).is_empty()
-	assert_str(_mode._status.text).is_equal(
+	assert_str(_mode.status_text()).is_equal(
 		"Facing auto  Take down the glass or door wall behind the exit"
 	)
 
@@ -154,7 +154,7 @@ func test_a_plain_wall_that_holds_a_door_wall_is_not_replaced() -> void:
 func test_the_status_line_says_what_to_do() -> void:
 	_mode.set_tool(BuildMode.Tool.ENTRANCE)
 	_mode.apply_at(_mode.grid.cell_to_world(Vector2i(4, 4)))
-	assert_str(_mode._status.text).is_equal(
+	assert_str(_mode.status_text()).is_equal(
 		"Facing auto  Put the entrance on the outside edge of the floor"
 	)
 	_mode.set_tool(BuildMode.Tool.SEATS)
@@ -162,4 +162,4 @@ func test_the_status_line_says_what_to_do() -> void:
 	_mode.set_tool(BuildMode.Tool.EXIT)
 	var blocked := _mode.apply_at(_mode.grid.cell_to_world(EDGE_CELLS[NORTH]))
 	assert_int(blocked.reason).is_equal(BuildResult.Reason.INTERACTION_BLOCKED)
-	assert_str(_mode._status.text).is_equal("Facing auto  Clear the floor in front of the exit")
+	assert_str(_mode.status_text()).is_equal("Facing auto  Clear the floor in front of the exit")

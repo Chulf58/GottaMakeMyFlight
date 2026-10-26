@@ -1,8 +1,8 @@
 class_name BuildMode
 extends Node3D
-## The player's build tools over a BuildGrid. Keys 1 to 6 (or the toolbar)
-## pick floor, wall, desk, scanner, seats or remove; the toolbar also has
-## glass, door, entrance and exit; Esc picks none; R turns the object;
+## The player's build tools over a BuildGrid. Keys 1 to 9 and 0 (or
+## BuildMenu's cards) pick floor, wall, desk, scanner, seats, remove, glass,
+## door, entrance and exit; Esc picks none; R turns the object;
 ## left-click applies, a drag along an edge lays a wall or glass line, and a
 ## drag with Floor or Remove fills or clears a rectangle (AreaDrag; Esc or
 ## right-click cancels it, a single click acts as it always did). A
@@ -11,6 +11,10 @@ extends Node3D
 ## in from the edge under the mouse until R is pressed (DoorPlacement.auto_facing()).
 
 signal grid_changed
+## Emitted by every set_tool(), NONE included, so the menu can follow it.
+signal tool_changed(new_tool: Tool)
+## Emitted when the status line's text changes.
+signal status_changed(text: String)
 
 enum Tool { NONE, FLOOR, WALL, DESK, SCANNER, SEATS, REMOVE, GLASS, DOOR, ENTRANCE, EXIT }
 
@@ -21,6 +25,10 @@ const TOOL_ACTIONS := {
 	&"build_tool_scanner": Tool.SCANNER,
 	&"build_tool_seats": Tool.SEATS,
 	&"build_tool_remove": Tool.REMOVE,
+	&"build_tool_glass": Tool.GLASS,
+	&"build_tool_door": Tool.DOOR,
+	&"build_tool_entrance": Tool.ENTRANCE,
+	&"build_tool_exit": Tool.EXIT,
 	&"build_tool_none": Tool.NONE,
 }
 const TOOL_OBJECTS := {
@@ -34,19 +42,6 @@ const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
 	Tool.GLASS: BuildGrid.WallKind.GLASS,
 	Tool.DOOR: BuildGrid.WallKind.DOOR,
-}
-## Toolbar order. Glass, door, entrance and exit have no key yet.
-const TOOL_LABELS := {
-	Tool.FLOOR: "1 Floor",
-	Tool.WALL: "2 Wall",
-	Tool.GLASS: "Glass",
-	Tool.DOOR: "Door",
-	Tool.DESK: "3 Desk",
-	Tool.SCANNER: "4 Scanner",
-	Tool.SEATS: "5 Seats",
-	Tool.ENTRANCE: "Entrance",
-	Tool.EXIT: "Exit",
-	Tool.REMOVE: "6 Remove",
 }
 ## The door tools by the name the status line uses for them.
 const DOOR_NAMES := {Tool.ENTRANCE: "entrance", Tool.EXIT: "exit"}
@@ -92,8 +87,7 @@ var _valid_material := _ghost_material(VALID_TINT)
 var _invalid_material := _ghost_material(INVALID_TINT)
 var _marker_material := _ghost_material(MARKER_TINT)
 var _area_remove_material := _ghost_material(AREA_REMOVE_TINT)
-var _status := Label.new()
-var _buttons: Dictionary = {}
+var _status := ""
 var _hover_key := ""
 var _dragging := false
 var _drag_side := -1
@@ -124,7 +118,6 @@ func _ready() -> void:
 	_view.refresh(grid)
 	_ghost.name = "Ghost"
 	add_child(_ghost)
-	_build_toolbar()
 	set_tool(tool)
 
 
@@ -178,9 +171,8 @@ func set_tool(new_tool: Tool) -> void:
 	tool = new_tool
 	_auto_facing = true
 	_hover_key = ""
-	for key in _buttons:
-		_buttons[key].set_pressed_no_signal(key == tool)
 	_show_status(null)
+	tool_changed.emit(tool)
 
 
 func rotate_facing() -> void:
@@ -289,7 +281,7 @@ func cancel_area() -> void:
 
 ## The text on the status line.
 func status_text() -> String:
-	return _status.text
+	return _status
 
 
 ## BuildGrid.validate() plus the entrance and exit rules (DoorPlacement.check()).
@@ -448,38 +440,12 @@ func _edit_key(edit: BuildEdit) -> String:
 	)
 
 
-func _build_toolbar() -> void:
-	var layer := CanvasLayer.new()
-	layer.name = "BuildToolbar"
-	add_child(layer)
-	var panel := PanelContainer.new()
-	panel.position = Vector2(16, 16)
-	layer.add_child(panel)
-	var row := HBoxContainer.new()
-	panel.add_child(row)
-	for key in TOOL_LABELS:
-		var button := Button.new()
-		button.text = TOOL_LABELS[key]
-		button.toggle_mode = true
-		button.focus_mode = Control.FOCUS_NONE
-		button.pressed.connect(set_tool.bind(key))
-		row.add_child(button)
-		_buttons[key] = button
-	var turn := Button.new()
-	turn.text = "R Rotate"
-	turn.focus_mode = Control.FOCUS_NONE
-	turn.pressed.connect(rotate_facing)
-	row.add_child(turn)
-	_status.custom_minimum_size = Vector2(360, 0)
-	row.add_child(_status)
-
-
 func _show_status(result: BuildResult) -> void:
 	if _area.active:
-		_status.text = _area.size_label()
+		_set_status(_area.size_label())
 		return
 	if _status_note != "":
-		_status.text = _status_note
+		_set_status(_status_note)
 		return
 	var text := ""
 	if TOOL_OBJECTS.has(tool):
@@ -489,4 +455,11 @@ func _show_status(result: BuildResult) -> void:
 		if DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
 			reason = DOOR_HINTS[result.reason] % DOOR_NAMES[tool]
 		text += ("  " if text != "" else "") + reason
-	_status.text = text
+	_set_status(text)
+
+
+func _set_status(text: String) -> void:
+	if text == _status:
+		return
+	_status = text
+	status_changed.emit(text)
