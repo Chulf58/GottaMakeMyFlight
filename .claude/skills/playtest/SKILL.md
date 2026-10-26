@@ -16,7 +16,8 @@ The agent running this skill owns no game code. A playtest reports; it never edi
 3. **Make the evidence folder:** `tools/blender/out/playtest/<yyyymmdd>-<charter>/` (gitignored). Every screenshot you cite is copied there.
 4. **Launch:** `run_project` with `projectPath: "C:/Users/chulf/Gotta-make-my-flight/game"` (the Windows path; a /mnt/c path fails). The result lists "Security scan findings" about `preload` and `load`; those are Tier 3 warnings, not blockers. Never set `GODOT_MCP_DISABLE_SECURITY`.
 5. **Prove the hook is on** before anything else: run the snapshot script (section 3). `attached: true` means the hook is on. `attached: false` or a missing `PlaytestHook` node means `GMMF_PLAYTEST=1` did not reach the game (see `tools/godot-mcp-wsl.sh`); stop and report a blocker, because without the hook this is only a screenshot session.
-6. **Pause at once** with `simulate_input` key `Space`, then confirm `paused: true` in a snapshot. The sim runs from launch: the first flight's doors close about 1:30 after start, and the clock keeps running between your tool calls. Space toggles, so tap it once and check; do not tap it blind. Unpause only to watch the sim: `Shift+3` gives 3x, `Shift+1` gives 1x, or press Space again.
+6. **Pause at once** with `simulate_input` key `Space`, then confirm `paused: true` in a snapshot. The sim runs from launch: the first flight's doors close about 1:30 after start, and the clock keeps running between your tool calls. Space toggles, so tap it once and check; do not tap it blind. Unpause only to watch the sim: `Shift+3` gives 3x, `Shift+1` gives 1x, or press Space again. `Shift+N` unpauses as well as setting the speed, so a Space tap after it pauses again; check `paused` in a snapshot whenever you are unsure which state you are in.
+7. **No intro dialogue.** The game normally opens paused under an intro dialogue (once per session). `GMMF_PLAYTEST=1` skips it, so a playtest launch starts with the clock running and no dialogue to dismiss. If an intro dialogue does show, the hook is not on (step 5).
 
 Runtime tools take one command at a time. A `take_screenshot` sent while `get_ui_elements` is in flight is rejected ("another command is in flight"). Send runtime calls one after another, never in the same parallel block.
 
@@ -41,7 +42,36 @@ func execute(scene_tree: SceneTree) -> Variant:
 ```
 
 - **One placement, one call.** To place with a tool, one `run_script` can warp and queue the whole input: `warp_mouse(AT)`, then `Input.parse_input_event` for the tool key (press and release `InputEventKey` with `physical_keycode` and `keycode` set), then a left `InputEventMouseButton` press and release. This goes through the game's real input handlers and is logged in the input record.
+- **Several warp-and-click steps in one `run_script` need a frame between them.** The viewport mouse position updates on the next frame, so without a pause every click lands on the last warp. Put `await scene_tree.process_frame` after each `warp_mouse` (before the event that reads the position); a whole build, floor drags included, then works in one script:
+
+```gdscript
+extends RefCounted
+
+func execute(scene_tree: SceneTree) -> Variant:
+	for at in [Vector2(700, 500), Vector2(900, 500)]:
+		scene_tree.root.warp_mouse(at)
+		await scene_tree.process_frame
+		# ... press and release the tool key / mouse button here
+	return scene_tree.root.get_mouse_position()
+```
+
 - **A drag (floor or remove rectangle, wall line) needs a motion event after each warp.** Warp to the start, press (`simulate_input` `mouse_button` `pressed: true`), warp to the end, then `simulate_input` `mouse_motion` (any `relative_x`/`relative_y`), a short `wait`, and `mouse_button` `pressed: false`. Without the motion event only the first cell is applied. The status line shows the rectangle size (`15 x 14`) while the drag is live and `Placed 210` after the release.
+- **Wheel zoom has no `simulate_input` form either.** Warp the mouse to an empty spot of the 3D view first (the camera reads the wheel as unhandled input, so a panel under the cursor would take it), then queue the wheel events in the same `run_script`; each press event is one zoom step, so send several for a large zoom:
+
+```gdscript
+extends RefCounted
+
+func execute(scene_tree: SceneTree) -> Variant:
+	scene_tree.root.warp_mouse(Vector2(960, 540))
+	for i in 5:
+		var wheel := InputEventMouseButton.new()
+		wheel.button_index = MOUSE_BUTTON_WHEEL_UP   # WHEEL_DOWN zooms out
+		wheel.position = Vector2(960, 540)
+		wheel.pressed = true
+		Input.parse_input_event(wheel)
+	return scene_tree.root.get_mouse_position()
+```
+
 - Work out screen coordinates from a screenshot of the paused view; the grid cell under a point is in the `build_edit` / `build_refused` event (`cell`). Aim, place, read the event, correct. Cells near the camera are bigger than far ones.
 - Setting state by calling game methods from `run_script` is allowed to save time, but it skips the input path. Say so in the report and use real input for whatever the charter is about.
 
@@ -64,7 +94,7 @@ The snapshot is JSON-safe: `attached`, `session`, `log_path`, `input_log_path`, 
 - Files: `<session>.jsonl` (events) and `<session>.input.jsonl` (mouse buttons, positions, modifiers, mouse moves at most every 50 ms, only the keys the game reads). The newest 10 sessions are kept.
 - There is no python in WSL. Summarise with `node -e`: parse each line with `JSON.parse`, group `anomaly` events by `data.kind` and `data.state`, count `passenger_stuck` by `data.reason`, list `error` events. Cite the file path and the line index (`i`) of every event you quote.
 
-**Anomaly kinds:** `stuck_too_long` (a passenger stuck more than 10 sim seconds), `no_route`, `off_grid`, `view_drift` and `view_missing` (a passenger or object node that does not match the sim), `frame_time` (average frame time over 50 ms). An anomaly is raised once per subject until it clears. An `error` event or a non-empty `errors` list is a script error the game printed; treat every one as a bug candidate, even when nothing looks wrong on screen.
+**Anomaly kinds:** `stuck_too_long` (a passenger stuck more than 10 sim seconds), `no_route`, `off_grid`, `view_drift` and `view_missing` (a passenger or object node that does not match the sim), `frame_time` (average frame time over 50 ms). An anomaly is raised once per subject until it clears. An `error` event or a non-empty `errors` list is a script error the game printed; treat every one as a bug candidate, even when nothing looks wrong on screen. One exception: under `--audio-driver Dummy` the `errors` list can hold WASAPI lines such as `GetBufferSize` or `output_device invalidated`. That is audio-device noise, not a game bug; list it under tool notes.
 
 **Seed and replay.** The seed of the world is `seed` in the snapshot and the session start line. The hook records the input but ships no replay tool. `run_project` passes no arguments, so `--playtest-seed=<n>` cannot be used from it; a replay needs a direct Godot launch, which is a separate windowed run. In a bug report give the seed and the exact input record (section 5); that is what a developer replays by hand.
 
@@ -79,12 +109,12 @@ The snapshot is JSON-safe: `attached`, `session`, `log_path`, `input_log_path`, 
 
 ### Smoke charter (after each game-facing merge)
 
-Aim: what the merge changed, and the path every player takes. Budget: about 25 tool calls and one launch.
+Aim: what the merge changed, and the path every player takes. Budget: about 55 tool calls and one launch. The first smoke run showed 25 is too few: the setup, one build, one flight and the opened screenshots use most of it, so plan 55.
 
 1. Read the merge's diff summary and name 2 to 4 things it touched (a HUD element, a build tool, a flight stage).
 2. Launch, prove the hook, pause.
 3. Check the HUD at start: every label shows text, nothing overlaps, the build menu matches the tool keys.
-4. Build the minimum terminal with real input (floor, entrance, exit, desk, scanner, seats) and read each `build_edit` event. Then unpause to 3x, run the flight to `DEPARTED`.
+4. Build the minimum terminal with real input (floor, entrance, exit, desk, scanner, seats) and read each `build_edit` event. Inside the Toon shell the Entrance and Exit tools only accept the shell's doors, so a placement away from one is refused with `DOOR_NOT_AT_SHELL_DOOR`. **Shortcut:** on an empty grid, open the Debug panel (`DebugToggle`) and click its `Starter terminal` button, which builds a whole terminal with the entrance on landside door B and the exit on gate C. Use it when the charter is not about building, and say in the report that the terminal came from the shortcut. Then unpause to 3x, run the flight to `DEPARTED`.
 5. Exercise each changed thing once with real input and once at an edge (a refused placement, a second click, Esc mid-drag).
 6. Pass if: no `error` events, no open anomaly that is not explained by the build (one desk will always back up a queue), every screenshot opened and clean, and the changed things behave as the diff says. Report pass or fail in one line plus any bug.
 
