@@ -244,7 +244,7 @@ func _ghost_plate(label: String, tool: BuildMode.Tool, cell: Vector2i) -> void:
 				label,
 				cell,
 				verdict.ok,
-				_build._status.text,
+				_build.status_text(),
 				_build.get_node("Ghost").visible,
 				root.get_mouse_position()
 			]

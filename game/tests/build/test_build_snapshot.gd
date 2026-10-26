@@ -59,7 +59,8 @@ func test_malformed_snapshot_is_rejected_and_grid_unchanged() -> void:
 	other.apply(BuildEdit.paint_floor(Vector2i(1, 1), BuildGrid.FLOOR_TILE, 3))
 	var before := JSON.stringify(other.to_snapshot())
 	var bad_cases: Array[Dictionary] = []
-	for key in good.keys():
+	# Every required key; "origin" is optional (test_build_grid_origin.gd).
+	for key in BuildGrid.SNAPSHOT_KEYS:
 		var missing := good.duplicate(true)
 		missing.erase(key)
 		bad_cases.append(missing)
