@@ -88,3 +88,9 @@ func test_starting_budget_covers_a_starter_terminal_at_roughly_half() -> void:
 	var cost := _starter_cost()
 	var share := float(cost) / PriceTable.STARTING_BUDGET
 	assert_float(share).is_between(0.4, 0.6)
+
+
+## Tuning values set when the cafe pieces joined the catalog.
+func test_the_cafe_pieces_have_their_set_prices() -> void:
+	assert_int(PriceTable.price_of_object(&"cafe_counter")).is_equal(600)
+	assert_int(PriceTable.price_of_object(&"cafe_table")).is_equal(300)

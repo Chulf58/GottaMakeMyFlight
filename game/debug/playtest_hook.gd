@@ -435,6 +435,7 @@ func _on_node_added(node: Node) -> void:
 func _on_edit_applied(edit: BuildEdit, result: BuildResult) -> void:
 	var data := PlaytestState.edit_data(edit)
 	data["object_id"] = result.object_id
+	data["room_id"] = result.room_id
 	_log.add(clock.tick, "build_edit", data)
 
 

@@ -22,7 +22,8 @@ static func point(at: Vector3) -> Array[float]:
 	return [snappedf(at.x, 0.01), snappedf(at.y, 0.01), snappedf(at.z, 0.01)]
 
 
-## What an edit asks for: its kind and cell, plus the fields that kind uses.
+## What an edit asks for: its kind and cell, plus the fields that kind uses. A
+## room removal names its room id instead of a cell.
 static func edit_data(edit: BuildEdit) -> Dictionary:
 	var data := {"kind": enum_name(BuildEdit.Kind.keys(), edit.kind), "cell": cell(edit.cell)}
 	match edit.kind:
@@ -39,11 +40,18 @@ static func edit_data(edit: BuildEdit) -> Dictionary:
 			data["facing"] = edit.facing
 		BuildEdit.Kind.REMOVE_OBJECT:
 			data["object_id"] = edit.object_id
+		BuildEdit.Kind.PLACE_ROOM:
+			data["room_type"] = String(edit.room_type)
+			data["rect"] = [edit.cell.x, edit.cell.y, edit.room_size.x, edit.room_size.y]
+		BuildEdit.Kind.REMOVE_ROOM:
+			data.erase("cell")
+			data["room_id"] = edit.room_id
 	return data
 
 
-## Floor cells, walls by kind (each edge counted once), objects by type, and
-## the entrances and exits with their ids and anchor cells.
+## Floor cells, walls by kind (each edge counted once), objects by type, the
+## entrances and exits with their ids and anchor cells, and the rooms with
+## their type, rectangle and RoomRules status.
 static func grid_summary(grid: BuildGrid) -> Dictionary:
 	var floors := 0
 	var walls := {}
@@ -82,7 +90,25 @@ static func grid_summary(grid: BuildGrid) -> Dictionary:
 		"objects": objects,
 		"entrances": entrances,
 		"exits": exits,
+		"rooms": _rooms(grid),
 	}
+
+
+static func _rooms(grid: BuildGrid) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for room_id in grid.room_ids():
+		var room := grid.get_room(room_id)
+		var area: Rect2i = room["rect"]
+		var status := RoomRules.status(grid, room_id)
+		var entry := {
+			"id": room_id,
+			"type": String(room["type"]),
+			"rect": [area.position.x, area.position.y, area.size.x, area.size.y],
+			"ready": status.ok,
+			"notes": Array(status.notes),
+		}
+		out.append(entry)
+	return out
 
 
 ## Passenger counts: total spawned, by stage name (stages with none left out),

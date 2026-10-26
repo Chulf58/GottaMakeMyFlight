@@ -69,8 +69,8 @@ func test_a_furnished_open_room_is_ready() -> void:
 	assert_array(Array(status.notes)).is_empty()
 	assert_str(status.headline()).is_equal("Ready")
 	assert_int(status.seats).is_equal(2)
-	assert_int(status.base_spend).is_equal(RoomTypes.get_type(&"cafe").base_spend)
-	assert_int(status.base_spend).is_greater(0)
+	# The cafe's base spend is a tuning value: a change to it changes this test.
+	assert_int(status.base_spend).is_equal(15)
 
 
 func test_each_extra_table_adds_two_seats() -> void:
