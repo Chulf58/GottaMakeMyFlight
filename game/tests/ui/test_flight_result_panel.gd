@@ -104,6 +104,40 @@ func test_the_dismiss_button_hides_the_result() -> void:
 	assert_bool(_hud.is_result_open()).is_false()
 
 
+func test_two_flights_closing_together_are_shown_one_after_the_other() -> void:
+	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(10, 20))
+	_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_world.sim.spawn_now("GMF202")
+	_world.sim.spawn_now("GMF202")
+	_world.run_to(21)
+	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_true()
+	assert_str(_hud.result_text()).contains("GMF101 result")
+	assert_str(_hud.result_text()).contains("Missed 1")
+	# The second result waits while the first is open.
+	_hud.refresh()
+	assert_str(_hud.result_text()).contains("GMF101 result")
+	_hud.dismiss_result()
+	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_true()
+	assert_str(_hud.result_text()).contains("GMF202 result")
+	assert_str(_hud.result_text()).contains("Missed 2")
+	_hud.dismiss_result()
+	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_false()
+
+
+func test_a_later_closure_does_not_replace_an_open_result() -> void:
+	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(100, 200))
+	_close_doors_with_misses(1)
+	_world.run_to(201)
+	_hud.refresh()
+	assert_str(_hud.result_text()).contains("GMF101 result")
+	_hud.dismiss_result()
+	_hud.refresh()
+	assert_str(_hud.result_text()).contains("GMF202 result")
+
+
 func test_a_flight_that_was_already_closed_is_not_announced_again() -> void:
 	_close_doors_with_misses(1)
 	_hud.dismiss_result()

@@ -72,6 +72,10 @@ var layout := TerminalLayout.new()
 var grid: BuildGrid
 var tick := 0
 var last_batch_seed := 0
+## Scheduled passengers dropped when their flight's doors closed, by flight id:
+## {"no_entrance": n, "late": n}. "no_entrance" counts those dropped while the
+## terminal had no entrance, "late" those who simply had not arrived yet.
+var no_shows := {}
 var tick_usec_last := 0
 var tick_usec_max := 0
 var tick_usec_total := 0
@@ -196,15 +200,8 @@ func active_count() -> int:
 	return _passengers.size() - _made - _missed
 
 
-## Scheduled passengers who have not spawned yet, for one flight or (with no
-## flight_id) for all of them.
-func pending_spawns(flight_id := "") -> int:
-	if flight_id == "":
-		return _schedule.size()
-	var count := 0
-	for entry in _schedule:
-		count += int(entry["flight"] == flight_id)
-	return count
+func pending_spawns() -> int:
+	return _schedule.size()
 
 
 ## The lane at a station in order, front first. A desk keeps the passenger it
@@ -330,6 +327,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	tick = loaded["tick"]
 	_next_id = loaded["next_id"]
 	last_batch_seed = loaded["last_batch_seed"]
+	no_shows = loaded["no_shows"]
 	_schedule = loaded["schedule"]
 	_queues = loaded["queues"]
 	_passengers = loaded["passengers"]
@@ -374,7 +372,21 @@ func _spawn(flight_id: String, variant: int) -> Passenger:
 	return p
 
 
+## Missed passengers are the ones already in the terminal. Those still on the
+## schedule for a closed flight will never board, so they are dropped and
+## counted as no-shows, with the cause that holds now.
 func _close_doors() -> void:
+	var cause := "no_entrance" if layout.entrances.is_empty() else "late"
+	var kept: Array[Dictionary] = []
+	for entry in _schedule:
+		if flights.is_doors_closed(entry["flight"]):
+			var counts: Dictionary = no_shows.get(entry["flight"], {"no_entrance": 0, "late": 0})
+			counts[cause] += 1
+			no_shows[entry["flight"]] = counts
+		else:
+			kept.append(entry)
+	if kept.size() != _schedule.size():
+		_schedule = kept
 	for p in _passengers:
 		if not p.is_done() and flights.is_doors_closed(p.flight_id):
 			_finish(p, false)

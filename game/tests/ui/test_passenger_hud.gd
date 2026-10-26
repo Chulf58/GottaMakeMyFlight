@@ -76,6 +76,18 @@ func test_a_spawned_debug_batch_replaces_an_earlier_refusal() -> void:
 	later.free_all()
 
 
+func test_a_refusal_after_a_spawned_batch_keeps_the_earlier_seed() -> void:
+	_hud.press_debug_spawn()
+	var seed := _world.sim.last_batch_seed
+	assert_int(seed).is_not_equal(0)
+	_world.run_to(21)
+	_hud.press_debug_spawn()
+	assert_int(_world.sim.last_batch_seed).is_equal(seed)
+	assert_str(_hud.status_text()).contains("no flight is open")
+	_hud.refresh()
+	assert_str(_hud.seed_text()).is_equal("Debug batch: 300 passengers, seed %d" % seed)
+
+
 func test_speed_buttons_set_the_clock() -> void:
 	_hud.press_speed(3)
 	assert_int(_world.clock.speed).is_equal(3)

@@ -77,19 +77,53 @@ func test_reasons_are_sorted_by_count_largest_first() -> void:
 	assert_int(reasons[1]["count"]).is_equal(1)
 
 
-func test_passengers_who_never_arrived_because_there_is_no_entrance_are_counted() -> void:
-	var world := _bare_room(false)
-	world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 5)
+func test_reasons_that_tie_sort_by_text_ascending() -> void:
+	var world := _bare_room()
+	var ids: Array[int] = []
+	for i in 5:
+		ids.append(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	world.run_to(21)
-	assert_int(world.sim.passenger_ids().size()).is_equal(0)
-	assert_int(world.sim.pending_spawns(PassengerTestWorld.FLIGHT)).is_equal(5)
-	assert_int(world.sim.pending_spawns("OTHER")).is_equal(0)
+	var fates := [
+		Passenger.Stage.SECURITY_QUEUE,
+		Passenger.Stage.SECURITY_QUEUE,
+		Passenger.Stage.CHECKIN_QUEUE,
+		Passenger.Stage.CHECKIN_QUEUE,
+		Passenger.Stage.SEATED
+	]
+	for i in 5:
+		world.passenger(ids[i]).missed_stage = fates[i]
+		world.passenger(ids[i]).missed_stuck = Passenger.Stuck.NONE
+	var reasons: Array = FlightResult.summarize(world.sim, PassengerTestWorld.FLIGHT)["reasons"]
+	var got := []
+	for reason in reasons:
+		got.append("%d %s" % [reason["count"], reason["text"]])
+	assert_array(got).is_equal(
+		[
+			"2 Still queuing for check-in",
+			"2 Still queuing for security",
+			"1 At the gate, but not boarded in time"
+		]
+	)
+
+
+func test_passengers_who_made_the_flight_are_counted_apart_from_the_missed() -> void:
+	var world := PassengerTestWorld.reference_world()
+	_worlds.append(world)
+	for i in 2:
+		world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	world.run_to(1700)
+	var late := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	world.run_to(1900)
 	var summary := FlightResult.summarize(world.sim, PassengerTestWorld.FLIGHT)
-	assert_int(summary["missed"]).is_equal(0)
+	assert_int(summary["made"]).is_equal(2)
+	assert_int(summary["missed"]).is_equal(1)
 	var reasons: Array = summary["reasons"]
 	assert_int(reasons.size()).is_equal(1)
-	assert_int(reasons[0]["count"]).is_equal(5)
-	assert_str(reasons[0]["text"]).contains("entrance")
+	assert_int(reasons[0]["count"]).is_equal(1)
+	var p := world.passenger(late)
+	assert_str(reasons[0]["text"]).is_equal(
+		FlightResult.reason_text(p.missed_stage, p.missed_stuck)
+	)
 
 
 func test_the_summary_ignores_other_flights() -> void:
@@ -102,26 +136,45 @@ func test_the_summary_ignores_other_flights() -> void:
 	assert_array(summary["reasons"]).is_empty()
 
 
-func test_every_stage_and_stuck_status_has_a_reason_text() -> void:
-	var texts := {}
-	for stage in Passenger.Stage.values():
-		if stage == Passenger.Stage.MADE or stage == Passenger.Stage.MISSED:
-			continue
-		var text := FlightResult.reason_text(stage, Passenger.Stuck.NONE)
-		assert_str(text).is_not_empty()
-		texts[text] = true
-	for stuck in Passenger.Stuck.values():
-		if stuck == Passenger.Stuck.NONE:
-			continue
-		var text := FlightResult.reason_text(Passenger.Stage.TO_CHECKIN, stuck)
-		assert_str(text).is_not_empty()
-		texts[text] = true
-	# Stuck wins over the stage, so a stuck reason differs from the stage's own.
-	(
-		assert_str(FlightResult.reason_text(Passenger.Stage.TO_CHECKIN, Passenger.Stuck.NO_CHECKIN))
-		. is_not_equal(FlightResult.reason_text(Passenger.Stage.TO_CHECKIN, Passenger.Stuck.NONE))
-	)
-	assert_int(texts.size()).is_greater(6)
+func test_each_stage_has_its_exact_reason_text() -> void:
+	var gate := "At the gate, but not boarded in time"
+	var late_exit := "Left the gate too late for the plane"
+	var expected := {
+		Passenger.Stage.SPAWNED: "Arrived after the doors closed",
+		Passenger.Stage.TO_CHECKIN: "Still walking to check-in",
+		Passenger.Stage.CHECKIN_QUEUE: "Still queuing for check-in",
+		Passenger.Stage.CHECKIN: "Still at the check-in desk",
+		Passenger.Stage.TO_SECURITY: "Still walking to security",
+		Passenger.Stage.SECURITY_QUEUE: "Still queuing for security",
+		Passenger.Stage.SECURITY: "Still at the security scanner",
+		Passenger.Stage.TO_GATE: "Still walking to the gate",
+		Passenger.Stage.SITTING_DOWN: gate,
+		Passenger.Stage.SEATED: gate,
+		Passenger.Stage.STANDING: gate,
+		Passenger.Stage.STANDING_UP: gate,
+		Passenger.Stage.TO_EXIT: late_exit,
+		Passenger.Stage.APRON: late_exit,
+	}
+	# Every stage a passenger can be missed in is in the table, so a stage added
+	# to the enum without a reason fails here.
+	assert_int(expected.size()).is_equal(Passenger.Stage.size() - 2)
+	for stage in expected:
+		assert_str(FlightResult.reason_text(stage, Passenger.Stuck.NONE)).is_equal(expected[stage])
+
+
+func test_each_stuck_status_has_its_exact_reason_text_and_beats_the_stage() -> void:
+	var expected := {
+		Passenger.Stuck.NO_CHECKIN: "No check-in desk to go to",
+		Passenger.Stuck.NO_SECURITY: "No security scanner to go to",
+		Passenger.Stuck.QUEUE_FULL: "Waiting outside a full queue",
+		Passenger.Stuck.NO_ROUTE: "No walkable route",
+		Passenger.Stuck.EXIT_BLOCKED: "The exit to the plane was blocked",
+	}
+	assert_int(expected.size()).is_equal(Passenger.Stuck.size() - 1)
+	for stuck in expected:
+		assert_str(FlightResult.reason_text(Passenger.Stage.SEATED, stuck)).is_equal(
+			expected[stuck]
+		)
 
 
 func test_the_missed_stage_survives_a_save_and_load() -> void:

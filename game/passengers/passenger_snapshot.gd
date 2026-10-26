@@ -6,8 +6,16 @@ extends RefCounted
 ## Seat claims and walker counts are rebuilt from the passenger records.
 
 const KEYS := [
-	"save_version", "tick", "next_id", "last_batch_seed", "schedule", "passengers", "queues"
+	"save_version",
+	"tick",
+	"next_id",
+	"last_batch_seed",
+	"schedule",
+	"passengers",
+	"queues",
+	"no_shows",
 ]
+const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
 	"id",
 	"variant",
@@ -59,6 +67,14 @@ static func save(
 				}
 			)
 		)
+	var no_show_list := []
+	var flights: Array = sim.no_shows.keys()
+	flights.sort()
+	for flight in flights:
+		var entry := {"flight": flight}
+		for cause in NO_SHOW_CAUSES:
+			entry[cause] = sim.no_shows[flight][cause]
+		no_show_list.append(entry)
 	return {
 		"save_version": PassengerSim.SAVE_VERSION,
 		"tick": str(sim.tick),
@@ -67,6 +83,7 @@ static func save(
 		"schedule": schedule.duplicate(true),
 		"passengers": records,
 		"queues": queue_list,
+		"no_shows": no_show_list,
 	}
 
 
@@ -103,6 +120,10 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 	var queues := _queues(data["queues"], ids)
 	if queues.has("error"):
 		return queues
+	var no_shows := _no_shows(data["no_shows"])
+	if no_shows.has("error"):
+		return no_shows
+	out["no_shows"] = no_shows
 	out["schedule"] = schedule
 	out["passengers"] = passengers
 	out["queues"] = queues
@@ -141,7 +162,7 @@ static func _top_problem(data: Dictionary) -> String:
 		return "last_batch_seed must be a decimal string"
 	if not _whole(data["next_id"]) or int(data["next_id"]) < 1:
 		return "next_id must be a whole number, 1 or more"
-	for key in ["schedule", "passengers", "queues"]:
+	for key in ["schedule", "passengers", "queues", "no_shows"]:
 		if typeof(data[key]) != TYPE_ARRAY:
 			return "%s must be an array" % key
 	return ""
@@ -247,6 +268,22 @@ static func _cell(value: Variant, grid: BuildGrid, may_be_none: bool) -> Variant
 	if grid.in_bounds(cell) or (may_be_none and cell == Passenger.NO_CELL):
 		return cell
 	return null
+
+
+## {flight: {cause: count}} from the saved list, or a dictionary with "error".
+static func _no_shows(list: Array) -> Dictionary:
+	var out := {}
+	for entry in list:
+		var ok: bool = typeof(entry) == TYPE_DICTIONARY and entry.has("flight")
+		ok = ok and typeof(entry["flight"]) == TYPE_STRING and not out.has(entry["flight"])
+		for cause in NO_SHOW_CAUSES:
+			ok = ok and entry.has(cause) and _whole(entry[cause]) and int(entry[cause]) >= 0
+		if not ok:
+			return {"error": "a no-show entry is malformed or repeated"}
+		out[entry["flight"]] = {}
+		for cause in NO_SHOW_CAUSES:
+			out[entry["flight"]][cause] = int(entry[cause])
+	return out
 
 
 static func _queues(list: Array, ids: Dictionary) -> Dictionary:

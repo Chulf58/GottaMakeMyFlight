@@ -58,10 +58,10 @@ var _time_label := Label.new()
 var _speed_buttons: Array[Button] = []
 var _debug_panel := PanelContainer.new()
 var _result := FlightResultPanel.new()
-## The flight whose doors closed and whose result is not shown yet. The sim
-## marks the passengers missed after the doors_closed signal, so the panel
-## waits for the next refresh.
-var _unreported := ""
+## Flights whose doors closed and whose result is not shown yet, oldest first.
+## The sim marks the passengers missed after the doors_closed signal, so a
+## result waits for the next refresh, and for the open one to be dismissed.
+var _unreported: Array[String] = []
 
 
 func _ready() -> void:
@@ -153,9 +153,8 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func refresh() -> void:
-	if _unreported != "":
-		show_result_for(_unreported)
-		_unreported = ""
+	if not _unreported.is_empty() and not _result.visible:
+		show_result_for(_unreported.pop_front())
 	_time_label.text = time_text()
 	_flight_label.text = flight_text()
 	_counts_label.text = counts_text()
@@ -346,7 +345,7 @@ func _fit_follow() -> void:
 
 
 func _on_doors_closed(flight_id: String) -> void:
-	_unreported = flight_id
+	_unreported.append(flight_id)
 
 
 func _is_pristine(grid: BuildGrid) -> bool:

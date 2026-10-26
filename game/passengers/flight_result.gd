@@ -6,6 +6,9 @@ extends RefCounted
 ## status such as "no check-in desk" wins over the stage the passenger was in.
 
 const NEVER_ARRIVED := "Never arrived: the terminal has no entrance"
+const ARRIVED_LATE := "Did not arrive before the doors closed"
+## PassengerSim.no_shows causes: scheduled passengers dropped at doors close.
+const NO_SHOW_TEXT := {"no_entrance": NEVER_ARRIVED, "late": ARRIVED_LATE}
 
 const STUCK_TEXT := {
 	Passenger.Stuck.NO_CHECKIN: "No check-in desk to go to",
@@ -41,9 +44,10 @@ static func reason_text(stage: Passenger.Stage, stuck: Passenger.Stuck) -> Strin
 
 
 ## {"flight", "made", "missed", "reasons"} for one flight. "reasons" is a list of
-## {"text", "count"} sorted largest first (ties by text). Passengers still
-## waiting to spawn when no entrance exists never reached the terminal, so
-## they are a reason but are not in "missed".
+## {"text", "count"} sorted largest first (ties by text). Scheduled passengers
+## dropped when the doors closed (PassengerSim.no_shows) never reached the
+## terminal, so they are a reason but are not in "missed". Nothing here reads
+## the live schedule, so the result does not change after the doors close.
 static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 	var made := 0
 	var missed := 0
@@ -58,9 +62,10 @@ static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 			missed += 1
 			var text := reason_text(p.missed_stage, p.missed_stuck)
 			counts[text] = int(counts.get(text, 0)) + 1
-	var waiting := sim.pending_spawns(flight_id)
-	if waiting > 0:
-		counts[NEVER_ARRIVED] = waiting
+	var no_shows: Dictionary = sim.no_shows.get(flight_id, {})
+	for cause in NO_SHOW_TEXT:
+		if no_shows.get(cause, 0) > 0:
+			counts[NO_SHOW_TEXT[cause]] = no_shows[cause]
 	var reasons := []
 	for text in counts:
 		reasons.append({"text": text, "count": counts[text]})
