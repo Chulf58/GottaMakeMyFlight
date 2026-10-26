@@ -126,6 +126,17 @@ func test_a_side_drops_over_the_side_fade() -> void:
 	assert_float(_cut.side_levels[SOUTH]).is_equal_approx(1.0 - 0.1 / _cut.side_fade_seconds, 1e-6)
 
 
+## The gate multiplies: half a side under half a roof is a quarter cut, so a
+## gate that only switches on or off fails.
+func test_the_gate_scales_the_cut_by_the_roof_level() -> void:
+	_cut.roof_level = 0.5
+	_cut.side_levels = [0.0, 0.5, 0.0, 0.0]
+	assert_float(_cut.cut(SOUTH)).is_equal_approx(0.25, 1e-6)
+	_cut.roof_level = 0.2
+	_cut.side_levels = [0.0, 1.0, 0.0, 0.0]
+	assert_float(_cut.cut(SOUTH)).is_equal_approx(0.2, 1e-6)
+
+
 func test_the_facade_cuts_only_while_the_roof_is_gone() -> void:
 	_cut.snap(300.0, _eye(0.0))
 	assert_float(_cut.side_levels[SOUTH]).is_equal(1.0)

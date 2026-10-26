@@ -196,6 +196,19 @@ func test_full_dissolve_hides_this_roof_only() -> void:
 	assert_float(mat.next_pass.get_shader_parameter("dissolve")).is_equal(1.0)
 	var lights := _mesh(_a, "Lights_Upper").get_surface_override_material(0) as ShaderMaterial
 	assert_float(lights.get_shader_parameter("dissolve")).is_equal(1.0)
+	# Canopy and Poles (the struts) dissolve with Upper, surface and outline.
+	for node_name in ["Canopy", "Poles"]:
+		var part := _mesh(_a, node_name).get_surface_override_material(0) as ShaderMaterial
+		(
+			assert_float(part.get_shader_parameter("dissolve"))
+			. override_failure_message(node_name)
+			. is_equal(1.0)
+		)
+		(
+			assert_float(part.next_pass.get_shader_parameter("dissolve"))
+			. override_failure_message(node_name + " outline")
+			. is_equal(1.0)
+		)
 	for mi in _a.roof_nodes:
 		assert_bool(mi.visible).override_failure_message(String(mi.name)).is_false()
 	var other := _mesh(_b, "Upper").get_surface_override_material(0) as ShaderMaterial

@@ -172,8 +172,93 @@ func _static_plates() -> void:
 		var ok := _prove(label, pose[4])
 		var img := await _grab_now()
 		_log_state(label)
+		var subject: String = pose[4]
+		if subject.begins_with("door"):
+			var doorway := _view.doorways[(6 if subject == "door6" else 3) - 1]
+			ok = _prove_jambs(label, doorway) and ok
+			ok = (await _prove_open_doorway(label, doorway, img)) and ok
 		if ok:
 			_keep(img, label + ".png")
+
+
+## A world point in a doorway's frame: `along` the facade from its centre,
+## `inward` toward the interior, at shell height `y`.
+func _doorway_point(doorway: ShellView.Doorway, along: float, inward: float, y: float) -> Vector3:
+	var centre := _shell.global_transform.affine_inverse() * doorway.centre_world
+	var outward := 1.0 if centre.z > 0.0 else -1.0
+	return _world(Vector3(centre.x + along, y, centre.z - outward * inward))
+
+
+## Rays from the camera to the top of each jamb must first hit that jamb.
+func _prove_jambs(label: String, doorway: ShellView.Doorway) -> bool:
+	var ok := doorway.jambs.size() == 2
+	print("JAMBS %s count=%d" % [label, doorway.jambs.size()])
+	for jamb in doorway.jambs:
+		var box := _box_of(jamb.find_children("*", "MeshInstance3D"))
+		var top := Vector3(box.get_center().x, box.end.y - 0.02, box.get_center().z)
+		print("JAMB %s %s visible=%s top=%s" % [label, jamb.name, jamb.is_visible_in_tree(), top])
+		ok = jamb.is_visible_in_tree() and ok
+		ok = _rays_hit("%s/%s" % [label, jamb.name], [top], [String(jamb.name)], 0.3) and ok
+	if not ok:
+		_invalid("%s: jambs missing, hidden or occluded" % label)
+	return ok
+
+
+## Rendered proof that the hole drops the door bay's squashed lintel: the
+## pixels where the lintel's top would be (over the opening, at the kerb top
+## on the doorway line) must look like the floor inside, not like the kerb
+## beside the opening. Control: with the bay's holes switched off for one
+## render, the same pixels must look like the kerb (the check is engaged).
+func _prove_open_doorway(label: String, doorway: ShellView.Doorway, img: Image) -> bool:
+	var kerb_top := ShellCutaway.FLOOR_Y + InteriorKit.STUB_HEIGHT - 0.01
+	var lintel := _doorway_point(doorway, 0.0, 0.0, kerb_top)
+	var kerb := _doorway_point(doorway, 2.3, 0.0, kerb_top)
+	var floor_inside := _doorway_point(doorway, 0.0, -2.0, ShellCutaway.FLOOR_Y)
+	var lum := [_luma(img, lintel), _luma(img, kerb), _luma(img, floor_inside)]
+	var open_ok := absf(lum[0] - lum[2]) < absf(lum[0] - lum[1]) and absf(lum[1] - lum[2]) > 0.1
+	print(
+		(
+			"HOLE %s open lintel_luma=%.3f kerb_luma=%.3f floor_luma=%.3f ok=%s"
+			% [label, lum[0], lum[1], lum[2], open_ok]
+		)
+	)
+	var no_holes: Array[AABB] = []
+	for mat in doorway.materials:
+		ShellView.set_holes(mat, no_holes)
+	var shut := await _grab_now()
+	doorway.draw_open(true)
+	await _frames(2)
+	var ctrl := _luma(shut, lintel)
+	var ctrl_ok := absf(ctrl - lum[1]) < absf(ctrl - lum[2])
+	print("HOLE %s control_holes_off lintel_luma=%.3f ok=%s" % [label, ctrl, ctrl_ok])
+	if not (open_ok and ctrl_ok):
+		_invalid("%s: lintel over the opening not shown dropped (or control not engaged)" % label)
+	return open_ok and ctrl_ok
+
+
+## Mean luminance of the 3x3 pixels around where `world` projects.
+func _luma(img: Image, world: Vector3) -> float:
+	var at := Vector2i(_cam.unproject_position(world).round())
+	var total := 0.0
+	var count := 0
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var p := at + Vector2i(dx, dy)
+			if p.x >= 0 and p.y >= 0 and p.x < img.get_width() and p.y < img.get_height():
+				total += img.get_pixelv(p).get_luminance()
+				count += 1
+	print("  PIXEL world=%s screen=%s count=%d" % [world, at, count])
+	return total / maxf(count, 1.0)
+
+
+## The body name for a baked mesh: the jamb it belongs to, or the mesh's own.
+func _piece_name(mi: MeshInstance3D) -> String:
+	var node: Node = mi
+	while node != null and node != _shell:
+		if String(node.name).begins_with("Jamb_"):
+			return String(node.name)
+		node = node.get_parent()
+	return String(mi.name)
 
 
 ## Zoom strips at the real camera easing, captured on the frames where the
@@ -469,7 +554,7 @@ func _rebuild_occluders() -> void:
 		var shape_node := CollisionShape3D.new()
 		shape_node.shape = shape
 		var body := StaticBody3D.new()
-		body.set_meta("piece", String(mi.name))
+		body.set_meta("piece", _piece_name(mi))
 		body.add_child(shape_node)
 		_occluders.add_child(body)
 		bodies += 1
@@ -498,11 +583,12 @@ func _prove(label: String, subject: String) -> bool:
 			)
 			floor_points = [_world(Vector3(-5.0, 0.3, 11.0)), _world(Vector3(0.0, 0.3, 11.0))]
 		"door6", "door3":
-			var n := "6" if subject == "door6" else "3"
-			framed = _corners(_named_box(["Door_" + n, "Porch_" + n]))
-			var doorway := _local(_shell.find_child("Doorway_" + n, true, false) as Node3D)
-			var inward := -1.5 if doorway.z > 0.0 else 1.5
-			floor_points = [_world(Vector3(doorway.x, 0.3, doorway.z + inward))]
+			# The visible jambs, both of them, not the hidden door and porch.
+			var doorway := _view.doorways[(6 if subject == "door6" else 3) - 1]
+			for jamb in doorway.jambs:
+				framed.append_array(_corners(_box_of(jamb.find_children("*", "MeshInstance3D"))))
+			var inside := _doorway_point(doorway, 0.0, -1.5, ShellCutaway.FLOOR_Y)
+			floor_points = [inside]
 		"corner_se":
 			framed = _corners(_named_box(["Facade_E_12", "Facade_S_22"]))
 		"corner_nw":
