@@ -9,6 +9,7 @@ extends Node3D
 ## ghost shows the edit under the mouse, tinted by check(), so the preview and
 ## the click use the same rules. Entrances and exits turn themselves to face
 ## in from the edge under the mouse until R is pressed (DoorPlacement.auto_facing()).
+## Inside a terminal shell they snap to its Toon doors instead (ShellDefinition).
 
 signal grid_changed
 ## Emitted by every set_tool(), NONE included, so the menu can follow it.
@@ -53,6 +54,11 @@ const DOOR_HINTS := {
 	BuildResult.Reason.DOOR_WALLED: "Take down the glass or door wall behind the %s",
 	BuildResult.Reason.WALL_HOLDS_DOOR: "The wall behind the %s holds a door; pick another spot",
 }
+## The status line for a door tool refused with DOOR_NOT_AT_SHELL_DOOR.
+const SHELL_DOOR_HINTS := {
+	Tool.ENTRANCE: "Put the entrance on one of the building's landside doors",
+	Tool.EXIT: "Put the exit on one of the building's gate doors",
+}
 ## Tools whose drag repeats along an edge line.
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag marks a rectangle that is applied on release.
@@ -73,6 +79,10 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 @export var grid_centred := true
 ## World position of the grid's north-west corner, its floor height included.
 @export var grid_origin := Vector3.ZERO
+## The terminal shell the player builds inside. When set, the grid takes its
+## frame (grid_size, grid_centred and grid_origin are not used), the Entrance
+## and Exit tools snap to its doors and load_snapshot() checks a save fits it.
+@export var shell: ShellDefinition
 
 var grid: BuildGrid
 var tool := Tool.FLOOR
@@ -112,7 +122,10 @@ static func _ghost_material(tint: Color) -> StandardMaterial3D:
 
 
 func _ready() -> void:
-	grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
+	if shell != null:
+		grid = BuildGrid.new(shell.grid_size, shell.grid_origin)
+	else:
+		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
 	_view.name = "BuildView"
 	add_child(_view)
 	_view.refresh(grid)
@@ -202,10 +215,15 @@ func edit_at(point: Vector3) -> BuildEdit:
 	if TOOL_WALL_KINDS.has(tool):
 		return BuildEdit.place_wall(cell, side, TOOL_WALL_KINDS[tool])
 	if TOOL_OBJECTS.has(tool):
+		var def_id: StringName = TOOL_OBJECTS[tool]
+		if shell != null and DOOR_NAMES.has(tool):
+			var door := shell.nearest(grid, def_id, point)
+			if door != null:
+				return BuildEdit.place_object(def_id, door.cell, door.facing)
 		var turn := facing
 		if _facing_is_auto():
-			turn = DoorPlacement.auto_facing(grid, TOOL_OBJECTS[tool], point, facing)
-		return BuildEdit.place_object(TOOL_OBJECTS[tool], cell, turn)
+			turn = DoorPlacement.auto_facing(grid, def_id, point, facing)
+		return BuildEdit.place_object(def_id, cell, turn)
 	return null
 
 
@@ -290,7 +308,24 @@ func status_text() -> String:
 
 ## BuildGrid.validate() plus the entrance and exit rules (DoorPlacement.check()).
 func check(edit: BuildEdit) -> BuildResult:
-	return DoorPlacement.check(grid, edit)
+	return DoorPlacement.check(grid, edit, shell)
+
+
+## Restores a BuildGrid.to_snapshot() dictionary into the grid and redraws.
+## With a shell, a save that does not fit it is refused first
+## (ShellDefinition.snapshot_problem()). Pushes an error and returns false,
+## leaving the grid as it was, on any refusal.
+func load_snapshot(data: Dictionary) -> bool:
+	var problem := shell.snapshot_problem(data) if shell != null else ""
+	if problem != "":
+		push_error("BuildMode.load_snapshot: %s" % problem)
+		return false
+	if not grid.from_snapshot(data):
+		return false
+	_view.refresh(grid)
+	_hover_key = ""
+	grid_changed.emit()
+	return true
 
 
 ## Applies an edit check() accepted, through the edits DoorPlacement.edits_for()
@@ -318,8 +353,9 @@ func _cancels_area(event: InputEvent) -> bool:
 	return click != null and click.pressed and click.button_index == MOUSE_BUTTON_RIGHT
 
 
+## A door tool picks its own facing until R is pressed; inside a shell, always.
 func _facing_is_auto() -> bool:
-	return _auto_facing and DOOR_NAMES.has(tool)
+	return (_auto_facing or shell != null) and DOOR_NAMES.has(tool)
 
 
 func _start_drag(point: Vector3) -> void:
@@ -456,7 +492,9 @@ func _show_status(result: BuildResult) -> void:
 		text = "Facing auto" if _facing_is_auto() else "Facing %d" % facing
 	if result != null and not result.ok:
 		var reason := result.reason_text()
-		if DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
+		if DOOR_NAMES.has(tool) and result.reason == BuildResult.Reason.DOOR_NOT_AT_SHELL_DOOR:
+			reason = SHELL_DOOR_HINTS[tool]
+		elif DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
 			reason = DOOR_HINTS[result.reason] % DOOR_NAMES[tool]
 		text += ("  " if text != "" else "") + reason
 	_set_status(text)
