@@ -14,3 +14,5 @@ opencode.sh
 .claude/agents/*
 !.claude/agents/implementor-graphic.md
 tools/blender/out/
+__pycache__/
+*.pyc

@@ -73,11 +73,12 @@ func restore_rng(saved_seed: int, saved_state: int) -> void:
 	rng.state = saved_state
 
 
-## JSON-safe state for a save. The RNG seed and state are decimal strings
-## because JSON numbers are doubles and lose 64-bit integers above 2^53.
+## JSON-safe state for a save. The tick and the RNG seed and state are
+## decimal strings because JSON numbers are doubles and lose 64-bit integers
+## above 2^53.
 func to_snapshot() -> Dictionary:
 	return {
-		"tick": tick,
+		"tick": str(tick),
 		"speed": speed,
 		"paused": paused,
 		"accumulator": _accumulator,
@@ -94,7 +95,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	if problem != "":
 		push_error("SimClock.from_snapshot: %s" % problem)
 		return false
-	tick = int(data["tick"])
+	tick = str(data["tick"]).to_int()
 	speed = int(data["speed"])
 	paused = data["paused"]
 	_accumulator = float(data["accumulator"])
@@ -110,14 +111,14 @@ func _snapshot_problem(data: Dictionary) -> String:
 	if problem != "":
 		return problem
 	for key in ["rng_seed", "rng_state"]:
-		if typeof(data[key]) != TYPE_STRING or not (data[key] as String).is_valid_int():
-			return "%s must be a decimal string" % key
+		if not is_int64_string(data[key]):
+			return "%s must be a decimal string within 64-bit range" % key
 	return ""
 
 
 func _clock_field_problem(data: Dictionary) -> String:
-	if not _is_whole_number(data["tick"]) or int(data["tick"]) < 0:
-		return "tick must be a whole number, 0 or more"
+	if not is_int64_string(data["tick"]) or str(data["tick"]).begins_with("-"):
+		return "tick must be a decimal string, 0 or more"
 	if not _is_whole_number(data["speed"]) or not SPEEDS.has(int(data["speed"])):
 		return "speed must be one of %s" % [SPEEDS]
 	if typeof(data["paused"]) != TYPE_BOOL:
@@ -128,7 +129,17 @@ func _clock_field_problem(data: Dictionary) -> String:
 	return ""
 
 
+## Exact: a float must hold a whole number with no tolerance.
 func _is_whole_number(value: Variant) -> bool:
 	if typeof(value) == TYPE_INT:
 		return true
-	return typeof(value) == TYPE_FLOAT and is_equal_approx(value, roundf(value))
+	return typeof(value) == TYPE_FLOAT and is_finite(value) and value == floorf(value)
+
+
+## A canonical decimal string of a 64-bit integer. String.to_int() clamps a
+## value past the limits instead of failing, so the string must read back
+## exactly as written; that also refuses "+5" and "007".
+static func is_int64_string(value: Variant) -> bool:
+	if typeof(value) != TYPE_STRING or not (value as String).is_valid_int():
+		return false
+	return str((value as String).to_int()) == value

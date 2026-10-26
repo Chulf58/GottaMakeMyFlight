@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" load_steps=2 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/textures/tp_atlas_lights_1a_d.png" id="1_lights"]
+
+[resource]
+resource_name = "TP_Atlas_Lights_1A_D"
+shading_mode = 0
+albedo_texture = ExtResource("1_lights")

@@ -1,10 +1,20 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
+[ext_resource type="Script" path="res://build/build_mode.gd" id="3_build"]
+[ext_resource type="Script" path="res://flights/flight_sim.gd" id="4_sim"]
+[ext_resource type="Script" path="res://flights/plane_view.gd" id="5_plane"]
+[ext_resource type="Script" path="res://airside/airside.gd" id="6_airside"]
+[ext_resource type="PackedScene" path="res://assets/buildings/tp_airport_01a.glb" id="7_terminal"]
+[ext_resource type="PackedScene" path="res://assets/airside/tp_runway_01a.glb" id="8_end"]
+[ext_resource type="PackedScene" path="res://assets/airside/tp_runway_03a.glb" id="9_strip"]
+[ext_resource type="Script" path="res://passengers/passenger_sim.gd" id="10_pax"]
+[ext_resource type="Script" path="res://passengers/passenger_views.gd" id="11_paxview"]
+[ext_resource type="Script" path="res://ui/passenger_hud.gd" id="12_hud"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
-size = Vector2(200, 200)
+size = Vector2(700, 700)
 
 [sub_resource type="StandardMaterial3D" id="Material_ground"]
 albedo_color = Color(0.36, 0.5, 0.3, 1)
@@ -34,7 +44,94 @@ transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0
 shadow_enabled = true
 
 [node name="Ground" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
 mesh = SubResource("PlaneMesh_ground")
 surface_material_override/0 = SubResource("Material_ground")
 
 [node name="TycoonCamera" parent="." instance=ExtResource("1_cam")]
+bounds_half_extent = 260.0
+
+[node name="BuildMode" type="Node3D" parent="."]
+script = ExtResource("3_build")
+
+[node name="Airside" type="Node3D" parent="."]
+script = ExtResource("6_airside")
+links = PackedStringArray("RunwayExit>TaxiEast", "TaxiEast>PushbackEnd", "PushbackEnd>Stand", "PushbackEnd>TaxiWest", "TaxiWest>RunwayEntry")
+
+[node name="ApproachStart" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -340, 45, -200)
+
+[node name="Touchdown" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -110, 0, -200)
+
+[node name="RunwayExit" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -200)
+
+[node name="TaxiEast" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -146)
+
+[node name="PushbackEnd" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 0, -146)
+
+[node name="Stand" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 0, -117)
+
+[node name="TaxiWest" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -132, 0, -146)
+
+[node name="RunwayEntry" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -132, 0, -200)
+
+[node name="Liftoff" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -200)
+
+[node name="ClimbEnd" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 260, 45, -200)
+
+[node name="Terminal" parent="Airside" instance=ExtResource("7_terminal")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -80)
+
+[node name="RunwayEndWest" parent="Airside" instance=ExtResource("8_end")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -144, 0, -200)
+
+[node name="RunwayWest" parent="Airside" instance=ExtResource("9_strip")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -96, 0, -200)
+
+[node name="RunwayMid" parent="Airside" instance=ExtResource("9_strip")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -200)
+
+[node name="RunwayEast" parent="Airside" instance=ExtResource("9_strip")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 96, 0, -200)
+
+[node name="RunwayEndEast" parent="Airside" instance=ExtResource("8_end")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 144, 0, -200)
+
+[node name="FlightSim" type="Node" parent="." node_paths=PackedStringArray("clock")]
+script = ExtResource("4_sim")
+clock = NodePath("../SimClock")
+
+[node name="PlaneView" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "airside")]
+script = ExtResource("5_plane")
+clock = NodePath("../SimClock")
+sim = NodePath("../FlightSim")
+airside = NodePath("../Airside")
+
+[node name="PassengerSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "build_mode")]
+script = ExtResource("10_pax")
+clock = NodePath("../SimClock")
+flights = NodePath("../FlightSim")
+build_mode = NodePath("../BuildMode")
+
+[node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim")]
+script = ExtResource("11_paxview")
+clock = NodePath("../SimClock")
+sim = NodePath("../PassengerSim")
+
+[node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode")]
+script = ExtResource("12_hud")
+clock = NodePath("../SimClock")
+flights = NodePath("../FlightSim")
+sim = NodePath("../PassengerSim")
+views = NodePath("../PassengerViews")
+camera = NodePath("../TycoonCamera")
+build_mode = NodePath("../BuildMode")

@@ -201,6 +201,12 @@ func test_malformed_snapshot_returns_false_and_leaves_clock_unchanged() -> void:
 	var fractional_tick := good.duplicate()
 	fractional_tick["tick"] = 1.5
 	bad_cases.append(fractional_tick)
+	var numeric_tick := good.duplicate()
+	numeric_tick["tick"] = 2
+	bad_cases.append(numeric_tick)
+	var nearly_whole_speed := good.duplicate()
+	nearly_whole_speed["speed"] = 2.0000001
+	bad_cases.append(nearly_whole_speed)
 	var big_accumulator := good.duplicate()
 	big_accumulator["accumulator"] = 5.0
 	bad_cases.append(big_accumulator)
@@ -214,9 +220,70 @@ func test_malformed_snapshot_returns_false_and_leaves_clock_unchanged() -> void:
 	var other := _new_clock()
 	other.seed_rng(7)
 	other.advance(SimClock.STEP * 2.5)
+	other.set_speed(2)
+	other.set_paused(true)
 	for bad in bad_cases:
 		assert_bool(other.from_snapshot(bad)).is_false()
+		assert_int(other.speed).is_equal(2)
+		assert_bool(other.paused).is_true()
 		assert_int(other.tick).is_equal(before_tick)
 		assert_float(other.alpha).is_equal(before_alpha)
 		assert_int(other.rng.seed).is_equal(before_seed)
 		assert_int(other.rng.state).is_equal(before_state)
+
+
+func test_tick_is_saved_as_a_decimal_string() -> void:
+	var clock := _new_clock()
+	clock.advance(SimClock.STEP * 3.5)
+	assert_str(clock.to_snapshot()["tick"]).is_equal("3")
+
+
+## 2^53 + 1 cannot be held by a JSON number, so only a string tick survives.
+func test_tick_above_2_pow_53_round_trips_through_json() -> void:
+	var clock := _new_clock()
+	clock.tick = 9007199254740993
+	var parsed: Variant = JSON.parse_string(JSON.stringify(clock.to_snapshot()))
+	var other := _new_clock()
+	assert_bool(other.from_snapshot(parsed)).is_true()
+	assert_int(other.tick).is_equal(9007199254740993)
+
+
+func test_rng_strings_one_past_the_int64_limits_are_rejected() -> void:
+	var clock := _new_clock()
+	var good := clock.to_snapshot()
+	var other := _new_clock()
+	other.seed_rng(5)
+	other.set_speed(3)
+	var before_state := other.rng.state
+	for key in ["rng_seed", "rng_state"]:
+		for value in ["9223372036854775808", "-9223372036854775809", "+5", "007"]:
+			var bad := good.duplicate()
+			bad[key] = value
+			assert_bool(other.from_snapshot(bad)).is_false()
+			assert_int(other.rng.seed).is_equal(5)
+			assert_int(other.rng.state).is_equal(before_state)
+			assert_int(other.speed).is_equal(3)
+			assert_bool(other.paused).is_false()
+
+
+func test_rng_strings_at_the_int64_limits_are_accepted() -> void:
+	var clock := _new_clock()
+	var data := clock.to_snapshot()
+	data["rng_seed"] = "-9223372036854775808"
+	data["rng_state"] = "9223372036854775807"
+	var other := _new_clock()
+	assert_bool(other.from_snapshot(data)).is_true()
+	assert_int(other.rng.seed).is_equal(-9223372036854775807 - 1)
+	assert_int(other.rng.state).is_equal(9223372036854775807)
+
+
+func test_tick_strings_out_of_range_or_not_canonical_are_rejected() -> void:
+	var clock := _new_clock()
+	var good := clock.to_snapshot()
+	var other := _new_clock()
+	other.advance(SimClock.STEP * 2.0)
+	for value in ["9223372036854775808", "-1", "1.0", "+3", "03", ""]:
+		var bad := good.duplicate()
+		bad["tick"] = value
+		assert_bool(other.from_snapshot(bad)).is_false()
+		assert_int(other.tick).is_equal(2)
