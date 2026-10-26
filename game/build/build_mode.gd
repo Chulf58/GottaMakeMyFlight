@@ -67,6 +67,11 @@ const INVALID_TINT := Color(0.95, 0.3, 0.25, 0.5)
 const MARKER_TINT := Color(1.0, 0.85, 0.3, 0.7)
 
 @export var grid_size := BuildGrid.DEFAULT_SIZE
+## When true the grid is centred on the world origin at height 0 and
+## grid_origin is not used.
+@export var grid_centred := true
+## World position of the grid's north-west corner, its floor height included.
+@export var grid_origin := Vector3.ZERO
 
 var grid: BuildGrid
 var tool := Tool.FLOOR
@@ -88,9 +93,9 @@ var _drag_side := -1
 var _last_applied_key := ""
 
 
-## Where a ray meets the ground plane y = 0, or null when it never does.
-static func ground_point(from: Vector3, direction: Vector3) -> Variant:
-	return Plane(Vector3.UP, 0.0).intersects_ray(from, direction)
+## Where a ray meets the level plane y = `height`, or null when it never does.
+static func ground_point(from: Vector3, direction: Vector3, height := 0.0) -> Variant:
+	return Plane(Vector3.UP, height).intersects_ray(from, direction)
 
 
 static func _ghost_material(tint: Color) -> StandardMaterial3D:
@@ -102,7 +107,7 @@ static func _ghost_material(tint: Color) -> StandardMaterial3D:
 
 
 func _ready() -> void:
-	grid = BuildGrid.new(grid_size)
+	grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
 	_view.name = "BuildView"
 	add_child(_view)
 	_view.refresh(grid)
@@ -153,6 +158,11 @@ func rotate_facing() -> void:
 	facing = (facing + 1) % 4
 	_hover_key = ""
 	_show_status(null)
+
+
+## Where a ray meets this grid's floor (its origin's height), or null.
+func grid_point(from: Vector3, direction: Vector3) -> Variant:
+	return ground_point(from, direction, grid.origin.y)
 
 
 ## The edit the current tool would make at a ground point, or null for none.
@@ -243,7 +253,7 @@ func _mouse_ground() -> Variant:
 	if camera == null:
 		return null
 	var mouse := get_viewport().get_mouse_position()
-	return ground_point(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse))
+	return grid_point(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse))
 
 
 func _update_ghost(point: Variant) -> void:

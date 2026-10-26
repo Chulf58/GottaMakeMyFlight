@@ -14,10 +14,28 @@ static func problem(data: Dictionary) -> String:
 	for key in ["width", "height"]:
 		if not _is_whole_in(data[key], 1, BuildGrid.MAX_SIDE_CELLS):
 			return "%s must be a whole number from 1 to %d" % [key, BuildGrid.MAX_SIDE_CELLS]
+	if data.has("origin") and not _is_origin(data["origin"]):
+		return (
+			"origin must be an array of three numbers within %d m of the world origin"
+			% int(BuildGrid.MAX_ORIGIN_M)
+		)
 	var problem_text := _cells_problem(data, int(data["width"]), int(data["height"]))
 	if problem_text != "":
 		return problem_text
 	return _objects_problem(data["objects"], data["next_object_id"])
+
+
+## The optional "origin" key: [x, y, z] in metres. A snapshot saved before
+## grids had an origin has none and loads centred at height 0.
+static func _is_origin(value: Variant) -> bool:
+	if typeof(value) != TYPE_ARRAY or (value as Array).size() != 3:
+		return false
+	for axis in value:
+		if typeof(axis) != TYPE_INT and typeof(axis) != TYPE_FLOAT:
+			return false
+		if not is_finite(axis) or absf(axis) > BuildGrid.MAX_ORIGIN_M:
+			return false
+	return true
 
 
 static func _cells_problem(data: Dictionary, width: int, height: int) -> String:

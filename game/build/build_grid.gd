@@ -5,8 +5,9 @@ class_name BuildGrid
 extends RefCounted
 ## The indoor build grid: 1 m cells in packed arrays, the source of truth for
 ## floors, walls and placed objects. Nodes only draw it. Cell (x, y) covers
-## world x in [origin.x + x, +1) and world z in [origin.z + y, +1); the grid
-## is centred on the world origin. North is -y (world -z).
+## world x in [origin.x + x, +1) and world z in [origin.z + y, +1), with its
+## floor at world y origin.y. The origin is set at creation; by default the
+## grid is centred on the world origin at height 0. North is -y (world -z).
 ##
 ## Every change goes through validate() and apply() with a BuildEdit, so the
 ## preview, the click and a snapshot load share one set of rules. apply()
@@ -28,6 +29,9 @@ const FLOOR_NONE := 0
 const FLOOR_TILE := 1
 const MAX_FLOOR_TYPE := 1
 const MAX_ZONE_ID := 2147483647
+## Furthest a snapshot's origin may be from the world origin on any axis, in
+## metres. Well past the airfield, and still centimetre-exact in a float.
+const MAX_ORIGIN_M := 10000.0
 const MAX_WALL_KIND := WallKind.DOOR
 ## Grid step for each Side.
 const SIDE_STEP: Array[Vector2i] = [
@@ -60,9 +64,16 @@ var _next_object_id := 1
 var _pathing := GridPathing.new()
 
 
-func _init(grid_size := DEFAULT_SIZE) -> void:
-	_reset(grid_size)
+## `grid_origin` is the world position of cell (0, 0)'s north-west corner, a
+## Vector3; null centres the grid on the world origin at height 0.
+func _init(grid_size := DEFAULT_SIZE, grid_origin: Variant = null) -> void:
+	_reset(grid_size, centred_origin(grid_size) if grid_origin == null else grid_origin)
 	_pathing.rebuild(self)
+
+
+## The origin that centres a grid of `grid_size` on the world origin at y 0.
+static func centred_origin(grid_size: Vector2i) -> Vector3:
+	return Vector3(-grid_size.x / 2.0, 0.0, -grid_size.y / 2.0)
 
 
 func in_bounds(cell: Vector2i) -> bool:
@@ -278,18 +289,25 @@ func to_snapshot() -> Dictionary:
 		"v_walls": Array(_v_walls),
 		"objects": objects,
 		"next_object_id": _next_object_id,
+		"origin": [origin.x, origin.y, origin.z],
 	}
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
-## (which turns ints into floats). Every object is re-placed through the
-## placement rules. Pushes an error and returns false, leaving the grid
-## unchanged, when anything is missing, malformed or breaks a rule.
+## (which turns ints into floats). The grid takes the snapshot's size and
+## origin; one saved before grids had an origin loads centred at height 0.
+## Every object is re-placed through the placement rules. Pushes an error and
+## returns false, leaving the grid unchanged, when anything is missing,
+## malformed or breaks a rule.
 func from_snapshot(data: Dictionary) -> bool:
 	var problem := BuildGridSnapshot.problem(data)
 	var loaded: BuildGrid = null
 	if problem == "":
-		loaded = BuildGrid.new(Vector2i(int(data["width"]), int(data["height"])))
+		var loaded_size := Vector2i(int(data["width"]), int(data["height"]))
+		var at := centred_origin(loaded_size)
+		if data.has("origin"):
+			at = Vector3(data["origin"][0], data["origin"][1], data["origin"][2])
+		loaded = BuildGrid.new(loaded_size, at)
 		problem = loaded._load_cells(data)
 	if problem != "":
 		push_error("BuildGrid.from_snapshot: %s" % problem)
@@ -313,9 +331,9 @@ func from_snapshot(data: Dictionary) -> bool:
 	return true
 
 
-func _reset(grid_size: Vector2i) -> void:
+func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	size = grid_size
-	origin = Vector3(-size.x / 2.0, 0.0, -size.y / 2.0)
+	origin = grid_origin
 	var cells := size.x * size.y
 	_floor = _zeros_bytes(cells)
 	_h_walls = _zeros_bytes(size.x * (size.y + 1))
