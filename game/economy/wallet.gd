@@ -13,8 +13,12 @@ const SNAPSHOT_KEYS := ["balance"]
 var balance: int = 0
 
 
+## A starting balance outside [0, MAX_BALANCE] pushes an error and leaves the
+## wallet at 0 rather than holding an invalid balance.
 func _init(starting_balance: int = 0) -> void:
-	assert(starting_balance >= 0 and starting_balance <= MAX_BALANCE)
+	if starting_balance < 0 or starting_balance > MAX_BALANCE:
+		push_error("Wallet: starting balance %d is outside 0..%d" % [starting_balance, MAX_BALANCE])
+		return
 	balance = starting_balance
 
 

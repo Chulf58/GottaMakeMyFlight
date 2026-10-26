@@ -47,8 +47,11 @@ static func price_of_object(id: StringName) -> int:
 	return OBJECT_PRICES[id]
 
 
-## What removing a piece that cost `price` pays back, rounded down.
+## What removing a piece that cost `price` pays back, rounded down. A negative
+## price (NO_PRICE from a failed lookup) stays NO_PRICE; only a real price of 0
+## refunds 0.
 static func refund_of(price: int) -> int:
-	if price <= 0:
-		return 0
+	if price < 0:
+		push_error("PriceTable: cannot refund price %d" % price)
+		return NO_PRICE
 	return price * REFUND_SHARE_PERCENT / 100

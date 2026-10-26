@@ -72,8 +72,16 @@ func test_refund_is_strictly_less_than_the_price() -> void:
 	assert_int(PriceTable.REFUND_SHARE_PERCENT).is_between(1, 99)
 
 
-func test_negative_price_has_no_refund() -> void:
-	assert_int(PriceTable.refund_of(-5)).is_equal(0)
+func test_refund_of_no_price_stays_an_error() -> void:
+	assert_int(PriceTable.refund_of(PriceTable.NO_PRICE)).is_equal(PriceTable.NO_PRICE)
+	assert_int(PriceTable.refund_of(-5)).is_equal(PriceTable.NO_PRICE)
+
+
+func test_refund_of_an_unknown_object_is_not_laundered_to_zero() -> void:
+	var refund := PriceTable.refund_of(PriceTable.price_of_object(&"no_such_thing"))
+	assert_int(refund).is_equal(PriceTable.NO_PRICE)
+	var wall_refund := PriceTable.refund_of(PriceTable.price_of_wall(BuildGrid.WallKind.NONE))
+	assert_int(wall_refund).is_equal(PriceTable.NO_PRICE)
 
 
 func test_starting_budget_covers_a_starter_terminal_at_roughly_half() -> void:

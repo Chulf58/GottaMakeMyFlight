@@ -21,6 +21,16 @@ func test_starts_at_the_given_balance_default_zero() -> void:
 	assert_int(_new_wallet(500).balance).is_equal(500)
 
 
+func test_out_of_range_starting_balance_leaves_a_zero_wallet() -> void:
+	assert_int(_new_wallet(-1).balance).is_equal(0)
+	assert_int(_new_wallet(Wallet.MAX_BALANCE + 1).balance).is_equal(0)
+
+
+func test_starting_balance_at_both_bounds_is_kept() -> void:
+	assert_int(_new_wallet(0).balance).is_equal(0)
+	assert_int(_new_wallet(Wallet.MAX_BALANCE).balance).is_equal(Wallet.MAX_BALANCE)
+
+
 func test_credit_adds_and_emits_the_new_balance() -> void:
 	var wallet := _new_wallet(100)
 	wallet.changed.connect(_on_changed)
@@ -79,8 +89,10 @@ func test_zero_spend_and_credit_succeed_without_a_signal() -> void:
 
 func test_credit_past_the_cap_is_refused() -> void:
 	var wallet := _new_wallet(Wallet.MAX_BALANCE - 10)
+	wallet.changed.connect(_on_changed)
 	assert_bool(wallet.credit(11)).is_false()
 	assert_int(wallet.balance).is_equal(Wallet.MAX_BALANCE - 10)
+	assert_array(_seen).is_empty()
 	assert_bool(wallet.credit(10)).is_true()
 	assert_int(wallet.balance).is_equal(Wallet.MAX_BALANCE)
 
