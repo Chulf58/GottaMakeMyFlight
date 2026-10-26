@@ -34,9 +34,19 @@ func sign_text(station: int) -> String:
 	return ((_signs[station] as Node).get_node("Caption") as Label3D).text
 
 
+func _ready() -> void:
+	sync()
+
+
+## Also called on every grid edit, so a paused edit that removes a station or
+## changes its lane length updates the sign at once. The sim rebuilds its
+## layout on the same signal and is connected first: bind() connects it in
+## the same call that sets sim.grid, so no sync here can see the grid sooner.
 func sync() -> void:
-	if sim == null:
+	if sim == null or sim.grid == null:
 		return
+	if not sim.grid.graph_changed.is_connected(_on_graph_changed):
+		sim.grid.graph_changed.connect(_on_graph_changed)
 	var full := MissSignals.full_stations(sim)
 	for station: int in _signs.keys():
 		if not full.has(station):
@@ -62,15 +72,14 @@ func draw() -> void:
 	## World units per screen pixel at one metre: a fixed-size sprite is drawn
 	## as if it stood one metre from the camera.
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
-	# The layout follows an edit at once, the queues only on the next tick, so
-	# a station removed while paused loses its sign here.
-	for station: int in _signs.keys():
-		if sim == null or not sim.layout.lanes.has(station):
-			_drop_sign(station)
 	for station: int in _signs:
 		var sign: Sprite3D = _signs[station]
 		sign.pixel_size = SIGN_PX * unit / MarkerIcons.SIZE
 		(sign.get_node("Caption") as Label3D).pixel_size = unit
+
+
+func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	sync()
 
 
 ## Above the middle of the station's footprint, clear of its top.

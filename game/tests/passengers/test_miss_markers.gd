@@ -102,7 +102,7 @@ func test_the_sign_goes_when_the_queue_drains() -> void:
 	assert_str(_markers.sign_text(desk)).is_equal("Queue full")
 
 
-func test_a_desk_removed_while_paused_loses_its_sign_on_the_next_frame() -> void:
+func test_a_desk_removed_while_paused_loses_its_sign_at_once() -> void:
 	_attach(_short_lane_world())
 	var desk: int = _world.sim.get_meta(&"desk")
 	_spawn_spaced(3)
@@ -111,7 +111,56 @@ func test_a_desk_removed_while_paused_loses_its_sign_on_the_next_frame() -> void
 	assert_object(sign).is_not_null()
 	var tick := _world.clock.tick
 	assert_bool(_world.grid.apply(BuildEdit.remove_object(desk)).ok).is_true()
-	_views.draw()
 	assert_int(_world.clock.tick).is_equal(tick)
 	assert_object(_markers.sign_for(desk)).is_null()
 	assert_bool(sign.visible).is_false()
+
+
+## One desk on a longer floor: its lane runs y 2 to 6 (5 cells), or y 2 to 4
+## (3 cells) while a wall closes the south edge of (2, 4).
+func _walled_lane_world(walled: bool) -> PassengerTestWorld:
+	var grid := PassengerTestWorld.floored(Vector2i(6, 7))
+	var desk := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(2, 1), 0)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 6), 3)
+	if walled:
+		grid.apply(BuildEdit.place_wall(Vector2i(2, 4), BuildGrid.Side.SOUTH))
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	world.sim.set_meta(&"desk", desk)
+	return world
+
+
+func test_a_lane_lengthened_while_paused_drops_its_sign_at_once() -> void:
+	_attach(_walled_lane_world(true))
+	var desk: int = _world.sim.get_meta(&"desk")
+	assert_int(_world.sim.layout.lanes[desk].size()).is_equal(3)
+	_spawn_spaced(3)
+	_world.run_to(_world.clock.tick + 30)
+	assert_int(_world.sim.queue_of(desk).size()).is_equal(3)
+	var sign := _markers.sign_for(desk)
+	assert_object(sign).is_not_null()
+	var tick := _world.clock.tick
+	var opened := _world.grid.apply(BuildEdit.remove_wall(Vector2i(2, 4), BuildGrid.Side.SOUTH))
+	assert_bool(opened.ok).is_true()
+	assert_int(_world.sim.layout.lanes[desk].size()).is_equal(5)
+	assert_int(_world.clock.tick).is_equal(tick)
+	assert_object(_markers.sign_for(desk)).is_null()
+	assert_bool(sign.visible).is_false()
+
+
+func test_a_lane_shortened_while_paused_shows_its_sign_at_once() -> void:
+	_attach(_walled_lane_world(false))
+	var desk: int = _world.sim.get_meta(&"desk")
+	assert_int(_world.sim.layout.lanes[desk].size()).is_equal(5)
+	_spawn_spaced(3)
+	_world.run_to(_world.clock.tick + 30)
+	assert_int(_world.sim.queue_of(desk).size()).is_equal(3)
+	assert_object(_markers.sign_for(desk)).is_null()
+	var tick := _world.clock.tick
+	var closed := _world.grid.apply(BuildEdit.place_wall(Vector2i(2, 4), BuildGrid.Side.SOUTH))
+	assert_bool(closed.ok).is_true()
+	assert_int(_world.sim.layout.lanes[desk].size()).is_equal(3)
+	assert_int(_world.clock.tick).is_equal(tick)
+	var sign := _markers.sign_for(desk)
+	assert_object(sign).is_not_null()
+	assert_bool(sign.visible).is_true()
+	assert_str(_markers.sign_text(desk)).is_equal("Queue full")

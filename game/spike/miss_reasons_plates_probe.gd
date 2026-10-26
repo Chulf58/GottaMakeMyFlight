@@ -20,6 +20,9 @@ const OUT_REL := "res://../tools/blender/out/miss-reasons"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 60000
+## A whole flight at 3x is 1900 ticks / 60 per second, about 32 s.
+const WAIT_LIMIT_MS := 120000
+const STALL_LIMIT_MS := 5000
 const FAR := 80.0
 const NEAR := 12.0
 const CAPTION_OUTLINE_PX := 8.0
@@ -133,12 +136,9 @@ func _boot() -> int:
 
 
 func _plates(desk: int) -> void:
-	_beat("overflow")
-	while _clock.tick < 1850:
-		var held: int = MissSignals.full_stations(_sim).get(desk, 0)
-		if held >= 2:
-			break
-		await process_frame
+	var overflowed := func() -> bool: return MissSignals.full_stations(_sim).get(desk, 0) >= 2
+	if not await _wait_for("overflow", 1850, overflowed):
+		return
 	_hud.press_speed(0)
 	await _frames(5)
 	var full := MissSignals.full_stations(_sim)
@@ -151,7 +151,11 @@ func _plates(desk: int) -> void:
 	if not full.has(desk) or full[desk] < 2:
 		_invalid("no overflow of 2 at desk %d by tick %d" % [desk, _clock.tick])
 		return
-	var desk_point := _markers.sign_for(desk).position - Vector3(0.0, 1.7, 0.0)
+	var sign := _markers.sign_for(desk)
+	if sign == null or not sign.visible:
+		_invalid("desk %d is full but has no visible sign" % desk)
+		return
+	var desk_point := sign.position - Vector3(0.0, 1.7, 0.0)
 	await _plate_sign(desk, desk_point, FAR, "01_queue_full_far.png")
 	await _plate_sign(desk, desk_point, NEAR, "02_queue_full_near.png")
 	await _plate_cleared(desk, desk_point)
@@ -201,9 +205,8 @@ func _plate_sign(desk: int, desk_point: Vector3, distance: float, name: String) 
 
 func _plate_cleared(desk: int, desk_point: Vector3) -> void:
 	_hud.press_speed(3)
-	_beat("cleared")
-	while _clock.tick < 1910:
-		await process_frame
+	if not await _wait_for("cleared", 1960, func() -> bool: return _clock.tick >= 1910):
+		return
 	_hud.press_speed(0)
 	_aim(desk_point, FAR)
 	await _frames(20)
@@ -224,6 +227,35 @@ func _plate_cleared(desk: int, desk_point: Vector3) -> void:
 		_save("03_cleared_far.png")
 	else:
 		_invalid("03: sign still shown after doors close, or nobody missed")
+
+
+## Steps frames until `done` holds. Fails through _invalid() when the sim
+## reaches `limit_tick` first, when the wait passes WAIT_LIMIT_MS, or when the
+## clock has not advanced for STALL_LIMIT_MS (the heartbeat in _process keeps
+## the guard thread quiet, so it cannot catch a stalled clock).
+func _wait_for(stage: String, limit_tick: int, done: Callable) -> bool:
+	_beat(stage)
+	var start_ms := Time.get_ticks_msec()
+	var moved_ms := start_ms
+	var last_tick := _clock.tick
+	while not done.call():
+		var now_ms := Time.get_ticks_msec()
+		if _clock.tick != last_tick:
+			last_tick = _clock.tick
+			moved_ms = now_ms
+		if _clock.tick >= limit_tick:
+			_invalid("%s: not met by tick %d" % [stage, limit_tick])
+			return false
+		if now_ms - start_ms > WAIT_LIMIT_MS:
+			_invalid("%s: not met in %d ms (tick %d)" % [stage, WAIT_LIMIT_MS, _clock.tick])
+			return false
+		if now_ms - moved_ms > STALL_LIMIT_MS:
+			_invalid(
+				"%s: clock stalled at tick %d for %d ms" % [stage, last_tick, now_ms - moved_ms]
+			)
+			return false
+		await process_frame
+	return true
 
 
 func _aim(at: Vector3, distance: float) -> void:
