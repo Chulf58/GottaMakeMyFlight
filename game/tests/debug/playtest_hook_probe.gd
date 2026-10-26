@@ -4,7 +4,9 @@ extends SceneTree
 ## Run:
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game \
-##     -s res://tests/debug/playtest_hook_probe.gd
+##     -s res://tests/debug/playtest_hook_probe.gd -- --playtest
+##
+## --playtest switches the autoload on (it is off in a debug build without it).
 ##
 ## Boots main.tscn with a new random world seed (printed) as the current scene,
 ## waits for the autoload to attach, builds the starter terminal with the HUD

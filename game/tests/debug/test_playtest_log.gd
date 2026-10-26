@@ -75,12 +75,25 @@ func test_the_error_logger_queues_errors_until_drained() -> void:
 	assert_int(logger.drain().size()).is_equal(0)
 
 
-func test_the_hook_is_on_in_debug_builds_or_by_argument_or_setting() -> void:
+## The old table had the hook on in every debug build and on in release with
+## --playtest or the setting. The ruling is the reverse on both counts: never
+## in release, and in a debug build only when opted in, so a player running the
+## game from the editor gets no log files.
+func test_the_hook_is_on_only_in_a_debug_build_that_opted_in() -> void:
 	var none := PackedStringArray()
-	assert_bool(HOOK.wants_enabled(false, none, false)).is_false()
-	assert_bool(HOOK.wants_enabled(true, none, false)).is_true()
-	assert_bool(HOOK.wants_enabled(false, PackedStringArray(["--playtest"]), false)).is_true()
-	assert_bool(HOOK.wants_enabled(false, none, true)).is_true()
+	var flag := PackedStringArray(["--playtest"])
+	assert_bool(HOOK.wants_enabled(true, none, false, "")).is_false()
+	assert_bool(HOOK.wants_enabled(true, flag, false, "")).is_true()
+	assert_bool(HOOK.wants_enabled(true, none, true, "")).is_true()
+	assert_bool(HOOK.wants_enabled(true, none, false, "1")).is_true()
+	assert_bool(HOOK.wants_enabled(true, none, false, "0")).is_false()
+	assert_bool(HOOK.wants_enabled(false, flag, true, "1")).is_false()
+	assert_bool(HOOK.wants_enabled(false, none, false, "")).is_false()
+
+
+func test_only_the_playtest_arguments_are_recorded() -> void:
+	var args := PackedStringArray(["--playtest", "--token=abc", "--playtest-seed=5", "bob"])
+	assert_array(HOOK.recorded_args(args)).is_equal(["--playtest", "--playtest-seed=5"])
 
 
 func test_the_seed_argument_is_read_when_it_is_a_whole_number() -> void:

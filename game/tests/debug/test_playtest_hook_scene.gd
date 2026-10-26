@@ -11,6 +11,7 @@ const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
 const DIR := "user://playtest_scene_test"
 const OFF_DIR := "user://playtest_scene_test_off"
+const AGAIN_DIR := "user://playtest_scene_test_again"
 const STUCK_LIMIT_S := 2.0
 const DESKS_GONE_TICK := 300
 const STUCK_CHECK_TICK := 420
@@ -42,7 +43,6 @@ func before() -> void:
 	_clock.set_paused(true)
 	_hook = HOOK.new()
 	_hook.configure(true, DIR)
-	_hook.session = "scene"
 	_hook.stuck_limit_s = STUCK_LIMIT_S
 	add_child(_hook)
 	_attached = _hook.attach(_main)
@@ -78,7 +78,7 @@ func after() -> void:
 	_hook.detach()
 	_hook.free()
 	_main.free()
-	for dir in [DIR, OFF_DIR]:
+	for dir in [DIR, OFF_DIR, AGAIN_DIR]:
 		for name in DirAccess.get_files_at(dir):
 			DirAccess.remove_absolute("%s/%s" % [dir, name])
 		DirAccess.remove_absolute(dir)
@@ -159,17 +159,44 @@ func test_a_push_error_is_logged_as_an_error() -> void:
 	assert_int(errors.size()).is_equal(1)
 
 
-func test_mouse_and_key_input_is_recorded_with_tick_and_position() -> void:
+func test_input_is_recorded_for_replay_without_typed_text() -> void:
 	var lines := FileAccess.get_file_as_string(_hook.input_log_path()).split("\n", false)
-	assert_int(lines.size()).is_equal(2)
-	var motion: Dictionary = JSON.parse_string(lines[0])
-	assert_str(motion["type"]).is_equal("InputEventMouseMotion")
-	assert_int(int(motion["tick"])).is_equal(0)
-	assert_float(motion["position"][0]).is_equal(321.0)
-	var key: Dictionary = JSON.parse_string(lines[1])
-	assert_str(key["type"]).is_equal("InputEventKey")
-	assert_int(int(key["keycode"])).is_equal(KEY_F9)
-	assert_bool(key["pressed"]).is_true()
+	var records: Array[Dictionary] = []
+	for line in lines:
+		records.append(JSON.parse_string(line))
+	# Three moves inside 50 ms keep the first and, before the button, the last;
+	# F9 is bound to nothing and is left out.
+	var types := records.map(func(r): return r["type"])
+	assert_array(types).is_equal(["motion", "motion", "button", "key", "key"])
+	assert_float(records[0]["position"][0]).is_equal(100.0)
+	assert_float(records[1]["position"][0]).is_equal(140.0)
+	assert_float(records[1]["relative"][0]).is_equal(40.0)
+	assert_int(int(records[2]["button"])).is_equal(MOUSE_BUTTON_RIGHT)
+	assert_int(int(records[3]["physical_keycode"])).is_equal(KEY_SPACE)
+	assert_array(records[4]["actions"]).is_equal(["build_rotate"])
+	assert_int(int(records[4]["tick"])).is_equal(0)
+	for record in records:
+		for banned in ["text", "unicode", "keycode"]:
+			assert_bool(record.has(banned)).override_failure_message(banned).is_false()
+
+
+func test_each_attach_starts_a_new_session_file() -> void:
+	var again: Node = auto_free(HOOK.new())
+	again.configure(true, AGAIN_DIR)
+	add_child(again)
+	assert_bool(again.attach(_main)).is_true()
+	var first: String = again.log_path()
+	again.detach()
+	assert_bool(again.attach(_main)).is_true()
+	var second: String = again.log_path()
+	again.detach()
+	assert_str(second).is_not_equal(first)
+	var first_lines := FileAccess.get_file_as_string(first).split("\n", false)
+	assert_int(first_lines.size()).is_equal(2)
+	assert_str(JSON.parse_string(first_lines[1])["data"]["state"]).is_equal("end")
+	var start: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(second).split("\n")[0])
+	assert_int(int(start["i"])).is_equal(0)
+	assert_str(start["data"]["state"]).is_equal("start")
 
 
 func test_events_since_reads_from_an_index() -> void:
@@ -182,24 +209,35 @@ func test_events_since_reads_from_an_index() -> void:
 
 func test_a_disabled_hook_attaches_to_nothing_and_writes_nothing() -> void:
 	var off: Node = auto_free(HOOK.new())
-	off.configure(false, OFF_DIR)
+	off.configure(false, OFF_DIR, true)
 	add_child(off)
 	assert_bool(off.is_processing()).is_false()
+	assert_bool(get_tree().node_added.is_connected(off._on_node_added)).is_false()
 	assert_bool(off.attach(_main)).is_false()
 	assert_bool(off.is_attached()).is_false()
 	assert_dict(off.snapshot()).is_equal({"enabled": false, "attached": false})
 	assert_bool(DirAccess.dir_exists_absolute(OFF_DIR)).is_false()
 
 
-## One mouse move and one F9 press through the viewport, as a player makes them.
+## Three mouse moves at once, a right-button release, and three key presses:
+## F9 (bound to nothing), Space (read by the HUD) and R (build_rotate).
 func _push_input() -> void:
-	var motion := InputEventMouseMotion.new()
-	motion.position = Vector2(321.0, 123.0)
-	get_viewport().push_input(motion)
-	var key := InputEventKey.new()
-	key.keycode = KEY_F9
-	key.pressed = true
-	get_viewport().push_input(key)
+	for x in [100.0, 120.0, 140.0]:
+		var motion := InputEventMouseMotion.new()
+		motion.position = Vector2(x, 50.0)
+		motion.relative = Vector2(20.0, 0.0)
+		get_viewport().push_input(motion)
+	var button := InputEventMouseButton.new()
+	button.button_index = MOUSE_BUTTON_RIGHT
+	button.position = Vector2(140.0, 50.0)
+	get_viewport().push_input(button)
+	for code in [KEY_F9, KEY_SPACE, KEY_R]:
+		var key := InputEventKey.new()
+		key.keycode = code
+		key.physical_keycode = code
+		key.unicode = 32 if code == KEY_SPACE else 0
+		key.pressed = true
+		get_viewport().push_input(key)
 
 
 func _of_type(type: String) -> Array[Dictionary]:

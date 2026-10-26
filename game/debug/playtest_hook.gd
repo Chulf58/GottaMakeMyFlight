@@ -1,27 +1,39 @@
 extends Node
 ## The PlaytestHook autoload: a dev-only window into the running game for an
-## AI playtester. It is on in debug builds, or in any build run with the
-## --playtest user argument (after `--`) or the debug/playtest/enabled project
-## setting, and inert otherwise: no file, no signal, no per-frame work.
+## AI playtester. It is on only in a debug build that opted in: the --playtest
+## user argument (after `--`), GMMF_PLAYTEST=1 in the environment (how a Godot
+## MCP run_project launch opts in, since run_project passes no arguments) or
+## the debug/playtest/enabled project setting. Otherwise, and always in a
+## release build, it is inert: no file, no signal, no per-frame work.
 ##
 ## When the current scene has a SimClock, FlightSim, PassengerSim and
-## BuildMode as children (main.tscn), the hook attaches to it and
+## BuildMode as children (main.tscn), the hook attaches to it, each attach a
+## new session, and
 ##   - writes every event to user://playtest/<session>.jsonl (PlaytestLog) and
 ##     keeps the last ones in memory: build_edit, build_refused, passenger_stage,
 ##     passenger_stuck, passenger_made, passenger_missed, flight_state, anomaly,
-##     error, plus a session line with the world seed at the start and end;
-##   - records mouse and key input with its tick and frame to
-##     user://playtest/<session>.input.jsonl;
+##     error, plus session lines (start with the world seed, capped, end);
+##   - records what a replay needs of the mouse and keys to
+##     user://playtest/<session>.input.jsonl: buttons, positions, modifiers,
+##     mouse moves at most every MOTION_INTERVAL_MS, and only the keys the game
+##     reads (its input actions and the HUD's raw keys), never typed text;
+##   - stops writing a file at max_file_bytes with one notice, and keeps the
+##     newest KEEP_SESSIONS sessions in the folder;
 ##   - every CHECK_INTERVAL_S of real time checks for anomalies (PlaytestAnomalies):
 ##     stuck_too_long, no_route, off_grid, view_drift, view_missing, frame_time;
 ##   - answers snapshot() and events_since() for the Godot MCP's run_script.
 ## --playtest-seed=<n> seeds the scene's SimClock before anything draws from
-## it, so a logged seed can be played again.
+## it, so a logged seed can be played again. It does nothing while the hook is off.
 
 const SETTING := "debug/playtest/enabled"
 const ARG := "--playtest"
 const SEED_ARG := "--playtest-seed="
+const ENV := "GMMF_PLAYTEST"
 const LOG_DIR := "user://playtest"
+const KEEP_SESSIONS := 10
+const MOTION_INTERVAL_MS := 50
+## Keys the HUD reads by physical keycode rather than through an input action.
+const HUD_KEYS: Array[Key] = [KEY_SPACE, KEY_1, KEY_2, KEY_3]
 const EVENT_TYPES: Array[String] = [
 	"session",
 	"build_edit",
@@ -52,10 +64,12 @@ var enabled := false
 ## Attach to the current scene on its own. Tests call configure() and attach().
 var auto_attach := true
 var log_dir := LOG_DIR
-## The file name stem; a dated one is made at attach when it is empty.
+## The current session's file name stem, new at every attach.
 var session := ""
 var stuck_limit_s := STUCK_LIMIT_S
 var frame_ms_limit := FRAME_MS_LIMIT
+## The size cap of each file of a session.
+var max_file_bytes := PlaytestJsonl.DEFAULT_MAX_BYTES
 var world_seed := 0
 
 var clock: SimClock
@@ -77,15 +91,19 @@ var _logger_added := false
 var _error_counts: Dictionary = {}
 ## Passenger id -> {"reason": Passenger.Stuck, "since": tick}.
 var _stuck: Dictionary = {}
-var _input_file: FileAccess
-var _input_path := ""
+var _input_log := PlaytestJsonl.new()
 var _input_count := 0
+## The latest mouse move not yet written, its relative motion summed, or {}.
+var _pending_motion: Dictionary = {}
+var _last_motion_ms := -MOTION_INTERVAL_MS
 var _since_check := 0.0
 var _frame_ms := PackedFloat32Array()
 
 
-static func wants_enabled(debug_build: bool, user_args: PackedStringArray, setting: bool) -> bool:
-	return debug_build or setting or user_args.has(ARG)
+static func wants_enabled(
+	debug_build: bool, user_args: PackedStringArray, setting: bool, env_value: String
+) -> bool:
+	return debug_build and (setting or user_args.has(ARG) or env_value == "1")
 
 
 ## The seed given with --playtest-seed=<n>, or null.
@@ -96,8 +114,17 @@ static func seed_arg(user_args: PackedStringArray) -> Variant:
 	return null
 
 
-## Sets the switch by hand instead of from the build, arguments and setting.
-## Call before the node enters the tree.
+## The user arguments a session records: the playtest ones only.
+static func recorded_args(user_args: PackedStringArray) -> Array[String]:
+	var out: Array[String] = []
+	for arg in user_args:
+		if arg == ARG or arg.begins_with(SEED_ARG):
+			out.append(arg)
+	return out
+
+
+## Sets the switch by hand instead of from the build, arguments, environment
+## and setting. Call before the node enters the tree.
 func configure(on: bool, dir := LOG_DIR, attach_automatically := false) -> void:
 	_configured = true
 	enabled = on
@@ -113,7 +140,8 @@ func _ready() -> void:
 		enabled = wants_enabled(
 			OS.is_debug_build(),
 			OS.get_cmdline_user_args(),
-			ProjectSettings.get_setting(SETTING, false)
+			ProjectSettings.get_setting(SETTING, false),
+			OS.get_environment(ENV)
 		)
 	set_process(enabled)
 	set_process_input(enabled)
@@ -144,62 +172,53 @@ func _process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if _input_file == null:
+	if _scene == null:
 		return
-	if not (
-		event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventKey
-	):
+	var now := Time.get_ticks_msec()
+	if event is InputEventMouseMotion:
+		_take_motion(event as InputEventMouseMotion, now)
 		return
-	var line := {
-		"i": _input_count,
-		"tick": clock.tick,
-		"frame": Engine.get_process_frames(),
-		"ms": Time.get_ticks_msec(),
-		"type": event.get_class(),
-		"text": event.as_text(),
-	}
-	var with_mods := event as InputEventWithModifiers
-	line["mods"] = [with_mods.shift_pressed, with_mods.ctrl_pressed, with_mods.alt_pressed]
-	if event is InputEventMouse:
-		var mouse := event as InputEventMouse
-		line["position"] = [mouse.position.x, mouse.position.y]
-		line["button_mask"] = mouse.button_mask
+	var line: Dictionary
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
+		line = _input_line(button, "button", now)
 		line["button"] = button.button_index
 		line["pressed"] = button.pressed
 		line["double_click"] = button.double_click
-	elif event is InputEventMouseMotion:
-		var motion := event as InputEventMouseMotion
-		line["relative"] = [motion.relative.x, motion.relative.y]
 	elif event is InputEventKey:
 		var key := event as InputEventKey
-		line["keycode"] = key.keycode
+		var actions := _game_actions(key)
+		if actions.is_empty() and not HUD_KEYS.has(key.physical_keycode):
+			return
+		line = _input_line(key, "key", now)
+		line["actions"] = actions
 		line["physical_keycode"] = key.physical_keycode
-		line["unicode"] = key.unicode
 		line["pressed"] = key.pressed
 		line["echo"] = key.echo
-	_input_file.store_line(JSON.stringify(line))
-	_input_count += 1
+	else:
+		return
+	_flush_motion()
+	_write_input(line)
 
 
 ## Attaches to a scene with a SimClock, FlightSim, PassengerSim and BuildMode
-## among its children, opens the log files and starts logging. Returns false
-## when the hook is off, the scene lacks a part, or a file cannot be opened.
+## among its children, starts a new session (its own files, events, anomalies
+## and stuck list) and starts logging. Returns false when the hook is off, the
+## scene lacks a part, or a file cannot be opened.
 func attach(scene: Node) -> bool:
 	if not enabled:
 		return false
 	detach()
 	if not _find_parts(scene):
 		return false
-	if session == "":
-		session = _new_session_name()
+	_reset_session()
+	PlaytestJsonl.prune_sessions(log_dir, KEEP_SESSIONS - 1)
+	session = _new_session_name()
+	_log.max_bytes = max_file_bytes
 	if not _log.open("%s/%s.jsonl" % [log_dir, session]):
 		return false
-	_input_path = ProjectSettings.globalize_path("%s/%s.input.jsonl" % [log_dir, session])
-	_input_file = FileAccess.open(_input_path, FileAccess.WRITE)
-	if _input_file == null:
-		push_error("PlaytestHook: cannot open %s" % _input_path)
+	_input_log.max_bytes = max_file_bytes
+	if not _input_log.open("%s/%s.input.jsonl" % [log_dir, session]):
 		_log.close()
 		return false
 	_scene = scene
@@ -219,12 +238,12 @@ func attach(scene: Node) -> bool:
 		"seed": str(world_seed),
 		"scene": scene.scene_file_path,
 		"log_path": _log.path,
-		"input_path": _input_path,
-		"args": Array(OS.get_cmdline_user_args()),
+		"input_path": _input_log.path,
+		"args": recorded_args(OS.get_cmdline_user_args()),
 	}
 	_log.add(clock.tick, "session", start)
 	_log.flush()
-	print("PLAYTEST log=%s input=%s seed=%d" % [_log.path, _input_path, world_seed])
+	print("PLAYTEST log=%s input=%s seed=%d" % [_log.path, _input_log.path, world_seed])
 	return true
 
 
@@ -232,6 +251,7 @@ func attach(scene: Node) -> bool:
 func detach() -> void:
 	if _scene == null:
 		return
+	_flush_motion()
 	_log.add(clock.tick, "session", {"state": "end", "events": _log.total()})
 	for pair in [
 		[grid.edit_applied, _on_edit_applied],
@@ -249,9 +269,7 @@ func detach() -> void:
 		OS.remove_logger(_errors)
 		_logger_added = false
 	_log.close()
-	if _input_file != null:
-		_input_file.close()
-		_input_file = null
+	_input_log.close()
 	_scene = null
 
 
@@ -264,7 +282,7 @@ func log_path() -> String:
 
 
 func input_log_path() -> String:
-	return _input_path
+	return _input_log.path
 
 
 ## Event count by type so far.
@@ -297,7 +315,7 @@ func snapshot(event_count := 20) -> Dictionary:
 		"attached": true,
 		"session": session,
 		"log_path": _log.path,
-		"input_log_path": _input_path,
+		"input_log_path": _input_log.path,
 		"seed": str(world_seed),
 		"tick": clock.tick,
 		"paused": clock.paused,
@@ -368,8 +386,8 @@ func run_checks() -> void:
 		record["state"] = "cleared"
 		_log.add(clock.tick, "anomaly", record)
 	_log.flush()
-	if _input_file != null:
-		_input_file.flush()
+	_flush_motion()
+	_input_log.flush()
 
 
 func _find_parts(scene: Node) -> bool:
@@ -580,3 +598,77 @@ func _drain_errors() -> void:
 		_error_counts[key] = kept
 		_log.add(kept["first_tick"], "error", entry)
 		_log.flush()
+
+
+func _reset_session() -> void:
+	_log = PlaytestLog.new()
+	_anomalies = PlaytestAnomalies.new()
+	_input_log = PlaytestJsonl.new()
+	_error_counts.clear()
+	_stuck.clear()
+	_errors.drain()
+	_input_count = 0
+	_pending_motion = {}
+	_last_motion_ms = -MOTION_INTERVAL_MS
+	_since_check = 0.0
+	_frame_ms.clear()
+
+
+## What every input line has: index, tick, frame, time, kind and the modifiers.
+func _input_line(event: InputEventWithModifiers, kind: String, now: int) -> Dictionary:
+	var line := {
+		"i": 0,
+		"tick": clock.tick,
+		"frame": Engine.get_process_frames(),
+		"ms": now,
+		"type": kind,
+		"mods": [event.shift_pressed, event.ctrl_pressed, event.alt_pressed, event.meta_pressed],
+	}
+	if event is InputEventMouse:
+		var mouse := event as InputEventMouse
+		line["position"] = [mouse.position.x, mouse.position.y]
+		line["button_mask"] = mouse.button_mask
+	return line
+
+
+## Keeps a mouse move as the pending one, its relative motion added to the
+## moves it replaces, and writes it once MOTION_INTERVAL_MS has passed since
+## the last move written.
+func _take_motion(motion: InputEventMouseMotion, now: int) -> void:
+	var line := _input_line(motion, "motion", now)
+	var relative := motion.relative
+	if not _pending_motion.is_empty():
+		relative += Vector2(_pending_motion["relative"][0], _pending_motion["relative"][1])
+	line["relative"] = [relative.x, relative.y]
+	_pending_motion = line
+	if now - _last_motion_ms >= MOTION_INTERVAL_MS:
+		_flush_motion()
+
+
+## The game's own input actions (not the engine's ui_ ones) a key event is.
+func _game_actions(key: InputEventKey) -> Array[String]:
+	var out: Array[String] = []
+	for action in InputMap.get_actions():
+		if not String(action).begins_with("ui_") and key.is_action(action, true):
+			out.append(String(action))
+	return out
+
+
+func _flush_motion() -> void:
+	if _pending_motion.is_empty():
+		return
+	_last_motion_ms = _pending_motion["ms"]
+	var line := _pending_motion
+	_pending_motion = {}
+	_write_input(line)
+
+
+func _write_input(line: Dictionary) -> void:
+	line["i"] = _input_count
+	match _input_log.put(line):
+		PlaytestJsonl.Put.WRITTEN:
+			_input_count += 1
+		PlaytestJsonl.Put.CAPPED_NOW:
+			_input_log.put_notice({"type": "capped", "max_bytes": _input_log.max_bytes})
+			var notice := {"state": "capped", "file": "input", "max_bytes": _input_log.max_bytes}
+			_log.add(clock.tick, "session", notice)
