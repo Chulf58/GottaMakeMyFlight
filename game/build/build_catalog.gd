@@ -47,6 +47,15 @@ static func _build() -> void:
 	_add(&"seat_row", "Gate seats", Vector2i(3, 1), Color(0.25, 0.45, 0.7), 0.8)
 	_add_door(&"entrance_door", "Entrance", Color(0.35, 0.7, 0.4))
 	_add_door(&"exit_door", "Exit to the plane", Color(0.3, 0.55, 0.85))
+	# Cafe pieces (interior-kit Cafe 1/2). The counter's interaction cell is its
+	# Mount_Order spot in front of the till; Mount_Staff behind it is not
+	# reserved until staff exist. The table's two seats are inside its footprint.
+	var counter := _add(
+		&"cafe_counter", "Cafe counter", Vector2i(2, 1), Color(0.85, 0.78, 0.6), 1.98
+	)
+	counter.has_interaction = true
+	counter.interaction_offset = Vector2i(0, 1)
+	_add(&"cafe_table", "Cafe table", Vector2i(3, 1), Color(0.55, 0.4, 0.3), 0.92)
 
 
 ## Passengers step through a door along its axis only, so it is walk-through;

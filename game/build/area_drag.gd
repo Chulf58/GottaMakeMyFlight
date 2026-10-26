@@ -82,11 +82,12 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 
 ## Removes, in each cell of `area`, what one Remove click on the middle of the
 ## cell removes: the object standing there (the whole object, even where it
-## reaches past the rectangle), otherwise the floor. Walls are never touched,
-## because a click only takes a wall near a cell's edge. Objects go first, so
-## the floor in front of a removed desk is free to go. A cell with no floor
-## and no object counts as unchanged; the floor under an object stays, as it
-## does for a click.
+## reaches past the rectangle), otherwise the room the cell is in (the whole
+## room), otherwise the floor. Walls are never touched, because a click only
+## takes a wall near a cell's edge. Objects go first, so the floor in front of
+## a removed desk is free to go. A cell with no floor and no object counts as
+## unchanged; the floor under an object or a room stays, as it does for a
+## click, so a second drag takes the floor of a removed room.
 static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
 	var outcome := Outcome.new()
 	outcome.removing = true
@@ -95,19 +96,25 @@ static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
 	# occupancy, which must not turn its other cells into plain floor.
 	var held := {}
 	var objects: Array[int] = []
+	var rooms: Array[int] = []
 	for cell in cells:
 		var object_id := grid.object_at(cell)
-		if object_id == 0:
+		var room_id := grid.room_at(cell)
+		if object_id == 0 and room_id == 0:
 			continue
 		held[cell] = true
-		if not objects.has(object_id):
+		if object_id != 0 and not objects.has(object_id):
 			objects.append(object_id)
+		elif object_id == 0 and not rooms.has(room_id):
+			rooms.append(room_id)
 	# DoorPlacement.check() adds nothing to a removal, so the batch's own
 	# in-order validation is the whole rule: a floor cell in front of a removed
 	# desk is judged after the desk is gone.
 	var edits: Array[BuildEdit] = []
 	for object_id in objects:
 		edits.append(BuildEdit.remove_object(object_id))
+	for room_id in rooms:
+		edits.append(BuildEdit.remove_room(room_id))
 	for cell in cells:
 		if held.has(cell):
 			continue

@@ -7,7 +7,8 @@ extends CanvasLayer
 ## a money slot sits top-left. BuildMode keeps the tool logic: the menu calls
 ## set_tool() and rotate_facing() and follows tool_changed and status_changed.
 ## Opening a category picks no tool; picking a card does, and a tool picked by
-## key opens its own category. Esc (tool NONE) closes the tray.
+## key opens its own category. Esc (tool NONE) closes the tray. The menu also
+## owns the room info panel (RoomPanel), top-left under the money slot.
 
 const THUMBNAIL_DIR := "res://assets/ui/thumbnails/%s.png"
 const CATEGORIES := [
@@ -20,10 +21,14 @@ const CATEGORIES := [
 	{"name": "Check-in", "tools": [BuildMode.Tool.DESK]},
 	{"name": "Security", "tools": [BuildMode.Tool.SCANNER]},
 	{"name": "Gates", "tools": [BuildMode.Tool.SEATS]},
+	{
+		"name": "Shops",
+		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
+	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray.
-const REMOVE_CATEGORY := 5
+const REMOVE_CATEGORY := 6
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -36,7 +41,15 @@ const ITEMS := {
 	BuildMode.Tool.DESK: ["Check-in desk", "desk", ""],
 	BuildMode.Tool.SCANNER: ["Scanner", "scanner", ""],
 	BuildMode.Tool.SEATS: ["Seats", "seats", ""],
+	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
+	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
+	BuildMode.Tool.TABLE: ["Table", "table", ""],
 }
+## Cards whose thumbnail is not rendered yet
+## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
+## show a plain tile until the PNG exists; any other missing PNG is an error.
+const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table"]
+const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot until building costs money
 ## (decision building-costs-money-from-a-starting-budget-you-can-t-build).
 const PRICE_TEXT := "Free"
@@ -76,6 +89,7 @@ var _category_buttons: Array[Button] = []
 var _cards: Dictionary = {}
 var _status := Label.new()
 var _money := Label.new()
+var _room_panel := RoomPanel.new()
 
 
 static func panel_style() -> StyleBoxFlat:
@@ -132,7 +146,9 @@ func _ready() -> void:
 	_build_tray()
 	_build_status()
 	_build_money()
+	add_child(_room_panel)
 	if build_mode != null:
+		_room_panel.watch(build_mode)
 		build_mode.tool_changed.connect(_on_tool_changed)
 		build_mode.status_changed.connect(_on_status_changed)
 		_on_status_changed(build_mode.status_text())
@@ -193,6 +209,10 @@ func status_label() -> Label:
 
 func money_label() -> Label:
 	return _money
+
+
+func room_panel() -> RoomPanel:
+	return _room_panel
 
 
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
@@ -295,6 +315,12 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	var path := THUMBNAIL_DIR % item[1]
 	if ResourceLoader.exists(path):
 		picture.texture = load(path)
+	elif PLACEHOLDER_THUMBNAILS.has(item[1]):
+		var tile := ColorRect.new()
+		tile.color = PLACEHOLDER_COLOR
+		tile.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		picture.add_child(tile)
 	else:
 		push_error("BuildMenu: no thumbnail at %s" % path)
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
