@@ -11,7 +11,8 @@ extends RefCounted
 ##
 ## Every change goes through validate() and apply() with a BuildEdit, so the
 ## preview, the click and a snapshot load share one set of rules. apply()
-## then relinks the A* graph around the changed cells only.
+## then relinks the A* graph around the changed cells only (once for a whole
+## batch, see begin_batch()).
 
 ## After an accepted edit: the cells GridPathing relinked, so every committed
 ## path through one of them may be stale. After a snapshot load: every cell.
@@ -62,6 +63,8 @@ var _reserved := PackedInt32Array()
 var _objects: Dictionary = {}
 var _next_object_id := 1
 var _pathing := GridPathing.new()
+var _batching := false
+var _batch_dirty: Array[Vector2i] = []
 
 
 ## `grid_origin` is the world position of cell (0, 0)'s north-west corner, a
@@ -239,8 +242,33 @@ func apply(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
 			result.dirty_cells = _erase_object(edit.object_id)
-	graph_changed.emit(_pathing.update(self, result.dirty_cells))
+	if _batching:
+		_batch_dirty.append_array(result.dirty_cells)
+	else:
+		graph_changed.emit(_pathing.update(self, result.dirty_cells))
 	return result
+
+
+## Starts a batch: apply() still validates and changes the grid edit by edit,
+## so each edit sees the ones before it, but the A* graph is not relinked and
+## graph_changed is not emitted until end_batch(). Validation reads the grid,
+## never the graph. Calls do not nest.
+func begin_batch() -> void:
+	_batching = true
+	_batch_dirty.clear()
+
+
+## Ends the batch: relinks the graph once around the union of the cells the
+## batch changed and emits graph_changed once with the cells relinked. Returns
+## them, or an empty array (and emits nothing) when no edit was accepted.
+func end_batch() -> Array[Vector2i]:
+	_batching = false
+	var relinked: Array[Vector2i] = []
+	if not _batch_dirty.is_empty():
+		relinked = _pathing.update(self, _batch_dirty)
+		graph_changed.emit(relinked)
+	_batch_dirty.clear()
+	return relinked
 
 
 func cell_to_world(cell: Vector2i) -> Vector3:

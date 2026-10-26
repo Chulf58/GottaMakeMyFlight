@@ -6,9 +6,9 @@ extends RefCounted
 ## owns the input and the ghost; this class owns the rectangle and what
 ## applying it does, so the click and the drag use the same edits and rules.
 ##
-## BuildGrid has no batch edit: every cell is one grid.apply(), which relinks
-## the A* graph around that cell and emits graph_changed. The cost is measured
-## in test_area_drag.gd.
+## Each rectangle is one BuildGrid batch: every cell is validated and applied
+## in order, and the A* graph is relinked and graph_changed emitted once at
+## the end. The cost is measured in test_area_drag.gd.
 
 
 ## What applying a rectangle did, for the status line.
@@ -49,12 +49,13 @@ var _end := Vector2i.ZERO
 var _limit := Vector2i.ZERO
 
 
-## Fills every cell of `area` with floor. Cells that already have it count as
-## unchanged; a cell the rules refuse (DoorPlacement.check()) is skipped.
+## Fills every cell of `area` with floor. Cells that already have floor, of any
+## zone, count as unchanged; a cell the rules refuse (DoorPlacement.check()) is skipped.
 static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 	var outcome := Outcome.new()
+	grid.begin_batch()
 	for cell in _cells(area):
-		if grid.floor_at(cell) == BuildGrid.FLOOR_TILE and grid.zone_at(cell) == zone:
+		if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
 			outcome.unchanged += 1
 			continue
 		var edit := BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, zone)
@@ -64,6 +65,7 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 			outcome.placed += 1
 		else:
 			outcome._refuse(result)
+	grid.end_batch()
 	return outcome
 
 
@@ -78,12 +80,19 @@ static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
 	var outcome := Outcome.new()
 	outcome.removing = true
 	var cells := _cells(area)
+	# Read every cell before the first edit: removing an object clears its
+	# occupancy, which must not turn its other cells into plain floor.
 	var held := {}
+	var objects: Array[int] = []
 	for cell in cells:
 		var object_id := grid.object_at(cell)
 		if object_id == 0:
 			continue
 		held[cell] = true
+		if not objects.has(object_id):
+			objects.append(object_id)
+	grid.begin_batch()
+	for object_id in objects:
 		var edit := BuildEdit.remove_object(object_id)
 		var result := DoorPlacement.check(grid, edit)
 		if result.ok:
@@ -104,6 +113,7 @@ static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
 			outcome.placed += 1
 		else:
 			outcome._refuse(result)
+	grid.end_batch()
 	return outcome
 
 

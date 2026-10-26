@@ -118,6 +118,16 @@ func test_right_click_cancels_the_drag() -> void:
 	assert_int(_changes).is_equal(0)
 
 
+func test_losing_the_window_focus_drops_the_rectangle() -> void:
+	for lost in [Node.NOTIFICATION_APPLICATION_FOCUS_OUT, Node.NOTIFICATION_WM_WINDOW_FOCUS_OUT]:
+		_mode.set_tool(BuildMode.Tool.FLOOR)
+		_drag(Vector2i(3, 3), Vector2i(7, 5))
+		_mode.notification(lost)
+		assert_object(_mode.finish_area()).is_null()
+		assert_bool(_floored(Vector2i(4, 4))).is_false()
+	assert_int(_changes).is_equal(0)
+
+
 func test_picking_another_tool_mid_drag_drops_the_rectangle() -> void:
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	_drag(Vector2i(3, 3), Vector2i(7, 5))

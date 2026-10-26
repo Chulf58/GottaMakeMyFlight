@@ -132,6 +132,13 @@ func _process(_delta: float) -> void:
 	_update_ghost(_mouse_ground())
 
 
+## A rectangle in progress is dropped when the window loses focus, because
+## the release will not reach it.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		cancel_area()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _area.active and _cancels_area(event):
 		cancel_area()

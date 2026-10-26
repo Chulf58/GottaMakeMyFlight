@@ -4,6 +4,12 @@ extends GdUnitTestSuite
 ## clearing it does cell by cell.
 
 const ZONE := 1
+## Stall guards, set between the measured time (see the printed AREA_DRAG lines)
+## and the per-cell relink this replaced (about 200 ms and 880 ms to fill).
+const FILL_30_LIMIT_MS := 150.0
+const CLEAR_30_LIMIT_MS := 100.0
+const FILL_64_LIMIT_MS := 500.0
+const CLEAR_64_LIMIT_MS := 250.0
 
 var _grid: BuildGrid
 var _drag: AreaDrag
@@ -177,6 +183,37 @@ func test_clear_counts_cells_without_floor_as_unchanged_not_refused() -> void:
 	assert_str(AreaDrag.clear(_grid, Rect2i(1, 1, 4, 4)).message()).is_equal("Nothing to remove")
 
 
+func test_clear_over_both_cells_of_a_desk_removes_it_and_keeps_the_floor_under_it() -> void:
+	_paint_rect(Rect2i(2, 2, 8, 8))
+	(
+		assert_bool(_grid.apply(BuildEdit.place_object(&"checkin_desk", Vector2i(3, 3), 0)).ok)
+		. is_true()
+	)
+	var outcome := AreaDrag.clear(_grid, Rect2i(3, 3, 2, 1))
+	assert_int(outcome.placed).is_equal(1)
+	assert_int(outcome.skipped).is_equal(0)
+	assert_array(_grid.object_ids()).is_empty()
+	assert_int(_grid.floor_at(Vector2i(3, 3))).is_equal(BuildGrid.FLOOR_TILE)
+	assert_int(_grid.floor_at(Vector2i(4, 3))).is_equal(BuildGrid.FLOOR_TILE)
+
+
+func test_fill_floor_leaves_floor_of_another_zone_alone() -> void:
+	_grid.apply(BuildEdit.paint_floor(Vector2i(4, 4), BuildGrid.FLOOR_TILE, 2))
+	var outcome := AreaDrag.fill_floor(_grid, Rect2i(3, 4, 3, 1), ZONE)
+	assert_int(outcome.placed).is_equal(2)
+	assert_int(outcome.unchanged).is_equal(1)
+	assert_int(_grid.zone_at(Vector2i(4, 4))).is_equal(2)
+
+
+func test_a_rectangle_relinks_the_graph_once() -> void:
+	var emitted := []
+	_grid.graph_changed.connect(func(cells: Array[Vector2i]) -> void: emitted.append(cells))
+	AreaDrag.fill_floor(_grid, Rect2i(3, 3, 5, 5), ZONE)
+	assert_int(emitted.size()).is_equal(1)
+	AreaDrag.clear(_grid, Rect2i(3, 3, 5, 5))
+	assert_int(emitted.size()).is_equal(2)
+
+
 func test_a_30_by_30_rectangle_applies_without_a_stall() -> void:
 	var big := BuildGrid.new(Vector2i(40, 40))
 	var world := PassengerTestWorld.make(big, FlightSim.schedule_starts(0))
@@ -189,6 +226,24 @@ func test_a_30_by_30_rectangle_applies_without_a_stall() -> void:
 	print("AREA_DRAG 30x30 fill=%.1f ms clear=%.1f ms (passenger sim bound)" % [fill_ms, clear_ms])
 	assert_int(filled.placed).is_equal(900)
 	assert_int(cleared.placed).is_equal(900)
-	assert_float(fill_ms).is_less(3000.0)
-	assert_float(clear_ms).is_less(3000.0)
+	assert_float(fill_ms).is_less(FILL_30_LIMIT_MS)
+	assert_float(clear_ms).is_less(CLEAR_30_LIMIT_MS)
+	world.free_all()
+
+
+func test_a_full_64_by_64_grid_fills_and_clears_without_a_stall() -> void:
+	var big := BuildGrid.new()
+	var world := PassengerTestWorld.make(big, FlightSim.schedule_starts(0))
+	var whole := Rect2i(Vector2i.ZERO, big.size)
+	var started := Time.get_ticks_usec()
+	var filled := AreaDrag.fill_floor(big, whole, ZONE)
+	var fill_ms := (Time.get_ticks_usec() - started) / 1000.0
+	started = Time.get_ticks_usec()
+	var cleared := AreaDrag.clear(big, whole)
+	var clear_ms := (Time.get_ticks_usec() - started) / 1000.0
+	print("AREA_DRAG 64x64 fill=%.1f ms clear=%.1f ms (passenger sim bound)" % [fill_ms, clear_ms])
+	assert_int(filled.placed).is_equal(4096)
+	assert_int(cleared.placed).is_equal(4096)
+	assert_float(fill_ms).is_less(FILL_64_LIMIT_MS)
+	assert_float(clear_ms).is_less(CLEAR_64_LIMIT_MS)
 	world.free_all()
