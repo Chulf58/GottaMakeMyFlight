@@ -1,7 +1,7 @@
 @tool
 extends EditorScenePostImport
 ## Binds the Toon Series toon materials to every imported surface by glTF material
-## name, and makes the characters' idle animation loop.
+## name, and makes the characters' looping clips (idle, walk, run, sit_idle) loop.
 ##
 ## The .glb files come from tools/blender/convert_toon_batch.py, which names every
 ## material after its pack and atlas. Each .glb.import points its
@@ -16,7 +16,7 @@ const MATERIALS := {
 	"TP_Glass_1A_D": "res://assets/materials/tp_glass.tres",
 	"TCP_Atlas_1A_D": "res://assets/materials/tcp_atlas_toon.tres",
 }
-const LOOPING_ANIMATIONS: Array[String] = ["idle"]
+const LOOPING_ANIMATIONS: Array[String] = ["idle", "walk", "run", "sit_idle"]
 
 
 func _post_import(scene: Node) -> Object:

@@ -16,8 +16,9 @@ What it does, per asset:
    one of five pack-qualified materials, rebuilt as Principled with the atlas PNG that
    this script converts from the vendor PSD. An unknown material name stops the run.
 3. Characters: keep only the parts the Unity source prefab enables, drop shape keys,
-   join the parts into one skinned mesh, move the idle action from the idle FBX onto the
-   character armature, and export only that action, named "idle".
+   join the parts into one skinned mesh, retarget the idle action from the idle FBX onto
+   the character armature as "idle", then add walk, run, sit_down, sit_idle and stand_up
+   (tools/blender/anim/toon_clips.py; it prints SPEED and SIT_CONTRACT lines).
 4. Export .glb (Y-up, no vertex colours), then RE-READ THE WRITTEN FILE and check
    materials, images, animations and bounds against the scene. Any mismatch stops the run.
 5. Write or patch the .glb.import so Godot runs the post-import material binder.
@@ -34,6 +35,9 @@ import bpy
 from mathutils import Matrix, Vector
 
 REPO = "C:\\Users\\chulf\\Gotta-make-my-flight"
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(REPO, "tools", "blender", "anim"))
+import toon_clips  # noqa: E402
 GAME = os.path.join(REPO, "game")
 ASSETS = os.path.join(GAME, "assets")
 TEX_DIR = os.path.join(ASSETS, "textures")
@@ -352,10 +356,16 @@ def build_character(stem, idle_fbx, prefab):
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
     if body.parent != arm or any(abs(v) > 1e-6 for v in arm.rotation_euler):
         die("%s: armature rotation was not applied" % stem)
+    # Walk, run and the sit clips go on after the rotation is applied, so the clip
+    # module works in armature space == world space (tools/blender/anim/toon_clips.py).
+    try:
+        durations = toon_clips.add_clips(stem, arm, action)
+    except toon_clips.Fail as e:
+        die(str(e))
     bpy.context.scene.frame_start = f0
     bpy.context.scene.frame_end = f1
     bpy.context.scene.frame_set(f0)
-    return [arm, body]
+    return [arm, body], durations
 
 
 def joint_offset(arm, name):
@@ -449,6 +459,51 @@ def scene_bounds_yup(objs):
     return lo, hi
 
 
+def glb_accessor(path, js, index):
+    """Float values of one accessor in the written .glb, as a list of tuples."""
+    with open(path, "rb") as f:
+        data = f.read()
+    jlen = struct.unpack_from("<I", data, 12)[0]
+    bin_start = 20 + jlen + 8
+    acc = js["accessors"][index]
+    view = js["bufferViews"][acc["bufferView"]]
+    width = {"SCALAR": 1, "VEC3": 3, "VEC4": 4}[acc["type"]]
+    if acc["componentType"] != 5126:
+        die("accessor %d is not float" % index)
+    stride = view.get("byteStride", 4 * width)
+    base = bin_start + view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    return [struct.unpack_from("<%df" % width, data, base + i * stride) for i in range(acc["count"])]
+
+
+def check_clips(stem, path, js, durations):
+    """The written file carries exactly the clips, each as long as it was baked and
+    each with real motion (Root may stay constant, the clip as a whole may not)."""
+    anims = js.get("animations", [])
+    names = [a["name"] for a in anims]
+    if sorted(names) != sorted(toon_clips.CLIPS) or len(anims) != len(toon_clips.CLIPS):
+        die("%s: expected animations %s, file has %s" % (stem, sorted(toon_clips.CLIPS), names))
+    for a in anims:
+        end = max(js["accessors"][s["input"]]["max"][0] for s in a["samplers"])
+        start = min(js["accessors"][s["input"]]["min"][0] for s in a["samplers"])
+        motion = 0.0
+        for s in a["samplers"]:
+            vals = glb_accessor(path, js, s["output"])
+            for c in range(len(vals[0])):
+                col = [v[c] for v in vals]
+                motion = max(motion, max(col) - min(col))
+        want = durations[a["name"]]
+        log(
+            "CLIP %s %s duration_s=%.4f baked_s=%.4f channels=%d max_channel_range=%.4f"
+            % (stem, a["name"], end - start, want, len(a["channels"]), motion)
+        )
+        if abs(start) > 1e-4:
+            die("%s: clip %s starts at %.4f s, not 0" % (stem, a["name"], start))
+        if abs((end - start) - want) > 0.25 / toon_clips.FPS:
+            die("%s: clip %s lasts %.4f s, baked %.4f s" % (stem, a["name"], end - start, want))
+        if motion < 1e-3:
+            die("%s: clip %s carries no motion" % (stem, a["name"]))
+
+
 def on_metre(v):
     return abs(v - round(v)) < 0.01
 
@@ -456,8 +511,9 @@ def on_metre(v):
 # ---------------------------------------------------------------- import file
 
 
-def write_scene_import(glb_path):
-    """Make Godot run the toon post-import binder on this .glb."""
+def write_scene_import(glb_path, animated=False):
+    """Make Godot run the toon post-import binder on this .glb. Characters import their
+    clips at the 25 fps they were baked at, so Godot keeps the baked keys as they are."""
     path = glb_path + ".import"
     line = 'import_script/path="%s"' % POST_IMPORT
     if os.path.exists(path):
@@ -468,11 +524,19 @@ def write_scene_import(glb_path):
         else:
             text = text.replace("[params]\n", "[params]\n\n%s\n" % line, 1)
         text = re.sub(r"^gltf/embedded_image_handling=.*$", "gltf/embedded_image_handling=0", text, flags=re.M)
+        if animated:
+            fps_line = "animation/fps=%d" % toon_clips.FPS
+            if re.search(r"^animation/fps=.*$", text, flags=re.M):
+                text = re.sub(r"^animation/fps=.*$", fps_line, text, flags=re.M)
+            else:
+                text = text.replace("[params]\n", "[params]\n\n%s\n" % fps_line, 1)
     else:
         text = (
             '[remap]\n\nimporter="scene"\nimporter_version=1\ntype="PackedScene"\n\n[params]\n\n'
             "%s\ngltf/embedded_image_handling=0\n" % line
         )
+        if animated:
+            text += "animation/fps=%d\n" % toon_clips.FPS
     with open(path, "w", newline="\n") as f:
         f.write(text)
 
@@ -495,8 +559,9 @@ def convert(stem, spec):
         for a in list(bpy.data.actions):
             bpy.data.actions.remove(a)
     rebind_materials(pack, objs)
+    durations = {}
     if idle_fbx is not None:
-        objs = build_character(stem, idle_fbx, prefab)
+        objs, durations = build_character(stem, idle_fbx, prefab)
         objs = list(bpy.context.scene.objects)
     bpy.context.view_layer.update()
 
@@ -576,15 +641,15 @@ def convert(stem, spec):
         die("%s: file materials %s differ from scene %s" % (stem, f_mats, mats))
     if f_imgs < 1 or f_imgs != len(imgs):
         die("%s: file images %d, scene images %s" % (stem, f_imgs, imgs))
-    if animated and f_anims != ["idle"]:
-        die("%s: expected exactly one animation 'idle', file has %s" % (stem, f_anims))
+    if animated:
+        check_clips(stem, out, js, durations)
     if not animated and f_anims:
         die("%s: a prop carries animations %s" % (stem, f_anims))
     if not animated:
         for k in range(3):
             if abs(f_lo[k] - s_lo[k]) > BOUNDS_TOLERANCE or abs(f_hi[k] - s_hi[k]) > BOUNDS_TOLERANCE:
                 die("%s: file bounds %s..%s differ from scene %s..%s" % (stem, f_lo, f_hi, s_lo, s_hi))
-    write_scene_import(out)
+    write_scene_import(out, animated)
 
 
 def main():
