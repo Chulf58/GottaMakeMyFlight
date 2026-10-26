@@ -22,7 +22,7 @@ signal outcome(id: int, made: bool)
 ## Every journey stage change, after it is made (the debug hook logs it).
 signal stage_changed(id: int, stage: Passenger.Stage)
 
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -72,6 +72,10 @@ var layout := TerminalLayout.new()
 var grid: BuildGrid
 var tick := 0
 var last_batch_seed := 0
+## Scheduled passengers dropped when their flight's doors closed, by flight id:
+## {"no_entrance": n, "late": n}. "no_entrance" counts those dropped while the
+## terminal had no entrance, "late" those who simply had not arrived yet.
+var no_shows := {}
 var tick_usec_last := 0
 var tick_usec_max := 0
 var tick_usec_total := 0
@@ -122,9 +126,10 @@ func schedule_flight(flight_id: String, count: int) -> void:
 
 ## The debug batch: `count` passengers for the first flight still boarding,
 ## one per tick from the next tick, through the normal spawn schedule. The
-## seed decides their characters and is kept in last_batch_seed.
-func spawn_batch(count: int, seed: int) -> void:
-	last_batch_seed = seed
+## seed decides their characters and is kept in last_batch_seed, but only once
+## the batch is scheduled. Returns false (with an error, last_batch_seed
+## unchanged) when every flight has closed its doors.
+func spawn_batch(count: int, seed: int) -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var flight_id := ""
@@ -134,9 +139,11 @@ func spawn_batch(count: int, seed: int) -> void:
 			break
 	if flight_id == "":
 		push_error("PassengerSim.spawn_batch: no flight is open for passengers")
-		return
+		return false
+	last_batch_seed = seed
 	for i in count:
 		_add_spawn(tick + 1 + i, flight_id, rng.randi_range(0, 1))
+	return true
 
 
 ## Spawns one passenger at the entrance now and returns its id, or 0 (with an
@@ -320,6 +327,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	tick = loaded["tick"]
 	_next_id = loaded["next_id"]
 	last_batch_seed = loaded["last_batch_seed"]
+	no_shows = loaded["no_shows"]
 	_schedule = loaded["schedule"]
 	_queues = loaded["queues"]
 	_passengers = loaded["passengers"]
@@ -364,13 +372,30 @@ func _spawn(flight_id: String, variant: int) -> Passenger:
 	return p
 
 
+## Missed passengers are the ones already in the terminal. Those still on the
+## schedule for a closed flight will never board, so they are dropped and
+## counted as no-shows, with the cause that holds now.
 func _close_doors() -> void:
+	var cause := "no_entrance" if layout.entrances.is_empty() else "late"
+	var kept: Array[Dictionary] = []
+	for entry in _schedule:
+		if flights.is_doors_closed(entry["flight"]):
+			var counts: Dictionary = no_shows.get(entry["flight"], {"no_entrance": 0, "late": 0})
+			counts[cause] += 1
+			no_shows[entry["flight"]] = counts
+		else:
+			kept.append(entry)
+	if kept.size() != _schedule.size():
+		_schedule = kept
 	for p in _passengers:
 		if not p.is_done() and flights.is_doors_closed(p.flight_id):
 			_finish(p, false)
 
 
 func _finish(p: Passenger, made: bool) -> void:
+	if not made:
+		p.missed_stage = p.stage
+		p.missed_stuck = p.stuck
 	_leave_station(p)
 	_release_seat(p)
 	_set_stage(p, Passenger.Stage.MADE if made else Passenger.Stage.MISSED)
