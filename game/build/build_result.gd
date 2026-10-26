@@ -25,6 +25,7 @@ enum Reason {
 	WALL_HOLDS_DOOR,
 	DOOR_NOT_ON_EDGE,
 	DOOR_WALLED,
+	DOOR_NOT_AT_SHELL_DOOR,
 }
 
 const REASON_TEXT := {
@@ -48,6 +49,7 @@ const REASON_TEXT := {
 	Reason.WALL_HOLDS_DOOR: "A door stands beside this wall",
 	Reason.DOOR_NOT_ON_EDGE: "Entrances and exits need the outside edge, with no floor behind them",
 	Reason.DOOR_WALLED: "Keep the edge behind an entrance or exit open",
+	Reason.DOOR_NOT_AT_SHELL_DOOR: "Use a landside door for an entrance, a gate door for an exit",
 }
 
 var ok: bool = true

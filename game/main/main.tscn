@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -14,6 +14,7 @@
 [ext_resource type="Script" path="res://ui/passenger_hud.gd" id="12_hud"]
 [ext_resource type="Script" path="res://ui/build_menu.gd" id="13_menu"]
 [ext_resource type="Script" path="res://build/view/shell_view.gd" id="14_shellview"]
+[ext_resource type="Resource" path="res://build/toon_terminal_shell.tres" id="15_shell"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -52,9 +53,11 @@ surface_material_override/0 = SubResource("Material_ground")
 
 [node name="TycoonCamera" parent="." instance=ExtResource("1_cam")]
 bounds_half_extent = 260.0
+home_position = Vector3(-0.5, 0, -79.8)
 
 [node name="BuildMode" type="Node3D" parent="."]
 script = ExtResource("3_build")
+shell = ExtResource("15_shell")
 
 [node name="Airside" type="Node3D" parent="."]
 script = ExtResource("6_airside")
