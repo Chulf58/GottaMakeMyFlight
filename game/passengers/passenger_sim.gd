@@ -23,8 +23,9 @@ signal outcome(id: int, made: bool)
 const SAVE_VERSION := 1
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
-## 4.5 m/s; the Toon run clips cover 4.17-5.30 m/s.
-const RUN_MM := 225
+## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
+## so they play at about 0.66x (male) and 0.84x (female).
+const RUN_MM := 175
 const CHECKIN_TICKS := 60
 const SECURITY_TICKS := 40
 ## The sit clips last 1.2 s.
