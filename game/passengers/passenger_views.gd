@@ -33,7 +33,7 @@ var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
 var _cur: Dictionary = {}
 var _ring := MeshInstance3D.new()
-## Queue-full signs and late badges, drawn after the passengers.
+## Queue-full signs, drawn after the passengers.
 var _markers := MissMarkers.new()
 
 
@@ -58,7 +58,6 @@ func _ready() -> void:
 		probe.free()
 	_markers.name = "MissMarkers"
 	_markers.sim = sim
-	_markers.views = self
 	add_child(_markers)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)

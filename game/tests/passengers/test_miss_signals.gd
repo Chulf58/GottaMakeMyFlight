@@ -1,6 +1,6 @@
 class_name TestMissSignals
 extends GdUnitTestSuite
-## Which stations count as full and which passengers are marked late.
+## Which stations count as full.
 
 var _world: PassengerTestWorld
 
@@ -28,14 +28,6 @@ func _short_lane_world() -> PassengerTestWorld:
 	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
 	world.sim.set_meta(&"desk", desk)
 	return world
-
-
-## The reference terminal with doors closing at tick 400, far too soon for
-## anyone to reach the plane, so every passenger is late from the first beat.
-func _tight_world() -> PassengerTestWorld:
-	var grid := BuildGrid.new()
-	ReferenceTerminal.build(grid)
-	return PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(200, 400))
 
 
 func _spawn_spaced(count: int) -> void:
@@ -86,28 +78,3 @@ func test_overflow_is_counted_and_clears_when_the_queue_drains() -> void:
 	_world.run_to(_world.clock.tick + 5 * PassengerSim.CHECKIN_TICKS + 40)
 	assert_int(_world.sim.queue_of(desk).size()).is_equal(0)
 	assert_dict(MissSignals.full_stations(_world.sim)).is_empty()
-
-
-func test_late_ids_are_the_late_passengers_still_travelling() -> void:
-	_world = _tight_world()
-	var spawned: Array[int] = []
-	for i in 3:
-		spawned.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	# Every id gets its forecast beat within one simulated second.
-	_world.run_to(PassengerSim.BEAT_TICKS + 2)
-	for id in spawned:
-		assert_bool(_world.passenger(id).late).is_true()
-	assert_array(MissSignals.late_ids(_world.sim)).contains_exactly(spawned)
-	# Once the doors close they have missed, and a missed passenger is not late.
-	_world.run_to(420)
-	assert_int(_world.sim.missed_count()).is_equal(3)
-	assert_array(MissSignals.late_ids(_world.sim)).is_empty()
-
-
-func test_passengers_with_time_to_spare_are_not_marked() -> void:
-	_world = PassengerTestWorld.reference_world()
-	for i in 3:
-		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_world.run_to(PassengerSim.BEAT_TICKS + 2)
-	assert_int(_world.sim.active_count()).is_equal(3)
-	assert_array(MissSignals.late_ids(_world.sim)).is_empty()

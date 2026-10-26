@@ -1,7 +1,7 @@
 class_name TestMissMarkers
 extends GdUnitTestSuite
-## The queue-full sign over a station and the late badge over a passenger,
-## drawn by the MissMarkers child of PassengerViews.
+## The queue-full sign over a full station, drawn by the MissMarkers child
+## of PassengerViews.
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -42,12 +42,6 @@ func _short_lane_world() -> PassengerTestWorld:
 	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
 	world.sim.set_meta(&"desk", desk)
 	return world
-
-
-func _tight_world() -> PassengerTestWorld:
-	var grid := BuildGrid.new()
-	ReferenceTerminal.build(grid)
-	return PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(200, 400))
 
 
 func _spawn_spaced(count: int) -> void:
@@ -121,44 +115,3 @@ func test_a_desk_removed_while_paused_loses_its_sign_on_the_next_frame() -> void
 	assert_int(_world.clock.tick).is_equal(tick)
 	assert_object(_markers.sign_for(desk)).is_null()
 	assert_bool(sign.visible).is_false()
-
-
-func test_a_late_badge_rides_above_the_drawn_passenger() -> void:
-	_attach(_tight_world())
-	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_world.run_to(PassengerSim.BEAT_TICKS + 8)
-	assert_bool(_world.passenger(id).late).is_true()
-	# The passenger is moving, so the drawn position lies between two ticks.
-	var before := _views.tick_position(id, false)
-	assert_float(before.distance_to(_views.tick_position(id, true))).is_greater(0.05)
-	_world.clock.advance(SimClock.STEP * 0.5)
-	_views.draw()
-	var badge := _markers.badge_for(id)
-	assert_object(badge).is_not_null()
-	assert_bool(badge.visible).is_true()
-	var head := _views.node_for(id).position + Vector3(0.0, MissMarkers.HEAD_M, 0.0)
-	assert_float(badge.position.distance_to(head)).is_less(0.001)
-	var lift := Vector3(0.0, MissMarkers.HEAD_M, 0.0)
-	assert_float(badge.position.distance_to(before + lift)).is_greater(0.02)
-
-
-func test_a_missed_passenger_returns_its_badge_to_the_pool() -> void:
-	_attach(_tight_world())
-	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_world.run_to(PassengerSim.BEAT_TICKS + 2)
-	var badge := _markers.badge_for(id)
-	assert_object(badge).is_not_null()
-	assert_int(_markers.free_badge_count()).is_equal(0)
-	_world.run_to(420)
-	assert_int(_world.passenger(id).stage).is_equal(Passenger.Stage.MISSED)
-	assert_object(_markers.badge_for(id)).is_null()
-	assert_bool(badge.visible).is_false()
-	assert_int(_markers.free_badge_count()).is_equal(1)
-
-
-func test_badge_size_keeps_a_readable_floor_and_ceiling() -> void:
-	# fov 55 on a 1080-pixel-high view: 0.6 m is 20 px at about 31 m.
-	assert_float(MissMarkers.badge_px(5.0, 55.0, 1080.0)).is_equal(MissMarkers.LATE_MAX_PX)
-	assert_float(MissMarkers.badge_px(200.0, 55.0, 1080.0)).is_equal(MissMarkers.LATE_MIN_PX)
-	assert_float(MissMarkers.badge_px(31.1, 55.0, 1080.0)).is_equal_approx(20.0, 0.1)
-	assert_float(MissMarkers.badge_px(0.0, 55.0, 1080.0)).is_equal(MissMarkers.LATE_MAX_PX)
