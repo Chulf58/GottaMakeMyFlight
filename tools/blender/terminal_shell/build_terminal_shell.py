@@ -57,6 +57,23 @@ Method:
    ends, all inset 0.03 m from their seam so neighbours never share a plane; plus
    a top cap on every mullion stub cut at y 5.5. Source custom normals are kept;
    closure faces are checked to carry their face normal.
+   Crack caps (step 3): above the ground storey each storey's backdrop starts a few cm
+   above the slab top it stands on, so a thin slit runs along the storey line that showed
+   the slab top in the original. Of every deleted up-facing slab top that ends on a
+   backdrop or setback plane, a CRACK_BAND (0.5 m) strip along that plane is kept: the same
+   surface the slit showed, nothing deeper.
+   Canopy (step 5): whole source islands move from Upper (or Lot) to the Canopy node:
+   islands from the canopy's back fascia plane (z -71.00) outward that reach past z -63.0,
+   the back-fascia islands that mirror one of them, and every pole cable.
+   Doorways (after step 6): each vestibule (Porch_<n>) is closed at its back by a panel
+   that faces out and is culled from inside. At each revolving door that panel is removed
+   and an opening of the panel's width (2.30 m, the vestibule's clear width; the drum is
+   2.21 m) is cut through the door's facade bay from the floor to OPEN_TOP (3.80, the upper
+   ledge top and the porch ceiling). A wall jamb (inward face to backdrop, in the bay), a
+   vestibule jamb (backdrop to the old panel, in the porch, covering the cut ledge and
+   window ends) on each side and a lintel up to the porch ceiling's inner edge close it;
+   81 rays through it must pass and 2 beside it must hit. A Doorway_<n> empty marks the floor centre of each opening on the backdrop
+   plane, its local -Z pointing outward, with glTF extras door, bay, outward, width, height.
 7. Write the .glb.import first (the source's [params]: toon_post_import.gd and
    embedded_image_handling=0, so Godot binds the shared atlases and extracts no
    PNGs), export (same glTF settings as convert_toon_batch.py), and RE-READ THE
@@ -75,7 +92,7 @@ import bpy
 from mathutils import Matrix, Quaternion, Vector
 from mathutils.bvhtree import BVHTree
 
-REPO = "C:\\Users\\chulf\\Gotta-make-my-flight"
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 SRC = os.path.join(REPO, "game", "assets", "buildings", "tp_airport_01a.glb")
 OUT_DEFAULT = os.path.join(REPO, "game", "assets", "buildings", "tp_airport_shell.glb")
 REPORT_DIR = os.path.join(REPO, "tools", "blender", "out", "toon_shell_extract")
@@ -94,6 +111,11 @@ LONG_SEAMS = [-30.5 + 3.0 * k for k in range(21)]  # pilaster centrelines, N and
 SHORT_SEAMS = [-92.3 + 2.5 * k for k in range(11)]  # pilaster centrelines, W and E
 SEAM_SNAP = 0.2  # a small piece this close to a seam goes to the west/north bay
 EPS = 1e-3
+DOOR_CLEAR = 0.10  # doorway clearance on each side of the revolving door's drum
+OPEN_TOP = 3.80  # doorway top: the upper ledge band's top and the porch ceiling
+CRACK_BAND = 0.5  # crack caps: kept width of a deleted slab top along the backdrop
+CANOPY_BACK_Z = -71.05  # the sloped landside canopy starts at its back fascia (z -71.00)
+CANOPY_REACH_Z = -63.0  # and reaches out past the landside facade (ledge rims stop at -64.1)
 
 sys.dont_write_bytecode = True
 
@@ -419,6 +441,137 @@ def bay_span(side, bay):
     return edges[bay - 1], edges[bay]
 
 
+# ------------------------------------------------------------------ doorways
+
+
+def gnormal(f):
+    return Vector((f.normal.x, f.normal.z, -f.normal.y))
+
+
+def gbox(f):
+    return bbox([g(v.co) for v in f.verts])
+
+
+def cut_doorways(bm, doors, drum, node_l, uvl, backdrop_uv_fn, add_quad):
+    """Cut an opening through the facade bay at each revolving door, close its jambs and
+    lintel, and prove it is open. The opening is as wide as the vestibule's back panel (its
+    clear width, which must hold the drum with at most DOOR_CLEAR to spare on each side),
+    from the floor (y 0.3) to OPEN_TOP, from the inward face through the wall, and the back
+    panel is removed. Returns one record per door for the markers and census."""
+    uvfs = {s: backdrop_uv_fn(s) for s in ("N", "S")}
+    rows = []
+    for k in sorted(doors):
+        c = doors[k]
+        side = "N" if c.z < -80.0 else "S"
+        bd = BZ0 if side == "N" else BZ1
+        inw = 1.0 if side == "N" else -1.0  # inward is +z on the airside wall, -z landside
+        inner = bd + INNER * inw
+        outer = SLAB_OUT[side]
+        zlo, zhi = min(inner, outer), max(inner, outer)
+        # The vestibule (Porch_<n>) is closed at its back by a single-sided panel facing out
+        # (culled from inside). The opening takes that panel's width, the vestibule's clear
+        # width between its side walls, and the panel goes.
+        pkey = ("Porch_%d" % k).encode()
+        panel = [f for f in bm.faces if f[node_l] == pkey and abs(gnormal(f).z + inw) < 1e-3
+                 and gbox(f)[0].x < c.x < gbox(f)[1].x and gbox(f)[1].y - gbox(f)[0].y > 3.0]
+        if not panel:
+            die("doorway %d: no vestibule back panel in Porch_%d" % (k, k))
+        plo, phi = bbox([p for f in panel for p in gbox(f)])
+        x0, x1, pz = plo.x, phi.x, plo.z
+        hw = (x1 - x0) / 2
+        if abs((x0 + x1) / 2 - c.x) > 0.02:
+            die("doorway %d: back panel centre %.3f is off the drum centre %.3f" % (k, (x0 + x1) / 2, c.x))
+        if phi.z - plo.z > 1e-3 or x1 - x0 < 2 * drum[k] or x1 - x0 > 2 * (drum[k] + DOOR_CLEAR):
+            die("doorway %d: back panel x %.2f..%.2f z %.2f..%.2f against drum %.3f" % (k, x0, x1, plo.z, phi.z, drum[k]))
+        wall_uv = {}
+        for jx, dirx in ((x0, 1), (x1, -1)):
+            side_faces = [f for f in bm.faces if f[node_l] == pkey and abs(gnormal(f).x - dirx) < 1e-3
+                          and abs(gbox(f)[0].x - jx) < 1e-3 and abs(gbox(f)[1].x - jx) < 1e-3]
+            if not side_faces:
+                die("doorway %d: no vestibule side wall at x %.2f" % (k, jx))
+            us = [lp[uvl].uv for lp in side_faces[0].loops]
+            wall_uv[jx] = Vector((sum(u.x for u in us) / len(us), sum(u.y for u in us) / len(us)))
+        floor_y = plo.y
+        bay = bay_of(side, c, False)
+        node = "Facade_%s_%02d" % (side, bay)
+        a, e = bay_span(side, bay)
+        if not (a + 0.23 < x0 and x1 < e - 0.23):  # pilasters reach 0.18 m from the seam
+            die("doorway %d (x %.2f..%.2f) does not clear the pilasters of %s (%.2f..%.2f)" % (k, x0, x1, node, a, e))
+        key = node.encode()
+
+        def bay_faces():
+            return [f for f in bm.faces if f[node_l] == key]
+
+        cuts = 0
+        for xc in (x0, x1):
+            cuts += bisect_faces(bm, [f for f in bay_faces() if gbox(f)[0].y < OPEN_TOP + EPS], "x", xc)
+        column = [f for f in bay_faces() if x0 - 1e-4 <= gbox(f)[0].x and gbox(f)[1].x <= x1 + 1e-4]
+        cuts += bisect_faces(bm, column, "y", OPEN_TOP)
+
+        def in_box(p):
+            return x0 < p.x < x1 and GROUND_Y + 1e-3 < p.y <= OPEN_TOP + 1e-3 and zlo - 1e-3 <= p.z <= zhi + 1e-3
+
+        cand = [f for f in bay_faces() if in_box(g(f.calc_center_median()))]
+        for f in cand:
+            lo, hi = gbox(f)
+            if lo.x < x0 - 1e-4 or hi.x > x1 + 1e-4 or lo.y < GROUND_Y - 1e-4 or hi.y > OPEN_TOP + 1e-4 \
+                    or lo.z < zlo - 1e-3 or hi.z > zhi + 1e-3:
+                die("doorway %d: face straddles the opening box: %s" % (k, fmt_box(describe([f]))))
+        # the porch ceiling must cover the opening's width up to its inner edge
+        ceil = [f for f in bm.faces if f[node_l] == ("Porch_%d" % k).encode() and gnormal(f).y < -0.999
+                and abs(g(f.calc_center_median()).y - OPEN_TOP) < 2e-3]
+        if not ceil:
+            die("doorway %d: no porch ceiling at y %.2f" % (k, OPEN_TOP))
+        clo, chi = bbox([p for f in ceil for p in bbox([g(v.co) for v in f.verts])])
+        edge = chi.z if side == "N" else clo.z
+        if clo.x > x0 or chi.x < x1 or not ((edge - bd) * inw > 0 and (inner - edge) * inw > 0):
+            die("doorway %d: porch ceiling x %.2f..%.2f edge %.2f does not cover the opening" % (k, clo.x, chi.x, edge))
+        bmesh.ops.delete(bm, geom=cand + panel, context="FACES")
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+
+        top_uv = uvfs[side](0.0, TOP_Y - 0.05)
+        quads = 0
+        for jx, dirx in ((x0, 1), (x1, -1)):
+            # wall jamb (inward face to backdrop) in the bay; vestibule jamb (backdrop to the
+            # old back panel) continues the vestibule's side wall in the porch. It covers the
+            # cut ends of the ledge bands and the window plane, so they get no caps of their own.
+            add_quad(node, [(jx, GROUND_Y, inner), (jx, GROUND_Y, bd), (jx, OPEN_TOP, bd), (jx, OPEN_TOP, inner)],
+                     [top_uv] * 4, (dirx, 0, 0))
+            add_quad("Porch_%d" % k, [(jx, floor_y, bd), (jx, floor_y, pz), (jx, OPEN_TOP, pz), (jx, OPEN_TOP, bd)],
+                     [wall_uv[jx]] * 4, (dirx, 0, 0))
+            quads += 2
+        add_quad(node, [(x0, OPEN_TOP, inner), (x1, OPEN_TOP, inner), (x1, OPEN_TOP, edge), (x0, OPEN_TOP, edge)],
+                 [top_uv] * 4, (0, -1, 0))
+        quads += 1
+
+        # proof: rays through the opening from 0.3 m inside to 0.1 m past the ledge front
+        # hit nothing; control rays just beside the opening hit the inward face
+        bm.normal_update()
+        bm.faces.index_update()
+        bvh = BVHTree.FromBMesh(bm)
+        ray = b(0, 0, -inw) - b(0, 0, 0)
+        reach = 0.3 + abs(pz - inner) + 0.1
+        clear = blocked = 0
+        for i in range(9):
+            for j in range(9):
+                x = x0 + 0.03 + (x1 - x0 - 0.06) * i / 8
+                y = GROUND_Y + 0.05 + (OPEN_TOP - GROUND_Y - 0.1) * j / 8
+                hit = bvh.ray_cast(b(x, y, inner + 0.3 * inw), ray, reach)
+                if hit[0] is None:
+                    clear += 1
+                else:
+                    blocked += 1
+        control = sum(1 for x in (x0 - 0.06, x1 + 0.06)
+                      if bvh.ray_cast(b(x, 2.0, inner + 0.3 * inw), ray, reach)[0] is not None)
+        if blocked or control != 2:
+            die("doorway %d: %d of 81 rays through the opening are blocked, %d of 2 control rays hit" % (k, blocked, control))
+        rows.append({"k": k, "side": side, "node": node, "c": c.copy(), "hw": hw, "bd": bd, "inner": inner,
+                     "outer": pz, "edge": edge, "cuts": cuts, "deleted": len(cand), "panel": len(panel),
+                     "quads": quads, "clear": clear, "control": control,
+                     "outward": (0.0, 0.0, -inw)})
+    return rows
+
+
 # ------------------------------------------------------------------ main
 
 
@@ -442,6 +595,8 @@ def main():
     bm.normal_update()
     uvl = bm.loops.layers.uv[uv_name]
     src_l = bm.faces.layers.int.new("src")
+    del_l = bm.faces.layers.int.new("del")  # layers are made up front: a new layer
+    frag_l = bm.faces.layers.int.new("frag")  # invalidates held BMFace references
     isl = islands_of(bm)
     info = [describe(fs) for fs in isl]
     for i, fs in enumerate(isl):
@@ -504,10 +659,13 @@ def main():
     inner_slab = [i for i in inner_slab if info[i]["hi"].y > LOT_MAX_Y]  # the ground slab is Lot
 
     doors = {}
+    drum = {}
     for k in range(1, 9):
         o = objs["TP_Airport_01A_Door_%d" % k]
-        lo, hi = bbox([g(o.matrix_world @ v.co) for v in o.data.vertices])
+        pts = [g(o.matrix_world @ v.co) for v in o.data.vertices]
+        lo, hi = bbox(pts)
         doors[k] = (lo + hi) / 2
+        drum[k] = max(math.hypot(p.x - doors[k].x, p.z - doors[k].z) for p in pts)
 
     def porch_of(d):
         for k, c in doors.items():
@@ -663,6 +821,80 @@ def main():
         if r[0] == r[1] and in_v(g(f.calc_center_median()), 0.02):
             in_v_kept.append((f, r[0], r[1]))
     partial_rows = [(f[src_l], fmt_box(describe([f])), vis, tot) for f, vis, tot in partial]
+
+    # Crack caps. Above the ground storey the backdrop of a storey starts a few cm above
+    # the slab top it stands on (for example walls from y 14.83 on a slab top at 14.80),
+    # so a thin slit runs along the storey line. Through it the original showed the slab
+    # top; the shell would show the hollow. The cap is the first CRACK_BAND metres of
+    # that deleted slab top, kept along every backdrop or setback plane it ends on: the
+    # same surface, UVs and normals the slit showed, and nothing deeper in the building.
+    # A ray-diff probe against the original located the slits (W, N and setback at
+    # y 14.8, W at 19.3).
+    for f in delete:
+        f[del_l] = 1
+    env_planes = (("x", BX0, 1), ("x", BX1, -1), ("z", BZ0, 1), ("z", BZ1, -1), ("z", SETBACK_Z, -1))
+    crack_jobs = []
+    for f in delete:
+        if f.normal.z < 0.999 or g(f.calc_center_median()).y < TOP_Y + 0.01:
+            continue
+        pts = [g(v.co) for v in f.verts]
+        touch = []
+        for axis, c, sgn in env_planes:
+            on = [p for p in pts if abs((p.x if axis == "x" else p.z) - c) < 2e-3]
+            if len(on) >= 2:
+                touch.append((axis, c, sgn))
+        if touch:
+            crack_jobs.append((f, touch))
+    # On the setback plane a strip is kept only where a kept wall stands on it just above
+    # the slab top: that plane is also an artificial cut line where no setback wall exists.
+    # (Gating the outer backdrop planes too reopened the W slit at y 19.3, where the slab
+    # meets the roof edge, so they stay ungated.)
+    walls_on = {}
+    for f in bm.faces:
+        if f[del_l] or abs(f.normal.z) > 0.01:
+            continue
+        lo, hi = gbox(f)
+        for axis, c, sgn in env_planes:
+            if axis == "x" and hi.x - lo.x < 1e-3 and abs(lo.x - c) < 0.02:
+                walls_on.setdefault((axis, c), []).append((lo.z, hi.z, lo.y))
+            if axis == "z" and hi.z - lo.z < 1e-3 and abs(lo.z - c) < 0.02:
+                walls_on.setdefault((axis, c), []).append((lo.x, hi.x, lo.y))
+
+    def wall_above(axis, c, a0, a1, y):
+        return any(w0 < a1 - 0.01 and w1 > a0 + 0.01 and y - 0.01 <= wy <= y + 0.5
+                   for w0, w1, wy in walls_on.get((axis, c), []))
+
+    crack_rows = []
+    no_wall = 0
+    for k, (f, touch) in enumerate(crack_jobs, start=1):
+        src_i = f[src_l]
+        f[frag_l] = k
+        for axis, c, sgn in touch:
+            frags = [ff for ff in bm.faces if ff[frag_l] == k]
+            bisect_faces(bm, frags, axis, c + sgn * CRACK_BAND)
+        for ff in [ff for ff in bm.faces if ff[frag_l] == k]:
+            cen = g(ff.calc_center_median())
+            for axis, c, sgn in touch:
+                d = ((cen.x if axis == "x" else cen.z) - c) * sgn
+                if 0.0 < d < CRACK_BAND:
+                    lo, hi = gbox(ff)
+                    a0, a1 = (lo.z, hi.z) if axis == "x" else (lo.x, hi.x)
+                    if c == SETBACK_Z and not wall_above(axis, c, a0, a1, cen.y):
+                        no_wall += 1
+                        break
+                    ff[del_l] = 0
+                    crack_rows.append((src_i, axis, c, fmt_box(describe([ff])), ff.calc_area()))
+                    break
+    delete = [f for f in bm.faces if f[del_l]]
+    for f in bm.faces:
+        if not f[del_l] and f[frag_l]:
+            lo_y = min(g(v.co).y for v in f.verts)
+            if lo_y < TOP_Y:
+                die("a crack cap reaches into the ground storey: %s" % fmt_box(describe([f])))
+    del_area = sum(f.calc_area() for f in delete)
+    deleted_by_src = {}
+    for f in delete:
+        deleted_by_src[f[src_l]] = deleted_by_src.get(f[src_l], 0) + 1
     bmesh.ops.delete(bm, geom=delete, context="FACES")
     loose = [v for v in bm.verts if not v.link_faces]
     bmesh.ops.delete(bm, geom=loose, context="VERTS")
@@ -724,6 +956,47 @@ def main():
 
     for f in bm.faces:
         f[node_l] = node_for(f).encode()
+
+    # Canopy: the sloped landside canopy keeps showing while Upper dissolves, so its
+    # islands leave Upper by source island (whole islands, no cuts). Boundary by position:
+    # an island from the canopy's back fascia plane (z -71.00) outward that reaches past
+    # z -63.0, i.e. more than 1.35 m out from the landside facade; plus each back-fascia
+    # island in the plane z -71.00 that mirrors a front-fascia island of that set (same x
+    # and y range); plus every pole cable, which hangs from the canopy.
+    canopy = {i for i, d in enumerate(info) if cls[i] in ("upper", "other", "slab:roof") and d["lo"].y >= 4.9
+              and d["lo"].z >= CANOPY_BACK_Z and d["hi"].z > CANOPY_REACH_Z}
+    cables = {i for i in range(len(info)) if cls[i] == "upper:cable"}
+    fascia = set()
+    for i, d in enumerate(info):
+        if i in canopy or abs(d["lo"].z + 71.0) > 0.01 or abs(d["hi"].z + 71.0) > 0.01:
+            continue
+        twins = [j for j in canopy if all(abs(info[j][k][a] - d[k][a]) < 0.05 for k in ("lo", "hi") for a in (0, 1))]
+        if len(twins) == 1:
+            fascia.add(i)
+        elif len(twins) > 1:
+            die("back fascia island %d has %d front twins" % (i, len(twins)))
+    canopy |= cables | fascia
+    canopy_from = {}
+    for f in bm.faces:
+        if f[src_l] not in canopy:
+            continue
+        old = f[node_l].decode()
+        if old not in ("Upper", "Lot"):
+            die("canopy island %d has a face in node %s at %s" % (f[src_l], old, fmt_box(describe([f]))))
+        canopy_from[old] = canopy_from.get(old, 0) + 1
+        f[node_l] = b"Canopy"
+    # The canopy's soffits over two spans are fragments of storey slabs (y 5.80 and 14.80)
+    # cut at the landside backdrop: every Upper face whose centre is more than 0.3 m outside
+    # that backdrop goes with the canopy (the upper ledge rims stop 0.25 m out).
+    soffit = 0
+    for f in bm.faces:
+        if f[node_l] == b"Upper" and g(f.calc_center_median()).z > BZ1 + 0.3:
+            f[node_l] = b"Canopy"
+            soffit += 1
+    canopy_from["Upper (soffit fragments)"] = soffit
+    low = [i for i in canopy if info[i]["lo"].y < 4.9]
+    if low or sum(canopy_from.values()) == 0:
+        die("canopy islands below y 4.9 %s, or no canopy faces" % low[:10])
 
     # Only long facade pieces are cut at the seams. A piece of a small island (a pilaster,
     # a sign mark, a mullion cap) goes whole to one bay instead: cutting it would split
@@ -883,6 +1156,7 @@ def main():
         add_quad(node, corners, [uvc] * 4, (0, 1, 0))
         stub_cap_count += 1
     bm.normal_update()
+    doorways = cut_doorways(bm, doors, drum, node_l, uvl, backdrop_uv_fn, add_quad)
 
     # ---- census report
     rep("SHELL CENSUS  source %s" % SRC)
@@ -966,6 +1240,29 @@ def main():
     rep("")
     rep("closure faces added: %d total (inward faces, top caps, end reveals, ledge end caps, %d stub top caps)"
         % (sum(added.values()), stub_cap_count))
+    rep("")
+    rep("CRACK CAPS: %d deleted slab tops above the ground storey end on a backdrop or setback plane; kept a "
+        "%.1f m strip of each along that plane (on the setback plane only where a kept wall stands on it): "
+        "%d strips, %.1f m2 (%d setback band fragments with no wall above dropped). Counts above this section are the initial deletion decision; "
+        "after the caps %d nominee faces are deleted (%.1f m2)" % (
+            len(crack_jobs), CRACK_BAND, len(crack_rows), sum(r[4] for r in crack_rows), no_wall,
+            len(delete), del_area))
+    for i, axis, c, box, area in crack_rows:
+        rep("  island %d (%s) along %s %.2f  %s  %.2f m2" % (i, cls[i], axis, c, box, area))
+    rep("")
+    rep("CANOPY: %d source islands (%d reach past z %.1f from z %.2f, %d back-fascia twins, %d pole cables); "
+        "faces moved from %s" % (len(canopy), len(canopy - cables - fascia), CANOPY_REACH_Z, CANOPY_BACK_Z,
+                                 len(fascia), len(cables), canopy_from))
+    rep("")
+    rep("DOORWAYS (opening = the vestibule's back panel width, y %.2f..%.2f, inward face to the old back panel):"
+        % (GROUND_Y, OPEN_TOP))
+    for dw in doorways:
+        rep("  Doorway_%d in %s: x %.3f..%.3f (width %.3f, drum %.3f), z %.2f..%.2f, faces cut %d, deleted %d bay + "
+            "%d back panel, closure quads %d (wall and vestibule jambs, lintel to the porch ceiling edge z %.2f); "
+            "rays through the opening clear %d/81, control rays beside it hit %d/2" % (
+                dw["k"], dw["node"], dw["c"].x - dw["hw"], dw["c"].x + dw["hw"], 2 * dw["hw"], 2 * drum[dw["k"]],
+                dw["inner"], dw["outer"], dw["cuts"], dw["deleted"], dw["panel"], dw["quads"], dw["edge"],
+                dw["clear"], dw["control"]))
 
     # ---- 7. split into objects, hierarchy, export
     root = bpy.data.objects.new("TP_Airport_Shell_ROOT", None)
@@ -987,6 +1284,8 @@ def main():
         flags = [0] * len(me.polygons)
         if "closure" in me.attributes:
             me.attributes["closure"].data.foreach_get("value", flags)
+        elif key in added:
+            die("node %s got closure faces but its mesh has no closure attribute" % key)
         worst_src = worst_new = 0.0
         for poly, flag in zip(me.polygons, flags):
             for li in poly.loop_indices:
@@ -998,7 +1297,7 @@ def main():
         if math.degrees(worst_new) > 1.0:
             die("closure faces on %s do not carry their face normal (%.2f deg)" % (key, math.degrees(worst_new)))
         normal_dev[key] = math.degrees(worst_src)
-        for attr in ("src", "node", "closure"):
+        for attr in ("src", "node", "closure", "del", "frag"):
             if attr in me.attributes:
                 me.attributes.remove(me.attributes[attr])
         me.materials.append(mat_main)
@@ -1007,6 +1306,20 @@ def main():
         ob.parent = facade_root if key.startswith("Facade_") else root
         node_faces[key] = len(me.polygons)
     bm.free()
+    # Doorway_<n>: an empty on the floor at the centre of each opening, on the backdrop
+    # plane, whose local -Z (Godot's forward) points out of the building. glTF extras
+    # carry the door, the bay, the outward vector and the opening's size.
+    for dw in doorways:
+        e = bpy.data.objects.new("Doorway_%d" % dw["k"], None)
+        bpy.context.scene.collection.objects.link(e)
+        e.parent = root
+        e.location = b(dw["c"].x, GROUND_Y, dw["bd"])
+        e.rotation_euler = (0.0, 0.0, 0.0 if dw["side"] == "N" else math.pi)
+        e["door"] = "Door_%d" % dw["k"]
+        e["bay"] = dw["node"]
+        e["outward"] = list(dw["outward"])
+        e["width"] = round(2 * dw["hw"], 4)
+        e["height"] = round(OPEN_TOP - GROUND_Y, 4)
     smooth = sorted((v, k) for k, v in normal_dev.items() if v > 1.0)
     rep("source custom normals kept; closure faces carry their face normal (< 1 deg). Nodes whose source "
         "faces are smooth-shaded (worst corner normal off the face normal): %s"
@@ -1073,8 +1386,8 @@ def main():
     bpy.data.objects.remove(main_ob, do_unlink=True)
     bpy.context.view_layer.update()
     names = sorted(o.name for o in bpy.context.scene.objects)
-    for want in ["Upper", "Lot", "Poles", "Lights_Upper", "Road"] + [
-            "Door_%d" % k for k in range(1, 9)]:
+    for want in ["Upper", "Canopy", "Lot", "Poles", "Lights_Upper", "Road"] + [
+            "Door_%d" % k for k in range(1, 9)] + ["Doorway_%d" % k for k in range(1, 9)]:
         if want not in names:
             die("node missing before export: %s" % want)
 
@@ -1097,12 +1410,13 @@ def main():
         export_morph=False,
         export_skins=False,
         export_animations=False,
+        export_extras=True,
     )
     expected = {}
     for o in bpy.context.scene.objects:
         tris = sum(len(p.vertices) - 2 for p in o.data.polygons) if o.type == "MESH" else 0
         expected[o.name] = (o.parent.name if o.parent else None, tris)
-    reread(out_path, expected, rep)
+    reread(out_path, expected, rep, doorways)
     path = os.path.join(REPORT_DIR, "census.txt")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(report) + "\n")
@@ -1156,7 +1470,7 @@ def node_matrix(nd):
     return Matrix.Translation(Vector(t)) @ q.to_matrix().to_4x4() @ Matrix.Diagonal(Vector((s[0], s[1], s[2], 1.0)))
 
 
-def reread(path, expected, rep):
+def reread(path, expected, rep, doorways):
     """Every number here comes from the written file."""
     with open(path, "rb") as fh:
         data = fh.read()
@@ -1187,6 +1501,7 @@ def reread(path, expected, rep):
     total = 0
 
     seen = {}
+    empties = {}
 
     def walk(i, parent, depth, pname=None):
         nonlocal total
@@ -1216,7 +1531,9 @@ def reread(path, expected, rep):
                              lo.x, hi.x, lo.y, hi.y, lo.z + OFFSET_Z, hi.z + OFFSET_Z)))
         else:
             seen[name] = (pname, 0)
-            rows.append((depth, name, 0, [], "(empty)"))
+            empties[name] = (world, nd.get("extras"))
+            p = world.to_translation()
+            rows.append((depth, name, 0, [], "(empty) at x %.3f y %.3f z %.3f" % (p.x, p.y, p.z + OFFSET_Z)))
         for c in nd.get("children", []):
             walk(c, world, depth + 1, name)
 
@@ -1248,6 +1565,32 @@ def reread(path, expected, rep):
     if bad or extra:
         die("re-read mismatch: %s extra=%s" % (bad[:10], sorted(extra)[:10]))
     rep("re-read matches the scene: %d nodes, names, parents and triangle counts" % len(seen))
+    if seen.get("Canopy", (None, 0))[1] == 0 or seen["Canopy"][0] != "TP_Airport_Shell_ROOT":
+        die("written file lacks a non-empty Canopy under the root")
+    marks = sorted(n for n in seen if n.startswith("Doorway_"))
+    if marks != ["Doorway_%d" % dw["k"] for dw in sorted(doorways, key=lambda r: r["k"])] or len(marks) != 8:
+        die("written doorway markers %s" % marks)
+    for dw in doorways:
+        name = "Doorway_%d" % dw["k"]
+        world, extras = empties[name]
+        p = world.to_translation()
+        fwd = -(world.to_3x3() @ Vector((0, 0, 1)))
+        want_p = Vector((dw["c"].x, GROUND_Y, dw["bd"] - OFFSET_Z))
+        want_f = Vector(dw["outward"])
+        scale = world.to_scale()
+        ex = extras or {}
+        ok = ((p - want_p).length < 1e-3 and (fwd - want_f).length < 1e-4 and (scale - Vector((1, 1, 1))).length < 1e-4
+              and seen[name][0] == "TP_Airport_Shell_ROOT" and ex.get("door") == "Door_%d" % dw["k"]
+              and ex.get("bay") == dw["node"] and abs(ex.get("width", 0) - 2 * dw["hw"]) < 1e-3
+              and abs(ex.get("height", 0) - (OPEN_TOP - GROUND_Y)) < 1e-3
+              and (Vector(ex.get("outward", (0, 0, 0))) - want_f).length < 1e-6)
+        rep("  %s written at (%.3f, %.3f, %.3f), -Z (%.3f, %.3f, %.3f), extras %s" % (
+            name, p.x, p.y, p.z + OFFSET_Z, fwd.x, fwd.y, fwd.z, json.dumps(ex, sort_keys=True)))
+        if not ok:
+            die("written %s does not match its doorway (position, -Z, scale, parent or extras)" % name)
+    other_extras = sorted(nd.get("name", "?") for nd in nodes if nd.get("extras") and
+                          not nd.get("name", "").startswith("Doorway_"))
+    rep("doorway markers verified in the written file (8); other nodes with extras: %s" % other_extras)
 
 
 main()

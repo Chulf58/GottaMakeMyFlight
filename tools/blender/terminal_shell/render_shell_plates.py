@@ -23,7 +23,7 @@ import numpy as np
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
-REPO = "C:\\Users\\chulf\\Gotta-make-my-flight"
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 SRC = os.path.join(REPO, "game", "assets", "buildings", "tp_airport_01a.glb")
 SHELL = os.path.join(REPO, "game", "assets", "buildings", "tp_airport_shell.glb")
 OUT = os.path.join(REPO, "tools", "blender", "out", "toon_shell_extract")
@@ -202,7 +202,7 @@ def main():
 
     # 4-5: ground storey with Upper hidden, from above and oblique
     scene, cam, red = load(shell)
-    hide(["Upper", "Lights_Upper"])
+    hide(["Upper", "Lights_Upper", "Canopy"])  # the canopy overhangs the landside rooms; hidden here to see the floor
     cube = cube_at(red, 0.0, 0.3, -80.0)
     floor = box(-33.94, 32.94, 0.3, 5.5, -95.25, -64.35)
     aim(cam, (0, 120, -79.8), (0, 0, -79.8001), ortho=72)
@@ -237,10 +237,51 @@ def main():
 
     # 11: the same bay hidden with Upper hidden too, seen from above at an angle, so the
     # wall-top caps, end reveals, ledge end caps and stub caps at the cut all show.
-    hide(["Upper", "Lights_Upper"])
+    hide(["Upper", "Lights_Upper", "Canopy"])  # the canopy overhangs the landside rooms; hidden here to see the floor
     aim(cam, (-5, 12, -57), (-5, 3.0, -64.5), lens=24)
     prove(scene, cam, "11_bay_S10_hidden_roof_off", box(-9.5, -0.5, 0.3, 5.5, -64.6, -64.1), cube, (1600, 900))
     render(scene, "11_bay_S10_hidden_roof_off")
+
+    # 12-13: every doorway from outside (its revolving door hidden, so the opening shows
+    # through the vestibule) and from inside the ground storey.
+    show_all()
+    doors = {1: (-25.99, "N"), 2: (-16.99, "N"), 3: (16.01, "N"), 4: (25.01, "N"),
+             5: (25.01, "S"), 6: (16.01, "S"), 7: (-16.99, "S"), 8: (-25.99, "S")}
+    for k, (cx, side) in doors.items():
+        bd, out = (-95.25, -1.0) if side == "N" else (-64.35, 1.0)
+        opening = box(cx - 1.2, cx + 1.2, 0.3, 3.8, bd, bd)
+        show_all()
+        hide(["Door_%d" % k])
+        cube.location = b(cx + 2.8, 0.5, bd + out * 4.0)
+        aim(cam, (cx + 1.0, 2.4, bd + out * 8.0), (cx, 2.0, bd), lens=24)
+        prove(scene, cam, "12_doorway_%d_outside" % k, opening, cube, (1200, 900))
+        render(scene, "12_doorway_%d_outside" % k)
+        show_all()
+        cube.location = b(cx + 1.6, 0.8, bd - out * 3.0)
+        aim(cam, (cx - 1.0, 1.7, bd - out * 7.0), (cx, 1.8, bd), lens=24)
+        prove(scene, cam, "13_doorway_%d_inside" % k, opening, cube, (1200, 900))
+        render(scene, "13_doorway_%d_inside" % k)
+
+    # 14: the Canopy node alone
+    show_all()
+    hide([o.name for o in scene.objects if o.parent and o.parent.name == "TP_Airport_Shell_ROOT"
+          and o.name != "Canopy"])
+    cube.location = b(0.0, 0.5, -55.0)
+    aim(cam, (70, 55, -12), (0, 7, -62), lens=30)
+    prove(scene, cam, "14_canopy_alone", box(-39, 36, 4.94, 17.55, -71, -51.14), cube, (1600, 1000))
+    render(scene, "14_canopy_alone")
+
+    # 15: close view of the old crack line (W facade, storey line y 14.8): original,
+    # the previous shell (when --before is given) and this shell, same camera.
+    before = a[a.index("--before") + 1] if "--before" in a else None
+    for kind, path in (("original", SRC), ("before", before), ("shell", shell)):
+        if path is None:
+            continue
+        scene, cam, red = load(path)
+        cube = cube_at(red, -35.47, 13.78, -80.43)  # 1 m below the view axis, 6 m out
+        aim(cam, (-41, 17.0, -82), (-33.94, 14.8, -80), lens=50)
+        prove(scene, cam, "15_crack_line_%s" % kind, box(-34.2, -33.94, 14.5, 15.1, -82.5, -77.5), cube, (1600, 1000))
+        render(scene, "15_crack_line_%s" % kind)
 
     # contact sheet (3 columns)
     names = sorted(f for f in os.listdir(OUT) if f[:2].isdigit() and f[:2] != "00" and f.endswith(".png"))
