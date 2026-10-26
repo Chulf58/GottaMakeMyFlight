@@ -76,7 +76,7 @@ func test_a_spawned_debug_batch_replaces_an_earlier_refusal() -> void:
 	later.free_all()
 
 
-func test_a_refusal_after_a_spawned_batch_keeps_the_earlier_seed() -> void:
+func test_a_refusal_after_a_spawned_batch_clears_the_seed_line() -> void:
 	_hud.press_debug_spawn()
 	var seed := _world.sim.last_batch_seed
 	assert_int(seed).is_not_equal(0)
@@ -85,7 +85,42 @@ func test_a_refusal_after_a_spawned_batch_keeps_the_earlier_seed() -> void:
 	assert_int(_world.sim.last_batch_seed).is_equal(seed)
 	assert_str(_hud.status_text()).contains("no flight is open")
 	_hud.refresh()
-	assert_str(_hud.seed_text()).is_equal("Debug batch: 300 passengers, seed %d" % seed)
+	assert_str(_hud.seed_text()).is_equal("")
+
+
+func test_a_spawned_batch_shows_its_seed_again_after_a_refusal() -> void:
+	_world.run_to(21)
+	_hud.press_debug_spawn()
+	var later := PassengerTestWorld.make(
+		PassengerTestWorld.floored(Vector2i(8, 6)), PassengerTestWorld.starts_with(100, 200)
+	)
+	_hud.clock = later.clock
+	_hud.flights = later.flights
+	_hud.sim = later.sim
+	_hud.press_debug_spawn()
+	assert_str(_hud.seed_text()).is_equal(
+		"Debug batch: 300 passengers, seed %d" % later.sim.last_batch_seed
+	)
+	later.free_all()
+
+
+func test_a_refused_debug_batch_after_departure_raises_no_error() -> void:
+	_world.run_to(21)
+	await assert_error(func() -> void: _hud.press_debug_spawn()).is_success()
+	assert_str(_hud.status_text()).contains("no flight is open")
+
+
+func test_the_flight_text_follows_the_flight_after_the_doors_close() -> void:
+	_world.run_to(21)
+	assert_str(_hud.flight_text()).is_equal("GMF101  Doors closed")
+	_world.run_to(85)
+	assert_str(_hud.flight_text()).is_equal("GMF101  Pushback")
+	_world.run_to(205)
+	assert_str(_hud.flight_text()).is_equal("GMF101  Taxiing")
+	_world.run_to(505)
+	assert_str(_hud.flight_text()).is_equal("GMF101  Taking off")
+	_world.run_to(705)
+	assert_str(_hud.flight_text()).is_equal("GMF101  Departed")
 
 
 func test_speed_buttons_set_the_clock() -> void:
@@ -110,6 +145,30 @@ func test_starter_terminal_builds_on_a_pristine_grid() -> void:
 	_hud.press_starter_terminal()
 	assert_int(mode.grid.object_ids().size()).is_greater(0)
 	assert_str(_hud.status_text()).is_equal("Starter terminal built")
+
+
+func test_starter_terminal_in_a_shell_stands_on_doors_b_and_c() -> void:
+	var shell: ShellDefinition = load("res://build/toon_terminal_shell.tres")
+	var mode := BuildMode.new()
+	mode.shell = shell
+	add_child(mode)
+	auto_free(mode)
+	_hud.build_mode = mode
+	_hud.press_starter_terminal()
+	assert_str(_hud.status_text()).is_equal("Starter terminal built")
+	var ids := ReferenceTerminal.object_ids(mode.grid)
+	var entrance := mode.grid.get_object(ids["entrances"][0])
+	var exit_door := mode.grid.get_object(ids["exits"][0])
+	(
+		assert_object(
+			shell.connection_for(&"entrance_door", entrance["anchor"], entrance["facing"])
+		)
+		. is_not_null()
+	)
+	(
+		assert_object(shell.connection_for(&"exit_door", exit_door["anchor"], exit_door["facing"]))
+		. is_not_null()
+	)
 
 
 func test_starter_terminal_refuses_a_painted_grid_and_says_so() -> void:

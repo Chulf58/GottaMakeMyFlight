@@ -4,7 +4,8 @@ extends PanelContainer
 ## missed and the main reasons passengers missed. Hidden until shown and
 ## dismissed with its button.
 
-## The most reasons listed; the rest are left out to keep the panel small.
+## The most reasons listed; the rest are summed into one "Other" row, so the
+## rows add up to every reason.
 const MAX_REASONS := 3
 const WIDTH := 440.0
 
@@ -41,6 +42,11 @@ static func text_for(summary: Dictionary) -> String:
 	var reasons: Array = summary["reasons"]
 	for i in mini(reasons.size(), MAX_REASONS):
 		lines.append("%d  %s" % [reasons[i]["count"], reasons[i]["text"]])
+	var other := 0
+	for i in range(MAX_REASONS, reasons.size()):
+		other += reasons[i]["count"]
+	if other > 0:
+		lines.append("%d  Other" % other)
 	return "\n".join(lines)
 
 

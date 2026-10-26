@@ -5,12 +5,12 @@ extends CanvasLayer
 ## pause, Shift+1/2/3 set the speed; plain number keys stay the build tool keys).
 ## Bottom-left: the followed passenger's story, kept left of BuildMenu's
 ## centre column and growing upward when it wraps. Bottom-right: a collapsed
-## Debug panel (a 300-passenger batch, a starter terminal, the batch seed and
-## their status). Clicking a passenger while no build tool is active follows
-## it: the selection is a stable passenger id, and the camera follows
-## PassengerViews.follow_anchor, never a pooled node. When a flight's doors
-## close, a dismissible FlightResultPanel opens under the top-right panel:
-## made, missed and the main reasons. A new game opens paused under the
+## Debug panel (a 300-passenger batch, a starter terminal on the Toon doors B
+## and C, the batch seed and their status). Clicking a passenger while no
+## build tool is active follows it: the selection is a stable passenger id,
+## and the camera follows PassengerViews.follow_anchor, never a pooled node.
+## When a flight's doors close, a dismissible FlightResultPanel opens under
+## the top-right panel: made, missed and the main reasons. A new game opens paused under the
 ## IntroDialogue (once per session, never in a probe, a test or a playtest);
 ## closing it starts the clock at 1x.
 
@@ -28,6 +28,14 @@ const DEBUG_W := 260.0
 ## The result panel's top edge, below the flight panel and well above the
 ## build tray.
 const RESULT_TOP := 200.0
+## The flight panel's word for each state from the doors closing on.
+const AFTER_DOORS_TEXT := {
+	FlightSim.State.DOORS_CLOSED: "Doors closed",
+	FlightSim.State.PUSHBACK: "Pushback",
+	FlightSim.State.TAXI_OUT: "Taxiing",
+	FlightSim.State.TAKEOFF: "Taking off",
+	FlightSim.State.DEPARTED: "Departed",
+}
 const STAGE_TEXT := {
 	Passenger.Stage.SPAWNED: "Arriving",
 	Passenger.Stage.TO_CHECKIN: "Heading to check-in",
@@ -60,6 +68,9 @@ var _seed_label := Label.new()
 var _follow_label := Label.new()
 var _status_label := Label.new()
 var _status := ""
+## True after a refused debug batch, until the next spawned one: the earlier
+## batch's seed line is then stale and stays hidden.
+var _batch_refused := false
 var _time_label := Label.new()
 var _speed_buttons: Array[Button] = []
 var _debug_panel := PanelContainer.new()
@@ -196,8 +207,9 @@ func flight_text() -> String:
 	if ids.is_empty():
 		return "No flights"
 	var id := ids[0]
-	if flights.is_doors_closed(id):
-		return "%s  Doors closed" % id
+	var after_doors: String = AFTER_DOORS_TEXT.get(flights.state_of(id), "")
+	if after_doors != "":
+		return "%s  %s" % [id, after_doors]
 	var state: String = FlightSim.State.find_key(flights.state_of(id))
 	var left := maxi(0, flights.doors_close_tick(id) - clock.tick) / SimClock.TICK_RATE
 	@warning_ignore("integer_division")
@@ -212,7 +224,7 @@ func counts_text() -> String:
 
 
 func seed_text() -> String:
-	if sim.last_batch_seed == 0:
+	if sim.last_batch_seed == 0 or _batch_refused:
 		return ""
 	return "Debug batch: %d passengers, seed %d" % [DEBUG_BATCH, sim.last_batch_seed]
 
@@ -236,11 +248,19 @@ func follow_text() -> String:
 
 ## Spawns the debug batch through normal spawning. The seed comes from the
 ## cosmetic RNG, so pressing the button leaves the saved sim RNG untouched.
+## With no flight open (every one has closed its doors) the press is refused
+## here, quietly, and the old batch's seed line is hidden.
 func press_debug_spawn() -> void:
-	var seed := randi() + 1
-	if not sim.spawn_batch(DEBUG_BATCH, seed):
+	if not _has_open_flight():
+		_batch_refused = true
 		_status = "Spawn refused: no flight is open for passengers"
 		return
+	var seed := randi() + 1
+	if not sim.spawn_batch(DEBUG_BATCH, seed):
+		_batch_refused = true
+		_status = "Spawn refused: no flight is open for passengers"
+		return
+	_batch_refused = false
 	_status = "Spawned %d passengers" % DEBUG_BATCH
 	print("DEBUG_BATCH spawn %d passengers seed=%d tick=%d" % [DEBUG_BATCH, seed, clock.tick])
 
@@ -316,7 +336,8 @@ func set_debug_open(value: bool) -> void:
 
 
 ## Builds ReferenceTerminal on a pristine build grid (no floor, walls or
-## objects), a debug shortcut for what BuildMode's tools can also build. Either
+## objects), a debug shortcut for what BuildMode's tools can also build. In a
+## terminal shell its entrance and exit stand on Toon doors B and C. Either
 ## outcome is shown in the status line; a refusal changes nothing.
 func press_starter_terminal() -> void:
 	if build_mode == null:
@@ -325,7 +346,7 @@ func press_starter_terminal() -> void:
 	if not _is_pristine(grid):
 		_status = "Starter terminal needs an empty grid"
 		return
-	if not ReferenceTerminal.build(grid):
+	if not ReferenceTerminal.build(grid, build_mode.shell):
 		push_error("PassengerHud: the starter terminal did not fit the grid")
 		_status = "Starter terminal failed: it did not fit the grid"
 		(build_mode.get_node("BuildView") as BuildView).refresh(grid)
@@ -442,6 +463,13 @@ func _playtest_switch_on() -> bool:
 		ProjectSettings.get_setting(PLAYTEST_HOOK.SETTING, false),
 		OS.get_environment(PLAYTEST_HOOK.ENV)
 	)
+
+
+func _has_open_flight() -> bool:
+	for id in flights.flight_ids():
+		if not flights.is_doors_closed(id):
+			return true
+	return false
 
 
 func _on_doors_closed(flight_id: String) -> void:
