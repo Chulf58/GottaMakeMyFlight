@@ -509,6 +509,7 @@ def verify_written(piece, out):
     loops = 0
     outside = 0
     used = {}
+    intended = intended_cells()
     for ob in bpy.context.scene.objects:
         if ob.type != "MESH":
             continue
@@ -534,7 +535,7 @@ def verify_written(piece, out):
                     rgb = sample_rgb(mname, u, v)
                     cell = (mname, int(u * cols), int((1.0 - v) * rows))
                     ok = (0.0 < u < 1.0 and 0.0 < v < 1.0 and 0.2 < fu < 0.8 and 0.05 < fv < 0.95
-                          and rgb not in EMPTY_RGB and cell in INTENDED)
+                          and rgb not in EMPTY_RGB and cell in intended)
                     used[(mname, int(u * cols), int((1.0 - v) * rows))] = rgb
                 if not ok:
                     outside += 1
@@ -560,7 +561,10 @@ def verify_written(piece, out):
         fail("%s: no geometry in the written file" % piece)
 
 
-INTENDED = {(m, c, r) for (m, c, r, _f, _s) in PALETTE.values()}
+def intended_cells():
+    """The atlas cells PALETTE names, read at check time so a kit extension
+    (build_cafe_kit.py) that adds entries is counted."""
+    return {(m, c, r) for (m, c, r, _f, _s) in PALETTE.values()}
 
 
 def report_palette():
@@ -573,11 +577,15 @@ def report_palette():
             % (name, mat, col, row, frac, span, top, bot))
 
 
-def main():
+def main(default_pieces=None, blend_out=None):
+    """Build, export and verify `-- piece ...` from the command line, else
+    default_pieces, else every piece. A kit extension passes its own pieces and
+    .blend path."""
+    blend_out = blend_out or BLEND_OUT
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    pieces = argv or list(PIECES)
+    pieces = argv or default_pieces or list(PIECES)
     os.makedirs(OUT_DIR, exist_ok=True)
-    os.makedirs(os.path.dirname(BLEND_OUT), exist_ok=True)
+    os.makedirs(os.path.dirname(blend_out), exist_ok=True)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     report_palette()
     written = []
@@ -599,11 +607,13 @@ def main():
         root.location.x = x
         x += 3.5
     bpy.ops.file.pack_all()
-    bpy.ops.wm.save_as_mainfile(filepath=BLEND_OUT, compress=True)
-    log("BLEND saved %s" % BLEND_OUT)
+    bpy.ops.wm.save_as_mainfile(filepath=blend_out, compress=True)
+    log("BLEND saved %s" % blend_out)
     log("KIT done pieces=%d fails=%d" % (len(written), len(FAILS)))
     if FAILS:
         sys.exit(1)
+    return written
 
 
-main()
+if __name__ == "__main__":
+    main()

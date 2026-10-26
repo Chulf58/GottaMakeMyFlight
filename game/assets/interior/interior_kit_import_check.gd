@@ -22,6 +22,8 @@ const PIECES := {
 	"seat_row": [ATLAS],
 	"kiosk": [ATLAS, LIGHTS],
 	"info_screen": [ATLAS, LIGHTS],
+	"cafe_counter": [ATLAS, GLASS, LIGHTS],
+	"cafe_table": [ATLAS],
 }
 const TOON_MATERIALS := [
 	"res://assets/materials/tp_atlas_toon.tres",
