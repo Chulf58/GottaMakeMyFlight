@@ -28,9 +28,13 @@ uniform float fade_end = 240.0;
 uniform float min_px = 0.05;
 
 #ifdef DISSOLVE
+#define DISSOLVE_HOLES
 #include "res://shaders/dissolve.gdshaderinc"
 // 0 draws the hull whole, 1 drops every pixel.
 uniform float dissolve : hint_range(0.0, 1.0) = 0.0;
+// World position of the hull vertex before it is pushed out, so the hole
+// boxes cut the hull where they cut its surface.
+varying vec3 dissolve_world;
 #endif
 
 varying float view_depth;
@@ -42,6 +46,9 @@ float width_at(float depth) {
 }
 
 void vertex() {
+#ifdef DISSOLVE
+	dissolve_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#endif
 	vec4 view = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
 	view_depth = -view.z;
 	vec4 clip = PROJECTION_MATRIX * view;
@@ -65,7 +72,7 @@ void fragment() {
 		discard;
 	}
 #ifdef DISSOLVE
-	if (dissolve_drop(FRAGCOORD.xy, dissolve)) {
+	if (dissolve_drop(FRAGCOORD.xy, dissolve) || dissolve_in_holes(dissolve_world)) {
 		discard;
 	}
 #endif

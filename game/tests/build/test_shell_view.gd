@@ -73,7 +73,8 @@ func test_setup_found_the_roof_and_four_sides() -> void:
 	for mi in _a.roof_nodes:
 		names.append(String(mi.name))
 	names.sort()
-	assert_array(names).is_equal(["Canopy", "Lights_Upper", "Upper"])
+	# Poles are the canopy's struts and fade with it (user ruling 2026-10-26).
+	assert_array(names).is_equal(["Canopy", "Lights_Upper", "Poles", "Upper"])
 	var counts := {}
 	for side in 4:
 		counts[side] = _a.side_pieces[side].size()
@@ -161,7 +162,7 @@ func test_roof_surfaces_get_their_own_dissolve_materials() -> void:
 				assert_str(outline.shader.resource_path).is_equal(OUTLINE_DISSOLVE)
 				assert_object(outline).is_not_same(shared.next_pass)
 			surfaces += 1
-	assert_int(surfaces).is_equal(3)
+	assert_int(surfaces).is_equal(4)
 
 
 func test_the_copies_keep_every_source_value() -> void:
@@ -241,6 +242,102 @@ func test_a_cut_side_is_squashed_in_shell_space_and_restored_exactly() -> void:
 			. override_failure_message(String(piece.name))
 			. is_true()
 		)
+
+
+## Whether a material drops world point `p`: the shader test (dissolve_in_holes),
+## lo <= p <= hi on every axis of any of its first hole_count boxes.
+func _drops(mat: ShaderMaterial, p: Vector3) -> bool:
+	var los: PackedVector3Array = mat.get_shader_parameter("hole_min")
+	var his: PackedVector3Array = mat.get_shader_parameter("hole_max")
+	assert_int(los.size()).is_equal(ShellView.HOLE_SLOTS)
+	var count: int = mat.get_shader_parameter("hole_count")
+	for i in mini(count, los.size()):
+		var lo := los[i]
+		var hi := his[i]
+		if (
+			p.x >= lo.x
+			and p.y >= lo.y
+			and p.z >= lo.z
+			and p.x <= hi.x
+			and p.y <= hi.y
+			and p.z <= hi.z
+		):
+			return true
+	return false
+
+
+## A side cut past half opens its doorways: door and porch hidden, two jambs
+## shown each, the door bay's hole set over the opening and Lot's over the
+## porch sign. Uncut, all of it goes back.
+func test_a_cut_side_opens_its_doorways() -> void:
+	assert_int(_a.doorways.size()).is_equal(8)
+	var lot := _mesh(_a, "Lot").get_surface_override_material(0) as ShaderMaterial
+	assert_str(lot.shader.resource_path).is_equal(TOON_DISSOLVE)
+	_a.cutaway.roof_level = 1.0
+	_a.cutaway.side_levels = [0.0, 1.0, 0.0, 0.0]
+	_a.apply()
+	var open_count := 0
+	for doorway in _a.doorways:
+		var south: bool = doorway.side == SOUTH
+		var label := String((doorway.door as Node3D).name)
+		assert_bool((doorway.door as Node3D).visible).override_failure_message(label).is_equal(
+			not south
+		)
+		assert_bool((doorway.porch as Node3D).visible).override_failure_message(label).is_equal(
+			not south
+		)
+		assert_int(doorway.jambs.size()).override_failure_message(label).is_equal(2)
+		for jamb in doorway.jambs:
+			assert_bool((jamb as Node3D).visible).override_failure_message(label).is_equal(south)
+		var bay := (
+			(doorway.bay as MeshInstance3D).get_surface_override_material(0) as ShaderMaterial
+		)
+		assert_str(bay.shader.resource_path).is_equal(TOON_DISSOLVE)
+		var over_opening := (doorway.centre_world as Vector3) + Vector3(0.0, 0.25, 0.0)
+		assert_bool(_drops(bay, over_opening)).override_failure_message(label).is_equal(south)
+		var sign_point: Vector3 = (doorway.sign_hole as AABB).get_center()
+		assert_bool(_drops(lot, sign_point)).override_failure_message(label).is_equal(south)
+		open_count += 1 if south else 0
+	assert_int(open_count).is_equal(4)
+	# The real letter sign of Porch_6, measured in Lot (shell A sits at the
+	# origin, so shell space is world space here).
+	for corner in [Vector3(15.6, 4.1, 19.0), Vector3(16.4, 5.0, 19.2)]:
+		(
+			assert_bool(_drops(lot, corner))
+			. override_failure_message("Porch_6 sign %s" % corner)
+			. is_true()
+		)
+	# Lot keeps its ground: the floor inside an open doorway is not dropped.
+	for doorway in _a.doorways:
+		assert_bool(_drops(lot, doorway.centre_world as Vector3)).is_false()
+	_a.cutaway.side_levels = [0.0, 0.0, 0.0, 0.0]
+	_a.apply()
+	for doorway in _a.doorways:
+		assert_bool((doorway.door as Node3D).visible).is_true()
+		assert_bool((doorway.porch as Node3D).visible).is_true()
+		for jamb in doorway.jambs:
+			assert_bool((jamb as Node3D).visible).is_false()
+		var bay := (
+			(doorway.bay as MeshInstance3D).get_surface_override_material(0) as ShaderMaterial
+		)
+		var over_opening := (doorway.centre_world as Vector3) + Vector3(0.0, 0.25, 0.0)
+		assert_bool(_drops(bay, over_opening)).is_false()
+		assert_bool(_drops(lot, (doorway.sign_hole as AABB).get_center())).is_false()
+
+
+## A turn from north to south passes a frame where both sides are cut exactly
+## 0.5: all eight doorways are open and every porch sign must still be dropped.
+func test_a_half_turn_opens_all_eight_doorways_and_drops_every_sign() -> void:
+	_a.cutaway.roof_level = 1.0
+	_a.cutaway.side_levels = [0.5, 0.5, 0.0, 0.0]
+	_a.apply()
+	var lot := _mesh(_a, "Lot").get_surface_override_material(0) as ShaderMaterial
+	assert_int(lot.get_shader_parameter("hole_count")).is_equal(8)
+	for doorway in _a.doorways:
+		var label := String((doorway.door as Node3D).name)
+		assert_bool((doorway.porch as Node3D).visible).override_failure_message(label).is_false()
+		var sign_point: Vector3 = (doorway.sign_hole as AABB).get_center()
+		assert_bool(_drops(lot, sign_point)).override_failure_message(label).is_true()
 
 
 func test_a_hidden_bay_stays_hidden_through_a_cut() -> void:

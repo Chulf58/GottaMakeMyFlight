@@ -17,14 +17,21 @@ uniform sampler2D ramp_texture : filter_nearest, repeat_disable;
 uniform float light_gain = 1.0;
 
 #ifdef DISSOLVE
+#define DISSOLVE_HOLES
 #include "res://shaders/dissolve.gdshaderinc"
 // 0 draws the surface whole, 1 drops every pixel.
 uniform float dissolve : hint_range(0.0, 1.0) = 0.0;
+// World position of the fragment, for the hole boxes.
+varying vec3 dissolve_world;
+
+void vertex() {
+	dissolve_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
 #endif
 
 void fragment() {
 #ifdef DISSOLVE
-	if (dissolve_drop(FRAGCOORD.xy, dissolve)) {
+	if (dissolve_drop(FRAGCOORD.xy, dissolve) || dissolve_in_holes(dissolve_world)) {
 		discard;
 	}
 #endif

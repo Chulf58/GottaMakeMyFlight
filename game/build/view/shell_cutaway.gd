@@ -3,7 +3,7 @@ extends RefCounted
 ## The Toon terminal shell's cutaway rule (Shell 3/4), as levels ShellView
 ## draws. View only: it changes no node, grid or path.
 ##
-## Roof: the roof group (Upper, Canopy, Lights_Upper) has a level from 0
+## Roof: the roof group (Upper, Canopy, Lights_Upper, Poles) has a level from 0
 ## (drawn) to 1 (gone). Its target turns 1 once the camera's zoom distance is
 ## below roof_hide_below and 0 once it is above roof_show_above; in between it
 ## keeps its last target, so the roof does not flicker at the threshold. The
@@ -21,9 +21,15 @@ extends RefCounted
 ## squashes a cut wall (InteriorKit.wall_parts). Its level moves in
 ## side_fade_seconds, so a turn drops the wall rather than popping it.
 ##
-## Gate: with cut_only_without_roof (the default) a side is cut by its level
-## times the roof level, so while the roof is drawn all four sides stand full
-## and the airport looks finished from afar.
+## Doorways: once a side is cut at least DOORWAY_OPEN_AT, its doorways open:
+## the squashed door and porch are hidden, a hole over the opening drops the
+## door bay's lintel (squashed into a bridge across the kerb), and two short
+## jambs stand at the opening's edges so it reads as a door frame (user ruling
+## 2026-10-26, "Short door-frame stubs").
+##
+## Gate: a side is cut by its level times the roof level, so while the roof is
+## drawn all four sides stand full and the airport looks finished from afar
+## (user ruling 2026-10-26, "Cut only when roof is gone").
 
 enum Side { NORTH, SOUTH, EAST, WEST }
 
@@ -32,6 +38,24 @@ const FLOOR_Y := 0.3
 const FACADE_HEIGHT := 5.2
 const STUB_FACTOR := InteriorKit.STUB_HEIGHT / FACADE_HEIGHT
 const SIDE_LETTERS := {"N": Side.NORTH, "S": Side.SOUTH, "E": Side.EAST, "W": Side.WEST}
+## A side's doorways open once it is cut this far.
+const DOORWAY_OPEN_AT := 0.5
+## Each jamb is a kit wall piece: this wide along the facade, this tall above
+## the floor (the kerb is InteriorKit.STUB_HEIGHT), and across the kerb this
+## deep (the facade bays are 0.5 m deep).
+const JAMB_WIDTH := 0.15
+const JAMB_HEIGHT := 0.6
+const JAMB_DEPTH := 0.6
+## The hole stops this far inside each opening edge, so the wall jamb faces
+## that close the kerb at the edges stay; it reaches this far either side of
+## the doorway line and up to this height, past any part of the bay.
+const HOLE_INSET := 0.01
+const HOLE_REACH := 1.5
+const HOLE_TOP := 6.0
+## A porch sign's hole starts this high (above the porch's door opening, 3.8)
+## and reaches this far past the porch's footprint.
+const SIGN_FLOOR := 3.9
+const SIGN_MARGIN := 0.3
 
 ## Tuning values (the user ruled the threshold is one).
 var roof_hide_below := 100.0
@@ -103,6 +127,62 @@ func side_target(side: int) -> float:
 func cut(side: int) -> float:
 	var level: float = side_levels[side]
 	return level * roof_level if cut_only_without_roof else level
+
+
+## Whether the doorways on `side` are open (see the class notes).
+func doorway_open(side: int) -> bool:
+	return cut(side) >= DOORWAY_OPEN_AT
+
+
+## The box over a doorway's opening, in shell space, whose door-bay fragments
+## are dropped while the doorway is open. `centre` is the doorway's floor
+## centre on the doorway line, `outward` its outward direction.
+static func hole_box(centre: Vector3, outward: Vector3, width: float) -> AABB:
+	var along := _along(outward)
+	var half := width * 0.5 - HOLE_INSET
+	var lo := centre - along * half - outward.abs() * HOLE_REACH
+	var hi := centre + along * half + outward.abs() * HOLE_REACH
+	lo.y = FLOOR_Y - 1.0
+	hi.y = HOLE_TOP
+	return AABB(lo, hi - lo)
+
+
+## The box over a porch's letter sign, in shell space: the sign is in the Lot
+## mesh (on the porch's front edge, y 4.08 to 5.0 at Porch_6), so it stays
+## when the porch is hidden; Lot's fragments in this box are dropped while the
+## doorway is open. The porch footprint grown by SIGN_MARGIN, from SIGN_FLOOR up.
+static func sign_box(porch_box: AABB) -> AABB:
+	var lo := porch_box.position - Vector3(SIGN_MARGIN, 0.0, SIGN_MARGIN)
+	var hi := porch_box.end + Vector3(SIGN_MARGIN, 0.0, SIGN_MARGIN)
+	lo.y = SIGN_FLOOR
+	hi.y = HOLE_TOP
+	return AABB(lo, hi - lo)
+
+
+## The two jambs of an open doorway, in shell space, as transforms of the kit
+## wall piece (1 m long on its x, WALL_HEIGHT tall, pivot at its foot).
+static func jamb_transforms(centre: Vector3, outward: Vector3, width: float) -> Array[Transform3D]:
+	var along := _along(outward)
+	var basis := Basis(along, Vector3.UP, along.cross(Vector3.UP))
+	basis = basis.scaled_local(
+		Vector3(
+			JAMB_WIDTH, JAMB_HEIGHT / InteriorKit.WALL_HEIGHT, JAMB_DEPTH / BuildView.WALL_THICKNESS
+		)
+	)
+	var offset := width * 0.5 + JAMB_WIDTH * 0.5
+	var out: Array[Transform3D] = []
+	for end in [-1.0, 1.0]:
+		var at: Vector3 = centre + along * offset * end
+		at.y = FLOOR_Y
+		out.append(Transform3D(basis, at))
+	return out
+
+
+## The unit direction along a facade whose outward direction is `outward`.
+static func _along(outward: Vector3) -> Vector3:
+	if absf(outward.x) > absf(outward.z):
+		return Vector3(0.0, 0.0, 1.0)
+	return Vector3(1.0, 0.0, 0.0)
 
 
 ## `level` moved toward `target` at the rate that makes a full change take

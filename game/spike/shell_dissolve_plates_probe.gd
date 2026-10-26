@@ -16,6 +16,8 @@ extends SceneTree
 ##   timeout 600 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://spike/shell_dissolve_plates_probe.gd
+## Add `-- --only=far_h0,strip_out_h0,...` to shoot only the named plates and
+## strips (strip_turn, forced, gate and removed_bay name their groups).
 ##
 ## The sim clock is paused and the HUD and build menu hidden. Every plate
 ## projects its subject points inside the frame with a margin (and in front of
@@ -35,7 +37,7 @@ const SETTLE_MAX_FRAMES := 180
 ## The shell's footprint centre in its own frame (the facade bounds' centre).
 const CENTRE := Vector3(-0.5, 0.0, 0.2)
 const TILE := Vector2i(480, 270)
-const ROOF_NAMES := ["Upper", "Canopy", "Lights_Upper"]
+const ROOF_NAMES := ["Upper", "Canopy", "Lights_Upper", "Poles"]
 const GLASS := "res://assets/materials/tp_glass.tres"
 
 var _out_dir := ""
@@ -53,6 +55,7 @@ var _shell: Node3D
 ## (glass left out), rebuilt for each pose.
 var _occluders: Node3D
 var _plates: Array[Image] = []
+var _only := PackedStringArray()
 var _strips: Array = []
 
 
@@ -96,18 +99,39 @@ func _run() -> void:
 		_invalid("main.tscn does not run ShellView on the shell")
 		_end()
 		return
+	_only = _only_arg()
+	print("PROBE only=%s" % (_only if not _only.is_empty() else ["(all)"]))
 	await _static_plates()
 	await _fade_strips()
-	await _turn_strip()
-	await _forced_level_plate()
-	await _gate_pairs()
-	await _removed_bay_plates()
-	_sheet(_plates, "contact_sheet_plates.png", 4)
+	if _wanted("strip_turn"):
+		await _turn_strip()
+	if _wanted("forced"):
+		await _forced_level_plate()
+	if _wanted("gate"):
+		await _gate_pairs()
+	if _wanted("removed_bay"):
+		await _removed_bay_plates()
+	if not _plates.is_empty():
+		_sheet(_plates, "contact_sheet_plates.png", 4)
 	var strip_tiles: Array[Image] = []
 	for row in _strips:
 		strip_tiles.append_array(row)
-	_sheet(strip_tiles, "contact_sheet_strips.png", 5)
+	if not strip_tiles.is_empty():
+		_sheet(strip_tiles, "contact_sheet_strips.png", 5)
 	_end()
+
+
+## The plate and strip names after `--only=` in the user arguments (after
+## `--`), comma-separated; empty runs everything.
+func _only_arg() -> PackedStringArray:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--only="):
+			return arg.trim_prefix("--only=").split(",", false)
+	return PackedStringArray()
+
+
+func _wanted(name: String) -> bool:
+	return _only.is_empty() or _only.has(name)
 
 
 func _end() -> void:
@@ -132,6 +156,7 @@ func _static_poses() -> Array:
 		["cut_40m_south", Vector3(0.0, 0.0, 10.0), 20.0, 40.0, "south"],
 		["door_landside_6", Vector3(door6.x, 0.0, door6.z - 2.0), 0.0, 25.0, "door6"],
 		["door_airside_3", Vector3(door3.x, 0.0, door3.z + 2.0), 180.0, 25.0, "door3"],
+		["door_landside_6_close", Vector3(door6.x, 0.0, door6.z - 1.0), 15.0, 12.0, "door6"],
 		["corner_se", Vector3(30.0, 0.0, 12.0), 45.0, 30.0, "corner_se"],
 		["corner_nw", Vector3(-31.0, 0.0, -12.0), -135.0, 30.0, "corner_nw"],
 	]
@@ -140,6 +165,8 @@ func _static_poses() -> Array:
 func _static_plates() -> void:
 	for pose in _static_poses():
 		var label: String = pose[0]
+		if not _wanted(label):
+			continue
 		_beat(label)
 		await _place(pose[1], pose[2], pose[3])
 		var ok := _prove(label, pose[4])
@@ -152,21 +179,23 @@ func _static_plates() -> void:
 ## Zoom strips at the real camera easing, captured on the frames where the
 ## roof level first passes each mark.
 func _fade_strips() -> void:
-	_beat("strip_out")
-	await _place(CENTRE, 0.0, 140.0)
-	_rig.zoom(0.5)
-	var out_row := await _capture_levels("strip_out_h0", [0.0, 0.25, 0.5, 0.75, 1.0], true, -1.0)
-	_strips.append(out_row)
-	_beat("strip_in")
-	await _place(CENTRE, 180.0, 70.0)
-	_rig.zoom(2.0)
-	var in_row := await _capture_levels("strip_in_h180", [1.0, 0.75, 0.5, 0.25, 0.0], false, -1.0)
-	_strips.append(in_row)
-	_beat("strip_reverse")
-	await _place(CENTRE, 0.0, 140.0)
-	_rig.zoom(0.5)
-	var rev_row := await _capture_levels("strip_reverse_h0", [0.25, 0.5], true, 0.5)
-	_strips.append(rev_row)
+	if _wanted("strip_out_h0"):
+		_beat("strip_out")
+		await _place(CENTRE, 0.0, 140.0)
+		_rig.zoom(0.5)
+		var marks := [0.0, 0.25, 0.5, 0.75, 1.0]
+		_strips.append(await _capture_levels("strip_out_h0", marks, true, -1.0))
+	if _wanted("strip_in_h180"):
+		_beat("strip_in")
+		await _place(CENTRE, 180.0, 70.0)
+		_rig.zoom(2.0)
+		var marks := [1.0, 0.75, 0.5, 0.25, 0.0]
+		_strips.append(await _capture_levels("strip_in_h180", marks, false, -1.0))
+	if _wanted("strip_reverse_h0"):
+		_beat("strip_reverse")
+		await _place(CENTRE, 0.0, 140.0)
+		_rig.zoom(0.5)
+		_strips.append(await _capture_levels("strip_reverse_h0", [0.25, 0.5], true, 0.5))
 
 
 ## Captures the frame where the roof level first reaches each mark (rising)
