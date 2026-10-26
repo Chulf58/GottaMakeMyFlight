@@ -1,7 +1,8 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
+[ext_resource type="Script" path="res://build/build_mode.gd" id="3_build"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(200, 200)
@@ -38,3 +39,6 @@ mesh = SubResource("PlaneMesh_ground")
 surface_material_override/0 = SubResource("Material_ground")
 
 [node name="TycoonCamera" parent="." instance=ExtResource("1_cam")]
+
+[node name="BuildMode" type="Node3D" parent="."]
+script = ExtResource("3_build")
