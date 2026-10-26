@@ -164,7 +164,7 @@ func press_speed(value: int) -> void:
 
 
 ## Builds ReferenceTerminal on a pristine build grid (no floor, walls or
-## objects), until BuildMode has entrance and exit tools of its own. Either
+## objects), a debug shortcut for what BuildMode's tools can also build. Either
 ## outcome is shown in the status line; a refusal changes nothing.
 func press_starter_terminal() -> void:
 	if build_mode == null:

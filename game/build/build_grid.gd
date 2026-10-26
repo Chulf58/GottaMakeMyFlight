@@ -1,3 +1,6 @@
+# gdlint:disable = max-public-methods
+# BuildGrid is the one grid data API; its accessors outgrew the 20-method cap
+# when wall kinds were added (wall_kind).
 class_name BuildGrid
 extends RefCounted
 ## The indoor build grid: 1 m cells in packed arrays, the source of truth for
@@ -14,6 +17,10 @@ extends RefCounted
 signal graph_changed(cells: Array[Vector2i])
 
 enum Side { NORTH, EAST, SOUTH, WEST }
+## What stands on a cell edge. The value is stored in the wall arrays as is,
+## so a snapshot from before kinds (only 0 and 1) loads every wall as plain.
+## Plain and glass walls block passengers; a door lets them through.
+enum WallKind { NONE, PLAIN, GLASS, DOOR }
 
 const DEFAULT_SIZE := Vector2i(64, 64)
 const MAX_SIDE_CELLS := 256
@@ -21,6 +28,7 @@ const FLOOR_NONE := 0
 const FLOOR_TILE := 1
 const MAX_FLOOR_TYPE := 1
 const MAX_ZONE_ID := 2147483647
+const MAX_WALL_KIND := WallKind.DOOR
 ## Grid step for each Side.
 const SIDE_STEP: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)
@@ -36,11 +44,11 @@ var origin := Vector3.ZERO
 
 var _floor := PackedByteArray()
 var _zone := PackedInt32Array()
-## 1 where a wall runs along the north edge of cell (x, y), at x + y * size.x.
-## Row y == size.y holds the south border.
+## The WallKind on the north edge of cell (x, y), at x + y * size.x. Row
+## y == size.y holds the south border.
 var _h_walls := PackedByteArray()
-## 1 where a wall runs along the west edge of cell (x, y), at
-## x + y * (size.x + 1). Column x == size.x holds the east border.
+## The WallKind on the west edge of cell (x, y), at x + y * (size.x + 1).
+## Column x == size.x holds the east border.
 var _v_walls := PackedByteArray()
 ## Id of the object standing on each cell, 0 for none.
 var _occupant := PackedInt32Array()
@@ -73,6 +81,13 @@ func has_wall(cell: Vector2i, side: int) -> bool:
 	if not in_bounds(cell) or side < 0 or side > 3:
 		return false
 	return _wall_value(cell, side) != 0
+
+
+## The WallKind on an edge, NONE when there is no wall or the edge is unknown.
+func wall_kind(cell: Vector2i, side: int) -> int:
+	if not in_bounds(cell) or side < 0 or side > 3:
+		return WallKind.NONE
+	return _wall_value(cell, side)
 
 
 ## Id of the object standing on `cell`, 0 for none.
@@ -172,7 +187,7 @@ func validate(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_FLOOR:
 			result = _check_remove_floor(edit.cell)
 		BuildEdit.Kind.PLACE_WALL:
-			result = _check_place_wall(edit.cell, edit.side)
+			result = _check_place_wall(edit.cell, edit.side, edit.wall_kind)
 		BuildEdit.Kind.REMOVE_WALL:
 			result = _check_remove_wall(edit.cell, edit.side)
 		BuildEdit.Kind.PLACE_OBJECT:
@@ -201,7 +216,7 @@ func apply(edit: BuildEdit) -> BuildResult:
 			_zone[_index(edit.cell)] = 0
 			result.dirty_cells = [edit.cell]
 		BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_WALL:
-			var value := 1 if edit.kind == BuildEdit.Kind.PLACE_WALL else 0
+			var value := edit.wall_kind if edit.kind == BuildEdit.Kind.PLACE_WALL else WallKind.NONE
 			_set_wall(edit.cell, edit.side, value)
 			result.dirty_cells = _edge_cells(edit.cell, edit.side)
 		BuildEdit.Kind.PLACE_OBJECT:
@@ -322,6 +337,9 @@ func _load_cells(data: Dictionary) -> String:
 		_h_walls[i] = int(data["h_walls"][i])
 	for i in _v_walls.size():
 		_v_walls[i] = int(data["v_walls"][i])
+	var door_problem := _door_walls_problem()
+	if door_problem != "":
+		return door_problem
 	for entry in data["objects"]:
 		var anchor := Vector2i(int(entry["anchor"][0]), int(entry["anchor"][1]))
 		var def_id := StringName(entry["def"])
@@ -357,14 +375,38 @@ func _check_remove_floor(cell: Vector2i) -> BuildResult:
 	return BuildResult.accepted()
 
 
-func _check_place_wall(cell: Vector2i, side: int) -> BuildResult:
+## A wall of `kind` on an empty edge, or in place of a wall of another kind.
+## A door needs a plain wall in line on both sides, and a plain wall beside a
+## door cannot change while the door stands.
+func _check_place_wall(cell: Vector2i, side: int, kind: int) -> BuildResult:
 	if not in_bounds(cell) or side < 0 or side > 3:
 		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	if _wall_value(cell, side) != 0:
+	var problem := _wall_kind_problem(cell, side, kind)
+	if problem == null and _wall_value(cell, side) == WallKind.NONE:
+		problem = _wall_object_problem(cell, side)
+	return problem if problem != null else BuildResult.accepted()
+
+
+## A refusal when `kind` cannot go on the edge as things stand, or null.
+func _wall_kind_problem(cell: Vector2i, side: int, kind: int) -> BuildResult:
+	if kind < WallKind.PLAIN or kind > MAX_WALL_KIND:
+		return BuildResult.refused(BuildResult.Reason.BAD_WALL_KIND)
+	var existing := _wall_value(cell, side)
+	if existing == kind:
 		return BuildResult.refused(BuildResult.Reason.WALL_EXISTS)
+	if kind == WallKind.DOOR and not _between_plain_walls(cell, side):
+		return BuildResult.refused(BuildResult.Reason.DOOR_NEEDS_WALLS)
+	if existing == WallKind.PLAIN and _beside_door(cell, side):
+		return BuildResult.refused(BuildResult.Reason.WALL_HOLDS_DOOR)
+	return null
+
+
+## A refusal when a new wall on the edge would cut through an object or shut
+## an object off from its interaction cell, or null.
+func _wall_object_problem(cell: Vector2i, side: int) -> BuildResult:
 	var other := cell + SIDE_STEP[side]
 	if not in_bounds(other):
-		return BuildResult.accepted()
+		return null
 	var here := _occupant[_index(cell)]
 	var there := _occupant[_index(other)]
 	if here != 0 and here == there:
@@ -372,15 +414,58 @@ func _check_place_wall(cell: Vector2i, side: int) -> BuildResult:
 	for pair in [[here, other], [there, cell]]:
 		if pair[0] != 0 and _reserved[_index(pair[1])] == pair[0]:
 			return BuildResult.refused(BuildResult.Reason.INTERACTION_BLOCKED, pair[0])
-	return BuildResult.accepted()
+	return null
 
 
 func _check_remove_wall(cell: Vector2i, side: int) -> BuildResult:
 	if not in_bounds(cell) or side < 0 or side > 3:
 		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	if _wall_value(cell, side) == 0:
+	var existing := _wall_value(cell, side)
+	if existing == WallKind.NONE:
 		return BuildResult.refused(BuildResult.Reason.NO_WALL)
+	if existing == WallKind.PLAIN and _beside_door(cell, side):
+		return BuildResult.refused(BuildResult.Reason.WALL_HOLDS_DOOR)
 	return BuildResult.accepted()
+
+
+## The two edges in line with an edge, one at either end, as [cell, side]
+## pairs on the same side. Either may lie outside the grid.
+func _inline_edges(cell: Vector2i, side: int) -> Array:
+	var along := Vector2i(1, 0) if side == Side.NORTH or side == Side.SOUTH else Vector2i(0, 1)
+	return [[cell - along, side], [cell + along, side]]
+
+
+func _between_plain_walls(cell: Vector2i, side: int) -> bool:
+	for edge in _inline_edges(cell, side):
+		if wall_kind(edge[0], edge[1]) != WallKind.PLAIN:
+			return false
+	return true
+
+
+func _beside_door(cell: Vector2i, side: int) -> bool:
+	for edge in _inline_edges(cell, side):
+		if wall_kind(edge[0], edge[1]) == WallKind.DOOR:
+			return true
+	return false
+
+
+## A problem string for the first door edge without a plain wall in line on
+## both sides, or "". Visits every edge once: north and west of each cell, the
+## south of the last row and the east of the last column.
+func _door_walls_problem() -> String:
+	for y in size.y:
+		for x in size.x:
+			var cell := Vector2i(x, y)
+			var sides := [Side.NORTH, Side.WEST]
+			if y == size.y - 1:
+				sides.append(Side.SOUTH)
+			if x == size.x - 1:
+				sides.append(Side.EAST)
+			for side in sides:
+				var is_door := _wall_value(cell, side) == WallKind.DOOR
+				if is_door and not _between_plain_walls(cell, side):
+					return "door at %s side %d needs a plain wall on each side" % [cell, side]
+	return ""
 
 
 func _check_place_object(def_id: StringName, anchor: Vector2i, facing: int) -> BuildResult:
@@ -464,11 +549,13 @@ func _erase_object(object_id: int) -> Array[Vector2i]:
 	return cells
 
 
-## An orthogonal step between two walkable cells: no wall on the shared edge,
-## and a walk-through object is only entered or left along its axis.
+## An orthogonal step between two walkable cells: no wall on the shared edge
+## other than a door, and a walk-through object is only entered or left along
+## its axis.
 func _straight_step_open(from: Vector2i, to: Vector2i) -> bool:
 	var step := to - from
-	if _wall_value(from, SIDE_STEP.find(step)) != 0:
+	var wall := _wall_value(from, SIDE_STEP.find(step))
+	if wall != WallKind.NONE and wall != WallKind.DOOR:
 		return false
 	return _passes_through(from, step) and _passes_through(to, step)
 

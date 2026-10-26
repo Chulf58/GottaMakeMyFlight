@@ -1,14 +1,15 @@
 class_name BuildMode
 extends Node3D
 ## The player's build tools over a BuildGrid. Keys 1 to 6 (or the toolbar)
-## pick floor, wall, desk, scanner, seats or remove; Esc picks none; R turns
-## the object; left-click applies, and a drag paints floors or a wall line.
-## A ghost shows the edit under the mouse, tinted by BuildGrid.validate(), so
-## the preview and the click use the same rules.
+## pick floor, wall, desk, scanner, seats or remove; the toolbar also has
+## glass, door, entrance and exit; Esc picks none; R turns the object;
+## left-click applies, and a drag paints floors or a wall or glass line. A
+## ghost shows the edit under the mouse, tinted by check(), so the preview and
+## the click use the same rules.
 
 signal grid_changed
 
-enum Tool { NONE, FLOOR, WALL, DESK, SCANNER, SEATS, REMOVE }
+enum Tool { NONE, FLOOR, WALL, DESK, SCANNER, SEATS, REMOVE, GLASS, DOOR, ENTRANCE, EXIT }
 
 const TOOL_ACTIONS := {
 	&"build_tool_floor": Tool.FLOOR,
@@ -23,16 +24,28 @@ const TOOL_OBJECTS := {
 	Tool.DESK: &"checkin_desk",
 	Tool.SCANNER: &"security_scanner",
 	Tool.SEATS: &"seat_row",
+	Tool.ENTRANCE: &"entrance_door",
+	Tool.EXIT: &"exit_door",
 }
+const TOOL_WALL_KINDS := {
+	Tool.WALL: BuildGrid.WallKind.PLAIN,
+	Tool.GLASS: BuildGrid.WallKind.GLASS,
+	Tool.DOOR: BuildGrid.WallKind.DOOR,
+}
+## Toolbar order. Glass, door, entrance and exit have no key yet.
 const TOOL_LABELS := {
 	Tool.FLOOR: "1 Floor",
 	Tool.WALL: "2 Wall",
+	Tool.GLASS: "Glass",
+	Tool.DOOR: "Door",
 	Tool.DESK: "3 Desk",
 	Tool.SCANNER: "4 Scanner",
 	Tool.SEATS: "5 Seats",
+	Tool.ENTRANCE: "Entrance",
+	Tool.EXIT: "Exit",
 	Tool.REMOVE: "6 Remove",
 }
-const DRAG_TOOLS := [Tool.FLOOR, Tool.WALL]
+const DRAG_TOOLS := [Tool.FLOOR, Tool.WALL, Tool.GLASS]
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1
 ## How close to an edge (in metres) the remove tool targets the wall there
@@ -135,10 +148,10 @@ func edit_at(point: Vector3) -> BuildEdit:
 	match tool:
 		Tool.FLOOR:
 			return BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, TERMINAL_ZONE)
-		Tool.WALL:
-			return BuildEdit.place_wall(cell, side)
 		Tool.REMOVE:
 			return _removal_at(point, cell, side)
+	if TOOL_WALL_KINDS.has(tool):
+		return BuildEdit.place_wall(cell, side, TOOL_WALL_KINDS[tool])
 	if TOOL_OBJECTS.has(tool):
 		return BuildEdit.place_object(TOOL_OBJECTS[tool], cell, facing)
 	return null
@@ -151,7 +164,9 @@ func apply_at(point: Vector3) -> BuildResult:
 	if edit == null or (_dragging and _edit_key(edit) == _last_applied_key):
 		return null
 	_last_applied_key = _edit_key(edit)
-	var result := grid.apply(edit)
+	var result := check(edit)
+	if result.ok:
+		result = grid.apply(edit)
 	if result.ok:
 		_view.refresh(grid)
 		_hover_key = ""
@@ -160,10 +175,32 @@ func apply_at(point: Vector3) -> BuildResult:
 	return result
 
 
+## Whether an entrance or exit door object at `anchor` and `facing` stands on
+## the terminal's edge: its back edge (the way out) has no wall and no floor
+## beyond it, the same test TerminalLayout.is_exit_open() makes. The grid
+## allows a door object anywhere; the tools add this check.
+static func outside_door_problem(on: BuildGrid, anchor: Vector2i, facing: int) -> BuildResult:
+	var out := BuildObjectDef.rotate_offset(Vector2i(0, -1), facing)
+	if on.floor_at(anchor + out) != BuildGrid.FLOOR_NONE:
+		return BuildResult.refused(BuildResult.Reason.DOOR_NOT_ON_EDGE)
+	if on.has_wall(anchor, BuildGrid.SIDE_STEP.find(out)):
+		return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
+	return BuildResult.accepted()
+
+
+## BuildGrid.validate(), plus, for an entrance or exit, that it stands on the
+## terminal's edge facing in (outside_door_problem()).
+func check(edit: BuildEdit) -> BuildResult:
+	var result := grid.validate(edit)
+	if result.ok and edit.kind == BuildEdit.Kind.PLACE_OBJECT and BuildCatalog.is_door(edit.def_id):
+		result = outside_door_problem(grid, edit.cell, edit.facing)
+	return result
+
+
 func _start_drag(point: Vector3) -> void:
 	_dragging = true
 	_last_applied_key = ""
-	_drag_side = grid.nearest_side(point) if tool == Tool.WALL else -1
+	_drag_side = grid.nearest_side(point) if TOOL_WALL_KINDS.has(tool) else -1
 
 
 func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
@@ -195,7 +232,7 @@ func _update_ghost(point: Variant) -> void:
 	if key == _hover_key:
 		return
 	_hover_key = key
-	var result := grid.validate(edit)
+	var result := check(edit)
 	_draw_ghost(edit, _valid_material if result.ok else _invalid_material)
 	_show_status(result)
 
@@ -248,7 +285,10 @@ func _ghost_box(extent: Vector3, material: Material) -> MeshInstance3D:
 
 
 func _edit_key(edit: BuildEdit) -> String:
-	return "%d:%s:%d:%d:%s" % [edit.kind, edit.cell, edit.side, edit.facing, edit.object_id]
+	return (
+		"%d:%s:%d:%d:%d:%s"
+		% [edit.kind, edit.cell, edit.side, edit.wall_kind, edit.facing, edit.object_id]
+	)
 
 
 func _build_toolbar() -> void:

@@ -27,6 +27,15 @@ const OBJECT_PIECES := {
 	&"checkin_desk": "checkin_desk",
 	&"security_scanner": "security_scanner",
 	&"seat_row": "seat_row",
+	&"entrance_door": "wall_door",
+	&"exit_door": "wall_door",
+}
+## Where a piece sits in its object's frame (footprint centre, facing 0), for
+## objects whose piece is not centred on the footprint. The entrance and exit
+## draw a door on their back edge, the way out.
+const OBJECT_OFFSETS := {
+	&"entrance_door": Vector3(0.0, 0.0, -0.5),
+	&"exit_door": Vector3(0.0, 0.0, -0.5),
 }
 const WALL_PIECES := {
 	WallKind.PLAIN: "wall",
@@ -41,6 +50,11 @@ static var _meshes: Dictionary = {}
 ## The piece an object type is drawn with, or "" when the kit has none.
 static func object_piece(def_id: StringName) -> String:
 	return OBJECT_PIECES.get(def_id, "")
+
+
+## The offset of an object's piece in the object's frame (zero for most).
+static func object_offset(def_id: StringName) -> Vector3:
+	return OBJECT_OFFSETS.get(def_id, Vector3.ZERO)
 
 
 ## The parts a wall edge draws, as [piece, local transform] pairs in the

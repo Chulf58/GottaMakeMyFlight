@@ -10,6 +10,8 @@ var kind: Kind = Kind.PAINT_FLOOR
 var cell := Vector2i.ZERO
 ## A BuildGrid.Side, for wall edits.
 var side: int = 0
+## A BuildGrid.WallKind, for PLACE_WALL.
+var wall_kind: int = BuildGrid.WallKind.PLAIN
 var floor_type: int = 0
 var zone_id: int = 0
 var def_id: StringName = &""
@@ -28,9 +30,14 @@ static func remove_floor(at: Vector2i) -> BuildEdit:
 	return _make(Kind.REMOVE_FLOOR, at)
 
 
-static func place_wall(at: Vector2i, edge_side: int) -> BuildEdit:
+## A wall of `kind` (a BuildGrid.WallKind) on an edge. On an edge that has a
+## wall of another kind, the new kind replaces it.
+static func place_wall(
+	at: Vector2i, edge_side: int, kind: int = BuildGrid.WallKind.PLAIN
+) -> BuildEdit:
 	var edit := _make(Kind.PLACE_WALL, at)
 	edit.side = edge_side
+	edit.wall_kind = kind
 	return edit
 
 

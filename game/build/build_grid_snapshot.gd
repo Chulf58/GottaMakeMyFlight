@@ -24,8 +24,8 @@ static func _cells_problem(data: Dictionary, width: int, height: int) -> String:
 	var checks := [
 		["floor", width * height, BuildGrid.MAX_FLOOR_TYPE],
 		["zone", width * height, BuildGrid.MAX_ZONE_ID],
-		["h_walls", width * (height + 1), 1],
-		["v_walls", (width + 1) * height, 1],
+		["h_walls", width * (height + 1), BuildGrid.MAX_WALL_KIND],
+		["v_walls", (width + 1) * height, BuildGrid.MAX_WALL_KIND],
 	]
 	for check in checks:
 		var values: Variant = data[check[0]]
