@@ -48,7 +48,7 @@ Durable conventions and project facts, for any engineer or agent working in this
 ## Project facts (generated)
 
 - Stack tags (= domain mount manifest): godot, gdscript, python, blender, sterling
-- Toolchains: gdlint, gdformat and gdUnit4 for `game/**/*.gd` (gdtoolkit Windows exes under `/mnt/c/Users/chulf/.local/bin/`; tests in `game/test/`)
+- Toolchains: gdlint, gdformat and gdUnit4 for `game/**/*.gd` (gdtoolkit Windows exes under `/mnt/c/Users/chulf/.local/bin/`; tests in `game/tests/`)
 - Lint/format command: `/mnt/c/Users/chulf/.local/bin/gdlint.exe <explicit .gd paths under game/> && /mnt/c/Users/chulf/.local/bin/gdformat.exe --check <same paths>`, run from the repo root so `gdlintrc` applies. Pass explicit paths, never a glob that sweeps vendored addons. gdformat.exe writes CRLF when it rewrites; `--check` never writes.
 - Domain stores (one shared store per stack tag): ~/.sterling/domains/godot/, ~/.sterling/domains/gdscript/, ~/.sterling/domains/python/, ~/.sterling/domains/blender/, ~/.sterling/domains/sterling/ — each created by init with a description of what belongs in it (§2.3)
 - Backup path: configured — see `.sterling/config.json` → `backup_path` (machine-local, deliberately not restated here)
@@ -129,6 +129,6 @@ These rules were learned on Dome Farmer, a Godot and Blender project on the same
 
 ### Parallelism by territory
 
-- Two agents must never write the same file; disjoint files parallelise freely. A lane is one territory (for example `game/` code, `game/test/`, `tools/blender/`), not one agent. Refill a territory the moment its lane reports.
+- Two agents must never write the same file; disjoint files parallelise freely. A lane is one territory (for example `game/` code, `game/tests/`, `tools/blender/`), not one agent. Refill a territory the moment its lane reports.
 - **File-disjoint is not scene-disjoint.** An agent editing a script that `main.tscn` reaches blocks every lane's probe on `main.tscn`. Ask which scenes a writer's file is reachable from.
 - Serialise windowed Godot runs. Blender headless renders parallelise and write `tools/blender/`, never `game/`. Git stays conductor-only.

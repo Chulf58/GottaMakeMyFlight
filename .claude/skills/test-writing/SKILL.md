@@ -7,7 +7,7 @@ description: The SOP for writing gdUnit4 tests that keep the suite fast and clea
 
 Ported from Dome Farmer and trimmed to what applies here. Dome Farmer enforced these rules with a shard script and a leak-guard hook; this repo has neither yet, so the rules below are followed by hand and a lane reports its numbers.
 
-Tests are gdUnit4 files under `game/test/`, named `<name>_test.gd`.
+Tests are gdUnit4 files under `game/tests/`, named `test_<name>.gd`, mirroring the source folder (for example `game/tests/core/test_sim_clock.gd`).
 
 ## Rules for a new or changed test file
 
