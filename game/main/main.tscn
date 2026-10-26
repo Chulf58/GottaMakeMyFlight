@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -6,13 +6,14 @@
 [ext_resource type="Script" path="res://flights/flight_sim.gd" id="4_sim"]
 [ext_resource type="Script" path="res://flights/plane_view.gd" id="5_plane"]
 [ext_resource type="Script" path="res://airside/airside.gd" id="6_airside"]
-[ext_resource type="PackedScene" path="res://assets/buildings/tp_airport_01a.glb" id="7_terminal"]
+[ext_resource type="PackedScene" path="res://assets/buildings/tp_airport_shell.glb" id="7_terminal"]
 [ext_resource type="PackedScene" path="res://assets/airside/tp_runway_01a.glb" id="8_end"]
 [ext_resource type="PackedScene" path="res://assets/airside/tp_runway_03a.glb" id="9_strip"]
 [ext_resource type="Script" path="res://passengers/passenger_sim.gd" id="10_pax"]
 [ext_resource type="Script" path="res://passengers/passenger_views.gd" id="11_paxview"]
 [ext_resource type="Script" path="res://ui/passenger_hud.gd" id="12_hud"]
 [ext_resource type="Script" path="res://ui/build_menu.gd" id="13_menu"]
+[ext_resource type="Script" path="res://build/view/shell_view.gd" id="14_shellview"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -141,3 +142,8 @@ build_mode = NodePath("../BuildMode")
 layer = 2
 script = ExtResource("13_menu")
 build_mode = NodePath("../BuildMode")
+
+[node name="ShellView" type="Node" parent="." node_paths=PackedStringArray("shell", "camera")]
+script = ExtResource("14_shellview")
+shell = NodePath("../Airside/Terminal")
+camera = NodePath("../TycoonCamera")
