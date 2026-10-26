@@ -11,4 +11,6 @@ claude-code.bat
 opencode.bat
 claude-code.sh
 opencode.sh
-.claude/agents/
+.claude/agents/*
+!.claude/agents/implementor-graphic.md
+tools/blender/out/
