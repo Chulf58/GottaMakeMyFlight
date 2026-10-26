@@ -1,6 +1,6 @@
 ---
 name: test-writing
-description: The SOP for writing gdUnit4 tests that keep the suite fast and clean: build the world once per file in before(), restore any global state a test changes, free what a test creates, keep files small, and run the file alone with a case count. Use when writing or changing any file under game/test and when briefing an implementor to write tests.
+description: The SOP for writing gdUnit4 tests that keep the suite fast and clean: build the world once per file in before(), restore any global state a test changes, free what a test creates, keep files small, and run the file alone with a case count. Use when writing or changing any file under game/tests and when briefing an implementor to write tests.
 ---
 
 # TEST-WRITING SOP: KEEP THE SUITE FAST

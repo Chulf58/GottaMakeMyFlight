@@ -141,3 +141,82 @@ func test_same_seed_gives_same_sequence() -> void:
 	a.seed_rng(99)
 	b.seed_rng(99)
 	assert_int(a.rng.randi()).is_equal(b.rng.randi())
+
+
+func test_snapshot_survives_json_with_rng_values_above_2_pow_53() -> void:
+	var clock := _new_clock()
+	# 2^53 + 1 is the first integer a double cannot hold.
+	var big_seed := 9007199254740993
+	clock.restore_rng(big_seed, 9223372036854775807)
+	clock.set_speed(3)
+	clock.advance(SimClock.STEP * 4.25)
+	var snapshot := clock.to_snapshot()
+	assert_str(snapshot["rng_seed"]).is_equal("9007199254740993")
+
+	var text := JSON.stringify(snapshot)
+	var parsed: Variant = JSON.parse_string(text)
+	assert_bool(parsed is Dictionary).is_true()
+
+	var expected: Array[int] = []
+	for i in 20:
+		expected.append(clock.rng.randi())
+
+	var other := _new_clock()
+	assert_bool(other.from_snapshot(parsed)).is_true()
+	assert_int(other.tick).is_equal(clock.tick)
+	assert_int(other.speed).is_equal(3)
+	assert_bool(other.paused).is_false()
+	assert_float(other.alpha).is_equal_approx(clock.alpha, 0.0001)
+	assert_int(other.rng.seed).is_equal(big_seed)
+	var actual: Array[int] = []
+	for i in 20:
+		actual.append(other.rng.randi())
+	assert_array(actual).is_equal(expected)
+
+
+func test_malformed_snapshot_returns_false_and_leaves_clock_unchanged() -> void:
+	var clock := _new_clock()
+	clock.seed_rng(7)
+	clock.advance(SimClock.STEP * 2.5)
+	var good := clock.to_snapshot()
+	var before_tick := clock.tick
+	var before_alpha := clock.alpha
+	var before_state := clock.rng.state
+	var before_seed := clock.rng.seed
+
+	var bad_cases: Array[Dictionary] = []
+	for key: String in good:
+		var missing := good.duplicate()
+		missing.erase(key)
+		bad_cases.append(missing)
+	var wrong_speed := good.duplicate()
+	wrong_speed["speed"] = 9
+	bad_cases.append(wrong_speed)
+	var wrong_paused := good.duplicate()
+	wrong_paused["paused"] = "no"
+	bad_cases.append(wrong_paused)
+	var negative_tick := good.duplicate()
+	negative_tick["tick"] = -1
+	bad_cases.append(negative_tick)
+	var fractional_tick := good.duplicate()
+	fractional_tick["tick"] = 1.5
+	bad_cases.append(fractional_tick)
+	var big_accumulator := good.duplicate()
+	big_accumulator["accumulator"] = 5.0
+	bad_cases.append(big_accumulator)
+	var numeric_seed := good.duplicate()
+	numeric_seed["rng_seed"] = 12345
+	bad_cases.append(numeric_seed)
+	var junk_state := good.duplicate()
+	junk_state["rng_state"] = "abc"
+	bad_cases.append(junk_state)
+
+	var other := _new_clock()
+	other.seed_rng(7)
+	other.advance(SimClock.STEP * 2.5)
+	for bad in bad_cases:
+		assert_bool(other.from_snapshot(bad)).is_false()
+		assert_int(other.tick).is_equal(before_tick)
+		assert_float(other.alpha).is_equal(before_alpha)
+		assert_int(other.rng.seed).is_equal(before_seed)
+		assert_int(other.rng.state).is_equal(before_state)
