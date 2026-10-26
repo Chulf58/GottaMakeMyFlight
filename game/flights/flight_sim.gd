@@ -27,7 +27,10 @@ enum State {
 
 const STATE_COUNT := 11
 ## How long each state lasts in ticks, SCHEDULED to TAKEOFF. DEPARTED is final.
-const PHASE_TICKS: Array[int] = [100, 120, 140, 300, 40, 400, 60, 120, 300, 200]
+## BOARDING is 1200 ticks (60 s): in the reference terminal the walk from the
+## farthest gate seat out through the exit and along the apron to the plane
+## door is about 915 ticks at walking pace (test_boarding_window.gd).
+const PHASE_TICKS: Array[int] = [100, 120, 140, 300, 40, 1200, 60, 120, 300, 200]
 const DEFAULT_ID := "GMF101"
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.

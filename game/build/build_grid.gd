@@ -9,6 +9,10 @@ extends RefCounted
 ## preview, the click and a snapshot load share one set of rules. apply()
 ## then relinks the A* graph around the changed cells only.
 
+## After an accepted edit: the cells GridPathing relinked, so every committed
+## path through one of them may be stale. After a snapshot load: every cell.
+signal graph_changed(cells: Array[Vector2i])
+
 enum Side { NORTH, EAST, SOUTH, WEST }
 
 const DEFAULT_SIZE := Vector2i(64, 64)
@@ -126,8 +130,37 @@ func can_step(from: Vector2i, to: Vector2i) -> bool:
 	)
 
 
+## A step generic routing may take: can_step() allows it and neither cell is
+## a security object, which only its serviced passenger walks through.
+func can_route(from: Vector2i, to: Vector2i) -> bool:
+	return can_step(from, to) and not _is_security_cell(from) and not _is_security_cell(to)
+
+
 func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 	return _pathing.find_path(self, from, to)
+
+
+## The cells a passenger walks to pass through a walk-through object: its
+## interaction cell, the footprint along the object's axis and the cell beyond.
+## Empty when the object is unknown or not walk-through, or a step is closed.
+func passage_cells(object_id: int) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if not _objects.has(object_id) or not _def_of(object_id).walk_through:
+		return cells
+	var record: Dictionary = _objects[object_id]
+	var def := _def_of(object_id)
+	var entry := def.interaction_cell(record["anchor"], record["facing"])
+	if entry == BuildObjectDef.NO_CELL:
+		return cells
+	var back := BuildObjectDef.rotate_offset(Vector2i(0, -1), record["facing"])
+	cells.append(entry)
+	for i in def.size.y + 1:
+		var next := cells[cells.size() - 1] + back
+		if not can_step(cells[cells.size() - 1], next):
+			cells.clear()
+			return cells
+		cells.append(next)
+	return cells
 
 
 ## Checks an edit without changing anything.
@@ -180,7 +213,7 @@ func apply(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
 			result.dirty_cells = _erase_object(edit.object_id)
-	_pathing.update(self, result.dirty_cells)
+	graph_changed.emit(_pathing.update(self, result.dirty_cells))
 	return result
 
 
@@ -257,6 +290,11 @@ func from_snapshot(data: Dictionary) -> bool:
 	_objects = loaded._objects
 	_next_object_id = loaded._next_object_id
 	_pathing = loaded._pathing
+	var every: Array[Vector2i] = []
+	for y in size.y:
+		for x in size.x:
+			every.append(Vector2i(x, y))
+	graph_changed.emit(every)
 	return true
 
 
@@ -441,6 +479,11 @@ func _passes_through(cell: Vector2i, step: Vector2i) -> bool:
 		return true
 	var axis := _def_of(occupant).through_axis(_objects[occupant]["facing"])
 	return step == axis or step == -axis
+
+
+func _is_security_cell(cell: Vector2i) -> bool:
+	var occupant := _occupant[_index(cell)]
+	return occupant != 0 and BuildCatalog.is_security(_objects[occupant]["def"])
 
 
 func _def_of(object_id: int) -> BuildObjectDef:

@@ -19,7 +19,7 @@ const HANG_LIMIT_MS := 60000
 const ROOM_MIN := Vector2i(28, 28)
 const ROOM_MAX := Vector2i(35, 33)
 const DOOR_X := 31
-const WALL_THICKNESS := 0.12
+const WALL_THICKNESS := BuildView.WALL_THICKNESS
 
 var _out_dir := ""
 var _failed := false
@@ -155,7 +155,7 @@ func _paint_room() -> void:
 func _wall_boxes() -> Array[AABB]:
 	var boxes: Array[AABB] = []
 	var local := AABB(
-		Vector3(-0.5, -BuildView.WALL_HEIGHT / 2.0, -WALL_THICKNESS / 2.0),
+		Vector3(-0.5, 0.0, -WALL_THICKNESS / 2.0),
 		Vector3(1.0, BuildView.WALL_HEIGHT, WALL_THICKNESS)
 	)
 	for y in range(ROOM_MIN.y, ROOM_MAX.y + 1):

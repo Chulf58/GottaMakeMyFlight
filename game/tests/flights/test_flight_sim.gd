@@ -2,7 +2,9 @@ class_name TestFlightSim
 extends GdUnitTestSuite
 
 const FRAME := 1.0 / 60.0
-const STARTS: Array[int] = [0, 100, 220, 360, 660, 700, 1100, 1160, 1280, 1580, 1780]
+## Boarding lasts 1200 ticks (60 s), not 400: the walk from the farthest gate seat to the
+## plane in the reference terminal is about 915 ticks (test_boarding_window.gd measures it).
+const STARTS: Array[int] = [0, 100, 220, 360, 660, 700, 1900, 1960, 2080, 2380, 2580]
 const FLIGHT := "GMF101"
 
 var _changes: Array[Vector2i] = []
@@ -64,7 +66,7 @@ func test_default_flight_uses_the_fixed_timing_table() -> void:
 
 func test_states_come_in_order_on_the_scheduled_ticks() -> void:
 	_sim.add_default_flight()
-	_run_to_tick(_clock, 1800)
+	_run_to_tick(_clock, 2600)
 	assert_array(_changes).is_equal(_transitions())
 	assert_int(_sim.state_of(FLIGHT)).is_equal(FlightSim.State.DEPARTED)
 
@@ -118,17 +120,17 @@ func test_pause_freezes_the_state() -> void:
 func test_doors_closed_query_and_signal() -> void:
 	_sim.add_default_flight()
 	assert_bool(_sim.is_doors_closed(FLIGHT)).is_false()
-	assert_that(_sim.boarding_window(FLIGHT)).is_equal(Vector2i(700, 1100))
-	assert_int(_sim.doors_close_tick(FLIGHT)).is_equal(1100)
-	_run_to_tick(_clock, 1099)
+	assert_that(_sim.boarding_window(FLIGHT)).is_equal(Vector2i(700, 1900))
+	assert_int(_sim.doors_close_tick(FLIGHT)).is_equal(1900)
+	_run_to_tick(_clock, 1899)
 	assert_int(_sim.state_of(FLIGHT)).is_equal(FlightSim.State.BOARDING)
 	assert_bool(_sim.is_doors_closed(FLIGHT)).is_false()
-	_run_to_tick(_clock, 1100)
+	_run_to_tick(_clock, 1900)
 	assert_bool(_sim.is_doors_closed(FLIGHT)).is_true()
-	assert_array(_door_events).is_equal([1100])
-	_run_to_tick(_clock, 1800)
+	assert_array(_door_events).is_equal([1900])
+	_run_to_tick(_clock, 2600)
 	assert_bool(_sim.is_doors_closed(FLIGHT)).is_true()
-	assert_array(_door_events).is_equal([1100])
+	assert_array(_door_events).is_equal([1900])
 
 
 func test_phase_progress_runs_from_zero_to_one_in_each_phase() -> void:
@@ -139,8 +141,8 @@ func test_phase_progress_runs_from_zero_to_one_in_each_phase() -> void:
 	assert_float(_sim.phase_progress(FLIGHT, 360.0)).is_equal(0.0)
 	assert_float(_sim.phase_progress(FLIGHT, 510.0)).is_equal(0.5)
 	assert_float(_sim.phase_progress(FLIGHT, 659.9)).is_between(0.99, 1.0)
-	_run_to_tick(_clock, 1800)
-	assert_float(_sim.phase_progress(FLIGHT, 1800.0)).is_equal(1.0)
+	_run_to_tick(_clock, 2600)
+	assert_float(_sim.phase_progress(FLIGHT, 2600.0)).is_equal(1.0)
 
 
 func test_duplicate_flight_ids_are_rejected() -> void:
@@ -161,9 +163,9 @@ func test_snapshot_round_trip_mid_taxi() -> void:
 	assert_bool(sim2.from_snapshot(data["flights"])).is_true()
 	assert_int(sim2.tick).is_equal(480)
 	assert_int(sim2.state_of(FLIGHT)).is_equal(FlightSim.State.TAXI_IN)
-	assert_that(sim2.boarding_window(FLIGHT)).is_equal(Vector2i(700, 1100))
+	assert_that(sim2.boarding_window(FLIGHT)).is_equal(Vector2i(700, 1900))
 	_changes.clear()
-	_run_to_tick(clock2, 1800)
+	_run_to_tick(clock2, 2600)
 	var expected: Array[Vector2i] = []
 	for state in range(FlightSim.State.AT_STAND, STARTS.size()):
 		expected.append(Vector2i(STARTS[state], state))

@@ -85,8 +85,10 @@ func test_unwalkable_cells_have_no_route() -> void:
 
 
 ## A wall line across the room with one gap, where the scanner stands. The
-## scanner lets passengers walk through along its axis; a seat row in the same
-## gap blocks it, which proves the route really runs through the scanner.
+## scanner can be stepped through along its axis (the passenger it serves walks
+## through it), but generic routing never links its cells: the only way across
+## is security service. With the scanner gone the gap is an open route again,
+## and a seat row in the gap closes it.
 func test_scanner_is_walk_through_along_its_axis_only() -> void:
 	var grid := _floored_grid(Vector2i(7, 7))
 	for x in 7:
@@ -96,14 +98,16 @@ func test_scanner_is_walk_through_along_its_axis_only() -> void:
 	assert_bool(scanner.ok).is_true()
 	assert_bool(grid.is_walkable(Vector2i(3, 3))).is_true()
 	assert_bool(grid.is_walkable(Vector2i(3, 4))).is_true()
-	var path := grid.find_path(Vector2i(3, 0), Vector2i(3, 6))
-	assert_bool(path.has(Vector2i(3, 3))).is_true()
-	assert_bool(path.has(Vector2i(3, 4))).is_true()
+	assert_array(grid.find_path(Vector2i(3, 0), Vector2i(3, 6))).is_empty()
 	assert_bool(grid.can_step(Vector2i(3, 2), Vector2i(3, 3))).is_true()
+	assert_bool(grid.can_route(Vector2i(3, 2), Vector2i(3, 3))).is_false()
 	assert_bool(grid.can_step(Vector2i(2, 3), Vector2i(3, 3))).is_false()
 	assert_bool(grid.can_step(Vector2i(4, 4), Vector2i(3, 4))).is_false()
 	assert_bool(grid.can_step(Vector2i(2, 2), Vector2i(3, 3))).is_false()
 	grid.apply(BuildEdit.remove_object(scanner.object_id))
+	var open := grid.find_path(Vector2i(3, 0), Vector2i(3, 6))
+	assert_bool(open.has(Vector2i(3, 3))).is_true()
+	assert_bool(open.has(Vector2i(3, 4))).is_true()
 	grid.apply(BuildEdit.place_object(&"seat_row", Vector2i(3, 3), 1))
 	assert_array(grid.find_path(Vector2i(3, 0), Vector2i(3, 6))).is_empty()
 
