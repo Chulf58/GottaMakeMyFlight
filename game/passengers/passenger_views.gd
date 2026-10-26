@@ -33,6 +33,8 @@ var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
 var _cur: Dictionary = {}
 var _ring := MeshInstance3D.new()
+## Queue-full signs, drawn after the passengers.
+var _markers := MissMarkers.new()
 
 
 func _ready() -> void:
@@ -54,6 +56,9 @@ func _ready() -> void:
 		for clip in LOOPED:
 			player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
 		probe.free()
+	_markers.name = "MissMarkers"
+	_markers.sim = sim
+	add_child(_markers)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
 
@@ -93,6 +98,7 @@ func sync() -> void:
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
+	_markers.sync()
 
 
 ## Places every node between its last two tick positions.
@@ -114,6 +120,7 @@ func draw() -> void:
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
 	_ring.visible = _nodes.has(selected_id)
+	_markers.draw()
 
 
 ## The passenger drawn nearest a screen point within PICK_RADIUS_PX, or 0.
