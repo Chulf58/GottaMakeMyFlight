@@ -7,7 +7,9 @@ Run from WSL (Blender is a Windows program, so it sees Windows paths):
         'C:\\Users\\chulf\\Gotta-make-my-flight\\tools\\blender\\terminal_shell\\build_terminal_shell.py'
 
 Optional after `--`: `--out <path.glb>` to write somewhere other than
-game/assets/buildings/tp_airport_shell.glb. The source .glb is only read.
+game/assets/buildings/tp_airport_shell.glb. A relative path is taken from the repo root.
+The path must end in .glb, stay inside the repo after symlinks and junctions are resolved,
+and not pass through one; the source .glb is refused under any spelling and is only read.
 
 Decision toon-terminal-shell-design-extracted-shell-glb-authored-shel, part 1.
 All numbers below are Godot world coordinates with the terminal at (0, 0, -80) as
@@ -43,9 +45,15 @@ Method:
    listed per fragment in the census: every nominee inside the ground-storey
    volume V goes, and an inside fragment that sees out through 10 percent or
    less of its samples goes (a crack between storey bands), except on the east
-   setback face, whose rims and stubs stay.
+   setback face, whose rims and stubs stay. Overriding both deletions outside V: a
+   fragment that shows in one of the six orthographic views of the ORIGINAL (a sample's
+   ray along an axis on its front side, grazing included, escapes the original scene) is
+   exterior and stays, such as the sloped soffits over the setback seen edge-on from the
+   west, which the 26 directions (d . n > 0.1) never test. After deletion no nominee face
+   may remain inside V.
 4. Leftovers: a non-nominee island inside the ground-storey volume V goes to the
-   Unclassified node and is listed; non-nominee islands inside the envelope that
+   Unclassified node and FAILS the build unless UNCLASSIFIED_ALLOWED lists it with a
+   reason (the list is empty); non-nominee islands inside the envelope that
    cannot see out are listed as hidden leftovers.
 5. Nodes: Facade_<N|S|W|E>_<bay> for the ground storey (bays between pilaster
    centrelines; long facade quads are cut at the seams, small islands go whole to
@@ -72,7 +80,8 @@ Method:
    ledge top and the porch ceiling). A wall jamb (inward face to backdrop, in the bay), a
    vestibule jamb (backdrop to the old panel, in the porch, covering the cut ledge and
    window ends) on each side and a lintel up to the porch ceiling's inner edge close it;
-   81 rays through it must pass and 2 beside it must hit. A Doorway_<n> empty marks the floor centre of each opening on the backdrop
+   81 rays through it must pass, and 2 beside it must first hit the bay's own inward face
+   (its node, within 2 mm of its plane). A Doorway_<n> empty marks the floor centre of each opening on the backdrop
    plane, its local -Z pointing outward, with glTF extras door, bay, outward, width, height.
 7. Write the .glb.import first (the source's [params]: toon_post_import.gd and
    embedded_image_handling=0, so Godot binds the shared atlases and extracts no
@@ -116,6 +125,12 @@ OPEN_TOP = 3.80  # doorway top: the upper ledge band's top and the porch ceiling
 CRACK_BAND = 0.5  # crack caps: kept width of a deleted slab top along the backdrop
 CANOPY_BACK_Z = -71.05  # the sloped landside canopy starts at its back fascia (z -71.00)
 CANOPY_REACH_Z = -63.0  # and reaches out past the landside facade (ledge rims stop at -64.1)
+CONTROL_TOL = 0.002  # doorway control rays: first hit within 2 mm of the inward face plane
+# Unclassified islands (non-nominee islands crossing the ground-storey volume V, or facade
+# faces with no side) fail the build unless listed here: {source island index: reason}.
+# Island indices come from islands_of() over the unmodified source .glb, so they are stable
+# while that file is unchanged. Empty: the build area holds no unexplained geometry.
+UNCLASSIFIED_ALLOWED = {}
 
 sys.dont_write_bytecode = True
 
@@ -152,8 +167,36 @@ def args():
     a = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     out = OUT_DEFAULT
     if "--out" in a:
+        if a.index("--out") + 1 >= len(a):
+            die("--out needs a path")
         out = a[a.index("--out") + 1]
-    return out
+    return checked_out_path(out)
+
+
+def checked_out_path(raw):
+    """The output path, resolved and bound to the repo. A relative path is taken from REPO,
+    not from the working directory. Refused: no .glb suffix, a path that leaves the repo,
+    a path through a symlink or junction (its real path differs from its spelled path), the
+    repo root itself, and the source .glb under any spelling."""
+    path = raw if os.path.isabs(raw) else os.path.join(REPO, raw)
+    path = os.path.abspath(path)
+    real = os.path.realpath(path)
+    repo_real = os.path.realpath(REPO)
+    if not path.lower().endswith(".glb"):
+        die("refusing --out %r: the output must end in .glb" % raw)
+    try:
+        inside = os.path.commonpath([os.path.normcase(repo_real), os.path.normcase(real)]) == os.path.normcase(repo_real)
+    except ValueError:  # different drives
+        inside = False
+    if not inside or os.path.normcase(real) == os.path.normcase(repo_real):
+        die("refusing --out %r: it resolves to %s, outside the repo %s" % (raw, real, repo_real))
+    if os.path.islink(path) or os.path.normcase(real) != os.path.normcase(path):
+        die("refusing --out %r: the path goes through a symlink or junction (%s is really %s)" % (raw, path, real))
+    if os.path.normcase(real) == os.path.normcase(os.path.realpath(SRC)) or (
+            os.path.exists(path) and os.path.samefile(path, SRC)):
+        die("refusing --out %r: it is the source .glb %s" % (raw, SRC))
+    log("OUT %s (from --out %r)" % (path, raw))
+    return path
 
 
 # ------------------------------------------------------------------ source
@@ -369,6 +412,27 @@ def sees_out(bvh, f, reach=600.0):
     return vis, len(pts), esc
 
 
+AXES = [Vector(v) for v in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))]
+
+
+def ortho_exposed(bvh, f):
+    """The first axis direction (Blender space) along which a sample on the front side of
+    face f escapes in bvh, or None. With the ORIGINAL scene as bvh this answers whether the
+    face shows in one of the six orthographic views of the original. Unlike sees_out it
+    also takes grazing directions (any d with d . n > 0), which is how a nearly horizontal
+    soffit shows edge-on from the side."""
+    n = f.normal
+    dirs = [d for d in AXES if d.dot(n) > 1e-4]
+    if not dirs:
+        return None
+    for p in face_samples(f):
+        o = p + n * 0.02
+        for d in dirs:
+            if bvh.ray_cast(o, d, 600.0)[0] is None:
+                return d
+    return None
+
+
 def covered_from_above(bvh, f):
     hits = 0
     pts = face_samples(f, spacing=2.0, cap=60)
@@ -393,8 +457,10 @@ def bisect_faces(bm, faces, axis, c):
             hit.append(f)
     if not hit:
         return 0
-    edges = list({e for f in hit for e in f.edges})
-    verts = list({v for f in hit for v in f.verts})
+    # Traversal order (dict keeps first-seen order), never a set: a set of BMesh elements
+    # orders by object address, which changes run to run and so would the cut result.
+    edges = list(dict.fromkeys(e for f in hit for e in f.edges))
+    verts = list(dict.fromkeys(v for f in hit for v in f.verts))
     bmesh.ops.bisect_plane(bm, geom=hit + edges + verts, dist=1e-5, plane_co=co, plane_no=no)
     return len(hit)
 
@@ -561,13 +627,27 @@ def cut_doorways(bm, doors, drum, node_l, uvl, backdrop_uv_fn, add_quad):
                     clear += 1
                 else:
                     blocked += 1
-        control = sum(1 for x in (x0 - 0.06, x1 + 0.06)
-                      if bvh.ray_cast(b(x, 2.0, inner + 0.3 * inw), ray, reach)[0] is not None)
+        # Each control ray's FIRST hit must be a face of this bay's node lying on the inward
+        # face plane (z = inner, within CONTROL_TOL), 0.3 m from the ray's start.
+        bm.faces.ensure_lookup_table()
+        control = 0
+        control_rows = []
+        for x in (x0 - 0.06, x1 + 0.06):
+            loc, _nrm, fi, dist = bvh.ray_cast(b(x, 2.0, inner + 0.3 * inw), ray, reach)
+            if loc is None:
+                die("doorway %d: control ray at x %.3f hits nothing" % (k, x))
+            hit_node = bm.faces[fi][node_l].decode()
+            hit_z = g(loc).z
+            control_rows.append((x, hit_node, hit_z, dist))
+            if hit_node != node or abs(hit_z - inner) > CONTROL_TOL:
+                die("doorway %d: control ray at x %.3f first hits %s at z %.4f (want %s at z %.4f +- %.3f)"
+                    % (k, x, hit_node, hit_z, node, inner, CONTROL_TOL))
+            control += 1
         if blocked or control != 2:
             die("doorway %d: %d of 81 rays through the opening are blocked, %d of 2 control rays hit" % (k, blocked, control))
         rows.append({"k": k, "side": side, "node": node, "c": c.copy(), "hw": hw, "bd": bd, "inner": inner,
                      "outer": pz, "edge": edge, "cuts": cuts, "deleted": len(cand), "panel": len(panel),
-                     "quads": quads, "clear": clear, "control": control,
+                     "quads": quads, "clear": clear, "control": control, "control_rows": control_rows,
                      "outward": (0.0, 0.0, -inw)})
     return rows
 
@@ -576,9 +656,7 @@ def cut_doorways(bm, doors, drum, node_l, uvl, backdrop_uv_fn, add_quad):
 
 
 def main():
-    out_path = args()
-    if os.path.abspath(out_path) == os.path.abspath(SRC):
-        die("refusing to overwrite the source .glb")
+    out_path = args()  # resolved, inside the repo, a .glb, never the source (checked_out_path)
     os.makedirs(REPORT_DIR, exist_ok=True)
     report = []
 
@@ -785,9 +863,20 @@ def main():
     delete, kept_vis, partial = [], len(ext), []
     interior_partial, interior_visible = [], []
     crack_deleted = []
+    kept_exposed = []
     for f in test:
         vis, tot, esc = res[f]
         cen = g(f.calc_center_median())
+        # Exterior exposure: a fragment outside V that shows in one of the six orthographic
+        # views of the ORIGINAL (a sample's axis ray escapes the original scene) is part of
+        # the outside and is kept, whatever the tolerance or the 26-direction test says.
+        if not in_v(cen, 0.02):
+            d = ortho_exposed(full_bvh, f)
+            if d is not None:
+                kept_exposed.append((f[src_l], fmt_box(describe([f])), f.calc_area(), vis, tot,
+                                     Vector((d.x, d.z, -d.y))))
+                kept_vis += 1
+                continue
         # Crack tolerance: an inside fragment that sees out through 10 percent or less of
         # its samples sees through a thin gap between storey bands, not a real face of the
         # envelope; it goes, and the gap is listed. Everything nominated inside V goes.
@@ -898,6 +987,10 @@ def main():
     bmesh.ops.delete(bm, geom=delete, context="FACES")
     loose = [v for v in bm.verts if not v.link_faces]
     bmesh.ops.delete(bm, geom=loose, context="VERTS")
+    left_in_v = [f for f in bm.faces if f[src_l] in nominee and in_v(g(f.calc_center_median()), 0.02)]
+    rep("nominee faces left inside the ground-storey volume V after deletion: %d" % len(left_in_v))
+    if left_in_v:
+        die("%d nominee faces remain inside V, e.g. %s" % (len(left_in_v), fmt_box(describe(left_in_v[:1]))))
     bm.normal_update()
     bm.verts.index_update()
     bm.faces.index_update()
@@ -956,6 +1049,20 @@ def main():
 
     for f in bm.faces:
         f[node_l] = node_for(f).encode()
+    # An Unclassified island is geometry in or at the build area that no rule explains: it
+    # fails the build unless UNCLASSIFIED_ALLOWED lists it with a reason.
+    stray = {}
+    for f in bm.faces:
+        if f[node_l] == b"Unclassified" and f[src_l] not in UNCLASSIFIED_ALLOWED:
+            stray.setdefault(f[src_l], 0)
+            stray[f[src_l]] += 1
+    if stray:
+        for i in sorted(stray):
+            log("UNCLASSIFIED island %d (%d faces) %s matches=%s %s" % (
+                i, stray[i], cls[i], matches[i], fmt_box(info[i])))
+        die("%d unclassified island(s) cross the ground-storey volume V (x %.2f..%.2f y %.2f..%.2f z %.2f..%.2f) "
+            "or sit in the facade zone with no side, and are not in UNCLASSIFIED_ALLOWED: %s"
+            % (len(stray), BX0, BX1, GROUND_Y, TOP_Y, BZ0, BZ1, sorted(stray)[:20]))
 
     # Canopy: the sloped landside canopy keeps showing while Upper dissolves, so its
     # islands leave Upper by source island (whole islands, no cuts). Boundary by position:
@@ -1229,6 +1336,11 @@ def main():
                 esc[0].x, esc[0].y, esc[0].z, esc[1].x, esc[1].y, esc[1].z, esc[2].x, esc[2].y, esc[2].z) if esc else ""
             rep("  island %d (%s) visible %d/%d  %s  %s" % (i, cls[i], vis, tot, box, e))
     rep("nominee faces inside V that can see out (left in the build area): %d" % len(in_v_kept))
+    rep("KEPT BY EXTERIOR EXPOSURE (outside V, shows in an orthographic view of the original): %d faces, %.2f m2"
+        % (len(kept_exposed), sum(r[2] for r in kept_exposed)))
+    for i, box, area, vis, tot, d in kept_exposed:
+        rep("  island %d (%s) %s  %.2f m2  26-dir visible %d/%d  escapes along (%.0f, %.0f, %.0f)"
+            % (i, cls[i], box, area, vis, tot, d.x, d.y, d.z))
     rep("")
     rep("UNCLASSIFIED (non-nominee islands crossing the ground-storey volume V): %d" % len(unclassified))
     for i in sorted(unclassified):
@@ -1263,6 +1375,9 @@ def main():
                 dw["k"], dw["node"], dw["c"].x - dw["hw"], dw["c"].x + dw["hw"], 2 * dw["hw"], 2 * drum[dw["k"]],
                 dw["inner"], dw["outer"], dw["cuts"], dw["deleted"], dw["panel"], dw["quads"], dw["edge"],
                 dw["clear"], dw["control"]))
+        for x, hit_node, hit_z, dist in dw["control_rows"]:
+            rep("    control ray x %.3f: first hit %s at z %.4f (inward face z %.4f), %.3f m from its start"
+                % (x, hit_node, hit_z, dw["inner"], dist))
 
     # ---- 7. split into objects, hierarchy, export
     root = bpy.data.objects.new("TP_Airport_Shell_ROOT", None)
@@ -1553,7 +1668,10 @@ def reread(path, expected, rep, doorways):
     if {n for n in names if n.startswith("Facade_")} != bays:
         die("written facade bays differ from the 68 expected names")
     if "Unclassified" in names:
-        rep("NOTE: an Unclassified node was written")
+        if not UNCLASSIFIED_ALLOWED:
+            die("written file has an Unclassified node, and UNCLASSIFIED_ALLOWED is empty")
+        rep("NOTE: an Unclassified node was written, holding only allowlisted islands %s"
+            % sorted(UNCLASSIFIED_ALLOWED))
     bad = []
     for name, (parent, tris) in expected.items():
         got = seen.get(name)

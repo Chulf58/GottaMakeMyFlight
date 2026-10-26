@@ -12,6 +12,14 @@ culling on, because the game's toon surface shader culls back faces. Every plate
 proves its subject and its 1 m reference cube are in frame and that the cube is the first
 thing a ray from the camera hits; otherwise it prints PROBE_INVALID and exits 1.
 Coordinates in this file are Godot world coordinates with the terminal at (0, 0, -80).
+
+The exterior check that can fail is ortho_compare: six orthographic views (N, S, W, E, top,
+bottom) at true scale, 20 px/m, no anti-aliasing, each with the 1 m cube, original against
+shell. After every plate is written it exits 1 when any view has more than ORTHO_MAX_DIFF_PX
+pixels differing by more than DIFF_LEVEL outside the intended-change masks (the doorway
+openings, and the footprint from below), or a mask shows no difference at all. The
+four perspective views (distance, airside, west, landside close) are extra evidence and
+only print their difference.
 """
 
 import math
@@ -28,6 +36,24 @@ SRC = os.path.join(REPO, "game", "assets", "buildings", "tp_airport_01a.glb")
 SHELL = os.path.join(REPO, "game", "assets", "buildings", "tp_airport_shell.glb")
 OUT = os.path.join(REPO, "tools", "blender", "out", "toon_shell_extract")
 OFFSET_Z = -80.0
+DIFF_LEVEL = 0.08  # a pixel differs when any colour channel moves by more than this (0..1)
+ORTHO_PX_PER_M = 20.0  # true scale: every orthographic view is 20 px per metre
+# The six orthographic views fail when more than this many pixels differ outside the
+# intended-change masks. At 20 px/m a pixel is 0.0025 m2, so 100 px is 0.25 m2: a 0.10 m
+# mullion over 2.5 m, the smallest facade element whose loss or addition must not pass.
+# The views render without anti-aliasing (one sample at each pixel centre), so a pixel
+# differs only when the surface its centre ray hits differs; with anti-aliasing on, the
+# silhouette columns at the building corners differed by sub-pixel coverage alone.
+ORTHO_MAX_DIFF_PX = 100
+# Intended changes, masked out of the limit and counted separately (each must show a
+# difference, a control that the comparison sees the change it should):
+#   N and S: the eight doorway openings (opening x centre +- 1.15, y 0.3..3.8, decision
+#     toon-terminal-shell-design-extracted-shell-glb-authored-shel), padded by 0.1 m.
+#   bottom: the envelope footprint x -33.94..32.94, z -95.25..-64.35, padded by 0.05 m.
+#     The Lot floor is culled from below, so inside the footprint this view sees the
+#     interior, which the shell deletes by design; outside it, the overhangs.
+DOORS = {1: (-25.99, "N"), 2: (-16.99, "N"), 3: (16.01, "N"), 4: (25.01, "N"),
+         5: (25.01, "S"), 6: (16.01, "S"), 7: (-16.99, "S"), 8: (-25.99, "S")}
 
 
 def b(x, y, z):
@@ -138,6 +164,89 @@ def box(x0, x1, y0, y1, z0, z1):
     return [b(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
 
 
+def save_px(px, name, tag):
+    im = bpy.data.images.new(name, px.shape[1], px.shape[0], alpha=True)
+    im.pixels = px.ravel()
+    im.filepath_raw = os.path.join(OUT, tag + ".png")
+    im.file_format = "PNG"
+    im.save()
+    print("PLATE", im.filepath_raw, flush=True)
+
+
+def ortho_compare(shell, building):
+    """Six true-scale orthographic views (N, S, W, E, top, bottom), original against shell,
+    each with a 1 m reference cube. A view fails when more than ORTHO_MAX_DIFF_PX pixels
+    differ by more than DIFF_LEVEL. Each plate stacks original (top), shell (middle) and
+    the difference (bottom: the shell dimmed, differing pixels magenta)."""
+    # name, eye, target, cube base (Godot), frame width and height in metres, fixed euler
+    views = [
+        ("N", (0, 10, -400), (0, 10, -70), (0.0, 0.0, -101.5), 92, 26, None),
+        ("S", (0, 10, 300), (0, 10, -70), (0.0, 0.0, -38.0), 92, 26, None),
+        ("W", (-400, 10, -70), (0, 10, -70), (-44.5, 0.0, -70.0), 68, 26, None),
+        ("E", (400, 10, -70), (0, 10, -70), (44.5, 0.0, -70.0), 68, 26, None),
+        ("top", (0, 400, -70), (0, 0, -70), (0.0, 0.0, -102.0), 92, 68, (0.0, 0.0, 0.0)),
+        ("bottom", (0, -400, -70), (0, 0, -70), (0.0, -3.0, -102.0), 92, 68, (math.pi, 0.0, 0.0)),
+    ]
+    results = []
+    for k, (view, eye, tgt, cpos, wm, hm, euler) in enumerate(views, start=1):
+        size = (int(round(wm * ORTHO_PX_PER_M)), int(round(hm * ORTHO_PX_PER_M)))
+        px = {}
+        for kind, path in (("original", SRC), ("shell", shell)):
+            scene, cam, red = load(path)
+            scene.display.render_aa = "OFF"
+            cube = cube_at(red, *cpos)
+            aim(cam, eye, tgt, ortho=max(wm, hm))
+            if euler is not None:
+                cam.rotation_euler = euler
+            tag = "ortho_%s_%s" % (view, kind)
+            prove(scene, cam, tag, building, cube, size)
+            px[kind] = render(scene, tag)
+            os.remove(os.path.join(OUT, tag + ".png"))  # kept only inside the stacked plate
+        # intended-change mask, projected through this view's camera (rows run bottom-up)
+        mask = np.zeros(px["shell"].shape[:2], dtype=bool)
+        rects = []
+        if view in ("N", "S"):
+            for cx, side in DOORS.values():
+                if side == view:
+                    bd = -95.25 if side == "N" else -64.35
+                    rects.append((box(cx - 1.25, cx + 1.25, 0.2, 3.9, bd, bd)))
+        elif view == "bottom":
+            rects.append(box(-33.99, 32.99, 0.0, 0.0, -95.30, -64.30))
+        for pts in rects:
+            co = [world_to_camera_view(scene, cam, p) for p in pts]
+            c0 = max(0, int(math.floor(min(c.x for c in co) * size[0])))
+            c1 = min(size[0], int(math.ceil(max(c.x for c in co) * size[0])))
+            r0 = max(0, int(math.floor(min(c.y for c in co) * size[1])))
+            r1 = min(size[1], int(math.ceil(max(c.y for c in co) * size[1])))
+            mask[r0:r1, c0:c1] = True
+        dd = np.abs(px["original"][..., :3] - px["shell"][..., :3]).max(axis=2)
+        differs = dd > DIFF_LEVEL
+        n = int((differs & ~mask).sum())
+        n_masked = int((differs & mask).sum())
+        ys, xs = np.nonzero(differs & ~mask)
+        where = "none" if n == 0 else "rows %d..%d cols %d..%d (from the bottom-left)" % (
+            ys.min(), ys.max(), xs.min(), xs.max())
+        print("ORTHO_DIFF %s: %dx%d px at %.0f px/m, no AA, pixels differing > %.2f outside the masks: %d "
+              "(limit %d), inside %d mask rects: %d, mean abs %.6f, where %s"
+              % (view, size[0], size[1], ORTHO_PX_PER_M, DIFF_LEVEL, n, ORTHO_MAX_DIFF_PX, len(rects),
+                 n_masked, dd.mean(), where), flush=True)
+        if rects and n_masked == 0:
+            results.append((view + " mask control (no intended change seen)", 1 + ORTHO_MAX_DIFF_PX))
+        ov = px["shell"] * 0.35
+        ov[..., 3] = 1.0
+        ov[mask & ~differs] = (0.0, 0.25, 0.3, 1.0)
+        ov[differs & mask] = (0.0, 1.0, 1.0, 1.0)
+        ov[differs & ~mask] = (1.0, 0.0, 1.0, 1.0)
+        band = np.ones((8, ov.shape[1], 4), dtype=np.float32)
+        # Blender image rows run bottom-up, so the first block is the bottom of the plate.
+        save_px(np.concatenate([ov, band, px["shell"], band, px["original"]], axis=0),
+                "ortho_" + view, "16_ortho_%d_%s_diff" % (k, view))
+        results.append((view, n))
+    worst = max(results, key=lambda r: r[1])
+    print("ORTHO_WORST %s %d px (limit %d)" % (worst[0], worst[1], ORTHO_MAX_DIFF_PX), flush=True)
+    return [r for r in results if r[1] > ORTHO_MAX_DIFF_PX]
+
+
 def main():
     shell = SHELL
     a = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -199,6 +308,8 @@ def main():
     im.file_format = "PNG"
     im.save()
     print("PLATE", im.filepath_raw, flush=True)
+
+    ortho_over = ortho_compare(shell, building)  # fails at the end, once every plate is written
 
     # 4-5: ground storey with Upper hidden, from above and oblique
     scene, cam, red = load(shell)
@@ -303,6 +414,9 @@ def main():
     im.file_format = "PNG"
     im.save()
     print("SHEET", names, flush=True)
+    if ortho_over:
+        fail("orthographic views over the diff limit of %d px: %s" % (ORTHO_MAX_DIFF_PX, ortho_over))
+    print("ORTHO_PASS all six views within %d px outside the masks" % ORTHO_MAX_DIFF_PX, flush=True)
 
 
 main()
