@@ -94,3 +94,19 @@ func test_a_toon_door_with_a_wall_on_its_way_out_is_refused() -> void:
 func test_a_malformed_snapshot_is_refused_before_anything_is_read() -> void:
 	assert_str(SHELL.snapshot_problem({"width": 66})).is_not_empty()
 	assert_bool(_mode.load_snapshot({"width": 66})).is_false()
+
+
+func test_a_refused_restore_leaves_a_built_grid_unchanged() -> void:
+	var built := _shell_grid([[&"entrance_door", LANDSIDE_B, 2], [&"exit_door", GATE_C, 0]])
+	assert_bool(_mode.load_snapshot(built.to_snapshot())).is_true()
+	var before := JSON.stringify(_mode.grid.to_snapshot())
+	var old := BuildGrid.new()
+	old.apply(BuildEdit.paint_floor(Vector2i(3, 3), BuildGrid.FLOOR_TILE, 1))
+	var off_door := _shell_grid([[&"entrance_door", Vector2i(15, 29), 2]])
+	var walled := _shell_grid([[&"exit_door", GATE_C, 0]])
+	walled.apply(BuildEdit.place_wall(GATE_C, BuildGrid.Side.NORTH))
+	for refused in [old.to_snapshot(), off_door.to_snapshot(), walled.to_snapshot()]:
+		assert_bool(_mode.load_snapshot(refused)).is_false()
+		assert_str(JSON.stringify(_mode.grid.to_snapshot())).is_equal(before)
+	assert_int(_floor_count()).is_equal(3 * 30)
+	assert_int(_mode.grid.object_ids().size()).is_equal(2)

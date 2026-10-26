@@ -83,18 +83,52 @@ func test_a_new_passenger_starts_on_the_road_and_walks_in_through_door_b() -> vo
 
 
 ## Spawned once boarding is open, nothing waits on boarding, so the road
-## still ahead adds its walking time to the forecast.
-func test_the_forecast_counts_the_road_walk() -> void:
+## still ahead adds exactly its own walking ticks to the forecast: the walk
+## drops leftover distance where the road meets the grid, so the road and the
+## indoor walk round up to whole ticks separately. Every road progress within
+## one tick's step is tried, so a combined rounding cannot pass by luck.
+func test_the_forecast_counts_the_road_walk_as_its_own_leg() -> void:
 	_world.run_to(_world.flights.boarding_window(PassengerTestWorld.FLIGHT).x)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	var road_ticks := JourneyForecast.walk_ticks(p.apron_total_mm())
-	var with_road := JourneyForecast.arrival_tick(_world.sim, p)
-	p.apron_mm = p.apron_total_mm()
+	var total := p.apron_total_mm()
+	p.apron_mm = total
 	var walked := JourneyForecast.arrival_tick(_world.sim, p)
+	var exact := 0
+	for done_mm in range(0, PassengerSim.WALK_MM):
+		p.apron_mm = done_mm
+		var road_ticks := JourneyForecast.walk_ticks(total - done_mm)
+		var with_road := JourneyForecast.arrival_tick(_world.sim, p)
+		assert_int(with_road - walked).is_equal(road_ticks)
+		exact += int(with_road - walked == road_ticks)
 	p.apron_mm = 0
-	print("FORECAST with_road=%d walked=%d road_ticks=%d" % [with_road, walked, road_ticks])
-	assert_int(road_ticks).is_greater(80)
-	assert_int(with_road - walked).is_between(road_ticks - 1, road_ticks + 1)
+	print(
+		"FORECAST walked=%d total_mm=%d exact=%d/%d" % [walked, total, exact, PassengerSim.WALK_MM]
+	)
+	assert_int(exact).is_equal(PassengerSim.WALK_MM)
+
+
+## An entrance or exit the shell does not know (only the debug starter
+## terminal places one) walks the default route, with a warning.
+func test_a_door_off_the_toon_doors_walks_the_default_route_with_a_warning() -> void:
+	var stray := PassengerTestWorld.place(_world.grid, &"exit_door", Vector2i(20, 0), 0)
+	# A lambda captures locals by value, so it fills an array it shares.
+	var points: Array[Vector3] = []
+	await (
+		assert_error(func() -> void: points.append_array(ShellRoutes.departure(_world.sim, stray)))
+		. is_push_warning(
+			(
+				"ShellRoutes: exit_door at (20, 0) is not on a Toon door;"
+				+ " its passengers walk the default route"
+			)
+		)
+	)
+	var centre := _world.grid.cell_to_world(Vector2i(20, 0))
+	assert_int(points.size()).is_equal(3 + _world.sim.apron_waypoints.size())
+	assert_vector(points[0]).is_equal(centre)
+	assert_vector(points[2]).is_equal(centre + Vector3(0.0, 0.0, -1.5))
+	assert_vector(points[3]).is_equal(_world.sim.apron_waypoints[0])
+	var stray_in := PassengerTestWorld.place(_world.grid, &"entrance_door", Vector2i(20, 29), 2)
+	assert_array(ShellRoutes.arrival(_world.sim, stray_in)).is_empty()
 
 
 func test_the_exit_walk_leaves_through_gate_c_to_the_plane_door() -> void:

@@ -195,6 +195,7 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.mood <= PassengerSim.MOOD_MAX
 		and p.seg_mm >= 0
 		and p.apron_mm >= 0
+		and p.apron_mm <= p.apron_total_mm()
 		and p.odometer_mm >= 0
 	)
 	var stage_ok := (
@@ -248,6 +249,8 @@ static func _fill(p: Passenger, record: Dictionary, grid: BuildGrid) -> bool:
 			return false
 		for axis in value:
 			if typeof(axis) not in [TYPE_INT, TYPE_FLOAT]:
+				return false
+			if not is_finite(axis) or absf(axis) > BuildGrid.MAX_ORIGIN_M:
 				return false
 		p.apron.append(Vector3(value[0], value[1], value[2]))
 	return true

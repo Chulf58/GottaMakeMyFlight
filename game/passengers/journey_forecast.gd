@@ -56,10 +56,12 @@ static func arrival_tick(sim: PassengerSim, p: Passenger) -> int:
 static func _to_gate(sim: PassengerSim, p: Passenger) -> Vector3i:
 	var pos := p.path_end()
 	var mm := p.remaining_mm()
-	if p.stage == Passenger.Stage.SPAWNED:
-		# The road walk to the entrance, inside a terminal shell.
-		mm += maxi(0, p.apron_total_mm() - p.apron_mm)
 	var wait := 0
+	var road_ticks := 0
+	if p.stage == Passenger.Stage.SPAWNED:
+		# The road walk to the entrance, inside a terminal shell, is a leg of
+		# its own: the walk drops leftover distance where it meets the grid.
+		road_ticks = walk_ticks(p.apron_total_mm() - p.apron_mm)
 	if p.stage <= Passenger.Stage.CHECKIN:
 		# The scanner is chosen as station choice will: soonest estimated finish.
 		var scanner := _soonest_scanner(sim, pos)
@@ -84,7 +86,7 @@ static func _to_gate(sim: PassengerSim, p: Passenger) -> Vector3i:
 	):
 		pos = p.seat_front
 		mm = 0
-	return Vector3i(walk_ticks(mm) + wait, pos.x, pos.y)
+	return Vector3i(road_ticks + walk_ticks(mm) + wait, pos.x, pos.y)
 
 
 static func _passage_mm(passage: Array) -> int:
