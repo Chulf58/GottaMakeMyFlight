@@ -1,0 +1,74 @@
+[gd_resource type="Resource" script_class="ShellDefinition" load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://build/shell_definition.gd" id="1_def"]
+[ext_resource type="Script" path="res://build/shell_door_connection.gd" id="2_conn"]
+
+[sub_resource type="Resource" id="Resource_door_1"]
+script = ExtResource("2_conn")
+doorway = 1
+kind = 1
+label = "D"
+cell = Vector2i(7, 0)
+route = PackedVector3Array(-26.0, 0.3, -95.25, -26.0, 0.2, -95.6, -26.0, 0.2, -99.9, -14.5, 0.0, -101.0, -14.5, 0.0, -106.5)
+
+[sub_resource type="Resource" id="Resource_door_2"]
+script = ExtResource("2_conn")
+doorway = 2
+kind = 1
+label = "C"
+cell = Vector2i(16, 0)
+route = PackedVector3Array(-17.0, 0.3, -95.25, -17.0, 0.2, -95.6, -17.0, 0.2, -99.9, -14.5, 0.0, -101.0, -14.5, 0.0, -106.5)
+
+[sub_resource type="Resource" id="Resource_door_3"]
+script = ExtResource("2_conn")
+doorway = 3
+kind = 1
+label = "B"
+cell = Vector2i(49, 0)
+route = PackedVector3Array(16.0, 0.3, -95.25, 16.0, 0.2, -95.6, 16.0, 0.2, -99.9, -14.5, 0.0, -101.0, -14.5, 0.0, -106.5)
+
+[sub_resource type="Resource" id="Resource_door_4"]
+script = ExtResource("2_conn")
+doorway = 4
+kind = 1
+label = "A"
+cell = Vector2i(58, 0)
+route = PackedVector3Array(25.0, 0.3, -95.25, 25.0, 0.2, -95.6, 25.0, 0.2, -99.9, -14.5, 0.0, -101.0, -14.5, 0.0, -106.5)
+
+[sub_resource type="Resource" id="Resource_door_5"]
+script = ExtResource("2_conn")
+doorway = 5
+label = "D"
+cell = Vector2i(58, 29)
+facing = 2
+route = PackedVector3Array(25.0, 0.1, -57.0, 25.0, 0.2, -60.25, 25.0, 0.2, -64.2, 25.0, 0.3, -64.35)
+
+[sub_resource type="Resource" id="Resource_door_6"]
+script = ExtResource("2_conn")
+doorway = 6
+label = "C"
+cell = Vector2i(49, 29)
+facing = 2
+route = PackedVector3Array(16.0, 0.1, -57.0, 16.0, 0.2, -60.25, 16.0, 0.2, -64.2, 16.0, 0.3, -64.35)
+
+[sub_resource type="Resource" id="Resource_door_7"]
+script = ExtResource("2_conn")
+doorway = 7
+label = "B"
+cell = Vector2i(16, 29)
+facing = 2
+route = PackedVector3Array(-17.0, 0.1, -57.0, -17.0, 0.2, -60.25, -17.0, 0.2, -64.2, -17.0, 0.3, -64.35)
+
+[sub_resource type="Resource" id="Resource_door_8"]
+script = ExtResource("2_conn")
+doorway = 8
+label = "A"
+cell = Vector2i(7, 29)
+facing = 2
+route = PackedVector3Array(-26.0, 0.1, -57.0, -26.0, 0.2, -60.25, -26.0, 0.2, -64.2, -26.0, 0.3, -64.35)
+
+[resource]
+script = ExtResource("1_def")
+grid_origin = Vector3(-33.5, 0.32, -94.8)
+grid_size = Vector2i(66, 30)
+connections = Array[ExtResource("2_conn")]([SubResource("Resource_door_1"), SubResource("Resource_door_2"), SubResource("Resource_door_3"), SubResource("Resource_door_4"), SubResource("Resource_door_5"), SubResource("Resource_door_6"), SubResource("Resource_door_7"), SubResource("Resource_door_8")])

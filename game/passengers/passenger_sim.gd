@@ -22,7 +22,8 @@ signal outcome(id: int, made: bool)
 ## Every journey stage change, after it is made (the debug hook logs it).
 signal stage_changed(id: int, stage: Passenger.Stage)
 
-const SAVE_VERSION := 2
+## 3: the walks outside carry heights ([x, y, z] apron points).
+const SAVE_VERSION := 3
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -55,11 +56,13 @@ const SEAT_STAGES := [
 @export var build_mode: BuildMode
 @export var auto_schedule := true
 
-## The authored apron walk after the exit door, world points. Defaults: into
-## the Toon terminal's south face, out of its airside face at gate C's door,
-## through the 2.3 m gap between that face (z -100) and the parked plane's
-## nose (z -102.3), and to the plane's port door (the plane at the stand at
-## (-18, 0, -117) spans x -32.2 to -3.8 with its wings).
+## The apron walk after an exit door with no terminal shell connection
+## (ShellRoutes.departure()), world points: the forecourt layout's walk into
+## the Toon terminal's south face, out of its airside face near gate C, through
+## the 2.3 m gap between that face (z -100) and the parked plane's nose
+## (z -102.3), and to the plane's port door (the plane at the stand at
+## (-18, 0, -117) spans x -32.2 to -3.8 with its wings). Inside the shell the
+## gate doors' authored routes are used instead (ShellDoorConnection.route).
 var apron_waypoints := PackedVector3Array(
 	[
 		Vector3(-14.5, 0.0, -41.0),
@@ -70,6 +73,10 @@ var apron_waypoints := PackedVector3Array(
 )
 var layout := TerminalLayout.new()
 var grid: BuildGrid
+## The terminal shell whose Toon doors give the walks outside (ShellRoutes):
+## from BuildMode in a scene; tests set it. Null: no road walk, and exits
+## walk apron_waypoints.
+var shell: ShellDefinition
 var tick := 0
 var last_batch_seed := 0
 ## Scheduled passengers dropped when their flight's doors closed, by flight id:
@@ -99,6 +106,7 @@ var _missed := 0
 func _ready() -> void:
 	if clock == null or flights == null or build_mode == null:
 		return
+	shell = build_mode.shell
 	bind(clock, flights, build_mode.grid)
 	if auto_schedule:
 		for id in flights.flight_ids():
@@ -268,9 +276,9 @@ func wait_ticks(p: Passenger) -> int:
 
 ## Where the passenger stands on this tick, in world space.
 func world_position(p: Passenger) -> Vector3:
-	if not p.apron.is_empty() and p.stage >= Passenger.Stage.APRON:
-		var xz := p.apron_position()
-		return Vector3(xz.x, 0.0, xz.y)
+	var outside := p.stage >= Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
+	if outside and not p.apron.is_empty():
+		return p.apron_position()
 	if p.stage in SEAT_STAGES and p.seat_cell != Passenger.NO_CELL:
 		var front := grid.cell_to_world(p.seat_front)
 		var seat := grid.cell_to_world(p.seat_cell)
@@ -366,6 +374,7 @@ func _spawn(flight_id: String, variant: int) -> Passenger:
 	p.boarding_tick = flights.boarding_window(flight_id).x
 	p.at = layout.door_cell(grid, layout.entrances[0])
 	p.clear_path()
+	p.apron = ShellRoutes.arrival(self, layout.entrances[0])
 	_passengers.append(p)
 	_by_id[p.id] = p
 	passenger_spawned.emit(p.id)
@@ -453,8 +462,12 @@ func _step(p: Passenger) -> void:
 		_replan(p)
 	match p.stage:
 		Passenger.Stage.SPAWNED:
-			_set_stage(p, Passenger.Stage.TO_CHECKIN)
-			_seek(p)
+			# In from the road first, when the entrance has one (ShellRoutes).
+			if p.apron_mm >= p.apron_total_mm():
+				p.apron = []
+				p.apron_mm = 0
+				_set_stage(p, Passenger.Stage.TO_CHECKIN)
+				_seek(p)
 		Passenger.Stage.TO_CHECKIN, Passenger.Stage.TO_SECURITY:
 			_seek(p)
 		Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_QUEUE:
@@ -483,11 +496,11 @@ func _step(p: Passenger) -> void:
 
 func _move(p: Passenger) -> void:
 	var speed := RUN_MM if p.late else WALK_MM
-	if p.stage == Passenger.Stage.APRON:
+	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
 		var total := p.apron_total_mm()
 		p.odometer_mm += mini(speed, total - p.apron_mm)
 		p.apron_mm = mini(p.apron_mm + speed, total)
-		if p.apron_mm >= total:
+		if p.stage == Passenger.Stage.APRON and p.apron_mm >= total:
 			_finish(p, true)
 	elif p.is_moving():
 		p.walk(speed)
@@ -686,21 +699,9 @@ func _choose_exit(p: Passenger) -> void:
 	p.set_path(best_path)
 
 
-## Door centre, its outward edge, one metre out, then the authored waypoints.
-func _apron_points(exit_door: int) -> Array[Vector2]:
-	var points: Array[Vector2] = []
-	var cell := layout.door_cell(grid, exit_door)
-	if cell == BuildObjectDef.NO_CELL:
-		return points
-	var out := Vector2(layout.door_outward(grid, exit_door))
-	var centre_3d := grid.cell_to_world(cell)
-	var centre := Vector2(centre_3d.x, centre_3d.z)
-	points.append(centre)
-	points.append(centre + out * 0.5)
-	points.append(centre + out * 1.5)
-	for point in apron_waypoints:
-		points.append(Vector2(point.x, point.z))
-	return points
+## The walk from an exit door's cell to the plane door (ShellRoutes.departure()).
+func _apron_points(exit_door: int) -> Array[Vector3]:
+	return ShellRoutes.departure(self, exit_door)
 
 
 ## An edit touched the committed path. Finish the current step if it is still

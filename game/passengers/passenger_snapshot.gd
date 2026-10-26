@@ -145,7 +145,7 @@ static func _record(p: Passenger) -> Dictionary:
 	record["path"] = path
 	var apron := []
 	for point in p.apron:
-		apron.append([point.x, point.y])
+		apron.append([point.x, point.y, point.z])
 	record["apron"] = apron
 	return record
 
@@ -244,14 +244,12 @@ static func _fill(p: Passenger, record: Dictionary, grid: BuildGrid) -> bool:
 			return false
 		p.path.append(cell)
 	for value in record["apron"]:
-		if typeof(value) != TYPE_ARRAY or value.size() != 2:
+		if typeof(value) != TYPE_ARRAY or value.size() != 3:
 			return false
-		if (
-			typeof(value[0]) not in [TYPE_INT, TYPE_FLOAT]
-			or typeof(value[1]) not in [TYPE_INT, TYPE_FLOAT]
-		):
-			return false
-		p.apron.append(Vector2(value[0], value[1]))
+		for axis in value:
+			if typeof(axis) not in [TYPE_INT, TYPE_FLOAT]:
+				return false
+		p.apron.append(Vector3(value[0], value[1], value[2]))
 	return true
 
 

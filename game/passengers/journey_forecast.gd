@@ -2,7 +2,8 @@ class_name JourneyForecast
 extends RefCounted
 ## Whether a passenger will make its flight at a walk. The forecast covers the
 ## whole remaining journey: the committed path, the queue wait and service at
-## the stations still ahead, the scanner passage, waiting at the gate until
+## the stations still ahead (after the road walk to the entrance, inside a
+## terminal shell), the scanner passage, waiting at the gate until
 ## boarding opens, standing up, the walk to the nearest open exit and the
 ## apron walk to the plane door. Legs not yet planned use octile distance.
 ## Everything is at walking pace, so running raises the slack, and a gap
@@ -55,6 +56,9 @@ static func arrival_tick(sim: PassengerSim, p: Passenger) -> int:
 static func _to_gate(sim: PassengerSim, p: Passenger) -> Vector3i:
 	var pos := p.path_end()
 	var mm := p.remaining_mm()
+	if p.stage == Passenger.Stage.SPAWNED:
+		# The road walk to the entrance, inside a terminal shell.
+		mm += maxi(0, p.apron_total_mm() - p.apron_mm)
 	var wait := 0
 	if p.stage <= Passenger.Stage.CHECKIN:
 		# The scanner is chosen as station choice will: soonest estimated finish.
