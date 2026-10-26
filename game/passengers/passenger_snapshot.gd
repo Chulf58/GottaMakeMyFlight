@@ -26,6 +26,8 @@ const INT_FIELDS := [
 	"mood",
 	"outcome_tick",
 	"odometer_mm",
+	"missed_stage",
+	"missed_stuck",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan"]
@@ -174,8 +176,18 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.apron_mm >= 0
 		and p.odometer_mm >= 0
 	)
-	var stage_ok := p.stage >= 0 and p.stage < Passenger.Stage.size()
-	var stuck_ok := p.stuck >= 0 and p.stuck < Passenger.Stuck.size()
+	var stage_ok := (
+		p.stage >= 0
+		and p.stage < Passenger.Stage.size()
+		and p.missed_stage >= 0
+		and p.missed_stage < Passenger.Stage.size()
+	)
+	var stuck_ok := (
+		p.stuck >= 0
+		and p.stuck < Passenger.Stuck.size()
+		and p.missed_stuck >= 0
+		and p.missed_stuck < Passenger.Stuck.size()
+	)
 	var index_ok := p.path_index >= 0 and p.path_index < maxi(p.path.size(), 1)
 	if (
 		not (variant_ok and range_ok and stage_ok and stuck_ok and index_ok)

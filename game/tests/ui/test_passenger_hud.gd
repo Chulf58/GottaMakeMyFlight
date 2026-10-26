@@ -48,6 +48,34 @@ func test_debug_button_spawns_300_and_shows_the_seed() -> void:
 	assert_str(_hud.seed_text()).is_equal("Debug batch: 300 passengers, seed %d" % seed)
 
 
+func test_a_refused_debug_batch_leaves_no_seed_and_says_why() -> void:
+	_world.run_to(21)
+	assert_bool(_world.flights.is_doors_closed(PassengerTestWorld.FLIGHT)).is_true()
+	_hud.press_debug_spawn()
+	assert_int(_world.sim.pending_spawns()).is_equal(0)
+	assert_int(_world.sim.last_batch_seed).is_equal(0)
+	_hud.refresh()
+	assert_str(_hud.seed_text()).is_equal("")
+	assert_str(_hud.status_text()).contains("no flight is open")
+
+
+func test_a_spawned_debug_batch_replaces_an_earlier_refusal() -> void:
+	_world.run_to(21)
+	_hud.press_debug_spawn()
+	assert_str(_hud.status_text()).contains("no flight is open")
+	var later := PassengerTestWorld.make(
+		PassengerTestWorld.floored(Vector2i(8, 6)), PassengerTestWorld.starts_with(100, 200)
+	)
+	_hud.clock = later.clock
+	_hud.flights = later.flights
+	_hud.sim = later.sim
+	_hud.press_debug_spawn()
+	assert_int(later.sim.pending_spawns()).is_equal(300)
+	assert_str(_hud.status_text()).is_equal("Spawned 300 passengers")
+	assert_str(_hud.seed_text()).contains("seed %d" % later.sim.last_batch_seed)
+	later.free_all()
+
+
 func test_speed_buttons_set_the_clock() -> void:
 	_hud.press_speed(3)
 	assert_int(_world.clock.speed).is_equal(3)

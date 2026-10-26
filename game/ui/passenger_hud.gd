@@ -8,7 +8,9 @@ extends CanvasLayer
 ## Debug panel (a 300-passenger batch, a starter terminal, the batch seed and
 ## their status). Clicking a passenger while no build tool is active follows
 ## it: the selection is a stable passenger id, and the camera follows
-## PassengerViews.follow_anchor, never a pooled node.
+## PassengerViews.follow_anchor, never a pooled node. When a flight's doors
+## close, a dismissible FlightResultPanel opens under the top-right panel:
+## made, missed and the main reasons.
 
 const DEBUG_BATCH := 300
 ## Where the follow text's bottom edge sits, up from the bottom of the screen.
@@ -17,6 +19,9 @@ const FOLLOW_TOP := 96.0
 const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 ## The Debug panel's fixed width; its labels wrap inside it.
 const DEBUG_W := 260.0
+## The result panel's top edge, below the flight panel and well above the
+## build tray.
+const RESULT_TOP := 200.0
 const STAGE_TEXT := {
 	Passenger.Stage.SPAWNED: "Arriving",
 	Passenger.Stage.TO_CHECKIN: "Heading to check-in",
@@ -52,6 +57,11 @@ var _status := ""
 var _time_label := Label.new()
 var _speed_buttons: Array[Button] = []
 var _debug_panel := PanelContainer.new()
+var _result := FlightResultPanel.new()
+## The flight whose doors closed and whose result is not shown yet. The sim
+## marks the passengers missed after the doors_closed signal, so the panel
+## waits for the next refresh.
+var _unreported := ""
 
 
 func _ready() -> void:
@@ -86,6 +96,11 @@ func _ready() -> void:
 	hint.add_theme_font_size_override("font_size", 14)
 	hint.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))
 	column.add_child(hint)
+	_result.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_result.position = Vector2(-460.0, RESULT_TOP)
+	add_child(_result)
+	if flights != null:
+		flights.doors_closed.connect(_on_doors_closed)
 	_build_debug()
 	_follow_label.name = "FollowText"
 	_follow_label.add_theme_font_size_override("font_size", 22)
@@ -138,6 +153,9 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func refresh() -> void:
+	if _unreported != "":
+		show_result_for(_unreported)
+		_unreported = ""
 	_time_label.text = time_text()
 	_flight_label.text = flight_text()
 	_counts_label.text = counts_text()
@@ -206,8 +224,28 @@ func follow_text() -> String:
 ## cosmetic RNG, so pressing the button leaves the saved sim RNG untouched.
 func press_debug_spawn() -> void:
 	var seed := randi() + 1
-	sim.spawn_batch(DEBUG_BATCH, seed)
+	if not sim.spawn_batch(DEBUG_BATCH, seed):
+		_status = "Spawn refused: no flight is open for passengers"
+		return
+	_status = "Spawned %d passengers" % DEBUG_BATCH
 	print("DEBUG_BATCH spawn %d passengers seed=%d tick=%d" % [DEBUG_BATCH, seed, clock.tick])
+
+
+## Opens the result panel for a flight, from the passengers' recorded fates.
+func show_result_for(flight_id: String) -> void:
+	_result.show_result(FlightResult.summarize(sim, flight_id))
+
+
+func dismiss_result() -> void:
+	_result.dismiss_result()
+
+
+func is_result_open() -> bool:
+	return _result.visible
+
+
+func result_text() -> String:
+	return _result.result_text()
 
 
 ## 0 pauses; 1 to 3 run at that speed.
@@ -305,6 +343,10 @@ func _fit_follow() -> void:
 	_follow_label.offset_top = -FOLLOW_TOP
 	_follow_label.offset_bottom = -FOLLOW_BOTTOM
 	_follow_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+
+func _on_doors_closed(flight_id: String) -> void:
+	_unreported = flight_id
 
 
 func _is_pristine(grid: BuildGrid) -> bool:
