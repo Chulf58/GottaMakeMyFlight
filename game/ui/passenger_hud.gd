@@ -10,8 +10,14 @@ extends CanvasLayer
 ## it: the selection is a stable passenger id, and the camera follows
 ## PassengerViews.follow_anchor, never a pooled node. When a flight's doors
 ## close, a dismissible FlightResultPanel opens under the top-right panel:
-## made, missed and the main reasons.
+## made, missed and the main reasons. A new game opens paused under the
+## IntroDialogue (once per session, never in a probe, a test or a playtest);
+## closing it starts the clock at 1x.
 
+## The PlaytestHook autoload's script, for its static switch check.
+const PLAYTEST_HOOK := preload("res://debug/playtest_hook.gd")
+## Above BuildMenu's layer, so the intro's backdrop covers the build bar too.
+const INTRO_LAYER := 10
 const DEBUG_BATCH := 300
 ## Where the follow text's bottom edge sits, up from the bottom of the screen.
 const FOLLOW_BOTTOM := 64.0
@@ -62,6 +68,11 @@ var _result := FlightResultPanel.new()
 ## The sim marks the passengers missed after the doors_closed signal, so a
 ## result waits for the next refresh, and for the open one to be dismissed.
 var _unreported: Array[String] = []
+var _intro_layer: CanvasLayer
+var _intro: IntroDialogue
+## The camera's input state when the intro opened, restored when it closes.
+var _camera_was_processing := true
+var _camera_was_taking_input := true
 
 
 func _ready() -> void:
@@ -111,6 +122,10 @@ func _ready() -> void:
 	add_child(_follow_label)
 	_fit_follow()
 	get_viewport().size_changed.connect(_fit_follow)
+	if IntroDialogue.should_show(
+		IntroDialogue.shown_this_session, _in_current_scene(), _playtest_switch_on()
+	):
+		open_intro()
 	refresh()
 
 
@@ -259,6 +274,39 @@ func press_pause_toggle() -> void:
 	clock.set_paused(not clock.paused)
 
 
+## Opens the intro dialogue, pauses the clock and stops the camera. Refused
+## (false) when it was already shown this session or is open.
+func open_intro() -> bool:
+	if IntroDialogue.shown_this_session or _intro != null or clock == null:
+		return false
+	IntroDialogue.shown_this_session = true
+	_intro_layer = CanvasLayer.new()
+	_intro_layer.name = "IntroLayer"
+	_intro_layer.layer = INTRO_LAYER
+	_intro = IntroDialogue.new()
+	_intro_layer.add_child(_intro)
+	add_child(_intro_layer)
+	# Dismissal, or the dialogue or its layer leaving the tree any other way,
+	# runs the same one-time cleanup.
+	_intro.dismissed.connect(_close_intro)
+	_intro.tree_exiting.connect(_close_intro)
+	_intro_layer.tree_exiting.connect(_close_intro)
+	clock.set_paused(true)
+	_gate_camera(true)
+	return true
+
+
+## Closes the intro as Continue would; does nothing when it is not open.
+func dismiss_intro() -> void:
+	if _intro != null:
+		_intro.dismiss()
+
+
+## The open intro dialogue, or null when it is closed.
+func intro() -> IntroDialogue:
+	return _intro
+
+
 func is_debug_open() -> bool:
 	return _debug_panel.visible
 
@@ -342,6 +390,58 @@ func _fit_follow() -> void:
 	_follow_label.offset_top = -FOLLOW_TOP
 	_follow_label.offset_bottom = -FOLLOW_BOTTOM
 	_follow_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+
+## Ends the intro once, however it ended: frees its layer (unless that is
+## already on its way out), gives the camera its input back and starts the
+## clock at 1x. Later calls find nothing open and do nothing.
+func _close_intro() -> void:
+	if _intro_layer == null:
+		return
+	var layer := _intro_layer
+	_intro_layer = null
+	_intro = null
+	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
+		layer.queue_free()
+	_gate_camera(false)
+	if is_instance_valid(clock):
+		clock.set_paused(false)
+		clock.set_speed(1)
+
+
+## The camera-input gate. Marking events handled cannot stop TycoonCamera,
+## which polls held keys in _process, so while the intro is open its _process
+## (WASD, Q/E, easing) and _unhandled_input (wheel, drags, Home) are switched
+## off, and switched back to what they were when it closes.
+func _gate_camera(closed: bool) -> void:
+	if not is_instance_valid(camera):
+		return
+	if closed:
+		_camera_was_processing = camera.is_processing()
+		_camera_was_taking_input = camera.is_processing_unhandled_input()
+		camera.set_process(false)
+		camera.set_process_unhandled_input(false)
+	else:
+		camera.set_process(_camera_was_processing)
+		camera.set_process_unhandled_input(_camera_was_taking_input)
+
+
+## True when this HUD belongs to the running scene: a normal launch or a
+## change_scene, not a probe or test that adds the scene under root by hand.
+func _in_current_scene() -> bool:
+	var current := get_tree().current_scene
+	return current != null and (current == self or current.is_ancestor_of(self))
+
+
+## The PlaytestHook's switches (--playtest, GMMF_PLAYTEST=1 or the
+## debug/playtest/enabled setting), in any build: a playtest skips the intro.
+func _playtest_switch_on() -> bool:
+	return PLAYTEST_HOOK.wants_enabled(
+		true,
+		OS.get_cmdline_user_args(),
+		ProjectSettings.get_setting(PLAYTEST_HOOK.SETTING, false),
+		OS.get_environment(PLAYTEST_HOOK.ENV)
+	)
 
 
 func _on_doors_closed(flight_id: String) -> void:
