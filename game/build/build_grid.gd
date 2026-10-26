@@ -12,7 +12,7 @@ extends RefCounted
 ## Every change goes through validate() and apply() with a BuildEdit, so the
 ## preview, the click and a snapshot load share one set of rules. apply()
 ## then relinks the A* graph around the changed cells only (once for a whole
-## batch, see begin_batch()).
+## list of edits, see apply_batch()).
 
 ## After an accepted edit: the cells GridPathing relinked, so every committed
 ## path through one of them may be stale. After a snapshot load: every cell.
@@ -63,8 +63,6 @@ var _reserved := PackedInt32Array()
 var _objects: Dictionary = {}
 var _next_object_id := 1
 var _pathing := GridPathing.new()
-var _batching := false
-var _batch_dirty: Array[Vector2i] = []
 
 
 ## `grid_origin` is the world position of cell (0, 0)'s north-west corner, a
@@ -217,6 +215,34 @@ func validate(edit: BuildEdit) -> BuildResult:
 ## Validates the edit and, if it is accepted, applies it and relinks the A*
 ## graph around its dirty cells. A refused edit changes nothing.
 func apply(edit: BuildEdit) -> BuildResult:
+	var result := _commit(edit)
+	if result.ok:
+		graph_changed.emit(_pathing.update(self, result.dirty_cells))
+	return result
+
+
+## Applies a list of edits in order: each is validated and applied against the
+## grid as the earlier ones left it, and a refused edit changes nothing and
+## does not stop the rest. The A* graph is then relinked once around the union
+## of the cells the accepted edits changed and graph_changed is emitted once
+## with the cells relinked; with no accepted edit nothing is relinked or
+## emitted. Returns one result per edit, in order. No state outlives the call.
+func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
+	var results: Array[BuildResult] = []
+	var dirty: Array[Vector2i] = []
+	for edit in edits:
+		var result := _commit(edit)
+		results.append(result)
+		if result.ok:
+			dirty.append_array(result.dirty_cells)
+	if not dirty.is_empty():
+		graph_changed.emit(_pathing.update(self, dirty))
+	return results
+
+
+## Validates the edit and, if it is accepted, changes the grid data and fills
+## in the result's dirty cells. Does not relink the A* graph.
+func _commit(edit: BuildEdit) -> BuildResult:
 	var result := validate(edit)
 	if not result.ok:
 		return result
@@ -242,33 +268,7 @@ func apply(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
 			result.dirty_cells = _erase_object(edit.object_id)
-	if _batching:
-		_batch_dirty.append_array(result.dirty_cells)
-	else:
-		graph_changed.emit(_pathing.update(self, result.dirty_cells))
 	return result
-
-
-## Starts a batch: apply() still validates and changes the grid edit by edit,
-## so each edit sees the ones before it, but the A* graph is not relinked and
-## graph_changed is not emitted until end_batch(). Validation reads the grid,
-## never the graph. Calls do not nest.
-func begin_batch() -> void:
-	_batching = true
-	_batch_dirty.clear()
-
-
-## Ends the batch: relinks the graph once around the union of the cells the
-## batch changed and emits graph_changed once with the cells relinked. Returns
-## them, or an empty array (and emits nothing) when no edit was accepted.
-func end_batch() -> Array[Vector2i]:
-	_batching = false
-	var relinked: Array[Vector2i] = []
-	if not _batch_dirty.is_empty():
-		relinked = _pathing.update(self, _batch_dirty)
-		graph_changed.emit(relinked)
-	_batch_dirty.clear()
-	return relinked
 
 
 func cell_to_world(cell: Vector2i) -> Vector3:

@@ -1,7 +1,7 @@
 class_name TestBuildGridBatch
 extends GdUnitTestSuite
-## BuildGrid's batch: edits validate and apply one by one, in order, but the
-## A* graph is relinked and graph_changed is emitted once, at the end.
+## BuildGrid.apply_batch(): edits validate and apply one by one, in order, but
+## the A* graph is relinked and graph_changed is emitted once, at the end.
 
 var _emitted: Array = []
 
@@ -11,36 +11,38 @@ func _watch(grid: BuildGrid) -> void:
 	grid.graph_changed.connect(func(cells: Array[Vector2i]) -> void: _emitted.append(cells))
 
 
-func _paint(grid: BuildGrid, area: Rect2i) -> void:
+func _paints(area: Rect2i) -> Array[BuildEdit]:
+	var edits: Array[BuildEdit] = []
 	for y in range(area.position.y, area.end.y):
 		for x in range(area.position.x, area.end.x):
-			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	return edits
 
 
 func test_a_batch_emits_graph_changed_once_with_every_relinked_cell() -> void:
 	var grid := BuildGrid.new(Vector2i(12, 12))
 	_watch(grid)
-	grid.begin_batch()
-	_paint(grid, Rect2i(2, 2, 3, 2))
-	assert_array(_emitted).is_empty()
-	var relinked := grid.end_batch()
+	var results := grid.apply_batch(_paints(Rect2i(2, 2, 3, 2)))
+	assert_int(results.size()).is_equal(6)
 	assert_int(_emitted.size()).is_equal(1)
-	assert_array(_emitted[0]).contains_exactly_in_any_order(relinked)
-	assert_array(relinked).contains(
+	assert_array(_emitted[0]).contains(
 		[Vector2i(2, 2), Vector2i(4, 3), Vector2i(1, 1), Vector2i(5, 4)]
 	)
 
 
 func test_later_edits_in_a_batch_see_the_earlier_ones() -> void:
 	var grid := BuildGrid.new(Vector2i(12, 12))
-	grid.begin_batch()
-	assert_int(grid.apply(BuildEdit.remove_floor(Vector2i(3, 3))).reason).is_equal(
-		BuildResult.Reason.NO_FLOOR
-	)
-	assert_bool(grid.apply(BuildEdit.paint_floor(Vector2i(3, 3), 1, 1)).ok).is_true()
-	assert_bool(grid.apply(BuildEdit.remove_floor(Vector2i(3, 3))).ok).is_true()
-	grid.end_batch()
-	assert_int(grid.floor_at(Vector2i(3, 3))).is_equal(BuildGrid.FLOOR_NONE)
+	var cell := Vector2i(3, 3)
+	var edits: Array[BuildEdit] = [
+		BuildEdit.remove_floor(cell),
+		BuildEdit.paint_floor(cell, 1, 1),
+		BuildEdit.remove_floor(cell),
+	]
+	var results := grid.apply_batch(edits)
+	assert_int(results[0].reason).is_equal(BuildResult.Reason.NO_FLOOR)
+	assert_bool(results[1].ok).is_true()
+	assert_bool(results[2].ok).is_true()
+	assert_int(grid.floor_at(cell)).is_equal(BuildGrid.FLOOR_NONE)
 
 
 func test_a_batch_leaves_the_same_routes_as_edits_one_at_a_time() -> void:
@@ -55,10 +57,7 @@ func test_a_batch_leaves_the_same_routes_as_edits_one_at_a_time() -> void:
 	edits.append(BuildEdit.remove_floor(Vector2i(10, 6)))
 	for edit in edits:
 		single.apply(edit)
-	batched.begin_batch()
-	for edit in edits:
-		batched.apply(edit)
-	batched.end_batch()
+	batched.apply_batch(edits)
 	for y in range(1, 9):
 		for x in range(1, 13):
 			var to := Vector2i(x, y)
@@ -70,16 +69,35 @@ func test_a_batch_leaves_the_same_routes_as_edits_one_at_a_time() -> void:
 func test_a_batch_that_changes_nothing_emits_nothing() -> void:
 	var grid := BuildGrid.new(Vector2i(8, 8))
 	_watch(grid)
-	grid.begin_batch()
-	grid.apply(BuildEdit.remove_floor(Vector2i(3, 3)))
-	assert_array(grid.end_batch()).is_empty()
+	var edits: Array[BuildEdit] = [BuildEdit.remove_floor(Vector2i(3, 3))]
+	var results := grid.apply_batch(edits)
+	assert_bool(results[0].ok).is_false()
+	assert_array(_emitted).is_empty()
+
+
+func test_an_empty_batch_emits_nothing() -> void:
+	var grid := BuildGrid.new(Vector2i(8, 8))
+	_watch(grid)
+	var edits: Array[BuildEdit] = []
+	assert_array(grid.apply_batch(edits)).is_empty()
 	assert_array(_emitted).is_empty()
 
 
 func test_edits_after_a_batch_relink_on_their_own() -> void:
 	var grid := BuildGrid.new(Vector2i(8, 8))
-	grid.begin_batch()
-	grid.end_batch()
+	grid.apply_batch(_paints(Rect2i(1, 1, 2, 2)))
 	_watch(grid)
-	grid.apply(BuildEdit.paint_floor(Vector2i(3, 3), 1, 1))
+	grid.apply(BuildEdit.paint_floor(Vector2i(5, 5), 1, 1))
 	assert_int(_emitted.size()).is_equal(1)
+
+
+func test_back_to_back_batches_relink_only_their_own_cells() -> void:
+	var grid := BuildGrid.new(Vector2i(20, 12))
+	_watch(grid)
+	grid.apply_batch(_paints(Rect2i(1, 1, 2, 2)))
+	grid.apply_batch(_paints(Rect2i(15, 8, 2, 2)))
+	assert_int(_emitted.size()).is_equal(2)
+	assert_array(_emitted[0]).contains([Vector2i(1, 1), Vector2i(2, 2)])
+	assert_array(_emitted[0]).not_contains([Vector2i(15, 8), Vector2i(16, 9)])
+	assert_array(_emitted[1]).contains([Vector2i(15, 8), Vector2i(16, 9)])
+	assert_array(_emitted[1]).not_contains([Vector2i(1, 1), Vector2i(2, 2)])

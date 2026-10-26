@@ -6,9 +6,9 @@ extends RefCounted
 ## owns the input and the ghost; this class owns the rectangle and what
 ## applying it does, so the click and the drag use the same edits and rules.
 ##
-## Each rectangle is one BuildGrid batch: every cell is validated and applied
-## in order, and the A* graph is relinked and graph_changed emitted once at
-## the end. The cost is measured in test_area_drag.gd.
+## Each rectangle is one BuildGrid.apply_batch(): every cell is validated and
+## applied in order, and the A* graph is relinked and graph_changed emitted once
+## at the end. The cost is measured in test_area_drag.gd.
 
 
 ## What applying a rectangle did, for the status line.
@@ -33,6 +33,13 @@ class Outcome:
 			text += ", skipped %d: %s" % [skipped, first_reason]
 		return text
 
+	func _count(results: Array[BuildResult]) -> void:
+		for result in results:
+			if result.ok:
+				placed += 1
+			else:
+				_refuse(result)
+
 	func _refuse(result: BuildResult) -> void:
 		skipped += 1
 		if first_reason == "":
@@ -53,7 +60,10 @@ var _limit := Vector2i.ZERO
 ## zone, count as unchanged; a cell the rules refuse (DoorPlacement.check()) is skipped.
 static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 	var outcome := Outcome.new()
-	grid.begin_batch()
+	# Painting floor never changes what DoorPlacement.check() reads, so
+	# checking every cell before the batch gives the same answers as checking
+	# between the edits.
+	var edits: Array[BuildEdit] = []
 	for cell in _cells(area):
 		if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
 			outcome.unchanged += 1
@@ -61,11 +71,10 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 		var edit := BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, zone)
 		var result := DoorPlacement.check(grid, edit)
 		if result.ok:
-			grid.apply(edit)
-			outcome.placed += 1
+			edits.append(edit)
 		else:
 			outcome._refuse(result)
-	grid.end_batch()
+	outcome._count(grid.apply_batch(edits))
 	return outcome
 
 
@@ -91,29 +100,20 @@ static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
 		held[cell] = true
 		if not objects.has(object_id):
 			objects.append(object_id)
-	grid.begin_batch()
+	# DoorPlacement.check() adds nothing to a removal, so the batch's own
+	# in-order validation is the whole rule: a floor cell in front of a removed
+	# desk is judged after the desk is gone.
+	var edits: Array[BuildEdit] = []
 	for object_id in objects:
-		var edit := BuildEdit.remove_object(object_id)
-		var result := DoorPlacement.check(grid, edit)
-		if result.ok:
-			grid.apply(edit)
-			outcome.placed += 1
-		else:
-			outcome._refuse(result)
+		edits.append(BuildEdit.remove_object(object_id))
 	for cell in cells:
 		if held.has(cell):
 			continue
 		if grid.in_bounds(cell) and grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
 			outcome.unchanged += 1
 			continue
-		var edit := BuildEdit.remove_floor(cell)
-		var result := DoorPlacement.check(grid, edit)
-		if result.ok:
-			grid.apply(edit)
-			outcome.placed += 1
-		else:
-			outcome._refuse(result)
-	grid.end_batch()
+		edits.append(BuildEdit.remove_floor(cell))
+	outcome._count(grid.apply_batch(edits))
 	return outcome
 
 
