@@ -46,8 +46,8 @@ const REASON_TEXT := {
 	Reason.BAD_WALL_KIND: "Unknown wall kind",
 	Reason.DOOR_NEEDS_WALLS: "A door needs a plain wall on each side",
 	Reason.WALL_HOLDS_DOOR: "A door stands beside this wall",
-	Reason.DOOR_NOT_ON_EDGE: "Must stand on the terminal's edge, facing in",
-	Reason.DOOR_WALLED: "A wall closes the way out",
+	Reason.DOOR_NOT_ON_EDGE: "Entrances and exits need the outside edge, with no floor behind them",
+	Reason.DOOR_WALLED: "Keep the edge behind an entrance or exit open",
 }
 
 var ok: bool = true
