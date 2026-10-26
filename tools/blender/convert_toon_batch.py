@@ -754,6 +754,30 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         write_scene_import(out, animated)
 
 
+def out_dir_arg(raw):
+    """The --out directory as a resolved Windows path, refused when it is empty, a WSL
+    path (this runs under Windows Blender) or inside game/ in any spelling: a \\\\?\\
+    prefix, .. segments, other case or a junction all resolve before the comparison."""
+    if not raw.strip():
+        die("--out needs a directory, got an empty one")
+    if re.match(r"^/mnt/[A-Za-z](/|$)", raw):
+        die("--out got a WSL path %r; pass the Windows form (C:\\...)" % raw)
+    path = raw
+    for prefix in ("\\\\?\\", "//?/"):
+        if path.startswith(prefix):
+            path = path[len(prefix) :]
+    path = os.path.realpath(path)
+    norm = os.path.normcase(path)
+    game = os.path.normcase(os.path.realpath(GAME))
+    try:
+        inside = os.path.commonpath([norm, game]) == game
+    except ValueError:  # different drives
+        inside = False
+    if inside:
+        die("--out must name a directory outside game/, got %r (resolves to %s)" % (raw, path))
+    return path
+
+
 def main():
     """Arguments after `--`: asset stems, and optionally `--out <dir>`. With --out the
     .glb files go to that directory and game/ is left as it is: the atlas PNGs already
@@ -764,11 +788,8 @@ def main():
         i = argv.index("--out")
         if i + 1 >= len(argv):
             die("--out needs a directory")
-        out_root = os.path.abspath(argv[i + 1]) if argv[i + 1].strip() else ""
+        out_root = out_dir_arg(argv[i + 1])
         del argv[i : i + 2]
-        game = os.path.normcase(os.path.abspath(GAME))
-        if not out_root or os.path.normcase(out_root) == game or os.path.normcase(out_root).startswith(game + os.sep):
-            die("--out must name a directory outside game/, got %r" % out_root)
         if os.path.basename(out_root) in BATCH:
             die("--out was given a stem, not a directory: %r" % out_root)
     stems = argv or list(BATCH)
