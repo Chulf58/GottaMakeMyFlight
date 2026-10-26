@@ -10,8 +10,14 @@ extends CanvasLayer
 ## it: the selection is a stable passenger id, and the camera follows
 ## PassengerViews.follow_anchor, never a pooled node. When a flight's doors
 ## close, a dismissible FlightResultPanel opens under the top-right panel:
-## made, missed and the main reasons.
+## made, missed and the main reasons. A new game opens paused under the
+## IntroDialogue (once per session, never in a probe, a test or a playtest);
+## closing it starts the clock at 1x.
 
+## The PlaytestHook autoload's script, for its static switch check.
+const PLAYTEST_HOOK := preload("res://debug/playtest_hook.gd")
+## Above BuildMenu's layer, so the intro's backdrop covers the build bar too.
+const INTRO_LAYER := 10
 const DEBUG_BATCH := 300
 ## Where the follow text's bottom edge sits, up from the bottom of the screen.
 const FOLLOW_BOTTOM := 64.0
@@ -62,6 +68,8 @@ var _result := FlightResultPanel.new()
 ## The sim marks the passengers missed after the doors_closed signal, so a
 ## result waits for the next refresh, and for the open one to be dismissed.
 var _unreported: Array[String] = []
+var _intro_layer: CanvasLayer
+var _intro: IntroDialogue
 
 
 func _ready() -> void:
@@ -111,6 +119,10 @@ func _ready() -> void:
 	add_child(_follow_label)
 	_fit_follow()
 	get_viewport().size_changed.connect(_fit_follow)
+	if IntroDialogue.should_show(
+		IntroDialogue.shown_this_session, _in_current_scene(), _playtest_switch_on()
+	):
+		open_intro()
 	refresh()
 
 
@@ -259,6 +271,34 @@ func press_pause_toggle() -> void:
 	clock.set_paused(not clock.paused)
 
 
+## Opens the intro dialogue and pauses the clock. Refused (false) when it was
+## already shown this session or is open.
+func open_intro() -> bool:
+	if IntroDialogue.shown_this_session or _intro != null or clock == null:
+		return false
+	IntroDialogue.shown_this_session = true
+	_intro_layer = CanvasLayer.new()
+	_intro_layer.name = "IntroLayer"
+	_intro_layer.layer = INTRO_LAYER
+	_intro = IntroDialogue.new()
+	_intro.dismissed.connect(_on_intro_dismissed)
+	_intro_layer.add_child(_intro)
+	add_child(_intro_layer)
+	clock.set_paused(true)
+	return true
+
+
+## Closes the intro as Continue would; does nothing when it is not open.
+func dismiss_intro() -> void:
+	if _intro != null:
+		_intro.dismiss()
+
+
+## The open intro dialogue, or null when it is closed.
+func intro() -> IntroDialogue:
+	return _intro
+
+
 func is_debug_open() -> bool:
 	return _debug_panel.visible
 
@@ -342,6 +382,32 @@ func _fit_follow() -> void:
 	_follow_label.offset_top = -FOLLOW_TOP
 	_follow_label.offset_bottom = -FOLLOW_BOTTOM
 	_follow_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+
+func _on_intro_dismissed() -> void:
+	_intro_layer.queue_free()
+	_intro_layer = null
+	_intro = null
+	clock.set_paused(false)
+	clock.set_speed(1)
+
+
+## True when this HUD belongs to the running scene: a normal launch or a
+## change_scene, not a probe or test that adds the scene under root by hand.
+func _in_current_scene() -> bool:
+	var current := get_tree().current_scene
+	return current != null and (current == self or current.is_ancestor_of(self))
+
+
+## The PlaytestHook's switches (--playtest, GMMF_PLAYTEST=1 or the
+## debug/playtest/enabled setting), in any build: a playtest skips the intro.
+func _playtest_switch_on() -> bool:
+	return PLAYTEST_HOOK.wants_enabled(
+		true,
+		OS.get_cmdline_user_args(),
+		ProjectSettings.get_setting(PLAYTEST_HOOK.SETTING, false),
+		OS.get_environment(PLAYTEST_HOOK.ENV)
+	)
 
 
 func _on_doors_closed(flight_id: String) -> void:
