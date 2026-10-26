@@ -9,18 +9,28 @@ extends SceneTree
 ##     --path game -s res://spike/door_glass_plates_probe.gd
 ##
 ## The sim clock is paused, so no passenger spawns, and the passenger HUD is
-## hidden; the build toolbar stays. Each subject must project inside the
-## frame (below the toolbar) and be hit first by at least half of the camera
-## rays aimed at it, with every drawn wall, post, floor tile and visible
-## object as an occluder (glass panes left out), or the probe prints
-## PROBE_INVALID and exits 1. A guard thread calls OS.crash() on a stall.
+## hidden; the build menu stays. Each subject must project inside the frame
+## (clear of the money slot and the bottom build menu) and be hit first by at
+## least half of the camera rays aimed at it, with every drawn wall, post,
+## floor tile and visible object as an occluder (glass panes left out), or
+## the probe prints PROBE_INVALID and exits 1. A guard thread calls OS.crash() on a stall.
 ## Plates go to tools/blender/out/door_glass/.
 
 const OUT_REL := "res://../tools/blender/out/door_glass"
 const GLASS := "res://assets/materials/tp_glass.tres"
 const MARGIN_PX := 8.0
-## The build toolbar's strip at the top of the window.
-const TOOLBAR_PX := 80.0
+## The money slot's strip at the top of the window (BuildMenu._build_money).
+const TOP_HUD_PX := 56.0
+## The bottom HUD strip: BuildMenu's category bar, the tray's reserved height
+## and the status line above it (game/ui/build_menu.gd).
+const BOTTOM_HUD_PX := (
+	BuildMenu.MARGIN
+	+ BuildMenu.BAR_H
+	+ BuildMenu.GAP
+	+ BuildMenu.TRAY_H
+	+ BuildMenu.GAP
+	+ BuildMenu.STATUS_H
+)
 const FOCUS_CELL := Vector2i(16, 10)
 const YAW := 0.6
 const DISTANCES := [18.0, 21.0, 24.0, 27.0, 30.0, 34.0]
@@ -139,7 +149,9 @@ func _subject(grid: BuildGrid, edges: Array, kind: String) -> Dictionary:
 
 func _all_in_frame(cam: Camera3D, subjects: Dictionary, report: bool) -> bool:
 	var size := root.get_visible_rect().size
-	var rect := Rect2(Vector2(MARGIN_PX, TOOLBAR_PX), size - Vector2(MARGIN_PX * 2, TOOLBAR_PX))
+	var rect := Rect2(
+		Vector2(MARGIN_PX, TOP_HUD_PX), size - Vector2(MARGIN_PX * 2, TOP_HUD_PX + BOTTOM_HUD_PX)
+	)
 	var all_ok := true
 	for key in subjects:
 		var box: AABB = subjects[key]["box"]
