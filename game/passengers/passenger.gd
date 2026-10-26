@@ -56,8 +56,10 @@ var seat_object := 0
 var seat_cell := NO_CELL
 var seat_front := NO_CELL
 var exit_object := 0
-## The apron walk from the exit door to the plane door, world x and z.
-var apron: Array[Vector2] = []
+## The walk outside the terminal, world points: the road to the entrance
+## while SPAWNED (inside a terminal shell), the exit door to the plane door
+## from APRON on. Empty while neither is under way.
+var apron: Array[Vector3] = []
 var apron_mm := 0
 var mood := MOOD_START
 var late := false
@@ -69,7 +71,7 @@ var outcome_tick := -1
 ## Read only while stage is MISSED; the flight result panel groups on them.
 var missed_stage: Stage = Stage.SPAWNED
 var missed_stuck: Stuck = Stuck.NONE
-## Everything walked so far, path and apron.
+## Everything walked so far, path and the walks outside.
 var odometer_mm := 0
 
 
@@ -157,12 +159,15 @@ func apron_total_mm() -> int:
 	return mm
 
 
+## Measured on the ground (x and z), so a change of height costs no time.
 func apron_segment_mm(i: int) -> int:
-	return roundi(apron[i - 1].distance_to(apron[i]) * 1000.0)
+	var a := apron[i - 1]
+	var b := apron[i]
+	return roundi(Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z)) * 1000.0)
 
 
-## World x and z along the apron walk at the current progress.
-func apron_position() -> Vector2:
+## World position along the walk outside at the current progress.
+func apron_position() -> Vector3:
 	var left := apron_mm
 	for i in range(1, apron.size()):
 		var length := apron_segment_mm(i)

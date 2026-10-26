@@ -185,7 +185,8 @@ func _release(id: int) -> void:
 func _pose(node: Node3D, p: Passenger) -> void:
 	var clip := "idle"
 	var base := 1.0
-	var moving := p.stage == Passenger.Stage.APRON or p.is_moving()
+	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
+	var moving := (outside and p.apron_mm < p.apron_total_mm()) or p.is_moving()
 	match p.stage:
 		Passenger.Stage.SITTING_DOWN:
 			clip = "sit_down"

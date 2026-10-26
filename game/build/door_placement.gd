@@ -15,15 +15,20 @@ static func back_step(facing: int) -> Vector2i:
 ## BuildGrid.validate(), plus the edge rule for entrances and exits: a new one
 ## stands on the terminal's edge facing in (outside_door_problem()), and a
 ## standing one keeps its way out open: no wall of any kind on its back edge
-## and no floor on the cell beyond.
-static func check(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+## and no floor on the cell beyond. Inside a `shell`, a new one must also stand
+## on one of its Toon doors of the right kind, a landside door for an entrance
+## and a gate door for an exit, facing out through it.
+static func check(grid: BuildGrid, edit: BuildEdit, shell: ShellDefinition = null) -> BuildResult:
 	var result := grid.validate(edit)
 	if not result.ok:
 		return result
 	match edit.kind:
 		BuildEdit.Kind.PLACE_OBJECT:
-			if BuildCatalog.is_door(edit.def_id):
-				return outside_door_problem(grid, edit.cell, edit.facing)
+			if not BuildCatalog.is_door(edit.def_id):
+				return result
+			if shell != null and shell.connection_for(edit.def_id, edit.cell, edit.facing) == null:
+				return BuildResult.refused(BuildResult.Reason.DOOR_NOT_AT_SHELL_DOOR)
+			return outside_door_problem(grid, edit.cell, edit.facing)
 		BuildEdit.Kind.PLACE_WALL:
 			if on_a_way_out(grid, edit.cell, edit.side):
 				return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
