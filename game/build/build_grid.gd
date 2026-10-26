@@ -17,6 +17,13 @@ extends RefCounted
 ## After an accepted edit: the cells GridPathing relinked, so every committed
 ## path through one of them may be stale. After a snapshot load: every cell.
 signal graph_changed(cells: Array[Vector2i])
+## After apply() or apply_batch() changed the grid data for one edit, before
+## the graph is relinked (at once for apply(), at the end for a batch).
+signal edit_applied(edit: BuildEdit, result: BuildResult)
+## After apply() or apply_batch() refused an edit, and from callers whose own
+## rules refuse an edit before it reaches the grid (AreaDrag, BuildMode), so a
+## refusal is visible without parsing the UI.
+signal edit_refused(edit: BuildEdit, result: BuildResult)
 
 enum Side { NORTH, EAST, SOUTH, WEST }
 ## What stands on a cell edge. The value is stored in the wall arrays as is,
@@ -245,6 +252,7 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 func _commit(edit: BuildEdit) -> BuildResult:
 	var result := validate(edit)
 	if not result.ok:
+		edit_refused.emit(edit, result)
 		return result
 	match edit.kind:
 		BuildEdit.Kind.PAINT_FLOOR:
@@ -268,6 +276,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
 			result.dirty_cells = _erase_object(edit.object_id)
+	edit_applied.emit(edit, result)
 	return result
 
 

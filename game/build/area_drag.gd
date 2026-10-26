@@ -74,6 +74,8 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 			edits.append(edit)
 		else:
 			outcome._refuse(result)
+			# Never handed to apply_batch(), which logs the refusals it makes itself.
+			grid.edit_refused.emit(edit, result)
 	outcome._count(grid.apply_batch(edits))
 	return outcome
 

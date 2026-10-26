@@ -217,6 +217,7 @@ func apply_at(point: Vector3) -> BuildResult:
 		return null
 	_last_applied_key = _edit_key(edit)
 	var result := check(edit)
+	var refused_by_check := not result.ok
 	if result.ok:
 		result = _apply_checked(edit)
 	if result.ok:
@@ -224,6 +225,9 @@ func apply_at(point: Vector3) -> BuildResult:
 		_hover_key = ""
 		grid_changed.emit()
 	_show_status(result)
+	# A refusal from the grid itself (inside _apply_checked) was emitted there.
+	if refused_by_check:
+		grid.edit_refused.emit(edit, result)
 	return result
 
 
