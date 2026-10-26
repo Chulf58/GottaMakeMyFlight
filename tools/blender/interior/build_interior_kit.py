@@ -300,21 +300,26 @@ def build_security_scanner(root, c):
     box("Scanner_Mat", (-0.35, -0.92, 0), (0.35, 0.92, 0.012), "dark", root, c)
 
 
+# The sit clips put the seat contact at about 0.53 m (article toon-asset-pipeline):
+# the pan top is SEAT_LIFT + 0.46. The backrest top stays at 0.88.
+SEAT_LIFT = 0.07
+
+
 def build_seat_row(root, c):
-    box("Seat_Beam", (-1.42, 0.0, 0.30), (1.42, 0.08, 0.36), "frame", root, c)
+    box("Seat_Beam", (-1.42, 0.0, SEAT_LIFT + 0.30), (1.42, 0.08, SEAT_LIFT + 0.36), "frame", root, c)
     for i, x in enumerate((-1.2, 0.0, 1.2)):
-        box("Seat_Leg_%d" % i, (x - 0.03, 0.01, 0.02), (x + 0.03, 0.07, 0.30), "frame", root, c)
+        box("Seat_Leg_%d" % i, (x - 0.03, 0.01, 0.02), (x + 0.03, 0.07, SEAT_LIFT + 0.30), "frame", root, c)
         box("Seat_Foot_%d" % i, (x - 0.035, -0.25, 0), (x + 0.035, 0.30, 0.03), "dark", root, c)
     for i, x in enumerate((-1.08, -0.36, 0.36, 1.08)):
-        box("Seat_Bracket_%d" % i, (x - 0.05, -0.05, 0.36), (x + 0.05, 0.10, 0.38), "frame", root, c)
-        box("Seat_Pan_%d" % i, (x - 0.285, -0.32, 0.38), (x + 0.285, 0.18, 0.46), "blue", root, c, bevel=0.02)
+        box("Seat_Bracket_%d" % i, (x - 0.05, -0.05, SEAT_LIFT + 0.36), (x + 0.05, 0.10, SEAT_LIFT + 0.38), "frame", root, c)
+        box("Seat_Pan_%d" % i, (x - 0.285, -0.32, SEAT_LIFT + 0.38), (x + 0.285, 0.18, SEAT_LIFT + 0.46), "blue", root, c, bevel=0.02)
         box(
-            "Seat_Back_%d" % i, (x - 0.285, 0.16, 0.46), (x + 0.285, 0.24, 0.88), "blue", root, c,
-            bevel=0.02, rot_x=-8.0, pivot=(x, 0.20, 0.46),
+            "Seat_Back_%d" % i, (x - 0.285, 0.16, SEAT_LIFT + 0.46), (x + 0.285, 0.24, 0.88), "blue", root, c,
+            bevel=0.02, rot_x=-8.0, pivot=(x, 0.20, SEAT_LIFT + 0.46),
         )
     for i, x in enumerate((-1.395, -0.72, 0.0, 0.72, 1.395)):
-        box("Arm_Post_%d" % i, (x - 0.02, 0.02, 0.36), (x + 0.02, 0.06, 0.62), "frame", root, c)
-        box("Arm_%d" % i, (x - 0.025, -0.30, 0.62), (x + 0.025, 0.16, 0.66), "dark", root, c)
+        box("Arm_Post_%d" % i, (x - 0.02, 0.02, SEAT_LIFT + 0.36), (x + 0.02, 0.06, SEAT_LIFT + 0.62), "frame", root, c)
+        box("Arm_%d" % i, (x - 0.025, -0.30, SEAT_LIFT + 0.62), (x + 0.025, 0.16, SEAT_LIFT + 0.66), "dark", root, c)
 
 
 def build_kiosk(root, c):

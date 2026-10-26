@@ -211,7 +211,9 @@ func _draw_ghost(edit: BuildEdit, material: Material) -> void:
 			var wall := _ghost_box(
 				Vector3(1.0, BuildView.WALL_HEIGHT, BuildView.WALL_THICKNESS * 1.5), material
 			)
-			wall.transform = BuildView.wall_transform(grid, edit.cell, edit.side)
+			wall.transform = BuildView.wall_transform(grid, edit.cell, edit.side).translated_local(
+				Vector3(0.0, BuildView.WALL_HEIGHT / 2.0, 0.0)
+			)
 		BuildEdit.Kind.PLACE_OBJECT:
 			_ghost_object(edit.def_id, edit.cell, edit.facing, material)
 		BuildEdit.Kind.REMOVE_OBJECT:
