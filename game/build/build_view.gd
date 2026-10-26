@@ -4,7 +4,8 @@ extends Node3D
 ## and posts as one multimesh per kit mesh, one node per placed object. Walls
 ## facing the camera are cut down to a stub (WallCutaway), updated as the
 ## camera turns. A view only: it holds no state the grid does not have, and
-## refresh() redraws from the grid.
+## refresh() redraws from the grid. An entrance or exit door's piece stands
+## on its back edge and drops with the cutaway like a door wall.
 
 const WALL_HEIGHT := InteriorKit.WALL_HEIGHT
 const WALL_THICKNESS := 0.14
@@ -12,6 +13,12 @@ const AREA_COLOR := Color(0.3, 0.42, 0.27)
 ## The build area plane sits under the floor tiles (their top is at 0, their
 ## underside at -0.04).
 const AREA_Y := -0.05
+## The kit's kind for each BuildGrid.WallKind that is a wall.
+const KIT_WALL_KINDS := {
+	BuildGrid.WallKind.PLAIN: InteriorKit.WallKind.PLAIN,
+	BuildGrid.WallKind.GLASS: InteriorKit.WallKind.GLASS,
+	BuildGrid.WallKind.DOOR: InteriorKit.WallKind.DOOR,
+}
 
 ## Turns walls facing the camera into stubs. Off draws every wall full.
 var cutaway_enabled := true:
@@ -19,11 +26,10 @@ var cutaway_enabled := true:
 		cutaway_enabled = value
 		_cutaway.reset()
 		_draw_walls()
-## The kind of the wall on an edge, called as (cell, side) with the edge in
-## WallCutaway.wall_edges form, for edges that have a wall. BuildGrid has no
-## wall kinds yet, so every wall is plain unless a caller supplies kinds.
-var wall_kind_source: Callable = func(_cell: Vector2i, _side: int) -> int:
-	return InteriorKit.WallKind.PLAIN
+## The InteriorKit.WallKind of the wall on an edge, called as (cell, side)
+## with the edge in WallCutaway.wall_edges form, for edges that have a wall.
+## By default the grid's own kinds; a caller may supply others.
+var wall_kind_source: Callable = grid_wall_kind
 
 var _grid: BuildGrid
 var _cutaway := WallCutaway.new()
@@ -39,13 +45,20 @@ var _object_nodes: Dictionary = {}
 
 ## The node for an object type, centred on its footprint at facing 0: the
 ## kit piece with its own materials, or with `material` on every mesh (for a
-## ghost). A type the kit has no piece for gets a placeholder box.
+## ghost). A type the kit has no piece for gets a placeholder box. A piece
+## with an offset (InteriorKit.object_offset) goes under a plain root node.
 static func make_object_node(def: BuildObjectDef, material: Material) -> Node3D:
 	var piece := InteriorKit.object_piece(def.id)
 	if piece == "":
 		push_warning("BuildView: no kit piece for '%s', drawing a box" % def.id)
 		return _placeholder(def, material if material != null else _solid(def.color))
 	var root := InteriorKit.instantiate(piece)
+	var offset := InteriorKit.object_offset(def.id)
+	if offset != Vector3.ZERO:
+		var holder := Node3D.new()
+		root.position = offset
+		holder.add_child(root)
+		root = holder
 	root.name = str(def.id)
 	if material != null:
 		for mesh in root.find_children("*", "MeshInstance3D", true, false):
@@ -111,8 +124,18 @@ func update_cutaway(toward_eye: Vector3) -> void:
 		_draw_walls()
 
 
+## The kit kind of the grid's wall on an edge that has one.
+func grid_wall_kind(cell: Vector2i, side: int) -> int:
+	return KIT_WALL_KINDS[_grid.wall_kind(cell, side)]
+
+
 func object_node_count() -> int:
 	return _object_nodes.size()
+
+
+## The node drawing a placed object, or null.
+func object_node(object_id: int) -> Node3D:
+	return _object_nodes.get(object_id)
 
 
 ## Edges (WallCutaway.wall_edges form) drawn as stubs right now.
@@ -148,8 +171,8 @@ func refresh(grid: BuildGrid) -> void:
 	_wall_kinds.clear()
 	for edge in _wall_edges:
 		_wall_kinds[edge] = wall_kind_source.call(Vector2i(edge.x, edge.y), edge.z)
-	_draw_walls()
 	_sync_objects()
+	_draw_walls()
 
 
 func _draw_floors() -> void:
@@ -176,6 +199,7 @@ func _draw_walls() -> void:
 				if _cut_edges.has(beside):
 					_cut_edges[edge] = true
 	var placed := {}
+	_draw_door_objects(placed)
 	var full := {}
 	for edge in _wall_edges:
 		var cut := _cut_edges.has(edge)
@@ -189,6 +213,41 @@ func _draw_walls() -> void:
 		for part in InteriorKit.post_parts(not posts[vertex]):
 			_place(placed, part[0], Transform3D(Basis.IDENTITY, at) * part[1])
 	_fill(placed, ["wall", "wall_glass", InteriorKit.GLASS_KERB, "wall_door", "wall_post"])
+
+
+## Entrance and exit doors: their piece hides and two jambs are drawn on the
+## back edge when that edge, or a wall in line with it, is cut.
+func _draw_door_objects(placed: Dictionary) -> void:
+	for object_id in _object_nodes:
+		# The record the node was drawn from: the grid may have changed since
+		# the last refresh().
+		var record: Dictionary = (_object_nodes[object_id] as Node3D).get_meta("record")
+		if not BuildCatalog.is_door(record["def"]):
+			continue
+		var anchor: Vector2i = record["anchor"]
+		var out := BuildObjectDef.rotate_offset(Vector2i(0, -1), record["facing"])
+		var side := BuildGrid.SIDE_STEP.find(out)
+		var edge := _edge_key(anchor, side)
+		var cut := _cutaway.is_cut(_grid, anchor, side)
+		for beside in WallCutaway.inline_neighbours(edge):
+			cut = cut or _cut_edges.has(beside)
+		(_object_nodes[object_id] as Node3D).visible = not cut
+		if not cut:
+			continue
+		_cut_edges[edge] = true
+		var frame := wall_transform(_grid, anchor, side)
+		for part in InteriorKit.wall_parts(InteriorKit.WallKind.DOOR, true):
+			_place(placed, part[0], frame * part[1])
+
+
+## An edge in WallCutaway.wall_edges form: north or west of a cell, or south
+## of the last row, east of the last column.
+func _edge_key(cell: Vector2i, side: int) -> Vector3i:
+	if side == BuildGrid.Side.SOUTH and cell.y + 1 < _grid.size.y:
+		return Vector3i(cell.x, cell.y + 1, BuildGrid.Side.NORTH)
+	if side == BuildGrid.Side.EAST and cell.x + 1 < _grid.size.x:
+		return Vector3i(cell.x + 1, cell.y, BuildGrid.Side.WEST)
+	return Vector3i(cell.x, cell.y, side)
 
 
 func _place(placed: Dictionary, piece: String, at: Transform3D) -> void:

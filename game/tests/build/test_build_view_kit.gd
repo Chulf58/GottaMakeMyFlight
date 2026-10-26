@@ -186,3 +186,56 @@ func test_door_drops_with_a_neighbour_on_the_last_row_and_clears_when_walls_go()
 	view.refresh(grid)
 	for piece in ["wall", "wall_door", "wall_post"]:
 		assert_int(view.piece_counts()[piece]).override_failure_message(piece).is_equal(0)
+
+
+func test_entrance_door_piece_drops_to_jambs_like_a_door_wall() -> void:
+	# Room x 2..4, y 2..4 with plain walls beside the entrance on the south side.
+	var grid := BuildGrid.new(Vector2i(8, 8))
+	for y in range(2, 5):
+		for x in range(2, 5):
+			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	for x in [2, 4]:
+		grid.apply(BuildEdit.place_wall(Vector2i(x, 4), BuildGrid.Side.SOUTH))
+	var door_id := grid.apply(BuildEdit.place_object(&"entrance_door", Vector2i(3, 4), 2)).object_id
+	var view := auto_free(BuildView.new()) as BuildView
+	add_child(view)
+	view.refresh(grid)
+	var door := view.object_node(door_id)
+	var back_edge := Vector3i(3, 5, NORTH)
+	view.update_cutaway(_toward_eye(0.0))
+	assert_array(view.cut_edges()).contains([back_edge])
+	assert_bool(door.visible).is_false()
+	assert_int(_jamb_count(view)).is_equal(2)
+	view.update_cutaway(_toward_eye(180.0))
+	assert_array(view.cut_edges()).not_contains([back_edge])
+	assert_bool(door.visible).is_true()
+	assert_int(_jamb_count(view)).is_equal(0)
+
+
+## Wall instances scaled to a jamb's width.
+func _jamb_count(view: BuildView) -> int:
+	var count := 0
+	for at in view.piece_transforms("wall"):
+		if is_equal_approx(at.basis.get_scale().x, InteriorKit.JAMB_WIDTH):
+			count += 1
+	return count
+
+
+func test_a_redraw_before_refresh_uses_the_drawn_records() -> void:
+	# The grid loses the entrance but the view has not been refreshed yet: a
+	# cutaway redraw in between must not read the grid's (missing) record.
+	var grid := BuildGrid.new(Vector2i(8, 8))
+	for y in range(3, 5):
+		for x in range(2, 5):
+			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	var door_id := grid.apply(BuildEdit.place_object(&"entrance_door", Vector2i(3, 4), 2)).object_id
+	assert_int(door_id).is_greater(0)
+	var view := auto_free(BuildView.new()) as BuildView
+	add_child(view)
+	view.refresh(grid)
+	assert_bool(grid.apply(BuildEdit.remove_object(door_id)).ok).is_true()
+	view.update_cutaway(_toward_eye(0.0))
+	assert_array(view.cut_edges()).contains([Vector3i(3, 5, NORTH)])
+	assert_bool(view.object_node(door_id).visible).is_false()
+	view.refresh(grid)
+	assert_object(view.object_node(door_id)).is_null()

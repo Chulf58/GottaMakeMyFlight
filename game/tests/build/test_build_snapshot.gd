@@ -80,7 +80,7 @@ func test_malformed_snapshot_is_rejected_and_grid_unchanged() -> void:
 	bad_floor["floor"][3] = 42
 	bad_cases.append(bad_floor)
 	var bad_wall := good.duplicate(true)
-	bad_wall["h_walls"][0] = 2
+	bad_wall["h_walls"][0] = 4
 	bad_cases.append(bad_wall)
 	bad_cases.append(_with_object_change(good, "def", "rocket"))
 	bad_cases.append(_with_object_change(good, "facing", 5))

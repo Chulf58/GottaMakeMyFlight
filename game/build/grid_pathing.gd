@@ -2,7 +2,8 @@ class_name GridPathing
 extends RefCounted
 ## The passenger A* graph over a BuildGrid. One AStar2D point per cell, at
 ## the cell's grid coordinates, so diagonal links cost sqrt(2). A link exists
-## exactly when BuildGrid.can_route() allows the step; an AStarGrid2D cannot
+## exactly when BuildGrid.can_route() allows the step, so a door wall links
+## like an open edge and a plain or glass wall does not; an AStarGrid2D cannot
 ## hold that, because walls sit on cell edges and a door blocks its sides.
 ## Security scanners are never linked: only the passenger a scanner serves
 ## walks through it, along BuildGrid.passage_cells(), so generic routing can

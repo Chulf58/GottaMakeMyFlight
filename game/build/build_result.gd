@@ -20,6 +20,11 @@ enum Reason {
 	WALL_EXISTS,
 	NO_WALL,
 	NO_OBJECT,
+	BAD_WALL_KIND,
+	DOOR_NEEDS_WALLS,
+	WALL_HOLDS_DOOR,
+	DOOR_NOT_ON_EDGE,
+	DOOR_WALLED,
 }
 
 const REASON_TEXT := {
@@ -38,6 +43,11 @@ const REASON_TEXT := {
 	Reason.WALL_EXISTS: "There is already a wall here",
 	Reason.NO_WALL: "No wall here",
 	Reason.NO_OBJECT: "No such object",
+	Reason.BAD_WALL_KIND: "Unknown wall kind",
+	Reason.DOOR_NEEDS_WALLS: "A door needs a plain wall on each side",
+	Reason.WALL_HOLDS_DOOR: "A door stands beside this wall",
+	Reason.DOOR_NOT_ON_EDGE: "Must stand on the terminal's edge, facing in",
+	Reason.DOOR_WALLED: "A wall closes the way out",
 }
 
 var ok: bool = true
