@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "blender": {
+      "command": "/mnt/c/Users/chulf/Gotta-make-my-flight/tools/blender-mcp-wsl.sh",
+      "args": []
+    },
+    "godot": {
+      "command": "/mnt/c/Users/chulf/Gotta-make-my-flight/tools/godot-mcp-wsl.sh",
+      "args": []
+    }
+  }
+}

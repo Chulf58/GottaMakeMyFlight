@@ -48,8 +48,8 @@ Durable conventions and project facts, for any engineer or agent working in this
 ## Project facts (generated)
 
 - Stack tags (= domain mount manifest): godot, gdscript, python, blender, sterling
-- Toolchains: none (`game/**/*.gd`)  <!-- path globs → adapter; test-path globs; run commands -->
-- Lint/format command: not recorded yet; add it here
+- Toolchains: gdlint, gdformat and gdUnit4 for `game/**/*.gd` (gdtoolkit Windows exes under `/mnt/c/Users/chulf/.local/bin/`; tests in `game/test/`)
+- Lint/format command: `/mnt/c/Users/chulf/.local/bin/gdlint.exe <explicit .gd paths under game/> && /mnt/c/Users/chulf/.local/bin/gdformat.exe --check <same paths>`, run from the repo root so `gdlintrc` applies. Pass explicit paths, never a glob that sweeps vendored addons. gdformat.exe writes CRLF when it rewrites; `--check` never writes.
 - Domain stores (one shared store per stack tag): ~/.sterling/domains/godot/, ~/.sterling/domains/gdscript/, ~/.sterling/domains/python/, ~/.sterling/domains/blender/, ~/.sterling/domains/sterling/ — each created by init with a description of what belongs in it (§2.3)
 - Backup path: configured — see `.sterling/config.json` → `backup_path` (machine-local, deliberately not restated here)
 
@@ -66,3 +66,69 @@ Durable conventions and project facts, for any engineer or agent working in this
 - **No hand-maintained architecture or design documents.** Generated projections only, clearly marked. Knowledge lives in the store; a document that duplicates it will drift from it, and the copy is always the one that lies.
 
 (grows only via architecture-altering decision records — nothing yet)
+
+## Godot and Blender conventions (ported from Dome Farmer)
+
+These rules were learned on Dome Farmer, a Godot and Blender project on the same machine. They are adapted to this game: a Godot 4.7.2 project in `game/`, with assets from the Toon Series packs. The graphics and physics agent is `.claude/agents/implementor-graphic.md`; the asset method is `.claude/skills/blender-asset/SKILL.md`; the test method is `.claude/skills/test-writing/SKILL.md`.
+
+### Visual inspection and plates
+
+- **Open every image a subagent produces before repeating a claim about it.** For motion, open rendered frame strips. An agent's numbers are structure evidence only. The sentence "it looks correct" is the one claim an agent could not have verified.
+- **Read the whole plate, not only the fix.** Check that each effect starts at its true source, every part is attached, nothing floats, doubles, clips, is oversized or is missing, and the subject is big enough to judge. A subject a few pixels tall is not inspected; re-frame it. Write one line per plate naming what was checked.
+- **Structure and appearance are different questions.** Vertex counts, bounding boxes and UV asserts say nothing about how an asset looks. A mean-colour figure is not evidence either.
+- **Require six-axis orthographic views at true scale with a 1 m reference cube, plus a distance shot.** Legibility at range is usually the real requirement.
+- **A new on-screen element uses its ruled form.** Before a brief names a marker, ghost, highlight, colour or caption, find the rulings for that element and quote them in the brief.
+- **Every generated plate goes under `tools/blender/out/<purpose>/`, which is gitignored.** Never put a plate in a tracked directory.
+- **The Blender view is never the authority on in-engine appearance.** Assets can pass every Blender check and still render wrong in the game. Only a windowed Godot render answers whether it looks right, and the Unity toon shaders are rebuilt in Godot, so check the ramp and outline there.
+
+### Probes
+
+- A probe is a script that `extends SceneTree`: `_initialize()` sets up, `_process(delta) -> bool` is a frame-driven state machine that returns `true` to quit. To drive the real game, `load("res://main.tscn").instantiate()`, set any `@export` BEFORE `add_child` (instantiating does not run `_ready()`; entering the tree does), then step frames and give each stage a settle window.
+- **Write probes that cannot pass by accident.** Every pass value is a positive (a count that grew, a position that moved), and each prints the values it compared, not a verdict. If the pass value is a zero, add a control proving the subject was engaged.
+- **Every plate proves its subject is in frame before it is saved.** Project the subject with `camera.unproject_position(subject.global_position)`, assert the point falls inside the viewport with a margin, and print the coordinates. Then check occlusion with a raycast, because in-frame is not visible. On failure print `PROBE_INVALID` and exit 1. A colour statistic cannot do this job.
+- A probe boots the real game with a new random world seed and prints it, so a failure can be replayed.
+
+### Godot run modes
+
+- **Godot has four run modes and they are not interchangeable.** `--check-only` is the parse gate. The gdUnit4 suite is for logic. `--headless -s <script>` is for a spike. `--path game ... -s <script>` windowed is for anything the GPU owns. A test that does not build the real scene cannot find a composition bug, so a probe is the floor for `main.tscn`.
+- **gdUnit4:** `--ignoreHeadlessMode` is mandatory (without it gdUnit4 refuses to run and exits 103, which reads like a crash). Exit 0 is a pass, 100 is failures. Pass `-c` so a fail-fast does not hide most of the failures.
+- **Every Godot run the user does not play passes `--audio-driver Dummy`**, so test sound does not play on the user's speakers.
+- **Windowed runs need `--display-driver windows --rendering-driver vulkan`.** Headless loads the dummy rendering server, so a GPU-backed render or timing taken there is a broken instrument.
+- **Exactly one windowed Godot run at a time, project-wide.** Two at once corrupt the import cache and lose every render in flight. Batch subjects into one run and hold the slot yourself. A game launched through the Godot MCP holds the slot too.
+- **Import is mandatory after adding or moving any `.gd`**, and after re-exporting an asset into `game/`, before any test or render.
+- Run the full suite once on the final tree before a merge, not on every commit. A commit needs the fast gates on the touched files (`--check-only`, `gdlint`, `gdformat --check`) and the targeted tests with their case counts.
+
+### Blender work
+
+- **Build work is always `--background --python`.** Headless is reproducible (the command line goes into the report), runs in parallel across processes and leaves no residual state. The Blender MCP is for inspection only and is never the authority on appearance.
+- **Rebind the Toon palette atlas on import.** A skipped rebind fails silently and exports an untextured mesh. Check the image and material counts in the export's own output.
+- **Verify an export by re-reading the written file, not the scene.** A glTF that flattened its node hierarchy looks identical in a still. Put each origin on its own rotation axis.
+- **The render is the only test that counts for appearance.**
+
+### MCP mechanics
+
+- The Godot server is `godot-mcp-runtime`, launched by `tools/godot-mcp-wsl.sh` on Windows node. Tool calls pass the Windows project path `C:/Users/chulf/Gotta-make-my-flight/game`. The server writes `game/.mcp/` and does not remove it on stop. The Blender server is launched by `tools/blender-mcp-wsl.sh`. Both are declared in `.mcp.json`.
+- **Where the Godot MCP has no tool for a job, say so in the report, name the tool you looked for, and use the direct command.** Check the tool list at the start of the task. It cannot run an `-s` SceneTree probe.
+- **Godot:** scene-editing tools refuse while a game runs, so call `stop_project` first. `get_debug_output` works only for a game started by `run_project`. Take screenshots with `responseMode: 'path_only'` unless you need pixel-exact output. One broken autoload fails every headless tool; check `list_autoloads` first. A key or action input without `pressed` taps it; set `pressed` to hold. Never set `GODOT_MCP_DISABLE_SECURITY`.
+- **Blender:** `execute_blender_code` returns only what the code assigns to `result` (a JSON-serialisable dict); printed output is lost. Set mode, active object and selection before each operator. Call `view_layer.update()` before reading world matrices or modifier results, and flush bmesh edits. Keep the object reference at creation, because names gain `.001` on collision. `render_viewport_to_path` ignores the directory and writes to Blender's temp folder, so copy the plate under `tools/blender/out/`. The server adds no undo step, so save the `.blend` before a change you may need to reverse.
+
+### Machine facts
+
+- **Godot** is at `/mnt/c/Users/chulf/AppData/Local/Programs/Godot/`. From WSL bash use `Godot_v4.7.2-stable_win64_console.exe`; a `C:/...` path as the executable exits 127.
+- **Blender** is at `/mnt/c/Program Files/Blender Foundation/Blender 5.2/`. The path contains spaces, so quote it.
+- **There is no `python` in WSL.** A bare `python` hits the Windows Store alias and exits 49. Blender work uses Blender's own bundled interpreter. For a one-off JSON read, use `node -e`, `grep` or `sed`.
+- **gdtoolkit** (`gdlint.exe`, `gdformat.exe`) is at `/mnt/c/Users/chulf/.local/bin/`, not in the WSL `~/.local/bin`. `gdformat.exe` writes CRLF line endings when it rewrites a file; convert back to the file's own endings.
+- **Subagent shells** may be unable to run `unzip`, `mkdir`, `cp` or `find`. Extracting a vendor archive is then a conductor step; hand agents the extracted path.
+
+### The gdlint line cap
+
+- `gdlintrc` sets `max-file-lines: 1600` and the check counts comments as well as code. `max-public-methods` is 20 and `max-returns` is 6.
+- An exemption is per file, never a bigger number in `gdlintrc`: put `# gdlint:disable = max-file-lines` in the file. The spelling matters, because `max-file-lines` responds only to `disable`, not `ignore`.
+- Never trust a written list of exempt files. `grep -rlnE "gdlint:disable *=.*max-file-lines" game --include=*.gd` is the only authority.
+- New behaviour goes in a new file, not in headroom under the cap.
+
+### Parallelism by territory
+
+- Two agents must never write the same file; disjoint files parallelise freely. A lane is one territory (for example `game/` code, `game/test/`, `tools/blender/`), not one agent. Refill a territory the moment its lane reports.
+- **File-disjoint is not scene-disjoint.** An agent editing a script that `main.tscn` reaches blocks every lane's probe on `main.tscn`. Ask which scenes a writer's file is reachable from.
+- Serialise windowed Godot runs. Blender headless renders parallelise and write `tools/blender/`, never `game/`. Git stays conductor-only.
