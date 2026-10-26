@@ -1,8 +1,9 @@
 class_name PlaneView
 extends Node3D
-## Draws one flight's Toon plane. Reads the sim every frame and places the
-## plane between the last two ticks with the clock's alpha; it never writes
-## back. Hidden before the flight appears and after it departs.
+## Draws the Toon plane of whichever flight holds its gate: each day's
+## occurrence in turn (FlightSim.flight_at_gate). Reads the sim every frame and
+## places the plane between the last two ticks with the clock's alpha; it
+## never writes back. Hidden while no flight is past SCHEDULED at the gate.
 
 const PLANE_SCENE := preload("res://assets/planes/tp_plane_05a.glb")
 ## The previous moving state, whose path ends where this one begins.
@@ -23,11 +24,14 @@ const REST_AFTER := {
 @export var clock: SimClock
 @export var sim: FlightSim
 @export var airside: Airside
-@export var flight_id := FlightSim.DEFAULT_ID
+@export var gate := FlightSim.DEFAULT_GATE
 ## Moves the model so its middle sits on the pose point (the glb origin is near
 ## the nose end).
 @export var model_offset := Vector3(0.0, 0.0, 1.7)
 @export var model_yaw_degrees := 0.0
+
+## The flight drawn on the last update_pose(), or "".
+var flight_id := ""
 
 var _model: Node3D
 var _paths: Dictionary = {}
@@ -50,6 +54,7 @@ func _process(_delta: float) -> void:
 
 ## Places the plane for the sim's current state and the clock's alpha.
 func update_pose() -> void:
+	flight_id = sim.flight_at_gate(gate)
 	var state := sim.state_of(flight_id)
 	visible = state > FlightSim.State.SCHEDULED and state < FlightSim.State.DEPARTED
 	if not visible:
