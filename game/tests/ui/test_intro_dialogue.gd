@@ -4,6 +4,9 @@ extends GdUnitTestSuite
 ## is modal while open, closes on Continue, Space or Enter and then starts the
 ## clock at 1x, and opens once per session.
 
+## Held W (pan forward) and Q (rotate left); TycoonCamera polls them each frame.
+const CAMERA_ACTIONS: Array[StringName] = [&"cam_forward", &"cam_rotate_left"]
+
 ## The HUD, BuildMode and BuildMenu live in a 1920x1080 SubViewport so layout
 ## and pushed input see a real screen size.
 var _port: SubViewport
@@ -45,6 +48,8 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	for action in CAMERA_ACTIONS:
+		Input.action_release(action)
 	_port.free()
 	_world.free_all()
 	IntroDialogue.shown_this_session = _shown_before
@@ -171,17 +176,96 @@ func test_enter_closes_the_intro() -> void:
 	assert_bool(_world.clock.paused).is_false()
 
 
-func test_keys_behind_the_open_intro_do_nothing() -> void:
+## A real TycoonCamera in the viewport, handed to the HUD before the intro opens.
+func _add_camera() -> TycoonCamera:
+	var rig := (
+		(load("res://camera/tycoon_camera.tscn") as PackedScene).instantiate() as TycoonCamera
+	)
+	_port.add_child(rig)
+	_hud.camera = rig
+	return rig
+
+
+func _frames(count: int) -> void:
+	for i in count:
+		await get_tree().process_frame
+
+
+func _wheel_up() -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_WHEEL_UP
+	event.pressed = true
+	event.position = Vector2(_port.size) / 2.0
+	event.global_position = event.position
+	_port.push_input(event)
+
+
+func test_keys_and_held_camera_keys_behind_the_open_intro_do_nothing() -> void:
+	var rig := _add_camera()
+	await _frames(2)
+	var start := rig.position
+	var start_yaw := rig.yaw
 	# BuildMode starts on the Floor tool; key 2 would pick Wall.
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
 	_hud.open_intro()
 	_tap(KEY_2)
 	_tap(KEY_3, true)
 	_port.push_input(_key(KEY_SPACE, false, true))
+	for action in CAMERA_ACTIONS:
+		Input.action_press(action)
+	await _frames(5)
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
 	assert_int(_world.clock.speed).is_equal(1)
 	assert_bool(_world.clock.paused).is_true()
 	assert_bool(_hud.intro() != null).is_true()
+	assert_vector(rig.position).is_equal(start)
+	assert_float(rig.yaw).is_equal(start_yaw)
+	# Control: the same held keys move the camera once the intro is closed.
+	_hud.dismiss_intro()
+	await _frames(5)
+	assert_vector(rig.position).is_not_equal(start)
+	assert_float(rig.yaw).is_not_equal(start_yaw)
+
+
+func test_the_wheel_does_not_zoom_behind_the_open_intro() -> void:
+	var rig := _add_camera()
+	await _frames(2)
+	var start := rig.target_distance
+	_hud.open_intro()
+	_wheel_up()
+	assert_float(rig.target_distance).is_equal(start)
+	# Control: the same notch zooms once the intro is closed.
+	_hud.dismiss_intro()
+	_wheel_up()
+	assert_float(rig.target_distance).is_less(start)
+
+
+func test_freeing_the_dialogue_directly_starts_the_clock_once() -> void:
+	_world.clock.set_speed(3)
+	_hud.open_intro()
+	_hud.intro().free()
+	assert_bool(_hud.intro() != null).is_false()
+	assert_bool(_world.clock.paused).is_false()
+	assert_int(_world.clock.speed).is_equal(1)
+	# The emptied layer goes next frame; that must not reset the speed again.
+	_world.clock.set_speed(2)
+	await _frames(2)
+	assert_int(_world.clock.speed).is_equal(2)
+	assert_object(_hud.find_child("IntroLayer", false, false)).is_null()
+
+
+func test_freeing_the_intro_layer_directly_starts_the_clock_and_frees_the_camera() -> void:
+	var rig := _add_camera()
+	await _frames(2)
+	var start := rig.position
+	_hud.open_intro()
+	_hud.intro().get_parent().free()
+	assert_bool(_hud.intro() != null).is_false()
+	assert_bool(_world.clock.paused).is_false()
+	assert_int(_world.clock.speed).is_equal(1)
+	Input.action_press(CAMERA_ACTIONS[0])
+	await _frames(5)
+	assert_vector(rig.position).is_not_equal(start)
 
 
 func test_a_click_on_the_build_bar_is_blocked_while_open_and_works_after() -> void:

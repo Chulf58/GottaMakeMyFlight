@@ -70,6 +70,9 @@ var _result := FlightResultPanel.new()
 var _unreported: Array[String] = []
 var _intro_layer: CanvasLayer
 var _intro: IntroDialogue
+## The camera's input state when the intro opened, restored when it closes.
+var _camera_was_processing := true
+var _camera_was_taking_input := true
 
 
 func _ready() -> void:
@@ -271,8 +274,8 @@ func press_pause_toggle() -> void:
 	clock.set_paused(not clock.paused)
 
 
-## Opens the intro dialogue and pauses the clock. Refused (false) when it was
-## already shown this session or is open.
+## Opens the intro dialogue, pauses the clock and stops the camera. Refused
+## (false) when it was already shown this session or is open.
 func open_intro() -> bool:
 	if IntroDialogue.shown_this_session or _intro != null or clock == null:
 		return false
@@ -281,10 +284,15 @@ func open_intro() -> bool:
 	_intro_layer.name = "IntroLayer"
 	_intro_layer.layer = INTRO_LAYER
 	_intro = IntroDialogue.new()
-	_intro.dismissed.connect(_on_intro_dismissed)
 	_intro_layer.add_child(_intro)
 	add_child(_intro_layer)
+	# Dismissal, or the dialogue or its layer leaving the tree any other way,
+	# runs the same one-time cleanup.
+	_intro.dismissed.connect(_close_intro)
+	_intro.tree_exiting.connect(_close_intro)
+	_intro_layer.tree_exiting.connect(_close_intro)
 	clock.set_paused(true)
+	_gate_camera(true)
 	return true
 
 
@@ -384,12 +392,38 @@ func _fit_follow() -> void:
 	_follow_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 
-func _on_intro_dismissed() -> void:
-	_intro_layer.queue_free()
+## Ends the intro once, however it ended: frees its layer (unless that is
+## already on its way out), gives the camera its input back and starts the
+## clock at 1x. Later calls find nothing open and do nothing.
+func _close_intro() -> void:
+	if _intro_layer == null:
+		return
+	var layer := _intro_layer
 	_intro_layer = null
 	_intro = null
-	clock.set_paused(false)
-	clock.set_speed(1)
+	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
+		layer.queue_free()
+	_gate_camera(false)
+	if is_instance_valid(clock):
+		clock.set_paused(false)
+		clock.set_speed(1)
+
+
+## The camera-input gate. Marking events handled cannot stop TycoonCamera,
+## which polls held keys in _process, so while the intro is open its _process
+## (WASD, Q/E, easing) and _unhandled_input (wheel, drags, Home) are switched
+## off, and switched back to what they were when it closes.
+func _gate_camera(closed: bool) -> void:
+	if not is_instance_valid(camera):
+		return
+	if closed:
+		_camera_was_processing = camera.is_processing()
+		_camera_was_taking_input = camera.is_processing_unhandled_input()
+		camera.set_process(false)
+		camera.set_process_unhandled_input(false)
+	else:
+		camera.set_process(_camera_was_processing)
+		camera.set_process_unhandled_input(_camera_was_taking_input)
 
 
 ## True when this HUD belongs to the running scene: a normal launch or a
