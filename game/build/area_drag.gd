@@ -65,6 +65,7 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 			outcome.placed += 1
 		else:
 			outcome._refuse(result)
+			grid.edit_refused.emit(edit, result)
 	grid.end_batch()
 	return outcome
 
@@ -100,6 +101,7 @@ static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
 			outcome.placed += 1
 		else:
 			outcome._refuse(result)
+			grid.edit_refused.emit(edit, result)
 	for cell in cells:
 		if held.has(cell):
 			continue
@@ -113,6 +115,7 @@ static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
 			outcome.placed += 1
 		else:
 			outcome._refuse(result)
+			grid.edit_refused.emit(edit, result)
 	grid.end_batch()
 	return outcome
 

@@ -19,6 +19,8 @@ extends Node
 
 signal passenger_spawned(id: int)
 signal outcome(id: int, made: bool)
+## Every journey stage change, after it is made (the debug hook logs it).
+signal stage_changed(id: int, stage: Passenger.Stage)
 
 const SAVE_VERSION := 1
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
@@ -801,6 +803,7 @@ func _retry_now(p: Passenger) -> bool:
 func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
 	p.stage = stage
 	p.stage_tick = tick
+	stage_changed.emit(p.id, stage)
 
 
 ## Rebuilds what is derived from the passengers after a load.
