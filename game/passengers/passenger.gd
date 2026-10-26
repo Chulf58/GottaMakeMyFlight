@@ -65,6 +65,10 @@ var cleared := false
 ## Set when an edit touched the committed path; replanned on the next tick.
 var needs_replan := false
 var outcome_tick := -1
+## Where the passenger was, and what blocked it, when the doors closed on it.
+## Read only while stage is MISSED; the flight result panel groups on them.
+var missed_stage: Stage = Stage.SPAWNED
+var missed_stuck: Stuck = Stuck.NONE
 ## Everything walked so far, path and apron.
 var odometer_mm := 0
 
