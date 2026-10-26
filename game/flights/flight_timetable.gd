@@ -93,6 +93,13 @@ static func contract_overlaps(contract: Dictionary, start: int, end: int) -> boo
 	return maxi(lowest, int(contract["first_day"])) <= highest
 
 
+## Timetable order of live flights: first start tick, then id.
+static func flight_before(a: Dictionary, b: Dictionary) -> bool:
+	if a["starts"][0] != b["starts"][0]:
+		return a["starts"][0] < b["starts"][0]
+	return a["id"] < b["id"]
+
+
 ## The state a flight is in at `now`: the last whose start tick has passed.
 static func state_at(starts: Array[int], now: int) -> int:
 	var state := FlightSim.State.SCHEDULED

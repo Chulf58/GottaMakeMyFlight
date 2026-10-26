@@ -131,3 +131,12 @@ func test_a_jump_issues_overdue_occurrences_in_time_order() -> void:
 	assert_array(_added_ids).is_equal(["AM-d0", "PM-d0", "AM-d1", "PM-d1", "AM-d2"])
 	assert_array(_sim.flight_ids()).is_equal(["AM-d2"])
 	assert_int(_sim.state_of("PM-d1")).is_equal(FlightSim.State.DEPARTED)
+
+
+## flight_ids() is in timetable order whatever order flights were added in.
+func test_flights_are_listed_by_first_start_then_id() -> void:
+	assert_bool(_sim.add_flight("LATER", FlightSim.schedule_starts(4000))).is_true()
+	assert_bool(_sim.add_flight("SOONER", FlightSim.schedule_starts(3100))).is_true()
+	assert_bool(_sim.add_flight("ALSO", FlightSim.schedule_starts(3100))).is_true()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
+	assert_array(_sim.flight_ids()).is_equal(["AM-d0", "ALSO", "SOONER", "LATER"])

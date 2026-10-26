@@ -145,3 +145,38 @@ func test_a_pruned_occurrence_in_a_save_is_refused() -> void:
 	assert_bool(target.from_snapshot(stale)).is_false()
 	assert_array(target.contract_ids()).is_empty()
 	assert_int(target.state_of("NIGHT-d1")).is_equal(-1)
+
+
+## first_day must be one an acceptance between tick 0 and the save's tick could
+## give: NIGHT (00:30) could not start on day 0, and at tick 21590 AM (08:00)
+## would go to day 1 at the latest, never day 2.
+func test_a_first_day_no_acceptance_could_give_is_refused() -> void:
+	var good: Dictionary = _saved(_timetabled(MIDNIGHT - 10))["flights"]
+	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(good)).is_true()
+	var too_early := good.duplicate(true)
+	too_early["contracts"][0]["first_day"] = 0
+	var postponed := good.duplicate(true)
+	postponed["contracts"][1]["first_day"] = 2
+	postponed["next_day"]["AM"] = 2
+	for bad in [too_early, postponed]:
+		var target := auto_free(FlightSim.new()) as FlightSim
+		assert_bool(target.from_snapshot(bad)).override_failure_message(str(bad)).is_false()
+		assert_array(target.contract_ids()).is_empty()
+
+
+## Live flights are listed in timetable order (first start tick, then id), the
+## order PassengerHud and spawn_batch read; a save in another order is refused.
+func test_live_flights_out_of_timetable_order_are_refused() -> void:
+	var world := _world()
+	var sim: FlightSim = world[1]
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("LATE", 1430))).is_true()
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("NEXT", 119))).is_true()
+	_run(world[0], 21000)
+	assert_array(sim.flight_ids()).is_equal(["LATE-d0", "NEXT-d1"])
+	var good: Dictionary = _saved(world)["flights"]
+	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(good)).is_true()
+	var reversed := good.duplicate(true)
+	reversed["flights"].reverse()
+	var target := auto_free(FlightSim.new()) as FlightSim
+	assert_bool(target.from_snapshot(reversed)).is_false()
+	assert_array(target.flight_ids()).is_empty()

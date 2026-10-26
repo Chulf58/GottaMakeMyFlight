@@ -56,7 +56,9 @@ const SAVE_VERSION := 1
 ## The tick the sim has been told about; set by the clock or a snapshot.
 var tick: int = 0
 
-## Live flights {id, starts, state, gate, contract, day}, in the order added.
+## Live flights {id, starts, state, gate, contract, day}, in timetable order
+## (FlightTimetable.flight_before), so the order is a function of what is
+## live and a load restores it exactly.
 ## A one-off flight has contract "" and day -1.
 var _flights: Array[Dictionary] = []
 ## Read-only contracts in acceptance order.
@@ -97,8 +99,7 @@ func add_flight(id: String, starts: Array[int], gate := DEFAULT_GATE) -> bool:
 	if problem != "":
 		push_error("FlightSim: flight '%s' %s" % [id, problem])
 		return false
-	var record := _record(id, starts, gate, "", -1)
-	_flights.append(record)
+	_insert(_record(id, starts, gate, "", -1))
 	return true
 
 
@@ -310,9 +311,16 @@ static func _issued_before(a: Array, b: Array) -> bool:
 func _issue(contract: Dictionary, day: int) -> void:
 	var id := FlightTimetable.occurrence_id(contract["id"], day)
 	var starts := FlightTimetable.starts_for(contract, day)
-	_flights.append(_record(id, starts, contract["gate"], contract["id"], day))
+	_insert(_record(id, starts, contract["gate"], contract["id"], day))
 	_next_day[contract["id"]] = day + 1
 	occurrence_added.emit(id)
+
+
+func _insert(record: Dictionary) -> void:
+	var at := _flights.size()
+	while at > 0 and FlightTimetable.flight_before(record, _flights[at - 1]):
+		at -= 1
+	_flights.insert(at, record)
 
 
 func _prune() -> void:

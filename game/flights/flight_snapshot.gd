@@ -40,7 +40,7 @@ static func load(data: Dictionary) -> Dictionary:
 		return {"error": problem}
 	var tick := int(data["tick"])
 	var contracts: Array[Dictionary] = []
-	problem = _read_contracts(data["contracts"], contracts)
+	problem = _read_contracts(data["contracts"], tick, contracts)
 	if problem == "":
 		problem = _next_day_problem(data["next_day"], contracts, tick)
 	if problem != "":
@@ -75,7 +75,8 @@ static func _top_problem(data: Dictionary) -> String:
 	return ""
 
 
-static func _read_contracts(entries: Array, out: Array[Dictionary]) -> String:
+## first_day must be one that accepting between tick 0 and `tick` gives.
+static func _read_contracts(entries: Array, tick: int, out: Array[Dictionary]) -> String:
 	for entry in entries:
 		var problem := FlightContract.problem(entry, FlightContract.KEYS)
 		if problem != "":
@@ -83,6 +84,10 @@ static func _read_contracts(entries: Array, out: Array[Dictionary]) -> String:
 		if not FlightSim.GATES.has(entry["gate"]):
 			return "contract gate '%s' has no stand" % entry["gate"]
 		var contract := FlightContract.make(entry)
+		var earliest := FlightTimetable.first_day(contract, 0)
+		var latest := FlightTimetable.first_day(contract, tick)
+		if contract["first_day"] < earliest or contract["first_day"] > latest:
+			return "contract %s first_day is not one an acceptance could give" % contract["id"]
 		for other in out:
 			if other["id"] == contract["id"]:
 				return "contract id '%s' is used twice" % contract["id"]
@@ -128,6 +133,9 @@ static func _read_flights(
 				live[entry["contract"]] = int(live.get(entry["contract"], 0)) + 1
 			if problem == "" and int(entry["state"]) != FlightTimetable.state_at(starts, tick):
 				problem = "flight %s state does not match the tick" % entry["id"]
+			if problem == "" and not out.is_empty():
+				if not FlightTimetable.flight_before(out[out.size() - 1], entry):
+					problem = "flight %s is out of timetable order" % entry["id"]
 			if problem == "":
 				out.append(_record(entry, starts))
 		if problem != "":
