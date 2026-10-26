@@ -210,6 +210,32 @@ func holding_of(station: int) -> Array[int]:
 	return out
 
 
+## Passengers in front of a newcomer to `station`: its lane, holding area and
+## walkers on the way. At a desk the one being served is in the lane too.
+func _station_slot(station: int) -> int:
+	var count: int = _incoming.get(station, 0)
+	if _queues.has(station):
+		count += (_queues[station]["lane"] as Array).size()
+		count += (_queues[station]["holding"] as Array).size()
+	return count
+
+
+## Ticks until a passenger who walks `walk_mm` to the back of `station`'s
+## queue has been served: the walk, the service in progress, the passengers
+## waiting and its own service. Station choice and the lateness forecast both
+## use it.
+func station_eta(station: int, walk_mm: int) -> int:
+	var scanner := layout.passages.has(station)
+	var waiting := _station_slot(station)
+	var left := 0
+	if _queues.has(station) and _queues[station]["serving"] != 0:
+		left = _serving_left(_queues[station])
+		if not scanner:
+			waiting -= 1
+	var service := SECURITY_TICKS if scanner else CHECKIN_TICKS
+	return JourneyForecast.walk_ticks(walk_mm) + left + maxi(waiting, 0) * service + service
+
+
 ## Ticks until the passenger's service at its current or next station ends.
 func wait_ticks(p: Passenger) -> int:
 	var desk_stage := p.stage <= Passenger.Stage.CHECKIN
@@ -485,24 +511,14 @@ func _choose_station(p: Passenger) -> void:
 	var best := 0
 	var best_eta := 0
 	var best_path: Array[Vector2i] = []
-	var service := CHECKIN_TICKS if to_desk else SECURITY_TICKS
 	for station in candidates:
 		if not layout.is_usable(station):
 			continue
-		var q := _queue(station)
 		var cells: Array = layout.lanes[station]
-		var ahead: int = (
-			(q["lane"] as Array).size() + (q["holding"] as Array).size() + _incoming.get(station, 0)
-		)
-		var path := grid.find_path(p.at, cells[mini(ahead, cells.size() - 1)])
+		var path := grid.find_path(p.at, cells[mini(_station_slot(station), cells.size() - 1)])
 		if path.is_empty():
 			continue
-		var eta := (
-			JourneyForecast.walk_ticks(Passenger.path_mm(path))
-			+ _serving_left(q)
-			+ ahead * service
-			+ service
-		)
+		var eta := station_eta(station, Passenger.path_mm(path))
 		if best == 0 or eta < best_eta:
 			best = station
 			best_eta = eta
@@ -536,8 +552,18 @@ func _queue_move(p: Passenger) -> void:
 	var target: Vector2i = layout.lanes[p.station][index]
 	if p.at != target:
 		var path := grid.find_path(p.at, target)
-		if not path.is_empty():
+		if path.is_empty():
+			_requeue(p)
+		else:
 			p.set_path(path)
+
+
+## A queued passenger with no way back to its lane cell would hold up the
+## passengers behind it. It leaves the queue and chooses a station again.
+func _requeue(p: Passenger) -> void:
+	_leave_station(p)
+	_send_back(p)
+	p.stuck = Passenger.Stuck.NO_ROUTE
 
 
 ## Gate access needs clearance: only a cleared passenger claims a seat.

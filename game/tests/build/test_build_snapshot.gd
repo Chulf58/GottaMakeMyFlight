@@ -105,3 +105,18 @@ func _with_object_change(good: Dictionary, key: String, value: Variant) -> Dicti
 	var changed := good.duplicate(true)
 	changed["objects"][0][key] = value
 	return changed
+
+
+func test_snapshot_rejects_numbers_that_are_only_nearly_whole() -> void:
+	var good := _through_json(_built_grid().to_snapshot())
+	var other := BuildGrid.new(Vector2i(4, 4))
+	var before := JSON.stringify(other.to_snapshot())
+	var bad_cases: Array[Dictionary] = []
+	var wide := good.duplicate(true)
+	wide["width"] = float(good["width"]) + 0.000001
+	bad_cases.append(wide)
+	bad_cases.append(_with_object_change(good, "facing", 1.000001))
+	bad_cases.append(_with_object_change(good, "anchor", [1.000001, 1]))
+	for bad in bad_cases:
+		assert_bool(other.from_snapshot(bad)).is_false()
+		assert_str(JSON.stringify(other.to_snapshot())).is_equal(before)

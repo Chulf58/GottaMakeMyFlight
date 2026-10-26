@@ -37,6 +37,8 @@ var _flight_label := Label.new()
 var _counts_label := Label.new()
 var _seed_label := Label.new()
 var _follow_label := Label.new()
+var _status_label := Label.new()
+var _status := ""
 
 
 func _ready() -> void:
@@ -68,6 +70,7 @@ func _ready() -> void:
 	starter.pressed.connect(press_starter_terminal)
 	debug.add_child(starter)
 	column.add_child(_seed_label)
+	column.add_child(_status_label)
 	_follow_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_follow_label.position = Vector2(16.0, -96.0)
 	_follow_label.add_theme_font_size_override("font_size", 22)
@@ -98,6 +101,7 @@ func refresh() -> void:
 	_flight_label.text = flight_text()
 	_counts_label.text = counts_text()
 	_seed_label.text = seed_text()
+	_status_label.text = _status
 	_follow_label.text = follow_text()
 
 
@@ -125,6 +129,10 @@ func seed_text() -> String:
 	if sim.last_batch_seed == 0:
 		return ""
 	return "Debug batch: %d passengers, seed %d" % [DEBUG_BATCH, sim.last_batch_seed]
+
+
+func status_text() -> String:
+	return _status
 
 
 func follow_text() -> String:
@@ -155,10 +163,34 @@ func press_speed(value: int) -> void:
 		clock.set_speed(value)
 
 
-## Builds ReferenceTerminal on an empty build grid, until BuildMode has
-## entrance and exit tools of its own.
+## Builds ReferenceTerminal on a pristine build grid (no floor, walls or
+## objects), until BuildMode has entrance and exit tools of its own. Either
+## outcome is shown in the status line; a refusal changes nothing.
 func press_starter_terminal() -> void:
-	if build_mode == null or not build_mode.grid.object_ids().is_empty():
+	if build_mode == null:
 		return
-	ReferenceTerminal.build(build_mode.grid)
-	(build_mode.get_node("BuildView") as BuildView).refresh(build_mode.grid)
+	var grid := build_mode.grid
+	if not _is_pristine(grid):
+		_status = "Starter terminal needs an empty grid"
+		return
+	if not ReferenceTerminal.build(grid):
+		push_error("PassengerHud: the starter terminal did not fit the grid")
+		_status = "Starter terminal failed: it did not fit the grid"
+		(build_mode.get_node("BuildView") as BuildView).refresh(grid)
+		return
+	_status = "Starter terminal built"
+	(build_mode.get_node("BuildView") as BuildView).refresh(grid)
+
+
+func _is_pristine(grid: BuildGrid) -> bool:
+	if not grid.object_ids().is_empty():
+		return false
+	for y in grid.size.y:
+		for x in grid.size.x:
+			var cell := Vector2i(x, y)
+			if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
+				return false
+			for side in BuildGrid.SIDE_STEP.size():
+				if grid.has_wall(cell, side):
+					return false
+	return true

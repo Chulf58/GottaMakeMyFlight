@@ -200,3 +200,24 @@ func test_snapshot_rejects_bad_input_whole() -> void:
 		assert_bool(target.from_snapshot(bad)).is_false()
 		assert_int(target.flight_ids().size()).is_equal(0)
 		assert_int(target.tick).is_equal(0)
+
+
+func test_snapshot_rejects_numbers_that_are_only_nearly_whole() -> void:
+	_sim.add_default_flight()
+	_run_to_tick(_clock, 480)
+	var good := _sim.to_snapshot()
+	var near_tick := good.duplicate(true)
+	near_tick["tick"] = 480.000001
+	var near_state := good.duplicate(true)
+	near_state["flights"][0]["state"] = float(FlightSim.State.TAXI_IN) + 0.000001
+	var near_start := good.duplicate(true)
+	var starts := []
+	for value in STARTS:
+		starts.append(float(value))
+	starts[3] += 0.000001
+	near_start["flights"][0]["starts"] = starts
+	for bad in [near_tick, near_state, near_start]:
+		var target := _new_sim(_new_clock())
+		assert_bool(target.from_snapshot(bad)).is_false()
+		assert_int(target.flight_ids().size()).is_equal(0)
+		assert_int(target.tick).is_equal(0)

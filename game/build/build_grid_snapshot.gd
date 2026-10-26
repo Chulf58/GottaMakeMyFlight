@@ -86,8 +86,4 @@ static func _is_whole_in(value: Variant, low: int, high: int) -> bool:
 
 
 static func _is_whole(value: Variant) -> bool:
-	if typeof(value) == TYPE_INT:
-		return true
-	return (
-		typeof(value) == TYPE_FLOAT and is_finite(value) and is_equal_approx(value, roundf(value))
-	)
+	return WholeNumber.is_whole(value)

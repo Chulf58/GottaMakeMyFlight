@@ -166,10 +166,22 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 	var p := Passenger.new()
 	if not _fill(p, record, grid):
 		return null
+	var variant_ok := p.variant in [0, 1]
+	var range_ok := (
+		p.mood >= 0
+		and p.mood <= PassengerSim.MOOD_MAX
+		and p.seg_mm >= 0
+		and p.apron_mm >= 0
+		and p.odometer_mm >= 0
+	)
 	var stage_ok := p.stage >= 0 and p.stage < Passenger.Stage.size()
 	var stuck_ok := p.stuck >= 0 and p.stuck < Passenger.Stuck.size()
 	var index_ok := p.path_index >= 0 and p.path_index < maxi(p.path.size(), 1)
-	if not (stage_ok and stuck_ok and index_ok) or p.id < 1 or p.id >= next_id:
+	if (
+		not (variant_ok and range_ok and stage_ok and stuck_ok and index_ok)
+		or p.id < 1
+		or p.id >= next_id
+	):
 		return null
 	return p
 
@@ -250,6 +262,4 @@ static func _queues(list: Array, ids: Dictionary) -> Dictionary:
 
 
 static func _whole(value: Variant) -> bool:
-	if typeof(value) == TYPE_INT:
-		return true
-	return typeof(value) == TYPE_FLOAT and is_finite(value) and value == floorf(value)
+	return WholeNumber.is_whole(value)

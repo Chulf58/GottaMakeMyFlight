@@ -84,3 +84,40 @@ func _moved_mm(id: int, ticks: int) -> int:
 	var before := _world.passenger(id).odometer_mm
 	_world.run_to(_world.clock.tick + ticks)
 	return _world.passenger(id).odometer_mm - before
+
+
+## A passenger placed at the gate cell, standing, with boarding still ahead.
+func test_standing_passenger_cannot_leave_before_boarding_opens() -> void:
+	_world = PassengerTestWorld.reference_world()
+	var p := Passenger.new()
+	p.stage = Passenger.Stage.STANDING
+	p.at = Vector2i(15, 5)
+	p.cleared = true
+	p.boarding_tick = _world.sim.tick + 1000
+	assert_int(JourneyForecast.arrival_tick(_world.sim, p)).is_greater(p.boarding_tick)
+
+
+## Two idle scanners; one or both then get a passenger mid-service.
+func _forecast_with_scanner_load(busy: Array[int], ticks_left: int) -> int:
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(10, 4000))
+	var scanners: Array = ReferenceTerminal.object_ids(_world.grid)["scanners"]
+	var subject := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	for index in busy:
+		var served := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		_world.passenger(served).service_end = _world.sim.tick + ticks_left
+		_world.sim._queue(scanners[index])["serving"] = served
+	return JourneyForecast.arrival_tick(_world.sim, _world.passenger(subject))
+
+
+func test_forecast_before_check_in_sees_the_scanner_queue() -> void:
+	var idle := _forecast_with_scanner_load([], 0)
+	_world.free_all()
+	var one_busy := _forecast_with_scanner_load([0], 300)
+	_world.free_all()
+	var both_busy := _forecast_with_scanner_load([0, 1], 300)
+	# One scanner still free: the forecast takes it and barely moves.
+	assert_int(one_busy - idle).is_less(60)
+	# Both busy for 300 ticks: the passenger waits for the sooner one.
+	assert_int(both_busy - idle).is_greater(200)

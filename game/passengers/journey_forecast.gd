@@ -40,7 +40,7 @@ static func arrival_tick(sim: PassengerSim, p: Passenger) -> int:
 	if leg.x >= NEVER:
 		return NEVER
 	var leave := maxi(now + leg.x, p.boarding_tick)
-	if p.stage == Passenger.Stage.TO_EXIT or p.stage == Passenger.Stage.STANDING:
+	if p.stage == Passenger.Stage.TO_EXIT:
 		leave = now
 	match p.stage:
 		Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED:
@@ -57,12 +57,13 @@ static func _to_gate(sim: PassengerSim, p: Passenger) -> Vector3i:
 	var mm := p.remaining_mm()
 	var wait := 0
 	if p.stage <= Passenger.Stage.CHECKIN:
-		wait += sim.wait_ticks(p) + PassengerSim.SECURITY_TICKS
-		var scanner := _nearest_scanner(sim, pos)
-		if scanner == 0:
+		# The scanner is chosen as station choice will: soonest estimated finish.
+		var scanner := _soonest_scanner(sim, pos)
+		if scanner.y == 0:
 			return Vector3i(NEVER, pos.x, pos.y)
-		var passage: Array = sim.layout.passages[scanner]
-		mm += Passenger.octile_mm(pos, passage[0]) + _passage_mm(passage)
+		wait += sim.wait_ticks(p) + scanner.x
+		var passage: Array = sim.layout.passages[scanner.y]
+		mm += _passage_mm(passage)
 		pos = passage[passage.size() - 1]
 	elif p.stage < Passenger.Stage.SECURITY:
 		wait += sim.wait_ticks(p)
@@ -88,16 +89,18 @@ static func _passage_mm(passage: Array) -> int:
 	return Passenger.path_mm(cells)
 
 
-static func _nearest_scanner(sim: PassengerSim, from: Vector2i) -> int:
-	var best := 0
-	var best_mm := 0
+## The scanner with the soonest estimated finish for a passenger standing at
+## `from` (the walk is octile, as no path exists yet) and that finish in ticks
+## (x), and its id (y); id 0 when none is usable. Ties go to the lower id.
+static func _soonest_scanner(sim: PassengerSim, from: Vector2i) -> Vector2i:
+	var best := Vector2i.ZERO
 	for id in sim.layout.scanners:
 		if not sim.layout.is_usable(id):
 			continue
-		var mm := Passenger.octile_mm(from, sim.layout.passages[id][0])
-		if best == 0 or mm < best_mm:
-			best = id
-			best_mm = mm
+		var walk_mm := Passenger.octile_mm(from, sim.layout.passages[id][0])
+		var eta := sim.station_eta(id, walk_mm)
+		if best.y == 0 or eta < best.x:
+			best = Vector2i(eta, id)
 	return best
 
 

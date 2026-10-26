@@ -116,3 +116,26 @@ func test_bad_snapshots_are_rejected_whole() -> void:
 		assert_bool(_b.sim.from_snapshot(bad)).is_false()
 		assert_str(_b.signature()).is_equal(before)
 		assert_int(_b.sim.pending_spawns()).is_equal(0)
+
+
+func test_out_of_range_passenger_fields_are_rejected_whole() -> void:
+	_a = PassengerTestWorld.reference_world()
+	_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_a.run_to(40)
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
+	_b = PassengerTestWorld.reference_world()
+	var before := _b.signature()
+	for change in [
+		["variant", 2],
+		["variant", -1],
+		["mood", PassengerSim.MOOD_MAX + 1],
+		["mood", -1],
+		["seg_mm", -1],
+		["apron_mm", -1],
+		["odometer_mm", -1],
+	]:
+		var bad := good.duplicate(true)
+		bad["passengers"][0][change[0]] = change[1]
+		assert_bool(_b.sim.from_snapshot(bad)).override_failure_message(str(change)).is_false()
+		assert_str(_b.signature()).is_equal(before)
+		assert_int(_b.sim.passenger_ids().size()).is_equal(0)

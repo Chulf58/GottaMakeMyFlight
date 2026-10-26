@@ -113,3 +113,24 @@ func test_holding_shows_queue_full_until_a_slot_frees() -> void:
 	assert_array(_world.sim.queue_of(desk)).contains([ids[3]])
 	assert_int(fourth.stuck).is_equal(Passenger.Stuck.NONE)
 	assert_int(_world.sim.queue_of(desk).find(ids[3])).is_equal(2)
+
+
+func test_desk_nearly_done_is_not_counted_a_full_service_slower() -> void:
+	# Entrance at x = 2: the west lane is a few metres nearer than the east.
+	var grid := PassengerTestWorld.floored(Vector2i(9, 6))
+	var west := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(1, 1), 0)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(7, 1), 0)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(2, 5), 2)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	var busy := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var served := _world.passenger(busy)
+	served.stage = Passenger.Stage.CHECKIN
+	served.station = west
+	served.at = _world.sim.layout.lanes[west][0]
+	served.service_end = _world.sim.tick + 5
+	var q: Dictionary = _world.sim._queue(west)
+	q["lane"].append(busy)
+	q["serving"] = busy
+	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_world.step()
+	assert_int(_world.passenger(id).station).is_equal(west)
