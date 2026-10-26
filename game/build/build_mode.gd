@@ -5,7 +5,8 @@ extends Node3D
 ## glass, door, entrance and exit; Esc picks none; R turns the object;
 ## left-click applies, and a drag paints floors or a wall or glass line. A
 ## ghost shows the edit under the mouse, tinted by check(), so the preview and
-## the click use the same rules.
+## the click use the same rules. Entrances and exits turn themselves to face
+## in from the edge under the mouse until R is pressed (DoorPlacement.auto_facing()).
 
 signal grid_changed
 
@@ -45,6 +46,16 @@ const TOOL_LABELS := {
 	Tool.EXIT: "Exit",
 	Tool.REMOVE: "6 Remove",
 }
+## The door tools by the name the status line uses for them.
+const DOOR_NAMES := {Tool.ENTRANCE: "entrance", Tool.EXIT: "exit"}
+## What the status line tells the player to do when a door tool is refused.
+const DOOR_HINTS := {
+	BuildResult.Reason.NO_FLOOR: "Put the %s on a floor tile at the outside edge",
+	BuildResult.Reason.DOOR_NOT_ON_EDGE: "Put the %s on the outside edge of the floor",
+	BuildResult.Reason.INTERACTION_BLOCKED: "Clear the floor in front of the %s",
+	BuildResult.Reason.DOOR_WALLED: "Take down the glass or door wall behind the %s",
+	BuildResult.Reason.WALL_HOLDS_DOOR: "The wall behind the %s holds a door; pick another spot",
+}
 const DRAG_TOOLS := [Tool.FLOOR, Tool.WALL, Tool.GLASS]
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1
@@ -61,6 +72,9 @@ var grid: BuildGrid
 var tool := Tool.FLOOR
 var facing := 0
 
+## False once R is pressed, until a tool is picked again. While true, the
+## door tools ignore `facing` and use DoorPlacement.auto_facing().
+var _auto_facing := true
 var _view := BuildView.new()
 var _ghost := Node3D.new()
 var _valid_material := _ghost_material(VALID_TINT)
@@ -127,6 +141,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func set_tool(new_tool: Tool) -> void:
 	tool = new_tool
+	_auto_facing = true
 	_hover_key = ""
 	for key in _buttons:
 		_buttons[key].set_pressed_no_signal(key == tool)
@@ -134,6 +149,7 @@ func set_tool(new_tool: Tool) -> void:
 
 
 func rotate_facing() -> void:
+	_auto_facing = false
 	facing = (facing + 1) % 4
 	_hover_key = ""
 	_show_status(null)
@@ -153,7 +169,10 @@ func edit_at(point: Vector3) -> BuildEdit:
 	if TOOL_WALL_KINDS.has(tool):
 		return BuildEdit.place_wall(cell, side, TOOL_WALL_KINDS[tool])
 	if TOOL_OBJECTS.has(tool):
-		return BuildEdit.place_object(TOOL_OBJECTS[tool], cell, facing)
+		var turn := facing
+		if _facing_is_auto():
+			turn = DoorPlacement.auto_facing(grid, TOOL_OBJECTS[tool], point, facing)
+		return BuildEdit.place_object(TOOL_OBJECTS[tool], cell, turn)
 	return null
 
 
@@ -166,7 +185,7 @@ func apply_at(point: Vector3) -> BuildResult:
 	_last_applied_key = _edit_key(edit)
 	var result := check(edit)
 	if result.ok:
-		result = grid.apply(edit)
+		result = _apply_checked(edit)
 	if result.ok:
 		_view.refresh(grid)
 		_hover_key = ""
@@ -175,65 +194,31 @@ func apply_at(point: Vector3) -> BuildResult:
 	return result
 
 
-## Whether an entrance or exit door object at `anchor` and `facing` stands on
-## the terminal's edge: its back edge (the way out) has no wall and no floor
-## beyond it, the same test TerminalLayout.is_exit_open() makes. The grid
-## allows a door object anywhere; the tools add this check.
-static func outside_door_problem(on: BuildGrid, anchor: Vector2i, facing: int) -> BuildResult:
-	var out := BuildObjectDef.rotate_offset(Vector2i(0, -1), facing)
-	if on.floor_at(anchor + out) != BuildGrid.FLOOR_NONE:
-		return BuildResult.refused(BuildResult.Reason.DOOR_NOT_ON_EDGE)
-	if on.has_wall(anchor, BuildGrid.SIDE_STEP.find(out)):
-		return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
-	return BuildResult.accepted()
-
-
-## BuildGrid.validate(), plus the edge rule for entrances and exits: a new one
-## stands on the terminal's edge facing in (outside_door_problem()), and a
-## standing one keeps its way out open: no wall of any kind on its back edge
-## and no floor on the cell beyond.
+## BuildGrid.validate() plus the entrance and exit rules (DoorPlacement.check()).
 func check(edit: BuildEdit) -> BuildResult:
-	var result := grid.validate(edit)
-	if not result.ok:
-		return result
-	match edit.kind:
-		BuildEdit.Kind.PLACE_OBJECT:
-			if BuildCatalog.is_door(edit.def_id):
-				return outside_door_problem(grid, edit.cell, edit.facing)
-		BuildEdit.Kind.PLACE_WALL:
-			if _on_a_way_out(edit.cell, edit.side):
-				return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
-		BuildEdit.Kind.PAINT_FLOOR:
-			if _beyond_a_door(edit.cell):
-				return BuildResult.refused(BuildResult.Reason.DOOR_NOT_ON_EDGE)
+	return DoorPlacement.check(grid, edit)
+
+
+## Applies an edit check() accepted, through the edits DoorPlacement.edits_for()
+## plans: an entrance or exit first takes down the plain wall on its back edge.
+## Each grid edit emits graph_changed on its own; every state in between is a
+## valid grid.
+func _apply_checked(edit: BuildEdit) -> BuildResult:
+	var plan := DoorPlacement.edits_for(grid, edit)
+	var cleared: Array[Vector2i] = []
+	for i in plan.size() - 1:
+		var before := grid.apply(plan[i])
+		if not before.ok:
+			return before
+		cleared.append_array(before.dirty_cells)
+	var result := grid.apply(plan.back())
+	if result.ok:
+		result.dirty_cells.append_array(cleared)
 	return result
 
 
-## Each standing entrance or exit as [anchor, outward step].
-func _ways_out() -> Array:
-	var out := []
-	for object_id in grid.object_ids():
-		var record := grid.get_object(object_id)
-		if BuildCatalog.is_door(record["def"]):
-			var step := BuildObjectDef.rotate_offset(Vector2i(0, -1), record["facing"])
-			out.append([record["anchor"], step])
-	return out
-
-
-## Whether the edge (from either cell beside it) is a door's back edge.
-func _on_a_way_out(cell: Vector2i, side: int) -> bool:
-	var step := BuildGrid.SIDE_STEP[side]
-	for way in _ways_out():
-		if (cell == way[0] and step == way[1]) or (cell == way[0] + way[1] and step == -way[1]):
-			return true
-	return false
-
-
-func _beyond_a_door(cell: Vector2i) -> bool:
-	for way in _ways_out():
-		if cell == way[0] + way[1]:
-			return true
-	return false
+func _facing_is_auto() -> bool:
+	return _auto_facing and DOOR_NAMES.has(tool)
 
 
 func _start_drag(point: Vector3) -> void:
@@ -357,7 +342,12 @@ func _build_toolbar() -> void:
 
 
 func _show_status(result: BuildResult) -> void:
-	var text := "Facing %d" % facing if TOOL_OBJECTS.has(tool) else ""
+	var text := ""
+	if TOOL_OBJECTS.has(tool):
+		text = "Facing auto" if _facing_is_auto() else "Facing %d" % facing
 	if result != null and not result.ok:
-		text += ("  " if text != "" else "") + result.reason_text()
+		var reason := result.reason_text()
+		if DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
+			reason = DOOR_HINTS[result.reason] % DOOR_NAMES[tool]
+		text += ("  " if text != "" else "") + reason
 	_status.text = text

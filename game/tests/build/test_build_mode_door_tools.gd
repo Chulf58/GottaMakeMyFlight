@@ -78,8 +78,10 @@ func test_entrance_tool_needs_the_terminal_edge_with_the_front_facing_in() -> vo
 	assert_str(str(_mode.grid.get_object(placed.object_id)["def"])).is_equal("entrance_door")
 
 
-func test_exit_tool_refuses_a_wall_on_the_way_out() -> void:
-	_mode.grid.apply(BuildEdit.place_wall(Vector2i(6, 2), NORTH))
+## A plain wall there is taken down by the placement instead (see
+## test_build_mode_door_placement.gd), so this uses glass.
+func test_exit_tool_refuses_a_glass_wall_on_the_way_out() -> void:
+	_mode.grid.apply(BuildEdit.place_wall(Vector2i(6, 2), NORTH, BuildGrid.WallKind.GLASS))
 	var walled := _place(BuildMode.Tool.EXIT, Vector2i(6, 2), 0)
 	assert_int(walled.reason).is_equal(BuildResult.Reason.DOOR_WALLED)
 	assert_array(_mode.grid.object_ids()).is_empty()
