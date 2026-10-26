@@ -1,0 +1,89 @@
+{
+  "generator": "tools/blender/thumbnails/render_kit_thumbnails.py",
+  "style": 3,
+  "size": 256,
+  "items": {
+    "floor": {
+      "png": "floor.png",
+      "class": "tile",
+      "style": 3,
+      "sources": {
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
+    },
+    "wall": {
+      "png": "wall.png",
+      "class": "edge",
+      "style": 3,
+      "sources": {
+        "wall.glb": "22bcaf0d0e5cd04a2ae1c82352237898ef9033bcd2bb4b41f8daa4d570842da9"
+      }
+    },
+    "glass": {
+      "png": "glass.png",
+      "class": "edge",
+      "style": 3,
+      "sources": {
+        "wall_glass.glb": "b1da75a19bbcab7ca33b942c531469833b8bdcfc5f2db1d33dce9c0a43be7e06"
+      }
+    },
+    "door": {
+      "png": "door.png",
+      "class": "edge",
+      "style": 3,
+      "sources": {
+        "wall_door.glb": "159ff32f268d372c7c3e985eb29d25b7c21a249da6236c42771f742e96dea807"
+      }
+    },
+    "desk": {
+      "png": "desk.png",
+      "class": "2x1",
+      "style": 3,
+      "sources": {
+        "checkin_desk.glb": "16d00842abf931fbef48da5c0277904f0c273bb29aeaaf4a27db0949dabfc10b"
+      }
+    },
+    "scanner": {
+      "png": "scanner.png",
+      "class": "1x2",
+      "style": 3,
+      "sources": {
+        "security_scanner.glb": "dc5a270958591c4d37db80edd23219abfd831d6235c79bdb0032803cc2c0f534"
+      }
+    },
+    "seats": {
+      "png": "seats.png",
+      "class": "3x1",
+      "style": 3,
+      "sources": {
+        "seat_row.glb": "edec9bdcca0f8e17355ebf4750e6a2fc6c57824b7cf484b720d4ac13a92a8752"
+      }
+    },
+    "entrance": {
+      "png": "entrance.png",
+      "class": "door_1x1",
+      "style": 3,
+      "sources": {
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
+        "wall_door.glb": "159ff32f268d372c7c3e985eb29d25b7c21a249da6236c42771f742e96dea807"
+      }
+    },
+    "exit": {
+      "png": "exit.png",
+      "class": "door_1x1",
+      "style": 3,
+      "sources": {
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
+        "wall_door.glb": "159ff32f268d372c7c3e985eb29d25b7c21a249da6236c42771f742e96dea807"
+      }
+    },
+    "remove": {
+      "png": "remove.png",
+      "class": "tile",
+      "style": 3,
+      "sources": {
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
+    }
+  }
+}
