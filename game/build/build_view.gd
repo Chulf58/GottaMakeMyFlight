@@ -219,7 +219,9 @@ func _draw_walls() -> void:
 ## back edge when that edge, or a wall in line with it, is cut.
 func _draw_door_objects(placed: Dictionary) -> void:
 	for object_id in _object_nodes:
-		var record := _grid.get_object(object_id)
+		# The record the node was drawn from: the grid may have changed since
+		# the last refresh().
+		var record: Dictionary = (_object_nodes[object_id] as Node3D).get_meta("record")
 		if not BuildCatalog.is_door(record["def"]):
 			continue
 		var anchor: Vector2i = record["anchor"]

@@ -129,3 +129,32 @@ func test_entrance_and_exit_draw_a_door_on_their_back_edge() -> void:
 		assert_int(meshes.size()).is_equal(InteriorKit.meshes("wall_door").size())
 		for mesh in meshes:
 			assert_bool((mesh as MeshInstance3D).mesh is BoxMesh).is_false()
+
+
+func test_a_standing_door_keeps_its_way_out_open() -> void:
+	assert_bool(_place(BuildMode.Tool.EXIT, Vector2i(6, 2), 0).ok).is_true()
+	assert_bool(_place(BuildMode.Tool.ENTRANCE, Vector2i(4, 7), 2).ok).is_true()
+	# Plain walls beside the exit's back edge, so a door there passes the door rule.
+	for x in [5, 7]:
+		_mode.grid.apply(BuildEdit.place_wall(Vector2i(x, 2), NORTH))
+	for kind in [BuildGrid.WallKind.PLAIN, BuildGrid.WallKind.GLASS, BuildGrid.WallKind.DOOR]:
+		for edge in [[Vector2i(6, 2), NORTH], [Vector2i(6, 1), SOUTH]]:
+			var walled := _mode.check(BuildEdit.place_wall(edge[0], edge[1], kind))
+			assert_int(walled.reason).is_equal(BuildResult.Reason.DOOR_WALLED)
+	var entrance_wall := _mode.check(BuildEdit.place_wall(Vector2i(4, 7), SOUTH))
+	assert_int(entrance_wall.reason).is_equal(BuildResult.Reason.DOOR_WALLED)
+	_mode.set_tool(BuildMode.Tool.WALL)
+	var by_tool := _mode.apply_at(_near_edge(Vector2i(6, 2), NORTH))
+	assert_int(by_tool.reason).is_equal(BuildResult.Reason.DOOR_WALLED)
+	assert_bool(_mode.grid.has_wall(Vector2i(6, 2), NORTH)).is_false()
+	_mode.set_tool(BuildMode.Tool.GLASS)
+	var glass := _mode.apply_at(_near_edge(Vector2i(4, 8), NORTH))
+	assert_int(glass.reason).is_equal(BuildResult.Reason.DOOR_WALLED)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	for beyond in [Vector2i(6, 1), Vector2i(4, 8)]:
+		var floor := _mode.apply_at(_mode.grid.cell_to_world(beyond))
+		assert_int(floor.reason).is_equal(BuildResult.Reason.DOOR_NOT_ON_EDGE)
+		assert_int(_mode.grid.floor_at(beyond)).is_equal(BuildGrid.FLOOR_NONE)
+	# Other edges and cells near the doors stay free to build on.
+	assert_bool(_mode.check(BuildEdit.place_wall(Vector2i(6, 2), BuildGrid.Side.EAST)).ok).is_true()
+	assert_bool(_mode.check(BuildEdit.paint_floor(Vector2i(5, 1), 1, 1)).ok).is_true()

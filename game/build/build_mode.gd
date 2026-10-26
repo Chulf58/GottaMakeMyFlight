@@ -188,13 +188,52 @@ static func outside_door_problem(on: BuildGrid, anchor: Vector2i, facing: int) -
 	return BuildResult.accepted()
 
 
-## BuildGrid.validate(), plus, for an entrance or exit, that it stands on the
-## terminal's edge facing in (outside_door_problem()).
+## BuildGrid.validate(), plus the edge rule for entrances and exits: a new one
+## stands on the terminal's edge facing in (outside_door_problem()), and a
+## standing one keeps its way out open: no wall of any kind on its back edge
+## and no floor on the cell beyond.
 func check(edit: BuildEdit) -> BuildResult:
 	var result := grid.validate(edit)
-	if result.ok and edit.kind == BuildEdit.Kind.PLACE_OBJECT and BuildCatalog.is_door(edit.def_id):
-		result = outside_door_problem(grid, edit.cell, edit.facing)
+	if not result.ok:
+		return result
+	match edit.kind:
+		BuildEdit.Kind.PLACE_OBJECT:
+			if BuildCatalog.is_door(edit.def_id):
+				return outside_door_problem(grid, edit.cell, edit.facing)
+		BuildEdit.Kind.PLACE_WALL:
+			if _on_a_way_out(edit.cell, edit.side):
+				return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
+		BuildEdit.Kind.PAINT_FLOOR:
+			if _beyond_a_door(edit.cell):
+				return BuildResult.refused(BuildResult.Reason.DOOR_NOT_ON_EDGE)
 	return result
+
+
+## Each standing entrance or exit as [anchor, outward step].
+func _ways_out() -> Array:
+	var out := []
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		if BuildCatalog.is_door(record["def"]):
+			var step := BuildObjectDef.rotate_offset(Vector2i(0, -1), record["facing"])
+			out.append([record["anchor"], step])
+	return out
+
+
+## Whether the edge (from either cell beside it) is a door's back edge.
+func _on_a_way_out(cell: Vector2i, side: int) -> bool:
+	var step := BuildGrid.SIDE_STEP[side]
+	for way in _ways_out():
+		if (cell == way[0] and step == way[1]) or (cell == way[0] + way[1] and step == -way[1]):
+			return true
+	return false
+
+
+func _beyond_a_door(cell: Vector2i) -> bool:
+	for way in _ways_out():
+		if cell == way[0] + way[1]:
+			return true
+	return false
 
 
 func _start_drag(point: Vector3) -> void:

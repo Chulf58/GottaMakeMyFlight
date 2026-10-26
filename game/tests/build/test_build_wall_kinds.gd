@@ -60,10 +60,15 @@ func test_a_door_needs_a_plain_wall_in_line_on_both_sides() -> void:
 	assert_int(_grid.wall_kind(Vector2i(2, 2), NORTH)).is_equal(PLAIN)
 	var at_border := _grid.apply(BuildEdit.place_wall(Vector2i(0, 2), NORTH, DOOR))
 	assert_int(at_border.reason).is_equal(BuildResult.Reason.DOOR_NEEDS_WALLS)
-	# A wall across the line at the door's end is not in line with it.
-	_grid.apply(BuildEdit.place_wall(Vector2i(4, 2), BuildGrid.Side.WEST))
-	var by_corner := _grid.apply(BuildEdit.place_wall(Vector2i(4, 2), NORTH, DOOR))
+	# Away from the border: a plain wall in line on the west, and on the east
+	# only a wall across the line at the door's end, which is not in line.
+	var corner := BuildGrid.new(Vector2i(5, 5))
+	corner.apply(BuildEdit.place_wall(Vector2i(1, 2), NORTH))
+	corner.apply(BuildEdit.place_wall(Vector2i(2, 2), NORTH))
+	corner.apply(BuildEdit.place_wall(Vector2i(3, 2), BuildGrid.Side.WEST))
+	var by_corner := corner.apply(BuildEdit.place_wall(Vector2i(2, 2), NORTH, DOOR))
 	assert_int(by_corner.reason).is_equal(BuildResult.Reason.DOOR_NEEDS_WALLS)
+	assert_int(corner.wall_kind(Vector2i(2, 2), NORTH)).is_equal(PLAIN)
 
 
 func test_a_door_on_an_empty_edge_between_plain_walls_is_accepted() -> void:
