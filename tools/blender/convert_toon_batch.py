@@ -5,7 +5,8 @@ Run from WSL (Blender is a Windows program, so every path it sees is a Windows p
     "/mnt/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background \
         --factory-startup --python 'C:\\Users\\chulf\\Gotta-make-my-flight\\tools\\blender\\convert_toon_batch.py'
 
-Optional after `--`: asset stems to convert (default: the whole BATCH table).
+Optional after `--`: asset stems to convert (default: the whole BATCH table), and
+`--out <dir>` to write the .glb files there for a trial run that leaves game/ unchanged.
 Then run a Godot `--headless --import`, which binds the toon materials through
 game/assets/toon_post_import.gd.
 
@@ -19,6 +20,7 @@ What it does, per asset:
    join the parts into one skinned mesh, retarget the idle action from the idle FBX onto
    the character armature as "idle", then add walk, run, sit_down, sit_idle and stand_up
    (tools/blender/anim/toon_clips.py; it prints SPEED and SIT_CONTRACT lines).
+   Then move the vendor UV faults listed in UV_FIXES to their target swatch.
 4. Export .glb (Y-up, no vertex colours), then RE-READ THE WRITTEN FILE and check
    materials, images, animations and bounds against the scene. Any mismatch stops the run.
 5. Write or patch the .glb.import so Godot runs the post-import material binder.
@@ -90,6 +92,18 @@ BATCH = {
         "Poses\\TCP_Female_Idle_01.fbx",
         "Prefabs\\Female Character Sources\\TCP_Female_Character_01.prefab",
     ),
+}
+
+# Vendor UV faults repaired per asset, after the part join and before export:
+# (u0, v0, u1, v1) box the face's UV centroid falls in, the UV every loop of those faces
+# moves to, and the face count the vendor file has there. TCP_Male_Shoes_01A maps four
+# heel-back quads into a magenta ramp of the shared atlas (RGB about 225,0,181); they move
+# to the tan heel band around them (user-ruled "Tan, blend in"): the band swatch is a
+# vertical gradient, flat across u 0.625-0.656, and v 0.155 is the shade (157,147,124) the
+# band faces beside the patch sample. The atlas itself is shared and stays as it is. A different count stops the run, so a changed vendor file is seen, and the
+# written file is re-read for faces left in the box.
+UV_FIXES = {
+    "tcp_male_character_01": [((0.354, 0.217, 0.360, 0.224), (0.637, 0.155), 4)],
 }
 
 REST_TOLERANCE = 1e-3
@@ -368,6 +382,49 @@ def build_character(stem, idle_fbx, prefab):
     return [arm, body], durations
 
 
+def in_box(box, u, v):
+    return box[0] <= u <= box[2] and box[1] <= v <= box[3]
+
+
+def fix_uvs(stem, objs):
+    """Move the UV_FIXES faces of this asset to their target UV (see UV_FIXES). Returns,
+    per fix, how many triangles the moved faces make, for the check on the written file."""
+    fixes = UV_FIXES.get(stem, [])
+    tris = []
+    if not fixes:
+        return tris
+    meshes = [o for o in objs if o.type == "MESH"]
+    for box, target, expected in fixes:
+        hits = []
+        for o in meshes:
+            if len(o.data.uv_layers) != 1:
+                die("%s: %s has %d UV maps, the UV fix expects one" % (stem, o.name, len(o.data.uv_layers)))
+            uv = o.data.uv_layers[0].data
+            for p in o.data.polygons:
+                lis = list(p.loop_indices)
+                cu = sum(uv[li].uv.x for li in lis) / len(lis)
+                cv = sum(uv[li].uv.y for li in lis) / len(lis)
+                if in_box(box, cu, cv):
+                    hits.append((o, lis))
+        if len(hits) != expected:
+            die("%s: %d faces in UV box %s, expected %d" % (stem, len(hits), box, expected))
+        for o, lis in hits:
+            for li in lis:
+                o.data.uv_layers[0].data[li].uv = target
+        left = 0
+        for o in meshes:
+            uv = o.data.uv_layers[0].data
+            for p in o.data.polygons:
+                lis = list(p.loop_indices)
+                if in_box(box, sum(uv[li].uv.x for li in lis) / len(lis), sum(uv[li].uv.y for li in lis) / len(lis)):
+                    left += 1
+        log("UVFIX %s box=%s faces_before=%d faces_after=%d target=%s" % (stem, box, len(hits), left, target))
+        if left:
+            die("%s: %d faces still in UV box %s" % (stem, left, box))
+        tris.append(sum(len(lis) - 2 for _o, lis in hits))
+    return tris
+
+
 def joint_offset(arm, name):
     bone = arm.data.bones[name]
     if bone.parent is None:
@@ -467,12 +524,54 @@ def glb_accessor(path, js, index):
     bin_start = 20 + jlen + 8
     acc = js["accessors"][index]
     view = js["bufferViews"][acc["bufferView"]]
-    width = {"SCALAR": 1, "VEC3": 3, "VEC4": 4}[acc["type"]]
+    width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[acc["type"]]
     if acc["componentType"] != 5126:
         die("accessor %d is not float" % index)
     stride = view.get("byteStride", 4 * width)
     base = bin_start + view.get("byteOffset", 0) + acc.get("byteOffset", 0)
     return [struct.unpack_from("<%df" % width, data, base + i * stride) for i in range(acc["count"])]
+
+
+def glb_indices(path, js, index):
+    """Integer values of one index accessor in the written .glb."""
+    with open(path, "rb") as f:
+        data = f.read()
+    jlen = struct.unpack_from("<I", data, 12)[0]
+    bin_start = 20 + jlen + 8
+    acc = js["accessors"][index]
+    view = js["bufferViews"][acc["bufferView"]]
+    fmt = {5121: "B", 5123: "H", 5125: "I"}[acc["componentType"]]
+    base = bin_start + view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    return list(struct.unpack_from("<%d%s" % (acc["count"], fmt), data, base))
+
+
+def check_uv_fixes(stem, path, js, fixed_tris):
+    """No triangle of the written file has its UV centroid in a UV_FIXES box, and exactly
+    as many triangles as fix_uvs moved have all three corners on the target UV. glTF
+    stores V flipped (v_gltf = 1 - v_blender), so the box and target are flipped to match."""
+    for (box, target, _expected), want in zip(UV_FIXES.get(stem, []), fixed_tris):
+        tu, tv = target[0], 1.0 - target[1]
+        fbox = (box[0], 1.0 - box[3], box[2], 1.0 - box[1])
+        in_tris = at_target = 0
+        for mesh in js["meshes"]:
+            for prim in mesh["primitives"]:
+                if prim.get("mode", 4) != 4 or "TEXCOORD_0" not in prim["attributes"]:
+                    die("%s: primitive without triangles or TEXCOORD_0" % stem)
+                uvs = glb_accessor(path, js, prim["attributes"]["TEXCOORD_0"])
+                idx = glb_indices(path, js, prim["indices"])
+                for t in range(0, len(idx), 3):
+                    cu = sum(uvs[i][0] for i in idx[t : t + 3]) / 3.0
+                    cv = sum(uvs[i][1] for i in idx[t : t + 3]) / 3.0
+                    if in_box(fbox, cu, cv):
+                        in_tris += 1
+                    if all(abs(uvs[i][0] - tu) < 1e-4 and abs(uvs[i][1] - tv) < 1e-4 for i in idx[t : t + 3]):
+                        at_target += 1
+        log(
+            "UVFIX_FILE %s box=%s triangles_in_box=%d triangles_at_target=%d moved=%d"
+            % (stem, box, in_tris, at_target, want)
+        )
+        if in_tris or at_target != want:
+            die("%s: written file has %d triangles in UV box %s, %d of %d at target" % (stem, in_tris, box, at_target, want))
 
 
 def check_clips(stem, path, js, durations):
@@ -544,7 +643,7 @@ def write_scene_import(glb_path, animated=False):
 # ---------------------------------------------------------------- main
 
 
-def convert(stem, spec):
+def convert(stem, spec, out_root=None):  # out_root None: write into game/assets/
     pack, category, fbx, idle_fbx, prefab = spec
     root = TP if pack == "TP" else TCP
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -563,6 +662,7 @@ def convert(stem, spec):
     if idle_fbx is not None:
         objs, durations = build_character(stem, idle_fbx, prefab)
         objs = list(bpy.context.scene.objects)
+    fixed_tris = fix_uvs(stem, objs)
     bpy.context.view_layer.update()
 
     mats = sorted({s.material.name for o in objs if o.type == "MESH" for s in o.material_slots})
@@ -570,7 +670,7 @@ def convert(stem, spec):
     verts = sum(len(o.data.vertices) for o in objs if o.type == "MESH")
     s_lo, s_hi = scene_bounds_yup(objs)
 
-    out_dir = os.path.join(ASSETS, category)
+    out_dir = out_root or os.path.join(ASSETS, category)
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, stem + ".glb")
     bpy.ops.object.select_all(action="SELECT")
@@ -641,6 +741,7 @@ def convert(stem, spec):
         die("%s: file materials %s differ from scene %s" % (stem, f_mats, mats))
     if f_imgs < 1 or f_imgs != len(imgs):
         die("%s: file images %d, scene images %s" % (stem, f_imgs, imgs))
+    check_uv_fixes(stem, out, js, fixed_tris)
     if animated:
         check_clips(stem, out, js, durations)
     if not animated and f_anims:
@@ -649,18 +750,58 @@ def convert(stem, spec):
         for k in range(3):
             if abs(f_lo[k] - s_lo[k]) > BOUNDS_TOLERANCE or abs(f_hi[k] - s_hi[k]) > BOUNDS_TOLERANCE:
                 die("%s: file bounds %s..%s differ from scene %s..%s" % (stem, f_lo, f_hi, s_lo, s_hi))
-    write_scene_import(out, animated)
+    if out_root is None:
+        write_scene_import(out, animated)
+
+
+def out_dir_arg(raw):
+    """The --out directory as a resolved Windows path, refused when it is empty, a WSL
+    path (this runs under Windows Blender) or inside game/ in any spelling: a \\\\?\\
+    prefix, .. segments, other case or a junction all resolve before the comparison."""
+    if not raw.strip():
+        die("--out needs a directory, got an empty one")
+    if re.match(r"^/mnt/[A-Za-z](/|$)", raw):
+        die("--out got a WSL path %r; pass the Windows form (C:\\...)" % raw)
+    path = raw
+    for prefix in ("\\\\?\\", "//?/"):
+        if path.startswith(prefix):
+            path = path[len(prefix) :]
+    path = os.path.realpath(path)
+    norm = os.path.normcase(path)
+    game = os.path.normcase(os.path.realpath(GAME))
+    try:
+        inside = os.path.commonpath([norm, game]) == game
+    except ValueError:  # different drives
+        inside = False
+    if inside:
+        die("--out must name a directory outside game/, got %r (resolves to %s)" % (raw, path))
+    return path
 
 
 def main():
+    """Arguments after `--`: asset stems, and optionally `--out <dir>`. With --out the
+    .glb files go to that directory and game/ is left as it is: the atlas PNGs already
+    there are read, not rewritten, and no .import file is written."""
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
+    out_root = None
+    if "--out" in argv:
+        i = argv.index("--out")
+        if i + 1 >= len(argv):
+            die("--out needs a directory")
+        out_root = out_dir_arg(argv[i + 1])
+        del argv[i : i + 2]
+        if os.path.basename(out_root) in BATCH:
+            die("--out was given a stem, not a directory: %r" % out_root)
     stems = argv or list(BATCH)
     unknown = [s for s in stems if s not in BATCH]
     if unknown:
         die("unknown stems %s" % unknown)
-    convert_textures()
+    if out_root is None:
+        convert_textures()
+    else:
+        log("OUT %s (game/ is not written)" % out_root)
     for stem in stems:
-        convert(stem, BATCH[stem])
+        convert(stem, BATCH[stem], out_root)
     log("DONE %d assets" % len(stems))
 
 
