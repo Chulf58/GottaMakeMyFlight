@@ -64,7 +64,10 @@ Method:
    top cap at 5.49, end reveals at both bay ends, and ledge end caps at both bay
    ends, all inset 0.03 m from their seam so neighbours never share a plane; plus
    a top cap on every mullion stub cut at y 5.5. Source custom normals are kept;
-   closure faces are checked to carry their face normal.
+   closure faces are checked to carry their face normal. The closures seen from inside
+   (inward face, top cap, end reveals, doorway wall jambs and lintel) take the interior
+   kit's light wall swatch (WALL_SWATCH), not the dark teal backdrop's; the ledge end caps
+   and stub caps, seen from outside, keep the swatch of the surface they close.
    Crack caps (step 3): above the ground storey each storey's backdrop starts a few cm
    above the slab top it stands on, so a thin slit runs along the storey line that showed
    the slab top in the original. Of every deleted up-facing slab top that ends on a
@@ -126,6 +129,13 @@ CRACK_BAND = 0.5  # crack caps: kept width of a deleted slab top along the backd
 CANOPY_BACK_Z = -71.05  # the sloped landside canopy starts at its back fascia (z -71.00)
 CANOPY_REACH_Z = -63.0  # and reaches out past the landside facade (ledge rims stop at -64.1)
 CONTROL_TOL = 0.002  # doorway control rays: first hit within 2 mm of the inward face plane
+# Inside wall colour: the interior kit's "wall" palette entry (PALETTE["wall"] in
+# tools/blender/interior/build_interior_kit.py): TP_Atlas_1A_D column 22, row 0, from 0.12
+# below the swatch top, spanning 0.22 of it; v follows height, the top of the wall lightest.
+# The backdrop's swatch (column 0, row 4) is dark teal and read near-black from inside.
+WALL_SWATCH = (22, 0, 0.12, 0.22)  # column, row, fraction from the swatch top, span
+ATLAS_GRID = (32, 16)  # TP_Atlas_1A_D swatch columns and rows
+WALL_MIN_LUMA = 0.6  # the build fails if the inside wall swatch samples darker than this
 # Unclassified islands (non-nominee islands crossing the ground-storey volume V, or facade
 # faces with no side) fail the build unless listed here: {source island index: reason}.
 # Island indices come from islands_of() over the unmodified source .glb, so they are stable
@@ -510,6 +520,17 @@ def bay_span(side, bay):
 # ------------------------------------------------------------------ doorways
 
 
+def wall_uv(y):
+    """Atlas UV of the inside wall colour at height y (Godot): WALL_SWATCH's span, top to bottom."""
+    col, row, frac, span = WALL_SWATCH
+    t = min(1.0, max(0.0, (TOP_Y - y) / (TOP_Y - GROUND_Y)))
+    return Vector(((col + 0.5) / ATLAS_GRID[0], 1.0 - (row + frac + span * t) / ATLAS_GRID[1]))
+
+
+def wall_uvs(corners_g):
+    return [wall_uv(p[1]) for p in corners_g]
+
+
 def gnormal(f):
     return Vector((f.normal.x, f.normal.z, -f.normal.y))
 
@@ -518,13 +539,12 @@ def gbox(f):
     return bbox([g(v.co) for v in f.verts])
 
 
-def cut_doorways(bm, doors, drum, node_l, uvl, backdrop_uv_fn, add_quad):
+def cut_doorways(bm, doors, drum, node_l, uvl, add_quad):
     """Cut an opening through the facade bay at each revolving door, close its jambs and
     lintel, and prove it is open. The opening is as wide as the vestibule's back panel (its
     clear width, which must hold the drum with at most DOOR_CLEAR to spare on each side),
     from the floor (y 0.3) to OPEN_TOP, from the inward face through the wall, and the back
     panel is removed. Returns one record per door for the markers and census."""
-    uvfs = {s: backdrop_uv_fn(s) for s in ("N", "S")}
     rows = []
     for k in sorted(doors):
         c = doors[k]
@@ -595,19 +615,18 @@ def cut_doorways(bm, doors, drum, node_l, uvl, backdrop_uv_fn, add_quad):
         bmesh.ops.delete(bm, geom=cand + panel, context="FACES")
         bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
 
-        top_uv = uvfs[side](0.0, TOP_Y - 0.05)
         quads = 0
         for jx, dirx in ((x0, 1), (x1, -1)):
             # wall jamb (inward face to backdrop) in the bay; vestibule jamb (backdrop to the
             # old back panel) continues the vestibule's side wall in the porch. It covers the
             # cut ends of the ledge bands and the window plane, so they get no caps of their own.
-            add_quad(node, [(jx, GROUND_Y, inner), (jx, GROUND_Y, bd), (jx, OPEN_TOP, bd), (jx, OPEN_TOP, inner)],
-                     [top_uv] * 4, (dirx, 0, 0))
+            jamb = [(jx, GROUND_Y, inner), (jx, GROUND_Y, bd), (jx, OPEN_TOP, bd), (jx, OPEN_TOP, inner)]
+            add_quad(node, jamb, wall_uvs(jamb), (dirx, 0, 0))
             add_quad("Porch_%d" % k, [(jx, floor_y, bd), (jx, floor_y, pz), (jx, OPEN_TOP, pz), (jx, OPEN_TOP, bd)],
                      [wall_uv[jx]] * 4, (dirx, 0, 0))
             quads += 2
-        add_quad(node, [(x0, OPEN_TOP, inner), (x1, OPEN_TOP, inner), (x1, OPEN_TOP, edge), (x0, OPEN_TOP, edge)],
-                 [top_uv] * 4, (0, -1, 0))
+        lintel = [(x0, OPEN_TOP, inner), (x1, OPEN_TOP, inner), (x1, OPEN_TOP, edge), (x0, OPEN_TOP, edge)]
+        add_quad(node, lintel, wall_uvs(lintel), (0, -1, 0))
         quads += 1
 
         # proof: rays through the opening from 0.3 m inside to 0.1 m past the ledge front
@@ -1132,7 +1151,7 @@ def main():
         cen = d["c"] if small else g(f.calc_center_median())
         f[node_l] = ("Facade_%s_%02d" % (side, bay_of(side, cen, small))).encode()
 
-    # ---- 6. closures (new faces, UVs from the backdrop and the ledge swatches)
+    # ---- 6. closures (new faces: the inside wall swatch, or the ledge and stub swatches)
     backdrops = {}
     for i, d in enumerate(info):
         if d["n"] is None or d["faces"] > 2 or abs(d["lo"].y - GROUND_Y) > 0.01 or abs(d["hi"].y - TOP_Y) > 0.01:
@@ -1142,32 +1161,23 @@ def main():
             backdrops[s] = i
     if sorted(backdrops) != ["E", "N", "S", "W"]:
         die("expected one backdrop quad per side, found %s" % sorted(backdrops))
-    def backdrop_uv_fn(side):
-        faces = [ff for ff in bm.faces if ff[src_l] == backdrops[side]]
-        pts = []
-        for ff in faces:
-            for lp in ff.loops:
-                gp = g(lp.vert.co)
-                along = gp.x if side in ("N", "S") else gp.z
-                pts.append((along, gp.y, lp[uvl].uv.copy()))
-        a0 = min(p[0] for p in pts)
-        a1 = max(p[0] for p in pts)
-
-        def corner(ax, yy):
-            best = min(pts, key=lambda p: abs(p[0] - ax) + abs(p[1] - yy))
-            return best[2]
-
-        c00, c10 = corner(a0, GROUND_Y), corner(a1, GROUND_Y)
-        c01, c11 = corner(a0, TOP_Y), corner(a1, TOP_Y)
-
-        def uv(along, yy):
-            s = (along - a0) / (a1 - a0)
-            t = (yy - GROUND_Y) / (TOP_Y - GROUND_Y)
-            lo = c00.lerp(c10, s)
-            hi = c01.lerp(c11, s)
-            return lo.lerp(hi, t)
-
-        return uv
+    # The inside wall swatch must be light in the atlas the closures are drawn with
+    # (material slot 0 of the main mesh, which every node mesh gets).
+    atlas_img = [nd.image for nd in mat_main.node_tree.nodes if nd.type == "TEX_IMAGE" and nd.image]
+    if mat_main.name != "TP_Atlas_1A_D" or len(atlas_img) != 1:
+        die("main material is %s with %d images, expected TP_Atlas_1A_D with 1" % (mat_main.name, len(atlas_img)))
+    atlas_img = atlas_img[0]
+    aw, ah = atlas_img.size
+    apx = atlas_img.pixels[:]
+    wall_rgb = []
+    for yy in (TOP_Y, GROUND_Y):
+        uvw = wall_uv(yy)
+        k = (min(ah - 1, int(uvw.y * ah)) * aw + min(aw - 1, int(uvw.x * aw))) * 4
+        rgb = apx[k:k + 3]
+        luma = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+        wall_rgb.append((yy, uvw, tuple(round(c * 255) for c in rgb), luma))
+        if luma < WALL_MIN_LUMA:
+            die("inside wall swatch at y %.2f samples rgb %s (luma %.2f < %.2f)" % (yy, wall_rgb[-1][2], luma, WALL_MIN_LUMA))
 
     added = {}
     closure_l = bm.faces.layers.int.new("closure")
@@ -1193,13 +1203,11 @@ def main():
         return f
 
     for side in ("N", "S", "W", "E"):
-        uvf = backdrop_uv_fn(side)
         nbays = 22 if side in ("N", "S") else 12
         inward = {"N": (0, 0, 1), "S": (0, 0, -1), "W": (1, 0, 0), "E": (-1, 0, 0)}[side]
         outward = tuple(-c for c in inward)
         bd = {"N": BZ0, "S": BZ1, "W": BX0, "E": BX1}[side]
         inner = bd + INNER * (1 if side in ("N", "W") else -1)
-        top_uv = uvf(0.0 if side in ("N", "S") else -80.0, TOP_Y - 0.05)
         for bay in range(1, nbays + 1):
             node = "Facade_%s_%02d" % (side, bay)
             a, c = bay_span(side, bay)
@@ -1217,26 +1225,23 @@ def main():
                     return (along, yy, depth)
                 return (depth, yy, along)
 
-            def U(along, yy):
-                return uvf(along, yy)
-
             # inward face
-            add_quad(node, [P(ia, y0, inner), P(ic, y0, inner), P(ic, y1, inner), P(ia, y1, inner)],
-                     [U(ia, y0), U(ic, y0), U(ic, y1), U(ia, y1)], inward)
+            face = [P(ia, y0, inner), P(ic, y0, inner), P(ic, y1, inner), P(ia, y1, inner)]
+            add_quad(node, face, wall_uvs(face), inward)
             # top cap from the inner face to the backdrop (N/S caps also cover the corners)
             ta, tc = (a, c) if side in ("N", "S") else (ia, ic)
             if side in ("N", "S"):
                 ta = max(ta, BX0)
                 tc = min(tc, BX1)
-            add_quad(node, [P(ta, y1, inner), P(tc, y1, inner), P(tc, y1, bd), P(ta, y1, bd)],
-                     [top_uv] * 4, (0, 1, 0))
+            cap = [P(ta, y1, inner), P(tc, y1, inner), P(tc, y1, bd), P(ta, y1, bd)]
+            add_quad(node, cap, wall_uvs(cap), (0, 1, 0))
             # end reveals, inset into the bay, facing out of the bay along the wall
             lo_end, hi_end = ta + INSET, tc - INSET
             along_dir = (1, 0, 0) if side in ("N", "S") else (0, 0, 1)
             neg_dir = tuple(-k for k in along_dir)
             for e, dirv in ((lo_end, neg_dir), (hi_end, along_dir)):
-                add_quad(node, [P(e, y0, inner), P(e, y0, bd), P(e, y1, bd), P(e, y1, inner)],
-                         [top_uv] * 4, dirv)
+                reveal = [P(e, y0, inner), P(e, y0, bd), P(e, y1, bd), P(e, y1, inner)]
+                add_quad(node, reveal, wall_uvs(reveal), dirv)
                 # ledge end caps between the backdrop and the ledge's outer face
                 for ly0, ly1 in LEDGES:
                     luv = ledge_uv.get((side, ly0))
@@ -1263,7 +1268,7 @@ def main():
         add_quad(node, corners, [uvc] * 4, (0, 1, 0))
         stub_cap_count += 1
     bm.normal_update()
-    doorways = cut_doorways(bm, doors, drum, node_l, uvl, backdrop_uv_fn, add_quad)
+    doorways = cut_doorways(bm, doors, drum, node_l, uvl, add_quad)
 
     # ---- census report
     rep("SHELL CENSUS  source %s" % SRC)
@@ -1352,6 +1357,9 @@ def main():
     rep("")
     rep("closure faces added: %d total (inward faces, top caps, end reveals, ledge end caps, %d stub top caps)"
         % (sum(added.values()), stub_cap_count))
+    rep("inside wall swatch (inward faces, top caps, end reveals, doorway wall jambs and lintels): "
+        "TP_Atlas_1A_D column %d row %d; %s" % (WALL_SWATCH[0], WALL_SWATCH[1], "; ".join(
+            "y %.2f uv (%.4f, %.4f) rgb %s luma %.2f" % (yy, uvw.x, uvw.y, rgb, lu) for yy, uvw, rgb, lu in wall_rgb)))
     rep("")
     rep("CRACK CAPS: %d deleted slab tops above the ground storey end on a backdrop or setback plane; kept a "
         "%.1f m strip of each along that plane (on the setback plane only where a kept wall stands on it): "
