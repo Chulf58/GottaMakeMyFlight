@@ -12,6 +12,9 @@ extends Node3D
 ## Inside a terminal shell they snap to its Toon doors instead (ShellDefinition).
 ## The Cafe tool drags a rectangle that marks floor as a cafe room (RoomTool);
 ## the counter and table tools furnish it, and RoomView shows what it needs.
+## The Bag room tool does the same for a baggage room; the belt tools lay the
+## line to it (BuildCatalog.belt_ports() says where pieces join) and the end
+## piece goes inside the room.
 ## Every edit is paid from `finances` through BuildTransaction.
 
 signal grid_changed
@@ -38,6 +41,12 @@ enum Tool {
 	CAFE_ROOM,
 	COUNTER,
 	TABLE,
+	BAG_ROOM,
+	BELT,
+	BELT_CORNER,
+	BELT_FEED,
+	BELT_END,
+	CART,
 }
 
 const TOOL_ACTIONS := {
@@ -61,11 +70,24 @@ const TOOL_OBJECTS := {
 	Tool.EXIT: &"exit_door",
 	Tool.COUNTER: &"cafe_counter",
 	Tool.TABLE: &"cafe_table",
+	Tool.BELT: &"baggage_belt",
+	Tool.BELT_CORNER: &"baggage_belt_corner",
+	Tool.BELT_FEED: &"baggage_belt_feed",
+	Tool.BELT_END: &"baggage_belt_end",
+	Tool.CART: &"baggage_cart",
 }
 ## Tools that mark a dragged rectangle as a room of a RoomTypes id.
-const TOOL_ROOMS := {Tool.CAFE_ROOM: &"cafe"}
+const TOOL_ROOMS := {Tool.CAFE_ROOM: &"cafe", Tool.BAG_ROOM: &"bag_room"}
 ## Tools under which the room under the pointer is followed for its panel.
-const ROOM_FOCUS_TOOLS := [Tool.NONE, Tool.CAFE_ROOM, Tool.COUNTER, Tool.TABLE]
+const ROOM_FOCUS_TOOLS := [
+	Tool.NONE,
+	Tool.CAFE_ROOM,
+	Tool.COUNTER,
+	Tool.TABLE,
+	Tool.BAG_ROOM,
+	Tool.BELT_END,
+	Tool.CART,
+]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
 	Tool.GLASS: BuildGrid.WallKind.GLASS,
@@ -89,7 +111,7 @@ const SHELL_DOOR_HINTS := {
 ## Tools whose drag repeats along an edge line.
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag marks a rectangle that is applied on release.
-const AREA_TOOLS := [Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM]
+const AREA_TOOLS := [Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM, Tool.BAG_ROOM]
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1
 ## How close to an edge (in metres) the remove tool targets the wall there

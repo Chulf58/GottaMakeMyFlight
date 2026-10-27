@@ -1,23 +1,27 @@
 class_name HandBuiltTerminal
 extends RefCounted
 ## A terminal built only through BuildMode's tools, the way a player paints
-## one, for the spike probes. Cells x 10-21, y 2-17 on the default grid, laid
-## out like ReferenceTerminal (desks, a security divider with two scanners,
-## seats, the entrance on the south edge and the exit on the north edge) plus
-## a landside wall across row LOBBY_Y with a door, and three glass walls in
-## the west side.
+## one, for the spike probes. Cells x 10-21, y 0-29 inside the Toon terminal
+## shell, laid out like ReferenceTerminal (desks, a security divider with two
+## scanners, seats, the entrance on landside door B at the south edge and the
+## exit on gate door C at the north edge, the shell's own door cells) plus a
+## landside wall across row LOBBY_Y with a door, and three glass walls in the
+## west side.
 
-const FLOOR_MIN := Vector2i(10, 2)
-const FLOOR_MAX := Vector2i(21, 17)
+const FLOOR_MIN := Vector2i(10, 0)
+const FLOOR_MAX := Vector2i(21, 29)
 const DIVIDER_Y := 9
 ## The landside wall runs along the north edge of this row, with a door at
 ## DOOR_X.
-const LOBBY_Y := 15
-const DOOR_X := 18
+const LOBBY_Y := 25
+const DOOR_X := 16
 const GLASS_YS: Array[int] = [11, 12, 13]
 const SCANNER_XS: Array[int] = [17, 19]
-const ENTRANCE_CELL := Vector2i(18, 17)
-const EXIT_CELL := Vector2i(20, 2)
+## The shell's landside door B and gate door C (toon_terminal_shell.tres).
+## BuildMode snaps an entrance or exit tool to the nearest door of its kind,
+## so the tool only has to be used on these cells.
+const ENTRANCE_CELL := Vector2i(16, 29)
+const EXIT_CELL := Vector2i(16, 0)
 
 var mode: BuildMode
 var applied := 0
