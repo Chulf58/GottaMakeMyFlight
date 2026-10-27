@@ -159,3 +159,112 @@ func test_a_plan_whose_final_balance_would_pass_the_limit_is_still_refused() -> 
 	assert_int(result.reason).is_equal(BuildResult.Reason.WALLET_FULL)
 	assert_int(grid.wall_kind(Vector2i(3, 6), SOUTH)).is_not_equal(0)
 	assert_int(tight.balance).is_equal(Wallet.MAX_BALANCE - 10)
+
+
+## Finding 2: a listener of edit_applied gets that edit's own result, not the
+## plan's aggregate.
+func test_edit_applied_payloads_keep_each_edits_own_dirty_cells() -> void:
+	var grid := _grid_with_paid_wall()
+	var reference := _grid_with_paid_wall()
+	var plan := _entrance_plan(grid)
+	var expected: Array = []
+	for edit in _entrance_plan(reference):
+		expected.append(reference.apply(edit).dirty_cells.duplicate())
+	var payloads: Array[BuildResult] = []
+	grid.edit_applied.connect(
+		func(_edit: BuildEdit, result: BuildResult) -> void: payloads.append(result)
+	)
+	var returned := BuildTransaction.commit_plan(grid, plan, Wallet.new(1000))
+	print("payload cells %s, expected %s" % [payloads.map(_cells_of), expected])
+	assert_int(payloads.size()).is_equal(2)
+	assert_array(payloads[0].dirty_cells).is_equal(expected[0])
+	assert_array(payloads[1].dirty_cells).is_equal(expected[1])
+	# The caller still gets every applied edit's cells on the last result.
+	assert_int(returned.dirty_cells.size()).is_equal(expected[0].size() + expected[1].size())
+
+
+func _cells_of(result: BuildResult) -> Array[Vector2i]:
+	return result.dirty_cells
+
+
+## A mixed plan whose first edit refunds 20 and whose second the grid refuses
+## (no floor at (7, 7)): all-applied it fits a wallet 10 below the limit, but
+## the applied part alone does not.
+func _mixed_edits() -> Array[BuildEdit]:
+	var edits: Array[BuildEdit] = [
+		BuildEdit.remove_wall(Vector2i(3, 6), SOUTH),
+		BuildEdit.place_object(&"seat_row", Vector2i(7, 7), 0),
+	]
+	return edits
+
+
+## Finding 1: when the exact settlement fails after a partial refusal, the
+## grid goes back, the wallet stays, listeners see only the refusal.
+func test_a_plan_whose_settlement_fails_changes_nothing_and_is_refused() -> void:
+	var grid := _grid_with_paid_wall()
+	var before := grid.to_snapshot()
+	var wallet := Wallet.new(Wallet.MAX_BALANCE - 10)
+	_record_events(grid)
+	var result := BuildTransaction.commit_plan(grid, _mixed_edits(), wallet)
+	print("result '%s', events %s" % [result.reason_text(), _events])
+	assert_bool(result.ok).is_false()
+	assert_int(result.reason).is_equal(BuildResult.Reason.WALLET_FULL)
+	assert_dict(grid.to_snapshot()).is_equal(before)
+	assert_int(wallet.balance).is_equal(Wallet.MAX_BALANCE - 10)
+	assert_array(_events).is_equal(["refused"])
+
+
+func test_a_batch_whose_settlement_fails_changes_nothing_and_refuses_every_edit() -> void:
+	var grid := _grid_with_paid_wall()
+	var before := grid.to_snapshot()
+	var wallet := Wallet.new(Wallet.MAX_BALANCE - 10)
+	_record_events(grid)
+	var results := BuildTransaction.commit_batch(grid, _mixed_edits(), wallet)
+	print(
+		(
+			"reasons %s, events %s"
+			% [results.map(func(r: BuildResult) -> int: return r.reason), _events]
+		)
+	)
+	assert_int(results.size()).is_equal(2)
+	for result in results:
+		assert_bool(result.ok).is_false()
+		assert_int(result.reason).is_equal(BuildResult.Reason.WALLET_FULL)
+	assert_dict(grid.to_snapshot()).is_equal(before)
+	assert_int(wallet.balance).is_equal(Wallet.MAX_BALANCE - 10)
+	assert_array(_events).is_equal(["refused", "refused"])
+
+
+## Finding 3: holds nest; signals go out at the outermost release only.
+func test_nested_holds_publish_only_at_the_outermost_release() -> void:
+	var grid := _floored_grid()
+	_record_events(grid)
+	grid.hold_signals()
+	grid.hold_signals()
+	grid.apply(BuildEdit.paint_floor(Vector2i(0, 0), BuildGrid.FLOOR_TILE, 1))
+	grid.release_signals()
+	assert_array(_events).is_empty()
+	grid.release_signals()
+	assert_array(_events).is_equal(["applied", "graph"])
+
+
+## A listener that opens its own hold while the queue is flushing neither
+## loses nor reorders the rest of the flush.
+func test_a_hold_opened_by_a_listener_during_the_flush_keeps_the_queue() -> void:
+	var grid := _floored_grid()
+	_record_events(grid)
+	var nested: Array[bool] = [false]
+	grid.edit_applied.connect(
+		func(_edit: BuildEdit, _result: BuildResult) -> void:
+			if nested[0]:
+				return
+			nested[0] = true
+			grid.hold_signals()
+			grid.apply(BuildEdit.paint_floor(Vector2i(0, 1), BuildGrid.FLOOR_TILE, 1))
+			grid.release_signals()
+	)
+	grid.hold_signals()
+	grid.apply(BuildEdit.paint_floor(Vector2i(0, 0), BuildGrid.FLOOR_TILE, 1))
+	grid.release_signals()
+	print("events %s" % [_events])
+	assert_array(_events).contains_exactly_in_any_order(["applied", "applied", "graph", "graph"])
