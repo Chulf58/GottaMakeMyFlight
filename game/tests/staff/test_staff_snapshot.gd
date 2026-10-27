@@ -27,34 +27,6 @@ func after_test() -> void:
 	_b = null
 
 
-func _save(world: PassengerTestWorld) -> String:
-	return (
-		JSON
-		. stringify(
-			{
-				"clock": world.clock.to_snapshot(),
-				"flights": world.flights.to_snapshot(),
-				"grid": world.grid.to_snapshot(),
-				"passengers": world.sim.to_snapshot(),
-				"staff": world.staff.to_snapshot(),
-			}
-		)
-	)
-
-
-func _load(text: String) -> PassengerTestWorld:
-	var data: Dictionary = JSON.parse_string(text)
-	var grid := BuildGrid.new()
-	assert_bool(grid.from_snapshot(data["grid"])).is_true()
-	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 99)
-	world.auto_staff = false
-	assert_bool(world.clock.from_snapshot(data["clock"])).is_true()
-	assert_bool(world.flights.from_snapshot(data["flights"])).is_true()
-	assert_bool(world.sim.from_snapshot(data["passengers"])).is_true()
-	assert_bool(world.staff.from_snapshot(data["staff"])).is_true()
-	return world
-
-
 func _walker(world: PassengerTestWorld) -> StaffMember:
 	for id in world.staff.member_ids():
 		var m := world.staff.get_member(id)
@@ -82,7 +54,7 @@ func test_a_save_mid_walk_plays_out_identically() -> void:
 			% [_a.clock.tick, walker.id, walker.at, walker.seg_mm]
 		)
 	)
-	_b = _load(_save(_a))
+	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
 	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))
 	assert_str(_b.signature()).is_equal(_a.signature())
 	var differing := 0
@@ -123,7 +95,7 @@ func test_a_save_right_after_a_station_is_removed_loads() -> void:
 	# PassengerSim.to_snapshot() refuses until the cafe is settled after an
 	# edit; this world has no cafe, so settling it changes nothing else.
 	_a.sim.cafes.reconcile()
-	_b = _load(_save(_a))
+	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
 	assert_int(_b.staff.get_member(id).station).is_equal(0)
 	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))
 
@@ -172,7 +144,7 @@ func test_a_save_right_after_a_walking_member_is_built_over_loads() -> void:
 	assert_int(_a.staff.staff_at(desk)).is_equal(0)
 	# See test_a_save_right_after_a_station_is_removed_loads.
 	_a.sim.cafes.reconcile()
-	_b = _load(_save(_a))
+	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
 	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))
 
 
@@ -202,4 +174,75 @@ func test_an_on_duty_member_off_its_post_or_at_an_unusable_station_is_refused() 
 	assert_bool(_a.sim.layout.is_usable(scanner)).is_false()
 	before_load = StaffTestKit.signature(_a.staff)
 	assert_bool(_a.staff.from_snapshot(good)).is_false()
+	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)
+
+
+func _backing_out_member(world: PassengerTestWorld) -> StaffMember:
+	var m := world.staff.get_member(world.staff.hire(SECURITY))
+	while world.clock.tick < 600:
+		world.step()
+		if m.state != StaffMember.State.TO_STATION or m.seg_mm < 300 or m.path_index < 2:
+			continue
+		var next := m.path[m.path_index + 1]
+		var step := next - m.at
+		if m.path.size() - 1 - m.path_index >= 3 and (step.x == 0 or step.y == 0):
+			assert_bool(world.grid.apply(BuildEdit.remove_floor(next)).ok).is_true()
+			world.step()
+			return m
+	return null
+
+
+func test_a_save_while_a_member_backs_out_of_a_removed_cell_plays_out_identically() -> void:
+	_a = PassengerTestWorld.reference_world()
+	_a.auto_staff = false
+	var m := _backing_out_member(_a)
+	assert_object(m).is_not_null()
+	assert_bool(m.backing_out).is_true()
+	assert_bool(_a.grid.is_walkable(m.at)).is_false()
+	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
+	assert_bool(_b.staff.get_member(m.id).backing_out).is_true()
+	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))
+	var differing := 0
+	for i in 300:
+		_a.step()
+		_b.step()
+		differing += int(StaffTestKit.signature(_a.staff) != StaffTestKit.signature(_b.staff))
+	assert_int(differing).is_equal(0)
+	assert_int(_b.staff.on_duty_count(SECURITY)).is_equal(1)
+	assert_bool(_b.staff.get_member(m.id).backing_out).is_false()
+
+
+func test_a_save_from_before_backing_out_existed_loads_as_not_backing_out() -> void:
+	_a = PassengerTestWorld.reference_world()
+	_a.auto_staff = false
+	_a.staff.hire(CHECKIN)
+	while _a.staff.on_duty_count(CHECKIN) == 0 and _a.clock.tick < 600:
+		_a.step()
+	var old: Dictionary = JSON.parse_string(JSON.stringify(_a.staff.to_snapshot()))
+	old["members"][0].erase("backing_out")
+	assert_bool(_a.staff.from_snapshot(old)).is_true()
+	assert_bool(_a.staff.get_member(1).backing_out).is_false()
+	var stray: Dictionary = JSON.parse_string(JSON.stringify(_a.staff.to_snapshot()))
+	stray["members"][0]["backing_out"] = true
+	var before_load := StaffTestKit.signature(_a.staff)
+	assert_bool(_a.staff.from_snapshot(stray)).is_false()
+	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)
+
+
+func test_a_first_step_with_no_progress_cannot_pose_as_a_reversal() -> void:
+	_a = PassengerTestWorld.reference_world()
+	_a.auto_staff = false
+	var m := _a.staff.get_member(_a.staff.hire(SECURITY))
+	while not (m.state == StaffMember.State.TO_STATION and m.path_index == 0 and m.seg_mm > 0):
+		_a.step()
+		assert_int(_a.clock.tick).is_less(600)
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.staff.to_snapshot()))
+	var no_progress := good.duplicate(true)
+	no_progress["members"][0]["seg_mm"] = 0
+	var before_load := StaffTestKit.signature(_a.staff)
+	# Control: the same record is a valid first step while it claims no reversal.
+	assert_bool(_a.staff.from_snapshot(no_progress)).is_true()
+	no_progress["members"][0]["backing_out"] = true
+	before_load = StaffTestKit.signature(_a.staff)
+	assert_bool(_a.staff.from_snapshot(no_progress)).is_false()
 	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)
