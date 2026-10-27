@@ -27,34 +27,6 @@ func after_test() -> void:
 	_b = null
 
 
-func _save(world: PassengerTestWorld) -> String:
-	return (
-		JSON
-		. stringify(
-			{
-				"clock": world.clock.to_snapshot(),
-				"flights": world.flights.to_snapshot(),
-				"grid": world.grid.to_snapshot(),
-				"passengers": world.sim.to_snapshot(),
-				"staff": world.staff.to_snapshot(),
-			}
-		)
-	)
-
-
-func _load(text: String) -> PassengerTestWorld:
-	var data: Dictionary = JSON.parse_string(text)
-	var grid := BuildGrid.new()
-	assert_bool(grid.from_snapshot(data["grid"])).is_true()
-	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 99)
-	world.auto_staff = false
-	assert_bool(world.clock.from_snapshot(data["clock"])).is_true()
-	assert_bool(world.flights.from_snapshot(data["flights"])).is_true()
-	assert_bool(world.sim.from_snapshot(data["passengers"])).is_true()
-	assert_bool(world.staff.from_snapshot(data["staff"])).is_true()
-	return world
-
-
 func _in_service(world: PassengerTestWorld, station: int) -> bool:
 	for id in world.sim.passenger_ids():
 		var p := world.passenger(id)
@@ -87,7 +59,7 @@ func test_a_leaving_member_leaves_on_the_same_tick_after_a_save_and_load() -> vo
 	var desk := m.station
 	assert_bool(m.leaving).is_true()
 	assert_bool(_a.staff.is_open(desk)).is_false()
-	_b = _load(_save(_a))
+	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
 	var loaded := _b.staff.get_member(id)
 	assert_object(loaded).is_not_null()
 	assert_bool(loaded.leaving).is_true()
@@ -129,6 +101,6 @@ func test_a_station_removed_while_its_member_is_leaving_lets_it_go_at_once() -> 
 	assert_int(changes[0]).is_greater(0)
 	_a.run_to(_a.clock.tick + 60)
 	assert_int(_a.staff.count(CHECKIN)).is_equal(0)
-	_b = _load(_save(_a))
+	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
 	assert_int(_b.staff.count(CHECKIN)).is_equal(0)
 	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))

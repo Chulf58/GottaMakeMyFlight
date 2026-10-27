@@ -211,13 +211,37 @@ func test_a_floor_removed_under_the_next_cell_turns_the_member_back_without_a_ju
 	assert_bool(m.in_pool()).is_false()
 	assert_int(m.state).is_equal(StaffMember.State.TO_STATION)
 	assert_float(moved).is_less_equal(0.1)
-	# It reaches the cell it left, then plans on from there or gives up.
-	var ticks := 0
-	while m.state == StaffMember.State.TO_STATION and ticks < LIMIT_TICKS:
-		_w.step()
-		ticks += 1
-	print("settled after %d more ticks: state %d at %s" % [ticks, m.state, m.at])
-	assert_int(ticks).is_less(LIMIT_TICKS)
-	assert_bool(m.in_pool()).is_false()
-	if m.state == StaffMember.State.ON_DUTY:
-		assert_that(m.at).is_equal(_w.sim.layout.lanes[m.station][0])
+	assert_bool(m.backing_out).is_true()
+	# It reaches the cell it left, clears the mark and walks on to its post
+	# (the terminal has another way round).
+	var ticks := _until_on_duty(m.id)
+	print("on duty after %d more ticks at %s" % [ticks, m.at])
+	assert_int(ticks).is_greater(0)
+	assert_bool(m.backing_out).is_false()
+	assert_int(m.state).is_equal(StaffMember.State.ON_DUTY)
+	assert_that(m.at).is_equal(_w.sim.layout.lanes[m.station][0])
+
+
+func test_a_cell_built_over_in_the_first_step_of_a_path_still_sends_the_member_to_the_pool(
+) -> void:
+	# After a replan ahead the path starts afresh at the member's cell, so it is
+	# on the first step of a path with a cell behind it that is not backing out.
+	var m := _mid_step(4, false)
+	assert_object(m).is_not_null()
+	var ahead := m.path[m.path_index + 3]
+	var placed := false
+	for side in 4:
+		placed = placed or _w.grid.apply(BuildEdit.place_wall(ahead, side)).ok
+	assert_bool(placed).is_true()
+	_w.step()
+	assert_int(m.state).is_equal(StaffMember.State.TO_STATION)
+	assert_int(m.path_index).is_equal(0)
+	assert_int(m.seg_mm).is_greater(0)
+	assert_bool(m.backing_out).is_false()
+	var cell := m.at
+	assert_bool(_w.grid.is_walkable(m.path[1])).is_true()
+	assert_bool(_w.grid.apply(BuildEdit.remove_floor(cell)).ok).is_true()
+	print("first step from %s, floor removed: member in pool %s" % [cell, m.in_pool()])
+	assert_bool(m.in_pool()).is_true()
+	assert_int(m.state).is_equal(StaffMember.State.IDLE)
+	assert_int(m.station).is_equal(0)

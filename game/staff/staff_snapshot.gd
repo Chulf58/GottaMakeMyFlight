@@ -44,6 +44,7 @@ static func save(members: Array[StaffMember], next_id: int) -> Dictionary:
 					"needs_replan": m.needs_replan,
 					"search_failed": m.search_failed,
 					"leaving": m.leaving,
+					"backing_out": m.backing_out,
 				}
 			)
 		)
@@ -115,6 +116,11 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	m.needs_replan = record["needs_replan"]
 	m.search_failed = record["search_failed"]
 	m.leaving = record["leaving"]
+	# Saves from before the flag existed have none: not backing out.
+	if record.has("backing_out"):
+		if typeof(record["backing_out"]) != TYPE_BOOL:
+			return "member field 'backing_out' is not true or false"
+		m.backing_out = record["backing_out"]
 	var at: Variant = _cell(record["at"])
 	if at == null:
 		return "member %d stands on no cell" % m.id
@@ -138,6 +144,16 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 
 ## Whether the member's cell, path and progress agree.
 static func _place_problem(m: StaffMember) -> String:
+	if (
+		m.backing_out
+		and (
+			m.state != StaffMember.State.TO_STATION
+			or m.in_pool()
+			or m.path_index != 0
+			or m.path.size() < 2
+		)
+	):
+		return "is backing out but not on the first step of a walk"
 	if m.in_pool():
 		if not m.path.is_empty() or m.path_index != 0 or m.seg_mm != 0 or m.needs_replan:
 			return "is in the pool but has a walk"

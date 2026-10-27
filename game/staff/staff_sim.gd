@@ -206,16 +206,10 @@ func _reconcile() -> void:
 			staff_changed.emit()
 
 
-## Whether the member turned back from a cell that went (_replan()): `at` is
-## that cell until the member reaches the one it left, which still stands.
+## Whether the member is backing out of a cell that went (_replan() marked it):
+## `at` is that cell until the member reaches the one it left, if that stands.
 func _backing_out(m: StaffMember) -> bool:
-	return (
-		m.state == StaffMember.State.TO_STATION
-		and m.is_moving()
-		and m.path_index == 0
-		and m.seg_mm > 0
-		and sim.grid.is_walkable(m.path[1])
-	)
+	return m.backing_out and m.is_moving() and sim.grid.is_walkable(m.path[1])
 
 
 func _remove(m: StaffMember) -> void:
@@ -314,10 +308,19 @@ func _plan(m: StaffMember) -> bool:
 ## and plans again there.
 func _replan(m: StaffMember) -> void:
 	m.needs_replan = false
+	var target: Vector2i = sim.layout.lanes[m.station][0]
+	if m.backing_out:
+		# Already turned back: only what comes after the cell it left changes.
+		var back := m.path[1]
+		var onward: Array[Vector2i] = [m.at, back]
+		onward.append_array(_path(back, target).slice(1))
+		var offset := m.seg_mm
+		m.set_path(onward)
+		m.seg_mm = offset
+		return
 	if not m.is_moving() or m.seg_mm == 0:
 		_plan(m)
 		return
-	var target: Vector2i = sim.layout.lanes[m.station][0]
 	var here := m.at
 	var next := m.path[m.path_index + 1]
 	var keep := m.seg_mm
@@ -337,6 +340,7 @@ func _replan(m: StaffMember) -> void:
 		path.push_front(next)
 	m.set_path(path)
 	m.seg_mm = keep
+	m.backing_out = not sim.grid.is_walkable(m.path[0])
 
 
 func _path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:

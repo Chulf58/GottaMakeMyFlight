@@ -29,6 +29,9 @@ var search_failed := false
 ## Fired while a passenger was in service at its station: it stays on duty
 ## until that service ends, then leaves (StaffSim.fire()).
 var leaving := false
+## StaffSim._replan() turned it back from a cell that went: `at` is that cell
+## until it reaches the one it left (path[1]). Cleared on arriving there.
+var backing_out := false
 
 
 func in_pool() -> bool:
@@ -49,6 +52,7 @@ func set_path(cells: Array[Vector2i]) -> void:
 ## Stops where it stands; in the pool there is no path at all.
 func clear_path() -> void:
 	path.clear()
+	backing_out = false
 	if not in_pool():
 		path.append(at)
 	path_index = 0
@@ -71,6 +75,7 @@ func walk(mm: int) -> void:
 		seg_mm -= length
 		path_index += 1
 		at = path[path_index]
+		backing_out = false
 	seg_mm = 0
 
 
