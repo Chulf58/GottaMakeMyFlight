@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## Arrival types (decision passengers-get-an-arrival-type-rushed-typical-or-relaxed):
 ## each scheduled passenger draws rushed, typical or relaxed from the sim RNG.
 ## Typical ones arrive in the flight's usual window, rushed ones late in it,
-## and relaxed ones before the flight's first state, up to two game hours
+## and relaxed ones before the flight's first state, up to three game hours
 ## before departure. The flight timeline and contracts do not change.
 
 ## The flight's first state, late enough that every window is still ahead.
@@ -97,12 +97,12 @@ func test_shares_follow_the_split_constant() -> void:
 		assert_int(percent).is_between(share - 2, share + 2)
 
 
-func test_relaxed_passengers_arrive_before_the_first_state_up_to_2_h_before_departure() -> void:
+func test_relaxed_passengers_arrive_before_the_first_state_up_to_3_h_before_departure() -> void:
 	var world := _flight(7)
 	var departure := world.flights.state_start(PassengerTestWorld.FLIGHT, FlightSim.State.PUSHBACK)
 	var relaxed: Array = _ticks_by_type(world)[ArrivalTypes.Type.RELAXED]
 	print("first state %d, departure %d, relaxed %s" % [FIRST, departure, relaxed])
-	assert_int(ArrivalTypes.RELAXED_LEAD_TICKS).is_equal(2 * 60 * GameCalendar.TICKS_PER_MINUTE)
+	assert_int(ArrivalTypes.RELAXED_LEAD_TICKS).is_equal(3 * 60 * GameCalendar.TICKS_PER_MINUTE)
 	assert_int(relaxed.min()).is_greater_equal(departure - ArrivalTypes.RELAXED_LEAD_TICKS)
 	assert_int(relaxed.max()).is_less_equal(FIRST)
 	# They come ahead of the window today's passengers arrive in.

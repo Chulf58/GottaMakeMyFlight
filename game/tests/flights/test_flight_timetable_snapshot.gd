@@ -68,7 +68,10 @@ func test_save_and_load_just_before_midnight_gives_the_same_future() -> void:
 	_log.clear()
 	_run(source[0], end)
 	assert_array(after_load).is_equal(_log)
-	assert_bool(_log.has("%d add AM-d1" % (28800 + 440 - 1200))).is_true()
+	(
+		assert_bool(_log.has("%d add AM-d1" % (28800 + 440 - FlightTimetable.ISSUE_LEAD_TICKS)))
+		. is_true()
+	)
 	assert_bool(_log.has("22200 NIGHT-d1 %d" % FlightSim.State.PUSHBACK)).is_true()
 	assert_int(_log.size()).is_greater(20)
 	assert_str(JSON.stringify(loaded[1].to_snapshot())).is_equal(

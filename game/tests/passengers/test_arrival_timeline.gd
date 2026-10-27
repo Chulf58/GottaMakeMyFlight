@@ -7,12 +7,12 @@ extends GdUnitTestSuite
 ## fields stay as they were.
 
 ## 10:00: the occurrence departs at tick 4800, its first state is at 2840, it
-## is issued at 1640 and its doors close at 4740.
+## is issued at 440 and its doors close at 4740.
 const CONTRACT := "ARR"
 const OCCURRENCE := "ARR-d0"
 const MINUTE := 600
 const FIRST := 2840
-const ISSUED := 1640
+const ISSUED := 440
 const DEPARTURE := 4800
 const BOOKED := 40
 ## The one-off flight's first state in the save tests.

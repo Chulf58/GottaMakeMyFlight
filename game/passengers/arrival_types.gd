@@ -17,8 +17,9 @@ const NAMES: Array[String] = ["rushed", "typical", "relaxed"]
 ## placeholder near the survey in the ruling (about a third of travellers
 ## arrive two hours early).
 const SHARES: Array[int] = [15, 55, 30]
-## Two game hours: the earliest relaxed arrival is this long before departure.
-const RELAXED_LEAD_TICKS := 2400
+## Three game hours (user-ruled): the earliest relaxed arrival is this long
+## before departure, 1640 ticks before the first state.
+const RELAXED_LEAD_TICKS := 3600
 ## Rushed passengers arrive in the last 15 game minutes of the usual window.
 const RUSHED_SPAN_TICKS := 300
 

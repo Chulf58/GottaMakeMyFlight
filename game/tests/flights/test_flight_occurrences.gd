@@ -1,6 +1,6 @@
 class_name TestFlightOccurrences
 extends GdUnitTestSuite
-## Daily occurrences: issued an hour ahead of their first state, named
+## Daily occurrences: issued two hours ahead of their first state, named
 ## <contract>-d<day> after their departure day, pruned an hour after they
 ## depart, and still answered for after pruning.
 
@@ -31,14 +31,14 @@ func _run_to(target: int) -> void:
 
 
 ## 00:30 on day 1 is tick 22200. Its occurrence starts at 22:52 on day 0
-## (tick 20240), is issued an hour earlier (19040) and departs at 22820.
+## (tick 20240), is issued two hours earlier (17840) and departs at 22820.
 func test_an_occurrence_crosses_midnight_under_its_departure_day() -> void:
 	assert_bool(_sim.accept_contract(TestFlightContracts.terms("NIGHT", 30))).is_true()
-	_run_to(19039)
+	_run_to(17839)
 	assert_array(_added_ids).is_empty()
-	_run_to(19040)
+	_run_to(17840)
 	assert_array(_added_ids).is_equal(["NIGHT-d1"])
-	assert_int(_added[0].x).is_equal(19040)
+	assert_int(_added[0].x).is_equal(17840)
 	assert_int(_sim.state_start("NIGHT-d1", FlightSim.State.SCHEDULED)).is_equal(20240)
 	assert_int(GameCalendar.day_of(20240)).is_equal(0)
 	var pushback := _sim.state_start("NIGHT-d1", FlightSim.State.PUSHBACK)
