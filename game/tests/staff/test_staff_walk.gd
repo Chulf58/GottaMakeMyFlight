@@ -138,3 +138,54 @@ func test_removing_the_only_station_leaves_its_member_idle_on_the_floor() -> voi
 	assert_int(m.station).is_equal(0)
 	assert_bool(m.in_pool()).is_false()
 	assert_int(_w.staff.on_duty_count(SECURITY)).is_equal(0)
+
+
+## Steps a fresh agent until it is at least 300 mm into a step (a straight one
+## when `straight`) with `cells_left` path cells still ahead; returns it.
+func _mid_step(cells_left: int, straight: bool) -> StaffMember:
+	# An officer: the walk to a scanner is the longest from the entrance.
+	var m := _w.staff.get_member(_w.staff.hire(SECURITY))
+	while _w.clock.tick < LIMIT_TICKS:
+		_w.step()
+		# Two cells in, clear of the entrance door's own cell.
+		if m.state != StaffMember.State.TO_STATION or m.seg_mm < 300 or m.path_index < 2:
+			continue
+		if m.path.size() - 1 - m.path_index < cells_left:
+			continue
+		var step := m.path[m.path_index + 1] - m.at
+		if not straight or step.x == 0 or step.y == 0:
+			return m
+	return null
+
+
+func test_an_edit_ahead_on_the_path_keeps_the_step_in_progress() -> void:
+	var m := _mid_step(4, false)
+	assert_object(m).is_not_null()
+	var ahead := m.path[m.path_index + 3]
+	var placed := false
+	for side in 4:
+		placed = placed or _w.grid.apply(BuildEdit.place_wall(ahead, side)).ok
+	assert_bool(placed).is_true()
+	assert_bool(m.needs_replan).is_true()
+	var before := m.grid_position()
+	_w.step()
+	var moved := m.grid_position().distance_to(before)
+	print("edit ahead at %s: moved %.3f m on the next tick, seg_mm %d" % [ahead, moved, m.seg_mm])
+	assert_float(moved).is_less_equal(0.1)
+	assert_int(_until_on_duty(m.id)).is_greater(0)
+
+
+func test_a_wall_across_the_current_step_turns_the_member_back_without_a_jump() -> void:
+	var m := _mid_step(3, true)
+	assert_object(m).is_not_null()
+	var here := m.at
+	var next := m.path[m.path_index + 1]
+	var side := BuildGrid.SIDE_STEP.find(next - here)
+	assert_bool(_w.grid.apply(BuildEdit.place_wall(here, side)).ok).is_true()
+	assert_bool(_w.grid.can_route(here, next)).is_false()
+	var before := m.grid_position()
+	_w.step()
+	var moved := m.grid_position().distance_to(before)
+	print("wall across %s -> %s: moved %.3f m, now at %s" % [here, next, moved, m.at])
+	assert_float(moved).is_less_equal(0.1)
+	assert_int(_until_on_duty(m.id)).is_greater(0)

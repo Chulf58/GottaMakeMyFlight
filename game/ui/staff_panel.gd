@@ -75,15 +75,22 @@ func hint_label() -> Label:
 	return _hint
 
 
+## Hired and on duty; a member fired mid-service still works until that
+## service ends, so it is counted and named as leaving.
 func counts_text(role: StaffMember.Role) -> String:
-	return "%d hired, %d on duty" % [staff.count(role), staff.on_duty_count(role)]
+	var text := "%d hired, %d on duty" % [staff.count(role), staff.on_duty_count(role)]
+	var leaving := staff.leaving_count(role)
+	if leaving > 0:
+		text += ", %d leaving" % leaving
+	return text
 
 
-## One line per role whose stations stand but nobody of that role is hired.
+## One line per role whose stations stand but nobody of that role is hired
+## and staying (members leaving do not count).
 func hint_text() -> String:
 	var lines := PackedStringArray()
 	for role in ROLES:
-		if not staff.stations_of(role).is_empty() and staff.count(role) == 0:
+		if not staff.stations_of(role).is_empty() and _staying(role) == 0:
 			lines.append(HINTS[role])
 	return "\n".join(lines)
 
@@ -91,9 +98,13 @@ func hint_text() -> String:
 func refresh() -> void:
 	for role in ROLES:
 		(_counts[role] as Label).text = counts_text(role)
-		(_fire[role] as Button).disabled = staff.count(role) == 0
+		(_fire[role] as Button).disabled = _staying(role) == 0
 	_hint.text = hint_text()
 	_hint.visible = _hint.text != ""
+
+
+func _staying(role: StaffMember.Role) -> int:
+	return staff.count(role) - staff.leaving_count(role)
 
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:

@@ -26,6 +26,9 @@ var seg_mm := 0
 var needs_replan := false
 ## The last search found no station to go to; the next waits for its beat.
 var search_failed := false
+## Fired while a passenger was in service at its station: it stays on duty
+## until that service ends, then leaves (StaffSim.fire()).
+var leaving := false
 
 
 func in_pool() -> bool:

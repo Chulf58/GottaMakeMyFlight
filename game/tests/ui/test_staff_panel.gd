@@ -94,3 +94,24 @@ func test_the_hint_waits_for_a_desk_and_then_a_scanner() -> void:
 	assert_bool(_panel.hint_label().visible).is_true()
 	PassengerTestWorld.place(_w.grid, &"security_scanner", Vector2i(8, 2), 0)
 	assert_str(_panel.hint_text()).is_equal("Hire a check-in agent\nHire a security officer")
+
+
+func test_an_agent_fired_mid_service_shows_as_leaving_until_it_goes() -> void:
+	_make()
+	_panel.hire_button(SECURITY).pressed.emit()
+	_panel.hire_button(CHECKIN).pressed.emit()
+	while _w.staff.on_duty_count(CHECKIN) == 0 and _w.clock.tick < 600:
+		_w.step()
+	var p := _w.passenger(_w.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	while p.stage != Passenger.Stage.CHECKIN and _w.clock.tick < 1200:
+		_w.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.CHECKIN)
+	_panel.fire_button(CHECKIN).pressed.emit()
+	assert_str(_panel.counts_text(CHECKIN)).is_equal("1 hired, 1 on duty, 1 leaving")
+	assert_bool(_panel.fire_button(CHECKIN).disabled).is_true()
+	assert_str(_panel.hint_text()).is_equal("Hire a check-in agent")
+	while _w.staff.count(CHECKIN) > 0 and _w.clock.tick < 1400:
+		_w.step()
+	assert_str(_panel.counts_text(CHECKIN)).is_equal("0 hired, 0 on duty")
+	assert_bool(_panel.fire_button(CHECKIN).disabled).is_true()
+	assert_str(_panel.hint_text()).is_equal("Hire a check-in agent")

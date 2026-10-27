@@ -55,28 +55,41 @@ func hire(role: StaffMember.Role) -> int:
 
 
 ## Lets one member of `role` go: an idle one if any, else one still walking,
-## else one on duty (its station closes); the highest id within each. Returns
-## false, changing nothing, when nobody of that role is hired.
+## else one on duty; the highest id within each. A member on duty with a
+## passenger in service is not gone at once: it is marked leaving, its station
+## takes nobody new (is_open() is false) and it leaves on the first tick after
+## that service ends, so the station is never unstaffed while it serves.
+## Until then it still counts in count() and on_duty_count(), and in
+## leaving_count(). Returns false, changing nothing, when every member of
+## that role is already leaving or none is hired.
 func fire(role: StaffMember.Role) -> bool:
 	for state in [StaffMember.State.IDLE, StaffMember.State.TO_STATION, StaffMember.State.ON_DUTY]:
 		for i in range(_members.size() - 1, -1, -1):
 			var m := _members[i]
-			if m.role != role or m.state != state:
+			if m.role != role or m.state != state or m.leaving:
 				continue
-			if _claims.get(m.station, 0) == m.id:
-				_claims.erase(m.station)
-			_members.remove_at(i)
-			_by_id.erase(m.id)
+			if state == StaffMember.State.ON_DUTY and _in_service(m.station):
+				m.leaving = true
+			else:
+				_remove(m)
 			staff_changed.emit()
 			return true
 	return false
 
 
-## Members of `role`, hired and not fired.
+## Members of `role` still employed, those leaving included.
 func count(role: StaffMember.Role) -> int:
 	var n := 0
 	for m in _members:
 		n += int(m.role == role)
+	return n
+
+
+## Members of `role` fired mid-service who have not left yet.
+func leaving_count(role: StaffMember.Role) -> int:
+	var n := 0
+	for m in _members:
+		n += int(m.role == role and m.leaving)
 	return n
 
 
@@ -105,10 +118,12 @@ func is_staffed(station: int) -> bool:
 
 
 ## Whether passengers are served at a desk or scanner: it is usable
-## (TerminalLayout.is_usable()) and a member is on duty there. Closed
-## stations are what a closed sign marks.
+## (TerminalLayout.is_usable()) and a member is on duty there who is not
+## leaving. Closed stations are what a closed sign marks.
 func is_open(station: int) -> bool:
-	return sim.layout.is_usable(station) and is_staffed(station)
+	if not sim.layout.is_usable(station) or not is_staffed(station):
+		return false
+	return not (_by_id[_claims[station]] as StaffMember).leaving
 
 
 ## The member walking to or on duty at the station, or 0.
@@ -172,16 +187,41 @@ func _beat(m: StaffMember) -> bool:
 
 
 ## Members of a station that is gone or not usable go idle; members standing on
-## a cell that is no longer walkable go back to the pool.
+## a cell that is no longer walkable give up their station and go back to the
+## pool; leaving members whose service has ended go.
 func _reconcile() -> void:
-	for m in _members:
+	for i in range(_members.size() - 1, -1, -1):
+		var m := _members[i]
 		if m.station != 0:
 			var usable := sim.layout.is_usable(m.station)
 			if not usable or not stations_of(m.role).has(m.station):
 				_release(m)
 		if not m.in_pool() and not sim.grid.is_walkable(m.at):
+			if m.station != 0:
+				_release(m)
 			m.at = StaffMember.NO_CELL
 			m.clear_path()
+		if m.leaving and not (m.state == StaffMember.State.ON_DUTY and _in_service(m.station)):
+			_remove(m)
+			staff_changed.emit()
+
+
+func _remove(m: StaffMember) -> void:
+	if _claims.get(m.station, 0) == m.id:
+		_claims.erase(m.station)
+	_members.erase(m)
+	_by_id.erase(m.id)
+
+
+## Whether a passenger is being checked in or screened at the station now.
+func _in_service(station: int) -> bool:
+	for id in sim.passenger_ids():
+		var p := sim.get_passenger(id)
+		if p.station != station:
+			continue
+		if p.stage == Passenger.Stage.CHECKIN or p.stage == Passenger.Stage.SECURITY:
+			return true
+	return false
 
 
 func _release(m: StaffMember) -> void:
@@ -230,8 +270,8 @@ func _assign(m: StaffMember) -> void:
 
 func _walk(m: StaffMember) -> void:
 	if m.needs_replan:
-		m.needs_replan = false
-		if not _plan(m):
+		_replan(m)
+		if m.state != StaffMember.State.TO_STATION:
 			return
 	m.walk(PassengerSim.WALK_MM)
 	if m.is_moving():
@@ -252,6 +292,40 @@ func _plan(m: StaffMember) -> bool:
 		return false
 	m.set_path(path)
 	return true
+
+
+## An edit touched the rest of the path. The step in progress is kept, as
+## PassengerSim._replan() keeps a passenger's: while it can still be taken the
+## member finishes it and plans on from its end; when the edit closed it the
+## member turns back to the cell it just left, from where it is; with no way
+## on it walks to the end of what it has and plans again there.
+func _replan(m: StaffMember) -> void:
+	m.needs_replan = false
+	if not m.is_moving() or m.seg_mm == 0:
+		_plan(m)
+		return
+	var target: Vector2i = sim.layout.lanes[m.station][0]
+	var here := m.at
+	var next := m.path[m.path_index + 1]
+	var keep := m.seg_mm
+	var path: Array[Vector2i] = []
+	if sim.grid.can_route(here, next):
+		path = _path(next, target)
+		if path.is_empty():
+			path.append(next)
+		path.push_front(here)
+	elif sim.grid.is_walkable(next):
+		keep = Passenger.segment_mm(here, next) - keep
+		m.at = next
+		path = _path(here, target)
+		if path.is_empty():
+			path.append(here)
+		path.push_front(next)
+	else:
+		_plan(m)
+		return
+	m.set_path(path)
+	m.seg_mm = keep
 
 
 func _path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:

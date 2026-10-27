@@ -1,8 +1,8 @@
 class_name TestStaffGating
 extends GdUnitTestSuite
 ## A desk or scanner without staff on duty is closed: nobody queues at it and
-## nobody is served there. A station that closes finishes the passenger in
-## service and sends the rest of its queue to choose again.
+## nobody is served there. An agent fired mid-service stays on duty until that
+## service ends; the desk takes nobody new and sends its queue to choose again.
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
@@ -115,7 +115,7 @@ func test_staff_arriving_opens_the_desk_for_waiting_passengers() -> void:
 		assert_bool(_w.passenger(id).cleared).is_true()
 
 
-func test_a_desk_that_closes_finishes_its_passenger_and_sends_the_queue_away() -> void:
+func test_an_agent_fired_mid_service_stays_until_it_ends_then_the_desk_closes() -> void:
 	StaffTestKit.staff_all(_w.staff)
 	# The kit seats desks in id order; firing an agent takes the higher id, so
 	# only the first desk stays open.
@@ -132,7 +132,16 @@ func test_a_desk_that_closes_finishes_its_passenger_and_sends_the_queue_away() -
 		served = 0
 	assert_int(served).is_greater(0)
 	var behind := _w.sim.queue_of(desk).slice(1)
+	var agent := _w.staff.staff_at(desk)
+	var check_ins: int = _reached[Passenger.Stage.CHECKIN]
+	# Fired mid-service: the agent stays on duty until this service ends, and
+	# the desk takes nobody new meanwhile.
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
+	assert_int(_w.staff.leaving_count(CHECKIN)).is_equal(1)
+	assert_int(_w.staff.count(CHECKIN)).is_equal(1)
+	assert_bool(_w.staff.fire(CHECKIN)).is_false()
+	assert_bool(_w.staff.is_staffed(desk)).is_true()
+	assert_bool(_w.staff.is_open(desk)).is_false()
 	_w.step()
 	assert_array(_w.sim.queue_of(desk)).is_equal([served])
 	for id in behind:
@@ -140,9 +149,21 @@ func test_a_desk_that_closes_finishes_its_passenger_and_sends_the_queue_away() -
 		assert_int(p.station).is_equal(0)
 		assert_int(p.stage).is_equal(Passenger.Stage.TO_CHECKIN)
 		assert_int(p.stuck).is_equal(Passenger.Stuck.NO_CHECKIN)
-	_w.run_to(_w.clock.tick + PassengerSim.CHECKIN_TICKS + 1)
-	assert_int(_w.passenger(served).stage).is_not_equal(Passenger.Stage.CHECKIN)
-	assert_int(_w.passenger(served).stage).is_not_equal(Passenger.Stage.CHECKIN_QUEUE)
+	var unstaffed_in_service := 0
+	while _w.passenger(served).stage == Passenger.Stage.CHECKIN and _w.clock.tick < 1000:
+		unstaffed_in_service += int(not _w.staff.is_staffed(desk))
+		_w.step()
+	assert_int(unstaffed_in_service).is_equal(0)
+	assert_int(_w.passenger(served).stage).is_equal(Passenger.Stage.TO_SECURITY)
+	# The service ended on this tick; the agent leaves on the next one.
+	_w.step()
+	print("agent %d left at tick %d" % [agent, _w.clock.tick])
+	assert_object(_w.staff.get_member(agent)).is_null()
+	assert_int(_w.staff.count(CHECKIN)).is_equal(0)
+	assert_int(_w.staff.leaving_count(CHECKIN)).is_equal(0)
+	assert_bool(_w.staff.is_staffed(desk)).is_false()
+	_w.run_to(_w.clock.tick + 200)
 	assert_array(_w.sim.queue_of(desk)).is_empty()
+	assert_int(_reached[Passenger.Stage.CHECKIN]).is_equal(check_ins)
 	for id in behind:
 		assert_int(_w.passenger(id).stage).is_equal(Passenger.Stage.TO_CHECKIN)

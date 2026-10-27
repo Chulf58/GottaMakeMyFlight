@@ -150,3 +150,51 @@ func test_damaged_saves_are_refused_and_change_nothing() -> void:
 		assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)
 	assert_bool(_a.staff.from_snapshot(good)).is_true()
 	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)
+
+
+func test_a_save_right_after_a_walking_member_is_built_over_loads() -> void:
+	_a = PassengerTestWorld.reference_world()
+	_a.auto_staff = false
+	var id := _a.staff.hire(CHECKIN)
+	var m := _a.staff.get_member(id)
+	while (m.state != StaffMember.State.TO_STATION or m.path_index < 2) and _a.clock.tick < 300:
+		_a.step()
+	var desk := m.station
+	assert_bool(_a.grid.apply(BuildEdit.remove_floor(m.at)).ok).is_true()
+	assert_bool(m.in_pool()).is_true()
+	assert_int(m.state).is_equal(StaffMember.State.IDLE)
+	assert_int(m.station).is_equal(0)
+	assert_bool(m.needs_replan).is_false()
+	assert_array(m.path).is_empty()
+	assert_int(_a.staff.staff_at(desk)).is_equal(0)
+	_b = _load(_save(_a))
+	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))
+
+
+func test_an_on_duty_member_off_its_post_or_at_an_unusable_station_is_refused() -> void:
+	_a = PassengerTestWorld.reference_world()
+	_a.auto_staff = false
+	var id := _a.staff.hire(SECURITY)
+	while _a.staff.on_duty_count(SECURITY) == 0 and _a.clock.tick < 600:
+		_a.step()
+	var m := _a.staff.get_member(id)
+	var post := m.at
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.staff.to_snapshot()))
+	var off_post := good.duplicate(true)
+	off_post["members"][0]["at"] = [post.x, post.y + 1]
+	off_post["members"][0]["path"] = [[post.x, post.y + 1]]
+	var before_load := StaffTestKit.signature(_a.staff)
+	assert_bool(_a.staff.from_snapshot(off_post)).is_false()
+	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)
+	# A wall across the scanner's passage closes it: the scanner is no longer
+	# usable, so the saved member cannot be on duty there.
+	var passage: Array = _a.sim.layout.passages[m.station]
+	var last: Vector2i = passage[passage.size() - 1]
+	var inside: Vector2i = passage[passage.size() - 2]
+	var side := BuildGrid.SIDE_STEP.find(last - inside)
+	var scanner := m.station
+	assert_bool(_a.grid.apply(BuildEdit.place_wall(inside, side)).ok).is_true()
+	assert_bool(_a.sim.layout.is_usable(scanner)).is_false()
+	before_load = StaffTestKit.signature(_a.staff)
+	assert_bool(_a.staff.from_snapshot(good)).is_false()
+	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)

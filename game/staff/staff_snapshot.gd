@@ -17,9 +17,10 @@ const MEMBER_KEYS := [
 	"seg_mm",
 	"needs_replan",
 	"search_failed",
+	"leaving",
 ]
 const INT_FIELDS := ["id", "role", "state", "station", "path_index", "seg_mm"]
-const BOOL_FIELDS := ["needs_replan", "search_failed"]
+const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving"]
 
 
 static func save(members: Array[StaffMember], next_id: int) -> Dictionary:
@@ -42,6 +43,7 @@ static func save(members: Array[StaffMember], next_id: int) -> Dictionary:
 					"seg_mm": m.seg_mm,
 					"needs_replan": m.needs_replan,
 					"search_failed": m.search_failed,
+					"leaving": m.leaving,
 				}
 			)
 		)
@@ -112,6 +114,7 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	m.seg_mm = int(record["seg_mm"])
 	m.needs_replan = record["needs_replan"]
 	m.search_failed = record["search_failed"]
+	m.leaving = record["leaving"]
 	var at: Variant = _cell(record["at"])
 	if at == null:
 		return "member %d stands on no cell" % m.id
@@ -152,7 +155,7 @@ static func _place_problem(m: StaffMember) -> String:
 ## Whether the member's state, station and replan flag agree with the layout.
 static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 	if m.state == StaffMember.State.IDLE:
-		if m.station != 0 or m.is_moving() or m.needs_replan:
+		if m.station != 0 or m.is_moving() or m.needs_replan or m.leaving:
 			return "is idle but has a station or a walk"
 		return ""
 	var stations := sim.layout.desks
@@ -160,8 +163,16 @@ static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 		stations = sim.layout.scanners
 	if not stations.has(m.station):
 		return "works at station %d, which is not one of its role" % m.station
-	if m.state == StaffMember.State.ON_DUTY and (m.is_moving() or m.needs_replan):
+	if m.leaving and m.state != StaffMember.State.ON_DUTY:
+		return "is leaving but not on duty"
+	if m.state != StaffMember.State.ON_DUTY:
+		return ""
+	if m.is_moving() or m.needs_replan:
 		return "is on duty but walking"
+	if not sim.layout.is_usable(m.station):
+		return "is on duty at station %d, which is not usable" % m.station
+	if m.at != sim.layout.lanes[m.station][0]:
+		return "is on duty away from its station service cell"
 	return ""
 
 
