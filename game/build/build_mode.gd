@@ -142,6 +142,9 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 var grid: BuildGrid
 var tool := Tool.FLOOR
 var facing := 0
+## Probe hook: a viewport point read in place of the real mouse by the hover
+## and ghost. (-1, -1), the default, reads the mouse; nothing in the game sets it.
+var pointer_override := Vector2(-1.0, -1.0)
 
 ## False once R is pressed, until a tool is picked again. While true, the
 ## door tools ignore `facing` and use DoorPlacement.auto_facing().
@@ -614,6 +617,8 @@ func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 
 ## Whether the pointer is over a HUD control, which hides the world under it.
 func _pointer_over_ui() -> bool:
+	if pointer_override.x >= 0.0:
+		return false
 	return get_viewport().gui_get_hovered_control() != null
 
 
@@ -622,6 +627,8 @@ func _mouse_ground() -> Variant:
 	if camera == null:
 		return null
 	var mouse := get_viewport().get_mouse_position()
+	if pointer_override.x >= 0.0:
+		mouse = pointer_override
 	return grid_point(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse))
 
 

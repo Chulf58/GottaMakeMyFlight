@@ -31,6 +31,7 @@ extends SceneTree
 ## Plates go to tools/blender/out/cafe/.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/cafe"
 const MARGIN_PX := 8.0
 ## Scene nodes whose visible meshes can hide a guest.
@@ -43,6 +44,7 @@ const MIN_SUBJECT_PX := 16.0
 const POP_SEARCH_PX := Vector2(160.0, 80.0)
 const DISTANCES := [9.0, 11.0, 13.0, 16.0, 20.0]
 const TICKS_PER_FRAME := 4
+## Ticks the plates may take, counted from the tick the hungry guests spawn.
 const LAST_TICK := 1100
 const HANG_MS := 90000
 ## Head height of a standing guest, and of a seated one.
@@ -71,6 +73,8 @@ var _images: Array[Image] = []
 ## The passenger id the "pop" plate is about, set when a payment lands.
 var _fresh_pop := 0
 var _scale_tag := ""
+## The tick the plates must be taken by, set when the guests spawn.
+var _last_tick := 0
 
 
 func _initialize() -> void:
@@ -119,6 +123,20 @@ func _run() -> void:
 	_balance_seen = _wallet.balance
 	_sim.cafes.paid.connect(_on_paid)
 	_sim.stage_changed.connect(_on_stage)
+	# A new game has no staff and a closed airport: hire one member per station,
+	# step until they are on duty and the starter's first flight is issued.
+	var staff := main.get_node("Staff") as StaffSim
+	var hired := StarterFlight.hire_per_station(_sim, staff)
+	var doors := StarterFlight.advance_until_open(
+		clock, main.get_node("FlightSim") as FlightSim, staff
+	)
+	print("PROBE staff hired=%d opened tick=%d doors_close_tick=%d" % [hired, clock.tick, doors])
+	if hired == 0 or doors < 0:
+		_invalid("the staff were not hired and the airport did not open")
+		_finish()
+		quit(1)
+		return
+	_last_tick = clock.tick + LAST_TICK
 	# Six get hungry at once (landside, after check-in) and six about 15 s
 	# later (mostly airside); the flight's own 24 arrive at random.
 	for i in 12:
@@ -128,7 +146,7 @@ func _run() -> void:
 	var cam := rig.get_node("Camera3D") as Camera3D
 	cam.make_current()
 	print("PROBE viewport=%s" % root.get_visible_rect().size)
-	while clock.tick < LAST_TICK and not (_plates.size() == SHOTS.size() and _both_sides_paid()):
+	while clock.tick < _last_tick and not (_plates.size() == SHOTS.size() and _both_sides_paid()):
 		_beat("tick %d" % clock.tick)
 		for i in TICKS_PER_FRAME:
 			clock.advance(SimClock.STEP)
@@ -453,7 +471,7 @@ func _report(ids: Dictionary) -> void:
 		_invalid("expected paid visits on both sides, got %s" % [sides.keys()])
 	for shot in SHOTS:
 		if not _plates.has(shot):
-			_invalid("no '%s' moment happened by tick %d" % [shot, LAST_TICK])
+			_invalid("no '%s' moment happened by tick %d" % [shot, _last_tick])
 
 
 ## The plates in a 2 x 2 sheet at half size.

@@ -1,9 +1,12 @@
 class_name MissMarkers
 extends Node3D
 ## Shows why passengers miss: a red "!" sign, captioned "Queue full" above it,
-## over every full desk or scanner (MissSignals.full_stations). PassengerViews
-## creates it as a child and calls sync() after each tick and draw() after
-## placing its passengers. It reads the sim and never writes to it.
+## over every full desk or scanner (MissSignals.full_stations), and a grey one
+## captioned "Closed" over every desk or scanner with nobody on duty
+## (MissSignals.closed_stations; a closed station shows only that, since it
+## serves nobody). PassengerViews creates it as a child and calls sync() after
+## each tick and draw() after placing its passengers. It reads the sim and
+## never writes to it.
 ##
 ## The sign is a billboard drawn over the world (no depth test), like the
 ## thought bubbles, and keeps one screen size at every zoom and UI scale. The
@@ -17,11 +20,18 @@ const CAPTION_FONT := 22
 const CAPTION_GAP_PX := 4.0
 const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
+## The closed sign is the queue-full icon with its red fill painted grey-blue.
+const CLOSED_FILL := Color(0.47, 0.53, 0.62)
+const FILL_TOLERANCE := 0.1
+const CLOSED_CAPTION := "Closed"
+
+static var _closed_texture: ImageTexture
 
 var sim: PassengerSim
 
-## Station id -> sign.
+## Station id -> sign, for the queue-full signs and the closed signs.
 var _signs: Dictionary = {}
+var _closed_signs: Dictionary = {}
 var _free_signs: Array[Sprite3D] = []
 
 
@@ -33,6 +43,37 @@ func sign_text(station: int) -> String:
 	if not _signs.has(station):
 		return ""
 	return ((_signs[station] as Node).get_node("Caption") as Label3D).text
+
+
+## The queue-full icon with its red fill repainted CLOSED_FILL, once; the
+## outline and the white "!" stay, so the two signs read as one family.
+static func _closed_icon() -> Texture2D:
+	if _closed_texture == null:
+		var img := MarkerIcons.queue_full().get_image()
+		for y in img.get_height():
+			for x in img.get_width():
+				var c := img.get_pixel(x, y)
+				if (
+					c.a > 0.99
+					and absf(c.r - MarkerIcons.QUEUE_FILL.r) < FILL_TOLERANCE
+					and absf(c.g - MarkerIcons.QUEUE_FILL.g) < FILL_TOLERANCE
+					and absf(c.b - MarkerIcons.QUEUE_FILL.b) < FILL_TOLERANCE
+				):
+					img.set_pixel(x, y, CLOSED_FILL)
+		img.generate_mipmaps()
+		_closed_texture = ImageTexture.create_from_image(img)
+	return _closed_texture
+
+
+## The Closed sign over a desk or scanner with nobody on duty, or null.
+func closed_sign_for(station: int) -> Node3D:
+	return _closed_signs.get(station)
+
+
+func closed_text(station: int) -> String:
+	if not _closed_signs.has(station):
+		return ""
+	return ((_closed_signs[station] as Node).get_node("Caption") as Label3D).text
 
 
 func _ready() -> void:
@@ -48,20 +89,27 @@ func sync() -> void:
 		return
 	if not sim.grid.graph_changed.is_connected(_on_graph_changed):
 		sim.grid.graph_changed.connect(_on_graph_changed)
+	_watch_staff()
+	var closed := MissSignals.closed_stations(sim)
 	var full := MissSignals.full_stations(sim)
+	for station: int in closed:
+		full.erase(station)
 	for station: int in _signs.keys():
 		if not full.has(station):
-			_drop_sign(station)
+			_drop_sign(_signs, station)
 	for station: int in full:
-		if not _signs.has(station):
-			_signs[station] = _take_sign()
-		var sign: Sprite3D = _signs[station]
-		sign.position = _sign_point(station)
+		var sign := _show_sign(_signs, station, "QueueFullSign", MarkerIcons.queue_full())
 		var held: int = full[station]
 		var caption := "Queue full"
 		if held > 0:
 			caption += " · +" + str(held) + " waiting"
 		(sign.get_node("Caption") as Label3D).text = caption
+	for station: int in _closed_signs.keys():
+		if not closed.has(station):
+			_drop_sign(_closed_signs, station)
+	for station in closed:
+		var sign := _show_sign(_closed_signs, station, "ClosedSign", _closed_icon())
+		(sign.get_node("Caption") as Label3D).text = CLOSED_CAPTION
 
 
 func draw() -> void:
@@ -79,14 +127,42 @@ func draw() -> void:
 	## World units per screen pixel at one metre: a fixed-size sprite is drawn
 	## as if it stood one metre from the camera.
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
-	for station: int in _signs:
-		var sign: Sprite3D = _signs[station]
-		sign.pixel_size = SIGN_PX * unit / MarkerIcons.SIZE
-		(sign.get_node("Caption") as Label3D).pixel_size = unit
+	for signs: Dictionary in [_signs, _closed_signs]:
+		for station: int in signs:
+			var sign: Sprite3D = signs[station]
+			sign.pixel_size = SIGN_PX * unit / MarkerIcons.SIZE
+			(sign.get_node("Caption") as Label3D).pixel_size = unit
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	sync()
+
+
+## A hire, a fire or a member going on duty changes which stations are closed,
+## also while the clock is paused.
+func _watch_staff() -> void:
+	if sim.staff == null:
+		return
+	if not sim.staff.staff_changed.is_connected(sync):
+		sim.staff.staff_changed.connect(sync)
+	if not sim.staff.member_state_changed.is_connected(_on_member_state):
+		sim.staff.member_state_changed.connect(_on_member_state)
+
+
+func _on_member_state(_id: int, _state: StaffMember.State) -> void:
+	sync()
+
+
+## The sign of `station` in `signs`, taken from the pool when it has none,
+## placed over the station and given its icon.
+func _show_sign(signs: Dictionary, station: int, sign_name: String, icon: Texture2D) -> Sprite3D:
+	if not signs.has(station):
+		signs[station] = _take_sign()
+	var sign: Sprite3D = signs[station]
+	sign.name = sign_name
+	sign.texture = icon
+	sign.position = _sign_point(station)
+	return sign
 
 
 ## Above the middle of the station's footprint, clear of its top.
@@ -133,8 +209,8 @@ func _take_sign() -> Sprite3D:
 	return sign
 
 
-func _drop_sign(station: int) -> void:
-	var sign: Sprite3D = _signs[station]
+func _drop_sign(signs: Dictionary, station: int) -> void:
+	var sign: Sprite3D = signs[station]
 	sign.visible = false
 	_free_signs.append(sign)
-	_signs.erase(station)
+	signs.erase(station)
