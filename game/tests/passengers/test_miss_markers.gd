@@ -6,6 +6,8 @@ extends GdUnitTestSuite
 var _world: PassengerTestWorld
 var _views: PassengerViews
 var _markers: MissMarkers
+## The root window UI scale a test changed, restored after it; -1 when untouched.
+var _root_scale := -1.0
 
 
 func before() -> void:
@@ -17,6 +19,9 @@ func after() -> void:
 
 
 func after_test() -> void:
+	if _root_scale > 0.0:
+		get_tree().root.content_scale_factor = _root_scale
+		_root_scale = -1.0
 	if _views != null:
 		_views.free()
 		_views = null
@@ -164,3 +169,37 @@ func test_a_lane_shortened_while_paused_shows_its_sign_at_once() -> void:
 	assert_object(sign).is_not_null()
 	assert_bool(sign.visible).is_true()
 	assert_str(_markers.sign_text(desk)).is_equal("Queue full")
+
+
+## The sign is SIGN_PX on screen whatever the UI scale (content_scale_factor):
+## the UI scale shrinks the layout rect, never the rendered view.
+func test_the_sign_keeps_its_screen_size_at_every_ui_scale() -> void:
+	_attach(_short_lane_world())
+	var desk: int = _world.sim.get_meta(&"desk")
+	_spawn_spaced(3)
+	_world.run_to(_world.clock.tick + 25)
+	var sign := _markers.sign_for(desk) as Sprite3D
+	assert_object(sign).is_not_null()
+	var window := get_tree().root
+	_root_scale = window.content_scale_factor
+	window.content_scale_factor = 1.0
+	_markers.draw()
+	var layout_height := window.get_visible_rect().size.y
+	var sign_size := sign.pixel_size
+	var caption_size := (sign.get_node("Caption") as Label3D).pixel_size
+	window.content_scale_factor = 1.25
+	_markers.draw()
+	# Control: the UI scale took hold, so the layout got shorter.
+	assert_float(window.get_visible_rect().size.y).is_less(layout_height - 1.0)
+	assert_float(sign.pixel_size).is_equal_approx(sign_size, 1e-7)
+	assert_float((sign.get_node("Caption") as Label3D).pixel_size).is_equal_approx(
+		caption_size, 1e-7
+	)
+	var camera := window.get_camera_3d()
+	var fov := camera.fov if camera != null else MissMarkers.FALLBACK_FOV
+	# The window size in pixels is what the 3D view renders at.
+	var rendered := float(window.size.y)
+	var on_screen := (
+		sign.pixel_size * MarkerIcons.SIZE * rendered / (2.0 * tan(deg_to_rad(fov) / 2.0))
+	)
+	assert_float(on_screen).is_equal_approx(MissMarkers.SIGN_PX, 0.01)
