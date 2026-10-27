@@ -7,9 +7,13 @@ extends RefCounted
 ##
 ## An offer is {id, day, <FlightContract.TERM_KEYS>, status}: its terms are
 ## exactly what a contract needs, and day is the day it was drawn. Offers stay
-## on the board with their status (OPEN, ACCEPTED or DECLINED) and are saved
-## that way, so a day that has offers is never drawn again, whether the board
-## was opened twice or loaded from a save.
+## on the board with their status (OPEN, ACCEPTED, DECLINED or EXPIRED) and are
+## saved that way, so a day that has offers is never drawn again, whether the
+## board was opened twice or loaded from a save.
+##
+## Decision airline-offers-expire-at-the-end-of-their-day: an offer still OPEN
+## when a later day starts becomes EXPIRED, so the open list is always today's
+## choices. ensure_day does it, being the call made at each day boundary.
 
 ## Fires when offers arrive, one is accepted or declined, or a save is loaded.
 signal changed
@@ -17,7 +21,8 @@ signal changed
 const OPEN := "open"
 const ACCEPTED := "accepted"
 const DECLINED := "declined"
-const STATUSES := [OPEN, ACCEPTED, DECLINED]
+const EXPIRED := "expired"
+const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 
 const SAVE_VERSION := 1
 const SAVE_KEYS := ["save_version", "offers"]
@@ -62,22 +67,25 @@ static func terms_of(offer: Dictionary) -> Dictionary:
 	return terms
 
 
-## Draws the offers for `day` from `rng` and returns their ids, or returns []
-## without touching `rng` when the day already has offers. A day outside
-## 0..FlightContract.MAX_DAY pushes an error and returns [].
+## Starts `day`: every offer still open from an earlier day expires, then the
+## offers for `day` are drawn from `rng` and their ids returned, or [] without
+## touching `rng` when the day already has offers. `changed` fires once when
+## anything expired or was drawn. A day outside 0..FlightContract.MAX_DAY pushes
+## an error and changes nothing.
 func ensure_day(day: int, rng: RandomNumberGenerator) -> Array[String]:
 	var ids: Array[String] = []
 	if day < 0 or day > FlightContract.MAX_DAY:
 		push_error("OfferBoard: day %d is outside 0..%d" % [day, FlightContract.MAX_DAY])
 		return ids
-	for offer in _offers:
-		if offer["day"] == day:
-			return ids
-	for number in range(1, OFFERS_PER_DAY + 1):
-		var offer := _draw(day, number, rng)
-		_offers.append(offer)
-		ids.append(offer["id"])
-	changed.emit()
+	var expired := _expire_before(day)
+	var drawn := not _has_day(day)
+	if drawn:
+		for number in range(1, OFFERS_PER_DAY + 1):
+			var offer := _draw(day, number, rng)
+			_offers.append(offer)
+			ids.append(offer["id"])
+	if expired or drawn:
+		changed.emit()
 	return ids
 
 
@@ -169,6 +177,23 @@ func _draw(day: int, number: int, rng: RandomNumberGenerator) -> Dictionary:
 	}
 
 
+## Marks every open offer drawn before `day` expired; true if any was.
+func _expire_before(day: int) -> bool:
+	var any := false
+	for offer in _offers:
+		if offer["status"] == OPEN and offer["day"] < day:
+			offer["status"] = EXPIRED
+			any = true
+	return any
+
+
+func _has_day(day: int) -> bool:
+	for offer in _offers:
+		if offer["day"] == day:
+			return true
+	return false
+
+
 func _index_of(id: String) -> int:
 	for i in _offers.size():
 		if _offers[i]["id"] == id:
@@ -200,6 +225,21 @@ func _load_problem(data: Dictionary, into: Array[Dictionary]) -> String:
 	for day in per_day:
 		if per_day[day] != OFFERS_PER_DAY:
 			return "day %d must hold all %d of its offers" % [day, OFFERS_PER_DAY]
+	return _status_problem(into)
+
+
+## "" when the statuses are ones a run could have saved: offers expire when a
+## later day starts, so an earlier day has none open and an expired offer has a
+## later recorded day behind it.
+func _status_problem(offers: Array[Dictionary]) -> String:
+	var latest := -1
+	for offer in offers:
+		latest = maxi(latest, offer["day"])
+	for offer in offers:
+		if offer["status"] == OPEN and offer["day"] < latest:
+			return "offer %s is open but day %d has started" % [offer["id"], latest]
+		if offer["status"] == EXPIRED and offer["day"] >= latest:
+			return "offer %s is expired but no later day is recorded" % offer["id"]
 	return ""
 
 

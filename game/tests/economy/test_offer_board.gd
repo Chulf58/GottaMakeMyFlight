@@ -151,8 +151,8 @@ func test_changed_fires_when_offers_arrive_or_one_is_declined_only() -> void:
 
 func test_a_save_through_json_restores_offers_and_dispositions() -> void:
 	var ids := _board.ensure_day(0, _rng)
-	_board.ensure_day(1, _rng)
 	_board.decline(ids[0])
+	_board.ensure_day(1, _rng)
 	var parsed: Variant = JSON.parse_string(JSON.stringify(_board.to_snapshot()))
 	var loaded := OfferBoard.new()
 	assert_bool(loaded.from_snapshot(parsed)).is_true()
