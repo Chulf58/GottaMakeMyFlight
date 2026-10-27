@@ -65,7 +65,11 @@ func test_the_departures_list_today_s_flights_in_time_order() -> void:
 		. is_true()
 	)
 	assert_array(_lines()).is_equal(
-		["06:04  GMF101", "11:00  Oslo  Gotta Air", "14:00  Berlin  Nordic Wing"]
+		[
+			"06:04  GMF101  doors close in 0:01",
+			"11:00  Oslo  Gotta Air",
+			"14:00  Berlin  Nordic Wing"
+		]
 	)
 
 
@@ -83,7 +87,7 @@ func test_a_contract_flight_boards_then_departs() -> void:
 	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air")
 	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0)
 	_world.run_to(starts[FlightSim.State.BOARDING] + 1)
-	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air  Boarding")
+	assert_str(_lines()[1]).contains("11:00  Oslo  Gotta Air  doors close in")
 	_world.run_to(starts[FlightSim.State.DEPARTED] + 1)
 	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air  Departed")
 
@@ -101,7 +105,8 @@ func test_a_contract_that_starts_tomorrow_is_not_listed_today() -> void:
 func test_the_list_names_the_day_s_flights_again_after_midnight() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
 	_world.run_to(GameCalendar.day_start(1) + 1)
-	assert_array(_lines()).is_equal(["11:00  Oslo  Gotta Air"])
+	assert_int(_lines().size()).is_equal(1)
+	assert_str(_lines()[0]).starts_with("11:00  Oslo  Gotta Air  doors close in")
 
 
 func test_no_flights_says_so() -> void:
@@ -122,7 +127,7 @@ func test_a_long_day_shows_the_first_lines_and_counts_the_rest() -> void:
 		)
 	var lines := _lines()
 	assert_int(lines.size()).is_equal(DepartureList.MAX_LINES)
-	assert_str(lines[0]).is_equal("06:04  GMF101")
+	assert_str(lines[0]).is_equal("06:04  GMF101  doors close in 0:01")
 	assert_str(lines[lines.size() - 1]).is_equal("+4 more")
 
 
@@ -132,7 +137,7 @@ func test_departed_flights_make_room_for_later_ones() -> void:
 		_world.flights.accept_contract(_terms("C%d" % i, minutes[i], "Rome", "Sunhop"))
 	_world.run_to(705)
 	var lines := _lines()
-	assert_str(lines[0]).is_equal("09:00  Rome  Sunhop")
+	assert_str(lines[0]).starts_with("09:00  Rome  Sunhop  doors close in")
 	assert_str(lines[lines.size() - 1]).is_equal("+3 more")
 
 
@@ -142,3 +147,46 @@ func test_the_flight_panel_shows_the_list() -> void:
 	var label := _hud.find_child("Departures", true, false) as Label
 	assert_str(label.text).is_equal(_text())
 	assert_str(label.text).contains("11:00  Oslo  Gotta Air")
+
+
+@warning_ignore("integer_division")
+func _doors_left(contract_id: String, tick: int) -> String:
+	var starts := FlightTimetable.starts_for(_world.flights.contract_of(contract_id), 0)
+	var left: int = (starts[FlightSim.State.DOORS_CLOSED] - tick) / SimClock.TICK_RATE
+	return "doors close in %d:%02d" % [left / 60, left % 60]
+
+
+func test_only_the_next_departing_flight_counts_down_to_its_doors() -> void:
+	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
+	_world.flights.accept_contract(_terms("NW200", 14 * 60, "Berlin", "Nordic Wing"))
+	var lines := _lines()
+	assert_str(lines[0]).ends_with("doors close in 0:01")
+	assert_str(lines[1]).is_equal("11:00  Oslo  Gotta Air")
+	assert_str(lines[2]).is_equal("14:00  Berlin  Nordic Wing")
+
+
+func test_the_countdown_moves_to_the_following_flight_once_the_doors_close() -> void:
+	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
+	_world.flights.accept_contract(_terms("NW200", 14 * 60, "Berlin", "Nordic Wing"))
+	_world.run_to(21)
+	var lines := _lines()
+	assert_str(lines[0]).is_equal("06:04  GMF101  Doors closed")
+	assert_str(lines[1]).is_equal("11:00  Oslo  Gotta Air  %s" % _doors_left("GA100", 21))
+	assert_str(lines[2]).is_equal("14:00  Berlin  Nordic Wing")
+
+
+func test_the_countdown_counts_down_and_drops_the_boarding_word() -> void:
+	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
+	_world.run_to(21)
+	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0)
+	_world.run_to(starts[FlightSim.State.BOARDING] + 1)
+	assert_str(_lines()[1]).is_equal(
+		"11:00  Oslo  Gotta Air  %s" % _doors_left("GA100", _world.clock.tick)
+	)
+	_world.run_to(starts[FlightSim.State.DOORS_CLOSED] + 1)
+	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air  Doors closed")
+
+
+func test_no_flight_counts_down_when_every_door_has_closed() -> void:
+	_world.run_to(21)
+	assert_str(_text()).is_equal("06:04  GMF101  Doors closed")

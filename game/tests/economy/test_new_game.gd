@@ -47,7 +47,7 @@ func test_the_hud_shows_the_budget_and_the_day_one_departure() -> void:
 	var hud: PassengerHud = _main.get_node("PassengerHud")
 	assert_str(menu.money_label().text).is_equal("Money  %d" % PriceTable.STARTING_BUDGET)
 	var panel := hud.find_child("Departures", true, false) as Label
-	assert_str(panel.text).is_equal("07:38  Oslo  Gotta Air")
+	assert_str(panel.text).is_equal("07:38  Oslo  Gotta Air  doors close in 1:35")
 	# The clock and the timetable replace the elapsed time and the one-flight row.
 	var panel_texts := PackedStringArray()
 	for label in (hud.find_child("FlightPanel", true, false) as Control).find_children(
@@ -59,7 +59,7 @@ func test_the_hud_shows_the_budget_and_the_day_one_departure() -> void:
 	assert_array(panel_texts).contains([clock_label.text])
 	for text in panel_texts:
 		assert_str(text).not_contains("Time ")
-		assert_str(text).not_contains("doors close in")
+		assert_str(text).not_contains("Scheduled")
 		assert_str(text).not_contains("GMF101-d0")
 
 

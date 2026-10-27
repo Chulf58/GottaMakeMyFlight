@@ -124,7 +124,10 @@ func _scene_a() -> void:
 		_menu.preview_label().text == "Cost 25", "a: cost line '%s'" % _menu.preview_label().text
 	)
 	var departures := _departures()
-	_expect(departures.text == "07:38  Oslo  Gotta Air", "a: departures '%s'" % departures.text)
+	_expect(
+		departures.text == "07:38  Oslo  Gotta Air  doors close in 1:35",
+		"a: departures '%s'" % departures.text
+	)
 	var policy := _find_label(_hud, PassengerHud.DEBUG_POLICY_TEXT)
 	_expect(policy != null and policy.is_visible_in_tree(), "a: the policy label is not shown")
 	if policy != null:

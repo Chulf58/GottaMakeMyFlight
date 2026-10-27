@@ -93,7 +93,7 @@ func _check() -> void:
 	_expect("clock", clock_text, "Day 1  06:00")
 	var departures := (hud.find_child("Departures", true, false) as Label).text
 	print("LABEL departures=%s" % departures.replace("\n", " | "))
-	_expect("departures", departures, "07:38  Oslo  Gotta Air")
+	_expect("departures", departures, "07:38  Oslo  Gotta Air  doors close in 1:35")
 
 	var prices := {}
 	for tool in [
