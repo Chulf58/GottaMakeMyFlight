@@ -11,6 +11,8 @@ func before_test() -> void:
 	_added.clear()
 	_sim = auto_free(FlightSim.new()) as FlightSim
 	_sim.occurrence_added.connect(func(id: String) -> void: _added.append(id))
+	# A FlightSim starts closed; these cases are about an open airport.
+	_sim.open_airport()
 
 
 static func terms(id: String, minute: int, gate := "C") -> Dictionary:

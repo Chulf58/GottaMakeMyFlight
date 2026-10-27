@@ -10,12 +10,21 @@ extends Node
 ## daily timetable: each day's occurrence is issued ahead of its first state
 ## (FlightTimetable), named "<contract>-d<day>", and pruned after it departs;
 ## queries on a pruned occurrence still answer from its immutable contract.
-## add_flight adds a one-off flight, which is never pruned. A new game starts
-## with the one STARTER_TERMS contract (add_starter_contract), so day one has
-## a flight; add_default_flight is the one-off GMF101 that tests still use.
+## add_flight adds a one-off flight, which is never pruned; add_default_flight
+## is the one-off GMF101 that tests still use.
 ##
-## One tick: set the tick, issue due occurrences in time order, advance every
-## flight, prune. PassengerSim binds after FlightSim, so it sees the result.
+## The airport starts closed and issues no occurrence until it opens
+## (decision airport-opening-design-stays-open-once-opened-starter-flight-
+## placed-after-opening). AirportGate opens it once it is staffed and has a
+## working path, and accepts the STARTER_TERMS contract then; open_airport()
+## alone opens it without the starter. It never closes again. A contract
+## accepted while closed starts on its first day issued at or after the
+## opening (FlightTimetable.opening_day); the days it skipped were never
+## flown, so they are never answered as departed.
+##
+## One tick: set the tick, let the gate open the airport, issue due
+## occurrences in time order, advance every flight, prune. PassengerSim binds
+## after FlightSim, so it sees the result.
 
 signal state_changed(flight_id: String, new_state: int)
 ## Fires once as a flight enters DOORS_CLOSED. The passenger slice stops
@@ -49,15 +58,13 @@ const DEFAULT_ID := "GMF101"
 ## Gates with a stand. Only gate C has one; more gates are a later slice.
 const GATES: Array[String] = ["C"]
 const DEFAULT_GATE := "C"
-## The contract a new game starts with (Economy 7/8). It departs at 07:38, so
-## its first occurrence starts at tick 0 (06:00 plus the 98 minutes from the
-## first state to pushback), the timing the one-off GMF101 had. Fee and size
-## sit inside the offer board's ranges.
+## The contract the airport opens with (Economy 7/8), without its departure
+## minute: starter_terms() sets that from the opening tick. Fee and size sit
+## inside the offer board's ranges.
 const STARTER_TERMS := {
 	"id": DEFAULT_ID,
 	"airline": "Gotta Air",
 	"destination": "Oslo",
-	"departure_minute": 458,
 	"gate": DEFAULT_GATE,
 	"plane_size": "small",
 	"booked_passengers": 12,
@@ -65,13 +72,22 @@ const STARTER_TERMS := {
 }
 ## 2: occurrences are issued FlightTimetable.ISSUE_LEAD_TICKS (2400, was 1200)
 ## before their first state, which changes the saved next_day at some ticks.
-const SAVE_VERSION := 2
+## 3: the airport's open state (opened_tick, start_day). A version 2 save
+## loads as open since tick 0.
+const SAVE_VERSION := 3
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock
 
 ## The tick the sim has been told about; set by the clock or a snapshot.
 var tick: int = 0
+## The tick the airport opened, or -1 while it is closed. Set only by
+## open_airport() and from_snapshot(); read it, never write it.
+var opened_tick: int = -1
+## Asked on each tick while the airport is closed whether it may open
+## (AirportGate.try_open). Set by AirportGate.bind(); without one the airport
+## stays closed until open_airport() is called.
+var gate: AirportGate
 
 ## Live flights {id, starts, state, gate, contract, day}, in timetable order
 ## (FlightTimetable.flight_before), so the order is a function of what is
@@ -82,12 +98,15 @@ var _flights: Array[Dictionary] = []
 var _contracts: Array[Dictionary] = []
 ## Contract id -> the first day not yet issued.
 var _next_day: Dictionary = {}
+## Contract id -> its first day that is or will be issued: first_day, or for a
+## contract accepted while closed, FlightTimetable.opening_day. Days from
+## first_day up to it were skipped, not flown.
+var _start_day: Dictionary = {}
 
 
 func _ready() -> void:
 	if clock != null:
 		bind_clock(clock)
-		add_starter_contract()
 
 
 ## Start ticks of every state for a flight whose SCHEDULED state begins at
@@ -103,10 +122,32 @@ func bind_clock(clock: SimClock) -> void:
 	clock.ticked.connect(on_tick)
 
 
-## Accepts STARTER_TERMS, the contract a new game starts with. False (with an
-## error) when it was already accepted or clashes with a flight.
-func add_starter_contract() -> bool:
-	return accept_contract(STARTER_TERMS)
+## STARTER_TERMS departing so that its first state is ISSUE_LEAD_TICKS after
+## `now`, rounded up to a whole minute: its first occurrence is issued at
+## `now` or within the minute after, never with less than the normal lead.
+static func starter_terms(now: int) -> Dictionary:
+	var departure := now + FlightTimetable.ISSUE_LEAD_TICKS + FlightTimetable.departure_offset()
+	var minutes := -GameCalendar.floor_div(-departure, GameCalendar.TICKS_PER_MINUTE)
+	var terms := STARTER_TERMS.duplicate()
+	terms["departure_minute"] = GameCalendar.minute_of_day(minutes * GameCalendar.TICKS_PER_MINUTE)
+	return terms
+
+
+## Opens the airport at the current tick; it never closes again. Each contract
+## accepted while closed starts on its first day issued at or after now, and
+## what is due is issued at once. False (with an error) when already open.
+## The starter contract is AirportGate.open()'s, not this.
+func open_airport() -> bool:
+	if opened_tick >= 0:
+		push_error("FlightSim.open_airport: the airport opened at tick %d" % opened_tick)
+		return false
+	opened_tick = tick
+	for contract in _contracts:
+		var day := FlightTimetable.opening_day(contract, tick)
+		_start_day[contract["id"]] = day
+		_next_day[contract["id"]] = day
+	_issue_due()
+	return true
 
 
 ## Adds the one-off flight GMF101, starting at tick 0.
@@ -129,7 +170,8 @@ func add_flight(id: String, starts: Array[int], gate := DEFAULT_GATE) -> bool:
 ## Accepts an offer's terms (FlightContract.TERM_KEYS) as a contract whose
 ## first occurrence is the first one whose whole preparation window is still
 ## ahead. False (with an error) for bad terms, a used id or a gate clash.
-## Issues the first occurrence at once when it is already due.
+## Issues the first occurrence at once when it is already due and the airport
+## is open; while it is closed the contract waits for the opening.
 func accept_contract(terms: Dictionary) -> bool:
 	var problem := accept_problem(terms)
 	if problem != "":
@@ -138,6 +180,7 @@ func accept_contract(terms: Dictionary) -> bool:
 	var contract := _candidate(terms)
 	_contracts.append(contract)
 	_next_day[contract["id"]] = contract["first_day"]
+	_start_day[contract["id"]] = contract["first_day"]
 	_issue_due()
 	return true
 
@@ -158,6 +201,8 @@ func accept_problem(terms: Dictionary) -> String:
 
 func on_tick(new_tick: int) -> void:
 	tick = new_tick
+	if opened_tick < 0 and gate != null:
+		gate.try_open()
 	_issue_due()
 	for flight in _flights:
 		_advance(flight)
@@ -244,7 +289,7 @@ func phase_progress(id: String, time: float) -> float:
 
 ## JSON-safe state for a save.
 func to_snapshot() -> Dictionary:
-	return FlightSnapshot.save(tick, _contracts, _next_day, _flights)
+	return FlightSnapshot.save(tick, opened_tick, _contracts, _start_day, _next_day, _flights)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
@@ -257,7 +302,9 @@ func from_snapshot(data: Dictionary) -> bool:
 		push_error("FlightSim.from_snapshot: %s" % loaded["error"])
 		return false
 	tick = loaded["tick"]
+	opened_tick = loaded["opened_tick"]
 	_contracts = loaded["contracts"]
+	_start_day = loaded["start_day"]
 	_next_day = loaded["next_day"]
 	_flights = loaded["flights"]
 	return true
@@ -321,7 +368,10 @@ func _clash_problem(contract: Dictionary) -> String:
 
 ## Issues every occurrence whose issue tick has come, oldest first (then by
 ## contract order and day), so the order never depends on dictionary order.
+## Nothing while the airport is closed.
 func _issue_due() -> void:
+	if opened_tick < 0:
+		return
 	var due: Array = []
 	for index in _contracts.size():
 		var contract := _contracts[index]
@@ -377,7 +427,8 @@ func _advance(flight: Dictionary) -> void:
 
 
 ## The live record, or for an issued occurrence that was pruned, a departed
-## record rebuilt from its contract; {} for anything else.
+## record rebuilt from its contract; {} for anything else, including the days
+## a contract skipped while the airport was closed.
 func _find(id: String) -> Dictionary:
 	var index := _index_of(id)
 	if index >= 0:
@@ -387,7 +438,9 @@ func _find(id: String) -> Dictionary:
 		return {}
 	var contract := contract_of(parts["contract"])
 	var day: int = parts["day"]
-	if contract.is_empty() or day < contract["first_day"] or day >= _next_day[contract["id"]]:
+	if contract.is_empty():
+		return {}
+	if day < _start_day[contract["id"]] or day >= _next_day[contract["id"]]:
 		return {}
 	var record := _record(
 		id, FlightTimetable.starts_for(contract, day), contract["gate"], contract["id"], day

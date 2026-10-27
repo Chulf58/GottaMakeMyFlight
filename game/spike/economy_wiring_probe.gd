@@ -11,9 +11,11 @@ extends SceneTree
 ##
 ## Boots main.tscn with a new random world seed (printed), builds the starter
 ## terminal with the HUD button, accepts a contract for 11:40 and runs the sim
-## until its occurrence has departed. The pass value is a positive: the wallet
-## grew by exactly the fee times the contract's made passengers, and at least
-## one passenger made it. Then it empties the wallet and takes away every
+## until its occurrence has departed. The hired staff open the airport, so the
+## starter contract flies too. The pass value is a positive: the wallet grew by
+## exactly the fee times the contract's made passengers plus the starter's fee
+## times its made passengers, and at least one passenger made the contract's
+## flight. Then it empties the wallet and takes away every
 ## scanner, steps one tick, and passes when exactly one grant was paid, the
 ## wallet grew by its amount and the status label shows its message word for
 ## word. Otherwise it prints PROBE_INVALID and exits 1. A
@@ -45,6 +47,9 @@ var _phase := 0
 var _before := 0
 var _contract_made := 0
 var _contract_missed := 0
+## Passengers who made another contract's flight (the starter's), and their fees.
+var _other_made := 0
+var _other_fees := 0
 var _grants := 0
 var _grant_amount := 0
 var _grant_text := ""
@@ -139,7 +144,13 @@ func _on_granted(amount: int, text: String) -> void:
 
 func _on_outcome(id: int, made: bool) -> void:
 	var p := _sim.get_passenger(id)
-	if p == null or p.flight_id != OCCURRENCE:
+	if p == null:
+		return
+	if p.flight_id != OCCURRENCE:
+		if made:
+			var contract := _flights.contract_of(_flights.flight_contract_id(p.flight_id))
+			_other_made += 1
+			_other_fees += int(contract.get("fee_per_passenger", 0))
 		return
 	if made:
 		_contract_made += 1
@@ -165,11 +176,17 @@ func _report() -> void:
 			% [_clock.tick, _contract_made, _contract_missed, FEE, _grants]
 		)
 	)
+	print("PROBE other contracts made=%d fees=%d" % [_other_made, _other_fees])
 	print("PROBE balance before=%d after=%d delta=%d" % [_before, after, after - _before])
 	if _contract_made <= 0:
 		_invalid("no passenger made the contract's flight")
-	elif after - _before != _contract_made * FEE:
-		_invalid("delta %d is not %d made x fee %d" % [after - _before, _contract_made, FEE])
+	elif after - _before != _contract_made * FEE + _other_fees:
+		_invalid(
+			(
+				"delta %d is not %d made x fee %d + other fees %d"
+				% [after - _before, _contract_made, FEE, _other_fees]
+			)
+		)
 	elif _grants != 0:
 		_invalid("a rescue grant was paid in a working terminal")
 	else:
