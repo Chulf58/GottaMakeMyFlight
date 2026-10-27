@@ -20,14 +20,19 @@ extends RefCounted
 ## taken down, but never the security divider (ruling rescue-grant-repair-
 ## price-never-removes-the-security-divider-other-walls-may-come-down-when-
 ## cheaper): before each leg the cells passengers can already walk are marked
-## landside (joined to an entrance or a desk or scanner service cell) or
-## airside (joined to a scanner's passage end or an open exit), and a landside
-## leg (desk, scanner) never steps into an airside cell or floors a cell open
-## to one; the exit leg does the same the other way. A cell joined to both, as
-## when a scanner is gone and its gap is open, is free to both. A new scanner
-## must lead out of landside. The leg then takes the cheapest
-## of: a standing desk, scanner or exit the search reached, or a new one,
-## priced as its object plus the floor its footprint (and a scanner's exit
+## landside or airside from seeds (entrances and desk and scanner service
+## cells landside; scanner passage ends and open exits airside). The marking
+## spreads one step at a time over open steps with no wall of any kind on the
+## edge, so it never crosses a wall, a door wall in the divider or a scanner,
+## and a cell both sides reach (an open scanner gap, an exit beside the hall)
+## takes the side that reaches it first, landside on a tie. A landside leg
+## (desk, scanner) never steps into an airside cell or floors a cell open to
+## one; the exit leg does the same the other way. A new scanner must lead out
+## of landside. The grid stores no landside or airside zone (every floor cell
+## carries the one terminal zone), so the sides are worked out this way.
+##
+## The leg then takes the cheapest of: a standing desk, scanner or exit the
+## search reached, or a new one, priced as its object plus the floor its footprint (and a scanner's exit
 ## cell, or a door's own cell) still needs. A new piece goes where the
 ## search reaches first, in its settle order, trying facings 0 to 3, so the
 ## same grid always gives the same plan. With no entrance, every place an
@@ -38,7 +43,10 @@ extends RefCounted
 ## test; a choice that fails is undone edit by edit and the next one tried.
 ## When a later leg finds no choice that works, the plan backtracks: it undoes
 ## the earlier leg's choice and tries that leg's next one (MAX_TRIES choices
-## per leg, MAX_ATTEMPTS built in all, so a plan always ends).
+## per leg, MAX_ATTEMPTS built in all, so a plan always ends). Running out of
+## those caps is not "cannot be repaired": ok stays false and fallback_price
+## is set (see _fallback_price()), and the rescue grant pays that instead. Only
+## a search that tried every choice without a cap is an error.
 ##
 ## Prices come from BuildTransaction. least_balance() is the money the plan
 ## needs at the start when its edits are bought one by one in order, each
@@ -57,17 +65,25 @@ const MAX_CANDIDATES := 24
 const MAX_TRIES := 12
 const MAX_ATTEMPTS := 48
 const UNREACHED := 1 << 30
-## Cell sides, as flags: LAND | AIR is a cell joined to both.
+## The side each walkable cell is marked with.
 const LAND := 1
 const AIR := 2
 ## Search prices are money times SCALE, plus 1 per wall taken down.
 const SCALE := 64
 
+## The caps in use; tests lower or lift them and put them back.
+static var max_candidates := MAX_CANDIDATES
+static var max_tries := MAX_TRIES
+static var max_attempts := MAX_ATTEMPTS
+
 ## The edits to apply in order, each priced against the grid as it was when
 ## make() ran. Empty when the path already works.
 var edits: Array[BuildEdit] = []
-## False when no repair was found (the error has been pushed).
+## False when no repair was found.
 var ok := false
+## With ok false: what a repair is taken to cost when the caps ran out before
+## one was found, or -1 when every choice was tried (the error was pushed).
+var fallback_price := -1
 
 var _grid: BuildGrid
 var _layout := TerminalLayout.new()
@@ -93,6 +109,8 @@ var _region := {}
 var _forbidden := 0
 var _has_air := false
 var _attempts := 0
+## Set when a cap cut the choices short.
+var _capped := false
 
 
 ## Whether a new passenger can walk entrance, desk, scanner and exit on `grid`
@@ -190,10 +208,40 @@ func _plan() -> bool:
 		var door := _layout.door_cell(_grid, _layout.entrances[0])
 		sources = [{"cell": door, "cost": 0, "edits": [] as Array[BuildEdit]}]
 		_kept[door] = true
-	if not _solve(Leg.DESK, sources):
+	if _solve(Leg.DESK, sources):
+		return true
+	if _capped:
+		push_warning("RepairPlan: no repair within the caps; pricing a conservative one")
+		fallback_price = _fallback_price()
+	else:
 		push_error("RepairPlan: found no repair that gives a working path (%d tried)" % _attempts)
-		return false
-	return true
+	return false
+
+
+## The price taken for a repair when the caps ran out: every essential at its
+## price, plus floor for every bare cell in the area the terminal's floor
+## spans, one cell wider each way (the whole grid when it has no floor). A
+## repair buys at most one of each essential, and one that stays in that area
+## floors no more cells than this, so the player gets enough and may get more.
+func _fallback_price() -> int:
+	var total := 0
+	for def_id in [&"entrance_door", &"checkin_desk", &"security_scanner", &"exit_door"]:
+		total += _object_price(def_id)
+	var area := Rect2i()
+	for y in _grid.size.y:
+		for x in _grid.size.x:
+			if _grid.floor_at(Vector2i(x, y)) != BuildGrid.FLOOR_NONE:
+				var one := Rect2i(x, y, 1, 1)
+				area = one if area.size == Vector2i.ZERO else area.merge(one)
+	area = area.grow(1) if area.size != Vector2i.ZERO else Rect2i(Vector2i.ZERO, _grid.size)
+	area = area.intersection(Rect2i(Vector2i.ZERO, _grid.size))
+	_refresh_sets(Leg.DESK)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if _grid.floor_at(cell) == BuildGrid.FLOOR_NONE and not _no_floor.has(cell):
+				total += _price_of_floor(cell)
+	return total
 
 
 ## Repairs `leg` and every leg after it, backtracking over this leg's
@@ -206,7 +254,9 @@ func _solve(leg: int, sources: Array) -> bool:
 	var choices := _standing_choices(leg)
 	choices.append_array(_new_choices(leg, sources))
 	choices.sort_custom(_cheaper)
-	choices = choices.slice(0, MAX_TRIES)
+	if choices.size() > max_tries:
+		_capped = true
+	choices = choices.slice(0, max_tries)
 	# The search is redone by the next leg, so each walk is taken from it now.
 	for choice in choices:
 		var source: Dictionary = sources[_src[_index(choice["reach"])]]
@@ -219,7 +269,8 @@ func _solve(leg: int, sources: Array) -> bool:
 		if source.has("door"):
 			choice["walk"][source["door"]] = true
 	for choice in choices:
-		if _attempts >= MAX_ATTEMPTS:
+		if _attempts >= max_attempts:
+			_capped = true
 			return false
 		_attempts += 1
 		var kept := _kept.duplicate()
@@ -259,7 +310,7 @@ func _refresh_sets(leg: int) -> void:
 			_lane_cells[cell] = true
 
 
-## Marks each walkable cell LAND, AIR or both (see the class notes).
+## Marks each walkable cell LAND or AIR (see the class notes).
 func _label_regions() -> void:
 	_region.clear()
 	var land: Array[Vector2i] = []
@@ -276,23 +327,30 @@ func _label_regions() -> void:
 			air.append(passage.back())
 	for door in _layout.open_exits(_grid):
 		air.append(_layout.door_cell(_grid, door))
-	_flood(land, LAND)
-	_flood(air, AIR)
 	_has_air = not air.is_empty()
-
-
-func _flood(seeds: Array[Vector2i], side: int) -> void:
-	var todo := seeds.duplicate()
-	var seen := {}
-	while not todo.is_empty():
-		var cell: Vector2i = todo.pop_back()
-		if seen.has(cell) or not _grid.is_walkable(cell):
-			continue
-		seen[cell] = true
-		_region[cell] = _region.get(cell, 0) | side
-		for step in BuildGrid.SIDE_STEP:
-			if _grid.in_bounds(cell + step) and _grid.can_route(cell, cell + step):
-				todo.append(cell + step)
+	# One breadth-first spread from both sides at once; the first to reach a
+	# cell keeps it.
+	var queue: Array[Vector2i] = []
+	for cell in land:
+		if _grid.is_walkable(cell) and not _region.has(cell):
+			_region[cell] = LAND
+			queue.append(cell)
+	for cell in air:
+		if _grid.is_walkable(cell) and not _region.has(cell):
+			_region[cell] = AIR
+			queue.append(cell)
+	var head := 0
+	while head < queue.size():
+		var cell := queue[head]
+		head += 1
+		for side in 4:
+			var next := cell + BuildGrid.SIDE_STEP[side]
+			if _region.has(next) or not _grid.in_bounds(next):
+				continue
+			if _grid.has_wall(cell, side) or not _grid.can_route(cell, next):
+				continue
+			_region[next] = _region[cell]
+			queue.append(next)
 
 
 ## Whether `cell` lies on the side the current leg may not reach: in it, or,
@@ -331,7 +389,8 @@ func _new_choices(leg: int, sources: Array) -> Array:
 	var price := _object_price(def_id)
 	var out := []
 	for cell in _order:
-		if out.size() >= MAX_CANDIDATES:
+		if out.size() >= max_candidates:
+			_capped = true
 			break
 		if _grid.object_at(cell) != 0 or _reserved.has(cell) or _lane_cells.has(cell):
 			continue
@@ -381,7 +440,9 @@ func _door_choices(def_id: StringName) -> Array:
 		var cost: int = _dist[_index(reach)] + source["door_cost"] * SCALE
 		out.append({"cost": cost, "rank": out.size(), "reach": reach, "next": door, "piece": piece})
 	out.sort_custom(_cheaper)
-	return out.slice(0, MAX_CANDIDATES)
+	if out.size() > max_candidates:
+		_capped = true
+	return out.slice(0, max_candidates)
 
 
 ## Every place a `def_id` door may stand, as a search source at its service
@@ -566,12 +627,10 @@ func _search(sources: Array) -> void:
 ## step cannot be made. A cell with an object is only crossed the way the
 ## passengers already can (BuildGrid.can_route()).
 func _step_price(from: Vector2i, to: Vector2i) -> int:
-	if not _grid.in_bounds(to):
+	if not _grid.in_bounds(to) or _off_side(to):
 		return -1
 	if _grid.can_route(from, to):
 		return 0
-	if _off_side(to):
-		return -1
 	if _grid.object_at(from) != 0 or _grid.object_at(to) != 0 or _no_floor.has(to):
 		return -1
 	var side := BuildGrid.SIDE_STEP.find(to - from)

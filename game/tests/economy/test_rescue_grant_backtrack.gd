@@ -78,3 +78,49 @@ func test_the_cheapest_desk_blocking_the_corridor_is_passed_over() -> void:
 		_world.step()
 	print("passenger stage %d stuck %d tick %d" % [p.stage, p.stuck, _world.clock.tick])
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
+
+
+## A desk where the old blocking desk would stand is the second choice here; the
+## paid rebuild below is the player's own.
+func _rebuild_by_hand() -> void:
+	var by_hand: Array[BuildEdit] = [
+		BuildEdit.paint_floor(Vector2i(2, 7), BuildGrid.FLOOR_TILE, 1),
+		BuildEdit.paint_floor(Vector2i(3, 7), BuildGrid.FLOOR_TILE, 1),
+		BuildEdit.paint_floor(Vector2i(2, 8), BuildGrid.FLOOR_TILE, 1),
+		BuildEdit.place_object(&"checkin_desk", Vector2i(2, 7), 0),
+	]
+	for edit in by_hand:
+		var one: Array[BuildEdit] = [edit]
+		assert_bool(BuildTransaction.commit_plan(_world.grid, one, _world.sim.wallet).ok).is_true()
+	assert_bool(_grant.has_working_path()).is_true()
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	while not p.is_done() and _world.clock.tick < 6000:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
+
+
+## With one choice per leg, the working desk (the second choice) is past the
+## cap. Running out of choices is not "cannot be repaired": a grant is paid.
+func test_a_working_choice_past_the_per_leg_cap_still_gets_a_grant() -> void:
+	RepairPlan.max_tries = 1
+	var plan := _grant.repair_plan()
+	RepairPlan.max_tries = RepairPlan.MAX_TRIES
+	print("plan ok %s fallback %d" % [plan.ok, plan.fallback_price])
+	assert_bool(plan.ok).is_false()
+	assert_bool(_grant.evaluate()).is_true()
+	print("balance %d" % _world.sim.wallet.balance)
+	assert_int(_world.sim.wallet.balance).is_greater_equal(475)
+	_rebuild_by_hand()
+
+
+## One attempt in all: the blocking desk is built, the scanner leg fails, and
+## no attempt is left to back out of it.
+func test_a_plan_that_runs_out_of_attempts_still_gets_a_grant() -> void:
+	RepairPlan.max_attempts = 1
+	var plan := _grant.repair_plan()
+	RepairPlan.max_attempts = RepairPlan.MAX_ATTEMPTS
+	print("plan ok %s fallback %d" % [plan.ok, plan.fallback_price])
+	assert_bool(plan.ok).is_false()
+	assert_bool(_grant.evaluate()).is_true()
+	assert_int(_world.sim.wallet.balance).is_greater_equal(475)
+	_rebuild_by_hand()

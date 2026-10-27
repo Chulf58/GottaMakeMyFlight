@@ -107,7 +107,7 @@ func repair_plan() -> RepairPlan:
 	_watch_grid()
 	if _plan == null:
 		_plan = RepairPlan.make(_sim.grid, _sim.shell)
-		_bound = RepairPlan.least_balance(_sim.grid, _plan.edits) if _plan.ok else -1
+		_bound = _price_of(_plan)
 	return _plan
 
 
@@ -156,14 +156,20 @@ func _shortfall() -> int:
 	_watch_grid()
 	if _bound >= 0 and _wallet.balance >= _bound:
 		return 0
-	var plan := repair_plan()
+	var cost := _price_of(repair_plan())
+	return maxi(cost - _wallet.balance, 0) if cost >= 0 else 0
+
+
+## What `plan` costs: its edits bought in order, or its fallback price when the
+## caps ran out; -1 when there is no repair to price.
+func _price_of(plan: RepairPlan) -> int:
 	if not plan.ok:
-		return 0
+		return plan.fallback_price
 	var cost := RepairPlan.least_balance(_sim.grid, plan.edits)
 	if cost == PriceTable.NO_PRICE:
 		push_error("RescueGrant: the repair has a piece with no price")
-		return 0
-	return maxi(cost - _wallet.balance, 0)
+		return -1
+	return cost
 
 
 func _watch_grid() -> void:
@@ -258,7 +264,8 @@ static func _message(amount: int, edits: Array[BuildEdit]) -> String:
 		if edit.kind == BuildEdit.Kind.PAINT_FLOOR:
 			names.append("floor")
 			break
+	var what := ", ".join(names) if not names.is_empty() else "a way through the terminal"
 	return (
 		"The airport authority has sent a rescue grant of %d to rebuild: %s. It is a one-off."
-		% [amount, ", ".join(names)]
+		% [amount, what]
 	)
