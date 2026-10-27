@@ -165,7 +165,13 @@ func try_visit(p: Passenger, browsing := false) -> bool:
 ## mood, and a hungry or browsing passenger may start a visit.
 func beat(p: Passenger) -> void:
 	p.hunger = mini(p.hunger + 1, HUNGER_MAX)
-	if _visits.has(p.id):
+	var visit: CafeVisit = _visits.get(p.id)
+	if visit != null:
+		# The abandon-now forecast with live queues, once a second per guest.
+		if not visit.seat.is_empty():
+			visit.deadline = CafeForecast.live_deadline(
+				_sim, p, visit.seat["approach"], visit.resume_stage
+			)
 		return
 	var hungry := p.hunger >= HUNGRY_AT
 	@warning_ignore("integer_division")
@@ -216,7 +222,9 @@ func reconcile() -> void:
 			continue
 		visit.seat = seat
 		if deadlines_stale:
-			visit.deadline = CafeForecast.deadline(_sim, p, seat["approach"], visit.resume_stage)
+			visit.deadline = CafeForecast.live_deadline(
+				_sim, p, seat["approach"], visit.resume_stage
+			)
 	var counters: Array = _queues.keys()
 	counters.sort()
 	for counter_id in counters:

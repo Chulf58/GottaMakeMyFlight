@@ -65,6 +65,24 @@ static func deadline(
 	)
 
 
+## The deadline of a visit under way, forecast again with the queues and
+## stations as they are now: the earlier of leaving from the seat (`approach`,
+## standing up first) and leaving at once from where the guest stands. CafeSim
+## asks for it once a simulated second per guest and after every grid edit,
+## so a queue that grows during the visit brings the deadline forward.
+static func live_deadline(
+	sim: PassengerSim, p: Passenger, approach: Vector2i, resume: Passenger.Stage
+) -> int:
+	var from_seat := deadline(sim, p, approach, resume)
+	if p.at == approach:
+		return from_seat
+	var now := _leaving(p, p.at, resume)
+	now.boarding_tick = 0
+	var ticks := mini(JourneyForecast.arrival_from(sim, now, 0), JourneyForecast.NEVER)
+	var from_here := sim.flights.doors_close_tick(p.flight_id) - MARGIN_TICKS - ticks
+	return mini(from_seat, from_here)
+
+
 ## Whether an arrival forecast leaves the margin before `p`'s doors close.
 static func admits(sim: PassengerSim, p: Passenger, arrival: int) -> bool:
 	return arrival + MARGIN_TICKS <= sim.flights.doors_close_tick(p.flight_id)

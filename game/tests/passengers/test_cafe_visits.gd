@@ -289,11 +289,14 @@ func test_doors_closing_on_a_guest_drops_its_visit() -> void:
 	var visit := _cafes().visit_of(p.id)
 	while p.stage != Passenger.Stage.CAFE_SEATED and _world.clock.tick < 1400:
 		_world.step()
-	# Held at the table past the doors, which the deadline never allows.
-	visit.deadline = 1000000
+	# Held at the table past the doors, which the deadline never allows: the
+	# deadline is pushed out again before every tick, since the guest's beat
+	# forecasts it afresh each second.
 	visit.dwell_end = 1000000
 	var key := visit.seat_key
-	_world.run_to(1900)
+	while _world.clock.tick < 1900:
+		visit.deadline = 1000000
+		_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.MISSED)
 	assert_int(p.missed_stage).is_equal(Passenger.Stage.CAFE_SEATED)
 	assert_int(visit.outcome).is_equal(CafeVisit.Outcome.SHORT)
