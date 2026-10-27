@@ -107,6 +107,8 @@ func _wait_attach() -> bool:
 func _build() -> void:
 	_beat("build")
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
+	# A new game has no staff: seat one at every desk and scanner.
+	StaffTestKit.staff_all(_main.get_node("Staff"))
 	var grid := _mode.grid
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	var behind := ReferenceTerminal.ENTRANCE_CELL + Vector2i(0, 1)

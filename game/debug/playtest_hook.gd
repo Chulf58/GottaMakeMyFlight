@@ -46,6 +46,11 @@ const EVENT_TYPES: Array[String] = [
 	"anomaly",
 	"error",
 ]
+## hire_staff() role names.
+const STAFF_ROLES := {
+	"checkin": StaffMember.Role.CHECKIN,
+	"security": StaffMember.Role.SECURITY,
+}
 const CHECK_INTERVAL_S := 0.5
 ## A passenger stuck this long in sim seconds is an anomaly.
 const STUCK_LIMIT_S := 10.0
@@ -332,7 +337,22 @@ func snapshot(event_count := 20) -> Dictionary:
 		"errors": _error_counts.values(),
 		"input_events": _input_count,
 		"debug_batch_seed": passengers.last_batch_seed,
+		"staff": _staff_summary(),
 	}
+
+
+## Hires one member of `role` ("checkin" or "security") as the panel's Hire
+## button does, so a playtest can staff the airport. Returns the member id, or
+## 0 with an error when the hook has no scene, the scene has no StaffSim or
+## the role is unknown.
+func hire_staff(role: String) -> int:
+	if _scene == null or passengers.staff == null:
+		push_error("PlaytestHook.hire_staff: no attached scene with a StaffSim")
+		return 0
+	if not STAFF_ROLES.has(role):
+		push_error("PlaytestHook.hire_staff: unknown role '%s'" % role)
+		return 0
+	return passengers.staff.hire(STAFF_ROLES[role])
 
 
 ## snapshot() as a JSON string, for a caller that wants text.
@@ -388,6 +408,20 @@ func run_checks() -> void:
 	_log.flush()
 	_flush_motion()
 	_input_log.flush()
+
+
+## Hired and on-duty counts by role name; empty without a StaffSim.
+func _staff_summary() -> Dictionary:
+	var out := {}
+	if passengers.staff == null:
+		return out
+	for role_name in STAFF_ROLES:
+		var role: StaffMember.Role = STAFF_ROLES[role_name]
+		out[role_name] = {
+			"hired": passengers.staff.count(role),
+			"on_duty": passengers.staff.on_duty_count(role),
+		}
+	return out
 
 
 func _find_parts(scene: Node) -> bool:

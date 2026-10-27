@@ -1,33 +1,53 @@
 extends SceneTree
 ## Windowed plate and benchmark probe for slice g (passengers). Boots the real main scene
 ## with a new random sim seed (printed), builds ReferenceTerminal through the HUD's
-## starter-terminal button and runs the default flight at 3x. Plates:
-##   1 passengers queuing at the desks and scanners and seated at the gate
-##   2 a late passenger running, with its thought bubble, followed from the HUD
-##   3 the plane at the stand with passengers walking to its door
-## The HUD is on every plate. Then a fresh scene spawns the 300-passenger debug batch and
-## runs at 3x, printing frame and tick times.
+## starter-terminal button and runs the default flight GMF101 at 3x. Each plate is taken
+## the first time its moment happens, with the camera on the subjects' centroid (from
+## the plate's yaw, then the other three quarter turns until enough are shown):
+##   01 passengers queuing at a desk or scanner
+##   01b a passenger seated at the gate, close (seats empty once boarding starts at 700)
+##   02 a late passenger running, with its thought bubble, followed from the HUD
+##   03 passengers on the apron walking to the parked plane's door
+##   04 the 300-passenger debug batch (a fresh scene), after a benchmark at 3x
+## The HUD is on every plate.
 ##
-## Run (one windowed Godot run project-wide; hold game/.godot/windowed.lock):
+## A passenger counts as shown when its drawn body is at least MIN_SUBJECT_PX tall, nine
+## sight lines to its upper body (against every visible mesh of the shell, the build, the
+## plane and the other passengers, skinned ones in the pose drawn) land on its own meshes
+## at least once with no blocker, every landing point is in the frame with a margin, and the
+## HUD covers none of them (the plate against a twin rendered with the HUD's canvas layers
+## hidden). A plate with too few shown passengers prints PROBE_INVALID and the probe
+## exits 1. A guard thread calls OS.crash() on a stall.
+##
+## Run (one windowed Godot run project-wide); --ui-scale overrides the content scale from
+## project.godot, and the plate names carry the scale:
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path C:/Users/chulf/Gotta-make-my-flight/game -s res://spike/passenger_plates_probe.gd
+##     --path <repo>/game -s res://spike/passenger_plates_probe.gd -- --ui-scale=1.0
 ##
-## Plates go to tools/blender/out/passengers/. A subject that is not in frame or is hidden
-## prints PROBE_INVALID and the probe exits 1.
+## Plates go to tools/blender/out/passengers/.
 
+const PlateSight := preload("res://spike/plate_sight.gd")
 const OUT_REL := "res://../tools/blender/out/passengers"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 60000
+const WAIT_LIMIT_MS := 120000
+const STALL_LIMIT_MS := 5000
 const BENCH_TICKS := 900
-## World boxes that can hide a passenger: the Toon terminal (measured by
-## passenger_measure_probe.gd) and the parked plane's fuselage. The plane's measured box
-## (x -32.2 to -3.8) includes the wings, so the fuselage width here is an estimate.
-const BLOCKERS: Array[AABB] = [
-	AABB(Vector3(-43.0, -0.1, -100.0), Vector3(86.0, 20.9, 60.0)),
-	AABB(Vector3(-20.2, 0.0, -131.83), Vector3(4.4, 4.5, 29.52)),
+## GMF101's doors close at tick 1900 (FlightSim.PHASE_TICKS from tick 0).
+const DOORS_TICK := 1900
+## Scene nodes whose visible meshes can hide a passenger.
+const OCCLUDER_OWNERS: Array[String] = [
+	"Airside/Terminal", "BuildMode", "PlaneView", "PassengerViews"
 ]
+## A passenger drawn shorter than this (layout pixels) is too small to inspect.
+const MIN_SUBJECT_PX := 16.0
+## The benchmark plate checks at most this many of its in-frame passengers.
+const BENCH_CHECKED := 320
+## The debug batch stands in crowds (many spawn on the same cells), so few of
+## its passengers are clear of every other one; this many must be.
+const BENCH_SHOWN := 5
 
 var _out_dir := ""
 var _failed := false
@@ -43,12 +63,19 @@ var _clock: SimClock
 var _sim: PassengerSim
 var _views: PassengerViews
 var _hud: PassengerHud
+var _scale_tag := ""
+var _saved: Array[Image] = []
 
 
 func _initialize() -> void:
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=", _out_dir)
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--ui-scale="):
+			root.content_scale_factor = float(arg.get_slice("=", 1))
+	_scale_tag = "_s%.2f" % root.content_scale_factor
+	print("PROBE ui_scale=%.2f" % root.content_scale_factor)
 	_beat("init")
 	_guard = Thread.new()
 	_guard.start(_watch)
@@ -117,19 +144,35 @@ func _frames(count: int) -> void:
 	await RenderingServer.frame_post_draw
 
 
+## Steps frames until `done` holds. Fails through _invalid() when the sim
+## reaches `limit_tick` first, when the wait passes WAIT_LIMIT_MS, or when the
+## clock has not advanced for STALL_LIMIT_MS.
 func _until(stage: String, limit_tick: int, done: Callable) -> bool:
 	_beat(stage)
-	while _clock.tick < limit_tick:
-		if done.call():
-			return true
+	var start_ms := Time.get_ticks_msec()
+	var moved_ms := start_ms
+	var last_tick := _clock.tick
+	while not done.call():
+		var now_ms := Time.get_ticks_msec()
+		if _clock.tick != last_tick:
+			last_tick = _clock.tick
+			moved_ms = now_ms
+		if _clock.tick >= limit_tick:
+			_invalid("%s: not met by tick %d" % [stage, limit_tick])
+			return false
+		if now_ms - start_ms > WAIT_LIMIT_MS:
+			_invalid("%s: not met in %d ms (tick %d)" % [stage, WAIT_LIMIT_MS, _clock.tick])
+			return false
+		if now_ms - moved_ms > STALL_LIMIT_MS:
+			_invalid("%s: clock stalled at tick %d" % [stage, last_tick])
+			return false
 		await process_frame
-	_invalid("%s: condition not met by tick %d" % [stage, limit_tick])
-	return false
+	return true
 
 
 func _aim(at: Vector3, distance: float, yaw: float) -> void:
 	_rig.stop_follow()
-	_rig.position = at
+	_rig.position = Vector3(at.x, 0.0, at.z)
 	_rig.yaw = yaw
 	_rig.distance = distance
 
@@ -137,6 +180,7 @@ func _aim(at: Vector3, distance: float, yaw: float) -> void:
 func _run() -> void:
 	await _boot()
 	await _plate_queues()
+	await _plate_seated()
 	await _plate_late()
 	await _plate_boarding()
 	_main.queue_free()
@@ -146,29 +190,25 @@ func _run() -> void:
 	_guard_stop = true
 	_guard_mutex.unlock()
 	_guard.wait_to_finish()
+	if not _saved.is_empty():
+		_save(_sheet(), "contact_sheet")
 	print("PROBE done failed=", _failed)
 	quit(1 if _failed else 0)
 
 
 func _plate_queues() -> void:
-	var ok: bool = await _until(
-		"queues", 1200, func() -> bool: return _count(_queued) >= 2 and _count(_seated) >= 2
-	)
+	if not await _until("queues", DOORS_TICK, func() -> bool: return _count(_queued) >= 2):
+		return
 	_hud.press_speed(0)
-	_aim(Vector3(-16.0, 0.0, -21.0), 26.0, 0.0)
-	await _frames(20)
-	print("PLATE1 tick=%d queued=%d seated=%d" % [_clock.tick, _count(_queued), _count(_seated)])
-	if ok and _visible(_queued) >= 2 and _visible(_seated) >= 2:
-		_save("01_queues_and_seated.png")
-	else:
-		_invalid("plate 1 subjects not visible")
-	_aim(Vector3(-17.0, 0.0, -27.0), 7.0, 0.0)
-	await _frames(20)
-	print("PLATE1b seated_visible=%d" % _visible(_seated))
-	if _visible(_seated) >= 1:
-		_save("01b_seated_close.png")
-	else:
-		_invalid("plate 1b seated passengers not visible")
+	await _plate("01_queues", _ids(_queued), 26.0, 0.0, 2)
+	_hud.press_speed(3)
+
+
+func _plate_seated() -> void:
+	if not await _until("seated", DOORS_TICK, func() -> bool: return _count(_seated) >= 1):
+		return
+	_hud.press_speed(0)
+	await _plate("01b_seated_close", _ids(_seated), 7.0, 0.0, 1)
 	_hud.press_speed(3)
 
 
@@ -180,7 +220,7 @@ func _plate_late() -> void:
 		return p.late and p.stage < Passenger.Stage.TO_EXIT and p.is_moving() and away
 	var found: bool = await _until(
 		"late",
-		1850,
+		DOORS_TICK,
 		func() -> bool:
 			late[0] = _first(running)
 			return late[0] != 0
@@ -189,9 +229,7 @@ func _plate_late() -> void:
 		return
 	_hud.press_speed(0)
 	var p := _sim.get_passenger(late[0])
-	_aim(_views.node_for(p.id).position, 14.0, 0.0)
 	_views.selected_id = p.id
-	await _frames(20)
 	var node := _views.node_for(p.id)
 	print(
 		(
@@ -206,10 +244,11 @@ func _plate_late() -> void:
 			]
 		)
 	)
-	if _in_frame(node.position + Vector3(0, 1, 0)) and node.get_meta(&"clip") == "run":
-		_save("02_late_runner.png")
+	if node.get_meta(&"clip") != "run":
+		_invalid("plate 2 runner %d is not playing the run clip" % p.id)
 	else:
-		_invalid("plate 2 runner not in frame or not running")
+		var only: Array[int] = [p.id]
+		await _plate("02_late_runner", only, 14.0, 0.0, 1)
 	_views.selected_id = 0
 	_hud.press_speed(3)
 
@@ -217,24 +256,105 @@ func _plate_late() -> void:
 func _plate_boarding() -> void:
 	var near_plane := func(p: Passenger) -> bool:
 		return p.stage == Passenger.Stage.APRON and _sim.world_position(p).z < -100.5
-	var ok: bool = await _until("boarding", 1900, func() -> bool: return _count(near_plane) >= 2)
-	_hud.press_speed(0)
-	_aim(Vector3(-15.0, 0.0, -106.0), 24.0, PI * 0.8)
-	await _frames(20)
-	var shown := _visible(near_plane)
-	print(
-		(
-			"PLATE3 tick=%d near_plane=%d visible=%d made=%d"
-			% [_clock.tick, _count(near_plane), shown, _sim.made_count()]
-		)
+	var ok: bool = await _until(
+		"boarding", DOORS_TICK, func() -> bool: return _count(near_plane) >= 2
 	)
-	if ok and shown >= 1:
-		_save("03_boarding_at_stand.png")
-	else:
-		_invalid("plate 3 boarding passengers not visible")
-	_hud.press_speed(3)
-	await _until("doors", 1910, func() -> bool: return _clock.tick >= 1901)
+	if ok:
+		_hud.press_speed(0)
+		await _plate("03_boarding_at_stand", _ids(near_plane), 24.0, PI * 0.8, 1)
+		_hud.press_speed(3)
+	await _until("doors", DOORS_TICK + 10, func() -> bool: return _clock.tick >= DOORS_TICK + 1)
 	print("OUTCOME made=%d missed=%d" % [_sim.made_count(), _sim.missed_count()])
+
+
+## Aims at the centroid of `ids` from `yaw`, then from the other three
+## quarter turns, and saves the first plate where at least `need` of them are
+## shown. When no view shows enough, the last view is saved with an _INVALID
+## suffix (left out of the contact sheet) for diagnosis.
+func _plate(name: String, ids: Array[int], distance: float, yaw: float, need: int) -> void:
+	_beat(name)
+	var centre := Vector3.ZERO
+	for id in ids:
+		centre += _views.node_for(id).position
+	centre /= ids.size()
+	var result := {}
+	for turn in 4:
+		var view_yaw := wrapf(yaw + turn * PI / 2.0, -PI, PI)
+		_aim(centre, distance, view_yaw)
+		await _frames(20)
+		print(
+			(
+				"PLATE %s%s tick=%d candidates=%d centroid=%s distance=%.0f yaw=%.2f"
+				% [name, _scale_tag, _clock.tick, ids.size(), centre, distance, view_yaw]
+			)
+		)
+		result = await _shown(ids)
+		print("SHOWN %s%s shown=%d need=%d" % [name, _scale_tag, result["shown"], need])
+		if result["shown"] >= need:
+			_save(result["image"], name)
+			return
+	_invalid("%s: fewer than %d of %d passengers shown from any side" % [name, need, ids.size()])
+	_save(result["image"], name + "_INVALID", false)
+
+
+## Freezes the scene, grabs the plate and checks each of `ids` (see the file
+## comment). Returns {shown: int, image: Image}.
+func _shown(ids: Array[int]) -> Dictionary:
+	paused = true
+	var img: Image = await PlateSight.grab(self)
+	var subjects := {}
+	for id in ids:
+		subjects[_views.node_for(id)] = str(id)
+	var owners: Array[Node] = []
+	for path in OCCLUDER_OWNERS:
+		owners.append(_main.get_node(path))
+	var holder := PlateSight.colliders(root, owners, subjects)
+	var unbaked: Array = holder.get_meta("unbaked")
+	var bounds: Dictionary = holder.get_meta("bounds")
+	print("PROBE occluder bodies=%d unbaked=%d" % [holder.get_child_count(), unbaked.size()])
+	await physics_frame
+	await physics_frame
+	var twin: Dictionary = await PlateSight.hud_twin(self, _main)
+	var bare: Image = twin["image"]
+	var changed := PlateSight.differing(img, bare, Rect2i(Vector2i.ZERO, img.get_size()), 4)
+	print("HUD layers_hidden=%d plate_px_changed=%d" % [twin["layers"], changed])
+	var shown := 0
+	for id in ids:
+		var box: AABB = bounds.get(str(id), AABB())
+		var seen := PlateSight.person_shown(
+			_cam, box, str(id), _frame_rect(), img, bare, MIN_SUBJECT_PX
+		)
+		print(
+			(
+				(
+					"VISIBLE passenger=%d node_at=%s drawn=%s px=%s height_px=%.0f lines=9 on=%d"
+					+ " past=%d blockers=%s in_frame=%s hud_px=%d ok=%s"
+				)
+				% [
+					id,
+					_views.node_for(id).position,
+					box,
+					seen.get("px"),
+					seen.get("height_px", 0.0),
+					seen["on"],
+					seen["past"],
+					seen["blockers"],
+					seen.get("in_frame"),
+					seen.get("hud_px", 0),
+					seen["ok"]
+				]
+			)
+		)
+		shown += int(seen["ok"])
+	holder.free()
+	paused = false
+	if not unbaked.is_empty():
+		_invalid("skinned meshes not baked: %s" % [unbaked])
+		shown = 0
+	if changed == 0:
+		_invalid("hiding the HUD changed no pixel, so the HUD check proves nothing")
+		shown = 0
+	return {"shown": shown, "image": img}
 
 
 func _benchmark() -> void:
@@ -242,7 +362,7 @@ func _benchmark() -> void:
 	await _boot()
 	await _frames(10)
 	_hud.press_debug_spawn()
-	_aim(Vector3(-16.0, 0.0, -20.0), 40.0, 0.0)
+	_aim(_sim.grid.cell_to_world(ReferenceTerminal.ENTRANCE_CELL), 40.0, 0.0)
 	var start_tick := _clock.tick
 	_sim.tick_usec_max = 0
 	_sim.tick_usec_total = 0
@@ -288,8 +408,36 @@ func _benchmark() -> void:
 		)
 	)
 	_hud.press_speed(0)
-	await _frames(5)
-	_save("04_benchmark_300.png")
+	var everyone := _ids(func(_p: Passenger) -> bool: return true)
+	var centre := Vector3.ZERO
+	for id in everyone:
+		centre += _views.node_for(id).position
+	_aim(centre / maxi(everyone.size(), 1), 40.0, 0.0)
+	await _frames(20)
+	if peak < PassengerHud.DEBUG_BATCH:
+		_invalid(
+			"04: views peaked at %d, under the debug batch of %d" % [peak, PassengerHud.DEBUG_BATCH]
+		)
+	var in_frame: Array[int] = []
+	for id in everyone:
+		var at := _views.node_for(id).position + Vector3(0.0, 1.0, 0.0)
+		if in_frame.size() < BENCH_CHECKED and _in_frame(at):
+			in_frame.append(id)
+	_beat("04_benchmark_300")
+	print(
+		(
+			"PLATE 04_benchmark_300%s tick=%d candidates=%d"
+			% [_scale_tag, _clock.tick, in_frame.size()]
+		)
+	)
+	var result := await _shown(in_frame)
+	var shown: int = result["shown"]
+	print("SHOWN 04_benchmark_300%s shown=%d need=%d" % [_scale_tag, shown, BENCH_SHOWN])
+	if shown >= BENCH_SHOWN:
+		_save(result["image"], "04_benchmark_300")
+	else:
+		_invalid("04: %d passengers shown, need %d" % [shown, BENCH_SHOWN])
+		_save(result["image"], "04_benchmark_300_INVALID", false)
 
 
 func _queued(p: Passenger) -> bool:
@@ -301,52 +449,52 @@ func _seated(p: Passenger) -> bool:
 
 
 func _count(test: Callable) -> int:
-	var n := 0
+	return _ids(test).size()
+
+
+## Passengers passing `test` that have a drawn node.
+func _ids(test: Callable) -> Array[int]:
+	var ids: Array[int] = []
 	for id in _sim.passenger_ids():
-		n += int(test.call(_sim.get_passenger(id)))
-	return n
+		if _views.node_for(id) != null and test.call(_sim.get_passenger(id)):
+			ids.append(id)
+	return ids
 
 
 func _first(test: Callable) -> int:
-	for id in _sim.passenger_ids():
-		if test.call(_sim.get_passenger(id)):
-			return id
-	return 0
+	var ids := _ids(test)
+	return 0 if ids.is_empty() else ids[0]
 
 
-## Subjects passing `test` whose drawn node is in frame and not behind a blocker.
-func _visible(test: Callable) -> int:
-	var n := 0
-	for id in _sim.passenger_ids():
-		var node := _views.node_for(id)
-		if node == null or not test.call(_sim.get_passenger(id)):
-			continue
-		var at := node.position + Vector3(0.0, 1.0, 0.0)
-		if _in_frame(at) and not _hidden(at):
-			n += 1
-	return n
+func _frame_rect() -> Rect2:
+	return Rect2(
+		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
+	)
 
 
 func _in_frame(at: Vector3) -> bool:
-	var rect := Rect2(
-		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
-	)
-	var screen := _cam.unproject_position(at)
-	return not _cam.is_position_behind(at) and rect.has_point(screen)
+	return not _cam.is_position_behind(at) and _frame_rect().has_point(_cam.unproject_position(at))
 
 
-func _hidden(at: Vector3) -> bool:
-	for box in BLOCKERS:
-		if box.has_point(at) or box.intersects_segment(_cam.global_position, at) != null:
-			return true
-	return false
-
-
-func _save(name: String) -> void:
-	var img := root.get_texture().get_image()
-	var path := _out_dir.path_join(name)
+func _save(img: Image, name: String, sheet := true) -> void:
+	var path := _out_dir.path_join(name + _scale_tag + ".png")
 	var err := img.save_png(path)
 	if err != OK:
 		_invalid("could not save %s (error %d)" % [path, err])
 		return
 	print("PLATE saved %s size=%s" % [path, img.get_size()])
+	if sheet:
+		_saved.append(img)
+
+
+## Every saved plate at a third size, three to a row.
+func _sheet() -> Image:
+	var w := _saved[0].get_width() / 3
+	var h := _saved[0].get_height() / 3
+	var rows := (_saved.size() + 2) / 3
+	var sheet := Image.create(w * 3, h * rows, false, Image.FORMAT_RGBA8)
+	for i in _saved.size():
+		var small := _saved[i].duplicate() as Image
+		small.resize(w, h, Image.INTERPOLATE_BILINEAR)
+		sheet.blit_rect(small, Rect2i(0, 0, w, h), Vector2i(w * (i % 3), h * (i / 3)))
+	return sheet

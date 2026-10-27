@@ -9,30 +9,38 @@ extends SceneTree
 ##
 ## Plates, each taken the first tick its moment happens: a guest ordering at a
 ## counter, a guest seated at a table, the '+$' pop over a counter, and a
-## landside guest seated. Before a plate is saved its subject (the guest, or
-## the pop) is projected into the frame clear of the HUD strips and a ray from
-## the camera must reach it past the shell and the build pieces; otherwise the
-## probe prints PROBE_INVALID and exits 1. A guard thread calls OS.crash() on
-## a stall.
+## landside guest seated. The scene is frozen for each plate. A guest is shown
+## when its drawn body (skinned meshes baked in the pose drawn) is in the frame
+## with a margin, at least one of nine sight lines (against every visible mesh
+## of the shell, the build, the plane and the other passengers) lands on its
+## own meshes with no blocker, and the HUD covers none of the landing points
+## (the plate against a twin rendered with the HUD's canvas layers hidden).
+## The pop ignores depth and has no mesh, so it is measured instead: the plate
+## against a twin with the pop hidden must differ, the differing box must sit
+## in the frame, no pixel of it may change when the HUD is hidden, and a second
+## grab must match the first there. A plate that fails prints PROBE_INVALID and
+## the probe exits 1. A guard thread calls OS.crash() on a stall.
 ##
-## Run (one windowed Godot run project-wide; take the slot first):
+## Run (one windowed Godot run project-wide; take the slot first); --ui-scale
+## overrides the content scale from project.godot, and the plate names carry
+## the scale:
 ##   timeout 900 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path game -s res://spike/cafe_plates_probe.gd
+##     --path game -s res://spike/cafe_plates_probe.gd -- --ui-scale=1.0
 ##
 ## Plates go to tools/blender/out/cafe/.
 
+const PlateSight := preload("res://spike/plate_sight.gd")
 const OUT_REL := "res://../tools/blender/out/cafe"
 const MARGIN_PX := 8.0
-const TOP_HUD_PX := 56.0
-const BOTTOM_HUD_PX := (
-	BuildMenu.MARGIN
-	+ BuildMenu.BAR_H
-	+ BuildMenu.GAP
-	+ BuildMenu.TRAY_H
-	+ BuildMenu.GAP
-	+ BuildMenu.STATUS_H
-)
+## Scene nodes whose visible meshes can hide a guest.
+const OCCLUDER_OWNERS: Array[String] = [
+	"Airside/Terminal", "BuildMode", "PlaneView", "PassengerViews"
+]
+## A guest drawn shorter than this (layout pixels) is too small to inspect.
+const MIN_SUBJECT_PX := 16.0
+## Half the size of the box searched for the pop's pixels, in layout pixels.
+const POP_SEARCH_PX := Vector2(160.0, 80.0)
 const DISTANCES := [9.0, 11.0, 13.0, 16.0, 20.0]
 const TICKS_PER_FRAME := 4
 const LAST_TICK := 1100
@@ -62,11 +70,17 @@ var _plates := {}
 var _images: Array[Image] = []
 ## The passenger id the "pop" plate is about, set when a payment lands.
 var _fresh_pop := 0
+var _scale_tag := ""
 
 
 func _initialize() -> void:
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--ui-scale="):
+			root.content_scale_factor = float(arg.get_slice("=", 1))
+	_scale_tag = "_s%.2f" % root.content_scale_factor
+	print("PROBE ui_scale=%.2f" % root.content_scale_factor)
 	_beat("boot")
 	_guard.start(_watch)
 	_run.call_deferred()
@@ -102,6 +116,7 @@ func _run() -> void:
 	print("PROBE ids=%s usable_cafes=%d" % [ids, _sim.cafes.layout.cafes.size()])
 	if _sim.cafes.layout.cafes.size() != 2:
 		_invalid("expected two usable cafes")
+	_balance_seen = _wallet.balance
 	_sim.cafes.paid.connect(_on_paid)
 	_sim.stage_changed.connect(_on_stage)
 	# Six get hungry at once (landside, after check-in) and six about 15 s
@@ -123,7 +138,7 @@ func _run() -> void:
 		await process_frame
 	_report(ids)
 	if _images.size() == SHOTS.size():
-		_save(_contact_sheet(_images), "contact_sheet.png")
+		_save(_contact_sheet(_images), "contact_sheet%s.png" % _scale_tag)
 	print("PROBE done tick=%d failed=%s" % [clock.tick, _failed])
 	_finish()
 	quit(1 if _failed else 0)
@@ -168,8 +183,15 @@ func _plate(main: Node3D, rig: TycoonCamera, cam: Camera3D, moment: Array) -> vo
 			break
 	print(
 		(
-			"CAMERA %s pos=%s distance=%.1f pitch_deg=%.1f yaw=%.2f"
-			% [shot, cam.global_position, rig.distance, -cam.rotation_degrees.x, rig.yaw]
+			"CAMERA %s%s pos=%s distance=%.1f pitch_deg=%.1f yaw=%.2f"
+			% [
+				shot,
+				_scale_tag,
+				cam.global_position,
+				rig.distance,
+				-cam.rotation_degrees.x,
+				rig.yaw
+			]
 		)
 	)
 	var p := _sim.get_passenger(id)
@@ -180,16 +202,20 @@ func _plate(main: Node3D, rig: TycoonCamera, cam: Camera3D, moment: Array) -> vo
 		)
 	)
 	var ok := framed and _in_frame(cam, subject, shot, true)
-	# Built now, with the walls and shell cut away for this camera.
-	var occluders := _colliders(main)
-	await physics_frame
-	await physics_frame
-	ok = _visible(cam, subject, shot) and ok
-	occluders.free()
-	var img := await _grab()
+	# Freeze the scene, so the plate and its twins differ only by what each hides.
+	paused = true
+	var img: Image = await PlateSight.grab(self, 4)
+	if shot == "pop":
+		ok = await _pop_shown(main, cam, views, img, subject, id) and ok
+	else:
+		ok = await _guest_shown(main, cam, views, img, id, shot) and ok
+	paused = false
 	if ok:
-		_save(img, "cafe_%s.png" % shot)
+		_save(img, "cafe_%s%s.png" % [shot, _scale_tag])
 		_images.append(img)
+	else:
+		_invalid("%s: the subject is out of frame, hidden or under the HUD" % shot)
+		_save(img, "cafe_%s_INVALID%s.png" % [shot, _scale_tag])
 
 
 ## Where to look: the guest's head, or the pop label.
@@ -208,11 +234,14 @@ func _subject_point(views: PassengerViews, shot: String, id: int) -> Vector3:
 	return node.global_position + Vector3(0.0, SEATED_HEAD_M if seated else HEAD_M, 0.0)
 
 
-func _in_frame(cam: Camera3D, point: Vector3, label: String, report: bool) -> bool:
-	var size := root.get_visible_rect().size
-	var rect := Rect2(
-		Vector2(MARGIN_PX, TOP_HUD_PX), size - Vector2(MARGIN_PX * 2, TOP_HUD_PX + BOTTOM_HUD_PX)
+func _frame_rect() -> Rect2:
+	return Rect2(
+		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
 	)
+
+
+func _in_frame(cam: Camera3D, point: Vector3, label: String, report: bool) -> bool:
+	var rect := _frame_rect()
 	var behind := cam.is_position_behind(point)
 	var screen := cam.unproject_position(point)
 	var ok := not behind and rect.has_point(screen)
@@ -228,18 +257,125 @@ func _in_frame(cam: Camera3D, point: Vector3, label: String, report: bool) -> bo
 	return ok
 
 
-## A ray from the camera to the subject must not hit the shell or a build
-## piece more than 5 cm before it.
-func _visible(cam: Camera3D, point: Vector3, label: String) -> bool:
-	var space := cam.get_world_3d().direct_space_state
-	var from := cam.global_position
-	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, point))
-	var blocked := hit and from.distance_to(hit.position) < from.distance_to(point) - 0.05
-	var blocker := str((hit.collider as Node).get_meta("mesh", "")) if blocked else ""
-	print("VISIBLE %s clear=%s blocker=%s" % [label, not blocked, blocker])
-	if blocked:
-		_invalid("%s: the subject is hidden behind %s" % [label, blocker])
-	return not blocked
+## The guest's drawn body against every visible mesh of the occluder owners,
+## in the frozen pose (PlateSight.person_shown).
+func _guest_shown(
+	main: Node3D, cam: Camera3D, views: PassengerViews, img: Image, id: int, shot: String
+) -> bool:
+	var owners: Array[Node] = []
+	for path in OCCLUDER_OWNERS:
+		owners.append(main.get_node(path))
+	var subjects := {}
+	var node := views.node_for(id)
+	if node != null:
+		subjects[node] = "guest"
+	var holder := PlateSight.colliders(root, owners, subjects)
+	var unbaked: Array = holder.get_meta("unbaked")
+	var box: AABB = (holder.get_meta("bounds") as Dictionary).get("guest", AABB())
+	print("PROBE occluder bodies=%d unbaked=%d" % [holder.get_child_count(), unbaked.size()])
+	await physics_frame
+	await physics_frame
+	var twin: Dictionary = await PlateSight.hud_twin(self, main)
+	var bare: Image = twin["image"]
+	var changed := PlateSight.differing(img, bare, Rect2i(Vector2i.ZERO, img.get_size()), 4)
+	var seen := PlateSight.person_shown(cam, box, "guest", _frame_rect(), img, bare, MIN_SUBJECT_PX)
+	holder.free()
+	print("HUD %s layers_hidden=%d plate_px_changed=%d" % [shot, twin["layers"], changed])
+	print(
+		(
+			(
+				"VISIBLE %s passenger=%d drawn=%s px=%s height_px=%.0f lines=9 on=%d past=%d"
+				+ " blockers=%s in_frame=%s hud_px=%d ok=%s"
+			)
+			% [
+				shot,
+				id,
+				box,
+				seen.get("px"),
+				seen.get("height_px", 0.0),
+				seen["on"],
+				seen["past"],
+				seen["blockers"],
+				seen.get("in_frame"),
+				seen.get("hud_px", 0),
+				seen["ok"]
+			]
+		)
+	)
+	if not unbaked.is_empty():
+		print("PROBE skinned meshes not baked: %s" % [unbaked])
+	return seen["ok"] and changed > 0 and unbaked.is_empty()
+
+
+## The newest pop, measured in the plate: a twin with the pop hidden must
+## differ inside a box around its anchor, the differing box must sit in the
+## frame (and not reach the search box's edge, or the search cut it), none of
+## it may change when the HUD is hidden, and a second grab must match the plate
+## there (nothing else moved). Its text must be the payer's amount.
+func _pop_shown(
+	main: Node3D, cam: Camera3D, views: PassengerViews, img: Image, at: Vector3, payer: int
+) -> bool:
+	var labels := views.cafe_pops().live_labels()
+	if labels.is_empty():
+		return false
+	var label: Label3D = labels.back()
+	print("POP live_labels=%d" % labels.size())
+	if labels.size() != 1:
+		return false
+	var per_screen := root.get_visible_rect().size.y / float(img.get_height())
+	var anchor := cam.unproject_position(at)
+	var search := PlateSight.to_screen(
+		Rect2(anchor - POP_SEARCH_PX, POP_SEARCH_PX * 2.0), per_screen, img.get_size()
+	)
+	var again: Image = await PlateSight.grab(self, 4)
+	var drift := PlateSight.differing(img, again, search, 1)
+	label.visible = false
+	var hidden: Image = await PlateSight.grab(self, 4)
+	label.visible = true
+	var box := PlateSight.differing_box(img, hidden, search)
+	var drawn := PlateSight.differing(img, hidden, box, 1) if box.has_area() else 0
+	var twin: Dictionary = await PlateSight.hud_twin(self, main)
+	var bare: Image = twin["image"]
+	var changed := PlateSight.differing(img, bare, Rect2i(Vector2i.ZERO, img.get_size()), 4)
+	var under := PlateSight.differing(img, bare, box, 1) if box.has_area() else 0
+	var layout := Rect2(Vector2(box.position) * per_screen, Vector2(box.size) * per_screen)
+	var in_frame := box.has_area() and _frame_rect().encloses(layout)
+	var cut := (
+		box.position.x == search.position.x
+		or box.position.y == search.position.y
+		or box.end.x == search.end.x
+		or box.end.y == search.end.y
+	)
+	var amount := -1
+	for row in _payments:
+		if row[0] == payer:
+			amount = row[2]
+	var text_ok := label.text == "+$%d" % amount
+	var ok := drift == 0 and drawn > 0 and in_frame and not cut and under == 0 and changed > 0
+	ok = ok and text_ok and label.modulate.a > 0.5
+	print(
+		(
+			(
+				'POP text="%s" payer_amount=%d alpha=%.2f search_screen=%s drawn_box_screen=%s'
+				+ " drawn_px=%d drift_px=%d cut=%s in_frame=%s hud_px=%d plate_px_changed=%d ok=%s"
+			)
+			% [
+				label.text,
+				amount,
+				label.modulate.a,
+				search,
+				box,
+				drawn,
+				drift,
+				cut,
+				in_frame,
+				under,
+				changed,
+				ok
+			]
+		)
+	)
+	return ok
 
 
 func _on_stage(id: int, stage: Passenger.Stage) -> void:
@@ -332,53 +468,6 @@ func _contact_sheet(plates: Array[Image]) -> Image:
 	return sheet
 
 
-## One static body per visible mesh of the shell and the build view (walls,
-## counters, tables), in world space, for the visibility rays.
-func _colliders(main: Node) -> Node3D:
-	var holder := Node3D.new()
-	holder.name = "ProbeColliders"
-	root.add_child(holder)
-	for owner_node in [main.get_node("Airside/Terminal"), main.get_node("BuildMode")]:
-		for mi in owner_node.find_children("*", "MeshInstance3D", true, false):
-			var inst := mi as MeshInstance3D
-			if inst.is_visible_in_tree() and inst.mesh != null:
-				_add_body(holder, inst.name, inst.mesh, [inst.global_transform])
-		for mmi in owner_node.find_children("*", "MultiMeshInstance3D", true, false):
-			var multi := mmi as MultiMeshInstance3D
-			if not multi.is_visible_in_tree() or multi.multimesh == null:
-				continue
-			var mm := multi.multimesh
-			var at: Array[Transform3D] = []
-			var count := mm.instance_count
-			if mm.visible_instance_count >= 0:
-				count = mm.visible_instance_count
-			for i in count:
-				at.append(multi.global_transform * mm.get_instance_transform(i))
-			_add_body(holder, multi.name, mm.mesh, at)
-	print("PROBE occluder bodies=%d" % holder.get_child_count())
-	return holder
-
-
-func _add_body(holder: Node3D, label: String, mesh: Mesh, transforms: Array) -> void:
-	if mesh == null:
-		return
-	var local_faces := mesh.get_faces()
-	if local_faces.is_empty() or transforms.is_empty():
-		return
-	var faces := PackedVector3Array()
-	for at: Transform3D in transforms:
-		for p in local_faces:
-			faces.append(at * p)
-	var shape := ConcavePolygonShape3D.new()
-	shape.set_faces(faces)
-	var shape_node := CollisionShape3D.new()
-	shape_node.shape = shape
-	var body := StaticBody3D.new()
-	body.set_meta("mesh", label)
-	body.add_child(shape_node)
-	holder.add_child(body)
-
-
 func _invalid(msg: String) -> void:
 	print("PROBE_INVALID ", msg)
 	_failed = true
@@ -389,13 +478,6 @@ func _frames(count: int) -> void:
 		await process_frame
 		_beat(_stage)
 	await RenderingServer.frame_post_draw
-
-
-func _grab() -> Image:
-	await _frames(4)
-	var img := root.get_texture().get_image()
-	img.convert(Image.FORMAT_RGBA8)
-	return img
 
 
 func _save(img: Image, file: String) -> void:

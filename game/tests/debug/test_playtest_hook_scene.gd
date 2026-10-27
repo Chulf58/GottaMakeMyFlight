@@ -59,6 +59,9 @@ func before() -> void:
 	_attached = _hook.attach(_main)
 	_push_input()
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
+	# A new game has no staff: seat one at every desk and scanner so the
+	# session's passengers are served.
+	StaffTestKit.staff_all(_main.get_node("Staff"))
 	var grid := _mode.grid
 	_mode.set_tool(BuildMode.Tool.ENTRANCE)
 	_mode.apply_at(grid.cell_to_world(OFF_DOOR_CELL))

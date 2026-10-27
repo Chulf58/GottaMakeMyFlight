@@ -1,4 +1,4 @@
-[gd_scene load_steps=25 format=3]
+[gd_scene load_steps=27 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -20,6 +20,8 @@
 [ext_resource type="Script" path="res://ui/offer_panel.gd" id="18_offerpanel"]
 [ext_resource type="Script" path="res://economy/settlement.gd" id="19_settlement"]
 [ext_resource type="Script" path="res://economy/rescue_grant.gd" id="20_rescue"]
+[ext_resource type="Script" path="res://staff/staff_sim.gd" id="21_staff"]
+[ext_resource type="Script" path="res://ui/staff_panel.gd" id="22_staffpanel"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -130,12 +132,16 @@ clock = NodePath("../SimClock")
 sim = NodePath("../FlightSim")
 airside = NodePath("../Airside")
 
-[node name="PassengerSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "build_mode", "finances")]
+[node name="PassengerSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "build_mode", "finances", "staff")]
 script = ExtResource("10_pax")
 clock = NodePath("../SimClock")
 flights = NodePath("../FlightSim")
 build_mode = NodePath("../BuildMode")
 finances = NodePath("../Finances")
+staff = NodePath("../Staff")
+
+[node name="Staff" type="Node" parent="."]
+script = ExtResource("21_staff")
 
 [node name="Settlement" type="Node" parent="." node_paths=PackedStringArray("passengers", "finances")]
 script = ExtResource("19_settlement")
@@ -182,3 +188,8 @@ layer = 2
 script = ExtResource("18_offerpanel")
 desk = NodePath("../OfferDesk")
 flights = NodePath("../FlightSim")
+
+[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff")]
+layer = 2
+script = ExtResource("22_staffpanel")
+staff = NodePath("../Staff")

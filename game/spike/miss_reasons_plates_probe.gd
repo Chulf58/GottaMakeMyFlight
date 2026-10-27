@@ -23,6 +23,7 @@ extends SceneTree
 ##     --path <repo>/game -s res://spike/miss_reasons_plates_probe.gd \
 ##     -- --ui-scale=1.0
 
+const PlateSight := preload("res://spike/plate_sight.gd")
 const OUT_REL := "res://../tools/blender/out/miss_reasons"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
@@ -282,46 +283,26 @@ func _framed(label: String, rect: Rect2) -> bool:
 ## rects, read in screen pixels and rounded outward). The control is the whole
 ## plate: hiding the layers must change it, or the comparison proves nothing.
 func _clear_of_hud(img: Image, rects: Array[Rect2], per_screen: float) -> bool:
-	var layers: Array[CanvasLayer] = []
-	for node in _main.find_children("*", "CanvasLayer", true, false):
-		var layer := node as CanvasLayer
-		if layer.visible:
-			layer.visible = false
-			layers.append(layer)
-	var bare := await _grab()
-	for layer in layers:
-		layer.visible = true
-	await _frames(2)
+	var twin: Dictionary = await PlateSight.hud_twin(self, _main)
+	var bare: Image = twin["image"]
 	var plate := Rect2i(Vector2i.ZERO, img.get_size())
-	var changed := _differing(img, bare, plate, 4)
+	var changed := PlateSight.differing(img, bare, plate, 4)
 	var ok := changed > 0
 	var under: Array[int] = []
 	for rect in rects:
 		var lo := Vector2i((rect.position / per_screen).floor())
 		var hi := Vector2i((rect.end / per_screen).ceil())
 		var screen := Rect2i(lo, hi - lo)
-		var count := _differing(img, bare, screen.intersection(plate), 1)
+		var count := PlateSight.differing(img, bare, screen.intersection(plate), 1)
 		under.append(count)
 		ok = ok and count == 0
 	print(
 		(
 			"HUD layers_hidden=%d plate_px_changed=%d sign_caption_deskhits_px_under_hud=%s ok=%s"
-			% [layers.size(), changed, under, ok]
+			% [twin["layers"], changed, under, ok]
 		)
 	)
 	return ok
-
-
-## Pixels inside `rect` (every `step`th one) that differ between two plates.
-func _differing(a: Image, b: Image, rect: Rect2i, step: int) -> int:
-	var count := 0
-	for y in range(rect.position.y, rect.end.y, step):
-		for x in range(rect.position.x, rect.end.x, step):
-			var p := a.get_pixel(x, y)
-			var q := b.get_pixel(x, y)
-			if absf(p.r - q.r) + absf(p.g - q.g) + absf(p.b - q.b) > 0.03:
-				count += 1
-	return count
 
 
 ## Nine sight lines from the camera to a grid of points just under the top of
@@ -338,9 +319,7 @@ func _desk_seen(desk: int, bounds: AABB) -> Array[Vector3]:
 	await physics_frame
 	var space := _cam.get_world_3d().direct_space_state
 	var from := _cam.global_position
-	var on_desk: Array[Vector3] = []
-	var neutral := 0
-	var blockers: Array[String] = []
+	var targets: Array[Vector3] = []
 	for i in 3:
 		for j in 3:
 			var at := (
@@ -351,16 +330,11 @@ func _desk_seen(desk: int, bounds: AABB) -> Array[Vector3]:
 					(j + 0.5) / 3.0 * bounds.size.z
 				)
 			)
-			var to := at + (at - from).normalized() * 3.0
-			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to))
-			if hit.is_empty():
-				neutral += 1
-			elif (hit.collider as Node).has_meta("desk"):
-				on_desk.append(hit.position)
-			elif from.distance_to(hit.position) < from.distance_to(at) - 0.05:
-				blockers.append(str((hit.collider as Node).get_meta("mesh", "")))
-			else:
-				neutral += 1
+			targets.append(at)
+	var lines := PlateSight.sight_lines(space, from, targets, "desk")
+	var on_desk: Array[Vector3] = lines["on_subject"]
+	var neutral: int = lines["past"]
+	var blockers: Array[String] = lines["blockers"]
 	occluders.free()
 	var ok := not on_desk.is_empty() and blockers.is_empty()
 	print(
@@ -435,63 +409,25 @@ func _near(a: Color, b: Color) -> bool:
 
 
 ## One static body per visible mesh of the occluder owners, in world space,
-## for the sight lines (as in cafe_plates_probe.gd). Bodies from the desk's
-## own meshes carry the "desk" meta.
+## for the sight lines (PlateSight). Bodies from the desk's own meshes carry
+## the "desk" subject tag.
 func _colliders(desk_node: Node3D) -> Node3D:
-	var holder := Node3D.new()
-	holder.name = "ProbeColliders"
-	root.add_child(holder)
+	var owners: Array[Node] = []
 	for path in OCCLUDER_OWNERS:
-		var owner_node := _main.get_node(path)
-		for mi in owner_node.find_children("*", "MeshInstance3D", true, false):
-			var inst := mi as MeshInstance3D
-			if not inst.is_visible_in_tree() or inst.mesh == null:
-				continue
-			var body := _add_body(holder, inst.name, inst.mesh, [inst.global_transform])
-			if body != null and desk_node != null and desk_node.is_ancestor_of(inst):
-				body.set_meta("desk", true)
-		for mmi in owner_node.find_children("*", "MultiMeshInstance3D", true, false):
-			var multi := mmi as MultiMeshInstance3D
-			if not multi.is_visible_in_tree() or multi.multimesh == null:
-				continue
-			var mm := multi.multimesh
-			var at: Array[Transform3D] = []
-			var count := mm.instance_count
-			if mm.visible_instance_count >= 0:
-				count = mm.visible_instance_count
-			for i in count:
-				at.append(multi.global_transform * mm.get_instance_transform(i))
-			_add_body(holder, multi.name, mm.mesh, at)
+		owners.append(_main.get_node(path))
+	var subjects := {}
+	if desk_node != null:
+		subjects[desk_node] = "desk"
+	var holder := PlateSight.colliders(root, owners, subjects)
+	var unbaked: Array = holder.get_meta("unbaked")
+	if not unbaked.is_empty():
+		_invalid("skinned meshes not baked: %s" % [unbaked])
 	print("PROBE occluder bodies=%d" % holder.get_child_count())
 	return holder
 
 
-func _add_body(holder: Node3D, label: String, mesh: Mesh, transforms: Array) -> StaticBody3D:
-	if mesh == null:
-		return null
-	var local_faces := mesh.get_faces()
-	if local_faces.is_empty() or transforms.is_empty():
-		return null
-	var faces := PackedVector3Array()
-	for at: Transform3D in transforms:
-		for p in local_faces:
-			faces.append(at * p)
-	var shape := ConcavePolygonShape3D.new()
-	shape.set_faces(faces)
-	var shape_node := CollisionShape3D.new()
-	shape_node.shape = shape
-	var body := StaticBody3D.new()
-	body.set_meta("mesh", label)
-	body.add_child(shape_node)
-	holder.add_child(body)
-	return body
-
-
 func _grab() -> Image:
-	await _frames(2)
-	var img := root.get_texture().get_image()
-	img.convert(Image.FORMAT_RGBA8)
-	return img
+	return await PlateSight.grab(self)
 
 
 func _plate_cleared(desk: int, desk_point: Vector3) -> void:

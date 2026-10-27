@@ -99,6 +99,7 @@ func _run() -> void:
 	if not _check_frame() or not _build():
 		_end()
 		return
+	_hire_staff()
 	_id = _sim.spawn_now(_main.get_node("FlightSim").flight_ids()[0])
 	_views.selected_id = _id
 	var p := _sim.get_passenger(_id)
@@ -132,6 +133,22 @@ func _check_frame() -> bool:
 
 
 ## Builds the one-path terminal with the BuildMode tools, as a player would.
+## A new game has no staff: one hire per desk and scanner, as the staff
+## panel's Hire buttons do; the staff walk to the stations on their own.
+func _hire_staff() -> void:
+	var staff := _main.get_node("Staff") as StaffSim
+	for i in _sim.layout.desks.size():
+		staff.hire(StaffMember.Role.CHECKIN)
+	for i in _sim.layout.scanners.size():
+		staff.hire(StaffMember.Role.SECURITY)
+	print(
+		(
+			"PROBE hired checkin=%d security=%d"
+			% [staff.count(StaffMember.Role.CHECKIN), staff.count(StaffMember.Role.SECURITY)]
+		)
+	)
+
+
 func _build() -> bool:
 	var grid := _mode.grid
 	_mode.set_tool(BuildMode.Tool.FLOOR)
