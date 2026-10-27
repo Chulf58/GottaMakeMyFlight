@@ -12,6 +12,12 @@ extends Node
 ## GameCalendar days; the window is the current day and the two before it,
 ## pooled, so a busy day weighs more than a quiet one.
 ##
+## Missed bags (Baggage B4) lower the stars too: every bag BaggageSim settles
+## (bag_settled) is recorded on the day it settles, whether or not its passenger
+## made the flight, because a bag the belt could not load is the belt's miss.
+## RatingFormula.WEIGHT_BAGS says how much they weigh. Set `baggage` before
+## bind() (the scene wires it); without it no bag is recorded.
+##
 ## For the HUD: stars(), parts(), has_data() and the changed signal. For the
 ## offer board: stars() against RatingFormula.TIER_STARS (RatingFormula.tier).
 ## For contracts: warning() while the rating is below RatingFormula.WARN_BELOW,
@@ -25,8 +31,10 @@ const SAVE_VERSION := 1
 @export var clock: SimClock
 @export var flights: FlightSim
 @export var passengers: PassengerSim
+@export var baggage: BaggageSim
 
-## Day -> {"made", "missed", "mood_sum"}; only days with a record are listed.
+## Day -> {"made", "missed", "mood_sum", "bags", "bags_missed"}; only days with
+## a record are listed.
 var _days: Dictionary = {}
 ## The last tick the rating has seen; its day is the current day.
 var _tick := 0
@@ -46,9 +54,11 @@ func _ready() -> void:
 
 ## Listens to the clock, the flights' door closes and the passengers' outcomes.
 ## Binding the same three again does nothing; binding others first lets go of
-## the ones bound before, so no signal reaches the rating twice.
+## the ones bound before, so no signal reaches the rating twice. The bag sim in
+## `baggage`, if set, is listened to as well, also on a repeated bind.
 func bind(with_clock: SimClock, with_flights: FlightSim, with_passengers: PassengerSim) -> void:
 	if _bound and clock == with_clock and flights == with_flights and passengers == with_passengers:
+		_bind_baggage()
 		return
 	_unbind()
 	clock = with_clock
@@ -57,6 +67,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_passengers: Passen
 	clock.ticked.connect(on_tick)
 	flights.doors_closed.connect(_on_doors_closed)
 	passengers.outcome.connect(_on_outcome)
+	_bind_baggage()
 	_bound = true
 
 
@@ -87,6 +98,19 @@ func record_passenger(tick: int, made: bool, mood: int) -> void:
 	changed.emit()
 
 
+## One bag settled at `tick`, loaded or missed (a missed bag counts for the
+## rating whatever became of its passenger).
+func record_bag(tick: int, loaded: bool) -> void:
+	var totals := _today_after_rolling(tick)
+	if totals["bags"] >= RatingFormula.MAX_DAY_COUNT:
+		push_error("AirportRating.record_bag: the day is full of bags")
+		return
+	totals["bags"] += 1
+	if not loaded:
+		totals["bags_missed"] += 1
+	changed.emit()
+
+
 ## A flight's doors closed at `tick`; its no-shows are recorded on a later tick.
 func note_doors_closed(flight_id: String, tick: int) -> void:
 	for entry in _pending:
@@ -98,7 +122,7 @@ func note_doors_closed(flight_id: String, tick: int) -> void:
 ## The stars over the window, 1 to 5 in half steps; STARTING_STARS with no data.
 func stars() -> float:
 	var window := _window(current_day())
-	return RatingFormula.stars(window["made"], window["missed"], window["mood_sum"])
+	return _stars_of(window)
 
 
 ## False until a passenger (or no-show) is inside the window.
@@ -108,7 +132,8 @@ func has_data() -> bool:
 
 
 ## The parts the HUD tooltip shows: {"stars", "made", "missed", "passengers",
-## "made_share" 0..1, "mood_avg" 0..100 of those who made it, "days" with data}.
+## "made_share" 0..1, "mood_avg" 0..100 of those who made it, "bags" settled,
+## "bags_missed" of them and their "bags_missed_share" 0..1, "days" with data}.
 func parts() -> Dictionary:
 	var window := _window(current_day())
 	var total: int = window["made"] + window["missed"]
@@ -118,6 +143,9 @@ func parts() -> Dictionary:
 	var mood_avg := 0.0
 	if window["made"] > 0:
 		mood_avg = float(window["mood_sum"]) / window["made"]
+	var bags_missed_share := 0.0
+	if window["bags"] > 0:
+		bags_missed_share = float(window["bags_missed"]) / window["bags"]
 	return {
 		"stars": stars(),
 		"made": window["made"],
@@ -125,6 +153,9 @@ func parts() -> Dictionary:
 		"passengers": total,
 		"made_share": made_share,
 		"mood_avg": mood_avg,
+		"bags": window["bags"],
+		"bags_missed": window["bags_missed"],
+		"bags_missed_share": bags_missed_share,
 		"days": window["days"],
 	}
 
@@ -160,7 +191,8 @@ func current_day() -> int:
 	return GameCalendar.day_of(_tick)
 
 
-## What `day` holds: {"made", "missed", "mood_sum"}, zeros when it has nothing.
+## What `day` holds: {"made", "missed", "mood_sum", "bags", "bags_missed"},
+## zeros when it has nothing.
 func day_totals(day: int) -> Dictionary:
 	if _days.has(day):
 		return (_days[day] as Dictionary).duplicate()
@@ -197,7 +229,14 @@ func from_snapshot(data: Dictionary) -> bool:
 	return true
 
 
+func _bind_baggage() -> void:
+	if baggage != null and not baggage.bag_settled.is_connected(_on_bag_settled):
+		baggage.bag_settled.connect(_on_bag_settled)
+
+
 func _unbind() -> void:
+	if is_instance_valid(baggage) and baggage.bag_settled.is_connected(_on_bag_settled):
+		baggage.bag_settled.disconnect(_on_bag_settled)
 	if not _bound:
 		return
 	if is_instance_valid(clock) and clock.ticked.is_connected(on_tick):
@@ -256,8 +295,12 @@ func _on_outcome(id: int, made: bool) -> void:
 	record_passenger(passengers.tick, made, p.mood)
 
 
+func _on_bag_settled(_bag_id: int, _passenger_id: int, _flight_id: String, loaded: bool) -> void:
+	record_bag(clock.tick, loaded)
+
+
 static func _empty_day() -> Dictionary:
-	return {"made": 0, "missed": 0, "mood_sum": 0}
+	return {"made": 0, "missed": 0, "mood_sum": 0, "bags": 0, "bags_missed": 0}
 
 
 ## Today's totals (created if need be) once the day has rolled to `tick`.
@@ -271,7 +314,7 @@ func _today_after_rolling(tick: int) -> Dictionary:
 
 ## Pooled totals of the window ending on `last_day`.
 func _window(last_day: int) -> Dictionary:
-	var window := {"made": 0, "missed": 0, "mood_sum": 0, "days": 0}
+	var window := {"made": 0, "missed": 0, "mood_sum": 0, "bags": 0, "bags_missed": 0, "days": 0}
 	for day in range(last_day - RatingFormula.WINDOW_DAYS + 1, last_day + 1):
 		if not _days.has(day):
 			continue
@@ -279,6 +322,8 @@ func _window(last_day: int) -> Dictionary:
 		window["made"] += totals["made"]
 		window["missed"] += totals["missed"]
 		window["mood_sum"] += totals["mood_sum"]
+		window["bags"] += totals["bags"]
+		window["bags_missed"] += totals["bags_missed"]
 		if totals["made"] + totals["missed"] > 0:
 			window["days"] += 1
 	return window
@@ -316,5 +361,11 @@ static func _is_low(window: Dictionary) -> bool:
 	var total: int = window["made"] + window["missed"]
 	if total == 0:
 		return false
-	var stars_value := RatingFormula.stars(window["made"], window["missed"], window["mood_sum"])
-	return stars_value < RatingFormula.WARN_BELOW
+	return _stars_of(window) < RatingFormula.WARN_BELOW
+
+
+## The stars of a pooled window.
+static func _stars_of(window: Dictionary) -> float:
+	return RatingFormula.stars(
+		window["made"], window["missed"], window["mood_sum"], window["bags"], window["bags_missed"]
+	)

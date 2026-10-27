@@ -10,6 +10,12 @@ extends RefCounted
 ## the mood part averages over the ones who made it only).
 const WEIGHT_MADE := 0.7
 const WEIGHT_MOOD := 0.3
+## What a missed bag takes off the score (decision airport-rating-1-5-stars-
+## over-a-rolling-3-days-mostly-made-o: "missed bags join later", a smaller part
+## than the mood). The score loses this much when every bag of the window
+## missed, in proportion to the share that did. A window with no bags loses
+## nothing, so an airport that builds no belt is not paid for it.
+const WEIGHT_BAGS := 0.2
 ## The rating looks at the current in-game day and the two before it.
 const WINDOW_DAYS := 3
 ## Below this an airline sends a warning.
@@ -37,8 +43,11 @@ const TIE_EPSILON := 1e-9
 
 
 ## Stars from pooled counts: `mood_sum` is the sum of the mood of the `made`
-## passengers at exit. 1 to 5 in half steps; no passengers gives STARTING_STARS.
-static func stars(made: int, missed: int, mood_sum: int) -> float:
+## passengers at exit; `bags` bags settled, `bags_missed` of them missed.
+## 1 to 5 in half steps; no passengers gives STARTING_STARS.
+static func stars(
+	made: int, missed: int, mood_sum: int, bags: int = 0, bags_missed: int = 0
+) -> float:
 	var total := made + missed
 	if total == 0:
 		return STARTING_STARS
@@ -46,7 +55,11 @@ static func stars(made: int, missed: int, mood_sum: int) -> float:
 	var mood_share := 0.0
 	if made > 0:
 		mood_share = float(mood_sum) / (made * PassengerSim.MOOD_MAX)
+	var bag_miss_share := 0.0
+	if bags > 0:
+		bag_miss_share = float(bags_missed) / bags
 	var score := WEIGHT_MADE * made_share + WEIGHT_MOOD * mood_share
+	score = clampf(score - WEIGHT_BAGS * bag_miss_share, 0.0, 1.0)
 	var raw := MIN_STARS + (MAX_STARS - MIN_STARS) * score
 	var half_steps := floorf(raw * 2.0 + 0.5 + TIE_EPSILON)
 	return clampf(half_steps / 2.0, MIN_STARS, MAX_STARS)

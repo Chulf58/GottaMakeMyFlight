@@ -20,7 +20,11 @@ func after() -> void:
 
 func before_test() -> void:
 	_events.clear()
-	_world = PassengerTestWorld.reference_world()
+	# A ready bag room (no belt to it): without one nobody checks a bag.
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	BagRoomKit.add(grid)
+	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.sim.checked_in.connect(
 		func(id: int, desk: int) -> void:
 			var p := _world.passenger(id)

@@ -5,6 +5,9 @@ extends RefCounted
 
 const KEYS := ["save_version", "tick", "days", "low_days", "pending"]
 const DAY_KEYS := ["day", "made", "missed", "mood_sum"]
+## Added with missed bags (Baggage B4). A day from before them has neither and
+## loads with no bags; the two come as a pair.
+const BAG_KEYS := ["bags", "bags_missed"]
 const PENDING_KEYS := ["flight", "tick"]
 ## Ticks stay exact through JSON (doubles) up to 2^53.
 const MAX_TICK := 9007199254740992
@@ -12,7 +15,7 @@ const MAX_TICK := 9007199254740992
 const MAX_PENDING := 64
 
 
-## `days` maps day -> {"made", "missed", "mood_sum"}; `pending` holds
+## `days` maps day -> {"made", "missed", "mood_sum", "bags", "bags_missed"}; `pending` holds
 ## {"flight", "tick"} entries.
 static func save(
 	tick: int, days: Dictionary, low_days: int, pending: Array[Dictionary]
@@ -22,17 +25,15 @@ static func save(
 	var day_list := []
 	for day in day_ids:
 		var totals: Dictionary = days[day]
-		(
-			day_list
-			. append(
-				{
-					"day": day,
-					"made": totals["made"],
-					"missed": totals["missed"],
-					"mood_sum": totals["mood_sum"],
-				}
-			)
-		)
+		var entry := {
+			"day": day,
+			"made": totals["made"],
+			"missed": totals["missed"],
+			"mood_sum": totals["mood_sum"],
+			"bags": totals["bags"],
+			"bags_missed": totals["bags_missed"],
+		}
+		day_list.append(entry)
 	var pending_list := []
 	for entry in pending:
 		pending_list.append({"flight": entry["flight"], "tick": entry["tick"]})
@@ -90,7 +91,10 @@ static func _top_problem(data: Dictionary) -> String:
 static func _read_days(entries: Array, current: int, out: Dictionary) -> String:
 	var previous := current - RatingFormula.WINDOW_DAYS
 	for entry in entries:
-		var problem := _entry_problem(entry, DAY_KEYS)
+		var keys: Array = DAY_KEYS
+		if typeof(entry) == TYPE_DICTIONARY and (entry.has("bags") or entry.has("bags_missed")):
+			keys = DAY_KEYS + BAG_KEYS
+		var problem := _entry_problem(entry, keys)
 		if problem == "":
 			problem = _day_problem(entry, previous, current)
 		if problem != "":
@@ -100,6 +104,8 @@ static func _read_days(entries: Array, current: int, out: Dictionary) -> String:
 			"made": int(entry["made"]),
 			"missed": int(entry["missed"]),
 			"mood_sum": int(entry["mood_sum"]),
+			"bags": int(entry.get("bags", 0)),
+			"bags_missed": int(entry.get("bags_missed", 0)),
 		}
 	return ""
 
@@ -118,6 +124,10 @@ static func _day_problem(entry: Dictionary, previous: int, current: int) -> Stri
 			"day %d mood_sum must be a whole number up to made * %d"
 			% [int(day), PassengerSim.MOOD_MAX]
 		)
+	if entry.has("bags") and not _is_count(entry["bags"], cap):
+		return "day %d bags must be a whole number from 0 to %d" % [int(day), cap]
+	if entry.has("bags_missed") and not _is_count(entry["bags_missed"], int(entry["bags"])):
+		return "day %d bags_missed must be a whole number up to bags" % int(day)
 	return ""
 
 

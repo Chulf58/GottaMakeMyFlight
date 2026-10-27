@@ -47,6 +47,12 @@ const WAGES := {
 	StaffMember.Role.SECURITY: 90,
 }
 
+## The share of its fee an airline pays for a passenger who makes the flight
+## but whose bag missed it (ruling baggage-rides-a-player-built-belt-from-check-
+## in-to-a-bag-roo: the reduction is a tuning value, to be checked in a
+## playtest).
+const MISSED_BAG_FEE_PERCENT := 50
+
 
 static func price_of_floor() -> int:
 	return FLOOR_PRICE
@@ -73,6 +79,16 @@ static func wage_of(role: int) -> int:
 		push_error("PriceTable: no wage for staff role %d" % role)
 		return NO_PRICE
 	return WAGES[role]
+
+
+## The fee paid for a passenger whose bag missed the flight, rounded down. A
+## negative fee (NO_PRICE) stays NO_PRICE, so a failed lookup never reads as a
+## cut fee.
+static func fee_after_missed_bag(fee: int) -> int:
+	if fee < 0:
+		push_error("PriceTable: cannot cut fee %d" % fee)
+		return NO_PRICE
+	return fee * MISSED_BAG_FEE_PERCENT / 100
 
 
 ## What removing a piece that cost `price` pays back, rounded down. A negative
