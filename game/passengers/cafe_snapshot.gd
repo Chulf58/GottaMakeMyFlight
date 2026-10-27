@@ -9,11 +9,12 @@ extends RefCounted
 ## can reach: ids positive; each visit's seat (and, until served, its counter)
 ## present in the cafe layout rebuilt from the saved grid; each queue in the
 ## visit's room at an existing counter; served, outcome, settled and amount
-## agreeing with the guest's stage; and the visit resuming on the guest's side
-## of security. A save taken after an edit and before the next tick
-## ("deadlines_stale") may name pieces the edit removed, as continuous play
-## does until that tick ends the visit, so only then are missing pieces let
-## through.
+## agreeing with the guest's stage; an order in progress, or a seated guest's
+## dwell, that started on the guest's stage tick and ends after the saved tick;
+## and the visit resuming on the guest's side of security. A save never holds
+## stale cafe state: PassengerSim.to_snapshot() brings the cafe in line with
+## the grid after an edit first, so "deadlines_stale" is always false and a
+## piece missing from the rebuilt layout is refused outright, whatever it was.
 
 const VISIT_INT_FIELDS := [
 	"passenger",
@@ -55,12 +56,15 @@ static func save(cafes: CafeSim) -> Dictionary:
 ## {"visits": {passenger id: CafeVisit}, "queues": {counter id: queue},
 ## "deadlines_stale": bool} from a save(), or a dictionary with "error".
 ## `passengers` maps each saved passenger's id to its Passenger, so each visit
-## can be checked against its passenger's stage; `grid` holds the saved grid.
-static func load(data: Variant, passengers: Dictionary, grid: BuildGrid) -> Dictionary:
+## can be checked against its passenger's stage; `grid` holds the saved grid
+## and `tick` is the saved tick.
+static func load(data: Variant, passengers: Dictionary, grid: BuildGrid, tick: int) -> Dictionary:
 	if typeof(data) != TYPE_DICTIONARY or not (data.has("visits") and data.has("queues")):
 		return {"error": "cafe must hold visits and queues"}
 	if not data.has("deadlines_stale") or typeof(data["deadlines_stale"]) != TYPE_BOOL:
 		return {"error": "cafe deadlines_stale must be true or false"}
+	if data["deadlines_stale"]:
+		return {"error": "cafe deadlines_stale must be false: a save settles the cafe first"}
 	if typeof(data["visits"]) != TYPE_ARRAY or typeof(data["queues"]) != TYPE_ARRAY:
 		return {"error": "cafe visits and queues must be arrays"}
 	var visits := {}
@@ -80,16 +84,15 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid) -> Dict
 			return {"error": "passenger %d is at the cafe with no visit" % id}
 		if visits.has(id) and not (at_cafe or stage == Passenger.Stage.STANDING_UP):
 			return {"error": "passenger %d has a visit but is not at the cafe" % id}
-	var stale: bool = data["deadlines_stale"]
 	var terminal := TerminalLayout.new()
 	terminal.rebuild(grid)
 	var cafes := CafeLayout.new()
 	cafes.rebuild(grid, terminal)
 	for id in visits:
-		var problem := _visit_problem(visits[id], passengers[id], cafes, stale)
+		var problem := _visit_problem(visits[id], passengers[id], cafes, tick)
 		if problem != "":
 			return {"error": "cafe visit of passenger %d: %s" % [id, problem]}
-	var queues := _queues(data["queues"], visits, cafes, stale)
+	var queues := _queues(data["queues"], visits, cafes)
 	if queues.has("error"):
 		return queues
 	for id in visits:
@@ -98,39 +101,60 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid) -> Dict
 		var serving: int = queues.get(visit.counter, {}).get("serving", 0)
 		if ordering != (serving == id):
 			return {"error": "cafe guest %d orders but is not served, or the reverse" % id}
-	return {"visits": visits, "queues": queues, "deadlines_stale": stale}
+	return {"visits": visits, "queues": queues, "deadlines_stale": false}
 
 
-## Why a visit cannot be what continuous play left, or "" when it can.
-static func _visit_problem(
-	visit: CafeVisit, p: Passenger, cafes: CafeLayout, stale: bool
-) -> String:
+## Why a visit cannot be what continuous play left by `tick`, or "" when it
+## can.
+static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, tick: int) -> String:
 	var stage := p.stage
 	var unserved := UNSERVED_STAGES.has(stage)
 	var standing := stage == Passenger.Stage.CAFE_STANDING_UP
 	var key := visit.seat_key.split(":")
 	var key_ok := key.size() == 2 and key[0].is_valid_int() and key[1].is_valid_int()
+	key_ok = key_ok and int(key[0]) >= 1 and int(key[1]) >= 0
 	var checks := [
 		[visit.room >= 1 and visit.counter >= 1, "room and counter ids must be 1 or more"],
-		[key_ok and int(key[0]) >= 1 and int(key[1]) >= 0, "seat key must be <table>:<seat>"],
+		[key_ok, "seat key must be <table>:<seat>"],
 		[
 			(visit.resume_stage == Passenger.Stage.TO_GATE) == p.cleared,
 			"it resumes on the other side of security"
 		],
-		[stale or not cafes.seat(visit.room, visit.seat_key).is_empty(), "no such cafe seat"],
+		[not cafes.seat(visit.room, visit.seat_key).is_empty(), "no such cafe seat"],
 		[
-			stale or visit.served or not cafes.counter(visit.room, visit.counter).is_empty(),
+			visit.served or not cafes.counter(visit.room, visit.counter).is_empty(),
 			"no such cafe counter"
 		],
 		[visit.served != unserved, "served does not match stage %d" % stage],
 		[(visit.outcome != CafeVisit.Outcome.NONE) == standing, "outcome does not match stage"],
 		[not visit.settled or standing, "settled before standing up"],
 		[visit.settled or visit.amount == 0, "an amount on a visit not settled"],
+		[
+			(
+				stage != Passenger.Stage.CAFE_ORDER
+				or _runs_past(visit.service_end, p.stage_tick, CafeSim.ORDER_TICKS, tick)
+			),
+			"the order does not end ORDER_TICKS after it started and after the saved tick"
+		],
+		[
+			(
+				stage != Passenger.Stage.CAFE_SEATED
+				or _runs_past(visit.dwell_end, p.stage_tick, CafeSim.DWELL_TICKS, tick)
+			),
+			"the dwell does not end DWELL_TICKS after it started and after the saved tick"
+		],
 	]
 	for check in checks:
 		if not check[0]:
 			return check[1]
 	return ""
+
+
+## Whether a span of `length` ticks that started at `start` (the guest's stage
+## tick) ends at `end`, and has started but not ended by `tick`: the step that
+## ends it runs on the tick it ends, so a save never holds it at or past then.
+static func _runs_past(end: int, start: int, length: int, tick: int) -> bool:
+	return end == start + length and start <= tick and end > tick
 
 
 static func _visit(entry: Variant) -> CafeVisit:
@@ -163,9 +187,9 @@ static func _visit(entry: Variant) -> CafeVisit:
 
 ## Counter id -> {"room", "lane", "serving"} from the saved list, or a
 ## dictionary with "error". Every guest named has a visit and is in one queue,
-## in its own room at the counter it chose, which exists (unless `stale`) and
-## has a lane cell for each guest.
-static func _queues(list: Array, visits: Dictionary, cafes: CafeLayout, stale: bool) -> Dictionary:
+## in its own room at the counter it chose, which is in the layout with a lane
+## cell for each guest.
+static func _queues(list: Array, visits: Dictionary, cafes: CafeLayout) -> Dictionary:
 	var queues := {}
 	var placed := {}
 	for entry in list:
@@ -194,9 +218,10 @@ static func _queues(list: Array, visits: Dictionary, cafes: CafeLayout, stale: b
 			var visit: CafeVisit = visits[id]
 			if visit.counter != int(entry["counter"]) or visit.room != int(entry["room"]):
 				return {"error": "cafe guest %d queues at a counter it did not choose" % id}
-		var cells: Array = cafes.counter(int(entry["room"]), int(entry["counter"])).get("lane", [])
-		if not stale and not lane.is_empty() and lane.size() > cells.size():
-			return {"error": "cafe counter %d has no lane for its queue" % int(entry["counter"])}
+		var counter := int(entry["counter"])
+		var cells: Array = cafes.counter(int(entry["room"]), counter).get("lane", [])
+		if cells.is_empty() or lane.size() > cells.size():
+			return {"error": "cafe counter %d has no lane for its queue" % counter}
 	# A guest queues until it is served, and never after.
 	for id in visits:
 		if (visits[id] as CafeVisit).served == placed.has(id):

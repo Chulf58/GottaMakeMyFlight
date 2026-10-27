@@ -15,8 +15,10 @@ extends RefCounted
 ##
 ## Every phase before standing up checks the visit's deadline. A guest past it
 ## who has not been served gives up (no charge); one who has been served
-## leaves early. The deadline is worked out again after any grid edit, and a
-## visit whose cafe, counter or seat is gone ends the same way.
+## leaves early. The deadline is worked out again after any grid edit, once a
+## second on the guest's beat, and every tick for a landside guest, whose
+## journey on runs through the scanner queues. A visit whose cafe, counter or
+## seat is gone ends the same way.
 ##
 ## Hunger (point 5) rises once a simulated second; at HUNGRY_AT the passenger
 ## heads for the nearest reachable cafe if the forecast allows, and otherwise
@@ -40,16 +42,16 @@ signal paid(passenger_id: int, room_id: int, amount: int)
 ## Ticks to make an order once the guest is at the front.
 const ORDER_TICKS := 60
 ## Ticks a guest stays seated when nothing hurries it.
-const DWELL_TICKS := 240
+const DWELL_TICKS := 120
 ## The approach cell is about a metre from the seated root, so the shuffle in
 ## and out takes longer than at a gate seat.
 const SHUFFLE_TICKS := 12
 ## Seats tried per visit, nearest the counter first.
 const SEAT_TRIES := 4
-const HUNGER_START_MIN := 10
-const HUNGER_START_MAX := 40
+const HUNGER_START_MIN := 40
+const HUNGER_START_MAX := 70
 const HUNGER_MAX := 100
-const HUNGRY_AT := 60
+const HUNGRY_AT := 50
 ## A hungry passenger with no visit loses a mood point every this many beats.
 const HUNGRY_MOOD_BEATS := 5
 ## A refused hungry passenger tries again after this long.
@@ -60,7 +62,7 @@ const BROWSE_REACH_MM := 5000
 const AIRSIDE_BROWSE_REACH_MM := 8000
 ## A browser drops in only with this much spare beyond the margin. Boarding
 ## caps the spare: in the reference flight a passenger who reaches the gate
-## early has about 150 ticks beyond the margin, whatever it does before.
+## early has about 220 ticks beyond the margin, whatever it does before.
 const BROWSE_SPARE_TICKS := 100
 const BROWSE_COOLDOWN_TICKS := 600
 ## Spend in whole percent: mood 0 spends 80% of the base, 100 spends 120%.
@@ -81,7 +83,8 @@ const START_STAGES: Array[Passenger.Stage] = [
 
 var layout := CafeLayout.new()
 ## Set by any grid edit: every visit's deadline is worked out again on the
-## next tick. Saved, so a load between an edit and that tick plays on alike.
+## next tick. PassengerSim.to_snapshot() reconciles first when it is set, so a
+## save never holds it set.
 var deadlines_stale := false
 
 var _sim: PassengerSim
@@ -217,6 +220,13 @@ func reconcile() -> void:
 		var p := _sim.get_passenger(id)
 		var seat := layout.seat(visit.room, visit.seat_key)
 		var counter := layout.counter(visit.room, visit.counter)
+		if seat.is_empty() and visit.served:
+			# No chair to get up from: a served guest pays and goes on at once,
+			# so no visit outlives its seat.
+			if visit.outcome == CafeVisit.Outcome.NONE:
+				visit.outcome = CafeVisit.Outcome.SHORT
+			_end(p, visit)
+			continue
 		if seat.is_empty() or (counter.is_empty() and not visit.served):
 			_leave_early(p, visit)
 			continue
@@ -280,9 +290,16 @@ func step(p: Passenger) -> void:
 		_set_stage.call(p, Passenger.Stage.TO_GATE if p.cleared else Passenger.Stage.TO_SECURITY)
 		return
 	var stage := p.stage
-	if stage != Passenger.Stage.CAFE_STANDING_UP and _sim.tick >= visit.deadline:
-		_leave_early(p, visit)
-		return
+	if stage != Passenger.Stage.CAFE_STANDING_UP:
+		if visit.resume_stage == Passenger.Stage.TO_SECURITY and not visit.seat.is_empty():
+			# The rest of a landside journey runs through the scanners, whose
+			# queues can fill between beats: forecast it again every tick.
+			visit.deadline = CafeForecast.live_deadline(
+				_sim, p, visit.seat["approach"], visit.resume_stage
+			)
+		if _sim.tick >= visit.deadline:
+			_leave_early(p, visit)
+			return
 	match stage:
 		Passenger.Stage.CAFE_WALK, Passenger.Stage.CAFE_QUEUE:
 			_queue_step(p, visit)
