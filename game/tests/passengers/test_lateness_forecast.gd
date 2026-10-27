@@ -102,6 +102,8 @@ func _forecast_with_scanner_load(busy: Array[int], ticks_left: int) -> int:
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(10, 4000))
+	# The forecast is read before any tick, so the stations are staffed here.
+	StaffTestKit.staff_all(_world.staff)
 	var scanners: Array = ReferenceTerminal.object_ids(_world.grid)["scanners"]
 	var subject := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	for index in busy:

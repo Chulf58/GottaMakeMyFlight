@@ -79,6 +79,7 @@ func _process(_delta: float) -> bool:
 		_build_tick = _clock.tick
 		_beat("build")
 		_build_terminal()
+		_hire_staff()
 		_built = true
 		_beat("run")
 		return false
@@ -87,6 +88,22 @@ func _process(_delta: float) -> bool:
 	if _clock.tick >= END_TICK:
 		return _report()
 	return false
+
+
+## A new game has no staff: one hire per desk and scanner, as the staff
+## panel's Hire buttons do; the staff walk to the stations on their own.
+func _hire_staff() -> void:
+	var staff := _main.get_node("Staff") as StaffSim
+	for i in _sim.layout.desks.size():
+		staff.hire(StaffMember.Role.CHECKIN)
+	for i in _sim.layout.scanners.size():
+		staff.hire(StaffMember.Role.SECURITY)
+	print(
+		(
+			"PROBE hired checkin=%d security=%d"
+			% [staff.count(StaffMember.Role.CHECKIN), staff.count(StaffMember.Role.SECURITY)]
+		)
+	)
 
 
 func _build_terminal() -> void:

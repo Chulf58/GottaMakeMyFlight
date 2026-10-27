@@ -1,7 +1,7 @@
 class_name PassengerTestWorld
 extends RefCounted
-## A clock, one flight, a grid and a PassengerSim wired together without a
-## scene, for the passenger tests. Call free_all() when done.
+## A clock, one flight, a grid, a PassengerSim and its StaffSim wired together
+## without a scene, for the passenger tests. Call free_all() when done.
 
 const FLIGHT := "GMF101"
 
@@ -13,6 +13,11 @@ var clock: SimClock
 var flights: FlightSim
 var grid: BuildGrid
 var sim: PassengerSim
+var staff: StaffSim
+## Before each tick, staff are seated at once at every desk and scanner without
+## any (StaffTestKit.staff_all), so tests that are not about staffing find the
+## stations open. Staff tests set it false and hire.
+var auto_staff := true
 var _tracked := false
 
 
@@ -34,11 +39,20 @@ static func make(on_grid: BuildGrid, starts: Array[int], seed := 1) -> Passenger
 	world.grid = on_grid
 	world.sim = PassengerSim.new()
 	world.sim.wallet = Wallet.new()
+	world.staff = StaffSim.new()
+	world.sim.staff = world.staff
+	# Connected before the sim binds, so it runs before the passenger tick.
+	world.clock.ticked.connect(
+		func(_tick: int) -> void:
+			if world.auto_staff:
+				StaffTestKit.staff_all(world.staff)
+	)
 	world.sim.bind(world.clock, world.flights, on_grid)
 	if tracker != null:
 		tracker.auto_free(world.clock)
 		tracker.auto_free(world.flights)
 		tracker.auto_free(world.sim)
+		tracker.auto_free(world.staff)
 		world._tracked = true
 	return world
 
@@ -110,5 +124,6 @@ func free_all() -> void:
 	if _tracked:
 		return
 	sim.free()
+	staff.free()
 	flights.free()
 	clock.free()
