@@ -105,3 +105,44 @@ func test_an_affordable_ghost_is_hidden_over_the_hud_too() -> void:
 	assert_bool(_ghost().visible).is_true()
 	await _hover(OVER_HUD)
 	assert_bool(_ghost().visible).is_false()
+
+
+func _start_rectangle() -> void:
+	assert_bool(_finances.wallet.from_snapshot({"balance": "100000"})).is_true()
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	_mode.begin_area(_mode.grid.cell_to_world(Vector2i(18, 30)))
+	_mode.move_area(_mode.grid.cell_to_world(Vector2i(22, 33)))
+	assert_bool(_mode._area.active).is_true()
+
+
+func test_a_rectangle_in_progress_hides_its_ghost_and_size_over_a_hud_control() -> void:
+	_start_rectangle()
+	await _hover(OVER_WORLD)
+	var size_text := _mode.status_text()
+	print("rect world: visible=%s status='%s'" % [_ghost().visible, size_text])
+	assert_bool(_ghost().visible).is_true()
+	assert_int(_ghost().get_child_count()).is_greater(0)
+	assert_str(size_text).is_not_empty()
+	await _hover(OVER_HUD)
+	print(
+		(
+			"rect hud: visible=%s status='%s' active=%s"
+			% [_ghost().visible, _mode.status_text(), _mode._area.active]
+		)
+	)
+	assert_bool(_ghost().visible).is_false()
+	assert_str(_mode.status_text()).is_equal("")
+	# The drag is not cancelled: it is still there to finish or abandon.
+	assert_bool(_mode._area.active).is_true()
+
+
+func test_a_rectangle_returns_with_its_size_when_the_pointer_leaves_the_hud() -> void:
+	_start_rectangle()
+	await _hover(OVER_WORLD)
+	var size_text := _mode.status_text()
+	await _hover(OVER_HUD)
+	await _hover(OVER_WORLD)
+	print("rect back: visible=%s status='%s'" % [_ghost().visible, _mode.status_text()])
+	assert_bool(_ghost().visible).is_true()
+	assert_int(_ghost().get_child_count()).is_greater(0)
+	assert_str(_mode.status_text()).is_equal(size_text)
