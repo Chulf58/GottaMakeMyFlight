@@ -87,15 +87,17 @@ func _check_open() -> bool:
 
 
 func _clock_problem() -> String:
-	var size := root.get_visible_rect().size
+	# The window is checked by its pixels: the content scale (project.godot)
+	# gives the HUD a smaller layout size than the window.
+	var size := root.size
 	print(
 		(
-			"PROBE viewport=%s paused=%s tick=%d (at open %d)"
-			% [size, _clock.paused, _clock.tick, _tick_at_open]
+			"PROBE window=%s layout=%s paused=%s tick=%d (at open %d)"
+			% [size, root.get_visible_rect().size, _clock.paused, _clock.tick, _tick_at_open]
 		)
 	)
-	if Vector2i(size) != SCREEN:
-		return "the viewport is %s, not %s" % [size, SCREEN]
+	if size != SCREEN:
+		return "the window is %s, not %s" % [size, SCREEN]
 	if not _clock.paused or _clock.tick != _tick_at_open or _tick_at_open != 0:
 		return "the clock ran while the intro was open"
 	return ""

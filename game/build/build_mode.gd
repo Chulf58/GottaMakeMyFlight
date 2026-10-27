@@ -179,7 +179,8 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	var point: Variant = _mouse_ground()
-	_update_ghost(point)
+	# Over a HUD Control the pointer is not over the world: no ghost, no hover.
+	_update_ghost(null if _pointer_over_ui() else point)
 	update_room_focus(point)
 
 
@@ -485,7 +486,9 @@ func _update_ghost(point: Variant) -> void:
 	var edit: BuildEdit = null if point == null else edit_at(point)
 	if edit == null:
 		_ghost.visible = false
-		_hover_key = ""
+		if _hover_key != "":
+			_hover_key = ""
+			_show_status(null)
 		return
 	var key := _edit_key(edit)
 	if key == _hover_key:
