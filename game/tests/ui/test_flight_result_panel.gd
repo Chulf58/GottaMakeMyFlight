@@ -137,7 +137,7 @@ func test_the_dismiss_button_hides_the_result() -> void:
 	assert_bool(_hud.is_result_open()).is_false()
 
 
-func test_two_flights_closing_together_are_shown_one_after_the_other() -> void:
+func test_two_flights_closing_together_show_the_later_one() -> void:
 	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(10, 20))
 	_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.sim.spawn_now("GMF202")
@@ -145,45 +145,57 @@ func test_two_flights_closing_together_are_shown_one_after_the_other() -> void:
 	_world.run_to(21)
 	_hud.refresh()
 	assert_bool(_hud.is_result_open()).is_true()
-	assert_str(_hud.result_text()).contains("GMF101 result")
-	assert_str(_hud.result_text()).contains("Missed 1")
-	# The second result waits while the first is open.
-	_hud.refresh()
-	assert_str(_hud.result_text()).contains("GMF101 result")
-	_hud.dismiss_result()
-	_hud.refresh()
-	assert_bool(_hud.is_result_open()).is_true()
 	assert_str(_hud.result_text()).contains("GMF202 result")
 	assert_str(_hud.result_text()).contains("Missed 2")
+	_hud.refresh()
+	assert_str(_hud.result_text()).contains("GMF202 result")
 	_hud.dismiss_result()
 	_hud.refresh()
 	assert_bool(_hud.is_result_open()).is_false()
 
 
-func test_a_waiting_result_is_summarized_when_the_doors_close_not_when_shown() -> void:
+func test_a_later_closure_replaces_an_open_result_that_was_not_dismissed() -> void:
 	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(100, 200))
 	_close_doors_with_misses(1)
 	_world.sim.spawn_now("GMF202")
 	_world.sim.spawn_now("GMF202")
+	assert_str(_hud.result_text()).contains("GMF101 result")
 	_world.run_to(201)
 	_hud.refresh()
-	assert_str(_hud.result_text()).contains("GMF101 result")
-	# The sim drops a pruned flight's results while the first panel is open.
-	_world.sim.flight_results.erase("GMF202")
-	_hud.dismiss_result()
-	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_true()
 	assert_str(_hud.result_text()).contains("GMF202 result")
 	assert_str(_hud.result_text()).contains("Missed 2")
 
 
-func test_a_later_closure_does_not_replace_an_open_result() -> void:
+func test_a_result_is_summarized_once_at_closure_and_not_shown_again() -> void:
 	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(100, 200))
 	_close_doors_with_misses(1)
+	_world.sim.spawn_now("GMF202")
+	_world.sim.spawn_now("GMF202")
 	_world.run_to(201)
 	_hud.refresh()
-	assert_str(_hud.result_text()).contains("GMF101 result")
+	var shown := _hud.result_text()
+	assert_str(shown).contains("GMF202 result")
+	# The sim drops a pruned flight's results; the shown summary is its own copy.
+	_world.sim.flight_results.erase("GMF202")
+	_hud.refresh()
+	assert_str(_hud.result_text()).is_equal(shown)
 	_hud.dismiss_result()
 	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_false()
+
+
+func test_a_dismissed_result_stays_hidden_until_another_flight_closes() -> void:
+	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(100, 200))
+	_close_doors_with_misses(1)
+	_hud.dismiss_result()
+	_world.run_to(150)
+	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_false()
+	_world.sim.spawn_now("GMF202")
+	_world.run_to(201)
+	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_true()
 	assert_str(_hud.result_text()).contains("GMF202 result")
 
 

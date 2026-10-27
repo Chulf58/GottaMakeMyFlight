@@ -9,6 +9,41 @@ const SECURITY_IDS: Array[StringName] = [&"security_scanner"]
 ## faces in, and the back edge leads out.
 const DOOR_IDS: Array[StringName] = [&"entrance_door", &"exit_door"]
 
+## Where a baggage belt piece joins its neighbours, in the piece's frame at
+## facing 0, from BAGGAGE_DATA (tools/blender/interior/build_baggage_kit.py).
+## Each port is a Mount_Belt_<name> empty on a cell edge at belt-top height:
+## F is the front (+Z) edge, B the back, L the -X edge, R the +X edge, and
+## [cell, name] says which footprint cell owns it. A check-in desk's belt is
+## its +x cell, running front to back, so the desk has a B outlet and no paths:
+## a feed placed behind it takes the bags.
+const BELT_PORT_SIDES := {
+	"F": Vector2i(0, 1),
+	"B": Vector2i(0, -1),
+	"L": Vector2i(-1, 0),
+	"R": Vector2i(1, 0),
+}
+const BELT_PORTS := {
+	&"checkin_desk": [[Vector2i(1, 0), "B"]],
+	&"baggage_belt": [[Vector2i.ZERO, "F"], [Vector2i.ZERO, "B"]],
+	&"baggage_belt_corner": [[Vector2i.ZERO, "F"], [Vector2i.ZERO, "R"]],
+	&"baggage_belt_feed": [[Vector2i.ZERO, "F"], [Vector2i.ZERO, "L"], [Vector2i.ZERO, "R"]],
+	&"baggage_belt_end": [[Vector2i.ZERO, "F"]],
+}
+## The routes a bag can take through a belt piece, [from port, to port]. A
+## feed is a merge, not a sorter: a bag takes one exit (F to L or R, or L to R)
+## and the sim picks it. An exit with no piece beyond it stays open. The end
+## piece's bag rests on its slide (Mount_BagRest) instead of leaving.
+const BELT_PATHS := {
+	&"baggage_belt": [["F", "B"]],
+	&"baggage_belt_corner": [["F", "R"]],
+	&"baggage_belt_feed": [["F", "L"], ["F", "R"], ["L", "R"]],
+	&"baggage_belt_end": [["F", "BagRest"]],
+}
+## The pieces that make up a belt line (the desk is its source, not a piece).
+const BELT_IDS: Array[StringName] = [
+	&"baggage_belt", &"baggage_belt_corner", &"baggage_belt_feed", &"baggage_belt_end"
+]
+
 static var _defs: Dictionary = {}
 
 
@@ -32,6 +67,36 @@ static func is_security(id: StringName) -> bool:
 
 static func is_door(id: StringName) -> bool:
 	return DOOR_IDS.has(id)
+
+
+static func is_belt(id: StringName) -> bool:
+	return BELT_IDS.has(id)
+
+
+## The belt ports of an object placed at `anchor` and `facing`: each
+## {"name": "F"/"B"/"L"/"R", "cell": the footprint cell that owns it,
+## "side": the grid step out of that cell through the port}. Empty for an
+## object with no belt (BELT_PORTS).
+static func belt_ports(id: StringName, anchor: Vector2i, facing: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for port in BELT_PORTS.get(id, []):
+		(
+			out
+			. append(
+				{
+					"name": port[1],
+					"cell": anchor + BuildObjectDef.rotate_offset(port[0], facing),
+					"side": BuildObjectDef.rotate_offset(BELT_PORT_SIDES[port[1]], facing),
+				}
+			)
+		)
+	return out
+
+
+## Whether two belt ports (belt_ports() entries) face each other across a cell
+## edge, so a bag can pass from one piece to the other.
+static func belt_ports_join(a: Dictionary, b: Dictionary) -> bool:
+	return a["cell"] + a["side"] == b["cell"] and b["cell"] + b["side"] == a["cell"]
 
 
 static func _build() -> void:
@@ -74,6 +139,15 @@ static func _build() -> void:
 			"facing": Vector2i(-1, 0),
 		},
 	]
+	# Baggage pieces (interior-kit Baggage B1). Belts are 0.46 m to the rail
+	# top and never walkable: a belt across a walkway blocks it. None has an
+	# interaction cell; a bag room is judged by its end piece alone.
+	var belt_color := Color(0.4, 0.4, 0.45)
+	_add(&"baggage_belt", "Baggage belt", Vector2i.ONE, belt_color, 0.46)
+	_add(&"baggage_belt_corner", "Belt corner", Vector2i.ONE, belt_color, 0.46)
+	_add(&"baggage_belt_feed", "Belt merge", Vector2i.ONE, belt_color, 0.46)
+	_add(&"baggage_belt_end", "Belt end", Vector2i.ONE, Color(0.9, 0.75, 0.25), 1.3)
+	_add(&"baggage_cart", "Baggage cart", Vector2i(1, 2), Color(0.3, 0.5, 0.75), 1.62)
 
 
 ## Passengers step through a door along its axis only, so it is walk-through;
