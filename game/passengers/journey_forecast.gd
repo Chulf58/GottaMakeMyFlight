@@ -30,7 +30,13 @@ static func walk_ticks(mm: int) -> int:
 
 ## The tick the passenger would reach the plane door at a walk.
 static func arrival_tick(sim: PassengerSim, p: Passenger) -> int:
-	var now := sim.tick
+	return arrival_from(sim, p, sim.tick)
+
+
+## arrival_tick() for a passenger whose state holds from tick `now` on (a cafe
+## visit forecasts the journey after the visit this way). Queues and stations
+## are read as they are on the sim's current tick.
+static func arrival_from(sim: PassengerSim, p: Passenger, now: int) -> int:
 	if p.is_done():
 		return p.outcome_tick
 	if p.stage == Passenger.Stage.APRON:
@@ -62,12 +68,15 @@ static func _to_gate(sim: PassengerSim, p: Passenger) -> Vector3i:
 		# The road walk to the entrance, inside a terminal shell, is a leg of
 		# its own: the walk drops leftover distance where it meets the grid.
 		road_ticks = walk_ticks(p.apron_total_mm() - p.apron_mm)
-	if p.stage <= Passenger.Stage.CHECKIN:
+	var choosing := p.stage == Passenger.Stage.TO_SECURITY and p.station == 0
+	if p.stage <= Passenger.Stage.CHECKIN or choosing:
 		# The scanner is chosen as station choice will: soonest estimated finish.
 		var scanner := _soonest_scanner(sim, pos)
 		if scanner.y == 0:
 			return Vector3i(NEVER, pos.x, pos.y)
-		wait += sim.wait_ticks(p) + scanner.x
+		if not choosing:
+			wait += sim.wait_ticks(p)
+		wait += scanner.x
 		var passage: Array = sim.layout.passages[scanner.y]
 		mm += _passage_mm(passage)
 		pos = passage[passage.size() - 1]
