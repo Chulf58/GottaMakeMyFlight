@@ -11,7 +11,9 @@ extends RefCounted
 ## - flight ids in the passengers part (each passenger's flight, the pending
 ##   spawns, the scheduled flights, the no-shows and flight results) and in
 ##   the rating's pending list: a live flight, or an occurrence of a saved
-##   contract (FlightSim answers a pruned occurrence from its contract);
+##   contract on a day already issued (from its start day up to, not
+##   including, its next day), which FlightSim._find() answers from the
+##   contract after the occurrence was pruned;
 ## - stations and seats in the passengers part: every queue's station and
 ##   every passenger's station is a usable station of the layout built from
 ##   the saved grid, and every gate seat a passenger holds is a seat there.
@@ -71,9 +73,6 @@ static func _flight_id_problem(
 	var live := {}
 	for flight in flights["flights"]:
 		live[flight["id"]] = true
-	var contracts := {}
-	for contract in flights["contracts"]:
-		contracts[contract["id"]] = true
 	var named: Array[String] = []
 	for p in passengers["passengers"]:
 		named.append((p as Passenger).flight_id)
@@ -85,12 +84,25 @@ static func _flight_id_problem(
 	for entry in rating["pending"]:
 		named.append(str(entry["flight"]))
 	for id in named:
-		if live.has(id):
-			continue
-		var occurrence := FlightTimetable.parse_occurrence(id)
-		if occurrence.is_empty() or not contracts.has(occurrence["contract"]):
-			return "flight %s is named but is neither a live flight nor a saved contract's" % id
+		if not live.has(id) and not _issued(id, flights):
+			return "flight %s is named but is neither live nor an issued occurrence" % id
 	return ""
+
+
+## Whether `id` is an occurrence FlightSim._find() answers after it was
+## pruned: a saved contract's, on a day from its start day up to, not
+## including, its first day not yet issued.
+static func _issued(id: String, flights: Dictionary) -> bool:
+	var occurrence := FlightTimetable.parse_occurrence(id)
+	if occurrence.is_empty():
+		return false
+	var contract: String = occurrence["contract"]
+	var start_day: Dictionary = flights["start_day"]
+	var next_day: Dictionary = flights["next_day"]
+	if not start_day.has(contract) or not next_day.has(contract):
+		return false
+	var day: int = occurrence["day"]
+	return day >= int(start_day[contract]) and day < int(next_day[contract])
 
 
 static func _station_problem(passengers: Dictionary, sim: PassengerSim) -> String:

@@ -83,8 +83,8 @@ const START_STAGES: Array[Passenger.Stage] = [
 
 var layout := CafeLayout.new()
 ## Set by any grid edit: every visit's deadline is worked out again on the
-## next tick. PassengerSim.to_snapshot() reconciles first when it is set, so a
-## save never holds it set.
+## next tick. While it is set, PassengerSim.to_snapshot() refuses and SaveGame
+## waits for that tick, so a save never holds it set.
 var deadlines_stale := false
 
 var _sim: PassengerSim

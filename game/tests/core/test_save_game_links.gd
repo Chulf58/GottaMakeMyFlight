@@ -116,6 +116,18 @@ func test_a_passenger_on_an_unknown_flight_is_refused() -> void:
 	_assert_refused(bad, "flight NOPE is named")
 
 
+## A well-formed occurrence id of a saved contract, on a day never issued:
+## FlightSim._find() would not know it, and the passenger would wait forever.
+func test_a_passenger_on_a_never_issued_occurrence_is_refused() -> void:
+	var bad := _taken()
+	var id := FlightTimetable.occurrence_id(_accepted, 999_999_999)
+	assert_dict(FlightTimetable.parse_occurrence(id)).is_equal(
+		{"contract": _accepted, "day": 999_999_999}
+	)
+	bad["passengers"]["passengers"][0]["flight_id"] = id
+	_assert_refused(bad, "flight %s is named" % id)
+
+
 func test_a_passenger_at_a_station_that_is_not_there_is_refused() -> void:
 	var bad := _taken()
 	var i := _record_with(bad["passengers"], "station")
