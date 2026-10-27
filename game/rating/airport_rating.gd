@@ -145,6 +145,17 @@ func contract_ends() -> bool:
 	return _low_days >= RatingFormula.LOW_DAYS_TO_END
 
 
+## An airline ended its contract: the low-day count starts again from
+## RatingFormula.LOW_DAYS_AFTER_END. False (with an error) unless contract_ends().
+func note_contract_ended() -> bool:
+	if not contract_ends():
+		push_error("AirportRating.note_contract_ended: no contract is due to end")
+		return false
+	_low_days = RatingFormula.LOW_DAYS_AFTER_END
+	changed.emit()
+	return true
+
+
 func current_day() -> int:
 	return GameCalendar.day_of(_tick)
 

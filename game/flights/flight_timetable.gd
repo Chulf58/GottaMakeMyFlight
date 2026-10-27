@@ -103,6 +103,11 @@ static func contract_overlaps(contract: Dictionary, start: int, end: int) -> boo
 	return maxi(lowest, int(contract["first_day"])) <= highest
 
 
+## True when the half-open gate holds [a_start, a_end) and [b_start, b_end) overlap.
+static func holds_overlap(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
+	return a_start < b_end and b_start < a_end
+
+
 ## Timetable order of live flights: first start tick, then id.
 static func flight_before(a: Dictionary, b: Dictionary) -> bool:
 	if a["starts"][0] != b["starts"][0]:
