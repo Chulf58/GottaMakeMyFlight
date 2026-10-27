@@ -12,9 +12,10 @@ extends RefCounted
 ## agreeing with the guest's stage; an order in progress, or a seated guest's
 ## dwell, that started on the guest's stage tick and ends after the saved tick;
 ## and the visit resuming on the guest's side of security. A save never holds
-## stale cafe state: PassengerSim.to_snapshot() brings the cafe in line with
-## the grid after an edit first, so "deadlines_stale" is always false and a
-## piece missing from the rebuilt layout is refused outright, whatever it was.
+## stale cafe state: between a grid edit and the next tick's reconcile,
+## PassengerSim.to_snapshot() refuses (SaveGame waits for that tick), so
+## "deadlines_stale" is always false and a piece missing from the rebuilt
+## layout is refused outright, whatever it was.
 
 const VISIT_INT_FIELDS := [
 	"passenger",

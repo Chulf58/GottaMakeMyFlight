@@ -152,7 +152,9 @@ func test_a_save_names_only_pieces_in_the_saved_cafe_layout() -> void:
 	for removed in [other_counter, other_table]:
 		assert_bool(_world.grid.apply(BuildEdit.remove_object(removed)).ok).is_true()
 	assert_bool(_world.sim.cafes.deadlines_stale).is_true()
-	# The save brings the cafe in line with the grid first.
+	# The cafe is brought in line with the grid before the save, which itself
+	# changes nothing (PassengerSim.to_snapshot()).
+	_world.sim.cafes.reconcile()
 	var good: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
 	assert_bool(_world.sim.cafes.deadlines_stale).is_false()
 	assert_bool(good["cafe"]["deadlines_stale"]).is_false()

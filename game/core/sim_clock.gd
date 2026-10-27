@@ -30,6 +30,9 @@ var alpha: float:
 		return _accumulator / STEP
 
 var _accumulator: float = 0.0
+## True while `ticked` is being emitted, so SaveGame can refuse to save or
+## load from inside a tick.
+var _in_tick := false
 
 
 func _init() -> void:
@@ -49,9 +52,16 @@ func advance(real_delta: float) -> void:
 		_accumulator -= STEP
 		tick += 1
 		steps += 1
+		_in_tick = true
 		ticked.emit(tick)
+		_in_tick = false
 	if _accumulator >= STEP:
 		_accumulator = fposmod(_accumulator, STEP)
+
+
+## True from the moment a tick is emitted until every listener has returned.
+func is_in_tick() -> bool:
+	return _in_tick
 
 
 func set_paused(value: bool) -> void:

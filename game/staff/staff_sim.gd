@@ -146,8 +146,12 @@ func step() -> void:
 			_walk(m)
 
 
+## JSON-safe state for a save, exactly as the members stand: it only reads.
+## Edits reconcile at once (_on_graph_changed), so between ticks the one
+## thing left for the next step() is a leaving member whose service ended
+## during the tick. It is saved still leaving and on duty, and the loaded
+## game's next step() lets it go on the same tick as one never saved.
 func to_snapshot() -> Dictionary:
-	_reconcile()
 	return StaffSnapshot.save(_members, _next_id)
 
 
@@ -196,7 +200,7 @@ func _reconcile() -> void:
 			var usable := sim.layout.is_usable(m.station)
 			if not usable or not stations_of(m.role).has(m.station):
 				_release(m)
-		if not m.in_pool() and not sim.grid.is_walkable(m.at):
+		if not m.in_pool() and not sim.grid.is_walkable(m.at) and not _backing_out(m):
 			if m.station != 0:
 				_release(m)
 			m.at = StaffMember.NO_CELL
@@ -204,6 +208,12 @@ func _reconcile() -> void:
 		if m.leaving and not (m.state == StaffMember.State.ON_DUTY and _in_service(m.station)):
 			_remove(m)
 			staff_changed.emit()
+
+
+## Whether the member is backing out of a cell that went (_replan() marked it):
+## `at` is that cell until the member reaches the one it left, if that stands.
+func _backing_out(m: StaffMember) -> bool:
+	return m.backing_out and m.is_moving() and sim.grid.is_walkable(m.path[1])
 
 
 func _remove(m: StaffMember) -> void:
@@ -296,15 +306,25 @@ func _plan(m: StaffMember) -> bool:
 
 ## An edit touched the rest of the path. The step in progress is kept, as
 ## PassengerSim._replan() keeps a passenger's: while it can still be taken the
-## member finishes it and plans on from its end; when the edit closed it the
-## member turns back to the cell it just left, from where it is; with no way
-## on it walks to the end of what it has and plans again there.
+## member finishes it and plans on from its end; when the edit closed it, or
+## removed the cell it was entering, the member turns back to the cell it just
+## left, from where it is; with no way on it walks to the end of what it has
+## and plans again there.
 func _replan(m: StaffMember) -> void:
 	m.needs_replan = false
+	var target: Vector2i = sim.layout.lanes[m.station][0]
+	if m.backing_out:
+		# Already turned back: only what comes after the cell it left changes.
+		var back := m.path[1]
+		var onward: Array[Vector2i] = [m.at, back]
+		onward.append_array(_path(back, target).slice(1))
+		var offset := m.seg_mm
+		m.set_path(onward)
+		m.seg_mm = offset
+		return
 	if not m.is_moving() or m.seg_mm == 0:
 		_plan(m)
 		return
-	var target: Vector2i = sim.layout.lanes[m.station][0]
 	var here := m.at
 	var next := m.path[m.path_index + 1]
 	var keep := m.seg_mm
@@ -314,18 +334,17 @@ func _replan(m: StaffMember) -> void:
 		if path.is_empty():
 			path.append(next)
 		path.push_front(here)
-	elif sim.grid.is_walkable(next):
+	else:
+		# Closed, or the cell itself is gone: back to the cell it left.
 		keep = Passenger.segment_mm(here, next) - keep
 		m.at = next
 		path = _path(here, target)
 		if path.is_empty():
 			path.append(here)
 		path.push_front(next)
-	else:
-		_plan(m)
-		return
 	m.set_path(path)
 	m.seg_mm = keep
+	m.backing_out = not sim.grid.is_walkable(m.path[0])
 
 
 func _path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
