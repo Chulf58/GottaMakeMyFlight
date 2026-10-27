@@ -52,6 +52,12 @@ const SEAT_TRIES := 4
 const MOOD_MAX := 100
 ## Seated, the feet stand this far in front of the seat cell's centre.
 const SIT_FORWARD_M := 0.45
+## A seat_row has three cells but four chairs (pans at x -1.08, -0.36, 0.36 and
+## 1.08 m in build_seat_row, tools/blender/interior/build_interior_kit.py), so
+## a seated passenger is drawn this far along the row's x axis from its cell's
+## centre, per footprint index. The middle cell takes the chair at +0.36; the
+## one at -0.36 stays empty. Drawing only: cells, claims and saves are per cell.
+const GATE_CHAIR_OFFSET_M: Array[float] = [-0.08, 0.36, 0.08]
 const SHUFFLE_TICKS := 8
 const QUEUE_STAGES := [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_QUEUE]
 const SEAT_STAGES := [
@@ -356,7 +362,7 @@ func world_position(p: Passenger) -> Vector3:
 	if p.stage in SEAT_STAGES and p.seat_cell != Passenger.NO_CELL:
 		var front := grid.cell_to_world(p.seat_front)
 		var seat := grid.cell_to_world(p.seat_cell)
-		var spot := seat + (front - seat) * SIT_FORWARD_M
+		var spot := seat + (front - seat) * SIT_FORWARD_M + _chair_offset(p)
 		var shuffle := clampf((tick - p.stage_tick) / float(SHUFFLE_TICKS), 0.0, 1.0)
 		if p.stage == Passenger.Stage.SITTING_DOWN:
 			return front.lerp(spot, shuffle)
@@ -366,6 +372,26 @@ func world_position(p: Passenger) -> Vector3:
 		return spot
 	var at := p.grid_position()
 	return grid.origin + Vector3(at.x, 0.0, at.y)
+
+
+## The sideways step from a gate seat cell's centre to its chair
+## (GATE_CHAIR_OFFSET_M), turned with the seat row. A row removed by an edit
+## gets no step until the next tick's _reconcile() releases its seat. A seat
+## cell that is not in its object's footprint is a bug: it is reported and
+## gets no step.
+func _chair_offset(p: Passenger) -> Vector3:
+	var record := grid.get_object(p.seat_object)
+	if record.is_empty():
+		return Vector3.ZERO
+	var def := BuildCatalog.get_def(record["def"])
+	var index := def.footprint(record["anchor"], record["facing"]).find(p.seat_cell)
+	if index < 0 or index >= GATE_CHAIR_OFFSET_M.size():
+		push_error("passenger %d seat cell %s is not a chair cell" % [p.id, p.seat_cell])
+		return Vector3.ZERO
+	var side := BuildObjectDef.rotate_point(
+		Vector2(GATE_CHAIR_OFFSET_M[index], 0.0), record["facing"]
+	)
+	return Vector3(side.x, 0.0, side.y)
 
 
 ## What the passenger's thought bubble says, or "" for nothing.
