@@ -44,11 +44,12 @@ func _retired() -> void:
 	assert_int(_a.sim.missed_count()).is_greater(0)
 
 
-func test_version_is_5_and_a_version_4_save_is_refused() -> void:
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(5)
+## Version 6 (arrival types) is pinned in TestArrivalTimeline.
+func test_a_version_4_save_is_refused() -> void:
+	assert_int(PassengerSim.SAVE_VERSION).is_greater_equal(5)
 	_retired()
 	var data := _round_trip()
-	assert_int(int(data["save_version"])).is_equal(5)
+	assert_int(int(data["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	data["save_version"] = 4
 	_b = PassengerTestWorld.reference_world()
 	assert_bool(_b.sim.from_snapshot(data)).is_false()
