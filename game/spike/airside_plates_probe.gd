@@ -13,6 +13,7 @@ extends SceneTree
 ## otherwise PROBE_INVALID is printed and the probe exits 1. Plates go to
 ## tools/blender/out/airside_flight/.
 
+const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/airside_flight"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
@@ -38,6 +39,10 @@ var _clock: SimClock
 var _plane: Node3D
 var _cam: Camera3D
 var _rig: Node3D
+## The tick the starter's first flight starts its first state: a new game boots
+## closed and issues it ISSUE_LEAD_TICKS after the opening, so every sampled
+## tick below is counted from here.
+var _t0 := 0
 
 
 func _initialize() -> void:
@@ -87,6 +92,25 @@ func _run() -> void:
 	_cam = _main.get_node("TycoonCamera/Camera3D")
 	_plane = _main.get_node("PlaneView")
 	await _frames(10)
+	# The plane's timeline is the subject, not staffing: open the airport directly
+	# (AirportGate.open() opens it ready or not), which issues the starter flight.
+	var gate := _main.get_node("AirportGate") as AirportGate
+	if not gate.open():
+		_invalid("the airport did not open")
+		_finish()
+		return
+	# The opening accepts the starter contract; its first occurrence is issued on
+	# the next tick, which is stepped by hand.
+	var starter := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
+	StarterFlight.advance_until(
+		_clock, func() -> bool: return _sim().flight_ids().has(starter), 200
+	)
+	_t0 = _sim().state_start("GMF101-d0", 0)
+	print("PROBE opened tick=%d first_state_tick=%d" % [_clock.tick, _t0])
+	if _t0 <= 0:
+		_invalid("the starter's first flight GMF101-d0 was not issued")
+		_finish()
+		return
 	_add_colliders(_main)
 	await physics_frame
 	print("PROBE speed_set=", _clock.set_speed(3), " speed=", _clock.speed)
@@ -235,7 +259,7 @@ func _strip() -> void:
 	for row in STRIP_ROWS:
 		var frames: Array[Image] = []
 		for target in row[1]:
-			_step_to(target)
+			_step_to(_t0 + target)
 			_plane.update_pose()
 			_follow()
 			await physics_frame
@@ -282,10 +306,10 @@ func _overview() -> void:
 	# The strip ran the clock to the end of the flight; rewind to mid-boarding through the
 	# sim's own snapshot so the plane stands at the gate.
 	var snap := _sim().to_snapshot()
-	snap["tick"] = 800
+	snap["tick"] = _t0 + 800
 	snap["flights"][0]["state"] = FlightSim.State.BOARDING
 	print("OVERVIEW restore=", _sim().from_snapshot(snap))
-	_clock.tick = 800
+	_clock.tick = _t0 + 800
 	_plane.update_pose()
 	var airside: Node3D = _main.get_node("Airside")
 	for m in airside.get_children():

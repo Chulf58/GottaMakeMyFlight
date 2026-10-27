@@ -383,6 +383,11 @@ func bubble_text(p: Passenger) -> String:
 	if p.stage == Passenger.Stage.MISSED:
 		return "Missed my flight!"
 	if p.stuck != Passenger.Stuck.NONE:
+		# A usable station that stands unstaffed is closed, not missing.
+		if p.stuck == Passenger.Stuck.NO_CHECKIN and layout.desks.any(layout.is_usable):
+			return "Check-in is closed"
+		if p.stuck == Passenger.Stuck.NO_SECURITY and layout.scanners.any(layout.is_usable):
+			return "Security is closed"
 		return STUCK_TEXT[p.stuck]
 	if p.late and not p.is_done():
 		return "I'm late!"
