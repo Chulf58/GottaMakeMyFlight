@@ -157,6 +157,9 @@ var _area_remove_material := _ghost_material(AREA_REMOVE_TINT)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
+## True while the pointer maps to a cell inside the grid, whether or not the
+## picked tool makes an edit there (a room tool makes none before a drag).
+var _pointer_on_grid := false
 var _dragging := false
 var _drag_side := -1
 var _last_applied_key := ""
@@ -349,6 +352,12 @@ func hover_edit() -> BuildEdit:
 	return _hover_edit
 
 
+## True while the pointer is over a cell of the grid (BuildMenu shows its status
+## line only then); false with no hover yet, over the HUD or outside the grid.
+func pointer_on_grid() -> bool:
+	return _pointer_on_grid
+
+
 ## The rectangle being dragged, or an empty Rect2i when no rectangle drag is on
 ## (BuildMenu prices it for the cost line).
 func dragged_area() -> Rect2i:
@@ -517,6 +526,7 @@ func _mouse_ground() -> Variant:
 
 
 func _update_ghost(point: Variant) -> void:
+	_pointer_on_grid = point != null and grid.in_bounds(grid.world_to_cell(point))
 	if _area.active:
 		_draw_area()
 		return
@@ -544,6 +554,7 @@ func _update_ghost(point: Variant) -> void:
 ## Hides the rectangle's slab and size while the pointer is over the HUD; the
 ## cleared hover key makes _draw_area() draw both again on the way back.
 func _hide_area_ghost() -> void:
+	_pointer_on_grid = false
 	_ghost.visible = false
 	if _hover_key != "":
 		_hover_key = ""

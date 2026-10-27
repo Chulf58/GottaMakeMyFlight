@@ -116,11 +116,13 @@ func test_an_unaffordable_card_can_still_be_picked_to_see_the_shortfall() -> voi
 	_set_balance(100)
 	_menu.press_card(BuildMode.Tool.DESK)
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.DESK)
+	_mode._update_ghost(_at(Vector2i(3, 3)))
 	assert_str(_menu.preview_text()).is_equal("Cost 400   Short by 300")
 
 
 func test_the_cost_line_shows_the_picked_tool_s_price() -> void:
 	_mode.set_tool(BuildMode.Tool.DESK)
+	_mode._update_ghost(_at(Vector2i(3, 3)))
 	assert_str(_menu.preview_text()).is_equal("Cost 400")
 	_menu.refresh_preview()
 	assert_str(_menu.preview_label().text).is_equal("Cost 400")
@@ -181,11 +183,23 @@ func test_a_door_over_a_paid_wall_shows_the_net_price_not_the_card_price() -> vo
 	assert_str(_menu.preview_text()).is_equal("Cost %d   Short by %d" % [net, 300 - net - 10])
 
 
-func test_the_cost_line_falls_back_to_the_card_price_off_the_grid() -> void:
-	_mode.set_tool(BuildMode.Tool.ENTRANCE)
-	_mode._update_ghost(null)
+func test_the_cost_line_is_empty_when_the_pointer_is_not_over_the_grid() -> void:
+	# At launch: a priced tool is picked and no pointer has hovered yet.
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
 	assert_object(_mode.hover_edit()).is_null()
-	assert_str(_menu.preview_text()).is_equal("Cost 300")
+	_menu.refresh_preview()
+	assert_str(_menu.preview_text()).is_equal("")
+	assert_bool(_menu.preview_label().visible).is_false()
+	# Over a cell the line prices the edit.
+	_mode._update_ghost(_at(Vector2i(3, 3)))
+	_menu.refresh_preview()
+	assert_str(_menu.preview_label().text).is_equal("Cost 25")
+	assert_bool(_menu.preview_label().visible).is_true()
+	# The pointer leaving the grid (over the HUD) clears it again.
+	_mode._update_ghost(null)
+	_menu.refresh_preview()
+	assert_str(_menu.preview_label().text).is_equal("")
+	assert_bool(_menu.preview_label().visible).is_false()
 
 
 func test_the_unaffordable_tint_comes_from_the_hud_theme() -> void:
@@ -203,4 +217,6 @@ func test_picking_a_tool_drops_the_old_tool_s_hovered_edit() -> void:
 	assert_str(_menu.preview_text()).is_equal("Cost 25")
 	_menu.press_card(BuildMode.Tool.DESK)
 	assert_object(_mode.hover_edit()).is_null()
+	assert_str(_menu.preview_text()).is_equal("")
+	_mode._update_ghost(_at(Vector2i(3, 3)))
 	assert_str(_menu.preview_text()).is_equal("Cost 400")
