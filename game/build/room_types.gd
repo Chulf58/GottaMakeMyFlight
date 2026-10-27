@@ -57,3 +57,13 @@ static func _build() -> void:
 	cafe.seats_per_piece = 2
 	cafe.base_spend = 15
 	_types[cafe.id] = cafe
+
+	# Bag room (decision baggage-rides-a-player-built-belt-from-check-in-to-a-
+	# bag-roo): where the check-in belt ends. It seats nobody and earns no
+	# spend; the belt's end piece is what makes it work.
+	var bag_room := RoomType.new()
+	bag_room.id = &"bag_room"
+	bag_room.display_name = "Bag room"
+	bag_room.min_size = Vector2i(2, 2)
+	bag_room.required = [[&"baggage_belt_end", "Needs a belt end"]]
+	_types[bag_room.id] = bag_room

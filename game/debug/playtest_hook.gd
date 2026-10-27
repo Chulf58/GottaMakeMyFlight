@@ -560,12 +560,16 @@ func _check_passengers(found: Dictionary) -> void:
 			_found(found, "off_grid", subject, base)
 		var node: Node3D = views.node_for(id) if views != null else null
 		if node != null and node.is_inside_tree():
+			# Against where the views mean to draw it (a gate sitter sits on its
+			# chair, up to 0.36 m beside the sim's cell-based spot).
 			var sim_at := passengers.world_position(p)
-			var drift := node.global_position.distance_to(sim_at)
+			var target := views.to_global(views.draw_position(p))
+			var drift := node.global_position.distance_to(target)
 			if drift > VIEW_DRIFT_M:
 				var data := base.duplicate()
 				data["drift_m"] = snappedf(drift, 0.01)
 				data["view"] = PlaytestState.point(node.global_position)
+				data["target"] = PlaytestState.point(target)
 				data["sim"] = PlaytestState.point(sim_at)
 				_found(found, "view_drift", subject, data)
 

@@ -27,6 +27,14 @@ const OBJECT_PRICES := {
 	&"exit_door": 300,
 	&"cafe_counter": 600,
 	&"cafe_table": 300,
+	# Belt pieces: a straight run is a little over a wall's price so a long
+	# line from check-in is a real spend; the end is the dear piece (roller
+	# slide, bumper, beacon). The cart is a plain dolly.
+	&"baggage_belt": 50,
+	&"baggage_belt_corner": 60,
+	&"baggage_belt_feed": 90,
+	&"baggage_belt_end": 200,
+	&"baggage_cart": 120,
 }
 
 
