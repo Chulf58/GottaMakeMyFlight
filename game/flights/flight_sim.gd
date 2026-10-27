@@ -1,15 +1,28 @@
 class_name FlightSim
 extends Node
 ## The flight schedule as plain data driven by SimClock ticks. Each flight is
-## a record (id, start tick of every state, current state); a tick moves it to
-## the next state when that state's start tick arrives. Nodes only read it.
-## All times are integer sim ticks (20 per second), so speed and pause change
-## nothing here.
+## a record (id, start tick of every state, current state, gate); a tick moves
+## it to the next state when that state's start tick arrives. Nodes only read
+## it. All times are integer sim ticks (20 per second), so speed and pause
+## change nothing here.
+##
+## Flights come from two places. Accepted contracts (FlightContract) run a
+## daily timetable: each day's occurrence is issued ahead of its first state
+## (FlightTimetable), named "<contract>-d<day>", and pruned after it departs;
+## queries on a pruned occurrence still answer from its immutable contract.
+## add_flight adds a one-off flight, which is never pruned; the bootstrap
+## flight GMF101 is one until a starter contract replaces it.
+##
+## One tick: set the tick, issue due occurrences in time order, advance every
+## flight, prune. PassengerSim binds after FlightSim, so it sees the result.
 
 signal state_changed(flight_id: String, new_state: int)
 ## Fires once as a flight enters DOORS_CLOSED. The passenger slice stops
 ## boarding on it; is_doors_closed() answers the same question as a query.
 signal doors_closed(flight_id: String)
+## Fires once when a contract's occurrence is issued, after it is recorded,
+## before any of its states is due. Never fires on a snapshot load.
+signal occurrence_added(flight_id: String)
 
 enum State {
 	SCHEDULED,
@@ -32,6 +45,10 @@ const STATE_COUNT := 11
 ## door is about 915 ticks at walking pace (test_boarding_window.gd).
 const PHASE_TICKS: Array[int] = [100, 120, 140, 300, 40, 1200, 60, 120, 300, 200]
 const DEFAULT_ID := "GMF101"
+## Gates with a stand. Only gate C has one; more gates are a later slice.
+const GATES: Array[String] = ["C"]
+const DEFAULT_GATE := "C"
+const SAVE_VERSION := 1
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock
@@ -39,7 +56,15 @@ const DEFAULT_ID := "GMF101"
 ## The tick the sim has been told about; set by the clock or a snapshot.
 var tick: int = 0
 
+## Live flights {id, starts, state, gate, contract, day}, in timetable order
+## (FlightTimetable.flight_before), so the order is a function of what is
+## live and a load restores it exactly.
+## A one-off flight has contract "" and day -1.
 var _flights: Array[Dictionary] = []
+## Read-only contracts in acceptance order.
+var _contracts: Array[Dictionary] = []
+## Contract id -> the first day not yet issued.
+var _next_day: Dictionary = {}
 
 
 func _ready() -> void:
@@ -66,30 +91,89 @@ func add_default_flight() -> bool:
 	return add_flight(DEFAULT_ID, schedule_starts(0))
 
 
-## False (with an error) when the id is taken or `starts` is not STATE_COUNT
-## non-decreasing ticks.
-func add_flight(id: String, starts: Array[int]) -> bool:
-	if id == "" or _index_of(id) >= 0:
-		push_error("FlightSim: flight id '%s' is empty or already used" % id)
+## Adds a one-off flight. False (with an error) when the id is taken or has
+## the occurrence form, `starts` is not STATE_COUNT non-decreasing ticks, the
+## gate has no stand, or the flight would hold the gate during an occurrence.
+func add_flight(id: String, starts: Array[int], gate := DEFAULT_GATE) -> bool:
+	var problem := _one_off_problem(id, starts, gate)
+	if problem != "":
+		push_error("FlightSim: flight '%s' %s" % [id, problem])
 		return false
-	if not _starts_valid(starts):
-		push_error("FlightSim: flight '%s' needs %d non-decreasing start ticks" % [id, STATE_COUNT])
+	_insert(_record(id, starts, gate, "", -1))
+	return true
+
+
+## Accepts an offer's terms (FlightContract.TERM_KEYS) as a contract whose
+## first occurrence is the first one whose whole preparation window is still
+## ahead. False (with an error) for bad terms, a used id or a gate clash.
+## Issues the first occurrence at once when it is already due.
+func accept_contract(terms: Dictionary) -> bool:
+	var problem := FlightContract.problem(terms, FlightContract.TERM_KEYS)
+	if problem == "" and not GATES.has(terms["gate"]):
+		problem = "gate '%s' has no stand" % terms["gate"]
+	if problem == "" and not contract_of(terms["id"]).is_empty():
+		problem = "contract id '%s' is already used" % terms["id"]
+	if problem != "":
+		push_error("FlightSim.accept_contract: %s" % problem)
 		return false
-	_flights.append({"id": id, "starts": starts.duplicate(), "state": _state_at(starts, tick)})
+	var fields := terms.duplicate()
+	fields["first_day"] = 0
+	fields["first_day"] = FlightTimetable.first_day(fields, tick)
+	var contract := FlightContract.make(fields)
+	problem = _clash_problem(contract)
+	if problem != "":
+		push_error("FlightSim.accept_contract: %s" % problem)
+		return false
+	_contracts.append(contract)
+	_next_day[contract["id"]] = contract["first_day"]
+	_issue_due()
 	return true
 
 
 func on_tick(new_tick: int) -> void:
 	tick = new_tick
+	_issue_due()
 	for flight in _flights:
 		_advance(flight)
+	_prune()
 
 
+## Live flights: one-off flights and issued occurrences not yet pruned.
 func flight_ids() -> Array[String]:
 	var ids: Array[String] = []
 	for flight in _flights:
 		ids.append(flight["id"])
 	return ids
+
+
+func contract_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for contract in _contracts:
+		ids.append(contract["id"])
+	return ids
+
+
+## The read-only contract, or {} for an unknown id.
+func contract_of(contract_id: String) -> Dictionary:
+	for contract in _contracts:
+		if contract["id"] == contract_id:
+			return contract
+	return {}
+
+
+## The contract an occurrence belongs to, or "" for a one-off or unknown flight.
+func flight_contract_id(id: String) -> String:
+	return _find(id).get("contract", "")
+
+
+## The live flight holding `gate` now (from its first state until it
+## departs), or "". Occurrences at one gate never overlap.
+func flight_at_gate(gate: String) -> String:
+	for flight in _flights:
+		var starts: Array = flight["starts"]
+		if flight["gate"] == gate and starts[0] <= tick and tick < starts[State.DEPARTED]:
+			return flight["id"]
+	return ""
 
 
 func state_of(id: String) -> int:
@@ -134,77 +218,119 @@ func phase_progress(id: String, time: float) -> float:
 
 ## JSON-safe state for a save.
 func to_snapshot() -> Dictionary:
-	var flights: Array = []
-	for flight in _flights:
-		flights.append(
-			{"id": flight["id"], "starts": flight["starts"].duplicate(), "state": flight["state"]}
-		)
-	return {"tick": tick, "flights": flights}
+	return FlightSnapshot.save(tick, _contracts, _next_day, _flights)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
 ## (which turns ints into floats). Pushes an error and returns false, leaving
 ## the sim unchanged, when anything is missing, mistyped or inconsistent.
+## Emits nothing: what the save had issued stays issued.
 func from_snapshot(data: Dictionary) -> bool:
-	var problem := _snapshot_problem(data)
-	if problem != "":
-		push_error("FlightSim.from_snapshot: %s" % problem)
+	var loaded := FlightSnapshot.load(data)
+	if loaded.has("error"):
+		push_error("FlightSim.from_snapshot: %s" % loaded["error"])
 		return false
-	tick = int(data["tick"])
-	_flights.clear()
-	for entry in data["flights"]:
-		var starts: Array[int] = []
-		for value in entry["starts"]:
-			starts.append(int(value))
-		_flights.append({"id": entry["id"], "starts": starts, "state": int(entry["state"])})
+	tick = loaded["tick"]
+	_contracts = loaded["contracts"]
+	_next_day = loaded["next_day"]
+	_flights = loaded["flights"]
 	return true
 
 
-func _snapshot_problem(data: Dictionary) -> String:
-	if not (data.has("tick") and data.has("flights")):
-		return "missing key 'tick' or 'flights'"
-	if not _is_whole(data["tick"]) or int(data["tick"]) < 0:
-		return "tick must be a whole number, 0 or more"
-	if typeof(data["flights"]) != TYPE_ARRAY:
-		return "flights must be an array"
-	var seen: Array[String] = []
-	for entry in data["flights"]:
-		var problem := _entry_problem(entry, int(data["tick"]), seen)
-		if problem != "":
-			return problem
+## A flight record with the state it is in at the current tick.
+func _record(
+	id: String, starts: Array[int], gate: String, contract: String, day: int
+) -> Dictionary:
+	return {
+		"id": id,
+		"starts": starts.duplicate(),
+		"state": FlightTimetable.state_at(starts, tick),
+		"gate": gate,
+		"contract": contract,
+		"day": day,
+	}
+
+
+func _one_off_problem(id: String, starts: Array[int], gate: String) -> String:
+	if id == "" or _index_of(id) >= 0:
+		return "has an empty or used id"
+	if not FlightTimetable.parse_occurrence(id).is_empty():
+		return "has an id of the contract occurrence form"
+	if not FlightTimetable.starts_valid(starts):
+		return "needs %d non-decreasing start ticks, 0 or more" % STATE_COUNT
+	if not GATES.has(gate):
+		return "is at gate '%s', which has no stand" % gate
+	for contract in _contracts:
+		if contract["gate"] == gate:
+			if FlightTimetable.contract_overlaps(contract, starts[0], starts[State.DEPARTED]):
+				return "would hold gate %s during contract %s" % [gate, contract["id"]]
 	return ""
 
 
-func _entry_problem(entry: Variant, now: int, seen: Array[String]) -> String:
-	if typeof(entry) != TYPE_DICTIONARY:
-		return "each flight must be a dictionary"
-	if not (entry.has("id") and entry.has("starts") and entry.has("state")):
-		return "a flight is missing 'id', 'starts' or 'state'"
-	if typeof(entry["id"]) != TYPE_STRING or entry["id"] == "" or seen.has(entry["id"]):
-		return "flight ids must be unique, non-empty strings"
-	seen.append(entry["id"])
-	var problem := _starts_problem(entry["starts"])
-	if problem != "":
-		return problem
-	var starts: Array[int] = []
-	for value in entry["starts"]:
-		starts.append(int(value))
-	if not _is_whole(entry["state"]) or int(entry["state"]) != _state_at(starts, now):
-		return "state does not match the tick"
+func _clash_problem(contract: Dictionary) -> String:
+	for other in _contracts:
+		if FlightTimetable.contracts_clash(contract, other):
+			return (
+				"contract %s clashes with %s at gate %s"
+				% [contract["id"], other["id"], other["gate"]]
+			)
+	for flight in _flights:
+		var starts: Array = flight["starts"]
+		if flight["contract"] == "" and flight["gate"] == contract["gate"]:
+			if FlightTimetable.contract_overlaps(contract, starts[0], starts[State.DEPARTED]):
+				return (
+					"contract %s clashes with flight %s at gate %s"
+					% [contract["id"], flight["id"], flight["gate"]]
+				)
 	return ""
 
 
-func _starts_problem(values: Variant) -> String:
-	if typeof(values) != TYPE_ARRAY or values.size() != STATE_COUNT:
-		return "starts must be an array of %d ticks" % STATE_COUNT
-	var starts: Array[int] = []
-	for value in values:
-		if not _is_whole(value):
-			return "start ticks must be whole numbers"
-		starts.append(int(value))
-	if not _starts_valid(starts):
-		return "start ticks must be 0 or more and not decrease"
-	return ""
+## Issues every occurrence whose issue tick has come, oldest first (then by
+## contract order and day), so the order never depends on dictionary order.
+func _issue_due() -> void:
+	var due: Array = []
+	for index in _contracts.size():
+		var contract := _contracts[index]
+		var day: int = _next_day[contract["id"]]
+		while FlightTimetable.issue_tick(contract, day) <= tick:
+			due.append([FlightTimetable.issue_tick(contract, day), index, day])
+			day += 1
+	due.sort_custom(_issued_before)
+	for entry in due:
+		_issue(_contracts[entry[1]], entry[2])
+
+
+## Orders [issue tick, contract index, day] entries field by field.
+static func _issued_before(a: Array, b: Array) -> bool:
+	for i in a.size():
+		if a[i] != b[i]:
+			return a[i] < b[i]
+	return false
+
+
+func _issue(contract: Dictionary, day: int) -> void:
+	var id := FlightTimetable.occurrence_id(contract["id"], day)
+	var starts := FlightTimetable.starts_for(contract, day)
+	_insert(_record(id, starts, contract["gate"], contract["id"], day))
+	_next_day[contract["id"]] = day + 1
+	occurrence_added.emit(id)
+
+
+func _insert(record: Dictionary) -> void:
+	var at := _flights.size()
+	while at > 0 and FlightTimetable.flight_before(record, _flights[at - 1]):
+		at -= 1
+	_flights.insert(at, record)
+
+
+func _prune() -> void:
+	for i in range(_flights.size() - 1, -1, -1):
+		var flight := _flights[i]
+		if flight["contract"] == "":
+			continue
+		var contract := contract_of(flight["contract"])
+		if tick >= FlightTimetable.prune_tick(contract, flight["day"]):
+			_flights.remove_at(i)
 
 
 func _advance(flight: Dictionary) -> void:
@@ -216,9 +342,24 @@ func _advance(flight: Dictionary) -> void:
 			doors_closed.emit(flight["id"])
 
 
+## The live record, or for an issued occurrence that was pruned, a departed
+## record rebuilt from its contract; {} for anything else.
 func _find(id: String) -> Dictionary:
 	var index := _index_of(id)
-	return _flights[index] if index >= 0 else {}
+	if index >= 0:
+		return _flights[index]
+	var parts := FlightTimetable.parse_occurrence(id)
+	if parts.is_empty():
+		return {}
+	var contract := contract_of(parts["contract"])
+	var day: int = parts["day"]
+	if contract.is_empty() or day < contract["first_day"] or day >= _next_day[contract["id"]]:
+		return {}
+	var record := _record(
+		id, FlightTimetable.starts_for(contract, day), contract["gate"], contract["id"], day
+	)
+	record["state"] = State.DEPARTED
+	return record
 
 
 func _index_of(id: String) -> int:
@@ -226,24 +367,3 @@ func _index_of(id: String) -> int:
 		if _flights[i]["id"] == id:
 			return i
 	return -1
-
-
-## The state a flight is in at `now`: the last whose start tick has passed.
-static func _state_at(starts: Array[int], now: int) -> int:
-	var state := State.SCHEDULED
-	while state < State.DEPARTED and now >= starts[state + 1]:
-		state += 1
-	return state
-
-
-static func _starts_valid(starts: Array[int]) -> bool:
-	if starts.size() != STATE_COUNT or starts[0] < 0:
-		return false
-	for i in range(1, STATE_COUNT):
-		if starts[i] < starts[i - 1]:
-			return false
-	return true
-
-
-static func _is_whole(value: Variant) -> bool:
-	return WholeNumber.is_whole(value)

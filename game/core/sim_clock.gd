@@ -13,6 +13,10 @@ const SPEEDS: Array[int] = [1, 2, 3]
 ## Most steps one frame may run. Past this the backlog is dropped, so a long
 ## stall does not make the next frame run even longer.
 const MAX_STEPS_PER_FRAME := 10
+const SAVE_VERSION := 1
+const SNAPSHOT_KEYS := [
+	"save_version", "tick", "speed", "paused", "accumulator", "rng_seed", "rng_state"
+]
 
 var tick: int = 0
 var speed: int = 1
@@ -78,6 +82,7 @@ func restore_rng(saved_seed: int, saved_state: int) -> void:
 ## above 2^53.
 func to_snapshot() -> Dictionary:
 	return {
+		"save_version": SAVE_VERSION,
 		"tick": str(tick),
 		"speed": speed,
 		"paused": paused,
@@ -89,7 +94,8 @@ func to_snapshot() -> Dictionary:
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
 ## (which turns ints into floats). Pushes an error and returns false, leaving
-## the clock unchanged, when any key is missing or has a bad type or value.
+## the clock unchanged, when any key is missing or unknown, or has a bad type
+## or value.
 func from_snapshot(data: Dictionary) -> bool:
 	var problem := _snapshot_problem(data)
 	if problem != "":
@@ -104,9 +110,14 @@ func from_snapshot(data: Dictionary) -> bool:
 
 
 func _snapshot_problem(data: Dictionary) -> String:
-	for key in ["tick", "speed", "paused", "accumulator", "rng_seed", "rng_state"]:
+	for key in data.keys():
+		if not SNAPSHOT_KEYS.has(key):
+			return "unknown key '%s'" % key
+	for key in SNAPSHOT_KEYS:
 		if not data.has(key):
 			return "missing key '%s'" % key
+	if not _is_whole_number(data["save_version"]) or int(data["save_version"]) != SAVE_VERSION:
+		return "save_version must be %d" % SAVE_VERSION
 	var problem := _clock_field_problem(data)
 	if problem != "":
 		return problem
