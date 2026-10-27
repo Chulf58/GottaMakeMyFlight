@@ -1,4 +1,4 @@
-[gd_scene load_steps=30 format=3]
+[gd_scene load_steps=31 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -26,6 +26,7 @@
 
 [ext_resource type="Script" path="res://rating/airport_rating.gd" id="23_rating"]
 [ext_resource type="Script" path="res://ui/rating_badge.gd" id="24_ratingbadge"]
+[ext_resource type="Script" path="res://core/save_game.gd" id="25_save"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -213,4 +214,17 @@ gate = NodePath("../AirportGate")
 [node name="RatingBadge" type="CanvasLayer" parent="." node_paths=PackedStringArray("rating")]
 layer = 2
 script = ExtResource("24_ratingbadge")
+rating = NodePath("../AirportRating")
+
+[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating")]
+script = ExtResource("25_save")
+clock = NodePath("../SimClock")
+build_mode = NodePath("../BuildMode")
+flights = NodePath("../FlightSim")
+passengers = NodePath("../PassengerSim")
+staff = NodePath("../Staff")
+finances = NodePath("../Finances")
+settlement = NodePath("../Settlement")
+rescue_grant = NodePath("../RescueGrant")
+offer_desk = NodePath("../OfferDesk")
 rating = NodePath("../AirportRating")

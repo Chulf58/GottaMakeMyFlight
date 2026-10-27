@@ -182,9 +182,13 @@ func test_a_save_between_an_edit_and_the_next_tick_loads_and_plays_on_alike() ->
 	assert_bool(_a.grid.apply(BuildEdit.remove_object(table)).ok).is_true()
 	assert_bool(_a.sim.cafes.deadlines_stale).is_true()
 	var balance := _a.sim.wallet.balance
+	# PassengerSim.to_snapshot() changes nothing, so the cafe is brought in
+	# line with the grid explicitly before the save (SaveGame waits for the
+	# next tick instead).
+	_a.sim.cafes.reconcile()
 	_b = _load(_save(_a))
-	# The save brought the cafe in line with the grid first: the guest's seat
-	# is gone, so it pays the short share and goes on, in the saved game too.
+	# The guest's seat is gone, so it paid the short share and went on, in the
+	# saved game too.
 	assert_bool(_a.sim.cafes.deadlines_stale).is_false()
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
 	var base := RoomTypes.get_type(&"cafe").base_spend
