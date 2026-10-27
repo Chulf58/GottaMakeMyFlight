@@ -11,7 +11,8 @@ extends CanvasLayer
 ## build tool is active follows it: the selection is a stable passenger id,
 ## and the camera follows PassengerViews.follow_anchor, never a pooled node.
 ## When a flight's doors close, a dismissible FlightResultPanel opens under
-## the top-right panel: made, missed and the main reasons. A new game opens paused under the
+## the top-right panel: made, missed and the main reasons; a later closing
+## flight replaces it. A new game opens paused under the
 ## IntroDialogue (once per session, never in a probe, a test or a playtest);
 ## closing it starts the clock at 1x.
 ##
@@ -96,8 +97,6 @@ var _result := FlightResultPanel.new()
 ## first. The sim marks the passengers missed after the doors_closed signal,
 ## so a result waits for the next refresh.
 var _unreported: Array[String] = []
-## FlightResult summaries waiting for the open panel to be dismissed.
-var _unshown: Array[Dictionary] = []
 var _intro_layer: CanvasLayer
 var _intro: IntroDialogue
 ## The camera's input state when the intro opened, restored when it closes.
@@ -211,13 +210,11 @@ func _shortcut_input(event: InputEvent) -> void:
 
 func refresh() -> void:
 	_drop_retired_selection()
-	# Summarized now, not when shown: the sim drops a flight's results when
-	# FlightSim prunes it, which can come before the open panel is dismissed.
-	for flight_id in _unreported:
-		_unshown.append(FlightResult.summarize(sim, flight_id))
-	_unreported.clear()
-	if not _unshown.is_empty() and not _result.visible:
-		_result.show_result(_unshown.pop_front())
+	# The panel always shows the latest flight to close, replacing an open one
+	# that was not dismissed, so it never holds an earlier day's result.
+	if not _unreported.is_empty():
+		_result.show_result(FlightResult.summarize(sim, _unreported.back()))
+		_unreported.clear()
 	_time_label.text = time_text()
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
