@@ -89,6 +89,12 @@ func tick_position(id: int, current: bool) -> Vector3:
 	return (_cur if current else _prev).get(id, Vector3.ZERO)
 
 
+## Where a passenger is drawn on this tick: the sim's position, moved onto
+## its chair's pan at a gate seat (GateChairs).
+func draw_position(p: Passenger) -> Vector3:
+	return sim.world_position(p) + GateChairs.offset(sim, p)
+
+
 ## Records positions for the tick that just ran and updates poses and bubbles.
 func sync() -> void:
 	var seen := {}
@@ -97,7 +103,7 @@ func sync() -> void:
 		if not _visible(p):
 			continue
 		seen[id] = true
-		var now := sim.world_position(p)
+		var now := draw_position(p)
 		if not _nodes.has(id):
 			_nodes[id] = _take(p.variant)
 			_cur[id] = now

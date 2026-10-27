@@ -60,15 +60,21 @@ func advance(seconds: float) -> void:
 
 func _on_paid(passenger_id: int, room_id: int, amount: int) -> void:
 	# Pops of one room share its column, so a pop paid while others of that
-	# room are still up steps aside in the label's plane: right, left, then
-	# further out. Sideways steps keep it under the room label.
-	var others := 0
+	# room are still up steps aside in the label's plane to the first free
+	# slot in the order 0, +1, -1, +2, -2, ... Sideways steps keep it under
+	# the room label.
+	var taken := {}
 	for live in _live:
 		if live.get_meta(&"room") == room_id:
-			others += 1
+			taken[live.get_meta(&"slot")] = true
+	var side := 0
+	var n := 0
+	while taken.has(side):
+		n += 1
+		side = ceili(n / 2.0) * (1 if n % 2 == 1 else -1)
 	var label := _take()
 	label.set_meta(&"room", room_id)
-	var side := ceili(others / 2.0) * (1 if others % 2 == 1 else -1)
+	label.set_meta(&"slot", side)
 	label.offset = Vector2(side * SIDE_STEP_M / label.pixel_size, 0.0)
 	label.text = "+$%d" % amount
 	label.position = _point(passenger_id, room_id)

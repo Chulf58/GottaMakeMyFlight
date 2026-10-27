@@ -276,3 +276,28 @@ func test_pops_paid_together_in_one_room_step_aside_from_each_other() -> void:
 	for label in labels:
 		var width := _text_box(label).size.x - label.outline_size * label.pixel_size
 		assert_float(CafePops.SIDE_STEP_M).is_greater(width)
+
+
+## The middle pop expires while the side ones are still up: the next payment
+## takes the freed middle slot, not a side slot another pop is in.
+func test_a_new_pop_takes_the_slot_an_expired_pop_freed() -> void:
+	var p := _guest()
+	var pops := _views.cafe_pops()
+	_run_to_stage(p, Passenger.Stage.CAFE_STANDING_UP)
+	var room := _world.sim.cafes.visit_of(p.id).room
+	var oldest := pops.live_labels()[0]
+	assert_float(oldest.offset.x).is_equal_approx(0.0, 0.001)
+	pops.advance(CafePops.POP_SECONDS * 0.6)
+	_world.sim.cafes.paid.emit(p.id, room, 7)
+	_world.sim.cafes.paid.emit(p.id, room, 9)
+	pops.advance(CafePops.POP_SECONDS * 0.5)
+	assert_int(pops.live_count()).is_equal(2)
+	assert_bool(pops.live_labels().has(oldest)).is_false()
+	_world.sim.cafes.paid.emit(p.id, room, 11)
+	var sides := {}
+	for label in pops.live_labels():
+		sides[label.text] = snappedf(label.offset.x * label.pixel_size, 0.001)
+	print("pop sides after expiry %s" % [sides])
+	assert_float(sides["+$7"]).is_equal_approx(CafePops.SIDE_STEP_M, 0.001)
+	assert_float(sides["+$9"]).is_equal_approx(-CafePops.SIDE_STEP_M, 0.001)
+	assert_float(sides["+$11"]).is_equal_approx(0.0, 0.001)

@@ -259,7 +259,7 @@ func _plate_seated() -> void:
 
 ## Where the sitter's evaluated pose puts its hips against its chair: sideways
 ## and forward in the seat row's frame from the chair's point on the row's
-## centre line (x from the cell centre plus PassengerSim.GATE_CHAIR_OFFSET_M),
+## centre line (x from the cell centre plus GateChairs.CHAIR_OFFSET_M),
 ## and their height. The pan spans forward -0.18 to 0.32 m with its top at
 ## 0.53 m, and a standing pose has its hips near 1.1 m, so hips that are not
 ## low, over the pan and within a pan's half width fail the probe.
@@ -269,7 +269,7 @@ func _check_sitter(id: int) -> void:
 	var cells := BuildCatalog.get_def(record["def"]).footprint(record["anchor"], record["facing"])
 	var index := cells.find(p.seat_cell)
 	var frame := BuildView.object_transform(_sim.grid, cells, record["facing"])
-	var pan := frame * Vector3((index - 1) + PassengerSim.GATE_CHAIR_OFFSET_M[index], 0.0, 0.0)
+	var pan := frame * Vector3((index - 1) + GateChairs.CHAIR_OFFSET_M[index], 0.0, 0.0)
 	var node := _views.node_for(id)
 	var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var hips := (

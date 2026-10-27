@@ -1,8 +1,8 @@
 class_name TestGateSeatChairs
 extends GdUnitTestSuite
 ## A gate seat_row has three cells and four chairs. A seated passenger is drawn
-## on a chair pan of the drawn seat_row.glb (PassengerSim.GATE_CHAIR_OFFSET_M),
-## not on the armrest between two chairs, at every facing and grid origin.
+## on a chair pan of the drawn seat_row.glb by the view (GateChairs), while
+## the sim keeps seating by cell, at every facing and grid origin.
 
 const SEAT_ROW := "res://assets/interior/seat_row.glb"
 ## The pans' top faces: tools/blender/interior/build_interior_kit.py puts the
@@ -66,8 +66,8 @@ func test_the_seat_row_mesh_has_four_pans_and_each_cell_maps_to_its_own() -> voi
 	print("pan centres %s" % [pans])
 	assert_int(pans.size()).is_equal(4)
 	var used := {}
-	for i in PassengerSim.GATE_CHAIR_OFFSET_M.size():
-		var chair: float = (i - 1) + PassengerSim.GATE_CHAIR_OFFSET_M[i]
+	for i in GateChairs.CHAIR_OFFSET_M.size():
+		var chair: float = (i - 1) + GateChairs.CHAIR_OFFSET_M[i]
 		var nearest := -1
 		for j in pans.size():
 			if absf(pans[j] - chair) < MATCH_M:
@@ -84,11 +84,14 @@ func test_a_seated_passenger_is_drawn_on_a_chair_at_every_facing() -> void:
 		for x in 10:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	var anchors := [Vector2i(2, 1), Vector2i(8, 2), Vector2i(7, 8), Vector2i(1, 7)]
-	var rows := []
 	for facing in 4:
-		rows.append(PassengerTestWorld.place(grid, &"seat_row", anchors[facing], facing))
+		PassengerTestWorld.place(grid, &"seat_row", anchors[facing], facing)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	var sim := _world.sim
+	var views := PassengerViews.new()
+	views.sim = sim
+	# In the tree, so freeing it frees the nodes it builds in _ready.
+	add_child(views)
 	var checked := 0
 	for seat: Dictionary in sim.layout.seats:
 		var record := grid.get_object(seat["object_id"])
@@ -101,10 +104,17 @@ func test_a_seated_passenger_is_drawn_on_a_chair_at_every_facing() -> void:
 		p.seat_object = seat["object_id"]
 		p.seat_cell = seat["cell"]
 		p.seat_front = seat["front"]
-		var drawn := sim.world_position(p)
+		var front := grid.cell_to_world(seat["front"])
+		var cell := grid.cell_to_world(seat["cell"])
+		# The sim seats by cell: SIT_FORWARD_M in front of the cell's centre.
+		var in_sim := sim.world_position(p)
+		assert_vector(in_sim).is_equal_approx(
+			cell + (front - cell) * PassengerSim.SIT_FORWARD_M, Vector3.ONE * 0.001
+		)
+		var drawn := views.draw_position(p)
 		# The pan this cell maps to, through the transform the build view draws with.
 		var frame := BuildView.object_transform(grid, cells, record["facing"])
-		var chair: float = (index - 1) + PassengerSim.GATE_CHAIR_OFFSET_M[index]
+		var chair: float = (index - 1) + GateChairs.CHAIR_OFFSET_M[index]
 		var nearest := pans[0]
 		for x in pans:
 			if absf(x - chair) < absf(nearest - chair):
@@ -114,29 +124,29 @@ func test_a_seated_passenger_is_drawn_on_a_chair_at_every_facing() -> void:
 		var forward := (drawn - pan).dot(frame.basis.z)
 		print(
 			(
-				"facing=%d cell=%s index=%d drawn=%s pan=%s sideways=%.3f forward=%.3f"
-				% [record["facing"], seat["cell"], index, drawn, pan, sideways, forward]
+				"facing=%d cell=%s index=%d sim=%s drawn=%s pan=%s sideways=%.3f forward=%.3f"
+				% [record["facing"], seat["cell"], index, in_sim, drawn, pan, sideways, forward]
 			)
 		)
 		assert_float(absf(sideways)).is_less(MATCH_M)
 		assert_float(forward).is_equal_approx(PassengerSim.SIT_FORWARD_M, 0.001)
 		assert_float(drawn.y).is_equal_approx(grid.origin.y, 0.001)
-		# Sitting down ends where the seated passenger is drawn.
+		# Sitting down ends on the chair, starts at the front cell and is half
+		# way sideways half way through the shuffle.
 		p.stage = Passenger.Stage.SITTING_DOWN
 		p.stage_tick = sim.tick - PassengerSim.SHUFFLE_TICKS
-		assert_vector(sim.world_position(p)).is_equal_approx(drawn, Vector3.ONE * 0.001)
-		# ... and starts at the front cell.
+		assert_vector(views.draw_position(p)).is_equal_approx(drawn, Vector3.ONE * 0.001)
 		p.stage_tick = sim.tick
-		assert_vector(sim.world_position(p)).is_equal_approx(
-			grid.cell_to_world(seat["front"]), Vector3.ONE * 0.001
-		)
+		assert_vector(views.draw_position(p)).is_equal_approx(front, Vector3.ONE * 0.001)
+		p.stage_tick = sim.tick - PassengerSim.SHUFFLE_TICKS / 2
+		var half := views.draw_position(p) - sim.world_position(p)
+		assert_vector(half).is_equal_approx((drawn - in_sim) * 0.5, Vector3.ONE * 0.001)
 		# Standing up starts on the chair and ends at the front cell.
 		p.stage = Passenger.Stage.STANDING_UP
 		p.stage_tick = sim.tick
-		assert_vector(sim.world_position(p)).is_equal_approx(drawn, Vector3.ONE * 0.001)
+		assert_vector(views.draw_position(p)).is_equal_approx(drawn, Vector3.ONE * 0.001)
 		p.stage_tick = sim.tick - PassengerSim.STAND_UP_TICKS
-		assert_vector(sim.world_position(p)).is_equal_approx(
-			grid.cell_to_world(seat["front"]), Vector3.ONE * 0.001
-		)
+		assert_vector(views.draw_position(p)).is_equal_approx(front, Vector3.ONE * 0.001)
 		checked += 1
+	views.free()
 	assert_int(checked).is_equal(12)
