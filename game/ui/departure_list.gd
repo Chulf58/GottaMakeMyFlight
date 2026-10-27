@@ -12,7 +12,9 @@ extends RefCounted
 ## closed no contract is listed, since nothing is scheduled until it opens; a
 ## contract accepted then never shows the days it skipped (decision
 ## airport-opening-design-stays-open-once-opened-starter-flight-placed-after-
-## opening). The list is at most MAX_LINES lines, so the panel keeps its place
+## opening). An ended contract (FlightSim.end_contract) is listed only for the
+## days before its end day; the flights it had issued by then still fly and
+## show. The list is at most MAX_LINES lines, so the panel keeps its place
 ## above the flight result: when more leave today, flights that have departed
 ## drop off the top first, then the last line becomes "+n more".
 
@@ -59,6 +61,9 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 	for contract_id in flights.contract_ids():
 		var contract := flights.contract_of(contract_id)
 		if not open or int(start_days[contract_id]) > today:
+			continue
+		var end_day := flights.contract_end_day(contract_id)
+		if end_day >= 0 and today >= end_day:
 			continue
 		var tick := GameCalendar.tick_at(today, int(contract["departure_minute"]))
 		var state := flights.state_of(FlightTimetable.occurrence_id(contract_id, today))

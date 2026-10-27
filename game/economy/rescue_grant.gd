@@ -10,7 +10,9 @@ extends Node
 ## (RepairPlan.least_balance() of RepairPlan.make()'s edits: the missing
 ## pieces, the floor they stand on and the floor that joins them up, bought in
 ## order with each refund paying toward the rest), no more, and `granted`
-## carries the message to show.
+## carries the message to show. Owed wages (Settlement.wages_owed()) are paid
+## out of any credit the moment it lands, so the grant adds them on top: it
+## clears the wage debt and still leaves the repair's funding in the wallet.
 ##
 ## One grant per stuck event. The event lasts until a working path exists
 ## again; only then can a later loss start a new one. The latch is saved
@@ -54,6 +56,9 @@ const SEATED_STAGES: Array[Passenger.Stage] = [
 @export var clock: SimClock
 @export var passengers: PassengerSim
 @export var finances: Finances
+## Optional: its owed wages are added to the grant (see the class notes). Tests
+## set it after bind(); without it a grant is the repair's shortfall alone.
+@export var settlement: Settlement
 
 var _clock: SimClock
 var _sim: PassengerSim
@@ -120,10 +125,13 @@ func evaluate() -> bool:
 	if _granted or _someone_can_make_a_flight():
 		return false
 	var amount := _shortfall()
-	if amount <= 0 or not _wallet.credit(amount):
+	if amount <= 0:
+		return false
+	var wages := settlement.wages_owed() if settlement != null else 0
+	if not _wallet.credit(amount + wages):
 		return false
 	_granted = true
-	granted.emit(amount, _message(amount, repair_plan().edits))
+	granted.emit(amount + wages, _message(amount, repair_plan().edits, wages))
 	return true
 
 
@@ -255,7 +263,7 @@ static func _first_leg(stage: Passenger.Stage) -> int:
 	return RepairPlan.Leg.EXIT
 
 
-static func _message(amount: int, edits: Array[BuildEdit]) -> String:
+static func _message(amount: int, edits: Array[BuildEdit], wages := 0) -> String:
 	var names := PackedStringArray()
 	for edit in edits:
 		if edit.kind == BuildEdit.Kind.PLACE_OBJECT and PIECE_NAMES.has(edit.def_id):
@@ -265,7 +273,10 @@ static func _message(amount: int, edits: Array[BuildEdit]) -> String:
 			names.append("floor")
 			break
 	var what := ", ".join(names) if not names.is_empty() else "a way through the terminal"
-	return (
+	var text := (
 		"The airport authority has sent a rescue grant of %d to rebuild: %s. It is a one-off."
 		% [amount, what]
 	)
+	if wages > 0:
+		text += " A further %d clears the owed wages." % wages
+	return text
