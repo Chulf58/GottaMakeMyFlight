@@ -33,6 +33,14 @@ static func record(id: String, day: int, minute: int, status := OfferBoard.OPEN)
 	}
 
 
+## The whole offer set of `day`, ids O<day>N1.., one departure minute each.
+static func day_records(day: int, minutes: Array) -> Array:
+	var offers := []
+	for i in minutes.size():
+		offers.append(record("O%dN%d" % [day, i + 1], day, minutes[i]))
+	return offers
+
+
 static func save_of(offers: Array) -> Dictionary:
 	return {"save_version": OfferBoard.SAVE_VERSION, "offers": offers}
 
@@ -175,19 +183,22 @@ func test_a_restored_rng_gives_the_offers_an_uninterrupted_run_would() -> void:
 	assert_array(loaded.open_offers()).is_equal(_board.open_offers())
 
 
+## A save whose day 0 is the valid draw with `key` set to `value` on its first offer.
+static func with_first(key: String, value: Variant) -> Dictionary:
+	var offers := day_records(0, [600, 720, 840])
+	offers[0][key] = value
+	return save_of(offers)
+
+
 func test_a_bad_save_is_refused_whole_and_leaves_the_board_alone() -> void:
 	_board.ensure_day(0, _rng)
 	var before := _board.to_snapshot()
-	var extra := record("O0N9", 0, 600)
-	extra["colour"] = "red"
-	var bad_terms := record("O0N9", 0, 600)
-	bad_terms["plane_size"] = "jumbo"
 	var cases: Array = [
-		save_of([record("A1", 0, 600), record("A1", 0, 700)]),
-		save_of([extra]),
-		save_of([record("O0N9", 0, 600, "maybe")]),
-		save_of([bad_terms]),
-		save_of([record("O0N9", -1, 600)]),
+		with_first("colour", "red"),
+		with_first("status", "maybe"),
+		with_first("plane_size", "jumbo"),
+		with_first("day", -1),
+		with_first("id", "O0N2"),
 		save_of(["not a record"]),
 		{"save_version": OfferBoard.SAVE_VERSION + 1, "offers": []},
 		{"save_version": OfferBoard.SAVE_VERSION},
@@ -197,6 +208,84 @@ func test_a_bad_save_is_refused_whole_and_leaves_the_board_alone() -> void:
 	for bad in cases:
 		assert_bool(_board.from_snapshot(bad)).override_failure_message(str(bad)).is_false()
 		assert_dict(_board.to_snapshot()).is_equal(before)
+
+
+## Each of these passes FlightContract validation but is not something the
+## board could have drawn.
+func test_terms_no_draw_could_produce_are_refused() -> void:
+	var cases: Array = [
+		["airline", "Mystery Air"],
+		["destination", "Atlantis"],
+		["gate", "Z"],
+		["plane_size", "large"],
+		["booked_passengers", OfferBoard.STARTER_SIZES["small"][0] - 1],
+		["booked_passengers", OfferBoard.STARTER_SIZES["small"][1] + 1],
+		["departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE + 1],
+		["departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE - OfferBoard.DEPARTURE_STEP],
+		["departure_minute", OfferBoard.DEPARTURE_LAST_MINUTE + OfferBoard.DEPARTURE_STEP],
+		["fee_per_passenger", OfferBoard.FEE_MIN - 1],
+		["fee_per_passenger", OfferBoard.FEE_MAX + 1],
+	]
+	var before := _board.to_snapshot()
+	for case in cases:
+		var bad := with_first(case[0], case[1])
+		var terms := OfferBoard.terms_of(bad["offers"][0])
+		assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_empty()
+		assert_bool(_board.from_snapshot(bad)).override_failure_message(str(case)).is_false()
+		assert_dict(_board.to_snapshot()).is_equal(before)
+
+
+func test_the_extremes_of_every_draw_range_load() -> void:
+	var small: Array = OfferBoard.STARTER_SIZES["small"]
+	var low := with_first("booked_passengers", small[0])
+	var high := with_first("booked_passengers", small[1])
+	var early := with_first("departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE)
+	var late := with_first("departure_minute", OfferBoard.DEPARTURE_LAST_MINUTE)
+	var cheap := with_first("fee_per_passenger", OfferBoard.FEE_MIN)
+	var dear := with_first("fee_per_passenger", OfferBoard.FEE_MAX)
+	for good in [low, high, early, late, cheap, dear]:
+		var loaded := OfferBoard.new().from_snapshot(good)
+		assert_bool(loaded).override_failure_message(str(good)).is_true()
+
+
+## A day with offers is never drawn again, so a save holding only part of a day
+## would leave it short for good: every day must be the whole canonical set.
+func test_a_partial_or_oversized_day_is_refused() -> void:
+	_board.ensure_day(0, _rng)
+	var before := _board.to_snapshot()
+	var missing := day_records(0, [600, 720, 840])
+	missing.remove_at(1)
+	var extra := day_records(0, [600, 720, 840])
+	extra.append(record("O0N4", 0, 900))
+	var renamed := day_records(0, [600, 720, 840])
+	renamed[2]["id"] = "A1"
+	var second_day_short := day_records(0, [600, 720, 840]) + day_records(1, [600, 720, 840])
+	second_day_short.pop_back()
+	for offers in [missing, extra, renamed, second_day_short]:
+		var loaded := _board.from_snapshot(save_of(offers))
+		assert_bool(loaded).override_failure_message(str(offers)).is_false()
+		assert_dict(_board.to_snapshot()).is_equal(before)
+
+
+func test_a_refused_partial_day_leaves_ensure_day_and_the_rng_alone() -> void:
+	_board.ensure_day(0, _rng)
+	var offers: Array = _board.to_snapshot()["offers"]
+	offers.remove_at(0)
+	assert_bool(_board.from_snapshot(save_of(offers))).is_false()
+	assert_array(_board.open_offers()).has_size(OfferBoard.OFFERS_PER_DAY)
+	var state := _rng.state
+	assert_array(_board.ensure_day(0, _rng)).is_empty()
+	assert_int(_rng.state).is_equal(state)
+	var fresh := OfferBoard.new()
+	assert_bool(fresh.from_snapshot(save_of(offers))).is_false()
+	assert_array(fresh.ensure_day(0, _rng)).has_size(OfferBoard.OFFERS_PER_DAY)
+
+
+func test_whole_days_load_in_any_order() -> void:
+	var offers := day_records(0, [600, 720, 840])
+	offers.reverse()
+	assert_bool(_board.from_snapshot(save_of(offers))).is_true()
+	assert_array(_board.ensure_day(0, _rng)).is_empty()
 
 
 func test_an_empty_save_loads_an_empty_board() -> void:

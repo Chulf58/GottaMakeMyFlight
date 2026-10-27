@@ -133,7 +133,8 @@ func to_snapshot() -> Dictionary:
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
 ## Pushes an error and returns false, leaving the board unchanged, when
-## anything is missing, mistyped or invalid.
+## anything is missing, mistyped or invalid, including an offer the board
+## could not have drawn and a day that does not hold its whole offer set.
 func from_snapshot(data: Dictionary) -> bool:
 	var loaded: Array[Dictionary] = []
 	var problem := _load_problem(data, loaded)
@@ -181,6 +182,7 @@ func _load_problem(data: Dictionary, into: Array[Dictionary]) -> String:
 	if problem != "":
 		return problem
 	var seen := {}
+	var per_day := {}
 	for entry in data["offers"]:
 		problem = _offer_problem(entry)
 		if problem != "":
@@ -192,7 +194,12 @@ func _load_problem(data: Dictionary, into: Array[Dictionary]) -> String:
 		if seen.has(offer["id"]):
 			return "offer id '%s' appears twice" % offer["id"]
 		seen[offer["id"]] = true
+		per_day[offer["day"]] = per_day.get(offer["day"], 0) + 1
 		into.append(offer)
+	# Ids are unique and canonical for their day, so a full count is the full set.
+	for day in per_day:
+		if per_day[day] != OFFERS_PER_DAY:
+			return "day %d must hold all %d of its offers" % [day, OFFERS_PER_DAY]
 	return ""
 
 
@@ -226,4 +233,39 @@ func _offer_problem(entry: Variant) -> String:
 	var day: Variant = entry["day"]
 	if not WholeNumber.is_whole(day) or day < 0 or day > FlightContract.MAX_DAY:
 		return "day must be a whole number from 0 to %d" % FlightContract.MAX_DAY
-	return FlightContract.problem(terms_of(entry), FlightContract.TERM_KEYS)
+	var problem := FlightContract.problem(terms_of(entry), FlightContract.TERM_KEYS)
+	if problem == "":
+		problem = _undrawable_problem(entry)
+	return problem
+
+
+## "" when `entry`, already valid as a contract, is something _draw could have
+## made: a canonical id for its day, and every term inside the draw's ranges.
+## Reads the same constants _draw does, so the two cannot drift apart.
+func _undrawable_problem(entry: Dictionary) -> String:
+	var day := int(entry["day"])
+	var ids := []
+	for number in range(1, OFFERS_PER_DAY + 1):
+		ids.append("O%dN%d" % [day, number])
+	if not ids.has(entry["id"]):
+		return "offer id '%s' is not one of day %d's %s" % [entry["id"], day, ids]
+	if not AIRLINES.has(entry["airline"]) or not DESTINATIONS.has(entry["destination"]):
+		return "offer %s has an airline or destination the board never draws" % entry["id"]
+	if not FlightSim.GATES.has(entry["gate"]) or not STARTER_SIZES.has(entry["plane_size"]):
+		return "offer %s has a gate or plane size the board never draws" % entry["id"]
+	return _range_problem(entry)
+
+
+## "" when the passengers, fee and departure are values _draw can produce.
+func _range_problem(entry: Dictionary) -> String:
+	var booked_range: Array = STARTER_SIZES[entry["plane_size"]]
+	var booked := int(entry["booked_passengers"])
+	if booked < booked_range[0] or booked > booked_range[1]:
+		return "offer %s books %d passengers outside its size's range" % [entry["id"], booked]
+	var fee := int(entry["fee_per_passenger"])
+	if fee < FEE_MIN or fee > FEE_MAX:
+		return "offer %s has a fee outside %d..%d" % [entry["id"], FEE_MIN, FEE_MAX]
+	var offset := int(entry["departure_minute"]) - DEPARTURE_FIRST_MINUTE
+	if offset < 0 or offset > DEPARTURE_SLOTS * DEPARTURE_STEP or offset % DEPARTURE_STEP != 0:
+		return "offer %s departs off the board's departure slots" % entry["id"]
+	return ""
