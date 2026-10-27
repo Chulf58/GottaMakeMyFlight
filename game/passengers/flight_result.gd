@@ -2,7 +2,8 @@ class_name FlightResult
 extends RefCounted
 ## A finished flight's result: how many passengers made it, how many missed it
 ## and the reasons they missed, from what PassengerSim recorded when the doors
-## closed on each of them (Passenger.missed_stage and missed_stuck). A blocking
+## closed on each of them (Passenger.missed_stage and missed_stuck), kept in
+## PassengerSim.flight_results after the passengers are retired. A blocking
 ## status such as "no check-in desk" wins over the stage the passenger was in.
 
 const NEVER_ARRIVED := "Never arrived: the terminal has no entrance"
@@ -56,19 +57,14 @@ static func reason_text(stage: Passenger.Stage, stuck: Passenger.Stuck) -> Strin
 ## terminal, so they are a reason but are not in "missed". Nothing here reads
 ## the live schedule, so the result does not change after the doors close.
 static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
-	var made := 0
-	var missed := 0
+	var result: Dictionary = sim.flight_results.get(flight_id, {})
+	var made: int = result.get("made", 0)
+	var missed: int = result.get("missed", 0)
 	var counts := {}
-	for id in sim.passenger_ids():
-		var p := sim.get_passenger(id)
-		if p.flight_id != flight_id:
-			continue
-		if p.stage == Passenger.Stage.MADE:
-			made += 1
-		elif p.stage == Passenger.Stage.MISSED:
-			missed += 1
-			var text := reason_text(p.missed_stage, p.missed_stuck)
-			counts[text] = int(counts.get(text, 0)) + 1
+	var causes: Dictionary = result.get("causes", {})
+	for cause: Vector2i in causes:
+		var text := reason_text(cause.x as Passenger.Stage, cause.y as Passenger.Stuck)
+		counts[text] = int(counts.get(text, 0)) + causes[cause]
 	var no_shows: Dictionary = sim.no_shows.get(flight_id, {})
 	for cause in NO_SHOW_TEXT:
 		if no_shows.get(cause, 0) > 0:

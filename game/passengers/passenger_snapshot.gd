@@ -4,7 +4,9 @@ extends RefCounted
 ## paths, queue order, service ends, seat claims, apron progress and pending
 ## replans are all saved, so nothing is recomputed differently after a load.
 ## Cafe visits and counter queues go under "cafe" (CafeSnapshot).
-## Seat claims and walker counts are rebuilt from the passenger records.
+## Seat claims and walker counts are rebuilt from the passenger records. The
+## made and missed totals, each flight's results and the scheduled flights are
+## saved as they are: settled passengers are retired, so they cannot be rebuilt.
 
 const KEYS := [
 	"save_version",
@@ -16,6 +18,10 @@ const KEYS := [
 	"queues",
 	"no_shows",
 	"cafe",
+	"made",
+	"missed",
+	"flight_results",
+	"scheduled",
 ]
 const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
@@ -45,13 +51,17 @@ const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan"]
 
 
+## `totals` is [made, missed]; `scheduled` the scheduled flight ids.
 static func save(
 	sim: PassengerSim,
 	passengers: Array[Passenger],
 	schedule: Array[Dictionary],
 	queues: Dictionary,
-	next_id: int
+	next_id: int,
+	totals: Array,
+	scheduled: Array
 ) -> Dictionary:
+	scheduled.sort()
 	var records := []
 	for p in passengers:
 		records.append(_record(p))
@@ -79,6 +89,19 @@ static func save(
 		for cause in NO_SHOW_CAUSES:
 			entry[cause] = sim.no_shows[flight][cause]
 		no_show_list.append(entry)
+	var result_list := []
+	var result_flights: Array = sim.flight_results.keys()
+	result_flights.sort()
+	for flight in result_flights:
+		var result: Dictionary = sim.flight_results[flight]
+		var causes := []
+		var keys: Array = result["causes"].keys()
+		keys.sort()
+		for key: Vector2i in keys:
+			causes.append({"stage": key.x, "stuck": key.y, "count": result["causes"][key]})
+		result_list.append(
+			{"flight": flight, "made": result["made"], "missed": result["missed"], "causes": causes}
+		)
 	return {
 		"save_version": PassengerSim.SAVE_VERSION,
 		"tick": str(sim.tick),
@@ -89,6 +112,10 @@ static func save(
 		"queues": queue_list,
 		"no_shows": no_show_list,
 		"cafe": CafeSnapshot.save(sim.cafes),
+		"made": totals[0],
+		"missed": totals[1],
+		"flight_results": result_list,
+		"scheduled": scheduled,
 	}
 
 
@@ -133,6 +160,21 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 	if no_shows.has("error"):
 		return no_shows
 	out["no_shows"] = no_shows
+	var results := _flight_results(data["flight_results"])
+	if results.has("error"):
+		return results
+	problem = _totals_problem(data, results, passengers)
+	if problem != "":
+		return {"error": problem}
+	var scheduled := {}
+	for flight in data["scheduled"]:
+		if typeof(flight) != TYPE_STRING or scheduled.has(flight):
+			return {"error": "scheduled flights must be distinct strings"}
+		scheduled[flight] = true
+	out["made"] = int(data["made"])
+	out["missed"] = int(data["missed"])
+	out["flight_results"] = results
+	out["scheduled"] = scheduled
 	out["schedule"] = schedule
 	out["passengers"] = passengers
 	out["queues"] = queues
@@ -171,9 +213,12 @@ static func _top_problem(data: Dictionary) -> String:
 		return "last_batch_seed must be a decimal string"
 	if not _whole(data["next_id"]) or int(data["next_id"]) < 1:
 		return "next_id must be a whole number, 1 or more"
-	for key in ["schedule", "passengers", "queues", "no_shows"]:
+	for key in ["schedule", "passengers", "queues", "no_shows", "flight_results", "scheduled"]:
 		if typeof(data[key]) != TYPE_ARRAY:
 			return "%s must be an array" % key
+	for key in ["made", "missed"]:
+		if not _whole(data[key]) or int(data[key]) < 0:
+			return "%s must be a whole number, 0 or more" % key
 	return ""
 
 
@@ -297,6 +342,78 @@ static func _no_shows(list: Array) -> Dictionary:
 		for cause in NO_SHOW_CAUSES:
 			out[entry["flight"]][cause] = int(entry[cause])
 	return out
+
+
+## {flight: {"made", "missed", "causes": {Vector2i(stage, stuck): count}}} from
+## the saved list, or a dictionary with "error". The causes add up to "missed".
+static func _flight_results(list: Array) -> Dictionary:
+	var out := {}
+	for entry in list:
+		var ok: bool = typeof(entry) == TYPE_DICTIONARY
+		for key in ["flight", "made", "missed", "causes"]:
+			ok = ok and entry.has(key)
+		ok = ok and typeof(entry["flight"]) == TYPE_STRING and not out.has(entry["flight"])
+		ok = ok and _whole(entry["made"]) and int(entry["made"]) >= 0
+		ok = ok and _whole(entry["missed"]) and int(entry["missed"]) >= 0
+		ok = ok and typeof(entry["causes"]) == TYPE_ARRAY
+		var causes := {}
+		var total := 0
+		for cause in entry["causes"] if ok else []:
+			var cause_ok: bool = typeof(cause) == TYPE_DICTIONARY
+			for key in ["stage", "stuck", "count"]:
+				cause_ok = cause_ok and cause.has(key) and _whole(cause[key])
+			if not cause_ok:
+				ok = false
+				break
+			var at := Vector2i(int(cause["stage"]), int(cause["stuck"]))
+			var count := int(cause["count"])
+			var in_range := at.x >= 0 and at.x < Passenger.Stage.size()
+			in_range = in_range and at.y >= 0 and at.y < Passenger.Stuck.size() and count > 0
+			if not in_range or causes.has(at):
+				ok = false
+				break
+			causes[at] = count
+			total += count
+		if not ok or total != int(entry["missed"]):
+			return {"error": "a flight result is malformed, repeated or does not add up"}
+		out[entry["flight"]] = {
+			"made": int(entry["made"]), "missed": int(entry["missed"]), "causes": causes
+		}
+	return out
+
+
+## "" when the totals cover what the flights' results and the retained settled
+## passengers say, otherwise what is wrong. Retired passengers are only in the
+## totals and the results, so these can only be at least what is still listed.
+static func _totals_problem(data: Dictionary, results: Dictionary, passengers: Array) -> String:
+	var made := {}
+	var missed := {}
+	for p: Passenger in passengers:
+		if p.stage == Passenger.Stage.MADE:
+			made[p.flight_id] = int(made.get(p.flight_id, 0)) + 1
+		elif p.stage == Passenger.Stage.MISSED:
+			missed[p.flight_id] = int(missed.get(p.flight_id, 0)) + 1
+	var made_sum := 0
+	var missed_sum := 0
+	for flight in results:
+		made_sum += results[flight]["made"]
+		missed_sum += results[flight]["missed"]
+	for flight in made:
+		if int(results.get(flight, {}).get("made", 0)) < made[flight]:
+			return "flight %s has fewer made results than made passengers" % flight
+	for flight in missed:
+		if int(results.get(flight, {}).get("missed", 0)) < missed[flight]:
+			return "flight %s has fewer missed results than missed passengers" % flight
+	if int(data["made"]) < made_sum or int(data["missed"]) < missed_sum:
+		return "the made or missed total is below the flights' results"
+	# Ids 1 to next_id - 1 were handed out, so no more passengers than that
+	# can have settled. Each total is bounded before the sum, so it cannot wrap.
+	var spawned := int(data["next_id"]) - 1
+	if int(data["made"]) > spawned or int(data["missed"]) > spawned:
+		return "the made or missed total is above the passengers ever spawned"
+	if int(data["made"]) > spawned - int(data["missed"]):
+		return "the made and missed totals together are above the passengers ever spawned"
+	return ""
 
 
 static func _queues(list: Array, ids: Dictionary) -> Dictionary:
