@@ -142,3 +142,12 @@ func test_the_flight_panel_shows_the_list() -> void:
 	var label := _hud.find_child("Departures", true, false) as Label
 	assert_str(label.text).is_equal(_text())
 	assert_str(label.text).contains("11:00  Oslo  Gotta Air")
+
+
+func test_the_flight_line_names_the_contract_not_the_day_suffix() -> void:
+	var timetable: FlightSim = auto_free(FlightSim.new())
+	timetable.bind_clock(_world.clock)
+	timetable.add_starter_contract()
+	_hud.flights = timetable
+	assert_array(timetable.flight_ids()).is_equal(["GMF101-d0"])
+	assert_str(_hud.flight_text()).is_equal("GMF101  Scheduled  doors close in 1:35")

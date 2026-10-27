@@ -246,13 +246,17 @@ func flight_text() -> String:
 	if ids.is_empty():
 		return "No flights"
 	var id := ids[0]
+	# A timetable occurrence shows its contract's name, not the "-d<day>" suffix,
+	# which would also widen the panel past the screen edge.
+	var occurrence := FlightTimetable.parse_occurrence(id)
+	var shown: String = occurrence["contract"] if not occurrence.is_empty() else id
 	var after_doors: String = AFTER_DOORS_TEXT.get(flights.state_of(id), "")
 	if after_doors != "":
-		return "%s  %s" % [id, after_doors]
+		return "%s  %s" % [shown, after_doors]
 	var state: String = FlightSim.State.find_key(flights.state_of(id))
 	var left := maxi(0, flights.doors_close_tick(id) - clock.tick) / SimClock.TICK_RATE
 	@warning_ignore("integer_division")
-	return "%s  %s  doors close in %d:%02d" % [id, state.capitalize(), left / 60, left % 60]
+	return "%s  %s  doors close in %d:%02d" % [shown, state.capitalize(), left / 60, left % 60]
 
 
 func counts_text() -> String:

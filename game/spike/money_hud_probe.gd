@@ -92,7 +92,7 @@ func _check() -> void:
 	var departures := (hud.find_child("Departures", true, false) as Label).text
 	print("LABEL departures=%s" % departures.replace("\n", " | "))
 	_expect("departures", departures, "07:38  Oslo  Gotta Air")
-	_expect("flight line", hud.flight_text().begins_with("GMF101-d0"), true)
+	_expect("flight line", hud.flight_text().begins_with("GMF101  "), true)
 
 	var prices := {}
 	for tool in [
