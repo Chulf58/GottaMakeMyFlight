@@ -249,7 +249,7 @@ func _strip() -> void:
 					% [
 						tag,
 						_clock.tick,
-						_sim().state_of("GMF101"),
+						_sim().state_of("GMF101-d0"),
 						_plane.global_position,
 						_plane.global_basis.z,
 						rad_to_deg(asin(_plane.global_basis.z.y))
@@ -309,7 +309,9 @@ func _overview() -> void:
 	_cam = top
 	await _frames(4)
 	var model: Node3D = _plane.get_node("Pivot")
-	print("OVERVIEW plane_state=", _sim().state_of("GMF101"), " plane_pos=", _plane.global_position)
+	print(
+		"OVERVIEW plane_state=", _sim().state_of("GMF101-d0"), " plane_pos=", _plane.global_position
+	)
 	var terminal: Node3D = airside.get_node("Terminal")
 	var pts: Array[Vector3] = _corners(_aabb_of(model)) + _corners(_aabb_of(terminal))
 	if _prove_in_frame("overview", pts):

@@ -72,7 +72,7 @@ func before() -> void:
 	_run_to(CLEAR_CHECK_TICK)
 	_check()
 	_run_to(LATE_SPAWN_TICK)
-	_late_id = _sim.spawn_now(FlightSim.DEFAULT_ID)
+	_late_id = _sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
 	_run_to(END_TICK)
 	# Before the last check, whose flush puts the room events in the file.
 	_mark_rooms()

@@ -1,7 +1,8 @@
 class_name PassengerHud
 extends CanvasLayer
 ## The passenger HUD. Top-right: elapsed sim time, the flight and its doors
-## countdown, made and missed counts, and the speed buttons (Space toggles the
+## countdown, made and missed counts, today's departures (DepartureList), and
+## the speed buttons (Space toggles the
 ## pause, Shift+1/2/3 set the speed; plain number keys stay the build tool keys).
 ## Bottom-left: the followed passenger's story, kept left of BuildMenu's
 ## centre column and growing upward when it wraps. Bottom-right: a collapsed
@@ -13,12 +14,18 @@ extends CanvasLayer
 ## the top-right panel: made, missed and the main reasons. A new game opens paused under the
 ## IntroDialogue (once per session, never in a probe, a test or a playtest);
 ## closing it starts the clock at 1x.
+##
+## Economy policy of the Debug panel (Economy 7/8): its actions are debug aids
+## and are labelled so. The starter terminal is written straight to the grid,
+## so it costs nothing and pays no refund when a piece comes down; spawned
+## passengers are normal ones and pay their airline fee when they board.
 
 ## The PlaytestHook autoload's script, for its static switch check.
 const PLAYTEST_HOOK := preload("res://debug/playtest_hook.gd")
 ## Above BuildMenu's layer, so the intro's backdrop covers the build bar too.
 const INTRO_LAYER := 10
 const DEBUG_BATCH := 300
+const DEBUG_POLICY_TEXT := "Debug only: the terminal is free with no refunds; passengers pay fees."
 ## Where the follow text's bottom edge sits, up from the bottom of the screen.
 const FOLLOW_BOTTOM := 64.0
 const FOLLOW_TOP := 96.0
@@ -27,7 +34,10 @@ const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 const DEBUG_W := 260.0
 ## The result panel's top edge, below the flight panel and well above the
 ## build tray.
-const RESULT_TOP := 200.0
+const RESULT_TOP := 258.0
+## Gap between the flight panel's rows, tighter than the theme's so the
+## departures list fits above the result panel.
+const FLIGHT_PANEL_GAP := 1
 ## The flight panel's word for each state from the doors closing on.
 const AFTER_DOORS_TEXT := {
 	FlightSim.State.DOORS_CLOSED: "Doors closed",
@@ -71,6 +81,7 @@ const STAGE_TEXT := {
 
 var _flight_label := Label.new()
 var _counts_label := Label.new()
+var _departures_label := Label.new()
 var _seed_label := Label.new()
 var _follow_label := Label.new()
 var _status_label := Label.new()
@@ -104,10 +115,14 @@ func _ready() -> void:
 	panel.custom_minimum_size = Vector2(440.0, 0.0)
 	add_child(panel)
 	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", FLIGHT_PANEL_GAP)
 	panel.add_child(column)
 	for label in [_time_label, _flight_label, _counts_label]:
 		label.theme_type_variation = &"HudLarge"
 		column.add_child(label)
+	_departures_label.name = "Departures"
+	_departures_label.theme_type_variation = &"HudHint"
+	column.add_child(_departures_label)
 	var speeds := HBoxContainer.new()
 	column.add_child(speeds)
 	for value in [0, 1, 2, 3]:
@@ -207,6 +222,7 @@ func refresh() -> void:
 	_time_label.text = time_text()
 	_flight_label.text = flight_text()
 	_counts_label.text = counts_text()
+	_departures_label.text = DepartureList.text(flights, clock.tick)
 	_seed_label.text = seed_text()
 	_seed_label.visible = _seed_label.text != ""
 	_status_label.text = _status
@@ -409,7 +425,9 @@ func _build_debug() -> void:
 	for button in [batch, starter]:
 		button.focus_mode = Control.FOCUS_NONE
 		column.add_child(button)
-	for label in [_seed_label, _status_label]:
+	var policy := Label.new()
+	policy.text = DEBUG_POLICY_TEXT
+	for label in [policy, _seed_label, _status_label]:
 		label.theme_type_variation = &"HudHint"
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		column.add_child(label)

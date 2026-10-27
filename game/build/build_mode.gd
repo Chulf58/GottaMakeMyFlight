@@ -320,6 +320,12 @@ func begin_area(point: Vector3) -> void:
 	_hover_key = ""
 
 
+## The rectangle being dragged, or an empty Rect2i when no rectangle drag is on
+## (BuildMenu prices it for the cost line).
+func dragged_area() -> Rect2i:
+	return _area.rect() if _area.active else Rect2i()
+
+
 ## Stretches the rectangle to the cell under a ground point.
 func move_area(point: Vector3) -> void:
 	if _area.active:

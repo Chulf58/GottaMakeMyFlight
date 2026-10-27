@@ -132,7 +132,7 @@ func _run_flight() -> void:
 		elif _clock.tick == DESKS_BACK_TICK:
 			_return_desks()
 	_clock.set_paused(true)
-	var state := _flights.state_of(FlightSim.DEFAULT_ID)
+	var state := _flights.state_of(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
 	if state == FlightSim.State.DEPARTED and _departed_at < 0:
 		_departed_at = _clock.tick
 	if _departed_at >= 0 and _clock.tick >= _departed_at + AFTER_DEPARTED_TICKS:

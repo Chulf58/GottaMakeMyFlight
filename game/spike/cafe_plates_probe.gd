@@ -107,7 +107,7 @@ func _run() -> void:
 	# Six get hungry at once (landside, after check-in) and six about 15 s
 	# later (mostly airside); the flight's own 24 arrive at random.
 	for i in 12:
-		var id := _sim.spawn_now(FlightSim.DEFAULT_ID)
+		var id := _sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
 		_sim.get_passenger(id).hunger = 59 if i % 2 == 0 else 45
 	var rig := main.get_node("TycoonCamera") as TycoonCamera
 	var cam := rig.get_node("Camera3D") as Camera3D
