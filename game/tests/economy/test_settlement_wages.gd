@@ -228,14 +228,20 @@ func test_owed_wages_are_kept_whole_beyond_the_wallet_limit() -> void:
 	assert_int(_kit.settlement.wages_owed()).is_equal(0)
 
 
-func test_owed_wages_stop_at_the_overflow_guard() -> void:
+## A charge that would pass the limit is refused loudly: no debt is cut short,
+## no day is marked charged, nothing is spent or announced.
+func test_a_charge_that_would_pass_the_debt_limit_is_refused_and_changes_nothing() -> void:
 	_kit.hire(CHECKIN)
 	assert_bool(_kit.world.sim.wallet.spend(1000)).is_true()
 	var data := _kit.settlement.to_snapshot()
 	data["wages_owed"] = str(Settlement.MAX_WAGES - 10)
 	assert_bool(_kit.settlement.from_snapshot(data)).is_true()
 	_kit.cross(1)
-	assert_int(_kit.settlement.wages_owed()).is_equal(Settlement.MAX_WAGES)
+	assert_int(_kit.settlement.wages_owed()).is_equal(Settlement.MAX_WAGES - 10)
+	assert_str(_kit.settlement.to_snapshot()["wages_day"]).is_equal("0")
+	assert_int(_kit.settlement.wages_paid_today()).is_equal(0)
+	assert_int(_kit.world.sim.wallet.balance).is_equal(0)
+	assert_array(_kit.charges).is_empty()
 
 
 func test_without_a_staff_pool_no_wage_is_charged() -> void:

@@ -47,10 +47,14 @@ const OPTIONAL_SNAPSHOT_KEYS := ["wages_owed", "wages_day", "wages_paid_today"]
 const NO_DAY := -1
 ## Far past any game a player can play; a saved day beyond it is refused.
 const MAX_DAY := 1_000_000_000
-## The most owed wages (and wages paid in a day) the state holds. The debt is
-## not a balance, so it is not bound by Wallet.MAX_BALANCE; this only keeps the
-## sums far from the 64-bit limit. At a few hundred a day it is never reached.
+## The most owed wages the state holds. The debt is not a balance, so it is not
+## bound by Wallet.MAX_BALANCE; this keeps the sums far from the 64-bit limit. At
+## a few hundred a day it is never reached, and a charge that would pass it is
+## refused loudly, never cut short.
 const MAX_WAGES := 1_000_000_000_000_000
+## The most wages paid in a day: the old debt, then a charge paid from the
+## wallet, so no more than both limits together.
+const MAX_WAGES_PAID_TODAY := MAX_WAGES + Wallet.MAX_BALANCE
 
 ## In a scene these come from the wired nodes; tests call bind(). Without
 ## `staff` no wage is charged.
@@ -175,17 +179,31 @@ func _wage_problem(data: Dictionary) -> String:
 	if wage_keys != 0 and wage_keys != OPTIONAL_SNAPSHOT_KEYS.size():
 		return "the wage keys %s must be all present or all absent" % [OPTIONAL_SNAPSHOT_KEYS]
 	for key in ["wages_owed", "wages_paid_today"]:
-		if data.has(key) and not _in_range(data[key], 0, MAX_WAGES):
-			return "'%s' is not 0 to %d" % [key, MAX_WAGES]
+		var limit := MAX_WAGES if key == "wages_owed" else MAX_WAGES_PAID_TODAY
+		if data.has(key) and not _in_range(data[key], 0, limit):
+			return "'%s' is not 0 to %d" % [key, limit]
 	if data.has("wages_day") and not _in_range(data["wages_day"], NO_DAY, MAX_DAY):
 		return "'wages_day' is not a day"
 	return ""
 
 
-## "" or why a saved settlement and a saved clock disagree: the last charged
-## day must not be after the clock's own day, or the days between would never
-## be charged. A save from before wages holds no day and always agrees. Run on
-## the save's parts by SaveLinks, since neither part sees the other.
+## "" or why the saved settlement disagrees with the other saved parts it
+## depends on. Run on the save's parts by SaveLinks, since no part sees another.
+## A save from before wages holds no wage state and always agrees.
+static func wages_link_problem(
+	settlement: Dictionary, clock: Dictionary, wallet: Dictionary
+) -> String:
+	var found := wages_day_problem(settlement, clock)
+	if found == "":
+		found = wages_debt_problem(settlement, wallet)
+	return found
+
+
+## "" or why a saved last charged day and the saved clock disagree. Once the
+## settlement has ticked, the day is the clock's own day at every save point
+## (saves are taken between ticks, after the tick that starts a day has charged
+## it). A day after the clock's would skip days; one before it would never
+## charge the days between. Only NO_DAY (not ticked yet) is exempt.
 static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> String:
 	if not settlement.has("wages_day") or not clock.has("tick"):
 		return ""
@@ -195,11 +213,25 @@ static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> Stri
 		return ""
 	var saved_day := str(settlement["wages_day"]).to_int()
 	var clock_day := GameCalendar.day_of(str(clock["tick"]).to_int())
-	if saved_day > clock_day:
+	if saved_day != NO_DAY and saved_day != clock_day:
 		return (
-			"settlement: wages were last charged for day %d, after the clock's day %d"
+			"settlement: wages were last charged for day %d, but the clock is on day %d"
 			% [saved_day, clock_day]
 		)
+	return ""
+
+
+## "" or why saved owed wages and a saved balance disagree: every credit pays
+## the debt first, so wages are never owed while the wallet holds money.
+static func wages_debt_problem(settlement: Dictionary, wallet: Dictionary) -> String:
+	if not settlement.has("wages_owed") or not wallet.has("balance"):
+		return ""
+	if not SimClock.is_int64_string(settlement["wages_owed"]):
+		return ""
+	if not SimClock.is_int64_string(wallet["balance"]):
+		return ""
+	if str(settlement["wages_owed"]).to_int() > 0 and str(wallet["balance"]).to_int() > 0:
+		return "settlement: wages are owed while the wallet holds money"
 	return ""
 
 
@@ -249,24 +281,35 @@ func _charge_wages(day: int) -> void:
 		return
 	if day <= _wages_day:
 		return
+	var due := _wages_due()
+	var paid := mini(due, _wallet.balance)
+	if _wages_owed + due - paid > MAX_WAGES:
+		push_error(
+			"Settlement: owed wages would pass %d, so day %d is not charged" % [MAX_WAGES, day]
+		)
+		return
 	_wages_day = day
 	_wages_paid_today = 0
-	if staff == null:
+	if due == 0:
 		return
+	if not _wallet.spend(paid):
+		push_error("Settlement: wallet refused a wage of %d it holds" % paid)
+		return
+	_wages_paid_today = paid
+	_wages_owed += due - paid
+	wages_charged.emit(day, paid, due - paid)
+
+
+## The wages of everyone on the roster for one day; none without a staff pool.
+func _wages_due() -> int:
+	if staff == null:
+		return 0
 	var due := 0
 	for role in StaffMember.Role.values():
 		var wage := PriceTable.wage_of(role)
 		if wage > 0:
 			due += staff.count(role) * wage
-	if due == 0:
-		return
-	var paid := mini(due, _wallet.balance)
-	if not _wallet.spend(paid):
-		push_error("Settlement: wallet refused a wage of %d it holds" % paid)
-		return
-	_wages_paid_today = paid
-	_wages_owed = mini(_wages_owed + due - paid, MAX_WAGES)
-	wages_charged.emit(day, paid, due - paid)
+	return due
 
 
 ## Pays owed wages, then owed fees. Wages go first: paying them frees room in
@@ -284,15 +327,17 @@ func _pay_wages() -> void:
 	if paid <= 0 or not _wallet.spend(paid):
 		return
 	_wages_owed -= paid
-	_wages_paid_today = mini(_wages_paid_today + paid, MAX_WAGES)
+	_wages_paid_today += paid
 
 
-## Wallet.credit_claim: takes what is owed in wages out of an incoming credit
-## and returns it, so the balance gets only the rest.
-func _claim_credit(amount: int) -> int:
+## Wallet.credit_claim: what is owed in wages out of an incoming credit. With
+## `commit` false it only says how much it would take; with true it takes it,
+## pays that debt and returns the amount, so the balance gets only the rest.
+func _claim_credit(amount: int, commit: bool) -> int:
 	var paid := mini(_wages_owed, amount)
-	_wages_owed -= paid
-	_wages_paid_today = mini(_wages_paid_today + paid, MAX_WAGES)
+	if commit:
+		_wages_owed -= paid
+		_wages_paid_today += paid
 	return paid
 
 

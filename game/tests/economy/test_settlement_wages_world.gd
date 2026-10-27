@@ -41,6 +41,18 @@ func test_a_save_charged_for_a_day_after_the_clock_day_is_refused_and_changes_no
 	assert_str(JSON.stringify(_taken())).is_equal(before_text)
 
 
+func test_a_save_owing_wages_while_the_wallet_holds_money_is_refused() -> void:
+	var data := _taken()
+	var before_text := JSON.stringify(_taken())
+	data["settlement"]["wages_owed"] = "5"
+	data["wallet"]["balance"] = "10"
+	assert_bool(_save.load_world(data)).is_false()
+	assert_str(_save.message_text()).contains("wages are owed while the wallet holds money")
+	assert_str(JSON.stringify(_taken())).is_equal(before_text)
+	data["wallet"]["balance"] = "0"
+	assert_bool(_save.load_world(data)).is_true()
+
+
 func test_a_save_with_no_day_charged_yet_loads() -> void:
 	var data := _taken()
 	data["settlement"]["wages_day"] = str(Settlement.NO_DAY)

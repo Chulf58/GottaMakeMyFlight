@@ -20,8 +20,9 @@ extends RefCounted
 ##   A save is taken only between ticks with no edit pending, and each tick
 ##   starts by bringing queues and seats in line with the layout, so a save
 ##   never holds one that is gone;
-## - the settlement's last charged wage day is not after the clock's day
-##   (Settlement.wages_day_problem).
+## - the settlement's last charged wage day is the clock's day (or none yet),
+##   and no wages are owed while the wallet holds money
+##   (Settlement.wages_link_problem).
 ##
 ## Checked elsewhere already: staff stations and roles against the layout
 ## (StaffSnapshot.load), cafe visits and queues against the saved grid
@@ -40,7 +41,7 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 	if found == "":
 		found = _station_problem(staged["passengers"], staged["sim"])
 	if found == "":
-		found = Settlement.wages_day_problem(data["settlement"], data["clock"])
+		found = Settlement.wages_link_problem(data["settlement"], data["clock"], data["wallet"])
 	return found
 
 

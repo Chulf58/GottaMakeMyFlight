@@ -11,11 +11,12 @@ const MAX_BALANCE := 999_999_999_999
 const SNAPSHOT_KEYS := ["balance"]
 
 var balance: int = 0
-## Optional: called with each credit's amount before it lands, it takes a share
-## of it for a debt (Settlement's owed wages), pays that debt and returns the
-## amount taken, 0 to the whole credit. The balance gets the rest. Unset or
-## freed, the whole credit lands. A load restores the balance as it was saved
-## and claims nothing.
+## Optional: a debt that takes a share of each credit before the balance sees
+## it (Settlement's owed wages). Called as claim(amount, commit): with commit
+## false it returns how much it would take and changes nothing; with true it
+## takes that, pays the debt and returns it. The balance gets the rest, and
+## room is checked on that rest. Unset or freed, the whole credit lands. A load
+## restores the balance as it was saved and claims nothing.
 var credit_claim: Callable
 
 
@@ -33,13 +34,15 @@ func can_afford(amount: int) -> bool:
 
 
 ## Adds `amount`, less what credit_claim takes for a debt. Returns false and
-## leaves the balance unchanged when the amount is negative or would pass
-## MAX_BALANCE. Zero succeeds silently.
+## leaves the balance and the debt unchanged when the amount is negative or
+## what is left after the debt would pass MAX_BALANCE. Zero succeeds silently.
 func credit(amount: int) -> bool:
-	if amount < 0 or amount > MAX_BALANCE - balance:
+	var taken := _claimed(amount, false)
+	if amount < 0 or amount - taken > MAX_BALANCE - balance:
 		push_error("Wallet.credit: %d is not creditable at balance %d" % [amount, balance])
 		return false
-	_set_balance(balance + amount - _claimed(amount))
+	_claimed(amount, true)
+	_set_balance(balance + amount - taken)
 	return true
 
 
@@ -70,10 +73,10 @@ func from_snapshot(data: Dictionary) -> bool:
 	return true
 
 
-func _claimed(amount: int) -> int:
-	if amount == 0 or not credit_claim.is_valid():
+func _claimed(amount: int, commit: bool) -> int:
+	if amount <= 0 or not credit_claim.is_valid():
 		return 0
-	var taken: int = credit_claim.call(amount)
+	var taken: int = credit_claim.call(amount, commit)
 	return clampi(taken, 0, amount)
 
 

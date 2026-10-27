@@ -127,9 +127,10 @@ func test_a_malformed_wage_key_is_refused_and_changes_nothing() -> void:
 	_kit.cross(1)
 	var good := _kit.settlement.to_snapshot()
 	var too_big := str(Settlement.MAX_WAGES + 1)
+	var paid_too_big := str(Settlement.MAX_WAGES_PAID_TODAY + 1)
 	var bad_values := {
 		"wages_owed": [5, "-1", too_big, "x"],
-		"wages_paid_today": [5, "-1", too_big, "x"],
+		"wages_paid_today": [5, "-1", paid_too_big, "x"],
 		"wages_day": [5, "-2", "x"],
 	}
 	for key in bad_values:
@@ -161,14 +162,53 @@ func test_the_wage_keys_come_as_a_group_and_a_partial_set_is_refused() -> void:
 	assert_bool(_kit.settlement.from_snapshot({"owed": []})).is_true()
 
 
-func test_a_day_charged_after_the_clock_day_is_a_broken_link() -> void:
+func test_a_day_other_than_the_clock_day_is_a_broken_link() -> void:
 	var clock := {"tick": str(GameCalendar.day_start(4) + 100)}
 	var saved := {"wages_day": "4"}
 	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
-	saved["wages_day"] = "3"
-	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
 	saved["wages_day"] = "5"
 	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 5")
+	saved["wages_day"] = "3"
+	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 3")
+	saved["wages_day"] = "0"
+	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 0")
 	saved["wages_day"] = str(Settlement.NO_DAY)
 	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
 	assert_str(Settlement.wages_day_problem({"owed": []}, clock)).is_empty()
+
+
+## The link check holds on every tick a save can be taken, the one that starts a
+## day and the ones around it included, with a debt standing and without.
+func test_every_save_point_agrees_with_the_link_checks() -> void:
+	_kit.hire(CHECKIN)
+	assert_bool(_kit.world.sim.wallet.spend(1000)).is_true()
+	_kit.near_midnight(1, 4)
+	for i in 10:
+		_kit.world.step()
+		var saved := _kit.save()
+		(
+			assert_str(
+				Settlement.wages_link_problem(saved["settlement"], saved["clock"], saved["wallet"])
+			)
+			. is_empty()
+		)
+	assert_int(_kit.settlement.wages_owed()).is_equal(60)
+	assert_bool(_kit.world.sim.wallet.credit(100)).is_true()
+	var after_pay := _kit.save()
+	(
+		assert_str(
+			Settlement.wages_link_problem(
+				after_pay["settlement"], after_pay["clock"], after_pay["wallet"]
+			)
+		)
+		. is_empty()
+	)
+	assert_int(_kit.world.sim.wallet.balance).is_equal(40)
+
+
+func test_wages_owed_while_the_wallet_holds_money_is_a_broken_link() -> void:
+	var owed := {"wages_owed": "5"}
+	assert_str(Settlement.wages_debt_problem(owed, {"balance": "0"})).is_empty()
+	assert_str(Settlement.wages_debt_problem(owed, {"balance": "1"})).contains("owed")
+	assert_str(Settlement.wages_debt_problem({"wages_owed": "0"}, {"balance": "9"})).is_empty()
+	assert_str(Settlement.wages_debt_problem({"owed": []}, {"balance": "9"})).is_empty()

@@ -94,3 +94,21 @@ func test_without_debt_the_grant_is_the_shortfall_alone() -> void:
 	assert_int(_granted[0][0]).is_equal(repair)
 	assert_str(_granted[0][1]).not_contains("owed wages")
 	assert_int(_world.sim.wallet.balance).is_equal(repair)
+
+
+## The grant is more than the wallet can hold when the debt is near the limit;
+## only what is left after the debt has to fit.
+func test_a_debt_near_the_wallet_limit_does_not_stop_the_rescue() -> void:
+	_world.step()
+	var debt := Wallet.MAX_BALANCE - 100
+	var data := _settlement.to_snapshot()
+	data["wages_owed"] = str(debt)
+	assert_bool(_settlement.from_snapshot(data)).is_true()
+	_remove_scanners()
+	var repair := BuildTransaction.needed(_world.grid, _grant.repair_plan().edits)
+	assert_int(repair + debt).is_greater(Wallet.MAX_BALANCE)
+	_world.step()
+	assert_array(_granted).has_size(1)
+	assert_int(_granted[0][0]).is_equal(repair + debt)
+	assert_int(_settlement.wages_owed()).is_equal(0)
+	assert_int(_world.sim.wallet.balance).is_equal(repair)
