@@ -49,13 +49,31 @@ static func _build() -> void:
 	_add_door(&"exit_door", "Exit to the plane", Color(0.3, 0.55, 0.85))
 	# Cafe pieces (interior-kit Cafe 1/2). The counter's interaction cell is its
 	# Mount_Order spot in front of the till; Mount_Staff behind it is not
-	# reserved until staff exist. The table's two seats are inside its footprint.
+	# reserved until staff exist.
 	var counter := _add(
 		&"cafe_counter", "Cafe counter", Vector2i(2, 1), Color(0.85, 0.78, 0.6), 1.98
 	)
 	counter.has_interaction = true
 	counter.interaction_offset = Vector2i(0, 1)
-	_add(&"cafe_table", "Cafe table", Vector2i(3, 1), Color(0.55, 0.4, 0.3), 0.92)
+	var table := _add(&"cafe_table", "Cafe table", Vector2i(3, 1), Color(0.55, 0.4, 0.3), 0.92)
+	# A chair in each outer cell, the table in the middle cell. The roots are the
+	# .glb's Mount_SitRoot_L/R (0.55 m either side of the table centre, facing
+	# it); a guest steps in from the cell in front of the chair, since the cell
+	# the chair faces is the table.
+	table.seats = [
+		{
+			"cell": Vector2i(0, 0),
+			"approach": Vector2i(0, 1),
+			"root": Vector2(0.45, 0.0),
+			"facing": Vector2i(1, 0),
+		},
+		{
+			"cell": Vector2i(2, 0),
+			"approach": Vector2i(2, 1),
+			"root": Vector2(-0.45, 0.0),
+			"facing": Vector2i(-1, 0),
+		},
+	]
 
 
 ## Passengers step through a door along its axis only, so it is walk-through;
