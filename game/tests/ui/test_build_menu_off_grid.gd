@@ -55,6 +55,20 @@ func test_the_status_line_is_hidden_over_ground_outside_the_grid() -> void:
 	assert_bool(_menu.status_label().visible).is_true()
 
 
+func test_the_status_line_is_hidden_when_the_pointer_leaves_the_grid_for_the_hud() -> void:
+	_mode.set_tool(BuildMode.Tool.ENTRANCE)
+	_mode._update_ghost(_at(Vector2i(3, 3)))
+	_menu.refresh_preview()
+	assert_str(_mode.status_text()).is_not_equal("")
+	assert_bool(_menu.status_label().visible).is_true()
+	# Over a HUD Control BuildMode drops the hover but keeps the status text.
+	_mode._update_ghost(null)
+	assert_object(_mode.hover_edit()).is_null()
+	assert_str(_mode.status_text()).is_not_equal("")
+	_menu.refresh_preview()
+	assert_bool(_menu.status_label().visible).is_false()
+
+
 func test_a_grant_message_shows_even_with_the_pointer_off_the_grid() -> void:
 	_mode._update_ghost(_at(Vector2i(-3, -3)))
 	_menu._on_granted(100, "Rescue grant")

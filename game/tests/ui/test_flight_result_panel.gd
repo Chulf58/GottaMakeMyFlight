@@ -167,6 +167,24 @@ func test_a_later_closure_replaces_an_open_result_that_was_not_dismissed() -> vo
 	assert_str(_hud.result_text()).contains("Missed 2")
 
 
+func test_a_result_is_summarized_once_at_closure_and_not_shown_again() -> void:
+	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(100, 200))
+	_close_doors_with_misses(1)
+	_world.sim.spawn_now("GMF202")
+	_world.sim.spawn_now("GMF202")
+	_world.run_to(201)
+	_hud.refresh()
+	var shown := _hud.result_text()
+	assert_str(shown).contains("GMF202 result")
+	# The sim drops a pruned flight's results; the shown summary is its own copy.
+	_world.sim.flight_results.erase("GMF202")
+	_hud.refresh()
+	assert_str(_hud.result_text()).is_equal(shown)
+	_hud.dismiss_result()
+	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_false()
+
+
 func test_a_dismissed_result_stays_hidden_until_another_flight_closes() -> void:
 	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(100, 200))
 	_close_doors_with_misses(1)

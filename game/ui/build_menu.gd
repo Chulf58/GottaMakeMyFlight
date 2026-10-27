@@ -284,21 +284,23 @@ func preview_text() -> String:
 	return text
 
 
-## Sets the cost line from preview_text(), and hides the status line while the
-## pointer is over ground outside the grid, where its only text would be the
-## "Outside the building area" refusal. A grant message is never hidden.
+## Sets the cost line from preview_text(), and shows the status line only while
+## the pointer is over a cell of the grid (or a rectangle is being dragged), so
+## a stale hint such as "Facing auto" or the "Outside the building area"
+## refusal does not stay over the world. A grant message is never hidden.
 func refresh_preview() -> void:
 	_cost.text = preview_text()
 	_cost.visible = _cost.text != ""
-	_status.visible = _holding or not _pointer_off_grid()
+	_status.visible = _holding or build_mode == null or _pointer_on_grid()
 
 
-## True while BuildMode hovers an edit on a cell outside the grid.
-func _pointer_off_grid() -> bool:
-	if build_mode == null:
-		return false
+## True while BuildMode hovers an edit on a cell inside the grid, or a
+## rectangle drag is in progress.
+func _pointer_on_grid() -> bool:
+	if build_mode.dragged_area().has_area():
+		return true
 	var edit := build_mode.hover_edit()
-	return edit != null and not build_mode.grid.in_bounds(edit.cell)
+	return edit != null and build_mode.grid.in_bounds(edit.cell)
 
 
 func room_panel() -> RoomPanel:
@@ -340,7 +342,7 @@ func _preview_price() -> Vector2i:
 		var rect_cost := _floor_rect_cost(area)
 		return Vector2i(rect_cost, rect_cost)
 	var edit := build_mode.hover_edit()
-	if edit == null or _pointer_off_grid():
+	if edit == null or not _pointer_on_grid():
 		return Vector2i.ZERO
 	var plan := DoorPlacement.edits_for(build_mode.grid, edit)
 	var net := 0
