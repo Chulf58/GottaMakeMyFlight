@@ -7,8 +7,12 @@ extends RefCounted
 ## "doors close in M:SS" in place of its status word (decision
 ## flight-panel-the-next-departing-flight-s-row-shows-a-doors-close-countdown);
 ## the others keep their status words. A contract
-## shows its destination and airline from the day it starts, a one-off flight
-## its id. The list is at most MAX_LINES lines, so the panel keeps its place
+## shows its destination and airline from its recorded start day
+## (FlightSim.start_days), a one-off flight its id. While the airport is
+## closed no contract is listed, since nothing is scheduled until it opens; a
+## contract accepted then never shows the days it skipped (decision
+## airport-opening-design-stays-open-once-opened-starter-flight-placed-after-
+## opening). The list is at most MAX_LINES lines, so the panel keeps its place
 ## above the flight result: when more leave today, flights that have departed
 ## drop off the top first, then the last line becomes "+n more".
 
@@ -50,9 +54,11 @@ static func _countdown_line(row: Dictionary, tick: int) -> String:
 ## earliest first; `doors` is the tick its doors close.
 static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
+	var open := flights.opened_tick >= 0
+	var start_days := flights.start_days
 	for contract_id in flights.contract_ids():
 		var contract := flights.contract_of(contract_id)
-		if int(contract["first_day"]) > today:
+		if not open or int(start_days[contract_id]) > today:
 			continue
 		var tick := GameCalendar.tick_at(today, int(contract["departure_minute"]))
 		var state := flights.state_of(FlightTimetable.occurrence_id(contract_id, today))

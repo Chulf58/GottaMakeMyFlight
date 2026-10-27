@@ -33,6 +33,9 @@ signal doors_closed(flight_id: String)
 ## Fires once when a contract's occurrence is issued, after it is recorded,
 ## before any of its states is due. Never fires on a snapshot load.
 signal occurrence_added(flight_id: String)
+## Fires after from_snapshot() installs a save, so readers of the open state
+## (AirportGate) can refresh. The only signal a load emits.
+signal snapshot_loaded
 
 enum State {
 	SCHEDULED,
@@ -88,6 +91,14 @@ var opened_tick: int = -1
 ## (AirportGate.try_open). Set by AirportGate.bind(); without one the airport
 ## stays closed until open_airport() is called.
 var gate: AirportGate
+## Contract id -> its recorded start day, the first day that is or will be
+## issued (see _start_day): a copy, so readers cannot change it. Writing it is
+## an error.
+var start_days: Dictionary:
+	get:
+		return _start_day.duplicate()
+	set(_value):
+		push_error("FlightSim.start_days is read-only")
 
 ## Live flights {id, starts, state, gate, contract, day}, in timetable order
 ## (FlightTimetable.flight_before), so the order is a function of what is
@@ -295,7 +306,7 @@ func to_snapshot() -> Dictionary:
 ## Restores a to_snapshot() dictionary, including one that went through JSON
 ## (which turns ints into floats). Pushes an error and returns false, leaving
 ## the sim unchanged, when anything is missing, mistyped or inconsistent.
-## Emits nothing: what the save had issued stays issued.
+## Emits only snapshot_loaded: what the save had issued stays issued.
 func from_snapshot(data: Dictionary) -> bool:
 	var loaded := FlightSnapshot.load(data)
 	if loaded.has("error"):
@@ -307,6 +318,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_start_day = loaded["start_day"]
 	_next_day = loaded["next_day"]
 	_flights = loaded["flights"]
+	snapshot_loaded.emit()
 	return true
 
 

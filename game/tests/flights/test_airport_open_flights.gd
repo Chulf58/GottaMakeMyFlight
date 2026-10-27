@@ -147,6 +147,22 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 	assert_int(_sim.state_start(starter, FlightSim.State.SCHEDULED)).is_equal(10220)
 
 
+## start_days reads the recorded start as a copy, and refuses a write.
+func test_start_days_is_a_read_only_copy_of_the_recorded_start() -> void:
+	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
+	assert_dict(_sim.start_days).is_equal({"AM": 0})
+	_sim.open_airport()
+	var days := _sim.start_days
+	assert_dict(days).is_equal({"AM": 1})
+	days["AM"] = 7
+	assert_dict(_sim.start_days).is_equal({"AM": 1})
+	await (
+		assert_error(func() -> void: _sim.start_days = {"AM": 5})
+		. is_push_error("FlightSim.start_days is read-only")
+	)
+	assert_dict(_sim.start_days).is_equal({"AM": 1})
+
+
 ## A gate that is ready from `from_tick` on, whatever the staff.
 class ReadyGate:
 	extends AirportGate

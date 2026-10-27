@@ -139,9 +139,11 @@ func _check() -> void:
 	print("LABEL debug policy=%s" % PassengerHud.DEBUG_POLICY_TEXT)
 
 
-## Adds three more contracts so today's list is at its longest.
+## Opens the airport (a closed one lists no contract) and adds three
+## contracts so today's list is at its longest.
 func _fill_the_day() -> void:
 	var flights: FlightSim = _main.get_node("FlightSim")
+	_expect("airport opened", flights.open_airport(), true)
 	for i in 3:
 		var terms := FlightSim.STARTER_TERMS.duplicate()
 		terms["id"] = "PRB%d" % i

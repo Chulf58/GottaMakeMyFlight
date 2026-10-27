@@ -88,6 +88,16 @@ func test_the_hint_follows_the_blocker_until_the_airport_opens() -> void:
 	assert_bool(_panel.hint_label().visible).is_false()
 
 
+## Loading an open save refreshes the hint with no staff or grid event.
+func test_loading_an_open_save_clears_the_closed_line() -> void:
+	_make()
+	assert_str(_panel.hint_label().text).starts_with("Airport closed: ")
+	var data := _w.flights.to_snapshot()
+	data["opened_tick"] = 0
+	assert_bool(_w.flights.from_snapshot(data)).is_true()
+	assert_str(_panel.hint_label().text).is_equal("Hire a check-in agent\nHire a security officer")
+
+
 ## Without a gate (the panel on its own) only the hiring lines show.
 func test_a_panel_without_a_gate_shows_only_the_hiring_hint() -> void:
 	_make()

@@ -45,6 +45,7 @@ func bind(with_flights: FlightSim, with_staff: StaffSim) -> void:
 	flights = with_flights
 	staff = with_staff
 	flights.gate = self
+	flights.snapshot_loaded.connect(changed.emit)
 	staff.staff_changed.connect(changed.emit)
 	staff.member_state_changed.connect(_on_member_state)
 	staff.sim.grid.graph_changed.connect(_on_graph_changed)
