@@ -37,8 +37,10 @@ extends Node
 ##
 ## Reconcile (final-grid semantics: a belt taken away and laid again before
 ## the next tick changes nothing): a bag whose body is on a cell that is no
-## longer belt is LOST; one in the first half of an edge that no longer joins
-## stops (BLOCKED) and goes on when the edge comes back; one at a centre with
+## longer belt is LOST; one still short of its cell's centre whose committed
+## belt-to-belt edge no longer joins (the cell behind gone, a wall, a port
+## turned away) stops where it is (BLOCKED) and goes on when the edge comes
+## back, while the half cell from a desk needs no desk; one at a centre with
 ## no route is BLOCKED and RIDING again once a route exists; an IN_ROOM bag
 ## whose end is no longer a root is LOST. AT_DESK bags retry every tick.
 
@@ -103,8 +105,16 @@ func bind(
 
 
 ## Checks passenger `passenger_id`'s bag in at desk `desk_id` now, and returns
-## the bag. On or after its flight's cutoff it is missed at once.
+## the bag. On or after its flight's cutoff it is missed at once. A passenger
+## checks one bag: a second check-in while its first bag is kept pushes an
+## error and returns null.
 func check_in(passenger_id: int, flight_id: String, desk_id: int) -> Bag:
+	for kept in _bags:
+		if kept.passenger == passenger_id:
+			push_error(
+				"BaggageSim.check_in: passenger %d already has bag %d" % [passenger_id, kept.id]
+			)
+			return null
 	var bag := Bag.new()
 	bag.id = _next_id
 	_next_id += 1
@@ -147,15 +157,17 @@ func bags() -> Array[Bag]:
 	return _bags
 
 
-## The state a bag on a belt must have in `with_routes`: RIDING, BLOCKED,
-## IN_ROOM (it stands on a root's centre) or MISSED (lost: its body is on a
-## cell that is no longer belt).
+## The state a bag on a belt must have in `with_routes`: RIDING, BLOCKED (its
+## committed belt-to-belt edge no longer joins, or no route from the centre
+## it stands on), IN_ROOM (it stands on a root's centre) or MISSED (lost:
+## its body is on a cell that is no longer belt). The half cell from a desk
+## needs only the belt it leads onto.
 static func belt_state(bag: Bag, with_routes: BagRoutes) -> Bag.State:
 	var body := bag.physical_cell()
 	if not with_routes.is_belt(body):
 		return Bag.State.MISSED
 	if bag.remain_mm > 0:
-		if body != bag.cell and not with_routes.joined(body, bag.from_step):
+		if not bag.from_desk and not with_routes.joined(bag.cell - bag.from_step, bag.from_step):
 			return Bag.State.BLOCKED
 		return Bag.State.RIDING
 	if with_routes.is_root(bag.cell):
@@ -277,10 +289,12 @@ func _transfer() -> void:
 		var bag: Bag = wants[target]
 		if bag.state == Bag.State.AT_DESK:
 			bag.from_step = routes.entry_of(bag.desk)["step"]
+			bag.from_desk = true
 			bag.remain_mm = Bag.CELL_MM / 2
 			bag.state = Bag.State.RIDING
 		else:
 			bag.from_step = target - bag.cell
+			bag.from_desk = false
 			bag.remain_mm = Bag.CELL_MM
 		bag.cell = target
 

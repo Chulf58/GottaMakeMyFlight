@@ -23,6 +23,7 @@ const BAG_KEYS := [
 	"cell",
 	"from",
 	"remain_mm",
+	"from_desk",
 	"wait_tick",
 	"created_tick",
 	"cutoff_tick",
@@ -31,7 +32,7 @@ const BAG_KEYS := [
 ]
 const RESULT_KEYS := ["loaded", "missed", "causes"]
 ## The whole-number fields of a saved bag that are ticks or ids, at least 0.
-const COUNT_FIELDS := ["id", "passenger", "desk", "wait_tick", "created_tick", "cutoff_tick"]
+const COUNT_FIELDS := ["id", "passenger", "desk", "wait_tick", "created_tick"]
 
 
 static func save(sim: BaggageSim, next_id: int) -> Dictionary:
@@ -50,6 +51,7 @@ static func save(sim: BaggageSim, next_id: int) -> Dictionary:
 					"cell": [bag.cell.x, bag.cell.y],
 					"from": [bag.from_step.x, bag.from_step.y],
 					"remain_mm": bag.remain_mm,
+					"from_desk": bag.from_desk,
 					"wait_tick": bag.wait_tick,
 					"created_tick": bag.created_tick,
 					"cutoff_tick": bag.cutoff_tick,
@@ -140,6 +142,9 @@ static func _top_problem(data: Dictionary) -> String:
 
 static func _read_bags(saved: Array, tick: int, next_id: int, out: Array[Bag]) -> String:
 	var last_id := 0
+	# Passenger id -> bag id: one bag per passenger, whether or not the
+	# passenger is still in the passengers part.
+	var owners := {}
 	for entry in saved:
 		if typeof(entry) != TYPE_DICTIONARY:
 			return "a bag is not a dictionary"
@@ -149,9 +154,12 @@ static func _read_bags(saved: Array, tick: int, next_id: int, out: Array[Bag]) -
 			problem = _bag_rules(bag, tick)
 		if problem == "" and (bag.id <= last_id or bag.id >= next_id):
 			problem = "ids must rise and stay under next_id"
+		if problem == "" and owners.has(bag.passenger):
+			problem = "passenger %d already has bag %d" % [bag.passenger, owners[bag.passenger]]
 		if problem != "":
 			return "bag %s: %s" % [entry.get("id", "?"), problem]
 		last_id = bag.id
+		owners[bag.passenger] = bag.id
 		out.append(bag)
 	return ""
 
@@ -171,6 +179,7 @@ static func _read_bag(entry: Dictionary, bag: Bag) -> String:
 	bag.cell = Vector2i(int(entry["cell"][0]), int(entry["cell"][1]))
 	bag.from_step = Vector2i(int(entry["from"][0]), int(entry["from"][1]))
 	bag.remain_mm = int(entry["remain_mm"])
+	bag.from_desk = entry["from_desk"]
 	bag.wait_tick = int(entry["wait_tick"])
 	bag.created_tick = int(entry["created_tick"])
 	bag.cutoff_tick = int(entry["cutoff_tick"])
@@ -200,6 +209,10 @@ static func _field_problem(entry: Dictionary) -> String:
 	for key in ["rest_tick", "outcome_tick"]:
 		if problem == "" and (not WholeNumber.is_whole(entry[key]) or int(entry[key]) < -1):
 			problem = "%s must be a whole number of at least -1" % key
+	if problem == "" and not WholeNumber.is_whole(entry["cutoff_tick"]):
+		problem = "cutoff_tick must be a whole number"
+	if problem == "" and typeof(entry["from_desk"]) != TYPE_BOOL:
+		problem = "from_desk must be true or false"
 	if problem != "":
 		return problem
 	if typeof(entry["flight"]) != TYPE_STRING or entry["flight"] == "":
@@ -230,10 +243,27 @@ static func _bag_rules(bag: Bag, tick: int) -> String:
 		and (bag.rest_tick < bag.created_tick or bag.rest_tick > tick)
 	):
 		problem = "a bag in the room needs a rest tick in its life"
-	elif bag.on_belt() and not BuildGrid.SIDE_STEP.has(bag.from_step):
+	else:
+		problem = _edge_rules(bag)
+	return problem
+
+
+## Where a bag may be along its edge, by state. A bag on a belt came in by
+## one side and is within one cell of its centre (half a cell from a desk).
+## A missed bag keeps the place it stopped at. A bag at a desk, in the room
+## or loaded is at no edge.
+static func _edge_rules(bag: Bag) -> String:
+	var problem := ""
+	var side := BuildGrid.SIDE_STEP.has(bag.from_step)
+	var stopped := bag.on_belt() or bag.state == Bag.State.MISSED
+	if not side and bag.from_step != Vector2i.ZERO:
+		problem = "it came in by no side"
+	elif bag.on_belt() and not side:
 		problem = "a bag on a belt came in by one side"
-	elif bag.remain_mm > Bag.CELL_MM or (not bag.on_belt() and bag.remain_mm != 0):
+	elif bag.remain_mm > Bag.CELL_MM or (bag.remain_mm > 0 and not (stopped and side)):
 		problem = "remain_mm is outside its edge"
+	elif bag.from_desk and bag.remain_mm * 2 > Bag.CELL_MM:
+		problem = "a bag from a desk rides half a cell"
 	return problem
 
 

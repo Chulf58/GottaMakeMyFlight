@@ -102,7 +102,7 @@ func signature() -> String:
 	for b in sim.bags():
 		parts.append(
 			(
-				"%d|%d|%d|%s|%s|%d|%d|%d|%d"
+				"%d|%d|%d|%s|%s|%d|%d|%d|%d|%d"
 				% [
 					b.id,
 					b.state,
@@ -110,6 +110,7 @@ func signature() -> String:
 					b.cell,
 					b.from_step,
 					b.remain_mm,
+					int(b.from_desk),
 					b.wait_tick,
 					b.rest_tick,
 					b.outcome_tick

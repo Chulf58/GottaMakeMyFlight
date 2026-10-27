@@ -43,13 +43,35 @@ func test_a_belt_taken_from_under_a_bag_loses_it_once() -> void:
 	assert_that(_world.sim.results[BagTestWorld.FLIGHT]["causes"]).is_equal({"lost": 1})
 
 
-func test_a_bag_in_the_second_half_of_its_edge_rides_on_when_the_cell_behind_goes() -> void:
+func test_a_bag_stops_short_of_its_centre_when_the_cell_behind_goes_until_it_is_back() -> void:
 	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)
 	_world.run_to(45)
+	# Its body is on (5, 7), but its edge from (4, 7) is not done.
 	assert_that(bag.physical_cell()).is_equal(Vector2i(5, 7))
+	assert_int(bag.remain_mm).is_equal(250)
 	_world.unlay(Vector2i(4, 7))
+	_world.run_to(60)
+	assert_int(bag.state).is_equal(Bag.State.BLOCKED)
+	assert_that(bag.cell).is_equal(Vector2i(5, 7))
+	assert_int(bag.remain_mm).is_equal(250)
+	_world.lay(Vector2i(4, 7), Vector2i(4, 7))
+	_world.run_to(BagTestWorld.ARRIVAL + 15)
+	# Stopped on ticks 46 to 60.
+	assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
+	assert_int(bag.rest_tick).is_equal(BagTestWorld.ARRIVAL + 15)
+
+
+func test_a_bag_leaving_its_desk_rides_on_when_the_desk_goes() -> void:
+	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)
+	_world.run_to(3)
+	assert_bool(bag.from_desk).is_true()
+	assert_int(bag.remain_mm).is_equal(350)
+	assert_bool(_world.grid.apply(BuildEdit.remove_object(_desk)).ok).is_true()
+	var entry: Array[Vector2i] = [BagTestWorld.ENTRY]
+	_world.grid.apply_batch(BeltShaper.reshape_edits(_world.grid, entry))
 	_world.run_to(BagTestWorld.ARRIVAL)
 	assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
+	assert_int(bag.rest_tick).is_equal(BagTestWorld.ARRIVAL)
 
 
 func test_a_vanished_edge_stops_a_bag_where_it_is_until_it_comes_back() -> void:

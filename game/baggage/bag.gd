@@ -3,9 +3,11 @@ extends RefCounted
 ## One checked bag as plain data (decision baggage-bag-sim-design-route-field-
 ## belt-capacity-cutoff). BaggageSim owns and moves it.
 ##
-## A bag on a belt owns one cell, `cell`. It came in from the cell
-## `cell - from_step` and still has `remain_mm` to go to the centre of `cell`;
-## at the centre (remain_mm 0) it picks its next edge from the route field.
+## A bag on a belt owns one cell, `cell`. It came in along its committed edge
+## from the cell `cell - from_step` (or, when `from_desk`, from its desk's
+## outlet) and still has `remain_mm` to go to the centre of `cell`; at the
+## centre (remain_mm 0) it picks its next edge from the route field. The edge
+## must stay in place until then: a bag whose belt-to-belt edge goes stops.
 ## While remain_mm is more than half a cell its body is still on the cell it
 ## came from (physical_cell()), so that cell is taken too. An IN_ROOM bag
 ## keeps the belt end it reached in `cell`; an AT_DESK bag has no cell.
@@ -29,6 +31,9 @@ var cause := Cause.NONE
 var cell := Vector2i.ZERO
 var from_step := Vector2i.ZERO
 var remain_mm := 0
+## True while the bag rides the half cell from its desk's outlet: that edge
+## needs no belt behind it, so a desk taken away never stops the bag.
+var from_desk := false
 ## The tick it began waiting for its next cell: its check-in tick at a desk,
 ## the tick it reached a cell centre on a belt. Merges go to the earliest,
 ## then the lower id.
