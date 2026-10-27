@@ -70,7 +70,8 @@ func test_the_result_does_not_change_after_the_doors_close() -> void:
 	world.run_to(21)
 	var before := JSON.stringify(FlightResult.summarize(world.sim, PassengerTestWorld.FLIGHT))
 	world.run_to(400)
-	assert_int(world.sim.passenger_ids().size()).is_equal(1)
+	# The missed passenger is retired by now; the result is kept per flight.
+	assert_int(world.sim.passenger_ids().size()).is_equal(0)
 	(
 		assert_str(JSON.stringify(FlightResult.summarize(world.sim, PassengerTestWorld.FLIGHT)))
 		. is_equal(before)

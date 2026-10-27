@@ -13,6 +13,10 @@ extends RefCounted
 ## preview, the click and a snapshot load share one set of rules. apply()
 ## then relinks the A* graph around the changed cells only (once for a whole
 ## list of edits, see apply_batch()).
+##
+## Each floor cell, wall edge and object keeps the purchase price it was
+## placed with (BuildEdit.paid), so a removal refunds a share of what was
+## actually paid (BuildTransaction). The grid itself never touches money.
 
 ## After an accepted edit: the cells GridPathing relinked, so every committed
 ## path through one of them may be stale. After a snapshot load: every cell.
@@ -51,6 +55,13 @@ const SNAPSHOT_KEYS := [
 const OBJECT_KEYS := ["id", "def", "anchor", "facing"]
 ## Each entry of the optional "rooms" snapshot key. "rect" is [x, y, w, h].
 const ROOM_KEYS := ["id", "type", "rect"]
+## The optional snapshot keys holding the purchase price saved on each floor
+## cell and wall edge, laid out like "floor", "h_walls" and "v_walls". They
+## come together; a snapshot saved before prices has none and loads with
+## nothing paid. Each object entry may carry its own "paid".
+const PAID_KEYS := ["floor_paid", "h_walls_paid", "v_walls_paid"]
+## Highest purchase price a piece can carry (the int32 the arrays hold).
+const MAX_PAID := 2147483647
 
 var size := Vector2i.ZERO
 ## World position of the north-west corner of cell (0, 0).
@@ -77,6 +88,12 @@ var _rooms: Dictionary = {}
 ## Id of the room each cell belongs to, 0 for none. Derived from _rooms.
 var _room_at := PackedInt32Array()
 var _next_room_id := 1
+## The purchase price saved on each floor cell and wall edge (same layout as
+## _floor, _h_walls and _v_walls), 0 where nothing was paid. Objects keep
+## theirs in their record as "paid".
+var _floor_paid := PackedInt32Array()
+var _h_paid := PackedInt32Array()
+var _v_paid := PackedInt32Array()
 var _pathing := GridPathing.new()
 
 
@@ -115,6 +132,20 @@ func wall_kind(cell: Vector2i, side: int) -> int:
 	if not in_bounds(cell) or side < 0 or side > 3:
 		return WallKind.NONE
 	return _wall_value(cell, side)
+
+
+## The purchase price saved on a floor cell, 0 for none.
+func floor_paid(cell: Vector2i) -> int:
+	return _floor_paid[_index(cell)] if in_bounds(cell) else 0
+
+
+## The purchase price saved on a wall edge, 0 for none or an unknown edge.
+func wall_paid(cell: Vector2i, side: int) -> int:
+	if not in_bounds(cell) or side < 0 or side > 3:
+		return 0
+	if side == Side.NORTH or side == Side.SOUTH:
+		return _h_paid[_h_index(cell, side)]
+	return _v_paid[_v_index(cell, side)]
 
 
 ## Id of the object standing on `cell`, 0 for none.
@@ -291,20 +322,23 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.PAINT_FLOOR:
 			_floor[_index(edit.cell)] = edit.floor_type
 			_zone[_index(edit.cell)] = edit.zone_id
+			_floor_paid[_index(edit.cell)] = edit.paid
 			result.dirty_cells = [edit.cell]
 		BuildEdit.Kind.REMOVE_FLOOR:
 			_floor[_index(edit.cell)] = FLOOR_NONE
 			_zone[_index(edit.cell)] = 0
+			_floor_paid[_index(edit.cell)] = 0
 			result.dirty_cells = [edit.cell]
 		BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_WALL:
-			var value := edit.wall_kind if edit.kind == BuildEdit.Kind.PLACE_WALL else WallKind.NONE
-			_set_wall(edit.cell, edit.side, value)
+			var placing := edit.kind == BuildEdit.Kind.PLACE_WALL
+			_set_wall(edit.cell, edit.side, edit.wall_kind if placing else WallKind.NONE)
+			_set_wall_paid(edit.cell, edit.side, edit.paid if placing else 0)
 			result.dirty_cells = _edge_cells(edit.cell, edit.side)
 		BuildEdit.Kind.PLACE_OBJECT:
 			result.object_id = _next_object_id
 			_next_object_id += 1
 			result.dirty_cells = _insert_object(
-				result.object_id, edit.def_id, edit.cell, edit.facing
+				result.object_id, edit.def_id, edit.cell, edit.facing, edit.paid
 			)
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
@@ -355,6 +389,7 @@ func to_snapshot() -> Dictionary:
 			"def": str(record["def"]),
 			"anchor": [anchor.x, anchor.y],
 			"facing": record["facing"],
+			"paid": record["paid"],
 		}
 		objects.append(entry)
 	var rooms := []
@@ -382,13 +417,18 @@ func to_snapshot() -> Dictionary:
 		"origin": [origin.x, origin.y, origin.z],
 		"rooms": rooms,
 		"next_room_id": _next_room_id,
+		"floor_paid": Array(_floor_paid),
+		"h_walls_paid": Array(_h_paid),
+		"v_walls_paid": Array(_v_paid),
 	}
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
 ## (which turns ints into floats). The grid takes the snapshot's size and
 ## origin; one saved before grids had an origin loads centred at height 0, and
-## one saved before rooms loads with none.
+## one saved before rooms loads with none, and one saved before purchase
+## prices loads with nothing paid (so removing its pieces refunds nothing).
+## Loading never spends or credits money.
 ## Every object is re-placed through the placement rules. Pushes an error and
 ## returns false, leaving the grid unchanged, when anything is missing,
 ## malformed or breaks a rule.
@@ -418,6 +458,9 @@ func from_snapshot(data: Dictionary) -> bool:
 	_rooms = loaded._rooms
 	_room_at = loaded._room_at
 	_next_room_id = loaded._next_room_id
+	_floor_paid = loaded._floor_paid
+	_h_paid = loaded._h_paid
+	_v_paid = loaded._v_paid
 	_pathing = loaded._pathing
 	var every: Array[Vector2i] = []
 	for y in size.y:
@@ -442,6 +485,9 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_room_at = _zeros_ints(cells)
 	_rooms = {}
 	_next_room_id = 1
+	_floor_paid = _zeros_ints(cells)
+	_h_paid = _zeros_ints(size.x * (size.y + 1))
+	_v_paid = _zeros_ints((size.x + 1) * size.y)
 
 
 ## Fills this fresh grid from a structurally valid snapshot and returns a
@@ -457,6 +503,9 @@ func _load_cells(data: Dictionary) -> String:
 	var door_problem := _door_walls_problem()
 	if door_problem != "":
 		return door_problem
+	var paid_problem := _load_paid(data)
+	if paid_problem != "":
+		return paid_problem
 	var room_problem := _load_rooms(data)
 	if room_problem != "":
 		return room_problem
@@ -466,9 +515,46 @@ func _load_cells(data: Dictionary) -> String:
 		var check := _check_place_object(def_id, anchor, int(entry["facing"]))
 		if not check.ok:
 			return "object %d refused: %s" % [int(entry["id"]), check.reason_text()]
-		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]))
+		var paid := int(entry.get("paid", 0))
+		# No price history yet, so today's price caps what was paid.
+		if paid > 0 and paid > PriceTable.price_of_object(def_id):
+			return "object %d paid %d, more than its price" % [int(entry["id"]), paid]
+		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
 	_pathing.rebuild(self)
+	return ""
+
+
+## Fills the saved purchase prices from the optional PAID_KEYS and returns a
+## problem string, or "". Floor and walls must already be loaded. A price on a
+## cell with no floor or an edge with no wall could never have been paid, and
+## neither could one above today's PriceTable price for the piece: there is no
+## price history, so today's price is the cap.
+func _load_paid(data: Dictionary) -> String:
+	if not data.has(PAID_KEYS[0]):
+		return ""
+	for i in _floor_paid.size():
+		_floor_paid[i] = int(data["floor_paid"][i])
+		var cap := 0 if _floor[i] == FLOOR_NONE else PriceTable.price_of_floor()
+		if _floor_paid[i] > cap:
+			return "floor_paid %d at index %d is more than %d" % [_floor_paid[i], i, cap]
+	for i in _h_paid.size():
+		_h_paid[i] = int(data["h_walls_paid"][i])
+		var problem := _wall_paid_problem("h_walls_paid", i, _h_paid[i], _h_walls[i])
+		if problem != "":
+			return problem
+	for i in _v_paid.size():
+		_v_paid[i] = int(data["v_walls_paid"][i])
+		var problem := _wall_paid_problem("v_walls_paid", i, _v_paid[i], _v_walls[i])
+		if problem != "":
+			return problem
+	return ""
+
+
+func _wall_paid_problem(key: String, i: int, paid: int, kind: int) -> String:
+	var cap := 0 if kind == WallKind.NONE else PriceTable.price_of_wall(kind)
+	if paid > cap:
+		return "%s %d at index %d is more than %d" % [key, paid, i, cap]
 	return ""
 
 
@@ -697,9 +783,9 @@ func _interaction_problem(spot: Vector2i, cells: Array[Vector2i]) -> BuildResult
 
 
 func _insert_object(
-	object_id: int, def_id: StringName, anchor: Vector2i, facing: int
+	object_id: int, def_id: StringName, anchor: Vector2i, facing: int, paid := 0
 ) -> Array[Vector2i]:
-	_objects[object_id] = {"def": def_id, "anchor": anchor, "facing": facing}
+	_objects[object_id] = {"def": def_id, "anchor": anchor, "facing": facing, "paid": paid}
 	var def := BuildCatalog.get_def(def_id)
 	var cells := def.footprint(anchor, facing)
 	for cell in cells:
@@ -776,6 +862,23 @@ func _set_wall(cell: Vector2i, side: int, value: int) -> void:
 			_v_walls[cell.y * (size.x + 1) + cell.x] = value
 		Side.EAST:
 			_v_walls[cell.y * (size.x + 1) + cell.x + 1] = value
+
+
+func _set_wall_paid(cell: Vector2i, side: int, value: int) -> void:
+	if side == Side.NORTH or side == Side.SOUTH:
+		_h_paid[_h_index(cell, side)] = value
+	else:
+		_v_paid[_v_index(cell, side)] = value
+
+
+## Index of a north or south edge in the _h_walls layout.
+func _h_index(cell: Vector2i, side: int) -> int:
+	return (cell.y + (1 if side == Side.SOUTH else 0)) * size.x + cell.x
+
+
+## Index of a west or east edge in the _v_walls layout.
+func _v_index(cell: Vector2i, side: int) -> int:
+	return cell.y * (size.x + 1) + cell.x + (1 if side == Side.EAST else 0)
 
 
 ## The in-bounds cells on either side of an edge.

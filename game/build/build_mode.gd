@@ -12,6 +12,7 @@ extends Node3D
 ## Inside a terminal shell they snap to its Toon doors instead (ShellDefinition).
 ## The Cafe tool drags a rectangle that marks floor as a cafe room (RoomTool);
 ## the counter and table tools furnish it, and RoomView shows what it needs.
+## Every edit is paid from `finances` through BuildTransaction.
 
 signal grid_changed
 ## Emitted by every set_tool(), NONE included, so the menu can follow it.
@@ -109,6 +110,12 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 ## frame (grid_size, grid_centred and grid_origin are not used), the Entrance
 ## and Exit tools snap to its doors and load_snapshot() checks a save fits it.
 @export var shell: ShellDefinition
+## Where building is paid from (BuildTransaction): a click or door costs its
+## price, a Floor rectangle is all or nothing, a wall stroke stops when the
+## money runs out, and removals refund a share of the saved price. main.tscn
+## sets it. Without it the tools build for free and save no prices, the
+## non-spending path tests and probes use.
+@export var finances: Finances
 
 var grid: BuildGrid
 var tool := Tool.FLOOR
@@ -130,6 +137,9 @@ var _hover_key := ""
 var _dragging := false
 var _drag_side := -1
 var _last_applied_key := ""
+## True once a segment of the current wall stroke was refused for money; the
+## rest of the stroke is refused too, until the next press.
+var _stroke_out_of_money := false
 var _area := AreaDrag.new()
 ## What the last rectangle did, shown until the pointer leaves its last cell.
 var _status_note := ""
@@ -162,6 +172,8 @@ func _ready() -> void:
 	_room_view.watch(grid)
 	_ghost.name = "Ghost"
 	add_child(_ghost)
+	if finances != null:
+		finances.wallet.changed.connect(_on_balance_changed)
 	set_tool(tool)
 
 
@@ -260,23 +272,30 @@ func edit_at(point: Vector3) -> BuildEdit:
 	return null
 
 
-## Applies the current tool at a ground point and redraws on success. A drag
-## applies once per target. Returns null when nothing was attempted.
+## Applies the current tool at a ground point, paid through BuildTransaction,
+## and redraws on success. A drag applies once per target; once a segment of a
+## wall stroke cannot be paid for, the rest of the stroke is refused for
+## money too. Returns null when nothing was attempted.
 func apply_at(point: Vector3) -> BuildResult:
 	var edit := edit_at(point)
 	if edit == null or (_dragging and _edit_key(edit) == _last_applied_key):
 		return null
 	_last_applied_key = _edit_key(edit)
 	var result := check(edit)
+	if result.ok and _dragging and _stroke_out_of_money:
+		result = BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
+	if _dragging and result.reason == BuildResult.Reason.CANT_AFFORD:
+		_stroke_out_of_money = true
 	var refused_by_check := not result.ok
 	if result.ok:
-		result = _apply_checked(edit)
+		result = BuildTransaction.commit_plan(grid, DoorPlacement.edits_for(grid, edit), wallet())
 	if result.ok:
 		_view.refresh(grid)
 		_hover_key = ""
 		grid_changed.emit()
 	_show_status(result)
-	# A refusal from the grid itself (inside _apply_checked) was emitted there.
+	# A refusal from the grid or the transaction (inside commit_plan()) was
+	# emitted there.
 	if refused_by_check:
 		grid.edit_refused.emit(edit, result)
 	return result
@@ -317,9 +336,9 @@ func finish_area() -> AreaDrag.Outcome:
 		return null
 	var outcome: AreaDrag.Outcome
 	if tool == Tool.REMOVE:
-		outcome = AreaDrag.clear(grid, _area.rect())
+		outcome = AreaDrag.clear(grid, _area.rect(), wallet())
 	else:
-		outcome = AreaDrag.fill_floor(grid, _area.rect(), TERMINAL_ZONE)
+		outcome = AreaDrag.fill_floor(grid, _area.rect(), TERMINAL_ZONE, wallet())
 	if outcome.placed > 0:
 		_view.refresh(grid)
 		grid_changed.emit()
@@ -332,7 +351,7 @@ func finish_area() -> AreaDrag.Outcome:
 ## Marks the released rectangle as a room of the current room tool's type.
 func _finish_room() -> void:
 	var type: StringName = TOOL_ROOMS[tool]
-	var result := RoomTool.mark(grid, _area.rect(), type)
+	var result := RoomTool.mark(grid, _area.rect(), type, wallet())
 	if result.ok:
 		grid_changed.emit()
 	_status_note = RoomTool.message(grid, result, type)
@@ -371,15 +390,26 @@ func status_text() -> String:
 	return _status
 
 
-## BuildGrid.validate() plus the entrance and exit rules (DoorPlacement.check()).
+## The wallet building is paid from, or null when the tools build for free.
+func wallet() -> Wallet:
+	return finances.wallet if finances != null else null
+
+
+## BuildGrid.validate() plus the entrance and exit rules (DoorPlacement.check()),
+## then whether the wallet can pay for the edits it takes
+## (BuildTransaction.check(), CANT_AFFORD).
 func check(edit: BuildEdit) -> BuildResult:
-	return DoorPlacement.check(grid, edit, shell)
+	var result := DoorPlacement.check(grid, edit, shell)
+	if not result.ok:
+		return result
+	return BuildTransaction.check(grid, DoorPlacement.edits_for(grid, edit), wallet())
 
 
 ## Restores a BuildGrid.to_snapshot() dictionary into the grid and redraws.
 ## With a shell, a save that does not fit it is refused first
 ## (ShellDefinition.snapshot_problem()). Pushes an error and returns false,
-## leaving the grid as it was, on any refusal.
+## leaving the grid as it was, on any refusal. A load never spends or
+## credits: it bypasses BuildTransaction and keeps the saved purchase prices.
 func load_snapshot(data: Dictionary) -> bool:
 	var problem := shell.snapshot_problem(data) if shell != null else ""
 	if problem != "":
@@ -393,22 +423,10 @@ func load_snapshot(data: Dictionary) -> bool:
 	return true
 
 
-## Applies an edit check() accepted, through the edits DoorPlacement.edits_for()
-## plans: an entrance or exit first takes down the plain wall on its back edge.
-## Each grid edit emits graph_changed on its own; every state in between is a
-## valid grid.
-func _apply_checked(edit: BuildEdit) -> BuildResult:
-	var plan := DoorPlacement.edits_for(grid, edit)
-	var cleared: Array[Vector2i] = []
-	for i in plan.size() - 1:
-		var before := grid.apply(plan[i])
-		if not before.ok:
-			return before
-		cleared.append_array(before.dirty_cells)
-	var result := grid.apply(plan.back())
-	if result.ok:
-		result.dirty_cells.append_array(cleared)
-	return result
+## A changed balance can change whether the ghost's edit is affordable, so the
+## ghost is checked again.
+func _on_balance_changed(_balance: int) -> void:
+	_hover_key = ""
 
 
 func _cancels_area(event: InputEvent) -> bool:
@@ -426,6 +444,7 @@ func _facing_is_auto() -> bool:
 func _start_drag(point: Vector3) -> void:
 	_dragging = true
 	_last_applied_key = ""
+	_stroke_out_of_money = false
 	_drag_side = grid.nearest_side(point) if TOOL_WALL_KINDS.has(tool) else -1
 
 

@@ -13,10 +13,14 @@ static func check(grid: BuildGrid, area: Rect2i, type: StringName) -> BuildResul
 	return grid.validate(BuildEdit.place_room(area, type))
 
 
-## Marks `area` as a room of `type`. A refusal changes nothing; the grid emits
-## edit_refused for it.
-static func mark(grid: BuildGrid, area: Rect2i, type: StringName) -> BuildResult:
-	return grid.apply(BuildEdit.place_room(area, type))
+## Marks `area` as a room of `type`, through BuildTransaction like every
+## player build (a room costs nothing, so `wallet` never pays). A refusal
+## changes nothing; the grid emits edit_refused for it.
+static func mark(
+	grid: BuildGrid, area: Rect2i, type: StringName, wallet: Wallet = null
+) -> BuildResult:
+	var plan: Array[BuildEdit] = [BuildEdit.place_room(area, type)]
+	return BuildTransaction.commit_plan(grid, plan, wallet)
 
 
 ## The status line while a rectangle is dragged: "Cafe 4 x 3", followed by

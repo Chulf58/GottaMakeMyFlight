@@ -160,9 +160,12 @@ func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	assert_bool(_snapshot["attached"]).is_true()
 	assert_int(_snapshot["tick"]).is_equal(END_TICK)
 	assert_str(_snapshot["flight_state"]).is_equal("DEPARTED")
-	var by_stage: Dictionary = _snapshot["passengers"]["by_stage"]
-	assert_int(by_stage.get("MADE", 0) + by_stage.get("MISSED", 0)).is_equal(25)
-	assert_int(_snapshot["passengers"]["total"]).is_equal(25)
+	# Settled passengers are retired 200 ticks after their outcome; the durable
+	# totals still count all 25 and nobody is left in the list.
+	var summary: Dictionary = _snapshot["passengers"]
+	assert_int(summary["made"] + summary["missed"]).is_equal(25)
+	assert_int(summary["total"]).is_equal(0)
+	assert_dict(summary["by_stage"]).is_empty()
 	var grid: Dictionary = _snapshot["grid"]
 	# The 12 x 30 terminal, door B to gate C.
 	assert_int(grid["floor_cells"]).is_equal(12 * 30)

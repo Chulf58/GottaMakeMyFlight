@@ -24,7 +24,10 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 
 ## 3: the walks outside carry heights ([x, y, z] apron points).
 ## 4: hunger, the cafe cooldown and the cafe visits, queues and seats.
-const SAVE_VERSION := 4
+## 5: durable made and missed totals, per-flight results and the flights
+## already scheduled; settled passengers are retired, so none of these are
+## rebuilt from the passenger list.
+const SAVE_VERSION := 5
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -38,6 +41,9 @@ const STAND_UP_TICKS := 24
 const DEFAULT_PASSENGERS := 24
 ## The last scheduled spawn of a flight is this many ticks before doors close.
 const LAST_SPAWN_LEAD_TICKS := 800
+## A made or missed passenger is kept this long, then retired (a missed one
+## stays drawn for PassengerViews.MISSED_LINGER_TICKS, which is the same).
+const SETTLED_KEEP_TICKS := 200
 ## Stuck passengers retry once a simulated second, staggered by id; mood and
 ## the lateness forecast update on the same beat.
 const BEAT_TICKS := 20
@@ -90,6 +96,12 @@ var last_batch_seed := 0
 ## {"no_entrance": n, "late": n}. "no_entrance" counts those dropped while the
 ## terminal had no entrance, "late" those who simply had not arrived yet.
 var no_shows := {}
+## What a flight's settled passengers did, by flight id, kept after they are
+## retired: {"made": n, "missed": n, "causes": {Vector2i(missed_stage,
+## missed_stuck): n}}. Dropped, with no_shows, when FlightSim prunes the flight.
+var flight_results := {}
+## Settled passengers kept because they still held something (a bug).
+var retire_refused := 0
 var tick_usec_last := 0
 var tick_usec_max := 0
 var tick_usec_total := 0
@@ -100,6 +112,8 @@ var _by_id: Dictionary = {}
 var _next_id := 1
 ## Pending spawns {"tick", "flight", "variant"}, in tick order.
 var _schedule: Array[Dictionary] = []
+## Flights whose arrivals are scheduled and whose doors have not closed.
+var _scheduled: Dictionary = {}
 ## Station id -> {"lane": Array[int], "holding": Array[int], "serving": int}.
 var _queues: Dictionary = {}
 ## Derived: station id -> passengers walking to it.
@@ -131,15 +145,25 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	clock.ticked.connect(on_tick)
 	grid.graph_changed.connect(_on_graph_changed)
+	if auto_schedule:
+		flights.occurrence_added.connect(_on_occurrence_added)
 
 
-## Schedules `count` passengers for a flight between tick 1 and
-## LAST_SPAWN_LEAD_TICKS before its doors close, from the saved sim RNG.
-func schedule_flight(flight_id: String, count: int) -> void:
-	var last := maxi(1, flights.doors_close_tick(flight_id) - LAST_SPAWN_LEAD_TICKS)
+## Schedules `count` passengers for a flight, each arriving from just after
+## the flight's first state (or the next tick, if later) to LAST_SPAWN_LEAD_TICKS
+## before its doors close, from the saved sim RNG. A flight is scheduled once:
+## a second call, or a flight whose doors have closed, is refused with an error.
+func schedule_flight(flight_id: String, count: int) -> bool:
+	if _scheduled.has(flight_id) or flights.is_doors_closed(flight_id):
+		push_error("PassengerSim.schedule_flight: '%s' is scheduled or closed" % flight_id)
+		return false
+	_scheduled[flight_id] = true
+	var first := maxi(flights.state_start(flight_id, FlightSim.State.SCHEDULED) + 1, clock.tick + 1)
+	var last := maxi(first, flights.doors_close_tick(flight_id) - LAST_SPAWN_LEAD_TICKS)
 	for i in count:
-		var at := clock.rng.randi_range(1, last)
+		var at := clock.rng.randi_range(first, last)
 		_add_spawn(at, flight_id, clock.rng.randi_range(0, 1))
+	return true
 
 
 ## The debug batch: `count` passengers for the first flight still boarding,
@@ -189,6 +213,8 @@ func on_tick(new_tick: int) -> void:
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
+	_retire_settled()
+	_prune_results()
 	tick_usec_last = Time.get_ticks_usec() - started
 	tick_usec_max = maxi(tick_usec_max, tick_usec_last)
 	tick_usec_total += tick_usec_last
@@ -216,7 +242,10 @@ func missed_count() -> int:
 
 ## Passengers still on their way: spawned and neither made nor missed.
 func active_count() -> int:
-	return _passengers.size() - _made - _missed
+	var count := 0
+	for p in _passengers:
+		count += int(not p.is_done())
+	return count
 
 
 func pending_spawns() -> int:
@@ -335,7 +364,9 @@ func apron_length_mm(exit_door: int) -> int:
 
 
 func to_snapshot() -> Dictionary:
-	return PassengerSnapshot.save(self, _passengers, _schedule, _queues, _next_id)
+	return PassengerSnapshot.save(
+		self, _passengers, _schedule, _queues, _next_id, [_made, _missed], _scheduled.keys()
+	)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -351,6 +382,10 @@ func from_snapshot(data: Dictionary) -> bool:
 	_next_id = loaded["next_id"]
 	last_batch_seed = loaded["last_batch_seed"]
 	no_shows = loaded["no_shows"]
+	flight_results = loaded["flight_results"]
+	_scheduled = loaded["scheduled"]
+	_made = loaded["made"]
+	_missed = loaded["missed"]
 	_schedule = loaded["schedule"]
 	_queues = loaded["queues"]
 	cafes.restore(loaded["cafe"])
@@ -369,6 +404,12 @@ func _add_spawn(at_tick: int, flight_id: String, variant: int) -> void:
 	while i > 0 and _schedule[i - 1]["tick"] > at_tick:
 		i -= 1
 	_schedule.insert(i, entry)
+
+
+## An occurrence was issued: its booked passengers arrive within its window.
+func _on_occurrence_added(flight_id: String) -> void:
+	var contract := flights.contract_of(flights.flight_contract_id(flight_id))
+	schedule_flight(flight_id, contract["booked_passengers"])
 
 
 func _spawn_due() -> void:
@@ -413,6 +454,9 @@ func _close_doors() -> void:
 			kept.append(entry)
 	if kept.size() != _schedule.size():
 		_schedule = kept
+	for flight_id in _scheduled.keys():
+		if flights.is_doors_closed(flight_id):
+			_scheduled.erase(flight_id)
 	for p in _passengers:
 		if not p.is_done() and flights.is_doors_closed(p.flight_id):
 			_finish(p, false)
@@ -429,13 +473,67 @@ func _finish(p: Passenger, made: bool) -> void:
 	p.stuck = Passenger.Stuck.NONE
 	p.late = false
 	p.outcome_tick = tick
+	var result: Dictionary = flight_results.get(p.flight_id, {"made": 0, "missed": 0, "causes": {}})
 	if made:
 		_made += 1
+		result["made"] += 1
 	else:
 		_missed += 1
+		result["missed"] += 1
+		var cause := Vector2i(p.missed_stage, p.missed_stuck)
+		result["causes"][cause] = int(result["causes"].get(cause, 0)) + 1
 		p.mood = 0
 		p.clear_path()
+	flight_results[p.flight_id] = result
 	outcome.emit(p.id, made)
+
+
+## Retires the settled passengers kept for SETTLED_KEEP_TICKS. One that still
+## holds a station, seat, cafe visit or queue place is a bug: it is reported
+## and kept, so nothing is left pointing at a passenger that is gone.
+func _retire_settled() -> void:
+	for i in range(_passengers.size() - 1, -1, -1):
+		var p := _passengers[i]
+		if not p.is_done() or tick - p.outcome_tick <= SETTLED_KEEP_TICKS:
+			continue
+		var leftover := _settled_leftovers(p)
+		if leftover != "":
+			retire_refused += 1
+			push_error("PassengerSim: settled passenger %d still holds %s" % [p.id, leftover])
+			continue
+		_by_id.erase(p.id)
+		_passengers.remove_at(i)
+
+
+## What a settled passenger still holds, or "" when it holds nothing.
+func _settled_leftovers(p: Passenger) -> String:
+	var held := PackedStringArray()
+	if p.station != 0:
+		held.append("a station")
+	if p.seat_object != 0 or _seat_claims.values().has(p.id):
+		held.append("a seat")
+	if cafes.visit_of(p.id) != null:
+		held.append("a cafe visit")
+	for q in _queues.values():
+		if (q["lane"] as Array).has(p.id) or (q["holding"] as Array).has(p.id):
+			held.append("a queue place")
+		elif q["serving"] == p.id:
+			held.append("a service")
+	for record in cafes.queue_records():
+		if (record["lane"] as Array).has(p.id) or record["serving"] == p.id:
+			held.append("a cafe queue place")
+	return ", ".join(held)
+
+
+## Drops the results and no-shows of flights FlightSim no longer lists.
+func _prune_results() -> void:
+	if flight_results.is_empty() and no_shows.is_empty():
+		return
+	var live := flights.flight_ids()
+	for results in [flight_results, no_shows]:
+		for flight_id in results.keys():
+			if not live.has(flight_id):
+				results.erase(flight_id)
 
 
 func _step_station(station: int) -> void:
@@ -870,8 +968,6 @@ func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
 func _rederive() -> void:
 	_incoming.clear()
 	_seat_claims.clear()
-	_made = 0
-	_missed = 0
 	for p in _passengers:
 		var walking := (
 			p.stage == Passenger.Stage.TO_CHECKIN or p.stage == Passenger.Stage.TO_SECURITY
@@ -882,6 +978,4 @@ func _rederive() -> void:
 			for seat in layout.seats:
 				if seat["object_id"] == p.seat_object and seat["cell"] == p.seat_cell:
 					_seat_claims[seat["key"]] = p.id
-		_made += int(p.stage == Passenger.Stage.MADE)
-		_missed += int(p.stage == Passenger.Stage.MISSED)
 	cafes.rederive()

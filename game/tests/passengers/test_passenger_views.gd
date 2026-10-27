@@ -47,8 +47,11 @@ func test_missed_passengers_release_their_node_for_reuse() -> void:
 	var a := _world.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
 	_world.step()
 	var node_a := _views.node_for(a)
+	var passenger_a := _world.passenger(a)
 	_world.run_to(40 + PassengerViews.MISSED_LINGER_TICKS + 1)
-	assert_int(_world.passenger(a).stage).is_equal(Passenger.Stage.MISSED)
+	# Retired from the sim by now; the held record still says it missed.
+	assert_int(passenger_a.stage).is_equal(Passenger.Stage.MISSED)
+	assert_object(_world.passenger(a)).is_null()
 	assert_object(_views.node_for(a)).is_null()
 	assert_int(_views.active_count()).is_equal(0)
 	var b := _world.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
