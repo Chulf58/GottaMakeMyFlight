@@ -30,6 +30,8 @@ enum Reason {
 	ROOM_OVERLAP,
 	IN_ROOM,
 	NO_ROOM,
+	CANT_AFFORD,
+	UNPRICED,
 }
 
 const REASON_TEXT := {
@@ -58,6 +60,8 @@ const REASON_TEXT := {
 	Reason.ROOM_OVERLAP: "Overlaps another room",
 	Reason.IN_ROOM: "A room covers this floor; remove the room first",
 	Reason.NO_ROOM: "No such room",
+	Reason.CANT_AFFORD: "Not enough money",
+	Reason.UNPRICED: "This piece has no price",
 }
 
 var ok: bool = true
