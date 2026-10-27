@@ -6,9 +6,10 @@ extends RefCounted
 ## owns the input and the ghost; this class owns the rectangle and what
 ## applying it does, so the click and the drag use the same edits and rules.
 ##
-## Each rectangle is one BuildGrid.apply_batch(): every cell is validated and
-## applied in order, and the A* graph is relinked and graph_changed emitted once
-## at the end. The cost is measured in test_area_drag.gd.
+## Each rectangle is one BuildGrid.apply_batch(), made and paid for through
+## BuildTransaction.commit_batch(): every cell is validated and applied in
+## order, and the A* graph is relinked and graph_changed emitted once at the
+## end. The cost in time is measured in test_area_drag.gd.
 
 
 ## What applying a rectangle did, for the status line.
@@ -23,12 +24,22 @@ class Outcome:
 	## The reason text of the first refusal, in row order.
 	var first_reason := ""
 	var removing := false
+	## Money the rectangle took (Floor) or paid back (Remove); 0 without a wallet.
+	var money := 0
+	## When the wallet could not pay for the whole rectangle: the tiles it
+	## would have laid and what they cost. Nothing was applied.
+	var unaffordable_tiles := 0
+	var unaffordable_cost := 0
 
 	func message() -> String:
+		if unaffordable_tiles > 0:
+			return "Not enough money: %d tiles cost %d" % [unaffordable_tiles, unaffordable_cost]
 		var verb := "Removed" if removing else "Placed"
 		if placed == 0 and skipped == 0:
 			return "Nothing to remove" if removing else "Nothing to place"
 		var text := "%s %d" % [verb, placed]
+		if money != 0:
+			text += (", refund %d" if removing else " for %d") % money
 		if skipped > 0:
 			text += ", skipped %d: %s" % [skipped, first_reason]
 		return text
@@ -56,9 +67,12 @@ var _end := Vector2i.ZERO
 var _limit := Vector2i.ZERO
 
 
-## Fills every cell of `area` with floor. Cells that already have floor, of any
-## zone, count as unchanged; a cell the rules refuse (DoorPlacement.check()) is skipped.
-static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
+## Fills every cell of `area` with floor, paid from `wallet` through
+## BuildTransaction.commit_batch(): all or nothing, so when the wallet cannot
+## pay for every new tile none is laid. Cells that already have floor, of any
+## zone, count as unchanged and cost nothing; a cell the rules refuse
+## (DoorPlacement.check()) is skipped. A null wallet lays floor for free.
+static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int, wallet: Wallet = null) -> Outcome:
 	var outcome := Outcome.new()
 	# Painting floor never changes what DoorPlacement.check() reads, so
 	# checking every cell before the batch gives the same answers as checking
@@ -76,7 +90,7 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 			outcome._refuse(result)
 			# Never handed to apply_batch(), which logs the refusals it makes itself.
 			grid.edit_refused.emit(edit, result)
-	outcome._count(grid.apply_batch(edits))
+	_commit(outcome, grid, edits, wallet)
 	return outcome
 
 
@@ -87,8 +101,10 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int) -> Outcome:
 ## takes a wall near a cell's edge. Objects go first, so the floor in front of
 ## a removed desk is free to go. A cell with no floor and no object counts as
 ## unchanged; the floor under an object or a room stays, as it does for a
-## click, so a second drag takes the floor of a removed room.
-static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
+## click, so a second drag takes the floor of a removed room. Each removed
+## piece refunds its share of its saved price into `wallet`
+## (BuildTransaction.commit_batch()); a null wallet gets nothing.
+static func clear(grid: BuildGrid, area: Rect2i, wallet: Wallet = null) -> Outcome:
 	var outcome := Outcome.new()
 	outcome.removing = true
 	var cells := _cells(area)
@@ -122,8 +138,26 @@ static func clear(grid: BuildGrid, area: Rect2i) -> Outcome:
 			outcome.unchanged += 1
 			continue
 		edits.append(BuildEdit.remove_floor(cell))
-	outcome._count(grid.apply_batch(edits))
+	_commit(outcome, grid, edits, wallet)
 	return outcome
+
+
+## Commits `edits` through BuildTransaction and counts what they did. A
+## rectangle refused for money counts no tile as skipped: unaffordable_tiles
+## says why nothing was laid.
+static func _commit(
+	outcome: Outcome, grid: BuildGrid, edits: Array[BuildEdit], wallet: Wallet
+) -> void:
+	var before := wallet.balance if wallet != null else 0
+	var results := BuildTransaction.commit_batch(grid, edits, wallet)
+	if not results.is_empty() and results[0].reason == BuildResult.Reason.CANT_AFFORD:
+		# commit_batch() refuses money all or nothing, so nothing was applied.
+		outcome.unaffordable_tiles = edits.size()
+		outcome.unaffordable_cost = BuildTransaction.needed(grid, edits)
+		return
+	if wallet != null:
+		outcome.money = absi(wallet.balance - before)
+	outcome._count(results)
 
 
 static func _cells(area: Rect2i) -> Array[Vector2i]:
