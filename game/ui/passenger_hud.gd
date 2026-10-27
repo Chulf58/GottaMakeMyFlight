@@ -98,7 +98,7 @@ var _camera_was_taking_input := true
 func _ready() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "FlightPanel"
-	panel.add_theme_stylebox_override("panel", BuildMenu.panel_style())
+	panel.theme = BuildMenu.HUD_THEME
 	panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	panel.position = Vector2(-460.0, 12.0)
 	panel.custom_minimum_size = Vector2(440.0, 0.0)
@@ -106,7 +106,7 @@ func _ready() -> void:
 	var column := VBoxContainer.new()
 	panel.add_child(column)
 	for label in [_time_label, _flight_label, _counts_label]:
-		label.add_theme_font_size_override("font_size", 22)
+		label.theme_type_variation = &"HudLarge"
 		column.add_child(label)
 	var speeds := HBoxContainer.new()
 	column.add_child(speeds)
@@ -115,7 +115,7 @@ func _ready() -> void:
 		button.text = "Pause" if value == 0 else "%dx" % value
 		button.toggle_mode = true
 		button.custom_minimum_size = Vector2(72.0, 36.0)
-		BuildMenu.style_button(button)
+		button.focus_mode = Control.FOCUS_NONE
 		if value == 0:
 			button.pressed.connect(press_pause_toggle)
 		else:
@@ -124,8 +124,7 @@ func _ready() -> void:
 		_speed_buttons.append(button)
 	var hint := Label.new()
 	hint.text = "Space pause   Shift+1/2/3 speed"
-	hint.add_theme_font_size_override("font_size", 14)
-	hint.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))
+	hint.theme_type_variation = &"HudHint"
 	column.add_child(hint)
 	_result.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_result.position = Vector2(-460.0, RESULT_TOP)
@@ -134,9 +133,8 @@ func _ready() -> void:
 		flights.doors_closed.connect(_on_doors_closed)
 	_build_debug()
 	_follow_label.name = "FollowText"
-	_follow_label.add_theme_font_size_override("font_size", 22)
-	_follow_label.add_theme_constant_override("outline_size", 6)
-	_follow_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_follow_label.theme = BuildMenu.HUD_THEME
+	_follow_label.theme_type_variation = &"HudFloatText"
 	_follow_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_follow_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_follow_label)
@@ -386,6 +384,7 @@ func press_starter_terminal() -> void:
 func _build_debug() -> void:
 	var corner := VBoxContainer.new()
 	corner.name = "DebugCorner"
+	corner.theme = BuildMenu.HUD_THEME
 	corner.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	corner.offset_left = -16.0
 	corner.offset_right = -16.0
@@ -396,7 +395,6 @@ func _build_debug() -> void:
 	corner.alignment = BoxContainer.ALIGNMENT_END
 	add_child(corner)
 	_debug_panel.name = "DebugPanel"
-	_debug_panel.add_theme_stylebox_override("panel", BuildMenu.panel_style())
 	_debug_panel.visible = false
 	_debug_panel.custom_minimum_size = Vector2(DEBUG_W, 0.0)
 	corner.add_child(_debug_panel)
@@ -409,10 +407,10 @@ func _build_debug() -> void:
 	starter.text = "Starter terminal"
 	starter.pressed.connect(press_starter_terminal)
 	for button in [batch, starter]:
-		BuildMenu.style_button(button)
+		button.focus_mode = Control.FOCUS_NONE
 		column.add_child(button)
 	for label in [_seed_label, _status_label]:
-		label.add_theme_font_size_override("font_size", 14)
+		label.theme_type_variation = &"HudHint"
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		column.add_child(label)
 	var toggle := Button.new()
@@ -420,7 +418,7 @@ func _build_debug() -> void:
 	toggle.text = "Debug"
 	toggle.toggle_mode = true
 	toggle.size_flags_horizontal = Control.SIZE_SHRINK_END
-	BuildMenu.style_button(toggle)
+	toggle.focus_mode = Control.FOCUS_NONE
 	toggle.toggled.connect(set_debug_open)
 	corner.add_child(toggle)
 

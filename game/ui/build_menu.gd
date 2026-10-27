@@ -69,12 +69,10 @@ const THUMB_SIZE := 72.0
 const CATEGORY_SIZE := Vector2(100.0, 44.0)
 const ROTATE_SIZE := Vector2(72.0, 176.0)
 
-const PANEL_COLOR := Color(0.07, 0.08, 0.11, 0.86)
-const BUTTON_COLOR := Color(0.14, 0.16, 0.21, 0.95)
-const HOVER_COLOR := Color(0.2, 0.23, 0.3, 0.95)
-const SELECTED_COLOR := Color(0.16, 0.3, 0.48, 1.0)
-const BORDER_COLOR := Color(0.3, 0.33, 0.4)
-const SELECTED_BORDER := Color(1.0, 0.8, 0.3)
+## The one HUD theme (decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
+## A CanvasLayer does not pass a theme down, so every top-level HUD Control
+## under a CanvasLayer sets it itself.
+const HUD_THEME := preload("res://ui/hud_theme.tres")
 
 @export var build_mode: BuildMode
 
@@ -90,34 +88,6 @@ var _cards: Dictionary = {}
 var _status := Label.new()
 var _money := Label.new()
 var _room_panel := RoomPanel.new()
-
-
-static func panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PANEL_COLOR
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(4.0)
-	return style
-
-
-static func button_style(fill: Color, border: Color, width: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = border
-	style.set_border_width_all(width)
-	style.set_corner_radius_all(4)
-	style.set_content_margin_all(6.0)
-	return style
-
-
-## Gives a button the menu's look; pressed (selected) has a gold border.
-static func style_button(button: Button) -> void:
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_stylebox_override("normal", button_style(BUTTON_COLOR, BORDER_COLOR, 1))
-	button.add_theme_stylebox_override("hover", button_style(HOVER_COLOR, BORDER_COLOR, 1))
-	var selected := button_style(SELECTED_COLOR, SELECTED_BORDER, 3)
-	button.add_theme_stylebox_override("pressed", selected)
-	button.add_theme_stylebox_override("hover_pressed", selected)
 
 
 ## "3" for the key bound to a tool's action, or "" when the tool has none.
@@ -259,7 +229,8 @@ func _anchor_bottom_centre(control: Control, bottom: float) -> void:
 
 func _build_bar() -> void:
 	_bar.name = "CategoryBar"
-	_bar.add_theme_stylebox_override("panel", panel_style())
+	_bar.theme = HUD_THEME
+	_bar.theme_type_variation = &"HudBar"
 	_bar.custom_minimum_size = Vector2(0.0, BAR_H)
 	_anchor_bottom_centre(_bar, MARGIN)
 	add_child(_bar)
@@ -271,8 +242,7 @@ func _build_bar() -> void:
 		button.text = CATEGORIES[i]["name"]
 		button.toggle_mode = true
 		button.custom_minimum_size = CATEGORY_SIZE
-		button.add_theme_font_size_override("font_size", 17)
-		style_button(button)
+		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(press_category.bind(i))
 		row.add_child(button)
 		_category_buttons.append(button)
@@ -280,7 +250,7 @@ func _build_bar() -> void:
 
 func _build_tray() -> void:
 	_tray.name = "ItemTray"
-	_tray.add_theme_stylebox_override("panel", panel_style())
+	_tray.theme = HUD_THEME
 	_tray.custom_minimum_size = Vector2(0.0, TRAY_H)
 	_anchor_bottom_centre(_tray, MARGIN + BAR_H + GAP)
 	add_child(_tray)
@@ -308,7 +278,7 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	button.name = "Card%s" % item[1].capitalize()
 	button.toggle_mode = true
 	button.custom_minimum_size = CARD_SIZE
-	style_button(button)
+	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(press_card.bind(tool))
 	var column := _card_column(button)
 	var picture := TextureRect.new()
@@ -329,10 +299,10 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(picture)
 	var key := key_hint(tool)
-	_card_label(column, item[0], 15, Color.WHITE)
-	_card_label(column, _size_text(tool), 14, Color(0.75, 0.8, 0.88))
-	_card_label(column, PRICE_TEXT, 14, Color(0.6, 0.9, 0.6))
-	_card_label(column, "Key %s" % key if key != "" else "Click", 14, Color(1.0, 0.85, 0.45))
+	_card_label(column, item[0], &"HudCardName")
+	_card_label(column, _size_text(tool), &"HudHint")
+	_card_label(column, PRICE_TEXT, &"HudPrice")
+	_card_label(column, "Key %s" % key if key != "" else "Click", &"HudHint")
 	return button
 
 
@@ -340,12 +310,12 @@ func _make_rotate_card() -> Button:
 	var button := Button.new()
 	button.name = "CardRotate"
 	button.custom_minimum_size = ROTATE_SIZE
-	style_button(button)
+	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void: build_mode.rotate_facing())
 	var column := _card_column(button)
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	_card_label(column, "Rotate", 15, Color.WHITE)
-	_card_label(column, "Key R", 14, Color(1.0, 0.85, 0.45))
+	_card_label(column, "Rotate", &"HudCardName")
+	_card_label(column, "Key R", &"HudHint")
 	return button
 
 
@@ -362,13 +332,12 @@ func _card_column(button: Button) -> VBoxContainer:
 	return column
 
 
-func _card_label(column: VBoxContainer, text: String, font_size: int, color: Color) -> void:
+func _card_label(column: VBoxContainer, text: String, variation: StringName) -> void:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.clip_text = true
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
+	label.theme_type_variation = variation
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(label)
 
@@ -395,9 +364,8 @@ func _build_status() -> void:
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status.max_lines_visible = 2
-	_status.add_theme_font_size_override("font_size", 18)
-	_status.add_theme_constant_override("outline_size", 6)
-	_status.add_theme_color_override("font_outline_color", Color.BLACK)
+	_status.theme = HUD_THEME
+	_status.theme_type_variation = &"HudFloatText"
 	_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_status)
 
@@ -405,10 +373,10 @@ func _build_status() -> void:
 func _build_money() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "MoneySlot"
-	panel.add_theme_stylebox_override("panel", panel_style())
+	panel.theme = HUD_THEME
 	panel.position = Vector2(16.0, 12.0)
 	panel.custom_minimum_size = Vector2(220.0, 0.0)
 	add_child(panel)
 	_money.text = MONEY_TEXT
-	_money.add_theme_font_size_override("font_size", 22)
+	_money.theme_type_variation = &"HudMoney"
 	panel.add_child(_money)

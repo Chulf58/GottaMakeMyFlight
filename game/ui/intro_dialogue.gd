@@ -42,11 +42,6 @@ const TEXT_LEFT := 128.0
 const NAMEPLATE_SIZE := Vector2(380.0, 74.0)
 const GROUP_W := PORTRAIT_SIZE - PORTRAIT_OVERLAP + BOX_SIZE.x
 const DIM_COLOR := Color(0.03, 0.04, 0.06, 0.45)
-const PAPER_COLOR := Color(0.96, 0.93, 0.86)
-const INK_COLOR := Color(0.09, 0.1, 0.15)
-const FRAME_COLOR := Color(0.07, 0.08, 0.11)
-const GOLD_COLOR := Color(1.0, 0.8, 0.3)
-const NAME_COLOR := Color(0.98, 0.95, 0.88)
 
 ## Set when PassengerHud opens the intro; it stays set for the rest of the
 ## process, so a reloaded scene does not show it again.
@@ -72,6 +67,7 @@ static func should_show(already_shown: bool, in_current_scene: bool, playtest_on
 
 func _init() -> void:
 	name = "IntroDialogue"
+	theme = BuildMenu.HUD_THEME
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	mouse_force_pass_scroll_events = false
@@ -157,12 +153,12 @@ func continue_button() -> Button:
 
 func _build_box() -> void:
 	_box.name = "Box"
-	_box.add_theme_stylebox_override("panel", _frame_style())
+	_box.theme_type_variation = &"IntroBox"
 	_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_group.add_child(_box)
 	var inner := Panel.new()
 	inner.name = "GoldLine"
-	inner.add_theme_stylebox_override("panel", _gold_line_style())
+	inner.theme_type_variation = &"IntroGoldLine"
 	inner.set_anchors_preset(Control.PRESET_FULL_RECT)
 	inner.offset_left = 10.0
 	inner.offset_top = 10.0
@@ -173,10 +169,7 @@ func _build_box() -> void:
 	_body.name = "Body"
 	_body.text = BODY_TEXT
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_body.add_theme_font_override("font", _bold_font())
-	_body.add_theme_font_size_override("font_size", 25)
-	_body.add_theme_color_override("font_color", INK_COLOR)
-	_body.add_theme_constant_override("line_spacing", 2)
+	_body.theme_type_variation = &"IntroBody"
 	_body.set_anchors_preset(Control.PRESET_FULL_RECT)
 	# The portrait covers the box's left edge, so the text starts past it.
 	_body.offset_left = TEXT_LEFT
@@ -188,8 +181,6 @@ func _build_box() -> void:
 	_continue.name = "Continue"
 	_continue.text = CONTINUE_TEXT
 	_continue.focus_mode = Control.FOCUS_NONE
-	BuildMenu.style_button(_continue)
-	_continue.add_theme_font_size_override("font_size", 18)
 	_continue.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_continue.offset_left = -220.0
 	_continue.offset_top = -62.0
@@ -201,16 +192,7 @@ func _build_box() -> void:
 
 func _build_nameplate() -> void:
 	_nameplate.name = "Nameplate"
-	var style := StyleBoxFlat.new()
-	style.bg_color = FRAME_COLOR
-	style.set_border_width_all(3)
-	style.border_color = GOLD_COLOR
-	style.set_corner_radius_all(4)
-	style.content_margin_left = 20.0
-	style.content_margin_right = 20.0
-	style.content_margin_top = 6.0
-	style.content_margin_bottom = 6.0
-	_nameplate.add_theme_stylebox_override("panel", style)
+	_nameplate.theme_type_variation = &"IntroNameplate"
 	_nameplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_group.add_child(_nameplate)
 	var column := VBoxContainer.new()
@@ -219,15 +201,12 @@ func _build_nameplate() -> void:
 	var title := Label.new()
 	title.name = "Name"
 	title.text = NAME_TEXT
-	title.add_theme_font_override("font", _bold_font())
-	title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color", NAME_COLOR)
+	title.theme_type_variation = &"IntroName"
 	column.add_child(title)
 	var role := Label.new()
 	role.name = "Title"
 	role.text = TITLE_TEXT
-	role.add_theme_font_size_override("font_size", 16)
-	role.add_theme_color_override("font_color", GOLD_COLOR)
+	role.theme_type_variation = &"IntroRole"
 	column.add_child(role)
 
 
@@ -244,30 +223,3 @@ func _place() -> void:
 		roundf((screen.x - GROUP_W * group_scale) / 2.0),
 		roundf(screen.y - BOX_BOTTOM - PORTRAIT_SIZE * group_scale)
 	)
-
-
-func _frame_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PAPER_COLOR
-	style.set_border_width_all(8)
-	style.border_color = FRAME_COLOR
-	style.set_corner_radius_all(6)
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
-	style.shadow_size = 10
-	return style
-
-
-func _gold_line_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.draw_center = false
-	style.set_border_width_all(2)
-	style.border_color = GOLD_COLOR
-	style.set_corner_radius_all(3)
-	return style
-
-
-func _bold_font() -> FontVariation:
-	var font := FontVariation.new()
-	font.base_font = ThemeDB.fallback_font
-	font.variation_embolden = 0.7
-	return font
