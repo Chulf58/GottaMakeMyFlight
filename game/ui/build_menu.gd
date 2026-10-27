@@ -14,6 +14,15 @@ extends CanvasLayer
 ## grant_hold_s seconds (a later grant restarts the hold); status text that
 ## arrives meanwhile (the pointer moving over the grid changes it) waits and
 ## shows when the hold ends.
+##
+## Money (ruling building-costs-money-from-a-starting-budget-you-can-t-build):
+## the money slot shows the wallet BuildMode pays from and follows it; each
+## card shows its price and greys out while the wallet cannot pay it (it can
+## still be picked, so the cost line can show the shortfall); a cost line above
+## the status line shows what the tool, or the dragged Floor rectangle, would
+## cost and how short the wallet is. Prices stay in the price colour, never
+## red. With no wallet (BuildMode builds for free) the slot reads "--" and
+## every card says Free.
 
 const THUMBNAIL_DIR := "res://assets/ui/thumbnails/%s.png"
 const CATEGORIES := [
@@ -55,9 +64,10 @@ const ITEMS := {
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
 const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table"]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
-## The price slot until building costs money
-## (decision building-costs-money-from-a-starting-budget-you-can-t-build).
+## The price slot of a card with no price (a room), or of any card when
+## BuildMode has no wallet.
 const PRICE_TEXT := "Free"
+## The money slot when BuildMode has no wallet.
 const MONEY_TEXT := "Money  --"
 
 ## Geometry in pixels, measured up from the bottom edge.
@@ -66,6 +76,7 @@ const BAR_H := 52.0
 const GAP := 6.0
 const TRAY_H := 196.0
 const STATUS_H := 52.0
+const COST_H := 26.0
 ## Width of the centre column the tray and status line live in; PassengerHud
 ## keeps the follow text left of it.
 const COLUMN_W := 640.0
@@ -98,6 +109,14 @@ var _category_buttons: Array[Button] = []
 var _cards: Dictionary = {}
 var _status := Label.new()
 var _money := Label.new()
+var _cost := Label.new()
+## The wallet building is paid from, or null when the tools build for free.
+var _wallet: Wallet
+## Card tool -> its price Label.
+var _price_labels: Dictionary = {}
+## The last dragged rectangle priced (rectangle and balance) and its cost.
+var _rect_cost_key := ""
+var _rect_cost := 0
 var _room_panel := RoomPanel.new()
 ## True while the status line holds a grant message; the latest status text
 ## waits in _held_status until the hold ends.
@@ -119,6 +138,18 @@ static func key_hint(tool: BuildMode.Tool) -> String:
 	return ""
 
 
+## What a tool's card costs: the floor tile, one wall piece or the object.
+## 0 for a tool with no price (Remove, the cafe room, no tool).
+static func tool_price(tool: BuildMode.Tool) -> int:
+	if tool == BuildMode.Tool.FLOOR:
+		return PriceTable.price_of_floor()
+	if BuildMode.TOOL_WALL_KINDS.has(tool):
+		return PriceTable.price_of_wall(BuildMode.TOOL_WALL_KINDS[tool])
+	if BuildMode.TOOL_OBJECTS.has(tool):
+		return PriceTable.price_of_object(BuildMode.TOOL_OBJECTS[tool])
+	return 0
+
+
 ## The category a tool belongs to, or NO_CATEGORY.
 static func category_of(tool: BuildMode.Tool) -> int:
 	for i in CATEGORIES.size():
@@ -133,8 +164,10 @@ func _ready() -> void:
 	_build_tray()
 	_build_status()
 	_build_money()
+	_build_cost()
 	add_child(_room_panel)
 	if build_mode != null:
+		_wallet = build_mode.wallet()
 		_room_panel.watch(build_mode)
 		build_mode.tool_changed.connect(_on_tool_changed)
 		build_mode.status_changed.connect(_on_status_changed)
@@ -142,8 +175,15 @@ func _ready() -> void:
 		_on_tool_changed(build_mode.tool)
 	else:
 		_sync()
+	if _wallet != null:
+		_wallet.changed.connect(_on_balance_changed)
+	_refresh_money()
 	if rescue_grant != null:
 		rescue_grant.granted.connect(_on_granted)
+
+
+func _process(_delta: float) -> void:
+	refresh_preview()
 
 
 ## The open category, or NO_CATEGORY when the tray is closed.
@@ -200,6 +240,55 @@ func money_label() -> Label:
 	return _money
 
 
+func preview_label() -> Label:
+	return _cost
+
+
+## The text on a card's price slot: its price, or Free.
+func card_price_text(tool: BuildMode.Tool) -> String:
+	return (_price_labels[tool] as Label).text
+
+
+func card_price_label(tool: BuildMode.Tool) -> Label:
+	return _price_labels[tool]
+
+
+## False while the wallet cannot pay the card's price; true with no wallet.
+func is_card_affordable(tool: BuildMode.Tool) -> bool:
+	return _wallet == null or _wallet.can_afford(tool_price(tool))
+
+
+## What greys out a card the wallet cannot pay: the theme's HudCard
+## unaffordable_tint (hud_theme.tres).
+static func unaffordable_tint() -> Color:
+	return HUD_THEME.get_color("unaffordable_tint", "HudCard")
+
+
+## What the current tool would cost now, as "Cost 400" and, when the wallet is
+## short, "Cost 400   Short by 300"; "" when nothing costs money or there is no
+## wallet. The cost is the net of the plan BuildMode would apply under the
+## pointer (a door over a paid wall also refunds the wall, so it is cheaper than
+## its card), the card's price when the pointer is not over the grid, or for a
+## dragged Floor rectangle the unfloored tiles the rules accept, as
+## AreaDrag.fill_floor() charges.
+func preview_text() -> String:
+	if _wallet == null or build_mode == null:
+		return ""
+	var price := _preview_price()
+	if price.x <= 0:
+		return ""
+	var text := "Cost %d" % price.x
+	if price.y > _wallet.balance:
+		text += "   Short by %d" % (price.y - _wallet.balance)
+	return text
+
+
+## Sets the cost line from preview_text().
+func refresh_preview() -> void:
+	_cost.text = preview_text()
+	_cost.visible = _cost.text != ""
+
+
 func room_panel() -> RoomPanel:
 	return _room_panel
 
@@ -212,6 +301,64 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 		var index := category_of(tool)
 		_open = NO_CATEGORY if index == REMOVE_CATEGORY else index
 	_sync()
+
+
+func _on_balance_changed(_balance: int) -> void:
+	_refresh_money()
+
+
+## Writes the wallet into the money slot and each card's price slot, and greys
+## out the cards it cannot pay.
+func _refresh_money() -> void:
+	_money.text = MONEY_TEXT if _wallet == null else "Money  %d" % _wallet.balance
+	for tool in _price_labels:
+		var price := tool_price(tool)
+		var label: Label = _price_labels[tool]
+		label.text = PRICE_TEXT if _wallet == null or price == 0 else str(price)
+		_cards[tool].modulate = Color.WHITE if is_card_affordable(tool) else unaffordable_tint()
+	refresh_preview()
+
+
+## (what the placement costs net of refunds, what the wallet must hold for it).
+## A door over a paid wall costs its price less the wall's refund, but the
+## wallet must still hold the full door price (BuildTransaction.needed).
+func _preview_price() -> Vector2i:
+	var area := build_mode.dragged_area()
+	if build_mode.tool == BuildMode.Tool.FLOOR and area.has_area():
+		var rect_cost := _floor_rect_cost(area)
+		return Vector2i(rect_cost, rect_cost)
+	var edit := build_mode.hover_edit()
+	if edit == null:
+		var price := tool_price(build_mode.tool)
+		return Vector2i(price, price)
+	var plan := DoorPlacement.edits_for(build_mode.grid, edit)
+	var net := 0
+	for step in plan:
+		net += BuildTransaction.quote(build_mode.grid, step).net()
+	return Vector2i(maxi(0, net), maxi(0, BuildTransaction.needed(build_mode.grid, plan)))
+
+
+## A rectangle is priced once per rectangle and balance, not every frame.
+func _floor_rect_cost(area: Rect2i) -> int:
+	var key := "%s:%d" % [area, _wallet.balance]
+	if key != _rect_cost_key:
+		_rect_cost_key = key
+		_rect_cost = _price_floor_rect(area)
+	return _rect_cost
+
+
+func _price_floor_rect(area: Rect2i) -> int:
+	var grid := build_mode.grid
+	var edits: Array[BuildEdit] = []
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
+				continue
+			var edit := BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, BuildMode.TERMINAL_ZONE)
+			if DoorPlacement.check(grid, edit).ok:
+				edits.append(edit)
+	return maxi(0, BuildTransaction.needed(grid, edits))
 
 
 func _on_status_changed(text: String) -> void:
@@ -346,7 +493,7 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	var key := key_hint(tool)
 	_card_label(column, item[0], &"HudCardName")
 	_card_label(column, _size_text(tool), &"HudHint")
-	_card_label(column, PRICE_TEXT, &"HudPrice")
+	_price_labels[tool] = _card_label(column, PRICE_TEXT, &"HudPrice")
 	_card_label(column, "Key %s" % key if key != "" else "Click", &"HudHint")
 	return button
 
@@ -377,7 +524,7 @@ func _card_column(button: Button) -> VBoxContainer:
 	return column
 
 
-func _card_label(column: VBoxContainer, text: String, variation: StringName) -> void:
+func _card_label(column: VBoxContainer, text: String, variation: StringName) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -385,6 +532,7 @@ func _card_label(column: VBoxContainer, text: String, variation: StringName) -> 
 	label.theme_type_variation = variation
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(label)
+	return label
 
 
 func _size_text(tool: BuildMode.Tool) -> String:
@@ -413,6 +561,27 @@ func _build_status() -> void:
 	_status.theme_type_variation = &"HudFloatText"
 	_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_status)
+
+
+## The cost line, centred over the status line's box.
+func _build_cost() -> void:
+	_cost.name = "CostLine"
+	var bottom := MARGIN + BAR_H + GAP + TRAY_H + GAP + STATUS_H
+	_cost.anchor_left = 0.5
+	_cost.anchor_right = 0.5
+	_cost.anchor_top = 1.0
+	_cost.anchor_bottom = 1.0
+	_cost.offset_left = -COLUMN_W / 2.0
+	_cost.offset_right = COLUMN_W / 2.0
+	_cost.offset_top = -bottom - COST_H
+	_cost.offset_bottom = -bottom
+	_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cost.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_cost.theme = HUD_THEME
+	_cost.theme_type_variation = &"HudFloatText"
+	_cost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cost.visible = false
+	add_child(_cost)
 
 
 func _build_money() -> void:

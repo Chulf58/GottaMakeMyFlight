@@ -10,8 +10,9 @@ extends Node
 ## daily timetable: each day's occurrence is issued ahead of its first state
 ## (FlightTimetable), named "<contract>-d<day>", and pruned after it departs;
 ## queries on a pruned occurrence still answer from its immutable contract.
-## add_flight adds a one-off flight, which is never pruned; the bootstrap
-## flight GMF101 is one until a starter contract replaces it.
+## add_flight adds a one-off flight, which is never pruned. A new game starts
+## with the one STARTER_TERMS contract (add_starter_contract), so day one has
+## a flight; add_default_flight is the one-off GMF101 that tests still use.
 ##
 ## One tick: set the tick, issue due occurrences in time order, advance every
 ## flight, prune. PassengerSim binds after FlightSim, so it sees the result.
@@ -48,6 +49,20 @@ const DEFAULT_ID := "GMF101"
 ## Gates with a stand. Only gate C has one; more gates are a later slice.
 const GATES: Array[String] = ["C"]
 const DEFAULT_GATE := "C"
+## The contract a new game starts with (Economy 7/8). It departs at 07:38, so
+## its first occurrence starts at tick 0 (06:00 plus the 98 minutes from the
+## first state to pushback), the timing the one-off GMF101 had. Fee and size
+## sit inside the offer board's ranges.
+const STARTER_TERMS := {
+	"id": DEFAULT_ID,
+	"airline": "Gotta Air",
+	"destination": "Oslo",
+	"departure_minute": 458,
+	"gate": DEFAULT_GATE,
+	"plane_size": "small",
+	"booked_passengers": 12,
+	"fee_per_passenger": 25,
+}
 ## 2: occurrences are issued FlightTimetable.ISSUE_LEAD_TICKS (2400, was 1200)
 ## before their first state, which changes the saved next_day at some ticks.
 const SAVE_VERSION := 2
@@ -72,7 +87,7 @@ var _next_day: Dictionary = {}
 func _ready() -> void:
 	if clock != null:
 		bind_clock(clock)
-		add_default_flight()
+		add_starter_contract()
 
 
 ## Start ticks of every state for a flight whose SCHEDULED state begins at
@@ -88,7 +103,13 @@ func bind_clock(clock: SimClock) -> void:
 	clock.ticked.connect(on_tick)
 
 
-## Adds the one scheduled flight, GMF101, starting at tick 0.
+## Accepts STARTER_TERMS, the contract a new game starts with. False (with an
+## error) when it was already accepted or clashes with a flight.
+func add_starter_contract() -> bool:
+	return accept_contract(STARTER_TERMS)
+
+
+## Adds the one-off flight GMF101, starting at tick 0.
 func add_default_flight() -> bool:
 	return add_flight(DEFAULT_ID, schedule_starts(0))
 

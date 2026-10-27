@@ -26,6 +26,8 @@ const GATE_C := Vector2i(16, 0)
 ## A shell-edge cell more than the snap radius from any Toon door.
 const OFF_DOOR_CELL := Vector2i(12, 29)
 const ERROR_TEXT := "PlaytestHook test error"
+## The starter contract's booked passengers plus the one spawned too late.
+const PASSENGERS := FlightSim.STARTER_TERMS["booked_passengers"] + 1
 
 var _main: Node
 var _hook: Node
@@ -75,7 +77,7 @@ func before() -> void:
 	_run_to(CLEAR_CHECK_TICK)
 	_check()
 	_run_to(LATE_SPAWN_TICK)
-	_late_id = _sim.spawn_now(FlightSim.DEFAULT_ID)
+	_late_id = _sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
 	_run_to(END_TICK)
 	# Before the last check, whose flush puts the room events in the file.
 	_mark_rooms()
@@ -104,7 +106,7 @@ func test_the_log_file_has_every_event_type() -> void:
 		counts[event["type"]] = counts.get(event["type"], 0) + 1
 	for type in HOOK.EVENT_TYPES:
 		assert_int(counts.get(type, 0)).override_failure_message("no %s line" % type).is_greater(0)
-	assert_int(counts["passenger_made"] + counts["passenger_missed"]).is_equal(25)
+	assert_int(counts["passenger_made"] + counts["passenger_missed"]).is_equal(PASSENGERS)
 
 
 func test_a_door_away_from_the_toon_doors_is_logged_with_its_reason() -> void:
@@ -164,9 +166,9 @@ func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	assert_int(_snapshot["tick"]).is_equal(END_TICK)
 	assert_str(_snapshot["flight_state"]).is_equal("DEPARTED")
 	# Settled passengers are retired 200 ticks after their outcome; the durable
-	# totals still count all 25 and nobody is left in the list.
+	# totals still count all of them and nobody is left in the list.
 	var summary: Dictionary = _snapshot["passengers"]
-	assert_int(summary["made"] + summary["missed"]).is_equal(25)
+	assert_int(summary["made"] + summary["missed"]).is_equal(PASSENGERS)
 	assert_int(summary["total"]).is_equal(0)
 	assert_dict(summary["by_stage"]).is_empty()
 	var grid: Dictionary = _snapshot["grid"]

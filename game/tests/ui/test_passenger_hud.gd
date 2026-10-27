@@ -37,8 +37,9 @@ func test_counts_show_made_and_missed_after_doors_close() -> void:
 	_world.run_to(21)
 	_hud.refresh()
 	assert_str(_hud.counts_text()).is_equal("Made 0   Missed 1   In terminal 0")
-	assert_str(_hud.flight_text()).contains("GMF101")
-	assert_str(_hud.flight_text()).contains("Doors closed")
+	assert_str(DepartureList.text(_world.flights, _world.clock.tick)).contains(
+		"GMF101  Doors closed"
+	)
 
 
 func test_debug_button_spawns_300_and_shows_the_seed() -> void:
@@ -110,17 +111,18 @@ func test_a_refused_debug_batch_after_departure_raises_no_error() -> void:
 	assert_str(_hud.status_text()).contains("no flight is open")
 
 
-func test_the_flight_text_follows_the_flight_after_the_doors_close() -> void:
-	_world.run_to(21)
-	assert_str(_hud.flight_text()).is_equal("GMF101  Doors closed")
-	_world.run_to(85)
-	assert_str(_hud.flight_text()).is_equal("GMF101  Pushback")
-	_world.run_to(205)
-	assert_str(_hud.flight_text()).is_equal("GMF101  Taxiing")
-	_world.run_to(505)
-	assert_str(_hud.flight_text()).is_equal("GMF101  Taking off")
-	_world.run_to(705)
-	assert_str(_hud.flight_text()).is_equal("GMF101  Departed")
+func test_the_departures_follow_the_flight_after_the_doors_close() -> void:
+	var label := _hud.find_child("Departures", true, false) as Label
+	for step in [
+		[21, "Doors closed"],
+		[85, "Pushback"],
+		[205, "Taxiing"],
+		[505, "Taking off"],
+		[705, "Departed"]
+	]:
+		_world.run_to(step[0])
+		_hud.refresh()
+		assert_str(label.text).is_equal("06:04  GMF101  %s" % step[1])
 
 
 func test_speed_buttons_set_the_clock() -> void:
