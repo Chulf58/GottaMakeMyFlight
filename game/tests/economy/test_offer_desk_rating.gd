@@ -117,3 +117,24 @@ func test_higher_tiers_show_up_across_days_once_the_rating_is_high() -> void:
 		for offer in _desk.board.open_offers():
 			seen[OfferBoard.tier_of(offer["airline"])] = true
 	assert_array(seen.keys()).contains([0, 1, 2])
+
+
+func test_a_desk_in_a_scene_without_a_rating_says_so() -> void:
+	var bare := auto_free(OfferDesk.new()) as OfferDesk
+	bare.clock = _clock
+	bare.flights = auto_free(FlightSim.new()) as FlightSim
+	await (
+		assert_error(func() -> void: add_child(bare))
+		. is_push_error("OfferDesk: no rating set, so every day is drawn at the starter tier")
+	)
+	assert_int(bare.board.open_offers().size()).is_equal(OfferBoard.OFFERS_PER_DAY)
+
+
+func test_a_desk_in_a_scene_without_flights_says_so() -> void:
+	var bare := auto_free(OfferDesk.new()) as OfferDesk
+	bare.clock = _clock
+	bare.rating = _rating
+	await (
+		assert_error(func() -> void: add_child(bare))
+		. is_push_error("OfferDesk: no flights set, so no contract will ever end")
+	)

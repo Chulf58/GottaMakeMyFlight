@@ -34,6 +34,10 @@ func _ready() -> void:
 	if clock == null:
 		push_error("OfferDesk: no clock set, so no offers will ever be drawn")
 		return
+	if rating == null:
+		push_error("OfferDesk: no rating set, so every day is drawn at the starter tier")
+	if flights == null:
+		push_error("OfferDesk: no flights set, so no contract will ever end")
 	bind_clock(clock)
 
 

@@ -404,6 +404,18 @@ func _one_off_problem(id: String, starts: Array[int], gate: String) -> String:
 		if contract["gate"] == gate and not _ended.has(contract["id"]):
 			if FlightTimetable.contract_overlaps(contract, starts[0], starts[State.DEPARTED]):
 				return "would hold gate %s during contract %s" % [gate, contract["id"]]
+	return _ended_hold_problem(starts, gate)
+
+
+## An ended contract released its future days, not the occurrences it issued:
+## "" unless the gate time over `starts` is held by one of those still live.
+func _ended_hold_problem(starts: Array[int], gate: String) -> String:
+	for flight in _flights:
+		if flight["gate"] == gate and _ended.has(flight["contract"]):
+			var held: Array = flight["starts"]
+			var end: int = starts[State.DEPARTED]
+			if FlightTimetable.holds_overlap(starts[0], end, held[0], held[State.DEPARTED]):
+				return "would hold gate %s during %s" % [gate, flight["id"]]
 	return ""
 
 

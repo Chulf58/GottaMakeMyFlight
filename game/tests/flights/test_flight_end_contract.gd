@@ -184,3 +184,52 @@ func test_an_impossible_ended_state_is_refused_whole() -> void:
 		var target := auto_free(FlightSim.new()) as FlightSim
 		assert_bool(target.from_snapshot(bad)).override_failure_message(str(bad)).is_false()
 		assert_array(target.contract_ids()).is_empty()
+
+
+## An ended contract releases its future days, not the occurrences it issued:
+## a one-off over AM-d1's gate time is refused while AM-d1 is live.
+func test_a_one_off_cannot_take_the_gate_time_of_a_live_ended_occurrence() -> void:
+	var world := _ended_world()
+	var sim: FlightSim = world[1]
+	assert_array(sim.flight_ids()).contains(["AM-d1"])
+	var starts := FlightTimetable.starts_for(sim.contract_of("AM"), 1)
+	await (
+		assert_error(func() -> void: sim.add_flight("RAW", starts, "C"))
+		. is_push_error("FlightSim: flight 'RAW' would hold gate C during AM-d1")
+	)
+	assert_array(sim.flight_ids()).not_contains(["RAW"])
+
+
+func test_a_one_off_may_take_a_day_the_ended_contract_never_issues() -> void:
+	var world := _ended_world()
+	var sim: FlightSim = world[1]
+	_run(world[0], 40000)
+	assert_array(sim.flight_ids()).not_contains(["AM-d1"])
+	var starts := FlightTimetable.starts_for(sim.contract_of("AM"), 2)
+	assert_bool(sim.add_flight("RAW", starts, "C")).is_true()
+
+
+## The same refusal on load: a save with live AM-d1, ended AM and a one-off on
+## AM-d1's gate time cannot come from a run.
+func test_a_save_with_a_one_off_over_a_live_ended_occurrence_is_refused() -> void:
+	var data := _saved(_ended_world())
+	var occurrence: Dictionary = {}
+	for entry in data["flights"]:
+		if entry["id"] == "AM-d1":
+			occurrence = entry
+	assert_dict(occurrence).is_not_empty()
+	assert_bool(FlightSnapshot.load(data.duplicate(true)).has("error")).is_false()
+	var bad := data.duplicate(true)
+	var one_off := occurrence.duplicate(true)
+	one_off["id"] = "RAW"
+	one_off["contract"] = ""
+	one_off["day"] = -1
+	bad["flights"].append(one_off)
+	var loaded := FlightSnapshot.load(bad)
+	assert_str(loaded.get("error", "")).contains("flight RAW clashes with AM-d1 of an ended")
+	var target := auto_free(FlightSim.new()) as FlightSim
+	await (
+		assert_error(func() -> void: target.from_snapshot(bad))
+		. is_push_error("FlightSim.from_snapshot: %s" % loaded["error"])
+	)
+	assert_array(target.contract_ids()).is_empty()
