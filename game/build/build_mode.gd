@@ -179,7 +179,14 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	var point: Variant = _mouse_ground()
-	_update_ghost(point)
+	# Over a HUD Control the pointer is not over the world: no ghost, no hover.
+	# A rectangle in progress stays, hidden, until the pointer is back.
+	if not _pointer_over_ui():
+		_update_ghost(point)
+	elif _area.active:
+		_hide_area_ghost()
+	else:
+		_update_ghost(null)
 	update_room_focus(point)
 
 
@@ -216,7 +223,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_drag_side = -1
 	elif event is InputEventMouseMotion and (_area.active or _dragging):
 		var point: Variant = _mouse_ground()
-		if point == null:
+		if point == null or _pointer_over_ui():
 			return
 		if _area.active:
 			move_area(point)
@@ -485,7 +492,9 @@ func _update_ghost(point: Variant) -> void:
 	var edit: BuildEdit = null if point == null else edit_at(point)
 	if edit == null:
 		_ghost.visible = false
-		_hover_key = ""
+		if _hover_key != "":
+			_hover_key = ""
+			_show_status(null)
 		return
 	var key := _edit_key(edit)
 	if key == _hover_key:
@@ -494,6 +503,15 @@ func _update_ghost(point: Variant) -> void:
 	var result := check(edit)
 	_draw_ghost(edit, _valid_material if result.ok else _invalid_material)
 	_show_status(result)
+
+
+## Hides the rectangle's slab and size while the pointer is over the HUD; the
+## cleared hover key makes _draw_area() draw both again on the way back.
+func _hide_area_ghost() -> void:
+	_ghost.visible = false
+	if _hover_key != "":
+		_hover_key = ""
+		_set_status("")
 
 
 ## One tinted slab over the whole rectangle, with its size on the status line.

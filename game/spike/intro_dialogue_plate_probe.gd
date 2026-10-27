@@ -75,9 +75,15 @@ func _check_open() -> bool:
 	var image := root.get_texture().get_image()
 	var box: Rect2 = rects["box"]
 	var crop := box.merge(rects["portrait"]).merge(rects["nameplate"]).grow(12.0)
+	# The part rects are in layout space (the content scale); the image is in
+	# window pixels.
+	var factor := Vector2(image.get_size()) / root.get_visible_rect().size
+	var crop_px := Rect2(crop.position * factor, crop.size * factor)
+	crop_px = crop_px.intersection(Rect2(Vector2.ZERO, Vector2(image.get_size())))
+	print("PROBE crop layout=%s factor=%s pixels=%s" % [crop, factor, crop_px])
 	if not _save(image, "intro_open_1080p.png"):
 		return _invalid("the open plate did not save")
-	if not _save(image.get_region(Rect2i(crop)), "intro_open_crop.png"):
+	if not _save(image.get_region(Rect2i(crop_px)), "intro_open_crop.png"):
 		return _invalid("the crop plate did not save")
 	_press(KEY_SPACE, true)
 	_press(KEY_SPACE, false)
@@ -87,15 +93,17 @@ func _check_open() -> bool:
 
 
 func _clock_problem() -> String:
-	var size := root.get_visible_rect().size
+	# The window is checked by its pixels: the content scale (project.godot)
+	# gives the HUD a smaller layout size than the window.
+	var size := root.size
 	print(
 		(
-			"PROBE viewport=%s paused=%s tick=%d (at open %d)"
-			% [size, _clock.paused, _clock.tick, _tick_at_open]
+			"PROBE window=%s layout=%s paused=%s tick=%d (at open %d)"
+			% [size, root.get_visible_rect().size, _clock.paused, _clock.tick, _tick_at_open]
 		)
 	)
-	if Vector2i(size) != SCREEN:
-		return "the viewport is %s, not %s" % [size, SCREEN]
+	if size != SCREEN:
+		return "the window is %s, not %s" % [size, SCREEN]
 	if not _clock.paused or _clock.tick != _tick_at_open or _tick_at_open != 0:
 		return "the clock ran while the intro was open"
 	return ""
@@ -103,7 +111,8 @@ func _clock_problem() -> String:
 
 ## In frame with a margin, clear of the build tray, and not under another layer.
 func _layout_problem(rects: Dictionary) -> String:
-	var screen := Rect2(Vector2.ONE * MARGIN, Vector2(SCREEN) - Vector2.ONE * 2.0 * MARGIN)
+	var layout_size := root.get_visible_rect().size
+	var screen := Rect2(Vector2.ONE * MARGIN, layout_size - Vector2.ONE * 2.0 * MARGIN)
 	for part in rects:
 		var rect: Rect2 = rects[part]
 		print("PROBE in_frame %s rect=%s inside=%s" % [part, rect, screen.encloses(rect)])

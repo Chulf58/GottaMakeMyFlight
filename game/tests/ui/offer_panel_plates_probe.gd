@@ -110,7 +110,9 @@ func _run() -> void:
 	await _frames(3)
 	_hud.press_starter_terminal()
 	print("PROBE starter: %s" % _hud.status_text())
-	print("PROBE viewport=%s" % root.get_visible_rect().size)
+	print("PROBE window=%s layout=%s" % [root.size, root.get_visible_rect().size])
+	if root.size != Vector2i(1920, 1080):
+		_invalid("the window is %s, not 1920x1080" % root.size)
 	await _frames(10)
 
 	if _panel.is_open():
@@ -162,8 +164,11 @@ func _run() -> void:
 
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	await _frames(10)
-	if Vector2i(root.get_visible_rect().size) != Vector2i(1280, 720):
-		_invalid("e: the window is %s, not 1280x720" % root.get_visible_rect().size)
+	# The content scale (project.godot) keeps the layout size the same at every
+	# window size, so the window is checked by its pixels.
+	print("PROBE window=%s layout=%s" % [root.size, root.get_visible_rect().size])
+	if root.size != Vector2i(1280, 720):
+		_invalid("e: the window is %s, not 1280x720" % root.size)
 	await _plate("e_open_1280", _card_buttons())
 
 	print("PROBE done failed=%s" % _failed)
@@ -202,7 +207,8 @@ func _plate(label: String, buttons: Array) -> void:
 		var motion := InputEventMouseMotion.new()
 		motion.position = centre
 		motion.global_position = centre
-		root.push_input(motion)
+		# The centre is in layout space (the content scale), so push it as such.
+		root.push_input(motion, true)
 		await process_frame
 		await process_frame
 		var hit := root.gui_get_hovered_control()

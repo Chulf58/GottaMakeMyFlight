@@ -16,9 +16,10 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game -s res://tests/ui/build_hud_plates_probe.gd
 
-const OUT_REL := "res://../tools/blender/out/build_hud"
+const OUT_REL := "res://../tools/blender/out/hud-followups"
 const MARGIN_PX := 8.0
 const LIMIT_MS := 120000
+const OCCLUSION_STOP_M := 0.1
 const FOCUS_CELL := Vector2i(20, 10)
 const DRAG_FROM := Vector2i(24, 6)
 const DRAG_TO := Vector2i(29, 11)
@@ -88,7 +89,19 @@ func _run() -> void:
 	rig.distance = 42.0
 	rig.zoom(1.0)
 	await _frames(20)
-	print("PROBE viewport=%s" % root.get_visible_rect().size)
+	print("PROBE window=%s layout=%s" % [root.size, root.get_visible_rect().size])
+	if root.size != Vector2i(1920, 1080):
+		_invalid("the window is %s, not 1920x1080" % root.size)
+
+	# Control: a point one metre under the ground must report an occluder, or
+	# the occlusion check below could not tell anything.
+	var under := _mode.grid.cell_to_world(DRAG_FROM) + Vector3(0.0, -1.0, 0.0)
+	var control := _occluder(under)
+	print("PROBE occlusion control under %s: %s" % [under, control if control != "" else "clear"])
+	if control == "":
+		_invalid(
+			"the occlusion check found nothing between the camera and a point under the ground"
+		)
 
 	_mode.set_tool(BuildMode.Tool.NONE)
 	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
@@ -118,10 +131,15 @@ func _run() -> void:
 		_invalid("c: no refusal on the status line: '%s'" % _mode.status_text())
 	await _plate("c_checkin_refusal_1920", [_mode.grid.cell_to_world(REFUSED_CELL)])
 
+	await _ghost_over_hud()
+
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	await _frames(10)
-	if Vector2i(root.get_visible_rect().size) != Vector2i(1280, 720):
-		_invalid("d: the window is %s, not 1280x720" % root.get_visible_rect().size)
+	# The content scale (project.godot) keeps the layout size the same at every
+	# window size, so the window is checked by its pixels, not the visible rect.
+	print("PROBE window=%s layout=%s" % [root.size, root.get_visible_rect().size])
+	if root.size != Vector2i(1280, 720):
+		_invalid("d: the window is %s, not 1280x720" % root.size)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	_hud.set_debug_open(true)
 	_hud.press_debug_spawn()
@@ -136,6 +154,40 @@ func _run() -> void:
 	print("PROBE done failed=%s" % _failed)
 	_finish()
 	quit(1 if _failed else 0)
+
+
+## The build ghost shows over the world and hides while the real mouse is over
+## the category bar (control: the same tool a moment earlier, over the world).
+func _ghost_over_hud() -> void:
+	var ghost := _mode.get_node("Ghost") as Node3D
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
+	await _frames(6)
+	var world_hovered := root.gui_get_hovered_control()
+	var world_children := ghost.get_child_count()
+	print(
+		(
+			"PROBE ghost over world: hovered=%s visible=%s children=%d"
+			% [world_hovered, ghost.visible, world_children]
+		)
+	)
+	if world_hovered != null or not ghost.visible or world_children == 0:
+		_invalid("e: the control did not show a ghost over the world")
+	var on_bar := _menu.bar().get_global_rect().get_center()
+	_warp_screen(on_bar)
+	await _frames(6)
+	var bar_hovered := root.gui_get_hovered_control()
+	print(
+		(
+			"PROBE ghost over HUD at %s: hovered=%s visible=%s status='%s'"
+			% [on_bar, bar_hovered, ghost.visible, _mode.status_text()]
+		)
+	)
+	if bar_hovered == null or ghost.visible:
+		_invalid("e: the ghost is not hidden over the bar")
+	await _plate("e_ghost_over_bar_1920", [])
+	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
+	await _frames(4)
 
 
 func _plate(label: String, subjects: Array) -> void:
@@ -165,7 +217,9 @@ func _plate(label: String, subjects: Array) -> void:
 			if (panels[key] as Rect2).has_point(p):
 				covered = key
 		print("  SUBJECT %s -> %s in_frame=%s covered_by='%s'" % [point, p, in_frame, covered])
-		ok = ok and in_frame and covered == ""
+		var occluder := _occluder(point)
+		print("  OCCLUSION %s: %s" % [point, occluder if occluder != "" else "clear"])
+		ok = ok and in_frame and covered == "" and occluder == ""
 	if not ok:
 		_invalid("%s: a panel or subject check failed" % label)
 		return
@@ -175,6 +229,51 @@ func _plate(label: String, subjects: Array) -> void:
 	print("PLATE saved %s err=%d" % [path, err])
 	if err != OK:
 		_invalid("%s: the plate was not saved (error %d)" % [label, err])
+
+
+## Whether an opaque mesh lies between the camera and a world subject: the
+## first mesh triangle the camera-to-subject segment crosses, as a description
+## with its path, hit point and distance, or "" for a clear line. The game has
+## no colliders, so the test runs on mesh triangles (AABB first). The segment
+## stops OCCLUSION_STOP_M short of the subject so the ground it stands on does
+## not count; the build ghost's own meshes and transparent materials are skipped.
+func _occluder(subject: Vector3) -> String:
+	var from := _cam.global_position
+	var to := subject + (from - subject).normalized() * OCCLUSION_STOP_M
+	var ghost := _mode.get_node("Ghost")
+	var best := ""
+	var best_distance := INF
+	for node in _main.find_children("*", "MeshInstance3D", true, false):
+		var instance := node as MeshInstance3D
+		if instance.mesh == null or not instance.is_visible_in_tree() or ghost.is_ancestor_of(node):
+			continue
+		if _is_transparent(instance):
+			continue
+		var xform := instance.global_transform
+		if (xform * instance.get_aabb()).intersects_segment(from, to) == null:
+			continue
+		var inverse := xform.affine_inverse()
+		var hit: Dictionary = instance.mesh.generate_triangle_mesh().intersect_segment(
+			inverse * from, inverse * to
+		)
+		if hit.is_empty():
+			continue
+		var world_hit: Vector3 = xform * (hit["position"] as Vector3)
+		var distance := from.distance_to(world_hit)
+		if distance < best_distance:
+			best_distance = distance
+			best = (
+				"%s hit at %s, %.2f m from the camera" % [instance.get_path(), world_hit, distance]
+			)
+	return best
+
+
+func _is_transparent(instance: MeshInstance3D) -> bool:
+	var material := instance.material_override
+	if material == null and instance.mesh.get_surface_count() > 0:
+		material = instance.get_active_material(0)
+	var base := material as BaseMaterial3D
+	return base != null and base.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
 
 
 ## The on-screen rect of every visible HUD panel.
@@ -195,7 +294,17 @@ func _panels() -> Dictionary:
 
 
 func _warp(point: Vector3) -> void:
-	root.warp_mouse(_cam.unproject_position(point))
+	_warp_screen(_cam.unproject_position(point))
+
+
+## Moves the mouse and sends the motion event a real pointer would, which is
+## what updates the hovered Control.
+func _warp_screen(screen: Vector2) -> void:
+	root.warp_mouse(screen)
+	var motion := InputEventMouseMotion.new()
+	motion.position = screen
+	motion.global_position = screen
+	Input.parse_input_event(motion)
 
 
 func _invalid(why: String) -> void:

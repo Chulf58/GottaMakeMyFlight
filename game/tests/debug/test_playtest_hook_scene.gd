@@ -271,6 +271,8 @@ func test_a_disabled_hook_attaches_to_nothing_and_writes_nothing() -> void:
 	assert_bool(DirAccess.dir_exists_absolute(OFF_DIR)).is_false()
 
 
+## The mouse events are pushed in the viewport's own (content-scaled) coordinates,
+## so the recorded positions equal the pushed ones.
 ## Three mouse moves at once, a right-button release, and three key presses:
 ## F9 (bound to nothing), Space (read by the HUD) and R (build_rotate).
 func _push_input() -> void:
@@ -278,11 +280,11 @@ func _push_input() -> void:
 		var motion := InputEventMouseMotion.new()
 		motion.position = Vector2(x, 50.0)
 		motion.relative = Vector2(20.0, 0.0)
-		get_viewport().push_input(motion)
+		get_viewport().push_input(motion, true)
 	var button := InputEventMouseButton.new()
 	button.button_index = MOUSE_BUTTON_RIGHT
 	button.position = Vector2(140.0, 50.0)
-	get_viewport().push_input(button)
+	get_viewport().push_input(button, true)
 	for code in [KEY_F9, KEY_SPACE, KEY_R]:
 		var key := InputEventKey.new()
 		key.keycode = code
