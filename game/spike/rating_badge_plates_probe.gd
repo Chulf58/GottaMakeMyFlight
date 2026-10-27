@@ -163,6 +163,7 @@ func _tooltip_state() -> void:
 	var motion := InputEventMouseMotion.new()
 	motion.position = centre
 	motion.global_position = centre
+	root.warp_mouse(centre)
 	root.push_input(motion, true)
 	await _frames(TOOLTIP_FRAMES)
 	var hit := root.gui_get_hovered_control()
@@ -172,7 +173,9 @@ func _tooltip_state() -> void:
 	_expect(card.tooltip_text.contains("Made it: 75%"), "%s: tooltip lacks the made share" % name)
 	_check_layout(name)
 	await _save(name)
-	root.warp_mouse(Vector2(root.get_visible_rect().size.x / 2.0, root.get_visible_rect().size.y))
+	root.warp_mouse(
+		Vector2(root.get_visible_rect().size.x / 2.0, root.get_visible_rect().size.y - 4.0)
+	)
 	await _frames(3)
 
 
