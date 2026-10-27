@@ -82,6 +82,22 @@ func _process(_delta: float) -> bool:
 	return false
 
 
+## A new game has no staff: one hire per desk and scanner, as the staff
+## panel's Hire buttons do; the staff walk to the stations on their own.
+func _hire_staff() -> void:
+	var staff := _main.get_node("Staff") as StaffSim
+	for i in _sim.layout.desks.size():
+		staff.hire(StaffMember.Role.CHECKIN)
+	for i in _sim.layout.scanners.size():
+		staff.hire(StaffMember.Role.SECURITY)
+	print(
+		(
+			"PROBE hired checkin=%d security=%d"
+			% [staff.count(StaffMember.Role.CHECKIN), staff.count(StaffMember.Role.SECURITY)]
+		)
+	)
+
+
 func _setup() -> void:
 	var settlement := _main.get_node("Settlement")
 	var rescue := _main.get_node("RescueGrant")
@@ -96,6 +112,7 @@ func _setup() -> void:
 	rescue.granted.connect(_on_granted)
 	_sim.outcome.connect(_on_outcome)
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
+	_hire_staff()
 	var terms := {
 		"id": CONTRACT,
 		"airline": "Gotta Air",
