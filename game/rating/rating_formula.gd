@@ -17,6 +17,11 @@ const WARN_BELOW := 2.0
 ## An airline ends its contract after the warning day and two more low days,
 ## counted at day ends.
 const LOW_DAYS_TO_END := 3
+## The low-day count an airline's ending leaves behind (decision low-rating-
+## ends-one-airline-contract-per-low-day, user-ruled "One more per extra low
+## day"): one short of LOW_DAYS_TO_END, so each further low day ends one more
+## airline, and a day that is not low resets the count to 0 and stops the run.
+const LOW_DAYS_AFTER_END := LOW_DAYS_TO_END - 1
 ## Stars that unlock the first and second airline tier (the offer board's
 ## thresholds; below the first is tier 0).
 const TIER_STARS: Array[float] = [3.0, 4.0]

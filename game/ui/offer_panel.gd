@@ -11,6 +11,13 @@ extends CanvasLayer
 ## shows its reason on the sheet and the offer stays open; otherwise the board
 ## turns the offer into a contract. The sheet rebuilds whenever the board
 ## changes, so midnight expiry and the new day's offers appear on their own.
+##
+## While the desk's AirportRating is below RatingFormula.WARN_BELOW the airlines
+## warn (decision airport-rating-1-5-stars-over-a-rolling-3-days-mostly-made-o):
+## the sheet shows the warning with the low days left before contracts end, the
+## button turns coral and carries the same text as its tooltip, so it is seen
+## with the sheet closed. It follows the rating's changed signal and does not
+## rebuild the cards.
 
 const SHEET_W := 560.0
 const TOP := 12.0
@@ -27,9 +34,33 @@ var _button: Button
 var _sheet: PanelContainer
 var _cards: VBoxContainer
 var _message: Label
+var _warning: Label
+var _notice: Label
+var _offers_waiting := false
 var _card_nodes: Dictionary = {}
 var _accept_buttons: Dictionary = {}
 var _decline_buttons: Dictionary = {}
+
+
+## The airlines' warning once the rating is low: `low_days` day ends have
+## already been low, and contracts end at RatingFormula.LOW_DAYS_TO_END.
+static func warning_message(low_days: int) -> String:
+	var text := (
+		"Airlines are warning you: the airport rating is below %d stars."
+		% int(RatingFormula.WARN_BELOW)
+	)
+	var left := RatingFormula.LOW_DAYS_TO_END - low_days
+	if left > 0:
+		text += " Contracts end after %d more low %s." % [left, "day" if left == 1 else "days"]
+	return text
+
+
+## What the player is told when an airline leaves because the rating stayed low.
+static func ended_message(airline: String, destination: String) -> String:
+	var text := (
+		"%s to %s has ended its contract: the airport rating stayed low." % [airline, destination]
+	)
+	return text + " Flights already issued still fly; no new days will."
 
 
 ## The text lines of an offer's card: who and where, when and what plane, and
@@ -57,7 +88,11 @@ func _ready() -> void:
 	layer = 2
 	_build()
 	desk.board.changed.connect(_refresh)
+	if desk.rating != null:
+		desk.rating.changed.connect(_refresh_warning)
+	desk.contract_ended.connect(_on_contract_ended)
 	_refresh()
+	_refresh_warning()
 
 
 func is_open() -> bool:
@@ -104,6 +139,25 @@ func card_text(id: String) -> String:
 	return "\n".join(lines)
 
 
+## The airlines' warning shown on the sheet, "" when the rating is fine.
+func warning_text() -> String:
+	return _warning.text
+
+
+func warning_label() -> Label:
+	return _warning
+
+
+## The last airline to end its contract, shown under the warning until the
+## rating recovers, "" when none has (it is not saved, so a load clears it).
+func notice_text() -> String:
+	return _notice.text
+
+
+func notice_label() -> Label:
+	return _notice
+
+
 ## What the sheet says under the cards: the last accept's result or refusal,
 ## or EMPTY_TEXT when no offer is open.
 func message() -> String:
@@ -115,6 +169,8 @@ func _build() -> void:
 	_sheet = PanelContainer.new()
 	_cards = VBoxContainer.new()
 	_message = Label.new()
+	_warning = Label.new()
+	_notice = Label.new()
 	var column := VBoxContainer.new()
 	column.name = "OfferColumn"
 	column.theme = BuildMenu.HUD_THEME
@@ -145,6 +201,18 @@ func _build() -> void:
 	title.text = "Today's offers"
 	_style_label(title, &"HudTitle")
 	sheet_column.add_child(title)
+	_warning.name = "OfferWarning"
+	_warning.visible = false
+	_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_warning.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
+	_style_label(_warning, &"HudProblemText")
+	sheet_column.add_child(_warning)
+	_notice.name = "OfferNotice"
+	_notice.visible = false
+	_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_notice.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
+	_style_label(_notice, &"HudProblemText")
+	sheet_column.add_child(_notice)
 	_cards.name = "OfferCards"
 	_cards.add_theme_constant_override("separation", 6)
 	sheet_column.add_child(_cards)
@@ -171,9 +239,48 @@ func _refresh() -> void:
 	for offer in offers:
 		_add_card(offer)
 	_button.text = "Offers (%d)" % offers.size()
-	var waiting := offers.size() > 0
-	_button.theme_type_variation = &"HudButtonYellow" if waiting else &"HudButtonTeal"
+	_offers_waiting = offers.size() > 0
+	_style_button()
 	_say(EMPTY_TEXT if offers.is_empty() else "")
+
+
+## Shows or clears the airlines' warning from the rating, on the sheet and as
+## the button's tooltip.
+func _refresh_warning() -> void:
+	var rating := desk.rating
+	var text := ""
+	if rating != null and rating.warning():
+		text = warning_message(rating.low_days())
+	_warning.text = text
+	_warning.visible = text != ""
+	if text == "":
+		_set_notice("")
+	else:
+		_button.tooltip_text = text if _notice.text == "" else "%s\n%s" % [text, _notice.text]
+	_style_button()
+
+
+func _on_contract_ended(contract: Dictionary) -> void:
+	_set_notice(ended_message(contract["airline"], contract["destination"]))
+	_refresh_warning()
+
+
+## Shows `text` as the ending notice, hiding the line when it is empty.
+func _set_notice(text: String) -> void:
+	_notice.text = text
+	_notice.visible = text != ""
+	if text == "":
+		_button.tooltip_text = ""
+
+
+## Coral while the airlines warn, yellow while offers wait, else teal.
+func _style_button() -> void:
+	if _warning.visible:
+		_button.theme_type_variation = &"HudButtonCoral"
+	elif _offers_waiting:
+		_button.theme_type_variation = &"HudButtonYellow"
+	else:
+		_button.theme_type_variation = &"HudButtonTeal"
 
 
 func _add_card(offer: Dictionary) -> void:
