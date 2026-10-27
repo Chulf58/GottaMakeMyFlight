@@ -72,6 +72,8 @@ var apron_waypoints := PackedVector3Array(
 	]
 )
 var layout := TerminalLayout.new()
+## Cafe visits, their counter queues and seats (CafeSim).
+var cafes := CafeSim.new()
 var grid: BuildGrid
 ## The terminal shell whose Toon doors give the walks outside (ShellRoutes):
 ## from BuildMode in a scene; tests set it. Null: no road walk, and exits
@@ -119,6 +121,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	grid = with_grid
 	tick = clock.tick
 	layout.rebuild(grid)
+	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	clock.ticked.connect(on_tick)
 	grid.graph_changed.connect(_on_graph_changed)
 
@@ -175,6 +178,7 @@ func on_tick(new_tick: int) -> void:
 	stations.sort()
 	for station in stations:
 		_step_station(station)
+	cafes.step_counters()
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
@@ -276,9 +280,13 @@ func wait_ticks(p: Passenger) -> int:
 
 ## Where the passenger stands on this tick, in world space.
 func world_position(p: Passenger) -> Vector3:
-	var outside := p.stage >= Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
-	if outside and not p.apron.is_empty():
+	const OUTSIDE := [
+		Passenger.Stage.SPAWNED, Passenger.Stage.APRON, Passenger.Stage.MADE, Passenger.Stage.MISSED
+	]
+	if p.stage in OUTSIDE and not p.apron.is_empty():
 		return p.apron_position()
+	if p.stage in Passenger.CAFE_SEAT_STAGES:
+		return cafes.seat_position(p)
 	if p.stage in SEAT_STAGES and p.seat_cell != Passenger.NO_CELL:
 		var front := grid.cell_to_world(p.seat_front)
 		var seat := grid.cell_to_world(p.seat_cell)
@@ -407,6 +415,7 @@ func _finish(p: Passenger, made: bool) -> void:
 		p.missed_stuck = p.stuck
 	_leave_station(p)
 	_release_seat(p)
+	cafes.cleanup(p)
 	_set_stage(p, Passenger.Stage.MADE if made else Passenger.Stage.MISSED)
 	p.stuck = Passenger.Stuck.NONE
 	p.late = false
@@ -460,6 +469,8 @@ func _step_station(station: int) -> void:
 func _step(p: Passenger) -> void:
 	if p.needs_replan:
 		_replan(p)
+	if Passenger.in_cafe(p.stage):
+		cafes.step(p)
 	match p.stage:
 		Passenger.Stage.SPAWNED:
 			# In from the road first, when the entrance has one (ShellRoutes).
@@ -486,7 +497,14 @@ func _step(p: Passenger) -> void:
 		Passenger.Stage.STANDING_UP:
 			if tick - p.stage_tick >= STAND_UP_TICKS:
 				_release_seat(p)
-				_set_stage(p, Passenger.Stage.TO_EXIT)
+				# Up for the cafe, or (its visit dropped) back to the gate
+				# while boarding has not started.
+				if cafes.visit_of(p.id) != null:
+					cafes.depart(p)
+				elif tick < p.boarding_tick:
+					_set_stage(p, Passenger.Stage.TO_GATE)
+				else:
+					_set_stage(p, Passenger.Stage.TO_EXIT)
 		Passenger.Stage.TO_EXIT:
 			_to_exit(p)
 	_move(p)
@@ -518,6 +536,10 @@ func _beat(p: Passenger) -> void:
 	if p.late:
 		change -= 1
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
+	# A cafe guest walks: its visit's deadline keeps the margin for the rest.
+	if cafes.visit_of(p.id) != null:
+		p.late = false
+		return
 	# With no way to the plane the passenger is stuck, not late: it does not run.
 	var arrival := JourneyForecast.arrival_tick(self, p)
 	if arrival >= JourneyForecast.NEVER:
@@ -778,6 +800,7 @@ func _reconcile() -> void:
 			_release_seat(p)
 			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
 				_set_stage(p, Passenger.Stage.STANDING)
+	cafes.reconcile()
 
 
 func _seat_exists(p: Passenger) -> bool:
@@ -850,3 +873,4 @@ func _rederive() -> void:
 					_seat_claims[seat["key"]] = p.id
 		_made += int(p.stage == Passenger.Stage.MADE)
 		_missed += int(p.stage == Passenger.Stage.MISSED)
+	cafes.rederive()

@@ -33,6 +33,13 @@ const STAGE_TEXT := {
 	Passenger.Stage.STANDING_UP: "At the gate, but not boarded in time",
 	Passenger.Stage.TO_EXIT: "Left the gate too late for the plane",
 	Passenger.Stage.APRON: "Left the gate too late for the plane",
+	Passenger.Stage.CAFE_WALK: "Still at the cafe",
+	Passenger.Stage.CAFE_QUEUE: "Still at the cafe",
+	Passenger.Stage.CAFE_ORDER: "Still at the cafe",
+	Passenger.Stage.CAFE_TO_SEAT: "Still at the cafe",
+	Passenger.Stage.CAFE_SITTING_DOWN: "Still at the cafe",
+	Passenger.Stage.CAFE_SEATED: "Still at the cafe",
+	Passenger.Stage.CAFE_STANDING_UP: "Still at the cafe",
 }
 
 

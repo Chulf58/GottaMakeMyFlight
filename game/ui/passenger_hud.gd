@@ -53,6 +53,13 @@ const STAGE_TEXT := {
 	Passenger.Stage.APRON: "Walking to the plane",
 	Passenger.Stage.MADE: "Boarded",
 	Passenger.Stage.MISSED: "Missed the flight",
+	Passenger.Stage.CAFE_WALK: "Heading to the cafe",
+	Passenger.Stage.CAFE_QUEUE: "Queuing at the cafe",
+	Passenger.Stage.CAFE_ORDER: "Ordering a coffee",
+	Passenger.Stage.CAFE_TO_SEAT: "Taking a coffee to a seat",
+	Passenger.Stage.CAFE_SITTING_DOWN: "Sitting down at the cafe",
+	Passenger.Stage.CAFE_SEATED: "Having a coffee",
+	Passenger.Stage.CAFE_STANDING_UP: "Leaving the cafe",
 }
 
 @export var clock: SimClock
