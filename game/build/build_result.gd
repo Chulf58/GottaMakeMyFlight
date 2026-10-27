@@ -33,6 +33,9 @@ enum Reason {
 	CANT_AFFORD,
 	UNPRICED,
 	WALLET_FULL,
+	BELT_CROSSING,
+	BELT_WALL,
+	NOT_A_BELT,
 }
 
 const REASON_TEXT := {
@@ -64,6 +67,9 @@ const REASON_TEXT := {
 	Reason.CANT_AFFORD: "Not enough money",
 	Reason.UNPRICED: "This piece has no price",
 	Reason.WALLET_FULL: "The money is at its limit; the refund would not fit",
+	Reason.BELT_CROSSING: "Belts cannot cross; a belt joins at most three others",
+	Reason.BELT_WALL: "A wall is in the way of the belt",
+	Reason.NOT_A_BELT: "Only a belt piece changes shape",
 }
 
 var ok: bool = true

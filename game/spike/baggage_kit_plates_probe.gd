@@ -10,11 +10,16 @@ extends SceneTree
 ##
 ## Stages: six-axis orthographic plates at true scale beside a 1 m cube of each
 ## baggage piece and the check-in desk, each drawn by BuildView.make_object_node
-## (so a placeholder box would show); then a chain placed through BuildMode on a
-## real BuildGrid: check-in desk, feed behind it, three straight belts, a corner
-## and a belt end inside a walled 4 x 4 bag room with a cart, seen through the
-## real TycoonCamera at two headings close up, at 30 m and at 80 m, plus a close
-## shot of the desk-to-feed join. Every plate proves each subject is in frame
+## (so a placeholder box would show); then a layout built through BuildMode on
+## a real BuildGrid: two check-in desks side by side and one L line laid with the
+## Belt tool (decision baggage-belts-are-one-auto-shaping-belt-tool-one-baggage-
+## tray), which shapes itself into a corner behind the first desk, a merge
+## behind the second, a corner and an end inside a walled 4 x 4 bag room with a
+## cart, seen through the real TycoonCamera at two headings close up, at 30 m
+## and at 80 m, close on the desk-to-belt join and on the merge; a desk with its
+## back to a wall from both sides (its belt reaches 7 cm into the wall); and the
+## build menu with the Baggage tray open over the scene. Every plate proves each
+## subject is in frame
 ## (projected bounds inside the viewport with a margin) and that at least half
 ## of the camera rays aimed at its camera-facing opaque triangles hit it first,
 ## with every wall, post, floor tile and object as an occluder; otherwise it
@@ -43,23 +48,38 @@ const SIX_AXIS := {
 	"top": Vector3(0, 1, 0),
 	"bottom": Vector3(0, -1, 0),
 }
-const GRID := Vector2i(16, 12)
+const GRID := Vector2i(16, 13)
 ## The bag room's cells: x 10..13, y 2..5. Its south side is open at x 10 (the
 ## belt comes in) and x 11 (the way in).
 const ROOM := Rect2i(10, 2, 4, 4)
 const ROOM_GAPS := [10, 11]
-## [def, anchor, facing]: the chain of test_baggage_pieces, moved to this grid.
-const CHAIN := [
-	[&"checkin_desk", Vector2i(5, 8), 0],
-	[&"baggage_belt_feed", Vector2i(6, 7), 0],
-	[&"baggage_belt", Vector2i(7, 7), 1],
-	[&"baggage_belt", Vector2i(8, 7), 1],
-	[&"baggage_belt", Vector2i(9, 7), 1],
-	[&"baggage_belt_corner", Vector2i(10, 7), 2],
-	[&"baggage_belt", Vector2i(10, 6), 0],
-	[&"baggage_belt_end", Vector2i(10, 5), 0],
-	[&"baggage_cart", Vector2i(12, 3), 0],
-]
+## Two desks side by side, facing 0: their belt outlets point north into row 7.
+const DESKS: Array[Vector2i] = [Vector2i(3, 8), Vector2i(6, 8)]
+## The one Belt line: east along row 7 behind both desks, then north into the
+## bag room, where its dead end becomes the end.
+const LINE_FROM := Vector2i(4, 7)
+const LINE_TO := Vector2i(10, 5)
+const CART := Vector2i(12, 3)
+## A desk with a wall along its back edge.
+const WALL_DESK := Vector2i(2, 11)
+## The piece each belt cell must have taken.
+const SHAPES := {
+	Vector2i(4, 7): &"baggage_belt_corner",
+	Vector2i(5, 7): &"baggage_belt",
+	Vector2i(6, 7): &"baggage_belt",
+	Vector2i(7, 7): &"baggage_belt_feed",
+	Vector2i(8, 7): &"baggage_belt",
+	Vector2i(9, 7): &"baggage_belt",
+	Vector2i(10, 7): &"baggage_belt_corner",
+	Vector2i(10, 6): &"baggage_belt",
+	Vector2i(10, 5): &"baggage_belt_end",
+}
+## Two desks, nine belt cells, the cart and the wall desk.
+const OBJECT_COUNT := 13
+## Belt cells right behind a desk: from the front (yaw 0.7) the desk hides them,
+## as it would in the game, so there they only have to be in frame; the yaw 220
+## shot looks from behind and must see them.
+const BEHIND_DESKS := ["baggage_belt@5,7", "baggage_belt@6,7"]
 
 var _out_dir := ""
 var _failed := false
@@ -131,8 +151,8 @@ func _run() -> void:
 		site.add_child(mode)
 		var subjects := _build_chain(mode)
 		print("CHAIN subjects=%s" % [subjects.keys()])
-		if subjects.size() != CHAIN.size():
-			_invalid("view drew %d of %d chain objects" % [subjects.size(), CHAIN.size()])
+		if subjects.size() != OBJECT_COUNT:
+			_invalid("view drew %d of %d objects" % [subjects.size(), OBJECT_COUNT])
 		for id in PIECES:
 			var node := BuildView.make_object_node(BuildCatalog.get_def(id), null)
 			_report_materials(id, node)
@@ -329,6 +349,24 @@ func _prove_size(cam: Camera3D, label: String, points: Array[Vector3], min_px: f
 ## at least half must hit the subject first. Godot front faces wind clockwise, so a
 ## triangle faces the camera when its (b - a) x (c - a) normal points away from it.
 func _prove_visible(cam: Camera3D, label: String, subject: Node3D) -> bool:
+	var counted := _ray_hits(cam, subject)
+	var hits: int = counted[0]
+	var total: int = counted[1]
+	var ok: bool = hits * 2 >= total and hits > 0
+	print("VISIBLE %s ray_hits=%d/%d ok=%s" % [label, hits, counted[1], ok])
+	if not ok:
+		_invalid("%s: occluded or not hit (%d of %d rays)" % [label, hits, counted[1]])
+	return ok
+
+
+## The ray count of a subject allowed to be hidden in this shot, printed only.
+func _report_visible(cam: Camera3D, label: String, subject: Node3D) -> void:
+	var counted := _ray_hits(cam, subject)
+	print("VISIBLE %s ray_hits=%d/%d hidden_allowed" % [label, counted[0], counted[1]])
+
+
+## [rays that hit the subject first, rays cast].
+func _ray_hits(cam: Camera3D, subject: Node3D) -> Array:
 	var targets: Array[Vector3] = []
 	var ortho := cam.projection == Camera3D.PROJECTION_ORTHOGONAL
 	for mi in _meshes(subject):
@@ -353,11 +391,7 @@ func _prove_visible(cam: Camera3D, label: String, subject: Node3D) -> bool:
 		var hit := space.intersect_ray(q)
 		if hit and subject.is_ancestor_of(hit.collider):
 			hits += 1
-	var ok := hits * 2 >= targets.size() and hits > 0
-	print("VISIBLE %s ray_hits=%d/%d ok=%s" % [label, hits, targets.size(), ok])
-	if not ok:
-		_invalid("%s: occluded or not hit (%d of %d rays)" % [label, hits, targets.size()])
-	return ok
+	return [hits, targets.size()]
 
 
 ## The shader and outline of each surface: the toon look the importer binds.
@@ -520,21 +554,37 @@ func _build_chain(mode: BuildMode) -> Dictionary:
 			"wall"
 		)
 	_must(grid.apply(BuildEdit.place_room(ROOM, &"bag_room")), "bag room")
-	var ids := {}
-	for entry in CHAIN:
-		var result := grid.apply(BuildEdit.place_object(entry[0], entry[1], entry[2]))
-		_must(result, "%s at %s" % [entry[0], entry[1]])
-		ids[result.object_id] = "%s@%d,%d" % [entry[0], entry[1].x, entry[1].y]
-	# Each neighbouring pair of the line (desk to end) joins port to port.
-	var line: Array = ids.keys().slice(0, 8)
-	for i in line.size() - 1:
-		var joined := false
-		for mine in _ports(grid, line[i]):
-			for theirs in _ports(grid, line[i + 1]):
-				joined = joined or BuildCatalog.belt_ports_join(mine, theirs)
-		print("JOIN %s -> %s joined=%s" % [ids[line[i]], ids[line[i + 1]], joined])
-		if not joined:
-			_invalid("chain breaks between %s and %s" % [ids[line[i]], ids[line[i + 1]]])
+	for anchor in DESKS:
+		_must(grid.apply(BuildEdit.place_object(&"checkin_desk", anchor, 0)), "desk")
+	_must(grid.apply(BuildEdit.place_object(&"baggage_cart", CART, 0)), "cart")
+	for x in [WALL_DESK.x, WALL_DESK.x + 1]:
+		_must(
+			grid.apply(BuildEdit.place_wall(Vector2i(x, WALL_DESK.y), BuildGrid.Side.NORTH)), "wall"
+		)
+	_must(grid.apply(BuildEdit.place_object(&"checkin_desk", WALL_DESK, 0)), "wall desk")
+	# The Belt tool lays and shapes the line.
+	mode.set_tool(BuildMode.Tool.BELT)
+	_must(mode.lay_belt(LINE_FROM, LINE_TO), "belt line")
+	mode.set_tool(BuildMode.Tool.NONE)
+	for cell in SHAPES:
+		var record := grid.get_object(grid.object_at(cell))
+		var def := StringName(record.get("def", ""))
+		print("SHAPE %s at %s facing %s" % [def, cell, record.get("facing", -1)])
+		if def != SHAPES[cell]:
+			_invalid("%s took %s, expected %s" % [cell, def, SHAPES[cell]])
+	# Every link of every belt cell joins port to port.
+	var scene := BeltShaper.Scene.new(grid)
+	var joins := 0
+	for cell in SHAPES:
+		for step in scene.links(cell):
+			var joined := false
+			for mine in _ports(grid, grid.object_at(cell)):
+				for theirs in _ports(grid, grid.object_at(cell + step)):
+					joined = joined or BuildCatalog.belt_ports_join(mine, theirs)
+			joins += 1
+			if not joined:
+				_invalid("%s links %s but the ports do not join" % [cell, cell + step])
+	print("JOIN links=%d all_joined=%s" % [joins, not _failed])
 	var room_id := grid.room_at(Vector2i(11, 3))
 	var status := RoomRules.status(grid, room_id)
 	print("ROOM bag_room id=%d headline=%s" % [room_id, status.headline()])
@@ -565,28 +615,44 @@ func _plate_chain() -> void:
 	site.add_child(mode)
 	var subjects := _build_chain(mode)
 	print("CHAIN subjects=%s" % [subjects.keys()])
-	if subjects.size() != CHAIN.size():
-		_invalid("view drew %d of %d chain objects" % [subjects.size(), CHAIN.size()])
+	if subjects.size() != OBJECT_COUNT:
+		_invalid("view drew %d of %d objects" % [subjects.size(), OBJECT_COUNT])
 	var view: BuildView = mode.get_node("BuildView")
-	var cube := _cube(site, mode.grid.cell_to_world(Vector2i(8, 9)) + Vector3(0, 0.5, 0))
+	var cube := _cube(site, mode.grid.cell_to_world(Vector2i(8, 10)) + Vector3(0, 0.5, 0))
 	# The cube can hide a piece too.
 	_add_colliders(cube)
 	var rig: Node3D = load(CAMERA).instantiate()
 	site.add_child(rig)
 	var cam: Camera3D = rig.get_node("Camera3D")
 	cam.make_current()
-	var focus := mode.grid.cell_to_world(Vector2i(9, 5))
-	var join := mode.grid.cell_to_world(Vector2i(6, 7)) + Vector3(0, 0, 0.5)
-	var everything: Array = subjects.keys()
+	var grid := mode.grid
+	var focus := grid.cell_to_world(Vector2i(8, 6))
+	var join := grid.cell_to_world(Vector2i(4, 7)) + Vector3(0, 0, 0.5)
+	var merge := grid.cell_to_world(Vector2i(7, 7))
+	var wall_desk := grid.cell_to_world(WALL_DESK) + Vector3(0.5, 0, 0)
+	var wall_tag := "checkin_desk@%d,%d" % [WALL_DESK.x, WALL_DESK.y]
+	var layout: Array = subjects.keys().filter(func(k: String) -> bool: return k != wall_tag)
+	var desk_a := "checkin_desk@%d,%d" % [DESKS[0].x, DESKS[0].y]
+	var desk_b := "checkin_desk@%d,%d" % [DESKS[1].x, DESKS[1].y]
 	var shots := [
 		# [name, focus, distance m, yaw, subjects, least screen size px per subject]
-		["chain_close_yaw40", focus, 16.0, 0.7, everything, 20.0],
-		["chain_close_yaw220", focus, 16.0, 0.7 + PI, everything, 20.0],
-		["chain_join_close", join, 5.0, 0.7, ["checkin_desk@5,8", "baggage_belt_feed@6,7"], 60.0],
-		["chain_mid_30m", focus, 30.0, 0.7, everything, 8.0],
-		["chain_distance_80m", focus, 80.0, 0.7, everything, 3.0],
+		["chain_close_yaw40", focus, 16.0, 0.7, layout, 20.0],
+		["chain_close_yaw220", focus, 16.0, 0.7 + PI, layout, 20.0],
+		["chain_join_close", join, 5.0, 0.7, [desk_a, "baggage_belt_corner@4,7"], 60.0],
+		[
+			"chain_merge_close",
+			merge,
+			6.0,
+			0.7,
+			[desk_b, "baggage_belt_feed@7,7", "baggage_belt@6,7", "baggage_belt@8,7"],
+			40.0
+		],
+		["chain_mid_30m", focus, 30.0, 0.7, layout, 8.0],
+		["chain_distance_80m", focus, 80.0, 0.7, layout, 3.0],
+		["desk_wall_yaw40", wall_desk, 5.0, 0.7, [wall_tag], 60.0],
+		["desk_wall_yaw220", wall_desk, 5.0, 0.7 + PI, [wall_tag], 60.0],
 	]
-	var sheet := Image.create(1920, 720, false, Image.FORMAT_RGBA8)
+	var sheet := Image.create(1920, 1080, false, Image.FORMAT_RGBA8)
 	var slot := 0
 	for shot in shots:
 		_beat(shot[0])
@@ -610,6 +676,9 @@ func _plate_chain() -> void:
 			var corners := _corners(_aabb_of(subjects[key]))
 			ok = _prove_in_frame(cam, tag, corners) and ok
 			ok = _prove_size(cam, tag, corners, shot[5]) and ok
+			if shot[3] < PI and BEHIND_DESKS.has(key):
+				_report_visible(cam, tag, subjects[key])
+				continue
 			ok = _prove_visible(cam, tag, subjects[key]) and ok
 		if shot[0] == "chain_close_yaw40":
 			ok = _prove_in_frame(cam, "chain_close_yaw40/cube", _corners(_aabb_of(cube))) and ok
@@ -623,5 +692,50 @@ func _plate_chain() -> void:
 			_blit(sheet, img, slot, Vector2i(640, 360))
 		slot += 1
 	_save(sheet, "chain_contact_sheet.png")
+	await _plate_menu(mode, rig, focus)
 	site.queue_free()
+	await _frames(2)
+
+
+## The build menu over the layout with the Belt tool picked, so the Baggage
+## tray is open: each baggage card must hold a rendered thumbnail and the tray
+## must sit inside the window.
+func _plate_menu(mode: BuildMode, rig: Node3D, focus: Vector3) -> void:
+	_beat("menu")
+	rig.position = focus
+	rig.distance = 16.0
+	rig.yaw = 0.7
+	rig.zoom(1.0)
+	var menu := BuildMenu.new()
+	menu.build_mode = mode
+	root.add_child(menu)
+	mode.set_tool(BuildMode.Tool.BELT)
+	await _frames(8)
+	var ok := true
+	for tool in [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART]:
+		var card := menu.card(tool)
+		var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
+		var shown := card.is_visible_in_tree() and picture.texture != null
+		print(
+			(
+				"MENU card %s visible=%s thumbnail=%s rect=%s"
+				% [
+					BuildMenu.ITEMS[tool][0],
+					card.is_visible_in_tree(),
+					picture.texture.resource_path if picture.texture else "none",
+					card.get_global_rect()
+				]
+			)
+		)
+		ok = shown and ok
+	var screen := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
+	var tray := menu.tray().get_global_rect()
+	print("MENU tray=%s screen=%s open_category=%d" % [tray, screen, menu.open_category()])
+	ok = ok and screen.encloses(tray) and menu.is_tray_open()
+	if ok:
+		_save(await _grab(), "menu_baggage_tray.png")
+	else:
+		_invalid("menu: the Baggage tray or a thumbnail is not shown")
+	menu.queue_free()
+	mode.set_tool(BuildMode.Tool.NONE)
 	await _frames(2)

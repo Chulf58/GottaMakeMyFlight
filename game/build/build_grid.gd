@@ -282,6 +282,8 @@ func validate(edit: BuildEdit) -> BuildResult:
 				result = BuildResult.accepted()
 			else:
 				result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
+		BuildEdit.Kind.RESHAPE_BELT:
+			result = _check_reshape_belt(edit)
 	return result
 
 
@@ -355,6 +357,13 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_ROOM:
 			result.room_id = edit.room_id
 			_erase_room(edit.room_id)
+		BuildEdit.Kind.RESHAPE_BELT:
+			# Same id, anchor and saved price; every belt piece is one cell.
+			result.object_id = object_at(edit.cell)
+			var record: Dictionary = _objects[result.object_id]
+			record["def"] = edit.def_id
+			record["facing"] = edit.facing
+			result.dirty_cells = [edit.cell]
 	_emit_or_hold(func() -> void: edit_applied.emit(edit, result))
 	return result
 
@@ -555,8 +564,10 @@ func _load_cells(data: Dictionary) -> String:
 		if not check.ok:
 			return "object %d refused: %s" % [int(entry["id"]), check.reason_text()]
 		var paid := int(entry.get("paid", 0))
-		# No price history yet, so today's price caps what was paid.
-		if paid > 0 and paid > PriceTable.price_of_object(def_id):
+		# No price history yet, so today's price caps what was paid. A belt
+		# piece keeps its price when it changes shape (RESHAPE_BELT), so the
+		# dearest belt piece caps every belt piece.
+		if paid > 0 and paid > _paid_cap(def_id):
 			return "object %d paid %d, more than its price" % [int(entry["id"]), paid]
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
@@ -819,6 +830,31 @@ func _interaction_problem(spot: Vector2i, cells: Array[Vector2i]) -> BuildResult
 		if cells.has(spot + SIDE_STEP[side]) and _wall_value(spot, side) != 0:
 			return BuildResult.refused(BuildResult.Reason.INTERACTION_BLOCKED)
 	return null
+
+
+## The most a saved object of `def_id` can have been bought for.
+static func _paid_cap(def_id: StringName) -> int:
+	if not BuildCatalog.is_belt(def_id):
+		return PriceTable.price_of_object(def_id)
+	var cap := 0
+	for id in BuildCatalog.BELT_IDS:
+		cap = maxi(cap, PriceTable.price_of_object(id))
+	return cap
+
+
+## A belt piece on the cell can become any belt piece at any facing.
+func _check_reshape_belt(edit: BuildEdit) -> BuildResult:
+	if not in_bounds(edit.cell):
+		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
+	var object_id := object_at(edit.cell)
+	if object_id == 0:
+		return BuildResult.refused(BuildResult.Reason.NO_OBJECT)
+	var was_belt := BuildCatalog.is_belt(_objects[object_id]["def"])
+	if not was_belt or not BuildCatalog.is_belt(edit.def_id):
+		return BuildResult.refused(BuildResult.Reason.NOT_A_BELT, object_id)
+	if edit.facing < 0 or edit.facing > 3:
+		return BuildResult.refused(BuildResult.Reason.BAD_FACING)
+	return BuildResult.accepted()
 
 
 func _insert_object(

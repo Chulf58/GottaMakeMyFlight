@@ -39,21 +39,16 @@ const CATEGORIES := [
 		"name": "Shops",
 		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
 	},
-	# Baggage (decision baggage-rides-a-player-built-belt-from-check-in-to-a-
-	# bag-roo) takes two categories: six cards and Rotate do not fit one tray in
-	# COLUMN_W. The bag room groups like Shops, the room with what goes in it.
+	# One Belt tool shapes itself (decision baggage-belts-are-one-auto-shaping-
+	# belt-tool-one-baggage-tray), so baggage fits one tray.
 	{
-		"name": "Belts",
-		"tools": [BuildMode.Tool.BELT, BuildMode.Tool.BELT_CORNER, BuildMode.Tool.BELT_FEED],
-	},
-	{
-		"name": "Bag room",
-		"tools": [BuildMode.Tool.BAG_ROOM, BuildMode.Tool.BELT_END, BuildMode.Tool.CART],
+		"name": "Baggage",
+		"tools": [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART],
 	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray.
-const REMOVE_CATEGORY := 8
+const REMOVE_CATEGORY := 7
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -69,27 +64,14 @@ const ITEMS := {
 	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
 	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
 	BuildMode.Tool.TABLE: ["Table", "table", ""],
-	BuildMode.Tool.BELT: ["Belt", "belt", ""],
-	BuildMode.Tool.BELT_CORNER: ["Belt corner", "belt_corner", ""],
-	BuildMode.Tool.BELT_FEED: ["Belt merge", "belt_feed", ""],
+	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
-	BuildMode.Tool.BELT_END: ["Belt end", "belt_end", ""],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
 }
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := [
-	"cafe_room",
-	"counter",
-	"table",
-	"belt",
-	"belt_corner",
-	"belt_feed",
-	"bag_room",
-	"belt_end",
-	"cart",
-]
+const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table"]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
@@ -174,6 +156,8 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 		return PriceTable.price_of_wall(BuildMode.TOOL_WALL_KINDS[tool])
 	if BuildMode.TOOL_OBJECTS.has(tool):
 		return PriceTable.price_of_object(BuildMode.TOOL_OBJECTS[tool])
+	if tool == BuildMode.Tool.BELT:
+		return PriceTable.price_of_object(BuildMode.BELT_PRICE_ID)
 	return 0
 
 
@@ -365,6 +349,10 @@ func _preview_price() -> Vector2i:
 	if build_mode.tool == BuildMode.Tool.FLOOR and area.has_area():
 		var rect_cost := _floor_rect_cost(area)
 		return Vector2i(rect_cost, rect_cost)
+	if build_mode.tool == BuildMode.Tool.BELT:
+		# Only the cells with no belt yet are bought; reshaping is free.
+		var line_cost := build_mode.belt_cells_to_buy() * tool_price(BuildMode.Tool.BELT)
+		return Vector2i(line_cost, line_cost)
 	var edit := build_mode.hover_edit()
 	if edit == null or not _pointer_on_grid():
 		return Vector2i.ZERO

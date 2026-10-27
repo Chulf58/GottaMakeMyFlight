@@ -13,6 +13,7 @@ enum Kind {
 	REMOVE_OBJECT,
 	PLACE_ROOM,
 	REMOVE_ROOM,
+	RESHAPE_BELT,
 }
 
 var kind: Kind = Kind.PAINT_FLOOR
@@ -90,6 +91,16 @@ static func place_room(area: Rect2i, type: StringName) -> BuildEdit:
 static func remove_room(id: int) -> BuildEdit:
 	var edit := _make(Kind.REMOVE_ROOM, Vector2i.ZERO)
 	edit.room_id = id
+	return edit
+
+
+## Turns the belt piece on `at` into `id` (another belt piece) at `turn`,
+## keeping its object id, anchor and saved price: the shape a belt cell takes
+## from its neighbours (BeltShaper). Not a purchase; it costs nothing.
+static func reshape_belt(at: Vector2i, id: StringName, turn: int) -> BuildEdit:
+	var edit := _make(Kind.RESHAPE_BELT, at)
+	edit.def_id = id
+	edit.facing = turn
 	return edit
 
 
