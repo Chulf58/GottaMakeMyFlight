@@ -119,3 +119,35 @@ func test_totals_below_the_retained_settled_passengers_are_refused() -> void:
 	data["made"] = 0
 	data["missed"] = 0
 	assert_bool(_b.sim.from_snapshot(data)).is_false()
+
+
+func test_totals_larger_than_the_passengers_ever_spawned_are_refused() -> void:
+	_retired()
+	var good := _round_trip()
+	var spawned := int(good["next_id"]) - 1
+	assert_int(int(good["made"]) + int(good["missed"])).is_equal(spawned)
+	var cases := {
+		"excessive combined": {"made": int(good["made"]) + 1},
+		"excessive missed": {"missed": int(good["missed"]) + 1},
+		"excessive made alone": {"made": spawned + 1, "missed": 0},
+		"excessive missed alone": {"made": 0, "missed": spawned + 1},
+		"huge made": {"made": 1e15},
+		"huge both": {"made": 1e15, "missed": 1e15},
+	}
+	_b = PassengerTestWorld.reference_world()
+	var before := _b.signature()
+	for label: String in cases:
+		var bad := good.duplicate(true)
+		bad.merge(cases[label], true)
+		assert_bool(_b.sim.from_snapshot(bad)).override_failure_message(label).is_false()
+		assert_str(_b.signature()).is_equal(before)
+
+
+func test_an_empty_world_cannot_show_made_passengers() -> void:
+	_a = PassengerTestWorld.reference_world()
+	var data := _round_trip()
+	assert_int(int(data["next_id"])).is_equal(1)
+	data["made"] = 100
+	_b = PassengerTestWorld.reference_world()
+	assert_bool(_b.sim.from_snapshot(data)).is_false()
+	assert_int(_b.sim.made_count()).is_equal(0)

@@ -406,6 +406,13 @@ static func _totals_problem(data: Dictionary, results: Dictionary, passengers: A
 			return "flight %s has fewer missed results than missed passengers" % flight
 	if int(data["made"]) < made_sum or int(data["missed"]) < missed_sum:
 		return "the made or missed total is below the flights' results"
+	# Ids 1 to next_id - 1 were handed out, so no more passengers than that
+	# can have settled. Each total is bounded before the sum, so it cannot wrap.
+	var spawned := int(data["next_id"]) - 1
+	if int(data["made"]) > spawned or int(data["missed"]) > spawned:
+		return "the made or missed total is above the passengers ever spawned"
+	if int(data["made"]) > spawned - int(data["missed"]):
+		return "the made and missed totals together are above the passengers ever spawned"
 	return ""
 
 

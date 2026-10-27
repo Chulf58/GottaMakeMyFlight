@@ -153,6 +153,16 @@ func _process(_delta: float) -> void:
 	refresh()
 
 
+## A followed passenger the sim has retired is gone: clear the selection and
+## let the camera go, instead of following the frozen anchor.
+func _drop_retired_selection() -> void:
+	if views == null or views.selected_id == 0 or sim.get_passenger(views.selected_id) != null:
+		return
+	views.selected_id = 0
+	if camera != null:
+		camera.stop_follow()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
 	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
@@ -188,6 +198,7 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func refresh() -> void:
+	_drop_retired_selection()
 	# Summarized now, not when shown: the sim drops a flight's results when
 	# FlightSim prunes it, which can come before the open panel is dismissed.
 	for flight_id in _unreported:
