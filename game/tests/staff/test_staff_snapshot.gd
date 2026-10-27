@@ -92,6 +92,9 @@ func test_a_save_right_after_a_station_is_removed_loads() -> void:
 		_a.step()
 	var desk := _a.staff.get_member(id).station
 	assert_bool(_a.grid.apply(BuildEdit.remove_object(desk)).ok).is_true()
+	# PassengerSim.to_snapshot() refuses until the cafe is settled after an
+	# edit; this world has no cafe, so settling it changes nothing else.
+	_a.sim.cafes.reconcile()
 	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
 	assert_int(_b.staff.get_member(id).station).is_equal(0)
 	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))
@@ -139,6 +142,8 @@ func test_a_save_right_after_a_walking_member_is_built_over_loads() -> void:
 	assert_bool(m.needs_replan).is_false()
 	assert_array(m.path).is_empty()
 	assert_int(_a.staff.staff_at(desk)).is_equal(0)
+	# See test_a_save_right_after_a_station_is_removed_loads.
+	_a.sim.cafes.reconcile()
 	_b = StaffTestKit.load_world(StaffTestKit.save_text(_a))
 	assert_str(StaffTestKit.signature(_b.staff)).is_equal(StaffTestKit.signature(_a.staff))
 
