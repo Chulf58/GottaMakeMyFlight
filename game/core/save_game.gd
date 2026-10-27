@@ -12,15 +12,18 @@ extends Node
 ## and between a grid edit and the next tick (CafeSim.deadlines_stale), because
 ## only that tick's reconcile may settle the cafe; settling it at save time
 ## would run it a tick early. Each part's to_snapshot() only reads, so a
-## game saved and played on plays exactly like one never saved.
+## game saved and played on plays exactly like one never saved. The staff are
+## saved as they stand, a leaving member whose service just ended included;
+## the next tick's staff step lets it go, loaded or not.
 ## request_save() keeps a refused save waiting and retries it after each
 ## frame's clock advance (process_priority puts this node after SimClock).
 ##
 ## Loading checks everything before it changes anything. Each part is loaded
 ## into a staged copy built from the save alone (a grid, then a bare
 ## PassengerSim on that grid for the passengers and the staff, a fresh
-## instance for the rest), then the parts are checked against each other (one
-## tick for all). Only when every check passes are the live parts installed,
+## instance for the rest), then the parts are checked against each other: one
+## tick for all, and every id one part saves that names something in another
+## (SaveLinks). Only when every check passes are the live parts installed,
 ## in parts() order. A refused load leaves the world as it was.
 ##
 ## Files go to user://saves/ as JSON, written to a .tmp file and renamed over
@@ -86,7 +89,7 @@ func parts() -> Array[SavePart]:
 			"flights",
 			flights.to_snapshot,
 			SavePart.checked(
-				func(data: Dictionary) -> Dictionary: return FlightSnapshot.load(data)
+				"flights", func(data: Dictionary) -> Dictionary: return FlightSnapshot.load(data)
 			),
 			flights.from_snapshot
 		),
@@ -117,14 +120,14 @@ func parts() -> Array[SavePart]:
 		SavePart.new(
 			"offers",
 			offer_desk.board.to_snapshot,
-			SavePart.scratch(OfferBoard),
+			SavePart.scratch(OfferBoard, &"from_snapshot", "offers"),
 			offer_desk.board.from_snapshot
 		),
 		SavePart.new(
 			"rating",
 			rating.to_snapshot,
 			SavePart.checked(
-				func(data: Dictionary) -> Dictionary: return RatingSnapshot.load(data)
+				"rating", func(data: Dictionary) -> Dictionary: return RatingSnapshot.load(data)
 			),
 			_install_rating
 		),
@@ -314,7 +317,10 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 		var problem: String = part.stage.call(data[part.key], staged)
 		if problem != "":
 			return "%s: %s" % [part.key, problem]
-	return _ticks_problem(data)
+	var across := _ticks_problem(data)
+	if across == "":
+		across = SaveLinks.problem(data, staged)
+	return across
 
 
 ## Every part that keeps the tick was saved on the same one.
@@ -341,13 +347,15 @@ func _stage_grid(data: Dictionary, staged: Dictionary) -> String:
 	return ""
 
 
-## Checked against the staged grid; leaves a bare PassengerSim on that grid,
-## with its layout built, for the staff check.
+## Checked against the staged grid. Keeps the loaded passenger state and a
+## bare PassengerSim on that grid, with its layout built, for the staff check
+## and the links (SaveLinks).
 func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	var grid: BuildGrid = staged["grid"]
-	var problem := str(PassengerSnapshot.load(data, grid).get("error", ""))
-	if problem != "":
-		return problem
+	var loaded := PassengerSnapshot.load(data, grid)
+	if loaded.has("error"):
+		return str(loaded["error"])
+	staged["passengers"] = loaded
 	var sim := PassengerSim.new()
 	sim.grid = grid
 	sim.layout.rebuild(grid)

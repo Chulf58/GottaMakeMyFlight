@@ -34,7 +34,7 @@ func after() -> void:
 
 
 func after_test() -> void:
-	for path in [PATH, PATH + ".tmp", BAD]:
+	for path in [PATH, PATH + ".tmp", BAD, BLOCKED]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(path)
 	if DirAccess.dir_exists_absolute(BLOCKED + ".tmp"):
@@ -122,10 +122,15 @@ func test_a_save_file_replaces_the_old_one_through_a_temp_file() -> void:
 
 
 func test_a_file_that_cannot_be_written_is_shown_and_keeps_the_old_save() -> void:
+	const SENTINEL := "the old save, which must survive"
+	var old := FileAccess.open(BLOCKED, FileAccess.WRITE)
+	old.store_string(SENTINEL)
+	old.close()
+	# A folder where the .tmp file goes makes writing it fail.
 	assert_int(DirAccess.make_dir_recursive_absolute(BLOCKED + ".tmp")).is_equal(OK)
 	assert_bool(_save.save_to_file(BLOCKED)).is_false()
 	assert_str(_save.message_text()).starts_with("Save failed: cannot write")
-	assert_bool(FileAccess.file_exists(BLOCKED)).is_false()
+	assert_str(FileAccess.get_file_as_string(BLOCKED)).is_equal(SENTINEL)
 
 
 func test_a_missing_or_broken_file_is_shown_and_changes_nothing() -> void:

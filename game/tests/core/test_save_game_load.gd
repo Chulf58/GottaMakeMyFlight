@@ -138,11 +138,34 @@ func test_a_bad_top_level_shape_is_refused() -> void:
 	assert_bool(_save.load_world([])).is_false()
 
 
-func test_a_wallet_part_is_restored_and_never_credited_the_budget() -> void:
+## A load into a Finances that has not been set up yet, as in a scene whose
+## Finances has not entered the tree: only Finances.restore() marks it set up,
+## so entering the tree afterwards credits no starting budget on top. Loading
+## through wallet.from_snapshot() directly would leave it unset, and _ready()
+## would add PriceTable.STARTING_BUDGET.
+func test_a_wallet_part_goes_through_finances_restore_before_any_new_game() -> void:
 	var data := _taken()
-	var wallet := (_main.get_node("Finances") as Finances).wallet
 	data["wallet"]["balance"] = "1234"
-	assert_bool(_save.load_world(data)).is_true()
-	assert_int(wallet.balance).is_equal(1234)
-	assert_bool((_main.get_node("Finances") as Finances).start_new_game()).is_false()
-	assert_int(wallet.balance).is_equal(1234)
+	var live := _save.finances
+	var fresh := FinancesDouble.new()
+	_save.finances = fresh
+	var loaded := _save.load_world(data)
+	_save.finances = live
+	assert_bool(loaded).is_true()
+	assert_int(fresh.restores).is_equal(1)
+	assert_int(fresh.wallet.balance).is_equal(1234)
+	add_child(fresh)
+	assert_int(fresh.wallet.balance).is_equal(1234)
+	assert_bool(fresh.start_new_game()).is_false()
+	assert_int(fresh.wallet.balance).is_equal(1234)
+	fresh.free()
+
+
+## Finances that counts its restore() calls.
+class FinancesDouble:
+	extends Finances
+	var restores := 0
+
+	func restore(data: Dictionary) -> bool:
+		restores += 1
+		return super(data)

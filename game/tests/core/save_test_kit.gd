@@ -4,10 +4,9 @@ extends RefCounted
 ## world, open its airport through the real hiring path, step it, and read a
 ## checksum of everything that decides what happens next.
 ##
-## The checksum only reads. It hashes every SaveGame part's to_snapshot()
-## except the staff, whose to_snapshot() reconciles first, so the staff are
-## read member by member instead (StaffTestKit.signature). An unsaved control
-## world can therefore be checksummed on every tick and stay unsaved.
+## The checksum hashes every SaveGame part's to_snapshot(). Each of those only
+## reads (PassengerSim's and StaffSim's included), so an unsaved control world
+## can be checksummed on every tick and stay unsaved.
 
 const MAIN := "res://main/main.tscn"
 
@@ -49,8 +48,5 @@ static func save_game(main: Node) -> SaveGame:
 static func checksum(main: Node) -> String:
 	var data := {}
 	for part in save_game(main).parts():
-		if part.key != "staff":
-			data[part.key] = part.save.call()
-	var staff: StaffSim = main.get_node("Staff")
-	data["staff"] = [staff.member_ids(), StaffTestKit.signature(staff)]
+		data[part.key] = part.save.call()
 	return JSON.stringify(data, "", true, true).sha256_text()

@@ -146,8 +146,12 @@ func step() -> void:
 			_walk(m)
 
 
+## JSON-safe state for a save, exactly as the members stand: it only reads.
+## Edits reconcile at once (_on_graph_changed), so between ticks the one
+## thing left for the next step() is a leaving member whose service ended
+## during the tick. It is saved still leaving and on duty, and the loaded
+## game's next step() lets it go on the same tick as one never saved.
 func to_snapshot() -> Dictionary:
-	_reconcile()
 	return StaffSnapshot.save(_members, _next_id)
 
 
