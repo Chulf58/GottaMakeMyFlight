@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -16,6 +16,8 @@
 [ext_resource type="Script" path="res://build/view/shell_view.gd" id="14_shellview"]
 [ext_resource type="Resource" path="res://build/toon_terminal_shell.tres" id="15_shell"]
 [ext_resource type="Script" path="res://economy/finances.gd" id="16_finances"]
+[ext_resource type="Script" path="res://economy/offer_desk.gd" id="17_offerdesk"]
+[ext_resource type="Script" path="res://ui/offer_panel.gd" id="18_offerpanel"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -59,9 +61,10 @@ surface_material_override/0 = SubResource("Material_ground")
 bounds_half_extent = 260.0
 home_position = Vector3(-0.5, 0, -79.8)
 
-[node name="BuildMode" type="Node3D" parent="."]
+[node name="BuildMode" type="Node3D" parent="." node_paths=PackedStringArray("finances")]
 script = ExtResource("3_build")
 shell = ExtResource("15_shell")
+finances = NodePath("../Finances")
 
 [node name="Airside" type="Node3D" parent="."]
 script = ExtResource("6_airside")
@@ -155,3 +158,13 @@ build_mode = NodePath("../BuildMode")
 script = ExtResource("14_shellview")
 shell = NodePath("../Airside/Terminal")
 camera = NodePath("../TycoonCamera")
+
+[node name="OfferDesk" type="Node" parent="." node_paths=PackedStringArray("clock")]
+script = ExtResource("17_offerdesk")
+clock = NodePath("../SimClock")
+
+[node name="OfferPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("desk", "flights")]
+layer = 2
+script = ExtResource("18_offerpanel")
+desk = NodePath("../OfferDesk")
+flights = NodePath("../FlightSim")

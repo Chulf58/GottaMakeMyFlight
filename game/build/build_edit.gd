@@ -31,6 +31,11 @@ var object_id: int = 0
 var room_size := Vector2i.ZERO
 var room_type: StringName = &""
 var room_id: int = 0
+## For PAINT_FLOOR, PLACE_WALL and PLACE_OBJECT: the purchase price the grid
+## records on the piece, which a later removal refunds a share of.
+## BuildTransaction sets it; an edit applied without one (a debug layout, a
+## test) records 0, so removing that piece refunds nothing.
+var paid: int = 0
 
 
 static func paint_floor(at: Vector2i, type: int, zone: int) -> BuildEdit:
