@@ -99,6 +99,18 @@ func _signature(world: PassengerTestWorld) -> String:
 	return ";".join(parts)
 
 
+## The index in a save's cafe visits of the first guest in `stage`, or -1.
+func _visit_index(save: Dictionary, stage: Passenger.Stage) -> int:
+	var stages := {}
+	for record in save["passengers"]:
+		stages[int(record["id"])] = int(record["stage"])
+	var visits: Array = save["cafe"]["visits"]
+	for i in visits.size():
+		if stages[int(visits[i]["passenger"])] == stage:
+			return i
+	return -1
+
+
 func _stages_in_cafe(world: PassengerTestWorld) -> Dictionary:
 	var out := {}
 	for id in world.sim.cafes.visit_ids():
@@ -155,18 +167,106 @@ func test_a_visit_saved_after_it_was_paid_is_not_paid_again() -> void:
 	assert_int(_paid_b).is_equal(0)
 
 
+func test_a_save_between_an_edit_and_the_next_tick_loads_and_plays_on_alike() -> void:
+	_a = _cafe_world()
+	var p := _a.passenger(_a.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.hunger = HUNGRY
+	while p.stage != Passenger.Stage.CAFE_SEATED and _a.clock.tick < 1400:
+		_a.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SEATED)
+	# The guest's table goes while the game is paused, and the game is saved.
+	var table := int(_a.sim.cafes.visit_of(p.id).seat_key.split(":")[0])
+	assert_bool(_a.grid.apply(BuildEdit.remove_object(table)).ok).is_true()
+	assert_bool(_a.sim.cafes.deadlines_stale).is_true()
+	_b = _load(_save(_a))
+	assert_object(_b.sim.cafes.visit_of(p.id)).is_not_null()
+	_a.step()
+	_b.step()
+	# The next tick sees the seat gone: the guest gets up and pays the short share.
+	for world in [_a, _b]:
+		assert_int(world.passenger(p.id).stage).is_equal(Passenger.Stage.CAFE_STANDING_UP)
+		assert_int(world.sim.cafes.visit_of(p.id).outcome).is_equal(CafeVisit.Outcome.SHORT)
+	assert_str(_signature(_b)).is_equal(_signature(_a))
+	for i in PassengerSim.STAND_UP_TICKS + 1:
+		_a.step()
+		_b.step()
+	assert_object(_b.sim.cafes.visit_of(p.id)).is_null()
+	assert_str(_signature(_b)).is_equal(_signature(_a))
+
+
 func test_bad_cafe_state_is_rejected_whole() -> void:
 	_a = _cafe_world()
-	for i in 4:
+	for i in 10:
 		_a.passenger(_a.sim.spawn_now(PassengerTestWorld.FLIGHT)).hunger = HUNGRY
-	while _a.sim.cafes.visit_ids().size() < 2 and _a.clock.tick < 900:
+	# A moment with one guest seated (served) and one still queuing.
+	while _a.clock.tick < 900:
 		_a.step()
-	_a.step()
+		var stages := _stages_in_cafe(_a)
+		if stages.has(Passenger.Stage.CAFE_SEATED) and stages.has(Passenger.Stage.CAFE_QUEUE):
+			break
 	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
 	var visits: Array = good["cafe"]["visits"]
 	assert_int(visits.size()).is_greater_equal(2)
 	var guest := int(visits[0]["passenger"])
+	var queuing := _visit_index(good, Passenger.Stage.CAFE_QUEUE)
+	var seated := _visit_index(good, Passenger.Stage.CAFE_SEATED)
+	assert_int(queuing).is_greater_equal(0)
+	assert_int(seated).is_greater_equal(0)
 	var bad_cases: Array = []
+	var other_room := 0
+	var other_counter := 0
+	var queued_visit: Dictionary = visits[queuing]
+	for entry in good["cafe"]["queues"]:
+		if int(entry["room"]) != int(queued_visit["room"]):
+			other_room = int(entry["room"])
+			other_counter = int(entry["counter"])
+	for change in [
+		["room", -1],
+		["room", 999],
+		["counter", 0],
+		["counter", 999],
+		["seat_key", ""],
+		["seat_key", "999:0"],
+	]:
+		var bad := good.duplicate(true)
+		bad["cafe"]["visits"][queuing][change[0]] = change[1]
+		bad_cases.append(["queuing guest " + str(change), bad])
+	var settled_queuing := good.duplicate(true)
+	settled_queuing["cafe"]["visits"][queuing]["settled"] = true
+	settled_queuing["cafe"]["visits"][queuing]["outcome"] = CafeVisit.Outcome.COMPLETE
+	settled_queuing["cafe"]["visits"][queuing]["amount"] = 15
+	bad_cases.append(["unserved queuing guest settled COMPLETE", settled_queuing])
+	var short_queuing := good.duplicate(true)
+	short_queuing["cafe"]["visits"][queuing]["outcome"] = CafeVisit.Outcome.SHORT
+	bad_cases.append(["unserved queuing guest with an outcome", short_queuing])
+	var unpaid_amount := good.duplicate(true)
+	unpaid_amount["cafe"]["visits"][seated]["amount"] = 12
+	bad_cases.append(["an amount on a visit not settled", unpaid_amount])
+	var seated_done := good.duplicate(true)
+	seated_done["cafe"]["visits"][seated]["outcome"] = CafeVisit.Outcome.COMPLETE
+	seated_done["cafe"]["visits"][seated]["settled"] = true
+	bad_cases.append(["seated guest already settled", seated_done])
+	var wrong_side := good.duplicate(true)
+	var side: int = wrong_side["cafe"]["visits"][queuing]["resume_stage"]
+	wrong_side["cafe"]["visits"][queuing]["resume_stage"] = (
+		Passenger.Stage.TO_GATE
+		if side == Passenger.Stage.TO_SECURITY
+		else Passenger.Stage.TO_SECURITY
+	)
+	bad_cases.append(["resumes on the wrong side of security", wrong_side])
+	for entry_change in [["room", 999], ["room", other_room], ["counter", -3]]:
+		var bad := good.duplicate(true)
+		for entry in bad["cafe"]["queues"]:
+			if (entry["lane"] as Array).has(queued_visit["passenger"]):
+				entry[entry_change[0]] = entry_change[1]
+		bad_cases.append(["queue " + str(entry_change), bad])
+	if other_counter != 0:
+		var swapped := good.duplicate(true)
+		swapped["cafe"]["visits"][queuing]["counter"] = other_counter
+		for entry in swapped["cafe"]["queues"]:
+			if (entry["lane"] as Array).has(queued_visit["passenger"]):
+				entry["counter"] = other_counter
+		bad_cases.append(["queuing at the other cafe's counter", swapped])
 	var no_cafe := good.duplicate(true)
 	no_cafe.erase("cafe")
 	bad_cases.append(["no cafe key", no_cafe])

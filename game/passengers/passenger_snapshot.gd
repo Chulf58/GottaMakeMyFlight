@@ -122,7 +122,7 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
 		ids[p.id] = p
 		passengers.append(p)
-	var cafe := CafeSnapshot.load(data["cafe"], ids)
+	var cafe := CafeSnapshot.load(data["cafe"], ids, grid)
 	if cafe.has("error"):
 		return cafe
 	out["cafe"] = cafe
