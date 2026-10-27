@@ -6,9 +6,10 @@ extends Node3D
 ## placing its passengers. It reads the sim and never writes to it.
 ##
 ## The sign is a billboard drawn over the world (no depth test), like the
-## thought bubbles, and keeps one screen size at every zoom. The caption sits
-## above the sign so it does not cover the lane it describes. Sizes are for
-## the camera's field of view and the view's height in pixels.
+## thought bubbles, and keeps one screen size at every zoom and UI scale. The
+## caption sits above the sign so it does not cover the lane it describes.
+## Sizes are screen pixels, for the camera's field of view and the rendered
+## view's height.
 
 const SIGN_LIFT_M := 0.6
 const SIGN_PX := 56.0
@@ -66,9 +67,15 @@ func sync() -> void:
 func draw() -> void:
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var fov := camera.fov if camera != null else FALLBACK_FOV
+	## The viewport's output height in screen pixels. The visible rect alone is the
+	## layout size, which the content scale (project.godot) makes smaller than
+	## the screen, so it is scaled back by the stretch transform. (The viewport
+	## texture's get_size() is no help: under the content scale it reports
+	## neither size.)
 	var height := FALLBACK_HEIGHT
 	if is_inside_tree():
-		height = get_viewport().get_visible_rect().size.y
+		var view := get_viewport()
+		height = view.get_visible_rect().size.y * view.get_stretch_transform().get_scale().y
 	## World units per screen pixel at one metre: a fixed-size sprite is drawn
 	## as if it stood one metre from the camera.
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
