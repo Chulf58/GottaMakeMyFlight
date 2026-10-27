@@ -32,8 +32,9 @@ extends RefCounted
 ## carries the one terminal zone), so the sides are worked out this way.
 ##
 ## The leg then takes the cheapest of: a standing desk, scanner or exit the
-## search reached, or a new one, priced as its object plus the floor its footprint (and a scanner's exit
-## cell, or a door's own cell) still needs. A new piece goes where the
+## search reached, or a new one, priced as its object plus the floor its
+## footprint (and a scanner's exit cell, or a door's own cell) still needs. A
+## new piece goes where the
 ## search reaches first, in its settle order, trying facings 0 to 3, so the
 ## same grid always gives the same plan. With no entrance, every place an
 ## entrance may stand (a landside Toon door in a shell, else any edge cell
