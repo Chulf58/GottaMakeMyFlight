@@ -5,13 +5,15 @@ extends SceneTree
 ## events-do-not-move-the-game-s.)
 ##
 ## At UI scale 1.0 and 1.25 it boots main.tscn, warps the real mouse
-## (Viewport.warp_mouse) onto the staff panel's check-in Hire button centre and
-## queues a mouse motion, then a left press and release through
-## Input.parse_input_event at that point, in window pixels (the viewport point
-## through Window.get_final_transform). It prints the control under the pointer,
-## the hire count before and after, and the BuildMode edits and refusals the
-## click caused (the floor tool is armed, so a leaked click would show). The
-## same for the 3x speed button (clock speed before and after). A control click
+## (Viewport.warp_mouse) onto the bar's Staff button, then onto the staff
+## card's check-in Hire button centre, and queues a mouse motion, then a left
+## press and release through Input.parse_input_event at that point, in window
+## pixels (the viewport point through Window.get_final_transform). It prints the
+## control under the pointer, the hire count before and after, and the
+## BuildMode edits and refusals the click caused. The card opens from the Staff
+## button and an armed tool closes it, so those two clicks are made with no
+## tool; the floor tool is armed after, for the 3x speed button (clock speed
+## before and after; a leaked click would show). A control click
 ## on empty world with the floor tool armed must produce a recorded edit or
 ## refusal: it proves the instrument sees BuildMode. Pass values are positives
 ## (the hire count rose, the speed changed, the control click was recorded);
@@ -76,8 +78,21 @@ func _at_scale(scale_value: float) -> void:
 	await _frames(6)
 	var size := root.get_visible_rect().size
 	print("PROBE ui_scale=%.2f viewport=%s" % [root.content_scale_factor, size])
-	_mode.set_tool(BuildMode.Tool.FLOOR)
+	# The hiring card opens from the bar's Staff button and an armed tool closes
+	# it, so the Hire click is made with no tool; the floor tool is armed after.
+	_mode.set_tool(BuildMode.Tool.NONE)
+	var menu := _main.get_node("BuildMenu") as BuildMenu
 	var panel := _main.get_node("StaffPanel") as StaffPanel
+	var opened := await _click(menu.staff_button, "staff button")
+	print(
+		(
+			"PROBE scale=%.2f staff_button staff_open=%s card_visible=%s build_events=%d"
+			% [scale_value, menu.staff_open, panel.card().is_visible_in_tree(), opened]
+		)
+	)
+	_expect(menu.staff_open, "the Staff button click did not open the staff card")
+	_expect(panel.card().is_visible_in_tree(), "the staff card is not visible after its button")
+	_expect(opened == 0, "the Staff button click reached BuildMode (%d events)" % opened)
 	var hire := panel.hire_button(StaffMember.Role.CHECKIN)
 	var before := _staff.count(StaffMember.Role.CHECKIN)
 	var events := await _click(hire, "hire")
@@ -90,6 +105,7 @@ func _at_scale(scale_value: float) -> void:
 	)
 	_expect(after == before + 1, "the Hire click did not hire (%d -> %d)" % [before, after])
 	_expect(events == 0, "the Hire click reached BuildMode (%d events)" % events)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
 	var speed_button := _find_button("3x")
 	_clock.set_speed(1)
 	_clock.set_paused(false)

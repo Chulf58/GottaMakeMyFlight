@@ -2,7 +2,9 @@ extends SceneTree
 ## Windowed plates for the queue-full sign. Boots the real main scene with a
 ## new random sim seed (printed), builds ReferenceTerminal through the HUD's
 ## starter-terminal button, removes its east check-in desk so the one desk left
-## overflows (as in the first playtest), and runs the default flight at 3x.
+## overflows (as in the first playtest), hires staff for it and the scanners,
+## lets the airport open, sends a crowd in shortly before the starter's doors
+## close, and runs the flight at 3x.
 ## Plates:
 ##   01 the full desk with its "Queue full" sign, at the default play zoom (80)
 ##   02 the same, near (distance 12)
@@ -24,6 +26,11 @@ extends SceneTree
 ##     -- --ui-scale=1.0
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const StarterFlight := preload("res://spike/starter_flight.gd")
+## The crowd that overflows the one desk, and how long before the doors close
+## it arrives: too many for one agent to serve, so some miss.
+const CROWD := 14
+const CROWD_LEAD_TICKS := 600
 const OUT_REL := "res://../tools/blender/out/miss_reasons"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
@@ -59,6 +66,8 @@ var _markers: MissMarkers
 var _hud: PassengerHud
 var _scale_tag := ""
 var _saved: Array[Image] = []
+## The tick the starter's first flight closes its doors, set by _boot().
+var _doors_tick := 0
 
 
 func _initialize() -> void:
@@ -149,13 +158,29 @@ func _boot() -> int:
 		return 0
 	(_main.get_node("BuildMode/BuildView") as BuildView).refresh(_sim.grid)
 	print("PROBE one desk=%d lane_cells=%d" % [desks[0], _sim.layout.lanes[desks[0]].size()])
+	# A new game has no staff and a closed airport: hire for the one desk and the
+	# scanners, step until they are on duty and the starter's first flight is
+	# issued. Its twelve arrive one by one and never overflow a desk, so a crowd
+	# walks in CROWD_LEAD_TICKS before the doors close.
+	var staff := _main.get_node("Staff") as StaffSim
+	var hired := StarterFlight.hire_per_station(_sim, staff)
+	_doors_tick = StarterFlight.advance_until_open(_clock, _main.get_node("FlightSim"), staff)
+	print("PROBE hired=%d opened tick=%d doors_close_tick=%d" % [hired, _clock.tick, _doors_tick])
+	if hired == 0 or _doors_tick < 0:
+		_invalid("the staff were not hired and the airport did not open")
+		return 0
+	var crowd_at := _doors_tick - CROWD_LEAD_TICKS
+	StarterFlight.advance_until(_clock, func() -> bool: return _clock.tick >= crowd_at, _doors_tick)
+	for i in CROWD:
+		_sim.spawn_now(StarterFlight.first_flight())
+	print("PROBE crowd tick=%d spawned=%d doors=%d" % [_clock.tick, CROWD, _doors_tick])
 	_hud.press_speed(3)
 	return desks[0]
 
 
 func _plates(desk: int) -> void:
 	var overflowed := func() -> bool: return MissSignals.full_stations(_sim).get(desk, 0) >= 2
-	if not await _wait_for("overflow", 1850, overflowed):
+	if not await _wait_for("overflow", _doors_tick - 50, overflowed):
 		return
 	_hud.press_speed(0)
 	await _frames(5)
@@ -432,7 +457,9 @@ func _grab() -> Image:
 
 func _plate_cleared(desk: int, desk_point: Vector3) -> void:
 	_hud.press_speed(3)
-	if not await _wait_for("cleared", 1960, func() -> bool: return _clock.tick >= 1910):
+	if not await _wait_for(
+		"cleared", _doors_tick + 60, func() -> bool: return _clock.tick >= _doors_tick + 10
+	):
 		return
 	_hud.press_speed(0)
 	_aim(desk_point, FAR)

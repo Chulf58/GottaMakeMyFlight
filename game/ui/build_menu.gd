@@ -15,6 +15,11 @@ extends CanvasLayer
 ## arrives meanwhile (the pointer moving over the grid changes it) waits and
 ## shows when the hold ends.
 ##
+## The Staff button ends the bar, after the categories. It has no tray of
+## cards: it opens the StaffPanel's hiring card in the tray's place (the panel
+## follows staff_toggled), and it is shut by opening a category or picking a
+## tool, as a tray is by another.
+##
 ## Money (ruling building-costs-money-from-a-starting-budget-you-can-t-build):
 ## the money slot shows the wallet BuildMode pays from and follows it; each
 ## card shows its price and greys out while the wallet cannot pay it (it can
@@ -23,6 +28,9 @@ extends CanvasLayer
 ## cost and how short the wallet is. Prices stay in the price colour, never
 ## red. With no wallet (BuildMode builds for free) the slot reads "--" and
 ## every card says Free.
+
+## The hiring card opened or closed (the StaffPanel shows it with this).
+signal staff_toggled(open: bool)
 
 const THUMBNAIL_DIR := "res://assets/ui/thumbnails/%s.png"
 const CATEGORIES := [
@@ -106,6 +114,11 @@ const GRANT_HOLD_S := 8.0
 @export var rescue_grant: RescueGrant
 ## Seconds a grant message holds the status line.
 @export var grant_hold_s := GRANT_HOLD_S
+
+## True while the hiring card is open; press_staff() changes it.
+var staff_open := false
+## The Staff button at the end of the bar.
+var staff_button := Button.new()
 
 var _open := NO_CATEGORY
 ## True while a category click clears the tool, so the tool_changed(NONE)
@@ -209,6 +222,7 @@ func is_tray_open() -> bool:
 ## A category button click: opens its tray (picking no tool), closes it when
 ## it is already open, or picks Remove, which has no tray.
 func press_category(index: int) -> void:
+	_set_staff_open(false)
 	if index == REMOVE_CATEGORY:
 		build_mode.set_tool(BuildMode.Tool.REMOVE)
 		return
@@ -219,6 +233,20 @@ func press_category(index: int) -> void:
 	_browsing = true
 	build_mode.set_tool(BuildMode.Tool.NONE)
 	_browsing = false
+	_sync()
+
+
+## The Staff button click: opens the hiring card (closing any tray and
+## dropping the tool), or closes it when it is open.
+func press_staff() -> void:
+	if staff_open:
+		_set_staff_open(false)
+		return
+	_open = NO_CATEGORY
+	_browsing = true
+	build_mode.set_tool(BuildMode.Tool.NONE)
+	_browsing = false
+	_set_staff_open(true)
 	_sync()
 
 
@@ -315,11 +343,21 @@ func room_panel() -> RoomPanel:
 	return _room_panel
 
 
+func _set_staff_open(open: bool) -> void:
+	if open == staff_open:
+		return
+	staff_open = open
+	staff_button.set_pressed_no_signal(open)
+	staff_toggled.emit(open)
+
+
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
 	if tool == BuildMode.Tool.NONE:
 		if not _browsing:
 			_open = NO_CATEGORY
+			_set_staff_open(false)
 	else:
+		_set_staff_open(false)
 		var index := category_of(tool)
 		_open = NO_CATEGORY if index == REMOVE_CATEGORY else index
 	_sync()
@@ -431,7 +469,7 @@ func _sync() -> void:
 
 ## Anchors a control to the bottom centre with its bottom edge `bottom` px up;
 ## it grows up and out to both sides from there.
-func _anchor_bottom_centre(control: Control, bottom: float) -> void:
+static func anchor_bottom_centre(control: Control, bottom: float) -> void:
 	control.anchor_left = 0.5
 	control.anchor_right = 0.5
 	control.anchor_top = 1.0
@@ -449,7 +487,7 @@ func _build_bar() -> void:
 	_bar.theme = HUD_THEME
 	_bar.theme_type_variation = &"HudBar"
 	_bar.custom_minimum_size = Vector2(0.0, BAR_H)
-	_anchor_bottom_centre(_bar, MARGIN)
+	anchor_bottom_centre(_bar, MARGIN)
 	add_child(_bar)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
@@ -463,13 +501,20 @@ func _build_bar() -> void:
 		button.pressed.connect(press_category.bind(i))
 		row.add_child(button)
 		_category_buttons.append(button)
+	staff_button.name = "StaffButton"
+	staff_button.text = "Staff"
+	staff_button.toggle_mode = true
+	staff_button.custom_minimum_size = CATEGORY_SIZE
+	staff_button.focus_mode = Control.FOCUS_NONE
+	staff_button.pressed.connect(press_staff)
+	row.add_child(staff_button)
 
 
 func _build_tray() -> void:
 	_tray.name = "ItemTray"
 	_tray.theme = HUD_THEME
 	_tray.custom_minimum_size = Vector2(0.0, TRAY_H)
-	_anchor_bottom_centre(_tray, MARGIN + BAR_H + GAP)
+	anchor_bottom_centre(_tray, MARGIN + BAR_H + GAP)
 	add_child(_tray)
 	for i in CATEGORIES.size():
 		var row := HBoxContainer.new()

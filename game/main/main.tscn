@@ -205,11 +205,12 @@ script = ExtResource("18_offerpanel")
 desk = NodePath("../OfferDesk")
 flights = NodePath("../FlightSim")
 
-[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate")]
+[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate", "menu")]
 layer = 2
 script = ExtResource("22_staffpanel")
 staff = NodePath("../Staff")
 gate = NodePath("../AirportGate")
+menu = NodePath("../BuildMenu")
 
 [node name="RatingBadge" type="CanvasLayer" parent="." node_paths=PackedStringArray("rating")]
 layer = 2

@@ -23,12 +23,15 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://spike/shell_build_path_probe.gd
 
+const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/shell-build-area"
 const MARGIN_PX := 24.0
 const HANG_MS := 60000
 const SETTLE_MAX_FRAMES := 200
 const TICKS_PER_FRAME := 20
-const MAX_TICKS := 1900
+## Ticks past the starter flight's doors-close tick the journey may take: the
+## passenger waits at the gate until boarding, which starts long after the opening.
+const MAX_TICKS_AFTER_DOORS := 120
 const NEAR_M := 16.0
 const FAR_M := 170.0
 const TILE := Vector2i(480, 270)
@@ -61,6 +64,9 @@ var _mode: BuildMode
 var _occluders: Node3D
 var _plates: Array[Image] = []
 var _id := 0
+## The tick the journey must be done by, and the starter flight's doors-close tick.
+var _max_tick := 0
+var _doors_tick := 0
 var _stages := {}
 var _min_door_m := INF
 var _min_gate_m := INF
@@ -99,8 +105,11 @@ func _run() -> void:
 	if not _check_frame() or not _build():
 		_end()
 		return
-	_hire_staff()
-	_id = _sim.spawn_now(_main.get_node("FlightSim").flight_ids()[0])
+	if not _hire_staff_and_open():
+		_end()
+		return
+	_id = _sim.spawn_now(StarterFlight.first_flight())
+	_max_tick = _doors_tick + MAX_TICKS_AFTER_DOORS
 	_views.selected_id = _id
 	var p := _sim.get_passenger(_id)
 	print("SPAWN id=%d stage=%d at=%s first=%s" % [_id, p.stage, p.at, _sim.world_position(p)])
@@ -133,20 +142,27 @@ func _check_frame() -> bool:
 
 
 ## Builds the one-path terminal with the BuildMode tools, as a player would.
-## A new game has no staff: one hire per desk and scanner, as the staff
-## panel's Hire buttons do; the staff walk to the stations on their own.
-func _hire_staff() -> void:
+## A new game has no staff and a closed airport: one hire per desk and scanner,
+## as the staff panel's Hire buttons do; the staff walk to the stations on
+## their own, the airport opens and issues the starter's first flight. False
+## (after PROBE_INVALID) when that does not happen.
+func _hire_staff_and_open() -> bool:
 	var staff := _main.get_node("Staff") as StaffSim
-	for i in _sim.layout.desks.size():
-		staff.hire(StaffMember.Role.CHECKIN)
-	for i in _sim.layout.scanners.size():
-		staff.hire(StaffMember.Role.SECURITY)
+	StarterFlight.hire_per_station(_sim, staff)
 	print(
 		(
 			"PROBE hired checkin=%d security=%d"
 			% [staff.count(StaffMember.Role.CHECKIN), staff.count(StaffMember.Role.SECURITY)]
 		)
 	)
+	var doors := StarterFlight.advance_until_open(
+		_clock, _main.get_node("FlightSim") as FlightSim, staff
+	)
+	_doors_tick = doors
+	print("PROBE opened tick=%d doors_close_tick=%d" % [_clock.tick, doors])
+	if doors < 0:
+		_invalid("the staff did not open the airport and get the starter's first flight issued")
+	return doors >= 0
 
 
 func _build() -> bool:
@@ -230,11 +246,11 @@ func _journey() -> void:
 	await _until(func() -> bool: return p.is_done(), "boarding")
 
 
-## Advances one tick at a time until `done` holds, at most MAX_TICKS in all.
+## Advances one tick at a time until `done` holds, until _max_tick.
 func _until(done: Callable, stage: String) -> void:
 	_beat(stage)
 	var steps := 0
-	while not done.call() and _clock.tick < MAX_TICKS:
+	while not done.call() and _clock.tick < _max_tick:
 		_tick()
 		steps += 1
 		if steps % TICKS_PER_FRAME == 0:

@@ -12,10 +12,13 @@ extends CanvasLayer
 ## (AirportGate.blocker(), decision airport-opening-design-stays-open-once-
 ## opened-starter-flight-placed-after-opening); that line goes once it opens.
 ##
-## It sits at the left edge, centred vertically, below the money slot and the
-## room panel (top-left) and above the follow text (bottom-left), in the
-## shared HUD theme set on its card. The HUD layout ruling puts Staff in the
-## bottom category bar later; until then this card is its place.
+## The card belongs to the bottom category bar (decision hud-layout-bottom-
+## category-bar-with-an-item-tray-time-and-fl): the bar's Staff button opens it
+## above the bar, in the item tray's place, and a category or a tool closes it.
+## The hint is not part of the card: it stays on screen in a card of its own just above
+## the bar (above an open tray or card), whether the card is open or not, so a closed
+## airport is never hidden behind a closed card. Without a `menu` (a test) the
+## card is always shown.
 
 const ROLES: Array[StaffMember.Role] = [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]
 const ROLE_NAMES := {
@@ -39,16 +42,21 @@ const CLOSED_HINTS := {
 	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
 	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner",
 }
-const LEFT := 16.0
-const WIDTH := 260.0
+const ROLE_WIDTH := 210.0
+## Width of the hint card's text, in layout pixels.
+const HINT_W := 560.0
 
 ## In a scene the Staff node; tests set it before the panel enters the tree.
 @export var staff: StaffSim
 ## In a scene the AirportGate; without one the hint has only the hiring lines.
 @export var gate: AirportGate
+## In a scene the BuildMenu whose Staff button opens the card.
+@export var menu: BuildMenu
 
 var _card := PanelContainer.new()
 var _hint := Label.new()
+var _hint_box := PanelContainer.new()
+var _hint_bottom := -1.0
 ## Role -> the Label with its counts, its Hire and its Fire button.
 var _counts: Dictionary = {}
 var _hire: Dictionary = {}
@@ -57,6 +65,9 @@ var _fire: Dictionary = {}
 
 func _ready() -> void:
 	_build()
+	if menu != null:
+		menu.staff_toggled.connect(_on_staff_toggled)
+		_card.visible = menu.staff_open
 	if staff == null:
 		push_error("StaffPanel: no StaffSim is set")
 		return
@@ -121,10 +132,15 @@ func refresh() -> void:
 		(_fire[role] as Button).disabled = _staying(role) == 0
 	_hint.text = hint_text()
 	_hint.visible = _hint.text != ""
+	_hint_box.visible = _hint.visible
 
 
 func _staying(role: StaffMember.Role) -> int:
 	return staff.count(role) - staff.leaving_count(role)
+
+
+func _on_staff_toggled(open: bool) -> void:
+	_card.visible = open
 
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:
@@ -138,17 +154,15 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 func _build() -> void:
 	_card.name = "StaffCard"
 	_card.theme = BuildMenu.HUD_THEME
-	_card.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	_card.offset_left = LEFT
-	_card.offset_top = 0.0
-	_card.offset_bottom = 0.0
-	_card.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_card.custom_minimum_size = Vector2(WIDTH, 0.0)
+	BuildMenu.anchor_bottom_centre(_card, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 	add_child(_card)
-	var column := VBoxContainer.new()
-	_card.add_child(column)
-	column.add_child(_label("Staff", &"HudTitle"))
+	var roles := HBoxContainer.new()
+	roles.add_theme_constant_override("separation", 14)
+	_card.add_child(roles)
 	for role in ROLES:
+		var column := VBoxContainer.new()
+		column.custom_minimum_size = Vector2(ROLE_WIDTH, 0.0)
+		roles.add_child(column)
 		column.add_child(_label(ROLE_NAMES[role], &"HudCardName"))
 		var counts := _label("", &"HudSmall")
 		counts.name = "%sCounts" % ROLE_KEYS[role]
@@ -160,11 +174,42 @@ func _build() -> void:
 		_fire[role] = _button(row, "Fire%s" % ROLE_KEYS[role], "Fire", &"HudButtonCoral")
 		(_hire[role] as Button).pressed.connect(func() -> void: staff.hire(role))
 		(_fire[role] as Button).pressed.connect(func() -> void: staff.fire(role))
+	_build_hint()
+
+
+## The hint sits in a HUD card of its own, centred, growing up from the bottom
+## edge _hint_bottom() gives: just above the bar, or above the open tray or
+## staff card, so it never covers either and has a backing to read against.
+func _build_hint() -> void:
+	_hint_box.name = "StaffHintCard"
+	_hint_box.theme = BuildMenu.HUD_THEME
+	_hint_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint_box.visible = false
+	add_child(_hint_box)
 	_hint.name = "StaffHint"
 	_hint.theme_type_variation = &"HudAttentionText"
+	_hint.custom_minimum_size = Vector2(HINT_W, 0.0)
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hint.visible = false
-	column.add_child(_hint)
+	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint_box.add_child(_hint)
+	_place_hint()
+
+
+func _process(_delta: float) -> void:
+	_place_hint()
+
+
+## Docks the hint card above whatever stands over the bar now.
+func _place_hint() -> void:
+	var bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
+	if menu != null and menu.is_tray_open():
+		bottom += BuildMenu.TRAY_H + BuildMenu.GAP
+	elif _card.visible and menu != null:
+		bottom += _card.get_combined_minimum_size().y + BuildMenu.GAP
+	if not is_equal_approx(bottom, _hint_bottom):
+		_hint_bottom = bottom
+		BuildMenu.anchor_bottom_centre(_hint_box, bottom)
 
 
 func _label(text: String, variation: StringName) -> Label:

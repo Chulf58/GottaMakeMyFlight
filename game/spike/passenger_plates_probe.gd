@@ -31,15 +31,24 @@ extends SceneTree
 ## Plates go to tools/blender/out/passengers/.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/passengers"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 60000
+## The 300-passenger plate bakes every skinned mesh in one frame
+## (PlateSight.colliders), which takes minutes, so its one silent frame may last this long.
+const BENCH_HANG_LIMIT_MS := 420000
 const WAIT_LIMIT_MS := 120000
 const STALL_LIMIT_MS := 5000
 const BENCH_TICKS := 900
-## GMF101's doors close at tick 1900 (FlightSim.PHASE_TICKS from tick 0).
-const DOORS_TICK := 1900
+## With the terminal staffed the starter's own twelve passengers all make it,
+## so none runs late. The late plate adds this many arrivals this long before
+## the doors close.
+const CROWD := 8
+const CROWD_GAP_TICKS := 15
+const LATE_ARRIVALS := 1
+const LATE_ARRIVALS_BEFORE_DOORS_TICKS := 450
 ## How long 01b waits for a middle-chair sitter after the first sitter.
 const MIDDLE_WAIT_TICKS := 120
 ## Scene nodes whose visible meshes can hide a passenger.
@@ -70,6 +79,8 @@ var _views: PassengerViews
 var _hud: PassengerHud
 var _scale_tag := ""
 var _saved: Array[Image] = []
+## The tick the starter's first flight closes its doors, set by _boot().
+var _doors_tick := 0
 
 
 func _initialize() -> void:
@@ -110,7 +121,8 @@ func _watch() -> void:
 		_guard_mutex.unlock()
 		if stop:
 			return
-		if idle_ms > HANG_LIMIT_MS:
+		var limit := BENCH_HANG_LIMIT_MS if stage.begins_with("04_") else HANG_LIMIT_MS
+		if idle_ms > limit:
 			print("PROBE_INVALID hang stage=%s no heartbeat for %d ms" % [stage, idle_ms])
 			OS.crash("passenger plates probe hung")
 
@@ -147,13 +159,11 @@ func _boot() -> void:
 		" seats=",
 		_sim.layout.seats.size()
 	)
-	# An unstaffed desk or scanner is closed (StaffSim.is_open), so hire one
-	# member per station; they walk to their stations like hired staff in play.
+	# A new game has no staff and a closed airport: hire one member per station,
+	# let them walk to it and the airport open, and take the doors tick from the
+	# starter's first flight.
 	var staff := _main.get_node("Staff") as StaffSim
-	for desk in _sim.layout.desks:
-		staff.hire(StaffMember.Role.CHECKIN)
-	for scanner in _sim.layout.scanners:
-		staff.hire(StaffMember.Role.SECURITY)
+	StarterFlight.hire_per_station(_sim, staff)
 	print(
 		(
 			"PROBE staff hired checkin=%d security=%d"
@@ -162,6 +172,11 @@ func _boot() -> void:
 	)
 	if staff.member_ids().is_empty():
 		_invalid("no staff hired, so every station stays closed")
+	_doors_tick = StarterFlight.advance_until_open(_clock, _main.get_node("FlightSim"), staff)
+	print("PROBE opened tick=%d doors_close_tick=%d" % [_clock.tick, _doors_tick])
+	if _doors_tick < 0:
+		_invalid("the airport did not open and issue the starter's first flight")
+		_doors_tick = _clock.tick
 	_hud.press_speed(3)
 
 
@@ -206,10 +221,14 @@ func _aim(at: Vector3, distance: float, yaw: float) -> void:
 
 func _run() -> void:
 	await _boot()
+	_spawn_crowd()
 	await _plate_queues()
 	await _plate_seated()
-	await _plate_late()
+	# Boarding first: the starter's own passengers walk to the plane before the
+	# late arrivals come, and are aboard by the time the late plate is done.
 	await _plate_boarding()
+	await _plate_late()
+	await _finish_flight()
 	_main.queue_free()
 	await _frames(5)
 	await _benchmark()
@@ -223,8 +242,22 @@ func _run() -> void:
 	quit(1 if _failed else 0)
 
 
+## The starter's twelve arrive one by one, so two desks never hold two at once.
+## A crowd walks in together right after the opening to give plate 01 a queue.
+func _spawn_crowd() -> void:
+	# One every CROWD_GAP_TICKS: passengers spawned on the same tick stand on one
+	# cell and hide each other, so no plate could show them.
+	for i in CROWD:
+		_sim.spawn_now(StarterFlight.first_flight())
+		var next_at := _clock.tick + CROWD_GAP_TICKS
+		StarterFlight.advance_until(
+			_clock, func() -> bool: return _clock.tick >= next_at, CROWD_GAP_TICKS * 2
+		)
+	print("PROBE crowd tick=%d spawned=%d" % [_clock.tick, CROWD])
+
+
 func _plate_queues() -> void:
-	if not await _until("queues", DOORS_TICK, func() -> bool: return _count(_queued) >= 2):
+	if not await _until("queues", _doors_tick, func() -> bool: return _count(_queued) >= 2):
 		return
 	_hud.press_speed(0)
 	await _plate("01_queues", _ids(_queued), 26.0, 0.0, 2)
@@ -244,7 +277,7 @@ func _plate_seated() -> void:
 		if first_seen[0] < 0:
 			first_seen[0] = _clock.tick
 		return _clock.tick - first_seen[0] >= MIDDLE_WAIT_TICKS
-	if not await _until("seated", DOORS_TICK, ready):
+	if not await _until("seated", _doors_tick, ready):
 		return
 	_hud.press_speed(0)
 	var middle := _ids(_seated_middle)
@@ -304,14 +337,32 @@ func _check_sitter(id: int) -> void:
 
 
 func _plate_late() -> void:
+	var arrive_at := _doors_tick - LATE_ARRIVALS_BEFORE_DOORS_TICKS
+	var waited: bool = await _until(
+		"late arrivals", _doors_tick, func() -> bool: return _clock.tick >= arrive_at
+	)
+	if not waited:
+		return
+	var before := _sim.passenger_ids().size()
+	for i in LATE_ARRIVALS:
+		_sim.spawn_now(StarterFlight.first_flight())
+	print(
+		(
+			"PROBE late arrivals tick=%d doors=%d passengers_before=%d after=%d"
+			% [_clock.tick, _doors_tick, before, _sim.passenger_ids().size()]
+		)
+	)
 	var late := [0]
 	var entrance := _sim.grid.cell_to_world(ReferenceTerminal.ENTRANCE_CELL)
 	var running := func(p: Passenger) -> bool:
 		var away := _sim.world_position(p).distance_to(entrance) > 3.0
-		return p.late and p.stage < Passenger.Stage.TO_EXIT and p.is_moving() and away
+		# On the open floor between the entrance and the desks, where no scanner
+		# or counter stands between the camera and the runner.
+		var open_floor := p.stage == Passenger.Stage.TO_CHECKIN
+		return p.late and open_floor and p.is_moving() and away
 	var found: bool = await _until(
 		"late",
-		DOORS_TICK,
+		_doors_tick,
 		func() -> bool:
 			late[0] = _first(running)
 			return late[0] != 0
@@ -348,13 +399,17 @@ func _plate_boarding() -> void:
 	var near_plane := func(p: Passenger) -> bool:
 		return p.stage == Passenger.Stage.APRON and _sim.world_position(p).z < -100.5
 	var ok: bool = await _until(
-		"boarding", DOORS_TICK, func() -> bool: return _count(near_plane) >= 2
+		"boarding", _doors_tick, func() -> bool: return _count(near_plane) >= 2
 	)
 	if ok:
 		_hud.press_speed(0)
 		await _plate("03_boarding_at_stand", _ids(near_plane), 24.0, PI * 0.8, 1)
 		_hud.press_speed(3)
-	await _until("doors", DOORS_TICK + 10, func() -> bool: return _clock.tick >= DOORS_TICK + 1)
+
+
+## Runs on to the tick the doors close and prints how the flight ended.
+func _finish_flight() -> void:
+	await _until("doors", _doors_tick + 10, func() -> bool: return _clock.tick >= _doors_tick + 1)
 	print("OUTCOME made=%d missed=%d" % [_sim.made_count(), _sim.missed_count()])
 
 
@@ -402,7 +457,15 @@ func _shown(ids: Array[int]) -> Dictionary:
 	var owners: Array[Node] = []
 	for path in OCCLUDER_OWNERS:
 		owners.append(_main.get_node(path))
+	var started_ms := Time.get_ticks_msec()
 	var holder := PlateSight.colliders(root, owners, subjects)
+	print(
+		(
+			"PROBE colliders for %d subjects built in %d ms"
+			% [ids.size(), Time.get_ticks_msec() - started_ms]
+		)
+	)
+	_beat("%s colliders" % _stage.get_slice(" ", 0))
 	var unbaked: Array = holder.get_meta("unbaked")
 	var bounds: Dictionary = holder.get_meta("bounds")
 	print("PROBE occluder bodies=%d unbaked=%d" % [holder.get_child_count(), unbaked.size()])
@@ -414,6 +477,7 @@ func _shown(ids: Array[int]) -> Dictionary:
 	print("HUD layers_hidden=%d plate_px_changed=%d" % [twin["layers"], changed])
 	var shown := 0
 	for id in ids:
+		_beat("%s passenger %d" % [_stage.get_slice(" ", 0), id])
 		var box: AABB = bounds.get(str(id), AABB())
 		var seen := PlateSight.person_shown(
 			_cam, box, str(id), _frame_rect(), img, bare, MIN_SUBJECT_PX

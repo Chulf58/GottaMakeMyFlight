@@ -6,8 +6,9 @@ extends RefCounted
 
 
 ## Hires one member for every usable desk and scanner that has nobody and puts
-## it on duty there at once. Returns how many were seated.
-static func staff_all(staff: StaffSim) -> int:
+## it on duty there at once. Returns how many were seated. `roles` limits it
+## to stations of those roles (both when empty).
+static func staff_all(staff: StaffSim, roles: Array[StaffMember.Role] = []) -> int:
 	var layout := staff.sim.layout
 	var seated := 0
 	var stations: Array[int] = []
@@ -19,6 +20,8 @@ static func staff_all(staff: StaffSim) -> int:
 		var role := StaffMember.Role.SECURITY
 		if layout.desks.has(station):
 			role = StaffMember.Role.CHECKIN
+		if not roles.is_empty() and not roles.has(role):
+			continue
 		var member := staff.get_member(staff.hire(role))
 		member.station = station
 		member.at = layout.lanes[station][0]
