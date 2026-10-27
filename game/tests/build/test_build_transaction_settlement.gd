@@ -249,10 +249,19 @@ func test_nested_holds_publish_only_at_the_outermost_release() -> void:
 
 
 ## A listener that opens its own hold while the queue is flushing neither
-## loses nor reorders the rest of the flush.
+## loses nor reorders the rest of the flush: the first edit's applied signal
+## reaches the listener, which paints a second cell and releases its own hold,
+## so the second edit's signals go out in full before the first edit's graph
+## signal resumes the outer queue.
 func test_a_hold_opened_by_a_listener_during_the_flush_keeps_the_queue() -> void:
 	var grid := _floored_grid()
-	_record_events(grid)
+	var seen: Array[String] = []
+	grid.edit_applied.connect(
+		func(edit: BuildEdit, _result: BuildResult) -> void: seen.append("applied %s" % edit.cell)
+	)
+	grid.graph_changed.connect(
+		func(cells: Array[Vector2i]) -> void: seen.append("graph %s" % [cells])
+	)
 	var nested: Array[bool] = [false]
 	grid.edit_applied.connect(
 		func(_edit: BuildEdit, _result: BuildResult) -> void:
@@ -266,5 +275,9 @@ func test_a_hold_opened_by_a_listener_during_the_flush_keeps_the_queue() -> void
 	grid.hold_signals()
 	grid.apply(BuildEdit.paint_floor(Vector2i(0, 0), BuildGrid.FLOOR_TILE, 1))
 	grid.release_signals()
-	print("events %s" % [_events])
-	assert_array(_events).contains_exactly_in_any_order(["applied", "applied", "graph", "graph"])
+	print("events %s" % [seen])
+	# graph_changed carries the relinked cells: the second edit's wider block
+	# (rows 0 to 2) first, then the first edit's (rows 0 to 1).
+	var second_block := "graph [(0, 0), (1, 0), (0, 1), (1, 1), (0, 2), (1, 2)]"
+	var first_block := "graph [(0, 0), (1, 0), (0, 1), (1, 1)]"
+	assert_array(seen).is_equal(["applied (0, 0)", "applied (0, 1)", second_block, first_block])
