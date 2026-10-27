@@ -34,8 +34,8 @@ a swap or hide; its UVs sit in one swatch, so a UV scroll would change colour, n
 the belt). Ports are Mount_Belt_F/B/L/R empties at belt-top height on each open edge's
 midpoint, +Z pointing out of the piece (an edge normal, not a flow direction). BAGGAGE
 records each piece's footprint, ports and the paths a bag can take through it; it is
-printed as BAGGAGE_DATA. Known join defect outside this kit: checkin_desk's belt stops
-0.10 m short of its cell's back edge and is 3 cm wider on its -x side.
+printed as BAGGAGE_DATA. checkin_desk's belt (build_interior_kit.py) has the same
+cross-section and runs to its cell's back edge, so a feed behind the desk joins it.
 """
 
 import json

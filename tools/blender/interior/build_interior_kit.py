@@ -272,11 +272,15 @@ def build_checkin_desk(root, c):
     box("Desk_Monitor_Neck", (-0.50, 0.26, 1.08), (-0.44, 0.30, 1.2), "dark", root, c)
     box("Desk_Monitor", (-0.67, 0.28, 1.18), (-0.27, 0.32, 1.44), "dark", root, c, bevel=0.01)
     box("Desk_Monitor_Face", (-0.64, 0.32, 1.21), (-0.30, 0.33, 1.41), "screen_sky", root, c)
-    # Right cell: the bag drop belt, running front to back.
-    box("Belt_Body", (0.05, -0.42, 0), (0.92, 0.40, 0.32), "metal", root, c, bevel=0.01)
-    box("Belt_Top", (0.12, -0.42, 0.32), (0.85, 0.40, 0.355), "dark", root, c)
-    for side, x0, x1 in (("L", 0.05, 0.12), ("R", 0.85, 0.92)):
-        box("Belt_Rail_" + side, (x0, -0.42, 0.32), (x1, 0.40, 0.46), "frame", root, c)
+    # Right cell: the bag drop belt, running front to back. It has the baggage belt
+    # pieces' cross-section (build_baggage_kit.py: body 0.08..0.92, lane 0.15..0.85)
+    # and runs to the cell's back edge, the desk's belt outlet, so it meets a belt
+    # feed placed behind the desk. Like a belt port, that edge skips the 0.08 m
+    # furniture inset.
+    box("Belt_Body", (0.08, -0.42, 0), (0.92, 0.50, 0.32), "metal", root, c, bevel=0.01)
+    box("Belt_Top", (0.15, -0.42, 0.32), (0.85, 0.50, 0.355), "dark", root, c)
+    for side, x0, x1 in (("L", 0.08, 0.15), ("R", 0.85, 0.92)):
+        box("Belt_Rail_" + side, (x0, -0.42, 0.32), (x1, 0.50, 0.46), "frame", root, c)
     # Desk number sign on a pole standing on the back of the right rail, away from
     # the approach.
     cyl("Sign_Pole", 0.885, 0.32, 0.46, 1.62, 0.025, "frame", root, c)
@@ -362,7 +366,7 @@ PIECES = {
     "wall_post": (build_wall_post, "edge", (-0.08, -0.08, 0.0), (0.08, 0.08, WALL_H + 0.04)),
     "wall_glass": (build_wall_glass, "edge", (-0.5, -0.07, 0.0), (0.5, 0.07, WALL_H)),
     "wall_door": (build_wall_door, "edge", (-0.86, -0.15, 0.0), (0.86, 0.075, WALL_H)),
-    "checkin_desk": (build_checkin_desk, (2, 1), (-0.92, -0.42, 0.0), (0.92, 0.42, 1.78)),
+    "checkin_desk": (build_checkin_desk, (2, 1), (-0.92, -0.42, 0.0), (0.92, 0.50, 1.78)),
     "security_scanner": (build_security_scanner, (1, 2), (-0.42, -0.92, 0.0), (0.42, 0.92, 2.42)),
     "seat_row": (build_seat_row, (3, 1), (-1.42, -0.32, 0.0), (1.42, 0.30, 0.88)),
     "kiosk": (build_kiosk, (1, 1), (-0.30, -0.22, 0.0), (0.30, 0.24, 1.62)),
