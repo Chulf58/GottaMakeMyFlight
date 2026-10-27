@@ -15,8 +15,10 @@ extends RefCounted
 ##
 ## Every phase before standing up checks the visit's deadline. A guest past it
 ## who has not been served gives up (no charge); one who has been served
-## leaves early. The deadline is worked out again after any grid edit, and a
-## visit whose cafe, counter or seat is gone ends the same way.
+## leaves early. The deadline is worked out again after any grid edit, once a
+## second on the guest's beat, and every tick for a landside guest, whose
+## journey on runs through the scanner queues. A visit whose cafe, counter or
+## seat is gone ends the same way.
 ##
 ## Hunger (point 5) rises once a simulated second; at HUNGRY_AT the passenger
 ## heads for the nearest reachable cafe if the forecast allows, and otherwise
@@ -280,9 +282,16 @@ func step(p: Passenger) -> void:
 		_set_stage.call(p, Passenger.Stage.TO_GATE if p.cleared else Passenger.Stage.TO_SECURITY)
 		return
 	var stage := p.stage
-	if stage != Passenger.Stage.CAFE_STANDING_UP and _sim.tick >= visit.deadline:
-		_leave_early(p, visit)
-		return
+	if stage != Passenger.Stage.CAFE_STANDING_UP:
+		if visit.resume_stage == Passenger.Stage.TO_SECURITY and not visit.seat.is_empty():
+			# The rest of a landside journey runs through the scanners, whose
+			# queues can fill between beats: forecast it again every tick.
+			visit.deadline = CafeForecast.live_deadline(
+				_sim, p, visit.seat["approach"], visit.resume_stage
+			)
+		if _sim.tick >= visit.deadline:
+			_leave_early(p, visit)
+			return
 	match stage:
 		Passenger.Stage.CAFE_WALK, Passenger.Stage.CAFE_QUEUE:
 			_queue_step(p, visit)

@@ -12,6 +12,8 @@ const HUNGRY := 59
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
 var _paid_b := 0
+## The ids CafeTestLayout.build() gave the last cafe world's pieces.
+var _ids: Dictionary
 
 
 func before() -> void:
@@ -33,7 +35,7 @@ func after_test() -> void:
 
 func _cafe_world() -> PassengerTestWorld:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid, true)
+	_ids = CafeTestLayout.build(grid, true)
 	return PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 4242)
 
 
@@ -213,13 +215,14 @@ func test_bad_cafe_state_is_rejected_whole() -> void:
 	assert_int(queuing).is_greater_equal(0)
 	assert_int(seated).is_greater_equal(0)
 	var bad_cases: Array = []
-	var other_room := 0
-	var other_counter := 0
 	var queued_visit: Dictionary = visits[queuing]
-	for entry in good["cafe"]["queues"]:
-		if int(entry["room"]) != int(queued_visit["room"]):
-			other_room = int(entry["room"])
-			other_counter = int(entry["counter"])
+	# The other cafe's room and counter, from the built layout.
+	var airside := int(queued_visit["room"]) == int(_ids["air_room"])
+	var other_room: int = _ids["land_room"] if airside else _ids["air_room"]
+	var other_counter: int = _ids["land_counter"] if airside else _ids["air_counter"]
+	assert_int(other_room).is_not_equal(int(queued_visit["room"]))
+	assert_int(other_room).is_greater(0)
+	assert_int(other_counter).is_greater(0)
 	for change in [
 		["room", -1],
 		["room", 999],
@@ -260,13 +263,16 @@ func test_bad_cafe_state_is_rejected_whole() -> void:
 			if (entry["lane"] as Array).has(queued_visit["passenger"]):
 				entry[entry_change[0]] = entry_change[1]
 		bad_cases.append(["queue " + str(entry_change), bad])
-	if other_counter != 0:
-		var swapped := good.duplicate(true)
-		swapped["cafe"]["visits"][queuing]["counter"] = other_counter
-		for entry in swapped["cafe"]["queues"]:
-			if (entry["lane"] as Array).has(queued_visit["passenger"]):
-				entry["counter"] = other_counter
-		bad_cases.append(["queuing at the other cafe's counter", swapped])
+	# The queue and every guest in it moved to the other cafe's counter, so
+	# only the counter's room disagrees.
+	var swapped := good.duplicate(true)
+	for entry in swapped["cafe"]["queues"]:
+		if (entry["lane"] as Array).has(queued_visit["passenger"]):
+			entry["counter"] = other_counter
+			for visit: Dictionary in swapped["cafe"]["visits"]:
+				if (entry["lane"] as Array).has(visit["passenger"]):
+					visit["counter"] = other_counter
+	bad_cases.append(["queuing at the other cafe's counter", swapped])
 	var no_cafe := good.duplicate(true)
 	no_cafe.erase("cafe")
 	bad_cases.append(["no cafe key", no_cafe])
