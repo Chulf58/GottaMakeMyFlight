@@ -40,7 +40,8 @@ const OFFER_KEYS := [
 ]
 
 ## Tuning values. A few offers a day; the starter tier has small and medium
-## planes only (larger ones wait for reputation).
+## planes only (larger ones wait for reputation). AIRLINES, STARTER_SIZES and
+## FEE_MIN..FEE_MAX are tier 0 of the tier tables below.
 const OFFERS_PER_DAY := 3
 const AIRLINES := ["Gotta Air", "Nordic Wing", "Blue Fjord", "Sunhop"]
 const DESTINATIONS := ["Oslo", "Berlin", "Lisbon", "Rome", "Dublin", "Athens"]
@@ -48,6 +49,18 @@ const DESTINATIONS := ["Oslo", "Berlin", "Lisbon", "Rome", "Dublin", "Athens"]
 const STARTER_SIZES := {"small": [12, 24], "medium": [24, 48]}
 const FEE_MIN := 15
 const FEE_MAX := 35
+## Airline tiers, unlocked by the airport rating (RatingFormula.tier): tier t
+## draws from the airlines of tiers 0..t. An airline's own tier decides the
+## plane sizes it flies (size -> [fewest, most] booked passengers) and its fee
+## per passenger [lowest, highest]: bigger airlines, better offers.
+const TIER_AIRLINES: Array = [
+	AIRLINES, ["Polar Jet", "Aegean Sky"], ["Skyline Global", "Meridian Air"]
+]
+const TIER_SIZES: Array = [
+	STARTER_SIZES, {"medium": [24, 48], "large": [48, 96]}, {"large": [64, 120]}
+]
+const TIER_FEES: Array = [[FEE_MIN, FEE_MAX], [25, 45], [40, 60]]
+const MAX_TIER := 2
 ## Scheduled departures fall on a quarter hour from 07:00 to 21:00.
 const DEPARTURE_FIRST_MINUTE := 7 * 60
 const DEPARTURE_LAST_MINUTE := 21 * 60
@@ -57,6 +70,14 @@ const DEPARTURE_SLOTS := (DEPARTURE_LAST_MINUTE - DEPARTURE_FIRST_MINUTE) / DEPA
 
 ## Offers in the order they were drawn.
 var _offers: Array[Dictionary] = []
+
+
+## The airline tier of `airline` (0 for a starter airline), or -1 if no tier has it.
+static func tier_of(airline: String) -> int:
+	for tier in TIER_AIRLINES.size():
+		if TIER_AIRLINES[tier].has(airline):
+			return tier
+	return -1
 
 
 ## The contract terms of `offer`, ready for FlightSim.accept_contract.
@@ -69,19 +90,24 @@ static func terms_of(offer: Dictionary) -> Dictionary:
 
 ## Starts `day`: every offer still open from an earlier day expires, then the
 ## offers for `day` are drawn from `rng` and their ids returned, or [] without
-## touching `rng` when the day already has offers. `changed` fires once when
-## anything expired or was drawn. A day outside 0..FlightContract.MAX_DAY pushes
-## an error and changes nothing.
-func ensure_day(day: int, rng: RandomNumberGenerator) -> Array[String]:
+## touching `rng` when the day already has offers. `tier` (0..MAX_TIER, the
+## airport rating's RatingFormula.tier) picks which airlines the new offers may
+## come from; it does not change how far `rng` advances. `changed` fires once
+## when anything expired or was drawn. A day outside 0..FlightContract.MAX_DAY,
+## or a tier outside 0..MAX_TIER, pushes an error and changes nothing.
+func ensure_day(day: int, rng: RandomNumberGenerator, tier := 0) -> Array[String]:
 	var ids: Array[String] = []
 	if day < 0 or day > FlightContract.MAX_DAY:
 		push_error("OfferBoard: day %d is outside 0..%d" % [day, FlightContract.MAX_DAY])
+		return ids
+	if tier < 0 or tier > MAX_TIER:
+		push_error("OfferBoard: tier %d is outside 0..%d" % [tier, MAX_TIER])
 		return ids
 	var expired := _expire_before(day)
 	var drawn := not _has_day(day)
 	if drawn:
 		for number in range(1, OFFERS_PER_DAY + 1):
-			var offer := _draw(day, number, rng)
+			var offer := _draw(day, number, rng, tier)
 			_offers.append(offer)
 			ids.append(offer["id"])
 	if expired or drawn:
@@ -156,13 +182,19 @@ func from_snapshot(data: Dictionary) -> bool:
 
 ## Every draw is made for every offer, in this order, so the RNG advances by
 ## the same amount whatever the values turn out to be.
-func _draw(day: int, number: int, rng: RandomNumberGenerator) -> Dictionary:
-	var airline: String = AIRLINES[rng.randi_range(0, AIRLINES.size() - 1)]
+func _draw(day: int, number: int, rng: RandomNumberGenerator, tier: int) -> Dictionary:
+	var airlines: Array = []
+	for unlocked in range(tier + 1):
+		airlines.append_array(TIER_AIRLINES[unlocked])
+	var airline: String = airlines[rng.randi_range(0, airlines.size() - 1)]
+	var own := tier_of(airline)
+	var sizes: Dictionary = TIER_SIZES[own]
+	var fees: Array = TIER_FEES[own]
 	var destination: String = DESTINATIONS[rng.randi_range(0, DESTINATIONS.size() - 1)]
 	var minute := DEPARTURE_FIRST_MINUTE + rng.randi_range(0, DEPARTURE_SLOTS) * DEPARTURE_STEP
 	var gate: String = FlightSim.GATES[rng.randi_range(0, FlightSim.GATES.size() - 1)]
-	var size: String = STARTER_SIZES.keys()[rng.randi_range(0, STARTER_SIZES.size() - 1)]
-	var booked_range: Array = STARTER_SIZES[size]
+	var size: String = sizes.keys()[rng.randi_range(0, sizes.size() - 1)]
+	var booked_range: Array = sizes[size]
 	return {
 		"id": "O%dN%d" % [day, number],
 		"day": day,
@@ -172,7 +204,7 @@ func _draw(day: int, number: int, rng: RandomNumberGenerator) -> Dictionary:
 		"gate": gate,
 		"plane_size": size,
 		"booked_passengers": rng.randi_range(booked_range[0], booked_range[1]),
-		"fee_per_passenger": rng.randi_range(FEE_MIN, FEE_MAX),
+		"fee_per_passenger": rng.randi_range(fees[0], fees[1]),
 		"status": OPEN,
 	}
 
@@ -289,22 +321,26 @@ func _undrawable_problem(entry: Dictionary) -> String:
 		ids.append("O%dN%d" % [day, number])
 	if not ids.has(entry["id"]):
 		return "offer id '%s' is not one of day %d's %s" % [entry["id"], day, ids]
-	if not AIRLINES.has(entry["airline"]) or not DESTINATIONS.has(entry["destination"]):
+	var tier := tier_of(entry["airline"])
+	if tier < 0 or not DESTINATIONS.has(entry["destination"]):
 		return "offer %s has an airline or destination the board never draws" % entry["id"]
-	if not FlightSim.GATES.has(entry["gate"]) or not STARTER_SIZES.has(entry["plane_size"]):
+	if not FlightSim.GATES.has(entry["gate"]) or not TIER_SIZES[tier].has(entry["plane_size"]):
 		return "offer %s has a gate or plane size the board never draws" % entry["id"]
 	return _range_problem(entry)
 
 
-## "" when the passengers, fee and departure are values _draw can produce.
+## "" when the passengers, fee and departure are values _draw can produce for
+## the entry's airline tier.
 func _range_problem(entry: Dictionary) -> String:
-	var booked_range: Array = STARTER_SIZES[entry["plane_size"]]
+	var tier := tier_of(entry["airline"])
+	var booked_range: Array = TIER_SIZES[tier][entry["plane_size"]]
 	var booked := int(entry["booked_passengers"])
 	if booked < booked_range[0] or booked > booked_range[1]:
 		return "offer %s books %d passengers outside its size's range" % [entry["id"], booked]
 	var fee := int(entry["fee_per_passenger"])
-	if fee < FEE_MIN or fee > FEE_MAX:
-		return "offer %s has a fee outside %d..%d" % [entry["id"], FEE_MIN, FEE_MAX]
+	var fees: Array = TIER_FEES[tier]
+	if fee < fees[0] or fee > fees[1]:
+		return "offer %s has a fee outside %d..%d" % [entry["id"], fees[0], fees[1]]
 	var offset := int(entry["departure_minute"]) - DEPARTURE_FIRST_MINUTE
 	if offset < 0 or offset > DEPARTURE_SLOTS * DEPARTURE_STEP or offset % DEPARTURE_STEP != 0:
 		return "offer %s departs off the board's departure slots" % entry["id"]

@@ -1,3 +1,6 @@
+# gdlint:disable = max-public-methods
+# FlightSim is the one flight data API; ending a contract (end_contract,
+# active_contract_ids, contract_end_day) took it past the 20-method cap.
 class_name FlightSim
 extends Node
 ## The flight schedule as plain data driven by SimClock ticks. Each flight is
@@ -22,6 +25,11 @@ extends Node
 ## opening (FlightTimetable.opening_day); the days it skipped were never
 ## flown, so they are never answered as departed.
 ##
+## end_contract stops a contract's future days (decision low-rating-ends-one-
+## airline-contract-per-low-day): what it already issued still flies and the
+## contract stays on record, but it issues nothing more and no longer holds its
+## gate time against new contracts.
+##
 ## One tick: set the tick, let the gate open the airport, issue due
 ## occurrences in time order, advance every flight, prune. PassengerSim binds
 ## after FlightSim, so it sees the result.
@@ -33,6 +41,9 @@ signal doors_closed(flight_id: String)
 ## Fires once when a contract's occurrence is issued, after it is recorded,
 ## before any of its states is due. Never fires on a snapshot load.
 signal occurrence_added(flight_id: String)
+## Fires once when end_contract stops a contract's future days. Never fires on
+## a snapshot load.
+signal contract_ended(contract_id: String)
 ## Fires after from_snapshot() installs a save, so readers of the open state
 ## (AirportGate) can refresh. The only signal a load emits.
 signal snapshot_loaded
@@ -77,7 +88,9 @@ const STARTER_TERMS := {
 ## before their first state, which changes the saved next_day at some ticks.
 ## 3: the airport's open state (opened_tick, start_day). A version 2 save
 ## loads as open since tick 0.
-const SAVE_VERSION := 3
+## 4: ended contracts (ended: contract id -> its first day never issued). A
+## version 2 or 3 save loads with none ended.
+const SAVE_VERSION := 4
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock
@@ -113,6 +126,10 @@ var _next_day: Dictionary = {}
 ## contract accepted while closed, FlightTimetable.opening_day. Days from
 ## first_day up to it were skipped, not flown.
 var _start_day: Dictionary = {}
+## Contract id -> the first day it never issues, for the contracts that ended
+## (end_contract). The day is the contract's _next_day when it ended, so it
+## equals its _next_day from then on.
+var _ended: Dictionary = {}
 
 
 func _ready() -> void:
@@ -210,6 +227,41 @@ func accept_problem(terms: Dictionary) -> String:
 	return _clash_problem(_candidate(terms))
 
 
+## Ends a contract: no day from its next unissued one on is ever issued, so the
+## occurrences already issued still fly and the contract stays on record (its
+## fee and terms still answer for them). Its gate time is free for a new
+## contract. False (with an error) for an unknown or already ended contract or
+## while the airport is closed.
+func end_contract(contract_id: String) -> bool:
+	if contract_of(contract_id).is_empty():
+		push_error("FlightSim.end_contract: no contract '%s'" % contract_id)
+		return false
+	if _ended.has(contract_id):
+		push_error("FlightSim.end_contract: contract '%s' already ended" % contract_id)
+		return false
+	if opened_tick < 0:
+		push_error("FlightSim.end_contract: the airport is closed")
+		return false
+	_ended[contract_id] = _next_day[contract_id]
+	contract_ended.emit(contract_id)
+	return true
+
+
+## The contracts that have not ended, in acceptance order (oldest first).
+func active_contract_ids() -> Array[String]:
+	var ids: Array[String] = []
+	for contract in _contracts:
+		if not _ended.has(contract["id"]):
+			ids.append(contract["id"])
+	return ids
+
+
+## The first day an ended contract never issues, or -1 while it is running or
+## unknown.
+func contract_end_day(contract_id: String) -> int:
+	return _ended.get(contract_id, -1)
+
+
 func on_tick(new_tick: int) -> void:
 	tick = new_tick
 	if opened_tick < 0 and gate != null:
@@ -300,7 +352,9 @@ func phase_progress(id: String, time: float) -> float:
 
 ## JSON-safe state for a save.
 func to_snapshot() -> Dictionary:
-	return FlightSnapshot.save(tick, opened_tick, _contracts, _start_day, _next_day, _flights)
+	return FlightSnapshot.save(
+		tick, opened_tick, _contracts, _start_day, _next_day, _ended, _flights
+	)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
@@ -317,6 +371,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_contracts = loaded["contracts"]
 	_start_day = loaded["start_day"]
 	_next_day = loaded["next_day"]
+	_ended = loaded["ended"]
 	_flights = loaded["flights"]
 	snapshot_loaded.emit()
 	return true
@@ -346,7 +401,7 @@ func _one_off_problem(id: String, starts: Array[int], gate: String) -> String:
 	if not GATES.has(gate):
 		return "is at gate '%s', which has no stand" % gate
 	for contract in _contracts:
-		if contract["gate"] == gate:
+		if contract["gate"] == gate and not _ended.has(contract["id"]):
 			if FlightTimetable.contract_overlaps(contract, starts[0], starts[State.DEPARTED]):
 				return "would hold gate %s during contract %s" % [gate, contract["id"]]
 	return ""
@@ -362,14 +417,16 @@ func _candidate(terms: Dictionary) -> Dictionary:
 
 func _clash_problem(contract: Dictionary) -> String:
 	for other in _contracts:
-		if FlightTimetable.contracts_clash(contract, other):
+		if not _ended.has(other["id"]) and FlightTimetable.contracts_clash(contract, other):
 			return (
 				"contract %s clashes with %s at gate %s"
 				% [contract["id"], other["id"], other["gate"]]
 			)
+	# One-offs and the occurrences an ended contract issued before it ended.
 	for flight in _flights:
 		var starts: Array = flight["starts"]
-		if flight["contract"] == "" and flight["gate"] == contract["gate"]:
+		var fixed: bool = flight["contract"] == "" or _ended.has(flight["contract"])
+		if fixed and flight["gate"] == contract["gate"]:
 			if FlightTimetable.contract_overlaps(contract, starts[0], starts[State.DEPARTED]):
 				return (
 					"contract %s clashes with flight %s at gate %s"
@@ -387,6 +444,8 @@ func _issue_due() -> void:
 	var due: Array = []
 	for index in _contracts.size():
 		var contract := _contracts[index]
+		if _ended.has(contract["id"]):
+			continue
 		var day: int = _next_day[contract["id"]]
 		while FlightTimetable.issue_tick(contract, day) <= tick:
 			due.append([FlightTimetable.issue_tick(contract, day), index, day])

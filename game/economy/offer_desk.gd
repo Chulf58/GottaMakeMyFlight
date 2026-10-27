@@ -8,9 +8,21 @@ extends Node
 ## the whole-world save (Economy 8/8) saves board.to_snapshot() beside SimClock's
 ## snapshot, whose rng seed and state the next day's draw continues from.
 
+## An airline ended its contract because the rating stayed low (decision low-
+## rating-ends-one-airline-contract-per-low-day): the ended contract, whose
+## airline and destination the player is told.
+signal contract_ended(contract: Dictionary)
+
 ## The clock to follow when this node enters a scene. A scene must set it: a
 ## desk with no clock pushes an error and never draws. Tests call bind_clock.
 @export var clock: SimClock
+## The airport rating whose tier (RatingFormula.tier of its stars) decides which
+## airlines a new day's offers may come from. Read when a day is drawn, so the
+## rating must tick before the desk does (it sits earlier in the scene): the
+## new day then counts. Without one every day is drawn at the starter tier.
+@export var rating: AirportRating
+## The flights whose contracts a low rating ends. Without it nothing ends.
+@export var flights: FlightSim
 
 var board := OfferBoard.new()
 
@@ -36,7 +48,7 @@ func bind_clock(sim_clock: SimClock) -> void:
 	_bound = sim_clock
 	clock = sim_clock
 	_day = GameCalendar.day_of(clock.tick)
-	board.ensure_day(_day, clock.rng)
+	board.ensure_day(_day, clock.rng, _tier())
 	clock.ticked.connect(on_tick)
 
 
@@ -45,4 +57,29 @@ func on_tick(tick: int) -> void:
 	if day == _day:
 		return
 	_day = day
-	board.ensure_day(day, clock.rng)
+	board.ensure_day(day, clock.rng, _tier())
+	_end_contract_if_due()
+
+
+## When the rating's low days have run out, the oldest contract still running
+## ends (the first accepted: FlightSim lists them in acceptance order) and the
+## rating's count starts again, so at most one airline leaves per day end. The
+## count is used up even with no contract left to end. The rating must have
+## ticked first, so it has closed the day that just ended.
+func _end_contract_if_due() -> void:
+	if rating == null or flights == null or not rating.contract_ends():
+		return
+	var running := flights.active_contract_ids()
+	rating.note_contract_ended()
+	if running.is_empty():
+		return
+	var contract := flights.contract_of(running[0])
+	if flights.end_contract(contract["id"]):
+		contract_ended.emit(contract)
+
+
+## The airline tier the rating has unlocked, 0 with no rating.
+func _tier() -> int:
+	if rating == null:
+		return 0
+	return RatingFormula.tier(rating.stars())
