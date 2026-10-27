@@ -222,3 +222,22 @@ func test_a_save_from_before_backing_out_existed_loads_as_not_backing_out() -> v
 	var before_load := StaffTestKit.signature(_a.staff)
 	assert_bool(_a.staff.from_snapshot(stray)).is_false()
 	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)
+
+
+func test_a_first_step_with_no_progress_cannot_pose_as_a_reversal() -> void:
+	_a = PassengerTestWorld.reference_world()
+	_a.auto_staff = false
+	var m := _a.staff.get_member(_a.staff.hire(SECURITY))
+	while not (m.state == StaffMember.State.TO_STATION and m.path_index == 0 and m.seg_mm > 0):
+		_a.step()
+		assert_int(_a.clock.tick).is_less(600)
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.staff.to_snapshot()))
+	var no_progress := good.duplicate(true)
+	no_progress["members"][0]["seg_mm"] = 0
+	var before_load := StaffTestKit.signature(_a.staff)
+	# Control: the same record is a valid first step while it claims no reversal.
+	assert_bool(_a.staff.from_snapshot(no_progress)).is_true()
+	no_progress["members"][0]["backing_out"] = true
+	before_load = StaffTestKit.signature(_a.staff)
+	assert_bool(_a.staff.from_snapshot(no_progress)).is_false()
+	assert_str(StaffTestKit.signature(_a.staff)).is_equal(before_load)

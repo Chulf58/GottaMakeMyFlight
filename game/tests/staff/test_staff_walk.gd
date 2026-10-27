@@ -222,6 +222,30 @@ func test_a_floor_removed_under_the_next_cell_turns_the_member_back_without_a_ju
 	assert_that(m.at).is_equal(_w.sim.layout.lanes[m.station][0])
 
 
+func test_an_edit_during_a_reversal_reroutes_the_rest_without_going_back_to_the_gone_cell() -> void:
+	var m := _mid_step(3, true)
+	assert_object(m).is_not_null()
+	assert_bool(_w.grid.apply(BuildEdit.remove_floor(m.path[m.path_index + 1])).ok).is_true()
+	_w.step()
+	assert_bool(m.backing_out).is_true()
+	var gone := m.at
+	var tail := m.path[2]
+	var placed := false
+	for side in 4:
+		placed = placed or _w.grid.apply(BuildEdit.place_wall(tail, side)).ok
+	assert_bool(placed).is_true()
+	assert_bool(m.needs_replan).is_true()
+	var before := m.grid_position()
+	_w.step()
+	var moved := m.grid_position().distance_to(before)
+	print("wall at %s during the reversal from %s: moved %.3f m" % [tail, gone, moved])
+	assert_float(moved).is_less_equal(0.1)
+	assert_bool(m.in_pool()).is_false()
+	assert_bool(m.backing_out or m.at != gone).is_true()
+	assert_int(_until_on_duty(m.id)).is_greater(0)
+	assert_bool(m.backing_out).is_false()
+
+
 func test_a_cell_built_over_in_the_first_step_of_a_path_still_sends_the_member_to_the_pool(
 ) -> void:
 	# After a replan ahead the path starts afresh at the member's cell, so it is
