@@ -20,12 +20,6 @@ const STAR_SIZE := 24.0
 const STAR_GAP := 3.0
 const NO_DATA_TEXT := "No flights yet"
 const NO_DATA_TIP := "No flights yet: the rating starts when passengers make or miss a flight."
-## A star's colours from the Toon palette the HUD theme uses: sunny yellow
-## fill, a pale card tone when empty, the theme's dark navy outline.
-const STAR_FILL := Color(1.0, 0.82, 0.25)
-const STAR_EMPTY := Color(0.87, 0.85, 0.81)
-const STAR_OUTLINE := Color(0.1, 0.13, 0.26)
-
 @export var rating: AirportRating
 
 var _card := PanelContainer.new()
@@ -54,6 +48,16 @@ func watch(with_rating: AirportRating) -> void:
 
 func card() -> PanelContainer:
 	return _card
+
+
+## The drawn stars; its `fills` are what the card shows.
+func star_row() -> StarRow:
+	return _star_row
+
+
+## The label beside the stars (named RatingText).
+func label() -> Label:
+	return _label
 
 
 ## The stars drawn: the rating's, or 0 while it has no data.
@@ -126,18 +130,26 @@ func _build() -> void:
 
 
 ## Draws the five stars from `fills`: an empty star under, the filled part
-## clipped to its left half for a half step, the outline on top.
+## clipped to its left half for a half step, the outline on top. Colours come
+## from the HUD theme, type RatingStars: star_fill, star_empty, star_outline.
 class StarRow:
 	extends Control
 
 	var fills: Array[float] = []
 
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_THEME_CHANGED:
+			queue_redraw()
+
 	func _draw() -> void:
+		var fill := get_theme_color(&"star_fill", &"RatingStars")
+		var empty := get_theme_color(&"star_empty", &"RatingStars")
+		var outline_colour := get_theme_color(&"star_outline", &"RatingStars")
 		for i in fills.size():
 			var shape := _star(Vector2(i * (STAR_SIZE + STAR_GAP) + STAR_SIZE / 2.0, size.y / 2.0))
-			draw_colored_polygon(shape, STAR_EMPTY)
+			draw_colored_polygon(shape, empty)
 			if fills[i] >= 1.0:
-				draw_colored_polygon(shape, STAR_FILL)
+				draw_colored_polygon(shape, fill)
 			elif fills[i] > 0.0:
 				var half := PackedVector2Array(
 					[
@@ -148,10 +160,10 @@ class StarRow:
 					]
 				)
 				for piece in Geometry2D.intersect_polygons(shape, half):
-					draw_colored_polygon(piece, STAR_FILL)
+					draw_colored_polygon(piece, fill)
 			var outline := shape.duplicate()
 			outline.append(shape[0])
-			draw_polyline(outline, STAR_OUTLINE, 2.0, true)
+			draw_polyline(outline, outline_colour, 2.0, true)
 
 	## A five-point star around `centre`, point up, starting at the top point.
 	static func _star(centre: Vector2) -> PackedVector2Array:
