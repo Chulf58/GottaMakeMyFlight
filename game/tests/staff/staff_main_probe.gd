@@ -9,8 +9,9 @@ extends SceneTree
 ## Boots main.tscn with a new random world seed (printed), builds the starter
 ## terminal with the HUD button and runs UNSTAFFED_TICKS with the staff pool
 ## as a new game leaves it, empty: passengers arrive and nobody checks in.
-## Then it hires one check-in agent and one security officer and runs the
-## first flight until it has departed: the agents walk to their stations and
+## Then it presses Hire in the StaffPanel for one check-in agent and one
+## security officer (the hint must show before and clear after) and runs the
+## first flight until it has departed: the staff walk to their stations and
 ## passengers check in, are screened and make the flight. Each phase prints
 ## the counts it compared; any check that fails prints PROBE_INVALID and exits 1.
 
@@ -90,9 +91,25 @@ func _run_unstaffed() -> void:
 	if _count(Passenger.Stage.CHECKIN) != 0:
 		_invalid("a passenger checked in with no staff")
 		return
-	_staff.hire(StaffMember.Role.CHECKIN)
-	_staff.hire(StaffMember.Role.SECURITY)
-	print("PROBE hired checkin=1 security=1 at tick %d" % _clock.tick)
+	var panel := _main.get_node("StaffPanel") as StaffPanel
+	var hint_before := panel.hint_text().replace("\n", " | ")
+	panel.hire_button(StaffMember.Role.CHECKIN).pressed.emit()
+	panel.hire_button(StaffMember.Role.SECURITY).pressed.emit()
+	print(
+		(
+			"PROBE pressed Hire in the panel at tick %d: hint before '%s', after '%s', %s / %s"
+			% [
+				_clock.tick,
+				hint_before,
+				panel.hint_text(),
+				panel.counts_text(StaffMember.Role.CHECKIN),
+				panel.counts_text(StaffMember.Role.SECURITY),
+			]
+		)
+	)
+	if hint_before == "" or panel.hint_text() != "" or _staff.member_ids().size() != 2:
+		_invalid("the panel's hint or Hire buttons did not work")
+		return
 	_phase = 2
 
 
