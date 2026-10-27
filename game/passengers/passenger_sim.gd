@@ -21,6 +21,9 @@ signal passenger_spawned(id: int)
 signal outcome(id: int, made: bool)
 ## Every journey stage change, after it is made (the debug hook logs it).
 signal stage_changed(id: int, stage: Passenger.Stage)
+## A passenger finished check-in at desk `desk` (an object id) and handed
+## over its bag (BaggageSim).
+signal checked_in(id: int, desk: int)
 
 ## 3: the walks outside carry heights ([x, y, z] apron points).
 ## 4: hunger, the cafe cooldown and the cafe visits, queues and seats.
@@ -604,6 +607,7 @@ func _step_station(station: int) -> void:
 			else:
 				(q["lane"] as Array).erase(served.id)
 				_set_stage(served, Passenger.Stage.TO_SECURITY)
+				checked_in.emit(served.id, station)
 	while not (q["holding"] as Array).is_empty() and (q["lane"] as Array).size() < cells.size():
 		var moved: int = (q["holding"] as Array).pop_front()
 		(q["lane"] as Array).append(moved)

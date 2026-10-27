@@ -1,4 +1,4 @@
-[gd_scene load_steps=31 format=3]
+[gd_scene load_steps=34 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -27,6 +27,9 @@
 [ext_resource type="Script" path="res://rating/airport_rating.gd" id="23_rating"]
 [ext_resource type="Script" path="res://ui/rating_badge.gd" id="24_ratingbadge"]
 [ext_resource type="Script" path="res://core/save_game.gd" id="25_save"]
+[ext_resource type="Script" path="res://baggage/baggage_sim.gd" id="26_bagsim"]
+[ext_resource type="Script" path="res://baggage/baggage_views.gd" id="27_bagview"]
+[ext_resource type="Script" path="res://staff/staff_characters.gd" id="28_staffchars"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -148,16 +151,18 @@ staff = NodePath("../Staff")
 [node name="Staff" type="Node" parent="."]
 script = ExtResource("21_staff")
 
-[node name="Settlement" type="Node" parent="." node_paths=PackedStringArray("passengers", "finances")]
+[node name="Settlement" type="Node" parent="." node_paths=PackedStringArray("passengers", "finances", "staff")]
 script = ExtResource("19_settlement")
 passengers = NodePath("../PassengerSim")
 finances = NodePath("../Finances")
+staff = NodePath("../Staff")
 
-[node name="RescueGrant" type="Node" parent="." node_paths=PackedStringArray("clock", "passengers", "finances")]
+[node name="RescueGrant" type="Node" parent="." node_paths=PackedStringArray("clock", "passengers", "finances", "settlement")]
 script = ExtResource("20_rescue")
 clock = NodePath("../SimClock")
 passengers = NodePath("../PassengerSim")
 finances = NodePath("../Finances")
+settlement = NodePath("../Settlement")
 
 [node name="AirportGate" type="Node" parent="." node_paths=PackedStringArray("flights", "staff")]
 script = ExtResource("23_gate")
@@ -170,10 +175,27 @@ clock = NodePath("../SimClock")
 flights = NodePath("../FlightSim")
 passengers = NodePath("../PassengerSim")
 
+[node name="BaggageSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "passengers", "build_mode")]
+script = ExtResource("26_bagsim")
+clock = NodePath("../SimClock")
+flights = NodePath("../FlightSim")
+passengers = NodePath("../PassengerSim")
+build_mode = NodePath("../BuildMode")
+
 [node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim")]
 script = ExtResource("11_paxview")
 clock = NodePath("../SimClock")
 sim = NodePath("../PassengerSim")
+
+[node name="BaggageViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim")]
+script = ExtResource("27_bagview")
+clock = NodePath("../SimClock")
+sim = NodePath("../BaggageSim")
+
+[node name="StaffCharacters" type="Node3D" parent="." node_paths=PackedStringArray("clock", "staff")]
+script = ExtResource("28_staffchars")
+clock = NodePath("../SimClock")
+staff = NodePath("../Staff")
 
 [node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode")]
 script = ExtResource("12_hud")
@@ -195,9 +217,11 @@ script = ExtResource("14_shellview")
 shell = NodePath("../Airside/Terminal")
 camera = NodePath("../TycoonCamera")
 
-[node name="OfferDesk" type="Node" parent="." node_paths=PackedStringArray("clock")]
+[node name="OfferDesk" type="Node" parent="." node_paths=PackedStringArray("clock", "rating", "flights")]
 script = ExtResource("17_offerdesk")
 clock = NodePath("../SimClock")
+rating = NodePath("../AirportRating")
+flights = NodePath("../FlightSim")
 
 [node name="OfferPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("desk", "flights")]
 layer = 2
@@ -217,7 +241,7 @@ layer = 2
 script = ExtResource("24_ratingbadge")
 rating = NodePath("../AirportRating")
 
-[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating")]
+[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating", "baggage")]
 script = ExtResource("25_save")
 clock = NodePath("../SimClock")
 build_mode = NodePath("../BuildMode")
@@ -229,3 +253,4 @@ settlement = NodePath("../Settlement")
 rescue_grant = NodePath("../RescueGrant")
 offer_desk = NodePath("../OfferDesk")
 rating = NodePath("../AirportRating")
+baggage = NodePath("../BaggageSim")

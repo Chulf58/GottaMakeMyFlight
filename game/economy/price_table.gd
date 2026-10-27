@@ -1,7 +1,8 @@
 class_name PriceTable
 extends RefCounted
-## What building costs. Every number lives here: the starting budget, the
-## per-piece prices and the refund share. Prices are whole numbers. A lookup
+## What building and staffing cost. Every number lives here: the starting
+## budget, the per-piece prices, the refund share and the daily wages. Prices
+## are whole numbers. A lookup
 ## for something with no price returns NO_PRICE, never 0, so a missing entry
 ## cannot read as "free".
 
@@ -37,6 +38,15 @@ const OBJECT_PRICES := {
 	&"baggage_cart": 120,
 }
 
+## What one hired member of a role costs per game day (ruling staff-wages-
+## charged-daily-at-midnight-unpaid-wages-carried-as-owed). Tuning values, to
+## be checked in a playtest. One entry per StaffMember.Role; a test keeps the
+## two in step.
+const WAGES := {
+	StaffMember.Role.CHECKIN: 60,
+	StaffMember.Role.SECURITY: 90,
+}
+
 
 static func price_of_floor() -> int:
 	return FLOOR_PRICE
@@ -55,6 +65,14 @@ static func price_of_object(id: StringName) -> int:
 		push_error("PriceTable: no price for object '%s'" % id)
 		return NO_PRICE
 	return OBJECT_PRICES[id]
+
+
+## The daily wage of a `role` (a StaffMember.Role); an unknown role has none.
+static func wage_of(role: int) -> int:
+	if not WAGES.has(role):
+		push_error("PriceTable: no wage for staff role %d" % role)
+		return NO_PRICE
+	return WAGES[role]
 
 
 ## What removing a piece that cost `price` pays back, rounded down. A negative
