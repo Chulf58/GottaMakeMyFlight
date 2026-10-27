@@ -19,7 +19,9 @@ extends RefCounted
 ##   the saved grid, and every gate seat a passenger holds is a seat there.
 ##   A save is taken only between ticks with no edit pending, and each tick
 ##   starts by bringing queues and seats in line with the layout, so a save
-##   never holds one that is gone.
+##   never holds one that is gone;
+## - the settlement's last charged wage day is not after the clock's day
+##   (Settlement.wages_day_problem).
 ##
 ## Checked elsewhere already: staff stations and roles against the layout
 ## (StaffSnapshot.load), cafe visits and queues against the saved grid
@@ -37,6 +39,8 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 		found = _flight_id_problem(staged["passengers"], staged["rating"], flights)
 	if found == "":
 		found = _station_problem(staged["passengers"], staged["sim"])
+	if found == "":
+		found = Settlement.wages_day_problem(data["settlement"], data["clock"])
 	return found
 
 

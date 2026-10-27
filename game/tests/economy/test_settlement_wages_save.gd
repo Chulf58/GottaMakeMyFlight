@@ -126,7 +126,7 @@ func test_a_malformed_wage_key_is_refused_and_changes_nothing() -> void:
 	_kit.hire(CHECKIN)
 	_kit.cross(1)
 	var good := _kit.settlement.to_snapshot()
-	var too_big := str(Wallet.MAX_BALANCE + 1)
+	var too_big := str(Settlement.MAX_WAGES + 1)
 	var bad_values := {
 		"wages_owed": [5, "-1", too_big, "x"],
 		"wages_paid_today": [5, "-1", too_big, "x"],
@@ -144,3 +144,31 @@ func test_a_malformed_wage_key_is_refused_and_changes_nothing() -> void:
 	assert_int(_kit.settlement.wages_owed()).is_equal(0)
 	_kit.world.step()
 	assert_array(_kit.charges).has_size(1)
+
+
+func test_the_wage_keys_come_as_a_group_and_a_partial_set_is_refused() -> void:
+	_kit.hire(CHECKIN)
+	_kit.cross(1)
+	var good := _kit.settlement.to_snapshot()
+	var keys := Settlement.OPTIONAL_SNAPSHOT_KEYS
+	for i in range(1, 7):
+		var data := {"owed": good["owed"]}
+		for k in keys.size():
+			if i & (1 << k) != 0:
+				data[keys[k]] = good[keys[k]]
+		assert_bool(_kit.settlement.from_snapshot(data)).is_false()
+		assert_bool(_kit.settlement.from_snapshot(good)).is_true()
+	assert_bool(_kit.settlement.from_snapshot({"owed": []})).is_true()
+
+
+func test_a_day_charged_after_the_clock_day_is_a_broken_link() -> void:
+	var clock := {"tick": str(GameCalendar.day_start(4) + 100)}
+	var saved := {"wages_day": "4"}
+	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
+	saved["wages_day"] = "3"
+	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
+	saved["wages_day"] = "5"
+	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 5")
+	saved["wages_day"] = str(Settlement.NO_DAY)
+	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
+	assert_str(Settlement.wages_day_problem({"owed": []}, clock)).is_empty()

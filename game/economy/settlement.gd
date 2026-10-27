@@ -19,11 +19,14 @@ extends Node
 ## unpaid-wages-carried-as-owed). On the first tick of each game day every
 ## member on the staff roster, one still finishing a service before leaving
 ## included, is charged the wage of their role (PriceTable.WAGES). The wallet
-## pays what it holds; the rest is owed wages. Owed wages are paid first
-## whenever money is there, on every sim tick and whenever a fee is settled,
-## and before the owed fees, so paying them frees the room a fee waits for.
-## Money that other code puts into the wallet is swept on the next tick, not
-## the instant it arrives.
+## pays what it holds; the rest is owed wages, kept apart from the wallet so
+## the debt is whole even when it is larger than the wallet could ever hold.
+## Owed wages are paid first, the moment money comes in: Settlement sets
+## Wallet.credit_claim, so every credit (a fee, a cafe sale, a refund, a
+## grant) goes to the debt before the balance sees it and nothing can spend
+## it first. Each sim tick also pays any debt the balance already holds the
+## money for, before the owed fees, so paying it frees the room a fee waits
+## for in a full wallet.
 ##
 ## The last day charged is saved with the owed wages, so a load neither charges
 ## a day twice nor skips one. The first tick seen after a new game, or after a
@@ -38,11 +41,16 @@ signal wages_charged(day: int, paid: int, owed: int)
 const SNAPSHOT_KEYS := ["owed"]
 ## Added with staff wages. A save from before them has none and loads with no
 ## debt and no day charged yet.
+## The three keys come as a group: all present or all absent.
 const OPTIONAL_SNAPSHOT_KEYS := ["wages_owed", "wages_day", "wages_paid_today"]
 ## No day charged yet. Ticks are never negative, so no day is.
 const NO_DAY := -1
 ## Far past any game a player can play; a saved day beyond it is refused.
 const MAX_DAY := 1_000_000_000
+## The most owed wages (and wages paid in a day) the state holds. The debt is
+## not a balance, so it is not bound by Wallet.MAX_BALANCE; this only keeps the
+## sums far from the 64-bit limit. At a few hundred a day it is never reached.
+const MAX_WAGES := 1_000_000_000_000_000
 
 ## In a scene these come from the wired nodes; tests call bind(). Without
 ## `staff` no wage is charged.
@@ -78,7 +86,10 @@ func _ready() -> void:
 ## the sim's clock. Binding the sim already followed only changes the wallet;
 ## binding another lets go of the first.
 func bind(sim: PassengerSim, wallet: Wallet) -> void:
+	if _wallet != null and _wallet != wallet and _wallet.credit_claim == _claim_credit:
+		_wallet.credit_claim = Callable()
 	_wallet = wallet
+	_wallet.credit_claim = _claim_credit
 	if sim == _sim:
 		return
 	if _sim != null:
@@ -123,9 +134,10 @@ func to_snapshot() -> Dictionary:
 ## Restores a to_snapshot() dictionary. Pushes an error and returns false,
 ## changing nothing, for a missing or unknown key, an owed fee that is not a
 ## decimal string from 1 to Wallet.MAX_BALANCE, or a wage amount or day that is
-## not a decimal string in range. The wage keys are optional: a save without
-## them loads with no owed wages and no day charged yet. A successful load
-## forgets which passengers were paid, since the loaded sim may replay them.
+## not a decimal string in range. The wage keys are optional as a group: a save
+## without any loads with no owed wages and no day charged yet, and a partial
+## set is refused. A successful load forgets which passengers were paid, since
+## the loaded sim may replay them.
 func from_snapshot(data: Dictionary) -> bool:
 	var problem := _snapshot_problem(data)
 	if problem != "":
@@ -152,11 +164,42 @@ func _snapshot_problem(data: Dictionary) -> String:
 	for text in data["owed"]:
 		if not _in_range(text, 1, Wallet.MAX_BALANCE):
 			return "owed fee %s is not 1 to %d" % [text, Wallet.MAX_BALANCE]
+	return _wage_problem(data)
+
+
+## Why the wage keys are refused, or "" (all absent is allowed).
+func _wage_problem(data: Dictionary) -> String:
+	var wage_keys := 0
+	for key in OPTIONAL_SNAPSHOT_KEYS:
+		wage_keys += int(data.has(key))
+	if wage_keys != 0 and wage_keys != OPTIONAL_SNAPSHOT_KEYS.size():
+		return "the wage keys %s must be all present or all absent" % [OPTIONAL_SNAPSHOT_KEYS]
 	for key in ["wages_owed", "wages_paid_today"]:
-		if data.has(key) and not _in_range(data[key], 0, Wallet.MAX_BALANCE):
-			return "'%s' is not 0 to %d" % [key, Wallet.MAX_BALANCE]
+		if data.has(key) and not _in_range(data[key], 0, MAX_WAGES):
+			return "'%s' is not 0 to %d" % [key, MAX_WAGES]
 	if data.has("wages_day") and not _in_range(data["wages_day"], NO_DAY, MAX_DAY):
 		return "'wages_day' is not a day"
+	return ""
+
+
+## "" or why a saved settlement and a saved clock disagree: the last charged
+## day must not be after the clock's own day, or the days between would never
+## be charged. A save from before wages holds no day and always agrees. Run on
+## the save's parts by SaveLinks, since neither part sees the other.
+static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> String:
+	if not settlement.has("wages_day") or not clock.has("tick"):
+		return ""
+	if not SimClock.is_int64_string(settlement["wages_day"]):
+		return ""
+	if not SimClock.is_int64_string(clock["tick"]):
+		return ""
+	var saved_day := str(settlement["wages_day"]).to_int()
+	var clock_day := GameCalendar.day_of(str(clock["tick"]).to_int())
+	if saved_day > clock_day:
+		return (
+			"settlement: wages were last charged for day %d, after the clock's day %d"
+			% [saved_day, clock_day]
+		)
 	return ""
 
 
@@ -222,25 +265,35 @@ func _charge_wages(day: int) -> void:
 		push_error("Settlement: wallet refused a wage of %d it holds" % paid)
 		return
 	_wages_paid_today = paid
-	_wages_owed = mini(_wages_owed + due - paid, Wallet.MAX_BALANCE)
+	_wages_owed = mini(_wages_owed + due - paid, MAX_WAGES)
 	wages_charged.emit(day, paid, due - paid)
 
 
-## Pays owed wages, then owed fees, then wages again from the fees just paid.
-## Wages go first: paying them frees room in a full wallet for a fee to fit.
+## Pays owed wages, then owed fees. Wages go first: paying them frees room in
+## a full wallet for a fee to fit.
 func _pay_owed() -> void:
 	_pay_wages()
 	_pay_fees()
-	_pay_wages()
 
 
-## Pays the owed wages the wallet holds the money for.
+## Pays the owed wages the balance already holds the money for. Credits never
+## leave debt and balance both standing (see _claim_credit), so this only acts
+## on a state loaded or set up that way.
 func _pay_wages() -> void:
 	var paid := mini(_wages_owed, _wallet.balance)
 	if paid <= 0 or not _wallet.spend(paid):
 		return
 	_wages_owed -= paid
-	_wages_paid_today += paid
+	_wages_paid_today = mini(_wages_paid_today + paid, MAX_WAGES)
+
+
+## Wallet.credit_claim: takes what is owed in wages out of an incoming credit
+## and returns it, so the balance gets only the rest.
+func _claim_credit(amount: int) -> int:
+	var paid := mini(_wages_owed, amount)
+	_wages_owed -= paid
+	_wages_paid_today = mini(_wages_paid_today + paid, MAX_WAGES)
+	return paid
 
 
 ## Pays owed fees, oldest first, while the next one fits the wallet.

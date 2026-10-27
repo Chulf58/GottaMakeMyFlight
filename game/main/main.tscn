@@ -154,11 +154,12 @@ passengers = NodePath("../PassengerSim")
 finances = NodePath("../Finances")
 staff = NodePath("../Staff")
 
-[node name="RescueGrant" type="Node" parent="." node_paths=PackedStringArray("clock", "passengers", "finances")]
+[node name="RescueGrant" type="Node" parent="." node_paths=PackedStringArray("clock", "passengers", "finances", "settlement")]
 script = ExtResource("20_rescue")
 clock = NodePath("../SimClock")
 passengers = NodePath("../PassengerSim")
 finances = NodePath("../Finances")
+settlement = NodePath("../Settlement")
 
 [node name="AirportGate" type="Node" parent="." node_paths=PackedStringArray("flights", "staff")]
 script = ExtResource("23_gate")

@@ -11,6 +11,12 @@ const MAX_BALANCE := 999_999_999_999
 const SNAPSHOT_KEYS := ["balance"]
 
 var balance: int = 0
+## Optional: called with each credit's amount before it lands, it takes a share
+## of it for a debt (Settlement's owed wages), pays that debt and returns the
+## amount taken, 0 to the whole credit. The balance gets the rest. Unset or
+## freed, the whole credit lands. A load restores the balance as it was saved
+## and claims nothing.
+var credit_claim: Callable
 
 
 ## A starting balance outside [0, MAX_BALANCE] pushes an error and leaves the
@@ -26,13 +32,14 @@ func can_afford(amount: int) -> bool:
 	return amount >= 0 and amount <= balance
 
 
-## Adds `amount`. Returns false and leaves the balance unchanged when the
-## amount is negative or would pass MAX_BALANCE. Zero succeeds silently.
+## Adds `amount`, less what credit_claim takes for a debt. Returns false and
+## leaves the balance unchanged when the amount is negative or would pass
+## MAX_BALANCE. Zero succeeds silently.
 func credit(amount: int) -> bool:
 	if amount < 0 or amount > MAX_BALANCE - balance:
 		push_error("Wallet.credit: %d is not creditable at balance %d" % [amount, balance])
 		return false
-	_set_balance(balance + amount)
+	_set_balance(balance + amount - _claimed(amount))
 	return true
 
 
@@ -61,6 +68,13 @@ func from_snapshot(data: Dictionary) -> bool:
 		return false
 	_set_balance(str(data["balance"]).to_int())
 	return true
+
+
+func _claimed(amount: int) -> int:
+	if amount == 0 or not credit_claim.is_valid():
+		return 0
+	var taken: int = credit_claim.call(amount)
+	return clampi(taken, 0, amount)
 
 
 func _snapshot_problem(data: Dictionary) -> String:
