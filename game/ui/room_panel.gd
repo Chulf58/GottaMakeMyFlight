@@ -9,9 +9,6 @@ extends PanelContainer
 
 const POSITION := Vector2(16.0, 64.0)
 const WIDTH := 280.0
-const READY_COLOR := Color(0.6, 0.95, 0.65)
-const NOTE_COLOR := Color(1.0, 0.78, 0.4)
-const TEXT_COLOR := Color(0.85, 0.88, 0.94)
 
 var _build_mode: BuildMode
 var _room_id := 0
@@ -24,7 +21,7 @@ func _ready() -> void:
 	position = POSITION
 	custom_minimum_size = Vector2(WIDTH, 0.0)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_theme_stylebox_override("panel", BuildMenu.panel_style())
+	theme = BuildMenu.HUD_THEME
 	_lines.add_theme_constant_override("separation", 2)
 	_lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_lines)
@@ -55,13 +52,13 @@ func show_room(id: int) -> void:
 	visible = status != null
 	if status == null:
 		return
-	_line(status.type_name, 22, Color.WHITE)
+	_line(status.type_name, &"HudTitle")
 	if status.ok:
-		_line(RoomRules.READY, 17, READY_COLOR)
+		_line(RoomRules.READY, &"HudGoodText")
 	for note in status.notes:
-		_line(note, 17, NOTE_COLOR)
-	_line("Seats %d" % status.seats, 17, TEXT_COLOR)
-	_line("Base spend $%d per visit" % status.base_spend, 17, TEXT_COLOR)
+		_line(note, &"HudAttentionText")
+	_line("Seats %d" % status.seats)
+	_line("Base spend $%d per visit" % status.base_spend)
 	reset_size()
 
 
@@ -78,13 +75,14 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	_dirty = _room_id != 0
 
 
-func _line(text: String, font_size: int, color: Color) -> void:
+func _line(text: String, variation := &"") -> void:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	# Autowrap needs a width, or the label measures one word per line.
-	label.custom_minimum_size = Vector2(WIDTH - 8.0, 0.0)
-	label.add_theme_font_size_override("font_size", font_size)
-	label.add_theme_color_override("font_color", color)
+	# Autowrap needs a width, or the label measures one word per line. The
+	# width is what the theme card's content margins leave of WIDTH.
+	var padding := get_theme_stylebox("panel").get_minimum_size().x
+	label.custom_minimum_size = Vector2(WIDTH - padding, 0.0)
+	label.theme_type_variation = variation
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_lines.add_child(label)

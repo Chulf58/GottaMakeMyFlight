@@ -16,17 +16,18 @@ func _init() -> void:
 	name = "FlightResultPanel"
 	visible = false
 	custom_minimum_size = Vector2(WIDTH, 0.0)
-	add_theme_stylebox_override("panel", BuildMenu.panel_style())
+	theme = BuildMenu.HUD_THEME
 	var column := VBoxContainer.new()
 	add_child(column)
-	_label.add_theme_font_size_override("font_size", 18)
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_label)
 	var dismiss := Button.new()
 	dismiss.name = "DismissResult"
 	dismiss.text = "Dismiss"
 	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_END
-	BuildMenu.style_button(dismiss)
+	dismiss.focus_mode = Control.FOCUS_NONE
+	# The panel's accent: it waits for the player to dismiss it.
+	dismiss.theme_type_variation = &"HudButtonYellow"
 	dismiss.pressed.connect(dismiss_result)
 	column.add_child(dismiss)
 
