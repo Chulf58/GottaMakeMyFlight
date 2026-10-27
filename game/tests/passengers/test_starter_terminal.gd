@@ -59,9 +59,10 @@ func test_both_doors_pass_the_shell_door_rules() -> void:
 func test_a_passenger_walks_the_real_routes_and_makes_the_flight() -> void:
 	var entrance: int = ReferenceTerminal.object_ids(_world.grid)["entrances"][0]
 	assert_bool(ShellRoutes.arrival(_world.sim, entrance).size() > 2).is_true()
-	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	_world.run_to(LAST_TICK)
-	assert_int(_world.passenger(id).stage).is_equal(Passenger.Stage.MADE)
+	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
+	assert_int(_world.sim.made_count()).is_equal(1)
 
 
 func test_without_a_shell_the_layout_is_the_reference_one() -> void:

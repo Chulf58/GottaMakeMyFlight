@@ -82,10 +82,12 @@ var _time_label := Label.new()
 var _speed_buttons: Array[Button] = []
 var _debug_panel := PanelContainer.new()
 var _result := FlightResultPanel.new()
-## Flights whose doors closed and whose result is not shown yet, oldest first.
-## The sim marks the passengers missed after the doors_closed signal, so a
-## result waits for the next refresh, and for the open one to be dismissed.
+## Flights whose doors closed and whose result is not summarized yet, oldest
+## first. The sim marks the passengers missed after the doors_closed signal,
+## so a result waits for the next refresh.
 var _unreported: Array[String] = []
+## FlightResult summaries waiting for the open panel to be dismissed.
+var _unshown: Array[Dictionary] = []
 var _intro_layer: CanvasLayer
 var _intro: IntroDialogue
 ## The camera's input state when the intro opened, restored when it closes.
@@ -151,6 +153,16 @@ func _process(_delta: float) -> void:
 	refresh()
 
 
+## A followed passenger the sim has retired is gone: clear the selection and
+## let the camera go, instead of following the frozen anchor.
+func _drop_retired_selection() -> void:
+	if views == null or views.selected_id == 0 or sim.get_passenger(views.selected_id) != null:
+		return
+	views.selected_id = 0
+	if camera != null:
+		camera.stop_follow()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
 	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
@@ -186,8 +198,14 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func refresh() -> void:
-	if not _unreported.is_empty() and not _result.visible:
-		show_result_for(_unreported.pop_front())
+	_drop_retired_selection()
+	# Summarized now, not when shown: the sim drops a flight's results when
+	# FlightSim prunes it, which can come before the open panel is dismissed.
+	for flight_id in _unreported:
+		_unshown.append(FlightResult.summarize(sim, flight_id))
+	_unreported.clear()
+	if not _unshown.is_empty() and not _result.visible:
+		_result.show_result(_unshown.pop_front())
 	_time_label.text = time_text()
 	_flight_label.text = flight_text()
 	_counts_label.text = counts_text()

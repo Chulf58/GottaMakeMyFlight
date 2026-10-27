@@ -111,8 +111,9 @@ static func _rooms(grid: BuildGrid) -> Array[Dictionary]:
 	return out
 
 
-## Passenger counts: total spawned, by stage name (stages with none left out),
-## made, missed, still active and still to spawn.
+## Passenger counts: total listed (settled passengers are retired shortly after
+## their outcome), by stage name (stages with none left out), made and missed
+## (durable totals), still active and still to spawn.
 static func passenger_summary(sim: PassengerSim) -> Dictionary:
 	var by_stage := {}
 	var ids := sim.passenger_ids()
