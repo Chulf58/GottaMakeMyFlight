@@ -32,7 +32,7 @@ import sys
 
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -78,6 +78,8 @@ CLASSES = {
     "2x1": ((2.0, 1.0, 1.6), (0.0, 0.0, 0.8)),
     "1x2": ((1.0, 2.0, 2.3), (0.0, 0.0, 1.15)),
     "3x1": ((3.0, 1.0, 1.0), (0.0, 0.0, 0.5)),
+    "3x2": ((3.0, 2.0, 0.5), (0.0, 0.0, 0.25)),
+    "2x2": ((2.0, 2.0, 1.7), (0.0, 0.0, 0.85)),
 }
 
 # Catalog colours (build_catalog.gd), sRGB.
@@ -99,6 +101,34 @@ ITEMS = {
     "entrance": ("door_1x1", ["floor_tile", ("wall_door", (0.0, 0.5, 0.0))], ["arrow_in"]),
     "exit": ("door_1x1", ["floor_tile", ("wall_door", (0.0, 0.5, 0.0))], ["arrow_out"]),
     "remove": ("tile", ["floor_tile"], ["cross"]),
+    # Baggage (decision baggage-belts-are-one-auto-shaping-belt-tool-one-baggage-tray).
+    # Belt: the shapes the Belt tool lays, two straights along Godot X, a corner
+    # (facing 1) and one straight coming toward the camera, as BeltShaper shapes them.
+    # A Godot facing f is a Blender Z turn of -90 f degrees; Godot +Z is Blender -Y.
+    "belt": (
+        "3x2",
+        [
+            ("baggage_belt", (-1.0, 0.5, 0.0), -90.0),
+            ("baggage_belt", (0.0, 0.5, 0.0), -90.0),
+            ("baggage_belt_corner", (1.0, 0.5, 0.0), -90.0),
+            ("baggage_belt", (1.0, -0.5, 0.0), 0.0),
+        ],
+        [],
+    ),
+    "cart": ("1x2", ["baggage_cart"], []),
+    # Bag room (conductor ruling): a 2x2 floor with a belt end and a cart.
+    "bag_room": (
+        "2x2",
+        [
+            ("floor_tile", (-0.5, -0.5, 0.0)),
+            ("floor_tile", (0.5, -0.5, 0.0)),
+            ("floor_tile", (-0.5, 0.5, 0.0)),
+            ("floor_tile", (0.5, 0.5, 0.0)),
+            ("baggage_belt_end", (-0.5, -0.5, 0.0)),
+            ("baggage_cart", (0.5, 0.0, 0.0)),
+        ],
+        [],
+    ),
 }
 ORDER = list(ITEMS)
 
@@ -292,13 +322,15 @@ def reset_scene():
     return scene
 
 
-def import_piece(name, offset):
+def import_piece(name, offset, yaw=0.0):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=os.path.join(KIT_DIR, name + ".glb"))
     new = [o for o in bpy.data.objects if o not in before]
     roots = [o for o in new if o.parent is None]
+    # Turn about the piece origin (Blender Z is Godot Y), then move it into place.
+    place = Matrix.Translation(Vector(offset)) @ Matrix.Rotation(math.radians(yaw), 4, "Z")
     for r in roots:
-        r.location = Vector(offset) + r.location
+        r.matrix_world = place @ r.matrix_world
     meshes = [o for o in new if o.type == "MESH"]
     if not meshes:
         invalid("%s.glb imported no meshes" % name)
@@ -462,7 +494,8 @@ def render_item(item, path):
     for entry in pieces:
         name = piece_name(entry)
         offset = (0.0, 0.0, 0.0) if isinstance(entry, str) else entry[1]
-        meshes, names = import_piece(name, offset)
+        yaw = entry[2] if not isinstance(entry, str) and len(entry) > 2 else 0.0
+        meshes, names = import_piece(name, offset, yaw)
         objs += meshes
         mats |= names
     objs += add_glyphs(extras)

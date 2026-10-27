@@ -202,6 +202,11 @@ func end_cell() -> Vector2i:
 	return _end
 
 
+## The cell the drag started on.
+func start_cell() -> Vector2i:
+	return _start
+
+
 func is_single_cell() -> bool:
 	return _start == _end
 

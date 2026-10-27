@@ -29,10 +29,13 @@ const BELT_PORTS := {
 	&"baggage_belt_feed": [[Vector2i.ZERO, "F"], [Vector2i.ZERO, "L"], [Vector2i.ZERO, "R"]],
 	&"baggage_belt_end": [[Vector2i.ZERO, "F"]],
 }
-## The routes a bag can take through a belt piece, [from port, to port]. A
-## feed is a merge, not a sorter: a bag takes one exit (F to L or R, or L to R)
-## and the sim picks it. An exit with no piece beyond it stays open. The end
-## piece's bag rests on its slide (Mount_BagRest) instead of leaving.
+## The routes a bag can take through a belt piece: each pair of ports a path
+## joins. A bag may ride a path either way, because BeltShaper turns a piece
+## to fit its neighbours, not the flow (a corner can only join F and R), so
+## the bag sim routes along these joins from a desk outlet toward an end. A
+## feed is a merge, not a sorter. An exit with no piece beyond it stays open.
+## The end piece's bag rests on its slide (Mount_BagRest): "BagRest" is only
+## ever the last step.
 const BELT_PATHS := {
 	&"baggage_belt": [["F", "B"]],
 	&"baggage_belt_corner": [["F", "R"]],

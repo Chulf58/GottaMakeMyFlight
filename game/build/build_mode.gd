@@ -12,10 +12,14 @@ extends Node3D
 ## Inside a terminal shell they snap to its Toon doors instead (ShellDefinition).
 ## The Cafe tool drags a rectangle that marks floor as a cafe room (RoomTool);
 ## the counter and table tools furnish it, and RoomView shows what it needs.
-## The Bag room tool does the same for a baggage room; the belt tools lay the
-## line to it (BuildCatalog.belt_ports() says where pieces join) and the end
-## piece goes inside the room.
-## Every edit is paid from `finances` through BuildTransaction.
+## The Bag room tool does the same for a baggage room. The Belt tool lays belt
+## cells: press, drag and release lays an L-shaped line (BeltShaper.path()),
+## a click lays one cell, and Esc or right-click cancels. Every belt cell takes
+## its piece from its neighbours (BeltShaper), so a line that dead-ends in a
+## bag room ends in the belt end the room needs; after every other edit the
+## belts next to it are reshaped too (_reshape_belts()).
+## Every edit is paid from `finances` through BuildTransaction; a belt cell
+## costs the plain belt price whatever shape it takes, and a reshape is free.
 
 signal grid_changed
 ## Emitted by every set_tool(), NONE included, so the menu can follow it.
@@ -43,9 +47,6 @@ enum Tool {
 	TABLE,
 	BAG_ROOM,
 	BELT,
-	BELT_CORNER,
-	BELT_FEED,
-	BELT_END,
 	CART,
 }
 
@@ -70,12 +71,11 @@ const TOOL_OBJECTS := {
 	Tool.EXIT: &"exit_door",
 	Tool.COUNTER: &"cafe_counter",
 	Tool.TABLE: &"cafe_table",
-	Tool.BELT: &"baggage_belt",
-	Tool.BELT_CORNER: &"baggage_belt_corner",
-	Tool.BELT_FEED: &"baggage_belt_feed",
-	Tool.BELT_END: &"baggage_belt_end",
 	Tool.CART: &"baggage_cart",
 }
+## What one belt cell costs, whatever piece it becomes.
+const BELT_PRICE_ID := &"baggage_belt"
+const BELT_HINT := "Drag to lay a belt"
 ## Tools that mark a dragged rectangle as a room of a RoomTypes id.
 const TOOL_ROOMS := {Tool.CAFE_ROOM: &"cafe", Tool.BAG_ROOM: &"bag_room"}
 ## Tools under which the room under the pointer is followed for its panel.
@@ -85,7 +85,7 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.COUNTER,
 	Tool.TABLE,
 	Tool.BAG_ROOM,
-	Tool.BELT_END,
+	Tool.BELT,
 	Tool.CART,
 ]
 const TOOL_WALL_KINDS := {
@@ -110,8 +110,8 @@ const SHELL_DOOR_HINTS := {
 }
 ## Tools whose drag repeats along an edge line.
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
-## Tools whose drag marks a rectangle that is applied on release.
-const AREA_TOOLS := [Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM, Tool.BAG_ROOM]
+## Tools whose drag is applied on release: a rectangle, or the Belt's line.
+const AREA_TOOLS := [Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM, Tool.BAG_ROOM, Tool.BELT]
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1
 ## How close to an edge (in metres) the remove tool targets the wall there
@@ -170,6 +170,8 @@ var _area := AreaDrag.new()
 ## What the last rectangle did, shown until the pointer leaves its last cell.
 var _status_note := ""
 var _note_cell := Vector2i.ZERO
+## The Belt line the ghost shows (the drag, or the cell under the pointer).
+var _belt_plan: BeltShaper.Plan
 
 
 ## Where a ray meets the level plane y = `height`, or null when it never does.
@@ -322,7 +324,17 @@ func apply_at(point: Vector3) -> BuildResult:
 		_stroke_out_of_money = true
 	var refused_by_check := not result.ok
 	if result.ok:
+		# A removed room's cells, read before it is gone: its dead ends change.
+		var touched: Array[Vector2i] = []
+		if edit.kind == BuildEdit.Kind.REMOVE_ROOM:
+			touched = _rect_cells(grid.get_room(edit.room_id).get("rect", Rect2i()))
+		# The edit and the reshape it causes reach listeners as one change.
+		grid.hold_signals()
 		result = BuildTransaction.commit_plan(grid, DoorPlacement.edits_for(grid, edit), wallet())
+		if result.ok:
+			touched.append_array(result.dirty_cells)
+			_reshape_belts(touched)
+		grid.release_signals()
 	if result.ok:
 		_view.refresh(grid)
 		_hover_key = ""
@@ -340,6 +352,9 @@ func apply_at(point: Vector3) -> BuildResult:
 func begin_area(point: Vector3) -> void:
 	var cell := grid.world_to_cell(point)
 	if not grid.in_bounds(cell):
+		if tool == Tool.BELT:
+			_show_status(BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS))
+			return
 		apply_at(point)
 		return
 	_status_note = ""
@@ -379,6 +394,9 @@ func finish_area() -> AreaDrag.Outcome:
 		return null
 	_area.cancel()
 	_hover_key = ""
+	if tool == Tool.BELT:
+		lay_belt(_area.start_cell(), _area.end_cell())
+		return null
 	if _area.is_single_cell():
 		apply_at(_area.press_point)
 		return null
@@ -387,7 +405,12 @@ func finish_area() -> AreaDrag.Outcome:
 		return null
 	var outcome: AreaDrag.Outcome
 	if tool == Tool.REMOVE:
+		var touched := _cells_a_clear_touches(_area.rect())
+		grid.hold_signals()
 		outcome = AreaDrag.clear(grid, _area.rect(), wallet())
+		if outcome.placed > 0:
+			_reshape_belts(touched)
+		grid.release_signals()
 	else:
 		outcome = AreaDrag.fill_floor(grid, _area.rect(), TERMINAL_ZONE, wallet())
 	if outcome.placed > 0:
@@ -402,12 +425,86 @@ func finish_area() -> AreaDrag.Outcome:
 ## Marks the released rectangle as a room of the current room tool's type.
 func _finish_room() -> void:
 	var type: StringName = TOOL_ROOMS[tool]
+	grid.hold_signals()
 	var result := RoomTool.mark(grid, _area.rect(), type, wallet())
+	if result.ok:
+		_reshape_belts(_rect_cells(_area.rect()))
+	grid.release_signals()
 	if result.ok:
 		grid_changed.emit()
 	_status_note = RoomTool.message(grid, result, type)
 	_note_cell = _area.end_cell()
 	_show_status(null)
+
+
+## Lays a belt line from cell `from` to cell `to` (BeltShaper.path()): buys a
+## plain belt on each path cell that has none, at the belt price, and shapes
+## them and the belts next to them, all in one plan. Refused whole when a cell
+## cannot take a belt, a wall crosses the line, a belt would get a fourth link
+## or the wallet cannot pay. A line over belt only does nothing.
+func lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
+	var plan := BeltShaper.plan_line(grid, from, to, facing)
+	var result := plan.result
+	if result.ok and not plan.edits.is_empty():
+		result = BuildTransaction.commit_plan(grid, plan.edits, wallet())
+	if result.ok and not plan.edits.is_empty():
+		_view.refresh(grid)
+		grid_changed.emit()
+	_belt_plan = null
+	_hover_key = ""
+	_show_status(result)
+	if not plan.result.ok:
+		grid.edit_refused.emit(BuildEdit.place_object(BELT_PRICE_ID, to, facing), result)
+	return result
+
+
+## How many belt cells the line under the pointer (or being dragged) would buy;
+## 0 when it is refused or no Belt line is shown (BuildMenu prices it).
+func belt_cells_to_buy() -> int:
+	if tool != Tool.BELT or _belt_plan == null or not _belt_plan.result.ok:
+		return 0
+	return _belt_plan.new_cells.size()
+
+
+## Reshapes the belts on and next to `cells` to fit their links (BeltShaper):
+## free RESHAPE_BELT edits, committed through BuildTransaction so they reach
+## listeners like any edit.
+func _reshape_belts(cells: Array[Vector2i]) -> void:
+	var edits := BeltShaper.reshape_edits(grid, BeltShaper.around(cells))
+	if edits.is_empty():
+		return
+	BuildTransaction.commit_plan(grid, edits, wallet())
+	_view.refresh(grid)
+
+
+## The cells a Remove rectangle over `area` can change the belts next to, read
+## before it clears: the rectangle, the whole footprint of each object reaching
+## into it (a desk's outlet sits beside its far cell) and every bag room that
+## reaches into or touches it.
+func _cells_a_clear_touches(area: Rect2i) -> Array[Vector2i]:
+	var cells := _rect_cells(area)
+	var seen := {}
+	for cell in _rect_cells(area):
+		var object_id := grid.object_at(cell) if grid.in_bounds(cell) else 0
+		if object_id == 0 or seen.has(object_id):
+			continue
+		seen[object_id] = true
+		var record := grid.get_object(object_id)
+		var def := BuildCatalog.get_def(record["def"])
+		cells.append_array(def.footprint(record["anchor"], record["facing"]))
+	for room_id in grid.room_ids():
+		var room := grid.get_room(room_id)
+		if room["type"] == &"bag_room" and (room["rect"] as Rect2i).intersects(area.grow(1)):
+			cells.append_array(_rect_cells(room["rect"]))
+	return cells
+
+
+static func _rect_cells(area: Rect2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			cells.append(Vector2i(x, y))
+	return cells
 
 
 ## Follows the room under a ground point (null for none) while a room-focus
@@ -453,6 +550,9 @@ func check(edit: BuildEdit) -> BuildResult:
 	var result := DoorPlacement.check(grid, edit, shell)
 	if not result.ok:
 		return result
+	var crossing := BeltShaper.crossing_problem(grid, edit)
+	if crossing != null:
+		return crossing
 	return BuildTransaction.check(grid, DoorPlacement.edits_for(grid, edit), wallet())
 
 
@@ -534,6 +634,9 @@ func _update_ghost(point: Variant) -> void:
 		_status_note = ""
 		_hover_key = ""
 		_show_status(null)
+	if tool == Tool.BELT:
+		_hover_belt(point)
+		return
 	var edit: BuildEdit = null if point == null else edit_at(point)
 	_hover_edit = edit
 	if edit == null:
@@ -561,8 +664,48 @@ func _hide_area_ghost() -> void:
 		_set_status("")
 
 
+## The Belt ghost for the one cell under the pointer, or none off the grid.
+func _hover_belt(point: Variant) -> void:
+	_hover_edit = null
+	if not _pointer_on_grid:
+		_belt_plan = null
+		_ghost.visible = false
+		if _hover_key != "":
+			_hover_key = ""
+			_show_status(null)
+		return
+	var cell := grid.world_to_cell(point)
+	_draw_belt(cell, cell)
+
+
+## The shaped pieces a Belt line from `from` to `to` would lay or reshape,
+## tinted by whether it can be laid; a refused line tints its cells instead.
+func _draw_belt(from: Vector2i, to: Vector2i) -> void:
+	var key := "belt:%s:%s:%d" % [from, to, facing]
+	if key == _hover_key:
+		return
+	_hover_key = key
+	_belt_plan = BeltShaper.plan_line(grid, from, to, facing)
+	var result := _belt_plan.result
+	if result.ok:
+		result = BuildTransaction.check(grid, _belt_plan.edits, wallet())
+	_clear_ghost()
+	var material := _valid_material if result.ok else _invalid_material
+	if _belt_plan.result.ok:
+		for piece in _belt_plan.shapes:
+			_ghost_object(piece[0], piece[1], piece[2], material)
+	else:
+		for cell in _belt_plan.cells:
+			if grid.in_bounds(cell):
+				_ghost_tile(cell, material)
+	_show_status(result)
+
+
 ## One tinted slab over the whole rectangle, with its size on the status line.
 func _draw_area() -> void:
+	if tool == Tool.BELT:
+		_draw_belt(_area.start_cell(), _area.end_cell())
+		return
 	var area := _area.rect()
 	var key := "area:%s" % area
 	if key == _hover_key:
@@ -656,6 +799,14 @@ func _edit_key(edit: BuildEdit) -> String:
 func _show_status(result: BuildResult) -> void:
 	if _area.active and TOOL_ROOMS.has(tool):
 		_set_status(RoomTool.drag_label(grid, _area.rect(), TOOL_ROOMS[tool]))
+		return
+	if tool == Tool.BELT:
+		var text := BELT_HINT
+		if _area.active and _belt_plan != null:
+			text = "Belt %d cells" % _belt_plan.cells.size()
+		if result != null and not result.ok:
+			text += "  " + result.reason_text()
+		_set_status(text)
 		return
 	if _area.active:
 		_set_status(_area.size_label())

@@ -40,7 +40,7 @@
       "class": "2x1",
       "style": 3,
       "sources": {
-        "checkin_desk.glb": "16d00842abf931fbef48da5c0277904f0c273bb29aeaaf4a27db0949dabfc10b"
+        "checkin_desk.glb": "f7a39f201e9f91aba7769a9fdff900bdd90e7ecc387da79a3b44dc3d4881056b"
       }
     },
     "scanner": {
@@ -82,6 +82,33 @@
       "class": "tile",
       "style": 3,
       "sources": {
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
+    },
+    "belt": {
+      "png": "belt.png",
+      "class": "3x2",
+      "style": 3,
+      "sources": {
+        "baggage_belt.glb": "3719f03ac021591d63403f7e95767b533cc16f92fdea1ca5922009d2827e3324",
+        "baggage_belt_corner.glb": "bdbd92af151c7d496c4ede290596eec04f08d0f0e73b362450e72998af2b4249"
+      }
+    },
+    "cart": {
+      "png": "cart.png",
+      "class": "1x2",
+      "style": 3,
+      "sources": {
+        "baggage_cart.glb": "0299ce3f891fa3295fdff4627e5de0f7ca2b54285e4eab795e0607633f09101c"
+      }
+    },
+    "bag_room": {
+      "png": "bag_room.png",
+      "class": "2x2",
+      "style": 3,
+      "sources": {
+        "baggage_belt_end.glb": "253f226b2f64ca6561b595ca6f8aa57293558db905ec4b4d63ec20183dbe9ab5",
+        "baggage_cart.glb": "0299ce3f891fa3295fdff4627e5de0f7ca2b54285e4eab795e0607633f09101c",
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
       }
     }
