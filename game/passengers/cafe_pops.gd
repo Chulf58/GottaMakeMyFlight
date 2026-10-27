@@ -1,16 +1,22 @@
 class_name CafePops
 extends Node3D
-## The '+$' pop over a cafe counter when a visit is paid (ruling
-## shops-and-food-stalls-earn-per-visit-toilets-and-screens-cos): a gold
-## "+$<amount>" that rises a metre and fades out over POP_SECONDS. It listens
-## to CafeSim.paid, which fires only after the money is in the wallet.
-## PassengerViews creates it as a child. It reads the sim and never writes
-## to it; labels are pooled.
+## The '+$' pop over a cafe when a visit is paid (ruling
+## shops-and-food-stalls-earn-per-visit-toilets-and-screens-cos: "a small '+$'
+## pop over the shop"): a gold "+$<amount>" that rises and fades out over
+## POP_SECONDS. It hangs in the same column as the room's label (RoomView), top
+## aligned under the label's bottom line, so for any camera turn it stays below
+## the label and never covers it. It listens to CafeSim.paid, which fires only
+## after the money is in the wallet. PassengerViews creates it as a child. It
+## reads the sim and never writes to it; labels are pooled.
 
 const POP_SECONDS := 1.6
-const RISE_M := 1.0
-## Starts just above the counter's 1.98 m chalkboard.
-const LIFT_M := 2.3
+const RISE_M := 0.4
+## Space between the pop's top line at the end of its rise and the bottom line
+## of the room label (RoomView.LABEL_Y), which grows upward from there.
+const GAP_M := 0.6
+## How far a pop paid while another of its room is up steps aside, wider
+## than a "+$<amount>" pop.
+const SIDE_STEP_M := 1.3
 const FONT_SIZE := 64
 const COLOR := Color(1.0, 0.84, 0.3)
 
@@ -53,7 +59,23 @@ func advance(seconds: float) -> void:
 
 
 func _on_paid(passenger_id: int, room_id: int, amount: int) -> void:
+	# Pops of one room share its column, so a pop paid while others of that
+	# room are still up steps aside in the label's plane to the first free
+	# slot in the order 0, +1, -1, +2, -2, ... Sideways steps keep it under
+	# the room label.
+	var taken := {}
+	for live in _live:
+		if live.get_meta(&"room") == room_id:
+			taken[live.get_meta(&"slot")] = true
+	var side := 0
+	var n := 0
+	while taken.has(side):
+		n += 1
+		side = ceili(n / 2.0) * (1 if n % 2 == 1 else -1)
 	var label := _take()
+	label.set_meta(&"room", room_id)
+	label.set_meta(&"slot", side)
+	label.offset = Vector2(side * SIDE_STEP_M / label.pixel_size, 0.0)
 	label.text = "+$%d" % amount
 	label.position = _point(passenger_id, room_id)
 	label.modulate = COLOR
@@ -62,23 +84,27 @@ func _on_paid(passenger_id: int, room_id: int, amount: int) -> void:
 	_live.append(label)
 
 
-## Above the guest's counter (the visit is still there when `paid` fires), or
-## above the room's middle when the counter is gone.
+## Where a pop starts: under the room label's column, RISE_M + GAP_M below the
+## label's bottom line. Over the guest's counter when the room is gone.
 func _point(passenger_id: int, room_id: int) -> Vector3:
 	var grid := sim.grid
+	var lift := Vector3(0.0, RoomView.LABEL_Y - GAP_M - RISE_M, 0.0)
+	var room := grid.get_room(room_id)
+	if not room.is_empty():
+		var area: Rect2i = room["rect"]
+		# RoomView's own formula for the label's position.
+		var middle := (
+			grid.cell_to_world(area.position)
+			+ Vector3((area.size.x - 1) / 2.0, 0.0, (area.size.y - 1) / 2.0)
+		)
+		return middle + lift
 	var visit := sim.cafes.visit_of(passenger_id)
 	var counter := grid.get_object(visit.counter) if visit != null else {}
 	if not counter.is_empty():
 		var def := BuildCatalog.get_def(counter["def"])
 		var cells := def.footprint(counter["anchor"], counter["facing"])
-		var centre := BuildView.object_transform(grid, cells, counter["facing"]).origin
-		return centre + Vector3(0.0, LIFT_M, 0.0)
-	var room := grid.get_room(room_id)
-	if room.is_empty():
-		return grid.origin + Vector3(0.0, LIFT_M, 0.0)
-	var rect: Rect2i = room["rect"]
-	var middle := Vector2(rect.position) + Vector2(rect.size) * 0.5
-	return grid.origin + Vector3(middle.x, LIFT_M, middle.y)
+		return BuildView.object_transform(grid, cells, counter["facing"]).origin + lift
+	return grid.origin + lift
 
 
 func _take() -> Label3D:
@@ -89,6 +115,8 @@ func _take() -> Label3D:
 	var label := Label3D.new()
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
+	# The text hangs down from the label's position.
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	label.font_size = FONT_SIZE
 	label.outline_size = 16
 	label.outline_modulate = Color(0.05, 0.05, 0.08)

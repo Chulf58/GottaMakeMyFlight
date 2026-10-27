@@ -5,11 +5,14 @@ extends SceneTree
 ## the first time its moment happens, with the camera on the subjects' centroid (from
 ## the plate's yaw, then the other three quarter turns until enough are shown):
 ##   01 passengers queuing at a desk or scanner
-##   01b a passenger seated at the gate, close (seats empty once boarding starts at 700)
+##   01b a passenger seated in the middle chair of a gate seat row, close, from the
+##       front (01b_seated_close) and from three-quarters (01b_seated_side), once its
+##       sit pose is on (the first sitter when no middle chair fills soon)
 ##   02 a late passenger running, with its thought bubble, followed from the HUD
 ##   03 passengers on the apron walking to the parked plane's door
 ##   04 the 300-passenger debug batch (a fresh scene), after a benchmark at 3x
-## The HUD is on every plate.
+## The HUD is on every plate; the build tool is cleared after each boot, so no build
+## ghost follows the mouse into a plate.
 ##
 ## A passenger counts as shown when its drawn body is at least MIN_SUBJECT_PX tall, nine
 ## sight lines to its upper body (against every visible mesh of the shell, the build, the
@@ -37,6 +40,8 @@ const STALL_LIMIT_MS := 5000
 const BENCH_TICKS := 900
 ## GMF101's doors close at tick 1900 (FlightSim.PHASE_TICKS from tick 0).
 const DOORS_TICK := 1900
+## How long 01b waits for a middle-chair sitter after the first sitter.
+const MIDDLE_WAIT_TICKS := 120
 ## Scene nodes whose visible meshes can hide a passenger.
 const OCCLUDER_OWNERS: Array[String] = [
 	"Airside/Terminal", "BuildMode", "PlaneView", "PassengerViews"
@@ -129,12 +134,34 @@ func _boot() -> void:
 	_hud = _main.get_node("PassengerHud")
 	await _frames(5)
 	_hud.press_starter_terminal()
+	var build := _main.get_node("BuildMode") as BuildMode
+	build.set_tool(BuildMode.Tool.NONE)
+	await _frames(2)
+	var ghost := build.get_node("Ghost") as Node3D
+	print("PROBE build_tool=%d ghost_visible=%s" % [build.tool, ghost.visible])
+	if build.tool != BuildMode.Tool.NONE or ghost.visible:
+		_invalid("the build tool or its ghost is still on after clearing it")
 	print(
 		"PROBE terminal objects=",
 		_sim.grid.object_ids().size(),
 		" seats=",
 		_sim.layout.seats.size()
 	)
+	# An unstaffed desk or scanner is closed (StaffSim.is_open), so hire one
+	# member per station; they walk to their stations like hired staff in play.
+	var staff := _main.get_node("Staff") as StaffSim
+	for desk in _sim.layout.desks:
+		staff.hire(StaffMember.Role.CHECKIN)
+	for scanner in _sim.layout.scanners:
+		staff.hire(StaffMember.Role.SECURITY)
+	print(
+		(
+			"PROBE staff hired checkin=%d security=%d"
+			% [staff.count(StaffMember.Role.CHECKIN), staff.count(StaffMember.Role.SECURITY)]
+		)
+	)
+	if staff.member_ids().is_empty():
+		_invalid("no staff hired, so every station stays closed")
 	_hud.press_speed(3)
 
 
@@ -205,11 +232,75 @@ func _plate_queues() -> void:
 
 
 func _plate_seated() -> void:
-	if not await _until("seated", DOORS_TICK, func() -> bool: return _count(_seated) >= 1):
+	# A middle-chair sitter is preferred (the chair the old drawing missed); if
+	# none sits within MIDDLE_WAIT_TICKS of the first sitter, the plate takes the
+	# first one seated, and the SITTER line names its cell index.
+	var first_seen := [-1]
+	var ready := func() -> bool:
+		if _count(_seated_middle) >= 1:
+			return true
+		if _count(_seated_posed) == 0:
+			return false
+		if first_seen[0] < 0:
+			first_seen[0] = _clock.tick
+		return _clock.tick - first_seen[0] >= MIDDLE_WAIT_TICKS
+	if not await _until("seated", DOORS_TICK, ready):
 		return
 	_hud.press_speed(0)
-	await _plate("01b_seated_close", _ids(_seated), 7.0, 0.0, 1)
+	var middle := _ids(_seated_middle)
+	var only: Array[int] = [middle[0] if not middle.is_empty() else _ids(_seated_posed)[0]]
+	await _frames(5)
+	_check_sitter(only[0])
+	# Both views at their own yaw only: the front view is the one that read as standing.
+	await _plate("01b_seated_close", only, 7.0, 0.0, 1, 1)
+	await _plate("01b_seated_side", only, 7.0, PI * 0.3, 1, 1)
 	_hud.press_speed(3)
+
+
+## Where the sitter's evaluated pose puts its hips against its chair: sideways
+## and forward in the seat row's frame from the chair's point on the row's
+## centre line (x from the cell centre plus GateChairs.CHAIR_OFFSET_M),
+## and their height. The pan spans forward -0.18 to 0.32 m with its top at
+## 0.53 m, and a standing pose has its hips near 1.1 m, so hips that are not
+## low, over the pan and within a pan's half width fail the probe.
+func _check_sitter(id: int) -> void:
+	var p := _sim.get_passenger(id)
+	var record := _sim.grid.get_object(p.seat_object)
+	var cells := BuildCatalog.get_def(record["def"]).footprint(record["anchor"], record["facing"])
+	var index := cells.find(p.seat_cell)
+	var frame := BuildView.object_transform(_sim.grid, cells, record["facing"])
+	var pan := frame * Vector3((index - 1) + GateChairs.CHAIR_OFFSET_M[index], 0.0, 0.0)
+	var node := _views.node_for(id)
+	var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var hips := (
+		(skeleton.global_transform * skeleton.get_bone_global_pose(skeleton.find_bone("Hips")))
+		. origin
+	)
+	print(
+		(
+			(
+				"SITTER id=%d stage=%d clip=%s cell=%s index=%d node=%s hips=%s"
+				+ " hips_sideways=%.3f hips_forward=%.3f hips_up=%.3f"
+			)
+			% [
+				id,
+				p.stage,
+				node.get_meta(&"clip"),
+				p.seat_cell,
+				index,
+				node.global_position,
+				hips,
+				(hips - pan).dot(frame.basis.x),
+				(hips - pan).dot(frame.basis.z),
+				hips.y - _sim.grid.origin.y
+			]
+		)
+	)
+	var sideways := absf((hips - pan).dot(frame.basis.x))
+	var forward := (hips - pan).dot(frame.basis.z)
+	var up := hips.y - _sim.grid.origin.y
+	if sideways > 0.2 or forward < -0.18 or forward > 0.32 or up < 0.55 or up > 0.9:
+		_invalid("01b: sitter %d's hips are not on its chair" % id)
 
 
 func _plate_late() -> void:
@@ -267,18 +358,21 @@ func _plate_boarding() -> void:
 	print("OUTCOME made=%d missed=%d" % [_sim.made_count(), _sim.missed_count()])
 
 
-## Aims at the centroid of `ids` from `yaw`, then from the other three
-## quarter turns, and saves the first plate where at least `need` of them are
-## shown. When no view shows enough, the last view is saved with an _INVALID
-## suffix (left out of the contact sheet) for diagnosis.
-func _plate(name: String, ids: Array[int], distance: float, yaw: float, need: int) -> void:
+## Aims at the centroid of `ids` from `yaw`, then from the next quarter turns
+## (`turns` views in all, so 1 keeps the given yaw only), and saves the first
+## plate where at least `need` of them are shown. When no view shows enough,
+## the last view is saved with an _INVALID suffix (left out of the contact
+## sheet) for diagnosis.
+func _plate(
+	name: String, ids: Array[int], distance: float, yaw: float, need: int, turns := 4
+) -> void:
 	_beat(name)
 	var centre := Vector3.ZERO
 	for id in ids:
 		centre += _views.node_for(id).position
 	centre /= ids.size()
 	var result := {}
-	for turn in 4:
+	for turn in turns:
 		var view_yaw := wrapf(yaw + turn * PI / 2.0, -PI, PI)
 		_aim(centre, distance, view_yaw)
 		await _frames(20)
@@ -444,8 +538,20 @@ func _queued(p: Passenger) -> bool:
 	return p.stage in [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_QUEUE]
 
 
-func _seated(p: Passenger) -> bool:
-	return p.stage == Passenger.Stage.SEATED
+## Seated at a gate seat, with the sit pose on (its view plays sit_idle).
+func _seated_posed(p: Passenger) -> bool:
+	if p.stage != Passenger.Stage.SEATED or p.seat_object == 0:
+		return false
+	return _views.node_for(p.id).get_meta(&"clip", "") == "sit_idle"
+
+
+## _seated_posed() in a seat row's middle cell.
+func _seated_middle(p: Passenger) -> bool:
+	if not _seated_posed(p):
+		return false
+	var record := _sim.grid.get_object(p.seat_object)
+	var cells := BuildCatalog.get_def(record["def"]).footprint(record["anchor"], record["facing"])
+	return cells.find(p.seat_cell) == 1
 
 
 func _count(test: Callable) -> int:
