@@ -3,6 +3,7 @@ extends RefCounted
 ## The JSON shape of PassengerSim's state, and its checks on load. Committed
 ## paths, queue order, service ends, seat claims, apron progress and pending
 ## replans are all saved, so nothing is recomputed differently after a load.
+## Cafe visits and counter queues go under "cafe" (CafeSnapshot).
 ## Seat claims and walker counts are rebuilt from the passenger records.
 
 const KEYS := [
@@ -14,6 +15,7 @@ const KEYS := [
 	"passengers",
 	"queues",
 	"no_shows",
+	"cafe",
 ]
 const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
@@ -36,6 +38,8 @@ const INT_FIELDS := [
 	"odometer_mm",
 	"missed_stage",
 	"missed_stuck",
+	"hunger",
+	"cafe_cooldown",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan"]
@@ -84,6 +88,7 @@ static func save(
 		"passengers": records,
 		"queues": queue_list,
 		"no_shows": no_show_list,
+		"cafe": CafeSnapshot.save(sim.cafes),
 	}
 
 
@@ -115,8 +120,12 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 		var p := _passenger(entry, grid, int(data["next_id"]))
 		if p == null or ids.has(p.id):
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
-		ids[p.id] = true
+		ids[p.id] = p
 		passengers.append(p)
+	var cafe := CafeSnapshot.load(data["cafe"], ids, grid)
+	if cafe.has("error"):
+		return cafe
+	out["cafe"] = cafe
 	var queues := _queues(data["queues"], ids)
 	if queues.has("error"):
 		return queues
@@ -197,6 +206,9 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.apron_mm >= 0
 		and p.apron_mm <= p.apron_total_mm()
 		and p.odometer_mm >= 0
+		and p.hunger >= 0
+		and p.hunger <= CafeSim.HUNGER_MAX
+		and p.cafe_cooldown >= 0
 	)
 	var stage_ok := (
 		p.stage >= 0

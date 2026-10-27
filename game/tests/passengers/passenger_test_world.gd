@@ -33,6 +33,7 @@ static func make(on_grid: BuildGrid, starts: Array[int], seed := 1) -> Passenger
 	world.flights.add_flight(FLIGHT, starts)
 	world.grid = on_grid
 	world.sim = PassengerSim.new()
+	world.sim.wallet = Wallet.new()
 	world.sim.bind(world.clock, world.flights, on_grid)
 	if tracker != null:
 		tracker.auto_free(world.clock)

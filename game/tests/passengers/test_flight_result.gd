@@ -139,6 +139,7 @@ func test_the_summary_ignores_other_flights() -> void:
 func test_each_stage_has_its_exact_reason_text() -> void:
 	var gate := "At the gate, but not boarded in time"
 	var late_exit := "Left the gate too late for the plane"
+	var cafe := "Still at the cafe"
 	var expected := {
 		Passenger.Stage.SPAWNED: "Arrived after the doors closed",
 		Passenger.Stage.TO_CHECKIN: "Still walking to check-in",
@@ -154,6 +155,13 @@ func test_each_stage_has_its_exact_reason_text() -> void:
 		Passenger.Stage.STANDING_UP: gate,
 		Passenger.Stage.TO_EXIT: late_exit,
 		Passenger.Stage.APRON: late_exit,
+		Passenger.Stage.CAFE_WALK: cafe,
+		Passenger.Stage.CAFE_QUEUE: cafe,
+		Passenger.Stage.CAFE_ORDER: cafe,
+		Passenger.Stage.CAFE_TO_SEAT: cafe,
+		Passenger.Stage.CAFE_SITTING_DOWN: cafe,
+		Passenger.Stage.CAFE_SEATED: cafe,
+		Passenger.Stage.CAFE_STANDING_UP: cafe,
 	}
 	# Every stage a passenger can be missed in is in the table, so a stage added
 	# to the enum without a reason fails here.
