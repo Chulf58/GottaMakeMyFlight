@@ -88,11 +88,12 @@ func _check() -> void:
 	var money_before := menu.money_label().text
 	print("LABEL money=%s" % money_before)
 	_expect("money slot", money_before, "Money  %d" % PriceTable.STARTING_BUDGET)
-	print("LABEL flight=%s" % hud.flight_text())
+	var clock_text := (hud.find_child("Clock", true, false) as Label).text
+	print("LABEL clock=%s" % clock_text)
+	_expect("clock", clock_text, "Day 1  06:00")
 	var departures := (hud.find_child("Departures", true, false) as Label).text
 	print("LABEL departures=%s" % departures.replace("\n", " | "))
 	_expect("departures", departures, "07:38  Oslo  Gotta Air")
-	_expect("flight line", hud.flight_text().begins_with("GMF101  "), true)
 
 	var prices := {}
 	for tool in [
@@ -119,7 +120,7 @@ func _check() -> void:
 	_expect("money changed", menu.money_label().text != money_before, true)
 	_expect("desk greyed", menu.is_card_affordable(BuildMode.Tool.DESK), false)
 	_expect(
-		"desk card grey", menu.card(BuildMode.Tool.DESK).modulate, BuildMenu.UNAFFORDABLE_MODULATE
+		"desk card grey", menu.card(BuildMode.Tool.DESK).modulate, BuildMenu.unaffordable_tint()
 	)
 	_expect("floor card normal", menu.card(BuildMode.Tool.FLOOR).modulate, Color.WHITE)
 	_expect("tool cost and shortfall", menu.preview_label().text, "Cost 400   Short by 100")

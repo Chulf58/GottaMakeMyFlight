@@ -498,6 +498,7 @@ HudButtonYellow/styles/hover = SubResource("StyleBoxFlat_7j4oq")
 HudButtonYellow/styles/hover_pressed = SubResource("StyleBoxFlat_epllc")
 HudButtonYellow/styles/normal = SubResource("StyleBoxFlat_516ru")
 HudButtonYellow/styles/pressed = SubResource("StyleBoxFlat_epllc")
+HudCard/colors/unaffordable_tint = Color(0.6, 0.6, 0.6, 1)
 HudCardName/base_type = &"Label"
 HudCardName/colors/font_color = Color(0.1, 0.13, 0.26, 1)
 HudCardName/font_sizes/font_size = 15

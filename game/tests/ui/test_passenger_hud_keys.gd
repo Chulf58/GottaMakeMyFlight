@@ -113,9 +113,12 @@ func test_the_follow_text_stays_bottom_left_and_left_of_the_build_column() -> vo
 	assert_float(PassengerHud.FOLLOW_BOTTOM).is_greater(BuildMenu.MARGIN + BuildMenu.BAR_H)
 
 
-func test_time_counts_up_from_the_clock() -> void:
+func test_the_clock_shows_the_in_game_day_and_time() -> void:
+	assert_str(_hud.time_text()).is_equal("Day 1  06:00")
 	_world.clock.tick = 125 * SimClock.TICK_RATE
-	assert_str(_hud.time_text()).is_equal("Time 2:05")
+	assert_str(_hud.time_text()).is_equal("Day 1  08:05")
+	_world.clock.tick = GameCalendar.day_start(1) + 20 * GameCalendar.TICKS_PER_MINUTE
+	assert_str(_hud.time_text()).is_equal("Day 2  00:20")
 
 
 func test_the_pause_button_pauses_and_resumes_at_the_same_speed() -> void:

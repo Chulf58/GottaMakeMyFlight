@@ -157,3 +157,50 @@ func test_the_cost_line_ends_with_the_drag() -> void:
 	_mode.finish_area()
 	_mode.set_tool(BuildMode.Tool.NONE)
 	assert_str(_menu.preview_text()).is_equal("")
+
+
+func test_a_door_over_a_paid_wall_shows_the_net_price_not_the_card_price() -> void:
+	var cell := Vector2i(5, 5)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	_mode.apply_at(_at(cell))
+	_mode.set_tool(BuildMode.Tool.WALL)
+	var step := BuildGrid.SIDE_STEP[BuildGrid.Side.NORTH]
+	assert_bool(_mode.apply_at(_at(cell) + Vector3(step.x * 0.45, 0.0, step.y * 0.45)).ok).is_true()
+	_mode.set_tool(BuildMode.Tool.ENTRANCE)
+	_mode._update_ghost(_at(cell))
+	var plan := DoorPlacement.edits_for(_mode.grid, _mode.hover_edit())
+	assert_int(plan.size()).is_equal(2)
+	var refund := PriceTable.refund_of(PriceTable.WALL_PRICES[BuildGrid.WallKind.PLAIN])
+	var net := PriceTable.OBJECT_PRICES[&"entrance_door"] - refund
+	assert_int(net).is_less(PriceTable.OBJECT_PRICES[&"entrance_door"])
+	assert_str(_menu.preview_text()).is_equal("Cost %d" % net)
+	assert_str(_menu.card_price_text(BuildMode.Tool.ENTRANCE)).is_equal("300")
+	# The wallet must still hold the full door price, so a balance between the
+	# net and the full price is short, and the line says by how much.
+	_set_balance(net + 10)
+	assert_str(_menu.preview_text()).is_equal("Cost %d   Short by %d" % [net, 300 - net - 10])
+
+
+func test_the_cost_line_falls_back_to_the_card_price_off_the_grid() -> void:
+	_mode.set_tool(BuildMode.Tool.ENTRANCE)
+	_mode._update_ghost(null)
+	assert_object(_mode.hover_edit()).is_null()
+	assert_str(_menu.preview_text()).is_equal("Cost 300")
+
+
+func test_the_unaffordable_tint_comes_from_the_hud_theme() -> void:
+	assert_that(BuildMenu.unaffordable_tint()).is_equal(
+		BuildMenu.HUD_THEME.get_color("unaffordable_tint", "HudCard")
+	)
+	assert_that(BuildMenu.unaffordable_tint()).is_not_equal(Color.WHITE)
+	_set_balance(0)
+	assert_that(_menu.card(BuildMode.Tool.DESK).modulate).is_equal(BuildMenu.unaffordable_tint())
+
+
+func test_picking_a_tool_drops_the_old_tool_s_hovered_edit() -> void:
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	_mode._update_ghost(_at(Vector2i(3, 3)))
+	assert_str(_menu.preview_text()).is_equal("Cost 25")
+	_menu.press_card(BuildMode.Tool.DESK)
+	assert_object(_mode.hover_edit()).is_null()
+	assert_str(_menu.preview_text()).is_equal("Cost 400")

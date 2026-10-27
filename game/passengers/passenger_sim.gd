@@ -140,7 +140,7 @@ func _ready() -> void:
 	bind(clock, flights, build_mode.grid)
 	if auto_schedule:
 		for id in flights.flight_ids():
-			schedule_flight(id, DEFAULT_PASSENGERS)
+			schedule_flight(id, _booked_passengers(id))
 
 
 func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -> void:
@@ -446,8 +446,15 @@ func _add_spawn(
 
 ## An occurrence was issued: its booked passengers arrive within its window.
 func _on_occurrence_added(flight_id: String) -> void:
+	schedule_flight(flight_id, _booked_passengers(flight_id))
+
+
+## A contract flight's booked passengers; DEFAULT_PASSENGERS for a one-off one.
+## An occurrence issued before this sim subscribed (a new game's starter
+## contract) is still a contract flight.
+func _booked_passengers(flight_id: String) -> int:
 	var contract := flights.contract_of(flights.flight_contract_id(flight_id))
-	schedule_flight(flight_id, contract["booked_passengers"])
+	return DEFAULT_PASSENGERS if contract.is_empty() else contract["booked_passengers"]
 
 
 func _spawn_due() -> void:

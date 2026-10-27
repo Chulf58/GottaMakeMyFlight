@@ -69,8 +69,6 @@ const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 const PRICE_TEXT := "Free"
 ## The money slot when BuildMode has no wallet.
 const MONEY_TEXT := "Money  --"
-## What greys out a card the wallet cannot pay.
-const UNAFFORDABLE_MODULATE := Color(0.6, 0.6, 0.6, 1.0)
 
 ## Geometry in pixels, measured up from the bottom edge.
 const MARGIN := 8.0
@@ -116,8 +114,9 @@ var _cost := Label.new()
 var _wallet: Wallet
 ## Card tool -> its price Label.
 var _price_labels: Dictionary = {}
-## What the cost line was last set from, so it is recomputed only on a change.
-var _cost_key := ""
+## The last dragged rectangle priced (rectangle and balance) and its cost.
+var _rect_cost_key := ""
+var _rect_cost := 0
 var _room_panel := RoomPanel.new()
 ## True while the status line holds a grant message; the latest status text
 ## waits in _held_status until the hold ends.
@@ -259,31 +258,33 @@ func is_card_affordable(tool: BuildMode.Tool) -> bool:
 	return _wallet == null or _wallet.can_afford(tool_price(tool))
 
 
-## What the current tool, or the dragged Floor rectangle, would cost now, as
-## "Cost 400" and, when the wallet is short, "Cost 400   Short by 300"; ""
-## when nothing costs money or there is no wallet. A rectangle costs only its
-## unfloored tiles the rules accept, as AreaDrag.fill_floor() charges.
+## What greys out a card the wallet cannot pay: the theme's HudCard
+## unaffordable_tint (hud_theme.tres).
+static func unaffordable_tint() -> Color:
+	return HUD_THEME.get_color("unaffordable_tint", "HudCard")
+
+
+## What the current tool would cost now, as "Cost 400" and, when the wallet is
+## short, "Cost 400   Short by 300"; "" when nothing costs money or there is no
+## wallet. The cost is the net of the plan BuildMode would apply under the
+## pointer (a door over a paid wall also refunds the wall, so it is cheaper than
+## its card), the card's price when the pointer is not over the grid, or for a
+## dragged Floor rectangle the unfloored tiles the rules accept, as
+## AreaDrag.fill_floor() charges.
 func preview_text() -> String:
 	if _wallet == null or build_mode == null:
 		return ""
-	var cost := _preview_cost()
-	if cost <= 0:
+	var price := _preview_price()
+	if price.x <= 0:
 		return ""
-	var text := "Cost %d" % cost
-	if cost > _wallet.balance:
-		text += "   Short by %d" % (cost - _wallet.balance)
+	var text := "Cost %d" % price.x
+	if price.y > _wallet.balance:
+		text += "   Short by %d" % (price.y - _wallet.balance)
 	return text
 
 
-## Sets the cost line from preview_text(); recomputed only when the tool, the
-## dragged rectangle or the balance changed.
+## Sets the cost line from preview_text().
 func refresh_preview() -> void:
-	var key := "-"
-	if build_mode != null and _wallet != null:
-		key = "%d:%s:%d" % [build_mode.tool, build_mode.dragged_area(), _wallet.balance]
-	if key == _cost_key:
-		return
-	_cost_key = key
 	_cost.text = preview_text()
 	_cost.visible = _cost.text != ""
 
@@ -314,18 +315,39 @@ func _refresh_money() -> void:
 		var price := tool_price(tool)
 		var label: Label = _price_labels[tool]
 		label.text = PRICE_TEXT if _wallet == null or price == 0 else str(price)
-		_cards[tool].modulate = Color.WHITE if is_card_affordable(tool) else UNAFFORDABLE_MODULATE
+		_cards[tool].modulate = Color.WHITE if is_card_affordable(tool) else unaffordable_tint()
 	refresh_preview()
 
 
-func _preview_cost() -> int:
+## (what the placement costs net of refunds, what the wallet must hold for it).
+## A door over a paid wall costs its price less the wall's refund, but the
+## wallet must still hold the full door price (BuildTransaction.needed).
+func _preview_price() -> Vector2i:
 	var area := build_mode.dragged_area()
 	if build_mode.tool == BuildMode.Tool.FLOOR and area.has_area():
-		return _floor_rect_cost(area)
-	return tool_price(build_mode.tool)
+		var rect_cost := _floor_rect_cost(area)
+		return Vector2i(rect_cost, rect_cost)
+	var edit := build_mode.hover_edit()
+	if edit == null:
+		var price := tool_price(build_mode.tool)
+		return Vector2i(price, price)
+	var plan := DoorPlacement.edits_for(build_mode.grid, edit)
+	var net := 0
+	for step in plan:
+		net += BuildTransaction.quote(build_mode.grid, step).net()
+	return Vector2i(maxi(0, net), maxi(0, BuildTransaction.needed(build_mode.grid, plan)))
 
 
+## A rectangle is priced once per rectangle and balance, not every frame.
 func _floor_rect_cost(area: Rect2i) -> int:
+	var key := "%s:%d" % [area, _wallet.balance]
+	if key != _rect_cost_key:
+		_rect_cost_key = key
+		_rect_cost = _price_floor_rect(area)
+	return _rect_cost
+
+
+func _price_floor_rect(area: Rect2i) -> int:
 	var grid := build_mode.grid
 	var edits: Array[BuildEdit] = []
 	for y in range(area.position.y, area.end.y):

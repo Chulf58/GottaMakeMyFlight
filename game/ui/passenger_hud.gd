@@ -1,9 +1,9 @@
 class_name PassengerHud
 extends CanvasLayer
-## The passenger HUD. Top-right: elapsed sim time, the flight and its doors
-## countdown, made and missed counts, today's departures (DepartureList), and
-## the speed buttons (Space toggles the
-## pause, Shift+1/2/3 set the speed; plain number keys stay the build tool keys).
+## The passenger HUD. Top-right: the in-game day and clock, made and missed
+## counts, today's departures (DepartureList), and the speed buttons (Space
+## toggles the pause, Shift+1/2/3 set the speed; plain number keys stay the
+## build tool keys).
 ## Bottom-left: the followed passenger's story, kept left of BuildMenu's
 ## centre column and growing upward when it wraps. Bottom-right: a collapsed
 ## Debug panel (a 300-passenger batch, a starter terminal on the Toon doors B
@@ -79,7 +79,6 @@ const STAGE_TEXT := {
 @export var camera: TycoonCamera
 @export var build_mode: BuildMode
 
-var _flight_label := Label.new()
 var _counts_label := Label.new()
 var _departures_label := Label.new()
 var _seed_label := Label.new()
@@ -117,11 +116,11 @@ func _ready() -> void:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", FLIGHT_PANEL_GAP)
 	panel.add_child(column)
-	for label in [_time_label, _flight_label, _counts_label]:
+	_time_label.name = "Clock"
+	for label in [_time_label, _counts_label]:
 		label.theme_type_variation = &"HudLarge"
 		column.add_child(label)
 	_departures_label.name = "Departures"
-	_departures_label.theme_type_variation = &"HudHint"
 	column.add_child(_departures_label)
 	var speeds := HBoxContainer.new()
 	column.add_child(speeds)
@@ -220,7 +219,6 @@ func refresh() -> void:
 	if not _unshown.is_empty() and not _result.visible:
 		_result.show_result(_unshown.pop_front())
 	_time_label.text = time_text()
-	_flight_label.text = flight_text()
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
 	_seed_label.text = seed_text()
@@ -234,29 +232,9 @@ func refresh() -> void:
 			_speed_buttons[i].set_pressed_no_signal(on)
 
 
-## Elapsed sim time as m:ss.
+## The in-game day and 24-hour clock, "Day 1  06:00" (GameCalendar).
 func time_text() -> String:
-	var seconds := clock.tick / SimClock.TICK_RATE
-	@warning_ignore("integer_division")
-	return "Time %d:%02d" % [seconds / 60, seconds % 60]
-
-
-func flight_text() -> String:
-	var ids := flights.flight_ids()
-	if ids.is_empty():
-		return "No flights"
-	var id := ids[0]
-	# A timetable occurrence shows its contract's name, not the "-d<day>" suffix,
-	# which would also widen the panel past the screen edge.
-	var occurrence := FlightTimetable.parse_occurrence(id)
-	var shown: String = occurrence["contract"] if not occurrence.is_empty() else id
-	var after_doors: String = AFTER_DOORS_TEXT.get(flights.state_of(id), "")
-	if after_doors != "":
-		return "%s  %s" % [shown, after_doors]
-	var state: String = FlightSim.State.find_key(flights.state_of(id))
-	var left := maxi(0, flights.doors_close_tick(id) - clock.tick) / SimClock.TICK_RATE
-	@warning_ignore("integer_division")
-	return "%s  %s  doors close in %d:%02d" % [shown, state.capitalize(), left / 60, left % 60]
+	return "Day %d  %s" % [GameCalendar.day_of(clock.tick) + 1, GameCalendar.clock_text(clock.tick)]
 
 
 func counts_text() -> String:

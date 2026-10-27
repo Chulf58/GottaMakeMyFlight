@@ -151,7 +151,7 @@ func _scene_b() -> void:
 		_expect(_menu.card(tool).modulate == Color.WHITE, "b: card %d is greyed" % tool)
 	for tool in [BuildMode.Tool.GLASS, BuildMode.Tool.DOOR]:
 		_expect(
-			_menu.card(tool).modulate == BuildMenu.UNAFFORDABLE_MODULATE,
+			_menu.card(tool).modulate == BuildMenu.unaffordable_tint(),
 			"b: card %d not greyed" % tool
 		)
 		var price := _menu.card_price_label(tool)
@@ -342,8 +342,11 @@ func _plate(label: String, buttons: Array, park_mouse := true) -> void:
 	)
 	print(
 		(
-			"  TEXT flight='%s' departures='%s'"
-			% [_hud.flight_text(), _departures().text.replace("\n", " | ")]
+			"  TEXT clock='%s' departures='%s'"
+			% [
+				(_hud.find_child("Clock", true, false) as Label).text,
+				_departures().text.replace("\n", " | ")
+			]
 		)
 	)
 	for button: Button in buttons:

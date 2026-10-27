@@ -48,4 +48,24 @@ func test_the_hud_shows_the_budget_and_the_day_one_departure() -> void:
 	assert_str(menu.money_label().text).is_equal("Money  %d" % PriceTable.STARTING_BUDGET)
 	var panel := hud.find_child("Departures", true, false) as Label
 	assert_str(panel.text).is_equal("07:38  Oslo  Gotta Air")
-	assert_str(hud.flight_text()).contains(FlightSim.STARTER_TERMS["id"])
+	# The clock and the timetable replace the elapsed time and the one-flight row.
+	var panel_texts := PackedStringArray()
+	for label in (hud.find_child("FlightPanel", true, false) as Control).find_children(
+		"*", "Label", true, false
+	):
+		panel_texts.append((label as Label).text)
+	var clock_label := hud.find_child("Clock", true, false) as Label
+	assert_str(clock_label.text).is_equal("Day 1  06:00")
+	assert_array(panel_texts).contains([clock_label.text])
+	for text in panel_texts:
+		assert_str(text).not_contains("Time ")
+		assert_str(text).not_contains("doors close in")
+		assert_str(text).not_contains("GMF101-d0")
+
+
+func test_day_one_books_the_starter_contract_s_passengers_not_the_default() -> void:
+	var sim: PassengerSim = _main.get_node("PassengerSim")
+	assert_int(FlightSim.STARTER_TERMS["booked_passengers"]).is_not_equal(
+		PassengerSim.DEFAULT_PASSENGERS
+	)
+	assert_int(sim.pending_spawns()).is_equal(FlightSim.STARTER_TERMS["booked_passengers"])

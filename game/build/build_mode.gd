@@ -134,6 +134,7 @@ var _marker_material := _ghost_material(MARKER_TINT)
 var _area_remove_material := _ghost_material(AREA_REMOVE_TINT)
 var _status := ""
 var _hover_key := ""
+var _hover_edit: BuildEdit
 var _dragging := false
 var _drag_side := -1
 var _last_applied_key := ""
@@ -236,6 +237,7 @@ func set_tool(new_tool: Tool) -> void:
 	tool = new_tool
 	_auto_facing = true
 	_hover_key = ""
+	_hover_edit = null
 	_show_status(null)
 	tool_changed.emit(tool)
 
@@ -318,6 +320,11 @@ func begin_area(point: Vector3) -> void:
 	_status_note = ""
 	_area.begin(cell, point, grid.size)
 	_hover_key = ""
+
+
+## The edit under the pointer, or null (BuildMenu prices it for the cost line).
+func hover_edit() -> BuildEdit:
+	return _hover_edit
 
 
 ## The rectangle being dragged, or an empty Rect2i when no rectangle drag is on
@@ -496,6 +503,7 @@ func _update_ghost(point: Variant) -> void:
 		_hover_key = ""
 		_show_status(null)
 	var edit: BuildEdit = null if point == null else edit_at(point)
+	_hover_edit = edit
 	if edit == null:
 		_ghost.visible = false
 		if _hover_key != "":
