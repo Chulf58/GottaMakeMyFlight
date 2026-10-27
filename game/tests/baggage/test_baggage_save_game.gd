@@ -24,6 +24,8 @@ func before() -> void:
 	data["tick"] = str(start)
 	assert_bool(clock.from_snapshot(data)).is_true()
 	SaveTestKit.start_airport(_main)
+	# Passengers check no bag until a ready bag room exists.
+	BagRoomKit.add((_main.get_node("BuildMode") as BuildMode).grid)
 	_save = SaveTestKit.save_game(_main)
 	_bags = _main.get_node("BaggageSim")
 	while _unsettled() == null and clock.tick < start + LIMIT:

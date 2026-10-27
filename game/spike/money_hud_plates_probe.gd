@@ -21,6 +21,7 @@ extends SceneTree
 ##     --path C:/Users/chulf/Gotta-make-my-flight/.claude/worktrees/<lane>/game \
 ##     -s res://spike/money_hud_plates_probe.gd
 
+const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/money_hud"
 const LIMIT_MS := 180000
 const WINDOW := Vector2i(1920, 1080)
@@ -111,11 +112,40 @@ func _boot(world_seed: int) -> void:
 	_flights = _main.get_node("FlightSim") as FlightSim
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	await _frames(8)
+	# A new game boots closed with no flight; open the airport directly (these
+	# plates are about money, not staffing), which accepts the starter and issues
+	# its first occurrence on the next tick, stepped by hand.
+	_expect((_main.get_node("AirportGate") as AirportGate).open(), "the airport did not open")
+	var starter := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
+	StarterFlight.advance_until(
+		_main.get_node("SimClock"), func() -> bool: return _flights.flight_ids().has(starter), 200
+	)
+	await _frames(4)
 	_hud.set_debug_open(true)
 	await _frames(4)
 
 
+## Puts BuildMode's pointer over a cell of the grid through its pointer_override
+## hook, so the cost line prices the tool under it instead of reading whatever
+## the real mouse happens to cover. A plain warp_mouse plus a motion event at
+## window pixels (as hud_click_probe does) left the viewport mouse on the real
+## cursor in this probe, so the hover is driven here instead.
+func _point_at_world() -> void:
+	var camera := _main.get_node("TycoonCamera/Camera3D") as Camera3D
+	var screen := camera.unproject_position(_mode.grid.cell_to_world(DRAG_FROM))
+	_mode.pointer_override = screen
+	await _frames(6)
+	print(
+		(
+			"  POINTER override=%s on_grid=%s tool=%d hovered=%s"
+			% [screen, _mode.pointer_on_grid(), _mode.tool, _mode.hover_edit() != null]
+		)
+	)
+	_expect(_mode.pointer_on_grid(), "the overridden pointer is not on the grid")
+
+
 func _scene_a() -> void:
+	await _point_at_world()
 	_expect(
 		_menu.money_label().text == "Money  20000", "a: money text '%s'" % _menu.money_label().text
 	)
@@ -125,7 +155,7 @@ func _scene_a() -> void:
 	)
 	var departures := _departures()
 	_expect(
-		departures.text == "07:38  Oslo  Gotta Air  doors close in 1:35",
+		departures.text == "09:38  Oslo  Gotta Air  doors close in 3:35",
 		"a: departures '%s'" % departures.text
 	)
 	var policy := _find_label(_hud, PassengerHud.DEBUG_POLICY_TEXT)
@@ -142,7 +172,7 @@ func _scene_a() -> void:
 func _scene_b() -> void:
 	_finances.wallet.from_snapshot({"balance": "60"})
 	_menu.press_card(BuildMode.Tool.DOOR)
-	await _frames(4)
+	await _point_at_world()
 	_expect(
 		_menu.money_label().text == "Money  60", "b: money text '%s'" % _menu.money_label().text
 	)
@@ -182,6 +212,7 @@ func _scene_b() -> void:
 
 
 func _scene_c() -> void:
+	_mode.pointer_override = Vector2(-1.0, -1.0)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	var camera := _main.get_node("TycoonCamera/Camera3D") as Camera3D
 	var corners := [
@@ -231,7 +262,7 @@ func _scene_d() -> void:
 	for i in 2:
 		var terms := FlightSim.STARTER_TERMS.duplicate()
 		terms["id"] = "PRB%d" % i
-		terms["departure_minute"] = (11 + 3 * i) * 60
+		terms["departure_minute"] = (14 + 3 * i) * 60
 		terms["destination"] = ["Rome", "Berlin"][i]
 		terms["airline"] = ["Blue Fjord", "Nordic Wing"][i]
 		_expect(_flights.accept_contract(terms), "d: contract %d refused" % i)

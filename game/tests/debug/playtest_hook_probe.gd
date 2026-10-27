@@ -10,8 +10,9 @@ extends SceneTree
 ##
 ## Boots main.tscn with a new random world seed (printed) as the current scene,
 ## waits for the autoload to attach, builds the starter terminal with the HUD
-## button, drags a Floor rectangle over the cell behind the entrance (one cell
-## refused), takes both check-in desks away for 30 sim seconds, counted from
+## button, sets a desk down on a desk (refused; the shell floors every cell a
+## Floor rectangle could reach, so a rectangle refuses nothing), takes both
+## check-in desks away for 30 sim seconds, counted from
 ## the first passenger's arrival (passengers get stuck and the stuck_too_long
 ## anomaly is raised, then cleared once the desks are back), and runs the
 ## starter's first flight to DEPARTED at up to 40 ticks a frame. The seated
@@ -59,6 +60,8 @@ var _departed_at := -1
 ## The tick the first passenger arrived, or -1.
 var _arrived := -1
 var _waited := 0
+## Refusals the grid announced, counted here to show the build_refused control.
+var _refused := 0
 
 
 func _initialize() -> void:
@@ -115,14 +118,46 @@ func _build() -> void:
 	# A new game has no staff: seat one at every desk and scanner.
 	StaffTestKit.staff_all(_main.get_node("Staff"))
 	var grid := _mode.grid
-	_mode.set_tool(BuildMode.Tool.FLOOR)
-	var behind := ReferenceTerminal.ENTRANCE_CELL + Vector2i(0, 1)
-	_mode.begin_area(grid.cell_to_world(behind + Vector2i(-1, 0)))
-	_mode.move_area(grid.cell_to_world(behind + Vector2i(1, 0)))
-	var outcome := _mode.finish_area()
-	print("PROBE floor rectangle placed=%d skipped=%d" % [outcome.placed, outcome.skipped])
+	grid.edit_refused.connect(_count_refusal)
+	# A refused edit: a desk set down on a desk. The starter's shell already
+	# floors every cell a Floor rectangle could reach, so a rectangle would
+	# refuse nothing.
+	var desk := _first_desk(grid)
+	if desk.is_empty():
+		_invalid("the starter terminal has no check-in desk to build over")
+		return
+	_mode.set_tool(BuildMode.Tool.DESK)
+	var refused_before := _refused
+	var result := _mode.apply_at(grid.cell_to_world(desk["anchor"]))
+	print(
+		(
+			"PROBE desk over the desk at %s ok=%s reason=%s refusals_before=%d refusals_after=%d"
+			% [
+				desk["anchor"],
+				result.ok if result != null else "none",
+				result.reason_text() if result != null else "none",
+				refused_before,
+				_refused
+			]
+		)
+	)
+	if result == null or result.ok or _refused <= refused_before:
+		_invalid("building a desk over a desk was not refused")
+		return
 	_mode.set_tool(BuildMode.Tool.NONE)
 	_phase = 2
+
+
+func _first_desk(grid: BuildGrid) -> Dictionary:
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		if record["def"] == &"checkin_desk":
+			return record
+	return {}
+
+
+func _count_refusal(_edit: BuildEdit, _result: BuildResult) -> void:
+	_refused += 1
 
 
 func _run_flight() -> void:

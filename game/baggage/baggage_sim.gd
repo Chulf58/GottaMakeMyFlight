@@ -107,8 +107,12 @@ func bind(
 ## Checks passenger `passenger_id`'s bag in at desk `desk_id` now, and returns
 ## the bag. On or after its flight's cutoff it is missed at once. A passenger
 ## checks one bag: a second check-in while its first bag is kept pushes an
-## error and returns null.
+## error and returns null. While the grid has no ready bag room the passenger
+## checks no bag and it returns null, with no error (decision bags-count-only-
+## once-a-ready-bag-room-exists-missed-bag-fee-and-rating).
 func check_in(passenger_id: int, flight_id: String, desk_id: int) -> Bag:
+	if not has_ready_bag_room():
+		return null
 	for kept in _bags:
 		if kept.passenger == passenger_id:
 			push_error(
@@ -131,6 +135,17 @@ func check_in(passenger_id: int, flight_id: String, desk_id: int) -> Bag:
 	return bag
 
 
+## Whether the grid, as it stands now, holds a bag room that is ready (a belt end
+## in it, so it has a root for the route field). Read from the grid each time,
+## never saved, so a save and a load always agree on it.
+func has_ready_bag_room() -> bool:
+	for room_id in grid.room_ids():
+		if grid.get_room(room_id)["type"] == BeltShaper.BAG_ROOM:
+			if RoomRules.status(grid, room_id).ok:
+				return true
+	return false
+
+
 func on_tick(new_tick: int) -> void:
 	tick = new_tick
 	if routes_stale:
@@ -144,6 +159,15 @@ func on_tick(new_tick: int) -> void:
 
 func get_bag(id: int) -> Bag:
 	return _by_id.get(id)
+
+
+## The kept bag of passenger `passenger_id`, or null: the passenger never
+## checked one in, or it was settled long enough ago to be dropped.
+func bag_of_passenger(passenger_id: int) -> Bag:
+	for bag in _bags:
+		if bag.passenger == passenger_id:
+			return bag
+	return null
 
 
 func bag_ids() -> Array[int]:
