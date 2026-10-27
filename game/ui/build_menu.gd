@@ -467,6 +467,12 @@ func _sync() -> void:
 		_cards[key].set_pressed_no_signal(key == tool)
 
 
+## Height, from the bottom edge, of the top of the tray, status and cost stack:
+## what a card that must not cover any of them docks above.
+static func tray_stack_top() -> float:
+	return MARGIN + BAR_H + GAP + TRAY_H + GAP + STATUS_H + COST_H
+
+
 ## Anchors a control to the bottom centre with its bottom edge `bottom` px up;
 ## it grows up and out to both sides from there.
 static func anchor_bottom_centre(control: Control, bottom: float) -> void:

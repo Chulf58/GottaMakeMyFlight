@@ -136,3 +136,20 @@ func test_the_hint_sits_above_the_bar_and_clear_of_the_card() -> void:
 
 func test_the_hint_does_not_take_mouse_input() -> void:
 	assert_int(_panel.hint_label().mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
+
+
+func test_the_hint_clears_the_tray_status_and_cost_lines_with_a_tray_open() -> void:
+	_menu.category_button(2).pressed.emit()
+	await get_tree().process_frame
+	_menu.status_label().text = "Facing auto"
+	_menu.status_label().visible = true
+	_menu.preview_label().text = "Cost 400   Short by 300"
+	_menu.preview_label().visible = true
+	await get_tree().process_frame
+	assert_bool(_menu.is_tray_open()).is_true()
+	var hint := _panel.hint_label().get_global_rect()
+	assert_bool(hint.intersects(_menu.tray().get_global_rect())).is_false()
+	assert_bool(hint.intersects(_menu.status_label().get_global_rect())).is_false()
+	assert_bool(hint.intersects(_menu.preview_label().get_global_rect())).is_false()
+	assert_float(hint.end.y).is_less_equal(_menu.preview_label().get_global_rect().position.y)
+	assert_float(hint.position.y).is_greater_equal(0.0)

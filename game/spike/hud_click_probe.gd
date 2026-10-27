@@ -9,13 +9,15 @@ extends SceneTree
 ## card's check-in Hire button centre, and queues a mouse motion, then a left
 ## press and release through Input.parse_input_event at that point, in window
 ## pixels (the viewport point through Window.get_final_transform). It prints the
-## control under the pointer, the hire count before and after, and the
-## BuildMode edits and refusals the click caused. The card opens from the Staff
-## button and an armed tool closes it, so those two clicks are made with no
-## tool; the floor tool is armed after, for the 3x speed button (clock speed
-## before and after; a leaked click would show). A control click
-## on empty world with the floor tool armed must produce a recorded edit or
-## refusal: it proves the instrument sees BuildMode. Pass values are positives
+## control under the pointer, the hire count before and after, the BuildMode
+## edits and refusals the click caused, and how many left-button events reached
+## _unhandled_input (the stage BuildMode reads; a tap node on the root counts
+## them). The floor tool is armed for the Staff click, so a leak would make an
+## edit. The Hire card closes when a tool is armed, so that click runs with no
+## tool, where an edit cannot happen: its leak check is the tap count, which
+## must stay 0. A control click on empty world with the floor tool armed must
+## produce a recorded edit or refusal and reach the tap: it proves the
+## instrument sees BuildMode. Pass values are positives
 ## (the hire count rose, the speed changed, the control click was recorded);
 ## each compared value is printed. A failure prints PROBE_INVALID and exits 1.
 ## A guard thread calls OS.crash() on a hang.
@@ -43,6 +45,8 @@ var _staff: StaffSim
 var _clock: SimClock
 var _applied := 0
 var _refused := 0
+var _tap := InputTap.new()
+var _reached := 0
 
 
 func _initialize() -> void:
@@ -63,6 +67,7 @@ func _run() -> void:
 	_staff = _main.get_node("Staff")
 	_mode.grid.edit_applied.connect(func(_e: BuildEdit, _r: BuildResult) -> void: _applied += 1)
 	_mode.grid.edit_refused.connect(func(_e: BuildEdit, _r: BuildResult) -> void: _refused += 1)
+	root.add_child(_tap)
 	(_main.get_node("TycoonCamera/Camera3D") as Camera3D).make_current()
 	await _frames(6)
 	print("PROBE window=%s viewport=%s" % [root.size, root.get_visible_rect().size])
@@ -78,33 +83,37 @@ func _at_scale(scale_value: float) -> void:
 	await _frames(6)
 	var size := root.get_visible_rect().size
 	print("PROBE ui_scale=%.2f viewport=%s" % [root.content_scale_factor, size])
-	# The hiring card opens from the bar's Staff button and an armed tool closes
-	# it, so the Hire click is made with no tool; the floor tool is armed after.
-	_mode.set_tool(BuildMode.Tool.NONE)
+	# The Staff click runs with the floor tool armed, so a leaked click would
+	# make an edit. An armed tool closes the hiring card, so the Hire click runs
+	# with no tool (the Staff click drops it): its leak check is the tap count.
+	_mode.set_tool(BuildMode.Tool.FLOOR)
 	var menu := _main.get_node("BuildMenu") as BuildMenu
 	var panel := _main.get_node("StaffPanel") as StaffPanel
 	var opened := await _click(menu.staff_button, "staff button")
 	print(
 		(
-			"PROBE scale=%.2f staff_button staff_open=%s card_visible=%s build_events=%d"
-			% [scale_value, menu.staff_open, panel.card().is_visible_in_tree(), opened]
+			"PROBE scale=%.2f staff_button staff_open=%s card_visible=%s build_events=%d reached=%d"
+			% [scale_value, menu.staff_open, panel.card().is_visible_in_tree(), opened, _reached]
 		)
 	)
 	_expect(menu.staff_open, "the Staff button click did not open the staff card")
 	_expect(panel.card().is_visible_in_tree(), "the staff card is not visible after its button")
 	_expect(opened == 0, "the Staff button click reached BuildMode (%d events)" % opened)
+	_expect(_reached == 0, "the Staff button click reached _unhandled_input (%d)" % _reached)
+	_expect(_mode.tool == BuildMode.Tool.NONE, "the Staff button did not drop the armed tool")
 	var hire := panel.hire_button(StaffMember.Role.CHECKIN)
 	var before := _staff.count(StaffMember.Role.CHECKIN)
 	var events := await _click(hire, "hire")
 	var after := _staff.count(StaffMember.Role.CHECKIN)
 	print(
 		(
-			"PROBE scale=%.2f hire hired_before=%d hired_after=%d build_events=%d"
-			% [scale_value, before, after, events]
+			"PROBE scale=%.2f hire hired_before=%d hired_after=%d build_events=%d reached=%d"
+			% [scale_value, before, after, events, _reached]
 		)
 	)
 	_expect(after == before + 1, "the Hire click did not hire (%d -> %d)" % [before, after])
 	_expect(events == 0, "the Hire click reached BuildMode (%d events)" % events)
+	_expect(_reached == 0, "the Hire click reached _unhandled_input (%d)" % _reached)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	var speed_button := _find_button("3x")
 	_clock.set_speed(1)
@@ -113,17 +122,24 @@ func _at_scale(scale_value: float) -> void:
 	events = await _click(speed_button, "speed3")
 	print(
 		(
-			"PROBE scale=%.2f speed3 speed_before=%d speed_after=%d paused=%s build_events=%d"
-			% [scale_value, speed_before, _clock.speed, _clock.paused, events]
+			"PROBE scale=%.2f speed3 speed_before=%d speed_after=%d paused=%s build_events=%d reached=%d"
+			% [scale_value, speed_before, _clock.speed, _clock.paused, events, _reached]
 		)
 	)
 	_expect(_clock.speed == 3, "the 3x click did not set the speed (%d)" % _clock.speed)
 	_expect(events == 0, "the 3x click reached BuildMode (%d events)" % events)
+	_expect(_reached == 0, "the 3x click reached _unhandled_input (%d)" % _reached)
 	# Control: a click on empty world with the floor tool armed must be seen.
 	var world_pt := Vector2(root.get_visible_rect().size) * Vector2(0.55, 0.5)
 	events = await _click_at(world_pt, "world control")
-	print("PROBE scale=%.2f world_control build_events=%d" % [scale_value, events])
+	print(
+		(
+			"PROBE scale=%.2f world_control build_events=%d reached=%d"
+			% [scale_value, events, _reached]
+		)
+	)
 	_expect(events >= 1, "the control click on the world produced no BuildMode event")
+	_expect(_reached >= 1, "the control click on the world did not reach _unhandled_input")
 	_mode.set_tool(BuildMode.Tool.NONE)
 
 
@@ -141,7 +157,8 @@ func _click(control: Control, what: String) -> int:
 
 
 ## Warps the mouse onto `point` (viewport coordinates), queues a motion, then a
-## left press and release; returns the BuildMode edits and refusals it caused.
+## left press and release; returns the BuildMode edits and refusals it caused and
+## sets _reached to the left-button events that reached _unhandled_input.
 func _click_at(point: Vector2, what: String, target: Control = null) -> int:
 	_beat("click " + what)
 	var window_pt := root.get_final_transform() * point
@@ -174,6 +191,7 @@ func _click_at(point: Vector2, what: String, target: Control = null) -> int:
 		)
 	)
 	var base := _applied + _refused
+	_tap.count = 0
 	for pressed in [true, false]:
 		var button := InputEventMouseButton.new()
 		button.button_index = MOUSE_BUTTON_LEFT
@@ -183,6 +201,7 @@ func _click_at(point: Vector2, what: String, target: Control = null) -> int:
 		button.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
 		Input.parse_input_event(button)
 		await _frames(2)
+	_reached = _tap.count
 	return _applied + _refused - base
 
 
@@ -241,3 +260,15 @@ func _watch() -> void:
 				)
 			)
 			OS.crash("hud click probe hung")
+
+
+## Counts left-button events that reach the unhandled-input stage, the one
+## BuildMode reads: a control that consumed its click keeps them from here.
+class InputTap:
+	extends Node
+	var count := 0
+
+	func _unhandled_input(event: InputEvent) -> void:
+		var button := event as InputEventMouseButton
+		if button != null and button.button_index == MOUSE_BUTTON_LEFT:
+			count += 1

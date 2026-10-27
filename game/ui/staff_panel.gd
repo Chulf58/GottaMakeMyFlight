@@ -178,8 +178,9 @@ func _build() -> void:
 
 
 ## The hint sits in a HUD card of its own, centred, growing up from the bottom
-## edge _hint_bottom() gives: just above the bar, or above the open tray or
-## staff card, so it never covers either and has a backing to read against.
+## edge _place_hint() gives: just above the bar, above the open tray with its
+## status and cost lines, or above the staff card, so it never covers any of them
+## and has a backing to read against.
 func _build_hint() -> void:
 	_hint_box.name = "StaffHintCard"
 	_hint_box.theme = BuildMenu.HUD_THEME
@@ -204,7 +205,7 @@ func _process(_delta: float) -> void:
 func _place_hint() -> void:
 	var bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 	if menu != null and menu.is_tray_open():
-		bottom += BuildMenu.TRAY_H + BuildMenu.GAP
+		bottom = BuildMenu.tray_stack_top() + BuildMenu.GAP
 	elif _card.visible and menu != null:
 		bottom += _card.get_combined_minimum_size().y + BuildMenu.GAP
 	if not is_equal_approx(bottom, _hint_bottom):
