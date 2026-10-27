@@ -15,8 +15,12 @@ extends Node
 ## game saved and played on plays exactly like one never saved. The staff are
 ## saved as they stand, a leaving member whose service just ended included;
 ## the next tick's staff step lets it go, loaded or not.
-## request_save() keeps a refused save waiting and retries it after each
-## frame's clock advance (process_priority puts this node after SimClock).
+## The bags wait for the same tick (BaggageSim.routes_stale): their route
+## field is rebuilt from the grid on the tick after an edit, never at save
+## time. request_save() keeps a refused save waiting, with its message kept
+## on screen while it waits (a paused game can wait a long time), and
+## retries it after each frame's clock advance (process_priority puts this
+## node after SimClock).
 ##
 ## Loading checks everything before it changes anything. Each part is loaded
 ## into a staged copy built from the save alone (a grid, then a bare
@@ -35,7 +39,8 @@ extends Node
 signal saved(path: String, ok: bool)
 signal loaded(ok: bool)
 
-const SAVE_VERSION := 1
+## 2: the bags (part "baggage"); version 1 saves are refused.
+const SAVE_VERSION := 2
 const SAVE_DIR := "user://saves"
 const QUICK_SAVE_PATH := "user://saves/quicksave.json"
 const QUICK_SAVE_KEY := KEY_F5
@@ -53,6 +58,7 @@ const MESSAGE_SECONDS := 4.0
 @export var rescue_grant: RescueGrant
 @export var offer_desk: OfferDesk
 @export var rating: AirportRating
+@export var baggage: BaggageSim
 ## Where F5 and F8 save and load. Tests point it at their own file.
 @export var quick_save_path := QUICK_SAVE_PATH
 
@@ -97,6 +103,14 @@ func parts() -> Array[SavePart]:
 			"passengers", passengers.to_snapshot, _stage_passengers, passengers.from_snapshot
 		),
 		SavePart.new("staff", staff.to_snapshot, _stage_staff, staff.from_snapshot),
+		SavePart.new(
+			"baggage",
+			baggage.to_snapshot,
+			SavePart.checked(
+				"baggage", func(data: Dictionary) -> Dictionary: return BaggageSnapshot.load(data)
+			),
+			baggage.from_snapshot
+		),
 		# Finances.restore(), never start_new_game(): a load is not a new game.
 		SavePart.new(
 			"wallet",
@@ -140,7 +154,7 @@ func parts() -> Array[SavePart]:
 func save_problem() -> String:
 	if clock.is_in_tick():
 		return "the game is in the middle of a tick"
-	if passengers.cafes.deadlines_stale:
+	if passengers.cafes.deadlines_stale or baggage.routes_stale:
 		return "the last build change settles on the next tick"
 	return ""
 
@@ -272,7 +286,9 @@ func message_text() -> String:
 
 func _process(delta: float) -> void:
 	retry_pending()
-	if _message_left > 0.0:
+	if pending_path != "":
+		_message_left = MESSAGE_SECONDS
+	elif _message_left > 0.0:
 		_message_left -= delta
 		if _message_left <= 0.0 and _label != null:
 			_label.visible = false
@@ -326,7 +342,7 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 ## Every part that keeps the tick was saved on the same one.
 func _ticks_problem(data: Dictionary) -> String:
 	var tick := str(data["clock"]["tick"]).to_int()
-	for key in ["flights", "passengers", "rating"]:
+	for key in ["flights", "passengers", "rating", "baggage"]:
 		var value: Variant = data[key]["tick"]
 		var other := str(value).to_int() if typeof(value) == TYPE_STRING else int(value)
 		if other != tick:
