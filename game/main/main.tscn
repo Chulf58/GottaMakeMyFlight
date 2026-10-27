@@ -148,10 +148,11 @@ staff = NodePath("../Staff")
 [node name="Staff" type="Node" parent="."]
 script = ExtResource("21_staff")
 
-[node name="Settlement" type="Node" parent="." node_paths=PackedStringArray("passengers", "finances")]
+[node name="Settlement" type="Node" parent="." node_paths=PackedStringArray("passengers", "finances", "staff")]
 script = ExtResource("19_settlement")
 passengers = NodePath("../PassengerSim")
 finances = NodePath("../Finances")
+staff = NodePath("../Staff")
 
 [node name="RescueGrant" type="Node" parent="." node_paths=PackedStringArray("clock", "passengers", "finances")]
 script = ExtResource("20_rescue")
