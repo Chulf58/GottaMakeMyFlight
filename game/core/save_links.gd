@@ -19,7 +19,10 @@ extends RefCounted
 ##   the saved grid, and every gate seat a passenger holds is a seat there.
 ##   A save is taken only between ticks with no edit pending, and each tick
 ##   starts by bringing queues and seats in line with the layout, so a save
-##   never holds one that is gone.
+##   never holds one that is gone;
+## - the settlement's last charged wage day is the clock's day (or none yet),
+##   and no wages are owed while the wallet holds money
+##   (Settlement.wages_link_problem).
 ## - bags: every bag fits the route field built from the saved grid
 ##   (BaggageSnapshot.grid_problem), an unsettled bag's flight is live (its
 ##   cutoff comes before its doors close, and a flight stays listed until
@@ -44,6 +47,8 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 		found = _flight_id_problem(staged["passengers"], staged["rating"], flights)
 	if found == "":
 		found = _station_problem(staged["passengers"], staged["sim"])
+	if found == "":
+		found = Settlement.wages_link_problem(data["settlement"], data["clock"], data["wallet"])
 	if found == "":
 		found = _bag_problem(staged["baggage"], staged["grid"], flights)
 	return found
