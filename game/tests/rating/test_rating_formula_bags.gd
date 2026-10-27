@@ -4,8 +4,11 @@ extends GdUnitTestSuite
 ## WEIGHT_BAGS off the score, in proportion to the share of bags missed.
 
 
+func test_the_tuned_bag_weight_is_a_fifth_of_the_score() -> void:
+	assert_float(RatingFormula.WEIGHT_BAGS).is_equal(0.2)
+
+
 func test_bags_weigh_less_than_the_mood_and_the_made_share() -> void:
-	assert_float(RatingFormula.WEIGHT_BAGS).is_greater(0.0)
 	assert_float(RatingFormula.WEIGHT_BAGS).is_less(RatingFormula.WEIGHT_MOOD)
 	assert_float(RatingFormula.WEIGHT_MOOD).is_less(RatingFormula.WEIGHT_MADE)
 
