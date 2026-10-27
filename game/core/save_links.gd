@@ -20,6 +20,13 @@ extends RefCounted
 ##   A save is taken only between ticks with no edit pending, and each tick
 ##   starts by bringing queues and seats in line with the layout, so a save
 ##   never holds one that is gone.
+## - bags: every bag fits the route field built from the saved grid
+##   (BaggageSnapshot.grid_problem), an unsettled bag's flight is live (its
+##   cutoff comes before its doors close, and a flight stays listed until
+##   after it departs), and every flight in the bag results is live or an
+##   issued occurrence. A bag's passenger and desk are not looked up: a
+##   settled passenger is retired and a desk can be demolished while its
+##   bags remain.
 ##
 ## Checked elsewhere already: staff stations and roles against the layout
 ## (StaffSnapshot.load), cafe visits and queues against the saved grid
@@ -37,7 +44,26 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 		found = _flight_id_problem(staged["passengers"], staged["rating"], flights)
 	if found == "":
 		found = _station_problem(staged["passengers"], staged["sim"])
+	if found == "":
+		found = _bag_problem(staged["baggage"], staged["grid"], flights)
 	return found
+
+
+static func _bag_problem(baggage: Dictionary, grid: BuildGrid, flights: Dictionary) -> String:
+	var bags: Array[Bag] = baggage["bags"]
+	var found := BaggageSnapshot.grid_problem(bags, BagRoutes.build(grid))
+	if found != "":
+		return "baggage: %s" % found
+	var live := {}
+	for flight in flights["flights"]:
+		live[flight["id"]] = true
+	for bag in bags:
+		if not bag.is_settled() and not live.has(bag.flight):
+			return "baggage: bag %d waits for flight %s, which is not live" % [bag.id, bag.flight]
+	for id in (baggage["results"] as Dictionary).keys():
+		if not live.has(id) and not _issued(id, flights):
+			return "baggage: flight %s has results but is neither live nor issued" % id
+	return ""
 
 
 static func _offer_problem(saved: Array, board: OfferBoard, contracts: Array) -> String:
