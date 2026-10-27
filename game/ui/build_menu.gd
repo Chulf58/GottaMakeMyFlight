@@ -8,7 +8,12 @@ extends CanvasLayer
 ## set_tool() and rotate_facing() and follows tool_changed and status_changed.
 ## Opening a category picks no tool; picking a card does, and a tool picked by
 ## key opens its own category. Esc (tool NONE) closes the tray. The menu also
-## owns the room info panel (RoomPanel), top-left under the money slot.
+## owns the room info panel (RoomPanel), top-left under the money slot. The
+## status line also shows the rescue grant's message when one is paid (ruling
+## going-broke-a-one-off-rescue-grant-when-the-airport-is-stuck) for
+## grant_hold_s seconds (a later grant restarts the hold); status text that
+## arrives meanwhile (the pointer moving over the grid changes it) waits and
+## shows when the hold ends.
 
 const THUMBNAIL_DIR := "res://assets/ui/thumbnails/%s.png"
 const CATEGORIES := [
@@ -73,8 +78,14 @@ const ROTATE_SIZE := Vector2(72.0, 176.0)
 ## A CanvasLayer does not pass a theme down, so every top-level HUD Control
 ## under a CanvasLayer sets it itself.
 const HUD_THEME := preload("res://ui/hud_theme.tres")
+## How long a rescue grant's message stays on the status line, in seconds.
+const GRANT_HOLD_S := 8.0
 
 @export var build_mode: BuildMode
+## Optional: when set, its paid grants are announced on the status line.
+@export var rescue_grant: RescueGrant
+## Seconds a grant message holds the status line.
+@export var grant_hold_s := GRANT_HOLD_S
 
 var _open := NO_CATEGORY
 ## True while a category click clears the tool, so the tool_changed(NONE)
@@ -88,6 +99,12 @@ var _cards: Dictionary = {}
 var _status := Label.new()
 var _money := Label.new()
 var _room_panel := RoomPanel.new()
+## True while the status line holds a grant message; the latest status text
+## waits in _held_status until the hold ends.
+var _holding := false
+## Counts grants, so only the latest grant's timer ends the hold.
+var _hold_generation := 0
+var _held_status := ""
 
 
 ## "3" for the key bound to a tool's action, or "" when the tool has none.
@@ -125,6 +142,8 @@ func _ready() -> void:
 		_on_tool_changed(build_mode.tool)
 	else:
 		_sync()
+	if rescue_grant != null:
+		rescue_grant.granted.connect(_on_granted)
 
 
 ## The open category, or NO_CATEGORY when the tray is closed.
@@ -196,7 +215,33 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 
 
 func _on_status_changed(text: String) -> void:
+	if _holding:
+		_held_status = text
+		return
 	_status.text = text
+
+
+func _on_granted(_amount: int, message: String) -> void:
+	if not _holding:
+		_held_status = _status.text
+	_holding = true
+	_status.text = message
+	_hold_generation += 1
+	var timer := get_tree().create_timer(grant_hold_s)
+	timer.timeout.connect(_on_hold_timeout.bind(_hold_generation))
+
+
+func _on_hold_timeout(generation: int) -> void:
+	if generation == _hold_generation:
+		end_grant_hold()
+
+
+## Ends the grant message's hold and shows the latest status text.
+func end_grant_hold() -> void:
+	if not _holding:
+		return
+	_holding = false
+	_status.text = _held_status
 
 
 ## Shows the open category's row and marks the selected category and card.
