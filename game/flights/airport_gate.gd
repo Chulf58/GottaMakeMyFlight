@@ -28,6 +28,10 @@ enum Blocker { NONE, NO_PATH, NO_CHECKIN, NO_SECURITY }
 @export var flights: FlightSim
 @export var staff: StaffSim
 
+## True when open() found gate C full all day and opened with no starter.
+## Set only by open(); not saved, so it reads false after a load.
+var opened_without_starter := false
+
 var _path_ok := false
 var _path_dirty := true
 
@@ -84,14 +88,17 @@ func try_open() -> bool:
 ## Opens the airport now, ready or not, and accepts the starter contract at
 ## the first departure minute that leaves ISSUE_LEAD_TICKS after the opening
 ## and holds gate C free (a later minute only when an offer accepted while
-## closed already holds that slot). False (with an error) when already open.
+## closed already holds that slot). The slot is found before the airport
+## opens, and opening does not change which slots are free, so the opening
+## and the starter are one step. When offers accepted while closed fill gate C
+## all day, the airport opens with no starter: those offers are its flights,
+## and opened_without_starter says so. False (with an error) when already open.
 func open() -> bool:
+	var terms := {} if is_open() else _starter_terms()
 	if not flights.open_airport():
 		return false
-	var terms := _starter_terms()
-	if terms.is_empty():
-		push_error("AirportGate: gate %s has no free slot for the starter" % FlightSim.DEFAULT_GATE)
-	else:
+	opened_without_starter = terms.is_empty()
+	if not opened_without_starter:
 		flights.accept_contract(terms)
 	changed.emit()
 	return true

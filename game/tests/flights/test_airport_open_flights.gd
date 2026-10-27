@@ -147,6 +147,37 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 	assert_int(_sim.state_start(starter, FlightSim.State.SCHEDULED)).is_equal(10220)
 
 
+## Eleven offers accepted while closed, at minutes 0, 129, ... 1290, each hold
+## gate C for 129 minutes and leave no 129-minute gap, so the starter has no
+## slot: the airport still opens, with no starter and no error, and each offer
+## starts at its first slot after the lead.
+func test_a_gate_full_all_day_opens_with_no_starter_and_no_error() -> void:
+	var ids: Array[String] = []
+	for i in 11:
+		ids.append("S%d" % i)
+		assert_bool(_sim.accept_contract(TestFlightContracts.terms(ids[i], 129 * i))).is_true()
+	assert_int(FlightTimetable.reserved_ticks()).is_equal(129 * GameCalendar.TICKS_PER_MINUTE)
+	var gate: AirportGate = auto_free(AirportGate.new())
+	gate.flights = _sim
+	_run_to(1000)
+	await assert_error(func() -> void: gate.open()).is_success()
+	assert_int(_sim.opened_tick).is_equal(1000)
+	assert_bool(gate.is_open()).is_true()
+	assert_bool(gate.opened_without_starter).is_true()
+	assert_array(_sim.contract_ids()).is_equal(ids)
+	var start_days := _sim.start_days
+	for id in ids:
+		var contract := _sim.contract_of(id)
+		var day: int = start_days[id]
+		var issue := FlightTimetable.issue_tick(contract, day)
+		var day_before := FlightTimetable.issue_tick(contract, day - 1)
+		assert_int(day).override_failure_message(id).is_equal(
+			FlightTimetable.opening_day(contract, 1000)
+		)
+		assert_int(issue).override_failure_message(id).is_greater_equal(1000)
+		assert_int(day_before).override_failure_message(id).is_less(1000)
+
+
 ## start_days reads the recorded start as a copy, and refuses a write.
 func test_start_days_is_a_read_only_copy_of_the_recorded_start() -> void:
 	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
