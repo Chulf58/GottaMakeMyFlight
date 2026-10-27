@@ -10,11 +10,13 @@ extends GdUnitTestSuite
 ## passenger may miss its flight.
 
 const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
-## The band in whole percent of early arrivals: 20% to 25%. The ruling asks for
-## about 25-33%, but this layout (one table, two seats per cafe) on this
-## timeline caps the share at 23% (21 of 91) even when every passenger is
-## hungry from spawn, with DWELL_TICKS 120 and MARGIN_TICKS 100 (user-ruled
-## "Shorter cafe visits"). Hunger 40-70, hungry at 50, reaches that cap.
+## The band in whole percent of early arrivals: 20% to 25%, the interim target
+## of decision cafe-tuning-some-passengers-visit-a-cafe-each-flight (user-ruled
+## "Accept 23% for now") until arrival types land, then 25-33%. This layout
+## (one table, two seats per cafe) on this timeline caps the share at 23% (21
+## of 91) even when every passenger is hungry from spawn, with DWELL_TICKS 120
+## and MARGIN_TICKS 100 ("Shorter cafe visits"). Hunger 40-70, hungry at 50,
+## reaches that cap.
 const SHARE_MIN := 20
 const SHARE_MAX := 25
 

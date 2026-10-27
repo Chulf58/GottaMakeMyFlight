@@ -177,23 +177,35 @@ func test_a_save_between_an_edit_and_the_next_tick_loads_and_plays_on_alike() ->
 		_a.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SEATED)
 	# The guest's table goes while the game is paused, and the game is saved.
-	var table := int(_a.sim.cafes.visit_of(p.id).seat_key.split(":")[0])
+	var visit := _a.sim.cafes.visit_of(p.id)
+	var table := int(visit.seat_key.split(":")[0])
 	assert_bool(_a.grid.apply(BuildEdit.remove_object(table)).ok).is_true()
 	assert_bool(_a.sim.cafes.deadlines_stale).is_true()
+	var balance := _a.sim.wallet.balance
 	_b = _load(_save(_a))
-	assert_object(_b.sim.cafes.visit_of(p.id)).is_not_null()
-	_a.step()
-	_b.step()
-	# The next tick sees the seat gone: the guest gets up and pays the short share.
+	# The save brought the cafe in line with the grid first: the guest's seat
+	# is gone, so it pays the short share and goes on, in the saved game too.
+	assert_bool(_a.sim.cafes.deadlines_stale).is_false()
+	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
+	var base := RoomTypes.get_type(&"cafe").base_spend
+	var short := CafeSim.spend(base, p.mood, airside, CafeVisit.Outcome.SHORT)
+	assert_int(visit.outcome).is_equal(CafeVisit.Outcome.SHORT)
 	for world in [_a, _b]:
-		assert_int(world.passenger(p.id).stage).is_equal(Passenger.Stage.CAFE_STANDING_UP)
-		assert_int(world.sim.cafes.visit_of(p.id).outcome).is_equal(CafeVisit.Outcome.SHORT)
+		assert_object(world.sim.cafes.visit_of(p.id)).is_null()
+		assert_int(world.passenger(p.id).stage).is_equal(visit.resume_stage)
+		assert_int(world.sim.wallet.balance).is_equal(balance + short)
 	assert_str(_signature(_b)).is_equal(_signature(_a))
-	for i in PassengerSim.STAND_UP_TICKS + 1:
+	var first_bad := -1
+	while _a.clock.tick <= _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT):
 		_a.step()
 		_b.step()
+		if first_bad < 0 and _signature(_a) != _signature(_b):
+			first_bad = _a.clock.tick
+	assert_int(first_bad).override_failure_message("first differing tick %d" % first_bad).is_equal(
+		-1
+	)
 	assert_object(_b.sim.cafes.visit_of(p.id)).is_null()
-	assert_str(_signature(_b)).is_equal(_signature(_a))
+	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 
 
 func test_bad_cafe_state_is_rejected_whole() -> void:

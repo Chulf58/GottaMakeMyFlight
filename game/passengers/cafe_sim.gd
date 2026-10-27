@@ -83,7 +83,8 @@ const START_STAGES: Array[Passenger.Stage] = [
 
 var layout := CafeLayout.new()
 ## Set by any grid edit: every visit's deadline is worked out again on the
-## next tick. Saved, so a load between an edit and that tick plays on alike.
+## next tick. PassengerSim.to_snapshot() reconciles first when it is set, so a
+## save never holds it set.
 var deadlines_stale := false
 
 var _sim: PassengerSim
@@ -219,6 +220,13 @@ func reconcile() -> void:
 		var p := _sim.get_passenger(id)
 		var seat := layout.seat(visit.room, visit.seat_key)
 		var counter := layout.counter(visit.room, visit.counter)
+		if seat.is_empty() and visit.served:
+			# No chair to get up from: a served guest pays and goes on at once,
+			# so no visit outlives its seat.
+			if visit.outcome == CafeVisit.Outcome.NONE:
+				visit.outcome = CafeVisit.Outcome.SHORT
+			_end(p, visit)
+			continue
 		if seat.is_empty() or (counter.is_empty() and not visit.served):
 			_leave_early(p, visit)
 			continue

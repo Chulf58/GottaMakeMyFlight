@@ -363,7 +363,13 @@ func apron_length_mm(exit_door: int) -> int:
 	return walk.apron_total_mm()
 
 
+## A save never holds cafe state an edit left stale: between an edit and the
+## next tick the cafe is brought in line with the grid first (CafeSim.reconcile()
+## ends visits whose pieces went, which can pay into the wallet), so save the
+## wallet after this. The saved and the continued game go on from that state.
 func to_snapshot() -> Dictionary:
+	if cafes.deadlines_stale:
+		cafes.reconcile()
 	return PassengerSnapshot.save(
 		self, _passengers, _schedule, _queues, _next_id, [_made, _missed], _scheduled.keys()
 	)

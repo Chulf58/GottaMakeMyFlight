@@ -3,15 +3,16 @@ extends GdUnitTestSuite
 ## A cafe save the game could not have reached is refused (article cafe-visits,
 ## acceptance cafe-save). An order in progress ends after the saved tick and
 ## started ORDER_TICKS before that end; a seated guest's dwell does the same
-## with DWELL_TICKS. A save taken between an edit and the next tick
-## (deadlines_stale) may name pieces the edit removed, but only pieces the
-## saved grid shows were there: an object id below the grid's next id that is
-## gone or is still the right kind of piece, in a room that is gone or is a
-## cafe.
+## with DWELL_TICKS. A save taken between an edit and the next tick brings the
+## cafe in line with the grid first, so a save never holds stale cafe state
+## and every seat, counter and room it names is in the cafe layout rebuilt
+## from the saved grid: a removed piece, of any kind or room, is refused.
 
 const HUNGRY := 59
 
 var _world: PassengerTestWorld
+## The ids CafeTestLayout.build() gave the pieces.
+var _ids: Dictionary
 
 
 func before() -> void:
@@ -33,7 +34,7 @@ func after_test() -> void:
 ## save as through JSON.
 func _busy_save() -> Dictionary:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid, true)
+	_ids = CafeTestLayout.build(grid, true)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 4000), 4242)
 	for i in 12:
 		_world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT)).hunger = HUNGRY
@@ -136,13 +137,25 @@ func test_an_order_or_a_dwell_must_end_after_the_saved_tick() -> void:
 	_assert_refused(cases, good)
 
 
-func test_a_stale_save_names_only_pieces_the_saved_grid_shows_were_there() -> void:
-	var good := _busy_save()
-	# Any edit leaves the deadlines stale until the next tick.
-	_world.grid.apply(BuildEdit.paint_floor(Vector2i(40, 40), BuildGrid.FLOOR_TILE, 1))
+func test_a_save_names_only_pieces_in_the_saved_cafe_layout() -> void:
+	_busy_save()
+	var queuing_id := 0
+	for id in _world.sim.cafes.visit_ids():
+		if _world.passenger(id).stage == Passenger.Stage.CAFE_QUEUE:
+			queuing_id = id
+			break
+	assert_int(queuing_id).is_greater(0)
+	# The other cafe loses its counter and a table while the game is paused.
+	var airside := _world.sim.cafes.visit_of(queuing_id).room == int(_ids["air_room"])
+	var other_counter: int = _ids["land_counter"] if airside else _ids["air_counter"]
+	var other_table: int = _ids["land_table_2"] if airside else _ids["air_table_2"]
+	for removed in [other_counter, other_table]:
+		assert_bool(_world.grid.apply(BuildEdit.remove_object(removed)).ok).is_true()
 	assert_bool(_world.sim.cafes.deadlines_stale).is_true()
-	good = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
-	assert_bool(good["cafe"]["deadlines_stale"]).is_true()
+	# The save brings the cafe in line with the grid first.
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
+	assert_bool(_world.sim.cafes.deadlines_stale).is_false()
+	assert_bool(good["cafe"]["deadlines_stale"]).is_false()
 	var queuing := _visit_index(good, Passenger.Stage.CAFE_QUEUE)
 	assert_int(queuing).is_greater_equal(0)
 	var visit: Dictionary = good["cafe"]["visits"][queuing]
@@ -159,9 +172,19 @@ func test_a_stale_save_names_only_pieces_the_saved_grid_shows_were_there() -> vo
 		["a counter that never existed", _change(good, queuing, "counter", never)],
 		["a table used as a counter", _change(good, queuing, "counter", table)],
 		["a room that never existed", _change(good, queuing, "room", never_room)],
+		# Removed pieces: the wrong kind, and the right kind in the other room.
+		[
+			"a removed counter used as a table",
+			_change(good, queuing, "seat_key", "%d:0" % other_counter)
+		],
+		["a removed table used as a counter", _change(good, queuing, "counter", other_table)],
+		[
+			"a removed table from the other cafe",
+			_change(good, queuing, "seat_key", "%d:0" % other_table)
+		],
+		["the other cafe's removed counter", _change(good, queuing, "counter", other_counter)],
 	]
+	var stale := good.duplicate(true)
+	stale["cafe"]["deadlines_stale"] = true
+	cases.append(["a save that holds stale cafe state", stale])
 	_assert_refused(cases, good)
-	# A piece the edit really removed is let through until the next tick.
-	assert_bool(_world.grid.apply(BuildEdit.remove_object(table)).ok).is_true()
-	var removed: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
-	_assert_refused([], removed)
