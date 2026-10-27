@@ -150,11 +150,12 @@ staff = NodePath("../Staff")
 [node name="Staff" type="Node" parent="."]
 script = ExtResource("21_staff")
 
-[node name="Settlement" type="Node" parent="." node_paths=PackedStringArray("passengers", "finances", "staff")]
+[node name="Settlement" type="Node" parent="." node_paths=PackedStringArray("passengers", "finances", "staff", "baggage")]
 script = ExtResource("19_settlement")
 passengers = NodePath("../PassengerSim")
 finances = NodePath("../Finances")
 staff = NodePath("../Staff")
+baggage = NodePath("../BaggageSim")
 
 [node name="RescueGrant" type="Node" parent="." node_paths=PackedStringArray("clock", "passengers", "finances", "settlement")]
 script = ExtResource("20_rescue")
@@ -168,11 +169,12 @@ script = ExtResource("23_gate")
 flights = NodePath("../FlightSim")
 staff = NodePath("../Staff")
 
-[node name="AirportRating" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "passengers")]
+[node name="AirportRating" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "passengers", "baggage")]
 script = ExtResource("23_rating")
 clock = NodePath("../SimClock")
 flights = NodePath("../FlightSim")
 passengers = NodePath("../PassengerSim")
+baggage = NodePath("../BaggageSim")
 
 [node name="BaggageSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "passengers", "build_mode")]
 script = ExtResource("26_bagsim")

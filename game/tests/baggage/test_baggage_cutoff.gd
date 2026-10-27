@@ -72,6 +72,9 @@ func test_causes_name_a_desk_with_no_belt_and_a_belt_with_no_room() -> void:
 	var bare := world.desk(Vector2i(2, 2))
 	var lined := world.desk(BagTestWorld.DESK)
 	world.lay(BagTestWorld.ENTRY, BagTestWorld.END)
+	# A bag room the belt does not reach: bags are checked in (there is a ready
+	# room) and the lined desk's belt has no route to it.
+	BagRoomKit.add(world.grid, Rect2i(13, 1, 2, 2))
 	var no_belt := world.sim.check_in(1, BagTestWorld.FLIGHT, bare)
 	var no_room := world.sim.check_in(2, BagTestWorld.FLIGHT, lined)
 	world.run_to(200)

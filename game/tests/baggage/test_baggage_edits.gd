@@ -135,6 +135,9 @@ func test_a_bag_in_the_room_is_lost_when_its_end_or_room_goes() -> void:
 func test_a_bag_reaching_a_belt_end_after_a_room_is_drawn_around_it_rests() -> void:
 	var room_id := _world.grid.room_at(BagTestWorld.END)
 	_world.grid.apply(BuildEdit.remove_room(room_id))
+	# Another ready bag room, which the belt does not reach, keeps bags being
+	# checked in while this one is gone.
+	BagRoomKit.add(_world.grid, Rect2i(13, 1, 2, 2))
 	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)
 	_world.run_to(BagTestWorld.ARRIVAL + 5)
 	assert_int(bag.state).is_equal(Bag.State.AT_DESK)

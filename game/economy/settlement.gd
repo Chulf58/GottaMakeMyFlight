@@ -28,6 +28,18 @@ extends Node
 ## money for, before the owed fees, so paying it frees the room a fee waits
 ## for in a full wallet.
 ##
+## A passenger who makes the flight whose bag missed it (BaggageSim.bag_settled
+## with loaded false) pays PriceTable.fee_after_missed_bag of the fee (Baggage B4,
+## ruling baggage-rides-a-player-built-belt-from-check-in-to-a-bag-roo). A bag
+## whose passenger missed the flight changes nothing: that passenger pays no
+## fee. The bag and the passenger settle in either order. A missed bag seen
+## first is kept (_bag_missed) until its passenger finishes; a made passenger
+## whose bag is still on its way is kept with the fee it earned (_awaiting_bag)
+## until the bag settles. Both are saved, so a load never pays a full fee for a
+## bag that missed. A passenger with no bag in the BaggageSim (none checked in,
+## or settled long ago) pays the full fee, as does any passenger when no
+## BaggageSim is set.
+##
 ## The last day charged is saved with the owed wages, so a load neither charges
 ## a day twice nor skips one. The first tick seen after a new game, or after a
 ## load of a save from before wages, only records the day: nothing is charged
@@ -43,6 +55,13 @@ const SNAPSHOT_KEYS := ["owed"]
 ## debt and no day charged yet.
 ## The three keys come as a group: all present or all absent.
 const OPTIONAL_SNAPSHOT_KEYS := ["wages_owed", "wages_day", "wages_paid_today"]
+## Added with missed bags (Baggage B4). A save from before them has neither and
+## loads with no bag state; the two come as a pair, like the wage keys.
+const BAG_SNAPSHOT_KEYS := ["bag_missed", "bags_awaited"]
+## Sorted, so a saved entry's keys can be compared with it.
+const AWAITED_KEYS := ["fee", "passenger"]
+## Far past any passenger id a game hands out.
+const MAX_PASSENGER_ID := 1_000_000_000_000
 ## No day charged yet. Ticks are never negative, so no day is.
 const NO_DAY := -1
 ## Far past any game a player can play; a saved day beyond it is refused.
@@ -61,6 +80,8 @@ const MAX_WAGES_PAID_TODAY := MAX_WAGES + Wallet.MAX_BALANCE
 @export var passengers: PassengerSim
 @export var finances: Finances
 @export var staff: StaffSim
+## Without it every passenger who makes the flight pays the whole fee.
+@export var baggage: BaggageSim
 
 var _sim: PassengerSim
 var _wallet: Wallet
@@ -75,6 +96,12 @@ var _wages_owed := 0
 var _wages_day := NO_DAY
 ## Wages paid since the last midnight charge, catching up on owed wages included.
 var _wages_paid_today := 0
+## Passenger ids (set of true) whose bag missed while the passenger was still
+## on their way; dropped when the passenger finishes.
+var _bag_missed: Dictionary = {}
+## Passenger id -> the fee of a passenger who made the flight while their bag
+## was still on its way, held until the bag settles.
+var _awaiting_bag: Dictionary = {}
 
 
 func _ready() -> void:
@@ -83,6 +110,8 @@ func _ready() -> void:
 		return
 	if staff == null:
 		push_error("Settlement: staff is not set, so no wage is charged")
+	if baggage == null:
+		push_error("Settlement: baggage is not set, so no fee is cut for a missed bag")
 	bind(passengers, finances.wallet)
 
 
@@ -94,6 +123,8 @@ func bind(sim: PassengerSim, wallet: Wallet) -> void:
 		_wallet.credit_claim = Callable()
 	_wallet = wallet
 	_wallet.credit_claim = _claim_credit
+	if baggage != null and not baggage.bag_settled.is_connected(_on_bag_settled):
+		baggage.bag_settled.connect(_on_bag_settled)
 	if sim == _sim:
 		return
 	if _sim != null:
@@ -121,17 +152,27 @@ func wages_paid_today() -> int:
 
 
 ## JSON-safe state for a save: the owed fees as decimal strings, like the
-## wallet's balance, and the wage state (owed wages, last charged day and paid
-## today) as decimal strings.
+## wallet's balance, the wage state (owed wages, last charged day and paid
+## today) as decimal strings, and the bag state: the passengers whose bag
+## missed ("bag_missed") and the fees held for a bag still on its way
+## ("bags_awaited", each {"passenger", "fee"}), also as decimal strings.
 func to_snapshot() -> Dictionary:
 	var out := []
 	for fee in _owed:
 		out.append(str(fee))
+	var missed := []
+	for id in _bag_missed:
+		missed.append(str(id))
+	var awaited := []
+	for id in _awaiting_bag:
+		awaited.append({"passenger": str(id), "fee": str(_awaiting_bag[id])})
 	return {
 		"owed": out,
 		"wages_owed": str(_wages_owed),
 		"wages_day": str(_wages_day),
 		"wages_paid_today": str(_wages_paid_today),
+		"bag_missed": missed,
+		"bags_awaited": awaited,
 	}
 
 
@@ -140,8 +181,10 @@ func to_snapshot() -> Dictionary:
 ## decimal string from 1 to Wallet.MAX_BALANCE, or a wage amount or day that is
 ## not a decimal string in range. The wage keys are optional as a group: a save
 ## without any loads with no owed wages and no day charged yet, and a partial
-## set is refused. A successful load forgets which passengers were paid, since
-## the loaded sim may replay them.
+## set is refused. The bag keys are optional as a pair in the same way, and
+## refused for a passenger id or fee out of range, a passenger listed twice or in
+## both lists. A successful load forgets which passengers were paid, since the
+## loaded sim may replay them.
 func from_snapshot(data: Dictionary) -> bool:
 	var problem := _snapshot_problem(data)
 	if problem != "":
@@ -154,6 +197,12 @@ func from_snapshot(data: Dictionary) -> bool:
 	_wages_owed = str(data.get("wages_owed", "0")).to_int()
 	_wages_day = str(data.get("wages_day", str(NO_DAY))).to_int()
 	_wages_paid_today = str(data.get("wages_paid_today", "0")).to_int()
+	_bag_missed.clear()
+	for text in data.get("bag_missed", []):
+		_bag_missed[str(text).to_int()] = true
+	_awaiting_bag.clear()
+	for entry in data.get("bags_awaited", []):
+		_awaiting_bag[str(entry["passenger"]).to_int()] = str(entry["fee"]).to_int()
 	# A load rewinds the session: the passengers it holds may finish again.
 	_settled.clear()
 	return true
@@ -161,14 +210,60 @@ func from_snapshot(data: Dictionary) -> bool:
 
 func _snapshot_problem(data: Dictionary) -> String:
 	for key in data.keys():
-		if not SNAPSHOT_KEYS.has(key) and not OPTIONAL_SNAPSHOT_KEYS.has(key):
+		if (
+			not SNAPSHOT_KEYS.has(key)
+			and not OPTIONAL_SNAPSHOT_KEYS.has(key)
+			and not BAG_SNAPSHOT_KEYS.has(key)
+		):
 			return "unknown key '%s'" % key
 	if not data.has("owed") or typeof(data["owed"]) != TYPE_ARRAY:
 		return "'owed' must be a list"
 	for text in data["owed"]:
 		if not _in_range(text, 1, Wallet.MAX_BALANCE):
 			return "owed fee %s is not 1 to %d" % [text, Wallet.MAX_BALANCE]
-	return _wage_problem(data)
+	var problem := _wage_problem(data)
+	if problem == "":
+		problem = _bag_problem(data)
+	return problem
+
+
+## Why the bag keys are refused, or "" (both absent is allowed).
+func _bag_problem(data: Dictionary) -> String:
+	if data.has("bag_missed") != data.has("bags_awaited"):
+		return "the bag keys %s must be both present or both absent" % [BAG_SNAPSHOT_KEYS]
+	if not data.has("bag_missed"):
+		return ""
+	if typeof(data["bag_missed"]) != TYPE_ARRAY or typeof(data["bags_awaited"]) != TYPE_ARRAY:
+		return "'bag_missed' and 'bags_awaited' must be lists"
+	var missed := {}
+	for text in data["bag_missed"]:
+		if not _in_range(text, 1, MAX_PASSENGER_ID) or missed.has(str(text)):
+			return "bag_missed entry %s is not a new passenger id" % [text]
+		missed[str(text)] = true
+	var awaited := {}
+	for entry in data["bags_awaited"]:
+		var problem := _awaited_problem(entry, missed, awaited)
+		if problem != "":
+			return problem
+		awaited[str(entry["passenger"])] = true
+	return ""
+
+
+## Why one "bags_awaited" entry is refused, or "".
+func _awaited_problem(entry: Variant, missed: Dictionary, awaited: Dictionary) -> String:
+	if typeof(entry) != TYPE_DICTIONARY:
+		return "bags_awaited entries must be dictionaries"
+	var keys: Array = (entry as Dictionary).keys()
+	keys.sort()
+	if keys != AWAITED_KEYS:
+		return "bags_awaited entries hold exactly %s, not %s" % [AWAITED_KEYS, keys]
+	if not _in_range(entry["passenger"], 1, MAX_PASSENGER_ID):
+		return "bags_awaited passenger %s is not a passenger id" % [entry["passenger"]]
+	if missed.has(str(entry["passenger"])) or awaited.has(str(entry["passenger"])):
+		return "passenger %s is listed twice for a bag" % [entry["passenger"]]
+	if not _in_range(entry["fee"], 1, Wallet.MAX_BALANCE):
+		return "bags_awaited fee %s is not 1 to %d" % [entry["fee"], Wallet.MAX_BALANCE]
+	return ""
 
 
 ## Why the wage keys are refused, or "" (all absent is allowed).
@@ -244,6 +339,8 @@ func _in_range(text: Variant, low: int, high: int) -> bool:
 
 
 func _on_outcome(id: int, made: bool) -> void:
+	var bag_missed := _bag_missed.has(id)
+	_bag_missed.erase(id)
 	if not made:
 		return
 	var p := _sim.get_passenger(id)
@@ -262,9 +359,42 @@ func _on_outcome(id: int, made: bool) -> void:
 		return
 	_settled[id] = true
 	var fee: int = contract["fee_per_passenger"]
+	if fee > 0 and bag_missed:
+		fee = PriceTable.fee_after_missed_bag(fee)
+	elif fee > 0 and _bag_on_its_way(id):
+		_awaiting_bag[id] = fee
+		return
 	if fee > 0:
 		_owed.append(fee)
 	_pay_owed()
+
+
+## True while passenger `id` has a bag in the BaggageSim that is not settled.
+func _bag_on_its_way(id: int) -> bool:
+	if baggage == null:
+		return false
+	var bag := baggage.bag_of_passenger(id)
+	return bag != null and not bag.is_settled()
+
+
+## A bag settled. A made passenger waiting for it is paid now, the fee cut if the
+## bag missed. Otherwise a missed bag is kept until its passenger finishes, if
+## the passenger is still on their way.
+func _on_bag_settled(_bag_id: int, passenger_id: int, _flight_id: String, loaded: bool) -> void:
+	if _awaiting_bag.has(passenger_id):
+		var fee: int = _awaiting_bag[passenger_id]
+		_awaiting_bag.erase(passenger_id)
+		if not loaded:
+			fee = PriceTable.fee_after_missed_bag(fee)
+		if fee > 0:
+			_owed.append(fee)
+		_pay_owed()
+		return
+	if loaded or _sim == null:
+		return
+	var p := _sim.get_passenger(passenger_id)
+	if p != null and not p.is_done():
+		_bag_missed[passenger_id] = true
 
 
 func _on_tick(tick: int) -> void:
