@@ -92,6 +92,22 @@ BATCH = {
         "Poses\\TCP_Female_Idle_01.fbx",
         "Prefabs\\Female Character Sources\\TCP_Female_Character_01.prefab",
     ),
+    # Staff (StaffCharacters): the navy skirt suit reads as a check-in agent, the white
+    # shirt, tie and dark trousers as a security officer.
+    "tcp_female_character_07": (
+        "TCP",
+        "people",
+        "TCP_Female_Character_07.fbx",
+        "Poses\\TCP_Female_Idle_01.fbx",
+        "Prefabs\\Female Character Sources\\TCP_Female_Character_07.prefab",
+    ),
+    "tcp_male_character_07": (
+        "TCP",
+        "people",
+        "TCP_Male_Character_07.fbx",
+        "Poses\\TCP_Male_Idle_01.fbx",
+        "Prefabs\\Male Character Sources\\TCP_Male_Character_07.prefab",
+    ),
 }
 
 # Vendor UV faults repaired per asset, after the part join and before export:
