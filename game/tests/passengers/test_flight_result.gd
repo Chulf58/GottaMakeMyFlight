@@ -65,12 +65,13 @@ func test_reasons_are_sorted_by_count_largest_first() -> void:
 	for i in 4:
 		ids.append(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	world.run_to(21)
-	# Fake a spread of recorded stages: three at security, one at the gate.
-	for i in 3:
-		world.passenger(ids[i]).missed_stage = Passenger.Stage.SECURITY_QUEUE
-		world.passenger(ids[i]).missed_stuck = Passenger.Stuck.NONE
-	world.passenger(ids[3]).missed_stage = Passenger.Stage.SEATED
-	world.passenger(ids[3]).missed_stuck = Passenger.Stuck.NONE
+	assert_int(ids.size()).is_equal(4)
+	# Fake a spread of recorded stages, as the flight keeps them: three at
+	# security, one at the gate.
+	world.sim.flight_results[PassengerTestWorld.FLIGHT]["causes"] = {
+		Vector2i(Passenger.Stage.SECURITY_QUEUE, Passenger.Stuck.NONE): 3,
+		Vector2i(Passenger.Stage.SEATED, Passenger.Stuck.NONE): 1,
+	}
 	var reasons: Array = FlightResult.summarize(world.sim, PassengerTestWorld.FLIGHT)["reasons"]
 	assert_int(reasons.size()).is_equal(2)
 	assert_int(reasons[0]["count"]).is_equal(3)
@@ -90,9 +91,12 @@ func test_reasons_that_tie_sort_by_text_ascending() -> void:
 		Passenger.Stage.CHECKIN_QUEUE,
 		Passenger.Stage.SEATED
 	]
-	for i in 5:
-		world.passenger(ids[i]).missed_stage = fates[i]
-		world.passenger(ids[i]).missed_stuck = Passenger.Stuck.NONE
+	assert_int(ids.size()).is_equal(5)
+	var causes := {}
+	for fate in fates:
+		var cause := Vector2i(fate, Passenger.Stuck.NONE)
+		causes[cause] = int(causes.get(cause, 0)) + 1
+	world.sim.flight_results[PassengerTestWorld.FLIGHT]["causes"] = causes
 	var reasons: Array = FlightResult.summarize(world.sim, PassengerTestWorld.FLIGHT)["reasons"]
 	var got := []
 	for reason in reasons:

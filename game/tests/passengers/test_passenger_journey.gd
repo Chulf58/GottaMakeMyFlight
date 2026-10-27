@@ -41,6 +41,8 @@ func test_routing_cannot_bypass_security() -> void:
 		_world.step()
 		for id in ids:
 			var p := _world.passenger(id)
+			if p == null:
+				continue  # settled long ago and retired
 			# The scanner footprint reaches the airside row; its passenger is mid-service.
 			if p.stage in [Passenger.Stage.SECURITY, Passenger.Stage.APRON, Passenger.Stage.MADE]:
 				continue
@@ -98,19 +100,21 @@ func test_no_desk_gives_no_checkin_and_a_walled_desk_gives_no_route() -> void:
 
 func test_made_before_doors_close_and_missed_at_doors_close() -> void:
 	_world = PassengerTestWorld.reference_world()
-	var early := _spawn_many(3, 20)
+	var early: Array[Passenger] = []
+	for id in _spawn_many(3, 20):
+		early.append(_world.passenger(id))
 	_world.run_to(1700)
-	var late := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var late := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	_world.run_to(1899)
-	for id in early:
-		var p := _world.passenger(id)
+	# The early three are made and retired by now, so they are held here.
+	for p in early:
 		assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 		assert_int(p.outcome_tick).is_less(1900)
-	assert_int(_world.passenger(late).stage).is_not_equal(Passenger.Stage.MADE)
+	assert_int(late.stage).is_not_equal(Passenger.Stage.MADE)
 	assert_int(_world.sim.missed_count()).is_equal(0)
 	_world.step()
-	assert_int(_world.passenger(late).stage).is_equal(Passenger.Stage.MISSED)
-	assert_int(_world.passenger(late).outcome_tick).is_equal(1900)
+	assert_int(late.stage).is_equal(Passenger.Stage.MISSED)
+	assert_int(late.outcome_tick).is_equal(1900)
 	assert_int(_world.sim.made_count()).is_equal(3)
 	assert_int(_world.sim.missed_count()).is_equal(1)
 

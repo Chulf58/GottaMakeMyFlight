@@ -74,10 +74,11 @@ func test_the_result_lists_three_reasons_and_sums_the_rest_as_other() -> void:
 		Passenger.Stage.SEATED,
 		Passenger.Stage.APRON
 	]
+	# The reasons are kept per flight, so they are set where they are kept.
+	var causes := {}
 	for i in 4:
-		var p := _world.passenger(_world.sim.passenger_ids()[i])
-		p.missed_stage = stages[i]
-		p.missed_stuck = Passenger.Stuck.NONE
+		causes[Vector2i(stages[i], Passenger.Stuck.NONE)] = 1
+	_world.sim.flight_results[PassengerTestWorld.FLIGHT]["causes"] = causes
 	_hud.dismiss_result()
 	_hud.show_result_for(PassengerTestWorld.FLIGHT)
 	var lines := _hud.result_text().split("\n")
@@ -157,6 +158,22 @@ func test_two_flights_closing_together_are_shown_one_after_the_other() -> void:
 	_hud.dismiss_result()
 	_hud.refresh()
 	assert_bool(_hud.is_result_open()).is_false()
+
+
+func test_a_waiting_result_is_summarized_when_the_doors_close_not_when_shown() -> void:
+	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(100, 200))
+	_close_doors_with_misses(1)
+	_world.sim.spawn_now("GMF202")
+	_world.sim.spawn_now("GMF202")
+	_world.run_to(201)
+	_hud.refresh()
+	assert_str(_hud.result_text()).contains("GMF101 result")
+	# The sim drops a pruned flight's results while the first panel is open.
+	_world.sim.flight_results.erase("GMF202")
+	_hud.dismiss_result()
+	_hud.refresh()
+	assert_str(_hud.result_text()).contains("GMF202 result")
+	assert_str(_hud.result_text()).contains("Missed 2")
 
 
 func test_a_later_closure_does_not_replace_an_open_result() -> void:
