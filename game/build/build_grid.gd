@@ -95,6 +95,9 @@ var _floor_paid := PackedInt32Array()
 var _h_paid := PackedInt32Array()
 var _v_paid := PackedInt32Array()
 var _pathing := GridPathing.new()
+## Signal emissions held back by hold_signals(), in the order they happened.
+var _held: Array[Callable] = []
+var _holding := false
 
 
 ## `grid_origin` is the world position of cell (0, 0)'s north-west corner, a
@@ -288,7 +291,8 @@ func validate(edit: BuildEdit) -> BuildResult:
 func apply(edit: BuildEdit) -> BuildResult:
 	var result := _commit(edit)
 	if result.ok and not result.dirty_cells.is_empty():
-		graph_changed.emit(_pathing.update(self, result.dirty_cells))
+		var relinked := _pathing.update(self, result.dirty_cells)
+		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
 	return result
 
 
@@ -307,7 +311,8 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 		if result.ok:
 			dirty.append_array(result.dirty_cells)
 	if not dirty.is_empty():
-		graph_changed.emit(_pathing.update(self, dirty))
+		var relinked := _pathing.update(self, dirty)
+		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
 	return results
 
 
@@ -316,7 +321,7 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 func _commit(edit: BuildEdit) -> BuildResult:
 	var result := validate(edit)
 	if not result.ok:
-		edit_refused.emit(edit, result)
+		_emit_or_hold(func() -> void: edit_refused.emit(edit, result))
 		return result
 	match edit.kind:
 		BuildEdit.Kind.PAINT_FLOOR:
@@ -350,8 +355,33 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_ROOM:
 			result.room_id = edit.room_id
 			_erase_room(edit.room_id)
-	edit_applied.emit(edit, result)
+	_emit_or_hold(func() -> void: edit_applied.emit(edit, result))
 	return result
+
+
+## Holds back edit_applied, edit_refused and graph_changed from apply() and
+## apply_batch() until release_signals(), so a caller can settle money for the
+## outcome before any listener runs. The grid data changes at once; only the
+## signals wait, in order. Not nested.
+func hold_signals() -> void:
+	_holding = true
+
+
+## Emits every signal held since hold_signals(), in the order they happened,
+## and goes back to emitting at once.
+func release_signals() -> void:
+	_holding = false
+	var held := _held
+	_held = []
+	for emit in held:
+		emit.call()
+
+
+func _emit_or_hold(emit: Callable) -> void:
+	if _holding:
+		_held.append(emit)
+	else:
+		emit.call()
 
 
 func cell_to_world(cell: Vector2i) -> Vector3:

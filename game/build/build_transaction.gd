@@ -82,8 +82,8 @@ static func needed(grid: BuildGrid, edits: Array[BuildEdit]) -> int:
 	return _needed(_quotes(grid, edits, false))
 
 
-## Accepted when `wallet` can pay for `edits` and hold their refunds, else
-## refused with CANT_AFFORD, WALLET_FULL (a refund would pass
+## Accepted when `wallet` can pay for `edits` and hold their settlement, else
+## refused with CANT_AFFORD, WALLET_FULL (the settlement would pass
 ## Wallet.MAX_BALANCE) or UNPRICED (a piece has no price). A null wallet
 ## always takes them.
 static func check(grid: BuildGrid, edits: Array[BuildEdit], wallet: Wallet) -> BuildResult:
@@ -94,22 +94,25 @@ static func check(grid: BuildGrid, edits: Array[BuildEdit], wallet: Wallet) -> B
 
 ## Commits one player action: `plan` is applied edit by edit with
 ## BuildGrid.apply(), in order, stopping at the first refusal (the plan
-## DoorPlacement.edits_for() makes). The plan's whole price (needed()) is taken
-## before the grid changes, so a listener on the grid's signals already sees
-## it paid; afterwards the price of every edit that was not applied comes
-## back, and the refunds of the applied ones are paid. A plan the wallet
-## cannot pay for or hold the refunds of changes nothing and is emitted as
+## DoorPlacement.edits_for() makes). The grid's signals are held while the
+## plan applies, the wallet is settled exactly for the edits that were applied
+## (_settle()), and only then are the signals published, in the order they
+## happened, so a listener already sees the money settled. A plan the wallet
+## cannot pay for or hold the settlement of changes nothing and is emitted as
 ## edit_refused for its last edit. Returns the last edit's result with every
-## applied edit's dirty cells, or the first refusal.
+## applied edit's dirty cells, or the first refusal; a settlement that fails
+## after the grid changed (push_error) is returned as its own refusal when the
+## plan itself went through.
 static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet) -> BuildResult:
 	var quotes := _quotes(grid, plan, wallet == null)
-	var refusal := _take_price(quotes, wallet)
+	var refusal := _refusal(quotes, wallet)
 	if not refusal.ok:
 		grid.edit_refused.emit(plan.back(), refusal)
 		return refusal
 	var applied: Array[bool] = []
 	var cleared: Array[Vector2i] = []
 	var result: BuildResult = null
+	grid.hold_signals()
 	for i in plan.size():
 		plan[i].paid = quotes[i].paid
 		result = grid.apply(plan[i])
@@ -120,22 +123,29 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 			cleared.append_array(result.dirty_cells)
 		else:
 			result.dirty_cells.append_array(cleared)
-	_settle(wallet, quotes, applied)
+	var settlement := _settle(wallet, quotes, applied)
+	grid.release_signals()
+	if not settlement.ok:
+		push_error("BuildTransaction: the plan's settlement did not fit the wallet")
+		if result.ok:
+			return settlement
 	return result
 
 
 ## Commits a rectangle: `edits` go through one BuildGrid.apply_batch(), which
 ## validates each in order and skips the ones it refuses. All or nothing on
-## money: when the wallet cannot pay for every edit (or hold the refunds),
+## money: when the wallet cannot pay for every edit (or hold the settlement),
 ## none is applied, each is refused (and emitted as edit_refused) and no money
-## moves. Otherwise the whole price is taken before the grid changes, the
-## price of every edit the grid refused comes back afterwards, and the
-## refunds of the applied ones are paid. Returns one result per edit, in order.
+## moves. Otherwise the grid's signals are held while the edits apply, the
+## wallet is settled exactly for the edits that were applied (_settle()), and
+## only then are the signals published. Returns one result per edit, in order;
+## when the settlement fails after the grid changed (push_error), every applied
+## edit's result is replaced by that refusal.
 static func commit_batch(
 	grid: BuildGrid, edits: Array[BuildEdit], wallet: Wallet
 ) -> Array[BuildResult]:
 	var quotes := _quotes(grid, edits, wallet == null)
-	var refusal := _take_price(quotes, wallet)
+	var refusal := _refusal(quotes, wallet)
 	var results: Array[BuildResult] = []
 	if not refusal.ok:
 		for edit in edits:
@@ -145,11 +155,18 @@ static func commit_batch(
 		return results
 	for i in edits.size():
 		edits[i].paid = quotes[i].paid
+	grid.hold_signals()
 	results = grid.apply_batch(edits)
 	var applied: Array[bool] = []
 	for result in results:
 		applied.append(result.ok)
-	_settle(wallet, quotes, applied)
+	var settlement := _settle(wallet, quotes, applied)
+	grid.release_signals()
+	if not settlement.ok:
+		push_error("BuildTransaction: the batch's settlement did not fit the wallet")
+		for i in results.size():
+			if results[i].ok:
+				results[i] = settlement
 	return results
 
 
@@ -169,20 +186,21 @@ static func _needed(quotes: Array[Quote]) -> int:
 	return total
 
 
-## The refunds `quotes` pay at most: each edit that pays back more than it
-## costs.
-static func _refunds(quotes: Array[Quote]) -> int:
+## The net money the edits in `quotes` take when every one is applied.
+static func _net(quotes: Array[Quote]) -> int:
 	var total := 0
 	for q in quotes:
-		total += maxi(-q.net(), 0)
+		total += q.net()
 	return total
 
 
 ## Accepted, or the reason `wallet` cannot take `quotes`. The wallet must hold
-## needed() now, and room for every refund on top of today's balance: after
-## the price is taken, at most the price and the refunds come back, so the
-## settlement after the grid changes can never pass Wallet.MAX_BALANCE. A null
-## wallet (free edits) always takes them.
+## needed() (the most any subset of the edits can take) and, once every edit is
+## applied, the exact final balance must stay within Wallet.MAX_BALANCE: a
+## charge in the same plan makes room for a refund (a paid wall made an
+## entrance). If the grid then refuses some edit and the settlement of the
+## rest does not fit, _settle() reports it. A null wallet (free edits) always
+## takes them.
 static func _refusal(quotes: Array[Quote], wallet: Wallet) -> BuildResult:
 	if wallet == null:
 		return BuildResult.accepted()
@@ -191,41 +209,29 @@ static func _refusal(quotes: Array[Quote], wallet: Wallet) -> BuildResult:
 		return BuildResult.refused(BuildResult.Reason.UNPRICED)
 	if not wallet.can_afford(total):
 		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
-	if _refunds(quotes) > Wallet.MAX_BALANCE - wallet.balance:
+	if -_net(quotes) > Wallet.MAX_BALANCE - wallet.balance:
 		return BuildResult.refused(BuildResult.Reason.WALLET_FULL)
 	return BuildResult.accepted()
 
 
-## Checks `quotes` against `wallet` and takes their whole price (needed())
-## before any edit is applied. Returns the refusal, with nothing taken, when
-## the wallet cannot take them.
-static func _take_price(quotes: Array[Quote], wallet: Wallet) -> BuildResult:
-	var refusal := _refusal(quotes, wallet)
-	if not refusal.ok or wallet == null:
-		return refusal
-	if not wallet.spend(_needed(quotes)):
-		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
-	return refusal
-
-
-## After the grid changed: gives back the price taken for every edit that was
-## not applied (`applied[i]` false or missing) and pays the refund of every
-## applied edit that pays back more than it costs. _refusal() left room for
-## all of it, so a failed credit means something else filled the wallet while
-## the grid changed; that is reported, not hidden.
-static func _settle(wallet: Wallet, quotes: Array[Quote], applied: Array[bool]) -> void:
+## After the grid changed, before its signals are published: moves the exact
+## net money of the edits that were applied (`applied[i]` true), the price of
+## the ones that were not never having left the wallet. Accepted, or refused
+## with CANT_AFFORD or WALLET_FULL when the wallet cannot take it (only
+## possible when the grid refused an edit that was not expected to fail and
+## the rest does not fit); the wallet is then unchanged.
+static func _settle(wallet: Wallet, quotes: Array[Quote], applied: Array[bool]) -> BuildResult:
 	if wallet == null:
-		return
-	var back := 0
+		return BuildResult.accepted()
+	var net := 0
 	for i in quotes.size():
-		var net := quotes[i].net()
-		var done := i < applied.size() and applied[i]
-		if done and net < 0:
-			back -= net
-		elif not done and net > 0:
-			back += net
-	if back > 0 and not wallet.credit(back):
-		push_error("BuildTransaction: %d owed back did not fit the wallet" % back)
+		if i < applied.size() and applied[i]:
+			net += quotes[i].net()
+	if net > 0 and not wallet.spend(net):
+		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
+	if net < 0 and not wallet.credit(-net):
+		return BuildResult.refused(BuildResult.Reason.WALLET_FULL)
+	return BuildResult.accepted()
 
 
 ## A new piece at `price` in place of one saved at `old_paid` (0 for none).

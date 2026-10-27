@@ -262,8 +262,8 @@ func test_rooms_cost_nothing() -> void:
 
 
 ## A listener on edit_applied that spends everything it sees: the build's own
-## price is already taken when the grid changes, so grid and wallet agree.
-func test_the_price_is_taken_before_the_grid_changes() -> void:
+## price is already settled when the grid signals, so grid and wallet agree.
+func test_the_price_is_settled_before_the_grid_signals() -> void:
 	var grid := _floored_grid()
 	var wallet := Wallet.new(1000)
 	var seen: Array[int] = []
@@ -282,7 +282,7 @@ func test_the_price_is_taken_before_the_grid_changes() -> void:
 	assert_int(grid.object_ids().size()).is_equal(1)
 
 
-func test_a_batch_takes_its_price_first_and_returns_what_the_grid_refused() -> void:
+func test_a_batch_settles_to_the_applied_edits_price_before_the_grid_signals() -> void:
 	var grid := BuildGrid.new(Vector2i(4, 4))
 	var wallet := Wallet.new(1000)
 	var seen: Array[int] = []
@@ -293,7 +293,8 @@ func test_a_batch_takes_its_price_first_and_returns_what_the_grid_refused() -> v
 	var results := BuildTransaction.commit_batch(grid, _paints(Rect2i(2, 2, 3, 1)), wallet)
 	print("balance seen %s, after %d" % [seen, wallet.balance])
 	assert_bool(results[2].ok).is_false()
-	assert_array(seen).is_equal([1000 - 75, 1000 - 75])
+	# The refused third cell never cost anything; the listeners see the exact settlement.
+	assert_array(seen).is_equal([1000 - 50, 1000 - 50])
 	assert_int(wallet.balance).is_equal(1000 - 50)
 
 
