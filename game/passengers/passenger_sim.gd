@@ -64,6 +64,10 @@ const SEAT_STAGES := [
 @export var build_mode: BuildMode
 ## The scene's wallet owner; cafe visits pay into its Wallet.
 @export var finances: Finances
+## The staff pool (StaffSim), stepped at the start of each tick. A desk or
+## scanner is open only while a member is on duty at it (StaffSim.is_open()); with no
+## StaffSim every station stays closed.
+@export var staff: StaffSim
 @export var auto_schedule := true
 
 ## The apron walk after an exit door with no terminal shell connection
@@ -130,6 +134,8 @@ func _ready() -> void:
 		wallet = finances.wallet
 	if clock == null or flights == null or build_mode == null:
 		return
+	if staff == null:
+		push_error("PassengerSim: no StaffSim is set, so every desk and scanner stays closed")
 	shell = build_mode.shell
 	bind(clock, flights, build_mode.grid)
 	if auto_schedule:
@@ -148,6 +154,9 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	grid.graph_changed.connect(_on_graph_changed)
 	if auto_schedule:
 		flights.occurrence_added.connect(_on_occurrence_added)
+	# After the layout handler above, so staff read a rebuilt layout on edits.
+	if staff != null:
+		staff.bind(self)
 
 
 ## Schedules `count` passengers for a flight from the saved sim RNG. Each
@@ -206,6 +215,8 @@ func on_tick(new_tick: int) -> void:
 	var started := Time.get_ticks_usec()
 	tick = new_tick
 	_spawn_due()
+	if staff != null:
+		staff.step()
 	_reconcile()
 	_close_doors()
 	var stations: Array = layout.lanes.keys()
@@ -284,8 +295,10 @@ func _station_slot(station: int) -> int:
 ## Ticks until a passenger who walks `walk_mm` to the back of `station`'s
 ## queue has been served: the walk, the service in progress, the passengers
 ## waiting and its own service. Station choice and the lateness forecast both
-## use it.
+## use it. A closed station never finishes (JourneyForecast.NEVER).
 func station_eta(station: int, walk_mm: int) -> int:
+	if not _is_open(station):
+		return JourneyForecast.NEVER
 	var scanner := layout.passages.has(station)
 	var waiting := _station_slot(station)
 	var left := 0
@@ -303,6 +316,8 @@ func wait_ticks(p: Passenger) -> int:
 	var service := CHECKIN_TICKS if desk_stage else SECURITY_TICKS
 	if p.stage == Passenger.Stage.CHECKIN or p.stage == Passenger.Stage.SECURITY:
 		return maxi(0, p.service_end - tick)
+	if p.station == 0 and not _any_open(layout.desks if desk_stage else layout.scanners):
+		return JourneyForecast.NEVER
 	if p.station == 0 or not _queues.has(p.station):
 		return service
 	var q: Dictionary = _queues[p.station]
@@ -315,6 +330,18 @@ func wait_ticks(p: Passenger) -> int:
 	if desk_stage and q["serving"] != 0:
 		ahead -= 1
 	return _serving_left(q) + maxi(ahead, 0) * service + service
+
+
+## Whether a desk or scanner serves (StaffSim.is_open()); never without staff.
+func _is_open(station: int) -> bool:
+	return staff != null and staff.is_open(station)
+
+
+func _any_open(stations: Array[int]) -> bool:
+	for station in stations:
+		if _is_open(station):
+			return true
+	return false
 
 
 ## Where the passenger stands on this tick, in world space.
@@ -567,7 +594,7 @@ func _step_station(station: int) -> void:
 		var moved: int = (q["holding"] as Array).pop_front()
 		(q["lane"] as Array).append(moved)
 		_by_id[moved].stuck = Passenger.Stuck.NONE
-	if q["serving"] != 0 or (q["lane"] as Array).is_empty() or not layout.is_usable(station):
+	if q["serving"] != 0 or (q["lane"] as Array).is_empty() or not _is_open(station):
 		return
 	var front: Passenger = _by_id[q["lane"][0]]
 	if front.at != cells[0] or front.is_moving():
@@ -671,7 +698,7 @@ func _beat(p: Passenger) -> void:
 
 ## Walking to a desk or scanner: choose one, walk there, join its lane.
 func _seek(p: Passenger) -> void:
-	if p.station != 0 and not layout.is_usable(p.station):
+	if p.station != 0 and not _is_open(p.station):
 		_leave_station(p)
 	if p.station == 0:
 		if p.stuck == Passenger.Stuck.NONE or _retry_now(p):
@@ -695,8 +722,13 @@ func _choose_station(p: Passenger) -> void:
 	var best := 0
 	var best_eta := 0
 	var best_path: Array[Vector2i] = []
+	if not _any_open(candidates) and candidates.any(layout.is_usable):
+		# Usable but none staffed, so all closed: wait where you stand.
+		p.stuck = Passenger.Stuck.NO_CHECKIN if to_desk else Passenger.Stuck.NO_SECURITY
+		p.clear_path()
+		return
 	for station in candidates:
-		if not layout.is_usable(station):
+		if not _is_open(station):
 			continue
 		var cells: Array = layout.lanes[station]
 		var path := grid.find_path(p.at, cells[mini(_station_slot(station), cells.size() - 1)])
@@ -911,6 +943,9 @@ func _reconcile() -> void:
 			for id in members:
 				_send_back(_by_id[id])
 			continue
+		if not _is_open(station):
+			_close_queue(station, q)
+			continue
 		var cells: Array = layout.lanes[station]
 		while (q["lane"] as Array).size() > cells.size():
 			var last: int = (q["lane"] as Array).pop_back()
@@ -922,6 +957,20 @@ func _reconcile() -> void:
 			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
 				_set_stage(p, Passenger.Stage.STANDING)
 	cafes.reconcile()
+
+
+## A station without staff on duty: the passenger in service is finished, and
+## everyone else in its lane or holding list stops and chooses again.
+func _close_queue(station: int, q: Dictionary) -> void:
+	var serving: int = q["serving"]
+	var members: Array = (q["lane"] as Array) + (q["holding"] as Array)
+	members.erase(serving)
+	q["lane"] = [serving] if serving != 0 and not layout.passages.has(station) else []
+	q["holding"] = []
+	for id in members:
+		var p: Passenger = _by_id[id]
+		_send_back(p)
+		p.clear_path()
 
 
 func _seat_exists(p: Passenger) -> bool:

@@ -1,0 +1,81 @@
+class_name StaffMember
+extends RefCounted
+## One hired staff member as plain data: its role, whether it is idle, walking
+## to a station or on duty there, and where it stands. A member in the pool
+## (at NO_CELL) is off the floor; it enters through the terminal's entrance
+## when it is sent to a station. Distances are whole millimetres, as for
+## passengers (Passenger.segment_mm).
+
+enum Role { CHECKIN, SECURITY }
+enum State { IDLE, TO_STATION, ON_DUTY }
+
+const NO_CELL := Vector2i(-1, -1)
+
+var id := 0
+var role: Role = Role.CHECKIN
+var state: State = State.IDLE
+## The desk or scanner it walks to or works at; 0 when idle.
+var station := 0
+var at := NO_CELL
+## The committed path, starting at the cell it set out from; empty in the pool.
+var path: Array[Vector2i] = []
+var path_index := 0
+## Progress from `at` towards the next path cell.
+var seg_mm := 0
+## An edit touched the rest of the path: plan again before the next step.
+var needs_replan := false
+## The last search found no station to go to; the next waits for its beat.
+var search_failed := false
+
+
+func in_pool() -> bool:
+	return at == NO_CELL
+
+
+func is_moving() -> bool:
+	return path_index < path.size() - 1
+
+
+## Commits a path that starts at `at`.
+func set_path(cells: Array[Vector2i]) -> void:
+	path = cells
+	path_index = 0
+	seg_mm = 0
+
+
+## Stops where it stands; in the pool there is no path at all.
+func clear_path() -> void:
+	path.clear()
+	if not in_pool():
+		path.append(at)
+	path_index = 0
+	seg_mm = 0
+
+
+func path_end() -> Vector2i:
+	return path[path.size() - 1] if not path.is_empty() else at
+
+
+## Walks `mm` along the path. Leftover distance at the end is dropped.
+func walk(mm: int) -> void:
+	if not is_moving():
+		return
+	seg_mm += mm
+	while path_index < path.size() - 1:
+		var length := Passenger.segment_mm(path[path_index], path[path_index + 1])
+		if seg_mm < length:
+			return
+		seg_mm -= length
+		path_index += 1
+		at = path[path_index]
+	seg_mm = 0
+
+
+## Grid-space position (cell centres at +0.5) between `at` and the next cell.
+func grid_position() -> Vector2:
+	var here := Vector2(at) + Vector2(0.5, 0.5)
+	if not is_moving() or seg_mm == 0:
+		return here
+	var next := path[path_index + 1]
+	var t := seg_mm / float(Passenger.segment_mm(at, next))
+	return here.lerp(Vector2(next) + Vector2(0.5, 0.5), t)
