@@ -74,6 +74,18 @@ func test_a_seated_guest_sits_at_the_seat_root_facing_the_table() -> void:
 	assert_str(_clip(p.id)).is_equal("stand_up")
 
 
+func test_an_ordering_guest_faces_the_counter() -> void:
+	var p := _guest()
+	_run_to_stage(p, Passenger.Stage.CAFE_ORDER)
+	# The counters face south (+y), so the guest looks north (-z): yaw pi.
+	var yaw := _views.node_for(p.id).rotation.y
+	print("ordering at %s yaw %.3f" % [p.at, yaw])
+	assert_bool(p.is_moving()).is_false()
+	assert_float(absf(yaw)).is_equal_approx(PI, 0.001)
+	_views.draw()
+	assert_float(absf(_views.node_for(p.id).rotation.y)).is_equal_approx(PI, 0.001)
+
+
 func test_sitting_down_moves_from_the_approach_cell_to_the_seat_root() -> void:
 	var p := _guest()
 	var seat := _world.sim.cafes.visit_of(p.id).seat

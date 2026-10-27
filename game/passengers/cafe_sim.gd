@@ -369,6 +369,18 @@ func restore(state: Dictionary) -> void:
 	deadlines_stale = state["deadlines_stale"]
 
 
+## The grid direction from a queuing or ordering guest to its counter, or
+## zero for anyone else.
+func counter_facing(p: Passenger) -> Vector2i:
+	var visit: CafeVisit = _visits.get(p.id)
+	if visit == null or not p.stage in [Passenger.Stage.CAFE_QUEUE, Passenger.Stage.CAFE_ORDER]:
+		return Vector2i.ZERO
+	var counter := _sim.grid.get_object(visit.counter)
+	if counter.is_empty():
+		return Vector2i.ZERO
+	return -TerminalLayout.front_of(counter["facing"])
+
+
 ## Rebuilds what is derived from the visits after a load.
 func rederive() -> void:
 	_layout_dirty = true

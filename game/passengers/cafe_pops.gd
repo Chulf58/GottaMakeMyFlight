@@ -91,6 +91,10 @@ func _take() -> Label3D:
 	label.no_depth_test = true
 	label.font_size = FONT_SIZE
 	label.outline_size = 16
+	label.outline_modulate = Color(0.05, 0.05, 0.08)
 	label.pixel_size = 0.006
+	# Over the room's own label, which also ignores depth.
+	label.render_priority = 10
+	label.outline_render_priority = 9
 	add_child(label)
 	return label

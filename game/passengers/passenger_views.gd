@@ -223,6 +223,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	elif at_cafe:
 		var looks := sim.cafes.seat_facing(p)
 		node.rotation.y = atan2(looks.x, looks.y)
+	elif not moving and sim.cafes.counter_facing(p) != Vector2i.ZERO:
+		# Waiting in a cafe queue or ordering: face the counter.
+		var ahead := sim.cafes.counter_facing(p)
+		node.rotation.y = atan2(ahead.x, ahead.y)
 	node.set_meta(&"base_speed", base)
 	if node.get_meta(&"clip", "") != clip:
 		node.set_meta(&"clip", clip)
