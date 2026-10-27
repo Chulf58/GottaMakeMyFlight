@@ -23,7 +23,8 @@ signal outcome(id: int, made: bool)
 signal stage_changed(id: int, stage: Passenger.Stage)
 
 ## 3: the walks outside carry heights ([x, y, z] apron points).
-const SAVE_VERSION := 3
+## 4: hunger, the cafe cooldown and the cafe visits, queues and seats.
+const SAVE_VERSION := 4
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -54,6 +55,8 @@ const SEAT_STAGES := [
 @export var flights: FlightSim
 ## In a scene the grid comes from BuildMode; tests call bind() instead.
 @export var build_mode: BuildMode
+## The scene's wallet owner; cafe visits pay into its Wallet.
+@export var finances: Finances
 @export var auto_schedule := true
 
 ## The apron walk after an exit door with no terminal shell connection
@@ -74,6 +77,8 @@ var apron_waypoints := PackedVector3Array(
 var layout := TerminalLayout.new()
 ## Cafe visits, their counter queues and seats (CafeSim).
 var cafes := CafeSim.new()
+## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
+var wallet: Wallet
 var grid: BuildGrid
 ## The terminal shell whose Toon doors give the walks outside (ShellRoutes):
 ## from BuildMode in a scene; tests set it. Null: no road walk, and exits
@@ -106,6 +111,8 @@ var _missed := 0
 
 
 func _ready() -> void:
+	if finances != null:
+		wallet = finances.wallet
 	if clock == null or flights == null or build_mode == null:
 		return
 	shell = build_mode.shell
@@ -380,6 +387,7 @@ func _spawn(flight_id: String, variant: int) -> Passenger:
 	p.spawn_tick = tick
 	p.stage_tick = tick
 	p.boarding_tick = flights.boarding_window(flight_id).x
+	p.hunger = clock.rng.randi_range(CafeSim.HUNGER_START_MIN, CafeSim.HUNGER_START_MAX)
 	p.at = layout.door_cell(grid, layout.entrances[0])
 	p.clear_path()
 	p.apron = ShellRoutes.arrival(self, layout.entrances[0])
@@ -536,6 +544,8 @@ func _beat(p: Passenger) -> void:
 	if p.late:
 		change -= 1
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
+	# Hunger, and a cafe visit when hungry or passing one with time to spare.
+	cafes.beat(p)
 	# A cafe guest walks: its visit's deadline keeps the margin for the rest.
 	if cafes.visit_of(p.id) != null:
 		p.late = false

@@ -36,6 +36,8 @@ const INT_FIELDS := [
 	"odometer_mm",
 	"missed_stage",
 	"missed_stuck",
+	"hunger",
+	"cafe_cooldown",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan"]
@@ -197,6 +199,9 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.apron_mm >= 0
 		and p.apron_mm <= p.apron_total_mm()
 		and p.odometer_mm >= 0
+		and p.hunger >= 0
+		and p.hunger <= CafeSim.HUNGER_MAX
+		and p.cafe_cooldown >= 0
 	)
 	var stage_ok := (
 		p.stage >= 0

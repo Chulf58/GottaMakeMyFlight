@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://ui/build_menu.gd" id="13_menu"]
 [ext_resource type="Script" path="res://build/view/shell_view.gd" id="14_shellview"]
 [ext_resource type="Resource" path="res://build/toon_terminal_shell.tres" id="15_shell"]
+[ext_resource type="Script" path="res://economy/finances.gd" id="16_finances"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -38,6 +39,9 @@ tonemap_mode = 2
 
 [node name="SimClock" type="Node" parent="."]
 script = ExtResource("2_clock")
+
+[node name="Finances" type="Node" parent="."]
+script = ExtResource("16_finances")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")
@@ -121,11 +125,12 @@ clock = NodePath("../SimClock")
 sim = NodePath("../FlightSim")
 airside = NodePath("../Airside")
 
-[node name="PassengerSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "build_mode")]
+[node name="PassengerSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "build_mode", "finances")]
 script = ExtResource("10_pax")
 clock = NodePath("../SimClock")
 flights = NodePath("../FlightSim")
 build_mode = NodePath("../BuildMode")
+finances = NodePath("../Finances")
 
 [node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim")]
 script = ExtResource("11_paxview")

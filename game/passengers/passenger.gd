@@ -97,6 +97,12 @@ var missed_stage: Stage = Stage.SPAWNED
 var missed_stuck: Stuck = Stuck.NONE
 ## Everything walked so far, path and the walks outside.
 var odometer_mm := 0
+## 0-100, rising once a simulated second; a cafe visit that serves food
+## resets it (CafeSim).
+var hunger := 0
+## No cafe visit is considered before this tick (CafeSim's retry and browse
+## cooldowns).
+var cafe_cooldown := 0
 
 
 static func in_cafe(stage: Stage) -> bool:

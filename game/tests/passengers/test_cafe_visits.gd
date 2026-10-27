@@ -57,9 +57,18 @@ func _cafes() -> CafeSim:
 	return _world.sim.cafes
 
 
+## A new passenger who never starts a visit by itself (not hungry, and its
+## cafe cooldown holds), so the tests start visits with try_visit().
+func _spawn() -> Passenger:
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.hunger = 0
+	p.cafe_cooldown = 1000000
+	return p
+
+
 ## Spawns a passenger and runs until it reaches `stage` (or `limit`).
 func _spawn_to(stage: Passenger.Stage, limit := 900) -> Passenger:
-	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	var p := _spawn()
 	while p.stage != stage and _world.clock.tick < limit:
 		_world.step()
 	assert_int(p.stage).is_equal(stage)
@@ -71,7 +80,7 @@ func _spawn_to(stage: Passenger.Stage, limit := 900) -> Passenger:
 func _visit_from_gate(count: int) -> Array[Passenger]:
 	var waiting: Array[Passenger] = []
 	for i in count:
-		waiting.append(_world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT)))
+		waiting.append(_spawn())
 	var started: Array[Passenger] = []
 	while not waiting.is_empty() and _world.clock.tick < 600:
 		_world.step()

@@ -18,8 +18,24 @@ extends RefCounted
 ## leaves early. The deadline is worked out again after any grid edit, and a
 ## visit whose cafe, counter or seat is gone ends the same way.
 ##
+## Hunger (point 5) rises once a simulated second; at HUNGRY_AT the passenger
+## heads for the nearest reachable cafe if the forecast allows, and otherwise
+## its mood drops every few seconds. A walking passenger who comes near a cafe
+## with lots of time to spare drops in too (browsing, airside from further
+## away), with a cooldown between tries.
+##
+## Money (points 6 and 7) is settled once, synchronously, when a served guest
+## stands up or leaves: the amount is worked out in whole numbers, credited to
+## PassengerSim.wallet, the visit is marked settled, and only then is `paid`
+## emitted. A full visit pays the room type's base spend nudged by mood and
+## the airside bonus, resets hunger and lifts mood; leaving early pays part of
+## it and resets hunger; giving up before being served pays nothing.
+##
 ## Visits, queues and seats are handled in id and key order, with integer
 ## quantities only, so a save loaded at a tick boundary plays on exactly.
+
+## After the money is in the wallet, for the '+$' pop over the counter.
+signal paid(passenger_id: int, room_id: int, amount: int)
 
 ## Ticks to make an order once the guest is at the front.
 const ORDER_TICKS := 60
@@ -30,6 +46,30 @@ const DWELL_TICKS := 240
 const SHUFFLE_TICKS := 12
 ## Seats tried per visit, nearest the counter first.
 const SEAT_TRIES := 4
+const HUNGER_START_MIN := 10
+const HUNGER_START_MAX := 40
+const HUNGER_MAX := 100
+const HUNGRY_AT := 60
+## A hungry passenger with no visit loses a mood point every this many beats.
+const HUNGRY_MOOD_BEATS := 5
+## A refused hungry passenger tries again after this long.
+const HUNGER_RETRY_TICKS := 100
+## Browsing: how near a cafe's order spot a walking passenger must pass, by
+## octile distance first and then by path; airside passengers browse more.
+const BROWSE_REACH_MM := 5000
+const AIRSIDE_BROWSE_REACH_MM := 8000
+## A browser drops in only with this much spare beyond the margin. Boarding
+## caps the spare: in the reference flight a passenger who reaches the gate
+## early has about 150 ticks beyond the margin, whatever it does before.
+const BROWSE_SPARE_TICKS := 100
+const BROWSE_COOLDOWN_TICKS := 600
+## Spend in whole percent: mood 0 spends 80% of the base, 100 spends 120%.
+const MOOD_SPEND_MIN := 80
+const MOOD_SPEND_SPAN := 40
+const AIRSIDE_SPEND_PERCENT := 125
+## A guest who leaves early pays this share.
+const SHORT_SPEND_PERCENT := 50
+const SERVED_MOOD_BONUS := 10
 ## The stages a visit may start from: heading for security after check-in,
 ## heading for the gate, or waiting at it.
 const START_STAGES: Array[Passenger.Stage] = [
@@ -100,19 +140,62 @@ func seat_holder(key: String) -> int:
 
 ## Commits `p` to a visit at the nearest usable cafe when the forecast allows
 ## it. False when it may not start one now, no cafe has a free seat and room
-## in a queue it can reach, or the whole visit does not fit.
-func try_visit(p: Passenger) -> bool:
+## in a queue it can reach, or the whole visit does not fit. A browsing
+## passenger only looks at cafes within its reach and needs
+## BROWSE_SPARE_TICKS more to spare.
+func try_visit(p: Passenger, browsing := false) -> bool:
 	if not START_STAGES.has(p.stage) or _visits.has(p.id):
 		return false
 	refresh()
-	var plan := _plan(p)
+	var plan := _plan(p, _reach_mm(p) if browsing else 0)
 	if plan.is_empty():
 		return false
 	var arrival := CafeForecast.visit_arrival(_sim, p, plan["legs"])
+	if browsing:
+		arrival += BROWSE_SPARE_TICKS
 	if not CafeForecast.admits(_sim, p, arrival):
 		return false
 	_commit(p, plan)
 	return true
+
+
+## Once a simulated second per passenger: hunger rises, unmet hunger costs
+## mood, and a hungry or browsing passenger may start a visit.
+func beat(p: Passenger) -> void:
+	p.hunger = mini(p.hunger + 1, HUNGER_MAX)
+	if _visits.has(p.id):
+		return
+	var hungry := p.hunger >= HUNGRY_AT
+	@warning_ignore("integer_division")
+	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
+	if hungry and posmod(beat_number, HUNGRY_MOOD_BEATS) == 0:
+		p.mood = maxi(p.mood - 1, 0)
+	if _sim.tick < p.cafe_cooldown or not START_STAGES.has(p.stage):
+		return
+	if hungry:
+		if not try_visit(p):
+			p.cafe_cooldown = _sim.tick + HUNGER_RETRY_TICKS
+		return
+	var walking := (
+		p.is_moving() and p.stage in [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
+	)
+	if walking and _passing_cafe(p):
+		if not try_visit(p, true):
+			p.cafe_cooldown = _sim.tick + BROWSE_COOLDOWN_TICKS
+
+
+## What a visit pays, in whole money: `base` x mood% x airside% x the share
+## for the outcome, rounded once (half up).
+static func spend(base: int, mood: int, airside: bool, outcome: CafeVisit.Outcome) -> int:
+	if outcome == CafeVisit.Outcome.NONE:
+		return 0
+	# Everything in hundredths of a percent until the one rounding.
+	var mood_part := MOOD_SPEND_MIN * PassengerSim.MOOD_MAX + mood * MOOD_SPEND_SPAN
+	var side := AIRSIDE_SPEND_PERCENT if airside else 100
+	var share := 100 if outcome == CafeVisit.Outcome.COMPLETE else SHORT_SPEND_PERCENT
+	var scale := PassengerSim.MOOD_MAX * 100 * 100 * 100
+	@warning_ignore("integer_division")
+	return (base * mood_part * side * share + scale / 2) / scale
 
 
 ## Rebuilds the layout after an edit and brings visits and queues in line
@@ -225,6 +308,7 @@ func cleanup(p: Passenger) -> void:
 		return
 	if visit.served and visit.outcome == CafeVisit.Outcome.NONE:
 		visit.outcome = CafeVisit.Outcome.SHORT
+	_settle(p, visit)
 	_remove(visit)
 
 
@@ -267,21 +351,27 @@ func rederive() -> void:
 
 ## The best visit for `p`: the cafe nearest by path whose soonest counter has
 ## room in its queue and which has a free seat reachable from that counter,
-## ties to the lower room id. Empty when there is none.
-func _plan(p: Passenger) -> Dictionary:
+## ties to the lower room id. With `reach_mm` above 0, only cafes whose order
+## spot is that near, by octile distance and then by path. Empty when there
+## is none.
+func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
 	var best := {}
 	for cafe in layout.cafes:
 		var counter := _soonest_counter(cafe)
 		if counter.is_empty():
 			continue
 		var lane: Array = counter["lane"]
+		if reach_mm > 0 and Passenger.octile_mm(p.at, lane[0]) > reach_mm:
+			continue
 		var seat := _free_seat(cafe, lane[0])
 		if seat.is_empty():
 			continue
 		var route := _route(p, lane[queue_of(counter["id"]).size()])
 		if route.is_empty():
 			continue
-		var mm := Passenger.path_mm(route["path"]) - int(route["keep"])
+		var mm: int = route["mm"]
+		if reach_mm > 0 and mm > reach_mm:
+			continue
 		if best.is_empty() or mm < best["mm"]:
 			best = {
 				"mm": mm, "room": cafe["room"], "counter": counter, "seat": seat, "route": route
@@ -347,22 +437,52 @@ func _free_seat(cafe: Dictionary, from: Vector2i) -> Dictionary:
 	return {}
 
 
-## A path from where `p` is to `target`: {"path", "keep"}, where "keep" is the
-## progress along the step already under way (the path then runs on from that
-## step's far cell). Empty when there is no way.
+## The shortest way from where `p` stands to `target`: {"path", "keep", "mm",
+## "from"}. Partway along a step, the passenger either finishes it and goes on
+## from its far cell, or turns back; "from" is the cell the path starts at
+## (the step's far cell when turning back), "keep" the progress already made
+## from it along the path's first step, and "mm" the walk still to do. Empty
+## when there is no way.
 func _route(p: Passenger, target: Vector2i) -> Dictionary:
-	if p.is_moving() and p.seg_mm > 0:
-		var next := p.path[p.path_index + 1]
-		if _sim.grid.can_route(p.at, next):
-			var rest := _sim.grid.find_path(next, target)
-			if rest.is_empty():
-				return {}
-			rest.push_front(p.at)
-			return {"path": rest, "keep": p.seg_mm}
-	var path := _sim.grid.find_path(p.at, target)
-	if path.is_empty():
-		return {}
-	return {"path": path, "keep": 0}
+	var here := _sim.grid.find_path(p.at, target)
+	var stay := {}
+	if not here.is_empty():
+		stay = {"path": here, "keep": 0, "from": p.at, "mm": Passenger.path_mm(here)}
+	if not p.is_moving() or p.seg_mm == 0:
+		return stay
+	var next := p.path[p.path_index + 1]
+	if not _sim.grid.can_route(p.at, next):
+		return stay
+	var step_mm := Passenger.segment_mm(p.at, next)
+	var best := {}
+	if not here.is_empty():
+		var back := here.duplicate()
+		back.push_front(next)
+		var back_mm := p.seg_mm + Passenger.path_mm(here)
+		best = {"path": back, "keep": step_mm - p.seg_mm, "from": next, "mm": back_mm}
+	var ahead := _sim.grid.find_path(next, target)
+	if not ahead.is_empty():
+		var on_mm := step_mm - p.seg_mm + Passenger.path_mm(ahead)
+		if best.is_empty() or on_mm <= int(best["mm"]):
+			ahead.push_front(p.at)
+			best = {"path": ahead, "keep": p.seg_mm, "from": p.at, "mm": on_mm}
+	return best
+
+
+func _reach_mm(p: Passenger) -> int:
+	return AIRSIDE_BROWSE_REACH_MM if p.cleared else BROWSE_REACH_MM
+
+
+## Whether some cafe's order spot is within the passenger's browse reach, by
+## octile distance (the cheap first test; _plan() checks the path).
+func _passing_cafe(p: Passenger) -> bool:
+	refresh()
+	var reach := _reach_mm(p)
+	for cafe in layout.cafes:
+		for counter in cafe["counters"]:
+			if Passenger.octile_mm(p.at, counter["lane"][0]) <= reach:
+				return true
+	return false
 
 
 func _resume_stage(p: Passenger) -> Passenger.Stage:
@@ -404,6 +524,7 @@ func _commit(p: Passenger, plan: Dictionary) -> void:
 func _walk(p: Passenger, route: Dictionary) -> void:
 	var path: Array[Vector2i] = []
 	path.assign(route["path"])
+	p.at = route["from"]
 	p.set_path(path)
 	p.seg_mm = route["keep"]
 	_set_stage.call(p, Passenger.Stage.CAFE_WALK)
@@ -480,14 +601,41 @@ func _leave_early(p: Passenger, visit: CafeVisit) -> void:
 			_end(p, visit)
 
 
-func _stand(p: Passenger, _visit: CafeVisit) -> void:
+## A served guest gets up: the visit is paid for as it does.
+func _stand(p: Passenger, visit: CafeVisit) -> void:
+	_settle(p, visit)
 	_set_stage.call(p, Passenger.Stage.CAFE_STANDING_UP)
 
 
 ## The visit is over: the guest goes on with its journey.
 func _end(p: Passenger, visit: CafeVisit) -> void:
+	_settle(p, visit)
 	_remove(visit)
 	_resume(p, visit)
+
+
+## Pays for a served visit once: the amount goes into the wallet, the visit
+## is marked settled, the guest's hunger and mood change, and then `paid` is
+## emitted. A visit with no outcome (not served) pays nothing. Without a
+## wallet, or when the wallet refuses, nothing is settled and an error says so.
+func _settle(p: Passenger, visit: CafeVisit) -> void:
+	if visit.settled or visit.outcome == CafeVisit.Outcome.NONE:
+		return
+	var base := RoomTypes.get_type(&"cafe").base_spend
+	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
+	var amount := spend(base, p.mood, airside, visit.outcome)
+	if _sim.wallet == null:
+		push_error("CafeSim: no wallet to pay passenger %d's %d into" % [p.id, amount])
+		return
+	if not _sim.wallet.credit(amount):
+		push_error("CafeSim: the wallet refused passenger %d's %d" % [p.id, amount])
+		return
+	visit.amount = amount
+	visit.settled = true
+	p.hunger = 0
+	if visit.outcome == CafeVisit.Outcome.COMPLETE:
+		p.mood = mini(p.mood + SERVED_MOOD_BONUS, PassengerSim.MOOD_MAX)
+	paid.emit(p.id, visit.room, amount)
 
 
 ## Gives up before being served: no charge and nothing changes for the guest.
@@ -497,6 +645,7 @@ func _abandon(p: Passenger, visit: CafeVisit) -> void:
 
 
 func _resume(p: Passenger, visit: CafeVisit) -> void:
+	p.cafe_cooldown = _sim.tick + BROWSE_COOLDOWN_TICKS
 	p.station = 0
 	p.stuck = Passenger.Stuck.NONE
 	p.clear_path()
