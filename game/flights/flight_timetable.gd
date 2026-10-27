@@ -8,9 +8,12 @@ extends RefCounted
 ## issued ISSUE_LEAD_TICKS before that window opens and pruned
 ## PRUNE_AFTER_TICKS after it departs.
 
-## Issue an occurrence one game hour before its first state, so listeners
-## (passenger arrivals) can plan it before anything is due.
-const ISSUE_LEAD_TICKS := 1200
+## Issue an occurrence two game hours before its first state, so listeners
+## can plan it before anything is due. Passenger arrivals start up to
+## ArrivalTypes.RELAXED_LEAD_TICKS before departure (1640 ticks before the
+## first state); this leaves 760 ticks between the issue and the earliest of
+## them.
+const ISSUE_LEAD_TICKS := 2400
 ## Keep a departed occurrence listed for one game hour, then drop the record.
 const PRUNE_AFTER_TICKS := 1200
 

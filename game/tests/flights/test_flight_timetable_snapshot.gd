@@ -68,7 +68,10 @@ func test_save_and_load_just_before_midnight_gives_the_same_future() -> void:
 	_log.clear()
 	_run(source[0], end)
 	assert_array(after_load).is_equal(_log)
-	assert_bool(_log.has("%d add AM-d1" % (28800 + 440 - 1200))).is_true()
+	(
+		assert_bool(_log.has("%d add AM-d1" % (28800 + 440 - FlightTimetable.ISSUE_LEAD_TICKS)))
+		. is_true()
+	)
 	assert_bool(_log.has("22200 NIGHT-d1 %d" % FlightSim.State.PUSHBACK)).is_true()
 	assert_int(_log.size()).is_greater(20)
 	assert_str(JSON.stringify(loaded[1].to_snapshot())).is_equal(
@@ -84,6 +87,28 @@ func test_snapshot_records_version_contracts_and_issued_days() -> void:
 	assert_int(int(data["next_day"]["AM"])).is_equal(1)
 	assert_str(data["flights"][0]["contract"]).is_equal("NIGHT")
 	assert_int(int(data["flights"][0]["day"])).is_equal(1)
+
+
+## Version 1 saves were written with the one-hour issue lead, so their
+## next_day can disagree with today's lead: they are refused, whatever the
+## save tick. AM (08:00) has its first state at 440 and PM (14:00) at 7640.
+func test_version_is_2_and_a_version_1_save_is_refused() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(2)
+	var world := _world()
+	assert_bool(world[1].accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
+	assert_bool(world[1].accept_contract(TestFlightContracts.terms("PM", 840))).is_true()
+	# Between PM's two-hour (5240) and one-hour (6440) issue ticks.
+	_run(world[0], 6000)
+	var data: Dictionary = _saved(world)["flights"]
+	assert_int(int(data["save_version"])).is_equal(2)
+	assert_int(int(data["next_day"]["PM"])).is_equal(1)
+	var loaded := _world()
+	assert_bool(loaded[1].from_snapshot(data.duplicate(true))).is_true()
+	var old := data.duplicate(true)
+	old["save_version"] = 1
+	var fresh := _world()
+	assert_bool(fresh[1].from_snapshot(old)).is_false()
+	assert_array(fresh[1].flight_ids()).is_empty()
 
 
 func test_an_inconsistent_timetable_save_is_refused_whole() -> void:

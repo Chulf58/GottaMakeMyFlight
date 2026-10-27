@@ -59,6 +59,9 @@ var id := 0
 var flight_id := ""
 ## 0 or 1: which Toon character draws this passenger.
 var variant := 0
+## When it set out for the airport (ArrivalTypes): scheduled passengers draw
+## one; debug and spawn_now passengers are typical.
+var arrival_type: ArrivalTypes.Type = ArrivalTypes.Type.TYPICAL
 var spawn_tick := 0
 ## The tick its flight starts boarding.
 var boarding_tick := 0

@@ -27,7 +27,8 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 ## 5: durable made and missed totals, per-flight results and the flights
 ## already scheduled; settled passengers are retired, so none of these are
 ## rebuilt from the passenger list.
-const SAVE_VERSION := 5
+## 6: each passenger and pending arrival carries its arrival type.
+const SAVE_VERSION := 6
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -149,20 +150,22 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 		flights.occurrence_added.connect(_on_occurrence_added)
 
 
-## Schedules `count` passengers for a flight, each arriving from just after
-## the flight's first state (or the next tick, if later) to LAST_SPAWN_LEAD_TICKS
-## before its doors close, from the saved sim RNG. A flight is scheduled once:
-## a second call, or a flight whose doors have closed, is refused with an error.
+## Schedules `count` passengers for a flight from the saved sim RNG. Each
+## draws an arrival type and arrives in that type's window (ArrivalTypes):
+## relaxed ones before the flight's first state, typical ones from just after
+## it to LAST_SPAWN_LEAD_TICKS before its doors close, rushed ones late in
+## that, never before the next tick. A flight is scheduled once: a second
+## call, or a flight whose doors have closed, is refused with an error.
 func schedule_flight(flight_id: String, count: int) -> bool:
 	if _scheduled.has(flight_id) or flights.is_doors_closed(flight_id):
 		push_error("PassengerSim.schedule_flight: '%s' is scheduled or closed" % flight_id)
 		return false
 	_scheduled[flight_id] = true
-	var first := maxi(flights.state_start(flight_id, FlightSim.State.SCHEDULED) + 1, clock.tick + 1)
-	var last := maxi(first, flights.doors_close_tick(flight_id) - LAST_SPAWN_LEAD_TICKS)
 	for i in count:
-		var at := clock.rng.randi_range(first, last)
-		_add_spawn(at, flight_id, clock.rng.randi_range(0, 1))
+		var arrival := ArrivalTypes.draw(clock.rng)
+		var span := ArrivalTypes.window(arrival, flights, flight_id, clock.tick)
+		var at := clock.rng.randi_range(span.x, span.y)
+		_add_spawn(at, flight_id, clock.rng.randi_range(0, 1), arrival)
 	return true
 
 
@@ -404,8 +407,10 @@ func from_snapshot(data: Dictionary) -> bool:
 	return true
 
 
-func _add_spawn(at_tick: int, flight_id: String, variant: int) -> void:
-	var entry := {"tick": at_tick, "flight": flight_id, "variant": variant}
+func _add_spawn(
+	at_tick: int, flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL
+) -> void:
+	var entry := {"tick": at_tick, "flight": flight_id, "variant": variant, "arrival": arrival}
 	var i := _schedule.size()
 	while i > 0 and _schedule[i - 1]["tick"] > at_tick:
 		i -= 1
@@ -423,15 +428,16 @@ func _spawn_due() -> void:
 		return
 	while not _schedule.is_empty() and _schedule[0]["tick"] <= tick:
 		var entry: Dictionary = _schedule.pop_front()
-		_spawn(entry["flight"], entry["variant"])
+		_spawn(entry["flight"], entry["variant"], entry["arrival"])
 
 
-func _spawn(flight_id: String, variant: int) -> Passenger:
+func _spawn(flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL) -> Passenger:
 	var p := Passenger.new()
 	p.id = _next_id
 	_next_id += 1
 	p.flight_id = flight_id
 	p.variant = variant
+	p.arrival_type = arrival
 	p.spawn_tick = tick
 	p.stage_tick = tick
 	p.boarding_tick = flights.boarding_window(flight_id).x

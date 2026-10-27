@@ -70,7 +70,9 @@ func test_arrivals_fall_inside_the_occurrence_window() -> void:
 		var spawned := _world.passenger(id).spawn_tick
 		earliest = mini(earliest, spawned)
 		latest = maxi(latest, spawned)
-	assert_int(earliest).is_greater(FIRST)
+	# Relaxed passengers may come before the first state, up to three game hours
+	# before departure (ArrivalTypes); the departure is 1960 ticks after FIRST.
+	assert_int(earliest).is_greater_equal(FIRST + 1960 - ArrivalTypes.RELAXED_LEAD_TICKS)
 	assert_int(latest).is_less_equal(last)
 
 

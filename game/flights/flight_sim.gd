@@ -48,7 +48,9 @@ const DEFAULT_ID := "GMF101"
 ## Gates with a stand. Only gate C has one; more gates are a later slice.
 const GATES: Array[String] = ["C"]
 const DEFAULT_GATE := "C"
-const SAVE_VERSION := 1
+## 2: occurrences are issued FlightTimetable.ISSUE_LEAD_TICKS (2400, was 1200)
+## before their first state, which changes the saved next_day at some ticks.
+const SAVE_VERSION := 2
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock

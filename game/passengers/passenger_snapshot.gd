@@ -46,6 +46,7 @@ const INT_FIELDS := [
 	"missed_stuck",
 	"hunger",
 	"cafe_cooldown",
+	"arrival_type",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan"]
@@ -134,12 +135,16 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 		problem = _spawn_problem(entry)
 		if problem != "":
 			return {"error": problem}
-		schedule.append(
-			{
-				"tick": int(entry["tick"]),
-				"flight": entry["flight"],
-				"variant": int(entry["variant"])
-			}
+		(
+			schedule
+			. append(
+				{
+					"tick": int(entry["tick"]),
+					"flight": entry["flight"],
+					"variant": int(entry["variant"]),
+					"arrival": int(entry["arrival"]),
+				}
+			)
 		)
 	var passengers: Array[Passenger] = []
 	var ids := {}
@@ -229,7 +234,13 @@ static func _spawn_problem(entry: Variant) -> String:
 		return "a schedule entry needs whole tick and variant"
 	if typeof(entry["flight"]) != TYPE_STRING or int(entry["variant"]) not in [0, 1]:
 		return "a schedule entry has a bad flight or variant"
+	if not entry.has("arrival") or not _arrival_ok(entry["arrival"]):
+		return "a schedule entry needs an arrival type"
 	return ""
+
+
+static func _arrival_ok(value: Variant) -> bool:
+	return _whole(value) and int(value) >= 0 and int(value) < ArrivalTypes.Type.size()
 
 
 ## A Passenger from its record, or null when the record is malformed.
@@ -243,7 +254,7 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 	var p := Passenger.new()
 	if not _fill(p, record, grid):
 		return null
-	var variant_ok := p.variant in [0, 1]
+	var variant_ok := p.variant in [0, 1] and _arrival_ok(p.arrival_type)
 	var range_ok := (
 		p.mood >= 0
 		and p.mood <= PassengerSim.MOOD_MAX
