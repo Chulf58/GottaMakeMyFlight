@@ -138,3 +138,59 @@ func test_binding_twice_pays_each_fee_once() -> void:
 	_accept()
 	_run_one(OCCURRENCE)
 	assert_int(_world.sim.wallet.balance).is_equal(_world.sim.made_count() * FEE)
+
+
+## Fills the wallet so that `room` more fits, no more.
+func _fill_to_room(room: int) -> void:
+	var wallet := _world.sim.wallet
+	assert_bool(wallet.credit(Wallet.MAX_BALANCE - room - wallet.balance)).is_true()
+
+
+func test_a_fee_the_wallet_cannot_hold_is_owed_and_paid_once_room_is_made() -> void:
+	_make()
+	_accept()
+	_fill_to_room(10)
+	var p := _run_one(OCCURRENCE)
+	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
+	var made := _world.sim.made_count()
+	assert_int(made).is_greater(0)
+	print("made %d owed %s balance %d" % [made, _settlement.owed(), _world.sim.wallet.balance])
+	assert_int(_world.sim.wallet.balance).is_equal(Wallet.MAX_BALANCE - 10)
+	assert_int(_settlement.owed().size()).is_equal(made)
+	assert_bool(_world.sim.wallet.spend(1000)).is_true()
+	_world.step()
+	_world.step()
+	assert_int(_world.sim.wallet.balance).is_equal(Wallet.MAX_BALANCE - 10 - 1000 + made * FEE)
+	assert_array(_settlement.owed()).is_empty()
+
+
+func test_owed_fees_survive_a_save_round_trip() -> void:
+	_make()
+	_accept()
+	_fill_to_room(10)
+	_run_one(OCCURRENCE)
+	var made := _world.sim.made_count()
+	assert_int(made).is_greater(0)
+	var data := JSON.parse_string(JSON.stringify(_settlement.to_snapshot())) as Dictionary
+	var saved := _world
+	_make()
+	saved.free_all()
+	assert_bool(_settlement.from_snapshot(data)).is_true()
+	assert_int(_world.sim.wallet.balance).is_equal(0)
+	_world.step()
+	print("owed after load paid: balance %d" % _world.sim.wallet.balance)
+	assert_int(_world.sim.wallet.balance).is_equal(made * FEE)
+	_world.step()
+	assert_int(_world.sim.wallet.balance).is_equal(made * FEE)
+
+
+func test_a_malformed_settlement_snapshot_is_refused_and_changes_nothing() -> void:
+	_make()
+	assert_bool(_settlement.from_snapshot({})).is_false()
+	assert_bool(_settlement.from_snapshot({"owed": [37]})).is_false()
+	assert_bool(_settlement.from_snapshot({"owed": ["-5"]})).is_false()
+	assert_bool(_settlement.from_snapshot({"owed": ["0"]})).is_false()
+	assert_bool(_settlement.from_snapshot({"owed": [], "extra": 1})).is_false()
+	assert_array(_settlement.owed()).is_empty()
+	assert_bool(_settlement.from_snapshot({"owed": ["37"]})).is_true()
+	assert_array(_settlement.owed()).is_equal([37])

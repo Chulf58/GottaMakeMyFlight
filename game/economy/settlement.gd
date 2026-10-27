@@ -7,10 +7,15 @@ extends Node
 ## A missed passenger pays nothing, and neither does a one-off flight, which
 ## has no contract.
 ##
-## Settlement keeps no state a save would hold. PassengerSim emits outcome
-## only when a passenger finishes (never when a snapshot is loaded), so a load
-## cannot replay a fee; the settled ids below only refuse a repeated signal
-## for a passenger the sim still holds.
+## A fee the wallet cannot hold (it would pass Wallet.MAX_BALANCE) is owed,
+## not lost: it waits in the owed list and is paid on the first sim tick it
+## fits, oldest first. The owed list is the one state a save holds
+## (to_snapshot). PassengerSim emits outcome only when a passenger finishes
+## (never when a snapshot is loaded), so a load cannot replay a fee; the
+## settled ids below only refuse a repeated signal for a passenger the sim
+## still holds.
+
+const SNAPSHOT_KEYS := ["owed"]
 
 ## In a scene these come from the wired nodes; tests call bind().
 @export var passengers: PassengerSim
@@ -18,9 +23,11 @@ extends Node
 
 var _sim: PassengerSim
 var _wallet: Wallet
-## Passengers already paid that the sim still holds (it retires settled
-## passengers after a while, and ids are never reused).
+## Passengers already paid (or owed) that the sim still holds (it retires
+## settled passengers after a while, and ids are never reused).
 var _settled: Dictionary = {}
+## Fees earned that did not fit the wallet yet, oldest first.
+var _owed: Array[int] = []
 
 
 func _ready() -> void:
@@ -30,17 +37,59 @@ func _ready() -> void:
 	bind(passengers, finances.wallet)
 
 
-## Follows `sim`'s outcomes and pays into `wallet`. Binding the sim already
-## followed only changes the wallet; binding another lets go of the first.
+## Follows `sim`'s outcomes and pays into `wallet`, retrying owed fees on
+## the sim's clock. Binding the sim already followed only changes the wallet;
+## binding another lets go of the first.
 func bind(sim: PassengerSim, wallet: Wallet) -> void:
 	_wallet = wallet
 	if sim == _sim:
 		return
 	if _sim != null:
 		_sim.outcome.disconnect(_on_outcome)
+		_sim.clock.ticked.disconnect(_on_tick)
 	_sim = sim
 	_settled.clear()
 	_sim.outcome.connect(_on_outcome)
+	_sim.clock.ticked.connect(_on_tick)
+
+
+## The fees owed, oldest first.
+func owed() -> Array[int]:
+	return _owed.duplicate()
+
+
+## JSON-safe state for a save: the owed fees as decimal strings, like the
+## wallet's balance.
+func to_snapshot() -> Dictionary:
+	var out := []
+	for fee in _owed:
+		out.append(str(fee))
+	return {"owed": out}
+
+
+## Restores a to_snapshot() dictionary. Pushes an error and returns false,
+## changing nothing, for a missing or unknown key or an owed fee that is not a
+## decimal string from 1 to Wallet.MAX_BALANCE.
+func from_snapshot(data: Dictionary) -> bool:
+	for key in data.keys():
+		if not SNAPSHOT_KEYS.has(key):
+			push_error("Settlement.from_snapshot: unknown key '%s'" % key)
+			return false
+	if not data.has("owed") or typeof(data["owed"]) != TYPE_ARRAY:
+		push_error("Settlement.from_snapshot: 'owed' must be a list")
+		return false
+	var loaded: Array[int] = []
+	for text in data["owed"]:
+		var fee := str(text).to_int()
+		var bad := not SimClock.is_int64_string(text) or fee < 1 or fee > Wallet.MAX_BALANCE
+		if bad:
+			push_error(
+				"Settlement.from_snapshot: owed fee %s is not 1 to %d" % [text, Wallet.MAX_BALANCE]
+			)
+			return false
+		loaded.append(fee)
+	_owed = loaded
+	return true
 
 
 func _on_outcome(id: int, made: bool) -> void:
@@ -60,8 +109,23 @@ func _on_outcome(id: int, made: bool) -> void:
 	if contract.is_empty():
 		push_error("Settlement: flight '%s' has no contract to pay from" % p.flight_id)
 		return
-	if _wallet.credit(contract["fee_per_passenger"]):
-		_settled[id] = true
+	_settled[id] = true
+	var fee: int = contract["fee_per_passenger"]
+	if fee > 0:
+		_owed.append(fee)
+	_pay_owed()
+
+
+func _on_tick(_tick: int) -> void:
+	_pay_owed()
+
+
+## Pays owed fees, oldest first, while the next one fits the wallet.
+func _pay_owed() -> void:
+	while not _owed.is_empty() and _owed[0] <= Wallet.MAX_BALANCE - _wallet.balance:
+		if not _wallet.credit(_owed[0]):
+			return
+		_owed.pop_front()
 
 
 func _forget_retired() -> void:

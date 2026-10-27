@@ -162,10 +162,11 @@ views = NodePath("../PassengerViews")
 camera = NodePath("../TycoonCamera")
 build_mode = NodePath("../BuildMode")
 
-[node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode")]
+[node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant")]
 layer = 2
 script = ExtResource("13_menu")
 build_mode = NodePath("../BuildMode")
+rescue_grant = NodePath("../RescueGrant")
 
 [node name="ShellView" type="Node" parent="." node_paths=PackedStringArray("shell", "camera")]
 script = ExtResource("14_shellview")

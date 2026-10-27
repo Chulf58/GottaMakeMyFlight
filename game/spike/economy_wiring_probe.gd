@@ -1,7 +1,8 @@
 extends SceneTree
 ## Headless probe of Economy 5/8 on the real main scene: Settlement and
-## RescueGrant are bound, and a passenger who makes an accepted contract's
-## flight credits the wallet with the captured fee.
+## RescueGrant are bound, a passenger who makes an accepted contract's flight
+## credits the wallet with the captured fee, and a rescue grant's message
+## reaches BuildMenu's status line.
 ##
 ## Run:
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
@@ -12,7 +13,10 @@ extends SceneTree
 ## terminal with the HUD button, accepts a contract for 11:40 and runs the sim
 ## until its occurrence has departed. The pass value is a positive: the wallet
 ## grew by exactly the fee times the contract's made passengers, and at least
-## one passenger made it. Otherwise it prints PROBE_INVALID and exits 1. A
+## one passenger made it. Then it empties the wallet and takes away every
+## scanner, steps one tick, and passes when exactly one grant was paid, the
+## wallet grew by its amount and the status label shows its message word for
+## word. Otherwise it prints PROBE_INVALID and exits 1. A
 ## guard thread ends a hang (anti-pattern a-frame-counting-watchdog-cannot-
 ## catch-a-stuck-main-thread).
 
@@ -42,6 +46,8 @@ var _before := 0
 var _contract_made := 0
 var _contract_missed := 0
 var _grants := 0
+var _grant_amount := 0
+var _grant_text := ""
 
 
 func _initialize() -> void:
@@ -70,6 +76,8 @@ func _process(_delta: float) -> bool:
 			_run()
 		2:
 			_report()
+		3:
+			_stick()
 			return true
 	return false
 
@@ -85,7 +93,7 @@ func _setup() -> void:
 	if not bound:
 		_invalid("Settlement or RescueGrant is not bound to the scene's nodes")
 		return
-	rescue.granted.connect(func(_amount: int, _text: String) -> void: _grants += 1)
+	rescue.granted.connect(_on_granted)
 	_sim.outcome.connect(_on_outcome)
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
 	var terms := {
@@ -104,6 +112,12 @@ func _setup() -> void:
 	_before = _wallet.balance
 	print("PROBE balance before=%d" % _before)
 	_phase = 1
+
+
+func _on_granted(amount: int, text: String) -> void:
+	_grants += 1
+	_grant_amount = amount
+	_grant_text = text
 
 
 func _on_outcome(id: int, made: bool) -> void:
@@ -142,7 +156,37 @@ func _report() -> void:
 	elif _grants != 0:
 		_invalid("a rescue grant was paid in a working terminal")
 	else:
-		print("PROBE_DONE the wallet grew by the captured fee per made passenger")
+		print("PROBE fee pass: the wallet grew by the captured fee per made passenger")
+		_phase = 3
+
+
+## Leaves the terminal with no scanner and no money, then steps one tick.
+func _stick() -> void:
+	_wallet.spend(_wallet.balance)
+	var grid := _sim.grid
+	var removed := 0
+	for id in grid.object_ids():
+		if grid.get_object(id)["def"] == &"security_scanner":
+			if grid.apply(BuildEdit.remove_object(id)).ok:
+				removed += 1
+	var label := (_main.get_node("BuildMenu") as BuildMenu).status_label()
+	var before := label.text
+	_clock.set_paused(false)
+	_clock.advance(SimClock.STEP)
+	_clock.set_paused(true)
+	var counts := [removed, _sim.active_count(), _grants, _grant_amount]
+	print("PROBE scanners removed=%d active=%d grants=%d amount=%d" % counts)
+	print("PROBE balance=%d label before='%s'" % [_wallet.balance, before])
+	print("PROBE label after='%s'" % label.text)
+	print("PROBE message='%s'" % _grant_text)
+	if removed <= 0:
+		_invalid("no scanner was removed")
+	elif _grants != 1 or _grant_amount <= 0 or _wallet.balance != _grant_amount:
+		_invalid("expected one grant credited to an empty wallet")
+	elif _grant_text == "" or label.text != _grant_text:
+		_invalid("the grant message did not reach the status label")
+	else:
+		print("PROBE_DONE fees settle and the grant message reaches the HUD label")
 		_finish(0)
 
 
