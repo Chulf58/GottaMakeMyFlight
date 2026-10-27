@@ -35,6 +35,8 @@ var _cur: Dictionary = {}
 var _ring := MeshInstance3D.new()
 ## Queue-full signs, drawn after the passengers.
 var _markers := MissMarkers.new()
+## The '+$' pops over cafe counters.
+var _pops := CafePops.new()
 
 
 func _ready() -> void:
@@ -59,6 +61,9 @@ func _ready() -> void:
 	_markers.name = "MissMarkers"
 	_markers.sim = sim
 	add_child(_markers)
+	_pops.name = "CafePops"
+	_pops.sim = sim
+	add_child(_pops)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
 
@@ -73,6 +78,10 @@ func node_for(id: int) -> Node3D:
 
 func active_count() -> int:
 	return _nodes.size()
+
+
+func cafe_pops() -> CafePops:
+	return _pops
 
 
 ## A passenger's recorded position for the tick before (false) or now (true).
@@ -188,12 +197,12 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
 	var moving := (outside and p.apron_mm < p.apron_total_mm()) or p.is_moving()
 	match p.stage:
-		Passenger.Stage.SITTING_DOWN:
+		Passenger.Stage.SITTING_DOWN, Passenger.Stage.CAFE_SITTING_DOWN:
 			clip = "sit_down"
 			base = SIT_CLIP_SECONDS / (PassengerSim.SIT_DOWN_TICKS / float(SimClock.TICK_RATE))
-		Passenger.Stage.SEATED:
+		Passenger.Stage.SEATED, Passenger.Stage.CAFE_SEATED:
 			clip = "sit_idle"
-		Passenger.Stage.STANDING_UP:
+		Passenger.Stage.STANDING_UP, Passenger.Stage.CAFE_STANDING_UP:
 			clip = "stand_up"
 			base = SIT_CLIP_SECONDS / (PassengerSim.STAND_UP_TICKS / float(SimClock.TICK_RATE))
 	if moving:
@@ -202,12 +211,18 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		var sim_mps := mm * SimClock.TICK_RATE / 1000.0
 		clip = "run" if p.late else "walk"
 		base = sim_mps / (CLIP_RUN_MPS[variant] if p.late else CLIP_WALK_MPS[variant])
-	var seated: bool = p.stage in PassengerSim.SEAT_STAGES and p.seat_object != 0
-	node.set_meta(&"seated", seated)
-	if seated:
+	var at_gate: bool = p.stage in PassengerSim.SEAT_STAGES and p.seat_object != 0
+	var at_cafe := (
+		p.stage in Passenger.CAFE_SEAT_STAGES and sim.cafes.seat_facing(p) != Vector2i.ZERO
+	)
+	node.set_meta(&"seated", at_gate or at_cafe)
+	if at_gate:
 		var facing: int = sim.grid.get_object(p.seat_object).get("facing", 0)
 		var front := TerminalLayout.front_of(facing)
 		node.rotation.y = atan2(front.x, front.y)
+	elif at_cafe:
+		var looks := sim.cafes.seat_facing(p)
+		node.rotation.y = atan2(looks.x, looks.y)
 	node.set_meta(&"base_speed", base)
 	if node.get_meta(&"clip", "") != clip:
 		node.set_meta(&"clip", clip)

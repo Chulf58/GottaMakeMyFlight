@@ -246,7 +246,9 @@ func follow_text() -> String:
 	var p := sim.get_passenger(views.selected_id)
 	if p == null:
 		return ""
-	var parts := PackedStringArray(["Passenger %d" % p.id, STAGE_TEXT[p.stage], "mood %d" % p.mood])
+	var parts := PackedStringArray(
+		["Passenger %d" % p.id, STAGE_TEXT[p.stage], "mood %d" % p.mood, "hunger %d" % p.hunger]
+	)
 	var bubble := sim.bubble_text(p)
 	if bubble != "":
 		parts.append('"%s"' % bubble)
