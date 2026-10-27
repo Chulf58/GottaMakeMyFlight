@@ -8,6 +8,9 @@ extends CanvasLayer
 ## (ruling staff-a-new-game-starts-with-an-empty-staff-pool-and-a-hint): once a
 ## desk stands and no agent is hired it asks for one, and the same for a
 ## scanner and an officer; each line goes once someone of that role is hired.
+## While the airport is closed the hint first names what keeps it closed
+## (AirportGate.blocker(), decision airport-opening-design-stays-open-once-
+## opened-starter-flight-placed-after-opening); that line goes once it opens.
 ##
 ## It sits at the left edge, centred vertically, below the money slot and the
 ## room panel (top-left) and above the follow text (bottom-left), in the
@@ -27,11 +30,22 @@ const HINTS := {
 	StaffMember.Role.CHECKIN: "Hire a check-in agent",
 	StaffMember.Role.SECURITY: "Hire a security officer",
 }
+const CLOSED_HINTS := {
+	AirportGate.Blocker.NO_PATH:
+	(
+		"Airport closed: passengers need a way from an entrance through check-in"
+		+ " and security to an exit"
+	),
+	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
+	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner",
+}
 const LEFT := 16.0
 const WIDTH := 260.0
 
 ## In a scene the Staff node; tests set it before the panel enters the tree.
 @export var staff: StaffSim
+## In a scene the AirportGate; without one the hint has only the hiring lines.
+@export var gate: AirportGate
 
 var _card := PanelContainer.new()
 var _hint := Label.new()
@@ -50,12 +64,15 @@ func _ready() -> void:
 
 
 ## Follows `with_staff`'s hiring and members going on duty, and its grid's
-## edits for the hint. The StaffSim must already be bound to a PassengerSim.
+## edits for the hint, and the gate when one is set. The StaffSim must already
+## be bound to a PassengerSim.
 func watch(with_staff: StaffSim) -> void:
 	staff = with_staff
 	staff.staff_changed.connect(refresh)
 	staff.member_state_changed.connect(_on_member_state)
 	staff.sim.grid.graph_changed.connect(_on_graph_changed)
+	if gate != null:
+		gate.changed.connect(refresh)
 	refresh()
 
 
@@ -85,10 +102,13 @@ func counts_text(role: StaffMember.Role) -> String:
 	return text
 
 
-## One line per role whose stations stand but nobody of that role is hired
-## and staying (members leaving do not count).
+## What keeps the airport closed, if it is, then one line per role whose
+## stations stand but nobody of that role is hired and staying (members
+## leaving do not count).
 func hint_text() -> String:
 	var lines := PackedStringArray()
+	if gate != null and gate.blocker() != AirportGate.Blocker.NONE:
+		lines.append(CLOSED_HINTS[gate.blocker()])
 	for role in ROLES:
 		if not staff.stations_of(role).is_empty() and _staying(role) == 0:
 			lines.append(HINTS[role])

@@ -3,16 +3,29 @@ extends RefCounted
 ## The JSON shape of FlightSim's state, and its checks on load. A load is
 ## strict: the save must be exactly what an uninterrupted run would hold at its
 ## tick (issued days, live occurrences and their schedules all derive from the
-## contracts and the tick), so a bad save is refused whole.
+## contracts, the opening tick and the tick), so a bad save is refused whole.
+##
+## Version 3 adds the airport's open state: opened_tick (-1 while closed) and
+## each contract's start_day, its first day that is or will be issued. A
+## version 2 save was written before the airport could be closed, so it loads
+## as open since tick 0 with every contract starting on its first_day.
 
-const KEYS := ["save_version", "tick", "contracts", "next_day", "flights"]
+const KEYS := [
+	"save_version", "tick", "opened_tick", "contracts", "start_day", "next_day", "flights"
+]
+const V2_KEYS := ["save_version", "tick", "contracts", "next_day", "flights"]
 const FLIGHT_KEYS := ["id", "starts", "state", "gate", "contract", "day"]
 ## Ticks stay exact through JSON (doubles) up to 2^53.
 const MAX_TICK := 9007199254740992
 
 
 static func save(
-	tick: int, contracts: Array[Dictionary], next_day: Dictionary, flights: Array[Dictionary]
+	tick: int,
+	opened_tick: int,
+	contracts: Array[Dictionary],
+	start_day: Dictionary,
+	next_day: Dictionary,
+	flights: Array[Dictionary]
 ) -> Dictionary:
 	var contract_list := []
 	for contract in contracts:
@@ -27,47 +40,66 @@ static func save(
 	return {
 		"save_version": FlightSim.SAVE_VERSION,
 		"tick": tick,
+		"opened_tick": opened_tick,
 		"contracts": contract_list,
+		"start_day": start_day.duplicate(),
 		"next_day": next_day.duplicate(),
 		"flights": flight_list,
 	}
 
 
-## {"tick", "contracts", "next_day", "flights"} ready to install, or {"error"}.
+## {"tick", "opened_tick", "contracts", "start_day", "next_day", "flights"}
+## ready to install, or {"error"}.
 static func load(data: Dictionary) -> Dictionary:
 	var problem := _top_problem(data)
 	if problem != "":
 		return {"error": problem}
 	var tick := int(data["tick"])
+	var opened := int(data.get("opened_tick", 0))
 	var contracts: Array[Dictionary] = []
 	problem = _read_contracts(data["contracts"], tick, contracts)
+	var start_day := {}
 	if problem == "":
-		problem = _next_day_problem(data["next_day"], contracts, tick)
+		problem = _read_start_days(data, contracts, opened, start_day)
+	if problem == "":
+		problem = _next_day_problem(data["next_day"], contracts, start_day, opened, tick)
 	if problem != "":
 		return {"error": problem}
 	var next_day := {}
 	for contract in contracts:
 		next_day[contract["id"]] = int(data["next_day"][contract["id"]])
 	var flights: Array[Dictionary] = []
-	problem = _read_flights(data["flights"], contracts, next_day, tick, flights)
+	problem = _read_flights(data["flights"], contracts, start_day, next_day, tick, flights)
 	if problem != "":
 		return {"error": problem}
-	return {"tick": tick, "contracts": contracts, "next_day": next_day, "flights": flights}
+	return {
+		"tick": tick,
+		"opened_tick": opened,
+		"contracts": contracts,
+		"start_day": start_day,
+		"next_day": next_day,
+		"flights": flights,
+	}
 
 
 static func _top_problem(data: Dictionary) -> String:
+	var version: Variant = data.get("save_version")
+	var versions := "save_version must be 2 or %d" % FlightSim.SAVE_VERSION
+	if not WholeNumber.is_whole(version) or not [2, FlightSim.SAVE_VERSION].has(int(version)):
+		return versions
+	var keys: Array = KEYS if int(version) == FlightSim.SAVE_VERSION else V2_KEYS
 	for key in data.keys():
-		if not KEYS.has(key):
+		if not keys.has(key):
 			return "unknown key '%s'" % key
-	for key in KEYS:
+	for key in keys:
 		if not data.has(key):
 			return "missing key '%s'" % key
-	if not WholeNumber.is_whole(data["save_version"]):
-		return "save_version must be %d" % FlightSim.SAVE_VERSION
-	if int(data["save_version"]) != FlightSim.SAVE_VERSION:
-		return "save_version must be %d" % FlightSim.SAVE_VERSION
 	if not _is_tick(data["tick"]):
 		return "tick must be a whole number from 0 to 2^53"
+	if data.has("opened_tick"):
+		var opened: Variant = data["opened_tick"]
+		if not WholeNumber.is_whole(opened) or opened < -1 or opened > data["tick"]:
+			return "opened_tick must be -1 or a whole number from 0 to the tick"
 	if typeof(data["contracts"]) != TYPE_ARRAY or typeof(data["flights"]) != TYPE_ARRAY:
 		return "contracts and flights must be arrays"
 	if typeof(data["next_day"]) != TYPE_DICTIONARY:
@@ -97,10 +129,47 @@ static func _read_contracts(entries: Array, tick: int, out: Array[Dictionary]) -
 	return ""
 
 
+## Each start day is the contract's first_day, or, for a contract accepted
+## while closed, the day it starts on after the opening. While the airport is
+## closed nothing has been moved yet; a contract accepted after the opening
+## has a first_day no earlier than an acceptance at the opening gives.
+static func _read_start_days(
+	data: Dictionary, contracts: Array[Dictionary], opened: int, out: Dictionary
+) -> String:
+	if not data.has("start_day"):
+		for contract in contracts:
+			out[contract["id"]] = contract["first_day"]
+		return ""
+	var days: Variant = data["start_day"]
+	if typeof(days) != TYPE_DICTIONARY or days.size() != contracts.size():
+		return "start_day must be a dictionary with one entry per contract"
+	for contract in contracts:
+		var value: Variant = days.get(contract["id"])
+		if not WholeNumber.is_whole(value):
+			return "start_day for %s must be a whole number" % contract["id"]
+		var day := int(value)
+		var first: int = contract["first_day"]
+		var ok := day == first
+		if opened >= 0:
+			var after_opening := FlightTimetable.opening_day(contract, opened)
+			ok = (
+				day == after_opening
+				or (ok and first >= FlightTimetable.first_day(contract, opened))
+			)
+		if not ok:
+			return "start_day for %s is not one the opening could give" % contract["id"]
+		out[contract["id"]] = day
+	return ""
+
+
 ## Each contract's first unissued day must be the one an uninterrupted run
-## reaches at `tick`.
+## reaches at `tick`: its start day while closed, since nothing is issued.
 static func _next_day_problem(
-	next_day: Dictionary, contracts: Array[Dictionary], tick: int
+	next_day: Dictionary,
+	contracts: Array[Dictionary],
+	start_day: Dictionary,
+	opened: int,
+	tick: int
 ) -> String:
 	if next_day.size() != contracts.size():
 		return "next_day must have one entry per contract"
@@ -108,7 +177,10 @@ static func _next_day_problem(
 		var value: Variant = next_day.get(contract["id"])
 		if not WholeNumber.is_whole(value):
 			return "next_day for %s must be a whole number" % contract["id"]
-		if int(value) != FlightTimetable.next_day(contract, tick):
+		var expected: int = start_day[contract["id"]]
+		if opened >= 0:
+			expected = maxi(expected, FlightTimetable.next_day(contract, tick))
+		if int(value) != expected:
 			return "next_day for %s does not match the tick" % contract["id"]
 	return ""
 
@@ -116,6 +188,7 @@ static func _next_day_problem(
 static func _read_flights(
 	entries: Array,
 	contracts: Array[Dictionary],
+	start_day: Dictionary,
 	next_day: Dictionary,
 	tick: int,
 	out: Array[Dictionary]
@@ -129,7 +202,7 @@ static func _read_flights(
 			if entry["contract"] == "":
 				problem = _one_off_problem(entry, starts, contracts)
 			else:
-				problem = _occurrence_problem(entry, starts, contracts, next_day, tick)
+				problem = _occurrence_problem(entry, starts, contracts, start_day, next_day, tick)
 				live[entry["contract"]] = int(live.get(entry["contract"], 0)) + 1
 			if problem == "" and int(entry["state"]) != FlightTimetable.state_at(starts, tick):
 				problem = "flight %s state does not match the tick" % entry["id"]
@@ -141,7 +214,8 @@ static func _read_flights(
 		if problem != "":
 			return problem
 	for contract in contracts:
-		if int(live.get(contract["id"], 0)) != _expected_live(contract, next_day, tick):
+		var expected := _expected_live(contract, start_day, next_day, tick)
+		if int(live.get(contract["id"], 0)) != expected:
 			return "occurrences of %s are missing" % contract["id"]
 	return ""
 
@@ -190,12 +264,13 @@ static func _one_off_problem(
 	return ""
 
 
-## An occurrence must be issued, not yet pruned, and exactly as its contract
-## schedules it.
+## An occurrence must be issued (from its contract's start day), not yet
+## pruned, and exactly as its contract schedules it.
 static func _occurrence_problem(
 	entry: Dictionary,
 	starts: Array[int],
 	contracts: Array[Dictionary],
+	start_day: Dictionary,
 	next_day: Dictionary,
 	tick: int
 ) -> String:
@@ -206,7 +281,7 @@ static func _occurrence_problem(
 	if contract.is_empty():
 		return "flight %s names an unknown contract" % entry["id"]
 	var day := int(entry["day"])
-	if day < contract["first_day"] or day >= next_day[contract["id"]]:
+	if day < start_day[contract["id"]] or day >= next_day[contract["id"]]:
 		return "flight %s was not issued" % entry["id"]
 	if entry["id"] != FlightTimetable.occurrence_id(contract["id"], day):
 		return "flight %s does not match its contract and day" % entry["id"]
@@ -218,10 +293,12 @@ static func _occurrence_problem(
 
 
 ## How many issued occurrences of `contract` are still live at `tick`.
-static func _expected_live(contract: Dictionary, next_day: Dictionary, tick: int) -> int:
+static func _expected_live(
+	contract: Dictionary, start_day: Dictionary, next_day: Dictionary, tick: int
+) -> int:
 	var count := 0
 	var day: int = next_day[contract["id"]] - 1
-	while day >= contract["first_day"] and tick < FlightTimetable.prune_tick(contract, day):
+	while day >= start_day[contract["id"]] and tick < FlightTimetable.prune_tick(contract, day):
 		count += 1
 		day -= 1
 	return count

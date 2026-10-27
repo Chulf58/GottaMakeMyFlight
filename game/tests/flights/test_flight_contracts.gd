@@ -11,6 +11,8 @@ func before_test() -> void:
 	_added.clear()
 	_sim = auto_free(FlightSim.new()) as FlightSim
 	_sim.occurrence_added.connect(func(id: String) -> void: _added.append(id))
+	# A FlightSim starts closed; these cases are about an open airport.
+	_sim.open_airport()
 
 
 static func terms(id: String, minute: int, gate := "C") -> Dictionary:
@@ -57,10 +59,14 @@ func test_the_contract_is_a_read_only_copy_of_the_terms() -> void:
 func test_acceptance_after_todays_preparation_start_goes_to_tomorrow() -> void:
 	for case in [[439, 0], [440, 0], [441, 1]]:
 		var sim := auto_free(FlightSim.new()) as FlightSim
+		sim.open_airport()
 		sim.on_tick(case[0])
 		assert_bool(sim.accept_contract(terms("GMF400", 480))).is_true()
 		assert_int(sim.contract_of("GMF400")["first_day"]).is_equal(case[1])
+		# Open, so a first_day of 0 is issued at once and a first_day of 1 is not.
+		assert_int(sim.flight_ids().size()).is_equal(1 - case[1])
 	var late := auto_free(FlightSim.new()) as FlightSim
+	late.open_airport()
 	late.on_tick(441)
 	late.accept_contract(terms("GMF400", 480))
 	assert_array(late.flight_ids()).is_empty()

@@ -52,6 +52,13 @@ static func first_day(contract: Dictionary, now: int) -> int:
 	return maxi(0, -GameCalendar.floor_div(-behind, GameCalendar.TICKS_PER_DAY))
 
 
+## The first day, from the contract's first_day on, that is issued at or after
+## `opened` (the tick the airport opened): the start of a contract accepted
+## while the airport was closed. The days before it are never flown.
+static func opening_day(contract: Dictionary, opened: int) -> int:
+	return maxi(int(contract["first_day"]), first_day(contract, opened + ISSUE_LEAD_TICKS))
+
+
 static func issue_tick(contract: Dictionary, day: int) -> int:
 	return _first_start(contract, day) - ISSUE_LEAD_TICKS
 

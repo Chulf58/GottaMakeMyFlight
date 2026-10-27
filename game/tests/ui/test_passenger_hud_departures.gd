@@ -20,6 +20,8 @@ func before_test() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(10, 20))
+	# A FlightSim starts closed; these contracts fly from an open airport.
+	_world.flights.open_airport()
 	_hud = PassengerHud.new()
 	_hud.clock = _world.clock
 	_hud.flights = _world.flights

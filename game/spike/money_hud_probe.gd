@@ -3,7 +3,8 @@ extends SceneTree
 ## the wallet and follows it, the cards show their prices and grey out, the
 ## cost line shows cost and shortfall for a tool and for a dragged Floor
 ## rectangle, the flight panel lists today's departures, and the new game
-## has the starting budget and the one starter contract. It prints the label
+## has the starting budget and, its airport still closed, no contract and no
+## flight (the starter comes when it opens). It prints the label
 ## texts it compared; any mismatch prints PROBE_INVALID and exits 1.
 ##
 ## Run:
@@ -82,8 +83,9 @@ func _check() -> void:
 		)
 	)
 	_expect("starting budget", wallet.balance, PriceTable.STARTING_BUDGET)
-	_expect("one starter contract", flights.contract_ids(), [FlightSim.STARTER_TERMS["id"]])
-	_expect("day one has a flight", flights.flight_ids(), ["GMF101-d0"])
+	_expect("the airport is closed", flights.opened_tick, -1)
+	_expect("no contract before opening", flights.contract_ids(), [])
+	_expect("no flight before opening", flights.flight_ids(), [])
 
 	var money_before := menu.money_label().text
 	print("LABEL money=%s" % money_before)
@@ -93,7 +95,7 @@ func _check() -> void:
 	_expect("clock", clock_text, "Day 1  06:00")
 	var departures := (hud.find_child("Departures", true, false) as Label).text
 	print("LABEL departures=%s" % departures.replace("\n", " | "))
-	_expect("departures", departures, "07:38  Oslo  Gotta Air  doors close in 1:35")
+	_expect("departures", departures, DepartureList.EMPTY_TEXT)
 
 	var prices := {}
 	for tool in [
@@ -137,9 +139,11 @@ func _check() -> void:
 	print("LABEL debug policy=%s" % PassengerHud.DEBUG_POLICY_TEXT)
 
 
-## Adds three more contracts so today's list is at its longest.
+## Opens the airport (a closed one lists no contract) and adds three
+## contracts so today's list is at its longest.
 func _fill_the_day() -> void:
 	var flights: FlightSim = _main.get_node("FlightSim")
+	_expect("airport opened", flights.open_airport(), true)
 	for i in 3:
 		var terms := FlightSim.STARTER_TERMS.duplicate()
 		terms["id"] = "PRB%d" % i

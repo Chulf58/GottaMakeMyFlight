@@ -40,6 +40,8 @@ func _room(with_entrance := true) -> void:
 	if with_entrance:
 		PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(100000))
+	# A FlightSim starts closed; these contracts fly from an open airport.
+	_world.flights.open_airport()
 
 
 func _accept() -> void:

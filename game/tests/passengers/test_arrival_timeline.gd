@@ -46,6 +46,8 @@ func test_the_occurrence_exists_before_its_first_passenger_spawns() -> void:
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
 	_a = PassengerTestWorld.make(grid, FlightSim.schedule_starts(100000), 3)
+	# A FlightSim starts closed; this contract flies from an open airport.
+	_a.flights.open_airport()
 	_a.flights.occurrence_added.connect(func(_id: String) -> void: _issued_at = _a.clock.tick)
 	_a.sim.passenger_spawned.connect(_on_spawned)
 	var terms := TestFlightContracts.terms(CONTRACT, MINUTE)

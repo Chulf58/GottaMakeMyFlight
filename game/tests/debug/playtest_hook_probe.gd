@@ -11,9 +11,12 @@ extends SceneTree
 ## Boots main.tscn with a new random world seed (printed) as the current scene,
 ## waits for the autoload to attach, builds the starter terminal with the HUD
 ## button, drags a Floor rectangle over the cell behind the entrance (one cell
-## refused), takes both check-in desks away for 30 sim seconds (passengers get
-## stuck and the stuck_too_long anomaly is raised, then cleared once the desks
-## are back), and runs the flight to DEPARTED at up to 40 ticks a frame. Then it
+## refused), takes both check-in desks away for 30 sim seconds, counted from
+## the first passenger's arrival (passengers get stuck and the stuck_too_long
+## anomaly is raised, then cleared once the desks are back), and runs the
+## starter's first flight to DEPARTED at up to 40 ticks a frame. The seated
+## staff open the airport on the first tick, and that flight starts
+## ISSUE_LEAD_TICKS later. Then it
 ## prints the snapshot, the log path and the log's line counts by type, read
 ## back from the file. Every type but error must have grown from zero, or the
 ## probe prints PROBE_INVALID and exits 1. A guard thread ends a hang with
@@ -53,6 +56,8 @@ var _mode: BuildMode
 var _desks: Array[Dictionary] = []
 var _phase := 0
 var _departed_at := -1
+## The tick the first passenger arrived, or -1.
+var _arrived := -1
 var _waited := 0
 
 
@@ -129,9 +134,11 @@ func _run_flight() -> void:
 	var target := _clock.tick + TICKS_PER_FRAME
 	while _clock.tick < target:
 		_clock.advance(SimClock.STEP)
-		if _clock.tick == DESKS_GONE_TICK:
+		if _arrived < 0 and not _sim.passenger_ids().is_empty():
+			_arrived = _clock.tick
+		if _arrived >= 0 and _clock.tick == _arrived + DESKS_GONE_TICK:
 			_take_desks()
-		elif _clock.tick == DESKS_BACK_TICK:
+		elif _arrived >= 0 and _clock.tick == _arrived + DESKS_BACK_TICK:
 			_return_desks()
 	_clock.set_paused(true)
 	var state := _flights.state_of(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))

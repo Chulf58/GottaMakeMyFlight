@@ -15,6 +15,8 @@ const DIR := "user://playtest_scene_test"
 const OFF_DIR := "user://playtest_scene_test_off"
 const AGAIN_DIR := "user://playtest_scene_test_again"
 const STUCK_LIMIT_S := 2.0
+## The desk ticks count from the first passenger's arrival, the late spawn
+## and the end from the first state of the starter's first flight.
 const DESKS_GONE_TICK := 300
 const STUCK_CHECK_TICK := 420
 const DESKS_BACK_TICK := 430
@@ -44,6 +46,8 @@ var _kept_rect := Rect2i()
 var _removed_rect := Rect2i()
 var _snapshot: Dictionary
 var _events: Array[Dictionary] = []
+## The first state of the starter's first flight.
+var _start := 0
 
 
 func before() -> void:
@@ -68,17 +72,27 @@ func before() -> void:
 	_mode.set_tool(BuildMode.Tool.ENTRANCE)
 	_mode.apply_at(grid.cell_to_world(OFF_DOOR_CELL))
 	_mode.set_tool(BuildMode.Tool.NONE)
-	_run_to(DESKS_GONE_TICK)
+	# Staffed, the airport opens on the first tick and the starter's first
+	# flight starts ISSUE_LEAD_TICKS later; the session's ticks count from it.
+	_run_to(1)
+	var starter := (_main.get_node("FlightSim") as FlightSim).contract_of(FlightSim.DEFAULT_ID)
+	_start = FlightTimetable.starts_for(starter, 0)[FlightSim.State.SCHEDULED]
+	# The first passengers arrive well before the flight's first state; the
+	# desks go and come back while they walk to check-in.
+	while _sim.passenger_ids().is_empty() and _clock.tick < _start:
+		_run_to(_clock.tick + 1)
+	var arrived := _clock.tick
+	_run_to(arrived + DESKS_GONE_TICK)
 	var desks := _take_desks()
-	_run_to(STUCK_CHECK_TICK)
+	_run_to(arrived + STUCK_CHECK_TICK)
 	_check()
 	_stuck_open_at_check = not _hook.stuck_list().is_empty()
 	_put_back(desks)
-	_run_to(CLEAR_CHECK_TICK)
+	_run_to(arrived + CLEAR_CHECK_TICK)
 	_check()
-	_run_to(LATE_SPAWN_TICK)
+	_run_to(_start + LATE_SPAWN_TICK)
 	_late_id = _sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
-	_run_to(END_TICK)
+	_run_to(_start + END_TICK)
 	# Before the last check, whose flush puts the room events in the file.
 	_mark_rooms()
 	push_error(ERROR_TEXT)
@@ -163,7 +177,8 @@ func test_the_late_passenger_is_logged_as_missed() -> void:
 
 func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	assert_bool(_snapshot["attached"]).is_true()
-	assert_int(_snapshot["tick"]).is_equal(END_TICK)
+	assert_int(_snapshot["tick"]).is_equal(_start + END_TICK)
+	assert_int(_start).is_equal(1 + 19 + FlightTimetable.ISSUE_LEAD_TICKS)
 	assert_str(_snapshot["flight_state"]).is_equal("DEPARTED")
 	# Settled passengers are retired 200 ticks after their outcome; the durable
 	# totals still count all of them and nobody is left in the list.

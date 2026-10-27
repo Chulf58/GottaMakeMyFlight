@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3]
+[gd_scene load_steps=30 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -22,6 +22,8 @@
 [ext_resource type="Script" path="res://economy/rescue_grant.gd" id="20_rescue"]
 [ext_resource type="Script" path="res://staff/staff_sim.gd" id="21_staff"]
 [ext_resource type="Script" path="res://ui/staff_panel.gd" id="22_staffpanel"]
+[ext_resource type="Script" path="res://flights/airport_gate.gd" id="23_gate"]
+
 [ext_resource type="Script" path="res://rating/airport_rating.gd" id="23_rating"]
 [ext_resource type="Script" path="res://ui/rating_badge.gd" id="24_ratingbadge"]
 
@@ -156,6 +158,11 @@ clock = NodePath("../SimClock")
 passengers = NodePath("../PassengerSim")
 finances = NodePath("../Finances")
 
+[node name="AirportGate" type="Node" parent="." node_paths=PackedStringArray("flights", "staff")]
+script = ExtResource("23_gate")
+flights = NodePath("../FlightSim")
+staff = NodePath("../Staff")
+
 [node name="AirportRating" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "passengers")]
 script = ExtResource("23_rating")
 clock = NodePath("../SimClock")
@@ -197,10 +204,11 @@ script = ExtResource("18_offerpanel")
 desk = NodePath("../OfferDesk")
 flights = NodePath("../FlightSim")
 
-[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff")]
+[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate")]
 layer = 2
 script = ExtResource("22_staffpanel")
 staff = NodePath("../Staff")
+gate = NodePath("../AirportGate")
 
 [node name="RatingBadge" type="CanvasLayer" parent="." node_paths=PackedStringArray("rating")]
 layer = 2

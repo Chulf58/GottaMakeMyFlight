@@ -16,6 +16,8 @@ func before_test() -> void:
 	_most_live = 0
 	_sim = auto_free(FlightSim.new()) as FlightSim
 	_sim.occurrence_added.connect(_on_added)
+	# A FlightSim starts closed; these cases are about an open airport.
+	_sim.open_airport()
 
 
 func _on_added(id: String) -> void:

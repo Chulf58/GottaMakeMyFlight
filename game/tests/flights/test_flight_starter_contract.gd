@@ -1,9 +1,10 @@
 class_name TestFlightStarterContract
 extends GdUnitTestSuite
-## The starter contract a new game begins with (Economy 7/8): it replaces the
-## one-off bootstrap flight, so day one has a flight and the timetable repeats
-## it every day. Its first occurrence starts at tick 0, the timing the
-## bootstrap flight had.
+## The starter contract (Economy 7/8) is accepted when the airport opens
+## (decision airport-opening-design-stays-open-once-opened-starter-flight-
+## placed-after-opening), not when a new game starts: starter_terms(now)
+## departs so its first state is ISSUE_LEAD_TICKS after `now`, rounded up to
+## a whole minute. AirportGate.open() accepts it (test_airport_gate.gd).
 
 var _clock: SimClock
 var _sim: FlightSim
@@ -16,57 +17,34 @@ func before_test() -> void:
 
 
 func test_the_starter_terms_are_a_valid_contract_that_would_be_accepted() -> void:
-	assert_str(FlightContract.problem(FlightSim.STARTER_TERMS, FlightContract.TERM_KEYS)).is_equal(
-		""
-	)
-	assert_str(_sim.accept_problem(FlightSim.STARTER_TERMS)).is_equal("")
+	var terms := FlightSim.starter_terms(0)
+	assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_equal("")
+	assert_str(_sim.accept_problem(terms)).is_equal("")
+	for key in FlightSim.STARTER_TERMS:
+		assert_that(terms[key]).is_equal(FlightSim.STARTER_TERMS[key])
 
 
-func test_a_new_game_has_one_starter_contract_and_one_flight_on_day_one() -> void:
-	assert_bool(_sim.add_starter_contract()).is_true()
-	var id := FlightTimetable.occurrence_id(FlightSim.STARTER_TERMS["id"], 0)
-	assert_array(_sim.contract_ids()).is_equal([FlightSim.STARTER_TERMS["id"]])
-	assert_array(_sim.flight_ids()).is_equal([id])
-	assert_str(_sim.flight_contract_id(id)).is_equal(FlightSim.STARTER_TERMS["id"])
+## [now, first state of its first occurrence]: whole minutes keep the lead
+## exactly, others round up, and 22:40 (tick 20000) crosses midnight.
+func test_the_first_state_is_the_lead_after_now_rounded_up_to_a_minute() -> void:
+	var cases := [[0, 2400], [1000, 3400], [1007, 3420], [1019, 3420], [20000, 22400]]
+	for case: Array in cases:
+		var sim: FlightSim = auto_free(FlightSim.new())
+		for t in range(1, case[0] + 1):
+			sim.on_tick(t)
+		sim.open_airport()
+		assert_bool(sim.accept_contract(FlightSim.starter_terms(case[0]))).is_true()
+		var contract := sim.contract_of(FlightSim.DEFAULT_ID)
+		var day: int = contract["first_day"]
+		var first := FlightTimetable.starts_for(contract, day)[0]
+		assert_int(first).override_failure_message(str(case)).is_equal(case[1])
+		assert_int(FlightTimetable.issue_tick(contract, day)).is_greater_equal(case[0])
 
 
-func test_the_first_occurrence_starts_at_tick_zero_like_the_bootstrap_flight() -> void:
-	_sim.add_starter_contract()
-	var id := _sim.flight_ids()[0]
-	var starts := []
-	for state in FlightSim.STATE_COUNT:
-		starts.append(_sim.state_start(id, state))
-	assert_array(starts).is_equal(FlightSim.schedule_starts(0))
-	assert_int(_sim.state_of(id)).is_equal(FlightSim.State.SCHEDULED)
-
-
-func test_the_starter_flight_departs_on_day_one_and_repeats_the_next_day() -> void:
-	_sim.add_starter_contract()
-	var id := _sim.flight_ids()[0]
-	var pushback := _sim.state_start(id, FlightSim.State.PUSHBACK)
-	assert_int(GameCalendar.day_of(pushback)).is_equal(0)
-	assert_int(GameCalendar.minute_of_day(pushback)).is_equal(
-		FlightSim.STARTER_TERMS["departure_minute"]
-	)
-	_sim.on_tick(GameCalendar.TICKS_PER_DAY)
-	var next := FlightTimetable.occurrence_id(FlightSim.STARTER_TERMS["id"], 1)
-	assert_bool(_sim.flight_ids().has(next)).is_true()
-
-
-func test_a_second_starter_contract_is_refused() -> void:
-	assert_bool(_sim.add_starter_contract()).is_true()
-	await (
-		assert_error(func() -> void: _sim.add_starter_contract())
-		. is_push_error("FlightSim.accept_contract: contract id 'GMF101' is already used")
-	)
-	assert_array(_sim.contract_ids()).has_size(1)
-
-
-func test_the_node_adds_the_starter_contract_when_it_enters_a_scene_with_a_clock() -> void:
+func test_a_new_game_s_flight_sim_has_no_contract_and_no_flight() -> void:
 	var sim: FlightSim = auto_free(FlightSim.new())
 	sim.clock = _clock
 	add_child(sim)
-	assert_array(sim.contract_ids()).is_equal([FlightSim.STARTER_TERMS["id"]])
-	assert_array(sim.flight_ids()).is_equal(
-		[FlightTimetable.occurrence_id(FlightSim.STARTER_TERMS["id"], 0)]
-	)
+	assert_array(sim.contract_ids()).is_empty()
+	assert_array(sim.flight_ids()).is_empty()
+	assert_int(sim.opened_tick).is_equal(-1)
