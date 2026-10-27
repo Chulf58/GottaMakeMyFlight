@@ -25,7 +25,34 @@ static func problem(data: Dictionary) -> String:
 	problem_text = _objects_problem(data["objects"], data["next_object_id"])
 	if problem_text != "":
 		return problem_text
+	problem_text = _paid_problem(data, int(data["width"]), int(data["height"]))
+	if problem_text != "":
+		return problem_text
 	return _rooms_problem(data)
+
+
+## The optional BuildGrid.PAID_KEYS, which come together: arrays laid out like
+## "floor", "h_walls" and "v_walls" of whole prices from 0. Whether a price
+## sits on a piece, and is no more than today's price for it, is left to
+## from_snapshot().
+static func _paid_problem(data: Dictionary, width: int, height: int) -> String:
+	var present := 0
+	for key in BuildGrid.PAID_KEYS:
+		present += 1 if data.has(key) else 0
+	if present == 0:
+		return ""
+	if present != BuildGrid.PAID_KEYS.size():
+		return "%s must all be present or all absent" % ", ".join(BuildGrid.PAID_KEYS)
+	var lengths := [width * height, width * (height + 1), (width + 1) * height]
+	for i in lengths.size():
+		var key: String = BuildGrid.PAID_KEYS[i]
+		var values: Variant = data[key]
+		if typeof(values) != TYPE_ARRAY or (values as Array).size() != lengths[i]:
+			return "%s must be an array of %d values" % [key, lengths[i]]
+		for value in values:
+			if not _is_whole_in(value, 0, BuildGrid.MAX_PAID):
+				return "%s values must be whole numbers from 0 to %d" % [key, BuildGrid.MAX_PAID]
+	return ""
 
 
 ## The optional "rooms" and "next_room_id" keys, which come together. A
@@ -135,6 +162,9 @@ static func _object_problem(entry: Variant) -> String:
 		return "object anchor must be two whole numbers"
 	if not _is_whole(entry["facing"]):
 		return "object facing must be a whole number"
+	# Optional: an object saved before purchase prices has none and paid 0.
+	if (entry as Dictionary).has("paid") and not _is_whole_in(entry["paid"], 0, BuildGrid.MAX_PAID):
+		return "object paid must be a whole number from 0 to %d" % BuildGrid.MAX_PAID
 	return ""
 
 

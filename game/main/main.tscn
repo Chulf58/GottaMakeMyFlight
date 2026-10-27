@@ -59,9 +59,10 @@ surface_material_override/0 = SubResource("Material_ground")
 bounds_half_extent = 260.0
 home_position = Vector3(-0.5, 0, -79.8)
 
-[node name="BuildMode" type="Node3D" parent="."]
+[node name="BuildMode" type="Node3D" parent="." node_paths=PackedStringArray("finances")]
 script = ExtResource("3_build")
 shell = ExtResource("15_shell")
+finances = NodePath("../Finances")
 
 [node name="Airside" type="Node3D" parent="."]
 script = ExtResource("6_airside")
