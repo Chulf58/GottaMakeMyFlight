@@ -225,6 +225,21 @@ func _load_problem(data: Dictionary, into: Array[Dictionary]) -> String:
 	for day in per_day:
 		if per_day[day] != OFFERS_PER_DAY:
 			return "day %d must hold all %d of its offers" % [day, OFFERS_PER_DAY]
+	return _status_problem(into)
+
+
+## "" when the statuses are ones a run could have saved: offers expire when a
+## later day starts, so an earlier day has none open and an expired offer has a
+## later recorded day behind it.
+func _status_problem(offers: Array[Dictionary]) -> String:
+	var latest := -1
+	for offer in offers:
+		latest = maxi(latest, offer["day"])
+	for offer in offers:
+		if offer["status"] == OPEN and offer["day"] < latest:
+			return "offer %s is open but day %d has started" % [offer["id"], latest]
+		if offer["status"] == EXPIRED and offer["day"] >= latest:
+			return "offer %s is expired but no later day is recorded" % offer["id"]
 	return ""
 
 

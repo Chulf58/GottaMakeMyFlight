@@ -80,17 +80,42 @@ func test_expiry_fires_changed_once_together_with_the_new_draw() -> void:
 	assert_int(_changes).is_equal(2)
 
 
-func test_expiry_alone_fires_changed_when_the_new_day_already_has_offers() -> void:
-	# Day 1 was drawn, then a save from before the draw's expiry loaded.
-	var loaded := TestOfferBoard.day_records(0, [600, 720, 840])
-	loaded.append_array(TestOfferBoard.day_records(1, [600, 720, 840]))
-	assert_bool(_board.from_snapshot(TestOfferBoard.save_of(loaded))).is_true()
-	_changes = 0
-	assert_array(_board.ensure_day(1, _rng)).is_empty()
-	assert_int(_changes).is_equal(1)
+## A day's records with every offer set to `status`.
+func _day_with(day: int, status: String) -> Array:
+	var offers := TestOfferBoard.day_records(day, [600, 720, 840])
+	for offer in offers:
+		offer["status"] = status
+	return offers
+
+
+func test_a_save_with_open_offers_from_before_its_latest_day_is_refused() -> void:
+	var offers := _day_with(0, OfferBoard.OPEN)
+	offers.append_array(_day_with(1, OfferBoard.OPEN))
+	assert_bool(_board.from_snapshot(TestOfferBoard.save_of(offers))).is_false()
+	assert_array(_board.open_offers()).is_empty()
+	# One still-open offer on an earlier day is enough.
+	offers = _day_with(0, OfferBoard.EXPIRED)
+	offers[2]["status"] = OfferBoard.OPEN
+	offers.append_array(_day_with(1, OfferBoard.OPEN))
+	assert_bool(_board.from_snapshot(TestOfferBoard.save_of(offers))).is_false()
+
+
+func test_a_save_whose_latest_day_is_expired_is_refused() -> void:
+	assert_bool(_board.from_snapshot(TestOfferBoard.save_of(_day_with(0, "expired")))).is_false()
+	var offers := _day_with(0, OfferBoard.EXPIRED)
+	offers.append_array(_day_with(1, OfferBoard.OPEN))
+	offers[3]["status"] = OfferBoard.EXPIRED
+	assert_bool(_board.from_snapshot(TestOfferBoard.save_of(offers))).is_false()
+	assert_array(_board.open_offers()).is_empty()
+
+
+func test_a_save_a_run_could_have_made_loads() -> void:
+	var offers := _day_with(0, OfferBoard.EXPIRED)
+	offers[0]["status"] = OfferBoard.DECLINED
+	offers[1]["status"] = OfferBoard.ACCEPTED
+	offers.append_array(_day_with(1, OfferBoard.OPEN))
+	assert_bool(_board.from_snapshot(TestOfferBoard.save_of(offers))).is_true()
 	assert_array(_board.open_offers()).has_size(OfferBoard.OFFERS_PER_DAY)
-	_board.ensure_day(1, _rng)
-	assert_int(_changes).is_equal(1)
 
 
 func test_expired_status_survives_a_save_through_json() -> void:

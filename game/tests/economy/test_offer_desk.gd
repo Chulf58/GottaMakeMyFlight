@@ -95,3 +95,37 @@ func test_a_board_that_already_holds_today_is_not_redrawn_on_bind() -> void:
 
 func test_an_unbound_desk_draws_nothing() -> void:
 	assert_array(_desk.board.open_offers()).is_empty()
+
+
+func test_binding_the_same_clock_again_changes_nothing() -> void:
+	_desk.bind_clock(_clock)
+	var state := _clock.rng.state
+	_desk.bind_clock(_clock)
+	assert_int(_changes).is_equal(1)
+	assert_int(_clock.rng.state).is_equal(state)
+	_tick_to(GameCalendar.day_start(1))
+	assert_int(_changes).is_equal(2)
+
+
+func test_binding_another_clock_lets_go_of_the_first() -> void:
+	var other := auto_free(SimClock.new()) as SimClock
+	other.seed_rng(7)
+	_desk.bind_clock(_clock)
+	_desk.bind_clock(other)
+	assert_int(_desk.clock.get_instance_id()).is_equal(other.get_instance_id())
+	var changes := _changes
+	var state := _clock.rng.state
+	_tick_to(GameCalendar.day_start(1))
+	assert_int(_changes).is_equal(changes)
+	assert_int(_clock.rng.state).is_equal(state)
+	assert_int(_clock.ticked.get_connections().size()).is_equal(0)
+	other.tick = GameCalendar.day_start(1)
+	other.ticked.emit(other.tick)
+	assert_int(_changes).is_equal(changes + 1)
+
+
+func test_a_desk_in_a_scene_without_a_clock_fails_loudly_and_stays_empty() -> void:
+	var bare := auto_free(OfferDesk.new()) as OfferDesk
+	add_child(bare)
+	assert_array(bare.board.open_offers()).is_empty()
+	assert_object(bare.clock).is_null()

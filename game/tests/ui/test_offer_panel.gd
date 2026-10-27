@@ -131,3 +131,17 @@ func test_with_no_open_offers_the_sheet_says_when_more_arrive() -> void:
 	assert_array(_panel.card_ids()).is_empty()
 	assert_str(_panel.message()).is_equal(OfferPanel.EMPTY_TEXT)
 	assert_str(_panel.toggle_button().text).is_equal("Offers (0)")
+
+
+func test_a_panel_without_a_desk_builds_nothing_instead_of_showing_no_offers() -> void:
+	var bare := OfferPanel.new()
+	bare.flights = _sim
+	_port.add_child(bare)
+	assert_int(bare.get_child_count()).is_equal(0)
+
+
+func test_a_panel_without_flights_builds_nothing() -> void:
+	var bare := OfferPanel.new()
+	bare.desk = _desk
+	_port.add_child(bare)
+	assert_int(bare.get_child_count()).is_equal(0)

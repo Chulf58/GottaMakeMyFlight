@@ -32,10 +32,10 @@ const REFUSAL_TEXT := Color(0.72, 0.2, 0.18)
 @export var desk: OfferDesk
 @export var flights: FlightSim
 
-var _button := Button.new()
-var _sheet := PanelContainer.new()
-var _cards := VBoxContainer.new()
-var _message := Label.new()
+var _button: Button
+var _sheet: PanelContainer
+var _cards: VBoxContainer
+var _message: Label
 var _card_nodes: Dictionary = {}
 var _accept_buttons: Dictionary = {}
 var _decline_buttons: Dictionary = {}
@@ -108,10 +108,12 @@ static func _bold_font() -> FontVariation:
 
 
 func _ready() -> void:
+	if desk == null or flights == null:
+		push_error("OfferPanel: desk and flights must both be set, so nothing is shown")
+		return
 	layer = 2
 	_build()
-	if desk != null:
-		desk.board.changed.connect(_refresh)
+	desk.board.changed.connect(_refresh)
 	_refresh()
 
 
@@ -166,6 +168,10 @@ func message() -> String:
 
 
 func _build() -> void:
+	_button = Button.new()
+	_sheet = PanelContainer.new()
+	_cards = VBoxContainer.new()
+	_message = Label.new()
 	var column := VBoxContainer.new()
 	column.name = "OfferColumn"
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -217,9 +223,7 @@ func _refresh() -> void:
 	_card_nodes.clear()
 	_accept_buttons.clear()
 	_decline_buttons.clear()
-	var offers: Array[Dictionary] = []
-	if desk != null:
-		offers = desk.board.open_offers()
+	var offers := desk.board.open_offers()
 	for offer in offers:
 		_add_card(offer)
 	_button.text = "Offers (%d)" % offers.size()
