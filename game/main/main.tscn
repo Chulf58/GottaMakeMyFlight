@@ -1,4 +1,4 @@
-[gd_scene load_steps=31 format=3]
+[gd_scene load_steps=32 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -27,6 +27,7 @@
 [ext_resource type="Script" path="res://rating/airport_rating.gd" id="23_rating"]
 [ext_resource type="Script" path="res://ui/rating_badge.gd" id="24_ratingbadge"]
 [ext_resource type="Script" path="res://core/save_game.gd" id="25_save"]
+[ext_resource type="Script" path="res://staff/staff_characters.gd" id="26_staffchars"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -174,6 +175,11 @@ passengers = NodePath("../PassengerSim")
 script = ExtResource("11_paxview")
 clock = NodePath("../SimClock")
 sim = NodePath("../PassengerSim")
+
+[node name="StaffCharacters" type="Node3D" parent="." node_paths=PackedStringArray("clock", "staff")]
+script = ExtResource("26_staffchars")
+clock = NodePath("../SimClock")
+staff = NodePath("../Staff")
 
 [node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode")]
 script = ExtResource("12_hud")
