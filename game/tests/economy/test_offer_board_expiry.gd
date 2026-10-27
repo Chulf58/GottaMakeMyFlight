@@ -88,6 +88,25 @@ func _day_with(day: int, status: String) -> Array:
 	return offers
 
 
+func test_expiry_alone_fires_changed_when_the_new_day_was_already_drawn() -> void:
+	# Out-of-order calls through the public API: day 0 is drawn after day 1,
+	# so it is open when day 1 is asked for again.
+	var day1 := _board.ensure_day(1, _rng)
+	var day0 := _board.ensure_day(0, _rng)
+	assert_int(_board.open_offers().size()).is_equal(2 * OfferBoard.OFFERS_PER_DAY)
+	_changes = 0
+	var state := _rng.state
+	assert_array(_board.ensure_day(1, _rng)).is_empty()
+	assert_int(_changes).is_equal(1)
+	assert_int(_rng.state).is_equal(state)
+	for id in day0:
+		assert_str(_board.offer_of(id)["status"]).is_equal(OfferBoard.EXPIRED)
+	for id in day1:
+		assert_str(_board.offer_of(id)["status"]).is_equal(OfferBoard.OPEN)
+	_board.ensure_day(1, _rng)
+	assert_int(_changes).is_equal(1)
+
+
 func test_a_save_with_open_offers_from_before_its_latest_day_is_refused() -> void:
 	var offers := _day_with(0, OfferBoard.OPEN)
 	offers.append_array(_day_with(1, OfferBoard.OPEN))
