@@ -353,6 +353,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	no_shows = loaded["no_shows"]
 	_schedule = loaded["schedule"]
 	_queues = loaded["queues"]
+	cafes.restore(loaded["cafe"])
 	_passengers = loaded["passengers"]
 	_by_id.clear()
 	for p in _passengers:

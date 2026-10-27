@@ -80,6 +80,9 @@ const START_STAGES: Array[Passenger.Stage] = [
 ]
 
 var layout := CafeLayout.new()
+## Set by any grid edit: every visit's deadline is worked out again on the
+## next tick. Saved, so a load between an edit and that tick plays on alike.
+var deadlines_stale := false
 
 var _sim: PassengerSim
 var _set_stage: Callable
@@ -92,7 +95,6 @@ var _queues: Dictionary = {}
 ## Derived: seat key -> passenger id.
 var _seats: Dictionary = {}
 var _layout_dirty := true
-var _deadlines_dirty := false
 
 
 ## Wires the sim's own stage, station and gate-seat helpers in, so a stage
@@ -213,7 +215,7 @@ func reconcile() -> void:
 			_leave_early(p, visit)
 			continue
 		visit.seat = seat
-		if _deadlines_dirty:
+		if deadlines_stale:
 			visit.deadline = CafeForecast.deadline(_sim, p, seat["approach"], visit.resume_stage)
 	var counters: Array = _queues.keys()
 	counters.sort()
@@ -225,7 +227,7 @@ func reconcile() -> void:
 			_abandon(_sim.get_passenger(last), _visits[last])
 		if (q["lane"] as Array).is_empty() and q["serving"] == 0:
 			_queues.erase(counter_id)
-	_deadlines_dirty = false
+	deadlines_stale = false
 
 
 ## Rebuilds the layout when an edit made it stale.
@@ -336,6 +338,35 @@ func seat_facing(p: Passenger) -> Vector2i:
 	if visit == null or visit.seat.is_empty():
 		return Vector2i.ZERO
 	return visit.seat["facing"]
+
+
+## The queues for a save, in counter id order.
+func queue_records() -> Array:
+	var out := []
+	var counters: Array = _queues.keys()
+	counters.sort()
+	for counter_id in counters:
+		var q: Dictionary = _queues[counter_id]
+		(
+			out
+			. append(
+				{
+					"counter": counter_id,
+					"room": q["room"],
+					"lane": (q["lane"] as Array).duplicate(),
+					"serving": q["serving"],
+				}
+			)
+		)
+	return out
+
+
+## Installs visits and queues a CafeSnapshot.load() checked; rederive() then
+## rebuilds the seats and the layout.
+func restore(state: Dictionary) -> void:
+	_visits = state["visits"]
+	_queues = state["queues"]
+	deadlines_stale = state["deadlines_stale"]
 
 
 ## Rebuilds what is derived from the visits after a load.
@@ -665,4 +696,4 @@ func _remove(visit: CafeVisit) -> void:
 
 func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
 	_layout_dirty = true
-	_deadlines_dirty = true
+	deadlines_stale = true

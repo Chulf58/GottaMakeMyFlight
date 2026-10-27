@@ -3,6 +3,7 @@ extends RefCounted
 ## The JSON shape of PassengerSim's state, and its checks on load. Committed
 ## paths, queue order, service ends, seat claims, apron progress and pending
 ## replans are all saved, so nothing is recomputed differently after a load.
+## Cafe visits and counter queues go under "cafe" (CafeSnapshot).
 ## Seat claims and walker counts are rebuilt from the passenger records.
 
 const KEYS := [
@@ -14,6 +15,7 @@ const KEYS := [
 	"passengers",
 	"queues",
 	"no_shows",
+	"cafe",
 ]
 const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
@@ -86,6 +88,7 @@ static func save(
 		"passengers": records,
 		"queues": queue_list,
 		"no_shows": no_show_list,
+		"cafe": CafeSnapshot.save(sim.cafes),
 	}
 
 
@@ -117,8 +120,12 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 		var p := _passenger(entry, grid, int(data["next_id"]))
 		if p == null or ids.has(p.id):
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
-		ids[p.id] = true
+		ids[p.id] = p
 		passengers.append(p)
+	var cafe := CafeSnapshot.load(data["cafe"], ids)
+	if cafe.has("error"):
+		return cafe
+	out["cafe"] = cafe
 	var queues := _queues(data["queues"], ids)
 	if queues.has("error"):
 		return queues
