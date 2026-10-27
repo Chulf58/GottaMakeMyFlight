@@ -233,3 +233,38 @@ func test_a_save_with_a_one_off_over_a_live_ended_occurrence_is_refused() -> voi
 		. is_push_error("FlightSim.from_snapshot: %s" % loaded["error"])
 	)
 	assert_array(target.contract_ids()).is_empty()
+
+
+## Ended AM with live AM-d1 and a running contract NEW at the same time with
+## live NEW-d1: accept_contract would have refused NEW, so the save is refused.
+func test_a_save_with_a_running_contract_over_a_live_ended_occurrence_is_refused() -> void:
+	var data := _saved(_ended_world())
+	var at := 0
+	for i in data["flights"].size():
+		if data["flights"][i]["id"] == "AM-d1":
+			at = i
+	var contract: Dictionary = data["contracts"][0].duplicate(true)
+	contract["id"] = "NEW"
+	contract["first_day"] = 1
+	data["contracts"].append(contract)
+	data["start_day"]["NEW"] = 1
+	data["next_day"]["NEW"] = 2
+	var flight: Dictionary = data["flights"][at].duplicate(true)
+	flight["id"] = "NEW-d1"
+	flight["contract"] = "NEW"
+	data["flights"].insert(at + 1, flight)
+	var loaded := FlightSnapshot.load(data)
+	assert_str(loaded.get("error", "")).contains("flight NEW-d1 clashes with AM-d1 of an ended")
+
+
+## The valid pair: NEW accepted at AM's time after AM-d1 has gone loads.
+func test_a_running_contract_at_an_ended_contracts_time_loads_once_its_flights_are_gone() -> void:
+	var world := _ended_world()
+	_run(world[0], 40000)
+	assert_bool(world[1].accept_contract(TestFlightContracts.terms("NEW", 480))).is_true()
+	var data := _saved(world)
+	(
+		assert_array(data["flights"].filter(func(f: Dictionary) -> bool: return f["id"] == "AM-d1"))
+		. is_empty()
+	)
+	assert_bool(FlightSnapshot.load(data).has("error")).is_false()

@@ -287,24 +287,21 @@ static func _read_flights(
 	return _fixed_clash_problem(out, ended)
 
 
-## A one-off flight must not hold gate time with a live occurrence of an ended
-## contract: only the ended contract's future days are released.
+## A live occurrence of an ended contract keeps its gate time: no other live
+## flight (a one-off or an occurrence of a running contract) may overlap it.
+## Only the ended contract's future days are released.
 static func _fixed_clash_problem(flights: Array[Dictionary], ended: Dictionary) -> String:
-	for one_off in flights:
-		if one_off["contract"] != "":
+	var last := FlightSim.State.DEPARTED
+	for fixed in flights:
+		if fixed["contract"] == "" or not ended.has(fixed["contract"]):
 			continue
-		for flight in flights:
-			if flight["contract"] == "" or not ended.has(flight["contract"]):
+		for other in flights:
+			if other["id"] == fixed["id"] or other["gate"] != fixed["gate"]:
 				continue
-			if flight["gate"] != one_off["gate"]:
-				continue
-			var a: Array = one_off["starts"]
-			var b: Array = flight["starts"]
-			var last := FlightSim.State.DEPARTED
+			var a: Array = fixed["starts"]
+			var b: Array = other["starts"]
 			if FlightTimetable.holds_overlap(a[0], a[last], b[0], b[last]):
-				return (
-					"flight %s clashes with %s of an ended contract" % [one_off["id"], flight["id"]]
-				)
+				return "flight %s clashes with %s of an ended contract" % [other["id"], fixed["id"]]
 	return ""
 
 
