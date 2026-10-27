@@ -97,13 +97,38 @@ func test_a_belt_dead_end_outside_the_room_is_a_plain_belt() -> void:
 	assert_array(_notes(room_id)).is_equal([NEEDS_END])
 
 
-func test_belts_and_a_cart_do_not_stand_in_for_the_end() -> void:
+func test_a_real_belt_end_outside_the_room_does_not_count() -> void:
+	# The Belt tool never makes an end outside a bag room, but a B2a save can
+	# hold a hand-placed one: put it on the grid directly, then load it back.
 	var room_id := _mark_bag_room(ROOM)
-	# A line through the room: its dead ends are outside, so no end inside.
-	assert_bool(_lay(Vector2i(2, 5), Vector2i(6, 5)).ok).is_true()
-	assert_bool(_click(BuildMode.Tool.CART, Vector2i(4, 3)).ok).is_true()
-	for x in range(3, 6):
-		assert_str(_def_at(Vector2i(x, 5))).is_equal("baggage_belt")
+	var end := _mode.grid.apply(BuildEdit.place_object(&"baggage_belt_end", Vector2i(8, 8), 0))
+	assert_bool(end.ok).is_true()
+	assert_str(_def_at(Vector2i(8, 8))).is_equal("baggage_belt_end")
+	assert_array(_notes(room_id)).is_equal([NEEDS_END])
+	var saved := _mode.grid.to_snapshot()
+	assert_bool(_mode.load_snapshot(saved)).is_true()
+	assert_str(_def_at(Vector2i(8, 8))).is_equal("baggage_belt_end")
+	assert_array(_notes(_mode.grid.room_at(ROOM.position))).is_equal([NEEDS_END])
+
+
+func test_belts_a_corner_a_merge_and_a_cart_do_not_stand_in_for_the_end() -> void:
+	# A 5x5 room, so a merge and a corner fit inside with no line beside another.
+	var room_id := _mark_bag_room(Rect2i(4, 4, 5, 5))
+	# A line through the room, then a branch from its middle that turns and
+	# leaves: every dead end is outside the room.
+	assert_bool(_lay(Vector2i(3, 5), Vector2i(9, 5)).ok).is_true()
+	assert_bool(_lay(Vector2i(6, 6), Vector2i(6, 8)).ok).is_true()
+	assert_bool(_lay(Vector2i(7, 8), Vector2i(9, 8)).ok).is_true()
+	assert_bool(_click(BuildMode.Tool.CART, Vector2i(4, 6)).ok).is_true()
+	assert_str(_def_at(Vector2i(6, 5))).is_equal("baggage_belt_feed")
+	assert_str(_def_at(Vector2i(6, 8))).is_equal("baggage_belt_corner")
+	assert_str(_def_at(Vector2i(5, 5))).is_equal("baggage_belt")
+	for cell in [Vector2i(3, 5), Vector2i(9, 5), Vector2i(9, 8)]:
+		assert_str(_def_at(cell)).is_equal("baggage_belt")
+	var pieces := RoomRules.status(_mode.grid, room_id).pieces
+	assert_int(pieces.get(&"baggage_belt_feed", 0)).is_equal(1)
+	assert_int(pieces.get(&"baggage_belt_corner", 0)).is_equal(1)
+	assert_int(pieces.get(&"baggage_belt_end", 0)).is_equal(0)
 	assert_array(_notes(room_id)).is_equal([NEEDS_END])
 
 
