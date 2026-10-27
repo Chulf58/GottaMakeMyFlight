@@ -65,3 +65,17 @@ func test_status_text_waits_while_the_grant_message_is_held() -> void:
 	assert_str(_menu.status_label().text).is_equal("Not enough money")
 	_menu._on_status_changed("Placed 1 for 25")
 	assert_str(_menu.status_label().text).is_equal("Placed 1 for 25")
+
+
+## A second grant inside the first one's hold gets a full hold of its own.
+func test_a_second_grant_inside_the_hold_keeps_its_full_hold() -> void:
+	_menu.grant_hold_s = 0.3
+	_grant.granted.emit(10, "first grant")
+	await get_tree().create_timer(0.2).timeout
+	_grant.granted.emit(20, "second grant")
+	_menu._on_status_changed("hover text")
+	await get_tree().create_timer(0.2).timeout
+	print("after the first hold ran out: '%s'" % _menu.status_label().text)
+	assert_str(_menu.status_label().text).is_equal("second grant")
+	await get_tree().create_timer(0.25).timeout
+	assert_str(_menu.status_label().text).is_equal("hover text")

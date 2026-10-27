@@ -160,3 +160,18 @@ func test_a_malformed_snapshot_is_refused_and_changes_nothing() -> void:
 	assert_bool(_grant.from_snapshot({"granted": true, "extra": 1})).is_false()
 	_remove_all(["scanners"])
 	assert_bool(_grant.evaluate()).is_true()
+
+
+## The working-path check is cached: an edit only marks it stale (the grid
+## signal handler never runs the route search), and the next tick redoes it.
+func test_the_working_path_is_cached_and_redone_on_the_tick_after_an_edit() -> void:
+	_world.step()
+	assert_bool(_grant._path_dirty).is_false()
+	assert_bool(_grant._path_ok).is_true()
+	_remove_all(["scanners"])
+	assert_bool(_grant._path_dirty).is_true()
+	assert_bool(_grant._path_ok).is_true()
+	_world.step()
+	assert_bool(_grant._path_dirty).is_false()
+	assert_bool(_grant._path_ok).is_false()
+	assert_array(_granted).has_size(1)

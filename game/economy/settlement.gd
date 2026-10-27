@@ -69,7 +69,8 @@ func to_snapshot() -> Dictionary:
 
 ## Restores a to_snapshot() dictionary. Pushes an error and returns false,
 ## changing nothing, for a missing or unknown key or an owed fee that is not a
-## decimal string from 1 to Wallet.MAX_BALANCE.
+## decimal string from 1 to Wallet.MAX_BALANCE. A successful load forgets
+## which passengers were paid, since the loaded sim may replay them.
 func from_snapshot(data: Dictionary) -> bool:
 	for key in data.keys():
 		if not SNAPSHOT_KEYS.has(key):
@@ -89,6 +90,8 @@ func from_snapshot(data: Dictionary) -> bool:
 			return false
 		loaded.append(fee)
 	_owed = loaded
+	# A load rewinds the session: the passengers it holds may finish again.
+	_settled.clear()
 	return true
 
 

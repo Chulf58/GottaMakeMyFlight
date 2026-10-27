@@ -195,3 +195,54 @@ func test_no_new_plan_while_the_wallet_covers_the_bound_and_a_raised_one_is_caug
 	assert_bool(_grant.evaluate()).is_true()
 	print("grants %s" % [_granted])
 	assert_int(_granted[0][0]).is_equal(925 + PriceTable.price_of_object(&"exit_door") - 1000)
+
+
+## Ruling rescue-grant-repair-price-never-removes-the-security-divider-other-
+## walls-may-come-down-when-cheaper: no landside floor is left but a corridor
+## at x = 18, and airside has free floor behind the divider. The new desk goes
+## landside on paid floor, never airside through the divider.
+func test_a_new_desk_never_goes_airside_through_the_security_divider() -> void:
+	_remove_all(["desks"])
+	for y in range(ReferenceTerminal.DIVIDER_Y, ReferenceTerminal.FLOOR_MAX.y):
+		for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
+			if x != ReferenceTerminal.ENTRANCE_CELL.x:
+				_world.grid.apply(BuildEdit.remove_floor(Vector2i(x, y)))
+	assert_bool(_grant.evaluate()).is_true()
+	var floors := 0
+	var desk_y := -1
+	for edit in _grant.repair_plan().edits:
+		if edit.kind == BuildEdit.Kind.PAINT_FLOOR:
+			floors += 1
+		if edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == &"checkin_desk":
+			desk_y = edit.cell.y
+		if edit.kind == BuildEdit.Kind.REMOVE_WALL:
+			assert_bool(edit.cell.y == ReferenceTerminal.DIVIDER_Y and edit.side == 0).is_false()
+	print("grant %s floors %d desk row %d" % [_granted, floors, desk_y])
+	assert_int(desk_y).is_greater_equal(ReferenceTerminal.DIVIDER_Y)
+	assert_int(floors).is_greater(0)
+	var desk := PriceTable.price_of_object(&"checkin_desk")
+	assert_int(_granted[0][0]).is_equal(desk + floors * PriceTable.price_of_floor())
+	_rebuild(_grant.repair_plan().edits)
+	assert_bool(_a_passenger_makes_the_flight()).is_true()
+
+
+## A paid wall across the route and a floor gap: taking the wall down refunds
+## half its price before the floor is bought, so the grant is only the rest.
+func test_a_refund_earned_early_in_the_repair_lowers_the_grant() -> void:
+	var wallet := _world.sim.wallet
+	var walls: Array[BuildEdit] = []
+	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
+		walls.append(BuildEdit.place_wall(Vector2i(x, 16), BuildGrid.Side.NORTH))
+	wallet.credit(BuildTransaction.needed(_world.grid, walls))
+	for result in BuildTransaction.commit_batch(_world.grid, walls, wallet):
+		assert_bool(result.ok).is_true()
+	assert_int(wallet.balance).is_equal(0)
+	_cut_the_hall()
+	var refund := PriceTable.refund_of(PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN))
+	var expected := PriceTable.price_of_floor() - refund
+	assert_bool(_grant.evaluate()).is_true()
+	print("grants %s expected %d" % [_granted, expected])
+	assert_int(_granted[0][0]).is_equal(expected)
+	_rebuild(_grant.repair_plan().edits)
+	assert_int(wallet.balance).is_equal(0)
+	assert_bool(_grant.has_working_path()).is_true()

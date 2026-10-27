@@ -7,9 +7,10 @@ extends Node
 ## scanner, exit, each reachable on foot), the wallet cannot pay for the
 ## repair and no passenger in the terminal can still make a flight. The grant
 ## is the shortfall: it brings the balance up to the repair's price
-## (BuildTransaction.needed() of RepairPlan.make()'s edits: the missing pieces,
-## the floor they stand on and the floor that joins them up), no more, and
-## `granted` carries the message to show.
+## (RepairPlan.least_balance() of RepairPlan.make()'s edits: the missing
+## pieces, the floor they stand on and the floor that joins them up, bought in
+## order with each refund paying toward the rest), no more, and `granted`
+## carries the message to show.
 ##
 ## One grant per stuck event. The event lasts until a working path exists
 ## again; only then can a later loss start a new one. The latch is saved
@@ -19,7 +20,8 @@ extends Node
 ## wallet is not touched from inside a grid handler (build transaction staging
 ## is still open work), and PassengerSim has rebuilt its layout from the grid
 ## by the next tick. A grid edit therefore pays out at the next tick. The grid's
-## signals only mark the cached repair plan stale and keep its price bound.
+## signals only mark the cached working-path answer and repair plan stale and
+## keep the plan's price bound; the route search runs again on the next tick.
 ##
 ## Planning copies the grid and searches it, which is too slow to redo on
 ## every tick after every build click. So the price of the last plan made is
@@ -65,6 +67,9 @@ var _watched: BuildGrid
 var _bound := -1
 ## Set by an edit that changed cells, so graph_changed can tell edits from loads.
 var _edit_seen := false
+## The working-path answer for the grid as it stands, redone once it is stale.
+var _path_ok := false
+var _path_dirty := true
 
 
 func _ready() -> void:
@@ -88,8 +93,13 @@ func bind(with_clock: SimClock, sim: PassengerSim, with_wallet: Wallet) -> void:
 
 
 ## Whether a new passenger can walk the whole journey on the grid as it stands.
+## The answer is kept until the grid changes.
 func has_working_path() -> bool:
-	return RepairPlan.has_working_path(_sim.grid, _sim.layout)
+	_watch_grid()
+	if _path_dirty:
+		_path_ok = RepairPlan.has_working_path(_sim.grid, _sim.layout)
+		_path_dirty = false
+	return _path_ok
 
 
 ## The repair for the grid as it stands, made once per grid change.
@@ -97,7 +107,7 @@ func repair_plan() -> RepairPlan:
 	_watch_grid()
 	if _plan == null:
 		_plan = RepairPlan.make(_sim.grid, _sim.shell)
-		_bound = BuildTransaction.needed(_sim.grid, _plan.edits) if _plan.ok else -1
+		_bound = RepairPlan.least_balance(_sim.grid, _plan.edits) if _plan.ok else -1
 	return _plan
 
 
@@ -149,7 +159,7 @@ func _shortfall() -> int:
 	var plan := repair_plan()
 	if not plan.ok:
 		return 0
-	var cost := BuildTransaction.needed(_sim.grid, plan.edits)
+	var cost := RepairPlan.least_balance(_sim.grid, plan.edits)
 	if cost == PriceTable.NO_PRICE:
 		push_error("RescueGrant: the repair has a piece with no price")
 		return 0
@@ -167,6 +177,7 @@ func _watch_grid() -> void:
 	_watched.edit_applied.connect(_on_edit_applied)
 	_plan = null
 	_bound = -1
+	_path_dirty = true
 
 
 func _on_edit_applied(edit: BuildEdit, result: BuildResult) -> void:
@@ -185,6 +196,7 @@ func _on_edit_applied(edit: BuildEdit, result: BuildResult) -> void:
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	_plan = null
+	_path_dirty = true
 	if not _edit_seen:
 		_bound = -1
 	_edit_seen = false

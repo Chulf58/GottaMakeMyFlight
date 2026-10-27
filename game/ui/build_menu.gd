@@ -11,8 +11,9 @@ extends CanvasLayer
 ## owns the room info panel (RoomPanel), top-left under the money slot. The
 ## status line also shows the rescue grant's message when one is paid (ruling
 ## going-broke-a-one-off-rescue-grant-when-the-airport-is-stuck) for
-## GRANT_HOLD_S seconds; status text that arrives meanwhile (the pointer moving
-## over the grid changes it) waits and shows when the hold ends.
+## grant_hold_s seconds (a later grant restarts the hold); status text that
+## arrives meanwhile (the pointer moving over the grid changes it) waits and
+## shows when the hold ends.
 
 const THUMBNAIL_DIR := "res://assets/ui/thumbnails/%s.png"
 const CATEGORIES := [
@@ -83,6 +84,8 @@ const GRANT_HOLD_S := 8.0
 @export var build_mode: BuildMode
 ## Optional: when set, its paid grants are announced on the status line.
 @export var rescue_grant: RescueGrant
+## Seconds a grant message holds the status line.
+@export var grant_hold_s := GRANT_HOLD_S
 
 var _open := NO_CATEGORY
 ## True while a category click clears the tool, so the tool_changed(NONE)
@@ -99,6 +102,8 @@ var _room_panel := RoomPanel.new()
 ## True while the status line holds a grant message; the latest status text
 ## waits in _held_status until the hold ends.
 var _holding := false
+## Counts grants, so only the latest grant's timer ends the hold.
+var _hold_generation := 0
 var _held_status := ""
 
 
@@ -221,7 +226,14 @@ func _on_granted(_amount: int, message: String) -> void:
 		_held_status = _status.text
 	_holding = true
 	_status.text = message
-	get_tree().create_timer(GRANT_HOLD_S).timeout.connect(end_grant_hold)
+	_hold_generation += 1
+	var timer := get_tree().create_timer(grant_hold_s)
+	timer.timeout.connect(_on_hold_timeout.bind(_hold_generation))
+
+
+func _on_hold_timeout(generation: int) -> void:
+	if generation == _hold_generation:
+		end_grant_hold()
 
 
 ## Ends the grant message's hold and shows the latest status text.

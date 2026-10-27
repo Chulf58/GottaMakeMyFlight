@@ -194,3 +194,35 @@ func test_a_malformed_settlement_snapshot_is_refused_and_changes_nothing() -> vo
 	assert_array(_settlement.owed()).is_empty()
 	assert_bool(_settlement.from_snapshot({"owed": ["37"]})).is_true()
 	assert_array(_settlement.owed()).is_equal([37])
+
+
+## A save loaded into the same session rewinds it: the passenger ids the save
+## holds come back, and their fees are paid when they make the flight again.
+func test_rewinding_to_an_earlier_save_pays_the_replayed_fees() -> void:
+	_make()
+	_accept()
+	var p := _world.passenger(_world.sim.spawn_now(OCCURRENCE))
+	var clock_save := JSON.parse_string(JSON.stringify(_world.clock.to_snapshot())) as Dictionary
+	var flights_save := (
+		JSON.parse_string(JSON.stringify(_world.flights.to_snapshot())) as Dictionary
+	)
+	var sim_save := JSON.parse_string(JSON.stringify(_world.sim.to_snapshot())) as Dictionary
+	var wallet_save := _world.sim.wallet.to_snapshot()
+	var settle_save := JSON.parse_string(JSON.stringify(_settlement.to_snapshot())) as Dictionary
+	while not p.is_done() and _world.clock.tick < SETTLED:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
+	var first := _world.sim.wallet.balance
+	assert_int(first).is_equal(_world.sim.made_count() * FEE)
+	assert_bool(_world.clock.from_snapshot(clock_save)).is_true()
+	assert_bool(_world.flights.from_snapshot(flights_save)).is_true()
+	assert_bool(_world.sim.from_snapshot(sim_save)).is_true()
+	assert_bool(_world.sim.wallet.from_snapshot(wallet_save)).is_true()
+	assert_bool(_settlement.from_snapshot(settle_save)).is_true()
+	var again := _world.passenger(p.id)
+	assert_object(again).is_not_null()
+	while not again.is_done() and _world.clock.tick < SETTLED * 2:
+		_world.step()
+	print("first %d after rewind %d stage %d" % [first, _world.sim.wallet.balance, again.stage])
+	assert_int(again.stage).is_equal(Passenger.Stage.MADE)
+	assert_int(_world.sim.wallet.balance).is_equal(_world.sim.made_count() * FEE)
