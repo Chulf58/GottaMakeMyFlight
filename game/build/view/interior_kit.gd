@@ -29,6 +29,8 @@ const OBJECT_PIECES := {
 	&"seat_row": "seat_row",
 	&"entrance_door": "wall_door",
 	&"exit_door": "wall_door",
+	&"cafe_counter": "cafe_counter",
+	&"cafe_table": "cafe_table",
 }
 ## Where a piece sits in its object's frame (footprint centre, facing 0), for
 ## objects whose piece is not centred on the footprint. The entrance and exit

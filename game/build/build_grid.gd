@@ -49,6 +49,8 @@ const SNAPSHOT_KEYS := [
 	"width", "height", "floor", "zone", "h_walls", "v_walls", "objects", "next_object_id"
 ]
 const OBJECT_KEYS := ["id", "def", "anchor", "facing"]
+## Each entry of the optional "rooms" snapshot key. "rect" is [x, y, w, h].
+const ROOM_KEYS := ["id", "type", "rect"]
 
 var size := Vector2i.ZERO
 ## World position of the north-west corner of cell (0, 0).
@@ -69,6 +71,12 @@ var _reserved := PackedInt32Array()
 ## Object id -> {"def": StringName, "anchor": Vector2i, "facing": int}.
 var _objects: Dictionary = {}
 var _next_object_id := 1
+## Room id -> {"type": StringName (a RoomTypes id), "rect": Rect2i}. A room
+## marks floor cells as a store type; it never changes walkability.
+var _rooms: Dictionary = {}
+## Id of the room each cell belongs to, 0 for none. Derived from _rooms.
+var _room_at := PackedInt32Array()
+var _next_room_id := 1
 var _pathing := GridPathing.new()
 
 
@@ -122,6 +130,23 @@ func get_object(object_id: int) -> Dictionary:
 func object_ids() -> Array[int]:
 	var ids: Array[int] = []
 	ids.assign(_objects.keys())
+	return ids
+
+
+## Id of the room `cell` belongs to, 0 for none.
+func room_at(cell: Vector2i) -> int:
+	return _room_at[_index(cell)] if in_bounds(cell) else 0
+
+
+## A copy of the room record ({"type", "rect"}), or an empty dictionary.
+func get_room(room_id: int) -> Dictionary:
+	return _rooms.get(room_id, {}).duplicate()
+
+
+func room_ids() -> Array[int]:
+	var ids: Array[int] = []
+	ids.assign(_rooms.keys())
+	ids.sort()
 	return ids
 
 
@@ -216,14 +241,22 @@ func validate(edit: BuildEdit) -> BuildResult:
 				result = BuildResult.accepted()
 			else:
 				result = BuildResult.refused(BuildResult.Reason.NO_OBJECT)
+		BuildEdit.Kind.PLACE_ROOM:
+			result = _check_place_room(Rect2i(edit.cell, edit.room_size), edit.room_type)
+		BuildEdit.Kind.REMOVE_ROOM:
+			if _rooms.has(edit.room_id):
+				result = BuildResult.accepted()
+			else:
+				result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
 	return result
 
 
 ## Validates the edit and, if it is accepted, applies it and relinks the A*
-## graph around its dirty cells. A refused edit changes nothing.
+## graph around its dirty cells. A refused edit changes nothing, and an edit
+## with no dirty cells (a room) relinks and emits nothing.
 func apply(edit: BuildEdit) -> BuildResult:
 	var result := _commit(edit)
-	if result.ok:
+	if result.ok and not result.dirty_cells.is_empty():
 		graph_changed.emit(_pathing.update(self, result.dirty_cells))
 	return result
 
@@ -276,6 +309,13 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
 			result.dirty_cells = _erase_object(edit.object_id)
+		BuildEdit.Kind.PLACE_ROOM:
+			result.room_id = _next_room_id
+			_next_room_id += 1
+			_insert_room(result.room_id, edit.room_type, Rect2i(edit.cell, edit.room_size))
+		BuildEdit.Kind.REMOVE_ROOM:
+			result.room_id = edit.room_id
+			_erase_room(edit.room_id)
 	edit_applied.emit(edit, result)
 	return result
 
@@ -317,6 +357,19 @@ func to_snapshot() -> Dictionary:
 			"facing": record["facing"],
 		}
 		objects.append(entry)
+	var rooms := []
+	for room_id in room_ids():
+		var area: Rect2i = _rooms[room_id]["rect"]
+		(
+			rooms
+			. append(
+				{
+					"id": room_id,
+					"type": str(_rooms[room_id]["type"]),
+					"rect": [area.position.x, area.position.y, area.size.x, area.size.y],
+				}
+			)
+		)
 	return {
 		"width": size.x,
 		"height": size.y,
@@ -327,12 +380,15 @@ func to_snapshot() -> Dictionary:
 		"objects": objects,
 		"next_object_id": _next_object_id,
 		"origin": [origin.x, origin.y, origin.z],
+		"rooms": rooms,
+		"next_room_id": _next_room_id,
 	}
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
 ## (which turns ints into floats). The grid takes the snapshot's size and
-## origin; one saved before grids had an origin loads centred at height 0.
+## origin; one saved before grids had an origin loads centred at height 0, and
+## one saved before rooms loads with none.
 ## Every object is re-placed through the placement rules. Pushes an error and
 ## returns false, leaving the grid unchanged, when anything is missing,
 ## malformed or breaks a rule.
@@ -359,6 +415,9 @@ func from_snapshot(data: Dictionary) -> bool:
 	_reserved = loaded._reserved
 	_objects = loaded._objects
 	_next_object_id = loaded._next_object_id
+	_rooms = loaded._rooms
+	_room_at = loaded._room_at
+	_next_room_id = loaded._next_room_id
 	_pathing = loaded._pathing
 	var every: Array[Vector2i] = []
 	for y in size.y:
@@ -380,6 +439,9 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_reserved = _zeros_ints(cells)
 	_objects = {}
 	_next_object_id = 1
+	_room_at = _zeros_ints(cells)
+	_rooms = {}
+	_next_room_id = 1
 
 
 ## Fills this fresh grid from a structurally valid snapshot and returns a
@@ -395,6 +457,9 @@ func _load_cells(data: Dictionary) -> String:
 	var door_problem := _door_walls_problem()
 	if door_problem != "":
 		return door_problem
+	var room_problem := _load_rooms(data)
+	if room_problem != "":
+		return room_problem
 	for entry in data["objects"]:
 		var anchor := Vector2i(int(entry["anchor"][0]), int(entry["anchor"][1]))
 		var def_id := StringName(entry["def"])
@@ -404,6 +469,23 @@ func _load_cells(data: Dictionary) -> String:
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]))
 	_next_object_id = int(data["next_object_id"])
 	_pathing.rebuild(self)
+	return ""
+
+
+## Re-places the snapshot's rooms through the placement rules and returns a
+## problem string, or "". The floor must already be loaded.
+func _load_rooms(data: Dictionary) -> String:
+	if not data.has("rooms"):
+		return ""
+	for entry in data["rooms"]:
+		var r: Array = entry["rect"]
+		var area := Rect2i(int(r[0]), int(r[1]), int(r[2]), int(r[3]))
+		var type := StringName(entry["type"])
+		var check := _check_place_room(area, type)
+		if not check.ok:
+			return "room %d refused: %s" % [int(entry["id"]), check.reason_text()]
+		_insert_room(int(entry["id"]), type, area)
+	_next_room_id = int(data["next_room_id"])
 	return ""
 
 
@@ -427,7 +509,44 @@ func _check_remove_floor(cell: Vector2i) -> BuildResult:
 		return BuildResult.refused(BuildResult.Reason.OCCUPIED, _occupant[i])
 	if _reserved[i] != 0:
 		return BuildResult.refused(BuildResult.Reason.INTERACTION_RESERVED, _reserved[i])
+	if _room_at[i] != 0:
+		return BuildResult.refused(BuildResult.Reason.IN_ROOM)
 	return BuildResult.accepted()
+
+
+## A room needs a known type and a non-empty rectangle of floor cells inside
+## the grid that no other room covers. Its minimum size is not a placement
+## rule: RoomRules shows it as a note, so a tuning change never refuses a save.
+func _check_place_room(area: Rect2i, type: StringName) -> BuildResult:
+	if RoomTypes.get_type(type) == null:
+		return BuildResult.refused(BuildResult.Reason.UNKNOWN_ROOM_TYPE)
+	var has_cells := area.size.x > 0 and area.size.y > 0
+	if not has_cells or not in_bounds(area.position) or not in_bounds(area.end - Vector2i.ONE):
+		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var i := _index(Vector2i(x, y))
+			if _floor[i] == FLOOR_NONE:
+				return BuildResult.refused(BuildResult.Reason.NO_FLOOR)
+			if _room_at[i] != 0:
+				return BuildResult.refused(BuildResult.Reason.ROOM_OVERLAP)
+	return BuildResult.accepted()
+
+
+func _insert_room(room_id: int, type: StringName, area: Rect2i) -> void:
+	_rooms[room_id] = {"type": type, "rect": area}
+	_fill_room_cells(area, room_id)
+
+
+func _erase_room(room_id: int) -> void:
+	_fill_room_cells(_rooms[room_id]["rect"], 0)
+	_rooms.erase(room_id)
+
+
+func _fill_room_cells(area: Rect2i, value: int) -> void:
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			_room_at[_index(Vector2i(x, y))] = value
 
 
 ## A wall of `kind` on an empty edge, or in place of a wall of another kind.

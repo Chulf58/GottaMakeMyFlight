@@ -25,6 +25,8 @@ const OBJECT_PRICES := {
 	&"seat_row": 250,
 	&"entrance_door": 300,
 	&"exit_door": 300,
+	&"cafe_counter": 600,
+	&"cafe_table": 300,
 }
 
 

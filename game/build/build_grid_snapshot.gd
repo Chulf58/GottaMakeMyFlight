@@ -22,7 +22,55 @@ static func problem(data: Dictionary) -> String:
 	var problem_text := _cells_problem(data, int(data["width"]), int(data["height"]))
 	if problem_text != "":
 		return problem_text
-	return _objects_problem(data["objects"], data["next_object_id"])
+	problem_text = _objects_problem(data["objects"], data["next_object_id"])
+	if problem_text != "":
+		return problem_text
+	return _rooms_problem(data)
+
+
+## The optional "rooms" and "next_room_id" keys, which come together. A
+## snapshot saved before rooms has neither and loads with no rooms. Placement
+## rules (floor, overlap, bounds, known type) are left to from_snapshot().
+static func _rooms_problem(data: Dictionary) -> String:
+	if data.has("rooms") != data.has("next_room_id"):
+		return "rooms and next_room_id must both be present or both absent"
+	if not data.has("rooms"):
+		return ""
+	if typeof(data["rooms"]) != TYPE_ARRAY:
+		return "rooms must be an array"
+	var seen := {}
+	for entry in data["rooms"]:
+		var entry_problem := _room_problem(entry)
+		if entry_problem != "":
+			return entry_problem
+		var room_id := int(entry["id"])
+		if seen.has(room_id):
+			return "room id %d appears twice" % room_id
+		seen[room_id] = true
+	var highest: int = seen.keys().max() if not seen.is_empty() else 0
+	if not _is_whole_in(data["next_room_id"], highest + 1, BuildGrid.MAX_ZONE_ID):
+		return "next_room_id must be a whole number above every room id"
+	return ""
+
+
+static func _room_problem(entry: Variant) -> String:
+	if typeof(entry) != TYPE_DICTIONARY:
+		return "each room must be a dictionary"
+	for key in BuildGrid.ROOM_KEYS:
+		if not (entry as Dictionary).has(key):
+			return "room is missing key '%s'" % key
+	if not _is_whole_in(entry["id"], 1, BuildGrid.MAX_ZONE_ID):
+		return "room id must be a whole number, 1 or more"
+	if typeof(entry["type"]) != TYPE_STRING:
+		return "room type must be a string"
+	var area: Variant = entry["rect"]
+	if typeof(area) != TYPE_ARRAY or (area as Array).size() != 4:
+		return "room rect must be four whole numbers"
+	for i in 4:
+		var low := 0 if i < 2 else 1
+		if not _is_whole_in(area[i], low, BuildGrid.MAX_SIDE_CELLS):
+			return "room rect must be x, y from 0 and a width and height from 1"
+	return ""
 
 
 ## The optional "origin" key: [x, y, z] in metres. A snapshot saved before

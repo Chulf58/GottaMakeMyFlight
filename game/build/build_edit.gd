@@ -4,7 +4,16 @@ extends RefCounted
 ## these, so the ghost preview, the click and a snapshot load all run the same
 ## checks. Undo commands can later be built from the same records.
 
-enum Kind { PAINT_FLOOR, REMOVE_FLOOR, PLACE_WALL, REMOVE_WALL, PLACE_OBJECT, REMOVE_OBJECT }
+enum Kind {
+	PAINT_FLOOR,
+	REMOVE_FLOOR,
+	PLACE_WALL,
+	REMOVE_WALL,
+	PLACE_OBJECT,
+	REMOVE_OBJECT,
+	PLACE_ROOM,
+	REMOVE_ROOM,
+}
 
 var kind: Kind = Kind.PAINT_FLOOR
 var cell := Vector2i.ZERO
@@ -17,6 +26,11 @@ var zone_id: int = 0
 var def_id: StringName = &""
 var facing: int = 0
 var object_id: int = 0
+## For PLACE_ROOM: the room's size in cells (`cell` is its north-west cell)
+## and its RoomTypes id. For REMOVE_ROOM: the room's id.
+var room_size := Vector2i.ZERO
+var room_type: StringName = &""
+var room_id: int = 0
 
 
 static func paint_floor(at: Vector2i, type: int, zone: int) -> BuildEdit:
@@ -57,6 +71,20 @@ static func place_object(id: StringName, anchor: Vector2i, turn: int) -> BuildEd
 static func remove_object(id: int) -> BuildEdit:
 	var edit := _make(Kind.REMOVE_OBJECT, Vector2i.ZERO)
 	edit.object_id = id
+	return edit
+
+
+## Marks the floor cells of `area` as a room of `type` (a RoomTypes id).
+static func place_room(area: Rect2i, type: StringName) -> BuildEdit:
+	var edit := _make(Kind.PLACE_ROOM, area.position)
+	edit.room_size = area.size
+	edit.room_type = type
+	return edit
+
+
+static func remove_room(id: int) -> BuildEdit:
+	var edit := _make(Kind.REMOVE_ROOM, Vector2i.ZERO)
+	edit.room_id = id
 	return edit
 
 

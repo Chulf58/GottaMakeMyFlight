@@ -5,8 +5,9 @@ extends GdUnitTestSuite
 ## Entrance placed away from any Toon door (refused), both check-in desks taken
 ## away and put back (passengers stuck, the
 ## stuck_too_long anomaly raised and cleared), a passenger spawned too late to
-## board, one push_error(), and the flight run to DEPARTED. The cases read the
-## log file, the snapshot and the events it left.
+## board, one push_error(), and the flight run to DEPARTED, then two cafe rooms
+## marked (one removed again) and one refused for overlapping. The cases read
+## the log file, the snapshot and the events it left.
 
 const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
@@ -34,6 +35,11 @@ var _mode: BuildMode
 var _attached := false
 var _stuck_open_at_check := false
 var _late_id := 0
+## The cafe kept, the one removed again, and the rectangle each one marks.
+var _kept_room := 0
+var _removed_room := 0
+var _kept_rect := Rect2i()
+var _removed_rect := Rect2i()
 var _snapshot: Dictionary
 var _events: Array[Dictionary] = []
 
@@ -68,6 +74,8 @@ func before() -> void:
 	_run_to(LATE_SPAWN_TICK)
 	_late_id = _sim.spawn_now(FlightSim.DEFAULT_ID)
 	_run_to(END_TICK)
+	# Before the last check, whose flush puts the room events in the file.
+	_mark_rooms()
 	push_error(ERROR_TEXT)
 	_check()
 	_snapshot = _hook.snapshot(5)
@@ -97,11 +105,50 @@ func test_the_log_file_has_every_event_type() -> void:
 
 
 func test_a_door_away_from_the_toon_doors_is_logged_with_its_reason() -> void:
-	var refused := _of_type("build_refused")
+	var refused := _of_type("build_refused").filter(
+		func(e): return e["data"]["kind"] == "PLACE_OBJECT"
+	)
 	assert_int(refused.size()).is_equal(1)
 	assert_str(refused[0]["data"]["reason"]).is_equal("DOOR_NOT_AT_SHELL_DOOR")
 	var cell: Array = refused[0]["data"]["cell"]
 	assert_that(Vector2i(int(cell[0]), int(cell[1]))).is_equal(OFF_DOOR_CELL)
+
+
+func test_room_edits_are_logged_with_their_room() -> void:
+	var rooms := _of_type("build_edit").filter(
+		func(e): return String(e["data"]["kind"]).ends_with("_ROOM")
+	)
+	assert_int(rooms.size()).is_equal(3)
+	var kept: Dictionary = rooms[0]["data"]
+	assert_str(kept["kind"]).is_equal("PLACE_ROOM")
+	assert_str(kept["room_type"]).is_equal("cafe")
+	assert_array(_ints(kept["rect"])).is_equal(_rect_array(_kept_rect))
+	assert_int(int(kept["room_id"])).is_equal(_kept_room)
+	assert_int(int(rooms[1]["data"]["room_id"])).is_equal(_removed_room)
+	var removed: Dictionary = rooms[2]["data"]
+	assert_str(removed["kind"]).is_equal("REMOVE_ROOM")
+	assert_int(int(removed["room_id"])).is_equal(_removed_room)
+	assert_bool(removed.has("cell")).is_false()
+
+
+func test_a_refused_room_is_logged_with_its_rectangle_and_reason() -> void:
+	var refused := _of_type("build_refused").filter(
+		func(e): return e["data"]["kind"] == "PLACE_ROOM"
+	)
+	assert_int(refused.size()).is_equal(1)
+	var data: Dictionary = refused[0]["data"]
+	assert_str(data["reason"]).is_equal("ROOM_OVERLAP")
+	assert_str(data["room_type"]).is_equal("cafe")
+	assert_array(_ints(data["rect"])).is_equal(_rect_array(_kept_rect))
+
+
+func test_the_snapshot_lists_the_rooms_left() -> void:
+	var rooms: Array = _snapshot["grid"]["rooms"]
+	assert_int(rooms.size()).is_equal(1)
+	assert_int(int(rooms[0]["id"])).is_equal(_kept_room)
+	assert_str(rooms[0]["type"]).is_equal("cafe")
+	assert_array(_ints(rooms[0]["rect"])).is_equal(_rect_array(_kept_rect))
+	assert_bool(rooms[0]["ready"]).is_false()
 
 
 func test_the_late_passenger_is_logged_as_missed() -> void:
@@ -281,3 +328,41 @@ func _put_back(desks: Array[Dictionary]) -> void:
 	for record in desks:
 		grid.apply(BuildEdit.place_object(record["def"], record["anchor"], record["facing"]))
 	(_mode.get_node("BuildView") as BuildView).refresh(grid)
+
+
+## Marks a cafe on the first all-floor 3x3 rectangle, refuses one on top of
+## it, and marks and removes a second one beside it.
+func _mark_rooms() -> void:
+	var grid := _mode.grid
+	_kept_rect = _floored_rect(grid, Rect2i())
+	_kept_room = grid.apply(BuildEdit.place_room(_kept_rect, &"cafe")).room_id
+	grid.apply(BuildEdit.place_room(_kept_rect, &"cafe"))
+	_removed_rect = _floored_rect(grid, _kept_rect)
+	_removed_room = grid.apply(BuildEdit.place_room(_removed_rect, &"cafe")).room_id
+	grid.apply(BuildEdit.remove_room(_removed_room))
+
+
+## The first 3x3 rectangle, in row order, whose cells all have floor and lie
+## outside `skip`.
+func _floored_rect(grid: BuildGrid, skip: Rect2i) -> Rect2i:
+	for y in grid.size.y - 2:
+		for x in grid.size.x - 2:
+			var area := Rect2i(x, y, 3, 3)
+			if skip.intersects(area):
+				continue
+			var floored := true
+			for cy in range(y, y + 3):
+				for cx in range(x, x + 3):
+					floored = floored and grid.floor_at(Vector2i(cx, cy)) != BuildGrid.FLOOR_NONE
+			if floored:
+				return area
+	return Rect2i()
+
+
+func _rect_array(area: Rect2i) -> Array:
+	return [area.position.x, area.position.y, area.size.x, area.size.y]
+
+
+## JSON turns whole numbers into floats.
+func _ints(values: Array) -> Array:
+	return values.map(func(v): return int(v))

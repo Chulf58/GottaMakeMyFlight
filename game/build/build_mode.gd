@@ -10,14 +10,34 @@ extends Node3D
 ## the click use the same rules. Entrances and exits turn themselves to face
 ## in from the edge under the mouse until R is pressed (DoorPlacement.auto_facing()).
 ## Inside a terminal shell they snap to its Toon doors instead (ShellDefinition).
+## The Cafe tool drags a rectangle that marks floor as a cafe room (RoomTool);
+## the counter and table tools furnish it, and RoomView shows what it needs.
 
 signal grid_changed
 ## Emitted by every set_tool(), NONE included, so the menu can follow it.
 signal tool_changed(new_tool: Tool)
 ## Emitted when the status line's text changes.
 signal status_changed(text: String)
+## Emitted when the room under the pointer changes, 0 for none
+## (update_room_focus()).
+signal room_focus_changed(room_id: int)
 
-enum Tool { NONE, FLOOR, WALL, DESK, SCANNER, SEATS, REMOVE, GLASS, DOOR, ENTRANCE, EXIT }
+enum Tool {
+	NONE,
+	FLOOR,
+	WALL,
+	DESK,
+	SCANNER,
+	SEATS,
+	REMOVE,
+	GLASS,
+	DOOR,
+	ENTRANCE,
+	EXIT,
+	CAFE_ROOM,
+	COUNTER,
+	TABLE,
+}
 
 const TOOL_ACTIONS := {
 	&"build_tool_floor": Tool.FLOOR,
@@ -38,7 +58,13 @@ const TOOL_OBJECTS := {
 	Tool.SEATS: &"seat_row",
 	Tool.ENTRANCE: &"entrance_door",
 	Tool.EXIT: &"exit_door",
+	Tool.COUNTER: &"cafe_counter",
+	Tool.TABLE: &"cafe_table",
 }
+## Tools that mark a dragged rectangle as a room of a RoomTypes id.
+const TOOL_ROOMS := {Tool.CAFE_ROOM: &"cafe"}
+## Tools under which the room under the pointer is followed for its panel.
+const ROOM_FOCUS_TOOLS := [Tool.NONE, Tool.CAFE_ROOM, Tool.COUNTER, Tool.TABLE]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
 	Tool.GLASS: BuildGrid.WallKind.GLASS,
@@ -62,7 +88,7 @@ const SHELL_DOOR_HINTS := {
 ## Tools whose drag repeats along an edge line.
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag marks a rectangle that is applied on release.
-const AREA_TOOLS := [Tool.FLOOR, Tool.REMOVE]
+const AREA_TOOLS := [Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM]
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1
 ## How close to an edge (in metres) the remove tool targets the wall there
@@ -92,6 +118,8 @@ var facing := 0
 ## door tools ignore `facing` and use DoorPlacement.auto_facing().
 var _auto_facing := true
 var _view := BuildView.new()
+var _room_view := RoomView.new()
+var _focus_room := 0
 var _ghost := Node3D.new()
 var _valid_material := _ghost_material(VALID_TINT)
 var _invalid_material := _ghost_material(INVALID_TINT)
@@ -129,13 +157,18 @@ func _ready() -> void:
 	_view.name = "BuildView"
 	add_child(_view)
 	_view.refresh(grid)
+	_room_view.name = "RoomView"
+	add_child(_room_view)
+	_room_view.watch(grid)
 	_ghost.name = "Ghost"
 	add_child(_ghost)
 	set_tool(tool)
 
 
 func _process(_delta: float) -> void:
-	_update_ghost(_mouse_ground())
+	var point: Variant = _mouse_ground()
+	_update_ghost(point)
+	update_room_focus(point)
 
 
 ## A rectangle in progress is dropped when the window loses focus, because
@@ -268,8 +301,9 @@ func move_area(point: Vector3) -> void:
 
 
 ## Applies the rectangle. A drag that never left its cell is applied as the
-## single click it is, at the press point. Returns what a rectangle did, or
-## null when there was no rectangle or it was a click.
+## single click it is, at the press point (which marks no room). Returns what
+## a Floor or Remove rectangle did, or null when there was no rectangle, it
+## was a click or it marked a room.
 func finish_area() -> AreaDrag.Outcome:
 	if not _area.active:
 		return null
@@ -277,6 +311,9 @@ func finish_area() -> AreaDrag.Outcome:
 	_hover_key = ""
 	if _area.is_single_cell():
 		apply_at(_area.press_point)
+		return null
+	if TOOL_ROOMS.has(tool):
+		_finish_room()
 		return null
 	var outcome: AreaDrag.Outcome
 	if tool == Tool.REMOVE:
@@ -290,6 +327,34 @@ func finish_area() -> AreaDrag.Outcome:
 	_note_cell = _area.end_cell()
 	_show_status(null)
 	return outcome
+
+
+## Marks the released rectangle as a room of the current room tool's type.
+func _finish_room() -> void:
+	var type: StringName = TOOL_ROOMS[tool]
+	var result := RoomTool.mark(grid, _area.rect(), type)
+	if result.ok:
+		grid_changed.emit()
+	_status_note = RoomTool.message(grid, result, type)
+	_note_cell = _area.end_cell()
+	_show_status(null)
+
+
+## Follows the room under a ground point (null for none) while a room-focus
+## tool is picked; any other tool follows no room. Emits room_focus_changed
+## when the room changes, including when the followed room is removed.
+func update_room_focus(point: Variant) -> void:
+	var room_id := 0
+	if point != null and ROOM_FOCUS_TOOLS.has(tool) and not _pointer_over_ui():
+		room_id = grid.room_at(grid.world_to_cell(point))
+	if room_id != _focus_room:
+		_focus_room = room_id
+		room_focus_changed.emit(room_id)
+
+
+## The room the info panel shows, 0 for none.
+func focused_room() -> int:
+	return _focus_room
 
 
 ## Drops the rectangle with nothing applied.
@@ -372,7 +437,14 @@ func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 	var to_edge := 0.5 - maxf(absf(offset.x), absf(offset.z))
 	if grid.has_wall(cell, side) and to_edge <= WALL_PICK_DISTANCE:
 		return BuildEdit.remove_wall(cell, side)
+	if grid.room_at(cell) != 0:
+		return BuildEdit.remove_room(grid.room_at(cell))
 	return BuildEdit.remove_floor(cell)
+
+
+## Whether the pointer is over a HUD control, which hides the world under it.
+func _pointer_over_ui() -> bool:
+	return get_viewport().gui_get_hovered_control() != null
 
 
 func _mouse_ground() -> Variant:
@@ -414,11 +486,9 @@ func _draw_area() -> void:
 	_hover_key = key
 	_clear_ghost()
 	var material := _area_remove_material if tool == Tool.REMOVE else _valid_material
-	var slab := _ghost_box(Vector3(area.size.x - 0.04, 0.08, area.size.y - 0.04), material)
-	slab.position = (
-		grid.cell_to_world(area.position)
-		+ Vector3((area.size.x - 1) / 2.0, 0.06, (area.size.y - 1) / 2.0)
-	)
+	if TOOL_ROOMS.has(tool) and not RoomTool.check(grid, area, TOOL_ROOMS[tool]).ok:
+		material = _invalid_material
+	_ghost_slab(area, material)
 	_show_status(null)
 
 
@@ -445,6 +515,8 @@ func _draw_ghost(edit: BuildEdit, material: Material) -> void:
 		BuildEdit.Kind.REMOVE_OBJECT:
 			var record := grid.get_object(edit.object_id)
 			_ghost_object(record["def"], record["anchor"], record["facing"], material)
+		BuildEdit.Kind.REMOVE_ROOM:
+			_ghost_slab(grid.get_room(edit.room_id)["rect"], material)
 
 
 func _ghost_object(def_id: StringName, anchor: Vector2i, turn: int, material: Material) -> void:
@@ -463,6 +535,15 @@ func _ghost_tile(cell: Vector2i, material: Material) -> void:
 	tile.position = grid.cell_to_world(cell) + Vector3(0.0, 0.06, 0.0)
 
 
+## One tinted slab over a rectangle of cells.
+func _ghost_slab(area: Rect2i, material: Material) -> void:
+	var slab := _ghost_box(Vector3(area.size.x - 0.04, 0.08, area.size.y - 0.04), material)
+	slab.position = (
+		grid.cell_to_world(area.position)
+		+ Vector3((area.size.x - 1) / 2.0, 0.06, (area.size.y - 1) / 2.0)
+	)
+
+
 func _ghost_box(extent: Vector3, material: Material) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = extent
@@ -475,19 +556,30 @@ func _ghost_box(extent: Vector3, material: Material) -> MeshInstance3D:
 
 func _edit_key(edit: BuildEdit) -> String:
 	return (
-		"%d:%s:%d:%d:%d:%s"
-		% [edit.kind, edit.cell, edit.side, edit.wall_kind, edit.facing, edit.object_id]
+		"%d:%s:%d:%d:%d:%s:%s"
+		% [
+			edit.kind,
+			edit.cell,
+			edit.side,
+			edit.wall_kind,
+			edit.facing,
+			edit.object_id,
+			edit.room_id
+		]
 	)
 
 
 func _show_status(result: BuildResult) -> void:
+	if _area.active and TOOL_ROOMS.has(tool):
+		_set_status(RoomTool.drag_label(grid, _area.rect(), TOOL_ROOMS[tool]))
+		return
 	if _area.active:
 		_set_status(_area.size_label())
 		return
 	if _status_note != "":
 		_set_status(_status_note)
 		return
-	var text := ""
+	var text := RoomTool.hint(TOOL_ROOMS[tool]) if TOOL_ROOMS.has(tool) else ""
 	if TOOL_OBJECTS.has(tool):
 		text = "Facing auto" if _facing_is_auto() else "Facing %d" % facing
 	if result != null and not result.ok:

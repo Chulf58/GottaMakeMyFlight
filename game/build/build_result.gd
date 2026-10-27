@@ -26,6 +26,10 @@ enum Reason {
 	DOOR_NOT_ON_EDGE,
 	DOOR_WALLED,
 	DOOR_NOT_AT_SHELL_DOOR,
+	UNKNOWN_ROOM_TYPE,
+	ROOM_OVERLAP,
+	IN_ROOM,
+	NO_ROOM,
 }
 
 const REASON_TEXT := {
@@ -50,12 +54,18 @@ const REASON_TEXT := {
 	Reason.DOOR_NOT_ON_EDGE: "Entrances and exits need the outside edge, with no floor behind them",
 	Reason.DOOR_WALLED: "Keep the edge behind an entrance or exit open",
 	Reason.DOOR_NOT_AT_SHELL_DOOR: "Use a landside door for an entrance, a gate door for an exit",
+	Reason.UNKNOWN_ROOM_TYPE: "Unknown room type",
+	Reason.ROOM_OVERLAP: "Overlaps another room",
+	Reason.IN_ROOM: "A room covers this floor; remove the room first",
+	Reason.NO_ROOM: "No such room",
 }
 
 var ok: bool = true
 var reason: Reason = Reason.NONE
 ## The object a placement created, or the one a removal removed.
 var object_id: int = 0
+## The room a placement created, or the one a removal removed.
+var room_id: int = 0
 ## The object that caused a refusal, when one did.
 var blocking_object_id: int = 0
 ## Cells whose walkability or step links may have changed. Empty on refusal.

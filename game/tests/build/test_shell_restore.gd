@@ -110,3 +110,32 @@ func test_a_refused_restore_leaves_a_built_grid_unchanged() -> void:
 		assert_str(JSON.stringify(_mode.grid.to_snapshot())).is_equal(before)
 	assert_int(_floor_count()).is_equal(3 * 30)
 	assert_int(_mode.grid.object_ids().size()).is_equal(2)
+
+
+func test_a_bad_room_refuses_the_restore_and_keeps_the_live_rooms() -> void:
+	var built := _shell_grid([[&"entrance_door", LANDSIDE_B, 2], [&"exit_door", GATE_C, 0]])
+	var room := built.apply(BuildEdit.place_room(Rect2i(15, 10, 3, 4), &"cafe"))
+	assert_bool(room.ok).is_true()
+	assert_bool(_mode.load_snapshot(built.to_snapshot())).is_true()
+	var before := JSON.stringify(_mode.grid.to_snapshot())
+	var good := JSON.parse_string(before) as Dictionary
+	var refused: Array[Dictionary] = []
+	# Floor runs on x 15..17 only, so x 14 is bare ground.
+	var off_floor := good.duplicate(true)
+	off_floor["rooms"] = [{"id": 1, "type": "cafe", "rect": [14, 10, 3, 4]}]
+	refused.append(off_floor)
+	var overlap := good.duplicate(true)
+	overlap["rooms"].append({"id": 2, "type": "cafe", "rect": [15, 12, 3, 3]})
+	overlap["next_room_id"] = 3
+	refused.append(overlap)
+	var unknown := good.duplicate(true)
+	unknown["rooms"][0]["type"] = "spa"
+	refused.append(unknown)
+	var no_next := good.duplicate(true)
+	no_next.erase("next_room_id")
+	refused.append(no_next)
+	for data in refused:
+		assert_bool(_mode.load_snapshot(data)).is_false()
+		assert_str(JSON.stringify(_mode.grid.to_snapshot())).is_equal(before)
+	assert_array(_mode.grid.room_ids()).is_equal([room.room_id])
+	assert_int(_mode.grid.room_at(Vector2i(16, 11))).is_equal(room.room_id)
