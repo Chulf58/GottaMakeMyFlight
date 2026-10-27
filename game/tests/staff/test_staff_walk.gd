@@ -189,3 +189,35 @@ func test_a_wall_across_the_current_step_turns_the_member_back_without_a_jump() 
 	print("wall across %s -> %s: moved %.3f m, now at %s" % [here, next, moved, m.at])
 	assert_float(moved).is_less_equal(0.1)
 	assert_int(_until_on_duty(m.id)).is_greater(0)
+
+
+func test_a_floor_removed_under_the_next_cell_turns_the_member_back_without_a_jump() -> void:
+	var m := _mid_step(3, true)
+	assert_object(m).is_not_null()
+	var here := m.at
+	var next := m.path[m.path_index + 1]
+	var seg := m.seg_mm
+	assert_bool(_w.grid.apply(BuildEdit.remove_floor(next)).ok).is_true()
+	assert_bool(_w.grid.is_walkable(next)).is_false()
+	var before := m.grid_position()
+	_w.step()
+	var moved := m.grid_position().distance_to(before)
+	print(
+		(
+			"floor gone at %s: was %d mm in from %s, moved %.3f m, now at %s"
+			% [next, seg, here, moved, m.at]
+		)
+	)
+	assert_bool(m.in_pool()).is_false()
+	assert_int(m.state).is_equal(StaffMember.State.TO_STATION)
+	assert_float(moved).is_less_equal(0.1)
+	# It reaches the cell it left, then plans on from there or gives up.
+	var ticks := 0
+	while m.state == StaffMember.State.TO_STATION and ticks < LIMIT_TICKS:
+		_w.step()
+		ticks += 1
+	print("settled after %d more ticks: state %d at %s" % [ticks, m.state, m.at])
+	assert_int(ticks).is_less(LIMIT_TICKS)
+	assert_bool(m.in_pool()).is_false()
+	if m.state == StaffMember.State.ON_DUTY:
+		assert_that(m.at).is_equal(_w.sim.layout.lanes[m.station][0])
