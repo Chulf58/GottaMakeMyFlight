@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## Hunger and browsing (decision cafe-visit-design-forecast-the-whole-
 ## itinerary-abandon-by-a, point 5; rulings passenger-needs-are-hunger-toilet-
 ## and-boredom-met-by-food-st and a-passenger-with-a-high-need-detours-to-the-
-## nearest-facility): hunger starts at 10-40 from the sim RNG, rises once a
+## nearest-facility): hunger starts at 40-70 from the sim RNG, rises once a
 ## simulated second, sends a hungry passenger to the nearest reachable cafe
 ## when the forecast allows and costs mood when it cannot; a walking passenger
 ## passing a cafe with time to spare drops in, with a cooldown.
@@ -67,7 +67,7 @@ func _hungers(seed: int) -> Array[int]:
 	return out
 
 
-func test_starting_hunger_is_10_to_40_from_the_sim_rng() -> void:
+func test_starting_hunger_is_40_to_70_from_the_sim_rng() -> void:
 	var first := _hungers(31)
 	assert_array(first).is_equal(_hungers(31))
 	var distinct := {}

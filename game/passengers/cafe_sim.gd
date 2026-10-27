@@ -42,16 +42,16 @@ signal paid(passenger_id: int, room_id: int, amount: int)
 ## Ticks to make an order once the guest is at the front.
 const ORDER_TICKS := 60
 ## Ticks a guest stays seated when nothing hurries it.
-const DWELL_TICKS := 240
+const DWELL_TICKS := 120
 ## The approach cell is about a metre from the seated root, so the shuffle in
 ## and out takes longer than at a gate seat.
 const SHUFFLE_TICKS := 12
 ## Seats tried per visit, nearest the counter first.
 const SEAT_TRIES := 4
-const HUNGER_START_MIN := 10
-const HUNGER_START_MAX := 40
+const HUNGER_START_MIN := 40
+const HUNGER_START_MAX := 70
 const HUNGER_MAX := 100
-const HUNGRY_AT := 60
+const HUNGRY_AT := 50
 ## A hungry passenger with no visit loses a mood point every this many beats.
 const HUNGRY_MOOD_BEATS := 5
 ## A refused hungry passenger tries again after this long.
@@ -62,7 +62,7 @@ const BROWSE_REACH_MM := 5000
 const AIRSIDE_BROWSE_REACH_MM := 8000
 ## A browser drops in only with this much spare beyond the margin. Boarding
 ## caps the spare: in the reference flight a passenger who reaches the gate
-## early has about 150 ticks beyond the margin, whatever it does before.
+## early has about 220 ticks beyond the margin, whatever it does before.
 const BROWSE_SPARE_TICKS := 100
 const BROWSE_COOLDOWN_TICKS := 600
 ## Spend in whole percent: mood 0 spends 80% of the base, 100 spends 120%.

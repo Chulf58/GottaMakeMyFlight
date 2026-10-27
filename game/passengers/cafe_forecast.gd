@@ -23,7 +23,7 @@ extends RefCounted
 ## Ticks a visit must leave spare before the doors close. Its own tuning value,
 ## kept above JourneyForecast.RUN_ON_SLACK so a guest who leaves on the
 ## deadline still walks.
-const MARGIN_TICKS := 200
+const MARGIN_TICKS := 100
 
 
 ## The tick the guest stands up at the end of a visit that starts now.

@@ -18,7 +18,7 @@ const CROWD_EVERY := 7
 const CROWD_UNTIL := 700
 ## Passengers who check in at once, enough to make a seated guest's deadline
 ## pass (two scanners, SECURITY_TICKS each).
-const BURST := 16
+const BURST := 22
 
 var _worlds: Array[PassengerTestWorld] = []
 
