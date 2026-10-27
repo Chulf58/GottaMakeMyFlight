@@ -294,13 +294,10 @@ func refresh_preview() -> void:
 	_status.visible = _holding or build_mode == null or _pointer_on_grid()
 
 
-## True while BuildMode hovers an edit on a cell inside the grid, or a
-## rectangle drag is in progress.
+## True while BuildMode has the pointer over a cell inside the grid, whether or
+## not the picked tool makes an edit there.
 func _pointer_on_grid() -> bool:
-	if build_mode.dragged_area().has_area():
-		return true
-	var edit := build_mode.hover_edit()
-	return edit != null and build_mode.grid.in_bounds(edit.cell)
+	return build_mode.pointer_on_grid()
 
 
 func room_panel() -> RoomPanel:
