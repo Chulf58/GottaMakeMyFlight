@@ -20,7 +20,7 @@ func _priced_grid() -> BuildGrid:
 	wall.paid = 33
 	grid.apply(wall)
 	var desk := BuildEdit.place_object(&"checkin_desk", Vector2i(1, 2), 0)
-	desk.paid = 444
+	desk.paid = 400
 	grid.apply(desk)
 	return grid
 
@@ -34,7 +34,7 @@ func test_the_grid_records_and_clears_purchase_prices() -> void:
 	assert_int(grid.floor_paid(Vector2i(3, 1))).is_equal(23)
 	assert_int(grid.wall_paid(Vector2i(2, 1), NORTH)).is_equal(33)
 	assert_int(grid.wall_paid(Vector2i(2, 0), BuildGrid.Side.SOUTH)).is_equal(33)
-	assert_int(grid.get_object(1)["paid"]).is_equal(444)
+	assert_int(grid.get_object(1)["paid"]).is_equal(400)
 	grid.apply(BuildEdit.remove_wall(Vector2i(2, 1), NORTH))
 	grid.apply(BuildEdit.remove_floor(Vector2i(4, 4)))
 	assert_int(grid.wall_paid(Vector2i(2, 1), NORTH)).is_equal(0)
@@ -47,7 +47,7 @@ func test_purchase_prices_survive_a_json_round_trip() -> void:
 	assert_bool(other.from_snapshot(_through_json(snapshot))).is_true()
 	assert_int(other.floor_paid(Vector2i(3, 1))).is_equal(23)
 	assert_int(other.wall_paid(Vector2i(2, 1), NORTH)).is_equal(33)
-	assert_int(other.get_object(1)["paid"]).is_equal(444)
+	assert_int(other.get_object(1)["paid"]).is_equal(400)
 	assert_str(JSON.stringify(other.to_snapshot())).is_equal(JSON.stringify(snapshot))
 
 
@@ -92,6 +92,40 @@ func test_malformed_purchase_prices_are_refused_and_the_grid_kept() -> void:
 	var bad_object := good.duplicate(true)
 	bad_object["objects"][0]["paid"] = "lots"
 	bad_cases.append(bad_object)
+	_assert_all_refused(other, bad_cases, before)
+
+
+## With no price history, today's PriceTable price is the most a piece could
+## have been bought for; a save claiming more would refund money never paid.
+func test_a_saved_price_above_todays_price_is_refused() -> void:
+	var good := _through_json(_priced_grid().to_snapshot())
+	var other := BuildGrid.new(Vector2i(6, 6))
+	var before := JSON.stringify(other.to_snapshot())
+	var bad_cases: Array[Dictionary] = []
+	# Cell (2, 1) has floor; the plain wall is on the north edge of (2, 1).
+	var floor_over := good.duplicate(true)
+	floor_over["floor_paid"][8] = PriceTable.price_of_floor() + 1
+	bad_cases.append(floor_over)
+	var floor_huge := good.duplicate(true)
+	floor_huge["floor_paid"][8] = BuildGrid.MAX_PAID
+	bad_cases.append(floor_huge)
+	var wall_over := good.duplicate(true)
+	wall_over["h_walls_paid"][8] = PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN) + 1
+	bad_cases.append(wall_over)
+	var object_over := good.duplicate(true)
+	object_over["objects"][0]["paid"] = PriceTable.price_of_object(&"checkin_desk") + 1
+	bad_cases.append(object_over)
+	_assert_all_refused(other, bad_cases, before)
+	# At today's price exactly, the same save loads.
+	var at_price := good.duplicate(true)
+	at_price["floor_paid"][8] = PriceTable.price_of_floor()
+	at_price["h_walls_paid"][8] = PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
+	assert_bool(other.from_snapshot(at_price)).is_true()
+	assert_int(other.floor_paid(Vector2i(2, 1))).is_equal(PriceTable.price_of_floor())
+	assert_int(other.wall_paid(Vector2i(2, 1), NORTH)).is_equal(40)
+
+
+func _assert_all_refused(other: BuildGrid, bad_cases: Array[Dictionary], before: String) -> void:
 	var refused := 0
 	for data in bad_cases:
 		if not other.from_snapshot(data):

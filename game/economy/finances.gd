@@ -5,25 +5,39 @@ extends Node
 ## from it (Economy 4/8, BuildTransaction), and airline fees and the money slot
 ## (Economy 5/8 and 7/8) are to use the same node.
 ##
-## A new game starts with PriceTable.STARTING_BUDGET, credited once when the
-## node enters the tree. This is the stand-in for Economy 7/8's new-game
-## setup, which is to take it over. A save load (Economy 8/8) restores the
-## wallet with Wallet.from_snapshot(), which replaces the balance and never
-## credits the budget again.
+## The wallet is set up once, in one of two ways: start_new_game() credits
+## PriceTable.STARTING_BUDGET, and restore() loads a saved balance, replacing
+## whatever was there. After either, start_new_game() is refused, so a
+## restored game is never credited the budget. When neither has run by the time the node enters the
+## tree, it is a new game: main.tscn takes that path. Economy 7/8's new-game
+## setup is to call start_new_game() itself, and Economy 8/8's load restore().
+## Restore through restore(), never through wallet.from_snapshot() directly,
+## or entering the tree credits the budget on top.
 
 var wallet := Wallet.new()
 
-var _budget_given := false
+var _set_up := false
 
 
 func _ready() -> void:
-	start_new_game()
+	if not _set_up:
+		start_new_game()
 
 
-## Credits the starting budget. Returns false and changes nothing when it was
-## already credited.
+## Credits the starting budget. Returns false and changes nothing when the
+## wallet was already set up, by an earlier call or by restore().
 func start_new_game() -> bool:
-	if _budget_given:
+	if _set_up:
 		return false
-	_budget_given = true
+	_set_up = true
 	return wallet.credit(PriceTable.STARTING_BUDGET)
+
+
+## Restores a Wallet.to_snapshot() dictionary and marks the wallet set up, so
+## the starting budget is never credited on top. Returns false and changes
+## nothing when the wallet refuses the data (Wallet.from_snapshot()).
+func restore(data: Dictionary) -> bool:
+	if not wallet.from_snapshot(data):
+		return false
+	_set_up = true
+	return true

@@ -21,6 +21,27 @@ func test_a_loaded_wallet_is_not_credited_again() -> void:
 	assert_int(finances.wallet.balance).is_equal(123)
 
 
+func test_a_wallet_restored_before_entering_the_tree_is_not_credited() -> void:
+	var finances: Finances = auto_free(Finances.new())
+	assert_bool(finances.restore({"balance": "123"})).is_true()
+	add_child(finances)
+	print("balance after restore then ready %d" % finances.wallet.balance)
+	assert_int(finances.wallet.balance).is_equal(123)
+	assert_bool(finances.start_new_game()).is_false()
+	assert_int(finances.wallet.balance).is_equal(123)
+
+
+func test_a_refused_restore_changes_nothing() -> void:
+	var finances: Finances = auto_free(Finances.new())
+	add_child(finances)
+	assert_bool(finances.restore({"balance": "-5"})).is_false()
+	assert_int(finances.wallet.balance).is_equal(PriceTable.STARTING_BUDGET)
+	var fresh: Finances = auto_free(Finances.new())
+	assert_bool(fresh.restore({"balance": "-5"})).is_false()
+	add_child(fresh)
+	assert_int(fresh.wallet.balance).is_equal(PriceTable.STARTING_BUDGET)
+
+
 func test_main_scene_gives_build_mode_the_finances_node() -> void:
 	var state := (load("res://main/main.tscn") as PackedScene).get_state()
 	var wired := {}

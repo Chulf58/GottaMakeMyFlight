@@ -516,6 +516,9 @@ func _load_cells(data: Dictionary) -> String:
 		if not check.ok:
 			return "object %d refused: %s" % [int(entry["id"]), check.reason_text()]
 		var paid := int(entry.get("paid", 0))
+		# No price history yet, so today's price caps what was paid.
+		if paid > 0 and paid > PriceTable.price_of_object(def_id):
+			return "object %d paid %d, more than its price" % [int(entry["id"]), paid]
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
 	_pathing.rebuild(self)
@@ -523,23 +526,35 @@ func _load_cells(data: Dictionary) -> String:
 
 
 ## Fills the saved purchase prices from the optional PAID_KEYS and returns a
-## problem string, or "". Floor and walls must already be loaded: a price on
-## a cell with no floor or an edge with no wall could never have been paid.
+## problem string, or "". Floor and walls must already be loaded. A price on a
+## cell with no floor or an edge with no wall could never have been paid, and
+## neither could one above today's PriceTable price for the piece: there is no
+## price history, so today's price is the cap.
 func _load_paid(data: Dictionary) -> String:
 	if not data.has(PAID_KEYS[0]):
 		return ""
 	for i in _floor_paid.size():
 		_floor_paid[i] = int(data["floor_paid"][i])
-		if _floor_paid[i] != 0 and _floor[i] == FLOOR_NONE:
-			return "floor_paid holds a price where no floor is, at index %d" % i
+		var cap := 0 if _floor[i] == FLOOR_NONE else PriceTable.price_of_floor()
+		if _floor_paid[i] > cap:
+			return "floor_paid %d at index %d is more than %d" % [_floor_paid[i], i, cap]
 	for i in _h_paid.size():
 		_h_paid[i] = int(data["h_walls_paid"][i])
-		if _h_paid[i] != 0 and _h_walls[i] == WallKind.NONE:
-			return "h_walls_paid holds a price where no wall is, at index %d" % i
+		var problem := _wall_paid_problem("h_walls_paid", i, _h_paid[i], _h_walls[i])
+		if problem != "":
+			return problem
 	for i in _v_paid.size():
 		_v_paid[i] = int(data["v_walls_paid"][i])
-		if _v_paid[i] != 0 and _v_walls[i] == WallKind.NONE:
-			return "v_walls_paid holds a price where no wall is, at index %d" % i
+		var problem := _wall_paid_problem("v_walls_paid", i, _v_paid[i], _v_walls[i])
+		if problem != "":
+			return problem
+	return ""
+
+
+func _wall_paid_problem(key: String, i: int, paid: int, kind: int) -> String:
+	var cap := 0 if kind == WallKind.NONE else PriceTable.price_of_wall(kind)
+	if paid > cap:
+		return "%s %d at index %d is more than %d" % [key, paid, i, cap]
 	return ""
 
 

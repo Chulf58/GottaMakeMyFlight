@@ -33,7 +33,8 @@ static func problem(data: Dictionary) -> String:
 
 ## The optional BuildGrid.PAID_KEYS, which come together: arrays laid out like
 ## "floor", "h_walls" and "v_walls" of whole prices from 0. Whether a price
-## sits on a piece is left to from_snapshot().
+## sits on a piece, and is no more than today's price for it, is left to
+## from_snapshot().
 static func _paid_problem(data: Dictionary, width: int, height: int) -> String:
 	var present := 0
 	for key in BuildGrid.PAID_KEYS:

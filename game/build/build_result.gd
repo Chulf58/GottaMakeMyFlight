@@ -32,6 +32,7 @@ enum Reason {
 	NO_ROOM,
 	CANT_AFFORD,
 	UNPRICED,
+	WALLET_FULL,
 }
 
 const REASON_TEXT := {
@@ -62,6 +63,7 @@ const REASON_TEXT := {
 	Reason.NO_ROOM: "No such room",
 	Reason.CANT_AFFORD: "Not enough money",
 	Reason.UNPRICED: "This piece has no price",
+	Reason.WALLET_FULL: "The money is at its limit; the refund would not fit",
 }
 
 var ok: bool = true

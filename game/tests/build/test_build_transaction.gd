@@ -259,3 +259,66 @@ func test_rooms_cost_nothing() -> void:
 	assert_bool(result.ok).is_true()
 	BuildTransaction.commit_plan(grid, _plan(BuildEdit.remove_room(result.room_id)), wallet)
 	assert_int(wallet.balance).is_equal(0)
+
+
+## A listener on edit_applied that spends everything it sees: the build's own
+## price is already taken when the grid changes, so grid and wallet agree.
+func test_the_price_is_taken_before_the_grid_changes() -> void:
+	var grid := _floored_grid()
+	var wallet := Wallet.new(1000)
+	var seen: Array[int] = []
+	grid.edit_applied.connect(
+		func(_edit: BuildEdit, _result: BuildResult) -> void:
+			seen.append(wallet.balance)
+			wallet.spend(wallet.balance)
+	)
+	var result := BuildTransaction.commit_plan(
+		grid, _plan(BuildEdit.place_object(&"seat_row", Vector2i(2, 3), 0)), wallet
+	)
+	print("balance seen by the listener %s, after %d" % [seen, wallet.balance])
+	assert_bool(result.ok).is_true()
+	assert_array(seen).is_equal([1000 - 250])
+	assert_int(wallet.balance).is_equal(0)
+	assert_int(grid.object_ids().size()).is_equal(1)
+
+
+func test_a_batch_takes_its_price_first_and_returns_what_the_grid_refused() -> void:
+	var grid := BuildGrid.new(Vector2i(4, 4))
+	var wallet := Wallet.new(1000)
+	var seen: Array[int] = []
+	grid.edit_applied.connect(
+		func(_edit: BuildEdit, _result: BuildResult) -> void: seen.append(wallet.balance)
+	)
+	# Three cells, the last outside the grid.
+	var results := BuildTransaction.commit_batch(grid, _paints(Rect2i(2, 2, 3, 1)), wallet)
+	print("balance seen %s, after %d" % [seen, wallet.balance])
+	assert_bool(results[2].ok).is_false()
+	assert_array(seen).is_equal([1000 - 75, 1000 - 75])
+	assert_int(wallet.balance).is_equal(1000 - 50)
+
+
+## A refund the wallet cannot hold is refused before the piece is removed.
+func test_a_removal_into_a_full_wallet_is_refused_and_keeps_the_piece() -> void:
+	var grid := BuildGrid.new(Vector2i(8, 8))
+	var laid := BuildEdit.paint_floor(Vector2i(3, 3), BuildGrid.FLOOR_TILE, 1)
+	laid.paid = PriceTable.FLOOR_PRICE
+	grid.apply(laid)
+	var wallet := Wallet.new(Wallet.MAX_BALANCE)
+	var removal := BuildEdit.remove_floor(Vector2i(3, 3))
+	var full := BuildResult.Reason.WALLET_FULL
+	assert_int(BuildTransaction.check(grid, _plan(removal), wallet).reason).is_equal(full)
+	var result := BuildTransaction.commit_plan(grid, _plan(removal), wallet)
+	var batch := BuildTransaction.commit_batch(
+		grid, _plan(BuildEdit.remove_floor(Vector2i(3, 3))), wallet
+	)
+	print("plan '%s' batch '%s'" % [result.reason_text(), batch[0].reason_text()])
+	assert_int(result.reason).is_equal(full)
+	assert_int(batch[0].reason).is_equal(full)
+	assert_int(grid.floor_at(Vector2i(3, 3))).is_equal(BuildGrid.FLOOR_TILE)
+	assert_int(wallet.balance).is_equal(Wallet.MAX_BALANCE)
+	# A removal that refunds nothing still goes through.
+	grid.apply(BuildEdit.paint_floor(Vector2i(5, 5), BuildGrid.FLOOR_TILE, 1))
+	var unpaid := BuildTransaction.commit_plan(
+		grid, _plan(BuildEdit.remove_floor(Vector2i(5, 5))), wallet
+	)
+	assert_bool(unpaid.ok).is_true()
