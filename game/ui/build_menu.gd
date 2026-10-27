@@ -265,12 +265,13 @@ static func unaffordable_tint() -> Color:
 
 
 ## What the current tool would cost now, as "Cost 400" and, when the wallet is
-## short, "Cost 400   Short by 300"; "" when nothing costs money or there is no
-## wallet. The cost is the net of the plan BuildMode would apply under the
-## pointer (a door over a paid wall also refunds the wall, so it is cheaper than
-## its card), the card's price when the pointer is not over the grid, or for a
-## dragged Floor rectangle the unfloored tiles the rules accept, as
-## AreaDrag.fill_floor() charges.
+## short, "Cost 400   Short by 300"; "" when nothing costs money, there is no
+## wallet or the pointer is not over a cell of the grid (no hover yet, over the
+## HUD, or over ground outside the grid). The cost is the net of the plan
+## BuildMode would apply under the pointer (a door over a paid wall also
+## refunds the wall, so it is cheaper than its card), or for a dragged Floor
+## rectangle the unfloored tiles the rules accept, as AreaDrag.fill_floor()
+## charges.
 func preview_text() -> String:
 	if _wallet == null or build_mode == null:
 		return ""
@@ -283,10 +284,21 @@ func preview_text() -> String:
 	return text
 
 
-## Sets the cost line from preview_text().
+## Sets the cost line from preview_text(), and hides the status line while the
+## pointer is over ground outside the grid, where its only text would be the
+## "Outside the building area" refusal. A grant message is never hidden.
 func refresh_preview() -> void:
 	_cost.text = preview_text()
 	_cost.visible = _cost.text != ""
+	_status.visible = _holding or not _pointer_off_grid()
+
+
+## True while BuildMode hovers an edit on a cell outside the grid.
+func _pointer_off_grid() -> bool:
+	if build_mode == null:
+		return false
+	var edit := build_mode.hover_edit()
+	return edit != null and not build_mode.grid.in_bounds(edit.cell)
 
 
 func room_panel() -> RoomPanel:
@@ -328,9 +340,8 @@ func _preview_price() -> Vector2i:
 		var rect_cost := _floor_rect_cost(area)
 		return Vector2i(rect_cost, rect_cost)
 	var edit := build_mode.hover_edit()
-	if edit == null:
-		var price := tool_price(build_mode.tool)
-		return Vector2i(price, price)
+	if edit == null or _pointer_off_grid():
+		return Vector2i.ZERO
 	var plan := DoorPlacement.edits_for(build_mode.grid, edit)
 	var net := 0
 	for step in plan:
