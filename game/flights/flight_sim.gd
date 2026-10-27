@@ -108,26 +108,29 @@ func add_flight(id: String, starts: Array[int], gate := DEFAULT_GATE) -> bool:
 ## ahead. False (with an error) for bad terms, a used id or a gate clash.
 ## Issues the first occurrence at once when it is already due.
 func accept_contract(terms: Dictionary) -> bool:
+	var problem := accept_problem(terms)
+	if problem != "":
+		push_error("FlightSim.accept_contract: %s" % problem)
+		return false
+	var contract := _candidate(terms)
+	_contracts.append(contract)
+	_next_day[contract["id"]] = contract["first_day"]
+	_issue_due()
+	return true
+
+
+## Why accept_contract would refuse `terms` right now (bad terms, a gate with no
+## stand, a used id or a gate clash), or "" when it would take them. Read-only:
+## it pushes no error and changes nothing, so a caller can ask first.
+func accept_problem(terms: Dictionary) -> String:
 	var problem := FlightContract.problem(terms, FlightContract.TERM_KEYS)
 	if problem == "" and not GATES.has(terms["gate"]):
 		problem = "gate '%s' has no stand" % terms["gate"]
 	if problem == "" and not contract_of(terms["id"]).is_empty():
 		problem = "contract id '%s' is already used" % terms["id"]
 	if problem != "":
-		push_error("FlightSim.accept_contract: %s" % problem)
-		return false
-	var fields := terms.duplicate()
-	fields["first_day"] = 0
-	fields["first_day"] = FlightTimetable.first_day(fields, tick)
-	var contract := FlightContract.make(fields)
-	problem = _clash_problem(contract)
-	if problem != "":
-		push_error("FlightSim.accept_contract: %s" % problem)
-		return false
-	_contracts.append(contract)
-	_next_day[contract["id"]] = contract["first_day"]
-	_issue_due()
-	return true
+		return problem
+	return _clash_problem(_candidate(terms))
 
 
 func on_tick(new_tick: int) -> void:
@@ -265,6 +268,14 @@ func _one_off_problem(id: String, starts: Array[int], gate: String) -> String:
 			if FlightTimetable.contract_overlaps(contract, starts[0], starts[State.DEPARTED]):
 				return "would hold gate %s during contract %s" % [gate, contract["id"]]
 	return ""
+
+
+## The contract `terms` would become now, with its first day. Terms must be valid.
+func _candidate(terms: Dictionary) -> Dictionary:
+	var fields := terms.duplicate()
+	fields["first_day"] = 0
+	fields["first_day"] = FlightTimetable.first_day(fields, tick)
+	return FlightContract.make(fields)
 
 
 func _clash_problem(contract: Dictionary) -> String:
