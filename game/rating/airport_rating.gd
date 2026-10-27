@@ -35,6 +35,8 @@ var _low_days := 0
 ## Flights whose doors have closed and whose no-shows are not yet recorded:
 ## {"flight": String, "tick": int}.
 var _pending: Array[Dictionary] = []
+## True while the signals of clock, flights and passengers are connected.
+var _bound := false
 
 
 func _ready() -> void:
@@ -43,31 +45,28 @@ func _ready() -> void:
 
 
 ## Listens to the clock, the flights' door closes and the passengers' outcomes.
+## Binding the same three again does nothing; binding others first lets go of
+## the ones bound before, so no signal reaches the rating twice.
 func bind(with_clock: SimClock, with_flights: FlightSim, with_passengers: PassengerSim) -> void:
+	if _bound and clock == with_clock and flights == with_flights and passengers == with_passengers:
+		return
+	_unbind()
 	clock = with_clock
 	flights = with_flights
 	passengers = with_passengers
 	clock.ticked.connect(on_tick)
 	flights.doors_closed.connect(_on_doors_closed)
 	passengers.outcome.connect(_on_outcome)
+	_bound = true
 
 
-## Rolls the day over when `tick` is in a later day, and records the no-shows
-## of flights that closed on an earlier tick.
+## Records the no-shows of flights that closed on an earlier tick, each on the
+## day its doors closed, then rolls the day over when `tick` is in a later day:
+## a flight closing on a day's last tick counts for that day, before the day
+## is checked against WARN_BELOW.
 func on_tick(tick: int) -> void:
+	_record_finished_no_shows(tick)
 	_roll_to(tick)
-	if passengers == null or _pending.is_empty():
-		return
-	var waiting: Array[Dictionary] = []
-	for entry in _pending:
-		if entry["tick"] < tick:
-			var counts: Dictionary = passengers.no_shows.get(entry["flight"], {})
-			record_no_shows(tick, int(counts.get("no_entrance", 0)) + int(counts.get("late", 0)))
-		else:
-			waiting.append(entry)
-	if waiting.size() != _pending.size():
-		_pending = waiting
-		changed.emit()
 
 
 ## One passenger made or missed their flight at `tick`, leaving at `mood`
@@ -85,19 +84,6 @@ func record_passenger(tick: int, made: bool, mood: int) -> void:
 		totals["mood_sum"] += mood
 	else:
 		totals["missed"] += 1
-	changed.emit()
-
-
-## `count` passengers who never reached the terminal before a flight's doors
-## closed, counted as missed.
-func record_no_shows(tick: int, count: int) -> void:
-	if count <= 0:
-		return
-	var totals := _today_after_rolling(tick)
-	if totals["made"] + totals["missed"] + count > RatingFormula.MAX_DAY_COUNT:
-		push_error("AirportRating.record_no_shows: the day is full")
-		return
-	totals["missed"] += count
 	changed.emit()
 
 
@@ -198,6 +184,53 @@ func from_snapshot(data: Dictionary) -> bool:
 	_pending = loaded["pending"]
 	changed.emit()
 	return true
+
+
+func _unbind() -> void:
+	if not _bound:
+		return
+	if is_instance_valid(clock) and clock.ticked.is_connected(on_tick):
+		clock.ticked.disconnect(on_tick)
+	if is_instance_valid(flights) and flights.doors_closed.is_connected(_on_doors_closed):
+		flights.doors_closed.disconnect(_on_doors_closed)
+	if is_instance_valid(passengers) and passengers.outcome.is_connected(_on_outcome):
+		passengers.outcome.disconnect(_on_outcome)
+	_bound = false
+
+
+## A pending flight is finished once `tick` is after its doors closed: PassengerSim
+## has finalized its no-shows by then. They count for the day the doors closed.
+func _record_finished_no_shows(tick: int) -> void:
+	if passengers == null or _pending.is_empty():
+		return
+	var waiting: Array[Dictionary] = []
+	for entry in _pending:
+		if entry["tick"] < tick:
+			var counts: Dictionary = passengers.no_shows.get(entry["flight"], {})
+			_add_no_shows(
+				entry["tick"], int(counts.get("no_entrance", 0)) + int(counts.get("late", 0))
+			)
+		else:
+			waiting.append(entry)
+	if waiting.size() != _pending.size():
+		_pending = waiting
+		changed.emit()
+
+
+func _add_no_shows(close_tick: int, count: int) -> void:
+	if count <= 0:
+		return
+	var day := GameCalendar.day_of(close_tick)
+	if day <= current_day() - RatingFormula.WINDOW_DAYS:
+		push_error("AirportRating: no-shows of day %d are older than the window" % day)
+		return
+	if not _days.has(day):
+		_days[day] = _empty_day()
+	var totals: Dictionary = _days[day]
+	if totals["made"] + totals["missed"] + count > RatingFormula.MAX_DAY_COUNT:
+		push_error("AirportRating: day %d is full" % day)
+		return
+	totals["missed"] += count
 
 
 func _on_doors_closed(flight_id: String) -> void:

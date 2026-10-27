@@ -111,6 +111,8 @@ static func _day_problem(entry: Dictionary, previous: int, current: int) -> Stri
 	var cap := RatingFormula.MAX_DAY_COUNT
 	if not _is_count(entry["made"], cap) or not _is_count(entry["missed"], cap):
 		return "day %d counts must be whole numbers from 0 to %d" % [int(day), cap]
+	if int(entry["made"]) + int(entry["missed"]) > cap:
+		return "day %d holds more than %d passengers" % [int(day), cap]
 	if not _is_count(entry["mood_sum"], int(entry["made"]) * PassengerSim.MOOD_MAX):
 		return (
 			"day %d mood_sum must be a whole number up to made * %d"
@@ -129,8 +131,13 @@ static func _read_pending(entries: Array, tick: int, out: Array[Dictionary]) -> 
 			problem = "pending flight must be a non-empty string"
 		if problem == "" and seen.has(entry["flight"]):
 			problem = "pending flight '%s' is listed twice" % entry["flight"]
-		if problem == "" and not _is_count(entry["tick"], tick):
-			problem = "pending tick must be a whole number from 0 to the saved tick"
+		# A flight is pending only from its doors closing to the next tick, and a
+		# save lands between ticks, so a pending close is exactly the saved tick.
+		if (
+			problem == ""
+			and not (WholeNumber.is_whole(entry["tick"]) and int(entry["tick"]) == tick)
+		):
+			problem = "pending tick must be the saved tick"
 		if problem != "":
 			return problem
 		seen[entry["flight"]] = true

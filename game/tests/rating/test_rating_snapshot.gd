@@ -74,6 +74,8 @@ func test_bad_snapshots_are_refused_and_leave_the_rating_unchanged() -> void:
 		"negative count": func(d): d["days"][0]["missed"] = -1,
 		"fractional count": func(d): d["days"][0]["made"] = 1.5,
 		"huge count": func(d): d["days"][0]["missed"] = max_count + 1,
+		# Each count is within the cap; day 1 already holds 4 made.
+		"day total above the cap": func(d): d["days"][1]["missed"] = max_count,
 		"mood above the maximum": func(d): d["days"][1]["mood_sum"] = 4 * 100 + 1,
 		"mood with nobody made": func(d): d["days"][0]["mood_sum"] = 1,
 		"day outside the window": func(d): d["days"][0]["day"] = -5,
@@ -86,6 +88,8 @@ func test_bad_snapshots_are_refused_and_leave_the_rating_unchanged() -> void:
 		"pending entry malformed": func(d): d["pending"][0] = "GMF101",
 		"pending empty flight id": func(d): d["pending"][0]["flight"] = "",
 		"pending after the saved tick": func(d): d["pending"][0]["tick"] = d["tick"] + 1,
+		# A close before the saved tick would have been recorded by that tick.
+		"stale pending before the saved tick": func(d): d["pending"][0]["tick"] = d["tick"] - 1,
 		"duplicate pending flight": func(d): d["pending"].append(d["pending"][0].duplicate()),
 	}
 	var before := _text(_other)

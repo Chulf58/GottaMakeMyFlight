@@ -166,6 +166,24 @@ func test_an_empty_window_ends_the_low_streak() -> void:
 	assert_int(rating.low_days()).is_equal(0)
 
 
+func test_no_shows_of_a_flight_closing_on_the_last_tick_of_a_day_count_for_that_day() -> void:
+	var rating := _rating()
+	var sim := auto_free(PassengerSim.new()) as PassengerSim
+	rating.passengers = sim
+	var close := _midnight(1) - 1
+	sim.no_shows["F1"] = {"no_entrance": 10, "late": 0}
+	rating.on_tick(close)
+	rating.note_doors_closed("F1", close)
+	rating.on_tick(close)
+	assert_int(rating.day_totals(0)["missed"]).is_equal(0)
+	# The next tick is midnight: the no-shows land in day 0 before it is checked.
+	rating.on_tick(_midnight(1))
+	assert_int(rating.day_totals(0)["missed"]).is_equal(10)
+	assert_int(rating.day_totals(1)["missed"]).is_equal(0)
+	assert_int(rating.low_days()).is_equal(1)
+	assert_int(rating.current_day()).is_equal(1)
+
+
 func test_changed_is_emitted_when_the_numbers_move() -> void:
 	var rating := _rating()
 	rating.changed.connect(_on_changed)
