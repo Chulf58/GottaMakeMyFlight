@@ -148,15 +148,21 @@ func card_origin() -> Vector2:
 	return Vector2(slot.position.x, slot.end.y + CARD_GAP)
 
 
-## Moves the tooltip popup holding the card to card_origin(), as a screen
-## position.
+## card_origin() as a screen position: the slot-local point under its left
+## edge, through the screen transform, which maps local coordinates (a global
+## point would carry the slot's own offset twice).
+func card_screen_position() -> Vector2i:
+	return Vector2i(get_screen_transform() * Vector2(0.0, size.y + CARD_GAP))
+
+
+## Moves the tooltip popup holding the card to card_screen_position().
 func _place_card() -> void:
 	if not is_inside_tree() or not is_instance_valid(_card) or not _card.is_inside_tree():
 		return
 	var popup := _card.get_window()
 	if popup == null or popup == get_window():
 		return
-	popup.position = Vector2i(get_screen_transform() * card_origin())
+	popup.position = card_screen_position()
 
 
 func _grid() -> GridContainer:

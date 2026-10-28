@@ -118,8 +118,15 @@ func _layout_problem(rects: Dictionary) -> String:
 		print("PROBE in_frame %s rect=%s inside=%s" % [part, rect, screen.encloses(rect)])
 		if not rect.has_area() or not screen.encloses(rect):
 			return "%s is not inside the screen with a %d px margin" % [part, MARGIN]
-	# BuildMode starts on Floor, so the tray and its status line are open at boot.
+	# A new game starts with no tool, so the tray is closed at boot; the box must
+	# still clear the space the tray and its status line take when one opens.
 	var menu := current_scene.get_node("BuildMenu") as BuildMenu
+	var mode := current_scene.get_node("BuildMode") as BuildMode
+	print("PROBE start_tool=%d tray_open=%s" % [mode.tool, menu.is_tray_open()])
+	if mode.tool != BuildMode.Tool.NONE:
+		return "BuildMode did not start with no tool (tool %d)" % mode.tool
+	if menu.is_tray_open():
+		return "the build tray is open at launch"
 	var tray_top := minf(
 		menu.tray().get_global_rect().position.y, menu.status_label().get_global_rect().position.y
 	)
