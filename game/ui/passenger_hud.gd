@@ -12,7 +12,8 @@ extends CanvasLayer
 ## and the camera follows PassengerViews.follow_anchor, never a pooled node.
 ## When a flight's doors close, a dismissible FlightResultPanel opens under
 ## the top-right panel: made, missed and the main reasons; a later closing
-## flight replaces it. A new game opens paused under the
+## flight replaces it, and it hides itself when the game day changes. On
+## ready the camera frames the built area (StartView). A new game opens paused under the
 ## IntroDialogue (once per session, never in a probe, a test or a playtest);
 ## closing it starts the clock at 1x.
 ##
@@ -157,6 +158,8 @@ func _ready() -> void:
 		IntroDialogue.shown_this_session, _in_current_scene(), _playtest_switch_on()
 	):
 		open_intro()
+	if camera != null and build_mode != null:
+		camera.frame_start_view(StartView.area_for(build_mode.grid, build_mode.shell))
 	refresh()
 
 
@@ -213,8 +216,9 @@ func refresh() -> void:
 	# The panel always shows the latest flight to close, replacing an open one
 	# that was not dismissed, so it never holds an earlier day's result.
 	if not _unreported.is_empty():
-		_result.show_result(FlightResult.summarize(sim, _unreported.back()))
+		_result.show_result(FlightResult.summarize(sim, _unreported.back()), _today())
 		_unreported.clear()
+	_result.expire_on_new_day(_today())
 	_time_label.text = time_text()
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
@@ -287,11 +291,16 @@ func press_debug_spawn() -> void:
 
 ## Opens the result panel for a flight, from the passengers' recorded fates.
 func show_result_for(flight_id: String) -> void:
-	_result.show_result(FlightResult.summarize(sim, flight_id))
+	_result.show_result(FlightResult.summarize(sim, flight_id), _today())
 
 
 func dismiss_result() -> void:
 	_result.dismiss_result()
+
+
+## The game day the clock is on.
+func _today() -> int:
+	return GameCalendar.day_of(clock.tick)
 
 
 func is_result_open() -> bool:

@@ -1,8 +1,8 @@
 class_name FlightResultPanel
 extends PanelContainer
 ## The result of one flight, shown by PassengerHud when its doors close: made,
-## missed and the main reasons passengers missed. Hidden until shown and
-## dismissed with its button.
+## missed and the main reasons passengers missed. Hidden until shown, then
+## dismissed with its button or, failing that, when the game day changes.
 
 ## The most reasons listed; the rest are summed into one "Other" row, so the
 ## rows add up to every reason.
@@ -10,6 +10,8 @@ const MAX_REASONS := 3
 const WIDTH := 440.0
 
 var _label := Label.new()
+## The game day the card was shown on; it is stale once the day moves on.
+var _day := 0
 
 
 func _init() -> void:
@@ -51,9 +53,16 @@ static func text_for(summary: Dictionary) -> String:
 	return "\n".join(lines)
 
 
-func show_result(summary: Dictionary) -> void:
+func show_result(summary: Dictionary, day: int) -> void:
 	_label.text = text_for(summary)
+	_day = day
 	visible = true
+
+
+## Hides the card once `today` is not the day it was shown on.
+func expire_on_new_day(today: int) -> void:
+	if visible and today != _day:
+		dismiss_result()
 
 
 func dismiss_result() -> void:
