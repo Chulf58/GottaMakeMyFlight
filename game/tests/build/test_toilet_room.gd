@@ -118,8 +118,8 @@ func test_a_stall_and_a_sink_make_the_toilet_ready() -> void:
 	assert_bool(_click(STALL, Vector2i(3, 3)).ok).is_true()
 	assert_bool(_click(SINK, Vector2i(5, 3)).ok).is_true()
 	var status := RoomRules.status(_mode.grid, room_id)
-	print("toilet notes %s pieces %s" % [status.notes, status.pieces])
-	assert_bool(status.ok).is_true()
+	var seen := "notes %s pieces %s" % [status.notes, status.pieces]
+	assert_bool(status.ok).override_failure_message(seen).is_true()
 	assert_str(status.headline()).is_equal("Ready")
 	assert_int(status.pieces.get(&"toilet_stall", 0)).is_equal(1)
 	assert_int(status.pieces.get(&"toilet_sink", 0)).is_equal(1)
@@ -192,8 +192,7 @@ func test_a_ready_toilet_costs_its_stall_rate_per_stall_per_day() -> void:
 	_click(STALL, Vector2i(5, 3))
 	_click(SINK, Vector2i(6, 3))
 	var status := RoomRules.status(_mode.grid, room_id)
-	print("ready %s upkeep %d" % [status.ok, RoomRules.daily_upkeep(_mode.grid, room_id)])
-	assert_bool(status.ok).is_true()
+	assert_bool(status.ok).override_failure_message(str(status.notes)).is_true()
 	assert_int(status.upkeep).is_equal(3 * PriceTable.TOILET_STALL_UPKEEP)
 	assert_int(RoomRules.daily_upkeep(_mode.grid, room_id)).is_equal(
 		3 * PriceTable.TOILET_STALL_UPKEEP

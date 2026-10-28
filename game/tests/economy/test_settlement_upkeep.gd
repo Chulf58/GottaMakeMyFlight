@@ -70,9 +70,11 @@ func test_midnight_charges_each_stall_of_a_ready_toilet() -> void:
 	var room_id := _toilet(3)
 	assert_bool(RoomRules.status(_kit.world.grid, room_id).ok).is_true()
 	_kit.charge(1)
-	print("balance %d ledger %s" % [_kit.world.sim.wallet.balance, _ledger.to_snapshot()])
-	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 - 3 * RATE)
-	assert_int(_ledger.upkeep_paid()).is_equal(3 * RATE)
+	var seen := str(_ledger.to_snapshot())
+	assert_int(_kit.world.sim.wallet.balance).override_failure_message(seen).is_equal(
+		1000 - 3 * RATE
+	)
+	assert_int(_ledger.upkeep_paid()).override_failure_message(seen).is_equal(3 * RATE)
 	assert_int(_ledger.amount(C.UPKEEP)).is_equal(-3 * RATE)
 	assert_int(_ledger.wages_paid()).is_equal(0)
 	assert_int(_kit.settlement.upkeep_owed()).is_equal(0)
@@ -103,8 +105,10 @@ func test_every_ready_toilet_is_charged_and_wages_with_it() -> void:
 	_kit.hire(CHECKIN)
 	_kit.charge(1)
 	var wages := PriceTable.wage_of(CHECKIN)
-	print("balance %d ledger %s" % [_kit.world.sim.wallet.balance, _ledger.to_snapshot()])
-	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 - wages - 3 * RATE)
+	var seen := str(_ledger.to_snapshot())
+	assert_int(_kit.world.sim.wallet.balance).override_failure_message(seen).is_equal(
+		1000 - wages - 3 * RATE
+	)
 	assert_int(_ledger.wages_paid()).is_equal(wages)
 	assert_int(_ledger.upkeep_paid()).is_equal(3 * RATE)
 	assert_int(_ledger.operating_result()).is_equal(-wages - 3 * RATE)
@@ -118,15 +122,13 @@ func test_a_short_wallet_pays_wages_first_and_owes_the_upkeep() -> void:
 	var wallet := _kit.world.sim.wallet
 	assert_bool(wallet.spend(wallet.balance - (wages + 5), C.BUILD)).is_true()
 	_kit.charge(1)
-	print(
-		(
-			"balance %d wages owed %d upkeep owed %d"
-			% [wallet.balance, _kit.settlement.wages_owed(), _kit.settlement.upkeep_owed()]
-		)
+	var seen := (
+		"balance %d wages owed %d upkeep owed %d"
+		% [wallet.balance, _kit.settlement.wages_owed(), _kit.settlement.upkeep_owed()]
 	)
-	assert_int(wallet.balance).is_equal(0)
-	assert_int(_kit.settlement.wages_owed()).is_equal(0)
-	assert_int(_kit.settlement.upkeep_owed()).is_equal(2 * RATE - 5)
+	assert_int(wallet.balance).override_failure_message(seen).is_equal(0)
+	assert_int(_kit.settlement.wages_owed()).override_failure_message(seen).is_equal(0)
+	assert_int(_kit.settlement.upkeep_owed()).override_failure_message(seen).is_equal(2 * RATE - 5)
 	assert_int(_ledger.wages_paid()).is_equal(wages)
 	assert_int(_ledger.upkeep_paid()).is_equal(5)
 	assert_array(_upkeep_changes).is_equal([2 * RATE - 5])
@@ -156,10 +158,10 @@ func test_an_empty_wallet_owes_both_and_a_credit_pays_wages_then_upkeep() -> voi
 	assert_bool(wallet.credit(2 * RATE + 7, C.FEES)).is_true()
 	assert_int(_kit.settlement.upkeep_owed()).is_equal(0)
 	assert_int(wallet.balance).is_equal(12)
-	print("ledger %s" % [_ledger.to_snapshot()])
-	assert_int(_ledger.wages_paid()).is_equal(wages)
-	assert_int(_ledger.upkeep_paid()).is_equal(2 * RATE)
-	assert_int(_ledger.cash_change()).is_equal(12)
+	var seen := str(_ledger.to_snapshot())
+	assert_int(_ledger.wages_paid()).override_failure_message(seen).is_equal(wages)
+	assert_int(_ledger.upkeep_paid()).override_failure_message(seen).is_equal(2 * RATE)
+	assert_int(_ledger.cash_change()).override_failure_message(seen).is_equal(12)
 	assert_int(_ledger.wages_paid()).is_equal(_kit.settlement.wages_paid_today())
 
 

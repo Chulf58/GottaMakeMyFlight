@@ -194,6 +194,13 @@ func upkeep_owed() -> int:
 	return _upkeep_owed
 
 
+## Everything credit_claim takes out of a credit before the balance sees it:
+## owed wages and owed upkeep. A credit of this much more than a sum leaves that
+## sum in the wallet (RescueGrant grosses its grant up by it).
+func claimed_debt() -> int:
+	return _wages_owed + _upkeep_owed
+
+
 ## JSON-safe state for a save: the owed fees as decimal strings, like the
 ## wallet's balance, the wage state (owed wages, last charged day and paid
 ## today) and the owed upkeep as decimal strings, and the bag state: the
