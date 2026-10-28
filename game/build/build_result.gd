@@ -36,6 +36,7 @@ enum Reason {
 	BELT_CROSSING,
 	BELT_WALL,
 	NOT_A_BELT,
+	STAFF_SPOT,
 }
 
 const REASON_TEXT := {
@@ -70,6 +71,7 @@ const REASON_TEXT := {
 	Reason.BELT_CROSSING: "Belts cannot cross; a belt joins at most three others",
 	Reason.BELT_WALL: "A wall is in the way of the belt",
 	Reason.NOT_A_BELT: "Only a belt piece changes shape",
+	Reason.STAFF_SPOT: "Keep the staff spot behind a desk or beside a scanner free, with a way in",
 }
 
 var ok: bool = true

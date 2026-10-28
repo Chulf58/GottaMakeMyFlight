@@ -7,12 +7,12 @@ extends Node3D
 ## before and the tick now, keyed by member id, and each frame it draws
 ## between the two with the clock's alpha, as PassengerViews does.
 ##
-## StaffSim puts a member on duty on its station's service cell, the cell the
-## passenger being served stands on. So an on-duty member is drawn at its
-## station's post instead (POSTS: behind a desk's counter, beside a scanner's
-## arch), facing the passenger side. The move onto and off the post is a
-## snap, never a glide through the counter. The post is only drawn: nothing
-## reserves it, so a desk backed onto a wall draws its agent behind the wall.
+## StaffSim walks a member onto its station's staff spot (StaffSpots: behind
+## a desk's counter, beside a scanner's landside half) and puts it on duty
+## there, so a member is always drawn where it stands: walking onto the spot
+## and off it again is an ordinary walk, with no jump. On duty it faces its
+## station's front, the passenger side. A fired member walking out to the
+## entrance is drawn walking until it is gone.
 ##
 ## Edits, hires, fires and loads between ticks resync at once (snapped) on the
 ## next frame, so a paused game shows them. It reads the sim and never writes
@@ -26,14 +26,6 @@ const CHARACTERS: Array[PackedScene] = [
 ## Walk clip speeds measured by the Toon pipeline (SPEED lines), by role.
 const CLIP_WALK_MPS: Array[float] = [1.922, 1.952]
 const LOOPED := ["idle", "walk"]
-## Where an on-duty member stands, in its station's frame (BuildView.object_transform:
-## footprint centre, front +Z): behind the desk's counter cell, and beside the
-## scanner's landside half, just outside its right panel (in the next cell, so
-## a scanner built right beside it overlaps this officer).
-const POSTS := {
-	&"checkin_desk": Vector3(-0.5, 0.0, -0.85),
-	&"security_scanner": Vector3(0.75, 0.0, 0.55),
-}
 
 @export var clock: SimClock
 @export var staff: StaffSim
@@ -83,10 +75,10 @@ func tick_position(id: int, current: bool) -> Vector3:
 	return (_cur if current else _prev).get(id, Vector3.ZERO)
 
 
-## Where the member on duty at `station` is drawn, in world space.
+## Where the member on duty at `station` is drawn, in world space: the
+## centre of its staff spot.
 func post_position(station: int) -> Vector3:
-	var record := staff.sim.grid.get_object(station)
-	return _station_frame(record) * (POSTS[StringName(record["def"])] as Vector3)
+	return staff.sim.grid.cell_to_world(staff.spot_of(station))
 
 
 ## The yaw a member on duty at `station` is drawn with: facing the station's front.
@@ -112,14 +104,12 @@ func sync(snap: bool = false) -> void:
 		if fresh:
 			node = _take(m.role)
 			_nodes[id] = node
-		var on_post := m.state == StaffMember.State.ON_DUTY
-		var now := post_position(m.station) if on_post else staff.world_position(m)
-		if snap or fresh or node.get_meta(&"on_post") != on_post:
+		var now := staff.world_position(m)
+		if snap or fresh:
 			_prev[id] = now
 		else:
 			_prev[id] = _cur[id]
 		_cur[id] = now
-		node.set_meta(&"on_post", on_post)
 		_pose(node, m, (_cur[id] as Vector3) - (_prev[id] as Vector3))
 	for id in _nodes.keys():
 		if not seen.has(id):
@@ -155,11 +145,6 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	_mark_dirty()
 
 
-func _station_frame(record: Dictionary) -> Transform3D:
-	var cells := BuildCatalog.get_def(record["def"]).footprint(record["anchor"], record["facing"])
-	return BuildView.object_transform(staff.sim.grid, cells, record["facing"])
-
-
 func _take(role: StaffMember.Role) -> Node3D:
 	var free: Array = _pool[role]
 	var node: Node3D
@@ -171,7 +156,6 @@ func _take(role: StaffMember.Role) -> Node3D:
 		node.set_meta(&"role", role)
 		add_child(node)
 	node.rotation.y = 0.0
-	node.set_meta(&"on_post", false)
 	return node
 
 
@@ -193,7 +177,7 @@ func _pose(node: Node3D, m: StaffMember, moved: Vector3) -> void:
 	var base := 1.0
 	if m.state == StaffMember.State.ON_DUTY:
 		node.rotation.y = post_yaw(m.station)
-	elif m.state == StaffMember.State.TO_STATION and m.is_moving():
+	elif m.is_moving():
 		clip = "walk"
 		base = (PassengerSim.WALK_MM * SimClock.TICK_RATE / 1000.0) / CLIP_WALK_MPS[m.role]
 		if moved.length() > 0.001:

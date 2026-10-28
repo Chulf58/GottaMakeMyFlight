@@ -5,7 +5,8 @@ extends RefCounted
 ## seats and doors. Lanes are fixed and bounded: from a station's interaction
 ## cell (slot 0, where service happens) straight out along its front, up to
 ## LANE_SLOTS cells, stopping at a closed step, a cell another lane already
-## took or another object's interaction cell. Stations claim cells in id order.
+## took, another object's interaction cell or a staff spot (StaffSpots), which
+## passengers may cross but never queue on. Stations claim cells in id order.
 
 const LANE_SLOTS := 6
 
@@ -40,6 +41,10 @@ func rebuild(grid: BuildGrid) -> void:
 		var spot := grid.interaction_cell(id)
 		if spot != BuildObjectDef.NO_CELL:
 			reserved[spot] = id
+	for id in ids:
+		var staff_spot := StaffSpots.spot_of(grid, id)
+		if staff_spot != BuildObjectDef.NO_CELL and not reserved.has(staff_spot):
+			reserved[staff_spot] = id
 	for id in ids:
 		match StringName(grid.get_object(id)["def"]):
 			&"checkin_desk":

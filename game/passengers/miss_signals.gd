@@ -7,6 +7,11 @@ extends RefCounted
 ## anyone is held; a scanner can be one short for the rest of a tick, after it
 ## moves its front into the passage, and the holding count covers that tick.
 
+## Why a closed station is closed: its staff spot is blocked (only an old save
+## can hold one), or nobody is on duty.
+const SPOT_BLOCKED_REASON := "Staff spot blocked"
+const NO_STAFF_REASON := "No staff on duty"
+
 
 static func is_full(capacity: int, lane: int, holding: int) -> bool:
 	if capacity <= 0:
@@ -42,3 +47,13 @@ static func closed_stations(sim: PassengerSim) -> Array[int]:
 		if sim.layout.is_usable(station) and not sim.staff.is_open(station):
 			out.append(station)
 	return out
+
+
+## Why `station` is closed (SPOT_BLOCKED_REASON or NO_STAFF_REASON), or "" when
+## it is not one of closed_stations().
+static func closed_reason(sim: PassengerSim, station: int) -> String:
+	if not closed_stations(sim).has(station):
+		return ""
+	if sim.staff.spot_blocked(station):
+		return SPOT_BLOCKED_REASON
+	return NO_STAFF_REASON

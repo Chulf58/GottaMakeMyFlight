@@ -197,7 +197,7 @@ func test_a_removal_batch_refunds_every_removed_piece() -> void:
 	var wallet := Wallet.new(1000)
 	BuildTransaction.commit_batch(grid, _paints(Rect2i(1, 1, 3, 3)), wallet)
 	var desk := BuildTransaction.commit_plan(
-		grid, _plan(BuildEdit.place_object(&"checkin_desk", Vector2i(1, 1), 0)), wallet
+		grid, _plan(BuildEdit.place_object(&"checkin_desk", Vector2i(1, 2), 0)), wallet
 	)
 	assert_bool(desk.ok).is_true()
 	var balance := wallet.balance

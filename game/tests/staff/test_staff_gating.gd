@@ -155,14 +155,19 @@ func test_an_agent_fired_mid_service_stays_until_it_ends_then_the_desk_closes() 
 		_w.step()
 	assert_int(unstaffed_in_service).is_equal(0)
 	assert_int(_w.passenger(served).stage).is_equal(Passenger.Stage.TO_SECURITY)
-	# The service ended on this tick; the agent leaves on the next one.
+	# The service ended on this tick; the agent walks out on the next one.
 	_w.step()
-	print("agent %d left at tick %d" % [agent, _w.clock.tick])
-	assert_object(_w.staff.get_member(agent)).is_null()
+	print("agent %d left its desk at tick %d" % [agent, _w.clock.tick])
+	var leaver := _w.staff.get_member(agent)
+	assert_int(leaver.state).is_equal(StaffMember.State.WALKING_OUT)
+	assert_bool(leaver.leaving).is_false()
 	assert_int(_w.staff.count(CHECKIN)).is_equal(0)
 	assert_int(_w.staff.leaving_count(CHECKIN)).is_equal(0)
 	assert_bool(_w.staff.is_staffed(desk)).is_false()
 	_w.run_to(_w.clock.tick + 200)
+	# It reached the entrance and is gone.
+	assert_object(_w.staff.get_member(agent)).is_null()
+	assert_that(leaver.at).is_equal(ReferenceTerminal.ENTRANCE_CELL)
 	assert_array(_w.sim.queue_of(desk)).is_empty()
 	assert_int(_reached[Passenger.Stage.CHECKIN]).is_equal(check_ins)
 	for id in behind:

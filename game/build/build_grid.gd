@@ -79,6 +79,9 @@ var _v_walls := PackedByteArray()
 var _occupant := PackedInt32Array()
 ## Id of the object whose interaction cell this is, 0 for none.
 var _reserved := PackedInt32Array()
+## The staff spot of every desk and scanner (StaffSpots), kept apart from
+## _reserved. Derived from _objects.
+var _spots := StaffSpots.new()
 ## Object id -> {"def": StringName, "anchor": Vector2i, "facing": int}.
 var _objects: Dictionary = {}
 var _next_object_id := 1
@@ -256,7 +259,9 @@ func passage_cells(object_id: int) -> Array[Vector2i]:
 	return cells
 
 
-## Checks an edit without changing anything.
+## Checks an edit without changing anything. An edit the other rules accept
+## is then checked against the staff spots (StaffSpots.edit_problem()); a
+## snapshot load skips that check, so an old save still loads.
 func validate(edit: BuildEdit) -> BuildResult:
 	var result: BuildResult
 	match edit.kind:
@@ -284,6 +289,10 @@ func validate(edit: BuildEdit) -> BuildResult:
 				result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
 		BuildEdit.Kind.RESHAPE_BELT:
 			result = _check_reshape_belt(edit)
+	if result.ok:
+		var spot_problem := _spots.edit_problem(self, edit)
+		if spot_problem != null:
+			result = spot_problem
 	return result
 
 
@@ -501,6 +510,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_v_walls = loaded._v_walls
 	_occupant = loaded._occupant
 	_reserved = loaded._reserved
+	_spots = loaded._spots
 	_objects = loaded._objects
 	_next_object_id = loaded._next_object_id
 	_rooms = loaded._rooms
@@ -528,6 +538,7 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_zone = _zeros_ints(cells)
 	_occupant = _zeros_ints(cells)
 	_reserved = _zeros_ints(cells)
+	_spots = StaffSpots.new()
 	_objects = {}
 	_next_object_id = 1
 	_room_at = _zeros_ints(cells)
@@ -868,6 +879,7 @@ func _insert_object(
 	var spot := def.interaction_cell(anchor, facing)
 	if spot != BuildObjectDef.NO_CELL:
 		_reserved[_index(spot)] = object_id
+	_spots.add(object_id, StaffSpots.cell_of(def_id, anchor, facing))
 	return cells
 
 
@@ -880,6 +892,7 @@ func _erase_object(object_id: int) -> Array[Vector2i]:
 	var spot := def.interaction_cell(record["anchor"], record["facing"])
 	if spot != BuildObjectDef.NO_CELL:
 		_reserved[_index(spot)] = 0
+	_spots.remove(object_id, StaffSpots.cell_of(record["def"], record["anchor"], record["facing"]))
 	_objects.erase(object_id)
 	return cells
 

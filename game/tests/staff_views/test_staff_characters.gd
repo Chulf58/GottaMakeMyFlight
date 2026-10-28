@@ -1,7 +1,7 @@
 class_name TestStaffCharacters
 extends GdUnitTestSuite
 ## Staff are drawn with their role's model: walking with the walk clip while
-## they head to a station, idle on duty at the station's post facing the
+## they head to a station, idle on duty on the station's staff spot facing the
 ## passenger side, and between ticks with the clock's alpha.
 
 const CHECKIN := StaffMember.Role.CHECKIN
@@ -80,19 +80,28 @@ func test_staff_models_are_not_passenger_models() -> void:
 	)
 
 
-func test_an_agent_arriving_on_duty_snaps_to_the_post_behind_the_counter() -> void:
+func test_an_agent_walks_onto_the_spot_behind_the_counter_with_no_jump() -> void:
 	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
 	var ticks := _until_on_duty(m)
 	assert_int(ticks).is_greater(0)
 	var desk := m.station
 	var post := _views.post_position(desk)
-	var service := _w.staff.world_position(m)
+	var service := _w.grid.cell_to_world(_w.sim.layout.lanes[desk][0])
 	var front_2d := TerminalLayout.front_of(_w.grid.get_object(desk)["facing"])
 	var front := Vector3(front_2d.x, 0.0, front_2d.y)
-	print("desk %d post %s service cell %s after %d ticks" % [desk, post, service, ticks])
-	# On the arrival tick itself: both samples on the post, no glide through the desk.
-	assert_that(_views.tick_position(m.id, false)).is_equal(post)
+	var before := _views.tick_position(m.id, false)
+	print(
+		(
+			"desk %d spot %s service cell %s, arrived from %s after %d ticks"
+			% [desk, post, service, before, ticks]
+		)
+	)
+	assert_that(post).is_equal(_w.grid.cell_to_world(StaffSpots.spot_of(_w.grid, desk)))
+	# On the arrival tick the agent is drawn on the spot, one walking step on
+	# from the tick before: no jump onto it.
 	assert_that(_views.tick_position(m.id, true)).is_equal(post)
+	assert_float(before.distance_to(post)).is_greater(0.0)
+	assert_float(before.distance_to(post)).is_less_equal(PassengerSim.WALK_MM / 1000.0 + 0.0001)
 	assert_float((post - service).dot(front)).is_less(-1.5)
 	var node := _views.node_for(m.id)
 	assert_str(_clip(node)).is_equal("idle")
@@ -104,10 +113,10 @@ func test_a_scanner_officer_stands_beside_the_arch_facing_the_lane() -> void:
 	assert_int(_until_on_duty(m)).is_greater(0)
 	var scanner := m.station
 	assert_bool((_ids["scanners"] as Array).has(scanner)).is_true()
-	var record := _w.grid.get_object(scanner)
-	var cells := BuildCatalog.get_def(record["def"]).footprint(record["anchor"], record["facing"])
-	var frame := BuildView.object_transform(_w.grid, cells, record["facing"])
-	var expected := frame * StaffCharacters.POSTS[&"security_scanner"]
+	var expected := _w.grid.cell_to_world(StaffSpots.spot_of(_w.grid, scanner))
+	# One tick standing on the spot, so the drawn position no longer blends in
+	# the last step onto it.
+	_w.step()
 	_views.draw()
 	var node := _views.node_for(m.id)
 	print("scanner %d officer at %s" % [scanner, node.position])
@@ -197,7 +206,7 @@ func test_drawing_never_changes_the_sim() -> void:
 	assert_int(_views.active_count()).is_equal(2)
 
 
-func test_desk_posts_turn_with_the_desk_in_all_four_facings() -> void:
+func test_desk_spots_turn_with_the_desk_in_all_four_facings() -> void:
 	for facing in 4:
 		var grid := PassengerTestWorld.floored(Vector2i(12, 12))
 		PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 11), 3)
@@ -210,8 +219,8 @@ func test_desk_posts_turn_with_the_desk_in_all_four_facings() -> void:
 		var id: int = world.staff.staff_at(desk)
 		var front_2d := TerminalLayout.front_of(facing)
 		var front := Vector3(front_2d.x, 0.0, front_2d.y)
-		# The counter is the anchor cell; the post is 0.85 m behind its centre.
-		var expected := grid.cell_to_world(Vector2i(5, 5)) - front * 0.85
+		# The counter is the anchor cell; the spot is the cell behind it.
+		var expected := grid.cell_to_world(Vector2i(5, 5) - front_2d)
 		var drawn := views.tick_position(id, true)
 		print("facing %d post %s expected %s" % [facing, drawn, expected])
 		assert_float(drawn.distance_to(expected)).is_less(0.0001)

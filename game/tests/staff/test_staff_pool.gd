@@ -70,7 +70,9 @@ func test_fire_takes_an_idle_member_then_a_walking_one_then_one_on_duty() -> voi
 	var on_duty := first + second - walking
 	assert_int(_w.staff.get_member(walking).state).is_equal(StaffMember.State.TO_STATION)
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
-	assert_array(_w.staff.member_ids()).is_equal([on_duty])
+	# The walking one walks out: still drawn and saved, no longer staff.
+	assert_int(_w.staff.get_member(walking).state).is_equal(StaffMember.State.WALKING_OUT)
+	assert_int(_w.staff.count(CHECKIN)).is_equal(1)
 	var station := _w.staff.get_member(on_duty).station
 	assert_bool(_w.staff.is_staffed(station)).is_true()
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()

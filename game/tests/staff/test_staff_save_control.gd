@@ -47,7 +47,11 @@ func before() -> void:
 	for i in COMPARE_TICKS:
 		_step([_control, _saved, _loaded])
 		for world in left:
-			if left[world] < 0 and world.staff.get_member(id) == null:
+			var member: StaffMember = world.staff.get_member(id)
+			if (
+				left[world] < 0
+				and (member == null or member.state == StaffMember.State.WALKING_OUT)
+			):
 				left[world] = world.clock.tick
 		for world in first_bad:
 			if first_bad[world] < 0 and _sig(world) != _sig(_control):

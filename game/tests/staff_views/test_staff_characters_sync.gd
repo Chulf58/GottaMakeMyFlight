@@ -2,7 +2,8 @@ class_name TestStaffCharactersSync
 extends GdUnitTestSuite
 ## Staff characters follow hires, fires, edits and loads: between ticks the
 ## next frame resyncs with no glide, nodes go back to their role's pool, and a
-## member fired mid-service stays on its post until it leaves.
+## member fired mid-service stays on its spot until the service ends, then
+## walks out.
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
@@ -57,11 +58,16 @@ func test_seating_and_firing_while_paused_show_on_the_next_frame() -> void:
 	var id: int = _w.staff.staff_at(desk)
 	assert_that(_views.node_for(id).position).is_equal(_views.post_position(desk))
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
-	assert_object(_w.staff.get_member(id)).is_null()
+	assert_int(_w.staff.get_member(id).state).is_equal(StaffMember.State.WALKING_OUT)
 	_w.clock.advance(SimClock.STEP * 3.0)
 	_views._process(0.0)
-	assert_int(_views.active_count()).is_equal(3)
-	assert_object(_views.node_for(id)).is_null()
+	# Still drawn on its spot while paused, now with the walk clip.
+	assert_int(_views.active_count()).is_equal(4)
+	var node := _views.node_for(id)
+	assert_that(node.position).is_equal(_views.post_position(desk))
+	assert_str((node.get_node("AnimationPlayer") as AnimationPlayer).current_animation).is_equal(
+		"walk"
+	)
 	assert_int(_w.clock.tick).is_equal(tick)
 
 
@@ -72,6 +78,8 @@ func test_a_fired_members_node_is_reused_by_the_next_hire_of_its_role() -> void:
 	var node := _views.node_for(first)
 	assert_object(node).is_not_null()
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
+	while _w.staff.get_member(first) != null and _w.clock.tick < LIMIT_TICKS:
+		_w.step()
 	_views._process(0.0)
 	assert_bool(node.visible).is_false()
 	var officer := _w.staff.hire(SECURITY)
@@ -134,7 +142,7 @@ func test_a_load_followed_by_a_tick_before_the_frame_does_not_glide() -> void:
 	assert_that(_views.tick_position(id, false)).is_equal(now)
 
 
-func test_a_member_fired_mid_service_stays_on_its_post_until_it_leaves() -> void:
+func test_a_member_fired_mid_service_stays_on_its_spot_until_it_walks_out() -> void:
 	for i in 4:
 		_w.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
@@ -148,18 +156,25 @@ func test_a_member_fired_mid_service_stays_on_its_post_until_it_leaves() -> void
 	_views._process(0.0)
 	var node := _views.node_for(m.id)
 	var post := _views.post_position(m.station)
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
 	var ticks := 0
-	while _w.staff.get_member(m.id) != null and ticks < LIMIT_TICKS:
+	while m.leaving and ticks < LIMIT_TICKS:
 		assert_that(node.position).is_equal(post)
-		(
-			assert_str((node.get_node("AnimationPlayer") as AnimationPlayer).current_animation)
-			. is_equal("idle")
-		)
+		assert_str(player.current_animation).is_equal("idle")
 		_w.step()
 		_views.draw()
 		ticks += 1
-	print("left %d ticks after being fired" % ticks)
+	print("left its spot %d ticks after being fired" % ticks)
 	assert_int(ticks).is_greater(1)
+	assert_int(m.state).is_equal(StaffMember.State.WALKING_OUT)
+	var walked := 0
+	while _w.staff.get_member(m.id) != null and ticks < LIMIT_TICKS:
+		walked += int(player.current_animation == "walk")
+		_w.step()
+		_views.draw()
+		ticks += 1
+	print("walked out for %d ticks" % walked)
+	assert_int(walked).is_greater(10)
 	assert_object(_views.node_for(m.id)).is_null()
 	assert_bool(node.visible).is_false()
 	# It left inside the tick (staff_changed from _reconcile): that tick's sync
