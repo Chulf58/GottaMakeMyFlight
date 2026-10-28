@@ -43,6 +43,15 @@ extends Node
 ## or settled long ago) pays the full fee, as does any passenger when no
 ## BaggageSim is set.
 ##
+## On the same tick, after the wages, every ready toilet room is charged its
+## upkeep (decision toilet-design-queue-free-reservable-stalls-per-stall-daily-u,
+## point 2): RoomRules.daily_upkeep, PriceTable.TOILET_STALL_UPKEEP per stall.
+## The wallet pays the wages first and the upkeep from what is left; the rest of
+## the upkeep is owed upkeep, kept apart from owed wages so the ledger books each
+## under its own category. Repayment order, on every credit (credit_claim) and in
+## each tick's sweep: owed wages, then owed upkeep, then owed fees. Owed upkeep is
+## saved under its own optional key; a save without it owes none.
+##
 ## The last day charged is saved with the owed wages, so a load neither charges
 ## a day twice nor skips one. A save taken mid-day D before the charge moved to
 ## the day's last tick holds D as charged (it was charged at D's start), so D's
@@ -59,8 +68,12 @@ signal wages_charged(day: int, paid: int, owed: int)
 signal wages_paid(amount: int, owed: int)
 ## The owed wages changed (a charge, a payment, a load); the money card follows it.
 signal wages_owed_changed(owed: int)
+## The owed upkeep changed (a charge, a payment, a load).
+signal upkeep_owed_changed(owed: int)
 
 const SNAPSHOT_KEYS := ["owed"]
+## Added with toilet upkeep. A save from before it has none and owes no upkeep.
+const UPKEEP_SNAPSHOT_KEY := "upkeep_owed"
 ## Added with staff wages. A save from before them has none and loads with no
 ## debt and no day charged yet.
 ## The three keys come as a group: all present or all absent.
@@ -91,6 +104,8 @@ const MAX_WAGES := 1_000_000_000_000_000
 ## The most wages paid in a day: the old debt, then a charge paid from the
 ## wallet, so no more than both limits together.
 const MAX_WAGES_PAID_TODAY := MAX_WAGES + Wallet.MAX_BALANCE
+## The most owed upkeep the state holds, for the same reason as MAX_WAGES.
+const MAX_UPKEEP := MAX_WAGES
 
 ## In a scene these come from the wired nodes; tests call bind(). Without
 ## `staff` no wage is charged.
@@ -109,7 +124,9 @@ var _settled: Dictionary = {}
 var _owed: Array[int] = []
 ## Wages charged but not paid yet, carried until money is there.
 var _wages_owed := 0
-## The last game day wages were charged for, or NO_DAY.
+## Room upkeep charged but not paid yet, paid after owed wages.
+var _upkeep_owed := 0
+## The last game day wages and upkeep were charged for, or NO_DAY.
 var _wages_day := NO_DAY
 ## Wages paid on the current game day: the charge made on its last tick and any
 ## owed wages paid during it.
@@ -172,11 +189,17 @@ func wages_paid_today() -> int:
 	return _wages_paid_today
 
 
+## Room upkeep still owed.
+func upkeep_owed() -> int:
+	return _upkeep_owed
+
+
 ## JSON-safe state for a save: the owed fees as decimal strings, like the
 ## wallet's balance, the wage state (owed wages, last charged day and paid
-## today) as decimal strings, and the bag state: the passengers whose bag
-## missed ("bag_missed") and the fees held for a bag still on its way
-## ("bags_awaited", each {"passenger", "fee"}), also as decimal strings.
+## today) and the owed upkeep as decimal strings, and the bag state: the
+## passengers whose bag missed ("bag_missed") and the fees held for a bag still
+## on its way ("bags_awaited", each {"passenger", "fee"}), also as decimal
+## strings.
 func to_snapshot() -> Dictionary:
 	var out := []
 	for fee in _owed:
@@ -193,6 +216,7 @@ func to_snapshot() -> Dictionary:
 		"wages_day": str(_wages_day),
 		"wages_paid_today": str(_wages_paid_today),
 		WAGE_TIMING_KEY: WAGE_TIMING_LAST_TICK,
+		UPKEEP_SNAPSHOT_KEY: str(_upkeep_owed),
 		"bag_missed": missed,
 		"bags_awaited": awaited,
 	}
@@ -203,7 +227,9 @@ func to_snapshot() -> Dictionary:
 ## decimal string from 1 to Wallet.MAX_BALANCE, or a wage amount or day that is
 ## not a decimal string in range. The wage keys are optional as a group: a save
 ## without any loads with no owed wages and no day charged yet, and a partial
-## set is refused. The bag keys are optional as a pair in the same way, and
+## set is refused. The owed upkeep is optional on its own: a save without it
+## owes none, and one that is not a decimal string from 0 to MAX_UPKEEP is
+## refused. The bag keys are optional as a pair in the same way, and
 ## refused for a passenger id or fee out of range, a passenger listed twice or in
 ## both lists. A successful load forgets which passengers were paid, since the
 ## loaded sim may replay them.
@@ -217,6 +243,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		loaded.append(str(text).to_int())
 	_owed = loaded
 	_set_wages_owed(str(data.get("wages_owed", "0")).to_int())
+	_set_upkeep_owed(str(data.get(UPKEEP_SNAPSHOT_KEY, "0")).to_int())
 	_wages_day = _earned_day(data)
 	_wages_paid_today = str(data.get("wages_paid_today", "0")).to_int()
 	_paid_day = GameCalendar.day_of(_sim.clock.tick) if _sim != null else NO_DAY
@@ -245,6 +272,7 @@ func _snapshot_problem(data: Dictionary) -> String:
 		if (
 			not SNAPSHOT_KEYS.has(key)
 			and key != WAGE_TIMING_KEY
+			and key != UPKEEP_SNAPSHOT_KEY
 			and not OPTIONAL_SNAPSHOT_KEYS.has(key)
 			and not BAG_SNAPSHOT_KEYS.has(key)
 		):
@@ -257,6 +285,12 @@ func _snapshot_problem(data: Dictionary) -> String:
 	var problem := _wage_problem(data)
 	if problem == "":
 		problem = _bag_problem(data)
+	if (
+		problem == ""
+		and data.has(UPKEEP_SNAPSHOT_KEY)
+		and not _in_range(data[UPKEEP_SNAPSHOT_KEY], 0, MAX_UPKEEP)
+	):
+		problem = "'%s' is not 0 to %d" % [UPKEEP_SNAPSHOT_KEY, MAX_UPKEEP]
 	return problem
 
 
@@ -322,13 +356,16 @@ func _wage_problem(data: Dictionary) -> String:
 
 ## "" or why the saved settlement disagrees with the other saved parts it
 ## depends on. Run on the save's parts by SaveLinks, since no part sees another.
-## A save from before wages holds no wage state and always agrees.
+## A save from before wages holds no wage state and always agrees. It also
+## checks the owed upkeep against the wallet (upkeep_debt_problem).
 static func wages_link_problem(
 	settlement: Dictionary, clock: Dictionary, wallet: Dictionary
 ) -> String:
 	var found := wages_day_problem(settlement, clock)
 	if found == "":
 		found = wages_debt_problem(settlement, wallet)
+	if found == "":
+		found = upkeep_debt_problem(settlement, wallet)
 	return found
 
 
@@ -386,6 +423,21 @@ static func wages_debt_problem(settlement: Dictionary, wallet: Dictionary) -> St
 		return ""
 	if str(settlement["wages_owed"]).to_int() > 0 and str(wallet["balance"]).to_int() > 0:
 		return "settlement: wages are owed while the wallet holds money"
+	return ""
+
+
+## "" or why saved owed upkeep and a saved balance disagree: like owed wages,
+## owed upkeep takes every credit before the balance, so the two never both
+## stand.
+static func upkeep_debt_problem(settlement: Dictionary, wallet: Dictionary) -> String:
+	if not settlement.has(UPKEEP_SNAPSHOT_KEY) or not wallet.has("balance"):
+		return ""
+	if not SimClock.is_int64_string(settlement[UPKEEP_SNAPSHOT_KEY]):
+		return ""
+	if not SimClock.is_int64_string(wallet["balance"]):
+		return ""
+	if str(settlement[UPKEEP_SNAPSHOT_KEY]).to_int() > 0 and str(wallet["balance"]).to_int() > 0:
+		return "settlement: upkeep is owed while the wallet holds money"
 	return ""
 
 
@@ -459,7 +511,7 @@ func _on_bag_settled(_bag_id: int, passenger_id: int, _flight_id: String, loaded
 func _on_tick(tick: int) -> void:
 	_roll_paid_day(tick)
 	if GameCalendar.is_last_tick_of_day(tick):
-		_charge_wages(GameCalendar.day_of(tick))
+		_charge_day(GameCalendar.day_of(tick))
 	_pay_owed()
 
 
@@ -480,21 +532,35 @@ func _note_wages_paid(paid: int) -> void:
 	_wages_paid_today += paid
 
 
-## Charges the roster for `day`, on its last tick; a day at or before the last
-## charged one is never charged again.
-func _charge_wages(day: int) -> void:
+## Charges the roster's wages and then the ready rooms' upkeep for `day`, on its
+## last tick; a day at or before the last charged one is never charged again.
+## The wages are paid from the balance first, the upkeep from what is left.
+func _charge_day(day: int) -> void:
 	if day <= _wages_day:
 		return
 	var due := _wages_due()
 	var paid := mini(due, _wallet.balance)
+	var upkeep := _upkeep_due()
+	var upkeep_paid := mini(upkeep, _wallet.balance - paid)
 	if _wages_owed + due - paid > MAX_WAGES:
 		push_error(
 			"Settlement: owed wages would pass %d, so day %d is not charged" % [MAX_WAGES, day]
 		)
 		return
-	_wages_day = day
-	if due == 0:
+	if _upkeep_owed + upkeep - upkeep_paid > MAX_UPKEEP:
+		push_error(
+			"Settlement: owed upkeep would pass %d, so day %d is not charged" % [MAX_UPKEEP, day]
+		)
 		return
+	_wages_day = day
+	if due > 0:
+		_charge_wages(day, due, paid)
+	if upkeep > 0:
+		_charge_upkeep(upkeep, upkeep_paid)
+
+
+## Takes the day's wages of `due`, `paid` of it from the wallet, the rest owed.
+func _charge_wages(day: int, due: int, paid: int) -> void:
 	if not _wallet.spend(paid, Wallet.Category.WAGES):
 		push_error("Settlement: wallet refused a wage of %d it holds" % paid)
 		return
@@ -502,6 +568,25 @@ func _charge_wages(day: int) -> void:
 	_set_wages_owed(_wages_owed + due - paid)
 	wages_charged.emit(day, paid, due - paid)
 	_announce_wages_paid(paid)
+
+
+## Takes the day's upkeep of `due`, `paid` of it from the wallet, the rest owed.
+func _charge_upkeep(due: int, paid: int) -> void:
+	if not _wallet.spend(paid, Wallet.Category.UPKEEP):
+		push_error("Settlement: wallet refused an upkeep of %d it holds" % paid)
+		return
+	_set_upkeep_owed(_upkeep_owed + due - paid)
+
+
+## The day's upkeep of every ready room on the sim's grid (RoomRules.daily_upkeep);
+## none without a grid.
+func _upkeep_due() -> int:
+	if _sim == null or _sim.grid == null:
+		return 0
+	var due := 0
+	for room_id in _sim.grid.room_ids():
+		due += RoomRules.daily_upkeep(_sim.grid, room_id)
+	return due
 
 
 ## The wages of everyone on the roster for one day; none without a staff pool.
@@ -516,10 +601,11 @@ func _wages_due() -> int:
 	return due
 
 
-## Pays owed wages, then owed fees. Wages go first: paying them frees room in
-## a full wallet for a fee to fit.
+## Pays owed wages, then owed upkeep, then owed fees. The debts go first: paying
+## them frees room in a full wallet for a fee to fit.
 func _pay_owed() -> void:
 	_pay_wages()
+	_pay_upkeep()
 	_pay_fees()
 
 
@@ -535,16 +621,33 @@ func _pay_wages() -> void:
 	_announce_wages_paid(paid)
 
 
-## Wallet.credit_claim: what is owed in wages out of an incoming credit. With
-## `commit` false it only says how much it would take; with true it takes it,
-## pays that debt and returns the amount, so the balance gets only the rest.
-func _claim_credit(amount: int, commit: bool) -> int:
-	var paid := mini(_wages_owed, amount)
-	if commit and paid > 0:
-		_note_wages_paid(paid)
-		_set_wages_owed(_wages_owed - paid)
-		_announce_wages_paid(paid)
-	return paid
+## Pays the owed upkeep the balance holds the money for, after _pay_wages.
+func _pay_upkeep() -> void:
+	var paid := mini(_upkeep_owed, _wallet.balance)
+	if paid <= 0 or not _wallet.spend(paid, Wallet.Category.UPKEEP):
+		return
+	_set_upkeep_owed(_upkeep_owed - paid)
+
+
+## Wallet.credit_claim: what is owed out of an incoming credit, owed wages
+## first and owed upkeep from what is left, as {Category: share} with only the
+## shares above 0. With `commit` false it only says what it would take; with
+## true it takes it and pays those debts, so the balance gets only the rest.
+func _claim_credit(amount: int, commit: bool) -> Dictionary:
+	var wages := mini(_wages_owed, amount)
+	var upkeep := mini(_upkeep_owed, amount - wages)
+	if commit and wages > 0:
+		_note_wages_paid(wages)
+		_set_wages_owed(_wages_owed - wages)
+		_announce_wages_paid(wages)
+	if commit and upkeep > 0:
+		_set_upkeep_owed(_upkeep_owed - upkeep)
+	var claims := {}
+	if wages > 0:
+		claims[Wallet.Category.WAGES] = wages
+	if upkeep > 0:
+		claims[Wallet.Category.UPKEEP] = upkeep
+	return claims
 
 
 func _announce_wages_paid(paid: int) -> void:
@@ -557,6 +660,13 @@ func _set_wages_owed(value: int) -> void:
 		return
 	_wages_owed = value
 	wages_owed_changed.emit(_wages_owed)
+
+
+func _set_upkeep_owed(value: int) -> void:
+	if value == _upkeep_owed:
+		return
+	_upkeep_owed = value
+	upkeep_owed_changed.emit(_upkeep_owed)
 
 
 ## Pays owed fees, oldest first, while the next one fits the wallet.

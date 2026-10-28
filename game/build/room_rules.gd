@@ -30,6 +30,9 @@ class RoomStatus:
 	var notes := PackedStringArray()
 	var seats := 0
 	var base_spend := 0
+	## What the room costs to run per game day once it is ready: its type's
+	## upkeep piece count times the per-piece upkeep. Shown as one room total.
+	var upkeep := 0
 	## BuildCatalog id -> how many of that piece count for the room.
 	var pieces: Dictionary = {}
 
@@ -61,8 +64,18 @@ static func status(grid: BuildGrid, room_id: int) -> RoomStatus:
 	if not has_opening(grid, area):
 		result.notes.append(NO_OPENING)
 	result.seats = result.pieces.get(type.seat_piece, 0) * type.seats_per_piece
+	result.upkeep = result.pieces.get(type.upkeep_piece, 0) * type.upkeep_per_piece
 	result.ok = result.notes.is_empty()
 	return result
+
+
+## What room `room_id` is charged at midnight (Settlement): its upkeep when it is
+## ready, 0 when it is not or there is no such room.
+static func daily_upkeep(grid: BuildGrid, room_id: int) -> int:
+	var result := status(grid, room_id)
+	if result == null or not result.ok:
+		return 0
+	return result.upkeep
 
 
 ## BuildCatalog id -> count of the objects wholly inside `area`, their

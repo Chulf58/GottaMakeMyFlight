@@ -3,7 +3,8 @@ extends RefCounted
 ## The store types a room can be marked as, keyed by string id. Each type says
 ## what a room of it needs to work (decision
 ## store-mechanics-draw-a-room-then-furnish-it-required-pieces): its required
-## pieces, a minimum size, and how many seats each seating piece gives.
+## pieces, a minimum size, how many seats each seating piece gives and what a
+## ready room costs to run per day.
 ## RoomRules judges a room against its type.
 
 
@@ -22,6 +23,10 @@ class RoomType:
 	var seats_per_piece := 0
 	## What one visit spends before mood and the airside bonus (a tuning value).
 	var base_spend := 0
+	## The piece a ready room is charged upkeep for each game day, and the
+	## charge per piece (PriceTable); none for a room that costs nothing to run.
+	var upkeep_piece: StringName = &""
+	var upkeep_per_piece := 0
 
 	## Whether a room of `size` cells is big enough, turned either way.
 	func fits(size: Vector2i) -> bool:
@@ -67,3 +72,17 @@ static func _build() -> void:
 	bag_room.min_size = Vector2i(2, 2)
 	bag_room.required = [[&"baggage_belt_end", "Needs a belt end"]]
 	_types[bag_room.id] = bag_room
+
+	# Toilet (decision toilet-design-queue-free-reservable-stalls-per-stall-
+	# daily-u, points 1 and 2): each stall is one use slot, and the sink is
+	# required furniture. It seats nobody and earns nothing; each stall of a
+	# ready toilet costs upkeep every day. 2x3 holds a 1x2 stall and a sink side
+	# by side with the approach cell in front of each.
+	var toilet := RoomType.new()
+	toilet.id = &"toilet"
+	toilet.display_name = "Toilet"
+	toilet.min_size = Vector2i(2, 3)
+	toilet.required = [[&"toilet_stall", "Needs a toilet stall"], [&"toilet_sink", "Needs a sink"]]
+	toilet.upkeep_piece = &"toilet_stall"
+	toilet.upkeep_per_piece = PriceTable.TOILET_STALL_UPKEEP
+	_types[toilet.id] = toilet

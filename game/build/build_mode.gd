@@ -12,7 +12,8 @@ extends Node3D
 ## Inside a terminal shell they snap to its Toon doors instead (ShellDefinition).
 ## The Cafe tool drags a rectangle that marks floor as a cafe room (RoomTool);
 ## the counter and table tools furnish it, and RoomView shows what it needs.
-## The Bag room tool does the same for a baggage room. The Belt tool lays belt
+## The Bag room tool does the same for a baggage room, and the Toilet room tool
+## for a toilet, which the stall and sink tools furnish. The Belt tool lays belt
 ## cells: press, drag and release lays an L-shaped line (BeltShaper.path()),
 ## a click lays one cell, and Esc or right-click cancels. Every belt cell takes
 ## its piece from its neighbours (BeltShaper), so a line that dead-ends in a
@@ -52,6 +53,9 @@ enum Tool {
 	XRAY_BELT,
 	ARCH,
 	PICKUP_TABLE,
+	TOILET_ROOM,
+	TOILET_STALL,
+	TOILET_SINK,
 }
 
 const TOOL_ACTIONS := {
@@ -80,6 +84,8 @@ const TOOL_OBJECTS := {
 	Tool.XRAY_BELT: SecurityLanes.XRAY_BELT,
 	Tool.ARCH: SecurityLanes.ARCH,
 	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
+	Tool.TOILET_STALL: &"toilet_stall",
+	Tool.TOILET_SINK: &"toilet_sink",
 }
 ## The security lane part tools, in flow order.
 const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
@@ -89,7 +95,11 @@ const BELT_HINT := "Drag to lay a belt"
 ## The status line over a lane part that belongs to no arch.
 const NOT_IN_LANE := "Not part of a lane"
 ## Tools that mark a dragged rectangle as a room of a RoomTypes id.
-const TOOL_ROOMS := {Tool.CAFE_ROOM: &"cafe", Tool.BAG_ROOM: &"bag_room"}
+const TOOL_ROOMS := {
+	Tool.CAFE_ROOM: &"cafe",
+	Tool.BAG_ROOM: &"bag_room",
+	Tool.TOILET_ROOM: &"toilet",
+}
 ## Tools under which the room under the pointer is followed for its panel.
 const ROOM_FOCUS_TOOLS := [
 	Tool.NONE,
@@ -99,6 +109,9 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.BAG_ROOM,
 	Tool.BELT,
 	Tool.CART,
+	Tool.TOILET_ROOM,
+	Tool.TOILET_STALL,
+	Tool.TOILET_SINK,
 ]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
@@ -123,7 +136,9 @@ const SHELL_DOOR_HINTS := {
 ## Tools whose drag repeats along an edge line.
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag is applied on release: a rectangle, or the Belt's line.
-const AREA_TOOLS := [Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM, Tool.BAG_ROOM, Tool.BELT]
+const AREA_TOOLS := [
+	Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM, Tool.BAG_ROOM, Tool.TOILET_ROOM, Tool.BELT
+]
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1
 ## How close to an edge (in metres) the remove tool targets the wall there
