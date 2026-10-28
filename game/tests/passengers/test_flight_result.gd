@@ -151,7 +151,7 @@ func test_each_stage_has_its_exact_reason_text() -> void:
 		Passenger.Stage.CHECKIN: "Still at the check-in desk",
 		Passenger.Stage.TO_SECURITY: "Still walking to security",
 		Passenger.Stage.SECURITY_QUEUE: "Still queuing for security",
-		Passenger.Stage.SECURITY: "Still at the security scanner",
+		Passenger.Stage.SECURITY: "Still at security",
 		Passenger.Stage.TO_GATE: "Still walking to the gate",
 		Passenger.Stage.SITTING_DOWN: gate,
 		Passenger.Stage.SEATED: gate,
@@ -177,7 +177,7 @@ func test_each_stage_has_its_exact_reason_text() -> void:
 func test_each_stuck_status_has_its_exact_reason_text_and_beats_the_stage() -> void:
 	var expected := {
 		Passenger.Stuck.NO_CHECKIN: "No check-in desk to go to",
-		Passenger.Stuck.NO_SECURITY: "No security scanner to go to",
+		Passenger.Stuck.NO_SECURITY: "No security scanner or lane to go to",
 		Passenger.Stuck.QUEUE_FULL: "Waiting outside a full queue",
 		Passenger.Stuck.NO_ROUTE: "No walkable route",
 		Passenger.Stuck.EXIT_BLOCKED: "The exit to the plane was blocked",

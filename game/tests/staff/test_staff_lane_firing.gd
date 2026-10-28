@@ -74,7 +74,8 @@ func test_a_primary_fired_mid_admission_stays_until_every_admitted_passenger_cle
 
 
 ## Two passengers admitted at once, one repacking at the berth and the next
-## unpacking: the fired primary stays until both are cleared.
+## holding the main position (unpacking or in the arch): the fired primary
+## stays until both are cleared.
 func test_a_primary_fired_with_two_passengers_admitted_stays_until_both_clear() -> void:
 	var w := _lane()
 	var officer := StaffTestKit.seat(w.world.staff, w.station, PRIMARY)
@@ -84,7 +85,7 @@ func test_a_primary_fired_with_two_passengers_admitted_stays_until_both_clear() 
 	var both := func() -> bool:
 		return (
 			w.world.passenger(first).security_phase == PHASE.REPACK
-			and w.world.passenger(second).security_phase == PHASE.UNPACK
+			and [PHASE.UNPACK, PHASE.ARCH].has(w.world.passenger(second).security_phase)
 		)
 	while not both.call() and w.world.clock.tick < 3000:
 		w.world.step()

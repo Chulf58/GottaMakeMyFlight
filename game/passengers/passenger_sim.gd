@@ -40,7 +40,9 @@ signal checked_in(id: int, desk: int)
 ## remaining work and resolved incident, and per station the admitted and
 ## returning passengers, the main position and the berth. A version 7 save
 ## keeps a basic scanner's service in progress exactly as it was.
-const SAVE_VERSION := 8
+## 9: a lane's unpack work starts at 3 + 4 per bag, not 6 + 8. A version 8
+## save has its unpack work left scaled to the new start.
+const SAVE_VERSION := 9
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,

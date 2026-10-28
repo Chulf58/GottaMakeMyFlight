@@ -13,7 +13,7 @@ const NO_SHOW_TEXT := {"no_entrance": NEVER_ARRIVED, "late": ARRIVED_LATE}
 
 const STUCK_TEXT := {
 	Passenger.Stuck.NO_CHECKIN: "No check-in desk to go to",
-	Passenger.Stuck.NO_SECURITY: "No security scanner to go to",
+	Passenger.Stuck.NO_SECURITY: "No security scanner or lane to go to",
 	Passenger.Stuck.QUEUE_FULL: "Waiting outside a full queue",
 	Passenger.Stuck.NO_ROUTE: "No walkable route",
 	Passenger.Stuck.EXIT_BLOCKED: "The exit to the plane was blocked",
@@ -26,7 +26,7 @@ const STAGE_TEXT := {
 	Passenger.Stage.CHECKIN: "Still at the check-in desk",
 	Passenger.Stage.TO_SECURITY: "Still walking to security",
 	Passenger.Stage.SECURITY_QUEUE: "Still queuing for security",
-	Passenger.Stage.SECURITY: "Still at the security scanner",
+	Passenger.Stage.SECURITY: "Still at security",
 	Passenger.Stage.TO_GATE: "Still walking to the gate",
 	Passenger.Stage.SITTING_DOWN: "At the gate, but not boarded in time",
 	Passenger.Stage.SEATED: "At the gate, but not boarded in time",
