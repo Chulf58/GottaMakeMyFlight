@@ -351,6 +351,16 @@ func reach_problem(before: Dictionary, after: Dictionary) -> BuildResult:
 	return null
 
 
+## The officer spots of lanes this instance recognised that `standing` did
+## not, as spot -> arch: the spots a placement that completes a lane brings.
+func new_officer_spots(standing: SecurityLanes) -> Dictionary:
+	var out := {}
+	for spot: Vector2i in _officer_spots:
+		if not standing._officer_spots.has(spot):
+			out[spot] = _officer_spots[spot][0]
+	return out
+
+
 func _officer_wall_problem(grid: BuildGrid, cell: Vector2i, side: int, kind: int) -> BuildResult:
 	var closes := kind == BuildGrid.WallKind.PLAIN or kind == BuildGrid.WallKind.GLASS
 	var existing := grid.wall_kind(cell, side)

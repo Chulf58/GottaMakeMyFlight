@@ -348,7 +348,8 @@ func _recognised_lanes() -> SecurityLanes:
 
 
 ## The cells staff can reach from an entrance door (StaffSpots.reach()), as
-## cell -> true; empty with no entrance. Kept until the grid next changes, so
+## cell -> its region (equal regions have a way between them); empty with no
+## entrance. Kept until the grid next changes, so
 ## asking again is free. Read it, never change it.
 func staff_reach() -> Dictionary:
 	if not _staff_reach_known:
@@ -360,7 +361,9 @@ func staff_reach() -> Dictionary:
 ## STAFF_SPOT when applying `edits` together would cut a staff spot staff can
 ## reach now off from every entrance: a standing station's (naming it), an
 ## officer spot of a whole security lane as the grid stands (naming its arch),
-## or the spot of a station the edits place, when staff reach its cell now. Null
+## or a spot the edits bring, when staff reach its cell now: a placed
+## station's, or an officer spot of a lane a placed part completes (naming
+## its arch when the arch already stands). Null
 ## otherwise, always with no entrance on the grid, and with check_staff_reach
 ## off or inside an apply_batch() whose whole batch passed. Each edit must
 ## already be accepted on the grid as it stands, and no two may touch the same
@@ -375,10 +378,12 @@ func staff_reach_problem(edits: Array[BuildEdit]) -> BuildResult:
 		return null
 	var fresh: Array[Vector2i] = []
 	var narrows := false
+	var parts := false
 	for edit in edits:
 		match edit.kind:
 			BuildEdit.Kind.PLACE_OBJECT:
 				narrows = true
+				parts = parts or SecurityLanes.is_part(edit.def_id)
 				var spot := StaffSpots.cell_of(edit.def_id, edit.cell, edit.facing)
 				if spot != BuildObjectDef.NO_CELL:
 					fresh.append(spot)
@@ -389,11 +394,12 @@ func staff_reach_problem(edits: Array[BuildEdit]) -> BuildResult:
 	if not narrows:
 		return null
 	var before := staff_reach()
-	if before.is_empty() or not _any_spot_reached(before, fresh):
+	if before.is_empty() or not (parts or _any_spot_reached(before, fresh)):
 		return null
-	_last_after = _reach_after(edits)
+	var lane_spots := {}
+	_last_after = _reach_after(edits, lane_spots)
 	_last_after_known = true
-	return _reach_problem(before, _last_after, fresh)
+	return _reach_problem(before, _last_after, fresh, lane_spots)
 
 
 ## Whether applying all of `edits` leaves every staff spot staff reach now
@@ -410,6 +416,7 @@ func _batch_keeps_reach(edits: Array[BuildEdit]) -> bool:
 	var trial: Array[BuildEdit] = []
 	var fresh: Array[Vector2i] = []
 	var claimed := {}
+	var parts := false
 	for edit in edits:
 		match edit.kind:
 			BuildEdit.Kind.REMOVE_FLOOR, BuildEdit.Kind.PLACE_WALL:
@@ -423,15 +430,18 @@ func _batch_keeps_reach(edits: Array[BuildEdit]) -> bool:
 				if not _trial_placement(edit, claimed):
 					return false
 				trial.append(edit)
+				parts = parts or SecurityLanes.is_part(edit.def_id)
 				var spot := StaffSpots.cell_of(edit.def_id, edit.cell, edit.facing)
 				if spot != BuildObjectDef.NO_CELL:
 					fresh.append(spot)
 	if trial.is_empty():
 		return true
 	var before := staff_reach()
-	if before.is_empty() or not _any_spot_reached(before, fresh):
+	if before.is_empty() or not (parts or _any_spot_reached(before, fresh)):
 		return true
-	return _reach_problem(before, _reach_after(trial), fresh) == null
+	var lane_spots := {}
+	var after := _reach_after(trial, lane_spots)
+	return _reach_problem(before, after, fresh, lane_spots) == null
 
 
 ## Whether staff reach (`before`) some staff spot now: a station's, a whole
@@ -440,13 +450,26 @@ func _any_spot_reached(before: Dictionary, fresh: Array[Vector2i]) -> bool:
 	return _spots.any_reached(before, fresh) or _recognised_lanes().any_reached(before)
 
 
-## The staff reach rule on a station's spot (StaffSpots.reach_problem()), then
-## on a whole lane's officer spots (SecurityLanes.reach_problem()).
-func _reach_problem(before: Dictionary, after: Dictionary, fresh: Array[Vector2i]) -> BuildResult:
+## The staff reach rule on a station's spot (StaffSpots.reach_problem()), on
+## a whole lane's officer spots (SecurityLanes.reach_problem()), then on the
+## officer spots of lanes the edits complete (`lane_spots`, spot -> arch, from
+## _reach_after()): one staff reach now that `after` loses is refused, naming
+## the arch when it already stands, as a placed station's spot names none.
+func _reach_problem(
+	before: Dictionary, after: Dictionary, fresh: Array[Vector2i], lane_spots: Dictionary
+) -> BuildResult:
 	var problem := _spots.reach_problem(before, after, fresh)
 	if problem == null:
 		problem = _recognised_lanes().reach_problem(before, after)
-	return problem
+	if problem != null:
+		return problem
+	for spot: Vector2i in lane_spots:
+		if before.has(spot) and not after.has(spot):
+			var arch: int = lane_spots[spot]
+			return BuildResult.refused(
+				BuildResult.Reason.STAFF_SPOT, arch if _objects.has(arch) else 0
+			)
+	return null
 
 
 ## Whether a placement can join _batch_keeps_reach()'s trial: not an
@@ -477,7 +500,12 @@ func _is_entrance(object_id: int) -> bool:
 ## take cells away is written into the grid data (an object under an unused
 ## id), the flood runs, and every write is undone in reverse order, so the
 ## grid is exactly as it was. Nothing is emitted and the A* graph is untouched.
-func _reach_after(edits: Array[BuildEdit]) -> Dictionary:
+## When an edit places a lane part, the lanes are recognised on the written
+## grid too, and the officer spots of lanes whole there and not as the grid
+## stands go into `lane_spots` (spot -> arch).
+func _reach_after(edits: Array[BuildEdit], lane_spots: Dictionary) -> Dictionary:
+	var standing := _recognised_lanes()
+	var parts := false
 	var undo := []
 	var trial_id := _next_object_id
 	for edit in edits:
@@ -492,12 +520,17 @@ func _reach_after(edits: Array[BuildEdit]) -> Dictionary:
 				undo.append([edit, trial_id])
 				_insert_object(trial_id, edit.def_id, edit.cell, edit.facing)
 				trial_id += 1
+				parts = parts or SecurityLanes.is_part(edit.def_id)
 			BuildEdit.Kind.REMOVE_OBJECT:
 				# Only an entrance's removal takes cells away; it has no spot.
 				if _is_entrance(edit.object_id):
 					undo.append([edit, _objects[edit.object_id]])
 					_erase_object(edit.object_id)
 	var reach := StaffSpots.reach(self)
+	if parts:
+		var trial_lanes := SecurityLanes.new()
+		trial_lanes.rebuild(self)
+		lane_spots.merge(trial_lanes.new_officer_spots(standing))
 	for i in range(undo.size() - 1, -1, -1):
 		var edit: BuildEdit = undo[i][0]
 		match edit.kind:

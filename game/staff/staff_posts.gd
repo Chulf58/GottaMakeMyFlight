@@ -32,6 +32,11 @@ extends RefCounted
 ## vacancy is left that a member could reach: a helper never leaves a station
 ## closed.
 
+## How many times helper_from() has copied the staff to play the next step
+## (_after_next_step()), for tests and profiling: the copy is the costly part
+## of a forecast.
+static var next_step_copies := 0
+
 
 ## The cell a member working `station` in `slot` stands on, or
 ## BuildObjectDef.NO_CELL: a whole lane's officer spots, else (primary only)
@@ -122,25 +127,48 @@ static func _arrival(staff: StaffSim, station: int, now: int) -> int:
 
 
 ## Whether the next StaffSim.step() may change the helper post of lane
-## `station` beyond walking it: the helper's path is to be planned again, a
-## security primary post is vacant (step 1 promotes, step 3 recalls), a
-## member is leaving (its post comes free), or the helper post is vacant while
-## an officer is idle (step 4). Otherwise the pass leaves it as it is.
+## `station` beyond walking it. With a helper: its path is to be planned again,
+## or a security primary post it has a way to is vacant (step 1 promotes, step
+## 3 recalls) or held by a leaving member (the post comes free once that
+## service ends). With none: the post is vacant and an idle officer in the
+## pool or with a way to it can take it (step 4). A vacancy the helper has no
+## way to never moves it, so it costs no copy however long it stays open.
+## Ways are judged by staff reach regions (_joined()).
 static func _pass_pending(staff: StaffSim, station: int) -> bool:
+	var grid := staff.sim.grid
 	var helper := staff.staff_at(station, StaffMember.Slot.HELPER)
-	if helper != 0 and staff.get_member(helper).needs_replan:
-		return true
-	var idle := false
-	for m in _members(staff):
-		if m.leaving:
-			return true
-		idle = idle or (m.role == StaffMember.Role.SECURITY and m.state == StaffMember.State.IDLE)
 	if helper == 0:
-		return idle and is_vacant(staff, station, StaffMember.Slot.HELPER)
+		if not is_vacant(staff, station, StaffMember.Slot.HELPER):
+			return false
+		var post := staff.spot_of(station, StaffMember.Slot.HELPER)
+		for m in _members(staff):
+			if m.role != StaffMember.Role.SECURITY or m.state != StaffMember.State.IDLE:
+				continue
+			if m.in_pool() or _joined(grid, m.at, post):
+				return true
+		return false
+	var h := staff.get_member(helper)
+	if h.needs_replan:
+		return true
+	for m in _members(staff):
+		if m.leaving and m.role == StaffMember.Role.SECURITY:
+			if _joined(grid, h.at, staff.spot_of(m.station)):
+				return true
 	for other in staff.stations_of(StaffMember.Role.SECURITY):
 		if is_vacant(staff, other, StaffMember.Slot.PRIMARY):
-			return true
+			if _joined(grid, h.at, staff.spot_of(other)):
+				return true
 	return false
+
+
+## Whether staff have a way between cells `a` and `b`: both lie in one region
+## of BuildGrid.staff_reach(), the flood StaffSim's paths follow. True with no
+## entrance on the grid, where regions are not worked out.
+static func _joined(grid: BuildGrid, a: Vector2i, b: Vector2i) -> bool:
+	var reach := grid.staff_reach()
+	if reach.is_empty():
+		return true
+	return reach.has(a) and reach.has(b) and reach[a] == reach[b]
 
 
 ## helper_from() after playing the next StaffSim.step() on a copy of `staff`
@@ -148,6 +176,7 @@ static func _pass_pending(staff: StaffSim, station: int) -> bool:
 ## tick moved on as PassengerSim.on_tick() moves it before stepping the staff,
 ## and put back. A helper on duty now and after counts from now.
 static func _after_next_step(staff: StaffSim, station: int) -> int:
+	next_step_copies += 1
 	var sim := staff.sim
 	var next := StaffSim.new()
 	next.sim = sim

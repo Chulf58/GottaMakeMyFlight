@@ -80,6 +80,53 @@ func test_a_helper_replanning_round_an_edit_still_counts() -> void:
 	assert_int(int(w.cleared[id]) - now).is_equal(eta)
 
 
+## A scanner with no officer in a part of the floor the lane's helper has no
+## way to (its own entrance, a wall line between): a primary vacancy that
+## stays open for good. It can never recall the helper, so forecasts read the
+## helper as it stands and never copy the staff.
+func test_a_vacancy_the_helper_cannot_reach_costs_no_staff_copy() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(20, 16))
+	PassengerTestWorld.place(grid, &"entrance_door", SecurityTestWorld.START, 2)
+	PassengerTestWorld.place(grid, &"exit_door", Vector2i(5, 0), 0)
+	var parts := SecurityLaneBuilder.build(grid, SecurityTestWorld.ARCH_AT, 0, SecurityLanes.RIGHT)
+	var arch: int = parts[SecurityLanes.ARCH]
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(16, 15), 2)
+	var scanner := PassengerTestWorld.place(grid, &"security_scanner", Vector2i(15, 8), 0)
+	for y in 16:
+		var wall := grid.apply(BuildEdit.place_wall(Vector2i(12, y), BuildGrid.Side.WEST))
+		assert_bool(wall.ok).is_true()
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(3000, 6000), 7)
+	world.auto_staff = false
+	var staff := world.staff
+	StaffTestKit.seat(staff, arch, PRIMARY)
+	StaffTestKit.seat(staff, arch, HELPER)
+	for i in 3:
+		world.step()
+	var copies_before := StaffPosts.next_step_copies
+	var forecasts := 0
+	var wrong := 0
+	for i in 10:
+		for j in 5:
+			forecasts += 1
+			wrong += int(StaffPosts.helper_from(staff, arch) != world.sim.tick)
+		world.step()
+	var copies := StaffPosts.next_step_copies - copies_before
+	var vacant := StaffPosts.is_vacant(staff, scanner, PRIMARY)
+	var helped := staff.is_staffed(arch, HELPER)
+	world.free_all()
+	print(
+		(
+			"scanner %d vacant %s, helper on duty %s: %d forecasts, %d staff copies, %d wrong"
+			% [scanner, vacant, helped, forecasts, copies, wrong]
+		)
+	)
+	# The vacancy stayed open and the helper stayed on duty throughout.
+	assert_bool(vacant).is_true()
+	assert_bool(helped).is_true()
+	assert_int(wrong).is_equal(0)
+	assert_int(copies).is_equal(0)
+
+
 func test_a_helper_the_next_pass_recalls_no_longer_counts() -> void:
 	var setup := _repacking()
 	var w: SecurityTestWorld = setup[0]
