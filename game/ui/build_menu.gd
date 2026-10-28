@@ -43,6 +43,12 @@ const CATEGORIES := [
 	{"name": "Doors", "tools": [BuildMode.Tool.ENTRANCE, BuildMode.Tool.EXIT]},
 	{"name": "Check-in", "tools": [BuildMode.Tool.DESK]},
 	{"name": "Security", "tools": [BuildMode.Tool.SCANNER]},
+	# The security lane's four parts in flow order (decisions security-lane-
+	# parts-are-placed-separately-tray-table-x-ray-b and security-lane-parts-
+	# get-their-own-lane-build-category): five cards and the rotate card are
+	# wider than COLUMN_W, so they get a tray of their own, right after
+	# Security.
+	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
 	{"name": "Gates", "tools": [BuildMode.Tool.SEATS]},
 	{
 		"name": "Shops",
@@ -56,16 +62,8 @@ const CATEGORIES := [
 	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
-## The category that is a single button with no tray, while the Lane tray is
-## off (remove_category() holds either way).
-const REMOVE_CATEGORY := 7
-## The security lane's four parts in flow order (decisions security-lane-
-## parts-are-placed-separately-tray-table-x-ray-b and security-lane-parts-get-
-## their-own-lane-build-category): five cards and the rotate card are wider
-## than COLUMN_W, so they get a tray of their own, right after Security. It is
-## in the bar only while SecurityLanes.enabled is on.
-const LANE_CATEGORY := {"name": "Lane", "tools": BuildMode.LANE_TOOLS}
-const LANE_AFTER := "Security"
+## The category that is a single button with no tray.
+const REMOVE_CATEGORY := 8
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -205,16 +203,9 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 	return 0
 
 
-## The categories in bar order: CATEGORIES, with LANE_CATEGORY after
-## LANE_AFTER while SecurityLanes.enabled is on.
+## The categories in bar order (CATEGORIES).
 static func categories() -> Array:
-	var out := CATEGORIES.duplicate()
-	if SecurityLanes.enabled:
-		for i in out.size():
-			if out[i]["name"] == LANE_AFTER:
-				out.insert(i + 1, LANE_CATEGORY)
-				break
-	return out
+	return CATEGORIES.duplicate()
 
 
 ## The index of the Remove button, last in categories().
@@ -223,10 +214,8 @@ static func remove_category() -> int:
 
 
 ## A tool's card [name, thumbnail, size text] from ITEMS or LANE_ITEMS, or
-## an empty array for a tool with no card or one that is off.
+## an empty array for a tool with no card.
 static func item(tool: BuildMode.Tool) -> Array:
-	if not BuildMode.tool_enabled(tool):
-		return []
 	return ITEMS.get(tool, LANE_ITEMS.get(tool, []))
 
 

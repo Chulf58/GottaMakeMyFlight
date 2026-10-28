@@ -1,12 +1,10 @@
 class_name TestBuildMenuSecurity
 extends GdUnitTestSuite
-## The security lane parts in the build menu with the lane feature flag on
-## (SecurityLanes.enabled; decisions security-lane-parts-are-placed-
-## separately-tray-table-x-ray-b and security-lane-parts-get-their-own-lane-
-## build-category): a Lane tray right after Security holding the four parts
-## in flow order, each with its rendered thumbnail (Security 3/8), and a
-## build tool per part. Every case turns the flag on before
-## the menu is built and back off after.
+## The security lane parts in the build menu (decisions security-lane-parts-
+## are-placed-separately-tray-table-x-ray-b and security-lane-parts-get-their-
+## own-lane-build-category): a Lane tray right after Security holding the four
+## parts in flow order, each with its rendered thumbnail (Security 3/8), and a
+## build tool per part.
 
 const LANE_TOOLS := [
 	BuildMode.Tool.TRAY_TABLE,
@@ -27,7 +25,6 @@ var _menu: BuildMenu
 
 
 func before_test() -> void:
-	SecurityLanes.enabled = true
 	_port = SubViewport.new()
 	_port.size = Vector2i(1280, 720)
 	add_child(_port)
@@ -41,7 +38,6 @@ func before_test() -> void:
 
 func after_test() -> void:
 	_port.free()
-	SecurityLanes.enabled = false
 
 
 func _category_named(category_name: String) -> int:
@@ -64,10 +60,10 @@ func test_the_lane_tray_follows_security_and_security_keeps_the_scanner() -> voi
 	var security := _category_named("Security")
 	var lane := _category_named("Lane")
 	assert_int(lane).is_equal(security + 1)
-	assert_int(all.size()).is_equal(BuildMenu.CATEGORIES.size() + 1)
+	assert_int(all.size()).is_equal(BuildMenu.CATEGORIES.size())
 	assert_array(all[security]["tools"]).is_equal([BuildMode.Tool.SCANNER])
 	assert_array(all[lane]["tools"]).is_equal(LANE_TOOLS)
-	assert_int(BuildMenu.remove_category()).is_equal(BuildMenu.REMOVE_CATEGORY + 1)
+	assert_int(BuildMenu.remove_category()).is_equal(BuildMenu.REMOVE_CATEGORY)
 	assert_str(all[BuildMenu.remove_category()]["name"]).is_equal("Remove")
 	assert_str(_menu.category_button(lane).text).is_equal("Lane")
 	assert_str(_menu.category_button(lane + 1).text).is_equal("Gates")

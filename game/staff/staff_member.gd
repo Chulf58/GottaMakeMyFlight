@@ -10,6 +10,9 @@ extends RefCounted
 enum Role { CHECKIN, SECURITY }
 ## WALKING_OUT: fired, on its way to the entrance; no longer staff.
 enum State { IDLE, TO_STATION, ON_DUTY, WALKING_OUT }
+## The post it works at its station (StaffPosts): PRIMARY opens the station,
+## HELPER (at a whole security lane only) speeds up its repacks.
+enum Slot { PRIMARY, HELPER }
 
 const NO_CELL := Vector2i(-1, -1)
 
@@ -18,6 +21,8 @@ var role: Role = Role.CHECKIN
 var state: State = State.IDLE
 ## The desk or scanner it walks to or works at; 0 when idle or walking out.
 var station := 0
+## Which post at `station` it walks to or works; PRIMARY while it has none.
+var slot: Slot = Slot.PRIMARY
 var at := NO_CELL
 ## The committed path, starting at the cell it set out from; empty in the pool.
 var path: Array[Vector2i] = []
@@ -38,6 +43,11 @@ var backing_out := false
 
 func in_pool() -> bool:
 	return at == NO_CELL
+
+
+## Walking to or working a helper post.
+func is_helper() -> bool:
+	return station != 0 and slot == Slot.HELPER
 
 
 func is_moving() -> bool:

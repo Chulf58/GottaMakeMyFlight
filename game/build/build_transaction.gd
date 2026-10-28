@@ -126,8 +126,7 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 			cleared.append_array(result.dirty_cells)
 	var settlement := _settle(wallet, quotes, applied)
 	if not settlement.ok:
-		grid.from_snapshot(snapshot)
-		grid.release_signals(mark)
+		_roll_back(grid, snapshot, mark, "commit_plan", settlement)
 		_emit_refused(grid, plan.back(), settlement)
 		return settlement
 	grid.release_signals()
@@ -167,11 +166,34 @@ static func commit_batch(
 		applied.append(result.ok)
 	var settlement := _settle(wallet, quotes, applied)
 	if not settlement.ok:
-		grid.from_snapshot(snapshot)
-		grid.release_signals(mark)
+		_roll_back(grid, snapshot, mark, "commit_batch", settlement)
 		return _refuse_all(grid, edits, settlement)
 	grid.release_signals()
 	return results
+
+
+## Puts the grid back to `snapshot` after a settlement that did not fit and
+## drops the signals held since `mark`. When the restore itself is refused
+## (BuildGrid.from_snapshot() false), the grid still holds the applied edits:
+## that is pushed as an error naming the failed restore, and the held signals
+## are published instead of dropped, so listeners stay in step with the grid
+## as it really is. The caller still refuses the build: nothing was paid.
+static func _roll_back(
+	grid: BuildGrid, snapshot: Dictionary, mark: int, caller: String, settlement: BuildResult
+) -> void:
+	if grid.from_snapshot(snapshot):
+		grid.release_signals(mark)
+		return
+	push_error(
+		(
+			(
+				"BuildTransaction.%s: the settlement was refused (%s) and restoring the grid failed;"
+				+ " the applied edits stay on the grid, unpaid"
+			)
+			% [caller, settlement.reason_text()]
+		)
+	)
+	grid.release_signals()
 
 
 ## One refusal per edit, each emitted as edit_refused.

@@ -63,9 +63,17 @@ func test_removing_the_winner_hands_the_cell_to_the_other_lane_at_once() -> void
 
 func test_two_arches_across_one_set_of_tables_share_nothing() -> void:
 	# The tables at x = 5 fit the left arch's right side and the right arch's
-	# left side, and each arch stands on the other's officer spot.
-	var ids := SecurityLaneBuilder.build(_grid, Vector2i(4, 6), 0, RIGHT)
+	# left side, and each arch stands on the other's officer spot. The second
+	# arch goes in before the last table: once the first lane is whole,
+	# BuildGrid refuses an object on its officer spot
+	# (test_security_lane_officer_spots).
+	var skip: Array[StringName] = [SecurityLanes.PICKUP_TABLE]
+	var ids := SecurityLaneBuilder.build(_grid, Vector2i(4, 6), 0, RIGHT, skip)
 	var other := PassengerTestWorld.place(_grid, SecurityLanes.ARCH, Vector2i(6, 6), 0)
+	var table: Vector2i = SecurityLanes.geometry(Vector2i(4, 6), 0, RIGHT)["pickup_table"]
+	ids[SecurityLanes.PICKUP_TABLE] = PassengerTestWorld.place(
+		_grid, SecurityLanes.PICKUP_TABLE, table, 0
+	)
 	var lanes := _recognise()
 	var arch: int = ids[SecurityLanes.ARCH]
 	print("arches %d %d: %s %s" % [arch, other, lanes.status_text(arch), lanes.status_text(other)])

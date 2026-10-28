@@ -5,9 +5,13 @@ extends Node
 ## the nearest usable desk or scanner of its role that nobody else has claimed
 ## (the shortest grid path, ties to the lower station id), entering through
 ## the entrance nearest that station when it comes from the pool. It walks to the
-## station's staff spot (StaffSpots: behind a desk, beside a scanner), and a
+## station's staff spot (StaffSpots: behind a desk, beside a scanner; a
+## security lane's primary officer spot), and a
 ## station counts as staffed only while its member is on duty standing there;
-## until then PassengerSim keeps it closed. A station whose spot an old save
+## until then PassengerSim keeps it closed. That member holds the station's
+## primary post. A spare officer helps at a security lane from its helper
+## post; who goes where is the station-wide pass in StaffPosts, played at the
+## start of every step. A station whose spot an old save
 ## left blocked, or that no entrance has a way to, is never staffed. A member
 ## whose station is removed or stops being usable goes idle where it stands;
 ## one whose cell is built over goes back to the pool. A fired member walks
@@ -25,15 +29,29 @@ extends Node
 signal staff_changed
 signal member_state_changed(id: int, state: StaffMember.State)
 
-const SAVE_VERSION := 1
+## 2: members save their post (slot); StaffSnapshot migrates version 1.
+const SAVE_VERSION := 2
+## Who fire() lets go first: [state, slot] pairs, a helper before a primary
+## in the same state, so firing keeps stations open where it can.
+const FIRE_ORDER := [
+	[StaffMember.State.IDLE, StaffMember.Slot.PRIMARY],
+	[StaffMember.State.TO_STATION, StaffMember.Slot.HELPER],
+	[StaffMember.State.ON_DUTY, StaffMember.Slot.HELPER],
+	[StaffMember.State.TO_STATION, StaffMember.Slot.PRIMARY],
+	[StaffMember.State.ON_DUTY, StaffMember.Slot.PRIMARY],
+]
 
 var sim: PassengerSim
 
 var _members: Array[StaffMember] = []
 var _by_id: Dictionary = {}
 var _next_id := 1
-## Derived: station id -> the member walking to it or on duty there.
+## Derived: station id -> the member walking to its primary post or on duty
+## there.
 var _claims: Dictionary = {}
+## Derived: lane station id -> the member walking to its helper post or on
+## duty there.
+var _helpers: Dictionary = {}
 
 
 ## Called by PassengerSim.bind() once its layout is built.
@@ -59,22 +77,27 @@ func hire(role: StaffMember.Role) -> int:
 	return m.id
 
 
-## Lets one member of `role` go: an idle one if any, else one still walking,
-## else one on duty; the highest id within each. It walks out (WALKING_OUT)
-## and stops counting at once. A member on duty with a passenger in service
+## Lets one member of `role` go, in FIRE_ORDER: an idle one if any, else a
+## helper walking or on duty, else a primary walking, else one on duty; the
+## highest id within each. It walks out (WALKING_OUT)
+## and stops counting at once. A primary on duty with a passenger in service
 ## does not leave yet: it is marked leaving, its station takes nobody new
 ## (is_open() is false) and it walks out on the first tick after that service
-## ends, so the station is never unstaffed while it serves. Until then it
-## still counts in count() and on_duty_count(), and in leaving_count().
+## ends, so the station is never unstaffed while it serves. At a security
+## station every admitted passenger is in service, whatever its phase. Until
+## then it still counts in count() and on_duty_count(), and in leaving_count().
 ## Returns false, changing nothing, when every member of that role is already
 ## leaving or walking out, or none is hired.
 func fire(role: StaffMember.Role) -> bool:
-	for state in [StaffMember.State.IDLE, StaffMember.State.TO_STATION, StaffMember.State.ON_DUTY]:
+	for entry: Array in FIRE_ORDER:
+		var state: StaffMember.State = entry[0]
 		for i in range(_members.size() - 1, -1, -1):
 			var m := _members[i]
-			if m.role != role or m.state != state or m.leaving:
+			if m.role != role or m.state != state or m.slot != entry[1] or m.leaving:
 				continue
-			if state == StaffMember.State.ON_DUTY and _in_service(m.station):
+			# A helper serves nobody itself, so it never waits for a service.
+			var serving := state == StaffMember.State.ON_DUTY and not m.is_helper()
+			if serving and _in_service(m.station):
 				m.leaving = true
 			elif _send_out(m):
 				return true
@@ -119,9 +142,11 @@ func get_member(id: int) -> StaffMember:
 	return _by_id.get(id)
 
 
-## Whether a member is on duty at the station: only then is it open.
-func is_staffed(station: int) -> bool:
-	var id: int = _claims.get(station, 0)
+## Whether a member is on duty at the station's `slot` post. Only the primary
+## post opens a station, and a helper alone never does; a helper on duty
+## speeds up a lane's repacks (SecurityRuntime.rate()).
+func is_staffed(station: int, slot := StaffMember.Slot.PRIMARY) -> bool:
+	var id := staff_at(station, slot)
 	return id != 0 and (_by_id[id] as StaffMember).state == StaffMember.State.ON_DUTY
 
 
@@ -134,26 +159,29 @@ func is_open(station: int) -> bool:
 	return not (_by_id[_claims[station]] as StaffMember).leaving
 
 
-## The member walking to or on duty at the station, or 0.
-func staff_at(station: int) -> int:
-	return _claims.get(station, 0)
+## The member walking to or on duty at the station's `slot` post, or 0.
+func staff_at(station: int, slot := StaffMember.Slot.PRIMARY) -> int:
+	var claims := _helpers if slot == StaffMember.Slot.HELPER else _claims
+	return claims.get(station, 0)
 
 
-## Where the member working `station` stands (StaffSpots.spot_of()).
-func spot_of(station: int) -> Vector2i:
-	return StaffSpots.spot_of(sim.grid, station)
+## Where the member working `station` in `slot` stands (StaffPosts.spot()),
+## or BuildObjectDef.NO_CELL.
+func spot_of(station: int, slot := StaffMember.Slot.PRIMARY) -> Vector2i:
+	return StaffPosts.spot(sim.grid, sim.layout, station, slot)
 
 
 ## Whether staff can never work `station` because an old save left its staff
-## spot blocked (StaffSpots.blocked()); such a station stays closed.
+## spot blocked (StaffPosts.blocked()); such a station stays closed.
 func spot_blocked(station: int) -> bool:
-	return StaffSpots.blocked(sim.grid, station)
+	return StaffPosts.blocked(sim.grid, sim.layout, station)
 
 
-## Whether no entrance has a way to `station`'s staff spot
-## (StaffSpots.unreachable()), so nobody is sent there; it stays closed.
-func spot_unreachable(station: int) -> bool:
-	return StaffSpots.unreachable(sim.grid, station)
+## Whether no entrance has a way to `station`'s `slot` spot
+## (StaffPosts.unreachable()), so nobody is sent there; without its primary
+## the station stays closed.
+func spot_unreachable(station: int, slot := StaffMember.Slot.PRIMARY) -> bool:
+	return StaffPosts.unreachable(sim.grid, sim.layout, station, slot)
 
 
 ## Where a member on the floor stands on this tick, in world space.
@@ -162,12 +190,12 @@ func world_position(m: StaffMember) -> Vector3:
 	return sim.grid.origin + Vector3(at.x, 0.0, at.y)
 
 
+## Lets go of posts that went, plays the station-wide pass (StaffPosts.run())
+## and walks every walking member, in id order.
 func step() -> void:
 	_reconcile()
-	var members := _members.duplicate()
-	for m: StaffMember in members:
-		if m.state == StaffMember.State.IDLE and (not m.search_failed or _beat(m)):
-			_assign(m)
+	StaffPosts.run(self, _post, _repost)
+	for m: StaffMember in _members.duplicate():
 		if m.state == StaffMember.State.TO_STATION or m.state == StaffMember.State.WALKING_OUT:
 			_walk(m)
 
@@ -201,10 +229,11 @@ func from_snapshot(data: Dictionary) -> bool:
 func rederive() -> void:
 	_by_id.clear()
 	_claims.clear()
+	_helpers.clear()
 	for m in _members:
 		_by_id[m.id] = m
 		if m.station != 0:
-			_claims[m.station] = m.id
+			_claims_of(m)[m.station] = m.id
 
 
 ## The desks or the scanners, by role.
@@ -212,22 +241,60 @@ func stations_of(role: StaffMember.Role) -> Array[int]:
 	return sim.layout.desks if role == StaffMember.Role.CHECKIN else sim.layout.scanners
 
 
-func _beat(m: StaffMember) -> bool:
-	return posmod(sim.tick, PassengerSim.BEAT_TICKS) == posmod(m.id, PassengerSim.BEAT_TICKS)
+## Sends idle `m` along `path` (from where it stands, or from an entrance's
+## door cell when it is in the pool) to its `slot` post at `station`.
+## StaffPosts.run() calls it.
+func _post(m: StaffMember, station: int, slot: StaffMember.Slot, path: Array[Vector2i]) -> void:
+	m.search_failed = false
+	m.at = path[0]
+	m.station = station
+	m.slot = slot
+	_claims_of(m)[station] = m.id
+	m.set_path(path)
+	_set_state(m, StaffMember.State.TO_STATION)
+
+
+## Moves a member already on the floor, walking or on duty, to its `slot`
+## post at `station`: it plans a way there on its next step, keeping a step
+## in progress (_replan()). StaffPosts.run() calls it to promote or recall a
+## helper.
+func _repost(m: StaffMember, station: int, slot: StaffMember.Slot) -> void:
+	_unclaim(m)
+	m.station = station
+	m.slot = slot
+	_claims_of(m)[station] = m.id
+	m.search_failed = false
+	_set_state(m, StaffMember.State.TO_STATION)
+	m.needs_replan = true
+
+
+## The claims a member's post is kept in: primaries or helpers.
+func _claims_of(m: StaffMember) -> Dictionary:
+	return _helpers if m.slot == StaffMember.Slot.HELPER else _claims
+
+
+## Gives up the member's post: no station, and the primary slot.
+func _unclaim(m: StaffMember) -> void:
+	var claims := _claims_of(m)
+	if claims.get(m.station, 0) == m.id:
+		claims.erase(m.station)
+	m.station = 0
+	m.slot = StaffMember.Slot.PRIMARY
 
 
 ## Members of a station that is gone, not usable, or whose staff spot is
-## blocked or out of reach from every entrance go idle; members standing on a
+## blocked or out of reach from every entrance go idle, as do helpers of a
+## station that is no longer a whole lane; members standing on a
 ## cell that is no longer walkable give up their station and go back to the
 ## pool (one walking out is gone); leaving members whose service has ended
-## walk out.
+## walk out. Every primary post still claimed afterwards is one staff can
+## work: the first step of the pass (StaffPosts).
 func _reconcile() -> void:
 	for i in range(_members.size() - 1, -1, -1):
 		var m := _members[i]
 		if m.station != 0:
-			var usable := sim.layout.is_usable(m.station) and not spot_blocked(m.station)
-			usable = usable and not spot_unreachable(m.station)
-			if not usable or not stations_of(m.role).has(m.station):
+			var workable := StaffPosts.workable(sim.grid, sim.layout, m.station, m.slot)
+			if not workable or not stations_of(m.role).has(m.station):
 				_release(m)
 		if not m.in_pool() and not sim.grid.is_walkable(m.at) and not _backing_out(m):
 			if m.state == StaffMember.State.WALKING_OUT:
@@ -249,8 +316,7 @@ func _backing_out(m: StaffMember) -> bool:
 
 
 func _remove(m: StaffMember) -> void:
-	if _claims.get(m.station, 0) == m.id:
-		_claims.erase(m.station)
+	_unclaim(m)
 	_members.erase(m)
 	_by_id.erase(m.id)
 
@@ -266,9 +332,7 @@ func _leave(m: StaffMember) -> void:
 ## or with no entrance or no path to one, is removed at once, and that removal has already emitted
 ## staff_changed: returns true then, so the caller does not emit it again.
 func _send_out(m: StaffMember) -> bool:
-	if _claims.get(m.station, 0) == m.id:
-		_claims.erase(m.station)
-	m.station = 0
+	_unclaim(m)
 	m.leaving = false
 	m.search_failed = false
 	if m.in_pool() or sim.layout.entrances.is_empty():
@@ -280,7 +344,9 @@ func _send_out(m: StaffMember) -> bool:
 	return not _by_id.has(m.id)
 
 
-## Whether a passenger is being checked in or screened at the station now.
+## Whether a passenger is being checked in or screened at the station now: at
+## a security station any passenger SecurityRuntime has admitted there, in
+## whatever phase (Stage.SECURITY until it is cleared).
 func _in_service(station: int) -> bool:
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
@@ -292,48 +358,11 @@ func _in_service(station: int) -> bool:
 
 
 func _release(m: StaffMember) -> void:
-	if _claims.get(m.station, 0) == m.id:
-		_claims.erase(m.station)
-	m.station = 0
+	_unclaim(m)
 	m.needs_replan = false
 	m.search_failed = false
 	m.clear_path()
 	_set_state(m, StaffMember.State.IDLE)
-
-
-## The nearest unclaimed usable station of the member's role, by path length
-## from where it stands. One in the pool comes in through whichever entrance
-## gives the station the shortest path (ties to the lower entrance id), so a
-## spot staff reach only through a second entrance is still staffed.
-func _assign(m: StaffMember) -> void:
-	if m.in_pool() and sim.layout.entrances.is_empty():
-		m.search_failed = true
-		return
-	var best := 0
-	var best_mm := 0
-	var best_path: Array[Vector2i] = []
-	for station in stations_of(m.role):
-		if _claims.has(station) or not sim.layout.is_usable(station) or spot_blocked(station):
-			continue
-		if spot_unreachable(station):
-			continue
-		var path := _path_in(m, spot_of(station))
-		if path.is_empty():
-			continue
-		var mm := Passenger.path_mm(path)
-		if best == 0 or mm < best_mm:
-			best = station
-			best_mm = mm
-			best_path = path
-	if best == 0:
-		m.search_failed = true
-		return
-	m.search_failed = false
-	m.at = best_path[0]
-	m.station = best
-	_claims[best] = m.id
-	m.set_path(best_path)
-	_set_state(m, StaffMember.State.TO_STATION)
 
 
 ## One tick of walking to a station's spot or out to the entrance. On the
@@ -355,12 +384,13 @@ func _walk(m: StaffMember) -> void:
 		_set_state(m, StaffMember.State.ON_DUTY)
 
 
-## Where a walking member is headed: its station's staff spot, or, when it
-## walks out, the door cell of the entrance with the shortest path from where
-## it stands (the lower entrance id on a tie; NO_CELL when it reaches none).
+## Where a walking member is headed: its post's spot at its station, or, when
+## it walks out, the door cell of the entrance with the shortest path from
+## where it stands (the lower entrance id on a tie; NO_CELL when it reaches
+## none).
 func _target(m: StaffMember) -> Vector2i:
 	if m.state != StaffMember.State.WALKING_OUT:
-		return spot_of(m.station)
+		return spot_of(m.station, m.slot)
 	var best := StaffMember.NO_CELL
 	var best_mm := 0
 	for door in sim.layout.entrances:
@@ -445,32 +475,8 @@ func _replan(m: StaffMember) -> void:
 	m.backing_out = not sim.grid.is_walkable(m.path[0])
 
 
-## The path to `to` from where `m` stands, or, for a member in the pool, the
-## shortest from any entrance's door cell (the lower entrance id on a tie).
-func _path_in(m: StaffMember, to: Vector2i) -> Array[Vector2i]:
-	if not m.in_pool():
-		return _path(m.at, to)
-	var best: Array[Vector2i] = []
-	var best_mm := 0
-	for door in sim.layout.entrances:
-		var path := _path(sim.layout.door_cell(sim.grid, door), to)
-		if path.is_empty():
-			continue
-		var mm := Passenger.path_mm(path)
-		if best.is_empty() or mm < best_mm:
-			best = path
-			best_mm = mm
-	return best
-
-
 func _path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
-	if to == StaffMember.NO_CELL:
-		var none: Array[Vector2i] = []
-		return none
-	if from == to:
-		var here: Array[Vector2i] = [from]
-		return here
-	return sim.grid.find_path(from, to)
+	return StaffPosts.path(sim.grid, from, to)
 
 
 func _set_state(m: StaffMember, state: StaffMember.State) -> void:

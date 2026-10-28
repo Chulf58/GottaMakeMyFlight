@@ -108,8 +108,11 @@ func test_a_blocked_cell_of_the_lane_names_what_it_is_for() -> void:
 	}
 	for key in cases:
 		_grid = PassengerTestWorld.floored(Vector2i(14, 14))
-		var ids := SecurityLaneBuilder.build(_grid, ANCHOR, 3, LEFT)
+		# Blocked before the last part goes in: once the lane is whole, BuildGrid
+		# refuses a block on an officer spot (test_security_lane_officer_spots).
+		var ids := SecurityLaneBuilder.build(_grid, ANCHOR, 3, LEFT, [SecurityLanes.PICKUP_TABLE])
 		SecurityLaneBuilder.block(_grid, lane[key])
+		PassengerTestWorld.place(_grid, SecurityLanes.PICKUP_TABLE, lane["pickup_table"], 3)
 		print("blocked %s at %s" % [key, lane[key]])
 		assert_int(_status_of(ids[SecurityLanes.ARCH])).override_failure_message(key).is_equal(
 			cases[key]
@@ -130,9 +133,13 @@ func test_a_cell_off_the_floor_or_another_station_spot_blocks_the_lane() -> void
 	var floor_back := BuildEdit.paint_floor(lane["berth"], BuildGrid.FLOOR_TILE, 1)
 	assert_bool(_grid.apply(floor_back).ok).is_true()
 	assert_int(_status_of(arch)).is_equal(S.COMPLETE)
-	# A check-in desk whose staff spot is the lane's primary officer spot.
+	# A check-in desk whose staff spot is the lane's primary officer spot,
+	# placed while the lane lacks its pickup table (once whole, BuildGrid
+	# refuses it: test_security_lane_officer_spots).
 	var spot: Vector2i = lane["primary_spot"]
+	assert_bool(_grid.apply(BuildEdit.remove_object(ids[SecurityLanes.PICKUP_TABLE])).ok).is_true()
 	PassengerTestWorld.place(_grid, &"checkin_desk", spot + Vector2i(0, 1), 0)
+	PassengerTestWorld.place(_grid, SecurityLanes.PICKUP_TABLE, lane["pickup_table"], 0)
 	assert_that(StaffSpots.cell_of(&"checkin_desk", spot + Vector2i(0, 1), 0)).is_equal(spot)
 	assert_int(_status_of(arch)).is_equal(S.NO_PRIMARY_SPOT)
 
@@ -150,8 +157,12 @@ func test_a_wall_inside_the_lane_or_by_an_officer_spot_breaks_it() -> void:
 		. is_true()
 	)
 	assert_int(_status_of(arch)).is_equal(S.COMPLETE)
-	# The helper spot (5, 4) is north of the berth (5, 5).
+	# The helper spot (5, 4) is north of the berth (5, 5). The wall goes in
+	# while the lane lacks its pickup table (once whole, BuildGrid refuses it:
+	# test_security_lane_officer_spots).
+	assert_bool(_grid.apply(BuildEdit.remove_object(ids[SecurityLanes.PICKUP_TABLE])).ok).is_true()
 	assert_bool(_grid.apply(BuildEdit.place_wall(lane["berth"], BuildGrid.Side.NORTH)).ok).is_true()
+	PassengerTestWorld.place(_grid, SecurityLanes.PICKUP_TABLE, lane["pickup_table"], 0)
 	assert_int(_status_of(arch)).is_equal(S.NO_HELPER_SPOT)
 
 

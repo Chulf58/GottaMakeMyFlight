@@ -65,12 +65,9 @@ static func closed_reason(sim: PassengerSim, station: int) -> String:
 
 ## Every arch without a whole lane, in id order. An incomplete arch is no
 ## station (TerminalLayout lists neither it nor its parts), so it is neither
-## full nor closed: its sign says what is missing instead. Empty while
-## SecurityLanes.enabled is off.
+## full nor closed: its sign says what is missing instead.
 static func incomplete_arches(sim: PassengerSim) -> Array[int]:
 	var out: Array[int] = []
-	if not SecurityLanes.enabled:
-		return out
 	var lanes := sim.layout.security_lanes
 	for arch in lanes.arches:
 		if not lanes.is_complete(arch):
@@ -78,9 +75,6 @@ static func incomplete_arches(sim: PassengerSim) -> Array[int]:
 	return out
 
 
-## What an incomplete arch lacks first, in words (SecurityLanes.status_text),
-## or "" while SecurityLanes.enabled is off.
+## What an incomplete arch lacks first, in words (SecurityLanes.status_text).
 static func lane_hint(sim: PassengerSim, arch: int) -> String:
-	if not SecurityLanes.enabled:
-		return ""
 	return sim.layout.security_lanes.status_text(arch)

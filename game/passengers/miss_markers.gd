@@ -11,8 +11,8 @@ extends Node3D
 ## placing its passengers. It reads the sim and
 ## never writes to it.
 ##
-## An arch without a whole security lane (MissSignals.incomplete_arches, only
-## while SecurityLanes.enabled) gets a grey sign too, captioned with what it
+## An arch without a whole security lane (MissSignals.incomplete_arches) gets
+## a grey sign too, captioned with what it
 ## lacks first ("Needs a tray table", MissSignals.lane_hint). It is an
 ## ordinary caption in the layout below: the player is looking at their own
 ## half-built lane, the icon always stays, and the build status line says the
