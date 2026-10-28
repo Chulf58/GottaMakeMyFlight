@@ -17,7 +17,7 @@ const CROWD_CELL := Vector2i(16, 12)
 const CROWD_EVERY := 7
 const CROWD_UNTIL := 700
 ## Passengers who check in at once, enough to make a seated guest's deadline
-## pass (two scanners, SECURITY_TICKS each).
+## pass (two scanners, SecurityRuntime.BASIC_SCAN_TICKS or more each).
 const BURST := 22
 
 var _worlds: Array[PassengerTestWorld] = []

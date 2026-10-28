@@ -3,7 +3,9 @@ extends RefCounted
 ## The JSON shape of PassengerSim's state, and its checks on load. Committed
 ## paths, queue order, service ends, seat claims, apron progress and pending
 ## replans are all saved, so nothing is recomputed differently after a load.
-## Cafe visits and counter queues go under "cafe" (CafeSnapshot).
+## Cafe visits and counter queues go under "cafe" (CafeSnapshot), security
+## service under "security" (SecurityRuntime.to_list()) with each passenger's
+## phase, remaining work and resolved incident on its record.
 ## Seat claims and walker counts are rebuilt from the passenger records. The
 ## made and missed totals, each flight's results and the scheduled flights are
 ## saved as they are: settled passengers are retired, so they cannot be rebuilt.
@@ -22,9 +24,12 @@ const KEYS := [
 	"missed",
 	"flight_results",
 	"scheduled",
+	"security",
 ]
 ## The last version before the security traits, migrated on load.
 const V6 := 6
+## The last version before the security runtime, migrated on load.
+const V7 := 7
 const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
 	"id",
@@ -50,9 +55,11 @@ const INT_FIELDS := [
 	"cafe_cooldown",
 	"arrival_type",
 	"carry_on",
+	"security_phase",
+	"security_work",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
-const BOOL_FIELDS := ["late", "cleared", "needs_replan", "liquids", "alarm"]
+const BOOL_FIELDS := ["late", "cleared", "needs_replan", "liquids", "alarm", "incident_resolved"]
 
 
 ## `totals` is [made, missed]; `scheduled` the scheduled flight ids.
@@ -120,6 +127,7 @@ static func save(
 		"missed": totals[1],
 		"flight_results": result_list,
 		"scheduled": scheduled,
+		"security": sim.security.to_list(),
 	}
 
 
@@ -165,6 +173,10 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 	var queues := _queues(data["queues"], ids)
 	if queues.has("error"):
 		return queues
+	var security := _security(data["security"], ids, queues, grid)
+	if security.has("error"):
+		return security
+	out["security"] = security["records"]
 	var no_shows := _no_shows(data["no_shows"])
 	if no_shows.has("error"):
 		return no_shows
@@ -210,21 +222,58 @@ static func _record(p: Passenger) -> Dictionary:
 	return record
 
 
-## A version 6 save as version 7: every passenger gets zero bags and no
-## liquids or alarm, nothing else changes and nothing is drawn. Any other
-## save is returned as it is, for the checks to accept or refuse. The given
-## dictionary is not edited.
+## A version 6 or 7 save as the current version, nothing drawn. Version 6 to
+## 7: every passenger gets zero bags and no liquids or alarm. Version 7 to 8:
+## no passenger has a security phase, except that a basic scanner's passenger
+## in service keeps that service exactly as it was: SCAN with the ticks left
+## to its saved service end as work, its incident counted as resolved, so it
+## ends on the same tick with no repack. Any other save is returned as it is,
+## for the checks to accept or refuse. The given dictionary is not edited.
 static func _migrated(data: Dictionary) -> Dictionary:
-	if not _whole(data.get("save_version")) or int(data["save_version"]) != V6:
+	if not _whole(data.get("save_version")) or int(data["save_version"]) not in [V6, V7]:
 		return data
 	var out := data.duplicate(true)
-	out["save_version"] = PassengerSim.SAVE_VERSION
-	if typeof(out.get("passengers")) == TYPE_ARRAY:
-		for record in out["passengers"]:
+	var passengers: Array = out["passengers"] if typeof(out.get("passengers")) == TYPE_ARRAY else []
+	if int(out["save_version"]) == V6:
+		for record in passengers:
 			if typeof(record) == TYPE_DICTIONARY:
 				record["carry_on"] = 0
 				record["liquids"] = false
 				record["alarm"] = false
+	out["save_version"] = PassengerSim.SAVE_VERSION
+	var by_id := {}
+	for record in passengers:
+		if typeof(record) == TYPE_DICTIONARY:
+			record["security_phase"] = SecurityRuntime.Phase.NONE
+			record["security_work"] = 0
+			record["incident_resolved"] = false
+			if _whole(record.get("id")):
+				by_id[int(record["id"])] = record
+	var security := []
+	var tick := str(out.get("tick")).to_int()
+	var queues: Array = out["queues"] if typeof(out.get("queues")) == TYPE_ARRAY else []
+	for entry in queues:
+		if typeof(entry) != TYPE_DICTIONARY or not _whole(entry.get("serving")):
+			continue
+		var record: Dictionary = by_id.get(int(entry["serving"]), {})
+		var in_scan: bool = _whole(record.get("stage")) and _whole(record.get("service_end"))
+		if not in_scan or int(record["stage"]) != Passenger.Stage.SECURITY:
+			continue
+		record["security_phase"] = SecurityRuntime.Phase.SCAN
+		record["security_work"] = maxi(int(record["service_end"]) - tick, 0)
+		record["incident_resolved"] = true
+		var id := int(entry["serving"])
+		entry["serving"] = 0
+		security.append(
+			{
+				"station": entry.get("station"),
+				"admitted": [id],
+				"returns": [],
+				"main": id,
+				"berth": 0
+			}
+		)
+	out["security"] = security
 	return out
 
 
@@ -240,7 +289,9 @@ static func _top_problem(data: Dictionary) -> String:
 		return "last_batch_seed must be a decimal string"
 	if not _whole(data["next_id"]) or int(data["next_id"]) < 1:
 		return "next_id must be a whole number, 1 or more"
-	for key in ["schedule", "passengers", "queues", "no_shows", "flight_results", "scheduled"]:
+	for key in [
+		"schedule", "passengers", "queues", "no_shows", "flight_results", "scheduled", "security"
+	]:
 		if typeof(data[key]) != TYPE_ARRAY:
 			return "%s must be an array" % key
 	for key in ["made", "missed"]:
@@ -289,6 +340,9 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.cafe_cooldown >= 0
 		and p.carry_on >= 0
 		and p.carry_on <= CarryOnTraits.MAX_BAGS
+		and p.security_phase >= 0
+		and p.security_phase < SecurityRuntime.Phase.size()
+		and p.security_work >= 0
 	)
 	var stage_ok := (
 		p.stage >= 0
@@ -473,6 +527,97 @@ static func _queues(list: Array, ids: Dictionary) -> Dictionary:
 			return {"error": "a queue serves unknown passenger %d" % serving}
 		queues[int(entry["station"])] = {"lane": lane, "holding": holding, "serving": serving}
 	return queues
+
+
+## SecurityRuntime.records from the saved list, as {"records": ...}, or a
+## dictionary with "error". Every passenger in Stage.SECURITY is admitted at
+## exactly one station, its own, with a phase; nobody else has a phase or
+## work; returns are the admitted passengers in RETURN; the main position and
+## the berth are held by admitted passengers or nobody, as the station's tier
+## allows (_service_problem()).
+static func _security(
+	list: Array, ids: Dictionary, queues: Dictionary, grid: BuildGrid
+) -> Dictionary:
+	var records := {}
+	var station_of := {}
+	for entry in list:
+		var ok := typeof(entry) == TYPE_DICTIONARY
+		for key in ["station", "admitted", "returns", "main", "berth"]:
+			ok = ok and entry.has(key)
+		ok = ok and _whole(entry["station"]) and _whole(entry["main"]) and _whole(entry["berth"])
+		ok = (
+			ok
+			and typeof(entry["admitted"]) == TYPE_ARRAY
+			and typeof(entry["returns"]) == TYPE_ARRAY
+		)
+		if not ok or records.has(int(entry["station"])) or (entry["admitted"] as Array).is_empty():
+			return {"error": "a security entry is malformed, empty or repeated"}
+		var station := int(entry["station"])
+		var admitted := []
+		for value in entry["admitted"]:
+			var p: Passenger = ids.get(int(value)) if _whole(value) else null
+			if p == null or station_of.has(p.id) or p.station != station:
+				return {
+					"error": "security at %d admits an unknown or misplaced passenger" % station
+				}
+			station_of[p.id] = station
+			admitted.append(p.id)
+		var returns := []
+		for value in entry["returns"]:
+			if not _whole(value) or not admitted.has(int(value)) or returns.has(int(value)):
+				return {"error": "security at %d returns a passenger it has not admitted" % station}
+			returns.append(int(value))
+		for key in ["main", "berth"]:
+			if int(entry[key]) != 0 and not admitted.has(int(entry[key])):
+				return {"error": "security at %d gives its %s to nobody admitted" % [station, key]}
+		records[station] = {
+			"admitted": admitted,
+			"returns": returns,
+			"main": int(entry["main"]),
+			"berth": int(entry["berth"])
+		}
+		var problem := _service_problem(station, records[station], ids, queues, grid)
+		if problem != "":
+			return {"error": "security at %d: %s" % [station, problem]}
+	for id: int in ids:
+		var p: Passenger = ids[id]
+		var admitted := station_of.has(id)
+		var phased := p.security_phase != SecurityRuntime.Phase.NONE
+		var returning := admitted and (records[station_of[id]]["returns"] as Array).has(id)
+		if (
+			(p.stage == Passenger.Stage.SECURITY) != admitted
+			or phased != admitted
+			or (not admitted and p.security_work != 0)
+			or returning != (p.security_phase == SecurityRuntime.Phase.RETURN)
+		):
+			return {"error": "passenger %d's security phase does not match its station" % id}
+	return {"records": records}
+
+
+## What is wrong with a station's service record, or "": the station must be
+## a basic scanner or an arch on the grid, its admitted passengers must not
+## also stand in any queue, holding list or service, and the record must keep
+## the scheduler's rules for its tier (SecurityRuntime.record_problem()). An
+## arch is judged as a lane; one that is no longer whole is dropped on the
+## next tick.
+static func _service_problem(
+	station: int, record: Dictionary, ids: Dictionary, queues: Dictionary, grid: BuildGrid
+) -> String:
+	var object := grid.get_object(station)
+	var def: StringName = StringName(object["def"]) if not object.is_empty() else &""
+	if def != &"security_scanner" and def != SecurityLanes.ARCH:
+		return "it is not a scanner or a security arch"
+	var units := []
+	for id: int in record["admitted"]:
+		units.append(ids[id])
+		for q: Dictionary in queues.values():
+			if (
+				(q["lane"] as Array).has(id)
+				or (q["holding"] as Array).has(id)
+				or q["serving"] == id
+			):
+				return "passenger %d is admitted and in a queue as well" % id
+	return SecurityRuntime.record_problem(record, units, def == SecurityLanes.ARCH)
 
 
 static func _whole(value: Variant) -> bool:

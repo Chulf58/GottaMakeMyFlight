@@ -88,7 +88,7 @@ func test_a_passenger_heading_for_security_before_choosing_a_scanner_has_a_forec
 	var past_security := JourneyForecast.arrival_tick(_world.sim, airside)
 	print("landside %d airside %d" % [with_security, past_security])
 	assert_int(with_security).is_less(JourneyForecast.NEVER)
-	assert_int(with_security).is_greater(past_security + PassengerSim.SECURITY_TICKS)
+	assert_int(with_security).is_greater(past_security + SecurityRuntime.BASIC_SCAN_TICKS)
 	for scanner in ReferenceTerminal.object_ids(_world.grid)["scanners"]:
 		assert_bool(_world.grid.apply(BuildEdit.remove_object(scanner)).ok).is_true()
 	assert_int(JourneyForecast.arrival_tick(_world.sim, landside)).is_equal(JourneyForecast.NEVER)
@@ -155,7 +155,7 @@ func test_a_landside_visit_resumes_through_security() -> void:
 	var air := CafeForecast.leave_ticks(_world.sim, p, AIRSIDE_CELL, Passenger.Stage.TO_GATE)
 	print("leave landside %d airside %d" % [land, air])
 	assert_int(land).is_less(JourneyForecast.NEVER)
-	assert_int(land).is_greater(air + PassengerSim.SECURITY_TICKS)
+	assert_int(land).is_greater(air + SecurityRuntime.BASIC_SCAN_TICKS)
 
 
 func test_admission_needs_the_margin_before_doors_close() -> void:

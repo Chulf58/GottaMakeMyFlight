@@ -3,7 +3,8 @@ extends RefCounted
 ## Whether a passenger will make its flight at a walk. The forecast covers the
 ## whole remaining journey: the committed path, the queue wait and service at
 ## the stations still ahead (after the road walk to the entrance, inside a
-## terminal shell), the scanner passage, waiting at the gate until
+## terminal shell), security up to its exit (SecurityForecast, which walks the
+## passage itself, so it is not added again here), waiting at the gate until
 ## boarding opens, standing up, the walk to the nearest open exit and the
 ## apron walk to the plane door. Legs not yet planned use octile distance.
 ## Everything is at walking pace, so running raises the slack, and a gap
@@ -70,25 +71,23 @@ static func _to_gate(sim: PassengerSim, p: Passenger) -> Vector3i:
 		road_ticks = walk_ticks(p.apron_total_mm() - p.apron_mm)
 	var choosing := p.stage == Passenger.Stage.TO_SECURITY and p.station == 0
 	if p.stage <= Passenger.Stage.CHECKIN or choosing:
-		# The scanner is chosen as station choice will: soonest estimated finish.
-		var scanner := _soonest_scanner(sim, pos)
+		# The scanner is chosen as station choice will: soonest clearance.
+		var scanner := _soonest_scanner(sim, pos, p)
 		if scanner.y == 0:
 			return Vector3i(NEVER, pos.x, pos.y)
 		if not choosing:
 			wait += sim.wait_ticks(p)
 		wait += scanner.x
-		var passage: Array = sim.layout.passages[scanner.y]
-		mm += _passage_mm(passage)
-		pos = passage[passage.size() - 1]
-	elif p.stage < Passenger.Stage.SECURITY:
-		wait += sim.wait_ticks(p)
-		var passage: Array = sim.layout.passages.get(p.station, [])
-		if passage.is_empty():
+		pos = sim.security.exit_cell(scanner.y)
+	elif p.stage <= Passenger.Stage.SECURITY:
+		# Walking to, queuing at or inside its station: the replay walks it
+		# all, up to the security exit.
+		var clear := SecurityForecast.eta(sim, p)
+		if clear >= NEVER:
 			return Vector3i(NEVER, pos.x, pos.y)
-		mm += Passenger.octile_mm(pos, passage[0]) + _passage_mm(passage)
-		pos = passage[passage.size() - 1]
-	elif p.stage == Passenger.Stage.SECURITY:
-		wait += sim.wait_ticks(p)
+		wait += clear
+		mm = 0
+		pos = sim.security.exit_cell(p.station)
 	elif (
 		p.stage
 		in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED, Passenger.Stage.STANDING_UP]
@@ -98,22 +97,16 @@ static func _to_gate(sim: PassengerSim, p: Passenger) -> Vector3i:
 	return Vector3i(road_ticks + walk_ticks(mm) + wait, pos.x, pos.y)
 
 
-static func _passage_mm(passage: Array) -> int:
-	var cells: Array[Vector2i] = []
-	cells.assign(passage)
-	return Passenger.path_mm(cells)
-
-
-## The scanner with the soonest estimated finish for a passenger standing at
-## `from` (the walk is octile, as no path exists yet) and that finish in ticks
-## (x), and its id (y); id 0 when none is usable. Ties go to the lower id.
-static func _soonest_scanner(sim: PassengerSim, from: Vector2i) -> Vector2i:
+## The scanner where `p`, standing at `from`, is cleared soonest (the walk is
+## octile, as no path exists yet), with that clearance in ticks (x) and its id
+## (y); id 0 when none is usable. Ties go to the lower id.
+static func _soonest_scanner(sim: PassengerSim, from: Vector2i, p: Passenger) -> Vector2i:
 	var best := Vector2i.ZERO
 	for id in sim.layout.scanners:
 		if not sim.layout.is_usable(id):
 			continue
 		var walk_mm := Passenger.octile_mm(from, sim.layout.passages[id][0])
-		var eta := sim.station_eta(id, walk_mm)
+		var eta := sim.station_eta(id, walk_mm, p)
 		if best.y == 0 or eta < best.x:
 			best = Vector2i(eta, id)
 	return best

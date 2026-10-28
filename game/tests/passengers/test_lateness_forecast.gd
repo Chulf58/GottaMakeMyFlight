@@ -106,10 +106,19 @@ func _forecast_with_scanner_load(busy: Array[int], ticks_left: int) -> int:
 	StaffTestKit.staff_all(_world.staff)
 	var scanners: Array = ReferenceTerminal.object_ids(_world.grid)["scanners"]
 	var subject := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	# A scanner's service in progress is SecurityRuntime state: one admitted
+	# passenger scanning, with `ticks_left` of work and no incident.
 	for index in busy:
-		var served := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-		_world.passenger(served).service_end = _world.sim.tick + ticks_left
-		_world.sim._queue(scanners[index])["serving"] = served
+		var served := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		served.stage = Passenger.Stage.SECURITY
+		served.station = scanners[index]
+		served.liquids = false
+		served.alarm = false
+		served.security_phase = SecurityRuntime.Phase.SCAN
+		served.security_work = ticks_left
+		_world.sim.security.records[scanners[index]] = {
+			"admitted": [served.id], "returns": [], "main": served.id, "berth": 0
+		}
 	return JourneyForecast.arrival_tick(_world.sim, _world.passenger(subject))
 
 

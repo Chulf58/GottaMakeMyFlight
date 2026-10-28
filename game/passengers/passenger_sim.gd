@@ -15,7 +15,9 @@ extends Node
 ## are TerminalLayout's fixed, bounded lanes; a passenger arriving at a full
 ## lane waits in its station's holding list. Generic routing never crosses a
 ## scanner; the passenger being serviced walks its passage, and only cleared
-## passengers claim seats or head for the exit.
+## passengers claim seats or head for the exit. Security service, at a basic
+## scanner or a security lane, is SecurityRuntime's from admission on, and a
+## security station's estimate is SecurityForecast's replay.
 
 signal passenger_spawned(id: int)
 signal outcome(id: int, made: bool)
@@ -34,14 +36,17 @@ signal checked_in(id: int, desk: int)
 ## 7: each passenger carries its security traits (bags, liquids, alarm). A
 ## version 6 save is migrated with zero bags and no flags; older ones are
 ## refused.
-const SAVE_VERSION := 7
+## 8: security service state (SecurityRuntime): each passenger's phase,
+## remaining work and resolved incident, and per station the admitted and
+## returning passengers, the main position and the berth. A version 7 save
+## keeps a basic scanner's service in progress exactly as it was.
+const SAVE_VERSION := 8
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
 ## so they play at about 0.66x (male) and 0.84x (female).
 const RUN_MM := 175
 const CHECKIN_TICKS := 60
-const SECURITY_TICKS := 40
 ## The sit clips last 1.2 s.
 const SIT_DOWN_TICKS := 24
 const STAND_UP_TICKS := 24
@@ -94,6 +99,8 @@ var apron_waypoints := PackedVector3Array(
 var layout := TerminalLayout.new()
 ## Cafe visits, their counter queues and seats (CafeSim).
 var cafes := CafeSim.new()
+## Security service after admission, at every scanner and lane.
+var security := SecurityRuntime.new()
 ## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
 var wallet: Wallet
 var grid: BuildGrid
@@ -155,6 +162,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	grid = with_grid
 	tick = clock.tick
 	layout.rebuild(grid)
+	security.bind(self, _security_admitted, _security_cleared)
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	clock.ticked.connect(on_tick)
 	grid.graph_changed.connect(_on_graph_changed)
@@ -299,33 +307,48 @@ func _station_slot(station: int) -> int:
 
 
 ## Ticks until a passenger who walks `walk_mm` to the back of `station`'s
-## queue has been served: the walk, the service in progress, the passengers
-## waiting and its own service. Station choice and the lateness forecast both
-## use it. A closed station never finishes (JourneyForecast.NEVER).
-func station_eta(station: int, walk_mm: int) -> int:
+## queue is done there. At a desk: the walk, the service in progress, the
+## passengers waiting and its own service. At a security station: until `p`
+## (the candidate; a passenger with no carry-on when null) is cleared at the
+## security exit (SecurityForecast). Station choice and the lateness forecast
+## both use it. A closed station never finishes (JourneyForecast.NEVER).
+func station_eta(station: int, walk_mm: int, p: Passenger = null) -> int:
 	if not _is_open(station):
 		return JourneyForecast.NEVER
-	var scanner := layout.passages.has(station)
+	if layout.passages.has(station):
+		var candidate := p
+		if candidate == null:
+			candidate = Passenger.new()
+			candidate.id = _next_id
+		var join := tick + JourneyForecast.walk_ticks(walk_mm) + 1
+		return SecurityForecast.clearance(self, station, candidate, join)
 	var waiting := _station_slot(station)
 	var left := 0
 	if _queues.has(station) and _queues[station]["serving"] != 0:
 		left = _serving_left(_queues[station])
-		if not scanner:
-			waiting -= 1
-	var service := SECURITY_TICKS if scanner else CHECKIN_TICKS
-	return JourneyForecast.walk_ticks(walk_mm) + left + maxi(waiting, 0) * service + service
+		waiting -= 1
+	return (
+		JourneyForecast.walk_ticks(walk_mm)
+		+ left
+		+ maxi(waiting, 0) * CHECKIN_TICKS
+		+ CHECKIN_TICKS
+	)
 
 
-## Ticks until the passenger's service at its current or next station ends.
+## Ticks until the passenger's service at its current or next station ends:
+## for a security stage, until it is cleared at the security exit
+## (SecurityForecast.eta()).
 func wait_ticks(p: Passenger) -> int:
-	var desk_stage := p.stage <= Passenger.Stage.CHECKIN
-	var service := CHECKIN_TICKS if desk_stage else SECURITY_TICKS
-	if p.stage == Passenger.Stage.CHECKIN or p.stage == Passenger.Stage.SECURITY:
+	if p.stage > Passenger.Stage.CHECKIN and p.stage <= Passenger.Stage.SECURITY:
+		if p.station == 0 and not _any_open(layout.scanners):
+			return JourneyForecast.NEVER
+		return SecurityRuntime.BASIC_SCAN_TICKS if p.station == 0 else SecurityForecast.eta(self, p)
+	if p.stage == Passenger.Stage.CHECKIN:
 		return maxi(0, p.service_end - tick)
-	if p.station == 0 and not _any_open(layout.desks if desk_stage else layout.scanners):
+	if p.station == 0 and not _any_open(layout.desks):
 		return JourneyForecast.NEVER
 	if p.station == 0 or not _queues.has(p.station):
-		return service
+		return CHECKIN_TICKS
 	var q: Dictionary = _queues[p.station]
 	var lane: Array = q["lane"]
 	var holding: Array = q["holding"]
@@ -333,9 +356,21 @@ func wait_ticks(p: Passenger) -> int:
 	if p.stage in QUEUE_STAGES:
 		var at := lane.find(p.id)
 		ahead = at if at >= 0 else lane.size() + holding.find(p.id)
-	if desk_stage and q["serving"] != 0:
+	if q["serving"] != 0:
 		ahead -= 1
-	return _serving_left(q) + maxi(ahead, 0) * service + service
+	return _serving_left(q) + maxi(ahead, 0) * CHECKIN_TICKS + CHECKIN_TICKS
+
+
+## SecurityRuntime admitted `p` at its station.
+func _security_admitted(p: Passenger) -> void:
+	_set_stage(p, Passenger.Stage.SECURITY)
+
+
+## SecurityRuntime cleared `p` at its station's exit.
+func _security_cleared(p: Passenger) -> void:
+	p.station = 0
+	p.cleared = true
+	_set_stage(p, Passenger.Stage.TO_GATE)
 
 
 ## Whether a desk or scanner serves (StaffSim.is_open()); never without staff.
@@ -437,6 +472,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_missed = loaded["missed"]
 	_schedule = loaded["schedule"]
 	_queues = loaded["queues"]
+	security.restore(loaded["security"])
 	cafes.restore(loaded["cafe"])
 	_passengers = loaded["passengers"]
 	_by_id.clear()
@@ -574,6 +610,8 @@ func _settled_leftovers(p: Passenger) -> String:
 		held.append("a seat")
 	if cafes.visit_of(p.id) != null:
 		held.append("a cafe visit")
+	if security.holds(p.id):
+		held.append("a security place")
 	for q in _queues.values():
 		if (q["lane"] as Array).has(p.id) or (q["holding"] as Array).has(p.id):
 			held.append("a queue place")
@@ -596,42 +634,38 @@ func _prune_results() -> void:
 				results.erase(flight_id)
 
 
+## A station's tick: finished service, holding passengers moving into the
+## lane, then the next admission. Security stations go to SecurityRuntime.
 func _step_station(station: int) -> void:
 	var q := _queue(station)
 	var cells: Array = layout.lanes[station]
-	var scanner := layout.passages.has(station)
+	if layout.passages.has(station):
+		security.advance(station)
+		_promote(q, cells)
+		security.admit(station, q, cells, _is_open(station))
+		return
 	if q["serving"] != 0:
 		var served: Passenger = _by_id[q["serving"]]
 		if tick >= served.service_end and not served.is_moving():
 			q["serving"] = 0
 			served.station = 0
-			if scanner:
-				served.cleared = true
-				_set_stage(served, Passenger.Stage.TO_GATE)
-			else:
-				(q["lane"] as Array).erase(served.id)
-				_set_stage(served, Passenger.Stage.TO_SECURITY)
-				checked_in.emit(served.id, station)
-	while not (q["holding"] as Array).is_empty() and (q["lane"] as Array).size() < cells.size():
-		var moved: int = (q["holding"] as Array).pop_front()
-		(q["lane"] as Array).append(moved)
-		_by_id[moved].stuck = Passenger.Stuck.NONE
+			(q["lane"] as Array).erase(served.id)
+			_set_stage(served, Passenger.Stage.TO_SECURITY)
+			checked_in.emit(served.id, station)
+	_promote(q, cells)
 	if q["serving"] != 0 or (q["lane"] as Array).is_empty() or not _is_open(station):
 		return
 	var front: Passenger = _by_id[q["lane"][0]]
 	if front.at != cells[0] or front.is_moving():
 		return
 	q["serving"] = front.id
-	if scanner:
-		(q["lane"] as Array).pop_front()
-		front.service_end = tick + SECURITY_TICKS
-		var passage: Array[Vector2i] = []
-		passage.assign(layout.passages[station])
-		front.set_path(passage)
-		_set_stage(front, Passenger.Stage.SECURITY)
-	else:
-		front.service_end = tick + CHECKIN_TICKS
-		_set_stage(front, Passenger.Stage.CHECKIN)
+	front.service_end = tick + CHECKIN_TICKS
+	_set_stage(front, Passenger.Stage.CHECKIN)
+
+
+func _promote(q: Dictionary, cells: Array) -> void:
+	for moved in StationQueue.promote(q, cells):
+		_by_id[moved].stuck = Passenger.Stuck.NONE
 
 
 func _step(p: Passenger) -> void:
@@ -756,7 +790,7 @@ func _choose_station(p: Passenger) -> void:
 		var path := grid.find_path(p.at, cells[mini(_station_slot(station), cells.size() - 1)])
 		if path.is_empty():
 			continue
-		var eta := station_eta(station, Passenger.path_mm(path))
+		var eta := station_eta(station, Passenger.path_mm(path), p)
 		if best == 0 or eta < best_eta:
 			best = station
 			best_eta = eta
@@ -772,12 +806,9 @@ func _choose_station(p: Passenger) -> void:
 
 func _join(p: Passenger) -> void:
 	_incoming[p.station] = _incoming.get(p.station, 0) - 1
-	var q := _queue(p.station)
-	if (q["lane"] as Array).size() < (layout.lanes[p.station] as Array).size():
-		(q["lane"] as Array).append(p.id)
+	if StationQueue.join(_queue(p.station), layout.lanes[p.station], p.id):
 		p.stuck = Passenger.Stuck.NONE
 	else:
-		(q["holding"] as Array).append(p.id)
 		p.stuck = Passenger.Stuck.QUEUE_FULL
 	var to_desk := p.stage == Passenger.Stage.TO_CHECKIN
 	_set_stage(p, Passenger.Stage.CHECKIN_QUEUE if to_desk else Passenger.Stage.SECURITY_QUEUE)
@@ -945,7 +976,13 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 			if touched.has(p.path[i]):
 				p.needs_replan = true
 				break
+	var before := layout.security_lanes
 	layout.rebuild(grid)
+	# A lane that broke or changed (SecurityLanes.broken()) ends its service at
+	# once: its admitted passengers go back to choosing, without clearance.
+	for arch in SecurityLanes.broken(before, layout.security_lanes):
+		for id in security.drop(arch):
+			_send_back(_by_id[id])
 
 
 ## Brings queues and seat claims in line with the layout after an edit: a
@@ -954,16 +991,22 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 ## removed seat leaves its passenger standing.
 func _reconcile() -> void:
 	var stations: Array = _queues.keys()
+	for station in security.records.keys():
+		if not stations.has(station):
+			stations.append(station)
 	stations.sort()
 	for station in stations:
-		var q: Dictionary = _queues[station]
+		var q: Dictionary = _queues.get(station, {"lane": [], "holding": [], "serving": 0})
 		if not layout.is_usable(station):
 			var members: Array = (q["lane"] as Array) + (q["holding"] as Array)
 			if q["serving"] != 0 and not members.has(q["serving"]):
 				members.append(q["serving"])
+			members.append_array(security.drop(station))
 			_queues.erase(station)
 			for id in members:
 				_send_back(_by_id[id])
+			continue
+		if not _queues.has(station):
 			continue
 		if not _is_open(station):
 			_close_queue(station, q)
@@ -981,7 +1024,8 @@ func _reconcile() -> void:
 	cafes.reconcile()
 
 
-## A station without staff on duty: the passenger in service is finished, and
+## A station without staff on duty: the passenger in service is finished (at
+## a security station every admitted passenger, SecurityRuntime), and
 ## everyone else in its lane or holding list stops and chooses again.
 func _close_queue(station: int, q: Dictionary) -> void:
 	var serving: int = q["serving"]
@@ -1022,6 +1066,7 @@ func _leave_station(p: Passenger) -> void:
 		(q["holding"] as Array).erase(p.id)
 		if q["serving"] == p.id:
 			q["serving"] = 0
+	security.release(p)
 	p.station = 0
 
 
