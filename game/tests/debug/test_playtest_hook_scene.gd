@@ -11,9 +11,6 @@ extends GdUnitTestSuite
 
 const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
-const DIR := "user://playtest_scene_test"
-const OFF_DIR := "user://playtest_scene_test_off"
-const AGAIN_DIR := "user://playtest_scene_test_again"
 const STUCK_LIMIT_S := 2.0
 ## The desk ticks count from the first passenger's arrival, the late spawn
 ## and the end from the first state of the starter's first flight.
@@ -31,6 +28,9 @@ const ERROR_TEXT := "PlaytestHook test error"
 ## The starter contract's booked passengers plus the one spawned too late.
 const PASSENGERS := FlightSim.STARTER_TERMS["booked_passengers"] + 1
 
+var _dir := SaveTestKit.run_dir("playtest_scene_test")
+var _off_dir := SaveTestKit.run_dir("playtest_scene_test_off")
+var _again_dir := SaveTestKit.run_dir("playtest_scene_test_again")
 var _main: Node
 var _hook: Node
 var _clock: SimClock
@@ -59,7 +59,7 @@ func before() -> void:
 	add_child(_main)
 	_clock.set_paused(true)
 	_hook = HOOK.new()
-	_hook.configure(true, DIR)
+	_hook.configure(true, _dir)
 	_hook.stuck_limit_s = STUCK_LIMIT_S
 	add_child(_hook)
 	_attached = _hook.attach(_main)
@@ -107,7 +107,7 @@ func after() -> void:
 	_hook.detach()
 	_hook.free()
 	_main.free()
-	for dir in [DIR, OFF_DIR, AGAIN_DIR]:
+	for dir in [_dir, _off_dir, _again_dir]:
 		for name in DirAccess.get_files_at(dir):
 			DirAccess.remove_absolute("%s/%s" % [dir, name])
 		DirAccess.remove_absolute(dir)
@@ -254,7 +254,7 @@ func test_input_is_recorded_for_replay_without_typed_text() -> void:
 
 func test_each_attach_starts_a_new_session_file() -> void:
 	var again: Node = auto_free(HOOK.new())
-	again.configure(true, AGAIN_DIR)
+	again.configure(true, _again_dir)
 	add_child(again)
 	assert_bool(again.attach(_main)).is_true()
 	var first: String = again.log_path()
@@ -281,14 +281,14 @@ func test_events_since_reads_from_an_index() -> void:
 
 func test_a_disabled_hook_attaches_to_nothing_and_writes_nothing() -> void:
 	var off: Node = auto_free(HOOK.new())
-	off.configure(false, OFF_DIR, true)
+	off.configure(false, _off_dir, true)
 	add_child(off)
 	assert_bool(off.is_processing()).is_false()
 	assert_bool(get_tree().node_added.is_connected(off._on_node_added)).is_false()
 	assert_bool(off.attach(_main)).is_false()
 	assert_bool(off.is_attached()).is_false()
 	assert_dict(off.snapshot()).is_equal({"enabled": false, "attached": false})
-	assert_bool(DirAccess.dir_exists_absolute(OFF_DIR)).is_false()
+	assert_bool(DirAccess.dir_exists_absolute(_off_dir)).is_false()
 
 
 ## The mouse events are pushed in the viewport's own (content-scaled) coordinates,

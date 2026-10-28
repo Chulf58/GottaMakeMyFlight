@@ -19,6 +19,14 @@ static func run_path(file_name: String) -> String:
 	return "user://saves/%s_%d.json" % [file_name, OS.get_process_id()]
 
 
+## A directory path for one test run, unique to this Godot process, for tests
+## that write several files under a folder (the playtest log tests). The same
+## reasoning as run_path: a fixed folder is shared by every process on the
+## machine, so one process's cleanup deletes another's files mid-test.
+static func run_dir(dir_name: String) -> String:
+	return "user://%s_%d" % [dir_name, OS.get_process_id()]
+
+
 ## A main scene under `parent` whose sim RNG starts from `seed`, paused so
 ## only step() moves it. Seeded before it enters the tree, so the day-0 offers
 ## are drawn from the seed.
