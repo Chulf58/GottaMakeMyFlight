@@ -1436,6 +1436,10 @@ func _sweep() -> void:
 		_invalid("sweep: no pulled roller turned sharply (control)")
 	if turns[1] > 0:
 		_invalid("sweep: a pulled roller's axle jumped between two frames")
+	var control := CarryChecks.snap_control()
+	print("SWEEP snap control (broken followers must be caught): %s" % [control])
+	if not CarryChecks.snap_control_ok(control):
+		_invalid("sweep: the snap check missed a broken follower or flagged a good one (control)")
 	if checks.is_empty():
 		_invalid("sweep: no carrier was checked")
 	print("SWEEP contacts=%s" % [contacts])

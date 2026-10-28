@@ -7,6 +7,14 @@ extends RefCounted
 
 const CarryContact := preload("res://spike/carry_contact.gd")
 
+## Metres a roller's axle may move beyond its speed limit between two looks
+## (float noise and the walker's own step), and the most it may move when no
+## sim time passed (the clock paused, or two looks in one frame).
+const SNAP_SLACK_M := 0.02
+const STILL_M := 0.001
+const CONTROL_FRAMES := 5
+const CONTROL_DT := 0.1
+
 
 ## The hands holding something of `p` now (".R", ".L"): a hard case's and a
 ## roller's grip, a shoulder strap's hand; a backpack holds none.
@@ -124,10 +132,31 @@ static func detached(
 	return 0.0 if box.grow(reach / scale_by).has_point(local) else 1.0
 
 
-## Each pulled roller's drawn axle this frame against the last: a body turn
-## of more than 60 degrees counts as a sharp turn (turns[0]), an axle move of
-## more than CarryOnProps.SWING_JUMP_M a sim tick (a 60 fps frame at 1x is
-## a third of a tick) counts as a snap (turns[1]).
+## How far a pulled roller's axle may move in `dt` sim ticks: the speed limit
+## of CarryOnProps.SWING_JUMP_M a tick over the time that really passed, plus
+## SNAP_SLACK_M. Nothing but STILL_M when no time passed.
+static func snap_allowance(dt: float) -> float:
+	if dt <= 0.0:
+		return STILL_M
+	return CarryOnProps.SWING_JUMP_M * dt + SNAP_SLACK_M
+
+
+## One pulled roller seen again: `last` is [axle, yaw, sim time] of the look
+## before. A body turn of more than 60 degrees counts as a sharp turn
+## (turns[0]); an axle move beyond snap_allowance() of the sim time between the
+## two looks counts as a snap (turns[1]) and is printed.
+static func judge_pulled(
+	id: int, last: Array, axle: Vector3, yaw: float, now: float, turns: Array
+) -> void:
+	turns[0] += int(absf(angle_difference(last[1], yaw)) > PI / 3.0)
+	var dt := now - float(last[2])
+	var moved := axle.distance_to(last[0])
+	if moved > snap_allowance(dt):
+		turns[1] += 1
+		print("SWEEP snap id=%d moved=%.3f ticks=%.3f" % [id, moved, dt])
+
+
+## Each pulled roller's drawn axle this frame against the last (judge_pulled).
 static func watch_pulled(
 	sim: PassengerSim, views: PassengerViews, pulled: Dictionary, turns: Array, now: float
 ) -> void:
@@ -143,19 +172,60 @@ static func watch_pulled(
 			continue
 		var axle: Vector3 = held["bags"][i].global_transform * CarryOnProps.ROLLER_AXLE
 		if pulled.has(id):
-			var last: Array = pulled[id]
-			turns[0] += int(absf(angle_difference(last[1], body.rotation.y)) > PI / 3.0)
-			# Per sim tick: a slow frame runs several ticks, and the roller
-			# keeps pace with its walker through them.
-			var ticks := maxf(now - float(last[2]), 0.34)
-			if axle.distance_to(last[0]) > CarryOnProps.SWING_JUMP_M * ticks:
-				turns[1] += 1
-				print(
-					(
-						"SWEEP snap id=%d moved=%.2f ticks=%.2f"
-						% [id, axle.distance_to(last[0]), now - float(last[2])]
-					)
-				)
+			judge_pulled(id, pulled[id], axle, body.rotation.y, now, turns)
 		seen[id] = [axle, body.rotation.y, now]
 	pulled.clear()
 	pulled.merge(seen)
+
+
+## The snap check against followers of known quality, through judge_pulled
+## itself, over CONTROL_FRAMES looks CONTROL_DT ticks apart (all inside one
+## tick, as at 120 fps). Returns the snaps each counted: "creeping" moves 0.2 m
+## a look (the old check floored the time at a third of a tick and let it
+## pass), "teleporting" jumps to its target and back, "following" is the real
+## CarryOnProps.follow() with its target 0.9 m across, "still" does not move,
+## "no time passed" is a 0.05 m move and then none with the same look time.
+## Expected snaps: CONTROL_FRAMES, CONTROL_FRAMES, 0, 0 and 1. Each kind's
+## "travelled" is how far its axle got from where it started (a follower
+## that never moved would pass by accident).
+static func snap_control() -> Dictionary:
+	var out := {}
+	var yaw := 0.0
+	var steady := Vector3(0.3, 0.0, -1.0)
+	var target := Vector3(-0.6, 0.0, -1.0)
+	for kind in ["creeping", "teleporting", "following", "still"]:
+		var turns := [0, 0]
+		var axle := steady
+		var now := 10.0
+		for f in CONTROL_FRAMES:
+			var last := [axle, yaw, now]
+			now += CONTROL_DT
+			match kind:
+				"creeping":
+					axle += Vector3(0.2, 0.0, 0.0)
+				"teleporting":
+					axle = target if f % 2 == 0 else steady
+				"following":
+					axle = CarryOnProps.follow(axle, target, CONTROL_DT, 0)
+			judge_pulled(0, last, axle, yaw, now, turns)
+		out[kind] = turns[1]
+		out[kind + " travelled"] = axle.distance_to(steady)
+	var frozen := [0, 0]
+	judge_pulled(0, [steady, yaw, 10.0], steady + Vector3(0.05, 0.0, 0.0), yaw, 10.0, frozen)
+	judge_pulled(0, [steady, yaw, 10.0], steady, yaw, 10.0, frozen)
+	out["no time passed"] = frozen[1]
+	return out
+
+
+## Whether snap_control() came out as it must: both broken followers caught on
+## every look, the good and the still ones never, one snap for the move with no
+## time passed, and the good follower really moved.
+static func snap_control_ok(control: Dictionary) -> bool:
+	return (
+		control["creeping"] == CONTROL_FRAMES
+		and control["teleporting"] == CONTROL_FRAMES
+		and control["following"] == 0
+		and control["still"] == 0
+		and control["no time passed"] == 1
+		and control["following travelled"] > 0.05
+	)
