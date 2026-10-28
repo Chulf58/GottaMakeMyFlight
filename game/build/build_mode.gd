@@ -81,6 +81,9 @@ const TOOL_OBJECTS := {
 	Tool.ARCH: SecurityLanes.ARCH,
 	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
 }
+## The security lane part tools, in flow order. They are off until lanes can
+## be staffed (lane_tools_enabled).
+const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
 ## What one belt cell costs, whatever piece it becomes.
 const BELT_PRICE_ID := &"baggage_belt"
 const BELT_HINT := "Drag to lay a belt"
@@ -129,6 +132,14 @@ const VALID_TINT := Color(0.35, 0.9, 0.45, 0.5)
 const INVALID_TINT := Color(0.95, 0.3, 0.25, 0.5)
 const MARKER_TINT := Color(1.0, 0.85, 0.3, 0.7)
 const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
+
+## The security lane feature flag, off in the game: a whole lane cannot be
+## staffed until the lane staffing item (Security 5/8) lands, and RepairPlan
+## would count it as a working security leg. While it is off the lane part
+## tools cannot be picked, no hotkey maps to them and BuildMenu shows no Lane
+## tray, so no lane part can be built and no save can hold one. Tests turn it
+## on and back off.
+static var lane_tools_enabled := false
 
 @export var grid_size := BuildGrid.DEFAULT_SIZE
 ## When true the grid is centred on the world origin at height 0 and
@@ -278,7 +289,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			apply_at(point)
 
 
+## Whether `which` can be picked: every tool but the lane part tools, which
+## need lane_tools_enabled.
+static func tool_enabled(which: Tool) -> bool:
+	return lane_tools_enabled or not LANE_TOOLS.has(which)
+
+
+## Picks a tool. A tool that is off (tool_enabled()) is refused with a
+## warning and the current tool stays.
 func set_tool(new_tool: Tool) -> void:
+	if not tool_enabled(new_tool):
+		push_warning("BuildMode: tool %s is off (lane_tools_enabled)" % Tool.keys()[new_tool])
+		return
 	cancel_area()
 	tool = new_tool
 	_auto_facing = true
