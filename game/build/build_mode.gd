@@ -48,6 +48,10 @@ enum Tool {
 	BAG_ROOM,
 	BELT,
 	CART,
+	TRAY_TABLE,
+	XRAY_BELT,
+	ARCH,
+	PICKUP_TABLE,
 }
 
 const TOOL_ACTIONS := {
@@ -72,6 +76,10 @@ const TOOL_OBJECTS := {
 	Tool.COUNTER: &"cafe_counter",
 	Tool.TABLE: &"cafe_table",
 	Tool.CART: &"baggage_cart",
+	Tool.TRAY_TABLE: SecurityLanes.TRAY_TABLE,
+	Tool.XRAY_BELT: SecurityLanes.XRAY_BELT,
+	Tool.ARCH: SecurityLanes.ARCH,
+	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
 }
 ## What one belt cell costs, whatever piece it becomes.
 const BELT_PRICE_ID := &"baggage_belt"

@@ -43,6 +43,19 @@ const CATEGORIES := [
 	{"name": "Doors", "tools": [BuildMode.Tool.ENTRANCE, BuildMode.Tool.EXIT]},
 	{"name": "Check-in", "tools": [BuildMode.Tool.DESK]},
 	{"name": "Security", "tools": [BuildMode.Tool.SCANNER]},
+	# The security lane's four parts in flow order (decision security-lane-
+	# parts-are-placed-separately-tray-table-x-ray-b). They get a tray of their
+	# own: five cards and the rotate card are wider than COLUMN_W.
+	{
+		"name": "Lane",
+		"tools":
+		[
+			BuildMode.Tool.TRAY_TABLE,
+			BuildMode.Tool.XRAY_BELT,
+			BuildMode.Tool.ARCH,
+			BuildMode.Tool.PICKUP_TABLE,
+		],
+	},
 	{"name": "Gates", "tools": [BuildMode.Tool.SEATS]},
 	{
 		"name": "Shops",
@@ -57,7 +70,7 @@ const CATEGORIES := [
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray.
-const REMOVE_CATEGORY := 7
+const REMOVE_CATEGORY := 8
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -76,6 +89,10 @@ const ITEMS := {
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
+	BuildMode.Tool.TRAY_TABLE: ["Tray table", "tray_table", ""],
+	BuildMode.Tool.XRAY_BELT: ["X-ray belt", "xray_belt", ""],
+	BuildMode.Tool.ARCH: ["Arch", "arch", ""],
+	BuildMode.Tool.PICKUP_TABLE: ["Pickup table", "pickup_table", ""],
 }
 ## Cards that say what the placed thing needs to work, in the warning colour,
 ## in place of the "Click" hint (the card has no height to spare). A bag room
@@ -84,7 +101,9 @@ const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table"]
+const PLACEHOLDER_THUMBNAILS := [
+	"cafe_room", "counter", "table", "tray_table", "xray_belt", "arch", "pickup_table"
+]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
