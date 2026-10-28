@@ -27,14 +27,15 @@ extends RefCounted
 ## again from there. An incident resolves once (Passenger.incident_resolved).
 ##
 ## Work phases (SCAN, UNPACK, REPACK, PICKUP) keep their remaining integer work
-## on the passenger and lose rate() each tick, so a helper (Security 5/8) can
-## raise the rate without a saved deadline going stale. Walking phases end
+## on the passenger and lose rate() each tick, so a helper officer can raise
+## the rate without a saved deadline going stale. Walking phases end
 ## when the passenger stops walking. Everything happens in admission order on
 ## PassengerSim's tick, and the same code replays a copy of the state for the
 ## forecast (SecurityForecast).
 ##
 ## The host is PassengerSim, or a SecurityForecast replaying a copy: it gives
-## `layout` and get_passenger(id), and bind() takes what to call when a
+## `layout`, `staff` (a StaffSim or null, read by rate()) and
+## get_passenger(id), and bind() takes what to call when a
 ## passenger is admitted and when it is cleared.
 
 enum Phase { NONE, SCAN, UNPACK, ARCH, TO_BERTH, REPACK, RETURN, PICKUP, LEAVE }
@@ -45,6 +46,10 @@ const BASIC_SCAN_TICKS := 40
 const BASIC_BAG_TICKS := 15
 ## Repacking after liquids or an alarm, at either tier (at rate 1).
 const REPACK_TICKS := 80
+## Repack work done per tick at a lane with a helper officer on duty: the
+## repack takes half as long (ruling security-lane-staffing-one-officer-
+## opens-a-lane-and-a-second).
+const HELPER_RATE := 2
 ## Lane: stepping up to the tray table, and each bag into a tray.
 const LANE_UNPACK_TICKS := 6
 const LANE_UNPACK_BAG_TICKS := 8
@@ -83,10 +88,17 @@ func bind(host: Object, admitted := Callable(), cleared := Callable()) -> void:
 	_cleared = cleared
 
 
-## How much work a phase loses per tick at `station`: 1 for now. The hook for
-## a helper officer (Security 5/8), who raises it for the phases it helps.
-func rate(_station: int, _phase: int) -> int:
-	return 1
+## How much work a phase loses per tick at `station`: HELPER_RATE for a
+## repack (after liquids or an alarm) while a helper officer is on duty there
+## (StaffSim.is_staffed() for the HELPER slot), else 1. Only a whole lane
+## has a helper post. The rate is applied to the remaining work each tick, so
+## a helper who arrives or leaves mid-repack changes only what is left.
+func rate(station: int, phase: int) -> int:
+	if phase != Phase.REPACK:
+		return 1
+	var staff: StaffSim = _host.staff
+	var helped := staff != null and staff.is_staffed(station, StaffMember.Slot.HELPER)
+	return HELPER_RATE if helped else 1
 
 
 static func incident_open(p: Passenger) -> bool:

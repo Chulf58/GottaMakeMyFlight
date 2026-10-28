@@ -37,6 +37,21 @@ static func staff_all(staff: StaffSim, roles: Array[StaffMember.Role] = []) -> i
 	return seated
 
 
+## Hires a security officer and puts it on duty at once on `station`'s `slot`
+## spot (StaffSim.spot_of()); returns its id. A lane's helper post is seated
+## this way, as is a primary post when a test wants one without the others
+## staff_all() would seat.
+static func seat(staff: StaffSim, station: int, slot: StaffMember.Slot) -> int:
+	var member := staff.get_member(staff.hire(StaffMember.Role.SECURITY))
+	member.station = station
+	member.slot = slot
+	member.at = staff.spot_of(station, slot)
+	member.clear_path()
+	member.state = StaffMember.State.ON_DUTY
+	staff.rederive()
+	return member.id
+
+
 ## Everything that decides what a member does next, one entry per member.
 static func signature(staff: StaffSim) -> String:
 	var parts := PackedStringArray()
@@ -46,12 +61,13 @@ static func signature(staff: StaffSim) -> String:
 			parts
 			. append(
 				(
-					"%d|%d|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d"
+					"%d|%d|%d|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d"
 					% [
 						id,
 						m.role,
 						m.state,
 						m.station,
+						m.slot,
 						m.at,
 						m.path_index,
 						m.path.size(),

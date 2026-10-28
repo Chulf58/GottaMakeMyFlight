@@ -23,6 +23,9 @@ const HORIZON := 200000
 ## What SecurityRuntime reads from its host (see its header).
 var tick := 0
 var layout: TerminalLayout
+## The sim's staff, so a helper on duty now speeds the replayed repacks as it
+## does the real ones; taken as it is now, like whether the station is open.
+var staff: StaffSim
 
 var _sim: PassengerSim
 var _station := 0
@@ -94,6 +97,7 @@ func _setup(sim: PassengerSim, station: int) -> void:
 	_station = station
 	tick = sim.tick
 	layout = sim.layout
+	staff = sim.staff
 	_open = sim.staff != null and sim.staff.is_open(station)
 	_cells = sim.layout.lanes[station]
 	_runtime.bind(self, _on_admitted, _on_cleared)

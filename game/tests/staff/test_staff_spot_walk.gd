@@ -139,6 +139,9 @@ func test_an_old_save_on_duty_at_a_station_with_a_blocked_spot_loads_the_member_
 	var desk: int = ReferenceTerminal.object_ids(_w.grid)["desks"][0]
 	var service: Vector2i = _w.sim.layout.lanes[desk][0]
 	var data: Dictionary = JSON.parse_string(StaffTestKit.save_text(_w))
+	# An old save: its member record has no slot, as staff save version 1
+	# wrote it, so it loads through the version 1 migration.
+	data["staff"]["save_version"] = 1
 	data["staff"]["next_id"] = 2
 	data["staff"]["members"] = [
 		{
