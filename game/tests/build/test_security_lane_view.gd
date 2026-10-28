@@ -48,7 +48,9 @@ func test_every_lane_part_draws_its_own_kit_model() -> void:
 func test_each_part_fits_its_cell_and_only_belt_ends_reach_the_edge() -> void:
 	# Facing 0, local frame: front is +Z. [x half, -z reach, +z reach] per part.
 	var reach := {
-		SecurityLanes.ARCH: [0.42, 0.42, 0.42],
+		# The arch's posts reach 0.495 m across (Security 7/8: a 0.91 m clear
+		# passage for the 2 m Toon passengers' arm swing); still inside the cell.
+		SecurityLanes.ARCH: [0.495, 0.42, 0.42],
 		SecurityLanes.TRAY_TABLE: [0.38, 0.5, 0.42],
 		SecurityLanes.XRAY_BELT: [0.405, 0.5, 0.5],
 		SecurityLanes.PICKUP_TABLE: [0.36, 0.42, 0.5],

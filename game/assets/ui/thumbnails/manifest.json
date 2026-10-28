@@ -133,7 +133,7 @@
       "class": "door_1x1",
       "style": 3,
       "sources": {
-        "security_arch.glb": "9ca63103b472a888dd3b33a7194ea20f2e13f11475f3b82f36666a8b05b9bb0c"
+        "security_arch.glb": "b779139de83054f0a0fe4e2baac53382d48bfa904ef19b465a6e619003a328d3"
       }
     },
     "pickup_table": {
