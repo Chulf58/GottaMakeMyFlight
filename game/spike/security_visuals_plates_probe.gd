@@ -4,9 +4,10 @@ extends SceneTree
 ## main/main.tscn with a new random sim seed (printed), builds the starter
 ## terminal through the HUD, swaps its east basic scanner for a whole security
 ## lane (arch on the divider, LEFT mirror, facing 0, the divider walls under
-## the lane removed) and keeps the west basic scanner. Every station is staffed
-## with StaffTestKit.staff_all, a stand-in for lane staffing until Security
-## 5/8, so the lane's officers do not stand on their real spots here. Then
+## the lane removed) and keeps the west basic scanner. Staff are hired as the
+## panel hires them (one per station, plus a second officer who becomes the
+## lane's helper) and walk to their posts (StaffPosts), and the two lane
+## officers are plated on their spots with the way each faces. Then
 ## passengers with chosen carry-on are sent to security and each moment below
 ## is plated the first time it happens:
 ##   lane:  queue front held back, unpack (bags into the tray), the tray riding
@@ -93,7 +94,6 @@ var _sheets := {}
 
 
 func _initialize() -> void:
-	SecurityLanes.enabled = true  # Lanes are off in this tree until Security 5/8.
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=", _out_dir)
@@ -179,16 +179,27 @@ func _boot() -> void:
 	build.set_tool(BuildMode.Tool.NONE)
 	_build_lane(build)
 	var staff := _main.get_node("Staff") as StaffSim
-	var seated := StaffTestKit.staff_all(staff)
-	print("PROBE staffed=%d lane_open=%s" % [seated, staff.is_open(_arch)])
+	var hired := StarterFlight.hire_per_station(_sim, staff)
+	hired += int(staff.hire(StaffMember.Role.SECURITY) != 0)
 	var flights := _main.get_node("FlightSim") as FlightSim
-	var issued := func() -> bool: return flights.flight_ids().has(StarterFlight.first_flight())
-	if not StarterFlight.advance_until(_clock, issued, 4000):
-		_invalid("the starter's first flight was never issued")
-	if not staff.is_open(_arch):
-		_invalid("the lane is not open")
+	var doors := StarterFlight.advance_until_open(_clock, flights, staff)
+	print(
+		(
+			"PROBE hired=%d doors_tick=%d lane_open=%s primary=%d helper=%d"
+			% [
+				hired,
+				doors,
+				staff.is_open(_arch),
+				staff.staff_at(_arch),
+				staff.staff_at(_arch, StaffMember.Slot.HELPER)
+			]
+		)
+	)
+	if doors < 0 or not staff.is_open(_arch):
+		_invalid("the airport did not open or the lane is not staffed")
 	hud.press_speed(1)
 	await _frames(10)
+	await _plate_officers(staff)
 
 
 func _build_lane(build: BuildMode) -> void:
@@ -436,7 +447,12 @@ func _play() -> void:
 
 func _match(name: String) -> int:
 	for id in _sim.passenger_ids():
-		if _views.node_for(id) != null and _settled(id) and _hit(name, _sim.get_passenger(id)):
+		var p := _sim.get_passenger(id)
+		if _views.node_for(id) == null or not _settled(id) or not _hit(name, p):
+			continue
+		# A passenger the sim walks through another one (they share cells) is
+		# not a fair plate subject: wait for a moment with room around it.
+		if name == "lane_1_queue_hold" or _room_around(id) >= 0.5:
 			return id
 	return 0
 
@@ -448,6 +464,17 @@ func _settled(id: int) -> bool:
 		if props.transfer_progress(id, i) < 1.0:
 			return false
 	return true
+
+
+## The distance from passenger `id` to the nearest other drawn passenger.
+func _room_around(id: int) -> float:
+	var me := _views.node_for(id).global_position
+	var nearest := INF
+	for other in _sim.passenger_ids():
+		var node := _views.node_for(other)
+		if other != id and node != null:
+			nearest = minf(nearest, node.global_position.distance_to(me))
+	return nearest
 
 
 func _in_security() -> int:
@@ -672,7 +699,7 @@ func _check_clearance(name: String, id: int) -> void:
 			% [name, id, points.size(), part_hits, bag_parts, bag_body, homes, nearest]
 		)
 	)
-	if _basic_node != null and p.station == _basic_node.get_meta("record")["id"]:
+	if _basic_node != null and p.station == _sim.grid.object_at(BASIC_AT):
 		# The basic scanner's 0.70 m booth is another asset (the interior
 		# kit's security_scanner), outside this lane's work: its contacts are
 		# printed for the report and do not fail the probe.
@@ -683,8 +710,10 @@ func _check_clearance(name: String, id: int) -> void:
 				CarryContact.bag_points(bags[i].global_transform), _basic_node
 			)
 		print(
-			"BASIC_SCANNER %s body_points_in_booth=%d bag_points_in_booth=%d (reported, not failed)"
-			% [name, in_booth, bags_in_booth]
+			(
+				"BASIC_SCANNER %s body_points_in_booth=%d bag_points_in_booth=%d (reported, not failed)"
+				% [name, in_booth, bags_in_booth]
+			)
 		)
 	if points.is_empty():
 		_invalid("%s: no drawn body points to check" % name)
@@ -736,6 +765,104 @@ func _wall_boxes(grid: BuildGrid) -> void:
 				_part_boxes.append(["wall", Transform3D.IDENTITY, box])
 				count += 1
 	print("WALLS boxes=%d near the lane" % count)
+
+
+## The lane's two officers on their spots (primary beside the X-ray belt,
+## helper beside the berth), each shown (PlateSight) and in frame, with the
+## way each faces printed against the belt, the berth and the arch's front.
+func _plate_officers(staff: StaffSim) -> void:
+	var characters := _main.get_node("StaffCharacters") as StaffCharacters
+	var subjects := {}
+	var rows := []
+	var ok := true
+	for slot in [StaffMember.Slot.PRIMARY, StaffMember.Slot.HELPER]:
+		var id := staff.staff_at(_arch, slot)
+		var member := staff.get_member(id) if id != 0 else null
+		var node := characters.node_for(id) if id != 0 else null
+		if member == null or node == null:
+			_invalid("lane officer in slot %d is missing" % slot)
+			return
+		var spot := staff.spot_of(_arch, slot)
+		var faces := Vector2(sin(node.global_rotation.y), cos(node.global_rotation.y))
+		var to_belt := Vector2(_lane["xray_belt"] - spot).normalized()
+		var to_berth := Vector2(_lane["berth"] - spot).normalized()
+		var front := Vector2(_lane["front"])
+		(
+			rows
+			. append(
+				(
+					(
+						"OFFICER slot=%s id=%d at=%s spot=%s on_duty=%s faces=%s"
+						+ " dot_belt=%.2f dot_berth=%.2f dot_arch_front=%.2f"
+					)
+					% [
+						"primary" if slot == StaffMember.Slot.PRIMARY else "helper",
+						id,
+						member.at,
+						spot,
+						member.state == StaffMember.State.ON_DUTY,
+						faces.snapped(Vector2.ONE * 0.01),
+						faces.dot(to_belt),
+						faces.dot(to_berth),
+						faces.dot(front)
+					]
+				)
+			)
+		)
+		ok = ok and member.at == spot and member.state == StaffMember.State.ON_DUTY
+		subjects[node] = "officer%d" % slot
+	for row in rows:
+		print(row)
+	if not ok:
+		_invalid("a lane officer is not on duty on its spot")
+	paused = true
+	var centre := _sim.grid.cell_to_world(ARCH_AT)
+	for turn in 4:
+		var yaw := wrapf(0.6 + turn * PI / 2.0, -PI, PI)
+		_aim(centre, 8.0, yaw)
+		paused = false
+		_clock.set_paused(true)
+		await _frames(20)
+		paused = true
+		_clock.set_paused(false)
+		var img: Image = await PlateSight.grab(self)
+		var owners: Array[Node] = []
+		for path in OCCLUDER_OWNERS:
+			owners.append(_main.get_node(path))
+		owners.append(_main.get_node("StaffCharacters"))
+		var holder := PlateSight.colliders(root, owners, subjects)
+		await physics_frame
+		await physics_frame
+		var twin: Dictionary = await PlateSight.hud_twin(self, _main)
+		var frame := Rect2(
+			Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
+		)
+		var shown := 0
+		for node in subjects:
+			var tag: String = subjects[node]
+			var seen := PlateSight.person_shown(
+				_cam,
+				holder.get_meta("bounds").get(tag, AABB()),
+				tag,
+				frame,
+				img,
+				twin["image"],
+				MIN_SUBJECT_PX
+			)
+			print(
+				(
+					"INFRAME officers yaw=%.2f %s px=%s on=%d blockers=%s ok=%s"
+					% [yaw, tag, seen.get("px"), seen["on"], seen["blockers"], seen["ok"]]
+				)
+			)
+			shown += int(seen["ok"])
+		holder.free()
+		if shown == subjects.size():
+			_save(img, "officers_on_spots", "whole")
+			paused = false
+			return
+	paused = false
+	_invalid("the two lane officers are not both shown from any heading")
 
 
 ## A plate strip of one lane passenger crossing the arch while the game runs

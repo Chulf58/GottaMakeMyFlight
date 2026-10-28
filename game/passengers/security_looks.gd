@@ -133,23 +133,25 @@ static func bag_homes(sim: PassengerSim, p: Passenger) -> Array[Home]:
 
 
 ## Which hand holds bag `index` of `p` when it is carried: 0 the right, 1 the
-## left. Two bags take one hand each. One bag is in the right hand, except at
-## a lane (queuing or inside it) when the right hand is on the side of the
-## lane's parts and arch for the way the passenger walks: then the left, so
-## the bag passes the arch and tables on the open side.
+## left. Two bags take one hand each. One bag is in the right hand, unless
+## the cell beside the passenger on its right, for the way it walks (or last
+## walked), is closed off by a wall or holds an object (a lane part, a desk)
+## and the left is open: then the left, so the bag passes on the open side.
 static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if p.carry_on > 1:
 		return index
-	var lane := lane_of(sim, p)
-	if lane.is_empty() or p.path.size() < 2:
+	if p.path.size() < 2:
 		return 0
 	var at := clampi(p.path_index, 0, p.path.size() - 2)
 	var step := p.path[at + 1] - p.path[at]
 	if step == Vector2i.ZERO:
 		return 0
-	var ahead := world_dir(step)
-	var right := ahead.cross(Vector3.UP)
-	return 1 if right.dot(world_dir(lane["side"])) > 0.0 else 0
+	var right := world_dir(step).cross(Vector3.UP)
+	var right_step := Vector2i(signi(roundi(right.x)), signi(roundi(right.z)))
+	var cell := p.at
+	if _side_closed(sim.grid, cell, right_step) and not _side_closed(sim.grid, cell, -right_step):
+		return 1
+	return 0
 
 
 ## The scale every bag of `p` is drawn at.
@@ -180,6 +182,15 @@ static func floor_spot(_sim: PassengerSim, p: Passenger, index: int, count: int)
 	if p.stage in PassengerSim.SEAT_STAGES:
 		return Transform3D(across, Vector3(side, 0.0, SEAT_AHEAD_M))
 	return Transform3D(across, Vector3(side, 0.0, FLOOR_AHEAD_M))
+
+
+## Whether the edge of `cell` toward `toward` (a straight grid step) has a
+## wall, or the cell beyond holds an object.
+static func _side_closed(grid: BuildGrid, cell: Vector2i, toward: Vector2i) -> bool:
+	var side := BuildGrid.SIDE_STEP.find(toward)
+	if side < 0:
+		return false
+	return grid.has_wall(cell, side) or grid.object_at(cell + toward) != 0
 
 
 ## Whether `p` sits at a gate chair or a cafe seat (or is sitting down or

@@ -13,18 +13,14 @@ const APART_M := 0.44
 
 var _worlds: Array[SecurityTestWorld] = []
 var _views: Array[PassengerViews] = []
-var _lanes_were := false
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
-	_lanes_were = SecurityLanes.enabled
-	SecurityLanes.enabled = true
 
 
 func after() -> void:
 	PassengerTestWorld.tracker = null
-	SecurityLanes.enabled = _lanes_were
 
 
 func after_test() -> void:
