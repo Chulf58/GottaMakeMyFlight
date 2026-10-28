@@ -1448,12 +1448,13 @@ func _sweep() -> void:
 			carriers.append(id)
 			var clip := (body.get_node("AnimationPlayer") as AnimationPlayer).current_animation
 			var own := CarryContact.body_points(body, _gripping(p))
-			var hits := _bag_bag(drawn)
-			for bag in drawn:
-				hits += CarryContact.inside_meshes(own, bag)
+			var pair := _bag_bag(drawn)
+			if pair > 0:
+				contacts["bag_bag"] = contacts.get("bag_bag", 0) + pair
 			for i in drawn.size():
 				var key := "%s/v%d/%s" % [KIND_NAMES[SecurityLooks.bag_kind(p, i)], p.variant, clip]
 				checks[key] = checks.get(key, 0) + 1
+				var hits := CarryContact.inside_meshes(own, drawn[i])
 				if hits > 0:
 					if not contacts.has(key):
 						print(

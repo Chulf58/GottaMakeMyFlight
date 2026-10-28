@@ -227,7 +227,7 @@ func test_the_overhead_route_crosses_above_the_head() -> void:
 ## the strap and a backpack leaves both arms free; worn bags stay inside the
 ## corridor (0.44 m either side of its centre). The hands' places are not
 ## checked here: a headless skeleton is not animated (the windowed probe
-## checks them). Control: more than one kind is seen.
+## checks them). Control: every kind is seen, and a worn bag was measured.
 func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 	var w := SecurityTestWorld.make(true)
 	_worlds.append(w)
@@ -281,7 +281,8 @@ func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 			% [seen, widest]
 		)
 	)
-	assert_int(seen.size()).is_greater(1)
+	assert_int(seen.size()).is_equal(SecurityLooks.Kind.size())
+	assert_float(widest).is_greater(0.2)
 	assert_float(widest).is_less(0.44)
 	for kind: int in seen:
 		var arms: Array = seen[kind]

@@ -102,6 +102,9 @@ const PULL_LEAN_DEGREES := 12.0
 ## Pull_Top's origin.
 const ROLLER_AXLE := Vector3(0.0, 0.03, -0.19)
 const ROLLER_GRIP_PAST_TOP_M := 0.015
+## The roller's carry handle (build_carry_on_kit.py Roller_Handle), where a
+## lifted roller is held.
+const ROLLER_HANDLE := Vector3(0.0, 0.225, 0.165)
 ## A stretchable strip or rod as built (build_carry_on_kit.py REACH_BUILT).
 const REACH_BUILT_M := 0.02
 ## Kind -> [the stretched node, the node moved to its end].
@@ -209,7 +212,10 @@ static func carried(
 	var out := lateral if (grip - centre).dot(lateral) >= 0.0 else -lateral
 	var inward := -out
 	var hang := Basis(inward.cross(Vector3.UP), inward, Vector3.UP).scaled(Vector3.ONE * scale_by)
-	return Transform3D(hang, grip - hang * Vector3(0.0, box.end.y, box.end.z))
+	var anchor := Vector3(0.0, box.end.y, box.end.z)
+	if kind == SecurityLooks.Kind.ROLLER:
+		anchor = ROLLER_HANDLE
+	return Transform3D(hang, grip - hang * anchor)
 
 
 ## A hard case carried in front of the body (a cell closed on both sides):
@@ -503,9 +509,10 @@ func draw() -> void:
 		if held["tray"] != null:
 			(held["tray"] as Node3D).global_transform = tray_xf
 		held["weight"] = _front_weight(held, now)
-		_pose_arms(held, body, now)
 		_body_ids[body] = id
+		# Bags first: a new move is stamped there, and the arms follow it.
 		_place_bags(held, body, tray_xf, now)
+		_pose_arms(held, body, now)
 
 
 ## Puts the bags of one passenger in place (draw(), _on_pose()).
@@ -534,7 +541,12 @@ func _place_bags(held: Dictionary, body: Node3D, tray_xf: Transform3D, now: floa
 		var from_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
 		var reach: float = want_reach[0]
 		if k < 1.0:
-			reach = lerpf(bag["reach_from"], reach, _reach_blend(kind, k, to_hand))
+			var to_pull: bool = to_hand and bag["carry"] == SecurityLooks.Carry.PULL
+			reach = lerpf(
+				bag["reach_from"],
+				reach,
+				_reach_blend(kind, k, to_pull if kind == SecurityLooks.Kind.ROLLER else to_hand)
+			)
 		_set_reach(node, kind, reach)
 		if k >= 1.0:
 			node.global_transform = want
