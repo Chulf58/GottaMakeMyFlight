@@ -36,20 +36,6 @@ enum Stage {
 
 enum Stuck { NONE, NO_CHECKIN, NO_SECURITY, QUEUE_FULL, NO_ROUTE, EXIT_BLOCKED }
 
-## The stages of a cafe visit. The enum's order is not the journey's order
-## for them: never compare a stage against these with < or >.
-const CAFE_STAGES: Array[Stage] = [
-	Stage.CAFE_WALK,
-	Stage.CAFE_QUEUE,
-	Stage.CAFE_ORDER,
-	Stage.CAFE_TO_SEAT,
-	Stage.CAFE_SITTING_DOWN,
-	Stage.CAFE_SEATED,
-	Stage.CAFE_STANDING_UP,
-]
-const CAFE_SEAT_STAGES: Array[Stage] = [
-	Stage.CAFE_SITTING_DOWN, Stage.CAFE_SEATED, Stage.CAFE_STANDING_UP
-]
 const STRAIGHT_MM := 1000
 const DIAGONAL_MM := 1414
 const NO_CELL := Vector2i(-1, -1)
@@ -119,8 +105,11 @@ var security_work := 0
 var incident_resolved := false
 
 
+## Whether the stage is one of a cafe visit's. The enum's order is not the
+## journey's order for them: never compare one with < or > (StageKinds
+## classifies every stage).
 static func in_cafe(stage: Stage) -> bool:
-	return CAFE_STAGES.has(stage)
+	return StageKinds.facility(stage) == StageKinds.Facility.CAFE
 
 
 static func segment_mm(a: Vector2i, b: Vector2i) -> int:
