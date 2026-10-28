@@ -105,6 +105,23 @@ func test_another_object_adds_no_hint() -> void:
 	assert_str(_hover(Vector2i(2, 2))).is_empty()
 
 
+func test_a_resting_pointer_does_not_recognise_the_lanes_again() -> void:
+	_mode.set_tool(BuildMode.Tool.NONE)
+	_lane([SecurityLanes.XRAY_BELT])
+	var before := _mode.lane_hint_scans
+	for i in 5:
+		assert_str(_hover(ANCHOR)).is_equal(SecurityLanes.STATUS_TEXT[S.NO_XRAY_BELT])
+	assert_int(_mode.lane_hint_scans).is_equal(before + 1)
+	# An edit drops the cached hint: the next frame works it out again.
+	var belt: Vector2i = SecurityLanes.geometry(ANCHOR, 0, SecurityLanes.RIGHT)["xray_belt"]
+	PassengerTestWorld.place(_mode.grid, SecurityLanes.XRAY_BELT, belt, 0)
+	assert_str(_hover(ANCHOR)).is_empty()
+	assert_int(_mode.lane_hint_scans).is_equal(before + 2)
+	# Moving to another cell works that cell's hint out.
+	assert_str(_hover(ELSEWHERE)).is_empty()
+	assert_int(_mode.lane_hint_scans).is_equal(before + 3)
+
+
 func test_nothing_is_added_while_lanes_are_off() -> void:
 	SecurityLanes.enabled = false
 	_mode.set_tool(BuildMode.Tool.NONE)

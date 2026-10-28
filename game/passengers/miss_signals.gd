@@ -78,6 +78,9 @@ static func incomplete_arches(sim: PassengerSim) -> Array[int]:
 	return out
 
 
-## What an incomplete arch lacks first, in words (SecurityLanes.status_text).
+## What an incomplete arch lacks first, in words (SecurityLanes.status_text),
+## or "" while SecurityLanes.enabled is off.
 static func lane_hint(sim: PassengerSim, arch: int) -> String:
+	if not SecurityLanes.enabled:
+		return ""
 	return sim.layout.security_lanes.status_text(arch)

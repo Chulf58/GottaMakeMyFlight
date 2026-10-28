@@ -178,6 +178,15 @@ func test_a_whole_lane_with_a_full_queue_shows_the_queue_full_sign() -> void:
 func test_an_incomplete_arch_shows_nothing_while_lanes_are_off() -> void:
 	SecurityLanes.enabled = false
 	_attach([SecurityLanes.XRAY_BELT])
+	# The control: the layout still recognises the arch as incomplete, so only
+	# the flag keeps every helper silent.
+	assert_int(_world.sim.layout.security_lanes.status(_arch)).is_equal(S.NO_XRAY_BELT)
 	assert_array(MissSignals.incomplete_arches(_world.sim)).is_empty()
+	assert_str(MissSignals.lane_hint(_world.sim, _arch)).is_empty()
 	assert_object(_markers.hint_sign_for(_arch)).is_null()
 	assert_str(_markers.hint_text(_arch)).is_empty()
+	SecurityLanes.enabled = true
+	assert_array(MissSignals.incomplete_arches(_world.sim)).is_equal([_arch])
+	assert_str(MissSignals.lane_hint(_world.sim, _arch)).is_equal(
+		SecurityLanes.STATUS_TEXT[S.NO_XRAY_BELT]
+	)

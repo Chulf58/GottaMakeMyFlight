@@ -170,6 +170,9 @@ var facing := 0
 ## Probe hook: a viewport point read in place of the real mouse by the hover
 ## and ghost. (-1, -1), the default, reads the mouse; nothing in the game sets it.
 var pointer_override := Vector2(-1.0, -1.0)
+## How many times the lane hint under the pointer was worked out afresh rather
+## than reused; for the tests.
+var lane_hint_scans := 0
 
 ## False once R is pressed, until a tool is picked again. While true, the
 ## door tools ignore `facing` and use DoorPlacement.auto_facing().
@@ -187,6 +190,11 @@ var _hover_key := ""
 var _hover_edit: BuildEdit
 ## What the status line adds for the lane part under the pointer ("" for none).
 var _lane_hint := ""
+## The hint last worked out and its cell; any grid edit drops it, so a pointer
+## resting on a cell does not recognise the lanes again every frame.
+var _hint_cell := Vector2i.ZERO
+var _hint_cached := false
+var _hint_cache := ""
 ## True while the pointer maps to a cell inside the grid, whether or not the
 ## picked tool makes an edit there (a room tool makes none before a drag).
 var _pointer_on_grid := false
@@ -222,6 +230,7 @@ func _ready() -> void:
 		grid = BuildGrid.new(shell.grid_size, shell.grid_origin)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
+	grid.graph_changed.connect(_on_lane_graph_changed)
 	_view.name = "BuildView"
 	add_child(_view)
 	_view.refresh(grid)
@@ -690,7 +699,7 @@ func _update_ghost(point: Variant) -> void:
 		return
 	var edit: BuildEdit = null if point == null else edit_at(point)
 	_hover_edit = edit
-	var hint := "" if point == null else lane_hint(grid, grid.world_to_cell(point))
+	var hint := "" if point == null else _lane_hint_at(grid.world_to_cell(point))
 	if edit == null:
 		_ghost.visible = false
 		var idle_key := "" if hint == "" else "lane:" + hint
@@ -908,6 +917,23 @@ static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
 		if (lanes.candidate(arch)["parts"] as Dictionary).values().has(id):
 			return lanes.status_text(arch)
 	return NOT_IN_LANE
+
+
+## lane_hint() for the cell under the pointer, kept until the pointer moves to
+## another cell or the grid changes.
+func _lane_hint_at(cell: Vector2i) -> String:
+	if not SecurityLanes.enabled:
+		return ""
+	if not _hint_cached or cell != _hint_cell:
+		lane_hint_scans += 1
+		_hint_cell = cell
+		_hint_cache = lane_hint(grid, cell)
+		_hint_cached = true
+	return _hint_cache
+
+
+func _on_lane_graph_changed(_cells: Array[Vector2i]) -> void:
+	_hint_cached = false
 
 
 func _set_status(text: String) -> void:
