@@ -51,9 +51,12 @@ const REPACK_TICKS := 80
 ## repack takes half as long (ruling security-lane-staffing-one-officer-
 ## opens-a-lane-and-a-second).
 const HELPER_RATE := 2
-## Lane: stepping up to the tray table, and each bag into a tray.
-const LANE_UNPACK_TICKS := 6
-const LANE_UNPACK_BAG_TICKS := 8
+## Lane: stepping up to the tray table, and each bag into a tray. Walking the
+## arch is most of the main position's hold, so these are kept small enough
+## that a lane clears a stream about 1.9 times as fast as the basic scanner
+## (TestSecurityTierBalance).
+const LANE_UNPACK_TICKS := 3
+const LANE_UNPACK_BAG_TICKS := 4
 ## Lane: collecting the trays at the pickup table.
 const LANE_PICKUP_TICKS := 2
 const LANE_PICKUP_BAG_TICKS := 4

@@ -35,8 +35,8 @@ const LANE_PHASES := [
 const WALK := 98
 const SCAN := 40
 const SCAN_BAG := 15
-const UNPACK := 6
-const UNPACK_BAG := 8
+const UNPACK := 3
+const UNPACK_BAG := 4
 const PICKUP := 2
 const PICKUP_BAG := 4
 
@@ -113,7 +113,7 @@ func test_the_forecast_equals_measured_clearance_at_the_basic_scanner() -> void:
 
 
 func test_the_forecast_equals_measured_clearance_at_the_lane() -> void:
-	_check_tier(true, 2386, LANE_PHASES)
+	_check_tier(true, 2197, LANE_PHASES)
 
 
 static func _walk(mm: int) -> int:
