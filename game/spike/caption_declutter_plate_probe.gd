@@ -109,6 +109,9 @@ func _run() -> void:
 	var full := Rect2(Vector2.ZERO, Vector2(img.get_size()))
 	var shown: Array[Rect2] = []
 	var staff_rects: Array[Rect2] = []
+	var staff_plain: Array[Rect2] = []
+	var staff_moved := 0
+	var home := Vector2(0.0, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX)
 	var icons: Array[Rect2] = []
 	for station: int in closed:
 		var sign := markers.closed_sign_for(station)
@@ -133,6 +136,9 @@ func _run() -> void:
 			if not caption.visible:
 				_invalid("station %d: a staff-spot caption is hidden" % station)
 			staff_rects.append(rect)
+			staff_plain.append(MissMarkers.caption_rect(at, caption.text))
+			if not caption.offset.is_equal_approx(home):
+				staff_moved += 1
 	print("PROBE captions_shown=%d of %d" % [shown.size(), closed.size()])
 	if shown.is_empty():
 		_invalid("no caption shows, so nothing was checked")
@@ -147,6 +153,17 @@ func _run() -> void:
 	print("PROBE staff_spot_captions=%d frame=%s" % [staff_rects.size(), full])
 	if staff_rects.size() < 2:
 		_invalid("fewer than 2 staff-spot captions, so the moved path was not engaged")
+	# Before the layout the staff-spot captions at their own places overlap, so
+	# it had something to move; after it, at least one left its home offset.
+	var plain_overlap := false
+	for i in staff_plain.size():
+		for j in range(i + 1, staff_plain.size()):
+			plain_overlap = plain_overlap or staff_plain[i].intersects(staff_plain[j])
+	print("PROBE unmodified=%s overlap=%s moved=%d" % [staff_plain, plain_overlap, staff_moved])
+	if not plain_overlap:
+		_invalid("the unmodified staff-spot rects do not overlap, so nothing needed moving")
+	if staff_moved == 0:
+		_invalid("no staff-spot caption left its home offset")
 	for rect in staff_rects:
 		var inside := full.encloses(rect)
 		var on_icon := false

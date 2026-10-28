@@ -55,6 +55,8 @@ static var _caption_sizes: Dictionary = {}
 var sim: PassengerSim
 ## How many times the caption layout ran; it skips a draw where nothing changed.
 var declutter_runs := 0
+## How many staff-spot captions found no valid spot (one error pushed each).
+var no_spot_errors := 0
 
 ## Station id -> sign, for the queue-full signs and the closed signs.
 var _signs: Dictionary = {}
@@ -81,7 +83,8 @@ var _stations: Array[int] = []
 var _icons: Array[Rect2] = []
 var _icon_bins: Dictionary = {}
 ## Stations whose staff-spot caption found no valid spot, so the error is
-## pushed once, not on every layout.
+## pushed once per station, not on every layout; an entry lasts until the
+## station's sign is removed.
 var _no_spot: Dictionary = {}
 var _order: Array[int] = []
 var _placed: Array[Rect2] = []
@@ -297,13 +300,13 @@ func _clear_spot(i: int, view_size: Vector2) -> Rect2:
 			if not view.encloses(rect) or _hits_in(rect.grow(CAPTION_MARGIN_PX), _bins, _placed):
 				continue
 			if not _hits_in(rect, _icon_bins, _icons):
-				_no_spot.erase(_stations[i])
 				return rect
 			if not best_found:
 				best = rect
 				best_found = true
 	if not _no_spot.has(_stations[i]):
 		_no_spot[_stations[i]] = true
+		no_spot_errors += 1
 		push_error(
 			(
 				"MissMarkers: no clear spot inside the view for the caption of station %d"
@@ -470,4 +473,5 @@ func _drop_sign(signs: Dictionary, station: int) -> void:
 	sign.visible = false
 	_free_signs.append(sign)
 	signs.erase(station)
+	_no_spot.erase(station)
 	_dirty = true

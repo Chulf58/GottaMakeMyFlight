@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name TestClosedCaptionOverlap
 extends GdUnitTestSuite
 ## Neighbouring station captions must not print over each other ("ClCloseded").
@@ -343,6 +344,37 @@ func test_a_column_of_staff_spot_captions_near_the_top_stays_in_view_and_off_ico
 		for other in stations:
 			assert_bool(rect.intersects(_icon_rect_of(other))).is_false()
 	_assert_clear_by_the_margin(_shown_rects())
+
+
+## A view too small for any caption to fit in leaves a staff-spot caption no
+## valid spot. It stays visible, and the error (counted in no_spot_errors, as
+## gdUnit does not fail on push_error here) is raised once per station, also
+## after the view grows back and shrinks again.
+func test_a_staff_spot_caption_with_no_valid_spot_stays_visible_and_errors_once() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var station: int = MissSignals.closed_stations(_world.sim)[0]
+	_caption_of(station).text = MissMarkers.UNREACHABLE_CAPTION
+	_nudge_camera()
+	# Control: in the full view it has a spot, so there is no error yet.
+	assert_int(_markers.no_spot_errors).is_equal(0)
+	# Control: the caption is wider than the small view, so no spot can fit.
+	var small := Vector2i(100, 100)
+	assert_float(MissMarkers.caption_size(MissMarkers.UNREACHABLE_CAPTION).x).is_greater(small.x)
+	_port.size = small
+	_nudge_camera()
+	assert_int(_markers.no_spot_errors).is_equal(1)
+	assert_bool(_caption_of(station).visible).is_true()
+	# The same station laid out again: still shown, no second error.
+	_nudge_camera()
+	assert_int(_markers.no_spot_errors).is_equal(1)
+	assert_bool(_caption_of(station).visible).is_true()
+	# Zoom out and back in: the view grows, then shrinks again.
+	_port.size = Vector2i(1920, 1080)
+	_nudge_camera()
+	_port.size = small
+	_nudge_camera()
+	assert_int(_markers.no_spot_errors).is_equal(1)
+	assert_bool(_caption_of(station).visible).is_true()
 
 
 func test_of_two_overlapping_plain_closed_captions_the_leftmost_stays() -> void:
