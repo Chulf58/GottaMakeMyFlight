@@ -510,10 +510,34 @@ func drawn_count() -> int:
 	return count
 
 
+func _ready() -> void:
+	RenderingServer.frame_pre_draw.connect(_unposed)
+
+
+func _exit_tree() -> void:
+	if RenderingServer.frame_pre_draw.is_connected(_unposed):
+		RenderingServer.frame_pre_draw.disconnect(_unposed)
+
+
+## Before the frame is drawn: bags going to a hand that draw() left to
+## _on_pose, on a skeleton that did not report this frame, are placed now.
+func _unposed() -> void:
+	var frame := Engine.get_process_frames()
+	var now := _now()
+	for id in _held:
+		var held: Dictionary = _held[id]
+		if held.get("left_to_pose", -1) != frame or held.get("posed_frame", -2) == frame:
+			continue
+		var body := views.node_for(id)
+		if body != null:
+			_place_bags(held, body, _tray_transform(held, body), now, Placing.HAND)
+
+
 ## Places every prop for this frame. A bag going to a hand is placed when the
 ## character's skeleton has its final pose for the frame (_on_pose), so it does
 ## not trail the hand by a frame; here only when the skeleton did not report
-## last frame (paused, or not animated), so it is placed once per frame.
+## last frame (paused, or not animated), so it is placed once per frame, and
+## before the frame is drawn (_unposed) if the skeleton stops reporting.
 func draw() -> void:
 	var now := _now()
 	for id in _held:
@@ -528,6 +552,8 @@ func draw() -> void:
 		_body_ids[body] = id
 		# Bags first: a new move is stamped there, and the arms follow it.
 		var posed: bool = held.get("posed_frame", -2) == Engine.get_process_frames() - 1
+		if posed:
+			held["left_to_pose"] = Engine.get_process_frames()
 		_place_bags(held, body, tray_xf, now, Placing.NOT_HAND if posed else Placing.ALL)
 		_pose_arms(held, body, now)
 
@@ -740,11 +766,11 @@ func _trail(bag: Dictionary, body: Node3D, id: int, home: SecurityLooks.Home, ha
 	var cur := trail(walked, behind)
 	if (cur - now).dot(behind) < 0.0:
 		# The walker turned back past its roller (it is ahead now, not round a
-		# corner beside it): it swings the roller round behind it rather than
-		# walk through the rods.
+		# corner beside it): the roller swings round behind it over the next
+		# tick (drawn from where it was) rather than the walker crossing the
+		# rods.
 		walked = [now]
 		cur = trail(walked, behind)
-		bag.erase("axle")
 	bag["walked"] = walked
 	# Kept behind the walker on the pulling hand's side, so the rods never
 	# cross behind the legs to the other side (a zig-zag of diagonal steps
