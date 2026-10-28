@@ -6,8 +6,7 @@ extends GdUnitTestSuite
 ## belt and pickup table lie on one line at belt height in flow order (the
 ## queue side first), and the parts' belt ends meet with no gap. Lane cells
 ## come from SecurityLanes.geometry() (the contract at the top of
-## game/build/security_lanes.gd). The lane flag is turned on for this file
-## and restored after.
+## game/build/security_lanes.gd).
 
 const GRID := Vector2i(9, 9)
 const ANCHOR := Vector2i(4, 4)
@@ -26,17 +25,6 @@ const MOUNTS := {
 const BELT_TOP := 0.74
 ## Kit pieces are authored to the millimetre; export bounds hold to 6 mm.
 const EPS := 0.006
-
-var _was_enabled := false
-
-
-func before() -> void:
-	_was_enabled = SecurityLanes.enabled
-	SecurityLanes.enabled = true
-
-
-func after() -> void:
-	SecurityLanes.enabled = _was_enabled
 
 
 func test_every_lane_part_draws_its_own_kit_model() -> void:

@@ -147,14 +147,6 @@ const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(-1, -1),
 ]
 
-## The security lane feature flag, off in the game: a whole lane cannot be
-## staffed until the lane staffing item (Security 5/8) lands, and RepairPlan
-## would count it as a working security leg. While it is off, BuildMode will
-## not pick or use a lane part tool, BuildMenu shows no Lane tray, and
-## BuildGrid.from_snapshot() refuses a snapshot holding a lane part, so no
-## lane can be built or loaded. Tests turn it on and back off.
-static var enabled := false
-
 ## Every arch on the grid, in id order.
 var arches: Array[int] = []
 ## Arch id -> the lane() dictionary of its whole lane.
@@ -167,6 +159,8 @@ var _status := {}
 var _piece_owner := {}
 ## Cell -> the arch whose lane claimed it.
 var _cell_owner := {}
+## Officer spot cell of a whole lane -> [the arch, the cell it works beside].
+var _officer_spots := {}
 
 
 ## The named cells of a lane rooted at an arch at `anchor` and `facing`, on
@@ -242,6 +236,7 @@ func rebuild(grid: BuildGrid) -> void:
 	_status.clear()
 	_piece_owner.clear()
 	_cell_owner.clear()
+	_officer_spots.clear()
 	var ids := grid.object_ids()
 	ids.sort()
 	var others := {}
@@ -308,6 +303,47 @@ func lane_of_piece(object_id: int) -> int:
 ## The arch whose whole lane names `cell`, or 0.
 func lane_at(cell: Vector2i) -> int:
 	return _cell_owner.get(cell, 0)
+
+
+## A STAFF_SPOT refusal naming the arch when `edit` would block an officer
+## spot of a lane this instance recognised on `grid`, or null: an object
+## whose footprint, interaction cell or staff spot falls on one, a plain or
+## glass wall on an open edge between an officer spot and the part or berth
+## it works beside, or the floor taken from under one. BuildGrid.validate()
+## asks it about every edit its other rules accept, as it asks StaffSpots
+## about a desk's or scanner's spot. Removing a lane part is not refused: it
+## ends the lane (the removal policy above), which frees its spots.
+func officer_spot_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+	if _officer_spots.is_empty():
+		return null
+	var cells: Array[Vector2i] = []
+	match edit.kind:
+		BuildEdit.Kind.PLACE_OBJECT:
+			var def := BuildCatalog.get_def(edit.def_id)
+			cells = def.footprint(edit.cell, edit.facing)
+			cells.append(def.interaction_cell(edit.cell, edit.facing))
+			cells.append(StaffSpots.cell_of(edit.def_id, edit.cell, edit.facing))
+		BuildEdit.Kind.REMOVE_FLOOR:
+			cells = [edit.cell]
+		BuildEdit.Kind.PLACE_WALL:
+			return _officer_wall_problem(grid, edit.cell, edit.side, edit.wall_kind)
+	for cell in cells:
+		if _officer_spots.has(cell):
+			return BuildResult.refused(BuildResult.Reason.STAFF_SPOT, _officer_spots[cell][0])
+	return null
+
+
+func _officer_wall_problem(grid: BuildGrid, cell: Vector2i, side: int, kind: int) -> BuildResult:
+	var closes := kind == BuildGrid.WallKind.PLAIN or kind == BuildGrid.WallKind.GLASS
+	var existing := grid.wall_kind(cell, side)
+	if not closes or (existing != BuildGrid.WallKind.NONE and existing != BuildGrid.WallKind.DOOR):
+		return null
+	var other := cell + BuildGrid.SIDE_STEP[side]
+	for pair in [[cell, other], [other, cell]]:
+		var entry: Array = _officer_spots.get(pair[0], [])
+		if not entry.is_empty() and entry[1] == pair[1]:
+			return BuildResult.refused(BuildResult.Reason.STAFF_SPOT, entry[0])
+	return null
 
 
 ## {"lane": the candidate, "status": Status, "present": parts found}.
@@ -398,6 +434,8 @@ func _claim(lane: Dictionary) -> void:
 		_piece_owner[lane["parts"][part]] = arch
 	for cell in lane_cells(lane):
 		_cell_owner[cell] = arch
+	_officer_spots[lane["primary_spot"]] = [arch, lane["xray_belt"]]
+	_officer_spots[lane["helper_spot"]] = [arch, lane["berth"]]
 
 
 ## Free floor no earlier lane claimed: no object, no interaction cell and no

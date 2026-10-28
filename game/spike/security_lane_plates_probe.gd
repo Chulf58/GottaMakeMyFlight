@@ -9,7 +9,7 @@ extends SceneTree
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game \
 ##     -s res://spike/security_lane_plates_probe.gd
 ##
-## Turns SecurityLanes.enabled on for this run only. Stages: six orthographic
+## Stages: six orthographic
 ## views at true scale beside a 1 m cube of each lane part, drawn by
 ## BuildView.make_object_node (so a placeholder box would show); then one whole
 ## lane (arch, tray table, X-ray belt, pickup table at the cells
@@ -57,10 +57,9 @@ var _stage_started_ms := 0
 
 
 func _initialize() -> void:
-	SecurityLanes.enabled = true
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
-	print("PROBE out_dir=", _out_dir, " lanes_enabled=", SecurityLanes.enabled)
+	print("PROBE out_dir=", _out_dir)
 	_run.call_deferred()
 
 

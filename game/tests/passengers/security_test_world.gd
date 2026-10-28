@@ -9,9 +9,8 @@ extends RefCounted
 ## (unpack (5, 7), pickup (5, 5), exit (5, 4), berth (4, 5)) or a basic
 ## scanner anchored on (5, 5) facing 0 (passage (5, 7) to (5, 4)). Both queue
 ## from (5, 7) down to (5, 12) and clear their passengers on (5, 4). The
-## lane's arch is staffed by StaffTestKit.staff_all() like any scanner, a
-## stand-in for lane staffing (Security 5/8): its member is on duty with no
-## staff spot.
+## lane's arch is staffed by StaffTestKit.staff_all() like any scanner: its
+## member is on duty on the lane's primary officer spot (7, 6).
 
 const ARCH_AT := Vector2i(5, 6)
 const SCANNER_AT := Vector2i(5, 5)

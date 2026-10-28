@@ -81,8 +81,7 @@ const TOOL_OBJECTS := {
 	Tool.ARCH: SecurityLanes.ARCH,
 	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
 }
-## The security lane part tools, in flow order. They are off while
-## SecurityLanes.enabled is.
+## The security lane part tools, in flow order.
 const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
 ## What one belt cell costs, whatever piece it becomes.
 const BELT_PRICE_ID := &"baggage_belt"
@@ -155,12 +154,8 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 ## The tool BuildMode starts on. main.tscn sets None, so a new game has no tool
 ## and a stray click on the world builds nothing; the Floor default keeps a bare
 ## BuildMode ready to paint for tests and probes.
-## A tool that is off (tool_enabled()) is replaced by None, with a warning.
 @export var initial_tool := Tool.FLOOR:
 	set(value):
-		if not tool_enabled(value):
-			push_warning("BuildMode: initial tool %s is off; starting on None" % Tool.keys()[value])
-			value = Tool.NONE
 		initial_tool = value
 		tool = value
 
@@ -298,18 +293,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			apply_at(point)
 
 
-## Whether `which` can be picked: every tool but the lane part tools, which
-## need SecurityLanes.enabled.
-static func tool_enabled(which: Tool) -> bool:
-	return SecurityLanes.enabled or not LANE_TOOLS.has(which)
-
-
-## Picks a tool. A tool that is off (tool_enabled()) is refused with a
-## warning and the current tool stays.
+## Picks a tool.
 func set_tool(new_tool: Tool) -> void:
-	if not tool_enabled(new_tool):
-		push_warning("BuildMode: tool %s is off (SecurityLanes.enabled)" % Tool.keys()[new_tool])
-		return
 	cancel_area()
 	tool = new_tool
 	_auto_facing = true
@@ -333,13 +318,7 @@ func grid_point(from: Vector3, direction: Vector3) -> Variant:
 
 
 ## The edit the current tool would make at a ground point, or null for none.
-## A tool that is off (tool_enabled()) makes none, however it was selected, so
-## apply_at() and the ghost do nothing with it either.
 func edit_at(point: Vector3) -> BuildEdit:
-	return _tool_edit_at(point) if tool_enabled(tool) else null
-
-
-func _tool_edit_at(point: Vector3) -> BuildEdit:
 	var cell := grid.world_to_cell(point)
 	var side: int = grid.nearest_side(point)
 	if _dragging and _drag_side >= 0:
@@ -895,14 +874,14 @@ func _show_status(result: BuildResult) -> void:
 	_set_status(text)
 
 
-## What the status line says about the lane part at `cell`, while
-## SecurityLanes.enabled is on: the first thing the arch lacks
+## What the status line says about the lane part at `cell`: the first thing
+## the arch lacks
 ## (SecurityLanes.status_text) for an incomplete arch or a part of an
 ## incomplete lane, NOT_IN_LANE for a part no arch counts, and "" for a whole
 ## lane, any other object and empty floor. The lanes are recognised afresh
 ## from the grid, and only when the cell holds a lane part.
 static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
-	if not SecurityLanes.enabled or not on_grid.in_bounds(cell):
+	if not on_grid.in_bounds(cell):
 		return ""
 	var id := on_grid.object_at(cell)
 	if id == 0 or not SecurityLanes.is_part(StringName(on_grid.get_object(id)["def"])):
@@ -922,8 +901,6 @@ static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
 ## lane_hint() for the cell under the pointer, kept until the pointer moves to
 ## another cell or the grid changes.
 func _lane_hint_at(cell: Vector2i) -> String:
-	if not SecurityLanes.enabled:
-		return ""
 	if not _hint_cached or cell != _hint_cell:
 		lane_hint_scans += 1
 		_hint_cell = cell

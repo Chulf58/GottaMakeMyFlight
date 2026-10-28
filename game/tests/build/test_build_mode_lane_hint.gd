@@ -2,8 +2,7 @@ class_name TestBuildModeLaneHint
 extends GdUnitTestSuite
 ## The status line while the pointer is over a lane part: an incomplete arch
 ## names the first thing missing (SecurityLanes.status_text), a part that
-## belongs to no arch reads "Not part of a lane", and with SecurityLanes.enabled
-## off nothing is added.
+## belongs to no arch reads "Not part of a lane".
 
 const ANCHOR := Vector2i(5, 6)
 const S := SecurityLanes.Status
@@ -13,7 +12,6 @@ var _mode: BuildMode
 
 
 func before_test() -> void:
-	SecurityLanes.enabled = true
 	_mode = BuildMode.new()
 	_mode.grid_size = Vector2i(14, 14)
 	add_child(_mode)
@@ -23,7 +21,6 @@ func before_test() -> void:
 
 
 func after_test() -> void:
-	SecurityLanes.enabled = false
 	_mode.free()
 
 
@@ -120,12 +117,3 @@ func test_a_resting_pointer_does_not_recognise_the_lanes_again() -> void:
 	# Moving to another cell works that cell's hint out.
 	assert_str(_hover(ELSEWHERE)).is_empty()
 	assert_int(_mode.lane_hint_scans).is_equal(before + 3)
-
-
-func test_nothing_is_added_while_lanes_are_off() -> void:
-	SecurityLanes.enabled = false
-	_mode.set_tool(BuildMode.Tool.NONE)
-	_lane([SecurityLanes.XRAY_BELT])
-	PassengerTestWorld.place(_mode.grid, SecurityLanes.XRAY_BELT, Vector2i(2, 2), 0)
-	assert_str(_hover(ANCHOR)).is_empty()
-	assert_str(_hover(Vector2i(2, 2))).is_empty()

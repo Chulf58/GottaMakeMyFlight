@@ -241,11 +241,11 @@ static func _targets(
 	match leg:
 		Leg.DESK:
 			for desk in layout.desks:
-				if layout.is_usable(desk) and _staffed_enough(grid, desk, staffing):
+				if layout.is_usable(desk) and _staffed_enough(grid, layout, desk, staffing):
 					out.append([layout.lanes[desk][0], layout.lanes[desk][0]])
 		Leg.SCANNER:
 			for scanner in layout.scanners:
-				if layout.is_usable(scanner) and _staffed_enough(grid, scanner, staffing):
+				if layout.is_usable(scanner) and _staffed_enough(grid, layout, scanner, staffing):
 					var passage: Array = layout.passages[scanner]
 					out.append([layout.lanes[scanner][0], passage.back()])
 		Leg.EXIT:
@@ -255,13 +255,24 @@ static func _targets(
 	return out
 
 
-## Whether `station` passes `staffing`.
-static func _staffed_enough(grid: BuildGrid, station: int, staffing: Staffing) -> bool:
+## Whether `station` passes `staffing`. Its primary post decides
+## (StaffPosts): a security lane's officer spot, else its StaffSpots spot. A
+## station with no staff spot at all is never staffed, so only ANY lets it
+## through.
+static func _staffed_enough(
+	grid: BuildGrid, layout: TerminalLayout, station: int, staffing: Staffing
+) -> bool:
 	if staffing == Staffing.ANY:
 		return true
-	if StaffSpots.blocked(grid, station):
+	var primary := StaffMember.Slot.PRIMARY
+	if StaffPosts.spot(grid, layout, station, primary) == BuildObjectDef.NO_CELL:
 		return false
-	return staffing == Staffing.NOT_BLOCKED or not StaffSpots.unreachable(grid, station)
+	if StaffPosts.blocked(grid, layout, station):
+		return false
+	return (
+		staffing == Staffing.NOT_BLOCKED
+		or not StaffPosts.unreachable(grid, layout, station, primary)
+	)
 
 
 func _plan() -> bool:
