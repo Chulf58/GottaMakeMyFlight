@@ -196,7 +196,7 @@ func _report() -> void:
 
 ## Leaves the terminal with no scanner and no money, then steps one tick.
 func _stick() -> void:
-	_wallet.spend(_wallet.balance)
+	_wallet.spend(_wallet.balance, Wallet.Category.BUILD)
 	var grid := _sim.grid
 	var removed := 0
 	for id in grid.object_ids():

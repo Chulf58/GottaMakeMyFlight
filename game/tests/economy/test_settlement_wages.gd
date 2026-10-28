@@ -123,7 +123,7 @@ func test_wages_paid_today_starts_over_at_each_midnight() -> void:
 func test_what_the_wallet_cannot_pay_is_owed() -> void:
 	_kit.hire(CHECKIN, 2)
 	_kit.hire(SECURITY)
-	assert_bool(_kit.world.sim.wallet.spend(900)).is_true()
+	assert_bool(_kit.world.sim.wallet.spend(900, Wallet.Category.BUILD)).is_true()
 	_kit.cross(1)
 	print(
 		(
@@ -143,15 +143,15 @@ func test_money_that_comes_in_pays_owed_wages_first() -> void:
 	var wallet := _kit.world.sim.wallet
 	_kit.hire(CHECKIN, 2)
 	_kit.hire(SECURITY)
-	assert_bool(wallet.spend(1000)).is_true()
+	assert_bool(wallet.spend(1000, Wallet.Category.BUILD)).is_true()
 	_kit.cross(1)
 	assert_int(_kit.settlement.wages_owed()).is_equal(210)
-	assert_bool(wallet.credit(150)).is_true()
+	assert_bool(wallet.credit(150, Wallet.Category.FEES)).is_true()
 	assert_int(wallet.balance).is_equal(0)
-	assert_bool(wallet.spend(1)).is_false()
+	assert_bool(wallet.spend(1, Wallet.Category.BUILD)).is_false()
 	assert_int(_kit.settlement.wages_owed()).is_equal(60)
 	assert_int(_kit.settlement.wages_paid_today()).is_equal(150)
-	assert_bool(wallet.credit(100)).is_true()
+	assert_bool(wallet.credit(100, Wallet.Category.FEES)).is_true()
 	assert_int(wallet.balance).is_equal(40)
 	assert_int(_kit.settlement.wages_owed()).is_equal(0)
 	assert_int(_kit.settlement.wages_paid_today()).is_equal(210)
@@ -166,7 +166,7 @@ func test_a_build_refund_goes_to_the_debt_before_anything_can_spend_it() -> void
 	var laid := BuildEdit.paint_floor(Vector2i(0, 0), BuildGrid.FLOOR_TILE, 1)
 	var plan: Array[BuildEdit] = [laid]
 	assert_bool(BuildTransaction.commit_plan(grid, plan, wallet).ok).is_true()
-	assert_bool(wallet.spend(wallet.balance)).is_true()
+	assert_bool(wallet.spend(wallet.balance, Wallet.Category.BUILD)).is_true()
 	_kit.cross(1)
 	assert_int(_kit.settlement.wages_owed()).is_equal(60)
 	var seen: Array[int] = []
@@ -184,7 +184,7 @@ func test_a_build_refund_goes_to_the_debt_before_anything_can_spend_it() -> void
 
 func test_a_fee_arriving_while_wages_are_owed_goes_to_the_wages() -> void:
 	_kit.hire(CHECKIN)
-	assert_bool(_kit.world.sim.wallet.spend(1000)).is_true()
+	assert_bool(_kit.world.sim.wallet.spend(1000, Wallet.Category.BUILD)).is_true()
 	_kit.cross(1)
 	assert_int(_kit.settlement.wages_owed()).is_equal(60)
 	var data := _kit.settlement.to_snapshot()
@@ -199,7 +199,7 @@ func test_a_fee_arriving_while_wages_are_owed_goes_to_the_wages() -> void:
 ## Wages go before fees so that paying them frees the room a fee waits for.
 func test_owed_wages_are_paid_before_owed_fees_so_a_full_wallet_has_room() -> void:
 	var wallet := _kit.world.sim.wallet
-	assert_bool(wallet.credit(Wallet.MAX_BALANCE - wallet.balance)).is_true()
+	assert_bool(wallet.credit(Wallet.MAX_BALANCE - wallet.balance, Wallet.Category.FEES)).is_true()
 	var data := _kit.settlement.to_snapshot()
 	data["owed"] = ["50"]
 	data["wages_owed"] = "100"
@@ -213,17 +213,17 @@ func test_owed_wages_are_paid_before_owed_fees_so_a_full_wallet_has_room() -> vo
 ## The debt is not a balance: it is kept whole past Wallet.MAX_BALANCE.
 func test_owed_wages_are_kept_whole_beyond_the_wallet_limit() -> void:
 	_kit.hire(CHECKIN)
-	assert_bool(_kit.world.sim.wallet.spend(1000)).is_true()
+	assert_bool(_kit.world.sim.wallet.spend(1000, Wallet.Category.BUILD)).is_true()
 	var data := _kit.settlement.to_snapshot()
 	data["wages_owed"] = str(Wallet.MAX_BALANCE - 10)
 	assert_bool(_kit.settlement.from_snapshot(data)).is_true()
 	_kit.cross(1)
 	assert_int(_kit.settlement.wages_owed()).is_equal(Wallet.MAX_BALANCE - 10 + 60)
 	var wallet := _kit.world.sim.wallet
-	assert_bool(wallet.credit(Wallet.MAX_BALANCE)).is_true()
+	assert_bool(wallet.credit(Wallet.MAX_BALANCE, Wallet.Category.FEES)).is_true()
 	assert_int(wallet.balance).is_equal(0)
 	assert_int(_kit.settlement.wages_owed()).is_equal(50)
-	assert_bool(wallet.credit(100)).is_true()
+	assert_bool(wallet.credit(100, Wallet.Category.FEES)).is_true()
 	assert_int(wallet.balance).is_equal(50)
 	assert_int(_kit.settlement.wages_owed()).is_equal(0)
 
@@ -232,7 +232,7 @@ func test_owed_wages_are_kept_whole_beyond_the_wallet_limit() -> void:
 ## no day is marked charged, nothing is spent or announced.
 func test_a_charge_that_would_pass_the_debt_limit_is_refused_and_changes_nothing() -> void:
 	_kit.hire(CHECKIN)
-	assert_bool(_kit.world.sim.wallet.spend(1000)).is_true()
+	assert_bool(_kit.world.sim.wallet.spend(1000, Wallet.Category.BUILD)).is_true()
 	var data := _kit.settlement.to_snapshot()
 	data["wages_owed"] = str(Settlement.MAX_WAGES - 10)
 	assert_bool(_kit.settlement.from_snapshot(data)).is_true()

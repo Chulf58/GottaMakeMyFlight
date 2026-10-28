@@ -30,6 +30,11 @@ extends Node
 ## (SaveLinks). Only when every check passes are the live parts installed,
 ## in parts() order. A refused load leaves the world as it was.
 ##
+## A part named in OPTIONAL_PARTS may be missing from a save made before it
+## existed. It is then not staged, and its install is the part's own "none
+## saved" step: the DayLedger counts today's money from the load
+## (DayLedger.start_since_load).
+##
 ## Files go to user://saves/ as JSON, written to a .tmp file and renamed over
 ## the old save. F5 quick-saves and F8 quick-loads (F9 is left unbound; the
 ## playtest hook tests press it as a key bound to nothing). Every failure is
@@ -41,6 +46,8 @@ signal loaded(ok: bool)
 
 ## 2: the bags (part "baggage"); version 1 saves are refused.
 const SAVE_VERSION := 2
+## Parts a version 2 save may lack: "day_ledger" came after the version.
+const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
 const QUICK_SAVE_PATH := "user://saves/quicksave.json"
 const QUICK_SAVE_KEY := KEY_F5
@@ -59,6 +66,7 @@ const MESSAGE_SECONDS := 4.0
 @export var offer_desk: OfferDesk
 @export var rating: AirportRating
 @export var baggage: BaggageSim
+@export var day_ledger: DayLedger
 ## Where F5 and F8 save and load. Tests point it at their own file.
 @export var quick_save_path := QUICK_SAVE_PATH
 
@@ -123,6 +131,12 @@ func parts() -> Array[SavePart]:
 			settlement.to_snapshot,
 			SavePart.scratch(Settlement),
 			settlement.from_snapshot
+		),
+		SavePart.new(
+			"day_ledger",
+			day_ledger.to_snapshot,
+			SavePart.scratch(DayLedger),
+			day_ledger.from_snapshot
 		),
 		SavePart.new(
 			"rescue_grant",
@@ -191,7 +205,7 @@ func load_world(data: Variant) -> bool:
 		return false
 	pending_path = ""
 	for part in parts():
-		if not part.install.call(data[part.key]):
+		if not _install(part, data):
 			# Unreachable while each install repeats its own stage check; said
 			# loudly, because the world is then partly loaded.
 			_fail("Load", "the %s part was refused after it was checked" % part.key)
@@ -308,6 +322,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		quick_load()
 
 
+## Installs one part, or its "none saved" step when an older save lacks it.
+func _install(part: SavePart, data: Dictionary) -> bool:
+	if data.has(part.key):
+		return part.install.call(data[part.key])
+	if part.key == "day_ledger":
+		day_ledger.start_since_load()
+		return true
+	return false
+
+
 func _shape_problem(data: Variant) -> String:
 	if typeof(data) != TYPE_DICTIONARY:
 		return "the save is not a dictionary"
@@ -318,18 +342,20 @@ func _shape_problem(data: Variant) -> String:
 		if not keys.has(key):
 			return "unknown key '%s'" % key
 	for key in keys:
-		if not (data as Dictionary).has(key):
+		if not (data as Dictionary).has(key) and not OPTIONAL_PARTS.has(key):
 			return "missing key '%s'" % key
 	if not WholeNumber.is_whole(data["save_version"]) or int(data["save_version"]) != SAVE_VERSION:
 		return "save_version must be %d" % SAVE_VERSION
 	for key in keys.slice(1):
-		if typeof(data[key]) != TYPE_DICTIONARY:
+		if (data as Dictionary).has(key) and typeof(data[key]) != TYPE_DICTIONARY:
 			return "part '%s' is not a dictionary" % key
 	return ""
 
 
 func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 	for part in parts():
+		if not data.has(part.key):
+			continue
 		var problem: String = part.stage.call(data[part.key], staged)
 		if problem != "":
 			return "%s: %s" % [part.key, problem]

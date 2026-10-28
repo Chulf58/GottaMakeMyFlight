@@ -75,7 +75,7 @@ func test_nothing_is_paid_while_every_essential_stands() -> void:
 func test_no_grant_while_money_can_rebuild_the_missing_piece() -> void:
 	_remove_all(["scanners"])
 	var price := PriceTable.price_of_object(&"security_scanner")
-	_world.sim.wallet.credit(price)
+	_world.sim.wallet.credit(price, Wallet.Category.FEES)
 	assert_bool(_grant.has_working_path()).is_false()
 	assert_bool(_grant.evaluate()).is_false()
 	assert_int(_world.sim.wallet.balance).is_equal(price)
@@ -85,7 +85,7 @@ func test_no_grant_while_money_can_rebuild_the_missing_piece() -> void:
 func test_stuck_airport_gets_exactly_the_shortfall() -> void:
 	_remove_all(["scanners", "exits"])
 	var cost := _cost([&"security_scanner", &"exit_door"])
-	_world.sim.wallet.credit(100)
+	_world.sim.wallet.credit(100, Wallet.Category.FEES)
 	assert_bool(_grant.evaluate()).is_true()
 	print("balance %d cost %d grants %s" % [_world.sim.wallet.balance, cost, _granted])
 	assert_int(_world.sim.wallet.balance).is_equal(cost)
@@ -100,7 +100,7 @@ func test_stuck_airport_gets_exactly_the_shortfall() -> void:
 func test_one_grant_per_stuck_event() -> void:
 	_remove_all(["scanners"])
 	assert_bool(_grant.evaluate()).is_true()
-	assert_bool(_world.sim.wallet.spend(_world.sim.wallet.balance)).is_true()
+	assert_bool(_world.sim.wallet.spend(_world.sim.wallet.balance, Wallet.Category.BUILD)).is_true()
 	assert_bool(_grant.evaluate()).is_false()
 	_world.run_to(40)
 	assert_int(_granted.size()).is_equal(1)
@@ -110,7 +110,7 @@ func test_one_grant_per_stuck_event() -> void:
 func test_rebuilding_the_essentials_ends_the_event_so_a_new_one_is_granted() -> void:
 	_remove_all(["scanners"])
 	assert_bool(_grant.evaluate()).is_true()
-	_world.sim.wallet.spend(_world.sim.wallet.balance)
+	_world.sim.wallet.spend(_world.sim.wallet.balance, Wallet.Category.BUILD)
 	_rebuild_a_scanner()
 	assert_bool(_grant.has_working_path()).is_true()
 	assert_bool(_grant.evaluate()).is_false()
@@ -145,7 +145,7 @@ func test_binding_again_does_not_double_the_tick_check() -> void:
 func test_the_event_latch_survives_a_save_round_trip() -> void:
 	_remove_all(["scanners"])
 	assert_bool(_grant.evaluate()).is_true()
-	_world.sim.wallet.spend(_world.sim.wallet.balance)
+	_world.sim.wallet.spend(_world.sim.wallet.balance, Wallet.Category.BUILD)
 	var data := JSON.parse_string(JSON.stringify(_grant.to_snapshot())) as Dictionary
 	var loaded: RescueGrant = auto_free(RescueGrant.new())
 	loaded.bind(_world.clock, _world.sim, _world.sim.wallet)

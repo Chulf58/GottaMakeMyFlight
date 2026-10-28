@@ -27,7 +27,8 @@ extends CanvasLayer
 ## the status line shows what the tool, or the dragged Floor rectangle, would
 ## cost and how short the wallet is. Prices stay in the price colour, never
 ## red. With no wallet (BuildMode builds for free) the slot reads "--" and
-## every card says Free.
+## every card says Free. Hovering the money slot shows today's money from the
+## DayLedger (MoneySlot) when day_ledger is set.
 
 ## The hiring card opened or closed (the StaffPanel shows it with this).
 signal staff_toggled(open: bool)
@@ -120,6 +121,10 @@ const GRANT_HOLD_S := 8.0
 @export var rescue_grant: RescueGrant
 ## Seconds a grant message holds the status line.
 @export var grant_hold_s := GRANT_HOLD_S
+## Optional: when set, hovering the money slot shows today's money.
+@export var day_ledger: DayLedger
+## Optional: when set, the money card shows owed wages.
+@export var settlement: Settlement
 
 ## True while the hiring card is open; press_staff() changes it.
 var staff_open := false
@@ -137,6 +142,7 @@ var _category_buttons: Array[Button] = []
 var _cards: Dictionary = {}
 var _status := Label.new()
 var _money := Label.new()
+var _money_slot := MoneySlot.new()
 var _cost := Label.new()
 ## The wallet building is paid from, or null when the tools build for free.
 var _wallet: Wallet
@@ -210,6 +216,8 @@ func _ready() -> void:
 	_refresh_money()
 	if rescue_grant != null:
 		rescue_grant.granted.connect(_on_granted)
+	if day_ledger != null:
+		_money_slot.watch(day_ledger, settlement)
 
 
 func _process(_delta: float) -> void:
@@ -671,7 +679,7 @@ func _build_cost() -> void:
 
 
 func _build_money() -> void:
-	var panel := PanelContainer.new()
+	var panel := _money_slot
 	panel.name = "MoneySlot"
 	panel.theme = HUD_THEME
 	panel.position = Vector2(16.0, 12.0)

@@ -51,9 +51,9 @@ func test_the_money_slot_shows_the_starting_budget() -> void:
 
 
 func test_the_money_slot_follows_the_wallet() -> void:
-	_finances.wallet.spend(300)
+	_finances.wallet.spend(300, Wallet.Category.BUILD)
 	assert_str(_menu.money_label().text).is_equal("Money  %d" % (PriceTable.STARTING_BUDGET - 300))
-	_finances.wallet.credit(1000)
+	_finances.wallet.credit(1000, Wallet.Category.FEES)
 	assert_str(_menu.money_label().text).is_equal("Money  %d" % (PriceTable.STARTING_BUDGET + 700))
 
 

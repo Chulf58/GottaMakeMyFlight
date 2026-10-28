@@ -171,7 +171,7 @@ func test_a_floor_batch_commits_only_when_the_whole_quote_is_affordable() -> voi
 	assert_int(wallet.balance).is_equal(99)
 	assert_int(grid.floor_at(Vector2i(1, 1))).is_equal(BuildGrid.FLOOR_NONE)
 	assert_int(grid.floor_at(Vector2i(2, 2))).is_equal(BuildGrid.FLOOR_NONE)
-	wallet.credit(1)
+	wallet.credit(1, Wallet.Category.FEES)
 	results = BuildTransaction.commit_batch(grid, _paints(Rect2i(1, 1, 2, 2)), wallet)
 	for result in results:
 		assert_bool(result.ok).is_true()
@@ -270,7 +270,7 @@ func test_the_price_is_settled_before_the_grid_signals() -> void:
 	grid.edit_applied.connect(
 		func(_edit: BuildEdit, _result: BuildResult) -> void:
 			seen.append(wallet.balance)
-			wallet.spend(wallet.balance)
+			wallet.spend(wallet.balance, Wallet.Category.BUILD)
 	)
 	var result := BuildTransaction.commit_plan(
 		grid, _plan(BuildEdit.place_object(&"seat_row", Vector2i(2, 3), 0)), wallet
