@@ -926,7 +926,7 @@ func _carry_transform(held: Dictionary, body: Node3D, i: int, reach: Array) -> T
 			return hung[0]
 		SecurityLooks.Carry.PULL:
 			var grip := grip_of(body, held["hands"][i])
-			var axle := _axle_drawn(held["bags"][i], body, scale_by)
+			var axle := _axle_drawn(held["bags"][i], body, scale_by, held["hands"][i])
 			var rods := _reach_base(_part(node, "Pull_Reach"))
 			reach[0] = _pull_length(grip, axle, scale_by, rods.z)
 			return pulled(grip, axle, scale_by)
@@ -958,14 +958,23 @@ func _case_transform(held: Dictionary, body: Node3D, i: int) -> Transform3D:
 
 
 ## A pulled roller's axle drawn now, on the floor under the body (the wheels'
-## radius up); straight behind the body before sync() has started one.
-func _axle_drawn(bag: Dictionary, body: Node3D, scale_by: float) -> Vector3:
+## radius up), kept behind it on the pulling hand's side; straight behind the
+## body before sync() has started one.
+func _axle_drawn(bag: Dictionary, body: Node3D, scale_by: float, hand: int) -> Vector3:
 	var at: Vector3
 	if bag.has("axle"):
 		var alpha := clock.alpha if clock != null else 1.0
 		at = (bag["axle"][0] as Vector3).lerp(bag["axle"][1], alpha)
 	else:
 		at = body.global_position + Basis(Vector3.UP, body.rotation.y) * Vector3.FORWARD * TRAIL_M
+	# Behind the body as drawn now, on the pulling hand's side: between two
+	# ticks of a turning walker the blend can cross behind the legs.
+	var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
+	var local := frame.affine_inverse() * at
+	var out := -1.0 if hand == 0 else 1.0
+	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
+	local.z = minf(local.z, -TRAIL_M * 0.6)
+	at = frame * local
 	at.y = body.global_position.y + ROLLER_AXLE.y * scale_by
 	return at
 
