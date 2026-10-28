@@ -29,6 +29,26 @@ extends RefCounted
 
 enum Home { NONE, HAND, TRAY, FLOOR }
 enum Tray { NONE, IN, RIDE, OUT }
+## The kinds of carry-on bag (decision carry-on-bag-kinds-backpack-shoulder-or-
+## tote-bag-small-rolle): looks only, the sim never reads them.
+enum Kind { CASE, BACKPACK, SHOULDER, ROLLER }
+## How a kind is carried while its home is HAND: the hard case in the hand,
+## the backpack worn on the back, the tote on one shoulder, the roller pulled.
+enum Carry { HAND, BACK, SHOULDER, PULL }
+
+## The interior kit piece that draws each kind.
+const KIND_PIECES := {
+	Kind.CASE: "carry_on_bag",
+	Kind.BACKPACK: "carry_backpack",
+	Kind.SHOULDER: "carry_shoulder_bag",
+	Kind.ROLLER: "carry_roller",
+}
+const KIND_CARRY := {
+	Kind.CASE: Carry.HAND,
+	Kind.BACKPACK: Carry.BACK,
+	Kind.SHOULDER: Carry.SHOULDER,
+	Kind.ROLLER: Carry.PULL,
+}
 
 ## How far an unpacking or picking-up passenger steps toward its table.
 const STEP_M := 0.15
@@ -153,6 +173,39 @@ static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if _closed(sim.grid, cell, right_step) and not _closed(sim.grid, cell, -right_step):
 		return 1
 	return 0
+
+
+## The kind of carry-on bag `index` of `p`: a fixed hash of the passenger's id
+## and the bag's index, so a save, a load and a replay draw the same bags
+## without any saved state, and the sim RNG is not drawn from. A second bag
+## never repeats a backpack or a roller (one back, one trailer).
+static func bag_kind(p: Passenger, index: int) -> Kind:
+	var first := _mix(p.id * 2) % Kind.size() as Kind
+	if index == 0:
+		return first
+	var second := _mix(p.id * 2 + 1) % Kind.size() as Kind
+	if second == first and (first == Kind.BACKPACK or first == Kind.ROLLER):
+		second = (first + 1 + _mix(p.id * 2 + 7) % (Kind.size() - 1)) % Kind.size() as Kind
+	return second
+
+
+## How bag `index` of `p` is carried while in hand (Carry).
+static func carry_of(p: Passenger, index: int) -> Carry:
+	return KIND_CARRY[bag_kind(p, index)]
+
+
+## The side a worn shoulder bag hangs on: 0 the right, 1 the left, by its
+## index (stable, so a narrow cell never moves it across).
+static func worn_side(index: int) -> int:
+	return index % 2
+
+
+## A 32-bit integer mixer (a non-negative result).
+static func _mix(value: int) -> int:
+	var x := value & 0xFFFFFFFF
+	x = ((x >> 16) ^ x) * 0x45D9F3B & 0xFFFFFFFF
+	x = ((x >> 16) ^ x) * 0x45D9F3B & 0xFFFFFFFF
+	return (x >> 16) ^ x
 
 
 ## Whether `p` carries its bags in front of the body: when the cell it stands

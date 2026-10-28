@@ -14,7 +14,10 @@ extends SkeletonModifier3D
 ## from the centre line. CarryOnProps sets it on the holding hand (the bag in
 ## front of the body, inside its width, for a cell closed on both sides) and
 ## on the free hand, which comes forward beside the bag instead of swinging
-## across it.
+## across it. The same front pose, with the forearm raised, is the hand
+## holding a shoulder bag's strap at the chest (decision carry-on-bag-kinds-
+## backpack-shoulder-or-tote-bag-small-rolle); a hand pulling a roller is a side
+## carry that leans back (lean_back_degrees) with less swing.
 
 const ARM_BONES: Array[String] = ["Arm.R", "Arm.L"]
 const FOREARMS: Array[String] = ["Forearm.R", "Forearm.L"]
@@ -28,6 +31,9 @@ const FOREARM_M := 0.3
 @export var angle_degrees := 12.0
 ## Side carry: how much of the animation's arm swing is kept (1 all, 0 none).
 @export var swing_kept := 0.5
+## Side carry: how far back from hanging straight down the kept-still part of
+## the arm points (a hand pulling a roller trails a little behind the hip).
+@export var lean_back_degrees := 0.0
 ## Whether this hand holds a bag (the side carry); a free hand keeps the
 ## animation's pose and only comes forward with front_weight.
 @export var holds := true
@@ -95,7 +101,8 @@ func _side(
 ) -> Array[Transform3D]:
 	# Keep only part of the swing: a bag swung back would meet the leg that
 	# kicks back in a run.
-	pose.basis = _pointed(pose.basis, Vector3.DOWN, 1.0 - swing_kept)
+	var lean := deg_to_rad(lean_back_degrees)
+	pose.basis = _pointed(pose.basis, Vector3(0.0, -cos(lean), -sin(lean)), 1.0 - swing_kept)
 	# A point below the shoulder moves toward +X for a positive turn about +Z,
 	# so the sign follows the shoulder's side.
 	pose.basis = Basis(Vector3.BACK, deg_to_rad(angle_degrees) * outward) * pose.basis
