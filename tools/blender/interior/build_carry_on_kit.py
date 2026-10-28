@@ -57,7 +57,7 @@ TOTE_STRAP_Z = TOTE[2] / 2.0
 ROLLER = (0.32, 0.44, 0.20)
 ROD_Y = 0.03  # Godot y (Blender z) of the axle and rod line
 WHEEL_R = 0.03
-ROD_X = 0.09
+ROD_X = 0.06
 
 
 # piece -> {node name: Godot translation} of the stretchable nodes.
@@ -141,7 +141,7 @@ def build_carry_roller(root, c):
         tbox("Pull_Rod_" + side, (x - 0.01, -REACH_BUILT, -0.01), (x + 0.01, 0.0, 0.01), "metal", reach, c)
     top = reach_group("Pull_Top", "carry_roller", root, c)
     tbox("Pull_Bar", (-ROD_X - 0.012, -0.03, -0.014), (ROD_X + 0.012, 0.0, 0.014), "dark", top, c)
-    tbox("Pull_Cap", (-0.05, -0.034, -0.016), (0.05, -0.004, 0.016), "metal", top, c)
+    tbox("Pull_Cap", (-0.035, -0.034, -0.016), (0.035, -0.004, 0.016), "metal", top, c)
 
 
 # piece -> (builder, footprint, expected Blender bounds lo/hi).

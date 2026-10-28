@@ -16,14 +16,24 @@ extends SceneTree
 ##          pass through the arch, pickup
 ##   basic: carry-on through the scanner, the repack that holds it
 ##   whole: the checkpoint from 30 m
+##   kinds: each carry-on kind (decision carry-on-bag-kinds-backpack-shoulder-
+##          or-tote-bag-small-rolle) carried, in the tray, on the berth floor,
+##          in the alarm corridor and on the floor at a gate seat; the alarm
+##          walk-back of each kind checked every frame
+## Passengers are spawned and matched to roles (ROLES) by the kind of their
+## first bag (SecurityLooks.bag_kind), so every kind has its alarm passenger.
 ## Each plate tries four headings and keeps the first where the subject
 ## passenger is shown (game/spike/plate_sight.gd: in frame, sight lines on its
 ## upper body with no blocker, no HUD over it, tall enough) and every tray and
 ## bag of it is in frame, big enough and hit by a sight line. Clearance: no
 ## vertex of the subject's drawn body may lie inside a lane part (kit bounds
 ## of the tray table, X-ray belt and pickup table, the arch's posts), and no
-## vertex below a carried or floor bag's top inside that bag. Any failure
-## prints PROBE_INVALID and exits 1.
+## vertex inside one of its own bags' meshes (the hand holding a case, a
+## roller's grip or a strap left out), and no bag inside another. The bench
+## first sweeps the crowd: every frame of a walk (half of them late, so they
+## run) and queue, each carrier's body against its bags, per kind and
+## character, with a control per kind. Any failure prints PROBE_INVALID and
+## exits 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -49,19 +59,35 @@ const HANG_LIMIT_MS := 90000
 const RUN_LIMIT_TICKS := 6000
 const SEND_GAP_TICKS := 14
 const DISTANCE_M := 7.0
-## [bags, liquids, alarm] of the passengers sent, in order.
-const TRAITS := [
-	[2, false, false],
-	[1, false, true],
-	[0, false, false],
-	[1, true, false],
-	[2, false, true],
-	[1, false, false],
-	[2, false, false],
-	[1, false, true],
-	[1, false, false],
-	[2, false, true],
+## [first bag's kind or -1 for any, bags, liquids, alarm] of the passengers
+## sent, in order.
+const ROLES := [
+	[-1, 2, false, false],
+	[SecurityLooks.Kind.CASE, 1, false, true],
+	[-1, 0, false, false],
+	[-1, 1, true, false],
+	[-1, 2, false, true],
+	[-1, 1, false, false],
+	[SecurityLooks.Kind.SHOULDER, 1, false, true],
+	[SecurityLooks.Kind.BACKPACK, 1, false, true],
+	[-1, 2, false, false],
+	[SecurityLooks.Kind.ROLLER, 1, false, true],
+	[SecurityLooks.Kind.CASE, 2, false, true],
+	[SecurityLooks.Kind.CASE, 2, false, true],
+	[SecurityLooks.Kind.CASE, 1, false, true],
+	[SecurityLooks.Kind.CASE, 1, false, true],
+	[SecurityLooks.Kind.SHOULDER, 1, false, false],
+	[SecurityLooks.Kind.BACKPACK, 1, false, false],
+	[SecurityLooks.Kind.ROLLER, 1, false, false],
+	[SecurityLooks.Kind.SHOULDER, 1, false, true],
+	[SecurityLooks.Kind.BACKPACK, 1, false, true],
+	[SecurityLooks.Kind.ROLLER, 1, false, true],
 ]
+const KIND_NAMES := ["case", "backpack", "shoulder", "roller"]
+## The corridor is plated by the live walk-back (its second plate).
+const KIND_MOMENTS := ["carried", "tray", "berth", "seat", "live_walk_back"]
+## The crowd sweep: frames checked (every other frame).
+const SWEEP_FRAMES := 40
 ## A carried bag counts as in the hand while the grip is this near its bounds.
 const GRIP_REACH_M := 0.06
 ## The frame-cost check: this many passengers spawned, frames timed.
@@ -92,6 +118,11 @@ var _body_control_done := false
 var _basic_node: Node3D = null
 ## Moment name -> its group (see _hit()); removed once plated.
 var _moments := {}
+## Roles still to fill (ROLES).
+var _roles: Array = []
+## Passenger id -> its role, while a kind role's passenger has not reached the
+## lane (one that goes to the basic scanner gives its role back).
+var _role_of := {}
 var _sheets := {}
 
 
@@ -315,12 +346,25 @@ func _piece_box(piece: StringName) -> AABB:
 	return box
 
 
-func _send(traits: Array) -> int:
+## Spawns a passenger and gives it the first open role its first bag's kind
+## fits (a role for that kind first, then one for any kind); with none it
+## goes through without bags.
+func _send() -> int:
 	var id := _sim.spawn_now(StarterFlight.first_flight())
 	var p := _sim.get_passenger(id)
-	p.carry_on = traits[0]
-	p.liquids = traits[1]
-	p.alarm = traits[2]
+	var kind := SecurityLooks.bag_kind(p, 0)
+	var traits: Array = [-1, 0, false, false]
+	for want in [kind, -1]:
+		var at := _roles.find_custom(func(r: Array) -> bool: return r[0] == want)
+		if at >= 0:
+			traits = _roles.pop_at(at)
+			break
+	print("SEND passenger=%d kinds=%s role=%s" % [id, [kind, SecurityLooks.bag_kind(p, 1)], traits])
+	if traits[0] >= 0:
+		_role_of[id] = traits
+	p.carry_on = traits[1]
+	p.liquids = traits[2]
+	p.alarm = traits[3]
 	p.hunger = 0
 	p.apron = []
 	p.apron_mm = 0
@@ -349,11 +393,14 @@ func _define_moments() -> void:
 		"basic_1_scan",
 		"basic_2_repack",
 		"lane_8_live_crossing",
-		"alarm_6_live_walk_back",
 		"alarm_7_front_one_bag",
 		"alarm_8_front_two_bags",
 	]:
 		_moments[name] = name.get_slice("_", 0)
+	for kind in KIND_NAMES:
+		for moment in KIND_MOMENTS:
+			_moments["kind_%s_%s" % [kind, moment]] = "kinds"
+	_roles = ROLES.duplicate(true)
 
 
 ## Whether passenger `p` shows moment `name` now.
@@ -381,14 +428,16 @@ func _lane_hit(name: String, p: Passenger, done: int) -> bool:
 	var phase := p.security_phase
 	var hit := false
 	match name:
-		"alarm_6_live_walk_back":
-			hit = phase == SecurityRuntime.Phase.REPACK and first and p.carry_on > 0
 		"alarm_7_front_one_bag", "alarm_8_front_two_bags":
 			# Carried in front through the corridor, the turn finished.
 			var bags := 1 if name == "alarm_7_front_one_bag" else 2
 			hit = (
 				phase == SecurityRuntime.Phase.RETURN
 				and p.carry_on == bags
+				and (
+					SecurityLooks.Kind.CASE
+					in [SecurityLooks.bag_kind(p, 0), SecurityLooks.bag_kind(p, 1)]
+				)
 				and p.at == _lane["return_route"][0]
 				and _views.carry_on_props().front_weight_of(p.id) >= 1.0
 			)
@@ -423,6 +472,45 @@ func _lane_hit(name: String, p: Passenger, done: int) -> bool:
 	return hit
 
 
+## A kind moment (KIND_MOMENTS) for a passenger whose first bag is that kind.
+func _kind_hit(name: String, p: Passenger) -> bool:
+	var kind := KIND_NAMES.find(name.get_slice("_", 1))
+	if p.carry_on == 0 or SecurityLooks.bag_kind(p, 0) != kind:
+		return false
+	var homes := SecurityLooks.bag_homes(_sim, p)
+	var all_in := func(home: SecurityLooks.Home) -> bool:
+		return homes.all(func(h: SecurityLooks.Home) -> bool: return h == home)
+	var lane := p.stage == Passenger.Stage.SECURITY and p.station == _arch
+	var phase := p.security_phase
+	var hit := false
+	match name.trim_prefix("kind_%s_" % KIND_NAMES[kind]):
+		"carried":
+			hit = (
+				lane
+				and phase == SecurityRuntime.Phase.LEAVE
+				and all_in.call(SecurityLooks.Home.HAND)
+			)
+		"tray":
+			hit = (
+				_riding(p, not p.incident_resolved, 0.1)
+				and _progress(p) < 0.45
+				and all_in.call(SecurityLooks.Home.TRAY)
+			)
+		"berth":
+			hit = lane and p.carry_on == 1 and _repacked(p)
+		"seat":
+			hit = p.stage == Passenger.Stage.SEATED and all_in.call(SecurityLooks.Home.FLOOR)
+		"live_walk_back":
+			hit = lane and p.carry_on == 1 and _repacked(p) and not p.incident_resolved
+	return hit
+
+
+## A lane passenger repacking at the berth, its bags down a while.
+func _repacked(p: Passenger) -> bool:
+	var done := SecurityRuntime.work_for(p.security_phase, p) - p.security_work
+	return p.security_phase == SecurityRuntime.Phase.REPACK and done >= 20
+
+
 func _riding(p: Passenger, pass_ok: bool, at: float) -> bool:
 	return pass_ok and p.security_phase == SecurityRuntime.Phase.ARCH and _progress(p) >= at
 
@@ -444,8 +532,15 @@ func _play() -> void:
 	var stop := _clock.tick + RUN_LIMIT_TICKS
 	while not _moments.is_empty() and _clock.tick < stop:
 		_beat("play tick %d" % _clock.tick)
-		if sent < TRAITS.size() and _clock.tick >= next_send:
-			_send(TRAITS[sent])
+		for id in _role_of.keys():
+			var at := _sim.get_passenger(id)
+			if at.stage == Passenger.Stage.SECURITY and at.station != 0:
+				if at.station != _arch:
+					print("ROLE back passenger=%d went to the basic scanner" % id)
+					_roles.append(_role_of[id])
+				_role_of.erase(id)
+		if not _roles.is_empty() and _clock.tick >= next_send:
+			_send()
 			sent += 1
 			next_send = _clock.tick + SEND_GAP_TICKS
 		await process_frame
@@ -457,8 +552,8 @@ func _play() -> void:
 			if name == "lane_8_live_crossing":
 				await _plate_live(found)
 				_moments.erase(name)
-			elif name == "alarm_6_live_walk_back":
-				await _plate_live_walk_back(found)
+			elif name.ends_with("live_walk_back"):
+				await _plate_live_walk_back(found, name)
 				_moments.erase(name)
 			elif await _plate(name, group, found, DISTANCE_M):
 				_moments.erase(name)
@@ -471,7 +566,8 @@ func _play() -> void:
 func _match(name: String) -> int:
 	for id in _sim.passenger_ids():
 		var p := _sim.get_passenger(id)
-		if _views.node_for(id) == null or not _settled(id) or not _hit(name, p):
+		var hit := _kind_hit(name, p) if name.begins_with("kind_") else _hit(name, p)
+		if _views.node_for(id) == null or not _settled(id) or not hit:
 			continue
 		# A passenger the sim walks through another one (they share cells) is
 		# not a fair plate subject: wait for a moment with room around it.
@@ -730,11 +826,7 @@ func _check_clearance(name: String, id: int) -> void:
 	var homes := SecurityLooks.bag_homes(_sim, p)
 	var points := CarryContact.body_points(body, [])
 	var part_hits := _box_hits(points)
-	var gripping: Array = []
-	for i in homes.size():
-		if homes[i] == SecurityLooks.Home.HAND:
-			gripping.append([".R", ".L"][SecurityLooks.hand_of(_sim, p, i)])
-	var own := CarryContact.body_points(body, gripping)
+	var own := CarryContact.body_points(body, _gripping(p))
 	if not _body_control_done:
 		# Control: a bag at the hips must hold body points.
 		var at_hips := Transform3D(Basis.IDENTITY, body.global_position + Vector3.UP * 0.85)
@@ -749,8 +841,8 @@ func _check_clearance(name: String, id: int) -> void:
 	for i in bags.size():
 		if homes[i] == SecurityLooks.Home.TRAY:
 			continue
-		bag_body += CarryContact.inside_bag(own, bags[i].global_transform)
-		var bag_points := CarryContact.bag_points(bags[i].global_transform)
+		bag_body += CarryContact.inside_meshes(own, bags[i])
+		var bag_points := _surface(bags[i])
 		var hits := _box_hits(bag_points)
 		for key in hits:
 			if key == "wall" or key == "arch_post":
@@ -764,13 +856,33 @@ func _check_clearance(name: String, id: int) -> void:
 		var node := _views.node_for(other)
 		if other != id and node != null:
 			nearest = minf(nearest, node.global_position.distance_to(body.global_position))
+	bag_body += _bag_bag(bags)
+	if bag_body > 0:
+		for bag in bags:
+			print(
+				(
+					"CONTACT %s bones=%s bag_bag=%d"
+					% [name, _contact_bones(body, _gripping(p), bag), _bag_bag(bags)]
+				)
+			)
 	print(
 		(
 			(
 				"CLEARANCE %s passenger=%d body_points=%d body_part_contacts=%s"
-				+ " bag_part_contacts=%s bag_body_contacts=%d bags=%s nearest_passenger_m=%.2f"
+				+ " bag_part_contacts=%s bag_body_or_bag_contacts=%d bags=%s kinds=%s"
+				+ " nearest_passenger_m=%.2f"
 			)
-			% [name, id, points.size(), part_hits, bag_parts, bag_body, homes, nearest]
+			% [
+				name,
+				id,
+				points.size(),
+				part_hits,
+				bag_parts,
+				bag_body,
+				homes,
+				_views.carry_on_props().props_of(id)["kinds"],
+				nearest
+			]
 		)
 	)
 	if _basic_node != null and p.station == _sim.grid.object_at(BASIC_AT):
@@ -780,9 +892,7 @@ func _check_clearance(name: String, id: int) -> void:
 		var in_booth := CarryContact.inside_meshes(points, _basic_node)
 		var bags_in_booth := 0
 		for i in bags.size():
-			bags_in_booth += CarryContact.inside_meshes(
-				CarryContact.bag_points(bags[i].global_transform), _basic_node
-			)
+			bags_in_booth += CarryContact.inside_meshes(_surface(bags[i]), _basic_node)
 		print(
 			(
 				"BASIC_SCANNER %s body_points_in_booth=%d bag_points_in_booth=%d (reported, not failed)"
@@ -793,6 +903,108 @@ func _check_clearance(name: String, id: int) -> void:
 		_invalid("%s: no drawn body points to check" % name)
 	if not part_hits.is_empty() or not bag_parts.is_empty() or bag_body > 0:
 		_invalid("%s: passenger %d or its bags clip a lane part, a wall or the body" % [name, id])
+
+
+## The hands holding something of `p` now (".R", ".L"): a hard case's and a
+## roller's grip, a shoulder strap's hand; a backpack holds none.
+func _gripping(p: Passenger) -> Array:
+	var out: Array = []
+	var homes := SecurityLooks.bag_homes(_sim, p)
+	for i in homes.size():
+		if homes[i] != SecurityLooks.Home.HAND:
+			continue
+		match SecurityLooks.carry_of(p, i):
+			SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL:
+				out.append([".R", ".L"][SecurityLooks.hand_of(_sim, p, i)])
+			SecurityLooks.Carry.SHOULDER:
+				out.append([".R", ".L"][SecurityLooks.worn_side(i)])
+	return out
+
+
+## World points covering a bag node's surface, as drawn now (every mesh of
+## it, straps and rods included), sampled at CarryContact.SAMPLE_M or finer.
+func _surface(bag: Node3D) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+		var faces := mi.mesh.get_faces()
+		for i in range(0, faces.size() - 2, 3):
+			var a := mi.global_transform * faces[i]
+			var ab := mi.global_transform * faces[i + 1] - a
+			var ac := mi.global_transform * faces[i + 2] - a
+			var n := maxi(1, ceili(maxf(ab.length(), ac.length()) / CarryContact.SAMPLE_M))
+			for u in n + 1:
+				for v in n + 1 - u:
+					out.append(a + ab * (u / float(n)) + ac * (v / float(n)))
+	return out
+
+
+## For a contact report: the bones owning the body points inside `bag`, with
+## the part of the bag each point is in (Body, a strap or rod node), counted.
+func _contact_bones(body: Node3D, gripping: Array, bag: Node3D) -> Dictionary:
+	var named: Array = CarryContact.body_points_owned(body, gripping)
+	var found := {}
+	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+		var to_mesh := mi.global_transform.affine_inverse()
+		var faces := mi.mesh.get_faces()
+		for k in (named[0] as PackedVector3Array).size():
+			var lp: Vector3 = to_mesh * named[0][k]
+			if mi.get_aabb().grow(0.001).has_point(lp) and CarryContact._odd(lp, faces):
+				var key := "%s@%s" % [named[1][k], mi.name]
+				found[key] = found.get(key, 0) + 1
+	return found
+
+
+## Points of each bag of a passenger inside another of its bags.
+func _bag_bag(bags: Array[Node3D]) -> int:
+	var count := 0
+	for a in bags.size():
+		for b in bags.size():
+			if a != b:
+				count += CarryContact.inside_meshes(_surface(bags[a]), bags[b])
+	return count
+
+
+## How far bag `i` of passenger `id` is from what holds it (0 when held): the
+## hard case's grip inside its bounds (grown by GRIP_REACH_M), the roller's
+## grip bar at the hand and its wheels on the floor, the strap's bar over the
+## shoulder, the backpack at the spine.
+func _detached(id: int, i: int, body: Node3D) -> float:
+	var props := _views.carry_on_props()
+	var p := _sim.get_passenger(id)
+	var bag: Node3D = props.props_of(id)["bags"][i]
+	var kind := SecurityLooks.bag_kind(p, i)
+	var scale_by := bag.global_transform.basis.get_scale().x
+	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var bone := func(name: String) -> Vector3:
+		return (
+			skeleton.global_transform
+			* skeleton.get_bone_global_pose(skeleton.find_bone(name)).origin
+		)
+	var lifted: bool = props.props_of(id)["carries"][i] == SecurityLooks.Carry.HAND
+	match kind if not lifted else SecurityLooks.Kind.CASE:
+		SecurityLooks.Kind.ROLLER:
+			var grip := props.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
+			var top := bag.find_child("Pull_Top", true, false) as Node3D
+			var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
+			var axle := bag.global_transform * CarryOnProps.ROLLER_AXLE
+			var off_floor := absf(
+				axle.y - CarryOnProps.ROLLER_AXLE.y * scale_by - body.global_position.y
+			)
+			return maxf(0.0, maxf(bar.distance_to(grip) - GRIP_REACH_M, off_floor - 0.01))
+		SecurityLooks.Kind.SHOULDER:
+			var side: String = ["Arm.R", "Arm.L"][SecurityLooks.worn_side(i)]
+			var top := bag.find_child("Strap_Top", true, false) as Node3D
+			# The bar is STRAP_OUT_M out and STRAP_OVER_ARM_M over the joint, about
+			# 0.1 m from it with the arm's own lean.
+			return maxf(0.0, top.global_position.distance_to(bone.call(side)) - 0.2)
+		SecurityLooks.Kind.BACKPACK:
+			var spine: Vector3 = bone.call(CarryOnProps.SPINE_BONE)
+			var near := bag.global_transform * CarryOnProps.bag_box(kind).get_center()
+			return maxf(0.0, near.distance_to(spine) - 0.45)
+	var grip := props.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
+	var local := bag.global_transform.affine_inverse() * grip
+	var box := CarryOnProps.bag_box(kind)
+	return 0.0 if box.grow(GRIP_REACH_M / scale_by).has_point(local) else 1.0
 
 
 ## Points inside each solid box (lane parts, arch posts, walls), by its name.
@@ -995,9 +1207,10 @@ func _plate_live(id: int) -> bool:
 ## wall to the return route's end. Every frame the body, and each carried
 ## bag, are checked against the lane parts, the arch posts and the walls, and
 ## the body against its own bags. Three frames are plated (leaving the
-## berth, in the corridor, at the route's end). Control: the bag must be
-## carried in front on some of the frames.
-func _plate_live_walk_back(id: int) -> bool:
+## berth, in the corridor, at the route's end). The check runs on through the
+## second pass's walk to the unpack cell while a bag is in hand. Control: the
+## carry turns to the front on some frames and back on later ones.
+func _plate_live_walk_back(id: int, name: String) -> bool:
 	var p := _sim.get_passenger(id)
 	var corridor := _sim.grid.cell_to_world(_lane["return_route"][0])
 	_aim(corridor, DISTANCE_M, 0.6 + PI / 2.0)
@@ -1024,18 +1237,19 @@ func _plate_live_walk_back(id: int) -> bool:
 			break
 		if p.security_phase == SecurityRuntime.Phase.REPACK:
 			continue
-		if p.security_phase != SecurityRuntime.Phase.RETURN:
+		# On through the second pass's walk to the tray while a bag is in hand,
+		# so the turn back to the side carry is seen however short RETURN is.
+		var in_hand := SecurityLooks.bag_homes(_sim, p).has(SecurityLooks.Home.HAND)
+		var second_pass := p.security_phase == SecurityRuntime.Phase.ARCH and in_hand
+		if p.security_phase != SecurityRuntime.Phase.RETURN and not second_pass:
 			break
 		frames += 1
 		var body := _views.node_for(id)
 		var homes := SecurityLooks.bag_homes(_sim, p)
-		var gripping: Array = []
-		for i in homes.size():
-			if homes[i] == SecurityLooks.Home.HAND:
-				gripping.append([".R", ".L"][SecurityLooks.hand_of(_sim, p, i)])
+		var gripping := _gripping(p)
 		var drawn: Array[Node3D] = props.props_of(id)["bags"]
 		var weight := props.front_weight_of(id)
-		var carrying := not gripping.is_empty() and drawn.size() == p.carry_on
+		var carrying := homes.has(SecurityLooks.Home.HAND) and drawn.size() == p.carry_on
 		front_frames += int(carrying and weight >= 1.0)
 		side_after += int(carrying and front_frames > 0 and weight <= 0.0)
 		# Every carried bag stays at the hand that holds it, turns included.
@@ -1043,71 +1257,45 @@ func _plate_live_walk_back(id: int) -> bool:
 			# A bag still moving to the hand (picked up) is not held yet.
 			if homes[i] != SecurityLooks.Home.HAND or props.transfer_progress(id, i) < 1.0:
 				continue
-			var grip := props.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
-			var local := drawn[i].global_transform.affine_inverse() * grip
-			var box := AABB(Vector3.ZERO, CarryOnProps.bag_size())
-			box.position = Vector3(-box.size.x / 2.0, 0.0, -box.size.z / 2.0)
-			if not box.grow(GRIP_REACH_M / drawn[i].global_transform.basis.get_scale().x).has_point(
-				local
-			):
+			var off := _detached(id, i, body)
+			if off > 0.0:
 				detached += 1
 				print(
 					(
-						"DETACHED walk-back frame=%d at=%s turn=%.2f grip_local=%s"
-						% [frames, p.at, weight, local.snapped(Vector3.ONE * 0.01)]
+						"DETACHED walk-back frame=%d at=%s turn=%.2f kind=%s off_m=%.3f"
+						% [frames, p.at, weight, props.props_of(id)["kinds"][i], off]
 					)
 				)
 		var counts := _box_hits(CarryContact.body_points(body, []))
 		var own := CarryContact.body_points(body, gripping)
-		for bag: Node3D in props.props_of(id)["bags"]:
-			var points := CarryContact.bag_points(bag.global_transform)
+		var bag_pair := _bag_bag(drawn)
+		if bag_pair > 0:
+			counts["bag_bag"] = bag_pair
+		for bag: Node3D in drawn:
+			var points := _surface(bag)
 			for key in _box_hits(points):
 				if key == "wall" or key == "arch_post":
 					counts["bag_" + key] = counts.get("bag_" + key, 0) + 1
+					var where := [
+						bag.global_position.snapped(Vector3.ONE * 0.01), body.global_position
+					]
 					print(
 						(
-							(
-								"CONTACT walk-back frame=%d at=%s moving=%s %s weight=%.2f moved=%.2f"
-								+ " bag=%s body=%s"
-							)
-							% [
-								frames,
-								p.at,
-								p.is_moving(),
-								key,
-								props.front_weight_of(id),
-								props.transfer_progress(id, 0),
-								bag.global_position.snapped(Vector3.ONE * 0.01),
-								body.global_position.snapped(Vector3.ONE * 0.01)
-							]
+							"CONTACT walk-back frame=%d at=%s %s bag_body=%s"
+							% [frames, p.at, key, where]
 						)
 					)
 			for part in _part_nodes:
 				if CarryContact.inside_meshes(points, part) > 0:
 					counts["bag_" + str(part.name)] = counts.get("bag_" + str(part.name), 0) + 1
-			var inside := CarryContact.inside_bag(own, bag.global_transform)
+			var inside := CarryContact.inside_meshes(own, bag)
 			if inside > 0:
 				counts["bag_body"] = counts.get("bag_body", 0) + 1
-				var named: Array = CarryContact.body_points_owned(body, gripping)
-				var bones := {}
-				var wrist_far := 0.0
-				var grip_at := props.grip_of(body, 0)
-				for k in CarryContact.inside_indices(named[0], bag.global_transform):
-					bones[named[1][k]] = bones.get(named[1][k], 0) + 1
-					wrist_far = maxf(wrist_far, (named[0][k] as Vector3).distance_to(grip_at))
-				bones["max_from_right_grip_m"] = snappedf(wrist_far, 0.01)
-				bones["turn"] = snappedf(props.front_weight_of(id), 0.01)
+				var bones := _contact_bones(body, gripping, bag)
 				print(
 					(
-						"CONTACT walk-back frame=%d at=%s front=%s moved=%.2f points=%d bones=%s"
-						% [
-							frames,
-							p.at,
-							SecurityLooks.carry_front(_sim, p),
-							props.transfer_progress(id, 0),
-							inside,
-							bones
-						]
+						"CONTACT walk-back frame=%d at=%s points=%d bones=%s"
+						% [frames, p.at, inside, bones]
 					)
 				)
 		for key in counts:
@@ -1120,7 +1308,7 @@ func _plate_live_walk_back(id: int) -> bool:
 			var img := root.get_texture().get_image()
 			img.convert(Image.FORMAT_RGBA8)
 			if _live_shown(body, "live_walk_back_%d" % grabbed, float(grabbed)):
-				_save(img, "alarm_6_live_walk_back_%d" % grabbed, "live")
+				_save(img, "%s_%d" % [name, grabbed], "live")
 			else:
 				_invalid("live walk-back frame %d: the passenger is not shown" % grabbed)
 			grabbed += 1
@@ -1128,10 +1316,10 @@ func _plate_live_walk_back(id: int) -> bool:
 	print(
 		(
 			(
-				"LIVE walk-back passenger=%d frames_checked=%d front_carry_frames=%d"
+				"LIVE walk-back %s passenger=%d kinds=%s frames_checked=%d front_carry_frames=%d"
 				+ " frames_with_contacts=%s grabbed=%d"
 			)
-			% [id, frames, front_frames, worst, grabbed]
+			% [name, id, props.props_of(id)["kinds"], frames, front_frames, worst, grabbed]
 		)
 	)
 	print(
@@ -1192,6 +1380,7 @@ func _benchmark() -> void:
 	while _clock.tick < until:
 		_beat("bench walk-in")
 		await process_frame
+	await _sweep()
 	var centre := Vector3.ZERO
 	var count := 0
 	for id in _sim.passenger_ids():
@@ -1207,12 +1396,97 @@ func _benchmark() -> void:
 		_sim.get_passenger(id).carry_on = 0
 	await _frames(10)
 	var without := await _frame_times("no bags (control)")
+	if _views.carry_on_props().drawn_count() > 0 or _views.active_count() == 0:
+		_invalid("bench: no crowd on screen, or the control still draws bags")
 	print(
 		(
 			"BENCH flight=%s cost_ms_avg=%.2f cost_ms_p95=%.2f"
 			% [flight, with_bags[0] - without[0], with_bags[1] - without[1]]
 		)
 	)
+
+
+## The crowd sweep: each carrier with every bag settled in hand, its drawn
+## body (the holding hands left out) against its bags' meshes and its bags
+## against each other, every other frame for SWEEP_FRAMES frames of the live
+## walk and queue, then SWEEP_FRAMES / 2 poses of the run clip on the paused
+## crowd (seeked). Counts per kind, character and clip are printed; any
+## contact fails. Control per kind: one of its bags moved to a carrier's hips
+## holds body points.
+func _sweep() -> void:
+	var props := _views.carry_on_props()
+	var checks := {}
+	var contacts := {}
+	var carriers: Array[int] = []
+	for frame in SWEEP_FRAMES * 2 + SWEEP_FRAMES / 2:
+		_beat("sweep frame %d" % frame)
+		var running := frame >= SWEEP_FRAMES * 2
+		if running:
+			_clock.set_paused(true)
+			for id in carriers:
+				var player := _views.node_for(id).get_node("AnimationPlayer") as AnimationPlayer
+				player.play("run")
+				player.seek(fmod(frame * 0.071, player.current_animation_length), true)
+		await process_frame
+		if not running and frame % 2 == 1:
+			continue
+		carriers.clear()
+		for id in _sim.passenger_ids():
+			var body := _views.node_for(id)
+			var p := _sim.get_passenger(id)
+			var drawn: Array[Node3D] = props.props_of(id)["bags"]
+			if body == null or p.carry_on == 0 or drawn.size() != p.carry_on:
+				continue
+			var homes := SecurityLooks.bag_homes(_sim, p)
+			var settled := homes.all(
+				func(h: SecurityLooks.Home) -> bool: return h == SecurityLooks.Home.HAND
+			)
+			for i in drawn.size():
+				settled = settled and props.transfer_progress(id, i) >= 1.0
+			if not settled:
+				continue
+			carriers.append(id)
+			var clip := (body.get_node("AnimationPlayer") as AnimationPlayer).current_animation
+			var own := CarryContact.body_points(body, _gripping(p))
+			var hits := _bag_bag(drawn)
+			for bag in drawn:
+				hits += CarryContact.inside_meshes(own, bag)
+			for i in drawn.size():
+				var key := "%s/v%d/%s" % [KIND_NAMES[SecurityLooks.bag_kind(p, i)], p.variant, clip]
+				checks[key] = checks.get(key, 0) + 1
+				if hits > 0:
+					if not contacts.has(key):
+						print(
+							(
+								"SWEEP contact %s bones=%s"
+								% [key, _contact_bones(body, _gripping(p), drawn[i])]
+							)
+						)
+					contacts[key] = contacts.get(key, 0) + hits
+	_clock.set_paused(false)
+	print("SWEEP checks=%s" % [checks])
+	if checks.is_empty():
+		_invalid("sweep: no carrier was checked")
+	print("SWEEP contacts=%s" % [contacts])
+	var controlled := {}
+	for id in carriers:
+		var body := _views.node_for(id)
+		var own := CarryContact.body_points(body, [])
+		var hips := Transform3D(Basis.IDENTITY, body.global_position + Vector3.UP * 0.85)
+		for bag: Node3D in props.props_of(id)["bags"]:
+			var kind: int = props.props_of(id)["kinds"][props.props_of(id)["bags"].find(bag)]
+			if controlled.has(kind):
+				continue
+			var was := bag.global_transform
+			bag.global_transform = hips.scaled_local(was.basis.get_scale())
+			controlled[kind] = CarryContact.inside_meshes(own, bag)
+			bag.global_transform = was
+	print("CONTROL sweep body_points_in_a_bag_at_the_hips by kind=%s" % [controlled])
+	for kind in KIND_NAMES.size():
+		if controlled.get(kind, 0) == 0:
+			_invalid("sweep: no %s control, or it found no contact" % KIND_NAMES[kind])
+	if not contacts.is_empty():
+		_invalid("sweep: a carried bag touches its carrier's body or another bag")
 
 
 ## [avg ms, p95 ms] over BENCH_FRAMES frames, printing the counts on screen.

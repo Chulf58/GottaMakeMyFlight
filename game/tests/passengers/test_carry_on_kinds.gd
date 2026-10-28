@@ -4,8 +4,8 @@ extends GdUnitTestSuite
 ## bag-small-rolle): which kind a bag is (a fixed hash of the passenger's id,
 ## no saved state), how each kind is carried (CarryOnProps' placement maths)
 ## and what each kind does in a cell closed on both sides (only the hard case
-## turns to the front; worn and pulled bags keep their carry, inside the
-## corridor).
+## turns to the front, a roller lifted at security included; worn bags keep
+## their carry, inside the corridor).
 
 const CORRIDOR := Vector2i(4, 6)
 const IDS := 2000
@@ -120,7 +120,7 @@ func test_a_pulled_roller_runs_from_the_floor_to_the_hand() -> void:
 
 
 ## A worn shoulder bag hangs from its strap's bar over the shoulder joint,
-## upright, its inner face outside the hip, under the elbow.
+## upright, its inner face outside the hip (0.196 m), under the elbow.
 func test_a_shoulder_bag_hangs_from_the_shoulder_outside_the_hip() -> void:
 	var base := Vector3(0.0, 0.05, 0.14)
 	for side in 2:
@@ -133,57 +133,67 @@ func test_a_shoulder_bag_hangs_from_the_shoulder_outside_the_hip() -> void:
 		assert_float(absf(bar.x)).is_equal_approx(CarryOnProps.STRAP_OUT_M, 0.0001)
 		assert_float(signf(bar.x)).is_equal(signf(joint.x))
 		assert_vector(xf.basis.z.normalized()).is_equal_approx(Vector3.UP, Vector3.ONE * 0.0001)
-		# The inner face (local y = 0) at 0.22 from the centre line, the bag's
-		# top STRAP_M under the bar.
+		# The inner face (local y = 0) the strips' depth in from the strap, the
+		# bag's top STRAP_M under the bar.
 		var inner := xf * Vector3.ZERO
-		assert_float(absf(inner.x)).is_equal_approx(0.22, 0.0001)
+		assert_float(absf(inner.x)).is_equal_approx(CarryOnProps.STRAP_OUT_M - base.y, 0.0001)
+		assert_float(absf(inner.x)).is_greater(0.21)
 		var top := xf * Vector3(0.0, 0.0, base.z)
 		assert_float(top.y).is_equal_approx(bar.y - CarryOnProps.STRAP_M, 0.0001)
 
 
-## A worn backpack: its back panel BACK_FROM_SPINE_M behind the spine bone,
-## its length along the bone, its top just above it.
+## A worn backpack: the top of its back panel BACK_FROM_SPINE_M behind the
+## spine bone and just above it, its length along the bone leaning in at the
+## top by BACK_LEAN_DEGREES (so its bottom stands further out, clear of the
+## hips), behind the body.
 func test_a_backpack_is_worn_behind_the_spine() -> void:
 	var spine := Transform3D(Basis(Vector3.RIGHT, -0.1), Vector3(0.0, 1.544, -0.047))
 	var xf := CarryOnProps.worn_back(spine, 0.0, 1.0)
-	assert_vector(xf.basis.z.normalized()).is_equal_approx(
-		spine.basis.y.normalized(), Vector3.ONE * 0.0001
-	)
-	var panel := xf.affine_inverse() * spine.origin
-	assert_float(panel.y).is_equal_approx(-CarryOnProps.BACK_FROM_SPINE_M, 0.0001)
-	# Behind the body (it faces +Z).
-	assert_float((xf * Vector3(0.0, 0.1, 0.0)).z).is_less(spine.origin.z)
+	var along := xf.basis.z.normalized()
+	var lean := rad_to_deg(along.angle_to(spine.basis.y.normalized()))
+	assert_float(lean).is_equal_approx(CarryOnProps.BACK_LEAN_DEGREES, 0.01)
 	var top := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z
-	assert_float(panel.z).is_equal_approx(top - CarryOnProps.BACK_TOP_OVER_SPINE_M, 0.0001)
+	var top_inner := xf * Vector3(0.0, 0.0, top)
+	var bottom_inner := (
+		xf * Vector3(0.0, 0.0, CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).position.z)
+	)
+	var up := spine.basis.y.normalized()
+	var out := (top_inner - spine.origin) - up * (top_inner - spine.origin).dot(up)
+	assert_float(out.length()).is_equal_approx(CarryOnProps.BACK_FROM_SPINE_M, 0.0001)
+	assert_float((top_inner - spine.origin).dot(up)).is_equal_approx(
+		CarryOnProps.BACK_TOP_OVER_SPINE_M, 0.0001
+	)
+	# Behind the body (it faces +Z), the bottom further back than the top.
+	assert_float(top_inner.z).is_less(spine.origin.z)
+	assert_float(bottom_inner.z).is_less(top_inner.z)
 
 
-## The roller's axle trails like a trailer: straight behind on a straight
-## walk, and through a right-angle corner it cuts the corner on the inside
-## and never swings out past either walked leg (a rigid tail would swing to
-## the outside at once). Control: the axle moved on round the corner.
+## The roller's axle is TRAIL_M back along the line the body walked: on a
+## straight walk straight behind, and round a right-angle corner on the walked
+## line itself (never cutting the corner, where a lane part may stand). Before
+## any step it is TRAIL_M along `back`. Control: it moves round the corner.
 func test_a_trailing_axle_follows_the_walked_line() -> void:
-	var hitch := Vector3.ZERO
-	var axle := Vector3(0.0, 0.0, -CarryOnProps.TRAIL_M)
+	var back := Vector3(0.0, 0.0, -1.0)
+	var start := CarryOnProps.trail([Vector3.ZERO], back)
+	assert_vector(start).is_equal_approx(back * CarryOnProps.TRAIL_M, Vector3.ONE * 0.0001)
+	var walked: Array = [Vector3.ZERO]
 	for i in 30:
-		hitch.z += 0.08
-		axle = CarryOnProps.trail(axle, hitch)
-	assert_float(axle.x).is_equal_approx(0.0, 0.0001)
-	assert_float(hitch.z - axle.z).is_equal_approx(CarryOnProps.TRAIL_M, 0.0001)
-	var corner := hitch
+		walked.append(walked[-1] + Vector3(0.0, 0.0, 0.08))
+	var axle := CarryOnProps.trail(walked, back)
+	assert_vector(axle).is_equal_approx(
+		walked[-1] - Vector3(0.0, 0.0, CarryOnProps.TRAIL_M), Vector3.ONE * 0.0001
+	)
+	var corner: Vector3 = walked[-1]
 	var worst := 0.0
 	for i in 30:
-		hitch.x += 0.08
-		axle = CarryOnProps.trail(axle, hitch)
-		# Distance from the walked polyline (the leg along z up to the corner,
-		# then the leg along x).
-		var to_first := absf(axle.x) if axle.z <= corner.z else axle.distance_to(corner)
-		var to_second := absf(axle.z - corner.z) if axle.x >= corner.x else INF
-		worst = maxf(worst, minf(to_first, to_second))
-		assert_float(axle.x).is_greater_equal(-0.0001)
-		assert_float(axle.z).is_less_equal(corner.z + 0.0001)
-	print("trailer through a right-angle corner: worst off the walked line %.3f m" % worst)
+		walked.append(walked[-1] + Vector3(0.08, 0.0, 0.0))
+		axle = CarryOnProps.trail(walked, back)
+		# Off the walked polyline: the leg along z, then the leg along x.
+		var off := absf(axle.x) if axle.z < corner.z - 0.0001 else absf(axle.z - corner.z)
+		worst = maxf(worst, off)
+	print("trailing axle round a right-angle corner: worst off the walked line %.4f m" % worst)
+	assert_float(worst).is_less(0.0001)
 	assert_float(axle.x).is_greater(corner.x + 1.0)
-	assert_float(worst).is_less(CarryOnProps.TRAIL_M * 0.5)
 
 
 ## The overhead route for a backpack: it starts and ends where asked, stays
@@ -211,10 +221,10 @@ func test_the_overhead_route_crosses_above_the_head() -> void:
 	assert_int(crossed).is_greater(2)
 
 
-## In a cell closed on both sides only a hard case comes to the front: in
-## the alarm corridor the arm holding a hard case is in its front pose, a
-## pulling arm is not, a shoulder bag's arm holds the strap and a backpack
-## leaves both arms free; worn bags and a roller's axle stay inside the
+## In a cell closed on both sides only a hand-carried bag comes to the front:
+## in the alarm corridor the arm holding a hard case, or a roller (lifted by
+## its handle at security), is in its front pose, a shoulder bag's arm holds
+## the strap and a backpack leaves both arms free; worn bags stay inside the
 ## corridor (0.44 m either side of its centre). The hands' places are not
 ## checked here: a headless skeleton is not animated (the windowed probe
 ## checks them). Control: more than one kind is seen.
@@ -263,11 +273,6 @@ func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 					widest = maxf(
 						widest, maxf(absf(box.position.x - centre.x), absf(box.end.x - centre.x))
 					)
-				SecurityLooks.Kind.ROLLER:
-					var axle := bags[0].global_transform * CarryOnProps.ROLLER_AXLE
-					var behind := body.global_transform.affine_inverse() * axle
-					assert_float(behind.z).is_less(-0.6)
-					widest = maxf(widest, absf(axle.x - centre.x) + 0.17)
 		if ids.all(func(id: int) -> bool: return w.cleared.has(id)):
 			break
 	print(
@@ -287,12 +292,11 @@ func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 				assert_float(hand[2]).is_equal(1.0)
 			SecurityLooks.Kind.ROLLER:
 				assert_bool(hand[1]).is_true()
-				assert_float(hand[2]).is_equal(0.0)
-				assert_float(arms[1][2]).is_equal(0.0)
+				assert_float(hand[2]).is_equal(1.0)
 			SecurityLooks.Kind.SHOULDER:
 				assert_bool(hand[1]).is_false()
 				assert_float(hand[2]).is_equal(1.0)
-				assert_float(hand[3]).is_equal(CarryOnProps.STRAP_OUT_M)
+				assert_float(hand[3]).is_equal(CarryOnProps.STRAP_HAND_M)
 				assert_float(arms[1][2]).is_equal(0.0)
 			SecurityLooks.Kind.BACKPACK:
 				assert_bool(hand[0] or arms[1][0]).is_false()
