@@ -15,6 +15,21 @@ const TRAITS := [
 	[1, true, true],
 ]
 
+## Each scheduler-rule case and the words its refusal must give.
+const RULE_ERRORS := {
+	"a repacking passenger without the berth": "needs the berth it does not hold",
+	"main given to a passenger past the arch": "main position",
+	"a basic scanner phase at a lane": "phase this tier does not have",
+	"repacking with the incident resolved": "repacks with no open incident",
+	"mid-scan with the main position free": "main position",
+	"a berth at a basic scanner": "one passenger, with no berth",
+	"a lane phase at a basic scanner": "phase this tier does not have",
+	"two passengers in service": "one passenger, with no berth",
+	"admitted and in the lane": "in a queue as well",
+	"admitted and in the holding list": "in a queue as well",
+	"admitted and the queue's service": "in a queue as well",
+}
+
 var _lanes_were := false
 
 
@@ -141,7 +156,83 @@ func test_a_save_with_inconsistent_security_state_is_refused() -> void:
 	var no_key: Dictionary = good.duplicate(true)
 	no_key.erase("security")
 	cases["no security key"] = no_key
-	var b := SecurityTestWorld.make(true)
+	# The scheduler's rules at a lane: the repacking passenger holds the berth
+	# with its incident open, is past the arch and is in no queue.
+	var repacker := ids[0]
+	var no_berth := _changed(good, func(d: Dictionary) -> void: d["security"][0]["berth"] = 0)
+	cases["a repacking passenger without the berth"] = no_berth
+	cases["main given to a passenger past the arch"] = _changed(
+		good, func(d: Dictionary) -> void: d["security"][0]["main"] = repacker
+	)
+	cases["a basic scanner phase at a lane"] = _changed(
+		good,
+		func(d: Dictionary) -> void:
+			_record(d, repacker)["security_phase"] = SecurityRuntime.Phase.SCAN
+	)
+	cases["repacking with the incident resolved"] = _changed(
+		good, func(d: Dictionary) -> void: _record(d, repacker)["incident_resolved"] = true
+	)
+	_add_queue_cases(cases, good, repacker)
+	_check_refused(true, a, good, cases)
+	a.world.free_all()
+
+
+func test_a_basic_scanner_save_that_breaks_its_one_service_is_refused() -> void:
+	var a := SecurityTestWorld.make(false)
+	var ids := a.send_all(TRAITS)
+	# Scanning the first passenger, with another waiting in the lane.
+	while not a.admitted.has(ids[0]) or a.world.sim.queue_of(a.station).is_empty():
+		a.world.step()
+	var good := _json(a.world.sim.to_snapshot())
+	var scanning := ids[0]
+	assert_int(int(good["security"][0]["main"])).is_equal(scanning)
+	var waiting := int(_queue_entry(good)["lane"][0])
+	var cases := {}
+	# With main free, the next tick would admit the queue front beside it.
+	cases["mid-scan with the main position free"] = _changed(
+		good, func(d: Dictionary) -> void: d["security"][0]["main"] = 0
+	)
+	cases["a berth at a basic scanner"] = _changed(
+		good, func(d: Dictionary) -> void: d["security"][0]["berth"] = scanning
+	)
+	cases["a lane phase at a basic scanner"] = _changed(
+		good,
+		func(d: Dictionary) -> void:
+			_record(d, scanning)["security_phase"] = SecurityRuntime.Phase.UNPACK
+	)
+	cases["two passengers in service"] = _changed(
+		good,
+		func(d: Dictionary) -> void:
+			(_queue_entry(d)["lane"] as Array).erase(float(waiting))
+			var record := _record(d, waiting)
+			record["stage"] = Passenger.Stage.SECURITY
+			record["security_phase"] = SecurityRuntime.Phase.SCAN
+			record["security_work"] = SecurityRuntime.BASIC_SCAN_TICKS
+			d["security"][0]["admitted"].append(waiting)
+	)
+	_add_queue_cases(cases, good, scanning)
+	_check_refused(false, a, good, cases)
+	a.world.free_all()
+
+
+## An admitted passenger also put in the queue, the holding list or the
+## queue's service.
+func _add_queue_cases(cases: Dictionary, good: Dictionary, admitted: int) -> void:
+	cases["admitted and in the lane"] = _changed(
+		good, func(d: Dictionary) -> void: _queue_entry(d)["lane"].append(admitted)
+	)
+	cases["admitted and in the holding list"] = _changed(
+		good, func(d: Dictionary) -> void: _queue_entry(d)["holding"].append(admitted)
+	)
+	cases["admitted and the queue's service"] = _changed(
+		good, func(d: Dictionary) -> void: _queue_entry(d)["serving"] = admitted
+	)
+
+
+func _check_refused(
+	use_lane: bool, a: SecurityTestWorld, good: Dictionary, cases: Dictionary
+) -> void:
+	var b := SecurityTestWorld.make(use_lane)
 	b.world.clock.from_snapshot(_json(a.world.clock.to_snapshot()))
 	b.world.flights.from_snapshot(_json(a.world.flights.to_snapshot()))
 	var before := b.signature()
@@ -152,6 +243,34 @@ func test_a_save_with_inconsistent_security_state_is_refused() -> void:
 			. is_false()
 		)
 		assert_str(b.signature()).is_equal(before)
+		# A scheduler-rule case is refused for that rule, not something else.
+		if RULE_ERRORS.has(name):
+			var problem: String = PassengerSnapshot.load(cases[name], b.world.grid).get("error", "")
+			assert_str(problem).override_failure_message("%s: %s" % [name, problem]).contains(
+				RULE_ERRORS[name]
+			)
 	assert_bool(b.world.sim.from_snapshot(good)).is_true()
-	a.world.free_all()
 	b.world.free_all()
+
+
+## A deep copy of `data` with `change` applied.
+func _changed(data: Dictionary, change: Callable) -> Dictionary:
+	var out := data.duplicate(true)
+	change.call(out)
+	return out
+
+
+func _record(data: Dictionary, id: int) -> Dictionary:
+	for record: Dictionary in data["passengers"]:
+		if int(record["id"]) == id:
+			return record
+	return {}
+
+
+## The queue entry of the save's one security station.
+func _queue_entry(data: Dictionary) -> Dictionary:
+	var station := int(data["security"][0]["station"])
+	for entry: Dictionary in data["queues"]:
+		if int(entry["station"]) == station:
+			return entry
+	return {}

@@ -52,6 +52,18 @@ const LANE_UNPACK_BAG_TICKS := 8
 const LANE_PICKUP_TICKS := 2
 const LANE_PICKUP_BAG_TICKS := 4
 const WORK_PHASES: Array[Phase] = [Phase.SCAN, Phase.UNPACK, Phase.REPACK, Phase.PICKUP]
+const BASIC_PHASES: Array[Phase] = [Phase.SCAN, Phase.REPACK]
+const LANE_PHASES: Array[Phase] = [
+	Phase.UNPACK,
+	Phase.ARCH,
+	Phase.TO_BERTH,
+	Phase.REPACK,
+	Phase.RETURN,
+	Phase.PICKUP,
+	Phase.LEAVE,
+]
+## Lane phases that hold the main position: until the arch is passed.
+const MAIN_PHASES: Array[Phase] = [Phase.UNPACK, Phase.ARCH]
 
 ## Station id -> {"admitted": Array (ids, admission order), "returns": Array
 ## (ids, return order), "main": id holding the main position or 0, "berth":
@@ -93,6 +105,48 @@ static func work_for(phase: Phase, p: Passenger) -> int:
 		Phase.REPACK:
 			return REPACK_TICKS
 	return 0
+
+
+## What breaks the scheduler's rules in a station's record (see `records`)
+## whose admitted passengers are `units`, between ticks, or "". `lane` says
+## which tier. A basic scanner serves exactly one passenger, in SCAN or
+## REPACK, who holds the main position, and has no berth or returns. At a
+## lane the one passenger in UNPACK or ARCH holds the main position, or
+## nobody does when there is none; a passenger stepping aside or repacking
+## has an open incident and holds the berth, and so does one in UNPACK or ARCH
+## with an open incident (reserved); otherwise only a returning passenger may
+## still hold it (it is released on the tick after it steps off); a returning
+## passenger's incident is resolved.
+static func record_problem(record: Dictionary, units: Array, lane: bool) -> String:
+	var in_main: Array[int] = []
+	var needs_berth: Array[int] = []
+	var by_id := {}
+	for p: Passenger in units:
+		by_id[p.id] = p
+		var phase := p.security_phase as Phase
+		if not (LANE_PHASES if lane else BASIC_PHASES).has(phase):
+			return "passenger %d is in a phase this tier does not have" % p.id
+		var aside := phase == Phase.TO_BERTH or phase == Phase.REPACK
+		if aside and not incident_open(p):
+			return "passenger %d repacks with no open incident" % p.id
+		if phase == Phase.RETURN and not p.incident_resolved:
+			return "passenger %d returns with its incident open" % p.id
+		if not lane or MAIN_PHASES.has(phase):
+			in_main.append(p.id)
+		if lane and (aside or (MAIN_PHASES.has(phase) and incident_open(p))):
+			needs_berth.append(p.id)
+	if not lane and (units.size() != 1 or record["berth"] != 0 or not record["returns"].is_empty()):
+		return "a basic scanner serves one passenger, with no berth or returns"
+	if in_main.size() > 1 or record["main"] != (in_main[0] if in_main.size() == 1 else 0):
+		return "the main position is not held by its one passenger in service"
+	if needs_berth.size() > 1:
+		return "two passengers need the one berth"
+	var berth: int = record["berth"]
+	if not needs_berth.is_empty() and berth != needs_berth[0]:
+		return "passenger %d needs the berth it does not hold" % needs_berth[0]
+	if needs_berth.is_empty() and berth != 0 and by_id[berth].security_phase != Phase.RETURN:
+		return "the berth is held by passenger %d, who does not need it" % berth
+	return ""
 
 
 ## Whether `station` is a whole security lane (otherwise a basic scanner).

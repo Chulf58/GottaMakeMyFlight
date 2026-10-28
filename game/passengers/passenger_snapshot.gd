@@ -173,7 +173,7 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 	var queues := _queues(data["queues"], ids)
 	if queues.has("error"):
 		return queues
-	var security := _security(data["security"], ids)
+	var security := _security(data["security"], ids, queues, grid)
 	if security.has("error"):
 		return security
 	out["security"] = security["records"]
@@ -533,8 +533,11 @@ static func _queues(list: Array, ids: Dictionary) -> Dictionary:
 ## dictionary with "error". Every passenger in Stage.SECURITY is admitted at
 ## exactly one station, its own, with a phase; nobody else has a phase or
 ## work; returns are the admitted passengers in RETURN; the main position and
-## the berth are held by admitted passengers or nobody.
-static func _security(list: Array, ids: Dictionary) -> Dictionary:
+## the berth are held by admitted passengers or nobody, as the station's tier
+## allows (_service_problem()).
+static func _security(
+	list: Array, ids: Dictionary, queues: Dictionary, grid: BuildGrid
+) -> Dictionary:
 	var records := {}
 	var station_of := {}
 	for entry in list:
@@ -573,6 +576,9 @@ static func _security(list: Array, ids: Dictionary) -> Dictionary:
 			"main": int(entry["main"]),
 			"berth": int(entry["berth"])
 		}
+		var problem := _service_problem(station, records[station], ids, queues, grid)
+		if problem != "":
+			return {"error": "security at %d: %s" % [station, problem]}
 	for id: int in ids:
 		var p: Passenger = ids[id]
 		var admitted := station_of.has(id)
@@ -586,6 +592,32 @@ static func _security(list: Array, ids: Dictionary) -> Dictionary:
 		):
 			return {"error": "passenger %d's security phase does not match its station" % id}
 	return {"records": records}
+
+
+## What is wrong with a station's service record, or "": the station must be
+## a basic scanner or an arch on the grid, its admitted passengers must not
+## also stand in any queue, holding list or service, and the record must keep
+## the scheduler's rules for its tier (SecurityRuntime.record_problem()). An
+## arch is judged as a lane; one that is no longer whole is dropped on the
+## next tick.
+static func _service_problem(
+	station: int, record: Dictionary, ids: Dictionary, queues: Dictionary, grid: BuildGrid
+) -> String:
+	var object := grid.get_object(station)
+	var def: StringName = StringName(object["def"]) if not object.is_empty() else &""
+	if def != &"security_scanner" and def != SecurityLanes.ARCH:
+		return "it is not a scanner or a security arch"
+	var units := []
+	for id: int in record["admitted"]:
+		units.append(ids[id])
+		for q: Dictionary in queues.values():
+			if (
+				(q["lane"] as Array).has(id)
+				or (q["holding"] as Array).has(id)
+				or q["serving"] == id
+			):
+				return "passenger %d is admitted and in a queue as well" % id
+	return SecurityRuntime.record_problem(record, units, def == SecurityLanes.ARCH)
 
 
 static func _whole(value: Variant) -> bool:
