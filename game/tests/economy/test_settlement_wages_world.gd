@@ -64,5 +64,7 @@ func test_a_save_from_before_wages_loads() -> void:
 	var settlement: Dictionary = data["settlement"]
 	for key in Settlement.OPTIONAL_SNAPSHOT_KEYS:
 		settlement.erase(key)
+	# The day ledger came after wages, so a save from before them has none.
+	data.erase("day_ledger")
 	assert_bool(_save.load_world(data)).is_true()
 	assert_int((_main.get_node("Settlement") as Settlement).wages_owed()).is_equal(0)

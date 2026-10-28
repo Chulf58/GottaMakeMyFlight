@@ -108,6 +108,54 @@ func test_the_card_follows_the_ledger() -> void:
 	assert_str(_slot.tooltip_text).contains("Airline fees  +300")
 
 
+## The card Godot's tooltip popup shows, while it is in the tree.
+func _open_card() -> Control:
+	var card: Control = _slot._make_custom_tooltip("")
+	add_child(card)
+	auto_free(card)
+	return card
+
+
+func _shown(card: Control) -> PackedStringArray:
+	var texts := PackedStringArray()
+	for label in card.find_children("*", "Label", true, false):
+		texts.append((label as Label).text)
+	return texts
+
+
+func test_an_open_card_follows_the_ledger_in_place() -> void:
+	var card := _open_card()
+	assert_bool(_shown(card).has("Owed wages")).is_false()
+	assert_bool(_wallet.credit(100, C.SHOP)).is_true()
+	var shown := _shown(card)
+	assert_bool(shown.has("+100")).is_true()
+	assert_int(shown.count("Shops")).is_equal(1)
+
+
+func test_an_open_card_updates_its_heading_and_rows() -> void:
+	var card := _open_card()
+	assert_str(_shown(card)[0]).is_equal("Today")
+	_ledger.start_since_load()
+	assert_str(_shown(card)[0]).is_equal("Since load")
+	assert_bool(_shown(card).has("Cash change since load")).is_true()
+
+
+func test_a_card_no_longer_shown_is_not_refilled() -> void:
+	var card: Control = auto_free(_slot._make_custom_tooltip(""))
+	var before := _shown(card)
+	assert_bool(_wallet.credit(100, C.SHOP)).is_true()
+	assert_array(Array(_shown(card))).is_equal(Array(before))
+
+
+func test_the_grid_takes_its_spacing_from_the_theme() -> void:
+	var card: Control = auto_free(_slot.make_card("Today", MoneySlot.rows(_ledger, 0)))
+	var grids := card.find_children("*", "GridContainer", true, false)
+	assert_int(grids.size()).is_equal(2)
+	for grid in grids:
+		assert_str(String((grid as GridContainer).theme_type_variation)).is_equal("HudMoneyGrid")
+	assert_int(BuildMenu.HUD_THEME.get_constant(&"h_separation", &"HudMoneyGrid")).is_greater(4)
+
+
 func test_a_slot_with_no_ledger_has_no_card() -> void:
 	var bare: MoneySlot = auto_free(MoneySlot.new())
 	assert_str(bare.card_text()).is_empty()

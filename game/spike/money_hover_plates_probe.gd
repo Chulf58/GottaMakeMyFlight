@@ -16,9 +16,10 @@ extends SceneTree
 ## rows, the popup rect lies inside the visible rect (printed), the owed row
 ## uses HudAttentionText. A crop around the card, scaled 2x, is saved beside the
 ## full plate. Otherwise it prints PROBE_INVALID and exits 1. After plate a it
-## credits a shop sale with the card still open and prints a LIVE line saying
-## whether the open card follows (an observation, not a pass condition), with a
-## crop named a_live. A guard thread
+## credits a shop sale with the card still open and requires the open card, in
+## the same popup, to show EXPECT_A_LIVE (LIVE line, crop named a_live). It then
+## sets owed wages with the card open and requires the popup to grow by the
+## owed row, and to shrink back to its earlier size when they are cleared. A guard thread
 ## reads a heartbeat and calls OS.crash() on a hang (anti-pattern
 ## a-frame-counting-watchdog-cannot-catch-a-stuck-main-thread).
 ##
@@ -37,6 +38,11 @@ const TOOLTIP_WAIT_MS := 2500
 const EXPECT_A := (
 	"Today\nAirline fees  +1840\nShops  +365\nWages paid  -720\nOperating result  +1485"
 	+ "\nBuilding  -450\nRescue grant  0\nCash change today  +1035"
+)
+## Plate a after a shop sale of 100 with the card open.
+const EXPECT_A_LIVE := (
+	"Today\nAirline fees  +1840\nShops  +465\nWages paid  -720\nOperating result  +1585"
+	+ "\nBuilding  -450\nRescue grant  0\nCash change today  +1135"
 )
 const EXPECT_B := (
 	"Today\nAirline fees  +240\nShops  0\nWages paid  -740\nOperating result  -500"
@@ -356,8 +362,9 @@ func _check_card(card: Control, expected: String) -> bool:
 	return ok
 
 
-## Credits a shop sale with the pointer still on the slot, waits, and reports
-## whether the open card shows the new totals; saves a crop either way.
+## Credits a shop sale with the pointer still on the slot, waits, and requires
+## the open card to show the new totals; saves a crop either way. Then requires
+## the popup to grow for an owed-wages row and shrink back without it.
 func _live_check(name: String) -> void:
 	_expect(_wallet.credit(100, Wallet.Category.SHOP), "live: shop credit refused")
 	await _frames(20)
@@ -376,10 +383,40 @@ func _live_check(name: String) -> void:
 			]
 		)
 	)
+	_expect(
+		popup != null and popup == _shown and shown == EXPECT_A_LIVE,
+		"live: the open card does not show the new totals"
+	)
+	await _resize_check(popup, card)
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
 	var crop := Rect2i(root.get_final_transform() * Rect2(Vector2.ZERO, Vector2(520, 380)))
 	_save(image.get_region(crop), name.replace("a_normal", "a_live") + "_crop")
+
+
+## With the card open, owed wages add a row: the popup must grow to hold it,
+## and shrink back to its earlier size once they are cleared.
+func _resize_check(popup: Window, card: Control) -> void:
+	if popup == null or card == null:
+		return
+	var before := popup.size
+	_set_owed(55)
+	await _frames(5)
+	var grown := popup.size
+	var holds := Vector2(grown) + Vector2.ONE >= card.get_combined_minimum_size()
+	var owed_row := _card_text(card).ends_with("Owed wages  55")
+	_set_owed(0)
+	await _frames(5)
+	var after := popup.size
+	print(
+		(
+			"  RESIZE before=%s grown=%s after=%s card_min=%s holds=%s owed_row=%s"
+			% [before, grown, after, card.get_combined_minimum_size(), holds, owed_row]
+		)
+	)
+	_expect(owed_row, "resize: the open card shows no owed wages row")
+	_expect(grown.y > before.y and holds, "resize: the popup did not grow for the owed row")
+	_expect(after == before, "resize: the popup did not shrink back")
 
 
 func _card_text(card: Control) -> String:

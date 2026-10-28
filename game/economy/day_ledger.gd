@@ -31,11 +31,8 @@ const CATEGORY_KEYS := {
 	Wallet.Category.WAGES: "wages",
 }
 const SNAPSHOT_KEYS := ["day", "since_load"]
-## Categories whose total is never above 0 (money out) or never below 0
-## (money in); BUILD nets purchases against refunds and may be either.
-const OUT_KEYS := ["wages"]
-const IN_KEYS := ["fees", "shop", "grant", "opening"]
-## Far beyond a day's money; a saved total past it is refused.
+## Far beyond a day's money; a saved total past it is refused. Any total may
+## be either sign, since the Wallet takes any category in either direction.
 const MAX_TOTAL := 1_000_000_000_000_000_000
 const NO_DAY := -1
 
@@ -180,6 +177,32 @@ static func day_link_problem(ledger: Dictionary, clock_data: Dictionary) -> Stri
 	return ""
 
 
+## "" or why a saved ledger and the saved settlement disagree on today's
+## wages. Settlement.wages_paid_today counts the midnight charge, owed wages
+## paid from the balance and wages claimed from credits since the day was
+## charged, and the ledger counts the same three under WAGES from the same
+## tick, so a ledger not marked since_load holds exactly minus that. A ledger
+## with a settlement that has no wage state is refused: every save that has
+## the ledger also has the wage keys.
+static func wages_link_problem(ledger: Dictionary, settlement: Dictionary) -> String:
+	if not settlement.has("wages_paid_today"):
+		return "day_ledger: the settlement holds no wages paid today to check it against"
+	if ledger.get("since_load") == true:
+		return ""
+	if not SimClock.is_int64_string(ledger.get("wages")):
+		return ""
+	if not SimClock.is_int64_string(settlement["wages_paid_today"]):
+		return ""
+	var counted := -str(ledger["wages"]).to_int()
+	var paid := str(settlement["wages_paid_today"]).to_int()
+	if counted != paid:
+		return (
+			"day_ledger: today's wages paid are %d, but the settlement paid %d today"
+			% [counted, paid]
+		)
+	return ""
+
+
 func _roll_to(new_day: int) -> void:
 	if new_day == _day:
 		return
@@ -210,10 +233,8 @@ func _snapshot_problem(data: Dictionary) -> String:
 	if typeof(data["since_load"]) != TYPE_BOOL:
 		return "'since_load' must be true or false"
 	for key in CATEGORY_KEYS.values():
-		var low := 0 if IN_KEYS.has(key) else -MAX_TOTAL
-		var high := 0 if OUT_KEYS.has(key) else MAX_TOTAL
-		if not _whole_in(data[key], low, high):
-			return "'%s' is not a decimal string from %d to %d" % [key, low, high]
+		if not _whole_in(data[key], -MAX_TOTAL, MAX_TOTAL):
+			return "'%s' is not a decimal string from %d to %d" % [key, -MAX_TOTAL, MAX_TOTAL]
 	return ""
 
 

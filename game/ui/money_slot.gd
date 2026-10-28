@@ -9,17 +9,24 @@ extends PanelContainer
 ##
 ## It follows the ledger's changed signal and the settlement's owed wages, not
 ## Wallet.changed: a credit that owed wages take whole leaves the balance as it
-## was but still changes the card. The card has no on/off setting (decision
+## was but still changes the card. A card already open is filled again in
+## place and its popup resized to fit, so it never shows stale totals. The
+## card has no on/off setting (decision
 ## hud-steal-list-self-clearing-alert-cards-money-hover-departu). With no
 ## ledger the slot has no card.
 
 const ATTENTION := &"HudAttentionText"
 ## The first rows are the operating result and its parts; a rule follows them.
 const OPERATING_ROWS := 4
+## The grid's theme type: room between a label and its value.
+const GRID := &"HudMoneyGrid"
 
 var ledger: DayLedger
 ## Optional: without it no owed wages are shown.
 var settlement: Settlement
+
+## The card last handed to the tooltip popup; refilled while it is shown.
+var _card: Control
 
 
 ## Shows `day_ledger`'s totals and `with_settlement`'s owed wages, and follows
@@ -36,6 +43,12 @@ func watch(day_ledger: DayLedger, with_settlement: Settlement) -> void:
 
 func refresh() -> void:
 	tooltip_text = card_text()
+	if ledger == null or not is_instance_valid(_card) or not _card.is_inside_tree():
+		return
+	_fill(_card, heading(ledger), rows(ledger, _owed()))
+	var popup := _card.get_window() as Popup
+	if popup != null:
+		popup.reset_size()
 
 
 ## The card as plain text, one "Label  value" row per line under the
@@ -83,6 +96,16 @@ static func signed(value: int) -> String:
 func make_card(title: String, card_rows: Array) -> Control:
 	var box := VBoxContainer.new()
 	box.theme = BuildMenu.HUD_THEME
+	_fill(box, title, card_rows)
+	return box
+
+
+## Replaces the card's contents. Old children are detached before they are
+## freed, so nothing reads them in between.
+func _fill(box: Control, title: String, card_rows: Array) -> void:
+	for child in box.get_children():
+		box.remove_child(child)
+		child.queue_free()
 	var head := Label.new()
 	head.text = title
 	head.theme_type_variation = &"HudTitle"
@@ -105,18 +128,19 @@ func make_card(title: String, card_rows: Array) -> Control:
 		value.theme_type_variation = row[2]
 		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		grid.add_child(value)
-	return box
 
 
 func _make_custom_tooltip(_for_text: String) -> Object:
 	if ledger == null:
 		return null
-	return make_card(heading(ledger), rows(ledger, _owed()))
+	_card = make_card(heading(ledger), rows(ledger, _owed()))
+	return _card
 
 
 func _grid() -> GridContainer:
 	var grid := GridContainer.new()
 	grid.columns = 2
+	grid.theme_type_variation = GRID
 	return grid
 
 

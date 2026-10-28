@@ -148,6 +148,28 @@ func test_a_snapshot_round_trips_through_json() -> void:
 	assert_bool(other.is_since_load()).is_false()
 
 
+## The Wallet takes any category in either direction, so a total of either
+## sign in any category saves and loads (Sol review of 884a485).
+func test_every_category_round_trips_with_either_sign() -> void:
+	assert_bool(_wallet.from_snapshot({"balance": "1000"})).is_true()
+	for category in C.values():
+		assert_bool(_wallet.spend(10 + category, category)).is_true()
+	_assert_round_trip(-1)
+	for category in C.values():
+		assert_bool(_wallet.credit(50 + category, category)).is_true()
+	_assert_round_trip(1)
+
+
+## Saves and loads the ledger through JSON and checks each total has `sign`.
+func _assert_round_trip(sign: int) -> void:
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(_ledger.to_snapshot()))
+	var other: DayLedger = auto_free(DayLedger.new())
+	assert_bool(other.from_snapshot(saved)).override_failure_message(str(saved)).is_true()
+	assert_dict(other.to_snapshot()).is_equal(_ledger.to_snapshot())
+	for category in C.values():
+		assert_int(signi(other.amount(category))).is_equal(sign)
+
+
 func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 	assert_bool(_wallet.credit(300, C.FEES)).is_true()
 	var before := _ledger.to_snapshot()
@@ -163,8 +185,8 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 		["day", "-1"],
 		["day", 3],
 		["since_load", "no"],
-		["fees", "-5"],
-		["wages", "5"],
+		["fees", str(-DayLedger.MAX_TOTAL - 1)],
+		["wages", str(DayLedger.MAX_TOTAL + 1)],
 		["build", "1.5"],
 		["shop", "x"],
 		["opening", str(DayLedger.MAX_TOTAL + 1)],
@@ -202,3 +224,21 @@ func test_the_saved_day_must_be_the_clocks_day() -> void:
 	assert_str(DayLedger.day_link_problem(ledger, clock)).contains("day 1")
 	ledger["day"] = "3"
 	assert_str(DayLedger.day_link_problem(ledger, clock)).contains("day 3")
+
+
+func test_the_saved_wages_paid_must_be_the_settlements_wages_paid_today() -> void:
+	var ledger := _ledger.to_snapshot()
+	ledger["wages"] = "-150"
+	var settlement := {"wages_paid_today": "150"}
+	assert_str(DayLedger.wages_link_problem(ledger, settlement)).is_empty()
+	settlement["wages_paid_today"] = "90"
+	assert_str(DayLedger.wages_link_problem(ledger, settlement)).contains("150")
+	ledger["since_load"] = true
+	assert_str(DayLedger.wages_link_problem(ledger, settlement)).is_empty()
+
+
+func test_a_ledger_with_no_settlement_wage_state_is_refused() -> void:
+	var ledger := _ledger.to_snapshot()
+	assert_str(DayLedger.wages_link_problem(ledger, {"owed": []})).contains("no wages paid")
+	ledger["since_load"] = true
+	assert_str(DayLedger.wages_link_problem(ledger, {"owed": []})).contains("no wages paid")

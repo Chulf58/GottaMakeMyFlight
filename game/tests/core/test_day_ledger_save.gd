@@ -115,7 +115,36 @@ func test_a_ledger_saved_on_another_day_than_the_clock_is_refused() -> void:
 
 func test_a_bad_ledger_part_is_refused_and_changes_nothing() -> void:
 	var bad := _taken()
-	bad["day_ledger"]["fees"] = "-1"
+	bad["day_ledger"]["fees"] = "1.5"
 	var before := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(bad)).is_false()
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+
+
+func test_a_ledger_whose_wages_disagree_with_the_settlement_is_refused() -> void:
+	var bad := _taken()
+	var paid := str(bad["settlement"]["wages_paid_today"]).to_int()
+	assert_int(-str(bad["day_ledger"]["wages"]).to_int()).is_equal(paid)
+	# A ledger counting since a load is not checked; this one counts the day.
+	bad["day_ledger"]["since_load"] = false
+	bad["day_ledger"]["wages"] = str(-paid - 5)
+	assert_bool(_wallet.credit(13, C.SHOP)).is_true()
+	var before := SaveTestKit.checksum(_main)
+	assert_bool(_save.load_world(bad)).is_false()
+	assert_str(_save.message_text()).contains("wages paid")
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+
+
+func test_a_ledger_with_a_settlement_missing_its_wage_state_is_refused() -> void:
+	var bad := _taken()
+	for key in Settlement.OPTIONAL_SNAPSHOT_KEYS:
+		bad["settlement"].erase(key)
+	var control := bad.duplicate(true)
+	control.erase("day_ledger")
+	assert_bool(_wallet.credit(17, C.SHOP)).is_true()
+	var before := SaveTestKit.checksum(_main)
+	assert_bool(_save.load_world(bad)).is_false()
+	assert_str(_save.message_text()).contains("no wages paid")
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	# Without the ledger the same settlement loads, as an older save does.
+	assert_bool(_save.load_world(control)).is_true()
