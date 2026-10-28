@@ -17,8 +17,13 @@ extends Node3D
 ## ordinary caption in the layout below: the player is looking at their own
 ## half-built lane, the icon always stays, and the build status line says the
 ## same words while the pointer is over the arch, so it hides when it overlaps
-## and is never lifted. A whole lane is one station and gets the queue-full
-## and Closed signs like a scanner.
+## and is never lifted. It is kept readable, though: inside the view by
+## VIEW_MARGIN_PX and clear of every visible HUD control that takes the mouse
+## (the money card, the Offers button, the bottom bar), moving toward the
+## screen's middle by at most MAX_HINT_TRAVEL_PX when it has to, so it stays by
+## its station. With no such spot within that reach it stays in its own place.
+## A whole lane is one station and gets the queue-full and Closed signs like a
+## scanner.
 ##
 ## The sign is a billboard drawn over the world (no depth test), like the
 ## thought bubbles, and keeps one screen size at every zoom and UI scale. The
@@ -32,7 +37,8 @@ extends Node3D
 ## view and off every icon; with no such spot it is reported once and kept at
 ## the best one found. Otherwise the widest caption wins, then the leftmost.
 ## The layout runs only when the camera (its presence, identity, pose and field
-## of view), the view size or the signs changed.
+## of view), the view size, the signs or (while a lane hint shows) the HUD
+## controls' rectangles changed.
 
 const SIGN_LIFT_M := 0.6
 const SIGN_PX := 56.0
@@ -50,6 +56,12 @@ const FALLBACK_HEIGHT := 1080.0
 const FALLBACK_WIDTH := 1920.0
 ## A moved staff-spot caption tries this many side steps each way.
 const MAX_SHIFTS := 8
+## A lane-hint caption keeps this far inside the view, clear of every HUD
+## control, and moves toward the screen's middle in HINT_STEP_PX steps, at most
+## MAX_HINT_TRAVEL_PX, to get there.
+const VIEW_MARGIN_PX := 8.0
+const HINT_STEP_PX := 6.0
+const MAX_HINT_TRAVEL_PX := 260.0
 ## The closed sign is the queue-full icon with its red fill painted grey-blue.
 const CLOSED_FILL := Color(0.47, 0.53, 0.62)
 const FILL_TOLERANCE := 0.1
@@ -82,6 +94,8 @@ var _view_height := 0.0
 var _view_width := 0.0
 ## Instance id of the camera the last layout used, 0 for none.
 var _view_camera := 0
+## The HUD control rectangles (screen pixels) the last layout kept clear of.
+var _view_hud: Array[Rect2] = []
 ## Reused by the caption layout: the captions in play, their rectangles and
 ## whether each is a staff-spot reason, the order they are placed in, the
 ## rectangles placed so far, and a grid of them by cell.
@@ -89,6 +103,7 @@ var _labels: Array[Label3D] = []
 var _points: Array[Vector2] = []
 var _rects: Array[Rect2] = []
 var _mandatory: Array[bool] = []
+var _hints: Array[bool] = []
 var _stations: Array[int] = []
 ## The icons in play, for a moved caption to keep off, and a grid of them.
 var _icons: Array[Rect2] = []
@@ -222,6 +237,7 @@ func draw() -> void:
 		width = view.get_visible_rect().size.x * view.get_stretch_transform().get_scale().x
 	var xform := camera.global_transform if camera != null else Transform3D()
 	var camera_id := camera.get_instance_id() if camera != null else 0
+	var hud := _hud_rects(to_output) if not _hint_signs.is_empty() else ([] as Array[Rect2])
 	if (
 		not _dirty
 		and camera_id == _view_camera
@@ -229,9 +245,11 @@ func draw() -> void:
 		and is_equal_approx(fov, _view_fov)
 		and is_equal_approx(height, _view_height)
 		and is_equal_approx(width, _view_width)
+		and hud == _view_hud
 	):
 		return
 	_dirty = false
+	_view_hud = hud
 	_view_camera = camera_id
 	_view_transform = xform
 	_view_fov = fov
@@ -260,6 +278,7 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 	_points.clear()
 	_rects.clear()
 	_mandatory.clear()
+	_hints.clear()
 	_stations.clear()
 	_icons.clear()
 	_icon_bins.clear()
@@ -278,6 +297,7 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 			_points.append(point)
 			_rects.append(caption_rect(point, caption.text))
 			_mandatory.append(is_staff_spot_caption(caption.text))
+			_hints.append(is_same(signs, _hint_signs))
 			_stations.append(station)
 			var icon := Rect2(point.x - SIGN_PX / 2.0, point.y - SIGN_PX, SIGN_PX, SIGN_PX)
 			_icons.append(icon)
@@ -298,9 +318,16 @@ func _place_caption(i: int, view_size: Vector2) -> void:
 		caption.offset += Vector2(
 			rect.position.x - _rects[i].position.x, _rects[i].end.y - rect.end.y
 		)
-	elif _hits_in(rect.grow(CAPTION_MARGIN_PX), _bins, _placed):
-		caption.visible = false
-		return
+	else:
+		if _hints[i]:
+			rect = _hint_spot(i, view_size)
+			caption.offset += Vector2(
+				rect.position.x - _rects[i].position.x, _rects[i].end.y - rect.end.y
+			)
+		if _hits_in(rect.grow(CAPTION_MARGIN_PX), _bins, _placed):
+			caption.visible = false
+			caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
+			return
 	_placed.append(rect)
 	_bin(_bins, rect, _placed.size() - 1)
 
@@ -343,6 +370,80 @@ func _clear_spot(i: int, view_size: Vector2) -> Rect2:
 			)
 		)
 	return best
+
+
+## Where lane-hint caption `i` goes: its own spot when that is inside the view
+## by VIEW_MARGIN_PX and clear of the HUD controls, else the nearest spot toward
+## the screen's middle (at most MAX_HINT_TRAVEL_PX away) that is also off every
+## icon. With none, the first spot found inside the view, else its own.
+func _hint_spot(i: int, view_size: Vector2) -> Rect2:
+	var own := _rects[i]
+	var inner := Rect2(Vector2.ZERO, view_size).grow(-VIEW_MARGIN_PX)
+	if _hint_spot_clear(own, inner):
+		return own
+	var toward := view_size / 2.0 - own.get_center()
+	if toward.is_zero_approx():
+		return own
+	var step := toward.normalized() * HINT_STEP_PX
+	var in_view := own
+	var in_view_found := inner.encloses(own)
+	for k in range(1, int(MAX_HINT_TRAVEL_PX / HINT_STEP_PX) + 1):
+		var rect := Rect2(own.position + step * k, own.size)
+		if not inner.encloses(rect):
+			continue
+		if _hint_spot_clear(rect, inner) and not _hits_in(rect, _icon_bins, _icons):
+			return rect
+		if not in_view_found:
+			in_view = rect
+			in_view_found = true
+	return in_view
+
+
+## True when `rect` is inside `inner` and off every HUD control (by the margin).
+func _hint_spot_clear(rect: Rect2, inner: Rect2) -> bool:
+	if not inner.encloses(rect):
+		return false
+	var padded := rect.grow(CAPTION_MARGIN_PX)
+	for hud in _view_hud:
+		if padded.intersects(hud):
+			return false
+	return true
+
+
+## The rectangles (screen pixels) of the visible HUD controls that take the
+## mouse: the Controls under every canvas layer beside this node or beside an
+## ancestor of it. A control that takes the mouse is where the player clicks,
+## so a caption under it cannot be read or used; one that ignores the mouse
+## (the layout containers and labels inside a card) is not counted, and a
+## counted control's children lie inside it, so they are not walked.
+func _hud_rects(to_output: float) -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	var scale := Transform2D().scaled(Vector2(to_output, to_output))
+	var node: Node = self
+	while node != null and node.get_parent() != null:
+		node = node.get_parent()
+		for child in node.get_children():
+			if child is CanvasLayer and (child as CanvasLayer).visible:
+				_collect_hud(child, scale, rects)
+	return rects
+
+
+func _collect_hud(parent: Node, scale: Transform2D, rects: Array[Rect2]) -> void:
+	for child in parent.get_children():
+		if child is Control:
+			var control := child as Control
+			if not control.visible:
+				continue
+			if (
+				control.mouse_filter == Control.MOUSE_FILTER_STOP
+				and control.size.x * control.size.y > 0.0
+			):
+				var local := Rect2(Vector2.ZERO, control.size)
+				rects.append(scale * control.get_global_transform_with_canvas() * local)
+				continue
+		if child is CanvasItem and not (child as CanvasItem).visible:
+			continue
+		_collect_hud(child, scale, rects)
 
 
 ## True when `rect` touches a rectangle in `rects`, found through `bins`.
