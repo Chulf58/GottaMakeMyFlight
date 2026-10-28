@@ -41,8 +41,9 @@ extends RefCounted
 ## RECOGNITION. rebuild() takes the arches in id order. For each it builds the
 ## RIGHT candidate, then the LEFT one, and judges each candidate whole before
 ## claiming anything: every part present on its cell with the arch's facing,
-## no plain or glass wall between a part and the cell it serves, the passage
-## open, and every other named cell free floor (no object, no interaction
+## no plain or glass wall between a part and the cell it serves or across a
+## conveyor edge (tray table to X-ray belt, X-ray belt to pickup table), the
+## passage open, and every other named cell free floor (no object, no interaction
 ## cell, no staff spot, no cell an earlier lane claimed) joined by routing
 ## steps: queue entry to unpack, pickup to berth, berth along the return
 ## route to unpack, pickup to exit, and each officer spot open to its part
@@ -114,6 +115,10 @@ const SIDE_PARTS := [
 	[XRAY_BELT, Status.NO_XRAY_BELT, "arch"],
 	[PICKUP_TABLE, Status.NO_PICKUP_TABLE, "pickup"],
 ]
+## The two edges between neighbouring parts of the conveyor, tray table to
+## X-ray belt and X-ray belt to pickup table. A wall on one would cut the
+## trays' way, so it counts as a wall in the lane like one across it.
+const CONVEYOR_EDGES := [[TRAY_TABLE, XRAY_BELT], [XRAY_BELT, PICKUP_TABLE]]
 ## What the lane-incomplete hint says for each status.
 const STATUS_TEXT := {
 	Status.COMPLETE: "Lane ready",
@@ -340,9 +345,8 @@ func _evaluate(grid: BuildGrid, arch: int, mirror: int, others: Dictionary) -> D
 ## The first thing wrong with a candidate whose parts are all in place, or
 ## COMPLETE.
 func _room_status(grid: BuildGrid, lane: Dictionary, others: Dictionary) -> int:
-	for entry in SIDE_PARTS:
-		if _walled(grid, lane[entry[0]], lane[entry[2]]):
-			return Status.WALL_IN_LANE
+	if _wall_in_lane(grid, lane):
+		return Status.WALL_IN_LANE
 	var pickup: Vector2i = lane["pickup"]
 	if grid.passage_cells(lane["arch_id"]) != lane["passage"] or not _free(grid, pickup, others):
 		return Status.NO_PASSAGE
@@ -355,6 +359,18 @@ func _room_status(grid: BuildGrid, lane: Dictionary, others: Dictionary) -> int:
 		return Status.NO_PRIMARY_SPOT
 	var helper_open := _officer_spot_open(grid, lane["helper_spot"], lane["berth"], others)
 	return Status.COMPLETE if helper_open else Status.NO_HELPER_SPOT
+
+
+## Whether a plain or glass wall stands between a part and the cell it serves,
+## or across either conveyor edge.
+func _wall_in_lane(grid: BuildGrid, lane: Dictionary) -> bool:
+	for entry in SIDE_PARTS:
+		if _walled(grid, lane[entry[0]], lane[entry[2]]):
+			return true
+	for edge in CONVEYOR_EDGES:
+		if _walled(grid, lane[edge[0]], lane[edge[1]]):
+			return true
+	return false
 
 
 ## The berth, the return route back to the unpack cell and the exit, in
