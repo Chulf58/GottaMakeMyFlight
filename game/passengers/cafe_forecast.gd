@@ -96,6 +96,11 @@ static func _leaving(p: Passenger, cell: Vector2i, resume: Passenger.Stage) -> P
 	after.flight_id = p.flight_id
 	after.boarding_tick = p.boarding_tick
 	after.cleared = p.cleared
+	# Security forecasts this passenger as the candidate, with its carry-on.
+	after.carry_on = p.carry_on
+	after.liquids = p.liquids
+	after.alarm = p.alarm
+	after.incident_resolved = p.incident_resolved
 	after.stage = resume
 	after.at = cell
 	after.clear_path()

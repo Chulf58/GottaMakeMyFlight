@@ -37,15 +37,26 @@ func _make_with_cafes(roomy := false) -> void:
 
 
 ## Spawns a passenger and runs until it reaches `stage`, with no cafe visit on
-## the way (its cooldown holds until then).
+## the way (its cooldown holds until then). It carries nothing to security
+## (_no_carry_on()).
 func _spawn_to(stage: Passenger.Stage, hunger: int, limit := 900) -> Passenger:
-	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	var p := _no_carry_on(_world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT)))
 	p.hunger = hunger
 	p.cafe_cooldown = 1000000
 	while p.stage != stage and _world.clock.tick < limit:
 		_world.step()
 	assert_int(p.stage).is_equal(stage)
 	p.cafe_cooldown = 0
+	return p
+
+
+## Explicit traits, no bags and no incident: security takes the basic
+## scanner's BASIC_SCAN_TICKS, the time these tests' timings were set
+## against, whatever the seed draws.
+static func _no_carry_on(p: Passenger) -> Passenger:
+	p.carry_on = 0
+	p.liquids = false
+	p.alarm = false
 	return p
 
 
@@ -180,7 +191,9 @@ func test_a_refused_browse_waits_out_its_cooldown() -> void:
 	_make_with_cafes(true)
 	var walkers: Array[Passenger] = []
 	for i in 3:
-		var walker := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		var walker := _no_carry_on(
+			_world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		)
 		walker.hunger = 0
 		walker.cafe_cooldown = 1000000
 		walkers.append(walker)

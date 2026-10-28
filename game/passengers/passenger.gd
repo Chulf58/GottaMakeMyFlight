@@ -111,6 +111,12 @@ var cafe_cooldown := 0
 var carry_on := 0
 var liquids := false
 var alarm := false
+## Inside Stage.SECURITY (SecurityRuntime): the phase (SecurityRuntime.Phase,
+## NONE outside it) and the integer work left in it. incident_resolved is set
+## once its liquids or alarm repack is done; an incident resolves once.
+var security_phase := 0
+var security_work := 0
+var incident_resolved := false
 
 
 static func in_cafe(stage: Stage) -> bool:

@@ -179,7 +179,7 @@ func test_a_save_before_the_first_state_keeps_arrival_types_and_plays_out_the_sa
 
 func test_bad_arrival_types_and_version_5_saves_are_refused_whole() -> void:
 	var good := _saved_early()
-	assert_int(int(good["save_version"])).is_equal(7)
+	assert_int(int(good["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	var bad_cases: Array[Dictionary] = []
 	for value in [-1, 3, 1.5, "relaxed"]:
 		var record := good.duplicate(true)

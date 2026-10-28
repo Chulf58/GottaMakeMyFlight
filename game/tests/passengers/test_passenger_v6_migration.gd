@@ -1,10 +1,13 @@
 class_name TestPassengerV6Migration
 extends GdUnitTestSuite
-## A version 6 passenger save (no carry-on traits) loads into version 7 with
-## zero bags and no liquids or alarm, everything else as saved and no RNG
-## drawn; a native version 7 save missing a trait is refused, and so is
-## version 5 (decision security-lane-technical-design-one-station-per-lane-
-## with-int, point 7).
+## A version 6 passenger save (no carry-on traits) loads into the current
+## version with zero bags and no liquids or alarm, everything else as saved
+## and no RNG drawn; a native version 7 save missing a trait is refused, and
+## so is version 5 (decision security-lane-technical-design-one-station-per-
+## lane-with-int, point 7). Carry-on now changes security times, so the
+## continuous world the migrated one is compared with has every trait zeroed
+## at spawn, as a version 6 world had; the fixtures are written in the shape
+## version 7 saved (SecurityTestWorld.as_v7()).
 
 const SAVE_TICK := 205
 const TRAIT_FIELDS := ["carry_on", "liquids", "alarm"]
@@ -24,11 +27,25 @@ func after() -> void:
 
 func before_test() -> void:
 	_a = PassengerTestWorld.reference_world(4242)
+	_zero_traits_of(_a)
 	_a.sim.schedule_flight(PassengerTestWorld.FLIGHT, 24)
 	for i in 10:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_a.run_to(SAVE_TICK)
-	_v7 = _json(_a.sim.to_snapshot())
+	_v7 = SecurityTestWorld.as_v7(_json(_a.sim.to_snapshot()))
+
+
+## Every passenger `world` spawns gets what a version 6 world had: no bags,
+## liquids or alarm. Both worlds a comparison steps need it, as passengers
+## still spawn after the save.
+static func _zero_traits_of(world: PassengerTestWorld) -> void:
+	world.sim.passenger_spawned.connect(
+		func(id: int) -> void:
+			var p := world.passenger(id)
+			p.carry_on = 0
+			p.liquids = false
+			p.alarm = false
+	)
 
 
 func after_test() -> void:
@@ -57,6 +74,7 @@ func _v6() -> Dictionary:
 ## loaded.
 func _fresh() -> PassengerTestWorld:
 	var world := PassengerTestWorld.reference_world(1)
+	_zero_traits_of(world)
 	world.clock.from_snapshot(_json(_a.clock.to_snapshot()))
 	world.flights.from_snapshot(_json(_a.flights.to_snapshot()))
 	return world
@@ -92,7 +110,12 @@ func test_migration_changes_nothing_else_and_in_progress_service_continues() -> 
 	for id in _a.sim.passenger_ids():
 		var want := _a.passenger(id)
 		var got := _b.passenger(id)
-		assert_int(got.service_end).is_equal(want.service_end)
+		# A scanner's service is its remaining work now; service_end is the
+		# desk's.
+		if want.stage != Passenger.Stage.SECURITY:
+			assert_int(got.service_end).is_equal(want.service_end)
+		assert_int(got.security_phase).is_equal(want.security_phase)
+		assert_int(got.security_work).is_equal(want.security_work)
 		assert_int(got.station).is_equal(want.station)
 		assert_int(got.hunger).is_equal(want.hunger)
 		assert_int(got.arrival_type).is_equal(want.arrival_type)
@@ -123,7 +146,7 @@ func test_a_migrated_world_saves_as_version_7_with_the_traits() -> void:
 	_b = _fresh()
 	assert_bool(_b.sim.from_snapshot(_v6())).is_true()
 	var again := _json(_b.sim.to_snapshot())
-	assert_int(int(again["save_version"])).is_equal(7)
+	assert_int(int(again["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	for record: Dictionary in again["passengers"]:
 		assert_int(int(record["carry_on"])).is_equal(0)
 		assert_bool(record["liquids"]).is_false()
