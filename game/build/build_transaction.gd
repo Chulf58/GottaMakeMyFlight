@@ -109,7 +109,7 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 	var quotes := _quotes(grid, plan, wallet == null)
 	var refusal := _refusal(quotes, wallet)
 	if not refusal.ok:
-		grid.edit_refused.emit(plan.back(), refusal)
+		_emit_refused(grid, plan.back(), refusal)
 		return refusal
 	var snapshot := _snapshot_if_settlement_can_fail(grid, quotes, wallet)
 	var applied: Array[bool] = []
@@ -128,7 +128,7 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 	if not settlement.ok:
 		grid.from_snapshot(snapshot)
 		grid.release_signals(mark)
-		grid.edit_refused.emit(plan.back(), settlement)
+		_emit_refused(grid, plan.back(), settlement)
 		return settlement
 	grid.release_signals()
 	if not result.ok:
@@ -182,8 +182,15 @@ static func _refuse_all(
 	for edit in edits:
 		var refused := BuildResult.refused(refusal.reason)
 		results.append(refused)
-		grid.edit_refused.emit(edit, refused)
+		_emit_refused(grid, edit, refused)
 	return results
+
+
+## Publishes edit_refused through the grid's own hold queue, so a refusal
+## arriving while a caller holds the grid's signals waits behind the edits
+## already queued there instead of overtaking them.
+static func _emit_refused(grid: BuildGrid, edit: BuildEdit, refusal: BuildResult) -> void:
+	grid._emit_or_hold(func() -> void: grid.edit_refused.emit(edit, refusal))
 
 
 ## The grid as it stands, when _settle() could fail for `quotes`: only when the
