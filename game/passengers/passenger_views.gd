@@ -22,6 +22,8 @@ const PICK_RADIUS_PX := 40.0
 
 @export var clock: SimClock
 @export var sim: PassengerSim
+## When set, a finished load snaps every view to the loaded world.
+@export var save_game: SaveGame
 
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
@@ -66,6 +68,8 @@ func _ready() -> void:
 	add_child(_pops)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
+	if save_game != null:
+		save_game.loaded.connect(_on_loaded)
 
 
 func _process(_delta: float) -> void:
@@ -116,6 +120,18 @@ func sync() -> void:
 	_markers.sync()
 
 
+## Draws every view at the sim's current state now, with no tick to run: a
+## load while paused brings no tick, and a view drawn between its two pre-load
+## positions would stay there. Syncs poses and the node set (passengers the
+## load removed lose their view, new ones get one), then makes the previous and
+## current positions the same so the frame draws the current one.
+func snap() -> void:
+	sync()
+	for id in _cur:
+		_prev[id] = _cur[id]
+	draw()
+
+
 ## Places every node between its last two tick positions.
 func draw() -> void:
 	var alpha := clock.alpha if clock != null else 1.0
@@ -155,6 +171,11 @@ func pick(camera: Camera3D, screen: Vector2) -> int:
 
 func _on_ticked(_tick: int) -> void:
 	sync()
+
+
+func _on_loaded(ok: bool) -> void:
+	if ok:
+		snap()
 
 
 func _visible(p: Passenger) -> bool:
