@@ -937,49 +937,6 @@ func _check_clearance(name: String, id: int) -> void:
 		_invalid("%s: passenger %d or its bags clip a lane part, a wall or the body" % [name, id])
 
 
-## How far bag `i` of passenger `id` is from what holds it (0 when held): the
-## hard case's grip inside its bounds (grown by GRIP_REACH_M), the roller's
-## grip bar at the hand and its wheels on the floor, the strap's bar over the
-## shoulder, the backpack at the spine.
-func _detached(id: int, i: int, body: Node3D) -> float:
-	var props := _views.carry_on_props()
-	var p := _sim.get_passenger(id)
-	var bag: Node3D = props.props_of(id)["bags"][i]
-	var kind := SecurityLooks.bag_kind(p, i)
-	var scale_by := bag.global_transform.basis.get_scale().x
-	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
-	var bone := func(name: String) -> Vector3:
-		return (
-			skeleton.global_transform
-			* skeleton.get_bone_global_pose(skeleton.find_bone(name)).origin
-		)
-	var lifted: bool = props.props_of(id)["carries"][i] == SecurityLooks.Carry.HAND
-	match kind if not lifted else SecurityLooks.Kind.CASE:
-		SecurityLooks.Kind.ROLLER:
-			var grip := props.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
-			var top := bag.find_child("Pull_Top", true, false) as Node3D
-			var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
-			var axle := bag.global_transform * CarryOnProps.ROLLER_AXLE
-			var off_floor := absf(
-				axle.y - CarryOnProps.ROLLER_AXLE.y * scale_by - body.global_position.y
-			)
-			return maxf(0.0, maxf(bar.distance_to(grip) - GRIP_REACH_M, off_floor - 0.01))
-		SecurityLooks.Kind.SHOULDER:
-			var side: String = ["Arm.R", "Arm.L"][SecurityLooks.worn_side(i)]
-			var top := bag.find_child("Strap_Top", true, false) as Node3D
-			# The bar is STRAP_OUT_M out and STRAP_OVER_ARM_M over the joint, about
-			# 0.1 m from it with the arm's own lean.
-			return maxf(0.0, top.global_position.distance_to(bone.call(side)) - 0.2)
-		SecurityLooks.Kind.BACKPACK:
-			var spine: Vector3 = bone.call(CarryOnProps.SPINE_BONE)
-			var near := bag.global_transform * CarryOnProps.bag_box(kind).get_center()
-			return maxf(0.0, near.distance_to(spine) - 0.45)
-	var grip := props.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
-	var local := bag.global_transform.affine_inverse() * grip
-	var box := CarryOnProps.bag_box(kind)
-	return 0.0 if box.grow(GRIP_REACH_M / scale_by).has_point(local) else 1.0
-
-
 ## Points inside each solid box (lane parts, arch posts, walls), by its name.
 func _box_hits(points: PackedVector3Array) -> Dictionary:
 	var hits := {}
@@ -1230,7 +1187,7 @@ func _plate_live_walk_back(id: int, name: String) -> bool:
 			# A bag still moving to the hand (picked up) is not held yet.
 			if homes[i] != SecurityLooks.Home.HAND or props.transfer_progress(id, i) < 1.0:
 				continue
-			var off := _detached(id, i, body)
+			var off := CarryChecks.detached(_sim, _views, id, i, body, GRIP_REACH_M)
 			if off > 0.0:
 				detached += 1
 				print(
@@ -1391,6 +1348,9 @@ func _sweep() -> void:
 	var checks := {}
 	var contacts := {}
 	var carriers: Array[int] = []
+	# Pulled rollers on the live walk: id -> [axle, yaw] last frame.
+	var pulled := {}
+	var turns := [0, 0]
 	for frame in SWEEP_FRAMES * 2 + SWEEP_FRAMES / 2:
 		_beat("sweep frame %d" % frame)
 		var running := frame >= SWEEP_FRAMES * 2
@@ -1407,6 +1367,8 @@ func _sweep() -> void:
 				var player := _views.node_for(id).get_node("AnimationPlayer") as AnimationPlayer
 				player.seek(fmod(frame * 0.071, player.current_animation_length), true)
 		await process_frame
+		if not running:
+			CarryChecks.watch_pulled(_sim, _views, pulled, turns)
 		if not running and frame % 2 == 1:
 			continue
 		carriers.clear()
@@ -1469,6 +1431,11 @@ func _sweep() -> void:
 					contacts[key] = contacts.get(key, 0) + hits
 	_clock.set_paused(false)
 	print("SWEEP checks=%s" % [checks])
+	print("SWEEP pulled rollers: sharp_turns=%d axle_snaps=%d" % turns)
+	if turns[0] == 0:
+		_invalid("sweep: no pulled roller turned sharply (control)")
+	if turns[1] > 0:
+		_invalid("sweep: a pulled roller's axle jumped between two frames")
 	if checks.is_empty():
 		_invalid("sweep: no carrier was checked")
 	print("SWEEP contacts=%s" % [contacts])

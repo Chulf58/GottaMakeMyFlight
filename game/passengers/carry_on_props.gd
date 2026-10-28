@@ -103,6 +103,14 @@ const TRAIL_SIDE_M := 0.3
 ## line, and how far behind it at least (TRAIL_M * 0.6).
 const TRAIL_SIDE_MIN_M := 0.28
 const TRAIL_SIDE_MAX_M := 0.6
+## When the axle's place behind the body jumps (the body turned sharply, or
+## walked back past its roller), the drawn axle swings there round the
+## pulling hand's side over SWING_TICKS of sim time, at least
+## SWING_RADIUS_M from the body's centre. A jump is a move of more than
+## SWING_JUMP_M between two draws.
+const SWING_TICKS := 10.0
+const SWING_RADIUS_M := 0.55
+const SWING_JUMP_M := 0.2
 ## The pulling arm: turned out a little, less swing, leaning back.
 const PULL_OUT_DEGREES := 12.0
 const PULL_SWING_KEPT := 0.2
@@ -309,6 +317,25 @@ static func trail(walked: Array, back: Vector3) -> Vector3:
 	if walked.size() > 1:
 		on = (walked[0] - walked[1]).normalized()
 	return at + on * left
+
+
+## A swung axle at `k` (0 to 1, eased) of its swing from `from` to `to`, both
+## in the body's frame (x across, +z ahead): round the pulling hand's side
+## (`hand` 0 right, 1 left) by angle about the body's centre, never nearer
+## than SWING_RADIUS_M, so it passes beside the body clear of the legs.
+static func swing_point(from: Vector3, to: Vector3, k: float, hand: int) -> Vector3:
+	var out := -1.0 if hand == 0 else 1.0
+	# Angle from straight behind (0) toward the hand's side (PI / 2).
+	var a0 := atan2(from.x * out, -from.z)
+	var a1 := atan2(to.x * out, -to.z)
+	if a0 < -PI / 2.0:
+		a0 += TAU
+	var e := k * k * (3.0 - 2.0 * k)
+	var a := lerpf(a0, a1, e)
+	var flat_from := Vector2(from.x, from.z).length()
+	var flat_to := Vector2(to.x, to.z).length()
+	var r := maxf(lerpf(flat_from, flat_to, e), SWING_RADIUS_M)
+	return Vector3(out * r * sin(a), lerpf(from.y, to.y, e), -r * cos(a))
 
 
 ## The overhead route at `k` (0 to 1) from `from` to `to`, both in the body's
@@ -656,7 +683,8 @@ func _place_bags(
 
 
 ## How far a strap or rod has gone from its old length to its new one at `k`
-## of a move: a shoulder strap stretches late (the bag is at the hip first) and
+## of a move: a shoulder strap stretches in the last 15% of the move, as the
+## bag comes in from outside the hip with the hand already up (_pose_arms), and
 ## goes slack early; a roller's rods come out only once it is down behind the
 ## body and go in before it rises.
 static func _reach_blend(kind: SecurityLooks.Kind, k: float, to_hand: bool) -> float:
@@ -669,7 +697,7 @@ static func _reach_blend(kind: SecurityLooks.Kind, k: float, to_hand: bool) -> f
 	if kind != SecurityLooks.Kind.SHOULDER:
 		return k
 	if to_hand:
-		return clampf((k - 0.6) / 0.4, 0.0, 1.0)
+		return clampf((k - 0.85) / 0.15, 0.0, 1.0)
 	return clampf(k / 0.4, 0.0, 1.0)
 
 
@@ -1000,8 +1028,20 @@ func _axle_drawn(bag: Dictionary, body: Node3D, scale_by: float, hand: int) -> V
 	var out := -1.0 if hand == 0 else 1.0
 	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
 	local.z = minf(local.z, -TRAIL_M * 0.6)
-	at = frame * local
+	var target := frame * local
+	var now := _now()
+	if not bag.has("swing") and bag.has("drawn_axle"):
+		if (bag["drawn_axle"] as Vector3).distance_to(target) > SWING_JUMP_M:
+			bag["swing"] = {"from": bag["drawn_axle"], "since": now}
+	at = target
+	if bag.has("swing"):
+		var k := clampf((now - bag["swing"]["since"]) / SWING_TICKS, 0.0, 1.0)
+		var from := frame.affine_inverse() * (bag["swing"]["from"] as Vector3)
+		at = frame * swing_point(from, local, k, hand)
+		if k >= 1.0:
+			bag.erase("swing")
 	at.y = body.global_position.y + ROLLER_AXLE.y * scale_by
+	bag["drawn_axle"] = at
 	return at
 
 

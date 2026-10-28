@@ -196,6 +196,33 @@ func test_a_trailing_axle_follows_the_walked_line() -> void:
 	assert_float(axle.x).is_greater(corner.x + 1.0)
 
 
+## A pulled roller whose walker turns right round (its axle was 1 m behind,
+## now it is 1 m ahead): the drawn axle swings back behind the body round the
+## pulling hand's side over SWING_TICKS, moving at most 0.6 m a tick and never
+## nearer the body's centre than SWING_RADIUS_M (the legs keep within about
+## 0.45 m). Control: it ends where the trail puts it, and the swing was a real
+## half turn.
+func test_a_roller_swings_round_after_a_half_turn() -> void:
+	for hand in 2:
+		var out := -1.0 if hand == 0 else 1.0
+		var to := Vector3(out * 0.3, 0.03, -CarryOnProps.TRAIL_M)
+		var from := Vector3(-out * 0.3, 0.03, CarryOnProps.TRAIL_M)
+		var last := from
+		var steps := int(CarryOnProps.SWING_TICKS) * 4
+		var worst := 0.0
+		for i in steps + 1:
+			var at := CarryOnProps.swing_point(from, to, i / float(steps), hand)
+			worst = maxf(worst, at.distance_to(last) * 4.0)
+			last = at
+			assert_float(Vector2(at.x, at.z).length()).is_greater_equal(
+				CarryOnProps.SWING_RADIUS_M - 0.0001
+			)
+		print("half-turn swing, hand %d: worst move per tick %.3f m" % [hand, worst])
+		assert_float(worst).is_less(0.6)
+		assert_vector(last).is_equal_approx(to, Vector3.ONE * 0.0001)
+		assert_float(from.distance_to(to)).is_greater(1.9)
+
+
 ## The overhead route for a backpack: it starts and ends where asked, stays
 ## on the body's centre plane in the middle, and while it crosses over the
 ## head its lowest point is at OVERHEAD_M.

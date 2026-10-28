@@ -77,3 +77,76 @@ static func arch_post_half_depth(arch: Node3D) -> float:
 			if local.y > 0.05 and absf(local.x) > 0.2:
 				deep = maxf(deep, absf(local.z))
 	return deep
+
+
+## How far bag `i` of passenger `id` is from what holds it (0 when held): the
+## hard case's grip inside its bounds (grown by reach), the roller's
+## grip bar at the hand and its wheels on the floor, the strap's bar over the
+## shoulder, the backpack at the spine.
+static func detached(
+	sim: PassengerSim, views: PassengerViews, id: int, i: int, body: Node3D, reach: float
+) -> float:
+	var props := views.carry_on_props()
+	var p := sim.get_passenger(id)
+	var bag: Node3D = props.props_of(id)["bags"][i]
+	var kind := SecurityLooks.bag_kind(p, i)
+	var scale_by := bag.global_transform.basis.get_scale().x
+	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var bone := func(name: String) -> Vector3:
+		return (
+			skeleton.global_transform
+			* skeleton.get_bone_global_pose(skeleton.find_bone(name)).origin
+		)
+	var lifted: bool = props.props_of(id)["carries"][i] == SecurityLooks.Carry.HAND
+	match kind if not lifted else SecurityLooks.Kind.CASE:
+		SecurityLooks.Kind.ROLLER:
+			var grip := props.grip_of(body, SecurityLooks.hand_of(sim, p, i))
+			var top := bag.find_child("Pull_Top", true, false) as Node3D
+			var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
+			var axle := bag.global_transform * CarryOnProps.ROLLER_AXLE
+			var off_floor := absf(
+				axle.y - CarryOnProps.ROLLER_AXLE.y * scale_by - body.global_position.y
+			)
+			return maxf(0.0, maxf(bar.distance_to(grip) - reach, off_floor - 0.01))
+		SecurityLooks.Kind.SHOULDER:
+			var side: String = ["Arm.R", "Arm.L"][SecurityLooks.worn_side(i)]
+			var top := bag.find_child("Strap_Top", true, false) as Node3D
+			# The bar is STRAP_OUT_M out and STRAP_OVER_ARM_M over the joint, about
+			# 0.1 m from it with the arm's own lean.
+			return maxf(0.0, top.global_position.distance_to(bone.call(side)) - 0.2)
+		SecurityLooks.Kind.BACKPACK:
+			var spine: Vector3 = bone.call(CarryOnProps.SPINE_BONE)
+			var near := bag.global_transform * CarryOnProps.bag_box(kind).get_center()
+			return maxf(0.0, near.distance_to(spine) - 0.45)
+	var grip := props.grip_of(body, SecurityLooks.hand_of(sim, p, i))
+	var local := bag.global_transform.affine_inverse() * grip
+	var box := CarryOnProps.bag_box(kind)
+	return 0.0 if box.grow(reach / scale_by).has_point(local) else 1.0
+
+
+## Each pulled roller's drawn axle this frame against the last: a body turn
+## of more than 60 degrees counts as a sharp turn (turns[0]), an axle move of
+## more than CarryOnProps.SWING_JUMP_M plus 5 cm counts as a snap (turns[1]).
+static func watch_pulled(
+	sim: PassengerSim, views: PassengerViews, pulled: Dictionary, turns: Array
+) -> void:
+	var props := views.carry_on_props()
+	var seen := {}
+	for id in sim.passenger_ids():
+		var body := views.node_for(id)
+		var held: Dictionary = props.props_of(id)
+		if body == null or not held["carries"].has(SecurityLooks.Carry.PULL):
+			continue
+		var i: int = held["carries"].find(SecurityLooks.Carry.PULL)
+		if props.transfer_progress(id, i) < 1.0:
+			continue
+		var axle: Vector3 = held["bags"][i].global_transform * CarryOnProps.ROLLER_AXLE
+		if pulled.has(id):
+			var last: Array = pulled[id]
+			turns[0] += int(absf(angle_difference(last[1], body.rotation.y)) > PI / 3.0)
+			if axle.distance_to(last[0]) > CarryOnProps.SWING_JUMP_M + 0.05:
+				turns[1] += 1
+				print("SWEEP snap id=%d moved=%.2f" % [id, axle.distance_to(last[0])])
+		seen[id] = [axle, body.rotation.y]
+	pulled.clear()
+	pulled.merge(seen)
