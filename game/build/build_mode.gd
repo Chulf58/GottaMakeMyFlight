@@ -129,6 +129,9 @@ const TERMINAL_ZONE := 1
 ## How close to an edge (in metres) the remove tool targets the wall there
 ## rather than the floor.
 const WALL_PICK_DISTANCE := 0.3
+## How far past the pointer's ground point an object box still counts as seen
+## (a box's floor face lies on the ground plane itself).
+const SIGHT_SLACK_M := 0.001
 const VALID_TINT := Color(0.35, 0.9, 0.45, 0.5)
 const INVALID_TINT := Color(0.95, 0.3, 0.25, 0.5)
 const MARKER_TINT := Color(1.0, 0.85, 0.3, 0.7)
@@ -205,6 +208,10 @@ var _status_note := ""
 var _note_cell := Vector2i.ZERO
 ## The Belt line the ghost shows (the drag, or the cell under the pointer).
 var _belt_plan: BeltShaper.Plan
+## True while the grid holds a change the view has not drawn: an edit made
+## straight on the grid (the debug starter, a playtest script) rather than
+## through these tools, which redraw at once.
+var _view_stale := false
 
 
 ## Where a ray meets the level plane y = `height`, or null when it never does.
@@ -226,9 +233,10 @@ func _ready() -> void:
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
 	grid.graph_changed.connect(_on_lane_graph_changed)
+	grid.graph_changed.connect(_on_grid_drawn_cells_changed)
 	_view.name = "BuildView"
 	add_child(_view)
-	_view.refresh(grid)
+	_redraw()
 	_room_view.name = "RoomView"
 	add_child(_room_view)
 	_room_view.watch(grid)
@@ -371,7 +379,7 @@ func apply_at(point: Vector3) -> BuildResult:
 			_reshape_belts(touched)
 		grid.release_signals()
 	if result.ok:
-		_view.refresh(grid)
+		_redraw()
 		_hover_key = ""
 		grid_changed.emit()
 	_show_status(result)
@@ -449,7 +457,7 @@ func finish_area() -> AreaDrag.Outcome:
 	else:
 		outcome = AreaDrag.fill_floor(grid, _area.rect(), TERMINAL_ZONE, wallet())
 	if outcome.placed > 0:
-		_view.refresh(grid)
+		_redraw()
 		grid_changed.emit()
 	_status_note = outcome.message()
 	_note_cell = _area.end_cell()
@@ -483,7 +491,7 @@ func lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
 	if result.ok and not plan.edits.is_empty():
 		result = BuildTransaction.commit_plan(grid, plan.edits, wallet())
 	if result.ok and not plan.edits.is_empty():
-		_view.refresh(grid)
+		_redraw()
 		grid_changed.emit()
 	_belt_plan = null
 	_hover_key = ""
@@ -509,7 +517,7 @@ func _reshape_belts(cells: Array[Vector2i]) -> void:
 	if edits.is_empty():
 		return
 	BuildTransaction.commit_plan(grid, edits, wallet())
-	_view.refresh(grid)
+	_redraw()
 
 
 ## The cells a Remove rectangle over `area` can change the belts next to, read
@@ -603,7 +611,7 @@ func load_snapshot(data: Dictionary) -> bool:
 		return false
 	if not grid.from_snapshot(data):
 		return false
-	_view.refresh(grid)
+	_redraw()
 	_hover_key = ""
 	grid_changed.emit()
 	return true
@@ -634,8 +642,13 @@ func _start_drag(point: Vector3) -> void:
 	_drag_side = grid.nearest_side(point) if TOOL_WALL_KINDS.has(tool) else -1
 
 
+## What Remove takes at a ground point: the object the pointer is on (seen
+## from the camera, or on the point's cell), then a wall edge within
+## WALL_PICK_DISTANCE, then the room, then the floor.
 func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
-	var object_id := grid.object_at(cell)
+	var object_id := _object_in_sight(point)
+	if object_id == 0:
+		object_id = grid.object_at(cell)
 	if object_id != 0:
 		return BuildEdit.remove_object(object_id)
 	var offset := point - grid.cell_to_world(cell)
@@ -645,6 +658,95 @@ func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 	if grid.room_at(cell) != 0:
 		return BuildEdit.remove_room(grid.room_at(cell))
 	return BuildEdit.remove_floor(cell)
+
+
+## The object the camera's line of sight to a ground point meets first, or 0
+## (also 0 with no camera, or the point behind it). Each object is a box over
+## its footprint as tall as it is drawn (BuildView.pick_height). A tall object
+## hides the ground behind it on screen, so a click on it picks a ground point
+## beyond it, maybe beside a wall edge; the object the player sees under the
+## pointer wins. An object behind a wall the view draws opaque
+## (_wall_in_sight) is not seen.
+func _object_in_sight(point: Vector3) -> int:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null or camera.is_position_behind(point):
+		return 0
+	var from := camera.project_ray_origin(camera.unproject_position(point))
+	var reach := from.distance_to(point)
+	if reach <= 0.0:
+		return 0
+	var direction := (point - from) / reach
+	var nearest := reach + SIGHT_SLACK_M
+	var seen := 0
+	for object_id in grid.object_ids():
+		var hit: Variant = _object_box(object_id).intersects_ray(from, direction)
+		if hit == null:
+			continue
+		var distance := from.distance_to(hit)
+		if distance < nearest:
+			nearest = distance
+			seen = object_id
+	if seen != 0 and nearest >= _wall_in_sight(from, point) - SIGHT_SLACK_M:
+		return 0
+	return seen
+
+
+## A placed object's footprint, from the floor up to its drawn height.
+func _object_box(object_id: int) -> AABB:
+	var record := grid.get_object(object_id)
+	var def := BuildCatalog.get_def(record["def"])
+	var cells := def.footprint(record["anchor"], record["facing"])
+	var low: Vector2i = cells[0]
+	var high: Vector2i = cells[0]
+	for at in cells:
+		low = Vector2i(mini(low.x, at.x), mini(low.y, at.y))
+		high = Vector2i(maxi(high.x, at.x), maxi(high.y, at.y))
+	var corner := grid.origin + Vector3(low.x, 0.0, low.y)
+	var extent := Vector3(high.x - low.x + 1, BuildView.pick_height(def), high.y - low.y + 1)
+	return AABB(corner, extent)
+
+
+## How far from `from`, on the straight line to `to`, the first wall edge the
+## view draws opaque (BuildView.sight_height) stands in the way, or INF. The
+## line is walked across the grid lines it crosses, so the cost grows with the
+## grid's width, not with the number of walls.
+func _wall_in_sight(from: Vector3, to: Vector3) -> float:
+	var start := from - grid.origin
+	var span := to - from
+	var nearest := INF
+	for axis in [0, 2]:
+		if absf(span[axis]) < 0.000001:
+			continue
+		var cells := grid.size.x if axis == 0 else grid.size.y
+		var low := maxi(0, ceili(minf(start[axis], start[axis] + span[axis])))
+		var high := mini(cells, floori(maxf(start[axis], start[axis] + span[axis])))
+		for line in range(low, high + 1):
+			var t := (line - start[axis]) / span[axis]
+			var at := start + span * t
+			var edge := _edge_on_line(axis, line, at)
+			if edge.z >= 0 and at.y < _view.sight_height(edge):
+				nearest = minf(nearest, t * span.length())
+	return nearest
+
+
+## The wall edge (WallCutaway.wall_edges form) a point crosses on grid line
+## `line` of `axis` (0 for x, 2 for z), or z -1 off the grid. `at` is relative
+## to the grid origin.
+func _edge_on_line(axis: int, line: int, at: Vector3) -> Vector3i:
+	var off := Vector3i(0, 0, -1)
+	if axis == 0:
+		var row := floori(at.z)
+		if row < 0 or row >= grid.size.y:
+			return off
+		if line < grid.size.x:
+			return Vector3i(line, row, BuildGrid.Side.WEST)
+		return Vector3i(line - 1, row, BuildGrid.Side.EAST)
+	var column := floori(at.x)
+	if column < 0 or column >= grid.size.x:
+		return off
+	if line < grid.size.y:
+		return Vector3i(column, line, BuildGrid.Side.NORTH)
+	return Vector3i(column, line - 1, BuildGrid.Side.SOUTH)
 
 
 ## Whether the pointer is over a HUD control, which hides the world under it.
@@ -911,6 +1013,25 @@ func _lane_hint_at(cell: Vector2i) -> String:
 
 func _on_lane_graph_changed(_cells: Array[Vector2i]) -> void:
 	_hint_cached = false
+
+
+## Every grid change reaches the view: one not drawn yet by the tool that made
+## it is drawn once at the end of the frame, however many edits came before.
+func _on_grid_drawn_cells_changed(_cells: Array[Vector2i]) -> void:
+	if _view_stale:
+		return
+	_view_stale = true
+	_redraw_if_stale.call_deferred()
+
+
+func _redraw_if_stale() -> void:
+	if _view_stale:
+		_redraw()
+
+
+func _redraw() -> void:
+	_view_stale = false
+	_view.refresh(grid)
 
 
 func _set_status(text: String) -> void:

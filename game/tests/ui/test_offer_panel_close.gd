@@ -1,7 +1,7 @@
 class_name TestOfferPanelClose
 extends GdUnitTestSuite
 ## OfferPanel closes on Esc and when the player picks a build tool or opens a
-## category; the Offers button still toggles it.
+## category; the Offers button still toggles it, also when clicked for real.
 
 var _port: SubViewport
 var _desk: OfferDesk
@@ -125,3 +125,33 @@ func test_a_panel_with_no_build_mode_still_works() -> void:
 	assert_bool(bare.is_open()).is_true()
 	bare.close()
 	assert_bool(bare.is_open()).is_false()
+
+
+## A press and a release of `button` at a point of the port.
+func _mouse(button: MouseButton, at: Vector2) -> void:
+	for down in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = button
+		event.pressed = down
+		event.position = at
+		event.global_position = at
+		_port.push_input(event)
+
+
+## Smoke playtest 8 (note 5): a real click on the Offers button closes the open
+## sheet, also after the wheel turned over the sheet. (The playtest sent wheel
+## presses with no release, which leaves the sheet holding Godot's mouse focus,
+## so its next click never reached the button; a real wheel always releases.)
+func test_a_real_click_on_the_button_closes_the_sheet_after_scrolling_over_it() -> void:
+	await await_idle_frame()
+	var at := _panel.toggle_button().get_global_rect().get_center()
+	_mouse(MOUSE_BUTTON_LEFT, at)
+	await await_idle_frame()
+	assert_bool(_panel.is_open()).is_true()
+	var sheet := _panel.get_node("OfferColumn/OfferSheet") as Control
+	for i in 4:
+		_mouse(MOUSE_BUTTON_WHEEL_UP, sheet.get_global_rect().get_center())
+	await await_idle_frame()
+	_mouse(MOUSE_BUTTON_LEFT, _panel.toggle_button().get_global_rect().get_center())
+	await await_idle_frame()
+	assert_bool(_panel.is_open()).is_false()
