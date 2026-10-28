@@ -347,9 +347,10 @@ func test_a_column_of_staff_spot_captions_near_the_top_stays_in_view_and_off_ico
 
 
 ## A view too small for any caption to fit in leaves a staff-spot caption no
-## valid spot. It stays visible, and the error (counted in no_spot_errors, as
-## gdUnit does not fail on push_error here) is raised once per station, also
-## after the view grows back and shrinks again.
+## valid spot. It stays visible, and the error is raised once per station, also
+## after the view grows back and shrinks again: the first one is caught with
+## assert_error, and no_spot_errors showing 1 afterwards means no later layout
+## raised a second.
 func test_a_staff_spot_caption_with_no_valid_spot_stays_visible_and_errors_once() -> void:
 	_frame_closed_signs(HOME_DISTANCE)
 	var station: int = MissSignals.closed_stations(_world.sim)[0]
@@ -361,7 +362,13 @@ func test_a_staff_spot_caption_with_no_valid_spot_stays_visible_and_errors_once(
 	var small := Vector2i(100, 100)
 	assert_float(MissMarkers.caption_size(MissMarkers.UNREACHABLE_CAPTION).x).is_greater(small.x)
 	_port.size = small
-	_nudge_camera()
+	# The first layout in the small view raises the error itself, naming the station.
+	await (
+		assert_error(func() -> void: _nudge_camera())
+		. is_push_error(
+			"MissMarkers: no clear spot inside the view for the caption of station %d" % station
+		)
+	)
 	assert_int(_markers.no_spot_errors).is_equal(1)
 	assert_bool(_caption_of(station).visible).is_true()
 	# The same station laid out again: still shown, no second error.

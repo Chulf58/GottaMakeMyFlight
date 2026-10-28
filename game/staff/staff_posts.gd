@@ -129,11 +129,13 @@ static func _arrival(staff: StaffSim, station: int, now: int) -> int:
 ## Whether the next StaffSim.step() may change the helper post of lane
 ## `station` beyond walking it. With a helper: its path is to be planned again,
 ## or a security primary post it has a way to is vacant (step 1 promotes, step
-## 3 recalls) or held by a leaving member (the post comes free once that
-## service ends). With none: the post is vacant and an idle officer in the
-## pool or with a way to it can take it (step 4). A vacancy the helper has no
-## way to never moves it, so it costs no copy however long it stays open.
-## Ways are judged by staff reach regions (_joined()).
+## 3 recalls) or held by a leaving member whose service has ended (the step
+## lets it go; one still serving stays, so it costs no copy). With none: the
+## post is vacant and an idle officer in the pool or with a way to it can take
+## it (step 4); one whose last search failed counts only on its beat, as in
+## run(), judged on the tick the step runs. A vacancy the helper has no way to
+## never moves it, so it costs no copy however long it stays open. Ways are
+## judged by staff reach regions (_joined()).
 static func _pass_pending(staff: StaffSim, station: int) -> bool:
 	var grid := staff.sim.grid
 	var helper := staff.staff_at(station, StaffMember.Slot.HELPER)
@@ -141,8 +143,12 @@ static func _pass_pending(staff: StaffSim, station: int) -> bool:
 		if not is_vacant(staff, station, StaffMember.Slot.HELPER):
 			return false
 		var post := staff.spot_of(station, StaffMember.Slot.HELPER)
+		# The step runs one tick on, and a failed search waits for its beat then.
+		var next := staff.sim.tick + 1
 		for m in _members(staff):
 			if m.role != StaffMember.Role.SECURITY or m.state != StaffMember.State.IDLE:
+				continue
+			if m.search_failed and not _on_beat(m, next):
 				continue
 			if m.in_pool() or _joined(grid, m.at, post):
 				return true
@@ -152,6 +158,9 @@ static func _pass_pending(staff: StaffSim, station: int) -> bool:
 		return true
 	for m in _members(staff):
 		if m.leaving and m.role == StaffMember.Role.SECURITY:
+			# One still serving stays: the step cannot let it go yet.
+			if m.state == StaffMember.State.ON_DUTY and in_service(staff.sim, m.station):
+				continue
 			if _joined(grid, h.at, staff.spot_of(m.station)):
 				return true
 	for other in staff.stations_of(StaffMember.Role.SECURITY):
@@ -194,6 +203,20 @@ static func _after_next_step(staff: StaffSim, station: int) -> int:
 	return from
 
 
+## Whether a passenger is being checked in or screened at `station` now: at a
+## security station any passenger SecurityRuntime has admitted there, in
+## whatever phase (Stage.SECURITY until it is cleared). A primary on duty
+## here does not leave until this is false (StaffSim.fire(), _reconcile()).
+static func in_service(sim: PassengerSim, station: int) -> bool:
+	for id in sim.passenger_ids():
+		var p := sim.get_passenger(id)
+		if p.station != station:
+			continue
+		if p.stage == Passenger.Stage.CHECKIN or p.stage == Passenger.Stage.SECURITY:
+			return true
+	return false
+
+
 ## The pass described at the top, on `staff`'s members. It changes posts only
 ## through StaffSim's own two moves: `post` (member, station, slot, path)
 ## sends an idle member out, and `repost` (member, station, slot) moves one
@@ -202,7 +225,10 @@ static func run(staff: StaffSim, post: Callable, repost: Callable) -> void:
 	_promote(staff, repost)
 	var spare: Array[StaffMember] = []
 	for m in _members(staff):
-		if m.state != StaffMember.State.IDLE or (m.search_failed and not _on_beat(staff, m)):
+		if (
+			m.state != StaffMember.State.IDLE
+			or (m.search_failed and not _on_beat(m, staff.sim.tick))
+		):
 			continue
 		if not _take_nearest(staff, m, StaffMember.Slot.PRIMARY, post):
 			spare.append(m)
@@ -265,11 +291,11 @@ static func _members(staff: StaffSim) -> Array[StaffMember]:
 	return out
 
 
-## Whether this tick is the member's beat (once a simulated second,
-## staggered by id), when a member whose last search failed searches again.
-static func _on_beat(staff: StaffSim, m: StaffMember) -> bool:
+## Whether `tick` is the member's beat (once a simulated second, staggered by
+## id), when a member whose last search failed searches again.
+static func _on_beat(m: StaffMember, tick: int) -> bool:
 	var beat := PassengerSim.BEAT_TICKS
-	return posmod(staff.sim.tick, beat) == posmod(m.id, beat)
+	return posmod(tick, beat) == posmod(m.id, beat)
 
 
 ## Step 1: on-duty helpers of lanes with a vacant primary post move over.

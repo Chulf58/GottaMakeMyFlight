@@ -110,3 +110,64 @@ func test_a_loaded_walker_faces_along_its_path_with_no_tick_run() -> void:
 			assert_float(_gap(after_load[id], headings[id])).is_less(0.01)
 			turned += 1
 	assert_int(turned).is_greater(0)
+
+
+## A passenger on the cell grid: path cells from `cells`, `stage` as given,
+## `index` cells already walked.
+static func _on_grid(stage: Passenger.Stage, cells: Array[Vector2i], index := 0) -> Passenger:
+	var p := Passenger.new()
+	p.stage = stage
+	p.at = cells[index]
+	p.set_path(cells)
+	p.path_index = index
+	return p
+
+
+## A passenger on the walk outside: `points` as the apron, `mm` walked.
+static func _on_apron(stage: Passenger.Stage, points: Array[Vector3], mm: int) -> Passenger:
+	var p := Passenger.new()
+	p.stage = stage
+	p.apron = points
+	p.apron_mm = mm
+	return p
+
+
+func test_walk_heading_on_the_grid_follows_the_current_path_step() -> void:
+	var cells: Array[Vector2i] = [Vector2i(2, 2), Vector2i(3, 2), Vector2i(3, 3)]
+	assert_vector(_views.walk_heading(_on_grid(Passenger.Stage.TO_SECURITY, cells, 0))).is_equal(
+		Vector2(1, 0)
+	)
+	assert_vector(_views.walk_heading(_on_grid(Passenger.Stage.TO_SECURITY, cells, 1))).is_equal(
+		Vector2(0, 1)
+	)
+	# On the last cell nothing is left to walk.
+	assert_vector(_views.walk_heading(_on_grid(Passenger.Stage.TO_SECURITY, cells, 2))).is_equal(
+		Vector2.ZERO
+	)
+
+
+func test_walk_heading_on_the_apron_follows_the_leg_under_the_progress() -> void:
+	var points: Array[Vector3] = [Vector3(0, 0, 0), Vector3(4, 0, 0), Vector3(4, 1, 3)]
+	for stage in [Passenger.Stage.APRON, Passenger.Stage.SPAWNED]:
+		# The first leg is 4000 mm long, the second 3000 mm (height costs nothing).
+		assert_vector(_views.walk_heading(_on_apron(stage, points, 1000))).is_equal(Vector2(4, 0))
+		assert_vector(_views.walk_heading(_on_apron(stage, points, 5000))).is_equal(Vector2(0, 3))
+
+
+func test_walk_heading_outside_reads_the_apron_not_a_leftover_grid_path() -> void:
+	# Control: the same path heads along (0, 1) once the passenger is not outside.
+	var points: Array[Vector3] = [Vector3(0, 0, 0), Vector3(4, 0, 0)]
+	var cells: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1)]
+	var outside := _on_apron(Passenger.Stage.APRON, points, 1000)
+	outside.set_path(cells)
+	assert_vector(_views.walk_heading(outside)).is_equal(Vector2(4, 0))
+	var inside := _on_apron(Passenger.Stage.TO_GATE, points, 1000)
+	inside.set_path(cells)
+	assert_vector(_views.walk_heading(inside)).is_equal(Vector2(0, 1))
+
+
+func test_walk_heading_is_zero_once_the_apron_walk_has_ended() -> void:
+	var points: Array[Vector3] = [Vector3(0, 0, 0), Vector3(4, 0, 0)]
+	var done := _on_apron(Passenger.Stage.APRON, points, 4000)
+	done.clear_path()
+	assert_vector(_views.walk_heading(done)).is_equal(Vector2.ZERO)
