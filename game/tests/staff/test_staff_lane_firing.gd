@@ -73,6 +73,49 @@ func test_a_primary_fired_mid_admission_stays_until_every_admitted_passenger_cle
 	assert_bool(w.admitted.has(later)).is_false()
 
 
+## Two passengers admitted at once, one repacking at the berth and the next
+## unpacking: the fired primary stays until both are cleared.
+func test_a_primary_fired_with_two_passengers_admitted_stays_until_both_clear() -> void:
+	var w := _lane()
+	var officer := StaffTestKit.seat(w.world.staff, w.station, PRIMARY)
+	var ids := w.send_all([[0, true, false], [2, false, false]])
+	var first: int = ids[0]
+	var second: int = ids[1]
+	var both := func() -> bool:
+		return (
+			w.world.passenger(first).security_phase == PHASE.REPACK
+			and w.world.passenger(second).security_phase == PHASE.UNPACK
+		)
+	while not both.call() and w.world.clock.tick < 3000:
+		w.world.step()
+	assert_bool(both.call()).is_true()
+	assert_array(w.runtime_record()["admitted"]).is_equal([first, second])
+	assert_bool(w.world.staff.fire(SECURITY)).is_true()
+	var m := w.world.staff.get_member(officer)
+	assert_bool(m.leaving).is_true()
+	var last_clear := -1
+	while not (w.cleared.has(first) and w.cleared.has(second)) and w.world.clock.tick < 4000:
+		w.world.step()
+		if w.cleared.has(first) and w.cleared.has(second):
+			last_clear = w.world.clock.tick
+			break
+		assert_int(m.state).override_failure_message("tick %d" % w.world.clock.tick).is_equal(
+			StaffMember.State.ON_DUTY
+		)
+	print(
+		(
+			"fired with both admitted; cleared at %s and %s"
+			% [w.cleared.get(first), w.cleared.get(second)]
+		)
+	)
+	assert_int(last_clear).is_greater(0)
+	# It stayed past the first clearance, through the second passenger's.
+	assert_int(int(w.cleared[first])).is_not_equal(int(w.cleared[second]))
+	w.world.step()
+	var gone := w.world.staff.get_member(officer)
+	assert_bool(gone == null or gone.state == StaffMember.State.WALKING_OUT).is_true()
+
+
 func test_firing_lets_a_helper_go_before_the_primary() -> void:
 	var w := _lane()
 	# The primary has the higher id: by id alone (the highest on duty goes

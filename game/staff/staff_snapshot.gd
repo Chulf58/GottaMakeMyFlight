@@ -5,8 +5,9 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## A save from before staff spots has its on-duty members on the station's
-## service cell (lane slot 0). Such a member loads standing on the station's
+## A save from before staff spots (a version 1 save) has its on-duty members
+## on the station's service cell (lane slot 0). Such a member loads standing
+## on the station's
 ## staff spot, or, when an old layout left that spot blocked or out of reach
 ## from every entrance, idle where it stood (walking out if it was leaving),
 ## since the station can never be staffed. An on-duty member on a free spot
@@ -15,8 +16,10 @@ extends RefCounted
 ## Version 2 saves each member's post ("slot", StaffMember.Slot). A version 1
 ## save comes from before helpers and before security lanes could be built or
 ## loaded, so every member in it works a primary post: _migrated_v1() gives
-## each member record slot PRIMARY before the version 2 checks. A version 2
-## save missing a slot is refused. A helper must be a security officer at a
+## each member record slot PRIMARY before the version 2 checks. Only a
+## version 1 save has the service-cell migration above: in a version 2 save a
+## member on duty away from its post's spot is refused. A version 2 save
+## missing a slot is refused. A helper must be a security officer at a
 ## whole security lane and never leaving; a member with no station holds the
 ## primary slot; each post (station and slot) is claimed at most once.
 
@@ -77,7 +80,8 @@ static func load(saved: Dictionary, sim: PassengerSim) -> Dictionary:
 	if not WholeNumber.is_whole(saved["save_version"]):
 		return {"error": "save_version is not a whole number"}
 	var data := saved
-	if int(saved["save_version"]) == 1:
+	var v1 := int(saved["save_version"]) == 1
+	if v1:
 		var migrated: Variant = _migrated_v1(saved)
 		if migrated is String:
 			return {"error": migrated}
@@ -96,7 +100,7 @@ static func load(saved: Dictionary, sim: PassengerSim) -> Dictionary:
 	var claimed := {}
 	var last_id := 0
 	for record in data["members"]:
-		var parsed: Variant = _member(record, sim)
+		var parsed: Variant = _member(record, sim, v1)
 		if parsed is String:
 			return {"error": parsed}
 		var m: StaffMember = parsed
@@ -135,8 +139,10 @@ static func _slot_name(m: StaffMember) -> String:
 	return "helper" if m.slot == StaffMember.Slot.HELPER else "primary"
 
 
-## A StaffMember, or a String naming what is wrong with the record.
-static func _member(record: Variant, sim: PassengerSim) -> Variant:
+## A StaffMember, or a String naming what is wrong with the record. `v1`: the
+## record comes from a version 1 save, the only kind the service-cell
+## migration applies to.
+static func _member(record: Variant, sim: PassengerSim, v1: bool) -> Variant:
 	if typeof(record) != TYPE_DICTIONARY:
 		return "a member is not a dictionary"
 	for key in MEMBER_KEYS:
@@ -185,7 +191,8 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 		if not m.path.is_empty() and not _adjacent(m.path[m.path.size() - 1], cell):
 			return "member %d has a path that jumps" % m.id
 		m.path.append(cell)
-	_migrate_service_cell(m, sim)
+	if v1:
+		_migrate_service_cell(m, sim)
 	_release_unreachable(m, sim)
 	var problem := _place_problem(m)
 	if problem == "":

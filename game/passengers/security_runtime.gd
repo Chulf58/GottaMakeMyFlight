@@ -34,8 +34,9 @@ extends RefCounted
 ## forecast (SecurityForecast).
 ##
 ## The host is PassengerSim, or a SecurityForecast replaying a copy: it gives
-## `layout`, `staff` (a StaffSim or null, read by rate()) and
-## get_passenger(id), and bind() takes what to call when a
+## `layout`, `tick`, get_passenger(id) and, unless `helper_from` names the
+## station (a replay), `staff` (a StaffSim or null, read by rate()); bind()
+## takes what to call when a
 ## passenger is admitted and when it is cleared.
 
 enum Phase { NONE, SCAN, UNPACK, ARCH, TO_BERTH, REPACK, RETURN, PICKUP, LEAVE }
@@ -75,6 +76,11 @@ const MAIN_PHASES: Array[Phase] = [Phase.UNPACK, Phase.ARCH]
 ## id holding or reserving the berth or 0}. A station with nobody admitted
 ## has no record.
 var records := {}
+## Station id -> the first tick a helper is on duty there (-1: never), set by
+## a replay (SecurityForecast) from StaffPosts.helper_from(), since a replay
+## does not step the staff. A station listed here is judged by it instead of
+## by the host's staff.
+var helper_from := {}
 var _host: Object
 var _admitted: Callable
 var _cleared: Callable
@@ -90,15 +96,22 @@ func bind(host: Object, admitted := Callable(), cleared := Callable()) -> void:
 
 ## How much work a phase loses per tick at `station`: HELPER_RATE for a
 ## repack (after liquids or an alarm) while a helper officer is on duty there
-## (StaffSim.is_staffed() for the HELPER slot), else 1. Only a whole lane
-## has a helper post. The rate is applied to the remaining work each tick, so
-## a helper who arrives or leaves mid-repack changes only what is left.
+## (StaffSim.is_staffed() for the HELPER slot, or `helper_from` in a
+## replay), else 1. Only a whole lane has a helper post. The rate is applied
+## to the remaining work each tick, so a helper who arrives or leaves
+## mid-repack changes only what is left.
 func rate(station: int, phase: int) -> int:
 	if phase != Phase.REPACK:
 		return 1
+	return HELPER_RATE if _helped(station) else 1
+
+
+func _helped(station: int) -> bool:
+	if helper_from.has(station):
+		var from: int = helper_from[station]
+		return from >= 0 and _host.tick >= from
 	var staff: StaffSim = _host.staff
-	var helped := staff != null and staff.is_staffed(station, StaffMember.Slot.HELPER)
-	return HELPER_RATE if helped else 1
+	return staff != null and staff.is_staffed(station, StaffMember.Slot.HELPER)
 
 
 static func incident_open(p: Passenger) -> bool:

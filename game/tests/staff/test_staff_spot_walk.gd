@@ -110,17 +110,28 @@ func test_a_station_whose_old_save_blocked_its_spot_is_never_staffed() -> void:
 	assert_int(_w.staff.count(CHECKIN)).is_equal(2)
 
 
-func test_an_old_save_with_a_member_on_the_service_cell_loads_it_on_the_spot() -> void:
-	_w = PassengerTestWorld.reference_world()
-	_w.auto_staff = false
-	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
-	assert_int(_until_on_duty(_w, m)).is_greater(0)
+## A save of `_w` whose one member record is put on duty on its station's
+## service cell, as a save from before staff spots held it; as a version 1
+## save (no slot) when `v1`, else left a version 2 save.
+func _on_service_cell(m: StaffMember, v1: bool) -> Dictionary:
 	var data: Dictionary = JSON.parse_string(StaffTestKit.save_text(_w))
 	var service: Vector2i = _w.sim.layout.lanes[m.station][0]
 	var record: Dictionary = data["staff"]["members"][0]
 	record["at"] = [service.x, service.y]
 	record["path"] = [[service.x, service.y]]
 	record["path_index"] = 0
+	if v1:
+		data["staff"]["save_version"] = 1
+		record.erase("slot")
+	return data
+
+
+func test_an_old_save_with_a_member_on_the_service_cell_loads_it_on_the_spot() -> void:
+	_w = PassengerTestWorld.reference_world()
+	_w.auto_staff = false
+	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
+	assert_int(_until_on_duty(_w, m)).is_greater(0)
+	var data := _on_service_cell(m, true)
 	_b = StaffTestKit.load_world(JSON.stringify(data))
 	assert_object(_b).is_not_null()
 	var loaded := _b.staff.get_member(m.id)
@@ -132,6 +143,22 @@ func test_an_old_save_with_a_member_on_the_service_cell_loads_it_on_the_spot() -
 		_b.step()
 	assert_that(loaded.at).is_equal(m.at)
 	assert_int(loaded.state).is_equal(m.state)
+
+
+## Only a version 1 save migrates: the same record in a version 2 save is an
+## on-duty member away from its post, and is refused.
+func test_a_version_2_save_with_a_member_on_the_service_cell_is_refused() -> void:
+	_w = PassengerTestWorld.reference_world()
+	_w.auto_staff = false
+	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
+	assert_int(_until_on_duty(_w, m)).is_greater(0)
+	var data := _on_service_cell(m, false)
+	assert_int(int(data["staff"]["save_version"])).is_equal(2)
+	var loaded := StaffSnapshot.load(data["staff"], _w.sim)
+	print("v2 on the service cell: %s" % [loaded])
+	assert_str(loaded.get("error", "")).is_equal(
+		"member %d is on duty away from its post's staff spot" % m.id
+	)
 
 
 func test_an_old_save_on_duty_at_a_station_with_a_blocked_spot_loads_the_member_idle() -> void:

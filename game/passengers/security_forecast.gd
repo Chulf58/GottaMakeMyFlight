@@ -15,7 +15,10 @@ extends RefCounted
 ## change: no work runs out and nobody reaches a cell or joins. Read between
 ## ticks it is exact for passengers who walk; a late passenger runs, so it
 ## arrives sooner than forecast. Whether the station is open is taken as it
-## is now: a closed station admits nobody new.
+## is now: a closed station admits nobody new. Staff are not stepped: a lane's
+## helper speeds the replayed repacks from the tick StaffPosts.helper_from()
+## gives (now when on duty, its arrival when walking there), and that tick is
+## an event the replay does not skip past.
 
 ## Far enough that a replay this long has gone wrong.
 const HORIZON := 200000
@@ -23,14 +26,13 @@ const HORIZON := 200000
 ## What SecurityRuntime reads from its host (see its header).
 var tick := 0
 var layout: TerminalLayout
-## The sim's staff, so a helper on duty now speeds the replayed repacks as it
-## does the real ones; taken as it is now, like whether the station is open.
-var staff: StaffSim
 
 var _sim: PassengerSim
 var _station := 0
 var _runtime := SecurityRuntime.new()
 var _open := false
+## The first tick a helper is on duty at the station, or -1 (never).
+var _helper_from := -1
 var _cells: Array = []
 var _queue := {"lane": [], "holding": []}
 ## Passenger id -> its copy.
@@ -97,8 +99,10 @@ func _setup(sim: PassengerSim, station: int) -> void:
 	_station = station
 	tick = sim.tick
 	layout = sim.layout
-	staff = sim.staff
 	_open = sim.staff != null and sim.staff.is_open(station)
+	if sim.staff != null:
+		_helper_from = StaffPosts.helper_from(sim.staff, station)
+	_runtime.helper_from = {station: _helper_from}
 	_cells = sim.layout.lanes[station]
 	_runtime.bind(self, _on_admitted, _on_cleared)
 	var record := sim.security.record_of(station)
@@ -219,6 +223,9 @@ func _next_event() -> int:
 		_changed = false
 		return tick + 1
 	var best := -1
+	if _helper_from > tick:
+		# The repack rate changes on the tick the helper arrives.
+		best = _helper_from
 	for id in _order:
 		if _cleared.has(id):
 			continue

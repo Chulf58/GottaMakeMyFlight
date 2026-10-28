@@ -78,6 +78,31 @@ static func workable(
 	return not blocked(grid, layout, station) and not unreachable(grid, layout, station, slot)
 
 
+## The first tick on which a helper is on duty at `station`, read from where
+## it stands now, or -1 when none will be without a new decision: the
+## current tick for one on duty, and for one walking there the tick its
+## committed path brings it onto the helper spot. StaffSim steps before the
+## passengers, so a helper arriving on a tick already counts for that tick's
+## security work. A helper whose path is about to be planned again (an edit
+## touched it) or does not end on the spot gives -1.
+static func helper_from(staff: StaffSim, station: int) -> int:
+	var id := staff.staff_at(station, StaffMember.Slot.HELPER)
+	if id == 0:
+		return -1
+	var m := staff.get_member(id)
+	if m.state == StaffMember.State.ON_DUTY:
+		return staff.sim.tick
+	var spot := staff.spot_of(station, StaffMember.Slot.HELPER)
+	if m.state != StaffMember.State.TO_STATION or m.needs_replan or m.path_end() != spot:
+		return -1
+	var mm := -m.seg_mm
+	for i in range(m.path_index, m.path.size() - 1):
+		mm += Passenger.segment_mm(m.path[i], m.path[i + 1])
+	# Each step walks WALK_MM and carries what is left over to the next cell,
+	# so it arrives on the step whose total first reaches the rest of the path.
+	return staff.sim.tick + maxi(JourneyForecast.walk_ticks(mm), 1)
+
+
 ## The pass described at the top, on `staff`'s members. It changes posts only
 ## through StaffSim's own two moves: `post` (member, station, slot, path)
 ## sends an idle member out, and `repost` (member, station, slot) moves one

@@ -112,6 +112,37 @@ func test_the_forecast_replays_the_helper_rate() -> void:
 	assert_int(int(w.cleared[id]) - now).is_equal(eta)
 
 
+## A helper still walking to its post when the forecast is taken arrives
+## mid-repack; the replay switches to HELPER_RATE on the tick the runtime
+## does.
+func test_the_forecast_counts_a_helper_arriving_mid_repack() -> void:
+	var w := _lane(false)
+	var id := w.send(0, true)
+	assert_bool(_until_phase(w, id, REPACK)).is_true()
+	var helper := StaffTestKit.send_helper(w.world.staff, w.station, Vector2i(1, 4))
+	var now := w.world.clock.tick
+	var eta := SecurityForecast.eta(w.world.sim, w.world.passenger(id))
+	var arrived := -1
+	while not w.cleared.has(id) and w.world.clock.tick < now + 2000:
+		w.world.step()
+		var m := w.world.staff.get_member(helper)
+		if arrived < 0 and m.state == StaffMember.State.ON_DUTY:
+			arrived = w.world.clock.tick
+			# On the tick it arrives the repack is still running.
+			assert_int(w.world.passenger(id).security_phase).is_equal(REPACK)
+	print(
+		(
+			"helper on duty at %d (forecast at %d), forecast %d, measured %d"
+			% [arrived, now, eta, int(w.cleared.get(id, -1)) - now]
+		)
+	)
+	# The helper arrived while the repack was still running, so it counted.
+	assert_int(arrived).is_greater(now)
+	assert_int(arrived - now).is_less(SecurityRuntime.REPACK_TICKS)
+	assert_bool(w.cleared.has(id)).is_true()
+	assert_int(int(w.cleared[id]) - now).is_equal(eta)
+
+
 func test_a_save_mid_repack_with_a_helper_plays_on_identically() -> void:
 	var a := _lane(true)
 	var id := a.send(1, false, true)
