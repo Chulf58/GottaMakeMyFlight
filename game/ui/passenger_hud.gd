@@ -221,7 +221,7 @@ func refresh() -> void:
 	# that was not dismissed, so it never holds an earlier day's result.
 	if not _unreported.is_empty():
 		var latest: Dictionary = _unreported.back()
-		_result.show_result(FlightResult.summarize(sim, latest["flight"]), latest["day"])
+		_result.show_result(_result_summary(latest["flight"]), latest["day"])
 		_unreported.clear()
 	_result.expire_on_new_day(_today())
 	_time_label.text = time_text()
@@ -296,7 +296,14 @@ func press_debug_spawn() -> void:
 
 ## Opens the result panel for a flight, from the passengers' recorded fates.
 func show_result_for(flight_id: String) -> void:
-	_result.show_result(FlightResult.summarize(sim, flight_id), _today())
+	_result.show_result(_result_summary(flight_id), _today())
+
+
+## The flight's FlightResult summary, titled with its contract's name.
+func _result_summary(flight_id: String) -> Dictionary:
+	var summary := FlightResult.summarize(sim, flight_id)
+	summary["title"] = FlightResultPanel.title_for(flights, flight_id)
+	return summary
 
 
 func dismiss_result() -> void:
