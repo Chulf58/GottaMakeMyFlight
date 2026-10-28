@@ -195,7 +195,7 @@ func test_a_missing_desk_with_no_floor_to_stand_on_is_granted_its_floor() -> voi
 ## and each edit since raises the bound by the most it can add to a repair.
 func test_no_new_plan_while_the_wallet_covers_the_bound_and_a_raised_one_is_caught() -> void:
 	var wallet := _world.sim.wallet
-	wallet.credit(5000)
+	wallet.credit(5000, Wallet.Category.FEES)
 	_remove_all(["scanners"])
 	assert_bool(_grant.evaluate()).is_false()
 	assert_object(_grant._plan).is_not_null()
@@ -205,7 +205,7 @@ func test_no_new_plan_while_the_wallet_covers_the_bound_and_a_raised_one_is_caug
 	print("cut %d bound %d plan %s" % [cut, _grant._bound, _grant._plan])
 	assert_object(_grant._plan).is_null()
 	assert_int(_grant._bound).is_equal(900 + cut * PriceTable.price_of_floor())
-	assert_bool(wallet.spend(wallet.balance - 1000)).is_true()
+	assert_bool(wallet.spend(wallet.balance - 1000, Wallet.Category.BUILD)).is_true()
 	assert_bool(_grant.evaluate()).is_false()
 	assert_int(_grant._bound).is_equal(925)
 	_remove_all(["exits"])
@@ -254,7 +254,7 @@ func test_a_refund_earned_early_in_the_repair_lowers_the_grant() -> void:
 	var walls: Array[BuildEdit] = []
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 		walls.append(BuildEdit.place_wall(Vector2i(x, 16), BuildGrid.Side.NORTH))
-	wallet.credit(BuildTransaction.needed(_world.grid, walls))
+	wallet.credit(BuildTransaction.needed(_world.grid, walls), Wallet.Category.FEES)
 	_old_save_rules()
 	for result in BuildTransaction.commit_batch(_world.grid, walls, wallet):
 		assert_bool(result.ok).is_true()

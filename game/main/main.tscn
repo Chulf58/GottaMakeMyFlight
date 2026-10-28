@@ -1,4 +1,4 @@
-[gd_scene load_steps=34 format=3]
+[gd_scene load_steps=35 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -30,6 +30,7 @@
 [ext_resource type="Script" path="res://baggage/baggage_sim.gd" id="26_bagsim"]
 [ext_resource type="Script" path="res://baggage/baggage_views.gd" id="27_bagview"]
 [ext_resource type="Script" path="res://staff/staff_characters.gd" id="28_staffchars"]
+[ext_resource type="Script" path="res://economy/day_ledger.gd" id="29_dayledger"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -54,8 +55,14 @@ tonemap_mode = 2
 [node name="SimClock" type="Node" parent="."]
 script = ExtResource("2_clock")
 
-[node name="Finances" type="Node" parent="."]
+[node name="DayLedger" type="Node" parent="." node_paths=PackedStringArray("clock", "finances")]
+script = ExtResource("29_dayledger")
+clock = NodePath("../SimClock")
+finances = NodePath("../Finances")
+
+[node name="Finances" type="Node" parent="." node_paths=PackedStringArray("clock")]
 script = ExtResource("16_finances")
+clock = NodePath("../SimClock")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")
@@ -209,11 +216,13 @@ camera = NodePath("../TycoonCamera")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 
-[node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant")]
+[node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant", "day_ledger", "settlement")]
 layer = 2
 script = ExtResource("13_menu")
 build_mode = NodePath("../BuildMode")
 rescue_grant = NodePath("../RescueGrant")
+day_ledger = NodePath("../DayLedger")
+settlement = NodePath("../Settlement")
 
 [node name="ShellView" type="Node" parent="." node_paths=PackedStringArray("shell", "camera")]
 script = ExtResource("14_shellview")
@@ -247,7 +256,7 @@ layer = 2
 script = ExtResource("24_ratingbadge")
 rating = NodePath("../AirportRating")
 
-[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating", "baggage")]
+[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating", "baggage", "day_ledger")]
 script = ExtResource("25_save")
 clock = NodePath("../SimClock")
 build_mode = NodePath("../BuildMode")
@@ -260,3 +269,4 @@ rescue_grant = NodePath("../RescueGrant")
 offer_desk = NodePath("../OfferDesk")
 rating = NodePath("../AirportRating")
 baggage = NodePath("../BaggageSim")
+day_ledger = NodePath("../DayLedger")

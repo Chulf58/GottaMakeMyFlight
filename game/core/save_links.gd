@@ -31,6 +31,8 @@ extends RefCounted
 ##   settled passenger is retired and a desk can be demolished while its
 ##   bags remain. The reverse is looked up: a passenger whose fee the
 ##   settlement holds for a bag on its way has an unsettled bag.
+## - today's money: the DayLedger's day is the clock's day
+##   (DayLedger.day_link_problem); a save without the ledger has none to check.
 ##
 ## Checked elsewhere already: staff stations and roles against the layout
 ## (StaffSnapshot.load), cafe visits and queues against the saved grid
@@ -54,6 +56,8 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 		found = _bag_problem(staged["baggage"], staged["grid"], flights)
 	if found == "":
 		found = _awaited_problem(data["settlement"], staged["baggage"]["bags"])
+	if found == "" and data.has("day_ledger"):
+		found = DayLedger.day_link_problem(data["day_ledger"], data["clock"])
 	return found
 
 

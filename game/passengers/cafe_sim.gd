@@ -695,7 +695,7 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 	if _sim.wallet == null:
 		push_error("CafeSim: no wallet to pay passenger %d's %d into" % [p.id, amount])
 		return
-	if not _sim.wallet.credit(amount):
+	if not _sim.wallet.credit(amount, Wallet.Category.SHOP):
 		push_error("CafeSim: the wallet refused passenger %d's %d" % [p.id, amount])
 		return
 	visit.amount = amount

@@ -87,7 +87,7 @@ func test_rewinding_to_a_save_before_midnight_charges_it_once_more() -> void:
 
 func test_owed_wages_and_the_paid_total_survive_a_save() -> void:
 	_kit.hire(CHECKIN, 2)
-	assert_bool(_kit.world.sim.wallet.spend(950)).is_true()
+	assert_bool(_kit.world.sim.wallet.spend(950, Wallet.Category.BUILD)).is_true()
 	_kit.cross(1)
 	assert_int(_kit.settlement.wages_owed()).is_equal(70)
 	var saved := Settlement.new()
@@ -181,7 +181,7 @@ func test_a_day_other_than_the_clock_day_is_a_broken_link() -> void:
 ## day and the ones around it included, with a debt standing and without.
 func test_every_save_point_agrees_with_the_link_checks() -> void:
 	_kit.hire(CHECKIN)
-	assert_bool(_kit.world.sim.wallet.spend(1000)).is_true()
+	assert_bool(_kit.world.sim.wallet.spend(1000, Wallet.Category.BUILD)).is_true()
 	_kit.near_midnight(1, 4)
 	for i in 10:
 		_kit.world.step()
@@ -193,7 +193,7 @@ func test_every_save_point_agrees_with_the_link_checks() -> void:
 			. is_empty()
 		)
 	assert_int(_kit.settlement.wages_owed()).is_equal(60)
-	assert_bool(_kit.world.sim.wallet.credit(100)).is_true()
+	assert_bool(_kit.world.sim.wallet.credit(100, Wallet.Category.FEES)).is_true()
 	var after_pay := _kit.save()
 	(
 		assert_str(

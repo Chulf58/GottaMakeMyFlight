@@ -128,7 +128,7 @@ func evaluate() -> bool:
 	if amount <= 0:
 		return false
 	var wages := settlement.wages_owed() if settlement != null else 0
-	if not _wallet.credit(amount + wages):
+	if not _wallet.credit(amount + wages, Wallet.Category.GRANT):
 		return false
 	_granted = true
 	granted.emit(amount + wages, _message(amount, repair_plan().edits, wages))

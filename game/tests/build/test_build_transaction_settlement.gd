@@ -61,7 +61,7 @@ func test_a_plan_refund_is_paid_before_the_grid_signals() -> void:
 	grid.edit_applied.connect(
 		func(_edit: BuildEdit, _result: BuildResult) -> void:
 			seen.append(wallet.balance)
-			wallet.credit(Wallet.MAX_BALANCE - wallet.balance)
+			wallet.credit(Wallet.MAX_BALANCE - wallet.balance, Wallet.Category.FEES)
 	)
 	var removal := _plan(BuildEdit.remove_floor(Vector2i(0, 0)))
 	var result := BuildTransaction.commit_plan(grid, removal, wallet)

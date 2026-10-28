@@ -2,13 +2,29 @@ class_name Wallet
 extends RefCounted
 ## The player's money: a whole-number balance that never goes negative (no
 ## loans). Plain data; the price list lives in PriceTable.
+##
+## Every credit and spend names what the money is for (Category), and every
+## movement that happens emits one transaction (decision money-hover-design-
+## categorised-wallet-transactions-feed-a-sa), which the DayLedger adds up per
+## day. A refused movement and a snapshot restore emit none.
 
 signal changed(balance: int)
+## Money moved: `amount` is the gross amount, negative for a spend; for a
+## credit, `wages_claimed` is the part credit_claim took for owed wages (the
+## balance moved by amount - wages_claimed). `tick` is the clock's tick, or
+## NO_TICK when the wallet has no clock.
+signal transaction(amount: int, category: int, wages_claimed: int, tick: int)
+
+## What a movement is for. There is deliberately no catch-all: every caller
+## says which one.
+enum Category { FEES, SHOP, GRANT, OPENING, BUILD, WAGES }
 
 ## Upper bound on the balance, far below 2^53, so a JSON round trip and any
 ## sum of in-range amounts stay exact.
 const MAX_BALANCE := 999_999_999_999
 const SNAPSHOT_KEYS := ["balance"]
+## The tick of a transaction from a wallet with no clock.
+const NO_TICK := -1
 
 var balance: int = 0
 ## Optional: a debt that takes a share of each credit before the balance sees
@@ -18,6 +34,8 @@ var balance: int = 0
 ## room is checked on that rest. Unset or freed, the whole credit lands. A load
 ## restores the balance as it was saved and claims nothing.
 var credit_claim: Callable
+## Stamps each transaction with its tick; Finances sets the scene's clock.
+var clock: SimClock
 
 
 ## A starting balance outside [0, MAX_BALANCE] pushes an error and leaves the
@@ -34,24 +52,30 @@ func can_afford(amount: int) -> bool:
 
 
 ## Adds `amount`, less what credit_claim takes for a debt. Returns false and
-## leaves the balance and the debt unchanged when the amount is negative or
-## what is left after the debt would pass MAX_BALANCE. Zero succeeds silently.
-func credit(amount: int) -> bool:
+## leaves the balance and the debt unchanged when the amount is negative, the
+## category unknown, or what is left after the debt would pass MAX_BALANCE.
+## Zero succeeds silently.
+func credit(amount: int, category: Category) -> bool:
+	if not _known(category):
+		return false
 	var taken := _claimed(amount, false)
 	if amount < 0 or amount - taken > MAX_BALANCE - balance:
 		push_error("Wallet.credit: %d is not creditable at balance %d" % [amount, balance])
 		return false
 	_claimed(amount, true)
 	_set_balance(balance + amount - taken)
+	_emit(amount, category, taken)
 	return true
 
 
 ## Takes `amount`. Returns false and leaves the balance unchanged when the
-## amount is negative or more than the balance. Zero succeeds silently.
-func spend(amount: int) -> bool:
-	if not can_afford(amount):
+## amount is negative or more than the balance, or the category unknown. Zero
+## succeeds silently.
+func spend(amount: int, category: Category) -> bool:
+	if not _known(category) or not can_afford(amount):
 		return false
 	_set_balance(balance - amount)
+	_emit(-amount, category, 0)
 	return true
 
 
@@ -71,6 +95,21 @@ func from_snapshot(data: Dictionary) -> bool:
 		return false
 	_set_balance(str(data["balance"]).to_int())
 	return true
+
+
+func _known(category: int) -> bool:
+	if Category.values().has(category):
+		return true
+	push_error("Wallet: %d is not a Wallet.Category" % category)
+	return false
+
+
+func _emit(amount: int, category: Category, wages_claimed: int) -> void:
+	if amount == 0:
+		return
+	transaction.emit(
+		amount, category, wages_claimed, clock.tick if is_instance_valid(clock) else NO_TICK
+	)
 
 
 func _claimed(amount: int, commit: bool) -> int:

@@ -97,7 +97,7 @@ func test_a_wall_stroke_pays_per_segment_and_stops_when_money_runs_out() -> void
 		outcomes.append(_mode.apply_at(_near_edge(Vector2i(x, 4), NORTH)).ok)
 		if x == 5:
 			# Money that arrives mid-stroke does not restart it.
-			_wallet().credit(10 * wall)
+			_wallet().credit(10 * wall, Wallet.Category.FEES)
 	print("segments %s balance %d" % [outcomes, _wallet().balance])
 	assert_array(outcomes).is_equal([true, true, true, false, false])
 	for x in range(2, 5):
@@ -118,7 +118,7 @@ func test_a_floor_rectangle_is_all_or_nothing() -> void:
 	assert_int(_mode.grid.floor_at(Vector2i(2, 2))).is_equal(BuildGrid.FLOOR_NONE)
 	assert_int(_wallet().balance).is_equal(15 * PriceTable.FLOOR_PRICE - 1)
 	assert_str(_mode.status_text()).is_equal("Not enough money: 15 tiles cost 375")
-	_wallet().credit(1)
+	_wallet().credit(1, Wallet.Category.FEES)
 	outcome = _fill(Rect2i(2, 2, 5, 3))
 	assert_int(outcome.placed).is_equal(15)
 	assert_int(_wallet().balance).is_equal(0)

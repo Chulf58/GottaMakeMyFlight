@@ -32,7 +32,7 @@ func remake(on_world: PassengerTestWorld = null) -> void:
 			PassengerTestWorld.floored(Vector2i(8, 6)), FlightSim.schedule_starts(1000000)
 		)
 	world.auto_staff = false
-	world.sim.wallet.credit(START_BALANCE)
+	world.sim.wallet.credit(START_BALANCE, Wallet.Category.OPENING)
 	settlement = _suite.auto_free(Settlement.new())
 	settlement.staff = world.staff
 	settlement.bind(world.sim, world.sim.wallet)

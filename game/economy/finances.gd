@@ -14,12 +14,18 @@ extends Node
 ## Restore through restore(), never through wallet.from_snapshot() directly,
 ## or entering the tree credits the budget on top.
 
+## Stamps the wallet's transactions with their tick, so the DayLedger puts
+## each on its day. Without it they carry Wallet.NO_TICK.
+@export var clock: SimClock
+
 var wallet := Wallet.new()
 
 var _set_up := false
 
 
 func _ready() -> void:
+	if clock != null:
+		wallet.clock = clock
 	if not _set_up:
 		start_new_game()
 
@@ -30,7 +36,7 @@ func start_new_game() -> bool:
 	if _set_up:
 		return false
 	_set_up = true
-	return wallet.credit(PriceTable.STARTING_BUDGET)
+	return wallet.credit(PriceTable.STARTING_BUDGET, Wallet.Category.OPENING)
 
 
 ## Restores a Wallet.to_snapshot() dictionary and marks the wallet set up, so

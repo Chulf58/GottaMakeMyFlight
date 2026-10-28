@@ -49,6 +49,8 @@ extends Node
 ## `owed` the shortfall carried as owed wages (the debt in total is
 ## wages_owed()). Not emitted on a day with nobody on the roster.
 signal wages_charged(day: int, paid: int, owed: int)
+## The owed wages changed (a charge, a payment, a load); the money card follows it.
+signal wages_owed_changed(owed: int)
 
 const SNAPSHOT_KEYS := ["owed"]
 ## Added with staff wages. A save from before them has none and loads with no
@@ -194,7 +196,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	for text in data["owed"]:
 		loaded.append(str(text).to_int())
 	_owed = loaded
-	_wages_owed = str(data.get("wages_owed", "0")).to_int()
+	_set_wages_owed(str(data.get("wages_owed", "0")).to_int())
 	_wages_day = str(data.get("wages_day", str(NO_DAY))).to_int()
 	_wages_paid_today = str(data.get("wages_paid_today", "0")).to_int()
 	_bag_missed.clear()
@@ -422,11 +424,11 @@ func _charge_wages(day: int) -> void:
 	_wages_paid_today = 0
 	if due == 0:
 		return
-	if not _wallet.spend(paid):
+	if not _wallet.spend(paid, Wallet.Category.WAGES):
 		push_error("Settlement: wallet refused a wage of %d it holds" % paid)
 		return
 	_wages_paid_today = paid
-	_wages_owed += due - paid
+	_set_wages_owed(_wages_owed + due - paid)
 	wages_charged.emit(day, paid, due - paid)
 
 
@@ -454,10 +456,10 @@ func _pay_owed() -> void:
 ## on a state loaded or set up that way.
 func _pay_wages() -> void:
 	var paid := mini(_wages_owed, _wallet.balance)
-	if paid <= 0 or not _wallet.spend(paid):
+	if paid <= 0 or not _wallet.spend(paid, Wallet.Category.WAGES):
 		return
-	_wages_owed -= paid
 	_wages_paid_today += paid
+	_set_wages_owed(_wages_owed - paid)
 
 
 ## Wallet.credit_claim: what is owed in wages out of an incoming credit. With
@@ -466,15 +468,22 @@ func _pay_wages() -> void:
 func _claim_credit(amount: int, commit: bool) -> int:
 	var paid := mini(_wages_owed, amount)
 	if commit:
-		_wages_owed -= paid
 		_wages_paid_today += paid
+		_set_wages_owed(_wages_owed - paid)
 	return paid
+
+
+func _set_wages_owed(value: int) -> void:
+	if value == _wages_owed:
+		return
+	_wages_owed = value
+	wages_owed_changed.emit(_wages_owed)
 
 
 ## Pays owed fees, oldest first, while the next one fits the wallet.
 func _pay_fees() -> void:
 	while not _owed.is_empty() and _owed[0] <= Wallet.MAX_BALANCE - _wallet.balance:
-		if not _wallet.credit(_owed[0]):
+		if not _wallet.credit(_owed[0], Wallet.Category.FEES):
 			return
 		_owed.pop_front()
 

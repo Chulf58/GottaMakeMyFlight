@@ -145,7 +145,8 @@ func test_binding_twice_pays_each_fee_once() -> void:
 ## Fills the wallet so that `room` more fits, no more.
 func _fill_to_room(room: int) -> void:
 	var wallet := _world.sim.wallet
-	assert_bool(wallet.credit(Wallet.MAX_BALANCE - room - wallet.balance)).is_true()
+	var fill := Wallet.MAX_BALANCE - room - wallet.balance
+	assert_bool(wallet.credit(fill, Wallet.Category.FEES)).is_true()
 
 
 func test_a_fee_the_wallet_cannot_hold_is_owed_and_paid_once_room_is_made() -> void:
@@ -159,7 +160,7 @@ func test_a_fee_the_wallet_cannot_hold_is_owed_and_paid_once_room_is_made() -> v
 	print("made %d owed %s balance %d" % [made, _settlement.owed(), _world.sim.wallet.balance])
 	assert_int(_world.sim.wallet.balance).is_equal(Wallet.MAX_BALANCE - 10)
 	assert_int(_settlement.owed().size()).is_equal(made)
-	assert_bool(_world.sim.wallet.spend(1000)).is_true()
+	assert_bool(_world.sim.wallet.spend(1000, Wallet.Category.BUILD)).is_true()
 	_world.step()
 	_world.step()
 	assert_int(_world.sim.wallet.balance).is_equal(Wallet.MAX_BALANCE - 10 - 1000 + made * FEE)

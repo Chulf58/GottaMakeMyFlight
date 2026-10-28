@@ -265,12 +265,12 @@ static func _settle(wallet: Wallet, quotes: Array[Quote], applied: Array[bool]) 
 	for i in quotes.size():
 		if i < applied.size() and applied[i]:
 			net += quotes[i].net()
-	if net > 0 and not wallet.spend(net):
+	if net > 0 and not wallet.spend(net, Wallet.Category.BUILD):
 		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
 	if net < 0:
 		if -net > Wallet.MAX_BALANCE - wallet.balance:
 			return BuildResult.refused(BuildResult.Reason.WALLET_FULL)
-		wallet.credit(-net)
+		wallet.credit(-net, Wallet.Category.BUILD)
 	return BuildResult.accepted()
 
 
