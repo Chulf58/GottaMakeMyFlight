@@ -229,6 +229,8 @@ func _button(row: HBoxContainer, node_name: String, text: String, variation: Str
 	var button := Button.new()
 	button.name = node_name
 	button.text = text
+	# A clicked button must not keep keyboard focus: Space (pause) would press it again.
+	button.focus_mode = Control.FOCUS_NONE
 	button.theme_type_variation = variation
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(button)
