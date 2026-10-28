@@ -80,6 +80,7 @@ CLASSES = {
     "3x1": ((3.0, 1.0, 1.0), (0.0, 0.0, 0.5)),
     "3x2": ((3.0, 2.0, 0.5), (0.0, 0.0, 0.25)),
     "2x2": ((2.0, 2.0, 1.7), (0.0, 0.0, 0.85)),
+    "1x1": ((1.0, 1.0, 1.6), (0.0, 0.0, 0.8)),
 }
 
 # Catalog colours (build_catalog.gd), sRGB.
@@ -129,6 +130,12 @@ ITEMS = {
         ],
         [],
     ),
+    # Security lane parts, the Lane tray (decision security-lane-parts-get-their-own-
+    # lane-build-category-next-t), each 1x1. The arch is as tall as a door.
+    "tray_table": ("1x1", ["tray_table"], []),
+    "xray_belt": ("1x1", ["xray_belt"], []),
+    "arch": ("door_1x1", ["security_arch"], []),
+    "pickup_table": ("1x1", ["pickup_table"], []),
 }
 ORDER = list(ITEMS)
 
