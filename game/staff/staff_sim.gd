@@ -75,8 +75,8 @@ func fire(role: StaffMember.Role) -> bool:
 				continue
 			if state == StaffMember.State.ON_DUTY and _in_service(m.station):
 				m.leaving = true
-			else:
-				_send_out(m)
+			elif _send_out(m):
+				return true
 			staff_changed.emit()
 			return true
 	return false
@@ -229,8 +229,8 @@ func _reconcile() -> void:
 			m.at = StaffMember.NO_CELL
 			m.clear_path()
 		if m.leaving and not (m.state == StaffMember.State.ON_DUTY and _in_service(m.station)):
-			_send_out(m)
-			staff_changed.emit()
+			if not _send_out(m):
+				staff_changed.emit()
 
 
 ## Whether the member is backing out of a cell that went (_replan() marked it):
@@ -254,19 +254,21 @@ func _leave(m: StaffMember) -> void:
 
 ## A fired member gives up its station and walks out to the first entrance,
 ## keeping a step in progress. One in the pool, or with no entrance or no path
-## to it, is removed at once.
-func _send_out(m: StaffMember) -> void:
+## to it, is removed at once, and that removal has already emitted
+## staff_changed: returns true then, so the caller does not emit it again.
+func _send_out(m: StaffMember) -> bool:
 	if _claims.get(m.station, 0) == m.id:
 		_claims.erase(m.station)
 	m.station = 0
 	m.leaving = false
 	m.search_failed = false
 	if m.in_pool() or sim.layout.entrances.is_empty():
-		_remove(m)
-		return
+		_leave(m)
+		return true
 	_set_state(m, StaffMember.State.WALKING_OUT)
 	m.needs_replan = true
 	_replan(m)
+	return not _by_id.has(m.id)
 
 
 ## Whether a passenger is being checked in or screened at the station now.

@@ -117,6 +117,21 @@ func test_with_no_path_to_the_entrance_a_fired_member_goes_at_once() -> void:
 	assert_int(_w.staff.count(CHECKIN)).is_equal(1)
 
 
+func test_a_member_gone_at_once_is_announced_once() -> void:
+	var m := _seated_agent()
+	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
+		_w.grid.apply(BuildEdit.place_wall(Vector2i(x, 13), BuildGrid.Side.NORTH))
+	var changes := [0]
+	_w.staff.staff_changed.connect(func() -> void: changes[0] += 1)
+	assert_bool(_w.staff.fire(CHECKIN)).is_true()
+	assert_object(_w.staff.get_member(m.id)).is_null()
+	var in_pool := _w.staff.hire(SECURITY)
+	assert_bool(_w.staff.fire(SECURITY)).is_true()
+	assert_object(_w.staff.get_member(in_pool)).is_null()
+	print("staff_changed: %d for a fire with no path, a hire and a fire from the pool" % changes[0])
+	assert_int(changes[0]).is_equal(3)
+
+
 func test_with_no_entrance_a_fired_member_goes_at_once() -> void:
 	var m := _seated_agent()
 	var entrance: int = _w.sim.layout.entrances[0]

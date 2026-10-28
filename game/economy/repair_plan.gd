@@ -34,7 +34,8 @@ extends RefCounted
 ## The leg then takes the cheapest of: a standing desk, scanner or exit the
 ## search reached, or a new one, priced as its object plus the floor its
 ## footprint (and a scanner's exit cell, or a door's own cell) still needs. A
-## new piece goes where the
+## new desk or scanner also needs its staff spot (StaffSpots) free and floored,
+## and that floor is part of its price. A new piece goes where the
 ## search reaches first, in its settle order, trying facings 0 to 3, so the
 ## same grid always gives the same plan. With no entrance, every place an
 ## entrance may stand (a landside Toon door in a shell, else any edge cell
@@ -418,6 +419,12 @@ func _new_choices(leg: int, sources: Array) -> Array:
 				if not _free_for_piece([next] as Array[Vector2i], walk, false):
 					continue
 				cells.append(next)
+			# Passengers may cross the staff spot, so it may lie on the walk.
+			var spot := StaffSpots.cell_of(def_id, anchor, facing)
+			if spot != BuildObjectDef.NO_CELL:
+				if not _free_for_piece([spot] as Array[Vector2i], {}, false):
+					continue
+				cells.append(spot)
 			var piece := _floors(cells)
 			piece.append(BuildEdit.place_object(def_id, anchor, facing))
 			var cost := _dist[_index(cell)] + (price + _floors_price(piece)) * SCALE

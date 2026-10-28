@@ -90,3 +90,14 @@ func test_a_station_closed_by_a_blocked_spot_says_why() -> void:
 	assert_str(MissSignals.closed_reason(_w.sim, desks[1])).is_empty()
 	_w.staff.fire(StaffMember.Role.CHECKIN)
 	assert_str(MissSignals.closed_reason(_w.sim, desks[1])).is_equal(MissSignals.NO_STAFF_REASON)
+	# The Closed sign says why: a blocked spot, or plainly closed.
+	var views := PassengerViews.new()
+	views.clock = _w.clock
+	views.sim = _w.sim
+	add_child(views)
+	var markers := views.get_node("MissMarkers") as MissMarkers
+	markers.sync()
+	print("captions: '%s', '%s'" % [markers.closed_text(blocked), markers.closed_text(desks[1])])
+	assert_str(markers.closed_text(blocked)).is_equal(MissMarkers.SPOT_BLOCKED_CAPTION)
+	assert_str(markers.closed_text(desks[1])).is_equal(MissMarkers.CLOSED_CAPTION)
+	views.free()

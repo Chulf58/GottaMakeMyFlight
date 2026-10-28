@@ -16,6 +16,9 @@ const DESK := Vector2i(2, 8)
 const ENTRY := Vector2i(3, 7)
 const END := Vector2i(10, 7)
 const ROOM := Rect2i(10, 6, 3, 3)
+## side_desk(): its anchor and its outlet cell, which feeds the line at (6, 7).
+const SIDE_DESK := Vector2i(5, 9)
+const SIDE_ENTRY := Vector2i(6, 8)
 ## A bag checked in on tick 0 rests on the standard line's end on this tick.
 const ARRIVAL := 150
 
@@ -50,6 +53,16 @@ func line() -> int:
 	room(ROOM)
 	var desk_id := desk(DESK)
 	lay(ENTRY, END)
+	return desk_id
+
+
+## A second desk two rows below the standard line, its agent row between,
+## and its outlet cell (6, 8) laid as a belt feeding the line at (6, 7)
+## (decision desk-belts-run-one-row-back-desk-then-the-agent-row-then-the).
+## Returns the desk id. Call after line().
+func side_desk() -> int:
+	var desk_id := desk(SIDE_DESK)
+	lay(SIDE_ENTRY, SIDE_ENTRY)
 	return desk_id
 
 

@@ -92,22 +92,27 @@ func test_a_bag_waiting_for_space_is_riding_not_blocked() -> void:
 func test_equal_waits_at_a_merge_go_to_the_lower_id() -> void:
 	# Two desks feed (6, 3) from the left and right branches of a T whose
 	# stem runs down to a bag room; both bags reach their branch centres on
-	# the same tick.
+	# the same tick. Each desk stands two rows below the branch, its outlet
+	# cell feeding up into it (decision desk-belts-run-one-row-back-desk-then-
+	# the-agent-row-then-the), so every bag rides one cell more than on a
+	# desk right behind the branch: 20 ticks later.
 	_world.room(Rect2i(5, 8, 3, 3))
-	var left := _world.desk(Vector2i(2, 4))
-	var right := _world.desk(Vector2i(9, 4), 0)
+	var left := _world.desk(Vector2i(2, 5))
+	var right := _world.desk(Vector2i(9, 5), 0)
 	_world.lay(Vector2i(3, 3), Vector2i(10, 3))
+	_world.lay(Vector2i(3, 4), Vector2i(3, 4))
+	_world.lay(Vector2i(10, 4), Vector2i(10, 4))
 	_world.lay(Vector2i(6, 3), Vector2i(6, 9))
 	var routes := BagRoutes.build(_world.grid)
-	assert_that(routes.entry_of(left)["cell"]).is_equal(Vector2i(3, 3))
-	assert_that(routes.entry_of(right)["cell"]).is_equal(Vector2i(10, 3))
-	assert_int(routes.dist[Vector2i(3, 3)]).is_equal(routes.dist[Vector2i(10, 3)] - 1)
+	assert_that(routes.entry_of(left)["cell"]).is_equal(Vector2i(3, 4))
+	assert_that(routes.entry_of(right)["cell"]).is_equal(Vector2i(10, 4))
+	assert_int(routes.dist[Vector2i(3, 4)]).is_equal(routes.dist[Vector2i(10, 4)] - 1)
 	# The right bag starts one cell further out, so checked in 20 ticks
 	# earlier it reaches its side of the merge on the same tick.
 	var b1 := _world.sim.check_in(1, BagTestWorld.FLIGHT, right)
 	_world.run_to(20)
 	var b2 := _world.sim.check_in(2, BagTestWorld.FLIGHT, left)
-	_run_checked(70)
+	_run_checked(90)
 	assert_that(b1.cell).is_equal(Vector2i(7, 3))
 	assert_that(b2.cell).is_equal(Vector2i(5, 3))
 	assert_int(b1.remain_mm).is_equal(0)
@@ -121,17 +126,22 @@ func test_equal_waits_at_a_merge_go_to_the_lower_id() -> void:
 
 func test_the_longer_wait_wins_a_merge_over_the_lower_id() -> void:
 	var desk_id := _world.line()
-	# A desk feeding (6, 7) from below makes it a merge.
-	var side := _world.desk(Vector2i(5, 8))
-	assert_that(BagRoutes.build(_world.grid).entry_of(side)["cell"]).is_equal(Vector2i(6, 7))
+	# A desk two rows below the line, its outlet cell (6, 8) feeding (6, 7)
+	# from below (decision desk-belts-run-one-row-back-desk-then-the-agent-
+	# row-then-the), makes (6, 7) a merge.
+	var side := _world.side_desk()
+	assert_that(BagRoutes.build(_world.grid).entry_of(side)["cell"]).is_equal(Vector2i(6, 8))
 	var first := _world.sim.check_in(1, BagTestWorld.FLIGHT, desk_id)
 	var second := _world.sim.check_in(2, BagTestWorld.FLIGHT, desk_id)
-	_run_checked(52)
+	_run_checked(42)
 	# The first bag holds (6, 7) until its body leaves it after tick 80; the
-	# side bag waits for it from its check-in on tick 52.
+	# side bag, checked in 10 ticks (500 mm from the desk) before tick 52,
+	# reaches the centre of its outlet cell and waits there from tick 52.
 	var waiting := _world.sim.check_in(3, BagTestWorld.FLIGHT, side)
 	_run_checked(80)
-	assert_int(waiting.state).is_equal(Bag.State.AT_DESK)
+	assert_int(waiting.state).is_equal(Bag.State.RIDING)
+	assert_that(waiting.cell).is_equal(Vector2i(6, 8))
+	assert_int(waiting.remain_mm).is_equal(0)
 	assert_that(second.cell).is_equal(Vector2i(5, 7))
 	assert_int(second.remain_mm).is_equal(0)
 	assert_int(second.wait_tick).is_equal(80)
