@@ -76,6 +76,10 @@ const ITEMS := {
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
 }
+## Cards that say what the placed thing needs to work, in the warning colour,
+## in place of the "Click" hint (the card has no height to spare). A bag room
+## does nothing without a belt end.
+const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
@@ -99,6 +103,8 @@ const COST_H := 26.0
 const COLUMN_W := 640.0
 const CARD_SIZE := Vector2(112.0, 176.0)
 const THUMB_SIZE := 72.0
+## The card hint labels' font size, as HudHint sets it.
+const CARD_HINT_FONT_SIZE := 14
 const CATEGORY_SIZE := Vector2(100.0, 44.0)
 const ROTATE_SIZE := Vector2(72.0, 176.0)
 
@@ -570,7 +576,11 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	_card_label(column, item[0], &"HudCardName")
 	_card_label(column, _size_text(tool), &"HudHint")
 	_price_labels[tool] = _card_label(column, PRICE_TEXT, &"HudPrice")
-	_card_label(column, "Key %s" % key if key != "" else "Click", &"HudHint")
+	if CARD_NEEDS.has(tool):
+		var need := _card_label(column, CARD_NEEDS[tool], &"HudAttentionText")
+		need.add_theme_font_size_override("font_size", CARD_HINT_FONT_SIZE)
+	else:
+		_card_label(column, "Key %s" % key if key != "" else "Click", &"HudHint")
 	return button
 
 
