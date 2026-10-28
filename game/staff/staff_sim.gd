@@ -346,15 +346,10 @@ func _send_out(m: StaffMember) -> bool:
 
 ## Whether a passenger is being checked in or screened at the station now: at
 ## a security station any passenger SecurityRuntime has admitted there, in
-## whatever phase (Stage.SECURITY until it is cleared).
+## whatever phase (Stage.SECURITY until it is cleared). StaffPosts.in_service()
+## answers it, so the helper forecast reads the same rule.
 func _in_service(station: int) -> bool:
-	for id in sim.passenger_ids():
-		var p := sim.get_passenger(id)
-		if p.station != station:
-			continue
-		if p.stage == Passenger.Stage.CHECKIN or p.stage == Passenger.Stage.SECURITY:
-			return true
-	return false
+	return StaffPosts.in_service(sim, station)
 
 
 func _release(m: StaffMember) -> void:

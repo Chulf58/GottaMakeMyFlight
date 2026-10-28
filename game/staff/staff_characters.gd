@@ -11,7 +11,8 @@ extends Node3D
 ## a desk's counter, beside a scanner's landside half) and puts it on duty
 ## there, so a member is always drawn where it stands: walking onto the spot
 ## and off it again is an ordinary walk, with no jump. On duty it faces its
-## station's front, the passenger side. A fired member walking out to the
+## station's front, the passenger side; a security lane's officer faces its
+## work instead (post_yaw()). A fired member walking out to the
 ## entrance is drawn walking until it is gone.
 ##
 ## Edits, hires, fires and loads between ticks resync at once (snapped) on the
@@ -81,8 +82,16 @@ func post_position(station: int) -> Vector3:
 	return staff.sim.grid.cell_to_world(staff.spot_of(station))
 
 
-## The yaw a member on duty at `station` is drawn with: facing the station's front.
-func post_yaw(station: int) -> float:
+## The yaw a member on duty at `station` in `slot` is drawn with: at a whole
+## security lane, looking at its work (the primary officer at the X-ray belt,
+## the helper at the repack berth, each beside it); elsewhere facing the
+## station's front.
+func post_yaw(station: int, slot: StaffMember.Slot = StaffMember.Slot.PRIMARY) -> float:
+	var lane := staff.sim.layout.security_lanes.lane(station)
+	if not lane.is_empty():
+		var work: Vector2i = lane["berth" if slot == StaffMember.Slot.HELPER else "xray_belt"]
+		var ahead := work - staff.spot_of(station, slot)
+		return atan2(ahead.x, ahead.y)
 	var front := TerminalLayout.front_of(staff.sim.grid.get_object(station)["facing"])
 	return atan2(front.x, front.y)
 
@@ -176,7 +185,7 @@ func _pose(node: Node3D, m: StaffMember, moved: Vector3) -> void:
 	var clip := "idle"
 	var base := 1.0
 	if m.state == StaffMember.State.ON_DUTY:
-		node.rotation.y = post_yaw(m.station)
+		node.rotation.y = post_yaw(m.station, m.slot)
 	elif m.is_moving():
 		clip = "walk"
 		base = (PassengerSim.WALK_MM * SimClock.TICK_RATE / 1000.0) / CLIP_WALK_MPS[m.role]
