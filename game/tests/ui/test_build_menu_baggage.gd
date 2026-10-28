@@ -67,10 +67,16 @@ func test_the_baggage_cards_show_size_price_and_a_rendered_thumbnail() -> void:
 		BuildMode.Tool.BAG_ROOM: "2x2 min",
 		BuildMode.Tool.CART: "1x2",
 	}
+	# The bag room card's last line says what the room needs (note 7), not "Click".
+	var hints := {
+		BuildMode.Tool.BELT: "Click",
+		BuildMode.Tool.BAG_ROOM: "Needs belt end",
+		BuildMode.Tool.CART: "Click",
+	}
 	for tool in BAGGAGE_TOOLS:
 		var card := _menu.card(tool)
 		assert_object(card).override_failure_message("tool %d" % tool).is_not_null()
-		assert_array(_texts(card)).contains([BuildMenu.ITEMS[tool][0], sizes[tool], "Click"])
+		assert_array(_texts(card)).contains([BuildMenu.ITEMS[tool][0], sizes[tool], hints[tool]])
 		var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
 		# A rendered PNG, not the placeholder tile.
 		assert_object(picture.texture).override_failure_message("tool %d" % tool).is_not_null()

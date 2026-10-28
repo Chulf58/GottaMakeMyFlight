@@ -1,14 +1,17 @@
 class_name RoomPanel
 extends PanelContainer
-## The room info panel: type, status ("Ready" or what the room still needs),
-## seats and base spend of the room under the pointer (decision
-## store-mechanics-draw-a-room-then-furnish-it-required-pieces). BuildMenu
+## The room info panel: type, status ("Ready" or what the room still needs)
+## and the facts of the room under the pointer (decision
+## store-mechanics-draw-a-room-then-furnish-it-required-pieces): seats and base
+## spend for a shop, the count of belt ends for a bag room. Esc closes it. BuildMenu
 ## creates it top-left under the money slot; it is hidden while no room is
 ## followed. It reads RoomRules and follows the grid's own signals, so
 ## furniture placed while it is open shows on the next frame.
 
 const POSITION := Vector2(16.0, 64.0)
 const WIDTH := 280.0
+const BAG_ROOM := &"bag_room"
+const BELT_END := &"baggage_belt_end"
 
 var _build_mode: BuildMode
 var _room_id := 0
@@ -57,14 +60,25 @@ func show_room(id: int) -> void:
 		_line(RoomRules.READY, &"HudGoodText")
 	for note in status.notes:
 		_line(note, &"HudAttentionText")
-	_line("Seats %d" % status.seats)
-	_line("Base spend $%d per visit" % status.base_spend)
+	if status.type_id == BAG_ROOM:
+		_line("Belt ends %d" % status.pieces.get(BELT_END, 0))
+	else:
+		_line("Seats %d" % status.seats)
+		_line("Base spend $%d per visit" % status.base_spend)
 	reset_size()
 
 
 func _process(_delta: float) -> void:
 	if _dirty:
 		show_room(_room_id)
+
+
+## Esc closes the panel and is not passed on, so it does not also drop a tool.
+## The panel comes back when the pointer moves to another room.
+func _unhandled_input(event: InputEvent) -> void:
+	if visible and event.is_action_pressed("build_tool_none"):
+		show_room(0)
+		get_viewport().set_input_as_handled()
 
 
 func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
