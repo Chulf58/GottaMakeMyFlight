@@ -15,7 +15,10 @@ extends SceneTree
 ## Before each save it proves the subject: the card's text equals the expected
 ## rows, the popup rect lies inside the visible rect (printed), the owed row
 ## uses HudAttentionText. A crop around the card, scaled 2x, is saved beside the
-## full plate. Otherwise it prints PROBE_INVALID and exits 1. A guard thread
+## full plate. Otherwise it prints PROBE_INVALID and exits 1. After plate a it
+## credits a shop sale with the card still open and prints a LIVE line saying
+## whether the open card follows (an observation, not a pass condition), with a
+## crop named a_live. A guard thread
 ## reads a heartbeat and calls OS.crash() on a hang (anti-pattern
 ## a-frame-counting-watchdog-cannot-catch-a-stuck-main-thread).
 ##
