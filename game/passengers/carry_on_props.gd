@@ -210,14 +210,17 @@ func draw() -> void:
 			(held["tray"] as Node3D).global_transform = tray_xf
 		var bags: Array = held["bags"]
 		var homes: Array = held["homes"]
+		var hands: Array = held["hands"]
 		for i in bags.size():
 			var bag: Dictionary = bags[i]
 			var want := _bag_transform(held, body, tray_xf, i, homes[i], bags.size())
 			var node: Node3D = bag["node"]
-			if bag["home"] != homes[i]:
+			# A change of hand moves the bag across like a change of home.
+			var place: int = homes[i] * 2 + hands[i]
+			if bag["home"] != place:
 				bag["from"] = want if bag["home"] == -1 else node.global_transform
 				bag["since"] = now if bag["home"] != -1 else now - TRANSFER_TICKS
-				bag["home"] = homes[i]
+				bag["home"] = place
 			var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
 			var placed := (bag["from"] as Transform3D).interpolate_with(want, k)
 			# Lifted on the way, over a table edge rather than through it.

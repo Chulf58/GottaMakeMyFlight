@@ -596,7 +596,14 @@ func _check(name: String, id: int, yaw: float) -> Dictionary:
 		var hits: int = (lines["on_subject"] as Array).size()
 		# A tray inside the X-ray tunnel is hidden by design.
 		var tunnel := name == "lane_4_ride_scan"
-		var prop_ok := in_frame and size >= MIN_PROP_PX and (hits >= 1 or tunnel)
+		# A bag in the far hand is behind its own carrier, who is checked
+		# above; it must be in frame, and a tray or a bag in a tray or on the
+		# floor must also be hit.
+		var homes := SecurityLooks.bag_homes(_sim, _sim.get_passenger(id))
+		var carried: bool = (
+			tag.begins_with("bag") and homes[int(tag.trim_prefix("bag"))] == SecurityLooks.Home.HAND
+		)
+		var prop_ok: bool = in_frame and size >= MIN_PROP_PX and (hits >= 1 or tunnel or carried)
 		print(
 			(
 				(
@@ -787,26 +794,23 @@ func _plate_officers(staff: StaffSim) -> void:
 		var to_belt := Vector2(_lane["xray_belt"] - spot).normalized()
 		var to_berth := Vector2(_lane["berth"] - spot).normalized()
 		var front := Vector2(_lane["front"])
-		(
-			rows
-			. append(
+		rows.append(
+			(
 				(
-					(
-						"OFFICER slot=%s id=%d at=%s spot=%s on_duty=%s faces=%s"
-						+ " dot_belt=%.2f dot_berth=%.2f dot_arch_front=%.2f"
-					)
-					% [
-						"primary" if slot == StaffMember.Slot.PRIMARY else "helper",
-						id,
-						member.at,
-						spot,
-						member.state == StaffMember.State.ON_DUTY,
-						faces.snapped(Vector2.ONE * 0.01),
-						faces.dot(to_belt),
-						faces.dot(to_berth),
-						faces.dot(front)
-					]
+					"OFFICER slot=%s id=%d at=%s spot=%s on_duty=%s faces=%s"
+					+ " dot_belt=%.2f dot_berth=%.2f dot_arch_front=%.2f"
 				)
+				% [
+					"primary" if slot == StaffMember.Slot.PRIMARY else "helper",
+					id,
+					member.at,
+					spot,
+					member.state == StaffMember.State.ON_DUTY,
+					faces.snapped(Vector2.ONE * 0.01),
+					faces.dot(to_belt),
+					faces.dot(to_berth),
+					faces.dot(front)
+				]
 			)
 		)
 		ok = ok and member.at == spot and member.state == StaffMember.State.ON_DUTY

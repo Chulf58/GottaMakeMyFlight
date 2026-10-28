@@ -149,9 +149,17 @@ static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	var right := world_dir(step).cross(Vector3.UP)
 	var right_step := Vector2i(signi(roundi(right.x)), signi(roundi(right.z)))
 	var cell := p.at
-	if _side_closed(sim.grid, cell, right_step) and not _side_closed(sim.grid, cell, -right_step):
+	if _closed(sim.grid, cell, right_step) and not _closed(sim.grid, cell, -right_step):
 		return 1
 	return 0
+
+
+## Whether either straight part of a (possibly diagonal) step out of `cell`
+## is closed (_side_closed).
+static func _closed(grid: BuildGrid, cell: Vector2i, toward: Vector2i) -> bool:
+	if toward.x != 0 and _side_closed(grid, cell, Vector2i(toward.x, 0)):
+		return true
+	return toward.y != 0 and _side_closed(grid, cell, Vector2i(0, toward.y))
 
 
 ## The scale every bag of `p` is drawn at.
