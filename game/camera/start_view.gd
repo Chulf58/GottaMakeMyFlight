@@ -1,8 +1,10 @@
 class_name StartView
 extends RefCounted
 ## The ground area the start camera frames: the cells the player has built
-## (floor or an object), or, with nothing built, the starter terminal's floor
-## when it fits the grid. TycoonCamera.frame_start_view turns the area into a view.
+## (a floor, or a wall on one of a cell's edges, which counts for both cells
+## it touches; an object needs a floor, so it adds no cell of its own), or,
+## with nothing built, the starter terminal's floor when it fits the grid.
+## TycoonCamera.frame_start_view turns the area into a view.
 
 
 ## The area in world x and z (a Rect2's y is z), or the whole grid when
@@ -25,12 +27,21 @@ static func _built_cells(grid: BuildGrid) -> Rect2i:
 	for y in grid.size.y:
 		for x in grid.size.x:
 			var cell := Vector2i(x, y)
-			if grid.floor_at(cell) == BuildGrid.FLOOR_NONE and grid.object_at(cell) == 0:
+			if not _is_built(grid, cell):
 				continue
 			low = cell if not found else low.min(cell)
 			high = cell if not found else high.max(cell)
 			found = true
 	return Rect2i(low, high - low + Vector2i.ONE) if found else Rect2i()
+
+
+static func _is_built(grid: BuildGrid, cell: Vector2i) -> bool:
+	if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
+		return true
+	for side in BuildGrid.SIDE_STEP.size():
+		if grid.has_wall(cell, side):
+			return true
+	return false
 
 
 static func _starter_cells(shell: ShellDefinition) -> Rect2i:

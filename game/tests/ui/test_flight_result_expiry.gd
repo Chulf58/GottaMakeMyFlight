@@ -75,16 +75,34 @@ func test_a_result_shown_on_day_two_stays_up_that_day() -> void:
 	assert_bool(_hud.is_result_open()).is_true()
 
 
-func test_a_result_that_closes_on_the_new_day_is_not_hidden_by_it() -> void:
-	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(100, 200))
-	_close_doors_with_misses(1)
-	_world.sim.spawn_now("GMF202")
-	var day_two := GameCalendar.TICKS_PER_DAY - GameCalendar.START_TICK_OF_DAY
-	_world.run_to(201)
-	_world.clock.tick = day_two
+## A flight whose doors close at `doors`, one passenger spawned shortly before.
+func _flight_closing_at(id: String, doors: int) -> void:
+	_world.flights.add_flight(id, PassengerTestWorld.starts_with(doors - 1200, doors))
+	_world.run_to(doors - 1000)
+	_world.sim.spawn_now(id)
+
+
+func test_a_flight_that_closed_just_before_midnight_hides_at_the_day_change() -> void:
+	var midnight := GameCalendar.TICKS_PER_DAY - GameCalendar.START_TICK_OF_DAY
+	_flight_closing_at("GMF202", midnight - 1)
+	# The clock runs past midnight before the HUD refreshes.
+	_world.run_to(midnight + 5)
+	assert_int(GameCalendar.day_of(midnight - 1)).is_equal(0)
+	assert_int(GameCalendar.day_of(_world.clock.tick)).is_equal(1)
+	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_false()
+
+
+func test_a_flight_that_closed_exactly_at_midnight_belongs_to_the_new_day() -> void:
+	var midnight := GameCalendar.TICKS_PER_DAY - GameCalendar.START_TICK_OF_DAY
+	_flight_closing_at("GMF202", midnight)
+	_world.run_to(midnight + 5)
 	_hud.refresh()
 	assert_bool(_hud.is_result_open()).is_true()
 	assert_str(_hud.result_text()).contains("GMF202 result")
+	_world.clock.tick += GameCalendar.TICKS_PER_DAY
+	_hud.refresh()
+	assert_bool(_hud.is_result_open()).is_false()
 
 
 func test_dismiss_still_works_before_the_day_changes() -> void:

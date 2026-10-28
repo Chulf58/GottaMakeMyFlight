@@ -52,15 +52,25 @@ func test_a_built_grid_frames_what_is_built_not_the_starter_terminal() -> void:
 	assert_vector(area.size).is_equal_approx(Vector2(5.0, 3.0), Vector2.ONE * 0.001)
 
 
-func test_an_object_on_bare_ground_counts_as_built() -> void:
-	var grid := BuildGrid.new(Vector2i(10, 10))
-	grid.apply(BuildEdit.paint_floor(Vector2i(2, 2), BuildGrid.FLOOR_TILE, 1))
-	grid.apply(BuildEdit.place_object(&"checkin_desk", Vector2i(2, 2), 0))
+func test_a_wall_without_a_floor_counts_as_built() -> void:
+	var grid := BuildGrid.new(Vector2i(10, 8))
+	grid.apply(BuildEdit.place_wall(Vector2i(2, 3), BuildGrid.Side.WEST))
+	grid.apply(BuildEdit.place_wall(Vector2i(6, 7), BuildGrid.Side.SOUTH))
 	var area := StartView.area_for(grid, null)
+	# The west wall touches cells 1 and 2 of row 3; the south wall, on the
+	# grid's outer edge, touches only cell (6, 7): x 1-6, y 3-7.
 	assert_vector(area.position).is_equal_approx(
-		Vector2(grid.origin.x + 2.0, grid.origin.z + 2.0), Vector2.ONE * 0.001
+		Vector2(grid.origin.x + 1.0, grid.origin.z + 3.0), Vector2.ONE * 0.001
 	)
-	assert_float(area.size.x).is_greater_equal(1.0)
+	assert_vector(area.size).is_equal_approx(Vector2(6.0, 5.0), Vector2.ONE * 0.001)
+
+
+func test_a_wall_and_a_floor_far_apart_are_framed_together() -> void:
+	var grid := BuildGrid.new(Vector2i(10, 8))
+	grid.apply(BuildEdit.paint_floor(Vector2i(1, 1), BuildGrid.FLOOR_TILE, 1))
+	grid.apply(BuildEdit.place_wall(Vector2i(8, 6), BuildGrid.Side.EAST))
+	var area := StartView.area_for(grid, null)
+	assert_vector(area.size).is_equal_approx(Vector2(9.0, 6.0), Vector2.ONE * 0.001)
 
 
 func test_without_a_shell_the_default_layout_floor_is_framed_on_a_big_grid() -> void:

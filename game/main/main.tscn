@@ -199,7 +199,7 @@ script = ExtResource("28_staffchars")
 clock = NodePath("../SimClock")
 staff = NodePath("../Staff")
 
-[node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode")]
+[node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode", "save_game")]
 script = ExtResource("12_hud")
 clock = NodePath("../SimClock")
 flights = NodePath("../FlightSim")
@@ -207,6 +207,7 @@ sim = NodePath("../PassengerSim")
 views = NodePath("../PassengerViews")
 camera = NodePath("../TycoonCamera")
 build_mode = NodePath("../BuildMode")
+save_game = NodePath("../SaveGame")
 
 [node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant")]
 layer = 2
