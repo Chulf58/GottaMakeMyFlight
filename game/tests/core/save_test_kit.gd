@@ -11,6 +11,14 @@ extends RefCounted
 const MAIN := "res://main/main.tscn"
 
 
+## A save file path for one test run, unique to this Godot process. Every
+## Godot process on the machine shares the same user:// folder, so two suites
+## running at once (two worktrees, a lane and the conductor) would otherwise
+## see each other's files at a fixed path and fail a "file not there yet" check.
+static func run_path(file_name: String) -> String:
+	return "user://saves/%s_%d.json" % [file_name, OS.get_process_id()]
+
+
 ## A main scene under `parent` whose sim RNG starts from `seed`, paused so
 ## only step() moves it. Seeded before it enters the tree, so the day-0 offers
 ## are drawn from the seed.

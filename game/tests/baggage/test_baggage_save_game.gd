@@ -6,9 +6,9 @@ extends GdUnitTestSuite
 ## against passengers or desks, whose ids on a bag are historical.
 
 const SEED := 4_242
-const PATH := "user://saves/test_baggage_save_game.json"
 const LIMIT := 8000
 
+var _path := SaveTestKit.run_path("test_baggage_save_game")
 var _main: Node
 var _save: SaveGame
 var _bags: BaggageSim
@@ -36,7 +36,7 @@ func before() -> void:
 
 func after() -> void:
 	_main.free()
-	DirAccess.remove_absolute(PATH)
+	DirAccess.remove_absolute(_path)
 
 
 func _unsettled() -> Bag:
@@ -60,23 +60,23 @@ func test_the_save_holds_the_bags_of_checked_in_passengers() -> void:
 
 
 func test_a_save_waits_while_the_routes_are_stale_and_says_so() -> void:
-	_save.quick_save_path = PATH
+	_save.quick_save_path = _path
 	_bags.routes_stale = true
 	assert_str(_save.save_problem()).is_equal("the last build change settles on the next tick")
-	assert_bool(_save.request_save(PATH)).is_false()
-	assert_str(_save.pending_path).is_equal(PATH)
+	assert_bool(_save.request_save(_path)).is_false()
+	assert_str(_save.pending_path).is_equal(_path)
 	# Paused, no tick comes: the message stays up however long it waits.
 	for i in 3:
 		_save._process(SaveGame.MESSAGE_SECONDS)
 	var label: Label = _save.get_node("SaveMessage/Message")
 	assert_bool(label.visible).is_true()
 	assert_str(label.text).contains("Saving after the next tick")
-	assert_bool(FileAccess.file_exists(PATH)).is_false()
+	assert_bool(FileAccess.file_exists(_path)).is_false()
 	SaveTestKit.step(_main)
 	assert_bool(_bags.routes_stale).is_false()
 	_save._process(0.0)
 	assert_str(_save.pending_path).is_equal("")
-	assert_bool(FileAccess.file_exists(PATH)).is_true()
+	assert_bool(FileAccess.file_exists(_path)).is_true()
 
 
 func test_a_bag_names_its_passenger_and_desk_without_needing_them() -> void:
