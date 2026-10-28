@@ -5,9 +5,11 @@ extends Node
 ## current game day: the gross amount under its category, and the wages a
 ## credit paid off under WAGES, so the totals sum to the change in the balance.
 ## Before recording a transaction it rolls to the day of the transaction's
-## tick, and it rolls on every clock tick, so the wage charge at the first tick
-## of a day lands on the new day whichever listener hears the tick first
-## (SimClock counts the tick before it emits it).
+## tick, and it rolls on every clock tick (SimClock counts the tick before it
+## emits it). Settlement charges the day's wages on the day's last tick (decision
+## daily-wages-are-charged-on-the-last-tick-of-the-game-day-and), so they land
+## on the day they were earned, whichever listener hears the tick first, and
+## the next day starts at 0 wages. Owed wages paid later land on the day paid.
 ##
 ## The totals are a SaveGame part. A save from before the part has none, and
 ## the load marks the ledger as counting since the load (start_since_load), so
@@ -178,10 +180,10 @@ static func day_link_problem(ledger: Dictionary, clock_data: Dictionary) -> Stri
 
 
 ## "" or why a saved ledger and the saved settlement disagree on today's
-## wages. Settlement.wages_paid_today counts the midnight charge, owed wages
-## paid from the balance and wages claimed from credits since the day was
-## charged, and the ledger counts the same three under WAGES from the same
-## tick, so a ledger not marked since_load holds exactly minus that. A ledger
+## wages. Settlement.wages_paid_today counts the day's wage charge (made on its
+## last tick), owed wages paid from the balance and wages claimed from credits
+## during the day, and the ledger counts the same three under WAGES from the
+## same tick, so a ledger not marked since_load holds exactly minus that. A ledger
 ## with a settlement that has no wage state is refused: every save that has
 ## the ledger also has the wage keys.
 static func wages_link_problem(ledger: Dictionary, settlement: Dictionary) -> String:

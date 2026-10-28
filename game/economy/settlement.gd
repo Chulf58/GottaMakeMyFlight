@@ -16,9 +16,12 @@ extends Node
 ## still holds.
 ##
 ## It also charges staff wages (ruling staff-wages-charged-daily-at-midnight-
-## unpaid-wages-carried-as-owed). On the first tick of each game day every
+## unpaid-wages-carried-as-owed). On the last tick of each game day (midnight,
+## decision daily-wages-are-charged-on-the-last-tick-of-the-game-day-and) every
 ## member on the staff roster, one still finishing a service before leaving
-## included, is charged the wage of their role (PriceTable.WAGES). The wallet
+## included, is charged the wage of their role (PriceTable.WAGES). The charge
+## carries that tick, so the DayLedger books it to the day it was earned and the
+## next day starts at 0 wages. The wallet
 ## pays what it holds; the rest is owed wages, kept apart from the wallet so
 ## the debt is whole even when it is larger than the wallet could ever hold.
 ## Owed wages are paid first, the moment money comes in: Settlement sets
@@ -41,14 +44,19 @@ extends Node
 ## BaggageSim is set.
 ##
 ## The last day charged is saved with the owed wages, so a load neither charges
-## a day twice nor skips one. The first tick seen after a new game, or after a
-## load of a save from before wages, only records the day: nothing is charged
-## for the day the session starts in.
+## a day twice nor skips one. A save taken mid-day D before the charge moved to
+## the day's last tick holds D as charged (it was charged at D's start), so D's
+## own end-of-day charge is skipped once after loading it.
 
-## Wages were charged for `day`: `paid` is what the wallet paid at once and
-## `owed` the shortfall carried as owed wages (the debt in total is
+## Wages were charged for `day`, on its last tick: `paid` is what the wallet paid
+## at once and `owed` the shortfall carried as owed wages (the debt in total is
 ## wages_owed()). Not emitted on a day with nobody on the roster.
 signal wages_charged(day: int, paid: int, owed: int)
+## Wages were paid: the midnight charge, or owed wages paid off later out of a
+## credit or the balance. `amount` is what this payment took, `owed` the debt
+## left after it. One emission per payment and never for 0; a UI shows
+## "Wages paid: <amount>".
+signal wages_paid(amount: int, owed: int)
 ## The owed wages changed (a charge, a payment, a load); the money card follows it.
 signal wages_owed_changed(owed: int)
 
@@ -57,6 +65,13 @@ const SNAPSHOT_KEYS := ["owed"]
 ## debt and no day charged yet.
 ## The three keys come as a group: all present or all absent.
 const OPTIONAL_SNAPSHOT_KEYS := ["wages_owed", "wages_day", "wages_paid_today"]
+## Names how `wages_day` is read. A save with it holds the day whose wages were
+## charged (on that day's last tick), a save without it (before the charge moved
+## to the last tick) holds the day charged at its start, one day later. Only
+## with the wage keys; from_snapshot turns the old reading into the new.
+const WAGE_TIMING_KEY := "wages_timing"
+## The only value: wages_day is the day earned, charged on its last tick.
+const WAGE_TIMING_LAST_TICK := "1"
 ## Added with missed bags (Baggage B4). A save from before them has neither and
 ## loads with no bag state; the two come as a pair, like the wage keys.
 const BAG_SNAPSHOT_KEYS := ["bag_missed", "bags_awaited"]
@@ -96,8 +111,12 @@ var _owed: Array[int] = []
 var _wages_owed := 0
 ## The last game day wages were charged for, or NO_DAY.
 var _wages_day := NO_DAY
-## Wages paid since the last midnight charge, catching up on owed wages included.
+## Wages paid on the current game day: the charge made on its last tick and any
+## owed wages paid during it.
 var _wages_paid_today := 0
+## The game day _wages_paid_today counts, or NO_DAY before the session's first
+## payment or tick. Not saved: a load takes the loaded clock's day.
+var _paid_day := NO_DAY
 ## Passenger ids (set of true) whose bag missed while the passenger was still
 ## on their way; dropped when the passenger finishes.
 var _bag_missed: Dictionary = {}
@@ -148,7 +167,7 @@ func wages_owed() -> int:
 	return _wages_owed
 
 
-## Wages paid since the last midnight charge, owed wages caught up included.
+## Wages paid on the current game day, owed wages caught up included.
 func wages_paid_today() -> int:
 	return _wages_paid_today
 
@@ -173,6 +192,7 @@ func to_snapshot() -> Dictionary:
 		"wages_owed": str(_wages_owed),
 		"wages_day": str(_wages_day),
 		"wages_paid_today": str(_wages_paid_today),
+		WAGE_TIMING_KEY: WAGE_TIMING_LAST_TICK,
 		"bag_missed": missed,
 		"bags_awaited": awaited,
 	}
@@ -197,8 +217,9 @@ func from_snapshot(data: Dictionary) -> bool:
 		loaded.append(str(text).to_int())
 	_owed = loaded
 	_set_wages_owed(str(data.get("wages_owed", "0")).to_int())
-	_wages_day = str(data.get("wages_day", str(NO_DAY))).to_int()
+	_wages_day = _earned_day(data)
 	_wages_paid_today = str(data.get("wages_paid_today", "0")).to_int()
+	_paid_day = GameCalendar.day_of(_sim.clock.tick) if _sim != null else NO_DAY
 	_bag_missed.clear()
 	for text in data.get("bag_missed", []):
 		_bag_missed[str(text).to_int()] = true
@@ -210,10 +231,20 @@ func from_snapshot(data: Dictionary) -> bool:
 	return true
 
 
+## The saved last charged day as the day earned. A save without the timing key
+## holds the day charged at its start, so days up to the one before it are paid.
+func _earned_day(data: Dictionary) -> int:
+	var saved := str(data.get("wages_day", str(NO_DAY))).to_int()
+	if data.has(WAGE_TIMING_KEY) or saved == NO_DAY:
+		return saved
+	return saved - 1
+
+
 func _snapshot_problem(data: Dictionary) -> String:
 	for key in data.keys():
 		if (
 			not SNAPSHOT_KEYS.has(key)
+			and key != WAGE_TIMING_KEY
 			and not OPTIONAL_SNAPSHOT_KEYS.has(key)
 			and not BAG_SNAPSHOT_KEYS.has(key)
 		):
@@ -281,6 +312,11 @@ func _wage_problem(data: Dictionary) -> String:
 			return "'%s' is not 0 to %d" % [key, limit]
 	if data.has("wages_day") and not _in_range(data["wages_day"], NO_DAY, MAX_DAY):
 		return "'wages_day' is not a day"
+	if data.has(WAGE_TIMING_KEY):
+		if wage_keys == 0:
+			return "'%s' needs the wage keys" % WAGE_TIMING_KEY
+		if data[WAGE_TIMING_KEY] != WAGE_TIMING_LAST_TICK:
+			return "'%s' must be \"%s\"" % [WAGE_TIMING_KEY, WAGE_TIMING_LAST_TICK]
 	return ""
 
 
@@ -296,11 +332,13 @@ static func wages_link_problem(
 	return found
 
 
-## "" or why a saved last charged day and the saved clock disagree. Once the
-## settlement has ticked, the day is the clock's own day at every save point
-## (saves are taken between ticks, after the tick that starts a day has charged
-## it). A day after the clock's would skip days; one before it would never
-## charge the days between. Only NO_DAY (not ticked yet) is exempt.
+## "" or why a saved last charged day and the saved clock disagree. Saves are
+## taken between ticks and a day is charged on its last tick, so the last
+## charged day is the day before the clock's, or the clock's own only when the
+## saved tick is that day's last. A day after the clock's would skip days; one
+## more than a day before it would never charge the days between. Only NO_DAY
+## (no day charged yet) is exempt. A save without WAGE_TIMING_KEY holds the day
+## charged at its start, which is the clock's own day (from_snapshot migrates it).
 static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> String:
 	if not settlement.has("wages_day") or not clock.has("tick"):
 		return ""
@@ -309,8 +347,14 @@ static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> Stri
 	if not SimClock.is_int64_string(clock["tick"]):
 		return ""
 	var saved_day := str(settlement["wages_day"]).to_int()
-	var clock_day := GameCalendar.day_of(str(clock["tick"]).to_int())
-	if saved_day != NO_DAY and saved_day != clock_day:
+	var clock_tick := str(clock["tick"]).to_int()
+	var clock_day := GameCalendar.day_of(clock_tick)
+	var allowed := [clock_day]
+	if settlement.has(WAGE_TIMING_KEY):
+		allowed = [clock_day - 1]
+		if GameCalendar.is_last_tick_of_day(clock_tick):
+			allowed.append(clock_day)
+	if saved_day != NO_DAY and not allowed.has(saved_day):
 		return (
 			"settlement: wages were last charged for day %d, but the clock is on day %d"
 			% [saved_day, clock_day]
@@ -400,17 +444,32 @@ func _on_bag_settled(_bag_id: int, passenger_id: int, _flight_id: String, loaded
 
 
 func _on_tick(tick: int) -> void:
-	_charge_wages(GameCalendar.day_of(tick))
+	_roll_paid_day(tick)
+	if GameCalendar.is_last_tick_of_day(tick):
+		_charge_wages(GameCalendar.day_of(tick))
 	_pay_owed()
 
 
-## Charges the roster once for each new game day: the first tick seen only
-## records the day, and a day at or before the last charged one is never
-## charged again.
+## Starts the day's wages paid over at 0 when the clock's day is not the one
+## they count. Called before every payment, so the count is right whichever
+## listener hears the first tick of a day first.
+func _roll_paid_day(tick: int) -> void:
+	var day := GameCalendar.day_of(tick)
+	if _paid_day != NO_DAY and day != _paid_day:
+		_wages_paid_today = 0
+	_paid_day = day
+
+
+## Counts a wage payment toward today, in the day of the clock's tick.
+func _note_wages_paid(paid: int) -> void:
+	if _sim != null:
+		_roll_paid_day(_sim.clock.tick)
+	_wages_paid_today += paid
+
+
+## Charges the roster for `day`, on its last tick; a day at or before the last
+## charged one is never charged again.
 func _charge_wages(day: int) -> void:
-	if _wages_day == NO_DAY:
-		_wages_day = day
-		return
 	if day <= _wages_day:
 		return
 	var due := _wages_due()
@@ -421,15 +480,15 @@ func _charge_wages(day: int) -> void:
 		)
 		return
 	_wages_day = day
-	_wages_paid_today = 0
 	if due == 0:
 		return
 	if not _wallet.spend(paid, Wallet.Category.WAGES):
 		push_error("Settlement: wallet refused a wage of %d it holds" % paid)
 		return
-	_wages_paid_today = paid
+	_note_wages_paid(paid)
 	_set_wages_owed(_wages_owed + due - paid)
 	wages_charged.emit(day, paid, due - paid)
+	_announce_wages_paid(paid)
 
 
 ## The wages of everyone on the roster for one day; none without a staff pool.
@@ -458,8 +517,9 @@ func _pay_wages() -> void:
 	var paid := mini(_wages_owed, _wallet.balance)
 	if paid <= 0 or not _wallet.spend(paid, Wallet.Category.WAGES):
 		return
-	_wages_paid_today += paid
+	_note_wages_paid(paid)
 	_set_wages_owed(_wages_owed - paid)
+	_announce_wages_paid(paid)
 
 
 ## Wallet.credit_claim: what is owed in wages out of an incoming credit. With
@@ -467,10 +527,16 @@ func _pay_wages() -> void:
 ## pays that debt and returns the amount, so the balance gets only the rest.
 func _claim_credit(amount: int, commit: bool) -> int:
 	var paid := mini(_wages_owed, amount)
-	if commit:
-		_wages_paid_today += paid
+	if commit and paid > 0:
+		_note_wages_paid(paid)
 		_set_wages_owed(_wages_owed - paid)
+		_announce_wages_paid(paid)
 	return paid
+
+
+func _announce_wages_paid(paid: int) -> void:
+	if paid > 0:
+		wages_paid.emit(paid, _wages_owed)
 
 
 func _set_wages_owed(value: int) -> void:

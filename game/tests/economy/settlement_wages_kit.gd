@@ -2,7 +2,10 @@ class_name SettlementWagesKit
 extends RefCounted
 ## Test support for staff wages: a bare floored room with a bound Settlement
 ## and no automatic staffing, so only the members a case hires exist. The clock
-## is moved to just before a midnight with near_midnight() or cross().
+## is moved to just before a midnight with near_midnight(), cross() or charge().
+## Wages are charged on the last tick of a day (decision daily-wages-are-
+## charged-on-the-last-tick-of-the-game-day-and), so the charge of "midnight
+## `day`" is for day - 1.
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
@@ -12,6 +15,8 @@ var world: PassengerTestWorld
 var settlement: Settlement
 ## Every wages_charged emission, as [day, paid, owed].
 var charges: Array = []
+## Every wages_paid emission, as [amount, owed].
+var payments: Array = []
 
 var _suite: GdUnitTestSuite
 
@@ -26,6 +31,7 @@ func _init(suite: GdUnitTestSuite) -> void:
 func remake(on_world: PassengerTestWorld = null) -> void:
 	free_all()
 	charges = []
+	payments = []
 	world = on_world
 	if world == null:
 		world = PassengerTestWorld.make(
@@ -38,6 +44,9 @@ func remake(on_world: PassengerTestWorld = null) -> void:
 	settlement.bind(world.sim, world.sim.wallet)
 	settlement.wages_charged.connect(
 		func(day: int, paid: int, owed: int) -> void: charges.append([day, paid, owed])
+	)
+	settlement.wages_paid.connect(
+		func(amount: int, owed: int) -> void: payments.append([amount, owed])
 	)
 	world.step()
 
@@ -65,6 +74,14 @@ func cross(day: int) -> void:
 	near_midnight(day, 3)
 	for i in 6:
 		world.step()
+
+
+## Runs the clock to the last tick of day - 1, where the wages of day - 1 are
+## charged, and stops there: the day is not over yet.
+func charge(day: int) -> void:
+	near_midnight(day, 2)
+	world.step()
+	_suite.assert_bool(GameCalendar.is_last_tick_of_day(world.clock.tick)).is_true()
 
 
 ## Everything a save holds of the wages: the settlement, wallet and clock, as
