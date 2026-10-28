@@ -18,6 +18,14 @@ extends CanvasLayer
 ## button turns coral and carries the same text as its tooltip, so it is seen
 ## with the sheet closed. It follows the rating's changed signal and does not
 ## rebuild the cards.
+##
+## While the sheet is open the game clock is paused (decision the-airline-offers-
+## panel-pauses-the-game-while-it-is-open); closing it gives back the speed the
+## player had, paused included, unless the player picked another speed while it
+## was open. The sheet closes on Esc and when a build tool is picked.
+##
+## A card says "first flight tomorrow" when the sim would not fly today's slot
+## (FlightTimetable.first_day), once the airport is open.
 
 const SHEET_W := 560.0
 const TOP := 12.0
@@ -29,6 +37,10 @@ const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
 
 @export var desk: OfferDesk
 @export var flights: FlightSim
+## Paused while the sheet is open; null leaves the clock alone.
+@export var clock: SimClock
+## Its tool changes close the sheet; null leaves the sheet to Esc and the button.
+@export var build_mode: BuildMode
 
 var _button: Button
 var _sheet: PanelContainer
@@ -40,6 +52,12 @@ var _offers_waiting := false
 var _card_nodes: Dictionary = {}
 var _accept_buttons: Dictionary = {}
 var _decline_buttons: Dictionary = {}
+var _departs_labels: Dictionary = {}
+var _noted_tick := -1
+## True from open() until the player changes the clock or the sheet closes.
+var _holding_clock := false
+var _held_paused := false
+var _held_speed := 1
 
 
 ## The airlines' warning once the rating is low: `low_days` day ends have
@@ -63,16 +81,31 @@ static func ended_message(airline: String, destination: String) -> String:
 	return text + " Flights already issued still fly; no new days will."
 
 
+## Says when the first flight is if it is not today: "" when the sim would fly
+## today's slot (FlightTimetable.first_day is today), else "first flight
+## tomorrow" or, past that, "first flight on Day N" (the HUD's day number).
+static func first_flight_note(offer: Dictionary, now: int) -> String:
+	var first_day := FlightTimetable.first_day(offer, now)
+	var ahead := first_day - GameCalendar.day_of(now)
+	if ahead <= 0:
+		return ""
+	return "first flight tomorrow" if ahead == 1 else "first flight on Day %d" % (first_day + 1)
+
+
 ## The text lines of an offer's card: who and where, when and what plane, and
-## the money.
-static func card_lines(offer: Dictionary) -> PackedStringArray:
+## the money. `note` (first_flight_note) follows the departure when not empty.
+static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	var minute: int = offer["departure_minute"]
 	var time := GameCalendar.clock_text(GameCalendar.tick_at(0, minute))
 	var size: String = offer["plane_size"]
+	var then := ", %s" % note if note != "" else ""
 	return PackedStringArray(
 		[
 			"%s to %s" % [offer["airline"], offer["destination"]],
-			"Departs %s daily   Gate %s   %s plane" % [time, offer["gate"], size.capitalize()],
+			(
+				"Departs %s daily%s   Gate %s   %s plane"
+				% [time, then, offer["gate"], size.capitalize()]
+			),
 			(
 				"%d passengers booked   $%d per passenger"
 				% [offer["booked_passengers"], offer["fee_per_passenger"]]
@@ -84,6 +117,8 @@ static func card_lines(offer: Dictionary) -> PackedStringArray:
 func _ready() -> void:
 	if desk == null or flights == null:
 		push_error("OfferPanel: desk and flights must both be set, so nothing is shown")
+		set_process(false)
+		set_process_unhandled_input(false)
 		return
 	layer = 2
 	_build()
@@ -91,20 +126,57 @@ func _ready() -> void:
 	if desk.rating != null:
 		desk.rating.changed.connect(_refresh_warning)
 	desk.contract_ended.connect(_on_contract_ended)
+	if build_mode != null:
+		build_mode.tool_changed.connect(_on_tool_changed)
 	_refresh()
 	_refresh_warning()
+
+
+func _process(_delta: float) -> void:
+	if not _sheet.visible:
+		return
+	if _holding_clock and (not clock.paused or clock.speed != _held_speed):
+		_holding_clock = false
+	if flights.tick != _noted_tick:
+		_refresh_notes()
+
+
+## Esc closes the sheet and is not passed on, so it does not also drop a tool.
+func _unhandled_input(event: InputEvent) -> void:
+	if _sheet.visible and event.is_action_pressed("build_tool_none"):
+		close()
+		get_viewport().set_input_as_handled()
 
 
 func is_open() -> bool:
 	return _sheet.visible
 
 
+## Shows the sheet and pauses the clock, remembering how the player had it.
 func open() -> void:
+	if _sheet.visible:
+		return
 	_sheet.visible = true
+	_refresh_notes()
+	if clock != null:
+		_held_paused = clock.paused
+		_held_speed = clock.speed
+		clock.set_paused(true)
+		_holding_clock = true
 
 
+## Hides the sheet and gives back the paused state the player had, unless they
+## changed the clock while it was open.
 func close() -> void:
+	if not _sheet.visible:
+		return
 	_sheet.visible = false
+	if clock == null or not _holding_clock:
+		return
+	_holding_clock = false
+	if not clock.paused or clock.speed != _held_speed:
+		return
+	clock.set_paused(_held_paused)
 
 
 func toggle_button() -> Button:
@@ -224,7 +296,14 @@ func _build() -> void:
 
 
 func _on_toggle() -> void:
-	_sheet.visible = not _sheet.visible
+	if _sheet.visible:
+		close()
+	else:
+		open()
+
+
+func _on_tool_changed(_tool: BuildMode.Tool) -> void:
+	close()
 
 
 ## Rebuilds the cards and the button text from the board's open offers.
@@ -235,6 +314,7 @@ func _refresh() -> void:
 	_card_nodes.clear()
 	_accept_buttons.clear()
 	_decline_buttons.clear()
+	_departs_labels.clear()
 	var offers := desk.board.open_offers()
 	for offer in offers:
 		_add_card(offer)
@@ -242,6 +322,23 @@ func _refresh() -> void:
 	_offers_waiting = offers.size() > 0
 	_style_button()
 	_say(EMPTY_TEXT if offers.is_empty() else "")
+	_noted_tick = flights.tick
+
+
+## The first-flight note for an offer card right now: "" while the airport is
+## closed, because a contract accepted then starts at the opening.
+func _note_for(offer: Dictionary) -> String:
+	if flights.opened_tick < 0:
+		return ""
+	return first_flight_note(offer, flights.tick)
+
+
+## Rewrites each card's departure line for the sim's current tick.
+func _refresh_notes() -> void:
+	_noted_tick = flights.tick
+	for id in _departs_labels:
+		var offer := desk.board.offer_of(id)
+		(_departs_labels[id] as Label).text = card_lines(offer, _note_for(offer))[1]
 
 
 ## Shows or clears the airlines' warning from the rating, on the sheet and as
@@ -296,9 +393,11 @@ func _add_card(offer: Dictionary) -> void:
 	var texts := VBoxContainer.new()
 	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(texts)
-	var lines := card_lines(offer)
+	var lines := card_lines(offer, _note_for(offer))
 	for i in lines.size():
 		var label := Label.new()
+		if i == 1:
+			_departs_labels[id] = label
 		label.text = lines[i]
 		label.custom_minimum_size = Vector2(CARD_TEXT_W, 0.0)
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
