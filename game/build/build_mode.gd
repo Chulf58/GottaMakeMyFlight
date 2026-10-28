@@ -139,6 +139,14 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 ## non-spending path tests and probes use.
 @export var finances: Finances
 
+## The tool BuildMode starts on. main.tscn sets None, so a new game has no tool
+## and a stray click on the world builds nothing; the Floor default keeps a bare
+## BuildMode ready to paint for tests and probes.
+@export var initial_tool := Tool.FLOOR:
+	set(value):
+		initial_tool = value
+		tool = value
+
 var grid: BuildGrid
 var tool := Tool.FLOOR
 var facing := 0
@@ -822,9 +830,11 @@ func _show_status(result: BuildResult) -> void:
 		_set_status(_status_note)
 		return
 	var text := RoomTool.hint(TOOL_ROOMS[tool]) if TOOL_ROOMS.has(tool) else ""
-	if TOOL_OBJECTS.has(tool):
+	var refused := result != null and not result.ok
+	# The facing is for an item that can be placed; a refusal shows its reason alone.
+	if TOOL_OBJECTS.has(tool) and not refused:
 		text = "Facing auto" if _facing_is_auto() else "Facing %d" % facing
-	if result != null and not result.ok:
+	if refused:
 		var reason := result.reason_text()
 		if DOOR_NAMES.has(tool) and result.reason == BuildResult.Reason.DOOR_NOT_AT_SHELL_DOOR:
 			reason = SHELL_DOOR_HINTS[tool]

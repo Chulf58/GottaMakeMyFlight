@@ -20,6 +20,8 @@ const ATTENTION := &"HudAttentionText"
 const OPERATING_ROWS := 4
 ## The grid's theme type: room between a label and its value.
 const GRID := &"HudMoneyGrid"
+## Space between the slot and the card opened under it.
+const CARD_GAP := 6.0
 
 var ledger: DayLedger
 ## Optional: without it no owed wages are shown.
@@ -134,7 +136,33 @@ func _make_custom_tooltip(_for_text: String) -> Object:
 	if ledger == null:
 		return null
 	_card = make_card(heading(ledger), rows(ledger, _owed()))
+	_card.tree_entered.connect(_place_card, CONNECT_ONE_SHOT | CONNECT_DEFERRED)
 	return _card
+
+
+## Where the card's top-left sits, in the canvas the slot is drawn in: under
+## the slot at its left edge, so it covers neither the money figure nor the
+## rating stars beside the slot. Godot would open it at the pointer, over both.
+func card_origin() -> Vector2:
+	var slot := get_global_rect()
+	return Vector2(slot.position.x, slot.end.y + CARD_GAP)
+
+
+## card_origin() as a screen position: the slot-local point under its left
+## edge, through the screen transform, which maps local coordinates (a global
+## point would carry the slot's own offset twice).
+func card_screen_position() -> Vector2i:
+	return Vector2i(get_screen_transform() * Vector2(0.0, size.y + CARD_GAP))
+
+
+## Moves the tooltip popup holding the card to card_screen_position().
+func _place_card() -> void:
+	if not is_inside_tree() or not is_instance_valid(_card) or not _card.is_inside_tree():
+		return
+	var popup := _card.get_window()
+	if popup == null or popup == get_window():
+		return
+	popup.position = card_screen_position()
 
 
 func _grid() -> GridContainer:

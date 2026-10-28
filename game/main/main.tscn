@@ -84,6 +84,7 @@ home_position = Vector3(-0.5, 0, -79.8)
 script = ExtResource("3_build")
 shell = ExtResource("15_shell")
 finances = NodePath("../Finances")
+initial_tool = 0
 
 [node name="Airside" type="Node3D" parent="."]
 script = ExtResource("6_airside")
