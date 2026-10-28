@@ -18,10 +18,12 @@ extends Node3D
 ## half-built lane, the icon always stays, and the build status line says the
 ## same words while the pointer is over the arch, so it hides when it overlaps
 ## and is never lifted. It is kept readable, though: inside the view by
-## VIEW_MARGIN_PX and clear of every visible HUD control that takes the mouse
-## (the money card, the Offers button, the bottom bar), moving toward the
-## screen's middle by at most MAX_HINT_TRAVEL_PX when it has to, so it stays by
-## its station. With no such spot within that reach it stays in its own place.
+## VIEW_MARGIN_PX and clear of everything the HUD draws (the money card, the
+## Offers button, the bottom bar, a passive hint card), moving toward the
+## screen's middle when it has to, so it stays by its station: first along that
+## line by at most MAX_HINT_TRAVEL_PX, then on rings around its own place. With
+## no clear spot anywhere in the view it is hidden for that layout
+## (hint_no_spot_hides counts it); the icon stays.
 ## A whole lane is one station and gets the queue-full and Closed signs like a
 ## scanner.
 ##
@@ -62,6 +64,11 @@ const MAX_SHIFTS := 8
 const VIEW_MARGIN_PX := 8.0
 const HINT_STEP_PX := 6.0
 const MAX_HINT_TRAVEL_PX := 260.0
+## Past that, spots are tried on rings this far apart, with this many points each.
+const HINT_RING_STEP_PX := 32.0
+const HINT_RING_POINTS := 16
+## A HUD control this share of the view in both directions is a root container.
+const ROOT_SPAN := 0.9
 ## The closed sign is the queue-full icon with its red fill painted grey-blue.
 const CLOSED_FILL := Color(0.47, 0.53, 0.62)
 const FILL_TOLERANCE := 0.1
@@ -78,6 +85,9 @@ var sim: PassengerSim
 var declutter_runs := 0
 ## How many staff-spot captions found no valid spot (one error pushed each).
 var no_spot_errors := 0
+## How many lane-hint captions were hidden because no spot in the view was clear
+## of the HUD, summed over the layouts run.
+var hint_no_spot_hides := 0
 
 ## Station id -> sign, for the queue-full signs and the closed signs.
 var _signs: Dictionary = {}
@@ -237,7 +247,11 @@ func draw() -> void:
 		width = view.get_visible_rect().size.x * view.get_stretch_transform().get_scale().x
 	var xform := camera.global_transform if camera != null else Transform3D()
 	var camera_id := camera.get_instance_id() if camera != null else 0
-	var hud := _hud_rects(to_output) if not _hint_signs.is_empty() else ([] as Array[Rect2])
+	var hud := (
+		_hud_rects(to_output, Vector2(width, height))
+		if not _hint_signs.is_empty()
+		else ([] as Array[Rect2])
+	)
 	if (
 		not _dirty
 		and camera_id == _view_camera
@@ -321,6 +335,11 @@ func _place_caption(i: int, view_size: Vector2) -> void:
 	else:
 		if _hints[i]:
 			rect = _hint_spot(i, view_size)
+			if rect.size == Vector2.ZERO:
+				hint_no_spot_hides += 1
+				caption.visible = false
+				caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
+				return
 			caption.offset += Vector2(
 				rect.position.x - _rects[i].position.x, _rects[i].end.y - rect.end.y
 			)
@@ -373,33 +392,43 @@ func _clear_spot(i: int, view_size: Vector2) -> Rect2:
 
 
 ## Where lane-hint caption `i` goes: its own spot when that is inside the view
-## by VIEW_MARGIN_PX and clear of the HUD controls, else the nearest spot toward
-## the screen's middle (at most MAX_HINT_TRAVEL_PX away) that is also off every
-## icon. With none, the first spot found inside the view, else its own.
+## by VIEW_MARGIN_PX and clear of the HUD, else the nearest spot toward the
+## screen's middle (at most MAX_HINT_TRAVEL_PX away) that is also off every
+## icon, else the nearest such spot on rings of growing radius around its own
+## place, tried from the direction of the middle first. A zero-size rectangle
+## means no spot is clear anywhere in the view.
 func _hint_spot(i: int, view_size: Vector2) -> Rect2:
 	var own := _rects[i]
 	var inner := Rect2(Vector2.ZERO, view_size).grow(-VIEW_MARGIN_PX)
 	if _hint_spot_clear(own, inner):
 		return own
 	var toward := view_size / 2.0 - own.get_center()
-	if toward.is_zero_approx():
-		return own
-	var step := toward.normalized() * HINT_STEP_PX
-	var in_view := own
-	var in_view_found := inner.encloses(own)
-	for k in range(1, int(MAX_HINT_TRAVEL_PX / HINT_STEP_PX) + 1):
-		var rect := Rect2(own.position + step * k, own.size)
-		if not inner.encloses(rect):
-			continue
-		if _hint_spot_clear(rect, inner) and not _hits_in(rect, _icon_bins, _icons):
-			return rect
-		if not in_view_found:
-			in_view = rect
-			in_view_found = true
-	return in_view
+	var heading := toward.angle() if not toward.is_zero_approx() else 0.0
+	if not toward.is_zero_approx():
+		var step := toward.normalized() * HINT_STEP_PX
+		for k in range(1, int(MAX_HINT_TRAVEL_PX / HINT_STEP_PX) + 1):
+			var rect := Rect2(own.position + step * k, own.size)
+			if _hint_spot_usable(rect, inner):
+				return rect
+	var radius := HINT_RING_STEP_PX
+	var longest := view_size.length()
+	while radius <= longest:
+		for n in HINT_RING_POINTS:
+			## 0, then one step either side of the heading, then two, and so on.
+			var turn := ceili(n / 2.0) * (1.0 if n % 2 == 1 else -1.0)
+			var angle := heading + TAU * turn / HINT_RING_POINTS
+			var rect := Rect2(own.position + Vector2.from_angle(angle) * radius, own.size)
+			if _hint_spot_usable(rect, inner):
+				return rect
+		radius += HINT_RING_STEP_PX
+	return Rect2()
 
 
-## True when `rect` is inside `inner` and off every HUD control (by the margin).
+func _hint_spot_usable(rect: Rect2, inner: Rect2) -> bool:
+	return _hint_spot_clear(rect, inner) and not _hits_in(rect, _icon_bins, _icons)
+
+
+## True when `rect` is inside `inner` and off every HUD rectangle (by the margin).
 func _hint_spot_clear(rect: Rect2, inner: Rect2) -> bool:
 	if not inner.encloses(rect):
 		return false
@@ -410,13 +439,12 @@ func _hint_spot_clear(rect: Rect2, inner: Rect2) -> bool:
 	return true
 
 
-## The rectangles (screen pixels) of the visible HUD controls that take the
-## mouse: the Controls under every canvas layer beside this node or beside an
-## ancestor of it. A control that takes the mouse is where the player clicks,
-## so a caption under it cannot be read or used; one that ignores the mouse
-## (the layout containers and labels inside a card) is not counted, and a
-## counted control's children lie inside it, so they are not walked.
-func _hud_rects(to_output: float) -> Array[Rect2]:
+## The rectangles (screen pixels) of what the HUD draws: the Controls under
+## every canvas layer beside this node or beside an ancestor of it, found by
+## draws_something(). Invisible ones, layout containers that draw nothing and
+## a control spanning the whole view (a root container) are not counted. A
+## counted panel or button is not walked into: its children lie inside it.
+func _hud_rects(to_output: float, view_size: Vector2) -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	var scale := Transform2D().scaled(Vector2(to_output, to_output))
 	var node: Node = self
@@ -424,26 +452,52 @@ func _hud_rects(to_output: float) -> Array[Rect2]:
 		node = node.get_parent()
 		for child in node.get_children():
 			if child is CanvasLayer and (child as CanvasLayer).visible:
-				_collect_hud(child, scale, rects)
+				_collect_hud(child, scale, view_size, rects)
 	return rects
 
 
-func _collect_hud(parent: Node, scale: Transform2D, rects: Array[Rect2]) -> void:
+func _collect_hud(
+	parent: Node, scale: Transform2D, view_size: Vector2, rects: Array[Rect2]
+) -> void:
 	for child in parent.get_children():
-		if child is Control:
-			var control := child as Control
-			if not control.visible:
-				continue
-			if (
-				control.mouse_filter == Control.MOUSE_FILTER_STOP
-				and control.size.x * control.size.y > 0.0
-			):
-				var local := Rect2(Vector2.ZERO, control.size)
-				rects.append(scale * control.get_global_transform_with_canvas() * local)
-				continue
 		if child is CanvasItem and not (child as CanvasItem).visible:
 			continue
-		_collect_hud(child, scale, rects)
+		if child is Control:
+			var control := child as Control
+			if draws_something(control) and control.size.x * control.size.y > 0.0:
+				var rect := (
+					scale
+					* control.get_global_transform_with_canvas()
+					* Rect2(Vector2.ZERO, control.size)
+				)
+				var spans := (
+					rect.size.x >= view_size.x * ROOT_SPAN
+					and rect.size.y >= view_size.y * ROOT_SPAN
+				)
+				if not spans:
+					rects.append(rect)
+					if _is_box(control):
+						continue
+		_collect_hud(child, scale, view_size, rects)
+
+
+## True for a Control that puts something on the screen: a panel, a button, a
+## label with text, a picture, a colour fill, or any control with a panel style.
+static func draws_something(control: Control) -> bool:
+	if _is_box(control) or control is ColorRect:
+		return true
+	if control is Label:
+		return not (control as Label).text.is_empty()
+	if control is RichTextLabel:
+		return not (control as RichTextLabel).text.is_empty()
+	if control is TextureRect:
+		return (control as TextureRect).texture != null
+	return control.has_theme_stylebox_override("panel")
+
+
+## A panel or a button: it draws a box and its children lie inside it.
+static func _is_box(control: Control) -> bool:
+	return control is Panel or control is PanelContainer or control is BaseButton
 
 
 ## True when `rect` touches a rectangle in `rects`, found through `bins`.

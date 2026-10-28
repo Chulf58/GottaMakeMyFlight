@@ -2,9 +2,10 @@ class_name TestLaneHintCaptionPlacement
 extends GdUnitTestSuite
 ## The lane-incomplete caption ("A wall cuts through the lane") is never hidden
 ## by the player's own HUD or cut off by the screen edge: it stays inside the
-## view with a margin and clear of every visible HUD control that takes the
-## mouse, moving toward the middle of the screen when it has to move. Smoke
-## playtest 8 saw it clipped at the top and half behind the Offers button.
+## view with a margin and clear of everything the visible HUD draws, moving
+## toward the middle of the screen when it has to move and hiding (counted) only
+## when no spot in the view is clear. Smoke playtest 8 saw it clipped at the top
+## and half behind the Offers button.
 ##
 ## The rules are checked on the caption's screen rectangle, from a real camera
 ## and a real Control tree in a 1920x1080 viewport. What this does not prove is
@@ -168,9 +169,23 @@ func test_a_caption_moves_clear_of_a_control_nested_in_a_container() -> void:
 	assert_bool(_rect().intersects(Rect2(card.position, card.size))).is_false()
 
 
-func test_hud_controls_that_take_no_mouse_or_are_hidden_do_not_move_the_caption() -> void:
+## A passive card (it ignores the mouse, like the staff hint card) is still
+## drawn over the world, so the caption keeps off it.
+func test_a_visible_passive_panel_is_avoided() -> void:
 	var area := Rect2(800.0, 300.0, 400.0, 400.0)
-	var passive := _add_button(area, Control.MOUSE_FILTER_IGNORE)
+	var card := PanelContainer.new()
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_layer.add_child(card)
+	card.position = area.position
+	card.size = area.size
+	_place_sign(Vector2(960.0, 560.0))
+	assert_bool(_home_rect().intersects(area)).is_true()
+	assert_bool(_rect().intersects(area)).is_false()
+	assert_bool(_inside_with_margin(_rect())).is_true()
+
+
+func test_a_hidden_control_is_ignored() -> void:
+	var area := Rect2(800.0, 300.0, 400.0, 400.0)
 	var hidden := _add_button(area)
 	hidden.visible = false
 	_place_sign(Vector2(960.0, 560.0))
@@ -178,10 +193,95 @@ func test_hud_controls_that_take_no_mouse_or_are_hidden_do_not_move_the_caption(
 	assert_vector(_caption().offset).is_equal(
 		Vector2(0.0, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX)
 	)
-	# Control: the same control taking the mouse and shown does move it.
-	passive.mouse_filter = Control.MOUSE_FILTER_STOP
+	# Control: the same control shown does move it.
+	hidden.visible = true
 	_markers.draw()
 	assert_bool(_rect().intersects(area)).is_false()
+
+
+func test_containers_that_draw_nothing_and_root_containers_do_not_move_the_caption() -> void:
+	var area := Rect2(800.0, 300.0, 400.0, 400.0)
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_layer.add_child(root)
+	var box := VBoxContainer.new()
+	box.position = area.position
+	box.size = area.size
+	root.add_child(box)
+	var empty := Label.new()
+	box.add_child(empty)
+	_place_sign(Vector2(960.0, 560.0))
+	assert_bool(_home_rect().intersects(area)).is_true()
+	assert_vector(_caption().offset).is_equal(
+		Vector2(0.0, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX)
+	)
+	# Control: a panel with a panel style on the same spot is a drawn one.
+	box.add_theme_stylebox_override("panel", StyleBoxFlat.new())
+	_markers.draw()
+	assert_bool(_rect().intersects(area)).is_false()
+
+
+## A sheet 560 px wide over the home spot, as the Offers sheet is.
+func test_a_large_open_sheet_over_the_home_spot_never_has_the_caption_on_it() -> void:
+	var sheet := Rect2(680.0, 200.0, 560.0, 560.0)
+	var panel := PanelContainer.new()
+	_layer.add_child(panel)
+	panel.position = sheet.position
+	panel.size = sheet.size
+	_place_sign(Vector2(960.0, 500.0))
+	assert_bool(_home_rect().intersects(sheet)).is_true()
+	assert_bool(_caption().visible).is_true()
+	assert_bool(_rect().grow(MissMarkers.CAPTION_MARGIN_PX - 0.01).intersects(sheet)).is_false()
+	assert_bool(_inside_with_margin(_rect())).is_true()
+	assert_int(_markers.hint_no_spot_hides).is_equal(0)
+
+
+## The HUD covers the whole view in two halves, so no spot is clear: the
+## caption is hidden, counted, and the icon stays.
+func test_with_no_clear_spot_anywhere_the_caption_is_hidden_and_counted() -> void:
+	for top in [0.0, 540.0]:
+		var half := PanelContainer.new()
+		_layer.add_child(half)
+		half.position = Vector2(0.0, top)
+		half.size = Vector2(1920.0, 540.0)
+	_place_sign(Vector2(960.0, 500.0))
+	assert_bool(_caption().visible).is_false()
+	assert_int(_markers.hint_no_spot_hides).is_greater(0)
+	assert_bool(_markers.hint_sign_for(_arch).visible).is_true()
+	# Control: with the halves gone the caption is back and nothing more is counted.
+	var hides := _markers.hint_no_spot_hides
+	for half in _layer.get_children():
+		half.visible = false
+	_markers.draw()
+	assert_bool(_caption().visible).is_true()
+	assert_int(_markers.hint_no_spot_hides).is_equal(hides)
+
+
+## Under a content scale of 1.25 the layout is 1536x864 units and the screen
+## 1920x1080 pixels: HUD rectangles and the caption are compared in pixels.
+func test_at_a_ui_scale_of_1_25_the_hud_rectangles_are_in_screen_pixels() -> void:
+	_port.size_2d_override = Vector2i(1536, 864)
+	_port.size_2d_override_stretch = true
+	var scale := 1.25
+	var offers_units := Rect2(900.0, 12.0, 170.0, 40.0)
+	_add_button(offers_units)
+	_port.get_camera_3d().position.x += 0.001
+	_markers.hint_sign_for(_arch).global_position = _port.get_camera_3d().project_position(
+		Vector2(985.0, 100.0), DEPTH
+	)
+	_markers.draw()
+	var point := _point() * scale
+	var home := MissMarkers.caption_rect(point, _caption().text)
+	var lift := _caption().offset.y - MissMarkers.SIGN_PX - MissMarkers.CAPTION_GAP_PX
+	var rect := MissMarkers.caption_rect(point, _caption().text, lift, _caption().offset.x)
+	var offers := Rect2(offers_units.position * scale, offers_units.size * scale)
+	print("scaled point %s home %s moved %s button %s" % [point, home, rect, offers])
+	# Control: in pixels the unmoved caption is on the button; the button's
+	# rectangle taken in units would miss it, so the scale matters.
+	assert_bool(home.intersects(offers)).is_true()
+	assert_bool(home.intersects(offers_units)).is_false()
+	assert_bool(rect.grow(MissMarkers.CAPTION_MARGIN_PX - 0.01).intersects(offers)).is_false()
+	assert_bool(VIEW.grow(-MissMarkers.VIEW_MARGIN_PX + 0.01).encloses(rect)).is_true()
 
 
 func test_a_control_that_appears_or_goes_while_the_view_stands_still_is_followed() -> void:
