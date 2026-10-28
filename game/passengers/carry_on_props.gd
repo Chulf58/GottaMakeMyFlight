@@ -79,7 +79,7 @@ const SPINE_BONE := "Spine_03"
 const BACK_FROM_SPINE_M := 0.175
 const BACK_TOP_OVER_SPINE_M := 0.06
 ## It leans in at the top by this much, its bottom out clear of the hips.
-const BACK_LEAN_DEGREES := 8.0
+const BACK_LEAN_DEGREES := 10.0
 ## Shoulder bag: the strap this far out from the body's centre line, its bar
 ## this far over the Arm bone (the shoulder joint), and this long from the bar
 ## to the bag's top edge (the bag hangs outside the hip, its top about the hip
