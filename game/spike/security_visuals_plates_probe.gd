@@ -1,6 +1,6 @@
 extends SceneTree
 ## Windowed frame-strip plates of passengers going through security inside the
-## real main scene (Security 7/8; SecurityLooks, SecurityProps). Boots
+## real main scene (Security 7/8; SecurityLooks, CarryOnProps). Boots
 ## main/main.tscn with a new random sim seed (printed), builds the starter
 ## terminal through the HUD, swaps its east basic scanner for a whole security
 ## lane (arch on the divider, LEFT mirror, facing 0, the divider walls under
@@ -32,6 +32,7 @@ extends SceneTree
 ## Plates go to tools/blender/out/security-lane-visuals/.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const CarryContact := preload("res://spike/carry_contact.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/security-lane-visuals"
 const MAIN_SCENE := "res://main/main.tscn"
@@ -60,11 +61,9 @@ const TRAITS := [
 	[1, false, false],
 	[2, false, true],
 ]
-## The arch's posts in its own frame (a 0.70 m clear opening across x).
-const POST_X := Vector2(0.35, 0.42)
-const POST_Z := 0.42
-## Body vertices this near a carried bag's grip are the hand that holds it.
-const GRIP_HAND_M := 0.12
+## The frame-cost check: this many passengers spawned, frames timed.
+const BENCH_PASSENGERS := 100
+const BENCH_FRAMES := 240
 
 var _out_dir := ""
 var _failed := false
@@ -82,6 +81,12 @@ var _views: PassengerViews
 var _arch := 0
 var _lane := {}
 var _part_boxes: Array = []
+## The lane part nodes the build view draws (tray table, X-ray belt, pickup
+## table, arch), for bag-against-mesh checks.
+var _part_nodes: Array[Node3D] = []
+var _body_control_done := false
+## The basic scanner's drawn node (its booth is reported, not failed: below).
+var _basic_node: Node3D = null
 ## Moment name -> its group (see _hit()); removed once plated.
 var _moments := {}
 var _sheets := {}
@@ -142,6 +147,7 @@ func _run() -> void:
 	await _play()
 	for name in _moments:
 		_invalid("moment %s never happened" % name)
+	await _benchmark()
 	for group in _sheets:
 		_save(_sheet(_sheets[group]), "%s_strip" % group, "")
 	_guard_mutex.lock()
@@ -225,10 +231,54 @@ func _build_lane(build: BuildMode) -> void:
 		_part_boxes.append([str(part), xf, _piece_box(part)])
 	var arch_cells: Array[Vector2i] = [ARCH_AT]
 	var arch_xf := BuildView.object_transform(grid, arch_cells, 0)
+	var arch_node: Node3D = null
+	for child in (build.get_node("BuildView") as BuildView).get_children():
+		if not child.has_meta("record"):
+			continue
+		# The probe's grid holds one lane, so every lane part drawn is one of it.
+		var def := StringName(child.get_meta("record")["def"])
+		if SecurityLanes.is_part(def):
+			_part_nodes.append(child)
+		if def == SecurityLanes.ARCH:
+			arch_node = child
+		if def == &"security_scanner":
+			_basic_node = child
+	var inner := _arch_clear_half(arch_node) if arch_node != null else 0.0
+	var outer := _piece_box(SecurityLanes.ARCH).end.x
+	print("ARCH clear_width_m=%.3f outer_width_m=%.3f" % [inner * 2.0, outer * 2.0])
+	if arch_node == null or inner < 0.3:
+		_invalid("the arch's posts were not found")
 	for sign in [-1.0, 1.0]:
-		var lo := Vector3(POST_X.x if sign > 0 else -POST_X.y, 0.0, -POST_Z)
-		var post := AABB(lo, Vector3(POST_X.y - POST_X.x, 2.42, POST_Z * 2.0))
-		_part_boxes.append(["arch_post", arch_xf, post])
+		var lo := Vector3(inner if sign > 0 else -outer, 0.0, -0.42)
+		_part_boxes.append(["arch_post", arch_xf, AABB(lo, Vector3(outer - inner, 2.42, 0.84))])
+	_wall_boxes(grid)
+	_controls(grid)
+
+
+## Negative controls for the clearance checks, so a zero count means clear
+## and not blind: a bag sunk into the tray table's cabinet must be inside its
+## meshes, and a bag on a wall edge must hit the wall boxes.
+func _controls(grid: BuildGrid) -> void:
+	var table: Node3D = null
+	for part in _part_nodes:
+		if StringName(part.get_meta("record")["def"]) == SecurityLanes.TRAY_TABLE:
+			table = part
+	var sunk := Transform3D(
+		Basis.IDENTITY, grid.cell_to_world(_lane["tray_table"]) + Vector3.UP * 0.3
+	)
+	var in_table := CarryContact.inside_meshes(CarryContact.bag_points(sunk), table) if table else 0
+	var wall_hits := 0
+	for entry in _part_boxes:
+		if entry[0] == "wall":
+			var wall_box: AABB = entry[2]
+			var base := wall_box.get_center()
+			base.y = wall_box.position.y
+			var on_wall := Transform3D(Basis.IDENTITY, base)
+			wall_hits = _box_hits(CarryContact.bag_points(on_wall)).get("wall", 0)
+			break
+	print("CONTROL bag_in_tray_table_cabinet=%d bag_on_wall=%d" % [in_table, wall_hits])
+	if in_table == 0 or wall_hits == 0:
+		_invalid("a clearance control found no contact, so the checks are blind")
 
 
 func _must(result: BuildResult, what: String) -> void:
@@ -281,6 +331,7 @@ func _define_moments() -> void:
 		"alarm_5_pickup",
 		"basic_1_scan",
 		"basic_2_repack",
+		"lane_8_live_crossing",
 	]:
 		_moments[name] = name.get_slice("_", 0)
 
@@ -310,6 +361,8 @@ func _lane_hit(name: String, p: Passenger, done: int) -> bool:
 	var phase := p.security_phase
 	var hit := false
 	match name:
+		"lane_8_live_crossing":
+			hit = phase == SecurityRuntime.Phase.UNPACK and first
 		"lane_2_unpack":
 			hit = (
 				phase == SecurityRuntime.Phase.UNPACK
@@ -370,7 +423,10 @@ func _play() -> void:
 			if found == 0:
 				continue
 			var group: String = _moments[name]
-			if await _plate(name, group, found, DISTANCE_M):
+			if name == "lane_8_live_crossing":
+				await _plate_live(found)
+				_moments.erase(name)
+			elif await _plate(name, group, found, DISTANCE_M):
 				_moments.erase(name)
 			break
 		if not whole_done and _in_security() >= 4:
@@ -380,9 +436,18 @@ func _play() -> void:
 
 func _match(name: String) -> int:
 	for id in _sim.passenger_ids():
-		if _views.node_for(id) != null and _hit(name, _sim.get_passenger(id)):
+		if _views.node_for(id) != null and _settled(id) and _hit(name, _sim.get_passenger(id)):
 			return id
 	return 0
+
+
+## Whether every bag of passenger `id` has finished moving to its home.
+func _settled(id: int) -> bool:
+	var props := _views.carry_on_props()
+	for i in props.props_of(id)["bags"].size():
+		if props.transfer_progress(id, i) < 1.0:
+			return false
+	return true
 
 
 func _in_security() -> int:
@@ -444,7 +509,7 @@ func _check(name: String, id: int, yaw: float) -> Dictionary:
 	var subjects := {}
 	var body := _views.node_for(id)
 	subjects[body] = str(id)
-	var props := _views.security_props().props_of(id)
+	var props := _views.carry_on_props().props_of(id)
 	var prop_tags := {}
 	if props["tray"] != null:
 		subjects[props["tray"]] = "tray"
@@ -553,76 +618,289 @@ func _facing_points(prop: Node3D) -> Array[Vector3]:
 	return out
 
 
-## Body vertices of the subject inside a lane part, and inside its own carried
-## (away from the holding hand) or floor bags.
+## Clearance of the subject in its drawn pose: body points (both hands
+## included) inside a lane part, an arch post or a wall; carried and floor bag
+## points inside a part, a post or a wall; and body points inside one of its
+## own bags' meshes (the gripping hand left out, CarryContact). Prints every
+## count; any contact fails the probe.
 func _check_clearance(name: String, id: int) -> void:
-	var verts := _body_vertices(_views.node_for(id))
-	var part_hits := {}
-	for entry in _part_boxes:
-		var inv: Transform3D = (entry[1] as Transform3D).affine_inverse()
-		var box: AABB = entry[2]
-		for v in verts:
-			var local := inv * v
-			if box.grow(-0.005).has_point(local):
-				part_hits[entry[0]] = part_hits.get(entry[0], 0) + 1
-				if entry[0] == "arch_post":
-					# How far into the post, from the 0.70 m opening's edge.
-					var depth := absf(local.x) - POST_X.x
-					part_hits["arch_depth_m"] = maxf(part_hits.get("arch_depth_m", 0.0), depth)
-					part_hits["arch_at_y"] = snappedf(v.y, 0.01)
-	# A carried bag may touch the hand that holds it; the rest of the body and
-	# a floor bag's whole volume must stay out.
-	var bag_hits := 0
-	var homes := SecurityLooks.bag_homes(_sim, _sim.get_passenger(id))
 	var body := _views.node_for(id)
-	var bags: Array[Node3D] = _views.security_props().props_of(id)["bags"]
+	var p := _sim.get_passenger(id)
+	var homes := SecurityLooks.bag_homes(_sim, p)
+	var points := CarryContact.body_points(body, [])
+	var part_hits := _box_hits(points)
+	var gripping: Array = []
+	for i in homes.size():
+		if homes[i] == SecurityLooks.Home.HAND:
+			gripping.append([".R", ".L"][SecurityLooks.hand_of(_sim, p, i)])
+	var own := CarryContact.body_points(body, gripping)
+	if not _body_control_done:
+		# Control: a bag at the hips must hold body points.
+		var at_hips := Transform3D(Basis.IDENTITY, body.global_position + Vector3.UP * 0.85)
+		var control := CarryContact.inside_bag(own, at_hips)
+		print("CONTROL body_points_in_a_bag_at_the_hips=%d" % control)
+		if control == 0:
+			_invalid("the bag-body check found no contact in its control")
+		_body_control_done = true
+	var bags: Array[Node3D] = _views.carry_on_props().props_of(id)["bags"]
+	var bag_body := 0
+	var bag_parts := {}
 	for i in bags.size():
 		if homes[i] == SecurityLooks.Home.TRAY:
 			continue
-		var inv := bags[i].global_transform.affine_inverse()
-		var bag_box := AABB(Vector3.ZERO, SecurityProps.bag_size())
-		bag_box.position = Vector3(-bag_box.size.x / 2.0, 0.0, -bag_box.size.z / 2.0)
-		var grip := _views.security_props().grip_of(body, i)
-		var carried := homes[i] == SecurityLooks.Home.HAND
-		for v in verts:
-			if carried and v.distance_to(grip) < GRIP_HAND_M:
-				continue
-			if bag_box.grow(-0.005).has_point(inv * v):
-				bag_hits += 1
+		bag_body += CarryContact.inside_bag(own, bags[i].global_transform)
+		var bag_points := CarryContact.bag_points(bags[i].global_transform)
+		var hits := _box_hits(bag_points)
+		for key in hits:
+			if key == "wall" or key == "arch_post":
+				bag_parts[key] = bag_parts.get(key, 0) + hits[key]
+		for part in _part_nodes:
+			var inside := CarryContact.inside_meshes(bag_points, part)
+			if inside > 0:
+				bag_parts[part.name] = bag_parts.get(part.name, 0) + inside
 	var nearest := INF
-	var me := _views.node_for(id).global_position
 	for other in _sim.passenger_ids():
 		var node := _views.node_for(other)
 		if other != id and node != null:
-			nearest = minf(nearest, node.global_position.distance_to(me))
+			nearest = minf(nearest, node.global_position.distance_to(body.global_position))
 	print(
 		(
 			(
-				"CLEARANCE %s passenger=%d body_vertices=%d part_contacts=%s"
-				+ " bag_body_contacts=%d nearest_passenger_m=%.2f"
+				"CLEARANCE %s passenger=%d body_points=%d body_part_contacts=%s"
+				+ " bag_part_contacts=%s bag_body_contacts=%d bags=%s nearest_passenger_m=%.2f"
 			)
-			% [name, id, verts.size(), part_hits, bag_hits, nearest]
+			% [name, id, points.size(), part_hits, bag_parts, bag_body, homes, nearest]
 		)
 	)
-	if verts.is_empty():
-		_invalid("%s: no drawn body vertices to check" % name)
-	if not part_hits.is_empty() or bag_hits > 0:
-		_invalid("%s: passenger %d clips a lane part or its own bag" % [name, id])
+	if _basic_node != null and p.station == _basic_node.get_meta("record")["id"]:
+		# The basic scanner's 0.70 m booth is another asset (the interior
+		# kit's security_scanner), outside this lane's work: its contacts are
+		# printed for the report and do not fail the probe.
+		var in_booth := CarryContact.inside_meshes(points, _basic_node)
+		var bags_in_booth := 0
+		for i in bags.size():
+			bags_in_booth += CarryContact.inside_meshes(
+				CarryContact.bag_points(bags[i].global_transform), _basic_node
+			)
+		print(
+			"BASIC_SCANNER %s body_points_in_booth=%d bag_points_in_booth=%d (reported, not failed)"
+			% [name, in_booth, bags_in_booth]
+		)
+	if points.is_empty():
+		_invalid("%s: no drawn body points to check" % name)
+	if not part_hits.is_empty() or not bag_parts.is_empty() or bag_body > 0:
+		_invalid("%s: passenger %d or its bags clip a lane part, a wall or the body" % [name, id])
 
 
-func _body_vertices(body: Node3D) -> PackedVector3Array:
-	var out := PackedVector3Array()
-	for mi: MeshInstance3D in body.find_children("*", "MeshInstance3D", true, false):
-		if not mi.is_visible_in_tree():
+## Points inside each solid box (lane parts, arch posts, walls), by its name.
+func _box_hits(points: PackedVector3Array) -> Dictionary:
+	var hits := {}
+	for entry in _part_boxes:
+		var inv: Transform3D = (entry[1] as Transform3D).affine_inverse()
+		var box: AABB = (entry[2] as AABB).grow(-0.002)
+		for v in points:
+			if box.has_point(inv * v):
+				hits[entry[0]] = hits.get(entry[0], 0) + 1
+	return hits
+
+
+## The arch's clear half-width, read from its drawn meshes: the nearest
+## vertex to the centre line, between the floor mat and the beam, that is
+## off the centre (the posts' inner face).
+func _arch_clear_half(arch: Node3D) -> float:
+	var inner := INF
+	var inv := arch.global_transform.affine_inverse()
+	for mi: MeshInstance3D in arch.find_children("*", "MeshInstance3D", true, false):
+		for v in mi.mesh.get_faces():
+			var local := inv * (mi.global_transform * v)
+			if local.y > 0.05 and local.y < 2.15 and absf(local.x) > 0.2:
+				inner = minf(inner, absf(local.x))
+	return inner
+
+
+## Solid boxes for every wall edge near the lane (0.12 m thick, 2.6 m tall).
+func _wall_boxes(grid: BuildGrid) -> void:
+	var count := 0
+	for y in range(ARCH_AT.y - 4, ARCH_AT.y + 5):
+		for x in range(ARCH_AT.x - 5, ARCH_AT.x + 3):
+			var cell := Vector2i(x, y)
+			for side in [
+				BuildGrid.Side.NORTH, BuildGrid.Side.EAST, BuildGrid.Side.SOUTH, BuildGrid.Side.WEST
+			]:
+				if not grid.has_wall(cell, side):
+					continue
+				var step: Vector2i = BuildGrid.SIDE_STEP[side]
+				var centre := grid.cell_to_world(cell) + Vector3(step.x, 0.0, step.y) * 0.5
+				var size := Vector3(1.0 if step.x == 0 else 0.12, 2.6, 1.0 if step.y == 0 else 0.12)
+				var box := AABB(centre - Vector3(size.x / 2.0, 0.0, size.z / 2.0), size)
+				_part_boxes.append(["wall", Transform3D.IDENTITY, box])
+				count += 1
+	print("WALLS boxes=%d near the lane" % count)
+
+
+## A plate strip of one lane passenger crossing the arch while the game runs
+## (no pause): the camera is set on the arch while the passenger unpacks, then
+## every frame of its first ARCH pass is checked against the posts, and three
+## frames are grabbed and checked in frame with sight lines past the static
+## scene (the build and the shell).
+func _plate_live(id: int) -> bool:
+	var p := _sim.get_passenger(id)
+	var arch := _sim.grid.cell_to_world(ARCH_AT)
+	_aim(arch, DISTANCE_M, 0.6 + PI / 2.0)
+	await _frames(30)
+	var owners: Array[Node] = [_main.get_node("Airside/Terminal"), _main.get_node("BuildMode")]
+	var holder := PlateSight.colliders(root, owners, {})
+	await physics_frame
+	await physics_frame
+	var frames := 0
+	var worst := 0
+	var marks := [0.5, 0.65, 0.8]
+	var grabbed := 0
+	var stop := Time.get_ticks_msec() + 20000
+	while Time.get_ticks_msec() < stop:
+		_beat("live crossing frame %d" % frames)
+		await process_frame
+		if p.stage != Passenger.Stage.SECURITY or p.security_phase > SecurityRuntime.Phase.ARCH:
+			break
+		if p.security_phase != SecurityRuntime.Phase.ARCH:
 			continue
-		var mesh: Mesh = mi.bake_mesh_from_current_skeleton_pose() if mi.skin != null else mi.mesh
-		if mesh == null:
-			continue
-		for s in mesh.get_surface_count():
-			var verts: PackedVector3Array = mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]
-			for k in range(0, verts.size(), 2):
-				out.append(mi.global_transform * verts[k])
-	return out
+		var body := _views.node_for(id)
+		var hits := _box_hits(CarryContact.body_points(body, []))
+		frames += 1
+		worst = maxi(worst, hits.get("arch_post", 0) + hits.get("wall", 0))
+		var at := _progress(p)
+		if grabbed < marks.size() and at >= marks[grabbed]:
+			var img := root.get_texture().get_image()
+			img.convert(Image.FORMAT_RGBA8)
+			var ok := _live_shown(body, "live_crossing_%d" % grabbed, at)
+			if ok:
+				_save(img, "lane_8_live_crossing_%d" % grabbed, "live")
+			else:
+				_invalid("live crossing frame %d: the passenger is not shown" % grabbed)
+			grabbed += 1
+	holder.free()
+	print(
+		(
+			"LIVE crossing passenger=%d frames_checked=%d worst_post_or_wall_contacts=%d grabbed=%d"
+			% [id, frames, worst, grabbed]
+		)
+	)
+	if frames < 10 or grabbed < marks.size():
+		_invalid("live crossing: only %d frames and %d plates" % [frames, grabbed])
+	if worst > 0:
+		_invalid("live crossing: the walking passenger touches an arch post or wall")
+	return true
+
+
+func _live_shown(body: Node3D, tag: String, at: float) -> bool:
+	var frame := Rect2(
+		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
+	)
+	var base := body.global_position
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for h in [0.0, 1.0, 1.9]:
+		var s := _cam.unproject_position(base + Vector3(0.0, h, 0.0))
+		lo = lo.min(s)
+		hi = hi.max(s)
+	var in_frame := frame.has_point(lo) and frame.has_point(hi)
+	var clear := 0
+	var space := _cam.get_world_3d().direct_space_state
+	for h in [1.0, 1.4, 1.7]:
+		var target := base + Vector3(0.0, h, 0.0)
+		var hit := space.intersect_ray(
+			PhysicsRayQueryParameters3D.create(_cam.global_position, target)
+		)
+		clear += int(hit.is_empty())
+	var ok := in_frame and clear >= 2 and hi.y - lo.y >= MIN_SUBJECT_PX
+	print(
+		(
+			"INFRAME %s progress=%.2f screen=(%.0f,%.0f)-(%.0f,%.0f) unblocked_lines=%d/3 ok=%s"
+			% [tag, at, lo.x, lo.y, hi.x, hi.y, clear, ok]
+		)
+	)
+	return ok
+
+
+## Frame cost of the carry-on bags with about BENCH_PASSENGERS passengers on
+## screen: frame times with their bags, then the same crowd with every bag
+## taken away (carry_on 0), as the control.
+func _benchmark() -> void:
+	_beat("bench spawn")
+	var flight := StarterFlight.first_flight()
+	_sim.spawn_batch(BENCH_PASSENGERS, randi() + 1)
+	var until := _clock.tick + 240
+	while _clock.tick < until:
+		_beat("bench walk-in")
+		await process_frame
+	var centre := Vector3.ZERO
+	var count := 0
+	for id in _sim.passenger_ids():
+		var node := _views.node_for(id)
+		if node != null:
+			centre += node.global_position
+			count += 1
+	_aim(centre / maxi(count, 1), 26.0, 0.6)
+	await _frames(30)
+	var with_bags := await _frame_times("with bags")
+	var flight_ids := _sim.passenger_ids()
+	for id in flight_ids:
+		_sim.get_passenger(id).carry_on = 0
+	await _frames(10)
+	var without := await _frame_times("no bags (control)")
+	print(
+		(
+			"BENCH flight=%s cost_ms_avg=%.2f cost_ms_p95=%.2f"
+			% [flight, with_bags[0] - without[0], with_bags[1] - without[1]]
+		)
+	)
+
+
+## [avg ms, p95 ms] over BENCH_FRAMES frames, printing the counts on screen.
+func _frame_times(label: String) -> Array:
+	var frame := Rect2(Vector2.ZERO, root.get_visible_rect().size)
+	var on_screen := 0
+	var bags_on := 0
+	for id in _sim.passenger_ids():
+		var node := _views.node_for(id)
+		if node != null and not _cam.is_position_behind(node.global_position):
+			if frame.has_point(_cam.unproject_position(node.global_position + Vector3.UP)):
+				on_screen += 1
+				bags_on += _views.carry_on_props().props_of(id)["bags"].size()
+	var times: Array[float] = []
+	var last := Time.get_ticks_usec()
+	for i in BENCH_FRAMES:
+		_beat("bench %s" % label)
+		await process_frame
+		var now := Time.get_ticks_usec()
+		times.append((now - last) / 1000.0)
+		last = now
+	times.sort()
+	var total := 0.0
+	for t in times:
+		total += t
+	var avg := total / times.size()
+	var p95: float = times[int(times.size() * 0.95)]
+	print(
+		(
+			(
+				"BENCH %s passengers_drawn=%d on_screen=%d bags_on_screen=%d props_drawn=%d"
+				+ " frames=%d avg_ms=%.2f p50_ms=%.2f p95_ms=%.2f"
+			)
+			% [
+				label,
+				_views.active_count(),
+				on_screen,
+				bags_on,
+				_views.carry_on_props().drawn_count(),
+				times.size(),
+				avg,
+				times[times.size() / 2],
+				p95
+			]
+		)
+	)
+	return [avg, p95]
 
 
 ## The whole checkpoint, lane and basic scanner, from 30 m.

@@ -39,8 +39,8 @@ var _ring := MeshInstance3D.new()
 var _markers := MissMarkers.new()
 ## The '+$' pops over cafe counters.
 var _pops := CafePops.new()
-## Trays and carry-on bags at security.
-var _props := SecurityProps.new()
+## Carry-on bags of every passenger, and trays at security lanes.
+var _props := CarryOnProps.new()
 ## Passenger id -> its drawn offset at security (SecurityLooks.target_offset),
 ## moved toward the target at walking speed once per tick.
 var _offsets: Dictionary = {}
@@ -71,7 +71,8 @@ func _ready() -> void:
 	_pops.name = "CafePops"
 	_pops.sim = sim
 	add_child(_pops)
-	_props.name = "SecurityProps"
+	_props.name = "CarryOnProps"
+	_props.clock = clock
 	_props.sim = sim
 	_props.views = self
 	add_child(_props)
@@ -97,7 +98,7 @@ func cafe_pops() -> CafePops:
 	return _pops
 
 
-func security_props() -> SecurityProps:
+func carry_on_props() -> CarryOnProps:
 	return _props
 
 

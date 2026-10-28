@@ -1,13 +1,22 @@
-class_name SecurityProps
+class_name CarryOnProps
 extends Node3D
-## The trays and carry-on bags of passengers at security (Security 7/8),
-## drawn where SecurityLooks says they are. sync() runs on each tick after
-## PassengerViews has posed its characters and takes or returns pooled
-## props; draw() runs each frame after the characters are placed and puts
-## every prop in place from the drawn characters, so a tray riding the X-ray
-## belt keeps pace with its passenger between ticks. A bag that changes home
-## (hand, tray, floor) moves there over TRANSFER_MS instead of jumping. It
-## reads the sim and the views and never writes either.
+## The carry-on bags of every drawn passenger, and the trays at security
+## lanes (Security 7/8; decisions passengers-carry-their-carry-on-bags-for-
+## the-whole-visit-fro and carried-bags-stay-gripped-in-the-hand-clear-body-
+## contact-by). SecurityLooks says where each bag is: in a hand, in a tray or
+## on the floor. sync() runs on each tick after PassengerViews has posed its
+## characters: it takes or returns pooled props and turns each character's
+## CarryArm on for a hand that holds a bag. draw() runs each frame after the
+## characters are placed and puts every prop in place from them, so a tray
+## riding the X-ray belt keeps pace with its passenger between ticks.
+##
+## A carried bag stands upright with its top edge in the hand, just past the
+## knuckles (the Fingers bone) of the hand SecurityLooks.hand_of() names,
+## its thin side to the leg and its body outward from the hand; its handle,
+## on the broad face, faces the leg. A bag that changes
+## home moves there over TRANSFER_TICKS of sim time (the clock's tick plus its
+## alpha), so it stops while the game is paused and keeps pace at 2x and 3x.
+## It reads the sim and the views and never writes either.
 
 const TRAY_MOUNTS := {
 	SecurityLooks.Tray.IN: [SecurityLanes.TRAY_TABLE, "Mount_TrayIn"],
@@ -16,13 +25,12 @@ const TRAY_MOUNTS := {
 const SCAN_MOUNT := [SecurityLanes.XRAY_BELT, "Mount_TrayScan"]
 ## A bag in a tray rests on the tray's floor, this far above its mount.
 const TRAY_FLOOR_M := 0.012
-## A carried bag hangs this far under the hand that holds it.
-const GRIP_DROP_M := 0.02
-## A carried bag's inner face stays at least this far from the body's centre
-## line (the Toon characters' hips and thighs reach about 0.2 m).
-const CARRY_CLEAR_M := 0.22
-const TRANSFER_MS := 300.0
-const HANDS: Array[String] = ["Hand.R", "Hand.L"]
+## The grip sits this far past the knuckles along the hand's own axis.
+const GRIP_ALONG_M := 0.03
+const TRANSFER_TICKS := 6.0
+## How high a moving bag rises midway, so it goes over a table edge.
+const TRANSFER_LIFT_M := 0.3
+const GRIP_BONES: Array[String] = ["Fingers.R", "Fingers.L"]
 
 ## Mount name -> its transform relative to its kit piece's root.
 static var _mounts := {}
@@ -30,9 +38,12 @@ static var _bag_size := Vector3.ZERO
 
 var sim: PassengerSim
 var views: PassengerViews
+## Sim time for bag moves; without one a move is instant.
+var clock: SimClock
 
 ## Passenger id -> {"tray": Node3D or null, "tray_at": SecurityLooks.Tray,
-## "bags": Array of {"node", "home", "from", "since"}, "homes": Array}.
+## "bags": Array of {"node", "home", "from", "since"}, "homes": Array,
+## "lane": Dictionary, "scale": float, "floor": Array of Transform3D}.
 var _held := {}
 var _free_trays: Array[Node3D] = []
 var _free_bags: Array[Node3D] = []
@@ -53,24 +64,22 @@ static func mount_local(piece: StringName, mount: String) -> Transform3D:
 	return _mounts[mount]
 
 
-## The carry-on bag's size at scale 1 (read once from the kit scene).
+## The carry-on bag's size at scale 1, handle included (read once).
 static func bag_size() -> Vector3:
 	if _bag_size == Vector3.ZERO:
 		var node := InteriorKit.instantiate("carry_on_bag")
 		var box := AABB()
+		var first := true
 		for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
-			box = (
-				box.merge(mi.transform * mi.get_aabb())
-				if box.size != Vector3.ZERO
-				else (mi.transform * mi.get_aabb())
-			)
+			var b := mi.transform * mi.get_aabb()
+			box = b if first else box.merge(b)
+			first = false
 		node.free()
 		_bag_size = box.size
 	return _bag_size
 
 
-## The world transform of a lane's tray mount (`at` IN or OUT, or the scan
-## mount for RIDE's middle).
+## The world transform of a lane's mount on `piece`.
 static func mount_world(
 	grid: BuildGrid, lane: Dictionary, piece: StringName, mount: String
 ) -> Transform3D:
@@ -94,6 +103,19 @@ static func ride(grid: BuildGrid, lane: Dictionary, body: Vector3) -> Transform3
 	return mid.interpolate_with(end, (t - 0.5) * 2.0)
 
 
+## A carried bag's transform for a grip at `grip` on a body drawn with yaw
+## `yaw` at `centre`: upright (its length vertical), its handle face toward
+## the body, its top edge at the grip, its body outward from the hand.
+static func carried(grip: Vector3, centre: Vector3, yaw: float, scale_by: float) -> Transform3D:
+	var size := bag_size()
+	var lateral := Basis(Vector3.UP, yaw) * Vector3.RIGHT
+	var out := lateral if (grip - centre).dot(lateral) >= 0.0 else -lateral
+	var inward := -out
+	var hang := Basis(inward.cross(Vector3.UP), inward, Vector3.UP).scaled(Vector3.ONE * scale_by)
+	var handle := hang * Vector3(0.0, size.y, 0.0)
+	return Transform3D(hang, grip - handle - Vector3.UP * (size.z * 0.5 * scale_by))
+
+
 ## Takes and returns props to match each drawn passenger's look on this tick.
 func sync() -> void:
 	var seen := {}
@@ -104,6 +126,10 @@ func sync() -> void:
 		var p := sim.get_passenger(id)
 		var homes := SecurityLooks.bag_homes(sim, p)
 		var tray_at := SecurityLooks.tray(sim, p)
+		var hands: Array[int] = []
+		for i in homes.size():
+			hands.append(SecurityLooks.hand_of(sim, p, i))
+		_arms(node, homes, hands)
 		if homes.is_empty() and tray_at == SecurityLooks.Tray.NONE:
 			continue
 		seen[id] = true
@@ -111,8 +137,13 @@ func sync() -> void:
 		_held[id] = held
 		held["tray_at"] = tray_at
 		held["homes"] = homes
+		held["hands"] = hands
 		held["lane"] = SecurityLooks.lane_of(sim, p)
 		held["scale"] = SecurityLooks.bag_scale(p)
+		var spots: Array[Transform3D] = []
+		for i in homes.size():
+			spots.append(SecurityLooks.floor_spot(sim, p, i, homes.size()))
+		held["floor"] = spots
 		if tray_at != SecurityLooks.Tray.NONE and held["tray"] == null:
 			held["tray"] = _take(_free_trays, "security_tray")
 		elif tray_at == SecurityLooks.Tray.NONE and held["tray"] != null:
@@ -149,9 +180,26 @@ func props_of(id: int) -> Dictionary:
 	return {"tray": held.get("tray"), "bags": bags}
 
 
+## How far bag `index` of passenger `id` is through its move to its home,
+## 0 to 1 (1 when it is not moving).
+func transfer_progress(id: int, index: int) -> float:
+	var bags: Array = _held.get(id, {}).get("bags", [])
+	if index >= bags.size() or not bags[index].has("since"):
+		return 1.0
+	return clampf((_now() - bags[index]["since"]) / TRANSFER_TICKS, 0.0, 1.0)
+
+
+## How many bag and tray nodes are drawn now.
+func drawn_count() -> int:
+	var count := 0
+	for held: Dictionary in _held.values():
+		count += (held["bags"] as Array).size() + int(held["tray"] != null)
+	return count
+
+
 ## Places every prop for this frame.
 func draw() -> void:
-	var now := float(Time.get_ticks_msec())
+	var now := _now()
 	for id in _held:
 		var held: Dictionary = _held[id]
 		var body := views.node_for(id)
@@ -168,10 +216,58 @@ func draw() -> void:
 			var node: Node3D = bag["node"]
 			if bag["home"] != homes[i]:
 				bag["from"] = want if bag["home"] == -1 else node.global_transform
-				bag["since"] = now
+				bag["since"] = now if bag["home"] != -1 else now - TRANSFER_TICKS
 				bag["home"] = homes[i]
-			var k := clampf((now - bag["since"]) / TRANSFER_MS, 0.0, 1.0)
-			node.global_transform = (bag["from"] as Transform3D).interpolate_with(want, k)
+			var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
+			var placed := (bag["from"] as Transform3D).interpolate_with(want, k)
+			# Lifted on the way, over a table edge rather than through it.
+			placed.origin.y += TRANSFER_LIFT_M * 4.0 * k * (1.0 - k)
+			node.global_transform = placed
+
+
+## Where hand `i` (right, then left) of a character grips a bag now.
+func grip_of(body: Node3D, i: int) -> Vector3:
+	var grips: Array = _rig(body)["grips"]
+	var grip: BoneAttachment3D = grips[i % grips.size()]
+	return grip.global_position + grip.global_basis.y.normalized() * GRIP_ALONG_M
+
+
+func _now() -> float:
+	return clock.tick + clock.alpha if clock != null else 0.0
+
+
+## Turns each arm's CarryArm on while its hand holds a bag.
+func _arms(body: Node3D, homes: Array[SecurityLooks.Home], hands: Array[int]) -> void:
+	var holding := [false, false]
+	for i in homes.size():
+		if homes[i] == SecurityLooks.Home.HAND:
+			holding[hands[i]] = true
+	var arms: Array = _rig(body)["arms"]
+	for side in arms.size():
+		(arms[side] as CarryArm).active = holding[side]
+
+
+## A character's grip attachments and CarryArm modifiers, one per hand, made
+## the first time and kept on the pooled character.
+func _rig(body: Node3D) -> Dictionary:
+	if body.has_meta(&"carry_rig"):
+		return body.get_meta(&"carry_rig")
+	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var rig := {"grips": [], "arms": []}
+	for side in GRIP_BONES.size():
+		var grip := BoneAttachment3D.new()
+		grip.name = "Grip%d" % side
+		grip.bone_name = GRIP_BONES[side]
+		skeleton.add_child(grip)
+		rig["grips"].append(grip)
+		var arm := CarryArm.new()
+		arm.name = "CarryArm%d" % side
+		arm.side = side
+		arm.active = false
+		skeleton.add_child(arm)
+		rig["arms"].append(arm)
+	body.set_meta(&"carry_rig", rig)
+	return rig
 
 
 func _tray_transform(held: Dictionary, body: Node3D) -> Transform3D:
@@ -189,7 +285,6 @@ func _bag_transform(
 	held: Dictionary, body: Node3D, tray_xf: Transform3D, i: int, home: int, count: int
 ) -> Transform3D:
 	var scale_by: float = held["scale"]
-	var size := bag_size() * scale_by
 	var yaw := Basis(Vector3.UP, body.rotation.y)
 	match home:
 		SecurityLooks.Home.TRAY:
@@ -197,38 +292,12 @@ func _bag_transform(
 			at.y += TRAY_FLOOR_M
 			return Transform3D(tray_xf.basis.scaled(Vector3.ONE * scale_by), tray_xf * at)
 		SecurityLooks.Home.FLOOR:
-			var turn := yaw if count > 1 else yaw * Basis(Vector3.UP, PI / 2.0)
-			var spot := body.global_position + yaw * SecurityLooks.on_floor(i, count)
-			return Transform3D(turn.scaled(Vector3.ONE * scale_by), spot)
-	# Carried on its side: its thickness points out from the body, its inner
-	# face hangs from the hand and its length runs along the walk, so the
-	# swinging hand does not take the bag through a thigh.
-	var grip := grip_of(body, i)
-	# The bag stays square to the walk: "out" is the body's side the hand is on,
-	# and the inner face sits at the hand, or at CARRY_CLEAR_M from the body's
-	# centre line when the swinging hand comes nearer than that.
-	var forward := yaw * Vector3.BACK
-	var lateral := yaw * Vector3.RIGHT
-	var beside := (grip - body.global_position).dot(lateral)
-	var out := lateral if beside >= 0.0 else -lateral
-	var hang := Basis(out.cross(forward), out, forward)
-	var push := out * maxf(CARRY_CLEAR_M - absf(beside), 0.0)
-	var drop := Vector3(0.0, GRIP_DROP_M + size.x * 0.5, 0.0)
-	return Transform3D(hang.scaled(Vector3.ONE * scale_by), grip - drop + push)
-
-
-## Where hand `i` (right, then left) of a character is now, from a bone
-## attachment added to its skeleton the first time.
-func grip_of(body: Node3D, i: int) -> Vector3:
-	var name := "Grip%d" % i
-	var grip := body.find_child(name, true, false) as BoneAttachment3D
-	if grip == null:
-		var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
-		grip = BoneAttachment3D.new()
-		grip.name = name
-		grip.bone_name = HANDS[i % HANDS.size()]
-		skeleton.add_child(grip)
-	return grip.global_position
+			var spot: Transform3D = held["floor"][i]
+			var placed := Transform3D(yaw, body.global_position) * spot
+			placed.origin.y = sim.grid.origin.y
+			return Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)
+	var hand: int = held["hands"][i]
+	return carried(grip_of(body, hand), body.global_position, body.rotation.y, scale_by)
 
 
 func _take(pool: Array[Node3D], piece: String) -> Node3D:

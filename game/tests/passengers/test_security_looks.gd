@@ -1,7 +1,7 @@
 class_name TestSecurityLooks
 extends GdUnitTestSuite
 ## How passengers at security look (Security 7/8, SecurityLooks and
-## SecurityProps through PassengerViews): every lane phase maps to its tray,
+## CarryOnProps through PassengerViews): every lane phase maps to its tray,
 ## bag homes, facing and step; the basic scanner carries the bags and repacks
 ## on the floor; drawn passengers keep apart through the lane, a held queue
 ## front included; and the drawn spots clear the lane parts at every facing
@@ -68,7 +68,7 @@ func _watch(w: SecurityTestWorld, ids: Array[int]) -> Dictionary:
 				entry["homes"][home] = true
 			entry["face"] = SecurityLooks.face(sim, p)
 			entry["step"] = SecurityLooks.target_offset(sim, p)
-			entry["bags_drawn"] = _views[-1].security_props().props_of(id)["bags"].size()
+			entry["bags_drawn"] = _views[-1].carry_on_props().props_of(id)["bags"].size()
 			seen[id][key] = entry
 		if ids.all(func(id: int) -> bool: return w.cleared.has(id)):
 			break
@@ -118,12 +118,109 @@ func test_an_alarm_steps_aside_repacks_on_the_floor_and_walks_back() -> void:
 	assert_that(repack["face"]).is_equal(-Vector2(lane["front"]))
 	var back: Dictionary = seen["%d/true" % SecurityRuntime.Phase.RETURN]
 	assert_dict(back["homes"]).is_equal({SecurityLooks.Home.HAND: true})
-	# The second pass keeps the searched bag in hand and has no tray.
+	# The second pass walks back to the unpack cell with the bag in hand, then
+	# puts it on a tray that rides the belt and waits at the pickup table, so
+	# no carried bag goes through the arch.
 	var again: Dictionary = seen["%d/true" % SecurityRuntime.Phase.ARCH]
-	assert_dict(again["tray"]).is_equal({SecurityLooks.Tray.NONE: true})
-	assert_dict(again["homes"]).is_equal({SecurityLooks.Home.HAND: true})
+	assert_dict(again["tray"]).is_equal(
+		{SecurityLooks.Tray.NONE: true, SecurityLooks.Tray.RIDE: true}
+	)
+	assert_dict(again["homes"]).is_equal(
+		{SecurityLooks.Home.HAND: true, SecurityLooks.Home.TRAY: true}
+	)
 	var pickup: Dictionary = seen["%d/true" % SecurityRuntime.Phase.PICKUP]
-	assert_dict(pickup["tray"]).is_equal({SecurityLooks.Tray.NONE: true})
+	assert_dict(pickup["tray"]).is_equal({SecurityLooks.Tray.OUT: true})
+	assert_dict(pickup["homes"]).contains_keys([SecurityLooks.Home.TRAY, SecurityLooks.Home.HAND])
+
+
+## Carry-on is drawn for the whole visit: the same bag node is in hand while
+## walking to security and queuing, through admission and after clearance,
+## and a seated passenger's bags lie on the floor. No bag, no prop.
+func test_bags_stay_with_the_passenger_for_the_whole_visit() -> void:
+	var w := _make(true)
+	var props := _views[-1].carry_on_props()
+	var ids := w.send_all([[1, false, false], [0, false, false]])
+	var id := ids[0]
+	var p := w.world.passenger(id)
+	var first_bag: Node3D = null
+	var stages := {}
+	for i in 3000:
+		w.world.step()
+		var bags: Array[Node3D] = props.props_of(id)["bags"]
+		if p.stage != Passenger.Stage.SECURITY:
+			stages[p.stage] = SecurityLooks.bag_homes(w.world.sim, p)
+		assert_int(bags.size()).is_equal(1)
+		if first_bag == null:
+			first_bag = bags[0]
+		assert_object(bags[0]).is_same(first_bag)
+		assert_int(props.props_of(ids[1])["bags"].size()).is_equal(0)
+		if w.cleared.has(id) and p.stage != Passenger.Stage.SECURITY:
+			break
+	print(
+		(
+			"homes outside security by stage: %s"
+			% [stages.keys().map(func(s: int) -> String: return Passenger.Stage.keys()[s])]
+		)
+	)
+	assert_bool(w.cleared.has(id)).is_true()
+	assert_bool(stages.has(Passenger.Stage.SECURITY_QUEUE)).is_true()
+	# The last stage seen is the one right after clearance.
+	assert_bool(stages.has(p.stage)).is_true()
+	for stage in stages:
+		assert_array(stages[stage]).is_equal([SecurityLooks.Home.HAND])
+	# Seated at a gate chair: on the floor at the sitter's feet.
+	p.stage = Passenger.Stage.SEATED
+	p.seat_object = 1
+	assert_array(SecurityLooks.bag_homes(w.world.sim, p)).is_equal([SecurityLooks.Home.FLOOR])
+	var spot := SecurityLooks.floor_spot(w.world.sim, p, 0, 1)
+	assert_float(spot.origin.z).is_equal_approx(SecurityLooks.SEAT_AHEAD_M, 0.0001)
+
+
+## A bag moving to its new home runs on sim time: it does not move while no
+## tick passes (a paused clock, however many frames are drawn), and it is
+## halfway after half of TRANSFER_TICKS ticks, at any game speed.
+func test_bag_moves_run_on_sim_time() -> void:
+	var w := _make(true)
+	var views := _views[-1]
+	var props := views.carry_on_props()
+	var ids := w.send_all([[1, false, false]])
+	var p := w.world.passenger(ids[0])
+	var sim := w.world.sim
+	for i in 3000:
+		w.world.step()
+		if SecurityLooks.bag_homes(sim, p) == [SecurityLooks.Home.TRAY]:
+			break
+		# A frame per tick, as in play, so the bag has a drawn home to move from.
+		views.draw()
+	assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.UNPACK)
+	views.draw()
+	var start := props.transfer_progress(ids[0], 0)
+	var placed := props.props_of(ids[0])["bags"][0].global_transform as Transform3D
+	w.world.clock.set_paused(true)
+	for frame in 30:
+		views.draw()
+	var still := props.transfer_progress(ids[0], 0)
+	var still_at := props.props_of(ids[0])["bags"][0].global_transform as Transform3D
+	w.world.clock.set_paused(false)
+	for tick in 3:
+		w.world.step()
+	views.draw()
+	var half := props.transfer_progress(ids[0], 0)
+	for tick in 3:
+		w.world.step()
+	views.draw()
+	var done := props.transfer_progress(ids[0], 0)
+	print(
+		(
+			"transfer progress start=%.3f paused=%.3f after3=%.3f after6=%.3f"
+			% [start, still, half, done]
+		)
+	)
+	assert_float(start).is_less(0.01)
+	assert_float(still).is_equal(start)
+	assert_bool(still_at.is_equal_approx(placed)).is_true()
+	assert_float(half).is_equal_approx(0.5, 0.01)
+	assert_float(done).is_equal(1.0)
 
 
 func test_the_basic_scanner_carries_the_bags_and_repacks_in_place() -> void:

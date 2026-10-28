@@ -4,7 +4,7 @@ extends RefCounted
 ## SecurityRuntime phase (Security 7/8). Pure: it reads the sim and the lane
 ## geometry (SecurityLanes) and returns where the passenger wants to stand,
 ## which way it faces, where its tray is and where each carry-on bag is.
-## PassengerViews and SecurityProps draw from it; nothing here keeps state.
+## PassengerViews and CarryOnProps draw from it; nothing here keeps state.
 ##
 ## At a lane: UNPACK steps toward the tray table and faces it; the bags move
 ## from the hands into a tray on the tray table, one by one as the unpack work
@@ -12,10 +12,12 @@ extends RefCounted
 ## passenger. PICKUP steps toward the pickup table, the tray waits there and
 ## the bags go back to the hands one by one. TO_BERTH, RETURN and LEAVE carry
 ## the bags. REPACK puts them on the floor in front of the passenger, who faces
-## the helper's spot. The second pass through the arch, after a repack, keeps
-## the bags in hand and has no tray. At the basic scanner: SCAN carries the
-## bags, REPACK puts them on the floor where the passenger stands, which holds
-## the scanner. Bags show only inside Stage.SECURITY.
+## the helper's spot. On the second pass, after a repack, the passenger puts
+## its bags on a tray again once it reaches the unpack cell, and they ride the
+## belt as on the first pass. At the basic scanner: SCAN carries the bags,
+## REPACK puts them on the floor where the passenger stands, which holds the
+## scanner. Outside security the bags are carried, and set down while seated
+## (bag_homes(), floor_spot()).
 ##
 ## Shared cells: the next queue front walks onto the unpack cell while the
 ## passenger before it still unpacks there, and a returner crosses the unpack
@@ -38,9 +40,13 @@ const CLEAR_M := 1.05
 ## Two bags are drawn at this scale so both fit one tray.
 const TWO_BAG_SCALE := 0.55
 ## A floor bag's centre, in front of the passenger.
-const FLOOR_AHEAD_M := 0.5
+const FLOOR_AHEAD_M := 0.56
 ## Two floor bags stand this far either side of the passenger's line.
 const FLOOR_APART_M := 0.16
+## A bag at a gate chair lies at the sitter's feet, this far ahead.
+const SEAT_AHEAD_M := 0.62
+## A bag at a cafe seat lies beside the chair, this far to the sitter's right.
+const CAFE_BESIDE_M := 0.45
 
 
 ## The lane geometry of the station `p` is admitted at or queues for, or {}
@@ -95,53 +101,55 @@ static func face(sim: PassengerSim, p: Passenger) -> Vector2:
 	return Vector2.ZERO
 
 
-## Where the tray of `p` is: on the tray table at UNPACK, riding the belt on
-## the first ARCH pass, on the pickup table at PICKUP after a first pass.
+## Where the tray of `p` is: on the tray table at UNPACK, riding the belt in
+## ARCH, on the pickup table at PICKUP. A returner's ARCH starts beside the
+## unpack cell, so its tray appears once it reaches the unpack cell.
 static func tray(sim: PassengerSim, p: Passenger) -> Tray:
 	if p.stage != Passenger.Stage.SECURITY or lane_of(sim, p).is_empty():
-		return Tray.NONE
-	if p.incident_resolved:
 		return Tray.NONE
 	match p.security_phase:
 		SecurityRuntime.Phase.UNPACK:
 			return Tray.IN
 		SecurityRuntime.Phase.ARCH:
-			return Tray.RIDE
+			return Tray.RIDE if _on_passage(p) else Tray.NONE
 		SecurityRuntime.Phase.PICKUP:
 			return Tray.OUT
 	return Tray.NONE
 
 
-## Where each of the carry-on bags of `p` is (Home), one entry per bag.
+## Where each of the carry-on bags of `p` is (Home), one entry per bag, for
+## the whole visit: in hand, on the floor while seated at a gate chair or a
+## cafe seat, and at security as the header says.
 static func bag_homes(sim: PassengerSim, p: Passenger) -> Array[Home]:
 	var out: Array[Home] = []
-	if p.stage != Passenger.Stage.SECURITY:
+	if p.stage == Passenger.Stage.SECURITY:
+		for i in p.carry_on:
+			out.append(_security_home(sim, p, i))
 		return out
-	var on_lane := not lane_of(sim, p).is_empty()
-	var phase := p.security_phase as SecurityRuntime.Phase
-	var done := SecurityRuntime.work_for(phase, p) - p.security_work
+	var home := Home.FLOOR if _seated(sim, p) else Home.HAND
 	for i in p.carry_on:
-		var home := Home.HAND
-		match phase:
-			SecurityRuntime.Phase.REPACK:
-				home = Home.FLOOR
-			SecurityRuntime.Phase.UNPACK:
-				var in_tray := (
-					SecurityRuntime.LANE_UNPACK_TICKS + i * SecurityRuntime.LANE_UNPACK_BAG_TICKS
-				)
-				home = Home.TRAY if done >= in_tray else Home.HAND
-			SecurityRuntime.Phase.ARCH:
-				home = Home.HAND if p.incident_resolved else Home.TRAY
-			SecurityRuntime.Phase.PICKUP:
-				var out_of_tray := (
-					SecurityRuntime.LANE_PICKUP_TICKS + i * SecurityRuntime.LANE_PICKUP_BAG_TICKS
-				)
-				var waiting := not p.incident_resolved and done < out_of_tray
-				home = Home.TRAY if waiting else Home.HAND
-		if not on_lane and home == Home.TRAY:
-			home = Home.HAND
 		out.append(home)
 	return out
+
+
+## Which hand holds bag `index` of `p` when it is carried: 0 the right, 1 the
+## left. Two bags take one hand each. One bag is in the right hand, except at
+## a lane (queuing or inside it) when the right hand is on the side of the
+## lane's parts and arch for the way the passenger walks: then the left, so
+## the bag passes the arch and tables on the open side.
+static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
+	if p.carry_on > 1:
+		return index
+	var lane := lane_of(sim, p)
+	if lane.is_empty() or p.path.size() < 2:
+		return 0
+	var at := clampi(p.path_index, 0, p.path.size() - 2)
+	var step := p.path[at + 1] - p.path[at]
+	if step == Vector2i.ZERO:
+		return 0
+	var ahead := world_dir(step)
+	var right := ahead.cross(Vector3.UP)
+	return 1 if right.dot(world_dir(lane["side"])) > 0.0 else 0
 
 
 ## The scale every bag of `p` is drawn at.
@@ -158,11 +166,60 @@ static func in_tray(index: int, count: int, bag_length: float) -> Vector3:
 	return Vector3(0.0, 0.0, half if index == 0 else -half)
 
 
-## Bag `index` of `count` on the floor, in the passenger's frame (+z ahead).
-static func on_floor(index: int, count: int) -> Vector3:
-	if count < 2:
-		return Vector3(0.0, 0.0, FLOOR_AHEAD_M)
-	return Vector3(FLOOR_APART_M if index == 0 else -FLOOR_APART_M, 0.0, FLOOR_AHEAD_M)
+## Where floor bag `index` of `count` of `p` lies, in the passenger's frame
+## (+z ahead, +x its left, on the floor): at the feet of a gate chair, beside
+## a cafe seat (the table is ahead), and ahead of a repacking passenger. One
+## bag lies across the passenger's line, two lie along it side by side.
+static func floor_spot(_sim: PassengerSim, p: Passenger, index: int, count: int) -> Transform3D:
+	var across := Basis(Vector3.UP, PI / 2.0) if count < 2 else Basis.IDENTITY
+	var side := 0.0 if count < 2 else (FLOOR_APART_M if index == 0 else -FLOOR_APART_M)
+	if p.stage in Passenger.CAFE_SEAT_STAGES:
+		# Beside the chair, lying along it.
+		var along := 0.0 if count < 2 else side
+		return Transform3D(Basis.IDENTITY, Vector3(-CAFE_BESIDE_M, 0.0, along))
+	if p.stage in PassengerSim.SEAT_STAGES:
+		return Transform3D(across, Vector3(side, 0.0, SEAT_AHEAD_M))
+	return Transform3D(across, Vector3(side, 0.0, FLOOR_AHEAD_M))
+
+
+## Whether `p` sits at a gate chair or a cafe seat (or is sitting down or
+## standing up there).
+static func _seated(sim: PassengerSim, p: Passenger) -> bool:
+	if p.stage in PassengerSim.SEAT_STAGES and p.seat_object != 0:
+		return true
+	return p.stage in Passenger.CAFE_SEAT_STAGES and sim.cafes.seat_facing(p) != Vector2i.ZERO
+
+
+static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
+	var on_lane := not lane_of(sim, p).is_empty()
+	var phase := p.security_phase as SecurityRuntime.Phase
+	var done := SecurityRuntime.work_for(phase, p) - p.security_work
+	var home := Home.HAND
+	match phase:
+		SecurityRuntime.Phase.REPACK:
+			home = Home.FLOOR
+		SecurityRuntime.Phase.UNPACK:
+			var in_tray := (
+				SecurityRuntime.LANE_UNPACK_TICKS + i * SecurityRuntime.LANE_UNPACK_BAG_TICKS
+			)
+			home = Home.TRAY if done >= in_tray else Home.HAND
+		SecurityRuntime.Phase.ARCH:
+			home = Home.TRAY if _on_passage(p) else Home.HAND
+		SecurityRuntime.Phase.PICKUP:
+			var out_of_tray := (
+				SecurityRuntime.LANE_PICKUP_TICKS + i * SecurityRuntime.LANE_PICKUP_BAG_TICKS
+			)
+			home = Home.TRAY if done < out_of_tray else Home.HAND
+	if not on_lane and home == Home.TRAY:
+		home = Home.HAND
+	return home
+
+
+## Whether a lane passenger in ARCH has reached the passage: always on the
+## first pass; on a returner's second pass once it stands on the unpack cell
+## (its path runs from the return route's end through the passage).
+static func _on_passage(p: Passenger) -> bool:
+	return not p.incident_resolved or p.path_index >= 1
 
 
 ## A queue front of a lane stops at the unpack cell's queue-side edge while
