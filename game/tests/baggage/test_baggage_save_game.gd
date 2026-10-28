@@ -103,3 +103,46 @@ func test_a_bag_that_does_not_fit_the_saved_grid_is_refused() -> void:
 	bag["from"] = [1, 0]
 	assert_bool(_save.load_world(data)).is_false()
 	assert_str(_save.message_text()).contains("baggage: bag")
+
+
+## The saved settlement holds a fee for `passenger` while the bag is on its way.
+func _await_bag(data: Dictionary, passenger: int) -> void:
+	data["settlement"]["bags_awaited"].append({"passenger": str(passenger), "fee": "50"})
+
+
+## The passenger of the first bag in `data` that is not settled (no outcome yet).
+func _unsettled_passenger(data: Dictionary) -> int:
+	for bag in data["baggage"]["bags"]:
+		if int(bag["outcome_tick"]) < 0:
+			return int(bag["passenger"])
+	return -1
+
+
+func test_a_fee_awaiting_the_bag_of_a_passenger_with_an_unsettled_bag_loads() -> void:
+	var data: Dictionary = _data.duplicate(true)
+	_await_bag(data, _unsettled_passenger(data))
+	assert_bool(_save.load_world(data)).is_true()
+
+
+func test_a_fee_awaiting_a_bag_that_is_not_there_is_refused() -> void:
+	var data: Dictionary = _data.duplicate(true)
+	_await_bag(data, 987_654)
+	assert_bool(_save.load_world(data)).is_false()
+	assert_str(_save.message_text()).contains("baggage: passenger 987654 awaits a bag")
+
+
+func test_a_fee_awaiting_a_bag_that_is_settled_is_refused() -> void:
+	var data: Dictionary = _data.duplicate(true)
+	var bag := _first_bag(data)
+	bag["state"] = Bag.State.LOADED
+	bag["outcome_tick"] = int(bag["created_tick"]) + 1
+	# The settled bag is counted in its flight's results and the totals.
+	var result: Dictionary = data["baggage"]["results"].get(
+		bag["flight"], {"loaded": 0, "missed": 0, "causes": {}}
+	)
+	result["loaded"] = int(result["loaded"]) + 1
+	data["baggage"]["results"][bag["flight"]] = result
+	data["baggage"]["loaded_total"] = int(data["baggage"]["loaded_total"]) + 1
+	_await_bag(data, int(bag["passenger"]))
+	assert_bool(_save.load_world(data)).is_false()
+	assert_str(_save.message_text()).contains("awaits a bag")

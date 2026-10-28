@@ -93,9 +93,10 @@ static func _door(shell: ShellDefinition, kind: int, label: String) -> ShellDoor
 	return null
 
 
-## The grid's object ids by kind, each list in id order.
+## The grid's object ids by kind, each list in id order. Every baggage belt
+## piece (BuildCatalog.is_belt) is listed under "belts".
 static func object_ids(grid: BuildGrid) -> Dictionary:
-	var out := {"desks": [], "scanners": [], "seats": [], "entrances": [], "exits": []}
+	var out := {"desks": [], "scanners": [], "seats": [], "entrances": [], "exits": [], "belts": []}
 	var kinds := {
 		&"checkin_desk": "desks",
 		&"security_scanner": "scanners",
@@ -106,5 +107,7 @@ static func object_ids(grid: BuildGrid) -> Dictionary:
 	var ids := grid.object_ids()
 	ids.sort()
 	for id in ids:
-		(out[kinds[StringName(grid.get_object(id)["def"])]] as Array).append(id)
+		var def := StringName(grid.get_object(id)["def"])
+		var kind: String = "belts" if BuildCatalog.is_belt(def) else kinds[def]
+		(out[kind] as Array).append(id)
 	return out
