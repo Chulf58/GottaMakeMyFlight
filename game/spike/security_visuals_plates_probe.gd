@@ -607,6 +607,7 @@ func _check(name: String, id: int, yaw: float) -> Dictionary:
 		)
 	)
 	var space := _cam.get_world_3d().direct_space_state
+	var blocker_checked := false
 	for tag in prop_tags:
 		var prop_box: AABB = bounds.get(tag, AABB())
 		var lo := Vector2(INF, INF)
@@ -620,16 +621,28 @@ func _check(name: String, id: int, yaw: float) -> Dictionary:
 		var targets := _facing_points(prop_tags[tag])
 		var lines := PlateSight.sight_lines(space, _cam.global_position, targets, tag)
 		var hits: int = (lines["on_subject"] as Array).size()
-		# A tray inside the X-ray tunnel is hidden by design.
+		# A tray inside the X-ray tunnel is hidden by design. Every other prop,
+		# a carried bag included, must be hit by a sight line from this heading;
+		# a heading where a bag is behind its carrier fails and the next is tried.
 		var tunnel := name == "lane_4_ride_scan"
-		# A bag in the far hand is behind its own carrier, who is checked
-		# above; it must be in frame, and a tray or a bag in a tray or on the
-		# floor must also be hit.
+		var prop_ok := _prop_shown(in_frame, size, hits, tunnel)
 		var homes := SecurityLooks.bag_homes(_sim, _sim.get_passenger(id))
 		var carried: bool = (
 			tag.begins_with("bag") and homes[int(tag.trim_prefix("bag"))] == SecurityLooks.Home.HAND
 		)
-		var prop_ok: bool = in_frame and size >= MIN_PROP_PX and (hits >= 1 or tunnel or carried)
+		if carried and prop_ok and not blocker_checked:
+			# Negative control: an opaque box between the camera and the bag
+			# must leave the same check with no hit, so a pass means seen.
+			blocker_checked = true
+			var blocked := await _blocked_hits(holder, prop_box, targets, tag)
+			print("CONTROL %s %s sight_hits_with_blocker=%d" % [name, tag, blocked])
+			if _prop_shown(in_frame, size, blocked, tunnel):
+				_invalid(
+					(
+						"%s: %s still passed with an opaque blocker in front (blind check)"
+						% [name, tag]
+					)
+				)
 		print(
 			(
 				(
@@ -655,6 +668,34 @@ func _check(name: String, id: int, yaw: float) -> Dictionary:
 		ok = ok and prop_ok
 	holder.free()
 	return {"ok": ok, "image": img}
+
+
+## Whether a prop is shown: in frame, big enough and hit by a sight line (a
+## tray in the X-ray tunnel is hidden by design).
+func _prop_shown(in_frame: bool, size: float, hits: int, tunnel: bool) -> bool:
+	return in_frame and size >= MIN_PROP_PX and (hits >= 1 or tunnel)
+
+
+## The sight lines to a prop's `targets` that land on it with a 1 m opaque box
+## standing between the camera and the prop (0 when the box hides it). The box
+## is removed again.
+func _blocked_hits(holder: Node3D, prop_box: AABB, targets: Array[Vector3], tag: String) -> int:
+	var centre := prop_box.get_center()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3.ONE
+	var shape_node := CollisionShape3D.new()
+	shape_node.shape = shape
+	var blocker := StaticBody3D.new()
+	blocker.set_meta("mesh", "control_blocker")
+	blocker.add_child(shape_node)
+	holder.add_child(blocker)
+	blocker.global_position = centre + (_cam.global_position - centre).normalized() * 0.9
+	await physics_frame
+	await physics_frame
+	var space := _cam.get_world_3d().direct_space_state
+	var lines := PlateSight.sight_lines(space, _cam.global_position, targets, tag)
+	blocker.free()
+	return (lines["on_subject"] as Array).size()
 
 
 ## Up to twelve midpoints of a prop's triangles that face the camera, nudged

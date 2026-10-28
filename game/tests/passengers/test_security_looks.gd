@@ -173,51 +173,86 @@ func test_bags_stay_with_the_passenger_for_the_whole_visit() -> void:
 	assert_float(spot.origin.z).is_equal_approx(SecurityLooks.SEAT_AHEAD_M, 0.0001)
 
 
-## A bag moving to its new home runs on sim time: it does not move while no
-## tick passes (a paused clock, however many frames are drawn), and it is
-## halfway after half of TRANSFER_TICKS ticks, at any game speed.
-func test_bag_moves_run_on_sim_time() -> void:
-	var w := _make(true)
-	var views := _views[-1]
-	var props := views.carry_on_props()
+## The tick a lane passenger's bag first has the tray as its home (the sim is
+## seeded, so a second world with the same seed reaches it on the same tick).
+func _tray_tick() -> int:
+	var w := SecurityTestWorld.make(true)
+	_worlds.append(w)
 	var ids := w.send_all([[1, false, false]])
 	var p := w.world.passenger(ids[0])
-	var sim := w.world.sim
 	for i in 3000:
 		w.world.step()
-		if SecurityLooks.bag_homes(sim, p) == [SecurityLooks.Home.TRAY]:
-			break
-		# A frame per tick, as in play, so the bag has a drawn home to move from.
-		views.draw()
-	assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.UNPACK)
-	views.draw()
-	var start := props.transfer_progress(ids[0], 0)
-	var placed := props.props_of(ids[0])["bags"][0].global_transform as Transform3D
-	w.world.clock.set_paused(true)
-	for frame in 30:
-		views.draw()
-	var still := props.transfer_progress(ids[0], 0)
-	var still_at := props.props_of(ids[0])["bags"][0].global_transform as Transform3D
-	w.world.clock.set_paused(false)
-	for tick in 3:
+		if SecurityLooks.bag_homes(w.world.sim, p) == [SecurityLooks.Home.TRAY]:
+			return w.world.clock.tick
+	return -1
+
+
+## A bag moving to its new home runs on sim time from the tick its home
+## changed: it does not move while no tick passes (a paused clock, however many
+## frames are drawn), and at 1x, 2x and 3x, with one draw per frame advance
+## (2 and 3 ticks per frame), its progress is the ticks since the change over
+## TRANSFER_TICKS, however the ticks fall among the frames. At 2x and 3x the
+## change is on the first tick of a frame, so the frame's later ticks count.
+func test_bag_moves_run_on_sim_time() -> void:
+	var changed := _tray_tick()
+	assert_int(changed).is_greater(SecurityTestWorld.SPACING)
+	for speed in SimClock.SPEEDS:
+		var w := _make(true)
+		var views := _views[-1]
+		var props := views.carry_on_props()
+		var clock := w.world.clock
+		var ids := w.send_all([[1, false, false]])
+		var p := w.world.passenger(ids[0])
+		var say := "at %dx" % speed
+		# A frame per tick, as at 1x, up to the tick before the change, so the
+		# bag has a drawn home to move from.
+		while clock.tick < changed - 1:
+			w.world.step()
+			views.draw()
+		assert_int(clock.tick).override_failure_message(say).is_equal(changed - 1)
+		assert_array(SecurityLooks.bag_homes(w.world.sim, p)).is_equal([SecurityLooks.Home.HAND])
+		# One frame that runs `speed` ticks, the first of them the change.
+		clock.set_speed(speed)
 		w.world.step()
-	views.draw()
-	var half := props.transfer_progress(ids[0], 0)
-	for tick in 3:
-		w.world.step()
-	views.draw()
-	var done := props.transfer_progress(ids[0], 0)
-	print(
-		(
-			"transfer progress start=%.3f paused=%.3f after3=%.3f after6=%.3f"
-			% [start, still, half, done]
+		views.draw()
+		assert_int(clock.tick).override_failure_message(say).is_equal(changed - 1 + speed)
+		assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.UNPACK)
+		var start := props.transfer_progress(ids[0], 0)
+		var placed := props.props_of(ids[0])["bags"][0].global_transform as Transform3D
+		clock.set_paused(true)
+		for frame in 30:
+			views.draw()
+		var still := props.transfer_progress(ids[0], 0)
+		var still_at := props.props_of(ids[0])["bags"][0].global_transform as Transform3D
+		clock.set_paused(false)
+		assert_float(still).override_failure_message(say).is_equal(start)
+		assert_bool(still_at.is_equal_approx(placed)).override_failure_message(say).is_true()
+		var trace: Array[String] = []
+		var frames := 0
+		var progress := start
+		while progress < 1.0 and frames < 20:
+			var want := clampf(
+				(clock.tick + clock.alpha - changed) / CarryOnProps.TRANSFER_TICKS, 0.0, 1.0
+			)
+			progress = props.transfer_progress(ids[0], 0)
+			trace.append("tick=%d progress=%.3f want=%.3f" % [clock.tick, progress, want])
+			(
+				assert_float(progress)
+				. override_failure_message(
+					"%s: progress off the change tick %d: %s" % [say, changed, trace]
+				)
+				. is_equal_approx(want, 0.001)
+			)
+			w.world.step()
+			views.draw()
+			frames += 1
+		print("bag move %s, change on tick %d: %s" % [say, changed, trace])
+		assert_float(progress).override_failure_message(say).is_equal(1.0)
+		# It is on the tick of the change plus TRANSFER_TICKS that it is done.
+		assert_bool(clock.tick >= changed + CarryOnProps.TRANSFER_TICKS).is_true()
+		assert_float(start).override_failure_message(say).is_equal_approx(
+			(speed - 1) / CarryOnProps.TRANSFER_TICKS, 0.001
 		)
-	)
-	assert_float(start).is_less(0.01)
-	assert_float(still).is_equal(start)
-	assert_bool(still_at.is_equal_approx(placed)).is_true()
-	assert_float(half).is_equal_approx(0.5, 0.01)
-	assert_float(done).is_equal(1.0)
 
 
 func test_the_basic_scanner_carries_the_bags_and_repacks_in_place() -> void:

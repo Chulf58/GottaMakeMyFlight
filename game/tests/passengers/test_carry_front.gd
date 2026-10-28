@@ -127,23 +127,44 @@ func test_the_walk_back_switches_to_the_front_and_back_on_sim_time() -> void:
 	assert_float(halfway[1]).is_equal_approx(0.25, 0.01)
 
 
-## After a load (PassengerViews.snap()) a passenger in the corridor is drawn
-## in the front carry at once, with no turn to play while paused.
+## After a load (PassengerViews.snap()) a passenger on the way to the front
+## carry is drawn in it at once, with no turn to play while paused. Control:
+## two ticks after the front carry first becomes true the drawn blend is part
+## way (strictly between 0 and 1), so the snap is what takes it to 1.
 func test_a_load_in_the_corridor_starts_in_the_front_carry() -> void:
 	var w := _make()
 	var views := _views[-1]
+	var props := views.carry_on_props()
 	var ids := w.send_all([[1, false, true]])
 	var p := w.world.passenger(ids[0])
+	var sim := w.world.sim
+	var front_at := -1
 	for i in 3000:
 		w.world.step()
 		views.draw()
-		if p.security_phase == SecurityRuntime.Phase.RETURN and p.at == CORRIDOR:
+		if (
+			p.stage == Passenger.Stage.SECURITY
+			and SecurityLooks.bag_homes(sim, p) == [SecurityLooks.Home.HAND]
+			and SecurityLooks.carry_front(sim, p)
+		):
+			front_at = sim.tick
 			break
-	assert_bool(p.at == CORRIDOR).is_true()
-	# Control: before the load the record is mid-turn or already turned.
-	var before := views.carry_on_props().front_weight_of(ids[0])
+	assert_int(front_at).is_greater(0)
+	assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.RETURN)
+	for tick in 2:
+		w.world.step()
+		views.draw()
+	assert_bool(SecurityLooks.carry_front(sim, p)).is_true()
+	var before := props.front_weight_of(ids[0])
 	w.world.clock.set_paused(true)
 	views.snap()
-	var weight := views.carry_on_props().front_weight_of(ids[0])
-	print("front weight before the load %.2f, right after it %.2f" % [before, weight])
+	var weight := props.front_weight_of(ids[0])
+	print(
+		(
+			"front carry from tick %d: weight before the load %.3f, right after it %.3f"
+			% [front_at, before, weight]
+		)
+	)
+	assert_float(before).is_greater(0.0)
+	assert_float(before).is_less(1.0)
 	assert_float(weight).is_equal(1.0)

@@ -56,7 +56,8 @@ var views: PassengerViews
 var clock: SimClock
 
 ## Passenger id -> {"tray": Node3D or null, "tray_at": SecurityLooks.Tray,
-## "bags": Array of {"node", "home", "from", "since"}, "homes": Array,
+## "bags": Array of {"node", "place", "changed", "home", "from", "since"}
+## (place and changed are set by sync(), the rest by draw()), "homes": Array,
 ## "lane": Dictionary, "scale": float, "floor": Array of Transform3D}.
 var _held := {}
 var _free_trays: Array[Node3D] = []
@@ -175,9 +176,10 @@ func sync() -> void:
 			# carry it needs, with no turn to play.
 			held["front"] = front
 		elif front != held["front"]:
-			# Turning between side and front carry starts from where it is now.
-			held["front_from"] = _front_weight(held, _now())
-			held["front_since"] = _now()
+			# Turning between side and front carry starts from where it is now,
+			# at this tick: a frame that runs several ticks stamps each one.
+			held["front_from"] = _front_weight(held, _tick())
+			held["front_since"] = _tick()
 			held["front"] = front
 		held["lane"] = SecurityLooks.lane_of(sim, p)
 		held["scale"] = SecurityLooks.bag_scale(p)
@@ -195,6 +197,13 @@ func sync() -> void:
 			bags.append({"node": _take(_free_bags, "carry_on_bag"), "home": -1})
 		while bags.size() > homes.size():
 			_give(_free_bags, bags.pop_back()["node"])
+		# A change of home or hand is stamped with this tick; draw() starts the
+		# move from where the bag was drawn last.
+		for i in bags.size():
+			var place: int = homes[i] * 2 + hands[i]
+			if bags[i].get("place", -2) != place:
+				bags[i]["place"] = place
+				bags[i]["changed"] = _tick()
 	for id in _held.keys():
 		if not seen.has(id):
 			release(id)
@@ -273,14 +282,14 @@ func _place_bags(held: Dictionary, body: Node3D, tray_xf: Transform3D, now: floa
 		var want := _bag_transform(held, body, tray_xf, i, homes[i], bags.size())
 		var node: Node3D = bag["node"]
 		# A change of hand moves the bag across like a change of home.
-		var place: int = homes[i] * 2 + hands[i]
-		if bag["home"] != place:
+		if bag["home"] != bag["place"]:
 			# The move starts where the bag is, held in the passenger's frame,
-			# so a bag picked up while walking stays ahead of the legs.
+			# so a bag picked up while walking stays ahead of the legs. Its clock
+			# is the tick sync() saw the change on, not the frame it is drawn in.
 			var start := want if bag["home"] == -1 else node.global_transform
 			bag["from"] = body.global_transform.affine_inverse() * start
-			bag["since"] = now if bag["home"] != -1 else now - TRANSFER_TICKS
-			bag["home"] = place
+			bag["since"] = bag["changed"] - (TRANSFER_TICKS if bag["home"] == -1 else 0.0)
+			bag["home"] = bag["place"]
 		var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
 		var start_now := body.global_transform * (bag["from"] as Transform3D)
 		var placed := start_now.interpolate_with(want, k)
@@ -349,6 +358,11 @@ func grip_of(body: Node3D, i: int) -> Vector3:
 
 func _now() -> float:
 	return clock.tick + clock.alpha if clock != null else 0.0
+
+
+## The sim tick a change seen in sync() happened on.
+func _tick() -> float:
+	return float(clock.tick) if clock != null else 0.0
 
 
 ## Turns each arm's CarryArm on while its hand holds a bag.
