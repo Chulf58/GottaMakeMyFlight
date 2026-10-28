@@ -71,12 +71,25 @@ func test_a_new_game_with_the_starting_budget_gets_no_grant() -> void:
 
 
 ## Control: an empty shell the wallet cannot build is stuck and gets the
-## shortfall once, the message naming the pieces to build.
+## shortfall once, the message naming the pieces to build. The money is just
+## enough: buying the repair edit by edit through paid build transactions
+## goes through, spends the wallet to exactly 0 and leaves a working path.
 func test_an_empty_shell_with_no_money_gets_the_shortfall() -> void:
-	assert_bool(_world.sim.wallet.credit(100, Wallet.Category.OPENING)).is_true()
+	var wallet := _world.sim.wallet
+	assert_bool(wallet.credit(100, Wallet.Category.OPENING)).is_true()
 	_world.run_to(3)
-	prints("granted", _granted, "price", _price)
+	prints("granted", _granted, "balance", wallet.balance)
 	assert_int(_granted.size()).is_equal(1)
-	assert_int(_granted[0][0]).is_equal(_price - 100)
-	assert_int(_world.sim.wallet.balance).is_equal(_price)
+	assert_int(_granted[0][0]).is_greater(0)
 	assert_str(_granted[0][1]).contains("entrance, check-in desk, security scanner, exit")
+	var grid := _world.grid
+	var edits := _grant.repair_plan().edits.duplicate()
+	for edit: BuildEdit in edits:
+		var result := BuildTransaction.commit_plan(grid, [edit] as Array[BuildEdit], wallet)
+		var why := "buying %s at %s refused: %d" % [edit.kind, edit.cell, result.reason]
+		assert_bool(result.ok).override_failure_message(why).is_true()
+	var layout := TerminalLayout.new()
+	layout.rebuild(grid)
+	prints("left", wallet.balance)
+	assert_int(wallet.balance).is_equal(0)
+	assert_bool(RepairPlan.has_working_path(grid, layout)).is_true()
