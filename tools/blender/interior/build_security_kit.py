@@ -12,8 +12,11 @@ facing 0 the arch is at (0, 0), the tray table at (1, 1), the X-ray belt at (1, 
 the pickup table at (1, -1), and passengers and bags both move toward Godot -Z. A part
 stores only its facing, never the lane's mirror, so every piece is symmetric across X
 and serves a lane with its parts on either side of the arch. The pieces:
-- security_arch (1x1): the basic scanner's walk-through arch (0.70 m clear passage)
-  without its queue rails.
+- security_arch (1x1): a walk-through arch with a 0.91 m clear passage (ARCH_CLEAR_HALF),
+  wider than the basic scanner's 0.70 m: the 2 m Toon passengers swing their hands out
+  to 0.43 m from the centre line when they walk, so the opening keeps 2.5 cm either
+  side (Security 7/8). Thin posts reach 0.495 m, past the usual inset but inside the
+  cell, so its +x and -x sides have their own limit (SIDE_LIMITS).
 - xray_belt (1x1): a belt cabinet with a tunnel over the middle. The belt runs to the
   front and back cell edges (ports, as the baggage belts) so tray table, X-ray and
   pickup table read as one conveyor; the cabinet keeps the 0.08 m inset. Short curtain
@@ -61,6 +64,13 @@ BLEND_OUT = os.path.join(kit.REPO, "tools", "blender", "out", "security-lane", "
 INSET = 0.08
 EDGE = 0.5
 HALF_IN = EDGE - INSET  # 0.42
+# The arch's clear half-width, its posts' inner panel face and outer face (see the
+# module docstring).
+ARCH_CLEAR_HALF = 0.455
+ARCH_PANEL_IN = 0.465
+ARCH_OUTER = 0.495
+# Per piece, sides whose closed-side limit is not HALF_IN.
+SIDE_LIMITS = {"security_arch": {"+x": ARCH_OUTER, "-x": ARCH_OUTER}}
 BELT_TOP = 0.74
 # The tray (Godot x by z by y): 0.44 x 0.60 x 0.08, walls 0.015, base 0.012.
 TRAY = (0.44, 0.60, 0.08)
@@ -124,19 +134,20 @@ def tray(prefix, x, y, z, parent, c, pal="tray_grey", depth=TRAY[1]):
 
 
 def build_security_arch(root, c):
-    # The basic scanner's arch (build_interior_kit.build_security_scanner): panels x
-    # 0.36..0.42 with 1 cm inner strips, a 0.70 m clear passage, cut to one cell.
+    # Panels x ARCH_PANEL_IN..ARCH_OUTER with 1 cm inner strips; the strips' inner face
+    # is the clear passage's edge (ARCH_CLEAR_HALF), cut to one cell.
     for side, s in (("L", -1.0), ("R", 1.0)):
-        x0, x1 = sorted((s * 0.36, s * 0.42))
-        tbox("Arch_Panel_" + side, (x0, -0.30, 0), (x1, 0.30, 2.2), "metal", root, c, bevel=0.02)
-        xs = sorted((s * 0.36, s * 0.35))
+        x0, x1 = sorted((s * ARCH_PANEL_IN, s * ARCH_OUTER))
+        tbox("Arch_Panel_" + side, (x0, -0.30, 0), (x1, 0.30, 2.2), "metal", root, c, bevel=0.01)
+        xs = sorted((s * ARCH_PANEL_IN, s * ARCH_CLEAR_HALF))
         tbox("Arch_Strip_" + side, (xs[0], -0.22, 0.30), (xs[1], 0.22, 2.0), "blue", root, c)
-        # The feet stop at the strips' inner face, keeping the passage 0.70 m clear.
-        f0, f1 = sorted((s * 0.35, s * 0.42))
+        # The feet stop at the strips' inner face, keeping the passage clear.
+        f0, f1 = sorted((s * ARCH_CLEAR_HALF, s * ARCH_OUTER))
         tbox("Arch_Foot_" + side, (f0, -0.40, 0), (f1, 0.40, 0.04), "frame", root, c)
-    tbox("Arch_Beam", (-0.42, -0.32, 2.2), (0.42, 0.32, 2.42), "frame", root, c, bevel=0.02)
+    tbox("Arch_Beam", (-ARCH_OUTER, -0.32, 2.2), (ARCH_OUTER, 0.32, 2.42), "frame", root, c, bevel=0.02)
     tbox("Arch_Lamp", (-0.08, -0.34, 2.27), (0.08, -0.32, 2.35), "lamp_green", root, c)
-    tbox("Arch_Mat", (-0.34, -0.42, 0), (0.34, 0.42, 0.012), "dark", root, c)
+    mat = ARCH_CLEAR_HALF - 0.01
+    tbox("Arch_Mat", (-mat, -0.42, 0), (mat, 0.42, 0.012), "dark", root, c)
 
 
 def build_xray_belt(root, c):
@@ -243,7 +254,7 @@ def build_carry_on_bag(root, c):
 
 # piece -> (builder, footprint, expected Blender bounds lo/hi).
 PIECES = {
-    "security_arch": (build_security_arch, (1, 1), (-0.42, -0.42, 0.0), (0.42, 0.42, 2.42)),
+    "security_arch": (build_security_arch, (1, 1), (-ARCH_OUTER, -0.42, 0.0), (ARCH_OUTER, 0.42, 2.42)),
     "xray_belt": (build_xray_belt, (1, 1), (-0.405, -EDGE, 0.0), (0.405, EDGE, 1.458)),
     "tray_table": (build_tray_table, (1, 1), (-0.38, -0.42, 0.0), (0.38, EDGE, BELT_TOP)),
     "pickup_table": (build_pickup_table, (1, 1), (-0.36, -EDGE, 0.0), (0.36, 0.42, 0.86)),
@@ -341,7 +352,7 @@ def check_sides(piece, objs):
     parts = []
     for side in ("+x", "-x", "+z", "-z"):
         is_port = side in SECURITY[piece]["ports"]
-        limit = EDGE if is_port else HALF_IN
+        limit = EDGE if is_port else SIDE_LIMITS.get(piece, {}).get(side, HALF_IN)
         parts.append("%s=%.4f/%s%.3f" % (side, ext[side], "port" if is_port else "closed", limit))
         if ext[side] > limit + 1e-3:
             kit.fail("%s: written mesh reaches %.4f on %s, limit %.3f" % (piece, ext[side], side, limit))
