@@ -58,13 +58,15 @@ func before() -> void:
 	_run["saved"] = SaveTestKit.save_game(_source).save_to_file(_path)
 	_loaded = SaveTestKit.boot(self, OTHER_SEED)
 	_run["loaded"] = SaveTestKit.save_game(_loaded).load_from_file(_path)
-	DirAccess.remove_absolute(_path)
 	_play_on()
 
 
 func after() -> void:
 	for main in [_control, _source, _loaded]:
-		main.free()
+		if main != null:
+			main.free()
+	DirAccess.remove_absolute(_path)
+	DirAccess.remove_absolute(_path + ".tmp")
 
 
 func _play_on() -> void:
