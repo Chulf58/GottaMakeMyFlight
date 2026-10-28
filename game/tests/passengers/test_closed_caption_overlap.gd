@@ -18,6 +18,12 @@ const CAMERA_SCENE := "res://camera/tycoon_camera.tscn"
 ## A layout of the 300 captions below must finish well inside this many
 ## milliseconds; the real figure is a small fraction of it.
 const BIG_LAYOUT_BUDGET_MSEC := 250
+## The column test: where on the screen it stands, how far apart the signs are
+## and how far from the camera they are put (any depth in front of it will do).
+const COLUMN_X := 960.0
+const COLUMN_STEP := 40.0
+const COLUMN_DEPTH := 60.0
+const VIEW := Rect2(0.0, 0.0, 1920.0, 1080.0)
 
 var _world: PassengerTestWorld
 var _port: SubViewport
@@ -96,11 +102,63 @@ func _point_of(station: int) -> Vector2:
 	return _camera().unproject_position(_markers.closed_sign_for(station).global_position)
 
 
-## The rectangle a showing caption covers, with any lift it was given.
+## The rectangle a showing caption covers, with any lift or side shift it was given.
 func _rect_of(station: int) -> Rect2:
 	var caption := _caption_of(station)
 	var lift := caption.offset.y - MissMarkers.SIGN_PX - MissMarkers.CAPTION_GAP_PX
-	return MissMarkers.caption_rect(_point_of(station), caption.text, lift)
+	return MissMarkers.caption_rect(_point_of(station), caption.text, lift, caption.offset.x)
+
+
+## The screen rectangle of a station's icon: a SIGN_PX square standing on its point.
+func _icon_rect_of(station: int) -> Rect2:
+	var point := _point_of(station)
+	var side := MissMarkers.SIGN_PX
+	return Rect2(point.x - side / 2.0, point.y - side, side, side)
+
+
+## Moves every closed sign to one column on the screen, `top` pixels down for the
+## first and COLUMN_STEP lower for each next, and gives each a staff-spot caption.
+## Returns the stations top first. Needs a camera (the rig from _frame_closed_signs).
+func _stack_signs_in_a_column(top: float) -> Array[int]:
+	var stations: Array[int] = []
+	stations.assign(MissSignals.closed_stations(_world.sim))
+	for i in stations.size():
+		_place_sign(stations[i], Vector2(COLUMN_X, top + COLUMN_STEP * i))
+		_caption_of(stations[i]).text = MissMarkers.UNREACHABLE_CAPTION
+	_nudge_camera()
+	return stations
+
+
+## Puts a closed sign at a point of the screen (the next draw lays it out there).
+func _place_sign(station: int, at: Vector2) -> void:
+	_markers.closed_sign_for(station).global_position = _camera().project_position(at, COLUMN_DEPTH)
+
+
+## Every closed sign in a short row dead ahead of a camera-less port, so their
+## plain "Closed" captions overlap as soon as there is a camera to see them from.
+func _bunch_signs_ahead() -> void:
+	var i := 0
+	for station: int in MissSignals.closed_stations(_world.sim):
+		_markers.closed_sign_for(station).global_position = Vector3(0.01 * i, 0.0, -20.0)
+		i += 1
+
+
+## A camera at the origin looking down -Z with the fallback field of view: the
+## same pose and field of view the layout assumes when there is no camera.
+func _add_plain_camera() -> Camera3D:
+	var camera := Camera3D.new()
+	camera.fov = MissMarkers.FALLBACK_FOV
+	_port.add_child(camera)
+	camera.current = true
+	return camera
+
+
+func _hidden_captions() -> int:
+	var hidden := 0
+	for station: int in MissSignals.closed_stations(_world.sim):
+		if not _caption_of(station).visible:
+			hidden += 1
+	return hidden
 
 
 func _shown_rects() -> Array[Rect2]:
@@ -195,9 +253,42 @@ func test_a_staff_spot_caption_beats_a_wide_queue_full_one_that_overlaps_it() ->
 		_set_pair(pair, texts[0], texts[1])
 		# Control: the pair does overlap.
 		assert_bool(_pair_overlaps(pair)).is_true()
-		for station in pair:
-			var staff_spot := MissMarkers.is_staff_spot_caption(_caption_of(station).text)
-			assert_bool(_caption_of(station).visible).is_equal(staff_spot)
+		var left: int = pair[0] if _point_of(pair[0]).x <= _point_of(pair[1]).x else pair[1]
+		var right: int = pair[1] if left == pair[0] else pair[0]
+		var staff := left if order == 0 else right
+		var queue := right if order == 0 else left
+		print("staff %s, queue visible %s" % [_rect_of(staff), _caption_of(queue).visible])
+		# The staff-spot caption always shows (it may move off an icon); the
+		# queue-full one shows only where it clears it.
+		assert_bool(_caption_of(staff).visible).is_true()
+		if _caption_of(queue).visible:
+			_assert_clear_by_the_margin([_rect_of(staff), _rect_of(queue)])
+
+
+## Two signs side by side in open space, every other sign parked along the
+## bottom: the staff-spot caption keeps its own place and the wide queue-full
+## caption that overlaps it is the one that hides.
+func test_in_open_space_the_staff_spot_caption_stays_put_and_the_wide_one_hides() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var stations: Array[int] = []
+	stations.assign(MissSignals.closed_stations(_world.sim))
+	for i in stations.size():
+		_place_sign(stations[i], Vector2(100.0 + 200.0 * i, 950.0))
+	var wide := "Queue full · +30000 waiting, lane at capacity"
+	var home := Vector2(0.0, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX)
+	for order in [0, 1]:
+		var staff: int = stations[order]
+		var queue: int = stations[1 - order]
+		_place_sign(stations[0], Vector2(900.0, 500.0))
+		_place_sign(stations[1], Vector2(940.0, 500.0))
+		_caption_of(staff).text = MissMarkers.UNREACHABLE_CAPTION
+		_caption_of(queue).text = wide
+		_nudge_camera()
+		# Control: left alone the pair overlaps, and the queue caption is the wider.
+		assert_bool(_pair_overlaps([staff, queue])).is_true()
+		assert_bool(_caption_of(staff).visible).is_true()
+		assert_vector(_caption_of(staff).offset).is_equal(home)
+		assert_bool(_caption_of(queue).visible).is_false()
 
 
 func test_two_staff_spot_captions_that_overlap_both_show_one_lifted_clear() -> void:
@@ -208,14 +299,50 @@ func test_two_staff_spot_captions_that_overlap_both_show_one_lifted_clear() -> v
 	assert_bool(_pair_overlaps(pair)).is_true()
 	for station in pair:
 		assert_bool(_caption_of(station).visible).is_true()
-	var lifts: Array[float] = []
+	var home := Vector2(0.0, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX)
+	var moved := 0
 	for station in pair:
-		lifts.append(
-			_caption_of(station).offset.y - MissMarkers.SIGN_PX - MissMarkers.CAPTION_GAP_PX
-		)
-	assert_float(maxf(lifts[0], lifts[1])).is_greater(0.0)
-	assert_float(minf(lifts[0], lifts[1])).is_equal(0.0)
+		print("pair caption %s offset %s" % [_rect_of(station), _caption_of(station).offset])
+		if not _caption_of(station).offset.is_equal_approx(home):
+			moved += 1
+	# At least one moved (the second to place cannot keep the first one's spot).
+	assert_int(moved).is_greater(0)
 	_assert_clear_by_the_margin([_rect_of(pair[0]), _rect_of(pair[1])])
+	for station in pair:
+		assert_bool(VIEW.encloses(_rect_of(station))).is_true()
+		for other: int in MissSignals.closed_stations(_world.sim):
+			assert_bool(_rect_of(station).intersects(_icon_rect_of(other))).is_false()
+
+
+## A column of staff-spot captions with the first icon near the top of the
+## screen: lifting each one upward alone would carry it out of the view, so the
+## layout must find room elsewhere, in the view and off every icon.
+func test_a_column_of_staff_spot_captions_near_the_top_stays_in_view_and_off_icons() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var stations := _stack_signs_in_a_column(130.0)
+	# Control: the column has several captions, and unlifted they pile up.
+	assert_int(stations.size()).is_greater(3)
+	var piled := 0
+	for i in range(1, stations.size()):
+		var plain := MissMarkers.caption_rect(
+			_point_of(stations[i]), MissMarkers.UNREACHABLE_CAPTION
+		)
+		var above := MissMarkers.caption_rect(
+			_point_of(stations[i - 1]), MissMarkers.UNREACHABLE_CAPTION
+		)
+		if plain.intersects(above):
+			piled += 1
+	assert_int(piled).is_greater(0)
+	for station in stations:
+		var rect := _rect_of(station)
+		print("column station %d caption %s" % [station, rect])
+		# Never hidden, and wholly inside the view.
+		assert_bool(_caption_of(station).visible).is_true()
+		assert_bool(VIEW.encloses(rect)).is_true()
+		# Off every icon, its own included.
+		for other in stations:
+			assert_bool(rect.intersects(_icon_rect_of(other))).is_false()
+	_assert_clear_by_the_margin(_shown_rects())
 
 
 func test_of_two_overlapping_plain_closed_captions_the_leftmost_stays() -> void:
@@ -268,6 +395,49 @@ func test_a_draw_where_nothing_changed_skips_the_layout() -> void:
 	_markers.sync()
 	_markers.draw()
 	assert_int(_markers.declutter_runs).is_equal(runs + 2)
+
+
+## Without a camera nothing is hidden. A camera that appears has to lay the
+## captions out again even when its pose and field of view equal the defaults
+## the layout assumed, and one that goes away has to bring them all back.
+func test_a_camera_added_after_a_cameraless_draw_reruns_the_layout() -> void:
+	_bunch_signs_ahead()
+	_markers.draw()
+	var runs := _markers.declutter_runs
+	assert_int(_hidden_captions()).is_equal(0)
+	var camera := _add_plain_camera()
+	assert_object(_camera()).is_same(camera)
+	_markers.draw()
+	assert_int(_markers.declutter_runs).is_equal(runs + 1)
+	# Control: the bunched captions really crowd, so the camera hides some.
+	assert_int(_hidden_captions()).is_greater(0)
+
+
+func test_removing_the_camera_brings_every_caption_back() -> void:
+	_bunch_signs_ahead()
+	var camera := _add_plain_camera()
+	_markers.draw()
+	var runs := _markers.declutter_runs
+	assert_int(_hidden_captions()).is_greater(0)
+	_port.remove_child(camera)
+	camera.free()
+	assert_object(_camera()).is_null()
+	_markers.draw()
+	assert_int(_markers.declutter_runs).is_equal(runs + 1)
+	assert_int(_hidden_captions()).is_equal(0)
+
+
+func test_swapping_in_another_identical_camera_reruns_the_layout() -> void:
+	_bunch_signs_ahead()
+	var first := _add_plain_camera()
+	_markers.draw()
+	var runs := _markers.declutter_runs
+	_port.remove_child(first)
+	first.free()
+	var second := _add_plain_camera()
+	assert_object(_camera()).is_same(second)
+	_markers.draw()
+	assert_int(_markers.declutter_runs).is_equal(runs + 1)
 
 
 ## 300 desks in a field: one layout of all their captions, then none while the
