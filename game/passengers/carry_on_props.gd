@@ -103,13 +103,16 @@ const TRAIL_SIDE_M := 0.3
 ## line, and how far behind it at least (TRAIL_M * 0.6).
 const TRAIL_SIDE_MIN_M := 0.28
 const TRAIL_SIDE_MAX_M := 0.6
-## When the axle's place behind the body jumps (the body turned sharply, or
-## walked back past its roller), the drawn axle swings there round the
-## pulling hand's side over SWING_TICKS of sim time, at least
-## SWING_RADIUS_M from the body's centre. A jump is a move of more than
-## SWING_JUMP_M between two draws.
-const SWING_TICKS := 10.0
+## The drawn axle follows its place behind the body at a limited speed in sim
+## time, round the pulling hand's side about the body's centre, at least
+## SWING_RADIUS_M from it: when the place jumps (the body turned sharply, or
+## walked back past its roller) the roller swings there, never in an instant.
+## SWING_TURN is radians per tick, SWING_REACH_M metres per tick of radius.
+const SWING_TURN := PI / 10.0
+const SWING_REACH_M := 0.2
 const SWING_RADIUS_M := 0.55
+## The probe's snap threshold: a drawn axle moving more than this between two
+## frames at 1x.
 const SWING_JUMP_M := 0.2
 ## The pulling arm: turned out a little, less swing, leaning back.
 const PULL_OUT_DEGREES := 12.0
@@ -319,23 +322,23 @@ static func trail(walked: Array, back: Vector3) -> Vector3:
 	return at + on * left
 
 
-## A swung axle at `k` (0 to 1, eased) of its swing from `from` to `to`, both
-## in the body's frame (x across, +z ahead): round the pulling hand's side
-## (`hand` 0 right, 1 left) by angle about the body's centre, never nearer
-## than SWING_RADIUS_M, so it passes beside the body clear of the legs.
-static func swing_point(from: Vector3, to: Vector3, k: float, hand: int) -> Vector3:
+## The drawn axle `dt` sim ticks on from `at` toward `to`, both in the body's
+## frame (x across, +z ahead): its angle about the body's centre turns at most
+## SWING_TURN a tick, round the pulling hand's side (`hand` 0 right, 1 left),
+## its distance changes at most SWING_REACH_M a tick and stays at least
+## SWING_RADIUS_M, so it passes beside the body clear of the legs.
+static func follow(at: Vector3, to: Vector3, dt: float, hand: int) -> Vector3:
 	var out := -1.0 if hand == 0 else 1.0
 	# Angle from straight behind (0) toward the hand's side (PI / 2).
-	var a0 := atan2(from.x * out, -from.z)
+	var a0 := atan2(at.x * out, -at.z)
 	var a1 := atan2(to.x * out, -to.z)
 	if a0 < -PI / 2.0:
 		a0 += TAU
-	var e := k * k * (3.0 - 2.0 * k)
-	var a := lerpf(a0, a1, e)
-	var flat_from := Vector2(from.x, from.z).length()
-	var flat_to := Vector2(to.x, to.z).length()
-	var r := maxf(lerpf(flat_from, flat_to, e), SWING_RADIUS_M)
-	return Vector3(out * r * sin(a), lerpf(from.y, to.y, e), -r * cos(a))
+	var a := a0 + clampf(a1 - a0, -SWING_TURN * dt, SWING_TURN * dt)
+	var r0 := Vector2(at.x, at.z).length()
+	var r1 := Vector2(to.x, to.z).length()
+	var r := maxf(r0 + clampf(r1 - r0, -SWING_REACH_M * dt, SWING_REACH_M * dt), SWING_RADIUS_M)
+	return Vector3(out * r * sin(a), to.y, -r * cos(a))
 
 
 ## The overhead route at `k` (0 to 1) from `from` to `to`, both in the body's
@@ -1028,20 +1031,14 @@ func _axle_drawn(bag: Dictionary, body: Node3D, scale_by: float, hand: int) -> V
 	var out := -1.0 if hand == 0 else 1.0
 	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
 	local.z = minf(local.z, -TRAIL_M * 0.6)
-	var target := frame * local
 	var now := _now()
-	if not bag.has("swing") and bag.has("drawn_axle"):
-		if (bag["drawn_axle"] as Vector3).distance_to(target) > SWING_JUMP_M:
-			bag["swing"] = {"from": bag["drawn_axle"], "since": now}
-	at = target
-	if bag.has("swing"):
-		var k := clampf((now - bag["swing"]["since"]) / SWING_TICKS, 0.0, 1.0)
-		var from := frame.affine_inverse() * (bag["swing"]["from"] as Vector3)
-		at = frame * swing_point(from, local, k, hand)
-		if k >= 1.0:
-			bag.erase("swing")
+	at = frame * local
+	if bag.has("drawn_axle"):
+		var was := frame.affine_inverse() * (bag["drawn_axle"] as Vector3)
+		at = frame * follow(was, local, maxf(now - bag["drawn_at"], 0.0), hand)
 	at.y = body.global_position.y + ROLLER_AXLE.y * scale_by
 	bag["drawn_axle"] = at
+	bag["drawn_at"] = now
 	return at
 
 
