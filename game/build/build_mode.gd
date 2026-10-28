@@ -661,13 +661,15 @@ func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 
 
 ## The object the camera's line of sight to a ground point meets first, or 0
-## (also 0 with no camera). Each object is a box over its footprint as tall as
-## its def's height. A tall object hides the ground behind it on screen, so a
-## click on it picks a ground point beyond it, maybe beside a wall edge; the
-## object the player sees under the pointer wins.
+## (also 0 with no camera, or the point behind it). Each object is a box over
+## its footprint as tall as it is drawn (BuildView.pick_height). A tall object
+## hides the ground behind it on screen, so a click on it picks a ground point
+## beyond it, maybe beside a wall edge; the object the player sees under the
+## pointer wins. An object behind a wall the view draws opaque
+## (_wall_in_sight) is not seen.
 func _object_in_sight(point: Vector3) -> int:
 	var camera := get_viewport().get_camera_3d()
-	if camera == null:
+	if camera == null or camera.is_position_behind(point):
 		return 0
 	var from := camera.project_ray_origin(camera.unproject_position(point))
 	var reach := from.distance_to(point)
@@ -684,10 +686,12 @@ func _object_in_sight(point: Vector3) -> int:
 		if distance < nearest:
 			nearest = distance
 			seen = object_id
+	if seen != 0 and nearest >= _wall_in_sight(from, point) - SIGHT_SLACK_M:
+		return 0
 	return seen
 
 
-## A placed object's footprint, from the floor up to its def's height.
+## A placed object's footprint, from the floor up to its drawn height.
 func _object_box(object_id: int) -> AABB:
 	var record := grid.get_object(object_id)
 	var def := BuildCatalog.get_def(record["def"])
@@ -698,7 +702,51 @@ func _object_box(object_id: int) -> AABB:
 		low = Vector2i(mini(low.x, at.x), mini(low.y, at.y))
 		high = Vector2i(maxi(high.x, at.x), maxi(high.y, at.y))
 	var corner := grid.origin + Vector3(low.x, 0.0, low.y)
-	return AABB(corner, Vector3(high.x - low.x + 1, def.height, high.y - low.y + 1))
+	var extent := Vector3(high.x - low.x + 1, BuildView.pick_height(def), high.y - low.y + 1)
+	return AABB(corner, extent)
+
+
+## How far from `from`, on the straight line to `to`, the first wall edge the
+## view draws opaque (BuildView.sight_height) stands in the way, or INF. The
+## line is walked across the grid lines it crosses, so the cost grows with the
+## grid's width, not with the number of walls.
+func _wall_in_sight(from: Vector3, to: Vector3) -> float:
+	var start := from - grid.origin
+	var span := to - from
+	var nearest := INF
+	for axis in [0, 2]:
+		if absf(span[axis]) < 0.000001:
+			continue
+		var cells := grid.size.x if axis == 0 else grid.size.y
+		var low := maxi(0, ceili(minf(start[axis], start[axis] + span[axis])))
+		var high := mini(cells, floori(maxf(start[axis], start[axis] + span[axis])))
+		for line in range(low, high + 1):
+			var t := (line - start[axis]) / span[axis]
+			var at := start + span * t
+			var edge := _edge_on_line(axis, line, at)
+			if edge.z >= 0 and at.y < _view.sight_height(edge):
+				nearest = minf(nearest, t * span.length())
+	return nearest
+
+
+## The wall edge (WallCutaway.wall_edges form) a point crosses on grid line
+## `line` of `axis` (0 for x, 2 for z), or z -1 off the grid. `at` is relative
+## to the grid origin.
+func _edge_on_line(axis: int, line: int, at: Vector3) -> Vector3i:
+	var off := Vector3i(0, 0, -1)
+	if axis == 0:
+		var row := floori(at.z)
+		if row < 0 or row >= grid.size.y:
+			return off
+		if line < grid.size.x:
+			return Vector3i(line, row, BuildGrid.Side.WEST)
+		return Vector3i(line - 1, row, BuildGrid.Side.EAST)
+	var column := floori(at.x)
+	if column < 0 or column >= grid.size.x:
+		return off
+	if line < grid.size.y:
+		return Vector3i(column, line, BuildGrid.Side.NORTH)
+	return Vector3i(column, line - 1, BuildGrid.Side.SOUTH)
 
 
 ## Whether the pointer is over a HUD control, which hides the world under it.

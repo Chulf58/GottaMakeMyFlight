@@ -20,6 +20,9 @@ const KIT_WALL_KINDS := {
 	BuildGrid.WallKind.DOOR: InteriorKit.WallKind.DOOR,
 }
 
+## Def id -> pick_height(), worked out once from the kit piece.
+static var _pick_heights: Dictionary = {}
+
 ## Turns walls facing the camera into stubs. Off draws every wall full.
 var cutaway_enabled := true:
 	set(value):
@@ -41,6 +44,36 @@ var _wall_kinds: Dictionary = {}
 var _cut_edges: Dictionary = {}
 var _area := MeshInstance3D.new()
 var _object_nodes: Dictionary = {}
+
+
+## How tall an object type stands as drawn: the top of its kit piece's meshes,
+## or the def's height when that is taller or the type has no piece. BuildMode
+## picks objects up to this height, so a click on the top of a model finds it.
+static func pick_height(def: BuildObjectDef) -> float:
+	if _pick_heights.has(def.id):
+		return _pick_heights[def.id]
+	var top := def.height
+	var piece := InteriorKit.object_piece(def.id)
+	if piece != "":
+		var lift := InteriorKit.object_offset(def.id).y
+		for part in InteriorKit.meshes(piece):
+			var bounds: AABB = (part[1] as Transform3D) * (part[0] as Mesh).get_aabb()
+			top = maxf(top, bounds.end.y + lift)
+	_pick_heights[def.id] = top
+	return top
+
+
+## How high the wall drawn on an edge (WallCutaway.wall_edges form) hides what
+## is behind it: a full plain or door wall its whole height, a cut one its
+## stub, a glass wall only its kerb, and an edge with no wall nothing.
+func sight_height(edge: Vector3i) -> float:
+	if not _wall_kinds.has(edge):
+		return 0.0
+	if _wall_kinds[edge] == InteriorKit.WallKind.GLASS:
+		return InteriorKit.GLASS_KERB_TOP
+	if _cut_edges.has(edge):
+		return InteriorKit.STUB_HEIGHT
+	return WALL_HEIGHT
 
 
 ## The node for an object type, centred on its footprint at facing 0: the
