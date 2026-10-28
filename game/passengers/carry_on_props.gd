@@ -45,7 +45,7 @@ extends Node3D
 
 enum Arm { FREE, HAND, PULL, STRAP }
 ## Which bags _place_bags() places.
-enum Placing { ALL, HAND, NOT_HAND }
+enum Placing { HAND, NOT_HAND }
 
 const TRAY_MOUNTS := {
 	SecurityLooks.Tray.IN: [SecurityLanes.TRAY_TABLE, "Mount_TrayIn"],
@@ -532,6 +532,14 @@ func front_weight_of(id: int) -> float:
 	return _front_weight(_held.get(id, {}), _now())
 
 
+## How many times bag `index` of passenger `id` has been put in place (a move
+## only stamped, not placed, does not count): a test reads it before and after
+## a frame to see that the bag was placed once.
+func placements_of(id: int, index: int) -> int:
+	var bags: Array = _held.get(id, {}).get("bags", [])
+	return int(bags[index].get("placed", 0)) if index < bags.size() else 0
+
+
 ## How many bag and tray nodes are drawn now.
 func drawn_count() -> int:
 	var count := 0
@@ -549,8 +557,8 @@ func _exit_tree() -> void:
 		RenderingServer.frame_pre_draw.disconnect(_unposed)
 
 
-## Before the frame is drawn: bags going to a hand that draw() left to
-## _on_pose, on a skeleton that did not report this frame, are placed now.
+## Before the frame is drawn: bags going to a hand, which draw() leaves to
+## _on_pose, are placed now when their skeleton did not report this frame.
 func _unposed() -> void:
 	var frame := Engine.get_process_frames()
 	var now := _now()
@@ -563,11 +571,10 @@ func _unposed() -> void:
 			_place_bags(held, body, _tray_transform(held, body), now, Placing.HAND)
 
 
-## Places every prop for this frame. A bag going to a hand is placed when the
-## character's skeleton has its final pose for the frame (_on_pose), so it does
-## not trail the hand by a frame; here only when the skeleton did not report
-## last frame (paused, or not animated), so it is placed once per frame, and
-## before the frame is drawn (_unposed) if the skeleton stops reporting.
+## Places every prop for this frame but the bags going to a hand. Those are
+## placed when the character's skeleton has its final pose for the frame
+## (_on_pose), so they do not trail the hand by a frame, or before the frame is
+## drawn (_unposed) if the skeleton did not report: once per frame either way.
 func draw() -> void:
 	var now := _now()
 	for id in _held:
@@ -581,15 +588,13 @@ func draw() -> void:
 		held["weight"] = _front_weight(held, now)
 		_body_ids[body] = id
 		# Bags first: a new move is stamped there, and the arms follow it.
-		var posed: bool = held.get("posed_frame", -2) == Engine.get_process_frames() - 1
-		if posed:
-			held["left_to_pose"] = Engine.get_process_frames()
-		_place_bags(held, body, tray_xf, now, Placing.NOT_HAND if posed else Placing.ALL)
+		held["left_to_pose"] = Engine.get_process_frames()
+		_place_bags(held, body, tray_xf, now, Placing.NOT_HAND)
 		_pose_arms(held, body, now)
 
 
-## Puts the bags of one passenger in place (draw(), _on_pose()): all of
-## them, only those going to a hand, or all but those. Every bag's new move is
+## Puts the bags of one passenger in place: only those going to a hand
+## (_on_pose(), _unposed()) or all but those (draw()). Every bag's new move is
 ## stamped, whichever are placed.
 func _place_bags(
 	held: Dictionary, body: Node3D, tray_xf: Transform3D, now: float, placing: Placing
@@ -625,6 +630,7 @@ func _place_bags(
 			bag["reach_from"] = _reach_of(node, kind)
 			if placing == Placing.NOT_HAND and hand_home:
 				continue
+		bag["placed"] = int(bag.get("placed", 0)) + 1
 		var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
 		var to_hand: bool = homes[i] == SecurityLooks.Home.HAND
 		var from_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
