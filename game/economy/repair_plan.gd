@@ -35,7 +35,8 @@ extends RefCounted
 ## search reached, or a new one, priced as its object plus the floor its
 ## footprint (and a scanner's exit cell, or a door's own cell) still needs. A
 ## new desk or scanner also needs its staff spot (StaffSpots) free and floored,
-## and that floor is part of its price. A standing desk or scanner whose spot
+## and joined by floor to the walk (_spot_link()), and that floor is part of
+## its price. A standing desk or scanner whose spot
 ## is blocked (StaffSpots.blocked(), only in an old save) or that staff cannot
 ## reach from an entrance (StaffSpots.unreachable()) is no working
 ## station, and every standing station's spot is kept clear of new pieces, as
@@ -324,6 +325,8 @@ func _solve(leg: int, sources: Array) -> bool:
 		choice["walk"] = _walk_cells(choice["reach"])
 		if source.has("door"):
 			choice["walk"][source["door"]] = true
+		for cell in choice.get("link", []):
+			choice["walk"][cell] = true
 	for choice in choices:
 		if _attempts >= max_attempts:
 			_capped = true
@@ -470,6 +473,9 @@ func _new_choices(leg: int, sources: Array) -> Array:
 		for facing in 4:
 			var anchor := cell - def.interaction_cell(Vector2i.ZERO, facing)
 			var cells := def.footprint(anchor, facing)
+			var footprint := {}
+			for each in cells:
+				footprint[each] = true
 			var next := cell
 			if def.walk_through:
 				var back := BuildObjectDef.rotate_offset(Vector2i(0, -1), facing)
@@ -484,17 +490,58 @@ func _new_choices(leg: int, sources: Array) -> Array:
 				cells.append(next)
 			# Passengers may cross the staff spot, so it may lie on the walk.
 			var spot := StaffSpots.cell_of(def_id, anchor, facing)
+			var link: Array[Vector2i] = []
 			if spot != BuildObjectDef.NO_CELL:
 				if not _free_for_piece([spot] as Array[Vector2i], {}, false):
 					continue
-				cells.append(spot)
+				# Staff must walk to the spot, so floor joins it to the walk.
+				link = _spot_link(spot, footprint, walk)
+				if link.is_empty():
+					continue
+				for each in link:
+					if not cells.has(each):
+						cells.append(each)
 			var piece := _floors(cells)
 			piece.append(BuildEdit.place_object(def_id, anchor, facing))
 			var cost := _dist[_index(cell)] + (price + _floors_price(piece)) * SCALE
-			out.append(
-				{"cost": cost, "rank": out.size(), "reach": cell, "next": next, "piece": piece}
-			)
+			var choice := {"cost": cost, "rank": out.size(), "reach": cell, "next": next}
+			choice["piece"] = piece
+			choice["link"] = link
+			out.append(choice)
 	return out
+
+
+## The cells from a new station's staff spot to the nearest cell passengers
+## can walk now or that `walk` will floor, by open steps around the station's
+## `footprint`, the spot first; empty when there is no such way. StaffSpots
+## refuses a spot with no floored neighbour, and staff need the way in, so the
+## bare cells on it are floored with the piece.
+func _spot_link(spot: Vector2i, footprint: Dictionary, walk: Dictionary) -> Array[Vector2i]:
+	var prev := {spot: spot}
+	var queue: Array[Vector2i] = [spot]
+	var head := 0
+	while head < queue.size():
+		var cell := queue[head]
+		head += 1
+		for side in 4:
+			var next := cell + BuildGrid.SIDE_STEP[side]
+			if prev.has(next) or not _grid.in_bounds(next) or footprint.has(next):
+				continue
+			if _grid.object_at(next) != 0 or _no_floor.has(next) or _off_side(next):
+				continue
+			var wall := _grid.wall_kind(cell, side)
+			if wall != BuildGrid.WallKind.NONE and wall != BuildGrid.WallKind.DOOR:
+				continue
+			prev[next] = cell
+			if walk.has(next) or _grid.is_walkable(next):
+				var path: Array[Vector2i] = []
+				var at := next
+				while at != spot:
+					at = prev[at]
+					path.push_front(at)
+				return path
+			queue.append(next)
+	return [] as Array[Vector2i]
 
 
 ## New exits: where one may stand, reached through its service cell.
