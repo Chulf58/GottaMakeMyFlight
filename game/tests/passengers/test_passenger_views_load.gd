@@ -102,10 +102,23 @@ func _count_views_at_sim_position() -> int:
 
 
 func test_views_match_the_loaded_passengers_exactly() -> void:
-	var visible := 0
+	# Expected from the sim alone: not made, and a missed passenger only while
+	# it lingers.
+	var expected: Array = []
 	for id in _sim.passenger_ids():
-		if _views.node_for(id) != null:
-			visible += 1
-	assert_int(_views.active_count()).is_equal(visible)
-	for id in _run["ids_after_load"]:
-		assert_object(_sim.get_passenger(id)).is_not_null()
+		var p := _sim.get_passenger(id)
+		if p.stage == Passenger.Stage.MADE:
+			continue
+		if (
+			p.stage == Passenger.Stage.MISSED
+			and _sim.tick - p.outcome_tick > PassengerViews.MISSED_LINGER_TICKS
+		):
+			continue
+		expected.append(id)
+	assert_int(expected.size()).is_greater(0)
+	for id in expected:
+		assert_object(_views.node_for(id)).is_not_null()
+	assert_int(_views.active_count()).is_equal(expected.size())
+	for id in _run["ids_before_load"]:
+		if not expected.has(id):
+			assert_object(_views.node_for(id)).is_null()
