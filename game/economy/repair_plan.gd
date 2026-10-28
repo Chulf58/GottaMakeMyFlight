@@ -34,7 +34,12 @@ extends RefCounted
 ## The leg then takes the cheapest of: a standing desk, scanner or exit the
 ## search reached, or a new one, priced as its object plus the floor its
 ## footprint (and a scanner's exit cell, or a door's own cell) still needs. A
-## new piece goes where the
+## new desk or scanner also needs its staff spot (StaffSpots) free and floored,
+## and that floor is part of its price. A standing desk or scanner whose spot
+## is blocked (StaffSpots.blocked(), only in an old save) or that staff cannot
+## reach from an entrance (StaffSpots.unreachable()) is no working
+## station, and every standing station's spot is kept clear of new pieces, as
+## an interaction cell is. A new piece goes where the
 ## search reaches first, in its settle order, trying facings 0 to 3, so the
 ## same grid always gives the same plan. With no entrance, every place an
 ## entrance may stand (a landside Toon door in a shell, else any edge cell
@@ -49,6 +54,13 @@ extends RefCounted
 ## is set (see _fallback_price()), and the rescue grant pays that instead. Only
 ## a search that tried every choice without a cap is an error.
 ##
+## The search builds without the staff reach rule (BuildGrid.check_staff_reach)
+## and counts a station staff cannot reach yet, since a later leg's floor may
+## open the way. A finished plan is then ordered floors and walls first,
+## objects after, and must build edit by edit on the original grid under every
+## rule, reach included, with every station it uses staffable; one that does
+## not is no repair and the search goes on to the next choice, within the caps.
+##
 ## Prices come from BuildTransaction. least_balance() is the money the plan
 ## needs at the start when its edits are bought one by one in order, each
 ## refund paying toward the later edits. The plan takes the cheapest choice
@@ -57,6 +69,10 @@ extends RefCounted
 ## moves an object the player built (walls, as above, it may take down).
 
 enum Leg { DESK, SCANNER, EXIT }
+## Which standing desks and scanners a route may use: any; any whose staff
+## spot is not blocked (the search, which judges reach on the finished plan);
+## or only those staff can work (spot neither blocked nor out of reach).
+enum Staffing { ANY, NOT_BLOCKED, STAFFABLE }
 
 ## The piece each leg needs.
 const LEG_DEFS: Array[StringName] = [&"checkin_desk", &"security_scanner", &"exit_door"]
@@ -87,6 +103,8 @@ var ok := false
 var fallback_price := -1
 
 var _grid: BuildGrid
+## The snapshot of the grid make() was given, for _failing_leg().
+var _source := {}
 var _layout := TerminalLayout.new()
 var _shell: ShellDefinition
 var _floor_price := -1
@@ -101,7 +119,8 @@ var _order: Array[Vector2i] = []
 var _kept := {}
 ## Cells beyond a standing door's back edge, which must stay without floor.
 var _no_floor := {}
-## Interaction cells of standing objects, and cells some lane already holds.
+## Interaction cells and staff spots of standing objects, and cells some lane
+## already holds.
 var _reserved := {}
 var _lane_cells := {}
 ## Walkable cell -> LAND, AIR or both; the side a leg may not enter; whether
@@ -110,27 +129,38 @@ var _region := {}
 var _forbidden := 0
 var _has_air := false
 var _attempts := 0
+## The leg a failed finished plan sends the search back to (_failing_leg()),
+## or -1; and the size of `edits` when each leg's current choice began.
+var _bad_leg := -1
+var _marks: Array[int] = [0, 0, 0]
 ## Set when a cap cut the choices short.
 var _capped := false
 
 
 ## Whether a new passenger can walk entrance, desk, scanner and exit on `grid`
-## as `layout` (rebuilt from that grid) describes it.
-static func has_working_path(grid: BuildGrid, layout: TerminalLayout) -> bool:
+## as `layout` (rebuilt from that grid) describes it. With `staffed` false, a
+## desk or scanner staff can never work still counts, so AirportGate can tell
+## a missing way from a staff spot problem.
+static func has_working_path(grid: BuildGrid, layout: TerminalLayout, staffed := true) -> bool:
 	if layout.entrances.is_empty():
 		return false
 	var door := layout.door_cell(grid, layout.entrances[0])
-	return can_finish(grid, layout, [door] as Array[Vector2i], Leg.DESK)
+	var staffing := Staffing.STAFFABLE if staffed else Staffing.ANY
+	return can_finish(grid, layout, [door] as Array[Vector2i], Leg.DESK, staffing)
 
 
 ## Whether a walker standing on one of `starts` can still use, in journey
 ## order, the pieces from `leg` on: a desk, a scanner, then an exit.
 static func can_finish(
-	grid: BuildGrid, layout: TerminalLayout, starts: Array[Vector2i], leg: int
+	grid: BuildGrid,
+	layout: TerminalLayout,
+	starts: Array[Vector2i],
+	leg: int,
+	staffing := Staffing.STAFFABLE
 ) -> bool:
 	var here := starts
 	for next_leg in range(leg, Leg.size()):
-		here = _next_cells(grid, layout, here, next_leg)
+		here = _next_cells(grid, layout, here, next_leg, staffing)
 		if here.is_empty():
 			return false
 	return true
@@ -157,9 +187,14 @@ static func make(grid: BuildGrid, shell: ShellDefinition = null) -> RepairPlan:
 	var plan := RepairPlan.new()
 	plan._shell = shell
 	plan._grid = BuildGrid.new(grid.size, grid.origin)
-	if not plan._grid.from_snapshot(grid.to_snapshot()):
+	plan._source = grid.to_snapshot()
+	if not plan._grid.from_snapshot(plan._source):
 		push_error("RepairPlan: the grid could not be copied")
 		return plan
+	# The search builds leg by leg, so a piece may stand on a corridor until a
+	# later leg's floor goes round it; _failing_leg() judges staff reach on the
+	# finished plan, floors and walls first.
+	plan._grid.check_staff_reach = false
 	plan._layout.rebuild(plan._grid)
 	plan.ok = plan._plan()
 	return plan
@@ -168,10 +203,14 @@ static func make(grid: BuildGrid, shell: ShellDefinition = null) -> RepairPlan:
 ## Where a leg's walkers stand once the leg is done: a desk's service cell,
 ## a scanner's passage end, an exit's door cell. Each reached from `starts`.
 static func _next_cells(
-	grid: BuildGrid, layout: TerminalLayout, starts: Array[Vector2i], leg: int
+	grid: BuildGrid,
+	layout: TerminalLayout,
+	starts: Array[Vector2i],
+	leg: int,
+	staffing := Staffing.STAFFABLE
 ) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
-	for target in _targets(grid, layout, leg):
+	for target in _targets(grid, layout, leg, staffing):
 		for start in starts:
 			if start == target[0] or not grid.find_path(start, target[0]).is_empty():
 				out.append(target[1])
@@ -179,17 +218,22 @@ static func _next_cells(
 	return out
 
 
-## The standing pieces a leg can use, as [cell walked to, cell left from].
-static func _targets(grid: BuildGrid, layout: TerminalLayout, leg: int) -> Array:
+## The standing pieces a leg can use, as [cell walked to, cell left from]. A
+## desk or scanner whose staff spot is blocked (a layout saved before spots)
+## or out of staff's reach is left out as `staffing` says: StaffSim
+## never staffs it, so no passenger gets through it.
+static func _targets(
+	grid: BuildGrid, layout: TerminalLayout, leg: int, staffing := Staffing.STAFFABLE
+) -> Array:
 	var out := []
 	match leg:
 		Leg.DESK:
 			for desk in layout.desks:
-				if layout.is_usable(desk):
+				if layout.is_usable(desk) and _staffed_enough(grid, desk, staffing):
 					out.append([layout.lanes[desk][0], layout.lanes[desk][0]])
 		Leg.SCANNER:
 			for scanner in layout.scanners:
-				if layout.is_usable(scanner):
+				if layout.is_usable(scanner) and _staffed_enough(grid, scanner, staffing):
 					var passage: Array = layout.passages[scanner]
 					out.append([layout.lanes[scanner][0], passage.back()])
 		Leg.EXIT:
@@ -197,6 +241,15 @@ static func _targets(grid: BuildGrid, layout: TerminalLayout, leg: int) -> Array
 				var cell := layout.door_cell(grid, door)
 				out.append([cell, cell])
 	return out
+
+
+## Whether `station` passes `staffing`.
+static func _staffed_enough(grid: BuildGrid, station: int, staffing: Staffing) -> bool:
+	if staffing == Staffing.ANY:
+		return true
+	if StaffSpots.blocked(grid, station):
+		return false
+	return staffing == Staffing.NOT_BLOCKED or not StaffSpots.unreachable(grid, station)
 
 
 func _plan() -> bool:
@@ -210,6 +263,7 @@ func _plan() -> bool:
 		sources = [{"cell": door, "cost": 0, "edits": [] as Array[BuildEdit]}]
 		_kept[door] = true
 	if _solve(Leg.DESK, sources):
+		edits = _ordered(edits)
 		return true
 	if _capped:
 		push_warning("RepairPlan: no repair within the caps; pricing a conservative one")
@@ -249,7 +303,8 @@ func _fallback_price() -> int:
 ## choices when the later legs fail. True when a working path stands.
 func _solve(leg: int, sources: Array) -> bool:
 	if leg == Leg.size():
-		return has_working_path(_grid, _layout)
+		_bad_leg = _failing_leg()
+		return _bad_leg < 0
 	_refresh_sets(leg)
 	_search(sources)
 	var choices := _standing_choices(leg)
@@ -276,6 +331,7 @@ func _solve(leg: int, sources: Array) -> bool:
 		_attempts += 1
 		var kept := _kept.duplicate()
 		var mark := edits.size()
+		_marks[leg] = mark
 		var undo: Array[BuildEdit] = []
 		if not _try(choice, leg, undo):
 			continue
@@ -285,6 +341,11 @@ func _solve(leg: int, sources: Array) -> bool:
 		_undo(undo)
 		_kept = kept
 		edits.resize(mark)
+		# A finished plan failed on an earlier leg's piece: no choice here can
+		# mend it, so go back to that leg's next choice.
+		if _bad_leg >= 0 and _bad_leg < leg:
+			return false
+		_bad_leg = -1
 	return false
 
 
@@ -305,6 +366,9 @@ func _refresh_sets(leg: int) -> void:
 		var spot := _grid.interaction_cell(id)
 		if spot != BuildObjectDef.NO_CELL:
 			_reserved[spot] = true
+		var stands := StaffSpots.spot_of(_grid, id)
+		if stands != BuildObjectDef.NO_CELL:
+			_reserved[stands] = true
 	_lane_cells.clear()
 	for lane in _layout.lanes.values():
 		for cell in lane:
@@ -373,7 +437,7 @@ func _off_side(cell: Vector2i) -> bool:
 
 func _standing_choices(leg: int) -> Array:
 	var out := []
-	for target in _targets(_grid, _layout, leg):
+	for target in _targets(_grid, _layout, leg, Staffing.NOT_BLOCKED):
 		var reach: Vector2i = target[0]
 		var cost := _dist[_index(reach)]
 		if cost < UNREACHED:
@@ -418,6 +482,12 @@ func _new_choices(leg: int, sources: Array) -> Array:
 				if not _free_for_piece([next] as Array[Vector2i], walk, false):
 					continue
 				cells.append(next)
+			# Passengers may cross the staff spot, so it may lie on the walk.
+			var spot := StaffSpots.cell_of(def_id, anchor, facing)
+			if spot != BuildObjectDef.NO_CELL:
+				if not _free_for_piece([spot] as Array[Vector2i], {}, false):
+					continue
+				cells.append(spot)
 			var piece := _floors(cells)
 			piece.append(BuildEdit.place_object(def_id, anchor, facing))
 			var cost := _dist[_index(cell)] + (price + _floors_price(piece)) * SCALE
@@ -582,8 +652,50 @@ func _leg_works(leg: int, next: Vector2i) -> bool:
 		return false
 	var here: Array[Vector2i] = [_layout.door_cell(_grid, _layout.entrances[0])]
 	for each in range(Leg.DESK, leg + 1):
-		here = _next_cells(_grid, _layout, here, each)
+		# Staff reach is judged once the whole plan stands (_solve()).
+		here = _next_cells(_grid, _layout, here, each, Staffing.NOT_BLOCKED)
 	return here.has(next)
+
+
+## `plan_edits` with every floor and wall edit ahead of the object placements,
+## each group in its own order, so a desk or scanner goes down only once the
+## floor round it is laid.
+static func _ordered(plan_edits: Array[BuildEdit]) -> Array[BuildEdit]:
+	var out: Array[BuildEdit] = []
+	var placed: Array[BuildEdit] = []
+	for edit in plan_edits:
+		if edit.kind == BuildEdit.Kind.PLACE_OBJECT:
+			placed.append(edit)
+		else:
+			out.append(edit)
+	out.append_array(placed)
+	return out
+
+
+## -1 when the finished plan works: a route runs through desks and scanners
+## staff can work (StaffSpots), and the plan builds edit by edit, in _ordered()
+## order, on the grid make() was given under the rules a player's clicks meet,
+## staff reach included. Otherwise the leg whose choice to try again: the first
+## leg with no such station, or the leg that added the edit a rebuild refused.
+func _failing_leg() -> int:
+	if _layout.entrances.is_empty():
+		return Leg.DESK
+	var here: Array[Vector2i] = [_layout.door_cell(_grid, _layout.entrances[0])]
+	for each in Leg.size():
+		here = _next_cells(_grid, _layout, here, each)
+		if here.is_empty():
+			return each
+	var trial := BuildGrid.new(_grid.size, _grid.origin)
+	if not trial.from_snapshot(_source):
+		return Leg.DESK
+	for edit in _ordered(edits):
+		if not trial.apply(edit).ok:
+			var at := edits.find(edit)
+			for each in range(Leg.size() - 1, -1, -1):
+				if at >= _marks[each]:
+					return each
+			return Leg.DESK
+	return -1
 
 
 ## Cheapest search price from `sources` to every cell.

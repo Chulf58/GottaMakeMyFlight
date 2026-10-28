@@ -84,9 +84,15 @@ func test_no_desk_gives_no_checkin_and_a_walled_desk_gives_no_route() -> void:
 	_world.step()
 	assert_int(_world.passenger(lost).stuck).is_equal(Passenger.Stuck.NO_CHECKIN)
 	assert_str(_world.sim.bubble_text(_world.passenger(lost))).is_equal("Where is check-in?")
-	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(5, 1), 0)
+	# The wall goes up first: once the desk stands, a wall cutting its staff spot
+	# off from the entrance is refused (decision
+	# desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3). A
+	# second entrance behind the wall lets staff reach the desk, so it is open;
+	# passengers still arrive through the first.
 	for y in 6:
 		grid.apply(BuildEdit.place_wall(Vector2i(4, y), BuildGrid.Side.WEST))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(7, 0), 0)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(5, 1), 0)
 	var blocked := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.run_to(_world.clock.tick + 21)
 	assert_int(_world.passenger(blocked).stuck).is_equal(Passenger.Stuck.NO_ROUTE)

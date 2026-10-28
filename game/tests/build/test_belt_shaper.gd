@@ -150,12 +150,13 @@ func test_a_desk_outlet_is_a_link_and_the_line_joins_it() -> void:
 
 
 func test_a_desk_placed_after_the_belt_reshapes_it_to_take_the_outlet() -> void:
-	_mode.lay_belt(Vector2i(3, 7), Vector2i(7, 7))
+	# The line starts at the outlet cell: (4, 7) is the desk's staff spot.
+	_mode.lay_belt(Vector2i(5, 7), Vector2i(7, 7))
 	assert_str(_def(Vector2i(5, 7))).is_equal("baggage_belt")
 	_mode.set_tool(BuildMode.Tool.DESK)
 	_mode.facing = 0
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(4, 8))).ok).is_true()
-	assert_str(_def(Vector2i(5, 7))).is_equal("baggage_belt_feed")
+	assert_str(_def(Vector2i(5, 7))).is_equal("baggage_belt_corner")
 	assert_bool(_joined(Vector2i(4, 8), Vector2i(5, 7))).is_true()
 
 
@@ -190,15 +191,17 @@ func test_a_fourth_link_is_refused_and_changes_nothing() -> void:
 func test_a_desk_or_a_wall_removal_that_makes_a_fourth_link_is_refused() -> void:
 	_mode.lay_belt(Vector2i(2, 6), Vector2i(8, 6))
 	_mode.lay_belt(Vector2i(5, 3), Vector2i(5, 5))
-	# A desk whose outlet would point into the merge from the south.
+	# A desk whose outlet would point into the merge from the south. Its staff
+	# spot (4, 6) is on the merge's west arm, so the spot rule refuses it first:
+	# a desk can no longer make a fourth link.
 	var desk := BuildEdit.place_object(&"checkin_desk", Vector2i(4, 7), 0)
-	assert_int(_mode.check(desk).reason).is_equal(BuildResult.Reason.BELT_CROSSING)
+	assert_int(_mode.check(desk).reason).is_equal(BuildResult.Reason.STAFF_SPOT)
 	# The click is refused the same way and places nothing.
 	var objects := _mode.grid.object_ids().size()
 	_mode.set_tool(BuildMode.Tool.DESK)
 	_mode.facing = 0
 	var clicked := _mode.apply_at(_mode.grid.cell_to_world(Vector2i(4, 7)))
-	assert_int(clicked.reason).is_equal(BuildResult.Reason.BELT_CROSSING)
+	assert_int(clicked.reason).is_equal(BuildResult.Reason.STAFF_SPOT)
 	assert_int(_mode.grid.object_ids().size()).is_equal(objects)
 	_mode.set_tool(BuildMode.Tool.BELT)
 	# A belt south of the merge behind a wall, then the wall taken away.
@@ -218,8 +221,9 @@ func test_a_desk_or_a_wall_removal_that_makes_a_fourth_link_is_refused() -> void
 
 func test_a_rectangle_taking_a_desk_reshapes_the_belt_at_its_outlet() -> void:
 	_mode.grid.apply(BuildEdit.place_object(&"checkin_desk", Vector2i(4, 8), 0))
-	_mode.lay_belt(Vector2i(3, 7), Vector2i(7, 7))
-	assert_str(_def(Vector2i(5, 7))).is_equal("baggage_belt_feed")
+	# The line starts at the outlet cell: (4, 7) is the desk's staff spot.
+	_mode.lay_belt(Vector2i(5, 7), Vector2i(7, 7))
+	assert_str(_def(Vector2i(5, 7))).is_equal("baggage_belt_corner")
 	# The rectangle covers only the desk's left cell, which takes the whole desk.
 	_mode.set_tool(BuildMode.Tool.REMOVE)
 	_mode.begin_area(_mode.grid.cell_to_world(Vector2i(3, 8)))

@@ -75,17 +75,22 @@ func test_a_desk_with_no_belt_or_a_removed_desk_has_no_entry() -> void:
 
 
 func test_equal_routes_go_to_the_first_root_in_coordinate_order() -> void:
-	# A line from (2, 3) to (12, 3) with a bag room at each end and a desk
-	# feeding (7, 3) from below: both ends are 5 cells away.
+	# A line from (2, 3) to (12, 3) with a bag room at each end and a desk two
+	# rows below (its agent row between, decision desk-belts-run-one-row-back-
+	# desk-then-the-agent-row-then-the) whose outlet cell (7, 4) feeds (7, 3)
+	# from below: both ends are 5 cells from (7, 3).
 	_world.room(Rect2i(0, 2, 3, 3))
 	_world.room(Rect2i(12, 2, 3, 3))
-	var desk_id := _world.desk(Vector2i(6, 4))
+	var desk_id := _world.desk(Vector2i(6, 5))
 	_world.lay(Vector2i(2, 3), Vector2i(12, 3))
+	_world.lay(Vector2i(7, 4), Vector2i(7, 4))
 	var routes := _routes()
 	assert_bool(routes.is_root(Vector2i(2, 3))).is_true()
 	assert_bool(routes.is_root(Vector2i(12, 3))).is_true()
-	assert_that(routes.entry_of(desk_id)["cell"]).is_equal(Vector2i(7, 3))
+	assert_that(routes.entry_of(desk_id)["cell"]).is_equal(Vector2i(7, 4))
+	assert_int(routes.dist[Vector2i(7, 4)]).is_equal(6)
 	assert_int(routes.dist[Vector2i(7, 3)]).is_equal(5)
+	assert_that(routes.step_from(Vector2i(7, 4))).is_equal(Vector2i(0, -1))
 	assert_that(routes.step_from(Vector2i(7, 3))).is_equal(Vector2i(-1, 0))
 	assert_that(routes.step_from(Vector2i(8, 3))).is_equal(Vector2i(1, 0))
 	_assert_descends(routes)

@@ -4,8 +4,11 @@ extends Node3D
 ## over every full desk or scanner (MissSignals.full_stations), and a grey one
 ## captioned "Closed" over every desk or scanner with nobody on duty
 ## (MissSignals.closed_stations; a closed station shows only that, since it
-## serves nobody). PassengerViews creates it as a child and calls sync() after
-## each tick and draw() after placing its passengers. It reads the sim and
+## serves nobody), "Closed: staff spot blocked" when an old save left the
+## station's staff spot blocked, or "Closed: staff can't reach" when staff have
+## no way from an entrance to it (MissSignals.closed_reason). PassengerViews
+## creates it as a child and calls sync() after each tick and draw() after
+## placing its passengers. It reads the sim and
 ## never writes to it.
 ##
 ## The sign is a billboard drawn over the world (no depth test), like the
@@ -24,6 +27,8 @@ const FALLBACK_HEIGHT := 1080.0
 const CLOSED_FILL := Color(0.47, 0.53, 0.62)
 const FILL_TOLERANCE := 0.1
 const CLOSED_CAPTION := "Closed"
+const SPOT_BLOCKED_CAPTION := "Closed: staff spot blocked"
+const UNREACHABLE_CAPTION := "Closed: staff can't reach"
 
 static var _closed_texture: ImageTexture
 
@@ -109,7 +114,13 @@ func sync() -> void:
 			_drop_sign(_closed_signs, station)
 	for station in closed:
 		var sign := _show_sign(_closed_signs, station, "ClosedSign", _closed_icon())
-		(sign.get_node("Caption") as Label3D).text = CLOSED_CAPTION
+		var caption := CLOSED_CAPTION
+		match MissSignals.closed_reason(sim, station):
+			MissSignals.SPOT_BLOCKED_REASON:
+				caption = SPOT_BLOCKED_CAPTION
+			MissSignals.UNREACHABLE_REASON:
+				caption = UNREACHABLE_CAPTION
+		(sign.get_node("Caption") as Label3D).text = caption
 
 
 func draw() -> void:

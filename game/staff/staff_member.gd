@@ -1,20 +1,22 @@
 class_name StaffMember
 extends RefCounted
 ## One hired staff member as plain data: its role, whether it is idle, walking
-## to a station or on duty there, and where it stands. A member in the pool
+## to a station, on duty there or walking out after being fired, and where it
+## stands. A member in the pool
 ## (at NO_CELL) is off the floor; it enters through the terminal's entrance
 ## when it is sent to a station. Distances are whole millimetres, as for
 ## passengers (Passenger.segment_mm).
 
 enum Role { CHECKIN, SECURITY }
-enum State { IDLE, TO_STATION, ON_DUTY }
+## WALKING_OUT: fired, on its way to the entrance; no longer staff.
+enum State { IDLE, TO_STATION, ON_DUTY, WALKING_OUT }
 
 const NO_CELL := Vector2i(-1, -1)
 
 var id := 0
 var role: Role = Role.CHECKIN
 var state: State = State.IDLE
-## The desk or scanner it walks to or works at; 0 when idle.
+## The desk or scanner it walks to or works at; 0 when idle or walking out.
 var station := 0
 var at := NO_CELL
 ## The committed path, starting at the cell it set out from; empty in the pool.

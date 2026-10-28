@@ -57,7 +57,7 @@ func test_a_hired_agent_walks_from_the_entrance_to_the_nearest_desk() -> void:
 	var ticks := _until_on_duty(id)
 	print("agent on duty after %d ticks at %s" % [ticks, m.at])
 	assert_int(ticks).is_greater(0)
-	assert_that(m.at).is_equal(_w.sim.layout.lanes[desk][0])
+	assert_that(m.at).is_equal(StaffSpots.spot_of(_w.grid, desk))
 	assert_bool(_w.staff.is_staffed(desk)).is_true()
 	assert_int(_w.staff.on_duty_count(CHECKIN)).is_equal(1)
 
@@ -219,7 +219,7 @@ func test_a_floor_removed_under_the_next_cell_turns_the_member_back_without_a_ju
 	assert_int(ticks).is_greater(0)
 	assert_bool(m.backing_out).is_false()
 	assert_int(m.state).is_equal(StaffMember.State.ON_DUTY)
-	assert_that(m.at).is_equal(_w.sim.layout.lanes[m.station][0])
+	assert_that(m.at).is_equal(StaffSpots.spot_of(_w.grid, m.station))
 
 
 func test_an_edit_during_a_reversal_reroutes_the_rest_without_going_back_to_the_gone_cell() -> void:

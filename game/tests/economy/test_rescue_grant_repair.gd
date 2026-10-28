@@ -50,11 +50,26 @@ func _remove_all(kinds: Array[String]) -> void:
 ## Takes the floor off every free cell of row GAP_Y, cutting the entrance off
 ## from the desks. Returns how many cells lost their floor.
 func _cut_the_hall() -> int:
+	_old_save_rules()
 	var cut := 0
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 		if _world.grid.apply(BuildEdit.remove_floor(Vector2i(x, GAP_Y))).ok:
 			cut += 1
+	_today_s_rules()
 	return cut
+
+
+## The stuck terminals here cut the staff spots off from the entrance, which a
+## player edit can no longer do (decision
+## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3) but a
+## save from before that rule can hold. Between these two calls the grid takes
+## edits past the staff reach rule, as such a save was built.
+func _old_save_rules() -> void:
+	_world.grid.check_staff_reach = false
+
+
+func _today_s_rules() -> void:
+	_world.grid.check_staff_reach = true
 
 
 ## Commits each edit as its own paid player action, as clicks would.
@@ -92,9 +107,11 @@ func test_every_piece_standing_but_no_route_is_stuck() -> void:
 
 
 func test_a_wall_across_the_route_is_not_stuck_because_removing_it_is_free() -> void:
+	_old_save_rules()
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 		var edit := BuildEdit.place_wall(Vector2i(x, GAP_Y), BuildGrid.Side.NORTH)
 		assert_bool(_world.grid.apply(edit).ok).is_true()
+	_today_s_rules()
 	assert_bool(_grant.has_working_path()).is_false()
 	var edits := _grant.repair_plan().edits
 	assert_int(BuildTransaction.needed(_world.grid, edits)).is_equal(0)
@@ -205,10 +222,12 @@ func test_no_new_plan_while_the_wallet_covers_the_bound_and_a_raised_one_is_caug
 ## landside on paid floor, never airside through the divider.
 func test_a_new_desk_never_goes_airside_through_the_security_divider() -> void:
 	_remove_all(["desks"])
+	_old_save_rules()
 	for y in range(ReferenceTerminal.DIVIDER_Y, ReferenceTerminal.FLOOR_MAX.y):
 		for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 			if x != ReferenceTerminal.ENTRANCE_CELL.x:
 				_world.grid.apply(BuildEdit.remove_floor(Vector2i(x, y)))
+	_today_s_rules()
 	assert_bool(_grant.evaluate()).is_true()
 	var floors := 0
 	var desk_y := -1
@@ -236,8 +255,10 @@ func test_a_refund_earned_early_in_the_repair_lowers_the_grant() -> void:
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 		walls.append(BuildEdit.place_wall(Vector2i(x, 16), BuildGrid.Side.NORTH))
 	wallet.credit(BuildTransaction.needed(_world.grid, walls))
+	_old_save_rules()
 	for result in BuildTransaction.commit_batch(_world.grid, walls, wallet):
 		assert_bool(result.ok).is_true()
+	_today_s_rules()
 	assert_int(wallet.balance).is_equal(0)
 	_cut_the_hall()
 	var refund := PriceTable.refund_of(PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN))

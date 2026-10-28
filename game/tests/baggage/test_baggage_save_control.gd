@@ -11,22 +11,25 @@ extends GdUnitTestSuite
 func _tie_layout(world: BagTestWorld) -> Array[int]:
 	world.room(Rect2i(0, 2, 3, 3))
 	world.room(Rect2i(12, 2, 3, 3))
-	var desk_id := world.desk(Vector2i(6, 4))
+	var desk_id := world.desk(Vector2i(6, 5))
 	world.lay(Vector2i(2, 3), Vector2i(12, 3))
+	world.lay(Vector2i(7, 4), Vector2i(7, 4))
 	return [desk_id]
 
 
 func _merge_layout(world: BagTestWorld) -> Array[int]:
 	world.room(Rect2i(5, 8, 3, 3))
-	var left := world.desk(Vector2i(2, 4))
-	var right := world.desk(Vector2i(9, 4))
+	var left := world.desk(Vector2i(2, 5))
+	var right := world.desk(Vector2i(9, 5))
 	world.lay(Vector2i(3, 3), Vector2i(10, 3))
+	world.lay(Vector2i(3, 4), Vector2i(3, 4))
+	world.lay(Vector2i(10, 4), Vector2i(10, 4))
 	world.lay(Vector2i(6, 3), Vector2i(6, 9))
 	return [left, right]
 
 
 func _line_layout(world: BagTestWorld) -> Array[int]:
-	return [world.line(), world.desk(Vector2i(5, 8))]
+	return [world.line(), world.side_desk()]
 
 
 ## Runs `world` to `to`, running events[t] (Callable(world, desks)) after
@@ -81,12 +84,12 @@ func _check_ins(count: int, desk_index := 0) -> Callable:
 
 func test_equal_route_ties_play_on_alike() -> void:
 	var events := {0: _check_ins(4), 40: _check_ins(2)}
-	_compare(_tie_layout, 600, 33, 700, events)
+	_compare(_tie_layout, 600, 53, 700, events)
 
 
 func test_merge_contention_plays_on_alike() -> void:
 	var events := {0: _check_ins(3, 1), 20: _check_ins(3, 0)}
-	_compare(_merge_layout, 600, 69, 700, events)
+	_compare(_merge_layout, 600, 89, 700, events)
 
 
 func test_a_mid_edge_edit_plays_on_alike() -> void:

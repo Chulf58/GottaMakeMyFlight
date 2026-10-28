@@ -15,13 +15,18 @@ extends Node
 ## duty opens the airport on the next tick. Opening accepts the starter
 ## contract, whose first flight starts ISSUE_LEAD_TICKS after the opening.
 ##
-## The path answer is kept until the grid changes; the staff checks are cheap
+## When the only path runs through a desk or scanner staff can never work (its
+## staff spot blocked, or no way to it from an entrance), the blocker is
+## STAFF_SPOT, not NO_PATH: passengers have their way, the staff do not.
+##
+## The path answers are kept until the grid changes; the staff checks are cheap
 ## and run on each call. `changed` tells the HUD the blocker may have changed.
 
 signal changed
 
-## What keeps the airport closed, checked in this order.
-enum Blocker { NONE, NO_PATH, NO_CHECKIN, NO_SECURITY }
+## What keeps the airport closed, checked in the order NO_PATH, STAFF_SPOT,
+## NO_CHECKIN, NO_SECURITY.
+enum Blocker { NONE, NO_PATH, NO_CHECKIN, NO_SECURITY, STAFF_SPOT }
 
 ## In a scene the wired nodes; tests call bind(). Place this node after the
 ## PassengerSim, so the layout is rebuilt before this reads it.
@@ -33,6 +38,8 @@ enum Blocker { NONE, NO_PATH, NO_CHECKIN, NO_SECURITY }
 var opened_without_starter := false
 
 var _path_ok := false
+## Whether passengers would have a working path if every station were staffed.
+var _route_ok := false
 var _path_dirty := true
 
 
@@ -65,9 +72,12 @@ func blocker() -> Blocker:
 		return Blocker.NONE
 	if _path_dirty:
 		_path_ok = RepairPlan.has_working_path(staff.sim.grid, staff.sim.layout)
+		_route_ok = _path_ok or RepairPlan.has_working_path(staff.sim.grid, staff.sim.layout, false)
 		_path_dirty = false
-	if not _path_ok:
+	if not _route_ok:
 		return Blocker.NO_PATH
+	if not _path_ok:
+		return Blocker.STAFF_SPOT
 	if not _any_open(staff.sim.layout.desks):
 		return Blocker.NO_CHECKIN
 	if not _any_open(staff.sim.layout.scanners):

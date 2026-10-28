@@ -9,6 +9,9 @@ extends GdUnitTestSuite
 ## divider) and a corridor at x = 18, so a desk airside would cost no floor
 ## and a landside one does.
 
+## The cell kept for the second scanner's officer (see _cut_landside()).
+const OFFICER_WAY := Vector2i(20, 10)
+
 var _world: PassengerTestWorld
 var _grant: RescueGrant
 var _granted: Array = []
@@ -46,13 +49,17 @@ func _remove_all(def_id: StringName, only_x := -1) -> void:
 
 
 ## Removes the desks and every free landside floor cell below row 9 off the
-## x = 18 corridor.
+## x = 18 corridor, except (20, 10): beside the second scanner's service cell,
+## it is its officer's only way in once the hall is gone, and a player edit may
+## not cut a staff spot off from the entrance (decision
+## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3).
 func _cut_landside() -> void:
 	_remove_all(&"checkin_desk")
 	for y in range(ReferenceTerminal.DIVIDER_Y + 1, ReferenceTerminal.FLOOR_MAX.y):
 		for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
-			if x != ReferenceTerminal.ENTRANCE_CELL.x:
-				_world.grid.apply(BuildEdit.remove_floor(Vector2i(x, y)))
+			var cell := Vector2i(x, y)
+			if x != ReferenceTerminal.ENTRANCE_CELL.x and cell != OFFICER_WAY:
+				_world.grid.apply(BuildEdit.remove_floor(cell))
 
 
 ## The grant is paid, the new desk stands landside on bought floor, no

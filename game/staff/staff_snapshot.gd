@@ -4,6 +4,13 @@ extends RefCounted
 ## committed path, progress and pending replan are saved, so nothing is
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
+##
+## A save from before staff spots has its on-duty members on the station's
+## service cell (lane slot 0). Such a member loads standing on the station's
+## staff spot, or, when an old layout left that spot blocked or out of reach
+## from every entrance, idle where it stood (walking out if it was leaving),
+## since the station can never be staffed. An on-duty member on a free spot
+## that no entrance reaches loads the same way.
 
 const KEYS := ["save_version", "next_id", "members"]
 const MEMBER_KEYS := [
@@ -134,6 +141,8 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 		if not m.path.is_empty() and not _adjacent(m.path[m.path.size() - 1], cell):
 			return "member %d has a path that jumps" % m.id
 		m.path.append(cell)
+	_migrate_service_cell(m, sim)
+	_release_unreachable(m, sim)
 	var problem := _place_problem(m)
 	if problem == "":
 		problem = _duty_problem(m, sim)
@@ -142,17 +151,67 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	return m
 
 
+## Moves a member an old save has on duty on its station's service cell onto
+## the station's staff spot, or, when the spot is blocked, lets it stand idle
+## there (or walk out, if it was leaving). Anything else is left for the
+## checks.
+static func _migrate_service_cell(m: StaffMember, sim: PassengerSim) -> void:
+	if m.state != StaffMember.State.ON_DUTY or m.path_index != m.path.size() - 1 or m.seg_mm != 0:
+		return
+	var lane: Array = sim.layout.lanes.get(m.station, [])
+	if lane.is_empty() or m.at != lane[0] or m.path[m.path_index] != m.at:
+		return
+	var stations := sim.layout.desks if m.role == StaffMember.Role.CHECKIN else sim.layout.scanners
+	if not stations.has(m.station):
+		return
+	var here: Array[Vector2i] = [m.at]
+	var never := _never_staffed(m.station, sim)
+	if not never:
+		m.at = StaffSpots.spot_of(sim.grid, m.station)
+		here = [m.at]
+	m.set_path(here)
+	if not never:
+		return
+	_stand_down(m)
+
+
+## An on-duty member of an old save, standing on its station's free spot,
+## when staff can no longer reach that spot from any entrance (a layout saved
+## before the reach rule): it stands idle there, or walks out if it was
+## leaving, as StaffSim would release it.
+static func _release_unreachable(m: StaffMember, sim: PassengerSim) -> void:
+	if m.state != StaffMember.State.ON_DUTY or m.is_moving():
+		return
+	if StaffSpots.blocked(sim.grid, m.station):
+		return
+	if StaffSpots.unreachable(sim.grid, m.station):
+		_stand_down(m)
+
+
+## Whether staff can never work `station`: its spot is blocked, or no
+## entrance has a way to it.
+static func _never_staffed(station: int, sim: PassengerSim) -> bool:
+	return StaffSpots.blocked(sim.grid, station) or StaffSpots.unreachable(sim.grid, station)
+
+
+## Leaves the member idle where it stands, or walking out if it was leaving.
+static func _stand_down(m: StaffMember) -> void:
+	m.station = 0
+	m.state = StaffMember.State.IDLE
+	if m.leaving:
+		m.leaving = false
+		m.state = StaffMember.State.WALKING_OUT
+		m.needs_replan = true
+
+
 ## Whether the member's cell, path and progress agree.
 static func _place_problem(m: StaffMember) -> String:
+	var walking := (
+		m.state == StaffMember.State.TO_STATION or m.state == StaffMember.State.WALKING_OUT
+	)
 	if (
 		m.backing_out
-		and (
-			m.state != StaffMember.State.TO_STATION
-			or m.in_pool()
-			or m.path_index != 0
-			or m.path.size() < 2
-			or m.seg_mm <= 0
-		)
+		and (not walking or m.in_pool() or m.path_index != 0 or m.path.size() < 2 or m.seg_mm <= 0)
 	):
 		return "is backing out but not partway through the first step of a walk"
 	if m.in_pool():
@@ -175,6 +234,10 @@ static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 		if m.station != 0 or m.is_moving() or m.needs_replan or m.leaving:
 			return "is idle but has a station or a walk"
 		return ""
+	if m.state == StaffMember.State.WALKING_OUT:
+		if m.station != 0 or m.leaving:
+			return "is walking out but has a station or is leaving"
+		return ""
 	var stations := sim.layout.desks
 	if m.role == StaffMember.Role.SECURITY:
 		stations = sim.layout.scanners
@@ -188,8 +251,10 @@ static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 		return "is on duty but walking"
 	if not sim.layout.is_usable(m.station):
 		return "is on duty at station %d, which is not usable" % m.station
-	if m.at != sim.layout.lanes[m.station][0]:
-		return "is on duty away from its station service cell"
+	if StaffSpots.blocked(sim.grid, m.station):
+		return "is on duty at station %d, whose staff spot is blocked" % m.station
+	if m.at != StaffSpots.spot_of(sim.grid, m.station):
+		return "is on duty away from its station's staff spot"
 	return ""
 
 

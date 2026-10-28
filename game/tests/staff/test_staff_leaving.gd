@@ -94,7 +94,7 @@ func test_a_station_removed_while_its_member_is_leaving_lets_it_go_at_once() -> 
 	var changes := [0]
 	_a.staff.staff_changed.connect(func() -> void: changes[0] += 1)
 	assert_bool(_a.grid.apply(BuildEdit.remove_object(desk)).ok).is_true()
-	assert_object(_a.staff.get_member(id)).is_null()
+	assert_int(_a.staff.get_member(id).state).is_equal(StaffMember.State.WALKING_OUT)
 	assert_int(_a.staff.count(CHECKIN)).is_equal(0)
 	assert_int(_a.staff.leaving_count(CHECKIN)).is_equal(0)
 	assert_int(_a.staff.staff_at(desk)).is_equal(0)
