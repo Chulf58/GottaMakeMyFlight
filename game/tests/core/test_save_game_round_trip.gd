@@ -18,13 +18,13 @@ extends GdUnitTestSuite
 
 const SEED := 6_102_026
 const OTHER_SEED := 99
-const PATH := "user://saves/test_save_game_round_trip.json"
 ## Ticks before the starter's first boarding starts at which the save is taken.
 const SAVE_LEAD := 100
 ## Ticks played past the start of day 1.
 const AFTER_ROLLOVER := 200
 const OPEN_LIMIT := 2000
 
+var _path := SaveTestKit.run_path("test_save_game_round_trip")
 var _control: Node
 var _source: Node
 var _loaded: Node
@@ -55,10 +55,10 @@ func before() -> void:
 	_run["same_before_save"] = SaveTestKit.checksum(_control) == SaveTestKit.checksum(_source)
 	_run["made_before"] = _sim(_control).made_count()
 	_run["balance_before"] = _wallet(_control).balance
-	_run["saved"] = SaveTestKit.save_game(_source).save_to_file(PATH)
+	_run["saved"] = SaveTestKit.save_game(_source).save_to_file(_path)
 	_loaded = SaveTestKit.boot(self, OTHER_SEED)
-	_run["loaded"] = SaveTestKit.save_game(_loaded).load_from_file(PATH)
-	DirAccess.remove_absolute(PATH)
+	_run["loaded"] = SaveTestKit.save_game(_loaded).load_from_file(_path)
+	DirAccess.remove_absolute(_path)
 	_play_on()
 
 
