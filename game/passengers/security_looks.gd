@@ -260,11 +260,12 @@ static func in_tray(index: int, count: int, bag_length: float) -> Vector3:
 static func floor_spot(_sim: PassengerSim, p: Passenger, index: int, count: int) -> Transform3D:
 	var across := Basis(Vector3.UP, PI / 2.0) if count < 2 else Basis.IDENTITY
 	var side := 0.0 if count < 2 else (FLOOR_APART_M if index == 0 else -FLOOR_APART_M)
-	if p.stage in Passenger.CAFE_SEAT_STAGES:
+	var where := StageKinds.location(p.stage)
+	if where == StageKinds.Location.FACILITY_SEAT:
 		# Beside the chair, lying along it.
 		var along := 0.0 if count < 2 else side
 		return Transform3D(Basis.IDENTITY, Vector3(-CAFE_BESIDE_M, 0.0, along))
-	if p.stage in PassengerSim.SEAT_STAGES:
+	if where == StageKinds.Location.GATE_SEAT:
 		return Transform3D(across, Vector3(side, 0.0, SEAT_AHEAD_M))
 	return Transform3D(across, Vector3(side, 0.0, FLOOR_AHEAD_M))
 
@@ -281,9 +282,10 @@ static func _side_closed(grid: BuildGrid, cell: Vector2i, toward: Vector2i) -> b
 ## Whether `p` sits at a gate chair or a cafe seat (or is sitting down or
 ## standing up there).
 static func _seated(sim: PassengerSim, p: Passenger) -> bool:
-	if p.stage in PassengerSim.SEAT_STAGES and p.seat_object != 0:
+	var where := StageKinds.location(p.stage)
+	if where == StageKinds.Location.GATE_SEAT and p.seat_object != 0:
 		return true
-	return p.stage in Passenger.CAFE_SEAT_STAGES and sim.cafes.seat_facing(p) != Vector2i.ZERO
+	return where == StageKinds.Location.FACILITY_SEAT and sim.cafes.seat_facing(p) != Vector2i.ZERO
 
 
 static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
