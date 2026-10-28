@@ -30,6 +30,11 @@ const KEYS := [
 const V6 := 6
 ## The last version before the security runtime, migrated on load.
 const V7 := 7
+## The last version before the shorter lane unpack, migrated on load.
+const V8 := 8
+## A version 8 lane started its unpack work at 6 ticks plus 8 per bag.
+const V8_UNPACK_TICKS := 6
+const V8_UNPACK_BAG_TICKS := 8
 const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
 	"id",
@@ -222,15 +227,18 @@ static func _record(p: Passenger) -> Dictionary:
 	return record
 
 
-## A version 6 or 7 save as the current version, nothing drawn. Version 6 to
+## A version 6, 7 or 8 save as the current version, nothing drawn. Version 6 to
 ## 7: every passenger gets zero bags and no liquids or alarm. Version 7 to 8:
 ## no passenger has a security phase, except that a basic scanner's passenger
 ## in service keeps that service exactly as it was: SCAN with the ticks left
 ## to its saved service end as work, its incident counted as resolved, so it
 ## ends on the same tick with no repack. Any other save is returned as it is,
-## for the checks to accept or refuse. The given dictionary is not edited.
+## for the checks to accept or refuse. Version 8 to 9: unpack work left is
+## scaled from the old start (6 + 8 per bag) to the new one, rounded up so a
+## passenger still unpacking keeps at least 1; a value past the old start is
+## left as it is and refused. The given dictionary is not edited.
 static func _migrated(data: Dictionary) -> Dictionary:
-	if not _whole(data.get("save_version")) or int(data["save_version"]) not in [V6, V7]:
+	if not _whole(data.get("save_version")) or int(data["save_version"]) not in [V6, V7, V8]:
 		return data
 	var out := data.duplicate(true)
 	var passengers: Array = out["passengers"] if typeof(out.get("passengers")) == TYPE_ARRAY else []
@@ -240,7 +248,11 @@ static func _migrated(data: Dictionary) -> Dictionary:
 				record["carry_on"] = 0
 				record["liquids"] = false
 				record["alarm"] = false
+	var from_version := int(out["save_version"])
 	out["save_version"] = PassengerSim.SAVE_VERSION
+	if from_version == V8:
+		_rescale_unpack(passengers)
+		return out
 	var by_id := {}
 	for record in passengers:
 		if typeof(record) == TYPE_DICTIONARY:
@@ -275,6 +287,32 @@ static func _migrated(data: Dictionary) -> Dictionary:
 		)
 	out["security"] = security
 	return out
+
+
+## Version 8 to 9: each passenger in UNPACK has its work left scaled to the new
+## start, which depends on its bags. A passenger whose bags or work are not
+## whole numbers, or whose work is past the old start, is left as it is for
+## the checks to refuse.
+static func _rescale_unpack(passengers: Array) -> void:
+	for record in passengers:
+		if typeof(record) != TYPE_DICTIONARY or not _whole(record.get("security_phase")):
+			continue
+		if int(record["security_phase"]) != SecurityRuntime.Phase.UNPACK:
+			continue
+		if not _whole(record.get("carry_on")) or not _whole(record.get("security_work")):
+			continue
+		var bags := int(record["carry_on"])
+		var work := int(record["security_work"])
+		if bags < 0 or bags > CarryOnTraits.MAX_BAGS or work < 0:
+			continue
+		var old_start := V8_UNPACK_TICKS + V8_UNPACK_BAG_TICKS * bags
+		if work > old_start:
+			continue
+		var new_start := (
+			SecurityRuntime.LANE_UNPACK_TICKS + SecurityRuntime.LANE_UNPACK_BAG_TICKS * bags
+		)
+		@warning_ignore("integer_division")
+		record["security_work"] = (work * new_start + old_start - 1) / old_start
 
 
 static func _top_problem(data: Dictionary) -> String:

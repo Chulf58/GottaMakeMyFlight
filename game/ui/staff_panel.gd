@@ -41,11 +41,11 @@ const CLOSED_HINTS := {
 	),
 	AirportGate.Blocker.STAFF_SPOT:
 	(
-		"Airport closed: staff can't reach the desk or scanner passengers need."
+		"Airport closed: staff can't reach the desk, scanner or lane passengers need."
 		+ " Clear its staff spot or the way to it"
 	),
 	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
-	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner",
+	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
 }
 const ROLE_WIDTH := 210.0
 ## Width of the hint card's text, in layout pixels.

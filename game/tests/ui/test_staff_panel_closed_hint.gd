@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## While the airport is closed the staff panel's hint names what keeps it
 ## closed (decision airport-opening-design-stays-open-once-opened-starter-
 ## flight-placed-after-opening): no working path, no check-in agent at a desk
-## or no security officer at a scanner. The line goes once the airport opens.
+## or no security officer at a scanner or lane. The line goes once the airport opens.
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
@@ -75,11 +75,11 @@ func test_the_hint_follows_the_blocker_until_the_airport_opens() -> void:
 	)
 	_until_on_duty(CHECKIN)
 	assert_str(_panel.hint_label().text).is_equal(
-		"Airport closed: no security officer at a scanner\nHire a security officer"
+		"Airport closed: no security officer at a scanner or lane\nHire a security officer"
 	)
 	_panel.hire_button(SECURITY).pressed.emit()
 	assert_str(_panel.hint_label().text).is_equal(
-		"Airport closed: no security officer at a scanner"
+		"Airport closed: no security officer at a scanner or lane"
 	)
 	_until_on_duty(SECURITY)
 	_w.step()

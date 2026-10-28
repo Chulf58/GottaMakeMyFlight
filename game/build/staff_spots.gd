@@ -107,30 +107,35 @@ static func unreachable(grid: BuildGrid, station: int) -> bool:
 	return not reach.is_empty() and not reach.has(spot)
 
 
-## Every cell staff can walk to from an entrance door's cell, as cell -> true:
-## a flood over BuildGrid.can_route() steps, the links StaffSim's A* paths
-## use. Empty when the grid has no entrance. Each reachable cell is visited
-## once and tries its eight neighbours.
+## Every cell staff can walk to from an entrance door's cell, as cell -> the
+## region it lies in: a flood over BuildGrid.can_route() steps, the links
+## StaffSim's A* paths use. Two cells have a way between them exactly when
+## their regions are equal; each region is numbered from 1 by the first
+## entrance (in object id order) that reaches it. Empty when the grid has no
+## entrance. Each reachable cell is visited once and tries its eight
+## neighbours.
 static func reach(grid: BuildGrid) -> Dictionary:
 	var seen := {}
-	var queue: Array[Vector2i] = []
+	var region := 0
 	for id in grid.object_ids():
 		var record := grid.get_object(id)
 		if StringName(record["def"]) != ENTRANCE:
 			continue
 		var door: Vector2i = record["anchor"]
-		if grid.is_walkable(door) and not seen.has(door):
-			seen[door] = true
-			queue.append(door)
-	var head := 0
-	while head < queue.size():
-		var cell := queue[head]
-		head += 1
-		for offset in NEIGHBOURS:
-			var next := cell + offset
-			if not seen.has(next) and grid.can_route(cell, next):
-				seen[next] = true
-				queue.append(next)
+		if not grid.is_walkable(door) or seen.has(door):
+			continue
+		region += 1
+		seen[door] = region
+		var queue: Array[Vector2i] = [door]
+		var head := 0
+		while head < queue.size():
+			var cell := queue[head]
+			head += 1
+			for offset in NEIGHBOURS:
+				var next := cell + offset
+				if not seen.has(next) and grid.can_route(cell, next):
+					seen[next] = region
+					queue.append(next)
 	return seen
 
 
