@@ -27,6 +27,11 @@ const OPEN_TICK := 800
 const STAFF_LIMIT_TICKS := 3000
 const RUN_LIMIT_TICKS := 40000
 const HANG_MS := 60000
+## The least share of the booked passengers that must make the flight, in
+## percent. Seed 7 measured 30 of 30 at the lane and 27 of 30 at the basic
+## scanner, so a checkpoint nobody clears fails at either tier.
+const LANE_MADE_FLOOR_PERCENT := 90
+const BASIC_MADE_FLOOR_PERCENT := 50
 
 var _lane := true
 var _pax := 30
@@ -396,6 +401,22 @@ func _report(results: Dictionary) -> void:
 		_invalid("the flight had no result within %d ticks" % RUN_LIMIT_TICKS)
 	if made + missed + int(no_shows.get("no_entrance", 0)) + int(no_shows.get("late", 0)) != _pax:
 		_invalid("made + missed + no-shows is not the booked %d" % _pax)
+	var floor_percent := LANE_MADE_FLOOR_PERCENT if _lane else BASIC_MADE_FLOOR_PERCENT
+	var made_floor := ceili(_pax * floor_percent / 100.0)
+	print(
+		(
+			"CHECK cleared=%d (need 1 or more) made=%d (need %d, %d%% of %d booked) made<=cleared %s"
+			% [_cleared.size(), made, made_floor, floor_percent, _pax, made <= _cleared.size()]
+		)
+	)
+	if _cleared.is_empty():
+		_invalid("no passenger was cleared by security")
+	if made < made_floor:
+		_invalid("only %d made the flight, the floor is %d" % [made, made_floor])
+	if made > _cleared.size():
+		_invalid(
+			"%d made the flight but only %d were cleared by security" % [made, _cleared.size()]
+		)
 	if (
 		_lane
 		and not (
