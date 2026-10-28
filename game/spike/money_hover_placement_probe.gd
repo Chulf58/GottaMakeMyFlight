@@ -11,9 +11,11 @@ extends SceneTree
 ## never opens, or opens empty, is PROBE_INVALID: every pass value compares
 ## printed numbers, and the popup is read from the slot's own card.
 ##
-## Window pixels are the viewport point through Window.get_final_transform,
-## plus the window's screen position when popups are native windows
-## (gui_embed_subwindows false), which is how Godot places them.
+## Every rect is compared in the space the popup is placed in: an embedded
+## popup (gui_embed_subwindows true, the project's setting) sits in layout
+## units, so the layout rects are used as they are; a native popup would be in
+## window pixels (the viewport point through Window.get_final_transform) plus
+## the window's screen position. It saves a plate of each window size.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -90,16 +92,20 @@ func _at_window(window_size: Vector2i) -> void:
 	)
 	_expect(root.size == window_size, "the window is %s, not %s" % [root.size, window_size])
 	var to_window := root.get_final_transform()
-	var offset := Vector2.ZERO if root.gui_embed_subwindows else Vector2(root.position)
-	var slot_px := _px(_slot.get_global_rect(), to_window, offset)
-	var money_px := _px(_menu.money_label().get_global_rect(), to_window, offset)
-	var stars_px := _px(_badge.card().get_global_rect(), to_window, offset)
+	var embedded := root.gui_embed_subwindows
+	var offset := Vector2.ZERO if embedded else Vector2(root.position)
+	var slot_r := _in_popup_space(_slot.get_global_rect(), to_window, offset)
+	var money_r := _in_popup_space(_menu.money_label().get_global_rect(), to_window, offset)
+	var stars_r := _in_popup_space(_badge.card().get_global_rect(), to_window, offset)
 	var inside := Rect2(offset, Vector2(root.size))
+	if embedded:
+		inside = Rect2(Vector2.ZERO, root.get_visible_rect().size)
 	# The pointer goes onto the slot's middle; the tooltip opens after Godot's
 	# own delay, so motion is sent until the card is in the tree.
-	var target := slot_px.get_center() - offset
+	var centre := _slot.get_global_rect().get_center()
+	var target := to_window * centre
 	_beat("hover")
-	root.warp_mouse(root.get_final_transform().affine_inverse() * target)
+	root.warp_mouse(centre)
 	var card: Control = null
 	for i in OPEN_LIMIT_FRAMES:
 		var motion := InputEventMouseMotion.new()
@@ -119,27 +125,27 @@ func _at_window(window_size: Vector2i) -> void:
 		_fail("the tooltip card closed before it could be measured")
 		return
 	var popup := card.get_window()
-	var popup_px := Rect2(Vector2(popup.position), Vector2(popup.size))
+	var popup_r := Rect2(Vector2(popup.position), Vector2(popup.size))
 	print("PROBE hovered=%s" % [root.gui_get_hovered_control()])
-	print("PROBE slot_px=%s money_px=%s stars_px=%s" % [slot_px, money_px, stars_px])
-	print("PROBE popup_px=%s window_rect=%s" % [popup_px, inside])
+	print("PROBE slot_r=%s money_r=%s stars_r=%s" % [slot_r, money_r, stars_r])
+	print("PROBE popup_r=%s window_rect=%s" % [popup_r, inside])
 	print(
 		(
 			"PROBE popup.x=%.1f slot.x=%.1f popup.y=%.1f slot.bottom=%.1f"
-			% [popup_px.position.x, slot_px.position.x, popup_px.position.y, slot_px.end.y]
+			% [popup_r.position.x, slot_r.position.x, popup_r.position.y, slot_r.end.y]
 		)
 	)
-	_expect(popup_px.has_area(), "the popup has no area")
+	_expect(popup_r.has_area(), "the popup has no area")
 	_expect(
-		absf(popup_px.position.x - slot_px.position.x) <= EDGE_TOLERANCE_PX,
+		absf(popup_r.position.x - slot_r.position.x) <= EDGE_TOLERANCE_PX,
 		"the popup does not start at the slot's left edge"
 	)
-	_expect(popup_px.position.y >= slot_px.end.y, "the popup is not below the slot")
-	_expect(not popup_px.intersects(money_px), "the popup covers the Money figure")
-	_expect(not popup_px.intersects(stars_px), "the popup covers the rating stars")
-	_expect(inside.encloses(popup_px), "the popup is not inside the window")
-	var away := Vector2(root.size) * 0.55
-	root.warp_mouse(away / to_window.get_scale())
+	_expect(popup_r.position.y >= slot_r.end.y, "the popup is not below the slot")
+	_expect(not popup_r.intersects(money_r), "the popup covers the Money figure")
+	_expect(not popup_r.intersects(stars_r), "the popup covers the rating stars")
+	_expect(inside.encloses(popup_r), "the popup is not inside the window")
+	_save_plate(window_size)
+	root.warp_mouse(root.get_visible_rect().size * 0.55)
 	await _frames(8)
 
 
@@ -154,9 +160,23 @@ func _open_card() -> Control:
 	return card
 
 
-## A viewport rect in window pixels (plus the window's screen offset).
-func _px(rect: Rect2, to_window: Transform2D, offset: Vector2) -> Rect2:
+## A layout (viewport) rect in the space the tooltip popup is placed in: an
+## embedded popup is positioned and sized in layout units, a native one in
+## window pixels plus the window's screen offset.
+func _in_popup_space(rect: Rect2, to_window: Transform2D, offset: Vector2) -> Rect2:
+	if root.gui_embed_subwindows:
+		return rect
 	return Rect2(to_window * rect.position + offset, rect.size * to_window.get_scale())
+
+
+## The window as drawn, with the hovered card, under
+## tools/blender/out/money-hover-placement/.
+func _save_plate(window_size: Vector2i) -> void:
+	var dir := ProjectSettings.globalize_path("res://../tools/blender/out/money-hover-placement")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var path := "%s/hover-%dx%d.png" % [dir, window_size.x, window_size.y]
+	var err := root.get_texture().get_image().save_png(path)
+	print("PROBE plate=%s err=%d" % [path, err])
 
 
 func _expect(ok: bool, reason: String) -> void:
