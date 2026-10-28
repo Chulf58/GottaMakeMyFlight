@@ -394,6 +394,11 @@ func _refresh_sets(leg: int) -> void:
 		var stands := StaffSpots.spot_of(_grid, id)
 		if stands != BuildObjectDef.NO_CELL:
 			_reserved[stands] = true
+	# A whole security lane keeps its berth, return route, exit, pickup and
+	# officer spots: a new piece there would end the lane.
+	for arch in _layout.security_lanes.complete_arches():
+		for cell in SecurityLanes.lane_cells(_layout.security_lanes.lane(arch)):
+			_reserved[cell] = true
 	_lane_cells.clear()
 	for lane in _layout.lanes.values():
 		for cell in lane:
