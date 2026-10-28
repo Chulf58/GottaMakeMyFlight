@@ -23,6 +23,8 @@ const KEYS := [
 	"flight_results",
 	"scheduled",
 ]
+## The last version before the security traits, migrated on load.
+const V6 := 6
 const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
 	"id",
@@ -47,9 +49,10 @@ const INT_FIELDS := [
 	"hunger",
 	"cafe_cooldown",
 	"arrival_type",
+	"carry_on",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
-const BOOL_FIELDS := ["late", "cleared", "needs_replan"]
+const BOOL_FIELDS := ["late", "cleared", "needs_replan", "liquids", "alarm"]
 
 
 ## `totals` is [made, missed]; `scheduled` the scheduled flight ids.
@@ -121,7 +124,8 @@ static func save(
 
 
 ## A dictionary with the restored state, or with an "error" key.
-static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
+static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
+	var data := _migrated(saved)
 	var problem := _top_problem(data)
 	if problem != "":
 		return {"error": problem}
@@ -206,6 +210,24 @@ static func _record(p: Passenger) -> Dictionary:
 	return record
 
 
+## A version 6 save as version 7: every passenger gets zero bags and no
+## liquids or alarm, nothing else changes and nothing is drawn. Any other
+## save is returned as it is, for the checks to accept or refuse. The given
+## dictionary is not edited.
+static func _migrated(data: Dictionary) -> Dictionary:
+	if not _whole(data.get("save_version")) or int(data["save_version"]) != V6:
+		return data
+	var out := data.duplicate(true)
+	out["save_version"] = PassengerSim.SAVE_VERSION
+	if typeof(out.get("passengers")) == TYPE_ARRAY:
+		for record in out["passengers"]:
+			if typeof(record) == TYPE_DICTIONARY:
+				record["carry_on"] = 0
+				record["liquids"] = false
+				record["alarm"] = false
+	return out
+
+
 static func _top_problem(data: Dictionary) -> String:
 	for key in KEYS:
 		if not data.has(key):
@@ -265,6 +287,8 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.hunger >= 0
 		and p.hunger <= CafeSim.HUNGER_MAX
 		and p.cafe_cooldown >= 0
+		and p.carry_on >= 0
+		and p.carry_on <= CarryOnTraits.MAX_BAGS
 	)
 	var stage_ok := (
 		p.stage >= 0
