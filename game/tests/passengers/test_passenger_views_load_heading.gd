@@ -5,11 +5,11 @@ extends GdUnitTestSuite
 ## a snap has no interval to take a heading from.
 
 const SEED := 6_102_026
-const PATH := "user://saves/test_passenger_views_load_heading.json"
 const SEARCH_LIMIT := 12000
 const TURN_LIMIT := 4000
 const TURNED_RAD := 0.3
 
+var _path := SaveTestKit.run_path("test_passenger_views_load_heading")
 var _main: Node
 var _views: PassengerViews
 var _sim: PassengerSim
@@ -27,7 +27,7 @@ func before() -> void:
 		ticks += 1
 	_views.draw()
 	_run["saved_headings"] = _headings(_walkers())
-	_run["saved"] = SaveTestKit.save_game(_main).save_to_file(PATH)
+	_run["saved"] = SaveTestKit.save_game(_main).save_to_file(_path)
 	# Play on until a saved walker's view faces away from its saved heading.
 	var turned := false
 	ticks = 0
@@ -41,13 +41,15 @@ func before() -> void:
 				turned = true
 	_run["turned_before_load"] = turned
 	_run["rotations_before_load"] = _rotations(_run["saved_headings"].keys())
-	_run["loaded"] = SaveTestKit.save_game(_main).load_from_file(PATH)
-	DirAccess.remove_absolute(PATH)
+	_run["loaded"] = SaveTestKit.save_game(_main).load_from_file(_path)
 	_run["rotations_after_load"] = _rotations(_run["saved_headings"].keys())
 
 
 func after() -> void:
-	_main.free()
+	if _main != null:
+		_main.free()
+	DirAccess.remove_absolute(_path)
+	DirAccess.remove_absolute(_path + ".tmp")
 
 
 ## Ids of passengers walking now that have a view, in the sim's own terms.

@@ -338,7 +338,11 @@ static func wages_link_problem(
 ## saved tick is that day's last. A day after the clock's would skip days; one
 ## more than a day before it would never charge the days between. Only NO_DAY
 ## (no day charged yet) is exempt. A save without WAGE_TIMING_KEY holds the day
-## charged at its start, which is the clock's own day (from_snapshot migrates it).
+## charged at its start, which is the clock's own day (from_snapshot migrates it to
+## the day before). Such a save taken on that day's last tick is refused: the migrated
+## day D - 1 leaves D to its own last tick, which the save has already passed, so D's
+## wages would never be charged. Charging on load is not possible here (no part sees the
+## wallet or the clock being loaded), so the state is refused loudly instead.
 static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> String:
 	if not settlement.has("wages_day") or not clock.has("tick"):
 		return ""
@@ -358,6 +362,15 @@ static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> Stri
 		return (
 			"settlement: wages were last charged for day %d, but the clock is on day %d"
 			% [saved_day, clock_day]
+		)
+	if (
+		not settlement.has(WAGE_TIMING_KEY)
+		and saved_day == clock_day
+		and GameCalendar.is_last_tick_of_day(clock_tick)
+	):
+		return (
+			"settlement: an old-format save taken on day %d's last tick would never charge that day"
+			% clock_day
 		)
 	return ""
 
