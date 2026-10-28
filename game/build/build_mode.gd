@@ -81,8 +81,8 @@ const TOOL_OBJECTS := {
 	Tool.ARCH: SecurityLanes.ARCH,
 	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
 }
-## The security lane part tools, in flow order. They are off until lanes can
-## be staffed (lane_tools_enabled).
+## The security lane part tools, in flow order. They are off while
+## SecurityLanes.enabled is.
 const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
 ## What one belt cell costs, whatever piece it becomes.
 const BELT_PRICE_ID := &"baggage_belt"
@@ -133,14 +133,6 @@ const INVALID_TINT := Color(0.95, 0.3, 0.25, 0.5)
 const MARKER_TINT := Color(1.0, 0.85, 0.3, 0.7)
 const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 
-## The security lane feature flag, off in the game: a whole lane cannot be
-## staffed until the lane staffing item (Security 5/8) lands, and RepairPlan
-## would count it as a working security leg. While it is off the lane part
-## tools cannot be picked, no hotkey maps to them and BuildMenu shows no Lane
-## tray, so no lane part can be built and no save can hold one. Tests turn it
-## on and back off.
-static var lane_tools_enabled := false
-
 @export var grid_size := BuildGrid.DEFAULT_SIZE
 ## When true the grid is centred on the world origin at height 0 and
 ## grid_origin is not used.
@@ -161,8 +153,12 @@ static var lane_tools_enabled := false
 ## The tool BuildMode starts on. main.tscn sets None, so a new game has no tool
 ## and a stray click on the world builds nothing; the Floor default keeps a bare
 ## BuildMode ready to paint for tests and probes.
+## A tool that is off (tool_enabled()) is replaced by None, with a warning.
 @export var initial_tool := Tool.FLOOR:
 	set(value):
+		if not tool_enabled(value):
+			push_warning("BuildMode: initial tool %s is off; starting on None" % Tool.keys()[value])
+			value = Tool.NONE
 		initial_tool = value
 		tool = value
 
@@ -290,16 +286,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## Whether `which` can be picked: every tool but the lane part tools, which
-## need lane_tools_enabled.
+## need SecurityLanes.enabled.
 static func tool_enabled(which: Tool) -> bool:
-	return lane_tools_enabled or not LANE_TOOLS.has(which)
+	return SecurityLanes.enabled or not LANE_TOOLS.has(which)
 
 
 ## Picks a tool. A tool that is off (tool_enabled()) is refused with a
 ## warning and the current tool stays.
 func set_tool(new_tool: Tool) -> void:
 	if not tool_enabled(new_tool):
-		push_warning("BuildMode: tool %s is off (lane_tools_enabled)" % Tool.keys()[new_tool])
+		push_warning("BuildMode: tool %s is off (SecurityLanes.enabled)" % Tool.keys()[new_tool])
 		return
 	cancel_area()
 	tool = new_tool
@@ -324,7 +320,13 @@ func grid_point(from: Vector3, direction: Vector3) -> Variant:
 
 
 ## The edit the current tool would make at a ground point, or null for none.
+## A tool that is off (tool_enabled()) makes none, however it was selected, so
+## apply_at() and the ghost do nothing with it either.
 func edit_at(point: Vector3) -> BuildEdit:
+	return _tool_edit_at(point) if tool_enabled(tool) else null
+
+
+func _tool_edit_at(point: Vector3) -> BuildEdit:
 	var cell := grid.world_to_cell(point)
 	var side: int = grid.nearest_side(point)
 	if _dragging and _drag_side >= 0:

@@ -35,6 +35,14 @@ func test_every_catalog_object_has_a_positive_price() -> void:
 		assert_int(PriceTable.price_of_object(id)).is_greater(0)
 
 
+func test_each_security_lane_part_has_its_price() -> void:
+	assert_int(PriceTable.price_of_object(&"security_arch")).is_equal(1100)
+	assert_int(PriceTable.price_of_object(&"xray_belt")).is_equal(900)
+	assert_int(PriceTable.price_of_object(&"tray_table")).is_equal(250)
+	assert_int(PriceTable.price_of_object(&"pickup_table")).is_equal(250)
+	assert_int(PriceTable.price_of_object(&"security_scanner")).is_equal(900)
+
+
 ## Decision security-tiers-the-old-single-scanner-stays-as-a-cheap-basic: the
 ## lane is the bigger upgrade, so its four parts cost well over one scanner.
 func test_a_whole_security_lane_costs_more_than_two_basic_scanners() -> void:

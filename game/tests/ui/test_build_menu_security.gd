@@ -1,7 +1,7 @@
 class_name TestBuildMenuSecurity
 extends GdUnitTestSuite
 ## The security lane parts in the build menu with the lane feature flag on
-## (BuildMode.lane_tools_enabled; decisions security-lane-parts-are-placed-
+## (SecurityLanes.enabled; decisions security-lane-parts-are-placed-
 ## separately-tray-table-x-ray-b and security-lane-parts-get-their-own-lane-
 ## build-category): a Lane tray right after Security holding the four parts
 ## in flow order, each with a placeholder tile until its thumbnail is
@@ -27,7 +27,7 @@ var _menu: BuildMenu
 
 
 func before_test() -> void:
-	BuildMode.lane_tools_enabled = true
+	SecurityLanes.enabled = true
 	_port = SubViewport.new()
 	_port.size = Vector2i(1280, 720)
 	add_child(_port)
@@ -41,7 +41,7 @@ func before_test() -> void:
 
 func after_test() -> void:
 	_port.free()
-	BuildMode.lane_tools_enabled = false
+	SecurityLanes.enabled = false
 
 
 func _category_named(category_name: String) -> int:

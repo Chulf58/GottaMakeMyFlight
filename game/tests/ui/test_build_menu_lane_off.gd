@@ -1,10 +1,11 @@
 class_name TestBuildMenuLaneOff
 extends GdUnitTestSuite
-## With the lane feature flag at its default (BuildMode.lane_tools_enabled
-## off) no security lane can be built in the game: the bar is as it was
-## before lanes, no card, hotkey or set_tool() reaches a lane part tool, and
-## nothing else in the game places a lane part (RepairPlan builds only its
-## leg pieces). A save can then never hold a lane either.
+## With the lane feature flag at its default (SecurityLanes.enabled off) no
+## security lane can be built or loaded in the game: the bar is as it was
+## before lanes; no card, hotkey, set_tool(), initial tool or tool written
+## straight to BuildMode makes a lane part edit; a grid snapshot holding a
+## lane part is refused; and nothing else in the game places a lane part
+## (RepairPlan builds only its leg pieces).
 
 const LANE_TOOLS := [
 	BuildMode.Tool.TRAY_TABLE,
@@ -38,7 +39,7 @@ func after_test() -> void:
 
 
 func test_the_flag_is_off_by_default() -> void:
-	assert_bool(BuildMode.lane_tools_enabled).is_false()
+	assert_bool(SecurityLanes.enabled).is_false()
 
 
 func test_the_bar_is_as_it_was_before_lanes() -> void:
@@ -69,6 +70,48 @@ func test_no_card_hotkey_or_set_tool_reaches_a_lane_tool() -> void:
 		_mode.set_tool(tool)
 		assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
 	assert_bool(BuildMode.tool_enabled(BuildMode.Tool.SCANNER)).is_true()
+
+
+func test_a_lane_initial_tool_starts_on_none_and_makes_no_edit() -> void:
+	var mode := BuildMode.new()
+	mode.grid_size = Vector2i(12, 12)
+	mode.initial_tool = BuildMode.Tool.ARCH
+	assert_int(mode.initial_tool).is_equal(BuildMode.Tool.NONE)
+	assert_int(mode.tool).is_equal(BuildMode.Tool.NONE)
+	_port.add_child(mode)
+	assert_int(mode.tool).is_equal(BuildMode.Tool.NONE)
+	assert_object(mode.edit_at(mode.grid.cell_to_world(Vector2i(5, 5)))).is_null()
+
+
+func test_a_lane_tool_set_directly_makes_no_edit_and_places_nothing() -> void:
+	var cell := Vector2i(5, 5)
+	assert_bool(_mode.grid.apply(BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, 1)).ok).is_true()
+	var point := _mode.grid.cell_to_world(cell)
+	# Control: an enabled object tool at the same point makes a placement.
+	_mode.tool = BuildMode.Tool.SCANNER
+	var control := _mode.edit_at(point)
+	assert_object(control).is_not_null()
+	assert_int(control.kind).is_equal(BuildEdit.Kind.PLACE_OBJECT)
+	for tool in LANE_TOOLS:
+		_mode.tool = tool
+		assert_object(_mode.edit_at(point)).is_null()
+		assert_object(_mode.apply_at(point)).is_null()
+	assert_array(_mode.grid.object_ids()).is_empty()
+
+
+func test_a_snapshot_holding_a_lane_part_is_refused() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(8, 8))
+	PassengerTestWorld.place(grid, SecurityLanes.ARCH, Vector2i(3, 3), 0)
+	var data := grid.to_snapshot()
+	var loaded := BuildGrid.new(Vector2i(8, 8))
+	assert_bool(loaded.from_snapshot(data)).is_false()
+	assert_array(loaded.object_ids()).is_empty()
+	# Control: the same snapshot loads once lanes are on.
+	SecurityLanes.enabled = true
+	var ok := loaded.from_snapshot(data)
+	SecurityLanes.enabled = false
+	assert_bool(ok).is_true()
+	assert_int(loaded.object_ids().size()).is_equal(1)
 
 
 func test_repair_plans_never_place_a_lane_part() -> void:

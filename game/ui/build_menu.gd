@@ -63,7 +63,7 @@ const REMOVE_CATEGORY := 7
 ## parts-are-placed-separately-tray-table-x-ray-b and security-lane-parts-get-
 ## their-own-lane-build-category): five cards and the rotate card are wider
 ## than COLUMN_W, so they get a tray of their own, right after Security. It is
-## in the bar only while BuildMode.lane_tools_enabled is on.
+## in the bar only while SecurityLanes.enabled is on.
 const LANE_CATEGORY := {"name": "Lane", "tools": BuildMode.LANE_TOOLS}
 const LANE_AFTER := "Security"
 const NO_CATEGORY := -1
@@ -204,10 +204,10 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 
 
 ## The categories in bar order: CATEGORIES, with LANE_CATEGORY after
-## LANE_AFTER while BuildMode.lane_tools_enabled is on.
+## LANE_AFTER while SecurityLanes.enabled is on.
 static func categories() -> Array:
 	var out := CATEGORIES.duplicate()
-	if BuildMode.lane_tools_enabled:
+	if SecurityLanes.enabled:
 		for i in out.size():
 			if out[i]["name"] == LANE_AFTER:
 				out.insert(i + 1, LANE_CATEGORY)

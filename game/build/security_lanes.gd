@@ -142,6 +142,14 @@ const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(-1, -1),
 ]
 
+## The security lane feature flag, off in the game: a whole lane cannot be
+## staffed until the lane staffing item (Security 5/8) lands, and RepairPlan
+## would count it as a working security leg. While it is off, BuildMode will
+## not pick or use a lane part tool, BuildMenu shows no Lane tray, and
+## BuildGrid.from_snapshot() refuses a snapshot holding a lane part, so no
+## lane can be built or loaded. Tests turn it on and back off.
+static var enabled := false
+
 ## Every arch on the grid, in id order.
 var arches: Array[int] = []
 ## Arch id -> the lane() dictionary of its whole lane.
@@ -175,6 +183,11 @@ static func geometry(anchor: Vector2i, facing: int, mirror: int) -> Dictionary:
 	var passage: Array[Vector2i] = [lane["unpack"], lane["arch"], lane["pickup"]]
 	lane["passage"] = passage
 	return lane
+
+
+## Whether `def_id` is one of the four lane parts.
+static func is_part(def_id: StringName) -> bool:
+	return PART_IDS.has(def_id)
 
 
 ## Every cell a lane names: its four part cells, its walk and officer cells
