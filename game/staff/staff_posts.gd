@@ -78,20 +78,38 @@ static func workable(
 	return not blocked(grid, layout, station) and not unreachable(grid, layout, station, slot)
 
 
-## The first tick on which a helper is on duty at `station`, read from where
-## it stands now, or -1 when none will be without a new decision: the
-## current tick for one on duty, and for one walking there the tick its
-## committed path brings it onto the helper spot. StaffSim steps before the
-## passengers, so a helper arriving on a tick already counts for that tick's
-## security work. A helper whose path is about to be planned again (an edit
-## touched it) or does not end on the spot gives -1.
+## The first tick on which a helper is on duty at `station`, or -1 when none
+## will be without a new decision: the current tick for one on duty, and for
+## one walking there the tick its committed path brings it onto the helper
+## spot. StaffSim steps before the passengers, so a helper arriving on a tick
+## already counts for that tick's security work.
+##
+## Between a build edit (or a hire or a firing) and the next tick, that next
+## step can still change the post: a walking helper whose path the edit
+## touched plans again, a primary vacancy recalls the helper or promotes it,
+## a leaving primary frees a post, and an idle officer takes a vacant helper
+## post. When one of these is pending (_pass_pending()) the answer is read
+## from a copy of the staff after playing that step on it (_after_next_step()),
+## so the forecast agrees with the runtime; StaffSim itself is not changed.
+## A helper whose path, planned again, does not end on the spot cannot reach
+## it and gives -1.
 static func helper_from(staff: StaffSim, station: int) -> int:
+	if not staff.sim.layout.security_lanes.is_complete(station):
+		return -1
+	if _pass_pending(staff, station):
+		return _after_next_step(staff, station)
+	return _arrival(staff, station, staff.sim.tick)
+
+
+## helper_from() read from where the helper of `station` stands, with `now`
+## the tick that state belongs to; -1 for a path still to be planned again.
+static func _arrival(staff: StaffSim, station: int, now: int) -> int:
 	var id := staff.staff_at(station, StaffMember.Slot.HELPER)
 	if id == 0:
 		return -1
 	var m := staff.get_member(id)
 	if m.state == StaffMember.State.ON_DUTY:
-		return staff.sim.tick
+		return now
 	var spot := staff.spot_of(station, StaffMember.Slot.HELPER)
 	if m.state != StaffMember.State.TO_STATION or m.needs_replan or m.path_end() != spot:
 		return -1
@@ -100,7 +118,51 @@ static func helper_from(staff: StaffSim, station: int) -> int:
 		mm += Passenger.segment_mm(m.path[i], m.path[i + 1])
 	# Each step walks WALK_MM and carries what is left over to the next cell,
 	# so it arrives on the step whose total first reaches the rest of the path.
-	return staff.sim.tick + maxi(JourneyForecast.walk_ticks(mm), 1)
+	return now + maxi(JourneyForecast.walk_ticks(mm), 1)
+
+
+## Whether the next StaffSim.step() may change the helper post of lane
+## `station` beyond walking it: the helper's path is to be planned again, a
+## security primary post is vacant (step 1 promotes, step 3 recalls), a
+## member is leaving (its post comes free), or the helper post is vacant while
+## an officer is idle (step 4). Otherwise the pass leaves it as it is.
+static func _pass_pending(staff: StaffSim, station: int) -> bool:
+	var helper := staff.staff_at(station, StaffMember.Slot.HELPER)
+	if helper != 0 and staff.get_member(helper).needs_replan:
+		return true
+	var idle := false
+	for m in _members(staff):
+		if m.leaving:
+			return true
+		idle = idle or (m.role == StaffMember.Role.SECURITY and m.state == StaffMember.State.IDLE)
+	if helper == 0:
+		return idle and is_vacant(staff, station, StaffMember.Slot.HELPER)
+	for other in staff.stations_of(StaffMember.Role.SECURITY):
+		if is_vacant(staff, other, StaffMember.Slot.PRIMARY):
+			return true
+	return false
+
+
+## helper_from() after playing the next StaffSim.step() on a copy of `staff`
+## (a snapshot round trip, which plays on exactly as the original), with the
+## tick moved on as PassengerSim.on_tick() moves it before stepping the staff,
+## and put back. A helper on duty now and after counts from now.
+static func _after_next_step(staff: StaffSim, station: int) -> int:
+	var sim := staff.sim
+	var next := StaffSim.new()
+	next.sim = sim
+	if not next.from_snapshot(staff.to_snapshot()):
+		next.free()
+		push_error("StaffPosts.helper_from: the staff copy did not load; no helper forecast")
+		return -1
+	sim.tick += 1
+	next.step()
+	sim.tick -= 1
+	var from := _arrival(next, station, sim.tick + 1)
+	next.free()
+	if from == sim.tick + 1 and staff.is_staffed(station, StaffMember.Slot.HELPER):
+		return sim.tick
+	return from
 
 
 ## The pass described at the top, on `staff`'s members. It changes posts only

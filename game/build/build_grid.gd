@@ -335,10 +335,16 @@ func _officer_spot_problem(edit: BuildEdit) -> BuildResult:
 	]
 	if not kinds.has(edit.kind):
 		return null
+	return _recognised_lanes().officer_spot_problem(self, edit)
+
+
+## The security lanes as the grid stands, recognised on first use after a
+## change.
+func _recognised_lanes() -> SecurityLanes:
 	if _lanes == null:
 		_lanes = SecurityLanes.new()
 		_lanes.rebuild(self)
-	return _lanes.officer_spot_problem(self, edit)
+	return _lanes
 
 
 ## The cells staff can reach from an entrance door (StaffSpots.reach()), as
@@ -352,8 +358,9 @@ func staff_reach() -> Dictionary:
 
 
 ## STAFF_SPOT when applying `edits` together would cut a staff spot staff can
-## reach now off from every entrance: a standing station's (naming it), or the
-## spot of a station the edits place, when staff reach its cell now. Null
+## reach now off from every entrance: a standing station's (naming it), an
+## officer spot of a whole security lane as the grid stands (naming its arch),
+## or the spot of a station the edits place, when staff reach its cell now. Null
 ## otherwise, always with no entrance on the grid, and with check_staff_reach
 ## off or inside an apply_batch() whose whole batch passed. Each edit must
 ## already be accepted on the grid as it stands, and no two may touch the same
@@ -382,11 +389,11 @@ func staff_reach_problem(edits: Array[BuildEdit]) -> BuildResult:
 	if not narrows:
 		return null
 	var before := staff_reach()
-	if before.is_empty() or not _spots.any_reached(before, fresh):
+	if before.is_empty() or not _any_spot_reached(before, fresh):
 		return null
 	_last_after = _reach_after(edits)
 	_last_after_known = true
-	return _spots.reach_problem(before, _last_after, fresh)
+	return _reach_problem(before, _last_after, fresh)
 
 
 ## Whether applying all of `edits` leaves every staff spot staff reach now
@@ -422,9 +429,24 @@ func _batch_keeps_reach(edits: Array[BuildEdit]) -> bool:
 	if trial.is_empty():
 		return true
 	var before := staff_reach()
-	if before.is_empty() or not _spots.any_reached(before, fresh):
+	if before.is_empty() or not _any_spot_reached(before, fresh):
 		return true
-	return _spots.reach_problem(before, _reach_after(trial), fresh) == null
+	return _reach_problem(before, _reach_after(trial), fresh) == null
+
+
+## Whether staff reach (`before`) some staff spot now: a station's, a whole
+## lane's officer spot, or one of the `fresh` spots of stations being placed.
+func _any_spot_reached(before: Dictionary, fresh: Array[Vector2i]) -> bool:
+	return _spots.any_reached(before, fresh) or _recognised_lanes().any_reached(before)
+
+
+## The staff reach rule on a station's spot (StaffSpots.reach_problem()), then
+## on a whole lane's officer spots (SecurityLanes.reach_problem()).
+func _reach_problem(before: Dictionary, after: Dictionary, fresh: Array[Vector2i]) -> BuildResult:
+	var problem := _spots.reach_problem(before, after, fresh)
+	if problem == null:
+		problem = _recognised_lanes().reach_problem(before, after)
+	return problem
 
 
 ## Whether a placement can join _batch_keeps_reach()'s trial: not an
