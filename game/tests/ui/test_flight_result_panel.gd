@@ -229,3 +229,17 @@ func test_the_result_sits_below_the_flight_panel_and_above_the_build_tray() -> v
 	)
 	assert_bool(rect.end.y <= tray_top).is_true()
 	assert_bool(rect.end.x <= _port.size.x and rect.position.x >= 0.0).is_true()
+
+
+func test_the_title_names_the_flight_not_its_day_occurrence() -> void:
+	var summary := {"flight": "GMF101-d0", "made": 2, "missed": 1, "reasons": []}
+	var text := FlightResultPanel.text_for(summary)
+	assert_str(text.split("\n")[0]).is_equal("GMF101 result")
+	assert_str(text).not_contains("-d0")
+	summary["flight"] = "GMF101-d12"
+	assert_str(FlightResultPanel.text_for(summary).split("\n")[0]).is_equal("GMF101 result")
+
+
+func test_a_flight_id_with_no_day_suffix_keeps_its_title() -> void:
+	var summary := {"flight": "GMF1", "made": 0, "missed": 0, "reasons": []}
+	assert_str(FlightResultPanel.text_for(summary).split("\n")[0]).is_equal("GMF1 result")

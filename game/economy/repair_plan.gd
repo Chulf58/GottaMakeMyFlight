@@ -35,7 +35,8 @@ extends RefCounted
 ## search reached, or a new one, priced as its object plus the floor its
 ## footprint (and a scanner's exit cell, or a door's own cell) still needs. A
 ## new desk or scanner also needs its staff spot (StaffSpots) free and floored,
-## and that floor is part of its price. A standing desk or scanner whose spot
+## and joined by floor to the walk (_spot_link()), and that floor is part of
+## its price. A standing desk or scanner whose spot
 ## is blocked (StaffSpots.blocked(), only in an old save) or that staff cannot
 ## reach from an entrance (StaffSpots.unreachable()) is no working
 ## station, and every standing station's spot is kept clear of new pieces, as
@@ -123,6 +124,9 @@ var _no_floor := {}
 ## already holds.
 var _reserved := {}
 var _lane_cells := {}
+## Cells staff can walk to from an entrance (StaffSpots.reach()), for
+## _spot_link().
+var _staff_reach := {}
 ## Walkable cell -> LAND, AIR or both; the side a leg may not enter; whether
 ## any airside exists.
 var _region := {}
@@ -168,12 +172,20 @@ static func can_finish(
 
 ## The least balance that buys `edits` one by one in order on `grid`: each
 ## edit's price (BuildTransaction.quote()) must be there when it is bought,
-## and a refund it earns pays toward the edits after it.
+## and a refund it earns pays toward the edits after it. A cell painted again
+## before its floor is taken up is charged once.
 ## PriceTable.NO_PRICE when an edit has no price.
 static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 	var least := 0
 	var spent := 0
+	var painted := {}
 	for edit in plan_edits:
+		if edit.kind == BuildEdit.Kind.PAINT_FLOOR:
+			if painted.has(edit.cell):
+				continue
+			painted[edit.cell] = true
+		elif edit.kind == BuildEdit.Kind.REMOVE_FLOOR:
+			painted.erase(edit.cell)
 		var quote := BuildTransaction.quote(grid, edit)
 		if not quote.priced:
 			return PriceTable.NO_PRICE
@@ -324,6 +336,8 @@ func _solve(leg: int, sources: Array) -> bool:
 		choice["walk"] = _walk_cells(choice["reach"])
 		if source.has("door"):
 			choice["walk"][source["door"]] = true
+		for cell in choice.get("link", []):
+			choice["walk"][cell] = true
 	for choice in choices:
 		if _attempts >= max_attempts:
 			_capped = true
@@ -373,6 +387,7 @@ func _refresh_sets(leg: int) -> void:
 	for lane in _layout.lanes.values():
 		for cell in lane:
 			_lane_cells[cell] = true
+	_staff_reach = StaffSpots.reach(_grid)
 
 
 ## Marks each walkable cell LAND or AIR (see the class notes).
@@ -470,6 +485,9 @@ func _new_choices(leg: int, sources: Array) -> Array:
 		for facing in 4:
 			var anchor := cell - def.interaction_cell(Vector2i.ZERO, facing)
 			var cells := def.footprint(anchor, facing)
+			var footprint := {}
+			for each in cells:
+				footprint[each] = true
 			var next := cell
 			if def.walk_through:
 				var back := BuildObjectDef.rotate_offset(Vector2i(0, -1), facing)
@@ -484,17 +502,67 @@ func _new_choices(leg: int, sources: Array) -> Array:
 				cells.append(next)
 			# Passengers may cross the staff spot, so it may lie on the walk.
 			var spot := StaffSpots.cell_of(def_id, anchor, facing)
+			var link: Array[Vector2i] = []
 			if spot != BuildObjectDef.NO_CELL:
 				if not _free_for_piece([spot] as Array[Vector2i], {}, false):
 					continue
-				cells.append(spot)
-			var piece := _floors(cells)
+				# Staff must walk to the spot, so floor joins it to the walk.
+				link = _spot_link(spot, footprint, walk)
+				if link.is_empty():
+					continue
+				for each in link:
+					if not cells.has(each):
+						cells.append(each)
+			# The walk's own edits floor its cells, and its price has them.
+			var bare: Array[Vector2i] = []
+			for each in cells:
+				if not walk.has(each):
+					bare.append(each)
+			var piece := _floors(bare)
 			piece.append(BuildEdit.place_object(def_id, anchor, facing))
 			var cost := _dist[_index(cell)] + (price + _floors_price(piece)) * SCALE
-			out.append(
-				{"cost": cost, "rank": out.size(), "reach": cell, "next": next, "piece": piece}
-			)
+			var choice := {"cost": cost, "rank": out.size(), "reach": cell, "next": next}
+			choice["piece"] = piece
+			choice["link"] = link
+			out.append(choice)
 	return out
+
+
+## The cells from a new station's staff spot to the nearest cell staff reach
+## now (_staff_reach) or that `walk` will floor, by open steps around the
+## station's `footprint`, the spot first; empty when there is no such way or
+## the spot is outside the grid, must stay bare or lies on the side the leg
+## may not reach. StaffSpots refuses a spot with no floored neighbour, and
+## staff need the way in, so the bare cells on it are floored with the piece.
+## A floor island staff cannot reach is passed over, not taken for the way in.
+func _spot_link(spot: Vector2i, footprint: Dictionary, walk: Dictionary) -> Array[Vector2i]:
+	if not _grid.in_bounds(spot) or _no_floor.has(spot) or _off_side(spot):
+		return [] as Array[Vector2i]
+	var prev := {spot: spot}
+	var queue: Array[Vector2i] = [spot]
+	var head := 0
+	while head < queue.size():
+		var cell := queue[head]
+		head += 1
+		for side in 4:
+			var next := cell + BuildGrid.SIDE_STEP[side]
+			if prev.has(next) or not _grid.in_bounds(next) or footprint.has(next):
+				continue
+			if _grid.object_at(next) != 0 or _no_floor.has(next) or _off_side(next):
+				continue
+			var wall := _grid.wall_kind(cell, side)
+			if wall != BuildGrid.WallKind.NONE and wall != BuildGrid.WallKind.DOOR:
+				continue
+			prev[next] = cell
+			if walk.has(next) or _staff_reach.has(next):
+				var path: Array[Vector2i] = []
+				var at := next
+				while at != spot:
+					at = prev[at]
+					path.push_front(at)
+				return path
+			queue.append(next)
+	return [] as Array[Vector2i]
 
 
 ## New exits: where one may stand, reached through its service cell.

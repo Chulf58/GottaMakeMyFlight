@@ -106,6 +106,11 @@ var hunger := 0
 ## No cafe visit is considered before this tick (CafeSim's retry and browse
 ## cooldowns).
 var cafe_cooldown := 0
+## What it brings to security (CarryOnTraits), drawn at spawn: 0 to 2 carry-on
+## bags, and whether it carries liquids and whether it sets off the alarm.
+var carry_on := 0
+var liquids := false
+var alarm := false
 
 
 static func in_cafe(stage: Stage) -> bool:

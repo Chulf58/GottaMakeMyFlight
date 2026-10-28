@@ -139,6 +139,7 @@ func test_a_ledger_with_a_settlement_missing_its_wage_state_is_refused() -> void
 	var bad := _taken()
 	for key in Settlement.OPTIONAL_SNAPSHOT_KEYS:
 		bad["settlement"].erase(key)
+	bad["settlement"].erase(Settlement.WAGE_TIMING_KEY)
 	var control := bad.duplicate(true)
 	control.erase("day_ledger")
 	assert_bool(_wallet.credit(17, C.SHOP)).is_true()

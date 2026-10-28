@@ -41,10 +41,10 @@ func test_a_save_taken_mid_day_loads_without_a_charge() -> void:
 		_kit.world.step()
 	assert_int(_kit.world.sim.wallet.balance).is_equal(balance)
 	assert_array(_kit.charges).is_empty()
-	assert_int(_kit.settlement.wages_paid_today()).is_equal(60)
+	assert_int(_kit.settlement.wages_paid_today()).is_equal(0)
 
 
-func test_a_save_taken_before_midnight_charges_the_new_day_once_after_loading() -> void:
+func test_a_save_taken_before_the_charge_tick_charges_the_day_once_after_loading() -> void:
 	_kit.hire(CHECKIN)
 	_kit.near_midnight(1, 40)
 	_kit.world.step()
@@ -52,16 +52,35 @@ func test_a_save_taken_before_midnight_charges_the_new_day_once_after_loading() 
 	for i in 80:
 		_kit.world.step()
 	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 - 60)
-	assert_array(_kit.charges).is_equal([[1, 60, 0]])
+	assert_array(_kit.charges).is_equal([[0, 60, 0]])
 
 
-func test_loading_a_save_taken_just_after_midnight_never_charges_that_day_twice() -> void:
+## Saved on the very tick before the charge: the load charges it, once.
+func test_a_save_taken_one_tick_before_the_charge_tick_charges_it_once() -> void:
 	_kit.hire(CHECKIN)
-	_kit.near_midnight(1, 1)
+	_kit.near_midnight(1, 3)
 	_kit.world.step()
-	_kit.world.step()
-	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 - 60)
+	assert_bool(GameCalendar.is_last_tick_of_day(_kit.world.clock.tick)).is_false()
 	_load_into_new_session(_kit.save())
+	for i in 20:
+		_kit.world.step()
+	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 - 60)
+	assert_array(_kit.charges).is_equal([[0, 60, 0]])
+	assert_int(_kit.settlement.wages_paid_today()).is_equal(0)
+
+
+## Saved on the charge tick itself: the load keeps the charge and its paid
+## total, charges nothing again, and starts the next day over at 0.
+func test_loading_a_save_taken_on_the_charge_tick_never_charges_that_day_twice() -> void:
+	_kit.hire(CHECKIN)
+	_kit.charge(1)
+	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 - 60)
+	var saved := _kit.save()
+	_load_into_new_session(saved)
+	assert_int(_kit.settlement.wages_paid_today()).is_equal(60)
+	assert_str(_kit.settlement.to_snapshot()["wages_day"]).is_equal("0")
+	_kit.world.step()
+	assert_int(_kit.settlement.wages_paid_today()).is_equal(0)
 	for i in 20:
 		_kit.world.step()
 	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 - 60)
@@ -88,7 +107,7 @@ func test_rewinding_to_a_save_before_midnight_charges_it_once_more() -> void:
 func test_owed_wages_and_the_paid_total_survive_a_save() -> void:
 	_kit.hire(CHECKIN, 2)
 	assert_bool(_kit.world.sim.wallet.spend(950, Wallet.Category.BUILD)).is_true()
-	_kit.cross(1)
+	_kit.charge(1)
 	assert_int(_kit.settlement.wages_owed()).is_equal(70)
 	var saved := Settlement.new()
 	assert_bool(saved.from_snapshot(_kit.save()["settlement"])).is_true()
@@ -110,21 +129,21 @@ func test_a_save_from_before_wages_loads_with_no_debt_and_charges_from_the_next_
 	assert_array(_kit.charges).is_empty()
 	_kit.cross(3)
 	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 + 37 - 60)
-	assert_array(_kit.charges).is_equal([[3, 60, 0]])
+	assert_array(_kit.charges).is_equal([[2, 60, 0]])
 
 
 func test_a_snapshot_holds_the_wage_state_as_decimal_strings() -> void:
 	_kit.hire(CHECKIN)
-	_kit.cross(1)
+	_kit.charge(1)
 	var data := _kit.settlement.to_snapshot()
 	assert_str(data["wages_owed"]).is_equal("0")
-	assert_str(data["wages_day"]).is_equal("1")
+	assert_str(data["wages_day"]).is_equal("0")
 	assert_str(data["wages_paid_today"]).is_equal("60")
 
 
 func test_a_malformed_wage_key_is_refused_and_changes_nothing() -> void:
 	_kit.hire(CHECKIN)
-	_kit.cross(1)
+	_kit.charge(1)
 	var good := _kit.settlement.to_snapshot()
 	var too_big := str(Settlement.MAX_WAGES + 1)
 	var paid_too_big := str(Settlement.MAX_WAGES_PAID_TODAY + 1)
@@ -163,18 +182,22 @@ func test_the_wage_keys_come_as_a_group_and_a_partial_set_is_refused() -> void:
 
 
 func test_a_day_other_than_the_clock_day_is_a_broken_link() -> void:
-	var clock := {"tick": str(GameCalendar.day_start(4) + 100)}
-	var saved := {"wages_day": "4"}
-	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
-	saved["wages_day"] = "5"
-	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 5")
-	saved["wages_day"] = "3"
-	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 3")
-	saved["wages_day"] = "0"
-	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 0")
-	saved["wages_day"] = str(Settlement.NO_DAY)
-	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
-	assert_str(Settlement.wages_day_problem({"owed": []}, clock)).is_empty()
+	var timed := {"wages_day": "3", Settlement.WAGE_TIMING_KEY: Settlement.WAGE_TIMING_LAST_TICK}
+	var mid_day := {"tick": str(GameCalendar.day_start(4) + 100)}
+	var last_tick := {"tick": str(GameCalendar.day_start(5) - 1)}
+	assert_str(Settlement.wages_day_problem(timed, mid_day)).is_empty()
+	# The clock's own day is charged only on its last tick, so it is not a mid-day state.
+	timed["wages_day"] = "4"
+	assert_str(Settlement.wages_day_problem(timed, mid_day)).contains("day 4")
+	assert_str(Settlement.wages_day_problem(timed, last_tick)).is_empty()
+	timed["wages_day"] = "3"
+	assert_str(Settlement.wages_day_problem(timed, last_tick)).is_empty()
+	for day in ["5", "2", "0"]:
+		timed["wages_day"] = day
+		assert_str(Settlement.wages_day_problem(timed, mid_day)).contains("day " + day)
+	timed["wages_day"] = str(Settlement.NO_DAY)
+	assert_str(Settlement.wages_day_problem(timed, mid_day)).is_empty()
+	assert_str(Settlement.wages_day_problem({"owed": []}, mid_day)).is_empty()
 
 
 ## The link check holds on every tick a save can be taken, the one that starts a
