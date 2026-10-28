@@ -21,18 +21,14 @@ const MIXED := [
 ]
 
 var _worlds: Array[SecurityTestWorld] = []
-var _lanes_were := false
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
-	_lanes_were = SecurityLanes.enabled
-	SecurityLanes.enabled = true
 
 
 func after() -> void:
 	PassengerTestWorld.tracker = null
-	SecurityLanes.enabled = _lanes_were
 
 
 func after_test() -> void:

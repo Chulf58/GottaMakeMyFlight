@@ -85,6 +85,10 @@ var _reserved := PackedInt32Array()
 ## The staff spot of every desk and scanner (StaffSpots), kept apart from
 ## _reserved. Derived from _objects.
 var _spots := StaffSpots.new()
+## The security lanes as the grid stands (SecurityLanes), recognised when an
+## edit that could block an officer spot is first checked after a change;
+## null until then.
+var _lanes: SecurityLanes = null
 ## The cells staff can reach from an entrance (StaffSpots.reach()), worked out
 ## when first asked after a change; _staff_reach_known goes false on every
 ## change to the grid data.
@@ -275,9 +279,11 @@ func passage_cells(object_id: int) -> Array[Vector2i]:
 
 
 ## Checks an edit without changing anything. An edit the other rules accept
-## is then checked against the staff spots (StaffSpots.edit_problem()), then,
+## is then checked against the staff spots (StaffSpots.edit_problem()), then
+## against the officer spots of whole security lanes
+## (SecurityLanes.officer_spot_problem()), then,
 ## unless `check_reach` is false, against staff reach (staff_reach_problem());
-## a snapshot load skips both, so an old save still loads. BeltShaper passes
+## a snapshot load skips all three, so an old save still loads. BeltShaper passes
 ## false per cell and checks a whole line's reach at once.
 func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 	_handoff_edit = null
@@ -309,6 +315,8 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 			result = _check_reshape_belt(edit)
 	if result.ok:
 		var spot_problem := _spots.edit_problem(self, edit)
+		if spot_problem == null:
+			spot_problem = _officer_spot_problem(edit)
 		if spot_problem == null and check_reach:
 			spot_problem = staff_reach_problem([edit] as Array[BuildEdit])
 			if spot_problem == null and _last_after_known:
@@ -317,6 +325,20 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 		if spot_problem != null:
 			result = spot_problem
 	return result
+
+
+## SecurityLanes.officer_spot_problem() for an edit that places an object or
+## a wall or removes floor, on the lanes recognised as the grid stands.
+func _officer_spot_problem(edit: BuildEdit) -> BuildResult:
+	var kinds := [
+		BuildEdit.Kind.PLACE_OBJECT, BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_FLOOR
+	]
+	if not kinds.has(edit.kind):
+		return null
+	if _lanes == null:
+		_lanes = SecurityLanes.new()
+		_lanes.rebuild(self)
+	return _lanes.officer_spot_problem(self, edit)
 
 
 ## The cells staff can reach from an entrance door (StaffSpots.reach()), as
@@ -555,6 +577,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		_staff_reach = _last_after
 	_staff_reach_known = _handoff_edit == edit
 	_handoff_edit = null
+	_lanes = null
 	_emit_or_hold(func() -> void: edit_applied.emit(edit, result))
 	return result
 
@@ -703,6 +726,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_v_paid = loaded._v_paid
 	_pathing = loaded._pathing
 	_staff_reach_known = false
+	_lanes = null
 	var every: Array[Vector2i] = []
 	for y in size.y:
 		for x in size.x:
@@ -723,6 +747,7 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_reserved = _zeros_ints(cells)
 	_spots = StaffSpots.new()
 	_staff_reach_known = false
+	_lanes = null
 	_objects = {}
 	_next_object_id = 1
 	_room_at = _zeros_ints(cells)
@@ -765,13 +790,9 @@ func _load_cells(data: Dictionary) -> String:
 	return ""
 
 
-## Why a snapshot's object entry cannot be loaded, or "". A security lane
-## part is refused while lanes are off (SecurityLanes.enabled), so a save
-## cannot bring in a lane the game cannot staff yet.
+## Why a snapshot's object entry cannot be loaded, or "".
 func _load_object_problem(entry: Dictionary, def_id: StringName, anchor: Vector2i) -> String:
 	var id := int(entry["id"])
-	if SecurityLanes.is_part(def_id) and not SecurityLanes.enabled:
-		return "object %d is a security lane part (%s), and security lanes are off" % [id, def_id]
 	var check := _check_place_object(def_id, anchor, int(entry["facing"]))
 	if not check.ok:
 		return "object %d refused: %s" % [id, check.reason_text()]
