@@ -111,9 +111,9 @@ const TRAIL_SIDE_MAX_M := 0.6
 const SWING_TURN := PI / 10.0
 const SWING_REACH_M := 0.2
 const SWING_RADIUS_M := 0.55
-## The probe's snap threshold: a drawn axle moving more than this between two
-## frames at 1x.
-const SWING_JUMP_M := 0.2
+## The probe's snap threshold: a drawn axle moving more than this a sim tick
+## (the walk is about 0.07 m a tick; a swing at most SWING_TURN of arc).
+const SWING_JUMP_M := 0.6
 ## The pulling arm: turned out a little, less swing, leaning back.
 const PULL_OUT_DEGREES := 12.0
 const PULL_SWING_KEPT := 0.2

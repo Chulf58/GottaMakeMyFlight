@@ -1368,7 +1368,7 @@ func _sweep() -> void:
 				player.seek(fmod(frame * 0.071, player.current_animation_length), true)
 		await process_frame
 		if not running:
-			CarryChecks.watch_pulled(_sim, _views, pulled, turns)
+			CarryChecks.watch_pulled(_sim, _views, pulled, turns, _clock.tick + _clock.alpha)
 		if not running and frame % 2 == 1:
 			continue
 		carriers.clear()

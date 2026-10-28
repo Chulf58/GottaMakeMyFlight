@@ -126,9 +126,10 @@ static func detached(
 
 ## Each pulled roller's drawn axle this frame against the last: a body turn
 ## of more than 60 degrees counts as a sharp turn (turns[0]), an axle move of
-## more than CarryOnProps.SWING_JUMP_M plus 5 cm counts as a snap (turns[1]).
+## more than CarryOnProps.SWING_JUMP_M a sim tick (a 60 fps frame at 1x is
+## a third of a tick) counts as a snap (turns[1]).
 static func watch_pulled(
-	sim: PassengerSim, views: PassengerViews, pulled: Dictionary, turns: Array
+	sim: PassengerSim, views: PassengerViews, pulled: Dictionary, turns: Array, now: float
 ) -> void:
 	var props := views.carry_on_props()
 	var seen := {}
@@ -144,9 +145,17 @@ static func watch_pulled(
 		if pulled.has(id):
 			var last: Array = pulled[id]
 			turns[0] += int(absf(angle_difference(last[1], body.rotation.y)) > PI / 3.0)
-			if axle.distance_to(last[0]) > CarryOnProps.SWING_JUMP_M + 0.05:
+			# Per sim tick: a slow frame runs several ticks, and the roller
+			# keeps pace with its walker through them.
+			var ticks := maxf(now - float(last[2]), 0.34)
+			if axle.distance_to(last[0]) > CarryOnProps.SWING_JUMP_M * ticks:
 				turns[1] += 1
-				print("SWEEP snap id=%d moved=%.2f" % [id, axle.distance_to(last[0])])
-		seen[id] = [axle, body.rotation.y]
+				print(
+					(
+						"SWEEP snap id=%d moved=%.2f ticks=%.2f"
+						% [id, axle.distance_to(last[0]), now - float(last[2])]
+					)
+				)
+		seen[id] = [axle, body.rotation.y, now]
 	pulled.clear()
 	pulled.merge(seen)
