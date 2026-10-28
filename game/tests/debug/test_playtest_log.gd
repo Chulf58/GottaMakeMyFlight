@@ -3,23 +3,24 @@ extends GdUnitTestSuite
 ## PlaytestLog's file and ring buffer, PlaytestAnomalies' once-per-subject
 ## rule, PlaytestErrorLogger's queue and the hook's on/off and seed switches.
 
-const DIR := "user://playtest_log_test"
 const HOOK := preload("res://debug/playtest_hook.gd")
+
+var _dir := SaveTestKit.run_dir("playtest_log_test")
 
 
 func after_test() -> void:
-	for name in DirAccess.get_files_at(DIR):
-		DirAccess.remove_absolute("%s/%s" % [DIR, name])
-	DirAccess.remove_absolute(DIR)
+	for name in DirAccess.get_files_at(_dir):
+		DirAccess.remove_absolute("%s/%s" % [_dir, name])
+	DirAccess.remove_absolute(_dir)
 
 
 func test_each_event_is_one_json_line_with_tick_wall_type_and_data() -> void:
 	var log := PlaytestLog.new()
-	assert_bool(log.open(DIR + "/one.jsonl")).is_true()
+	assert_bool(log.open(_dir + "/one.jsonl")).is_true()
 	log.add(5, "build_edit", {"kind": "PAINT_FLOOR"})
 	log.add(6, "anomaly", {"kind": "no_route"})
 	log.close()
-	var lines := FileAccess.get_file_as_string(DIR + "/one.jsonl").split("\n", false)
+	var lines := FileAccess.get_file_as_string(_dir + "/one.jsonl").split("\n", false)
 	assert_int(lines.size()).is_equal(2)
 	var first: Dictionary = JSON.parse_string(lines[0])
 	assert_int(int(first["i"])).is_equal(0)
@@ -27,7 +28,7 @@ func test_each_event_is_one_json_line_with_tick_wall_type_and_data() -> void:
 	assert_str(first["type"]).is_equal("build_edit")
 	assert_str(first["data"]["kind"]).is_equal("PAINT_FLOOR")
 	assert_float(first["wall"]).is_greater(1.0e9)
-	assert_str(log.path).is_equal(ProjectSettings.globalize_path(DIR + "/one.jsonl"))
+	assert_str(log.path).is_equal(ProjectSettings.globalize_path(_dir + "/one.jsonl"))
 
 
 func test_the_ring_keeps_the_last_events_and_since_reads_from_an_index() -> void:

@@ -5,7 +5,7 @@ extends GdUnitTestSuite
 
 const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
-const DIR := "user://playtest_staff_test"
+var _dir := SaveTestKit.run_dir("playtest_staff_test")
 
 var _main: Node
 var _hook: Node
@@ -16,7 +16,7 @@ func before() -> void:
 	add_child(_main)
 	(_main.get_node("SimClock") as SimClock).set_paused(true)
 	_hook = HOOK.new()
-	_hook.configure(true, DIR)
+	_hook.configure(true, _dir)
 	add_child(_hook)
 	assert_bool(_hook.attach(_main)).is_true()
 
@@ -25,9 +25,9 @@ func after() -> void:
 	_hook.detach()
 	_hook.free()
 	_main.free()
-	for name in DirAccess.get_files_at(DIR):
-		DirAccess.remove_absolute("%s/%s" % [DIR, name])
-	DirAccess.remove_absolute(DIR)
+	for name in DirAccess.get_files_at(_dir):
+		DirAccess.remove_absolute("%s/%s" % [_dir, name])
+	DirAccess.remove_absolute(_dir)
 
 
 func test_a_new_game_snapshot_shows_no_staff() -> void:
