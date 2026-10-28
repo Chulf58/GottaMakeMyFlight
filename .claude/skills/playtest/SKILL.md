@@ -56,7 +56,7 @@ func execute(scene_tree: SceneTree) -> Variant:
 ```
 
 - **A drag (floor or remove rectangle, wall line) needs a motion event after each warp.** Warp to the start, press (`simulate_input` `mouse_button` `pressed: true`), warp to the end, then `simulate_input` `mouse_motion` (any `relative_x`/`relative_y`), a short `wait`, and `mouse_button` `pressed: false`. Without the motion event only the first cell is applied. The status line shows the rectangle size (`15 x 14`) while the drag is live and `Placed 210` after the release.
-- **Wheel zoom has no `simulate_input` form either.** Warp the mouse to an empty spot of the 3D view first (the camera reads the wheel as unhandled input, so a panel under the cursor would take it), then queue the wheel events in the same `run_script`; each press event is one zoom step, so send several for a large zoom:
+- **Wheel zoom has no `simulate_input` form either.** Warp the mouse to an empty spot of the 3D view first (the camera reads the wheel as unhandled input, so a panel under the cursor would take it), then queue the wheel events in the same `run_script`; each tick is a press followed by a release at the same position, as a real wheel sends. A press with no release leaves the Control under the cursor holding mouse focus, and later clicks go to it instead of the button clicked. Send several ticks for a large zoom:
 
 ```gdscript
 extends RefCounted
@@ -69,6 +69,9 @@ func execute(scene_tree: SceneTree) -> Variant:
 		wheel.position = Vector2(960, 540)
 		wheel.pressed = true
 		Input.parse_input_event(wheel)
+		var release := wheel.duplicate() as InputEventMouseButton
+		release.pressed = false
+		Input.parse_input_event(release)
 	return scene_tree.root.get_mouse_position()
 ```
 
