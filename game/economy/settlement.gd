@@ -65,6 +65,13 @@ const SNAPSHOT_KEYS := ["owed"]
 ## debt and no day charged yet.
 ## The three keys come as a group: all present or all absent.
 const OPTIONAL_SNAPSHOT_KEYS := ["wages_owed", "wages_day", "wages_paid_today"]
+## Names how `wages_day` is read. A save with it holds the day whose wages were
+## charged (on that day's last tick), a save without it (before the charge moved
+## to the last tick) holds the day charged at its start, one day later. Only
+## with the wage keys; from_snapshot turns the old reading into the new.
+const WAGE_TIMING_KEY := "wages_timing"
+## The only value: wages_day is the day earned, charged on its last tick.
+const WAGE_TIMING_LAST_TICK := "1"
 ## Added with missed bags (Baggage B4). A save from before them has neither and
 ## loads with no bag state; the two come as a pair, like the wage keys.
 const BAG_SNAPSHOT_KEYS := ["bag_missed", "bags_awaited"]
@@ -185,6 +192,7 @@ func to_snapshot() -> Dictionary:
 		"wages_owed": str(_wages_owed),
 		"wages_day": str(_wages_day),
 		"wages_paid_today": str(_wages_paid_today),
+		WAGE_TIMING_KEY: WAGE_TIMING_LAST_TICK,
 		"bag_missed": missed,
 		"bags_awaited": awaited,
 	}
@@ -209,7 +217,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		loaded.append(str(text).to_int())
 	_owed = loaded
 	_set_wages_owed(str(data.get("wages_owed", "0")).to_int())
-	_wages_day = str(data.get("wages_day", str(NO_DAY))).to_int()
+	_wages_day = _earned_day(data)
 	_wages_paid_today = str(data.get("wages_paid_today", "0")).to_int()
 	_paid_day = GameCalendar.day_of(_sim.clock.tick) if _sim != null else NO_DAY
 	_bag_missed.clear()
@@ -223,10 +231,20 @@ func from_snapshot(data: Dictionary) -> bool:
 	return true
 
 
+## The saved last charged day as the day earned. A save without the timing key
+## holds the day charged at its start, so days up to the one before it are paid.
+func _earned_day(data: Dictionary) -> int:
+	var saved := str(data.get("wages_day", str(NO_DAY))).to_int()
+	if data.has(WAGE_TIMING_KEY) or saved == NO_DAY:
+		return saved
+	return saved - 1
+
+
 func _snapshot_problem(data: Dictionary) -> String:
 	for key in data.keys():
 		if (
 			not SNAPSHOT_KEYS.has(key)
+			and key != WAGE_TIMING_KEY
 			and not OPTIONAL_SNAPSHOT_KEYS.has(key)
 			and not BAG_SNAPSHOT_KEYS.has(key)
 		):
@@ -294,6 +312,11 @@ func _wage_problem(data: Dictionary) -> String:
 			return "'%s' is not 0 to %d" % [key, limit]
 	if data.has("wages_day") and not _in_range(data["wages_day"], NO_DAY, MAX_DAY):
 		return "'wages_day' is not a day"
+	if data.has(WAGE_TIMING_KEY):
+		if wage_keys == 0:
+			return "'%s' needs the wage keys" % WAGE_TIMING_KEY
+		if data[WAGE_TIMING_KEY] != WAGE_TIMING_LAST_TICK:
+			return "'%s' must be \"%s\"" % [WAGE_TIMING_KEY, WAGE_TIMING_LAST_TICK]
 	return ""
 
 
@@ -311,10 +334,11 @@ static func wages_link_problem(
 
 ## "" or why a saved last charged day and the saved clock disagree. Saves are
 ## taken between ticks and a day is charged on its last tick, so the last
-## charged day is the day before the clock's, or the clock's own right after
-## that last tick. A day after the clock's would skip days; one more than a day
-## before it would never charge the days between. Only NO_DAY (no day charged
-## yet) is exempt.
+## charged day is the day before the clock's, or the clock's own only when the
+## saved tick is that day's last. A day after the clock's would skip days; one
+## more than a day before it would never charge the days between. Only NO_DAY
+## (no day charged yet) is exempt. A save without WAGE_TIMING_KEY holds the day
+## charged at its start, which is the clock's own day (from_snapshot migrates it).
 static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> String:
 	if not settlement.has("wages_day") or not clock.has("tick"):
 		return ""
@@ -323,8 +347,14 @@ static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> Stri
 	if not SimClock.is_int64_string(clock["tick"]):
 		return ""
 	var saved_day := str(settlement["wages_day"]).to_int()
-	var clock_day := GameCalendar.day_of(str(clock["tick"]).to_int())
-	if saved_day != NO_DAY and saved_day != clock_day and saved_day != clock_day - 1:
+	var clock_tick := str(clock["tick"]).to_int()
+	var clock_day := GameCalendar.day_of(clock_tick)
+	var allowed := [clock_day]
+	if settlement.has(WAGE_TIMING_KEY):
+		allowed = [clock_day - 1]
+		if GameCalendar.is_last_tick_of_day(clock_tick):
+			allowed.append(clock_day)
+	if saved_day != NO_DAY and not allowed.has(saved_day):
 		return (
 			"settlement: wages were last charged for day %d, but the clock is on day %d"
 			% [saved_day, clock_day]

@@ -182,20 +182,22 @@ func test_the_wage_keys_come_as_a_group_and_a_partial_set_is_refused() -> void:
 
 
 func test_a_day_other_than_the_clock_day_is_a_broken_link() -> void:
-	var clock := {"tick": str(GameCalendar.day_start(4) + 100)}
-	var saved := {"wages_day": "4"}
-	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
-	saved["wages_day"] = "5"
-	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 5")
-	saved["wages_day"] = "3"
-	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
-	saved["wages_day"] = "2"
-	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 2")
-	saved["wages_day"] = "0"
-	assert_str(Settlement.wages_day_problem(saved, clock)).contains("day 0")
-	saved["wages_day"] = str(Settlement.NO_DAY)
-	assert_str(Settlement.wages_day_problem(saved, clock)).is_empty()
-	assert_str(Settlement.wages_day_problem({"owed": []}, clock)).is_empty()
+	var timed := {"wages_day": "3", Settlement.WAGE_TIMING_KEY: Settlement.WAGE_TIMING_LAST_TICK}
+	var mid_day := {"tick": str(GameCalendar.day_start(4) + 100)}
+	var last_tick := {"tick": str(GameCalendar.day_start(5) - 1)}
+	assert_str(Settlement.wages_day_problem(timed, mid_day)).is_empty()
+	# The clock's own day is charged only on its last tick, so it is not a mid-day state.
+	timed["wages_day"] = "4"
+	assert_str(Settlement.wages_day_problem(timed, mid_day)).contains("day 4")
+	assert_str(Settlement.wages_day_problem(timed, last_tick)).is_empty()
+	timed["wages_day"] = "3"
+	assert_str(Settlement.wages_day_problem(timed, last_tick)).is_empty()
+	for day in ["5", "2", "0"]:
+		timed["wages_day"] = day
+		assert_str(Settlement.wages_day_problem(timed, mid_day)).contains("day " + day)
+	timed["wages_day"] = str(Settlement.NO_DAY)
+	assert_str(Settlement.wages_day_problem(timed, mid_day)).is_empty()
+	assert_str(Settlement.wages_day_problem({"owed": []}, mid_day)).is_empty()
 
 
 ## The link check holds on every tick a save can be taken, the one that starts a
