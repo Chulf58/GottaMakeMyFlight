@@ -34,21 +34,23 @@ const STAGE_TEXT := {
 	Passenger.Stage.STANDING_UP: "At the gate, but not boarded in time",
 	Passenger.Stage.TO_EXIT: "Left the gate too late for the plane",
 	Passenger.Stage.APRON: "Left the gate too late for the plane",
-	Passenger.Stage.CAFE_WALK: "Still at the cafe",
-	Passenger.Stage.CAFE_QUEUE: "Still at the cafe",
-	Passenger.Stage.CAFE_ORDER: "Still at the cafe",
-	Passenger.Stage.CAFE_TO_SEAT: "Still at the cafe",
-	Passenger.Stage.CAFE_SITTING_DOWN: "Still at the cafe",
-	Passenger.Stage.CAFE_SEATED: "Still at the cafe",
-	Passenger.Stage.CAFE_STANDING_UP: "Still at the cafe",
 }
+## A passenger caught in a facility visit, whatever its stage there
+## (StageKinds.facility()).
+const FACILITY_TEXT := {
+	StageKinds.Facility.CAFE: "Still at the cafe",
+}
+## The reason when nothing more is known.
+const MISSED_TEXT := "Missed the flight"
 
 
 ## The reason text for a passenger who missed the plane at `stage`.
 static func reason_text(stage: Passenger.Stage, stuck: Passenger.Stuck) -> String:
 	if STUCK_TEXT.has(stuck):
 		return STUCK_TEXT[stuck]
-	return STAGE_TEXT.get(stage, "Missed the flight")
+	if STAGE_TEXT.has(stage):
+		return STAGE_TEXT[stage]
+	return FACILITY_TEXT.get(StageKinds.facility(stage), MISSED_TEXT)
 
 
 ## {"flight", "made", "missed", "reasons"} for one flight. "reasons" is a list of

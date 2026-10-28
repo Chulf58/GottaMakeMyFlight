@@ -45,12 +45,6 @@ const PIECE_NAMES := {
 	&"security_scanner": "security scanner",
 	&"exit_door": "exit",
 }
-## Seated stages, judged from the cell in front of the seat.
-const SEATED_STAGES: Array[Passenger.Stage] = [
-	Passenger.Stage.SITTING_DOWN,
-	Passenger.Stage.SEATED,
-	Passenger.Stage.STANDING_UP,
-]
 
 ## In a scene these come from the wired nodes; tests call bind().
 @export var clock: SimClock
@@ -225,9 +219,10 @@ func _dearest_essential() -> int:
 
 
 ## True when a passenger who has not finished still has a route from where it
-## stands through the pieces it has left to use. A cafe guest is judged by the
-## stage its journey resumes at (CafeVisit.resume_stage), from its seat's
-## approach cell when it is at the table.
+## stands through the pieces it has left to use. A guest on a facility visit
+## is judged by the stage its journey resumes at (StageKinds.resume_of()),
+## from the cell it sets off from (a cafe seat's approach) when it is at the
+## seat. A gate sitter is judged from the cell in front of its seat.
 func _someone_can_make_a_flight() -> bool:
 	for id in _sim.passenger_ids():
 		var p := _sim.get_passenger(id)
@@ -237,14 +232,15 @@ func _someone_can_make_a_flight() -> bool:
 			return true
 		var stage := p.stage
 		var start := p.at
-		if Passenger.in_cafe(stage):
-			var visit := _sim.cafes.visit_of(p.id)
-			if visit == null:
+		var where := StageKinds.location(stage)
+		if StageKinds.in_visit(stage):
+			var resume := StageKinds.resume_of(_sim, p)
+			if resume.is_empty():
 				continue
-			stage = visit.resume_stage
-			if not _sim.grid.is_walkable(start) and visit.seat.has("approach"):
-				start = visit.seat["approach"]
-		elif SEATED_STAGES.has(stage) and p.seat_front != Passenger.NO_CELL:
+			stage = resume["stage"]
+			if not _sim.grid.is_walkable(start) and resume["cell"] != Passenger.NO_CELL:
+				start = resume["cell"]
+		elif where == StageKinds.Location.GATE_SEAT and p.seat_front != Passenger.NO_CELL:
 			start = p.seat_front
 		elif stage == Passenger.Stage.SECURITY:
 			start = p.path_end()

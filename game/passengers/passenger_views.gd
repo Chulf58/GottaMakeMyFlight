@@ -285,13 +285,13 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		# a step to the table is not an idle slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
 		moving = mm > 0
-	match p.stage:
-		Passenger.Stage.SITTING_DOWN, Passenger.Stage.CAFE_SITTING_DOWN:
+	match StageKinds.pose(p.stage):
+		StageKinds.Pose.SITTING_DOWN:
 			clip = "sit_down"
 			base = SIT_CLIP_SECONDS / (PassengerSim.SIT_DOWN_TICKS / float(SimClock.TICK_RATE))
-		Passenger.Stage.SEATED, Passenger.Stage.CAFE_SEATED:
+		StageKinds.Pose.SEATED:
 			clip = "sit_idle"
-		Passenger.Stage.STANDING_UP, Passenger.Stage.CAFE_STANDING_UP:
+		StageKinds.Pose.STANDING_UP:
 			clip = "stand_up"
 			base = SIT_CLIP_SECONDS / (PassengerSim.STAND_UP_TICKS / float(SimClock.TICK_RATE))
 	if moving:
@@ -299,9 +299,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		var sim_mps := mm * SimClock.TICK_RATE / 1000.0
 		clip = "run" if p.late else "walk"
 		base = sim_mps / (CLIP_RUN_MPS[variant] if p.late else CLIP_WALK_MPS[variant])
-	var at_gate: bool = p.stage in PassengerSim.SEAT_STAGES and p.seat_object != 0
+	var where := StageKinds.location(p.stage)
+	var at_gate := where == StageKinds.Location.GATE_SEAT and p.seat_object != 0
 	var at_cafe := (
-		p.stage in Passenger.CAFE_SEAT_STAGES and sim.cafes.seat_facing(p) != Vector2i.ZERO
+		where == StageKinds.Location.FACILITY_SEAT and sim.cafes.seat_facing(p) != Vector2i.ZERO
 	)
 	node.set_meta(&"seated", at_gate or at_cafe)
 	var works := SecurityLooks.face(sim, p)

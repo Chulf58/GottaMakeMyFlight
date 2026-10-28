@@ -67,9 +67,6 @@ const MOOD_MAX := 100
 const SIT_FORWARD_M := 0.45
 const SHUFFLE_TICKS := 8
 const QUEUE_STAGES := [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_QUEUE]
-const SEAT_STAGES := [
-	Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED, Passenger.Stage.STANDING_UP
-]
 
 @export var clock: SimClock
 @export var flights: FlightSim
@@ -389,14 +386,12 @@ func _any_open(stations: Array[int]) -> bool:
 
 ## Where the passenger stands on this tick, in world space.
 func world_position(p: Passenger) -> Vector3:
-	const OUTSIDE := [
-		Passenger.Stage.SPAWNED, Passenger.Stage.APRON, Passenger.Stage.MADE, Passenger.Stage.MISSED
-	]
-	if p.stage in OUTSIDE and not p.apron.is_empty():
+	var where := StageKinds.location(p.stage)
+	if StageKinds.is_outside(p.stage) and not p.apron.is_empty():
 		return p.apron_position()
-	if p.stage in Passenger.CAFE_SEAT_STAGES:
+	if where == StageKinds.Location.FACILITY_SEAT:
 		return cafes.seat_position(p)
-	if p.stage in SEAT_STAGES and p.seat_cell != Passenger.NO_CELL:
+	if where == StageKinds.Location.GATE_SEAT and p.seat_cell != Passenger.NO_CELL:
 		var front := grid.cell_to_world(p.seat_front)
 		var seat := grid.cell_to_world(p.seat_cell)
 		var spot := seat + (front - seat) * SIT_FORWARD_M
@@ -673,8 +668,9 @@ func _promote(q: Dictionary, cells: Array) -> void:
 func _step(p: Passenger) -> void:
 	if p.needs_replan:
 		_replan(p)
-	if Passenger.in_cafe(p.stage):
-		cafes.step(p)
+	match StageKinds.facility(p.stage):
+		StageKinds.Facility.CAFE:
+			cafes.step(p)
 	match p.stage:
 		Passenger.Stage.SPAWNED:
 			# In from the road first, when the entrance has one (ShellRoutes).
@@ -701,14 +697,16 @@ func _step(p: Passenger) -> void:
 		Passenger.Stage.STANDING_UP:
 			if tick - p.stage_tick >= STAND_UP_TICKS:
 				_release_seat(p)
-				# Up for the cafe, or (its visit dropped) back to the gate
-				# while boarding has not started.
-				if cafes.visit_of(p.id) != null:
-					cafes.depart(p)
-				elif tick < p.boarding_tick:
-					_set_stage(p, Passenger.Stage.TO_GATE)
-				else:
-					_set_stage(p, Passenger.Stage.TO_EXIT)
+				# Up for a facility visit, or (its visit dropped) back to the
+				# gate while boarding has not started.
+				match StageKinds.visit_facility(self, p):
+					StageKinds.Facility.CAFE:
+						cafes.depart(p)
+					_:
+						if tick < p.boarding_tick:
+							_set_stage(p, Passenger.Stage.TO_GATE)
+						else:
+							_set_stage(p, Passenger.Stage.TO_EXIT)
 		Passenger.Stage.TO_EXIT:
 			_to_exit(p)
 	_move(p)
@@ -742,8 +740,8 @@ func _beat(p: Passenger) -> void:
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
 	# Hunger, and a cafe visit when hungry or passing one with time to spare.
 	cafes.beat(p)
-	# A cafe guest walks: its visit's deadline keeps the margin for the rest.
-	if cafes.visit_of(p.id) != null:
+	# A visiting guest walks: its visit's deadline keeps the margin for the rest.
+	if StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
 		p.late = false
 		return
 	# With no way to the plane the passenger is stuck, not late: it does not run.

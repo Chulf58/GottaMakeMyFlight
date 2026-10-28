@@ -20,7 +20,8 @@ const CHAIR_OFFSET_M: Array[float] = [-0.08, 0.36, 0.08]
 ## for a row an edit removed until the sim releases the seat on its next tick.
 ## A seat cell outside its row's footprint is a bug: reported, zero.
 static func offset(sim: PassengerSim, p: Passenger) -> Vector3:
-	if not p.stage in PassengerSim.SEAT_STAGES or p.seat_cell == Passenger.NO_CELL:
+	var at_gate_seat := StageKinds.location(p.stage) == StageKinds.Location.GATE_SEAT
+	if not at_gate_seat or p.seat_cell == Passenger.NO_CELL:
 		return Vector3.ZERO
 	var record := sim.grid.get_object(p.seat_object)
 	if record.is_empty():

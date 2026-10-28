@@ -555,8 +555,7 @@ func _check_passengers(found: Dictionary) -> void:
 				_found(found, "stuck_too_long", subject, data)
 		if p.stuck == Passenger.Stuck.NO_ROUTE:
 			_found(found, "no_route", subject, base)
-		var in_terminal := p.stage < Passenger.Stage.APRON or Passenger.in_cafe(p.stage)
-		if in_terminal and not grid.in_bounds(p.at):
+		if StageKinds.on_grid(p.stage) and not grid.in_bounds(p.at):
 			_found(found, "off_grid", subject, base)
 		var node: Node3D = views.node_for(id) if views != null else null
 		if node != null and node.is_inside_tree():
