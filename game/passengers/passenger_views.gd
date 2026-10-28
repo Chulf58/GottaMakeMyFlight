@@ -39,6 +39,11 @@ var _ring := MeshInstance3D.new()
 var _markers := MissMarkers.new()
 ## The '+$' pops over cafe counters.
 var _pops := CafePops.new()
+## Trays and carry-on bags at security.
+var _props := SecurityProps.new()
+## Passenger id -> its drawn offset at security (SecurityLooks.target_offset),
+## moved toward the target at walking speed once per tick.
+var _offsets: Dictionary = {}
 
 
 func _ready() -> void:
@@ -66,6 +71,10 @@ func _ready() -> void:
 	_pops.name = "CafePops"
 	_pops.sim = sim
 	add_child(_pops)
+	_props.name = "SecurityProps"
+	_props.sim = sim
+	_props.views = self
+	add_child(_props)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
 	if save_game != null:
@@ -88,15 +97,25 @@ func cafe_pops() -> CafePops:
 	return _pops
 
 
+func security_props() -> SecurityProps:
+	return _props
+
+
 ## A passenger's recorded position for the tick before (false) or now (true).
 func tick_position(id: int, current: bool) -> Vector3:
 	return (_cur if current else _prev).get(id, Vector3.ZERO)
 
 
 ## Where a passenger is drawn on this tick: the sim's position, moved onto
-## its chair's pan at a gate seat (GateChairs).
+## its chair's pan at a gate seat (GateChairs) and by its drawn offset at
+## security (SecurityLooks).
 func draw_position(p: Passenger) -> Vector3:
-	return sim.world_position(p) + GateChairs.offset(sim, p)
+	return sim.world_position(p) + GateChairs.offset(sim, p) + _offsets.get(p.id, Vector3.ZERO)
+
+
+## A passenger's drawn offset at security now.
+func security_offset(id: int) -> Vector3:
+	return _offsets.get(id, Vector3.ZERO)
 
 
 ## Records positions for the tick that just ran and updates poses and bubbles.
@@ -107,6 +126,7 @@ func sync() -> void:
 		if not _visible(p):
 			continue
 		seen[id] = true
+		_chase(p)
 		var now := draw_position(p)
 		if not _nodes.has(id):
 			_nodes[id] = _take(p.variant)
@@ -117,6 +137,7 @@ func sync() -> void:
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
+	_props.sync()
 	_markers.sync()
 
 
@@ -128,12 +149,19 @@ func sync() -> void:
 ## interval to take a heading from, a walker faces along its current path or
 ## apron leg.
 func snap() -> void:
+	for id in sim.passenger_ids():
+		_offsets.erase(id)
+		# A load starts every tray and bag over, with no transfer from before.
+		_props.release(id)
+		var target := SecurityLooks.target_offset(sim, sim.get_passenger(id))
+		if target != Vector3.ZERO:
+			_offsets[id] = target
 	sync()
 	for id in _cur:
 		_prev[id] = _cur[id]
 		var node: Node3D = _nodes[id]
 		var heading := walk_heading(sim.get_passenger(id))
-		if heading != Vector2.ZERO and not node.get_meta(&"seated", false):
+		if heading != Vector2.ZERO and not _turn_locked(node):
 			node.rotation.y = atan2(heading.x, heading.y)
 	draw()
 
@@ -166,7 +194,7 @@ func draw() -> void:
 		var after: Vector3 = _cur[id]
 		node.position = before.lerp(after, alpha)
 		var heading := after - before
-		if heading.length() > 0.001 and not node.get_meta(&"seated", false):
+		if heading.length() > 0.001 and not _turn_locked(node):
 			node.rotation.y = atan2(heading.x, heading.z)
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
@@ -175,6 +203,7 @@ func draw() -> void:
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
 	_ring.visible = _nodes.has(selected_id)
+	_props.draw()
 	_markers.draw()
 
 
@@ -238,6 +267,8 @@ func _release(id: int) -> void:
 	node.set_meta(&"clip", "")
 	_pool[node.get_meta(&"variant")].append(node)
 	_nodes.erase(id)
+	_offsets.erase(id)
+	_props.release(id)
 	_prev.erase(id)
 	_cur.erase(id)
 
@@ -247,6 +278,12 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var base := 1.0
 	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
 	var moving := (outside and p.apron_mm < p.apron_total_mm()) or p.is_moving()
+	var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
+	if _at_security(p):
+		# The drawn step, so a held-back queue front does not walk in place and
+		# a step to the table is not an idle slide.
+		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
+		moving = mm > 0
 	match p.stage:
 		Passenger.Stage.SITTING_DOWN, Passenger.Stage.CAFE_SITTING_DOWN:
 			clip = "sit_down"
@@ -258,7 +295,6 @@ func _pose(node: Node3D, p: Passenger) -> void:
 			base = SIT_CLIP_SECONDS / (PassengerSim.STAND_UP_TICKS / float(SimClock.TICK_RATE))
 	if moving:
 		var variant: int = node.get_meta(&"variant")
-		var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
 		var sim_mps := mm * SimClock.TICK_RATE / 1000.0
 		clip = "run" if p.late else "walk"
 		base = sim_mps / (CLIP_RUN_MPS[variant] if p.late else CLIP_WALK_MPS[variant])
@@ -267,6 +303,8 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		p.stage in Passenger.CAFE_SEAT_STAGES and sim.cafes.seat_facing(p) != Vector2i.ZERO
 	)
 	node.set_meta(&"seated", at_gate or at_cafe)
+	var works := SecurityLooks.face(sim, p)
+	node.set_meta(&"faces", works != Vector2.ZERO)
 	if at_gate:
 		var facing: int = sim.grid.get_object(p.seat_object).get("facing", 0)
 		var front := TerminalLayout.front_of(facing)
@@ -274,6 +312,8 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	elif at_cafe:
 		var looks := sim.cafes.seat_facing(p)
 		node.rotation.y = atan2(looks.x, looks.y)
+	elif works != Vector2.ZERO:
+		node.rotation.y = atan2(works.x, works.y)
 	elif not moving and sim.cafes.counter_facing(p) != Vector2i.ZERO:
 		# Waiting in a cafe queue or ordering: face the counter.
 		var ahead := sim.cafes.counter_facing(p)
@@ -283,3 +323,24 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		node.set_meta(&"clip", clip)
 		(node.get_node("AnimationPlayer") as AnimationPlayer).play(clip)
 	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
+
+
+## Moves a passenger's drawn offset at security one tick's walk toward its
+## target (SecurityLooks.target_offset).
+func _chase(p: Passenger) -> void:
+	var target := SecurityLooks.target_offset(sim, p)
+	var now: Vector3 = _offsets.get(p.id, Vector3.ZERO)
+	now = now.move_toward(target, PassengerSim.WALK_MM / 1000.0)
+	if now == Vector3.ZERO:
+		_offsets.erase(p.id)
+	else:
+		_offsets[p.id] = now
+
+
+func _at_security(p: Passenger) -> bool:
+	return p.stage == Passenger.Stage.SECURITY or p.stage == Passenger.Stage.SECURITY_QUEUE
+
+
+## A seated passenger, or one facing its work at security, keeps its rotation.
+func _turn_locked(node: Node3D) -> bool:
+	return node.get_meta(&"seated", false) or node.get_meta(&"faces", false)
