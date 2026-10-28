@@ -31,7 +31,10 @@ signal checked_in(id: int, desk: int)
 ## already scheduled; settled passengers are retired, so none of these are
 ## rebuilt from the passenger list.
 ## 6: each passenger and pending arrival carries its arrival type.
-const SAVE_VERSION := 6
+## 7: each passenger carries its security traits (bags, liquids, alarm). A
+## version 6 save is migrated with zero bags and no flags; older ones are
+## refused.
+const SAVE_VERSION := 7
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -486,6 +489,7 @@ func _spawn(flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICA
 	p.stage_tick = tick
 	p.boarding_tick = flights.boarding_window(flight_id).x
 	p.hunger = clock.rng.randi_range(CafeSim.HUNGER_START_MIN, CafeSim.HUNGER_START_MAX)
+	CarryOnTraits.draw(clock.rng, p)
 	p.at = layout.door_cell(grid, layout.entrances[0])
 	p.clear_path()
 	p.apron = ShellRoutes.arrival(self, layout.entrances[0])
