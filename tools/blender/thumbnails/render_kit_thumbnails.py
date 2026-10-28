@@ -81,6 +81,7 @@ CLASSES = {
     "3x2": ((3.0, 2.0, 0.5), (0.0, 0.0, 0.25)),
     "2x2": ((2.0, 2.0, 1.7), (0.0, 0.0, 0.85)),
     "1x1": ((1.0, 1.0, 1.6), (0.0, 0.0, 0.8)),
+    "1x1_tall": ((1.0, 1.0, 2.0), (0.0, 0.0, 1.0)),
 }
 
 # Catalog colours (build_catalog.gd), sRGB.
@@ -136,6 +137,10 @@ ITEMS = {
     "xray_belt": ("1x1", ["xray_belt"], []),
     "arch": ("door_1x1", ["security_arch"], []),
     "pickup_table": ("1x1", ["pickup_table"], []),
+    # Toilet pieces (decision toilet-design-queue-free-reservable-stalls-per-stall-daily-u):
+    # the 1x2 stall with its doors closed and the sink with its 1.95 m mirror.
+    "toilet_stall": ("1x2", ["toilet_stall"], []),
+    "toilet_sink": ("1x1_tall", ["toilet_sink"], []),
 }
 ORDER = list(ITEMS)
 
@@ -545,7 +550,8 @@ def contact_sheet(items):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     cols, gap, small = 5, 8, 64
     rows = math.ceil(len(items) / cols)
-    W = cols * SIZE + (cols + 1) * gap
+    # Wide enough for the 256 px grid and for the row of 64 px copies.
+    W = max(cols * SIZE + (cols + 1) * gap, len(items) * (small + gap) + gap)
     small_h = 2 * small + 3 * gap
     H = rows * (SIZE + gap) + gap + small_h
     dark, light = (0.16, 0.18, 0.22), (0.86, 0.87, 0.84)
