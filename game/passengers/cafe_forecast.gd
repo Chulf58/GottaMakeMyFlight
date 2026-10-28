@@ -11,8 +11,11 @@ extends RefCounted
 ## The deadline is the last tick a guest can start to leave (stand up) and
 ## still arrive MARGIN_TICKS before the doors close: the "abandon now"
 ## arrival from the seat. CafeSim checks it in every visit phase and works it
-## out again after a layout edit. The doors close before passengers step, so
-## the deadline is strictly before the closing tick.
+## out again after a layout edit.
+##
+## The cafe's own parts are here: the visit's legs and the stand-up from the
+## seat. The journey after it, on the grid's real routes, the margin and the
+## deadline rules are VisitForecast's, shared with every facility.
 ##
 ## A visit's legs: "pre_ticks" (getting up from a gate seat first),
 ## "to_queue_mm" (the walk to the queue), "order_ticks" (the queue wait and the
@@ -20,10 +23,7 @@ extends RefCounted
 ## "dwell_ticks", "leave_cell" (the seat's approach cell) and "resume_stage"
 ## (TO_SECURITY landside, TO_GATE airside).
 
-## Ticks a visit must leave spare before the doors close. Its own tuning value,
-## kept above JourneyForecast.RUN_ON_SLACK so a guest who leaves on the
-## deadline still walks.
-const MARGIN_TICKS := 100
+const MARGIN_TICKS := VisitForecast.MARGIN_TICKS
 
 
 ## The tick the guest stands up at the end of a visit that starts now.
@@ -41,28 +41,28 @@ static func visit_end(sim: PassengerSim, legs: Dictionary) -> int:
 
 ## The tick `p` would reach the plane door after the visit, at a walk.
 static func visit_arrival(sim: PassengerSim, p: Passenger, legs: Dictionary) -> int:
-	var after := _leaving(p, legs["leave_cell"], legs["resume_stage"])
-	var leave := visit_end(sim, legs) + PassengerSim.STAND_UP_TICKS
-	return mini(JourneyForecast.arrival_from(sim, after, leave), JourneyForecast.NEVER)
+	return VisitForecast.arrival(
+		sim,
+		p,
+		visit_end(sim, legs) - sim.tick,
+		legs["leave_cell"],
+		PassengerSim.STAND_UP_TICKS,
+		legs["resume_stage"]
+	)
 
 
 ## Ticks from standing up at `cell` to the plane door, with no boarding wait.
 static func leave_ticks(
 	sim: PassengerSim, p: Passenger, cell: Vector2i, resume: Passenger.Stage
 ) -> int:
-	var after := _leaving(p, cell, resume)
-	after.boarding_tick = 0
-	var ticks := JourneyForecast.arrival_from(sim, after, 0)
-	return mini(ticks + PassengerSim.STAND_UP_TICKS, JourneyForecast.NEVER)
+	return VisitForecast.leave_ticks(sim, p, cell, PassengerSim.STAND_UP_TICKS, resume)
 
 
 ## The last tick `p` can stand up at `cell` and arrive MARGIN_TICKS early.
 static func deadline(
 	sim: PassengerSim, p: Passenger, cell: Vector2i, resume: Passenger.Stage
 ) -> int:
-	return (
-		sim.flights.doors_close_tick(p.flight_id) - MARGIN_TICKS - leave_ticks(sim, p, cell, resume)
-	)
+	return VisitForecast.deadline(sim, p, cell, PassengerSim.STAND_UP_TICKS, resume)
 
 
 ## The deadline of a visit under way, forecast again with the queues and
@@ -73,35 +73,9 @@ static func deadline(
 static func live_deadline(
 	sim: PassengerSim, p: Passenger, approach: Vector2i, resume: Passenger.Stage
 ) -> int:
-	var from_seat := deadline(sim, p, approach, resume)
-	if p.at == approach:
-		return from_seat
-	var now := _leaving(p, p.at, resume)
-	now.boarding_tick = 0
-	var ticks := mini(JourneyForecast.arrival_from(sim, now, 0), JourneyForecast.NEVER)
-	var from_here := sim.flights.doors_close_tick(p.flight_id) - MARGIN_TICKS - ticks
-	return mini(from_seat, from_here)
+	return VisitForecast.live_deadline(sim, p, approach, PassengerSim.STAND_UP_TICKS, resume)
 
 
 ## Whether an arrival forecast leaves the margin before `p`'s doors close.
 static func admits(sim: PassengerSim, p: Passenger, arrival: int) -> bool:
-	return arrival + MARGIN_TICKS <= sim.flights.doors_close_tick(p.flight_id)
-
-
-## `p` as it will be after the visit: standing at `cell`, in `resume`, with no
-## station chosen yet.
-static func _leaving(p: Passenger, cell: Vector2i, resume: Passenger.Stage) -> Passenger:
-	var after := Passenger.new()
-	after.id = p.id
-	after.flight_id = p.flight_id
-	after.boarding_tick = p.boarding_tick
-	after.cleared = p.cleared
-	# Security forecasts this passenger as the candidate, with its carry-on.
-	after.carry_on = p.carry_on
-	after.liquids = p.liquids
-	after.alarm = p.alarm
-	after.incident_resolved = p.incident_resolved
-	after.stage = resume
-	after.at = cell
-	after.clear_path()
-	return after
+	return VisitForecast.admits(sim, p, arrival)
