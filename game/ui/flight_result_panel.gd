@@ -34,11 +34,18 @@ func _init() -> void:
 	column.add_child(dismiss)
 
 
+## The flight number a player knows: a daily occurrence id ("GMF101-d0") shows
+## as its contract ("GMF101"); any other id is shown as it is. Display only.
+static func flight_title(flight_id: String) -> String:
+	var parsed := FlightTimetable.parse_occurrence(flight_id)
+	return parsed["contract"] if not parsed.is_empty() else flight_id
+
+
 ## The panel's text for a FlightResult.summarize() dictionary.
 static func text_for(summary: Dictionary) -> String:
 	var lines := PackedStringArray(
 		[
-			"%s result" % summary["flight"],
+			"%s result" % flight_title(summary["flight"]),
 			"Made %d   Missed %d" % [summary["made"], summary["missed"]],
 		]
 	)

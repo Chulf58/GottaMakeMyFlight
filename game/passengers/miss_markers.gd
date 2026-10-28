@@ -15,12 +15,18 @@ extends Node3D
 ## thought bubbles, and keeps one screen size at every zoom and UI scale. The
 ## caption sits above the sign so it does not cover the lane it describes.
 ## Sizes are screen pixels, for the camera's field of view and the rendered
-## view's height.
+## view's height. Neighbouring stations stand closer on screen than a caption
+## is wide when zoomed out, so draw() hides a caption that would overlap one
+## already shown (the widest first, then left to right); every icon stays and
+## the captions return as the camera moves in.
 
 const SIGN_LIFT_M := 0.6
 const SIGN_PX := 56.0
 const CAPTION_FONT := 22
 const CAPTION_GAP_PX := 4.0
+const CAPTION_OUTLINE := 8
+## Clear space kept between two shown captions.
+const CAPTION_MARGIN_PX := 6.0
 const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
 ## The closed sign is the queue-full icon with its red fill painted grey-blue.
@@ -132,9 +138,12 @@ func draw() -> void:
 	## texture's get_size() is no help: under the content scale it reports
 	## neither size.)
 	var height := FALLBACK_HEIGHT
+	## Layout coordinates (the camera's) times this are screen pixels.
+	var to_output := 1.0
 	if is_inside_tree():
 		var view := get_viewport()
-		height = view.get_visible_rect().size.y * view.get_stretch_transform().get_scale().y
+		to_output = view.get_stretch_transform().get_scale().y
+		height = view.get_visible_rect().size.y * to_output
 	## World units per screen pixel at one metre: a fixed-size sprite is drawn
 	## as if it stood one metre from the camera.
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
@@ -143,6 +152,57 @@ func draw() -> void:
 			var sign: Sprite3D = signs[station]
 			sign.pixel_size = SIGN_PX * unit / MarkerIcons.SIZE
 			(sign.get_node("Caption") as Label3D).pixel_size = unit
+	_declutter_captions(camera, to_output)
+
+
+## Shows each caption only if it clears the captions already shown, taking the
+## widest first and then left to right. `to_output` converts the camera's
+## viewport coordinates to the screen pixels the captions are sized in.
+func _declutter_captions(camera: Camera3D, to_output: float) -> void:
+	var entries: Array[Dictionary] = []
+	for signs: Dictionary in [_signs, _closed_signs]:
+		for station: int in signs:
+			var sign: Sprite3D = signs[station]
+			var caption := sign.get_node("Caption") as Label3D
+			caption.visible = true
+			if camera == null or camera.is_position_behind(sign.global_position):
+				continue
+			var point := camera.unproject_position(sign.global_position) * to_output
+			entries.append({"caption": caption, "rect": caption_rect(point, caption.text)})
+	entries.sort_custom(_wider_then_left_first)
+	var shown: Array[Rect2] = []
+	for entry in entries:
+		var rect: Rect2 = entry["rect"]
+		var clear := true
+		for other in shown:
+			if rect.intersects(other):
+				clear = false
+				break
+		(entry["caption"] as Label3D).visible = clear
+		if clear:
+			shown.append(rect.grow(CAPTION_MARGIN_PX / 2.0))
+
+
+static func _wider_then_left_first(a: Dictionary, b: Dictionary) -> bool:
+	var ra: Rect2 = a["rect"]
+	var rb: Rect2 = b["rect"]
+	if not is_equal_approx(ra.size.x, rb.size.x):
+		return ra.size.x > rb.size.x
+	if not is_equal_approx(ra.position.x, rb.position.x):
+		return ra.position.x < rb.position.x
+	return ra.position.y < rb.position.y
+
+
+## The screen rectangle (pixels) a caption covers over a sign whose bottom edge
+## is at `sign_point`: centred on the sign, its bottom a gap above the icon. The
+## width is estimated from the default font, plus the outline.
+static func caption_rect(sign_point: Vector2, text: String) -> Rect2:
+	var font := ThemeDB.fallback_font
+	var size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, CAPTION_FONT)
+	size.x += CAPTION_OUTLINE
+	size.y = font.get_height(CAPTION_FONT) + CAPTION_OUTLINE
+	var bottom := sign_point.y - SIGN_PX - CAPTION_GAP_PX
+	return Rect2(Vector2(sign_point.x - size.x / 2.0, bottom - size.y), size)
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
@@ -211,7 +271,7 @@ func _take_sign() -> Sprite3D:
 	caption.render_priority = 12
 	caption.outline_render_priority = 11
 	caption.font_size = CAPTION_FONT
-	caption.outline_size = 8
+	caption.outline_size = CAPTION_OUTLINE
 	caption.outline_modulate = MarkerIcons.OUTLINE
 	caption.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
