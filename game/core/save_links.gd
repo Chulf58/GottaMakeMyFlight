@@ -29,7 +29,8 @@ extends RefCounted
 ##   after it departs), and every flight in the bag results is live or an
 ##   issued occurrence. A bag's passenger and desk are not looked up: a
 ##   settled passenger is retired and a desk can be demolished while its
-##   bags remain.
+##   bags remain. The reverse is looked up: a passenger whose fee the
+##   settlement holds for a bag on its way has an unsettled bag.
 ##
 ## Checked elsewhere already: staff stations and roles against the layout
 ## (StaffSnapshot.load), cafe visits and queues against the saved grid
@@ -51,7 +52,24 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 		found = Settlement.wages_link_problem(data["settlement"], data["clock"], data["wallet"])
 	if found == "":
 		found = _bag_problem(staged["baggage"], staged["grid"], flights)
+	if found == "":
+		found = _awaited_problem(data["settlement"], staged["baggage"]["bags"])
 	return found
+
+
+## Every fee the settlement holds for a bag still on its way names a passenger
+## with an unsettled bag. A bag settles before it is retired, and settling pays
+## the fee, so a saved fee with no unsettled bag would never be paid.
+static func _awaited_problem(settlement: Dictionary, bags: Array[Bag]) -> String:
+	var unsettled := {}
+	for bag in bags:
+		if not bag.is_settled():
+			unsettled[bag.passenger] = true
+	for entry in settlement.get("bags_awaited", []):
+		var passenger := str(entry["passenger"]).to_int()
+		if not unsettled.has(passenger):
+			return "baggage: passenger %d awaits a bag but has no unsettled bag" % passenger
+	return ""
 
 
 static func _bag_problem(baggage: Dictionary, grid: BuildGrid, flights: Dictionary) -> String:
