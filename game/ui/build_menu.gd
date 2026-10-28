@@ -175,6 +175,10 @@ var _holding := false
 ## Counts grants, so only the latest grant's timer ends the hold.
 var _hold_generation := 0
 var _held_status := ""
+## True while the hold shows a rescue grant's message, false for a wage one.
+var _hold_is_grant := false
+## A wages-paid message that waited for a rescue message's hold to end; "" if none.
+var _pending_wages := ""
 
 
 ## "3" for the key bound to a tool's action, or "" when the tool has none.
@@ -490,24 +494,37 @@ func _on_status_changed(text: String) -> void:
 	_status.text = text
 
 
+## A rescue message always wins the status line. A wages-paid message it cuts
+## short is not lost: it shows once the rescue hold ends.
 func _on_granted(_amount: int, message: String) -> void:
+	if _holding and not _hold_is_grant:
+		_pending_wages = _status.text
+	_start_hold(message, true)
+
+
+func _start_hold(message: String, is_grant: bool) -> void:
 	if not _holding:
 		_held_status = _status.text
 	_holding = true
+	_hold_is_grant = is_grant
 	_status.text = message
 	_hold_generation += 1
 	var timer := get_tree().create_timer(grant_hold_s)
 	timer.timeout.connect(_on_hold_timeout.bind(_hold_generation))
 
 
-## "Wages paid: N", with the debt left when there is one, held like a grant message.
+## "Wages paid: N", with the debt left when there is one, held like a grant
+## message. During a rescue hold it waits (the latest one) instead of replacing it.
 func _on_wages_paid(amount: int, owed: int) -> void:
 	if amount <= 0:
 		return
 	var message := "Wages paid: %d" % amount
 	if owed > 0:
 		message += " (%d owed)" % owed
-	_on_granted(amount, message)
+	if _holding and _hold_is_grant:
+		_pending_wages = message
+		return
+	_start_hold(message, false)
 
 
 func _on_hold_timeout(generation: int) -> void:
@@ -515,10 +532,17 @@ func _on_hold_timeout(generation: int) -> void:
 		end_grant_hold()
 
 
-## Ends the grant message's hold and shows the latest status text.
+## Ends the message's hold and shows the latest status text, or the wages-paid
+## message that waited for a rescue hold, which then holds in its turn.
 func end_grant_hold() -> void:
 	if not _holding:
 		return
+	if _hold_is_grant and _pending_wages != "":
+		var waiting := _pending_wages
+		_pending_wages = ""
+		_start_hold(waiting, false)
+		return
+	_pending_wages = ""
 	_holding = false
 	_status.text = _held_status
 
