@@ -153,7 +153,7 @@ func test_the_grid_takes_its_spacing_from_the_theme() -> void:
 	assert_int(grids.size()).is_equal(2)
 	for grid in grids:
 		assert_str(String((grid as GridContainer).theme_type_variation)).is_equal("HudMoneyGrid")
-	assert_int(BuildMenu.HUD_THEME.get_constant(&"h_separation", &"HudMoneyGrid")).is_greater(4)
+	assert_int(BuildMenu.HUD_THEME.get_constant(&"h_separation", &"HudMoneyGrid")).is_equal(32)
 
 
 func test_a_slot_with_no_ledger_has_no_card() -> void:

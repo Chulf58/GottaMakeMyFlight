@@ -144,8 +144,8 @@ func to_snapshot() -> Dictionary:
 
 ## Restores a to_snapshot() dictionary. Pushes an error and returns false,
 ## changing nothing, for a missing or unknown key, a day that is not a decimal
-## string from 0, a since_load that is not a boolean, or a total out of range
-## or of the wrong sign for its category.
+## string from 0, a since_load that is not a boolean, or a total outside
+## -MAX_TOTAL to MAX_TOTAL (either sign is allowed in every category).
 func from_snapshot(data: Dictionary) -> bool:
 	var problem := _snapshot_problem(data)
 	if problem != "":
