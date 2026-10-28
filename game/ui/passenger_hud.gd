@@ -12,7 +12,8 @@ extends CanvasLayer
 ## and the camera follows PassengerViews.follow_anchor, never a pooled node.
 ## When a flight's doors close, a dismissible FlightResultPanel opens under
 ## the top-right panel: made, missed and the main reasons; a later closing
-## flight replaces it. A new game opens paused under the
+## flight replaces it, and it hides itself when the game day changes. On
+## ready the camera frames the built area (StartView). A new game opens paused under the
 ## IntroDialogue (once per session, never in a probe, a test or a playtest);
 ## closing it starts the clock at 1x.
 ##
@@ -78,6 +79,8 @@ const STAGE_TEXT := {
 @export var sim: PassengerSim
 @export var views: PassengerViews
 @export var camera: TycoonCamera
+## Its loaded signal re-frames the start view on the loaded world.
+@export var save_game: SaveGame
 @export var build_mode: BuildMode
 
 var _counts_label := Label.new()
@@ -94,9 +97,10 @@ var _speed_buttons: Array[Button] = []
 var _debug_panel := PanelContainer.new()
 var _result := FlightResultPanel.new()
 ## Flights whose doors closed and whose result is not summarized yet, oldest
-## first. The sim marks the passengers missed after the doors_closed signal,
+## first, each with the game day it closed on (the clock can pass midnight
+## before the next refresh). The sim marks the passengers missed after the doors_closed signal,
 ## so a result waits for the next refresh.
-var _unreported: Array[String] = []
+var _unreported: Array[Dictionary] = []
 var _intro_layer: CanvasLayer
 var _intro: IntroDialogue
 ## The camera's input state when the intro opened, restored when it closes.
@@ -157,6 +161,9 @@ func _ready() -> void:
 		IntroDialogue.shown_this_session, _in_current_scene(), _playtest_switch_on()
 	):
 		open_intro()
+	if save_game != null:
+		save_game.loaded.connect(_on_save_loaded)
+	_frame_start_view()
 	refresh()
 
 
@@ -213,8 +220,10 @@ func refresh() -> void:
 	# The panel always shows the latest flight to close, replacing an open one
 	# that was not dismissed, so it never holds an earlier day's result.
 	if not _unreported.is_empty():
-		_result.show_result(FlightResult.summarize(sim, _unreported.back()))
+		var latest: Dictionary = _unreported.back()
+		_result.show_result(FlightResult.summarize(sim, latest["flight"]), latest["day"])
 		_unreported.clear()
+	_result.expire_on_new_day(_today())
 	_time_label.text = time_text()
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
@@ -287,11 +296,16 @@ func press_debug_spawn() -> void:
 
 ## Opens the result panel for a flight, from the passengers' recorded fates.
 func show_result_for(flight_id: String) -> void:
-	_result.show_result(FlightResult.summarize(sim, flight_id))
+	_result.show_result(FlightResult.summarize(sim, flight_id), _today())
 
 
 func dismiss_result() -> void:
 	_result.dismiss_result()
+
+
+## The game day the clock is on.
+func _today() -> int:
+	return GameCalendar.day_of(clock.tick)
 
 
 func is_result_open() -> bool:
@@ -494,8 +508,19 @@ func _has_open_flight() -> bool:
 	return false
 
 
+## A loaded world is a new start: frame the camera on what the save built.
+func _on_save_loaded(ok: bool) -> void:
+	if ok:
+		_frame_start_view()
+
+
+func _frame_start_view() -> void:
+	if camera != null and build_mode != null:
+		camera.frame_start_view(StartView.area_for(build_mode.grid, build_mode.shell))
+
+
 func _on_doors_closed(flight_id: String) -> void:
-	_unreported.append(flight_id)
+	_unreported.append({"flight": flight_id, "day": GameCalendar.day_of(flights.tick)})
 
 
 func _is_pristine(grid: BuildGrid) -> bool:

@@ -30,6 +30,9 @@ extends Node3D
 @export var home_position := Vector3.ZERO
 @export var home_distance := 80.0
 @export var home_yaw := 0.0
+## How much roomier than the area itself a framed view is, so the area clears
+## the HUD panels around the screen edge.
+@export var frame_margin := 1.3
 
 var yaw := 0.0
 ## The distance the wheel is zooming toward; `distance` catches up to it.
@@ -127,6 +130,42 @@ func go_home() -> void:
 	_begin_glide(home_position, home_distance, home_yaw)
 
 
+## The focus point and distance that fit `area`, a ground rectangle in the
+## world's x and z, seen at yaw 0 (x across the screen, z into it): the
+## nearest distance, inside the zoom limits, at which the area grown by
+## `frame_margin` is wholly in view. The pitch follows the distance, so the
+## distance is found by bisection.
+func framing_for(area: Rect2) -> Dictionary:
+	var half := area.size * 0.5 * frame_margin
+	var fit := max_distance
+	if _fits(half, min_distance):
+		fit = min_distance
+	elif _fits(half, max_distance):
+		var low := min_distance
+		for _i in 30:
+			var mid := (low + fit) / 2.0
+			if _fits(half, mid):
+				fit = mid
+			else:
+				low = mid
+	var centre := area.get_center()
+	return {"position": _clamp_to_bounds(Vector3(centre.x, 0.0, centre.y)), "distance": fit}
+
+
+## Makes the view that fits `area` the start view: Home returns to it, and the
+## camera jumps there now, with no glide.
+func frame_start_view(area: Rect2) -> void:
+	var view := framing_for(area)
+	home_position = view["position"]
+	home_distance = view["distance"]
+	stop_follow()
+	_gliding = false
+	position = home_position
+	yaw = home_yaw
+	distance = home_distance
+	_apply()
+
+
 ## Keeps the focus on `node` until a manual pan, `glide_to`, `go_home` or
 ## `stop_follow`, or until the node is freed.
 func follow(node: Node3D) -> void:
@@ -198,3 +237,33 @@ func _apply() -> void:
 	var pitch := deg_to_rad(pitch_for_distance(_distance))
 	_camera.position = Vector3(0.0, _distance * sin(pitch), _distance * cos(pitch))
 	_camera.rotation = Vector3(-pitch, 0.0, 0.0)
+
+
+## True when the ground rectangle centred on the focus, `half` wide and deep
+## from its middle to its edges, is wholly in view from `from_distance` at the
+## pitch that distance gets.
+func _fits(half: Vector2, from_distance: float) -> bool:
+	var pitch := deg_to_rad(pitch_for_distance(from_distance))
+	var half_tan := tan(deg_to_rad(_camera.fov) / 2.0)
+	var forward := Vector3(0.0, -sin(pitch), -cos(pitch))
+	var up := Vector3(0.0, cos(pitch), -sin(pitch))
+	var eye := Vector3(0.0, from_distance * sin(pitch), from_distance * cos(pitch))
+	for sign_x in [-1.0, 1.0]:
+		for sign_z in [-1.0, 1.0]:
+			var to_corner := Vector3(sign_x * half.x, 0.0, sign_z * half.y) - eye
+			var depth := to_corner.dot(forward)
+			if depth <= 0.0:
+				return false
+			if absf(to_corner.x) > depth * half_tan * _aspect():
+				return false
+			if absf(to_corner.dot(up)) > depth * half_tan:
+				return false
+	return true
+
+
+## Width over height of the view: the viewport's, or 16:9 outside the tree.
+func _aspect() -> float:
+	if not is_inside_tree():
+		return 16.0 / 9.0
+	var size := get_viewport().get_visible_rect().size
+	return size.x / maxf(size.y, 1.0)
