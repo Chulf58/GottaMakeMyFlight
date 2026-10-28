@@ -333,6 +333,34 @@ func officer_spot_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	return null
 
 
+## Whether an officer spot of a lane this instance recognised is in `before`
+## (a StaffSpots.reach() set): only then can an edit cut one off.
+func any_reached(before: Dictionary) -> bool:
+	return _officer_spots.keys().any(func(spot: Vector2i) -> bool: return before.has(spot))
+
+
+## The staff reach rule for officer spots, as StaffSpots.reach_problem() is
+## for a desk's or scanner's spot: a STAFF_SPOT refusal naming the arch when
+## an officer spot of a lane this instance recognised is in `before` and not
+## in `after` (reach() sets of the grid now and as an edit would leave it),
+## or null. A spot staff cannot reach already is left alone.
+func reach_problem(before: Dictionary, after: Dictionary) -> BuildResult:
+	for spot: Vector2i in _officer_spots:
+		if before.has(spot) and not after.has(spot):
+			return BuildResult.refused(BuildResult.Reason.STAFF_SPOT, _officer_spots[spot][0])
+	return null
+
+
+## The officer spots of lanes this instance recognised that `standing` did
+## not, as spot -> arch: the spots a placement that completes a lane brings.
+func new_officer_spots(standing: SecurityLanes) -> Dictionary:
+	var out := {}
+	for spot: Vector2i in _officer_spots:
+		if not standing._officer_spots.has(spot):
+			out[spot] = _officer_spots[spot][0]
+	return out
+
+
 func _officer_wall_problem(grid: BuildGrid, cell: Vector2i, side: int, kind: int) -> BuildResult:
 	var closes := kind == BuildGrid.WallKind.PLAIN or kind == BuildGrid.WallKind.GLASS
 	var existing := grid.wall_kind(cell, side)

@@ -27,8 +27,12 @@ static func two_lanes() -> Array:
 ## Walls the lane's primary officer spot and the floor cell beyond it (away
 ## from the X-ray belt) into a closed two-cell pocket: the lane is still whole
 ## (the spot is free and has a step out), but staff cannot walk to the spot
-## from any entrance. Only for a lane at facing 0.
+## from any entrance. Only for a lane at facing 0. The staff reach rule
+## refuses the last wall, so it is built with the rule off, as an old save
+## could hold it, and the rule is put back.
 static func pocket_primary_spot(grid: BuildGrid, lane: Dictionary) -> void:
+	var checked := grid.check_staff_reach
+	grid.check_staff_reach = false
 	var spot: Vector2i = lane["primary_spot"]
 	var beyond: Vector2i = spot + lane["side"]
 	var outer := BuildGrid.Side.EAST if (lane["side"] as Vector2i).x > 0 else BuildGrid.Side.WEST
@@ -42,6 +46,7 @@ static func pocket_primary_spot(grid: BuildGrid, lane: Dictionary) -> void:
 	for wall: Array in walls:
 		var result := grid.apply(BuildEdit.place_wall(wall[0], wall[1]))
 		assert(result.ok, "pocket wall refused: %s" % result.reason_text())
+	grid.check_staff_reach = checked
 
 
 ## The lane of `arch` as the world's layout recognises it.

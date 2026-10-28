@@ -17,8 +17,9 @@ extends RefCounted
 ## arrives sooner than forecast. Whether the station is open is taken as it
 ## is now: a closed station admits nobody new. Staff are not stepped: a lane's
 ## helper speeds the replayed repacks from the tick StaffPosts.helper_from()
-## gives (now when on duty, its arrival when walking there), and that tick is
-## an event the replay does not skip past.
+## gives (now when on duty, its arrival when walking there, read after the
+## next staff step when that step will plan its path again or move it to
+## another post), and that tick is an event the replay does not skip past.
 
 ## Far enough that a replay this long has gone wrong.
 const HORIZON := 200000

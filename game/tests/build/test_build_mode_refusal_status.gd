@@ -40,7 +40,10 @@ func test_a_rotated_refused_item_shows_the_reason_without_facing() -> void:
 
 func test_the_staff_spot_refusal_reads_as_the_reason_alone() -> void:
 	assert_str(BuildResult.refused(BuildResult.Reason.STAFF_SPOT).reason_text()).is_equal(
-		"Keep the staff spot behind a desk or beside a scanner free, with a way in"
+		(
+			"Keep the staff spot behind a desk, beside a scanner or at a lane officer's post"
+			+ " free, with a way in"
+		)
 	)
 
 
