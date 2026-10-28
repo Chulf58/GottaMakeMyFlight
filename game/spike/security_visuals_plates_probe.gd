@@ -44,6 +44,7 @@ extends SceneTree
 
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
+const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/security-lane-visuals"
 const MAIN_SCENE := "res://main/main.tscn"
@@ -91,10 +92,14 @@ const SWEEP_FRAMES := 40
 ## A carried bag counts as in the hand while the grip is this near its bounds.
 const GRIP_REACH_M := 0.06
 ## The frame-cost check: this many passengers spawned, frames timed.
-const BENCH_PASSENGERS := 100
+## The bench crowd: this many passengers drawn in all, as in Security 7/8.
+const BENCH_CROWD := 110
 const BENCH_FRAMES := 240
 
 var _out_dir := ""
+var _seed := 0
+## --sweep-only: boot, then the crowd sweep and the bench, no moments.
+var _sweep_only := false
 var _failed := false
 var _stage := "init"
 var _heartbeat_ms := 0
@@ -176,8 +181,9 @@ func _frames(count: int) -> void:
 
 func _run() -> void:
 	await _boot()
-	_define_moments()
-	await _play()
+	if not _sweep_only:
+		_define_moments()
+		await _play()
 	for name in _moments:
 		_invalid("moment %s never happened" % name)
 	await _benchmark()
@@ -203,6 +209,8 @@ func _boot() -> void:
 		if arg.begins_with("--seed="):
 			seed = int(arg.get_slice("=", 1))
 	_clock.seed_rng(seed)
+	_seed = seed
+	_sweep_only = OS.get_cmdline_user_args().has("--sweep-only")
 	print("PROBE sim_seed=", seed)
 	root.add_child(_main)
 	_rig = _main.get_node("TycoonCamera")
@@ -296,9 +304,18 @@ func _build_lane(build: BuildMode) -> void:
 	print("ARCH clear_width_m=%.3f outer_width_m=%.3f" % [inner * 2.0, outer * 2.0])
 	if arch_node == null or inner < 0.3:
 		_invalid("the arch's posts were not found")
+	# Each post as drawn: its 0.04 m feet 0.84 m deep, the panels above them
+	# as deep as the arch's meshes reach there (read like the clear width).
+	var deep := CarryChecks.arch_post_half_depth(arch_node) if arch_node != null else 0.42
+	print("ARCH post_depth_m=%.3f above the feet" % [deep * 2.0])
 	for sign in [-1.0, 1.0]:
-		var lo := Vector3(inner if sign > 0 else -outer, 0.0, -0.42)
-		_part_boxes.append(["arch_post", arch_xf, AABB(lo, Vector3(outer - inner, 2.42, 0.84))])
+		var x := inner if sign > 0 else -outer
+		var feet := AABB(Vector3(x, 0.0, -0.42), Vector3(outer - inner, 0.045, 0.84))
+		var posts := AABB(
+			Vector3(x, 0.045, -deep), Vector3(outer - inner, 2.42 - 0.045, deep * 2.0)
+		)
+		_part_boxes.append(["arch_post", arch_xf, feet])
+		_part_boxes.append(["arch_post", arch_xf, posts])
 	_wall_boxes(grid)
 	_controls(grid)
 
@@ -400,6 +417,7 @@ func _define_moments() -> void:
 	for kind in KIND_NAMES:
 		for moment in KIND_MOMENTS:
 			_moments["kind_%s_%s" % [kind, moment]] = "kinds"
+	_moments["kind_backpack_from_behind"] = "kinds"
 	_roles = ROLES.duplicate(true)
 
 
@@ -484,7 +502,7 @@ func _kind_hit(name: String, p: Passenger) -> bool:
 	var phase := p.security_phase
 	var hit := false
 	match name.trim_prefix("kind_%s_" % KIND_NAMES[kind]):
-		"carried":
+		"carried", "from_behind":
 			hit = (
 				lane
 				and phase == SecurityRuntime.Phase.LEAVE
@@ -640,6 +658,14 @@ func _plate(name: String, group: String, id: int, distance: float) -> bool:
 		paused = true
 		_clock.set_paused(keep)
 		var result: Dictionary = await _check(name, id, yaw)
+		if name.ends_with("_from_behind"):
+			# Only a heading that looks at the passenger's back counts.
+			var look := body.global_position - _cam.global_position
+			look.y = 0.0
+			var ahead := Basis(Vector3.UP, body.rotation.y) * Vector3.BACK
+			var behind := look.normalized().dot(ahead)
+			print("BEHIND %s yaw=%.2f look_dot_forward=%.2f" % [name, yaw, behind])
+			result["ok"] = result["ok"] and behind > 0.5
 		if result["ok"]:
 			_save(result["image"], name, group)
 			ok = true
@@ -682,6 +708,8 @@ func _check(name: String, id: int, yaw: float) -> Dictionary:
 	var box: AABB = bounds.get(str(id), AABB())
 	var seen := PlateSight.person_shown(_cam, box, str(id), frame, img, bare, MIN_SUBJECT_PX)
 	var ok: bool = seen["ok"] and unbaked.is_empty()
+	if not unbaked.is_empty():
+		print("UNBAKED %s %s" % [name, unbaked])
 	print(
 		(
 			(
@@ -826,7 +854,7 @@ func _check_clearance(name: String, id: int) -> void:
 	var homes := SecurityLooks.bag_homes(_sim, p)
 	var points := CarryContact.body_points(body, [])
 	var part_hits := _box_hits(points)
-	var own := CarryContact.body_points(body, _gripping(p))
+	var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p))
 	if not _body_control_done:
 		# Control: a bag at the hips must hold body points.
 		var at_hips := Transform3D(Basis.IDENTITY, body.global_position + Vector3.UP * 0.85)
@@ -842,7 +870,7 @@ func _check_clearance(name: String, id: int) -> void:
 		if homes[i] == SecurityLooks.Home.TRAY:
 			continue
 		bag_body += CarryContact.inside_meshes(own, bags[i])
-		var bag_points := _surface(bags[i])
+		var bag_points := CarryChecks.surface(bags[i])
 		var hits := _box_hits(bag_points)
 		for key in hits:
 			if key == "wall" or key == "arch_post":
@@ -856,13 +884,17 @@ func _check_clearance(name: String, id: int) -> void:
 		var node := _views.node_for(other)
 		if other != id and node != null:
 			nearest = minf(nearest, node.global_position.distance_to(body.global_position))
-	bag_body += _bag_bag(bags)
+	bag_body += CarryChecks.bag_bag(bags)
 	if bag_body > 0:
 		for bag in bags:
 			print(
 				(
 					"CONTACT %s bones=%s bag_bag=%d"
-					% [name, _contact_bones(body, _gripping(p), bag), _bag_bag(bags)]
+					% [
+						name,
+						CarryChecks.contact_bones(body, CarryChecks.gripping(_sim, p), bag),
+						CarryChecks.bag_bag(bags)
+					]
 				)
 			)
 	print(
@@ -892,7 +924,7 @@ func _check_clearance(name: String, id: int) -> void:
 		var in_booth := CarryContact.inside_meshes(points, _basic_node)
 		var bags_in_booth := 0
 		for i in bags.size():
-			bags_in_booth += CarryContact.inside_meshes(_surface(bags[i]), _basic_node)
+			bags_in_booth += CarryContact.inside_meshes(CarryChecks.surface(bags[i]), _basic_node)
 		print(
 			(
 				"BASIC_SCANNER %s body_points_in_booth=%d bag_points_in_booth=%d (reported, not failed)"
@@ -903,65 +935,6 @@ func _check_clearance(name: String, id: int) -> void:
 		_invalid("%s: no drawn body points to check" % name)
 	if not part_hits.is_empty() or not bag_parts.is_empty() or bag_body > 0:
 		_invalid("%s: passenger %d or its bags clip a lane part, a wall or the body" % [name, id])
-
-
-## The hands holding something of `p` now (".R", ".L"): a hard case's and a
-## roller's grip, a shoulder strap's hand; a backpack holds none.
-func _gripping(p: Passenger) -> Array:
-	var out: Array = []
-	var homes := SecurityLooks.bag_homes(_sim, p)
-	for i in homes.size():
-		if homes[i] != SecurityLooks.Home.HAND:
-			continue
-		match SecurityLooks.carry_of(p, i):
-			SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL:
-				out.append([".R", ".L"][SecurityLooks.hand_of(_sim, p, i)])
-			SecurityLooks.Carry.SHOULDER:
-				out.append([".R", ".L"][SecurityLooks.worn_side(i)])
-	return out
-
-
-## World points covering a bag node's surface, as drawn now (every mesh of
-## it, straps and rods included), sampled at CarryContact.SAMPLE_M or finer.
-func _surface(bag: Node3D) -> PackedVector3Array:
-	var out := PackedVector3Array()
-	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
-		var faces := mi.mesh.get_faces()
-		for i in range(0, faces.size() - 2, 3):
-			var a := mi.global_transform * faces[i]
-			var ab := mi.global_transform * faces[i + 1] - a
-			var ac := mi.global_transform * faces[i + 2] - a
-			var n := maxi(1, ceili(maxf(ab.length(), ac.length()) / CarryContact.SAMPLE_M))
-			for u in n + 1:
-				for v in n + 1 - u:
-					out.append(a + ab * (u / float(n)) + ac * (v / float(n)))
-	return out
-
-
-## For a contact report: the bones owning the body points inside `bag`, with
-## the part of the bag each point is in (Body, a strap or rod node), counted.
-func _contact_bones(body: Node3D, gripping: Array, bag: Node3D) -> Dictionary:
-	var named: Array = CarryContact.body_points_owned(body, gripping)
-	var found := {}
-	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
-		var to_mesh := mi.global_transform.affine_inverse()
-		var faces := mi.mesh.get_faces()
-		for k in (named[0] as PackedVector3Array).size():
-			var lp: Vector3 = to_mesh * named[0][k]
-			if mi.get_aabb().grow(0.001).has_point(lp) and CarryContact._odd(lp, faces):
-				var key := "%s@%s" % [named[1][k], mi.name]
-				found[key] = found.get(key, 0) + 1
-	return found
-
-
-## Points of each bag of a passenger inside another of its bags.
-func _bag_bag(bags: Array[Node3D]) -> int:
-	var count := 0
-	for a in bags.size():
-		for b in bags.size():
-			if a != b:
-				count += CarryContact.inside_meshes(_surface(bags[a]), bags[b])
-	return count
 
 
 ## How far bag `i` of passenger `id` is from what holds it (0 when held): the
@@ -1246,7 +1219,7 @@ func _plate_live_walk_back(id: int, name: String) -> bool:
 		frames += 1
 		var body := _views.node_for(id)
 		var homes := SecurityLooks.bag_homes(_sim, p)
-		var gripping := _gripping(p)
+		var gripping := CarryChecks.gripping(_sim, p)
 		var drawn: Array[Node3D] = props.props_of(id)["bags"]
 		var weight := props.front_weight_of(id)
 		var carrying := homes.has(SecurityLooks.Home.HAND) and drawn.size() == p.carry_on
@@ -1268,11 +1241,11 @@ func _plate_live_walk_back(id: int, name: String) -> bool:
 				)
 		var counts := _box_hits(CarryContact.body_points(body, []))
 		var own := CarryContact.body_points(body, gripping)
-		var bag_pair := _bag_bag(drawn)
+		var bag_pair := CarryChecks.bag_bag(drawn)
 		if bag_pair > 0:
 			counts["bag_bag"] = bag_pair
 		for bag: Node3D in drawn:
-			var points := _surface(bag)
+			var points := CarryChecks.surface(bag)
 			for key in _box_hits(points):
 				if key == "wall" or key == "arch_post":
 					counts["bag_" + key] = counts.get("bag_" + key, 0) + 1
@@ -1291,7 +1264,7 @@ func _plate_live_walk_back(id: int, name: String) -> bool:
 			var inside := CarryContact.inside_meshes(own, bag)
 			if inside > 0:
 				counts["bag_body"] = counts.get("bag_body", 0) + 1
-				var bones := _contact_bones(body, gripping, bag)
+				var bones := CarryChecks.contact_bones(body, gripping, bag)
 				print(
 					(
 						"CONTACT walk-back frame=%d at=%s points=%d bones=%s"
@@ -1369,13 +1342,13 @@ func _live_shown(body: Node3D, tag: String, at: float) -> bool:
 	return ok
 
 
-## Frame cost of the carry-on bags with about BENCH_PASSENGERS passengers on
+## Frame cost of the carry-on bags with BENCH_CROWD passengers drawn and on
 ## screen: frame times with their bags, then the same crowd with every bag
 ## taken away (carry_on 0), as the control.
 func _benchmark() -> void:
 	_beat("bench spawn")
 	var flight := StarterFlight.first_flight()
-	_sim.spawn_batch(BENCH_PASSENGERS, randi() + 1)
+	_sim.spawn_batch(maxi(0, BENCH_CROWD - _views.active_count()), _seed + 1)
 	var until := _clock.tick + 240
 	while _clock.tick < until:
 		_beat("bench walk-in")
@@ -1422,10 +1395,16 @@ func _sweep() -> void:
 		_beat("sweep frame %d" % frame)
 		var running := frame >= SWEEP_FRAMES * 2
 		if running:
-			_clock.set_paused(true)
+			if not _clock.paused:
+				# Late walkers run: the views play the run clip and a roller is
+				# lifted, as the game draws them (a snap starts every carry in
+				# place, with no move to play on the paused clock).
+				_clock.set_paused(true)
+				for id in carriers:
+					_sim.get_passenger(id).late = true
+				_views.snap()
 			for id in carriers:
 				var player := _views.node_for(id).get_node("AnimationPlayer") as AnimationPlayer
-				player.play("run")
 				player.seek(fmod(frame * 0.071, player.current_animation_length), true)
 		await process_frame
 		if not running and frame % 2 == 1:
@@ -1447,8 +1426,8 @@ func _sweep() -> void:
 				continue
 			carriers.append(id)
 			var clip := (body.get_node("AnimationPlayer") as AnimationPlayer).current_animation
-			var own := CarryContact.body_points(body, _gripping(p))
-			var pair := _bag_bag(drawn)
+			var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p))
+			var pair := CarryChecks.bag_bag(drawn)
 			if pair > 0:
 				contacts["bag_bag"] = contacts.get("bag_bag", 0) + pair
 			for i in drawn.size():
@@ -1456,11 +1435,35 @@ func _sweep() -> void:
 				checks[key] = checks.get(key, 0) + 1
 				var hits := CarryContact.inside_meshes(own, drawn[i])
 				if hits > 0:
+					if not contacts.has(key) or key.begins_with("roller"):
+						var to_body := body.global_transform.affine_inverse()
+						var axle := to_body * (drawn[i].global_transform * CarryOnProps.ROLLER_AXLE)
+						var grip := to_body * props.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
+						print(
+							(
+								"SWEEP where %s id=%d i=%d hand=%d axle=%s grip=%s at=%s path=%s"
+								% [
+									key,
+									id,
+									i,
+									SecurityLooks.hand_of(_sim, p, i),
+									axle.snapped(Vector3.ONE * 0.01),
+									grip.snapped(Vector3.ONE * 0.01),
+									p.at,
+									p.path.slice(maxi(0, p.path_index - 2), p.path_index + 2)
+								]
+							)
+						)
 					if not contacts.has(key):
 						print(
 							(
 								"SWEEP contact %s bones=%s"
-								% [key, _contact_bones(body, _gripping(p), drawn[i])]
+								% [
+									key,
+									CarryChecks.contact_bones(
+										body, CarryChecks.gripping(_sim, p), drawn[i]
+									)
+								]
 							)
 						)
 					contacts[key] = contacts.get(key, 0) + hits

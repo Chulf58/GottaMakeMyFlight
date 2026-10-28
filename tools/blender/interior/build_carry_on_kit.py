@@ -46,12 +46,12 @@ BLEND_OUT = os.path.join(kit.REPO, "tools", "blender", "out", "carry-on-kinds", 
 # Length of a stretchable strip or rod as built (Godot metres along +Z).
 REACH_BUILT = 0.02
 # Backpack (Blender x, y, z): width, length (top end at -y), thickness.
-PACK = (0.30, 0.42, 0.15)
+PACK = (0.24, 0.42, 0.13)
 PACK_STRAP = 0.012
 # Tote: long side, height (top edge at -y), thickness.
 TOTE = (0.38, 0.28, 0.10)
 # Strap strips run up from the top edge at x = +-TOTE_STRAP_X, mid-thickness.
-TOTE_STRAP_X = 0.10
+TOTE_STRAP_X = 0.13
 TOTE_STRAP_Z = TOTE[2] / 2.0
 # Roller: width, length (top end at -y), thickness; wheels and rods on the back panel.
 ROLLER = (0.32, 0.44, 0.20)
@@ -98,11 +98,11 @@ def build_carry_backpack(root, c):
     tbox("Pack_Body", (-hx, -hy, s), (hx, hy, s + t), "red", root, c, bevel=0.035)
     tbox("Pack_Band", (-hx - 0.004, -hy + 0.02, s + 0.03), (hx + 0.004, -hy + 0.06, s + t - 0.02), "coffee",
          root, c)
-    tbox("Pack_Pocket", (-0.11, -0.04, s + t - 0.01), (0.11, hy - 0.04, s + t + 0.04), "sage", root, c,
+    tbox("Pack_Pocket", (-0.085, -0.04, s + t - 0.01), (0.085, hy - 0.04, s + t + 0.03), "sage", root, c,
          bevel=0.015)
-    tbox("Pack_Zip", (-0.09, -0.035, s + t + 0.04), (0.09, -0.02, s + t + 0.045), "dark", root, c)
+    tbox("Pack_Zip", (-0.07, -0.035, s + t + 0.03), (0.07, -0.02, s + t + 0.035), "dark", root, c)
     # Two shoulder straps on the back panel (the body side), a grab loop at the top end.
-    for side, x in (("L", -0.08), ("R", 0.08)):
+    for side, x in (("L", -0.065), ("R", 0.065)):
         tbox("Pack_Strap_" + side, (x - 0.022, -hy + 0.04, 0.0), (x + 0.022, hy - 0.05, s), "dark", root, c)
     tbox("Pack_Loop", (-0.04, -hy - 0.025, s + 0.05), (0.04, -hy, s + 0.09), "dark", root, c)
 
@@ -146,7 +146,7 @@ def build_carry_roller(root, c):
 
 # piece -> (builder, footprint, expected Blender bounds lo/hi).
 PIECES = {
-    "carry_backpack": (build_carry_backpack, None, (-0.154, -0.235, 0.0), (0.154, 0.21, 0.207)),
+    "carry_backpack": (build_carry_backpack, None, (-0.124, -0.235, 0.0), (0.124, 0.21, 0.177)),
     "carry_shoulder_bag": (build_carry_shoulder_bag, None, (-0.194, -0.184, -0.0), (0.194, 0.14, 0.106)),
     "carry_roller": (build_carry_roller, None, (-0.164, -0.274, 0.0), (0.164, 0.22, 0.225)),
 }

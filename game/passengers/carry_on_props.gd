@@ -44,6 +44,8 @@ extends Node3D
 ## and never writes either.
 
 enum Arm { FREE, HAND, PULL, STRAP }
+## Which bags _place_bags() places.
+enum Placing { ALL, HAND, NOT_HAND }
 
 const TRAY_MOUNTS := {
 	SecurityLooks.Tray.IN: [SecurityLanes.TRAY_TABLE, "Mount_TrayIn"],
@@ -75,26 +77,34 @@ const SPINE_BONE := "Spine_03"
 ## Worn backpack: its back panel this far behind the Spine_03 bone (clear of
 ## the back, a skirt and long hair), its top this far above the bone.
 const BACK_FROM_SPINE_M := 0.175
-const BACK_TOP_OVER_SPINE_M := 0.09
+const BACK_TOP_OVER_SPINE_M := 0.06
 ## It leans in at the top by this much, its bottom out clear of the hips.
-const BACK_LEAN_DEGREES := 10.0
+const BACK_LEAN_DEGREES := 8.0
 ## Shoulder bag: the strap this far out from the body's centre line, its bar
 ## this far over the Arm bone (the shoulder joint), and this long from the bar
-## to the bag's top edge (the bag hangs outside the hip, under the elbow).
-const STRAP_OUT_M := 0.30
+## to the bag's top edge (the bag hangs outside the hip, its top about the hip
+## bone's height, under the elbow).
+const STRAP_OUT_M := 0.32
 const STRAP_OVER_ARM_M := 0.06
-const STRAP_M := 0.58
+const STRAP_M := 0.45
 ## The strap hand: at the chest just inside the strap (so the forearm stays
 ## clear of the strap), this far from the centre line, the forearm raised this
 ## much.
-const STRAP_HAND_M := 0.18
+const STRAP_HAND_M := 0.15
 const STRAP_HAND_UP_DEGREES := 45.0
 ## A pulled roller's axle trails this far behind the body's centre, measured
 ## back along the line the body walked (so it takes each corner where the body
 ## did and clears the heel of a long stride).
 const TRAIL_M := 1.0
+## The walked line it follows is this far out on the pulling hand's side, so
+## the rods from the hand pass outside the thigh.
+const TRAIL_SIDE_M := 0.3
+## How far to the pulling hand's side the axle may be, from the body's centre
+## line, and how far behind it at least (TRAIL_M * 0.6).
+const TRAIL_SIDE_MIN_M := 0.28
+const TRAIL_SIDE_MAX_M := 0.6
 ## The pulling arm: turned out a little, less swing, leaning back.
-const PULL_OUT_DEGREES := 8.0
+const PULL_OUT_DEGREES := 12.0
 const PULL_SWING_KEPT := 0.2
 const PULL_LEAN_DEGREES := 12.0
 ## The roller's axle in its own frame at scale 1 (build_carry_on_kit.py: on
@@ -117,7 +127,7 @@ const REACH_NODES := {
 ## body's centre while it rises or comes down.
 const OVERHEAD_M := 2.05
 const ROUTE_FRONT_M := 0.45
-const ROUTE_BACK_M := 0.25
+const ROUTE_BACK_M := 0.2
 ## A roller on the overhead route is down by this much of the move; its rods
 ## then come out to the hand.
 const ROLLER_LAND := 0.85
@@ -305,12 +315,17 @@ static func trail(walked: Array, back: Vector3) -> Vector3:
 ## frame (x across, +z ahead), down by `land` (it then waits there, turned): it
 ## rises in front of or behind the body, crosses
 ## over the head with its lowest point (of `box`, the bag's bounds in its own
-## frame) at OVERHEAD_M, and comes down on the other side, turning as it goes.
+## frame) at OVERHEAD_M, turning there, and comes down on the other side.
 static func overhead(
 	from: Transform3D, to: Transform3D, k: float, box: AABB, land := 1.0
 ) -> Transform3D:
-	var turn := from.basis.get_rotation_quaternion().slerp(to.basis.get_rotation_quaternion(), k)
-	var basis := Basis(turn).scaled(from.basis.get_scale().lerp(to.basis.get_scale(), k))
+	# It turns only while it is up over the head: rising and coming down it
+	# keeps its start and end pose, so it swings into nothing beside the body.
+	var turned := clampf(k * 3.0 - 1.0, 0.0, 1.0)
+	var turn := from.basis.get_rotation_quaternion().slerp(
+		to.basis.get_rotation_quaternion(), turned
+	)
+	var basis := Basis(turn).scaled(from.basis.get_scale().lerp(to.basis.get_scale(), turned))
 	var lowest := INF
 	for i in 8:
 		lowest = minf(lowest, (basis * box.get_endpoint(i)).y)
@@ -438,7 +453,7 @@ func sync() -> void:
 				bags[i]["changed"] = _tick()
 				bags[i]["carry_was"] = bags[i].get("carry", carry)
 			bags[i]["carry"] = carry
-			_trail(bags[i], node, id, homes[i])
+			_trail(bags[i], node, id, homes[i], hands[i])
 	for id in _held.keys():
 		if not seen.has(id):
 			release(id)
@@ -495,9 +510,10 @@ func drawn_count() -> int:
 	return count
 
 
-## Places every prop for this frame. A character's carried bags are placed
-## again when its skeleton has its final pose for the frame (_on_pose), so a
-## bag in the hand does not trail the hand by a frame.
+## Places every prop for this frame. A bag going to a hand is placed when the
+## character's skeleton has its final pose for the frame (_on_pose), so it does
+## not trail the hand by a frame; here only when the skeleton did not report
+## last frame (paused, or not animated), so it is placed once per frame.
 func draw() -> void:
 	var now := _now()
 	for id in _held:
@@ -511,22 +527,37 @@ func draw() -> void:
 		held["weight"] = _front_weight(held, now)
 		_body_ids[body] = id
 		# Bags first: a new move is stamped there, and the arms follow it.
-		_place_bags(held, body, tray_xf, now)
+		var posed: bool = held.get("posed_frame", -2) == Engine.get_process_frames() - 1
+		_place_bags(held, body, tray_xf, now, Placing.NOT_HAND if posed else Placing.ALL)
 		_pose_arms(held, body, now)
 
 
-## Puts the bags of one passenger in place (draw(), _on_pose()).
-func _place_bags(held: Dictionary, body: Node3D, tray_xf: Transform3D, now: float) -> void:
+## Puts the bags of one passenger in place (draw(), _on_pose()): all of
+## them, only those going to a hand, or all but those. Every bag's new move is
+## stamped, whichever are placed.
+func _place_bags(
+	held: Dictionary, body: Node3D, tray_xf: Transform3D, now: float, placing: Placing
+) -> void:
 	var bags: Array = held["bags"]
 	var homes: Array = held["homes"]
 	for i in bags.size():
 		var bag: Dictionary = bags[i]
 		var node: Node3D = bag["node"]
 		var kind: SecurityLooks.Kind = bag["kind"]
+		var hand_home: bool = homes[i] == SecurityLooks.Home.HAND
+		var stamp: bool = bag["home"] != bag["place"]
+		if (
+			not stamp
+			and (
+				(placing == Placing.HAND and not hand_home)
+				or (placing == Placing.NOT_HAND and hand_home)
+			)
+		):
+			continue
 		var want_reach := [REACH_BUILT_M]
 		var want := _bag_transform(held, body, tray_xf, i, homes[i], want_reach)
 		# A change of hand moves the bag across like a change of home.
-		if bag["home"] != bag["place"]:
+		if stamp:
 			# The move starts where the bag is, held in the passenger's frame,
 			# so a bag picked up while walking stays ahead of the legs. Its clock
 			# is the tick sync() saw the change on, not the frame it is drawn in.
@@ -536,6 +567,8 @@ func _place_bags(held: Dictionary, body: Node3D, tray_xf: Transform3D, now: floa
 			bag["was"] = bag["home"]
 			bag["home"] = bag["place"]
 			bag["reach_from"] = _reach_of(node, kind)
+			if placing == Placing.NOT_HAND and hand_home:
+				continue
 		var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
 		var to_hand: bool = homes[i] == SecurityLooks.Home.HAND
 		var from_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
@@ -647,7 +680,8 @@ func _on_pose(body: Node3D) -> void:
 	var held: Dictionary = _held.get(id, {})
 	if held.is_empty() or views.node_for(id) != body:
 		return
-	_place_bags(held, body, _tray_transform(held, body), _now())
+	held["posed_frame"] = Engine.get_process_frames()
+	_place_bags(held, body, _tray_transform(held, body), _now(), Placing.HAND)
 
 
 ## Where hand `i` (right, then left) of a character grips a bag now.
@@ -676,15 +710,22 @@ func _tick() -> float:
 	return float(clock.tick) if clock != null else 0.0
 
 
-## Moves a pulled roller's axle one tick on behind the body's tick position
-## (tick_position, as drawn), or starts it straight behind; any other bag has
-## none.
-func _trail(bag: Dictionary, body: Node3D, id: int, home: SecurityLooks.Home) -> void:
+## Moves a pulled roller's axle one tick on: TRAIL_M back along the line
+## walked by a point TRAIL_SIDE_M out on the pulling hand's side of the body's
+## tick position (tick_position, as drawn); any other bag has none.
+func _trail(bag: Dictionary, body: Node3D, id: int, home: SecurityLooks.Home, hand: int) -> void:
 	if bag["carry"] != SecurityLooks.Carry.PULL or home != SecurityLooks.Home.HAND:
 		bag.erase("axle")
 		bag.erase("walked")
 		return
-	var now := views.tick_position(id, true)
+	var side := Vector3.LEFT if hand == 0 else Vector3.RIGHT
+	# The heading the body is drawn with for this tick (PassengerViews.draw()
+	# turns it to the step from the last tick position to this one).
+	var at := views.tick_position(id, true)
+	var step := at - views.tick_position(id, false)
+	var yaw := atan2(step.x, step.z) if step.length() > 0.001 else body.rotation.y
+	var turn := Basis(Vector3.UP, yaw)
+	var now := at + turn * side * TRAIL_SIDE_M
 	var walked: Array = bag.get("walked", [])
 	if walked.is_empty() or (walked[-1] as Vector3).distance_to(now) > 0.01:
 		walked.append(now)
@@ -695,8 +736,25 @@ func _trail(bag: Dictionary, body: Node3D, id: int, home: SecurityLooks.Home) ->
 		if length > TRAIL_M + 0.5:
 			walked = walked.slice(i - 1)
 			break
+	var behind := turn * Vector3.FORWARD
+	var cur := trail(walked, behind)
+	if (cur - now).dot(behind) < 0.0:
+		# The walker turned back past its roller (it is ahead now, not round a
+		# corner beside it): it swings the roller round behind it rather than
+		# walk through the rods.
+		walked = [now]
+		cur = trail(walked, behind)
+		bag.erase("axle")
 	bag["walked"] = walked
-	var cur := trail(walked, Basis(Vector3.UP, body.rotation.y) * Vector3.FORWARD)
+	# Kept behind the walker on the pulling hand's side, so the rods never
+	# cross behind the legs to the other side (a zig-zag of diagonal steps
+	# swings the walked line about the body's heading).
+	var frame := Transform3D(turn, at)
+	var local := frame.affine_inverse() * cur
+	var out := -1.0 if hand == 0 else 1.0
+	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
+	local.z = minf(local.z, -TRAIL_M * 0.6)
+	cur = frame * local
 	bag["axle"] = [bag["axle"][1] if bag.has("axle") else cur, cur]
 
 
@@ -734,6 +792,12 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 				if on > 0.0:
 					modes[side] = Arm.STRAP
 					strap[side] = on
+	# The arms keep what was set until it changes (most frames nothing does).
+	var key := [modes, strap, cases, held["weight"]]
+	if held.get("arm_key", []) == key and held.get("arm_body") == body:
+		return
+	held["arm_key"] = key
+	held["arm_body"] = body
 	var arms: Array = _rig(body)["arms"]
 	for side in arms.size():
 		var arm := arms[side] as CarryArm
