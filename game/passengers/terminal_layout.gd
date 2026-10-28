@@ -7,6 +7,12 @@ extends RefCounted
 ## LANE_SLOTS cells, stopping at a closed step, a cell another lane already
 ## took, another object's interaction cell or a staff spot (StaffSpots), which
 ## passengers may cross but never queue on. Stations claim cells in id order.
+##
+## A security lane (SecurityLanes) is one station keyed by its arch: a whole
+## lane's arch is listed in scanners with its passage, and the cells it keeps
+## clear (SecurityLanes.kept_clear_cells()) stop other queues like a staff
+## spot. An arch without a whole lane is in neither list, so is_usable() is
+## false for it.
 
 const LANE_SLOTS := 6
 
@@ -20,6 +26,9 @@ var lanes: Dictionary = {}
 var passages: Dictionary = {}
 ## One entry per seat: {key, object_id, cell, front, facing}, in id order.
 var seats: Array[Dictionary] = []
+## The security lanes, recognised anew on every rebuild, so a caller holding
+## the previous instance can compare the two (SecurityLanes.broken()).
+var security_lanes := SecurityLanes.new()
 
 
 static func front_of(facing: int) -> Vector2i:
@@ -34,6 +43,8 @@ func rebuild(grid: BuildGrid) -> void:
 	lanes.clear()
 	passages.clear()
 	seats.clear()
+	security_lanes = SecurityLanes.new()
+	security_lanes.rebuild(grid)
 	var ids := grid.object_ids()
 	ids.sort()
 	var reserved := {}
@@ -45,6 +56,10 @@ func rebuild(grid: BuildGrid) -> void:
 		var staff_spot := StaffSpots.spot_of(grid, id)
 		if staff_spot != BuildObjectDef.NO_CELL and not reserved.has(staff_spot):
 			reserved[staff_spot] = id
+	for arch in security_lanes.complete_arches():
+		for cell in SecurityLanes.kept_clear_cells(security_lanes.lane(arch)):
+			if not reserved.has(cell):
+				reserved[cell] = arch
 	for id in ids:
 		match StringName(grid.get_object(id)["def"]):
 			&"checkin_desk":
@@ -52,6 +67,10 @@ func rebuild(grid: BuildGrid) -> void:
 			&"security_scanner":
 				scanners.append(id)
 				passages[id] = grid.passage_cells(id)
+			&"security_arch":
+				if security_lanes.is_complete(id):
+					scanners.append(id)
+					passages[id] = security_lanes.lane(id)["passage"]
 			&"entrance_door":
 				entrances.append(id)
 			&"exit_door":

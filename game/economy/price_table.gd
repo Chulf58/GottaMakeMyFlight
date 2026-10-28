@@ -23,6 +23,15 @@ const WALL_PRICES := {
 const OBJECT_PRICES := {
 	&"checkin_desk": 400,
 	&"security_scanner": 900,
+	# Security lane parts: 2500 for a whole lane, under three basic scanners
+	# (2700) but well over two (decision security-tiers-the-old-single-scanner-
+	# stays-as-a-cheap-basic: the lane is the bigger, faster upgrade, run by one
+	# officer). The arch and the X-ray belt are the machines; the tables are
+	# plain furniture, a little under a cafe table.
+	&"security_arch": 1100,
+	&"xray_belt": 900,
+	&"tray_table": 250,
+	&"pickup_table": 250,
 	&"seat_row": 250,
 	&"entrance_door": 300,
 	&"exit_door": 300,

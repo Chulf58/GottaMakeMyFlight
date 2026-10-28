@@ -755,18 +755,32 @@ func _load_cells(data: Dictionary) -> String:
 	for entry in data["objects"]:
 		var anchor := Vector2i(int(entry["anchor"][0]), int(entry["anchor"][1]))
 		var def_id := StringName(entry["def"])
-		var check := _check_place_object(def_id, anchor, int(entry["facing"]))
-		if not check.ok:
-			return "object %d refused: %s" % [int(entry["id"]), check.reason_text()]
+		var problem := _load_object_problem(entry, def_id, anchor)
+		if problem != "":
+			return problem
 		var paid := int(entry.get("paid", 0))
-		# No price history yet, so today's price caps what was paid. A belt
-		# piece keeps its price when it changes shape (RESHAPE_BELT), so the
-		# dearest belt piece caps every belt piece.
-		if paid > 0 and paid > _paid_cap(def_id):
-			return "object %d paid %d, more than its price" % [int(entry["id"]), paid]
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
 	_pathing.rebuild(self)
+	return ""
+
+
+## Why a snapshot's object entry cannot be loaded, or "". A security lane
+## part is refused while lanes are off (SecurityLanes.enabled), so a save
+## cannot bring in a lane the game cannot staff yet.
+func _load_object_problem(entry: Dictionary, def_id: StringName, anchor: Vector2i) -> String:
+	var id := int(entry["id"])
+	if SecurityLanes.is_part(def_id) and not SecurityLanes.enabled:
+		return "object %d is a security lane part (%s), and security lanes are off" % [id, def_id]
+	var check := _check_place_object(def_id, anchor, int(entry["facing"]))
+	if not check.ok:
+		return "object %d refused: %s" % [id, check.reason_text()]
+	var paid := int(entry.get("paid", 0))
+	# No price history yet, so today's price caps what was paid. A belt
+	# piece keeps its price when it changes shape (RESHAPE_BELT), so the
+	# dearest belt piece caps every belt piece.
+	if paid > 0 and paid > _paid_cap(def_id):
+		return "object %d paid %d, more than its price" % [id, paid]
 	return ""
 
 

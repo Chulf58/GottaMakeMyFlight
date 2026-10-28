@@ -48,6 +48,10 @@ enum Tool {
 	BAG_ROOM,
 	BELT,
 	CART,
+	TRAY_TABLE,
+	XRAY_BELT,
+	ARCH,
+	PICKUP_TABLE,
 }
 
 const TOOL_ACTIONS := {
@@ -72,7 +76,14 @@ const TOOL_OBJECTS := {
 	Tool.COUNTER: &"cafe_counter",
 	Tool.TABLE: &"cafe_table",
 	Tool.CART: &"baggage_cart",
+	Tool.TRAY_TABLE: SecurityLanes.TRAY_TABLE,
+	Tool.XRAY_BELT: SecurityLanes.XRAY_BELT,
+	Tool.ARCH: SecurityLanes.ARCH,
+	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
 }
+## The security lane part tools, in flow order. They are off while
+## SecurityLanes.enabled is.
+const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
 ## What one belt cell costs, whatever piece it becomes.
 const BELT_PRICE_ID := &"baggage_belt"
 const BELT_HINT := "Drag to lay a belt"
@@ -142,8 +153,12 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 ## The tool BuildMode starts on. main.tscn sets None, so a new game has no tool
 ## and a stray click on the world builds nothing; the Floor default keeps a bare
 ## BuildMode ready to paint for tests and probes.
+## A tool that is off (tool_enabled()) is replaced by None, with a warning.
 @export var initial_tool := Tool.FLOOR:
 	set(value):
+		if not tool_enabled(value):
+			push_warning("BuildMode: initial tool %s is off; starting on None" % Tool.keys()[value])
+			value = Tool.NONE
 		initial_tool = value
 		tool = value
 
@@ -270,7 +285,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			apply_at(point)
 
 
+## Whether `which` can be picked: every tool but the lane part tools, which
+## need SecurityLanes.enabled.
+static func tool_enabled(which: Tool) -> bool:
+	return SecurityLanes.enabled or not LANE_TOOLS.has(which)
+
+
+## Picks a tool. A tool that is off (tool_enabled()) is refused with a
+## warning and the current tool stays.
 func set_tool(new_tool: Tool) -> void:
+	if not tool_enabled(new_tool):
+		push_warning("BuildMode: tool %s is off (SecurityLanes.enabled)" % Tool.keys()[new_tool])
+		return
 	cancel_area()
 	tool = new_tool
 	_auto_facing = true
@@ -294,7 +320,13 @@ func grid_point(from: Vector3, direction: Vector3) -> Variant:
 
 
 ## The edit the current tool would make at a ground point, or null for none.
+## A tool that is off (tool_enabled()) makes none, however it was selected, so
+## apply_at() and the ghost do nothing with it either.
 func edit_at(point: Vector3) -> BuildEdit:
+	return _tool_edit_at(point) if tool_enabled(tool) else null
+
+
+func _tool_edit_at(point: Vector3) -> BuildEdit:
 	var cell := grid.world_to_cell(point)
 	var side: int = grid.nearest_side(point)
 	if _dragging and _drag_side >= 0:

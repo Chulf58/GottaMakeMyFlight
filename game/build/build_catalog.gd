@@ -4,7 +4,7 @@ extends RefCounted
 ## until the Toon asset lane supplies real models.
 
 ## Walk-through objects only their serviced passenger passes through.
-const SECURITY_IDS: Array[StringName] = [&"security_scanner"]
+const SECURITY_IDS: Array[StringName] = [&"security_scanner", &"security_arch"]
 ## One-cell door markers on the terminal's edge: the front (interaction) side
 ## faces in, and the back edge leads out.
 const DOOR_IDS: Array[StringName] = [&"entrance_door", &"exit_door"]
@@ -112,6 +112,16 @@ static func _build() -> void:
 	scanner.walk_through = true
 	scanner.has_interaction = true
 	scanner.interaction_offset = Vector2i(0, 2)
+	# Security lane parts (SecurityLanes), one cell each and placed separately.
+	# The arch is walked through along its axis from the unpack cell in front
+	# of it; the tables and the X-ray belt stand beside the walk.
+	var arch := _add(&"security_arch", "Security arch", Vector2i.ONE, Color(0.5, 0.56, 0.66), 2.3)
+	arch.walk_through = true
+	arch.has_interaction = true
+	arch.interaction_offset = Vector2i(0, 1)
+	_add(&"tray_table", "Tray table", Vector2i.ONE, Color(0.72, 0.74, 0.78), 0.85)
+	_add(&"xray_belt", "X-ray belt", Vector2i.ONE, Color(0.36, 0.42, 0.52), 1.4)
+	_add(&"pickup_table", "Pickup table", Vector2i.ONE, Color(0.64, 0.68, 0.74), 0.85)
 	_add(&"seat_row", "Gate seats", Vector2i(3, 1), Color(0.25, 0.45, 0.7), 0.8)
 	_add_door(&"entrance_door", "Entrance", Color(0.35, 0.7, 0.4))
 	_add_door(&"exit_door", "Exit to the plane", Color(0.3, 0.55, 0.85))

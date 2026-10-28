@@ -56,8 +56,16 @@ const CATEGORIES := [
 	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
-## The category that is a single button with no tray.
+## The category that is a single button with no tray, while the Lane tray is
+## off (remove_category() holds either way).
 const REMOVE_CATEGORY := 7
+## The security lane's four parts in flow order (decisions security-lane-
+## parts-are-placed-separately-tray-table-x-ray-b and security-lane-parts-get-
+## their-own-lane-build-category): five cards and the rotate card are wider
+## than COLUMN_W, so they get a tray of their own, right after Security. It is
+## in the bar only while SecurityLanes.enabled is on.
+const LANE_CATEGORY := {"name": "Lane", "tools": BuildMode.LANE_TOOLS}
+const LANE_AFTER := "Security"
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -77,6 +85,13 @@ const ITEMS := {
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
 }
+## The Lane tray's cards, as ITEMS (item() looks in both).
+const LANE_ITEMS := {
+	BuildMode.Tool.TRAY_TABLE: ["Tray table", "tray_table", ""],
+	BuildMode.Tool.XRAY_BELT: ["X-ray belt", "xray_belt", ""],
+	BuildMode.Tool.ARCH: ["Arch", "arch", ""],
+	BuildMode.Tool.PICKUP_TABLE: ["Pickup table", "pickup_table", ""],
+}
 ## Cards that say what the placed thing needs to work, in the warning colour,
 ## in place of the "Click" hint (the card has no height to spare). A bag room
 ## does nothing without a belt end.
@@ -84,7 +99,9 @@ const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table"]
+const PLACEHOLDER_THUMBNAILS := [
+	"cafe_room", "counter", "table", "tray_table", "xray_belt", "arch", "pickup_table"
+]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
@@ -186,10 +203,36 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 	return 0
 
 
+## The categories in bar order: CATEGORIES, with LANE_CATEGORY after
+## LANE_AFTER while SecurityLanes.enabled is on.
+static func categories() -> Array:
+	var out := CATEGORIES.duplicate()
+	if SecurityLanes.enabled:
+		for i in out.size():
+			if out[i]["name"] == LANE_AFTER:
+				out.insert(i + 1, LANE_CATEGORY)
+				break
+	return out
+
+
+## The index of the Remove button, last in categories().
+static func remove_category() -> int:
+	return categories().size() - 1
+
+
+## A tool's card [name, thumbnail, size text] from ITEMS or LANE_ITEMS, or
+## an empty array for a tool with no card or one that is off.
+static func item(tool: BuildMode.Tool) -> Array:
+	if not BuildMode.tool_enabled(tool):
+		return []
+	return ITEMS.get(tool, LANE_ITEMS.get(tool, []))
+
+
 ## The category a tool belongs to, or NO_CATEGORY.
 static func category_of(tool: BuildMode.Tool) -> int:
-	for i in CATEGORIES.size():
-		if CATEGORIES[i]["tools"].has(tool):
+	var all := categories()
+	for i in all.size():
+		if all[i]["tools"].has(tool):
 			return i
 	return NO_CATEGORY
 
@@ -237,7 +280,7 @@ func is_tray_open() -> bool:
 ## it is already open, or picks Remove, which has no tray.
 func press_category(index: int) -> void:
 	_set_staff_open(false)
-	if index == REMOVE_CATEGORY:
+	if index == remove_category():
 		build_mode.set_tool(BuildMode.Tool.REMOVE)
 		return
 	if index == _open:
@@ -373,7 +416,7 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 	else:
 		_set_staff_open(false)
 		var index := category_of(tool)
-		_open = NO_CATEGORY if index == REMOVE_CATEGORY else index
+		_open = NO_CATEGORY if index == remove_category() else index
 	_sync()
 
 
@@ -475,7 +518,7 @@ func _sync() -> void:
 	for i in _rows.size():
 		_rows[i].visible = i == _open
 	for i in _category_buttons.size():
-		var on := i == _open or (i == REMOVE_CATEGORY and tool == BuildMode.Tool.REMOVE)
+		var on := i == _open or (i == remove_category() and tool == BuildMode.Tool.REMOVE)
 		_category_buttons[i].set_pressed_no_signal(on)
 	for key in _cards:
 		_cards[key].set_pressed_no_signal(key == tool)
@@ -512,9 +555,9 @@ func _build_bar() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	_bar.add_child(row)
-	for i in CATEGORIES.size():
+	for i in categories().size():
 		var button := Button.new()
-		button.text = CATEGORIES[i]["name"]
+		button.text = categories()[i]["name"]
 		button.toggle_mode = true
 		button.custom_minimum_size = CATEGORY_SIZE
 		button.focus_mode = Control.FOCUS_NONE
@@ -536,15 +579,15 @@ func _build_tray() -> void:
 	_tray.custom_minimum_size = Vector2(0.0, TRAY_H)
 	anchor_bottom_centre(_tray, MARGIN + BAR_H + GAP)
 	add_child(_tray)
-	for i in CATEGORIES.size():
+	for i in categories().size():
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		_tray.add_child(row)
 		_rows.append(row)
 		var turns := false
-		for tool in CATEGORIES[i]["tools"]:
-			if not ITEMS.has(tool):
+		for tool in categories()[i]["tools"]:
+			if item(tool).is_empty():
 				continue
 			var button := _make_card(tool)
 			row.add_child(button)
@@ -555,19 +598,19 @@ func _build_tray() -> void:
 
 
 func _make_card(tool: BuildMode.Tool) -> Button:
-	var item: Array = ITEMS[tool]
+	var card_item := item(tool)
 	var button := Button.new()
-	button.name = "Card%s" % item[1].capitalize()
+	button.name = "Card%s" % card_item[1].capitalize()
 	button.toggle_mode = true
 	button.custom_minimum_size = CARD_SIZE
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(press_card.bind(tool))
 	var column := _card_column(button)
 	var picture := TextureRect.new()
-	var path := THUMBNAIL_DIR % item[1]
+	var path := THUMBNAIL_DIR % card_item[1]
 	if ResourceLoader.exists(path):
 		picture.texture = load(path)
-	elif PLACEHOLDER_THUMBNAILS.has(item[1]):
+	elif PLACEHOLDER_THUMBNAILS.has(card_item[1]):
 		var tile := ColorRect.new()
 		tile.color = PLACEHOLDER_COLOR
 		tile.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -581,7 +624,7 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(picture)
 	var key := key_hint(tool)
-	_card_label(column, item[0], &"HudCardName")
+	_card_label(column, card_item[0], &"HudCardName")
 	_card_label(column, _size_text(tool), &"HudHint")
 	_price_labels[tool] = _card_label(column, PRICE_TEXT, &"HudPrice")
 	if CARD_NEEDS.has(tool):
@@ -633,7 +676,7 @@ func _size_text(tool: BuildMode.Tool) -> String:
 	if BuildMode.TOOL_OBJECTS.has(tool):
 		var def := BuildCatalog.get_def(BuildMode.TOOL_OBJECTS[tool])
 		return "%dx%d" % [def.size.x, def.size.y]
-	return ITEMS[tool][2]
+	return item(tool)[2]
 
 
 func _build_status() -> void:
