@@ -669,8 +669,8 @@ static func _reach_blend(kind: SecurityLooks.Kind, k: float, to_hand: bool) -> f
 	if kind != SecurityLooks.Kind.SHOULDER:
 		return k
 	if to_hand:
-		return clampf((k - 0.5) / 0.35, 0.0, 1.0)
-	return clampf((k - 0.15) / 0.35, 0.0, 1.0)
+		return clampf((k - 0.6) / 0.4, 0.0, 1.0)
+	return clampf(k / 0.4, 0.0, 1.0)
 
 
 ## How far to push a moving bag at `at` out to TRANSFER_CLEAR_M from the
@@ -808,14 +808,13 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 			SecurityLooks.Carry.SHOULDER:
 				var side := SecurityLooks.worn_side(i)
 				var was_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
-				# The hand takes the strap once it is over the shoulder
-				# (_reach_blend), so the rising bar never passes the forearm, and
-				# lets go before it goes slack.
+				# The hand is on the strap before it stretches (_reach_blend) and
+				# lets go after it is slack.
 				var on := 0.0
 				if homes[i] == SecurityLooks.Home.HAND:
-					on = clampf((k - 0.85) / 0.15, 0.0, 1.0)
+					on = clampf(k / 0.6, 0.0, 1.0)
 				elif was_hand:
-					on = 1.0 - clampf(k / 0.15, 0.0, 1.0)
+					on = 1.0 - clampf((k - 0.4) / 0.6, 0.0, 1.0)
 				if on > 0.0:
 					modes[side] = Arm.STRAP
 					strap[side] = on
