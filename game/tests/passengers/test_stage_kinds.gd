@@ -136,3 +136,64 @@ func test_a_cafe_guest_has_its_visit_owner_and_resume_and_others_have_none() -> 
 	assert_that(resume["cell"]).is_equal(visit.seat["approach"])
 	assert_int(StageKinds.visit_facility(_world.sim, other)).is_equal(StageKinds.Facility.NONE)
 	assert_dict(StageKinds.resume_of(_world.sim, other)).is_empty()
+
+
+func test_every_stage_has_its_journey_leg_from_the_table_not_the_enum_order() -> void:
+	var expected := {
+		Passenger.Stage.SPAWNED: StageKinds.Leg.CHECKIN,
+		Passenger.Stage.TO_CHECKIN: StageKinds.Leg.CHECKIN,
+		Passenger.Stage.CHECKIN_QUEUE: StageKinds.Leg.CHECKIN,
+		Passenger.Stage.CHECKIN: StageKinds.Leg.CHECKIN,
+		Passenger.Stage.TO_SECURITY: StageKinds.Leg.SECURITY,
+		Passenger.Stage.SECURITY_QUEUE: StageKinds.Leg.SECURITY,
+		Passenger.Stage.SECURITY: StageKinds.Leg.SECURITY,
+		Passenger.Stage.TO_GATE: StageKinds.Leg.AIRSIDE,
+		Passenger.Stage.SITTING_DOWN: StageKinds.Leg.AIRSIDE,
+		Passenger.Stage.SEATED: StageKinds.Leg.AIRSIDE,
+		Passenger.Stage.STANDING: StageKinds.Leg.AIRSIDE,
+		Passenger.Stage.STANDING_UP: StageKinds.Leg.AIRSIDE,
+		Passenger.Stage.TO_EXIT: StageKinds.Leg.AIRSIDE,
+		Passenger.Stage.APRON: StageKinds.Leg.APRON,
+		Passenger.Stage.MADE: StageKinds.Leg.DONE,
+		Passenger.Stage.MISSED: StageKinds.Leg.DONE,
+		Passenger.Stage.CAFE_WALK: StageKinds.Leg.VISIT,
+		Passenger.Stage.CAFE_QUEUE: StageKinds.Leg.VISIT,
+		Passenger.Stage.CAFE_ORDER: StageKinds.Leg.VISIT,
+		Passenger.Stage.CAFE_TO_SEAT: StageKinds.Leg.VISIT,
+		Passenger.Stage.CAFE_SITTING_DOWN: StageKinds.Leg.VISIT,
+		Passenger.Stage.CAFE_SEATED: StageKinds.Leg.VISIT,
+		Passenger.Stage.CAFE_STANDING_UP: StageKinds.Leg.VISIT,
+	}
+	assert_int(expected.size()).is_equal(Passenger.Stage.size())
+	assert_int(StageKinds.LEGS.size()).is_equal(Passenger.Stage.size())
+	for stage: int in Passenger.Stage.values():
+		(
+			assert_int(StageKinds.leg(stage))
+			. override_failure_message("stage %s leg" % Passenger.Stage.keys()[stage])
+			. is_equal(expected[stage])
+		)
+		# A visit stage is the visit's facility's, every other stage the
+		# journey's own.
+		assert_bool(StageKinds.leg(stage) == StageKinds.Leg.VISIT).is_equal(
+			StageKinds.in_visit(stage)
+		)
+
+
+func test_the_journey_forecast_refuses_a_passenger_on_a_visit() -> void:
+	_world = PassengerTestWorld.reference_world()
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.stage = Passenger.Stage.CAFE_QUEUE
+	var arrival := [0]
+	(
+		assert_error(func() -> void: arrival[0] = JourneyForecast.arrival_tick(_world.sim, p))
+		. is_push_error(
+			(
+				(
+					"JourneyForecast: passenger %d is on a facility visit (CAFE_QUEUE);"
+					+ " its facility forecasts it"
+				)
+				% p.id
+			)
+		)
+	)
+	assert_int(arrival[0]).is_equal(JourneyForecast.NEVER)

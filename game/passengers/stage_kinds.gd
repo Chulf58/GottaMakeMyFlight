@@ -3,8 +3,9 @@ extends RefCounted
 ## The one place that classifies passenger stages (decision
 ## toilet-design-queue-free-reservable-stalls-per-stall-daily-u, point 4).
 ## Every Passenger.Stage has one row in KINDS saying which facility owns it,
-## where the passenger is and how its body is posed, so a stage added to the
-## enum without a row fails test_stage_kinds. The enum's order is not the
+## where the passenger is and how its body is posed, and one in LEGS saying
+## which part of the journey it is on, so a stage added to the enum without
+## them fails test_stage_kinds. The enum's order is not the
 ## journey's order for the facility stages appended after MISSED: ask this
 ## class instead of comparing stages with < or >.
 ##
@@ -26,6 +27,14 @@ enum Location { ROAD, FLOOR, GATE_SEAT, FACILITY_SEAT, APRON, SETTLED }
 ## How the body is drawn: upright (standing or walking), or one of the three
 ## seat poses.
 enum Pose { UPRIGHT, SITTING_DOWN, SEATED, STANDING_UP }
+
+## Which part of the journey a stage belongs to, so no caller orders stages
+## by number. CHECKIN: on the road in or not yet checked in. SECURITY: checked
+## in and heading for, queuing at or inside security. AIRSIDE: cleared, at or
+## heading for the gate or the exit. APRON: the walk out to the plane. DONE:
+## made or missed. VISIT: on a facility visit, whose journey resumes at the
+## stage its facility keeps (resume_of()).
+enum Leg { CHECKIN, SECURITY, AIRSIDE, APRON, DONE, VISIT }
 
 ## Stage -> [Facility, Location, Pose].
 const KINDS := {
@@ -53,6 +62,32 @@ const KINDS := {
 	Passenger.Stage.CAFE_SEATED: [Facility.CAFE, Location.FACILITY_SEAT, Pose.SEATED],
 	Passenger.Stage.CAFE_STANDING_UP: [Facility.CAFE, Location.FACILITY_SEAT, Pose.STANDING_UP],
 }
+## Stage -> Leg.
+const LEGS := {
+	Passenger.Stage.SPAWNED: Leg.CHECKIN,
+	Passenger.Stage.TO_CHECKIN: Leg.CHECKIN,
+	Passenger.Stage.CHECKIN_QUEUE: Leg.CHECKIN,
+	Passenger.Stage.CHECKIN: Leg.CHECKIN,
+	Passenger.Stage.TO_SECURITY: Leg.SECURITY,
+	Passenger.Stage.SECURITY_QUEUE: Leg.SECURITY,
+	Passenger.Stage.SECURITY: Leg.SECURITY,
+	Passenger.Stage.TO_GATE: Leg.AIRSIDE,
+	Passenger.Stage.SITTING_DOWN: Leg.AIRSIDE,
+	Passenger.Stage.SEATED: Leg.AIRSIDE,
+	Passenger.Stage.STANDING: Leg.AIRSIDE,
+	Passenger.Stage.STANDING_UP: Leg.AIRSIDE,
+	Passenger.Stage.TO_EXIT: Leg.AIRSIDE,
+	Passenger.Stage.APRON: Leg.APRON,
+	Passenger.Stage.MADE: Leg.DONE,
+	Passenger.Stage.MISSED: Leg.DONE,
+	Passenger.Stage.CAFE_WALK: Leg.VISIT,
+	Passenger.Stage.CAFE_QUEUE: Leg.VISIT,
+	Passenger.Stage.CAFE_ORDER: Leg.VISIT,
+	Passenger.Stage.CAFE_TO_SEAT: Leg.VISIT,
+	Passenger.Stage.CAFE_SITTING_DOWN: Leg.VISIT,
+	Passenger.Stage.CAFE_SEATED: Leg.VISIT,
+	Passenger.Stage.CAFE_STANDING_UP: Leg.VISIT,
+}
 
 
 static func facility(stage: Passenger.Stage) -> Facility:
@@ -65,6 +100,10 @@ static func location(stage: Passenger.Stage) -> Location:
 
 static func pose(stage: Passenger.Stage) -> Pose:
 	return KINDS[stage][2]
+
+
+static func leg(stage: Passenger.Stage) -> Leg:
+	return LEGS[stage]
 
 
 ## Whether the stage belongs to a facility visit.

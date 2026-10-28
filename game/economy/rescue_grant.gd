@@ -250,12 +250,15 @@ func _someone_can_make_a_flight() -> bool:
 	return false
 
 
-## The first leg a passenger at `stage` still has to walk.
+## The first leg a passenger at `stage` still has to walk. One inside a
+## scanner's passage is judged from beyond it, so only its exit is left.
 static func _first_leg(stage: Passenger.Stage) -> int:
-	if stage <= Passenger.Stage.CHECKIN:
-		return RepairPlan.Leg.DESK
-	if stage <= Passenger.Stage.SECURITY_QUEUE:
-		return RepairPlan.Leg.SCANNER
+	match StageKinds.leg(stage):
+		StageKinds.Leg.CHECKIN:
+			return RepairPlan.Leg.DESK
+		StageKinds.Leg.SECURITY:
+			if stage != Passenger.Stage.SECURITY:
+				return RepairPlan.Leg.SCANNER
 	return RepairPlan.Leg.EXIT
 
 

@@ -43,9 +43,19 @@ static func arrival_tick(sim: PassengerSim, p: Passenger) -> int:
 ## facility visit forecasts the journey after the visit this way). Queues and
 ## stations are read as they are on the sim's current tick. With `routed`, the
 ## walks not yet planned follow the grid's paths.
+## A passenger on a facility visit is its facility's to forecast (VisitForecast
+## with the visit's own legs): asked here, it is an error and NEVER.
 static func arrival_from(sim: PassengerSim, p: Passenger, now: int, routed := false) -> int:
 	if p.is_done():
 		return p.outcome_tick
+	if StageKinds.leg(p.stage) == StageKinds.Leg.VISIT:
+		push_error(
+			(
+				"JourneyForecast: passenger %d is on a facility visit (%s); its facility forecasts it"
+				% [p.id, Passenger.Stage.keys()[p.stage]]
+			)
+		)
+		return NEVER
 	if p.stage == Passenger.Stage.APRON:
 		return now + walk_ticks(p.apron_total_mm() - p.apron_mm)
 	if p.stage == Passenger.Stage.TO_EXIT and p.exit_object != 0:
@@ -75,8 +85,9 @@ static func _to_gate(sim: PassengerSim, p: Passenger, routed: bool) -> Vector3i:
 		# The road walk to the entrance, inside a terminal shell, is a leg of
 		# its own: the walk drops leftover distance where it meets the grid.
 		road_ticks = walk_ticks(p.apron_total_mm() - p.apron_mm)
+	var leg := StageKinds.leg(p.stage)
 	var choosing := p.stage == Passenger.Stage.TO_SECURITY and p.station == 0
-	if p.stage <= Passenger.Stage.CHECKIN or choosing:
+	if leg == StageKinds.Leg.CHECKIN or choosing:
 		# The scanner is chosen as station choice will: soonest clearance.
 		var scanner := _soonest_scanner(sim, pos, p, routed)
 		if scanner.y == 0:
@@ -85,7 +96,7 @@ static func _to_gate(sim: PassengerSim, p: Passenger, routed: bool) -> Vector3i:
 			wait += sim.wait_ticks(p)
 		wait += scanner.x
 		pos = sim.security.exit_cell(scanner.y)
-	elif p.stage <= Passenger.Stage.SECURITY:
+	elif leg == StageKinds.Leg.SECURITY:
 		# Walking to, queuing at or inside its station: the replay walks it
 		# all, up to the security exit.
 		var clear := SecurityForecast.eta(sim, p)
@@ -120,23 +131,37 @@ static func _soonest_scanner(
 	return best
 
 
-## The walk to the nearest open exit plus its apron walk (octile, or the
-## grid's path when `routed`); NEVER_MM when there is none.
+## The open exit a passenger at `from` heads for, chosen as
+## PassengerSim._choose_exit() chooses it: the shortest walk inside along the
+## grid's path, ties to the earlier door in TerminalLayout.open_exits(). Its id
+## (x) and that walk in mm (y); x is 0 when no open exit can be walked to.
+static func nearest_exit(sim: PassengerSim, from: Vector2i) -> Vector2i:
+	var best := Vector2i.ZERO
+	for door in sim.layout.open_exits(sim.grid):
+		var mm := sim.routes.walk_mm(from, sim.layout.door_cell(sim.grid, door))
+		if mm < NEVER_MM and (best.x == 0 or mm < best.y):
+			best = Vector2i(door, mm)
+	return best
+
+
+## The walk out plus the apron walk to the plane, NEVER_MM when there is no
+## way. Unrouted: octile distance to each open exit plus its apron, the least
+## of them. Routed: the exit nearest_exit() picks, as the passenger will, and
+## that exit's apron.
 static func _exit_mm(sim: PassengerSim, from: Vector2i, routed: bool) -> int:
+	if routed:
+		var door := nearest_exit(sim, from)
+		return NEVER_MM if door.x == 0 else door.y + sim.apron_length_mm(door.x)
 	var best := NEVER_MM
 	for door in sim.layout.open_exits(sim.grid):
-		var mm := _walk_mm(sim, from, sim.layout.door_cell(sim.grid, door), routed)
-		if mm < NEVER_MM:
-			best = mini(best, mm + sim.apron_length_mm(door))
+		var mm := Passenger.octile_mm(from, sim.layout.door_cell(sim.grid, door))
+		best = mini(best, mm + sim.apron_length_mm(door))
 	return best
 
 
 ## Millimetres from `from` to `to`: octile, or with `routed` the length of
-## the grid's path, NEVER_MM when there is none.
+## the grid's path (PassengerSim.routes), NEVER_MM when there is none.
 static func _walk_mm(sim: PassengerSim, from: Vector2i, to: Vector2i, routed: bool) -> int:
 	if not routed:
 		return Passenger.octile_mm(from, to)
-	var path := sim.grid.find_path(from, to)
-	if path.is_empty():
-		return NEVER_MM
-	return Passenger.path_mm(path)
+	return sim.routes.walk_mm(from, to)

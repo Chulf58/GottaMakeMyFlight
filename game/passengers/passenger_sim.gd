@@ -96,6 +96,8 @@ var apron_waypoints := PackedVector3Array(
 	]
 )
 var layout := TerminalLayout.new()
+## Path lengths for the routed forecasts and exit choice, cleared on edits.
+var routes := RouteCache.new()
 ## Cafe visits, their counter queues and seats (CafeSim).
 var cafes := CafeSim.new()
 ## Security service after admission, at every scanner and lane.
@@ -161,6 +163,8 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	grid = with_grid
 	tick = clock.tick
 	layout.rebuild(grid)
+	# Before the sim's own handler, so nothing reads a route an edit outdated.
+	routes.bind(grid)
 	security.bind(self, _security_admitted, _security_cleared)
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	clock.ticked.connect(on_tick)
@@ -338,7 +342,7 @@ func station_eta(station: int, walk_mm: int, p: Passenger = null) -> int:
 ## for a security stage, until it is cleared at the security exit
 ## (SecurityForecast.eta()).
 func wait_ticks(p: Passenger) -> int:
-	if p.stage > Passenger.Stage.CHECKIN and p.stage <= Passenger.Stage.SECURITY:
+	if StageKinds.leg(p.stage) == StageKinds.Leg.SECURITY:
 		if p.station == 0 and not _any_open(layout.scanners):
 			return JourneyForecast.NEVER
 		return SecurityRuntime.BASIC_SCAN_TICKS if p.station == 0 else SecurityForecast.eta(self, p)
@@ -476,6 +480,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	for p in _passengers:
 		_by_id[p.id] = p
 	layout.rebuild(grid)
+	routes.clear()
 	_rederive()
 	return true
 
@@ -912,19 +917,17 @@ func _choose_exit(p: Passenger) -> void:
 		p.stuck = Passenger.Stuck.EXIT_BLOCKED
 		p.clear_path()
 		return
-	var best_path: Array[Vector2i] = []
-	for door in exits:
-		var path := grid.find_path(p.at, layout.door_cell(grid, door))
-		if path.is_empty():
-			continue
-		if best_path.is_empty() or Passenger.path_mm(path) < Passenger.path_mm(best_path):
-			best_path = path
-			p.exit_object = door
-	if best_path.is_empty():
+	# The routed forecasts price the same door (JourneyForecast.nearest_exit()).
+	var door := JourneyForecast.nearest_exit(self, p.at).x
+	var path: Array[Vector2i] = []
+	if door != 0:
+		path = grid.find_path(p.at, layout.door_cell(grid, door))
+	if path.is_empty():
 		p.stuck = Passenger.Stuck.NO_ROUTE
 		return
+	p.exit_object = door
 	p.stuck = Passenger.Stuck.NONE
-	p.set_path(best_path)
+	p.set_path(path)
 
 
 ## The walk from an exit door's cell to the plane door (ShellRoutes.departure()).
@@ -1047,7 +1050,7 @@ func _seat_exists(p: Passenger) -> bool:
 
 
 func _send_back(p: Passenger) -> void:
-	var to_desk := p.stage <= Passenger.Stage.CHECKIN
+	var to_desk := StageKinds.leg(p.stage) == StageKinds.Leg.CHECKIN
 	p.station = 0
 	p.stuck = Passenger.Stuck.NONE
 	if p.is_moving() and p.stage == Passenger.Stage.SECURITY:
