@@ -35,7 +35,10 @@ extends RefCounted
 ## search reached, or a new one, priced as its object plus the floor its
 ## footprint (and a scanner's exit cell, or a door's own cell) still needs. A
 ## new desk or scanner also needs its staff spot (StaffSpots) free and floored,
-## and that floor is part of its price. A new piece goes where the
+## and that floor is part of its price. A standing desk or scanner whose spot
+## is blocked (StaffSpots.blocked(), only in an old save) is no working
+## station, and every standing station's spot is kept clear of new pieces, as
+## an interaction cell is. A new piece goes where the
 ## search reaches first, in its settle order, trying facings 0 to 3, so the
 ## same grid always gives the same plan. With no entrance, every place an
 ## entrance may stand (a landside Toon door in a shell, else any edge cell
@@ -102,7 +105,8 @@ var _order: Array[Vector2i] = []
 var _kept := {}
 ## Cells beyond a standing door's back edge, which must stay without floor.
 var _no_floor := {}
-## Interaction cells of standing objects, and cells some lane already holds.
+## Interaction cells and staff spots of standing objects, and cells some lane
+## already holds.
 var _reserved := {}
 var _lane_cells := {}
 ## Walkable cell -> LAND, AIR or both; the side a leg may not enter; whether
@@ -180,17 +184,19 @@ static func _next_cells(
 	return out
 
 
-## The standing pieces a leg can use, as [cell walked to, cell left from].
+## The standing pieces a leg can use, as [cell walked to, cell left from]. A
+## desk or scanner whose staff spot is blocked (a layout saved before spots)
+## is left out: StaffSim never staffs it, so no passenger gets through it.
 static func _targets(grid: BuildGrid, layout: TerminalLayout, leg: int) -> Array:
 	var out := []
 	match leg:
 		Leg.DESK:
 			for desk in layout.desks:
-				if layout.is_usable(desk):
+				if layout.is_usable(desk) and not StaffSpots.blocked(grid, desk):
 					out.append([layout.lanes[desk][0], layout.lanes[desk][0]])
 		Leg.SCANNER:
 			for scanner in layout.scanners:
-				if layout.is_usable(scanner):
+				if layout.is_usable(scanner) and not StaffSpots.blocked(grid, scanner):
 					var passage: Array = layout.passages[scanner]
 					out.append([layout.lanes[scanner][0], passage.back()])
 		Leg.EXIT:
@@ -306,6 +312,9 @@ func _refresh_sets(leg: int) -> void:
 		var spot := _grid.interaction_cell(id)
 		if spot != BuildObjectDef.NO_CELL:
 			_reserved[spot] = true
+		var stands := StaffSpots.spot_of(_grid, id)
+		if stands != BuildObjectDef.NO_CELL:
+			_reserved[stands] = true
 	_lane_cells.clear()
 	for lane in _layout.lanes.values():
 		for cell in lane:
