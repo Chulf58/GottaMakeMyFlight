@@ -4,15 +4,15 @@ extends Node
 ## officers by role; nobody places them. An idle member walks on its own to
 ## the nearest usable desk or scanner of its role that nobody else has claimed
 ## (the shortest grid path, ties to the lower station id), entering through
-## the terminal's first entrance when it comes from the pool. It walks to the
+## the entrance nearest that station when it comes from the pool. It walks to the
 ## station's staff spot (StaffSpots: behind a desk, beside a scanner), and a
 ## station counts as staffed only while its member is on duty standing there;
 ## until then PassengerSim keeps it closed. A station whose spot an old save
-## left blocked is never staffed. A member whose station is removed or stops
-## being usable goes idle where it stands; one whose cell is built over goes
-## back to the pool. A fired member walks out to the first entrance and is
-## removed there (at once when it is in the pool or has no way there); while
-## it walks it is no longer staff.
+## left blocked, or that no entrance has a way to, is never staffed. A member
+## whose station is removed or stops being usable goes idle where it stands;
+## one whose cell is built over goes back to the pool. A fired member walks
+## out to the first entrance and is removed there (at once when it is in the
+## pool or has no way there); while it walks it is no longer staff.
 ##
 ## PassengerSim steps it at the start of each tick, so every passenger step
 ## reads one staff state. Members are handled in id order, distances are whole
@@ -147,6 +147,12 @@ func spot_of(station: int) -> Vector2i:
 ## spot blocked (StaffSpots.blocked()); such a station stays closed.
 func spot_blocked(station: int) -> bool:
 	return StaffSpots.blocked(sim.grid, station)
+
+
+## Whether no entrance has a way to `station`'s staff spot
+## (StaffSpots.unreachable()), so nobody is sent there; it stays closed.
+func spot_unreachable(station: int) -> bool:
+	return StaffSpots.unreachable(sim.grid, station)
 
 
 ## Where a member on the floor stands on this tick, in world space.
@@ -293,21 +299,22 @@ func _release(m: StaffMember) -> void:
 
 
 ## The nearest unclaimed usable station of the member's role, by path length
-## from where it stands (from the entrance when it is in the pool).
+## from where it stands. One in the pool comes in through whichever entrance
+## gives the station the shortest path (ties to the lower entrance id), so a
+## spot staff reach only through a second entrance is still staffed.
 func _assign(m: StaffMember) -> void:
-	var start := m.at
-	if m.in_pool():
-		if sim.layout.entrances.is_empty():
-			m.search_failed = true
-			return
-		start = sim.layout.door_cell(sim.grid, sim.layout.entrances[0])
+	if m.in_pool() and sim.layout.entrances.is_empty():
+		m.search_failed = true
+		return
 	var best := 0
 	var best_mm := 0
 	var best_path: Array[Vector2i] = []
 	for station in stations_of(m.role):
 		if _claims.has(station) or not sim.layout.is_usable(station) or spot_blocked(station):
 			continue
-		var path := _path(start, spot_of(station))
+		if spot_unreachable(station):
+			continue
+		var path := _path_in(m, spot_of(station))
 		if path.is_empty():
 			continue
 		var mm := Passenger.path_mm(path)
@@ -319,7 +326,7 @@ func _assign(m: StaffMember) -> void:
 		m.search_failed = true
 		return
 	m.search_failed = false
-	m.at = start
+	m.at = best_path[0]
 	m.station = best
 	_claims[best] = m.id
 	m.set_path(best_path)
@@ -423,6 +430,24 @@ func _replan(m: StaffMember) -> void:
 	m.set_path(path)
 	m.seg_mm = keep
 	m.backing_out = not sim.grid.is_walkable(m.path[0])
+
+
+## The path to `to` from where `m` stands, or, for a member in the pool, the
+## shortest from any entrance's door cell (the lower entrance id on a tie).
+func _path_in(m: StaffMember, to: Vector2i) -> Array[Vector2i]:
+	if not m.in_pool():
+		return _path(m.at, to)
+	var best: Array[Vector2i] = []
+	var best_mm := 0
+	for door in sim.layout.entrances:
+		var path := _path(sim.layout.door_cell(sim.grid, door), to)
+		if path.is_empty():
+			continue
+		var mm := Passenger.path_mm(path)
+		if best.is_empty() or mm < best_mm:
+			best = path
+			best_mm = mm
+	return best
 
 
 func _path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:

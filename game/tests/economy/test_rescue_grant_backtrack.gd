@@ -16,8 +16,9 @@ extends GdUnitTestSuite
 ## staff-spot-design-a-derived-staff-spot-behind-each-desk-and): the officer's
 ## at (2, 3) with (2, 4) as its way to the corridor, and (0, 6), behind the
 ## hall's first desk cells. A desk at (0, 7)-(1, 7) costs no floor and blocks
-## the corridor, and then no scanner fits in the hall; a desk on the bare cells
-## at (2, 8)-(3, 8), its agent on (2, 7), keeps the corridor open.
+## the corridor, and then no scanner fits in the hall (and staff could no longer
+## reach the officer's spot, so it is refused outright); a desk whose plan
+## floors a way round it keeps the corridor open.
 
 var _world: PassengerTestWorld
 var _grant: RescueGrant
@@ -60,8 +61,11 @@ func after_test() -> void:
 
 
 func test_the_cheapest_desk_blocking_the_corridor_is_passed_over() -> void:
+	# The blocking desk would cut the officer's spot off from the entrance, so
+	# a player may not place it at all (decision
+	# desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3).
 	var blocking := BuildEdit.place_object(&"checkin_desk", Vector2i(0, 7), 0)
-	assert_bool(_world.grid.validate(blocking).ok).is_true()
+	assert_int(_world.grid.validate(blocking).reason).is_equal(BuildResult.Reason.STAFF_SPOT)
 	assert_bool(_grant.has_working_path()).is_false()
 	var plan := _grant.repair_plan()
 	print("plan ok %s edits %d" % [plan.ok, plan.edits.size()])

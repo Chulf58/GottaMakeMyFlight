@@ -13,6 +13,13 @@ extends RefCounted
 ## rectangle drag, a belt line and a click meet the same rules; a snapshot
 ## load does not, so an old save still loads, and blocked() tells StaffSim
 ## which stations it can never staff.
+##
+## Reach (decision desk-belts-run-one-row-back-desk-then-the-agent-row-then-the,
+## v3): reach() is every cell staff can walk to from an entrance door, by the
+## steps StaffSim's paths take (BuildGrid.can_route). BuildGrid refuses an
+## edit that takes a spot out of that set (reach_problem()), and unreachable()
+## names a station whose spot an old save, or a layout built before its
+## entrance, left outside it.
 
 ## Per station type, in the object's frame at facing 0: "spot" is where the
 ## member stands and "beside" the footprint cell it works next to.
@@ -20,6 +27,7 @@ const LAYOUT := {
 	&"checkin_desk": {"spot": Vector2i(0, -1), "beside": Vector2i(0, 0)},
 	&"security_scanner": {"spot": Vector2i(1, 1), "beside": Vector2i(0, 1)},
 }
+const ENTRANCE := &"entrance_door"
 const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(0, -1),
 	Vector2i(1, -1),
@@ -87,6 +95,45 @@ static func blocked(grid: BuildGrid, station: int) -> bool:
 	return not _routable(grid, spot, {}, [])
 
 
+## Whether staff cannot walk from any entrance to `station`'s spot (it is not
+## in BuildGrid.staff_reach()). False with no entrance on the grid, and for an
+## object that is not a station. A blocked spot under an object is unreachable
+## too; callers that tell the two apart ask blocked() first.
+static func unreachable(grid: BuildGrid, station: int) -> bool:
+	var spot := spot_of(grid, station)
+	if spot == BuildObjectDef.NO_CELL:
+		return false
+	var reach := grid.staff_reach()
+	return not reach.is_empty() and not reach.has(spot)
+
+
+## Every cell staff can walk to from an entrance door's cell, as cell -> true:
+## a flood over BuildGrid.can_route() steps, the links StaffSim's A* paths
+## use. Empty when the grid has no entrance. Each reachable cell is visited
+## once and tries its eight neighbours.
+static func reach(grid: BuildGrid) -> Dictionary:
+	var seen := {}
+	var queue: Array[Vector2i] = []
+	for id in grid.object_ids():
+		var record := grid.get_object(id)
+		if StringName(record["def"]) != ENTRANCE:
+			continue
+		var door: Vector2i = record["anchor"]
+		if grid.is_walkable(door) and not seen.has(door):
+			seen[door] = true
+			queue.append(door)
+	var head := 0
+	while head < queue.size():
+		var cell := queue[head]
+		head += 1
+		for offset in NEIGHBOURS:
+			var next := cell + offset
+			if not seen.has(next) and grid.can_route(cell, next):
+				seen[next] = true
+				queue.append(next)
+	return seen
+
+
 ## Registers `station`'s spot (BuildGrid places an object, or loads one).
 func add(station: int, cell: Vector2i) -> void:
 	if cell == BuildObjectDef.NO_CELL:
@@ -122,6 +169,31 @@ func edit_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 			return _cut_off_problem(grid, {edit.cell: true}, [], BuildObjectDef.NO_CELL)
 		BuildEdit.Kind.PLACE_WALL:
 			return _wall_problem(grid, edit.cell, edit.side, edit.wall_kind)
+	return null
+
+
+## Whether some spot, a standing station's or one of the `fresh` spots of
+## stations being placed, is in `before` (a reach() set): only then can an
+## edit cut one off.
+func any_reached(before: Dictionary, fresh: Array[Vector2i]) -> bool:
+	for spot in _owners:
+		if before.has(spot):
+			return true
+	return fresh.any(func(spot: Vector2i) -> bool: return before.has(spot))
+
+
+## A refusal when a spot staff reach now (`before`) is not in `after`, the
+## reach() of the grid as the edit would leave it, or null. A standing
+## station's spot names that station; a `fresh` spot (a station being placed
+## whose cell staff reach now) names none. A spot staff cannot reach already
+## is left alone.
+func reach_problem(before: Dictionary, after: Dictionary, fresh: Array[Vector2i]) -> BuildResult:
+	for spot: Vector2i in _owners:
+		if before.has(spot) and not after.has(spot):
+			return _refused(spot)
+	for spot in fresh:
+		if before.has(spot) and not after.has(spot):
+			return BuildResult.refused(BuildResult.Reason.STAFF_SPOT)
 	return null
 
 

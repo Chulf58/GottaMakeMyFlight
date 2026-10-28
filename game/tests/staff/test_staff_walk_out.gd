@@ -44,6 +44,18 @@ func _seated_agent() -> StaffMember:
 	return _w.staff.get_member(_w.staff.member_ids()[1])
 
 
+## A second entrance on the hall's east edge above the desks, so a wall across
+## the hall below them cuts the first entrance (where members walk out) off
+## while staff can still reach every spot; a wall that left a spot with no
+## way from any entrance would be refused (decision
+## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3).
+func _second_entrance() -> void:
+	PassengerTestWorld.place(_w.grid, &"entrance_door", Vector2i(21, 12), 1)
+	assert_that(_w.sim.layout.door_cell(_w.grid, _w.sim.layout.entrances[0])).is_equal(
+		ReferenceTerminal.ENTRANCE_CELL
+	)
+
+
 func _assert_not_staff(m: StaffMember) -> void:
 	assert_int(m.state).is_equal(WALKING_OUT)
 	assert_int(m.station).is_equal(0)
@@ -104,6 +116,7 @@ func test_a_fired_member_still_walking_to_its_station_walks_out_from_where_it_is
 
 func test_with_no_path_to_the_entrance_a_fired_member_goes_at_once() -> void:
 	var m := _seated_agent()
+	_second_entrance()
 	# A wall across the hall below the desks cuts them off from the entrance.
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 		(
@@ -119,6 +132,7 @@ func test_with_no_path_to_the_entrance_a_fired_member_goes_at_once() -> void:
 
 func test_a_member_gone_at_once_is_announced_once() -> void:
 	var m := _seated_agent()
+	_second_entrance()
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 		_w.grid.apply(BuildEdit.place_wall(Vector2i(x, 13), BuildGrid.Side.NORTH))
 	var changes := [0]
@@ -142,6 +156,7 @@ func test_with_no_entrance_a_fired_member_goes_at_once() -> void:
 
 func test_a_walk_out_cut_off_on_the_way_goes_at_once() -> void:
 	var m := _seated_agent()
+	_second_entrance()
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
 	for i in 10:
 		_w.step()

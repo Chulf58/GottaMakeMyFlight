@@ -226,6 +226,11 @@ static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) 
 		plan.new_cells.append(cell)
 		scene.added[cell] = true
 		plan.edits.append(place)
+	# Each cell passed alone; together they may still close a staff spot in.
+	var cut_off := grid.staff_reach_problem(plan.edits)
+	if cut_off != null:
+		plan.result = cut_off
+		return plan
 	var reshapes: Array[BuildEdit] = []
 	for cell in around(plan.new_cells):
 		if not scene.is_belt(cell):

@@ -10,8 +10,9 @@ extends SceneTree
 ##     the entrance (walk_out_strip)
 ##   3 facing 1: the starter desks removed, one desk and one scanner placed at
 ##     facing 1, plated close and wide (desk_f1_*, scanner_f1_*)
-##   4 desk row: three side-by-side desks with the ruled walkway-row belts
-##     (decision desk-belts-run-one-row-back-desk-then-the-agent-row-then-the),
+##   4 desk row: three desks in a row with a one-cell gap between them, each
+##     outlet cell one belt into a collector two rows behind the desks
+##     (decision desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3),
 ##     plated wide and close (desk_row_*); diagnostic: a desk nobody reaches is
 ##     printed as a STAFFED line with entrance_path_cells=0 and does not fail the run
 ##   5 legacy: a save edited past today's rules (a seat row on a desk's spot)
@@ -50,11 +51,12 @@ const SEATS := &"seat_row"
 ## Phase 3 anchors, at facing 1, in the landside hall (x 10-21, y 9-17).
 const F1_DESK := Vector2i(13, 12)
 const F1_SCANNER := Vector2i(20, 14)
-## Phase 4: desks on ROW_Y at ROW_XS, the agent row ROW_Y - 1, the walkway row
-## ROW_Y - 2 and the collector ROW_Y - 3 from the first riser to COLLECTOR_END_X.
-const ROW_XS: Array[int] = [10, 12, 14]
+## Phase 4: desks on ROW_Y at ROW_XS (a one-cell gap between them), the agent
+## and outlet row ROW_Y - 1, and the collector ROW_Y - 2 from the last outlet
+## west to COLLECTOR_END_X, clear of the scanners' lanes.
+const ROW_XS: Array[int] = [11, 14, 17]
 const ROW_Y := 14
-const COLLECTOR_END_X := 16
+const COLLECTOR_END_X := 10
 ## Phase 5: a desk whose spot (20, 11) the seat row covers.
 const LEGACY_DESK := Vector2i(20, 12)
 const LEGACY_SEATS := Vector2i(19, 11)
@@ -610,10 +612,10 @@ func _phase_desk_row() -> void:
 		edits.append(BuildEdit.place_object(DESK, Vector2i(x, ROW_Y), 0))
 	if not _edit("desk_row", edits):
 		return
-	if not _belt(Vector2i(ROW_XS[0] + 1, ROW_Y - 3), Vector2i(COLLECTOR_END_X, ROW_Y - 3)):
+	if not _belt(Vector2i(ROW_XS[-1] + 1, ROW_Y - 2), Vector2i(COLLECTOR_END_X, ROW_Y - 2)):
 		return
 	for x in ROW_XS:
-		if not _belt(Vector2i(x + 1, ROW_Y - 1), Vector2i(x + 1, ROW_Y - 2)):
+		if not _belt(Vector2i(x + 1, ROW_Y - 1), Vector2i(x + 1, ROW_Y - 1)):
 			return
 	for i in ROW_XS.size() - 1:
 		_staff.hire(StaffMember.Role.CHECKIN)
@@ -621,8 +623,8 @@ func _phase_desk_row() -> void:
 	for x in ROW_XS:
 		desks.append(_sim.grid.object_at(Vector2i(x, ROW_Y)))
 	var pieces := []
-	for y in range(ROW_Y - 3, ROW_Y):
-		for x in range(ROW_XS[0], COLLECTOR_END_X + 1):
+	for y in range(ROW_Y - 2, ROW_Y):
+		for x in range(COLLECTOR_END_X, ROW_XS[-1] + 2):
 			var id := _sim.grid.object_at(Vector2i(x, y))
 			if id != 0:
 				pieces.append("%s:%s" % [Vector2i(x, y), _sim.grid.get_object(id)["def"]])
@@ -636,12 +638,16 @@ func _phase_desk_row() -> void:
 		var m := _on_duty_at(desk)
 		print(
 			(
-				"STAFFED desk=%d spot=%s usable=%s blocked=%s entrance_path_cells=%d on_duty=%s"
+				(
+					"STAFFED desk=%d spot=%s usable=%s blocked=%s unreachable=%s"
+					+ " entrance_path_cells=%d on_duty=%s"
+				)
 				% [
 					desk,
 					spot,
 					_sim.layout.is_usable(desk),
 					_staff.spot_blocked(desk),
+					_staff.spot_unreachable(desk),
 					path.size(),
 					m.id if m != null else 0
 				]

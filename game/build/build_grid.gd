@@ -66,6 +66,9 @@ const MAX_PAID := 2147483647
 var size := Vector2i.ZERO
 ## World position of the north-west corner of cell (0, 0).
 var origin := Vector3.ZERO
+## When false, validate() skips staff_reach_problem(). Only RepairPlan's search
+## copy turns it off: it checks reach on its finished plan instead.
+var check_staff_reach := true
 
 var _floor := PackedByteArray()
 var _zone := PackedInt32Array()
@@ -82,6 +85,11 @@ var _reserved := PackedInt32Array()
 ## The staff spot of every desk and scanner (StaffSpots), kept apart from
 ## _reserved. Derived from _objects.
 var _spots := StaffSpots.new()
+## The cells staff can reach from an entrance (StaffSpots.reach()), worked out
+## when first asked after a change; _staff_reach_known goes false on every
+## change to the grid data.
+var _staff_reach := {}
+var _staff_reach_known := false
 ## Object id -> {"def": StringName, "anchor": Vector2i, "facing": int}.
 var _objects: Dictionary = {}
 var _next_object_id := 1
@@ -260,8 +268,9 @@ func passage_cells(object_id: int) -> Array[Vector2i]:
 
 
 ## Checks an edit without changing anything. An edit the other rules accept
-## is then checked against the staff spots (StaffSpots.edit_problem()); a
-## snapshot load skips that check, so an old save still loads.
+## is then checked against the staff spots (StaffSpots.edit_problem()), then
+## against staff reach (staff_reach_problem()); a snapshot load skips both, so
+## an old save still loads.
 func validate(edit: BuildEdit) -> BuildResult:
 	var result: BuildResult
 	match edit.kind:
@@ -291,9 +300,85 @@ func validate(edit: BuildEdit) -> BuildResult:
 			result = _check_reshape_belt(edit)
 	if result.ok:
 		var spot_problem := _spots.edit_problem(self, edit)
+		if spot_problem == null:
+			spot_problem = staff_reach_problem([edit] as Array[BuildEdit])
 		if spot_problem != null:
 			result = spot_problem
 	return result
+
+
+## The cells staff can reach from an entrance door (StaffSpots.reach()), as
+## cell -> true; empty with no entrance. Kept until the grid next changes, so
+## asking again is free. Read it, never change it.
+func staff_reach() -> Dictionary:
+	if not _staff_reach_known:
+		_staff_reach = StaffSpots.reach(self)
+		_staff_reach_known = true
+	return _staff_reach
+
+
+## STAFF_SPOT when applying `edits` together would cut a staff spot staff can
+## reach now off from every entrance: a standing station's (naming it), or the
+## spot of a station the edits place, when staff reach its cell now. Null
+## otherwise, always with no entrance on the grid, and with check_staff_reach
+## off. Each edit must already be accepted on the grid as it stands, and no
+## two may touch the same cell: validate() passes one edit, BeltShaper a belt
+## line's placements. Only removing floor, placing a wall or placing an
+## object can take cells away; those are tried on the grid data, the reach
+## worked out (one flood fill), and the data put back. The cost is that flood,
+## and only when some spot is reached now.
+func staff_reach_problem(edits: Array[BuildEdit]) -> BuildResult:
+	if not check_staff_reach:
+		return null
+	var before := staff_reach()
+	if before.is_empty():
+		return null
+	var fresh: Array[Vector2i] = []
+	var narrows := false
+	for edit in edits:
+		match edit.kind:
+			BuildEdit.Kind.PLACE_OBJECT:
+				narrows = true
+				var spot := StaffSpots.cell_of(edit.def_id, edit.cell, edit.facing)
+				if spot != BuildObjectDef.NO_CELL:
+					fresh.append(spot)
+			BuildEdit.Kind.REMOVE_FLOOR, BuildEdit.Kind.PLACE_WALL:
+				narrows = true
+	if not narrows or not _spots.any_reached(before, fresh):
+		return null
+	return _spots.reach_problem(before, _reach_after(edits), fresh)
+
+
+## StaffSpots.reach() of the grid as `edits` would leave it. Each edit that can
+## take cells away is written into the grid data (an object under an unused
+## id), the flood runs, and every write is undone in reverse order, so the
+## grid is exactly as it was. Nothing is emitted and the A* graph is untouched.
+func _reach_after(edits: Array[BuildEdit]) -> Dictionary:
+	var undo := []
+	var trial_id := _next_object_id
+	for edit in edits:
+		match edit.kind:
+			BuildEdit.Kind.REMOVE_FLOOR:
+				undo.append([edit, _floor[_index(edit.cell)]])
+				_floor[_index(edit.cell)] = FLOOR_NONE
+			BuildEdit.Kind.PLACE_WALL:
+				undo.append([edit, _wall_value(edit.cell, edit.side)])
+				_set_wall(edit.cell, edit.side, edit.wall_kind)
+			BuildEdit.Kind.PLACE_OBJECT:
+				undo.append([edit, trial_id])
+				_insert_object(trial_id, edit.def_id, edit.cell, edit.facing)
+				trial_id += 1
+	var reach := StaffSpots.reach(self)
+	for i in range(undo.size() - 1, -1, -1):
+		var edit: BuildEdit = undo[i][0]
+		match edit.kind:
+			BuildEdit.Kind.REMOVE_FLOOR:
+				_floor[_index(edit.cell)] = undo[i][1]
+			BuildEdit.Kind.PLACE_WALL:
+				_set_wall(edit.cell, edit.side, undo[i][1])
+			BuildEdit.Kind.PLACE_OBJECT:
+				_erase_object(undo[i][1])
+	return reach
 
 
 ## Validates the edit and, if it is accepted, applies it and relinks the A*
@@ -373,6 +458,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			record["def"] = edit.def_id
 			record["facing"] = edit.facing
 			result.dirty_cells = [edit.cell]
+	_staff_reach_known = false
 	_emit_or_hold(func() -> void: edit_applied.emit(edit, result))
 	return result
 
@@ -520,6 +606,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_h_paid = loaded._h_paid
 	_v_paid = loaded._v_paid
 	_pathing = loaded._pathing
+	_staff_reach_known = false
 	var every: Array[Vector2i] = []
 	for y in size.y:
 		for x in size.x:
@@ -539,6 +626,7 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_occupant = _zeros_ints(cells)
 	_reserved = _zeros_ints(cells)
 	_spots = StaffSpots.new()
+	_staff_reach_known = false
 	_objects = {}
 	_next_object_id = 1
 	_room_at = _zeros_ints(cells)
