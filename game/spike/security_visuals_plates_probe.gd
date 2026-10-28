@@ -62,6 +62,8 @@ const TRAITS := [
 	[1, false, false],
 	[2, false, true],
 ]
+## A carried bag counts as in the hand while the grip is this near its bounds.
+const GRIP_REACH_M := 0.06
 ## The frame-cost check: this many passengers spawned, frames timed.
 const BENCH_PASSENGERS := 100
 const BENCH_FRAMES := 240
@@ -164,7 +166,11 @@ func _run() -> void:
 func _boot() -> void:
 	_main = load(MAIN_SCENE).instantiate()
 	_clock = _main.get_node("SimClock")
+	# --seed=N replays a run; otherwise a new random seed.
 	var seed := randi()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--seed="):
+			seed = int(arg.get_slice("=", 1))
 	_clock.seed_rng(seed)
 	print("PROBE sim_seed=", seed)
 	root.add_child(_main)
@@ -343,6 +349,9 @@ func _define_moments() -> void:
 		"basic_1_scan",
 		"basic_2_repack",
 		"lane_8_live_crossing",
+		"alarm_6_live_walk_back",
+		"alarm_7_front_one_bag",
+		"alarm_8_front_two_bags",
 	]:
 		_moments[name] = name.get_slice("_", 0)
 
@@ -372,6 +381,17 @@ func _lane_hit(name: String, p: Passenger, done: int) -> bool:
 	var phase := p.security_phase
 	var hit := false
 	match name:
+		"alarm_6_live_walk_back":
+			hit = phase == SecurityRuntime.Phase.REPACK and first and p.carry_on > 0
+		"alarm_7_front_one_bag", "alarm_8_front_two_bags":
+			# Carried in front through the corridor, the turn finished.
+			var bags := 1 if name == "alarm_7_front_one_bag" else 2
+			hit = (
+				phase == SecurityRuntime.Phase.RETURN
+				and p.carry_on == bags
+				and p.at == _lane["return_route"][0]
+				and _views.carry_on_props().front_weight_of(p.id) >= 1.0
+			)
 		"lane_8_live_crossing":
 			hit = phase == SecurityRuntime.Phase.UNPACK and first
 		"lane_2_unpack":
@@ -437,6 +457,9 @@ func _play() -> void:
 			if name == "lane_8_live_crossing":
 				await _plate_live(found)
 				_moments.erase(name)
+			elif name == "alarm_6_live_walk_back":
+				await _plate_live_walk_back(found)
+				_moments.erase(name)
 			elif await _plate(name, group, found, DISTANCE_M):
 				_moments.erase(name)
 			break
@@ -460,6 +483,9 @@ func _match(name: String) -> int:
 ## Whether every bag of passenger `id` has finished moving to its home.
 func _settled(id: int) -> bool:
 	var props := _views.carry_on_props()
+	var turning := props.front_weight_of(id)
+	if turning > 0.0 and turning < 1.0:
+		return false
 	for i in props.props_of(id)["bags"].size():
 		if props.transfer_progress(id, i) < 1.0:
 			return false
@@ -920,6 +946,167 @@ func _plate_live(id: int) -> bool:
 		_invalid("live crossing: only %d frames and %d plates" % [frames, grabbed])
 	if worst > 0:
 		_invalid("live crossing: the walking passenger touches an arch post or wall")
+	return true
+
+
+## The alarm walk-back while the game runs (no pause), with the bag in hand:
+## from the repack through the one-cell corridor between the arch and the
+## wall to the return route's end. Every frame the body, and each carried
+## bag, are checked against the lane parts, the arch posts and the walls, and
+## the body against its own bags. Three frames are plated (leaving the
+## berth, in the corridor, at the route's end). Control: the bag must be
+## carried in front on some of the frames.
+func _plate_live_walk_back(id: int) -> bool:
+	var p := _sim.get_passenger(id)
+	var corridor := _sim.grid.cell_to_world(_lane["return_route"][0])
+	_aim(corridor, DISTANCE_M, 0.6 + PI / 2.0)
+	await _frames(30)
+	var owners: Array[Node] = [_main.get_node("Airside/Terminal"), _main.get_node("BuildMode")]
+	var holder := PlateSight.colliders(root, owners, {})
+	await physics_frame
+	await physics_frame
+	var props := _views.carry_on_props()
+	var frames := 0
+	var front_frames := 0
+	var side_after := 0
+	var detached := 0
+	var worst := {}
+	var cells: Array[Vector2i] = [
+		_lane["berth"], _lane["return_route"][0], _lane["return_route"][1]
+	]
+	var grabbed := 0
+	var stop := Time.get_ticks_msec() + 30000
+	while Time.get_ticks_msec() < stop:
+		_beat("live walk-back frame %d" % frames)
+		await process_frame
+		if p.stage != Passenger.Stage.SECURITY:
+			break
+		if p.security_phase == SecurityRuntime.Phase.REPACK:
+			continue
+		if p.security_phase != SecurityRuntime.Phase.RETURN:
+			break
+		frames += 1
+		var body := _views.node_for(id)
+		var homes := SecurityLooks.bag_homes(_sim, p)
+		var gripping: Array = []
+		for i in homes.size():
+			if homes[i] == SecurityLooks.Home.HAND:
+				gripping.append([".R", ".L"][SecurityLooks.hand_of(_sim, p, i)])
+		var drawn: Array[Node3D] = props.props_of(id)["bags"]
+		var weight := props.front_weight_of(id)
+		var carrying := not gripping.is_empty() and drawn.size() == p.carry_on
+		front_frames += int(carrying and weight >= 1.0)
+		side_after += int(carrying and front_frames > 0 and weight <= 0.0)
+		# Every carried bag stays at the hand that holds it, turns included.
+		for i in drawn.size():
+			# A bag still moving to the hand (picked up) is not held yet.
+			if homes[i] != SecurityLooks.Home.HAND or props.transfer_progress(id, i) < 1.0:
+				continue
+			var grip := props.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
+			var local := drawn[i].global_transform.affine_inverse() * grip
+			var box := AABB(Vector3.ZERO, CarryOnProps.bag_size())
+			box.position = Vector3(-box.size.x / 2.0, 0.0, -box.size.z / 2.0)
+			if not box.grow(GRIP_REACH_M / drawn[i].global_transform.basis.get_scale().x).has_point(
+				local
+			):
+				detached += 1
+				print(
+					(
+						"DETACHED walk-back frame=%d at=%s turn=%.2f grip_local=%s"
+						% [frames, p.at, weight, local.snapped(Vector3.ONE * 0.01)]
+					)
+				)
+		var counts := _box_hits(CarryContact.body_points(body, []))
+		var own := CarryContact.body_points(body, gripping)
+		for bag: Node3D in props.props_of(id)["bags"]:
+			var points := CarryContact.bag_points(bag.global_transform)
+			for key in _box_hits(points):
+				if key == "wall" or key == "arch_post":
+					counts["bag_" + key] = counts.get("bag_" + key, 0) + 1
+					print(
+						(
+							(
+								"CONTACT walk-back frame=%d at=%s moving=%s %s weight=%.2f moved=%.2f"
+								+ " bag=%s body=%s"
+							)
+							% [
+								frames,
+								p.at,
+								p.is_moving(),
+								key,
+								props.front_weight_of(id),
+								props.transfer_progress(id, 0),
+								bag.global_position.snapped(Vector3.ONE * 0.01),
+								body.global_position.snapped(Vector3.ONE * 0.01)
+							]
+						)
+					)
+			for part in _part_nodes:
+				if CarryContact.inside_meshes(points, part) > 0:
+					counts["bag_" + str(part.name)] = counts.get("bag_" + str(part.name), 0) + 1
+			var inside := CarryContact.inside_bag(own, bag.global_transform)
+			if inside > 0:
+				counts["bag_body"] = counts.get("bag_body", 0) + 1
+				var named: Array = CarryContact.body_points_owned(body, gripping)
+				var bones := {}
+				var wrist_far := 0.0
+				var grip_at := props.grip_of(body, 0)
+				for k in CarryContact.inside_indices(named[0], bag.global_transform):
+					bones[named[1][k]] = bones.get(named[1][k], 0) + 1
+					wrist_far = maxf(wrist_far, (named[0][k] as Vector3).distance_to(grip_at))
+				bones["max_from_right_grip_m"] = snappedf(wrist_far, 0.01)
+				bones["turn"] = snappedf(props.front_weight_of(id), 0.01)
+				print(
+					(
+						"CONTACT walk-back frame=%d at=%s front=%s moved=%.2f points=%d bones=%s"
+						% [
+							frames,
+							p.at,
+							SecurityLooks.carry_front(_sim, p),
+							props.transfer_progress(id, 0),
+							inside,
+							bones
+						]
+					)
+				)
+		for key in counts:
+			worst[key] = worst.get(key, 0) + 1
+		if (
+			grabbed < cells.size()
+			and p.at == cells[grabbed]
+			and props.transfer_progress(id, 0) >= 1.0
+		):
+			var img := root.get_texture().get_image()
+			img.convert(Image.FORMAT_RGBA8)
+			if _live_shown(body, "live_walk_back_%d" % grabbed, float(grabbed)):
+				_save(img, "alarm_6_live_walk_back_%d" % grabbed, "live")
+			else:
+				_invalid("live walk-back frame %d: the passenger is not shown" % grabbed)
+			grabbed += 1
+	holder.free()
+	print(
+		(
+			(
+				"LIVE walk-back passenger=%d frames_checked=%d front_carry_frames=%d"
+				+ " frames_with_contacts=%s grabbed=%d"
+			)
+			% [id, frames, front_frames, worst, grabbed]
+		)
+	)
+	print(
+		(
+			"LIVE walk-back side_carry_after_front_frames=%d detached_bag_frames=%d"
+			% [side_after, detached]
+		)
+	)
+	if frames < 10 or grabbed < 3:
+		_invalid("live walk-back: only %d frames and %d plates" % [frames, grabbed])
+	if front_frames == 0 or side_after == 0:
+		_invalid("live walk-back: the bag was not carried in front and back at the side (control)")
+	if detached > 0:
+		_invalid("live walk-back: a carried bag left the hand")
+	if not worst.is_empty():
+		_invalid("live walk-back: the passenger or its bag touches a part, a post or a wall")
 	return true
 
 

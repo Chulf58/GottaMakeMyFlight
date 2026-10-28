@@ -12,12 +12,13 @@ extends RefCounted
 ## passenger. PICKUP steps toward the pickup table, the tray waits there and
 ## the bags go back to the hands one by one. TO_BERTH, RETURN and LEAVE carry
 ## the bags. REPACK puts them on the floor in front of the passenger, who faces
-## the helper's spot. On the second pass, after a repack, the passenger puts
-## its bags on a tray again once it reaches the unpack cell, and they ride the
-## belt as on the first pass. At the basic scanner: SCAN carries the bags,
-## REPACK puts them on the floor where the passenger stands, which holds the
-## scanner. Outside security the bags are carried, and set down while seated
-## (bag_homes(), floor_spot()).
+## the return route it walks next, so it picks them up ahead of it rather
+## than behind (from where a bag would pass through the body). On the second
+## pass, after a repack, the passenger puts its bags on a tray again when it
+## reaches the unpack cell, and they ride the belt as on the first pass. At
+## the basic scanner: SCAN carries the bags, REPACK puts them on the floor
+## where the passenger stands, which holds the scanner. Outside security the
+## bags are carried, and set down while seated (bag_homes(), floor_spot()).
 ##
 ## Shared cells: the next queue front walks onto the unpack cell while the
 ## passenger before it still unpacks there, and a returner crosses the unpack
@@ -82,8 +83,8 @@ static func target_offset(sim: PassengerSim, p: Passenger) -> Vector3:
 
 
 ## The ground direction (x, z) `p` faces while it works, or ZERO to keep its
-## heading: the tray table at UNPACK, the pickup table at PICKUP, the helper's
-## spot at a lane's REPACK, and the lane while a queue front is held back.
+## heading: the tray table at UNPACK, the pickup table at PICKUP, the return
+## route at a lane's REPACK, and the lane while a queue front is held back.
 static func face(sim: PassengerSim, p: Passenger) -> Vector2:
 	var lane := lane_of(sim, p)
 	if lane.is_empty():
@@ -97,7 +98,7 @@ static func face(sim: PassengerSim, p: Passenger) -> Vector2:
 		SecurityRuntime.Phase.UNPACK, SecurityRuntime.Phase.PICKUP:
 			return Vector2(lane["side"])
 		SecurityRuntime.Phase.REPACK:
-			return -Vector2(lane["front"])
+			return Vector2(lane["front"])
 	return Vector2.ZERO
 
 
@@ -152,6 +153,29 @@ static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if _closed(sim.grid, cell, right_step) and not _closed(sim.grid, cell, -right_step):
 		return 1
 	return 0
+
+
+## Whether `p` carries its bags in front of the body: when the cell it stands
+## on, or the next cell it walks into, is closed on both flanks for the way it
+## walks (decision in-a-cell-closed-on-both-sides-a-passenger-carries-their-
+## bag). A side-carried bag reaches about 0.55-0.6 m out, more than such a
+## cell leaves. Standing still, the cell it stands on and its last step count.
+static func carry_front(sim: PassengerSim, p: Passenger) -> bool:
+	if p.path.size() < 2:
+		return false
+	var at := clampi(p.path_index, 0, p.path.size() - 2)
+	var step := p.path[at + 1] - p.path[at]
+	if step == Vector2i.ZERO:
+		return false
+	var right := world_dir(step).cross(Vector3.UP)
+	var flank := Vector2i(signi(roundi(right.x)), signi(roundi(right.z)))
+	var cells: Array[Vector2i] = [p.at]
+	if p.is_moving():
+		cells.append(p.path[at + 1])
+	for cell in cells:
+		if _closed(sim.grid, cell, flank) and _closed(sim.grid, cell, -flank):
+			return true
+	return false
 
 
 ## Whether either straight part of a (possibly diagonal) step out of `cell`

@@ -111,7 +111,8 @@ func test_an_alarm_steps_aside_repacks_on_the_floor_and_walks_back() -> void:
 		assert_dict(entry["tray"]).is_equal({SecurityLooks.Tray.NONE: true})
 	var repack: Dictionary = seen["%d/false" % SecurityRuntime.Phase.REPACK]
 	assert_dict(repack["homes"]).is_equal({SecurityLooks.Home.FLOOR: true})
-	assert_that(repack["face"]).is_equal(-Vector2(lane["front"]))
+	# Facing the return route it walks next (Security 7/8 front-carry round).
+	assert_that(repack["face"]).is_equal(Vector2(lane["front"]))
 	var back: Dictionary = seen["%d/true" % SecurityRuntime.Phase.RETURN]
 	assert_dict(back["homes"]).is_equal({SecurityLooks.Home.HAND: true})
 	# The second pass walks back to the unpack cell with the bag in hand, then
