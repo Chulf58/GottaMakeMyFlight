@@ -130,7 +130,7 @@ const ROTATE_SIZE := Vector2(72.0, 176.0)
 ## A CanvasLayer does not pass a theme down, so every top-level HUD Control
 ## under a CanvasLayer sets it itself.
 const HUD_THEME := preload("res://ui/hud_theme.tres")
-## How long a rescue grant's message stays on the status line, in seconds.
+## How long a rescue grant's or wages-paid message stays on the status line, in seconds.
 const GRANT_HOLD_S := 8.0
 
 @export var build_mode: BuildMode
@@ -259,6 +259,8 @@ func _ready() -> void:
 	_refresh_money()
 	if rescue_grant != null:
 		rescue_grant.granted.connect(_on_granted)
+	if settlement != null:
+		settlement.wages_paid.connect(_on_wages_paid)
 	if day_ledger != null:
 		_money_slot.watch(day_ledger, settlement)
 
@@ -496,6 +498,16 @@ func _on_granted(_amount: int, message: String) -> void:
 	_hold_generation += 1
 	var timer := get_tree().create_timer(grant_hold_s)
 	timer.timeout.connect(_on_hold_timeout.bind(_hold_generation))
+
+
+## "Wages paid: N", with the debt left when there is one, held like a grant message.
+func _on_wages_paid(amount: int, owed: int) -> void:
+	if amount <= 0:
+		return
+	var message := "Wages paid: %d" % amount
+	if owed > 0:
+		message += " (%d owed)" % owed
+	_on_granted(amount, message)
 
 
 func _on_hold_timeout(generation: int) -> void:

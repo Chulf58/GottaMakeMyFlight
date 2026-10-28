@@ -89,3 +89,27 @@ func test_the_wage_timing_key_must_be_the_known_value_and_come_with_the_wage_key
 	var alone := {"owed": [], Settlement.WAGE_TIMING_KEY: Settlement.WAGE_TIMING_LAST_TICK}
 	assert_bool(_kit.settlement.from_snapshot(alone)).is_false()
 	assert_bool(_kit.settlement.from_snapshot(good)).is_true()
+
+
+## An old save taken exactly on day D's last tick holds D as charged, so the
+## migration would call D - 1 the last day earned and the next tick (D + 1) would
+## never charge D. The link check refuses that state; one tick earlier is fine.
+func test_an_old_format_save_taken_on_a_last_tick_is_refused() -> void:
+	_kit.hire(CHECKIN)
+	_kit.charge(2)
+	var old := _kit.save()
+	var settlement: Dictionary = old["settlement"]
+	settlement.erase(Settlement.WAGE_TIMING_KEY)
+	settlement["wages_day"] = "1"
+	var problem := Settlement.wages_link_problem(settlement, old["clock"], old["wallet"])
+	assert_str(problem).contains("last tick")
+	assert_str(problem).contains("day 1")
+	var earlier: Dictionary = old["clock"].duplicate()
+	earlier["tick"] = str(str(old["clock"]["tick"]).to_int() - 1)
+	assert_str(Settlement.wages_link_problem(settlement, earlier, old["wallet"])).is_empty()
+	# The same state in the new format is a valid save: day 1 is charged.
+	var timed := _kit.save()
+	var timed_problem := Settlement.wages_link_problem(
+		timed["settlement"], timed["clock"], timed["wallet"]
+	)
+	assert_str(timed_problem).is_empty()
