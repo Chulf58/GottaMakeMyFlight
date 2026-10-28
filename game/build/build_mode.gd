@@ -87,6 +87,8 @@ const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Too
 ## What one belt cell costs, whatever piece it becomes.
 const BELT_PRICE_ID := &"baggage_belt"
 const BELT_HINT := "Drag to lay a belt"
+## The status line over a lane part that belongs to no arch.
+const NOT_IN_LANE := "Not part of a lane"
 ## Tools that mark a dragged rectangle as a room of a RoomTypes id.
 const TOOL_ROOMS := {Tool.CAFE_ROOM: &"cafe", Tool.BAG_ROOM: &"bag_room"}
 ## Tools under which the room under the pointer is followed for its panel.
@@ -168,6 +170,9 @@ var facing := 0
 ## Probe hook: a viewport point read in place of the real mouse by the hover
 ## and ghost. (-1, -1), the default, reads the mouse; nothing in the game sets it.
 var pointer_override := Vector2(-1.0, -1.0)
+## How many times the lane hint under the pointer was worked out afresh rather
+## than reused; for the tests.
+var lane_hint_scans := 0
 
 ## False once R is pressed, until a tool is picked again. While true, the
 ## door tools ignore `facing` and use DoorPlacement.auto_facing().
@@ -183,6 +188,13 @@ var _area_remove_material := _ghost_material(AREA_REMOVE_TINT)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
+## What the status line adds for the lane part under the pointer ("" for none).
+var _lane_hint := ""
+## The hint last worked out and its cell; any grid edit drops it, so a pointer
+## resting on a cell does not recognise the lanes again every frame.
+var _hint_cell := Vector2i.ZERO
+var _hint_cached := false
+var _hint_cache := ""
 ## True while the pointer maps to a cell inside the grid, whether or not the
 ## picked tool makes an edit there (a room tool makes none before a drag).
 var _pointer_on_grid := false
@@ -218,6 +230,7 @@ func _ready() -> void:
 		grid = BuildGrid.new(shell.grid_size, shell.grid_origin)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
+	grid.graph_changed.connect(_on_lane_graph_changed)
 	_view.name = "BuildView"
 	add_child(_view)
 	_view.refresh(grid)
@@ -686,16 +699,20 @@ func _update_ghost(point: Variant) -> void:
 		return
 	var edit: BuildEdit = null if point == null else edit_at(point)
 	_hover_edit = edit
+	var hint := "" if point == null else _lane_hint_at(grid.world_to_cell(point))
 	if edit == null:
 		_ghost.visible = false
-		if _hover_key != "":
-			_hover_key = ""
+		var idle_key := "" if hint == "" else "lane:" + hint
+		if _hover_key != idle_key:
+			_hover_key = idle_key
+			_lane_hint = hint
 			_show_status(null)
 		return
-	var key := _edit_key(edit)
+	var key := _edit_key(edit) + "|" + hint
 	if key == _hover_key:
 		return
 	_hover_key = key
+	_lane_hint = hint
 	var result := check(edit)
 	_draw_ghost(edit, _valid_material if result.ok else _invalid_material)
 	_show_status(result)
@@ -873,7 +890,50 @@ func _show_status(result: BuildResult) -> void:
 		elif DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
 			reason = DOOR_HINTS[result.reason] % DOOR_NAMES[tool]
 		text += ("  " if text != "" else "") + reason
+	if _lane_hint != "":
+		text += ("  " if text != "" else "") + _lane_hint
 	_set_status(text)
+
+
+## What the status line says about the lane part at `cell`, while
+## SecurityLanes.enabled is on: the first thing the arch lacks
+## (SecurityLanes.status_text) for an incomplete arch or a part of an
+## incomplete lane, NOT_IN_LANE for a part no arch counts, and "" for a whole
+## lane, any other object and empty floor. The lanes are recognised afresh
+## from the grid, and only when the cell holds a lane part.
+static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
+	if not SecurityLanes.enabled or not on_grid.in_bounds(cell):
+		return ""
+	var id := on_grid.object_at(cell)
+	if id == 0 or not SecurityLanes.is_part(StringName(on_grid.get_object(id)["def"])):
+		return ""
+	var lanes := SecurityLanes.new()
+	lanes.rebuild(on_grid)
+	if lanes.is_complete(id) or lanes.lane_of_piece(id) != 0:
+		return ""
+	if lanes.arches.has(id):
+		return lanes.status_text(id)
+	for arch in lanes.arches:
+		if (lanes.candidate(arch)["parts"] as Dictionary).values().has(id):
+			return lanes.status_text(arch)
+	return NOT_IN_LANE
+
+
+## lane_hint() for the cell under the pointer, kept until the pointer moves to
+## another cell or the grid changes.
+func _lane_hint_at(cell: Vector2i) -> String:
+	if not SecurityLanes.enabled:
+		return ""
+	if not _hint_cached or cell != _hint_cell:
+		lane_hint_scans += 1
+		_hint_cell = cell
+		_hint_cache = lane_hint(grid, cell)
+		_hint_cached = true
+	return _hint_cache
+
+
+func _on_lane_graph_changed(_cells: Array[Vector2i]) -> void:
+	_hint_cached = false
 
 
 func _set_status(text: String) -> void:

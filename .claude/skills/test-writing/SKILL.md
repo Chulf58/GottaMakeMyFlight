@@ -17,7 +17,7 @@ Tests are gdUnit4 files under `game/tests/`, named `test_<name>.gd`, mirroring t
 4. **Restore global state.** If a test pauses the tree, changes `Engine.time_scale`, edits an autoload or writes an input action, it puts the value back before it ends. Freeing a node does not undo a global change, and the next suite fails far from the file that caused it.
 5. **Free what the test creates.** Wrap each `Node` the test makes in `auto_free(...)`, or call `free()` or `queue_free()` yourself. A node left under root is a leak.
 6. **Keep a file small.** One concern per file, split by subject. A big file is slow to find a failure in and cannot run beside the others.
-7. **A test that writes to `user://` removes what it wrote.**
+7. **A test that writes to `user://` removes what it wrote, and writes to a per-process path.** Use `SaveTestKit.run_path(name)` (game/tests/core/save_test_kit.gd), never a fixed `user://` file name, and delete the file and its `.tmp` in teardown. Parallel Godot test runs share the `user://` folder, so a fixed name lets one run see or delete the other's file (user-ruled 2026-10-28, after test_baggage_save_game failed 6 of 6 parallel rounds on a fixed path).
 
 ## Running tests
 

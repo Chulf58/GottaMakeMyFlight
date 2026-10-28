@@ -36,6 +36,10 @@ const OBJECT_PIECES := {
 	&"baggage_belt_feed": "baggage_belt_feed",
 	&"baggage_belt_end": "baggage_belt_end",
 	&"baggage_cart": "baggage_cart",
+	&"security_arch": "security_arch",
+	&"tray_table": "tray_table",
+	&"xray_belt": "xray_belt",
+	&"pickup_table": "pickup_table",
 }
 ## Where a piece sits in its object's frame (footprint centre, facing 0), for
 ## objects whose piece is not centred on the footprint. The entrance and exit

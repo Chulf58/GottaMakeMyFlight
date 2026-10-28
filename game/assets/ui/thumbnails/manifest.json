@@ -111,6 +111,38 @@
         "baggage_cart.glb": "0299ce3f891fa3295fdff4627e5de0f7ca2b54285e4eab795e0607633f09101c",
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
       }
+    },
+    "tray_table": {
+      "png": "tray_table.png",
+      "class": "1x1",
+      "style": 3,
+      "sources": {
+        "tray_table.glb": "17f1da69c6c36f2bae46fc5be0097ced3aac91a196b3d66a414e64296433eee1"
+      }
+    },
+    "xray_belt": {
+      "png": "xray_belt.png",
+      "class": "1x1",
+      "style": 3,
+      "sources": {
+        "xray_belt.glb": "94af78f318877ca8164bd2359a37a6540bd1b52fee719855d32eda6086e2c356"
+      }
+    },
+    "arch": {
+      "png": "arch.png",
+      "class": "door_1x1",
+      "style": 3,
+      "sources": {
+        "security_arch.glb": "9ca63103b472a888dd3b33a7194ea20f2e13f11475f3b82f36666a8b05b9bb0c"
+      }
+    },
+    "pickup_table": {
+      "png": "pickup_table.png",
+      "class": "1x1",
+      "style": 3,
+      "sources": {
+        "pickup_table.glb": "677d5b7855fedcca4a18ba99fc72d9301994e3d5ef29731964a438d8980cf006"
+      }
     }
   }
 }

@@ -11,6 +11,15 @@ extends Node3D
 ## placing its passengers. It reads the sim and
 ## never writes to it.
 ##
+## An arch without a whole security lane (MissSignals.incomplete_arches, only
+## while SecurityLanes.enabled) gets a grey sign too, captioned with what it
+## lacks first ("Needs a tray table", MissSignals.lane_hint). It is an
+## ordinary caption in the layout below: the player is looking at their own
+## half-built lane, the icon always stays, and the build status line says the
+## same words while the pointer is over the arch, so it hides when it overlaps
+## and is never lifted. A whole lane is one station and gets the queue-full
+## and Closed signs like a scanner.
+##
 ## The sign is a billboard drawn over the world (no depth test), like the
 ## thought bubbles, and keeps one screen size at every zoom and UI scale. The
 ## caption sits above the sign so it does not cover the lane it describes.
@@ -61,6 +70,8 @@ var no_spot_errors := 0
 ## Station id -> sign, for the queue-full signs and the closed signs.
 var _signs: Dictionary = {}
 var _closed_signs: Dictionary = {}
+## Arch id -> sign, for the arches without a whole lane.
+var _hint_signs: Dictionary = {}
 var _free_signs: Array[Sprite3D] = []
 ## Set when a sign or caption changed; with the camera and view size it decides
 ## whether draw() has anything to do.
@@ -132,6 +143,17 @@ func closed_text(station: int) -> String:
 	return ((_closed_signs[station] as Node).get_node("Caption") as Label3D).text
 
 
+## The lane-incomplete sign over an arch without a whole lane, or null.
+func hint_sign_for(arch: int) -> Node3D:
+	return _hint_signs.get(arch)
+
+
+func hint_text(arch: int) -> String:
+	if not _hint_signs.has(arch):
+		return ""
+	return ((_hint_signs[arch] as Node).get_node("Caption") as Label3D).text
+
+
 func _ready() -> void:
 	sync()
 
@@ -172,6 +194,13 @@ func sync() -> void:
 			MissSignals.UNREACHABLE_REASON:
 				caption = UNREACHABLE_CAPTION
 		_set_caption(sign, caption)
+	var incomplete := MissSignals.incomplete_arches(sim)
+	for arch: int in _hint_signs.keys():
+		if not incomplete.has(arch):
+			_drop_sign(_hint_signs, arch)
+	for arch in incomplete:
+		var sign := _show_sign(_hint_signs, arch, "LaneHintSign", _closed_icon())
+		_set_caption(sign, MissSignals.lane_hint(sim, arch))
 
 
 func draw() -> void:
@@ -211,7 +240,7 @@ func draw() -> void:
 	## World units per screen pixel at one metre: a fixed-size sprite is drawn
 	## as if it stood one metre from the camera.
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
-	for signs: Dictionary in [_signs, _closed_signs]:
+	for signs: Dictionary in [_signs, _closed_signs, _hint_signs]:
 		for station: int in signs:
 			var sign: Sprite3D = signs[station]
 			sign.pixel_size = SIGN_PX * unit / MarkerIcons.SIZE
@@ -236,7 +265,7 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 	_icon_bins.clear()
 	_placed.clear()
 	_bins.clear()
-	for signs: Dictionary in [_signs, _closed_signs]:
+	for signs: Dictionary in [_signs, _closed_signs, _hint_signs]:
 		for station: int in signs:
 			var sign: Sprite3D = signs[station]
 			var caption := sign.get_node("Caption") as Label3D

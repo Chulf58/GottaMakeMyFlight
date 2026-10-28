@@ -4,8 +4,8 @@ extends GdUnitTestSuite
 ## (SecurityLanes.enabled; decisions security-lane-parts-are-placed-
 ## separately-tray-table-x-ray-b and security-lane-parts-get-their-own-lane-
 ## build-category): a Lane tray right after Security holding the four parts
-## in flow order, each with a placeholder tile until its thumbnail is
-## rendered, and a build tool per part. Every case turns the flag on before
+## in flow order, each with its rendered thumbnail (Security 3/8), and a
+## build tool per part. Every case turns the flag on before
 ## the menu is built and back off after.
 
 const LANE_TOOLS := [
@@ -88,7 +88,7 @@ func test_each_lane_tool_places_its_part() -> void:
 		assert_that(BuildMode.TOOL_OBJECTS[LANE_TOOLS[i]]).is_equal(LANE_DEFS[i])
 
 
-func test_the_lane_cards_show_size_price_and_a_placeholder_tile() -> void:
+func test_the_lane_cards_show_size_price_and_a_rendered_thumbnail() -> void:
 	for tool in LANE_TOOLS:
 		var card := _menu.card(tool)
 		assert_object(card).override_failure_message("tool %d" % tool).is_not_null()
@@ -97,9 +97,13 @@ func test_the_lane_cards_show_size_price_and_a_placeholder_tile() -> void:
 		assert_array(texts).contains([BuildMenu.LANE_ITEMS[tool][0], "1x1"])
 		var price := PriceTable.price_of_object(BuildMode.TOOL_OBJECTS[tool])
 		assert_int(BuildMenu.tool_price(tool)).is_equal(price)
-		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(BuildMenu.LANE_ITEMS[tool][1])).is_true()
+		# A rendered PNG, not the placeholder tile.
+		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(BuildMenu.LANE_ITEMS[tool][1])).is_false()
 		var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
-		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(1)
+		assert_object(picture.texture).override_failure_message("tool %d" % tool).is_not_null()
+		var path := BuildMenu.THUMBNAIL_DIR % BuildMenu.LANE_ITEMS[tool][1]
+		assert_str(picture.texture.resource_path).is_equal(path)
+		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 
 
 func test_picking_a_lane_card_picks_its_tool_and_opens_the_lane_tray() -> void:

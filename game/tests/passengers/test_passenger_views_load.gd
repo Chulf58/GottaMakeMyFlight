@@ -5,12 +5,12 @@ extends GdUnitTestSuite
 ## pre-load positions until the first tick after unpausing).
 
 const SEED := 6_102_026
-const PATH := "user://saves/test_passenger_views_load.json"
 const PASSENGERS_WANTED := 4
 ## Ticks played after the save and before the load, so the world moves on.
 const AFTER_SAVE := 60
 const SEARCH_LIMIT := 12000
 
+var _path := SaveTestKit.run_path("test_passenger_views_load")
 var _main: Node
 var _views: PassengerViews
 var _sim: PassengerSim
@@ -27,7 +27,7 @@ func before() -> void:
 		SaveTestKit.step(_main)
 		ticks += 1
 	_run["ticks_to_passengers"] = ticks
-	_run["saved"] = SaveTestKit.save_game(_main).save_to_file(PATH)
+	_run["saved"] = SaveTestKit.save_game(_main).save_to_file(_path)
 	_run["ids_at_save"] = _views.active_count()
 	_views.draw()
 	_run["at_save"] = _positions()
@@ -36,14 +36,16 @@ func before() -> void:
 	_views.draw()
 	_run["before_load"] = _positions()
 	_run["ids_before_load"] = _node_ids()
-	_run["loaded"] = SaveTestKit.save_game(_main).load_from_file(PATH)
-	DirAccess.remove_absolute(PATH)
+	_run["loaded"] = SaveTestKit.save_game(_main).load_from_file(_path)
 	_run["after_load"] = _positions()
 	_run["ids_after_load"] = _node_ids()
 
 
 func after() -> void:
-	_main.free()
+	if _main != null:
+		_main.free()
+	DirAccess.remove_absolute(_path)
+	DirAccess.remove_absolute(_path + ".tmp")
 
 
 func _node_ids() -> Array:
