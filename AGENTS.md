@@ -96,6 +96,7 @@ These rules were learned on Dome Farmer, a Godot and Blender project on the same
 - **Windowed runs need `--display-driver windows --rendering-driver vulkan`.** Headless loads the dummy rendering server, so a GPU-backed render or timing taken there is a broken instrument.
 - **Exactly one windowed Godot run at a time, project-wide.** Two at once corrupt the import cache and lose every render in flight. Batch subjects into one run and hold the slot yourself. A game launched through the Godot MCP holds the slot too.
 - **Import is mandatory after adding or moving any `.gd`**, and after re-exporting an asset into `game/`, before any test or render.
+- **Commit the `.uid` file Godot generates next to every new `.gd`.** It appears after the import. A lane's commit that adds a `.gd` without its `.uid` leaves an untracked file on main after the merge (user-ruled 2026-10-28 through the question form, "Add it", after two merges that day left one behind).
 - **After every merge into main that adds or moves a `.gd` file, run a headless `--import` on main** before any playtest, probe or MCP launch. A stale global class cache makes the game fail to parse at launch (user-ruled 2026-10-27 through the question form, "Add it", after the first smoke playtest of the cafe merge found the game would not start).
 - Run the full suite once on the final tree before a merge, not on every commit. A commit needs the fast gates on the touched files (`--check-only`, `gdlint`, `gdformat --check`) and the targeted tests with their case counts.
 
