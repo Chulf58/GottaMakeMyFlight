@@ -1,10 +1,10 @@
 class_name PriceTable
 extends RefCounted
-## What building and staffing cost. Every number lives here: the starting
-## budget, the per-piece prices, the refund share and the daily wages. Prices
-## are whole numbers. A lookup
-## for something with no price returns NO_PRICE, never 0, so a missing entry
-## cannot read as "free".
+## What building, staffing and running rooms cost. Every number lives here: the
+## starting budget, the per-piece prices, the refund share, the daily wages and
+## the daily toilet upkeep. Prices are whole numbers. A lookup for something
+## with no price returns NO_PRICE, never 0, so a missing entry cannot read as
+## "free".
 
 ## Returned for an unknown object id or a wall kind with no price.
 const NO_PRICE := -1
@@ -45,7 +45,17 @@ const OBJECT_PRICES := {
 	&"baggage_belt_feed": 90,
 	&"baggage_belt_end": 200,
 	&"baggage_cart": 120,
+	# Toilet pieces: a stall (partition, door, pan) costs about a cafe table; the
+	# sink is plain plumbing. The stall is the one with a running cost.
+	&"toilet_stall": 300,
+	&"toilet_sink": 150,
 }
+
+## What a ready toilet room costs to run per stall per game day (decision
+## toilet-design-queue-free-reservable-stalls-per-stall-daily-u, point 2),
+## charged at midnight with the wages. A tuning value, to be checked in a
+## playtest: three stalls are half a check-in agent's wage.
+const TOILET_STALL_UPKEEP := 10
 
 ## What one hired member of a role costs per game day (ruling staff-wages-
 ## charged-daily-at-midnight-unpaid-wages-carried-as-owed). Tuning values, to

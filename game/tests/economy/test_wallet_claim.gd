@@ -1,8 +1,10 @@
 class_name TestWalletClaim
 extends GdUnitTestSuite
-## Wallet.credit_claim: a debt that takes its share of a credit before the
-## balance sees it. Room is checked on what is left after the debt, and a
-## refused credit leaves the debt as it was.
+## Wallet.credit_claim: debts that take their share of a credit before the
+## balance sees it, each under its Wallet.Category. Room is checked on what is
+## left after the debts, a refused credit leaves the debts as they were, and a
+## claim that asks for more than the credit or for an unknown category refuses
+## the credit loudly.
 
 var _debt := [0]
 var _wallet: Wallet
@@ -12,11 +14,11 @@ func before_test() -> void:
 	_debt[0] = 0
 	_wallet = Wallet.new()
 	var debt := _debt
-	_wallet.credit_claim = func(amount: int, commit: bool) -> int:
+	_wallet.credit_claim = func(amount: int, commit: bool) -> Dictionary:
 		var taken := mini(debt[0], amount)
 		if commit:
 			debt[0] -= taken
-		return taken
+		return {Wallet.Category.WAGES: taken}
 
 
 func test_a_credit_pays_the_debt_first_and_the_balance_gets_the_rest() -> void:
@@ -57,3 +59,43 @@ func test_without_a_claim_the_whole_credit_lands() -> void:
 	assert_int(_wallet.balance).is_equal(100)
 	assert_bool(_wallet.credit(Wallet.MAX_BALANCE, Wallet.Category.FEES)).is_false()
 	assert_int(_wallet.balance).is_equal(100)
+
+
+func test_two_debts_each_take_their_share() -> void:
+	var debts := [30, 50]
+	_wallet.credit_claim = func(amount: int, commit: bool) -> Dictionary:
+		var wages := mini(debts[0], amount)
+		var upkeep := mini(debts[1], amount - wages)
+		if commit:
+			debts[0] -= wages
+			debts[1] -= upkeep
+		return {Wallet.Category.WAGES: wages, Wallet.Category.UPKEEP: upkeep}
+	assert_bool(_wallet.credit(60, Wallet.Category.FEES)).is_true()
+	assert_array(debts).is_equal([0, 20])
+	assert_int(_wallet.balance).is_equal(0)
+	assert_bool(_wallet.credit(25, Wallet.Category.FEES)).is_true()
+	assert_array(debts).is_equal([0, 0])
+	assert_int(_wallet.balance).is_equal(5)
+
+
+func test_a_claim_for_more_than_the_credit_is_refused() -> void:
+	var commits := [0]
+	_wallet.credit_claim = func(amount: int, commit: bool) -> Dictionary:
+		if commit:
+			commits[0] += 1
+		return {Wallet.Category.WAGES: amount, Wallet.Category.UPKEEP: 1}
+	assert_bool(_wallet.credit(10, Wallet.Category.FEES)).is_false()
+	assert_int(commits[0]).is_equal(0)
+	assert_int(_wallet.balance).is_equal(0)
+
+
+func test_a_claim_with_a_negative_share_or_an_unknown_category_is_refused() -> void:
+	for claims in [{Wallet.Category.WAGES: -1}, {99: 5}, {Wallet.Category.WAGES: "5"}]:
+		var shares: Dictionary = claims
+		_wallet.credit_claim = func(_amount: int, _commit: bool) -> Dictionary: return shares
+		(
+			assert_bool(_wallet.credit(10, Wallet.Category.FEES))
+			. override_failure_message(str(shares))
+			. is_false()
+		)
+	assert_int(_wallet.balance).is_equal(0)

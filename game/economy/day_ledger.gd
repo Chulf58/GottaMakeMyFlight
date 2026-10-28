@@ -2,23 +2,27 @@ class_name DayLedger
 extends Node
 ## Today's money, per wallet category (decision money-hover-design-categorised-
 ## wallet-transactions-feed-a-sa). It adds up every Wallet.transaction of the
-## current game day: the gross amount under its category, and the wages a
-## credit paid off under WAGES, so the totals sum to the change in the balance.
+## current game day: the gross amount under its category, and each debt a
+## credit paid off under that debt's category (owed wages under WAGES, owed
+## upkeep under UPKEEP), so the totals sum to the change in the balance.
 ## Before recording a transaction it rolls to the day of the transaction's
 ## tick, and it rolls on every clock tick (SimClock counts the tick before it
-## emits it). Settlement charges the day's wages on the day's last tick (decision
-## daily-wages-are-charged-on-the-last-tick-of-the-game-day-and), so they land
-## on the day they were earned, whichever listener hears the tick first, and
-## the next day starts at 0 wages. Owed wages paid later land on the day paid.
+## emits it). Settlement charges the day's wages and toilet upkeep on the day's
+## last tick (decision daily-wages-are-charged-on-the-last-tick-of-the-game-day-
+## and), so they land on the day they were earned, whichever listener hears the
+## tick first, and the next day starts at 0. Owed wages or upkeep paid later
+## land on the day paid.
 ##
 ## The totals are a SaveGame part. A save from before the part has none, and
 ## the load marks the ledger as counting since the load (start_since_load), so
 ## the money card says so rather than showing a partial day as the whole one.
-## The next new day clears the mark.
+## The next new day clears the mark. A saved ledger from before upkeep has no
+## "upkeep" total and loads with 0 upkeep paid.
 ##
 ## OPENING (the starting budget) is recorded but is not earnings: it is in
 ## neither the operating result nor the cash change. The rescue grant is
-## counted apart from the operating result.
+## counted apart from the operating result. Wages and upkeep are both costs in
+## the operating result.
 
 ## The totals changed: a transaction, a new day, a load.
 signal changed
@@ -31,7 +35,11 @@ const CATEGORY_KEYS := {
 	Wallet.Category.OPENING: "opening",
 	Wallet.Category.BUILD: "build",
 	Wallet.Category.WAGES: "wages",
+	Wallet.Category.UPKEEP: "upkeep",
 }
+## Totals added after the ledger was first saved: a saved ledger without one
+## loads it as 0.
+const OPTIONAL_CATEGORY_KEYS := ["upkeep"]
 const SNAPSHOT_KEYS := ["day", "since_load"]
 ## Far beyond a day's money; a saved total past it is refused. Any total may
 ## be either sign, since the Wallet takes any category in either direction.
@@ -97,9 +105,16 @@ func wages_paid() -> int:
 	return -amount(Wallet.Category.WAGES)
 
 
-## Airline fees and shop sales less wages paid.
+## Room upkeep paid today, as a positive amount.
+func upkeep_paid() -> int:
+	return -amount(Wallet.Category.UPKEEP)
+
+
+## Airline fees and shop sales less wages and upkeep paid.
 func operating_result() -> int:
-	return amount(Wallet.Category.FEES) + amount(Wallet.Category.SHOP) - wages_paid()
+	return (
+		amount(Wallet.Category.FEES) + amount(Wallet.Category.SHOP) - wages_paid() - upkeep_paid()
+	)
 
 
 ## The day's change in the balance, the starting budget left out.
@@ -108,7 +123,7 @@ func cash_change() -> int:
 
 
 ## Wallet.transaction: adds a movement to the day of its tick.
-func record(gross: int, category: int, wages_claimed: int, tick: int) -> void:
+func record(gross: int, category: int, claimed: Dictionary, tick: int) -> void:
 	if tick == Wallet.NO_TICK:
 		push_error(
 			"DayLedger: a %d transaction has no tick; it is counted on day %d" % [gross, _day]
@@ -116,7 +131,8 @@ func record(gross: int, category: int, wages_claimed: int, tick: int) -> void:
 	else:
 		_roll_to(GameCalendar.day_of(tick))
 	_totals[category] += gross
-	_totals[Wallet.Category.WAGES] -= wages_claimed
+	for debt in claimed:
+		_totals[debt] -= claimed[debt]
 	changed.emit()
 
 
@@ -156,7 +172,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_day = str(data["day"]).to_int()
 	_since_load = data["since_load"]
 	for category in CATEGORY_KEYS:
-		_totals[category] = str(data[CATEGORY_KEYS[category]]).to_int()
+		_totals[category] = str(data.get(CATEGORY_KEYS[category], "0")).to_int()
 	changed.emit()
 	return true
 
@@ -228,14 +244,14 @@ func _snapshot_problem(data: Dictionary) -> String:
 		if not keys.has(key):
 			return "unknown key '%s'" % key
 	for key in keys:
-		if not data.has(key):
+		if not data.has(key) and not OPTIONAL_CATEGORY_KEYS.has(key):
 			return "missing key '%s'" % key
 	if not _whole_in(data["day"], 0, Settlement.MAX_DAY):
 		return "'day' is not a day"
 	if typeof(data["since_load"]) != TYPE_BOOL:
 		return "'since_load' must be true or false"
 	for key in CATEGORY_KEYS.values():
-		if not _whole_in(data[key], -MAX_TOTAL, MAX_TOTAL):
+		if data.has(key) and not _whole_in(data[key], -MAX_TOTAL, MAX_TOTAL):
 			return "'%s' is not a decimal string from %d to %d" % [key, -MAX_TOTAL, MAX_TOTAL]
 	return ""
 

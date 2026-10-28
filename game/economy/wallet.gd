@@ -10,14 +10,15 @@ extends RefCounted
 
 signal changed(balance: int)
 ## Money moved: `amount` is the gross amount, negative for a spend; for a
-## credit, `wages_claimed` is the part credit_claim took for owed wages (the
-## balance moved by amount - wages_claimed). `tick` is the clock's tick, or
-## NO_TICK when the wallet has no clock.
-signal transaction(amount: int, category: int, wages_claimed: int, tick: int)
+## credit, `claimed` is what credit_claim took to pay debts, as Category ->
+## amount with only the shares above 0 (the balance moved by amount less their
+## sum; empty for a spend or a credit no debt took from). `tick` is the clock's
+## tick, or NO_TICK when the wallet has no clock.
+signal transaction(amount: int, category: int, claimed: Dictionary, tick: int)
 
 ## What a movement is for. There is deliberately no catch-all: every caller
-## says which one.
-enum Category { FEES, SHOP, GRANT, OPENING, BUILD, WAGES }
+## says which one. UPKEEP is the daily running cost of rooms (toilet stalls).
+enum Category { FEES, SHOP, GRANT, OPENING, BUILD, WAGES, UPKEEP }
 
 ## Upper bound on the balance, far below 2^53, so a JSON round trip and any
 ## sum of in-range amounts stay exact.
@@ -27,12 +28,15 @@ const SNAPSHOT_KEYS := ["balance"]
 const NO_TICK := -1
 
 var balance: int = 0
-## Optional: a debt that takes a share of each credit before the balance sees
-## it (Settlement's owed wages). Called as claim(amount, commit): with commit
-## false it returns how much it would take and changes nothing; with true it
-## takes that, pays the debt and returns it. The balance gets the rest, and
-## room is checked on that rest. Unset or freed, the whole credit lands. A load
-## restores the balance as it was saved and claims nothing.
+## Optional: debts that take a share of each credit before the balance sees
+## it (Settlement's owed wages and owed upkeep). Called as claim(amount, commit)
+## and returns a Dictionary of Category -> share, the debt each share pays:
+## with commit false it says what it would take and changes nothing; with true
+## it takes that and pays the debts. Every share is a whole number from 0 and
+## together they are at most `amount`; a claim that breaks that pushes an error
+## and the credit is refused. The balance gets the rest, and room is checked on
+## that rest. Unset or freed, the whole credit lands. A load restores the
+## balance as it was saved and claims nothing.
 var credit_claim: Callable
 ## Stamps each transaction with its tick; Finances sets the scene's clock.
 var clock: SimClock
@@ -51,20 +55,23 @@ func can_afford(amount: int) -> bool:
 	return amount >= 0 and amount <= balance
 
 
-## Adds `amount`, less what credit_claim takes for a debt. Returns false and
-## leaves the balance and the debt unchanged when the amount is negative, the
-## category unknown, or what is left after the debt would pass MAX_BALANCE.
-## Zero succeeds silently.
+## Adds `amount`, less what credit_claim takes for debts. Returns false and
+## leaves the balance and the debts unchanged when the amount is negative, the
+## category unknown, the claim invalid, or what is left after the debts would
+## pass MAX_BALANCE. Zero succeeds silently.
 func credit(amount: int, category: Category) -> bool:
 	if not _known(category):
 		return false
-	var taken := _claimed(amount, false)
+	var claimed: Variant = _claims(amount, false)
+	var taken := -1 if claimed == null else _claimed_total(claimed, amount)
+	if taken < 0:
+		return false
 	if amount < 0 or amount - taken > MAX_BALANCE - balance:
 		push_error("Wallet.credit: %d is not creditable at balance %d" % [amount, balance])
 		return false
-	_claimed(amount, true)
+	_claims(amount, true)
 	_set_balance(balance + amount - taken)
-	_emit(amount, category, taken)
+	_emit(amount, category, claimed)
 	return true
 
 
@@ -75,7 +82,7 @@ func spend(amount: int, category: Category) -> bool:
 	if not _known(category) or not can_afford(amount):
 		return false
 	_set_balance(balance - amount)
-	_emit(-amount, category, 0)
+	_emit(-amount, category, {})
 	return true
 
 
@@ -104,19 +111,46 @@ func _known(category: int) -> bool:
 	return false
 
 
-func _emit(amount: int, category: Category, wages_claimed: int) -> void:
+func _emit(amount: int, category: Category, claimed: Dictionary) -> void:
 	if amount == 0:
 		return
-	transaction.emit(
-		amount, category, wages_claimed, clock.tick if is_instance_valid(clock) else NO_TICK
-	)
+	transaction.emit(amount, category, claimed, clock.tick if is_instance_valid(clock) else NO_TICK)
 
 
-func _claimed(amount: int, commit: bool) -> int:
+## credit_claim's shares of `amount`, with the shares of 0 left out; empty when
+## there is no claim or nothing to claim from, null (with an error pushed) when
+## the claim does not return a Dictionary.
+func _claims(amount: int, commit: bool) -> Variant:
 	if amount <= 0 or not credit_claim.is_valid():
-		return 0
-	var taken: int = credit_claim.call(amount, commit)
-	return clampi(taken, 0, amount)
+		return {}
+	var shares: Variant = credit_claim.call(amount, commit)
+	if typeof(shares) != TYPE_DICTIONARY:
+		push_error("Wallet: credit_claim returned %s, not a Dictionary" % [shares])
+		return null
+	var result := {}
+	for key in shares:
+		if typeof(shares[key]) != TYPE_INT or shares[key] != 0:
+			result[key] = shares[key]
+	return result
+
+
+## The sum of `claimed`, or -1 (with an error pushed) when a share is not a
+## whole number from 0 under a known Category or the sum passes `amount`.
+func _claimed_total(claimed: Dictionary, amount: int) -> int:
+	var total := 0
+	for key in claimed:
+		var share: Variant = claimed[key]
+		if typeof(key) != TYPE_INT or not Category.values().has(key):
+			push_error("Wallet: credit_claim named %s, not a Wallet.Category" % [key])
+			return -1
+		if typeof(share) != TYPE_INT or share < 0:
+			push_error("Wallet: credit_claim share %s is not a whole number from 0" % [share])
+			return -1
+		total += share
+	if total > maxi(amount, 0):
+		push_error("Wallet: credit_claim took %d of a credit of %d" % [total, amount])
+		return -1
+	return total
 
 
 func _snapshot_problem(data: Dictionary) -> String:

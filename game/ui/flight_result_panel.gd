@@ -41,11 +41,24 @@ static func flight_title(flight_id: String) -> String:
 	return parsed["contract"] if not parsed.is_empty() else flight_id
 
 
-## The panel's text for a FlightResult.summarize() dictionary.
+## The title a flight's card carries: a contract flight reads "Airline
+## Destination" ("Sunhop Lisbon"), not its internal offer id; a one-off flight
+## (the starter) keeps its flight number. Display only.
+static func title_for(flights: FlightSim, flight_id: String) -> String:
+	var parsed := FlightTimetable.parse_occurrence(flight_id)
+	if flights != null and not parsed.is_empty():
+		var contract := flights.contract_of(parsed["contract"])
+		if not contract.is_empty():
+			return "%s %s" % [contract["airline"], contract["destination"]]
+	return flight_title(flight_id)
+
+
+## The panel's text for a FlightResult.summarize() dictionary. A "title" key,
+## when present, replaces the flight number in the heading.
 static func text_for(summary: Dictionary) -> String:
 	var lines := PackedStringArray(
 		[
-			"%s result" % flight_title(summary["flight"]),
+			"%s result" % summary.get("title", flight_title(summary["flight"])),
 			"Made %d   Missed %d" % [summary["made"], summary["missed"]],
 		]
 	)

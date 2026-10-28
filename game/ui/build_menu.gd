@@ -138,6 +138,9 @@ const GRANT_HOLD_S := 8.0
 @export var day_ledger: DayLedger
 ## Optional: when set, the money card shows owed wages.
 @export var settlement: Settlement
+## Optional: when set, a successful load ends any message hold (the notices
+## belong to the world that was replaced).
+@export var save_game: SaveGame
 
 ## True while the hiring card is open; press_staff() changes it.
 var staff_open := false
@@ -252,6 +255,8 @@ func _ready() -> void:
 		rescue_grant.granted.connect(_on_granted)
 	if settlement != null:
 		settlement.wages_paid.connect(_on_wages_paid)
+	if save_game != null:
+		save_game.loaded.connect(_on_loaded)
 	if day_ledger != null:
 		_money_slot.watch(day_ledger, settlement)
 
@@ -512,6 +517,17 @@ func _on_wages_paid(amount: int, owed: int) -> void:
 		_pending_wages = message
 		return
 	_start_hold(message, false)
+
+
+## A loaded world starts with a clean status line: the hold and the wages
+## message waiting behind it described the world that was replaced.
+func _on_loaded(ok: bool) -> void:
+	if not ok:
+		return
+	_pending_wages = ""
+	_holding = false
+	_held_status = build_mode.status_text() if build_mode != null else ""
+	_status.text = _held_status
 
 
 func _on_hold_timeout(generation: int) -> void:
