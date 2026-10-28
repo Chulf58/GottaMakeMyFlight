@@ -126,6 +126,13 @@ static func record_problem(record: Dictionary, units: Array, lane: bool) -> Stri
 		var phase := p.security_phase as Phase
 		if not (LANE_PHASES if lane else BASIC_PHASES).has(phase):
 			return "passenger %d is in a phase this tier does not have" % p.id
+		# Work only runs down from what its phase started with, and a walking
+		# phase has none. Zero is allowed: a basic scanner's passenger can
+		# still be walking the passage when its scan work has run out. A
+		# version 7 save migrates to SCAN work of its old service end minus
+		# the tick, at most the old 40-tick scan, which is within the cap.
+		if p.security_work < 0 or p.security_work > work_for(phase, p):
+			return "passenger %d has more work left than its phase starts with" % p.id
 		var aside := phase == Phase.TO_BERTH or phase == Phase.REPACK
 		if aside and not incident_open(p):
 			return "passenger %d repacks with no open incident" % p.id

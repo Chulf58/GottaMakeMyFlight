@@ -139,8 +139,16 @@ func test_a_version_7_save_with_a_bad_record_is_still_refused() -> void:
 	(no_trait["passengers"][0] as Dictionary).erase("liquids")
 	var bad_version := _v7.duplicate(true)
 	bad_version["save_version"] = 9
+	# Version 7 scanned for 40 ticks at most; a service end far beyond what a
+	# scan of these bags takes would hold the scanner for ever.
+	var endless := _v7.duplicate(true)
+	for record: Dictionary in endless["passengers"]:
+		if int(record["id"]) == _first:
+			record["service_end"] = _a.world.sim.tick + 1000000000
 	_b = _fresh()
+	var problem: String = PassengerSnapshot.load(endless, _b.world.grid).get("error", "")
+	assert_str(problem).contains("more work left than its phase starts with")
 	var before := _b.signature()
-	for bad: Dictionary in [bad_stage, no_trait, bad_version]:
+	for bad: Dictionary in [bad_stage, no_trait, bad_version, endless]:
 		assert_bool(_b.world.sim.from_snapshot(bad)).is_false()
 		assert_str(_b.signature()).is_equal(before)

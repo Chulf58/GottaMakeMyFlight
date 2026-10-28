@@ -28,6 +28,11 @@ const RULE_ERRORS := {
 	"admitted and in the lane": "in a queue as well",
 	"admitted and in the holding list": "in a queue as well",
 	"admitted and the queue's service": "in a queue as well",
+	"huge SCAN work": "more work left than its phase starts with",
+	"SCAN work one over its start": "more work left than its phase starts with",
+	"work in a walking phase": "more work left than its phase starts with",
+	"huge REPACK work": "more work left than its phase starts with",
+	"REPACK work one over its start": "more work left than its phase starts with",
 }
 
 var _lanes_were := false
@@ -173,7 +178,7 @@ func test_a_save_with_inconsistent_security_state_is_refused() -> void:
 		good, func(d: Dictionary) -> void: _record(d, repacker)["incident_resolved"] = true
 	)
 	_add_queue_cases(cases, good, repacker)
-	_check_refused(true, a, good, cases)
+	_check_refused(true, a, [good], cases)
 	a.world.free_all()
 
 
@@ -210,9 +215,44 @@ func test_a_basic_scanner_save_that_breaks_its_one_service_is_refused() -> void:
 			record["security_work"] = SecurityRuntime.BASIC_SCAN_TICKS
 			d["security"][0]["admitted"].append(waiting)
 	)
+	# Scan work never exceeds what the scan started with at these traits.
+	var cap := SecurityRuntime.BASIC_SCAN_TICKS + SecurityRuntime.BASIC_BAG_TICKS * TRAITS[0][0]
+	cases["huge SCAN work"] = _work(good, scanning, 1000000000)
+	cases["SCAN work one over its start"] = _work(good, scanning, cap + 1)
 	_add_queue_cases(cases, good, scanning)
-	_check_refused(false, a, good, cases)
+	_check_refused(false, a, [good, _work(good, scanning, cap), _work(good, scanning, 0)], cases)
 	a.world.free_all()
+
+
+## Lane work: a walking phase has none, and repack work never exceeds its
+## start.
+func test_a_lane_save_with_impossible_work_is_refused() -> void:
+	var a := SecurityTestWorld.make(true)
+	var ids := a.send_all(TRAITS)
+	var walking := 0
+	while walking == 0:
+		a.world.step()
+		for id in ids:
+			if a.world.passenger(id).security_phase == SecurityRuntime.Phase.ARCH:
+				walking = id
+	var through := _json(a.world.sim.to_snapshot())
+	while a.world.passenger(ids[0]).security_phase != SecurityRuntime.Phase.REPACK:
+		a.world.step()
+	var repacking := _json(a.world.sim.to_snapshot())
+	var cases := {}
+	cases["work in a walking phase"] = _work(through, walking, 1)
+	cases["huge REPACK work"] = _work(repacking, ids[0], 1000000000)
+	cases["REPACK work one over its start"] = _work(
+		repacking, ids[0], SecurityRuntime.REPACK_TICKS + 1
+	)
+	var at_cap := _work(repacking, ids[0], SecurityRuntime.REPACK_TICKS)
+	_check_refused(true, a, [repacking, at_cap], cases)
+	a.world.free_all()
+
+
+## A copy of `data` with passenger `id`'s remaining security work set.
+func _work(data: Dictionary, id: int, work: int) -> Dictionary:
+	return _changed(data, func(d: Dictionary) -> void: _record(d, id)["security_work"] = work)
 
 
 ## An admitted passenger also put in the queue, the holding list or the
@@ -230,7 +270,7 @@ func _add_queue_cases(cases: Dictionary, good: Dictionary, admitted: int) -> voi
 
 
 func _check_refused(
-	use_lane: bool, a: SecurityTestWorld, good: Dictionary, cases: Dictionary
+	use_lane: bool, a: SecurityTestWorld, accepted: Array, cases: Dictionary
 ) -> void:
 	var b := SecurityTestWorld.make(use_lane)
 	b.world.clock.from_snapshot(_json(a.world.clock.to_snapshot()))
@@ -249,7 +289,8 @@ func _check_refused(
 			assert_str(problem).override_failure_message("%s: %s" % [name, problem]).contains(
 				RULE_ERRORS[name]
 			)
-	assert_bool(b.world.sim.from_snapshot(good)).is_true()
+	for good: Dictionary in accepted:
+		assert_bool(b.world.sim.from_snapshot(good)).is_true()
 	b.world.free_all()
 
 
