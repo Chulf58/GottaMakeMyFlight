@@ -87,6 +87,8 @@ const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Too
 ## What one belt cell costs, whatever piece it becomes.
 const BELT_PRICE_ID := &"baggage_belt"
 const BELT_HINT := "Drag to lay a belt"
+## The status line over a lane part that belongs to no arch.
+const NOT_IN_LANE := "Not part of a lane"
 ## Tools that mark a dragged rectangle as a room of a RoomTypes id.
 const TOOL_ROOMS := {Tool.CAFE_ROOM: &"cafe", Tool.BAG_ROOM: &"bag_room"}
 ## Tools under which the room under the pointer is followed for its panel.
@@ -183,6 +185,8 @@ var _area_remove_material := _ghost_material(AREA_REMOVE_TINT)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
+## What the status line adds for the lane part under the pointer ("" for none).
+var _lane_hint := ""
 ## True while the pointer maps to a cell inside the grid, whether or not the
 ## picked tool makes an edit there (a room tool makes none before a drag).
 var _pointer_on_grid := false
@@ -686,16 +690,20 @@ func _update_ghost(point: Variant) -> void:
 		return
 	var edit: BuildEdit = null if point == null else edit_at(point)
 	_hover_edit = edit
+	var hint := "" if point == null else lane_hint(grid, grid.world_to_cell(point))
 	if edit == null:
 		_ghost.visible = false
-		if _hover_key != "":
-			_hover_key = ""
+		var idle_key := "" if hint == "" else "lane:" + hint
+		if _hover_key != idle_key:
+			_hover_key = idle_key
+			_lane_hint = hint
 			_show_status(null)
 		return
-	var key := _edit_key(edit)
+	var key := _edit_key(edit) + "|" + hint
 	if key == _hover_key:
 		return
 	_hover_key = key
+	_lane_hint = hint
 	var result := check(edit)
 	_draw_ghost(edit, _valid_material if result.ok else _invalid_material)
 	_show_status(result)
@@ -873,7 +881,33 @@ func _show_status(result: BuildResult) -> void:
 		elif DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
 			reason = DOOR_HINTS[result.reason] % DOOR_NAMES[tool]
 		text += ("  " if text != "" else "") + reason
+	if _lane_hint != "":
+		text += ("  " if text != "" else "") + _lane_hint
 	_set_status(text)
+
+
+## What the status line says about the lane part at `cell`, while
+## SecurityLanes.enabled is on: the first thing the arch lacks
+## (SecurityLanes.status_text) for an incomplete arch or a part of an
+## incomplete lane, NOT_IN_LANE for a part no arch counts, and "" for a whole
+## lane, any other object and empty floor. The lanes are recognised afresh
+## from the grid, and only when the cell holds a lane part.
+static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
+	if not SecurityLanes.enabled or not on_grid.in_bounds(cell):
+		return ""
+	var id := on_grid.object_at(cell)
+	if id == 0 or not SecurityLanes.is_part(StringName(on_grid.get_object(id)["def"])):
+		return ""
+	var lanes := SecurityLanes.new()
+	lanes.rebuild(on_grid)
+	if lanes.is_complete(id) or lanes.lane_of_piece(id) != 0:
+		return ""
+	if lanes.arches.has(id):
+		return lanes.status_text(id)
+	for arch in lanes.arches:
+		if (lanes.candidate(arch)["parts"] as Dictionary).values().has(id):
+			return lanes.status_text(arch)
+	return NOT_IN_LANE
 
 
 func _set_status(text: String) -> void:
