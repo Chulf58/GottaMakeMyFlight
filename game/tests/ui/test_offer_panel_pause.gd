@@ -10,6 +10,7 @@ var _desk: OfferDesk
 var _sim: FlightSim
 var _clock: SimClock
 var _panel: OfferPanel
+var _save: SaveGame
 
 
 func before_test() -> void:
@@ -26,7 +27,10 @@ func before_test() -> void:
 	_panel = OfferPanel.new()
 	_panel.desk = _desk
 	_panel.flights = _sim
+	_save = SaveGame.new()
+	_port.add_child(_save)
 	_panel.clock = _clock
+	_panel.save_game = _save
 	_port.add_child(_panel)
 
 
@@ -149,3 +153,73 @@ func test_a_panel_with_no_clock_still_opens_and_closes() -> void:
 	assert_bool(bare.is_open()).is_true()
 	bare.close()
 	assert_bool(bare.is_open()).is_false()
+
+
+## A successful load puts the saved clock in place and closes the sheet; the
+## state held from before the load is never written back over it.
+func _load_while_open(paused: bool, speed: int) -> void:
+	_clock.set_speed(speed)
+	_clock.set_paused(paused)
+	_save.loaded.emit(true)
+
+
+func test_loading_a_running_save_closes_the_sheet_and_keeps_it_running() -> void:
+	_press_speed(2)
+	_panel.open()
+	_load_while_open(false, 2)
+	assert_bool(_panel.is_open()).is_false()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(2)
+
+
+func test_loading_a_paused_save_at_the_same_speed_stays_paused() -> void:
+	_press_speed(2)
+	_panel.open()
+	_load_while_open(true, 2)
+	assert_bool(_panel.is_open()).is_false()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.speed).is_equal(2)
+
+
+func test_loading_a_paused_save_at_another_speed_stays_paused_at_that_speed() -> void:
+	_press_speed(1)
+	_panel.open()
+	_load_while_open(true, 3)
+	assert_bool(_panel.is_open()).is_false()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.speed).is_equal(3)
+
+
+func test_a_failed_load_leaves_the_sheet_open_and_the_pause_held() -> void:
+	_press_speed(3)
+	_panel.open()
+	_save.loaded.emit(false)
+	assert_bool(_panel.is_open()).is_true()
+	assert_bool(_clock.paused).is_true()
+	_panel.close()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(3)
+
+
+func test_a_panel_leaving_the_tree_while_open_restores_the_clock() -> void:
+	_press_speed(3)
+	_panel.open()
+	_panel.free()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(3)
+
+
+func test_a_panel_leaving_the_tree_after_the_player_took_over_leaves_the_clock() -> void:
+	_press_speed(1)
+	_panel.open()
+	_press_speed(3)
+	_panel.free()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(3)
+
+
+func test_a_panel_leaving_the_tree_keeps_a_game_that_was_paused_paused() -> void:
+	_press_speed(0)
+	_panel.open()
+	_panel.free()
+	assert_bool(_clock.paused).is_true()

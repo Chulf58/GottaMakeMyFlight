@@ -55,6 +55,14 @@ func test_esc_closes_the_open_sheet() -> void:
 	assert_bool(_panel.is_open()).is_false()
 
 
+func test_esc_with_the_sheet_open_leaves_a_selected_tool_selected() -> void:
+	_mode.set_tool(BuildMode.Tool.WALL)
+	_panel.open()
+	_port.push_input(_key(KEY_ESCAPE))
+	assert_bool(_panel.is_open()).is_false()
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.WALL)
+
+
 func test_esc_closes_a_sheet_that_has_no_build_mode_to_watch() -> void:
 	var bare := OfferPanel.new()
 	bare.desk = _desk

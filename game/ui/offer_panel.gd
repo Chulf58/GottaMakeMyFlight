@@ -41,6 +41,8 @@ const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
 @export var clock: SimClock
 ## Its tool changes close the sheet; null leaves the sheet to Esc and the button.
 @export var build_mode: BuildMode
+## A successful load replaces the world the sheet was opened over, so it closes.
+@export var save_game: SaveGame
 
 var _button: Button
 var _sheet: PanelContainer
@@ -128,6 +130,8 @@ func _ready() -> void:
 	desk.contract_ended.connect(_on_contract_ended)
 	if build_mode != null:
 		build_mode.tool_changed.connect(_on_tool_changed)
+	if save_game != null:
+		save_game.loaded.connect(_on_loaded)
 	_refresh()
 	_refresh_warning()
 
@@ -171,6 +175,15 @@ func close() -> void:
 	if not _sheet.visible:
 		return
 	_sheet.visible = false
+	_restore_clock()
+
+
+## A panel that leaves the tree while open must not leave the game paused.
+func _exit_tree() -> void:
+	_restore_clock()
+
+
+func _restore_clock() -> void:
 	if clock == null or not _holding_clock:
 		return
 	_holding_clock = false
@@ -300,6 +313,15 @@ func _on_toggle() -> void:
 		close()
 	else:
 		open()
+
+
+## The loaded clock is the player's now, so the sheet closes without restoring
+## the state it held from before the load.
+func _on_loaded(ok: bool) -> void:
+	if not ok:
+		return
+	_holding_clock = false
+	close()
 
 
 func _on_tool_changed(_tool: BuildMode.Tool) -> void:

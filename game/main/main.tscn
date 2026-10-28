@@ -225,13 +225,14 @@ clock = NodePath("../SimClock")
 rating = NodePath("../AirportRating")
 flights = NodePath("../FlightSim")
 
-[node name="OfferPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("desk", "flights", "clock", "build_mode")]
+[node name="OfferPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("desk", "flights", "clock", "build_mode", "save_game")]
 layer = 2
 script = ExtResource("18_offerpanel")
 desk = NodePath("../OfferDesk")
 flights = NodePath("../FlightSim")
 clock = NodePath("../SimClock")
 build_mode = NodePath("../BuildMode")
+save_game = NodePath("../SaveGame")
 
 [node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate", "menu")]
 layer = 2
