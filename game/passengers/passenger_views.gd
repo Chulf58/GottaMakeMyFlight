@@ -22,6 +22,8 @@ const PICK_RADIUS_PX := 40.0
 
 @export var clock: SimClock
 @export var sim: PassengerSim
+## When set, a finished load snaps every view to the loaded world.
+@export var save_game: SaveGame
 
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
@@ -66,6 +68,8 @@ func _ready() -> void:
 	add_child(_pops)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
+	if save_game != null:
+		save_game.loaded.connect(_on_loaded)
 
 
 func _process(_delta: float) -> void:
@@ -116,6 +120,42 @@ func sync() -> void:
 	_markers.sync()
 
 
+## Draws every view at the sim's current state now, with no tick to run: a
+## load while paused brings no tick, and a view drawn between its two pre-load
+## positions would stay there. Syncs poses and the node set (passengers the
+## load removed lose their view, new ones get one), then makes the previous and
+## current positions the same so the frame draws the current one. With no
+## interval to take a heading from, a walker faces along its current path or
+## apron leg.
+func snap() -> void:
+	sync()
+	for id in _cur:
+		_prev[id] = _cur[id]
+		var node: Node3D = _nodes[id]
+		var heading := walk_heading(sim.get_passenger(id))
+		if heading != Vector2.ZERO and not node.get_meta(&"seated", false):
+			node.rotation.y = atan2(heading.x, heading.y)
+	draw()
+
+
+## The ground direction (x, z) a walking passenger is heading in, from the
+## committed path step or apron leg it is on; zero when it is not walking.
+func walk_heading(p: Passenger) -> Vector2:
+	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
+	if outside and p.apron_mm < p.apron_total_mm():
+		var left := p.apron_mm
+		for i in range(1, p.apron.size()):
+			var length := p.apron_segment_mm(i)
+			if left < length:
+				var leg := p.apron[i] - p.apron[i - 1]
+				return Vector2(leg.x, leg.z)
+			left -= length
+		return Vector2.ZERO
+	if p.is_moving():
+		return Vector2(p.path[p.path_index + 1] - p.path[p.path_index])
+	return Vector2.ZERO
+
+
 ## Places every node between its last two tick positions.
 func draw() -> void:
 	var alpha := clock.alpha if clock != null else 1.0
@@ -155,6 +195,11 @@ func pick(camera: Camera3D, screen: Vector2) -> int:
 
 func _on_ticked(_tick: int) -> void:
 	sync()
+
+
+func _on_loaded(ok: bool) -> void:
+	if ok:
+		snap()
 
 
 func _visible(p: Passenger) -> bool:
