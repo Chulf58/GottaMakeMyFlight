@@ -1,10 +1,11 @@
 class_name TestDeskBeltRows
 extends GdUnitTestSuite
-## Desk belts run one row back: desk, then the agent row, then the belt
-## (decision desk-belts-run-one-row-back-desk-then-the-agent-row-then-the).
-## A belt along the agent row is refused with the staff-spot reason, and a
-## row of desks side by side feeds one collector with every agent still able
-## to reach its spot.
+## Desk belts behind a row of desks (decision
+## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, user-ruled
+## "Walkway row"): desk, agent row, walkway row, then the collector three rows
+## back, fed by a two-cell riser from each desk's outlet cell. A belt along
+## the agent row is refused with the staff-spot reason, and so is a collector
+## right behind the agent row, which would box in the middle agent.
 
 const SPOT := BuildResult.Reason.STAFF_SPOT
 
@@ -37,10 +38,11 @@ func test_a_belt_along_the_agent_row_is_refused() -> void:
 	)
 
 
-## Three desks side by side, the collector two rows behind them (row 6): the
-## middle agent's spot (4, 7) would be boxed in by the two outlet belts beside
-## it and the collector behind, so the collector cannot be laid.
-func test_a_collector_right_behind_the_agent_row_boxes_in_the_middle_agent() -> void:
+## The refusal the ruling expects: three desks side by side with the
+## collector two rows behind them (row 6), no walkway row. The middle agent's
+## spot (4, 7) would be boxed in by the two outlet belts beside it and the
+## collector behind, so the collector is refused with the staff-spot reason.
+func test_a_collector_without_a_walkway_row_is_refused() -> void:
 	for x in [2, 4, 6]:
 		_world.desk(Vector2i(x, 8))
 	for x in [3, 5, 7]:
@@ -58,10 +60,11 @@ func test_a_collector_right_behind_the_agent_row_boxes_in_the_middle_agent() -> 
 	assert_int(result.blocking_object_id).is_equal(_world.grid.object_at(Vector2i(4, 8)))
 
 
-## Three desks side by side, each outlet cell feeding a two-cell riser into a
-## collector three rows back (row 6), leaving a walkway row between: every
-## bag reaches the bag room.
-func test_three_side_by_side_desks_feed_one_collector() -> void:
+## The ruled layout: three desks side by side on row 9, the agent row 8, the
+## walkway row 7 and the collector on row 6, each outlet cell feeding a
+## two-cell riser into it. Every agent keeps a way to its spot and every bag
+## reaches the bag room.
+func test_the_ruled_layout_feeds_three_side_by_side_desks_into_one_collector() -> void:
 	_world.room(BagTestWorld.ROOM)
 	var desks: Array[int] = []
 	for x in [2, 4, 6]:
