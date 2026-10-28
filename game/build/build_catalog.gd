@@ -161,6 +161,17 @@ static func _build() -> void:
 	_add(&"baggage_belt_feed", "Belt merge", Vector2i.ONE, belt_color, 0.46)
 	_add(&"baggage_belt_end", "Belt end", Vector2i.ONE, Color(0.9, 0.75, 0.25), 1.3)
 	_add(&"baggage_cart", "Baggage cart", Vector2i(1, 2), Color(0.3, 0.5, 0.75), 1.62)
+	# Toilet pieces (Toilets 3/5). A stall is one use slot, one cell wide and two
+	# deep: the door at the front, the toilet in the rear cell. Each piece's
+	# interaction cell is its Mount_Approach, the cell in front of it, kept clear
+	# like a counter's. No kit pieces are mapped yet, so the view draws boxes
+	# until the interior kit maps them.
+	var stall := _add(&"toilet_stall", "Toilet stall", Vector2i(1, 2), Color(0.8, 0.84, 0.88), 2.1)
+	stall.has_interaction = true
+	stall.interaction_offset = Vector2i(0, 2)
+	var sink := _add(&"toilet_sink", "Sink", Vector2i.ONE, Color(0.92, 0.94, 0.96), 1.0)
+	sink.has_interaction = true
+	sink.interaction_offset = Vector2i(0, 1)
 
 
 ## Passengers step through a door along its axis only, so it is walk-through;

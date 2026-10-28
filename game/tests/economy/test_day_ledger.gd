@@ -85,16 +85,59 @@ func test_the_rescue_grant_stays_out_of_the_operating_result() -> void:
 
 func test_wages_a_credit_pays_off_count_as_wages_paid() -> void:
 	var debt := [70]
-	_wallet.credit_claim = func(amount: int, commit: bool) -> int:
+	_wallet.credit_claim = func(amount: int, commit: bool) -> Dictionary:
 		var taken := mini(debt[0], amount)
 		if commit:
 			debt[0] -= taken
-		return taken
+		return {Wallet.Category.WAGES: taken} if taken > 0 else {}
 	assert_bool(_wallet.credit(100, C.FEES)).is_true()
 	assert_int(_ledger.amount(C.FEES)).is_equal(100)
 	assert_int(_ledger.wages_paid()).is_equal(70)
 	assert_int(_ledger.cash_change()).is_equal(30)
 	assert_int(_wallet.balance).is_equal(30)
+
+
+## Toilet upkeep (decision toilet-design-queue-free-reservable-stalls-per-
+## stall-daily-u, point 2) is its own line, a cost in the operating result.
+func test_upkeep_is_its_own_line_and_a_cost_in_the_operating_result() -> void:
+	assert_bool(_wallet.credit(300, C.FEES)).is_true()
+	assert_bool(_wallet.spend(60, C.WAGES)).is_true()
+	assert_bool(_wallet.spend(40, C.UPKEEP)).is_true()
+	assert_int(_ledger.amount(C.UPKEEP)).is_equal(-40)
+	assert_int(_ledger.upkeep_paid()).is_equal(40)
+	assert_int(_ledger.wages_paid()).is_equal(60)
+	assert_int(_ledger.operating_result()).is_equal(300 - 60 - 40)
+	assert_int(_ledger.cash_change()).is_equal(_wallet.balance)
+
+
+func test_a_credit_that_pays_both_debts_books_each_on_its_own_line() -> void:
+	var debts := {C.WAGES: 70, C.UPKEEP: 50}
+	_wallet.credit_claim = func(amount: int, commit: bool) -> Dictionary:
+		var wages := mini(debts[C.WAGES], amount)
+		var upkeep := mini(debts[C.UPKEEP], amount - wages)
+		if commit:
+			debts[C.WAGES] -= wages
+			debts[C.UPKEEP] -= upkeep
+		return {C.WAGES: wages, C.UPKEEP: upkeep}
+	assert_bool(_wallet.credit(100, C.FEES)).is_true()
+	assert_int(_ledger.amount(C.FEES)).is_equal(100)
+	assert_int(_ledger.wages_paid()).is_equal(70)
+	assert_int(_ledger.upkeep_paid()).is_equal(30)
+	assert_int(_ledger.cash_change()).is_equal(0)
+	assert_int(_wallet.balance).is_equal(0)
+
+
+## A ledger saved before upkeep existed has no "upkeep" total; it loads with 0.
+func test_a_saved_ledger_from_before_upkeep_loads_with_none() -> void:
+	assert_bool(_wallet.credit(300, C.FEES)).is_true()
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(_ledger.to_snapshot()))
+	assert_str(saved["upkeep"]).is_equal("0")
+	saved.erase("upkeep")
+	var other: DayLedger = auto_free(DayLedger.new())
+	assert_bool(other.from_snapshot(saved)).is_true()
+	assert_int(other.amount(C.UPKEEP)).is_equal(0)
+	assert_int(other.amount(C.FEES)).is_equal(300)
+	assert_bool(other.is_since_load()).is_false()
 
 
 func test_a_failed_spend_or_a_restore_records_nothing() -> void:
@@ -175,6 +218,8 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 	var before := _ledger.to_snapshot()
 	var bad_cases: Array = []
 	for key in before.keys():
+		if DayLedger.OPTIONAL_CATEGORY_KEYS.has(key):
+			continue
 		var missing := before.duplicate()
 		missing.erase(key)
 		bad_cases.append(missing)
@@ -190,6 +235,8 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 		["build", "1.5"],
 		["shop", "x"],
 		["opening", str(DayLedger.MAX_TOTAL + 1)],
+		["upkeep", "x"],
+		["upkeep", 4],
 	]:
 		var wrong := before.duplicate()
 		wrong[change[0]] = change[1]
