@@ -26,6 +26,11 @@ static func tick_of_day(tick: int) -> int:
 	return posmod(tick + START_TICK_OF_DAY, TICKS_PER_DAY)
 
 
+## Whether `tick` is the last of its day: the next tick is the first of the next.
+static func is_last_tick_of_day(tick: int) -> bool:
+	return tick_of_day(tick) == TICKS_PER_DAY - 1
+
+
 ## Minutes since midnight, 0 to MINUTES_PER_DAY - 1.
 static func minute_of_day(tick: int) -> int:
 	@warning_ignore("integer_division")
