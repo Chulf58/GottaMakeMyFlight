@@ -44,16 +44,17 @@ func _seated_agent() -> StaffMember:
 	return _w.staff.get_member(_w.staff.member_ids()[1])
 
 
-## A second entrance on the hall's east edge above the desks, so a wall across
-## the hall below them cuts the first entrance (where members walk out) off
-## while staff can still reach every spot; a wall that left a spot with no
-## way from any entrance would be refused (decision
-## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3).
-func _second_entrance() -> void:
-	PassengerTestWorld.place(_w.grid, &"entrance_door", Vector2i(21, 12), 1)
-	assert_that(_w.sim.layout.door_cell(_w.grid, _w.sim.layout.entrances[0])).is_equal(
-		ReferenceTerminal.ENTRANCE_CELL
-	)
+## The cuts below leave no entrance reachable from the desks, which a player
+## edit can no longer do while a station's spot is reached (decision
+## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3) but a
+## save from before that rule can hold. Between these two calls the grid takes
+## edits past the staff reach rule, as such a save was built.
+func _old_save_rules() -> void:
+	_w.grid.check_staff_reach = false
+
+
+func _today_s_rules() -> void:
+	_w.grid.check_staff_reach = true
 
 
 func _assert_not_staff(m: StaffMember) -> void:
@@ -116,8 +117,8 @@ func test_a_fired_member_still_walking_to_its_station_walks_out_from_where_it_is
 
 func test_with_no_path_to_the_entrance_a_fired_member_goes_at_once() -> void:
 	var m := _seated_agent()
-	_second_entrance()
 	# A wall across the hall below the desks cuts them off from the entrance.
+	_old_save_rules()
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 		(
 			assert_bool(
@@ -125,6 +126,7 @@ func test_with_no_path_to_the_entrance_a_fired_member_goes_at_once() -> void:
 			)
 			. is_true()
 		)
+	_today_s_rules()
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
 	assert_object(_w.staff.get_member(m.id)).is_null()
 	assert_int(_w.staff.count(CHECKIN)).is_equal(1)
@@ -132,9 +134,15 @@ func test_with_no_path_to_the_entrance_a_fired_member_goes_at_once() -> void:
 
 func test_a_member_gone_at_once_is_announced_once() -> void:
 	var m := _seated_agent()
-	_second_entrance()
+	_old_save_rules()
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
-		_w.grid.apply(BuildEdit.place_wall(Vector2i(x, 13), BuildGrid.Side.NORTH))
+		(
+			assert_bool(
+				_w.grid.apply(BuildEdit.place_wall(Vector2i(x, 13), BuildGrid.Side.NORTH)).ok
+			)
+			. is_true()
+		)
+	_today_s_rules()
 	var changes := [0]
 	_w.staff.staff_changed.connect(func() -> void: changes[0] += 1)
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
@@ -149,19 +157,21 @@ func test_a_member_gone_at_once_is_announced_once() -> void:
 func test_with_no_entrance_a_fired_member_goes_at_once() -> void:
 	var m := _seated_agent()
 	var entrance: int = _w.sim.layout.entrances[0]
+	_old_save_rules()
 	assert_bool(_w.grid.apply(BuildEdit.remove_object(entrance)).ok).is_true()
+	_today_s_rules()
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
 	assert_object(_w.staff.get_member(m.id)).is_null()
 
 
 func test_a_walk_out_cut_off_on_the_way_goes_at_once() -> void:
 	var m := _seated_agent()
-	_second_entrance()
 	assert_bool(_w.staff.fire(CHECKIN)).is_true()
 	for i in 10:
 		_w.step()
 	assert_int(m.state).is_equal(WALKING_OUT)
 	assert_int(m.at.y).is_less(13)
+	_old_save_rules()
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 		(
 			assert_bool(
@@ -169,6 +179,7 @@ func test_a_walk_out_cut_off_on_the_way_goes_at_once() -> void:
 			)
 			. is_true()
 		)
+	_today_s_rules()
 	_w.step()
 	print("after the cut: member %s" % _w.staff.get_member(m.id))
 	assert_object(_w.staff.get_member(m.id)).is_null()

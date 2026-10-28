@@ -219,14 +219,14 @@ static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) 
 		if scene.is_belt(cell):
 			continue
 		var place := BuildEdit.place_object(BELT, cell, turn)
-		var check := grid.validate(place)
+		var check := grid.validate(place, false)
 		if not check.ok:
 			plan.result = check
 			return plan
 		plan.new_cells.append(cell)
 		scene.added[cell] = true
 		plan.edits.append(place)
-	# Each cell passed alone; together they may still close a staff spot in.
+	# Staff reach is checked once for the whole line, not per cell.
 	var cut_off := grid.staff_reach_problem(plan.edits)
 	if cut_off != null:
 		plan.result = cut_off

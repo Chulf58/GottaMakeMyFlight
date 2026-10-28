@@ -140,3 +140,11 @@ func test_the_reference_terminal_reaches_every_spot() -> void:
 	assert_int(reach.size()).is_greater(100)
 	for station: int in ids["desks"] + ids["scanners"]:
 		assert_bool(StaffSpots.unreachable(grid, station)).is_false()
+
+
+func test_removing_the_last_entrance_while_a_spot_is_reached_is_refused() -> void:
+	var entrance := _grid.object_at(Vector2i(0, 11))
+	var result := _grid.apply(BuildEdit.remove_object(entrance))
+	print("last entrance: %s, blocker %d" % [result.reason_text(), result.blocking_object_id])
+	_expect_spot_refusal(result)
+	_expect_reachable()

@@ -7,9 +7,10 @@ extends RefCounted
 ##
 ## A save from before staff spots has its on-duty members on the station's
 ## service cell (lane slot 0). Such a member loads standing on the station's
-## staff spot, or, when an old layout left that spot blocked, idle where it
-## stood (walking out if it was leaving), since the station can never be
-## staffed.
+## staff spot, or, when an old layout left that spot blocked or out of reach
+## from every entrance, idle where it stood (walking out if it was leaving),
+## since the station can never be staffed. An on-duty member on a free spot
+## that no entrance reaches loads the same way.
 
 const KEYS := ["save_version", "next_id", "members"]
 const MEMBER_KEYS := [
@@ -141,6 +142,7 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 			return "member %d has a path that jumps" % m.id
 		m.path.append(cell)
 	_migrate_service_cell(m, sim)
+	_release_unreachable(m, sim)
 	var problem := _place_problem(m)
 	if problem == "":
 		problem = _duty_problem(m, sim)
@@ -163,12 +165,37 @@ static func _migrate_service_cell(m: StaffMember, sim: PassengerSim) -> void:
 	if not stations.has(m.station):
 		return
 	var here: Array[Vector2i] = [m.at]
-	if not StaffSpots.blocked(sim.grid, m.station):
+	var never := _never_staffed(m.station, sim)
+	if not never:
 		m.at = StaffSpots.spot_of(sim.grid, m.station)
 		here = [m.at]
 	m.set_path(here)
-	if not StaffSpots.blocked(sim.grid, m.station):
+	if not never:
 		return
+	_stand_down(m)
+
+
+## An on-duty member of an old save, standing on its station's free spot,
+## when staff can no longer reach that spot from any entrance (a layout saved
+## before the reach rule): it stands idle there, or walks out if it was
+## leaving, as StaffSim would release it.
+static func _release_unreachable(m: StaffMember, sim: PassengerSim) -> void:
+	if m.state != StaffMember.State.ON_DUTY or m.is_moving():
+		return
+	if StaffSpots.blocked(sim.grid, m.station):
+		return
+	if StaffSpots.unreachable(sim.grid, m.station):
+		_stand_down(m)
+
+
+## Whether staff can never work `station`: its spot is blocked, or no
+## entrance has a way to it.
+static func _never_staffed(station: int, sim: PassengerSim) -> bool:
+	return StaffSpots.blocked(sim.grid, station) or StaffSpots.unreachable(sim.grid, station)
+
+
+## Leaves the member idle where it stands, or walking out if it was leaving.
+static func _stand_down(m: StaffMember) -> void:
 	m.station = 0
 	m.state = StaffMember.State.IDLE
 	if m.leaving:

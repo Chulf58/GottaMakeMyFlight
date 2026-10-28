@@ -11,8 +11,9 @@ extends Node
 ## left blocked, or that no entrance has a way to, is never staffed. A member
 ## whose station is removed or stops being usable goes idle where it stands;
 ## one whose cell is built over goes back to the pool. A fired member walks
-## out to the first entrance and is removed there (at once when it is in the
-## pool or has no way there); while it walks it is no longer staff.
+## out to the nearest entrance it has a way to and is removed there (at once
+## when it is in the pool or has no way out); while it walks it is no longer
+## staff.
 ##
 ## PassengerSim steps it at the start of each tick, so every passenger step
 ## reads one staff state. Members are handled in id order, distances are whole
@@ -215,15 +216,17 @@ func _beat(m: StaffMember) -> bool:
 	return posmod(sim.tick, PassengerSim.BEAT_TICKS) == posmod(m.id, PassengerSim.BEAT_TICKS)
 
 
-## Members of a station that is gone, not usable or whose staff spot is
-## blocked go idle; members standing on a cell that is no longer walkable give
-## up their station and go back to the pool (one walking out is gone); leaving
-## members whose service has ended walk out.
+## Members of a station that is gone, not usable, or whose staff spot is
+## blocked or out of reach from every entrance go idle; members standing on a
+## cell that is no longer walkable give up their station and go back to the
+## pool (one walking out is gone); leaving members whose service has ended
+## walk out.
 func _reconcile() -> void:
 	for i in range(_members.size() - 1, -1, -1):
 		var m := _members[i]
 		if m.station != 0:
 			var usable := sim.layout.is_usable(m.station) and not spot_blocked(m.station)
+			usable = usable and not spot_unreachable(m.station)
 			if not usable or not stations_of(m.role).has(m.station):
 				_release(m)
 		if not m.in_pool() and not sim.grid.is_walkable(m.at) and not _backing_out(m):
@@ -258,9 +261,9 @@ func _leave(m: StaffMember) -> void:
 	staff_changed.emit()
 
 
-## A fired member gives up its station and walks out to the first entrance,
-## keeping a step in progress. One in the pool, or with no entrance or no path
-## to it, is removed at once, and that removal has already emitted
+## A fired member gives up its station and walks out to the nearest entrance
+## it has a way to (_target()), keeping a step in progress. One in the pool,
+## or with no entrance or no path to one, is removed at once, and that removal has already emitted
 ## staff_changed: returns true then, so the caller does not emit it again.
 func _send_out(m: StaffMember) -> bool:
 	if _claims.get(m.station, 0) == m.id:
@@ -352,14 +355,24 @@ func _walk(m: StaffMember) -> void:
 		_set_state(m, StaffMember.State.ON_DUTY)
 
 
-## Where a walking member is headed: its station's staff spot, or the first
-## entrance's door cell when it walks out (NO_CELL with no entrance).
+## Where a walking member is headed: its station's staff spot, or, when it
+## walks out, the door cell of the entrance with the shortest path from where
+## it stands (the lower entrance id on a tie; NO_CELL when it reaches none).
 func _target(m: StaffMember) -> Vector2i:
 	if m.state != StaffMember.State.WALKING_OUT:
 		return spot_of(m.station)
-	if sim.layout.entrances.is_empty():
-		return StaffMember.NO_CELL
-	return sim.layout.door_cell(sim.grid, sim.layout.entrances[0])
+	var best := StaffMember.NO_CELL
+	var best_mm := 0
+	for door in sim.layout.entrances:
+		var cell := sim.layout.door_cell(sim.grid, door)
+		var path := _path(m.at, cell)
+		if path.is_empty():
+			continue
+		var mm := Passenger.path_mm(path)
+		if best == StaffMember.NO_CELL or mm < best_mm:
+			best = cell
+			best_mm = mm
+	return best
 
 
 ## A new path from where the member stands to its target. With none, a member

@@ -30,12 +30,7 @@ func before_test() -> void:
 	assert_bool(ReferenceTerminal.build(source)).is_true()
 	var data := source.to_snapshot()
 	var next: int = data["next_object_id"]
-	var ring: Array[Vector2i] = []
-	for x in range(10, 17):
-		ring.append(Vector2i(x, 9))
-	for x in [10, 13, 16]:
-		ring.append_array([Vector2i(x, 10), Vector2i(x, 11)])
-	for cell in ring:
+	for cell in _ring():
 		(data["objects"] as Array).append(
 			{"id": next, "def": "baggage_belt", "anchor": [cell.x, cell.y], "facing": 0}
 		)
@@ -48,6 +43,16 @@ func before_test() -> void:
 	# ReferenceTerminal.object_ids() knows no belt pieces, so read the layout.
 	_desks = _w.sim.layout.desks.duplicate()
 	assert_int(_desks.size()).is_equal(2)
+
+
+## Belt cells that close each desk's spot and the cell beside it into a pocket.
+func _ring() -> Array[Vector2i]:
+	var ring: Array[Vector2i] = []
+	for x in range(10, 17):
+		ring.append(Vector2i(x, 9))
+	for x in [10, 13, 16]:
+		ring.append_array([Vector2i(x, 10), Vector2i(x, 11)])
+	return ring
 
 
 func after_test() -> void:
@@ -145,3 +150,48 @@ func test_the_gate_names_the_staff_spot_when_the_spots_are_blocked() -> void:
 	gate.bind(blocked.flights, blocked.staff)
 	print("blocked spots: blocker %d" % gate.blocker())
 	assert_int(gate.blocker()).is_equal(AirportGate.Blocker.STAFF_SPOT)
+
+
+## A staff save with agents on duty on the desks' spots, loaded with a grid that
+## has those spots pocketed (an old save): the agents load idle where they
+## stood, and the desks are closed because staff cannot reach them.
+func test_an_on_duty_agent_at_a_pocketed_spot_loads_released() -> void:
+	var source := PassengerTestWorld.reference_world()
+	source.auto_staff = false
+	assert_int(StaffTestKit.staff_all(source.staff)).is_equal(4)
+	var data: Dictionary = JSON.parse_string(StaffTestKit.save_text(source))
+	var grid_data: Dictionary = data["grid"]
+	var next: int = grid_data["next_object_id"]
+	for cell in _ring():
+		(grid_data["objects"] as Array).append(
+			{"id": next, "def": "baggage_belt", "anchor": [cell.x, cell.y], "facing": 0}
+		)
+		next += 1
+	grid_data["next_object_id"] = next
+	var loaded := StaffTestKit.load_world(JSON.stringify(data))
+	assert_object(loaded).is_not_null()
+	if loaded == null:
+		return
+	loaded.step()
+	var desks: Array[int] = loaded.sim.layout.desks
+	for id in loaded.staff.member_ids():
+		var m := loaded.staff.get_member(id)
+		print(
+			"member %d role %d state %d station %d at %s" % [id, m.role, m.state, m.station, m.at]
+		)
+		if m.role == CHECKIN:
+			assert_int(m.state).is_equal(StaffMember.State.IDLE)
+			assert_int(m.station).is_equal(0)
+	for desk in desks:
+		assert_bool(loaded.staff.is_staffed(desk)).is_false()
+		assert_str(MissSignals.closed_reason(loaded.sim, desk)).is_equal(
+			MissSignals.UNREACHABLE_REASON
+		)
+	var views := PassengerViews.new()
+	views.clock = loaded.clock
+	views.sim = loaded.sim
+	add_child(views)
+	var markers := views.get_node("MissMarkers") as MissMarkers
+	markers.sync()
+	assert_str(markers.closed_text(desks[0])).is_equal(MissMarkers.UNREACHABLE_CAPTION)
+	views.free()
