@@ -37,6 +37,7 @@ enum Reason {
 	BELT_WALL,
 	NOT_A_BELT,
 	STAFF_SPOT,
+	LANE_WALL,
 }
 
 const REASON_TEXT := {
@@ -76,6 +77,7 @@ const REASON_TEXT := {
 		"Keep the staff spot behind a desk, beside a scanner or at a lane officer's post"
 		+ " free, with a way in"
 	),
+	Reason.LANE_WALL: "A wall is in the way of the lane. Remove the wall first",
 }
 
 var ok: bool = true

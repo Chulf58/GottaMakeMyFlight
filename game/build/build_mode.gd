@@ -167,6 +167,10 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 ## frame (grid_size, grid_centred and grid_origin are not used), the Entrance
 ## and Exit tools snap to its doors and load_snapshot() checks a save fits it.
 @export var shell: ShellDefinition
+## The terminal shell's cutaway, drawn over the same shell. Remove does not
+## pick an object the shell hides from the camera (_shell_in_sight). main.tscn
+## sets it; without it nothing hides an object but the grid's own walls.
+@export var shell_view: ShellView
 ## Where building is paid from (BuildTransaction): a click or door costs its
 ## price, a Floor rectangle is all or nothing, a wall stroke stops when the
 ## money runs out, and removals refund a share of the saved price. main.tscn
@@ -666,8 +670,8 @@ func wallet() -> Wallet:
 
 
 ## BuildGrid.validate() plus the entrance and exit rules (DoorPlacement.check()),
-## then whether the wallet can pay for the edits it takes
-## (BuildTransaction.check(), CANT_AFFORD).
+## no belt crossing and no lane part across a wall (LaneWall), then whether the
+## wallet can pay for the edits it takes (BuildTransaction.check(), CANT_AFFORD).
 func check(edit: BuildEdit) -> BuildResult:
 	var result := DoorPlacement.check(grid, edit, shell)
 	if not result.ok:
@@ -675,6 +679,9 @@ func check(edit: BuildEdit) -> BuildResult:
 	var crossing := BeltShaper.crossing_problem(grid, edit)
 	if crossing != null:
 		return crossing
+	var lane_wall := LaneWall.problem(grid, edit)
+	if lane_wall != null:
+		return lane_wall
 	return BuildTransaction.check(grid, DoorPlacement.edits_for(grid, edit), wallet())
 
 
@@ -724,11 +731,12 @@ func _start_drag(point: Vector3) -> void:
 
 
 ## What Remove takes at a ground point: the object the pointer is on (seen
-## from the camera, or on the point's cell), then a wall edge within
+## from the camera, or on the point's cell unless the terminal shell hides the
+## point, see _shell_hides_point), then a wall edge within
 ## WALL_PICK_DISTANCE, then the room, then the floor.
 func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 	var object_id := _object_in_sight(point)
-	if object_id == 0:
+	if object_id == 0 and not _shell_hides_point(point):
 		object_id = grid.object_at(cell)
 	if object_id != 0:
 		return BuildEdit.remove_object(object_id)
@@ -747,7 +755,7 @@ func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 ## hides the ground behind it on screen, so a click on it picks a ground point
 ## beyond it, maybe beside a wall edge; the object the player sees under the
 ## pointer wins. An object behind a wall the view draws opaque
-## (_wall_in_sight) is not seen.
+## (_wall_in_sight) or behind the terminal shell (_shell_in_sight) is not seen.
 func _object_in_sight(point: Vector3) -> int:
 	var camera := get_viewport().get_camera_3d()
 	if camera == null or camera.is_position_behind(point):
@@ -769,7 +777,52 @@ func _object_in_sight(point: Vector3) -> int:
 			seen = object_id
 	if seen != 0 and nearest >= _wall_in_sight(from, point) - SIGHT_SLACK_M:
 		return 0
+	if seen != 0 and _shell_in_sight(from, point):
+		return 0
 	return seen
+
+
+## Whether the terminal shell stands between the camera and a ground point
+## (_shell_in_sight); false with no camera or a point behind it.
+func _shell_hides_point(point: Vector3) -> bool:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null or camera.is_position_behind(point):
+		return false
+	return _shell_in_sight(camera.project_ray_origin(camera.unproject_position(point)), point)
+
+
+## Whether the terminal shell, as ShellView draws it now, stands between the
+## camera at `from` and the ground point `to` inside the grid. While any of the
+## roof is drawn the shell is closed. Once it is gone, each outer face the
+## line enters through hides what is under its squashed height, which is the
+## full facade for a side the camera does not look from and a kerb for a cut
+## one (ShellCutaway.stub_transform).
+func _shell_in_sight(from: Vector3, to: Vector3) -> bool:
+	if shell_view == null or not shell_view.is_ready():
+		return false
+	var cutaway := shell_view.cutaway
+	if cutaway.roof_level < 1.0:
+		return true
+	var faces := [
+		[ShellCutaway.Side.WEST, 0, grid.origin.x, -1.0],
+		[ShellCutaway.Side.EAST, 0, grid.origin.x + grid.size.x, 1.0],
+		[ShellCutaway.Side.NORTH, 2, grid.origin.z, -1.0],
+		[ShellCutaway.Side.SOUTH, 2, grid.origin.z + grid.size.y, 1.0],
+	]
+	for face in faces:
+		var axis: int = face[1]
+		var plane: float = face[2]
+		var outward: float = face[3]
+		if (from[axis] - plane) * outward <= 0.0 or (to[axis] - plane) * outward > 0.0:
+			continue
+		var t := (plane - from[axis]) / (to[axis] - from[axis])
+		var height := lerpf(from.y, to.y, t) - grid.origin.y
+		var standing := lerpf(
+			ShellCutaway.FACADE_HEIGHT, InteriorKit.STUB_HEIGHT, cutaway.cut(face[0])
+		)
+		if height < standing:
+			return true
+	return false
 
 
 ## A placed object's footprint, from the floor up to its drawn height.
@@ -788,7 +841,7 @@ func _object_box(object_id: int) -> AABB:
 
 
 ## How far from `from`, on the straight line to `to`, the first wall edge the
-## view draws opaque (BuildView.sight_height) stands in the way, or INF. The
+## view draws opaque (BuildView.sight_blocked) stands in the way, or INF. The
 ## line is walked across the grid lines it crosses, so the cost grows with the
 ## grid's width, not with the number of walls.
 func _wall_in_sight(from: Vector3, to: Vector3) -> float:
@@ -805,7 +858,7 @@ func _wall_in_sight(from: Vector3, to: Vector3) -> float:
 			var t := (line - start[axis]) / span[axis]
 			var at := start + span * t
 			var edge := _edge_on_line(axis, line, at)
-			if edge.z >= 0 and at.y < _view.sight_height(edge):
+			if edge.z >= 0 and _view.sight_blocked(edge, fposmod(at[2 - axis], 1.0) - 0.5, at.y):
 				nearest = minf(nearest, t * span.length())
 	return nearest
 
