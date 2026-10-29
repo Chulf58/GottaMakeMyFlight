@@ -157,11 +157,17 @@ const GRANT_HOLD_S := 8.0
 ## Optional: when set, a successful load ends any message hold (the notices
 ## belong to the world that was replaced).
 @export var save_game: SaveGame
+## Optional: paused while build mode lasts (BuildSession).
+@export var clock: SimClock
 
 ## True while the hiring card is open; press_staff() changes it.
 var staff_open := false
 ## The Staff button at the end of the bar.
 var staff_button := Button.new()
+## Build mode: a tray open or a tool picked (decision build-mode-pauses-the-
+## game-while-a-build-tray-is-open-closin). The frame is its on-screen sign.
+var build_session := BuildSession.new()
+var build_frame := BuildModeFrame.new()
 
 var _open := NO_CATEGORY
 ## True while a category click clears the tool, so the tool_changed(NONE)
@@ -249,6 +255,11 @@ static func category_of(tool: BuildMode.Tool) -> int:
 
 func _ready() -> void:
 	layer = 2
+	build_session.build_mode = build_mode
+	build_session.clock = clock
+	build_session.changed.connect(build_frame.set_building)
+	add_child(build_session)
+	add_child(build_frame)
 	_build_bar()
 	_build_tray()
 	_build_status()
@@ -577,6 +588,7 @@ func _sync() -> void:
 		_category_buttons[i].set_pressed_no_signal(on)
 	for key in _cards:
 		_cards[key].set_pressed_no_signal(key == tool)
+	build_session.set_building(_open != NO_CATEGORY or tool != BuildMode.Tool.NONE)
 
 
 ## Height, from the bottom edge, of the top of the tray, status and cost stack:
