@@ -16,9 +16,11 @@ const SINK_X := 26
 
 ## A grid holding the reference terminal and both toilet rooms with `stalls`
 ## stalls each, and their ids: {"air_room", "land_room", "air_stalls",
-## "land_stalls" (object ids, west first), "air_sink", "land_sink"}.
-static func build(grid: BuildGrid, stalls := 2) -> Dictionary:
-	var built := ReferenceTerminal.build(grid)
+## "land_stalls" (object ids, west first), "air_sink", "land_sink"}. With a
+## `shell`, the terminal stands on the shell's doors (as CafeTestLayout), for a
+## probe on the real main scene.
+static func build(grid: BuildGrid, stalls := 2, shell: ShellDefinition = null) -> Dictionary:
+	var built := ReferenceTerminal.build(grid, shell)
 	assert(built, "reference terminal refused")
 	var edits: Array[BuildEdit] = []
 	for y in range(FLOOR.position.y, FLOOR.end.y):
