@@ -3,8 +3,10 @@ extends SceneTree
 ## money-hover-design-categorised-wallet-transactions-feed-a-sa) on the real
 ## main.tscn, at 1920x1080 with the UI scale at 1.0 and at 1.25
 ## (Window.content_scale_factor):
-##   a_normal     fees, shop income, wages paid and some building; no owed wages
-##   b_broke      balance 0, owed wages above 0 that ate a fee and a rescue grant
+##   a_normal     fees, shop income, wages and toilet upkeep paid and some
+##                building; no owed wages
+##   b_broke      balance 0, owed wages and owed upkeep above 0 that ate a fee
+##                and a rescue grant (Toilets 5/5 added the upkeep rows)
 ##   c_load       DayLedger.start_since_load(), then a fee and a purchase
 ## Each scene sets its money through the real Wallet and Settlement (credit,
 ## spend, Settlement.from_snapshot for the owed wages), then hovers the money
@@ -36,21 +38,22 @@ const HANG_LIMIT_MS := 20000
 const TOTAL_LIMIT_MS := 180000
 const TOOLTIP_WAIT_MS := 2500
 const EXPECT_A := (
-	"Today\nAirline fees  +1840\nShops  +365\nWages paid  -720\nOperating result  +1485"
-	+ "\nBuilding  -450\nRescue grant  0\nCash change today  +1035"
+	"Today\nAirline fees  +1840\nShops  +365\nWages paid  -720\nUpkeep paid  -60"
+	+ "\nOperating result  +1425\nBuilding  -450\nRescue grant  0\nCash change today  +975"
 )
 ## Plate a after a shop sale of 100 with the card open.
 const EXPECT_A_LIVE := (
-	"Today\nAirline fees  +1840\nShops  +465\nWages paid  -720\nOperating result  +1585"
-	+ "\nBuilding  -450\nRescue grant  0\nCash change today  +1135"
+	"Today\nAirline fees  +1840\nShops  +465\nWages paid  -720\nUpkeep paid  -60"
+	+ "\nOperating result  +1525\nBuilding  -450\nRescue grant  0\nCash change today  +1075"
 )
 const EXPECT_B := (
-	"Today\nAirline fees  +240\nShops  0\nWages paid  -740\nOperating result  -500"
-	+ "\nBuilding  0\nRescue grant  +500\nCash change today  0\nOwed wages  460"
+	"Today\nAirline fees  +240\nShops  0\nWages paid  -740\nUpkeep paid  0"
+	+ "\nOperating result  -500\nBuilding  0\nRescue grant  +500\nCash change today  0"
+	+ "\nOwed wages  460\nOwed upkeep  30"
 )
 const EXPECT_C := (
-	"Since load\nAirline fees  +300\nShops  0\nWages paid  0\nOperating result  +300"
-	+ "\nBuilding  -120\nRescue grant  0\nCash change since load  +180"
+	"Since load\nAirline fees  +300\nShops  0\nWages paid  0\nUpkeep paid  0"
+	+ "\nOperating result  +300\nBuilding  -120\nRescue grant  0\nCash change since load  +180"
 )
 
 var _guard := Thread.new()
@@ -121,6 +124,7 @@ func _scene_normal() -> void:
 	_expect(_wallet.credit(1840, Wallet.Category.FEES), "a: fee credit refused")
 	_expect(_wallet.credit(365, Wallet.Category.SHOP), "a: shop credit refused")
 	_expect(_wallet.spend(720, Wallet.Category.WAGES), "a: wage spend refused")
+	_expect(_wallet.spend(60, Wallet.Category.UPKEEP), "a: upkeep spend refused")
 	_expect(_wallet.spend(450, Wallet.Category.BUILD), "a: build spend refused")
 	await _plate("a_normal", EXPECT_A, true)
 
@@ -129,11 +133,16 @@ func _scene_broke() -> void:
 	_beat("b_broke %s" % _scale)
 	_wallet.from_snapshot({"balance": "0"})
 	_zero_ledger()
-	_set_owed(1200)
+	_set_owed(1200, 30)
 	# Owed wages take each credit whole: the fee and the grant both go to them.
 	_expect(_wallet.credit(240, Wallet.Category.FEES), "b: fee credit refused")
 	_expect(_wallet.credit(500, Wallet.Category.GRANT), "b: grant credit refused")
-	print("  STATE balance=%d owed=%d" % [_wallet.balance, _settlement.wages_owed()])
+	print(
+		(
+			"  STATE balance=%d owed=%d upkeep_owed=%d"
+			% [_wallet.balance, _settlement.wages_owed(), _settlement.upkeep_owed()]
+		)
+	)
 	await _plate("b_broke", EXPECT_B)
 
 
@@ -148,12 +157,14 @@ func _scene_load() -> void:
 	await _plate("c_load", EXPECT_C)
 
 
-## Sets the settlement's owed wages through a snapshot round trip.
-func _set_owed(amount: int) -> void:
+## Sets the settlement's owed wages and owed upkeep through a snapshot round trip.
+func _set_owed(amount: int, upkeep := 0) -> void:
 	var data := _settlement.to_snapshot()
 	data["wages_owed"] = str(amount)
+	data[Settlement.UPKEEP_SNAPSHOT_KEY] = str(upkeep)
 	_expect(_settlement.from_snapshot(data), "owed wages %d refused" % amount)
 	_expect(_settlement.wages_owed() == amount, "owed wages are %d" % _settlement.wages_owed())
+	_expect(_settlement.upkeep_owed() == upkeep, "owed upkeep is %d" % _settlement.upkeep_owed())
 
 
 func _zero_ledger() -> void:
@@ -255,7 +266,8 @@ func _show_card() -> Rect2:
 	panel.position = point + Vector2(0.0, 24.0)
 	panel.add_child(
 		_slot.make_card(
-			MoneySlot.heading(_ledger), MoneySlot.rows(_ledger, _settlement.wages_owed())
+			MoneySlot.heading(_ledger),
+			MoneySlot.rows(_ledger, _settlement.wages_owed(), _settlement.upkeep_owed())
 		)
 	)
 	_layer.add_child(panel)
@@ -337,7 +349,7 @@ func _check_card(card: Control, expected: String) -> bool:
 		)
 		ok = ok and key.size.x >= key.get_minimum_size().x
 		ok = ok and value.size.x >= value.get_minimum_size().x
-		if key.text == "Owed wages":
+		if key.text == "Owed wages" or key.text == "Owed upkeep":
 			var want := BuildMenu.HUD_THEME.get_color("font_color", MoneySlot.ATTENTION)
 			ok = ok and colour == want
 			ok = ok and key.theme_type_variation == MoneySlot.ATTENTION

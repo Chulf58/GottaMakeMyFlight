@@ -51,6 +51,7 @@ func test_the_card_shows_a_sample_day() -> void:
 						"Airline fees  +300",
 						"Shops  +40",
 						"Wages paid  -90",
+						"Upkeep paid  0",
 						"Operating result  +250",
 						"Building  -250",
 						"Rescue grant  +500",
@@ -61,6 +62,46 @@ func test_the_card_shows_a_sample_day() -> void:
 		)
 	)
 	assert_str(_slot.tooltip_text).is_equal(text)
+
+
+## Toilets 5/5: room upkeep paid is its own row among the operating rows, and
+## the four rows above the operating result add up to it.
+func test_upkeep_paid_is_an_operating_row_and_the_rows_add_up() -> void:
+	_sample_day()
+	assert_bool(_wallet.spend(30, C.UPKEEP)).is_true()
+	var rows := MoneySlot.rows(_ledger, 0)
+	print(rows)
+	assert_array(rows[3]).is_equal(["Upkeep paid", "-30", &""])
+	assert_array(rows[MoneySlot.OPERATING_ROWS - 1]).is_equal(["Operating result", "+220", &""])
+	var parts := 0
+	for i in MoneySlot.OPERATING_ROWS - 1:
+		parts += int(rows[i][1])
+	assert_int(parts).is_equal(_ledger.operating_result())
+	assert_int(_ledger.operating_result()).is_equal(220)
+
+
+func test_owed_upkeep_shows_in_the_attention_style_only_while_above_zero() -> void:
+	for row in MoneySlot.rows(_ledger, 0, 0):
+		assert_str(row[0]).is_not_equal("Owed upkeep")
+	var rows := MoneySlot.rows(_ledger, 75, 40)
+	assert_array(rows[rows.size() - 2]).is_equal(["Owed wages", "75", MoneySlot.ATTENTION])
+	assert_array(rows[rows.size() - 1]).is_equal(["Owed upkeep", "40", MoneySlot.ATTENTION])
+	rows = MoneySlot.rows(_ledger, 0, 40)
+	assert_array(rows[rows.size() - 1]).is_equal(["Owed upkeep", "40", MoneySlot.ATTENTION])
+
+
+func test_the_card_follows_owed_upkeep() -> void:
+	assert_str(_slot.card_text()).not_contains("Owed upkeep")
+	_settlement.from_snapshot(_settlement_with_upkeep_owed(25))
+	print(_slot.card_text())
+	assert_str(_slot.card_text()).contains("Owed upkeep  25")
+	assert_str(_slot.tooltip_text).is_equal(_slot.card_text())
+
+
+func _settlement_with_upkeep_owed(owed: int) -> Dictionary:
+	var data := _settlement.to_snapshot()
+	data[Settlement.UPKEEP_SNAPSHOT_KEY] = str(owed)
+	return data
 
 
 func test_an_empty_day_shows_zeros_and_no_owed_wages() -> void:

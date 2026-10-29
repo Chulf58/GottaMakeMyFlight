@@ -54,6 +54,14 @@ const CATEGORIES := [
 		"name": "Shops",
 		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
 	},
+	# The toilet room and its two pieces (Toilets 5/5). Shops holds three cards
+	# and Rotate already; six cards and Rotate are wider than COLUMN_W, so the
+	# toilet gets a tray of its own, as the Lane did.
+	{
+		"name": "Toilets",
+		"tools":
+		[BuildMode.Tool.TOILET_ROOM, BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK],
+	},
 	# One Belt tool shapes itself (decision baggage-belts-are-one-auto-shaping-
 	# belt-tool-one-baggage-tray), so baggage fits one tray.
 	{
@@ -63,7 +71,7 @@ const CATEGORIES := [
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray.
-const REMOVE_CATEGORY := 8
+const REMOVE_CATEGORY := 9
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -79,6 +87,9 @@ const ITEMS := {
 	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
 	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
 	BuildMode.Tool.TABLE: ["Table", "table", ""],
+	BuildMode.Tool.TOILET_ROOM: ["Toilet", "toilet_room", "2x3 min"],
+	BuildMode.Tool.TOILET_STALL: ["Toilet stall", "toilet_stall", ""],
+	BuildMode.Tool.TOILET_SINK: ["Sink", "toilet_sink", ""],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
@@ -94,10 +105,15 @@ const LANE_ITEMS := {
 ## in place of the "Click" hint (the card has no height to spare). A bag room
 ## does nothing without a belt end.
 const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
+## Cards that say what the placed thing costs to run, in the plain hint style
+## (costs are never red), in place of the "Click" hint: a toilet stall is
+## charged its upkeep every game day once its room is ready.
+const CARD_RUNNING_COSTS := {BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP}
+const RUNNING_COST_TEXT := "Upkeep %d/day"
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table"]
+const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table", "toilet_room"]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
@@ -193,7 +209,7 @@ static func key_hint(tool: BuildMode.Tool) -> String:
 
 
 ## What a tool's card costs: the floor tile, one wall piece or the object.
-## 0 for a tool with no price (Remove, the cafe room, no tool).
+## 0 for a tool with no price (Remove, a room, no tool).
 static func tool_price(tool: BuildMode.Tool) -> int:
 	if tool == BuildMode.Tool.FLOOR:
 		return PriceTable.price_of_floor()
@@ -669,6 +685,8 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	if CARD_NEEDS.has(tool):
 		var need := _card_label(column, CARD_NEEDS[tool], &"HudAttentionText")
 		need.add_theme_font_size_override("font_size", CARD_HINT_FONT_SIZE)
+	elif CARD_RUNNING_COSTS.has(tool):
+		_card_label(column, RUNNING_COST_TEXT % CARD_RUNNING_COSTS[tool], &"HudHint")
 	else:
 		_card_label(column, "Key %s" % key if key != "" else "Click", &"HudHint")
 	return button

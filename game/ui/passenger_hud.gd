@@ -273,7 +273,13 @@ func follow_text() -> String:
 	if p == null:
 		return ""
 	var parts := PackedStringArray(
-		["Passenger %d" % p.id, STAGE_TEXT[p.stage], "mood %d" % p.mood, "hunger %d" % p.hunger]
+		[
+			"Passenger %d" % p.id,
+			STAGE_TEXT[p.stage],
+			"mood %d" % p.mood,
+			"hunger %d" % p.hunger,
+			"toilet %d" % p.toilet_need,
+		]
 	)
 	var bubble := sim.bubble_text(p)
 	if bubble != "":

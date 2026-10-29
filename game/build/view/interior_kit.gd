@@ -40,6 +40,8 @@ const OBJECT_PIECES := {
 	&"tray_table": "tray_table",
 	&"xray_belt": "xray_belt",
 	&"pickup_table": "pickup_table",
+	&"toilet_stall": "toilet_stall",
+	&"toilet_sink": "toilet_sink",
 }
 ## Where a piece sits in its object's frame (footprint centre, facing 0), for
 ## objects whose piece is not centred on the footprint. The entrance and exit
