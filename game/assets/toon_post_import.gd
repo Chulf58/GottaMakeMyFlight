@@ -20,6 +20,7 @@ const MATERIALS := {
 	"TC_Tree_3A_D": "res://assets/materials/tc_tree_3a_toon.tres",
 	"TC_Props_2A_D": "res://assets/materials/tc_props_2a_toon.tres",
 	"TC_Building_4A_D": "res://assets/materials/tc_building_4a_toon.tres",
+	"TC_Building_17A_D": "res://assets/materials/tc_building_17a_toon.tres",
 }
 const LOOPING_ANIMATIONS: Array[String] = ["idle", "walk", "run", "sit_idle"]
 
