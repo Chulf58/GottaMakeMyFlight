@@ -139,3 +139,23 @@ func test_the_preview_prices_the_row_and_marks_what_would_be_skipped() -> void:
 	assert_int(preview.blocked).is_equal(1)
 	assert_str(preview.first_reason).is_not_empty()
 	assert_int(preview.cost).is_equal(0)
+
+
+func test_a_refusal_reaches_listeners_in_row_order_behind_the_edits_before_it() -> void:
+	_grid.apply(BuildEdit.place_wall(Vector2i(3, 4), NORTH))
+	var events: Array[String] = []
+	_grid.edit_applied.connect(
+		func(edit: BuildEdit, _result: BuildResult) -> void:
+			events.append("applied:%d" % edit.cell.x)
+	)
+	_grid.edit_refused.connect(
+		func(edit: BuildEdit, _result: BuildResult) -> void:
+			events.append("refused:%d" % edit.cell.x)
+	)
+	_begin(Vector2i(2, 4))
+	_row.move(Vector2i(4, 4))
+	var check := func(edit: BuildEdit) -> BuildResult: return _grid.validate(edit)
+	var dirty: Array[Vector2i] = []
+	WallRowDrag.apply(_grid, _row.edits(BuildGrid.WallKind.PLAIN), check, null, dirty)
+	print("events: %s" % [events])
+	assert_array(events).is_equal(["applied:2", "refused:3", "applied:4"])

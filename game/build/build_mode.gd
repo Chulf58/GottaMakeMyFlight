@@ -379,6 +379,15 @@ func _notification(what: int) -> void:
 		cancel_area()
 
 
+## A drag's release is caught here, ahead of the HUD: a Control under the
+## pointer takes the release before _unhandled_input sees it, which would leave
+## the drag open with nothing applied.
+func _input(event: InputEvent) -> void:
+	if _drag_active() and event.is_action_released("build_apply"):
+		finish_area()
+		finish_row()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _drag_active() and _cancels_area(event):
 		cancel_area()

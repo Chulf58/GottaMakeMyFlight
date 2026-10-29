@@ -53,7 +53,9 @@ static func apply(
 		if result.ok:
 			result = BuildTransaction.commit_plan(grid, DoorPlacement.edits_for(grid, edit), wallet)
 		else:
-			grid.edit_refused.emit(edit, result)
+			# Through the grid's hold queue, behind the edits already applied.
+			var refusal := result
+			grid._emit_or_hold(func() -> void: grid.edit_refused.emit(edit, refusal))
 		if result.ok:
 			outcome.placed += 1
 			dirty.append_array(result.dirty_cells)
