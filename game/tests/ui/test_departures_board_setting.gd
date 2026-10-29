@@ -125,6 +125,30 @@ func test_a_failed_write_keeps_the_toggle_for_the_session_and_reports_it() -> vo
 	assert_bool(FileAccess.file_exists(path)).is_false()
 
 
+func test_a_toggle_over_an_unreadable_file_changes_the_session_but_not_the_file() -> void:
+	var seeded := ConfigFile.new()
+	seeded.set_value("hud", "other_key", 7)
+	assert_int(seeded.save(_path)).is_equal(OK)
+	var board := _board()
+	assert_bool(board.is_shown()).is_true()
+	var garbage := "[hud\nbroken = =\n".to_utf8_buffer()
+	var file := FileAccess.open(_path, FileAccess.WRITE)
+	file.store_buffer(garbage)
+	file.close()
+	var recorded := FileAccess.get_file_as_bytes(_path)
+	assert_array(recorded).is_equal(garbage)
+	var read_error := ConfigFile.new().load(_path)
+	assert_int(read_error).is_not_equal(OK)
+	(
+		assert_error(func() -> void: _toggle(board).button_pressed = false)
+		. is_push_error("DeparturesBoard: cannot read %s (error %d)" % [_path, read_error])
+	)
+	assert_bool(board.is_shown()).is_false()
+	assert_bool(_panel(board).visible).is_false()
+	assert_bool(_toggle(board).button_pressed).is_false()
+	assert_array(FileAccess.get_file_as_bytes(_path)).is_equal(recorded)
+
+
 func test_toggling_keeps_other_keys_and_sections_in_the_file() -> void:
 	var seeded := ConfigFile.new()
 	seeded.set_value("hud", "other_key", 7)
