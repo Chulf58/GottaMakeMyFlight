@@ -27,8 +27,14 @@ extends RefCounted
 ## more to spare than the visit needs, who tries again after
 ## BROWSE_COOLDOWN_TICKS. Every visit ends with that cooldown too.
 ##
-## Money is settled once, when the browse finishes: spend() of the kiosk's
-## base spend, nudged by mood, with the airside bonus, credited to
+## Every shop type runs on this pipeline (RoomTypes.RoomType.shop: the kiosk,
+## the pharmacy, duty free and fashion); what differs per type is its data: the
+## browse piece and its slots (ShopLayout), the counter or till that opens it
+## (ShopCounters.COUNTER_ROOMS) and its base spend. "Kiosk" below stands for
+## any of them.
+##
+## Money is settled once, when the browse finishes: spend() of the base spend
+## of the visited room's type, nudged by mood, with the airside bonus, credited to
 ## PassengerSim.wallet as Wallet.Category.SHOP; then boredom is reset and
 ## `paid` is emitted. A browse that does not finish (its deadline passed, its
 ## slot or kiosk gone) pays nothing and leaves boredom as it was.
@@ -264,6 +270,18 @@ func browse_facing(p: Passenger) -> Vector2i:
 	return visit.slot["facing"]
 
 
+## The lower-case name of the shop type `passenger_id` is visiting ("kiosk",
+## "pharmacy"), or empty with no visit or when its room is gone.
+func store_name(passenger_id: int) -> String:
+	var visit := visit_of(passenger_id)
+	if visit == null:
+		return ""
+	var room := _sim.grid.get_room(visit.room)
+	if room.is_empty():
+		return ""
+	return RoomTypes.get_type(room["type"]).display_name.to_lower()
+
+
 ## Installs visits a ShopSnapshot.load() checked; rederive() then rebuilds the
 ## slot holders and the layout.
 func restore(state: Dictionary) -> void:
@@ -367,7 +385,8 @@ func _walk_step(p: Passenger, visit: ShopVisit) -> void:
 ## nothing is settled and an error says so.
 func _settle(p: Passenger, visit: ShopVisit) -> void:
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
-	var amount := spend(RoomTypes.get_type(&"kiosk").base_spend, p.mood, airside)
+	var type := RoomTypes.get_type(_sim.grid.get_room(visit.room)["type"])
+	var amount := spend(type.base_spend, p.mood, airside)
 	if _sim.wallet == null:
 		push_error("ShopSim: no wallet to pay passenger %d's %d into" % [p.id, amount])
 		return

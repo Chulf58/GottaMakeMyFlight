@@ -83,8 +83,14 @@ const STAGE_TEXT := {
 	Passenger.Stage.TOILET_USE: "In a toilet stall",
 	Passenger.Stage.TOILET_STANDING_UP: "In a toilet stall",
 	Passenger.Stage.TOILET_EXIT: "Leaving the toilet",
-	Passenger.Stage.SHOP_WALK: "Heading to the kiosk",
-	Passenger.Stage.SHOP_BROWSE: "Browsing at the kiosk",
+	Passenger.Stage.SHOP_WALK: "Heading to a shop",
+	Passenger.Stage.SHOP_BROWSE: "Browsing at a shop",
+}
+## A shop stage with a visit under way names the shop by its room type
+## (ShopSim.store_name()): "Heading to the kiosk", "Browsing at the pharmacy".
+const SHOP_STAGE_TEXT := {
+	Passenger.Stage.SHOP_WALK: "Heading to the %s",
+	Passenger.Stage.SHOP_BROWSE: "Browsing at the %s",
 }
 
 @export var clock: SimClock
@@ -294,6 +300,16 @@ func status_text() -> String:
 	return _status
 
 
+## What `p` is doing, for the follow line: its stage's text, naming the shop
+## it is visiting when it has a visit under way.
+static func stage_text(passenger_sim: PassengerSim, p: Passenger) -> String:
+	if SHOP_STAGE_TEXT.has(p.stage):
+		var store := passenger_sim.shops.store_name(p.id)
+		if store != "":
+			return SHOP_STAGE_TEXT[p.stage] % store
+	return STAGE_TEXT[p.stage]
+
+
 func follow_text() -> String:
 	if landside_views != null and landside_views.selected_id != 0:
 		var v: LandsideVehicle = null
@@ -308,7 +324,7 @@ func follow_text() -> String:
 	var parts := PackedStringArray(
 		[
 			"Passenger %d" % p.id,
-			STAGE_TEXT[p.stage],
+			stage_text(sim, p),
 			"mood %d" % p.mood,
 			"hunger %d" % p.hunger,
 			"toilet %d" % p.toilet_need,

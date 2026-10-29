@@ -2,7 +2,8 @@ class_name ShopCounters
 extends RefCounted
 ## The stations of shop staff (ruling store-mechanics-draw-a-room-then-
 ## furnish-it-required-pieces, point 3): the counters of ready cafes and
-## kiosks, where a server stands at each, and whether a kiosk is open.
+## shops (a kiosk, and the counter or till of a pharmacy, duty free or fashion
+## store), where a server stands at each, and whether a shop is open.
 ## StaffSim treats every counter here as a station of StaffMember.Role.SHOP,
 ## as it treats a desk as one of Role.CHECKIN: it is open only while a server
 ## is on duty on its staff spot and not leaving (StaffSim.is_open()).
@@ -31,6 +32,9 @@ extends RefCounted
 const COUNTER_ROOMS := {
 	&"cafe_counter": &"cafe",
 	&"kiosk_counter": &"kiosk",
+	&"pharmacy_counter": &"pharmacy",
+	&"duty_free_till": &"duty_free",
+	&"fashion_till": &"fashion",
 	&"info_desk": &"",
 }
 ## The counters that need no room.

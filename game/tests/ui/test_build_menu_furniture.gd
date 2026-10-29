@@ -7,9 +7,26 @@ extends GdUnitTestSuite
 ## each page opens the following one (the last goes back to the first). Every
 ## card shows its name, size, price, a rendered thumbnail and, where the piece
 ## has a running cost, its upkeep.
+##
+## The three Stores pages (decision store-rooms-and-retail-pieces-go-on-stores-
+## pages-behind-the-furniture-button; TestBuildMenuStores) follow the eight
+## furniture pages behind the same button, so the group has eleven pages and
+## the pharmacy counter and shelf sit on the pharmacy's Stores page, not Care.
 
-const PAGE_COUNT := 8
+## The pages behind the Furniture button: eight furniture pages, then three
+## Stores pages (was 8 before the Stores pages joined the group).
+const PAGE_COUNT := 11
 const MAX_CARDS_PER_PAGE := 4
+## The store tools on the Stores pages that are not furniture pieces.
+const STORE_TOOLS := [
+	BuildMode.Tool.PHARMACY_ROOM,
+	BuildMode.Tool.DUTY_FREE_ROOM,
+	BuildMode.Tool.DUTY_FREE_TILL,
+	BuildMode.Tool.DUTY_FREE_SHELF,
+	BuildMode.Tool.FASHION_ROOM,
+	BuildMode.Tool.FASHION_TILL,
+	BuildMode.Tool.FASHION_RAIL,
+]
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -62,7 +79,7 @@ func _next_button(page: int) -> Button:
 	return _menu.card(tool).get_parent().find_child("CardNext", true, false) as Button
 
 
-func test_one_furniture_button_on_the_bar_leads_eight_pages_before_remove() -> void:
+func test_one_furniture_button_on_the_bar_leads_all_its_pages_before_remove() -> void:
 	var first := _leader()
 	assert_int(first).is_not_equal(BuildMenu.NO_CATEGORY)
 	var all := BuildMenu.categories()
@@ -85,33 +102,39 @@ func test_the_pages_hold_every_furniture_tool_once_and_at_most_four_cards() -> v
 		var tools: Array = BuildMenu.categories()[page]["tools"]
 		assert_int(tools.size()).is_between(1, MAX_CARDS_PER_PAGE)
 		for tool in tools:
-			assert_bool(FurnitureTools.OBJECTS.has(tool)).is_true()
+			# A furniture piece, or (on a Stores page) a store room or retail piece.
+			var known: bool = FurnitureTools.OBJECTS.has(tool) or STORE_TOOLS.has(tool)
+			assert_bool(known).override_failure_message("tool %d" % tool).is_true()
 			assert_bool(seen.has(tool)).override_failure_message("tool %d twice" % tool).is_false()
 			seen[tool] = true
 			assert_int(BuildMenu.category_of(tool)).is_equal(page)
-	assert_int(seen.size()).is_equal(FurnitureTools.OBJECTS.size())
+	for tool in FurnitureTools.OBJECTS:
+		assert_bool(seen.has(tool)).override_failure_message("tool %d missing" % tool).is_true()
+	for tool in STORE_TOOLS:
+		assert_bool(seen.has(tool)).override_failure_message("tool %d missing" % tool).is_true()
+	assert_int(seen.size()).is_equal(FurnitureTools.OBJECTS.size() + STORE_TOOLS.size())
 
 
 func test_every_furniture_card_shows_name_size_price_and_a_rendered_thumbnail() -> void:
 	assert_array(BuildMenu.PLACEHOLDER_THUMBNAILS).is_empty()
-	for page in _pages():
-		_menu.press_category(page)
-		for tool in BuildMenu.categories()[page]["tools"]:
-			var card := _menu.card(tool)
-			assert_object(card).override_failure_message("tool %d" % tool).is_not_null()
-			var id: StringName = FurnitureTools.OBJECTS[tool]
-			var def := BuildCatalog.get_def(id)
-			var texts := _texts(card)
-			print("%s card: %s" % [id, texts])
-			assert_str(BuildMenu.item(tool)[0]).is_not_empty()
-			assert_array(texts).contains([BuildMenu.item(tool)[0]])
-			assert_array(texts).contains(["%dx%d" % [def.size.x, def.size.y]])
-			assert_int(BuildMenu.tool_price(tool)).is_equal(PriceTable.price_of_object(id))
-			var path := BuildMenu.THUMBNAIL_DIR % BuildMenu.item(tool)[1]
-			assert_bool(ResourceLoader.exists(path)).override_failure_message(path).is_true()
-			var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
-			assert_object(picture.texture).override_failure_message(path).is_not_null()
-			assert_int(picture.get_child_count()).is_equal(0)
+	# Every furniture piece, wherever its page (the store tools: TestBuildMenuStores).
+	for tool in FurnitureTools.OBJECTS:
+		_menu.press_category(BuildMenu.category_of(tool))
+		var card := _menu.card(tool)
+		assert_object(card).override_failure_message("tool %d" % tool).is_not_null()
+		var id: StringName = FurnitureTools.OBJECTS[tool]
+		var def := BuildCatalog.get_def(id)
+		var texts := _texts(card)
+		print("%s card: %s" % [id, texts])
+		assert_str(BuildMenu.item(tool)[0]).is_not_empty()
+		assert_array(texts).contains([BuildMenu.item(tool)[0]])
+		assert_array(texts).contains(["%dx%d" % [def.size.x, def.size.y]])
+		assert_int(BuildMenu.tool_price(tool)).is_equal(PriceTable.price_of_object(id))
+		var path := BuildMenu.THUMBNAIL_DIR % BuildMenu.item(tool)[1]
+		assert_bool(ResourceLoader.exists(path)).override_failure_message(path).is_true()
+		var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
+		assert_object(picture.texture).override_failure_message(path).is_not_null()
+		assert_int(picture.get_child_count()).is_equal(0)
 
 
 func test_the_price_slot_of_each_card_reads_its_price_with_a_wallet() -> void:

@@ -39,11 +39,12 @@ const STAGE_TEXT := {
 	Passenger.Stage.APRON: "Left the gate too late for the plane",
 }
 ## A passenger caught in a facility visit, whatever its stage there
-## (StageKinds.facility()).
+## (StageKinds.facility()). A miss records its stage, not which shop (a kiosk
+## or a store), so a shop visit reads the same for every shop type.
 const FACILITY_TEXT := {
 	StageKinds.Facility.CAFE: "Still at the cafe",
 	StageKinds.Facility.TOILET: "Still at the toilet",
-	StageKinds.Facility.SHOP: "Still at the kiosk",
+	StageKinds.Facility.SHOP: "Still at a shop",
 }
 ## The reason when nothing more is known.
 const MISSED_TEXT := "Missed the flight"

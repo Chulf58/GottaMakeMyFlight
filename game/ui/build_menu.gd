@@ -89,7 +89,7 @@ const CATEGORIES := [
 		"name": "Baggage",
 		"tools": [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART],
 	},
-	# The furniture (Furniture 4/4 F4-2): 29 pieces on eight pages, because the
+	# The furniture (Furniture 4/4 F4-2): its pieces on eight pages, because the
 	# bar has room for one more button and a tray holds four cards and Rotate in
 	# COLUMN_W. The first page has the bar button; a later page ("page": true)
 	# has none and is reached by the Next card on the page before it.
@@ -101,11 +101,41 @@ const CATEGORIES := [
 	{"name": "Care", "tools": FurnitureTools.PAGES[5], "page": true},
 	{"name": "Lounge", "tools": FurnitureTools.PAGES[6], "page": true},
 	{"name": "Fun", "tools": FurnitureTools.PAGES[7], "page": true},
+	# The Stores pages (decision store-rooms-and-retail-pieces-go-on-stores-
+	# pages-behind-the-furniture-button), later pages of the same group: one per
+	# store, its room, then its counter or till and its shelf or rail, as the
+	# Toilets and Kiosk trays hold theirs.
+	{
+		"name": "Pharmacy",
+		"tools":
+		[
+			BuildMode.Tool.PHARMACY_ROOM,
+			BuildMode.Tool.PHARMACY_COUNTER,
+			BuildMode.Tool.PHARMACY_SHELF,
+		],
+		"page": true,
+	},
+	{
+		"name": "Duty free",
+		"tools":
+		[
+			BuildMode.Tool.DUTY_FREE_ROOM,
+			BuildMode.Tool.DUTY_FREE_TILL,
+			BuildMode.Tool.DUTY_FREE_SHELF,
+		],
+		"page": true,
+	},
+	{
+		"name": "Fashion",
+		"tools":
+		[BuildMode.Tool.FASHION_ROOM, BuildMode.Tool.FASHION_TILL, BuildMode.Tool.FASHION_RAIL],
+		"page": true,
+	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray, last in CATEGORIES (GDScript
 ## cannot take it from CATEGORIES.size(): tests check the two agree).
-const REMOVE_CATEGORY := 19
+const REMOVE_CATEGORY := 22
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -127,6 +157,16 @@ const ITEMS := {
 	BuildMode.Tool.TOILET_SINK: ["Sink", "toilet_sink", ""],
 	BuildMode.Tool.KIOSK_ROOM: ["Kiosk", "kiosk_room", "3x3 min"],
 	BuildMode.Tool.KIOSK_COUNTER: ["Kiosk counter", "kiosk_counter", ""],
+	# The store rooms carry their RoomTypes names and minimum sizes; the pieces'
+	# short names suit their store's page (FurnitureTools.ITEMS has the
+	# pharmacy's).
+	BuildMode.Tool.PHARMACY_ROOM: ["Pharmacy", "pharmacy_room", "3x3 min"],
+	BuildMode.Tool.DUTY_FREE_ROOM: ["Duty free", "duty_free_room", "3x4 min"],
+	BuildMode.Tool.DUTY_FREE_TILL: ["Till", "duty_free_till", ""],
+	BuildMode.Tool.DUTY_FREE_SHELF: ["Shelf", "duty_free_shelf", ""],
+	BuildMode.Tool.FASHION_ROOM: ["Fashion store", "fashion_room", "3x4 min"],
+	BuildMode.Tool.FASHION_TILL: ["Till", "fashion_till", ""],
+	BuildMode.Tool.FASHION_RAIL: ["Clothes rail", "fashion_rail", ""],
 	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],

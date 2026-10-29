@@ -111,6 +111,8 @@ CLASSES = {
     "2x1_tall": ((2.0, 1.0, 2.1), (0.0, 0.0, 1.05)),
     "3x3": ((3.0, 3.0, 2.0), (0.0, 0.0, 1.0)),
     "2x3": ((2.0, 3.0, 2.2), (0.0, 0.0, 1.1)),
+    # The duty free and fashion rooms (3x4 min, F4-5): three wide, four deep.
+    "3x4": ((3.0, 4.0, 2.1), (0.0, 0.0, 1.05)),
     # Furniture (Furniture 4/4 F4-2): the 29 placeable pieces, each in the class of
     # its footprint and height; the tall classes are for pieces over 2 m.
     "1x3": ((1.0, 3.0, 1.4), (0.0, 0.0, 0.7)),
@@ -355,6 +357,45 @@ FURNITURE = {
     "prize_podium": ("6x3", ["prize_podium", ("vehicles/tp_suv_01a", "Mount_Car")]),
 }
 ITEMS.update({item: (cls, pieces, []) for item, (cls, pieces) in FURNITURE.items()})
+
+
+def _store_room(cls, depth, counter, browse):
+    """A store room (F4-5) on its minimum floor (three wide, depth deep), the
+    counter or till across the back row's left two cells facing front, its order
+    cell the cell in front of its left half.
+
+    3x3 (the pharmacy), as the kiosk room: the shelf down the right column's
+    front two cells facing Godot -X, its browse slot the centre column's front
+    cell. 3x4 (duty free, fashion): the shelf or rail across the second row from
+    the front, right two cells, facing front, its two browse slots the front
+    row's right two cells; facing the camera its goods read, and it stands
+    clear of the till's line of sight. Every use cell is distinct, on the floor
+    and reachable from the front row."""
+    back = (depth - 1) / 2.0
+    tiles = [
+        ("floor_tile", (float(x), back - y, 0.0)) for y in range(depth) for x in (-1, 0, 1)
+    ]
+    if depth == 3:
+        shelf = (browse, (1.0, 0.5 - back, 0.0), -90.0)
+    else:
+        shelf = (browse, (0.5, 1.0 - back, 0.0))
+    return (cls, tiles + [(counter, (-0.5, back, 0.0)), shelf], [])
+
+
+# Store rooms (F4-5): the pharmacy at 3x3 min, duty free and fashion at 3x4 min
+# (RoomTypes); the retail kit pieces (build_retail_kit.py) take the tall 2x1 box
+# like the pharmacy counter and shelf.
+ITEMS.update(
+    {
+        "pharmacy_room": _store_room("3x3", 3, "pharmacy_counter", "pharmacy_shelf"),
+        "duty_free_till": ("2x1_tall", ["duty_free_till"], []),
+        "duty_free_shelf": ("2x1_tall", ["duty_free_shelf"], []),
+        "duty_free_room": _store_room("3x4", 4, "duty_free_till", "duty_free_shelf"),
+        "fashion_till": ("2x1_tall", ["fashion_till"], []),
+        "fashion_rail": ("2x1_tall", ["fashion_rail"], []),
+        "fashion_room": _store_room("3x4", 4, "fashion_till", "fashion_rail"),
+    }
+)
 ORDER = list(ITEMS)
 
 

@@ -197,6 +197,25 @@ static func _build() -> void:
 	_build_decor()
 	_build_services()
 	_build_activities()
+	_build_retail()
+
+
+## Retail kit (F4-R, build_retail_kit.py) for the duty free and fashion stores
+## (F4-5): a till is a 2x1 counter served from its Mount_Order in front of its
+## left half, a shelf or rail is 2x1 with a Mount_Browse_0 and _1 in front of
+## its two cells (ShopLayout's browse slots), the first its interaction cell,
+## kept clear like a kiosk display stand's.
+static func _build_retail() -> void:
+	_add_counter(&"duty_free_till", "Duty free till", 1.86, Color(0.75, 0.6, 0.4))
+	_add_counter(&"fashion_till", "Fashion till", 1.86, Color(0.9, 0.6, 0.7))
+	var shelf := _add(
+		&"duty_free_shelf", "Duty free shelf", Vector2i(2, 1), Color(0.7, 0.55, 0.4), 1.98
+	)
+	shelf.has_interaction = true
+	shelf.interaction_offset = Vector2i(0, 1)
+	var rail := _add(&"fashion_rail", "Clothes rail", Vector2i(2, 1), Color(0.85, 0.5, 0.65), 1.76)
+	rail.has_interaction = true
+	rail.interaction_offset = Vector2i(0, 1)
 
 
 ## Decor (Furniture 4/4; decisions all-11-exported-decor-models-are-placeable-

@@ -84,6 +84,13 @@ const OBJECT_PRICES := {
 	&"atm": 600,
 	&"pharmacy_counter": 700,
 	&"pharmacy_shelf": 250,
+	# Retail (F4-5): a duty free or fashion till is a counter with a till, about
+	# the pharmacy counter; a shelf or rail of goods a step above the pharmacy
+	# shelf, as those stores earn more per visit.
+	&"duty_free_till": 700,
+	&"fashion_till": 700,
+	&"duty_free_shelf": 300,
+	&"fashion_rail": 300,
 	# Paid services: a shower and a nap pod earn a fee per use (SHOWER_FEE,
 	# NAP_POD_FEE) and cost no upkeep.
 	&"shower_cubicle": 500,
