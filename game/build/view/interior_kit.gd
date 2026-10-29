@@ -88,6 +88,11 @@ const OBJECT_PIECES := {
 	&"pharmacy_shelf": "pharmacy_shelf",
 	&"shower_cubicle": "shower_cubicle",
 	&"nap_pod": "nap_pod",
+	# Retail kit (F4-R) for the duty free and fashion stores (F4-5).
+	&"duty_free_shelf": "duty_free_shelf",
+	&"duty_free_till": "duty_free_till",
+	&"fashion_rail": "fashion_rail",
+	&"fashion_till": "fashion_till",
 	&"play_blocks": "play_blocks",
 	&"play_slide": "play_slide",
 	&"lounge_sofa": "lounge_sofa",

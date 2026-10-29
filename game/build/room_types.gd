@@ -18,9 +18,13 @@ class RoomType:
 	## [BuildCatalog id, note shown while the room has none of it], in the
 	## order the notes are shown.
 	var required: Array = []
-	## The piece that seats guests, and the seats each one gives.
+	## The piece that seats guests, and the seats each one gives. In a shop it
+	## is the browse piece and its browse slots (ShopLayout).
 	var seat_piece: StringName = &""
 	var seats_per_piece := 0
+	## Whether passengers visit it through ShopSim: they browse at its seat
+	## pieces and pay its base spend when the browse ends.
+	var shop := false
 	## What one visit spends before mood and the airside bonus (a tuning value).
 	var base_spend := 0
 	## The piece a ready room is charged upkeep for each game day, and the
@@ -102,4 +106,52 @@ static func _build() -> void:
 	kiosk.seat_piece = &"kiosk_display"
 	kiosk.seats_per_piece = 2
 	kiosk.base_spend = 12
+	kiosk.shop = true
 	_types[kiosk.id] = kiosk
+
+	# The per-visit stores (F4-5; decisions shops-and-food-stalls-earn-per-
+	# visit-toilets-and-screens-cos and duty-free-and-fashion-shops-get-their-
+	# own-blender-retail-kit): shops like the kiosk, each with a counter or till
+	# a server stands at and a browse piece whose Mount_Browse cells are its
+	# browse slots. The pharmacy shelf has one, the duty free shelf and the
+	# fashion rail two. Base spends are tuning values: a pharmacy sells less
+	# than a kiosk, duty free and fashion more.
+	_add_store(
+		&"pharmacy",
+		"Pharmacy",
+		Vector2i(3, 3),
+		10,
+		[[&"pharmacy_counter", "Needs a pharmacy counter"], [&"pharmacy_shelf", "Needs a shelf"], 1]
+	)
+	_add_store(
+		&"duty_free",
+		"Duty free",
+		Vector2i(3, 4),
+		25,
+		[[&"duty_free_till", "Needs a till"], [&"duty_free_shelf", "Needs a shelf"], 2]
+	)
+	_add_store(
+		&"fashion",
+		"Fashion",
+		Vector2i(3, 4),
+		30,
+		[[&"fashion_till", "Needs a till"], [&"fashion_rail", "Needs a clothes rail"], 2]
+	)
+
+
+## A shop room type that needs `pieces[0]` (its counter or till) and
+## `pieces[1]` (its browse piece, giving `pieces[2]` browse slots each), each
+## as [BuildCatalog id, note].
+static func _add_store(
+	id: StringName, display_name: String, min_size: Vector2i, base_spend: int, pieces: Array
+) -> void:
+	var store := RoomType.new()
+	store.id = id
+	store.display_name = display_name
+	store.min_size = min_size
+	store.required = [pieces[0], pieces[1]]
+	store.seat_piece = pieces[1][0]
+	store.seats_per_piece = pieces[2]
+	store.base_spend = base_spend
+	store.shop = true
+	_types[id] = store

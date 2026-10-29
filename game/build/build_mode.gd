@@ -99,6 +99,13 @@ enum Tool {
 	ARMCHAIR,
 	WORK_DESK,
 	PRIZE_PODIUM,
+	PHARMACY_ROOM,
+	DUTY_FREE_ROOM,
+	DUTY_FREE_TILL,
+	DUTY_FREE_SHELF,
+	FASHION_ROOM,
+	FASHION_TILL,
+	FASHION_RAIL,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -140,6 +147,10 @@ const TOOL_OBJECTS := {
 	Tool.KIOSK_COUNTER: &"kiosk_counter",
 	Tool.KIOSK_DISPLAY: &"kiosk_display",
 	Tool.SCREEN: ScreenCoverage.SCREEN_ID,
+	Tool.DUTY_FREE_TILL: &"duty_free_till",
+	Tool.DUTY_FREE_SHELF: &"duty_free_shelf",
+	Tool.FASHION_TILL: &"fashion_till",
+	Tool.FASHION_RAIL: &"fashion_rail",
 }
 ## The security lane part tools, in flow order.
 const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
@@ -160,6 +171,9 @@ const TOOL_ROOMS := {
 	Tool.BAG_ROOM: &"bag_room",
 	Tool.TOILET_ROOM: &"toilet",
 	Tool.KIOSK_ROOM: &"kiosk",
+	Tool.PHARMACY_ROOM: &"pharmacy",
+	Tool.DUTY_FREE_ROOM: &"duty_free",
+	Tool.FASHION_ROOM: &"fashion",
 }
 ## Tools under which the room under the pointer is followed for its panel.
 const ROOM_FOCUS_TOOLS := [
@@ -176,6 +190,15 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.KIOSK_ROOM,
 	Tool.KIOSK_COUNTER,
 	Tool.KIOSK_DISPLAY,
+	Tool.PHARMACY_ROOM,
+	Tool.PHARMACY_COUNTER,
+	Tool.PHARMACY_SHELF,
+	Tool.DUTY_FREE_ROOM,
+	Tool.DUTY_FREE_TILL,
+	Tool.DUTY_FREE_SHELF,
+	Tool.FASHION_ROOM,
+	Tool.FASHION_TILL,
+	Tool.FASHION_RAIL,
 ]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
