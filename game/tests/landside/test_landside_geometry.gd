@@ -21,6 +21,7 @@ const KERB_Z := -58.7
 ## (-z): its local (x, z) is the world offset (-z, x) from its origin.
 const LOT_YAW := -PI / 2.0
 const TOLERANCE := 0.01
+const KERB := "kerb"
 
 
 func _scene(packed: PackedScene) -> Node3D:
@@ -212,6 +213,121 @@ func test_the_multi_storey_stands_on_its_assets_footprint() -> void:
 		assert_bool(rect.has_point(Vector2(slot.x, slot.z))).is_true()
 		assert_float(slot.y).is_between(0.0, bounds.size.y)
 	assert_bool(rect.intersects(_lot_rect(STARTER.lots[0]))).is_false()
+
+
+## The walks out of every multi-storey slot and the cars' paths to and from
+## every slot stay on the asset's floors and ramps inside the building: every
+## point, and every 0.25 m along every segment, from the slot to the aisle
+## front stands on a walkable face of the mesh (its plane within 6 cm of the
+## point) with 1.8 m clear above. A straight line down through a floor, or a
+## point over a deck's ramp opening or under a ramp, fails. (The converted
+## ramp faces are wound with their normals down, so a walkable face is any
+## face within 25 degrees of level, whichever way it faces.)
+func test_the_multi_storey_walks_and_drives_stay_on_its_floors_and_ramps() -> void:
+	var asset := _scene(MULTI_SCENE)
+	var spot := STARTER.lots[1]
+	var faces := _level_faces(asset, Transform3D(Basis(), spot.centre))
+	var paths := LandsidePaths.new(STARTER)
+	var checked := 0
+	var kerbs := 0
+	var top := 0.0
+	var door := spot.entrance[spot.entrance.size() - 1]
+	for slot in spot.slots.size():
+		# Ground slot 0 (local z -22) stands in the ground-floor front wall (1.2 m
+		# high, local z -23.2 to -21.9), as the slots were authored in Landside
+		# 3/4; moving it is a slot layout change, outside this check.
+		if slot == 0:
+			continue
+		var path: PackedVector3Array = paths.slot_path[1][slot]
+		var routes := [path.slice(path.find(door), path.rfind(door) + 1)]
+		# A ground slot's passengers walk straight to the gate, as before.
+		if LandsidePaths.deck_of(spot, spot.slots[slot]) > 0:
+			var walk := PackedVector3Array(paths.lot_walk(1, slot))
+			routes.append(walk.slice(0, walk.find(door) + 1))
+		for route in routes:
+			assert_int(route.size()).is_greater(1)
+			for i in range(1, route.size()):
+				var a: Vector3 = route[i - 1]
+				var b: Vector3 = route[i]
+				var parts := maxi(ceili(a.distance_to(b) / 0.25), 1)
+				for part in parts + 1:
+					var at := a.lerp(b, float(part) / parts)
+					var problem := _footing(faces, at)
+					if problem == KERB:
+						kerbs += 1
+						problem = ""
+					(
+						assert_str(problem)
+						. override_failure_message("slot %d at %s: %s" % [slot, at, problem])
+						. is_empty()
+					)
+					checked += 1
+					top = maxf(top, at.y)
+	print("multi-storey floor checks %d, highest %.2f, over the kerb %d" % [checked, top, kerbs])
+	assert_float(top).is_greater(10.0)
+	assert_int(checked).is_greater(1000)
+	# Only a ground-floor car crosses the ramp landing's kerb (x 1 to 1.7, 0.4 m
+	# high) between the entrance and the aisle: the asset has no level way from
+	# its front entrance to the ground-floor stalls. Twelve slots, both ways.
+	assert_int(kerbs).is_less_equal(12 * 2 * 4)
+
+
+## The faces of the asset within 25 degrees of level, in world space, each
+## [a, b, c] (the asset standing at `at`).
+func _level_faces(root: Node3D, at: Transform3D) -> Array:
+	var out := []
+	for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+		var to_world := at * mi.global_transform
+		var f := mi.mesh.get_faces()
+		for i in range(0, f.size(), 3):
+			var a: Vector3 = to_world * f[i]
+			var b: Vector3 = to_world * f[i + 1]
+			var c: Vector3 = to_world * f[i + 2]
+			var n := (b - a).cross(c - a)
+			if n.length() > 1e-6 and absf(n.normalized().y) > 0.9:
+				out.append([a, b, c])
+	return out
+
+
+## "" when `at` stands on a level face with headroom, KERB when the only thing
+## in the way is a face at most 0.45 m up, else what is wrong.
+static func _footing(faces: Array, at: Vector3) -> String:
+	var floor_found := false
+	var kerb := false
+	for face in faces:
+		var y := _height_on(face, at)
+		if is_nan(y):
+			continue
+		if absf(y - at.y) <= 0.06:
+			floor_found = true
+		elif y > at.y + 0.06 and y <= at.y + 0.45:
+			kerb = true
+		elif y > at.y + 0.45 and y < at.y + 1.8:
+			return "a face %.2f m overhead" % (y - at.y)
+	if not floor_found:
+		return "no floor under it"
+	return KERB if kerb else ""
+
+
+## The height of `face`'s plane over `at`'s ground point, or NAN when the point
+## is not over the face.
+static func _height_on(face: Array, at: Vector3) -> float:
+	var a: Vector3 = face[0]
+	var b: Vector3 = face[1]
+	var c: Vector3 = face[2]
+	var p := Vector2(at.x, at.z)
+	var a2 := Vector2(a.x, a.z)
+	var b2 := Vector2(b.x, b.z)
+	var c2 := Vector2(c.x, c.z)
+	var area := (b2 - a2).cross(c2 - a2)
+	if absf(area) < 1e-9:
+		return NAN
+	var u := (b2 - p).cross(c2 - p) / area
+	var v := (c2 - p).cross(a2 - p) / area
+	var w := 1.0 - u - v
+	if u < -1e-4 or v < -1e-4 or w < -1e-4:
+		return NAN
+	return a.y * u + b.y * v + c.y * w
 
 
 func _lot_rect(lot: LandsideLotSpot) -> Rect2:

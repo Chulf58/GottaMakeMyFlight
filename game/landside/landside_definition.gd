@@ -54,16 +54,21 @@ func berth_get_out(index: int) -> Vector3:
 ## road_in point nearest it, the last segment carried on past the road's end
 ## (the starter curb's berths are past it).
 func berth_mm(index: int) -> int:
-	var at := berth_position(index)
+	return mm_along(road_in, berth_position(index))
+
+
+## How far along a polyline the point nearest `at` is, in whole mm, the last
+## segment carried on past the polyline's end.
+static func mm_along(points: PackedVector3Array, at: Vector3) -> int:
 	var best := INF
 	var best_mm := 0
 	var walked := 0
-	for i in range(1, road_in.size()):
-		var segment := roundi(road_in[i - 1].distance_to(road_in[i]) * 1000.0)
-		var a := road_in[i - 1]
-		var along := Vector3(road_in[i] - a)
+	for i in range(1, points.size()):
+		var segment := roundi(points[i - 1].distance_to(points[i]) * 1000.0)
+		var a := points[i - 1]
+		var along := Vector3(points[i] - a)
 		var t := maxf((at - a).dot(along) / maxf(along.length_squared(), 0.000001), 0.0)
-		if i < road_in.size() - 1:
+		if i < points.size() - 1:
 			t = minf(t, 1.0)
 		var gap := at.distance_to(a + along * t)
 		if gap < best:
@@ -71,6 +76,17 @@ func berth_mm(index: int) -> int:
 			best_mm = walked + roundi(t * segment)
 		walked += segment
 	return best_mm
+
+
+## The point `mm` along a polyline, the last segment carried on past its end
+## (point_at() stops at the end).
+static func point_on(points: PackedVector3Array, mm: int) -> Vector3:
+	var total := length_mm(points)
+	if mm <= total:
+		return point_at(points, mm)
+	var last := points[points.size() - 1]
+	var d := last - points[points.size() - 2]
+	return last + d.normalized() * ((mm - total) / 1000.0)
 
 
 ## The curb spot berth `index` belongs to, or -1 for the starter curb.
@@ -152,6 +168,17 @@ func _lot_problem(lot: LandsideLotSpot) -> String:
 		return "does not branch off road_in before the curb"
 	if lot.crossing.is_empty():
 		return "has no pedestrian crossing"
+	return _ramp_problem(lot)
+
+
+## "" when every ramp has two points and every slot is on a deck a ramp reaches.
+func _ramp_problem(lot: LandsideLotSpot) -> String:
+	for ramp in lot.ramps:
+		if ramp.size() < 2:
+			return "has a ramp with fewer than two points"
+	for slot in lot.slots:
+		if LandsidePaths.deck_of(lot, slot) < 0:
+			return "has a slot on a deck no ramp reaches"
 	return ""
 
 

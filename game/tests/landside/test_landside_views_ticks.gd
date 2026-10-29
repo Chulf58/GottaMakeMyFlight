@@ -2,10 +2,10 @@ class_name TestLandsideViewsTicks
 extends GdUnitTestSuite
 ## LandsideViews draws each car between its last two ticks with the clock's
 ## alpha (decision sim-architecture-fixed-tick-data-records-snapshot-saves-
-## grid-astar): on one lane by distance along the lane, through the clock's
-## ticked signal after PassengerSim stepped the road. A car that changed
-## place (road to curb berth) is drawn where it is now, never on a line
-## between the two. snap() draws the state now with nothing between. The
+## grid-astar): by distance along the lane or the berth's path it drives,
+## through the clock's ticked signal after PassengerSim stepped the road. A car
+## pulling into a berth is drawn along the berth's path, a short step a frame.
+## snap() draws the state now with nothing between. The
 ## world is the starter road with the reference terminal, 12 passengers
 ## booked, seed 3.
 
@@ -92,28 +92,44 @@ func test_a_frame_draws_with_the_clock_alpha() -> void:
 	assert_vector(drawn.origin).is_not_equal(_views.pose_at(id, 1.0).origin)
 
 
-func test_a_car_pulling_into_a_berth_is_drawn_in_the_berth_not_between() -> void:
+## Until the berth's path carried a car in, a car that took a berth was drawn
+## in it at once; now it is drawn along the path, from the road into the berth.
+func test_a_car_pulling_into_a_berth_is_drawn_along_its_path_into_the_berth() -> void:
 	var on_road := {}
-	var arrived := 0
-	while _land.sim.tick < LIMIT and arrived == 0:
+	var turned := 0
+	while _land.sim.tick < LIMIT and turned == 0:
 		for id in _land.landside.vehicle_ids():
 			on_road[id] = _land.landside.get_vehicle(id).lane == LandsideVehicle.Lane.ROAD_IN
 		_land.step()
 		for id in _land.landside.vehicle_ids():
 			var v := _land.landside.get_vehicle(id)
 			if v.lane == LandsideVehicle.Lane.BERTH and on_road.get(id, false):
-				arrived = id
-	assert_int(arrived).is_greater(0)
-	var v := _land.landside.get_vehicle(arrived)
+				turned = id
+	assert_int(turned).is_greater(0)
+	var v := _land.landside.get_vehicle(turned)
+	var path := _land.landside.paths.berth_path[v.stop]
 	var berth := _land.landside.definition.curb.berths[v.stop]
-	print(
-		(
-			"vehicle %d in berth %d at %s drawn at alpha 0 %s"
-			% [arrived, v.stop, berth, _views.pose_at(arrived, 0.0).origin]
-		)
+	# On the tick it took the berth it still stands on the road, where it was.
+	var start := _views.pose_at(turned, 1.0).origin
+	print("vehicle %d took berth %d at %s, drawn at %s" % [turned, v.stop, berth, start])
+	assert_vector(start).is_equal_approx(
+		LandsideDefinition.point_at(path, v.pos_mm), Vector3.ONE * 0.001
 	)
-	assert_vector(_views.pose_at(arrived, 0.0).origin).is_equal_approx(berth, Vector3.ONE * 0.001)
-	assert_float(_views.pose_at(arrived, 0.0).basis.z.x).is_less(-0.99)
+	assert_float(start.distance_to(berth)).is_greater(1.0)
+	var last := start
+	var ticks := 0
+	while v.stage == LandsideVehicle.Stage.DRIVE and ticks < 100:
+		_land.step()
+		ticks += 1
+		for alpha in [0.25, 0.5, 0.75, 1.0]:
+			var at := _views.pose_at(turned, alpha).origin
+			assert_float(at.distance_to(last)).is_less_equal(LandsideSim.SPEED_MM / 1000.0 + 0.001)
+			last = at
+	print("pulled in after %d ticks, drawn at %s" % [ticks, last])
+	assert_int(v.stage).is_equal(LandsideVehicle.Stage.DWELL)
+	assert_int(ticks).is_greater(1)
+	assert_vector(_views.pose_at(turned, 1.0).origin).is_equal_approx(berth, Vector3.ONE * 0.001)
+	assert_float(_views.pose_at(turned, 1.0).basis.z.x).is_less(-0.99)
 
 
 func test_snap_draws_the_state_now_with_nothing_between() -> void:

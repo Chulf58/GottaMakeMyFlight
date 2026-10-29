@@ -50,7 +50,16 @@ func test_a_lone_drop_off_gets_out_exactly_its_lead_after_entering_the_road() ->
 	var lead := sim.lead_ticks(LandsideVehicle.Intent.DROP)
 	var at := _release_tick(sim, LandsideVehicle.Intent.DROP, 100)
 	print("DROP lead=%d released=%d" % [lead, at])
-	assert_int(lead).is_equal(ceili(STARTER.curb.stop_mm / float(LandsideSim.SPEED_MM)))
+	# To the curb's stop, then pulling in along berth 0's path: the passengers
+	# get out once the car stands in the berth, not at the stop.
+	var pull_in := sim.paths.berth_stand[0] - STARTER.curb.stop_mm
+	assert_int(pull_in).is_greater(0)
+	assert_int(lead).is_equal(
+		(
+			ceili(STARTER.curb.stop_mm / float(LandsideSim.SPEED_MM))
+			+ ceili(pull_in / float(LandsideSim.SPEED_MM))
+		)
+	)
 	assert_int(at - 100).is_equal(lead)
 
 

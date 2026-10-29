@@ -2,9 +2,11 @@ class_name LandsideLotSpot
 extends Resource
 ## A place by the road where a car park can stand (LandsideDefinition.lots).
 ## A car that means to park turns off road_in at `branch_mm` onto `access`,
-## drives to its end (the lot gate) and parks in a reserved slot; its
-## passengers walk `crossing` from the gate over both carriageways to the
-## porch. A leaving car drives `exit` back onto the road. When the lot is full
+## drives to its end (the lot gate), then along the aisle (and up the ramps of
+## a multi-storey) into a reserved slot; its passengers walk back to the gate
+## (down the ramps from an upper deck) and over both carriageways along
+## `crossing` to the porch. A leaving car drives back to `exit` and along it
+## onto the road (LandsidePaths builds these routes). When the lot is full
 ## (every slot parked or reserved) a car does not turn and drops off at the
 ## curb instead.
 
@@ -28,3 +30,17 @@ enum Kind { SURFACE, MULTI_STOREY }
 @export var slots := PackedVector3Array()
 ## The walk from the lot gate over the road to the porch.
 @export var crossing := PackedVector3Array()
+## A multi-storey only: the way from the gate through the building's entrance
+## in its ground-floor wall, from in front of it to just inside.
+@export var entrance := PackedVector3Array()
+## Where the aisle between the stalls meets the gate side, on the ground. Cars
+## and walkers turn between the aisle and a stall at the stall's z, at this x,
+## on every deck.
+@export var aisle_front := Vector3.ZERO
+## A multi-storey only: per deck above the ground, the lowest first, the way
+## down that deck's ramp, from the deck's aisle to the aisle of the deck below
+## (the first ends where `entrance` ends). The points are on the walkable
+## surface and include every slope break of the ramp (test_landside_geometry.gd
+## checks them against the asset). Reversed, a deck's way down is a car's way
+## up.
+@export var ramps: Array[PackedVector3Array] = []
