@@ -19,9 +19,22 @@ extends RefCounted
 ## and not the spot of a counter with a lower id in that room. A counter with
 ## no such cell can never be staffed (blocked()) and its Closed sign says so.
 ## An edit can move a spot; StaffSim then walks the server to the new one.
+##
+## An info desk (decision info-desk-helps-stuck-passengers-a-short-help-visit-
+## with-a-m) is a counter that needs no room: it is usable wherever it stands,
+## on open floor or inside any room, and is staffed from the same SHOP pool. Its
+## staff spot is chosen the same way, on floor of the room it stands in (open
+## floor when it stands in none). It belongs to no room's type, so a kiosk's
+## room_open() never counts it.
 
-## Counter piece -> the room type it works in.
-const COUNTER_ROOMS := {&"cafe_counter": &"cafe", &"kiosk_counter": &"kiosk"}
+## Counter piece -> the room type it works in (empty for a roomless counter).
+const COUNTER_ROOMS := {
+	&"cafe_counter": &"cafe",
+	&"kiosk_counter": &"kiosk",
+	&"info_desk": &"",
+}
+## The counters that need no room.
+const ROOMLESS: Array[StringName] = [&"info_desk"]
 ## Where a server may stand, at facing 0 and in this order: behind the till,
 ## beside its west end, beside its east end; each with the footprint cell it
 ## works next to.
@@ -37,6 +50,11 @@ static func is_counter(grid: BuildGrid, id: int) -> bool:
 	return not record.is_empty() and COUNTER_ROOMS.has(StringName(record["def"]))
 
 
+## Whether `id` is a counter that needs no room (an info desk).
+static func is_roomless(grid: BuildGrid, id: int) -> bool:
+	return is_counter(grid, id) and ROOMLESS.has(StringName(grid.get_object(id)["def"]))
+
+
 ## The room `counter` stands in, or 0 (also for an object that is no counter).
 static func room_of(grid: BuildGrid, counter: int) -> int:
 	if not is_counter(grid, counter):
@@ -46,6 +64,8 @@ static func room_of(grid: BuildGrid, counter: int) -> int:
 
 ## Whether `counter` stands wholly inside a ready room of its type.
 static func usable(grid: BuildGrid, counter: int) -> bool:
+	if is_roomless(grid, counter):
+		return true
 	var room := room_of(grid, counter)
 	if room == 0:
 		return false
@@ -67,6 +87,9 @@ static func counters(grid: BuildGrid) -> Array[int]:
 	ids.sort()
 	var out: Array[int] = []
 	for id in ids:
+		if is_roomless(grid, id):
+			out.append(id)
+			continue
 		var room := room_of(grid, id)
 		if room == 0:
 			continue
@@ -82,14 +105,15 @@ static func counters(grid: BuildGrid) -> Array[int]:
 ## cell will do (or `counter` is no counter in a room).
 static func spot(grid: BuildGrid, counter: int) -> Vector2i:
 	var room := room_of(grid, counter)
-	if room == 0:
+	if room == 0 and not is_roomless(grid, counter):
 		return BuildObjectDef.NO_CELL
 	return _spots(grid, room).get(counter, BuildObjectDef.NO_CELL)
 
 
 ## Whether `counter` is a counter in a room with no cell a server can stand on.
 static func blocked(grid: BuildGrid, counter: int) -> bool:
-	return room_of(grid, counter) != 0 and spot(grid, counter) == BuildObjectDef.NO_CELL
+	var placed := room_of(grid, counter) != 0 or is_roomless(grid, counter)
+	return placed and spot(grid, counter) == BuildObjectDef.NO_CELL
 
 
 ## Whether a passenger is being served at `counter` now: an order in progress
@@ -105,6 +129,8 @@ static func room_open(sim: PassengerSim, room_id: int) -> bool:
 	if sim.staff == null:
 		return false
 	for counter in sim.staff.stations_of(StaffMember.Role.SHOP):
+		if is_roomless(sim.grid, counter):
+			continue
 		if room_of(sim.grid, counter) == room_id and sim.staff.is_open(counter):
 			return true
 	return false
@@ -134,7 +160,8 @@ static func _spots(grid: BuildGrid, room: int) -> Dictionary:
 			taken[cell] = true
 	var out := {}
 	for id in ids:
-		if room_of(grid, id) != room:
+		# Room 0 is open floor: only a roomless counter stands there.
+		if room_of(grid, id) != room or (room == 0 and not is_roomless(grid, id)):
 			continue
 		var record := grid.get_object(id)
 		var anchor: Vector2i = record["anchor"]

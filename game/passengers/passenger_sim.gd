@@ -57,7 +57,10 @@ signal checked_in(id: int, desk: int)
 ## its toilet needs, cooldowns and visits as saved. Version 11 also holds each
 ## passenger's kiosk cooldown and the kiosk visits under "shop" (ShopSnapshot);
 ## an older save gets no cooldown and no kiosk visits.
-const SAVE_VERSION := 11
+## 12: the help visits and cooldowns of the info desks, under "info_desk"
+## (InfoDesk.to_list()). A version 11 save is refused; a migrated older save has
+## none.
+const SAVE_VERSION := 12
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -123,6 +126,8 @@ var toilets := ToiletSim.new()
 var boredom := BoredomSim.new()
 ## What decor calms (DecorEffect), applied on each beat.
 var decor := DecorEffect.new()
+## Help visits to staffed info desks for stuck passengers (InfoDesk).
+var info_desks := InfoDesk.new()
 ## Kiosk visits and browse slot reservations (ShopSim).
 var shops := ShopSim.new()
 ## Security service after admission, at every scanner and lane.
@@ -197,6 +202,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	toilets.bind(self, _set_stage, _leave_station, _release_seat)
 	boredom.bind(self)
 	decor.bind(self)
+	info_desks.bind(self)
 	shops.bind(self, _set_stage, _leave_station, _release_seat)
 	arrivals.bind(self, _spawn)
 	clock.ticked.connect(on_tick)
@@ -494,9 +500,11 @@ func to_snapshot() -> Dictionary:
 	if cafes.deadlines_stale:
 		push_error("PassengerSim.to_snapshot: a grid edit settles on the next tick; save after it")
 		return {}
-	return PassengerSnapshot.save(
+	var data := PassengerSnapshot.save(
 		self, _passengers, _schedule, _queues, _next_id, [_made, _missed], _scheduled.keys()
 	)
+	data["info_desk"] = info_desks.to_list()
+	return data
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -507,6 +515,17 @@ func from_snapshot(data: Dictionary) -> bool:
 	var loaded := PassengerSnapshot.load(data, grid)
 	if loaded.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % loaded["error"])
+		return false
+	var ids := {}
+	for p: Passenger in loaded["passengers"]:
+		ids[p.id] = true
+	# A save migrated from before version 12 (PassengerSnapshot) has no info
+	# desk state: none is live. A version 12 save must carry it.
+	var desk_state := InfoDesk.checked(data.get("info_desk", InfoDesk.EMPTY), ids)
+	if not data.has("info_desk") and int(data["save_version"]) >= SAVE_VERSION:
+		desk_state = {"error": "missing key 'info_desk'"}
+	if desk_state.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % desk_state["error"])
 		return false
 	tick = loaded["tick"]
 	_next_id = loaded["next_id"]
@@ -522,6 +541,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	cafes.restore(loaded["cafe"])
 	toilets.restore(loaded["toilet"])
 	shops.restore(loaded["shop"])
+	info_desks.restore(desk_state)
 	_passengers = loaded["passengers"]
 	_by_id.clear()
 	for p in _passengers:
@@ -631,6 +651,7 @@ func _finish(p: Passenger, made: bool) -> void:
 	cafes.cleanup(p)
 	toilets.cleanup(p)
 	shops.cleanup(p)
+	info_desks.cleanup(p)
 	_set_stage(p, Passenger.Stage.MADE if made else Passenger.Stage.MISSED)
 	p.stuck = Passenger.Stuck.NONE
 	p.late = false
@@ -750,6 +771,18 @@ func _step(p: Passenger) -> void:
 			toilets.step(p)
 		StageKinds.Facility.SHOP:
 			shops.step(p)
+	# A help visit holds the passenger: its stage's own logic would plan again.
+	if info_desks.holds(p):
+		info_desks.step(p)
+	else:
+		_advance(p)
+	_move(p)
+	if posmod(tick, BEAT_TICKS) == posmod(p.id, BEAT_TICKS) and not p.is_done():
+		_beat(p)
+
+
+## One tick of the journey stage's own logic.
+func _advance(p: Passenger) -> void:
 	match p.stage:
 		Passenger.Stage.SPAWNED:
 			# In from the road first, when the entrance has one (ShellRoutes).
@@ -792,9 +825,6 @@ func _step(p: Passenger) -> void:
 							_set_stage(p, Passenger.Stage.TO_EXIT)
 		Passenger.Stage.TO_EXIT:
 			_to_exit(p)
-	_move(p)
-	if posmod(tick, BEAT_TICKS) == posmod(p.id, BEAT_TICKS) and not p.is_done():
-		_beat(p)
 
 
 func _move(p: Passenger) -> void:
@@ -815,7 +845,7 @@ func _beat(p: Passenger) -> void:
 	if p.stage in QUEUE_STAGES:
 		change -= 1
 	if p.stuck != Passenger.Stuck.NONE:
-		change -= 3
+		change -= info_desks.stuck_loss(p)
 	# A bored passenger gets nothing from its seat (BoredomSim).
 	if p.stage == Passenger.Stage.SEATED and not BoredomSim.is_bored(p):
 		change += 1
@@ -829,7 +859,9 @@ func _beat(p: Passenger) -> void:
 	cafes.beat(p)
 	boredom.beat(p)
 	shops.beat(p)
-	NeedsPolicy.arbitrate(self, p)
+	if not info_desks.holds(p):
+		NeedsPolicy.arbitrate(self, p)
+		info_desks.beat(p)
 	# A visiting guest walks: its visit's deadline keeps the margin for the rest.
 	if StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
 		p.late = false
