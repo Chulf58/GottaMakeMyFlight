@@ -174,6 +174,28 @@ INDOOR = {
     "tc_bench_2a_indoor": {"seat": ("Bench_2A", 0.65, 0.75, 0.53), "parts": {"Bench_2A_Tree": {"top": 2.4}}},
 }
 INDOOR_CEILING = 2.5
+# Reshape before the indoor factor, in vendor metres (user ruling 2026-10-29 through the
+# question form, "Reshape in Blender (Recommended)": shrink the four lamp heads and the
+# planter so the tree reads as the centre again, seat at 0.53 m, all under 2.5 m).
+#   step: top of the seat step; nothing at or below it moves, so the seat stays put.
+#   soil, rim: soil level and planter rim; the planter above the step keeps "planter" of
+#       its height. Grass blades (islands standing on the soil above the rim) drop with it.
+#   lamp: each lamp (one per quadrant) scales by this about the foot of its post.
+RESHAPE = {
+    "tc_bench_2a_indoor": {
+        "base": "Bench_2A",
+        "lights": "Bench_2A_Lights",
+        "tree": "Bench_2A_Tree",
+        "step": 0.85,
+        "soil": 1.5,
+        "rim": 1.73,
+        "planter": 0.5,
+        "lamp": 0.5,
+        # The vendor file as measured: a changed file stops the run instead of reshaping wrongly.
+        "lamp_islands": 19,
+        "grass_islands": 62,
+    },
+}
 # Lowest point of each decor prop, in metres above its origin. Everything else stands on
 # 0; Bush_1A's root ball is buried 0.30 m (vendor), the chain hangs between posts.
 GROUND = {
@@ -574,6 +596,138 @@ def faces_height(o, faces):
         acc += (o.matrix_world @ p.center).z * p.area
         total += p.area
     return acc / total
+
+
+def islands(o):
+    """Connected vertex groups of a mesh, as lists of vertex indices."""
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bm.verts.ensure_lookup_table()
+    seen = set()
+    out = []
+    for v in bm.verts:
+        if v.index in seen:
+            continue
+        stack = [v]
+        seen.add(v.index)
+        comp = []
+        while stack:
+            x = stack.pop()
+            comp.append(x.index)
+            for e in x.link_edges:
+                y = e.other_vert(x)
+                if y.index not in seen:
+                    seen.add(y.index)
+                    stack.append(y)
+        out.append(comp)
+    bm.free()
+    return out
+
+
+def move_world(o, indices, fn):
+    """Move the given vertices of `o` through fn(world position) -> world position."""
+    mw = o.matrix_world
+    inv = mw.inverted()
+    for i in indices:
+        v = o.data.vertices[i]
+        v.co = inv @ fn(mw @ v.co)
+    o.data.update()
+
+
+def reshape_tree_bench(stem, objs):
+    """Bench_2A at vendor scale, before the indoor factor (see RESHAPE). The planter above
+    the seat step is pressed down to RESHAPE "planter" of its height; the soil, grass and
+    tree drop with it; each of the four lamps shrinks to RESHAPE "lamp" about the foot of
+    its post and drops with the soil. The seat ring (at or below the step) does not move."""
+    spec = RESHAPE.get(stem)
+    if spec is None:
+        return
+    parts = {o.name: o for o in objs if o.type == "MESH"}
+    base, lights, tree = parts[spec["base"]], parts[spec["lights"]], parts[spec["tree"]]
+    step, soil, k = spec["step"], spec["soil"], spec["planter"]
+
+    def press(z):
+        return z if z <= step else step + (z - step) * k
+
+    drop = press(soil) - soil
+    grass = 0
+    pressed = 0
+    for comp in islands(base):
+        zs = [(base.matrix_world @ base.data.vertices[i].co).z for i in comp]
+        if min(zs) >= soil - 0.01 and max(zs) > spec["rim"] + 0.02:
+            # A grass blade standing in the soil: it drops with the soil, keeping its size.
+            move_world(base, comp, lambda w: w + Vector((0.0, 0.0, drop)))
+            grass += 1
+        else:
+            move_world(base, comp, lambda w: Vector((w.x, w.y, press(w.z))))
+            pressed += 1
+    quads = {}
+    for comp in islands(lights):
+        ws = [lights.matrix_world @ lights.data.vertices[i].co for i in comp]
+        cx = sum(w.x for w in ws) / len(ws)
+        cy = sum(w.y for w in ws) / len(ws)
+        key = (cx > 0.0, cy > 0.0)
+        if any((w.x > 0.0) != key[0] or (w.y > 0.0) != key[1] for w in ws):
+            die("%s: a lamp island crosses a quadrant boundary near %s" % (stem, (round(cx, 2), round(cy, 2))))
+        quads.setdefault(key, []).append((comp, ws))
+    if len(quads) != 4:
+        die("%s: expected four lamps (one per quadrant), found %d" % (stem, len(quads)))
+    if grass != spec["grass_islands"]:
+        die("%s: %d grass islands, expected %d" % (stem, grass, spec["grass_islands"]))
+    for key, comps in sorted(quads.items()):
+        if len(comps) != spec["lamp_islands"]:
+            die("%s: lamp %s has %d islands, expected %d" % (stem, key, len(comps), spec["lamp_islands"]))
+        pts = [w for _c, ws in comps for w in ws]
+        low = min(w.z for w in pts)
+        feet = [w for w in pts if w.z < low + 0.01]
+        pivot = Vector((sum(w.x for w in feet) / len(feet), sum(w.y for w in feet) / len(feet), low))
+        lamp_drop = press(low) - low
+        for comp, _ws in comps:
+            move_world(
+                lights,
+                comp,
+                lambda w, p=pivot, d=lamp_drop: p + (w - p) * spec["lamp"] + Vector((0.0, 0.0, d)),
+            )
+        log("RESHAPE %s lamp=%s islands=%d foot=%s" % (stem, key, len(comps), tuple(round(v, 3) for v in pivot)))
+    tree_low = min((tree.matrix_world @ v.co).z for v in tree.data.vertices)
+    tree_drop = press(tree_low) - tree_low
+    move_world(tree, range(len(tree.data.vertices)), lambda w: w + Vector((0.0, 0.0, tree_drop)))
+    bpy.context.view_layer.update()
+    log(
+        "RESHAPE %s planter_factor=%.2f rim=%.3f soil=%.3f drop=%.3f islands_pressed=%d "
+        "grass_dropped=%d lamp_factor=%.2f tree_drop=%.3f (vendor metres)"
+        % (stem, k, press(spec["rim"]), press(soil), drop, pressed, grass, spec["lamp"], tree_drop)
+    )
+
+
+def report_tree_bench(stem, objs):
+    """Final sizes of the reshaped bench in metres: the lamps, one lamp, the tree and its crown."""
+    spec = RESHAPE.get(stem)
+    if spec is None:
+        return
+    parts = {o.name: o for o in objs if o.type == "MESH"}
+    lamp = world_verts(parts[spec["lights"]])
+    one = [w for w in lamp if w.x > 0 and w.y > 0]
+    tree = world_verts(parts[spec["tree"]])
+    crown_from = min(w.z for w in tree) + 0.3 * (max(w.z for w in tree) - min(w.z for w in tree))
+    crown = [w for w in tree if w.z >= crown_from]
+    log(
+        "BENCH %s lamp_z=(%.3f, %.3f) one_lamp_xy=(%.3f, %.3f) "
+        "tree_z=(%.3f, %.3f) crown_xy=(%.3f, %.3f)"
+        % (
+            stem,
+            min(w.z for w in lamp),
+            max(w.z for w in lamp),
+            max(w.x for w in one) - min(w.x for w in one),
+            max(w.y for w in one) - min(w.y for w in one),
+            min(w.z for w in tree),
+            max(w.z for w in tree),
+            max(w.x for w in crown) - min(w.x for w in crown),
+            max(w.y for w in crown) - min(w.y for w in crown),
+        )
+    )
 
 
 def make_indoor(stem, objs):
@@ -995,7 +1149,9 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
     else:
         # Static props: resize an indoor variant, record the intended parts, bake every
         # non-unit scale into the meshes and check that no part moved.
+        reshape_tree_bench(stem, objs)
         seat = make_indoor(stem, objs)
+        report_tree_bench(stem, objs)
         intent = part_state(objs)
         baked = bake_scale(stem, objs)
         log("SCALE %s baked=%s" % (stem, baked))
