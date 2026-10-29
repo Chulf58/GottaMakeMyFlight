@@ -194,6 +194,9 @@ var clock: SimClock
 ## "front", "front_from", "front_since", "weight"}.
 var _held := {}
 var _free_trays: Array[Node3D] = []
+## Passenger id -> the tick its record was last released (release()), so a
+## record made again on that tick (after a load) is told from a new one.
+var _released_at := {}
 ## Character node -> the passenger id it draws now (for _on_pose).
 var _body_ids := {}
 ## Kit piece -> pooled bag nodes of that kind.
@@ -446,6 +449,9 @@ static func _in_piece(node: Node, root: Node) -> Transform3D:
 ## Takes and returns props to match each drawn passenger's look on this tick.
 func sync() -> void:
 	var seen := {}
+	for id: int in _released_at.keys():
+		if _released_at[id] < _tick():
+			_released_at.erase(id)
 	for id in sim.passenger_ids():
 		var node := views.node_for(id)
 		if node == null:
@@ -453,9 +459,14 @@ func sync() -> void:
 		var p := sim.get_passenger(id)
 		var homes := SecurityLooks.bag_homes(sim, p)
 		var tray_at := SecurityLooks.tray(sim, p)
-		if homes.is_empty():
+		# A basic scanner booth tucks the free arms in, with bags or without
+		# (decision basic-scanner-booth-passengers-carry-their-bags-in-front-
+		# and), so a passenger with none is kept until its arms are back out.
+		var booth := SecurityLooks.in_booth_passage(sim, p)
+		var tucked := booth or BoothCarry.tuck_weight(_held.get(id, {}), _tick()) > 0.0
+		if homes.is_empty() and not tucked:
 			_arms_off(node)
-		if homes.is_empty() and tray_at == SecurityLooks.Tray.NONE:
+		if homes.is_empty() and tray_at == SecurityLooks.Tray.NONE and not tucked:
 			continue
 		seen[id] = true
 		var hands: Array[int] = []
@@ -467,7 +478,7 @@ func sync() -> void:
 		for i in homes.size():
 			kinds.append(SecurityLooks.bag_kind(p, i))
 			var roller := kinds[i] == SecurityLooks.Kind.ROLLER
-			lifts.append(_lifted(kinds[i], p, lift_stall if roller else at_stall))
+			lifts.append(_lifted(kinds[i], p, lift_stall if roller else at_stall, booth))
 			# A worn bag keeps its side, so a narrow cell never moves it across.
 			var worn: bool = (
 				not lifts[i]
@@ -487,6 +498,9 @@ func sync() -> void:
 		held["kinds"] = kinds
 		held["in_stall"] = StallCarry.in_stall(p)
 		held["stall"] = StallCarry.stall_of(sim, p)
+		# At a booth a roller's lift into the hand ends before the front turn.
+		if booth and BoothCarry.roller_rising(held, kinds, lifts, _tick()):
+			front = false
 		if not held.has("front"):
 			# A new record (a new passenger, or after a load) starts in the
 			# carry it needs, with no turn to play.
@@ -498,12 +512,21 @@ func sync() -> void:
 			held["bag_from"] = _bag_weight(held, _tick())
 			held["front_since"] = _tick()
 			held["front"] = front
+		# A record made again after a load (PassengerViews.snap() releases every
+		# record, then syncs on the same tick) starts in the tuck it needs.
+		BoothCarry.update_tuck(held, booth, _released_at.get(id, -1.0) == _tick(), _tick())
 		# A roller held by its bar for a stall stays in hand until the turn back
 		# from the front has finished, so it goes to the pull from the side, and,
 		# held in the hand the walk would not pull it in, until it is clear of
 		# the stalls by StallCarry.LIFT_LEAD_M more, so it is pulled in that hand
 		# away from them. The front itself follows the stall alone.
 		var was: Array = held["bags"]
+		# A roller lifted at a booth stays in hand until the turn back has ended.
+		var kept := BoothCarry.kept_lifted(
+			held, kinds, lifts, _front_weight(held, _tick()), BoothCarry.tuck_weight(held, _tick())
+		)
+		for i in kinds.size():
+			lifts[i] = lifts[i] or kept[i]
 		for i in mini(was.size(), kinds.size()):
 			if (
 				not lifts[i]
@@ -566,7 +589,10 @@ func sync() -> void:
 			# Lifted for a stall alone (not at security or running): hung by the
 			# grip bar (_case_transform).
 			var by_bar: bool = (
-				lifted and kinds[i] == SecurityLooks.Kind.ROLLER and not _lifted(kinds[i], p, false)
+				lifted
+				and kinds[i] == SecurityLooks.Kind.ROLLER
+				and not _lifted(kinds[i], p, false, booth)
+				and not kept[i]
 			)
 			# A roller lifted before and now that stops or starts being held by its
 			# bar for a stall (its walker turns late, or reaches security) moves
@@ -599,15 +625,21 @@ func sync() -> void:
 ## Whether a bag of `kind` is lifted by its handle and carried as the hard
 ## case is: a roller through security (narrow lane cells, tables) and while
 ## its walker runs (a long stride kicks back into a trailing case), and a
-## roller or a backpack at a toilet stall (`at_stall`, StallCarry).
-static func _lifted(kind: SecurityLooks.Kind, p: Passenger, at_stall: bool) -> bool:
-	if kind == SecurityLooks.Kind.ROLLER and (p.stage == Passenger.Stage.SECURITY or p.late):
+## roller or a backpack at a toilet stall (`at_stall`, StallCarry). A roller
+## is also lifted through a basic scanner booth's passage (`at_booth`,
+## SecurityLooks.in_booth_passage), from the queue front at its entry.
+static func _lifted(
+	kind: SecurityLooks.Kind, p: Passenger, at_stall: bool, at_booth := false
+) -> bool:
+	var roller := kind == SecurityLooks.Kind.ROLLER
+	if roller and (p.stage == Passenger.Stage.SECURITY or p.late or at_booth):
 		return true
 	return at_stall and kind in [SecurityLooks.Kind.ROLLER, SecurityLooks.Kind.BACKPACK]
 
 
 ## Returns every prop of passenger `id` to the pool.
 func release(id: int) -> void:
+	_released_at[id] = _tick()
 	var held: Dictionary = _held.get(id, {})
 	if held.is_empty():
 		return
@@ -780,6 +812,7 @@ func draw() -> void:
 		if held["tray"] != null:
 			(held["tray"] as Node3D).global_transform = tray_xf
 		held["weight"] = _front_weight(held, now)
+		held["tuck_weight"] = BoothCarry.tuck_weight(held, now)
 		held["bag_weight"] = _bag_weight(held, now)
 		_body_ids[body] = id
 		# Bags first: a new move is stamped there, and the arms follow it.
@@ -1174,7 +1207,8 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 					modes[side] = Arm.STRAP
 					strap[side] = on
 	# The arms keep what was set until it changes (most frames nothing does).
-	var key := [modes, strap, cases, beside, held["weight"]]
+	var tuck: float = held.get("tuck_weight", 0.0)
+	var key := [modes, strap, cases, beside, held["weight"], tuck]
 	if held.get("arm_key", []) == key and held.get("arm_body") == body:
 		return
 	held["arm_key"] = key
@@ -1183,7 +1217,7 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 	for side in arms.size():
 		var arm := arms[side] as CarryArm
 		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL
-		arm.active = modes[side] != Arm.FREE or cases > 0
+		arm.active = modes[side] != Arm.FREE or cases > 0 or tuck > 0.0
 		var pulling: bool = modes[side] == Arm.PULL
 		arm.angle_degrees = PULL_OUT_DEGREES if pulling else 12.0
 		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5
@@ -1200,8 +1234,9 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 				arm.front_half_width = FRONT_ONE_BAG_M if cases < 2 else FRONT_TWO_BAGS_M
 				arm.front_weight = held["weight"]
 			_:
-				arm.front_half_width = FRONT_FREE_HAND_M
-				arm.front_weight = held["weight"] if beside > 0 else 0.0
+				# Beside a front-carried case, or tucked in through a booth.
+				arm.front_half_width = BoothCarry.free_hand_width(beside > 0, tuck)
+				arm.front_weight = maxf(held["weight"] if beside > 0 else 0.0, tuck)
 
 
 ## How far `bag` is through its move at sim time `now` (1 when settled or
