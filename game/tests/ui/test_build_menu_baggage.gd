@@ -45,7 +45,9 @@ func _category_named(category_name: String) -> int:
 func test_one_baggage_category_sits_before_remove_and_remove_stays_last() -> void:
 	var baggage := _category_named("Baggage")
 	assert_int(baggage).is_not_equal(BuildMenu.NO_CATEGORY)
-	assert_int(baggage).is_equal(BuildMenu.REMOVE_CATEGORY - 1)
+	# The furniture pages (Furniture 4/4 F4-2) sit between Baggage and Remove.
+	assert_str(BuildMenu.CATEGORIES[baggage + 1]["name"]).is_equal("Furniture")
+	assert_int(baggage).is_less(BuildMenu.REMOVE_CATEGORY)
 	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(BuildMenu.CATEGORIES.size() - 1)
 	assert_str(BuildMenu.CATEGORIES[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 	assert_array(BuildMenu.CATEGORIES[baggage]["tools"]).is_equal(BAGGAGE_TOOLS)

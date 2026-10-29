@@ -264,6 +264,240 @@
       "sources": {
         "landside/tp_parking_01a.glb": "0ec9fa32f7a8e7a373d44f417d40ef70436300a10d5ffe2f5b143562b734e3d0"
       }
+    },
+    "bench_1a": {
+      "png": "bench_1a.png",
+      "class": "1x3",
+      "style": 3,
+      "sources": {
+        "decor/tc_bench_1a.glb": "423ec5699d7db2dd58bd93d1c1fa00d14eea64d596078df2cebd920b83d57c4f"
+      }
+    },
+    "bench_2a_indoor": {
+      "png": "bench_2a_indoor.png",
+      "class": "4x4",
+      "style": 3,
+      "sources": {
+        "decor/tc_bench_2a_indoor.glb": "f71334119d31f62399f062247aaa6d1abb7de02d17319532f99697d9518acb22"
+      }
+    },
+    "bush": {
+      "png": "bush.png",
+      "class": "2x2",
+      "style": 3,
+      "sources": {
+        "decor/tc_bush_1a.glb": "1fb2b57584989231927d2f0e0f3507395f302ec1de40f671a477f7196c525936"
+      }
+    },
+    "fountain_indoor": {
+      "png": "fountain_indoor.png",
+      "class": "2x2_tall",
+      "style": 3,
+      "sources": {
+        "decor/tc_fountain_1a_indoor.glb": "7d11a3d08236f6f4b6a0aebadefb5ffdc05fcacf5dc8bcdd455b2a62b26a3074"
+      }
+    },
+    "metal_pole": {
+      "png": "metal_pole.png",
+      "class": "1x1_tall",
+      "style": 3,
+      "sources": {
+        "decor/tc_metal_pole_1a.glb": "789bb4453a7a32b03b51bdabb2ff643da15d1892b536a2b144faf2cc3830b1c4"
+      }
+    },
+    "metal_pole_chain": {
+      "png": "metal_pole_chain.png",
+      "class": "1x3",
+      "style": 3,
+      "sources": {
+        "decor/tc_metal_pole_1a.glb": "789bb4453a7a32b03b51bdabb2ff643da15d1892b536a2b144faf2cc3830b1c4",
+        "decor/tc_metal_pole_chain_1a.glb": "160b3acbeafeb3b3721bb47875992cc6446e8ba05de027dd93e57b263c2fba3f"
+      }
+    },
+    "plant_pot_1a": {
+      "png": "plant_pot_1a.png",
+      "class": "1x2_plant",
+      "style": 3,
+      "sources": {
+        "decor/tc_plant_pot_1a.glb": "e39e1e53b02f9d6f6d3be959411f5a83bb586feeada3ab227dd2a622a2abd2cb"
+      }
+    },
+    "plant_pot_2a": {
+      "png": "plant_pot_2a.png",
+      "class": "2x2",
+      "style": 3,
+      "sources": {
+        "decor/tc_plant_pot_2a.glb": "284b714b63d28dac9bf7c8452f0d78a01faaa2303ddad975f87c2eacd9d22d66"
+      }
+    },
+    "statue_indoor": {
+      "png": "statue_indoor.png",
+      "class": "1x1_xtall",
+      "style": 3,
+      "sources": {
+        "decor/tc_statue_1b_indoor.glb": "017596e789692ac37630222ead634823ca301b63badbde8ca5e8a32f819490fa"
+      }
+    },
+    "trash_can": {
+      "png": "trash_can.png",
+      "class": "1x1",
+      "style": 3,
+      "sources": {
+        "decor/tc_trash_can_1a.glb": "bee215b4a11b03af33807a044c7eb12823ae73ee91d7dd12f9b27729d879a87d"
+      }
+    },
+    "tree_indoor": {
+      "png": "tree_indoor.png",
+      "class": "2x2_tall",
+      "style": 3,
+      "sources": {
+        "decor/tc_tree_3a_indoor.glb": "12e41ecab51a761aa6ed22c4371e24779c15a1abe5b8af8033eb92b6e38f2b47"
+      }
+    },
+    "bar_counter": {
+      "png": "bar_counter.png",
+      "class": "2x2",
+      "style": 3,
+      "sources": {
+        "bar_counter.glb": "f0ec7a33fc17b9d072e2b43293c41d00e2c23416364225dd3064103b87d8a111"
+      }
+    },
+    "grab_and_go_stall": {
+      "png": "grab_and_go_stall.png",
+      "class": "2x1_xtall",
+      "style": 3,
+      "sources": {
+        "grab_and_go_stall.glb": "0434df3c58f6602a0611f5219742bcbdb5a4371bf5dff4c653ee2e9049f05016"
+      }
+    },
+    "restaurant_table": {
+      "png": "restaurant_table.png",
+      "class": "2x3",
+      "style": 3,
+      "sources": {
+        "restaurant_table.glb": "aff122a76c3704a3188b67e41f1fce044af3ac7b730c5cb2880721431d6380ae"
+      }
+    },
+    "restaurant_booth": {
+      "png": "restaurant_booth.png",
+      "class": "2x3",
+      "style": 3,
+      "sources": {
+        "restaurant_booth.glb": "6f2ad3ee8d826e3e9f74ff0ed58dce4460db453b6e74b87714ba87546b51deb7"
+      }
+    },
+    "info_desk": {
+      "png": "info_desk.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "info_desk.glb": "13692bf78808bea6981c27dd30bda60d4ab45e5a14e4a2566c80adf2fe8d407f"
+      }
+    },
+    "info_screen": {
+      "png": "info_screen.png",
+      "class": "1x1_xtall",
+      "style": 3,
+      "sources": {
+        "info_screen.glb": "c5ee4b34c3162a8843f384ac574dd12d7278c74e8ed377cf65861fb11148c26b"
+      }
+    },
+    "currency_exchange": {
+      "png": "currency_exchange.png",
+      "class": "2x1_xtall",
+      "style": 3,
+      "sources": {
+        "currency_exchange.glb": "88434d9f443119b45a52d5dd670cbdc17968b39e46e07b0aae9b917e27b38151"
+      }
+    },
+    "atm": {
+      "png": "atm.png",
+      "class": "1x1_tall",
+      "style": 3,
+      "sources": {
+        "atm.glb": "cfe08ff7264e3e17d62062f671f11b4947a80fa47cd4e58c1ba8b6cb3c0c97f7"
+      }
+    },
+    "pharmacy_counter": {
+      "png": "pharmacy_counter.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "pharmacy_counter.glb": "92c08510d1085a56cb85836474b284dddfa8f07f67bc97d8bcccb2bc87ec7351"
+      }
+    },
+    "pharmacy_shelf": {
+      "png": "pharmacy_shelf.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "pharmacy_shelf.glb": "02f7993cc5cd1b0ac45af72e26980f2199aabbea715a6fedafe452fac22b083d"
+      }
+    },
+    "shower_cubicle": {
+      "png": "shower_cubicle.png",
+      "class": "1x1_xtall",
+      "style": 3,
+      "sources": {
+        "shower_cubicle.glb": "8da257c6da4f5e59ed305468b040aff18538c2c78a08719cdddc21c16eef94d1"
+      }
+    },
+    "nap_pod": {
+      "png": "nap_pod.png",
+      "class": "1x1_tall",
+      "style": 3,
+      "sources": {
+        "nap_pod.glb": "ebfa53c68ba968af0e630ba1bb447957a9ccfd98d63b2419f64a4634425b5741"
+      }
+    },
+    "play_blocks": {
+      "png": "play_blocks.png",
+      "class": "2x2",
+      "style": 3,
+      "sources": {
+        "play_blocks.glb": "f6ad660e2b8eaaed8d65adbc9057112385e9e0660e375b9a4a94985016baf0e5"
+      }
+    },
+    "play_slide": {
+      "png": "play_slide.png",
+      "class": "2x1",
+      "style": 3,
+      "sources": {
+        "play_slide.glb": "a028c1cdb6b83286340174af9551908da4559038036dada3e98a37689edb5821"
+      }
+    },
+    "lounge_sofa": {
+      "png": "lounge_sofa.png",
+      "class": "2x1",
+      "style": 3,
+      "sources": {
+        "lounge_sofa.glb": "6db52e8430467d6f327fc1ce65048c04da759993f75b47f22015df4d1c7edd83"
+      }
+    },
+    "lounge_armchair": {
+      "png": "lounge_armchair.png",
+      "class": "1x1",
+      "style": 3,
+      "sources": {
+        "lounge_armchair.glb": "7c6d50d4a1f4bc575440b94df6825f3cca3623931ee540394c9aaa63e01c90e3"
+      }
+    },
+    "work_desk": {
+      "png": "work_desk.png",
+      "class": "2x2",
+      "style": 3,
+      "sources": {
+        "work_desk.glb": "a2de99b55d8a0b32c5f0e2562ac57be7bbe0fb8bfb4d2496ff11e3bee5af2842"
+      }
+    },
+    "prize_podium": {
+      "png": "prize_podium.png",
+      "class": "6x3",
+      "style": 3,
+      "sources": {
+        "prize_podium.glb": "38e0d869747c64a14935aee1b8158fb1f952064bcc5b5577b9565b923f67b705",
+        "vehicles/tp_suv_01a.glb": "6e1c4dd47752891765dd98a52a23f4d5f3c03e04e77d99b2893d615027329873"
+      }
     }
   }
 }
