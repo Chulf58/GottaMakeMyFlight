@@ -121,6 +121,10 @@ var _floor_paid := PackedInt32Array()
 var _h_paid := PackedInt32Array()
 var _v_paid := PackedInt32Array()
 var _pathing := GridPathing.new()
+## The staff A* graph (GridPathing with `staff` set), built when a staff path
+## is first asked for and kept up to date by the same relinks from then on;
+## null until then, and after a load or a rebuild.
+var _staff_pathing: GridPathing = null
 ## Signal emissions held back by hold_signals(), in the order they happened.
 var _held: Array[Callable] = []
 var _hold_depth := 0
@@ -255,8 +259,25 @@ func can_route(from: Vector2i, to: Vector2i) -> bool:
 	return can_step(from, to) and not _is_security_cell(from) and not _is_security_cell(to)
 
 
+## A step staff may take: any can_step(), so staff walk through a security
+## scanner or arch along its axis like screened airport staff (decision
+## staff-may-walk-through-security-scanners-and-lanes-so-shop-s). Passengers
+## route by can_route() and never do.
+func can_staff_route(from: Vector2i, to: Vector2i) -> bool:
+	return can_step(from, to)
+
+
 func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 	return _pathing.find_path(self, from, to)
+
+
+## The path staff walk from `from` to `to` over can_staff_route() steps, both
+## cells included, or empty when there is none.
+func find_staff_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
+	if _staff_pathing == null:
+		_staff_pathing = GridPathing.new(true)
+		_staff_pathing.rebuild(self)
+	return _staff_pathing.find_path(self, from, to)
 
 
 ## The cells a passenger walks to pass through a walk-through object: its
@@ -570,7 +591,7 @@ func _reach_after(edits: Array[BuildEdit], lane_spots: Dictionary) -> Dictionary
 func apply(edit: BuildEdit) -> BuildResult:
 	var result := _commit(edit)
 	if result.ok and not result.dirty_cells.is_empty():
-		var relinked := _pathing.update(self, result.dirty_cells)
+		var relinked := _relink_paths(result.dirty_cells)
 		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
 	return result
 
@@ -594,7 +615,7 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 			dirty.append_array(result.dirty_cells)
 	_reach_cleared = false
 	if not dirty.is_empty():
-		var relinked := _pathing.update(self, dirty)
+		var relinked := _relink_paths(dirty)
 		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
 	return results
 
@@ -623,7 +644,7 @@ func apply_sequence(edits: Array[BuildEdit], rule: Callable) -> BuildResult:
 		dirty.append_array(result.dirty_cells)
 	_reach_cleared = false
 	if not dirty.is_empty():
-		var relinked := _pathing.update(self, dirty)
+		var relinked := _relink_paths(dirty)
 		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
 	if not result.ok:
 		return result
@@ -838,6 +859,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_h_paid = loaded._h_paid
 	_v_paid = loaded._v_paid
 	_pathing = loaded._pathing
+	_staff_pathing = loaded._staff_pathing
 	_staff_reach_known = false
 	_lanes = null
 	if recorder != null:
@@ -902,6 +924,7 @@ func _load_cells(data: Dictionary) -> String:
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
 	_pathing.rebuild(self)
+	_staff_pathing = null
 	return ""
 
 
@@ -1248,6 +1271,14 @@ func _passes_through(cell: Vector2i, step: Vector2i) -> bool:
 		return true
 	var axis := _def_of(occupant).through_axis(_objects[occupant]["facing"])
 	return step == axis or step == -axis
+
+
+## Relinks both A* graphs around `dirty` cells (the staff one once built) and
+## returns the cells relinked.
+func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
+	if _staff_pathing != null:
+		_staff_pathing.update(self, dirty)
+	return _pathing.update(self, dirty)
 
 
 func _is_security_cell(cell: Vector2i) -> bool:

@@ -2,8 +2,7 @@ class_name ShopTestLayout
 extends RefCounted
 ## The reference terminal with floor east of it, for the kiosk tests, laid out
 ## like ToiletTestLayout: floor at x 22-27, y 3-16, the security divider
-## carried across it with a staff door near its east end (STAFF_DOOR), openings
-## in the terminal's east wall, and kiosk rooms in
+## carried across it, openings in the terminal's east wall, and kiosk rooms in
 ## its airside (x 22-27, y 3-8) and landside (x 22-27, y 10-15) halves. Each
 ## kiosk has its counter in its north-west corner and `displays` display
 ## stands at x 25, three rows apart, all facing south; a display's two browse
@@ -12,10 +11,6 @@ extends RefCounted
 const AIRSIDE_ROOM := Rect2i(22, 3, 6, 6)
 const LANDSIDE_ROOM := Rect2i(22, 10, 6, 6)
 const FLOOR := Rect2i(22, 3, 6, 14)
-## The door in the divider near its east end (decision a-door-wall-in-the-
-## security-divider-is-allowed-security-is-e): shop staff, who never pass a
-## scanner, reach the airside counter through it.
-const STAFF_DOOR := Vector2i(26, ReferenceTerminal.DIVIDER_Y)
 const COUNTER_X := 22
 const DISPLAY_X := 25
 
@@ -36,10 +31,7 @@ static func build(grid: BuildGrid, sides: Array = ["air"], displays := 2) -> Dic
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	for x in range(FLOOR.position.x, FLOOR.end.x):
 		var cell := Vector2i(x, ReferenceTerminal.DIVIDER_Y)
-		if cell != STAFF_DOOR:
-			edits.append(BuildEdit.place_wall(cell, BuildGrid.Side.NORTH))
-	# After the walls either side of it, which a door needs.
-	edits.append(BuildEdit.place_wall(STAFF_DOOR, BuildGrid.Side.NORTH, BuildGrid.WallKind.DOOR))
+		edits.append(BuildEdit.place_wall(cell, BuildGrid.Side.NORTH))
 	for y in [4, 5, 6, 7, 11, 12, 13, 14, 15]:
 		edits.append(BuildEdit.remove_wall(Vector2i(21, y), BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):

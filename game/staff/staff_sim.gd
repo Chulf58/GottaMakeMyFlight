@@ -497,7 +497,7 @@ func _replan(m: StaffMember) -> void:
 	var next := m.path[m.path_index + 1]
 	var keep := m.seg_mm
 	var path: Array[Vector2i] = []
-	if sim.grid.can_route(here, next):
+	if sim.grid.can_staff_route(here, next):
 		path = _path(next, target)
 		if path.is_empty():
 			path.append(next)

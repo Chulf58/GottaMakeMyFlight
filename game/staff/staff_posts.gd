@@ -274,7 +274,8 @@ static func is_vacant(staff: StaffSim, station: int, slot: StaffMember.Slot) -> 
 	return workable(staff.sim.grid, staff.sim.layout, station, slot)
 
 
-## The grid path from `from` to `to` that staff walk (BuildGrid.find_path()):
+## The grid path from `from` to `to` that staff walk
+## (BuildGrid.find_staff_path(), through security scanners and lanes):
 ## just `from` when the two are one cell, empty when `to` is NO_CELL or there
 ## is no way.
 static func path(grid: BuildGrid, from: Vector2i, to: Vector2i) -> Array[Vector2i]:
@@ -284,7 +285,7 @@ static func path(grid: BuildGrid, from: Vector2i, to: Vector2i) -> Array[Vector2
 	if from == to:
 		var here: Array[Vector2i] = [from]
 		return here
-	return grid.find_path(from, to)
+	return grid.find_staff_path(from, to)
 
 
 ## The path to `to` from where `m` stands, or, for a member in the pool, the

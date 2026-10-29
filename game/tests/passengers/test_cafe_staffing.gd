@@ -87,16 +87,15 @@ func test_with_no_server_a_cafe_plans_no_visit_and_with_one_it_does() -> void:
 	assert_int(plan["counter"]["id"]).is_equal(_ids["air_counter"])
 
 
-func test_a_passenger_skips_the_nearer_unstaffed_counter_for_a_staffed_one() -> void:
+func test_a_hungry_passenger_skips_an_unstaffed_counter() -> void:
 	_make(false)
+	StaffTestKit.seat_server(_world.staff, _ids["land_counter"])
 	var p := _to_gate()
+	# Airside, only the airside cafe could serve it, and nobody works there.
+	assert_bool(_cafes().try_visit(p)).is_false()
+	assert_bool(_world.staff.is_open(_ids["land_counter"])).is_true()
 	StaffTestKit.seat_server(_world.staff, _ids["air_counter"])
 	assert_int(_cafes().plan_visit(p)["counter"]["id"]).is_equal(_ids["air_counter"])
-	assert_bool(_world.staff.fire(StaffMember.Role.SHOP)).is_true()
-	StaffTestKit.seat_server(_world.staff, _ids["land_counter"])
-	# The staff door in the divider lets the airside passenger reach the
-	# landside cafe, the only one with a server now.
-	assert_int(_cafes().plan_visit(p)["counter"]["id"]).is_equal(_ids["land_counter"])
 
 
 func test_a_server_fired_mid_order_stays_until_the_order_is_made() -> void:

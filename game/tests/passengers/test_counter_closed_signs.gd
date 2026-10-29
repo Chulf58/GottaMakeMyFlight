@@ -65,19 +65,20 @@ func test_a_counter_no_server_can_stand_at_says_its_staff_spot_is_blocked() -> v
 	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.SPOT_BLOCKED_CAPTION)
 
 
-func test_an_airside_counter_staff_cannot_reach_says_so() -> void:
+func test_an_airside_counter_past_the_divider_is_staffed_through_security() -> void:
+	# The divider has no door: staff cross it through the scanners (decision
+	# staff-may-walk-through-security-scanners-and-lanes-so-shop-s), so the
+	# sign says Closed, not that staff can't reach, until a server arrives.
 	var grid := BuildGrid.new()
 	var ids := ShopTestLayout.build(grid, ["air"])
-	# Without the staff door the divider is crossed only through security,
-	# which staff never walk (decision staff-spot-reach-rule-an-edit-that-cuts-
-	# a-reachable-staff-sp, point 3).
-	var shut := BuildEdit.place_wall(ShopTestLayout.STAFF_DOOR, BuildGrid.Side.NORTH)
-	assert_bool(grid.apply(shut).ok).is_true()
 	_attach(grid)
 	var counter: int = ids["air_counter"]
-	assert_bool(_world.staff.spot_unreachable(counter)).is_true()
+	assert_bool(_world.staff.spot_unreachable(counter)).is_false()
 	_markers.sync()
-	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.UNREACHABLE_CAPTION)
+	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.CLOSED_CAPTION)
 	var m := _world.staff.get_member(_world.staff.hire(StaffMember.Role.SHOP))
-	_world.run_to(_world.clock.tick + 120)
-	assert_int(m.station).is_equal(0)
+	while m.state != StaffMember.State.ON_DUTY and _world.clock.tick < 1500:
+		_world.step()
+	assert_int(m.station).is_equal(counter)
+	_markers.sync()
+	assert_object(_markers.closed_sign_for(counter)).is_null()
