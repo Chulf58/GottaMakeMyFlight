@@ -20,6 +20,12 @@ extends RefCounted
 ## after). The views set a heading only on a body that moves, sits or faces
 ## something, so the carrier is one that does none of these and keeps the
 ## turn; one where the turn is not seen is given back and another is tried.
+## The instance also runs the sweep's grip watch (carry_grip_watch.gd: hand
+## bags placed once a frame from the final hand pose) and, when asked on the
+## command line, close-up plates of one carrier (carry_subject_plate.gd).
+
+const GripWatch := preload("res://spike/carry_grip_watch.gd")
+const SubjectPlate := preload("res://spike/carry_subject_plate.gd")
 
 ## How far along the lane (0 unpack cell, 1 pickup cell) the passenger may have
 ## walked for the lift's end.
@@ -37,6 +43,8 @@ const HOLD_FRAMES := 4
 var roller := 0
 var first_frame := -1
 var sharp := 0
+var grip := GripWatch.new()
+var plate := SubjectPlate.new()
 var _heading := 0.0
 var _tried := {}
 
@@ -60,6 +68,8 @@ static func lift_ends(sim: PassengerSim, p: Passenger, progress: float) -> bool:
 ## standing still among `pulled` (id -> last look), holds it, and gives the
 ## body back after HOLD_FRAMES.
 func step(views: PassengerViews, sim: PassengerSim, pulled: Dictionary, frame: int) -> void:
+	grip.start(views, sim)
+	plate.step(views, sim)
 	if roller == 0:
 		if frame < START_FRAME or frame >= LAST_START_FRAME:
 			return
@@ -94,3 +104,20 @@ func count(views: PassengerViews, frame: int, turned: int) -> void:
 		roller = 0
 		first_frame = -1
 		sharp = 0
+
+
+## The staged turn and the grip watch, as printable lines.
+func report() -> String:
+	return (
+		"SWEEP staged turn roller=%d frame=%d sharp_turns_seen=%d\n%s"
+		% [roller, first_frame, sharp, grip.report()]
+	)
+
+
+## Stops the grip watch; what failed in it and in the plates (empty: passed).
+func problems() -> Array[String]:
+	grip.stop()
+	var out := grip.problems()
+	plate.finish()
+	out.append_array(plate.problems)
+	return out
