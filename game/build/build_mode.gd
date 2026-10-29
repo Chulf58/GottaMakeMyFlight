@@ -64,6 +64,7 @@ enum Tool {
 	KIOSK_ROOM,
 	KIOSK_COUNTER,
 	KIOSK_DISPLAY,
+	SCREEN,
 }
 
 const TOOL_ACTIONS := {
@@ -96,6 +97,7 @@ const TOOL_OBJECTS := {
 	Tool.TOILET_SINK: &"toilet_sink",
 	Tool.KIOSK_COUNTER: &"kiosk_counter",
 	Tool.KIOSK_DISPLAY: &"kiosk_display",
+	Tool.SCREEN: ScreenCoverage.SCREEN_ID,
 }
 ## The security lane part tools, in flow order.
 const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
@@ -171,6 +173,9 @@ const VALID_TINT := Color(0.35, 0.9, 0.45, 0.5)
 const INVALID_TINT := Color(0.95, 0.3, 0.25, 0.5)
 const MARKER_TINT := Color(1.0, 0.85, 0.3, 0.7)
 const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
+## The cells a screen stand being placed would cover (ScreenCoverage; decision
+## boredom-screens-are-floor-standing-screen-stands-placed-like).
+const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
 
 @export var grid_size := BuildGrid.DEFAULT_SIZE
 ## When true the grid is centred on the world origin at height 0 and
@@ -222,6 +227,7 @@ var _valid_material := _ghost_material(VALID_TINT)
 var _invalid_material := _ghost_material(INVALID_TINT)
 var _marker_material := _ghost_material(MARKER_TINT)
 var _area_remove_material := _ghost_material(AREA_REMOVE_TINT)
+var _coverage_material := _ghost_material(COVERAGE_TINT)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
@@ -991,6 +997,8 @@ func _draw_ghost(edit: BuildEdit, material: Material) -> void:
 			)
 		BuildEdit.Kind.PLACE_OBJECT:
 			_ghost_object(edit.def_id, edit.cell, edit.facing, material)
+			for cell in coverage_preview(edit):
+				_ghost_tile(cell, _coverage_material).name = "Coverage"
 		BuildEdit.Kind.REMOVE_OBJECT:
 			var record := grid.get_object(edit.object_id)
 			_ghost_object(record["def"], record["anchor"], record["facing"], material)
@@ -1009,9 +1017,18 @@ func _ghost_object(def_id: StringName, anchor: Vector2i, turn: int, material: Ma
 		_ghost_tile(spot, _marker_material)
 
 
-func _ghost_tile(cell: Vector2i, material: Material) -> void:
+## The cells the ghost tints as covered while `edit` places a screen stand:
+## ScreenCoverage.covered_cells() where it would stand; empty for any other edit.
+func coverage_preview(edit: BuildEdit) -> Array[Vector2i]:
+	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or edit.def_id != ScreenCoverage.SCREEN_ID:
+		return []
+	return ScreenCoverage.covered_cells(grid, edit.cell, edit.facing)
+
+
+func _ghost_tile(cell: Vector2i, material: Material) -> MeshInstance3D:
 	var tile := _ghost_box(Vector3(0.96, 0.08, 0.96), material)
 	tile.position = grid.cell_to_world(cell) + Vector3(0.0, 0.06, 0.0)
+	return tile
 
 
 ## One tinted slab over a rectangle of cells.

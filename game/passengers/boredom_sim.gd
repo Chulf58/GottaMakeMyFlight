@@ -10,6 +10,14 @@ extends RefCounted
 ## facility visit leave it as it is, and so does being entertained
 ## (entertained()).
 ##
+## A waiting passenger a screen stand covers (ScreenCoverage, Boredom 4/5;
+## decision boredom-screens-halve-how-fast-boredom-rises-for-covered-wai)
+## watches it, and its boredom rises at half the rate: RISE once every
+## SCREEN_RISE_BEATS seconds, however many screens cover it. A screen never
+## lowers boredom, so a long wait still ends in a kiosk visit
+## (test_screen_tuning). A seated passenger watches from its chair's cell,
+## everyone else from the cell it is on.
+##
 ## From BORED_AT the passenger is bored: it gets no mood from its gate seat
 ## (PassengerSim's beat asks is_bored()) and loses a mood point every
 ## MOOD_BEATS seconds while it has no visit under way, like a high toilet
@@ -23,6 +31,9 @@ const MAX := 100
 ## The rise once a waiting second.
 const RISE := 1
 const BORED_AT := 50
+## While a screen covers a waiting passenger, boredom rises RISE only once
+## every this many beats: half the rate.
+const SCREEN_RISE_BEATS := 2
 ## A bored passenger with no visit loses a mood point every this many beats.
 const MOOD_BEATS := 5
 ## The stages boredom rises in, every one listed: the station and cafe queues
@@ -39,12 +50,16 @@ const WAITING_STAGES: Array[Passenger.Stage] = [
 ## screens, later items): called with a Passenger, true while it is
 ## entertained. Unset, nobody is.
 var entertainment := Callable()
+## The cells the grid's screen stands cover, followed from bind().
+var screens := ScreenCoverage.new()
 
 var _sim: PassengerSim
 
 
 func bind(sim: PassengerSim) -> void:
 	_sim = sim
+	if sim.grid != null:
+		screens.bind(sim.grid)
 
 
 ## The boredom a passenger starts with, spawned or migrated from a save
@@ -62,19 +77,34 @@ func entertained(p: Passenger) -> bool:
 	return entertainment.is_valid() and entertainment.call(p)
 
 
-## Whether `p`'s boredom rises on its beat: waiting and not entertained.
+## The cell `p` watches a screen from: its chair while seated, else where it is.
+static func watch_cell(p: Passenger) -> Vector2i:
+	if p.stage == Passenger.Stage.SEATED and p.seat_cell != Passenger.NO_CELL:
+		return p.seat_cell
+	return p.at
+
+
+## Whether `p` watches a screen on its beat: waiting where one covers it.
+func watching(p: Passenger) -> bool:
+	return WAITING_STAGES.has(p.stage) and screens.covers(watch_cell(p))
+
+
+## Whether `p`'s boredom rises on its beat: waiting and not entertained. While
+## it watches a screen, only every SCREEN_RISE_BEATS-th beat raises it.
 func rises(p: Passenger) -> bool:
 	return WAITING_STAGES.has(p.stage) and not entertained(p)
 
 
-## Once a simulated second per passenger: boredom rises while it waits, and
-## a bored passenger with no visit under way loses mood.
+## Once a simulated second per passenger: boredom rises while it waits, at half
+## the rate under a screen, and a bored passenger with no visit under way loses
+## mood.
 func beat(p: Passenger) -> void:
-	if rises(p):
+	@warning_ignore("integer_division")
+	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
+	var slowed := watching(p) and posmod(beat_number, SCREEN_RISE_BEATS) != 0
+	if rises(p) and not slowed:
 		p.boredom = mini(p.boredom + RISE, MAX)
 	if not is_bored(p) or StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE:
 		return
-	@warning_ignore("integer_division")
-	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
 	if posmod(beat_number, MOOD_BEATS) == 0:
 		p.mood = maxi(p.mood - 1, 0)
