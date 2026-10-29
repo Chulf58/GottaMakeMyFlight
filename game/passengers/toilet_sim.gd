@@ -32,7 +32,9 @@ extends RefCounted
 ## stands up (its need is reset). A visit whose stall is gone ends at once.
 ##
 ## Visits and stalls are handled in id order with integer quantities only, so
-## a save loaded at a tick boundary plays on exactly.
+## a save loaded at a tick boundary plays on exactly. Who owns which visit and
+## stall, the choice of stall and the reconcile walk are FacilitySlots', shared
+## with ShopSim; the phases, poses and what an interrupted use leaves are here.
 
 const NEED_START_MIN := 30
 const NEED_START_MAX := 90
@@ -83,17 +85,19 @@ const PHASE_TICKS := {
 var layout := ToiletLayout.new()
 ## Set by any grid edit: every visit's deadline is worked out again on the
 ## next tick. Saved as it is, so a loaded game does the same.
-var deadlines_stale := false
+var deadlines_stale: bool:
+	get:
+		return _core.deadlines_stale
+	set(value):
+		_core.deadlines_stale = value
 
 var _sim: PassengerSim
 var _set_stage: Callable
 var _leave_station: Callable
 var _release_gate_seat: Callable
-## Passenger id -> ToiletVisit.
-var _visits: Dictionary = {}
-## Derived: stall object id -> passenger id.
-var _stalls: Dictionary = {}
-var _layout_dirty := true
+## The visits (passenger id -> ToiletVisit) and stall holders, keyed by stall
+## object id.
+var _core := FacilitySlots.new()
 
 
 ## Wires the sim's own stage, station and gate-seat helpers in, so a stage
@@ -105,9 +109,7 @@ func bind(
 	_set_stage = set_stage
 	_leave_station = leave_station
 	_release_gate_seat = release_gate_seat
-	_layout_dirty = true
-	if not sim.grid.edit_applied.is_connected(_on_edit_applied):
-		sim.grid.edit_applied.connect(_on_edit_applied)
+	_core.bind(sim, layout)
 
 
 ## A need a passenger saved before toilets existed starts with: spread over
@@ -119,19 +121,16 @@ static func migrated_need(passenger_id: int) -> int:
 
 
 func visit_of(passenger_id: int) -> ToiletVisit:
-	return _visits.get(passenger_id)
+	return _core.visit_of(passenger_id)
 
 
 func visit_ids() -> Array[int]:
-	var ids: Array[int] = []
-	ids.assign(_visits.keys())
-	ids.sort()
-	return ids
+	return _core.ids()
 
 
 ## The passenger holding a stall, walkers included, or 0.
 func stall_holder(stall_id: int) -> int:
-	return _stalls.get(stall_id, 0)
+	return _core.holder(stall_id)
 
 
 ## Commits `p` to a visit at the free stall nearest by path when the forecast
@@ -195,7 +194,7 @@ func refuse(p: Passenger) -> void:
 ## again. Whether a visit starts is NeedsPolicy's to decide.
 func beat(p: Passenger) -> void:
 	p.toilet_need = mini(p.toilet_need + NEED_RISE, NEED_MAX)
-	var visit: ToiletVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit != null:
 		# The abandon-now forecast with live queues, once a second per visit.
 		if CHECKED_STAGES.has(p.stage) or p.stage == Passenger.Stage.STANDING_UP:
@@ -213,32 +212,17 @@ func beat(p: Passenger) -> void:
 ## visit whose stall is gone ends, and every deadline is forecast again.
 ## Called at the start of every tick, before anyone steps.
 func reconcile() -> void:
-	refresh()
-	for id in visit_ids():
-		var visit: ToiletVisit = _visits.get(id)
-		var p := _sim.get_passenger(id)
-		var stall := layout.stall(visit.stall_id)
-		if stall.is_empty():
-			_stall_gone(p, visit)
-			continue
-		visit.stall = stall
-		visit.room = stall["room"]
-		if deadlines_stale:
-			visit.deadline = _live_deadline(p, visit)
-	deadlines_stale = false
+	_core.reconcile(_keep, _live_deadline)
 
 
 ## Rebuilds the layout when an edit made it stale.
 func refresh() -> void:
-	if not _layout_dirty:
-		return
-	layout.rebuild(_sim.grid)
-	_layout_dirty = false
+	_core.refresh()
 
 
 ## One tick of a passenger in a toilet stage.
 func step(p: Passenger) -> void:
-	var visit: ToiletVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit == null:
 		push_error("ToiletSim: passenger %d is in a toilet stage with no visit" % p.id)
 		_set_stage.call(p, Passenger.Stage.TO_GATE if p.cleared else Passenger.Stage.TO_SECURITY)
@@ -275,7 +259,7 @@ func step(p: Passenger) -> void:
 
 ## A passenger who got up from a gate seat for the toilet sets off for it.
 func depart(p: Passenger) -> void:
-	var visit: ToiletVisit = _visits[p.id]
+	var visit := visit_of(p.id)
 	var route := VisitRoute.plan(_sim.grid, p, visit.stall.get("approach", p.at))
 	if _sim.tick >= visit.deadline or visit.stall.is_empty() or route.is_empty():
 		_end(p, visit)
@@ -285,15 +269,15 @@ func depart(p: Passenger) -> void:
 
 ## Drops the visit of a passenger who made or missed the flight.
 func cleanup(p: Passenger) -> void:
-	var visit: ToiletVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit != null:
-		_remove(visit)
+		_core.release(visit)
 
 
 ## Where a passenger inside a stall is drawn: from the approach cell to the
 ## turn spot stepping in, to the use spot sitting down, and back out again.
 func stall_position(p: Passenger) -> Vector3:
-	var visit: ToiletVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit == null or visit.stall.is_empty():
 		var at := p.grid_position()
 		return _sim.grid.origin + Vector3(at.x, 0.0, at.y)
@@ -320,7 +304,7 @@ func stall_position(p: Passenger) -> Vector3:
 ## The grid direction a passenger sitting down, seated or standing up in a
 ## stall faces (out of the door, as Mount_Use does), or zero otherwise.
 func use_facing(p: Passenger) -> Vector2i:
-	var visit: ToiletVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit == null or visit.stall.is_empty():
 		return Vector2i.ZERO
 	if StageKinds.pose(p.stage) == StageKinds.Pose.UPRIGHT or not Passenger.in_toilet(p.stage):
@@ -331,44 +315,28 @@ func use_facing(p: Passenger) -> Vector2i:
 ## Installs visits a ToiletSnapshot.load() checked; rederive() then rebuilds
 ## the stall holders and the layout.
 func restore(state: Dictionary) -> void:
-	_visits = state["visits"]
-	deadlines_stale = state["deadlines_stale"]
+	_core.restore(state["visits"], state["deadlines_stale"])
 
 
 ## Rebuilds what is derived from the visits after a load.
 func rederive() -> void:
-	_layout_dirty = true
-	refresh()
-	_stalls.clear()
+	_core.rederive()
 	for id in visit_ids():
-		var visit: ToiletVisit = _visits[id]
-		_stalls[visit.stall_id] = id
+		var visit := visit_of(id)
 		visit.stall = layout.stall(visit.stall_id)
 
 
 ## The free stall nearest `p` by path, ties to the lower stall id, with the
-## walk: {"stall", "route"}. Empty when no free stall can be reached. Octile
-## distance (less a diagonal step for a passenger partway along one) is a
-## lower bound on the path, so stalls further than the best path are skipped.
+## walk: {"stall", "route"} (FacilitySlots.nearest()). Empty when no free
+## stall can be reached.
 func _plan(p: Passenger) -> Dictionary:
-	var free: Array = []
+	var slots: Array = []
 	for stall in layout.stalls:
-		if not _stalls.has(stall["id"]):
-			free.append([Passenger.octile_mm(p.at, stall["approach"]), stall["id"], stall])
-	free.sort()
-	var best := {}
-	for entry in free:
-		if not best.is_empty() and entry[0] - Passenger.DIAGONAL_MM > int(best["route"]["mm"]):
-			break
-		var route := VisitRoute.plan(_sim.grid, p, entry[2]["approach"])
-		if route.is_empty():
-			continue
-		var better: bool = best.is_empty() or int(route["mm"]) < int(best["route"]["mm"])
-		if not better and int(route["mm"]) == int(best["route"]["mm"]):
-			better = int(entry[1]) < int(best["stall"]["id"])
-		if better:
-			best = {"stall": entry[2], "route": route}
-	return best
+		slots.append({"key": stall["id"], "order": [stall["id"]], "entry": stall})
+	var best := _core.nearest(p, slots, 0, true)
+	if best.is_empty():
+		return {}
+	return {"stall": best["entry"], "route": best["route"]}
 
 
 ## Ticks from now until a visit walking `walk_mm` starts to stand up.
@@ -407,8 +375,7 @@ func _commit(p: Passenger, stall: Dictionary, route: Dictionary) -> void:
 	visit.deadline = VisitForecast.deadline(
 		_sim, p, stall["approach"], LEAVE_TICKS, visit.resume_stage
 	)
-	_visits[p.id] = visit
-	_stalls[visit.stall_id] = p.id
+	_core.reserve(visit)
 	p.late = false
 	p.stuck = Passenger.Stuck.NONE
 	match p.stage:
@@ -467,13 +434,25 @@ func _turn_back(p: Passenger, reverse: Passenger.Stage, length: int) -> void:
 	p.stage_tick = _sim.tick - (length - spent)
 
 
+## FacilitySlots.reconcile()'s check of one visit: its stall entry is brought
+## up to date, or the stall is gone and the visit ends.
+func _keep(p: Passenger, visit: ToiletVisit) -> bool:
+	var stall := layout.stall(visit.stall_id)
+	if stall.is_empty():
+		_stall_gone(p, visit)
+		return false
+	visit.stall = stall
+	visit.room = stall["room"]
+	return true
+
+
 ## The stall went away under the visit: a walker gives up; one inside the
 ## stall is back on the approach cell at once (its need reset if it was using
 ## the stall); one still getting up from a gate seat lets the gate take over.
 func _stall_gone(p: Passenger, visit: ToiletVisit) -> void:
 	match p.stage:
 		Passenger.Stage.STANDING_UP:
-			_remove(visit)
+			_core.release(visit)
 		Passenger.Stage.TOILET_WALK:
 			_end(p, visit)
 		_:
@@ -485,7 +464,7 @@ func _stall_gone(p: Passenger, visit: ToiletVisit) -> void:
 ## The visit is over, or given up before the stall: the passenger goes on
 ## with its journey.
 func _end(p: Passenger, visit: ToiletVisit) -> void:
-	_remove(visit)
+	_core.release(visit)
 	_resume(p, visit)
 
 
@@ -495,14 +474,3 @@ func _resume(p: Passenger, visit: ToiletVisit) -> void:
 	p.stuck = Passenger.Stuck.NONE
 	p.clear_path()
 	_set_stage.call(p, visit.resume_stage)
-
-
-func _remove(visit: ToiletVisit) -> void:
-	_visits.erase(visit.passenger)
-	if _stalls.get(visit.stall_id, 0) == visit.passenger:
-		_stalls.erase(visit.stall_id)
-
-
-func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
-	_layout_dirty = true
-	deadlines_stale = true
