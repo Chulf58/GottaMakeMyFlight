@@ -206,7 +206,8 @@ static func _build() -> void:
 ## read from the .glb (a test keeps them in step). Placed as exported, with no
 ## rescale (decision oversized-toon-decor-trees-fountain-statue-tree-bench-is-
 ## bui). A chain is three cells in a row, a post in each outer cell and the
-## chain across all three.
+## chain across all three, drawn with its two posts (InteriorKit.OBJECT_POSTS),
+## so its height is the posts'.
 static func _build_decor() -> void:
 	var metal := Color(0.55, 0.58, 0.62)
 	var green := Color(0.3, 0.55, 0.3)
@@ -216,7 +217,7 @@ static func _build_decor() -> void:
 	_add(&"bush", "Bush", Vector2i(2, 2), green, 1.63)
 	_add(&"fountain_indoor", "Fountain", Vector2i(2, 2), Color(0.5, 0.7, 0.85), 1.8)
 	_add(&"metal_pole", "Post", Vector2i.ONE, metal, 1.62)
-	_add(&"metal_pole_chain", "Chain", Vector2i(1, 3), metal, 1.21)
+	_add(&"metal_pole_chain", "Chain", Vector2i(1, 3), metal, 1.62)
 	_add(&"plant_pot_1a", "Planter", Vector2i(1, 2), green, 1.62)
 	_add(&"plant_pot_2a", "Plant pot", Vector2i(2, 2), green, 1.05)
 	_add(&"statue_indoor", "Statue", Vector2i.ONE, stone, 2.4)

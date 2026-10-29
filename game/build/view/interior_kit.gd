@@ -19,6 +19,11 @@ const PRIZE_CAR_PIECE := "vehicles/tp_suv_01a"
 ## Pieces that carry another piece: object id -> [the mount it stands on, the
 ## piece]. attach_mounted() adds it to the object's node.
 const OBJECT_MOUNTED := {&"prize_podium": ["Mount_Car", PRIZE_CAR_PIECE]}
+## The post a chain hangs from (tc_metal_pole_chain_1a holds the chain only) and
+## where each of its two posts stands in the chain piece's frame, 2 m apart on
+## the floor, as decor_plates_probe.gd places them. attach_mounted() adds them.
+const CHAIN_POST_PIECE := "decor/tc_metal_pole_1a"
+const OBJECT_POSTS := {&"metal_pole_chain": [Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 2.0)]}
 ## Height of a cut-away wall or post.
 const STUB_HEIGHT := 0.3
 const WALL_HEIGHT := 2.5
@@ -98,7 +103,7 @@ const OBJECT_OFFSETS := {
 	&"exit_door": Vector3(0.0, 0.0, -0.5),
 	# A chain is three cells in a row with a post in each outer cell: its piece
 	# starts on one post and runs 2 m to the next, so it sits 1 m back of the
-	# centre.
+	# centre, and the node adds the two posts (OBJECT_POSTS).
 	&"metal_pole_chain": Vector3(0.0, 0.0, -1.0),
 }
 const WALL_PIECES := {
@@ -153,10 +158,15 @@ static func piece_path(piece: String) -> String:
 	return (FOLDER_PIECE_PATH if "/" in piece else PIECE_PATH) % piece
 
 
-## Adds the piece an object carries (OBJECT_MOUNTED) under `root`, the object's
-## node tree, standing at its mount and turned the way the mount points. An
-## object that carries nothing is left as it is.
+## Adds the pieces an object carries under `root`, the object's node tree: the
+## piece in OBJECT_MOUNTED standing at its mount and turned the way the mount
+## points, and the posts in OBJECT_POSTS at their places in the piece's frame.
+## An object that carries nothing is left as it is.
 static func attach_mounted(root: Node3D, def_id: StringName) -> void:
+	for place in OBJECT_POSTS.get(def_id, []):
+		var post := instantiate(CHAIN_POST_PIECE)
+		post.position = place
+		root.add_child(post)
 	var entry: Array = OBJECT_MOUNTED.get(def_id, [])
 	if entry.is_empty():
 		return

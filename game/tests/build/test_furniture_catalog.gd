@@ -130,8 +130,9 @@ func test_each_model_stays_inside_its_footprint_and_def_height_is_its_top() -> v
 			-BELOW_FLOOR.get(id, 0.0) - 0.01
 		)
 		var top := box.end.y
-		if id == PRIZE_CAR_ID:
-			# The podium is drawn with its car, so its top is the drawn node's.
+		if InteriorKit.OBJECT_MOUNTED.has(id) or InteriorKit.OBJECT_POSTS.has(id):
+			# The podium and the chain are drawn with a car and posts, so the top
+			# is the drawn node's.
 			var node := BuildView.make_object_node(def, null)
 			top = _node_box(node).end.y
 			node.free()
@@ -153,6 +154,30 @@ func test_the_chain_is_three_cells_with_a_post_in_each_outer_cell() -> void:
 	assert_float(box.position.z).is_greater_equal(-1.0)
 	assert_float(box.end.z).is_less_equal(1.0)
 	assert_float(box.size.z).is_greater(1.5)
+	# The tc_metal_pole_chain_1a glb holds the chain only, so the node the build
+	# view draws adds the two posts, standing on the floor in the outer cells.
+	var node := BuildView.make_object_node(def, null)
+	var posts := _posts_of(node)
+	assert_int(posts.size()).is_equal(2)
+	var zs: Array[float] = []
+	for post in posts:
+		var frame := _frame_in(post, node)
+		var post_box := _node_box(post)
+		zs.append(frame.origin.z)
+		print("chain post at %s, bounds %s" % [frame.origin, frame * post_box])
+		assert_float(frame.origin.x).is_equal_approx(0.0, 0.01)
+		assert_float(frame.origin.y).is_equal_approx(0.0, 0.01)
+		assert_float((frame * post_box).position.y).is_equal_approx(0.0, 0.01)
+		# The chain's end lies inside the post and its hang is below the post's top.
+		var span := frame * post_box
+		var at_post := box.position.z if frame.origin.z < 0.0 else box.end.z
+		assert_float(at_post).is_between(span.position.z, span.end.z)
+		assert_float(box.position.y).is_greater(0.0)
+		assert_float(box.end.y).is_less_equal(span.end.y)
+	zs.sort()
+	assert_float(zs[0]).is_equal_approx(-1.0, 0.01)
+	assert_float(zs[1]).is_equal_approx(1.0, 0.01)
+	node.free()
 
 
 ## The chain reserves its whole span: nothing else goes in a cell it covers,
@@ -236,17 +261,48 @@ func test_the_podium_node_holds_the_car_at_the_car_mount() -> void:
 	node.free()
 
 
-## A ghost wears its one material on the car too.
-func test_the_ghost_podium_tints_the_car() -> void:
+## A ghost wears its one material on the car and on the chain's posts too.
+func test_the_ghost_tints_the_car_and_the_chain_posts() -> void:
 	var ghost := StandardMaterial3D.new()
-	var node := BuildView.make_object_node(BuildCatalog.get_def(PRIZE_CAR_ID), ghost)
-	var car := _car_child(node)
+	var podium := BuildView.make_object_node(BuildCatalog.get_def(PRIZE_CAR_ID), ghost)
+	var car := _car_child(podium)
 	assert_object(car).is_not_null()
-	var meshes := car.find_children("*", "MeshInstance3D", true, false)
+	_assert_all_meshes_wear(car, ghost)
+	var chain := BuildView.make_object_node(BuildCatalog.get_def(&"metal_pole_chain"), ghost)
+	var posts := _posts_of(chain)
+	assert_int(posts.size()).is_equal(2)
+	for post in posts:
+		_assert_all_meshes_wear(post, ghost)
+	podium.free()
+	chain.free()
+
+
+func _assert_all_meshes_wear(root: Node3D, material: Material) -> void:
+	var meshes := root.find_children("*", "MeshInstance3D", true, false)
 	assert_int(meshes.size()).is_greater(0)
 	for mi in meshes:
-		assert_object((mi as MeshInstance3D).material_override).is_same(ghost)
-	node.free()
+		assert_object((mi as MeshInstance3D).material_override).is_same(material)
+
+
+## The post nodes under a drawn chain, found by the .glb they came from.
+func _posts_of(node: Node) -> Array[Node3D]:
+	var path := InteriorKit.piece_path(InteriorKit.CHAIN_POST_PIECE)
+	var found: Array[Node3D] = []
+	for child in node.get_children():
+		if child.scene_file_path == path:
+			found.append(child as Node3D)
+		found.append_array(_posts_of(child))
+	return found
+
+
+## `node`'s transform in the frame of `root`, an ancestor of it.
+func _frame_in(node: Node3D, root: Node3D) -> Transform3D:
+	var frame := node.transform
+	var parent := node.get_parent()
+	while parent != root:
+		frame = (parent as Node3D).transform * frame
+		parent = parent.get_parent()
+	return frame
 
 
 ## The car's root node under a drawn podium, found by the .glb it came from.
