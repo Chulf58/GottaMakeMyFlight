@@ -168,3 +168,70 @@ func test_a_load_in_the_corridor_starts_in_the_front_carry() -> void:
 	assert_float(before).is_greater(0.0)
 	assert_float(before).is_less(1.0)
 	assert_float(weight).is_equal(1.0)
+
+
+## On the walk back, the case turns back to the side upright ahead of the arm
+## (CarryOnProps._bag_weight: the arm's weight squared on a turn from the
+## front), so its lower end is not swung through the thigh, and both end the
+## turn together. Control: the turn was seen part way (strictly between 0 and
+## 1), so the two weights were compared mid-turn.
+func test_the_case_turns_back_to_the_side_ahead_of_the_arm() -> void:
+	var w := _make()
+	var views := _views[-1]
+	var props := views.carry_on_props()
+	var ids := w.send_all([[1, false, true]])
+	var p := w.world.passenger(ids[0])
+	var sim := w.world.sim
+	var mid: Array = []
+	var was_front := false
+	for i in 3000:
+		w.world.step()
+		views.draw()
+		var carried := SecurityLooks.bag_homes(sim, p) == [SecurityLooks.Home.HAND]
+		var front := SecurityLooks.carry_front(sim, p) and carried
+		if was_front and not front and p.stage == Passenger.Stage.SECURITY:
+			var start := sim.tick
+			while sim.tick < start + int(CarryOnProps.TRANSFER_TICKS / 2.0):
+				w.world.step()
+			mid = [props.front_weight_of(ids[0]), props.bag_turn_of(ids[0])]
+			while sim.tick < start + int(CarryOnProps.TRANSFER_TICKS):
+				w.world.step()
+			mid.append_array([props.front_weight_of(ids[0]), props.bag_turn_of(ids[0])])
+			break
+		was_front = front
+	print("turn back to the side, [arm, bag] halfway then at the end: %s" % [mid])
+	assert_int(mid.size()).is_equal(4)
+	assert_float(mid[0]).is_greater(0.0)
+	assert_float(mid[0]).is_less(1.0)
+	assert_float(mid[1]).is_less(mid[0])
+	assert_float(mid[1]).is_equal_approx(mid[0] * mid[0], 0.001)
+	assert_float(mid[2]).is_equal(0.0)
+	assert_float(mid[3]).is_equal(0.0)
+
+
+## A turn that reverses part way starts from where the case is, both ways (the
+## stamps sync() makes on a carry change, in its order: the arm's and the
+## case's weights at that tick, then the tick): no jump at the reversal, and
+## the case ends the last turn with the arm.
+func test_a_reversed_case_turn_starts_from_where_the_case_is() -> void:
+	var props := CarryOnProps.new()
+	var held := {"front": false}
+	var flips: Array = [[10.0, true], [13.0, false], [15.0, true]]
+	for flip: Array in flips:
+		var at: float = flip[0]
+		var bag_then := props._bag_weight(held, at)
+		var arm_then := props._front_weight(held, at)
+		held["front_from"] = props._front_weight(held, at)
+		held["bag_from"] = props._bag_weight(held, at)
+		held["front_since"] = at
+		held["front"] = flip[1]
+		print("flip at %.0f to front=%s: bag %.3f arm %.3f" % [at, flip[1], bag_then, arm_then])
+		assert_float(props._bag_weight(held, at)).is_equal_approx(bag_then, 0.0001)
+		assert_float(props._front_weight(held, at)).is_equal_approx(arm_then, 0.0001)
+	# Control: the reversals came part way, so a restart from 0 or 1 would jump.
+	assert_float(held["bag_from"]).is_greater(0.0)
+	assert_float(held["bag_from"]).is_less(1.0)
+	var end := 15.0 + CarryOnProps.TRANSFER_TICKS
+	assert_float(props._bag_weight(held, end)).is_equal(1.0)
+	assert_float(props._front_weight(held, end)).is_equal(1.0)
+	props.free()

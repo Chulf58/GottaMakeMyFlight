@@ -100,9 +100,13 @@ const TRAIL_M := 1.0
 ## the rods from the hand pass outside the thigh.
 const TRAIL_SIDE_M := 0.3
 ## How far to the pulling hand's side the axle may be, from the body's centre
-## line, and how far behind it at least (TRAIL_M * 0.6).
+## line, and how far behind it at least: a walked line that kinks at each
+## heading change (a diagonal zig-zag) puts the spot 1 m of walk back nearer
+## than 1 m, and with the axle 0.28-0.30 m out an axle 0.85 m or less behind
+## meets the trailing foot (windowed contact bench, 2026-10-29: none at 0.9 m).
 const TRAIL_SIDE_MIN_M := 0.28
 const TRAIL_SIDE_MAX_M := 0.6
+const TRAIL_BEHIND_MIN_M := 0.95
 ## The drawn axle follows its place behind the body at a limited speed in sim
 ## time, round the pulling hand's side about the body's centre, at least
 ## SWING_RADIUS_M from it: when the place jumps (the body turned sharply, or
@@ -228,15 +232,21 @@ static func ride(grid: BuildGrid, lane: Dictionary, body: Vector3) -> Transform3
 static func carried(
 	grip: Vector3, centre: Vector3, yaw: float, scale_by: float, kind := SecurityLooks.Kind.CASE
 ) -> Transform3D:
-	var box := bag_box(kind)
 	var lateral := Basis(Vector3.UP, yaw) * Vector3.RIGHT
 	var out := lateral if (grip - centre).dot(lateral) >= 0.0 else -lateral
 	var inward := -out
 	var hang := Basis(inward.cross(Vector3.UP), inward, Vector3.UP).scaled(Vector3.ONE * scale_by)
-	var anchor := Vector3(0.0, box.end.y, box.end.z)
+	return Transform3D(hang, grip - hang * grip_anchor(kind))
+
+
+## The point of a hand-carried bag (in its own frame, scale 1) held at the grip
+## in the side carry: a hard case's top edge on its handle face, a lifted
+## roller's carry handle.
+static func grip_anchor(kind: SecurityLooks.Kind) -> Vector3:
 	if kind == SecurityLooks.Kind.ROLLER:
-		anchor = ROLLER_HANDLE
-	return Transform3D(hang, grip - hang * anchor)
+		return ROLLER_HANDLE
+	var box := bag_box(kind)
+	return Vector3(0.0, box.end.y, box.end.z)
 
 
 ## A hard case carried in front of the body (a cell closed on both sides):
@@ -440,6 +450,7 @@ func sync() -> void:
 			# Turning between side and front carry starts from where it is now,
 			# at this tick: a frame that runs several ticks stamps each one.
 			held["front_from"] = _front_weight(held, _tick())
+			held["bag_from"] = _bag_weight(held, _tick())
 			held["front_since"] = _tick()
 			held["front"] = front
 		held["lane"] = SecurityLooks.lane_of(sim, p)
@@ -532,12 +543,43 @@ func front_weight_of(id: int) -> float:
 	return _front_weight(_held.get(id, {}), _now())
 
 
+## How far the hard case (or lifted roller) of passenger `id` has turned to
+## the front carry: 0 side, 1 front (_bag_weight).
+func bag_turn_of(id: int) -> float:
+	return _bag_weight(_held.get(id, {}), _now())
+
+
 ## How many times bag `index` of passenger `id` has been put in place (a move
 ## only stamped, not placed, does not count): a test reads it before and after
 ## a frame to see that the bag was placed once.
 func placements_of(id: int, index: int) -> int:
 	var bags: Array = _held.get(id, {}).get("bags", [])
 	return int(bags[index].get("placed", 0)) if index < bags.size() else 0
+
+
+## How many times passenger `id`'s props have been drawn (draw()): once a
+## frame, twice on a frame PassengerViews.snap() also draws.
+func draws_of(id: int) -> int:
+	return int(_held.get(id, {}).get("draw_seq", 0))
+
+
+## Where the hand holds bag `index` of passenger `id` as the bag is drawn now
+## (a hard case or lifted roller in hand: its point at the grip, through the
+## side and front carry), or Vector3.INF for a bag not held that way. A check
+## compares it with grip_of() before the frame is drawn, to see that the bag
+## was placed from the hand's final pose.
+func held_point(id: int, index: int) -> Vector3:
+	var held: Dictionary = _held.get(id, {})
+	var bags: Array = held.get("bags", [])
+	if index >= bags.size() or held["homes"][index] != SecurityLooks.Home.HAND:
+		return Vector3.INF
+	var bag: Dictionary = bags[index]
+	if bag.get("carry") != SecurityLooks.Carry.HAND:
+		return Vector3.INF
+	var ahead := carried_in_front(Vector3.ZERO, 0.0, held["scale"], bag["kind"])
+	var held_ahead := ahead.affine_inverse() * Vector3.ZERO
+	var at := grip_anchor(bag["kind"]).lerp(held_ahead, held.get("bag_weight", 0.0))
+	return (bag["node"] as Node3D).global_transform * at
 
 
 ## How many bag and tray nodes are drawn now.
@@ -558,23 +600,32 @@ func _exit_tree() -> void:
 
 
 ## Before the frame is drawn: bags going to a hand, which draw() leaves to
-## _on_pose, are placed now when their skeleton did not report this frame.
+## _on_pose, are placed now when their skeleton did not report after the draw.
 func _unposed() -> void:
-	var frame := Engine.get_process_frames()
 	var now := _now()
 	for id in _held:
 		var held: Dictionary = _held[id]
-		if held.get("left_to_pose", -1) != frame or held.get("posed_frame", -2) == frame:
-			continue
 		var body := views.node_for(id)
-		if body != null:
+		if body != null and _left_to_place(held):
 			_place_bags(held, body, _tray_transform(held, body), now, Placing.HAND)
 
 
+## Whether the bags going to a hand of `held` still wait to be placed after
+## this frame's draw(); true once only (the caller places them).
+func _left_to_place(held: Dictionary) -> bool:
+	if held.get("left_to_pose", -1) != Engine.get_process_frames():
+		return false
+	if held.get("posed_seq", -1) == held["draw_seq"]:
+		return false
+	held["posed_seq"] = held["draw_seq"]
+	return true
+
+
 ## Places every prop for this frame but the bags going to a hand. Those are
-## placed when the character's skeleton has its final pose for the frame
-## (_on_pose), so they do not trail the hand by a frame, or before the frame is
-## drawn (_unposed) if the skeleton did not report: once per frame either way.
+## placed when the character's skeleton reports its final pose for the frame
+## (_on_pose, after this draw), so they do not trail the hand by a frame, or
+## before the frame is drawn (_unposed) if the skeleton did not report after
+## it: once per frame either way.
 func draw() -> void:
 	var now := _now()
 	for id in _held:
@@ -586,9 +637,11 @@ func draw() -> void:
 		if held["tray"] != null:
 			(held["tray"] as Node3D).global_transform = tray_xf
 		held["weight"] = _front_weight(held, now)
+		held["bag_weight"] = _bag_weight(held, now)
 		_body_ids[body] = id
 		# Bags first: a new move is stamped there, and the arms follow it.
 		held["left_to_pose"] = Engine.get_process_frames()
+		held["draw_seq"] = int(held.get("draw_seq", 0)) + 1
 		_place_bags(held, body, tray_xf, now, Placing.NOT_HAND)
 		_pose_arms(held, body, now)
 
@@ -615,20 +668,26 @@ func _place_bags(
 			)
 		):
 			continue
+		# A bag going to a hand is only stamped here (draw()), so its place
+		# (and a roller's follower) is worked out once, when it is placed.
+		var stamp_only: bool = placing == Placing.NOT_HAND and hand_home
 		var want_reach := [REACH_BUILT_M]
-		var want := _bag_transform(held, body, tray_xf, i, homes[i], want_reach)
+		var want := node.global_transform
+		if not stamp_only:
+			want = _bag_transform(held, body, tray_xf, i, homes[i], want_reach)
 		# A change of hand moves the bag across like a change of home.
 		if stamp:
 			# The move starts where the bag is, held in the passenger's frame,
 			# so a bag picked up while walking stays ahead of the legs. Its clock
 			# is the tick sync() saw the change on, not the frame it is drawn in.
+			# A new bag's move is over at once, so its start is never drawn.
 			var start := want if bag["home"] == -1 else node.global_transform
 			bag["from"] = body.global_transform.affine_inverse() * start
 			bag["since"] = bag["changed"] - (TRANSFER_TICKS if bag["home"] == -1 else 0.0)
 			bag["was"] = bag["home"]
 			bag["home"] = bag["place"]
 			bag["reach_from"] = _reach_of(node, kind)
-			if placing == Placing.NOT_HAND and hand_home:
+			if stamp_only:
 				continue
 		bag["placed"] = int(bag.get("placed", 0)) + 1
 		var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
@@ -736,14 +795,38 @@ func _front_weight(held: Dictionary, now: float) -> float:
 	return lerpf(held["front_from"], target, 1.0 - (1.0 - k) * (1.0 - k))
 
 
-## The skeleton of `body` has its final pose for this frame: places its bags
-## from the hands as they are now.
+## How far a hard case in hand (or a lifted roller) has turned to the front
+## carry at sim time `now`, 0 to 1. To the front it eases as the arm does
+## (_front_weight); back to the side it turns faster, upright ahead of the arm
+## (from the front, the arm's weight squared), so its lower end is not swung
+## through the thigh as the hand comes out (the arm's own pace measured 5 body
+## points inside the case, its square none: windowed bench, 2026-10-29). A
+## turn that reverses starts from where the bag is (bag_from).
+func _bag_weight(held: Dictionary, now: float) -> float:
+	var front: bool = held.get("front", false)
+	if not held.has("front_since"):
+		return 1.0 if front else 0.0
+	var k := clampf((now - held["front_since"]) / TRANSFER_TICKS, 0.0, 1.0)
+	if front:
+		return lerpf(held["bag_from"], 1.0, 1.0 - (1.0 - k) * (1.0 - k))
+	return lerpf(held["bag_from"], 0.0, 1.0 - pow(1.0 - k, 4.0))
+
+
+## The skeleton of `body` reported a pose: its bags going to a hand are placed
+## from the frame's final report, once. A report before this frame's draw()
+## (a pose set before the views draw, such as a seek) is not the final one:
+## the draw moves the body and sets the arms, and the skeleton reports again
+## after it, so it places nothing. The first report after the draw places the
+## bags; a later one after the same draw is coalesced into it (the skeleton's
+## own modifiers run inside its update and never queue another), and a frame
+## with no report after the draw has them placed before it is drawn
+## (_unposed). A frame drawn twice (PassengerViews.snap() on a load) places
+## them after each draw.
 func _on_pose(body: Node3D) -> void:
 	var id: int = _body_ids.get(body, 0)
 	var held: Dictionary = _held.get(id, {})
-	if held.is_empty() or views.node_for(id) != body:
+	if held.is_empty() or views.node_for(id) != body or not _left_to_place(held):
 		return
-	held["posed_frame"] = Engine.get_process_frames()
 	_place_bags(held, body, _tray_transform(held, body), _now(), Placing.HAND)
 
 
@@ -816,7 +899,7 @@ func _trail(bag: Dictionary, body: Node3D, id: int, home: SecurityLooks.Home, ha
 	var local := frame.affine_inverse() * cur
 	var out := -1.0 if hand == 0 else 1.0
 	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
-	local.z = minf(local.z, -TRAIL_M * 0.6)
+	local.z = minf(local.z, -TRAIL_BEHIND_MIN_M)
 	cur = frame * local
 	bag["axle"] = [bag["axle"][1] if bag.has("axle") else cur, cur]
 
@@ -997,13 +1080,13 @@ func _carry_transform(held: Dictionary, body: Node3D, i: int, reach: Array) -> T
 
 
 ## A hard case in the hand: between side and front carry it stays in the
-## hand, turning with the arm (front weight).
+## hand, turning as the arm turns (_bag_weight).
 func _case_transform(held: Dictionary, body: Node3D, i: int) -> Transform3D:
 	var scale_by: float = held["scale"]
 	var grip := grip_of(body, held["hands"][i])
 	var kind: SecurityLooks.Kind = held["bags"][i]["kind"]
 	var side_xf := carried(grip, body.global_position, body.rotation.y, scale_by, kind)
-	var weight: float = held.get("weight", 0.0)
+	var weight: float = held.get("bag_weight", 0.0)
 	if weight <= 0.0:
 		return side_xf
 	var ahead := carried_in_front(grip, body.rotation.y, scale_by, kind)
@@ -1036,7 +1119,7 @@ func _axle_drawn(bag: Dictionary, body: Node3D, scale_by: float, hand: int) -> V
 	var local := frame.affine_inverse() * at
 	var out := -1.0 if hand == 0 else 1.0
 	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
-	local.z = minf(local.z, -TRAIL_M * 0.6)
+	local.z = minf(local.z, -TRAIL_BEHIND_MIN_M)
 	var now := _now()
 	at = frame * local
 	if bag.has("drawn_axle"):

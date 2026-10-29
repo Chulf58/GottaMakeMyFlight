@@ -32,8 +32,9 @@ extends SceneTree
 ## roller's grip or a strap left out), and no bag inside another. The bench
 ## first sweeps the crowd: every frame of a walk (half of them late, so they
 ## run) and queue, each carrier's body against its bags, per kind and
-## character, with a control per kind. Any failure prints PROBE_INVALID and
-## exits 1.
+## character, with a control per kind, and watches every hand bag before each
+## frame is drawn: placed once per draw, its grip on the hand's final pose
+## (carry_grip_watch.gd). Any failure prints PROBE_INVALID and exits 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -1455,12 +1456,9 @@ func _sweep() -> void:
 	_clock.set_paused(false)
 	print("SWEEP checks=%s" % [checks])
 	print("SWEEP pulled rollers: sharp_turns=%d axle_snaps=%d" % turns)
-	print(
-		(
-			"SWEEP staged turn roller=%d frame=%d sharp_turns_seen=%d"
-			% [staged.roller, staged.first_frame, staged.sharp]
-		)
-	)
+	print(staged.report())
+	for problem in staged.problems():
+		_invalid("sweep: " + problem)
 	if staged.roller == 0 or staged.sharp == 0:
 		_invalid("sweep: the staged sharp turn of a pulled roller was not seen (control)")
 	if turns[1] > 0:
