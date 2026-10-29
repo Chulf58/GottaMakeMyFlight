@@ -92,6 +92,13 @@ const SHOP_STAGE_TEXT := {
 	Passenger.Stage.SHOP_WALK: "Heading to the %s",
 	Passenger.Stage.SHOP_BROWSE: "Browsing at the %s",
 }
+## A shop people visit for money, not to pass time (a room type that does not
+## relieve boredom: the exchange, the ATM), is used, not browsed: "Using the
+## ATM".
+const MONEY_STAGE_TEXT := {
+	Passenger.Stage.SHOP_WALK: "Heading to the %s",
+	Passenger.Stage.SHOP_BROWSE: "Using the %s",
+}
 
 @export var clock: SimClock
 @export var flights: FlightSim
@@ -301,12 +308,15 @@ func status_text() -> String:
 
 
 ## What `p` is doing, for the follow line: its stage's text, naming the shop
-## it is visiting when it has a visit under way.
+## it is visiting when it has a visit under way (store_name() is empty when
+## there is no visit or its room is gone, so the room is there below).
 static func stage_text(passenger_sim: PassengerSim, p: Passenger) -> String:
 	if SHOP_STAGE_TEXT.has(p.stage):
 		var store := passenger_sim.shops.store_name(p.id)
 		if store != "":
-			return SHOP_STAGE_TEXT[p.stage] % store
+			var room := passenger_sim.grid.get_room(passenger_sim.shops.visit_of(p.id).room)
+			var relieves := RoomTypes.get_type(room["type"]).relieves_boredom
+			return (SHOP_STAGE_TEXT if relieves else MONEY_STAGE_TEXT)[p.stage] % store
 	return STAGE_TEXT[p.stage]
 
 
