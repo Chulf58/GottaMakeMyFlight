@@ -49,7 +49,8 @@ const CATEGORIES := [
 	# wider than COLUMN_W, so they get a tray of their own, right after
 	# Security.
 	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
-	{"name": "Gates", "tools": [BuildMode.Tool.SEATS]},
+	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
+	{"name": "Gates", "tools": [BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN]},
 	{
 		"name": "Shops",
 		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
@@ -91,6 +92,7 @@ const ITEMS := {
 	BuildMode.Tool.DESK: ["Check-in desk", "desk", ""],
 	BuildMode.Tool.SCANNER: ["Scanner", "scanner", ""],
 	BuildMode.Tool.SEATS: ["Seats", "seats", ""],
+	BuildMode.Tool.SCREEN: ["Screen", "screen_stand", ""],
 	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
 	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
 	BuildMode.Tool.TABLE: ["Table", "table", ""],
@@ -117,13 +119,17 @@ const LANE_ITEMS := {
 const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
 ## Cards that say what the placed thing costs to run, in the plain hint style
 ## (costs are never red), in place of the "Click" hint: a toilet stall is
-## charged its upkeep every game day once its room is ready.
-const CARD_RUNNING_COSTS := {BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP}
+## charged its upkeep every game day once its room is ready, a screen stand
+## wherever it stands.
+const CARD_RUNNING_COSTS := {
+	BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP,
+	BuildMode.Tool.SCREEN: PriceTable.SCREEN_UPKEEP,
+}
 const RUNNING_COST_TEXT := "Upkeep %d/day"
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := ["kiosk_room", "kiosk_counter", "kiosk_display"]
+const PLACEHOLDER_THUMBNAILS := ["kiosk_room", "kiosk_counter", "kiosk_display", "screen_stand"]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.

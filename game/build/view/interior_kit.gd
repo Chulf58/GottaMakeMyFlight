@@ -42,6 +42,9 @@ const OBJECT_PIECES := {
 	&"pickup_table": "pickup_table",
 	&"toilet_stall": "toilet_stall",
 	&"toilet_sink": "toilet_sink",
+	# The flight-information screen on its stand draws the boredom screen stand
+	# until its own piece is built (Boredom 5/5); its display faces the front.
+	&"screen_stand": "info_screen",
 }
 ## Where a piece sits in its object's frame (footprint centre, facing 0), for
 ## objects whose piece is not centred on the footprint. The entrance and exit
