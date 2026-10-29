@@ -239,7 +239,7 @@ func test_the_overhead_route_crosses_above_the_head() -> void:
 	var crossed := 0
 	for step in 21:
 		var k := step / 20.0
-		var at := CarryOnProps.overhead(on_floor, worn, k, box)
+		var at := CarryMoves.overhead(on_floor, worn, k, box)
 		if k == 0.0:
 			assert_vector(at.origin).is_equal_approx(on_floor.origin, Vector3.ONE * 0.0001)
 		if k == 1.0:

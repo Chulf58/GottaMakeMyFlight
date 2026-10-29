@@ -56,10 +56,10 @@ func test_a_roller_in_hand_joins_the_route_through_a_gate_ahead() -> void:
 		var held := _roller_in_hand(Vector3(-0.36, 0.9, grip_z))
 		for step in 61:
 			var k := step / 60.0
-			var lowering := CarryOnProps.overhead(
+			var lowering := CarryMoves.overhead(
 				held, pulled, k, box, CarryOnProps.ROLLER_LAND, true, false
 			)
-			var lifting := CarryOnProps.overhead(pulled, held, k, box, 1.0, false, true)
+			var lifting := CarryMoves.overhead(pulled, held, k, box, 1.0, false, true)
 			for xf: Transform3D in [lowering, lifting]:
 				var b := _bounds(xf, box)
 				(
@@ -85,17 +85,17 @@ func test_a_roller_in_hand_joins_the_route_through_a_gate_ahead() -> void:
 				)
 				checked += 1
 		# Lands in the hand at the end of the move, not at ROLLER_LAND.
-		var early := CarryOnProps.overhead(
+		var early := CarryMoves.overhead(
 			pulled, held, CarryOnProps.ROLLER_LAND, box, 1.0, false, true
 		)
 		assert_float(early.origin.distance_to(held.origin)).is_greater(0.05)
-		var landed := CarryOnProps.overhead(pulled, held, 1.0, box, 1.0, false, true)
+		var landed := CarryMoves.overhead(pulled, held, 1.0, box, 1.0, false, true)
 		assert_vector(landed.origin).is_equal_approx(held.origin, Vector3.ONE * 0.0001)
 	assert_int(checked).is_equal(4 * 61 * 2)
 	var behind := _roller_in_hand(Vector3(-0.36, 0.9, -0.1))
 	var hit := false
 	for step in 61:
-		var old := CarryOnProps.overhead(behind, pulled, step / 60.0, box, CarryOnProps.ROLLER_LAND)
+		var old := CarryMoves.overhead(behind, pulled, step / 60.0, box, CarryOnProps.ROLLER_LAND)
 		hit = hit or _bounds(old, box).intersects(UPPER)
 	assert_bool(hit).override_failure_message("control: the old route never met the head").is_true()
 
@@ -127,7 +127,7 @@ func test_without_a_hand_end_the_route_is_unchanged() -> void:
 	var worn := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(0.0, 1.1, -0.21))
 	for step in 13:
 		var k := step / 12.0
-		var a := CarryOnProps.overhead(on_floor, worn, k, box)
+		var a := CarryMoves.overhead(on_floor, worn, k, box)
 		assert_vector(a.origin).is_equal_approx(
 			_old_route(on_floor, worn, k, box), Vector3.ONE * 0.0001
 		)

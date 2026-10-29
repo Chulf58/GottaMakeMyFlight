@@ -31,8 +31,11 @@ const REACH_SHARE := 0.25
 ## share of the carry.
 const BACK_SIDE_M := 0.34
 const BACK_SHARE := 0.4
-## A backpack in a hand-led move is held this far above its grab loop's top.
-const LOOP_ABOVE_M := 0.05
+## A backpack in a hand-led move is held this far from its grab loop (its own
+## frame, the loop mid-depth at y 0.082, the bag 0 to 0.177 deep): past the
+## face hung toward the body and a little over the top, so the fingers hang
+## down outside the bag, not into it (a grip offset).
+const LOOP_OFFSET := Vector3(0.0, 0.12, 0.02)
 
 
 ## The kind of end a bag's place (`place`, CarryOnProps' (home * 2 + hand) * 2
@@ -131,9 +134,8 @@ static func anchor(kind: SecurityLooks.Kind, bar_z: float) -> Vector3:
 	if kind == SecurityLooks.Kind.ROLLER:
 		return Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, bar_z)
 	if kind == SecurityLooks.Kind.BACKPACK:
-		# Held with the loop in the palm, the knuckles over the bag's top, so
-		# the fingers close round the loop rather than into the bag.
-		return CarryOnProps.BACKPACK_LOOP + Vector3(0.0, 0.0, LOOP_ABOVE_M)
+		# Held by the loop, the fingers outside the bag's face (LOOP_OFFSET).
+		return CarryOnProps.BACKPACK_LOOP + LOOP_OFFSET
 	return CarryOnProps.grip_anchor(kind)
 
 

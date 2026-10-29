@@ -18,8 +18,10 @@ const STOOP_DROP := 0.6
 ## A stoop aims the shoulder this much of the arm's full reach from its target.
 const REACH_SLACK := 0.96
 const STEPS := 24
-## Only a target this low (world metres over the feet) is bent down to.
+## Only a target about this low (world metres over the feet) is bent down to,
+## fading over LOW_FADE_M either side.
 const LOW_M := 0.6
+const LOW_FADE_M := 0.15
 
 ## The reach targets (world) of the arms that reach, their sides (0 right, 1
 ## left) and weights (0 to 1).
@@ -51,15 +53,15 @@ func _process_modification_with_delta(_delta: float) -> void:
 		var shoulder := skeleton.get_bone_global_pose(arm).origin
 		var reach := CarryArm.reach_of(skeleton, sides[i]) / to_world * REACH_SLACK
 		var target := to_skeleton * targets[i]
-		# Only for a low target (a bag on the floor), and one a stoop reaches: a
-		# tray across a table, or a bag out of reach, is not bent down to.
-		if targets[i].y - skeleton.global_position.y > LOW_M:
+		# Only for a low target (a bag on the floor), not a tray on a table: the
+		# stoop fades out over LOW_FADE_M about LOW_M of height, so a target rising
+		# past it (a bag lifted) straightens the back smoothly, never in a frame.
+		var height := targets[i].y - skeleton.global_position.y
+		var low := 1.0 - smoothstep(LOW_M - LOW_FADE_M, LOW_M + LOW_FADE_M, height)
+		if low <= 0.0:
 			continue
 		var need := needed(shoulder, pivot, aim_at, target, reach, STOOP_DROP / to_world)
-		var bent := stooped(shoulder, pivot, aim_at, need, STOOP_DROP / to_world)
-		if bent.distance_to(target) > reach:
-			continue
-		s = maxf(s, need * clampf(weights[i], 0.0, 1.0))
+		s = maxf(s, need * low * clampf(weights[i], 0.0, 1.0))
 	if s <= 0.0:
 		return
 	drawn = s

@@ -145,6 +145,8 @@ const ROLLER_GRIP_PAST_TOP_M := 0.015
 ## swings out this far on the hand's side midway, clear of the trailing leg
 ## (0.15 m put it into a neighbouring stall's partition end from the row).
 const SWAP_OUT_M := 0.08
+## Away from a stall it swings this far out (the near shin met it at 0.08 m).
+const SWAP_OPEN_M := 0.2
 ## A roller held by its bar for a stall has the bar this far from the grip
 ## point, toward the bag's front (in the palm, a grip offset along the hand's
 ## axes): hung at the side the bag is that much further from the leg, across
@@ -392,21 +394,6 @@ static func follow(at: Vector3, to: Vector3, dt: float, hand: int) -> Vector3:
 	var r1 := Vector2(to.x, to.z).length()
 	var r := maxf(r0 + clampf(r1 - r0, -SWING_REACH_M * dt, SWING_REACH_M * dt), SWING_RADIUS_M)
 	return Vector3(out * r * sin(a), to.y, -r * cos(a))
-
-
-## The overhead route at `k` (0 to 1) from `from` to `to`, both in the body's
-## frame (x across, +z ahead), down by `land`: CarryMoves.overhead(), an end
-## held in the hand (`from_hand`, `to_hand`) joined through a gate ahead.
-static func overhead(
-	from: Transform3D,
-	to: Transform3D,
-	k: float,
-	box: AABB,
-	land := 1.0,
-	from_hand := false,
-	to_hand := false
-) -> Transform3D:
-	return CarryMoves.overhead(from, to, k, box, land, from_hand, to_hand)
 
 
 ## A bag lying flat with its length across a body turned to `yaw`.
@@ -1464,7 +1451,10 @@ func _swap_transform(held: Dictionary, body: Node3D, i: int, k: float) -> Array:
 	var s := smoothstep(0.0, 1.0, k)
 	var t := s if to_pull else 1.0 - s
 	var axle := _hung_axle(bag, grip, scale_by).lerp(trailing, t)
-	axle += outward * SWAP_OUT_M * 4.0 * t * (1.0 - t)
+	# Away from a stall (no partition beside it) it swings out further, clear of
+	# the near shin; the bar stays in the hand.
+	var swing := SWAP_OUT_M if not (held.get("stall", {}) as Dictionary).is_empty() else SWAP_OPEN_M
+	axle += outward * swing * 4.0 * t * (1.0 - t)
 	var ref := outward.lerp(Vector3.UP, t).normalized()
 	var rods := _reach_base(_part(bag["node"], "Pull_Reach"))
 	var xf := pulled(grip, axle, scale_by, ref).translated(outward * BAR_PALM_M * (1.0 - t))
