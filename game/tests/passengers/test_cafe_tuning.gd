@@ -3,22 +3,22 @@ extends GdUnitTestSuite
 ## Cafe tuning (decision cafe-tuning-some-passengers-visit-a-cafe-each-flight):
 ## in an ordinary flight about a quarter to a third of the passengers who
 ## arrive early use a cafe, and late ones still skip it. Measured on the
-## reference flight: the reference terminal with its two cafes
-## (CafeTestLayout), DEFAULT_PASSENGERS on the default timing, scheduled from
+## reference flight: the reference terminal with its two cafes and two tables
+## in each (CafeTestLayout with `extra_tables`), DEFAULT_PASSENGERS on the
+## default timing, scheduled from
 ## the sim RNG as in play, over several seeds pooled. Early means spawned
 ## before boarding opens; using a cafe means a visit that paid. No paying
 ## passenger may miss its flight.
 
 const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
-## The band in whole percent of early arrivals: 20% to 25%, the interim target
-## of decision cafe-tuning-some-passengers-visit-a-cafe-each-flight (user-ruled
-## "Accept 23% for now") until arrival types land, then 25-33%. This layout
-## (one table, two seats per cafe) on this timeline caps the share at 23% (21
-## of 91) even when every passenger is hungry from spawn, with DWELL_TICKS 120
-## and MARGIN_TICKS 100 ("Shorter cafe visits"). Hunger 40-70, hungry at 50,
-## reaches that cap.
-const SHARE_MIN := 20
-const SHARE_MAX := 25
+## The band in whole percent of early arrivals: 25% to 33%, the target of
+## decision cafe-tuning-some-passengers-visit-a-cafe-each-flight once arrival
+## types landed. With one table per cafe, relaxed passengers fill both seats
+## and the share falls to 11% for typical passengers, so the reference cafe
+## has two tables (decision
+## cafe-seats-the-reference-cafe-gets-2-tables-so-typical-passe).
+const SHARE_MIN := 25
+const SHARE_MAX := 33
 
 var _spawned: Dictionary = {}
 var _paid: Dictionary = {}
@@ -39,7 +39,7 @@ func _flight(seed: int) -> Dictionary:
 	_paid.clear()
 	_missed.clear()
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid)
+	CafeTestLayout.build(grid, true)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), seed)
 	var sim := world.sim
 	sim.passenger_spawned.connect(func(id: int) -> void: _spawned[id] = sim.tick)
@@ -59,7 +59,7 @@ func _flight(seed: int) -> Dictionary:
 	return out
 
 
-func test_a_fifth_to_a_quarter_of_early_arrivals_use_a_cafe_and_all_make_it() -> void:
+func test_a_quarter_to_a_third_of_early_arrivals_use_a_cafe_and_all_make_it() -> void:
 	var total := {"early": 0, "early_paid": 0, "late": 0, "late_paid": 0, "paid_missed": 0}
 	for seed in SEEDS:
 		var flight := _flight(seed)
