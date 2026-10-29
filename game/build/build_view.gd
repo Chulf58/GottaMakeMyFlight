@@ -97,14 +97,16 @@ func sight_blocked(edge: Vector3i, along: float, height: float) -> bool:
 
 ## The node for an object type, centred on its footprint at facing 0: the
 ## kit piece with its own materials, or with `material` on every mesh (for a
-## ghost). A type the kit has no piece for gets a placeholder box. A piece
-## with an offset (InteriorKit.object_offset) goes under a plain root node.
+## ghost, the carried piece too). A type the kit has no piece for gets a
+## placeholder box. A piece with an offset (InteriorKit.object_offset) goes
+## under a plain root node.
 static func make_object_node(def: BuildObjectDef, material: Material) -> Node3D:
 	var piece := InteriorKit.object_piece(def.id)
 	if piece == "":
 		push_warning("BuildView: no kit piece for '%s', drawing a box" % def.id)
 		return _placeholder(def, material if material != null else _solid(def.color))
 	var root := InteriorKit.instantiate(piece)
+	InteriorKit.attach_mounted(root, def.id)
 	var offset := InteriorKit.object_offset(def.id)
 	if offset != Vector3.ZERO:
 		var holder := Node3D.new()

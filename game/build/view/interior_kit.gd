@@ -16,6 +16,9 @@ const PIECE_PATH := "res://assets/interior/%s.glb"
 const FOLDER_PIECE_PATH := "res://assets/%s.glb"
 ## The car shown on the prize podium, standing on the podium's Mount_Car.
 const PRIZE_CAR_PIECE := "vehicles/tp_suv_01a"
+## Pieces that carry another piece: object id -> [the mount it stands on, the
+## piece]. attach_mounted() adds it to the object's node.
+const OBJECT_MOUNTED := {&"prize_podium": ["Mount_Car", PRIZE_CAR_PIECE]}
 ## Height of a cut-away wall or post.
 const STUB_HEIGHT := 0.3
 const WALL_HEIGHT := 2.5
@@ -66,8 +69,8 @@ const OBJECT_PIECES := {
 	&"statue_indoor": "decor/tc_statue_1b_indoor",
 	&"trash_can": "decor/tc_trash_can_1a",
 	&"tree_indoor": "decor/tc_tree_3a_indoor",
-	# Services and activities kits (Furniture 3/3b); the prize car is drawn
-	# separately at the podium's Mount_Car (PRIZE_CAR_PIECE).
+	# Services and activities kits (Furniture 3/3b); the podium carries its
+	# prize car (OBJECT_MOUNTED).
 	&"bar_counter": "bar_counter",
 	&"grab_and_go_stall": "grab_and_go_stall",
 	&"restaurant_table": "restaurant_table",
@@ -93,8 +96,9 @@ const OBJECT_PIECES := {
 const OBJECT_OFFSETS := {
 	&"entrance_door": Vector3(0.0, 0.0, -0.5),
 	&"exit_door": Vector3(0.0, 0.0, -0.5),
-	# A chain is the middle cell of post, chain, post in a row: its piece starts
-	# on one post and runs 2 m to the next, so it sits 1 m back of the cell.
+	# A chain is three cells in a row with a post in each outer cell: its piece
+	# starts on one post and runs 2 m to the next, so it sits 1 m back of the
+	# centre.
 	&"metal_pole_chain": Vector3(0.0, 0.0, -1.0),
 }
 const WALL_PIECES := {
@@ -147,6 +151,27 @@ static func post_parts(cut: bool) -> Array:
 ## The .glb a piece loads from.
 static func piece_path(piece: String) -> String:
 	return (FOLDER_PIECE_PATH if "/" in piece else PIECE_PATH) % piece
+
+
+## Adds the piece an object carries (OBJECT_MOUNTED) under `root`, the object's
+## node tree, standing at its mount and turned the way the mount points. An
+## object that carries nothing is left as it is.
+static func attach_mounted(root: Node3D, def_id: StringName) -> void:
+	var entry: Array = OBJECT_MOUNTED.get(def_id, [])
+	if entry.is_empty():
+		return
+	var mount := root.find_child(entry[0], true, false) as Node3D
+	if mount == null:
+		push_error("InteriorKit: no %s on the piece of %s" % [entry[0], def_id])
+		return
+	var frame := mount.transform
+	var parent := mount.get_parent()
+	while parent != root:
+		frame = (parent as Node3D).transform * frame
+		parent = parent.get_parent()
+	var carried := instantiate(entry[1])
+	carried.transform = frame.orthonormalized()
+	root.add_child(carried)
 
 
 ## A fresh node tree of a piece, with its own toon materials.

@@ -118,23 +118,23 @@ func test_each_model_stays_inside_its_footprint_and_def_height_is_its_top() -> v
 		var box := _bounds(id)
 		var slack := DECOR_OVERHANG if id in DECOR_IDS else KIT_OVERHANG
 		var half := Vector2(def.size) / 2.0
-		# The chain reaches from one neighbouring post to the other, so it is
-		# checked on its own below.
-		if id != &"metal_pole_chain":
-			assert_float(box.position.x).override_failure_message(str(id)).is_greater_equal(
-				-half.x - slack
-			)
-			assert_float(box.end.x).override_failure_message(str(id)).is_less_equal(half.x + slack)
-			assert_float(box.position.z).override_failure_message(str(id)).is_greater_equal(
-				-half.y - slack
-			)
-			assert_float(box.end.z).override_failure_message(str(id)).is_less_equal(half.y + slack)
+		assert_float(box.position.x).override_failure_message(str(id)).is_greater_equal(
+			-half.x - slack
+		)
+		assert_float(box.end.x).override_failure_message(str(id)).is_less_equal(half.x + slack)
+		assert_float(box.position.z).override_failure_message(str(id)).is_greater_equal(
+			-half.y - slack
+		)
+		assert_float(box.end.z).override_failure_message(str(id)).is_less_equal(half.y + slack)
 		assert_float(box.position.y).override_failure_message(str(id)).is_greater_equal(
 			-BELOW_FLOOR.get(id, 0.0) - 0.01
 		)
 		var top := box.end.y
 		if id == PRIZE_CAR_ID:
-			top = _mount(InteriorKit.object_piece(id), "Mount_Car").origin.y + _car_box().end.y
+			# The podium is drawn with its car, so its top is the drawn node's.
+			var node := BuildView.make_object_node(def, null)
+			top = _node_box(node).end.y
+			node.free()
 		print(
 			"%s: bounds %s, footprint %s, height %s, top %s" % [id, box, def.size, def.height, top]
 		)
@@ -143,16 +143,48 @@ func test_each_model_stays_inside_its_footprint_and_def_height_is_its_top() -> v
 		)
 
 
-func test_the_chain_runs_from_one_neighbouring_post_to_the_other() -> void:
-	# A chain is the middle cell of post, chain, post in a row: its piece starts
-	# on a post (the glb origin) and reaches the next one 2 m on.
+func test_the_chain_is_three_cells_with_a_post_in_each_outer_cell() -> void:
+	# The piece starts on a post (the glb origin) and reaches the next one 2 m
+	# on; the 1 m back offset puts the posts on the centres of the outer cells.
 	var def := BuildCatalog.get_def(&"metal_pole_chain")
-	assert_vector(Vector2(def.size)).is_equal(Vector2.ONE)
+	assert_vector(Vector2(def.size)).is_equal(Vector2(1, 3))
 	assert_vector(InteriorKit.object_offset(&"metal_pole_chain")).is_equal(Vector3(0, 0, -1.0))
 	var box := _bounds(&"metal_pole_chain")
 	assert_float(box.position.z).is_greater_equal(-1.0)
 	assert_float(box.end.z).is_less_equal(1.0)
 	assert_float(box.size.z).is_greater(1.5)
+
+
+## The chain reserves its whole span: nothing else goes in a cell it covers,
+## and a wall cannot cut across it. BuildGrid refuses a wall only on an edge
+## inside one footprint (it does not refuse a wall along the footprint's outer
+## edge, for any object), so the chain's two inner edges are the walls tested.
+func test_the_grid_reserves_every_cell_of_the_chain() -> void:
+	var grid := BuildGrid.new(Vector2i(10, 10))
+	var floors: Array[BuildEdit] = []
+	for y in 10:
+		for x in 10:
+			floors.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	grid.apply_batch(floors)
+	var origin := Vector2i(4, 4)
+	var chain := grid.apply(BuildEdit.place_object(&"metal_pole_chain", origin, 0))
+	assert_bool(chain.ok).is_true()
+	for y in 3:
+		var cell := origin + Vector2i(0, y)
+		var other := grid.apply(BuildEdit.place_object(&"metal_pole", cell, 0))
+		assert_bool(other.ok).override_failure_message("pole on %s" % cell).is_false()
+		assert_int(other.reason).is_equal(BuildResult.Reason.OVERLAP)
+	# A pole beside the chain is fine.
+	var beside := grid.apply(BuildEdit.place_object(&"metal_pole", origin + Vector2i(1, 1), 0))
+	assert_bool(beside.ok).is_true()
+	for y in [0, 1]:
+		var wall := grid.apply(
+			BuildEdit.place_wall(
+				origin + Vector2i(0, y), BuildGrid.Side.SOUTH, BuildGrid.WallKind.PLAIN
+			)
+		)
+		assert_bool(wall.ok).override_failure_message("wall in the chain, row %d" % y).is_false()
+		assert_int(wall.reason).is_equal(BuildResult.Reason.WALL_IN_FOOTPRINT)
 
 
 func test_interaction_offsets_match_the_models_use_mounts() -> void:
@@ -181,35 +213,62 @@ func test_interaction_offsets_match_the_models_use_mounts() -> void:
 		assert_bool(inside).override_failure_message(str(id)).is_false()
 
 
-func test_the_prize_car_fits_its_podium_at_the_car_mount() -> void:
-	var mount: Transform3D = _mount(InteriorKit.object_piece(PRIZE_CAR_ID), "Mount_Car")
-	# The mount's +Z is the way the car's nose points on the podium: the car
-	# turns about Y to put its own +Z there.
-	var turn := Basis.looking_at(-mount.basis.z, Vector3.UP)
-	var placed := Transform3D(turn, mount.origin) * _car_box()
+## The node the build view draws for a podium: BuildView.make_object_node()
+## holds the car, standing at the podium's Mount_Car and turned the way the
+## mount points (the car's nose is its +Z).
+func test_the_podium_node_holds_the_car_at_the_car_mount() -> void:
 	var def := BuildCatalog.get_def(PRIZE_CAR_ID)
+	var node := BuildView.make_object_node(def, null)
+	var car := _car_child(node)
+	assert_object(car).is_not_null()
+	var mount: Transform3D = _mount(InteriorKit.object_piece(PRIZE_CAR_ID), "Mount_Car")
+	assert_bool(car.transform.is_equal_approx(mount.orthonormalized())).is_true()
+	assert_vector(car.transform.basis.z).is_equal_approx(mount.basis.z, Vector3.ONE * 0.001)
+	var placed := _node_box(car)
+	var box := car.transform * placed
 	var half := Vector2(def.size) / 2.0
-	print("car on podium: %s in footprint %s" % [placed, def.size])
-	assert_float(placed.position.x).is_greater_equal(-half.x)
-	assert_float(placed.end.x).is_less_equal(half.x)
-	assert_float(placed.position.z).is_greater_equal(-half.y)
-	assert_float(placed.end.z).is_less_equal(half.y)
-	assert_float(placed.position.y).is_greater_equal(mount.origin.y - 0.01)
+	print("car on podium: %s in footprint %s" % [box, def.size])
+	assert_float(box.position.x).is_greater_equal(-half.x)
+	assert_float(box.end.x).is_less_equal(half.x)
+	assert_float(box.position.z).is_greater_equal(-half.y)
+	assert_float(box.end.z).is_less_equal(half.y)
+	assert_float(box.position.y).is_greater_equal(mount.origin.y - 0.01)
+	node.free()
 
 
-## The prize car's bounds in its own frame.
-func _car_box() -> AABB:
-	var car := InteriorKit.instantiate(InteriorKit.PRIZE_CAR_PIECE)
+## A ghost wears its one material on the car too.
+func test_the_ghost_podium_tints_the_car() -> void:
+	var ghost := StandardMaterial3D.new()
+	var node := BuildView.make_object_node(BuildCatalog.get_def(PRIZE_CAR_ID), ghost)
+	var car := _car_child(node)
+	assert_object(car).is_not_null()
+	var meshes := car.find_children("*", "MeshInstance3D", true, false)
+	assert_int(meshes.size()).is_greater(0)
+	for mi in meshes:
+		assert_object((mi as MeshInstance3D).material_override).is_same(ghost)
+	node.free()
+
+
+## The car's root node under a drawn podium, found by the .glb it came from.
+func _car_child(node: Node3D) -> Node3D:
+	var path := InteriorKit.piece_path(InteriorKit.PRIZE_CAR_PIECE)
+	for child in node.get_children():
+		if child.scene_file_path == path:
+			return child as Node3D
+	return null
+
+
+## The bounds of every mesh under `root`, in root's own frame.
+func _node_box(root: Node3D) -> AABB:
 	var box := AABB()
 	var first := true
-	for mi in car.find_children("*", "MeshInstance3D", true, false):
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
 		var xf := (mi as MeshInstance3D).transform
 		var parent := mi.get_parent()
-		while parent != car:
+		while parent != root:
 			xf = (parent as Node3D).transform * xf
 			parent = parent.get_parent()
 		var part_box: AABB = xf * (mi as MeshInstance3D).get_aabb()
 		box = part_box if first else box.merge(part_box)
 		first = false
-	car.free()
 	return box
