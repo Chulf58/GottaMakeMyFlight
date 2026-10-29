@@ -90,6 +90,12 @@ static func _upcoming_line(flights: FlightSim, today: int) -> String:
 	)
 
 
+## The rows for each flight leaving on `day`, earliest first (see _rows), for
+## readers that list another day than the flight panel's today.
+static func rows_for_day(flights: FlightSim, day: int) -> Array[Dictionary]:
+	return _rows(flights, day)
+
+
 ## {tick, doors, base, line, departed} for each flight leaving on `today`,
 ## earliest first; `doors` is the tick its doors close.
 static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
