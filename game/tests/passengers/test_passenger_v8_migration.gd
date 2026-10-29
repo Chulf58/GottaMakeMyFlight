@@ -57,12 +57,15 @@ func _fresh() -> SecurityTestWorld:
 func _v8(work: int, bags := 2) -> Dictionary:
 	var out := _v9.duplicate(true)
 	out["save_version"] = 8
-	# Version 8 had no toilet need, cooldown or visits, and no boredom.
+	# Version 8 had no toilet need, cooldown or visits, no boredom, kiosk
+	# cooldown or kiosk visits.
 	out.erase("toilet")
+	out.erase("shop")
 	for record: Dictionary in out["passengers"]:
 		record.erase("toilet_need")
 		record.erase("toilet_cooldown")
 		record.erase("boredom")
+		record.erase("shop_cooldown")
 		if int(record["id"]) == _id:
 			record["carry_on"] = bags
 			record["security_work"] = work

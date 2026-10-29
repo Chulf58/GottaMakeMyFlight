@@ -61,12 +61,15 @@ func _fresh() -> SecurityTestWorld:
 func test_the_fixture_is_a_version_7_save_mid_scan() -> void:
 	assert_int(int(_v7["save_version"])).is_equal(7)
 	assert_bool(_v7.has("security")).is_false()
+	for block in ["toilet", "shop"]:
+		assert_bool(_v7.has(block)).override_failure_message(block).is_false()
 	var serving := 0
 	for queue: Dictionary in _v7["queues"]:
 		serving = maxi(serving, int(queue["serving"]))
 	assert_int(serving).is_equal(_first)
 	for record: Dictionary in _v7["passengers"]:
-		assert_bool(record.has("security_phase")).is_false()
+		for field in ["security_phase", "toilet_need", "boredom", "shop_cooldown"]:
+			assert_bool(record.has(field)).override_failure_message(field).is_false()
 		if int(record["id"]) == _first:
 			assert_int(int(record["stage"])).is_equal(Passenger.Stage.SECURITY)
 			assert_bool(record["liquids"]).is_true()

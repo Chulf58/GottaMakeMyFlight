@@ -169,6 +169,44 @@ func test_past_its_deadline_a_browser_leaves_unpaid() -> void:
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
 
 
+func test_a_visit_lasts_the_walk_the_arrival_tick_and_the_browse() -> void:
+	_kiosk_world()
+	var p := ShopTestLayout.airside_guest(_world, BoredomSim.MAX)
+	assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.BOREDOM)
+	assert_int(p.stage).is_equal(Passenger.Stage.SHOP_WALK)
+	var committed := _world.clock.tick
+	var walk := JourneyForecast.walk_ticks(p.remaining_mm())
+	_run_while_visiting(p)
+	var took := _world.clock.tick - committed
+	print("walk %d ticks, visit took %d" % [walk, took])
+	assert_int(walk).is_greater(0)
+	assert_int(took).is_equal(walk + ShopSim.ARRIVE_TICKS + ShopSim.BROWSE_TICKS)
+	assert_int(_paid.size()).is_equal(1)
+
+
+func test_a_browse_finishing_on_the_last_permitted_tick_pays_and_relieves() -> void:
+	_kiosk_world()
+	var p := ShopTestLayout.airside_guest(_world, BoredomSim.MAX)
+	assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.BOREDOM)
+	var until := _world.clock.tick + 2000
+	while p.stage != Passenger.Stage.SHOP_BROWSE and _world.clock.tick < until:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.SHOP_BROWSE)
+	var visit := _world.sim.shops.visit_of(p.id)
+	var last := p.stage_tick + ShopSim.BROWSE_TICKS
+	# The deadline is set after the beat of the tick before, so the tick the
+	# browse completes on is the deadline itself.
+	_world.run_to(last - 1)
+	visit.deadline = last
+	_world.step()
+	print("tick %d, deadline %d, paid %s, boredom %d" % [_world.clock.tick, last, _paid, p.boredom])
+	assert_int(_world.clock.tick).is_equal(last)
+	assert_object(_world.sim.shops.visit_of(p.id)).is_null()
+	assert_int(_paid.size()).is_equal(1)
+	assert_int(p.boredom).is_equal(0)
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+
+
 func test_a_landside_passenger_uses_the_landside_kiosk_and_goes_on_to_security() -> void:
 	_kiosk_world(["air", "land"])
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))

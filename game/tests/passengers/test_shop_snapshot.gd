@@ -141,6 +141,49 @@ func test_a_save_in_every_phase_of_a_visit_loads_and_plays_on_alike() -> void:
 		_b = null
 
 
+## A seated gate passenger made bored commits a visit and stands up first; a
+## save in that STANDING_UP phase holds the visit with no walk yet. A and B
+## then play side by side to the end of the replay.
+func test_a_save_while_standing_up_from_the_gate_seat_plays_on_alike() -> void:
+	_a = _kiosk_world(4242)
+	var p := ShopTestLayout.airside_guest(_a, 0)
+	p.shop_cooldown = 1000000
+	var until := _a.clock.tick + 3000
+	while p.stage != Passenger.Stage.SEATED and _a.clock.tick < until:
+		_a.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.SEATED)
+	p.boredom = BoredomSim.MAX
+	p.shop_cooldown = 0
+	var visiting := func() -> bool: return _a.sim.shops.visit_of(p.id) != null
+	while (
+		not (p.stage == Passenger.Stage.STANDING_UP and visiting.call()) and _a.clock.tick < until
+	):
+		_a.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.STANDING_UP)
+	var text := _save(_a)
+	var start := _a.clock.tick
+	var balance := _a.sim.wallet.balance
+	_trace[start] = _signature(_a)
+	for i in REPLAY_TICKS:
+		_a.step()
+		_trace[_a.clock.tick] = _signature(_a)
+	_b = _load(text)
+	assert_str(_signature(_b)).is_equal(_trace[start])
+	assert_int(_b.passenger(p.id).stage).is_equal(Passenger.Stage.STANDING_UP)
+	assert_object(_b.sim.shops.visit_of(p.id)).is_not_null()
+	var first_bad := -1
+	var browsed := false
+	while _b.clock.tick < start + REPLAY_TICKS and first_bad < 0:
+		_b.step()
+		browsed = browsed or _b.passenger(p.id).stage == Passenger.Stage.SHOP_BROWSE
+		if _signature(_b) != _trace[_b.clock.tick]:
+			first_bad = _b.clock.tick
+	print("saved standing up at %d: first differing tick %d" % [start, first_bad])
+	assert_int(first_bad).is_equal(-1)
+	assert_bool(browsed).is_true()
+	assert_int(_b.sim.wallet.balance).is_greater(balance)
+
+
 func test_a_shop_state_no_play_could_reach_is_refused_and_changes_nothing() -> void:
 	var saves := _play_and_save()
 	var good: Dictionary = JSON.parse_string(saves["SHOP_BROWSE"])["passengers"]

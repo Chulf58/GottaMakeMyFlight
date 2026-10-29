@@ -29,7 +29,8 @@ extends RefCounted
 ##
 ## Every phase checks the visit's deadline: the last tick the passenger can
 ## leave the slot and still reach the plane door VisitForecast.MARGIN_TICKS
-## before the doors close. It is worked out again after any grid edit, once a
+## before the doors close. A browse that completes on that tick settles; one
+## that would complete after it ends unpaid. It is worked out again after any grid edit, once a
 ## second on the passenger's beat, and every tick for a landside visit.
 ##
 ## Visits and slots are handled in id and key order with integer quantities
@@ -40,6 +41,10 @@ signal paid(passenger_id: int, room_id: int, amount: int)
 
 ## Ticks spent browsing at the slot.
 const BROWSE_TICKS := 120
+## The tick between the end of the walk and the first tick of the browse: the
+## walk step sees the passenger standing at the slot only on the tick after it
+## arrived.
+const ARRIVE_TICKS := 1
 ## A bored passenger who could not start a visit tries again after this long.
 const RETRY_TICKS := 100
 ## After a visit, or a spare-time browse that could not start, no visit is
@@ -230,16 +235,20 @@ func step(p: Passenger) -> void:
 		# The rest of a landside journey runs through the scanners, whose
 		# queues can fill between beats: forecast it again every tick.
 		visit.deadline = _live_deadline(p, visit)
+	# A browse that completes on the deadline tick itself still settles: the
+	# deadline is the last tick the passenger may leave the slot.
+	var browsed := (
+		p.stage == Passenger.Stage.SHOP_BROWSE and _sim.tick - p.stage_tick >= BROWSE_TICKS
+	)
+	if browsed and _sim.tick <= visit.deadline:
+		_settle(p, visit)
+		_end(p, visit)
+		return
 	if _sim.tick >= visit.deadline:
 		_end(p, visit)
 		return
-	match p.stage:
-		Passenger.Stage.SHOP_WALK:
-			_walk_step(p, visit)
-		Passenger.Stage.SHOP_BROWSE:
-			if _sim.tick - p.stage_tick >= BROWSE_TICKS:
-				_settle(p, visit)
-				_end(p, visit)
+	if p.stage == Passenger.Stage.SHOP_WALK:
+		_walk_step(p, visit)
 
 
 ## A passenger who got up from a gate seat for the kiosk sets off for it.
@@ -341,7 +350,7 @@ func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
 ## Ticks from now until a visit walking `walk_mm` leaves its slot.
 func _visit_ticks(p: Passenger, walk_mm: int) -> int:
 	var pre := PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0
-	return pre + JourneyForecast.walk_ticks(walk_mm) + BROWSE_TICKS
+	return pre + JourneyForecast.walk_ticks(walk_mm) + ARRIVE_TICKS + BROWSE_TICKS
 
 
 func _live_deadline(p: Passenger, visit: ShopVisit) -> int:

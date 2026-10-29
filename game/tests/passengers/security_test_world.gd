@@ -91,7 +91,9 @@ func run_until_cleared(ids: Array[int], limit := 3000) -> bool:
 ## A version 8 passenger save written as version 7 wrote it: no security
 ## key, no phase fields, and a basic scanner's passenger in service as the
 ## scanner's "serving" with a service end of the save tick plus its remaining
-## work. Only a basic scanner in SCAN can be written this way.
+## work. Neither the toilet nor the kiosk part existed yet: no "toilet" or
+## "shop" block, and no toilet, boredom or kiosk cooldown field on a record.
+## Only a basic scanner in SCAN can be written this way.
 static func as_v7(data: Dictionary) -> Dictionary:
 	var out := data.duplicate(true)
 	out["save_version"] = 7
@@ -114,9 +116,16 @@ static func as_v7(data: Dictionary) -> Dictionary:
 				queue["serving"] = id
 	out.erase("security")
 	out.erase("toilet")
+	out.erase("shop")
 	for record: Dictionary in out["passengers"]:
 		for field in [
-			"security_phase", "security_work", "incident_resolved", "toilet_need", "toilet_cooldown"
+			"security_phase",
+			"security_work",
+			"incident_resolved",
+			"toilet_need",
+			"toilet_cooldown",
+			"boredom",
+			"shop_cooldown"
 		]:
 			record.erase(field)
 	return out

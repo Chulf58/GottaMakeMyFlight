@@ -11,6 +11,17 @@ extends GdUnitTestSuite
 
 const SAVE_TICK := 205
 const TRAIT_FIELDS := ["carry_on", "liquids", "alarm"]
+## Added after version 7, so a version 6 save holds none of them.
+const LATER_FIELDS := [
+	"security_phase",
+	"security_work",
+	"incident_resolved",
+	"toilet_need",
+	"toilet_cooldown",
+	"boredom",
+	"shop_cooldown"
+]
+const LATER_BLOCKS := ["security", "toilet", "shop"]
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
@@ -91,9 +102,11 @@ func test_the_fixture_is_a_real_mid_service_save_without_traits() -> void:
 	var data := _v6()
 	assert_int(int(data["save_version"])).is_equal(6)
 	var serving := 0
+	for block in LATER_BLOCKS:
+		assert_bool(data.has(block)).override_failure_message(block).is_false()
 	for record: Dictionary in data["passengers"]:
-		for field in TRAIT_FIELDS:
-			assert_bool(record.has(field)).is_false()
+		for field in TRAIT_FIELDS + LATER_FIELDS:
+			assert_bool(record.has(field)).override_failure_message(field).is_false()
 		serving += int(int(record["stage"]) == Passenger.Stage.CHECKIN)
 	assert_int(data["passengers"].size()).is_greater(0)
 	assert_int(serving).is_greater(0)

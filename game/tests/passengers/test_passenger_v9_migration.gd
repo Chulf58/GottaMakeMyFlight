@@ -10,6 +10,8 @@ extends GdUnitTestSuite
 
 const SAVE_TICK := 205
 const TOILET_FIELDS := ["toilet_need", "toilet_cooldown"]
+## Fields and blocks added after version 9, which neither fixture holds.
+const LATER_FIELDS := ["boredom", "shop_cooldown"]
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
@@ -54,15 +56,16 @@ func _json(data: Dictionary) -> Dictionary:
 
 
 ## The fixture in the shape `version` (8 or 9) saved: no toilet fields on a
-## passenger record and no "toilet" block.
+## passenger record and no "toilet" block, and none of what version 11 added:
+## no boredom or kiosk cooldown on a record and no "shop" block.
 func _old(version: int) -> Dictionary:
 	var data := _current.duplicate(true)
 	data["save_version"] = version
 	data.erase("toilet")
+	data.erase("shop")
 	for record: Dictionary in data["passengers"]:
-		for field in TOILET_FIELDS:
+		for field in TOILET_FIELDS + LATER_FIELDS:
 			record.erase(field)
-		record.erase("boredom")
 	return data
 
 
@@ -88,9 +91,10 @@ func test_the_fixture_is_a_real_save_without_toilets() -> void:
 	for version in [8, 9]:
 		var data := _old(version)
 		assert_bool(data.has("toilet")).is_false()
+		assert_bool(data.has("shop")).is_false()
 		assert_int(data["passengers"].size()).is_greater(10)
 		for record: Dictionary in data["passengers"]:
-			for field in TOILET_FIELDS:
+			for field in TOILET_FIELDS + LATER_FIELDS:
 				assert_bool(record.has(field)).is_false()
 
 

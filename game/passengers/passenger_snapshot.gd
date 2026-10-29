@@ -269,8 +269,10 @@ static func _record(p: Passenger) -> Dictionary:
 ## no toilet visits. Version 10 to 11: every passenger gets the boredom
 ## BoredomSim.start_of() gives its id; its toilet need, cooldown and any toilet
 ## visit are kept as saved, and it gets no kiosk cooldown and no kiosk visits.
-## Any other save is returned as it is, for the checks
-## to accept or refuse. The given dictionary is not edited.
+## Every step sets a field or block only when the save has none, so a value the
+## save already holds is kept for the checks to accept or refuse. Any other save
+## is returned as it is, for the checks to accept or refuse. The given
+## dictionary is not edited.
 static func _migrated(data: Dictionary) -> Dictionary:
 	if (
 		not _whole(data.get("save_version"))
@@ -284,9 +286,9 @@ static func _migrated(data: Dictionary) -> Dictionary:
 	if from_version == V6:
 		for record in passengers:
 			if typeof(record) == TYPE_DICTIONARY:
-				record["carry_on"] = 0
-				record["liquids"] = false
-				record["alarm"] = false
+				_set_missing(record, "carry_on", 0)
+				_set_missing(record, "liquids", false)
+				_set_missing(record, "alarm", false)
 	if from_version <= V7:
 		_add_security(out, passengers)
 	if from_version == V8:
@@ -297,16 +299,25 @@ static func _migrated(data: Dictionary) -> Dictionary:
 	return out
 
 
-## Version 7 to 8: the security runtime's phases and station records.
+## Sets `key` on `record` only when the record has no such key.
+static func _set_missing(record: Dictionary, key: String, value: Variant) -> void:
+	if not record.has(key):
+		record[key] = value
+
+
+## Version 7 to 8: the security runtime's phases and station records. A save
+## that already holds a "security" block keeps it and its queues as they are.
 static func _add_security(out: Dictionary, passengers: Array) -> void:
 	var by_id := {}
 	for record in passengers:
 		if typeof(record) == TYPE_DICTIONARY:
-			record["security_phase"] = SecurityRuntime.Phase.NONE
-			record["security_work"] = 0
-			record["incident_resolved"] = false
+			_set_missing(record, "security_phase", SecurityRuntime.Phase.NONE)
+			_set_missing(record, "security_work", 0)
+			_set_missing(record, "incident_resolved", false)
 			if _whole(record.get("id")):
 				by_id[int(record["id"])] = record
+	if out.has("security"):
+		return
 	var security := []
 	var tick := str(out.get("tick")).to_int()
 	var queues: Array = out["queues"] if typeof(out.get("queues")) == TYPE_ARRAY else []
@@ -340,9 +351,9 @@ static func _add_toilets(out: Dictionary, passengers: Array) -> void:
 	for record in passengers:
 		if typeof(record) != TYPE_DICTIONARY or not _whole(record.get("id")):
 			continue
-		record["toilet_need"] = ToiletSim.migrated_need(int(record["id"]))
-		record["toilet_cooldown"] = 0
-	out["toilet"] = {"visits": [], "deadlines_stale": false}
+		_set_missing(record, "toilet_need", ToiletSim.migrated_need(int(record["id"])))
+		_set_missing(record, "toilet_cooldown", 0)
+	_set_missing(out, "toilet", {"visits": [], "deadlines_stale": false})
 
 
 ## Version 10 to 11: boredom from each passenger's id, no kiosk cooldown and
@@ -351,9 +362,9 @@ static func _add_toilets(out: Dictionary, passengers: Array) -> void:
 static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 	for record in passengers:
 		if typeof(record) == TYPE_DICTIONARY and _whole(record.get("id")):
-			record["boredom"] = BoredomSim.start_of(int(record["id"]))
-			record["shop_cooldown"] = 0
-	out["shop"] = {"visits": [], "deadlines_stale": false}
+			_set_missing(record, "boredom", BoredomSim.start_of(int(record["id"])))
+			_set_missing(record, "shop_cooldown", 0)
+	_set_missing(out, "shop", {"visits": [], "deadlines_stale": false})
 
 
 ## Version 8 to 9: each passenger in UNPACK has its work left scaled to the new
