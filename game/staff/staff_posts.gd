@@ -4,8 +4,9 @@ extends RefCounted
 ## (decision security-lane-technical-design-one-station-per-lane-with-int,
 ## point 5; ruling security-lane-staffing-one-officer-opens-a-lane-and-a-second).
 ##
-## Every desk and scanner has a PRIMARY post: the station is open only while
-## a member is on duty there (StaffSim.is_open()). A whole security lane also
+## Every desk, scanner and shop counter has a PRIMARY post: the station is
+## open only while a member is on duty there (StaffSim.is_open()). A counter's
+## primary spot is its ShopCounters spot. A whole security lane also
 ## has a HELPER post: an officer on duty there speeds up the lane's repacks
 ## (SecurityRuntime.rate()). A desk's or basic scanner's primary spot is its
 ## StaffSpots spot. A lane's arch has no StaffSpots spot; its primary spot
@@ -40,10 +41,15 @@ static var next_step_copies := 0
 
 ## The cell a member working `station` in `slot` stands on, or
 ## BuildObjectDef.NO_CELL: a whole lane's officer spots, else (primary only)
-## the StaffSpots spot. A helper has a spot only at a whole lane.
+## a counter's ShopCounters spot or the StaffSpots spot. A helper has a spot
+## only at a whole lane.
 static func spot(
 	grid: BuildGrid, layout: TerminalLayout, station: int, slot: StaffMember.Slot
 ) -> Vector2i:
+	if ShopCounters.is_counter(grid, station):
+		if slot == StaffMember.Slot.HELPER:
+			return BuildObjectDef.NO_CELL
+		return ShopCounters.spot(grid, station)
 	var lane := layout.security_lanes.lane(station)
 	if not lane.is_empty():
 		return lane["helper_spot" if slot == StaffMember.Slot.HELPER else "primary_spot"]
@@ -52,9 +58,12 @@ static func spot(
 	return StaffSpots.spot_of(grid, station)
 
 
-## Whether an old save left `station`'s spot blocked (StaffSpots.blocked()).
+## Whether an old save left `station`'s spot blocked (StaffSpots.blocked()),
+## or a counter has no cell a server can stand on (ShopCounters.blocked()).
 ## Never for a whole lane, whose recognition requires free officer spots.
 static func blocked(grid: BuildGrid, layout: TerminalLayout, station: int) -> bool:
+	if ShopCounters.is_counter(grid, station):
+		return ShopCounters.blocked(grid, station)
 	if layout.security_lanes.is_complete(station):
 		return false
 	return StaffSpots.blocked(grid, station)
@@ -78,9 +87,20 @@ static func unreachable(
 static func workable(
 	grid: BuildGrid, layout: TerminalLayout, station: int, slot: StaffMember.Slot
 ) -> bool:
-	if not layout.is_usable(station) or spot(grid, layout, station, slot) == BuildObjectDef.NO_CELL:
+	if not usable(grid, layout, station):
+		return false
+	if spot(grid, layout, station, slot) == BuildObjectDef.NO_CELL:
 		return false
 	return not blocked(grid, layout, station) and not unreachable(grid, layout, station, slot)
+
+
+## Whether passengers can use `station` as the grid stands: a desk or scanner
+## the layout can use (TerminalLayout.is_usable()), or a counter in a ready
+## room of its type (ShopCounters.usable()).
+static func usable(grid: BuildGrid, layout: TerminalLayout, station: int) -> bool:
+	if ShopCounters.is_counter(grid, station):
+		return ShopCounters.usable(grid, station)
+	return layout.is_usable(station)
 
 
 ## The first tick on which a helper is on duty at `station`, or -1 when none
@@ -205,9 +225,12 @@ static func _after_next_step(staff: StaffSim, station: int) -> int:
 
 ## Whether a passenger is being checked in or screened at `station` now: at a
 ## security station any passenger SecurityRuntime has admitted there, in
-## whatever phase (Stage.SECURITY until it is cleared). A primary on duty
-## here does not leave until this is false (StaffSim.fire(), _reconcile()).
+## whatever phase (Stage.SECURITY until it is cleared); at a counter an order
+## in progress (ShopCounters.in_service()). A primary on duty here does not
+## leave until this is false (StaffSim.fire(), _reconcile()).
 static func in_service(sim: PassengerSim, station: int) -> bool:
+	if ShopCounters.is_counter(sim.grid, station):
+		return ShopCounters.in_service(sim, station)
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if p.station != station:

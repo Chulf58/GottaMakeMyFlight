@@ -22,6 +22,13 @@ extends RefCounted
 ## missing a slot is refused. A helper must be a security officer at a
 ## whole security lane and never leaving; a member with no station holds the
 ## primary slot; each post (station and slot) is claimed at most once.
+##
+## Version 3 adds shop servers (StaffMember.Role.SHOP) at the counters of
+## ready cafes and kiosks (ShopCounters), saved like any member. A version 1
+## or 2 save comes from before them: it loads as it is, with no server, so its
+## cafes and kiosks stay closed until the player hires one; a shop member in
+## it is refused. A server's station must be a usable counter, and on duty it
+## stands on that counter's staff spot.
 
 const KEYS := ["save_version", "next_id", "members"]
 const MEMBER_KEYS := [
@@ -80,17 +87,18 @@ static func load(saved: Dictionary, sim: PassengerSim) -> Dictionary:
 	if not WholeNumber.is_whole(saved["save_version"]):
 		return {"error": "save_version is not a whole number"}
 	var data := saved
-	var v1 := int(saved["save_version"]) == 1
+	var version := int(saved["save_version"])
+	var v1 := version == 1
+	if version < 1 or version > StaffSim.SAVE_VERSION:
+		return {
+			"error":
+			"save_version %s is not 1, 2 or %d" % [saved["save_version"], StaffSim.SAVE_VERSION]
+		}
 	if v1:
 		var migrated: Variant = _migrated_v1(saved)
 		if migrated is String:
 			return {"error": migrated}
 		data = migrated
-	elif int(saved["save_version"]) != StaffSim.SAVE_VERSION:
-		return {
-			"error":
-			"save_version %s is not 1 or %d" % [saved["save_version"], StaffSim.SAVE_VERSION]
-		}
 	if not WholeNumber.is_whole(data["next_id"]) or int(data["next_id"]) < 1:
 		return {"error": "next_id is not a whole number of at least 1"}
 	if typeof(data["members"]) != TYPE_ARRAY:
@@ -104,6 +112,10 @@ static func load(saved: Dictionary, sim: PassengerSim) -> Dictionary:
 		if parsed is String:
 			return {"error": parsed}
 		var m: StaffMember = parsed
+		if m.role == StaffMember.Role.SHOP and version < 3:
+			return {
+				"error": "a version %d save has shop member %d, which came in 3" % [version, m.id]
+			}
 		if m.id <= last_id or m.id >= next_id:
 			return {"error": "member %d is out of order or not below next_id" % m.id}
 		last_id = m.id
@@ -302,10 +314,7 @@ static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 		if m.station != 0 or m.leaving:
 			return "is walking out but has a station or is leaving"
 		return ""
-	var stations := sim.layout.desks
-	if m.role == StaffMember.Role.SECURITY:
-		stations = sim.layout.scanners
-	if not stations.has(m.station):
+	if not _of_role(m, sim):
 		return "works at station %d, which is not one of its role" % m.station
 	if m.leaving and m.state != StaffMember.State.ON_DUTY:
 		return "is leaving but not on duty"
@@ -313,13 +322,24 @@ static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 		return ""
 	if m.is_moving() or m.needs_replan:
 		return "is on duty but walking"
-	if not sim.layout.is_usable(m.station):
+	if not StaffPosts.usable(sim.grid, sim.layout, m.station):
 		return "is on duty at station %d, which is not usable" % m.station
 	if StaffPosts.blocked(sim.grid, sim.layout, m.station):
 		return "is on duty at station %d, whose staff spot is blocked" % m.station
 	if m.at != StaffPosts.spot(sim.grid, sim.layout, m.station, m.slot):
 		return "is on duty away from its post's staff spot"
 	return ""
+
+
+## Whether the member's station is one of its role: a desk, a scanner, or a
+## usable counter (ShopCounters.usable()).
+static func _of_role(m: StaffMember, sim: PassengerSim) -> bool:
+	match m.role:
+		StaffMember.Role.CHECKIN:
+			return sim.layout.desks.has(m.station)
+		StaffMember.Role.SHOP:
+			return ShopCounters.usable(sim.grid, m.station)
+	return sim.layout.scanners.has(m.station)
 
 
 static func _cell(value: Variant) -> Variant:

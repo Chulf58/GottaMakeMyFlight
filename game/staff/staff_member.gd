@@ -7,7 +7,8 @@ extends RefCounted
 ## when it is sent to a station. Distances are whole millimetres, as for
 ## passengers (Passenger.segment_mm).
 
-enum Role { CHECKIN, SECURITY }
+## SHOP: a server at a cafe or kiosk counter (ShopCounters).
+enum Role { CHECKIN, SECURITY, SHOP }
 ## WALKING_OUT: fired, on its way to the entrance; no longer staff.
 enum State { IDLE, TO_STATION, ON_DUTY, WALKING_OUT }
 ## The post it works at its station (StaffPosts): PRIMARY opens the station,

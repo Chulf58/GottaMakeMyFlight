@@ -193,12 +193,16 @@ func test_guests_are_served_in_the_order_they_joined_the_queue() -> void:
 
 func test_each_guest_reserves_its_own_seat_and_a_full_cafe_refuses() -> void:
 	_make(false, true)
+	# Only the airside counter has a server: the staff door in the divider
+	# lets an airside guest reach the landside cafe, which must stay closed.
+	_world.auto_staff_roles = [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]
+	StaffTestKit.seat_server(_world.staff, _ids["air_counter"])
 	var guests := _visit_from_gate(2)
 	assert_int(guests.size()).is_equal(2)
 	var a: Passenger = guests[0]
 	var b: Passenger = guests[1]
 	assert_str(_cafes().visit_of(a.id).seat_key).is_not_equal(_cafes().visit_of(b.id).seat_key)
-	# Two seats in the airside cafe, and the landside one cannot be reached.
+	# Two seats in the airside cafe, and the landside one has no server.
 	var c := _spawn_to(Passenger.Stage.TO_GATE)
 	assert_bool(_cafes().visit_of(a.id) != null and _cafes().visit_of(b.id) != null).is_true()
 	assert_bool(_cafes().try_visit(c)).is_false()

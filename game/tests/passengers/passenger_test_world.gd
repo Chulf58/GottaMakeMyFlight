@@ -14,10 +14,13 @@ var flights: FlightSim
 var grid: BuildGrid
 var sim: PassengerSim
 var staff: StaffSim
-## Before each tick, staff are seated at once at every desk and scanner without
-## any (StaffTestKit.staff_all), so tests that are not about staffing find the
-## stations open. Staff tests set it false and hire.
+## Before each tick, staff are seated at once at every desk, scanner and shop
+## counter without any (StaffTestKit.staff_all), so tests that are not about
+## staffing find the stations open. Staff tests set it false and hire.
 var auto_staff := true
+## The roles auto_staff seats; every role when empty. A test of an unstaffed
+## counter seats only the desk and scanner roles.
+var auto_staff_roles: Array[StaffMember.Role] = []
 var _tracked := false
 
 
@@ -45,7 +48,7 @@ static func make(on_grid: BuildGrid, starts: Array[int], seed := 1) -> Passenger
 	world.clock.ticked.connect(
 		func(_tick: int) -> void:
 			if world.auto_staff:
-				StaffTestKit.staff_all(world.staff)
+				StaffTestKit.staff_all(world.staff, world.auto_staff_roles)
 	)
 	world.sim.bind(world.clock, world.flights, on_grid)
 	if tracker != null:

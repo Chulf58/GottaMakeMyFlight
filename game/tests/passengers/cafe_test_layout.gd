@@ -2,7 +2,8 @@ class_name CafeTestLayout
 extends RefCounted
 ## The reference terminal with two cafes beside it, for the cafe tests: floor
 ## east of the terminal (x 22-27, y 3-16), the security divider carried
-## across it, openings in the terminal's east wall, an airside cafe room
+## across it with a staff door near its east end (STAFF_DOOR), openings in the
+## terminal's east wall, an airside cafe room
 ## (x 22-27, y 3-8) and a landside one (x 22-27, y 10-15). Each has a counter
 ## along its north side with a 4-cell lane south from its order spot, and one
 ## table (two seats) to the east of the lane.
@@ -10,6 +11,10 @@ extends RefCounted
 const AIRSIDE_ROOM := Rect2i(22, 3, 6, 6)
 const LANDSIDE_ROOM := Rect2i(22, 10, 6, 6)
 const FLOOR := Rect2i(22, 3, 6, 14)
+## The door in the divider near its east end (decision a-door-wall-in-the-
+## security-divider-is-allowed-security-is-e): shop staff, who never pass a
+## scanner, reach the airside counter through it.
+const STAFF_DOOR := Vector2i(26, ReferenceTerminal.DIVIDER_Y)
 const AIR_COUNTER := Vector2i(23, 3)
 const AIR_TABLE := Vector2i(24, 6)
 const LAND_COUNTER := Vector2i(23, 10)
@@ -35,7 +40,10 @@ static func build(
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	for x in range(FLOOR.position.x, FLOOR.end.x):
 		var cell := Vector2i(x, ReferenceTerminal.DIVIDER_Y)
-		edits.append(BuildEdit.place_wall(cell, BuildGrid.Side.NORTH))
+		if cell != STAFF_DOOR:
+			edits.append(BuildEdit.place_wall(cell, BuildGrid.Side.NORTH))
+	# After the walls either side of it, which a door needs.
+	edits.append(BuildEdit.place_wall(STAFF_DOOR, BuildGrid.Side.NORTH, BuildGrid.WallKind.DOOR))
 	for y in [4, 5, 6, 7, 11, 12, 13, 14, 15]:
 		edits.append(BuildEdit.remove_wall(Vector2i(21, y), BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):

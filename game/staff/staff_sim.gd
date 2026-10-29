@@ -1,8 +1,9 @@
 class_name StaffSim
 extends Node
-## The staff pool as plain data. The player hires check-in agents and security
-## officers by role; nobody places them. An idle member walks on its own to
-## the nearest usable desk or scanner of its role that nobody else has claimed
+## The staff pool as plain data. The player hires check-in agents, security
+## officers and shop servers by role; nobody places them. An idle member walks
+## on its own to the nearest usable desk, scanner or counter (ShopCounters) of
+## its role that nobody else has claimed
 ## (the shortest grid path, ties to the lower station id), entering through
 ## the entrance nearest that station when it comes from the pool. It walks to the
 ## station's staff spot (StaffSpots: behind a desk, beside a scanner; a
@@ -14,7 +15,9 @@ extends Node
 ## start of every step. A station whose spot an old save
 ## left blocked, or that no entrance has a way to, is never staffed. A member
 ## whose station is removed or stops being usable goes idle where it stands;
-## one whose cell is built over goes back to the pool. A fired member walks
+## one whose cell is built over goes back to the pool. One on duty whose
+## station's spot moved (a counter's can, ShopCounters) walks to the new
+## spot, or walks out if it was leaving. A fired member walks
 ## out to the nearest entrance it has a way to and is removed there (at once
 ## when it is in the pool or has no way out); while it walks it is no longer
 ## staff.
@@ -30,7 +33,8 @@ signal staff_changed
 signal member_state_changed(id: int, state: StaffMember.State)
 
 ## 2: members save their post (slot); StaffSnapshot migrates version 1.
-const SAVE_VERSION := 2
+## 3: shop servers (Role.SHOP) at counters; a version 2 save has none.
+const SAVE_VERSION := 3
 ## Who fire() lets go first: [state, slot] pairs, a helper before a primary
 ## in the same state, so firing keeps stations open where it can.
 const FIRE_ORDER := [
@@ -52,12 +56,18 @@ var _claims: Dictionary = {}
 ## Derived: lane station id -> the member walking to its helper post or on
 ## duty there.
 var _helpers: Dictionary = {}
+## Derived from the grid: the usable counters (ShopCounters.counters()), worked
+## out again after an edit when _counters_dirty is set.
+var _counters: Array[int] = []
+var _counters_dirty := true
 
 
 ## Called by PassengerSim.bind() once its layout is built.
 func bind(with_sim: PassengerSim) -> void:
 	sim = with_sim
 	sim.grid.graph_changed.connect(_on_graph_changed)
+	sim.grid.edit_applied.connect(_on_edit_applied)
+	_counters_dirty = true
 	_reconcile()
 
 
@@ -150,11 +160,12 @@ func is_staffed(station: int, slot := StaffMember.Slot.PRIMARY) -> bool:
 	return id != 0 and (_by_id[id] as StaffMember).state == StaffMember.State.ON_DUTY
 
 
-## Whether passengers are served at a desk or scanner: it is usable
-## (TerminalLayout.is_usable()) and a member is on duty there who is not
-## leaving. Closed stations are what a closed sign marks.
+## Whether passengers are served at a desk, scanner or counter: it is usable
+## (TerminalLayout.is_usable(), or one of the usable counters) and a member is
+## on duty there who is not leaving. Closed stations are what a closed sign
+## marks.
 func is_open(station: int) -> bool:
-	if not sim.layout.is_usable(station) or not is_staffed(station):
+	if not _usable(station) or not is_staffed(station):
 		return false
 	return not (_by_id[_claims[station]] as StaffMember).leaving
 
@@ -220,6 +231,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		return false
 	_next_id = loaded["next_id"]
 	_members.assign(loaded["members"])
+	_counters_dirty = true
 	rederive()
 	staff_changed.emit()
 	return true
@@ -236,9 +248,30 @@ func rederive() -> void:
 			_claims_of(m)[m.station] = m.id
 
 
-## The desks or the scanners, by role.
+## The desks, the scanners or the usable counters, by role.
 func stations_of(role: StaffMember.Role) -> Array[int]:
-	return sim.layout.desks if role == StaffMember.Role.CHECKIN else sim.layout.scanners
+	match role:
+		StaffMember.Role.CHECKIN:
+			return sim.layout.desks
+		StaffMember.Role.SHOP:
+			return _shop_counters()
+	return sim.layout.scanners
+
+
+## The usable counters, worked out again only after an edit.
+func _shop_counters() -> Array[int]:
+	if _counters_dirty:
+		_counters = ShopCounters.counters(sim.grid)
+		_counters_dirty = false
+	return _counters
+
+
+## Whether passengers can use `station`: a desk or scanner the layout can use,
+## or one of the usable counters.
+func _usable(station: int) -> bool:
+	if ShopCounters.is_counter(sim.grid, station):
+		return _shop_counters().has(station)
+	return sim.layout.is_usable(station)
 
 
 ## Sends idle `m` along `path` (from where it stands, or from an entrance's
@@ -286,9 +319,10 @@ func _unclaim(m: StaffMember) -> void:
 ## blocked or out of reach from every entrance go idle, as do helpers of a
 ## station that is no longer a whole lane; members standing on a
 ## cell that is no longer walkable give up their station and go back to the
-## pool (one walking out is gone); leaving members whose service has ended
-## walk out. Every primary post still claimed afterwards is one staff can
-## work: the first step of the pass (StaffPosts).
+## pool (one walking out is gone); members on duty away from their post's
+## spot, which moved, walk to it (_off_spot()); leaving members whose service
+## has ended walk out. Every primary post still claimed afterwards is one
+## staff can work: the first step of the pass (StaffPosts).
 func _reconcile() -> void:
 	for i in range(_members.size() - 1, -1, -1):
 		var m := _members[i]
@@ -304,9 +338,23 @@ func _reconcile() -> void:
 				_release(m)
 			m.at = StaffMember.NO_CELL
 			m.clear_path()
+		if m.state == StaffMember.State.ON_DUTY and m.at != spot_of(m.station, m.slot):
+			_off_spot(m)
 		if m.leaving and not (m.state == StaffMember.State.ON_DUTY and _in_service(m.station)):
 			if not _send_out(m):
 				staff_changed.emit()
+
+
+## A member on duty whose post's spot moved under it (an edit moved a
+## counter's spot, ShopCounters) walks to the new spot; one leaving walks out
+## instead, since the order it waited for is finished without it.
+func _off_spot(m: StaffMember) -> void:
+	if m.leaving:
+		if not _send_out(m):
+			staff_changed.emit()
+		return
+	_set_state(m, StaffMember.State.TO_STATION)
+	m.needs_replan = true
 
 
 ## Whether the member is backing out of a cell that went (_replan() marked it):
@@ -484,6 +532,7 @@ func _set_state(m: StaffMember, state: StaffMember.State) -> void:
 ## An edit touched a walking member's path: it plans again on its next step.
 ## Stations that went are let go at once, so a save never names one.
 func _on_graph_changed(cells: Array[Vector2i]) -> void:
+	_counters_dirty = true
 	var touched := {}
 	for cell in cells:
 		touched[cell] = true
@@ -495,3 +544,11 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 				m.needs_replan = true
 				break
 	_reconcile()
+
+
+## Any edit can change which counters are usable. A room edit changes no walk
+## graph, so graph_changed never follows it: posts are reconciled here then.
+func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
+	_counters_dirty = true
+	if result.dirty_cells.is_empty():
+		_reconcile()

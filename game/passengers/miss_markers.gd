@@ -6,7 +6,9 @@ extends Node3D
 ## (MissSignals.closed_stations; a closed station shows only that, since it
 ## serves nobody), "Closed: staff spot blocked" when an old save left the
 ## station's staff spot blocked, or "Closed: staff can't reach" when staff have
-## no way from an entrance to it (MissSignals.closed_reason). PassengerViews
+## no way from an entrance to it (MissSignals.closed_reason). A cafe or kiosk
+## counter with no server on duty gets the same Closed signs
+## (ShopCounters.closed). PassengerViews
 ## creates it as a child and calls sync() after each tick and draw() after
 ## placing its passengers. It reads the sim and
 ## never writes to it.
@@ -201,6 +203,8 @@ func sync() -> void:
 		sim.grid.graph_changed.connect(_on_graph_changed)
 	_watch_staff()
 	var closed := MissSignals.closed_stations(sim)
+	var counters := ShopCounters.closed(sim)
+	closed.append_array(counters)
 	var full := MissSignals.full_stations(sim)
 	for station: int in closed:
 		full.erase(station)
@@ -220,7 +224,7 @@ func sync() -> void:
 	for station in closed:
 		var sign := _show_sign(_closed_signs, station, "ClosedSign", _closed_icon())
 		var caption := CLOSED_CAPTION
-		match MissSignals.closed_reason(sim, station):
+		match _closed_reason(station, counters):
 			MissSignals.SPOT_BLOCKED_REASON:
 				caption = SPOT_BLOCKED_CAPTION
 			MissSignals.UNREACHABLE_REASON:
@@ -595,6 +599,19 @@ static func caption_rect(sign_point: Vector2, text: String, lift := 0.0, shift :
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	sync()
+
+
+## Why `station` is closed (a MissSignals reason): for a counter in
+## `counters` from its staff spot, as MissSignals.closed_reason() says for a
+## desk or scanner.
+func _closed_reason(station: int, counters: Array[int]) -> String:
+	if not counters.has(station):
+		return MissSignals.closed_reason(sim, station)
+	if sim.staff.spot_blocked(station):
+		return MissSignals.SPOT_BLOCKED_REASON
+	if sim.staff.spot_unreachable(station):
+		return MissSignals.UNREACHABLE_REASON
+	return MissSignals.NO_STAFF_REASON
 
 
 ## A hire, a fire or a member going on duty changes which stations are closed,

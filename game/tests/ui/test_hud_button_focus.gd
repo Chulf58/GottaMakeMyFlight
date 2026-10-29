@@ -65,7 +65,8 @@ func test_every_staff_panel_button_is_focus_none() -> void:
 	panel.staff = _w.staff
 	add_child(panel)
 	var buttons := _buttons_of(panel)
-	assert_int(buttons.size()).is_equal(4)
+	# Hire and Fire for each of the three roles.
+	assert_int(buttons.size()).is_equal(6)
 	for button in buttons:
 		assert_int(button.focus_mode).is_equal(Control.FOCUS_NONE)
 

@@ -2,7 +2,8 @@ class_name StaffCharacters
 extends Node3D
 ## Draws hired staff with pooled Toon characters, one model per role, so staff
 ## never look like passengers: a check-in agent in a navy skirt suit and a
-## security officer in a white shirt and tie. A member is drawn while it is on
+## security officer in a white shirt and tie. A shop server wears the check-in
+## agent's suit until it has a model of its own. A member is drawn while it is on
 ## the floor (not in the pool). Each tick it records the position for the tick
 ## before and the tick now, keyed by member id, and each frame it draws
 ## between the two with the clock's alpha, as PassengerViews does.
@@ -19,19 +20,21 @@ extends Node3D
 ## next frame, so a paused game shows them. It reads the sim and never writes
 ## to it.
 
-## By StaffMember.Role: CHECKIN, SECURITY.
+const AGENT_SUIT := preload("res://assets/people/tcp_female_character_07.glb")
+## By StaffMember.Role: CHECKIN, SECURITY, SHOP.
 const CHARACTERS: Array[PackedScene] = [
-	preload("res://assets/people/tcp_female_character_07.glb"),
+	AGENT_SUIT,
 	preload("res://assets/people/tcp_male_character_07.glb"),
+	AGENT_SUIT,
 ]
 ## Walk clip speeds measured by the Toon pipeline (SPEED lines), by role.
-const CLIP_WALK_MPS: Array[float] = [1.922, 1.952]
+const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922]
 const LOOPED := ["idle", "walk"]
 
 @export var clock: SimClock
 @export var staff: StaffSim
 
-var _pool: Array[Array] = [[], []]
+var _pool: Array[Array] = [[], [], []]
 ## Member id -> node.
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}

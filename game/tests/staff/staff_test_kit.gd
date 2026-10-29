@@ -5,24 +5,29 @@ extends RefCounted
 ## scanners serve from the first tick.
 
 
-## Hires one member for every usable desk and scanner that has nobody and puts
-## it on duty on its staff spot at once (a station whose spot is blocked, or
-## that staff cannot reach from an entrance, is skipped). Returns how many
-## were seated. `roles` limits it to stations of those roles (both when
-## empty).
+## Hires one member for every usable desk, scanner and shop counter that has
+## nobody and puts it on duty on its staff spot at once (a station whose spot
+## is blocked, or that staff cannot reach from an entrance, is skipped).
+## Returns how many were seated. `roles` limits it to stations of those roles
+## (every role when empty).
 static func staff_all(staff: StaffSim, roles: Array[StaffMember.Role] = []) -> int:
 	var layout := staff.sim.layout
 	var seated := 0
 	var stations: Array[int] = []
 	stations.append_array(layout.desks)
 	stations.append_array(layout.scanners)
+	var counters := staff.stations_of(StaffMember.Role.SHOP)
+	stations.append_array(counters)
 	for station in stations:
-		if staff.staff_at(station) != 0 or not layout.is_usable(station):
+		var counter := counters.has(station)
+		if staff.staff_at(station) != 0 or not (counter or layout.is_usable(station)):
 			continue
 		if staff.spot_blocked(station) or staff.spot_unreachable(station):
 			continue
 		var role := StaffMember.Role.SECURITY
-		if layout.desks.has(station):
+		if counter:
+			role = StaffMember.Role.SHOP
+		elif layout.desks.has(station):
 			role = StaffMember.Role.CHECKIN
 		if not roles.is_empty() and not roles.has(role):
 			continue
@@ -35,6 +40,18 @@ static func staff_all(staff: StaffSim, roles: Array[StaffMember.Role] = []) -> i
 	if seated > 0:
 		staff.rederive()
 	return seated
+
+
+## Hires a shop server and puts it on duty at once on `counter`'s staff spot;
+## returns its id.
+static func seat_server(staff: StaffSim, counter: int) -> int:
+	var member := staff.get_member(staff.hire(StaffMember.Role.SHOP))
+	member.station = counter
+	member.at = staff.spot_of(counter)
+	member.clear_path()
+	member.state = StaffMember.State.ON_DUTY
+	staff.rederive()
+	return member.id
 
 
 ## Hires a security officer and puts it on duty at once on `station`'s `slot`

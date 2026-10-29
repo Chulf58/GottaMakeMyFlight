@@ -69,7 +69,7 @@ func _changed(data: Dictionary, change: Callable) -> Dictionary:
 
 func test_a_helper_round_trips_through_a_save() -> void:
 	var data := _good()
-	assert_int(int(data["save_version"])).is_equal(2)
+	assert_int(int(data["save_version"])).is_equal(StaffSim.SAVE_VERSION)
 	var b := _world()
 	assert_bool(b.staff.from_snapshot(data)).is_true()
 	var helper := b.staff.get_member(b.staff.staff_at(_arch(b), HELPER))
@@ -98,7 +98,7 @@ func test_a_version_1_save_migrates_every_member_to_a_primary_post() -> void:
 		assert_int(b.staff.get_member(id).slot).is_equal(PRIMARY)
 	assert_bool(b.staff.is_open(_arch(b))).is_true()
 	assert_bool(b.staff.is_open(_scanner(b))).is_true()
-	assert_int(int(b.staff.to_snapshot()["save_version"])).is_equal(2)
+	assert_int(int(b.staff.to_snapshot()["save_version"])).is_equal(StaffSim.SAVE_VERSION)
 
 
 func test_bad_versions_and_slots_are_refused() -> void:
@@ -116,8 +116,8 @@ func test_bad_versions_and_slots_are_refused() -> void:
 			_changed(good, func(d: Dictionary) -> void: d["save_version"] = 1),
 			"version 1 member has a 'slot'"
 		],
-		"version 3":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 3), "is not 1 or 2"],
+		"version 4":
+		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 4), "is not 1, 2 or 3"],
 		"unknown slot":
 		[
 			_changed(good, func(d: Dictionary) -> void: d["members"][helper_at]["slot"] = 7),

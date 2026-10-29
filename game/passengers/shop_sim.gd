@@ -14,6 +14,12 @@ extends RefCounted
 ## where it left off: TO_SECURITY landside, TO_GATE airside. A passenger
 ## seated at a gate stands up first.
 ##
+## A kiosk is open only while a shop server is on duty at one of its counters
+## (ShopCounters.room_open(); ruling store-mechanics-draw-a-room-then-furnish-
+## it-required-pieces, point 3); a closed kiosk gets no visit. When it closes,
+## a passenger still walking there (or getting up for it) gives up, unpaid; one
+## already browsing finishes and pays, as a service under way ends first.
+##
 ## Two things start a visit, both through NeedsPolicy: boredom at or over
 ## BoredomSim.BORED_AT (wants_relief(), retrying after RETRY_TICKS when no slot
 ## is free or there is no time), and spare time (wants_browse()): a passenger
@@ -290,20 +296,24 @@ func _passing_shop(p: Passenger) -> bool:
 	refresh()
 	var reach := _reach_mm(p)
 	for shop in layout.shops:
+		if not ShopCounters.room_open(_sim, shop["room"]):
+			continue
 		for slot in shop["slots"]:
 			if _core.is_free(slot["key"]) and Passenger.octile_mm(p.at, slot["approach"]) <= reach:
 				return true
 	return false
 
 
-## The free slot nearest `p` by path, with the walk: {"slot", "route"}
-## (FacilitySlots.nearest()). Slots at the same octile distance are tried in
+## The free slot of an open kiosk nearest `p` by path, with the walk:
+## {"slot", "route"} (FacilitySlots.nearest()). Slots at the same octile distance are tried in
 ## display id and then index order, and on an equal path the one tried first
 ## wins. Only slots within `reach_mm` by path count when it is above 0. Empty
 ## when no free slot can be reached.
 func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
 	var slots: Array = []
 	for shop in layout.shops:
+		if not ShopCounters.room_open(_sim, shop["room"]):
+			continue
 		for slot in shop["slots"]:
 			slots.append(
 				{"key": slot["key"], "order": [slot["display"], slot["index"]], "entry": slot}
@@ -369,11 +379,15 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 
 
 ## FacilitySlots.reconcile()'s check of one visit: its slot entry is brought
-## up to date, or the slot or its kiosk is gone and the visit ends unpaid (one
-## still getting up from a gate seat lets the gate take over).
+## up to date, or the slot or its kiosk is gone, or the kiosk closed before
+## the browse began, and the visit ends unpaid (one still getting up from a
+## gate seat lets the gate take over).
 func _keep(p: Passenger, visit: ShopVisit) -> bool:
 	var slot := layout.slot(visit.display, visit.index)
-	if slot.is_empty() or int(slot["room"]) != visit.room:
+	var closed := (
+		p.stage != Passenger.Stage.SHOP_BROWSE and not ShopCounters.room_open(_sim, visit.room)
+	)
+	if slot.is_empty() or int(slot["room"]) != visit.room or closed:
 		if p.stage == Passenger.Stage.STANDING_UP:
 			_core.release(visit)
 		else:
