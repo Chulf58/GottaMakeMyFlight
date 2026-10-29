@@ -22,20 +22,30 @@ static func check(grid: BuildGrid, edit: BuildEdit, shell: ShellDefinition = nul
 	var result := grid.validate(edit)
 	if not result.ok:
 		return result
+	var problem := edge_problem(grid, edit, shell)
+	return problem if problem != null else result
+
+
+## check()'s rules beyond BuildGrid.validate(): the refusal, or null when the
+## edit keeps every entrance and exit on the edge with its way out open.
+static func edge_problem(
+	grid: BuildGrid, edit: BuildEdit, shell: ShellDefinition = null
+) -> BuildResult:
 	match edit.kind:
 		BuildEdit.Kind.PLACE_OBJECT:
 			if not BuildCatalog.is_door(edit.def_id):
-				return result
+				return null
 			if shell != null and shell.connection_for(edit.def_id, edit.cell, edit.facing) == null:
 				return BuildResult.refused(BuildResult.Reason.DOOR_NOT_AT_SHELL_DOOR)
-			return outside_door_problem(grid, edit.cell, edit.facing)
+			var outside := outside_door_problem(grid, edit.cell, edit.facing)
+			return null if outside.ok else outside
 		BuildEdit.Kind.PLACE_WALL:
 			if on_a_way_out(grid, edit.cell, edit.side):
 				return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
 		BuildEdit.Kind.PAINT_FLOOR:
 			if beyond_a_door(grid, edit.cell):
 				return BuildResult.refused(BuildResult.Reason.DOOR_NOT_ON_EDGE)
-	return result
+	return null
 
 
 ## Whether an entrance or exit door object at `anchor` and `facing` stands on

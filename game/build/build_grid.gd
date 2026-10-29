@@ -69,6 +69,10 @@ var origin := Vector3.ZERO
 ## When false, validate() skips staff_reach_problem(). Only RepairPlan's search
 ## copy turns it off: it checks reach on its finished plan instead.
 var check_staff_reach := true
+## While set, every edit the grid accepts is added to it with its inverse,
+## read before the edit changes anything (BuildReceipt), and a snapshot load
+## marks it replaced. BuildMode sets it for one player action (UndoStack).
+var recorder: BuildReceipt = null
 
 var _floor := PackedByteArray()
 var _zone := PackedInt32Array()
@@ -298,14 +302,20 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 		BuildEdit.Kind.REMOVE_WALL:
 			result = _check_remove_wall(edit.cell, edit.side)
 		BuildEdit.Kind.PLACE_OBJECT:
-			result = _check_place_object(edit.def_id, edit.cell, edit.facing)
+			if _restored_id_taken(edit.object_id, _objects, _next_object_id):
+				result = BuildResult.refused(BuildResult.Reason.OVERLAP, edit.object_id)
+			else:
+				result = _check_place_object(edit.def_id, edit.cell, edit.facing)
 		BuildEdit.Kind.REMOVE_OBJECT:
 			if _objects.has(edit.object_id):
 				result = BuildResult.accepted()
 			else:
 				result = BuildResult.refused(BuildResult.Reason.NO_OBJECT)
 		BuildEdit.Kind.PLACE_ROOM:
-			result = _check_place_room(Rect2i(edit.cell, edit.room_size), edit.room_type)
+			if _restored_id_taken(edit.room_id, _rooms, _next_room_id):
+				result = BuildResult.refused(BuildResult.Reason.ROOM_OVERLAP)
+			else:
+				result = _check_place_room(Rect2i(edit.cell, edit.room_size), edit.room_type)
 		BuildEdit.Kind.REMOVE_ROOM:
 			if _rooms.has(edit.room_id):
 				result = BuildResult.accepted()
@@ -325,6 +335,13 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 		if spot_problem != null:
 			result = spot_problem
 	return result
+
+
+## Whether a placement that brings an object or room back under its own id
+## (`id` above 0, an undo) cannot have it: the id is in use or was never
+## handed out. A placement with id 0 gets a fresh one.
+static func _restored_id_taken(id: int, records: Dictionary, next_id: int) -> bool:
+	return id != 0 and (id < 0 or id >= next_id or records.has(id))
 
 
 ## SecurityLanes.officer_spot_problem() for an edit that places an object or
@@ -582,6 +599,39 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 	return results
 
 
+## Applies `edits` in order and stops at the first refusal, which it returns;
+## the edits before it stay applied. Each edit is first put to `rule` (when
+## valid, called as rule(grid, edit) and returning a refusal or null) on the
+## grid as the earlier edits left it, then to validate(). Staff reach is judged
+## as in apply_batch(), with one flood when the whole list keeps it. The A*
+## graph is relinked once and graph_changed emitted once for the applied edits.
+## Returns an accepted result with their dirty cells when every edit applied.
+## BuildUndo runs it on a copy of the grid first, so a refusal never leaves a
+## part of an undo on the live grid.
+func apply_sequence(edits: Array[BuildEdit], rule: Callable) -> BuildResult:
+	var result := BuildResult.accepted()
+	var dirty: Array[Vector2i] = []
+	_reach_cleared = check_staff_reach and _batch_keeps_reach(edits)
+	for edit in edits:
+		var problem: BuildResult = rule.call(self, edit) if rule.is_valid() else null
+		if problem != null:
+			result = problem
+			break
+		result = _commit(edit)
+		if not result.ok:
+			break
+		dirty.append_array(result.dirty_cells)
+	_reach_cleared = false
+	if not dirty.is_empty():
+		var relinked := _pathing.update(self, dirty)
+		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
+	if not result.ok:
+		return result
+	var whole := BuildResult.accepted()
+	whole.dirty_cells = dirty
+	return whole
+
+
 ## Validates the edit and, if it is accepted, changes the grid data and fills
 ## in the result's dirty cells. Does not relink the A* graph.
 func _commit(edit: BuildEdit) -> BuildResult:
@@ -589,6 +639,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 	if not result.ok:
 		_emit_or_hold(func() -> void: edit_refused.emit(edit, result))
 		return result
+	var inverse := BuildReceipt.inverse_before(self, edit) if recorder != null else null
 	match edit.kind:
 		BuildEdit.Kind.PAINT_FLOOR:
 			_floor[_index(edit.cell)] = edit.floor_type
@@ -606,8 +657,11 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			_set_wall_paid(edit.cell, edit.side, edit.paid if placing else 0)
 			result.dirty_cells = _edge_cells(edit.cell, edit.side)
 		BuildEdit.Kind.PLACE_OBJECT:
-			result.object_id = _next_object_id
-			_next_object_id += 1
+			# An undo brings a removed object back under its own id.
+			result.object_id = edit.object_id
+			if edit.object_id == 0:
+				result.object_id = _next_object_id
+				_next_object_id += 1
 			result.dirty_cells = _insert_object(
 				result.object_id, edit.def_id, edit.cell, edit.facing, edit.paid
 			)
@@ -615,8 +669,10 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			result.object_id = edit.object_id
 			result.dirty_cells = _erase_object(edit.object_id)
 		BuildEdit.Kind.PLACE_ROOM:
-			result.room_id = _next_room_id
-			_next_room_id += 1
+			result.room_id = edit.room_id
+			if edit.room_id == 0:
+				result.room_id = _next_room_id
+				_next_room_id += 1
 			_insert_room(result.room_id, edit.room_type, Rect2i(edit.cell, edit.room_size))
 		BuildEdit.Kind.REMOVE_ROOM:
 			result.room_id = edit.room_id
@@ -633,6 +689,8 @@ func _commit(edit: BuildEdit) -> BuildResult:
 	_staff_reach_known = _handoff_edit == edit
 	_handoff_edit = null
 	_lanes = null
+	if recorder != null:
+		recorder.record(edit, result, inverse)
 	_emit_or_hold(func() -> void: edit_applied.emit(edit, result))
 	return result
 
@@ -782,6 +840,8 @@ func from_snapshot(data: Dictionary) -> bool:
 	_pathing = loaded._pathing
 	_staff_reach_known = false
 	_lanes = null
+	if recorder != null:
+		recorder.replaced = true
 	var every: Array[Vector2i] = []
 	for y in size.y:
 		for x in size.x:

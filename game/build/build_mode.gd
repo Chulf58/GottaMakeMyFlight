@@ -1,3 +1,6 @@
+# gdlint:disable = max-public-methods
+# BuildMode is the one player build surface; undo (undo, undo_history) took it
+# past the 20-method cap.
 class_name BuildMode
 extends Node3D
 ## The player's build tools over a BuildGrid. Keys 1 to 9 and 0 (or
@@ -21,6 +24,8 @@ extends Node3D
 ## belts next to it are reshaped too (_reshape_belts()).
 ## Every edit is paid from `finances` through BuildTransaction; a belt cell
 ## costs the plain belt price whatever shape it takes, and a reshape is free.
+## Ctrl+Z (build_undo) undoes the last build action and its money (UndoStack,
+## BuildUndo); a refused undo changes nothing and says why on the status line.
 
 signal grid_changed
 ## Emitted by every set_tool(), NONE included, so the menu can follow it.
@@ -218,7 +223,7 @@ var _last_applied_key := ""
 ## rest of the stroke is refused too, until the next press.
 var _stroke_out_of_money := false
 var _area := AreaDrag.new()
-## What the last rectangle did, shown until the pointer leaves its last cell.
+## What the last rectangle or undo did, shown until the pointer leaves its cell.
 var _status_note := ""
 var _note_cell := Vector2i.ZERO
 ## The Belt line the ghost shows (the drag, or the cell under the pointer).
@@ -227,6 +232,7 @@ var _belt_plan: BeltShaper.Plan
 ## straight on the grid (the debug starter, a playtest script) rather than
 ## through these tools, which redraw at once.
 var _view_stale := false
+var _history := UndoStack.new()
 
 
 ## Where a ray meets the level plane y = `height`, or null when it never does.
@@ -259,6 +265,7 @@ func _ready() -> void:
 	add_child(_ghost)
 	if finances != null:
 		finances.wallet.changed.connect(_on_balance_changed)
+	_history.watch(grid, wallet())
 	set_tool(tool)
 
 
@@ -285,6 +292,10 @@ func _notification(what: int) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _area.active and _cancels_area(event):
 		cancel_area()
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("build_undo"):
+		undo()
 		get_viewport().set_input_as_handled()
 		return
 	for action in TOOL_ACTIONS:
@@ -369,8 +380,15 @@ func edit_at(point: Vector3) -> BuildEdit:
 ## Applies the current tool at a ground point, paid through BuildTransaction,
 ## and redraws on success. A drag applies once per target; once a segment of a
 ## wall stroke cannot be paid for, the rest of the stroke is refused for
-## money too. Returns null when nothing was attempted.
+## money too. Returns null when nothing was attempted. One undo step.
 func apply_at(point: Vector3) -> BuildResult:
+	_history.begin_action()
+	var result := _apply_at(point)
+	_history.end_action()
+	return result
+
+
+func _apply_at(point: Vector3) -> BuildResult:
 	var edit := edit_at(point)
 	if edit == null or (_dragging and _edit_key(edit) == _last_applied_key):
 		return null
@@ -446,8 +464,15 @@ func move_area(point: Vector3) -> void:
 ## Applies the rectangle. A drag that never left its cell is applied as the
 ## single click it is, at the press point (which marks no room). Returns what
 ## a Floor or Remove rectangle did, or null when there was no rectangle, it
-## was a click or it marked a room.
+## was a click or it marked a room. One undo step.
 func finish_area() -> AreaDrag.Outcome:
+	_history.begin_action()
+	var outcome := _finish_area()
+	_history.end_action()
+	return outcome
+
+
+func _finish_area() -> AreaDrag.Outcome:
 	if not _area.active:
 		return null
 	_area.cancel()
@@ -499,8 +524,15 @@ func _finish_room() -> void:
 ## plain belt on each path cell that has none, at the belt price, and shapes
 ## them and the belts next to them, all in one plan. Refused whole when a cell
 ## cannot take a belt, a wall crosses the line, a belt would get a fourth link
-## or the wallet cannot pay. A line over belt only does nothing.
+## or the wallet cannot pay. A line over belt only does nothing. One undo step.
 func lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
+	_history.begin_action()
+	var result := _lay_belt(from, to)
+	_history.end_action()
+	return result
+
+
+func _lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
 	var plan := BeltShaper.plan_line(grid, from, to, facing)
 	var result := plan.result
 	if result.ok and not plan.edits.is_empty():
@@ -514,6 +546,38 @@ func lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
 	if not plan.result.ok:
 		grid.edit_refused.emit(BuildEdit.place_object(BELT_PRICE_ID, to, facing), result)
 	return result
+
+
+## Undoes the last build action and its money (UndoStack.undo()), dropping a
+## rectangle or stroke in progress first. The status line says it was undone,
+## why it was refused (nothing changed) or that there is nothing to undo, until
+## the pointer leaves its cell. Returns the result, or null with no history.
+func undo() -> BuildResult:
+	cancel_area()
+	_dragging = false
+	_drag_side = -1
+	var result := _history.undo(shell)
+	if result == null:
+		_status_note = UndoStack.NOTHING_TO_UNDO
+	elif result.ok:
+		_status_note = UndoStack.UNDONE
+		_redraw()
+		grid_changed.emit()
+	else:
+		_status_note = UndoStack.CANT_UNDO
+		if result.reason_text() != "":
+			_status_note += ": " + result.reason_text()
+	var point: Variant = _mouse_ground()
+	if point != null:
+		_note_cell = grid.world_to_cell(point)
+	_hover_key = ""
+	_show_status(null)
+	return result
+
+
+## The undo history, newest action on top (read it, never change it).
+func undo_history() -> UndoStack:
+	return _history
 
 
 ## How many belt cells the line under the pointer (or being dragged) would buy;
@@ -619,6 +683,7 @@ func check(edit: BuildEdit) -> BuildResult:
 ## (ShellDefinition.snapshot_problem()). Pushes an error and returns false,
 ## leaving the grid as it was, on any refusal. A load never spends or
 ## credits: it bypasses BuildTransaction and keeps the saved purchase prices.
+## It clears the undo history.
 func load_snapshot(data: Dictionary) -> bool:
 	var problem := shell.snapshot_problem(data) if shell != null else ""
 	if problem != "":
@@ -626,6 +691,7 @@ func load_snapshot(data: Dictionary) -> bool:
 		return false
 	if not grid.from_snapshot(data):
 		return false
+	_history.clear()
 	_redraw()
 	_hover_key = ""
 	grid_changed.emit()
@@ -960,6 +1026,10 @@ func _show_status(result: BuildResult) -> void:
 	if _area.active and TOOL_ROOMS.has(tool):
 		_set_status(RoomTool.drag_label(grid, _area.rect(), TOOL_ROOMS[tool]))
 		return
+	# An undo's note shows under the Belt tool too.
+	if _status_note != "" and not _area.active:
+		_set_status(_status_note)
+		return
 	if tool == Tool.BELT:
 		var text := BELT_HINT
 		if _area.active and _belt_plan != null:
@@ -970,9 +1040,6 @@ func _show_status(result: BuildResult) -> void:
 		return
 	if _area.active:
 		_set_status(_area.size_label())
-		return
-	if _status_note != "":
-		_set_status(_status_note)
 		return
 	var text := RoomTool.hint(TOOL_ROOMS[tool]) if TOOL_ROOMS.has(tool) else ""
 	var refused := result != null and not result.ok
