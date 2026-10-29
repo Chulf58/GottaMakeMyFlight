@@ -6,9 +6,10 @@ extends Node3D
 ## The player's build tools over a BuildGrid. Keys 1 to 9 and 0 (or
 ## BuildMenu's cards) pick floor, wall, desk, scanner, seats, remove, glass,
 ## door, entrance and exit; Esc picks none; R turns the object;
-## left-click applies, a drag along an edge lays a wall or glass line, and a
-## drag with Floor or Remove fills or clears a rectangle (AreaDrag; Esc or
-## right-click cancels it, a single click acts as it always did). A
+## left-click applies, a drag with Wall or Glass shows a straight row and
+## lays it on release (WallRowDrag), and a drag with Floor or Remove fills or
+## clears a rectangle (AreaDrag). Esc or right-click cancels either drag, and
+## a single click acts as it always did. A
 ## ghost shows the edit under the mouse, tinted by check(), so the preview and
 ## the click use the same rules. Entrances and exits turn themselves to face
 ## in from the edge under the mouse until R is pressed (DoorPlacement.auto_facing()).
@@ -196,7 +197,7 @@ const SHELL_DOOR_HINTS := {
 	Tool.ENTRANCE: "Put the entrance on one of the building's landside doors",
 	Tool.EXIT: "Put the exit on one of the building's gate doors",
 }
-## Tools whose drag repeats along an edge line.
+## Tools whose drag lays a straight row of edges, applied on release.
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag is applied on release: a rectangle, or the Belt's line.
 const AREA_TOOLS := [
@@ -211,8 +212,11 @@ const AREA_TOOLS := [
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1
 ## How close to an edge (in metres) the remove tool targets the wall there
-## rather than the floor.
-const WALL_PICK_DISTANCE := 0.3
+## rather than the floor, once the line of sight found no wall (WallPick).
+const WALL_PICK_DISTANCE := 0.4
+## How far (screen pixels) the pointer may drift after a press before the press
+## becomes a drag: a click that slips across a cell border is still a click.
+const CLICK_SLOP_PX := 6.0
 ## How far past the pointer's ground point an object box still counts as seen
 ## (a box's floor face lies on the ground plane itself).
 const SIGHT_SLACK_M := 0.001
@@ -239,7 +243,7 @@ const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
 ## sets it; without it nothing hides an object but the grid's own walls.
 @export var shell_view: ShellView
 ## Where building is paid from (BuildTransaction): a click or door costs its
-## price, a Floor rectangle is all or nothing, a wall stroke stops when the
+## price, a Floor rectangle is all or nothing, a wall row stops when the
 ## money runs out, and removals refund a share of the saved price. main.tscn
 ## sets it. Without it the tools build for free and save no prices, the
 ## non-spending path tests and probes use.
@@ -296,13 +300,14 @@ var _area_over_ui := false
 ## What the status line adds for the item under the pointer when its front falls
 ## outside the room it stands in ("" for none).
 var _front_warning := ""
-var _dragging := false
-var _drag_side := -1
-var _last_applied_key := ""
-## True once a segment of the current wall stroke was refused for money; the
-## rest of the stroke is refused too, until the next press.
-var _stroke_out_of_money := false
 var _area := AreaDrag.new()
+## The Wall or Glass row being dragged, and the status line text it shows.
+var _row := WallRowDrag.new()
+var _row_label := ""
+## Where the pointer was at the press that began a drag, and whether it has
+## since moved CLICK_SLOP_PX away.
+var _press_screen := Vector2.ZERO
+var _drag_moved := false
 ## What the last rectangle or undo did, shown until the pointer leaves its cell.
 var _status_note := ""
 var _note_cell := Vector2i.ZERO
@@ -357,10 +362,10 @@ func _process(_delta: float) -> void:
 	# Over a HUD Control the pointer is not over the world: no ghost, no hover.
 	# A rectangle in progress stays, hidden, until the pointer is back.
 	var over_ui := _pointer_over_ui()
-	_area_over_ui = over_ui and _area.active
+	_area_over_ui = over_ui and _drag_active()
 	if not over_ui:
 		_update_ghost(point)
-	elif _area.active:
+	elif _drag_active():
 		_hide_area_ghost()
 	else:
 		_update_ghost(null)
@@ -375,7 +380,7 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _area.active and _cancels_area(event):
+	if _drag_active() and _cancels_area(event):
 		cancel_area()
 		get_viewport().set_input_as_handled()
 		return
@@ -393,23 +398,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("build_apply"):
 		var point: Variant = _mouse_ground()
+		_press_screen = _pointer_position()
+		_drag_moved = false
 		if point != null and AREA_TOOLS.has(tool):
 			begin_area(point)
+		elif point != null and DRAG_TOOLS.has(tool):
+			begin_row(point)
 		elif point != null:
-			_start_drag(point)
 			apply_at(point)
 	elif event.is_action_released("build_apply"):
 		finish_area()
-		_dragging = false
-		_drag_side = -1
-	elif event is InputEventMouseMotion and (_area.active or _dragging):
+		finish_row()
+	elif event is InputEventMouseMotion and _drag_active():
 		var point: Variant = _mouse_ground()
 		if point == null or _pointer_over_ui():
 			return
+		if not _drag_moved:
+			if _pointer_position().distance_to(_press_screen) < CLICK_SLOP_PX:
+				return
+			_drag_moved = true
 		if _area.active:
 			move_area(point)
-		elif DRAG_TOOLS.has(tool):
-			apply_at(point)
+		else:
+			move_row(point)
 
 
 ## Picks a tool.
@@ -446,8 +457,6 @@ static func tool_object(for_tool: Tool) -> StringName:
 func edit_at(point: Vector3) -> BuildEdit:
 	var cell := grid.world_to_cell(point)
 	var side: int = grid.nearest_side(point)
-	if _dragging and _drag_side >= 0:
-		side = _drag_side
 	match tool:
 		Tool.FLOOR:
 			return BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, TERMINAL_ZONE)
@@ -469,9 +478,8 @@ func edit_at(point: Vector3) -> BuildEdit:
 
 
 ## Applies the current tool at a ground point, paid through BuildTransaction,
-## and redraws on success. A drag applies once per target; once a segment of a
-## wall stroke cannot be paid for, the rest of the stroke is refused for
-## money too. Returns null when nothing was attempted. One undo step.
+## and redraws on success. Returns null when nothing was attempted. One undo
+## step.
 func apply_at(point: Vector3) -> BuildResult:
 	# A landside action is not a grid action: it keeps its own undo record.
 	var landside_plan := landside_plan_at(point)
@@ -485,15 +493,10 @@ func apply_at(point: Vector3) -> BuildResult:
 
 func _apply_at(point: Vector3) -> BuildResult:
 	var edit := edit_at(point)
-	if edit == null or (_dragging and _edit_key(edit) == _last_applied_key):
+	if edit == null:
 		return null
 	var warning := front_warning(grid, edit)
-	_last_applied_key = _edit_key(edit)
 	var result := check(edit)
-	if result.ok and _dragging and _stroke_out_of_money:
-		result = BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
-	if _dragging and result.reason == BuildResult.Reason.CANT_AFFORD:
-		_stroke_out_of_money = true
 	var refused_by_check := not result.ok
 	if result.ok:
 		# A removed room's cells, read before it is gone: its dead ends change.
@@ -537,6 +540,60 @@ func begin_area(point: Vector3) -> void:
 	_hover_key = ""
 
 
+## Starts a Wall or Glass row on the cell under a ground point, on the edge side
+## nearest the point. A press outside the grid is a plain click, which the grid
+## refuses with its reason.
+func begin_row(point: Vector3) -> void:
+	if not DRAG_TOOLS.has(tool):
+		return
+	var cell := grid.world_to_cell(point)
+	if not grid.in_bounds(cell):
+		apply_at(point)
+		return
+	_status_note = ""
+	_row.begin(cell, grid.nearest_side(point), grid.size)
+	_hover_key = ""
+
+
+## Stretches the row to the cell under a ground point.
+func move_row(point: Vector3) -> void:
+	if _row.active:
+		_row.move(grid.world_to_cell(point))
+
+
+## Lays the row (WallRowDrag.apply()): every edge the rules accept, stopping
+## where the money runs out, as one undo step. A drag that never left its cell
+## lays the one edge, as a click. Returns what the row did, or null with no
+## row. The status line says how many edges were placed, what they cost and
+## why any was skipped.
+func finish_row() -> AreaDrag.Outcome:
+	if not _row.active:
+		return null
+	_history.begin_action()
+	_row.cancel()
+	_hover_key = ""
+	var dirty: Array[Vector2i] = []
+	var outcome := WallRowDrag.apply(grid, _row_edits(), check, wallet(), dirty)
+	if outcome.placed > 0:
+		_reshape_belts(dirty)
+		_redraw()
+		grid_changed.emit()
+	_history.end_action()
+	_status_note = outcome.message()
+	_note_cell = _row.end_cell()
+	_show_status(null)
+	return outcome
+
+
+func _row_edits() -> Array[BuildEdit]:
+	return _row.edits(TOOL_WALL_KINDS[tool])
+
+
+## True while a rectangle or a wall row is being dragged.
+func _drag_active() -> bool:
+	return _area.active or _row.active
+
+
 ## The edit under the pointer, or null (BuildMenu prices it for the cost line).
 func hover_edit() -> BuildEdit:
 	return _hover_edit
@@ -554,7 +611,7 @@ func pointer_on_grid() -> bool:
 ## rectangle stops growing (BuildMenu keeps the status line, which says why,
 ## visible).
 func drag_held_by_ui() -> bool:
-	return _area_over_ui and _area.active
+	return _area_over_ui and _drag_active()
 
 
 ## The rectangle being dragged, or an empty Rect2i when no rectangle drag is on
@@ -657,13 +714,11 @@ func _lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
 
 
 ## Undoes the last build action and its money (UndoStack.undo()), dropping a
-## rectangle or stroke in progress first. The status line says it was undone,
+## rectangle or row in progress first. The status line says it was undone,
 ## why it was refused (nothing changed) or that there is nothing to undo, until
 ## the pointer leaves its cell. Returns the result, or null with no history.
 func undo() -> BuildResult:
 	cancel_area()
-	_dragging = false
-	_drag_side = -1
 	var landside_first := landside_placement().has_undo_for(_history.peek())
 	var result := _landside_placement.undo() if landside_first else _history.undo(shell)
 	if result == null:
@@ -765,11 +820,12 @@ func focused_room() -> int:
 	return _focus_room
 
 
-## Drops the rectangle with nothing applied.
+## Drops the rectangle or row being dragged with nothing applied.
 func cancel_area() -> void:
-	if not _area.active:
+	if not _drag_active():
 		return
 	_area.cancel()
+	_row.cancel()
 	_hover_key = ""
 	_show_status(null)
 
@@ -838,24 +894,22 @@ func _facing_is_auto() -> bool:
 	return (_auto_facing or shell != null) and DOOR_NAMES.has(tool)
 
 
-func _start_drag(point: Vector3) -> void:
-	_dragging = true
-	_last_applied_key = ""
-	_stroke_out_of_money = false
-	_drag_side = grid.nearest_side(point) if TOOL_WALL_KINDS.has(tool) else -1
-
-
 ## What Remove takes at a ground point: the object the pointer is on (seen
 ## from the camera, or on the point's cell unless the terminal shell hides the
-## point, see ShellSight), then a wall edge within
-## WALL_PICK_DISTANCE, then the room, then the floor.
+## point, see ShellSight), then the wall the line of sight to the point meets
+## (WallPick), then a wall edge within WALL_PICK_DISTANCE of the point, then the
+## room, then the floor. A wall in the way hides the object by cell behind it.
 func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 	var object_id := _object_in_sight(point)
 	var camera := get_viewport().get_camera_3d()
-	if object_id == 0 and not ShellSight.hides_point(shell_view, grid, camera, point):
-		object_id = grid.object_at(cell)
+	var seen_wall := _wall_in_line_of_sight(camera, point)
+	if object_id == 0 and seen_wall.z < 0:
+		if not ShellSight.hides_point(shell_view, grid, camera, point):
+			object_id = grid.object_at(cell)
 	if object_id != 0:
 		return BuildEdit.remove_object(object_id)
+	if seen_wall.z >= 0:
+		return BuildEdit.remove_wall(Vector2i(seen_wall.x, seen_wall.y), seen_wall.z)
 	var offset := point - grid.cell_to_world(cell)
 	var to_edge := 0.5 - maxf(absf(offset.x), absf(offset.z))
 	if grid.has_wall(cell, side) and to_edge <= WALL_PICK_DISTANCE:
@@ -863,6 +917,16 @@ func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 	if grid.room_at(cell) != 0:
 		return BuildEdit.remove_room(grid.room_at(cell))
 	return BuildEdit.remove_floor(cell)
+
+
+## The wall edge (WallCutaway.wall_edges form) the camera's line of sight to a
+## ground point meets first (WallPick), or an edge whose z is -1 for none, also
+## with no camera or the point behind it.
+func _wall_in_line_of_sight(camera: Camera3D, point: Vector3) -> Vector3i:
+	if camera == null or camera.is_position_behind(point):
+		return WallPick.NO_EDGE
+	var from := camera.project_ray_origin(camera.unproject_position(point))
+	return WallPick.first_wall(grid, _view, from, point)
 
 
 ## The object the camera's line of sight to a ground point meets first, or 0
@@ -930,30 +994,10 @@ func _wall_in_sight(from: Vector3, to: Vector3) -> float:
 		for line in range(low, high + 1):
 			var t := (line - start[axis]) / span[axis]
 			var at := start + span * t
-			var edge := _edge_on_line(axis, line, at)
+			var edge := WallPick.edge_on_line(grid, axis, line, at)
 			if edge.z >= 0 and _view.sight_blocked(edge, fposmod(at[2 - axis], 1.0) - 0.5, at.y):
 				nearest = minf(nearest, t * span.length())
 	return nearest
-
-
-## The wall edge (WallCutaway.wall_edges form) a point crosses on grid line
-## `line` of `axis` (0 for x, 2 for z), or z -1 off the grid. `at` is relative
-## to the grid origin.
-func _edge_on_line(axis: int, line: int, at: Vector3) -> Vector3i:
-	var off := Vector3i(0, 0, -1)
-	if axis == 0:
-		var row := floori(at.z)
-		if row < 0 or row >= grid.size.y:
-			return off
-		if line < grid.size.x:
-			return Vector3i(line, row, BuildGrid.Side.WEST)
-		return Vector3i(line - 1, row, BuildGrid.Side.EAST)
-	var column := floori(at.x)
-	if column < 0 or column >= grid.size.x:
-		return off
-	if line < grid.size.y:
-		return Vector3i(column, line, BuildGrid.Side.NORTH)
-	return Vector3i(column, line - 1, BuildGrid.Side.SOUTH)
 
 
 ## Whether the pointer is over a HUD control, which hides the world under it.
@@ -963,13 +1007,16 @@ func _pointer_over_ui() -> bool:
 	return get_viewport().gui_get_hovered_control() != null
 
 
+## Where the pointer is, in viewport coordinates: pointer_override when set.
+func _pointer_position() -> Vector2:
+	return pointer_override if pointer_override.x >= 0.0 else get_viewport().get_mouse_position()
+
+
 func _mouse_ground() -> Variant:
 	var camera := get_viewport().get_camera_3d()
 	if camera == null:
 		return null
-	var mouse := get_viewport().get_mouse_position()
-	if pointer_override.x >= 0.0:
-		mouse = pointer_override
+	var mouse := _pointer_position()
 	var from := camera.project_ray_origin(mouse)
 	var direction := camera.project_ray_normal(mouse)
 	if _is_landside_tool():
@@ -984,13 +1031,16 @@ func _mouse_ground() -> Variant:
 
 func _update_ghost(point: Variant) -> void:
 	_pointer_on_grid = point != null and grid.in_bounds(grid.world_to_cell(point))
-	_landside_plan = null if _area.active else landside_plan_at(point)
+	_landside_plan = null if _drag_active() else landside_plan_at(point)
 	if _landside_plan != null or _is_landside_tool():
 		_pointer_on_grid = point != null
 		_hover_landside(_landside_plan)
 		return
 	if _area.active:
 		_draw_area()
+		return
+	if _row.active:
+		_draw_row()
 		return
 	if _status_note != "" and (point == null or grid.world_to_cell(point) != _note_cell):
 		_status_note = ""
@@ -1019,7 +1069,8 @@ func _update_ghost(point: Variant) -> void:
 	_lane_hint = hint
 	var result := check(edit)
 	_front_warning = warning if result.ok else ""
-	_draw_ghost(edit, _valid_material if result.ok else _invalid_material)
+	var valid := _area_remove_material if tool == Tool.REMOVE else _valid_material
+	_draw_ghost(edit, valid if result.ok else _invalid_material)
 	_show_status(result)
 
 
@@ -1143,6 +1194,30 @@ func _draw_belt(from: Vector2i, to: Vector2i) -> void:
 	_show_status(result)
 
 
+## The whole row a Wall or Glass drag would lay, one box per edge tinted by
+## whether it would be placed, with its length and cost on the status line.
+func _draw_row() -> void:
+	var cells := _row.cells()
+	var purse := wallet()
+	var key := "row:%s:%s:%d:%d" % [cells.front(), cells.back(), _row.side, tool]
+	if purse != null:
+		key += ":%d" % purse.balance
+	if key == _hover_key:
+		return
+	_hover_key = key
+	_hover_edit = null
+	var plan := WallRowDrag.preview(grid, _row_edits(), check, purse)
+	_clear_ghost()
+	for i in plan.edits.size():
+		var material := _valid_material if plan.valid[i] else _invalid_material
+		_ghost_wall(plan.edits[i].cell, plan.edits[i].side, material)
+	_row_label = "%s row of %d" % ["Glass" if tool == Tool.GLASS else "Wall", cells.size()]
+	_row_label += ", cost %d" % plan.cost
+	if plan.blocked > 0:
+		_row_label += ", %d blocked: %s" % [plan.blocked, plan.first_reason]
+	_show_status(null)
+
+
 ## One tinted slab over the whole rectangle, with its size on the status line.
 func _draw_area() -> void:
 	if tool == Tool.BELT:
@@ -1179,12 +1254,8 @@ func _draw_ghost(edit: BuildEdit, material: Material) -> void:
 		BuildEdit.Kind.PAINT_FLOOR, BuildEdit.Kind.REMOVE_FLOOR:
 			_ghost_tile(edit.cell, material)
 		BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_WALL:
-			var wall := _ghost_box(
-				Vector3(1.0, BuildView.WALL_HEIGHT, BuildView.WALL_THICKNESS * 1.5), material
-			)
-			wall.transform = BuildView.wall_transform(grid, edit.cell, edit.side).translated_local(
-				Vector3(0.0, BuildView.WALL_HEIGHT / 2.0, 0.0)
-			)
+			# A wall about to be removed is drawn bigger, so it reads at range.
+			_ghost_wall(edit.cell, edit.side, material, 2.0 if tool == Tool.REMOVE else 1.0)
 		BuildEdit.Kind.PLACE_OBJECT:
 			_ghost_object(edit.def_id, edit.cell, edit.facing, material)
 			for cell in coverage_preview(edit):
@@ -1194,6 +1265,17 @@ func _draw_ghost(edit: BuildEdit, material: Material) -> void:
 			_ghost_object(record["def"], record["anchor"], record["facing"], material)
 		BuildEdit.Kind.REMOVE_ROOM:
 			_ghost_slab(grid.get_room(edit.room_id)["rect"], material)
+
+
+## A tinted box over the wall edge of `cell` on `side`; `grow` thickens it.
+func _ghost_wall(cell: Vector2i, side: int, material: Material, grow := 1.0) -> void:
+	var extent := Vector3(1.0, BuildView.WALL_HEIGHT, BuildView.WALL_THICKNESS * 1.5 * grow)
+	if grow > 1.0:
+		extent += Vector3(0.04, 0.1, 0.0)
+	var wall := _ghost_box(extent, material)
+	wall.transform = BuildView.wall_transform(grid, cell, side).translated_local(
+		Vector3(0.0, extent.y / 2.0, 0.0)
+	)
 
 
 func _ghost_object(def_id: StringName, anchor: Vector2i, turn: int, material: Material) -> void:
@@ -1256,6 +1338,9 @@ func _edit_key(edit: BuildEdit) -> String:
 
 
 func _show_status(result: BuildResult) -> void:
+	if _row.active:
+		_set_status(_row_label)
+		return
 	if _area.active and TOOL_ROOMS.has(tool):
 		_set_status(RoomTool.drag_label(grid, _area.rect(), TOOL_ROOMS[tool]))
 		return

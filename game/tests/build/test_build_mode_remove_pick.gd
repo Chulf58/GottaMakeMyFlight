@@ -120,7 +120,10 @@ func test_an_opaque_wall_in_front_hides_the_arch() -> void:
 	var edit := _mode.edit_at(point)
 	print("full wall in front: kind=%d cell=%s side=%d" % [edit.kind, edit.cell, edit.side])
 	assert_int(edit.kind).is_equal(BuildEdit.Kind.REMOVE_WALL)
-	assert_that(edit.cell).is_equal(BEYOND)
+	# The wall the pointer sees is the full-height one in front of the arch (the
+	# line of sight crosses it first, WallPick), not the one beside the point.
+	assert_that(edit.cell).is_equal(ARCH_CELL)
+	assert_int(edit.side).is_equal(BuildGrid.Side.WEST)
 
 
 func test_a_cut_wall_in_front_does_not_hide_the_arch() -> void:
