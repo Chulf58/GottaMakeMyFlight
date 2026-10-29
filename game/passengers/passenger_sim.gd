@@ -121,6 +121,8 @@ var cafes := CafeSim.new()
 var toilets := ToiletSim.new()
 ## The boredom need (BoredomSim), raised on each beat.
 var boredom := BoredomSim.new()
+## What decor calms (DecorEffect), applied on each beat.
+var decor := DecorEffect.new()
 ## Kiosk visits and browse slot reservations (ShopSim).
 var shops := ShopSim.new()
 ## Security service after admission, at every scanner and lane.
@@ -194,6 +196,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	toilets.bind(self, _set_stage, _leave_station, _release_seat)
 	boredom.bind(self)
+	decor.bind(self)
 	shops.bind(self, _set_stage, _leave_station, _release_seat)
 	arrivals.bind(self, _spawn)
 	clock.ticked.connect(on_tick)
@@ -819,6 +822,7 @@ func _beat(p: Passenger) -> void:
 	if p.late:
 		change -= 1
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
+	decor.beat(p)
 	# Every need rises first, then NeedsPolicy picks which one, if any, the
 	# passenger acts on, by its priority table.
 	toilets.beat(p)
