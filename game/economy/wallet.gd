@@ -18,7 +18,8 @@ signal transaction(amount: int, category: int, claimed: Dictionary, tick: int)
 
 ## What a movement is for. There is deliberately no catch-all: every caller
 ## says which one. UPKEEP is the daily running cost of rooms (toilet stalls).
-enum Category { FEES, SHOP, GRANT, OPENING, BUILD, WAGES, UPKEEP }
+## PARKING is a car park's fee, credited when a car parks (LandsideSim).
+enum Category { FEES, SHOP, GRANT, OPENING, BUILD, WAGES, UPKEEP, PARKING }
 
 ## Upper bound on the balance, far below 2^53, so a JSON round trip and any
 ## sum of in-range amounts stay exact.

@@ -22,7 +22,7 @@ extends Node
 ## OPENING (the starting budget) is recorded but is not earnings: it is in
 ## neither the operating result nor the cash change. The rescue grant is
 ## counted apart from the operating result. Wages and upkeep are both costs in
-## the operating result.
+## the operating result; parking fees are earnings in it.
 
 ## The totals changed: a transaction, a new day, a load.
 signal changed
@@ -36,6 +36,7 @@ const CATEGORY_KEYS := {
 	Wallet.Category.BUILD: "build",
 	Wallet.Category.WAGES: "wages",
 	Wallet.Category.UPKEEP: "upkeep",
+	Wallet.Category.PARKING: "parking",
 }
 ## Totals added after the ledger was first saved: a saved ledger without one
 ## loads it as 0.
@@ -110,10 +111,14 @@ func upkeep_paid() -> int:
 	return -amount(Wallet.Category.UPKEEP)
 
 
-## Airline fees and shop sales less wages and upkeep paid.
+## Airline fees, shop sales and parking fees less wages and upkeep paid.
 func operating_result() -> int:
 	return (
-		amount(Wallet.Category.FEES) + amount(Wallet.Category.SHOP) - wages_paid() - upkeep_paid()
+		amount(Wallet.Category.FEES)
+		+ amount(Wallet.Category.SHOP)
+		+ amount(Wallet.Category.PARKING)
+		- wages_paid()
+		- upkeep_paid()
 	)
 
 

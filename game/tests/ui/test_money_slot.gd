@@ -2,7 +2,7 @@ class_name TestMoneySlot
 extends GdUnitTestSuite
 ## The money hover card (HUD 2/7, decision money-hover-design-categorised-
 ## wallet-transactions-feed-a-sa, point 5): hovering the money slot shows
-## today's airline fees, shops, wages paid and operating result, then building,
+## today's airline fees, shops, parking, wages paid and operating result, then building,
 ## rescue grant and cash change today, and owed wages in the attention style
 ## only when some are owed. It follows the DayLedger and the wage debt.
 
@@ -50,6 +50,7 @@ func test_the_card_shows_a_sample_day() -> void:
 						"Today",
 						"Airline fees  +300",
 						"Shops  +40",
+						"Parking  0",
 						"Wages paid  -90",
 						"Upkeep paid  0",
 						"Operating result  +250",
@@ -65,19 +66,22 @@ func test_the_card_shows_a_sample_day() -> void:
 
 
 ## Toilets 5/5: room upkeep paid is its own row among the operating rows, and
-## the four rows above the operating result add up to it.
+## the rows above the operating result add up to it. Landside 1/4: parking
+## fees are an operating row too.
 func test_upkeep_paid_is_an_operating_row_and_the_rows_add_up() -> void:
 	_sample_day()
 	assert_bool(_wallet.spend(30, C.UPKEEP)).is_true()
+	assert_bool(_wallet.credit(20, C.PARKING)).is_true()
 	var rows := MoneySlot.rows(_ledger, 0)
 	print(rows)
-	assert_array(rows[3]).is_equal(["Upkeep paid", "-30", &""])
-	assert_array(rows[MoneySlot.OPERATING_ROWS - 1]).is_equal(["Operating result", "+220", &""])
+	assert_array(rows[2]).is_equal(["Parking", "+20", &""])
+	assert_array(rows[4]).is_equal(["Upkeep paid", "-30", &""])
+	assert_array(rows[MoneySlot.OPERATING_ROWS - 1]).is_equal(["Operating result", "+240", &""])
 	var parts := 0
 	for i in MoneySlot.OPERATING_ROWS - 1:
 		parts += int(rows[i][1])
 	assert_int(parts).is_equal(_ledger.operating_result())
-	assert_int(_ledger.operating_result()).is_equal(220)
+	assert_int(_ledger.operating_result()).is_equal(240)
 
 
 func test_owed_upkeep_shows_in_the_attention_style_only_while_above_zero() -> void:
