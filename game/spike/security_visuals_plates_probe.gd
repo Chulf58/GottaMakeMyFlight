@@ -46,6 +46,7 @@ const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
+const Staged := preload("res://spike/security_probe_stage.gd")
 const OUT_REL := "res://../tools/blender/out/security-lane-visuals"
 const MAIN_SCENE := "res://main/main.tscn"
 const ARCH_AT := Vector2i(20, ReferenceTerminal.DIVIDER_Y)
@@ -95,6 +96,8 @@ const GRIP_REACH_M := 0.06
 ## The bench crowd: this many passengers drawn in all, as in Security 7/8.
 const BENCH_CROWD := 110
 const BENCH_FRAMES := 240
+## The most ticks the bench waits for the lane to empty of the moments' passengers.
+const BENCH_DRAIN_TICKS := 600
 
 var _out_dir := ""
 var _seed := 0
@@ -462,11 +465,7 @@ func _lane_hit(name: String, p: Passenger, done: int) -> bool:
 		"lane_8_live_crossing":
 			hit = phase == SecurityRuntime.Phase.UNPACK and first
 		"lane_2_unpack":
-			hit = (
-				phase == SecurityRuntime.Phase.UNPACK
-				and p.carry_on > 0
-				and done >= SecurityRuntime.LANE_UNPACK_TICKS + 4
-			)
+			hit = Staged.lift_ends(_sim, p, _progress(p))
 		"lane_3_ride_in":
 			hit = _riding(p, first, 0.2)
 		"lane_4_ride_scan":
@@ -552,7 +551,12 @@ func _play() -> void:
 		_beat("play tick %d" % _clock.tick)
 		for id in _role_of.keys():
 			var at := _sim.get_passenger(id)
-			if at.stage == Passenger.Stage.SECURITY and at.station != 0:
+			if at == null:
+				# Left the sim before reaching security: its role goes back.
+				print("ROLE back passenger=%d left the sim" % id)
+				_roles.append(_role_of[id])
+				_role_of.erase(id)
+			elif at.stage == Passenger.Stage.SECURITY and at.station != 0:
 				if at.station != _arch:
 					print("ROLE back passenger=%d went to the basic scanner" % id)
 					_roles.append(_role_of[id])
@@ -1303,6 +1307,14 @@ func _live_shown(body: Node3D, tag: String, at: float) -> bool:
 ## screen: frame times with their bags, then the same crowd with every bag
 ## taken away (carry_on 0), as the control.
 func _benchmark() -> void:
+	# The bench crowd is the spawned one: the moments' own passengers have left
+	# the lane first (a tray of one still in it is drawn with no bags).
+	var drain := _clock.tick + BENCH_DRAIN_TICKS
+	while _in_security() > 0 and _clock.tick < drain:
+		_beat("bench drain")
+		await process_frame
+	if _in_security() > 0:
+		_invalid("bench: the lane did not empty within %d ticks" % BENCH_DRAIN_TICKS)
 	_beat("bench spawn")
 	var flight := StarterFlight.first_flight()
 	_sim.spawn_batch(maxi(0, BENCH_CROWD - _views.active_count()), _seed + 1)
@@ -1326,7 +1338,12 @@ func _benchmark() -> void:
 		_sim.get_passenger(id).carry_on = 0
 	await _frames(10)
 	var without := await _frame_times("no bags (control)")
-	if _views.carry_on_props().drawn_count() > 0 or _views.active_count() == 0:
+	# Bags (not trays) of the passengers zeroed above; the sim spawns new ones.
+	var drawn := 0
+	for id in flight_ids:
+		drawn += _views.carry_on_props().props_of(id)["bags"].size()
+	print("BENCH control drawn_bags=%d crowd=%d" % [drawn, _views.active_count()])
+	if drawn > 0 or _views.active_count() == 0:
 		_invalid("bench: no crowd on screen, or the control still draws bags")
 	print(
 		(
@@ -1351,8 +1368,13 @@ func _sweep() -> void:
 	# Pulled rollers on the live walk: id -> [axle, yaw] last frame.
 	var pulled := {}
 	var turns := [0, 0]
+	# One roller is turned a quarter turn on purpose (Staged), so a sharp turn
+	# is always judged, whatever the seed's walks do.
+	var staged := Staged.new()
 	for frame in SWEEP_FRAMES * 2 + SWEEP_FRAMES / 2:
 		_beat("sweep frame %d" % frame)
+		var before: int = turns[0]
+		staged.step(_views, _sim, pulled, frame)
 		var running := frame >= SWEEP_FRAMES * 2
 		if running:
 			if not _clock.paused:
@@ -1369,6 +1391,7 @@ func _sweep() -> void:
 		await process_frame
 		if not running:
 			CarryChecks.watch_pulled(_sim, _views, pulled, turns, _clock.tick + _clock.alpha)
+			staged.count(_views, frame, turns[0] - before)
 		if not running and frame % 2 == 1:
 			continue
 		carriers.clear()
@@ -1432,8 +1455,14 @@ func _sweep() -> void:
 	_clock.set_paused(false)
 	print("SWEEP checks=%s" % [checks])
 	print("SWEEP pulled rollers: sharp_turns=%d axle_snaps=%d" % turns)
-	if turns[0] == 0:
-		_invalid("sweep: no pulled roller turned sharply (control)")
+	print(
+		(
+			"SWEEP staged turn roller=%d frame=%d sharp_turns_seen=%d"
+			% [staged.roller, staged.first_frame, staged.sharp]
+		)
+	)
+	if staged.roller == 0 or staged.sharp == 0:
+		_invalid("sweep: the staged sharp turn of a pulled roller was not seen (control)")
 	if turns[1] > 0:
 		_invalid("sweep: a pulled roller's axle jumped between two frames")
 	var control := CarryChecks.snap_control()
