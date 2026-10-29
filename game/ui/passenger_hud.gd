@@ -11,6 +11,10 @@ extends CanvasLayer
 ## and C, the batch seed and their status). Clicking a passenger while no
 ## build tool is active follows it: the selection is a stable passenger id,
 ## and the camera follows PassengerViews.follow_anchor, never a pooled node.
+## Clicking a car or taxi on the landside (LandsideViews) follows it instead
+## and the text shows its passengers, their flight and the drop-off delay so
+## far (VehicleInspect); a click inside a vehicle's drawn box picks the vehicle
+## before any passenger near it. One selection at a time.
 ## When a flight's doors close, a dismissible FlightResultPanel opens under
 ## the top-right panel: made, missed and the main reasons; a later closing
 ## flight replaces it, and it hides itself when the game day changes. On
@@ -87,6 +91,8 @@ const STAGE_TEXT := {
 @export var flights: FlightSim
 @export var sim: PassengerSim
 @export var views: PassengerViews
+## The landside's vehicles, for clicking a car or taxi; optional.
+@export var landside_views: LandsideViews
 @export var camera: TycoonCamera
 ## Its loaded signal re-frames the start view on the loaded world.
 @export var save_game: SaveGame
@@ -190,6 +196,11 @@ func _process(_delta: float) -> void:
 ## A followed passenger the sim has retired is gone: clear the selection and
 ## let the camera go, instead of following the frozen anchor.
 func _drop_retired_selection() -> void:
+	if landside_views != null and landside_views.selected_id != 0:
+		if not landside_views.has_vehicle(landside_views.selected_id):
+			landside_views.selected_id = 0
+			if camera != null:
+				camera.stop_follow()
 	if views == null or views.selected_id == 0 or sim.get_passenger(views.selected_id) != null:
 		return
 	views.selected_id = 0
@@ -205,8 +216,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if build_mode.tool != BuildMode.Tool.NONE:
 		return
-	views.selected_id = views.pick(camera.get_node("Camera3D") as Camera3D, click.position)
-	if views.selected_id != 0:
+	var eye := camera.get_node("Camera3D") as Camera3D
+	var vehicle := landside_views.pick(eye, click.position) if landside_views != null else 0
+	if landside_views != null:
+		landside_views.select(vehicle)
+	views.selected_id = 0 if vehicle != 0 else views.pick(eye, click.position)
+	if vehicle != 0:
+		camera.follow(landside_views.follow_anchor)
+	elif views.selected_id != 0:
 		camera.follow(views.follow_anchor)
 	else:
 		camera.stop_follow()
@@ -278,6 +295,11 @@ func status_text() -> String:
 
 
 func follow_text() -> String:
+	if landside_views != null and landside_views.selected_id != 0:
+		var v: LandsideVehicle = null
+		if sim.landside != null:
+			v = sim.landside.get_vehicle(landside_views.selected_id)
+		return VehicleInspect.text(sim.arrivals, flights, v, clock.tick) if v != null else ""
 	if views == null or views.selected_id == 0:
 		return ""
 	var p := sim.get_passenger(views.selected_id)
