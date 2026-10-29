@@ -4,8 +4,11 @@ extends RefCounted
 ## function of the FlightSim and the clock tick: one line per flight leaving
 ## today, earliest first, as "07:38  Oslo  Gotta Air  Boarding". The next
 ## departing flight (the earliest whose doors have not closed) shows
-## "doors close in M:SS" in place of its status word (decision
-## flight-panel-the-next-departing-flight-s-row-shows-a-doors-close-countdown);
+## "doors close 10:30", the game-clock time its doors close, in place of its
+## status word (decision flight-panel-the-next-departing-flight-s-row-shows-a-
+## doors-c; the clock-time wording is user-ruled 2026-10-29, replacing "doors
+## close in M:SS"). The doors close before the flight leaves, so that time is
+## always today and needs no day prefix;
 ## the others keep their status words. A contract
 ## shows its destination and airline from its recorded start day
 ## (FlightSim.start_days), a one-off flight its id. While the airport is
@@ -36,7 +39,7 @@ static func text(flights: FlightSim, tick: int) -> String:
 	var lines := PackedStringArray()
 	var shown := MAX_LINES - 1 if rows.size() > MAX_LINES else rows.size()
 	for row in rows.slice(0, shown):
-		lines.append(_countdown_line(row, tick) if row == next else row["line"])
+		lines.append(_countdown_line(row) if row == next else row["line"])
 	if shown < rows.size():
 		lines.append("+%d more" % (rows.size() - shown))
 	return "\n".join(lines)
@@ -50,10 +53,8 @@ static func _next_departing(rows: Array[Dictionary], tick: int) -> Dictionary:
 	return {}
 
 
-static func _countdown_line(row: Dictionary, tick: int) -> String:
-	var left := maxi(0, row["doors"] - tick) / SimClock.TICK_RATE
-	@warning_ignore("integer_division")
-	return "%s  doors close in %d:%02d" % [row["base"], left / 60, left % 60]
+static func _countdown_line(row: Dictionary) -> String:
+	return "%s  doors close %s" % [row["base"], GameCalendar.clock_text(row["doors"])]
 
 
 ## The day and time of the earliest contract that starts after `today`, or "".
