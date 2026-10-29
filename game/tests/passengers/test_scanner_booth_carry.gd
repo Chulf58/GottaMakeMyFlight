@@ -207,11 +207,12 @@ func _watch_rollers(w: SecurityTestWorld) -> Dictionary:
 	return out
 
 
-## A load (PassengerViews.snap()) while a passenger steps from the entry into
-## the booth draws it tucked at once, with bags (a backpack, worn, so both
-## hands are free) and without: a fresh record would start untucked (weight 0)
-## and ease in, so full weight right after the snap is the restore.
-func test_a_load_on_the_entry_step_draws_the_arms_tucked() -> void:
+## A load (PassengerViews.snap()) while a passenger's arms are turning in on
+## the approach draws it tucked at once, with bags (a backpack, worn, so both
+## hands are free) and without. Before the snap both arms are part way in
+## (strictly between 0 and 1); right after it they are fully in. Without the
+## restore a fresh record would start untucked (0) and ease in again.
+func test_a_load_during_the_turn_in_draws_the_arms_tucked() -> void:
 	var w := _make(false)
 	var views := _views_of(w)
 	var backpack := -1
@@ -235,27 +236,22 @@ func test_a_load_on_the_entry_step_draws_the_arms_tucked() -> void:
 	assert_int(backpack).is_greater(0)
 	for id in ids:
 		var p := w.world.passenger(id)
-		var partway := false
-		var snapped := false
+		var before: Array[float] = []
 		for i in 3000:
 			w.world.step()
 			views.draw()
-			var on_step := (
-				p.at == ENTRY
-				and p.is_moving()
-				and SecurityLooks.in_booth(w.world.sim.grid, p.path[p.path_index + 1])
-			)
-			if not on_step:
+			if not SecurityLooks.in_booth_passage(w.world.sim, p):
 				continue
-			partway = partway or _arm_weights(views, id).min() < 1.0
-			views.snap()
-			snapped = true
-			break
+			var weights := _arm_weights(views, id)
+			if weights.min() > 0.0 and weights.max() < 1.0:
+				before = weights
+				views.snap()
+				break
 		var after := _arm_weights(views, id)
-		print(
-			"load on the entry step: passenger %d partway before=%s after=%s" % [id, partway, after]
-		)
-		assert_bool(snapped).is_true()
+		print("load during the turn-in: passenger %d before=%s after=%s" % [id, before, after])
+		assert_array(before).is_not_empty()
+		assert_float(before.min()).is_greater(0.0)
+		assert_float(before.max()).is_less(1.0)
 		assert_float(after.min()).is_equal(1.0)
 
 

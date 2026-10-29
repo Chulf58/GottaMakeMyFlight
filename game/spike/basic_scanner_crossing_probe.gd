@@ -20,13 +20,13 @@ extends SceneTree
 ## every point past the passage edge is also traced in to the edge: a booth
 ## part crossed on the way is a clip through a part thinner than the points
 ## are apart. Body points inside the passenger's own carried bags are counted
-## too: a roller lifted into the hand or lowered to the pull on the approach
-## or past the exit and a bag picked up from the floor after the repack (both
-## touch the body on the committed carry code too), and
-## a hard case turning from the side to the front on the approach (the thigh
-## in the case for a frame; accepted by the user 2026-10-29, "Accept, merge
-## now") are printed with their frame count and distance from the booth; any
-## other fails. Any contact or crossing fails the probe; so does a
+## too. Only three ruled clips outside the booth's length are printed (each
+## point with the predicate it matched, _ruled_self_clip()): a hard case
+## turning from the side to the front on the approach (accepted by the user
+## 2026-10-29, "Accept, merge now"), a roller while its lift or lowering move
+## is under way, and a bag going from the repack floor spot to the hand (both
+## ruled pre-existing 2026-10-29). Any other body-in-bag point fails, as does
+## any contact or crossing; so does a
 ## sent passenger that never crossed mid-booth, an alarm or liquids passenger
 ## that never repacked, or a bag kind never carried through. Controls: a bag
 ## set into a side panel must be inside its meshes, and a point just past the
@@ -88,6 +88,9 @@ var _stats := {}
 var _kinds_crossed := {}
 ## Passenger id -> the bones of its first body-in-own-bag contact.
 var _self_bones := {}
+## Passenger id -> each bag's home on its last check (a pickup from the floor
+## is a move from FLOOR to HAND).
+var _last_homes := {}
 var _plated := false
 var _plates_saved := 0
 ## True while the crossing plates are being taken.
@@ -206,7 +209,19 @@ func _booth(node: Node3D) -> Array:
 		_invalid("expected one floor mat in the booth, found %d" % mats)
 	for part in parts:
 		print("BOOTH_PART ", part[0])
-	return [node, to_booth, parts, side_in]
+	# Which end of the booth (sign of its local z) the passage enters by.
+	var entry_sign := 0.0
+	for id: int in _sim.layout.scanners:
+		var passage: Array = _sim.layout.passages.get(id, [])
+		if passage.size() < 2:
+			continue
+		var inside := to_booth * _sim.grid.cell_to_world(passage[1])
+		if absf(inside.x) < 0.6 and absf(inside.z) < 1.2:
+			entry_sign = signf((to_booth * _sim.grid.cell_to_world(passage[0])).z)
+	print("BOOTH entry_side_z=%+.0f" % entry_sign)
+	if entry_sign == 0.0:
+		_invalid("the booth at %s has no passage entry" % node.global_position)
+	return [node, to_booth, parts, side_in, entry_sign]
 
 
 ## Triangle soup `faces` split into connected parts: triangles sharing a
@@ -340,12 +355,12 @@ func _check(id: int) -> void:
 		var hand_kinds := []
 		var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p))
 		var self_hits := 0
-		var roller_hits := 0
-		var turn_hits := 0
-		var pickup_hits := 0
+		var reported := {"case_turn": 0, "roller_move": 0, "repack_pickup": 0}
 		var props_now := _views.carry_on_props()
 		var front_now := props_now.front_weight_of(id)
-		var turning := front_now > 0.0 and front_now < 1.0
+		var outside := absf(local.z) > 0.95
+		var was_homes: Array = _last_homes.get(id, [])
+		_last_homes[id] = homes.duplicate()
 		for i in bags.size():
 			if homes[i] == SecurityLooks.Home.TRAY and p.station != 0:
 				_invalid("passenger %d has a tray bag at a basic scanner" % id)
@@ -354,15 +369,30 @@ func _check(id: int) -> void:
 				if homes[i] == SecurityLooks.Home.HAND:
 					hand_kinds.append(props["kinds"][i])
 					var hits := CarryContact.inside_meshes(own, bags[i])
-					self_hits += hits
-					if props["kinds"][i] == SecurityLooks.Kind.ROLLER:
-						roller_hits += hits
-					elif turning:
-						turn_hits += hits
-					elif p.incident_resolved and props_now.transfer_progress(id, i) < 1.0:
-						# Picked up from the floor after the repack, on its way
-						# into the hand.
-						pickup_hits += hits
+					var why := ""
+					if hits > 0:
+						var was_floor: bool = (
+							i < was_homes.size() and was_homes[i] == SecurityLooks.Home.FLOOR
+						)
+						why = _ruled_self_clip(
+							p,
+							props["kinds"][i],
+							outside,
+							signf(local.z) == booth[4],
+							front_now,
+							props_now.transfer_progress(id, i) < 1.0,
+							was_floor
+						)
+					if why == "":
+						self_hits += hits
+					else:
+						reported[why] += hits
+						print(
+							(
+								"SELF_REPORTED passenger=%d bag=%d predicate=%s points=%d along_m=%.2f front=%.2f"
+								% [id, i, why, hits, local.z, front_now]
+							)
+						)
 					if hits > 0 and not _self_bones.has(id):
 						var grip := CarryChecks.gripping(_sim, p)
 						_self_bones[id] = CarryChecks.contact_bones(body, grip, bags[i])
@@ -408,20 +438,14 @@ func _check(id: int) -> void:
 			}
 			_stats[id] = s
 		s["frames"] += 1
-		# On the approach and past the exit a roller's lift into the hand and its
-		# lowering to the pull, and a bag picked up from the floor after the
-		# repack, touch the body on the committed carry code too (measured
-		# against git HEAD; the pickup ruled pre-existing 2026-10-29): those are
-		# printed. Every other body-in-bag point, and any inside the booth's
-		# length, fails.
-		if absf(local.z) > 0.95:
-			s["self_outside"] += roller_hits
-			s["pickup_points"] += pickup_hits
-			self_hits -= roller_hits + turn_hits + pickup_hits
-			if turn_hits > 0:
-				s["turn_points"] += turn_hits
-				s["turn_frames"] += 1
-				s["turn_along"].append(snappedf(absf(local.z), 0.01))
+		# Only the three ruled clips are printed instead of failed
+		# (_ruled_self_clip); every other body-in-bag point fails.
+		s["self_outside"] += reported["roller_move"]
+		s["pickup_points"] += reported["repack_pickup"]
+		if reported["case_turn"] > 0:
+			s["turn_points"] += reported["case_turn"]
+			s["turn_frames"] += 1
+			s["turn_along"].append(snappedf(absf(local.z), 0.01))
 		s["self_contacts"] += self_hits
 		if self_hits > 0:
 			print(
@@ -460,6 +484,37 @@ func _check(id: int) -> void:
 		):
 			_plated = true
 			_plate_crossing.call_deferred(id, booth)
+
+
+## Which ruled clip a body-in-own-bag contact is, or "" when it is none (it
+## fails). All three happen outside the booth's length (`outside`):
+## - case_turn (accepted by the user 2026-10-29, "Accept, merge now"): a hard
+##   case turning from the side to the front (the front carry is the target and
+##   its weight is part way), on the approach end of the booth (`approach`);
+## - roller_move (ruled pre-existing 2026-10-29): a roller while its lift into
+##   the hand or its lowering to the pull is under way (`moving`);
+## - repack_pickup (ruled pre-existing 2026-10-29): a bag going from the floor
+##   (`was_floor` on the last check) to the hand (`moving`) of a passenger
+##   whose incident has just been resolved by the repack.
+func _ruled_self_clip(
+	p: Passenger,
+	kind: SecurityLooks.Kind,
+	outside: bool,
+	approach: bool,
+	front: float,
+	moving: bool,
+	was_floor: bool
+) -> String:
+	if not outside:
+		return ""
+	var to_front := SecurityLooks.carry_front(_sim, p)
+	if kind == SecurityLooks.Kind.CASE and approach and to_front and front > 0.0 and front < 1.0:
+		return "case_turn"
+	if kind == SecurityLooks.Kind.ROLLER and moving:
+		return "roller_move"
+	if kind != SecurityLooks.Kind.ROLLER and p.incident_resolved and moving and was_floor:
+		return "repack_pickup"
+	return ""
 
 
 ## Points of a passenger in the passage that lie past the passage edge with a
