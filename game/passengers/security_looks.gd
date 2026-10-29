@@ -224,7 +224,12 @@ static func _mix(value: int) -> int:
 ## walks (decision in-a-cell-closed-on-both-sides-a-passenger-carries-their-
 ## bag). A side-carried bag reaches about 0.55-0.6 m out, more than such a
 ## cell leaves. Standing still, the cell it stands on and its last step count.
+## A basic scanner booth's cells count as closed on both sides, standing or
+## walking (decision basic-scanner-booth-passengers-carry-their-bags-in-front-
+## and): its panels leave about 0.41 m either side of the centre line.
 static func carry_front(sim: PassengerSim, p: Passenger) -> bool:
+	if in_booth_passage(sim, p):
+		return true
 	if p.path.size() < 2:
 		return false
 	var at := clampi(p.path_index, 0, p.path.size() - 2)
@@ -240,6 +245,44 @@ static func carry_front(sim: PassengerSim, p: Passenger) -> bool:
 		if _closed(sim.grid, cell, flank) and _closed(sim.grid, cell, -flank):
 			return true
 	return false
+
+
+## Whether `p` stands in a basic scanner booth, walks into one now, or waits
+## at a booth's entry cell in the security queue: there its bags are carried
+## in front and its free arms tucked in (CarryOnProps). The entry counts so the
+## turn has ended before the bags reach the booth's rails; leaving, the cell it
+## stands on stays a booth cell until it arrives in the cell past the booth.
+static func in_booth_passage(sim: PassengerSim, p: Passenger) -> bool:
+	if in_booth(sim.grid, p.at):
+		return true
+	var queued := p.stage == Passenger.Stage.SECURITY_QUEUE or p.stage == Passenger.Stage.SECURITY
+	if queued and _booth_entry(sim, p.at):
+		return true
+	if not p.is_moving() or p.path.size() < 2:
+		return false
+	var at := clampi(p.path_index, 0, p.path.size() - 2)
+	var next := p.path[at + 1]
+	if in_booth(sim.grid, next):
+		return true
+	# Walking up to the entry it starts a step early, so the turn (after a
+	# roller's lift into the hand, CarryOnProps) ends before the booth's rails.
+	return queued and _booth_entry(sim, next)
+
+
+## Whether `cell` is the entry cell of a basic scanner's passage.
+static func _booth_entry(sim: PassengerSim, cell: Vector2i) -> bool:
+	var layout: TerminalLayout = sim.layout
+	for id: int in layout.scanners:
+		var passage: Array = layout.passages.get(id, [])
+		if not passage.is_empty() and passage[0] == cell and in_booth(sim.grid, passage[1]):
+			return true
+	return false
+
+
+## Whether `cell` lies inside a basic scanner booth (a security_scanner).
+static func in_booth(grid: BuildGrid, cell: Vector2i) -> bool:
+	var id := grid.object_at(cell)
+	return id != 0 and StringName(grid.get_object(id).get("def", "")) == &"security_scanner"
 
 
 ## Whether either straight part of a (possibly diagonal) step out of `cell`
