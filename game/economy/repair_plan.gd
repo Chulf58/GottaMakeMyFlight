@@ -102,6 +102,9 @@ var ok := false
 ## With ok false: what a repair is taken to cost when the caps ran out before
 ## one was found, or -1 when every choice was tried (the error was pushed).
 var fallback_price := -1
+## How many tried edits the search could not take back (an error was pushed for
+## each). Any means the search's copy of the grid went wrong; 0 is the norm.
+var undo_failures := 0
 
 var _grid: BuildGrid
 ## The snapshot of the grid make() was given, for _failing_leg().
@@ -172,25 +175,30 @@ static func can_finish(
 
 ## The least balance that buys `edits` one by one in order on `grid`: each
 ## edit's price (BuildTransaction.quote()) must be there when it is bought,
-## and a refund it earns pays toward the edits after it. A cell painted again
-## before its floor is taken up is charged once.
+## and a refund it earns pays toward the edits after it. Each edit is quoted
+## against a copy of `grid` as the edits before it left it, with the price
+## paid saved on what they built: a cell painted again before its floor is
+## taken up is charged once, and one painted, taken up and painted again twice.
+## An edit the copy refuses changes nothing there and is still quoted.
 ## PriceTable.NO_PRICE when an edit has no price.
 static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
+	var standing := BuildGrid.new(grid.size, grid.origin)
+	if not standing.from_snapshot(grid.to_snapshot()):
+		push_error("RepairPlan: the grid could not be copied to price the plan")
+		return PriceTable.NO_PRICE
+	standing.check_staff_reach = false
 	var least := 0
 	var spent := 0
-	var painted := {}
 	for edit in plan_edits:
-		if edit.kind == BuildEdit.Kind.PAINT_FLOOR:
-			if painted.has(edit.cell):
-				continue
-			painted[edit.cell] = true
-		elif edit.kind == BuildEdit.Kind.REMOVE_FLOOR:
-			painted.erase(edit.cell)
-		var quote := BuildTransaction.quote(grid, edit)
+		var quote := BuildTransaction.quote(standing, edit)
 		if not quote.priced:
 			return PriceTable.NO_PRICE
 		least = maxi(least, spent + maxi(quote.net(), 0))
 		spent += quote.net()
+		var saved := edit.paid
+		edit.paid = quote.paid
+		standing.apply(edit)
+		edit.paid = saved
 	return least
 
 
@@ -699,8 +707,15 @@ func _try(choice: Dictionary, leg: int, undo: Array[BuildEdit]) -> bool:
 ## Takes back built edits, newest first, and rebuilds the layout.
 func _undo(undo: Array[BuildEdit]) -> void:
 	for i in range(undo.size() - 1, -1, -1):
-		if not _grid.apply(undo[i]).ok:
-			push_error("RepairPlan: could not undo a tried repair edit")
+		var result := _grid.apply(undo[i])
+		if not result.ok:
+			undo_failures += 1
+			push_error(
+				(
+					"RepairPlan: could not undo a tried repair edit (kind %d at %s, refused %d)"
+					% [undo[i].kind, undo[i].cell, result.reason]
+				)
+			)
 	undo.clear()
 	_layout.rebuild(_grid)
 
@@ -715,13 +730,17 @@ func _build(edit: BuildEdit, done: Array[BuildEdit], undo: Array[BuildEdit]) -> 
 		var before := 0
 		if step.kind == BuildEdit.Kind.REMOVE_WALL:
 			before = _grid.wall_kind(step.cell, step.side)
+		# A paint over a floor already there changes nothing, so it records no
+		# way back: taking that floor up would undo more than this build did.
+		var was_bare := _grid.floor_at(step.cell) == BuildGrid.FLOOR_NONE
 		var result := _grid.apply(step)
 		if not result.ok:
 			return false
 		done.append(step)
 		match step.kind:
 			BuildEdit.Kind.PAINT_FLOOR:
-				undo.append(BuildEdit.remove_floor(step.cell))
+				if was_bare:
+					undo.append(BuildEdit.remove_floor(step.cell))
 			BuildEdit.Kind.REMOVE_WALL:
 				undo.append(BuildEdit.place_wall(step.cell, step.side, before))
 			BuildEdit.Kind.PLACE_OBJECT:

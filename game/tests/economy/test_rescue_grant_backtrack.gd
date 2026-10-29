@@ -69,6 +69,7 @@ func test_the_cheapest_desk_blocking_the_corridor_is_passed_over() -> void:
 	assert_bool(_grant.has_working_path()).is_false()
 	var plan := _grant.repair_plan()
 	print("plan ok %s edits %d" % [plan.ok, plan.edits.size()])
+	assert_int(plan.undo_failures).is_equal(0)
 	assert_bool(plan.ok).is_true()
 	assert_bool(_grant.evaluate()).is_true()
 	print("balance %d" % _world.sim.wallet.balance)
@@ -112,6 +113,7 @@ func test_a_working_choice_past_the_per_leg_cap_still_gets_a_grant() -> void:
 	var plan := _grant.repair_plan()
 	RepairPlan.max_tries = RepairPlan.MAX_TRIES
 	print("plan ok %s fallback %d" % [plan.ok, plan.fallback_price])
+	assert_int(plan.undo_failures).is_equal(0)
 	assert_bool(plan.ok).is_false()
 	assert_bool(_grant.evaluate()).is_true()
 	print("balance %d" % _world.sim.wallet.balance)
@@ -126,6 +128,7 @@ func test_a_plan_that_runs_out_of_attempts_still_gets_a_grant() -> void:
 	var plan := _grant.repair_plan()
 	RepairPlan.max_attempts = RepairPlan.MAX_ATTEMPTS
 	print("plan ok %s fallback %d" % [plan.ok, plan.fallback_price])
+	assert_int(plan.undo_failures).is_equal(0)
 	assert_bool(plan.ok).is_false()
 	assert_bool(_grant.evaluate()).is_true()
 	assert_int(_world.sim.wallet.balance).is_greater_equal(475)
