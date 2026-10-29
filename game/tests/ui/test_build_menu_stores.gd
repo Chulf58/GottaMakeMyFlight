@@ -126,7 +126,9 @@ func test_the_room_cards_carry_the_room_type_name_and_minimum_size() -> void:
 		assert_str(BuildMenu.item(tool)[0]).is_equal(room.display_name)
 		assert_array(texts).contains([room.display_name])
 		assert_array(texts).contains(["%dx%d min" % [room.min_size.x, room.min_size.y]])
-		assert_array(texts).contains([BuildMenu.PRICE_TEXT])
+		# A room is dragged out, as the kiosk room card says.
+		assert_array(texts).contains([BuildMenu.PRICE_TEXT, "Drag"])
+		assert_array(texts).not_contains(["Click"])
 
 
 func test_the_piece_cards_show_name_catalog_size_and_price() -> void:

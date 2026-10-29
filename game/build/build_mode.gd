@@ -230,6 +230,9 @@ const AREA_TOOLS := [
 	Tool.BAG_ROOM,
 	Tool.TOILET_ROOM,
 	Tool.KIOSK_ROOM,
+	Tool.PHARMACY_ROOM,
+	Tool.DUTY_FREE_ROOM,
+	Tool.FASHION_ROOM,
 	Tool.BELT,
 ]
 ## Zone id painted floors get. One terminal zone until zones become a tool.

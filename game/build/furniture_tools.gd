@@ -4,9 +4,11 @@ extends RefCounted
 ## all-11-exported-decor-models-are-placeable-plants-trees-foun and furniture-
 ## set-modelled-on-copenhagen-airport-decor-calms-pas): decor, the food and
 ## services kit and the activities kit. Each is a plain object tool, placed and
-## removed like a cafe table; shops and food here are objects only, with no
-## room type. BuildMode holds the Tool enum and answers tool_object() from
-## these tables, and BuildMenu shows the cards (PAGES) after its own.
+## removed like a cafe table. Most are objects only, with no room type; the
+## pharmacy counter and shelf are what a pharmacy room (F4-5, RoomTypes) needs
+## to be ready. BuildMode holds the Tool enum and answers tool_object() from
+## these tables, and BuildMenu shows the cards (PAGES, and the pharmacy's
+## Stores page) after its own.
 
 ## Tool -> catalog id.
 const OBJECTS := {
