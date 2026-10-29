@@ -1,0 +1,22 @@
+[gd_resource type="ShaderMaterial" load_steps=6 format=3]
+
+[ext_resource type="Shader" path="res://shaders/toon.gdshader" id="1_toon"]
+[ext_resource type="Texture2D" path="res://assets/textures/tc_props_2a_d.png" id="2_albedo"]
+[ext_resource type="Texture2D" path="res://assets/textures/tc_toon_ramp_01a_d.png" id="3_ramp"]
+[ext_resource type="Shader" path="res://shaders/toon_outline.gdshader" id="4_outline"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_outline"]
+render_priority = 0
+shader = ExtResource("4_outline")
+shader_parameter/outline_color = Color(0, 0, 0, 1)
+shader_parameter/outline_px = 1.5
+
+[resource]
+resource_name = "TC_Props_2A_D"
+render_priority = 0
+next_pass = SubResource("ShaderMaterial_outline")
+shader = ExtResource("1_toon")
+shader_parameter/albedo_texture = ExtResource("2_albedo")
+shader_parameter/albedo_tint = Color(1, 1, 1, 1)
+shader_parameter/ramp_texture = ExtResource("3_ramp")
+shader_parameter/light_gain = 1.0

@@ -115,7 +115,7 @@ func _start_rectangle() -> void:
 	assert_bool(_mode._area.active).is_true()
 
 
-func test_a_rectangle_in_progress_hides_its_ghost_and_size_over_a_hud_control() -> void:
+func test_a_rectangle_in_progress_hides_its_ghost_and_says_why_over_a_hud_control() -> void:
 	_start_rectangle()
 	await _hover(OVER_WORLD)
 	var size_text := _mode.status_text()
@@ -131,7 +131,8 @@ func test_a_rectangle_in_progress_hides_its_ghost_and_size_over_a_hud_control() 
 		)
 	)
 	assert_bool(_ghost().visible).is_false()
-	assert_str(_mode.status_text()).is_equal("")
+	assert_str(_mode.status_text()).is_equal(BuildMode.DRAG_OVER_UI)
+	assert_bool(_mode.drag_held_by_ui()).is_true()
 	# The drag is not cancelled: it is still there to finish or abandon.
 	assert_bool(_mode._area.active).is_true()
 
@@ -146,3 +147,30 @@ func test_a_rectangle_returns_with_its_size_when_the_pointer_leaves_the_hud() ->
 	assert_bool(_ghost().visible).is_true()
 	assert_int(_ghost().get_child_count()).is_greater(0)
 	assert_str(_mode.status_text()).is_equal(size_text)
+
+
+func test_the_reason_is_gone_once_the_pointer_is_back_on_the_floor() -> void:
+	_start_rectangle()
+	await _hover(OVER_HUD)
+	assert_str(_mode.status_text()).is_equal(BuildMode.DRAG_OVER_UI)
+	await _hover(OVER_WORLD)
+	assert_bool(_mode.drag_held_by_ui()).is_false()
+	assert_str(_mode.status_text()).is_not_equal(BuildMode.DRAG_OVER_UI)
+	assert_str(_mode.status_text()).is_not_empty()
+
+
+func test_a_room_drag_over_a_hud_control_says_why_too() -> void:
+	assert_bool(_finances.wallet.from_snapshot({"balance": "100000"})).is_true()
+	_mode.set_tool(BuildMode.Tool.TOILET_ROOM)
+	_mode.begin_area(_mode.grid.cell_to_world(Vector2i(18, 30)))
+	_mode.move_area(_mode.grid.cell_to_world(Vector2i(22, 33)))
+	await _hover(OVER_HUD)
+	assert_str(_mode.status_text()).is_equal(BuildMode.DRAG_OVER_UI)
+	assert_bool(_mode.drag_held_by_ui()).is_true()
+
+
+func test_no_reason_shows_over_a_hud_control_when_no_drag_is_on() -> void:
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	await _hover(OVER_HUD)
+	assert_bool(_mode.drag_held_by_ui()).is_false()
+	assert_str(_mode.status_text()).is_equal("")

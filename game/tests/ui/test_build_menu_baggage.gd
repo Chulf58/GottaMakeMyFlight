@@ -67,9 +67,9 @@ func test_the_baggage_cards_show_size_price_and_a_rendered_thumbnail() -> void:
 		BuildMode.Tool.BAG_ROOM: "2x2 min",
 		BuildMode.Tool.CART: "1x2",
 	}
-	# The bag room card's last line says what the room needs (note 7), not "Click".
+	# The bag room card's last line says what the room needs (note 7), not "Drag".
 	var hints := {
-		BuildMode.Tool.BELT: "Click",
+		BuildMode.Tool.BELT: "Drag",
 		BuildMode.Tool.BAG_ROOM: "Needs belt end",
 		BuildMode.Tool.CART: "Click",
 	}

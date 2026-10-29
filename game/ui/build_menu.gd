@@ -422,13 +422,16 @@ func preview_text() -> String:
 
 
 ## Sets the cost line from preview_text(), and shows the status line only while
-## the pointer is over a cell of the grid (or a rectangle is being dragged), so
+## the pointer is over a cell of the grid (or a rectangle drag is held by the
+## pointer being over the HUD, where the line says why), so
 ## a stale hint such as "Facing auto" or the "Outside the building area"
 ## refusal does not stay over the world. A grant message is never hidden.
 func refresh_preview() -> void:
 	_cost.text = preview_text()
 	_cost.visible = _cost.text != ""
-	_status.visible = _holding or build_mode == null or _pointer_on_grid()
+	_status.visible = (
+		_holding or build_mode == null or _pointer_on_grid() or build_mode.drag_held_by_ui()
+	)
 
 
 ## True while BuildMode has the pointer over a cell inside the grid, whether or
@@ -509,17 +512,7 @@ func _floor_rect_cost(area: Rect2i) -> int:
 
 
 func _price_floor_rect(area: Rect2i) -> int:
-	var grid := build_mode.grid
-	var edits: Array[BuildEdit] = []
-	for y in range(area.position.y, area.end.y):
-		for x in range(area.position.x, area.end.x):
-			var cell := Vector2i(x, y)
-			if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
-				continue
-			var edit := BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, BuildMode.TERMINAL_ZONE)
-			if DoorPlacement.check(grid, edit).ok:
-				edits.append(edit)
-	return maxi(0, BuildTransaction.needed(grid, edits))
+	return AreaDrag.floor_cost(build_mode.grid, area)
 
 
 func _on_status_changed(text: String) -> void:
@@ -729,8 +722,14 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	elif CARD_RUNNING_COSTS.has(tool):
 		_card_label(column, RUNNING_COST_TEXT % CARD_RUNNING_COSTS[tool], &"HudHint")
 	else:
-		_card_label(column, "Key %s" % key if key != "" else "Click", &"HudHint")
+		_card_label(column, "Key %s" % key if key != "" else _no_key_hint(tool), &"HudHint")
 	return button
+
+
+## What a card with no key says: a rectangle tool is drawn by dragging, any
+## other is a click.
+static func _no_key_hint(tool: BuildMode.Tool) -> String:
+	return "Drag" if BuildMode.AREA_TOOLS.has(tool) else "Click"
 
 
 func _make_rotate_card() -> Button:

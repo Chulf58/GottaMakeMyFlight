@@ -106,6 +106,12 @@ const BELT_PRICE_ID := &"baggage_belt"
 const BELT_HINT := "Drag to lay a belt"
 ## The status line over a lane part that belongs to no arch.
 const NOT_IN_LANE := "Not part of a lane"
+## The status line over an item placed inside a room whose front cell falls
+## outside it: the room does not count the item (FacilitySlots.piece_inside).
+const FRONT_OUTSIDE_ROOM := "Its front is outside the room, so it will not count. R turns it"
+## The status line while a rectangle drag is held by the pointer being over the
+## HUD: the rectangle keeps its last size and a release applies that one.
+const DRAG_OVER_UI := "Drag stops over the menu. Move back onto the floor to keep sizing"
 ## Tools that mark a dragged rectangle as a room of a RoomTypes id.
 const TOOL_ROOMS := {
 	Tool.CAFE_ROOM: &"cafe",
@@ -241,6 +247,11 @@ var _hint_cache := ""
 ## True while the pointer maps to a cell inside the grid, whether or not the
 ## picked tool makes an edit there (a room tool makes none before a drag).
 var _pointer_on_grid := false
+## True while a rectangle drag is on and the pointer is over a HUD Control.
+var _area_over_ui := false
+## What the status line adds for the item under the pointer when its front falls
+## outside the room it stands in ("" for none).
+var _front_warning := ""
 var _dragging := false
 var _drag_side := -1
 var _last_applied_key := ""
@@ -298,7 +309,9 @@ func _process(_delta: float) -> void:
 	var point: Variant = _mouse_ground()
 	# Over a HUD Control the pointer is not over the world: no ghost, no hover.
 	# A rectangle in progress stays, hidden, until the pointer is back.
-	if not _pointer_over_ui():
+	var over_ui := _pointer_over_ui()
+	_area_over_ui = over_ui and _area.active
+	if not over_ui:
 		_update_ghost(point)
 	elif _area.active:
 		_hide_area_ghost()
@@ -417,6 +430,7 @@ func _apply_at(point: Vector3) -> BuildResult:
 	var edit := edit_at(point)
 	if edit == null or (_dragging and _edit_key(edit) == _last_applied_key):
 		return null
+	var warning := front_warning(grid, edit)
 	_last_applied_key = _edit_key(edit)
 	var result := check(edit)
 	if result.ok and _dragging and _stroke_out_of_money:
@@ -440,6 +454,9 @@ func _apply_at(point: Vector3) -> BuildResult:
 		_redraw()
 		_hover_key = ""
 		grid_changed.emit()
+		if warning != "":
+			_status_note = warning
+			_note_cell = edit.cell
 	_show_status(result)
 	# A refusal from the grid or the transaction (inside commit_plan()) was
 	# emitted there.
@@ -472,6 +489,13 @@ func hover_edit() -> BuildEdit:
 ## line only then); false with no hover yet, over the HUD or outside the grid.
 func pointer_on_grid() -> bool:
 	return _pointer_on_grid
+
+
+## True while a rectangle drag is on and the pointer is over the HUD, where the
+## rectangle stops growing (BuildMenu keeps the status line, which says why,
+## visible).
+func drag_held_by_ui() -> bool:
+	return _area_over_ui and _area.active
 
 
 ## The rectangle being dragged, or an empty Rect2i when no rectangle drag is on
@@ -896,18 +920,21 @@ func _update_ghost(point: Variant) -> void:
 	var hint := "" if point == null else _lane_hint_at(grid.world_to_cell(point))
 	if edit == null:
 		_ghost.visible = false
+		_front_warning = ""
 		var idle_key := "" if hint == "" else "lane:" + hint
 		if _hover_key != idle_key:
 			_hover_key = idle_key
 			_lane_hint = hint
 			_show_status(null)
 		return
-	var key := _edit_key(edit) + "|" + hint
+	var warning := front_warning(grid, edit)
+	var key := _edit_key(edit) + "|" + hint + "|" + warning
 	if key == _hover_key:
 		return
 	_hover_key = key
 	_lane_hint = hint
 	var result := check(edit)
+	_front_warning = warning if result.ok else ""
 	_draw_ghost(edit, _valid_material if result.ok else _invalid_material)
 	_show_status(result)
 
@@ -917,9 +944,8 @@ func _update_ghost(point: Variant) -> void:
 func _hide_area_ghost() -> void:
 	_pointer_on_grid = false
 	_ghost.visible = false
-	if _hover_key != "":
-		_hover_key = ""
-		_set_status("")
+	_hover_key = ""
+	_set_status(DRAG_OVER_UI)
 
 
 ## The Belt ghost for the one cell under the pointer, or none off the grid.
@@ -965,13 +991,19 @@ func _draw_area() -> void:
 		_draw_belt(_area.start_cell(), _area.end_cell())
 		return
 	var area := _area.rect()
+	var purse := wallet()
 	var key := "area:%s" % area
+	if tool == Tool.FLOOR and purse != null:
+		key += ":%d" % purse.balance
 	if key == _hover_key:
 		return
 	_hover_key = key
 	_clear_ghost()
 	var material := _area_remove_material if tool == Tool.REMOVE else _valid_material
 	if TOOL_ROOMS.has(tool) and not RoomTool.check(grid, area, TOOL_ROOMS[tool]).ok:
+		material = _invalid_material
+	# A floor rectangle the wallet cannot pay for lays nothing (CANT_AFFORD).
+	if tool == Tool.FLOOR and purse != null and AreaDrag.floor_cost(grid, area) > purse.balance:
 		material = _invalid_material
 	_ghost_slab(area, material)
 	_show_status(null)
@@ -1096,6 +1128,8 @@ func _show_status(result: BuildResult) -> void:
 		elif DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
 			reason = DOOR_HINTS[result.reason] % DOOR_NAMES[tool]
 		text += ("  " if text != "" else "") + reason
+	if _front_warning != "" and not refused:
+		text += ("  " if text != "" else "") + _front_warning
 	if _lane_hint != "":
 		text += ("  " if text != "" else "") + _lane_hint
 	_set_status(text)
@@ -1123,6 +1157,28 @@ static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
 		if (lanes.candidate(arch)["parts"] as Dictionary).values().has(id):
 			return lanes.status_text(arch)
 	return NOT_IN_LANE
+
+
+## FRONT_OUTSIDE_ROOM for an object edit whose footprint lies wholly in a room
+## but whose interaction (front) cell does not: the room would not count it
+## (FacilitySlots.piece_inside), so a toilet stall placed so reads "Needs a
+## toilet stall". "" for any other edit.
+static func front_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
+	if edit == null or edit.kind != BuildEdit.Kind.PLACE_OBJECT:
+		return ""
+	var def := BuildCatalog.get_def(edit.def_id)
+	if def == null or not def.has_interaction:
+		return ""
+	var room_id := on_grid.room_at(edit.cell)
+	if room_id == 0:
+		return ""
+	var area: Rect2i = on_grid.get_room(room_id)["rect"]
+	for cell in def.footprint(edit.cell, edit.facing):
+		if not area.has_point(cell):
+			return ""
+	if area.has_point(def.interaction_cell(edit.cell, edit.facing)):
+		return ""
+	return FRONT_OUTSIDE_ROOM
 
 
 ## lane_hint() for the cell under the pointer, kept until the pointer moves to

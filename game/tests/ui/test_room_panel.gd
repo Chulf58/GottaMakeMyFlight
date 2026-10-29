@@ -60,7 +60,7 @@ func test_the_shops_category_holds_the_cafe_room_counter_and_table() -> void:
 	for tool in [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE]:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
 	assert_array(Array(_texts(_menu.card(BuildMode.Tool.CAFE_ROOM)))).contains(
-		["Cafe", "3x3 min", "Click"]
+		["Cafe", "3x3 min", "Drag"]
 	)
 	assert_array(Array(_texts(_menu.card(BuildMode.Tool.COUNTER)))).contains(["Counter", "2x1"])
 	assert_array(Array(_texts(_menu.card(BuildMode.Tool.TABLE)))).contains(["Table", "3x1"])
