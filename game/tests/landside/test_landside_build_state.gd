@@ -170,17 +170,119 @@ func test_curb_bays_add_berths_to_the_starter_curb() -> void:
 	assert_int(_berthed(9)).is_equal(8)
 
 
-func test_the_fifth_car_stands_in_the_first_built_bay() -> void:
+func test_a_built_bay_moves_the_queue_stop_upstream_of_its_first_berth() -> void:
+	assert_int(_sim.curb_stop_mm()).is_equal(STARTER.curb.stop_mm)
+	# Bay 0's first berth is at x 7.25 (35750 mm in), bay 1's at x 23.25 (19750 mm).
+	assert_int(STARTER.berth_mm(5)).is_equal(35750)
+	assert_int(STARTER.berth_mm(7)).is_equal(19750)
+	assert_bool(_sim.build_curb(0, 300)).is_true()
+	assert_int(_sim.curb_stop_mm()).is_equal(35750 - LandsideSim.BERTH_APPROACH_MM)
 	assert_bool(_sim.build_curb(1, 300)).is_true()
-	for i in 5:
+	assert_int(_sim.curb_stop_mm()).is_equal(19750 - LandsideSim.BERTH_APPROACH_MM)
+	assert_bool(_sim.remove_curb(1)).is_true()
+	assert_int(_sim.curb_stop_mm()).is_equal(35750 - LandsideSim.BERTH_APPROACH_MM)
+	# The starter curb's stop is the same distance before its first berth.
+	assert_int(STARTER.berth_mm(0) - LandsideSim.BERTH_APPROACH_MM).is_equal(STARTER.curb.stop_mm)
+
+
+func test_cars_take_the_first_berth_they_reach_driving_on() -> void:
+	assert_bool(_sim.build_curb(1, 300)).is_true()
+	for i in 3:
 		_car(LandsideVehicle.Intent.DROP)
 	_run(1, 800, false)
 	var standing: Array[Vector3] = []
 	for id in _sim.vehicle_ids():
 		var v := _sim.get_vehicle(id)
-		if v.lane == LandsideVehicle.Lane.BERTH and v.stop >= 4:
-			standing.append(_sim.world_position(v))
-	assert_array(standing).is_equal([STARTER.curb_spots[1].berths[0]])
+		assert_int(v.lane).is_equal(LandsideVehicle.Lane.BERTH)
+		standing.append(_sim.world_position(v))
+	# The east-most berth of the built bay first, then its other, then the
+	# starter curb's nearest berth.
+	(
+		assert_array(standing)
+		. contains_exactly_in_any_order(
+			[
+				STARTER.curb_spots[1].berths[1],
+				STARTER.curb_spots[1].berths[0],
+				STARTER.curb.berths[0],
+			]
+		)
+	)
+
+
+func test_a_car_never_reverses_into_a_berth_or_lands_on_the_queue() -> void:
+	assert_bool(_sim.build_curb(0, 300)).is_true()
+	assert_bool(_sim.build_curb(1, 300)).is_true()
+	for i in 14:
+		_car(LandsideVehicle.Intent.DROP)
+	var entered := 0
+	for t in range(1, 1500):
+		var before := {}
+		for id in _sim.vehicle_ids():
+			var v := _sim.get_vehicle(id)
+			if v.lane == LandsideVehicle.Lane.ROAD_IN:
+				before[id] = v.pos_mm
+		_sim.step(t, true, _rng)
+		for id in before:
+			var v := _sim.get_vehicle(id)
+			if v == null or v.lane != LandsideVehicle.Lane.BERTH:
+				continue
+			entered += 1
+			var at := STARTER.berth_mm(v.stop)
+			assert_int(at).override_failure_message("car %d reversed" % id).is_greater_equal(
+				before[id]
+			)
+			for other in _sim.vehicle_ids():
+				var queued := _sim.get_vehicle(other)
+				if queued.lane == LandsideVehicle.Lane.ROAD_IN:
+					assert_int(queued.pos_mm).is_less(at)
+	assert_int(entered).is_equal(14)
+
+
+func test_a_car_past_a_bay_does_not_go_back_to_it() -> void:
+	# A car that has driven on past bay 0 (a diverted car at the multi-storey's
+	# turn, 46000 mm in) takes a starter berth, not the free bay behind it.
+	assert_bool(_sim.build_curb(0, 300)).is_true()
+	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
+	for i in 40:
+		_car(LandsideVehicle.Intent.PARK)
+	_run(1, 2500, false)
+	var in_berths := 0
+	for id in _sim.vehicle_ids():
+		var v := _sim.get_vehicle(id)
+		if v.lane == LandsideVehicle.Lane.BERTH:
+			in_berths += 1
+			# Starter berths only (0 to 3): bay 0's are behind the diverted cars.
+			assert_int(v.stop).is_less(4)
+	assert_int(in_berths).is_equal(4)
+
+
+func test_lead_ticks_follow_the_lot_a_new_car_will_take() -> void:
+	assert_bool(_sim.build_lot(SURFACE, 1200)).is_true()
+	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
+	var surface_lead := _sim.lead_ticks(LandsideVehicle.Intent.PARK)
+	var multi := STARTER.lots[MULTI_STOREY]
+	var multi_lead := (
+		ceili(float(multi.branch_mm) / LandsideSim.SPEED_MM)
+		+ ceili(float(LandsideDefinition.length_mm(multi.access)) / LandsideSim.SPEED_MM)
+	)
+	assert_int(multi_lead).is_not_equal(surface_lead)
+	# Fill the surface lot, which a car reaches first.
+	for i in 12:
+		_car(LandsideVehicle.Intent.PARK)
+	_run(1, 1000)
+	assert_int(_sim.free_slots(SURFACE)).is_equal(0)
+	assert_int(_sim.lead_ticks(LandsideVehicle.Intent.PARK)).is_equal(multi_lead)
+	# A car handed over that long before its unload tick gets out on it.
+	var id := _car(LandsideVehicle.Intent.PARK)
+	var released := -1
+	for t in range(1000, 2000):
+		for event in _sim.step(t, true, _rng):
+			if event["vehicle"] == id:
+				released = t
+		if released >= 0:
+			break
+	assert_int(_sim.get_vehicle(id).lot).is_equal(MULTI_STOREY)
+	assert_int(released - 999).is_equal(multi_lead)
 
 
 func test_a_curb_bay_with_a_car_in_it_cannot_be_removed() -> void:
@@ -243,21 +345,26 @@ func test_a_car_in_a_bay_berth_loads_with_the_bay_built() -> void:
 func test_a_part_with_the_build_state_wrong_is_refused_whole() -> void:
 	assert_bool(_sim.build_lot(SURFACE, 1200)).is_true()
 	var data := _sim.to_snapshot(ArrivalBookings.new(), 0)
+	var nothing := "a spot with nothing built is closed or has a price"
+	var prices := "whole prices, 0 or more"
+	# Each case: the keys it breaks and the error it must be refused with.
 	var cases := {
-		"closed with nothing built": {"lots_closed": [false, true, false]},
-		"a price with nothing built": {"lots_paid": [1200, 500, 0]},
-		"a negative price": {"lots_paid": [-1200, 0, 0]},
-		"a fractional price": {"lots_paid": [1200.5, 0, 0]},
-		"too few lot entries": {"lots_closed": [false]},
-		"too many curb entries": {"curbs_built": [false, false, false]},
-		"a curb price with no bay": {"curbs_paid": [300, 0]},
-		"a flag that is not true or false": {"curbs_built": [0, 0]},
+		"closed with nothing built": [{"lots_closed": [false, true]}, nothing],
+		"a price with nothing built": [{"lots_paid": [1200, 500]}, nothing],
+		"a negative price": [{"lots_paid": [-1200, 0]}, prices],
+		"a fractional price": [{"lots_paid": [1200.5, 0]}, prices],
+		"too few lot entries": [{"lots_closed": [false]}, "lots_closed must be an array"],
+		"too many curb entries": [{"curbs_built": [false, false, false]}, "curbs_built must be"],
+		"a curb price with no bay": [{"curbs_paid": [300, 0]}, nothing],
+		"a flag that is not true or false": [{"curbs_built": [0, 0]}, "must hold true or false"],
 	}
 	for name in cases:
 		var bad := data.duplicate(true)
-		for key in cases[name]:
-			bad[key] = cases[name][key]
+		for key in cases[name][0]:
+			bad[key] = cases[name][0][key]
 		var loaded := LandsideSnapshot.load(bad, STARTER)
 		print("%s: %s" % [name, loaded.get("error", "LOADED")])
-		assert_bool(loaded.has("error")).override_failure_message(name).is_true()
+		assert_str(str(loaded.get("error", ""))).override_failure_message(name).contains(
+			cases[name][1]
+		)
 	assert_bool(LandsideSnapshot.load(data, STARTER).has("error")).is_false()

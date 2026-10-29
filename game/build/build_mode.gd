@@ -652,6 +652,13 @@ func undo() -> BuildResult:
 	return result
 
 
+## Forgets every action that could be undone, the grid's and the landside's
+## (BuildSession calls it when build mode ends).
+func clear_undo() -> void:
+	_history.clear()
+	_landside_placement.clear_undo()
+
+
 ## The undo history, newest action on top (read it, never change it).
 func undo_history() -> UndoStack:
 	return _history
@@ -771,8 +778,7 @@ func load_snapshot(data: Dictionary) -> bool:
 		return false
 	if not grid.from_snapshot(data):
 		return false
-	_history.clear()
-	_landside_placement.clear_undo()
+	clear_undo()
 	_redraw()
 	_hover_key = ""
 	grid_changed.emit()

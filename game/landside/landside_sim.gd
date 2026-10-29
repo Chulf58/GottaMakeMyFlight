@@ -49,6 +49,10 @@ const STAY_MIN_TICKS := GameCalendar.TICKS_PER_DAY
 const STAY_MAX_TICKS := 3 * GameCalendar.TICKS_PER_DAY
 ## Further ahead than any car can be.
 const FAR_MM := 1 << 40
+## How far before its first berth a curb's queue head stands: the starter
+## curb's stop (LandsideCurb.stop_mm) is this far before its first berth, and a
+## built curb bay's stop is as far before its own.
+const BERTH_APPROACH_MM := 4750
 
 @export var definition: LandsideDefinition
 ## In a scene the parking fees go to its wallet; tests set `wallet`.
@@ -75,6 +79,8 @@ var _by_id := {}
 var _next_id := 1
 ## Derived from the vehicles: the vehicle in each curb berth, or 0.
 var _berths: Array[int] = []
+## Derived: where along road_in each berth stands, in mm.
+var _berth_mm: Array[int] = []
 ## Derived: per lot spot, the vehicle holding each slot (driving to it or
 ## parked in it), or 0.
 var _slots: Array = []
@@ -203,22 +209,36 @@ func free_slots(spot: int) -> int:
 
 ## What a car of `intent` will do: PARK only while some car park is open.
 func resolve_intent(intent: LandsideVehicle.Intent) -> LandsideVehicle.Intent:
-	if intent == LandsideVehicle.Intent.PARK and _first_open_lot() < 0:
+	if intent == LandsideVehicle.Intent.PARK and _lot_for(0) < 0:
 		return LandsideVehicle.Intent.DROP
 	return intent
 
 
 ## Ticks from entering road_in to letting the passengers out, on a free road:
-## to the curb's stop, or to the first open lot's turn and along its access
+## to the curb's stop, or to the turn of the lot a new car would take
+## (_lot_for(): the first open lot with a free slot) and along its access
 ## lane. A car handed over that long before its unload tick gets out on it.
 func lead_ticks(intent: LandsideVehicle.Intent) -> int:
-	var spot := _first_open_lot()
+	var spot := _lot_for(0)
 	if resolve_intent(intent) == LandsideVehicle.Intent.PARK:
 		return (
 			ceili(float(definition.lots[spot].branch_mm) / SPEED_MM)
 			+ ceili(float(_access_mm[spot]) / SPEED_MM)
 		)
-	return ceili(float(definition.curb.stop_mm) / SPEED_MM)
+	return ceili(float(curb_stop_mm()) / SPEED_MM)
+
+
+## Where the curb's queue head waits, in mm along road_in: the starter curb's
+## stop, or, once a curb bay stands upstream of it, just before that bay's first
+## berth. A car never reverses, so the stop is upstream of every berth a car
+## takes there.
+func curb_stop_mm() -> int:
+	var stop := definition.curb.stop_mm
+	for i in _berths.size():
+		var spot := definition.berth_spot(i)
+		if spot >= 0 and curbs_built[spot]:
+			stop = mini(stop, _berth_mm[i] - BERTH_APPROACH_MM)
+	return maxi(stop, 0)
 
 
 ## A new vehicle carrying `bookings` enters road_in behind the last car
@@ -407,7 +427,7 @@ func _step_road_in(can_release: bool, released: Array[Dictionary]) -> void:
 		if v.bookings.is_empty():
 			v.intent = LandsideVehicle.Intent.DROP
 		var spot := _lot_ahead(v)
-		var stop := definition.curb.stop_mm
+		var stop := curb_stop_mm()
 		if spot >= 0:
 			stop = definition.lots[spot].branch_mm
 		var held := _drive(v, leader, stop)
@@ -421,7 +441,7 @@ func _step_road_in(can_release: bool, released: Array[Dictionary]) -> void:
 			else:
 				_set_moving(v, false)
 			continue
-		var berth := _free_berth()
+		var berth := _free_berth(v.pos_mm)
 		if berth < 0:
 			_set_moving(v, true)
 			continue
@@ -522,30 +542,32 @@ func _remove(v: LandsideVehicle) -> void:
 	_by_id.erase(v.id)
 
 
-## A car that means to park: the open lot it reaches first whose turn it has
-## not passed and which has a free slot, or the first it reaches when every one
-## is full (it finds that out at the turn and drops at the curb), or -1 (it
+## A car that means to park: the lot it will take from `pos_mm`, or -1 (it
 ## drops off at the curb then).
 func _lot_ahead(v: LandsideVehicle) -> int:
 	if v.intent != LandsideVehicle.Intent.PARK:
 		return -1
+	var spot := _lot_for(v.pos_mm)
+	if spot < 0:
+		v.intent = LandsideVehicle.Intent.DROP
+	return spot
+
+
+## The lot a car at `pos_mm` on road_in takes: the open lot it reaches first
+## whose turn it has not passed and which has a free slot, or the first it
+## reaches when every one is full (it finds that out at the turn and drops at
+## the curb), or -1. lead_ticks() and resolve_intent() ask this for a new car
+## (position 0), so what they promise is what the car then does.
+func _lot_for(pos_mm: int) -> int:
 	var first := -1
 	for spot in _lots_by_turn():
-		if definition.lots[spot].branch_mm < v.pos_mm:
+		if definition.lots[spot].branch_mm < pos_mm:
 			continue
 		if free_slots(spot) > 0:
 			return spot
 		if first < 0:
 			first = spot
-	if first < 0:
-		v.intent = LandsideVehicle.Intent.DROP
 	return first
-
-
-## The open lot a car reaches first from the start of road_in, or -1.
-func _first_open_lot() -> int:
-	var spots := _lots_by_turn()
-	return -1 if spots.is_empty() else spots[0]
 
 
 ## The open lots in the order a car on road_in reaches their turns.
@@ -562,13 +584,18 @@ func _lots_by_turn() -> Array[int]:
 	return spots
 
 
-## The lowest free berth of the starter curb and the built curb bays, or -1.
-func _free_berth() -> int:
+## The free berth, of the starter curb and the built curb bays, that a car at
+## `pos_mm` reaches first driving on, or -1. A berth behind the car is never
+## taken: it would reverse.
+func _free_berth(pos_mm: int) -> int:
+	var best := -1
 	for i in _berths.size():
 		var spot := definition.berth_spot(i)
-		if _berths[i] == 0 and (spot < 0 or curbs_built[spot]):
-			return i
-	return -1
+		if _berths[i] != 0 or (spot >= 0 and not curbs_built[spot]) or _berth_mm[i] < pos_mm:
+			continue
+		if best < 0 or _berth_mm[i] < _berth_mm[best]:
+			best = i
+	return best
 
 
 static func _filled(count: int, value: Variant) -> Array:
@@ -617,6 +644,9 @@ func _lane_points(lane: LandsideVehicle.Lane, spot: int) -> PackedVector3Array:
 func _rederive() -> void:
 	_berths.resize(definition.berth_count())
 	_berths.fill(0)
+	_berth_mm.clear()
+	for i in _berths.size():
+		_berth_mm.append(definition.berth_mm(i))
 	_slots.clear()
 	for spot in definition.lots:
 		var holders: Array[int] = []

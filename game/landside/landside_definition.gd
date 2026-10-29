@@ -50,6 +50,29 @@ func berth_get_out(index: int) -> Vector3:
 	return curb.get_out[at[1]] if at[0] < 0 else curb_spots[at[0]].get_out[at[1]]
 
 
+## How far along road_in berth `index` stands, in whole mm: the distance to the
+## road_in point nearest it, the last segment carried on past the road's end
+## (the starter curb's berths are past it).
+func berth_mm(index: int) -> int:
+	var at := berth_position(index)
+	var best := INF
+	var best_mm := 0
+	var walked := 0
+	for i in range(1, road_in.size()):
+		var segment := roundi(road_in[i - 1].distance_to(road_in[i]) * 1000.0)
+		var a := road_in[i - 1]
+		var along := Vector3(road_in[i] - a)
+		var t := maxf((at - a).dot(along) / maxf(along.length_squared(), 0.000001), 0.0)
+		if i < road_in.size() - 1:
+			t = minf(t, 1.0)
+		var gap := at.distance_to(a + along * t)
+		if gap < best:
+			best = gap
+			best_mm = walked + roundi(t * segment)
+		walked += segment
+	return best_mm
+
+
 ## The curb spot berth `index` belongs to, or -1 for the starter curb.
 func berth_spot(index: int) -> int:
 	return _berth_at(index)[0]
