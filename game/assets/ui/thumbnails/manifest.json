@@ -498,6 +498,68 @@
         "prize_podium.glb": "38e0d869747c64a14935aee1b8158fb1f952064bcc5b5577b9565b923f67b705",
         "vehicles/tp_suv_01a.glb": "6e1c4dd47752891765dd98a52a23f4d5f3c03e04e77d99b2893d615027329873"
       }
+    },
+    "pharmacy_room": {
+      "png": "pharmacy_room.png",
+      "class": "3x3",
+      "style": 3,
+      "sources": {
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
+        "pharmacy_counter.glb": "92c08510d1085a56cb85836474b284dddfa8f07f67bc97d8bcccb2bc87ec7351",
+        "pharmacy_shelf.glb": "02f7993cc5cd1b0ac45af72e26980f2199aabbea715a6fedafe452fac22b083d"
+      }
+    },
+    "duty_free_till": {
+      "png": "duty_free_till.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "duty_free_till.glb": "e184b0817507c74a2c1165ea6697a0d889398e695e5456ac5204c235e2b59e3e"
+      }
+    },
+    "duty_free_shelf": {
+      "png": "duty_free_shelf.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "duty_free_shelf.glb": "74904dc009d04b1f16e59d601454cec3c064621aecda1132425bccc718481b75"
+      }
+    },
+    "duty_free_room": {
+      "png": "duty_free_room.png",
+      "class": "3x4",
+      "style": 3,
+      "sources": {
+        "duty_free_shelf.glb": "74904dc009d04b1f16e59d601454cec3c064621aecda1132425bccc718481b75",
+        "duty_free_till.glb": "e184b0817507c74a2c1165ea6697a0d889398e695e5456ac5204c235e2b59e3e",
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
+    },
+    "fashion_till": {
+      "png": "fashion_till.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "fashion_till.glb": "d6a2f3490f7aaa9e51a94757738070aa63ce06947b1361cc0f57be520e04dee2"
+      }
+    },
+    "fashion_rail": {
+      "png": "fashion_rail.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "fashion_rail.glb": "9c937b6028b5ccbc1f126d7d5566f13c628c4d37943a059a72603b4722daf077"
+      }
+    },
+    "fashion_room": {
+      "png": "fashion_room.png",
+      "class": "3x4",
+      "style": 3,
+      "sources": {
+        "fashion_rail.glb": "9c937b6028b5ccbc1f126d7d5566f13c628c4d37943a059a72603b4722daf077",
+        "fashion_till.glb": "d6a2f3490f7aaa9e51a94757738070aa63ce06947b1361cc0f57be520e04dee2",
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
     }
   }
 }

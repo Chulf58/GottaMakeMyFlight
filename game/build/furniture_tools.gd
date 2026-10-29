@@ -64,8 +64,8 @@ const ITEMS := {
 	BuildMode.Tool.INFO_SCREEN: ["Info screen", "info_screen", ""],
 	BuildMode.Tool.EXCHANGE: ["Exchange", "currency_exchange", ""],
 	BuildMode.Tool.ATM: ["ATM", "atm", ""],
-	BuildMode.Tool.PHARMACY_COUNTER: ["Pharmacy", "pharmacy_counter", ""],
-	BuildMode.Tool.PHARMACY_SHELF: ["Pharma shelf", "pharmacy_shelf", ""],
+	BuildMode.Tool.PHARMACY_COUNTER: ["Counter", "pharmacy_counter", ""],
+	BuildMode.Tool.PHARMACY_SHELF: ["Shelf", "pharmacy_shelf", ""],
 	BuildMode.Tool.SHOWER: ["Shower", "shower_cubicle", ""],
 	BuildMode.Tool.NAP_POD: ["Nap pod", "nap_pod", ""],
 	BuildMode.Tool.SOFA: ["Sofa", "lounge_sofa", ""],
@@ -84,7 +84,8 @@ const RUNNING_COSTS := {
 
 ## The pages of the Furniture category (BuildMenu.CATEGORIES names them), each
 ## with at most four cards: a tray holds four cards and the Rotate and Next
-## column in BuildMenu.COLUMN_W, and no more.
+## column in BuildMenu.COLUMN_W, and no more. The pharmacy counter and shelf
+## are on the pharmacy's Stores page (BuildMenu.CATEGORIES), beside its room.
 const PAGES := [
 	[BuildMode.Tool.BUSH, BuildMode.Tool.PLANTER, BuildMode.Tool.PLANT_POT, BuildMode.Tool.TREE],
 	[
@@ -106,12 +107,7 @@ const PAGES := [
 		BuildMode.Tool.EXCHANGE,
 		BuildMode.Tool.ATM,
 	],
-	[
-		BuildMode.Tool.PHARMACY_COUNTER,
-		BuildMode.Tool.PHARMACY_SHELF,
-		BuildMode.Tool.SHOWER,
-		BuildMode.Tool.NAP_POD,
-	],
+	[BuildMode.Tool.SHOWER, BuildMode.Tool.NAP_POD],
 	[BuildMode.Tool.SOFA, BuildMode.Tool.ARMCHAIR, BuildMode.Tool.WORK_DESK],
 	[BuildMode.Tool.PLAY_BLOCKS, BuildMode.Tool.PLAY_SLIDE, BuildMode.Tool.PRIZE_PODIUM],
 ]
