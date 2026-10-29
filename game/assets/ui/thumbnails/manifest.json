@@ -560,6 +560,24 @@
         "fashion_till.glb": "d6a2f3490f7aaa9e51a94757738070aa63ce06947b1361cc0f57be520e04dee2",
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
       }
+    },
+    "exchange_room": {
+      "png": "exchange_room.png",
+      "class": "2x3",
+      "style": 3,
+      "sources": {
+        "currency_exchange.glb": "88434d9f443119b45a52d5dd670cbdc17968b39e46e07b0aae9b917e27b38151",
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
+    },
+    "atm_room": {
+      "png": "atm_room.png",
+      "class": "1x2",
+      "style": 3,
+      "sources": {
+        "atm.glb": "cfe08ff7264e3e17d62062f671f11b4947a80fa47cd4e58c1ba8b6cb3c0c97f7",
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
     }
   }
 }

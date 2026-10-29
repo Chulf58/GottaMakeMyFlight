@@ -396,6 +396,28 @@ ITEMS.update(
         "fashion_room": _store_room("3x4", 4, "fashion_till", "fashion_rail"),
     }
 )
+
+
+def _money_room(cls, width, depth, piece):
+    """A money room (F4-5b) on its minimum floor (width wide, depth deep), its one
+    piece facing front against the back row's server cell when there is one:
+    the exchange counter across the middle row of 2x3, the server's cell behind
+    it and the visit slot in front; the ATM in the back cell of 1x2, the visit
+    slot in front."""
+    back = (depth - 1) / 2.0
+    xs = [x - (width - 1) / 2.0 for x in range(width)]
+    tiles = [("floor_tile", (x, back - y, 0.0)) for y in range(depth) for x in xs]
+    row = back - 1.0 if depth == 3 else back
+    return (cls, tiles + [(piece, (0.0, row, 0.0))], [])
+
+
+# Money rooms (F4-5b): the exchange at 2x3 min, the ATM at 1x2 min (RoomTypes).
+ITEMS.update(
+    {
+        "exchange_room": _money_room("2x3", 2, 3, "currency_exchange"),
+        "atm_room": _money_room("1x2", 1, 2, "atm"),
+    }
+)
 ORDER = list(ITEMS)
 
 

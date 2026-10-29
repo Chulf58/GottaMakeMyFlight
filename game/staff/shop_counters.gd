@@ -3,7 +3,8 @@ extends RefCounted
 ## The stations of shop staff (ruling store-mechanics-draw-a-room-then-
 ## furnish-it-required-pieces, point 3): the counters of ready cafes and
 ## shops (a kiosk, and the counter or till of a pharmacy, duty free or fashion
-## store), where a server stands at each, and whether a shop is open.
+## store, or an exchange), where a server stands at each, and whether a shop
+## is open. An ATM room has no counter and needs no server.
 ## StaffSim treats every counter here as a station of StaffMember.Role.SHOP,
 ## as it treats a desk as one of Role.CHECKIN: it is open only while a server
 ## is on duty on its staff spot and not leaving (StaffSim.is_open()).
@@ -35,8 +36,13 @@ const COUNTER_ROOMS := {
 	&"pharmacy_counter": &"pharmacy",
 	&"duty_free_till": &"duty_free",
 	&"fashion_till": &"fashion",
+	&"currency_exchange": &"exchange",
 	&"info_desk": &"",
 }
+## The shop room types that need no server: open whenever the room is ready
+## (the ATM; decision currency-exchange-and-atm-visits-front-cell-slot-small-
+## fee-no-boredom).
+const SELF_SERVICE_ROOMS: Array[StringName] = [&"atm"]
 ## The counters that need no room.
 const ROOMLESS: Array[StringName] = [&"info_desk"]
 ## Where a server may stand, at facing 0 and in this order: behind the till,
@@ -129,8 +135,12 @@ static func in_service(sim: PassengerSim, counter: int) -> bool:
 
 
 ## Whether some counter in room `room_id` is open: a kiosk sells only then.
-## Never without a StaffSim.
+## Never without a StaffSim, except a self-service room (an ATM), which is
+## always open; whether the room is ready is ShopLayout's question.
 static func room_open(sim: PassengerSim, room_id: int) -> bool:
+	var room := sim.grid.get_room(room_id)
+	if not room.is_empty() and SELF_SERVICE_ROOMS.has(StringName(room["type"])):
+		return true
 	if sim.staff == null:
 		return false
 	for counter in sim.staff.stations_of(StaffMember.Role.SHOP):

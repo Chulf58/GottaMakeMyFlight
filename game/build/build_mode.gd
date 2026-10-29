@@ -106,6 +106,8 @@ enum Tool {
 	FASHION_ROOM,
 	FASHION_TILL,
 	FASHION_RAIL,
+	EXCHANGE_ROOM,
+	ATM_ROOM,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -174,6 +176,8 @@ const TOOL_ROOMS := {
 	Tool.PHARMACY_ROOM: &"pharmacy",
 	Tool.DUTY_FREE_ROOM: &"duty_free",
 	Tool.FASHION_ROOM: &"fashion",
+	Tool.EXCHANGE_ROOM: &"exchange",
+	Tool.ATM_ROOM: &"atm",
 }
 ## Tools under which the room under the pointer is followed for its panel.
 const ROOM_FOCUS_TOOLS := [
@@ -199,6 +203,10 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.FASHION_ROOM,
 	Tool.FASHION_TILL,
 	Tool.FASHION_RAIL,
+	Tool.EXCHANGE_ROOM,
+	Tool.EXCHANGE,
+	Tool.ATM_ROOM,
+	Tool.ATM,
 ]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
@@ -233,6 +241,8 @@ const AREA_TOOLS := [
 	Tool.PHARMACY_ROOM,
 	Tool.DUTY_FREE_ROOM,
 	Tool.FASHION_ROOM,
+	Tool.EXCHANGE_ROOM,
+	Tool.ATM_ROOM,
 	Tool.BELT,
 ]
 ## Zone id painted floors get. One terminal zone until zones become a tool.

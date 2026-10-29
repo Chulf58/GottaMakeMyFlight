@@ -1,7 +1,8 @@
 class_name TestBuildModeStoreRoomDrag
 extends GdUnitTestSuite
-## The store room tools (F4-5) drag out a rectangle through the real mouse
-## path, as the kiosk room tool does: a press starts BuildMode's area drag
+## The store room tools (F4-5, and the exchange and ATM rooms of F4-5b) drag
+## out a rectangle through the real mouse path, as the kiosk room tool does: a
+## press starts BuildMode's area drag
 ## (AREA_TOOLS), a motion sizes it and the release marks the room, one undo
 ## step. A room tool missing from AREA_TOOLS would take the press as a click
 ## (apply_at) and mark nothing. The kiosk room is the control.
@@ -18,6 +19,8 @@ const ROOM_TOOLS := {
 	BuildMode.Tool.PHARMACY_ROOM: "pharmacy",
 	BuildMode.Tool.DUTY_FREE_ROOM: "duty_free",
 	BuildMode.Tool.FASHION_ROOM: "fashion",
+	BuildMode.Tool.EXCHANGE_ROOM: "exchange",
+	BuildMode.Tool.ATM_ROOM: "atm",
 }
 
 var _port: SubViewport
