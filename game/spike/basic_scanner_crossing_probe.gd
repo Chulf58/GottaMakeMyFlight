@@ -88,9 +88,13 @@ var _stats := {}
 var _kinds_crossed := {}
 ## Passenger id -> the bones of its first body-in-own-bag contact.
 var _self_bones := {}
-## Passenger id -> each bag's home on its last check (a pickup from the floor
-## is a move from FLOOR to HAND).
-var _last_homes := {}
+## Passenger id -> each bag's [home, carry] on its last check.
+var _last_bag_state := {}
+## Passenger id -> {bag index -> the kind of the move it is in: "roller_lift"
+## (PULL to HAND), "roller_lower" (HAND to PULL), "repack_pickup" (FLOOR to
+## HAND after the repack resolved the incident) or "other"}, recorded when the
+## move begins and kept until its transfer has finished.
+var _bag_moves := {}
 var _plated := false
 var _plates_saved := 0
 ## True while the crossing plates are being taken.
@@ -359,8 +363,7 @@ func _check(id: int) -> void:
 		var props_now := _views.carry_on_props()
 		var front_now := props_now.front_weight_of(id)
 		var outside := absf(local.z) > 0.95
-		var was_homes: Array = _last_homes.get(id, [])
-		_last_homes[id] = homes.duplicate()
+		var moves := _track_moves(id, p, homes, props, props_now)
 		for i in bags.size():
 			if homes[i] == SecurityLooks.Home.TRAY and p.station != 0:
 				_invalid("passenger %d has a tray bag at a basic scanner" % id)
@@ -371,17 +374,13 @@ func _check(id: int) -> void:
 					var hits := CarryContact.inside_meshes(own, bags[i])
 					var why := ""
 					if hits > 0:
-						var was_floor: bool = (
-							i < was_homes.size() and was_homes[i] == SecurityLooks.Home.FLOOR
-						)
 						why = _ruled_self_clip(
 							p,
 							props["kinds"][i],
 							outside,
 							signf(local.z) == booth[4],
 							front_now,
-							props_now.transfer_progress(id, i) < 1.0,
-							was_floor
+							moves.get(i, "")
 						)
 					if why == "":
 						self_hits += hits
@@ -389,8 +388,8 @@ func _check(id: int) -> void:
 						reported[why] += hits
 						print(
 							(
-								"SELF_REPORTED passenger=%d bag=%d predicate=%s points=%d along_m=%.2f front=%.2f"
-								% [id, i, why, hits, local.z, front_now]
+								"SELF_REPORTED passenger=%d bag=%d predicate=%s move=%s points=%d along=%.2f front=%.2f"
+								% [id, i, why, moves.get(i, "none"), hits, local.z, front_now]
 							)
 						)
 					if hits > 0 and not _self_bones.has(id):
@@ -491,30 +490,76 @@ func _check(id: int) -> void:
 ## - case_turn (accepted by the user 2026-10-29, "Accept, merge now"): a hard
 ##   case turning from the side to the front (the front carry is the target and
 ##   its weight is part way), on the approach end of the booth (`approach`);
-## - roller_move (ruled pre-existing 2026-10-29): a roller while its lift into
-##   the hand or its lowering to the pull is under way (`moving`);
-## - repack_pickup (ruled pre-existing 2026-10-29): a bag going from the floor
-##   (`was_floor` on the last check) to the hand (`moving`) of a passenger
-##   whose incident has just been resolved by the repack.
+## - repack_pickup (ruled pre-existing 2026-10-29): a bag, roller included,
+##   in its move from the repack floor spot to the hand (`move`, see
+##   _track_moves());
+## - roller_move (ruled pre-existing 2026-10-29): a roller in its lift into the
+##   hand or its lowering to the pull (`move` roller_lift or roller_lower).
+## Any other move ("other", or none recorded) is not exempt.
 func _ruled_self_clip(
 	p: Passenger,
 	kind: SecurityLooks.Kind,
 	outside: bool,
 	approach: bool,
 	front: float,
-	moving: bool,
-	was_floor: bool
+	move: String
 ) -> String:
 	if not outside:
 		return ""
 	var to_front := SecurityLooks.carry_front(_sim, p)
 	if kind == SecurityLooks.Kind.CASE and approach and to_front and front > 0.0 and front < 1.0:
 		return "case_turn"
-	if kind == SecurityLooks.Kind.ROLLER and moving:
-		return "roller_move"
-	if kind != SecurityLooks.Kind.ROLLER and p.incident_resolved and moving and was_floor:
+	if move == "repack_pickup":
 		return "repack_pickup"
+	if kind == SecurityLooks.Kind.ROLLER and move in ["roller_lift", "roller_lower"]:
+		return "roller_move"
 	return ""
+
+
+## Records, for each bag of passenger `id`, the kind of move it begins on this
+## check (its [home, carry] differs from the last check) and keeps it until the
+## transfer has finished (CarryOnProps.transfer_progress reaches 1). A move
+## that began while the passenger was not checked has no kind. Returns the
+## bag index -> kind of the moves under way.
+func _track_moves(
+	id: int, p: Passenger, homes: Array, props: Dictionary, carry_props: CarryOnProps
+) -> Dictionary:
+	var was: Array = _last_bag_state.get(id, [])
+	var moves: Dictionary = _bag_moves.get(id, {})
+	var now: Array = []
+	for i in homes.size():
+		var carries: Array = props["carries"]
+		var state := [homes[i], carries[i] if i < carries.size() else -1]
+		now.append(state)
+		if i < was.size() and was[i] != state:
+			var kind := "other"
+			var roller: bool = (
+				i < props["kinds"].size() and props["kinds"][i] == SecurityLooks.Kind.ROLLER
+			)
+			if (
+				was[i][0] == SecurityLooks.Home.FLOOR
+				and state[0] == SecurityLooks.Home.HAND
+				and p.incident_resolved
+			):
+				kind = "repack_pickup"
+			elif (
+				roller
+				and was[i][1] == SecurityLooks.Carry.PULL
+				and state[1] == SecurityLooks.Carry.HAND
+			):
+				kind = "roller_lift"
+			elif (
+				roller
+				and was[i][1] == SecurityLooks.Carry.HAND
+				and state[1] == SecurityLooks.Carry.PULL
+			):
+				kind = "roller_lower"
+			moves[i] = kind
+		if moves.has(i) and carry_props.transfer_progress(id, i) >= 1.0:
+			moves.erase(i)
+	_last_bag_state[id] = now
+	_bag_moves[id] = moves
+	return moves
 
 
 ## Points of a passenger in the passage that lie past the passage edge with a
