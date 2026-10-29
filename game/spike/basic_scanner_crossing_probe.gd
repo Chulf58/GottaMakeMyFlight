@@ -35,20 +35,39 @@ extends SceneTree
 ## set into a side panel must be inside its meshes, and a point just past the
 ## panel must cross it. Two plates of one crossing (mid-booth, leaving) prove
 ## the passenger and its bags are in frame and unblocked before they are
-## saved. Any failure prints PROBE_INVALID and exits 1.
+## saved. Close plates of a roller's lowering and a hard case's pickup after a
+## repack, each at three moments (in its first half, its second half, settled), are taken
+## with the sim clock paused at that moment, from a camera of the probe's own
+## round the body, each kept only when the body and the bag are in frame, big
+## enough and hit by sight lines with no blocker (_plate_close()); a missing one
+## fails. Any failure prints PROBE_INVALID and exits 1.
+##
+## With --lane the east basic scanner is swapped for a security lane (as in the
+## security visuals probe) and the west one removed, so every passenger walks
+## through the lane's arch, narrowed to fit inside its cell (decision security-
+## lane-arch-is-narrowed-to-fit-inside-its-cell-beside-a), and RUNNER_ROLES are
+## sent too, kept late so they run. The arch is checked as a booth is (its mat
+## left out); a bag in a tray on the X-ray belt beside it is checked for
+## contact but not traced in to the passage, which it is not in. Instead of the
+## booth's kind, move and crossing-plate requirements, the run must see every
+## sent passenger cross mid-arch, at least two of them running, a returner's
+## second pass, and a close plate of a passenger with its arms tucked mid-arch
+## (each crossing prints its tuck weight there).
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game \
-##     -s res://spike/basic_scanner_crossing_probe.gd [-- --seed=N]
-## Plates go to tools/blender/out/security-booth/.
+##     -s res://spike/basic_scanner_crossing_probe.gd [-- --seed=N] [--lane]
+## Crossing plates go to tools/blender/out/security-booth/, close plates to
+## tools/blender/out/carry-selfclip/.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/security-booth"
+const CLOSE_OUT_REL := "res://../tools/blender/out/carry-selfclip"
 const MAIN_SCENE := "res://main/main.tscn"
 const RAY := Vector3(0.0013, 1.0, 0.0007)
 const MARGIN_PX := 8.0
@@ -73,6 +92,24 @@ const ROLES := [
 	[SecurityLooks.Kind.BACKPACK, 1, false, false],
 ]
 const KIND_NAMES := ["case", "backpack", "shoulder", "roller"]
+## Lane mode's extra roles, the fifth entry true: kept late, so they run.
+const RUNNER_ROLES := [
+	[-1, 0, false, false, true],
+	[-1, 1, false, false, true],
+	[-1, 1, false, true, true],
+]
+## The moves plated close, and the progress window of each of their moments.
+const MOVE_PLATES: Array[String] = ["roller_lower", "repack_pickup_case"]
+const MOMENTS := [[0.0, 0.5], [0.5, 0.99], [1.0, 1.0]]
+## A close plate's camera: this far out and this high, aimed at AIM_M over the
+## floor at the body; the body must be CLOSE_MIN_PX tall in it.
+const CLOSE_M := 3.0
+const CLOSE_HEIGHT_M := 1.7
+const AIM_M := 1.0
+const CLOSE_MIN_PX := 300.0
+## Lane mode: the lane on the divider as the security visuals probe builds it.
+const ARCH_AT := Vector2i(20, ReferenceTerminal.DIVIDER_Y)
+const OLD_SCANNERS: Array[Vector2i] = [Vector2i(17, 8), Vector2i(19, 8)]
 
 var _out_dir := ""
 var _failed := false
@@ -112,12 +149,28 @@ var _plates_saved := 0
 var _plate_task := false
 ## Passenger id -> its role (ROLES entry).
 var _role_of := {}
+var _lane_mode := false
+var _close_dir := ""
+## Move kind -> true once its three close plates are saved.
+var _move_plated := {}
+var _arch_plated := false
+## Lane mode: runner ids (kept late), and arch crossings counted.
+var _runners := {}
+## Passenger id -> true once it was measured running between the posts.
+var _arch_runners := {}
+var _arch_second := 0
+## Lane mode: passenger id -> {security phase: true} seen on any frame (a
+## lane's repack berth is away from the arch, outside the checked box).
+var _phases_seen := {}
 
 
 func _initialize() -> void:
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
-	print("PROBE out_dir=", _out_dir)
+	_close_dir = ProjectSettings.globalize_path(CLOSE_OUT_REL).simplify_path()
+	DirAccess.make_dir_recursive_absolute(_close_dir)
+	_lane_mode = OS.get_cmdline_user_args().has("--lane")
+	print("PROBE out_dir=", _out_dir, " close_dir=", _close_dir, " lane_mode=", _lane_mode)
 	_run.call_deferred()
 
 
@@ -164,9 +217,15 @@ func _boot() -> void:
 	hud.press_starter_terminal()
 	var build := _main.get_node("BuildMode") as BuildMode
 	build.set_tool(BuildMode.Tool.NONE)
+	if _lane_mode:
+		_build_lane(build)
+		# The removed scanners' nodes go at the end of the frame.
+		await _frames(2)
 	for child in (build.get_node("BuildView") as BuildView).get_children():
+		if child.is_queued_for_deletion():
+			continue
 		var record: Dictionary = child.get_meta("record", {})
-		if StringName(record.get("def", "")) == &"security_scanner":
+		if StringName(record.get("def", "")) in [&"security_scanner", SecurityLanes.ARCH]:
 			_booths.append(_booth(child))
 	if _booths.is_empty():
 		_invalid("no basic scanner booth is drawn")
@@ -241,6 +300,36 @@ func _booth(node: Node3D) -> Array:
 	return [node, to_booth, parts, side_in, entry_sign]
 
 
+## Lane mode: both basic scanners go and a lane (arch on the divider, LEFT
+## mirror, facing 0) takes the east one's place, the divider walls under it
+## removed, as the security visuals probe builds it.
+func _build_lane(build: BuildMode) -> void:
+	var grid := build.grid
+	for cell in OLD_SCANNERS:
+		var old := grid.object_at(cell)
+		if old != 0 and not grid.apply(BuildEdit.remove_object(old)).ok:
+			_invalid("could not remove the scanner at %s" % cell)
+	var lane := SecurityLanes.geometry(ARCH_AT, 0, SecurityLanes.LEFT)
+	for x in range(ARCH_AT.x - 2, ARCH_AT.x + 2):
+		var cell := Vector2i(x, ARCH_AT.y)
+		if grid.has_wall(cell, BuildGrid.Side.NORTH):
+			if not grid.apply(BuildEdit.remove_wall(cell, BuildGrid.Side.NORTH)).ok:
+				_invalid("could not open the divider at %s" % cell)
+	if not grid.apply(BuildEdit.place_object(SecurityLanes.ARCH, ARCH_AT, 0)).ok:
+		_invalid("could not place the arch")
+	for part in [SecurityLanes.TRAY_TABLE, SecurityLanes.XRAY_BELT, SecurityLanes.PICKUP_TABLE]:
+		if not grid.apply(BuildEdit.place_object(part, lane[part], 0)).ok:
+			_invalid("could not place %s" % part)
+	(build.get_node("BuildView") as BuildView).refresh(grid)
+	var arch := grid.object_at(ARCH_AT)
+	var lanes := _sim.layout.security_lanes
+	print(
+		"LANE arch=%d status=%s scanners=%s" % [arch, lanes.status_text(arch), _sim.layout.scanners]
+	)
+	if not lanes.is_complete(arch) or _sim.layout.scanners.size() != 1:
+		_invalid("the lane is not whole or not the only station")
+
+
 ## Triangle soup `faces` split into connected parts: triangles sharing a
 ## corner (to the millimetre) are one part.
 func _components(faces: PackedVector3Array) -> Array:
@@ -305,6 +394,8 @@ func _control() -> void:
 
 func _cross() -> void:
 	_roles = ROLES.duplicate(true)
+	if _lane_mode:
+		_roles.append_array(RUNNER_ROLES.duplicate(true))
 	var spawns := 0
 	var next_send := _clock.tick
 	var stop := Time.get_ticks_msec() + RUN_LIMIT_MS
@@ -314,9 +405,20 @@ func _cross() -> void:
 			_send()
 			spawns += 1
 			next_send = _clock.tick + SEND_GAP_TICKS
+		# Runners are kept late (the sim's beat may clear it) until cleared.
+		for id: int in _runners:
+			var runner := _sim.get_passenger(id)
+			if runner != null and runner.stage <= Passenger.Stage.SECURITY:
+				runner.late = true
 		for id in _sim.passenger_ids():
 			_check(id)
-		if _roles.is_empty() and _sent.all(_done) and _plated and not _plate_task:
+		for id in _sent:
+			var sent := _sim.get_passenger(id)
+			if _lane_mode and sent != null and sent.stage == Passenger.Stage.SECURITY:
+				var seen: Dictionary = _phases_seen.get_or_add(id, {})
+				seen[sent.security_phase] = true
+		var plated := _arch_plated if _lane_mode else _plated
+		if _roles.is_empty() and _sent.all(_done) and plated and not _plate_task:
 			break
 	if not _roles.is_empty():
 		_invalid("roles never filled after %d spawns: %s" % [spawns, _roles])
@@ -366,6 +468,9 @@ func _send() -> void:
 	p.clear_path()
 	_sent.append(id)
 	_role_of[id] = traits
+	if traits.size() > 4 and traits[4]:
+		_runners[id] = true
+		p.late = true
 	print("SEND passenger=%d kinds=%s role=%s" % [id, [kind, SecurityLooks.bag_kind(p, 1)], traits])
 
 
@@ -382,6 +487,7 @@ func _check(id: int) -> void:
 		var owned := CarryContact.body_points_owned(body, [])
 		var points: PackedVector3Array = owned[0]
 		var bag_points := PackedVector3Array()
+		var carried_points := PackedVector3Array()
 		var props: Dictionary = _views.carry_on_props().props_of(id)
 		var bags: Array[Node3D] = props["bags"]
 		var homes := SecurityLooks.bag_homes(_sim, p)
@@ -393,11 +499,20 @@ func _check(id: int) -> void:
 		var front_now := props_now.front_weight_of(id)
 		var outside := absf(local.z) > 0.95
 		var moves := _track_moves(id, p, homes, props, props_now)
+		for i: int in moves:
+			if moves[i] in MOVE_PLATES and not _move_plated.has(moves[i]) and not _plate_task:
+				_plate_task = true
+				_plate_move.call_deferred(id, i, moves[i])
 		for i in bags.size():
-			if homes[i] == SecurityLooks.Home.TRAY and p.station != 0:
+			var at_lane := not SecurityLooks.lane_of(_sim, p).is_empty()
+			if homes[i] == SecurityLooks.Home.TRAY and p.station != 0 and not at_lane:
 				_invalid("passenger %d has a tray bag at a basic scanner" % id)
 			if bags[i].is_visible_in_tree():
-				bag_points.append_array(CarryChecks.surface(bags[i]))
+				var surface := CarryChecks.surface(bags[i])
+				bag_points.append_array(surface)
+				# A bag in a tray rides the belt beside an arch, not the passage.
+				if homes[i] != SecurityLooks.Home.TRAY or not _lane_mode:
+					carried_points.append_array(surface)
 				if homes[i] == SecurityLooks.Home.HAND:
 					hand_kinds.append(props["kinds"][i])
 					var hits := CarryContact.inside_meshes(own, bags[i])
@@ -477,7 +592,7 @@ func _check(id: int) -> void:
 		s["phases"][p.security_phase] = true
 		s["body_contacts"] += _contacts(points, booth, s["parts"])
 		if absf(local.x) < 0.3 and absf(local.z) < 1.2:
-			s["through"] += _through(points, booth) + _through(bag_points, booth)
+			s["through"] += _through(points, booth) + _through(carried_points, booth)
 		var bag_hits := _contacts(bag_points, booth, s["parts"])
 		s["bag_contacts"] += bag_hits
 		if bag_hits > 0:
@@ -516,14 +631,59 @@ func _check(id: int) -> void:
 					s["mid_bone"] = (owned[1] as PackedStringArray)[k]
 			for k in hand_kinds:
 				_kinds_crossed[KIND_NAMES[k]] = true
-		if (
+		var arch := StringName((booth[0] as Node3D).get_meta("record", {}).get("def", ""))
+		if arch == SecurityLanes.ARCH:
+			_arch_crossing(id, p, s, local, props_now)
+		elif (
 			not _plated
+			and not _plate_task
 			and inside
 			and absf(local.z) < 0.2
 			and props["kinds"].has(SecurityLooks.Kind.CASE)
 		):
 			_plated = true
+			_plate_task = true
 			_plate_crossing.call_deferred(id, booth)
+
+
+## Lane mode, one frame of passenger `id` at the arch (`local`, its place in
+## the arch's frame): within the posts' depth it records its lowest tuck
+## weight and whether it ran (on which pass, measured from its walked distance
+## per tick); mid-arch, fully tucked and
+## with no plate task under way, it is plated close once.
+func _arch_crossing(
+	id: int, p: Passenger, s: Dictionary, local: Vector3, props_now: CarryOnProps
+) -> void:
+	if absf(local.x) > 0.3 or absf(local.z) > 0.3:
+		return
+	var tuck := props_now.tuck_of(id)
+	var key := "arch_second" if p.incident_resolved else "arch_first"
+	if not s.has(key):
+		s[key] = {
+			"tuck_min": INF,
+			"frames": 0,
+			"run_frames": 0,
+			"odo": p.odometer_mm,
+			"tick": _clock.tick,
+		}
+		if p.incident_resolved:
+			_arch_second += 1
+	var run: Dictionary = s[key]
+	run["tuck_min"] = minf(run["tuck_min"], tuck)
+	run["frames"] += 1
+	# Running is measured, not read off the flag: the walked distance per
+	# tick since the last tick seen here, near PassengerSim.RUN_MM.
+	var ticks: int = _clock.tick - int(run["tick"])
+	if ticks > 0:
+		var per_tick := float(p.odometer_mm - int(run["odo"])) / ticks
+		if per_tick > (PassengerSim.WALK_MM + PassengerSim.RUN_MM) * 0.5:
+			run["run_frames"] += 1
+			_arch_runners[id] = true
+		run["odo"] = p.odometer_mm
+		run["tick"] = _clock.tick
+	if not _arch_plated and not _plate_task and absf(local.z) < 0.15 and tuck >= 1.0:
+		_plate_task = true
+		_plate_arch.call_deferred(id)
 
 
 ## Prints one body-in-own-bag frame of bag `i` of passenger `id` (points
@@ -794,6 +954,189 @@ func _plate_best(id: int, booth: Array, name: String) -> bool:
 	return false
 
 
+## Close plates of bag `i` of passenger `id` in a `kind` move: at each of
+## MOMENTS, once its progress is in the window, the sim clock is paused, the
+## progress read again and _plate_close() run; the clock runs on in between.
+## All three saved marks the kind plated; a missed window or a plate with no
+## good heading leaves it for the next such move.
+func _plate_move(id: int, i: int, kind: String) -> void:
+	var props := _views.carry_on_props()
+	var saved := 0
+	# The move's [home, carry] when it began: a change before the last plate
+	# is another move, not this one.
+	var began: Array = (_last_bag_state.get(id, []) as Array).duplicate(true)
+	print(
+		(
+			"MOVE_PLATE %s passenger=%d bag=%d starts at k=%.2f tick=%d"
+			% [kind, id, i, props.transfer_progress(id, i), _clock.tick]
+		)
+	)
+	for m in MOMENTS.size():
+		var lo: float = MOMENTS[m][0]
+		var hi: float = MOMENTS[m][1]
+		var stop := Time.get_ticks_msec() + 10000
+		var k := props.transfer_progress(id, i)
+		while k < lo and Time.get_ticks_msec() < stop and _views.node_for(id) != null:
+			await process_frame
+			k = props.transfer_progress(id, i)
+		_clock.set_paused(true)
+		await _frames(1)
+		k = props.transfer_progress(id, i)
+		var bags: Array = props.props_of(id)["bags"]
+		var now_state: Array = _last_bag_state.get(id, [])
+		var same: bool = i < began.size() and i < now_state.size() and now_state[i] == began[i]
+		same = same and (k >= 1.0 or (_bag_moves.get(id, {}) as Dictionary).get(i, "") == kind)
+		if k < lo or k > hi or not same or i >= bags.size():
+			print("MOVE_PLATE %s passenger=%d moment=%d missed k=%.2f" % [kind, id, m, k])
+			_clock.set_paused(false)
+			break
+		var name := "%s_%d_k%03d" % [kind, m, roundi(k * 100.0)]
+		var ok := await _plate_close(id, bags[i], name)
+		_clock.set_paused(false)
+		if not ok:
+			break
+		saved += 1
+	if saved == MOMENTS.size():
+		_move_plated[kind] = true
+	_plate_task = false
+
+
+## Lane mode: a close plate of passenger `id` mid-arch with its arms tucked,
+## the sim clock paused for it.
+func _plate_arch(id: int) -> void:
+	_clock.set_paused(true)
+	await _frames(1)
+	var tuck := _views.carry_on_props().tuck_of(id)
+	var late := _sim.get_passenger(id).late
+	print("ARCH_PLATE passenger=%d tuck=%.2f late=%s" % [id, tuck, late])
+	if tuck >= 1.0 and await _plate_close(id, null, "arch_tucked_mid"):
+		_arch_plated = true
+	_clock.set_paused(false)
+	_plate_task = false
+
+
+## A close plate of passenger `id` (and `bag`, when given) saved to the close
+## plates folder as `name`: a camera of the probe's own CLOSE_M out and
+## CLOSE_HEIGHT_M high, aimed at the body AIM_M over the floor, tries eight
+## headings round the body (facing it first) with the HUD hidden. A heading is
+## kept only when the body's and the bag's drawn bounds project inside the
+## viewport by MARGIN_PX, the body is CLOSE_MIN_PX tall or more, the body is
+## shown (PlateSight.person_shown(): sight lines land on it, none blocked),
+## and at least two of five sight lines to the bag land on it with none
+## blocked by anything but the passenger itself. Each heading prints its
+## numbers. The camera, the HUD and the game camera are put back.
+func _plate_close(id: int, bag: Node3D, name: String) -> bool:
+	var body := _views.node_for(id)
+	if body == null:
+		return false
+	var layers: Array[CanvasLayer] = []
+	for node in _main.find_children("*", "CanvasLayer", true, false):
+		var layer := node as CanvasLayer
+		if layer.visible:
+			layer.visible = false
+			layers.append(layer)
+	var cam := Camera3D.new()
+	cam.fov = 50.0
+	root.add_child(cam)
+	cam.make_current()
+	var owners: Array[Node] = [
+		_main.get_node("Airside/Terminal"), _main.get_node("BuildMode"), _views
+	]
+	var frame := Rect2(
+		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
+	)
+	var saved := false
+	for h in 8:
+		var look := body.global_position + Vector3(0.0, AIM_M, 0.0)
+		var yaw := body.global_rotation.y + h * PI / 4.0
+		var out := Basis(Vector3.UP, yaw) * Vector3(0.0, 0.0, CLOSE_M)
+		cam.global_position = body.global_position + out + Vector3(0.0, CLOSE_HEIGHT_M, 0.0)
+		cam.look_at(look)
+		await _frames(2)
+		var img := root.get_texture().get_image()
+		var subjects := {body: "subject"}
+		if bag != null:
+			subjects[bag] = "bag"
+		var holder := PlateSight.colliders(root, owners, subjects)
+		await physics_frame
+		await physics_frame
+		var bounds: Dictionary = holder.get_meta("bounds")
+		var tag := "%s heading %d" % [name, h]
+		var ok := (holder.get_meta("unbaked") as Array).is_empty()
+		ok = ok and bounds.has("subject") and (bag == null or bounds.has("bag"))
+		if ok:
+			ok = _box_in_frame(cam, bounds["subject"], frame, tag + " body")
+			if bag != null:
+				ok = _box_in_frame(cam, bounds["bag"], frame, tag + " bag") and ok
+			var shown := PlateSight.person_shown(
+				cam, bounds["subject"], "subject", frame, img, img, CLOSE_MIN_PX
+			)
+			print("INFRAME %s person=%s" % [tag, shown])
+			ok = ok and shown["ok"]
+			if bag != null:
+				ok = _bag_seen(cam, bounds["bag"], tag) and ok
+		else:
+			print("INFRAME %s no bounds or unbaked: %s" % [tag, holder.get_meta("unbaked")])
+		holder.free()
+		if ok:
+			var path := _close_dir.path_join(name + ".png")
+			if img.save_png(path) != OK:
+				_invalid("could not save %s" % path)
+			else:
+				print("PLATE saved %s size=%s" % [path, img.get_size()])
+				saved = true
+			break
+	_cam.make_current()
+	cam.queue_free()
+	for layer in layers:
+		layer.visible = true
+	await _frames(1)
+	return saved
+
+
+## Whether the corners of `box` all project inside `frame`, in front of `cam`.
+func _box_in_frame(cam: Camera3D, box: AABB, frame: Rect2, tag: String) -> bool:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	var ok := true
+	for c in 8:
+		var corner := box.get_endpoint(c)
+		ok = ok and not cam.is_position_behind(corner)
+		var px := cam.unproject_position(corner)
+		lo = lo.min(px)
+		hi = hi.max(px)
+	ok = ok and frame.has_point(lo) and frame.has_point(hi)
+	print("INFRAME %s screen=(%.0f,%.0f)-(%.0f,%.0f) ok=%s" % [tag, lo.x, lo.y, hi.x, hi.y, ok])
+	return ok
+
+
+## Whether at least two of five sight lines from `cam` to `box` (its centre
+## and four points 30% out across and up) first hit the bag, and none first
+## hits anything but the bag or its own passenger before reaching it.
+func _bag_seen(cam: Camera3D, box: AABB, tag: String) -> bool:
+	var space := cam.get_world_3d().direct_space_state
+	var right := cam.global_transform.basis.x
+	var up := cam.global_transform.basis.y
+	var centre := box.get_center()
+	var reach := box.size.length() * 0.3
+	var on := 0
+	var blocked: Array[String] = []
+	for off in [Vector3.ZERO, right * reach, -right * reach, up * reach, -up * reach]:
+		var at: Vector3 = centre + off * 0.5
+		var to := at + (at - cam.global_position).normalized() * 3.0
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(cam.global_position, to))
+		if hit.is_empty():
+			continue
+		var what := str((hit.collider as Node).get_meta("subject", ""))
+		var before := cam.global_position.distance_to(at) - 0.05
+		if what == "bag":
+			on += 1
+		elif what != "subject" and cam.global_position.distance_to(hit.position) < before:
+			blocked.append(str((hit.collider as Node).get_meta("mesh", "")))
+	print("INFRAME %s bag_lines_on=%d/5 blocked=%s" % [tag, on, blocked])
+	return on >= 2 and blocked.is_empty()
+
+
 ## Whether every visible bag of `id` projects inside the frame, in front of
 ## the camera.
 func _bags_in_frame(id: int, tag: String) -> bool:
@@ -929,16 +1272,13 @@ func _report() -> void:
 			]
 		)
 	)
-	for kind in KIND_NAMES:
-		if not _kinds_crossed.has(kind):
-			_invalid("no %s carried through a booth" % kind)
+	if _lane_mode:
+		_report_lane()
+	else:
+		_report_booth()
 	if totals["frames"] < 100:
 		_invalid("only %d passenger frames near a booth" % totals["frames"])
 	print("BODY_IN_OWN_BAG failing=%d THROUGH_PARTS=%d" % [totals["self"], totals["through"]])
-	print("MOVES_CHECKED %s" % _moves_done)
-	for move in ["roller_lift", "roller_lower", "repack_pickup_case", "repack_pickup_shoulder"]:
-		if int(_moves_done.get(move, 0)) == 0:
-			_invalid("no whole %s move was checked" % move)
 	print(
 		(
 			"CASE_TURN_IN_OWN_BAG points=%d frames=%d distance_from_booth_centre_m=%s (reported, accepted)"
@@ -956,12 +1296,64 @@ func _report() -> void:
 				% [totals["body"], totals["bag"]]
 			)
 		)
-	if _plates_saved < 2:
-		_invalid("only %d of 2 crossing plates saved" % _plates_saved)
 	for id in _sent:
 		var s: Dictionary = _stats.get(id, {})
 		var traits: Array = _role_of[id]
 		if s.get("mid", 0) == 0:
 			_invalid("sent passenger %d never crossed mid-booth" % id)
-		elif (traits[2] or traits[3]) and not s["phases"].has(SecurityRuntime.Phase.REPACK):
+		elif (traits[2] or traits[3]) and not _phases_of(id, s).has(SecurityRuntime.Phase.REPACK):
 			_invalid("passenger %d (liquids or alarm) never repacked" % id)
+
+
+## Default mode's coverage: every kind carried through a booth, each repaired
+## move checked whole, both crossing plates and every move's close plates.
+func _report_booth() -> void:
+	for kind in KIND_NAMES:
+		if not _kinds_crossed.has(kind):
+			_invalid("no %s carried through a booth" % kind)
+	print("MOVES_CHECKED %s" % _moves_done)
+	for move in ["roller_lift", "roller_lower", "repack_pickup_case", "repack_pickup_shoulder"]:
+		if int(_moves_done.get(move, 0)) == 0:
+			_invalid("no whole %s move was checked" % move)
+	if _plates_saved < 2:
+		_invalid("only %d of 2 crossing plates saved" % _plates_saved)
+	print("MOVE_PLATES %s" % _move_plated)
+	for kind in MOVE_PLATES:
+		if not _move_plated.has(kind):
+			_invalid("no close plates of a whole %s move" % kind)
+
+
+## Lane mode's coverage: each crossing's lowest tuck weight between the arch's
+## posts, at least two crossings run, a returner's second pass, the close
+## plate of a tucked passenger mid-arch.
+func _report_lane() -> void:
+	for id in _stats:
+		for key in ["arch_first", "arch_second"]:
+			if _stats[id].has(key):
+				var run: Dictionary = _stats[id][key]
+				print(
+					(
+						"ARCH_CROSSING passenger=%d pass=%s frames=%d run_frames=%d tuck_min=%.2f"
+						% [id, key, run["frames"], run["run_frames"], run["tuck_min"]]
+					)
+				)
+	print(
+		(
+			"ARCH_TOTAL runners=%s second_passes=%d plated=%s"
+			% [_arch_runners.keys(), _arch_second, _arch_plated]
+		)
+	)
+	if _arch_runners.size() < 2:
+		_invalid("only %d passengers ran through the arch" % _arch_runners.size())
+	if _arch_second == 0:
+		_invalid("no returner crossed the arch a second time")
+	if not _arch_plated:
+		_invalid("no close plate of a tucked passenger mid-arch")
+
+
+## The security phases passenger `id` was seen in: on checked frames near a
+## booth (`s`), and in lane mode on any frame.
+func _phases_of(id: int, s: Dictionary) -> Dictionary:
+	var out: Dictionary = (s["phases"] as Dictionary).duplicate()
+	out.merge(_phases_seen.get(id, {}))
+	return out

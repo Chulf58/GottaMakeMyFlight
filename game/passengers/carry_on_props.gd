@@ -448,7 +448,9 @@ func sync() -> void:
 		var booth := SecurityLooks.in_booth_passage(sim, p)
 		# Bags go to the front (a roller into the hand first) before the booth.
 		var booth_bags := booth or BoothCarry.approaching(sim, p)
-		var tucked := booth or BoothCarry.tuck_weight(_held.get(id, {}), _tick()) > 0.0
+		# A lane's arch tucks the arms too, its bags in the tray.
+		var tuck_in := booth or SecurityLooks.in_arch_passage(sim, p)
+		var tucked := tuck_in or BoothCarry.tuck_weight(_held.get(id, {}), _tick()) > 0.0
 		if homes.is_empty() and not tucked:
 			_arms_off(node)
 		if homes.is_empty() and tray_at == SecurityLooks.Tray.NONE and not tucked:
@@ -499,7 +501,7 @@ func sync() -> void:
 			held["front"] = front
 		# A record made again after a load (PassengerViews.snap() releases every
 		# record, then syncs on the same tick) starts in the tuck it needs.
-		BoothCarry.update_tuck(held, booth, _released_at.get(id, -1.0) == _tick(), _tick())
+		BoothCarry.update_tuck(held, tuck_in, _released_at.get(id, -1.0) == _tick(), _tick())
 		# A roller held by its bar for a stall stays in hand until the turn back
 		# from the front has finished, so it goes to the pull from the side, and,
 		# held in the hand the walk would not pull it in, until it is clear of
@@ -669,6 +671,12 @@ func transfer_progress(id: int, index: int) -> float:
 ## the free arm beside it) follows it.
 func front_weight_of(id: int) -> float:
 	return _front_weight(_held.get(id, {}), _now())
+
+
+## How far passenger `id` has tucked its free arms in for a booth or an arch:
+## 0 swinging, 1 tucked (BoothCarry.tuck_weight).
+func tuck_of(id: int) -> float:
+	return BoothCarry.tuck_weight(_held.get(id, {}), _now())
 
 
 ## How far the hard case (or lifted roller) of passenger `id` has turned to

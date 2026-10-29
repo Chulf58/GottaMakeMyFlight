@@ -4,7 +4,8 @@ extends RefCounted
 ## scanner-booth-passengers-carry-their-bags-in-front-and): CarryOnProps asks
 ## these while SecurityLooks.in_booth_passage() holds. The free arms tuck in
 ## (a turn of its own, eased over CarryOnProps.TRANSFER_TICKS like the front
-## carry), a passenger without bags included; a roller is lifted into the hand
+## carry), a passenger without bags included, and do so through a security
+## lane's arch too (SecurityLooks.in_arch_passage()); a roller is lifted into the hand
 ## at the booth's entry and that move ends at the side before the turn to the
 ## front, and past the booth it stays in hand until the turn back has ended,
 ## so it never passes through the body. Pure: it reads and writes only the

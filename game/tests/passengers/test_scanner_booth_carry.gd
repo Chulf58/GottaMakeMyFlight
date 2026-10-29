@@ -92,6 +92,75 @@ func test_the_booth_passage_means_a_front_carry() -> void:
 	assert_bool(SecurityLooks.carry_front(sim, p)).is_false()
 
 
+## A walker still on its way to security (no queue: it is admitted at the
+## entry without stopping) counts from the step into its own booth's entry,
+## from straight ahead or from the side, and on the entry until it joins the
+## queue; not on the cell before it, not at another station's entry, and not
+## at a lane.
+func test_a_walker_on_its_way_turns_a_step_before_its_own_entry() -> void:
+	var w := _make(false)
+	var sim := w.world.sim
+	var id := _id_with_roller(false)
+	var before := ENTRY + Vector2i(0, 1)
+	var cases := [
+		[[before, ENTRY], w.station, true],
+		[[ENTRY + Vector2i(1, 0), ENTRY], w.station, true],
+		[[ENTRY + Vector2i(1, 1), ENTRY], w.station, true],
+		[[ENTRY], w.station, true],
+		[[ENTRY], w.station + 1000, false],
+		[[before], w.station, false],
+		[[before + Vector2i(0, 1), before], w.station, false],
+		[[before, ENTRY], w.station + 1000, false],
+	]
+	for c: Array in cases:
+		var route: Array[Vector2i] = []
+		route.assign(c[0])
+		var p := _walker(id, Passenger.Stage.TO_SECURITY, route)
+		p.station = c[1]
+		(
+			assert_bool(SecurityLooks.in_booth_passage(sim, p))
+			. override_failure_message("route %s station %d" % [c[0], c[1]])
+			. is_equal(c[2])
+		)
+	# Control: at a lane, walking into its unpack cell is no booth entry.
+	var lane := _make(true)
+	var unpack := SecurityTestWorld.ARCH_AT + Vector2i(0, 1)
+	var q := _walker(id, Passenger.Stage.TO_SECURITY, [unpack + Vector2i(0, 1), unpack])
+	q.station = lane.station
+	assert_bool(SecurityLooks.in_booth_passage(lane.world.sim, q)).is_false()
+
+
+## A lane's arch tucks the arms (decision security-lane-arch-is-narrowed-to-
+## fit-inside-its-cell-beside-a): standing in it or walking into it, until the
+## cell past it is reached; not standing on the unpack cell or past the arch.
+func test_a_lane_arch_passage_tucks_the_arms() -> void:
+	var w := _make(true)
+	var sim := w.world.sim
+	var arch := SecurityTestWorld.ARCH_AT
+	var id := _id_with_roller(false)
+	var cases := [
+		[[arch], true],
+		[[arch + Vector2i(0, 1), arch], true],
+		[[arch, arch + Vector2i(0, -1)], true],
+		[[arch + Vector2i(0, 1)], false],
+		[[arch + Vector2i(0, -1)], false],
+		[[arch + Vector2i(0, -1), arch + Vector2i(0, -2)], false],
+	]
+	for c: Array in cases:
+		var route: Array[Vector2i] = []
+		route.assign(c[0])
+		var p := _walker(id, Passenger.Stage.SECURITY, route)
+		(
+			assert_bool(SecurityLooks.in_arch_passage(sim, p))
+			. override_failure_message("route %s" % [c[0]])
+			. is_equal(c[1])
+		)
+	# Control: a basic scanner's booth is no arch.
+	var booth := _make(false)
+	var b := _walker(id, Passenger.Stage.SECURITY, [BOOTH])
+	assert_bool(SecurityLooks.in_arch_passage(booth.world.sim, b)).is_false()
+
+
 ## Control: a lane's arch is not a booth.
 func test_a_lane_arch_is_not_a_booth() -> void:
 	var w := _make(true)
