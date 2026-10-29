@@ -42,7 +42,11 @@ signal checked_in(id: int, desk: int)
 ## keeps a basic scanner's service in progress exactly as it was.
 ## 9: a lane's unpack work starts at 3 + 4 per bag, not 6 + 8. A version 8
 ## save has its unpack work left scaled to the new start.
-const SAVE_VERSION := 9
+## 10: each passenger's toilet need and toilet cooldown, and the toilet visits
+## under "toilet" (ToiletSnapshot). Versions 6 to 9 are migrated: each
+## passenger gets ToiletSim.migrated_need() of its id, and nobody is on a
+## toilet visit.
+const SAVE_VERSION := 10
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -100,6 +104,8 @@ var layout := TerminalLayout.new()
 var routes := RouteCache.new()
 ## Cafe visits, their counter queues and seats (CafeSim).
 var cafes := CafeSim.new()
+## Toilet visits and stall reservations (ToiletSim).
+var toilets := ToiletSim.new()
 ## Security service after admission, at every scanner and lane.
 var security := SecurityRuntime.new()
 ## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
@@ -167,6 +173,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	routes.bind(grid)
 	security.bind(self, _security_admitted, _security_cleared)
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
+	toilets.bind(self, _set_stage, _leave_station, _release_seat)
 	clock.ticked.connect(on_tick)
 	grid.graph_changed.connect(_on_graph_changed)
 	if auto_schedule:
@@ -394,7 +401,8 @@ func world_position(p: Passenger) -> Vector3:
 	if StageKinds.is_outside(p.stage) and not p.apron.is_empty():
 		return p.apron_position()
 	if where == StageKinds.Location.FACILITY_SEAT:
-		return cafes.seat_position(p)
+		var in_stall := Passenger.in_toilet(p.stage)
+		return toilets.stall_position(p) if in_stall else cafes.seat_position(p)
 	if where == StageKinds.Location.GATE_SEAT and p.seat_cell != Passenger.NO_CELL:
 		var front := grid.cell_to_world(p.seat_front)
 		var seat := grid.cell_to_world(p.seat_cell)
@@ -445,6 +453,8 @@ func apron_length_mm(exit_door: int) -> int:
 ## grid edit and the next tick (cafes.deadlines_stale) it pushes an error and
 ## returns {}. The next tick's reconcile settles the cafe, and SaveGame waits
 ## for it; a caller that must save sooner runs CafeSim.reconcile() itself.
+## Toilet deadlines left stale by that edit are saved stale and worked out
+## again on the loaded game's next tick (ToiletSnapshot).
 func to_snapshot() -> Dictionary:
 	if cafes.deadlines_stale:
 		push_error("PassengerSim.to_snapshot: a grid edit settles on the next tick; save after it")
@@ -475,6 +485,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_queues = loaded["queues"]
 	security.restore(loaded["security"])
 	cafes.restore(loaded["cafe"])
+	toilets.restore(loaded["toilet"])
 	_passengers = loaded["passengers"]
 	_by_id.clear()
 	for p in _passengers:
@@ -528,6 +539,7 @@ func _spawn(flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICA
 	p.boarding_tick = flights.boarding_window(flight_id).x
 	p.hunger = clock.rng.randi_range(CafeSim.HUNGER_START_MIN, CafeSim.HUNGER_START_MAX)
 	CarryOnTraits.draw(clock.rng, p)
+	p.toilet_need = clock.rng.randi_range(ToiletSim.NEED_START_MIN, ToiletSim.NEED_START_MAX)
 	p.at = layout.door_cell(grid, layout.entrances[0])
 	p.clear_path()
 	p.apron = ShellRoutes.arrival(self, layout.entrances[0])
@@ -567,6 +579,7 @@ func _finish(p: Passenger, made: bool) -> void:
 	_leave_station(p)
 	_release_seat(p)
 	cafes.cleanup(p)
+	toilets.cleanup(p)
 	_set_stage(p, Passenger.Stage.MADE if made else Passenger.Stage.MISSED)
 	p.stuck = Passenger.Stuck.NONE
 	p.late = false
@@ -587,8 +600,8 @@ func _finish(p: Passenger, made: bool) -> void:
 
 
 ## Retires the settled passengers kept for SETTLED_KEEP_TICKS. One that still
-## holds a station, seat, cafe visit or queue place is a bug: it is reported
-## and kept, so nothing is left pointing at a passenger that is gone.
+## holds a station, seat, cafe or toilet visit or queue place is a bug: it is
+## reported and kept, so nothing is left pointing at a passenger that is gone.
 func _retire_settled() -> void:
 	for i in range(_passengers.size() - 1, -1, -1):
 		var p := _passengers[i]
@@ -612,6 +625,8 @@ func _settled_leftovers(p: Passenger) -> String:
 		held.append("a seat")
 	if cafes.visit_of(p.id) != null:
 		held.append("a cafe visit")
+	if toilets.visit_of(p.id) != null:
+		held.append("a toilet visit")
 	if security.holds(p.id):
 		held.append("a security place")
 	for q in _queues.values():
@@ -676,6 +691,8 @@ func _step(p: Passenger) -> void:
 	match StageKinds.facility(p.stage):
 		StageKinds.Facility.CAFE:
 			cafes.step(p)
+		StageKinds.Facility.TOILET:
+			toilets.step(p)
 	match p.stage:
 		Passenger.Stage.SPAWNED:
 			# In from the road first, when the entrance has one (ShellRoutes).
@@ -707,6 +724,8 @@ func _step(p: Passenger) -> void:
 				match StageKinds.visit_facility(self, p):
 					StageKinds.Facility.CAFE:
 						cafes.depart(p)
+					StageKinds.Facility.TOILET:
+						toilets.depart(p)
 					_:
 						if tick < p.boarding_tick:
 							_set_stage(p, Passenger.Stage.TO_GATE)
@@ -743,8 +762,11 @@ func _beat(p: Passenger) -> void:
 	if p.late:
 		change -= 1
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
-	# Hunger, and a cafe visit when hungry or passing one with time to spare.
+	# Every need rises first, then NeedsPolicy picks which one, if any, the
+	# passenger acts on, by its priority table.
+	toilets.beat(p)
 	cafes.beat(p)
+	NeedsPolicy.arbitrate(self, p)
 	# A visiting guest walks: its visit's deadline keeps the margin for the rest.
 	if StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
 		p.late = false
@@ -1025,6 +1047,7 @@ func _reconcile() -> void:
 			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
 				_set_stage(p, Passenger.Stage.STANDING)
 	cafes.reconcile()
+	toilets.reconcile()
 
 
 ## A station without staff on duty: the passenger in service is finished (at
@@ -1110,3 +1133,4 @@ func _rederive() -> void:
 				if seat["object_id"] == p.seat_object and seat["cell"] == p.seat_cell:
 					_seat_claims[seat["key"]] = p.id
 	cafes.rederive()
+	toilets.rederive()

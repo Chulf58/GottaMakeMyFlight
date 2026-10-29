@@ -39,6 +39,7 @@ const STAGE_TEXT := {
 ## (StageKinds.facility()).
 const FACILITY_TEXT := {
 	StageKinds.Facility.CAFE: "Still at the cafe",
+	StageKinds.Facility.TOILET: "Still at the toilet",
 }
 ## The reason when nothing more is known.
 const MISSED_TEXT := "Missed the flight"

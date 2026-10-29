@@ -280,9 +280,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
 	var moving := (outside and p.apron_mm < p.apron_total_mm()) or p.is_moving()
 	var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
-	if _at_security(p):
+	if _at_security(p) or _stepping_in_stall(p):
 		# The drawn step, so a held-back queue front does not walk in place and
-		# a step to the table is not an idle slide.
+		# a step to the table, or into or out of a toilet stall, is not an idle
+		# slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
 		moving = mm > 0
 	match StageKinds.pose(p.stage):
@@ -304,7 +305,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var at_cafe := (
 		where == StageKinds.Location.FACILITY_SEAT and sim.cafes.seat_facing(p) != Vector2i.ZERO
 	)
-	node.set_meta(&"seated", at_gate or at_cafe)
+	var at_stall := (
+		where == StageKinds.Location.FACILITY_SEAT and sim.toilets.use_facing(p) != Vector2i.ZERO
+	)
+	node.set_meta(&"seated", at_gate or at_cafe or at_stall)
 	var works := SecurityLooks.face(sim, p)
 	node.set_meta(&"faces", works != Vector2.ZERO)
 	if at_gate:
@@ -314,6 +318,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	elif at_cafe:
 		var looks := sim.cafes.seat_facing(p)
 		node.rotation.y = atan2(looks.x, looks.y)
+	elif at_stall:
+		# Seated at Mount_Use, facing out of the stall door.
+		var out := sim.toilets.use_facing(p)
+		node.rotation.y = atan2(out.x, out.y)
 	elif works != Vector2.ZERO:
 		node.rotation.y = atan2(works.x, works.y)
 	elif not moving and sim.cafes.counter_facing(p) != Vector2i.ZERO:
@@ -341,6 +349,12 @@ func _chase(p: Passenger) -> void:
 
 func _at_security(p: Passenger) -> bool:
 	return p.stage == Passenger.Stage.SECURITY or p.stage == Passenger.Stage.SECURITY_QUEUE
+
+
+## Stepping between a toilet stall's approach cell and its turn spot, off the
+## grid path.
+func _stepping_in_stall(p: Passenger) -> bool:
+	return p.stage == Passenger.Stage.TOILET_ENTER or p.stage == Passenger.Stage.TOILET_EXIT
 
 
 ## A seated passenger, or one facing its work at security, keeps its rotation.
