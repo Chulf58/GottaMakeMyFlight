@@ -113,8 +113,11 @@ static func as_v7(data: Dictionary) -> Dictionary:
 			if int(queue["station"]) == int(entry["station"]):
 				queue["serving"] = id
 	out.erase("security")
+	out.erase("toilet")
 	for record: Dictionary in out["passengers"]:
-		for field in ["security_phase", "security_work", "incident_resolved"]:
+		for field in [
+			"security_phase", "security_work", "incident_resolved", "toilet_need", "toilet_cooldown"
+		]:
 			record.erase(field)
 	return out
 

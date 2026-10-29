@@ -3,7 +3,8 @@ extends RefCounted
 ## The JSON shape of PassengerSim's state, and its checks on load. Committed
 ## paths, queue order, service ends, seat claims, apron progress and pending
 ## replans are all saved, so nothing is recomputed differently after a load.
-## Cafe visits and counter queues go under "cafe" (CafeSnapshot), security
+## Cafe visits and counter queues go under "cafe" (CafeSnapshot), toilet
+## visits under "toilet" (ToiletSnapshot), security
 ## service under "security" (SecurityRuntime.to_list()) with each passenger's
 ## phase, remaining work and resolved incident on its record.
 ## Seat claims and walker counts are rebuilt from the passenger records. The
@@ -25,6 +26,7 @@ const KEYS := [
 	"flight_results",
 	"scheduled",
 	"security",
+	"toilet",
 ]
 ## The last version before the security traits, migrated on load.
 const V6 := 6
@@ -32,6 +34,8 @@ const V6 := 6
 const V7 := 7
 ## The last version before the shorter lane unpack, migrated on load.
 const V8 := 8
+## The last version before the toilet need and visits, migrated on load.
+const V9 := 9
 ## A version 8 lane started its unpack work at 6 ticks plus 8 per bag.
 const V8_UNPACK_TICKS := 6
 const V8_UNPACK_BAG_TICKS := 8
@@ -62,6 +66,8 @@ const INT_FIELDS := [
 	"carry_on",
 	"security_phase",
 	"security_work",
+	"toilet_need",
+	"toilet_cooldown",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan", "liquids", "alarm", "incident_resolved"]
@@ -133,6 +139,7 @@ static func save(
 		"flight_results": result_list,
 		"scheduled": scheduled,
 		"security": sim.security.to_list(),
+		"toilet": ToiletSnapshot.save(sim.toilets),
 	}
 
 
@@ -175,6 +182,13 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 	if cafe.has("error"):
 		return cafe
 	out["cafe"] = cafe
+	var toilet := ToiletSnapshot.load(data["toilet"], ids, grid, out["tick"])
+	if toilet.has("error"):
+		return toilet
+	for id: int in toilet["visits"]:
+		if (cafe["visits"] as Dictionary).has(id):
+			return {"error": "passenger %d has both a cafe and a toilet visit" % id}
+	out["toilet"] = toilet
 	var queues := _queues(data["queues"], ids)
 	if queues.has("error"):
 		return queues
@@ -227,32 +241,42 @@ static func _record(p: Passenger) -> Dictionary:
 	return record
 
 
-## A version 6, 7 or 8 save as the current version, nothing drawn. Version 6 to
+## A version 6, 7, 8 or 9 save as the current version, nothing drawn from the
+## sim RNG; each step runs in turn from the save's own version. Version 6 to
 ## 7: every passenger gets zero bags and no liquids or alarm. Version 7 to 8:
 ## no passenger has a security phase, except that a basic scanner's passenger
 ## in service keeps that service exactly as it was: SCAN with the ticks left
 ## to its saved service end as work, its incident counted as resolved, so it
-## ends on the same tick with no repack. Any other save is returned as it is,
-## for the checks to accept or refuse. Version 8 to 9: unpack work left is
+## ends on the same tick with no repack. Version 8 to 9: unpack work left is
 ## scaled from the old start (6 + 8 per bag) to the new one, rounded up so a
 ## passenger still unpacking keeps at least 1; a value past the old start is
-## left as it is and refused. The given dictionary is not edited.
+## left as it is and refused. Version 9 to 10: every passenger gets the toilet
+## need ToiletSim.migrated_need() gives its id and no cooldown, and there are
+## no toilet visits. Any other save is returned as it is, for the checks to
+## accept or refuse. The given dictionary is not edited.
 static func _migrated(data: Dictionary) -> Dictionary:
-	if not _whole(data.get("save_version")) or int(data["save_version"]) not in [V6, V7, V8]:
+	if not _whole(data.get("save_version")) or int(data["save_version"]) not in [V6, V7, V8, V9]:
 		return data
 	var out := data.duplicate(true)
 	var passengers: Array = out["passengers"] if typeof(out.get("passengers")) == TYPE_ARRAY else []
-	if int(out["save_version"]) == V6:
+	var from_version := int(out["save_version"])
+	out["save_version"] = PassengerSim.SAVE_VERSION
+	if from_version == V6:
 		for record in passengers:
 			if typeof(record) == TYPE_DICTIONARY:
 				record["carry_on"] = 0
 				record["liquids"] = false
 				record["alarm"] = false
-	var from_version := int(out["save_version"])
-	out["save_version"] = PassengerSim.SAVE_VERSION
+	if from_version <= V7:
+		_add_security(out, passengers)
 	if from_version == V8:
 		_rescale_unpack(passengers)
-		return out
+	_add_toilets(out, passengers)
+	return out
+
+
+## Version 7 to 8: the security runtime's phases and station records.
+static func _add_security(out: Dictionary, passengers: Array) -> void:
 	var by_id := {}
 	for record in passengers:
 		if typeof(record) == TYPE_DICTIONARY:
@@ -286,7 +310,17 @@ static func _migrated(data: Dictionary) -> Dictionary:
 			}
 		)
 	out["security"] = security
-	return out
+
+
+## Version 9 to 10: a toilet need from each passenger's id, no cooldown and no
+## visits. A record whose id is not a whole number is left for the checks.
+static func _add_toilets(out: Dictionary, passengers: Array) -> void:
+	for record in passengers:
+		if typeof(record) != TYPE_DICTIONARY or not _whole(record.get("id")):
+			continue
+		record["toilet_need"] = ToiletSim.migrated_need(int(record["id"]))
+		record["toilet_cooldown"] = 0
+	out["toilet"] = {"visits": [], "deadlines_stale": false}
 
 
 ## Version 8 to 9: each passenger in UNPACK has its work left scaled to the new
@@ -376,6 +410,9 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.hunger >= 0
 		and p.hunger <= CafeSim.HUNGER_MAX
 		and p.cafe_cooldown >= 0
+		and p.toilet_need >= 0
+		and p.toilet_need <= ToiletSim.NEED_MAX
+		and p.toilet_cooldown >= 0
 		and p.carry_on >= 0
 		and p.carry_on <= CarryOnTraits.MAX_BAGS
 		and p.security_phase >= 0

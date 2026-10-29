@@ -57,7 +57,11 @@ func _fresh() -> SecurityTestWorld:
 func _v8(work: int, bags := 2) -> Dictionary:
 	var out := _v9.duplicate(true)
 	out["save_version"] = 8
+	# Version 8 had no toilet need, cooldown or visits.
+	out.erase("toilet")
 	for record: Dictionary in out["passengers"]:
+		record.erase("toilet_need")
+		record.erase("toilet_cooldown")
 		if int(record["id"]) == _id:
 			record["carry_on"] = bags
 			record["security_work"] = work
@@ -72,7 +76,7 @@ func _loaded_work(data: Dictionary) -> int:
 
 func test_the_fixture_is_mid_unpack_with_two_bags_at_the_current_version() -> void:
 	assert_int(int(_v9["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(9)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(10)
 	var p := _a.world.passenger(_id)
 	assert_int(p.carry_on).is_equal(2)
 	assert_int(SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p)).is_equal(11)
@@ -116,11 +120,11 @@ func test_scaling_uses_the_passengers_own_bag_count() -> void:
 		_b = null
 
 
-func test_a_migrated_world_saves_as_version_9_and_loads_again() -> void:
+func test_a_migrated_world_saves_as_the_current_version_and_loads_again() -> void:
 	_b = _fresh()
 	assert_bool(_b.world.sim.from_snapshot(_v8(15))).is_true()
 	var again := _json(_b.world.sim.to_snapshot())
-	assert_int(int(again["save_version"])).is_equal(9)
+	assert_int(int(again["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	var third := _fresh()
 	assert_bool(third.world.sim.from_snapshot(again)).is_true()
 	assert_str(third.signature()).is_equal(_b.signature())

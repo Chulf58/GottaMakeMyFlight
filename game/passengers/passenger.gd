@@ -32,6 +32,15 @@ enum Stage {
 	CAFE_SITTING_DOWN,
 	CAFE_SEATED,
 	CAFE_STANDING_UP,
+	# A toilet visit (ToiletSim), appended after the cafe stages: walking to
+	# the reserved stall's approach cell, stepping in to the turn spot,
+	# sitting down, using it, standing up and stepping back out.
+	TOILET_WALK,
+	TOILET_ENTER,
+	TOILET_SITTING_DOWN,
+	TOILET_USE,
+	TOILET_STANDING_UP,
+	TOILET_EXIT,
 }
 
 enum Stuck { NONE, NO_CHECKIN, NO_SECURITY, QUEUE_FULL, NO_ROUTE, EXIT_BLOCKED }
@@ -92,6 +101,11 @@ var hunger := 0
 ## No cafe visit is considered before this tick (CafeSim's retry and browse
 ## cooldowns).
 var cafe_cooldown := 0
+## 0-100, rising once a simulated second; using a toilet stall resets it
+## (ToiletSim). Drawn from the sim RNG at spawn.
+var toilet_need := 0
+## No toilet visit is considered before this tick (ToiletSim's retry cooldown).
+var toilet_cooldown := 0
 ## What it brings to security (CarryOnTraits), drawn at spawn: 0 to 2 carry-on
 ## bags, and whether it carries liquids and whether it sets off the alarm.
 var carry_on := 0
@@ -110,6 +124,11 @@ var incident_resolved := false
 ## classifies every stage).
 static func in_cafe(stage: Stage) -> bool:
 	return StageKinds.facility(stage) == StageKinds.Facility.CAFE
+
+
+## Whether the stage is one of a toilet visit's (never compare with < or >).
+static func in_toilet(stage: Stage) -> bool:
+	return StageKinds.facility(stage) == StageKinds.Facility.TOILET
 
 
 static func segment_mm(a: Vector2i, b: Vector2i) -> int:

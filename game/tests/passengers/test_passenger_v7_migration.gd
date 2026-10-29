@@ -138,7 +138,7 @@ func test_a_version_7_save_with_a_bad_record_is_still_refused() -> void:
 	var no_trait := _v7.duplicate(true)
 	(no_trait["passengers"][0] as Dictionary).erase("liquids")
 	var bad_version := _v7.duplicate(true)
-	bad_version["save_version"] = 10
+	bad_version["save_version"] = PassengerSim.SAVE_VERSION + 1
 	# Version 7 scanned for 40 ticks at most; a service end far beyond what a
 	# scan of these bags takes would hold the scanner for ever.
 	var endless := _v7.duplicate(true)

@@ -15,13 +15,14 @@ extends RefCounted
 ## after the visit.
 
 ## Which facility runs a stage; NONE for the journey's own stages.
-enum Facility { NONE, CAFE }
+enum Facility { NONE, CAFE, TOILET }
 
 ## Where a passenger in a stage is. ROAD: walking in from the road, holding
 ## the entrance cell. FLOOR: on the grid, walking, queuing or in service.
 ## GATE_SEAT and FACILITY_SEAT: sitting down, seated or standing up at a gate
-## seat or a facility seat. APRON: the walk out to the plane. SETTLED: made
-## or missed.
+## seat or a facility seat; FACILITY_SEAT also covers stepping into and out of
+## a toilet stall, off its approach cell. APRON: the walk out to the plane.
+## SETTLED: made or missed.
 enum Location { ROAD, FLOOR, GATE_SEAT, FACILITY_SEAT, APRON, SETTLED }
 
 ## How the body is drawn: upright (standing or walking), or one of the three
@@ -61,6 +62,13 @@ const KINDS := {
 	Passenger.Stage.CAFE_SITTING_DOWN: [Facility.CAFE, Location.FACILITY_SEAT, Pose.SITTING_DOWN],
 	Passenger.Stage.CAFE_SEATED: [Facility.CAFE, Location.FACILITY_SEAT, Pose.SEATED],
 	Passenger.Stage.CAFE_STANDING_UP: [Facility.CAFE, Location.FACILITY_SEAT, Pose.STANDING_UP],
+	Passenger.Stage.TOILET_WALK: [Facility.TOILET, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.TOILET_ENTER: [Facility.TOILET, Location.FACILITY_SEAT, Pose.UPRIGHT],
+	Passenger.Stage.TOILET_SITTING_DOWN:
+	[Facility.TOILET, Location.FACILITY_SEAT, Pose.SITTING_DOWN],
+	Passenger.Stage.TOILET_USE: [Facility.TOILET, Location.FACILITY_SEAT, Pose.SEATED],
+	Passenger.Stage.TOILET_STANDING_UP: [Facility.TOILET, Location.FACILITY_SEAT, Pose.STANDING_UP],
+	Passenger.Stage.TOILET_EXIT: [Facility.TOILET, Location.FACILITY_SEAT, Pose.UPRIGHT],
 }
 ## Stage -> Leg.
 const LEGS := {
@@ -87,6 +95,12 @@ const LEGS := {
 	Passenger.Stage.CAFE_SITTING_DOWN: Leg.VISIT,
 	Passenger.Stage.CAFE_SEATED: Leg.VISIT,
 	Passenger.Stage.CAFE_STANDING_UP: Leg.VISIT,
+	Passenger.Stage.TOILET_WALK: Leg.VISIT,
+	Passenger.Stage.TOILET_ENTER: Leg.VISIT,
+	Passenger.Stage.TOILET_SITTING_DOWN: Leg.VISIT,
+	Passenger.Stage.TOILET_USE: Leg.VISIT,
+	Passenger.Stage.TOILET_STANDING_UP: Leg.VISIT,
+	Passenger.Stage.TOILET_EXIT: Leg.VISIT,
 }
 
 
@@ -129,12 +143,15 @@ static func on_grid(stage: Passenger.Stage) -> bool:
 static func visit_facility(sim: PassengerSim, p: Passenger) -> Facility:
 	if sim.cafes.visit_of(p.id) != null:
 		return Facility.CAFE
+	if sim.toilets.visit_of(p.id) != null:
+		return Facility.TOILET
 	return Facility.NONE
 
 
 ## How `p`'s journey goes on after its active visit: {"stage": the stage it
 ## resumes at, "cell": the cell it sets off from when the visit has one
-## (a cafe seat's approach), else Passenger.NO_CELL}. Empty with no visit.
+## (a cafe seat's or toilet stall's approach), else Passenger.NO_CELL}.
+## Empty with no visit.
 static func resume_of(sim: PassengerSim, p: Passenger) -> Dictionary:
 	match visit_facility(sim, p):
 		Facility.CAFE:
@@ -142,5 +159,11 @@ static func resume_of(sim: PassengerSim, p: Passenger) -> Dictionary:
 			return {
 				"stage": visit.resume_stage,
 				"cell": visit.seat.get("approach", Passenger.NO_CELL),
+			}
+		Facility.TOILET:
+			var visit := sim.toilets.visit_of(p.id)
+			return {
+				"stage": visit.resume_stage,
+				"cell": visit.stall.get("approach", Passenger.NO_CELL),
 			}
 	return {}

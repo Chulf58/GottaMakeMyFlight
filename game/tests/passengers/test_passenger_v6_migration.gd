@@ -32,6 +32,11 @@ func before_test() -> void:
 	for i in 10:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_a.run_to(SAVE_TICK)
+	# At the save every passenger holds the toilet need migration gives it
+	# (version 10), so the continuous world plays like the migrated one.
+	for id in _a.sim.passenger_ids():
+		_a.passenger(id).toilet_need = ToiletSim.migrated_need(id)
+		_a.passenger(id).toilet_cooldown = 0
 	_v7 = SecurityTestWorld.as_v7(_json(_a.sim.to_snapshot()))
 
 
