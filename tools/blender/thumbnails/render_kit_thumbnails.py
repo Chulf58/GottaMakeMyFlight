@@ -82,6 +82,9 @@ CLASSES = {
     "2x2": ((2.0, 2.0, 1.7), (0.0, 0.0, 0.85)),
     "1x1": ((1.0, 1.0, 1.6), (0.0, 0.0, 0.8)),
     "1x1_tall": ((1.0, 1.0, 2.0), (0.0, 0.0, 1.0)),
+    "2x1_tall": ((2.0, 1.0, 2.1), (0.0, 0.0, 1.05)),
+    "3x3": ((3.0, 3.0, 2.0), (0.0, 0.0, 1.0)),
+    "2x3": ((2.0, 3.0, 2.2), (0.0, 0.0, 1.1)),
 }
 
 # Catalog colours (build_catalog.gd), sRGB.
@@ -141,6 +144,49 @@ ITEMS = {
     # the 1x2 stall with its doors closed and the sink with its 1.95 m mirror.
     "toilet_stall": ("1x2", ["toilet_stall"], []),
     "toilet_sink": ("1x1_tall", ["toilet_sink"], []),
+    # Cafe pieces: the 2x1 counter is 1.98 m to its menu board, so it gets a
+    # taller box than the check-in desk's; the 3x1 table with its two chairs.
+    "counter": ("2x1_tall", ["cafe_counter"], []),
+    "table": ("3x1", ["cafe_table"], []),
+    # Rooms, as the bag room: the room tool's minimum floor, furnished with what
+    # makes it ready, every interaction and seat approach cell on the floor and
+    # clear. Cafe room (3x3 min): the counter across the back-right two cells
+    # (order spot: the middle cell), the table across the front row at facing 2,
+    # so its chairs are reached from the middle row's outer cells.
+    "cafe_room": (
+        "3x3",
+        [
+            ("floor_tile", (-1.0, -1.0, 0.0)),
+            ("floor_tile", (0.0, -1.0, 0.0)),
+            ("floor_tile", (1.0, -1.0, 0.0)),
+            ("floor_tile", (-1.0, 0.0, 0.0)),
+            ("floor_tile", (0.0, 0.0, 0.0)),
+            ("floor_tile", (1.0, 0.0, 0.0)),
+            ("floor_tile", (-1.0, 1.0, 0.0)),
+            ("floor_tile", (0.0, 1.0, 0.0)),
+            ("floor_tile", (1.0, 1.0, 0.0)),
+            ("cafe_counter", (0.5, 1.0, 0.0)),
+            ("cafe_table", (0.0, -1.0, 0.0), -180.0),
+        ],
+        [],
+    ),
+    # Toilet room (2x3 min): the sink in the back-left cell and the stall down the
+    # right column's back two cells, so the 2.1 m stall does not hide the sink from
+    # the front-left camera.
+    "toilet_room": (
+        "2x3",
+        [
+            ("floor_tile", (-0.5, -1.0, 0.0)),
+            ("floor_tile", (0.5, -1.0, 0.0)),
+            ("floor_tile", (-0.5, 0.0, 0.0)),
+            ("floor_tile", (0.5, 0.0, 0.0)),
+            ("floor_tile", (-0.5, 1.0, 0.0)),
+            ("floor_tile", (0.5, 1.0, 0.0)),
+            ("toilet_sink", (-0.5, 1.0, 0.0)),
+            ("toilet_stall", (0.5, 0.5, 0.0)),
+        ],
+        [],
+    ),
 }
 ORDER = list(ITEMS)
 
