@@ -3,7 +3,8 @@ extends PanelContainer
 ## The room info panel: type, status ("Ready" or what the room still needs)
 ## and the facts of the room under the pointer (decision
 ## store-mechanics-draw-a-room-then-furnish-it-required-pieces): seats and base
-## spend for a shop, the count of belt ends for a bag room. Esc closes it. BuildMenu
+## spend for a shop, the count of belt ends for a bag room, stalls, sinks and the
+## upkeep per day as one room total for a toilet. Esc closes it. BuildMenu
 ## creates it top-left under the money slot; it is hidden while no room is
 ## followed. It reads RoomRules and follows the grid's own signals, so
 ## furniture placed while it is open shows on the next frame.
@@ -12,6 +13,14 @@ const POSITION := Vector2(16.0, 64.0)
 const WIDTH := 280.0
 const BAG_ROOM := &"bag_room"
 const BELT_END := &"baggage_belt_end"
+const TOILET := &"toilet"
+const STALL := &"toilet_stall"
+const SINK := &"toilet_sink"
+## A toilet's upkeep is one room total (decision toilet-design-queue-free-
+## reservable-stalls-per-stall-daily-u, point 2): what RoomRules.daily_upkeep
+## charges at midnight while it is ready, and what it will once it is.
+const UPKEEP_READY := "Upkeep $%d per day"
+const UPKEEP_ONCE_READY := "Upkeep $%d per day once ready"
 
 var _build_mode: BuildMode
 var _room_id := 0
@@ -62,6 +71,10 @@ func show_room(id: int) -> void:
 		_line(note, &"HudAttentionText")
 	if status.type_id == BAG_ROOM:
 		_line("Belt ends %d" % status.pieces.get(BELT_END, 0))
+	elif status.type_id == TOILET:
+		_line("Stalls %d" % status.pieces.get(STALL, 0))
+		_line("Sinks %d" % status.pieces.get(SINK, 0))
+		_line((UPKEEP_READY if status.ok else UPKEEP_ONCE_READY) % status.upkeep)
 	else:
 		_line("Seats %d" % status.seats)
 		_line("Base spend $%d per visit" % status.base_spend)
