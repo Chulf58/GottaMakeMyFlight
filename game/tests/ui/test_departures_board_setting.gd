@@ -29,8 +29,12 @@ func after_test() -> void:
 
 
 func _board() -> DeparturesBoard:
+	return _board_at(_path)
+
+
+func _board_at(path: String) -> DeparturesBoard:
 	var board := DeparturesBoard.new()
-	board.settings_path = _path
+	board.settings_path = path
 	board.flights = _sim
 	board.clock = _clock
 	add_child(board)
@@ -86,6 +90,54 @@ func test_the_setting_is_one_key_in_the_hud_section() -> void:
 	var cfg := ConfigFile.new()
 	assert_int(cfg.load(_path)).is_equal(OK)
 	assert_bool(cfg.get_value("hud", "departures_board", true)).is_false()
+
+
+func test_an_unreadable_settings_file_starts_the_board_on_and_reports_it() -> void:
+	var file := FileAccess.open(_path, FileAccess.WRITE)
+	file.store_string("[hud\nbroken = =\n")
+	file.close()
+	var read_error := ConfigFile.new().load(_path)
+	assert_int(read_error).is_not_equal(OK)
+	var made: Array[DeparturesBoard] = []
+	(
+		assert_error(func() -> void: made.append(_board()))
+		. is_push_error("DeparturesBoard: cannot read %s (error %d)" % [_path, read_error])
+	)
+	assert_bool(made[0].is_shown()).is_true()
+	assert_bool(_panel(made[0]).visible).is_true()
+	assert_bool(_toggle(made[0]).button_pressed).is_true()
+
+
+func test_a_failed_write_keeps_the_toggle_for_the_session_and_reports_it() -> void:
+	# The folder does not exist, so the board starts on (no file) and the save fails.
+	var path := SaveTestKit.run_dir("departures_board_missing_dir") + "/hud_settings.cfg"
+	var write_error := ConfigFile.new().save(path)
+	assert_int(write_error).is_not_equal(OK)
+	var board := _board_at(path)
+	assert_bool(board.is_shown()).is_true()
+	(
+		assert_error(func() -> void: _toggle(board).button_pressed = false)
+		. is_push_error("DeparturesBoard: cannot write %s (error %d)" % [path, write_error])
+	)
+	assert_bool(board.is_shown()).is_false()
+	assert_bool(_panel(board).visible).is_false()
+	assert_bool(_toggle(board).button_pressed).is_false()
+	assert_bool(FileAccess.file_exists(path)).is_false()
+
+
+func test_toggling_keeps_other_keys_and_sections_in_the_file() -> void:
+	var seeded := ConfigFile.new()
+	seeded.set_value("hud", "other_key", 7)
+	seeded.set_value("audio", "volume", 0.5)
+	assert_int(seeded.save(_path)).is_equal(OK)
+	var board := _board()
+	assert_bool(board.is_shown()).is_true()
+	board.set_shown(false)
+	var cfg := ConfigFile.new()
+	assert_int(cfg.load(_path)).is_equal(OK)
+	assert_bool(cfg.get_value("hud", "departures_board", true)).is_false()
+	assert_int(cfg.get_value("hud", "other_key", 0)).is_equal(7)
+	assert_float(cfg.get_value("audio", "volume", 0.0)).is_equal(0.5)
 
 
 func test_the_key_toggles_the_board_and_a_held_key_does_not_repeat() -> void:
