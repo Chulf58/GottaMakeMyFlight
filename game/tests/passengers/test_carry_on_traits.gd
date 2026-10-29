@@ -125,9 +125,9 @@ func test_a_current_version_save_keeps_the_traits_and_plays_out_the_same() -> vo
 	for i in 10:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_a.run_to(205)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(10)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(11)
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
-	assert_int(int(data["save_version"])).is_equal(10)
+	assert_int(int(data["save_version"])).is_equal(11)
 	var seen := {}
 	for record: Dictionary in data["passengers"]:
 		seen[int(record["carry_on"])] = true

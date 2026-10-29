@@ -129,7 +129,7 @@ func test_a_save_with_inconsistent_security_state_is_refused() -> void:
 	while a.world.passenger(ids[0]).security_phase != SecurityRuntime.Phase.REPACK:
 		a.world.step()
 	var good := _json(a.world.sim.to_snapshot())
-	assert_int(int(good["save_version"])).is_equal(10)
+	assert_int(int(good["save_version"])).is_equal(11)
 	assert_int(good["security"].size()).is_equal(1)
 	var cases := {}
 	var no_record: Dictionary = good.duplicate(true)

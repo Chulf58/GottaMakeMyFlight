@@ -78,6 +78,8 @@ const STAGE_TEXT := {
 	Passenger.Stage.TOILET_USE: "In a toilet stall",
 	Passenger.Stage.TOILET_STANDING_UP: "In a toilet stall",
 	Passenger.Stage.TOILET_EXIT: "Leaving the toilet",
+	Passenger.Stage.SHOP_WALK: "Heading to the kiosk",
+	Passenger.Stage.SHOP_BROWSE: "Browsing at the kiosk",
 }
 
 @export var clock: SimClock
