@@ -2,8 +2,8 @@ class_name TestBuildMenuToilets
 extends GdUnitTestSuite
 ## The toilet in the build menu (Toilets 5/5): a Toilets tray right after
 ## Shops holding the Toilet room tool, the toilet stall and the sink, with
-## their prices, the stall's daily upkeep as its hint, the rendered stall and
-## sink thumbnails and the room's placeholder tile.
+## their prices, the stall's daily upkeep as its hint, and the rendered room,
+## stall and sink thumbnails.
 
 const TOILET_TOOLS := [
 	BuildMode.Tool.TOILET_ROOM,
@@ -131,18 +131,14 @@ func test_with_a_wallet_the_stall_and_sink_cards_show_their_prices() -> void:
 	port.free()
 
 
-func test_the_stall_and_sink_cards_use_their_rendered_thumbnails() -> void:
-	for tool in [BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK]:
+func test_the_room_stall_and_sink_cards_use_their_rendered_thumbnails() -> void:
+	for tool in TOILET_TOOLS:
 		var name: String = BuildMenu.item(tool)[1]
 		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(name)).is_false()
 		var picture := _picture(tool)
 		assert_object(picture.texture).override_failure_message(name).is_not_null()
 		assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % name)
 		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
-	# The room has no rendered picture yet: the plain tile, like the cafe room.
-	var room := _picture(BuildMode.Tool.TOILET_ROOM)
-	assert_object(room.texture).is_null()
-	assert_int(room.find_children("*", "ColorRect", true, false).size()).is_equal(1)
 
 
 func test_picking_a_toilet_card_picks_its_tool_and_opens_the_toilets_tray() -> void:
