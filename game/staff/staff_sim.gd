@@ -30,6 +30,8 @@ extends Node
 
 ## Hiring, firing and loading; the counts may have changed.
 signal staff_changed
+## A member was hired into the pool (hire() only, never a load).
+signal hired(id: int, role: StaffMember.Role)
 signal member_state_changed(id: int, state: StaffMember.State)
 
 ## 2: members save their post (slot); StaffSnapshot migrates version 1.
@@ -84,6 +86,7 @@ func hire(role: StaffMember.Role) -> int:
 	_members.append(m)
 	_by_id[m.id] = m
 	staff_changed.emit()
+	hired.emit(m.id, role)
 	return m.id
 
 

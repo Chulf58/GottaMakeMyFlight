@@ -12,7 +12,9 @@ extends Node
 ##   - writes every event to user://playtest/<session>.jsonl (PlaytestLog) and
 ##     keeps the last ones in memory: build_edit, build_refused, passenger_stage,
 ##     passenger_stuck, passenger_made, passenger_missed, flight_state, anomaly,
-##     error, plus session lines (start with the world seed, capped, end);
+##     error, staff_hired, bag_loaded, bag_missed, wages_charged, wages_paid
+##     (the last four only when the scene has a BaggageSim or a Settlement),
+##     plus session lines (start with the world seed, capped, end);
 ##   - records what a replay needs of the mouse and keys to
 ##     user://playtest/<session>.input.jsonl: buttons, positions, modifiers,
 ##     mouse moves at most every MOTION_INTERVAL_MS, and only the keys the game
@@ -45,6 +47,15 @@ const EVENT_TYPES: Array[String] = [
 	"flight_state",
 	"anomaly",
 	"error",
+	"staff_hired",
+]
+## Events a short scripted session need not produce, so the scene test does not
+## demand them; test_playtest_hook_money_events covers each.
+const OPTIONAL_EVENT_TYPES: Array[String] = [
+	"bag_loaded",
+	"bag_missed",
+	"wages_charged",
+	"wages_paid",
 ]
 ## hire_staff() role names.
 const STAFF_ROLES := {
@@ -84,6 +95,9 @@ var passengers: PassengerSim
 var views: PassengerViews
 var build_mode: BuildMode
 var grid: BuildGrid
+## Optional parts: null in a scene without them, and their events are not logged.
+var baggage: BaggageSim
+var settlement: Settlement
 
 var _configured := false
 var _scene: Node
@@ -236,6 +250,8 @@ func attach(scene: Node) -> bool:
 	passengers.passenger_spawned.connect(_on_spawned)
 	passengers.stage_changed.connect(_on_stage)
 	passengers.outcome.connect(_on_outcome)
+	for pair in _optional_bindings():
+		(pair[0] as Signal).connect(pair[1])
 	scene.tree_exiting.connect(detach)
 	OS.add_logger(_errors)
 	_logger_added = true
@@ -259,7 +275,7 @@ func detach() -> void:
 		return
 	_flush_motion()
 	_log.add(clock.tick, "session", {"state": "end", "events": _log.total()})
-	for pair in [
+	var bindings := [
 		[grid.edit_applied, _on_edit_applied],
 		[grid.edit_refused, _on_edit_refused],
 		[clock.ticked, _on_ticked],
@@ -268,7 +284,9 @@ func detach() -> void:
 		[passengers.stage_changed, _on_stage],
 		[passengers.outcome, _on_outcome],
 		[_scene.tree_exiting, detach],
-	]:
+	]
+	bindings.append_array(_optional_bindings())
+	for pair in bindings:
 		if (pair[0] as Signal).is_connected(pair[1]):
 			(pair[0] as Signal).disconnect(pair[1])
 	if _logger_added:
@@ -431,6 +449,8 @@ func _find_parts(scene: Node) -> bool:
 	passengers = null
 	views = null
 	build_mode = null
+	baggage = null
+	settlement = null
 	for child in scene.get_children():
 		if child is SimClock:
 			clock = child
@@ -442,6 +462,10 @@ func _find_parts(scene: Node) -> bool:
 			views = child
 		elif child is BuildMode:
 			build_mode = child
+		elif child is BaggageSim:
+			baggage = child
+		elif child is Settlement:
+			settlement = child
 	grid = build_mode.grid if build_mode != null else null
 	return clock != null and flights != null and passengers != null and grid != null
 
@@ -480,6 +504,37 @@ func _on_edit_refused(edit: BuildEdit, result: BuildResult) -> void:
 	data["reason_text"] = result.reason_text()
 	data["blocking_object_id"] = result.blocking_object_id
 	_log.add(clock.tick, "build_refused", data)
+
+
+## The [signal, handler] pairs of the optional parts that are present.
+func _optional_bindings() -> Array:
+	var pairs := []
+	if passengers.staff != null:
+		pairs.append([passengers.staff.hired, _on_staff_hired])
+	if baggage != null:
+		pairs.append([baggage.bag_settled, _on_bag_settled])
+	if settlement != null:
+		pairs.append([settlement.wages_charged, _on_wages_charged])
+		pairs.append([settlement.wages_paid, _on_wages_paid])
+	return pairs
+
+
+func _on_staff_hired(id: int, role: StaffMember.Role) -> void:
+	var data := {"id": id, "role": PlaytestState.enum_name(StaffMember.Role.keys(), role)}
+	_log.add(clock.tick, "staff_hired", data)
+
+
+func _on_bag_settled(bag_id: int, passenger_id: int, flight_id: String, loaded: bool) -> void:
+	var data := {"bag": bag_id, "passenger": passenger_id, "flight": flight_id}
+	_log.add(clock.tick, "bag_loaded" if loaded else "bag_missed", data)
+
+
+func _on_wages_charged(day: int, paid: int, owed: int) -> void:
+	_log.add(clock.tick, "wages_charged", {"day": day, "paid": paid, "owed": owed})
+
+
+func _on_wages_paid(amount: int, owed: int) -> void:
+	_log.add(clock.tick, "wages_paid", {"amount": amount, "owed": owed})
 
 
 func _on_ticked(_tick: int) -> void:
