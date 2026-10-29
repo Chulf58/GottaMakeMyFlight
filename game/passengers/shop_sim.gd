@@ -270,6 +270,18 @@ func browse_facing(p: Passenger) -> Vector2i:
 	return visit.slot["facing"]
 
 
+## The lower-case name of the shop type `passenger_id` is visiting ("kiosk",
+## "pharmacy"), or empty with no visit or when its room is gone.
+func store_name(passenger_id: int) -> String:
+	var visit := visit_of(passenger_id)
+	if visit == null:
+		return ""
+	var room := _sim.grid.get_room(visit.room)
+	if room.is_empty():
+		return ""
+	return RoomTypes.get_type(room["type"]).display_name.to_lower()
+
+
 ## Installs visits a ShopSnapshot.load() checked; rederive() then rebuilds the
 ## slot holders and the layout.
 func restore(state: Dictionary) -> void:

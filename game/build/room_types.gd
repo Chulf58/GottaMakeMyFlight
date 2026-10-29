@@ -132,7 +132,7 @@ static func _build() -> void:
 	)
 	_add_store(
 		&"fashion",
-		"Fashion",
+		"Fashion store",
 		Vector2i(3, 4),
 		30,
 		[[&"fashion_till", "Needs a till"], [&"fashion_rail", "Needs a clothes rail"], 2]

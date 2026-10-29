@@ -145,7 +145,8 @@ func test_each_stage_has_its_exact_reason_text() -> void:
 	var late_exit := "Left the gate too late for the plane"
 	var cafe := "Still at the cafe"
 	var toilet := "Still at the toilet"
-	var kiosk := "Still at the kiosk"
+	# A miss records only the stage, not which shop (kiosk or store) it was at.
+	var kiosk := "Still at a shop"
 	var expected := {
 		Passenger.Stage.SPAWNED: "Arrived after the doors closed",
 		Passenger.Stage.TO_CHECKIN: "Still walking to check-in",
