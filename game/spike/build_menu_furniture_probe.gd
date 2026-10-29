@@ -25,6 +25,8 @@ const PAGE_COUNT := 8
 const STAGE_LIMIT_MS := 60000
 ## The share of the window's height, from the bottom, a sheet tile keeps.
 const BAND_SHARE := 0.34
+const CARD_LINE := "CARD %s thumbnail=%s want=%s tiles=%d opaque_px=%d name_w=%.1f"
+const CARD_LINE_FIT := " label_w=%.1f in_tray=%s visible=%s"
 
 var _out_dir := ""
 var _failed := false
@@ -100,7 +102,7 @@ func _run() -> void:
 		if menu.open_category() != first + n:
 			_invalid("page %d: open category is %d, want %d" % [n, menu.open_category(), first + n])
 		var img := await _grab()
-		await _check_page(menu, first + n, seen)
+		_check_page(menu, first + n, seen)
 		_save(img, "menu_page_%d.png" % (n + 1))
 		var band := int(img.get_height() * BAND_SHARE)
 		var half := Vector2i(int(img.get_width() * 0.5), int(band * 0.5))
@@ -181,25 +183,9 @@ func _check_card(menu: BuildMenu, tool: BuildMode.Tool, tray: Rect2) -> void:
 	var text_w := font.get_string_size(name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	var fits_name := text_w <= name_label.size.x
 	var on_tray := tray.encloses(card.get_global_rect())
-	print(
-		(
-			"CARD %s thumbnail=%s want=%s tiles=%d opaque_px=%d name_w=%.1f label_w=%.1f"
-			+ (
-				" in_tray=%s visible=%s"
-				% [
-					name_label.text,
-					path,
-					want,
-					tiles,
-					opaque,
-					text_w,
-					name_label.size.x,
-					on_tray,
-					card.is_visible_in_tree()
-				]
-			)
-		)
-	)
+	var line := CARD_LINE % [name_label.text, path, want, tiles, opaque, text_w]
+	line += CARD_LINE_FIT % [name_label.size.x, on_tray, card.is_visible_in_tree()]
+	print(line)
 	if path != want or tiles != 0 or opaque == 0:
 		_invalid("%s: no rendered thumbnail" % name_label.text)
 	if not (fits_name and on_tray and card.is_visible_in_tree()):
