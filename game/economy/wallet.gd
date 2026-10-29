@@ -60,19 +60,25 @@ func can_afford(amount: int) -> bool:
 ## category unknown, the claim invalid, or what is left after the debts would
 ## pass MAX_BALANCE. Zero succeeds silently.
 func credit(amount: int, category: Category) -> bool:
-	if not _known(category):
+	var claimed: Variant = _valid_claims(amount, category)
+	if claimed == null:
 		return false
-	var claimed: Variant = _claims(amount, false)
-	var taken := -1 if claimed == null else _claimed_total(claimed, amount)
-	if taken < 0:
-		return false
-	if amount < 0 or amount - taken > MAX_BALANCE - balance:
+	if not _fits(amount, claimed):
 		push_error("Wallet.credit: %d is not creditable at balance %d" % [amount, balance])
 		return false
 	_claims(amount, true)
-	_set_balance(balance + amount - taken)
+	_set_balance(balance + amount - _claimed_total(claimed, amount))
 	_emit(amount, category, claimed)
 	return true
+
+
+## Whether credit() would take `amount` now, with what credit_claim would take
+## for debts counted the same way; changes nothing (the claim is asked with
+## commit false). False for a negative amount or an unknown category, and for
+## an invalid claim, which pushes its error as credit() does.
+func can_credit(amount: int, category: Category) -> bool:
+	var claimed: Variant = _valid_claims(amount, category)
+	return claimed != null and _fits(amount, claimed)
 
 
 ## Takes `amount`. Returns false and leaves the balance unchanged when the
@@ -115,6 +121,23 @@ func _emit(amount: int, category: Category, claimed: Dictionary) -> void:
 	if amount == 0:
 		return
 	transaction.emit(amount, category, claimed, clock.tick if is_instance_valid(clock) else NO_TICK)
+
+
+## credit_claim's shares of `amount` asked with commit false, when the category
+## is known and the claim valid; null otherwise, with the error pushed.
+func _valid_claims(amount: int, category: int) -> Variant:
+	if not _known(category):
+		return null
+	var claimed: Variant = _claims(amount, false)
+	if claimed == null or _claimed_total(claimed, amount) < 0:
+		return null
+	return claimed
+
+
+## Whether what is left of `amount` once `claimed` (valid) is paid fits under
+## MAX_BALANCE, for an amount from 0.
+func _fits(amount: int, claimed: Dictionary) -> bool:
+	return amount >= 0 and amount - _claimed_total(claimed, amount) <= MAX_BALANCE - balance
 
 
 ## credit_claim's shares of `amount`, with the shares of 0 left out; empty when

@@ -164,6 +164,39 @@ func test_undo_of_a_remove_charges_back_a_refund_that_went_to_owed_wages() -> vo
 	assert_int(owed[0]).is_equal(100000 - refund)
 
 
+## Near the balance cap, the credit an undo of a build makes still fits when a
+## debt takes it first: the wallet is asked the way a credit counts the claim.
+## Without the debt the same undo is refused WALLET_FULL and changes nothing.
+func _undo_near_the_cap_with_a_debt(debt_category: Wallet.Category) -> void:
+	var desk := _click(BuildMode.Tool.DESK, Vector2i(4, 4)).object_id
+	var price := PriceTable.price_of_object(DESK)
+	var near_cap := str(Wallet.MAX_BALANCE - 5)
+	assert_bool(_finances.wallet.from_snapshot({"balance": near_cap})).is_true()
+	var refused := _mode.undo()
+	print("no debt: %s" % refused.reason_text())
+	assert_int(refused.reason).is_equal(BuildResult.Reason.WALLET_FULL)
+	assert_int(_mode.grid.object_at(Vector2i(4, 4))).is_equal(desk)
+	assert_int(_mode.undo_history().size()).is_equal(1)
+	var owed := [price]
+	_finances.wallet.credit_claim = func(amount: int, commit: bool) -> Dictionary:
+		var share := mini(amount, owed[0])
+		if commit:
+			owed[0] -= share
+		return {debt_category: share}
+	_undo_ok()
+	assert_int(_mode.grid.object_at(Vector2i(4, 4))).is_equal(0)
+	assert_int(owed[0]).is_equal(0)
+	assert_int(_balance()).is_equal(Wallet.MAX_BALANCE - 5)
+
+
+func test_an_undo_near_the_cap_fits_when_owed_wages_take_the_refund() -> void:
+	_undo_near_the_cap_with_a_debt(Wallet.Category.WAGES)
+
+
+func test_an_undo_near_the_cap_fits_when_owed_upkeep_takes_the_refund() -> void:
+	_undo_near_the_cap_with_a_debt(Wallet.Category.UPKEEP)
+
+
 func test_undo_of_a_remove_drag_brings_a_room_and_its_pieces_back() -> void:
 	_drag(BuildMode.Tool.CAFE_ROOM, Rect2i(2, 2, 6, 5))
 	var room := _mode.grid.room_at(Vector2i(2, 2))

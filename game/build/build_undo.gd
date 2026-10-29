@@ -62,13 +62,14 @@ static func rule_problem(grid: BuildGrid, edit: BuildEdit, shell: ShellDefinitio
 
 
 ## CANT_AFFORD when the wallet cannot pay back a refund of `money` (above 0),
-## WALLET_FULL when a credit of what was spent (below 0) cannot fit, else null.
+## WALLET_FULL when a credit of what was spent (below 0) cannot fit once owed
+## wages and upkeep take their share (Wallet.can_credit()), else null.
 static func _money_problem(money: int, wallet: Wallet) -> BuildResult:
 	if wallet == null:
 		return null
 	if money > 0 and not wallet.can_afford(money):
 		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
-	if money < 0 and -money > Wallet.MAX_BALANCE - wallet.balance:
+	if money < 0 and not wallet.can_credit(-money, Wallet.Category.BUILD):
 		return BuildResult.refused(BuildResult.Reason.WALLET_FULL)
 	return null
 
