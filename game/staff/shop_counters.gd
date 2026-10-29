@@ -117,10 +117,11 @@ static func blocked(grid: BuildGrid, counter: int) -> bool:
 
 
 ## Whether a passenger is being served at `counter` now: an order in progress
-## at a cafe counter. A kiosk counter serves nobody itself (browsers pay as
-## they finish), so a kiosk server fired leaves at once.
+## at a cafe counter, or a help in progress at an info desk (the walk to it
+## does not count). A kiosk counter serves nobody itself (browsers pay as they
+## finish), so a kiosk server fired leaves at once.
 static func in_service(sim: PassengerSim, counter: int) -> bool:
-	return sim.cafes.serving_at(counter) != 0
+	return sim.cafes.serving_at(counter) != 0 or sim.info_desks.helping_at(counter)
 
 
 ## Whether some counter in room `room_id` is open: a kiosk sells only then.

@@ -237,5 +237,46 @@ func test_a_desk_that_closes_under_a_walker_ends_the_visit_with_no_boost() -> vo
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_ROUTE)
 
 
+func test_a_server_fired_during_the_help_stays_until_the_help_ends() -> void:
+	# A service under way ends first (decision firing-a-staff-member-mid-service-
+	# takes-effect-when-the-serv): the help is the desk's service, the walk is not.
+	_make()
+	var p := _guest()
+	assert_bool(_until_visit(p)).is_true()
+	var limit := _world.clock.tick + 200
+	while _world.clock.tick < limit and not _world.sim.info_desks.helping_at(_desk()):
+		_world.step()
+	assert_bool(_world.sim.info_desks.helping_at(_desk())).is_true()
+	assert_bool(ShopCounters.in_service(_world.sim, _desk())).is_true()
+	_world.auto_staff = false
+	assert_bool(_world.staff.fire(StaffMember.Role.SHOP)).is_true()
+	# Marked leaving and closed to newcomers, but still there.
+	assert_int(_world.staff.leaving_count(StaffMember.Role.SHOP)).is_equal(1)
+	assert_int(_world.staff.on_duty_count(StaffMember.Role.SHOP)).is_equal(1)
+	assert_bool(_world.staff.is_open(_desk())).is_false()
+	_run(10)
+	assert_bool(_world.sim.info_desks.holds(p)).is_true()
+	assert_int(_world.staff.on_duty_count(StaffMember.Role.SHOP)).is_equal(1)
+	limit = _world.clock.tick + 200
+	while _world.clock.tick < limit and _helped.is_empty():
+		_world.step()
+	assert_int(_helped.size()).is_equal(1)
+	assert_int(_helped[0]["mood"]).is_equal(_helped[0]["mood_before"] + InfoDesk.BOOST)
+	# The help is over, so the server walks out.
+	_run(3)
+	assert_int(_world.staff.count(StaffMember.Role.SHOP)).is_equal(0)
+
+
+func test_a_desk_nobody_is_being_helped_at_is_not_in_service() -> void:
+	_make()
+	_run(2)
+	assert_bool(ShopCounters.in_service(_world.sim, _desk())).is_false()
+	var p := _guest()
+	assert_bool(_until_visit(p)).is_true()
+	# Still walking: not a service, so a fired server would leave at once.
+	assert_bool(_world.sim.info_desks.helping_at(_desk())).is_false()
+	assert_bool(ShopCounters.in_service(_world.sim, _desk())).is_false()
+
+
 func _desk() -> int:
 	return _world.staff.stations_of(StaffMember.Role.SHOP)[0]

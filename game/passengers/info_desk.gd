@@ -95,6 +95,16 @@ func desk_of(p: Passenger) -> int:
 	return int((_visits.get(p.id, {}) as Dictionary).get("desk", 0))
 
 
+## Whether a passenger is being helped at `desk` now (the help, not the walk to
+## it): ShopCounters.in_service() reads it, so a server fired meanwhile stays
+## until the help ends.
+func helping_at(desk: int) -> bool:
+	for visit: Dictionary in _visits.values():
+		if visit["desk"] == desk and visit["end"] != WALKING:
+			return true
+	return false
+
+
 ## The mood a stuck passenger loses this beat: calmed when a staffed desk is in
 ## range.
 func stuck_loss(p: Passenger) -> int:
@@ -195,10 +205,16 @@ func to_list() -> Dictionary:
 	return {"visits": visits, "cooldowns": cooldowns}
 
 
-## A to_list() dictionary checked against the loaded passenger ids ({id: true}):
-## the same dictionary with whole numbers made ints, or {"error": why}. Changes
-## nothing.
-static func checked(data: Variant, ids: Dictionary) -> Dictionary:
+## A to_list() dictionary checked against the loaded game: `passengers` is
+## {id: Passenger}, `tick` the saved tick, `grid` the loaded grid. Returns the
+## same dictionary with whole numbers made ints, or {"error": why}. Changes
+## nothing. A visit must hold a passenger on a stage a desk helps and an object
+## that is an info desk on the grid; a help in progress must end after the saved
+## tick and within HELP_TICKS of it, with its passenger standing at the desk's
+## cell; a cooldown must not reach past a fresh one.
+static func checked(
+	data: Variant, passengers: Dictionary, tick: int, grid: BuildGrid
+) -> Dictionary:
 	if typeof(data) != TYPE_DICTIONARY:
 		return {"error": "info_desk must be a dictionary"}
 	for key in ["visits", "cooldowns"]:
@@ -208,20 +224,54 @@ static func checked(data: Variant, ids: Dictionary) -> Dictionary:
 	var seen := {}
 	for entry in data["visits"]:
 		var row := _row(entry, 3)
-		if row.is_empty() or not ids.has(row[0]) or seen.has(row[0]):
-			return {"error": "info_desk visit %s is malformed, repeated or unknown" % str(entry)}
-		if row[1] < 1 or row[2] < WALKING:
-			return {"error": "info_desk visit %s has a desk or end out of range" % str(entry)}
+		var problem := _visit_problem(row, passengers, seen, tick, grid)
+		if problem != "":
+			return {"error": "info_desk visit %s %s" % [str(entry), problem]}
 		seen[row[0]] = true
 		out["visits"].append(row)
 	seen = {}
 	for entry in data["cooldowns"]:
 		var row := _row(entry, 2)
-		if row.is_empty() or not ids.has(row[0]) or seen.has(row[0]) or row[1] < 0:
-			return {"error": "info_desk cooldown %s is malformed, repeated or unknown" % str(entry)}
+		var problem := _cooldown_problem(row, passengers, seen, tick)
+		if problem != "":
+			return {"error": "info_desk cooldown %s %s" % [str(entry), problem]}
 		seen[row[0]] = true
 		out["cooldowns"].append(row)
 	return out
+
+
+## Why a visit row [id, desk, end] cannot be live at `tick`, or "".
+static func _visit_problem(
+	row: Array[int], passengers: Dictionary, seen: Dictionary, tick: int, grid: BuildGrid
+) -> String:
+	if row.is_empty() or not passengers.has(row[0]) or seen.has(row[0]):
+		return "is malformed, repeated or unknown"
+	var p: Passenger = passengers[row[0]]
+	if not HELP_STAGES.has(p.stage):
+		return "holds a passenger on a stage no desk helps"
+	if not ShopCounters.is_roomless(grid, row[1]):
+		return "names an object that is not an info desk"
+	var end := row[2]
+	if end == WALKING:
+		return ""
+	if end <= tick or end > tick + HELP_TICKS:
+		return "has a help end outside the next %d ticks" % HELP_TICKS
+	if p.at != grid.interaction_cell(row[1]) or p.is_moving():
+		return "is being helped away from the desk"
+	return ""
+
+
+## Why a cooldown row [id, tick] cannot be live at `tick`, or "".
+static func _cooldown_problem(
+	row: Array[int], passengers: Dictionary, seen: Dictionary, tick: int
+) -> String:
+	if row.is_empty() or not passengers.has(row[0]) or seen.has(row[0]):
+		return "is malformed, repeated or unknown"
+	if (passengers[row[0]] as Passenger).is_done():
+		return "belongs to a settled passenger"
+	if row[1] < 0 or row[1] > tick + COOLDOWN_TICKS:
+		return "reaches past a fresh cooldown"
+	return ""
 
 
 ## Installs a checked() dictionary.

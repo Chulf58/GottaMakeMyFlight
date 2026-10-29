@@ -516,12 +516,14 @@ func from_snapshot(data: Dictionary) -> bool:
 	if loaded.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % loaded["error"])
 		return false
-	var ids := {}
+	var by_id := {}
 	for p: Passenger in loaded["passengers"]:
-		ids[p.id] = true
+		by_id[p.id] = p
 	# A save migrated from before version 12 (PassengerSnapshot) has no info
 	# desk state: none is live. A version 12 save must carry it.
-	var desk_state := InfoDesk.checked(data.get("info_desk", InfoDesk.EMPTY), ids)
+	var desk_state := InfoDesk.checked(
+		data.get("info_desk", InfoDesk.EMPTY), by_id, loaded["tick"], grid
+	)
 	if not data.has("info_desk") and int(data["save_version"]) >= SAVE_VERSION:
 		desk_state = {"error": "missing key 'info_desk'"}
 	if desk_state.has("error"):

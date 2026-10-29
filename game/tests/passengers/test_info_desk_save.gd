@@ -207,3 +207,115 @@ func test_a_save_from_before_version_12_loads_with_no_help_state() -> void:
 	assert_bool(_b.sim.from_snapshot(old)).is_true()
 	assert_bool(_b.sim.info_desks.to_list()["visits"].is_empty()).is_true()
 	assert_bool(_b.sim.info_desks.holds(_b.passenger(p.id))).is_false()
+
+
+func test_a_snapshot_that_cannot_be_live_is_refused_whole_and_for_its_own_reason() -> void:
+	# A help in progress: the passenger stands at the desk and the help ends
+	# within HELP_TICKS of the saved tick.
+	var p := _stuck_guest(_helping)
+	var tick := _a.clock.tick
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
+	var desk := _a.sim.info_desks.desk_of(p)
+	var end := int(good["info_desk"]["visits"][0][2])
+	var exit_door := 0
+	for id in _a.grid.object_ids():
+		if str(_a.grid.get_object(id)["def"]) == "exit_door":
+			exit_door = id
+	assert_int(exit_door).is_not_equal(0)
+	assert_bool(end > tick and end <= tick + InfoDesk.HELP_TICKS).is_true()
+	var live := {"visits": [[p.id, desk, end]], "cooldowns": [[p.id, 0]]}
+	# The control: the live state passes the same check the refusals fail.
+	var verdict := InfoDesk.checked(live, {p.id: _stub(p, -1, null)}, tick, _a.grid)
+	assert_bool(verdict.has("error")).is_false()
+	var far := tick + InfoDesk.HELP_TICKS + 1
+	var fresh := tick + InfoDesk.COOLDOWN_TICKS + 1
+	# [name, state, passenger stage or -1, passenger cell or null, error words]
+	var cases: Array = [
+		["expired help", _visit(p, desk, tick), -1, null, "help end"],
+		["long past", _visit(p, desk, tick - 40), -1, null, "help end"],
+		["too far ahead", _visit(p, desk, far), -1, null, "help end"],
+		["an exit door, not a desk", _visit(p, exit_door, end), -1, null, "not an info desk"],
+		["no such object", _visit(p, 9999, end), -1, null, "not an info desk"],
+		["a stage no desk helps", live, Passenger.Stage.TO_GATE, null, "no desk helps"],
+		["helped away from the desk", live, -1, [3, 3], "away from the desk"],
+		["a cooldown past a fresh one", _cooldown(p, fresh), -1, null, "fresh cooldown"],
+		["a settled passenger", _cooldown(p, 0), Passenger.Stage.MADE, null, "settled"],
+	]
+	_b = InfoDeskTestLayout.world()
+	var before := _b.signature()
+	for entry: Array in cases:
+		var label: String = entry[0]
+		var direct := InfoDesk.checked(
+			entry[1], {p.id: _stub(p, entry[2], entry[3])}, tick, _a.grid
+		)
+		assert_bool(direct.has("error")).override_failure_message(label).is_true()
+		assert_str(str(direct.get("error", ""))).override_failure_message(label).contains(entry[4])
+		var bad := good.duplicate(true)
+		bad["info_desk"] = entry[1]
+		for record: Dictionary in bad["passengers"]:
+			if int(record["id"]) != p.id:
+				continue
+			if int(entry[2]) >= 0:
+				record["stage"] = int(entry[2])
+			if entry[3] != null:
+				record["at"] = entry[3]
+		assert_bool(_b.sim.from_snapshot(bad)).override_failure_message(label).is_false()
+		assert_str(_b.signature()).override_failure_message(label).is_equal(before)
+		assert_array(_b.sim.info_desks.to_list()["visits"]).is_empty()
+		assert_array(_b.sim.info_desks.to_list()["cooldowns"]).is_empty()
+
+
+func test_a_version_11_snapshot_without_info_desk_is_refused_and_changes_nothing() -> void:
+	_stuck_guest(func(g: Passenger) -> bool: return _a.sim.info_desks.holds(g))
+	var old: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
+	old.erase("info_desk")
+	old["save_version"] = 11
+	_b = InfoDeskTestLayout.world()
+	var spare := InfoDeskTestLayout.guest(_b, Vector2i(9, 10), 50)
+	_b.run_to(30)
+	var before := _b.signature()
+	var tick := _b.clock.tick
+	var visits: Array = _b.sim.info_desks.to_list()["visits"]
+	assert_bool(_b.sim.from_snapshot(old)).is_false()
+	assert_str(_b.signature()).is_equal(before)
+	assert_int(_b.sim.tick).is_equal(tick)
+	assert_bool(_b.sim.get_passenger(spare.id) == spare).is_true()
+	assert_array(_b.sim.info_desks.to_list()["visits"]).is_equal(visits)
+
+
+func test_removing_the_desk_mid_help_ends_the_visit_so_a_save_stays_loadable() -> void:
+	var p := _stuck_guest(_helping)
+	var desk := _a.sim.info_desks.desk_of(p)
+	assert_bool(_a.grid.apply(BuildEdit.remove_object(desk)).ok).is_true()
+	# A save waits for the tick that settles an edit; that tick ends the visit.
+	_a.step()
+	assert_bool(_a.sim.info_desks.holds(p)).is_false()
+	assert_array(_a.sim.info_desks.to_list()["visits"]).is_empty()
+	_b = _load(_save(_a))
+	assert_bool(_b.sim.info_desks.holds(_b.passenger(p.id))).is_false()
+
+
+## A stop for _stuck_guest(): the passenger is being helped, at the desk.
+func _helping(g: Passenger) -> bool:
+	return (
+		_a.sim.info_desks.holds(g)
+		and g.at == InfoDeskTestLayout.DESK_FRONT
+		and _a.sim.info_desks.to_list()["visits"][0][2] != InfoDesk.WALKING
+	)
+
+
+## A copy of `p` for InfoDesk.checked(), with a stage or cell overridden.
+func _stub(p: Passenger, stage: int, cell: Variant) -> Passenger:
+	var stub := Passenger.new()
+	stub.id = p.id
+	stub.stage = p.stage if stage < 0 else stage
+	stub.at = p.at if cell == null else Vector2i(cell[0], cell[1])
+	return stub
+
+
+func _visit(p: Passenger, desk: int, end: int) -> Dictionary:
+	return {"visits": [[p.id, desk, end]], "cooldowns": []}
+
+
+func _cooldown(p: Passenger, tick: int) -> Dictionary:
+	return {"visits": [], "cooldowns": [[p.id, tick]]}
