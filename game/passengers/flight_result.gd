@@ -10,6 +10,9 @@ const NEVER_ARRIVED := "Never arrived: the terminal has no entrance"
 const ARRIVED_LATE := "Did not arrive before the doors closed"
 ## PassengerSim.no_shows causes: scheduled passengers dropped at doors close.
 const NO_SHOW_TEXT := {"no_entrance": NEVER_ARRIVED, "late": ARRIVED_LATE}
+## A booking still in its car or taxi when the doors closed
+## (ArrivalBookings.missed_by_flight): a missed flight, never a no-show.
+const WAITING_FOR_DROP_OFF := "Waiting for drop-off"
 
 const STUCK_TEXT := {
 	Passenger.Stuck.NO_CHECKIN: "No check-in desk to go to",
@@ -58,13 +61,18 @@ static func reason_text(stage: Passenger.Stage, stuck: Passenger.Stuck) -> Strin
 ## {"flight", "made", "missed", "reasons"} for one flight. "reasons" is a list of
 ## {"text", "count"} sorted largest first (ties by text). Scheduled passengers
 ## dropped when the doors closed (PassengerSim.no_shows) never reached the
-## terminal, so they are a reason but are not in "missed". Nothing here reads
-## the live schedule, so the result does not change after the doors close.
+## terminal, so they are a reason but are not in "missed". Passengers still on
+## the road in a car or taxi then did miss it: they are in "missed", with the
+## reason WAITING_FOR_DROP_OFF. Nothing here reads the live schedule, so the
+## result does not change after the doors close.
 static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 	var result: Dictionary = sim.flight_results.get(flight_id, {})
 	var made: int = result.get("made", 0)
-	var missed: int = result.get("missed", 0)
+	var on_road: int = sim.arrivals.missed_by_flight.get(flight_id, 0)
+	var missed: int = result.get("missed", 0) + on_road
 	var counts := {}
+	if on_road > 0:
+		counts[WAITING_FOR_DROP_OFF] = on_road
 	var causes: Dictionary = result.get("causes", {})
 	for cause: Vector2i in causes:
 		var text := reason_text(cause.x as Passenger.Stage, cause.y as Passenger.Stuck)

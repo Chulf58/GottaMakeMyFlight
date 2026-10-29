@@ -31,6 +31,9 @@ extends RefCounted
 ##   settled passenger is retired and a desk can be demolished while its
 ##   bags remain. The reverse is looked up: a passenger whose fee the
 ##   settlement holds for a bag on its way has an unsettled bag.
+## - the landside: every arrival booking's flight is one the passengers part
+##   has scheduled, and every flight with transport misses is live or an
+##   issued occurrence;
 ## - today's money: the DayLedger's day is the clock's day
 ##   (DayLedger.day_link_problem), and unless it counts since a load its
 ##   wages paid are the settlement's wages paid today
@@ -50,6 +53,8 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 	var found := _offer_problem(data["offers"]["offers"], staged["offers"], flights["contracts"])
 	if found == "":
 		found = _flight_id_problem(staged["passengers"], staged["rating"], flights)
+	if found == "":
+		found = _landside_problem(staged["landside"], staged["passengers"], flights)
 	if found == "":
 		found = _station_problem(staged["passengers"], staged["sim"])
 	if found == "":
@@ -143,6 +148,29 @@ static func _flight_id_problem(
 	for id in named:
 		if not live.has(id) and not _issued(id, flights):
 			return "flight %s is named but is neither live nor an issued occurrence" % id
+	return ""
+
+
+## Every arrival booking is for a flight the passengers part has scheduled
+## and whose doors have not closed (doors close settles a flight's bookings
+## and unschedules it on the same tick), and every flight with transport
+## misses is live or an issued occurrence.
+static func _landside_problem(
+	landside: Dictionary, passengers: Dictionary, flights: Dictionary
+) -> String:
+	var scheduled: Dictionary = passengers["scheduled"]
+	for b: ArrivalBooking in landside["bookings"]:
+		if not scheduled.has(b.flight_id):
+			return (
+				"landside: booking %d is for flight %s, which is not scheduled"
+				% [b.id, b.flight_id]
+			)
+	var live := {}
+	for flight in flights["flights"]:
+		live[flight["id"]] = true
+	for id in (landside["missed"] as Dictionary).keys():
+		if not live.has(id) and not _issued(id, flights):
+			return "landside: flight %s has misses but is neither live nor issued" % id
 	return ""
 
 

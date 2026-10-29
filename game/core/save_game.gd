@@ -45,7 +45,9 @@ signal saved(path: String, ok: bool)
 signal loaded(ok: bool)
 
 ## 2: the bags (part "baggage"); version 1 saves are refused.
-const SAVE_VERSION := 2
+## 3: the landside (part "landside": arrival bookings, cars, taxis and car
+## parks); version 2 saves are refused (no migration before a release).
+const SAVE_VERSION := 3
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -67,6 +69,7 @@ const MESSAGE_SECONDS := 4.0
 @export var rating: AirportRating
 @export var baggage: BaggageSim
 @export var day_ledger: DayLedger
+@export var landside: LandsideSim
 ## Where F5 and F8 save and load. Tests point it at their own file.
 @export var quick_save_path := QUICK_SAVE_PATH
 
@@ -111,6 +114,13 @@ func parts() -> Array[SavePart]:
 			"passengers", passengers.to_snapshot, _stage_passengers, passengers.from_snapshot
 		),
 		SavePart.new("staff", staff.to_snapshot, _stage_staff, staff.from_snapshot),
+		# The bookings are PassengerSim's; the part holds them with the cars.
+		SavePart.new(
+			"landside",
+			func() -> Dictionary: return landside.to_snapshot(passengers.arrivals, passengers.tick),
+			_stage_landside,
+			func(data: Dictionary) -> bool: return landside.from_snapshot(data, passengers.arrivals)
+		),
 		SavePart.new(
 			"baggage",
 			baggage.to_snapshot,
@@ -368,7 +378,7 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 ## Every part that keeps the tick was saved on the same one.
 func _ticks_problem(data: Dictionary) -> String:
 	var tick := str(data["clock"]["tick"]).to_int()
-	for key in ["flights", "passengers", "rating", "baggage"]:
+	for key in ["flights", "passengers", "rating", "baggage", "landside"]:
 		var value: Variant = data[key]["tick"]
 		var other := str(value).to_int() if typeof(value) == TYPE_STRING else int(value)
 		if other != tick:
@@ -407,6 +417,15 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 
 func _stage_staff(data: Dictionary, staged: Dictionary) -> String:
 	return str(StaffSnapshot.load(data, staged["sim"]).get("error", ""))
+
+
+## Checked against the scene's landside definition; kept for the links.
+func _stage_landside(data: Dictionary, staged: Dictionary) -> String:
+	var loaded := LandsideSnapshot.load(data, landside.definition)
+	if loaded.has("error"):
+		return str(loaded["error"])
+	staged["landside"] = loaded
+	return ""
 
 
 ## AirportRating.from_snapshot() then bind (a no-op when already bound to
