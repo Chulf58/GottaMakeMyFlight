@@ -70,6 +70,19 @@ const CATEGORIES := [
 		"tools":
 		[BuildMode.Tool.KIOSK_ROOM, BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
 	},
+	# The landside tools (Landside 3/4): a curb bay and the two car park kinds
+	# snap to the authored spots outside the terminal; Close opens or closes a
+	# car park so it can drain before Remove takes it back.
+	{
+		"name": "Landside",
+		"tools":
+		[
+			BuildMode.Tool.CURB,
+			BuildMode.Tool.SURFACE_LOT,
+			BuildMode.Tool.MULTI_STOREY,
+			BuildMode.Tool.LOT_GATE,
+		],
+	},
 	# One Belt tool shapes itself (decision baggage-belts-are-one-auto-shaping-
 	# belt-tool-one-baggage-tray), so baggage fits one tray.
 	{
@@ -79,7 +92,7 @@ const CATEGORIES := [
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray.
-const REMOVE_CATEGORY := 10
+const REMOVE_CATEGORY := 11
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -105,6 +118,10 @@ const ITEMS := {
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
+	BuildMode.Tool.CURB: ["Curb bay", "curb_bay", "16x3 m"],
+	BuildMode.Tool.SURFACE_LOT: ["Surface lot", "surface_lot", "32x24 m"],
+	BuildMode.Tool.MULTI_STOREY: ["Multi-storey", "multi_storey", "24x52 m"],
+	BuildMode.Tool.LOT_GATE: ["Open / close", "lot_gate", "A car park"],
 }
 ## The Lane tray's cards, as ITEMS (item() looks in both).
 const LANE_ITEMS := {
@@ -129,7 +146,7 @@ const RUNNING_COST_TEXT := "Upkeep %d/day"
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := []
+const PLACEHOLDER_THUMBNAILS := ["curb_bay", "surface_lot", "multi_storey", "lot_gate"]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
@@ -241,6 +258,10 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 		return PriceTable.price_of_object(BuildMode.TOOL_OBJECTS[tool])
 	if tool == BuildMode.Tool.BELT:
 		return PriceTable.price_of_object(BuildMode.BELT_PRICE_ID)
+	if BuildMode.LANDSIDE_BUILD_TOOLS.has(tool):
+		return PriceTable.price_of_landside(
+			LandsidePlacement.PRICE_IDS[BuildMode.LANDSIDE_BUILD_TOOLS[tool]]
+		)
 	return 0
 
 
@@ -492,6 +513,8 @@ func _preview_price() -> Vector2i:
 		# Only the cells with no belt yet are bought; reshaping is free.
 		var line_cost := build_mode.belt_cells_to_buy() * tool_price(BuildMode.Tool.BELT)
 		return Vector2i(line_cost, line_cost)
+	if build_mode.tool in BuildMode.LANDSIDE_BUILD_TOOLS:
+		return build_mode.landside_preview_price()
 	var edit := build_mode.hover_edit()
 	if edit == null or not _pointer_on_grid():
 		return Vector2i.ZERO

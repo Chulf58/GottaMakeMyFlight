@@ -58,6 +58,18 @@ const OBJECT_PRICES := {
 	&"screen_stand": 350,
 }
 
+## What the landside build tools cost (decision landside-parking-kinds-a-cheap-
+## surface-lot-and-an-expensive; Landside 3/4). Tuning values, to be checked in
+## a playtest: a curb bay (two berths) costs about a cafe table, a surface lot
+## (12 spaces) about three check-in desks, a multi-storey (36 spaces) about four
+## times a lot. A car pays SURFACE_LOT_FEE once when it parks, so a lot earns
+## its price back after about 60 cars.
+const LANDSIDE_PRICES := {
+	&"curb_bay": 300,
+	&"surface_lot": 1200,
+	&"multi_storey": 5000,
+}
+
 ## What a ready toilet room costs to run per stall per game day (decision
 ## toilet-design-queue-free-reservable-stalls-per-stall-daily-u, point 2),
 ## charged at midnight with the wages. A tuning value, to be checked in a
@@ -105,6 +117,14 @@ static func price_of_object(id: StringName) -> int:
 		push_error("PriceTable: no price for object '%s'" % id)
 		return NO_PRICE
 	return OBJECT_PRICES[id]
+
+
+## What a landside build costs (LANDSIDE_PRICES); an unknown id has no price.
+static func price_of_landside(id: StringName) -> int:
+	if not LANDSIDE_PRICES.has(id):
+		push_error("PriceTable: no price for landside build '%s'" % id)
+		return NO_PRICE
+	return LANDSIDE_PRICES[id]
 
 
 ## The daily wage of a `role` (a StaffMember.Role); an unknown role has none.

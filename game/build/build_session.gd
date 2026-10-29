@@ -54,7 +54,7 @@ func set_building(on: bool) -> void:
 		_hold_pending = false
 		active = false
 		if build_mode != null:
-			build_mode.undo_history().clear()
+			build_mode.clear_undo()
 	changed.emit(active)
 
 

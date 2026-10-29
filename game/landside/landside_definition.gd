@@ -25,6 +25,70 @@ extends Resource
 @export var curb: LandsideCurb
 ## Car park spots; a new game has none built.
 @export var lots: Array[LandsideLotSpot] = []
+## Places for more curb bays; a new game has none built.
+@export var curb_spots: Array[LandsideCurbSpot] = []
+
+
+## Every berth, the starter curb's first and then each curb spot's in order.
+## A berth index (LandsideVehicle.stop) counts through this list whether or
+## not the curb spot holding it is built.
+func berth_count() -> int:
+	var total := curb.berths.size()
+	for spot in curb_spots:
+		total += spot.berths.size()
+	return total
+
+
+func berth_position(index: int) -> Vector3:
+	var at := _berth_at(index)
+	return curb.berths[at[1]] if at[0] < 0 else curb_spots[at[0]].berths[at[1]]
+
+
+## Where the passengers of the car in berth `index` step out.
+func berth_get_out(index: int) -> Vector3:
+	var at := _berth_at(index)
+	return curb.get_out[at[1]] if at[0] < 0 else curb_spots[at[0]].get_out[at[1]]
+
+
+## How far along road_in berth `index` stands, in whole mm: the distance to the
+## road_in point nearest it, the last segment carried on past the road's end
+## (the starter curb's berths are past it).
+func berth_mm(index: int) -> int:
+	var at := berth_position(index)
+	var best := INF
+	var best_mm := 0
+	var walked := 0
+	for i in range(1, road_in.size()):
+		var segment := roundi(road_in[i - 1].distance_to(road_in[i]) * 1000.0)
+		var a := road_in[i - 1]
+		var along := Vector3(road_in[i] - a)
+		var t := maxf((at - a).dot(along) / maxf(along.length_squared(), 0.000001), 0.0)
+		if i < road_in.size() - 1:
+			t = minf(t, 1.0)
+		var gap := at.distance_to(a + along * t)
+		if gap < best:
+			best = gap
+			best_mm = walked + roundi(t * segment)
+		walked += segment
+	return best_mm
+
+
+## The curb spot berth `index` belongs to, or -1 for the starter curb.
+func berth_spot(index: int) -> int:
+	return _berth_at(index)[0]
+
+
+## [curb spot or -1, berth within it].
+func _berth_at(index: int) -> Array:
+	if index < curb.berths.size():
+		return [-1, index]
+	var left := index - curb.berths.size()
+	for i in curb_spots.size():
+		if left < curb_spots[i].berths.size():
+			return [i, left]
+		left -= curb_spots[i].berths.size()
+	push_error("LandsideDefinition: berth %d does not exist" % index)
+	return [-1, 0]
 
 
 ## A polyline's length in whole mm, each segment rounded on its own.
@@ -72,12 +136,18 @@ func problem() -> String:
 		var found := _lot_problem(lots[i])
 		if found != "":
 			return "lot spot %d %s" % [i, found]
+	for i in curb_spots.size():
+		var spot := curb_spots[i]
+		if spot == null or spot.berths.is_empty() or spot.berths.size() != spot.get_out.size():
+			return "curb spot %d needs berths, each with a get-out point" % i
 	return _keep_right_problem()
 
 
 func _lot_problem(lot: LandsideLotSpot) -> String:
 	if lot == null or lot.slots.is_empty() or lot.access.size() < 2 or lot.exit.size() < 2:
 		return "needs slots, an access lane and an exit lane"
+	if lot.footprint.x <= 0.0 or lot.footprint.y <= 0.0:
+		return "needs a footprint"
 	if lot.branch_mm <= 0 or lot.branch_mm >= curb.stop_mm:
 		return "does not branch off road_in before the curb"
 	if lot.crossing.is_empty():

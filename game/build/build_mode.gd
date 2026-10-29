@@ -65,6 +65,18 @@ enum Tool {
 	KIOSK_COUNTER,
 	KIOSK_DISPLAY,
 	SCREEN,
+	CURB,
+	SURFACE_LOT,
+	MULTI_STOREY,
+	LOT_GATE,
+}
+
+## The landside build tools (LandsidePlacement), by the kind each builds. They
+## work on the ground outside the grid; LOT_GATE opens or closes a car park.
+const LANDSIDE_BUILD_TOOLS := {
+	Tool.CURB: LandsidePlacement.Kind.CURB,
+	Tool.SURFACE_LOT: LandsidePlacement.Kind.SURFACE_LOT,
+	Tool.MULTI_STOREY: LandsidePlacement.Kind.MULTI_STOREY,
 }
 
 const TOOL_ACTIONS := {
@@ -203,6 +215,9 @@ const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
 ## sets it. Without it the tools build for free and save no prices, the
 ## non-spending path tests and probes use.
 @export var finances: Finances
+## The landside the curb, car park and Close tools build on (Landside 3/4). main.tscn
+## sets it; without it those tools do nothing.
+@export var landside: LandsideSim
 
 ## The tool BuildMode starts on. main.tscn sets None, so a new game has no tool
 ## and a stray click on the world builds nothing; the Floor default keeps a bare
@@ -269,6 +284,9 @@ var _belt_plan: BeltShaper.Plan
 ## through these tools, which redraw at once.
 var _view_stale := false
 var _history := UndoStack.new()
+var _landside_placement := LandsidePlacement.new()
+## What the landside tool under the pointer would do, or null (BuildMenu prices it).
+var _landside_plan: LandsidePlacement.Plan
 
 
 ## Where a ray meets the level plane y = `height`, or null when it never does.
@@ -420,6 +438,10 @@ func edit_at(point: Vector3) -> BuildEdit:
 ## wall stroke cannot be paid for, the rest of the stroke is refused for
 ## money too. Returns null when nothing was attempted. One undo step.
 func apply_at(point: Vector3) -> BuildResult:
+	# A landside action is not a grid action: it keeps its own undo record.
+	var landside_plan := landside_plan_at(point)
+	if landside_plan != null or _is_landside_tool():
+		return _apply_landside(landside_plan)
 	_history.begin_action()
 	var result := _apply_at(point)
 	_history.end_action()
@@ -487,6 +509,8 @@ func hover_edit() -> BuildEdit:
 
 ## True while the pointer is over a cell of the grid (BuildMenu shows its status
 ## line only then); false with no hover yet, over the HUD or outside the grid.
+## A landside tool works on the ground outside the grid, so for it this is true
+## while the pointer is over the ground.
 func pointer_on_grid() -> bool:
 	return _pointer_on_grid
 
@@ -605,7 +629,8 @@ func undo() -> BuildResult:
 	cancel_area()
 	_dragging = false
 	_drag_side = -1
-	var result := _history.undo(shell)
+	var landside_first := landside_placement().has_undo_for(_history.peek())
+	var result := _landside_placement.undo() if landside_first else _history.undo(shell)
 	if result == null:
 		_status_note = UndoStack.NOTHING_TO_UNDO
 	elif result.ok:
@@ -620,8 +645,18 @@ func undo() -> BuildResult:
 	if point != null:
 		_note_cell = grid.world_to_cell(point)
 	_hover_key = ""
+	if landside_first:
+		# The landside hover keeps this note until the pointer meets another plan.
+		_hover_key = _landside_key(landside_plan_at(point))
 	_show_status(null)
 	return result
+
+
+## Forgets every action that could be undone, the grid's and the landside's
+## (BuildSession calls it when build mode ends).
+func clear_undo() -> void:
+	_history.clear()
+	_landside_placement.clear_undo()
 
 
 ## The undo history, newest action on top (read it, never change it).
@@ -743,7 +778,7 @@ func load_snapshot(data: Dictionary) -> bool:
 		return false
 	if not grid.from_snapshot(data):
 		return false
-	_history.clear()
+	clear_undo()
 	_redraw()
 	_hover_key = ""
 	grid_changed.emit()
@@ -900,11 +935,25 @@ func _mouse_ground() -> Variant:
 	var mouse := get_viewport().get_mouse_position()
 	if pointer_override.x >= 0.0:
 		mouse = pointer_override
-	return grid_point(camera.project_ray_origin(mouse), camera.project_ray_normal(mouse))
+	var from := camera.project_ray_origin(mouse)
+	var direction := camera.project_ray_normal(mouse)
+	if _is_landside_tool():
+		return LandsidePlacement.ground_point(from, direction)
+	var point: Variant = grid_point(from, direction)
+	# Remove also takes a built landside spot, which stands off the grid, on the
+	# ground plane.
+	if tool == Tool.REMOVE and point != null and not grid.in_bounds(grid.world_to_cell(point)):
+		return LandsidePlacement.ground_point(from, direction)
+	return point
 
 
 func _update_ghost(point: Variant) -> void:
 	_pointer_on_grid = point != null and grid.in_bounds(grid.world_to_cell(point))
+	_landside_plan = null if _area.active else landside_plan_at(point)
+	if _landside_plan != null or _is_landside_tool():
+		_pointer_on_grid = point != null
+		_hover_landside(_landside_plan)
+		return
 	if _area.active:
 		_draw_area()
 		return
@@ -937,6 +986,80 @@ func _update_ghost(point: Variant) -> void:
 	_front_warning = warning if result.ok else ""
 	_draw_ghost(edit, _valid_material if result.ok else _invalid_material)
 	_show_status(result)
+
+
+## The landside tools' rules (LandsidePlacement) for the sim, shell and wallet
+## BuildMode has now.
+func landside_placement() -> LandsidePlacement:
+	_landside_placement.sim = landside
+	_landside_placement.shell = shell
+	_landside_placement.wallet = wallet()
+	return _landside_placement
+
+
+## What the current tool would do on the landside at a ground point (picked on
+## the y = 0 plane): a curb or car park tool snaps to the nearest free spot of
+## its kind or says why not, the Close tool finds the car park under it, and
+## Remove, off the grid, finds the built spot under it. Null for any other
+## tool or point, and for a spot-less pointer.
+func landside_plan_at(point: Variant) -> LandsidePlacement.Plan:
+	if point == null:
+		return null
+	var placement := landside_placement()
+	if LANDSIDE_BUILD_TOOLS.has(tool):
+		return placement.plan_build(LANDSIDE_BUILD_TOOLS[tool], point)
+	if tool == Tool.LOT_GATE:
+		return placement.plan_toggle(point)
+	if tool == Tool.REMOVE and not grid.in_bounds(grid.world_to_cell(point)):
+		return placement.plan_remove(point)
+	return null
+
+
+## (cost, money the wallet must hold) of the landside build under the pointer,
+## zero for anything else (BuildMenu's cost line).
+func landside_preview_price() -> Vector2i:
+	if _landside_plan == null or _landside_plan.action != LandsidePlacement.Action.BUILD:
+		return Vector2i.ZERO
+	return Vector2i(_landside_plan.price, _landside_plan.price)
+
+
+func _is_landside_tool() -> bool:
+	return LANDSIDE_BUILD_TOOLS.has(tool) or tool == Tool.LOT_GATE
+
+
+## Ghosts and describes a landside plan: the free spots of the tool's kind in
+## the marker tint, the spot under the pointer valid or invalid, and its
+## capacity, walk and price on the status line.
+func _hover_landside(plan: LandsidePlacement.Plan) -> void:
+	var key := _landside_key(plan)
+	if key == _hover_key:
+		return
+	_hover_key = key
+	_status_note = ""
+	_clear_ghost()
+	if plan == null:
+		_ghost.visible = false
+		_set_status("")
+		return
+	var spots: Array[LandsidePlacement.Plan] = []
+	if LANDSIDE_BUILD_TOOLS.has(tool):
+		spots = landside_placement().free_spot_plans(LANDSIDE_BUILD_TOOLS[tool])
+	var valid := _area_remove_material if tool == Tool.REMOVE else _valid_material
+	LandsidePlacement.draw(_ghost, spots, plan, valid, _invalid_material, _marker_material)
+	_set_status(plan.text)
+
+
+func _landside_key(plan: LandsidePlacement.Plan) -> String:
+	return "landside:%d:%s" % [tool, "none" if plan == null else plan.text]
+
+
+## Applies a landside plan (null when the tool has no landside to build on).
+## Landside actions keep their own undo records (LandsidePlacement.apply()).
+func _apply_landside(plan: LandsidePlacement.Plan) -> BuildResult:
+	var result := landside_placement().apply(plan, _history.peek())
+	_hover_key = ""
+	_status_note = ""
+	return result
 
 
 ## Hides the rectangle's slab and size while the pointer is over the HUD; the

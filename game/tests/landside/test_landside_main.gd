@@ -145,8 +145,9 @@ func test_a_new_game_starts_with_the_curb_and_no_car_park() -> void:
 	var fresh := SaveTestKit.boot(self, SEED)
 	var landside := _landside(fresh)
 	assert_object(landside.definition).is_not_null()
-	assert_array(landside.lots_built).is_equal([false])
-	assert_int(landside.definition.curb.berths.size()).is_equal(3)
+	assert_array(landside.lots_built).is_equal([false, false])
+	assert_array(landside.curbs_built).is_equal([false, false])
+	assert_int(landside.definition.curb.berths.size()).is_equal(4)
 	assert_object(_sim(fresh).landside).is_same(landside)
 	fresh.free()
 

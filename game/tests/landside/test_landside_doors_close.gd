@@ -5,10 +5,11 @@ extends GdUnitTestSuite
 ## PassengerSim.missed_count(), in the flight's result and in the airport
 ## rating (unlike a no-show, it is in "missed"). With no entrance it is a
 ## 'never arrived' no-show, as before. The flight here closes its doors at
-## tick 250, before the first car (on the road from tick 1) reaches the curb.
+## tick 60, before the first car (on the road from tick 1) reaches the curb,
+## 94 ticks along the 47 m of road that is baked into the shell.
 
-const BOARDING := 150
-const DOORS := 250
+const BOARDING := 30
+const DOORS := 60
 const BOOKED := 6
 
 var _land: LandsideTestWorld

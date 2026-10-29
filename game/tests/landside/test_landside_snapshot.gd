@@ -88,11 +88,11 @@ func _break(d: Dictionary, case_name: String) -> void:
 		"unknown key":
 			d["extra"] = 1
 		"old version":
-			d["save_version"] = 0
+			d["save_version"] = 1
 		"lots size":
-			d["lots_built"] = [true, true]
+			d["lots_built"] = [true, true, true]
 		"no lot built":
-			d["lots_built"] = [false]
+			d["lots_built"] = [false, false]
 		"aboard unlisted":
 			for v in d["vehicles"]:
 				(v["bookings"] as Array).clear()
@@ -132,6 +132,14 @@ func test_bad_parts_are_refused_whole() -> void:
 	bad["lots_built"] = []
 	assert_bool(sim.from_snapshot(bad, _land.sim.arrivals)).is_false()
 	assert_str(JSON.stringify(_part())).is_equal(before)
+
+
+func test_the_previous_part_version_is_refused_naming_the_version_it_needs() -> void:
+	var old: Dictionary = _data.duplicate(true)
+	old["save_version"] = 1
+	var loaded := LandsideSnapshot.load(old, LandsideTestWorld.with_berths(1))
+	assert_int(LandsideSnapshot.SAVE_VERSION).is_equal(2)
+	assert_str(str(loaded.get("error", ""))).is_equal("save_version must be 2")
 
 
 func test_a_booking_for_a_flight_not_scheduled_breaks_the_link() -> void:

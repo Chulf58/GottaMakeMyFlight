@@ -8,6 +8,16 @@ extends Resource
 ## (every slot parked or reserved) a car does not turn and drops off at the
 ## curb instead.
 
+## What the player can build here (decision landside-parking-kinds-a-cheap-
+## surface-lot-and-an-expensive): a surface lot or a multi-storey car park.
+## The kind fixes the spot's footprint and so its capacity (slots.size()).
+enum Kind { SURFACE, MULTI_STOREY }
+
+@export var kind := Kind.SURFACE
+## The footprint's middle on the ground plane and its size in metres, x by z:
+## where the build tools snap and what they draw.
+@export var centre := Vector3.ZERO
+@export var footprint := Vector2.ZERO
 ## Where the turn is, in mm along road_in.
 @export var branch_mm := 0
 ## The lane from the turn to the lot gate.

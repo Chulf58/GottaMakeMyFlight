@@ -6,7 +6,7 @@ extends RefCounted
 ## slot holders are rebuilt from the vehicles. Every booking saved is AWAITING
 ## (vehicle 0) or IN_VEHICLE in exactly the one vehicle that lists it.
 
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
 const KEYS := [
 	"save_version",
 	"tick",
@@ -17,6 +17,10 @@ const KEYS := [
 	"next_vehicle_id",
 	"vehicles",
 	"lots_built",
+	"lots_closed",
+	"lots_paid",
+	"curbs_built",
+	"curbs_paid",
 ]
 const BOOKING_INTS := [
 	"id", "party", "variant", "arrival", "unload_tick", "kind", "intent", "state", "vehicle"
@@ -82,6 +86,10 @@ static func save(
 		"next_vehicle_id": next_vehicle_id,
 		"vehicles": vehicle_list,
 		"lots_built": sim.lots_built.duplicate(),
+		"lots_closed": sim.lots_closed.duplicate(),
+		"lots_paid": sim.lots_paid.duplicate(),
+		"curbs_built": sim.curbs_built.duplicate(),
+		"curbs_paid": sim.curbs_paid.duplicate(),
 	}
 
 
@@ -100,6 +108,17 @@ static func load(data: Dictionary, definition: LandsideDefinition) -> Dictionary
 	var built: Array[bool] = []
 	built.assign(data["lots_built"])
 	out["lots_built"] = built
+	var closed: Array[bool] = []
+	closed.assign(data["lots_closed"])
+	out["lots_closed"] = closed
+	var curbs: Array[bool] = []
+	curbs.assign(data["curbs_built"])
+	out["curbs_built"] = curbs
+	for key in ["lots_paid", "curbs_paid"]:
+		var prices: Array[int] = []
+		for price in data[key]:
+			prices.append(int(price))
+		out[key] = prices
 	var missed := {}
 	var missed_sum := 0
 	for entry in data["missed"]:
@@ -117,7 +136,7 @@ static func load(data: Dictionary, definition: LandsideDefinition) -> Dictionary
 	if bookings.has("error"):
 		return bookings
 	out["bookings"] = bookings["list"]
-	var vehicles := _vehicles(data["vehicles"], out["next_vehicle_id"], definition, built)
+	var vehicles := _vehicles(data["vehicles"], out["next_vehicle_id"], definition, built, curbs)
 	if vehicles.has("error"):
 		return vehicles
 	out["vehicles"] = vehicles["list"]
@@ -143,14 +162,39 @@ static func _top_problem(data: Dictionary, definition: LandsideDefinition) -> St
 			return "%s must be a whole number, 1 or more" % key
 	if not _whole(data["missed_total"]) or int(data["missed_total"]) < 0:
 		return "missed_total must be a whole number, 0 or more"
-	for key in ["bookings", "missed", "vehicles", "lots_built"]:
+	for key in ["bookings", "missed", "vehicles"]:
 		if typeof(data[key]) != TYPE_ARRAY:
 			return "%s must be an array" % key
-	if (data["lots_built"] as Array).size() != definition.lots.size():
-		return "lots_built must have one entry per lot spot"
-	for flag in data["lots_built"]:
-		if typeof(flag) != TYPE_BOOL:
-			return "lots_built must hold true or false"
+	return _build_problem(data, definition)
+
+
+## The checks on what the player built: one entry per lot spot and curb spot,
+## closed and paid only where something stands.
+static func _build_problem(data: Dictionary, definition: LandsideDefinition) -> String:
+	var sizes := {
+		"lots_built": definition.lots.size(),
+		"lots_closed": definition.lots.size(),
+		"lots_paid": definition.lots.size(),
+		"curbs_built": definition.curb_spots.size(),
+		"curbs_paid": definition.curb_spots.size(),
+	}
+	for key in sizes:
+		if typeof(data[key]) != TYPE_ARRAY or (data[key] as Array).size() != sizes[key]:
+			return "%s must be an array with one entry per spot" % key
+	for key in ["lots_built", "lots_closed", "curbs_built"]:
+		for flag in data[key]:
+			if typeof(flag) != TYPE_BOOL:
+				return "%s must hold true or false" % key
+	for key in ["lots_paid", "curbs_paid"]:
+		for price in data[key]:
+			if not _whole(price) or int(price) < 0:
+				return "%s must hold whole prices, 0 or more" % key
+	var pairs := [["lots_built", "lots_closed", "lots_paid"], ["curbs_built", "", "curbs_paid"]]
+	for pair in pairs:
+		for i in (data[pair[0]] as Array).size():
+			var standing: bool = data[pair[0]][i]
+			if not standing and (pair[1] != "" and data[pair[1]][i] or int(data[pair[2]][i]) > 0):
+				return "a spot with nothing built is closed or has a price"
 	return ""
 
 
@@ -195,7 +239,11 @@ static func _booking_problem(b: ArrivalBooking, last: int, next_id: int) -> Stri
 
 ## {"list": Array[LandsideVehicle]} in id order, or {"error"}.
 static func _vehicles(
-	list: Array, next_id: int, definition: LandsideDefinition, built: Array[bool]
+	list: Array,
+	next_id: int,
+	definition: LandsideDefinition,
+	built: Array[bool],
+	curbs: Array[bool]
 ) -> Dictionary:
 	var out: Array[LandsideVehicle] = []
 	var held := {}
@@ -214,7 +262,7 @@ static func _vehicles(
 			if not _whole(id) or v.bookings.has(int(id)):
 				return {"error": "vehicle %d lists a bad or repeated booking" % v.id}
 			v.bookings.append(int(id))
-		var problem := _vehicle_problem(v, last, next_id, definition, built)
+		var problem := _vehicle_problem(v, last, next_id, definition, built, curbs)
 		var key := ""
 		match v.lane:
 			LandsideVehicle.Lane.BERTH:
@@ -232,7 +280,12 @@ static func _vehicles(
 
 
 static func _vehicle_problem(
-	v: LandsideVehicle, last: int, next_id: int, definition: LandsideDefinition, built: Array[bool]
+	v: LandsideVehicle,
+	last: int,
+	next_id: int,
+	definition: LandsideDefinition,
+	built: Array[bool],
+	curbs: Array[bool]
 ) -> String:
 	if v.id <= last or v.id >= next_id:
 		return "its id is out of order"
@@ -253,11 +306,14 @@ static func _vehicle_problem(
 	var stops := -1
 	match v.lane:
 		LandsideVehicle.Lane.BERTH:
-			stops = definition.curb.berths.size()
+			stops = definition.berth_count()
 		LandsideVehicle.Lane.ACCESS, LandsideVehicle.Lane.SLOT:
 			stops = definition.lots[v.lot].slots.size()
 	if (stops < 0 and v.stop != -1) or (stops >= 0 and (v.stop < 0 or v.stop >= stops)):
 		return "its berth or slot is out of range"
+	if v.lane == LandsideVehicle.Lane.BERTH and definition.berth_spot(v.stop) >= 0:
+		if not curbs[definition.berth_spot(v.stop)]:
+			return "it stands in a berth of a curb spot with no curb bay"
 	var length := _lane_length(v, definition)
 	if v.lane != LandsideVehicle.Lane.ROAD_IN and (v.pos_mm < 0 or v.pos_mm > length):
 		return "its position is off its lane"
