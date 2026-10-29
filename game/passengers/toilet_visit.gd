@@ -16,3 +16,8 @@ var resume_stage: Passenger.Stage = Passenger.Stage.TO_GATE
 var deadline := 0
 ## The reserved stall's ToiletLayout entry, derived again on load.
 var stall: Dictionary = {}
+
+
+## The stall's object id: the key FacilitySlots holds the stall by.
+func slot_key() -> int:
+	return stall_id

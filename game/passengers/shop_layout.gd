@@ -37,7 +37,7 @@ func rebuild(grid: BuildGrid) -> void:
 		var slots: Array[Dictionary] = []
 		for id in ids:
 			var record := grid.get_object(id)
-			if record["def"] != &"kiosk_display" or not CafeLayout._inside(grid, id, area):
+			if record["def"] != &"kiosk_display" or not FacilitySlots.piece_inside(grid, id, area):
 				continue
 			var def := BuildCatalog.get_def(record["def"])
 			var front := TerminalLayout.front_of(record["facing"])

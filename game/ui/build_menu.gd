@@ -173,11 +173,17 @@ const GRANT_HOLD_S := 8.0
 ## Optional: when set, a successful load ends any message hold (the notices
 ## belong to the world that was replaced).
 @export var save_game: SaveGame
+## Optional: paused while build mode lasts (BuildSession).
+@export var clock: SimClock
 
 ## True while the hiring card is open; press_staff() changes it.
 var staff_open := false
 ## The Staff button at the end of the bar.
 var staff_button := Button.new()
+## Build mode: a tray open or a tool picked (decision build-mode-pauses-the-
+## game-while-a-build-tray-is-open-closin). The frame is its on-screen sign.
+var build_session := BuildSession.new()
+var build_frame := BuildModeFrame.new()
 
 var _open := NO_CATEGORY
 ## True while a category click clears the tool, so the tool_changed(NONE)
@@ -265,6 +271,11 @@ static func category_of(tool: BuildMode.Tool) -> int:
 
 func _ready() -> void:
 	layer = 2
+	build_session.build_mode = build_mode
+	build_session.clock = clock
+	build_session.changed.connect(build_frame.set_building)
+	add_child(build_session)
+	add_child(build_frame)
 	_build_bar()
 	_build_tray()
 	_build_status()
@@ -556,10 +567,23 @@ func _on_wages_paid(amount: int, owed: int) -> void:
 func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
+	_end_build_mode_after_load()
 	_pending_wages = ""
 	_holding = false
 	_held_status = build_mode.status_text() if build_mode != null else ""
 	_status.text = _held_status
+
+
+## The loaded world is a new one: build mode ends with the clock as loaded, the
+## tray and tool close, and the undo history goes (as OfferPanel._on_loaded does
+## for its sheet).
+func _end_build_mode_after_load() -> void:
+	build_session.abandon()
+	_open = NO_CATEGORY
+	_set_staff_open(false)
+	if build_mode != null:
+		build_mode.set_tool(BuildMode.Tool.NONE)
+	_sync()
 
 
 func _on_hold_timeout(generation: int) -> void:
@@ -593,6 +617,7 @@ func _sync() -> void:
 		_category_buttons[i].set_pressed_no_signal(on)
 	for key in _cards:
 		_cards[key].set_pressed_no_signal(key == tool)
+	build_session.set_building(_open != NO_CATEGORY or tool != BuildMode.Tool.NONE)
 
 
 ## Height, from the bottom edge, of the top of the tray, status and cost stack:
