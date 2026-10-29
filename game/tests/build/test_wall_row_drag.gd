@@ -5,6 +5,8 @@ extends GdUnitTestSuite
 
 const NORTH := BuildGrid.Side.NORTH
 const WEST := BuildGrid.Side.WEST
+const SOUTH := BuildGrid.Side.SOUTH
+const EAST := BuildGrid.Side.EAST
 const SIZE := Vector2i(12, 12)
 
 var _grid: BuildGrid
@@ -87,8 +89,10 @@ func test_the_far_end_stays_inside_the_grid() -> void:
 	assert_that(_row.cells().back()).is_equal(Vector2i(11, 4))
 
 
-func test_every_edge_keeps_the_side_the_press_chose() -> void:
-	_begin(Vector2i(2, 4), WEST)
+func test_every_edge_of_a_row_along_the_press_side_axis_keeps_that_side() -> void:
+	# Was a WEST press dragged along x; the side now follows the drag axis, so
+	# a WEST press keeps WEST only for a drag along z (see the axis tests below).
+	_begin(Vector2i(4, 2), WEST)
 	_row.move(Vector2i(4, 4))
 	var edits := _row.edits(BuildGrid.WallKind.GLASS)
 	assert_int(edits.size()).is_equal(3)
@@ -96,6 +100,70 @@ func test_every_edge_keeps_the_side_the_press_chose() -> void:
 		assert_int(edit.kind).is_equal(BuildEdit.Kind.PLACE_WALL)
 		assert_int(edit.side).is_equal(WEST)
 		assert_int(edit.wall_kind).is_equal(BuildGrid.WallKind.GLASS)
+
+
+func test_a_mostly_vertical_drag_from_a_north_press_is_a_vertical_wall() -> void:
+	_begin(Vector2i(4, 2), NORTH)
+	_row.move(Vector2i(5, 7))
+	assert_int(_row.side).is_equal(WEST)
+	var edits := _row.edits(BuildGrid.WallKind.PLAIN)
+	assert_int(edits.size()).is_equal(6)
+	for edit in edits:
+		assert_int(edit.side).is_equal(WEST)
+		assert_int(edit.cell.x).is_equal(4)
+
+
+func test_a_mostly_horizontal_drag_from_a_west_press_is_a_horizontal_wall() -> void:
+	_begin(Vector2i(2, 4), WEST)
+	_row.move(Vector2i(7, 5))
+	assert_int(_row.side).is_equal(NORTH)
+	var edits := _row.edits(BuildGrid.WallKind.PLAIN)
+	assert_int(edits.size()).is_equal(6)
+	for edit in edits:
+		assert_int(edit.side).is_equal(NORTH)
+		assert_int(edit.cell.y).is_equal(4)
+
+
+func test_the_corrected_side_stays_toward_the_same_corner_as_the_press() -> void:
+	# SOUTH and EAST are the far edges; NORTH and WEST the near ones.
+	_begin(Vector2i(2, 2), SOUTH)
+	_row.move(Vector2i(2, 6))
+	assert_int(_row.side).is_equal(EAST)
+	_begin(Vector2i(2, 2), EAST)
+	_row.move(Vector2i(6, 2))
+	assert_int(_row.side).is_equal(SOUTH)
+	_begin(Vector2i(2, 2), SOUTH)
+	_row.move(Vector2i(6, 2))
+	assert_int(_row.side).is_equal(SOUTH)
+	_begin(Vector2i(2, 2), EAST)
+	_row.move(Vector2i(2, 6))
+	assert_int(_row.side).is_equal(EAST)
+
+
+func test_a_tie_between_the_axes_is_a_horizontal_wall() -> void:
+	_begin(Vector2i(2, 2), WEST)
+	_row.move(Vector2i(5, 5))
+	assert_int(_row.side).is_equal(NORTH)
+	for edit in _row.edits(BuildGrid.WallKind.PLAIN):
+		assert_int(edit.cell.y).is_equal(2)
+
+
+func test_the_side_follows_the_axis_as_the_pointer_moves() -> void:
+	_begin(Vector2i(4, 4), NORTH)
+	_row.move(Vector2i(8, 5))
+	assert_int(_row.side).is_equal(NORTH)
+	_row.move(Vector2i(5, 9))
+	assert_int(_row.side).is_equal(WEST)
+	_row.move(Vector2i(0, 4))
+	assert_int(_row.side).is_equal(NORTH)
+
+
+func test_a_row_that_never_left_its_cell_keeps_the_pressed_side() -> void:
+	_begin(Vector2i(3, 4), WEST)
+	assert_int(_row.side).is_equal(WEST)
+	_row.move(Vector2i(3, 4))
+	assert_int(_row.side).is_equal(WEST)
+	assert_int(_row.edits(BuildGrid.WallKind.PLAIN)[0].side).is_equal(WEST)
 
 
 func test_applying_places_every_edge_and_counts_them() -> void:

@@ -113,9 +113,11 @@ func test_a_diagonal_drag_snaps_to_the_longer_axis() -> void:
 	assert_int(_walls_on(_cells_x(2, 7, 4))).is_equal(6)
 	assert_bool(_mode.grid.has_wall(Vector2i(7, 6), NORTH)).is_false()
 	assert_bool(_mode.grid.has_wall(Vector2i(2, 5), NORTH)).is_false()
+	# Dominant along z: the walls turn to the vertical (WEST) edges, not NORTH.
 	_drag(Vector2i(9, 2), Vector2i(10, 8))
 	_mode.finish_row()
-	assert_int(_walls_on(_cells_z(9, 2, 8))).is_equal(7)
+	assert_int(_walls_on(_cells_z(9, 2, 8), WEST)).is_equal(7)
+	assert_int(_walls_on(_cells_z(9, 2, 8))).is_equal(0)
 
 
 func test_a_drag_that_never_left_its_cell_lays_the_one_edge() -> void:
