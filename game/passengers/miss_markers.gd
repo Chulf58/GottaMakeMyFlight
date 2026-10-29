@@ -41,6 +41,11 @@ extends Node3D
 ## The layout runs only when the camera (its presence, identity, pose and field
 ## of view), the view size, the signs or (while a lane hint shows) the HUD
 ## controls' rectangles changed.
+##
+## A caption is a Label3D, culled by its bounding box around its world anchor, and
+## a fixed-size label's box is tiny. A caption placed inside the view therefore
+## gets an anchor inside the view too (its sign can be off-screen), with the pixel
+## offset making up the difference.
 
 const SIGN_LIFT_M := 0.6
 const SIGN_PX := 56.0
@@ -64,11 +69,11 @@ const MAX_SHIFTS := 8
 const VIEW_MARGIN_PX := 8.0
 const HINT_STEP_PX := 6.0
 const MAX_HINT_TRAVEL_PX := 260.0
-## Past that, spots are tried on rings this far apart, with this many points each.
+## Past that, spots are tried on rings this far apart, each with a point every
+## HINT_RING_STEP_PX along it (at least this many), so no pocket a caption fits in
+## falls between two points.
 const HINT_RING_STEP_PX := 32.0
 const HINT_RING_POINTS := 16
-## A HUD control this share of the view in both directions is a root container.
-const ROOT_SPAN := 0.9
 ## The closed sign is the queue-full icon with its red fill painted grey-blue.
 const CLOSED_FILL := Color(0.47, 0.53, 0.62)
 const FILL_TOLERANCE := 0.1
@@ -247,11 +252,7 @@ func draw() -> void:
 		width = view.get_visible_rect().size.x * view.get_stretch_transform().get_scale().x
 	var xform := camera.global_transform if camera != null else Transform3D()
 	var camera_id := camera.get_instance_id() if camera != null else 0
-	var hud := (
-		_hud_rects(to_output, Vector2(width, height))
-		if not _hint_signs.is_empty()
-		else ([] as Array[Rect2])
-	)
+	var hud := _hud_rects(to_output) if not _hint_signs.is_empty() else ([] as Array[Rect2])
 	if (
 		not _dirty
 		and camera_id == _view_camera
@@ -303,6 +304,7 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 			var sign: Sprite3D = signs[station]
 			var caption := sign.get_node("Caption") as Label3D
 			caption.visible = true
+			caption.position = Vector3.ZERO
 			caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
 			if camera == null or camera.is_position_behind(sign.global_position):
 				continue
@@ -322,6 +324,25 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 	_order.sort_custom(_placed_before)
 	for i in _order:
 		_place_caption(i, view_size)
+	for i in _labels.size():
+		_anchor_in_view(i, camera, to_output, view_size)
+
+
+## Moves the Label3D of caption `i` to a world point that projects inside the
+## view by VIEW_MARGIN_PX when its sign's point does not, and shifts the pixel
+## offset back so the caption is drawn where the layout put it.
+func _anchor_in_view(i: int, camera: Camera3D, to_output: float, view_size: Vector2) -> void:
+	var caption := _labels[i]
+	if not caption.visible:
+		return
+	var inner := Rect2(Vector2.ZERO, view_size).grow(-VIEW_MARGIN_PX)
+	var point := _points[i]
+	var anchor := point.clamp(inner.position, inner.end)
+	if anchor.is_equal_approx(point):
+		return
+	var depth := -(camera.global_transform.affine_inverse() * caption.global_position).z
+	caption.global_position = camera.project_position(anchor / to_output, depth)
+	caption.offset += Vector2(point.x - anchor.x, anchor.y - point.y)
 
 
 func _place_caption(i: int, view_size: Vector2) -> void:
@@ -413,10 +434,11 @@ func _hint_spot(i: int, view_size: Vector2) -> Rect2:
 	var radius := HINT_RING_STEP_PX
 	var longest := view_size.length()
 	while radius <= longest:
-		for n in HINT_RING_POINTS:
+		var points := maxi(HINT_RING_POINTS, ceili(TAU * radius / HINT_RING_STEP_PX))
+		for n in points:
 			## 0, then one step either side of the heading, then two, and so on.
 			var turn := ceili(n / 2.0) * (1.0 if n % 2 == 1 else -1.0)
-			var angle := heading + TAU * turn / HINT_RING_POINTS
+			var angle := heading + TAU * turn / points
 			var rect := Rect2(own.position + Vector2.from_angle(angle) * radius, own.size)
 			if _hint_spot_usable(rect, inner):
 				return rect
@@ -441,10 +463,10 @@ func _hint_spot_clear(rect: Rect2, inner: Rect2) -> bool:
 
 ## The rectangles (screen pixels) of what the HUD draws: the Controls under
 ## every canvas layer beside this node or beside an ancestor of it, found by
-## draws_something(). Invisible ones, layout containers that draw nothing and
-## a control spanning the whole view (a root container) are not counted. A
+## draws_something(). Invisible ones and layout containers that draw nothing are
+## not counted, however large; a drawn control is, also one spanning the view. A
 ## counted panel or button is not walked into: its children lie inside it.
-func _hud_rects(to_output: float, view_size: Vector2) -> Array[Rect2]:
+func _hud_rects(to_output: float) -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	var scale := Transform2D().scaled(Vector2(to_output, to_output))
 	var node: Node = self
@@ -452,13 +474,11 @@ func _hud_rects(to_output: float, view_size: Vector2) -> Array[Rect2]:
 		node = node.get_parent()
 		for child in node.get_children():
 			if child is CanvasLayer and (child as CanvasLayer).visible:
-				_collect_hud(child, scale, view_size, rects)
+				_collect_hud(child, scale, rects)
 	return rects
 
 
-func _collect_hud(
-	parent: Node, scale: Transform2D, view_size: Vector2, rects: Array[Rect2]
-) -> void:
+func _collect_hud(parent: Node, scale: Transform2D, rects: Array[Rect2]) -> void:
 	for child in parent.get_children():
 		if child is CanvasItem and not (child as CanvasItem).visible:
 			continue
@@ -470,15 +490,10 @@ func _collect_hud(
 					* control.get_global_transform_with_canvas()
 					* Rect2(Vector2.ZERO, control.size)
 				)
-				var spans := (
-					rect.size.x >= view_size.x * ROOT_SPAN
-					and rect.size.y >= view_size.y * ROOT_SPAN
-				)
-				if not spans:
-					rects.append(rect)
-					if _is_box(control):
-						continue
-		_collect_hud(child, scale, view_size, rects)
+				rects.append(rect)
+				if _is_box(control):
+					continue
+		_collect_hud(child, scale, rects)
 
 
 ## True for a Control that puts something on the screen: a panel, a button, a
