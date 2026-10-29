@@ -219,10 +219,11 @@ camera = NodePath("../TycoonCamera")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 
-[node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant", "day_ledger", "settlement", "save_game")]
+[node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant", "day_ledger", "settlement", "save_game", "clock")]
 layer = 2
 script = ExtResource("13_menu")
 build_mode = NodePath("../BuildMode")
+clock = NodePath("../SimClock")
 rescue_grant = NodePath("../RescueGrant")
 day_ledger = NodePath("../DayLedger")
 settlement = NodePath("../Settlement")
