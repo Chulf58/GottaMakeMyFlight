@@ -67,20 +67,24 @@ func test_every_stage_is_presented_in_the_follow_panel_and_the_flight_result() -
 	assert_int(reasons).is_equal(Passenger.Stage.size() - 2)
 
 
-func test_cafe_stages_belong_to_the_cafe_and_no_other_stage_does() -> void:
+func test_cafe_and_toilet_stages_belong_to_their_facility_and_no_other_stage_does() -> void:
 	var cafe := 0
+	var toilet := 0
 	for stage: int in Passenger.Stage.values():
 		var stage_name: String = Passenger.Stage.keys()[stage]
-		var expected := (
-			StageKinds.Facility.CAFE
-			if stage_name.begins_with("CAFE_")
-			else StageKinds.Facility.NONE
-		)
+		var expected := StageKinds.Facility.NONE
+		if stage_name.begins_with("CAFE_"):
+			expected = StageKinds.Facility.CAFE
+		elif stage_name.begins_with("TOILET_"):
+			expected = StageKinds.Facility.TOILET
 		assert_int(StageKinds.facility(stage)).is_equal(expected)
 		assert_bool(StageKinds.in_visit(stage)).is_equal(expected != StageKinds.Facility.NONE)
 		assert_bool(Passenger.in_cafe(stage)).is_equal(expected == StageKinds.Facility.CAFE)
+		assert_bool(Passenger.in_toilet(stage)).is_equal(expected == StageKinds.Facility.TOILET)
 		cafe += int(expected == StageKinds.Facility.CAFE)
+		toilet += int(expected == StageKinds.Facility.TOILET)
 	assert_int(cafe).is_equal(7)
+	assert_int(toilet).is_equal(6)
 
 
 func test_seats_and_poses() -> void:
@@ -90,18 +94,29 @@ func test_seats_and_poses() -> void:
 		Passenger.Stage.CAFE_SEATED,
 		Passenger.Stage.CAFE_STANDING_UP,
 	]
+	var toilet := [
+		Passenger.Stage.TOILET_SITTING_DOWN,
+		Passenger.Stage.TOILET_USE,
+		Passenger.Stage.TOILET_STANDING_UP,
+	]
 	var poses := [StageKinds.Pose.SITTING_DOWN, StageKinds.Pose.SEATED, StageKinds.Pose.STANDING_UP]
 	for i in 3:
 		assert_int(StageKinds.location(gate[i])).is_equal(StageKinds.Location.GATE_SEAT)
 		assert_int(StageKinds.location(cafe[i])).is_equal(StageKinds.Location.FACILITY_SEAT)
+		assert_int(StageKinds.location(toilet[i])).is_equal(StageKinds.Location.FACILITY_SEAT)
 		assert_int(StageKinds.pose(gate[i])).is_equal(poses[i])
 		assert_int(StageKinds.pose(cafe[i])).is_equal(poses[i])
+		assert_int(StageKinds.pose(toilet[i])).is_equal(poses[i])
+	# Stepping into and out of a stall is off the grid but upright.
+	for stage in [Passenger.Stage.TOILET_ENTER, Passenger.Stage.TOILET_EXIT]:
+		assert_int(StageKinds.location(stage)).is_equal(StageKinds.Location.FACILITY_SEAT)
+		assert_int(StageKinds.pose(stage)).is_equal(StageKinds.Pose.UPRIGHT)
 	var seated := 0
 	for stage: int in Passenger.Stage.values():
 		if StageKinds.pose(stage) != StageKinds.Pose.UPRIGHT:
 			seated += 1
-			assert_bool(gate.has(stage) or cafe.has(stage)).is_true()
-	assert_int(seated).is_equal(6)
+			assert_bool(gate.has(stage) or cafe.has(stage) or toilet.has(stage)).is_true()
+	assert_int(seated).is_equal(9)
 
 
 func test_outside_and_on_grid_stages() -> void:
@@ -138,6 +153,25 @@ func test_a_cafe_guest_has_its_visit_owner_and_resume_and_others_have_none() -> 
 	assert_dict(StageKinds.resume_of(_world.sim, other)).is_empty()
 
 
+func test_a_toilet_visitor_has_its_visit_owner_and_resume() -> void:
+	var grid := BuildGrid.new()
+	ToiletTestLayout.build(grid)
+	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	ToiletTestLayout.calm(p)
+	while p.stage != Passenger.Stage.TO_SECURITY and _world.clock.tick < 600:
+		_world.step()
+	assert_int(StageKinds.visit_facility(_world.sim, p)).is_equal(StageKinds.Facility.NONE)
+	assert_bool(_world.sim.toilets.try_visit(p)).is_true()
+	var visit := _world.sim.toilets.visit_of(p.id)
+	assert_int(StageKinds.visit_facility(_world.sim, p)).is_equal(StageKinds.Facility.TOILET)
+	var resume := StageKinds.resume_of(_world.sim, p)
+	print("resume %s, approach %s" % [resume, visit.stall["approach"]])
+	assert_int(resume["stage"]).is_equal(Passenger.Stage.TO_SECURITY)
+	assert_that(resume["cell"]).is_equal(visit.stall["approach"])
+	assert_int(p.stage).is_equal(Passenger.Stage.TOILET_WALK)
+
+
 func test_every_stage_has_its_journey_leg_from_the_table_not_the_enum_order() -> void:
 	var expected := {
 		Passenger.Stage.SPAWNED: StageKinds.Leg.CHECKIN,
@@ -163,6 +197,12 @@ func test_every_stage_has_its_journey_leg_from_the_table_not_the_enum_order() ->
 		Passenger.Stage.CAFE_SITTING_DOWN: StageKinds.Leg.VISIT,
 		Passenger.Stage.CAFE_SEATED: StageKinds.Leg.VISIT,
 		Passenger.Stage.CAFE_STANDING_UP: StageKinds.Leg.VISIT,
+		Passenger.Stage.TOILET_WALK: StageKinds.Leg.VISIT,
+		Passenger.Stage.TOILET_ENTER: StageKinds.Leg.VISIT,
+		Passenger.Stage.TOILET_SITTING_DOWN: StageKinds.Leg.VISIT,
+		Passenger.Stage.TOILET_USE: StageKinds.Leg.VISIT,
+		Passenger.Stage.TOILET_STANDING_UP: StageKinds.Leg.VISIT,
+		Passenger.Stage.TOILET_EXIT: StageKinds.Leg.VISIT,
 	}
 	assert_int(expected.size()).is_equal(Passenger.Stage.size())
 	assert_int(StageKinds.LEGS.size()).is_equal(Passenger.Stage.size())
