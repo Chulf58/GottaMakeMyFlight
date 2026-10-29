@@ -550,11 +550,27 @@ func bag_turn_of(id: int) -> float:
 
 
 ## How many times bag `index` of passenger `id` has been put in place (a move
-## only stamped, not placed, does not count): a test reads it before and after
-## a frame to see that the bag was placed once.
+## only stamped, not placed, does not count): a bag in a hand once for each
+## skeleton report after a draw, or once before the frame is drawn.
 func placements_of(id: int, index: int) -> int:
+	return int(_bag_of(id, index).get("placed", 0))
+
+
+## How many draws bag `index` of passenger `id` has been taken a step on while
+## going to a hand (_step_hand_bags): one per draw.
+func steps_of(id: int, index: int) -> int:
+	return int(_bag_of(id, index).get("steps", 0))
+
+
+## How many steps the axle follower of bag `index` of passenger `id` (a pulled
+## roller) has taken (_axle_drawn): one per draw while it is pulled.
+func follows_of(id: int, index: int) -> int:
+	return int(_bag_of(id, index).get("follows", 0))
+
+
+func _bag_of(id: int, index: int) -> Dictionary:
 	var bags: Array = _held.get(id, {}).get("bags", [])
-	return int(bags[index].get("placed", 0)) if index < bags.size() else 0
+	return bags[index] if index < bags.size() else {}
 
 
 ## How many times passenger `id`'s props have been drawn (draw()): once a
@@ -600,32 +616,25 @@ func _exit_tree() -> void:
 
 
 ## Before the frame is drawn: bags going to a hand, which draw() leaves to
-## _on_pose, are placed now when their skeleton did not report after the draw.
+## _on_pose, are placed now when their skeleton did not report after the
+## latest draw.
 func _unposed() -> void:
 	var now := _now()
 	for id in _held:
 		var held: Dictionary = _held[id]
 		var body := views.node_for(id)
-		if body != null and _left_to_place(held):
+		if body == null or held.get("left_to_pose", -1) != Engine.get_process_frames():
+			continue
+		if held.get("posed_seq", -1) != held["draw_seq"]:
+			held["posed_seq"] = held["draw_seq"]
 			_place_bags(held, body, _tray_transform(held, body), now, Placing.HAND)
 
 
-## Whether the bags going to a hand of `held` still wait to be placed after
-## this frame's draw(); true once only (the caller places them).
-func _left_to_place(held: Dictionary) -> bool:
-	if held.get("left_to_pose", -1) != Engine.get_process_frames():
-		return false
-	if held.get("posed_seq", -1) == held["draw_seq"]:
-		return false
-	held["posed_seq"] = held["draw_seq"]
-	return true
-
-
-## Places every prop for this frame but the bags going to a hand. Those are
-## placed when the character's skeleton reports its final pose for the frame
-## (_on_pose, after this draw), so they do not trail the hand by a frame, or
-## before the frame is drawn (_unposed) if the skeleton did not report after
-## it: once per frame either way.
+## Places every prop for this frame but the bags going to a hand, and takes
+## those a step (_step_hand_bags: once per draw). They are placed from the hand
+## each time the character's skeleton reports after this draw (_on_pose), so
+## the last report of the frame wins and they never trail the hand, or before
+## the frame is drawn (_unposed) if the skeleton did not report after it.
 func draw() -> void:
 	var now := _now()
 	for id in _held:
@@ -643,7 +652,24 @@ func draw() -> void:
 		held["left_to_pose"] = Engine.get_process_frames()
 		held["draw_seq"] = int(held.get("draw_seq", 0)) + 1
 		_place_bags(held, body, tray_xf, now, Placing.NOT_HAND)
+		_step_hand_bags(held, body)
 		_pose_arms(held, body, now)
+
+
+## The once-per-draw part of the bags going to a hand (their moves are stamped
+## and the turn weights set in draw() already): each counts the draw, and a
+## pulled roller's axle takes its one follower step here (_axle_drawn), so
+## placing the bag again on a later report of the same frame never moves it on.
+## Placing (_place_bags, Placing.HAND) is then a function of the pose alone.
+func _step_hand_bags(held: Dictionary, body: Node3D) -> void:
+	var bags: Array = held["bags"]
+	for i in bags.size():
+		if held["homes"][i] != SecurityLooks.Home.HAND:
+			continue
+		var bag: Dictionary = bags[i]
+		bag["steps"] = int(bag.get("steps", 0)) + 1
+		if bag["carry"] == SecurityLooks.Carry.PULL:
+			bag["axle_now"] = _axle_drawn(bag, body, held["scale"], held["hands"][i])
 
 
 ## Puts the bags of one passenger in place: only those going to a hand
@@ -812,21 +838,22 @@ func _bag_weight(held: Dictionary, now: float) -> float:
 	return lerpf(held["bag_from"], 0.0, 1.0 - pow(1.0 - k, 4.0))
 
 
-## The skeleton of `body` reported a pose: its bags going to a hand are placed
-## from the frame's final report, once. A report before this frame's draw()
-## (a pose set before the views draw, such as a seek) is not the final one:
-## the draw moves the body and sets the arms, and the skeleton reports again
-## after it, so it places nothing. The first report after the draw places the
-## bags; a later one after the same draw is coalesced into it (the skeleton's
-## own modifiers run inside its update and never queue another), and a frame
-## with no report after the draw has them placed before it is drawn
-## (_unposed). A frame drawn twice (PassengerViews.snap() on a load) places
-## them after each draw.
+## The skeleton of `body` reported a pose: its bags going to a hand are put on
+## the hand as it is now. A report before this frame's draw() (a pose set
+## before the views draw, such as a seek) is not the final one: the draw moves
+## the body and sets the arms, and the skeleton reports again after it, so it
+## places nothing. Every report after a draw places them again, from the pose
+## it reports, so the frame's last report wins; placing only reads the pose and
+## what draw() stepped (_step_hand_bags), so a repeat moves nothing on. A draw
+## no report followed has them placed before the frame is drawn (_unposed).
 func _on_pose(body: Node3D) -> void:
 	var id: int = _body_ids.get(body, 0)
 	var held: Dictionary = _held.get(id, {})
-	if held.is_empty() or views.node_for(id) != body or not _left_to_place(held):
+	if held.is_empty() or views.node_for(id) != body:
 		return
+	if held.get("left_to_pose", -1) != Engine.get_process_frames():
+		return
+	held["posed_seq"] = held["draw_seq"]
 	_place_bags(held, body, _tray_transform(held, body), _now(), Placing.HAND)
 
 
@@ -1072,7 +1099,10 @@ func _carry_transform(held: Dictionary, body: Node3D, i: int, reach: Array) -> T
 			return hung[0]
 		SecurityLooks.Carry.PULL:
 			var grip := grip_of(body, held["hands"][i])
-			var axle := _axle_drawn(held["bags"][i], body, scale_by, held["hands"][i])
+			# The axle this draw stepped to (_step_hand_bags).
+			var axle: Vector3 = held["bags"][i].get("axle_now", Vector3.INF)
+			if not axle.is_finite():
+				axle = _axle_drawn(held["bags"][i], body, scale_by, held["hands"][i])
 			var rods := _reach_base(_part(node, "Pull_Reach"))
 			reach[0] = _pull_length(grip, axle, scale_by, rods.z)
 			return pulled(grip, axle, scale_by)
@@ -1128,6 +1158,7 @@ func _axle_drawn(bag: Dictionary, body: Node3D, scale_by: float, hand: int) -> V
 	at.y = body.global_position.y + ROLLER_AXLE.y * scale_by
 	bag["drawn_axle"] = at
 	bag["drawn_at"] = now
+	bag["follows"] = int(bag.get("follows", 0)) + 1
 	return at
 
 

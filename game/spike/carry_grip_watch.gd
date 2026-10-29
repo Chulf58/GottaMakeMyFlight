@@ -1,11 +1,12 @@
 extends RefCounted
-## The windowed check that hand bags are placed once a frame from the hand's
-## final pose (decision carry-on-bag-kinds-as-built item 6; CarryOnProps
-## _on_pose and _unposed). Connected to RenderingServer.frame_pre_draw after
-## CarryOnProps (so after its own pre-draw fallback), each look, just before
-## the frame is drawn:
-## - every bag in a hand (any kind) was placed as many times as the props were
-##   drawn since the last look (once a frame; twice on a snap() frame), and
+## The windowed check that hand bags step once per draw and end each frame on
+## the hand's final pose (decision carry-on-bag-kinds-as-built item 6;
+## CarryOnProps _step_hand_bags, _on_pose and _unposed). Connected to
+## RenderingServer.frame_pre_draw after CarryOnProps (so after its own pre-draw
+## fallback), each look, just before the frame is drawn:
+## - every bag in a hand (any kind) took as many steps (steps_of) as the props
+##   were drawn since the last look (once a frame; twice on a snap() frame) and
+##   was placed at least once (once for each skeleton report after a draw), and
 ## - every settled hard case or lifted roller in a hand has its held point
 ##   (CarryOnProps.held_point) on the hand now (grip_of), within GRIP_TOL_M.
 ## Headless runs never emit frame_pre_draw, so this runs only windowed.
@@ -14,7 +15,7 @@ extends RefCounted
 const GRIP_TOL_M := 0.001
 
 var looks := 0
-## Bag looks whose placements matched the draws, and those that did not.
+## Bag looks whose steps matched the draws and that were placed, and those not.
 var placed_ok := 0
 var placed_bad := 0
 ## Looks where the props were drawn twice since the last look.
@@ -29,7 +30,7 @@ var _views: PassengerViews
 ## Passenger id -> its props' draws at the last look.
 var _draws_at_look := {}
 var _sim: PassengerSim
-## [id, bag index] -> [placements, draws] at the last look.
+## [id, bag index] -> [placements, draws, steps] at the last look.
 var _last := {}
 var _notes: Array[String] = []
 
@@ -62,7 +63,9 @@ func problems() -> Array[String]:
 	if looks == 0 or placed_ok == 0 or grips == 0:
 		out.append("grip watch saw no hand bag (control): %s" % report())
 	if placed_bad > 0:
-		out.append("a hand bag was not placed once per draw: %s %s" % [report(), _notes])
+		out.append(
+			"a hand bag did not step once per draw or was not placed: %s %s" % [report(), _notes]
+		)
 	if grips_off > 0:
 		out.append("a hand bag's grip is off the final hand: %s %s" % [report(), _notes])
 	return out
@@ -90,18 +93,19 @@ func _look() -> void:
 			seen[key] = true
 			# Every look, a snap() frame included.
 			_grip(props, body, p, id, i)
-			var now := [props.placements_of(id, i), draws]
+			var now := [props.placements_of(id, i), draws, props.steps_of(id, i)]
 			var was: Array = _last.get(key, [])
 			_last[key] = now
 			# Not drawn since, or a new record (a snap() starts every one over).
 			if was.is_empty() or now[1] <= was[1] or now[0] < was[0]:
 				continue
 			double_draws += int(now[1] - was[1] > 1)
-			if now[0] - was[0] == now[1] - was[1]:
+			if now[2] - was[2] == now[1] - was[1] and now[0] > was[0]:
 				placed_ok += 1
 			else:
 				placed_bad += 1
-				_note("id=%d i=%d placed=%d draws=%d" % [id, i, now[0] - was[0], now[1] - was[1]])
+				var counts := [id, i, now[0] - was[0], now[1] - was[1], now[2] - was[2]]
+				_note("id=%d i=%d placed=%d draws=%d steps=%d" % counts)
 	for key in _last.keys():
 		if not seen.has(key):
 			_last.erase(key)
