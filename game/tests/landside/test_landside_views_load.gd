@@ -4,14 +4,17 @@ extends GdUnitTestSuite
 ## through SaveGame.loaded (no tick runs while paused): LandsideViews draws
 ## exactly the loaded vehicles on the map, each where the sim has it with
 ## nothing between two ticks, and a vehicle selection made before the load is
-## cleared. Built once for the file: a starter game played until cars drive
-## on the road, saved, and loaded into a second scene that had its own car
-## selected.
+## cleared. Built once for the file: a starter game played until its first
+## booking, EXTRA more passengers booked on that flight so cars arrive close
+## together, played on until at least ON_MAP cars are on the map, saved, and
+## loaded into a second scene that had its own car selected.
 
 const SEED := 4_400_101
 const OTHER_SEED := 9
 const LIMIT := 12000
-const ON_MAP := 1
+const ON_MAP := 3
+## Extra passengers booked on the first flight (ArrivalBookings.schedule()).
+const EXTRA := 40
 
 var _path := SaveTestKit.run_path("test_landside_views_load")
 var _saved: Node
@@ -23,7 +26,13 @@ func before() -> void:
 	_saved = SaveTestKit.boot(self, SEED)
 	SaveTestKit.start_airport(_saved)
 	var landside: LandsideSim = _saved.get_node("LandsideSim")
+	var sim: PassengerSim = _saved.get_node("PassengerSim")
 	var limit := landside.tick + LIMIT
+	while landside.tick < limit and sim.arrivals.booking_ids().is_empty():
+		SaveTestKit.step(_saved)
+	var first := sim.arrivals.get_booking(sim.arrivals.booking_ids()[0])
+	sim.arrivals.schedule(first.flight_id, EXTRA)
+	_run["booked"] = sim.arrivals.pending()
 	while landside.tick < limit and _on_map(landside).size() < ON_MAP:
 		SaveTestKit.step(_saved)
 	_run["saved_on_map"] = _on_map(landside)

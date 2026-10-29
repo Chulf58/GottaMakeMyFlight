@@ -1,10 +1,11 @@
 class_name TestVehicleFollow
 extends GdUnitTestSuite
 ## Clicking a car or taxi on the landside (no build tool active) selects it
-## instead of any passenger: the camera follows LandsideViews.follow_anchor
-## and the follow text shows the vehicle's passengers, flight and drop-off
-## delay (VehicleInspect). A click on empty ground clears the selection, and
-## a selected vehicle that drives off the map ends the follow.
+## instead of any passenger, even one drawn right under the click: the camera
+## follows LandsideViews.follow_anchor and the follow text shows the vehicle's
+## passengers, flight and drop-off delay (VehicleInspect). A click on empty
+## ground clears the selection, and a selected vehicle that drives off the map
+## ends the follow.
 
 const BOOKED := 8
 
@@ -93,8 +94,18 @@ func _click(at: Vector2) -> void:
 func test_clicking_a_vehicle_selects_it_and_shows_its_passengers_flight_and_delay() -> void:
 	var id := _drawn_vehicle()
 	assert_int(id).is_greater(0)
-	_views.selected_id = 12345
+	# A real passenger, drawn right under the car: both pickers find something
+	# under the click, and the vehicle wins.
+	var passenger := _land.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_views.sync()
+	_views.node_for(passenger).position = _cars.node_for(id).global_position
+	_views.selected_id = passenger
 	var at := _eye.unproject_position(_cars.node_for(id).global_position + Vector3(0.0, 1.0, 0.0))
+	var passenger_pick := _views.pick(_eye, at)
+	var vehicle_pick := _cars.pick(_eye, at)
+	print("at %s passenger pick %d vehicle pick %d" % [at, passenger_pick, vehicle_pick])
+	assert_int(passenger_pick).is_equal(passenger)
+	assert_int(vehicle_pick).is_equal(id)
 	_click(at)
 	_hud.refresh()
 	var text := _hud.follow_text()

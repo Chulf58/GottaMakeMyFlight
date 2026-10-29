@@ -4,8 +4,8 @@ extends GdUnitTestSuite
 ## on curb spot 0, the surface lot on lot spot 0 (closed, so its Closed sign
 ## shows) and the multi-storey on lot spot 1 appear on the next frames after
 ## they are built, with the clock paused and nothing but the scene's own
-## frame processing drawing them; taken off (and the lot opened) they
-## disappear the same way; and a load of the save taken while they stood
+## frame processing drawing them; opened, the lot drops its sign; taken off,
+## every one disappears the same way; and a load of the save taken while they stood
 ## brings every one back, sign included, while the clock is paused.
 
 const SEED := 6_200_301
@@ -69,13 +69,16 @@ func test_built_facilities_come_and_go_with_the_frames_and_return_after_a_load()
 	assert_bool(landside.remove_lot(1)).is_true()
 	assert_bool(landside.set_lot_closed(0, false)).is_true()
 	await _frames()
+	var opened := _drawn()
+	var lot_removed := landside.remove_lot(0)
+	await _frames()
 	var removed := _drawn()
 	var loaded := SaveTestKit.save_game(_main).load_from_file(_path)
 	var after_load := _drawn()
 	print(
 		(
-			"paused %s; before %s; built %s; removed %s; after load %s"
-			% [clock.paused, before, built, removed, after_load]
+			"paused %s; before %s; built %s; opened %s; removed %s; after load %s"
+			% [clock.paused, before, built, opened, removed, after_load]
 		)
 	)
 	assert_bool(clock.paused).is_true()
@@ -83,8 +86,9 @@ func test_built_facilities_come_and_go_with_the_frames_and_return_after_a_load()
 		{"bays": 2, "curb_0": "", "lot_0": "", "lot_1": "", "sign_0": false, "sign_1": false}
 	)
 	assert_dict(built).is_equal(BUILT)
+	# Opened again, the surface lot stands without its sign; removed, it is gone.
 	(
-		assert_dict(removed)
+		assert_dict(opened)
 		. is_equal(
 			{
 				"bays": 2,
@@ -95,6 +99,10 @@ func test_built_facilities_come_and_go_with_the_frames_and_return_after_a_load()
 				"sign_1": false,
 			}
 		)
+	)
+	assert_bool(lot_removed).is_true()
+	assert_dict(removed).is_equal(
+		{"bays": 2, "curb_0": "", "lot_0": "", "lot_1": "", "sign_0": false, "sign_1": false}
 	)
 	assert_bool(saved).is_true()
 	assert_bool(loaded).is_true()
