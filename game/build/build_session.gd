@@ -15,6 +15,9 @@ extends Node
 
 signal changed(active: bool)
 
+## Processes ahead of every default-priority node, SimClock included.
+const PROCESS_PRIORITY := -1000
+
 @export var build_mode: BuildMode
 ## Paused while building; null leaves the clock alone.
 @export var clock: SimClock
@@ -26,6 +29,12 @@ var _hold_pending := false
 var _holding := false
 var _held_paused := false
 var _held_speed := 1
+
+
+func _init() -> void:
+	# Before everything else in the frame, so a pause taken here lands before SimClock
+	# (earlier in the tree than the menu) processes: no tick runs after a tray opens.
+	process_priority = PROCESS_PRIORITY
 
 
 func _process(_delta: float) -> void:
@@ -47,6 +56,14 @@ func set_building(on: bool) -> void:
 		if build_mode != null:
 			build_mode.undo_history().clear()
 	changed.emit(active)
+
+
+## Ends build mode without giving the clock back: a load replaced the clock the
+## player had, so the one held from before it is no longer theirs to restore.
+func abandon() -> void:
+	_holding = false
+	_hold_pending = false
+	set_building(false)
 
 
 ## Takes the clock once build mode has started, and ends build mode when the

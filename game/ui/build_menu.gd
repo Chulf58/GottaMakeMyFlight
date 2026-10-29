@@ -551,10 +551,23 @@ func _on_wages_paid(amount: int, owed: int) -> void:
 func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
+	_end_build_mode_after_load()
 	_pending_wages = ""
 	_holding = false
 	_held_status = build_mode.status_text() if build_mode != null else ""
 	_status.text = _held_status
+
+
+## The loaded world is a new one: build mode ends with the clock as loaded, the
+## tray and tool close, and the undo history goes (as OfferPanel._on_loaded does
+## for its sheet).
+func _end_build_mode_after_load() -> void:
+	build_session.abandon()
+	_open = NO_CATEGORY
+	_set_staff_open(false)
+	if build_mode != null:
+		build_mode.set_tool(BuildMode.Tool.NONE)
+	_sync()
 
 
 func _on_hold_timeout(generation: int) -> void:
