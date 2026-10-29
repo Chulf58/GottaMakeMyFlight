@@ -14,7 +14,7 @@ extends RefCounted
 ## the picture through, and no object blocks it. A line through a cell corner
 ## is blocked only when both ways round the corner are. Placed screens just
 ## work: there is no power. A passenger in two fans is covered once
-## (BoredomSim relief does not stack).
+## (the slower rise in BoredomSim does not stack).
 ##
 ## Each screen is charged SCREEN_UPKEEP a day by Settlement, inside a room or
 ## not (decision shops-and-food-stalls-earn-per-visit-toilets-and-screens-cos).

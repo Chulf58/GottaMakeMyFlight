@@ -1,7 +1,7 @@
 class_name TestScreenTuning
 extends GdUnitTestSuite
-## Screen tuning (Boredom 4/5; decision boredom-and-shops-design-boredom-need-
-## while-waiting-kiosk-sh, point 3), measured like test_shop_tuning: the
+## Screen tuning (Boredom 4/5; decision boredom-screens-halve-how-fast-
+## boredom-rises-for-covered-wai), measured like test_shop_tuning: the
 ## reference terminal with the floor east of it (ShopTestLayout),
 ## DEFAULT_PASSENGERS scheduled from the sim RNG as in play, the flight's first
 ## state FIRST_STATE ticks after the schedule, over several seeds pooled. Each
@@ -12,11 +12,11 @@ extends GdUnitTestSuite
 ## mood, and per flight the kiosk visits and takings and the flights made and
 ## missed.
 ##
-## The relief rate is set so that screens help (fewer bored, better mood at
-## boarding than with nothing) while a kiosk stays the faster relief: one
-## browse clears boredom, a screen takes it down RELIEF every RELIEF_BEATS
-## seconds. With both, the kiosks keep a share of their takings
-## (MIXED_TAKINGS_MIN to MIXED_TAKINGS_MAX) and nobody misses the flight.
+## Screens buy time and mood (fewer bored, better mood at boarding than with
+## nothing) but never cure boredom: some still get bored with screens alone,
+## kiosks leave fewer bored than screens, and with both the kiosks keep most
+## of their takings (MIXED_TAKINGS_MIN to MIXED_TAKINGS_MAX). Nobody misses
+## the flight.
 
 const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
 const FIRST_STATE := 1700
@@ -26,15 +26,15 @@ const CONFIGS: Array[String] = ["none", "shops", "screens", "mixed"]
 const SCREENS: Array[Vector2i] = [Vector2i(12, 8), Vector2i(15, 8)]
 const SCREEN_FACING := 2
 ## The band in whole percent of their takings alone that the kiosks keep with
-## the gate screens as well. A screen stops the rise for everyone it covers,
-## so the passengers who get bored waiting at the gate, most of a kiosk's
-## custom, no longer detour; the kiosks keep the ones who arrive bored and the
-## spare-time browsers. Measured on these seeds with relief 1 every 2 beats:
-## nothing 35 of 99 bored at boarding, mean mood 68; shops 8 bored, mood 77,
-## 42 visits taking 702; screens 0 bored, mood 80; mixed 0 bored, mood 79, 8
-## visits taking 127 (18%). Every flight made by all 144 in every setup.
-const MIXED_TAKINGS_MIN := 10
-const MIXED_TAKINGS_MAX := 40
+## the gate screens as well. A screen halves the rise, so the long waiters
+## still get bored and detour, later. Measured on these seeds with the rise
+## once every 2 beats under a screen: nothing 35 of 99 bored at boarding,
+## mean mood 68; shops 8 bored, mood 77, 42 visits taking 702; screens 16
+## bored, mood 77; mixed 3 bored, mood 79, 23 visits taking 394 (56%). Every
+## bored passenger is a relaxed arrival, and all 144 made the flight in every
+## setup.
+const MIXED_TAKINGS_MIN := 40
+const MIXED_TAKINGS_MAX := 75
 
 var _type_of: Dictionary = {}
 var _went: Dictionary = {}
@@ -123,7 +123,7 @@ func _waiting(totals: Dictionary) -> Dictionary:
 	return out
 
 
-func test_screens_help_the_waiting_and_shops_stay_the_faster_relief() -> void:
+func test_screens_buy_time_and_mood_and_kiosks_stay_the_cure() -> void:
 	var pooled := {}
 	for config in CONFIGS:
 		pooled[config] = _empty()
@@ -159,14 +159,8 @@ func test_screens_help_the_waiting_and_shops_stay_the_faster_relief() -> void:
 			print("  %s %s" % [type, total[type]])
 	print(
 		(
-			"relief %d every %d beats; kiosk browse %d ticks; screens at %s facing %d"
-			% [
-				BoredomSim.RELIEF,
-				BoredomSim.RELIEF_BEATS,
-				ShopSim.BROWSE_TICKS,
-				SCREENS,
-				SCREEN_FACING
-			]
+			"screen rise once every %d beats; kiosk browse %d ticks; screens at %s facing %d"
+			% [BoredomSim.SCREEN_RISE_BEATS, ShopSim.BROWSE_TICKS, SCREENS, SCREEN_FACING]
 		)
 	)
 	var none := _waiting(pooled["none"])
@@ -178,15 +172,13 @@ func test_screens_help_the_waiting_and_shops_stay_the_faster_relief() -> void:
 	# Screens help: fewer bored and a better mood at boarding than with nothing.
 	assert_int(screens["bored"]).is_less(none["bored"])
 	assert_int(screens["mood"] * none["waiting"]).is_greater(none["mood"] * screens["waiting"])
+	# Screens only buy time: long waiters still get bored, and the kiosks stay
+	# the cure, leaving fewer bored than screens alone.
+	assert_int(screens["bored"]).is_greater(0)
+	assert_int(shops["bored"]).is_less(screens["bored"])
 	# Both together leave no more bored than either alone.
 	assert_int(mixed["bored"]).is_less_equal(mini(shops["bored"], screens["bored"]))
-	# A kiosk is the faster relief: one browse clears a bored passenger's
-	# boredom in BROWSE_TICKS, a screen takes many times longer to do the same.
-	@warning_ignore("integer_division")
-	var browse_beats := ShopSim.BROWSE_TICKS / PassengerSim.BEAT_TICKS
-	var screen_beats := BoredomSim.BORED_AT * BoredomSim.RELIEF_BEATS / BoredomSim.RELIEF
-	assert_int(screen_beats).is_greater(4 * browse_beats)
-	# Screens take custom from the kiosks but do not empty them, and nobody who
+	# The kiosks keep most of their custom with screens as well, and nobody who
 	# went missed the flight.
 	@warning_ignore("integer_division")
 	var kept: int = pooled["mixed"]["spend"] * 100 / maxi(pooled["shops"]["spend"], 1)
