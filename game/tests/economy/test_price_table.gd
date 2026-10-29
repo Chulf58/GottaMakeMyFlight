@@ -30,7 +30,9 @@ func test_floor_and_every_placeable_wall_kind_has_a_positive_price() -> void:
 
 func test_every_catalog_object_has_a_positive_price() -> void:
 	var ids := BuildCatalog.ids()
-	assert_int(ids.size()).is_equal(21)
+	assert_int(ids.size()).is_greater(0)
+	# No fixed total: it would break on every piece the catalog gains, and
+	# test_price_table_covers_exactly_the_catalog already pins the two together.
 	for id in ids:
 		assert_int(PriceTable.price_of_object(id)).is_greater(0)
 
@@ -113,3 +115,16 @@ func test_starting_budget_covers_a_starter_terminal_at_roughly_half() -> void:
 func test_the_cafe_pieces_have_their_set_prices() -> void:
 	assert_int(PriceTable.price_of_object(&"cafe_counter")).is_equal(600)
 	assert_int(PriceTable.price_of_object(&"cafe_table")).is_equal(300)
+
+
+## The furniture ids priced in F4-1 (Furniture 4/4): decor has no upkeep, the
+## prize car and the info screen have a daily running cost, and a shower and a
+## nap pod are paid services (a fee per use, no upkeep).
+func test_the_running_costs_and_service_fees_are_positive() -> void:
+	for value in [
+		PriceTable.PRIZE_CAR_UPKEEP,
+		PriceTable.INFO_SCREEN_UPKEEP,
+		PriceTable.SHOWER_FEE,
+		PriceTable.NAP_POD_FEE,
+	]:
+		assert_int(value).is_greater(0)

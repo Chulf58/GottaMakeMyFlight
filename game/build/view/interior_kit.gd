@@ -2,7 +2,9 @@ class_name InteriorKit
 extends RefCounted
 ## The interior kit pieces (game/assets/interior/) the build view draws, and
 ## which piece and local transform each wall kind and object uses. A piece is
-## named by its .glb basename; pieces load once and are cached.
+## named by its .glb basename; pieces load once and are cached. A piece named
+## with a folder ("decor/tc_bush_1a") loads from that .glb under game/assets/
+## instead of game/assets/interior/.
 ##
 ## Every piece's pivot is at height 0 on its footprint centre (walls on the
 ## cell edge, posts on the vertex), front +Z at facing 0, so a piece goes in at
@@ -11,6 +13,9 @@ extends RefCounted
 enum WallKind { PLAIN, GLASS, DOOR }
 
 const PIECE_PATH := "res://assets/interior/%s.glb"
+const FOLDER_PIECE_PATH := "res://assets/%s.glb"
+## The car shown on the prize podium, standing on the podium's Mount_Car.
+const PRIZE_CAR_PIECE := "vehicles/tp_suv_01a"
 ## Height of a cut-away wall or post.
 const STUB_HEIGHT := 0.3
 const WALL_HEIGHT := 2.5
@@ -47,6 +52,40 @@ const OBJECT_PIECES := {
 	# The boredom screen stand (Boredom 5/5): a TV on a pole, its picture to
 	# the front, the way its coverage fan points.
 	&"screen_stand": "screen_stand",
+	# Decor (Furniture 4/4): the Toon City models, drawn as exported with no
+	# rescale (decision oversized-toon-decor-trees-fountain-statue-tree-bench-
+	# is-bui).
+	&"bench_1a": "decor/tc_bench_1a",
+	&"bench_2a_indoor": "decor/tc_bench_2a_indoor",
+	&"bush": "decor/tc_bush_1a",
+	&"fountain_indoor": "decor/tc_fountain_1a_indoor",
+	&"metal_pole": "decor/tc_metal_pole_1a",
+	&"metal_pole_chain": "decor/tc_metal_pole_chain_1a",
+	&"plant_pot_1a": "decor/tc_plant_pot_1a",
+	&"plant_pot_2a": "decor/tc_plant_pot_2a",
+	&"statue_indoor": "decor/tc_statue_1b_indoor",
+	&"trash_can": "decor/tc_trash_can_1a",
+	&"tree_indoor": "decor/tc_tree_3a_indoor",
+	# Services and activities kits (Furniture 3/3b); the prize car is drawn
+	# separately at the podium's Mount_Car (PRIZE_CAR_PIECE).
+	&"bar_counter": "bar_counter",
+	&"grab_and_go_stall": "grab_and_go_stall",
+	&"restaurant_table": "restaurant_table",
+	&"restaurant_booth": "restaurant_booth",
+	&"info_desk": "info_desk",
+	&"info_screen": "info_screen",
+	&"currency_exchange": "currency_exchange",
+	&"atm": "atm",
+	&"pharmacy_counter": "pharmacy_counter",
+	&"pharmacy_shelf": "pharmacy_shelf",
+	&"shower_cubicle": "shower_cubicle",
+	&"nap_pod": "nap_pod",
+	&"play_blocks": "play_blocks",
+	&"play_slide": "play_slide",
+	&"lounge_sofa": "lounge_sofa",
+	&"lounge_armchair": "lounge_armchair",
+	&"work_desk": "work_desk",
+	&"prize_podium": "prize_podium",
 }
 ## Where a piece sits in its object's frame (footprint centre, facing 0), for
 ## objects whose piece is not centred on the footprint. The entrance and exit
@@ -54,6 +93,9 @@ const OBJECT_PIECES := {
 const OBJECT_OFFSETS := {
 	&"entrance_door": Vector3(0.0, 0.0, -0.5),
 	&"exit_door": Vector3(0.0, 0.0, -0.5),
+	# A chain is the middle cell of post, chain, post in a row: its piece starts
+	# on one post and runs 2 m to the next, so it sits 1 m back of the cell.
+	&"metal_pole_chain": Vector3(0.0, 0.0, -1.0),
 }
 const WALL_PIECES := {
 	WallKind.PLAIN: "wall",
@@ -102,9 +144,14 @@ static func post_parts(cut: bool) -> Array:
 	return [["wall_post", Transform3D(stub, Vector3.ZERO)]]
 
 
+## The .glb a piece loads from.
+static func piece_path(piece: String) -> String:
+	return (FOLDER_PIECE_PATH if "/" in piece else PIECE_PATH) % piece
+
+
 ## A fresh node tree of a piece, with its own toon materials.
 static func instantiate(piece: String) -> Node3D:
-	return (load(PIECE_PATH % piece) as PackedScene).instantiate()
+	return (load(piece_path(piece)) as PackedScene).instantiate()
 
 
 ## The meshes of a piece with each one's transform relative to the piece root

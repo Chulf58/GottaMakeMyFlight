@@ -56,6 +56,49 @@ const OBJECT_PRICES := {
 	# A screen stand (Boredom 4/5): a display on a floor stand, dearer than a
 	# seat row; it earns nothing and has a running cost.
 	&"screen_stand": 350,
+	# Decor (Furniture 4/4): no running cost and it earns nothing, it calms
+	# passengers nearby, so it is priced by size and showiness. A post or a bin
+	# is cheaper than a seat row, a bench or planter about a cafe table's half,
+	# the tree bench, fountain and statue are the showpieces.
+	&"metal_pole": 40,
+	&"metal_pole_chain": 60,
+	&"trash_can": 60,
+	&"bush": 80,
+	&"plant_pot_1a": 100,
+	&"bench_1a": 120,
+	&"plant_pot_2a": 150,
+	&"tree_indoor": 500,
+	&"bench_2a_indoor": 900,
+	&"statue_indoor": 1200,
+	&"fountain_indoor": 1500,
+	# Services (Furniture 3b): food pieces sit around the cafe's 600 counter and
+	# 300 table, a four-seat table or booth a step above the cafe's two-seat
+	# table; the desks and booths are about a check-in desk (400) to a counter.
+	&"bar_counter": 700,
+	&"grab_and_go_stall": 500,
+	&"restaurant_table": 450,
+	&"restaurant_booth": 600,
+	&"info_desk": 400,
+	&"info_screen": 300,
+	&"currency_exchange": 800,
+	&"atm": 600,
+	&"pharmacy_counter": 700,
+	&"pharmacy_shelf": 250,
+	# Paid services: a shower and a nap pod earn a fee per use (SHOWER_FEE,
+	# NAP_POD_FEE) and cost no upkeep.
+	&"shower_cubicle": 500,
+	&"nap_pod": 600,
+	# Activities (Furniture 3): play pieces and the lounge are plain furniture, a
+	# sofa a little over a seat row; the work desk has lights and two seats. The
+	# prize podium is the dearest piece in the terminal because it holds a car
+	# (decision furniture-set-modelled-on-copenhagen-airport-decor-calms-pas);
+	# it has a running cost (PRIZE_CAR_UPKEEP).
+	&"play_blocks": 350,
+	&"play_slide": 450,
+	&"lounge_sofa": 350,
+	&"lounge_armchair": 200,
+	&"work_desk": 500,
+	&"prize_podium": 3000,
 }
 
 ## What the landside build tools cost (decision landside-parking-kinds-a-cheap-
@@ -81,6 +124,20 @@ const TOILET_STALL_UPKEEP := 10
 ## charged at midnight with the toilet upkeep. A tuning value, to be checked in
 ## a playtest: a little under a stall, as one screen is a single display.
 const SCREEN_UPKEEP := 6
+## What the prize car on its podium costs to run per game day (decision
+## furniture-set-modelled-on-copenhagen-airport-decor-calms-pas: it costs money
+## to place and run). A tuning value: a little under a shop server's wage, as
+## the car pays back through the extra shop spend around it.
+const PRIZE_CAR_UPKEEP := 40
+## What an info screen costs to run per game day, like a screen stand (a
+## display, so a screen's upkeep, decision shops-and-food-stalls-earn-per-visit-
+## toilets-and-screens-cos).
+const INFO_SCREEN_UPKEEP := 6
+## What a passenger pays for one shower and one nap-pod stay: paid services, so
+## they earn per use and have no upkeep. Tuning values: a shower is a little
+## over a cafe visit (base spend 15), a nap a little under it.
+const SHOWER_FEE := 25
+const NAP_POD_FEE := 20
 
 ## What one hired member of a role costs per game day (ruling staff-wages-
 ## charged-daily-at-midnight-unpaid-wages-carried-as-owed). Tuning values, to
