@@ -154,8 +154,12 @@ func _scene_a() -> void:
 		_menu.preview_label().text == "Cost 25", "a: cost line '%s'" % _menu.preview_label().text
 	)
 	var departures := _departures()
+	var starter := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
+	var doors := GameCalendar.clock_text(
+		_flights.state_start(starter, FlightSim.State.DOORS_CLOSED)
+	)
 	_expect(
-		departures.text == "09:38  Oslo  Gotta Air  doors close in 3:35",
+		departures.text == "09:38  Oslo  Gotta Air  doors close " + doors,
 		"a: departures '%s'" % departures.text
 	)
 	var policy := _find_label(_hud, PassengerHud.DEBUG_POLICY_TEXT)
