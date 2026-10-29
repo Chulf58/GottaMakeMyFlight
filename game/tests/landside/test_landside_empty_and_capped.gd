@@ -102,6 +102,44 @@ func test_a_car_emptied_at_doors_close_never_turns_into_the_lot() -> void:
 	assert_int(landside.free_slots(0)).is_equal(LandsideTestWorld.STARTER.lots[0].slots.size() - 1)
 
 
+## A save can hold an empty car that still means to park (nothing in the
+## snapshot forbids it); loaded, it still never turns into the lot.
+func test_an_empty_parking_car_loaded_from_a_save_never_turns_into_the_lot() -> void:
+	var source: LandsideSim = auto_free(LandsideSim.new())
+	assert_bool(source.use_definition(LandsideTestWorld.STARTER)).is_true()
+	assert_bool(source.build_lot(0)).is_true()
+	var aboard: Array[int] = [1]
+	source.add_vehicle(LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.PARK, aboard)
+	var rng := RandomNumberGenerator.new()
+	for t in range(1, 11):
+		source.step(t, true, rng)
+	var data: Dictionary = JSON.parse_string(
+		JSON.stringify(source.to_snapshot(ArrivalBookings.new(), 10))
+	)
+	data["vehicles"][0]["bookings"] = []
+	var loaded: LandsideSim = auto_free(LandsideSim.new())
+	assert_bool(loaded.use_definition(LandsideTestWorld.STARTER)).is_true()
+	loaded.wallet = Wallet.new()
+	assert_bool(loaded.from_snapshot(data, ArrivalBookings.new())).is_true()
+	var v := loaded.get_vehicle(1)
+	assert_int(v.intent).is_equal(LandsideVehicle.Intent.PARK)
+	assert_int(v.lane).is_equal(LandsideVehicle.Lane.ROAD_IN)
+	assert_int(v.pos_mm).is_less(LandsideTestWorld.STARTER.lots[0].branch_mm)
+	var lanes := {}
+	var least_free := LandsideTestWorld.STARTER.lots[0].slots.size()
+	for t in range(11, 800):
+		loaded.step(t, true, rng)
+		var now := loaded.get_vehicle(1)
+		if now != null:
+			lanes[now.lane] = true
+		least_free = mini(least_free, loaded.free_slots(0))
+	print("lanes used %s, fewest free slots %d" % [lanes.keys(), least_free])
+	assert_bool(lanes.has(LandsideVehicle.Lane.ACCESS)).is_false()
+	assert_bool(lanes.has(LandsideVehicle.Lane.SLOT)).is_false()
+	assert_int(least_free).is_equal(LandsideTestWorld.STARTER.lots[0].slots.size())
+	assert_int(loaded.wallet.balance).is_equal(0)
+
+
 ## One car parks into `wallet`; returns [parked events, PARKING credits,
 ## the car's stage, whether its passenger got out].
 func _park_one(wallet: Wallet) -> Array:

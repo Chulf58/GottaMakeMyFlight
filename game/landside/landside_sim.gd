@@ -318,6 +318,9 @@ func _step_access(
 func _step_road_in(can_release: bool, released: Array[Dictionary]) -> void:
 	var leader := FAR_MM
 	for v in _members(LandsideVehicle.Lane.ROAD_IN, -1):
+		# An empty car never parks, however it got here (a save included).
+		if v.bookings.is_empty():
+			v.intent = LandsideVehicle.Intent.DROP
 		var spot := _lot_ahead(v)
 		var stop := definition.curb.stop_mm
 		if spot >= 0:
