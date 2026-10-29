@@ -16,7 +16,10 @@ extends RefCounted
 ## days before its end day; the flights it had issued by then still fly and
 ## show. The list is at most MAX_LINES lines, so the panel keeps its place
 ## above the flight result: when more leave today, flights that have departed
-## drop off the top first, then the last line becomes "+n more".
+## drop off the top first, then the last line becomes "+n more". When nothing
+## leaves today but an open airport has a contract starting on a later day, the
+## empty text is followed by that flight's day and time, as "Tomorrow  08:00
+## Lisbon  Sunhop".
 
 const MAX_LINES := 3
 const EMPTY_TEXT := "No departures today"
@@ -25,7 +28,8 @@ const EMPTY_TEXT := "No departures today"
 static func text(flights: FlightSim, tick: int) -> String:
 	var rows := _rows(flights, GameCalendar.day_of(tick))
 	if rows.is_empty():
-		return EMPTY_TEXT
+		var upcoming := _upcoming_line(flights, GameCalendar.day_of(tick))
+		return EMPTY_TEXT if upcoming == "" else EMPTY_TEXT + "\n" + upcoming
 	while rows.size() > MAX_LINES and rows[0]["departed"]:
 		rows.pop_front()
 	var next := _next_departing(rows, tick)
@@ -50,6 +54,39 @@ static func _countdown_line(row: Dictionary, tick: int) -> String:
 	var left := maxi(0, row["doors"] - tick) / SimClock.TICK_RATE
 	@warning_ignore("integer_division")
 	return "%s  doors close in %d:%02d" % [row["base"], left / 60, left % 60]
+
+
+## The day and time of the earliest contract that starts after `today`, or "".
+## An ended contract never starts, and a closed airport schedules nothing.
+static func _upcoming_line(flights: FlightSim, today: int) -> String:
+	if flights.opened_tick < 0:
+		return ""
+	var best_id := ""
+	var best_when := 0
+	for contract_id in flights.contract_ids():
+		var day := int(flights.start_days[contract_id])
+		var end_day := flights.contract_end_day(contract_id)
+		if day <= today or (end_day >= 0 and day >= end_day):
+			continue
+		var minute := int(flights.contract_of(contract_id)["departure_minute"])
+		var when := day * GameCalendar.MINUTES_PER_DAY + minute
+		if best_id == "" or when < best_when:
+			best_id = contract_id
+			best_when = when
+	if best_id == "":
+		return ""
+	var contract := flights.contract_of(best_id)
+	var day := int(flights.start_days[best_id])
+	var tick := GameCalendar.tick_at(day, int(contract["departure_minute"]))
+	return (
+		"%s  %s  %s  %s"
+		% [
+			"Tomorrow" if day == today + 1 else "Day %d" % (day + 1),
+			GameCalendar.clock_text(tick),
+			contract["destination"],
+			contract["airline"],
+		]
+	)
 
 
 ## {tick, doors, base, line, departed} for each flight leaving on `today`,
