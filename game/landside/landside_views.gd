@@ -8,7 +8,7 @@ extends Node3D
 ## a vehicle is drawn by distance along the lane's polyline, facing the
 ## direction of travel of the segment it is on, so traffic keeps right as the
 ## lanes do (decision landside-traffic-drives-on-the-right-the-terminal-side-
-## carri). The models' noses are local +Z.
+## carri). A parked car faces into its stall. The models' noses are local +Z.
 ##
 ## A vehicle that changed lane, berth or slot between the two ticks is drawn
 ## where it is now: LandsideSim moves it there in one step and has no path
@@ -232,14 +232,20 @@ func places() -> LandsidePlaces:
 	return _places
 
 
+## Where a vehicle is now. A parked car faces into its stall
+## (LandsidePlaces.parked_heading()), on its slot's deck in a multi-storey.
 func _place_of(v: LandsideVehicle) -> Dictionary:
+	var at := landside.world_position(v)
+	var dir := landside.heading(v)
+	if v.lane == LandsideVehicle.Lane.SLOT:
+		dir = LandsidePlaces.parked_heading(landside.definition.lots[v.lot], at)
 	return {
 		"lane": v.lane,
 		"lot": v.lot,
 		"stop": v.stop,
 		"pos_mm": v.pos_mm,
-		"at": landside.world_position(v),
-		"dir": landside.heading(v),
+		"at": at,
+		"dir": dir,
 	}
 
 

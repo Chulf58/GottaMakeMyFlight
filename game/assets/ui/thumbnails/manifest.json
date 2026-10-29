@@ -229,6 +229,41 @@
       "sources": {
         "screen_stand.glb": "ce1af0312ab25c7ab335d1cc06d3fd293dfb7c40128eb7487b39d477080f82ac"
       }
+    },
+    "curb_bay": {
+      "png": "curb_bay.png",
+      "class": "bay",
+      "style": 3,
+      "sources": {
+        "landside/tp_curb_bay_01a.glb": "4be2f752f2aafcf65eed2a146d865d6e26a8eea574a83155261be1ee20851e43",
+        "vehicles/tp_taxi_01a.glb": "d3afec88320661ecb2eb8217b02caff3d58917ae7d4807f011850c38f77d9771"
+      }
+    },
+    "surface_lot": {
+      "png": "surface_lot.png",
+      "class": "lot",
+      "style": 3,
+      "sources": {
+        "landside/tp_parking_01a.glb": "0ec9fa32f7a8e7a373d44f417d40ef70436300a10d5ffe2f5b143562b734e3d0",
+        "vehicles/tp_suv_01b.glb": "459c721d5b872bf4501463d125883087ae3eccef5b6f2bb70837dce99a31f90f",
+        "vehicles/tp_taxi_01b.glb": "5b15aab2864748865c8017e1064246a1e85bbdf7c70427e2c48c912e35ec44bf"
+      }
+    },
+    "multi_storey": {
+      "png": "multi_storey.png",
+      "class": "multi",
+      "style": 3,
+      "sources": {
+        "landside/tc_parking_2a.glb": "31bce5979061c9f1a61dfecb2718e8c7e63a6c30dbdaeb784d79dddcab9a0509"
+      }
+    },
+    "lot_gate": {
+      "png": "lot_gate.png",
+      "class": "gate",
+      "style": 3,
+      "sources": {
+        "landside/tp_parking_01a.glb": "0ec9fa32f7a8e7a373d44f417d40ef70436300a10d5ffe2f5b143562b734e3d0"
+      }
     }
   }
 }

@@ -3,11 +3,12 @@ extends GdUnitTestSuite
 ## Every drawn car and taxi faces its right-hand direction of travel
 ## (decision landside-traffic-drives-on-the-right-the-terminal-side-carri):
 ## on road_in and road_out it heads -x on the terminal-side carriageway, on a
-## lot's access lane +z, in a curb berth -x, in a parking slot +z, and on the
-## lot exit's stretch along the far carriageway +x. Moving between two ticks
-## on one lane, the model's nose (local +Z) points along the way it is drawn
-## moving. A bare LandsideSim on the starter road with its lot built, stepped
-## by hand; the views sync after each step. Built once for the file.
+## lot's access lane +z, in a curb berth -x, in a parking slot into its
+## stall (away from the lot's middle aisle), and on the lot exit's stretch
+## along the far carriageway +x. Moving between two ticks on one lane, the
+## model's nose (local +Z) points along the way it is drawn moving. A bare
+## LandsideSim on the starter road with both car parks and curb spot 0 built,
+## stepped by hand; the views sync after each step. Built once for the file.
 
 const STEPS := 1200
 ## Cars handed in on these ticks: [kind, intent].
@@ -19,6 +20,18 @@ const ARRIVALS := {
 	32: [LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP],
 	33: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.DROP],
 	34: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.DROP],
+	50: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.PARK],
+}
+## The surface lot (spot 0) closes on this tick, after car 2 turned into it, so
+## the later parking cars go to the multi-storey (spot 1).
+const CLOSE_SURFACE_TICK := 45
+## The way a parked car faces, by lot spot and slot row x, written out from
+## starter_landside.tres (not from LandsidePlaces): into the stall, away from
+## the aisle. The surface lot's aisle runs along x 31.7, the multi-storey's
+## slots stand west of its middle.
+const PARKED_NOSE := {
+	0: {24.85: Vector3(-1, 0, 0), 38.55: Vector3(1, 0, 0)},
+	1: {-7.6: Vector3(-1, 0, 0)},
 }
 const PLACE_NAMES := {
 	LandsideVehicle.Lane.BERTH: "berth",
@@ -46,6 +59,8 @@ func before() -> void:
 	_landside.use_definition(preload("res://landside/starter_landside.tres"))
 	_landside.wallet = Wallet.new()
 	assert_bool(_landside.build_lot(0)).is_true()
+	assert_bool(_landside.build_lot(1)).is_true()
+	assert_bool(_landside.build_curb(0)).is_true()
 	_views = LandsideViews.new()
 	_views.landside = _landside
 	add_child(_views)
@@ -57,6 +72,8 @@ func before() -> void:
 			var bookings: Array[int] = [booking]
 			booking += 1
 			_landside.add_vehicle(ARRIVALS[tick][0], ARRIVALS[tick][1], bookings)
+		if tick == CLOSE_SURFACE_TICK:
+			assert_bool(_landside.set_lot_closed(0, true)).is_true()
 		_landside.step(tick, true, rng)
 		for id in _landside.vehicle_ids():
 			var v := _landside.get_vehicle(id)
@@ -82,6 +99,11 @@ func _check_tick() -> void:
 		var nose := pose.basis.z
 		var place := _place_name(v, pose.origin)
 		var want := _want(place)
+		if place == "slot":
+			place = "slot_lot%d" % v.lot
+			want = _parked_nose(v.lot, pose.origin.x)
+			if want == Vector3.ZERO:
+				_wrong.append("slot at %s has no written-out nose" % pose.origin)
 		_covered[place] = int(_covered.get(place, 0)) + 1
 		if want != Vector3.ZERO and nose.dot(want) < 0.99:
 			_wrong.append("%s vehicle %d nose %s want %s" % [place, id, nose, want])
@@ -95,6 +117,15 @@ func _check_tick() -> void:
 				_wrong.append("%s vehicle %d moves %s nose %s" % [place, id, moved, nose])
 
 
+## PARKED_NOSE for the row at `x` of lot spot `lot`, or zero for none.
+static func _parked_nose(lot: int, x: float) -> Vector3:
+	var rows: Dictionary = PARKED_NOSE[lot]
+	for row: float in rows:
+		if absf(row - x) < 0.01:
+			return rows[row]
+	return Vector3.ZERO
+
+
 func _place_name(v: LandsideVehicle, at: Vector3) -> String:
 	if PLACE_NAMES.has(v.lane):
 		return PLACE_NAMES[v.lane]
@@ -102,14 +133,15 @@ func _place_name(v: LandsideVehicle, at: Vector3) -> String:
 	# corner itself either heading is right.
 	if absf(at.z - -45.0) > 0.01:
 		return "exit_to_road"
-	return "exit_far_carriageway" if at.x > 15.01 else "exit_corner"
+	var corner: Vector3 = _landside.definition.lots[v.lot].exit[1]
+	return "exit_far_carriageway" if at.x > corner.x + 0.01 else "exit_corner"
 
 
 static func _want(place: String) -> Vector3:
 	match place:
 		"berth", "road_in", "road_out":
 			return Vector3(-1, 0, 0)
-		"slot", "access":
+		"access":
 			return Vector3(0, 0, 1)
 		"exit_far_carriageway":
 			return Vector3(1, 0, 0)
@@ -120,7 +152,9 @@ static func _want(place: String) -> Vector3:
 
 func test_every_drawn_vehicle_faces_its_right_hand_direction_of_travel() -> void:
 	print("covered %s moving_checked %d wrong %s" % [_covered, _moving_checked, _wrong])
-	for place in ["road_in", "berth", "road_out", "access", "slot", "exit_to_road"]:
+	for place in [
+		"road_in", "berth", "road_out", "access", "slot_lot0", "slot_lot1", "exit_to_road"
+	]:
 		assert_int(int(_covered.get(place, 0))).is_greater(0)
 	assert_int(int(_covered.get("exit_far_carriageway", 0))).is_greater(0)
 	assert_int(_moving_checked).is_greater(100)
@@ -138,15 +172,13 @@ func test_cars_leave_the_view_with_the_sim_and_their_nodes_are_reused() -> void:
 	assert_int(_peak_nodes).is_greater(1)
 	assert_array(_landside.vehicle_ids()).is_empty()
 	assert_int(_views.vehicle_count()).is_equal(0)
-	# Taxi 8 takes the model taxi 5 drove (8 % 3 == 5 % 3), from the pool.
+	# Car 9 takes the model car 3 drove (9 % 3 == 3 % 3), from the pool.
 	var bookings: Array[int] = [99]
-	var id := _landside.add_vehicle(
-		LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, bookings
-	)
+	var id := _landside.add_vehicle(LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.DROP, bookings)
 	_landside.step(STEPS + 1, true, RandomNumberGenerator.new())
 	_views.sync()
-	assert_int(id).is_equal(8)
+	assert_int(id).is_equal(9)
 	assert_bool(_views.has_vehicle(id)).is_true()
 	assert_bool(_views.node_for(id).visible).is_true()
-	assert_str(String(_views.node_for(id).name)).is_equal("Vehicle8")
+	assert_str(String(_views.node_for(id).name)).is_equal("Vehicle9")
 	assert_int(_views.get_child_count()).is_equal(children)

@@ -8,28 +8,41 @@ extends SceneTree
 ##     -s res://tests/landside/landside_views_plates_probe.gd
 ##
 ## main.tscn boots with a random sim seed (printed), the starter terminal (the HUD's
-## debug button), a check-in agent and a security officer hired, and surface lot spot 0
-## built, and plays until the airport opened and the first car is on the map. Then the
-## entrance door is removed: nobody can get out, so cars hold in the curb berths and in
-## the lot and later cars queue on road_in, a jam that stands still long enough to
-## photograph (the airport stays open once opened, so the flight goes on). The sim is
-## stepped by the clock's own advance(), so LandsideViews draws through its real tick
-## signal and alpha. Plates, each proving its subjects in frame (projected bounds inside
-## the viewport with a margin) and hit by camera rays against colliders of every mesh in
-## the scene (meshes the roof dissolve has dropped are left out), else PROBE_INVALID.
-## The jam is a forced fixture: the entrance comes out with the grid's staff-reach check
-## off for that one edit (a player could not make it), so the plates are evidence of how
-## vehicles are drawn, faced, picked and described, not of congestion from play:
-##   curb      a car in a berth and the two queued cars nearest the curb's stop
+## debug button), a check-in agent and a security officer hired, curb spot 0's bay, the
+## multi-storey on lot spot 1 and the surface lot on lot spot 0 built, the surface lot
+## closed (so parking cars go to the multi-storey and the lot shows its Closed sign), and
+## plays until the airport opened and the first car is on the map. Then the entrance
+## door is removed: nobody can get out, so cars hold in the curb berths (the starter
+## curb's first, then the built bay's) and on the multi-storey's decks, and later cars
+## queue on road_in, a jam that stands still long enough to photograph (the airport
+## stays open once opened, so the flight goes on). With the door, 40 more passengers
+## are booked on that flight (ArrivalBookings.schedule()) so the curb fills whatever
+## the seed; once two cars are parked the multi-storey is closed as well, so the rest
+## queue for the curb. The sim is stepped by the clock's own advance(), so
+## LandsideViews draws through its real tick signal and alpha. Plates, each proving
+## its subjects in frame (projected bounds inside the viewport with a margin) and hit
+## by camera rays against colliders of every mesh in the scene (meshes the roof
+## dissolve has dropped are left out), else PROBE_INVALID. The jam is a forced fixture:
+## the entrance comes out with the grid's staff-reach check off for that one edit and
+## the extra bookings are added by hand (a player could do neither), so the plates are
+## evidence of how vehicles and facilities are drawn, faced, picked and described, not
+## of congestion from play:
+##   curb      a car in the built bay, a car in a starter bay and the two queued cars
+##             nearest the curb's stop
 ##   select    a queued car clicked through PassengerHud: ring and follow text
 ##   distance  the whole landside from 200 m
-##   lot       DIAGNOSTIC: the provisional lot placement with the sim's 12 slots
-##             (white posts), the access lane end (green) and the exit start (red),
-##             so the mismatch between the authored slots and the vendor lot shows
+##   multi     the multi-storey from the west with cars parked on its decks: each
+##             parked car's wheels on a deck (a ray down hits the building within 5 cm)
+##   closed    the closed surface lot with its Closed sign over the gate
+##   decks     the two parked cars moved by hand onto the second and third level (a
+##             forced fixture), the same checks at those decks
 ##   strip     a driving car over 6 frames a third of a tick apart
 ## Every drawn vehicle's nose (basis.z) is checked against its lane: -x on road_in,
-## road_out and in a berth, +z on the access lane and in a slot, and against the way it
-## is drawn moving. Plates go to tools/blender/out/landside/views/.
+## road_out and in a berth, +z on the access lane, into its stall in a slot
+## (LandsidePlaces.parked_heading()), and against the way it is drawn moving. Every
+## vehicle on road_in, road_out or in a berth must stand on the baked road (x -43 to
+## 43, z -60 to -40) and every parked one inside its car park's footprint: never on
+## grass. Plates go to tools/blender/out/landside/views/.
 
 const OUT_REL := "res://../tools/blender/out/landside/views"
 const MAIN_SCENE := "res://main/main.tscn"
@@ -38,6 +51,8 @@ const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 120000
 const TICK_LIMIT := 60000
 const TICKS_PER_FRAME := 200
+## Extra passengers booked on the first flight (see _book_more()).
+const EXTRA_BOOKINGS := 40
 const GLASS := "res://assets/materials/tp_glass.tres"
 
 var _out_dir := ""
@@ -97,12 +112,15 @@ func _watch() -> void:
 
 func _run() -> void:
 	await _boot()
+	# The strip first: once the jam stands no car drives free on the short road.
+	await _plate_strip()
 	if await _jam():
 		await _plate_curb()
 		await _plate_select()
 		await _plate_distance()
-		await _plate_lot()
-		await _plate_strip()
+		await _plate_multi()
+		await _plate_closed()
+		await _plate_decks()
 	_sheet()
 	_guard_mutex.lock()
 	_guard_stop = true
@@ -161,8 +179,14 @@ func _boot() -> void:
 	var staff: StaffSim = _main.get_node("Staff")
 	staff.hire(StaffMember.Role.CHECKIN)
 	staff.hire(StaffMember.Role.SECURITY)
-	if not _landside.build_lot(0):
-		_invalid("lot spot 0 could not be built")
+	var built := [
+		_landside.build_curb(0),
+		_landside.build_lot(0),
+		_landside.build_lot(1),
+		_landside.set_lot_closed(0, true),
+	]
+	if built != [true, true, true, true]:
+		_invalid("landside build steps refused: %s" % [built])
 	await _frames(10)
 
 
@@ -181,7 +205,19 @@ func _count(lane: LandsideVehicle.Lane, stage: int) -> int:
 	return n
 
 
-## Steps until a car stands in a berth and two cars queue on road_in on the map.
+## How many drawn cars stand in a built curb spot's berths.
+func _in_built_bay() -> int:
+	var n := 0
+	for id in _landside.vehicle_ids():
+		var v := _landside.get_vehicle(id)
+		if v.lane == LandsideVehicle.Lane.BERTH and _views.has_vehicle(id):
+			if _landside.definition.berth_spot(v.stop) >= 0:
+				n += 1
+	return n
+
+
+## Steps until a car stands in the built bay, two cars queue on road_in on the map and
+## a car is parked in the multi-storey.
 func _jam() -> bool:
 	_stage = "jam"
 	var closed := false
@@ -193,9 +229,15 @@ func _jam() -> bool:
 			closed = true
 			if not _remove_entrance():
 				return false
-		var berthed := _count(LandsideVehicle.Lane.BERTH, -1)
+			_book_more()
+		var berthed := _in_built_bay()
 		var queued := _count(LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Stage.QUEUE)
 		var parked := _count(LandsideVehicle.Lane.SLOT, -1)
+		# Two cars parked: close the multi-storey too, so later cars all queue for the
+		# curb (one flight books too few cars to fill six berths otherwise).
+		if parked >= 2 and _landside.lot_open(1):
+			_landside.set_lot_closed(1, true)
+			print("MULTI closed at tick %d with %d parked" % [_clock.tick, parked])
 		if berthed > 0 and queued >= 2 and parked > 0:
 			print(
 				(
@@ -211,7 +253,7 @@ func _jam() -> bool:
 			"no jam by tick %d (berths %d, queued %d, parked %d)"
 			% [
 				_clock.tick,
-				_count(LandsideVehicle.Lane.BERTH, -1),
+				_in_built_bay(),
 				_count(LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Stage.QUEUE),
 				_count(LandsideVehicle.Lane.SLOT, -1)
 			]
@@ -375,8 +417,13 @@ func _check_noses(label: String) -> void:
 		match v.lane:
 			LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.ROAD_OUT, LandsideVehicle.Lane.BERTH:
 				want = Vector3(-1, 0, 0)
-			LandsideVehicle.Lane.ACCESS, LandsideVehicle.Lane.SLOT:
+			LandsideVehicle.Lane.ACCESS:
 				want = Vector3(0, 0, 1)
+			LandsideVehicle.Lane.SLOT:
+				want = LandsidePlaces.parked_heading(
+					_landside.definition.lots[v.lot], _views.node_for(id).global_position
+				)
+		_check_ground(label, v, _views.node_for(id).global_position)
 		var move := _views.pose_at(id, 0.55).origin - _views.pose_at(id, 0.45).origin
 		var move_dot := nose.dot(move.normalized()) if move.length() > 0.01 else NAN
 		print(
@@ -407,6 +454,49 @@ func _check_noses(label: String) -> void:
 	print("NOSES %s checked=%d moving=%d" % [label, checked, moving])
 	if checked == 0:
 		_invalid("%s: no vehicle checked" % label)
+
+
+## On the baked road (x -43 to 43, z -60 to -40) on road_in, road_out and in a berth;
+## inside its car park's footprint when parked. The lot lanes between the road and a
+## car park are reported, not judged.
+func _check_ground(label: String, v: LandsideVehicle, at: Vector3) -> void:
+	var where := "lane"
+	var ok := true
+	match v.lane:
+		LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.ROAD_OUT, LandsideVehicle.Lane.BERTH:
+			where = "road"
+			ok = absf(at.x) <= 43.0 and at.z >= -60.0 and at.z <= -40.0
+		LandsideVehicle.Lane.SLOT:
+			var spot: LandsideLotSpot = _landside.definition.lots[v.lot]
+			where = "lot %d" % v.lot
+			ok = (
+				absf(at.x - spot.centre.x) <= spot.footprint.x / 2.0
+				and absf(at.z - spot.centre.z) <= spot.footprint.y / 2.0
+			)
+	print("GROUND %s vehicle=%d lane=%d at=%s on=%s ok=%s" % [label, v.id, v.lane, at, where, ok])
+	if not ok:
+		_invalid("%s: vehicle %d at %s is off the %s" % [label, v.id, at, where])
+
+
+## Books EXTRA_BOOKINGS more passengers on the flight the first car drives for, so
+## one flight brings enough cars to fill the berths and queue whatever the seed.
+func _book_more() -> void:
+	var sim: PassengerSim = _main.get_node("PassengerSim")
+	var flight := ""
+	for id in sim.arrivals.booking_ids():
+		flight = sim.arrivals.get_booking(id).flight_id
+		break
+	if flight == "":
+		_invalid("no booking to find the flight by")
+		return
+	var before := sim.arrivals.pending()
+	sim.arrivals.schedule(flight, EXTRA_BOOKINGS)
+	print(
+		(
+			"BOOKED %d more on %s: %d -> %d bookings"
+			% [EXTRA_BOOKINGS, flight, before, sim.arrivals.pending()]
+		)
+	)
 
 
 ## Removes the terminal's entrance door, so nobody gets out of a car any more.
@@ -457,7 +547,8 @@ func _keep(img: Image, file: String) -> void:
 # ------------------------------------------------------------ plates
 
 
-## The berthed car nearest the stop and the two queued cars nearest the stop.
+## A car in the built bay, one in a starter bay and the two queued cars nearest the
+## stop.
 func _curb_subjects() -> Dictionary:
 	var out := {}
 	var queued: Array[LandsideVehicle] = []
@@ -465,8 +556,10 @@ func _curb_subjects() -> Dictionary:
 		var v := _landside.get_vehicle(id)
 		if not _views.has_vehicle(id):
 			continue
-		if v.lane == LandsideVehicle.Lane.BERTH and not out.has("berth"):
-			out["berth"] = id
+		if v.lane == LandsideVehicle.Lane.BERTH:
+			var key := "built_bay" if _landside.definition.berth_spot(v.stop) >= 0 else "berth"
+			if not out.has(key):
+				out[key] = id
 		elif v.lane == LandsideVehicle.Lane.ROAD_IN and v.stage == LandsideVehicle.Stage.QUEUE:
 			queued.append(v)
 	queued.sort_custom(
@@ -480,8 +573,8 @@ func _curb_subjects() -> Dictionary:
 func _plate_curb() -> void:
 	var subjects := _curb_subjects()
 	print("CURB subjects %s" % [subjects])
-	await _aim("curb", Vector3(-6.0, 0.0, -56.0), 48.0, -0.35)
-	var ok := subjects.size() == 3
+	await _aim("curb", Vector3(-4.0, 0.0, -56.0), 58.0, -0.35)
+	var ok := subjects.size() == 4
 	for key in subjects:
 		var node := _views.node_for(subjects[key])
 		ok = _prove_in_frame("curb/%s vehicle %d" % [key, subjects[key]], _aabb_of(node)) and ok
@@ -497,7 +590,7 @@ func _plate_select() -> void:
 	if id == 0:
 		_invalid("select: no queued car")
 		return
-	await _aim("select", Vector3(-6.0, 0.0, -56.0), 48.0, -0.35)
+	await _aim("select", Vector3(-4.0, 0.0, -56.0), 58.0, -0.35)
 	var at := _cam.unproject_position(_views.node_for(id).global_position + Vector3(0.0, 1.0, 0.0))
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
@@ -534,63 +627,133 @@ func _plate_distance() -> void:
 	for key in subjects:
 		ok = _prove_in_frame("distance/%s" % key, _aabb_of(_views.node_for(subjects[key]))) and ok
 		ok = _prove_visible("distance/%s" % key, _views.node_for(subjects[key])) and ok
-	ok = _prove_in_frame("distance/lot", _aabb_of(_views.places().lot_node(0))) and ok
-	ok = _prove_visible("distance/lot", _views.places().lot_node(0)) and ok
+	for spot in 2:
+		var lot := _views.places().lot_node(spot)
+		ok = _prove_in_frame("distance/lot %d" % spot, _aabb_of(lot)) and ok
+		ok = _prove_visible("distance/lot %d" % spot, lot) and ok
 	_check_noses("distance")
 	var img := await _grab()
 	_keep(img, "landside_views_distance.png" if ok else "landside_views_distance_INVALID.png")
 
 
-func _post(at: Vector3, color: Color) -> MeshInstance3D:
-	var post := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.25
-	mesh.bottom_radius = 0.25
-	mesh.height = 3.0
-	post.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	post.material_override = mat
-	post.position = at + Vector3(0.0, 1.5, 0.0)
-	return post
+## The multi-storey's ground floor from the west with its parked cars: each in frame, on
+## a deck (a ray down from inside the car hits the building within 5 cm of the car's
+## wheels), and at least one seen through the open side.
+func _plate_multi() -> void:
+	# Low from the west, through the open side under the first deck: the ground-floor
+	# slots are 4.4 m in from the west wall. The distance plate frames the whole building.
+	await _plate_parked("multi", Vector3(-7.6, 1.0, -28.0))
 
 
-func _plate_lot() -> void:
-	var markers := Node3D.new()
-	markers.name = "ProbeMarkers"
-	_main.add_child(markers)
-	var spot: LandsideLotSpot = _landside.definition.lots[0]
-	for slot in spot.slots:
-		markers.add_child(_post(slot, Color.WHITE))
-	markers.add_child(_post(spot.access[spot.access.size() - 1], Color(0.1, 0.8, 0.2)))
-	markers.add_child(_post(spot.exit[0], Color(0.9, 0.1, 0.1)))
-	await _aim("lot", Vector3(4.0, 0.0, -28.0), 60.0, 0.0)
-	var lot := _views.places().lot_node(0)
-	var ok := _prove_in_frame("lot/lot", _aabb_of(lot))
-	ok = _prove_in_frame("lot/markers", _aabb_of(markers)) and ok
-	var parked := 0
+## The upper decks: a forced fixture after every other plate. The two parked cars'
+## records are moved to a slot on the second and third level (the sim reserved the
+## ground floor's lowest slots), the views snap, and the same checks run from the west
+## at those decks' height.
+func _plate_decks() -> void:
+	var moved := []
+	var upper := [12, 25]
 	for id in _landside.vehicle_ids():
-		if _landside.get_vehicle(id).lane == LandsideVehicle.Lane.SLOT and _views.has_vehicle(id):
-			parked += 1
-			ok = _prove_in_frame("lot/parked %d" % id, _aabb_of(_views.node_for(id))) and ok
-			ok = _prove_visible("lot/parked %d" % id, _views.node_for(id)) and ok
-	print(
-		(
-			"LOT DIAGNOSTIC parked=%d lot_at=%s slots=%s gate=%s exit_start=%s"
-			% [
-				parked,
-				lot.global_position,
-				spot.slots,
-				spot.access[spot.access.size() - 1],
-				spot.exit[0]
-			]
+		var v := _landside.get_vehicle(id)
+		if v.lane == LandsideVehicle.Lane.SLOT and v.lot == 1 and moved.size() < upper.size():
+			v.stop = upper[moved.size()]
+			moved.append([id, _landside.definition.lots[1].slots[v.stop]])
+	print("DECKS moved %s" % [moved])
+	_views.snap()
+	await _plate_parked("decks", Vector3(-7.6, 8.0, -28.0))
+
+
+## The parked cars in the multi-storey seen from the west at `focus`: each in frame, on
+## a deck, and at least one seen.
+func _plate_parked(label: String, focus: Vector3) -> void:
+	await _aim(label, focus, 20.0, -PI / 2.0)
+	var lot := _views.places().lot_node(1)
+	var ok := _prove_visible("%s/building" % label, lot)
+	var cars: Array[int] = []
+	var exclude: Array[RID] = []
+	for id in _landside.vehicle_ids():
+		var v := _landside.get_vehicle(id)
+		if _views.has_vehicle(id):
+			for body in _views.node_for(id).find_children("ProbeBody", "StaticBody3D", true, false):
+				exclude.append((body as StaticBody3D).get_rid())
+			if v.lane == LandsideVehicle.Lane.SLOT and v.lot == 1:
+				cars.append(id)
+	var space := _cam.get_world_3d().direct_space_state
+	var seen := 0
+	var on_deck := 0
+	for id in cars:
+		var node := _views.node_for(id)
+		ok = _prove_in_frame("%s/parked %d" % [label, id], _aabb_of(node)) and ok
+		var at := node.global_position
+		var q := PhysicsRayQueryParameters3D.create(at + Vector3(0, 0.5, 0), at - Vector3(0, 1, 0))
+		q.exclude = exclude
+		var hit := space.intersect_ray(q)
+		var gap: float = at.y - (hit["position"] as Vector3).y if hit else INF
+		var on_it: bool = hit and lot.is_ancestor_of(hit["collider"]) and absf(gap) <= 0.05
+		on_deck += int(on_it)
+		print(
+			(
+				"DECK %s/parked %d at=%s hit=%s gap=%.3f on_deck=%s"
+				% [label, id, at, hit.get("position"), gap, on_it]
+			)
 		)
-	)
-	_check_noses("lot")
+		if not on_it:
+			_invalid("%s: parked car %d is not on a deck" % [label, id])
+		seen += int(_quiet_visible(node))
+	print("PARKED %s cars=%d on_deck=%d seen=%d" % [label, cars.size(), on_deck, seen])
+	if cars.is_empty() or seen == 0:
+		_invalid("%s: %d parked cars, %d seen" % [label, cars.size(), seen])
+		ok = false
+	_check_noses(label)
 	var img := await _grab()
-	_keep(img, "landside_views_lot_DIAGNOSTIC.png" if ok else "landside_views_lot_INVALID.png")
-	markers.free()
+	var file := "landside_views_%s%s.png" % [label, "" if ok else "_INVALID"]
+	_keep(img, file)
+
+
+## Whether some camera ray reaches the subject first (no PROBE_INVALID): a car on a
+## lower deck may be hidden by the deck above from any one camera.
+func _quiet_visible(subject: Node3D) -> bool:
+	var space := _cam.get_world_3d().direct_space_state
+	var box := _aabb_of(subject)
+	for i in 8:
+		var t := box.get_center().lerp(box.get_endpoint(i), 0.6)
+		var q := PhysicsRayQueryParameters3D.create(_cam.global_position, t)
+		var hit := space.intersect_ray(q)
+		if hit and subject.is_ancestor_of(hit["collider"]):
+			return true
+	return false
+
+
+## The closed surface lot with its Closed sign over the gate, in frame.
+func _plate_closed() -> void:
+	var spot: LandsideLotSpot = _landside.definition.lots[0]
+	await _aim("closed", spot.centre + Vector3(0.0, 0.0, -6.0), 60.0, 0.0)
+	var lot := _views.places().lot_node(0)
+	var sign := _views.places().closed_sign(0)
+	var ok := sign != null and sign.visible
+	if not ok:
+		_invalid("closed: lot 0 is closed but has no Closed sign")
+	else:
+		var text := (sign.get_node("Caption") as Label3D).text
+		var at := _cam.unproject_position(sign.global_position)
+		var rect := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
+		print("CLOSED sign at=%s screen=%s caption=%s" % [sign.global_position, at, text])
+		if not rect.has_point(at) or text != "Closed":
+			_invalid("closed: the sign is out of frame or says %s" % text)
+			ok = false
+	ok = _prove_in_frame("closed/lot", _aabb_of(lot)) and ok
+	ok = _prove_visible("closed/lot", lot) and ok
+	var img := await _grab()
+	_keep(img, "landside_views_closed.png" if ok else "landside_views_closed_INVALID.png")
+
+
+## Whether no car on road_in is less than `room_mm` ahead of `v`.
+func _clear_ahead(v: LandsideVehicle, room_mm: int) -> bool:
+	for id in _landside.vehicle_ids():
+		var other := _landside.get_vehicle(id)
+		if other != v and other.lane == LandsideVehicle.Lane.ROAD_IN:
+			if other.pos_mm > v.pos_mm and other.pos_mm - v.pos_mm < room_mm:
+				return false
+	return true
 
 
 ## A car driving on road_in, drawn over 6 frames a third of a tick apart.
@@ -598,7 +761,7 @@ func _plate_strip() -> void:
 	_beat("strip")
 	var id := 0
 	var guard := 0
-	while id == 0 and guard < 4000:
+	while id == 0 and guard < 8000:
 		_tick()
 		guard += 1
 		for vid in _landside.vehicle_ids():
@@ -606,8 +769,10 @@ func _plate_strip() -> void:
 			if (
 				v.lane == LandsideVehicle.Lane.ROAD_IN
 				and v.stage == LandsideVehicle.Stage.DRIVE
-				and v.pos_mm > 40000
+				and v.pos_mm >= 2000
+				and v.pos_mm < 20000
 				and _views.has_vehicle(vid)
+				and _clear_ahead(v, 15000)
 			):
 				id = vid
 				break
@@ -663,12 +828,12 @@ func _sheet() -> void:
 	if _plates.is_empty():
 		return
 	var sheet := Image.create(1920, 1080, false, Image.FORMAT_RGBA8)
-	for i in mini(_plates.size(), 4):
+	for i in mini(_plates.size(), 9):
 		var copy := _plates[i].duplicate() as Image
-		copy.resize(960, 540, Image.INTERPOLATE_LANCZOS)
+		copy.resize(640, 360, Image.INTERPOLATE_LANCZOS)
 		sheet.blit_rect(
 			copy,
-			Rect2i(Vector2i.ZERO, Vector2i(960, 540)),
-			Vector2i((i % 2) * 960, floori(i / 2.0) * 540)
+			Rect2i(Vector2i.ZERO, Vector2i(640, 360)),
+			Vector2i((i % 3) * 640, floori(i / 3.0) * 360)
 		)
 	_save(sheet, "landside_views_contact_sheet.png")

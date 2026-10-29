@@ -11,7 +11,7 @@ extends GdUnitTestSuite
 const SEED := 4_400_101
 const OTHER_SEED := 9
 const LIMIT := 12000
-const ON_MAP := 2
+const ON_MAP := 1
 
 var _path := SaveTestKit.run_path("test_landside_views_load")
 var _saved: Node

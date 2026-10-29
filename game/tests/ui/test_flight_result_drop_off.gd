@@ -4,12 +4,14 @@ extends GdUnitTestSuite
 ## their car or taxi when the doors close show as "Waiting for drop-off" in
 ## the result PassengerHud opens, counted in Missed (decision landside-
 ## technical-design-arrival-bookings-landsidesim-vehic). The terminal has
-## its entrance, so these are traffic misses, not no-shows. The panel keeps
+## its entrance, so these are traffic misses, not no-shows; the doors close at
+## tick 60, before the first car reaches the curb 94 ticks along the 47 m road
+## (as in test_landside_doors_close.gd). The panel keeps
 ## its three-reason limit: below three larger reasons the drop-off count is
 ## summed into Other, never lost.
 
-const BOARDING := 150
-const DOORS := 250
+const BOARDING := 30
+const DOORS := 60
 const BOOKED := 6
 
 var _land: LandsideTestWorld

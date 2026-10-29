@@ -6,7 +6,8 @@ Run (headless, reproducible):
     [-- --force] [-- item ...]
 
 Each item is drawn from its interior kit .glb in game/assets/interior/ (the pieces
-game/build/view/interior_kit.gd uses), framed by one orthographic 3/4 camera at a
+game/build/view/interior_kit.gd uses), or for a piece named with a folder
+("landside/tp_curb_bay_01a") from that .glb under game/assets/, framed by one orthographic 3/4 camera at a
 fixed direction, at one scale per footprint class, on a transparent background.
 Writes 256x256 PNGs to game/assets/ui/thumbnails/<item>.png and a manifest of the
 source .glb hashes there; an item re-renders only when a source hash (or STYLE)
@@ -36,7 +37,8 @@ from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-KIT_DIR = os.path.join(REPO, "game", "assets", "interior")
+ASSETS_DIR = os.path.join(REPO, "game", "assets")
+KIT_DIR = os.path.join(ASSETS_DIR, "interior")
 TEXTURES = os.path.join(REPO, "game", "assets", "textures")
 OUT_DIR = os.path.join(REPO, "game", "assets", "ui", "thumbnails")
 MANIFEST = os.path.join(OUT_DIR, "manifest.json")
@@ -62,10 +64,16 @@ OUTLINE_PX = 1.5  # toon_outline outline_px, at the final size
 
 ATLAS_PNG = {
     "TP_Atlas_1A_D": "tp_atlas_1a_d.png",
+    # The converted Toon packs: the simple atlas is the same image
+    # (tp_atlas_simple_toon.tres); the multi-storey has its own texture and ramp.
+    "TP_Atlas_Simple_1A_D": "tp_atlas_1a_d.png",
+    "TC_Building_17A_D": "tc_building_17a_d.png",
     "TP_Atlas_Lights_1A_D": "tp_atlas_lights_1a_d.png",
     "TP_Glass_1A_D": "tp_glass_gradient_1a_d.png",
 }
 RAMP_PNG = "tp_toon_ramp_1d_d.png"
+# Materials whose toon ramp is not the TP one (tc_building_17a_toon.tres).
+RAMP_FOR = {"TC_Building_17A_D": "tc_toon_ramp_01a_d.png"}
 GLASS_ALPHA = 0.29  # tp_glass.tres albedo alpha
 GLASS_TINT = 0.85
 
@@ -85,12 +93,30 @@ CLASSES = {
     "2x1_tall": ((2.0, 1.0, 2.1), (0.0, 0.0, 1.05)),
     "3x3": ((3.0, 3.0, 2.0), (0.0, 0.0, 1.0)),
     "2x3": ((2.0, 3.0, 2.2), (0.0, 0.0, 1.1)),
+    # Landside (Landside 4/4), at their own scale: the 16 x 3 m curb bay on its
+    # strip of road (Godot +Z into the road is Blender -Y), the 32.3 x 24 m surface
+    # lot (local x -7.3 to 25), the 24 x 52 x 28.3 m multi-storey and the lot's two
+    # barrier arms at its barrier line (local x -7).
+    "bay": ((17.0, 4.6, 2.0), (0.0, -1.9, 1.0)),
+    "lot": ((32.3, 24.0, 3.0), (8.85, 0.0, 1.5)),
+    "multi": ((24.0, 52.0, 28.35), (0.0, 0.0, 14.17)),
+    "gate": ((1.0, 15.0, 2.0), (-7.0, 0.0, 1.0)),
 }
+# The converted Toon assets import with every face its own island (split vertices),
+# so border lines would outline every triangle and crease lines are denser than the
+# pixels between them at tens of metres per frame: both grey the picture out. Their
+# classes draw silhouette lines only, like the game's outline hull.
+NO_CREASE_CLASSES = {"bay", "lot", "multi", "gate"}
 
 # Catalog colours (build_catalog.gd), sRGB.
 ENTRANCE_RGB = (0.35, 0.7, 0.4)
 EXIT_RGB = (0.3, 0.55, 0.85)
 REMOVE_RGB = (0.86, 0.18, 0.16)
+# Under the curb bay thumbnail, a strip of road and sidewalk in the shell's road
+# and kerb greys (by eye, from the landside plates); the barrier posts.
+ROAD_RGB = (0.36, 0.37, 0.4)
+SIDEWALK_RGB = (0.74, 0.73, 0.7)
+POST_RGB = (0.28, 0.28, 0.3)
 
 # item -> (footprint class, main piece, extras). Extras are glyphs this script
 # builds. Entrance and exit draw wall_door on their back edge (Godot -Z 0.5, Blender
@@ -215,6 +241,43 @@ ITEMS = {
     ),
     # The boredom screen stand (one floor cell, its picture to the front).
     "screen_stand": ("1x1_tall", ["screen_stand"], []),
+    # Landside (Landside 4/4). A piece is (name, Blender offset, Blender Z turn
+    # in degrees[, the mesh objects to keep]); a car's nose (Godot +Z, Blender -Y)
+    # turned -90 points along Blender -X, the way the near carriageway drives.
+    # Curb bay: the bay on its road strip, a taxi in its west berth (Mount_Berth_1).
+    "curb_bay": (
+        "bay",
+        [
+            ("landside/tp_curb_bay_01a", (0.0, 0.0, 0.0), 0.0),
+            ("vehicles/tp_taxi_01a", (-3.25, -1.5, 0.02), -90.0),
+        ],
+        ["road_strip"],
+    ),
+    # Surface lot: two cars nose-in in middle stalls of the two rows (stalls
+    # between paint lines 4 m apart, rows at local z 7), away from the aisle.
+    "surface_lot": (
+        "lot",
+        [
+            ("landside/tp_parking_01a", (0.0, 0.0, 0.0), 0.0),
+            ("vehicles/tp_suv_01b", (8.0, -7.0, 0.11), 0.0),
+            ("vehicles/tp_taxi_01b", (12.0, 7.0, 0.11), 180.0),
+        ],
+        [],
+    ),
+    "multi_storey": ("multi", [("landside/tc_parking_2a", (0.0, 0.0, 0.0), 0.0)], []),
+    # Open / close: the lot's entry and exit barrier arms, on posts at their hinges.
+    "lot_gate": (
+        "gate",
+        [
+            (
+                "landside/tp_parking_01a",
+                (0.0, 0.0, 0.0),
+                0.0,
+                ["TP_Parking_01A_Entry_Barrier", "TP_Parking_01A_Exit_Barrier"],
+            ),
+        ],
+        ["gate_posts"],
+    ),
 }
 ORDER = list(ITEMS)
 
@@ -243,9 +306,14 @@ def piece_name(entry):
     return entry if isinstance(entry, str) else entry[0]
 
 
+def piece_path(name):
+    """A kit piece by name, or a .glb under game/assets/ named with its folder."""
+    return os.path.join(ASSETS_DIR if "/" in name else KIT_DIR, name + ".glb")
+
+
 def source_hashes(item):
     names = sorted({piece_name(e) for e in ITEMS[item][1]})
-    return {n + ".glb": sha256(os.path.join(KIT_DIR, n + ".glb")) for n in names}
+    return {n + ".glb": sha256(piece_path(n)) for n in names}
 
 
 # ---------------------------------------------------------------- materials
@@ -280,6 +348,7 @@ def toon_material(name, rgb=None):
         tex.image = image(ATLAS_PNG[name])
         tex.interpolation = "Closest"
         albedo_out = tex.outputs["Color"]
+    ramp_png = RAMP_FOR.get(name, RAMP_PNG)
     geo = nt.nodes.new("ShaderNodeNewGeometry")
     dot = nt.nodes.new("ShaderNodeVectorMath")
     dot.operation = "DOT_PRODUCT"
@@ -295,7 +364,7 @@ def toon_material(name, rgb=None):
     uv.inputs["Y"].default_value = 0.5
     nt.links.new(hl.outputs["Value"], uv.inputs["X"])
     ramp = nt.nodes.new("ShaderNodeTexImage")
-    ramp.image = image(RAMP_PNG, non_color=True)
+    ramp.image = image(ramp_png, non_color=True)
     ramp.interpolation = "Closest"
     ramp.extension = "EXTEND"
     nt.links.new(uv.outputs["Vector"], ramp.inputs["Vector"])
@@ -353,7 +422,7 @@ _materials = {}
 
 def kit_material(name):
     if name not in _materials:
-        if name == "TP_Atlas_1A_D":
+        if name in ("TP_Atlas_1A_D", "TP_Atlas_Simple_1A_D", "TC_Building_17A_D"):
             _materials[name] = toon_material(name)
         elif name == "TP_Atlas_Lights_1A_D":
             _materials[name] = unshaded_material(name)
@@ -408,10 +477,20 @@ def reset_scene():
     return scene
 
 
-def import_piece(name, offset, yaw=0.0):
+def import_piece(name, offset, yaw=0.0, keep=None):
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=os.path.join(KIT_DIR, name + ".glb"))
+    bpy.ops.import_scene.gltf(filepath=piece_path(name))
     new = [o for o in bpy.data.objects if o not in before]
+    if keep is not None:
+        # Only the named meshes stay; the rest of the asset is removed.
+        drop = [o for o in new if o.type == "MESH" and o.name.split(".")[0] not in keep]
+        for o in drop:
+            new.remove(o)
+            bpy.data.objects.remove(o, do_unlink=True)
+        kept = sorted(o.name for o in new if o.type == "MESH")
+        log("%s kept %s" % (name, kept))
+        if len(kept) != len(keep):
+            invalid("%s: kept %s, wanted %s" % (name, kept, keep))
     roots = [o for o in new if o.parent is None]
     # Turn about the piece origin (Blender Z is Godot Y), then move it into place.
     place = Matrix.Translation(Vector(offset)) @ Matrix.Rotation(math.radians(yaw), 4, "Z")
@@ -486,6 +565,20 @@ def add_glyphs(extras):
             objs.append(glyph_mesh("Glyph_Arrow_Out", arrow("out"), EXIT_RGB, 0.0, 0.07))
         elif g == "cross":
             objs.append(glyph_mesh("Glyph_Cross", cross(), REMOVE_RGB, 0.0, 0.08))
+        elif g == "road_strip":
+            # Road from the kerb line (Blender y 0) out to -4.2, sidewalk behind it.
+            road = [(-8.5, -4.2), (8.5, -4.2), (8.5, 0.0), (-8.5, 0.0)]
+            walk = [(-8.5, 0.0), (8.5, 0.0), (8.5, 0.4), (-8.5, 0.4)]
+            objs.append(glyph_mesh("Glyph_Road", [road], ROAD_RGB, -0.1, 0.0))
+            objs.append(glyph_mesh("Glyph_Sidewalk", [walk], SIDEWALK_RGB, -0.1, 0.0))
+        elif g == "gate_posts":
+            # Posts at the barrier hinges, Godot (-7, z, +-7) is Blender (-7, -+7).
+            posts = []
+            for y in (-7.0, 7.0):
+                posts.append(
+                    [(-7.15, y - 0.15), (-6.85, y - 0.15), (-6.85, y + 0.15), (-7.15, y + 0.15)]
+                )
+            objs.append(glyph_mesh("Glyph_Posts", posts, POST_RGB, 0.0, 1.75))
     return objs
 
 
@@ -576,12 +669,17 @@ def prove_in_frame(item, scene, cam, objs):
 def render_item(item, path):
     scene = reset_scene()
     cls, pieces, extras = ITEMS[item]
+    if cls in NO_CREASE_CLASSES:
+        for lineset in scene.view_layers[0].freestyle_settings.linesets:
+            lineset.select_crease = False
+            lineset.select_border = False
     objs, mats = [], set()
     for entry in pieces:
         name = piece_name(entry)
         offset = (0.0, 0.0, 0.0) if isinstance(entry, str) else entry[1]
         yaw = entry[2] if not isinstance(entry, str) and len(entry) > 2 else 0.0
-        meshes, names = import_piece(name, offset, yaw)
+        keep = entry[3] if not isinstance(entry, str) and len(entry) > 3 else None
+        meshes, names = import_piece(name, offset, yaw, keep)
         objs += meshes
         mats |= names
     objs += add_glyphs(extras)
