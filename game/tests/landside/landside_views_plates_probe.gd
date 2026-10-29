@@ -414,18 +414,31 @@ func _check_noses(label: String) -> void:
 		var v := _landside.get_vehicle(id)
 		var nose := _views.node_for(id).global_basis.z
 		var want := Vector3.ZERO
+		# On a berth's or slot's path a car is judged by the way it moves; standing
+		# in the berth or the stall, by the way it faces there.
 		match v.lane:
-			LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.ROAD_OUT, LandsideVehicle.Lane.BERTH:
+			LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.ROAD_OUT:
 				want = Vector3(-1, 0, 0)
+			LandsideVehicle.Lane.BERTH:
+				want = Vector3(-1, 0, 0) if v.stage == LandsideVehicle.Stage.DWELL else want
 			LandsideVehicle.Lane.ACCESS:
 				want = Vector3(0, 0, 1)
 			LandsideVehicle.Lane.SLOT:
-				want = LandsidePlaces.parked_heading(
-					_landside.definition.lots[v.lot], _views.node_for(id).global_position
-				)
+				if v.stage == LandsideVehicle.Stage.PARKED:
+					want = LandsidePlaces.parked_heading(
+						_landside.definition.lots[v.lot], _views.node_for(id).global_position
+					)
 		_check_ground(label, v, _views.node_for(id).global_position)
 		var move := _views.pose_at(id, 0.55).origin - _views.pose_at(id, 0.45).origin
 		var move_dot := nose.dot(move.normalized()) if move.length() > 0.01 else NAN
+		var backing: bool = (
+			v.lane == LandsideVehicle.Lane.SLOT
+			and v.stage == LandsideVehicle.Stage.LEAVE
+			and v.stop >= 0
+			and v.pos_mm - LandsideSim.SPEED_MM / 2 < _landside.paths.slot_back[v.lot][v.stop]
+		)
+		if backing:
+			move_dot = -move_dot
 		print(
 			(
 				"NOSE %s vehicle=%d lane=%d stage=%d at=%s nose=(%.3f, %.3f, %.3f) want=%s move_dot=%s"
@@ -467,6 +480,10 @@ func _check_ground(label: String, v: LandsideVehicle, at: Vector3) -> void:
 			where = "road"
 			ok = absf(at.x) <= 43.0 and at.z >= -60.0 and at.z <= -40.0
 		LandsideVehicle.Lane.SLOT:
+			if v.stage != LandsideVehicle.Stage.PARKED:
+				# Driving its slot's path, from the access lane in: reported only.
+				print("GROUND %s vehicle=%d on its slot path at=%s" % [label, v.id, at])
+				return
 			var spot: LandsideLotSpot = _landside.definition.lots[v.lot]
 			where = "lot %d" % v.lot
 			ok = (

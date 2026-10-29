@@ -84,18 +84,38 @@ func test_a_jammed_curb_delays_release_by_measured_ticks_against_a_control() -> 
 				LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.DROP, booking
 			)
 			entered_control[id] = [t, 0]
-	_run(jammed, 1, 2000, released_jammed)
+	var took := {}
+	for t in range(1, 2000):
+		for event in jammed.step(t, true, _rng):
+			released_jammed[event["vehicle"]] = t
+		for id in jammed.vehicle_ids():
+			var v := jammed.get_vehicle(id)
+			if v.lane == LandsideVehicle.Lane.BERTH:
+				took[id] = v.stop
 	var control_delays := _delays(released_control, entered_control, lead)
 	var jammed_delays := _delays(released_jammed, entered_jammed, lead)
-	print("control %s jammed %s" % [control_delays, jammed_delays])
+	print("control %s jammed %s took %s" % [control_delays, jammed_delays, took])
 	assert_array(control_delays).is_equal([0, 0, 0, 0, 0])
-	# Three berths: the fourth car waits for the first car's dwell to end, the
-	# fifth for the second's; each wait is the dwell less the gaps between.
-	var berths := three.curb.berths.size()
-	var wait := LandsideSim.DWELL_TICKS - berths * SPACING
-	assert_int(berths).is_equal(3)
-	assert_array(jammed_delays).is_equal([0, 0, 0, wait, wait])
-	assert_int(wait).is_greater(0)
+	assert_int(three.curb.berths.size()).is_equal(3)
+	# The first three find a free berth and pull in from the stop, so a berth
+	# further on lets its car out later by the extra drive along the authored
+	# berth paths (the lead counts the nearest berth): 6.5 m and 16 m further.
+	var paths := LandsidePaths.new(three)
+	var stop := three.curb.stop_mm
+	var extra: Array[int] = []
+	for berth in 3:
+		extra.append(_ticks(paths.berth_stand[berth] - stop) - _ticks(paths.berth_stand[0] - stop))
+	assert_array(extra).is_equal([0, 13, 32])
+	# The fourth and fifth wait at the stop for the first and second car's
+	# berths: that car's dwell, its way out until it is back on the road line,
+	# the curb clear for it to pull out, then the waiting car's own pull-in.
+	# Frozen as measured on commit 3dc5c6d, so a slower berth release fails here.
+	assert_array(jammed_delays).is_equal([0, 13, 32, 39, 76])
+	assert_array([took[1], took[2], took[3], took[4], took[5]]).is_equal([0, 1, 2, 0, 1])
+
+
+static func _ticks(mm: int) -> int:
+	return ceili(float(mm) / LandsideSim.SPEED_MM)
 
 
 func test_a_jammed_curb_delays_passengers_against_an_uncongested_control() -> void:
@@ -152,6 +172,9 @@ func test_a_full_lot_diverts_the_car_to_the_curb() -> void:
 	assert_int(sim.free_slots(0)).is_equal(0)
 	assert_array(diverted).is_empty()
 	var last: Array[int] = [slots + 1]
+	# The curb lead depends on the berth a car would take, so it is read while
+	# the curb is free, before this car takes berth 0.
+	var curb_lead := sim.lead_ticks(LandsideVehicle.Intent.DROP)
 	var id := sim.add_vehicle(LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.PARK, last)
 	var events := {}
 	var walks := {}
@@ -170,7 +193,7 @@ func test_a_full_lot_diverts_the_car_to_the_curb() -> void:
 				diverted,
 				events.get(id, -1) - 999,
 				sim.lead_ticks(LandsideVehicle.Intent.PARK),
-				sim.lead_ticks(LandsideVehicle.Intent.DROP),
+				curb_lead,
 				walks.get(id)
 			]
 		)
@@ -183,5 +206,5 @@ func test_a_full_lot_diverts_the_car_to_the_curb() -> void:
 	assert_array(walks[id]).is_equal([STARTER.curb.get_out[v.stop]])
 	# It gets out at the curb, the drive past the lot's turn later than a
 	# free slot would have let it out.
-	assert_int(events[id] - 999).is_equal(sim.lead_ticks(LandsideVehicle.Intent.DROP))
+	assert_int(events[id] - 999).is_equal(curb_lead)
 	assert_int(sim.wallet.balance).is_equal(slots * LandsideSim.SURFACE_LOT_FEE)

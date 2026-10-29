@@ -261,9 +261,13 @@ func test_lead_ticks_follow_the_lot_a_new_car_will_take() -> void:
 	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
 	var surface_lead := _sim.lead_ticks(LandsideVehicle.Intent.PARK)
 	var multi := STARTER.lots[MULTI_STOREY]
+	var access_mm := LandsideDefinition.length_mm(multi.access)
+	# The drive includes pulling in along slot 0's path, from the gate to the
+	# stall: the passengers get out once the car stands there.
 	var multi_lead := (
 		ceili(float(multi.branch_mm) / LandsideSim.SPEED_MM)
-		+ ceili(float(LandsideDefinition.length_mm(multi.access)) / LandsideSim.SPEED_MM)
+		+ ceili(float(access_mm) / LandsideSim.SPEED_MM)
+		+ ceili(float(_sim.paths.slot_stand[MULTI_STOREY][0] - access_mm) / LandsideSim.SPEED_MM)
 	)
 	assert_int(multi_lead).is_not_equal(surface_lead)
 	# Fill the surface lot, which a car reaches first.

@@ -4,17 +4,20 @@ extends Node3D
 ## 4/4), and the curb bays and car parks through LandsidePlaces. Each tick it
 ## records where every vehicle on the map is (its lane, lot, berth or slot
 ## and position in mm) for the tick before and the tick now, keyed by vehicle
-## id; each frame it draws between the two with the clock's alpha. On one lane
-## a vehicle is drawn by distance along the lane's polyline, facing the
-## direction of travel of the segment it is on, so traffic keeps right as the
-## lanes do (decision landside-traffic-drives-on-the-right-the-terminal-side-
-## carri). A parked car faces into its stall. The models' noses are local +Z.
+## id; each frame it draws between the two with the clock's alpha. A vehicle
+## is drawn by distance along the polyline it drives (a lane, or a berth's or
+## slot's path from LandsidePaths), facing the way the sim says it faces on
+## the segment it is on: the direction of travel, so traffic keeps right as
+## the lanes do (decision landside-traffic-drives-on-the-right-the-terminal-
+## side-carri), except backing out of a stall. A parked car faces into its
+## stall. The models' noses are local +Z.
 ##
-## A vehicle that changed lane, berth or slot between the two ticks is drawn
-## where it is now: LandsideSim moves it there in one step and has no path
-## between the two, so the view does not invent one (a car pulls into a curb
-## berth or a parking slot in one tick). Vehicles waiting off the map (below
-## 0 on road_in) are not drawn. Reads the sim and never writes to it.
+## A vehicle that moved from one lane onto the path that carries on from it
+## (road to a berth's path, a berth's path to road_out, and so on;
+## LandsidePaths.handover()) is drawn along the two, so it never jumps. Only a
+## change with no path between (a load) is drawn where it is now. Vehicles
+## waiting off the map (below 0 on road_in) are not drawn. Reads the sim and
+## never writes to it.
 ##
 ## Clicking a vehicle (PassengerHud) selects it: a ring around it, and
 ## follow_anchor moves with it for the camera.
@@ -34,13 +37,6 @@ const MODELS := {
 		preload("res://assets/vehicles/tp_van_01a.glb"),
 	],
 }
-## The lanes a vehicle drives along; in a berth or a slot it stands still.
-const DRIVEN := [
-	LandsideVehicle.Lane.ROAD_IN,
-	LandsideVehicle.Lane.ACCESS,
-	LandsideVehicle.Lane.ROAD_OUT,
-	LandsideVehicle.Lane.LOT_EXIT,
-]
 const RING_RADIUS := 3.4
 ## How far outside a vehicle's drawn box a click still picks it.
 const PICK_MARGIN_PX := 6.0
@@ -59,7 +55,7 @@ var _places := LandsidePlaces.new()
 ## Vehicle id -> its drawn model.
 var _nodes := {}
 ## Vehicle id -> where it was on the tick before and on the tick now, each
-## {"lane", "lot", "stop", "pos_mm", "at", "dir"}.
+## {"place": [lane, lot, stop], "pos_mm", "at", "dir"}.
 var _prev := {}
 var _cur := {}
 ## Model scene -> free nodes of it.
@@ -154,26 +150,17 @@ func pose_at(id: int, alpha: float) -> Transform3D:
 	var before: Dictionary = _prev[id]
 	var at: Vector3 = now["at"]
 	var dir: Vector3 = now["dir"]
-	if now["lane"] in DRIVEN and _same_place(before, now):
-		var points := lane_points(landside.definition, now["lane"], now["lot"])
-		var mm := roundi(lerpf(before["pos_mm"], now["pos_mm"], clampf(alpha, 0.0, 1.0)))
-		at = LandsideDefinition.point_at(points, mm)
-		dir = LandsideDefinition.heading_at(points, mm)
+	var paths := landside.paths
+	var off := paths.handover(before["place"], now["place"])
+	if off >= 0 and now["pos_mm"] != before["pos_mm"] - off:
+		var place: Array = now["place"]
+		var mm := roundi(lerpf(before["pos_mm"] - off, now["pos_mm"], clampf(alpha, 0.0, 1.0)))
+		if mm < 0:
+			place = before["place"]
+			mm += off
+		at = LandsideDefinition.point_at(paths.path(place[0], place[1], place[2]), mm)
+		dir = paths.facing(place[0], place[1], place[2], mm)
 	return Transform3D(Basis(Vector3.UP, atan2(dir.x, dir.z)), at)
-
-
-## The polyline of a driven lane (lot spot `lot` for a lot's lanes).
-static func lane_points(
-	definition: LandsideDefinition, lane: LandsideVehicle.Lane, lot: int
-) -> PackedVector3Array:
-	match lane:
-		LandsideVehicle.Lane.ROAD_OUT:
-			return definition.road_out
-		LandsideVehicle.Lane.ACCESS:
-			return definition.lots[lot].access
-		LandsideVehicle.Lane.LOT_EXIT:
-			return definition.lots[lot].exit
-	return definition.road_in
 
 
 ## Selects vehicle `id` (0 for none) and moves follow_anchor and the ring
@@ -233,25 +220,15 @@ func places() -> LandsidePlaces:
 
 
 ## Where a vehicle is now. A parked car faces into its stall
-## (LandsidePlaces.parked_heading()), on its slot's deck in a multi-storey.
+## (LandsidePlaces.parked_heading()), on its slot's deck in a multi-storey;
+## every other car faces the way the sim says (pulling in or out of a slot,
+## the way it drives, backing out of the stall included).
 func _place_of(v: LandsideVehicle) -> Dictionary:
 	var at := landside.world_position(v)
 	var dir := landside.heading(v)
-	if v.lane == LandsideVehicle.Lane.SLOT:
+	if v.stage == LandsideVehicle.Stage.PARKED:
 		dir = LandsidePlaces.parked_heading(landside.definition.lots[v.lot], at)
-	return {
-		"lane": v.lane,
-		"lot": v.lot,
-		"stop": v.stop,
-		"pos_mm": v.pos_mm,
-		"at": at,
-		"dir": dir,
-	}
-
-
-## Same lane, lot spot and berth or slot: the vehicle moved along one lane.
-static func _same_place(a: Dictionary, b: Dictionary) -> bool:
-	return a["lane"] == b["lane"] and a["lot"] == b["lot"] and a["stop"] == b["stop"]
+	return {"place": [v.lane, v.lot, v.stop], "pos_mm": v.pos_mm, "at": at, "dir": dir}
 
 
 ## Makes the tick before the tick now, so a frame draws the tick now.

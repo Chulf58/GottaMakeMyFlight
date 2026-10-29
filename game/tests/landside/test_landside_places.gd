@@ -171,7 +171,8 @@ func test_cars_parked_on_every_level_of_the_multi_storey_are_drawn_on_its_decks(
 	views.draw()
 	for id in _landside.vehicle_ids():
 		var v := _landside.get_vehicle(id)
-		if v.lane != LandsideVehicle.Lane.SLOT:
+		# A car on its slot's path that is still pulling in is not parked yet.
+		if v.stage != LandsideVehicle.Stage.PARKED:
 			continue
 		var drawn := views.node_for(id).position
 		var slot: Vector3 = STARTER.lots[1].slots[v.stop]

@@ -11,23 +11,33 @@ extends Node
 ## PassengerSim's ArrivalBookings steps it once a tick, hands it new vehicles
 ## and takes the release events it returns.
 ##
+## A car never jumps: between a lane and a curb berth or a parking slot it
+## drives the berth's or slot's path (LandsidePaths), at most SPEED_MM a tick,
+## in and out again. It lets its passengers out when it has pulled in, and a
+## parked car pays the parking fee then, once.
+##
 ## Each step, in order: leaving cars drive on (and are gone at their lane's
-## end); parked cars whose stay is over pull out onto their lot's exit; cars
-## in a curb berth let held passengers out, and pull out onto road_out once
-## they have stood DWELL_TICKS since; cars on a lot's access lane drive to
-## the gate and park in their reserved slot (the parking fee is credited
-## then, once); cars on road_in drive front first, each held back by the car
-## ahead and by its stop. A car that means to park stops at its lot's turn
-## and takes a free slot there, or, the lot being full, drives on to the
-## curb (decision landside-congestion-a-jammed-curb-or-full-car-park-delays-pa).
-## A car at the curb's stop takes the lowest free berth or queues. A lane is
+## end); in each car park, cars on their slot paths drive on (a car that has
+## pulled in parks and lets its passengers out; one that has pulled out joins
+## the lot's exit lane when it is clear), cars on the access lane drive to the
+## gate, and when no car moves in the lot the oldest request goes next: the car
+## at the gate pulls in (or, empty, turns round), or a parked car whose stay is
+## over pulls out. Then the curb and road_in: a car in a berth lets held
+## passengers out and, DWELL_TICKS after, pulls out when its way back onto the
+## road is clear (_merge_clear()); then road_in and the berth paths drive as one
+## road, front first, each car no closer than a gap behind the car ahead on the
+## road line, whichever lane it is on. A car that means to park stops at its
+## lot's turn and takes a free slot there, or, the lot being full, drives on to
+## the curb (decision landside-congestion-a-jammed-curb-or-full-car-park-delays-pa).
+## A car at the curb's stop takes the nearest free berth or queues. A lane is
 ## entered at its start only once the car last in it is a gap away, except
 ## road_in, whose queue runs on off the map (negative positions).
 ##
 ## Passengers get out only when the terminal has an entrance; until then
 ## they stay aboard in the berth or the parked car. A car whose passengers
-## all missed their flight while it drove pulls through a berth at once and
-## never turns into a lot. Parked cars stay 1 to 3 game days (decision
+## all missed their flight while it drove pulls through a berth at once,
+## turns round at a car park's gate, or, already in the car park, pulls out
+## of its slot without paying. Parked cars stay 1 to 3 game days (decision
 ## landside-parking-stay-a-parked-car-stays-1-3-game-days-while), drawn from
 ## the sim RNG when they park.
 
@@ -51,14 +61,17 @@ const STAY_MAX_TICKS := 3 * GameCalendar.TICKS_PER_DAY
 const FAR_MM := 1 << 40
 ## How far before its first berth a curb's queue head stands: the starter
 ## curb's stop (LandsideCurb.stop_mm) is this far before its first berth, and a
-## built curb bay's stop is as far before its own.
-const BERTH_APPROACH_MM := 4750
+## built curb bay's stop is as far before its own. A berth's path leaves the
+## road line there.
+const BERTH_APPROACH_MM := LandsidePaths.BERTH_APPROACH_MM
 
 @export var definition: LandsideDefinition
 ## In a scene the parking fees go to its wallet; tests set `wallet`.
 @export var finances: Finances
 
 var wallet: Wallet
+## The berth and slot paths of the definition.
+var paths: LandsidePaths
 ## The tick of the last step.
 var tick := 0
 ## Per lot spot: whether a car park stands there. A new game has none.
@@ -77,7 +90,8 @@ var curbs_paid: Array[int] = []
 var _vehicles: Array[LandsideVehicle] = []
 var _by_id := {}
 var _next_id := 1
-## Derived from the vehicles: the vehicle in each curb berth, or 0.
+## Derived from the vehicles: the vehicle holding each curb berth (pulling in,
+## standing, or pulling out until it is back on the road line), or 0.
 var _berths: Array[int] = []
 ## Derived: where along road_in each berth stands, in mm.
 var _berth_mm: Array[int] = []
@@ -108,6 +122,7 @@ func use_definition(with_definition: LandsideDefinition) -> bool:
 		push_error("LandsideSim: %s" % problem)
 		return false
 	definition = with_definition
+	paths = LandsidePaths.new(definition)
 	_road_in_mm = LandsideDefinition.length_mm(definition.road_in)
 	_road_out_mm = LandsideDefinition.length_mm(definition.road_out)
 	_access_mm.clear()
@@ -184,7 +199,7 @@ func build_curb(spot: int, paid := 0) -> bool:
 
 
 ## Takes the curb bay off curb spot `spot`. Refused (false, nothing changed)
-## while a car stands in one of its berths, or when none stands there.
+## while a car is on the path of one of its berths, or when none stands there.
 func remove_curb(spot: int) -> bool:
 	if spot < 0 or spot >= curbs_built.size() or not curbs_built[spot] or curb_cars(spot) > 0:
 		return false
@@ -193,11 +208,12 @@ func remove_curb(spot: int) -> bool:
 	return true
 
 
-## How many cars stand in curb spot `spot`'s berths.
+## How many cars are on the paths of curb spot `spot`'s berths: pulling in,
+## standing or pulling out.
 func curb_cars(spot: int) -> int:
 	var count := 0
-	for i in definition.berth_count():
-		if definition.berth_spot(i) == spot and _berths[i] != 0:
+	for v in _vehicles:
+		if v.lane == LandsideVehicle.Lane.BERTH and definition.berth_spot(v.stop) == spot:
 			count += 1
 	return count
 
@@ -214,18 +230,30 @@ func resolve_intent(intent: LandsideVehicle.Intent) -> LandsideVehicle.Intent:
 	return intent
 
 
-## Ticks from entering road_in to letting the passengers out, on a free road:
-## to the curb's stop, or to the turn of the lot a new car would take
-## (_lot_for(): the first open lot with a free slot) and along its access
-## lane. A car handed over that long before its unload tick gets out on it.
+## Ticks from entering road_in to letting the passengers out, on a free road
+## and with the berths and slots as they are now: to the curb's stop and in
+## along the path of the berth a car there takes (the nearest free one, or
+## the nearest when all are taken), or to the turn of the lot a new car would
+## take (_lot_for(): the first open lot with a free slot), along its access
+## lane and in along its lowest free slot's path. Each leg ends on a tick of
+## its own, as the car changes lane there. A car handed over that long before
+## its unload tick gets out on it.
 func lead_ticks(intent: LandsideVehicle.Intent) -> int:
 	var spot := _lot_for(0)
 	if resolve_intent(intent) == LandsideVehicle.Intent.PARK:
+		var slot := maxi((_slots[spot] as Array).find(0), 0)
 		return (
-			ceili(float(definition.lots[spot].branch_mm) / SPEED_MM)
-			+ ceili(float(_access_mm[spot]) / SPEED_MM)
+			_ticks(definition.lots[spot].branch_mm)
+			+ _ticks(_access_mm[spot])
+			+ _ticks(paths.slot_stand[spot][slot] - _access_mm[spot])
 		)
-	return ceili(float(curb_stop_mm()) / SPEED_MM)
+	var stop := curb_stop_mm()
+	var berth := _free_berth(stop, FAR_MM)
+	if berth < 0:
+		berth = _nearest_berth(stop)
+	if berth < 0:
+		return _ticks(stop)
+	return _ticks(stop) + _ticks(paths.berth_stand[berth] - stop)
 
 
 ## Where the curb's queue head waits, in mm along road_in: the starter curb's
@@ -295,32 +323,20 @@ func step(now: int, can_release: bool, rng: RandomNumberGenerator) -> Array[Dict
 	tick = now
 	var released: Array[Dictionary] = []
 	_step_leaving()
-	_step_parked(can_release, released)
-	_step_dwelling(can_release, released)
 	for spot in definition.lots.size():
-		_step_access(spot, can_release, released, rng)
-	_step_road_in(can_release, released)
+		_step_lot(spot, can_release, released, rng)
+	_step_curb(can_release, released)
 	return released
 
 
 ## Where the vehicle stands, in world space.
 func world_position(v: LandsideVehicle) -> Vector3:
-	match v.lane:
-		LandsideVehicle.Lane.BERTH:
-			return definition.berth_position(v.stop)
-		LandsideVehicle.Lane.SLOT:
-			return definition.lots[v.lot].slots[v.stop]
-	return LandsideDefinition.point_at(_lane_points(v.lane, v.lot), v.pos_mm)
+	return LandsideDefinition.point_at(paths.path(v.lane, v.lot, v.stop), v.pos_mm)
 
 
 ## The flat direction the vehicle faces.
 func heading(v: LandsideVehicle) -> Vector3:
-	match v.lane:
-		LandsideVehicle.Lane.BERTH:
-			return LandsideDefinition.heading_at(definition.road_in, definition.curb.stop_mm)
-		LandsideVehicle.Lane.SLOT:
-			return LandsideDefinition.heading_at(definition.lots[v.lot].access, _access_mm[v.lot])
-	return LandsideDefinition.heading_at(_lane_points(v.lane, v.lot), v.pos_mm)
+	return paths.facing(v.lane, v.lot, v.stop, v.pos_mm)
 
 
 ## JSON-safe state, with the bookings PassengerSim keeps (`bookings`) and
@@ -367,22 +383,114 @@ func _step_leaving() -> void:
 				leader = v.pos_mm
 
 
-func _step_parked(can_release: bool, released: Array[Dictionary]) -> void:
-	for v in _vehicles:
-		if v.stage != LandsideVehicle.Stage.PARKED:
-			continue
-		if not v.bookings.is_empty():
-			if can_release:
-				_release(v, _lot_walk(v), released)
-			continue
-		if tick >= v.leave_tick and _lane_clear(LandsideVehicle.Lane.LOT_EXIT, v.lot):
-			_slots[v.lot][v.stop] = 0
-			v.leave_tick = 0
-			_enter(v, LandsideVehicle.Lane.LOT_EXIT, LandsideVehicle.Stage.LEAVE)
+## One car park: its slot paths, its access lane, then the requests to move.
+## In- and outbound cars share the aisle and the ramps, so they never move at
+## once, and one car pulls out at a time; cars pulling in follow each other a
+## gap apart from the gate and never stop on the way, so several may.
+func _step_lot(
+	spot: int, can_release: bool, released: Array[Dictionary], rng: RandomNumberGenerator
+) -> void:
+	var moving_in := false
+	var moving_out := false
+	for v in _members(LandsideVehicle.Lane.SLOT, spot):
+		match v.stage:
+			LandsideVehicle.Stage.PARKED:
+				if not v.bookings.is_empty() and can_release:
+					_release(v, paths.lot_walk(spot, v.stop), released)
+			LandsideVehicle.Stage.DRIVE:
+				var stand := paths.slot_stand[spot][v.stop] as int
+				v.pos_mm = mini(v.pos_mm + SPEED_MM, stand)
+				if v.pos_mm < stand:
+					moving_in = true
+				else:
+					_arrive_in_slot(v, can_release, released, rng)
+			LandsideVehicle.Stage.LEAVE:
+				var end := paths.end_of(v.lane, spot, v.stop)
+				v.pos_mm = mini(v.pos_mm + SPEED_MM, end)
+				if v.pos_mm == end and _lane_clear(LandsideVehicle.Lane.LOT_EXIT, spot):
+					_enter(v, LandsideVehicle.Lane.LOT_EXIT, LandsideVehicle.Stage.LEAVE)
+				else:
+					moving_out = true
+	var gate := _step_access(spot)
+	if not moving_out:
+		_grant(spot, gate, moving_in)
 
 
-func _step_dwelling(can_release: bool, released: Array[Dictionary]) -> void:
-	for v in _vehicles:
+## Drives the access lane to the gate; returns the car waiting there, or null.
+func _step_access(spot: int) -> LandsideVehicle:
+	var end := _access_mm[spot]
+	var leader := FAR_MM
+	var waiting: LandsideVehicle = null
+	for v in _members(LandsideVehicle.Lane.ACCESS, spot):
+		var held := _drive(v, leader, end)
+		leader = v.pos_mm
+		if v.pos_mm < end:
+			_set_moving(v, held)
+			continue
+		# At the gate it waits until it may go in (its request is its stage tick).
+		_set_moving(v, true)
+		waiting = v
+	return waiting
+
+
+## Lets the oldest request in car park `spot` move, while no car pulls out
+## there: the car at the gate (`gate`, or null) since it reached it, or a
+## parked car since its stay ended; ties by vehicle id. A car that would pull
+## out waits for the cars `moving_in` to arrive, and so does a newer car at the
+## gate, so a stream of arrivals cannot keep it in forever.
+func _grant(spot: int, gate: LandsideVehicle, moving_in: bool) -> void:
+	var best := gate
+	var best_tick := gate.stage_tick if gate != null else FAR_MM
+	for v in _members(LandsideVehicle.Lane.SLOT, spot):
+		var due := (
+			v.stage == LandsideVehicle.Stage.PARKED
+			and v.bookings.is_empty()
+			and tick >= v.leave_tick
+		)
+		if due and (v.leave_tick < best_tick or (v.leave_tick == best_tick and v.id < best.id)):
+			best = v
+			best_tick = v.leave_tick
+	if best == null:
+		return
+	# A car turning round at the gate leaves the way it came in: it waits too.
+	var outbound := best.lane == LandsideVehicle.Lane.SLOT or best.bookings.is_empty()
+	if outbound and moving_in:
+		return
+	if best.lane == LandsideVehicle.Lane.ACCESS:
+		best.lane = LandsideVehicle.Lane.SLOT
+		if best.bookings.is_empty():
+			# Its passengers missed their flight on the way: it turns round.
+			_slots[spot][best.stop] = 0
+			best.stop = -1
+			_set_stage(best, LandsideVehicle.Stage.LEAVE)
+		else:
+			_set_stage(best, LandsideVehicle.Stage.DRIVE)
+		return
+	_slots[spot][best.stop] = 0
+	best.leave_tick = 0
+	_set_stage(best, LandsideVehicle.Stage.LEAVE)
+
+
+## A car that has pulled into its slot parks (the fee once) and lets its
+## passengers out; an empty one is due to leave at once and pays nothing.
+func _arrive_in_slot(
+	v: LandsideVehicle, can_release: bool, released: Array[Dictionary], rng: RandomNumberGenerator
+) -> void:
+	if v.bookings.is_empty():
+		v.leave_tick = maxi(tick, 1)
+		_set_stage(v, LandsideVehicle.Stage.PARKED)
+		return
+	_park(v, rng)
+	if can_release:
+		_release(v, paths.lot_walk(v.lot, v.stop), released)
+
+
+## The curb and road_in. First every car standing in a berth lets held
+## passengers out or starts pulling out; then road_in and the berth paths
+## drive as one road (_drive_road()).
+func _step_curb(can_release: bool, released: Array[Dictionary]) -> void:
+	var waiting := FAR_MM
+	for v in _members(LandsideVehicle.Lane.BERTH, -1):
 		if v.stage != LandsideVehicle.Stage.DWELL:
 			continue
 		if not v.bookings.is_empty():
@@ -390,81 +498,166 @@ func _step_dwelling(can_release: bool, released: Array[Dictionary]) -> void:
 				_release(v, [definition.berth_get_out(v.stop)], released)
 				v.stage_tick = tick
 			continue
-		if tick - v.stage_tick >= DWELL_TICKS and _lane_clear(LandsideVehicle.Lane.ROAD_OUT, -1):
-			_berths[v.stop] = 0
-			_enter(v, LandsideVehicle.Lane.ROAD_OUT, LandsideVehicle.Stage.LEAVE)
+		if tick - v.stage_tick < DWELL_TICKS:
+			continue
+		if _merge_clear(v):
+			_set_stage(v, LandsideVehicle.Stage.LEAVE)
+		else:
+			waiting = mini(waiting, _berth_mm[v.stop])
+	_drive_road(waiting, can_release, released)
 
 
-func _step_access(
-	spot: int, can_release: bool, released: Array[Dictionary], rng: RandomNumberGenerator
-) -> void:
-	var end := _access_mm[spot]
+## Road_in and every car pulling into or out of a berth, front first along the
+## road line: each is held a gap behind the car ahead on that line, whichever
+## lane it is on (a car tapering into its berth has left the line; one tapering
+## out counts at the road point its way out is level with). No car at the stop
+## takes a berth past one whose car `waiting` to pull out stands at.
+func _drive_road(waiting: int, can_release: bool, released: Array[Dictionary]) -> void:
+	var road: Array[LandsideVehicle] = []
+	for v in _vehicles:
+		if v.lane == LandsideVehicle.Lane.ROAD_IN:
+			road.append(v)
+		elif v.lane == LandsideVehicle.Lane.BERTH and v.stage != LandsideVehicle.Stage.DWELL:
+			road.append(v)
+	road.sort_custom(
+		func(a: LandsideVehicle, b: LandsideVehicle) -> bool:
+			var by_axis := _axis(a) - _axis(b)
+			return a.id < b.id if by_axis == 0 else by_axis > 0
+	)
 	var leader := FAR_MM
-	for v in _members(LandsideVehicle.Lane.ACCESS, spot):
-		var held := _drive(v, leader, end)
-		leader = v.pos_mm
-		if v.pos_mm < end:
-			_set_moving(v, held)
-			continue
-		if v.bookings.is_empty():
-			# Its passengers missed their flight on the way: it turns round.
-			_set_moving(v, true)
-			if _lane_clear(LandsideVehicle.Lane.LOT_EXIT, spot):
-				_slots[spot][v.stop] = 0
-				_enter(v, LandsideVehicle.Lane.LOT_EXIT, LandsideVehicle.Stage.LEAVE)
-				leader = FAR_MM
-			continue
-		_park(v, rng)
-		leader = FAR_MM
-		if can_release:
-			_release(v, _lot_walk(v), released)
+	for v in road:
+		if v.lane == LandsideVehicle.Lane.ROAD_IN:
+			leader = _drive_road_in(v, leader, waiting)
+		elif v.stage == LandsideVehicle.Stage.DRIVE:
+			leader = _pull_in(v, leader, can_release, released)
+		else:
+			leader = _pull_out(v, leader)
 
 
-func _step_road_in(can_release: bool, released: Array[Dictionary]) -> void:
-	var leader := FAR_MM
-	for v in _members(LandsideVehicle.Lane.ROAD_IN, -1):
-		# An empty car never parks, however it got here (a save included).
-		if v.bookings.is_empty():
-			v.intent = LandsideVehicle.Intent.DROP
-		var spot := _lot_ahead(v)
-		var stop := curb_stop_mm()
-		if spot >= 0:
-			stop = definition.lots[spot].branch_mm
-		var held := _drive(v, leader, stop)
-		leader = v.pos_mm
-		if v.pos_mm < stop:
-			_set_moving(v, held)
+## One car on road_in: to its stop, then into its lot's access lane, or into
+## the berth path of the nearest free berth. Returns the road position it
+## holds the car behind to.
+func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int) -> int:
+	# An empty car never parks, however it got here (a save included).
+	if v.bookings.is_empty():
+		v.intent = LandsideVehicle.Intent.DROP
+	var spot := _lot_ahead(v)
+	var stop := curb_stop_mm()
+	if spot >= 0:
+		stop = definition.lots[spot].branch_mm
+	var held := _drive(v, leader, stop)
+	if v.pos_mm < stop:
+		_set_moving(v, held)
+		return v.pos_mm
+	if spot >= 0:
+		if _turn_into_lot(v, spot):
+			return FAR_MM
+		# Waiting for room on the access lane, or (the lot full) driving on.
+		_set_moving(v, v.intent == LandsideVehicle.Intent.PARK)
+		return v.pos_mm
+	var berth := _free_berth(v.pos_mm, waiting)
+	if berth < 0:
+		_set_moving(v, true)
+		return v.pos_mm
+	_berths[berth] = v.id
+	v.lane = LandsideVehicle.Lane.BERTH
+	v.stop = berth
+	_set_stage(v, LandsideVehicle.Stage.DRIVE)
+	return v.pos_mm
+
+
+## A car pulling into its berth: along the road line it keeps a gap behind
+## `leader`; once it has pulled in it lets its passengers out (or, empty,
+## pulls through at once).
+func _pull_in(
+	v: LandsideVehicle, leader: int, can_release: bool, released: Array[Dictionary]
+) -> int:
+	var stand := paths.berth_stand[v.stop]
+	var split := paths.berth_split[v.stop]
+	var reach := mini(v.pos_mm + SPEED_MM, stand)
+	if v.pos_mm <= split and leader - GAP_MM < split:
+		reach = maxi(v.pos_mm, mini(reach, leader - GAP_MM))
+	v.pos_mm = reach
+	if v.pos_mm < stand:
+		return v.pos_mm if v.pos_mm <= split else leader
+	_set_stage(v, LandsideVehicle.Stage.DWELL)
+	if v.bookings.is_empty():
+		v.stage_tick = tick - DWELL_TICKS
+	elif can_release:
+		_release(v, [definition.berth_get_out(v.stop)], released)
+	return leader
+
+
+## A car pulling out of its berth, a gap behind `leader`; the berth is free
+## once it is back on the road line, and at its path's end it joins road_out
+## when that is clear.
+func _pull_out(v: LandsideVehicle, leader: int) -> int:
+	var end := paths.berth_end[v.stop]
+	var room := paths.berth_join[v.stop] + leader - GAP_MM - paths.berth_join_mm[v.stop]
+	v.pos_mm = maxi(v.pos_mm, mini(mini(v.pos_mm + SPEED_MM, end), room))
+	if v.pos_mm >= paths.berth_join[v.stop] and _berths[v.stop] == v.id:
+		_berths[v.stop] = 0
+	if v.pos_mm == end and _lane_clear(LandsideVehicle.Lane.ROAD_OUT, -1):
+		_enter(v, LandsideVehicle.Lane.ROAD_OUT, LandsideVehicle.Stage.LEAVE)
+		return paths.out_mm
+	return _axis(v)
+
+
+## Where a car on road_in or a berth path is along the road line, in mm along
+## road_in (carried on): its position while on the line; tapering out, the road
+## point level with the rest of its way out; tapering in or standing, its
+## berth's.
+func _axis(v: LandsideVehicle) -> int:
+	if v.lane != LandsideVehicle.Lane.BERTH:
+		return v.pos_mm
+	var i := v.stop
+	if v.pos_mm <= paths.berth_split[i]:
+		return v.pos_mm
+	if v.pos_mm > paths.berth_stand[i]:
+		return paths.berth_join_mm[i] + v.pos_mm - paths.berth_join[i]
+	return _berth_mm[i] - (paths.berth_stand[i] - v.pos_mm)
+
+
+## Whether the car standing in its berth may pull out now: nothing on the road
+## line from beside its berth to a gap past where it rejoins it, no car
+## tapering there, and no car moving up behind that would pass it within a gap
+## (the way out's extra length counted, as the car behind gains it).
+## A car waiting at the stop is not in its way: it stands still and keeps its
+## gap once it moves.
+func _merge_clear(v: LandsideVehicle) -> bool:
+	var b := _berth_mm[v.stop]
+	var ahead_to := paths.berth_join_mm[v.stop] + GAP_MM
+	var behind_from := b - GAP_MM - paths.berth_slack[v.stop] - SPEED_MM
+	for o in _vehicles:
+		if o == v or not (o.lane in [LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.BERTH]):
 			continue
-		if spot >= 0:
-			if _turn_into_lot(v, spot):
-				leader = FAR_MM
-			else:
-				_set_moving(v, false)
+		if o.lane == LandsideVehicle.Lane.BERTH and o.stage == LandsideVehicle.Stage.DWELL:
 			continue
-		var berth := _free_berth(v.pos_mm)
-		if berth < 0:
-			_set_moving(v, true)
+		var axis := _axis(o)
+		if axis >= b and axis <= ahead_to:
+			return false
+		if axis < behind_from or axis >= b or o.stage == LandsideVehicle.Stage.QUEUE:
 			continue
-		_berths[berth] = v.id
-		v.lane = LandsideVehicle.Lane.BERTH
-		v.stop = berth
-		v.pos_mm = 0
-		_set_stage(v, LandsideVehicle.Stage.DWELL)
-		leader = FAR_MM
-		if v.bookings.is_empty():
-			# Nobody to let out: it pulls through at once.
-			v.stage_tick = tick - DWELL_TICKS
-		elif can_release:
-			_release(v, [definition.berth_get_out(berth)], released)
+		var stops_short := (
+			o.lane == LandsideVehicle.Lane.BERTH
+			and o.stage == LandsideVehicle.Stage.DRIVE
+			and _berth_mm[o.stop] < b
+		)
+		if not stops_short:
+			return false
+	return true
 
 
 ## At its lot's turn: reserve the lowest free slot and turn onto the access
-## lane, or (the lot full) give up parking. True when it turned.
+## lane once it has room, or (the lot full) give up parking. True when it
+## turned.
 func _turn_into_lot(v: LandsideVehicle, spot: int) -> bool:
 	var slot := (_slots[spot] as Array).find(0)
 	if slot < 0:
 		v.intent = LandsideVehicle.Intent.DROP
 		diverted.emit(v.id)
+		return false
+	if not _lane_clear(LandsideVehicle.Lane.ACCESS, spot):
 		return false
 	_slots[spot][slot] = v.id
 	v.lot = spot
@@ -494,8 +687,6 @@ func _set_moving(v: LandsideVehicle, queued: bool) -> void:
 ## (Wallet.MAX_BALANCE), an error says so and no fee is taken; the car
 ## still parks, so its passengers are not held up by the balance.
 func _park(v: LandsideVehicle, rng: RandomNumberGenerator) -> void:
-	v.lane = LandsideVehicle.Lane.SLOT
-	v.pos_mm = 0
 	v.leave_tick = tick + rng.randi_range(STAY_MIN_TICKS, STAY_MAX_TICKS)
 	_set_stage(v, LandsideVehicle.Stage.PARKED)
 	if wallet == null:
@@ -505,14 +696,6 @@ func _park(v: LandsideVehicle, rng: RandomNumberGenerator) -> void:
 		push_error("LandsideSim: the wallet refused vehicle %d's parking fee" % v.id)
 		return
 	parked.emit(v.id, v.lot)
-
-
-## The walk from a parked car: its slot, the lot gate, then the crossing.
-func _lot_walk(v: LandsideVehicle) -> Array[Vector3]:
-	var spot := definition.lots[v.lot]
-	var walk: Array[Vector3] = [spot.slots[v.stop], spot.access[spot.access.size() - 1]]
-	walk.append_array(Array(spot.crossing))
-	return walk
 
 
 func _release(v: LandsideVehicle, walk: Array, released: Array[Dictionary]) -> void:
@@ -540,6 +723,11 @@ func _set_stage(v: LandsideVehicle, stage: LandsideVehicle.Stage) -> void:
 func _remove(v: LandsideVehicle) -> void:
 	_vehicles.erase(v)
 	_by_id.erase(v.id)
+
+
+## Ticks to drive `mm` at SPEED_MM.
+static func _ticks(mm: int) -> int:
+	return ceili(float(mm) / SPEED_MM)
 
 
 ## A car that means to park: the lot it will take from `pos_mm`, or -1 (it
@@ -585,17 +773,35 @@ func _lots_by_turn() -> Array[int]:
 
 
 ## The free berth, of the starter curb and the built curb bays, that a car at
-## `pos_mm` reaches first driving on, or -1. A berth behind the car is never
-## taken: it would reverse.
-func _free_berth(pos_mm: int) -> int:
+## `pos_mm` reaches first driving on, standing before `before_mm`, or -1. A
+## berth whose path leaves the road behind the car is never taken: it would
+## reverse.
+func _free_berth(pos_mm: int, before_mm: int) -> int:
 	var best := -1
 	for i in _berths.size():
-		var spot := definition.berth_spot(i)
-		if _berths[i] != 0 or (spot >= 0 and not curbs_built[spot]) or _berth_mm[i] < pos_mm:
+		if _berths[i] != 0 or not _berth_built(i) or paths.berth_split[i] < pos_mm:
+			continue
+		if _berth_mm[i] >= before_mm:
 			continue
 		if best < 0 or _berth_mm[i] < _berth_mm[best]:
 			best = i
 	return best
+
+
+## The built berth whose path a car at `pos_mm` reaches first, taken or not.
+func _nearest_berth(pos_mm: int) -> int:
+	var best := -1
+	for i in _berths.size():
+		if not _berth_built(i) or paths.berth_split[i] < pos_mm:
+			continue
+		if best < 0 or _berth_mm[i] < _berth_mm[best]:
+			best = i
+	return best
+
+
+func _berth_built(i: int) -> bool:
+	var spot := definition.berth_spot(i)
+	return spot < 0 or curbs_built[spot]
 
 
 static func _filled(count: int, value: Variant) -> Array:
@@ -629,18 +835,9 @@ func _lane_clear(lane: LandsideVehicle.Lane, spot: int) -> bool:
 	return true
 
 
-func _lane_points(lane: LandsideVehicle.Lane, spot: int) -> PackedVector3Array:
-	match lane:
-		LandsideVehicle.Lane.ROAD_OUT:
-			return definition.road_out
-		LandsideVehicle.Lane.ACCESS:
-			return definition.lots[spot].access
-		LandsideVehicle.Lane.LOT_EXIT:
-			return definition.lots[spot].exit
-	return definition.road_in
-
-
-## Berth and slot holders from the vehicle records, after a load or a reset.
+## Berth and slot holders from the vehicle records, after a load or a reset:
+## a berth is held until its car is back on the road line, a slot until its car
+## starts to pull out.
 func _rederive() -> void:
 	_berths.resize(definition.berth_count())
 	_berths.fill(0)
@@ -654,7 +851,7 @@ func _rederive() -> void:
 		holders.fill(0)
 		_slots.append(holders)
 	for v in _vehicles:
-		if v.lane == LandsideVehicle.Lane.BERTH:
+		if v.lane == LandsideVehicle.Lane.BERTH and v.pos_mm < paths.berth_join[v.stop]:
 			_berths[v.stop] = v.id
-		elif v.lane in [LandsideVehicle.Lane.ACCESS, LandsideVehicle.Lane.SLOT]:
+		elif LandsideSnapshot.holds_slot(v):
 			_slots[v.lot][v.stop] = v.id

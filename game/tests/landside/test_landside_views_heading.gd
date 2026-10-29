@@ -5,8 +5,9 @@ extends GdUnitTestSuite
 ## on road_in and road_out it heads -x on the terminal-side carriageway, on a
 ## lot's access lane +z, in a curb berth -x, in a parking slot into its
 ## stall (away from the lot's middle aisle), and on the lot exit's stretch
-## along the far carriageway +x. Moving between two ticks on one lane, the
-## model's nose (local +Z) points along the way it is drawn moving. A bare
+## along the far carriageway +x. Moving between two ticks, on a lane or a
+## berth's or slot's path, the model's nose (local +Z) points along the way it
+## is drawn moving, except backing out of a stall, where it points back. A bare
 ## LandsideSim on the starter road with both car parks and curb spot 0 built,
 ## stepped by hand; the views sync after each step. Built once for the file.
 
@@ -50,6 +51,7 @@ var _covered := {}
 ## Each failure, as text.
 var _wrong: Array[String] = []
 var _moving_checked := 0
+var _backing_checked := 0
 var _peak_nodes := 0
 var _children_at_peak := 0
 
@@ -90,12 +92,17 @@ func after() -> void:
 	_views.free()
 
 
+## Where each car is drawn on the tick now (alpha 1, on the place the sim has
+## it) faces its place's way; between two ticks the nose points along the way
+## it is drawn moving, except backing out of a stall, where it points back.
+## (Until cars drove a berth's or slot's path, the place was read at alpha 0.5;
+## now a car can be drawn on the lane it just left at that alpha.)
 func _check_tick() -> void:
 	for id in _landside.vehicle_ids():
 		if not _views.has_vehicle(id):
 			continue
 		var v := _landside.get_vehicle(id)
-		var pose := _views.pose_at(id, 0.5)
+		var pose := _views.pose_at(id, 1.0)
 		var nose := pose.basis.z
 		var place := _place_name(v, pose.origin)
 		var want := _want(place)
@@ -107,14 +114,27 @@ func _check_tick() -> void:
 		_covered[place] = int(_covered.get(place, 0)) + 1
 		if want != Vector3.ZERO and nose.dot(want) < 0.99:
 			_wrong.append("%s vehicle %d nose %s want %s" % [place, id, nose, want])
+		var mid := _views.pose_at(id, 0.5).basis.z
 		var a := _views.pose_at(id, 0.45).origin
 		var b := _views.pose_at(id, 0.55).origin
 		var moved := b - a
 		var same_heading := _views.pose_at(id, 0.45).basis.z.dot(_views.pose_at(id, 0.55).basis.z)
 		if moved.length() > 0.01 and same_heading > 0.999:
 			_moving_checked += 1
-			if nose.dot(moved.normalized()) < 0.99:
-				_wrong.append("%s vehicle %d moves %s nose %s" % [place, id, moved, nose])
+			var way := mid.dot(moved.normalized())
+			if _backing(v):
+				_backing_checked += 1
+				way = -way
+			if way < 0.99:
+				_wrong.append("%s vehicle %d moves %s nose %s" % [place, id, moved, mid])
+
+
+## Whether the car is drawn backing out of its stall halfway through the tick
+## that just ran (a car on its slot path moves a full step a tick).
+func _backing(v: LandsideVehicle) -> bool:
+	if v.lane != LandsideVehicle.Lane.SLOT or v.stage != LandsideVehicle.Stage.LEAVE or v.stop < 0:
+		return false
+	return v.pos_mm - LandsideSim.SPEED_MM / 2 < _landside.paths.slot_back[v.lot][v.stop]
 
 
 ## PARKED_NOSE for the row at `x` of lot spot `lot`, or zero for none.
@@ -127,6 +147,10 @@ static func _parked_nose(lot: int, x: float) -> Vector3:
 
 
 func _place_name(v: LandsideVehicle, at: Vector3) -> String:
+	# On a berth's or slot's path, pulling in or out: the motion check covers it.
+	var standing := v.stage in [LandsideVehicle.Stage.DWELL, LandsideVehicle.Stage.PARKED]
+	if v.lane in [LandsideVehicle.Lane.BERTH, LandsideVehicle.Lane.SLOT] and not standing:
+		return "berth_path" if v.lane == LandsideVehicle.Lane.BERTH else "slot_path_lot%d" % v.lot
 	if PLACE_NAMES.has(v.lane):
 		return PLACE_NAMES[v.lane]
 	# The lot exit runs -z to the far carriageway, then +x along it; on the
@@ -157,7 +181,10 @@ func test_every_drawn_vehicle_faces_its_right_hand_direction_of_travel() -> void
 	]:
 		assert_int(int(_covered.get(place, 0))).is_greater(0)
 	assert_int(int(_covered.get("exit_far_carriageway", 0))).is_greater(0)
+	for place in ["berth_path", "slot_path_lot0", "slot_path_lot1"]:
+		assert_int(int(_covered.get(place, 0))).is_greater(0)
 	assert_int(_moving_checked).is_greater(100)
+	assert_int(_backing_checked).is_greater(0)
 	assert_array(_wrong).is_empty()
 
 

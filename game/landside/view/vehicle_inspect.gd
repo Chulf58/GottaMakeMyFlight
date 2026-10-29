@@ -51,7 +51,7 @@ static func doing_text(v: LandsideVehicle) -> String:
 			return "Empty, leaving" if empty else "Leaving"
 	if empty:
 		return "Empty, driving on"
-	if v.lane == LandsideVehicle.Lane.ACCESS:
+	if v.lane in [LandsideVehicle.Lane.ACCESS, LandsideVehicle.Lane.SLOT]:
 		return "Driving into the car park"
 	var queued := v.stage == LandsideVehicle.Stage.QUEUE
 	if v.intent == LandsideVehicle.Intent.PARK:

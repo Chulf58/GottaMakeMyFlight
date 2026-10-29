@@ -6,7 +6,9 @@ extends RefCounted
 ## slot holders are rebuilt from the vehicles. Every booking saved is AWAITING
 ## (vehicle 0) or IN_VEHICLE in exactly the one vehicle that lists it.
 
-const SAVE_VERSION := 2
+## 3: a car in a berth or a slot has a position along that berth's or slot's
+## path (LandsidePaths), pulling in, standing or pulling out.
+const SAVE_VERSION := 3
 const KEYS := [
 	"save_version",
 	"tick",
@@ -29,12 +31,25 @@ const VEHICLE_INTS := [
 	"id", "kind", "intent", "lane", "pos_mm", "stage", "stop", "lot", "stage_tick", "leave_tick"
 ]
 ## The lane each stage may stand on.
+## DRIVE on a berth or slot path is pulling in, LEAVE there pulling out.
 const STAGE_LANES := {
-	LandsideVehicle.Stage.DRIVE: [LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.ACCESS],
+	LandsideVehicle.Stage.DRIVE:
+	[
+		LandsideVehicle.Lane.ROAD_IN,
+		LandsideVehicle.Lane.ACCESS,
+		LandsideVehicle.Lane.BERTH,
+		LandsideVehicle.Lane.SLOT,
+	],
 	LandsideVehicle.Stage.QUEUE: [LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.ACCESS],
 	LandsideVehicle.Stage.DWELL: [LandsideVehicle.Lane.BERTH],
 	LandsideVehicle.Stage.PARKED: [LandsideVehicle.Lane.SLOT],
-	LandsideVehicle.Stage.LEAVE: [LandsideVehicle.Lane.ROAD_OUT, LandsideVehicle.Lane.LOT_EXIT],
+	LandsideVehicle.Stage.LEAVE:
+	[
+		LandsideVehicle.Lane.ROAD_OUT,
+		LandsideVehicle.Lane.LOT_EXIT,
+		LandsideVehicle.Lane.BERTH,
+		LandsideVehicle.Lane.SLOT,
+	],
 }
 
 
@@ -248,6 +263,7 @@ static func _vehicles(
 	var out: Array[LandsideVehicle] = []
 	var held := {}
 	var last := 0
+	var paths := LandsidePaths.new(definition)
 	for entry in list:
 		var ok: bool = typeof(entry) == TYPE_DICTIONARY and entry.has("bookings")
 		for field in VEHICLE_INTS:
@@ -262,13 +278,12 @@ static func _vehicles(
 			if not _whole(id) or v.bookings.has(int(id)):
 				return {"error": "vehicle %d lists a bad or repeated booking" % v.id}
 			v.bookings.append(int(id))
-		var problem := _vehicle_problem(v, last, next_id, definition, built, curbs)
+		var problem := _vehicle_problem(v, last, next_id, paths, built, curbs)
 		var key := ""
-		match v.lane:
-			LandsideVehicle.Lane.BERTH:
-				key = "berth %d" % v.stop
-			LandsideVehicle.Lane.ACCESS, LandsideVehicle.Lane.SLOT:
-				key = "slot %d:%d" % [v.lot, v.stop]
+		if problem == "" and v.lane == LandsideVehicle.Lane.BERTH:
+			key = "berth %d" % v.stop if v.pos_mm < paths.berth_join[v.stop] else ""
+		elif problem == "" and holds_slot(v):
+			key = "slot %d:%d" % [v.lot, v.stop]
 		if problem == "" and key != "":
 			problem = "its %s is taken twice" % key if held.has(key) else ""
 			held[key] = true
@@ -276,17 +291,44 @@ static func _vehicles(
 			return {"error": "vehicle %d: %s" % [v.id, problem]}
 		last = v.id
 		out.append(v)
+	var lot_problem := _lot_traffic_problem(out, definition.lots.size())
+	if lot_problem != "":
+		return {"error": lot_problem}
 	return {"list": out}
+
+
+## The car park rule LandsideSim keeps (_step_lot()): in each lot at most one
+## car pulls out (or turns round), and none pulls in while one does. "" when
+## the vehicles keep it.
+static func _lot_traffic_problem(vehicles: Array[LandsideVehicle], lots: int) -> String:
+	var leaving: Array[int] = []
+	var arriving: Array[int] = []
+	leaving.resize(lots)
+	arriving.resize(lots)
+	for v in vehicles:
+		if v.lane != LandsideVehicle.Lane.SLOT:
+			continue
+		if v.stage == LandsideVehicle.Stage.LEAVE:
+			leaving[v.lot] += 1
+		elif v.stage == LandsideVehicle.Stage.DRIVE:
+			arriving[v.lot] += 1
+	for spot in lots:
+		if leaving[spot] > 1:
+			return "lot spot %d has more than one car pulling out" % spot
+		if leaving[spot] > 0 and arriving[spot] > 0:
+			return "lot spot %d has a car pulling in while one pulls out" % spot
+	return ""
 
 
 static func _vehicle_problem(
 	v: LandsideVehicle,
 	last: int,
 	next_id: int,
-	definition: LandsideDefinition,
+	paths: LandsidePaths,
 	built: Array[bool],
 	curbs: Array[bool]
 ) -> String:
+	var definition := paths.definition
 	if v.id <= last or v.id >= next_id:
 		return "its id is out of order"
 	if v.kind < 0 or v.kind >= LandsideVehicle.Kind.size():
@@ -309,16 +351,25 @@ static func _vehicle_problem(
 			stops = definition.berth_count()
 		LandsideVehicle.Lane.ACCESS, LandsideVehicle.Lane.SLOT:
 			stops = definition.lots[v.lot].slots.size()
-	if (stops < 0 and v.stop != -1) or (stops >= 0 and (v.stop < 0 or v.stop >= stops)):
+	# A car on a slot path with no slot is turning round at the gate.
+	var turning := (
+		v.lane == LandsideVehicle.Lane.SLOT
+		and v.stop == -1
+		and v.stage == LandsideVehicle.Stage.LEAVE
+	)
+	var stop_ok := v.stop == -1 if stops < 0 else (v.stop >= 0 and v.stop < stops) or turning
+	if not stop_ok:
 		return "its berth or slot is out of range"
 	if v.lane == LandsideVehicle.Lane.BERTH and definition.berth_spot(v.stop) >= 0:
 		if not curbs[definition.berth_spot(v.stop)]:
-			return "it stands in a berth of a curb spot with no curb bay"
-	var length := _lane_length(v, definition)
+			return "it is at a berth of a curb spot with no curb bay"
+	var length := _lane_length(v, paths)
 	if v.lane != LandsideVehicle.Lane.ROAD_IN and (v.pos_mm < 0 or v.pos_mm > length):
 		return "its position is off its lane"
 	if v.lane == LandsideVehicle.Lane.ROAD_IN and v.pos_mm > definition.curb.stop_mm:
 		return "it stands past the curb on road_in"
+	if not _stands_right(v, paths):
+		return "its stage does not fit where it is on its berth or slot path"
 	if (v.stage == LandsideVehicle.Stage.PARKED) != (v.leave_tick > 0):
 		return "only a parked car has a leave tick"
 	if v.stage == LandsideVehicle.Stage.LEAVE and not v.bookings.is_empty():
@@ -328,17 +379,35 @@ static func _vehicle_problem(
 	return ""
 
 
-static func _lane_length(v: LandsideVehicle, definition: LandsideDefinition) -> int:
-	match v.lane:
-		LandsideVehicle.Lane.ROAD_OUT:
-			return LandsideDefinition.length_mm(definition.road_out)
-		LandsideVehicle.Lane.ACCESS:
-			return LandsideDefinition.length_mm(definition.lots[v.lot].access)
-		LandsideVehicle.Lane.LOT_EXIT:
-			return LandsideDefinition.length_mm(definition.lots[v.lot].exit)
-		LandsideVehicle.Lane.ROAD_IN:
-			return LandsideDefinition.length_mm(definition.road_in)
-	return 0
+## On a berth or slot path: before the stand pulling in, at it standing, at it
+## or past it pulling out (a car let go on this tick has not moved yet; a
+## turning car has no stand).
+static func _stands_right(v: LandsideVehicle, paths: LandsidePaths) -> bool:
+	if not (v.lane in [LandsideVehicle.Lane.BERTH, LandsideVehicle.Lane.SLOT]):
+		return true
+	var stand := paths.stand_of(v.lane, v.lot, v.stop)
+	match v.stage:
+		LandsideVehicle.Stage.DRIVE:
+			return v.pos_mm < stand
+		LandsideVehicle.Stage.LEAVE:
+			return v.pos_mm >= stand
+	return v.pos_mm == stand
+
+
+static func _lane_length(v: LandsideVehicle, paths: LandsidePaths) -> int:
+	if v.lane in [LandsideVehicle.Lane.BERTH, LandsideVehicle.Lane.SLOT]:
+		return paths.end_of(v.lane, v.lot, v.stop)
+	return LandsideDefinition.length_mm(paths.path(v.lane, v.lot, v.stop))
+
+
+## Whether `v` holds its slot: driving to it on the access lane or its path,
+## or parked in it; a car pulling out has let it go.
+static func holds_slot(v: LandsideVehicle) -> bool:
+	if v.stop < 0:
+		return false
+	if v.lane == LandsideVehicle.Lane.ACCESS:
+		return true
+	return v.lane == LandsideVehicle.Lane.SLOT and v.stage != LandsideVehicle.Stage.LEAVE
 
 
 ## Every IN_VEHICLE booking is listed by its vehicle, and every booking a
