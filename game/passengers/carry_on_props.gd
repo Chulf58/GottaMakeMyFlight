@@ -145,7 +145,7 @@ const ROLLER_GRIP_PAST_TOP_M := 0.015
 ## swings out this far on the hand's side midway, clear of the trailing leg
 ## (0.15 m put it into a neighbouring stall's partition end from the row).
 const SWAP_OUT_M := 0.08
-## Away from a stall it swings this far out (the near shin met it at 0.08 m).
+## At security it swings this far out (the near shin met it at 0.08 m).
 const SWAP_OPEN_M := 0.2
 ## A roller held by its bar for a stall has the bar this far from the grip
 ## point, toward the bag's front (in the palm, a grip offset along the hand's
@@ -469,6 +469,7 @@ func sync() -> void:
 		held["hands"] = hands
 		held["kinds"] = kinds
 		held["in_stall"] = StallCarry.in_stall(p)
+		held["security"] = p.stage in [Passenger.Stage.SECURITY_QUEUE, Passenger.Stage.SECURITY]
 		held["stall"] = StallCarry.stall_of(sim, p)
 		# At a booth a roller's lift into the hand ends before the front turn.
 		if booth_bags and BoothCarry.roller_rising(held, kinds, lifts, _tick()):
@@ -1451,9 +1452,9 @@ func _swap_transform(held: Dictionary, body: Node3D, i: int, k: float) -> Array:
 	var s := smoothstep(0.0, 1.0, k)
 	var t := s if to_pull else 1.0 - s
 	var axle := _hung_axle(bag, grip, scale_by).lerp(trailing, t)
-	# Away from a stall (no partition beside it) it swings out further, clear of
+	# At security (no stall partition near) it swings out further, clear of
 	# the near shin; the bar stays in the hand.
-	var swing := SWAP_OUT_M if not (held.get("stall", {}) as Dictionary).is_empty() else SWAP_OPEN_M
+	var swing := SWAP_OPEN_M if held.get("security", false) else SWAP_OUT_M
 	axle += outward * swing * 4.0 * t * (1.0 - t)
 	var ref := outward.lerp(Vector3.UP, t).normalized()
 	var rods := _reach_base(_part(bag["node"], "Pull_Reach"))
