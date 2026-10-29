@@ -194,6 +194,85 @@ static func _build() -> void:
 	# no interaction cell. Drawn with the interior kit's screen_stand piece
 	# (Boredom 5/5).
 	_add(ScreenCoverage.SCREEN_ID, "Screen", Vector2i.ONE, Color(0.16, 0.2, 0.3), 1.88)
+	_build_decor()
+	_build_services()
+	_build_activities()
+
+
+## Decor (Furniture 4/4; decisions all-11-exported-decor-models-are-placeable-
+## plants-trees-foun and furniture-set-modelled-on-copenhagen-airport-decor-
+## calms-pas): the Toon City models, one id each, no interaction cell. A
+## footprint is the model's extent in whole cells and a height its top, both
+## read from the .glb (a test keeps them in step). Placed as exported, with no
+## rescale (decision oversized-toon-decor-trees-fountain-statue-tree-bench-is-
+## bui). A chain is three cells in a row, a post in each outer cell and the
+## chain across all three, drawn with its two posts (InteriorKit.OBJECT_POSTS),
+## so its height is the posts'.
+static func _build_decor() -> void:
+	var metal := Color(0.55, 0.58, 0.62)
+	var green := Color(0.3, 0.55, 0.3)
+	var stone := Color(0.7, 0.7, 0.68)
+	_add(&"bench_1a", "Bench", Vector2i(1, 3), Color(0.55, 0.4, 0.28), 1.35)
+	_add(&"bench_2a_indoor", "Tree bench", Vector2i(4, 4), green, 2.4)
+	_add(&"bush", "Bush", Vector2i(2, 2), green, 1.63)
+	_add(&"fountain_indoor", "Fountain", Vector2i(2, 2), Color(0.5, 0.7, 0.85), 1.8)
+	_add(&"metal_pole", "Post", Vector2i.ONE, metal, 1.62)
+	_add(&"metal_pole_chain", "Chain", Vector2i(1, 3), metal, 1.62)
+	_add(&"plant_pot_1a", "Planter", Vector2i(1, 2), green, 1.62)
+	_add(&"plant_pot_2a", "Plant pot", Vector2i(2, 2), green, 1.05)
+	_add(&"statue_indoor", "Statue", Vector2i.ONE, stone, 2.4)
+	_add(&"trash_can", "Bin", Vector2i.ONE, Color(0.4, 0.45, 0.5), 1.4)
+	_add(&"tree_indoor", "Tree", Vector2i(2, 2), green, 2.2)
+
+
+## Services kit (Furniture 3b). A counter, stall or desk is 2x1 with its
+## interaction cell on its Mount_Order, in front of the till (Mount_Staff
+## behind it is not reserved until staff exist, as at the cafe counter); an ATM
+## and a shower are used from their Mount_Use cell in front; the pharmacy shelf
+## from its Mount_Browse cell. Seats (Mount_SitRoot_*) are not catalogued yet:
+## nothing reads them for these pieces. The offsets are read from the .glb
+## mounts (a test keeps them in step).
+static func _build_services() -> void:
+	_add(&"bar_counter", "Bar counter", Vector2i(2, 2), Color(0.45, 0.3, 0.25), 1.54)
+	_add_counter(&"grab_and_go_stall", "Grab-and-go stall", 2.25, Color(0.9, 0.6, 0.3))
+	_add(&"restaurant_table", "Restaurant table", Vector2i(2, 3), Color(0.6, 0.45, 0.35), 1.01)
+	_add(&"restaurant_booth", "Restaurant booth", Vector2i(2, 3), Color(0.65, 0.3, 0.3), 1.15)
+	_add_counter(&"info_desk", "Info desk", 2.02, Color(0.3, 0.5, 0.75))
+	_add(&"info_screen", "Info screen", Vector2i.ONE, Color(0.16, 0.2, 0.3), 2.27)
+	_add_counter(&"currency_exchange", "Currency exchange", 2.16, Color(0.8, 0.7, 0.3))
+	var atm := _add(&"atm", "ATM", Vector2i.ONE, Color(0.35, 0.4, 0.5), 1.78)
+	atm.has_interaction = true
+	atm.interaction_offset = Vector2i(0, 1)
+	_add_counter(&"pharmacy_counter", "Pharmacy counter", 1.94, Color(0.4, 0.7, 0.55))
+	var shelf := _add(
+		&"pharmacy_shelf", "Pharmacy shelf", Vector2i(2, 1), Color(0.5, 0.75, 0.6), 1.98
+	)
+	shelf.has_interaction = true
+	shelf.interaction_offset = Vector2i(0, 1)
+	var shower := _add(&"shower_cubicle", "Shower", Vector2i.ONE, Color(0.7, 0.85, 0.9), 2.16)
+	shower.has_interaction = true
+	shower.interaction_offset = Vector2i(0, 1)
+	_add(&"nap_pod", "Nap pod", Vector2i.ONE, Color(0.35, 0.35, 0.55), 1.82)
+
+
+## Activities kit (Furniture 3): the play area, the lounge, the work desk and
+## the prize podium. None is used from an interaction cell. The podium is 6x3
+## and its height counts the prize car on it (2.3 m: the 0.3 m podium and the
+## 2.0 m SUV, drawn at the podium's Mount_Car).
+static func _build_activities() -> void:
+	_add(&"play_blocks", "Play blocks", Vector2i(2, 2), Color(0.9, 0.5, 0.3), 0.72)
+	_add(&"play_slide", "Play slide", Vector2i(2, 1), Color(0.9, 0.7, 0.2), 0.9)
+	_add(&"lounge_sofa", "Lounge sofa", Vector2i(2, 1), Color(0.5, 0.35, 0.6), 0.86)
+	_add(&"lounge_armchair", "Lounge armchair", Vector2i.ONE, Color(0.5, 0.35, 0.6), 0.86)
+	_add(&"work_desk", "Work desk", Vector2i(2, 2), Color(0.45, 0.5, 0.55), 1.2)
+	_add(&"prize_podium", "Prize podium", Vector2i(6, 3), Color(0.8, 0.2, 0.25), 2.3)
+
+
+## A 2x1 counter, stall or desk served from the cell in front of its left half.
+static func _add_counter(id: StringName, label: String, height: float, color: Color) -> void:
+	var counter := _add(id, label, Vector2i(2, 1), color, height)
+	counter.has_interaction = true
+	counter.interaction_offset = Vector2i(0, 1)
 
 
 ## Passengers step through a door along its axis only, so it is walk-through;
