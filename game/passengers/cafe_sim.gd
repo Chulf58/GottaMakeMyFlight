@@ -1,3 +1,6 @@
+# gdlint:disable = max-public-methods
+# CafeSim is the cafe visit API, and NeedsPolicy asks it whether a visit is
+# wanted and viable before one starts, so it has more than 20 public methods.
 class_name CafeSim
 extends RefCounted
 ## Cafe visits, owned by PassengerSim and stepped inside its tick (decision
@@ -144,30 +147,69 @@ func seat_holder(key: String) -> int:
 
 
 ## Commits `p` to a visit at the nearest usable cafe when the forecast allows
-## it. False when it may not start one now, no cafe has a free seat and room
-## in a queue it can reach, or the whole visit does not fit. A browsing
-## passenger only looks at cafes within its reach and needs
-## BROWSE_SPARE_TICKS more to spare.
+## it (plan_visit()). False when it may not start one now, no cafe has a free
+## seat and room in a queue it can reach, or the whole visit does not fit.
 func try_visit(p: Passenger, browsing := false) -> bool:
-	if not START_STAGES.has(p.stage) or _visits.has(p.id):
-		return false
-	if StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE:
-		return false
-	refresh()
-	var plan := _plan(p, _reach_mm(p) if browsing else 0)
+	var plan := plan_visit(p, browsing)
 	if plan.is_empty():
-		return false
-	var arrival := CafeForecast.visit_arrival(_sim, p, plan["legs"])
-	if browsing:
-		arrival += BROWSE_SPARE_TICKS
-	if not CafeForecast.admits(_sim, p, arrival):
 		return false
 	_commit(p, plan)
 	return true
 
 
+## The visit `p` would start now, without starting it: the plan of the
+## nearest usable cafe when the forecast admits the whole visit, else empty.
+## A browsing passenger only looks at cafes within its reach and needs
+## BROWSE_SPARE_TICKS more to spare. Changes nothing but the derived layout.
+func plan_visit(p: Passenger, browsing := false) -> Dictionary:
+	if (
+		not START_STAGES.has(p.stage)
+		or StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE
+	):
+		return {}
+	refresh()
+	var plan := _plan(p, _reach_mm(p) if browsing else 0)
+	if plan.is_empty():
+		return {}
+	var arrival := CafeForecast.visit_arrival(_sim, p, plan["legs"])
+	if browsing:
+		arrival += BROWSE_SPARE_TICKS
+	if not CafeForecast.admits(_sim, p, arrival):
+		return {}
+	return plan
+
+
+## Starts the visit a plan_visit() returned on this tick.
+func commit_visit(p: Passenger, plan: Dictionary) -> void:
+	_commit(p, plan)
+
+
+## Whether `p` is hungry and may start a cafe visit now: no visit of any
+## facility, a start stage and its cooldown over.
+func wants_food(p: Passenger) -> bool:
+	return p.hunger >= HUNGRY_AT and _may_start(p)
+
+
+## Whether `p`, not hungry, is walking past a cafe within its browse reach and
+## may start a visit now.
+func wants_browse(p: Passenger) -> bool:
+	if p.hunger >= HUNGRY_AT or not _may_start(p):
+		return false
+	var walking := (
+		p.is_moving() and p.stage in [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
+	)
+	return walking and _passing_cafe(p)
+
+
+## A wanted visit could not start: `p` waits HUNGER_RETRY_TICKS before trying
+## again, or BROWSE_COOLDOWN_TICKS after a browse.
+func refuse(p: Passenger, browsing := false) -> void:
+	p.cafe_cooldown = _sim.tick + (BROWSE_COOLDOWN_TICKS if browsing else HUNGER_RETRY_TICKS)
+
+
 ## Once a simulated second per passenger: hunger rises, unmet hunger costs
-## mood, and a hungry or browsing passenger may start a visit.
+## mood and a visit under way has its deadline forecast again. Whether a
+## visit starts is NeedsPolicy's to decide, after every need has risen.
 func beat(p: Passenger) -> void:
 	p.hunger = mini(p.hunger + 1, HUNGER_MAX)
 	var visit: CafeVisit = _visits.get(p.id)
@@ -183,18 +225,6 @@ func beat(p: Passenger) -> void:
 	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
 	if hungry and posmod(beat_number, HUNGRY_MOOD_BEATS) == 0:
 		p.mood = maxi(p.mood - 1, 0)
-	if _sim.tick < p.cafe_cooldown or not START_STAGES.has(p.stage):
-		return
-	if hungry:
-		if not try_visit(p):
-			p.cafe_cooldown = _sim.tick + HUNGER_RETRY_TICKS
-		return
-	var walking := (
-		p.is_moving() and p.stage in [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
-	)
-	if walking and _passing_cafe(p):
-		if not try_visit(p, true):
-			p.cafe_cooldown = _sim.tick + BROWSE_COOLDOWN_TICKS
 
 
 ## What a visit pays, in whole money: `base` x mood% x airside% x the share
@@ -510,6 +540,14 @@ func _free_seat(cafe: Dictionary, from: Vector2i) -> Dictionary:
 ## The shortest way from where `p` stands to `target` (VisitRoute.plan()).
 func _route(p: Passenger, target: Vector2i) -> Dictionary:
 	return VisitRoute.plan(_sim.grid, p, target)
+
+
+func _may_start(p: Passenger) -> bool:
+	return (
+		_sim.tick >= p.cafe_cooldown
+		and START_STAGES.has(p.stage)
+		and StageKinds.visit_facility(_sim, p) == StageKinds.Facility.NONE
+	)
 
 
 func _reach_mm(p: Passenger) -> int:

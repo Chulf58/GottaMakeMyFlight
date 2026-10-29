@@ -170,6 +170,7 @@ func test_a_walking_passenger_passing_a_cafe_with_time_to_spare_drops_in() -> vo
 	assert_int(away).is_less_equal(CafeSim.AIRSIDE_BROWSE_REACH_MM)
 	assert_int(away).is_greater(CafeSim.BROWSE_REACH_MM)
 	_world.sim.cafes.beat(p)
+	NeedsPolicy.arbitrate(_world.sim, p)
 	assert_int(p.hunger).is_less(CafeSim.HUNGRY_AT)
 	assert_object(_world.sim.cafes.visit_of(p.id)).is_not_null()
 	assert_int(_world.sim.cafes.visit_of(p.id).room).is_equal(_ids["air_room"])

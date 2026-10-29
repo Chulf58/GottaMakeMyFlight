@@ -19,10 +19,9 @@ extends RefCounted
 ## a-passenger-with-a-high-need-detours-to-the-nearest-facility). A detour
 ## never costs the flight.
 ##
-## Priority between needs: on a passenger's beat PassengerSim asks ToiletSim
-## before CafeSim, so a passenger whose toilet need and hunger are both high
-## tries a toilet first, and goes to a cafe only on a beat when no toilet
-## visit starts.
+## Which need a passenger acts on when several are high is NeedsPolicy's: the
+## beat here only raises the need, costs mood and updates deadlines, and the
+## policy asks wants_visit() and plan_visit() and starts the visit it chooses.
 ##
 ## Every phase before standing up checks the visit's deadline: the last tick
 ## the passenger can start to stand up and still reach the plane door
@@ -136,31 +135,64 @@ func stall_holder(stall_id: int) -> int:
 
 
 ## Commits `p` to a visit at the free stall nearest by path when the forecast
-## allows it. False when it may not start one now, no free stall can be
-## reached, or the whole visit does not fit before its doors close.
+## allows it (plan_visit()). False when it may not start one now, no free
+## stall can be reached, or the whole visit does not fit before its doors
+## close.
 func try_visit(p: Passenger) -> bool:
-	if not CafeSim.START_STAGES.has(p.stage) or _visits.has(p.id):
-		return false
-	if StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE:
-		return false
-	refresh()
-	var plan := _plan(p)
+	var plan := plan_visit(p)
 	if plan.is_empty():
 		return false
-	var stall: Dictionary = plan["stall"]
-	var route: Dictionary = plan["route"]
-	var resume := _resume_stage(p)
-	var arrival := VisitForecast.arrival(
-		_sim, p, _visit_ticks(p, route["mm"]), stall["approach"], LEAVE_TICKS, resume
-	)
-	if not VisitForecast.admits(_sim, p, arrival):
-		return false
-	_commit(p, stall, route)
+	commit_visit(p, plan)
 	return true
 
 
+## The visit `p` would start now, without starting it: {"stall", "route"} for
+## the free stall nearest by path when the forecast admits the whole visit,
+## else empty. Changes nothing but the derived layout.
+func plan_visit(p: Passenger) -> Dictionary:
+	if not CafeSim.START_STAGES.has(p.stage):
+		return {}
+	if StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE:
+		return {}
+	refresh()
+	var plan := _plan(p)
+	if plan.is_empty():
+		return {}
+	var stall: Dictionary = plan["stall"]
+	var route: Dictionary = plan["route"]
+	var arrival := VisitForecast.arrival(
+		_sim, p, _visit_ticks(p, route["mm"]), stall["approach"], LEAVE_TICKS, _resume_stage(p)
+	)
+	if not VisitForecast.admits(_sim, p, arrival):
+		return {}
+	return plan
+
+
+## Starts the visit a plan_visit() returned on this tick.
+func commit_visit(p: Passenger, plan: Dictionary) -> void:
+	_commit(p, plan["stall"], plan["route"])
+
+
+## Whether `p`'s need is high and it may start a visit now: no visit of any
+## facility, a start stage and its cooldown over.
+func wants_visit(p: Passenger) -> bool:
+	return (
+		p.toilet_need >= NEED_AT
+		and _sim.tick >= p.toilet_cooldown
+		and CafeSim.START_STAGES.has(p.stage)
+		and StageKinds.visit_facility(_sim, p) == StageKinds.Facility.NONE
+	)
+
+
+## A wanted visit could not start: `p` carries on and tries again after
+## RETRY_TICKS.
+func refuse(p: Passenger) -> void:
+	p.toilet_cooldown = _sim.tick + RETRY_TICKS
+
+
 ## Once a simulated second per passenger: the need rises, a high need with
-## no visit costs mood, and a passenger with a high need may start a visit.
+## no visit costs mood, and a visit under way has its deadline forecast
+## again. Whether a visit starts is NeedsPolicy's to decide.
 func beat(p: Passenger) -> void:
 	p.toilet_need = mini(p.toilet_need + NEED_RISE, NEED_MAX)
 	var visit: ToiletVisit = _visits.get(p.id)
@@ -175,10 +207,6 @@ func beat(p: Passenger) -> void:
 	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
 	if posmod(beat_number, MOOD_BEATS) == 0:
 		p.mood = maxi(p.mood - 1, 0)
-	if _sim.tick < p.toilet_cooldown or not CafeSim.START_STAGES.has(p.stage):
-		return
-	if not try_visit(p):
-		p.toilet_cooldown = _sim.tick + RETRY_TICKS
 
 
 ## Rebuilds the layout after an edit and brings visits in line with it: a

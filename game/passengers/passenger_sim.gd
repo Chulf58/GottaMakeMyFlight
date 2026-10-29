@@ -762,10 +762,11 @@ func _beat(p: Passenger) -> void:
 	if p.late:
 		change -= 1
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
-	# The toilet need, then hunger: a passenger with both high tries a toilet
-	# first (ToiletSim), and a cafe only when no toilet visit started.
+	# Every need rises first, then NeedsPolicy picks which one, if any, the
+	# passenger acts on, by its priority table.
 	toilets.beat(p)
 	cafes.beat(p)
+	NeedsPolicy.arbitrate(self, p)
 	# A visiting guest walks: its visit's deadline keeps the margin for the rest.
 	if StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
 		p.late = false
