@@ -80,9 +80,10 @@ surface_material_override/0 = SubResource("Material_ground")
 bounds_half_extent = 260.0
 home_position = Vector3(-0.5, 0, -79.8)
 
-[node name="BuildMode" type="Node3D" parent="." node_paths=PackedStringArray("finances")]
+[node name="BuildMode" type="Node3D" parent="." node_paths=PackedStringArray("finances", "shell_view")]
 script = ExtResource("3_build")
 shell = ExtResource("15_shell")
+shell_view = NodePath("../ShellView")
 finances = NodePath("../Finances")
 initial_tool = 0
 
@@ -218,10 +219,11 @@ camera = NodePath("../TycoonCamera")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 
-[node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant", "day_ledger", "settlement", "save_game")]
+[node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant", "day_ledger", "settlement", "save_game", "clock")]
 layer = 2
 script = ExtResource("13_menu")
 build_mode = NodePath("../BuildMode")
+clock = NodePath("../SimClock")
 rescue_grant = NodePath("../RescueGrant")
 day_ledger = NodePath("../DayLedger")
 settlement = NodePath("../Settlement")

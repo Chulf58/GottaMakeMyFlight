@@ -61,6 +61,10 @@ enum Tool {
 	TOILET_ROOM,
 	TOILET_STALL,
 	TOILET_SINK,
+	KIOSK_ROOM,
+	KIOSK_COUNTER,
+	KIOSK_DISPLAY,
+	SCREEN,
 }
 
 const TOOL_ACTIONS := {
@@ -91,6 +95,9 @@ const TOOL_OBJECTS := {
 	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
 	Tool.TOILET_STALL: &"toilet_stall",
 	Tool.TOILET_SINK: &"toilet_sink",
+	Tool.KIOSK_COUNTER: &"kiosk_counter",
+	Tool.KIOSK_DISPLAY: &"kiosk_display",
+	Tool.SCREEN: ScreenCoverage.SCREEN_ID,
 }
 ## The security lane part tools, in flow order.
 const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
@@ -104,6 +111,7 @@ const TOOL_ROOMS := {
 	Tool.CAFE_ROOM: &"cafe",
 	Tool.BAG_ROOM: &"bag_room",
 	Tool.TOILET_ROOM: &"toilet",
+	Tool.KIOSK_ROOM: &"kiosk",
 }
 ## Tools under which the room under the pointer is followed for its panel.
 const ROOM_FOCUS_TOOLS := [
@@ -117,6 +125,9 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.TOILET_ROOM,
 	Tool.TOILET_STALL,
 	Tool.TOILET_SINK,
+	Tool.KIOSK_ROOM,
+	Tool.KIOSK_COUNTER,
+	Tool.KIOSK_DISPLAY,
 ]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
@@ -142,7 +153,13 @@ const SHELL_DOOR_HINTS := {
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag is applied on release: a rectangle, or the Belt's line.
 const AREA_TOOLS := [
-	Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM, Tool.BAG_ROOM, Tool.TOILET_ROOM, Tool.BELT
+	Tool.FLOOR,
+	Tool.REMOVE,
+	Tool.CAFE_ROOM,
+	Tool.BAG_ROOM,
+	Tool.TOILET_ROOM,
+	Tool.KIOSK_ROOM,
+	Tool.BELT,
 ]
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1
@@ -156,6 +173,9 @@ const VALID_TINT := Color(0.35, 0.9, 0.45, 0.5)
 const INVALID_TINT := Color(0.95, 0.3, 0.25, 0.5)
 const MARKER_TINT := Color(1.0, 0.85, 0.3, 0.7)
 const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
+## The cells a screen stand being placed would cover (ScreenCoverage; decision
+## boredom-screens-are-floor-standing-screen-stands-placed-like).
+const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
 
 @export var grid_size := BuildGrid.DEFAULT_SIZE
 ## When true the grid is centred on the world origin at height 0 and
@@ -167,6 +187,10 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 ## frame (grid_size, grid_centred and grid_origin are not used), the Entrance
 ## and Exit tools snap to its doors and load_snapshot() checks a save fits it.
 @export var shell: ShellDefinition
+## The terminal shell's cutaway, drawn over the same shell. Remove does not
+## pick an object the shell hides from the camera (ShellSight). main.tscn
+## sets it; without it nothing hides an object but the grid's own walls.
+@export var shell_view: ShellView
 ## Where building is paid from (BuildTransaction): a click or door costs its
 ## price, a Floor rectangle is all or nothing, a wall stroke stops when the
 ## money runs out, and removals refund a share of the saved price. main.tscn
@@ -203,6 +227,7 @@ var _valid_material := _ghost_material(VALID_TINT)
 var _invalid_material := _ghost_material(INVALID_TINT)
 var _marker_material := _ghost_material(MARKER_TINT)
 var _area_remove_material := _ghost_material(AREA_REMOVE_TINT)
+var _coverage_material := _ghost_material(COVERAGE_TINT)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
@@ -666,8 +691,8 @@ func wallet() -> Wallet:
 
 
 ## BuildGrid.validate() plus the entrance and exit rules (DoorPlacement.check()),
-## then whether the wallet can pay for the edits it takes
-## (BuildTransaction.check(), CANT_AFFORD).
+## no belt crossing and no lane part across a wall (LaneWall), then whether the
+## wallet can pay for the edits it takes (BuildTransaction.check(), CANT_AFFORD).
 func check(edit: BuildEdit) -> BuildResult:
 	var result := DoorPlacement.check(grid, edit, shell)
 	if not result.ok:
@@ -675,6 +700,9 @@ func check(edit: BuildEdit) -> BuildResult:
 	var crossing := BeltShaper.crossing_problem(grid, edit)
 	if crossing != null:
 		return crossing
+	var lane_wall := LaneWall.problem(grid, edit)
+	if lane_wall != null:
+		return lane_wall
 	return BuildTransaction.check(grid, DoorPlacement.edits_for(grid, edit), wallet())
 
 
@@ -724,11 +752,13 @@ func _start_drag(point: Vector3) -> void:
 
 
 ## What Remove takes at a ground point: the object the pointer is on (seen
-## from the camera, or on the point's cell), then a wall edge within
+## from the camera, or on the point's cell unless the terminal shell hides the
+## point, see ShellSight), then a wall edge within
 ## WALL_PICK_DISTANCE, then the room, then the floor.
 func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 	var object_id := _object_in_sight(point)
-	if object_id == 0:
+	var camera := get_viewport().get_camera_3d()
+	if object_id == 0 and not ShellSight.hides_point(shell_view, grid, camera, point):
 		object_id = grid.object_at(cell)
 	if object_id != 0:
 		return BuildEdit.remove_object(object_id)
@@ -747,7 +777,7 @@ func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 ## hides the ground behind it on screen, so a click on it picks a ground point
 ## beyond it, maybe beside a wall edge; the object the player sees under the
 ## pointer wins. An object behind a wall the view draws opaque
-## (_wall_in_sight) is not seen.
+## (_wall_in_sight) or behind the terminal shell (ShellSight) is not seen.
 func _object_in_sight(point: Vector3) -> int:
 	var camera := get_viewport().get_camera_3d()
 	if camera == null or camera.is_position_behind(point):
@@ -769,6 +799,8 @@ func _object_in_sight(point: Vector3) -> int:
 			seen = object_id
 	if seen != 0 and nearest >= _wall_in_sight(from, point) - SIGHT_SLACK_M:
 		return 0
+	if seen != 0 and ShellSight.in_sight(shell_view, grid, from, point):
+		return 0
 	return seen
 
 
@@ -788,7 +820,7 @@ func _object_box(object_id: int) -> AABB:
 
 
 ## How far from `from`, on the straight line to `to`, the first wall edge the
-## view draws opaque (BuildView.sight_height) stands in the way, or INF. The
+## view draws opaque (BuildView.sight_blocked) stands in the way, or INF. The
 ## line is walked across the grid lines it crosses, so the cost grows with the
 ## grid's width, not with the number of walls.
 func _wall_in_sight(from: Vector3, to: Vector3) -> float:
@@ -805,7 +837,7 @@ func _wall_in_sight(from: Vector3, to: Vector3) -> float:
 			var t := (line - start[axis]) / span[axis]
 			var at := start + span * t
 			var edge := _edge_on_line(axis, line, at)
-			if edge.z >= 0 and at.y < _view.sight_height(edge):
+			if edge.z >= 0 and _view.sight_blocked(edge, fposmod(at[2 - axis], 1.0) - 0.5, at.y):
 				nearest = minf(nearest, t * span.length())
 	return nearest
 
@@ -965,6 +997,8 @@ func _draw_ghost(edit: BuildEdit, material: Material) -> void:
 			)
 		BuildEdit.Kind.PLACE_OBJECT:
 			_ghost_object(edit.def_id, edit.cell, edit.facing, material)
+			for cell in coverage_preview(edit):
+				_ghost_tile(cell, _coverage_material).name = "Coverage"
 		BuildEdit.Kind.REMOVE_OBJECT:
 			var record := grid.get_object(edit.object_id)
 			_ghost_object(record["def"], record["anchor"], record["facing"], material)
@@ -983,9 +1017,18 @@ func _ghost_object(def_id: StringName, anchor: Vector2i, turn: int, material: Ma
 		_ghost_tile(spot, _marker_material)
 
 
-func _ghost_tile(cell: Vector2i, material: Material) -> void:
+## The cells the ghost tints as covered while `edit` places a screen stand:
+## ScreenCoverage.covered_cells() where it would stand; empty for any other edit.
+func coverage_preview(edit: BuildEdit) -> Array[Vector2i]:
+	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or edit.def_id != ScreenCoverage.SCREEN_ID:
+		return []
+	return ScreenCoverage.covered_cells(grid, edit.cell, edit.facing)
+
+
+func _ghost_tile(cell: Vector2i, material: Material) -> MeshInstance3D:
 	var tile := _ghost_box(Vector3(0.96, 0.08, 0.96), material)
 	tile.position = grid.cell_to_world(cell) + Vector3(0.0, 0.06, 0.0)
+	return tile
 
 
 ## One tinted slab over a rectangle of cells.

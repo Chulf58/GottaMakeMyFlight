@@ -47,7 +47,10 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 			approaches[seat["approach"]] = true
 		var counters: Array[Dictionary] = []
 		for id in ids:
-			if grid.get_object(id)["def"] != &"cafe_counter" or not _inside(grid, id, area):
+			if (
+				grid.get_object(id)["def"] != &"cafe_counter"
+				or not FacilitySlots.piece_inside(grid, id, area)
+			):
 				continue
 			var lane := _lane(grid, id, taken, approaches)
 			for cell in lane:
@@ -82,24 +85,12 @@ func seat(room_id: int, key: String) -> Dictionary:
 	return {}
 
 
-## Whether the whole footprint and interaction cell of an object lie in `area`
-## (the rule RoomRules counts pieces by).
-static func _inside(grid: BuildGrid, id: int, area: Rect2i) -> bool:
-	var record := grid.get_object(id)
-	var def := BuildCatalog.get_def(record["def"])
-	for cell in def.footprint(record["anchor"], record["facing"]):
-		if not area.has_point(cell):
-			return false
-	var spot := grid.interaction_cell(id)
-	return spot == BuildObjectDef.NO_CELL or area.has_point(spot)
-
-
 static func _seats(grid: BuildGrid, ids: Array[int], area: Rect2i) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for id in ids:
 		var record := grid.get_object(id)
 		var def := BuildCatalog.get_def(record["def"])
-		if def.seats.is_empty() or not _inside(grid, id, area):
+		if def.seats.is_empty() or not FacilitySlots.piece_inside(grid, id, area):
 			continue
 		for seat in def.seat_descriptors(record["anchor"], record["facing"]):
 			if not grid.is_walkable(seat["approach"]):

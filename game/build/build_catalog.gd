@@ -172,6 +172,25 @@ static func _build() -> void:
 	var sink := _add(&"toilet_sink", "Sink", Vector2i.ONE, Color(0.92, 0.94, 0.96), 1.0)
 	sink.has_interaction = true
 	sink.interaction_offset = Vector2i(0, 1)
+	# Kiosk pieces (Boredom 2/5), plain boxes until the Blender pieces (Boredom
+	# 5/5). The counter makes a kiosk work and serves nobody yet (decision
+	# first-shop-is-the-kiosk-it-works-without-a-server-and-a-shop); its
+	# interaction cell is the till spot in front, kept clear. A display stand
+	# is two cells wide; the cell in front of each is a browse slot (ShopLayout),
+	# and the first of them is its interaction cell, kept clear.
+	var till := _add(&"kiosk_counter", "Kiosk counter", Vector2i(2, 1), Color(0.86, 0.62, 0.4), 1.1)
+	till.has_interaction = true
+	till.interaction_offset = Vector2i(0, 1)
+	var display := _add(
+		&"kiosk_display", "Display stand", Vector2i(2, 1), Color(0.5, 0.7, 0.75), 1.6
+	)
+	display.has_interaction = true
+	display.interaction_offset = Vector2i(0, 1)
+	# A screen stand (Boredom 4/5; decision boredom-screens-are-floor-standing-
+	# screen-stands-placed-like): one floor cell, turned like seats, covering a
+	# fan in front of it (ScreenCoverage). Nobody uses it at a spot, so it has
+	# no interaction cell. A plain box until its Blender piece (Boredom 5/5).
+	_add(ScreenCoverage.SCREEN_ID, "Screen", Vector2i.ONE, Color(0.16, 0.2, 0.3), 2.27)
 
 
 ## Passengers step through a door along its axis only, so it is walk-through;

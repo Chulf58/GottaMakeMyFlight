@@ -15,7 +15,7 @@ extends RefCounted
 ## after the visit.
 
 ## Which facility runs a stage; NONE for the journey's own stages.
-enum Facility { NONE, CAFE, TOILET }
+enum Facility { NONE, CAFE, TOILET, SHOP }
 
 ## Where a passenger in a stage is. ROAD: walking in from the road, holding
 ## the entrance cell. FLOOR: on the grid, walking, queuing or in service.
@@ -69,6 +69,9 @@ const KINDS := {
 	Passenger.Stage.TOILET_USE: [Facility.TOILET, Location.FACILITY_SEAT, Pose.SEATED],
 	Passenger.Stage.TOILET_STANDING_UP: [Facility.TOILET, Location.FACILITY_SEAT, Pose.STANDING_UP],
 	Passenger.Stage.TOILET_EXIT: [Facility.TOILET, Location.FACILITY_SEAT, Pose.UPRIGHT],
+	# A browser stands on its slot cell, on the walkable floor.
+	Passenger.Stage.SHOP_WALK: [Facility.SHOP, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.SHOP_BROWSE: [Facility.SHOP, Location.FLOOR, Pose.UPRIGHT],
 }
 ## Stage -> Leg.
 const LEGS := {
@@ -101,6 +104,8 @@ const LEGS := {
 	Passenger.Stage.TOILET_USE: Leg.VISIT,
 	Passenger.Stage.TOILET_STANDING_UP: Leg.VISIT,
 	Passenger.Stage.TOILET_EXIT: Leg.VISIT,
+	Passenger.Stage.SHOP_WALK: Leg.VISIT,
+	Passenger.Stage.SHOP_BROWSE: Leg.VISIT,
 }
 
 
@@ -145,12 +150,14 @@ static func visit_facility(sim: PassengerSim, p: Passenger) -> Facility:
 		return Facility.CAFE
 	if sim.toilets.visit_of(p.id) != null:
 		return Facility.TOILET
+	if sim.shops.visit_of(p.id) != null:
+		return Facility.SHOP
 	return Facility.NONE
 
 
 ## How `p`'s journey goes on after its active visit: {"stage": the stage it
 ## resumes at, "cell": the cell it sets off from when the visit has one
-## (a cafe seat's or toilet stall's approach), else Passenger.NO_CELL}.
+## (a cafe seat's or toilet stall's approach, a kiosk browse slot), else Passenger.NO_CELL}.
 ## Empty with no visit.
 static func resume_of(sim: PassengerSim, p: Passenger) -> Dictionary:
 	match visit_facility(sim, p):
@@ -165,5 +172,11 @@ static func resume_of(sim: PassengerSim, p: Passenger) -> Dictionary:
 			return {
 				"stage": visit.resume_stage,
 				"cell": visit.stall.get("approach", Passenger.NO_CELL),
+			}
+		Facility.SHOP:
+			var visit := sim.shops.visit_of(p.id)
+			return {
+				"stage": visit.resume_stage,
+				"cell": visit.slot.get("approach", Passenger.NO_CELL),
 			}
 	return {}

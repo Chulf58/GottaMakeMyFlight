@@ -61,12 +61,15 @@ func _fresh() -> SecurityTestWorld:
 func test_the_fixture_is_a_version_7_save_mid_scan() -> void:
 	assert_int(int(_v7["save_version"])).is_equal(7)
 	assert_bool(_v7.has("security")).is_false()
+	for block in ["toilet", "shop"]:
+		assert_bool(_v7.has(block)).override_failure_message(block).is_false()
 	var serving := 0
 	for queue: Dictionary in _v7["queues"]:
 		serving = maxi(serving, int(queue["serving"]))
 	assert_int(serving).is_equal(_first)
 	for record: Dictionary in _v7["passengers"]:
-		assert_bool(record.has("security_phase")).is_false()
+		for field in ["security_phase", "toilet_need", "boredom", "shop_cooldown"]:
+			assert_bool(record.has(field)).override_failure_message(field).is_false()
 		if int(record["id"]) == _first:
 			assert_int(int(record["stage"])).is_equal(Passenger.Stage.SECURITY)
 			assert_bool(record["liquids"]).is_true()
@@ -106,6 +109,8 @@ func test_everyone_not_in_service_loads_with_no_phase() -> void:
 	assert_bool(_b.world.sim.from_snapshot(_v7)).is_true()
 	for id in _b.world.sim.passenger_ids():
 		var p := _b.world.passenger(id)
+		# Version 10 to 11: the boredom start from the id.
+		assert_int(p.boredom).is_equal(BoredomSim.start_of(id))
 		if id == _first:
 			continue
 		assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.NONE)

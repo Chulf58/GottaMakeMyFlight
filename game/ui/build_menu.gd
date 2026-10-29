@@ -49,7 +49,8 @@ const CATEGORIES := [
 	# wider than COLUMN_W, so they get a tray of their own, right after
 	# Security.
 	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
-	{"name": "Gates", "tools": [BuildMode.Tool.SEATS]},
+	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
+	{"name": "Gates", "tools": [BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN]},
 	{
 		"name": "Shops",
 		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
@@ -62,6 +63,13 @@ const CATEGORIES := [
 		"tools":
 		[BuildMode.Tool.TOILET_ROOM, BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK],
 	},
+	# The kiosk room and its two pieces (Boredom 2/5), a tray of their own for
+	# the same reason as the toilet's.
+	{
+		"name": "Kiosk",
+		"tools":
+		[BuildMode.Tool.KIOSK_ROOM, BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
+	},
 	# One Belt tool shapes itself (decision baggage-belts-are-one-auto-shaping-
 	# belt-tool-one-baggage-tray), so baggage fits one tray.
 	{
@@ -71,7 +79,7 @@ const CATEGORIES := [
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray.
-const REMOVE_CATEGORY := 9
+const REMOVE_CATEGORY := 10
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -84,12 +92,16 @@ const ITEMS := {
 	BuildMode.Tool.DESK: ["Check-in desk", "desk", ""],
 	BuildMode.Tool.SCANNER: ["Scanner", "scanner", ""],
 	BuildMode.Tool.SEATS: ["Seats", "seats", ""],
+	BuildMode.Tool.SCREEN: ["Screen", "screen_stand", ""],
 	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
 	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
 	BuildMode.Tool.TABLE: ["Table", "table", ""],
 	BuildMode.Tool.TOILET_ROOM: ["Toilet", "toilet_room", "2x3 min"],
 	BuildMode.Tool.TOILET_STALL: ["Toilet stall", "toilet_stall", ""],
 	BuildMode.Tool.TOILET_SINK: ["Sink", "toilet_sink", ""],
+	BuildMode.Tool.KIOSK_ROOM: ["Kiosk", "kiosk_room", "3x3 min"],
+	BuildMode.Tool.KIOSK_COUNTER: ["Kiosk counter", "kiosk_counter", ""],
+	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
@@ -107,13 +119,17 @@ const LANE_ITEMS := {
 const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
 ## Cards that say what the placed thing costs to run, in the plain hint style
 ## (costs are never red), in place of the "Click" hint: a toilet stall is
-## charged its upkeep every game day once its room is ready.
-const CARD_RUNNING_COSTS := {BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP}
+## charged its upkeep every game day once its room is ready, a screen stand
+## wherever it stands.
+const CARD_RUNNING_COSTS := {
+	BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP,
+	BuildMode.Tool.SCREEN: PriceTable.SCREEN_UPKEEP,
+}
 const RUNNING_COST_TEXT := "Upkeep %d/day"
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table", "toilet_room"]
+const PLACEHOLDER_THUMBNAILS := ["kiosk_room", "kiosk_counter", "kiosk_display", "screen_stand"]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
@@ -157,11 +173,17 @@ const GRANT_HOLD_S := 8.0
 ## Optional: when set, a successful load ends any message hold (the notices
 ## belong to the world that was replaced).
 @export var save_game: SaveGame
+## Optional: paused while build mode lasts (BuildSession).
+@export var clock: SimClock
 
 ## True while the hiring card is open; press_staff() changes it.
 var staff_open := false
 ## The Staff button at the end of the bar.
 var staff_button := Button.new()
+## Build mode: a tray open or a tool picked (decision build-mode-pauses-the-
+## game-while-a-build-tray-is-open-closin). The frame is its on-screen sign.
+var build_session := BuildSession.new()
+var build_frame := BuildModeFrame.new()
 
 var _open := NO_CATEGORY
 ## True while a category click clears the tool, so the tool_changed(NONE)
@@ -249,6 +271,11 @@ static func category_of(tool: BuildMode.Tool) -> int:
 
 func _ready() -> void:
 	layer = 2
+	build_session.build_mode = build_mode
+	build_session.clock = clock
+	build_session.changed.connect(build_frame.set_building)
+	add_child(build_session)
+	add_child(build_frame)
 	_build_bar()
 	_build_tray()
 	_build_status()
@@ -540,10 +567,23 @@ func _on_wages_paid(amount: int, owed: int) -> void:
 func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
+	_end_build_mode_after_load()
 	_pending_wages = ""
 	_holding = false
 	_held_status = build_mode.status_text() if build_mode != null else ""
 	_status.text = _held_status
+
+
+## The loaded world is a new one: build mode ends with the clock as loaded, the
+## tray and tool close, and the undo history goes (as OfferPanel._on_loaded does
+## for its sheet).
+func _end_build_mode_after_load() -> void:
+	build_session.abandon()
+	_open = NO_CATEGORY
+	_set_staff_open(false)
+	if build_mode != null:
+		build_mode.set_tool(BuildMode.Tool.NONE)
+	_sync()
 
 
 func _on_hold_timeout(generation: int) -> void:
@@ -577,6 +617,7 @@ func _sync() -> void:
 		_category_buttons[i].set_pressed_no_signal(on)
 	for key in _cards:
 		_cards[key].set_pressed_no_signal(key == tool)
+	build_session.set_building(_open != NO_CATEGORY or tool != BuildMode.Tool.NONE)
 
 
 ## Height, from the bottom edge, of the top of the tray, status and cost stack:
