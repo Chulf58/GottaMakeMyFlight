@@ -40,8 +40,9 @@ extends Node3D
 ## already shown, and every icon stays; the captions return as the camera moves
 ## in. The two staff-spot reasons are never hidden: one that would overlap is
 ## moved clear instead, up first and then to either side, staying inside the
-## view and off every icon; with no such spot it is reported once and kept at
-## the best one found. Otherwise the widest caption wins, then the leftmost.
+## view and off every icon; with no such spot no error is raised and it takes
+## the best one found, else is clamped into the view (see _clear_spot).
+## Otherwise the widest caption wins, then the leftmost.
 ## The layout runs only when the camera (its presence, identity, pose and field
 ## of view), the view size, the signs or (while a lane hint shows) the HUD
 ## controls' rectangles changed.
@@ -400,7 +401,10 @@ func _place_caption(i: int, view_size: Vector2) -> void:
 ## one found is used: inside the view and clear of the captions, else the
 ## caption's own place moved the shortest way into the view, over another
 ## caption if need be (a view with no room is a normal camera state, so no error).
-## A station whose icon is wholly outside the view keeps its own place.
+## A caption whose own place and icon are both wholly outside the view keeps its
+## place, so a station far off screen draws nothing. In a view smaller than the caption nothing can
+## be inside, so it is pinned to the view's left and top edges and overhangs the
+## right and bottom (the real view is far wider than a caption; only a test is not).
 func _clear_spot(i: int, view_size: Vector2) -> Rect2:
 	var view := Rect2(Vector2.ZERO, view_size)
 	var text := _labels[i].text
@@ -424,7 +428,7 @@ func _clear_spot(i: int, view_size: Vector2) -> Rect2:
 			if not best_found:
 				best = rect
 				best_found = true
-	if best_found or not view.intersects(_icons[i]):
+	if best_found or not (view.intersects(best) or view.intersects(_icons[i])):
 		return best
 	var low := view.position
 	var high := (view.end - best.size).max(low)

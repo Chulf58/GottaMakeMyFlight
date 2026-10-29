@@ -103,16 +103,26 @@ func _point_of(station: int) -> Vector2:
 	return _camera().unproject_position(_markers.closed_sign_for(station).global_position)
 
 
-## The rectangle a showing caption covers, with any lift or side shift it was given.
+## The rectangle a showing caption covers, with any lift or side shift it was
+## given. A sign too near the view's edge has its Label3D moved to the margin and
+## its offset adjusted to match, so the rectangle is taken from the label's own
+## position, which is the sign's point everywhere else.
 func _rect_of(station: int) -> Rect2:
 	var caption := _caption_of(station)
 	var lift := caption.offset.y - MissMarkers.SIGN_PX - MissMarkers.CAPTION_GAP_PX
-	return MissMarkers.caption_rect(_point_of(station), caption.text, lift, caption.offset.x)
+	var point := _camera().unproject_position(caption.global_position)
+	return MissMarkers.caption_rect(point, caption.text, lift, caption.offset.x)
 
 
 ## The screen rectangle of a station's icon: a SIGN_PX square standing on its point.
 func _icon_rect_of(station: int) -> Rect2:
 	var point := _point_of(station)
+	var side := MissMarkers.SIGN_PX
+	return Rect2(point.x - side / 2.0, point.y - side, side, side)
+
+
+## The icon rectangle of a sign standing on a given screen point.
+func _icon_rect_of_at(point: Vector2) -> Rect2:
 	var side := MissMarkers.SIGN_PX
 	return Rect2(point.x - side / 2.0, point.y - side, side, side)
 
@@ -394,6 +404,72 @@ func test_staff_spot_captions_crowded_into_a_tiny_view_all_stay_inside_it() -> v
 			at_its_own_place += 1
 	# Control: the view really had room for one caption at its own place.
 	assert_int(at_its_own_place).is_greater(0)
+
+
+## The station's icon stands just past the bottom edge, so its caption, which
+## sits above the icon, still overlaps the view, and the one clear spot left in
+## the view is taken by the first caption placed. The others are clamped inside
+## the view, not drawn cut off at its edge, and no error is raised.
+func test_a_caption_whose_icon_is_just_past_the_edge_is_clamped_when_the_spots_are_taken() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var text := MissMarkers.UNREACHABLE_CAPTION
+	var size := MissMarkers.caption_size(text)
+	var view := Rect2(Vector2.ZERO, Vector2(size.x + 40.0, 100.0))
+	_port.size = Vector2i(view.size)
+	var point := Vector2(view.size.x / 2.0, view.size.y + MissMarkers.SIGN_PX + 14.0)
+	var stations: Array[int] = []
+	stations.assign(MissSignals.closed_stations(_world.sim))
+	stations.resize(4)
+	for station in stations:
+		_place_sign(station, point)
+		_caption_of(station).text = text
+	# Control: the icon is wholly outside the view and its own caption overlaps it.
+	assert_bool(view.intersects(_icon_rect_of_at(point))).is_false()
+	assert_bool(view.intersects(MissMarkers.caption_rect(point, text))).is_true()
+	assert_bool(view.encloses(MissMarkers.caption_rect(point, text))).is_false()
+	await assert_error(func() -> void: _nudge_camera()).is_success()
+	var clamped := 0
+	for station in stations:
+		var rect := _rect_of(station)
+		print("edge caption %s in view %s" % [rect, view])
+		assert_bool(_caption_of(station).visible).is_true()
+		assert_bool(view.encloses(rect)).is_true()
+		if rect.end.y > view.size.y - 15.0:
+			clamped += 1
+	# Control: some captions found no clear spot and went down the clamp path (the
+	# lifted one ends higher), so the view really was out of spots.
+	assert_int(clamped).is_greater(0)
+
+
+## A view smaller than the caption has no place inside it. The caption is
+## pinned to the view's left and top edges, so it overhangs the right (this is
+## the old 100x100 case), and no error is raised.
+func test_a_caption_wider_than_the_view_is_pinned_to_its_left_and_top_edges() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var station: int = MissSignals.closed_stations(_world.sim)[0]
+	var text := MissMarkers.UNREACHABLE_CAPTION
+	_caption_of(station).text = text
+	var small := Vector2i(100, 100)
+	# Control: the caption is wider than the view, so no spot can fit.
+	assert_float(MissMarkers.caption_size(text).x).is_greater(small.x)
+	_port.size = small
+	_place_sign(station, Vector2(50.0, 100.0))
+	await assert_error(func() -> void: _nudge_camera()).is_success()
+	var rect := _rect_of(station)
+	print("pinned caption %s in view %s" % [rect, small])
+	assert_bool(_caption_of(station).visible).is_true()
+	assert_float(rect.position.x).is_equal_approx(0.0, 0.01)
+	assert_float(rect.position.y).is_equal_approx(0.0, 0.01)
+	assert_float(rect.end.x).is_greater(small.x)
+	# Laid out again, and after the view grows and shrinks: the same, no error.
+	_nudge_camera()
+	_port.size = Vector2i(1920, 1080)
+	_nudge_camera()
+	_port.size = small
+	_place_sign(station, Vector2(50.0, 100.0))
+	await assert_error(func() -> void: _nudge_camera()).is_success()
+	assert_bool(_caption_of(station).visible).is_true()
+	assert_float(_rect_of(station).position.x).is_equal_approx(0.0, 0.01)
 
 
 ## Control: with room, the caption keeps the spot the layout lifted it to, clear
