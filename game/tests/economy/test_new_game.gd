@@ -101,7 +101,7 @@ func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
 			+ "Hire a check-in agent\nHire a security officer"
 		)
 	)
-	assert_str(_opened["hint_open"]).is_equal("")
+	assert_str(_opened["hint_open"]).is_equal("Open! Starter contract: Gotta Air to Oslo, daily")
 
 
 ## Opened at tick 1, the starter's first state is at 2420 (the lead, rounded

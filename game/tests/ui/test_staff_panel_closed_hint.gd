@@ -3,7 +3,8 @@ extends GdUnitTestSuite
 ## While the airport is closed the staff panel's hint names what keeps it
 ## closed (decision airport-opening-design-stays-open-once-opened-starter-
 ## flight-placed-after-opening): no working path, no check-in agent at a desk
-## or no security officer at a scanner or lane. The line goes once the airport opens.
+## or no security officer at a scanner or lane. The closed line is replaced by
+## the starter contract line once the airport opens (test_staff_panel_open_cue.gd).
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
@@ -84,8 +85,10 @@ func test_the_hint_follows_the_blocker_until_the_airport_opens() -> void:
 	_until_on_duty(SECURITY)
 	_w.step()
 	assert_bool(_gate.is_open()).is_true()
-	assert_str(_panel.hint_label().text).is_equal("")
-	assert_bool(_panel.hint_label().visible).is_false()
+	assert_str(_panel.hint_label().text).is_equal(
+		"Open! Starter contract: Gotta Air to Oslo, daily"
+	)
+	assert_bool(_panel.hint_label().visible).is_true()
 
 
 ## Loading an open save refreshes the hint with no staff or grid event.

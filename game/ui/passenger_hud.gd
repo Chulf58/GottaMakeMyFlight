@@ -3,7 +3,8 @@ extends CanvasLayer
 ## The passenger HUD. Top-right: the in-game day and clock, made and missed
 ## counts, today's departures (DepartureList), and the speed buttons (Space
 ## toggles the pause, Shift+1/2/3 set the speed; plain number keys stay the
-## build tool keys).
+## build tool keys). On the left edge, the optional DeparturesBoard (B shows
+## and hides it).
 ## Bottom-left: the followed passenger's story, kept left of BuildMenu's
 ## centre column and growing upward when it wraps. Bottom-right: a collapsed
 ## Debug panel (a 300-passenger batch, a starter terminal on the Toon doors B
@@ -90,7 +91,10 @@ const STAGE_TEXT := {
 ## Its loaded signal re-frames the start view on the loaded world.
 @export var save_game: SaveGame
 @export var build_mode: BuildMode
+## Where the departures board keeps its on/off choice; tests use their own.
+var departures_settings_path := DeparturesBoard.SETTINGS_PATH
 
+var _departures_board := DeparturesBoard.new()
 var _counts_label := Label.new()
 var _departures_label := Label.new()
 var _seed_label := Label.new()
@@ -154,6 +158,10 @@ func _ready() -> void:
 	_result.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_result.position = Vector2(-460.0, RESULT_TOP)
 	add_child(_result)
+	_departures_board.flights = flights
+	_departures_board.clock = clock
+	_departures_board.settings_path = departures_settings_path
+	add_child(_departures_board)
 	if flights != null:
 		flights.doors_closed.connect(_on_doors_closed)
 	_build_debug()
@@ -235,6 +243,7 @@ func refresh() -> void:
 	_time_label.text = time_text()
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
+	_departures_board.refresh()
 	_seed_label.text = seed_text()
 	_seed_label.visible = _seed_label.text != ""
 	_status_label.text = _status
