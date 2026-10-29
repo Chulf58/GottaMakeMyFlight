@@ -287,21 +287,32 @@ def build_checkin_desk(root, c):
     box("Sign_Face", (0.56, 0.28, 1.50), (0.92, 0.32, 1.78), "yellow", root, c, bevel=0.012)
 
 
+# The basic scanner booth (decision basic-scanner-booth-passengers-carry-their-bags-
+# in-front-and): the blue strips' inner face is the clear passage's edge, 0.41 m from
+# the centre line (passengers cross it with their bags in front and their free arms
+# tucked in). Nothing reaches past SCANNER_OUTER, so a wall on the cell edge (face
+# 0.44 m, trim 0.43 m, post 0.42 m from the cell centre) never meets the booth.
+SCANNER_CLEAR_HALF = 0.41
+SCANNER_PANEL_IN = 0.414
+SCANNER_OUTER = 0.419
+
+
 def build_security_scanner(root, c):
-    # Panels x 0.36..0.42 with 1 cm inner strips: a 0.70 m clear passage.
+    # Thin panels SCANNER_PANEL_IN..SCANNER_OUTER with 4 mm blue strips inside them.
     for side, s in (("L", -1.0), ("R", 1.0)):
-        x0, x1 = sorted((s * 0.36, s * 0.42))
-        box("Arch_Panel_" + side, (x0, -0.30, 0), (x1, 0.30, 2.2), "metal", root, c, bevel=0.02)
-        xs = sorted((s * 0.36, s * 0.35))
+        x0, x1 = sorted((s * SCANNER_PANEL_IN, s * SCANNER_OUTER))
+        box("Arch_Panel_" + side, (x0, -0.30, 0), (x1, 0.30, 2.2), "metal", root, c, bevel=0.002)
+        xs = sorted((s * SCANNER_CLEAR_HALF, s * SCANNER_PANEL_IN))
         box("Arch_Strip_" + side, (xs[0], -0.22, 0.30), (xs[1], 0.22, 2.0), "blue", root, c)
-        px0, px1 = sorted((s * 0.37, s * 0.42))
+        px0, px1 = sorted((s * SCANNER_CLEAR_HALF, s * SCANNER_OUTER))
         for end, y0, y1 in (("F", -0.92, -0.30), ("B", 0.30, 0.92)):
             ry = -0.895 if end == "F" else 0.895
             box("Rail_Post_%s%s" % (side, end), (px0, ry - 0.025, 0), (px1, ry + 0.025, 0.92), "frame", root, c)
             box("Rail_%s%s" % (side, end), (px0, y0, 0.86), (px1, y1, 0.92), "yellow", root, c)
-    box("Arch_Beam", (-0.42, -0.32, 2.2), (0.42, 0.32, 2.42), "frame", root, c, bevel=0.02)
+    box("Arch_Beam", (-SCANNER_OUTER, -0.32, 2.2), (SCANNER_OUTER, 0.32, 2.42), "frame", root, c, bevel=0.02)
     box("Arch_Lamp", (-0.08, -0.34, 2.27), (0.08, -0.32, 2.35), "lamp_green", root, c)
-    box("Scanner_Mat", (-0.35, -0.92, 0), (0.35, 0.92, 0.012), "dark", root, c)
+    mat = SCANNER_CLEAR_HALF - 0.01
+    box("Scanner_Mat", (-mat, -0.92, 0), (mat, 0.92, 0.012), "dark", root, c)
 
 
 # The sit clips put the seat contact at about 0.53 m (article toon-asset-pipeline):
@@ -367,7 +378,9 @@ PIECES = {
     "wall_glass": (build_wall_glass, "edge", (-0.5, -0.07, 0.0), (0.5, 0.07, WALL_H)),
     "wall_door": (build_wall_door, "edge", (-0.86, -0.15, 0.0), (0.86, 0.075, WALL_H)),
     "checkin_desk": (build_checkin_desk, (2, 1), (-0.92, -0.42, 0.0), (0.92, 0.50, 1.78)),
-    "security_scanner": (build_security_scanner, (1, 2), (-0.42, -0.92, 0.0), (0.42, 0.92, 2.42)),
+    "security_scanner": (
+        build_security_scanner, (1, 2), (-SCANNER_OUTER, -0.92, 0.0), (SCANNER_OUTER, 0.92, 2.42),
+    ),
     "seat_row": (build_seat_row, (3, 1), (-1.42, -0.32, 0.0), (1.42, 0.30, 0.88)),
     "kiosk": (build_kiosk, (1, 1), (-0.30, -0.22, 0.0), (0.30, 0.24, 1.62)),
     "info_screen": (build_info_screen, (1, 1), (-0.42, -0.26, 0.0), (0.42, 0.26, 2.27)),

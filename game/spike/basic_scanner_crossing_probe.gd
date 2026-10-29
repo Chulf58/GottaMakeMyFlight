@@ -5,7 +5,8 @@ extends SceneTree
 ## main/main.tscn with a new random sim seed (printed), builds the starter
 ## terminal through the HUD (two basic scanners), staffs it and opens the
 ## airport, then sends passengers with chosen carry-on (each bag kind, two
-## bags, an alarm and a liquids repack) to security while the game runs.
+## bags, an alarm and a liquids repack, no bags) to security while the game
+## runs.
 ##
 ## Every frame, every passenger near a booth is checked in the booth's own
 ## frame: points of its drawn body and of every bag it holds or has on the
@@ -14,15 +15,24 @@ extends SceneTree
 ## sole or a bag standing on a 1.2 cm mat is not a clip. Clearance is the gap
 ## from each point to the nearest part beside it (side parts) or above it
 ## (beam, lamp), at the same height and depth (a diagnostic on part bounds,
-## not a penetration depth). The contact count is a sampled check: body
-## vertices and bag surface points 4 cm apart, so a part thinner than that
-## crossing a triangle between its points is not seen. Any contact fails the
-## probe; so does a sent passenger that never crossed mid-booth, an alarm or
-## liquids passenger that never repacked, or a bag kind never carried through. Control: a bag set
-## into a side panel must be inside its meshes. Two plates of one crossing
-## (mid-booth, leaving) prove the passenger is in frame and
-## unblocked before they are saved. Any failure prints PROBE_INVALID and
-## exits 1.
+## not a penetration depth). The contact count is a sampled check (body
+## vertices, bag surface points 4 cm apart), so for a passenger in the passage
+## every point past the passage edge is also traced in to the edge: a booth
+## part crossed on the way is a clip through a part thinner than the points
+## are apart. Body points inside the passenger's own carried bags are counted
+## too: a roller lifted into the hand or lowered to the pull on the approach
+## or past the exit and a bag picked up from the floor after the repack (both
+## touch the body on the committed carry code too), and
+## a hard case turning from the side to the front on the approach (the thigh
+## in the case for a frame; accepted by the user 2026-10-29, "Accept, merge
+## now") are printed with their frame count and distance from the booth; any
+## other fails. Any contact or crossing fails the probe; so does a
+## sent passenger that never crossed mid-booth, an alarm or liquids passenger
+## that never repacked, or a bag kind never carried through. Controls: a bag
+## set into a side panel must be inside its meshes, and a point just past the
+## panel must cross it. Two plates of one crossing (mid-booth, leaving) prove
+## the passenger and its bags are in frame and unblocked before they are
+## saved. Any failure prints PROBE_INVALID and exits 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -55,6 +65,8 @@ const ROLES := [
 	[SecurityLooks.Kind.ROLLER, 2, false, false],
 	[-1, 1, false, true],
 	[-1, 2, true, false],
+	[-1, 0, false, false],
+	[SecurityLooks.Kind.BACKPACK, 1, false, false],
 ]
 const KIND_NAMES := ["case", "backpack", "shoulder", "roller"]
 
@@ -74,6 +86,8 @@ var _sent: Array[int] = []
 ## Passenger id -> stats Dictionary.
 var _stats := {}
 var _kinds_crossed := {}
+## Passenger id -> the bones of its first body-in-own-bag contact.
+var _self_bones := {}
 var _plated := false
 var _plates_saved := 0
 ## True while the crossing plates are being taken.
@@ -192,7 +206,7 @@ func _booth(node: Node3D) -> Array:
 		_invalid("expected one floor mat in the booth, found %d" % mats)
 	for part in parts:
 		print("BOOTH_PART ", part[0])
-	return [node, to_booth, parts]
+	return [node, to_booth, parts, side_in]
 
 
 ## Triangle soup `faces` split into connected parts: triangles sharing a
@@ -248,6 +262,13 @@ func _control() -> void:
 	print("CONTROL bag_in_side_panel_points=%d" % hits)
 	if hits == 0:
 		_invalid("the control bag in a side panel found no contact, so the check is blind")
+	# A point just past the side panel's outside, mid-booth at hip height, has
+	# the panel between it and the passage: a crossing, though inside nothing.
+	var past := PackedVector3Array([node.global_transform * Vector3(best.end.x + 0.01, 1.0, 0.0)])
+	var crossed := _through(past, booth)
+	print("CONTROL point_past_the_panel_crossings=%d inside=%d" % [crossed, _contacts(past, booth)])
+	if crossed == 0:
+		_invalid("the control point past the panel found no crossing, so the check is blind")
 
 
 func _cross() -> void:
@@ -310,12 +331,21 @@ func _check(id: int) -> void:
 		if absf(local.x) > NEAR.x or absf(local.z) > NEAR.z:
 			continue
 		var p := _sim.get_passenger(id)
-		var points := CarryContact.body_points(body, [])
+		var owned := CarryContact.body_points_owned(body, [])
+		var points: PackedVector3Array = owned[0]
 		var bag_points := PackedVector3Array()
 		var props: Dictionary = _views.carry_on_props().props_of(id)
 		var bags: Array[Node3D] = props["bags"]
 		var homes := SecurityLooks.bag_homes(_sim, p)
 		var hand_kinds := []
+		var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p))
+		var self_hits := 0
+		var roller_hits := 0
+		var turn_hits := 0
+		var pickup_hits := 0
+		var props_now := _views.carry_on_props()
+		var front_now := props_now.front_weight_of(id)
+		var turning := front_now > 0.0 and front_now < 1.0
 		for i in bags.size():
 			if homes[i] == SecurityLooks.Home.TRAY and p.station != 0:
 				_invalid("passenger %d has a tray bag at a basic scanner" % id)
@@ -323,11 +353,47 @@ func _check(id: int) -> void:
 				bag_points.append_array(CarryChecks.surface(bags[i]))
 				if homes[i] == SecurityLooks.Home.HAND:
 					hand_kinds.append(props["kinds"][i])
+					var hits := CarryContact.inside_meshes(own, bags[i])
+					self_hits += hits
+					if props["kinds"][i] == SecurityLooks.Kind.ROLLER:
+						roller_hits += hits
+					elif turning:
+						turn_hits += hits
+					elif p.incident_resolved and props_now.transfer_progress(id, i) < 1.0:
+						# Picked up from the floor after the repack, on its way
+						# into the hand.
+						pickup_hits += hits
+					if hits > 0 and not _self_bones.has(id):
+						var grip := CarryChecks.gripping(_sim, p)
+						_self_bones[id] = CarryChecks.contact_bones(body, grip, bags[i])
+						print(
+							(
+								"SELF passenger=%d bones=%s along_m=%.2f stage=%d phase=%d moving=%s front=%.2f"
+								% [
+									id,
+									_self_bones[id],
+									local.z,
+									p.stage,
+									p.security_phase,
+									p.is_moving(),
+									_views.carry_on_props().front_weight_of(id)
+								]
+							)
+						)
 		var s: Dictionary = _stats.get(id, {})
 		if s.is_empty():
 			s = {
 				"frames": 0,
 				"mid": 0,
+				"self_contacts": 0,
+				"self_outside": 0,
+				"turn_points": 0,
+				"turn_frames": 0,
+				"turn_along": [],
+				"pickup_points": 0,
+				"through": 0,
+				"mid_reach": 0.0,
+				"mid_bone": "",
 				"body_contacts": 0,
 				"bag_contacts": 0,
 				"body_gap": INF,
@@ -342,8 +408,32 @@ func _check(id: int) -> void:
 			}
 			_stats[id] = s
 		s["frames"] += 1
+		# On the approach and past the exit a roller's lift into the hand and its
+		# lowering to the pull, and a bag picked up from the floor after the
+		# repack, touch the body on the committed carry code too (measured
+		# against git HEAD; the pickup ruled pre-existing 2026-10-29): those are
+		# printed. Every other body-in-bag point, and any inside the booth's
+		# length, fails.
+		if absf(local.z) > 0.95:
+			s["self_outside"] += roller_hits
+			s["pickup_points"] += pickup_hits
+			self_hits -= roller_hits + turn_hits + pickup_hits
+			if turn_hits > 0:
+				s["turn_points"] += turn_hits
+				s["turn_frames"] += 1
+				s["turn_along"].append(snappedf(absf(local.z), 0.01))
+		s["self_contacts"] += self_hits
+		if self_hits > 0:
+			print(
+				(
+					"SELF_FAIL passenger=%d points=%d along_m=%.2f front=%.2f kinds=%s stage=%d"
+					% [id, self_hits, local.z, front_now, props["kinds"], p.stage]
+				)
+			)
 		s["phases"][p.security_phase] = true
 		s["body_contacts"] += _contacts(points, booth, s["parts"])
+		if absf(local.x) < 0.3 and absf(local.z) < 1.2:
+			s["through"] += _through(points, booth) + _through(bag_points, booth)
 		s["bag_contacts"] += _contacts(bag_points, booth, s["parts"])
 		var gaps := _gaps(points, booth)
 		var bag_gaps := _gaps(bag_points, booth)
@@ -355,6 +445,11 @@ func _check(id: int) -> void:
 		var inside := absf(local.z) < 0.6 and absf(local.x) < 0.3
 		if inside:
 			s["mid"] += 1
+			for k in points.size():
+				var x := absf(((booth[1] as Transform3D) * points[k]).x)
+				if x > s["mid_reach"]:
+					s["mid_reach"] = x
+					s["mid_bone"] = (owned[1] as PackedStringArray)[k]
 			for k in hand_kinds:
 				_kinds_crossed[KIND_NAMES[k]] = true
 		if (
@@ -365,6 +460,42 @@ func _check(id: int) -> void:
 		):
 			_plated = true
 			_plate_crossing.call_deferred(id, booth)
+
+
+## Points of a passenger in the passage that lie past the passage edge with a
+## booth part between them and the passage: the straight line from each point
+## in to the edge (at its height and depth) crosses a part's mesh. This finds a
+## body or bag through a part thinner than the points are apart, which the
+## containment count can miss; a point under a rail, past the edge but with
+## nothing in between, is not one.
+func _through(points: PackedVector3Array, booth: Array) -> int:
+	var count := 0
+	var edge: float = booth[3] - 0.002
+	var to_world: Transform3D = (booth[1] as Transform3D).affine_inverse()
+	for pt in points:
+		var lp: Vector3 = (booth[1] as Transform3D) * pt
+		if absf(lp.x) <= edge or absf(lp.z) > 0.95:
+			continue
+		var inner := to_world * Vector3(signf(lp.x) * edge, lp.y, lp.z)
+		for part in booth[2]:
+			var to_mesh: Transform3D = part[2]
+			var a: Vector3 = to_mesh * pt
+			var b: Vector3 = to_mesh * inner
+			var faces: PackedVector3Array = part[3]
+			var hit := false
+			for i in range(0, faces.size() - 2, 3):
+				if (
+					Geometry3D.segment_intersects_triangle(
+						a, b, faces[i], faces[i + 1], faces[i + 2]
+					)
+					!= null
+				):
+					hit = true
+					break
+			if hit:
+				count += 1
+				break
+	return count
 
 
 ## Points inside a booth mesh, counted per part into `parts` when given.
@@ -446,7 +577,8 @@ func _plate_both(id: int, booth: Array) -> void:
 func _plate_best(id: int, booth: Array, name: String) -> bool:
 	var node: Node3D = booth[0]
 	var owners: Array[Node] = [_main.get_node("Airside/Terminal"), _main.get_node("BuildMode")]
-	for yaw in [0.5, 0.5 + PI / 2.0, 0.5 + PI, 0.5 - PI / 2.0]:
+	# Facing the walker first, so its front-carried bag and hands show.
+	for yaw in [0.5 + PI, 0.5 + PI / 2.0, 0.5, 0.5 - PI / 2.0]:
 		_rig.stop_follow()
 		_rig.position = Vector3(node.global_position.x, 0.0, node.global_position.z)
 		_rig.yaw = yaw
@@ -530,13 +662,31 @@ func _save(img: Image, name: String) -> void:
 
 
 func _report() -> void:
-	var totals := {"body": 0, "bag": 0, "frames": 0}
+	var totals := {
+		"body": 0,
+		"bag": 0,
+		"frames": 0,
+		"self": 0,
+		"self_outside": 0,
+		"through": 0,
+		"turn_points": 0,
+		"turn_frames": 0,
+		"pickup": 0,
+	}
+	var turn_along: Array = []
 	var worst := Vector4(INF, INF, INF, 0.0)
 	for id in _stats:
 		var s: Dictionary = _stats[id]
 		totals["body"] += s["body_contacts"]
 		totals["bag"] += s["bag_contacts"]
 		totals["frames"] += s["frames"]
+		totals["self"] += s["self_contacts"]
+		totals["self_outside"] += s["self_outside"]
+		totals["turn_points"] += s["turn_points"]
+		totals["turn_frames"] += s["turn_frames"]
+		totals["pickup"] += s["pickup_points"]
+		turn_along.append_array(s["turn_along"])
+		totals["through"] += s["through"]
 		worst = Vector4(
 			minf(worst.x, s["body_gap"]),
 			minf(worst.y, s["bag_gap"]),
@@ -548,7 +698,8 @@ func _report() -> void:
 				(
 					"CROSSING passenger=%d sent=%s kinds=%s frames=%d mid=%d phases=%s body_contacts=%d"
 					+ " bag_contacts=%d parts=%s body_gap_m=%.3f bag_gap_m=%.3f head_gap_m=%.3f"
-					+ " body_reach_m=%.3f bag_reach_m=%.3f"
+					+ " body_reach_m=%.3f bag_reach_m=%.3f mid_reach_m=%.3f mid_bone=%s"
+					+ " body_in_own_bag=%d through_parts=%d"
 				)
 				% [
 					id,
@@ -564,7 +715,11 @@ func _report() -> void:
 					s["bag_gap"],
 					s["head_gap"],
 					s["reach"],
-					s["bag_reach"]
+					s["bag_reach"],
+					s["mid_reach"],
+					s["mid_bone"],
+					s["self_contacts"],
+					s["through"],
 				]
 			)
 		)
@@ -593,6 +748,25 @@ func _report() -> void:
 			_invalid("no %s carried through a booth" % kind)
 	if totals["frames"] < 100:
 		_invalid("only %d passenger frames near a booth" % totals["frames"])
+	print(
+		(
+			(
+				"BODY_IN_OWN_BAG failing=%d roller_moves_outside_booth=%d"
+				+ " repack_pickup_outside_booth=%d (reported) THROUGH_PARTS=%d"
+			)
+			% [totals["self"], totals["self_outside"], totals["pickup"], totals["through"]]
+		)
+	)
+	print(
+		(
+			"CASE_TURN_IN_OWN_BAG points=%d frames=%d distance_from_booth_centre_m=%s (reported, accepted)"
+			% [totals["turn_points"], totals["turn_frames"], turn_along]
+		)
+	)
+	if totals["self"] > 0:
+		_invalid("a body point lies inside its own carried bag: %d" % totals["self"])
+	if totals["through"] > 0:
+		_invalid("a body or bag point lies past a booth part: %d" % totals["through"])
 	if totals["body"] > 0 or totals["bag"] > 0:
 		_invalid(
 			(
