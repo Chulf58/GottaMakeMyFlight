@@ -11,6 +11,17 @@ extends GdUnitTestSuite
 
 const SAVE_TICK := 205
 const TRAIT_FIELDS := ["carry_on", "liquids", "alarm"]
+## Added after version 7, so a version 6 save holds none of them.
+const LATER_FIELDS := [
+	"security_phase",
+	"security_work",
+	"incident_resolved",
+	"toilet_need",
+	"toilet_cooldown",
+	"boredom",
+	"shop_cooldown"
+]
+const LATER_BLOCKS := ["security", "toilet", "shop"]
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
@@ -37,6 +48,8 @@ func before_test() -> void:
 	for id in _a.sim.passenger_ids():
 		_a.passenger(id).toilet_need = ToiletSim.migrated_need(id)
 		_a.passenger(id).toilet_cooldown = 0
+		# And the boredom version 11 migration gives it.
+		_a.passenger(id).boredom = BoredomSim.start_of(id)
 	_v7 = SecurityTestWorld.as_v7(_json(_a.sim.to_snapshot()))
 
 
@@ -89,9 +102,11 @@ func test_the_fixture_is_a_real_mid_service_save_without_traits() -> void:
 	var data := _v6()
 	assert_int(int(data["save_version"])).is_equal(6)
 	var serving := 0
+	for block in LATER_BLOCKS:
+		assert_bool(data.has(block)).override_failure_message(block).is_false()
 	for record: Dictionary in data["passengers"]:
-		for field in TRAIT_FIELDS:
-			assert_bool(record.has(field)).is_false()
+		for field in TRAIT_FIELDS + LATER_FIELDS:
+			assert_bool(record.has(field)).override_failure_message(field).is_false()
 		serving += int(int(record["stage"]) == Passenger.Stage.CHECKIN)
 	assert_int(data["passengers"].size()).is_greater(0)
 	assert_int(serving).is_greater(0)
@@ -103,6 +118,7 @@ func test_a_version_6_save_loads_with_zero_bags_and_no_flags() -> void:
 	assert_int(_b.sim.passenger_ids().size()).is_equal(_a.sim.passenger_ids().size())
 	for id in _b.sim.passenger_ids():
 		var p := _b.passenger(id)
+		assert_int(p.boredom).is_equal(BoredomSim.start_of(id))
 		assert_int(p.carry_on).is_equal(0)
 		assert_bool(p.liquids).is_false()
 		assert_bool(p.alarm).is_false()

@@ -332,6 +332,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		node.rotation.y = atan2(out.x, out.y)
 	elif works != Vector2.ZERO:
 		node.rotation.y = atan2(works.x, works.y)
+	elif sim.shops.browse_facing(p) != Vector2i.ZERO:
+		# Browsing at a kiosk: face the display stand.
+		var shelf := sim.shops.browse_facing(p)
+		node.rotation.y = atan2(shelf.x, shelf.y)
 	elif not moving and sim.cafes.counter_facing(p) != Vector2i.ZERO:
 		# Waiting in a cafe queue or ordering: face the counter.
 		var ahead := sim.cafes.counter_facing(p)

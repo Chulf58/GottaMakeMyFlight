@@ -61,6 +61,9 @@ enum Tool {
 	TOILET_ROOM,
 	TOILET_STALL,
 	TOILET_SINK,
+	KIOSK_ROOM,
+	KIOSK_COUNTER,
+	KIOSK_DISPLAY,
 }
 
 const TOOL_ACTIONS := {
@@ -91,6 +94,8 @@ const TOOL_OBJECTS := {
 	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
 	Tool.TOILET_STALL: &"toilet_stall",
 	Tool.TOILET_SINK: &"toilet_sink",
+	Tool.KIOSK_COUNTER: &"kiosk_counter",
+	Tool.KIOSK_DISPLAY: &"kiosk_display",
 }
 ## The security lane part tools, in flow order.
 const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
@@ -104,6 +109,7 @@ const TOOL_ROOMS := {
 	Tool.CAFE_ROOM: &"cafe",
 	Tool.BAG_ROOM: &"bag_room",
 	Tool.TOILET_ROOM: &"toilet",
+	Tool.KIOSK_ROOM: &"kiosk",
 }
 ## Tools under which the room under the pointer is followed for its panel.
 const ROOM_FOCUS_TOOLS := [
@@ -117,6 +123,9 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.TOILET_ROOM,
 	Tool.TOILET_STALL,
 	Tool.TOILET_SINK,
+	Tool.KIOSK_ROOM,
+	Tool.KIOSK_COUNTER,
+	Tool.KIOSK_DISPLAY,
 ]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
@@ -142,7 +151,13 @@ const SHELL_DOOR_HINTS := {
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag is applied on release: a rectangle, or the Belt's line.
 const AREA_TOOLS := [
-	Tool.FLOOR, Tool.REMOVE, Tool.CAFE_ROOM, Tool.BAG_ROOM, Tool.TOILET_ROOM, Tool.BELT
+	Tool.FLOOR,
+	Tool.REMOVE,
+	Tool.CAFE_ROOM,
+	Tool.BAG_ROOM,
+	Tool.TOILET_ROOM,
+	Tool.KIOSK_ROOM,
+	Tool.BELT,
 ]
 ## Zone id painted floors get. One terminal zone until zones become a tool.
 const TERMINAL_ZONE := 1

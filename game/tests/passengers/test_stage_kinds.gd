@@ -67,9 +67,10 @@ func test_every_stage_is_presented_in_the_follow_panel_and_the_flight_result() -
 	assert_int(reasons).is_equal(Passenger.Stage.size() - 2)
 
 
-func test_cafe_and_toilet_stages_belong_to_their_facility_and_no_other_stage_does() -> void:
+func test_cafe_toilet_and_kiosk_stages_belong_to_their_facility_and_no_other_does() -> void:
 	var cafe := 0
 	var toilet := 0
+	var shop := 0
 	for stage: int in Passenger.Stage.values():
 		var stage_name: String = Passenger.Stage.keys()[stage]
 		var expected := StageKinds.Facility.NONE
@@ -77,14 +78,18 @@ func test_cafe_and_toilet_stages_belong_to_their_facility_and_no_other_stage_doe
 			expected = StageKinds.Facility.CAFE
 		elif stage_name.begins_with("TOILET_"):
 			expected = StageKinds.Facility.TOILET
+		elif stage_name.begins_with("SHOP_"):
+			expected = StageKinds.Facility.SHOP
 		assert_int(StageKinds.facility(stage)).is_equal(expected)
 		assert_bool(StageKinds.in_visit(stage)).is_equal(expected != StageKinds.Facility.NONE)
 		assert_bool(Passenger.in_cafe(stage)).is_equal(expected == StageKinds.Facility.CAFE)
 		assert_bool(Passenger.in_toilet(stage)).is_equal(expected == StageKinds.Facility.TOILET)
 		cafe += int(expected == StageKinds.Facility.CAFE)
 		toilet += int(expected == StageKinds.Facility.TOILET)
+		shop += int(expected == StageKinds.Facility.SHOP)
 	assert_int(cafe).is_equal(7)
 	assert_int(toilet).is_equal(6)
+	assert_int(shop).is_equal(2)
 
 
 func test_seats_and_poses() -> void:
@@ -203,6 +208,8 @@ func test_every_stage_has_its_journey_leg_from_the_table_not_the_enum_order() ->
 		Passenger.Stage.TOILET_USE: StageKinds.Leg.VISIT,
 		Passenger.Stage.TOILET_STANDING_UP: StageKinds.Leg.VISIT,
 		Passenger.Stage.TOILET_EXIT: StageKinds.Leg.VISIT,
+		Passenger.Stage.SHOP_WALK: StageKinds.Leg.VISIT,
+		Passenger.Stage.SHOP_BROWSE: StageKinds.Leg.VISIT,
 	}
 	assert_int(expected.size()).is_equal(Passenger.Stage.size())
 	assert_int(StageKinds.LEGS.size()).is_equal(Passenger.Stage.size())
