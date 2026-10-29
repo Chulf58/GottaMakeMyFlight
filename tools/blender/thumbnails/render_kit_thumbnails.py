@@ -68,12 +68,30 @@ ATLAS_PNG = {
     # (tp_atlas_simple_toon.tres); the multi-storey has its own texture and ramp.
     "TP_Atlas_Simple_1A_D": "tp_atlas_1a_d.png",
     "TC_Building_17A_D": "tc_building_17a_d.png",
+    # The Toon City decor models (game/assets/decor/), each its own atlas.
+    "TC_Road_1A_D": "tc_road_1a_d.png",
+    "TC_Tree_1A_D": "tc_tree_1a_d.png",
+    "TC_Tree_3A_D": "tc_tree_3a_d.png",
+    "TC_Props_2A_D": "tc_props_2a_d.png",
+    "TC_Building_4A_D": "tc_building_4a_d.png",
     "TP_Atlas_Lights_1A_D": "tp_atlas_lights_1a_d.png",
     "TP_Glass_1A_D": "tp_glass_gradient_1a_d.png",
 }
 RAMP_PNG = "tp_toon_ramp_1d_d.png"
-# Materials whose toon ramp is not the TP one (tc_building_17a_toon.tres).
-RAMP_FOR = {"TC_Building_17A_D": "tc_toon_ramp_01a_d.png"}
+# Materials whose toon ramp is not the TP one (tc_building_17a_toon.tres and the
+# other Toon City materials in game/assets/materials/).
+TC_RAMP = "tc_toon_ramp_01a_d.png"
+TOON_MATERIALS = (
+    "TP_Atlas_1A_D",
+    "TP_Atlas_Simple_1A_D",
+    "TC_Building_17A_D",
+    "TC_Road_1A_D",
+    "TC_Tree_1A_D",
+    "TC_Tree_3A_D",
+    "TC_Props_2A_D",
+    "TC_Building_4A_D",
+)
+RAMP_FOR = {name: TC_RAMP for name in TOON_MATERIALS if name.startswith("TC_")}
 GLASS_ALPHA = 0.29  # tp_glass.tres albedo alpha
 GLASS_TINT = 0.85
 
@@ -93,6 +111,15 @@ CLASSES = {
     "2x1_tall": ((2.0, 1.0, 2.1), (0.0, 0.0, 1.05)),
     "3x3": ((3.0, 3.0, 2.0), (0.0, 0.0, 1.0)),
     "2x3": ((2.0, 3.0, 2.2), (0.0, 0.0, 1.1)),
+    # Furniture (Furniture 4/4 F4-2): the 29 placeable pieces, each in the class of
+    # its footprint and height; the tall classes are for pieces over 2 m.
+    "1x3": ((1.0, 3.0, 1.4), (0.0, 0.0, 0.7)),
+    "1x2_plant": ((1.0, 2.0, 2.3), (0.0, 0.0, 1.15)),
+    "4x4": ((4.0, 4.0, 2.4), (0.0, 0.0, 1.2)),
+    "6x3": ((6.0, 3.0, 2.3), (0.0, 0.0, 1.15)),
+    "2x2_tall": ((2.0, 2.0, 2.4), (0.0, 0.0, 1.2)),
+    "1x1_xtall": ((1.0, 1.0, 2.4), (0.0, 0.0, 1.2)),
+    "2x1_xtall": ((2.0, 1.0, 2.3), (0.0, 0.0, 1.15)),
     # Landside (Landside 4/4), at their own scale: the 16 x 3 m curb bay on its
     # strip of road (Godot +Z into the road is Blender -Y), the 32.3 x 24 m surface
     # lot (local x -7.3 to 25), the 24 x 52 x 28.3 m multi-storey and the lot's two
@@ -106,7 +133,9 @@ CLASSES = {
 # so border lines would outline every triangle and crease lines are denser than the
 # pixels between them at tens of metres per frame: both grey the picture out. Their
 # classes draw silhouette lines only, like the game's outline hull.
-NO_CREASE_CLASSES = {"bay", "lot", "multi", "gate"}
+# The foliage classes (the tree bench, the planter, the trees) are the same: their
+# leaves are many small faces and the crease lines turn them into a grey blob.
+NO_CREASE_CLASSES = {"bay", "lot", "multi", "gate", "4x4", "1x2_plant", "2x2_tall"}
 
 # Catalog colours (build_catalog.gd), sRGB.
 ENTRANCE_RGB = (0.35, 0.7, 0.4)
@@ -119,7 +148,9 @@ SIDEWALK_RGB = (0.74, 0.73, 0.7)
 POST_RGB = (0.28, 0.28, 0.3)
 
 # item -> (footprint class, main piece, extras). Extras are glyphs this script
-# builds. Entrance and exit draw wall_door on their back edge (Godot -Z 0.5, Blender
+# builds. A piece entry is a name, or (name, offset[, yaw[, keep]]); the offset is a
+# Blender (x, y, z), or the name of a Mount_ empty of an earlier piece of the item,
+# which the piece then stands on, turned the way the mount points. Entrance and exit draw wall_door on their back edge (Godot -Z 0.5, Blender
 # +Y 0.5), as InteriorKit.OBJECT_OFFSETS does, over a floor tile.
 ITEMS = {
     "floor": ("tile", ["floor_tile"], []),
@@ -279,6 +310,51 @@ ITEMS = {
         ["gate_posts"],
     ),
 }
+
+# Furniture (Furniture 4/4 F4-2), one item per catalog id, drawn as the build view
+# draws it (InteriorKit.OBJECT_PIECES, OBJECT_MOUNTED, OBJECT_POSTS). The prize
+# podium carries its SUV on Mount_Car. The chain piece starts on one post and runs
+# 2 m to the other (Godot +Z, Blender -Y), so it is drawn with its two posts, which
+# stand on the two ends of the chain: the object node sits 1 m back of the centre.
+FURNITURE = {
+    "bench_1a": ("1x3", ["decor/tc_bench_1a"]),
+    "bench_2a_indoor": ("4x4", ["decor/tc_bench_2a_indoor"]),
+    "bush": ("2x2", ["decor/tc_bush_1a"]),
+    "fountain_indoor": ("2x2_tall", ["decor/tc_fountain_1a_indoor"]),
+    "metal_pole": ("1x1_tall", ["decor/tc_metal_pole_1a"]),
+    "metal_pole_chain": (
+        "1x3",
+        [
+            ("decor/tc_metal_pole_chain_1a", (0.0, 1.0, 0.0)),
+            ("decor/tc_metal_pole_1a", (0.0, 1.0, 0.0)),
+            ("decor/tc_metal_pole_1a", (0.0, -1.0, 0.0)),
+        ],
+    ),
+    "plant_pot_1a": ("1x2_plant", ["decor/tc_plant_pot_1a"]),
+    "plant_pot_2a": ("2x2", ["decor/tc_plant_pot_2a"]),
+    "statue_indoor": ("1x1_xtall", ["decor/tc_statue_1b_indoor"]),
+    "trash_can": ("1x1", ["decor/tc_trash_can_1a"]),
+    "tree_indoor": ("2x2_tall", ["decor/tc_tree_3a_indoor"]),
+    "bar_counter": ("2x2", ["bar_counter"]),
+    "grab_and_go_stall": ("2x1_xtall", ["grab_and_go_stall"]),
+    "restaurant_table": ("2x3", ["restaurant_table"]),
+    "restaurant_booth": ("2x3", ["restaurant_booth"]),
+    "info_desk": ("2x1_tall", ["info_desk"]),
+    "info_screen": ("1x1_xtall", ["info_screen"]),
+    "currency_exchange": ("2x1_xtall", ["currency_exchange"]),
+    "atm": ("1x1_tall", ["atm"]),
+    "pharmacy_counter": ("2x1_tall", ["pharmacy_counter"]),
+    "pharmacy_shelf": ("2x1_tall", ["pharmacy_shelf"]),
+    "shower_cubicle": ("1x1_xtall", ["shower_cubicle"]),
+    "nap_pod": ("1x1_tall", ["nap_pod"]),
+    "play_blocks": ("2x2", ["play_blocks"]),
+    "play_slide": ("2x1", ["play_slide"]),
+    "lounge_sofa": ("2x1", ["lounge_sofa"]),
+    "lounge_armchair": ("1x1", ["lounge_armchair"]),
+    "work_desk": ("2x2", ["work_desk"]),
+    "prize_podium": ("6x3", ["prize_podium", ("vehicles/tp_suv_01a", "Mount_Car")]),
+}
+ITEMS.update({item: (cls, pieces, []) for item, (cls, pieces) in FURNITURE.items()})
 ORDER = list(ITEMS)
 
 
@@ -422,7 +498,7 @@ _materials = {}
 
 def kit_material(name):
     if name not in _materials:
-        if name in ("TP_Atlas_1A_D", "TP_Atlas_Simple_1A_D", "TC_Building_17A_D"):
+        if name in TOON_MATERIALS:
             _materials[name] = toon_material(name)
         elif name == "TP_Atlas_Lights_1A_D":
             _materials[name] = unshaded_material(name)
@@ -477,6 +553,9 @@ def reset_scene():
     return scene
 
 
+_mounts = {}
+
+
 def import_piece(name, offset, yaw=0.0, keep=None):
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=piece_path(name))
@@ -493,9 +572,18 @@ def import_piece(name, offset, yaw=0.0, keep=None):
             invalid("%s: kept %s, wanted %s" % (name, kept, keep))
     roots = [o for o in new if o.parent is None]
     # Turn about the piece origin (Blender Z is Godot Y), then move it into place.
-    place = Matrix.Translation(Vector(offset)) @ Matrix.Rotation(math.radians(yaw), 4, "Z")
+    if isinstance(offset, str):
+        if offset not in _mounts:
+            invalid("%s: no earlier piece has a %s" % (name, offset))
+        place = _mounts[offset].normalized() @ Matrix.Rotation(math.radians(yaw), 4, "Z")
+    else:
+        place = Matrix.Translation(Vector(offset)) @ Matrix.Rotation(math.radians(yaw), 4, "Z")
     for r in roots:
         r.matrix_world = place @ r.matrix_world
+    bpy.context.view_layer.update()
+    for o in new:
+        if o.type == "EMPTY" and o.name.startswith("Mount_"):
+            _mounts[o.name.split(".")[0]] = o.matrix_world.copy()
     meshes = [o for o in new if o.type == "MESH"]
     if not meshes:
         invalid("%s.glb imported no meshes" % name)
@@ -674,6 +762,7 @@ def render_item(item, path):
             lineset.select_crease = False
             lineset.select_border = False
     objs, mats = [], set()
+    _mounts.clear()
     for entry in pieces:
         name = piece_name(entry)
         offset = (0.0, 0.0, 0.0) if isinstance(entry, str) else entry[1]

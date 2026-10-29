@@ -69,6 +69,35 @@ enum Tool {
 	SURFACE_LOT,
 	MULTI_STOREY,
 	LOT_GATE,
+	BENCH,
+	TREE_BENCH,
+	BUSH,
+	FOUNTAIN,
+	POST,
+	CHAIN,
+	PLANTER,
+	PLANT_POT,
+	STATUE,
+	BIN,
+	TREE,
+	BAR_COUNTER,
+	GRAB_STALL,
+	DINING_TABLE,
+	BOOTH,
+	INFO_DESK,
+	INFO_SCREEN,
+	EXCHANGE,
+	ATM,
+	PHARMACY_COUNTER,
+	PHARMACY_SHELF,
+	SHOWER,
+	NAP_POD,
+	PLAY_BLOCKS,
+	PLAY_SLIDE,
+	SOFA,
+	ARMCHAIR,
+	WORK_DESK,
+	PRIZE_PODIUM,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -407,6 +436,12 @@ func grid_point(from: Vector3, direction: Vector3) -> Variant:
 	return ground_point(from, direction, grid.origin.y)
 
 
+## The catalog id a tool places: TOOL_OBJECTS, or FurnitureTools.OBJECTS for the
+## furniture tools. &"" for a tool that places no object.
+static func tool_object(for_tool: Tool) -> StringName:
+	return TOOL_OBJECTS.get(for_tool, FurnitureTools.OBJECTS.get(for_tool, &""))
+
+
 ## The edit the current tool would make at a ground point, or null for none.
 func edit_at(point: Vector3) -> BuildEdit:
 	var cell := grid.world_to_cell(point)
@@ -420,8 +455,8 @@ func edit_at(point: Vector3) -> BuildEdit:
 			return _removal_at(point, cell, side)
 	if TOOL_WALL_KINDS.has(tool):
 		return BuildEdit.place_wall(cell, side, TOOL_WALL_KINDS[tool])
-	if TOOL_OBJECTS.has(tool):
-		var def_id: StringName = TOOL_OBJECTS[tool]
+	var def_id := tool_object(tool)
+	if def_id != &"":
 		if shell != null and DOOR_NAMES.has(tool):
 			var door := shell.nearest(grid, def_id, point)
 			if door != null:
@@ -1242,7 +1277,7 @@ func _show_status(result: BuildResult) -> void:
 	var text := RoomTool.hint(TOOL_ROOMS[tool]) if TOOL_ROOMS.has(tool) else ""
 	var refused := result != null and not result.ok
 	# The facing is for an item that can be placed; a refusal shows its reason alone.
-	if TOOL_OBJECTS.has(tool) and not refused:
+	if tool_object(tool) != &"" and not refused:
 		text = "Facing auto" if _facing_is_auto() else "Facing %d" % facing
 	if refused:
 		var reason := result.reason_text()

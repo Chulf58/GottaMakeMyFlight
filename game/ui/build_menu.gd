@@ -89,10 +89,23 @@ const CATEGORIES := [
 		"name": "Baggage",
 		"tools": [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART],
 	},
+	# The furniture (Furniture 4/4 F4-2): 29 pieces on eight pages, because the
+	# bar has room for one more button and a tray holds four cards and Rotate in
+	# COLUMN_W. The first page has the bar button; a later page ("page": true)
+	# has none and is reached by the Next card on the page before it.
+	{"name": "Furniture", "tools": FurnitureTools.PAGES[0]},
+	{"name": "Features", "tools": FurnitureTools.PAGES[1], "page": true},
+	{"name": "Fittings", "tools": FurnitureTools.PAGES[2], "page": true},
+	{"name": "Food", "tools": FurnitureTools.PAGES[3], "page": true},
+	{"name": "Desks", "tools": FurnitureTools.PAGES[4], "page": true},
+	{"name": "Care", "tools": FurnitureTools.PAGES[5], "page": true},
+	{"name": "Lounge", "tools": FurnitureTools.PAGES[6], "page": true},
+	{"name": "Fun", "tools": FurnitureTools.PAGES[7], "page": true},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
-## The category that is a single button with no tray.
-const REMOVE_CATEGORY := 11
+## The category that is a single button with no tray, last in CATEGORIES (GDScript
+## cannot take it from CATEGORIES.size(): tests check the two agree).
+const REMOVE_CATEGORY := 19
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -254,8 +267,8 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 		return PriceTable.price_of_floor()
 	if BuildMode.TOOL_WALL_KINDS.has(tool):
 		return PriceTable.price_of_wall(BuildMode.TOOL_WALL_KINDS[tool])
-	if BuildMode.TOOL_OBJECTS.has(tool):
-		return PriceTable.price_of_object(BuildMode.TOOL_OBJECTS[tool])
+	if BuildMode.tool_object(tool) != &"":
+		return PriceTable.price_of_object(BuildMode.tool_object(tool))
 	if tool == BuildMode.Tool.BELT:
 		return PriceTable.price_of_object(BuildMode.BELT_PRICE_ID)
 	if BuildMode.LANDSIDE_BUILD_TOOLS.has(tool):
@@ -275,10 +288,32 @@ static func remove_category() -> int:
 	return categories().size() - 1
 
 
-## A tool's card [name, thumbnail, size text] from ITEMS or LANE_ITEMS, or
-## an empty array for a tool with no card.
+## A tool's card [name, thumbnail, size text] from ITEMS, LANE_ITEMS or
+## FurnitureTools.ITEMS, or an empty array for a tool with no card.
 static func item(tool: BuildMode.Tool) -> Array:
-	return ITEMS.get(tool, LANE_ITEMS.get(tool, []))
+	return ITEMS.get(tool, LANE_ITEMS.get(tool, FurnitureTools.ITEMS.get(tool, [])))
+
+
+## What a card says its piece costs to run per day, or 0 for none.
+static func running_cost(tool: BuildMode.Tool) -> int:
+	return CARD_RUNNING_COSTS.get(tool, FurnitureTools.RUNNING_COSTS.get(tool, 0))
+
+
+## The first page of the furniture group a category belongs to (CATEGORIES),
+## or the category itself when it is not a later page.
+static func group_start(index: int) -> int:
+	while index > 0 and CATEGORIES[index].get("page", false):
+		index -= 1
+	return index
+
+
+## The page the Next card of a category opens: the following page, the group's
+## first page after its last, or NO_CATEGORY for a category with no pages.
+static func next_page(index: int) -> int:
+	if index + 1 < CATEGORIES.size() and CATEGORIES[index + 1].get("page", false):
+		return index + 1
+	var start := group_start(index)
+	return start if start != index else NO_CATEGORY
 
 
 ## The category a tool belongs to, or NO_CATEGORY.
@@ -629,7 +664,10 @@ func _sync() -> void:
 	for i in _rows.size():
 		_rows[i].visible = i == _open
 	for i in _category_buttons.size():
-		var on := i == _open or (i == remove_category() and tool == BuildMode.Tool.REMOVE)
+		var on := (
+			(_open != NO_CATEGORY and i == group_start(_open))
+			or (i == remove_category() and tool == BuildMode.Tool.REMOVE)
+		)
 		_category_buttons[i].set_pressed_no_signal(on)
 	for key in _cards:
 		_cards[key].set_pressed_no_signal(key == tool)
@@ -674,6 +712,7 @@ func _build_bar() -> void:
 		button.custom_minimum_size = CATEGORY_SIZE
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(press_category.bind(i))
+		button.visible = not categories()[i].get("page", false)
 		row.add_child(button)
 		_category_buttons.append(button)
 	staff_button.name = "StaffButton"
@@ -704,8 +743,10 @@ func _build_tray() -> void:
 			var button := _make_card(tool)
 			row.add_child(button)
 			_cards[tool] = button
-			turns = turns or BuildMode.TOOL_OBJECTS.has(tool)
-		if turns:
+			turns = turns or BuildMode.tool_object(tool) != &""
+		if next_page(i) != NO_CATEGORY:
+			row.add_child(_make_rotate_and_next_cards(next_page(i)))
+		elif turns:
 			row.add_child(_make_rotate_card())
 
 
@@ -742,8 +783,8 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	if CARD_NEEDS.has(tool):
 		var need := _card_label(column, CARD_NEEDS[tool], &"HudAttentionText")
 		need.add_theme_font_size_override("font_size", CARD_HINT_FONT_SIZE)
-	elif CARD_RUNNING_COSTS.has(tool):
-		_card_label(column, RUNNING_COST_TEXT % CARD_RUNNING_COSTS[tool], &"HudHint")
+	elif running_cost(tool) > 0:
+		_card_label(column, RUNNING_COST_TEXT % running_cost(tool), &"HudHint")
 	else:
 		_card_label(column, "Key %s" % key if key != "" else _no_key_hint(tool), &"HudHint")
 	return button
@@ -755,10 +796,10 @@ static func _no_key_hint(tool: BuildMode.Tool) -> String:
 	return "Drag" if BuildMode.AREA_TOOLS.has(tool) else "Click"
 
 
-func _make_rotate_card() -> Button:
+func _make_rotate_card(height := ROTATE_SIZE.y) -> Button:
 	var button := Button.new()
 	button.name = "CardRotate"
-	button.custom_minimum_size = ROTATE_SIZE
+	button.custom_minimum_size = Vector2(ROTATE_SIZE.x, height)
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void: build_mode.rotate_facing())
 	var column := _card_column(button)
@@ -766,6 +807,25 @@ func _make_rotate_card() -> Button:
 	_card_label(column, "Rotate", &"HudCardName")
 	_card_label(column, "Key R", &"HudHint")
 	return button
+
+
+## The Rotate card and, under it, the Next card that opens the page after this one.
+func _make_rotate_and_next_cards(next: int) -> VBoxContainer:
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 6)
+	var half := (ROTATE_SIZE.y - 6.0) / 2.0
+	stack.add_child(_make_rotate_card(half))
+	var button := Button.new()
+	button.name = "CardNext"
+	button.custom_minimum_size = Vector2(ROTATE_SIZE.x, half)
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(press_category.bind(next))
+	var column := _card_column(button)
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	_card_label(column, "Next", &"HudCardName")
+	_card_label(column, categories()[next]["name"], &"HudHint")
+	stack.add_child(button)
+	return stack
 
 
 func _card_column(button: Button) -> VBoxContainer:
@@ -793,8 +853,8 @@ func _card_label(column: VBoxContainer, text: String, variation: StringName) -> 
 
 
 func _size_text(tool: BuildMode.Tool) -> String:
-	if BuildMode.TOOL_OBJECTS.has(tool):
-		var def := BuildCatalog.get_def(BuildMode.TOOL_OBJECTS[tool])
+	if BuildMode.tool_object(tool) != &"":
+		var def := BuildCatalog.get_def(BuildMode.tool_object(tool))
 		return "%dx%d" % [def.size.x, def.size.y]
 	return item(tool)[2]
 
