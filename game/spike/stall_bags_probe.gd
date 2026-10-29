@@ -23,7 +23,9 @@ extends SceneTree
 ## PROBE_INVALID, exit 1. Each frame also
 ## prints each bag's highest point, how far it reaches toward the bowl and how
 ## many of the drawn body's vertices (hands left out) lie inside its meshes
-## (CarryContact).
+## (CarryContact). Any frame with more than CONTACT_MAX such vertices fails the
+## probe (PROBE_FAIL, exit 1): a bag through a leg or the hips is the defect
+## this probe guards.
 ## A guard thread calls OS.crash() on a stall.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
@@ -31,12 +33,14 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://spike/stall_bags_probe.gd
 ##
-## Plates go to tools/blender/out/stall-bags/.
+## Plates go to tools/blender/out/stall-bags-2/.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
-const OUT_REL := "res://../tools/blender/out/stall-bags"
+const OUT_REL := "res://../tools/blender/out/stall-bags-2"
+## Drawn body vertices (hands left out) allowed inside a bag on any frame.
+const CONTACT_MAX := 0
 const OCCLUDER_OWNERS: Array[String] = [
 	"Airside/Terminal", "BuildMode", "PlaneView", "PassengerViews"
 ]
@@ -51,14 +55,14 @@ const VISITORS := [
 	["roller2", SecurityLooks.Kind.ROLLER, 2, ["down", "up", "out"]],
 ]
 ## Strip -> [frames, ticks between frames].
-const STRIPS := {"in": [14, 2], "down": [8, 1], "up": [10, 1], "out": [14, 2]}
+const STRIPS := {"in": [16, 2], "down": [8, 1], "up": [10, 1], "out": [12, 2]}
 ## The camera: this high and this far to the side of the visited stall's
 ## centre line, looking at a point this far out of the door from its centre.
 const STEEP_UP_M := 7.0
 const SIDE_M := 0.5
 const AIM_OUT := {"in": 1.3, "down": 0.4, "up": 0.6, "out": 1.6}
 ## Field of view per strip (narrow inside the stall, to see the bag large).
-const FOV := {"in": 50.0, "down": 22.0, "up": 30.0, "out": 50.0}
+const FOV := {"in": 62.0, "down": 22.0, "up": 30.0, "out": 66.0}
 ## Frames per row of a strip's plate.
 const GRID_COLUMNS := 5
 ## Crop half size in plate pixels.
@@ -95,7 +99,11 @@ func _initialize() -> void:
 func _run() -> void:
 	_main = (load("res://main/main.tscn") as PackedScene).instantiate()
 	_clock = _main.get_node("SimClock") as SimClock
+	# A seed to replay: ++ --seed=N after the script; a new random one otherwise.
 	var seed := randi()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--seed="):
+			seed = int(arg.trim_prefix("--seed="))
 	_clock.seed_rng(seed)
 	print("PROBE sim_seed=", seed)
 	root.add_child(_main)
@@ -188,7 +196,8 @@ func _kinds(p: Passenger) -> Array:
 func _moment(p: Passenger, wanted: Array, taken: Dictionary) -> String:
 	var sat := _sim.tick - p.stage_tick
 	var moments := {
-		"in": p.stage == Passenger.Stage.TOILET_WALK and p.remaining_mm() <= 1500,
+		# A roller is taken in hand at 1.7 m (StallCarry.LIFT_LEAD_M).
+		"in": p.stage == Passenger.Stage.TOILET_WALK and p.remaining_mm() <= 2100,
 		"down": p.stage == Passenger.Stage.TOILET_SITTING_DOWN and sat == 0,
 		"up":
 		p.stage == Passenger.Stage.TOILET_STANDING_UP and sat == PassengerSim.STAND_UP_TICKS - 2,
@@ -307,6 +316,11 @@ func _frame_ok(
 				touched.append("%s:%d" % [bone, inside])
 		if contacts > 0:
 			print("CONTACT %s %d bag%d %s" % [name, f, b, " ".join(touched)])
+		if contacts > CONTACT_MAX:
+			print(
+				"PROBE_FAIL contact %s %d bag%d: %d body vertices inside" % [name, f, b, contacts]
+			)
+			_failed = true
 		var box := CarryOnProps.bag_box(held["kinds"][b])
 		var top := -INF
 		var reach := INF
