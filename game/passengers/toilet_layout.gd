@@ -39,7 +39,7 @@ func rebuild(grid: BuildGrid) -> void:
 		var area: Rect2i = grid.get_room(room_id)["rect"]
 		for id in ids:
 			var record := grid.get_object(id)
-			if record["def"] != &"toilet_stall" or not _inside(grid, id, area):
+			if record["def"] != &"toilet_stall" or not FacilitySlots.piece_inside(grid, id, area):
 				continue
 			var approach := grid.interaction_cell(id)
 			if not grid.is_walkable(approach):
@@ -72,13 +72,3 @@ func stall(stall_id: int) -> Dictionary:
 		if entry["id"] == stall_id:
 			return entry
 	return {}
-
-
-## Whether the whole footprint and interaction cell of an object lie in `area`.
-static func _inside(grid: BuildGrid, id: int, area: Rect2i) -> bool:
-	var record := grid.get_object(id)
-	var def := BuildCatalog.get_def(record["def"])
-	for cell in def.footprint(record["anchor"], record["facing"]):
-		if not area.has_point(cell):
-			return false
-	return area.has_point(grid.interaction_cell(id))

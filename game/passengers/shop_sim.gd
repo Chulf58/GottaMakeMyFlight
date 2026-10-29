@@ -34,7 +34,10 @@ extends RefCounted
 ## second on the passenger's beat, and every tick for a landside visit.
 ##
 ## Visits and slots are handled in id and key order with integer quantities
-## only, so a save loaded at a tick boundary plays on exactly.
+## only, so a save loaded at a tick boundary plays on exactly. Who owns which
+## visit and slot, the choice of slot and the reconcile walk are
+## FacilitySlots', shared with ToiletSim; the browse, its outcome and the
+## money are here.
 
 ## After the money is in the wallet, for the '+$' pop over the kiosk.
 signal paid(passenger_id: int, room_id: int, amount: int)
@@ -65,17 +68,18 @@ const CHECKED_STAGES: Array[Passenger.Stage] = [
 var layout := ShopLayout.new()
 ## Set by any grid edit: every visit's deadline is worked out again on the
 ## next tick. Saved as it is, so a loaded game does the same.
-var deadlines_stale := false
+var deadlines_stale: bool:
+	get:
+		return _core.deadlines_stale
+	set(value):
+		_core.deadlines_stale = value
 
 var _sim: PassengerSim
 var _set_stage: Callable
 var _leave_station: Callable
 var _release_gate_seat: Callable
-## Passenger id -> ShopVisit.
-var _visits: Dictionary = {}
-## Derived: slot key -> passenger id.
-var _slots: Dictionary = {}
-var _layout_dirty := true
+## The visits (passenger id -> ShopVisit) and slot holders, keyed by slot key.
+var _core := FacilitySlots.new()
 
 
 ## Wires the sim's own stage, station and gate-seat helpers in, so a stage
@@ -87,9 +91,7 @@ func bind(
 	_set_stage = set_stage
 	_leave_station = leave_station
 	_release_gate_seat = release_gate_seat
-	_layout_dirty = true
-	if not sim.grid.edit_applied.is_connected(_on_edit_applied):
-		sim.grid.edit_applied.connect(_on_edit_applied)
+	_core.bind(sim, layout)
 
 
 ## What a finished browse pays, in whole money: `base` nudged by mood with the
@@ -99,19 +101,16 @@ static func spend(base: int, mood: int, airside: bool) -> int:
 
 
 func visit_of(passenger_id: int) -> ShopVisit:
-	return _visits.get(passenger_id)
+	return _core.visit_of(passenger_id)
 
 
 func visit_ids() -> Array[int]:
-	var ids: Array[int] = []
-	ids.assign(_visits.keys())
-	ids.sort()
-	return ids
+	return _core.ids()
 
 
 ## The passenger holding a slot, walkers included, or 0.
 func slot_holder(key: String) -> int:
-	return _slots.get(key, 0)
+	return _core.holder(key)
 
 
 ## Whether `p` is bored and may start a visit now.
@@ -165,8 +164,7 @@ func commit_visit(p: Passenger, plan: Dictionary) -> void:
 	visit.slot = slot
 	visit.resume_stage = _resume_stage(p)
 	visit.deadline = VisitForecast.deadline(_sim, p, slot["approach"], 0, visit.resume_stage)
-	_visits[p.id] = visit
-	_slots[slot["key"]] = p.id
+	_core.reserve(visit)
 	p.late = false
 	p.stuck = Passenger.Stuck.NONE
 	match p.stage:
@@ -190,7 +188,7 @@ func refuse(p: Passenger, browsing := false) -> void:
 ## Once a simulated second per passenger: a visit under way has its deadline
 ## forecast again. Boredom itself is BoredomSim's.
 func beat(p: Passenger) -> void:
-	var visit: ShopVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit != null and (CHECKED_STAGES.has(p.stage) or p.stage == Passenger.Stage.STANDING_UP):
 		visit.deadline = _live_deadline(p, visit)
 
@@ -199,34 +197,17 @@ func beat(p: Passenger) -> void:
 ## visit whose slot is gone ends unpaid, and every deadline is forecast again.
 ## Called at the start of every tick, before anyone steps.
 func reconcile() -> void:
-	refresh()
-	for id in visit_ids():
-		var visit: ShopVisit = _visits.get(id)
-		var p := _sim.get_passenger(id)
-		var slot := layout.slot(visit.display, visit.index)
-		if slot.is_empty() or int(slot["room"]) != visit.room:
-			if p.stage == Passenger.Stage.STANDING_UP:
-				_remove(visit)
-			else:
-				_end(p, visit)
-			continue
-		visit.slot = slot
-		if deadlines_stale:
-			visit.deadline = _live_deadline(p, visit)
-	deadlines_stale = false
+	_core.reconcile(_keep, _live_deadline)
 
 
 ## Rebuilds the layout when an edit made it stale.
 func refresh() -> void:
-	if not _layout_dirty:
-		return
-	layout.rebuild(_sim.grid)
-	_layout_dirty = false
+	_core.refresh()
 
 
 ## One tick of a passenger in a kiosk stage.
 func step(p: Passenger) -> void:
-	var visit: ShopVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit == null:
 		push_error("ShopSim: passenger %d is in a kiosk stage with no visit" % p.id)
 		_set_stage.call(p, Passenger.Stage.TO_GATE if p.cleared else Passenger.Stage.TO_SECURITY)
@@ -253,7 +234,7 @@ func step(p: Passenger) -> void:
 
 ## A passenger who got up from a gate seat for the kiosk sets off for it.
 func depart(p: Passenger) -> void:
-	var visit: ShopVisit = _visits[p.id]
+	var visit := visit_of(p.id)
 	var route := VisitRoute.plan(_sim.grid, p, visit.slot.get("approach", p.at))
 	if _sim.tick >= visit.deadline or visit.slot.is_empty() or route.is_empty():
 		_end(p, visit)
@@ -263,15 +244,15 @@ func depart(p: Passenger) -> void:
 
 ## Drops the visit of a passenger who made or missed the flight.
 func cleanup(p: Passenger) -> void:
-	var visit: ShopVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit != null:
-		_remove(visit)
+		_core.release(visit)
 
 
 ## The grid direction a browsing passenger faces (towards the display), or
 ## zero otherwise.
 func browse_facing(p: Passenger) -> Vector2i:
-	var visit: ShopVisit = _visits.get(p.id)
+	var visit := visit_of(p.id)
 	if visit == null or visit.slot.is_empty() or p.stage != Passenger.Stage.SHOP_BROWSE:
 		return Vector2i.ZERO
 	return visit.slot["facing"]
@@ -280,18 +261,14 @@ func browse_facing(p: Passenger) -> Vector2i:
 ## Installs visits a ShopSnapshot.load() checked; rederive() then rebuilds the
 ## slot holders and the layout.
 func restore(state: Dictionary) -> void:
-	_visits = state["visits"]
-	deadlines_stale = state["deadlines_stale"]
+	_core.restore(state["visits"], state["deadlines_stale"])
 
 
 ## Rebuilds what is derived from the visits after a load.
 func rederive() -> void:
-	_layout_dirty = true
-	refresh()
-	_slots.clear()
+	_core.rederive()
 	for id in visit_ids():
-		var visit: ShopVisit = _visits[id]
-		_slots[visit.slot_key()] = id
+		var visit := visit_of(id)
 		visit.slot = layout.slot(visit.display, visit.index)
 
 
@@ -314,37 +291,27 @@ func _passing_shop(p: Passenger) -> bool:
 	var reach := _reach_mm(p)
 	for shop in layout.shops:
 		for slot in shop["slots"]:
-			if not _slots.has(slot["key"]) and Passenger.octile_mm(p.at, slot["approach"]) <= reach:
+			if _core.is_free(slot["key"]) and Passenger.octile_mm(p.at, slot["approach"]) <= reach:
 				return true
 	return false
 
 
-## The free slot nearest `p` by path, ties to the lower display id and then
-## index, with the walk: {"slot", "route"}. Only slots within `reach_mm` by
-## path count when it is above 0. Empty when no free slot can be reached.
-## Octile distance (less a diagonal step for a passenger partway along one) is
-## a lower bound on the path, so slots further than the best path are skipped.
+## The free slot nearest `p` by path, with the walk: {"slot", "route"}
+## (FacilitySlots.nearest()). Slots at the same octile distance are tried in
+## display id and then index order, and on an equal path the one tried first
+## wins. Only slots within `reach_mm` by path count when it is above 0. Empty
+## when no free slot can be reached.
 func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
-	var free: Array = []
+	var slots: Array = []
 	for shop in layout.shops:
 		for slot in shop["slots"]:
-			if _slots.has(slot["key"]):
-				continue
-			var octile := Passenger.octile_mm(p.at, slot["approach"])
-			if reach_mm > 0 and octile - Passenger.DIAGONAL_MM > reach_mm:
-				continue
-			free.append([octile, slot["display"], slot["index"], slot])
-	free.sort()
-	var best := {}
-	for entry in free:
-		if not best.is_empty() and entry[0] - Passenger.DIAGONAL_MM > int(best["route"]["mm"]):
-			break
-		var route := VisitRoute.plan(_sim.grid, p, entry[3]["approach"])
-		if route.is_empty() or (reach_mm > 0 and int(route["mm"]) > reach_mm):
-			continue
-		if best.is_empty() or int(route["mm"]) < int(best["route"]["mm"]):
-			best = {"slot": entry[3], "route": route}
-	return best
+			slots.append(
+				{"key": slot["key"], "order": [slot["display"], slot["index"]], "entry": slot}
+			)
+	var best := _core.nearest(p, slots, reach_mm)
+	if best.is_empty():
+		return {}
+	return {"slot": best["entry"], "route": best["route"]}
 
 
 ## Ticks from now until a visit walking `walk_mm` leaves its slot.
@@ -401,22 +368,26 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 	paid.emit(p.id, visit.room, amount)
 
 
+## FacilitySlots.reconcile()'s check of one visit: its slot entry is brought
+## up to date, or the slot or its kiosk is gone and the visit ends unpaid (one
+## still getting up from a gate seat lets the gate take over).
+func _keep(p: Passenger, visit: ShopVisit) -> bool:
+	var slot := layout.slot(visit.display, visit.index)
+	if slot.is_empty() or int(slot["room"]) != visit.room:
+		if p.stage == Passenger.Stage.STANDING_UP:
+			_core.release(visit)
+		else:
+			_end(p, visit)
+		return false
+	visit.slot = slot
+	return true
+
+
 ## The visit is over, finished or not: the passenger goes on with its journey.
 func _end(p: Passenger, visit: ShopVisit) -> void:
-	_remove(visit)
+	_core.release(visit)
 	p.shop_cooldown = _sim.tick + BROWSE_COOLDOWN_TICKS
 	p.station = 0
 	p.stuck = Passenger.Stuck.NONE
 	p.clear_path()
 	_set_stage.call(p, visit.resume_stage)
-
-
-func _remove(visit: ShopVisit) -> void:
-	_visits.erase(visit.passenger)
-	if _slots.get(visit.slot_key(), 0) == visit.passenger:
-		_slots.erase(visit.slot_key())
-
-
-func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
-	_layout_dirty = true
-	deadlines_stale = true
