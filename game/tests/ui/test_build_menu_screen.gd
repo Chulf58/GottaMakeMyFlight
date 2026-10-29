@@ -1,8 +1,8 @@
 class_name TestBuildMenuScreen
 extends GdUnitTestSuite
 ## The screen stand in the build menu (Boredom 4/5): a Screen card in the Gates
-## tray after Seats, with its price, its daily upkeep as its hint and a plain
-## tile until its thumbnail is rendered; the tray keeps its Rotate card.
+## tray after Seats, with its price, its daily upkeep as its hint and its
+## rendered thumbnail (Boredom 5/5); the tray keeps its Rotate card.
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -64,6 +64,11 @@ func test_the_screen_card_shows_its_price_and_upkeep() -> void:
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.SCREEN)).is_equal(
 		PriceTable.price_of_object(ScreenCoverage.SCREEN_ID)
 	)
-	assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has("screen_stand")).is_true()
+	# Its rendered thumbnail since Boredom 5/5, no longer a plain tile.
+	assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has("screen_stand")).is_false()
+	var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
+	assert_object(picture.texture).is_not_null()
+	assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % "screen_stand")
+	assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 	var row := card.get_parent()
 	assert_object(row.get_node_or_null("CardRotate")).is_not_null()
