@@ -20,15 +20,18 @@ extends SceneTree
 ## every point past the passage edge is also traced in to the edge: a booth
 ## part crossed on the way is a clip through a part thinner than the points
 ## are apart. Body points inside the passenger's own carried bags are counted
-## too. Only three ruled clips outside the booth's length are printed (each
-## point with the predicate it matched, _ruled_self_clip()): a hard case
-## turning from the side to the front on the approach (accepted by the user
-## 2026-10-29, "Accept, merge now"), a roller while its lift or lowering move
-## is under way, and a bag going from the repack floor spot to the hand (both
-## ruled pre-existing 2026-10-29). Any other body-in-bag point fails, as does
-## any contact or crossing; so does a
+## too. Only one ruled clip outside the booth's length is printed instead of
+## failed (_ruled_self_clip()): a hard case turning from the side to the front
+## on the approach (accepted by the user 2026-10-29, "Accept, merge now").
+## Every other body-in-bag point fails, a roller's lift or lowering and a
+## pickup after a repack included, as does any contact or crossing; so does a
 ## sent passenger that never crossed mid-booth, an alarm or liquids passenger
-## that never repacked, or a bag kind never carried through. Controls: a bag
+## that never repacked, a bag kind never carried through, or a run that never
+## checked a whole roller lift, roller lowering, and a hard case's and a
+## shoulder bag's pickup after a repack (each printed with every SELF_DETAIL
+## point: the bag, its move, the arm and the contact points in the body's
+## frame). A passenger is followed until it has left the booth's surroundings
+## after security, so the moves past the exit are checked. Controls: a bag
 ## set into a side panel must be inside its meshes, and a point just past the
 ## panel must cross it. Two plates of one crossing (mid-booth, leaving) prove
 ## the passenger and its bags are in frame and unblocked before they are
@@ -53,17 +56,18 @@ const MIN_SUBJECT_PX := 60.0
 const RUN_LIMIT_MS := 240000
 const SEND_GAP_TICKS := 20
 const MAX_SPAWNS := 40
-## Near a booth: inside this half-size around its origin, in its own frame.
-const NEAR := Vector3(0.9, 3.0, 2.2)
+## Near a booth: inside this half-size around its origin, in its own frame
+## (past BoothCarry.LEAD_M, so a roller's lift before the booth is checked whole).
+const NEAR := Vector3(0.9, 3.0, 3.2)
 ## [first bag's kind or -1 for any, bags, liquids, alarm].
 const ROLES := [
 	[SecurityLooks.Kind.CASE, 1, false, false],
 	[SecurityLooks.Kind.BACKPACK, 1, false, false],
-	[SecurityLooks.Kind.SHOULDER, 1, false, false],
+	[SecurityLooks.Kind.SHOULDER, 1, true, false],
 	[SecurityLooks.Kind.ROLLER, 1, false, false],
 	[SecurityLooks.Kind.CASE, 2, false, false],
 	[SecurityLooks.Kind.ROLLER, 2, false, false],
-	[-1, 1, false, true],
+	[SecurityLooks.Kind.CASE, 1, false, true],
 	[-1, 2, true, false],
 	[-1, 0, false, false],
 	[SecurityLooks.Kind.BACKPACK, 1, false, false],
@@ -91,10 +95,17 @@ var _self_bones := {}
 ## Passenger id -> each bag's [home, carry] on its last check.
 var _last_bag_state := {}
 ## Passenger id -> {bag index -> the kind of the move it is in: "roller_lift"
-## (PULL to HAND), "roller_lower" (HAND to PULL), "repack_pickup" (FLOOR to
-## HAND after the repack resolved the incident) or "other"}, recorded when the
-## move begins and kept until its transfer has finished.
+## (PULL to HAND), "roller_lower" (HAND to PULL), "repack_pickup_<kind>" (FLOOR
+## to HAND after the repack resolved the incident) or "other"}, recorded when
+## the move begins and kept until its transfer has finished.
 var _bag_moves := {}
+## Move kind -> how many of those moves were checked from start to end.
+var _moves_done := {}
+## Passenger id -> the process frame its moves were last tracked on: a frame
+## missed in between (not near a booth, or plating) forgets the moves under
+## way and the state they started from, so only a move seen to begin and end
+## on unbroken checks counts as whole.
+var _tracked_frame := {}
 var _plated := false
 var _plates_saved := 0
 ## True while the crossing plates are being taken.
@@ -166,6 +177,8 @@ func _boot() -> void:
 	print("PROBE booths=%d hired=%d doors_tick=%d" % [_booths.size(), hired, doors])
 	if doors < 0:
 		_invalid("the airport did not open")
+	for kind in SecurityLooks.Kind.values():
+		print("BAGBOX kind=%d box=%s" % [kind, CarryOnProps.bag_box(kind)])
 	_control()
 	hud.press_speed(1)
 	await _frames(10)
@@ -314,7 +327,23 @@ func _cross() -> void:
 
 func _done(id: int) -> bool:
 	var p := _sim.get_passenger(id)
-	return _stats.has(id) and (p == null or p.stage > Passenger.Stage.SECURITY)
+	if not _stats.has(id):
+		return false
+	if p == null:
+		return true
+	return p.stage > Passenger.Stage.SECURITY and not _near_booth(id)
+
+
+## Whether passenger `id` is drawn near a booth (NEAR, the checked box).
+func _near_booth(id: int) -> bool:
+	var body := _views.node_for(id)
+	if body == null or not body.is_visible_in_tree():
+		return false
+	for booth in _booths:
+		var local: Vector3 = (booth[1] as Transform3D) * body.global_position
+		if absf(local.x) <= NEAR.x and absf(local.z) <= NEAR.z:
+			return true
+	return false
 
 
 func _send() -> void:
@@ -359,7 +388,7 @@ func _check(id: int) -> void:
 		var hand_kinds := []
 		var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p))
 		var self_hits := 0
-		var reported := {"case_turn": 0, "roller_move": 0, "repack_pickup": 0}
+		var reported := {"case_turn": 0}
 		var props_now := _views.carry_on_props()
 		var front_now := props_now.front_weight_of(id)
 		var outside := absf(local.z) > 0.95
@@ -374,13 +403,9 @@ func _check(id: int) -> void:
 					var hits := CarryContact.inside_meshes(own, bags[i])
 					var why := ""
 					if hits > 0:
+						_print_self_detail(id, i, body, own, local.z)
 						why = _ruled_self_clip(
-							p,
-							props["kinds"][i],
-							outside,
-							signf(local.z) == booth[4],
-							front_now,
-							moves.get(i, "")
+							p, props["kinds"][i], outside, signf(local.z) == booth[4], front_now
 						)
 					if why == "":
 						self_hits += hits
@@ -415,11 +440,9 @@ func _check(id: int) -> void:
 				"frames": 0,
 				"mid": 0,
 				"self_contacts": 0,
-				"self_outside": 0,
 				"turn_points": 0,
 				"turn_frames": 0,
 				"turn_along": [],
-				"pickup_points": 0,
 				"through": 0,
 				"mid_reach": 0.0,
 				"mid_bone": "",
@@ -437,10 +460,8 @@ func _check(id: int) -> void:
 			}
 			_stats[id] = s
 		s["frames"] += 1
-		# Only the three ruled clips are printed instead of failed
+		# Only the ruled clip is printed instead of failed
 		# (_ruled_self_clip); every other body-in-bag point fails.
-		s["self_outside"] += reported["roller_move"]
-		s["pickup_points"] += reported["repack_pickup"]
 		if reported["case_turn"] > 0:
 			s["turn_points"] += reported["case_turn"]
 			s["turn_frames"] += 1
@@ -457,7 +478,27 @@ func _check(id: int) -> void:
 		s["body_contacts"] += _contacts(points, booth, s["parts"])
 		if absf(local.x) < 0.3 and absf(local.z) < 1.2:
 			s["through"] += _through(points, booth) + _through(bag_points, booth)
-		s["bag_contacts"] += _contacts(bag_points, booth, s["parts"])
+		var bag_hits := _contacts(bag_points, booth, s["parts"])
+		s["bag_contacts"] += bag_hits
+		if bag_hits > 0:
+			print(
+				(
+					(
+						"BAG_CONTACT_DETAIL passenger=%d points=%d along=%.2f across=%.2f"
+						+ " turn=%.2f arm=%.2f stage=%d moving=%s"
+					)
+					% [
+						id,
+						bag_hits,
+						local.z,
+						local.x,
+						props_now.bag_turn_of(id),
+						front_now,
+						p.stage,
+						p.is_moving()
+					]
+				)
+			)
 		var gaps := _gaps(points, booth)
 		var bag_gaps := _gaps(bag_points, booth)
 		s["body_gap"] = minf(s["body_gap"], gaps.x)
@@ -485,45 +526,93 @@ func _check(id: int) -> void:
 			_plate_crossing.call_deferred(id, booth)
 
 
+## Prints one body-in-own-bag frame of bag `i` of passenger `id` (points
+## `own` of its drawn body, `along` the booth): the bag's kind, carry, move and
+## turn, the arm's front weight, the grip and the contact points in the body's
+## frame, so a clip can be told apart by move without another run.
+func _print_self_detail(
+	id: int, i: int, body: Node3D, own: PackedVector3Array, along: float
+) -> void:
+	var p := _sim.get_passenger(id)
+	var props_now := _views.carry_on_props()
+	var props := props_now.props_of(id)
+	var bag: Node3D = props["bags"][i]
+	var to_body := body.global_transform.affine_inverse()
+	var grip := to_body * props_now.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
+	print(
+		(
+			(
+				"SELF_DETAIL passenger=%d bag=%d kind=%d carry=%d k=%.2f turn=%.2f arm=%.2f"
+				+ " grip=%s moving=%s along=%.2f stage=%d bones=%s at=%s"
+			)
+			% [
+				id,
+				i,
+				props["kinds"][i],
+				props["carries"][i],
+				props_now.transfer_progress(id, i),
+				props_now.bag_turn_of(id),
+				props_now.front_weight_of(id),
+				grip.snapped(Vector3.ONE * 0.01),
+				p.is_moving(),
+				along,
+				p.stage,
+				CarryChecks.contact_bones(body, CarryChecks.gripping(_sim, p), bag),
+				_where_inside(body, own, bag)
+			]
+		)
+	)
+
+
+## Diagnostic: up to four body points inside `bag`, in the body's frame.
+func _where_inside(body: Node3D, own: PackedVector3Array, bag: Node3D) -> Array:
+	var out := []
+	var to_body := body.global_transform.affine_inverse()
+	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+		var to_mesh := mi.global_transform.affine_inverse()
+		var faces := mi.mesh.get_faces()
+		for pt in own:
+			var lp: Vector3 = to_mesh * pt
+			if mi.get_aabb().grow(0.001).has_point(lp) and CarryContact._odd(lp, faces):
+				if out.size() < 4:
+					out.append((to_body * pt).snapped(Vector3.ONE * 0.01))
+	return out
+
+
 ## Which ruled clip a body-in-own-bag contact is, or "" when it is none (it
-## fails). All three happen outside the booth's length (`outside`):
-## - case_turn (accepted by the user 2026-10-29, "Accept, merge now"): a hard
-##   case turning from the side to the front (the front carry is the target and
-##   its weight is part way), on the approach end of the booth (`approach`);
-## - repack_pickup (ruled pre-existing 2026-10-29): a bag, roller included,
-##   in its move from the repack floor spot to the hand (`move`, see
-##   _track_moves());
-## - roller_move (ruled pre-existing 2026-10-29): a roller in its lift into the
-##   hand or its lowering to the pull (`move` roller_lift or roller_lower).
-## Any other move ("other", or none recorded) is not exempt.
+## fails). Only one, outside the booth's length (`outside`): case_turn
+## (accepted by the user 2026-10-29, "Accept, merge now"), a hard case turning
+## from the side to the front (the front carry is the target and its weight is
+## part way), on the approach end of the booth (`approach`). A roller's lift
+## or lowering and a pickup after a repack are not exempt (fixed 2026-10-29,
+## board item pre-existing-carry-self-clips-found-by-game-spike-basic-scan).
 func _ruled_self_clip(
-	p: Passenger,
-	kind: SecurityLooks.Kind,
-	outside: bool,
-	approach: bool,
-	front: float,
-	move: String
+	p: Passenger, kind: SecurityLooks.Kind, outside: bool, approach: bool, front: float
 ) -> String:
 	if not outside:
 		return ""
 	var to_front := SecurityLooks.carry_front(_sim, p)
 	if kind == SecurityLooks.Kind.CASE and approach and to_front and front > 0.0 and front < 1.0:
 		return "case_turn"
-	if move == "repack_pickup":
-		return "repack_pickup"
-	if kind == SecurityLooks.Kind.ROLLER and move in ["roller_lift", "roller_lower"]:
-		return "roller_move"
 	return ""
 
 
 ## Records, for each bag of passenger `id`, the kind of move it begins on this
 ## check (its [home, carry] differs from the last check) and keeps it until the
-## transfer has finished (CarryOnProps.transfer_progress reaches 1). A move
-## that began while the passenger was not checked has no kind. Returns the
-## bag index -> kind of the moves under way.
+## transfer has finished (CarryOnProps.transfer_progress reaches 1), when it
+## counts in _moves_done: the run's proof that each repaired move was checked
+## whole. A move that began while the passenger was not checked has no kind.
+## Returns the bag index -> kind of the moves under way.
 func _track_moves(
 	id: int, p: Passenger, homes: Array, props: Dictionary, carry_props: CarryOnProps
 ) -> Dictionary:
+	var frame := Engine.get_process_frames()
+	if _tracked_frame.get(id, -10) == frame:
+		return _bag_moves.get(id, {})
+	if frame - int(_tracked_frame.get(id, -10)) > 1:
+		_last_bag_state.erase(id)
+		_bag_moves.erase(id)
+	_tracked_frame[id] = frame
 	var was: Array = _last_bag_state.get(id, [])
 	var moves: Dictionary = _bag_moves.get(id, {})
 	var now: Array = []
@@ -541,7 +630,7 @@ func _track_moves(
 				and state[0] == SecurityLooks.Home.HAND
 				and p.incident_resolved
 			):
-				kind = "repack_pickup"
+				kind = "repack_pickup_" + KIND_NAMES[props["kinds"][i]]
 			elif (
 				roller
 				and was[i][1] == SecurityLooks.Carry.PULL
@@ -556,6 +645,7 @@ func _track_moves(
 				kind = "roller_lower"
 			moves[i] = kind
 		if moves.has(i) and carry_props.transfer_progress(id, i) >= 1.0:
+			_moves_done[moves[i]] = int(_moves_done.get(moves[i], 0)) + 1
 			moves.erase(i)
 	_last_bag_state[id] = now
 	_bag_moves[id] = moves
@@ -767,11 +857,9 @@ func _report() -> void:
 		"bag": 0,
 		"frames": 0,
 		"self": 0,
-		"self_outside": 0,
 		"through": 0,
 		"turn_points": 0,
 		"turn_frames": 0,
-		"pickup": 0,
 	}
 	var turn_along: Array = []
 	var worst := Vector4(INF, INF, INF, 0.0)
@@ -781,10 +869,8 @@ func _report() -> void:
 		totals["bag"] += s["bag_contacts"]
 		totals["frames"] += s["frames"]
 		totals["self"] += s["self_contacts"]
-		totals["self_outside"] += s["self_outside"]
 		totals["turn_points"] += s["turn_points"]
 		totals["turn_frames"] += s["turn_frames"]
-		totals["pickup"] += s["pickup_points"]
 		turn_along.append_array(s["turn_along"])
 		totals["through"] += s["through"]
 		worst = Vector4(
@@ -848,15 +934,11 @@ func _report() -> void:
 			_invalid("no %s carried through a booth" % kind)
 	if totals["frames"] < 100:
 		_invalid("only %d passenger frames near a booth" % totals["frames"])
-	print(
-		(
-			(
-				"BODY_IN_OWN_BAG failing=%d roller_moves_outside_booth=%d"
-				+ " repack_pickup_outside_booth=%d (reported) THROUGH_PARTS=%d"
-			)
-			% [totals["self"], totals["self_outside"], totals["pickup"], totals["through"]]
-		)
-	)
+	print("BODY_IN_OWN_BAG failing=%d THROUGH_PARTS=%d" % [totals["self"], totals["through"]])
+	print("MOVES_CHECKED %s" % _moves_done)
+	for move in ["roller_lift", "roller_lower", "repack_pickup_case", "repack_pickup_shoulder"]:
+		if int(_moves_done.get(move, 0)) == 0:
+			_invalid("no whole %s move was checked" % move)
 	print(
 		(
 			"CASE_TURN_IN_OWN_BAG points=%d frames=%d distance_from_booth_centre_m=%s (reported, accepted)"
