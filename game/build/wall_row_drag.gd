@@ -3,11 +3,16 @@ extends RefCounted
 ## The straight row the Wall and Glass tools drag. A press starts it on a cell
 ## with the edge side the press was nearest to; the far end follows the
 ## pointer's cell and the row runs along whichever axis the drag has moved
-## further (a tie goes along x), from the press cell, one edge of that side in
-## each cell. Release applies it once, in one undo step, with apply(): every
-## edge the rules accept is placed and the rest are skipped, and a row that
-## runs out of money stops at that edge. BuildMode owns the input and the
-## ghost; this class owns the cells and what applying or previewing them does.
+## further (a tie goes along x), from the press cell, one edge in each cell. A
+## row along x is a horizontal wall (NORTH or SOUTH edges), a row along z a
+## vertical one (WEST or EAST edges); a press nearest the other kind of edge
+## is turned toward the same corner (NORTH and WEST are the near edges, SOUTH
+## and EAST the far ones). A row that never left its cell keeps the pressed
+## side, so a click lays the edge it was nearest to. Release applies it once,
+## in one undo step, with apply(): every edge the rules accept is placed and
+## the rest are skipped, and a row that runs out of money stops at that edge.
+## BuildMode owns the input and the ghost; this class owns the cells and what
+## applying or previewing them does.
 
 
 ## What previewing a row says: per edge whether it would be placed, what the
@@ -22,9 +27,13 @@ class Preview:
 
 
 var active := false
-## The BuildGrid.Side every edge of the row is on.
-var side := 0
+## The BuildGrid.Side every edge of the row is on: the pressed side, turned to
+## the drag axis once the row has left its cell.
+var side: int:
+	get:
+		return _row_side()
 
+var _press_side := 0
 var _start := Vector2i.ZERO
 var _end := Vector2i.ZERO
 var _limit := Vector2i.ZERO
@@ -106,7 +115,7 @@ static func preview(
 ## `grid_size` bounds the row.
 func begin(cell: Vector2i, edge_side: int, grid_size: Vector2i) -> void:
 	active = true
-	side = edge_side
+	_press_side = edge_side
 	_limit = grid_size
 	_start = cell
 	_end = cell
@@ -125,13 +134,28 @@ func is_single_cell() -> bool:
 	return _start == _end
 
 
+func _row_side() -> int:
+	if is_single_cell():
+		return _press_side
+	var near := _press_side == BuildGrid.Side.NORTH or _press_side == BuildGrid.Side.WEST
+	if _along_x():
+		return BuildGrid.Side.NORTH if near else BuildGrid.Side.SOUTH
+	return BuildGrid.Side.WEST if near else BuildGrid.Side.EAST
+
+
+## Whether the row runs along x: the drag moved at least as far in x as in z.
+func _along_x() -> bool:
+	var span := _end - _start
+	return absi(span.y) <= absi(span.x)
+
+
 ## The cells of the row from the press cell to the far end along the longer
 ## axis of the drag, both included.
 func cells() -> Array[Vector2i]:
 	var span := _end - _start
 	var step := Vector2i(signi(span.x), 0)
 	var count := absi(span.x)
-	if absi(span.y) > absi(span.x):
+	if not _along_x():
 		step = Vector2i(0, signi(span.y))
 		count = absi(span.y)
 	var row: Array[Vector2i] = []
