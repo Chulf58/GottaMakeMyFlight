@@ -9,10 +9,10 @@ extends GdUnitTestSuite
 ## so the car parks and its passengers get out, but no `parked` event fires
 ## without its PARKING transaction.
 
-## The flight closes its doors at 250, before a car on the road from tick 1
-## reaches the lot's turn (276 ticks in).
-const BOARDING := 150
-const DOORS := 250
+## The flight closes its doors at 25, before a car on the road from tick 1
+## reaches the lot's turn (30 ticks in).
+const BOARDING := 10
+const DOORS := 25
 const BOOKED := 12
 
 var _land: LandsideTestWorld

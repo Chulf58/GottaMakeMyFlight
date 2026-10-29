@@ -90,9 +90,9 @@ func _break(d: Dictionary, case_name: String) -> void:
 		"old version":
 			d["save_version"] = 0
 		"lots size":
-			d["lots_built"] = [true, true]
+			d["lots_built"] = [true, true, true]
 		"no lot built":
-			d["lots_built"] = [false]
+			d["lots_built"] = [false, false]
 		"aboard unlisted":
 			for v in d["vehicles"]:
 				(v["bookings"] as Array).clear()

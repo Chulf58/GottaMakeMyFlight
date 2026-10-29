@@ -43,7 +43,7 @@ func test_every_lane_along_the_road_keeps_the_centre_line_on_the_left() -> void:
 		)
 		assert_float(left.dot(to_centre)).is_greater(0.0)
 		checked += 1
-	assert_int(checked).is_equal(3)
+	assert_int(checked).is_equal(STARTER.lots.size() + 2)
 
 
 func test_the_near_carriageway_runs_west_with_the_curb_on_the_right() -> void:
