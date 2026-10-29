@@ -64,6 +64,7 @@ Durable conventions and project facts, for any engineer or agent working in this
 ## Conventions (lean — grows only via architecture-altering decision records)
 
 - **No hand-maintained architecture or design documents.** Generated projections only, clearly marked. Knowledge lives in the store; a document that duplicates it will drift from it, and the copy is always the one that lies.
+- **Saves before the first release:** do not write save migrations or other old-save handling. A change to save data bumps the version and may refuse older development saves. After the first release, older saves must load again (user-ruled 2026-10-29: "We dont cater for old saves until after a release"; decision `old-saves-are-not-supported-until-after-a-release-no-save-mi`).
 
 (grows only via architecture-altering decision records — nothing yet)
 
