@@ -49,9 +49,14 @@ extends Node3D
 ## backpack going to or from the back, and a roller going to or from the pull,
 ## take the overhead route (overhead()), along the body's centre plane, over
 ## the head (a roller taken round the side met the legs and, in a narrow cell,
-## the wall). Straps and rods retract while a
-## bag is off the body and stretch as it arrives. It reads the sim and the views
-## and never writes either.
+## the wall); a roller in the hand joins it through a gate ahead of the body,
+## and a bag picked up from the floor ahead passes outside the thigh
+## (CarryMoves). Straps and rods retract while a bag is off the body and
+## stretch as it arrives; a shoulder bag is in place before its strap does. In
+## a turn between side and front carry the holding arm reaches further forward,
+## so the turning bag passes ahead of the thighs, and at a basic scanner the
+## bags go to the front BoothCarry.LEAD_M before the booth. It reads the sim
+## and the views and never writes either.
 
 enum Arm { FREE, HAND, PULL, STRAP }
 ## Which bags _place_bags() places.
@@ -74,6 +79,9 @@ const FRONT_PALM_M := 0.04
 const FRONT_ONE_BAG_M := 0.10
 const FRONT_TWO_BAGS_M := 0.17
 const FRONT_FREE_HAND_M := 0.33
+## How much further forward the holding upper arm reaches half way through a
+## turn between the side and the front carry (_pose_arms).
+const TURN_REACH_DEGREES := 45.0
 const TRANSFER_TICKS := 6.0
 ## How high a moving bag rises midway, so it goes over a table edge.
 const TRANSFER_LIFT_M := 0.3
@@ -172,9 +180,12 @@ const REACH_NODES := {
 const OVERHEAD_M := 2.05
 const ROUTE_FRONT_M := 0.45
 const ROUTE_BACK_M := 0.2
-## A roller on the overhead route is down by this much of the move; its rods
-## then come out to the hand.
+## A roller on the overhead route to the pull is down by this much of the
+## move; its rods then come out to the hand.
 const ROLLER_LAND := 0.85
+## A shoulder bag going to the shoulder is in place by this much of the move,
+## when its strap starts to stretch (_reach_blend).
+const STRAP_PLACED := 0.85
 
 ## Kind -> its bounds at scale 1, all meshes with their transforms in the piece
 ## (read once).
@@ -388,46 +399,18 @@ static func follow(at: Vector3, to: Vector3, dt: float, hand: int) -> Vector3:
 
 
 ## The overhead route at `k` (0 to 1) from `from` to `to`, both in the body's
-## frame (x across, +z ahead), down by `land` (it then waits there, turned): it
-## rises in front of or behind the body, crosses
-## over the head with its lowest point (of `box`, the bag's bounds in its own
-## frame) at OVERHEAD_M, turning there, and comes down on the other side.
+## frame (x across, +z ahead), down by `land`: CarryMoves.overhead(), an end
+## held in the hand (`from_hand`, `to_hand`) joined through a gate ahead.
 static func overhead(
-	from: Transform3D, to: Transform3D, k: float, box: AABB, land := 1.0
+	from: Transform3D,
+	to: Transform3D,
+	k: float,
+	box: AABB,
+	land := 1.0,
+	from_hand := false,
+	to_hand := false
 ) -> Transform3D:
-	# It turns only while it is up over the head: rising and coming down it
-	# keeps its start and end pose, so it swings into nothing beside the body.
-	var turned := clampf(k * 3.0 - 1.0, 0.0, 1.0)
-	var turn := from.basis.get_rotation_quaternion().slerp(
-		to.basis.get_rotation_quaternion(), turned
-	)
-	var basis := Basis(turn).scaled(from.basis.get_scale().lerp(to.basis.get_scale(), turned))
-	var lowest := INF
-	for i in 8:
-		lowest = minf(lowest, (basis * box.get_endpoint(i)).y)
-	var high := OVERHEAD_M - lowest
-	var rise := _route_end(from.origin)
-	var fall := _route_end(to.origin)
-	var at: Vector3
-	if k < 1.0 / 3.0:
-		var t := k * 3.0
-		at = from.origin.lerp(rise, t)
-		at.y = lerpf(from.origin.y, high, t)
-	elif k < 2.0 / 3.0:
-		at = rise.lerp(fall, k * 3.0 - 1.0)
-		at.y = high
-	else:
-		var t := minf((k - 2.0 / 3.0) / (land - 2.0 / 3.0), 1.0)
-		at = fall.lerp(to.origin, t)
-		at.y = lerpf(high, to.origin.y, t)
-	return Transform3D(basis, at)
-
-
-## Where the overhead route leaves or joins the body's centre plane: in front
-## or behind, at least ROUTE_FRONT_M / ROUTE_BACK_M out.
-static func _route_end(at: Vector3) -> Vector3:
-	var z := maxf(at.z, ROUTE_FRONT_M) if at.z >= 0.0 else minf(at.z, -ROUTE_BACK_M)
-	return Vector3(0.0, at.y, z)
+	return CarryMoves.overhead(from, to, k, box, land, from_hand, to_hand)
 
 
 ## A bag lying flat with its length across a body turned to `yaw`.
@@ -463,6 +446,8 @@ func sync() -> void:
 		# (decision basic-scanner-booth-passengers-carry-their-bags-in-front-
 		# and), so a passenger with none is kept until its arms are back out.
 		var booth := SecurityLooks.in_booth_passage(sim, p)
+		# Bags go to the front (a roller into the hand first) before the booth.
+		var booth_bags := booth or BoothCarry.approaching(sim, p)
 		var tucked := booth or BoothCarry.tuck_weight(_held.get(id, {}), _tick()) > 0.0
 		if homes.is_empty() and not tucked:
 			_arms_off(node)
@@ -478,7 +463,7 @@ func sync() -> void:
 		for i in homes.size():
 			kinds.append(SecurityLooks.bag_kind(p, i))
 			var roller := kinds[i] == SecurityLooks.Kind.ROLLER
-			lifts.append(_lifted(kinds[i], p, lift_stall if roller else at_stall, booth))
+			lifts.append(_lifted(kinds[i], p, lift_stall if roller else at_stall, booth_bags))
 			# A worn bag keeps its side, so a narrow cell never moves it across.
 			var worn: bool = (
 				not lifts[i]
@@ -489,7 +474,7 @@ func sync() -> void:
 			)
 			hands.append(SecurityLooks.worn_side(i) if worn else SecurityLooks.hand_of(sim, p, i))
 		# A stall is closed on both sides, its approach as good as (StallCarry).
-		var front := SecurityLooks.carry_front(sim, p) or at_stall
+		var front := SecurityLooks.carry_front(sim, p) or at_stall or booth_bags
 		var held: Dictionary = _held.get(id, {"tray": null, "bags": []})
 		_held[id] = held
 		held["tray_at"] = tray_at
@@ -499,7 +484,7 @@ func sync() -> void:
 		held["in_stall"] = StallCarry.in_stall(p)
 		held["stall"] = StallCarry.stall_of(sim, p)
 		# At a booth a roller's lift into the hand ends before the front turn.
-		if booth and BoothCarry.roller_rising(held, kinds, lifts, _tick()):
+		if booth_bags and BoothCarry.roller_rising(held, kinds, lifts, _tick()):
 			front = false
 		if not held.has("front"):
 			# A new record (a new passenger, or after a load) starts in the
@@ -523,7 +508,12 @@ func sync() -> void:
 		var was: Array = held["bags"]
 		# A roller lifted at a booth stays in hand until the turn back has ended.
 		var kept := BoothCarry.kept_lifted(
-			held, kinds, lifts, _front_weight(held, _tick()), BoothCarry.tuck_weight(held, _tick())
+			held,
+			kinds,
+			lifts,
+			_front_weight(held, _tick()),
+			BoothCarry.tuck_weight(held, _tick()),
+			booth_bags
 		)
 		for i in kinds.size():
 			lifts[i] = lifts[i] or kept[i]
@@ -591,7 +581,7 @@ func sync() -> void:
 			var by_bar: bool = (
 				lifted
 				and kinds[i] == SecurityLooks.Kind.ROLLER
-				and not _lifted(kinds[i], p, false, booth)
+				and not _lifted(kinds[i], p, false, booth_bags)
 				and not kept[i]
 			)
 			# A roller lifted before and now that stops or starts being held by its
@@ -907,6 +897,7 @@ func _place_bags(
 		bag["carry_placed"] = bag["carry"]
 		var to_hand: bool = homes[i] == SecurityLooks.Home.HAND
 		var from_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
+		var from_floor: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.FLOOR
 		var reach: float = want_reach[0]
 		if k < 1.0:
 			var to_pull: bool = to_hand and bag["carry"] == SecurityLooks.Carry.PULL
@@ -916,6 +907,11 @@ func _place_bags(
 				_reach_blend(kind, k, to_pull if kind == SecurityLooks.Kind.ROLLER else to_hand)
 			)
 		_set_reach(node, kind, reach)
+		# A shoulder bag is in place by STRAP_PLACED of its move, so its strap
+		# stretches (_reach_blend) from a bag already on the shoulder, not
+		# through the strap hand raised at the chest.
+		if to_hand and kind == SecurityLooks.Kind.SHOULDER:
+			k = minf(k / STRAP_PLACED, 1.0)
 		if k >= 1.0:
 			node.global_transform = want
 			continue
@@ -932,15 +928,21 @@ func _place_bags(
 			or (from_hand and bag.get("carry_from", SecurityLooks.KIND_CARRY[kind]) in high)
 		)
 		if overhead_route:
-			var box := bag_box(kind)
+			# A roller held in the hand at an end of the route joins it through
+			# a gate ahead of the body (CarryMoves); it lands at ROLLER_LAND only
+			# in the pull, where its rods then come out to the hand.
+			var roller := kind == SecurityLooks.Kind.ROLLER
+			var pulls: bool = to_hand and bag["carry"] == SecurityLooks.Carry.PULL
 			node.global_transform = (
 				frame
 				* overhead(
 					bag["from"],
 					frame.affine_inverse() * want,
 					k,
-					box,
-					ROLLER_LAND if kind == SecurityLooks.Kind.ROLLER else 1.0
+					bag_box(kind),
+					ROLLER_LAND if roller and pulls else 1.0,
+					roller and from_hand and bag["carry_from"] == SecurityLooks.Carry.HAND,
+					roller and to_hand and bag["carry"] == SecurityLooks.Carry.HAND
 				)
 			)
 			continue
@@ -974,6 +976,8 @@ func _place_bags(
 			)
 		elif hand_in_stall:
 			pass
+		elif rising and from_floor and not in_stall and CarryMoves.picks_up_ahead(bag["from"]):
+			placed = frame * CarryMoves.pick_up(bag["from"], frame.affine_inverse() * want, k)
 		elif rising:
 			var across := start_now.origin.lerp(want.origin, k * k)
 			placed.origin.x = across.x
@@ -1025,7 +1029,7 @@ static func _reach_blend(kind: SecurityLooks.Kind, k: float, to_hand: bool) -> f
 	if kind != SecurityLooks.Kind.SHOULDER:
 		return k
 	if to_hand:
-		return clampf((k - 0.85) / 0.15, 0.0, 1.0)
+		return clampf((k - STRAP_PLACED) / (1.0 - STRAP_PLACED), 0.0, 1.0)
 	return clampf(k / 0.4, 0.0, 1.0)
 
 
@@ -1233,6 +1237,11 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 			Arm.HAND:
 				arm.front_half_width = FRONT_ONE_BAG_M if cases < 2 else FRONT_TWO_BAGS_M
 				arm.front_weight = held["weight"]
+				# Turning between the side and the front, the upper arm reaches
+				# further forward (most at half way, none at either end), so the
+				# turning bag passes ahead of the thighs.
+				var w: float = held["weight"]
+				arm.front_upper_degrees = 20.0 + TURN_REACH_DEGREES * 4.0 * w * (1.0 - w)
 			_:
 				# Beside a front-carried case, or tucked in through a booth.
 				arm.front_half_width = BoothCarry.free_hand_width(beside > 0, tuck)

@@ -272,3 +272,49 @@ func _views_of(w: SecurityTestWorld) -> PassengerViews:
 	add_child(views)
 	_views.append(views)
 	return views
+
+
+## Bags go to the front BoothCarry.LEAD_M before the booth's first cell, on the
+## way to security no, in the queue or at security, on the passage's line: two
+## cells out yes, three no; not past the booth, beside the line or at another stage. Control:
+## the two-cell spot is a real distance from the booth (more than the entry).
+func test_bags_go_to_the_front_a_lead_before_the_booth() -> void:
+	var w := _make(false)
+	var sim := w.world.sim
+	var id := _id_with_roller(false)
+	var two := ENTRY + Vector2i(0, 1)
+	var gap := sim.grid.cell_to_world(two).distance_to(sim.grid.cell_to_world(BOOTH))
+	print(
+		"two cells out: %.2f m from the booth's first cell, lead %.2f m" % [gap, BoothCarry.LEAD_M]
+	)
+	assert_float(gap).is_greater(1.5)
+	assert_float(gap).is_less_equal(BoothCarry.LEAD_M)
+	var cases := [
+		[Passenger.Stage.SECURITY_QUEUE, two, true],
+		[Passenger.Stage.SECURITY, ENTRY, true],
+		[Passenger.Stage.SECURITY_QUEUE, ENTRY + Vector2i(0, 2), false],
+		[Passenger.Stage.SECURITY, EXIT, false],
+		[Passenger.Stage.SECURITY_QUEUE, two + Vector2i(1, 0), false],
+		[Passenger.Stage.TO_GATE, two, false],
+		[Passenger.Stage.TO_SECURITY, two, false],
+	]
+	for c: Array in cases:
+		var route: Array[Vector2i] = [c[1]]
+		var p := _walker(id, c[0], route)
+		p.station = w.station
+		(
+			assert_bool(BoothCarry.approaching(sim, p))
+			. override_failure_message("stage %d at %s" % [c[0], c[1]])
+			. is_equal(c[2])
+		)
+	# Another station chosen (or none): not this booth's approach.
+	var other := _walker(id, Passenger.Stage.SECURITY_QUEUE, [two] as Array[Vector2i])
+	assert_bool(BoothCarry.approaching(sim, other)).is_false()
+	other.station = w.station + 1000
+	assert_bool(BoothCarry.approaching(sim, other)).is_false()
+	# Control: a lane's arch is no booth to approach.
+	var lane := _make(true)
+	var before_arch := SecurityTestWorld.ARCH_AT + Vector2i(0, 2)
+	var q := _walker(id, Passenger.Stage.SECURITY_QUEUE, [before_arch] as Array[Vector2i])
+	q.station = lane.station
+	assert_bool(BoothCarry.approaching(lane.world.sim, q)).is_false()

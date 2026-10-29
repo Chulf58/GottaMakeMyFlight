@@ -17,6 +17,15 @@ const TUCK_HAND_M := 0.22
 ## The same for a free hand beside a front-carried case: further out, so its
 ## fingertips stay clear of the case.
 const TUCK_BESIDE_M := 0.28
+## Bags go to the front this far before the centre of a booth's first cell
+## (approaching(); 2.8 m before the booth's own centre): a roller's lift into
+## the hand, then the turn (TRANSFER_TICKS each, about 0.4 m of walk) end before
+## the bags reach the booth's entry-end panels (0.92 m out from its centre).
+## Started at the entry cell, a walker at full pace was still turning 1.4 m out
+## and its case touched them.
+const LEAD_M := 2.3
+## How far from the passage's line a walker counts as on it.
+const LINE_M := 0.5
 
 
 ## How far `held` has tucked its free arms in at sim time `now`, 0 (swinging)
@@ -69,7 +78,8 @@ static func roller_rising(
 
 ## For each bag: whether a roller lifted by its handle that would go back to
 ## the pull now stays in hand, because it was in hand while the arms were
-## tucked for a booth (`tuck` above 0; marked "booth_kept") and the front
+## tucked for a booth (`tuck` above 0) or its bags were made ready for one
+## (`preparing`, approaching()) (marked "booth_kept") and the front
 ## weight (`front`) has not turned back to the side yet. The mark lasts until
 ## the front carry has ended, so a way past the booth closed on both sides,
 ## where the front carry goes on after the tuck, keeps it in hand too.
@@ -78,7 +88,8 @@ static func kept_lifted(
 	kinds: Array[SecurityLooks.Kind],
 	lifts: Array[bool],
 	front: float,
-	tuck: float
+	tuck: float,
+	preparing := false
 ) -> Array[bool]:
 	var was: Array = held["bags"]
 	var out: Array[bool] = []
@@ -87,9 +98,32 @@ static func kept_lifted(
 			out.append(false)
 			continue
 		var in_hand: bool = int(was[i].get("place", 0)) % 2 == 1 and not was[i].get("by_bar", false)
-		if tuck > 0.0 and in_hand:
+		if (tuck > 0.0 or preparing) and in_hand:
 			was[i]["booth_kept"] = true
 		if front <= 0.0:
 			was[i]["booth_kept"] = false
 		out.append(not lifts[i] and in_hand and was[i].get("booth_kept", false))
 	return out
+
+
+## Whether `p` walks up to the basic scanner booth it chose (its station), or
+## waits for it, in the security queue or at security (not on its way there:
+## a walker at full pace turning its case 2.7 m out put its thigh in it),
+## LEAD_M or less before the booth's first cell on its entry side, near the
+## passage's line: its bags go to the front from there (CarryOnProps), a roller
+## lifted into the hand first.
+static func approaching(sim: PassengerSim, p: Passenger) -> bool:
+	if p.stage != Passenger.Stage.SECURITY_QUEUE and p.stage != Passenger.Stage.SECURITY:
+		return false
+	var at := sim.world_position(p)
+	var passage: Array = sim.layout.passages.get(p.station, [])
+	if passage.size() < 2 or not SecurityLooks.in_booth(sim.grid, passage[1]):
+		return false
+	var booth := sim.grid.cell_to_world(passage[1])
+	var axis := booth - sim.grid.cell_to_world(passage[0])
+	axis.y = 0.0
+	axis = axis.normalized()
+	var rel := at - booth
+	rel.y = 0.0
+	var before := -rel.dot(axis)
+	return before > 0.0 and before <= LEAD_M and (rel + axis * before).length() <= LINE_M
