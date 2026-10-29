@@ -68,9 +68,17 @@ const FLOOR_APART_M := 0.16
 const SEAT_AHEAD_M := 0.62
 ## A bag at a cafe seat lies beside the chair, this far to the sitter's right.
 const CAFE_BESIDE_M := 0.45
-## A bag in a toilet stall lies this far out from the stall's footprint centre:
-## clear of the seated knees (about 0.21 m) and inside the closed door (0.92 m).
-const STALL_BAG_M := 0.6
+## A bag in a toilet stall stands upright on its end (STALL_UPRIGHT) with its
+## back face this far out from the stall's footprint centre: against the inside
+## of the closed door's leaves (0.881 m, less a 0.02 m gap), so the deepest bag
+## (0.226 m) keeps 0.635 m out, clear of the seated and standing feet (about
+## 0.55 m). Lying flat it was 0.35 m deep and the feet stood in it.
+const STALL_BAG_M := 0.861
+## A stall bag's own axes in the frame of a passenger facing out of the door:
+## its length (z) up, so a roller stands on its wheels and a backpack's loop is
+## on top; its back face (y = 0, a roller's rods) against the door and its
+## front (a case's handle face) toward the seat; its width (x) across.
+const STALL_UPRIGHT := Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP)
 
 
 ## The lane geometry of the station `p` is admitted at or queues for, or {}
@@ -258,16 +266,22 @@ static func in_tray(index: int, count: int, bag_length: float) -> Vector3:
 
 ## Where floor bag `index` of `count` of `p` lies, in the passenger's frame
 ## (+z ahead, +x its left, on the floor): at the feet of a gate chair, beside
-## a cafe seat (the table is ahead), by the door inside a toilet stall
-## (_stall_spot()), and ahead of a repacking passenger. One
-## bag lies across the passenger's line, two lie along it side by side.
+## a cafe seat (the table is ahead), upright against the door inside a toilet
+## stall (stall_floor()), and ahead of a repacking passenger. One bag lies
+## across the passenger's line, two lie along it side by side (in a stall, two
+## stand side by side across it).
 static func floor_spot(sim: PassengerSim, p: Passenger, index: int, count: int) -> Transform3D:
 	var across := Basis(Vector3.UP, PI / 2.0) if count < 2 else Basis.IDENTITY
 	var side := 0.0 if count < 2 else (FLOOR_APART_M if index == 0 else -FLOOR_APART_M)
 	var where := StageKinds.location(p.stage)
 	if where == StageKinds.Location.FACILITY_SEAT and _in_stall(sim, p):
-		# On the stall's floor by the door, ahead of the knees.
-		return Transform3D(across, _stall_spot(sim, p) + Vector3(side, 0.0, 0.0))
+		# On the stall's floor against the door, ahead of the feet.
+		var stall := sim.toilets.visit_of(p.id).stall
+		var out := world_dir(stall["front"])
+		var body := Transform3D(Basis(Vector3.UP, atan2(out.x, out.z)), sim.world_position(p))
+		var spot := body.affine_inverse() * stall_floor(stall, index, count)
+		spot.origin.y = 0.0
+		return spot
 	if where == StageKinds.Location.FACILITY_SEAT:
 		# Beside the chair, lying along it.
 		var along := 0.0 if count < 2 else side
@@ -304,19 +318,22 @@ static func _in_stall(sim: PassengerSim, p: Passenger) -> bool:
 	return sim.toilets.use_facing(p) != Vector2i.ZERO
 
 
-## Where the bags of a passenger in a stall lie: on the floor between the
-## seated knees and the closed door, a point fixed in the stall (the body
-## shuffles between Mount_Turn and Mount_Use under it), given in the
-## passenger's frame, which faces out of the door. The view draws the body
-## between two ticks while this is worked out from the tick's own position, so
-## during the shuffle a bag is off by at most one tick's step.
-static func _stall_spot(sim: PassengerSim, p: Passenger) -> Vector3:
-	var stall := sim.toilets.visit_of(p.id).stall
-	var front: Vector2i = stall["front"]
-	var out := world_dir(front)
+## Where floor bag `index` of `count` stands in `stall` (a ToiletLayout
+## entry), in the world, a point fixed in the stall (the body shuffles between
+## Mount_Turn and Mount_Use above it): STALL_UPRIGHT turned to face out of the
+## door, its back face STALL_BAG_M out from the footprint centre, one bag on the
+## centre line and two FLOOR_APART_M either side of it (each on its hand's
+## side), its origin on the floor
+## (CarryOnProps lifts a bag by its own bounds so it stands on the floor).
+static func stall_floor(stall: Dictionary, index: int, count: int) -> Transform3D:
+	var out := world_dir(stall["front"])
+	var facing := Basis(Vector3.UP, atan2(out.x, out.z))
 	var centre: Vector3 = stall["use"] - out * ToiletLayout.USE_M
-	var spot := centre + out * STALL_BAG_M
-	return Vector3(0.0, 0.0, (spot - sim.world_position(p)).dot(out))
+	# Each of two bags on the side of the hand that carries it (bag i in hand i,
+	# 0 the right, -x), so they do not cross over as they are picked up.
+	var side := 0.0 if count < 2 else (-FLOOR_APART_M if index == 0 else FLOOR_APART_M)
+	var at := centre + out * STALL_BAG_M + facing * Vector3(side, 0.0, 0.0)
+	return Transform3D(facing * STALL_UPRIGHT, at)
 
 
 static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
