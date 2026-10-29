@@ -163,12 +163,16 @@ func add_vehicle(
 
 
 ## A booking that left the vehicle without getting out (its flight closed).
+## A car emptied on road_in no longer means to park: it never turns into a
+## lot, so it reserves no slot and pays nothing.
 func drop_booking(vehicle_id: int, booking_id: int) -> void:
 	var v: LandsideVehicle = _by_id.get(vehicle_id)
 	if v == null or not v.bookings.has(booking_id):
 		push_error("LandsideSim: vehicle %d does not carry booking %d" % [vehicle_id, booking_id])
 		return
 	v.bookings.erase(booking_id)
+	if v.bookings.is_empty() and v.lane == LandsideVehicle.Lane.ROAD_IN:
+		v.intent = LandsideVehicle.Intent.DROP
 
 
 func vehicle_ids() -> Array[int]:
@@ -376,13 +380,22 @@ func _set_moving(v: LandsideVehicle, queued: bool) -> void:
 		_set_stage(v, stage)
 
 
+## Parks `v` in its reserved slot. The fee is settled the way shop income is
+## (CafeSim and ShopSim._settle()): credited first, and `parked` is emitted
+## only once the credit landed. Without a wallet, or when the wallet refuses
+## (Wallet.MAX_BALANCE), an error says so and no fee is taken; the car
+## still parks, so its passengers are not held up by the balance.
 func _park(v: LandsideVehicle, rng: RandomNumberGenerator) -> void:
 	v.lane = LandsideVehicle.Lane.SLOT
 	v.pos_mm = 0
 	v.leave_tick = tick + rng.randi_range(STAY_MIN_TICKS, STAY_MAX_TICKS)
 	_set_stage(v, LandsideVehicle.Stage.PARKED)
-	if wallet == null or not wallet.credit(SURFACE_LOT_FEE, Wallet.Category.PARKING):
-		push_error("LandsideSim: the parking fee of vehicle %d could not be credited" % v.id)
+	if wallet == null:
+		push_error("LandsideSim: no wallet to pay vehicle %d's parking fee into" % v.id)
+		return
+	if not wallet.credit(SURFACE_LOT_FEE, Wallet.Category.PARKING):
+		push_error("LandsideSim: the wallet refused vehicle %d's parking fee" % v.id)
+		return
 	parked.emit(v.id, v.lot)
 
 
