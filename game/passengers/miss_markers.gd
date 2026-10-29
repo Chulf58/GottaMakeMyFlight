@@ -92,8 +92,6 @@ static var _caption_sizes: Dictionary = {}
 var sim: PassengerSim
 ## How many times the caption layout ran; it skips a draw where nothing changed.
 var declutter_runs := 0
-## How many staff-spot captions found no valid spot (one error pushed each).
-var no_spot_errors := 0
 ## How many lane-hint captions were hidden because no spot in the view was clear
 ## of the HUD, summed over the layouts run.
 var hint_no_spot_hides := 0
@@ -129,10 +127,6 @@ var _stations: Array[int] = []
 ## The icons in play, for a moved caption to keep off, and a grid of them.
 var _icons: Array[Rect2] = []
 var _icon_bins: Dictionary = {}
-## Stations whose staff-spot caption found no valid spot, so the error is
-## pushed once per station, not on every layout; an entry lasts until the
-## station's sign is removed.
-var _no_spot: Dictionary = {}
 var _order: Array[int] = []
 var _placed: Array[Rect2] = []
 var _bins: Dictionary = {}
@@ -402,9 +396,11 @@ func _place_caption(i: int, view_size: Vector2) -> void:
 
 ## Where staff-spot caption `i` goes: its own spot if clear, else lifted
 ## upward, then the same lifts to either side. A spot is valid inside the view,
-## off every icon and clear of the captions placed. With no valid spot the error
-## is pushed once and the best spot found is used: inside the view and clear of
-## the captions, else the caption's own place.
+## off every icon and clear of the captions placed. With no valid spot the best
+## one found is used: inside the view and clear of the captions, else the
+## caption's own place moved the shortest way into the view, over another
+## caption if need be (a view with no room is a normal camera state, so no error).
+## A station whose icon is wholly outside the view keeps its own place.
 func _clear_spot(i: int, view_size: Vector2) -> Rect2:
 	var view := Rect2(Vector2.ZERO, view_size)
 	var text := _labels[i].text
@@ -428,16 +424,11 @@ func _clear_spot(i: int, view_size: Vector2) -> Rect2:
 			if not best_found:
 				best = rect
 				best_found = true
-	if not _no_spot.has(_stations[i]):
-		_no_spot[_stations[i]] = true
-		no_spot_errors += 1
-		push_error(
-			(
-				"MissMarkers: no clear spot inside the view for the caption of station %d"
-				% _stations[i]
-			)
-		)
-	return best
+	if best_found or not view.intersects(_icons[i]):
+		return best
+	var low := view.position
+	var high := (view.end - best.size).max(low)
+	return Rect2(best.position.clamp(low, high), best.size)
 
 
 ## Where lane-hint caption `i` goes: its own spot when that is inside the view
@@ -731,5 +722,4 @@ func _drop_sign(signs: Dictionary, station: int) -> void:
 	sign.visible = false
 	_free_signs.append(sign)
 	signs.erase(station)
-	_no_spot.erase(station)
 	_dirty = true

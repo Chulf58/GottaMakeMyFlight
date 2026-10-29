@@ -346,42 +346,74 @@ func test_a_column_of_staff_spot_captions_near_the_top_stays_in_view_and_off_ico
 	_assert_clear_by_the_margin(_shown_rects())
 
 
-## A view too small for any caption to fit in leaves a staff-spot caption no
-## valid spot. It stays visible, and the error is raised once per station, also
-## after the view grows back and shrinks again: the first one is caught with
-## assert_error, and no_spot_errors showing 1 afterwards means no later layout
-## raised a second.
-func test_a_staff_spot_caption_with_no_valid_spot_stays_visible_and_errors_once() -> void:
+## A sign near the top edge of the view leaves its staff-spot caption no clear
+## spot: its own place is above the view and every lift goes higher. The caption
+## is clamped to the nearest place inside the view, over its own icon if need be,
+## with no error (a view with no room is a normal camera state).
+func test_a_staff_spot_caption_with_no_room_is_clamped_into_the_view_without_error() -> void:
 	_frame_closed_signs(HOME_DISTANCE)
 	var station: int = MissSignals.closed_stations(_world.sim)[0]
 	_caption_of(station).text = MissMarkers.UNREACHABLE_CAPTION
-	_nudge_camera()
-	# Control: in the full view it has a spot, so there is no error yet.
-	assert_int(_markers.no_spot_errors).is_equal(0)
-	# Control: the caption is wider than the small view, so no spot can fit.
-	var small := Vector2i(100, 100)
-	assert_float(MissMarkers.caption_size(MissMarkers.UNREACHABLE_CAPTION).x).is_greater(small.x)
-	_port.size = small
-	# The first layout in the small view raises the error itself, naming the station.
-	await (
-		assert_error(func() -> void: _nudge_camera())
-		. is_push_error(
-			"MissMarkers: no clear spot inside the view for the caption of station %d" % station
-		)
-	)
-	assert_int(_markers.no_spot_errors).is_equal(1)
+	_place_sign(station, Vector2(COLUMN_X, 20.0))
+	# Control: left at its own place the caption lies wholly above the view.
+	var own := MissMarkers.caption_rect(Vector2(COLUMN_X, 20.0), MissMarkers.UNREACHABLE_CAPTION)
+	assert_float(own.end.y).is_less(0.0)
+	await assert_error(func() -> void: _nudge_camera()).is_success()
+	var rect := _rect_of(station)
+	print("clamped caption %s in view %s" % [rect, VIEW])
 	assert_bool(_caption_of(station).visible).is_true()
-	# The same station laid out again: still shown, no second error.
+	assert_bool(VIEW.encloses(rect)).is_true()
+	# Control: it moved down by the amount it was out, and stays centred on its sign.
+	assert_float(rect.position.y).is_equal_approx(0.0, 0.01)
+	assert_float(rect.get_center().x).is_equal_approx(COLUMN_X, 0.5)
+
+
+## Four captions of one spot in a view with room for one: each shows, wholly
+## inside the view, with no error. The one that finds the spot free keeps it.
+func test_staff_spot_captions_crowded_into_a_tiny_view_all_stay_inside_it() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var text := MissMarkers.UNREACHABLE_CAPTION
+	var size := MissMarkers.caption_size(text)
+	var lift := MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX
+	var view := Rect2(Vector2.ZERO, Vector2(size.x + 40.0, lift + size.y + 30.0))
+	_port.size = Vector2i(view.size)
+	var stations: Array[int] = []
+	stations.assign(MissSignals.closed_stations(_world.sim))
+	stations.resize(4)
+	for station in stations:
+		_place_sign(station, Vector2(view.size.x / 2.0, view.size.y - 10.0))
+		_caption_of(station).text = text
+	await assert_error(func() -> void: _nudge_camera()).is_success()
+	var at_its_own_place := 0
+	for station in stations:
+		var rect := _rect_of(station)
+		print("tiny view caption %s in view %s" % [rect, view])
+		assert_bool(_caption_of(station).visible).is_true()
+		assert_bool(view.encloses(rect)).is_true()
+		if _caption_of(station).offset.is_equal_approx(Vector2(0.0, lift)):
+			at_its_own_place += 1
+	# Control: the view really had room for one caption at its own place.
+	assert_int(at_its_own_place).is_greater(0)
+
+
+## Control: with room, the caption keeps the spot the layout lifted it to, clear
+## of the caption placed first, not a clamped one.
+func test_a_staff_spot_caption_with_room_keeps_its_lifted_clear_spot() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var pair := _leftmost_pair()
+	_set_pair(pair, MissMarkers.SPOT_BLOCKED_CAPTION, MissMarkers.UNREACHABLE_CAPTION)
+	_place_sign(pair[0], Vector2(900.0, 500.0))
+	_place_sign(pair[1], Vector2(940.0, 500.0))
 	_nudge_camera()
-	assert_int(_markers.no_spot_errors).is_equal(1)
-	assert_bool(_caption_of(station).visible).is_true()
-	# Zoom out and back in: the view grows, then shrinks again.
-	_port.size = Vector2i(1920, 1080)
-	_nudge_camera()
-	_port.size = small
-	_nudge_camera()
-	assert_int(_markers.no_spot_errors).is_equal(1)
-	assert_bool(_caption_of(station).visible).is_true()
+	assert_bool(_pair_overlaps(pair)).is_true()
+	var home := Vector2(0.0, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX)
+	var lifted := 0
+	for station in pair:
+		assert_bool(VIEW.encloses(_rect_of(station))).is_true()
+		if not _caption_of(station).offset.is_equal_approx(home):
+			lifted += 1
+	assert_int(lifted).is_equal(1)
+	_assert_clear_by_the_margin([_rect_of(pair[0]), _rect_of(pair[1])])
 
 
 func test_of_two_overlapping_plain_closed_captions_the_leftmost_stays() -> void:
