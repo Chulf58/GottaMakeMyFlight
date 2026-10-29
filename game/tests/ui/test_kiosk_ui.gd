@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## The kiosk in the build menu and the room panel (Boredom 2/5; decision
 ## store-mechanics-draw-a-room-then-furnish-it-required-pieces): a Kiosk tray
 ## right after Toilets with the Kiosk room tool, the counter and the display
-## stand, their prices and placeholder tiles; over a kiosk room the panel
+## stand, their prices and rendered thumbnails; over a kiosk room the panel
 ## lists what it still needs, its browse spots and its one spend number.
 
 const KIOSK_TOOLS := [
@@ -70,7 +70,12 @@ func test_the_kiosk_tray_follows_toilets_and_holds_the_room_counter_and_display(
 		var picture := (
 			_menu.card(tool).find_children("*", "TextureRect", true, false)[0] as TextureRect
 		)
-		assert_object(picture.texture).is_null()
+		# Rendered thumbnails since Boredom 5/5, no longer placeholder tiles.
+		var name: String = BuildMenu.item(tool)[1]
+		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(name)).is_false()
+		assert_object(picture.texture).override_failure_message(name).is_not_null()
+		assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % name)
+		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 	for def_id: StringName in [&"kiosk_counter", &"kiosk_display"]:
 		assert_int(PriceTable.price_of_object(def_id)).is_greater(0)
 	var counter := BuildMenu.tool_price(BuildMode.Tool.KIOSK_COUNTER)

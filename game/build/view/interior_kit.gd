@@ -42,6 +42,8 @@ const OBJECT_PIECES := {
 	&"pickup_table": "pickup_table",
 	&"toilet_stall": "toilet_stall",
 	&"toilet_sink": "toilet_sink",
+	&"kiosk_counter": "kiosk_counter",
+	&"kiosk_display": "kiosk_display",
 }
 ## Where a piece sits in its object's frame (footprint centre, facing 0), for
 ## objects whose piece is not centred on the footprint. The entrance and exit

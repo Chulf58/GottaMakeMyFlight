@@ -123,7 +123,7 @@ const RUNNING_COST_TEXT := "Upkeep %d/day"
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := ["kiosk_room", "kiosk_counter", "kiosk_display"]
+const PLACEHOLDER_THUMBNAILS := []
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
