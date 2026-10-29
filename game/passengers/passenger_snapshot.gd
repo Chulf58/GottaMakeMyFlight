@@ -4,9 +4,10 @@ extends RefCounted
 ## paths, queue order, service ends, seat claims, apron progress and pending
 ## replans are all saved, so nothing is recomputed differently after a load.
 ## Cafe visits and counter queues go under "cafe" (CafeSnapshot), toilet
-## visits under "toilet" (ToiletSnapshot), security
-## service under "security" (SecurityRuntime.to_list()) with each passenger's
-## phase, remaining work and resolved incident on its record.
+## visits under "toilet" (ToiletSnapshot), kiosk visits under "shop"
+## (ShopSnapshot), security service under "security"
+## (SecurityRuntime.to_list()) with each passenger's phase, remaining work and
+## resolved incident on its record.
 ## Seat claims and walker counts are rebuilt from the passenger records. The
 ## made and missed totals, each flight's results and the scheduled flights are
 ## saved as they are: settled passengers are retired, so they cannot be rebuilt.
@@ -27,6 +28,7 @@ const KEYS := [
 	"scheduled",
 	"security",
 	"toilet",
+	"shop",
 ]
 ## The last version before the security traits, migrated on load.
 const V6 := 6
@@ -71,6 +73,7 @@ const INT_FIELDS := [
 	"toilet_need",
 	"toilet_cooldown",
 	"boredom",
+	"shop_cooldown",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan", "liquids", "alarm", "incident_resolved"]
@@ -143,6 +146,7 @@ static func save(
 		"scheduled": scheduled,
 		"security": sim.security.to_list(),
 		"toilet": ToiletSnapshot.save(sim.toilets),
+		"shop": ShopSnapshot.save(sim.shops),
 	}
 
 
@@ -192,6 +196,13 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 		if (cafe["visits"] as Dictionary).has(id):
 			return {"error": "passenger %d has both a cafe and a toilet visit" % id}
 	out["toilet"] = toilet
+	var shop := ShopSnapshot.load(data["shop"], ids, grid, out["tick"])
+	if shop.has("error"):
+		return shop
+	for id: int in shop["visits"]:
+		if (cafe["visits"] as Dictionary).has(id) or (toilet["visits"] as Dictionary).has(id):
+			return {"error": "passenger %d has a shop visit and another" % id}
+	out["shop"] = shop
 	var queues := _queues(data["queues"], ids)
 	if queues.has("error"):
 		return queues
@@ -257,7 +268,8 @@ static func _record(p: Passenger) -> Dictionary:
 ## need ToiletSim.migrated_need() gives its id and no cooldown, and there are
 ## no toilet visits. Version 10 to 11: every passenger gets the boredom
 ## BoredomSim.start_of() gives its id; its toilet need, cooldown and any toilet
-## visit are kept as saved. Any other save is returned as it is, for the checks
+## visit are kept as saved, and it gets no kiosk cooldown and no kiosk visits.
+## Any other save is returned as it is, for the checks
 ## to accept or refuse. The given dictionary is not edited.
 static func _migrated(data: Dictionary) -> Dictionary:
 	if (
@@ -281,7 +293,7 @@ static func _migrated(data: Dictionary) -> Dictionary:
 		_rescale_unpack(passengers)
 	if from_version <= V9:
 		_add_toilets(out, passengers)
-	_add_boredom(passengers)
+	_add_boredom(out, passengers)
 	return out
 
 
@@ -333,12 +345,15 @@ static func _add_toilets(out: Dictionary, passengers: Array) -> void:
 	out["toilet"] = {"visits": [], "deadlines_stale": false}
 
 
-## Version 10 to 11: boredom from each passenger's id. A record whose id is
-## not a whole number is left for the checks.
-static func _add_boredom(passengers: Array) -> void:
+## Version 10 to 11: boredom from each passenger's id, no kiosk cooldown and
+## no kiosk visits. A record whose id is not a whole number is left for the
+## checks.
+static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 	for record in passengers:
 		if typeof(record) == TYPE_DICTIONARY and _whole(record.get("id")):
 			record["boredom"] = BoredomSim.start_of(int(record["id"]))
+			record["shop_cooldown"] = 0
+	out["shop"] = {"visits": [], "deadlines_stale": false}
 
 
 ## Version 8 to 9: each passenger in UNPACK has its work left scaled to the new
@@ -433,6 +448,7 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.toilet_cooldown >= 0
 		and p.boredom >= 0
 		and p.boredom <= BoredomSim.MAX
+		and p.shop_cooldown >= 0
 		and p.carry_on >= 0
 		and p.carry_on <= CarryOnTraits.MAX_BAGS
 		and p.security_phase >= 0

@@ -68,13 +68,18 @@ func test_a_need_shows_from_the_level_its_facility_acts_on() -> void:
 	p.hunger = 0
 	p.toilet_need = 0
 	assert_array(NeedIcons.shown(p)).is_equal([NeedIcons.Need.BOREDOM])
-	# No facility meets boredom yet: it shows queueing and seated, and goes
-	# only with a miss.
+	# It shows queueing, seated, walking to a kiosk and in a toilet stall, goes
+	# while browsing at the kiosk that meets it, and with a miss.
 	for stage in [
-		Passenger.Stage.SECURITY_QUEUE, Passenger.Stage.SEATED, Passenger.Stage.TOILET_USE
+		Passenger.Stage.SECURITY_QUEUE,
+		Passenger.Stage.SEATED,
+		Passenger.Stage.SHOP_WALK,
+		Passenger.Stage.TOILET_USE,
 	]:
 		p.stage = stage
 		assert_array(NeedIcons.shown(p)).is_equal([NeedIcons.Need.BOREDOM])
+	p.stage = Passenger.Stage.SHOP_BROWSE
+	assert_array(NeedIcons.shown(p)).is_empty()
 	p.stage = Passenger.Stage.MISSED
 	assert_array(NeedIcons.shown(p)).is_empty()
 

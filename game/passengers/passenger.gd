@@ -41,6 +41,10 @@ enum Stage {
 	TOILET_USE,
 	TOILET_STANDING_UP,
 	TOILET_EXIT,
+	# A kiosk visit (ShopSim), appended after the toilet stages: walking to the
+	# reserved browse slot and browsing there.
+	SHOP_WALK,
+	SHOP_BROWSE,
 }
 
 enum Stuck { NONE, NO_CHECKIN, NO_SECURITY, QUEUE_FULL, NO_ROUTE, EXIT_BLOCKED }
@@ -107,8 +111,11 @@ var toilet_need := 0
 ## No toilet visit is considered before this tick (ToiletSim's retry cooldown).
 var toilet_cooldown := 0
 ## 0-100, rising once a simulated second while waiting (BoredomSim); starts
-## from the id, not the sim RNG.
+## from the id, not the sim RNG. A finished kiosk browse resets it (ShopSim).
 var boredom := 0
+## No kiosk visit is considered before this tick (ShopSim's retry and browse
+## cooldowns).
+var shop_cooldown := 0
 ## What it brings to security (CarryOnTraits), drawn at spawn: 0 to 2 carry-on
 ## bags, and whether it carries liquids and whether it sets off the alarm.
 var carry_on := 0

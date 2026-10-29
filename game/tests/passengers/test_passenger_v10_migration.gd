@@ -1,12 +1,13 @@
 class_name TestPassengerV10Migration
 extends GdUnitTestSuite
-## A version 10 passenger save (no boredom) loads into version 11 (decision
-## boredom-and-shops-design-boredom-need-while-waiting-kiosk-sh, point 4):
-## each passenger gets the boredom BoredomSim.start_of() gives its id, every
-## toilet need, cooldown and visit under way is kept as saved, nothing is
-## drawn from the sim RNG, and the game plays on like a continuous one whose
-## passengers held that boredom at the save. A version 11 save missing boredom,
-## or holding it out of range, is refused.
+## A version 10 passenger save (no boredom, kiosk cooldown or kiosk visits)
+## loads into version 11 (decision boredom-and-shops-design-boredom-need-
+## while-waiting-kiosk-sh, point 4): each passenger gets the boredom
+## BoredomSim.start_of() gives its id and no kiosk cooldown, every toilet
+## need, cooldown and visit under way is kept as saved, nobody is on a kiosk
+## visit, nothing is drawn from the sim RNG, and the game plays on like a
+## continuous one whose passengers held that boredom at the save. A version 11
+## save missing boredom, or holding it out of range, is refused.
 
 ## How long the loaded game is played beside the one it came from: past the
 ## end of the toilet visit and well into the walk on.
@@ -56,6 +57,7 @@ func before_test() -> void:
 	# holds the boredom migration gives it.
 	for id in _a.sim.passenger_ids():
 		_a.passenger(id).boredom = BoredomSim.start_of(id)
+		_a.passenger(id).shop_cooldown = 0
 	_v11 = _json(_a.sim.to_snapshot())
 
 
@@ -83,8 +85,10 @@ func _in_stall(world: PassengerTestWorld) -> bool:
 func _v10() -> Dictionary:
 	var data := _v11.duplicate(true)
 	data["save_version"] = 10
+	data.erase("shop")
 	for record: Dictionary in data["passengers"]:
 		record.erase("boredom")
+		record.erase("shop_cooldown")
 	return data
 
 
@@ -114,7 +118,9 @@ func test_the_fixture_is_a_version_10_save_with_a_toilet_visit_under_way() -> vo
 	assert_int(data["passengers"].size()).is_greater(10)
 	for record: Dictionary in data["passengers"]:
 		assert_bool(record.has("boredom")).is_false()
+		assert_bool(record.has("shop_cooldown")).is_false()
 		assert_bool(record.has("toilet_need")).is_true()
+	assert_bool(data.has("shop")).is_false()
 
 
 func test_a_version_10_save_keeps_its_toilet_visits_and_gets_boredom_from_the_id() -> void:
@@ -128,6 +134,7 @@ func test_a_version_10_save_keeps_its_toilet_visits_and_gets_boredom_from_the_id
 	print("visits kept: %s" % [_b.sim.toilets.visit_ids()])
 	assert_array(_b.sim.toilets.visit_ids()).is_not_empty()
 	assert_array(_needs(_b)).is_equal(_needs(_a))
+	assert_array(_b.sim.shops.visit_ids()).is_empty()
 	for id in _b.sim.toilets.visit_ids():
 		var kept := _b.sim.toilets.visit_of(id)
 		var saved := _a.sim.toilets.visit_of(id)
@@ -136,6 +143,7 @@ func test_a_version_10_save_keeps_its_toilet_visits_and_gets_boredom_from_the_id
 	for id in _b.sim.passenger_ids():
 		var p := _b.passenger(id)
 		assert_int(p.boredom).is_equal(BoredomSim.start_of(id))
+		assert_int(p.shop_cooldown).is_equal(0)
 		assert_int(p.toilet_need).is_equal(_a.passenger(id).toilet_need)
 
 

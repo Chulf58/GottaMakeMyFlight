@@ -86,3 +86,20 @@ static func _build() -> void:
 	toilet.upkeep_piece = &"toilet_stall"
 	toilet.upkeep_per_piece = PriceTable.TOILET_STALL_UPKEEP
 	_types[toilet.id] = toilet
+
+	# Kiosk (decision boredom-and-shops-design-boredom-need-while-waiting-kiosk-
+	# sh, point 2): a counter makes it work, display stands give its browse
+	# slots (two each, ShopLayout). A visit pays base_spend nudged by mood and
+	# the airside bonus (ShopSim.spend()). 3x3 holds the counter, a stand and
+	# their front cells.
+	var kiosk := RoomType.new()
+	kiosk.id = &"kiosk"
+	kiosk.display_name = "Kiosk"
+	kiosk.min_size = Vector2i(3, 3)
+	kiosk.required = [
+		[&"kiosk_counter", "Needs a kiosk counter"], [&"kiosk_display", "Needs a display stand"]
+	]
+	kiosk.seat_piece = &"kiosk_display"
+	kiosk.seats_per_piece = 2
+	kiosk.base_spend = 12
+	_types[kiosk.id] = kiosk

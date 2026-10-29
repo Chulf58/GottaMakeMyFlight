@@ -60,7 +60,7 @@ func test_the_toilets_tray_follows_shops_and_holds_the_room_stall_and_sink() -> 
 	assert_int(toilets).is_equal(shops + 1)
 	assert_array(all[toilets]["tools"]).is_equal(TOILET_TOOLS)
 	assert_str(_menu.category_button(toilets).text).is_equal("Toilets")
-	assert_str(_menu.category_button(toilets + 1).text).is_equal("Baggage")
+	assert_str(_menu.category_button(toilets + 1).text).is_equal("Kiosk")
 	assert_int(BuildMenu.remove_category()).is_equal(BuildMenu.REMOVE_CATEGORY)
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 

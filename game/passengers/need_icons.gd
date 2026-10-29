@@ -14,8 +14,8 @@ extends RefCounted
 ## acts on (CafeSim.HUNGRY_AT, ToiletSim.NEED_AT, BoredomSim.BORED_AT), walking
 ## and queueing included, until the visit meets it. It is hidden while the
 ## passenger is at the facility meeting it (at a cafe table, inside a toilet
-## stall) and for a passenger who missed the flight. No facility meets boredom
-## yet, so its icon shows for as long as the passenger is bored. All icons hide
+## stall, browsing at a kiosk) and for a passenger who missed the flight. All
+## icons hide
 ## while the game camera is at its home zoom or farther out (shown_at()); the
 ## follow panel still lists the needs.
 ##
@@ -60,7 +60,7 @@ static func shown(p: Passenger) -> Array[Need]:
 		out.append(Need.HUNGER)
 	if p.toilet_need >= ToiletSim.NEED_AT and not in_stall:
 		out.append(Need.TOILET)
-	if BoredomSim.is_bored(p):
+	if BoredomSim.is_bored(p) and p.stage != Passenger.Stage.SHOP_BROWSE:
 		out.append(Need.BOREDOM)
 	return out
 

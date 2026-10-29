@@ -1,12 +1,12 @@
 class_name CafePops
 extends Node3D
-## The '+$' pop over a cafe when a visit is paid (ruling
+## The '+$' pop over a cafe or kiosk when a visit is paid (ruling
 ## shops-and-food-stalls-earn-per-visit-toilets-and-screens-cos: "a small '+$'
 ## pop over the shop"): a gold "+$<amount>" that rises and fades out over
 ## POP_SECONDS. It hangs in the same column as the room's label (RoomView), top
 ## aligned under the label's bottom line, so for any camera turn it stays below
-## the label and never covers it. It listens to CafeSim.paid, which fires only
-## after the money is in the wallet. PassengerViews creates it as a child. It
+## the label and never covers it. It listens to CafeSim.paid and ShopSim.paid,
+## which fire only after the money is in the wallet. PassengerViews creates it as a child. It
 ## reads the sim and never writes to it; labels are pooled.
 
 const POP_SECONDS := 1.6
@@ -30,6 +30,8 @@ var _free: Array[Label3D] = []
 func _ready() -> void:
 	if sim != null and not sim.cafes.paid.is_connected(_on_paid):
 		sim.cafes.paid.connect(_on_paid)
+	if sim != null and not sim.shops.paid.is_connected(_on_paid):
+		sim.shops.paid.connect(_on_paid)
 
 
 func _process(delta: float) -> void:

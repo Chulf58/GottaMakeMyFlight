@@ -11,16 +11,17 @@ extends RefCounted
 ## refused (its facility's retry cooldown starts), and the needs below it are
 ## not asked. With none viable, every wanted one is refused.
 
-enum Need { NONE, TOILET, HUNGER, BROWSE, BOREDOM }
+enum Need { NONE, TOILET, HUNGER, BROWSE, BOREDOM, SHOP_BROWSE }
 
 ## Highest priority first. TOILET before HUNGER: a high toilet need cannot be
 ## put off, and a stall visit is short and free, while a hungry passenger can
 ## wait and still eat later. BOREDOM after HUNGER (decision boredom-and-shops-
-## design-boredom-need-while-waiting-kiosk-sh, point 1): no facility meets it
-## yet, so it is wanted but never viable, and a bored passenger still browses
-## a cafe in spare time. BROWSE last: it is no need at all, only spare time
-## near a cafe.
-const ORDER: Array[Need] = [Need.TOILET, Need.HUNGER, Need.BOREDOM, Need.BROWSE]
+## design-boredom-need-while-waiting-kiosk-sh, points 1 and 2): a bored
+## passenger detours to a kiosk. The spare-time drop-ins come last, as they
+## are no need at all: BROWSE (a cafe) before SHOP_BROWSE (a kiosk), so a
+## passenger passing both drops into the cafe, and cafe browsing works
+## exactly as it did before kiosks.
+const ORDER: Array[Need] = [Need.TOILET, Need.HUNGER, Need.BOREDOM, Need.BROWSE, Need.SHOP_BROWSE]
 
 
 ## The visit `p` would start now, without starting anything: {"need": the
@@ -51,13 +52,16 @@ static func arbitrate(sim: PassengerSim, p: Passenger) -> Need:
 			Need.BROWSE:
 				sim.cafes.refuse(p, true)
 			Need.BOREDOM:
-				# No facility meets boredom yet, so there is no retry cooldown.
-				pass
+				sim.shops.refuse(p)
+			Need.SHOP_BROWSE:
+				sim.shops.refuse(p, true)
 	match choice["need"]:
 		Need.TOILET:
 			sim.toilets.commit_visit(p, choice["plan"])
 		Need.HUNGER, Need.BROWSE:
 			sim.cafes.commit_visit(p, choice["plan"])
+		Need.BOREDOM, Need.SHOP_BROWSE:
+			sim.shops.commit_visit(p, choice["plan"])
 	return choice["need"]
 
 
@@ -68,7 +72,9 @@ static func _wants(sim: PassengerSim, p: Passenger, need: Need) -> bool:
 		Need.HUNGER:
 			return sim.cafes.wants_food(p)
 		Need.BOREDOM:
-			return sim.boredom.wants_relief(p)
+			return sim.shops.wants_relief(p)
+		Need.SHOP_BROWSE:
+			return sim.shops.wants_browse(p)
 		Need.BROWSE:
 			return sim.cafes.wants_browse(p)
 	return false
@@ -82,5 +88,8 @@ static func _plan(sim: PassengerSim, p: Passenger, need: Need) -> Dictionary:
 			return sim.cafes.plan_visit(p)
 		Need.BROWSE:
 			return sim.cafes.plan_visit(p, true)
-		# Need.BOREDOM: no facility meets boredom yet (shops are Boredom 2/5).
+		Need.BOREDOM:
+			return sim.shops.plan_visit(p)
+		Need.SHOP_BROWSE:
+			return sim.shops.plan_visit(p, true)
 	return {}

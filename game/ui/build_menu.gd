@@ -62,6 +62,13 @@ const CATEGORIES := [
 		"tools":
 		[BuildMode.Tool.TOILET_ROOM, BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK],
 	},
+	# The kiosk room and its two pieces (Boredom 2/5), a tray of their own for
+	# the same reason as the toilet's.
+	{
+		"name": "Kiosk",
+		"tools":
+		[BuildMode.Tool.KIOSK_ROOM, BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
+	},
 	# One Belt tool shapes itself (decision baggage-belts-are-one-auto-shaping-
 	# belt-tool-one-baggage-tray), so baggage fits one tray.
 	{
@@ -71,7 +78,7 @@ const CATEGORIES := [
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray.
-const REMOVE_CATEGORY := 9
+const REMOVE_CATEGORY := 10
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -90,6 +97,9 @@ const ITEMS := {
 	BuildMode.Tool.TOILET_ROOM: ["Toilet", "toilet_room", "2x3 min"],
 	BuildMode.Tool.TOILET_STALL: ["Toilet stall", "toilet_stall", ""],
 	BuildMode.Tool.TOILET_SINK: ["Sink", "toilet_sink", ""],
+	BuildMode.Tool.KIOSK_ROOM: ["Kiosk", "kiosk_room", "3x3 min"],
+	BuildMode.Tool.KIOSK_COUNTER: ["Kiosk counter", "kiosk_counter", ""],
+	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
@@ -113,7 +123,9 @@ const RUNNING_COST_TEXT := "Upkeep %d/day"
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
-const PLACEHOLDER_THUMBNAILS := ["cafe_room", "counter", "table", "toilet_room"]
+const PLACEHOLDER_THUMBNAILS := [
+	"cafe_room", "counter", "table", "toilet_room", "kiosk_room", "kiosk_counter", "kiosk_display"
+]
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.

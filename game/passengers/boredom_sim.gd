@@ -14,9 +14,8 @@ extends RefCounted
 ## (PassengerSim's beat asks is_bored()) and loses a mood point every
 ## MOOD_BEATS seconds while it has no visit under way, like a high toilet
 ## need (decision a-passenger-with-a-high-need-detours-to-the-nearest-
-## facility). NeedsPolicy asks wants_relief() after hunger; no facility meets
-## boredom yet, so it never starts a visit for it. Tuned by
-## test_boredom_tuning.
+## facility). A finished kiosk browse resets it (ShopSim, which NeedsPolicy
+## asks after hunger). Tuned by test_boredom_tuning.
 
 const START_MIN := 0
 const START_MAX := 30
@@ -66,16 +65,6 @@ func entertained(p: Passenger) -> bool:
 ## Whether `p`'s boredom rises on its beat: waiting and not entertained.
 func rises(p: Passenger) -> bool:
 	return WAITING_STAGES.has(p.stage) and not entertained(p)
-
-
-## Whether `p` is bored and may start a visit now: no visit of any facility
-## and a start stage.
-func wants_relief(p: Passenger) -> bool:
-	return (
-		is_bored(p)
-		and CafeSim.START_STAGES.has(p.stage)
-		and StageKinds.visit_facility(_sim, p) == StageKinds.Facility.NONE
-	)
 
 
 ## Once a simulated second per passenger: boredom rises while it waits, and

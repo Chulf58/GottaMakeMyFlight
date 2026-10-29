@@ -6,8 +6,8 @@ extends GdUnitTestSuite
 ## waits (gate seated and standing, and every queue stage, cafe queues
 ## included), up to BoredomSim.MAX, and not while it is entertained. A bored
 ## passenger gets no mood from its gate seat and loses a point every
-## BoredomSim.MOOD_BEATS seconds. No facility meets boredom yet, so NeedsPolicy
-## never starts a visit for it.
+## BoredomSim.MOOD_BEATS seconds. With no kiosk built, NeedsPolicy starts no
+## visit for it.
 
 ## A floored world with the exit on the north edge and one gate seat row in
 ## the south-west, away from GUEST_CELL, so a cleared passenger walks to it.
@@ -64,6 +64,7 @@ func _guest(stage: Passenger.Stage, boredom: int) -> Passenger:
 	p.at = GUEST_CELL
 	p.clear_path()
 	p.boredom = boredom
+	p.shop_cooldown = 0
 	return p
 
 
@@ -175,13 +176,13 @@ func test_a_bored_seated_passenger_gains_no_mood_and_loses_some() -> void:
 	assert_int(calm.mood).is_greater(50 + beats - 2)
 
 
-func test_a_bored_passenger_starts_no_visit_with_no_facility_for_it() -> void:
+func test_a_bored_passenger_starts_no_visit_with_no_kiosk_built() -> void:
 	var p := _guest(Passenger.Stage.STANDING, BoredomSim.MAX)
-	assert_bool(_world.sim.boredom.wants_relief(p)).is_true()
+	assert_bool(_world.sim.shops.wants_relief(p)).is_true()
 	var choice := NeedsPolicy.choose(_world.sim, p)
 	assert_int(choice["need"]).is_equal(NeedsPolicy.Need.NONE)
 	assert_array(choice["refused"]).is_equal([NeedsPolicy.Need.BOREDOM])
 	assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.NONE)
 	assert_int(StageKinds.visit_facility(_world.sim, p)).is_equal(StageKinds.Facility.NONE)
 	p.boredom = BoredomSim.BORED_AT - 1
-	assert_bool(_world.sim.boredom.wants_relief(p)).is_false()
+	assert_bool(_world.sim.shops.wants_relief(p)).is_false()

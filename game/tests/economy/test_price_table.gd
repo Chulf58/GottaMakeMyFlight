@@ -30,7 +30,7 @@ func test_floor_and_every_placeable_wall_kind_has_a_positive_price() -> void:
 
 func test_every_catalog_object_has_a_positive_price() -> void:
 	var ids := BuildCatalog.ids()
-	assert_int(ids.size()).is_equal(18)
+	assert_int(ids.size()).is_equal(20)
 	for id in ids:
 		assert_int(PriceTable.price_of_object(id)).is_greater(0)
 

@@ -80,6 +80,7 @@ func test_both_high_and_both_viable_picks_the_toilet() -> void:
 				NeedsPolicy.Need.HUNGER,
 				NeedsPolicy.Need.BOREDOM,
 				NeedsPolicy.Need.BROWSE,
+				NeedsPolicy.Need.SHOP_BROWSE,
 			]
 		)
 	)
@@ -150,7 +151,7 @@ func test_with_no_need_high_nothing_is_chosen_or_refused() -> void:
 	assert_int(p.toilet_cooldown).is_equal(0)
 
 
-func test_boredom_comes_after_hunger_and_is_never_viable_yet() -> void:
+func test_boredom_comes_after_hunger_and_with_no_kiosk_nothing_starts() -> void:
 	var p := _needy()
 	p.toilet_need = 0
 	p.boredom = BoredomSim.MAX
@@ -158,10 +159,10 @@ func test_boredom_comes_after_hunger_and_is_never_viable_yet() -> void:
 	var choice := NeedsPolicy.choose(_world.sim, p)
 	assert_int(choice["need"]).is_equal(NeedsPolicy.Need.HUNGER)
 	assert_array(choice["refused"]).is_empty()
-	# Bored only: wanted, but no facility meets it, so nothing starts.
+	# Bored only: wanted, but this world has no kiosk, so nothing starts.
 	p.hunger = 0
 	choice = NeedsPolicy.choose(_world.sim, p)
 	print("bored only: %s refused %s" % [_name(choice["need"]), choice["refused"]])
-	assert_bool(_world.sim.boredom.wants_relief(p)).is_true()
+	assert_bool(_world.sim.shops.wants_relief(p)).is_true()
 	assert_array(choice["refused"]).contains([NeedsPolicy.Need.BOREDOM])
 	assert_int(choice["need"]).is_not_equal(NeedsPolicy.Need.BOREDOM)

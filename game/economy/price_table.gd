@@ -49,6 +49,10 @@ const OBJECT_PRICES := {
 	# sink is plain plumbing. The stall is the one with a running cost.
 	&"toilet_stall": 300,
 	&"toilet_sink": 150,
+	# Kiosk pieces: the counter is a till and a short counter, cheaper than the
+	# cafe's; a display stand is a shelf unit.
+	&"kiosk_counter": 400,
+	&"kiosk_display": 200,
 }
 
 ## What a ready toilet room costs to run per stall per game day (decision
