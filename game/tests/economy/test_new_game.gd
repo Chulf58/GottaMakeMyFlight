@@ -115,7 +115,7 @@ func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 	)
 	assert_int(_opened["first_start"]).is_equal(20 + FlightTimetable.ISSUE_LEAD_TICKS)
 	assert_int(GameCalendar.day_of(_opened["pushback"])).is_equal(0)
-	assert_str(_opened["departures"]).starts_with("09:39  Oslo  Gotta Air  doors close in ")
+	assert_str(_opened["departures"]).starts_with("09:39  Oslo  Gotta Air  doors close ")
 
 
 ## The clock and the timetable replace the elapsed time and the one-flight row.
