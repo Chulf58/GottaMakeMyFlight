@@ -79,7 +79,7 @@ func test_the_toilet_cards_show_name_size_price_and_hint() -> void:
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.TOILET_ROOM)).is_equal(0)
 	var upkeep := "Upkeep %d/day" % PriceTable.TOILET_STALL_UPKEEP
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_ROOM))).is_equal(
-		["Toilet", "2x3 min", BuildMenu.PRICE_TEXT, "Click"]
+		["Toilet", "2x3 min", BuildMenu.PRICE_TEXT, "Drag"]
 	)
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_STALL))).is_equal(
 		["Toilet stall", "1x2", BuildMenu.PRICE_TEXT, upkeep]

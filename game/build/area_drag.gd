@@ -94,6 +94,19 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int, wallet: Wallet 
 	return outcome
 
 
+## What fill_floor() needs in the wallet for `area`: the price of the tiles it
+## would lay (cells with no floor that DoorPlacement.check() accepts).
+static func floor_cost(grid: BuildGrid, area: Rect2i) -> int:
+	var edits: Array[BuildEdit] = []
+	for cell in _cells(area):
+		if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
+			continue
+		var edit := BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, BuildMode.TERMINAL_ZONE)
+		if DoorPlacement.check(grid, edit).ok:
+			edits.append(edit)
+	return maxi(0, BuildTransaction.needed(grid, edits))
+
+
 ## Removes, in each cell of `area`, what one Remove click on the middle of the
 ## cell removes: the object standing there (the whole object, even where it
 ## reaches past the rectangle), otherwise the room the cell is in (the whole
