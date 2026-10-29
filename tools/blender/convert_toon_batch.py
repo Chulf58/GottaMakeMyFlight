@@ -39,6 +39,8 @@ from mathutils import Matrix, Vector
 REPO = "C:\\Users\\chulf\\Gotta-make-my-flight"
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(REPO, "tools", "blender", "anim"))
+sys.path.insert(0, os.path.join(REPO, "tools", "blender", "landside"))
+import curb_bay  # noqa: E402
 import toon_clips  # noqa: E402
 GAME = os.path.join(REPO, "game")
 ASSETS = os.path.join(GAME, "assets")
@@ -49,6 +51,12 @@ TCP = os.path.join(SRC, "Toon City People")
 TC = os.path.join(SRC, "Toon City")
 PACK_ROOTS = {"TP": TP, "TCP": TCP, "TC": TC}
 POST_IMPORT = "res://assets/toon_post_import.gd"
+# A BATCH "fbx" starting with this is built by a script instead of imported. Its empties
+# (MARKERS) are mount points, checked by name and transform in the written file.
+AUTHORED = "authored:"
+AUTHORED_BUILDERS = {"curb_bay": curb_bay}
+MARKERS = {"tp_curb_bay_01a": curb_bay.MARKERS}
+MARKER_PARENT = {"tp_curb_bay_01a": curb_bay.MESH_NAME}
 
 # Vendor PSD -> PNG under game/assets/textures/. (png name, mipmaps)
 TEXTURES = {
@@ -65,6 +73,7 @@ TEXTURES = {
     os.path.join(TC, "Textures", "Tree_3A_D.psd"): ("tc_tree_3a_d.png", True),
     os.path.join(TC, "Textures", "Props_2A_D.psd"): ("tc_props_2a_d.png", True),
     os.path.join(TC, "Textures", "Building_4A_D.psd"): ("tc_building_4a_d.png", True),
+    os.path.join(TC, "Textures", "Building_17A_D.psd"): ("tc_building_17a_d.png", True),
     os.path.join(TC, "Textures", "TC_Toon_Ramp_01A_D.psd"): ("tc_toon_ramp_01a_d.png", False),
 }
 
@@ -82,6 +91,7 @@ MATERIALS = {
     ("TC", "Tree_3A_D"): ("TC_Tree_3A_D", "opaque", "tc_tree_3a_d.png"),
     ("TC", "Props_2A_D"): ("TC_Props_2A_D", "opaque", "tc_props_2a_d.png"),
     ("TC", "Building_4A_D"): ("TC_Building_4A_D", "opaque", "tc_building_4a_d.png"),
+    ("TC", "Building_17A_D"): ("TC_Building_17A_D", "opaque", "tc_building_17a_d.png"),
 }
 
 # stem -> (pack, category, fbx, idle fbx or None, source prefab or None)
@@ -108,6 +118,21 @@ BATCH = {
     "tc_statue_1b_indoor": ("TC", "decor", "Statue_1B.fbx", None, None),
     "tc_bench_2a_indoor": ("TC", "decor", "Bench_2A.fbx", None, None),
     "tp_suv_01a": ("TP", "vehicles", "TP_SUV_01A.fbx", None, None),
+    # Landside traffic (decision landside-technical-design-arrival-bookings-landsidesim-vehic):
+    # taxis, private cars and a van, at vendor scale.
+    "tp_taxi_01a": ("TP", "vehicles", "TP_Taxi_01A.fbx", None, None),
+    "tp_taxi_01b": ("TP", "vehicles", "TP_Taxi_01B.fbx", None, None),
+    "tp_taxi_01c": ("TP", "vehicles", "TP_Taxi_01C.fbx", None, None),
+    "tp_suv_01b": ("TP", "vehicles", "TP_SUV_01B.fbx", None, None),
+    "tp_suv_01c": ("TP", "vehicles", "TP_SUV_01C.fbx", None, None),
+    "tp_van_01a": ("TP", "vehicles", "TP_Van_01A.fbx", None, None),
+    # Landside parking (decision landside-parking-kinds-a-cheap-surface-lot-and-an-expensive):
+    # the cheap surface lot (Toon Planes, same atlas as the terminal and road; entry and
+    # exit barrier arms stay separate nodes on their hinge) and the multi-storey car park.
+    # The kerb drop-off bay is authored (tools/blender/landside/curb_bay.py), not an FBX.
+    "tp_parking_01a": ("TP", "landside", "TP_Parking_01A.fbx", None, None),
+    "tc_parking_2a": ("TC", "landside", "Parking_2A.fbx", None, None),
+    "tp_curb_bay_01a": ("TP", "landside", AUTHORED + "curb_bay", None, None),
     "tcp_male_character_01": (
         "TCP",
         "people",
@@ -201,7 +226,10 @@ RESHAPE = {
 GROUND = {
     "tc_bush_1a": -0.30,
     "tc_metal_pole_chain_1a": 0.74,
+    # Road paint lifted off the road it lies on (curb_bay.LIFT), so it never z-fights.
+    "tp_curb_bay_01a": 0.02,
 }
+GROUND_CATEGORIES = ("decor", "vehicles", "landside")
 GROUND_TOLERANCE = 0.01
 # Part checks: positions (bounds and origins) in metres, rotation matrix entries unitless.
 POSITION_TOLERANCE = 1e-3
@@ -791,9 +819,16 @@ def bake_scale(stem, objs):
     origin and rotation (door hinges, the trunk the tail lights hang on). Objects whose
     scale has magnitude 1 on every axis are not touched, mirrored ones included (the
     plane's TP_Plane_05A_Tables is -1, -1, -1). Returns the baked object names."""
+    markers = MARKERS.get(stem, {})
     for o in objs:
+        if o.type == "EMPTY" and o.name in markers:
+            continue
         if o.type != "MESH":
             die("%s: static prop has a %s object %s; only meshes are handled" % (stem, o.type, o.name))
+    for o in objs:
+        if o.type == "EMPTY" and any(abs(abs(s) - 1.0) > 1e-6 for s in o.matrix_world.to_scale()):
+            die("%s: marker %s has a non-unit scale" % (stem, o.name))
+    objs = [o for o in objs if o.type == "MESH"]
 
     def depth(o):
         d = 0
@@ -1083,6 +1118,41 @@ def check_clips(stem, path, js, durations):
             die("%s: clip %s carries no motion" % (stem, a["name"]))
 
 
+def check_markers(stem, js):
+    """The declared mount empties are nodes of the written file, by name, at their
+    declared position (glTF axes) with identity rotation and unit scale, each once and
+    parented to the declared mesh node; no other node without a mesh is in the file."""
+    want = MARKERS.get(stem, {})
+    nodes = js.get("nodes", [])
+    parent_of = {c: i for i, nd in enumerate(nodes) for c in nd.get("children", [])}
+    found = {}
+    for i, nd in enumerate(nodes):
+        if "mesh" in nd:
+            continue
+        name = nd.get("name", str(i))
+        if name not in want:
+            die("%s: written file has an unexpected empty node %s" % (stem, name))
+        if name in found:
+            die("%s: written file has two marker nodes named %s" % (stem, name))
+        parent = nodes[parent_of[i]].get("name") if i in parent_of else None
+        if parent != MARKER_PARENT[stem]:
+            die("%s: marker %s hangs under %s, not %s" % (stem, name, parent, MARKER_PARENT[stem]))
+        m = node_matrix(nd)
+        j = i
+        while j in parent_of:
+            j = parent_of[j]
+            m = node_matrix(nodes[j]) @ m
+        loc, rot, scl = m.decompose()
+        found[name] = loc
+        off = max(abs(a - b) for a, b in zip(loc, want[name]))
+        turn = max(abs(rot.to_matrix()[r][c] - (1.0 if r == c else 0.0)) for r in range(3) for c in range(3))
+        log("MARKER %s %s at=(%.3f, %.3f, %.3f) want=%s off_m=%.4f rotation_off=%.2e" % (stem, name, loc.x, loc.y, loc.z, want[name], off, turn))
+        if off > POSITION_TOLERANCE or turn > ROTATION_TOLERANCE or any(abs(s - 1.0) > 1e-6 for s in scl):
+            die("%s: marker %s is not at its declared transform" % (stem, name))
+    if sorted(found) != sorted(want):
+        die("%s: written file markers %s, declared %s" % (stem, sorted(found), sorted(want)))
+
+
 def on_metre(v):
     return abs(v - round(v)) < 0.01
 
@@ -1125,9 +1195,17 @@ def write_scene_import(glb_path, animated=False):
 
 def convert(stem, spec, out_root=None):  # out_root None: write into game/assets/
     pack, category, fbx, idle_fbx, prefab = spec
-    root = PACK_ROOTS[pack]
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.fbx(filepath=os.path.join(root, "Models", fbx))
+    if fbx.startswith(AUTHORED):
+        if idle_fbx is not None or prefab is not None:
+            die("%s: an authored asset is a static prop; it takes no idle FBX or prefab" % stem)
+        builder = AUTHORED_BUILDERS[fbx[len(AUTHORED) :]]
+        try:
+            builder.build(os.path.join(TEX_DIR, MATERIALS[(pack, builder.MATERIAL)][2]))
+        except builder.Fail as e:
+            die("%s: %s" % (stem, e))
+    else:
+        bpy.ops.import_scene.fbx(filepath=os.path.join(PACK_ROOTS[pack], "Models", fbx))
     bpy.context.view_layer.update()
     objs = list(bpy.context.scene.objects)
     reflected = sorted(o.name for o in objs if o.matrix_world.determinant() < 0)
@@ -1240,7 +1318,9 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
     check_uv_fixes(stem, out, js, fixed_tris)
     if intent is not None:
         compare_parts(stem, yup_parts(intent), glb_parts(out, js), "written-file")
-    if category == "decor":
+    if intent is not None:
+        check_markers(stem, js)
+    if category in GROUND_CATEGORIES:
         want = GROUND.get(stem, 0.0)
         log("GROUND %s bottom=%.3f expected=%.3f top=%.3f" % (stem, f_lo.y, want, f_hi.y))
         if abs(f_lo.y - want) > GROUND_TOLERANCE:
