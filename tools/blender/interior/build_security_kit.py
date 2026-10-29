@@ -12,11 +12,12 @@ facing 0 the arch is at (0, 0), the tray table at (1, 1), the X-ray belt at (1, 
 the pickup table at (1, -1), and passengers and bags both move toward Godot -Z. A part
 stores only its facing, never the lane's mirror, so every piece is symmetric across X
 and serves a lane with its parts on either side of the arch. The pieces:
-- security_arch (1x1): a walk-through arch with a 0.91 m clear passage (ARCH_CLEAR_HALF),
-  wider than the basic scanner's 0.70 m: the 2 m Toon passengers swing their hands out
-  to 0.43 m from the centre line when they walk, so the opening keeps 2.5 cm either
-  side (Security 7/8). Thin posts reach 0.495 m, past the usual inset but inside the
-  cell, so its +x and -x sides have their own limit (SIDE_LIMITS).
+- security_arch (1x1): a walk-through arch with a 0.76 m clear passage (ARCH_CLEAR_HALF).
+  Its posts reach 0.42 m from the centre line, the usual inset, so they stay inside the
+  cell when a wall stands on its side edge (wall inner face 0.43 m); passengers tuck
+  their arms in through it as at the basic scanner (decision security-lane-arch-is-
+  narrowed-to-fit-inside-its-cell-beside-a). It was 0.91 m clear with posts to
+  0.495 m, 6.5 cm into such a wall, for hands swinging out to 0.43 m.
 - xray_belt (1x1): a belt cabinet with a tunnel over the middle. The belt runs to the
   front and back cell edges (ports, as the baggage belts) so tray table, X-ray and
   pickup table read as one conveyor; the cabinet keeps the 0.08 m inset. Short curtain
@@ -65,12 +66,13 @@ INSET = 0.08
 EDGE = 0.5
 HALF_IN = EDGE - INSET  # 0.42
 # The arch's clear half-width, its posts' inner panel face and outer face (see the
-# module docstring).
-ARCH_CLEAR_HALF = 0.455
-ARCH_PANEL_IN = 0.465
-ARCH_OUTER = 0.495
-# Per piece, sides whose closed-side limit is not HALF_IN.
-SIDE_LIMITS = {"security_arch": {"+x": ARCH_OUTER, "-x": ARCH_OUTER}}
+# module docstring): 3 cm panels with 1 cm strips, the outer face on the usual inset.
+ARCH_CLEAR_HALF = 0.38
+ARCH_PANEL_IN = 0.39
+ARCH_OUTER = HALF_IN
+# Per piece, sides whose closed-side limit is not HALF_IN (none since the arch was
+# narrowed).
+SIDE_LIMITS = {}
 BELT_TOP = 0.74
 # The tray (Godot x by z by y): 0.44 x 0.60 x 0.08, walls 0.015, base 0.012.
 TRAY = (0.44, 0.60, 0.08)
