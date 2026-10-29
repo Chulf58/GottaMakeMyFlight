@@ -99,3 +99,19 @@ func test_a_claim_with_a_negative_share_or_an_unknown_category_is_refused() -> v
 			. is_false()
 		)
 	assert_int(_wallet.balance).is_equal(0)
+
+
+## can_credit() answers what credit() would do, room counted after the debt,
+## and changes neither the balance nor the debt.
+func test_can_credit_counts_the_debt_and_changes_nothing() -> void:
+	assert_bool(_wallet.from_snapshot({"balance": str(Wallet.MAX_BALANCE - 5)})).is_true()
+	assert_bool(_wallet.can_credit(10, Wallet.Category.BUILD)).is_false()
+	_debt[0] = 5
+	assert_bool(_wallet.can_credit(10, Wallet.Category.BUILD)).is_true()
+	assert_bool(_wallet.can_credit(11, Wallet.Category.BUILD)).is_false()
+	assert_bool(_wallet.can_credit(-1, Wallet.Category.BUILD)).is_false()
+	assert_int(_debt[0]).is_equal(5)
+	assert_int(_wallet.balance).is_equal(Wallet.MAX_BALANCE - 5)
+	assert_bool(_wallet.credit(10, Wallet.Category.BUILD)).is_true()
+	assert_int(_debt[0]).is_equal(0)
+	assert_int(_wallet.balance).is_equal(Wallet.MAX_BALANCE)
