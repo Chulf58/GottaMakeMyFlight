@@ -23,7 +23,9 @@ extends Node3D
 ## screen's middle when it has to, so it stays by its station: first along that
 ## line by at most MAX_HINT_TRAVEL_PX, then on rings around its own place. With
 ## no clear spot anywhere in the view it is hidden for that layout
-## (hint_no_spot_hides counts it); the icon stays.
+## (hint_no_spot_hides counts it); the icon stays. It also hides while its sign
+## is more than one caption width outside the view (user-ruled 2026-10-29: only
+## near the view), uncounted.
 ## A whole lane is one station and gets the queue-full and Closed signs like a
 ## scanner.
 ##
@@ -309,6 +311,9 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 			if camera == null or camera.is_position_behind(sign.global_position):
 				continue
 			var point := camera.unproject_position(sign.global_position) * to_output
+			if is_same(signs, _hint_signs) and _far_from_view(point, caption.text, view_size):
+				caption.visible = false
+				continue
 			_labels.append(caption)
 			_points.append(point)
 			_rects.append(caption_rect(point, caption.text))
@@ -326,6 +331,13 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 		_place_caption(i, view_size)
 	for i in _labels.size():
 		_anchor_in_view(i, camera, to_output, view_size)
+
+
+## True when a lane hint's sign point is more than one caption width outside the
+## view. The caption is hidden then (not counted as a missing spot) and shows
+## again as the sign comes within that distance.
+static func _far_from_view(point: Vector2, text: String, view_size: Vector2) -> bool:
+	return not Rect2(Vector2.ZERO, view_size).grow(caption_size(text).x).has_point(point)
 
 
 ## Moves the Label3D of caption `i` to a world point that projects inside the
