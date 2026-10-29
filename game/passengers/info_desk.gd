@@ -249,6 +249,8 @@ static func _visit_problem(
 	var p: Passenger = passengers[row[0]]
 	if not HELP_STAGES.has(p.stage):
 		return "holds a passenger on a stage no desk helps"
+	if not HELPABLE.has(p.stuck):
+		return "holds a passenger who is not stuck in a way a desk helps"
 	if not ShopCounters.is_roomless(grid, row[1]):
 		return "names an object that is not an info desk"
 	var end := row[2]

@@ -265,6 +265,37 @@ func test_a_snapshot_that_cannot_be_live_is_refused_whole_and_for_its_own_reason
 		assert_array(_b.sim.info_desks.to_list()["cooldowns"]).is_empty()
 
 
+func test_a_visit_for_a_passenger_not_stuck_in_a_helpable_way_is_refused() -> void:
+	# A visit only starts for a stuck status a desk helps (InfoDesk.HELPABLE), so
+	# a save carrying one for a calm or merely queued passenger cannot be live.
+	var p := _stuck_guest(_helping)
+	var tick := _a.clock.tick
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
+	assert_bool(InfoDesk.HELPABLE.has(p.stuck)).is_true()
+	var live: Dictionary = good["info_desk"]
+	var control := InfoDesk.checked(live, {p.id: _stub(p, -1, null)}, tick, _a.grid)
+	assert_bool(control.has("error")).is_false()
+	_b = InfoDeskTestLayout.world()
+	# The control: the unaltered snapshot loads, so the refusals below are the stuck status.
+	assert_bool(_b.sim.from_snapshot(good)).is_true()
+	var before := _b.signature()
+	var kept: Array = _b.sim.info_desks.to_list()["visits"]
+	for stuck: Passenger.Stuck in [Passenger.Stuck.NONE, Passenger.Stuck.QUEUE_FULL]:
+		var label := "stuck %d" % stuck
+		var direct := InfoDesk.checked(live, {p.id: _stub(p, -1, null, stuck)}, tick, _a.grid)
+		assert_bool(direct.has("error")).override_failure_message(label).is_true()
+		assert_str(str(direct.get("error", ""))).override_failure_message(label).contains(
+			"not stuck in a way a desk helps"
+		)
+		var bad := good.duplicate(true)
+		for record: Dictionary in bad["passengers"]:
+			if int(record["id"]) == p.id:
+				record["stuck"] = int(stuck)
+		assert_bool(_b.sim.from_snapshot(bad)).override_failure_message(label).is_false()
+		assert_str(_b.signature()).override_failure_message(label).is_equal(before)
+		assert_array(_b.sim.info_desks.to_list()["visits"]).is_equal(kept)
+
+
 func test_a_version_11_snapshot_without_info_desk_is_refused_and_changes_nothing() -> void:
 	_stuck_guest(func(g: Passenger) -> bool: return _a.sim.info_desks.holds(g))
 	var old: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
@@ -304,10 +335,12 @@ func _helping(g: Passenger) -> bool:
 	)
 
 
-## A copy of `p` for InfoDesk.checked(), with a stage or cell overridden.
-func _stub(p: Passenger, stage: int, cell: Variant) -> Passenger:
+## A copy of `p` for InfoDesk.checked(), with a stage, cell or stuck status
+## overridden (stuck -1 keeps `p`'s own).
+func _stub(p: Passenger, stage: int, cell: Variant, stuck: int = -1) -> Passenger:
 	var stub := Passenger.new()
 	stub.id = p.id
+	stub.stuck = p.stuck if stuck < 0 else stuck as Passenger.Stuck
 	stub.stage = p.stage if stage < 0 else stage
 	stub.at = p.at if cell == null else Vector2i(cell[0], cell[1])
 	return stub
