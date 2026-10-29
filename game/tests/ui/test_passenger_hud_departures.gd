@@ -187,7 +187,7 @@ func test_no_flight_counts_down_when_every_door_has_closed() -> void:
 
 
 ## A clock time, not a countdown: the text names the same minute at every tick
-## until the doors close, where a "doors close in H:MM" line changes.
+## until the doors close, where a countdown line would change every minute.
 func test_the_doors_time_does_not_change_as_the_clock_runs() -> void:
 	var before := _lines()[0]
 	assert_str(before).is_equal("06:04  GMF101  doors close 06:01")

@@ -71,6 +71,7 @@ func _open(clock: SimClock, flights: FlightSim, hud: PassengerHud, panel: StaffP
 	_opened["flights"] = flights.flight_ids()
 	_opened["first_start"] = flights.state_start(first, FlightSim.State.SCHEDULED)
 	_opened["pushback"] = flights.state_start(first, FlightSim.State.PUSHBACK)
+	_opened["doors_close"] = flights.state_start(first, FlightSim.State.DOORS_CLOSED)
 	_opened["departures"] = DepartureList.text(flights, clock.tick)
 	_opened["pending"] = (_main.get_node("PassengerSim") as PassengerSim).pending_spawns()
 
@@ -115,7 +116,8 @@ func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 	)
 	assert_int(_opened["first_start"]).is_equal(20 + FlightTimetable.ISSUE_LEAD_TICKS)
 	assert_int(GameCalendar.day_of(_opened["pushback"])).is_equal(0)
-	assert_str(_opened["departures"]).starts_with("09:39  Oslo  Gotta Air  doors close ")
+	var doors_text := GameCalendar.clock_text(_opened["doors_close"])
+	assert_str(_opened["departures"]).is_equal("09:39  Oslo  Gotta Air  doors close " + doors_text)
 
 
 ## The clock and the timetable replace the elapsed time and the one-flight row.
