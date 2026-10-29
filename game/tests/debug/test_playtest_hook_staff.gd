@@ -32,8 +32,15 @@ func after() -> void:
 
 func test_a_new_game_snapshot_shows_no_staff() -> void:
 	var staff: Dictionary = _hook.snapshot()["staff"]
-	assert_dict(staff).is_equal(
-		{"checkin": {"hired": 0, "on_duty": 0}, "security": {"hired": 0, "on_duty": 0}}
+	(
+		assert_dict(staff)
+		. is_equal(
+			{
+				"checkin": {"hired": 0, "on_duty": 0},
+				"security": {"hired": 0, "on_duty": 0},
+				"shop": {"hired": 0, "on_duty": 0},
+			}
+		)
 	)
 
 
@@ -43,9 +50,12 @@ func test_hire_staff_hires_by_role_name() -> void:
 	assert_int(id).is_greater(0)
 	assert_int(pool.get_member(id).role).is_equal(StaffMember.Role.CHECKIN)
 	assert_int(_hook.hire_staff("security")).is_greater(id)
+	var shop: int = _hook.hire_staff("shop")
+	assert_int(pool.get_member(shop).role).is_equal(StaffMember.Role.SHOP)
 	var staff: Dictionary = _hook.snapshot()["staff"]
 	assert_int(staff["checkin"]["hired"]).is_equal(1)
 	assert_int(staff["security"]["hired"]).is_equal(1)
+	assert_int(staff["shop"]["hired"]).is_equal(1)
 
 
 func test_an_unknown_role_hires_nobody() -> void:

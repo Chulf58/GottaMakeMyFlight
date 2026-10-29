@@ -9,6 +9,10 @@ extends RefCounted
 ## walks through it, along BuildGrid.passage_cells(), so generic routing can
 ## never cross security. After an edit only the links around the dirty cells
 ## are rebuilt.
+##
+## A staff graph (`staff` set) links every BuildGrid.can_staff_route() step
+## instead, through security objects along their axis (decision
+## staff-may-walk-through-security-scanners-and-lanes-so-shop-s).
 
 const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(1, 0),
@@ -21,8 +25,15 @@ const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(-1, -1),
 ]
 
+## Links staff steps rather than passenger ones.
+var staff := false
+
 var _astar := AStar2D.new()
 var _width := 0
+
+
+func _init(for_staff := false) -> void:
+	staff = for_staff
 
 
 func rebuild(grid: BuildGrid) -> void:
@@ -82,7 +93,7 @@ func _relink(grid: BuildGrid, cell: Vector2i) -> void:
 			continue
 		var other_id := _id(other)
 		var linked := _astar.are_points_connected(id, other_id)
-		var open := grid.can_route(cell, other)
+		var open := grid.can_staff_route(cell, other) if staff else grid.can_route(cell, other)
 		if open and not linked:
 			_astar.connect_points(id, other_id)
 		elif linked and not open:

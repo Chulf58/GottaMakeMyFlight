@@ -6,7 +6,9 @@ extends Node3D
 ## (MissSignals.closed_stations; a closed station shows only that, since it
 ## serves nobody), "Closed: staff spot blocked" when an old save left the
 ## station's staff spot blocked, or "Closed: staff can't reach" when staff have
-## no way from an entrance to it (MissSignals.closed_reason). PassengerViews
+## no way from an entrance to it (MissSignals.closed_reason). A cafe or kiosk
+## counter with no server on duty gets the same Closed signs
+## (ShopCounters.closed). PassengerViews
 ## creates it as a child and calls sync() after each tick and draw() after
 ## placing its passengers. It reads the sim and
 ## never writes to it.
@@ -102,6 +104,8 @@ var _closed_signs: Dictionary = {}
 ## Arch id -> sign, for the arches without a whole lane.
 var _hint_signs: Dictionary = {}
 var _free_signs: Array[Sprite3D] = []
+## A deferred refresh after a room edit is queued.
+var _room_sync_pending := false
 ## Set when a sign or caption changed; with the camera and view size it decides
 ## whether draw() has anything to do.
 var _dirty := true
@@ -190,8 +194,9 @@ func _ready() -> void:
 	sync()
 
 
-## Also called on every grid edit, so a paused edit that removes a station or
-## changes its lane length updates the sign at once. The sim rebuilds its
+## Also called on every grid edit (graph_changed, or edit_applied for a room
+## edit), so a paused edit that removes a station or changes its lane length
+## updates the sign at once. The sim rebuilds its
 ## layout on the same signal and is connected first: bind() connects it in
 ## the same call that sets sim.grid, so no sync here can see the grid sooner.
 func sync() -> void:
@@ -199,8 +204,12 @@ func sync() -> void:
 		return
 	if not sim.grid.graph_changed.is_connected(_on_graph_changed):
 		sim.grid.graph_changed.connect(_on_graph_changed)
+	if not sim.grid.edit_applied.is_connected(_on_edit_applied):
+		sim.grid.edit_applied.connect(_on_edit_applied)
 	_watch_staff()
 	var closed := MissSignals.closed_stations(sim)
+	var counters := ShopCounters.closed(sim)
+	closed.append_array(counters)
 	var full := MissSignals.full_stations(sim)
 	for station: int in closed:
 		full.erase(station)
@@ -220,7 +229,7 @@ func sync() -> void:
 	for station in closed:
 		var sign := _show_sign(_closed_signs, station, "ClosedSign", _closed_icon())
 		var caption := CLOSED_CAPTION
-		match MissSignals.closed_reason(sim, station):
+		match _closed_reason(station, counters):
 			MissSignals.SPOT_BLOCKED_REASON:
 				caption = SPOT_BLOCKED_CAPTION
 			MissSignals.UNREACHABLE_REASON:
@@ -595,6 +604,37 @@ static func caption_rect(sign_point: Vector2, text: String, lift := 0.0, shift :
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	sync()
+
+
+## A room edit changes no walk graph, so graph_changed never follows it, and
+## with no one hired staff_changed does not either. edit_applied comes before
+## the graph_changed of an edit with dirty cells, while the sim layout is still
+## the old one, so only a room edit is taken here. A held batch (AreaDrag.clear
+## removes objects, rooms and floor together) runs its callbacks before that
+## final graph_changed, so the refresh waits for the end of the frame, one run
+## however many room edits the batch held.
+func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
+	if result.dirty_cells.is_empty() and not _room_sync_pending:
+		_room_sync_pending = true
+		_sync_after_edit.call_deferred()
+
+
+func _sync_after_edit() -> void:
+	_room_sync_pending = false
+	sync()
+
+
+## Why `station` is closed (a MissSignals reason): for a counter in
+## `counters` from its staff spot, as MissSignals.closed_reason() says for a
+## desk or scanner.
+func _closed_reason(station: int, counters: Array[int]) -> String:
+	if not counters.has(station):
+		return MissSignals.closed_reason(sim, station)
+	if sim.staff.spot_blocked(station):
+		return MissSignals.SPOT_BLOCKED_REASON
+	if sim.staff.spot_unreachable(station):
+		return MissSignals.UNREACHABLE_REASON
+	return MissSignals.NO_STAFF_REASON
 
 
 ## A hire, a fire or a member going on duty changes which stations are closed,

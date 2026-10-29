@@ -50,6 +50,7 @@ const EVENT_TYPES: Array[String] = [
 const STAFF_ROLES := {
 	"checkin": StaffMember.Role.CHECKIN,
 	"security": StaffMember.Role.SECURITY,
+	"shop": StaffMember.Role.SHOP,
 }
 const CHECK_INTERVAL_S := 0.5
 ## A passenger stuck this long in sim seconds is an anomaly.

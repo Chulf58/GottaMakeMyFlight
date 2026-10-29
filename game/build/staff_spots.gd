@@ -16,10 +16,12 @@ extends RefCounted
 ##
 ## Reach (decision desk-belts-run-one-row-back-desk-then-the-agent-row-then-the,
 ## v3): reach() is every cell staff can walk to from an entrance door, by the
-## steps StaffSim's paths take (BuildGrid.can_route). BuildGrid refuses an
-## edit that takes a spot out of that set (reach_problem()), and unreachable()
-## names a station whose spot an old save, or a layout built before its
-## entrance, left outside it.
+## steps StaffSim's paths take (BuildGrid.can_staff_route, which crosses
+## security scanners and lanes along their axis: decision
+## staff-may-walk-through-security-scanners-and-lanes-so-shop-s). BuildGrid
+## refuses an edit that takes a spot out of that set (reach_problem()), and
+## unreachable() names a station whose spot an old save, or a layout built
+## before its entrance, left outside it.
 
 ## Per station type, in the object's frame at facing 0: "spot" is where the
 ## member stands and "beside" the footprint cell it works next to.
@@ -108,12 +110,12 @@ static func unreachable(grid: BuildGrid, station: int) -> bool:
 
 
 ## Every cell staff can walk to from an entrance door's cell, as cell -> the
-## region it lies in: a flood over BuildGrid.can_route() steps, the links
-## StaffSim's A* paths use. Two cells have a way between them exactly when
-## their regions are equal; each region is numbered from 1 by the first
-## entrance (in object id order) that reaches it. Empty when the grid has no
-## entrance. Each reachable cell is visited once and tries its eight
-## neighbours.
+## region it lies in: a flood over BuildGrid.can_staff_route() steps, the
+## links StaffSim's A* paths use (BuildGrid.find_staff_path()). Two cells
+## have a way between them exactly when their regions are equal; each region
+## is numbered from 1 by the first entrance (in object id order) that reaches
+## it. Empty when the grid has no entrance. Each reachable cell is visited
+## once and tries its eight neighbours.
 static func reach(grid: BuildGrid) -> Dictionary:
 	var seen := {}
 	var region := 0
@@ -133,7 +135,7 @@ static func reach(grid: BuildGrid) -> Dictionary:
 			head += 1
 			for offset in NEIGHBOURS:
 				var next := cell + offset
-				if not seen.has(next) and grid.can_route(cell, next):
+				if not seen.has(next) and grid.can_staff_route(cell, next):
 					seen[next] = region
 					queue.append(next)
 	return seen
@@ -295,13 +297,13 @@ static func _walled(grid: BuildGrid, spot: Vector2i, beside: Vector2i) -> bool:
 	return kind == BuildGrid.WallKind.PLAIN or kind == BuildGrid.WallKind.GLASS
 
 
-## Whether some neighbour of `spot` can be reached by a routing step
-## (BuildGrid.can_route) that uses none of the `gone` cells and does not cross
+## Whether some neighbour of `spot` can be reached by a staff step
+## (BuildGrid.can_staff_route) that uses none of the `gone` cells and does not cross
 ## the `shut` edge. A diagonal step uses both cells beside it.
 static func _routable(grid: BuildGrid, spot: Vector2i, gone: Dictionary, shut: Array) -> bool:
 	for offset in NEIGHBOURS:
 		var next := spot + offset
-		if not grid.can_route(spot, next):
+		if not grid.can_staff_route(spot, next):
 			continue
 		var cells: Array[Vector2i] = [next]
 		var edges := [[spot, next]]

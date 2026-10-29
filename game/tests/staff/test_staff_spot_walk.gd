@@ -153,7 +153,10 @@ func test_a_version_2_save_with_a_member_on_the_service_cell_is_refused() -> voi
 	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
 	assert_int(_until_on_duty(_w, m)).is_greater(0)
 	var data := _on_service_cell(m, false)
-	assert_int(int(data["staff"]["save_version"])).is_equal(2)
+	# A version 2 save (from after staff spots) has no service-cell migration;
+	# version 3 only added shop staff.
+	assert_int(int(data["staff"]["save_version"])).is_equal(StaffSim.SAVE_VERSION)
+	data["staff"]["save_version"] = 2
 	var loaded := StaffSnapshot.load(data["staff"], _w.sim)
 	print("v2 on the service cell: %s" % [loaded])
 	assert_str(loaded.get("error", "")).is_equal(

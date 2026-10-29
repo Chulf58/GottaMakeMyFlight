@@ -1,13 +1,15 @@
 class_name StaffPanel
 extends CanvasLayer
-## The hiring panel (Staff S2): for check-in agents and security officers, how
-## many are hired and how many are on duty, with Hire and Fire buttons that go
-## through StaffSim. Nobody is placed by hand: hired staff walk to a station
-## on their own (ruling staff-are-hired-by-role-into-a-pool-and-walk-to-
-## unstaffed-st). A new game has no staff, so the panel carries the hint
-## (ruling staff-a-new-game-starts-with-an-empty-staff-pool-and-a-hint): once a
-## desk stands and no agent is hired it asks for one, and the same for a
-## scanner and an officer; each line goes once someone of that role is hired.
+## The hiring panel (Staff S2): for check-in agents, security officers and shop
+## staff (servers at cafe and kiosk counters), how many are hired and how many
+## are on duty, with Hire and Fire buttons that go through StaffSim. Nobody
+## is placed by hand: hired staff walk to a station on their own (ruling
+## staff-are-hired-by-role-into-a-pool-and-walk-to-unstaffed-st). A new game
+## has no staff, so the panel carries the hint (ruling
+## staff-a-new-game-starts-with-an-empty-staff-pool-and-a-hint): once a desk
+## stands and no agent is hired it asks for one, and the same for a scanner
+## and an officer, and for a ready cafe or kiosk and shop staff; each line
+## goes once someone of that role is hired.
 ## While the airport is closed the hint first names what keeps it closed
 ## (AirportGate.blocker(), decision airport-opening-design-stays-open-once-
 ## opened-starter-flight-placed-after-opening); that line goes once it opens.
@@ -20,18 +22,23 @@ extends CanvasLayer
 ## airport is never hidden behind a closed card. Without a `menu` (a test) the
 ## card is always shown.
 
-const ROLES: Array[StaffMember.Role] = [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]
+const ROLES: Array[StaffMember.Role] = [
+	StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY, StaffMember.Role.SHOP
+]
 const ROLE_NAMES := {
 	StaffMember.Role.CHECKIN: "Check-in agents",
 	StaffMember.Role.SECURITY: "Security officers",
+	StaffMember.Role.SHOP: "Shop staff",
 }
 const ROLE_KEYS := {
 	StaffMember.Role.CHECKIN: "Checkin",
 	StaffMember.Role.SECURITY: "Security",
+	StaffMember.Role.SHOP: "Shop",
 }
 const HINTS := {
 	StaffMember.Role.CHECKIN: "Hire a check-in agent",
 	StaffMember.Role.SECURITY: "Hire a security officer",
+	StaffMember.Role.SHOP: "Hire shop staff",
 }
 const CLOSED_HINTS := {
 	AirportGate.Blocker.NO_PATH:
@@ -87,6 +94,7 @@ func watch(with_staff: StaffSim) -> void:
 	staff.staff_changed.connect(refresh)
 	staff.member_state_changed.connect(_on_member_state)
 	staff.sim.grid.graph_changed.connect(_on_graph_changed)
+	staff.sim.grid.edit_applied.connect(_on_edit_applied)
 	if gate != null:
 		gate.changed.connect(refresh)
 	refresh()
@@ -154,6 +162,15 @@ func _on_member_state(_id: int, _state: StaffMember.State) -> void:
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	refresh()
+
+
+## A room edit changes no walk graph, so graph_changed never follows it, and
+## StaffSim emits nothing when no one is hired. edit_applied comes before the
+## graph_changed of an edit with dirty cells, so only a room edit is taken
+## here. StaffSim connected first and has already reconciled its stations.
+func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
+	if result.dirty_cells.is_empty():
+		refresh()
 
 
 func _build() -> void:

@@ -16,6 +16,14 @@ extends RefCounted
 ## commit order, never more than the counter's lane has cells; each guest
 ## stands on the lane cell of its place.
 ##
+## A counter serves only while a shop server is on duty at it
+## (StaffSim.is_open(); ruling store-mechanics-draw-a-room-then-furnish-it-
+## required-pieces, point 3): no visit is planned at a closed counter and no
+## order starts there. When a counter closes, the order in progress is still
+## made (a server fired meanwhile stays until then, decision
+## firing-a-staff-member-mid-service-takes-effect-when-the-serv) and every
+## other guest in its queue gives up, unpaid. Guests already served go on.
+##
 ## Every phase before standing up checks the visit's deadline. A guest past it
 ## who has not been served gives up (no charge); one who has been served
 ## leaves early. The deadline is worked out again after any grid edit, once a
@@ -275,6 +283,10 @@ func reconcile() -> void:
 		while (q["lane"] as Array).size() > cells.size():
 			var last: int = (q["lane"] as Array).back()
 			_abandon(_sim.get_passenger(last), _visits[last])
+		if not _open(counter_id):
+			for id: int in (q["lane"] as Array).duplicate():
+				if id != q["serving"]:
+					_leave_early(_sim.get_passenger(id), _visits[id])
 		if (q["lane"] as Array).is_empty() and q["serving"] == 0:
 			_queues.erase(counter_id)
 	deadlines_stale = false
@@ -301,7 +313,7 @@ func step_counters() -> void:
 				q["serving"] = 0
 				(q["lane"] as Array).erase(served.id)
 				_serve(served, visit)
-		if q["serving"] != 0 or (q["lane"] as Array).is_empty():
+		if q["serving"] != 0 or (q["lane"] as Array).is_empty() or not _open(counter_id):
 			continue
 		var cells: Array = layout.counter(q["room"], counter_id).get("lane", [])
 		var front := _sim.get_passenger(q["lane"][0])
@@ -491,12 +503,14 @@ func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
 	return best
 
 
-## The counter with room in its queue that would serve a newcomer soonest,
-## ties to the lower id; empty when every queue is full.
+## The open counter with room in its queue that would serve a newcomer
+## soonest, ties to the lower id; empty when every queue is full or closed.
 func _soonest_counter(cafe: Dictionary) -> Dictionary:
 	var best := {}
 	var best_eta := 0
 	for counter in cafe["counters"]:
+		if not _open(counter["id"]):
+			continue
 		if queue_of(counter["id"]).size() >= (counter["lane"] as Array).size():
 			continue
 		var eta := _order_eta(counter["id"])
@@ -554,16 +568,22 @@ func _reach_mm(p: Passenger) -> int:
 	return AIRSIDE_BROWSE_REACH_MM if p.cleared else BROWSE_REACH_MM
 
 
-## Whether some cafe's order spot is within the passenger's browse reach, by
-## octile distance (the cheap first test; _plan() checks the path).
+## Whether some open counter's order spot is within the passenger's browse
+## reach, by octile distance (the cheap first test; _plan() checks the path).
 func _passing_cafe(p: Passenger) -> bool:
 	refresh()
 	var reach := _reach_mm(p)
 	for cafe in layout.cafes:
 		for counter in cafe["counters"]:
-			if Passenger.octile_mm(p.at, counter["lane"][0]) <= reach:
+			if _open(counter["id"]) and Passenger.octile_mm(p.at, counter["lane"][0]) <= reach:
 				return true
 	return false
+
+
+## Whether a shop server serves at the counter (StaffSim.is_open()); never
+## without a StaffSim, as at a desk.
+func _open(counter_id: int) -> bool:
+	return _sim.staff != null and _sim.staff.is_open(counter_id)
 
 
 func _resume_stage(p: Passenger) -> Passenger.Stage:
