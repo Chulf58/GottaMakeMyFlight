@@ -10,6 +10,11 @@ const SHELL := "res://assets/buildings/tp_airport_shell.glb"
 const PORT_SIZE := Vector2i(1280, 720)
 const ARCH_CELL := Vector2i(4, 4)
 const WEST := ShellCutaway.Side.WEST
+## A ray from the north-west outside the grid: it crosses the west face's
+## plane north of the grid's corner (z -2), outside the facade, and enters
+## through the north face 1.2 m up, a point on the ground at (3.5, 1.5).
+const CORNER_EYE := Vector3(-4.0, 6.0, -6.0)
+const CORNER_POINT := Vector3(3.5, 0.0, 1.5)
 
 var _world: Node3D
 var _view: ShellView
@@ -179,3 +184,19 @@ func test_a_click_on_the_arch_cell_with_the_roof_gone_takes_it() -> void:
 	_shell_state(1.0, 1.0)
 	var point := _look_at_arch_cell(6.0)
 	assert_int(_mode.edit_at(point).object_id).is_equal(_arch)
+
+
+func test_a_corner_ray_enters_by_the_cut_north_face_not_the_west_plane() -> void:
+	_view.cutaway.roof_level = 1.0
+	_view.cutaway.side_levels = [1.0, 0.0, 0.0, 0.0]
+	_view.apply()
+	assert_float(_view.cutaway.cut(ShellCutaway.Side.NORTH)).is_equal(1.0)
+	assert_float(_view.cutaway.cut(WEST)).is_equal(0.0)
+	assert_bool(ShellSight.in_sight(_view, _mode.grid, CORNER_EYE, CORNER_POINT)).is_false()
+
+
+func test_the_same_corner_ray_is_hidden_when_the_north_face_stands() -> void:
+	_view.cutaway.roof_level = 1.0
+	_view.cutaway.side_levels = [0.0, 0.0, 0.0, 0.0]
+	_view.apply()
+	assert_bool(ShellSight.in_sight(_view, _mode.grid, CORNER_EYE, CORNER_POINT)).is_true()

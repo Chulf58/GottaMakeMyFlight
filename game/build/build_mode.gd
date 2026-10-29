@@ -168,7 +168,7 @@ const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 ## and Exit tools snap to its doors and load_snapshot() checks a save fits it.
 @export var shell: ShellDefinition
 ## The terminal shell's cutaway, drawn over the same shell. Remove does not
-## pick an object the shell hides from the camera (_shell_in_sight). main.tscn
+## pick an object the shell hides from the camera (ShellSight). main.tscn
 ## sets it; without it nothing hides an object but the grid's own walls.
 @export var shell_view: ShellView
 ## Where building is paid from (BuildTransaction): a click or door costs its
@@ -732,11 +732,12 @@ func _start_drag(point: Vector3) -> void:
 
 ## What Remove takes at a ground point: the object the pointer is on (seen
 ## from the camera, or on the point's cell unless the terminal shell hides the
-## point, see _shell_hides_point), then a wall edge within
+## point, see ShellSight), then a wall edge within
 ## WALL_PICK_DISTANCE, then the room, then the floor.
 func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 	var object_id := _object_in_sight(point)
-	if object_id == 0 and not _shell_hides_point(point):
+	var camera := get_viewport().get_camera_3d()
+	if object_id == 0 and not ShellSight.hides_point(shell_view, grid, camera, point):
 		object_id = grid.object_at(cell)
 	if object_id != 0:
 		return BuildEdit.remove_object(object_id)
@@ -755,7 +756,7 @@ func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 ## hides the ground behind it on screen, so a click on it picks a ground point
 ## beyond it, maybe beside a wall edge; the object the player sees under the
 ## pointer wins. An object behind a wall the view draws opaque
-## (_wall_in_sight) or behind the terminal shell (_shell_in_sight) is not seen.
+## (_wall_in_sight) or behind the terminal shell (ShellSight) is not seen.
 func _object_in_sight(point: Vector3) -> int:
 	var camera := get_viewport().get_camera_3d()
 	if camera == null or camera.is_position_behind(point):
@@ -777,52 +778,9 @@ func _object_in_sight(point: Vector3) -> int:
 			seen = object_id
 	if seen != 0 and nearest >= _wall_in_sight(from, point) - SIGHT_SLACK_M:
 		return 0
-	if seen != 0 and _shell_in_sight(from, point):
+	if seen != 0 and ShellSight.in_sight(shell_view, grid, from, point):
 		return 0
 	return seen
-
-
-## Whether the terminal shell stands between the camera and a ground point
-## (_shell_in_sight); false with no camera or a point behind it.
-func _shell_hides_point(point: Vector3) -> bool:
-	var camera := get_viewport().get_camera_3d()
-	if camera == null or camera.is_position_behind(point):
-		return false
-	return _shell_in_sight(camera.project_ray_origin(camera.unproject_position(point)), point)
-
-
-## Whether the terminal shell, as ShellView draws it now, stands between the
-## camera at `from` and the ground point `to` inside the grid. While any of the
-## roof is drawn the shell is closed. Once it is gone, each outer face the
-## line enters through hides what is under its squashed height, which is the
-## full facade for a side the camera does not look from and a kerb for a cut
-## one (ShellCutaway.stub_transform).
-func _shell_in_sight(from: Vector3, to: Vector3) -> bool:
-	if shell_view == null or not shell_view.is_ready():
-		return false
-	var cutaway := shell_view.cutaway
-	if cutaway.roof_level < 1.0:
-		return true
-	var faces := [
-		[ShellCutaway.Side.WEST, 0, grid.origin.x, -1.0],
-		[ShellCutaway.Side.EAST, 0, grid.origin.x + grid.size.x, 1.0],
-		[ShellCutaway.Side.NORTH, 2, grid.origin.z, -1.0],
-		[ShellCutaway.Side.SOUTH, 2, grid.origin.z + grid.size.y, 1.0],
-	]
-	for face in faces:
-		var axis: int = face[1]
-		var plane: float = face[2]
-		var outward: float = face[3]
-		if (from[axis] - plane) * outward <= 0.0 or (to[axis] - plane) * outward > 0.0:
-			continue
-		var t := (plane - from[axis]) / (to[axis] - from[axis])
-		var height := lerpf(from.y, to.y, t) - grid.origin.y
-		var standing := lerpf(
-			ShellCutaway.FACADE_HEIGHT, InteriorKit.STUB_HEIGHT, cutaway.cut(face[0])
-		)
-		if height < standing:
-			return true
-	return false
 
 
 ## A placed object's footprint, from the floor up to its drawn height.
