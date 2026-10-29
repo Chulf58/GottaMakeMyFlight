@@ -195,6 +195,40 @@
         "toilet_sink.glb": "741c305abb3e739e9a285032e53907c67097d64bcf8f645e40f2182368b051c7",
         "toilet_stall.glb": "51386502977a3797a8ef95e3c738dd6268f07e8099a4324358752e35aaa1681d"
       }
+    },
+    "kiosk_counter": {
+      "png": "kiosk_counter.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "kiosk_counter.glb": "ca71154d187b5202ed8afc7e248f909caf784713347778969a3750149846e753"
+      }
+    },
+    "kiosk_display": {
+      "png": "kiosk_display.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "kiosk_display.glb": "dc171b8849eaff08a1af24f4940e90f2948f8cc895ed22728b55f9f47658d0a6"
+      }
+    },
+    "kiosk_room": {
+      "png": "kiosk_room.png",
+      "class": "3x3",
+      "style": 3,
+      "sources": {
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
+        "kiosk_counter.glb": "ca71154d187b5202ed8afc7e248f909caf784713347778969a3750149846e753",
+        "kiosk_display.glb": "dc171b8849eaff08a1af24f4940e90f2948f8cc895ed22728b55f9f47658d0a6"
+      }
+    },
+    "screen_stand": {
+      "png": "screen_stand.png",
+      "class": "1x1_tall",
+      "style": 3,
+      "sources": {
+        "screen_stand.glb": "ce1af0312ab25c7ab335d1cc06d3fd293dfb7c40128eb7487b39d477080f82ac"
+      }
     }
   }
 }

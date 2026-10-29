@@ -187,6 +187,34 @@ ITEMS = {
         ],
         [],
     ),
+    # Kiosk pieces (Boredom 5/5, build_kiosk_kit.py): the counter is 1.99 m to its
+    # canopy and the display 1.68 m, so both take the tall 2x1 box.
+    "kiosk_counter": ("2x1_tall", ["kiosk_counter"], []),
+    "kiosk_display": ("2x1_tall", ["kiosk_display"], []),
+    # Kiosk room (3x3 min): the counter across the back row's left two cells facing
+    # front, its till cell the middle row's left cell; the display down the right
+    # column's front two cells facing Godot -X, its browse slots the centre column's
+    # middle (slot 0) and front (slot 1) cells. Every interaction and browse cell is
+    # distinct and clear, and both fronts face the front-left camera.
+    "kiosk_room": (
+        "3x3",
+        [
+            ("floor_tile", (-1.0, -1.0, 0.0)),
+            ("floor_tile", (0.0, -1.0, 0.0)),
+            ("floor_tile", (1.0, -1.0, 0.0)),
+            ("floor_tile", (-1.0, 0.0, 0.0)),
+            ("floor_tile", (0.0, 0.0, 0.0)),
+            ("floor_tile", (1.0, 0.0, 0.0)),
+            ("floor_tile", (-1.0, 1.0, 0.0)),
+            ("floor_tile", (0.0, 1.0, 0.0)),
+            ("floor_tile", (1.0, 1.0, 0.0)),
+            ("kiosk_counter", (-0.5, 1.0, 0.0)),
+            ("kiosk_display", (1.0, -0.5, 0.0), -90.0),
+        ],
+        [],
+    ),
+    # The boredom screen stand (one floor cell, its picture to the front).
+    "screen_stand": ("1x1_tall", ["screen_stand"], []),
 }
 ORDER = list(ITEMS)
 

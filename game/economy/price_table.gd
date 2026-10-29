@@ -53,6 +53,9 @@ const OBJECT_PRICES := {
 	# cafe's; a display stand is a shelf unit.
 	&"kiosk_counter": 400,
 	&"kiosk_display": 200,
+	# A screen stand (Boredom 4/5): a display on a floor stand, dearer than a
+	# seat row; it earns nothing and has a running cost.
+	&"screen_stand": 350,
 }
 
 ## What a ready toilet room costs to run per stall per game day (decision
@@ -60,6 +63,12 @@ const OBJECT_PRICES := {
 ## charged at midnight with the wages. A tuning value, to be checked in a
 ## playtest: three stalls are half a check-in agent's wage.
 const TOILET_STALL_UPKEEP := 10
+## What one screen stand costs to run per game day, in a room or not
+## (decisions boredom-and-shops-design-boredom-need-while-waiting-kiosk-sh,
+## point 3, and shops-and-food-stalls-earn-per-visit-toilets-and-screens-cos),
+## charged at midnight with the toilet upkeep. A tuning value, to be checked in
+## a playtest: a little under a stall, as one screen is a single display.
+const SCREEN_UPKEEP := 6
 
 ## What one hired member of a role costs per game day (ruling staff-wages-
 ## charged-daily-at-midnight-unpaid-wages-carried-as-owed). Tuning values, to
