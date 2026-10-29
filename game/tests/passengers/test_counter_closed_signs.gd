@@ -82,3 +82,17 @@ func test_an_airside_counter_past_the_divider_is_staffed_through_security() -> v
 	assert_int(m.station).is_equal(counter)
 	_markers.sync()
 	assert_object(_markers.closed_sign_for(counter)).is_null()
+
+
+func test_removing_the_room_around_an_unstaffed_counter_drops_its_closed_sign() -> void:
+	var grid := BuildGrid.new()
+	_ids = CafeTestLayout.build(grid)
+	_attach(grid)
+	var counter: int = _ids["air_counter"]
+	_markers.sync()
+	assert_object(_markers.closed_sign_for(counter)).is_not_null()
+	# A room edit changes no walk graph and nobody is hired, so neither
+	# graph_changed nor staff_changed fires: the sign follows edit_applied.
+	assert_bool(grid.apply(BuildEdit.remove_room(_ids["air_room"])).ok).is_true()
+	assert_object(_markers.closed_sign_for(counter)).is_null()
+	assert_object(_markers.closed_sign_for(_ids["land_counter"])).is_not_null()

@@ -192,8 +192,9 @@ func _ready() -> void:
 	sync()
 
 
-## Also called on every grid edit, so a paused edit that removes a station or
-## changes its lane length updates the sign at once. The sim rebuilds its
+## Also called on every grid edit (graph_changed, or edit_applied for a room
+## edit), so a paused edit that removes a station or changes its lane length
+## updates the sign at once. The sim rebuilds its
 ## layout on the same signal and is connected first: bind() connects it in
 ## the same call that sets sim.grid, so no sync here can see the grid sooner.
 func sync() -> void:
@@ -201,6 +202,8 @@ func sync() -> void:
 		return
 	if not sim.grid.graph_changed.is_connected(_on_graph_changed):
 		sim.grid.graph_changed.connect(_on_graph_changed)
+	if not sim.grid.edit_applied.is_connected(_on_edit_applied):
+		sim.grid.edit_applied.connect(_on_edit_applied)
 	_watch_staff()
 	var closed := MissSignals.closed_stations(sim)
 	var counters := ShopCounters.closed(sim)
@@ -599,6 +602,16 @@ static func caption_rect(sign_point: Vector2, text: String, lift := 0.0, shift :
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	sync()
+
+
+## A room edit changes no walk graph, so graph_changed never follows it, and
+## with no one hired staff_changed does not either. edit_applied comes before
+## the graph_changed of an edit with dirty cells, while the sim layout is still
+## the old one, so only a room edit is taken here. The staff sim connected
+## first, so its stations are already reconciled.
+func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
+	if result.dirty_cells.is_empty():
+		sync()
 
 
 ## Why `station` is closed (a MissSignals reason): for a counter in

@@ -94,6 +94,7 @@ func watch(with_staff: StaffSim) -> void:
 	staff.staff_changed.connect(refresh)
 	staff.member_state_changed.connect(_on_member_state)
 	staff.sim.grid.graph_changed.connect(_on_graph_changed)
+	staff.sim.grid.edit_applied.connect(_on_edit_applied)
 	if gate != null:
 		gate.changed.connect(refresh)
 	refresh()
@@ -161,6 +162,15 @@ func _on_member_state(_id: int, _state: StaffMember.State) -> void:
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	refresh()
+
+
+## A room edit changes no walk graph, so graph_changed never follows it, and
+## StaffSim emits nothing when no one is hired. edit_applied comes before the
+## graph_changed of an edit with dirty cells, so only a room edit is taken
+## here. StaffSim connected first and has already reconciled its stations.
+func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
+	if result.dirty_cells.is_empty():
+		refresh()
 
 
 func _build() -> void:

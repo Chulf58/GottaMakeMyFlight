@@ -69,3 +69,20 @@ func test_the_hint_asks_for_shop_staff_only_while_a_ready_cafe_has_none() -> voi
 func test_without_a_cafe_or_kiosk_the_hint_does_not_ask_for_shop_staff() -> void:
 	_make(false)
 	assert_str(_panel.hint_text()).not_contains("Hire shop staff")
+
+
+func test_removing_the_only_cafe_room_while_paused_clears_the_shop_hint() -> void:
+	var grid := BuildGrid.new()
+	var ids := CafeTestLayout.build(grid)
+	_w = PassengerTestWorld.make(grid, FlightSim.schedule_starts(1000000))
+	_w.auto_staff = false
+	_panel = auto_free(StaffPanel.new())
+	_panel.staff = _w.staff
+	add_child(_panel)
+	assert_str(_panel.hint_label().text).contains("Hire shop staff")
+	# A room edit changes no walk graph, and with nobody hired StaffSim emits
+	# nothing: the panel has to follow the edit itself.
+	assert_bool(grid.apply(BuildEdit.remove_room(ids["air_room"])).ok).is_true()
+	assert_bool(grid.apply(BuildEdit.remove_room(ids["land_room"])).ok).is_true()
+	assert_array(_w.staff.stations_of(SHOP)).is_empty()
+	assert_str(_panel.hint_label().text).not_contains("Hire shop staff")
