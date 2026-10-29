@@ -32,7 +32,13 @@ extends Node3D
 ## walker is at security (narrow lane cells and tables) or runs (a long stride
 ## kicks back into a trailing case); it goes between pull and lift over the
 ## head. Worn bags keep their carry in a narrow cell: only a hand-carried bag
-## turns to the front (worn bags stay inside the body's width).
+## turns to the front (worn bags stay inside the body's width). At a toilet
+## stall (StallCarry) a roller and a backpack are taken in the hand too (the
+## backpack by its grab loop) and every hand-carried bag is held in front, from
+## just before the stall until the walker is clear of it, so nothing goes over
+## the head inside the stall and no roller trails over the bowl; inside, a bag
+## goes between the hand and the floor without the lift and the push out, and
+## no nearer the door than its leaves.
 ##
 ## A bag that changes home (or hand) moves there over TRANSFER_TICKS of sim
 ## time (the clock's tick plus its alpha), lifted and kept out from the body; a
@@ -130,6 +136,9 @@ const ROLLER_GRIP_PAST_TOP_M := 0.015
 ## The roller's carry handle (build_carry_on_kit.py Roller_Handle), where a
 ## lifted roller is held.
 const ROLLER_HANDLE := Vector3(0.0, 0.225, 0.165)
+## The backpack's grab loop (build_carry_on_kit.py Pack_Loop), its top, where
+## a backpack taken in hand at a toilet stall is held (StallCarry).
+const BACKPACK_LOOP := Vector3(0.0, 0.082, 0.235)
 ## A stretchable strip or rod as built (build_carry_on_kit.py REACH_BUILT).
 const REACH_BUILT_M := 0.02
 ## Kind -> [the stretched node, the node moved to its end].
@@ -241,10 +250,12 @@ static func carried(
 
 ## The point of a hand-carried bag (in its own frame, scale 1) held at the grip
 ## in the side carry: a hard case's top edge on its handle face, a lifted
-## roller's carry handle.
+## roller's carry handle, a backpack's grab loop.
 static func grip_anchor(kind: SecurityLooks.Kind) -> Vector3:
 	if kind == SecurityLooks.Kind.ROLLER:
 		return ROLLER_HANDLE
+	if kind == SecurityLooks.Kind.BACKPACK:
+		return BACKPACK_LOOP
 	var box := bag_box(kind)
 	return Vector3(0.0, box.end.y, box.end.z)
 
@@ -427,21 +438,30 @@ func sync() -> void:
 		seen[id] = true
 		var hands: Array[int] = []
 		var kinds: Array[SecurityLooks.Kind] = []
+		var lifts: Array[bool] = []
+		var at_stall := StallCarry.held_by_hand(sim, p)
 		for i in homes.size():
 			kinds.append(SecurityLooks.bag_kind(p, i))
+			lifts.append(_lifted(kinds[i], p, at_stall))
 			# A worn bag keeps its side, so a narrow cell never moves it across.
 			var worn: bool = (
-				SecurityLooks.KIND_CARRY[kinds[i]]
-				in [SecurityLooks.Carry.BACK, SecurityLooks.Carry.SHOULDER]
+				not lifts[i]
+				and (
+					SecurityLooks.KIND_CARRY[kinds[i]]
+					in [SecurityLooks.Carry.BACK, SecurityLooks.Carry.SHOULDER]
+				)
 			)
 			hands.append(SecurityLooks.worn_side(i) if worn else SecurityLooks.hand_of(sim, p, i))
-		var front := SecurityLooks.carry_front(sim, p)
+		# A stall is closed on both sides, its approach as good as (StallCarry).
+		var front := SecurityLooks.carry_front(sim, p) or at_stall
 		var held: Dictionary = _held.get(id, {"tray": null, "bags": []})
 		_held[id] = held
 		held["tray_at"] = tray_at
 		held["homes"] = homes
 		held["hands"] = hands
 		held["kinds"] = kinds
+		held["in_stall"] = StallCarry.in_stall(p)
+		held["stall"] = StallCarry.stall_of(sim, p)
 		if not held.has("front"):
 			# A new record (a new passenger, or after a load) starts in the
 			# carry it needs, with no turn to play.
@@ -478,13 +498,7 @@ func sync() -> void:
 		# A change of home or hand is stamped with this tick; draw() starts the
 		# move from where the bag was drawn last.
 		for i in bags.size():
-			# A roller is lifted by its handle and carried as the hard case is
-			# through security (narrow lane cells, tables) and while its walker
-			# runs (a long stride kicks back into a trailing case).
-			var lifted: bool = (
-				kinds[i] == SecurityLooks.Kind.ROLLER
-				and (p.stage == Passenger.Stage.SECURITY or p.late)
-			)
+			var lifted := lifts[i]
 			var carry: SecurityLooks.Carry = (
 				SecurityLooks.Carry.HAND if lifted else SecurityLooks.KIND_CARRY[kinds[i]]
 			)
@@ -498,6 +512,16 @@ func sync() -> void:
 	for id in _held.keys():
 		if not seen.has(id):
 			release(id)
+
+
+## Whether a bag of `kind` is lifted by its handle and carried as the hard
+## case is: a roller through security (narrow lane cells, tables) and while
+## its walker runs (a long stride kicks back into a trailing case), and a
+## roller or a backpack at a toilet stall (`at_stall`, StallCarry).
+static func _lifted(kind: SecurityLooks.Kind, p: Passenger, at_stall: bool) -> bool:
+	if kind == SecurityLooks.Kind.ROLLER and (p.stage == Passenger.Stage.SECURITY or p.late):
+		return true
+	return at_stall and kind in [SecurityLooks.Kind.ROLLER, SecurityLooks.Kind.BACKPACK]
 
 
 ## Returns every prop of passenger `id` to the pool.
@@ -708,7 +732,20 @@ func _place_bags(
 			# is the tick sync() saw the change on, not the frame it is drawn in.
 			# A new bag's move is over at once, so its start is never drawn.
 			var start := want if bag["home"] == -1 else node.global_transform
-			bag["from"] = body.global_transform.affine_inverse() * start
+			bag["from"] = _start_frame(bag, body).affine_inverse() * start
+			# The carry it was drawn with last, not one sync() saw in between
+			# (a frame can run several ticks).
+			bag["carry_from"] = bag.get(
+				"carry_placed", bag.get("carry_was", SecurityLooks.KIND_CARRY[kind])
+			)
+			# Set down in a toilet stall, a bag starts where the hand let go of
+			# it, fixed in the stall: the body shuffles back to the seat as it
+			# sits and would drag a start held in its frame through its knees.
+			bag.erase("from_world")
+			if held.get("in_stall", false) and homes[i] == SecurityLooks.Home.FLOOR:
+				bag["from_world"] = StallCarry.inside_door(
+					held["stall"], body.global_transform * bag["from"], bag_box(kind)
+				)
 			bag["since"] = bag["changed"] - (TRANSFER_TICKS if bag["home"] == -1 else 0.0)
 			bag["was"] = bag["home"]
 			bag["home"] = bag["place"]
@@ -717,6 +754,10 @@ func _place_bags(
 				continue
 		bag["placed"] = int(bag.get("placed", 0)) + 1
 		var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
+		# The body this placement goes with, for the next move's start.
+		bag["body_at"] = body.global_transform
+		bag["settled"] = k >= 1.0
+		bag["carry_placed"] = bag["carry"]
 		var to_hand: bool = homes[i] == SecurityLooks.Home.HAND
 		var from_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
 		var reach: float = want_reach[0]
@@ -732,11 +773,11 @@ func _place_bags(
 			node.global_transform = want
 			continue
 		var frame := body.global_transform
-		var pull := SecurityLooks.Carry.PULL
+		# Onto or off the back or the pull: over the head.
+		var high := [SecurityLooks.Carry.BACK, SecurityLooks.Carry.PULL]
 		var overhead_route: bool = (
-			(kind == SecurityLooks.Kind.BACKPACK and (to_hand or from_hand))
-			or (to_hand and bag["carry"] == pull)
-			or (from_hand and bag.get("carry_was", pull) == pull)
+			(to_hand and bag["carry"] in high)
+			or (from_hand and bag.get("carry_from", SecurityLooks.KIND_CARRY[kind]) in high)
 		)
 		if overhead_route:
 			var box := bag_box(kind)
@@ -751,14 +792,31 @@ func _place_bags(
 				)
 			)
 			continue
-		var start_now := frame * (bag["from"] as Transform3D)
+		var start_now: Transform3D = bag.get("from_world", frame * (bag["from"] as Transform3D))
 		var placed := start_now.interpolate_with(want, k)
 		# A bag going up rises first and then comes across (picked up from
 		# the floor, it clears the legs); one going down is lifted on the
 		# way, over a table edge rather than through it. Either way it is
 		# kept TRANSFER_CLEAR_M from the body's centre line, on its hand's side.
-		var arc := 4.0 * k * (1.0 - k)
-		if want.origin.y > start_now.origin.y:
+		# In a toilet stall a hand-carried bag goes between the floor and the
+		# front carry, both ahead of the body: no table to lift it over, and
+		# no push out from the body, which would put it into a partition or
+		# the door. Set down, it stays up by the door and goes down and back to
+		# its spot late, once the knees of the sitter, who shuffles back to
+		# the seat, are out of its way (they start 0.27 m from the door, less
+		# than a bag's depth); picked up, it comes forward first and rises
+		# late, ahead of the feet and the hips.
+		var in_stall: bool = held.get("in_stall", false)
+		var hand_in_stall: bool = in_stall and bag["carry"] == SecurityLooks.Carry.HAND
+		var arc := 0.0 if hand_in_stall else 4.0 * k * (1.0 - k)
+		var rising := want.origin.y > start_now.origin.y
+		if hand_in_stall:
+			var soon := 1.0 - (1.0 - k) * (1.0 - k)
+			var across := start_now.origin.lerp(want.origin, soon if rising else k * k * k)
+			placed.origin = Vector3(
+				across.x, lerpf(start_now.origin.y, want.origin.y, k * k), across.z
+			)
+		elif rising:
 			var across := start_now.origin.lerp(want.origin, k * k)
 			placed.origin.x = across.x
 			placed.origin.z = across.z
@@ -772,8 +830,28 @@ func _place_bags(
 		var hand: int = held["hands"][i]
 		if kind == SecurityLooks.Kind.SHOULDER:
 			hand = SecurityLooks.worn_side(i)
-		placed.origin += _keep_out(placed.origin, body, hand) * minf(arc * 2.0, 1.0)
+		var clear := StallCarry.STALL_CLEAR_M if in_stall else TRANSFER_CLEAR_M
+		placed.origin += _keep_out(placed.origin, body, hand, clear) * minf(arc * 2.0, 1.0)
+		if in_stall and homes[i] == SecurityLooks.Home.FLOOR:
+			placed = StallCarry.inside_door(held["stall"], placed, bag_box(kind))
 		node.global_transform = placed
+
+
+## The body frame a new move of `bag` starts in: the body as it was when the
+## bag was last placed, for a bag settled on the body (in the hand, on the
+## back or the shoulder), so a body that turned since (as one sitting down
+## in a toilet stall turns round on the spot) takes the bag round with it as
+## the hand does; the body now for anything else (a bag on the floor or in a
+## tray, a pulled roller on its wheels, one already moving).
+func _start_frame(bag: Dictionary, body: Node3D) -> Transform3D:
+	var held_by_body: bool = (
+		int(bag["home"]) >= 0
+		and int(bag["home"]) / 4 == SecurityLooks.Home.HAND
+		and bag.get("settled", false)
+		and bag.get("carry_placed", SecurityLooks.Carry.PULL) != SecurityLooks.Carry.PULL
+		and bag.has("body_at")
+	)
+	return bag["body_at"] if held_by_body else body.global_transform
 
 
 ## How far a strap or rod has gone from its old length to its new one at `k`
@@ -795,18 +873,19 @@ static func _reach_blend(kind: SecurityLooks.Kind, k: float, to_hand: bool) -> f
 	return clampf(k / 0.4, 0.0, 1.0)
 
 
-## How far to push a moving bag at `at` out to TRANSFER_CLEAR_M from the
-## body's centre line (zero when it is already that far out); a bag on the
-## centre line goes out on the side of `hand` (0 right, 1 left).
-func _keep_out(at: Vector3, body: Node3D, hand: int) -> Vector3:
+## How far to push a moving bag at `at` out to `clear` (TRANSFER_CLEAR_M, or
+## less in a toilet stall) from the body's centre line (zero when it is
+## already that far out); a bag on the centre line goes out on the side of
+## `hand` (0 right, 1 left).
+func _keep_out(at: Vector3, body: Node3D, hand: int, clear: float) -> Vector3:
 	var away := at - body.global_position
 	away.y = 0.0
 	var gap := away.length()
-	if gap >= TRANSFER_CLEAR_M:
+	if gap >= clear:
 		return Vector3.ZERO
 	if gap < 0.05:
 		away = Basis(Vector3.UP, body.rotation.y) * (Vector3.LEFT if hand == 0 else Vector3.RIGHT)
-	return away.normalized() * (TRANSFER_CLEAR_M - gap)
+	return away.normalized() * (clear - gap)
 
 
 ## How far passenger `held` has turned to the front carry at sim time `now`,
@@ -888,8 +967,10 @@ func _tick() -> float:
 ## tick position (tick_position, as drawn); any other bag has none.
 func _trail(bag: Dictionary, body: Node3D, id: int, home: SecurityLooks.Home, hand: int) -> void:
 	if bag["carry"] != SecurityLooks.Carry.PULL or home != SecurityLooks.Home.HAND:
-		bag.erase("axle")
-		bag.erase("walked")
+		# Not pulled now: the next pull starts its follower afresh behind the
+		# walker, not from wherever it was last drawn (perhaps metres back).
+		for key in ["axle", "walked", "drawn_axle", "drawn_at", "axle_now"]:
+			bag.erase(key)
 		return
 	var side := Vector3.LEFT if hand == 0 else Vector3.RIGHT
 	# The heading the body is drawn with for this tick (PassengerViews.draw()
