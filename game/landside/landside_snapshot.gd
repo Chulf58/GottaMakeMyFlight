@@ -291,7 +291,33 @@ static func _vehicles(
 			return {"error": "vehicle %d: %s" % [v.id, problem]}
 		last = v.id
 		out.append(v)
+	var lot_problem := _lot_traffic_problem(out, definition.lots.size())
+	if lot_problem != "":
+		return {"error": lot_problem}
 	return {"list": out}
+
+
+## The car park rule LandsideSim keeps (_step_lot()): in each lot at most one
+## car pulls out (or turns round), and none pulls in while one does. "" when
+## the vehicles keep it.
+static func _lot_traffic_problem(vehicles: Array[LandsideVehicle], lots: int) -> String:
+	var leaving: Array[int] = []
+	var arriving: Array[int] = []
+	leaving.resize(lots)
+	arriving.resize(lots)
+	for v in vehicles:
+		if v.lane != LandsideVehicle.Lane.SLOT:
+			continue
+		if v.stage == LandsideVehicle.Stage.LEAVE:
+			leaving[v.lot] += 1
+		elif v.stage == LandsideVehicle.Stage.DRIVE:
+			arriving[v.lot] += 1
+	for spot in lots:
+		if leaving[spot] > 1:
+			return "lot spot %d has more than one car pulling out" % spot
+		if leaving[spot] > 0 and arriving[spot] > 0:
+			return "lot spot %d has a car pulling in while one pulls out" % spot
+	return ""
 
 
 static func _vehicle_problem(
@@ -353,8 +379,9 @@ static func _vehicle_problem(
 	return ""
 
 
-## On a berth or slot path: before the stand pulling in, at it standing, past
-## it pulling out (a turning car has no stand).
+## On a berth or slot path: before the stand pulling in, at it standing, at it
+## or past it pulling out (a car let go on this tick has not moved yet; a
+## turning car has no stand).
 static func _stands_right(v: LandsideVehicle, paths: LandsidePaths) -> bool:
 	if not (v.lane in [LandsideVehicle.Lane.BERTH, LandsideVehicle.Lane.SLOT]):
 		return true
@@ -363,7 +390,7 @@ static func _stands_right(v: LandsideVehicle, paths: LandsidePaths) -> bool:
 		LandsideVehicle.Stage.DRIVE:
 			return v.pos_mm < stand
 		LandsideVehicle.Stage.LEAVE:
-			return v.pos_mm > stand
+			return v.pos_mm >= stand
 	return v.pos_mm == stand
 
 

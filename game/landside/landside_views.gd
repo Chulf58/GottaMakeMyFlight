@@ -220,11 +220,13 @@ func places() -> LandsidePlaces:
 
 
 ## Where a vehicle is now. A parked car faces into its stall
-## (LandsidePlaces.parked_heading()), on its slot's deck in a multi-storey.
+## (LandsidePlaces.parked_heading()), on its slot's deck in a multi-storey;
+## every other car faces the way the sim says (pulling in or out of a slot,
+## the way it drives, backing out of the stall included).
 func _place_of(v: LandsideVehicle) -> Dictionary:
 	var at := landside.world_position(v)
 	var dir := landside.heading(v)
-	if v.lane == LandsideVehicle.Lane.SLOT:
+	if v.stage == LandsideVehicle.Stage.PARKED:
 		dir = LandsidePlaces.parked_heading(landside.definition.lots[v.lot], at)
 	return {"place": [v.lane, v.lot, v.stop], "pos_mm": v.pos_mm, "at": at, "dir": dir}
 

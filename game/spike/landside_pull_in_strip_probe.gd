@@ -11,9 +11,10 @@ extends SceneTree
 ##
 ## main.tscn boots with a random sim seed (printed), the starter terminal (the HUD's
 ## debug button) and a check-in agent and a security officer hired, and plays until a
-## car on road_in takes a berth. The camera aims at the middle of its way in, and eight
-## frames are taken evenly from there to the tick it stands in the berth (a fraction of
-## a tick apart), the sim stepped by the clock's own advance(), so LandsideViews draws
+## car on road_in takes a berth. The camera aims at the middle of its way in; seven
+## frames are taken evenly over the way in (a fraction of a tick apart) and the eighth
+## once the car stands in the berth (a tick after its arrival tick), the sim stepped
+## by the clock's own advance(), so LandsideViews draws
 ## through its real tick signal and alpha. Every frame proves the car in frame (its
 ## projected bounds inside the viewport with a margin), frame 0 also hit by camera
 ## rays against colliders of every mesh in the scene, else PROBE_INVALID. Per frame it
@@ -136,8 +137,13 @@ func _boot() -> void:
 
 
 func _tick() -> void:
+	_advance(1.0)
+
+
+## Runs the clock `ticks` (a fraction allowed) through its own advance().
+func _advance(ticks: float) -> void:
 	_clock.set_paused(false)
-	_clock.advance(SimClock.STEP)
+	_clock.advance(SimClock.STEP * ticks)
 	_clock.set_paused(true)
 
 
@@ -180,13 +186,25 @@ func _plate_pull_in() -> void:
 	var last := Vector3.INF
 	var left := ceili(float(_landside.paths.berth_stand[v.stop] - v.pos_mm) / LandsideSim.SPEED_MM)
 	var gap := left / float(FRAMES - 1)
-	var longest := gap * LandsideSim.SPEED_MM / 1000.0 + 0.01
 	print("PULL_IN %d ticks to the berth, frames %.2f ticks apart" % [left, gap])
 	for i in FRAMES:
-		if i > 0:
-			_clock.set_paused(false)
-			_clock.advance(SimClock.STEP * gap)
-			_clock.set_paused(true)
+		# The ticks advanced since the frame before; a step may cover a lane step each.
+		var advanced := 0.0
+		if i > 0 and i < FRAMES - 1:
+			_advance(gap)
+			advanced = gap
+		elif i == FRAMES - 1:
+			# The last frame waits for the car to stand in its berth (fractions of a
+			# tick add up short of the tick count), then one tick more, so the view's
+			# tick before is in the berth too and every alpha draws it there.
+			var guard := 0
+			while v.stage == LandsideVehicle.Stage.DRIVE and guard < left * 4:
+				_advance(0.25)
+				advanced += 0.25
+				guard += 1
+			_advance(1.0)
+			advanced += 1.0
+		var longest := advanced * LandsideSim.SPEED_MM / 1000.0 + 0.01
 		_views.draw()
 		var node := _views.node_for(id)
 		if node == null:
