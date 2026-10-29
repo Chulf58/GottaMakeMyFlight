@@ -13,7 +13,9 @@ extends RefCounted
 ## acts on (CafeSim.HUNGRY_AT, ToiletSim.NEED_AT), walking and queueing
 ## included, until the visit meets it. It is hidden while the passenger is at
 ## the facility meeting it (at a cafe table, inside a toilet stall) and for a
-## passenger who missed the flight.
+## passenger who missed the flight. All icons hide while the game camera is at
+## its home zoom or farther out (shown_at()); the follow panel still lists the
+## needs.
 ##
 ## PassengerViews gives every passenger node two Sprite3D icons (make_sprite())
 ## at one point over the head, so the body's turn never moves them, and lays
@@ -102,6 +104,16 @@ static func offset_of(index: int, count: int, lift_px := 0.0) -> Vector2:
 	return Vector2(x, SIZE / 2.0 + lift_px * to_texture)
 
 
+## Whether need icons show through `camera` (user ruling: need icons hide when
+## the camera is zoomed out past the home zoom). Under a TycoonCamera rig they
+## show only while it is closer than its home distance (TycoonCamera.
+## home_distance, which frame_start_view() sets); at the home zoom or farther
+## out they are hidden. Any other camera, or none, shows them.
+static func shown_at(camera: Camera3D) -> bool:
+	var rig := camera.get_parent() as TycoonCamera if camera != null else null
+	return rig == null or rig.distance < rig.home_distance
+
+
 ## World units per output pixel at one metre from `camera` in `view`, or 0
 ## with no camera.
 static func unit_of(view: Viewport, camera: Camera3D) -> float:
@@ -114,9 +126,15 @@ static func unit_of(view: Viewport, camera: Camera3D) -> float:
 ## Lays out a passenger node's shown icons for this frame: ICON_PX on screen
 ## (`unit` from unit_of()), side by side, over the head, or on top of the
 ## thought bubble while it shows. Does nothing with no camera.
-static func layout(node: Node3D, bubble: Label3D, camera: Camera3D, unit: float) -> void:
+## With `shown` false (the camera at the home zoom or farther out, shown_at())
+## the node's icons are hidden for this frame.
+static func layout(
+	node: Node3D, bubble: Label3D, camera: Camera3D, unit: float, shown := true
+) -> void:
 	var count: int = node.get_meta(&"needs", 0)
-	if count == 0 or camera == null or unit <= 0.0:
+	for i in count:
+		(node.get_node(SPRITES[i]) as Sprite3D).visible = shown
+	if count == 0 or not shown or camera == null or unit <= 0.0:
 		return
 	var anchor := Vector3(0.0, LIFT_M, 0.0)
 	var lift_px := 0.0

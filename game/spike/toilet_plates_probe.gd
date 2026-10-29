@@ -16,12 +16,13 @@ extends SceneTree
 ##             second tick, from that steep camera (one sheet); every bag
 ##             must stay inside the crop
 ##   strip_out the same carrier standing up and stepping out (the pick-up)
-##   distance  the camera's home distance over the toilet rooms
+##   distance  the camera's home distance over the toilet rooms, where every
+##             need icon must be hidden although passengers in frame have needs
 ##   ui        the Toilets tray open and the room panel over a ready toilet
 ## Proofs before a save: the subject point projects inside the frame with a
 ## margin; a walker is shown by PlateSight.person_shown (nine sight lines, the
-## HUD twin). One passenger's need icons (the walker; at distance the one
-## farthest from other icons) are proven by a twin with only its icons hidden:
+## HUD twin). The walker's need icons (in_use, closer than the home zoom)
+## are proven by a twin with only its icons hidden:
 ## each icon must draw inside its own predicted rect, in the frame, with no HUD
 ## pixel over it; then a thought bubble is given to it and the icon row must
 ## draw wholly above the bubble. The bags are proven by a twin with them hidden
@@ -54,8 +55,6 @@ const VISITORS := 14
 const SETTLED_TICKS := 20
 const STRIP_FRAMES := 8
 const STRIP_STEP_TICKS := 2
-## Box searched around an overlay's anchor, in layout pixels.
-const ICON_SEARCH_PX := Vector2(70.0, 70.0)
 ## Plate pixels an icon may draw past its predicted rect (filtering, outline).
 const ICON_SLACK_PX := 3
 ## Height of the steep camera over the stall, and the strip's crop half size:
@@ -348,34 +347,6 @@ func _icon_rect(sprite: Sprite3D, img: Image) -> Rect2i:
 	return Rect2i(Rect2(centre - half, half * 2.0))
 
 
-## The icon-bearing passenger in the frame whose icon anchor is farthest from
-## every other drawn icon anchor, so its icons are judged alone; 0 for none.
-func _lone_icon_passenger() -> int:
-	var anchors := {}
-	for id in _sim.passenger_ids():
-		var node := _views.node_for(id)
-		if node == null or not node.visible or int(node.get_meta(&"needs", 0)) == 0:
-			continue
-		var sprite := node.get_node(NeedIcons.SPRITES[0]) as Sprite3D
-		if _cam.is_position_behind(sprite.global_position):
-			continue
-		var at := _cam.unproject_position(sprite.global_position)
-		if _frame_rect().grow(-ICON_SEARCH_PX.x).has_point(at):
-			anchors[id] = at
-	var best := 0
-	var best_gap := -1.0
-	for id in anchors:
-		var gap := INF
-		for other in anchors:
-			if other != id:
-				gap = minf(gap, (anchors[id] as Vector2).distance_to(anchors[other]))
-		if gap > best_gap:
-			best = id
-			best_gap = gap
-	print("ICONS lone passenger=%d gap_px=%.0f of %d" % [best, best_gap, anchors.size()])
-	return best
-
-
 ## Gives passenger `id` a thought bubble and requires its icon row to stand
 ## clear above it on screen: the bubble's drawn box (a twin with the bubble
 ## hidden) and the icons' drawn box (a twin with the icons hidden) must not
@@ -577,12 +548,27 @@ func _distance_plate() -> void:
 	var ok := _in_frame(_cam, focus, "distance rooms", true)
 	paused = true
 	var img: Image = await PlateSight.grab(self, 4)
-	var twin: Dictionary = await PlateSight.hud_twin(self, _main)
-	var lone := _lone_icon_passenger()
-	ok = lone != 0 and ok
-	if lone != 0:
-		ok = await _icons_shown(img, twin["image"], lone, "distance") and ok
-		ok = await _bubble_clear(lone, "distance") and ok
+	# At the home zoom every need icon is hidden (user ruling: need icons hide
+	# when the camera is zoomed out past the home zoom). The control: passengers
+	# in the frame do have needs to show.
+	var needy := 0
+	var drawn := 0
+	for id in _sim.passenger_ids():
+		var node := _views.node_for(id)
+		if node == null or not node.visible or int(node.get_meta(&"needs", 0)) == 0:
+			continue
+		if not _frame_rect().has_point(_cam.unproject_position(node.global_position)):
+			continue
+		needy += 1
+		for sprite_name in NeedIcons.SPRITES:
+			drawn += 1 if (node.get_node(sprite_name) as Sprite3D).visible else 0
+	print(
+		(
+			"ICONS distance rig_distance=%.1f home=%.1f needy_in_frame=%d icons_drawn=%d"
+			% [_rig.distance, _rig.home_distance, needy, drawn]
+		)
+	)
+	ok = ok and needy > 0 and drawn == 0
 	paused = false
 	_keep(img, "distance", ok)
 

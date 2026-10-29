@@ -164,8 +164,8 @@ static func _build() -> void:
 	# Toilet pieces (Toilets 3/5). A stall is one use slot, one cell wide and two
 	# deep: the door at the front, the toilet in the rear cell. Each piece's
 	# interaction cell is its Mount_Approach, the cell in front of it, kept clear
-	# like a counter's. No kit pieces are mapped yet, so the view draws boxes
-	# until the interior kit maps them.
+	# like a counter's. The view draws them with the interior kit's
+	# toilet_stall and toilet_sink pieces (Toilets 5/5).
 	var stall := _add(&"toilet_stall", "Toilet stall", Vector2i(1, 2), Color(0.8, 0.84, 0.88), 2.1)
 	stall.has_interaction = true
 	stall.interaction_offset = Vector2i(0, 2)

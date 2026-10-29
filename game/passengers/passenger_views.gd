@@ -193,6 +193,7 @@ func draw() -> void:
 	var paused := clock == null or clock.paused
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var unit := NeedIcons.unit_of(get_viewport() if is_inside_tree() else null, camera)
+	var icons_shown := NeedIcons.shown_at(camera)
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var before: Vector3 = _prev[id]
@@ -204,7 +205,7 @@ func draw() -> void:
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
 		player.speed_scale = 0.0 if paused else base * clock.speed
-		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit)
+		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
 	if _nodes.has(selected_id):
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)

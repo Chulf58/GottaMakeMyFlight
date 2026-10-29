@@ -217,6 +217,45 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 	camera.free()
 
 
+## User ruling: need icons show only while the camera is closer than its home
+## zoom; at the home zoom or farther out they are hidden.
+func test_icons_hide_at_and_past_the_home_zoom_and_show_closer_in() -> void:
+	var rig := (
+		(load("res://camera/tycoon_camera.tscn") as PackedScene).instantiate() as TycoonCamera
+	)
+	rig.home_distance = 40.0
+	add_child(rig)
+	rig.set_process(false)
+	var camera := rig.get_node("Camera3D") as Camera3D
+	camera.make_current()
+	var p := _calm_passenger()
+	p.hunger = CafeSim.HUNGER_MAX
+	p.toilet_need = ToiletSim.NEED_MAX
+	_world.step()
+	var node := _views.node_for(p.id)
+	var seen := {}
+	for distance in [39.0, 40.0, 41.0, 120.0, 12.0]:
+		rig.distance = distance
+		_views.draw()
+		seen[distance] = [
+			NeedIcons.shown_at(camera), _sprite(node, 0).visible, _sprite(node, 1).visible
+		]
+	print("home 40: distance -> [shown_at, icon 0, icon 1] %s" % seen)
+	assert_array(seen[39.0]).is_equal([true, true, true])
+	assert_array(seen[12.0]).is_equal([true, true, true])
+	assert_array(seen[40.0]).is_equal([false, false, false])
+	assert_array(seen[41.0]).is_equal([false, false, false])
+	assert_array(seen[120.0]).is_equal([false, false, false])
+	# A tick while zoomed out keeps them hidden: the frame's layout wins.
+	rig.distance = 60.0
+	_world.step()
+	_views.draw()
+	assert_bool(_sprite(node, 0).visible).is_false()
+	# Any camera outside a TycoonCamera rig, or none, shows them.
+	assert_bool(NeedIcons.shown_at(null)).is_true()
+	rig.free()
+
+
 func test_the_follow_panel_shows_the_toilet_need() -> void:
 	var hud := PassengerHud.new()
 	hud.clock = _world.clock
