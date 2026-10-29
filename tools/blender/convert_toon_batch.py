@@ -46,6 +46,8 @@ TEX_DIR = os.path.join(ASSETS, "textures")
 SRC = "C:\\Users\\chulf\\Assets new\\Toon Series"
 TP = os.path.join(SRC, "Toon Planes Pack")
 TCP = os.path.join(SRC, "Toon City People")
+TC = os.path.join(SRC, "Toon City")
+PACK_ROOTS = {"TP": TP, "TCP": TCP, "TC": TC}
 POST_IMPORT = "res://assets/toon_post_import.gd"
 
 # Vendor PSD -> PNG under game/assets/textures/. (png name, mipmaps)
@@ -56,6 +58,14 @@ TEXTURES = {
     os.path.join(TP, "Textures", "TP_Toon_Ramp_1D_D.psd"): ("tp_toon_ramp_1d_d.png", False),
     os.path.join(TCP, "Textures", "Atlas_1A_D 1.psd"): ("tcp_atlas_1a_d.png", True),
     os.path.join(TCP, "Textures", "TCP_Toon_Ramp_01D_D.psd"): ("tcp_toon_ramp_01d_d.png", False),
+    # Toon City: one 128x128 albedo per material, and one shared 3-step ramp (128x4, all
+    # four rows the same: 0, 0.494, 1.0) that every Toon City .mat names as _TextureRamp.
+    os.path.join(TC, "Textures", "Road_1A_D.psd"): ("tc_road_1a_d.png", True),
+    os.path.join(TC, "Textures", "Tree_1A_D.psd"): ("tc_tree_1a_d.png", True),
+    os.path.join(TC, "Textures", "Tree_3A_D.psd"): ("tc_tree_3a_d.png", True),
+    os.path.join(TC, "Textures", "Props_2A_D.psd"): ("tc_props_2a_d.png", True),
+    os.path.join(TC, "Textures", "Building_4A_D.psd"): ("tc_building_4a_d.png", True),
+    os.path.join(TC, "Textures", "TC_Toon_Ramp_01A_D.psd"): ("tc_toon_ramp_01a_d.png", False),
 }
 
 # (pack, FBX material name) -> (glTF material name, kind, png). The pairs come from the
@@ -66,6 +76,12 @@ MATERIALS = {
     ("TP", "Atlas_Lights_1A_D"): ("TP_Atlas_Lights_1A_D", "emissive", "tp_atlas_lights_1a_d.png"),
     ("TP", "Glass_Vehicles_01A_D"): ("TP_Glass_1A_D", "glass", "tp_glass_gradient_1a_d.png"),
     ("TCP", "Atlas_1A_D"): ("TCP_Atlas_1A_D", "opaque", "tcp_atlas_1a_d.png"),
+    # Toon City has no remaps; its prefabs name Road_2A_D.mat, identical to Road_1A_D.
+    ("TC", "Road_1A_D"): ("TC_Road_1A_D", "opaque", "tc_road_1a_d.png"),
+    ("TC", "Tree_1A_D"): ("TC_Tree_1A_D", "opaque", "tc_tree_1a_d.png"),
+    ("TC", "Tree_3A_D"): ("TC_Tree_3A_D", "opaque", "tc_tree_3a_d.png"),
+    ("TC", "Props_2A_D"): ("TC_Props_2A_D", "opaque", "tc_props_2a_d.png"),
+    ("TC", "Building_4A_D"): ("TC_Building_4A_D", "opaque", "tc_building_4a_d.png"),
 }
 
 # stem -> (pack, category, fbx, idle fbx or None, source prefab or None)
@@ -78,6 +94,20 @@ BATCH = {
     "tp_runway_05a": ("TP", "airside", "TP_Runway_05A.fbx", None, None),
     "tp_airport_01a": ("TP", "buildings", "TP_Airport_01A.fbx", None, None),
     "tp_loading_truck_01a": ("TP", "vehicles", "TP_Loading_Truck_01A.fbx", None, None),
+    # Decor (decision furniture-set-modelled-on-copenhagen-airport-decor-calms-pas) and
+    # the prize car. Vendor scale, except the _indoor stems (see INDOOR).
+    "tc_plant_pot_1a": ("TC", "decor", "Plant_Pot_1A.fbx", None, None),
+    "tc_plant_pot_2a": ("TC", "decor", "Plant_Pot_2A.fbx", None, None),
+    "tc_bush_1a": ("TC", "decor", "Bush_1A.fbx", None, None),
+    "tc_bench_1a": ("TC", "decor", "Bench_1A.fbx", None, None),
+    "tc_trash_can_1a": ("TC", "decor", "Trash_Can_1A.fbx", None, None),
+    "tc_metal_pole_1a": ("TC", "decor", "Metal_Pole_1A.fbx", None, None),
+    "tc_metal_pole_chain_1a": ("TC", "decor", "Metal_Pole_Chain_1A.fbx", None, None),
+    "tc_tree_3a_indoor": ("TC", "decor", "Tree_3A.fbx", None, None),
+    "tc_fountain_1a_indoor": ("TC", "decor", "Fountain_1A.fbx", None, None),
+    "tc_statue_1b_indoor": ("TC", "decor", "Statue_1B.fbx", None, None),
+    "tc_bench_2a_indoor": ("TC", "decor", "Bench_2A.fbx", None, None),
+    "tp_suv_01a": ("TP", "vehicles", "TP_SUV_01A.fbx", None, None),
     "tcp_male_character_01": (
         "TCP",
         "people",
@@ -121,6 +151,39 @@ BATCH = {
 UV_FIXES = {
     "tcp_male_character_01": [((0.354, 0.217, 0.360, 0.224), (0.637, 0.155), 4)],
 }
+
+# Indoor variants (decision oversized-toon-decor-trees-fountain-statue-tree-bench-is-bui):
+# the vendor props are 6.8-10.8 m tall and interior walls are 2.5 m, so they are built
+# smaller here and the game never rescales them. Every root object scales by one factor
+# about the asset origin, so the parts keep their spacing.
+#   "top": the factor puts the highest faced vertex at this height (m).
+#   "seat": (part, z0, z1, height): the up-facing faces of that part whose centre lies in
+#       z0..z1 at vendor scale are the seat; the factor puts them at this height.
+#   "parts": part -> {"top": m}: after the asset factor, that part scales again about
+#       its trunk base (its own origin in plan, its lowest vertex in height) so its top
+#       lands at this height.
+INDOOR = {
+    # Conifer in a round stone planter; 2.2 m stays under a 2.5 m wall with room.
+    "tc_tree_3a_indoor": {"top": 2.2},
+    # Basin, two tiers and a ball (the faced top is about 3.8 m at vendor scale).
+    "tc_fountain_1a_indoor": {"top": 1.8},
+    # Pedestal and robed figure; 2.4 m keeps the figure about 1.45 m tall.
+    "tc_statue_1b_indoor": {"top": 2.4},
+    # Round tree bench: the seat ledge (vendor 0.70 m) lands on the 0.53 m seat height of
+    # the sit clips, so people can sit on it; the tree alone shrinks to fit under 2.5 m.
+    "tc_bench_2a_indoor": {"seat": ("Bench_2A", 0.65, 0.75, 0.53), "parts": {"Bench_2A_Tree": {"top": 2.4}}},
+}
+INDOOR_CEILING = 2.5
+# Lowest point of each decor prop, in metres above its origin. Everything else stands on
+# 0; Bush_1A's root ball is buried 0.30 m (vendor), the chain hangs between posts.
+GROUND = {
+    "tc_bush_1a": -0.30,
+    "tc_metal_pole_chain_1a": 0.74,
+}
+GROUND_TOLERANCE = 0.01
+# Part checks: positions (bounds and origins) in metres, rotation matrix entries unitless.
+POSITION_TOLERANCE = 1e-3
+ROTATION_TOLERANCE = 1e-4
 
 REST_TOLERANCE = 1e-3
 # The idle rigs' joints sit up to a few cm off the characters' (female: 2.7 cm). Only
@@ -457,6 +520,190 @@ def group_has_weight(obj, group_name):
     return False
 
 
+# ---------------------------------------------------------------- static props
+
+
+def drop_loose(stem, objs):
+    """Remove vertices and edges that belong to no face. They are never drawn, glTF does
+    not export them, and they would still count in the scene bounds (Fountain_1A has one
+    stray vertex 3.7 m above its ball)."""
+    import bmesh
+
+    removed = 0
+    for o in objs:
+        if o.type != "MESH":
+            continue
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        edges = [e for e in bm.edges if not e.link_faces]
+        bmesh.ops.delete(bm, geom=edges, context="EDGES")
+        verts = [v for v in bm.verts if not v.link_faces]
+        bmesh.ops.delete(bm, geom=verts, context="VERTS")
+        removed += len(verts)
+        bm.to_mesh(o.data)
+        bm.free()
+    bpy.context.view_layer.update()
+    log("LOOSE %s removed_verts=%d" % (stem, removed))
+
+
+def world_verts(o):
+    return [o.matrix_world @ v.co for v in o.data.vertices]
+
+
+def scale_about(o, pivot, k):
+    o.matrix_world = Matrix.Translation(pivot) @ Matrix.Scale(k, 4) @ Matrix.Translation(-pivot) @ o.matrix_world
+    bpy.context.view_layer.update()
+
+
+def seat_faces(o, z0, z1):
+    """Up-facing faces of `o` whose world centre lies in z0..z1."""
+    nm = o.matrix_world.to_3x3().inverted().transposed()
+    return [
+        p.index
+        for p in o.data.polygons
+        if (nm @ p.normal).normalized().z > 0.9 and z0 <= (o.matrix_world @ p.center).z <= z1
+    ]
+
+
+def faces_height(o, faces):
+    """Area-weighted world height of the given faces of `o`."""
+    total = 0.0
+    acc = 0.0
+    for i in faces:
+        p = o.data.polygons[i]
+        acc += (o.matrix_world @ p.center).z * p.area
+        total += p.area
+    return acc / total
+
+
+def make_indoor(stem, objs):
+    """Scale an INDOOR stem to its indoor size. Returns the seat check (object name, face
+    indices, target height) or None."""
+    spec = INDOOR.get(stem)
+    if spec is None:
+        return None
+    meshes = {o.name: o for o in objs if o.type == "MESH"}
+    seat = None
+    if "top" in spec:
+        top = max(w.z for o in meshes.values() for w in world_verts(o))
+        k = spec["top"] / top
+        log("INDOOR %s vendor_top=%.3f target_top=%.3f factor=%.4f" % (stem, top, spec["top"], k))
+    else:
+        part, z0, z1, height = spec["seat"]
+        o = meshes.get(part)
+        if o is None:
+            die("%s: no part %s for the seat" % (stem, part))
+        faces = seat_faces(o, z0, z1)
+        if not faces:
+            die("%s: no up-facing faces on %s between %.2f and %.2f" % (stem, part, z0, z1))
+        vendor = faces_height(o, faces)
+        k = height / vendor
+        seat = (part, faces, height)
+        log("INDOOR %s seat_faces=%d vendor_seat=%.3f target_seat=%.3f factor=%.4f" % (stem, len(faces), vendor, height, k))
+    for o in objs:
+        if o.parent is None:
+            scale_about(o, Vector((0.0, 0.0, 0.0)), k)
+    for part, pspec in spec.get("parts", {}).items():
+        o = meshes.get(part)
+        if o is None:
+            die("%s: no part %s" % (stem, part))
+        ws = world_verts(o)
+        base = min(w.z for w in ws)
+        top = max(w.z for w in ws)
+        pivot = Vector((o.matrix_world.translation.x, o.matrix_world.translation.y, base))
+        e = (pspec["top"] - base) / (top - base)
+        scale_about(o, pivot, e)
+        log("INDOOR %s part=%s pivot=%s top_before=%.3f top_after=%.3f extra_factor=%.4f" % (
+            stem, part, tuple(round(v, 3) for v in pivot), top, max(w.z for w in world_verts(o)), e))
+    return seat
+
+
+def part_state(objs):
+    """Per mesh object: world vertex AABB, world origin, world rotation and parent name."""
+    out = {}
+    for o in objs:
+        if o.type != "MESH":
+            continue
+        ws = world_verts(o)
+        lo = Vector((min(w.x for w in ws), min(w.y for w in ws), min(w.z for w in ws)))
+        hi = Vector((max(w.x for w in ws), max(w.y for w in ws), max(w.z for w in ws)))
+        loc, rot, _scl = o.matrix_world.decompose()
+        out[o.name] = (lo, hi, loc, rot.to_matrix(), o.parent.name if o.parent else None)
+    return out
+
+
+def bake_scale(stem, objs):
+    """Bake every object's world scale into its mesh, parents first, keeping each world
+    origin and rotation (door hinges, the trunk the tail lights hang on). Objects whose
+    scale has magnitude 1 on every axis are not touched, mirrored ones included (the
+    plane's TP_Plane_05A_Tables is -1, -1, -1). Returns the baked object names."""
+    for o in objs:
+        if o.type != "MESH":
+            die("%s: static prop has a %s object %s; only meshes are handled" % (stem, o.type, o.name))
+
+    def depth(o):
+        d = 0
+        while o.parent is not None:
+            o, d = o.parent, d + 1
+        return d
+
+    order = sorted(objs, key=depth)
+    before = {o: o.matrix_world.copy() for o in order}
+    baked = []
+    for o in order:
+        loc, rot, scl = before[o].decompose()
+        if all(abs(abs(s) - 1.0) < 1e-6 for s in scl):
+            o.matrix_world = before[o]
+        else:
+            recomposed = Matrix.LocRotScale(loc, rot, scl)
+            shear = max(abs(recomposed[i][j] - before[o][i][j]) for i in range(4) for j in range(4))
+            if shear > 1e-6:
+                die("%s: %s has a sheared transform (%.2e off its TRS); not baked" % (stem, o.name, shear))
+            if before[o].determinant() <= 0.0:
+                die("%s: %s is mirrored; scale baking expects a positive scale" % (stem, o.name))
+            if o.data.users > 1:
+                die("%s: %s shares its mesh; cannot bake its scale alone" % (stem, o.name))
+            o.data.transform(Matrix.Diagonal(scl).to_4x4())
+            o.matrix_world = Matrix.Translation(loc) @ rot.to_matrix().to_4x4()
+            baked.append(o.name)
+        bpy.context.view_layer.update()
+    return baked
+
+
+def compare_parts(stem, intent, now, what):
+    """Each part's bounds, origin, rotation and parent match the intent."""
+    if sorted(intent) != sorted(now):
+        die("%s: %s parts %s differ from intent %s" % (stem, what, sorted(now), sorted(intent)))
+    worst_pos = 0.0
+    worst_rot = 0.0
+    for name, (lo, hi, loc, rot, parent) in intent.items():
+        n_lo, n_hi, n_loc, n_rot, n_parent = now[name]
+        if parent != n_parent:
+            die("%s: %s %s has parent %s, intended %s" % (stem, what, name, n_parent, parent))
+        pos = max(
+            max(abs(a - b) for a, b in zip(lo, n_lo)),
+            max(abs(a - b) for a, b in zip(hi, n_hi)),
+            max(abs(a - b) for a, b in zip(loc, n_loc)),
+        )
+        turn = max(abs(rot[i][j] - n_rot[i][j]) for i in range(3) for j in range(3))
+        worst_pos = max(worst_pos, pos)
+        worst_rot = max(worst_rot, turn)
+        if pos > POSITION_TOLERANCE or turn > ROTATION_TOLERANCE:
+            die("%s: %s part %s moved %.6f m or turned %.6f" % (stem, what, name, pos, turn))
+    log("PARTS %s %s parts=%d max_position_dev_m=%.6f max_rotation_dev=%.6f" % (stem, what, len(intent), worst_pos, worst_rot))
+
+
+def check_seat(stem, seat, objs):
+    if seat is None:
+        return
+    part, faces, target = seat
+    o = next(o for o in objs if o.name == part)
+    h = faces_height(o, faces)
+    log("SEAT %s part=%s faces=%d height=%.3f target=%.3f" % (stem, part, len(faces), h, target))
+    if abs(h - target) > GROUND_TOLERANCE:
+        die("%s: seat at %.3f, intended %.3f" % (stem, h, target))
+
+
 # ---------------------------------------------------------------- glb re-read
 
 
@@ -561,6 +808,69 @@ def glb_indices(path, js, index):
     return list(struct.unpack_from("<%d%s" % (acc["count"], fmt), data, base))
 
 
+Y_UP = Matrix(((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, -1.0, 0.0)))
+
+
+def yup_parts(parts):
+    """part_state() output in glTF axes (Y up)."""
+    out = {}
+    for name, (lo, hi, loc, rot, parent) in parts.items():
+        a, b = Y_UP @ lo, Y_UP @ hi
+        out[name] = (
+            Vector(map(min, a, b)),
+            Vector(map(max, a, b)),
+            Y_UP @ loc,
+            Y_UP @ rot @ Y_UP.transposed(),
+            parent,
+        )
+    return out
+
+
+def glb_parts(path, js):
+    """Per mesh node of the written file: world vertex AABB (from the vertices), world
+    origin, world rotation and parent node name, in glTF axes."""
+    nodes = js.get("nodes", [])
+    parent_of = {c: i for i, nd in enumerate(nodes) for c in nd.get("children", [])}
+    out = {}
+
+    def world(i):
+        m = node_matrix(nodes[i])
+        while i in parent_of:
+            i = parent_of[i]
+            m = node_matrix(nodes[i]) @ m
+        return m
+
+    for i, nd in enumerate(nodes):
+        if "mesh" not in nd:
+            continue
+        m = world(i)
+        lo = Vector((math.inf,) * 3)
+        hi = Vector((-math.inf,) * 3)
+        for prim in js["meshes"][nd["mesh"]]["primitives"]:
+            for p in glb_accessor(path, js, prim["attributes"]["POSITION"]):
+                w = m @ Vector(p)
+                lo = Vector(map(min, lo, w))
+                hi = Vector(map(max, hi, w))
+        loc, rot, _scl = m.decompose()
+        parent = nodes[parent_of[i]].get("name") if i in parent_of else None
+        name = nd.get("name", str(i))
+        if name in out:
+            die("written file has two mesh nodes named %s" % name)
+        out[name] = (lo, hi, loc, rot.to_matrix(), parent)
+    return out
+
+
+def check_texcoords(stem, js):
+    """Every primitive is triangles with TEXCOORD_0: a face without UVs samples (0, 0)."""
+    prims = 0
+    for mesh in js.get("meshes", []):
+        for prim in mesh["primitives"]:
+            prims += 1
+            if prim.get("mode", 4) != 4 or "TEXCOORD_0" not in prim["attributes"]:
+                die("%s: mesh %s has a primitive without triangles or TEXCOORD_0" % (stem, mesh.get("name")))
+    log("TEXCOORD %s primitives=%d all_have_texcoord_0=True" % (stem, prims))
+
+
 def check_uv_fixes(stem, path, js, fixed_tris):
     """No triangle of the written file has its UV centroid in a UV_FIXES box, and exactly
     as many triangles as fix_uvs moved have all three corners on the target UV. glTF
@@ -661,7 +971,7 @@ def write_scene_import(glb_path, animated=False):
 
 def convert(stem, spec, out_root=None):  # out_root None: write into game/assets/
     pack, category, fbx, idle_fbx, prefab = spec
-    root = TP if pack == "TP" else TCP
+    root = PACK_ROOTS[pack]
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.fbx(filepath=os.path.join(root, "Models", fbx))
     bpy.context.view_layer.update()
@@ -673,11 +983,24 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
                 o.animation_data_clear()
         for a in list(bpy.data.actions):
             bpy.data.actions.remove(a)
+    if idle_fbx is None:
+        drop_loose(stem, objs)
     rebind_materials(pack, objs)
     durations = {}
+    seat = None
+    intent = None
     if idle_fbx is not None:
         objs, durations = build_character(stem, idle_fbx, prefab)
         objs = list(bpy.context.scene.objects)
+    else:
+        # Static props: resize an indoor variant, record the intended parts, bake every
+        # non-unit scale into the meshes and check that no part moved.
+        seat = make_indoor(stem, objs)
+        intent = part_state(objs)
+        baked = bake_scale(stem, objs)
+        log("SCALE %s baked=%s" % (stem, baked))
+        compare_parts(stem, intent, part_state(objs), "after-bake")
+        check_seat(stem, seat, objs)
     fixed_tris = fix_uvs(stem, objs)
     bpy.context.view_layer.update()
 
@@ -757,7 +1080,17 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         die("%s: file materials %s differ from scene %s" % (stem, f_mats, mats))
     if f_imgs < 1 or f_imgs != len(imgs):
         die("%s: file images %d, scene images %s" % (stem, f_imgs, imgs))
+    check_texcoords(stem, js)
     check_uv_fixes(stem, out, js, fixed_tris)
+    if intent is not None:
+        compare_parts(stem, yup_parts(intent), glb_parts(out, js), "written-file")
+    if category == "decor":
+        want = GROUND.get(stem, 0.0)
+        log("GROUND %s bottom=%.3f expected=%.3f top=%.3f" % (stem, f_lo.y, want, f_hi.y))
+        if abs(f_lo.y - want) > GROUND_TOLERANCE:
+            die("%s: bottom at %.3f, expected %.3f" % (stem, f_lo.y, want))
+    if stem in INDOOR and f_hi.y >= INDOOR_CEILING:
+        die("%s: indoor variant is %.3f m tall, not under %.1f m" % (stem, f_hi.y, INDOOR_CEILING))
     if animated:
         check_clips(stem, out, js, durations)
     if not animated and f_anims:

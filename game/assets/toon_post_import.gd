@@ -15,6 +15,11 @@ const MATERIALS := {
 	"TP_Atlas_Lights_1A_D": "res://assets/materials/tp_lights.tres",
 	"TP_Glass_1A_D": "res://assets/materials/tp_glass.tres",
 	"TCP_Atlas_1A_D": "res://assets/materials/tcp_atlas_toon.tres",
+	"TC_Road_1A_D": "res://assets/materials/tc_road_1a_toon.tres",
+	"TC_Tree_1A_D": "res://assets/materials/tc_tree_1a_toon.tres",
+	"TC_Tree_3A_D": "res://assets/materials/tc_tree_3a_toon.tres",
+	"TC_Props_2A_D": "res://assets/materials/tc_props_2a_toon.tres",
+	"TC_Building_4A_D": "res://assets/materials/tc_building_4a_toon.tres",
 }
 const LOOPING_ANIMATIONS: Array[String] = ["idle", "walk", "run", "sit_idle"]
 
