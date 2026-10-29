@@ -2,8 +2,8 @@ class_name MoneySlot
 extends PanelContainer
 ## The money slot's hover card (HUD 2/7, decision money-hover-design-
 ## categorised-wallet-transactions-feed-a-sa, point 5). Hovering the slot shows
-## today's money from the DayLedger: airline fees, shops, wages paid, room
-## upkeep paid and the operating result they add up to; then building (net),
+## today's money from the DayLedger: airline fees, shops, parking, wages paid,
+## room upkeep paid and the operating result they add up to; then building (net),
 ## the rescue grant and the cash change today; and owed wages and owed upkeep,
 ## each in the attention style while some is owed. After a load of a save that
 ## held no ledger the card is headed "Since load".
@@ -18,8 +18,8 @@ extends PanelContainer
 ## ledger the slot has no card.
 
 const ATTENTION := &"HudAttentionText"
-## The first rows are the operating result and its four parts; a rule follows them.
-const OPERATING_ROWS := 5
+## The first rows are the operating result and its five parts; a rule follows them.
+const OPERATING_ROWS := 6
 ## The grid's theme type: room between a label and its value.
 const GRID := &"HudMoneyGrid"
 ## Space between the slot and the card opened under it.
@@ -82,6 +82,7 @@ static func rows(day_ledger: DayLedger, owed: int, owed_upkeep := 0) -> Array:
 	var out: Array = [
 		["Airline fees", signed(day_ledger.amount(Wallet.Category.FEES)), &""],
 		["Shops", signed(day_ledger.amount(Wallet.Category.SHOP)), &""],
+		["Parking", signed(day_ledger.amount(Wallet.Category.PARKING)), &""],
 		["Wages paid", signed(-day_ledger.wages_paid()), &""],
 		["Upkeep paid", signed(-day_ledger.upkeep_paid()), &""],
 		["Operating result", signed(day_ledger.operating_result()), &""],

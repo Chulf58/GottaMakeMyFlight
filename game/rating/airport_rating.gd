@@ -8,7 +8,11 @@ extends Node
 ## no_shows are pruned about a game hour after a flight departs: every
 ## passenger is recorded the tick they make or miss their flight (from
 ## PassengerSim.outcome), and a closed flight's no-shows one tick after its
-## doors close, once PassengerSim has finalized them. Days are
+## doors close, once PassengerSim has finalized them. A passenger still in a
+## car or taxi when its flight's doors close (ArrivalBookings.missed) is a
+## missed passenger on that tick; the no-shows of flights that closed on an
+## earlier tick are recorded first, so a miss on a day's first tick cannot
+## roll the day past them. Days are
 ## GameCalendar days; the window is the current day and the two before it,
 ## pooled, so a busy day weighs more than a quiet one.
 ##
@@ -67,6 +71,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_passengers: Passen
 	clock.ticked.connect(on_tick)
 	flights.doors_closed.connect(_on_doors_closed)
 	passengers.outcome.connect(_on_outcome)
+	passengers.arrivals.missed.connect(_on_arrival_missed)
 	_bind_baggage()
 	_bound = true
 
@@ -245,6 +250,10 @@ func _unbind() -> void:
 		flights.doors_closed.disconnect(_on_doors_closed)
 	if is_instance_valid(passengers) and passengers.outcome.is_connected(_on_outcome):
 		passengers.outcome.disconnect(_on_outcome)
+	if is_instance_valid(passengers):
+		var missed := passengers.arrivals.missed
+		if missed.is_connected(_on_arrival_missed):
+			missed.disconnect(_on_arrival_missed)
 	_bound = false
 
 
@@ -293,6 +302,11 @@ func _on_outcome(id: int, made: bool) -> void:
 		push_error("AirportRating: no passenger %d for its outcome" % id)
 		return
 	record_passenger(passengers.tick, made, p.mood)
+
+
+func _on_arrival_missed(_flight_id: String) -> void:
+	_record_finished_no_shows(passengers.tick)
+	record_passenger(passengers.tick, false, 0)
 
 
 func _on_bag_settled(_bag_id: int, _passenger_id: int, _flight_id: String, loaded: bool) -> void:

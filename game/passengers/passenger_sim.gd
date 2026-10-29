@@ -18,6 +18,12 @@ extends Node
 ## passengers claim seats or head for the exit. Security service, at a basic
 ## scanner or a security lane, is SecurityRuntime's from admission on, and a
 ## security station's estimate is SecurityForecast's replay.
+##
+## With a LandsideSim (`landside`), scheduled passengers are arrival bookings
+## (ArrivalBookings, `arrivals`) that come by car or taxi and become
+## passengers when they get out; each tick starts with the bookings' step,
+## right after the tick is taken. Without one they spawn at the entrance on
+## their drawn tick.
 
 signal passenger_spawned(id: int)
 signal outcome(id: int, made: bool)
@@ -87,6 +93,8 @@ const QUEUE_STAGES := [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_Q
 ## scanner is open only while a member is on duty at it (StaffSim.is_open()); with no
 ## StaffSim every station stays closed.
 @export var staff: StaffSim
+## The road and car parks passengers arrive through; tests may leave it unset.
+@export var landside: LandsideSim
 @export var auto_schedule := true
 
 ## The apron walk after an exit door with no terminal shell connection
@@ -117,6 +125,8 @@ var boredom := BoredomSim.new()
 var shops := ShopSim.new()
 ## Security service after admission, at every scanner and lane.
 var security := SecurityRuntime.new()
+## Arrival bookings by car and taxi, used while `landside` is set.
+var arrivals := ArrivalBookings.new()
 ## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
 var wallet: Wallet
 var grid: BuildGrid
@@ -185,6 +195,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	toilets.bind(self, _set_stage, _leave_station, _release_seat)
 	boredom.bind(self)
 	shops.bind(self, _set_stage, _leave_station, _release_seat)
+	arrivals.bind(self, _spawn)
 	clock.ticked.connect(on_tick)
 	grid.graph_changed.connect(_on_graph_changed)
 	if auto_schedule:
@@ -198,13 +209,18 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 ## draws an arrival type and arrives in that type's window (ArrivalTypes):
 ## relaxed ones before the flight's first state, typical ones from just after
 ## it to LAST_SPAWN_LEAD_TICKS before its doors close, rushed ones late in
-## that, never before the next tick. A flight is scheduled once: a second
-## call, or a flight whose doors have closed, is refused with an error.
+## that, never before the next tick. With a LandsideSim they are booked in
+## parties that share a car or taxi instead (ArrivalBookings.schedule()). A
+## flight is scheduled once: a second call, or a flight whose doors have
+## closed, is refused with an error.
 func schedule_flight(flight_id: String, count: int) -> bool:
 	if _scheduled.has(flight_id) or flights.is_doors_closed(flight_id):
 		push_error("PassengerSim.schedule_flight: '%s' is scheduled or closed" % flight_id)
 		return false
 	_scheduled[flight_id] = true
+	if landside != null:
+		arrivals.schedule(flight_id, count)
+		return true
 	for i in count:
 		var arrival := ArrivalTypes.draw(clock.rng)
 		var span := ArrivalTypes.window(arrival, flights, flight_id, clock.tick)
@@ -249,6 +265,7 @@ func spawn_now(flight_id: String, variant := -1) -> int:
 func on_tick(new_tick: int) -> void:
 	var started := Time.get_ticks_usec()
 	tick = new_tick
+	arrivals.step()
 	_spawn_due()
 	if staff != null:
 		staff.step()
@@ -285,8 +302,10 @@ func made_count() -> int:
 	return _made
 
 
+## Passengers who missed their flight, the ones still on the road when its
+## doors closed (ArrivalBookings.missed_total) included.
 func missed_count() -> int:
-	return _missed
+	return _missed + arrivals.missed_total
 
 
 ## Passengers still on their way: spawned and neither made nor missed.
@@ -297,8 +316,10 @@ func active_count() -> int:
 	return count
 
 
+## Scheduled passengers not yet in the terminal: pending spawns and arrival
+## bookings still on their way.
 func pending_spawns() -> int:
-	return _schedule.size()
+	return _schedule.size() + arrivals.pending()
 
 
 ## The lane at a station in order, front first. A desk keeps the passenger it
@@ -539,7 +560,13 @@ func _spawn_due() -> void:
 		_spawn(entry["flight"], entry["variant"], entry["arrival"])
 
 
-func _spawn(flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL) -> Passenger:
+## A new passenger at the entrance, or, with a `walk` (where it got out of
+## a car or taxi, ArrivalBookings), walking from there: the walk replaces the
+## road start of the entrance's shell route, or ends at the entrance's cell
+## when the entrance has none.
+func _spawn(
+	flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL, walk: Array[Vector3] = []
+) -> Passenger:
 	var p := Passenger.new()
 	p.id = _next_id
 	_next_id += 1
@@ -556,6 +583,13 @@ func _spawn(flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICA
 	p.at = layout.door_cell(grid, layout.entrances[0])
 	p.clear_path()
 	p.apron = ShellRoutes.arrival(self, layout.entrances[0])
+	if not walk.is_empty():
+		var road := p.apron
+		p.apron = walk.duplicate()
+		if road.is_empty():
+			p.apron.append(grid.cell_to_world(p.at))
+		else:
+			p.apron.append_array(road.slice(1))
 	_passengers.append(p)
 	_by_id[p.id] = p
 	passenger_spawned.emit(p.id)
@@ -656,11 +690,13 @@ func _settled_leftovers(p: Passenger) -> String:
 	return ", ".join(held)
 
 
-## Drops the results and no-shows of flights FlightSim no longer lists.
+## Drops the results, no-shows and transport misses of flights FlightSim no
+## longer lists.
 func _prune_results() -> void:
-	if flight_results.is_empty() and no_shows.is_empty():
+	if flight_results.is_empty() and no_shows.is_empty() and arrivals.missed_by_flight.is_empty():
 		return
 	var live := flights.flight_ids()
+	arrivals.prune(live)
 	for results in [flight_results, no_shows]:
 		for flight_id in results.keys():
 			if not live.has(flight_id):

@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="LandsideDefinition" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://landside/landside_definition.gd" id="1_def"]
+[ext_resource type="Script" path="res://landside/landside_curb.gd" id="2_curb"]
+[ext_resource type="Script" path="res://landside/landside_lot_spot.gd" id="3_lot"]
+
+[sub_resource type="Resource" id="Resource_curb"]
+script = ExtResource("2_curb")
+stop_mm = 154000
+berths = PackedVector3Array(-17.0, 0.1, -58.0, -10.5, 0.1, -58.0, -23.5, 0.1, -58.0)
+get_out = PackedVector3Array(-17.0, 0.1, -59.6, -10.5, 0.1, -59.6, -23.5, 0.1, -59.6)
+
+[sub_resource type="Resource" id="Resource_lot_1"]
+script = ExtResource("3_lot")
+branch_mm = 138000
+access = PackedVector3Array(12.0, 0.1, -55.0, 12.0, 0.1, -45.0, 12.0, 0.1, -37.5)
+exit = PackedVector3Array(15.0, 0.1, -37.5, 15.0, 0.1, -45.0, 170.0, 0.1, -45.0)
+slots = PackedVector3Array(-4.0, 0.1, -31.0, -1.5, 0.1, -31.0, 1.0, 0.1, -31.0, 3.5, 0.1, -31.0, 6.0, 0.1, -31.0, 8.5, 0.1, -31.0, -4.0, 0.1, -22.0, -1.5, 0.1, -22.0, 1.0, 0.1, -22.0, 3.5, 0.1, -22.0, 6.0, 0.1, -22.0, 8.5, 0.1, -22.0)
+crossing = PackedVector3Array(9.0, 0.1, -37.5, 9.0, 0.1, -39.5, 9.0, 0.1, -60.5)
+
+[resource]
+script = ExtResource("1_def")
+centre_line_z = -50.0
+road_in = PackedVector3Array(150.0, 0.1, -55.0, -4.0, 0.1, -55.0)
+road_out = PackedVector3Array(-29.0, 0.1, -55.0, -170.0, 0.1, -55.0)
+curb = SubResource("Resource_curb")
+lots = Array[ExtResource("3_lot")]([SubResource("Resource_lot_1")])

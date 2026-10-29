@@ -52,7 +52,7 @@ func _first_bag(data: Dictionary) -> Dictionary:
 
 func test_the_save_holds_the_bags_of_checked_in_passengers() -> void:
 	assert_object(_unsettled()).is_not_null()
-	assert_int(int(_data["save_version"])).is_equal(2)
+	assert_int(int(_data["save_version"])).is_equal(3)
 	assert_int((_data["baggage"]["bags"] as Array).size()).is_greater(0)
 	var bag := _first_bag(_data)
 	assert_int(int(bag["state"])).is_equal(Bag.State.AT_DESK)
