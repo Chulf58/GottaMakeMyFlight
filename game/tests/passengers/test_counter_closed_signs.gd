@@ -92,7 +92,33 @@ func test_removing_the_room_around_an_unstaffed_counter_drops_its_closed_sign() 
 	_markers.sync()
 	assert_object(_markers.closed_sign_for(counter)).is_not_null()
 	# A room edit changes no walk graph and nobody is hired, so neither
-	# graph_changed nor staff_changed fires: the sign follows edit_applied.
+	# graph_changed nor staff_changed fires: the sign follows edit_applied,
+	# refreshed once the frame ends.
 	assert_bool(grid.apply(BuildEdit.remove_room(_ids["air_room"])).ok).is_true()
+	await get_tree().process_frame
 	assert_object(_markers.closed_sign_for(counter)).is_null()
 	assert_object(_markers.closed_sign_for(_ids["land_counter"])).is_not_null()
+
+
+func test_a_batched_removal_of_an_unstaffed_desk_and_a_room_never_reads_the_stale_layout() -> void:
+	# AreaDrag.clear() removes objects, then rooms, in one held batch: the room
+	# edit_applied runs while sim.layout still lists the removed desk, so the
+	# refresh waits until the whole transaction has released its signals.
+	var grid := BuildGrid.new()
+	_ids = ShopTestLayout.build(grid, ["air"])
+	_attach(grid)
+	var desk: int = _world.sim.layout.desks[0]
+	var counter: int = _ids["air_counter"]
+	_markers.sync()
+	assert_object(_markers.closed_sign_for(desk)).is_not_null()
+	assert_object(_markers.closed_sign_for(counter)).is_not_null()
+	grid.hold_signals()
+	var edits: Array[BuildEdit] = [
+		BuildEdit.remove_object(desk), BuildEdit.remove_room(_ids["air_room"])
+	]
+	for result in grid.apply_batch(edits):
+		assert_bool(result.ok).is_true()
+	grid.release_signals()
+	await get_tree().process_frame
+	assert_object(_markers.closed_sign_for(desk)).is_null()
+	assert_object(_markers.closed_sign_for(counter)).is_null()

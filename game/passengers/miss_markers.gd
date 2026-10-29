@@ -104,6 +104,8 @@ var _closed_signs: Dictionary = {}
 ## Arch id -> sign, for the arches without a whole lane.
 var _hint_signs: Dictionary = {}
 var _free_signs: Array[Sprite3D] = []
+## A deferred refresh after a room edit is queued.
+var _room_sync_pending := false
 ## Set when a sign or caption changed; with the camera and view size it decides
 ## whether draw() has anything to do.
 var _dirty := true
@@ -607,11 +609,19 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 ## A room edit changes no walk graph, so graph_changed never follows it, and
 ## with no one hired staff_changed does not either. edit_applied comes before
 ## the graph_changed of an edit with dirty cells, while the sim layout is still
-## the old one, so only a room edit is taken here. The staff sim connected
-## first, so its stations are already reconciled.
+## the old one, so only a room edit is taken here. A held batch (AreaDrag.clear
+## removes objects, rooms and floor together) runs its callbacks before that
+## final graph_changed, so the refresh waits for the end of the frame, one run
+## however many room edits the batch held.
 func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
-	if result.dirty_cells.is_empty():
-		sync()
+	if result.dirty_cells.is_empty() and not _room_sync_pending:
+		_room_sync_pending = true
+		_sync_after_edit.call_deferred()
+
+
+func _sync_after_edit() -> void:
+	_room_sync_pending = false
+	sync()
 
 
 ## Why `station` is closed (a MissSignals reason): for a counter in
