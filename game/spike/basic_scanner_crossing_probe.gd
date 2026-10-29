@@ -965,6 +965,10 @@ func _plate_move(id: int, i: int, kind: String) -> void:
 	# The move's [home, carry] when it began: a change before the last plate
 	# is another move, not this one.
 	var began: Array = (_last_bag_state.get(id, []) as Array).duplicate(true)
+	# A transfer started again (a change of hand keeps [home, carry]) shows as
+	# its progress going back.
+	var last_k := props.transfer_progress(id, i)
+	var restarted := false
 	print(
 		(
 			"MOVE_PLATE %s passenger=%d bag=%d starts at k=%.2f tick=%d"
@@ -979,6 +983,8 @@ func _plate_move(id: int, i: int, kind: String) -> void:
 		while k < lo and Time.get_ticks_msec() < stop and _views.node_for(id) != null:
 			await process_frame
 			k = props.transfer_progress(id, i)
+			restarted = restarted or k < last_k
+			last_k = k
 		_clock.set_paused(true)
 		await _frames(1)
 		k = props.transfer_progress(id, i)
@@ -986,6 +992,9 @@ func _plate_move(id: int, i: int, kind: String) -> void:
 		var now_state: Array = _last_bag_state.get(id, [])
 		var same: bool = i < began.size() and i < now_state.size() and now_state[i] == began[i]
 		same = same and (k >= 1.0 or (_bag_moves.get(id, {}) as Dictionary).get(i, "") == kind)
+		restarted = restarted or k < last_k
+		last_k = k
+		same = same and not restarted
 		if k < lo or k > hi or not same or i >= bags.size():
 			print("MOVE_PLATE %s passenger=%d moment=%d missed k=%.2f" % [kind, id, m, k])
 			_clock.set_paused(false)
@@ -1017,7 +1026,8 @@ func _plate_arch(id: int) -> void:
 
 ## A close plate of passenger `id` (and `bag`, when given) saved to the close
 ## plates folder as `name`: a camera of the probe's own CLOSE_M out and
-## CLOSE_HEIGHT_M high, aimed at the body AIM_M over the floor, tries eight
+## CLOSE_HEIGHT_M high, aimed at the body AIM_M over the floor (higher and
+## further back for a bag over the head), tries eight
 ## headings round the body (facing it first) with the HUD hidden. A heading is
 ## kept only when the body's and the bag's drawn bounds project inside the
 ## viewport by MARGIN_PX, the body is CLOSE_MIN_PX tall or more, the body is
@@ -1039,18 +1049,29 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 	cam.fov = 50.0
 	root.add_child(cam)
 	cam.make_current()
-	var owners: Array[Node] = [
-		_main.get_node("Airside/Terminal"), _main.get_node("BuildMode"), _views
-	]
+	# Every drawn thing that can stand in the way: the building, the built
+	# objects, passengers and their bags, staff and baggage.
+	var owners: Array[Node] = [_views]
+	for path in ["Airside/Terminal", "BuildMode", "StaffCharacters", "BaggageViews"]:
+		owners.append(_main.get_node(path))
 	var frame := Rect2(
 		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
 	)
 	var saved := false
+	# A bag up over the head (a roller on the overhead route) is framed too:
+	# the aim rises to the middle of floor to bag top, the camera backs off.
+	var top := 2.0
+	if bag != null:
+		for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+			top = maxf(top, (mi.global_transform * mi.get_aabb()).end.y)
+	var aim := maxf(AIM_M, top * 0.5)
+	var back := CLOSE_M * maxf(1.0, (top + 0.3) / 2.3)
 	for h in 8:
-		var look := body.global_position + Vector3(0.0, AIM_M, 0.0)
+		var look := body.global_position + Vector3(0.0, aim, 0.0)
 		var yaw := body.global_rotation.y + h * PI / 4.0
-		var out := Basis(Vector3.UP, yaw) * Vector3(0.0, 0.0, CLOSE_M)
-		cam.global_position = body.global_position + out + Vector3(0.0, CLOSE_HEIGHT_M, 0.0)
+		var out := Basis(Vector3.UP, yaw) * Vector3(0.0, 0.0, back)
+		var up := Vector3(0.0, CLOSE_HEIGHT_M - AIM_M + aim, 0.0)
+		cam.global_position = body.global_position + out + up
 		cam.look_at(look)
 		await _frames(2)
 		var img := root.get_texture().get_image()

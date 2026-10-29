@@ -188,14 +188,16 @@ func test_a_first_walker_turns_before_the_entry_with_its_roller_already_in_hand(
 		var turning_while_lifting := 0
 		var nearest_turning := INF
 		var farthest_seen := 0.0
-		var front_at_booth := -1.0
+		var front_at_booth := INF
+		var booth_samples := 0
 		for i in 1500:
 			_tick(w, views)
 			var out := sim.world_position(p).distance_to(centre)
 			if p.stage > Passenger.Stage.SECURITY or (p.at.y < BOOTH_FIRST.y):
 				break
 			if p.at == BOOTH_FIRST:
-				front_at_booth = props.front_weight_of(id)
+				front_at_booth = minf(front_at_booth, props.front_weight_of(id))
+				booth_samples += 1
 			farthest_seen = maxf(farthest_seen, out) if out <= 2.6 else farthest_seen
 			var carries: Array = props.props_of(id)["carries"]
 			var moving_bag := props.transfer_progress(id, 0) < 1.0
@@ -215,10 +217,16 @@ func test_a_first_walker_turns_before_the_entry_with_its_roller_already_in_hand(
 				% [roller, lift_stage, turning_while_lifting, nearest_turning, farthest_seen]
 			)
 		)
-		print("  front weight in the booth's first cell: %.2f" % front_at_booth)
+		print(
+			(
+				"  lowest front weight in the booth's first cell: %.2f over %d ticks"
+				% [front_at_booth, booth_samples]
+			)
+		)
 		assert_float(farthest_seen).is_greater(2.4)
 		assert_float(nearest_turning).is_less(INF)
-		# It reached the booth, carrying in front.
+		# It reached the booth and carried in front all through its first cell.
+		assert_int(booth_samples).is_greater(0)
 		assert_float(front_at_booth).is_equal(1.0)
 		if roller:
 			assert_int(lift_stage).is_equal(Passenger.Stage.TO_SECURITY)
