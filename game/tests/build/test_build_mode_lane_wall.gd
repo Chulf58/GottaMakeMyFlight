@@ -85,9 +85,26 @@ func test_a_part_whose_edges_are_clear_is_accepted_beside_a_walled_one() -> void
 	assert_bool(_place(SecurityLanes.PICKUP_TABLE, Vector2i(20, 13)).ok).is_true()
 
 
-func test_a_part_with_no_arch_beside_it_is_accepted_across_a_wall() -> void:
-	_wall(Vector2i(20, 15), BuildGrid.Side.NORTH)
+## The tray table (20, 15) beside the arch at HALL: a wall west of it is across
+## the RIGHT lane of that arch (the unpack cell is (19, 15)), but the tray also
+## belongs to a clear LEFT lane whose arch can still go at (21, 14).
+func test_a_part_with_a_clear_lane_of_its_own_is_accepted_beside_a_walled_arch() -> void:
+	assert_bool(_mode.grid.apply(BuildEdit.place_object(SecurityLanes.ARCH, HALL, 0)).ok).is_true()
+	_wall(Vector2i(20, 15), BuildGrid.Side.WEST)
 	assert_bool(_place(SecurityLanes.TRAY_TABLE, Vector2i(20, 15)).ok).is_true()
+
+
+func test_a_part_with_a_clear_lane_not_yet_built_is_accepted_with_no_arch() -> void:
+	_wall(Vector2i(20, 15), BuildGrid.Side.WEST)
+	assert_bool(_place(SecurityLanes.TRAY_TABLE, Vector2i(20, 15)).ok).is_true()
+
+
+func test_a_part_walled_in_every_lane_it_could_join_is_refused_with_no_arch() -> void:
+	# A wall north of the tray table is across its conveyor step to the X-ray
+	# belt, in a RIGHT lane and in a LEFT one.
+	_wall(Vector2i(20, 15), BuildGrid.Side.NORTH)
+	var result := _place(SecurityLanes.TRAY_TABLE, Vector2i(20, 15))
+	assert_int(result.reason).is_equal(BuildResult.Reason.LANE_WALL)
 
 
 func test_taking_the_wall_edges_down_by_hand_lets_the_arch_in() -> void:

@@ -15,10 +15,10 @@ extends RefCounted
 ##
 ## An arch is refused when every mirror of its lane (RIGHT and LEFT) has a
 ## walled edge, because one clear side is enough for a lane. A part is refused
-## when every lane an arch beside it could give it (the same facing, the part's
-## cell where that lane puts the part) has a wall on a step into the part's own
-## cell, so a part is not blamed for a wall elsewhere in the lane. A part no
-## arch could own is not checked: it may be placed first and the arch after.
+## when every lane it could belong to (the same facing, an arch at the cell
+## each mirror puts it, whether that arch stands yet or not) has a wall on a
+## step into the part's own cell, so a part is not blamed for a wall elsewhere
+## in the lane, nor for the wall of a lane it need not join.
 
 ## The pairs of neighbouring lane cells a step crosses, by geometry() key: the
 ## parts and what they serve, the conveyor, the passage, the queue, the
@@ -77,20 +77,19 @@ static func walled_edge(grid: BuildGrid, lane: Dictionary, only := BuildObjectDe
 
 
 ## The lanes placing `edit` could belong to: both mirrors of an arch placed
-## here, or, for another part, each lane of an arch of the same facing that
-## puts this part at the edit's cell.
+## here, or, for another part, the lane each mirror gives a part at the edit's
+## cell, with its arch where that mirror puts it (an arch there already or one
+## to come; the arch's own cell must be on the grid).
 static func _candidates(grid: BuildGrid, edit: BuildEdit) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	if edit.def_id == SecurityLanes.ARCH:
-		for mirror in SecurityLanes.MIRRORS:
-			out.append(SecurityLanes.geometry(edit.cell, edit.facing, mirror))
-		return out
-	for id in grid.object_ids():
-		var arch := grid.get_object(id)
-		if StringName(arch["def"]) != SecurityLanes.ARCH or arch["facing"] != edit.facing:
-			continue
-		for mirror in SecurityLanes.MIRRORS:
-			var lane := SecurityLanes.geometry(arch["anchor"], arch["facing"], mirror)
-			if lane[edit.def_id] == edit.cell:
-				out.append(lane)
+	for mirror in SecurityLanes.MIRRORS:
+		var anchor: Vector2i = edit.cell
+		if edit.def_id != SecurityLanes.ARCH:
+			var frame: Vector2i = SecurityLanes.FRAME[edit.def_id]
+			var offset := BuildObjectDef.rotate_offset(
+				Vector2i(frame.x * mirror, frame.y), edit.facing
+			)
+			anchor = edit.cell - offset
+		if grid.in_bounds(anchor):
+			out.append(SecurityLanes.geometry(anchor, edit.facing, mirror))
 	return out
