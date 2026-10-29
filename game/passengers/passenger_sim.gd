@@ -46,7 +46,10 @@ signal checked_in(id: int, desk: int)
 ## under "toilet" (ToiletSnapshot). Versions 6 to 9 are migrated: each
 ## passenger gets ToiletSim.migrated_need() of its id, and nobody is on a
 ## toilet visit.
-const SAVE_VERSION := 10
+## 11: each passenger's boredom (BoredomSim). Versions 6 to 10 are migrated:
+## each passenger gets BoredomSim.start_of() of its id; a version 10 save keeps
+## its toilet needs, cooldowns and visits as saved.
+const SAVE_VERSION := 11
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -106,6 +109,8 @@ var routes := RouteCache.new()
 var cafes := CafeSim.new()
 ## Toilet visits and stall reservations (ToiletSim).
 var toilets := ToiletSim.new()
+## The boredom need (BoredomSim), raised on each beat.
+var boredom := BoredomSim.new()
 ## Security service after admission, at every scanner and lane.
 var security := SecurityRuntime.new()
 ## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
@@ -174,6 +179,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	security.bind(self, _security_admitted, _security_cleared)
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	toilets.bind(self, _set_stage, _leave_station, _release_seat)
+	boredom.bind(self)
 	clock.ticked.connect(on_tick)
 	grid.graph_changed.connect(_on_graph_changed)
 	if auto_schedule:
@@ -540,6 +546,7 @@ func _spawn(flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICA
 	p.hunger = clock.rng.randi_range(CafeSim.HUNGER_START_MIN, CafeSim.HUNGER_START_MAX)
 	CarryOnTraits.draw(clock.rng, p)
 	p.toilet_need = clock.rng.randi_range(ToiletSim.NEED_START_MIN, ToiletSim.NEED_START_MAX)
+	p.boredom = BoredomSim.start_of(p.id)
 	p.at = layout.door_cell(grid, layout.entrances[0])
 	p.clear_path()
 	p.apron = ShellRoutes.arrival(self, layout.entrances[0])
@@ -757,7 +764,8 @@ func _beat(p: Passenger) -> void:
 		change -= 1
 	if p.stuck != Passenger.Stuck.NONE:
 		change -= 3
-	if p.stage == Passenger.Stage.SEATED:
+	# A bored passenger gets nothing from its seat (BoredomSim).
+	if p.stage == Passenger.Stage.SEATED and not BoredomSim.is_bored(p):
 		change += 1
 	if p.late:
 		change -= 1
@@ -766,6 +774,7 @@ func _beat(p: Passenger) -> void:
 	# passenger acts on, by its priority table.
 	toilets.beat(p)
 	cafes.beat(p)
+	boredom.beat(p)
 	NeedsPolicy.arbitrate(self, p)
 	# A visiting guest walks: its visit's deadline keeps the margin for the rest.
 	if StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:

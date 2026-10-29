@@ -2,8 +2,9 @@ class_name TestNeedIcons
 extends GdUnitTestSuite
 ## The need icons over passengers (Toilets 5/5; decision passenger-needs-are-
 ## hunger-toilet-and-boredom-met-by-food-st: each need shows as an icon above
-## the passenger): which needs show, the painted icons, the row's layout on
-## screen, the views wiring and the follow panel's toilet need.
+## the passenger): which needs show, boredom's included (Boredom 1/5), the
+## painted icons, the row's layout on screen, the views wiring and the follow
+## panel's toilet need.
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -57,6 +58,25 @@ func test_a_need_shows_from_the_level_its_facility_acts_on() -> void:
 	assert_array(NeedIcons.shown(p)).is_equal([NeedIcons.Need.TOILET])
 	p.hunger = CafeSim.HUNGER_MAX
 	assert_array(NeedIcons.shown(p)).is_equal([NeedIcons.Need.HUNGER, NeedIcons.Need.TOILET])
+	# Boredom shows from BORED_AT, after the other two.
+	p.boredom = BoredomSim.BORED_AT - 1
+	assert_array(NeedIcons.shown(p)).is_equal([NeedIcons.Need.HUNGER, NeedIcons.Need.TOILET])
+	p.boredom = BoredomSim.BORED_AT
+	assert_array(NeedIcons.shown(p)).is_equal(
+		[NeedIcons.Need.HUNGER, NeedIcons.Need.TOILET, NeedIcons.Need.BOREDOM]
+	)
+	p.hunger = 0
+	p.toilet_need = 0
+	assert_array(NeedIcons.shown(p)).is_equal([NeedIcons.Need.BOREDOM])
+	# No facility meets boredom yet: it shows queueing and seated, and goes
+	# only with a miss.
+	for stage in [
+		Passenger.Stage.SECURITY_QUEUE, Passenger.Stage.SEATED, Passenger.Stage.TOILET_USE
+	]:
+		p.stage = stage
+		assert_array(NeedIcons.shown(p)).is_equal([NeedIcons.Need.BOREDOM])
+	p.stage = Passenger.Stage.MISSED
+	assert_array(NeedIcons.shown(p)).is_empty()
 
 
 func test_an_icon_hides_at_the_facility_meeting_its_need_and_after_a_miss() -> void:
@@ -99,24 +119,26 @@ func test_an_icon_hides_at_the_facility_meeting_its_need_and_after_a_miss() -> v
 func test_the_icons_are_yellow_circles_with_a_dark_outline_and_differ_by_glyph() -> void:
 	var hunger := NeedIcons.texture(NeedIcons.Need.HUNGER).get_image()
 	var toilet := NeedIcons.texture(NeedIcons.Need.TOILET).get_image()
+	var boredom := NeedIcons.texture(NeedIcons.Need.BOREDOM).get_image()
 	assert_int(hunger.get_width()).is_equal(NeedIcons.SIZE)
 	var edge := int(NeedIcons.SIZE / 2.0 - NeedIcons.RADIUS + NeedIcons.OUTLINE_PX / 2.0)
 	var mid := NeedIcons.SIZE / 2
 	var fill_spot := Vector2i(mid, int(mid + NeedIcons.RADIUS - NeedIcons.OUTLINE_PX - 3.0))
-	var differ := 0
-	for img in [hunger, toilet]:
+	for img in [hunger, toilet, boredom]:
 		assert_float(img.get_pixel(0, 0).a).is_equal(0.0)
 		var rim: Color = img.get_pixel(mid, edge)
 		var fill: Color = img.get_pixel(fill_spot.x, fill_spot.y)
 		print("rim %s fill %s" % [rim, fill])
 		assert_bool(_near(rim, Color(NeedIcons.OUTLINE, 1.0))).is_true()
 		assert_bool(_near(fill, Color(NeedIcons.FILL, 1.0))).is_true()
-	for y in range(16, NeedIcons.SIZE - 16, 2):
-		for x in range(16, NeedIcons.SIZE - 16, 2):
-			if not hunger.get_pixel(x, y).is_equal_approx(toilet.get_pixel(x, y)):
-				differ += 1
-	print("glyph pixels that differ: %d" % differ)
-	assert_int(differ).is_greater(200)
+	for pair in [[hunger, toilet], [hunger, boredom], [toilet, boredom]]:
+		var differ := 0
+		for y in range(16, NeedIcons.SIZE - 16, 2):
+			for x in range(16, NeedIcons.SIZE - 16, 2):
+				if not pair[0].get_pixel(x, y).is_equal_approx(pair[1].get_pixel(x, y)):
+					differ += 1
+		print("glyph pixels that differ: %d" % differ)
+		assert_int(differ).is_greater(200)
 
 
 ## Equal to within the 8-bit image's rounding.
@@ -163,6 +185,11 @@ func test_the_views_show_a_passengers_needs_over_its_head() -> void:
 	_world.step()
 	assert_bool(_sprite(node, 1).visible).is_true()
 	assert_object(_sprite(node, 1).texture).is_same(NeedIcons.texture(NeedIcons.Need.TOILET))
+	assert_bool(_sprite(node, 2).visible).is_false()
+	p.boredom = BoredomSim.MAX
+	_world.step()
+	assert_bool(_sprite(node, 2).visible).is_true()
+	assert_object(_sprite(node, 2).texture).is_same(NeedIcons.texture(NeedIcons.Need.BOREDOM))
 	var icon := _sprite(node, 0)
 	print(
 		"icon at %s, fixed %s, no depth %s" % [icon.position, icon.fixed_size, icon.no_depth_test]

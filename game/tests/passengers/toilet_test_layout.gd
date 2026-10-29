@@ -48,12 +48,14 @@ static func build(grid: BuildGrid, stalls := 2, shell: ShellDefinition = null) -
 
 
 ## Leaves `p` with no need of its own: it starts no toilet or cafe visit on
-## its beat, so a test decides when it goes.
+## its beat, so a test decides when it goes, and its boredom starts at 0, so
+## passengers calmed together become bored on the same beat.
 static func calm(p: Passenger) -> void:
 	p.hunger = 0
 	p.cafe_cooldown = 1000000
 	p.toilet_need = 0
 	p.toilet_cooldown = 1000000
+	p.boredom = 0
 
 
 static func _place(grid: BuildGrid, def_id: StringName, anchor: Vector2i) -> int:

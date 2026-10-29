@@ -36,6 +36,8 @@ const V7 := 7
 const V8 := 8
 ## The last version before the toilet need and visits, migrated on load.
 const V9 := 9
+## The last version before boredom, migrated on load.
+const V10 := 10
 ## A version 8 lane started its unpack work at 6 ticks plus 8 per bag.
 const V8_UNPACK_TICKS := 6
 const V8_UNPACK_BAG_TICKS := 8
@@ -68,6 +70,7 @@ const INT_FIELDS := [
 	"security_work",
 	"toilet_need",
 	"toilet_cooldown",
+	"boredom",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan", "liquids", "alarm", "incident_resolved"]
@@ -241,8 +244,8 @@ static func _record(p: Passenger) -> Dictionary:
 	return record
 
 
-## A version 6, 7, 8 or 9 save as the current version, nothing drawn from the
-## sim RNG; each step runs in turn from the save's own version. Version 6 to
+## A version 6, 7, 8, 9 or 10 save as the current version, nothing drawn from
+## the sim RNG; each step runs in turn from the save's own version. Version 6 to
 ## 7: every passenger gets zero bags and no liquids or alarm. Version 7 to 8:
 ## no passenger has a security phase, except that a basic scanner's passenger
 ## in service keeps that service exactly as it was: SCAN with the ticks left
@@ -252,10 +255,15 @@ static func _record(p: Passenger) -> Dictionary:
 ## passenger still unpacking keeps at least 1; a value past the old start is
 ## left as it is and refused. Version 9 to 10: every passenger gets the toilet
 ## need ToiletSim.migrated_need() gives its id and no cooldown, and there are
-## no toilet visits. Any other save is returned as it is, for the checks to
-## accept or refuse. The given dictionary is not edited.
+## no toilet visits. Version 10 to 11: every passenger gets the boredom
+## BoredomSim.start_of() gives its id; its toilet need, cooldown and any toilet
+## visit are kept as saved. Any other save is returned as it is, for the checks
+## to accept or refuse. The given dictionary is not edited.
 static func _migrated(data: Dictionary) -> Dictionary:
-	if not _whole(data.get("save_version")) or int(data["save_version"]) not in [V6, V7, V8, V9]:
+	if (
+		not _whole(data.get("save_version"))
+		or int(data["save_version"]) not in [V6, V7, V8, V9, V10]
+	):
 		return data
 	var out := data.duplicate(true)
 	var passengers: Array = out["passengers"] if typeof(out.get("passengers")) == TYPE_ARRAY else []
@@ -271,7 +279,9 @@ static func _migrated(data: Dictionary) -> Dictionary:
 		_add_security(out, passengers)
 	if from_version == V8:
 		_rescale_unpack(passengers)
-	_add_toilets(out, passengers)
+	if from_version <= V9:
+		_add_toilets(out, passengers)
+	_add_boredom(passengers)
 	return out
 
 
@@ -321,6 +331,14 @@ static func _add_toilets(out: Dictionary, passengers: Array) -> void:
 		record["toilet_need"] = ToiletSim.migrated_need(int(record["id"]))
 		record["toilet_cooldown"] = 0
 	out["toilet"] = {"visits": [], "deadlines_stale": false}
+
+
+## Version 10 to 11: boredom from each passenger's id. A record whose id is
+## not a whole number is left for the checks.
+static func _add_boredom(passengers: Array) -> void:
+	for record in passengers:
+		if typeof(record) == TYPE_DICTIONARY and _whole(record.get("id")):
+			record["boredom"] = BoredomSim.start_of(int(record["id"]))
 
 
 ## Version 8 to 9: each passenger in UNPACK has its work left scaled to the new
@@ -413,6 +431,8 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.toilet_need >= 0
 		and p.toilet_need <= ToiletSim.NEED_MAX
 		and p.toilet_cooldown >= 0
+		and p.boredom >= 0
+		and p.boredom <= BoredomSim.MAX
 		and p.carry_on >= 0
 		and p.carry_on <= CarryOnTraits.MAX_BAGS
 		and p.security_phase >= 0

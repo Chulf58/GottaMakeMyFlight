@@ -106,6 +106,8 @@ func test_everyone_not_in_service_loads_with_no_phase() -> void:
 	assert_bool(_b.world.sim.from_snapshot(_v7)).is_true()
 	for id in _b.world.sim.passenger_ids():
 		var p := _b.world.passenger(id)
+		# Version 10 to 11: the boredom start from the id.
+		assert_int(p.boredom).is_equal(BoredomSim.start_of(id))
 		if id == _first:
 			continue
 		assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.NONE)

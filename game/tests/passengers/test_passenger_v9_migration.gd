@@ -1,7 +1,7 @@
 class_name TestPassengerV9Migration
 extends GdUnitTestSuite
 ## Version 9 and version 8 passenger saves (no toilet need, cooldown or
-## visits) load into version 10 (decision toilet-design-queue-free-
+## visits) load into the current version (decision toilet-design-queue-free-
 ## reservable-stalls-per-stall-daily-u, point 6): each passenger gets the need
 ## ToiletSim.migrated_need() gives its id and no cooldown, nobody is on a toilet
 ## visit, nothing is drawn from the sim RNG, and the game plays on like a
@@ -13,7 +13,7 @@ const TOILET_FIELDS := ["toilet_need", "toilet_cooldown"]
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
-var _v10: Dictionary
+var _current: Dictionary
 
 
 func before() -> void:
@@ -36,7 +36,9 @@ func before_test() -> void:
 	for id in _a.sim.passenger_ids():
 		_a.passenger(id).toilet_need = ToiletSim.migrated_need(id)
 		_a.passenger(id).toilet_cooldown = 0
-	_v10 = _json(_a.sim.to_snapshot())
+		# Version 11 migration: the boredom start from the id.
+		_a.passenger(id).boredom = BoredomSim.start_of(id)
+	_current = _json(_a.sim.to_snapshot())
 
 
 func after_test() -> void:
@@ -54,12 +56,13 @@ func _json(data: Dictionary) -> Dictionary:
 ## The fixture in the shape `version` (8 or 9) saved: no toilet fields on a
 ## passenger record and no "toilet" block.
 func _old(version: int) -> Dictionary:
-	var data := _v10.duplicate(true)
+	var data := _current.duplicate(true)
 	data["save_version"] = version
 	data.erase("toilet")
 	for record: Dictionary in data["passengers"]:
 		for field in TOILET_FIELDS:
 			record.erase(field)
+		record.erase("boredom")
 	return data
 
 
@@ -76,12 +79,12 @@ func _needs(world: PassengerTestWorld) -> Array:
 	var out: Array = []
 	for id in world.sim.passenger_ids():
 		var p := world.passenger(id)
-		out.append([id, p.toilet_need, p.toilet_cooldown])
+		out.append([id, p.toilet_need, p.toilet_cooldown, p.boredom])
 	return out
 
 
 func test_the_fixture_is_a_real_save_without_toilets() -> void:
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(10)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(11)
 	for version in [8, 9]:
 		var data := _old(version)
 		assert_bool(data.has("toilet")).is_false()
@@ -106,6 +109,7 @@ func test_version_9_and_8_saves_load_with_needs_from_the_id_and_no_visits() -> v
 			assert_int(p.toilet_need).is_equal(ToiletSim.migrated_need(id))
 			assert_int(p.toilet_need).is_between(ToiletSim.NEED_START_MIN, ToiletSim.NEED_START_MAX)
 			assert_int(p.toilet_cooldown).is_equal(0)
+			assert_int(p.boredom).is_equal(BoredomSim.start_of(id))
 			seen[p.toilet_need] = true
 		print(
 			(
@@ -140,11 +144,11 @@ func test_a_migrated_version_9_save_plays_on_like_the_game_it_came_from() -> voi
 	assert_int(_a.sim.made_count()).is_greater(0)
 
 
-func test_a_migrated_world_saves_as_version_10_and_loads_again() -> void:
+func test_a_migrated_world_saves_as_the_current_version_and_loads_again() -> void:
 	_b = _fresh()
 	assert_bool(_b.sim.from_snapshot(_old(9))).is_true()
 	var again := _json(_b.sim.to_snapshot())
-	assert_int(int(again["save_version"])).is_equal(10)
+	assert_int(int(again["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	assert_bool(again.has("toilet")).is_true()
 	var third := _fresh()
 	assert_bool(third.sim.from_snapshot(again)).is_true()

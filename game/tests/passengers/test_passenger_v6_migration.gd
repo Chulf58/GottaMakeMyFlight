@@ -37,6 +37,8 @@ func before_test() -> void:
 	for id in _a.sim.passenger_ids():
 		_a.passenger(id).toilet_need = ToiletSim.migrated_need(id)
 		_a.passenger(id).toilet_cooldown = 0
+		# And the boredom version 11 migration gives it.
+		_a.passenger(id).boredom = BoredomSim.start_of(id)
 	_v7 = SecurityTestWorld.as_v7(_json(_a.sim.to_snapshot()))
 
 
@@ -103,6 +105,7 @@ func test_a_version_6_save_loads_with_zero_bags_and_no_flags() -> void:
 	assert_int(_b.sim.passenger_ids().size()).is_equal(_a.sim.passenger_ids().size())
 	for id in _b.sim.passenger_ids():
 		var p := _b.passenger(id)
+		assert_int(p.boredom).is_equal(BoredomSim.start_of(id))
 		assert_int(p.carry_on).is_equal(0)
 		assert_bool(p.liquids).is_false()
 		assert_bool(p.alarm).is_false()

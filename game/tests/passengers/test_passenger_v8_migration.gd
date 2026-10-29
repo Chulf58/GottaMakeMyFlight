@@ -57,11 +57,12 @@ func _fresh() -> SecurityTestWorld:
 func _v8(work: int, bags := 2) -> Dictionary:
 	var out := _v9.duplicate(true)
 	out["save_version"] = 8
-	# Version 8 had no toilet need, cooldown or visits.
+	# Version 8 had no toilet need, cooldown or visits, and no boredom.
 	out.erase("toilet")
 	for record: Dictionary in out["passengers"]:
 		record.erase("toilet_need")
 		record.erase("toilet_cooldown")
+		record.erase("boredom")
 		if int(record["id"]) == _id:
 			record["carry_on"] = bags
 			record["security_work"] = work
@@ -76,7 +77,7 @@ func _loaded_work(data: Dictionary) -> int:
 
 func test_the_fixture_is_mid_unpack_with_two_bags_at_the_current_version() -> void:
 	assert_int(int(_v9["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(10)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(11)
 	var p := _a.world.passenger(_id)
 	assert_int(p.carry_on).is_equal(2)
 	assert_int(SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p)).is_equal(11)
@@ -91,6 +92,7 @@ func test_a_version_8_save_mid_two_bag_unpack_loads_with_scaled_work_and_plays_o
 	assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.UNPACK)
 	# ceil(15 * 11 / 22) = 8
 	assert_int(p.security_work).is_equal(8)
+	assert_int(p.boredom).is_equal(BoredomSim.start_of(_id))
 	assert_bool(_b.run_until_cleared([_id])).is_true()
 	assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.NONE)
 

@@ -106,6 +106,9 @@ var cafe_cooldown := 0
 var toilet_need := 0
 ## No toilet visit is considered before this tick (ToiletSim's retry cooldown).
 var toilet_cooldown := 0
+## 0-100, rising once a simulated second while waiting (BoredomSim); starts
+## from the id, not the sim RNG.
+var boredom := 0
 ## What it brings to security (CarryOnTraits), drawn at spawn: 0 to 2 carry-on
 ## bags, and whether it carries liquids and whether it sets off the alarm.
 var carry_on := 0

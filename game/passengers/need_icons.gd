@@ -5,26 +5,28 @@ extends RefCounted
 ## Each icon is painted once into a texture in the HUD's filled toon style
 ## (decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale): a
 ## circle in the attention yellow inside the dark navy outline, with a dark
-## navy glyph, a fork and knife for hunger and a toilet for the toilet need.
-## Both use the one attention colour, told apart by the glyph; the circle tells
-## them from the stations' rounded-square signs (MarkerIcons).
+## navy glyph: a fork and knife for hunger, a toilet for the toilet need and
+## an hourglass for boredom. All use the one attention colour, told apart by
+## the glyph; the circle tells them from the stations' rounded-square signs
+## (MarkerIcons).
 ##
 ## A need's icon shows while the need is at or over the level its facility
-## acts on (CafeSim.HUNGRY_AT, ToiletSim.NEED_AT), walking and queueing
-## included, until the visit meets it. It is hidden while the passenger is at
-## the facility meeting it (at a cafe table, inside a toilet stall) and for a
-## passenger who missed the flight. All icons hide while the game camera is at
-## its home zoom or farther out (shown_at()); the follow panel still lists the
-## needs.
+## acts on (CafeSim.HUNGRY_AT, ToiletSim.NEED_AT, BoredomSim.BORED_AT), walking
+## and queueing included, until the visit meets it. It is hidden while the
+## passenger is at the facility meeting it (at a cafe table, inside a toilet
+## stall) and for a passenger who missed the flight. No facility meets boredom
+## yet, so its icon shows for as long as the passenger is bored. All icons hide
+## while the game camera is at its home zoom or farther out (shown_at()); the
+## follow panel still lists the needs.
 ##
-## PassengerViews gives every passenger node two Sprite3D icons (make_sprite())
+## PassengerViews gives every passenger node three Sprite3D icons (make_sprite())
 ## at one point over the head, so the body's turn never moves them, and lays
 ## them out each frame (layout()): they keep ICON_PX on screen at every zoom,
 ## like the station signs, and stand side by side along the screen's x through
 ## their offsets in the billboard plane. While the passenger's thought bubble
 ## shows, the row sits on top of the bubble instead of over the head.
 
-enum Need { HUNGER, TOILET }
+enum Need { HUNGER, TOILET, BOREDOM }
 
 const SIZE := 128
 const OUTLINE_PX := 9.0
@@ -40,12 +42,12 @@ const GAP_PX := 4.0
 ## Height over the passenger's root of the icons' anchor, just over the head.
 const LIFT_M := 2.0
 ## The sprite names on a passenger node.
-const SPRITES := ["NeedIcon0", "NeedIcon1"]
+const SPRITES := ["NeedIcon0", "NeedIcon1", "NeedIcon2"]
 
 static var _textures: Dictionary = {}
 
 
-## The needs whose icons show over `p`, hunger first.
+## The needs whose icons show over `p`: hunger, toilet, boredom.
 static func shown(p: Passenger) -> Array[Need]:
 	var out: Array[Need] = []
 	if p.stage == Passenger.Stage.MISSED or p.stage == Passenger.Stage.MADE:
@@ -58,6 +60,8 @@ static func shown(p: Passenger) -> Array[Need]:
 		out.append(Need.HUNGER)
 	if p.toilet_need >= ToiletSim.NEED_AT and not in_stall:
 		out.append(Need.TOILET)
+	if BoredomSim.is_bored(p):
+		out.append(Need.BOREDOM)
 	return out
 
 
@@ -172,12 +176,21 @@ static func _paint(need: Need) -> ImageTexture:
 				continue
 			var inside := clampf(0.5 - (edge + OUTLINE_PX), 0.0, 1.0)
 			var colour := OUTLINE.lerp(FILL, inside)
-			var glyph := _hunger(p) if need == Need.HUNGER else _toilet(p)
+			var glyph := _glyph(need, p)
 			colour = colour.lerp(GLYPH, clampf(0.5 - glyph, 0.0, 1.0) * inside)
 			colour.a = cover
 			img.set_pixel(x, y, colour)
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
+
+
+static func _glyph(need: Need, p: Vector2) -> float:
+	match need:
+		Need.HUNGER:
+			return _hunger(p)
+		Need.TOILET:
+			return _toilet(p)
+	return _hourglass(p)
 
 
 ## Signed distance to a fork (left) and a knife (right). Image y runs down.
@@ -204,6 +217,31 @@ static func _toilet(p: Vector2) -> float:
 	var bowl := maxf(p.distance_to(Vector2(4.0, 2.0)) - 24.0, 2.0 - p.y)
 	var pedestal := _box(p, Vector2(2.0, 30.0), Vector2(10.0, 9.0), 2.0)
 	return minf(minf(tank, seat), minf(bowl, pedestal))
+
+
+## Signed distance to an hourglass: a cap on top and bottom, the glass drawn
+## as two outlined bulbs meeting at a narrow waist, and a heap of sand in the
+## lower bulb.
+static func _hourglass(p: Vector2) -> float:
+	var caps := minf(
+		_box(p, Vector2(0.0, -33.0), Vector2(24.0, 4.0), 2.0),
+		_box(p, Vector2(0.0, 33.0), Vector2(24.0, 4.0), 2.0)
+	)
+	# The glass: two triangles tip to tip, drawn as their outlines.
+	var left := minf(
+		_segment(p, Vector2(-18.0, -29.0), Vector2(-3.0, 0.0)),
+		_segment(p, Vector2(-3.0, 0.0), Vector2(-18.0, 29.0))
+	)
+	var right := minf(
+		_segment(p, Vector2(18.0, -29.0), Vector2(3.0, 0.0)),
+		_segment(p, Vector2(3.0, 0.0), Vector2(18.0, 29.0))
+	)
+	var glass := minf(left, right) - 5.0
+	# The sand heaped in the lower bulb.
+	var sand := maxf(
+		_box(p, Vector2(0.0, 24.0), Vector2(8.0, 5.0), 0.0), absf(p.x) * 1.6 - (p.y - 14.0)
+	)
+	return minf(minf(caps, glass), sand)
 
 
 static func _segment(p: Vector2, a: Vector2, b: Vector2) -> float:
