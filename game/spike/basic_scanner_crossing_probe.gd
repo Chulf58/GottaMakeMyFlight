@@ -65,6 +65,7 @@ extends SceneTree
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 const CarryChecks := preload("res://spike/carry_probe_checks.gd")
+const FloatCheck := preload("res://spike/carry_float_check.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/security-booth"
 const CLOSE_OUT_REL := "res://../tools/blender/out/carry-selfclip"
@@ -107,6 +108,23 @@ const CLOSE_M := 3.0
 const CLOSE_HEIGHT_M := 1.7
 const AIM_M := 1.0
 const CLOSE_MIN_PX := 300.0
+## Hand-led moves plated close (bag kind and move, hands left out), each at
+## mid-move and near its end (_lead_plate_scan()).
+const LEAD_PLATES: Array[String] = [
+	"CASE floor>hand",
+	"CASE hand>floor",
+	"BACKPACK back>floor",
+	"SHOULDER floor>shoulder",
+	"ROLLER pull>floor",
+	"ROLLER pull>hand",
+	"ROLLER hand>pull",
+	"CASE hand>tray",
+	"CASE tray>hand",
+	"BACKPACK back>tray",
+	"BACKPACK tray>back",
+	"SHOULDER tray>shoulder",
+]
+const LEAD_MOMENTS := [[0.4, 0.6], [0.8, 0.97]]
 ## Lane mode: the lane on the divider as the security visuals probe builds it.
 const ARCH_AT := Vector2i(20, ReferenceTerminal.DIVIDER_Y)
 const OLD_SCANNERS: Array[Vector2i] = [Vector2i(17, 8), Vector2i(19, 8)]
@@ -162,12 +180,23 @@ var _arch_second := 0
 ## Lane mode: passenger id -> {security phase: true} seen on any frame (a
 ## lane's repack berth is away from the arch, outside the checked box).
 var _phases_seen := {}
+## The FLOAT check's tally over every drawn bag, every frame
+## (FloatCheck.watch_float), and its control's states ([] until run).
+var _floats := FloatCheck.float_counts()
+var _float_control := []
+## Key -> true once its hand-led move plates are saved.
+var _lead_plated := {}
 
 
 func _initialize() -> void:
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	# --run=<name> writes this run's plates into their own folder.
+	var run := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--run="):
+			run = "/" + arg.get_slice("=", 1)
+	_out_dir = ProjectSettings.globalize_path(OUT_REL + run).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
-	_close_dir = ProjectSettings.globalize_path(CLOSE_OUT_REL).simplify_path()
+	_close_dir = ProjectSettings.globalize_path(CLOSE_OUT_REL + run).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_close_dir)
 	_lane_mode = OS.get_cmdline_user_args().has("--lane")
 	print("PROBE out_dir=", _out_dir, " close_dir=", _close_dir, " lane_mode=", _lane_mode)
@@ -195,7 +224,10 @@ func _run() -> void:
 		await _cross()
 	_report()
 	print("PROBE done failed=", _failed)
-	quit(1 if _failed else 0)
+	# The one exit: 1 whenever failed=true was printed.
+	var code := 1 if _failed else 0
+	print("PROBE exit=%d path=_run" % code)
+	quit(code)
 
 
 func _boot() -> void:
@@ -401,6 +433,8 @@ func _cross() -> void:
 	var stop := Time.get_ticks_msec() + RUN_LIMIT_MS
 	while Time.get_ticks_msec() < stop:
 		await RenderingServer.frame_post_draw
+		_watch_float()
+		_lead_plate_scan()
 		if not _roles.is_empty() and _clock.tick >= next_send and spawns < MAX_SPAWNS:
 			_send()
 			spawns += 1
@@ -425,6 +459,137 @@ func _cross() -> void:
 	for id in _sent:
 		if not _done(id):
 			_invalid("passenger %d never cleared security" % id)
+
+
+## Close plates of the hand-led moves (CarryLead) as they happen anywhere: the
+## first move of each LEAD_PLATES key (bag kind and FloatCheck.move_of, hands
+## left out) still early in its move, plated at each LEAD_MOMENTS window, and
+## one walking plate per bag kind (a passenger with one bag, settled, moving).
+func _lead_plate_scan() -> void:
+	# The booth's own move plates (MOVE_PLATES) go first.
+	if _plate_task or (not _lane_mode and _move_plated.size() < MOVE_PLATES.size()):
+		return
+	var props := _views.carry_on_props()
+	for id in _sim.passenger_ids():
+		var body := _views.node_for(id)
+		var p := _sim.get_passenger(id)
+		if body == null or p == null or not body.is_visible_in_tree():
+			continue
+		var kinds: Array = props.props_of(id)["kinds"]
+		for i in kinds.size():
+			var kind_name: String = SecurityLooks.Kind.keys()[kinds[i]]
+			var move := FloatCheck.move_of(props, id, i).replace(".R", "").replace(".L", "")
+			var key := kind_name + " " + (move if move != "" else "walk")
+			if _lead_plated.has(key) or not (key in LEAD_PLATES or key.ends_with(" walk")):
+				continue
+			if move == "" and (not p.is_moving() or kinds.size() > 1):
+				continue
+			if move != "" and props.transfer_progress(id, i) > 0.3:
+				continue
+			_plate_task = true
+			_plate_lead.call_deferred(id, i, key)
+			return
+
+
+## The close plates of one hand-led move (or walk) of bag `i` of passenger
+## `id`, each with the sim clock paused at its moment; each prints the bag's
+## FLOAT state, the stoop drawn and whether the passenger walks.
+func _plate_lead(id: int, i: int, key: String) -> void:
+	var props := _views.carry_on_props()
+	var walk := key.ends_with(" walk")
+	var moments: Array = [[1.0, 1.0]] if walk else LEAD_MOMENTS
+	var move := FloatCheck.move_of(props, id, i)
+	var saved := 0
+	for m in moments.size():
+		var lo: float = moments[m][0]
+		var hi: float = moments[m][1]
+		var stop := Time.get_ticks_msec() + 5000
+		var k := props.transfer_progress(id, i)
+		while k < lo and Time.get_ticks_msec() < stop and _views.node_for(id) != null:
+			await process_frame
+			k = props.transfer_progress(id, i)
+		_clock.set_paused(true)
+		await _frames(1)
+		k = props.transfer_progress(id, i)
+		var body := _views.node_for(id)
+		var bags: Array = props.props_of(id)["bags"] if body != null else []
+		if (
+			body == null
+			or i >= bags.size()
+			or FloatCheck.move_of(props, id, i) != move
+			or k < lo
+			or k > hi
+		):
+			print("LEAD_PLATE %s passenger=%d moment=%d missed k=%.2f" % [key, id, m, k])
+			_clock.set_paused(false)
+			break
+		var state := FloatCheck.float_state(_sim, _views, id, i)
+		var rig: Dictionary = body.get_meta(&"carry_rig", {})
+		var stoop: float = (rig["stoop"] as CarryStoop).drawn if rig.has("stoop") else -1.0
+		var slug := key.replace(" ", "_").replace(">", "-to-")
+		var name := "lead_%s_%d_k%03d" % [slug, m, roundi(k * 100.0)]
+		print(
+			(
+				(
+					"LEAD_PLATE %s passenger=%d bag=%d moment=%d k=%.2f state=%s hand_gap_m=%.3f"
+					+ " stoop=%.2f walking=%s file=%s.png"
+				)
+				% [
+					key,
+					id,
+					i,
+					m,
+					k,
+					state[0],
+					state[1],
+					stoop,
+					_sim.get_passenger(id).is_moving(),
+					name
+				]
+			)
+		)
+		var ok := await _plate_close(id, bags[i], name)
+		_clock.set_paused(false)
+		if not ok:
+			break
+		saved += 1
+	if saved == moments.size():
+		_lead_plated[key] = true
+	_plate_task = false
+
+
+## One contact sheet of this run's hand-led move plates (lead_*.png in the
+## close plates folder), four across, each over its file name.
+func _lead_sheet() -> void:
+	var names: Array[String] = []
+	for file in DirAccess.get_files_at(_close_dir):
+		if file.begins_with("lead_") and file.ends_with(".png"):
+			names.append(file)
+	names.sort()
+	if names.is_empty():
+		return
+	var cell := Vector2i(480, 270)
+	var sheet := Image.create(
+		cell.x * 4, cell.y * ceili(names.size() / 4.0), false, Image.FORMAT_RGB8
+	)
+	for n in names.size():
+		var img := Image.load_from_file(_close_dir.path_join(names[n]))
+		img.convert(Image.FORMAT_RGB8)
+		img.resize(cell.x, cell.y)
+		sheet.blit_rect(img, Rect2i(Vector2i.ZERO, cell), Vector2i(n % 4, n / 4) * cell)
+	sheet.save_png(_close_dir.path_join("contact_sheet_lead.png"))
+	print("LEAD_SHEET %s plates=%s" % [_close_dir.path_join("contact_sheet_lead.png"), names])
+
+
+## One frame of the FLOAT check, and its control on the first drawn bag.
+func _watch_float() -> void:
+	FloatCheck.watch_float(_sim, _views, _floats)
+	if not _float_control.is_empty():
+		return
+	for id in _sim.passenger_ids():
+		var bags: Array = _views.carry_on_props().props_of(id)["bags"]
+		if _float_control.is_empty() and not bags.is_empty() and bags[0].is_visible_in_tree():
+			_float_control = FloatCheck.float_control(_sim, _views, id)
 
 
 func _done(id: int) -> bool:
@@ -1306,6 +1471,15 @@ func _report() -> void:
 			% [totals["turn_points"], totals["turn_frames"], turn_along]
 		)
 	)
+	print(FloatCheck.float_report(_floats))
+	print("LEAD_PLATED %s" % [_lead_plated.keys()])
+	_lead_sheet()
+	if _floats["float"] > 0:
+		_invalid("a carry-on bag floats (neither held, worn nor resting): %d" % _floats["float"])
+	if _float_control != ["float", "held"] and _float_control != ["float", "resting"]:
+		_invalid("the FLOAT control was not caught or not let go: %s" % [_float_control])
+	if _floats["held"] == 0 or _floats["resting"] == 0:
+		_invalid("the FLOAT check saw no held or no resting bag (control)")
 	if totals["self"] > 0:
 		_invalid("a body point lies inside its own carried bag: %d" % totals["self"])
 	if totals["through"] > 0:
