@@ -1,7 +1,7 @@
 class_name TestBuildModeMoney
 extends GdUnitTestSuite
 ## BuildMode's tools paying through BuildTransaction from a Finances wallet:
-## clicks, wall strokes, Floor and Remove rectangles, door conversions, the
+## clicks, wall rows, Floor and Remove rectangles, door conversions, the
 ## ghost check and snapshot load (ruling
 ## building-costs-money-from-a-starting-budget-you-can-t-build).
 
@@ -86,28 +86,27 @@ func test_an_unaffordable_click_is_refused_with_a_red_ghost_reason() -> void:
 	assert_int(_wallet().balance).is_equal(899)
 
 
-func test_a_wall_stroke_pays_per_segment_and_stops_when_money_runs_out() -> void:
+func test_a_wall_row_pays_per_edge_and_stops_when_money_runs_out() -> void:
 	_fill(Rect2i(1, 1, 8, 8))
 	var wall := PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
 	_set_balance(3 * wall + wall / 2)
 	_mode.set_tool(BuildMode.Tool.WALL)
-	_mode._start_drag(_near_edge(Vector2i(2, 4), NORTH))
-	var outcomes: Array[bool] = []
-	for x in range(2, 7):
-		outcomes.append(_mode.apply_at(_near_edge(Vector2i(x, 4), NORTH)).ok)
-		if x == 5:
-			# Money that arrives mid-stroke does not restart it.
-			_wallet().credit(10 * wall, Wallet.Category.FEES)
-	print("segments %s balance %d" % [outcomes, _wallet().balance])
-	assert_array(outcomes).is_equal([true, true, true, false, false])
+	_mode.begin_row(_near_edge(Vector2i(2, 4), NORTH))
+	_mode.move_row(_near_edge(Vector2i(6, 4), NORTH))
+	var outcome := _mode.finish_row()
+	print("placed %d skipped %d balance %d" % [outcome.placed, outcome.skipped, _wallet().balance])
+	assert_int(outcome.placed).is_equal(3)
+	assert_int(outcome.skipped).is_equal(2)
 	for x in range(2, 5):
 		assert_bool(_mode.grid.has_wall(Vector2i(x, 4), NORTH)).is_true()
 	for x in range(5, 7):
 		assert_bool(_mode.grid.has_wall(Vector2i(x, 4), NORTH)).is_false()
-	assert_int(_wallet().balance).is_equal(wall / 2 + 10 * wall)
-	# A new stroke can build again.
-	_mode._start_drag(_near_edge(Vector2i(5, 4), NORTH))
-	assert_bool(_mode.apply_at(_near_edge(Vector2i(5, 4), NORTH)).ok).is_true()
+	assert_int(_wallet().balance).is_equal(wall / 2)
+	# A new row can build again once there is money.
+	_wallet().credit(10 * wall, Wallet.Category.FEES)
+	_mode.begin_row(_near_edge(Vector2i(5, 4), NORTH))
+	assert_int(_mode.finish_row().placed).is_equal(1)
+	assert_bool(_mode.grid.has_wall(Vector2i(5, 4), NORTH)).is_true()
 
 
 func test_a_floor_rectangle_is_all_or_nothing() -> void:

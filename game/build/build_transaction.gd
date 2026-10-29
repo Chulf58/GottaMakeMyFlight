@@ -6,8 +6,8 @@ extends RefCounted
 ## player build plans its edits, quotes them here, checks the wallet can pay
 ## and commits grid and wallet together: a click or a door conversion through
 ## commit_plan(), a Floor or Remove rectangle through commit_batch(). A wall
-## stroke is a run of clicks, one per segment, so it stops paying when the
-## money runs out (BuildMode ends the stroke there).
+## row is a run of commit_plan() calls, one per edge, so it stops paying when
+## the money runs out (WallRowDrag.apply() ends the row there).
 ##
 ## Prices come from PriceTable. A placed piece's price is saved on it in the
 ## grid (BuildEdit.paid), and a removal refunds PriceTable.refund_of() that

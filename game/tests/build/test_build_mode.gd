@@ -73,7 +73,8 @@ func test_remove_tool_takes_a_wall_near_the_edge_and_floor_in_the_middle() -> vo
 	assert_int(_mode.edit_at(centre + Vector3(0, 0, -0.4)).kind).is_equal(
 		BuildEdit.Kind.REMOVE_WALL
 	)
-	assert_int(_mode.edit_at(centre + Vector3(0, 0, -0.1)).kind).is_equal(
+	# The wall band is 0.4 m wide (WALL_PICK_DISTANCE): 0.05 m off the middle is floor.
+	assert_int(_mode.edit_at(centre + Vector3(0, 0, -0.05)).kind).is_equal(
 		BuildEdit.Kind.REMOVE_FLOOR
 	)
 
