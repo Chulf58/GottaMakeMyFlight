@@ -54,6 +54,8 @@ const CLOSED_HINTS := {
 	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
 	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
 }
+## The line shown once the airport opens: the starter's airline and destination.
+const OPEN_CUE := "Open! Starter contract: %s to %s, daily"
 const ROLE_WIDTH := 210.0
 ## Width of the hint card's text, in layout pixels.
 const HINT_W := 560.0
@@ -69,6 +71,10 @@ var _card := PanelContainer.new()
 var _hint := Label.new()
 var _hint_box := PanelContainer.new()
 var _hint_bottom := -1.0
+## Whether the gate was open at the last refresh, so an opening is seen once.
+var _was_open := false
+## The starter line while it shows, "" otherwise.
+var _open_cue := ""
 ## Role -> the Label with its counts, its Hire and its Fire button.
 var _counts: Dictionary = {}
 var _hire: Dictionary = {}
@@ -97,6 +103,9 @@ func watch(with_staff: StaffSim) -> void:
 	staff.sim.grid.edit_applied.connect(_on_edit_applied)
 	if gate != null:
 		gate.changed.connect(refresh)
+		gate.flights.snapshot_loaded.connect(_on_snapshot_loaded)
+		gate.flights.state_changed.connect(_on_flight_state)
+		_was_open = gate.is_open()
 	refresh()
 
 
@@ -126,13 +135,16 @@ func counts_text(role: StaffMember.Role) -> String:
 	return text
 
 
-## What keeps the airport closed, if it is, then one line per role whose
+## What keeps the airport closed, if it is, or the starter line after it
+## opened, then one line per role whose
 ## stations stand but nobody of that role is hired and staying (members
 ## leaving do not count).
 func hint_text() -> String:
 	var lines := PackedStringArray()
 	if gate != null and gate.blocker() != AirportGate.Blocker.NONE:
 		lines.append(CLOSED_HINTS[gate.blocker()])
+	if _open_cue != "":
+		lines.append(_open_cue)
 	for role in ROLES:
 		if not staff.stations_of(role).is_empty() and _staying(role) == 0:
 			lines.append(HINTS[role])
@@ -140,12 +152,26 @@ func hint_text() -> String:
 
 
 func refresh() -> void:
+	_track_opening()
 	for role in ROLES:
 		(_counts[role] as Label).text = counts_text(role)
 		(_fire[role] as Button).disabled = _staying(role) == 0
 	_hint.text = hint_text()
 	_hint.visible = _hint.text != ""
 	_hint_box.visible = _hint.visible
+
+
+## Takes the starter line when the gate has opened since the last refresh with
+## a starter contract; an airport that opened with none has no line.
+func _track_opening() -> void:
+	if gate == null:
+		return
+	var open := gate.is_open()
+	if open and not _was_open and not gate.opened_without_starter:
+		var contract := gate.flights.contract_of(FlightSim.DEFAULT_ID)
+		if not contract.is_empty():
+			_open_cue = OPEN_CUE % [contract["airline"], contract["destination"]]
+	_was_open = open
 
 
 func _staying(role: StaffMember.Role) -> int:
@@ -158,6 +184,25 @@ func _on_staff_toggled(open: bool) -> void:
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:
 	refresh()
+
+
+## A load opens or closes the airport without an opening to announce. The gate
+## may refresh this panel first and see a closed-to-open change, so the line is
+## dropped and the open state re-read here, whichever ran first.
+func _on_snapshot_loaded() -> void:
+	_open_cue = ""
+	_was_open = gate.is_open()
+	refresh()
+
+
+func _on_flight_state(id: String, new_state: int) -> void:
+	if (
+		_open_cue != ""
+		and new_state == FlightSim.State.DEPARTED
+		and gate.flights.flight_contract_id(id) == FlightSim.DEFAULT_ID
+	):
+		_open_cue = ""
+		refresh()
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
