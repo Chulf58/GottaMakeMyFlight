@@ -248,7 +248,8 @@ static func carry_front(sim: PassengerSim, p: Passenger) -> bool:
 
 
 ## Whether `p` stands in a basic scanner booth, walks into one now, or waits
-## at a booth's entry cell in the security queue: there its bags are carried
+## at a booth's entry cell in the security queue (or, still on its way to
+## security, walks into or stands on its own booth's entry): there its bags are carried
 ## in front and its free arms tucked in (CarryOnProps). The entry counts so the
 ## turn has ended before the bags reach the booth's rails; leaving, the cell it
 ## stands on stays a booth cell until it arrives in the cell past the booth.
@@ -258,6 +259,9 @@ static func in_booth_passage(sim: PassengerSim, p: Passenger) -> bool:
 	var queued := p.stage == Passenger.Stage.SECURITY_QUEUE or p.stage == Passenger.Stage.SECURITY
 	if queued and _booth_entry(sim, p.at):
 		return true
+	# Arrived at its own entry on the way, it joins the queue next tick.
+	if p.stage == Passenger.Stage.TO_SECURITY and _own_entry(sim, p, p.at):
+		return true
 	if not p.is_moving() or p.path.size() < 2:
 		return false
 	var at := clampi(p.path_index, 0, p.path.size() - 2)
@@ -266,7 +270,18 @@ static func in_booth_passage(sim: PassengerSim, p: Passenger) -> bool:
 		return true
 	# Walking up to the entry it starts a step early, so the turn (after a
 	# roller's lift into the hand, CarryOnProps) ends before the booth's rails.
-	return queued and _booth_entry(sim, next)
+	if queued:
+		return _booth_entry(sim, next)
+	# So does a walker still on its way to security that walks into its own
+	# booth's entry: with no queue it is admitted there without stopping, and
+	# started at the entry it was still turning 1.4 m out.
+	return p.stage == Passenger.Stage.TO_SECURITY and _own_entry(sim, p, next)
+
+
+## Whether `cell` is the entry cell of the basic scanner `p` chose (its station).
+static func _own_entry(sim: PassengerSim, p: Passenger, cell: Vector2i) -> bool:
+	var passage: Array = sim.layout.passages.get(p.station, [])
+	return passage.size() > 1 and passage[0] == cell and in_booth(sim.grid, passage[1])
 
 
 ## Whether `cell` is the entry cell of a basic scanner's passage.
@@ -281,8 +296,28 @@ static func _booth_entry(sim: PassengerSim, cell: Vector2i) -> bool:
 
 ## Whether `cell` lies inside a basic scanner booth (a security_scanner).
 static func in_booth(grid: BuildGrid, cell: Vector2i) -> bool:
+	return _def_at(grid, cell) == &"security_scanner"
+
+
+## Whether `p` stands in a security lane's arch or walks into one now: there
+## its free arms tuck in as at a basic scanner booth (CarryOnProps), since the
+## arch is narrowed to fit inside its cell beside a wall (decision security-
+## lane-arch-is-narrowed-to-fit-inside-its-cell-beside-a). Its bags are in the
+## tray then, so nothing goes to the front. Leaving, the arch cell counts until
+## it arrives in the cell past it.
+static func in_arch_passage(sim: PassengerSim, p: Passenger) -> bool:
+	if _def_at(sim.grid, p.at) == SecurityLanes.ARCH:
+		return true
+	if not p.is_moving() or p.path.size() < 2:
+		return false
+	var at := clampi(p.path_index, 0, p.path.size() - 2)
+	return _def_at(sim.grid, p.path[at + 1]) == SecurityLanes.ARCH
+
+
+## The def id of the object on `cell`, or an empty name.
+static func _def_at(grid: BuildGrid, cell: Vector2i) -> StringName:
 	var id := grid.object_at(cell)
-	return id != 0 and StringName(grid.get_object(id).get("def", "")) == &"security_scanner"
+	return StringName(grid.get_object(id).get("def", "")) if id != 0 else &""
 
 
 ## Whether either straight part of a (possibly diagonal) step out of `cell`
