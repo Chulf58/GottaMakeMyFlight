@@ -178,3 +178,46 @@ func test_a_drawn_control_spanning_the_view_hides_the_caption() -> void:
 	panel.visible = false
 	_markers.draw()
 	assert_bool(_caption().visible).is_true()
+
+
+## The user ruled a hint caption shows only near the view: its sign on screen or
+## within one caption width past the edge. Farther off it hides, uncounted (it is
+## not a missing spot).
+func test_a_caption_whose_sign_is_far_off_screen_hides() -> void:
+	var width := MissMarkers.caption_size(_caption().text).x
+	for far: Vector2 in [
+		Vector2(-width - 200.0, 400.0),
+		Vector2(1920.0 + width + 200.0, 400.0),
+		Vector2(900.0, -width - 200.0),
+		Vector2(900.0, 1080.0 + width + 200.0),
+	]:
+		_place_sign(far)
+		print("far sign %s caption visible %s" % [_point(), _caption().visible])
+		assert_vector(_point()).is_equal_approx(far, Vector2(0.5, 0.5))
+		assert_bool(_caption().visible).is_false()
+	assert_int(_markers.hint_no_spot_hides).is_equal(0)
+
+
+func test_a_caption_whose_sign_is_just_past_the_edge_still_shows() -> void:
+	var width := MissMarkers.caption_size(_caption().text).x
+	for near: Vector2 in [
+		Vector2(-width + 40.0, 400.0),
+		Vector2(1920.0 + width - 40.0, 400.0),
+	]:
+		_place_sign(near)
+		print("near sign %s caption visible %s" % [_point(), _caption().visible])
+		assert_bool(VIEW.has_point(_point())).is_false()
+		assert_bool(_caption().visible).is_true()
+		assert_bool(_inside_with_margin(_drawn_rect())).is_true()
+
+
+func test_a_hidden_caption_returns_when_its_sign_comes_back_near_the_view() -> void:
+	var width := MissMarkers.caption_size(_caption().text).x
+	_place_sign(Vector2(-width - 200.0, 400.0))
+	assert_bool(_caption().visible).is_false()
+	_place_sign(Vector2(-30.0, 400.0))
+	assert_bool(_caption().visible).is_true()
+	_place_sign(Vector2(1920.0 + width + 200.0, 400.0))
+	assert_bool(_caption().visible).is_false()
+	_place_sign(Vector2(900.0, 600.0))
+	assert_bool(_caption().visible).is_true()
