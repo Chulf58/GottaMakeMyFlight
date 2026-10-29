@@ -20,6 +20,11 @@ const KIT_WALL_KINDS := {
 	BuildGrid.WallKind.DOOR: InteriorKit.WallKind.DOOR,
 }
 
+## The clear opening of an uncut door wall: half its width, from the jamb
+## stubs a cut door keeps (InteriorKit), and the underside of its lintel.
+const DOOR_OPENING_HALF := InteriorKit.JAMB_OFFSET - InteriorKit.JAMB_WIDTH / 2.0
+const DOOR_OPENING_TOP := 2.24
+
 ## Def id -> pick_height(), worked out once from the kit piece.
 static var _pick_heights: Dictionary = {}
 
@@ -74,6 +79,20 @@ func sight_height(edge: Vector3i) -> float:
 	if _cut_edges.has(edge):
 		return InteriorKit.STUB_HEIGHT
 	return WALL_HEIGHT
+
+
+## Whether the wall drawn on an edge hides a line of sight crossing it `along`
+## metres from the wall's middle and `height` metres up. It hides what
+## sight_height() says, except that an uncut door wall has a clear opening
+## through its middle: DOOR_OPENING_HALF either side of the door axis, up to
+## DOOR_OPENING_TOP (wall_door.glb: the leaves park beside it, the lintel is
+## above it).
+func sight_blocked(edge: Vector3i, along: float, height: float) -> bool:
+	if height >= sight_height(edge):
+		return false
+	var door: bool = _wall_kinds.get(edge, -1) == InteriorKit.WallKind.DOOR
+	var open: bool = door and not _cut_edges.has(edge)
+	return not (open and absf(along) < DOOR_OPENING_HALF and height < DOOR_OPENING_TOP)
 
 
 ## The node for an object type, centred on its footprint at facing 0: the

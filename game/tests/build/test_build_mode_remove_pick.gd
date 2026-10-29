@@ -141,6 +141,47 @@ func test_a_glass_wall_in_front_does_not_hide_the_arch() -> void:
 	assert_int(_mode.edit_at(point).object_id).is_equal(_arch)
 
 
+## A door on the arch's west edge, between plain walls in line with it.
+func _door_wall() -> void:
+	for row in [ARCH_CELL.y - 1, ARCH_CELL.y + 1]:
+		(
+			assert_bool(
+				(
+					_mode
+					. grid
+					. apply(BuildEdit.place_wall(Vector2i(ARCH_CELL.x, row), BuildGrid.Side.WEST))
+					. ok
+				)
+			)
+			. is_true()
+		)
+	await _wall(ARCH_CELL, BuildGrid.Side.WEST, BuildGrid.WallKind.DOOR)
+
+
+## A door wall on the arch's west edge, drawn full: its leaves park beside a
+## clear opening 0.8 m wide and 2.24 m tall (wall_door.glb), centred on the edge.
+func test_a_line_of_sight_through_a_door_wall_opening_takes_the_arch() -> void:
+	_view().cutaway_enabled = false
+	await _door_wall()
+	var point := _beyond_point()
+	_look(Vector3(0.0, 6.0, point.z), point)
+	var edit := _mode.edit_at(point)
+	print("through the door opening: kind=%d object=%d" % [edit.kind, edit.object_id])
+	assert_int(edit.kind).is_equal(BuildEdit.Kind.REMOVE_OBJECT)
+	assert_int(edit.object_id).is_equal(_arch)
+
+
+func test_a_line_of_sight_through_a_door_wall_beside_its_opening_is_hidden() -> void:
+	_view().cutaway_enabled = false
+	await _door_wall()
+	# 0.45 m off the door's axis the line meets the leaf, not the opening.
+	var point := _beyond_point() + Vector3(0.0, 0.0, 0.45)
+	_look(Vector3(0.0, 6.0, point.z), point)
+	var edit := _mode.edit_at(point)
+	print("beside the door opening: kind=%d object=%d" % [edit.kind, edit.object_id])
+	assert_int(edit.kind).is_not_equal(BuildEdit.Kind.REMOVE_OBJECT)
+
+
 func test_a_line_of_sight_through_the_top_of_the_arch_takes_it() -> void:
 	# The line passes over the arch's far side 2.37 m up: above its def height
 	# (2.3 m) but under the top of its model (2.42 m).
