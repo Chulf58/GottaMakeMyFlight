@@ -1,7 +1,8 @@
 class_name TestKioskPieces
 extends GdUnitTestSuite
 ## The kiosk pieces against their kit .glb files (Boredom 5/5, build_kiosk_kit.py):
-## InteriorKit draws kiosk_counter and kiosk_display with their own pieces; at
+## InteriorKit draws kiosk_counter, kiosk_display and the screen stand with
+## their own pieces (the screen's picture to the front); at
 ## every facing the counter's interaction cell is its Mount_Till, and in a ready
 ## kiosk room each ShopLayout browse slot is the display's Mount_Browse_<index>,
 ## approach cell and facing alike. A blocked slot 1 leaves slot 0 on its mount.
@@ -92,8 +93,26 @@ func test_the_kit_draws_the_kiosk_pieces_with_their_own_glbs() -> void:
 	assert_array(_display_mounts.keys()).contains(["Mount_Browse_0", "Mount_Browse_1"])
 
 
+func test_the_kit_draws_the_screen_stand_with_its_own_glb() -> void:
+	var piece := InteriorKit.object_piece(ScreenCoverage.SCREEN_ID)
+	assert_str(piece).is_equal("screen_stand")
+	assert_bool(ResourceLoader.exists(InteriorKit.PIECE_PATH % piece)).is_true()
+	# Its picture is the separate Screen_Face node, facing the front (+Z), the way
+	# its coverage fan points.
+	var root := InteriorKit.instantiate(piece)
+	var face := root.find_child("Screen_Face", true, false) as Node3D
+	assert_object(face).is_not_null()
+	var bounds := AABB()
+	for mi in face.find_children("*", "MeshInstance3D", true, false):
+		bounds = (mi as MeshInstance3D).get_aabb()
+	print("screen face aabb %s" % bounds)
+	assert_float(bounds.position.z).is_greater(0.0)
+	assert_float(bounds.size.x).is_greater(0.7)
+	root.free()
+
+
 ## The importer bound every surface to a shared toon material (the glTF carries
-## no images); screen_stand is checked too, though nothing maps it yet.
+## no images).
 func test_every_kiosk_and_screen_surface_has_a_toon_material() -> void:
 	for piece in ["kiosk_counter", "kiosk_display", "screen_stand"]:
 		var surfaces := 0

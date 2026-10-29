@@ -188,6 +188,12 @@ static func _build() -> void:
 	)
 	display.has_interaction = true
 	display.interaction_offset = Vector2i(0, 1)
+	# A screen stand (Boredom 4/5; decision boredom-screens-are-floor-standing-
+	# screen-stands-placed-like): one floor cell, turned like seats, covering a
+	# fan in front of it (ScreenCoverage). Nobody uses it at a spot, so it has
+	# no interaction cell. Drawn with the interior kit's screen_stand piece
+	# (Boredom 5/5).
+	_add(ScreenCoverage.SCREEN_ID, "Screen", Vector2i.ONE, Color(0.16, 0.2, 0.3), 1.88)
 
 
 ## Passengers step through a door along its axis only, so it is walk-through;
