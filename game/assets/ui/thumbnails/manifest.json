@@ -159,6 +159,42 @@
       "sources": {
         "toilet_sink.glb": "741c305abb3e739e9a285032e53907c67097d64bcf8f645e40f2182368b051c7"
       }
+    },
+    "counter": {
+      "png": "counter.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "cafe_counter.glb": "e3ec5f508bd4eba5c6987e21562def33f7d5c121ec6f2e72d1653baa89747e3b"
+      }
+    },
+    "table": {
+      "png": "table.png",
+      "class": "3x1",
+      "style": 3,
+      "sources": {
+        "cafe_table.glb": "1f471112d56e95be9e860b2115d28d7efd322fb80ebd66255b36f5d5e999c8e0"
+      }
+    },
+    "cafe_room": {
+      "png": "cafe_room.png",
+      "class": "3x3",
+      "style": 3,
+      "sources": {
+        "cafe_counter.glb": "e3ec5f508bd4eba5c6987e21562def33f7d5c121ec6f2e72d1653baa89747e3b",
+        "cafe_table.glb": "1f471112d56e95be9e860b2115d28d7efd322fb80ebd66255b36f5d5e999c8e0",
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
+      }
+    },
+    "toilet_room": {
+      "png": "toilet_room.png",
+      "class": "2x3",
+      "style": 3,
+      "sources": {
+        "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
+        "toilet_sink.glb": "741c305abb3e739e9a285032e53907c67097d64bcf8f645e40f2182368b051c7",
+        "toilet_stall.glb": "51386502977a3797a8ef95e3c738dd6268f07e8099a4324358752e35aaa1681d"
+      }
     }
   }
 }

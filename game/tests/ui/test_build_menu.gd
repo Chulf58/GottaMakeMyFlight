@@ -236,3 +236,14 @@ func test_key_9_picks_entrance() -> void:
 
 func test_key_0_picks_exit() -> void:
 	_assert_key_picks(KEY_0, BuildMode.Tool.EXIT, DOORS, "Key 0")
+
+
+func test_the_cafe_room_counter_and_table_cards_show_their_renders() -> void:
+	for tool in [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE]:
+		var name: String = BuildMenu.item(tool)[1]
+		var card := _menu.card(tool)
+		var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
+		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(name)).is_false()
+		assert_object(picture.texture).override_failure_message(name).is_not_null()
+		assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % name)
+		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
