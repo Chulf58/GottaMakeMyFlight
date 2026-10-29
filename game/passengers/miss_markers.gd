@@ -344,9 +344,16 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 
 ## True when a lane hint's sign point is more than one caption width outside the
 ## view. The caption is hidden then (not counted as a missing spot) and shows
-## again as the sign comes within that distance.
+## again as the sign comes within that distance. A point exactly one width out
+## is still near on every edge (Rect2.has_point excludes the right and bottom).
 static func _far_from_view(point: Vector2, text: String, view_size: Vector2) -> bool:
-	return not Rect2(Vector2.ZERO, view_size).grow(caption_size(text).x).has_point(point)
+	var reach := caption_size(text).x
+	return (
+		point.x < -reach
+		or point.y < -reach
+		or point.x > view_size.x + reach
+		or point.y > view_size.y + reach
+	)
 
 
 ## Moves the Label3D of caption `i` to a world point that projects inside the
