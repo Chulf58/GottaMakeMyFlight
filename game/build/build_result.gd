@@ -38,6 +38,9 @@ enum Reason {
 	NOT_A_BELT,
 	STAFF_SPOT,
 	LANE_WALL,
+	LANDSIDE_NOT_ON_SPOT,
+	LANDSIDE_SPOT_TAKEN,
+	LANDSIDE_OCCUPIED,
 }
 
 const REASON_TEXT := {
@@ -78,6 +81,9 @@ const REASON_TEXT := {
 		+ " free, with a way in"
 	),
 	Reason.LANE_WALL: "A wall is in the way of the lane. Remove the wall first",
+	Reason.LANDSIDE_NOT_ON_SPOT: "Put it on one of the marked landside spots",
+	Reason.LANDSIDE_SPOT_TAKEN: "Every spot of this kind nearby is already built",
+	Reason.LANDSIDE_OCCUPIED: "Cars are still in it. Close it and wait until it is empty",
 }
 
 var ok: bool = true

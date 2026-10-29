@@ -11,7 +11,9 @@ extends SceneTree
 ##
 ## Stages: six-axis orthographic plates of every asset beside a 1 m cube; then the real
 ## main.tscn with a random sim seed, the bay on the kerb in front of doors 5 and 6, a taxi
-## and an SUV on its berth markers, a van in the through lane, and the lot and the
+## and an SUV on its berth markers and a van in the through lane, all heading -x as
+## traffic keeps right on the terminal-side carriageway (decision
+## landside-traffic-drives-on-the-right-the-terminal-side-carri), and the lot and the
 ## multi-storey on the open ground past z -40 (an illustrative layout: the build spots
 ## belong to a later lane), seen close, from the default distance and from far away.
 ## Every plate proves its subjects are in frame (projected bounds inside the viewport)
@@ -461,9 +463,9 @@ func _plate_main() -> void:
 		_invalid("bay has no berth markers")
 		main.queue_free()
 		return
-	s["taxi"] = _spawn("vehicles/tp_taxi_01a", group, berth_1.global_position, 90.0)
-	s["suv"] = _spawn("vehicles/tp_suv_01b", group, berth_2.global_position, 90.0)
-	s["van"] = _spawn("vehicles/tp_van_01a", group, Vector3(2.0, ROAD_TOP, -53.5), 90.0)
+	s["taxi"] = _spawn("vehicles/tp_taxi_01a", group, berth_1.global_position, -90.0)
+	s["suv"] = _spawn("vehicles/tp_suv_01b", group, berth_2.global_position, -90.0)
+	s["van"] = _spawn("vehicles/tp_van_01a", group, Vector3(2.0, ROAD_TOP, -53.5), -90.0)
 	# Lot across the road from the bay, its barrier side (local -x) facing the road (slab z
 	# -40..-7.7); the multi-storey further west, where it does not hide the bay from the
 	# default heading (from (22, 0, -14) it filled the close view of the kerb), in the

@@ -83,11 +83,12 @@ surface_material_override/0 = SubResource("Material_ground")
 bounds_half_extent = 260.0
 home_position = Vector3(-0.5, 0, -79.8)
 
-[node name="BuildMode" type="Node3D" parent="." node_paths=PackedStringArray("finances", "shell_view")]
+[node name="BuildMode" type="Node3D" parent="." node_paths=PackedStringArray("finances", "shell_view", "landside")]
 script = ExtResource("3_build")
 shell = ExtResource("15_shell")
 shell_view = NodePath("../ShellView")
 finances = NodePath("../Finances")
+landside = NodePath("../LandsideSim")
 initial_tool = 0
 
 [node name="Airside" type="Node3D" parent="."]
@@ -218,7 +219,7 @@ script = ExtResource("28_staffchars")
 clock = NodePath("../SimClock")
 staff = NodePath("../Staff")
 
-[node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode", "save_game")]
+[node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode", "save_game", "landside_views")]
 script = ExtResource("12_hud")
 clock = NodePath("../SimClock")
 flights = NodePath("../FlightSim")
@@ -227,6 +228,7 @@ views = NodePath("../PassengerViews")
 camera = NodePath("../TycoonCamera")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
+landside_views = NodePath("../LandsideViews")
 
 [node name="BuildMenu" type="CanvasLayer" parent="." node_paths=PackedStringArray("build_mode", "rescue_grant", "day_ledger", "settlement", "save_game", "clock")]
 layer = 2
@@ -286,6 +288,8 @@ baggage = NodePath("../BaggageSim")
 day_ledger = NodePath("../DayLedger")
 landside = NodePath("../LandsideSim")
 
-[node name="LandsideViews" type="Node3D" parent="." node_paths=PackedStringArray("landside")]
+[node name="LandsideViews" type="Node3D" parent="." node_paths=PackedStringArray("landside", "clock", "save_game")]
 script = ExtResource("31_landsideview")
 landside = NodePath("../LandsideSim")
+clock = NodePath("../SimClock")
+save_game = NodePath("../SaveGame")

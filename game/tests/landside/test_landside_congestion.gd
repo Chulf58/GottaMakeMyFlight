@@ -33,9 +33,9 @@ func after_test() -> void:
 	_land = null
 
 
-func _bare_sim() -> LandsideSim:
+func _bare_sim(definition: LandsideDefinition = STARTER) -> LandsideSim:
 	var sim: LandsideSim = auto_free(LandsideSim.new())
-	assert_bool(sim.use_definition(STARTER)).is_true()
+	assert_bool(sim.use_definition(definition)).is_true()
 	sim.wallet = Wallet.new()
 	return sim
 
@@ -59,8 +59,10 @@ func _delays(released: Dictionary, entered: Dictionary, lead: int) -> Array[int]
 
 
 func test_a_jammed_curb_delays_release_by_measured_ticks_against_a_control() -> void:
-	var control := _bare_sim()
-	var jammed := _bare_sim()
+	# Three berths, as the curb was before it became two bays.
+	var three := LandsideTestWorld.with_berths(3)
+	var control := _bare_sim(three)
+	var jammed := _bare_sim(three)
 	var lead := control.lead_ticks(LandsideVehicle.Intent.DROP)
 	var entered_control := {}
 	var entered_jammed := {}
@@ -89,7 +91,7 @@ func test_a_jammed_curb_delays_release_by_measured_ticks_against_a_control() -> 
 	assert_array(control_delays).is_equal([0, 0, 0, 0, 0])
 	# Three berths: the fourth car waits for the first car's dwell to end, the
 	# fifth for the second's; each wait is the dwell less the gaps between.
-	var berths := STARTER.curb.berths.size()
+	var berths := three.curb.berths.size()
 	var wait := LandsideSim.DWELL_TICKS - berths * SPACING
 	assert_int(berths).is_equal(3)
 	assert_array(jammed_delays).is_equal([0, 0, 0, wait, wait])

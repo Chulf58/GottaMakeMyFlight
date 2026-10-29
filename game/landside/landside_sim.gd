@@ -1,3 +1,7 @@
+# gdlint:disable = max-public-methods
+# LandsideSim is the one owner of the road, the curb and the car parks; the
+# build tools' calls (build_*, remove_*, set_lot_closed and their counts) took
+# it past the 20-method cap.
 class_name LandsideSim
 extends Node
 ## Cars and taxis on the fixed road past the terminal (decision
@@ -45,6 +49,10 @@ const STAY_MIN_TICKS := GameCalendar.TICKS_PER_DAY
 const STAY_MAX_TICKS := 3 * GameCalendar.TICKS_PER_DAY
 ## Further ahead than any car can be.
 const FAR_MM := 1 << 40
+## How far before its first berth a curb's queue head stands: the starter
+## curb's stop (LandsideCurb.stop_mm) is this far before its first berth, and a
+## built curb bay's stop is as far before its own.
+const BERTH_APPROACH_MM := 4750
 
 @export var definition: LandsideDefinition
 ## In a scene the parking fees go to its wallet; tests set `wallet`.
@@ -55,12 +63,24 @@ var wallet: Wallet
 var tick := 0
 ## Per lot spot: whether a car park stands there. A new game has none.
 var lots_built: Array[bool] = []
+## Per lot spot: whether the car park takes no new arrivals, so it drains
+## (decision landside-technical-design-arrival-bookings-landsidesim-vehic,
+## point 7). Cars already on its lanes park and leave as usual.
+var lots_closed: Array[bool] = []
+## Per lot spot: the price it was built for, 0 when free or not built; what a
+## removal refunds a share of.
+var lots_paid: Array[int] = []
+## Per curb spot: whether a curb bay stands there, and its price as above.
+var curbs_built: Array[bool] = []
+var curbs_paid: Array[int] = []
 
 var _vehicles: Array[LandsideVehicle] = []
 var _by_id := {}
 var _next_id := 1
 ## Derived from the vehicles: the vehicle in each curb berth, or 0.
 var _berths: Array[int] = []
+## Derived: where along road_in each berth stands, in mm.
+var _berth_mm: Array[int] = []
 ## Derived: per lot spot, the vehicle holding each slot (driving to it or
 ## parked in it), or 0.
 var _slots: Array = []
@@ -95,9 +115,11 @@ func use_definition(with_definition: LandsideDefinition) -> bool:
 	for spot in definition.lots:
 		_access_mm.append(LandsideDefinition.length_mm(spot.access))
 		_exit_mm.append(LandsideDefinition.length_mm(spot.exit))
-	lots_built.clear()
-	lots_built.resize(definition.lots.size())
-	lots_built.fill(false)
+	lots_built.assign(_filled(definition.lots.size(), false))
+	lots_closed.assign(_filled(definition.lots.size(), false))
+	lots_paid.assign(_filled(definition.lots.size(), 0))
+	curbs_built.assign(_filled(definition.curb_spots.size(), false))
+	curbs_paid.assign(_filled(definition.curb_spots.size(), 0))
 	_vehicles.clear()
 	_by_id.clear()
 	_next_id = 1
@@ -105,14 +127,79 @@ func use_definition(with_definition: LandsideDefinition) -> bool:
 	return true
 
 
-## Puts a surface lot on spot `spot`. False (with an error) for an unknown
-## spot or one already built. The build tool (Landside 3/4) will call this.
-func build_lot(spot: int) -> bool:
+## Puts a car park on lot spot `spot`, bought for `paid`. False (with an
+## error) for an unknown spot or one already built.
+func build_lot(spot: int, paid := 0) -> bool:
 	if spot < 0 or spot >= lots_built.size() or lots_built[spot]:
 		push_error("LandsideSim.build_lot: spot %d is unknown or built" % spot)
 		return false
 	lots_built[spot] = true
+	lots_paid[spot] = paid
 	return true
+
+
+## Takes the car park off lot spot `spot`. Refused (false, nothing changed)
+## while any car is on its lanes or parked, or when none stands there.
+func remove_lot(spot: int) -> bool:
+	if spot < 0 or spot >= lots_built.size() or not lots_built[spot] or lot_cars(spot) > 0:
+		return false
+	lots_built[spot] = false
+	lots_closed[spot] = false
+	lots_paid[spot] = 0
+	return true
+
+
+## Closes the built car park `spot` to new arrivals, or opens it again. False
+## for an unknown or unbuilt spot.
+func set_lot_closed(spot: int, closed: bool) -> bool:
+	if spot < 0 or spot >= lots_built.size() or not lots_built[spot]:
+		return false
+	lots_closed[spot] = closed
+	return true
+
+
+## How many cars are on lot spot `spot`'s lanes or parked in it.
+func lot_cars(spot: int) -> int:
+	var count := 0
+	for v in _vehicles:
+		if v.lot == spot:
+			count += 1
+	return count
+
+
+## Whether lot spot `spot` takes new arrivals: built and not closed.
+func lot_open(spot: int) -> bool:
+	return lots_built[spot] and not lots_closed[spot]
+
+
+## Puts a curb bay on curb spot `spot`, bought for `paid`; its berths join the
+## curb. False (with an error) for an unknown spot or one already built.
+func build_curb(spot: int, paid := 0) -> bool:
+	if spot < 0 or spot >= curbs_built.size() or curbs_built[spot]:
+		push_error("LandsideSim.build_curb: spot %d is unknown or built" % spot)
+		return false
+	curbs_built[spot] = true
+	curbs_paid[spot] = paid
+	return true
+
+
+## Takes the curb bay off curb spot `spot`. Refused (false, nothing changed)
+## while a car stands in one of its berths, or when none stands there.
+func remove_curb(spot: int) -> bool:
+	if spot < 0 or spot >= curbs_built.size() or not curbs_built[spot] or curb_cars(spot) > 0:
+		return false
+	curbs_built[spot] = false
+	curbs_paid[spot] = 0
+	return true
+
+
+## How many cars stand in curb spot `spot`'s berths.
+func curb_cars(spot: int) -> int:
+	var count := 0
+	for i in definition.berth_count():
+		if definition.berth_spot(i) == spot and _berths[i] != 0:
+			count += 1
+	return count
 
 
 ## The free slots of lot spot `spot`: neither reserved nor parked in.
@@ -120,24 +207,38 @@ func free_slots(spot: int) -> int:
 	return (_slots[spot] as Array).count(0) if lots_built[spot] else 0
 
 
-## What a car of `intent` will do: PARK only while some car park stands.
+## What a car of `intent` will do: PARK only while some car park is open.
 func resolve_intent(intent: LandsideVehicle.Intent) -> LandsideVehicle.Intent:
-	if intent == LandsideVehicle.Intent.PARK and _first_built_lot() < 0:
+	if intent == LandsideVehicle.Intent.PARK and _lot_for(0) < 0:
 		return LandsideVehicle.Intent.DROP
 	return intent
 
 
 ## Ticks from entering road_in to letting the passengers out, on a free road:
-## to the curb's stop, or to the first built lot's turn and along its access
+## to the curb's stop, or to the turn of the lot a new car would take
+## (_lot_for(): the first open lot with a free slot) and along its access
 ## lane. A car handed over that long before its unload tick gets out on it.
 func lead_ticks(intent: LandsideVehicle.Intent) -> int:
-	var spot := _first_built_lot()
+	var spot := _lot_for(0)
 	if resolve_intent(intent) == LandsideVehicle.Intent.PARK:
 		return (
 			ceili(float(definition.lots[spot].branch_mm) / SPEED_MM)
 			+ ceili(float(_access_mm[spot]) / SPEED_MM)
 		)
-	return ceili(float(definition.curb.stop_mm) / SPEED_MM)
+	return ceili(float(curb_stop_mm()) / SPEED_MM)
+
+
+## Where the curb's queue head waits, in mm along road_in: the starter curb's
+## stop, or, once a curb bay stands upstream of it, just before that bay's first
+## berth. A car never reverses, so the stop is upstream of every berth a car
+## takes there.
+func curb_stop_mm() -> int:
+	var stop := definition.curb.stop_mm
+	for i in _berths.size():
+		var spot := definition.berth_spot(i)
+		if spot >= 0 and curbs_built[spot]:
+			stop = mini(stop, _berth_mm[i] - BERTH_APPROACH_MM)
+	return maxi(stop, 0)
 
 
 ## A new vehicle carrying `bookings` enters road_in behind the last car
@@ -206,7 +307,7 @@ func step(now: int, can_release: bool, rng: RandomNumberGenerator) -> Array[Dict
 func world_position(v: LandsideVehicle) -> Vector3:
 	match v.lane:
 		LandsideVehicle.Lane.BERTH:
-			return definition.curb.berths[v.stop]
+			return definition.berth_position(v.stop)
 		LandsideVehicle.Lane.SLOT:
 			return definition.lots[v.lot].slots[v.stop]
 	return LandsideDefinition.point_at(_lane_points(v.lane, v.lot), v.pos_mm)
@@ -237,6 +338,10 @@ func from_snapshot(data: Dictionary, bookings: ArrivalBookings) -> bool:
 		return false
 	tick = loaded["tick"]
 	lots_built = loaded["lots_built"]
+	lots_closed = loaded["lots_closed"]
+	lots_paid = loaded["lots_paid"]
+	curbs_built = loaded["curbs_built"]
+	curbs_paid = loaded["curbs_paid"]
 	_vehicles = loaded["vehicles"]
 	_next_id = loaded["next_vehicle_id"]
 	_by_id.clear()
@@ -282,7 +387,7 @@ func _step_dwelling(can_release: bool, released: Array[Dictionary]) -> void:
 			continue
 		if not v.bookings.is_empty():
 			if can_release:
-				_release(v, [definition.curb.get_out[v.stop]], released)
+				_release(v, [definition.berth_get_out(v.stop)], released)
 				v.stage_tick = tick
 			continue
 		if tick - v.stage_tick >= DWELL_TICKS and _lane_clear(LandsideVehicle.Lane.ROAD_OUT, -1):
@@ -322,7 +427,7 @@ func _step_road_in(can_release: bool, released: Array[Dictionary]) -> void:
 		if v.bookings.is_empty():
 			v.intent = LandsideVehicle.Intent.DROP
 		var spot := _lot_ahead(v)
-		var stop := definition.curb.stop_mm
+		var stop := curb_stop_mm()
 		if spot >= 0:
 			stop = definition.lots[spot].branch_mm
 		var held := _drive(v, leader, stop)
@@ -336,7 +441,7 @@ func _step_road_in(can_release: bool, released: Array[Dictionary]) -> void:
 			else:
 				_set_moving(v, false)
 			continue
-		var berth := _berths.find(0)
+		var berth := _free_berth(v.pos_mm)
 		if berth < 0:
 			_set_moving(v, true)
 			continue
@@ -350,7 +455,7 @@ func _step_road_in(can_release: bool, released: Array[Dictionary]) -> void:
 			# Nobody to let out: it pulls through at once.
 			v.stage_tick = tick - DWELL_TICKS
 		elif can_release:
-			_release(v, [definition.curb.get_out[berth]], released)
+			_release(v, [definition.berth_get_out(berth)], released)
 
 
 ## At its lot's turn: reserve the lowest free slot and turn onto the access
@@ -437,20 +542,67 @@ func _remove(v: LandsideVehicle) -> void:
 	_by_id.erase(v.id)
 
 
-## A car that means to park: the first built lot whose turn it has not
-## passed, or -1 (it drops off at the curb then).
+## A car that means to park: the lot it will take from `pos_mm`, or -1 (it
+## drops off at the curb then).
 func _lot_ahead(v: LandsideVehicle) -> int:
 	if v.intent != LandsideVehicle.Intent.PARK:
 		return -1
-	for spot in definition.lots.size():
-		if lots_built[spot] and definition.lots[spot].branch_mm >= v.pos_mm:
+	var spot := _lot_for(v.pos_mm)
+	if spot < 0:
+		v.intent = LandsideVehicle.Intent.DROP
+	return spot
+
+
+## The lot a car at `pos_mm` on road_in takes: the open lot it reaches first
+## whose turn it has not passed and which has a free slot, or the first it
+## reaches when every one is full (it finds that out at the turn and drops at
+## the curb), or -1. lead_ticks() and resolve_intent() ask this for a new car
+## (position 0), so what they promise is what the car then does.
+func _lot_for(pos_mm: int) -> int:
+	var first := -1
+	for spot in _lots_by_turn():
+		if definition.lots[spot].branch_mm < pos_mm:
+			continue
+		if free_slots(spot) > 0:
 			return spot
-	v.intent = LandsideVehicle.Intent.DROP
-	return -1
+		if first < 0:
+			first = spot
+	return first
 
 
-func _first_built_lot() -> int:
-	return lots_built.find(true)
+## The open lots in the order a car on road_in reaches their turns.
+func _lots_by_turn() -> Array[int]:
+	var spots: Array[int] = []
+	for spot in lots_built.size():
+		if lot_open(spot):
+			spots.append(spot)
+	spots.sort_custom(
+		func(a: int, b: int) -> bool:
+			var by_turn := definition.lots[a].branch_mm - definition.lots[b].branch_mm
+			return a < b if by_turn == 0 else by_turn < 0
+	)
+	return spots
+
+
+## The free berth, of the starter curb and the built curb bays, that a car at
+## `pos_mm` reaches first driving on, or -1. A berth behind the car is never
+## taken: it would reverse.
+func _free_berth(pos_mm: int) -> int:
+	var best := -1
+	for i in _berths.size():
+		var spot := definition.berth_spot(i)
+		if _berths[i] != 0 or (spot >= 0 and not curbs_built[spot]) or _berth_mm[i] < pos_mm:
+			continue
+		if best < 0 or _berth_mm[i] < _berth_mm[best]:
+			best = i
+	return best
+
+
+static func _filled(count: int, value: Variant) -> Array:
+	var out := []
+	out.resize(count)
+	out.fill(value)
+	return out
 
 
 ## The vehicles on a lane (and lot spot), front first, ties by id.
@@ -490,8 +642,11 @@ func _lane_points(lane: LandsideVehicle.Lane, spot: int) -> PackedVector3Array:
 
 ## Berth and slot holders from the vehicle records, after a load or a reset.
 func _rederive() -> void:
-	_berths.resize(definition.curb.berths.size())
+	_berths.resize(definition.berth_count())
 	_berths.fill(0)
+	_berth_mm.clear()
+	for i in _berths.size():
+		_berth_mm.append(definition.berth_mm(i))
 	_slots.clear()
 	for spot in definition.lots:
 		var holders: Array[int] = []

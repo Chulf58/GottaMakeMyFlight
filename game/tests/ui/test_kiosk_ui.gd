@@ -61,7 +61,8 @@ func test_the_kiosk_tray_follows_toilets_and_holds_the_room_counter_and_display(
 	var kiosk := _category_named("Kiosk")
 	assert_int(kiosk).is_equal(toilets + 1)
 	assert_array(all[kiosk]["tools"]).is_equal(KIOSK_TOOLS)
-	assert_str(_menu.category_button(kiosk + 1).text).is_equal("Baggage")
+	assert_str(_menu.category_button(kiosk + 1).text).is_equal("Landside")
+	assert_str(_menu.category_button(kiosk + 2).text).is_equal("Baggage")
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 	_menu.category_button(kiosk).pressed.emit()
 	for tool in KIOSK_TOOLS:
