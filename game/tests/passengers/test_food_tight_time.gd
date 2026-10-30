@@ -1,8 +1,12 @@
 class_name TestFoodTightTime
 extends GdUnitTestSuite
-## A seated guest in a bar or a restaurant who runs short of time leaves early,
-## pays the short share and still makes the flight (decision food-and-drink-
-## cafe-bar-sit-down-restaurant-and-grab-and-go-st, point 2). The time runs
+## A seated guest in a bar or a restaurant who runs short of time leaves early
+## and pays the short share (decision food-and-drink-cafe-bar-sit-down-
+## restaurant-and-grab-and-go-st, point 2). The restaurant guest still makes
+## the flight. The bar guest, already late at a walk, catches the burst's
+## boarding line and is held at its pace, so it misses behind the line, for
+## the crowding reason, and not in the bar (decision a-late-passenger-held-up-
+## by-people-traffic-at-boarding-misse). The time runs
 ## short for real: the guest is admitted while security is empty, then a burst
 ## of passengers fills the scanner queues behind it, so the leave deadline
 ## passes while it is seated. Nothing sets a deadline by hand.
@@ -83,7 +87,9 @@ func _run(venue: StringName) -> Dictionary:
 	}
 
 
-func _check_leaves_early(venue: StringName) -> void:
+## With `held_up`, the guest misses the flight in the boarding line instead of
+## making it.
+func _check_leaves_early(venue: StringName, held_up := false) -> void:
 	var seen := _run(venue)
 	var world: PassengerTestWorld = seen["world"]
 	var guest: Passenger = seen["guest"]
@@ -115,14 +121,44 @@ func _check_leaves_early(venue: StringName) -> void:
 	assert_int(world.sim.wallet.balance).is_equal(visit.amount)
 	# An early leaver does not collect the mood lift of a full visit.
 	assert_int(guest.mood).is_equal(seen["mood"])
-	# And it still makes the flight.
 	world.run_to(world.flights.doors_close_tick(guest.flight_id) + 1)
-	assert_int(guest.stage).is_equal(Passenger.Stage.MADE)
+	if not held_up:
+		# And it still makes the flight.
+		assert_int(guest.stage).is_equal(Passenger.Stage.MADE)
+		return
+	# Held up by people traffic: it missed out at the boarding line, not in
+	# the bar, and the flight's result blames the crowds.
+	var reasons: Array = FlightResult.summarize(world.sim, guest.flight_id)["reasons"]
+	print(
+		(
+			"%s guest missed at %s, %s; reasons %s"
+			% [
+				venue,
+				Passenger.Stage.keys()[guest.missed_stage],
+				Passenger.Stuck.keys()[guest.missed_stuck],
+				reasons
+			]
+		)
+	)
+	assert_int(guest.stage).is_equal(Passenger.Stage.MISSED)
+	assert_bool(guest.missed_stage in [Passenger.Stage.TO_EXIT, Passenger.Stage.APRON]).is_true()
+	assert_int(guest.missed_stuck).is_equal(Passenger.Stuck.CROWDED)
+	(
+		assert_bool(
+			reasons.any(func(r: Dictionary) -> bool: return r["text"] == FlightResult.CROWDED_TEXT)
+		)
+		. is_true()
+	)
 
 
 func test_a_restaurant_guest_short_of_time_leaves_early_pays_less_and_makes_the_flight() -> void:
 	_check_leaves_early(&"restaurant")
 
 
-func test_a_bar_guest_short_of_time_leaves_early_pays_less_and_makes_the_flight() -> void:
-	_check_leaves_early(&"bar")
+## Changed for decision a-late-passenger-held-up-by-people-traffic-at-boarding-
+## misse: this guest made the flight only by running through the burst's
+## walkers on the apron. Runners now keep a boarding line's pace, so it misses
+## there, and the miss is the terminal's crowding, not the bar's.
+func test_a_bar_guest_short_of_time_leaves_early_pays_less_and_misses_in_the_boarding_line(
+) -> void:
+	_check_leaves_early(&"bar", true)

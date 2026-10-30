@@ -3,7 +3,8 @@ extends Node
 ## The passengers as plain data, driven by SimClock ticks after FlightSim.
 ## Each tick: due spawns, then stations and lanes are reconciled with the
 ## layout, passengers of a flight whose doors have closed are marked missed,
-## stations finish and start service, and every passenger takes one step of
+## stations finish and start service, walkers waiting to join a boarding file
+## join where they fit (BoardingFiles), and every passenger takes one step of
 ## its journey: check-in, security, a gate seat (or standing room), the exit
 ## door and the apron walk to the plane. Passengers and stations are handled
 ## in id order and every quantity is an integer, so a snapshot loaded at a
@@ -66,7 +67,11 @@ signal checked_in(id: int, desk: int)
 ## 14: each standing passenger's claimed standing spot, under "standing"
 ## (StandingSpots.to_list()). Version 13 is refused, with no migration; a
 ## migrated older save has no claims.
-const SAVE_VERSION := 14
+## 15: the boarding files, under "boarding" (BoardingFiles.to_dict()), and a
+## standing spot kept by a passenger setting off from it for the exit. Version
+## 14 is refused, with no migration; a migrated older save has no files, so one
+## taken while anyone walked out to the plane is refused.
+const SAVE_VERSION := 15
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -143,6 +148,9 @@ var arrivals := ArrivalBookings.new()
 ## Standing spots near the gate and the passengers' claims on them, for when
 ## every gate seat is taken (StandingSpots).
 var standing := StandingSpots.new()
+## The ordered files walkers keep to on the way out to the plane, so they do
+## not walk through each other (BoardingFiles).
+var files := BoardingFiles.new()
 ## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
 var wallet: Wallet
 var grid: BuildGrid
@@ -297,6 +305,7 @@ func on_tick(new_tick: int) -> void:
 	for station in stations:
 		_step_station(station)
 	cafes.step_counters()
+	_admit_pending()
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
@@ -473,7 +482,20 @@ func world_position(p: Passenger) -> Vector3:
 		# Arrived at the spot's cell, it steps over onto the spot.
 		var point := standing.world_of(grid, standing.spot_of(p.id))
 		here = here.lerp(point, clampf((tick - p.stage_tick) / float(SHUFFLE_TICKS), 0.0, 1.0))
+	elif p.stage == Passenger.Stage.TO_EXIT and standing.spot_of(p.id) != StandingSpots.NO_SPOT:
+		here = _off_spot(p)
 	return here
+
+
+## A walker setting off for the exit from its standing spot: on the spot until
+## it moves, then walking from the spot to its path's next cell.
+func _off_spot(p: Passenger) -> Vector3:
+	var spot := standing.world_of(grid, standing.spot_of(p.id))
+	if not p.is_moving():
+		return spot
+	var next := p.path[p.path_index + 1]
+	var t := p.seg_mm / float(Passenger.segment_mm(p.at, next))
+	return spot.lerp(grid.origin + Vector3(next.x + 0.5, 0.0, next.y + 0.5), t)
 
 
 ## What the passenger's thought bubble says, or "" for nothing.
@@ -522,6 +544,7 @@ func to_snapshot() -> Dictionary:
 	)
 	data["info_desk"] = info_desks.to_list()
 	data["standing"] = standing.to_list()
+	data["boarding"] = files.to_dict()
 	return data
 
 
@@ -559,8 +582,16 @@ func from_snapshot(data: Dictionary) -> bool:
 	if claims.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % claims["error"])
 		return false
+	# The boarding files load as saved; a migrated older save has none.
+	var boarding := BoardingFiles.checked(data.get("boarding", BoardingFiles.EMPTY), by_id, self)
+	if not data.has("boarding") and current:
+		boarding = {"error": "missing key 'boarding'"}
+	if boarding.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % boarding["error"])
+		return false
 	spots.restore(claims["claims"])
 	standing = spots
+	files = boarding["files"]
 	tick = loaded["tick"]
 	_next_id = loaded["next_id"]
 	last_batch_seed = loaded["last_batch_seed"]
@@ -687,6 +718,10 @@ func _finish(p: Passenger, made: bool) -> void:
 	if not made:
 		p.missed_stage = p.stage
 		p.missed_stuck = p.stuck
+		# Held up by people traffic at boarding, the miss is the terminal's
+		# (decision a-late-passenger-held-up-by-people-traffic-at-boarding-misse).
+		if p.stuck == Passenger.Stuck.NONE and files.was_delayed(p.id):
+			p.missed_stuck = Passenger.Stuck.CROWDED
 	_leave_station(p)
 	_release_seat(p)
 	cafes.cleanup(p)
@@ -746,6 +781,8 @@ func _settled_leftovers(p: Passenger) -> String:
 		held.append("a security place")
 	if standing.spot_of(p.id) != StandingSpots.NO_SPOT:
 		held.append("a standing spot")
+	if files.holds(p.id) or files.was_delayed(p.id):
+		held.append("a boarding file place")
 	for q in _queues.values():
 		if (q["lane"] as Array).has(p.id) or (q["holding"] as Array).has(p.id):
 			held.append("a queue place")
@@ -874,14 +911,23 @@ func _advance(p: Passenger) -> void:
 
 func _move(p: Passenger) -> void:
 	var speed := RUN_MM if p.late else WALK_MM
+	if files.holds(p.id):
+		speed = files.step_of(self, p, speed)
 	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
 		var total := p.apron_total_mm()
 		p.odometer_mm += mini(speed, total - p.apron_mm)
 		p.apron_mm = mini(p.apron_mm + speed, total)
 		if p.stage == Passenger.Stage.APRON and p.apron_mm >= total:
 			_finish(p, true)
+		elif p.stage == Passenger.Stage.APRON:
+			files.moved(p)
 	elif p.is_moving():
 		p.walk(speed)
+	# A spot kept on setting off is given up once the walker is off its cell.
+	var spot := standing.spot_of(p.id)
+	if p.stage == Passenger.Stage.TO_EXIT and spot != StandingSpots.NO_SPOT:
+		if p.path_index > 0 or p.at != standing.cell_of(spot):
+			standing.release(p.id)
 
 
 ## Mood and the lateness forecast, once a simulated second per passenger.
@@ -1110,19 +1156,49 @@ func _release_seat(p: Passenger) -> void:
 
 func _to_exit(p: Passenger) -> void:
 	if p.exit_object != 0 and not layout.open_exits(grid).has(p.exit_object):
-		p.exit_object = 0
+		_drop_exit(p)
 	if p.exit_object == 0:
 		if p.stuck == Passenger.Stuck.NONE or _retry_now(p):
 			_choose_exit(p)
 		return
-	if p.is_moving():
+	# A pending walker waits for _admit_pending(), at the start of a tick.
+	if p.is_moving() or files.is_pending(p.id):
 		return
 	if p.at == layout.door_cell(grid, p.exit_object):
-		p.apron = _apron_points(p.exit_object)
-		p.apron_mm = 0
-		_set_stage(p, Passenger.Stage.APRON)
+		_step_out(p)
 	else:
-		p.exit_object = 0
+		_drop_exit(p)
+
+
+## At its door, `p` steps out onto the apron if its apron file has room, or
+## waits at the door (BoardingFiles.join_plane()).
+func _step_out(p: Passenger) -> void:
+	if not files.join_plane(self, p):
+		return
+	p.apron = (files.apron_of(self, p.exit_object)["points"] as Array).duplicate()
+	p.apron_mm = 0
+	_set_stage(p, Passenger.Stage.APRON)
+
+
+## The exit choice is given up, and with it the place in the boarding files.
+func _drop_exit(p: Passenger) -> void:
+	p.exit_object = 0
+	files.leave(p.id)
+
+
+## The pending walkers join their next file where they now fit, in
+## BoardingFiles.pending_order(): before anyone steps, so each walks this tick.
+func _admit_pending() -> void:
+	var open := layout.open_exits(grid)
+	for p in files.pending_order(self):
+		# Its exit closed or went while it waited: it gives up its place and
+		# chooses an exit again on its step (_to_exit()).
+		if not open.has(p.exit_object):
+			_drop_exit(p)
+		elif files.door_of(p.id) != 0:
+			_step_out(p)
+		else:
+			files.join_door(self, p)
 
 
 func _choose_exit(p: Passenger) -> void:
@@ -1142,6 +1218,7 @@ func _choose_exit(p: Passenger) -> void:
 	p.exit_object = door
 	p.stuck = Passenger.Stuck.NONE
 	p.set_path(path)
+	files.join_door(self, p)
 
 
 ## The walk from an exit door's cell to the plane door (ShellRoutes.departure()).
@@ -1177,9 +1254,21 @@ func _replan(p: Passenger) -> void:
 		path.push_front(next)
 	if path.size() < 2:
 		p.clear_path()
+		# No way on to its door: the walker chooses an exit again.
+		if p.stage == Passenger.Stage.TO_EXIT and p.exit_object != 0:
+			_drop_exit(p)
 		return
 	p.set_path(path)
 	p.seg_mm = keep
+	if p.stage != Passenger.Stage.TO_EXIT or p.exit_object == 0:
+		return
+	# No way on to its door: it chooses an exit again (_to_exit()).
+	if p.path_end() != layout.door_cell(grid, p.exit_object):
+		_drop_exit(p)
+	# A new way to the door changes the walk left: the walker takes its place
+	# in the door file again, or waits.
+	elif files.holds(p.id):
+		files.reroute(self, p)
 
 
 func _on_graph_changed(cells: Array[Vector2i]) -> void:
@@ -1195,6 +1284,7 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 				break
 	var before := layout.security_lanes
 	layout.rebuild(grid)
+	files.clear_derived()
 	# Rebuilt on the next tick (_reconcile), once however many edits came.
 	standing.stale = true
 	# A lane that broke or changed (SecurityLanes.broken()) ends its service at
@@ -1207,6 +1297,7 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 ## Any accepted edit: the standing spots are derived again on the next tick.
 func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
 	standing.stale = true
+	files.clear_derived()
 
 
 ## Brings queues and seat claims in line with the layout after an edit: a
@@ -1253,6 +1344,9 @@ func _reconcile() -> void:
 		# again this tick.
 		for id in standing.drop_invalid():
 			var p: Passenger = _by_id[id]
+			# One setting off for the exit just walks on from its cell.
+			if p.stage == Passenger.Stage.TO_EXIT:
+				continue
 			p.clear_path()
 			_set_stage(p, Passenger.Stage.TO_GATE)
 	cafes.reconcile()
@@ -1323,10 +1417,21 @@ func _retry_now(p: Passenger) -> bool:
 
 
 func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
-	# A standing spot is held only on the way to the gate and standing there:
-	# departure, a visit or the doors closing gives it up.
-	if stage != Passenger.Stage.TO_GATE and stage != Passenger.Stage.STANDING:
+	# A standing spot is held only on the way to the gate and standing there,
+	# and kept on setting off from it for the exit until the walker is off its
+	# cell (_move()), so it does not jump to the cell's centre; a visit or the
+	# doors closing gives it up.
+	var setting_off := stage == Passenger.Stage.TO_EXIT and p.stage == Passenger.Stage.STANDING
+	if stage != Passenger.Stage.TO_GATE and stage != Passenger.Stage.STANDING and not setting_off:
 		standing.release(p.id)
+	# The boarding files hold walkers heading out and on the apron only; one
+	# that turns to the exit chooses its door afresh.
+	if stage != Passenger.Stage.TO_EXIT and stage != Passenger.Stage.APRON:
+		files.leave(p.id)
+		files.forget(p.id)
+	elif stage == Passenger.Stage.TO_EXIT and p.stage != Passenger.Stage.TO_EXIT:
+		p.exit_object = 0
+		files.leave(p.id)
 	p.stage = stage
 	p.stage_tick = tick
 	stage_changed.emit(p.id, stage)
@@ -1346,6 +1451,7 @@ func _rederive() -> void:
 			for seat in layout.seats:
 				if seat["object_id"] == p.seat_object and seat["cell"] == p.seat_cell:
 					_seat_claims[seat["key"]] = p.id
+	files.clear_derived()
 	cafes.rederive()
 	toilets.rederive()
 	shops.rederive()

@@ -85,9 +85,9 @@ func test_an_old_save_with_standing_passengers_saves_as_v14_and_loads_again() ->
 		print("passenger %d loads as %s" % [id, Passenger.Stage.keys()[p.stage]])
 		assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
 		assert_bool(p.is_moving()).is_false()
-	# Saved straight away, before any tick, the v14 save loads.
+	# Saved straight away, before any tick, the current-version save loads.
 	var again := _json(_b.sim.to_snapshot())
-	assert_int(int(again["save_version"])).is_equal(14)
+	assert_int(int(again["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	_c = _fresh()
 	assert_bool(_c.sim.from_snapshot(again)).is_true()
 	# On the next tick each plans again: a spot (or a seat).

@@ -162,7 +162,7 @@ func test_the_cooldown_survives_a_save() -> void:
 func test_the_passenger_save_carries_the_visit_under_info_desk() -> void:
 	var p := _stuck_guest(func(g: Passenger) -> bool: return _a.sim.info_desks.holds(g))
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
-	assert_int(int(data["save_version"])).is_equal(14)
+	assert_int(int(data["save_version"])).is_equal(15)
 	assert_int(int(data["info_desk"]["visits"][0][0])).is_equal(p.id)
 	assert_int(int(data["info_desk"]["visits"][0][1])).is_equal(_a.sim.info_desks.desk_of(p))
 

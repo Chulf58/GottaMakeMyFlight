@@ -26,6 +26,8 @@ extends RefCounted
 ## kept above JourneyForecast.RUN_ON_SLACK so a passenger who leaves on the
 ## deadline still walks.
 const MARGIN_TICKS := 100
+## How many times leave_ticks() takes the boarding file wait again.
+const FILE_TRIES := 4
 
 
 ## The tick `p` would reach the plane door, at a walk, after a visit that
@@ -45,14 +47,28 @@ static func arrival(
 
 
 ## Ticks from starting to set off at `cell` (the `delay` included) to the
-## plane door, with no boarding wait.
+## plane door, with no boarding wait but with the wait in the boarding files
+## behind the walkers known now (BoardingFiles.queued()) when setting off as
+## late as the margin allows. Setting off earlier can put more walkers ahead,
+## so that latest start is moved back by the wait and the wait taken again,
+## up to FILE_TRIES times.
 static func leave_ticks(
 	sim: PassengerSim, p: Passenger, cell: Vector2i, delay: int, resume: Passenger.Stage
 ) -> int:
 	var after := _leaving(p, cell, resume)
 	after.boarding_tick = 0
-	var ticks := JourneyForecast.arrival_from(sim, after, 0, true)
-	return mini(ticks + delay, JourneyForecast.NEVER)
+	var ticks := JourneyForecast.arrival_from(sim, after, 0, true, false)
+	if ticks >= JourneyForecast.NEVER:
+		return JourneyForecast.NEVER
+	var latest := sim.flights.doors_close_tick(p.flight_id) - MARGIN_TICKS - ticks
+	var wait := 0
+	for i in FILE_TRIES:
+		var leave := latest - wait
+		var queued := JourneyForecast.arrival_from(sim, after, leave, true) - leave - ticks
+		if queued <= wait:
+			break
+		wait = queued
+	return mini(ticks + wait + delay, JourneyForecast.NEVER)
 
 
 ## The last tick `p` can start to set off at `cell` and arrive MARGIN_TICKS

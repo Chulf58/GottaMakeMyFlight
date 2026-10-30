@@ -232,9 +232,10 @@ func to_list() -> Array:
 ## Saved claims checked against the spots (rebuild() first) and the loaded
 ## passengers by id: {"claims": {passenger: spot}}, or {"error": text}. A
 ## claim must name a known passenger at most once, a spot that exists at most
-## once, and a cleared passenger with no seat on its way to the gate or
-## standing on that spot's cell. With `every_standing` (a version 14 save),
-## every STANDING passenger must hold one; a migrated older save has none.
+## once, and a cleared passenger with no seat on its way to the gate, or
+## standing on that spot's cell, or setting off from it for the exit and not
+## yet off the cell. With `every_standing` (a version 14 or later save), every
+## STANDING passenger must hold one; a migrated older save has none.
 func checked(list: Variant, by_id: Dictionary, every_standing: bool) -> Dictionary:
 	if typeof(list) != TYPE_ARRAY:
 		return {"error": "standing must be a list"}
@@ -255,7 +256,11 @@ func checked(list: Variant, by_id: Dictionary, every_standing: bool) -> Dictiona
 			return {"error": "standing claim %d -> %d is unknown or repeated" % [id, spot]}
 		var on_way := p.stage == Passenger.Stage.TO_GATE
 		var standing := p.stage == Passenger.Stage.STANDING and p.at == cell_of(spot)
-		if not p.cleared or p.seat_object != 0 or not (on_way or standing):
+		# Setting off for the exit, it keeps the spot until it is off the cell.
+		var leaving := (
+			p.stage == Passenger.Stage.TO_EXIT and p.at == cell_of(spot) and p.path_index == 0
+		)
+		if not p.cleared or p.seat_object != 0 or not (on_way or standing or leaving):
 			return {"error": "passenger %d cannot hold standing spot %d" % [id, spot]}
 		claims[id] = spot
 		taken[spot] = true

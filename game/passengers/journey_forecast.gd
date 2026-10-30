@@ -6,7 +6,8 @@ extends RefCounted
 ## terminal shell), security up to its exit (SecurityForecast, which walks the
 ## passage itself, so it is not added again here), waiting at the gate until
 ## boarding opens, standing up, the walk to the nearest open exit and the
-## apron walk to the plane door. Legs not yet planned use octile distance,
+## apron walk to the plane door, with the wait behind the walkers known now
+## in the boarding files (BoardingFiles.queued()). Legs not yet planned use octile distance,
 ## which a wall can make far shorter than the real walk; a routed forecast
 ## (VisitForecast's) walks them along the grid's path instead, and a scanner
 ## or exit it cannot reach does not count. Everything is at walking pace, so
@@ -42,10 +43,14 @@ static func arrival_tick(sim: PassengerSim, p: Passenger) -> int:
 ## arrival_tick() for a passenger whose state holds from tick `now` on (a
 ## facility visit forecasts the journey after the visit this way). Queues and
 ## stations are read as they are on the sim's current tick. With `routed`, the
-## walks not yet planned follow the grid's paths.
+## walks not yet planned follow the grid's paths. With `in_files`, the wait in
+## the boarding files behind the walkers known now is counted
+## (BoardingFiles.queued()); without, the walk is the passenger's own.
 ## A passenger on a facility visit is its facility's to forecast (VisitForecast
 ## with the visit's own legs): asked here, it is an error and NEVER.
-static func arrival_from(sim: PassengerSim, p: Passenger, now: int, routed := false) -> int:
+static func arrival_from(
+	sim: PassengerSim, p: Passenger, now: int, routed := false, in_files := true
+) -> int:
 	if p.is_done():
 		return p.outcome_tick
 	if StageKinds.leg(p.stage) == StageKinds.Leg.VISIT:
@@ -56,13 +61,40 @@ static func arrival_from(sim: PassengerSim, p: Passenger, now: int, routed := fa
 			)
 		)
 		return NEVER
+	var own := own_times(sim, p, now, routed)
+	if own.is_empty():
+		return NEVER
+	if not in_files:
+		return own["plane_tick"]
+	return mini(sim.files.queued(sim, p, own), NEVER)
+
+
+## The passenger's own way out with no wait in the boarding files: {"door":
+## the exit door, "door_tick": the tick it reaches the door's cell (-1 once on
+## the apron), "plane_tick": the tick it reaches the plane door, "plane": the
+## plane's key (BoardingFiles.plane_key(), null with no walk outside), "trail":
+## the distance out on the apron}; empty when it has no way to the plane.
+static func own_times(sim: PassengerSim, p: Passenger, now: int, routed: bool) -> Dictionary:
 	if p.stage == Passenger.Stage.APRON:
-		return now + walk_ticks(p.apron_total_mm() - p.apron_mm)
+		var plane: Variant = null if p.apron.is_empty() else BoardingFiles.plane_key(p.apron.back())
+		return {
+			"door": p.exit_object,
+			"door_tick": -1,
+			"plane_tick": now + walk_ticks(p.apron_total_mm() - p.apron_mm),
+			"plane": plane,
+			"trail": p.apron_mm,
+		}
 	if p.stage == Passenger.Stage.TO_EXIT and p.exit_object != 0:
-		return now + walk_ticks(p.remaining_mm() + sim.apron_length_mm(p.exit_object))
+		var apron := sim.files.apron_of(sim, p.exit_object)
+		return _times(
+			p.exit_object,
+			now + walk_ticks(p.remaining_mm()),
+			now + walk_ticks(p.remaining_mm() + apron["mm"]),
+			apron["plane"]
+		)
 	var leg := _to_gate(sim, p, routed)
 	if leg.x >= NEVER:
-		return NEVER
+		return {}
 	var leave := maxi(now + leg.x, p.boarding_tick)
 	if p.stage == Passenger.Stage.TO_EXIT:
 		leave = now
@@ -71,8 +103,20 @@ static func arrival_from(sim: PassengerSim, p: Passenger, now: int, routed := fa
 			leave += PassengerSim.STAND_UP_TICKS
 		Passenger.Stage.STANDING_UP:
 			leave += maxi(0, PassengerSim.STAND_UP_TICKS - (now - p.stage_tick))
-	var gate := Vector2i(leg.y, leg.z)
-	return mini(leave + walk_ticks(_exit_mm(sim, gate, routed)), NEVER)
+	var exit := _exit_of(sim, Vector2i(leg.y, leg.z), routed)
+	if exit.x == 0:
+		return {}
+	var plane_tick := leave + walk_ticks(exit.y + exit.z)
+	if plane_tick >= NEVER:
+		return {}
+	var plane: Variant = sim.files.apron_of(sim, exit.x)["plane"]
+	return _times(exit.x, leave + walk_ticks(exit.y), plane_tick, plane)
+
+
+static func _times(door: int, door_tick: int, plane_tick: int, plane: Variant) -> Dictionary:
+	return {
+		"door": door, "door_tick": door_tick, "plane_tick": plane_tick, "plane": plane, "trail": 0
+	}
 
 
 ## Ticks until the passenger stands at the gate (x), and the gate cell (y, z).
@@ -144,18 +188,23 @@ static func nearest_exit(sim: PassengerSim, from: Vector2i) -> Vector2i:
 	return best
 
 
-## The walk out plus the apron walk to the plane, NEVER_MM when there is no
-## way. Unrouted: octile distance to each open exit plus its apron, the least
-## of them. Routed: the exit nearest_exit() picks, as the passenger will, and
-## that exit's apron.
-static func _exit_mm(sim: PassengerSim, from: Vector2i, routed: bool) -> int:
+## The exit a passenger at `from` walks out of: its id (x, 0 when there is no
+## way), the walk to its cell (y) and its apron walk to the plane (z).
+## Unrouted: octile distance to each open exit, the least walk plus apron, ties
+## to the earlier door in TerminalLayout.open_exits(). Routed: the exit
+## nearest_exit() picks, as the passenger will, and that exit's apron.
+static func _exit_of(sim: PassengerSim, from: Vector2i, routed: bool) -> Vector3i:
 	if routed:
 		var door := nearest_exit(sim, from)
-		return NEVER_MM if door.x == 0 else door.y + sim.apron_length_mm(door.x)
-	var best := NEVER_MM
+		if door.x == 0:
+			return Vector3i.ZERO
+		return Vector3i(door.x, door.y, sim.files.apron_of(sim, door.x)["mm"])
+	var best := Vector3i.ZERO
 	for door in sim.layout.open_exits(sim.grid):
 		var mm := Passenger.octile_mm(from, sim.layout.door_cell(sim.grid, door))
-		best = mini(best, mm + sim.apron_length_mm(door))
+		var apron: int = sim.files.apron_of(sim, door)["mm"]
+		if best.x == 0 or mm + apron < best.y + best.z:
+			best = Vector3i(door, mm, apron)
 	return best
 
 
