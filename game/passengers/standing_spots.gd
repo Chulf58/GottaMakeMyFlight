@@ -12,11 +12,12 @@ extends RefCounted
 ## walk keeps airside itself. The grid stores no divider, so it labels the
 ## doorless components (cells joined by routable steps that cross no door
 ## wall). A component holding an entrance door is landside; one holding a gate
-## seat's access cell, a gate exit or a scanner's exit cell, and no entrance,
-## is trusted airside. The walk crosses a door wall only between two trusted
-## components, so a door inside the airside is no boundary and the divider's
-## door is, whatever scanners the terminal has. A component with no anchor is
-## never trusted, so an internal airside room with no gate seat, gate exit or
+## seat's access cell, a gate exit or the exit cell of a scanner that separates
+## an entrance component from another one, and no entrance, is trusted airside.
+## The walk crosses a door wall only between two trusted components, so a door
+## inside the airside is no boundary and the divider's door is, whatever
+## scanners the terminal has. A component with no anchor is never trusted, so
+## an internal airside room with no gate seat, gate exit or
 ## scanner exit gets no spots (no worse than blocking every door). A terminal
 ## with no divider at all has the gate and the entrance in one component:
 ## the walk fills it, as it has no door to cross. The sim has
@@ -293,26 +294,34 @@ static func _doorless_components(grid: BuildGrid) -> Dictionary:
 
 
 ## The trusted airside doorless components: those holding a gate seat's access
-## cell, a gate exit door or a scanner's exit cell, and no entrance door.
+## cell, a gate exit door or the exit cell of a scanner that separates an
+## entrance component from another one, and no entrance door.
 ## Anything else is not trusted, so the walk never crosses a door into or out
 ## of it. An internal airside room with none of those anchors therefore gets
 ## no spots (no worse than blocking every door).
 static func _trusted_components(sim: PassengerSim, components: Dictionary) -> Dictionary:
 	var grid := sim.grid
 	var layout := sim.layout
+	var unsafe := {}
+	for door in layout.entrances:
+		unsafe[components.get(layout.door_cell(grid, door), -1)] = true
 	var anchors: Array[Vector2i] = []
 	for seat in layout.seats:
 		anchors.append(seat["front"])
 	for door in layout.exits:
 		anchors.append(layout.door_cell(grid, door))
+	# A scanner trusts its exit side only when it separates an unsafe entry
+	# side from a different exit side: one in the entrance hall, or inside an
+	# isolated landside lobby, trusts nothing.
 	for scanner in layout.scanners:
-		anchors.append(sim.security.exit_cell(scanner))
+		var entry: int = components.get(grid.interaction_cell(scanner), -1)
+		var exit_cell := sim.security.exit_cell(scanner)
+		if unsafe.has(entry) and components.get(exit_cell, entry) != entry:
+			anchors.append(exit_cell)
 	var trusted := {}
 	for cell in anchors:
-		if components.has(cell):
+		if components.has(cell) and not unsafe.has(components[cell]):
 			trusted[components[cell]] = true
-	for door in layout.entrances:
-		trusted.erase(components.get(layout.door_cell(grid, door), -1))
 	return trusted
 
 
