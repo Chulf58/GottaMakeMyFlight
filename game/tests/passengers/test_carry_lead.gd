@@ -175,3 +175,57 @@ func test_a_hand_led_move_keeps_its_mode_across_a_stall_change() -> void:
 	swap["led"] = CarryOnProps._leads({"in_stall": false}, swap)
 	assert_bool(CarryOnProps._leading(swap, 1.0)).is_false()
 	assert_bool(CarryOnProps._leading(bag, CarryOnProps.TRANSFER_TICKS)).is_false()
+
+
+## A pulled roller passed from the right hand to the left (pull.R>pull.L) is
+## held by its bar all the way: at every k (0.01 apart) the bag placed from
+## the holder's grip, as CarryOnProps places it, has its bar (its rods drawn
+## as CarryOnProps blends them, carry_t of the way) within the FLOAT check's
+## held bound (5 cm) of that grip. The two pulls have rods 0.4 m apart in
+## length. Control: both hands hold it in turn.
+func test_a_roller_passed_between_pulling_hands_stays_held_by_its_bar() -> void:
+	var grips := [Vector3(-0.25, 0.75, 0.05), Vector3(0.25, 0.75, 0.05)]
+	var axles := [Vector3(-0.3, 0.03, -0.6), Vector3(0.3, 0.03, -1.0)]
+	var past := 0.2
+	var rods := []
+	var ends := []
+	for hand in 2:
+		var xf := CarryOnProps.pulled(grips[hand], axles[hand], 1.0, Vector3.UP)
+		ends.append(xf)
+		rods.append(grips[hand].distance_to(axles[hand]) + CarryOnProps.ROLLER_AXLE.z - past)
+	var bag := {
+		"kind": SecurityLooks.Kind.ROLLER,
+		"home": 6,
+		"carry": SecurityLooks.Carry.PULL,
+		"was": 4,
+		"carry_from": SecurityLooks.Carry.PULL,
+		"from": ends[0],
+	}
+	var flags := {"in_stall": false, "hand": 0, "yaw": 0.0, "clear": 0.0}
+	var holders := {}
+	var worst := 0.0
+	for step in 101:
+		var k := step / 100.0
+		var bar_z: float = lerpf(rods[0], rods[1], CarryLead.carry_t(k, bag)) + past
+		var body := {
+			"hand": 0,
+			"grips": grips,
+			"shoulders_y": [1.4, 1.4],
+			"bar_z": bar_z,
+			"scale": 1.0,
+			"strap_top": Vector3.ZERO,
+		}
+		var plan := CarryLead.plan(bag, k, ends[0], ends[1], Transform3D(), flags, body)
+		var holder: int = plan["holder"]
+		if holder < 0:
+			continue
+		holders[holder] = true
+		var xf: Transform3D = plan["xf"]
+		var placed := Transform3D(xf.basis, grips[holder] - xf.basis * (plan["anchor"] as Vector3))
+		var bar := placed * Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, bar_z)
+		worst = maxf(worst, bar.distance_to(grips[holder]))
+		assert_float(bar.distance_to(grips[holder])).is_less_equal(0.05)
+	print(
+		"pull.R>pull.L: holders %s, the bar at most %.4f m from the grip" % [holders.keys(), worst]
+	)
+	assert_bool(holders.has(0) and holders.has(1)).is_true()

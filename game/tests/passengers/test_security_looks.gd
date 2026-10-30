@@ -173,6 +173,31 @@ func test_bags_stay_with_the_passenger_for_the_whole_visit() -> void:
 	assert_float(spot.origin.z).is_equal_approx(SecurityLooks.SEAT_AHEAD_M, 0.0001)
 
 
+## Two floor bags lie side by side, each on the side of the hand that carries
+## it (bag 0 in the right hand on -x, bag 1 in the left on +x, +x the
+## passenger's left), so the hands do not cross: ahead of a repacking passenger
+## and at a gate chair's feet. One bag lies on the centre line. Control: each
+## bag's hand is its index.
+func test_two_floor_bags_lie_on_their_own_hands_sides() -> void:
+	var w := _make(true)
+	var ids := w.send_all([[2, false, false]])
+	var p := w.world.passenger(ids[0])
+	w.world.step()
+	assert_int(SecurityLooks.hand_of(w.world.sim, p, 0)).is_equal(0)
+	assert_int(SecurityLooks.hand_of(w.world.sim, p, 1)).is_equal(1)
+	var seen := []
+	for stage: Passenger.Stage in [Passenger.Stage.SECURITY, Passenger.Stage.SEATED]:
+		p.stage = stage
+		p.seat_object = 1
+		var right := SecurityLooks.floor_spot(w.world.sim, p, 0, 2).origin
+		var left := SecurityLooks.floor_spot(w.world.sim, p, 1, 2).origin
+		seen.append([Passenger.Stage.keys()[stage], right.x, left.x])
+		assert_float(right.x).is_equal_approx(-SecurityLooks.FLOOR_APART_M, 0.0001)
+		assert_float(left.x).is_equal_approx(SecurityLooks.FLOOR_APART_M, 0.0001)
+		assert_float(SecurityLooks.floor_spot(w.world.sim, p, 0, 1).origin.x).is_equal(0.0)
+	print("floor bag x by stage [stage, bag 0, bag 1]: %s" % [seen])
+
+
 ## The tick a lane passenger's bag first has the tray as its home (the sim is
 ## seeded, so a second world with the same seed reaches it on the same tick).
 func _tray_tick() -> int:

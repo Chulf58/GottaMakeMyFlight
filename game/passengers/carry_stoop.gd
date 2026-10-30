@@ -8,13 +8,18 @@ extends SkeletonModifier3D
 ## two-bone reach to its foot). How far: the least stoop (needed()) that brings
 ## each reaching arm's shoulder within REACH_SLACK of its full reach of its
 ## target, times its weight. CarryOnProps sets the targets each draw; with none
-## it does nothing. Ported from the floating-bag WIP (2b44136), its numbers
-## unchanged.
+## it does nothing. Ported from the floating-bag WIP (2b44136). The hips also
+## go back as they drop (HIP_BACK_M), so the knees come forward less, and a
+## target's keep holds the stoop on at any height: a bag lifted off or set on
+## the floor is reached ahead, not short of it in front of the thighs (board
+## item 5ed915b0).
 
 const LEGS: Array[Array] = [["Quad.R", "Shin.R", "Foot.R"], ["Quad.L", "Shin.L", "Foot.L"]]
-## The back's bend at a full stoop, and how far the hips go down with it.
+## The back's bend at a full stoop, and how far the hips go down and back with
+## it.
 const STOOP_DEGREES := 80.0
 const STOOP_DROP := 0.6
+const HIP_BACK_M := 0.2
 ## A stoop aims the shoulder this much of the arm's full reach from its target.
 const REACH_SLACK := 0.96
 const STEPS := 24
@@ -28,6 +33,9 @@ const LOW_FADE_M := 0.15
 var targets: Array[Vector3] = []
 var sides: Array[int] = []
 var weights: Array[float] = []
+## How far (0 to 1) each target's stoop is kept on whatever its height (none
+## given: 0, the height fade alone).
+var keeps: Array[float] = []
 ## The stoop drawn last (0 to 1), for checks and plates.
 var drawn := 0.0
 
@@ -58,9 +66,13 @@ func _process_modification_with_delta(_delta: float) -> void:
 		# past it (a bag lifted) straightens the back smoothly, never in a frame.
 		var height := targets[i].y - skeleton.global_position.y
 		var low := 1.0 - smoothstep(LOW_M - LOW_FADE_M, LOW_M + LOW_FADE_M, height)
+		if i < keeps.size():
+			low = maxf(low, clampf(keeps[i], 0.0, 1.0))
 		if low <= 0.0:
 			continue
-		var need := needed(shoulder, pivot, aim_at, target, reach, STOOP_DROP / to_world)
+		var need := needed(
+			shoulder, pivot, aim_at, target, reach, STOOP_DROP / to_world, HIP_BACK_M / to_world
+		)
 		s = maxf(s, need * low * clampf(weights[i], 0.0, 1.0))
 	if s <= 0.0:
 		return
@@ -70,6 +82,8 @@ func _process_modification_with_delta(_delta: float) -> void:
 		feet.append(skeleton.get_bone_global_pose(skeleton.find_bone(leg[2])))
 	var low := skeleton.get_bone_global_pose(hips)
 	low.origin.y -= STOOP_DROP / to_world * s
+	# Back (the skeleton faces +Z), so the knees come forward less.
+	low.origin.z -= HIP_BACK_M / to_world * s
 	skeleton.set_bone_global_pose(hips, low)
 	var back := skeleton.get_bone_global_pose(spine)
 	back.basis = turn(pivot, aim_at, s) * back.basis
@@ -88,12 +102,18 @@ static func turn(pivot: Vector3, target: Vector3, s: float) -> Basis:
 
 
 ## Where `shoulder` is at stoop `s`: the back turned about `pivot` toward
-## `aim_at` (turn()) and everything above the hips `drop` * s lower.
+## `aim_at` (turn()) and everything above the hips `drop` * s lower and `back`
+## * s further back (-Z, the body facing +Z).
 static func stooped(
-	shoulder: Vector3, pivot: Vector3, aim_at: Vector3, s: float, drop := STOOP_DROP
+	shoulder: Vector3,
+	pivot: Vector3,
+	aim_at: Vector3,
+	s: float,
+	drop := STOOP_DROP,
+	back := HIP_BACK_M
 ) -> Vector3:
 	var turned := pivot + turn(pivot, aim_at, s) * (shoulder - pivot)
-	return turned - Vector3.UP * drop * s
+	return turned - Vector3.UP * drop * s + Vector3.FORWARD * back * s
 
 
 ## The least stoop (0 to 1), the back bent toward `aim_at`, that brings
@@ -104,10 +124,11 @@ static func needed(
 	aim_at: Vector3,
 	target: Vector3,
 	reach: float,
-	drop := STOOP_DROP
+	drop := STOOP_DROP,
+	back := HIP_BACK_M
 ) -> float:
 	var reaches := func(s: float) -> bool:
-		return stooped(shoulder, pivot, aim_at, s, drop).distance_to(target) <= reach
+		return stooped(shoulder, pivot, aim_at, s, drop, back).distance_to(target) <= reach
 	if reaches.call(0.0):
 		return 0.0
 	for step in range(1, STEPS + 1):

@@ -29,13 +29,29 @@ const REACH_SHARE := 0.25
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side, at shoulder height, this far out from the centre line, over this
 ## share of the carry.
-const BACK_SIDE_M := 0.34
+const BACK_SIDE_M := 0.42
 const BACK_SHARE := 0.4
 ## A backpack in a hand-led move is held this far from its grab loop (its own
-## frame, the loop mid-depth at y 0.082, the bag 0 to 0.177 deep): past the
-## face hung toward the body and a little over the top, so the fingers hang
-## down outside the bag, not into it (a grip offset).
-const LOOP_OFFSET := Vector3(0.0, 0.12, 0.02)
+## frame, the loop mid-depth at y 0.082, the bag 0 to 0.177 deep, its top face
+## at z 0.21 and the loop's top at 0.235): past the face hung toward the body
+## and over the top (a grip offset), so less of the fingers, which curl 3 to 12
+## cm down and 7 to 13 cm back from the grip (measured, board item 5ed915b0),
+## reach into the top. No further: the probes' FLOAT check needs the grip within
+## 6 cm of the bag's bounds (z 0.295, y 0.237).
+const LOOP_OFFSET := Vector3(0.0, 0.15, 0.05)
+## Off the floor a bag turns to hang from the hand over this share of its
+## carry (off a tray, 0.35: the table is under it).
+const UPRIGHT_FROM_FLOOR := 0.2
+## Lifting a bag off the floor the stoop is kept on (CarryStoop.keeps) to this
+## share of the carry and gone KEEP_FADE later, so the hand reaches the bag's
+## path ahead of the knees, not short of it in front of the thighs; setting
+## one down, from as far before the end.
+const KEEP_T := 0.35
+const KEEP_FADE := 0.25
+## How high a bag set down on the floor rises midway: the full TRANSFER_LIFT_M
+## put the case top against the face of a body stooping to set it down, and
+## none put the hand low beside the case's top corner, palm out, not on it.
+const SET_DOWN_LIFT_M := 0.15
 
 
 ## The kind of end a bag's place (`place`, CarryOnProps' (home * 2 + hand) * 2
@@ -135,6 +151,21 @@ static func phase(k: float, from: End, to: End, from_hand: int, lead: int) -> Di
 	return {"t": clampf(t, 0.0, 1.0), "holder": holder, "weights": weights, "targets_at": aims}
 
 
+## How far (0 to 1) the leading hand's stoop is kept on (CarryStoop.keeps) at
+## `k` of a move from `from` to `to`: lifting a bag off the floor
+## (`from_floor`), through the reach and the carry to KEEP_T, gone by KEEP_T +
+## KEEP_FADE; setting one down on it (`to_floor`), the same from the end back.
+static func floor_keep(k: float, from: End, to: End, from_floor: bool, to_floor: bool) -> float:
+	var s := span(from, to)
+	var t := (k - s.x) / maxf(s.y - s.x, 0.0001)
+	var keep := 0.0
+	if from == End.REST and from_floor:
+		keep = 1.0 - smoothstep(KEEP_T, KEEP_T + KEEP_FADE, t)
+	if to == End.REST and to_floor:
+		keep = maxf(keep, smoothstep(1.0 - KEEP_T - KEEP_FADE, 1.0 - KEEP_T, t))
+	return keep
+
+
 ## The grip point (in the bag's own frame) of a bag of `kind` that is not in
 ## a hand: a hard case's top edge, a backpack's grab loop, a shoulder bag's
 ## top edge; a roller's grip bar at `bar_z` along it.
@@ -158,6 +189,59 @@ static func back_side(
 	return CarryOnProps.carried(grip, centre, yaw, scale_by, SecurityLooks.Kind.BACKPACK)
 
 
+## The leading hand's target `at` at `k` of a move of a backpack on or off the
+## back (`from` to `to`), body drawn at `frame` turned to `yaw`, `lead` the
+## hand, `body` as for plan(): while the hand reaches for the pack on the back
+## it comes by the side hang (BACK_SIDE_M out, under the shoulder) and only then
+## to the loop, and letting go of it there it goes back out by the side, so
+## the arm's blend to and from its own pose does not pass the hand through the
+## pack (measured: fingers and the hand inside it, board item 5ed915b0).
+static func by_side(
+	at: Vector3,
+	k: float,
+	from: End,
+	to: End,
+	frame: Transform3D,
+	yaw: float,
+	lead: int,
+	body: Dictionary
+) -> Vector3:
+	var out := Vector3.LEFT if lead == 0 else Vector3.RIGHT
+	var side := frame.origin + Basis(Vector3.UP, yaw) * (out * BACK_SIDE_M)
+	side.y = body["shoulders_y"][lead] - 0.1
+	var s := span(from, to)
+	if from == End.WORN and k < s.x:
+		return side.lerp(at, smoothstep(0.3, 1.0, k / s.x))
+	if to == End.WORN and k > s.y:
+		return at.lerp(side, smoothstep(0.0, 0.35, (k - s.y) / (1.0 - s.y)))
+	return at
+
+
+## Where a roller's axle is at `t` (0 under the hand at `hung`, 1 at
+## `trailing`, both world) of a swap between the hand and the pull at
+## security, the body drawn at `frame`, `hand` 0 right: round the hand's side
+## of the body (its angle about the body's centre turns from the one to the
+## other through the hand's side, as CarryOnProps.follow() swings a pulled
+## roller), at least `clear` from the centre midway, so it passes outside the
+## legs. A straight blend with a 0.2 m swing out took it behind the shins of a
+## walker standing at a lane (board item 5ed915b0).
+static func swap_axle(
+	frame: Transform3D, hung: Vector3, trailing: Vector3, t: float, hand: int, clear: float
+) -> Vector3:
+	var a := frame.affine_inverse() * hung
+	var b := frame.affine_inverse() * trailing
+	var out := -1.0 if hand == 0 else 1.0
+	# Angle from straight behind (0) toward the hand's side (PI / 2).
+	var a0 := atan2(a.x * out, -a.z)
+	var a1 := atan2(b.x * out, -b.z)
+	if a1 < -PI / 2.0:
+		a1 += TAU
+	var angle := lerpf(a0, a1, t)
+	var r := lerpf(Vector2(a.x, a.z).length(), Vector2(b.x, b.z).length(), t)
+	r = maxf(r, clear * 4.0 * t * (1.0 - t))
+	return frame * Vector3(out * r * sin(angle), lerpf(a.y, b.y, t), -r * cos(angle))
+
+
 ## How a hand-led move of `bag` (CarryOnProps' record) goes at `k`, from
 ## `start` (world now) to `want`, its body drawn at `frame`; `flags` as for
 ## path(), `body` the body as drawn now: {"hand": the bag's own hand or side,
@@ -165,7 +249,8 @@ static func back_side(
 ## [right, left] shoulder joint heights, "bar_z": a roller's grip bar along it,
 ## "scale": the bag's scale}. Returns {"holder", "xf" (the bag at a resting or
 ## worn end, or on its path), "anchor" (the point of the bag in the holder's
-## grip, its own frame), "targets", "weights" (each hand's, right then left)}.
+## grip, its own frame), "targets", "weights", "keeps" (each hand's, right then
+## left; keeps floor_keep(), flags "from_floor" and "to_floor")}.
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side (back_side()).
 static func plan(
@@ -194,9 +279,22 @@ static func plan(
 	var anchor_from: Vector3 = loose
 	if from_end == End.HELD and not roller:
 		anchor_from = bag["anchor_from"]
+	# Lying in a tray or on the floor a roller is taken (and left) by its carry
+	# handle on top, not by its bar down at the rod line (the forearm went
+	# through it, board item 5ed915b0); the hand slides to the bar as it lifts.
+	if roller and from_end == End.REST:
+		anchor_from = CarryOnProps.ROLLER_HANDLE
 	var anchor_to := loose
 	if to_end == End.HELD:
 		anchor_to = want.affine_inverse() * (body["grips"][to_hand] as Vector3)
+		if roller:
+			# Along the rods, on the bar as the rods are drawn now (they run out
+			# or in through the move), not where the end's rods put it: blending
+			# the two lengths again took the bar up to 8 cm off the hand passing
+			# a pulled roller between hands (crossing probe FLOAT, pull.R>pull.L).
+			anchor_to.z = loose.z
+	elif roller and to_end == End.REST:
+		anchor_to = CarryOnProps.ROLLER_HANDLE
 	var held_at := anchor_from.lerp(anchor_to, t)
 	var off_back: bool = from_end == End.WORN and bag["carry_from"] == SecurityLooks.Carry.BACK
 	var on_back: bool = to_end == End.WORN and bag["carry"] == SecurityLooks.Carry.BACK
@@ -219,8 +317,10 @@ static func plan(
 		on_path = path(start, want, t, frame, bag["from"], flags)
 		if from_end == End.REST or to_end == End.REST:
 			# Off the floor or a tray it turns to hang from the hand soon after it
-			# rises; onto one it hangs until it is nearly down (the arm above it).
-			var w := smoothstep(0.0, 0.35, t) if from_end == End.REST else smoothstep(0.65, 1.0, t)
+			# rises (off the floor sooner: lying flat it met the thighs); onto one
+			# it hangs until it is nearly down (the arm above it).
+			var up := UPRIGHT_FROM_FLOOR if flags.get("from_floor", false) else 0.35
+			var w := smoothstep(0.0, up, t) if from_end == End.REST else smoothstep(0.65, 1.0, t)
 			var q := start.basis.get_rotation_quaternion().slerp(
 				want.basis.get_rotation_quaternion(), w
 			)
@@ -234,15 +334,26 @@ static func plan(
 				targets[hand] = want * anchor_to
 			_:
 				targets[hand] = on_path * held_at
+	if off_back or on_back:
+		targets[lead] = by_side(targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, body)
 	var xf := on_path
 	if ph["holder"] < 0:
 		xf = start if k < span(from_end, to_end).x else want
+	# Only a hard case, which lies flat on the floor across the feet: a shoulder
+	# bag or a backpack lifted with the stoop kept bent the walker deep after a
+	# target far ahead (into a lane arch's post).
+	var keeps := [0.0, 0.0]
+	if bag["kind"] == SecurityLooks.Kind.CASE:
+		keeps[lead] = floor_keep(
+			k, from_end, to_end, flags.get("from_floor", false), flags.get("to_floor", false)
+		)
 	return {
 		"holder": ph["holder"],
 		"xf": xf,
 		"anchor": held_at,
 		"targets": targets,
 		"weights": ph["weights"],
+		"keeps": keeps,
 	}
 
 
@@ -250,12 +361,13 @@ static func plan(
 ## the body drawn at `frame`: a bag going up rises first and then comes across
 ## (picked up from the floor ahead, CarryMoves.pick_up(), `from_local` its
 ## start in the body's frame); one going down is lifted on the way, over a
-## table edge; either way kept `clear` from the body's centre line on the side
+## table edge, and one set down on the floor (`to_floor`) goes out ahead first
+## and down late; either way kept `clear` from the body's centre line on the side
 ## of `hand`. In a toilet stall (`in_stall`) a bag in the hand (`hand_carry`)
 ## goes between the floor and the front carry ahead of the body with no lift
 ## or push out: set down straight down, picked up upright first (decision
 ## stall-bag-poses-as-built-bags-stand-upright-against-the-insi). Moved
-## unchanged from CarryOnProps._place_bags.
+## from CarryOnProps._place_bags; the floor set-down added for board item 5ed915b0.
 static func path(
 	start: Transform3D,
 	want: Transform3D,
@@ -301,6 +413,13 @@ static func path(
 		# the bag comes in under the arm that will hold it.
 		var early := 6.75 * k * (1.0 - k) * (1.0 - k) * pow(1.0 - k * k, 4.0)
 		placed.origin.y += CarryOnProps.KNEE_LIFT_M * early
+	elif flags.get("to_floor", false) and not in_stall:
+		# Set down on the floor: out ahead first and down late, so it is not
+		# low in front of the thighs and the bent knees, lifted only
+		# SET_DOWN_LIFT_M (board item 5ed915b0).
+		var ahead := start.origin.lerp(want.origin, 1.0 - (1.0 - k) * (1.0 - k))
+		placed.origin = Vector3(ahead.x, lerpf(start.origin.y, want.origin.y, k * k), ahead.z)
+		placed.origin.y += SET_DOWN_LIFT_M * arc
 	else:
 		placed.origin.y += CarryOnProps.TRANSFER_LIFT_M * arc
 	var clear: float = flags.get("clear", CarryOnProps.TRANSFER_CLEAR_M)
