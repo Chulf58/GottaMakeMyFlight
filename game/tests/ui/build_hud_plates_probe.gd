@@ -149,6 +149,14 @@ func _run() -> void:
 		_invalid("c: no refusal on the status line: '%s'" % _mode.status_text())
 	if not reason.visible or reason.text() == "":
 		_invalid("c: no short reason beside the ghost")
+	# The card stands GAP right of the drawn ghost's bounds (or left of them at
+	# the window's edge), never on top of them.
+	var ghost := _mode.ghost_screen_rect()
+	var card := reason.get_global_rect()
+	var gap := minf(absf(card.position.x - ghost.end.x), absf(ghost.position.x - card.end.x))
+	print("PROBE c: ghost %s card %s gap %.1f" % [ghost, card, gap])
+	if not ghost.has_area() or card.intersects(ghost) or gap > GhostReason.GAP + 1.0:
+		_invalid("c: the card is not beside the ghost")
 	await _plate("c_checkin_refusal_1920", [_mode.grid.cell_to_world(refused_cell)])
 
 	await _ghost_over_hud()

@@ -2,17 +2,24 @@ class_name GhostReason
 extends PanelContainer
 ## A short refusal reason beside the build ghost (decision hud-steal-list-self-
 ## clearing-alert-cards-money-hover-departu, item 6): while the pointer is over
-## the grid and the edit under it is refused, a small card just below and to
-## the right of the pointer, where the ghost is, says why in a few words. The
-## status line above the tray still gives the whole reason.
+## the grid and the edit under it is refused, a small card right of the drawn
+## ghost's on-screen bounds (left of them when the window ends first), level
+## with the ghost's middle, says why in a few words. The status line above the
+## tray still gives the whole reason.
 ##
-## It reads BuildMode's public hover: hover_edit() and check(). The Belt and
-## the landside tools have no hover edit, so their reasons stay on the status
-## line alone, as do a dragged rectangle's and a wall row's: while the left
-## button is held a drag may own the hover, and the card hides.
+## It reads BuildMode's public hover: hover_edit(), check() and
+## ghost_screen_rect(). The Belt and the landside tools have no hover edit, so
+## their reasons stay on the status line alone, as do a dragged rectangle's
+## and a wall row's: while BuildMode.is_dragging() the drag owns the hover. A
+## held button with no drag (pressing on a refused desk) keeps the card.
+##
+## The answer is cached per hover edit and balance, and forgotten whenever the
+## grid changes (BuildGrid.graph_changed and edit_applied, which also catch an
+## edit written straight to the grid, such as the starter terminal), BuildMode
+## redraws after its own edit, or BuildMode's status line changes.
 
-## Where the card's top-left corner sits from the pointer.
-const OFFSET := Vector2(22.0, 18.0)
+## The gap between the ghost's bounds and the card.
+const GAP := 10.0
 ## The card keeps this far inside the window edges.
 const EDGE := 8.0
 ## Short forms of the longer BuildResult.REASON_TEXT lines; a reason missing
@@ -44,6 +51,8 @@ var _label := Label.new()
 ## The hover edit and balance last checked, and what check() said.
 var _key := ""
 var _result: BuildResult
+## The grid whose change signals _forget() is connected to.
+var _watched: BuildGrid
 
 
 ## The few words the card shows for a refusal.
@@ -69,7 +78,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	refresh(_pointer())
+	refresh()
 
 
 ## The text on the card ("" while it is hidden).
@@ -81,13 +90,12 @@ func text() -> String:
 func refusal() -> BuildResult:
 	if build_mode == null or build_mode.tool == BuildMode.Tool.NONE:
 		return null
-	if not build_mode.pointer_on_grid() or build_mode.dragged_area().has_area():
-		return null
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+	if not build_mode.pointer_on_grid() or build_mode.is_dragging():
 		return null
 	var edit := build_mode.hover_edit()
 	if edit == null:
 		return null
+	_watch(build_mode.grid)
 	var key := _edit_key(edit)
 	if key != _key:
 		_key = key
@@ -95,19 +103,23 @@ func refusal() -> BuildResult:
 	return null if _result.ok else _result
 
 
-## Shows the card beside `pointer` (viewport coordinates) while the edit there is
-## refused, kept inside the window; hides it otherwise.
-func refresh(pointer: Vector2) -> void:
+## Shows the card beside the drawn ghost while the edit under the pointer is
+## refused, kept inside the window; hides it otherwise, and while no part of
+## the ghost is on screen.
+func refresh() -> void:
 	var result := refusal()
-	visible = result != null
-	if result == null:
+	var screen := get_viewport().get_visible_rect()
+	var ghost := build_mode.ghost_screen_rect() if result != null else Rect2()
+	visible = result != null and ghost.has_area() and screen.intersects(ghost)
+	if not visible:
 		return
 	_label.text = short_text(result)
 	reset_size()
-	var screen := get_viewport().get_visible_rect().size
-	var at := pointer + OFFSET
-	at.x = clampf(at.x, EDGE, maxf(EDGE, screen.x - size.x - EDGE))
-	at.y = clampf(at.y, EDGE, maxf(EDGE, screen.y - size.y - EDGE))
+	var at := Vector2(ghost.end.x + GAP, ghost.get_center().y - size.y / 2.0)
+	if at.x + size.x > screen.end.x - EDGE:
+		at.x = ghost.position.x - GAP - size.x
+	at.x = clampf(at.x, EDGE, maxf(EDGE, screen.end.x - size.x - EDGE))
+	at.y = clampf(at.y, EDGE, maxf(EDGE, screen.end.y - size.y - EDGE))
 	position = at
 
 
@@ -116,10 +128,27 @@ func _forget() -> void:
 	_key = ""
 
 
-func _pointer() -> Vector2:
-	if build_mode != null and build_mode.pointer_override.x >= 0.0:
-		return build_mode.pointer_override
-	return get_viewport().get_mouse_position()
+## Forgets the cached answer on every change of `grid`, including an edit
+## written straight to it without BuildMode.
+func _watch(grid: BuildGrid) -> void:
+	if grid == _watched:
+		return
+	if _watched != null:
+		_watched.graph_changed.disconnect(_on_graph_changed)
+		_watched.edit_applied.disconnect(_on_edit_applied)
+	_watched = grid
+	_key = ""
+	if grid != null:
+		grid.graph_changed.connect(_on_graph_changed)
+		grid.edit_applied.connect(_on_edit_applied)
+
+
+func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	_forget()
+
+
+func _on_edit_applied(_edit: BuildEdit, _applied: BuildResult) -> void:
+	_forget()
 
 
 ## The edit's fields and the wallet balance: what check() depends on, beside the grid.

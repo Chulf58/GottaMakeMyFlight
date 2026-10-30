@@ -680,6 +680,48 @@ func pointer_on_grid() -> bool:
 	return _pointer_on_grid
 
 
+## True while a rectangle or a wall row is being dragged; the drag then owns
+## the hover (BuildMenu's refusal card hides). A read; it changes nothing.
+func is_dragging() -> bool:
+	return _drag_active()
+
+
+## The drawn build ghost's bounds on screen, in viewport coordinates: every
+## ghost mesh's box projected through the viewport's camera. An empty Rect2
+## while no ghost is drawn, or with no camera (BuildMenu's refusal card sits
+## beside it). A read; it changes nothing.
+func ghost_screen_rect() -> Rect2:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera == null or not _ghost.visible:
+		return Rect2()
+	var points := PackedVector2Array()
+	for node in _ghost.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		if mesh.mesh == null or _ghost_part_going(mesh):
+			continue
+		var box := mesh.global_transform * mesh.get_aabb()
+		for i in 8:
+			var corner := box.get_endpoint(i)
+			if not camera.is_position_behind(corner):
+				points.append(camera.unproject_position(corner))
+	if points.is_empty():
+		return Rect2()
+	var rect := Rect2(points[0], Vector2.ZERO)
+	for point in points:
+		rect = rect.expand(point)
+	return rect
+
+
+## True for a ghost part a redraw has queued for freeing (it stays a child
+## until the frame ends).
+func _ghost_part_going(node: Node) -> bool:
+	while node != null and node != _ghost:
+		if node.is_queued_for_deletion():
+			return true
+		node = node.get_parent()
+	return false
+
+
 ## True while a rectangle drag is on and the pointer is over the HUD, where the
 ## rectangle stops growing (BuildMenu keeps the status line, which says why,
 ## visible).
