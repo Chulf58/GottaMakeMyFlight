@@ -149,6 +149,9 @@ func test_bad_boarding_files_are_refused_whole() -> void:
 	var walking := good.duplicate(true)
 	(walking["boarding"]["pending"] as Array).append(indoor)
 	cases["pending walker still walking"] = walking
+	var settled := good.duplicate(true)
+	(settled["boarding"]["delayed"] as Array).append(99999)
+	cases["delayed walker unknown"] = settled
 	var extra := good.duplicate(true)
 	extra["boarding"]["queue"] = []
 	cases["unknown key"] = extra

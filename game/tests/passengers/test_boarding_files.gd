@@ -542,12 +542,11 @@ func test_walkers_from_two_doors_are_spaced_on_the_shared_apron() -> void:
 	assert_bool(_all_done(group)).is_true()
 
 
-## Doors close while a late walker is held back behind another flight's
-## walker in a boarding line: it misses, and the flight's result gives the
-## crowding reason; a late walker walking free at the head of the line misses
-## for the ordinary reason (decision a-late-passenger-held-up-by-people-traffic-
-## at-boarding-misse).
-func test_a_late_walker_held_in_a_line_at_doors_close_misses_from_crowds() -> void:
+## A late walker held back behind another flight's walker in a boarding line
+## misses, and the flight's result gives the crowding reason; a late walker
+## walking free at the head of the line misses for the ordinary reason
+## (decision a-late-passenger-held-up-by-people-traffic-at-boarding-misse).
+func test_a_late_walker_held_back_in_a_line_misses_from_crowds() -> void:
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
 	var closing := BOARDING + 60
@@ -560,8 +559,9 @@ func test_a_late_walker_held_in_a_line_at_doors_close_misses_from_crowds() -> vo
 	var held_ticks := 0
 	while _world.clock.tick < closing:
 		_world.step()
-		held_ticks += int(_world.sim.files.held_back(_world.sim, held))
-	assert_bool(_world.sim.files.held_back(_world.sim, held)).is_false()
+		held_ticks += int(_world.sim.files.was_delayed(held.id))
+	assert_bool(_world.sim.files.was_delayed(free.id)).is_false()
+	assert_bool(_world.sim.files.was_delayed(held.id)).is_false()
 	var summary := FlightResult.summarize(_world.sim, PassengerTestWorld.FLIGHT)
 	print(
 		(

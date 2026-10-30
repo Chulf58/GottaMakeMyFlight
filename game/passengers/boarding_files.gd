@@ -32,7 +32,7 @@ extends RefCounted
 ## The least walk between two walkers in one file, in mm.
 const GAP_MM := 700
 ## A save with no walker in any file.
-const EMPTY := {"doors": [], "planes": [], "pending": []}
+const EMPTY := {"doors": [], "planes": [], "pending": [], "delayed": []}
 
 ## Exit door id -> passenger ids, the one nearest the door first.
 var _doors: Dictionary = {}
@@ -42,6 +42,10 @@ var _door_of: Dictionary = {}
 var _plane_of: Dictionary = {}
 ## Passenger id -> true, while it waits for admission to its next file.
 var _pending: Dictionary = {}
+## Passenger id -> true once the files held it back while it was late (a
+## runner caught behind a slower walker, or waiting to join), until it leaves
+## the walk out (forget()): a miss then counts as the terminal's crowding.
+var _delayed: Dictionary = {}
 ## Derived: exit door -> {"points", "mm", "plane"}, its walk to the plane.
 var _aprons: Dictionary = {}
 var _aprons_shell: ShellDefinition
@@ -196,13 +200,24 @@ func allowed(sim: PassengerSim, p: Passenger, speed: int) -> int:
 	return step
 
 
-## Whether `p` is held back by the files on this tick: waiting to join, or
-## capped short of its own pace (a runner caught behind a slower walker).
-func held_back(sim: PassengerSim, p: Passenger) -> bool:
-	if not holds(p.id):
-		return false
-	var speed := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
-	return _pending.has(p.id) or allowed(sim, p, speed) < speed
+## The step `p`, at `speed`, takes this tick (allowed()), noting when the
+## files held it back while it was late.
+func step_of(sim: PassengerSim, p: Passenger, speed: int) -> int:
+	var step := allowed(sim, p, speed)
+	if p.late and step < speed:
+		_delayed[p.id] = true
+	return step
+
+
+## Whether the files held `p` back while it was late, on its way out.
+func was_delayed(id: int) -> bool:
+	return _delayed.has(id)
+
+
+## `id` has left the walk out (made, missed or turned away): its delay is
+## forgotten.
+func forget(id: int) -> void:
+	_delayed.erase(id)
 
 
 ## The pending walkers in admission order: those waiting at a door for the
@@ -240,7 +255,9 @@ func to_dict() -> Dictionary:
 		planes.append({"passengers": (_planes[key] as Array).duplicate()})
 	var pending: Array = _pending.keys()
 	pending.sort()
-	return {"doors": doors, "planes": planes, "pending": pending}
+	var delayed: Array = _delayed.keys()
+	delayed.sort()
+	return {"doors": doors, "planes": planes, "pending": pending, "delayed": delayed}
 
 
 ## A saved to_dict() checked against the loaded passengers by id (with the
@@ -251,16 +268,17 @@ func to_dict() -> Dictionary:
 ## down along a file (the gap a walker had to the one ahead when it joined is
 ## not checked again, since the one behind a newcomer may stand closer for a
 ## few ticks); a pending walker in a door file stands at the door, with only
-## apron walkers ahead of it.
+## apron walkers ahead of it; a delayed walker is on its way out.
 static func checked(data: Variant, by_id: Dictionary, sim: PassengerSim) -> Dictionary:
 	if (
 		typeof(data) != TYPE_DICTIONARY
-		or (data as Dictionary).size() != 3
+		or (data as Dictionary).size() != 4
 		or typeof(data.get("doors")) != TYPE_ARRAY
 		or typeof(data.get("planes")) != TYPE_ARRAY
 		or typeof(data.get("pending")) != TYPE_ARRAY
+		or typeof(data.get("delayed")) != TYPE_ARRAY
 	):
-		return {"error": "boarding must hold the lists doors, planes and pending"}
+		return {"error": "boarding must hold the lists doors, planes, pending and delayed"}
 	var files := BoardingFiles.new()
 	for entry: Variant in data["doors"]:
 		var problem := files._load_door(entry, by_id)
@@ -274,6 +292,13 @@ static func checked(data: Variant, by_id: Dictionary, sim: PassengerSim) -> Dict
 		var problem := files._load_pending(value, by_id, sim)
 		if problem != "":
 			return {"error": problem}
+	for value: Variant in data["delayed"]:
+		var id := int(value) if WholeNumber.is_whole(value) else 0
+		var p: Passenger = by_id.get(id)
+		var out := p != null and p.stage in [Passenger.Stage.TO_EXIT, Passenger.Stage.APRON]
+		if not out or files._delayed.has(id):
+			return {"error": "delayed walker %s is unknown, repeated or not on its way out" % value}
+		files._delayed[id] = true
 	var missing := files._unfiled(by_id)
 	if missing != "":
 		return {"error": missing}

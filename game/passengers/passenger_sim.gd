@@ -720,7 +720,7 @@ func _finish(p: Passenger, made: bool) -> void:
 		p.missed_stuck = p.stuck
 		# Held up by people traffic at boarding, the miss is the terminal's
 		# (decision a-late-passenger-held-up-by-people-traffic-at-boarding-misse).
-		if p.stuck == Passenger.Stuck.NONE and files.held_back(self, p):
+		if p.stuck == Passenger.Stuck.NONE and files.was_delayed(p.id):
 			p.missed_stuck = Passenger.Stuck.CROWDED
 	_leave_station(p)
 	_release_seat(p)
@@ -781,7 +781,7 @@ func _settled_leftovers(p: Passenger) -> String:
 		held.append("a security place")
 	if standing.spot_of(p.id) != StandingSpots.NO_SPOT:
 		held.append("a standing spot")
-	if files.holds(p.id):
+	if files.holds(p.id) or files.was_delayed(p.id):
 		held.append("a boarding file place")
 	for q in _queues.values():
 		if (q["lane"] as Array).has(p.id) or (q["holding"] as Array).has(p.id):
@@ -912,7 +912,7 @@ func _advance(p: Passenger) -> void:
 func _move(p: Passenger) -> void:
 	var speed := RUN_MM if p.late else WALK_MM
 	if files.holds(p.id):
-		speed = files.allowed(self, p, speed)
+		speed = files.step_of(self, p, speed)
 	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
 		var total := p.apron_total_mm()
 		p.odometer_mm += mini(speed, total - p.apron_mm)
@@ -1418,6 +1418,7 @@ func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
 	# that turns to the exit chooses its door afresh.
 	if stage != Passenger.Stage.TO_EXIT and stage != Passenger.Stage.APRON:
 		files.leave(p.id)
+		files.forget(p.id)
 	elif stage == Passenger.Stage.TO_EXIT and p.stage != Passenger.Stage.TO_EXIT:
 		p.exit_object = 0
 		files.leave(p.id)
