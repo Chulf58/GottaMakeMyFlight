@@ -580,6 +580,13 @@ func from_snapshot(data: Dictionary) -> bool:
 	_by_id.clear()
 	for p in _passengers:
 		_by_id[p.id] = p
+		# A save from before version 14 stands passengers with no spot. Each is
+		# sent back to the gate with a cleared path; its stage tick is the next
+		# tick, so it plans a seat or spot then (_to_spot()).
+		if p.stage == Passenger.Stage.STANDING and standing.spot_of(p.id) == StandingSpots.NO_SPOT:
+			p.stage = Passenger.Stage.TO_GATE
+			p.stage_tick = tick + 1
+			p.clear_path()
 	layout.rebuild(grid)
 	routes.clear()
 	_rederive()
