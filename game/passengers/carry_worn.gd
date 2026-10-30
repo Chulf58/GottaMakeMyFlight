@@ -4,13 +4,16 @@ extends RefCounted
 ## out of carry_on_props.gd, which is at its line cap). Pure.
 
 ## The bar never sits further out from the joint than this (STRAP_OUT_M less
-## the upright Arm bone's 0.206 m from the centre line): a joint drawn in toward
-## the centre line (the body leaning to reach low with the other hand) takes
-## the bar in with it, the bag tilting about its top so its bottom stays
-## outside the hip. Kept STRAP_OUT_M out from the centre line, the bar was
-## 0.23 m off a joint leaning 0.11 m in (board item a-shoulder-tote-floats-
-## 0-39-m-from-the-hand-at-the-end-of-a).
-const STRAP_PAST_JOINT_M := CarryOnProps.STRAP_OUT_M - 0.206
+## 0.176 m, the narrowest upright Arm bone measured from the centre line, so a
+## body standing upright hangs its bag as before): a joint drawn in toward the
+## centre line (the body leaning to reach low with the other hand) takes the
+## bar in with it, the bag tilting about its top so its bottom stays outside
+## the hip. Kept STRAP_OUT_M out from the centre line, the bar was 0.23 m off a
+## joint leaning 0.11 m in (board item a-shoulder-tote-floats-0-39-m-from-the-
+## hand-at-the-end-of-a). Measured from the 0.206 m joint instead, the bar came
+## in on narrower upright bodies too, and the holding forearm met the strap's
+## bar (crossing probe, booth mode, seed 2500448448).
+const STRAP_PAST_JOINT_M := CarryOnProps.STRAP_OUT_M - 0.176
 
 
 ## A shoulder bag hung on the shoulder of `side` (0 right, 1 left) of a body
