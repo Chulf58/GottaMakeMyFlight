@@ -18,6 +18,11 @@ extends RefCounted
 ## (test_screen_tuning). A seated passenger watches from its chair's cell,
 ## everyone else from the cell it is on.
 ##
+## A waiting passenger who looks at a prize car (PrizeCar.looks(): one in three,
+## within a few cells of the podium) does not get bored while it does: its boredom
+## does not rise and drops PrizeCar.LOOK_RELIEF every PrizeCar.LOOK_RELIEF_BEATS
+## beats.
+##
 ## From BORED_AT the passenger is bored: it gets no mood from its gate seat
 ## (PassengerSim's beat asks is_bored()) and loses a mood point every
 ## MOOD_BEATS seconds while it has no visit under way, like a high toilet
@@ -52,6 +57,8 @@ const WAITING_STAGES: Array[Passenger.Stage] = [
 var entertainment := Callable()
 ## The cells the grid's screen stands cover, followed from bind().
 var screens := ScreenCoverage.new()
+## The cells the grid's prize cars reach, followed from bind().
+var prize := PrizeCar.new()
 
 var _sim: PassengerSim
 
@@ -60,6 +67,7 @@ func bind(sim: PassengerSim) -> void:
 	_sim = sim
 	if sim.grid != null:
 		screens.bind(sim.grid)
+		prize.bind(sim.grid)
 
 
 ## The boredom a passenger starts with, spawned or migrated from a save
@@ -102,7 +110,10 @@ func beat(p: Passenger) -> void:
 	@warning_ignore("integer_division")
 	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
 	var slowed := watching(p) and posmod(beat_number, SCREEN_RISE_BEATS) != 0
-	if rises(p) and not slowed:
+	if prize.looks(p):
+		if posmod(beat_number, PrizeCar.LOOK_RELIEF_BEATS) == 0:
+			p.boredom = maxi(p.boredom - PrizeCar.LOOK_RELIEF, 0)
+	elif rises(p) and not slowed:
 		p.boredom = mini(p.boredom + RISE, MAX)
 	if not is_bored(p) or StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE:
 		return
