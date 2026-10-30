@@ -2,7 +2,7 @@ class_name TestStandingSpotClaims
 extends GdUnitTestSuite
 ## Standing spot claims in the running sim (PassengerSim with StandingSpots):
 ## one passenger per spot, overflow order and the held state, a freed seat
-## taken from a spot, release on departure, on doors closing and on an edit,
+## taken from a spot, release once off the cell on departure, on doors closing and on an edit,
 ## and the forecast walk to the spot. Each case builds its own small world,
 ## because each one moves passengers and claims.
 
@@ -154,14 +154,20 @@ func test_a_freed_seat_is_taken_and_gives_up_the_spot() -> void:
 	assert_bool(_run_until(sits)).is_true()
 
 
-func test_boarding_releases_the_spot() -> void:
+## Setting off for the exit, the passenger keeps its spot until it is off the
+## spot's cell (so it walks on from the spot, not from the cell's centre), and
+## gives it up then.
+func test_boarding_keeps_the_spot_until_off_its_cell_then_releases_it() -> void:
 	_world = seatless_world()
 	var p := cleared(_world)
 	assert_bool(_run_until(func() -> bool: return p.stage == Passenger.Stage.STANDING)).is_true()
 	assert_int(_world.sim.standing.claim_count()).is_equal(1)
+	var cell := p.at
 	_world.run_to(p.boarding_tick)
 	_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_EXIT)
+	assert_int(_world.sim.standing.claim_count()).is_equal(1)
+	assert_bool(_run_until(func() -> bool: return p.at != cell)).is_true()
 	assert_int(_world.sim.standing.claim_count()).is_equal(0)
 
 
