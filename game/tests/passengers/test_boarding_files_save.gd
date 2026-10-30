@@ -155,6 +155,22 @@ func test_bad_boarding_files_are_refused_whole() -> void:
 	var extra := good.duplicate(true)
 	extra["boarding"]["queue"] = []
 	cases["unknown key"] = extra
+	# The walker's committed path turned aside at its last step, the same
+	# length as before so its file stays in order: it no longer walks to the
+	# exit its file is for.
+	var wrong_path := good.duplicate(true)
+	for record: Dictionary in wrong_path["passengers"]:
+		if int(record["id"]) == indoor:
+			var path: Array = record["path"]
+			var before_end := Vector2i(int(path[-2][0]), int(path[-2][1]))
+			var end := Vector2i(int(path[-1][0]), int(path[-1][1]))
+			var step := end - before_end
+			var aside := before_end + Vector2i(-step.y, step.x)
+			if not _a.grid.is_walkable(aside):
+				aside = before_end + Vector2i(step.y, -step.x)
+			assert_bool(_a.grid.is_walkable(aside)).is_true()
+			path[-1] = [aside.x, aside.y]
+	cases["path not to its door"] = wrong_path
 	assert_bool(_a.passenger(indoor).is_moving()).is_true()
 	_b = PassengerTestWorld.reference_world()
 	var before := _b.signature()
@@ -165,3 +181,19 @@ func test_bad_boarding_files_are_refused_whole() -> void:
 		assert_str(_b.signature()).is_equal(before)
 	# The unchanged save loads.
 	assert_bool(_b.sim.from_snapshot(good)).is_true()
+
+
+## A save whose walkers head for an exit the loaded layout has closed (floor
+## laid outside the door) is refused.
+func test_a_save_whose_walkers_head_for_a_closed_exit_is_refused() -> void:
+	_a = _boarding_until(_mid_file)
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	var outside := ReferenceTerminal.EXIT_CELL + Vector2i(0, -1)
+	assert_bool(grid.apply(BuildEdit.paint_floor(outside, BuildGrid.FLOOR_TILE, 1)).ok).is_true()
+	_b = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 99)
+	assert_int(_b.sim.layout.open_exits(grid).size()).is_equal(0)
+	var before := _b.signature()
+	assert_bool(_b.sim.from_snapshot(good)).is_false()
+	assert_str(_b.signature()).is_equal(before)

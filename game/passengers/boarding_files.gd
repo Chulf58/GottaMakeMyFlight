@@ -267,8 +267,10 @@ func to_dict() -> Dictionary:
 ## plane and, while under GAP_MM out, in its door file; walk left never goes
 ## down along a file (the gap a walker had to the one ahead when it joined is
 ## not checked again, since the one behind a newcomer may stand closer for a
-## few ticks); a pending walker in a door file stands at the door, with only
-## apron walkers ahead of it; a delayed walker is on its way out.
+## few ticks); every walker heading for an exit, filed or pending, heads for
+## an open exit of the loaded layout along a path that ends at its cell; a
+## pending walker in a door file stands at the door, with only apron walkers
+## ahead of it; a delayed walker is on its way out.
 static func checked(data: Variant, by_id: Dictionary, sim: PassengerSim) -> Dictionary:
 	if (
 		typeof(data) != TYPE_DICTIONARY
@@ -281,7 +283,7 @@ static func checked(data: Variant, by_id: Dictionary, sim: PassengerSim) -> Dict
 		return {"error": "boarding must hold the lists doors, planes, pending and delayed"}
 	var files := BoardingFiles.new()
 	for entry: Variant in data["doors"]:
-		var problem := files._load_door(entry, by_id)
+		var problem := files._load_door(entry, by_id, sim)
 		if problem != "":
 			return {"error": problem}
 	for entry: Variant in data["planes"]:
@@ -455,7 +457,7 @@ func _ids(list: Variant, by_id: Dictionary, label: String) -> Variant:
 	return ids
 
 
-func _load_door(entry: Variant, by_id: Dictionary) -> String:
+func _load_door(entry: Variant, by_id: Dictionary, sim: PassengerSim) -> String:
 	if (
 		typeof(entry) != TYPE_DICTIONARY
 		or (entry as Dictionary).size() != 2
@@ -471,15 +473,26 @@ func _load_door(entry: Variant, by_id: Dictionary) -> String:
 	var last: Passenger = null
 	for id: int in ids:
 		var p: Passenger = by_id[id]
-		var heading := p.stage == Passenger.Stage.TO_EXIT
-		var out := p.stage == Passenger.Stage.APRON and p.apron_mm < GAP_MM
-		if p.exit_object != door or not (heading or out) or _door_of.has(id):
-			return "passenger %d cannot be in door file %d" % [id, door]
-		if last != null and door_left(p) < door_left(last):
-			return "passengers %d and %d in door file %d are out of order" % [last.id, id, door]
+		var problem := _member_problem(sim, p, door, last)
+		if problem != "":
+			return problem
 		_door_of[id] = door
 		last = p
 	_doors[door] = ids
+	return ""
+
+
+## Why `p` cannot follow `last` (null for the first) in door `door`'s file,
+## or "".
+func _member_problem(sim: PassengerSim, p: Passenger, door: int, last: Passenger) -> String:
+	var heading := p.stage == Passenger.Stage.TO_EXIT
+	var out := p.stage == Passenger.Stage.APRON and p.apron_mm < GAP_MM
+	if p.exit_object != door or not (heading or out) or _door_of.has(p.id):
+		return "passenger %d cannot be in door file %d" % [p.id, door]
+	if heading and not _heads_for(sim, p):
+		return "passenger %d in door file %d is not walking to that open exit" % [p.id, door]
+	if last != null and door_left(p) < door_left(last):
+		return "passengers %d and %d in door file %d are out of order" % [last.id, p.id, door]
 	return ""
 
 
@@ -516,16 +529,28 @@ func _load_pending(value: Variant, by_id: Dictionary, sim: PassengerSim) -> Stri
 	var p: Passenger = by_id.get(id)
 	if p == null or _pending.has(id):
 		return "pending passenger %d is unknown or repeated" % id
-	if p.stage != Passenger.Stage.TO_EXIT or p.exit_object == 0:
-		return "pending passenger %d is not heading for an exit" % id
+	if p.stage != Passenger.Stage.TO_EXIT or p.exit_object == 0 or not _heads_for(sim, p):
+		return "pending passenger %d is not heading for an open exit" % id
 	# In its door file it is the walker standing at the door: only walkers
 	# already out on the apron are ahead of it.
 	if _door_of.has(id):
 		var at_door := p.at == sim.layout.door_cell(sim.grid, p.exit_object)
-		if p.is_moving() or not at_door:
+		var ahead: Array = _doors[_door_of[id]].slice(0, _doors[_door_of[id]].find(id))
+		var out := ahead.all(
+			func(other: int) -> bool: return by_id[other].stage == Passenger.Stage.APRON
+		)
+		if p.is_moving() or not at_door or not out:
 			return "pending passenger %d is in a door file but not waiting at its door" % id
 	_pending[id] = true
 	return ""
+
+
+## Whether `p`'s exit is an open exit in the sim's layout and its committed
+## path ends at that exit's cell.
+static func _heads_for(sim: PassengerSim, p: Passenger) -> bool:
+	if not sim.layout.open_exits(sim.grid).has(p.exit_object):
+		return false
+	return p.path_end() == sim.layout.door_cell(sim.grid, p.exit_object)
 
 
 ## A walker that should be in a file and is not, or "".

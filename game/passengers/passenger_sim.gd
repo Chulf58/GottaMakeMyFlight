@@ -1189,8 +1189,13 @@ func _drop_exit(p: Passenger) -> void:
 ## The pending walkers join their next file where they now fit, in
 ## BoardingFiles.pending_order(): before anyone steps, so each walks this tick.
 func _admit_pending() -> void:
+	var open := layout.open_exits(grid)
 	for p in files.pending_order(self):
-		if files.door_of(p.id) != 0:
+		# Its exit closed or went while it waited: it gives up its place and
+		# chooses an exit again on its step (_to_exit()).
+		if not open.has(p.exit_object):
+			_drop_exit(p)
+		elif files.door_of(p.id) != 0:
 			_step_out(p)
 		else:
 			files.join_door(self, p)
@@ -1255,9 +1260,14 @@ func _replan(p: Passenger) -> void:
 		return
 	p.set_path(path)
 	p.seg_mm = keep
+	if p.stage != Passenger.Stage.TO_EXIT or p.exit_object == 0:
+		return
+	# No way on to its door: it chooses an exit again (_to_exit()).
+	if p.path_end() != layout.door_cell(grid, p.exit_object):
+		_drop_exit(p)
 	# A new way to the door changes the walk left: the walker takes its place
 	# in the door file again, or waits.
-	if p.stage == Passenger.Stage.TO_EXIT and files.holds(p.id):
+	elif files.holds(p.id):
 		files.reroute(self, p)
 
 

@@ -587,3 +587,71 @@ func test_a_late_walker_held_back_in_a_line_misses_from_crowds() -> void:
 		texts[reason["text"]] = reason["count"]
 	assert_int(texts.get(FlightResult.CROWDED_TEXT, 0)).is_equal(1)
 	assert_int(texts.get(FlightResult.STAGE_TEXT[free.missed_stage], 0)).is_equal(1)
+
+
+## The reference terminal with a second exit door at (17, 2), both walks out
+## joining the same apron route, and walkers crowding both doors, run until
+## one stands at its door waiting for room on the apron. Returns that walker,
+## or null.
+func _waiting_at_a_door() -> Passenger:
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	(
+		assert_bool(grid.apply(BuildEdit.remove_wall(Vector2i(17, 2), BuildGrid.Side.NORTH)).ok)
+		. is_true()
+	)
+	PassengerTestWorld.place(grid, &"exit_door", Vector2i(17, 2), 0)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(BOARDING, DOORS))
+	_world.run_to(BOARDING + 5)
+	for cell: Vector2i in [Vector2i(17, 3), Vector2i(20, 3), Vector2i(17, 4), Vector2i(20, 4)]:
+		for i in 3:
+			walker(_world, cell)
+	for i in 600:
+		_world.step()
+		for id in _world.sim.passenger_ids():
+			var files := _world.sim.files
+			if files.is_pending(id) and files.door_of(id) != 0:
+				return _world.passenger(id)
+	return null
+
+
+## While a walker waits at its door for room on the apron, `edit` closes that
+## door: it does not walk out through it, and is not counted as made for
+## free; it goes out by the other door.
+func _check_closed_while_waiting(close_it: Callable) -> void:
+	var p := _waiting_at_a_door()
+	assert_object(p).is_not_null()
+	var door := p.exit_object
+	var cell := _world.sim.layout.door_cell(_world.grid, door)
+	print("tick %d: walker %d waits at door %d %s" % [_world.clock.tick, p.id, door, cell])
+	assert_bool(close_it.call(door, cell)).is_true()
+	assert_bool(_world.sim.layout.open_exits(_world.grid).has(door)).is_false()
+	_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_EXIT)
+	assert_int(p.exit_object).is_not_equal(door)
+	assert_bool(_world.sim.files.door_file(door).has(p.id)).is_false()
+	var out_by := 0
+	while not p.is_done() and _world.clock.tick < DOORS:
+		_world.step()
+		if p.stage == Passenger.Stage.APRON and out_by == 0:
+			out_by = p.exit_object
+	print("walker %d went out by door %d, %s" % [p.id, out_by, Passenger.Stage.keys()[p.stage]])
+	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
+	assert_int(out_by).is_not_equal(door)
+	assert_int(out_by).is_not_equal(0)
+
+
+func test_a_walker_waiting_at_a_door_that_is_removed_does_not_board_for_free() -> void:
+	_check_closed_while_waiting(
+		func(door: int, _cell: Vector2i) -> bool:
+			return _world.grid.apply(BuildEdit.remove_object(door)).ok
+	)
+
+
+func test_a_walker_waiting_at_a_door_that_is_blocked_does_not_walk_through_it() -> void:
+	# Floor laid on the cell outside the door closes it (TerminalLayout.is_exit_open()).
+	_check_closed_while_waiting(
+		func(_door: int, cell: Vector2i) -> bool:
+			var beyond := cell + Vector2i(0, -1)
+			return _world.grid.apply(BuildEdit.paint_floor(beyond, BuildGrid.FLOOR_TILE, 1)).ok
+	)
