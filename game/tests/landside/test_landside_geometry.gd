@@ -217,12 +217,14 @@ func test_the_multi_storey_stands_on_its_assets_footprint() -> void:
 
 ## The walks out of every multi-storey slot and the cars' paths to and from
 ## every slot stay on the asset's floors and ramps inside the building: every
-## point, and every 0.25 m along every segment, from the slot to the aisle
-## front stands on a walkable face of the mesh (its plane within 6 cm of the
-## point) with 1.8 m clear above. A straight line down through a floor, or a
-## point over a deck's ramp opening or under a ramp, fails. (The converted
-## ramp faces are wound with their normals down, so a walkable face is any
-## face within 25 degrees of level, whichever way it faces.)
+## point, and every 0.25 m along every segment, from in front of the entrance
+## to the slot and back out to in front of the way out (a walk: from the slot
+## to the entrance) stands on a walkable face of the mesh (its plane within
+## 6 cm of the point) with 1.8 m clear above. A straight line down through a
+## floor, a point over a deck's ramp opening or under a ramp, or a kerb up to
+## 0.45 m high in the way, fails. (The converted ramp faces are wound with
+## their normals down, so a walkable face is any face within 25 degrees of
+## level, whichever way it faces.)
 func test_the_multi_storey_walks_and_drives_stay_on_its_floors_and_ramps() -> void:
 	var asset := _scene(MULTI_SCENE)
 	var spot := STARTER.lots[1]
@@ -233,13 +235,11 @@ func test_the_multi_storey_walks_and_drives_stay_on_its_floors_and_ramps() -> vo
 	var top := 0.0
 	var door := spot.entrance[spot.entrance.size() - 1]
 	for slot in spot.slots.size():
-		# Ground slot 0 (local z -22) stands in the ground-floor front wall (1.2 m
-		# high, local z -23.2 to -21.9), as the slots were authored in Landside
-		# 3/4; moving it is a slot layout change, outside this check.
-		if slot == 0:
-			continue
 		var path: PackedVector3Array = paths.slot_path[1][slot]
-		var routes := [path.slice(path.find(door), path.rfind(door) + 1)]
+		# In through the entrance and out of the way out; the path ends on the
+		# exit lane's start, on the road in front of the building.
+		var routes := [path.slice(path.find(spot.entrance[0]), path.size() - 1)]
+		assert_vector(path[path.size() - 2]).is_equal(spot.way_out[spot.way_out.size() - 1])
 		# A ground slot's passengers walk straight to the gate, as before.
 		if LandsidePaths.deck_of(spot, spot.slots[slot]) > 0:
 			var walk := PackedVector3Array(paths.lot_walk(1, slot))
@@ -266,10 +266,9 @@ func test_the_multi_storey_walks_and_drives_stay_on_its_floors_and_ramps() -> vo
 	print("multi-storey floor checks %d, highest %.2f, over the kerb %d" % [checked, top, kerbs])
 	assert_float(top).is_greater(10.0)
 	assert_int(checked).is_greater(1000)
-	# Only a ground-floor car crosses the ramp landing's kerb (x 1 to 1.7, 0.4 m
-	# high) between the entrance and the aisle: the asset has no level way from
-	# its front entrance to the ground-floor stalls. Twelve slots, both ways.
-	assert_int(kerbs).is_less_equal(12 * 2 * 4)
+	# No route crosses a kerb: the ground-floor cars go through the gap cut in
+	# the ramp kerb (tools/blender/landside/parking_2a_entrance.py).
+	assert_int(kerbs).is_equal(0)
 
 
 ## The faces of the asset within 25 degrees of level, in world space, each
