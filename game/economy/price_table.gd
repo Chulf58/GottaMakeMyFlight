@@ -111,7 +111,7 @@ const OBJECT_PRICES := {
 ## What the landside build tools cost (decision landside-parking-kinds-a-cheap-
 ## surface-lot-and-an-expensive; Landside 3/4). Tuning values, to be checked in
 ## a playtest: a curb bay (two berths) costs about a cafe table, a surface lot
-## (12 spaces) about three check-in desks, a multi-storey (36 spaces) about four
+## (12 spaces) about three check-in desks, a multi-storey (31 spaces) about four
 ## times a lot. A car pays SURFACE_LOT_FEE once when it parks, so a lot earns
 ## its price back after about 60 cars.
 const LANDSIDE_PRICES := {

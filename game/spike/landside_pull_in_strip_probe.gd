@@ -22,6 +22,15 @@ extends SceneTree
 ## longer than a lane step a tick allows over the frame gap, plus slack, the nose along
 ## the step (dot over 0.9), and the last frame in the berth (within 5 cm). The strip
 ## (four frames a row, two rows) goes to tools/blender/out/landside/pull_in/.
+##
+## Then the multi-storey (lot spot 1) is built and the probe waits for a car to turn in
+## for a ground-floor slot (board e3aa4367): eight frames from the gate, through the
+## gap cut in the ramp kerb, to the stall, from a camera on the ground floor. Every
+## frame proves the car in frame and hit by camera rays, prints its height, and checks
+## its nose against its heading over a twentieth of a tick; the last frame has the car
+## within 5 cm of its slot. Two stills follow: the kerb gap close up (the toon ramp
+## over the floor wedge), and parked cars on the first deck inside its painted stalls
+## (cars moved there as a fixture, as the views plates probe does).
 
 const OUT_REL := "res://../tools/blender/out/landside/pull_in"
 const MAIN_SCENE := "res://main/main.tscn"
@@ -31,6 +40,22 @@ const HANG_LIMIT_MS := 120000
 const TICK_LIMIT := 60000
 const FRAMES := 8
 const GLASS := "res://assets/materials/tp_glass.tres"
+const MULTI := 1
+## How far the nose check looks ahead, in ticks.
+const NOSE_TICKS := 0.05
+## On the ground floor near the aisle, under the first deck, looking at the gate
+## through the entrance opening (x 2.05 to 7.95), over the kerb gap and the stall.
+const GROUND_EYE := Vector3(-1.0, 2.8, -8.0)
+const GROUND_TARGET := Vector3(-1.0, 0.6, -28.0)
+## The kerb gap (x 1.0 to 1.7, z -29.9 to -25.9), seen from the stalls.
+const GAP_EYE := Vector3(-3.0, 1.9, -23.0)
+const GAP_MID := Vector3(1.35, 0.34, -27.9)
+## First-deck stalls the fixture fills (index from the deck's first slot), and the
+## still from the first deck's aisle.
+const DECK_STALLS: Array[int] = [3, 4, 5]
+const DECK_WAIT_TICKS := 20000
+const DECK_EYE := Vector3(-0.5, 8.6, 0.0)
+const DECK_TARGET := Vector3(-6.6, 5.6, -12.0)
 
 var _out_dir := ""
 var _failed := false
@@ -88,6 +113,12 @@ func _watch() -> void:
 func _run() -> void:
 	await _boot()
 	await _plate_pull_in()
+	if not _failed:
+		await _plate_ground_floor()
+	if not _failed:
+		await _plate_kerb_gap()
+	if not _failed:
+		await _plate_upper_deck()
 	_guard_mutex.lock()
 	_guard_stop = true
 	_guard_mutex.unlock()
@@ -253,6 +284,212 @@ func _plate_pull_in() -> void:
 		_invalid("the car ended %.2f m from its berth" % last.distance_to(berth))
 	var path := _out_dir.path_join("landside_pull_in_strip.png")
 	if strip.save_png(path) != OK:
+		_invalid("could not save %s" % path)
+	else:
+		print("PLATE saved %s" % path)
+
+
+# ------------------------------------------------------------ multi-storey
+
+
+## Steps until a drawn car has just left the multi-storey's access lane for a
+## ground-floor slot; its id, or 0.
+func _await_ground_slot() -> int:
+	_stage = "wait ground slot"
+	var lot := _landside.definition.lots[MULTI]
+	var on_access := {}
+	while _clock.tick < TICK_LIMIT:
+		for id in _landside.vehicle_ids():
+			var w := _landside.get_vehicle(id)
+			on_access[id] = w.lane == LandsideVehicle.Lane.ACCESS and w.lot == MULTI
+		_tick()
+		for id in _landside.vehicle_ids():
+			var v := _landside.get_vehicle(id)
+			if (
+				v.lane != LandsideVehicle.Lane.SLOT
+				or v.lot != MULTI
+				or not on_access.get(id, false)
+			):
+				continue
+			if LandsidePaths.deck_of(lot, lot.slots[v.stop]) == 0 and _views.has_vehicle(id):
+				return id
+		if _clock.tick % 200 == 0:
+			_beat("wait ground slot %d" % _clock.tick)
+			await process_frame
+	return 0
+
+
+## A fixed camera at `eye` looking at `target` (the rig stops driving it).
+func _place_camera(label: String, eye: Vector3, target: Vector3) -> void:
+	_beat(label)
+	_rig.stop_follow()
+	_rig.set_process(false)
+	_rig.set_process_unhandled_input(false)
+	_cam.look_at_from_position(eye, target, Vector3.UP)
+	await _frames(4)
+	_views.draw()
+	await _rebuild_colliders()
+	print("CAMERA %s eye=%s target=%s" % [label, eye, target])
+
+
+func _plate_ground_floor() -> void:
+	if not _landside.build_lot(MULTI):
+		_invalid("the multi-storey could not be built")
+		return
+	_views.draw()
+	var id := await _await_ground_slot()
+	if id == 0:
+		_invalid("no car took a ground-floor slot by tick %d" % TICK_LIMIT)
+		return
+	var v := _landside.get_vehicle(id)
+	var slot := _landside.definition.lots[MULTI].slots[v.stop]
+	var gate := _landside.definition.lots[MULTI].access[2]
+	print("GROUND vehicle=%d slot=%d at %s gate %s tick=%d" % [id, v.stop, slot, gate, _clock.tick])
+	await _place_camera("ground", GROUND_EYE, GROUND_TARGET)
+	var stand: int = _landside.paths.slot_stand[MULTI][v.stop]
+	var left := ceili(float(stand - v.pos_mm) / LandsideSim.SPEED_MM)
+	var gap := left / float(FRAMES - 1)
+	print("GROUND %d ticks to the slot, frames %.2f ticks apart" % [left, gap])
+	var strip := Image.create(1920, 540, false, Image.FORMAT_RGBA8)
+	var lowest := INF
+	var highest := -INF
+	var last := Vector3.INF
+	for i in FRAMES:
+		if i > 0 and i < FRAMES - 1:
+			_advance(gap - NOSE_TICKS)
+		elif i == FRAMES - 1:
+			var guard := 0
+			while v.stage == LandsideVehicle.Stage.DRIVE and guard < left * 4:
+				_advance(0.25)
+				guard += 1
+			_advance(1.0)
+		# The nose against the way the car moves over a twentieth of a tick.
+		_views.draw()
+		var node := _views.node_for(id)
+		if node == null:
+			_invalid("ground frame %d: vehicle %d left the view" % [i, id])
+			return
+		var before := node.global_position
+		var parked := v.stage == LandsideVehicle.Stage.PARKED
+		if not parked:
+			_advance(NOSE_TICKS)
+			_views.draw()
+		var at := node.global_position
+		var nose := node.global_basis.z
+		var step := at - before
+		var dot := nose.dot(step.normalized()) if step.length() > 0.001 else NAN
+		lowest = minf(lowest, at.y)
+		highest = maxf(highest, at.y)
+		print(
+			(
+				"GROUND_STRIP frame=%d tick=%d stage=%d at=%s nose=%s step=%.3f nose_dot=%.3f"
+				% [i, _clock.tick, v.stage, at, nose, step.length(), dot]
+			)
+		)
+		if not parked and step.length() <= 0.001:
+			_invalid("ground frame %d: the car did not move" % i)
+		if not parked and step.length() > 0.001 and dot < 0.9:
+			_invalid("ground frame %d: the car moves %s but faces %s" % [i, step, nose])
+		if not _prove_in_frame("ground/frame %d" % i, _aabb_of(node)):
+			return
+		# The probe colliders ride on the car's meshes; let physics see where it is now.
+		await physics_frame
+		await physics_frame
+		if not _prove_visible("ground/frame %d" % i, node):
+			return
+		last = at
+		var img := await _grab()
+		var tile := img.get_region(Rect2i(Vector2i(0, 0), img.get_size()))
+		tile.resize(480, 270, Image.INTERPOLATE_LANCZOS)
+		strip.blit_rect(
+			tile,
+			Rect2i(Vector2i.ZERO, Vector2i(480, 270)),
+			Vector2i((i % 4) * 480, floori(i / 4.0) * 270)
+		)
+	var off := Vector2(last.x - slot.x, last.z - slot.z).length()
+	print(
+		(
+			"GROUND last at %s, %.3f m from slot %s, car height %.3f..%.3f"
+			% [last, off, slot, lowest, highest]
+		)
+	)
+	if off > 0.05:
+		_invalid("the car ended %.2f m from its slot" % off)
+	_save(strip, "landside_ground_floor_strip.png")
+
+
+## Rays from the camera to `target`: at least one lands within 0.3 m of it.
+func _prove_point(label: String, target: Vector3) -> bool:
+	var space := _cam.get_world_3d().direct_space_state
+	var from := _cam.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, target + (target - from).normalized() * 0.5)
+	var hit := space.intersect_ray(q)
+	var off: float = (hit.position - target).length() if hit else INF
+	print("VISIBLE %s ray lands %.2f m from the target" % [label, off])
+	if off > 0.3:
+		_invalid("%s: the ray to %s stops %.2f m away" % [label, target, off])
+	return off <= 0.3
+
+
+func _plate_kerb_gap() -> void:
+	await _place_camera("kerb_gap", GAP_EYE, GAP_MID)
+	var box := AABB(Vector3(1.0, 0.3, -29.9), Vector3(0.7, 0.15, 4.0))
+	if not _prove_in_frame("kerb_gap", box) or not _prove_point("kerb_gap", GAP_MID):
+		return
+	_save(await _grab(), "landside_kerb_gap.png")
+
+
+## Parked cars moved into consecutive first-deck stalls (a fixture), then a still from
+## the first deck's aisle.
+func _plate_upper_deck() -> void:
+	var lot := _landside.definition.lots[MULTI]
+	var first := 0
+	for k in lot.slots.size():
+		if LandsidePaths.deck_of(lot, lot.slots[k]) == 1:
+			first = k
+			break
+	# Let more cars park first, so the deck shows a row of them.
+	var waited := 0
+	while _parked_in_multi() < DECK_STALLS.size() and waited < DECK_WAIT_TICKS:
+		_tick()
+		waited += 1
+		if waited % 200 == 0:
+			_beat("wait deck %d" % waited)
+			await process_frame
+	var moved: Array[int] = []
+	for id in _landside.vehicle_ids():
+		var v := _landside.get_vehicle(id)
+		if v.lot == MULTI and v.stage == LandsideVehicle.Stage.PARKED and moved.size() < 3:
+			v.stop = first + DECK_STALLS[moved.size()]
+			v.pos_mm = _landside.paths.slot_stand[MULTI][v.stop]
+			moved.append(id)
+	if moved.is_empty():
+		_invalid("no parked car to move onto the first deck")
+		return
+	_views.snap()
+	print("DECK moved %s to slots %s" % [moved, DECK_STALLS.slice(0, moved.size())])
+	await _place_camera("deck", DECK_EYE, DECK_TARGET)
+	for id in moved:
+		var node := _views.node_for(id)
+		if not _prove_in_frame("deck/%d" % id, _aabb_of(node)):
+			return
+		if not _prove_visible("deck/%d" % id, node):
+			return
+		print("DECK car %d at %s" % [id, node.global_position])
+	_save(await _grab(), "landside_upper_deck_stalls.png")
+
+
+func _parked_in_multi() -> int:
+	var count := 0
+	for id in _landside.vehicle_ids():
+		var v := _landside.get_vehicle(id)
+		count += int(v.lot == MULTI and v.stage == LandsideVehicle.Stage.PARKED)
+	return count
+
+
+func _save(img: Image, file: String) -> void:
+	var path := _out_dir.path_join(file)
+	if img.save_png(path) != OK:
 		_invalid("could not save %s" % path)
 	else:
 		print("PLATE saved %s" % path)
