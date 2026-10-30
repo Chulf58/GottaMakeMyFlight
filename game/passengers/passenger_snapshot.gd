@@ -8,7 +8,9 @@ extends RefCounted
 ## (ShopSnapshot), security service under "security"
 ## (SecurityRuntime.to_list()) with each passenger's phase, remaining work and
 ## resolved incident on its record.
-## Seat claims and walker counts are rebuilt from the passenger records. The
+## Seat claims and walker counts are rebuilt from the passenger records.
+## Standing spot claims are not: PassengerSim saves them under "standing" and
+## restores them as saved (StandingSpots.checked()). The
 ## made and missed totals, each flight's results and the scheduled flights are
 ## saved as they are: settled passengers are retired, so they cannot be rebuilt.
 

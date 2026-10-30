@@ -44,7 +44,8 @@ func _grid(with_statue: bool) -> BuildGrid:
 	var grid := PassengerTestWorld.floored(SIZE)
 	PassengerTestWorld.place(grid, &"exit_door", Vector2i(2, 0), 0)
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(2, 19), 2)
-	PassengerTestWorld.place(grid, &"seat_row", Vector2i(3, 14), 0)
+	# No gate seats: a standing passenger holding a spot takes a free seat on
+	# its beat, and the guest must stay standing under the statue.
 	if with_statue:
 		PassengerTestWorld.place(grid, &"statue_indoor", STATUE_CELL, 0)
 	return grid
@@ -62,6 +63,15 @@ func _guest(world: PassengerTestWorld) -> Passenger:
 	p.at = GUEST_CELL
 	p.clear_path()
 	p.mood = START_MOOD
+	# A standing passenger holds a standing spot on its cell; a version 14
+	# save refuses one that does not (StandingSpots.checked()).
+	var spots := world.sim.standing
+	spots.rebuild(world.sim)
+	for spot: int in spots.spots:
+		if spots.cell_of(spot) == GUEST_CELL:
+			spots.claim(p.id, spot)
+			break
+	assert_int(spots.spot_of(p.id)).is_not_equal(StandingSpots.NO_SPOT)
 	return p
 
 
