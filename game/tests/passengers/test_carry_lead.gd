@@ -160,8 +160,9 @@ func test_a_move_interrupted_in_its_reach_starts_the_next_where_the_bag_is() -> 
 
 ## Whether a move is hand-led is decided when it is stamped and kept to its
 ## end: one stamped outside a toilet stall stays hand-led when its walker steps
-## into the stall, and one stamped inside stays on the stall's path after it
-## steps out. A swap is never hand-led. Control: a finished move leads no more.
+## into the stall, and one stamped inside a stall is hand-led too (board item
+## c7b0e7be: every move; until then a stall move was not). A swap is never
+## hand-led. Control: a finished move leads no more.
 func test_a_hand_led_move_keeps_its_mode_across_a_stall_change() -> void:
 	var held := {"in_stall": false}
 	var bag := {"since": 0.0}
@@ -170,7 +171,7 @@ func test_a_hand_led_move_keeps_its_mode_across_a_stall_change() -> void:
 	assert_bool(CarryOnProps._leading(bag, 1.0)).is_true()
 	var in_stall := {"since": 0.0}
 	in_stall["led"] = CarryOnProps._leads({"in_stall": true}, in_stall)
-	assert_bool(CarryOnProps._leading(in_stall, 1.0)).is_false()
+	assert_bool(CarryOnProps._leading(in_stall, 1.0)).is_true()
 	var swap := {"since": 0.0, "swap": true}
 	swap["led"] = CarryOnProps._leads({"in_stall": false}, swap)
 	assert_bool(CarryOnProps._leading(swap, 1.0)).is_false()
@@ -229,3 +230,108 @@ func test_a_roller_passed_between_pulling_hands_stays_held_by_its_bar() -> void:
 		"pull.R>pull.L: holders %s, the bar at most %.4f m from the grip" % [holders.keys(), worst]
 	)
 	assert_bool(holders.has(0) and holders.has(1)).is_true()
+
+
+## A move of a bag of `kind` from the right hand to the floor, as CarryOnProps
+## records it, and a body for plan(): [bag, body].
+static func _to_floor(kind: SecurityLooks.Kind) -> Array:
+	var bag := {
+		"kind": kind,
+		"home": (SecurityLooks.Home.FLOOR * 2 + 0) * 2 + 1,
+		"carry": SecurityLooks.Carry.HAND,
+		"was": (SecurityLooks.Home.HAND * 2 + 0) * 2 + 1,
+		"carry_from": SecurityLooks.Carry.HAND,
+		"anchor_from": Vector3(0.0, 0.2, 0.1),
+		"from": Transform3D(),
+	}
+	var body := {
+		"hand": 0,
+		"grips": [Vector3(-0.2, 0.9, 0.3), Vector3(0.2, 0.9, 0.3)],
+		"shoulders_y": [1.4, 1.4],
+		"bar_z": 0.3,
+		"scale": 1.0,
+		"strap_top": Vector3.ZERO,
+	}
+	return [bag, body]
+
+
+## Set down in a toilet stall, a bag from the hand is placed from the hand at
+## every k up to its let-go, which starts early (STALL_LET_GO: the body shuffles
+## back to the seat), with the hand aimed at the bag's path at full weight from
+## k 0 (the body turns round to sit in one frame) and its stoop kept on, back
+## first (STALL_HIPS). A roller set down there is left by its grip bar, on top
+## as it stands, not by its carry handle. Controls: out of a stall the hand
+## eases in from weight 0, is still holding the bag past the stall's let-go,
+## its stoop takes the hips at once, and a roller is left by its carry handle.
+func test_a_stall_set_down_is_held_from_its_start_and_a_roller_left_by_its_bar() -> void:
+	var start := Transform3D(Basis(), Vector3(0.0, 0.6, 0.4))
+	var want := Transform3D(Basis(), Vector3(0.0, 0.0, 0.4))
+	var stall := {"in_stall": true, "hand_carry": true, "hand": 0, "yaw": 0.0, "clear": 0.3}
+	var open := stall.duplicate()
+	open["in_stall"] = false
+	var case_move := _to_floor(SecurityLooks.Kind.CASE)
+	var down := 1.0 - CarryLead.STALL_LET_GO
+	var frame := Transform3D()
+	for step in 11:
+		var k := down * step / 10.0 * 0.999
+		var plan := CarryLead.plan(case_move[0], k, start, want, frame, stall, case_move[1])
+		assert_int(plan["holder"]).is_equal(0)
+		assert_float(plan["weights"][0]).is_equal_approx(1.0, 0.0001)
+		assert_float(plan["keeps"][0]).is_equal_approx(1.0, 0.0001)
+		assert_vector(plan["drops"][0]).is_equal(CarryLead.STALL_HIPS)
+	var late := down + 0.01
+	(
+		assert_int(
+			CarryLead.plan(case_move[0], late, start, want, frame, stall, case_move[1])["holder"]
+		)
+		. is_equal(-1)
+	)
+	var outside := CarryLead.plan(case_move[0], 0.0, start, want, frame, open, case_move[1])
+	assert_int(outside["holder"]).is_equal(0)
+	assert_float(outside["weights"][0]).is_equal_approx(0.0, 0.0001)
+	assert_vector(outside["drops"][0]).is_equal(CarryStoop.HIPS_ALL)
+	(
+		assert_int(
+			CarryLead.plan(case_move[0], late, start, want, frame, open, case_move[1])["holder"]
+		)
+		. is_equal(0)
+	)
+	var roller := _to_floor(SecurityLooks.Kind.ROLLER)
+	var bar := CarryLead.anchor(SecurityLooks.Kind.ROLLER, 0.3)
+	var left := CarryLead.plan(roller[0], 1.0, start, want, frame, stall, roller[1])
+	var left_open := CarryLead.plan(roller[0], 1.0, start, want, frame, open, roller[1])
+	print(
+		(
+			"roller let go at %s in a stall (bar %s), at %s outside (handle %s)"
+			% [left["targets"][0], want * bar, left_open["targets"][0], CarryOnProps.ROLLER_HANDLE]
+		)
+	)
+	assert_vector(left["targets"][0]).is_equal_approx(want * bar, Vector3.ONE * 0.0001)
+	assert_vector(left_open["targets"][0]).is_equal_approx(
+		want * CarryOnProps.ROLLER_HANDLE, Vector3.ONE * 0.0001
+	)
+
+
+## Picked up off a stall's floor while the stooping hand is still low, a case's
+## path rises toward the carry (the hand no lower than STALL_CARRY_GRIP_M over
+## the feet), not toward where the low hand puts its carry end, which led the
+## hand down with it. Control: out of a stall the same move follows the low end.
+func test_a_stall_pick_up_rises_to_the_carry_not_to_the_low_hand() -> void:
+	var move := _to_floor(SecurityLooks.Kind.CASE)
+	var bag: Dictionary = move[0]
+	var body: Dictionary = move[1]
+	bag["home"] = (SecurityLooks.Home.HAND * 2 + 0) * 2
+	bag["was"] = (SecurityLooks.Home.FLOOR * 2 + 0) * 2
+	# The hand stooped low: its grip, and the carry end placed from it, low.
+	body["grips"] = [Vector3(0.0, 0.3, 0.4), Vector3(0.2, 0.3, 0.3)]
+	var start := Transform3D(Basis(), Vector3(0.0, 0.0, 0.5))
+	var want := Transform3D(Basis(), Vector3(0.0, 0.2, 0.4))
+	var stall := {"in_stall": true, "hand_carry": true, "hand": 0, "yaw": 0.0, "clear": 0.3}
+	var open := stall.duplicate()
+	open["in_stall"] = false
+	var k := 0.9
+	var up: Vector3 = CarryLead.plan(bag, k, start, want, Transform3D(), stall, body)["targets"][0]
+	var low: Vector3 = CarryLead.plan(bag, k, start, want, Transform3D(), open, body)["targets"][0]
+	print("stall pick-up target at k %.2f: %s; outside: %s" % [k, up, low])
+	assert_float(up.y).is_greater(CarryLead.STALL_CARRY_GRIP_M * 0.9)
+	assert_float(low.y).is_less(0.5)

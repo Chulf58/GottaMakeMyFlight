@@ -1001,14 +1001,12 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 	bag["reach_from"] = _reach_of(node, kind)
 
 
-## Whether a move of `bag` stamped now is hand-led (CarryLead): not a roller
-## going between the hand and the pull by its bar (_swap_transform, held by the
-## bar throughout), not inside a toilet stall (its moves are decision
-## stall-bag-poses-as-built-bags-stand-upright-against-the-insi's, not
-## measured by the crossing probe). Kept in the bag's "led" to the move's end,
-## so a move that crosses into or out of a stall does not change mode.
-static func _leads(held: Dictionary, bag: Dictionary) -> bool:
-	return not bag.get("swap", false) and not held.get("in_stall", false)
+## Whether a move of `bag` stamped now is hand-led (CarryLead): every move but
+## a roller's between the hand and the pull by its bar (_swap_transform, held
+## by the bar throughout), in a toilet stall too (board item c7b0e7be). Kept in
+## the bag's "led" to the move's end, so a move never changes mode.
+static func _leads(_held: Dictionary, bag: Dictionary) -> bool:
+	return not bag.get("swap", false)
 
 
 ## Whether `bag` is in a hand-led move now (_leads(), as stamped): moving.
@@ -1023,6 +1021,7 @@ func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 	var weights := [0.0, 0.0]
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	var keeps := [0.0, 0.0]
+	var drops := [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
 	for bag: Dictionary in held["bags"]:
 		if not _leading(bag, now) or not bag.has("lead"):
 			continue
@@ -1032,10 +1031,11 @@ func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 				weights[hand] = plan["weights"][hand]
 				targets[hand] = plan["targets"][hand]
 				keeps[hand] = plan["keeps"][hand]
+				drops[hand] = plan["drops"][hand]
 	held["reach_on"] = [weights[0] > 0.0, weights[1] > 0.0]
 	var rig := _rig(body)
 	var stoop: CarryStoop = rig["stoop"]
-	for list: Array in [stoop.targets, stoop.sides, stoop.weights, stoop.keeps]:
+	for list: Array in [stoop.targets, stoop.sides, stoop.weights, stoop.keeps, stoop.drops]:
 		list.clear()
 	for hand in 2:
 		var arm := rig["arms"][hand] as CarryArm
@@ -1046,6 +1046,7 @@ func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 			stoop.sides.append(hand)
 			stoop.weights.append(weights[hand])
 			stoop.keeps.append(keeps[hand])
+			stoop.drops.append(drops[hand])
 
 
 ## The body frame a new move of `bag` starts in: the body as it was when the
@@ -1304,7 +1305,7 @@ func _arms_off(body: Node3D) -> void:
 		arm.front_weight = 0.0
 		arm.reach_weight = 0.0
 	var stoop: CarryStoop = rig["stoop"]
-	for list: Array in [stoop.targets, stoop.sides, stoop.weights, stoop.keeps]:
+	for list: Array in [stoop.targets, stoop.sides, stoop.weights, stoop.keeps, stoop.drops]:
 		list.clear()
 
 
