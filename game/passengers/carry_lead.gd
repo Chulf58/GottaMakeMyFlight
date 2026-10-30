@@ -403,12 +403,14 @@ static func path(
 		# the bag comes in under the arm that will hold it.
 		var early := 6.75 * k * (1.0 - k) * (1.0 - k) * pow(1.0 - k * k, 4.0)
 		placed.origin.y += CarryOnProps.KNEE_LIFT_M * early
+	elif flags.get("to_floor", false) and not in_stall:
+		# Set down on the floor: out ahead first and down late, so it is not
+		# low in front of the thighs and the bent knees, and never lifted: the
+		# lift put the case top against the face of a body stooping to set it
+		# down (board item 5ed915b0).
+		var ahead := start.origin.lerp(want.origin, 1.0 - (1.0 - k) * (1.0 - k))
+		placed.origin = Vector3(ahead.x, lerpf(start.origin.y, want.origin.y, k * k), ahead.z)
 	else:
-		if flags.get("to_floor", false) and not in_stall:
-			# Set down on the floor: out ahead first and down late, so it is not
-			# low in front of the thighs and the bent knees (board item 5ed915b0).
-			var ahead := start.origin.lerp(want.origin, 1.0 - (1.0 - k) * (1.0 - k))
-			placed.origin = Vector3(ahead.x, lerpf(start.origin.y, want.origin.y, k * k), ahead.z)
 		placed.origin.y += CarryOnProps.TRANSFER_LIFT_M * arc
 	var clear: float = flags.get("clear", CarryOnProps.TRANSFER_CLEAR_M)
 	var yaw: float = flags.get("yaw", 0.0)

@@ -1365,10 +1365,6 @@ func _bag_transform(
 			if not (held.get("stall", {}) as Dictionary).is_empty():
 				return StallCarry.floor_place(held["stall"], bag_box(kind), scale_by, i, count)
 			var spot: Transform3D = held["floor"][i]
-			# Two bags side by side: each on its own hand's side (0 right, -x), so
-			# the hands do not cross to set them down or pick them up.
-			if is_equal_approx(absf(spot.origin.x), SecurityLooks.FLOOR_APART_M):
-				spot.origin.x = absf(spot.origin.x) * (-1.0 if held["hands"][i] == 0 else 1.0)
 			var placed := Transform3D(yaw, body.global_position) * spot
 			placed.origin.y = sim.grid.origin.y
 			return Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)

@@ -95,9 +95,14 @@ func test_a_hand_comes_and_goes_by_the_side_for_a_pack_on_the_back() -> void:
 	assert_vector(carried).is_equal(loop)
 
 
-## A bag set down on the floor ahead goes out ahead first and down late: half
-## way it is further ahead and higher than the same move onto a tray's spot
-## (a straight blend with the lift); both end at the spot.
+## A bag set down on the floor ahead goes out ahead first and down late, never
+## lifted: half way it is further ahead than the same move onto a tray's spot
+## (a straight blend with the lift), and at no point higher than it started,
+## but above the straight blend without the lift (down late); both end at the
+## spot. Changed for board item 5ed915b0: this test pinned the set-down higher
+## than the lifted blend half way, and that lift put the case top against the
+## face of a passenger stooping to set it down (crossing probe SELF_HEAD gap
+## 0.005 m at k 0.5).
 func test_a_bag_set_down_on_the_floor_goes_out_ahead_first() -> void:
 	var start := Transform3D(Basis(), Vector3(-0.3, 0.3, 0.05))
 	var want := Transform3D(Basis(), Vector3(0.0, 0.0, 0.56))
@@ -107,7 +112,11 @@ func test_a_bag_set_down_on_the_floor_goes_out_ahead_first() -> void:
 	var plain := CarryLead.path(start, want, 0.5, Transform3D(), start, flags)
 	var ahead := CarryLead.path(start, want, 0.5, Transform3D(), start, to_floor)
 	assert_float(ahead.origin.z - plain.origin.z).is_greater(0.1)
-	assert_float(ahead.origin.y - plain.origin.y).is_greater(0.05)
+	var straight := lerpf(start.origin.y, want.origin.y, 0.5)
+	assert_float(ahead.origin.y - straight).is_greater(0.05)
+	for n in 21:
+		var at := CarryLead.path(start, want, n / 20.0, Transform3D(), start, to_floor)
+		assert_float(at.origin.y).is_less_equal(start.origin.y + 0.0001)
 	var landed := CarryLead.path(start, want, 1.0, Transform3D(), start, to_floor)
 	assert_float(landed.origin.distance_to(want.origin)).is_less(0.0001)
 

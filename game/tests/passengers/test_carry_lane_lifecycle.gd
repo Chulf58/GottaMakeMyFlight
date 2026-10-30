@@ -278,14 +278,16 @@ func test_every_lifted_roller_hangs_by_its_bar() -> void:
 
 
 ## A roller going between the hand and the pull (a swap, held by its bar) goes
-## round the hand's side at security (CarryLead.swap_axle: midway its axle is
-## at least SWING_RADIUS_M from the body's centre) and swings out SWAP_OUT_M
-## elsewhere: the same move drawn without the security flag puts the axle
+## round the hand's side at security and swings out SWAP_OUT_M elsewhere.
+## Midway at security its drawn axle is CarryLead.swap_axle() of the hung and
+## trailing axles plus half the palm offset (BAR_PALM_M), on the hand's side of
+## the body; the same move drawn without the security flag puts the axle
 ## somewhere else. Every swap seen has the flag set exactly while its walker is
 ## at security. Control: a swap at security was seen. Changed for board item
 ## 5ed915b0: this test pinned a security swing SWAP_OPEN_M (0.2 m) wider than
 ## the narrow one, and that swing still put the roller behind the shins of a
-## walker standing at a lane (crossing probe, lane mode).
+## walker standing at a lane (crossing probe, lane mode); its first rewrite
+## checked only a distance from the body that the narrow swing also passed.
 func test_the_wide_swap_route_applies_only_at_security() -> void:
 	var w := _make()
 	var views := _views_of(w)
@@ -294,7 +296,8 @@ func test_the_wide_swap_route_applies_only_at_security() -> void:
 	var p := w.world.passenger(id)
 	var at_security := 0
 	var elsewhere := 0
-	var wider := NAN
+	var off := NAN
+	var side := NAN
 	var apart := NAN
 	for i in 2500:
 		_tick(w, views)
@@ -309,28 +312,53 @@ func test_the_wide_swap_route_applies_only_at_security() -> void:
 			elsewhere += 1
 			continue
 		at_security += 1
-		if is_nan(wider):
+		if is_nan(off):
 			var body := views.node_for(id)
-			var open: Transform3D = props._swap_transform(held, body, 0, 0.5)[0]
+			var drawn: Transform3D = props._swap_transform(held, body, 0, 0.5)[0]
 			held["security"] = false
 			var narrow: Transform3D = props._swap_transform(held, body, 0, 0.5)[0]
 			held["security"] = true
-			var axle := open * CarryOnProps.ROLLER_AXLE
-			var centre := body.global_position
-			wider = Vector2(axle.x - centre.x, axle.z - centre.z).length()
+			var axle := drawn * CarryOnProps.ROLLER_AXLE
+			var want := _swap_axle_midway(props, held, body)
+			off = axle.distance_to(want)
+			var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
+			# +x is the body's left: the right hand (0) is on -x.
+			side = (frame.affine_inverse() * axle).x * (-1.0 if held["hands"][0] == 0 else 1.0)
 			apart = axle.distance_to(narrow * CarryOnProps.ROLLER_AXLE)
 		if w.cleared.has(id):
 			break
 	print(
 		(
 			(
-				"swap frames at security %d, elsewhere %d; midway the axle is %.4f m out,"
-				+ " %.4f m from the narrow swing's"
+				"swap frames at security %d, elsewhere %d; midway the drawn axle is %.4f m from"
+				+ " swap_axle's, %.4f m out on the hand's side, %.4f m from the narrow swing's"
 			)
-			% [at_security, elsewhere, wider, apart]
+			% [at_security, elsewhere, off, side, apart]
 		)
 	)
 	assert_int(at_security).is_greater(0)
-	# The palm offset (BAR_PALM_M) moves the drawn axle a little either way.
-	assert_float(wider).is_greater_equal(CarryOnProps.SWING_RADIUS_M - CarryOnProps.BAR_PALM_M)
+	assert_float(off).is_less(0.001)
+	assert_float(side).is_greater(0.0)
 	assert_float(apart).is_greater(0.01)
+
+
+## Where the axle of the swapping roller (bag 0) of `held` drawn on `body` is
+## midway (t 0.5) at security: CarryLead.swap_axle() between its axle hung
+## under the grip and its trailing axle, moved out half of BAR_PALM_M on the
+## hand's side (CarryOnProps._swap_transform).
+func _swap_axle_midway(props: CarryOnProps, held: Dictionary, body: Node3D) -> Vector3:
+	var bag: Dictionary = held["bags"][0]
+	var scale_by: float = held["scale"]
+	var hand: int = held["hands"][0]
+	var grip := props.grip_of(body, hand)
+	var trailing: Vector3
+	if bag["carry"] == SecurityLooks.Carry.PULL:
+		trailing = bag.get("axle_now", Vector3.INF)
+		if not trailing.is_finite():
+			trailing = props._axle_drawn(bag, body, scale_by, hand)
+	else:
+		trailing = body.global_transform * ((bag["from"] as Transform3D) * CarryOnProps.ROLLER_AXLE)
+	var hung := props._hung_axle(bag, grip, scale_by)
+	var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
+	var axle := CarryLead.swap_axle(frame, hung, trailing, 0.5, hand, CarryOnProps.SWING_RADIUS_M)
+	return axle + CarryOnProps._outward(body, hand) * CarryOnProps.BAR_PALM_M * 0.5

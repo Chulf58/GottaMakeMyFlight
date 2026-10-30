@@ -532,8 +532,8 @@ func _on_tick(_tick: int) -> void:
 
 
 ## The close plates of one hand-led move (or walk) of bag `i` of passenger
-## `id`, each with the sim clock paused at its moment; each prints the bag's
-## FLOAT state, the stoop drawn and whether the passenger walks.
+## `id`, the paused sim clock stepped to each moment (no window jumped); each
+## prints the bag's FLOAT state, the stoop, the walk and SELF_HEAD (a move).
 func _plate_lead(id: int, i: int, key: String) -> void:
 	var props := _views.carry_on_props()
 	var walk := key.ends_with(" walk")
@@ -543,7 +543,6 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 	for m in moments.size():
 		var lo: float = moments[m][0]
 		var hi: float = moments[m][1]
-		# The clock is held and stepped to the moment, so no window is jumped.
 		_clock.set_paused(true)
 		await PlateSteps.step_to(self, _clock, props, id, i, lo, hi)
 		await _frames(1)
@@ -561,6 +560,7 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 			_clock.set_paused(false)
 			break
 		var state := FloatCheck.float_state(_sim, _views, id, i)
+		_failed = (not walk and PlateSteps.head_in_bag(body, bags[i], key, k) > 0) or _failed
 		var rig: Dictionary = body.get_meta(&"carry_rig", {})
 		var stoop: float = (rig["stoop"] as CarryStoop).drawn if rig.has("stoop") else -1.0
 		var slug := key.replace(" ", "_").replace(">", "-to-")

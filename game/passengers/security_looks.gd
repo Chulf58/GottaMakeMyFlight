@@ -346,11 +346,13 @@ static func in_tray(index: int, count: int, bag_length: float) -> Vector3:
 ## (+z ahead, +x its left, on the floor): at the feet of a gate chair, beside
 ## a cafe seat (the table is ahead), upright against the door inside a toilet
 ## stall (stall_floor()), and ahead of a repacking passenger. One bag lies
-## across the passenger's line, two lie along it side by side (in a stall, two
-## stand side by side across it).
+## across the passenger's line, two lie along it side by side, each on the side
+## of the hand that carries it (bag i in hand i, 0 the right, -x), so the hands
+## do not cross to set them down or pick them up (in a stall, two stand side by
+## side across it).
 static func floor_spot(sim: PassengerSim, p: Passenger, index: int, count: int) -> Transform3D:
 	var across := Basis(Vector3.UP, PI / 2.0) if count < 2 else Basis.IDENTITY
-	var side := 0.0 if count < 2 else (FLOOR_APART_M if index == 0 else -FLOOR_APART_M)
+	var side := 0.0 if count < 2 else (-FLOOR_APART_M if index == 0 else FLOOR_APART_M)
 	var where := StageKinds.location(p.stage)
 	if where == StageKinds.Location.FACILITY_SEAT and _in_stall(sim, p):
 		# On the stall's floor against the door, ahead of the feet.
@@ -361,8 +363,8 @@ static func floor_spot(sim: PassengerSim, p: Passenger, index: int, count: int) 
 		spot.origin.y = 0.0
 		return spot
 	if where == StageKinds.Location.FACILITY_SEAT:
-		# Beside the chair, lying along it.
-		var along := 0.0 if count < 2 else side
+		# Beside the chair, lying along it, bag 0 ahead of bag 1.
+		var along := 0.0 if count < 2 else -side
 		return Transform3D(Basis.IDENTITY, Vector3(-CAFE_BESIDE_M, 0.0, along))
 	if where == StageKinds.Location.GATE_SEAT:
 		return Transform3D(across, Vector3(side, 0.0, SEAT_AHEAD_M))

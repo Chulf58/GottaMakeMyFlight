@@ -7,6 +7,7 @@ extends RefCounted
 ## close up. Load with preload(); no class_name.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const CarryContact := preload("res://spike/carry_contact.gd")
 
 ## A plate whose sampled pixels are darker than DARK_LEVEL (every channel) over
 ## more than DARK_SHARE of the frame is a camera inside or against a mesh.
@@ -177,7 +178,10 @@ static func lead_sheet(dir: String) -> void:
 	print("LEAD_SHEET %s plates=%s" % [dir.path_join("contact_sheet_lead.png"), names])
 
 
-## A detail plate of `bag`: `cam` DETAIL_M from the bag's middle, aimed at it,
+## A detail plate of `bag`: `cam` DETAIL_M from the bag's middle, or further
+## for the whole bag to fit (a roller with its rods out), aimed at it; the
+## sight lines go to its biggest mesh (its case: the whole bag's middle can be
+## in the air between the rods),
 ## tried from the side `cam` is on now and then DETAIL_TURNS about the bag;
 ## saved to `path` from the first side where the bag's drawn bounds project
 ## inside `frame` (probe._box_in_frame), at least DETAIL_ON of five sight lines
@@ -195,16 +199,19 @@ static func detail_plate(
 	path: String
 ) -> bool:
 	var box := AABB()
+	var core := AABB()
 	var first := true
 	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
 		var b := mi.global_transform * mi.get_aabb()
 		box = b if first else box.merge(b)
+		core = b if b.get_volume() > core.get_volume() else core
 		first = false
 	var centre := box.get_center()
+	var reach := maxf(DETAIL_M, box.size.length() * 0.55 / tan(deg_to_rad(cam.fov) * 0.5))
 	var away := cam.global_position - centre
 	var tag := path.get_file().get_basename()
 	for turn: float in DETAIL_TURNS:
-		cam.global_position = centre + (Basis(Vector3.UP, turn) * away).normalized() * DETAIL_M
+		cam.global_position = centre + (Basis(Vector3.UP, turn) * away).normalized() * reach
 		cam.look_at(centre)
 		for f in 2:
 			await probe.process_frame
@@ -219,7 +226,7 @@ static func detail_plate(
 		var ok: bool = (
 			bounds.has("bag") and probe.call("_box_in_frame", cam, bounds["bag"], frame, side)
 		)
-		var on := lines_on_bag(cam, bounds.get("bag", AABB()))
+		var on := lines_on_bag(cam, core)
 		var dark := dark_share(img)
 		print("INFRAME %s bag_lines_first_on=%d/5 dark=%.2f" % [side, on, dark])
 		ok = ok and on >= DETAIL_ON and dark < DARK_SHARE
@@ -246,3 +253,37 @@ static func lines_on_bag(cam: Camera3D, box: AABB) -> int:
 		if not hit.is_empty() and str((hit.collider as Node).get_meta("subject", "")) == "bag":
 			on += 1
 	return on
+
+
+## The SELF check of the head and neck at a hand-led move's plate moment (a
+## floor set-down or pickup stoops over the bag; the booth SELF check counts
+## only bags whose home is a hand): how many vertices skinned mostly to a bone
+## named Head* or Neck* lie inside a mesh of `bag`, and their least gap to the
+## bag's mesh bounds (a box at least as big as the mesh, so the gap is never
+## overstated). Prints SELF_HEAD with the bones and point count seen (the
+## control), and PROBE_INVALID when any is inside. Returns the count inside.
+static func head_in_bag(body: Node3D, bag: Node3D, key: String, k: float) -> int:
+	var named: Array = CarryContact.body_points_owned(body, [])
+	var meshes := []
+	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+		meshes.append([mi.global_transform, mi.get_aabb(), mi.mesh.get_faces()])
+	var bones := {}
+	var inside := 0
+	var gap := INF
+	for n in (named[0] as PackedVector3Array).size():
+		var bone: String = named[1][n]
+		if not (bone.begins_with("Head") or bone.begins_with("Neck")):
+			continue
+		bones[bone] = bones.get(bone, 0) + 1
+		var point: Vector3 = named[0][n]
+		for mesh: Array in meshes:
+			var xf: Transform3D = mesh[0]
+			var box: AABB = mesh[1]
+			var local := xf.affine_inverse() * point
+			if box.grow(0.001).has_point(local) and CarryContact._odd(local, mesh[2]):
+				inside += 1
+			gap = minf(gap, point.distance_to(xf * local.clamp(box.position, box.end)))
+	print("SELF_HEAD %s k=%.2f inside=%d gap_m=%.3f bones=%s" % [key, k, inside, gap, bones])
+	if bones.is_empty() or inside > 0:
+		print("PROBE_INVALID SELF_HEAD %s: head or neck in its bag, or no head points" % key)
+	return inside + int(bones.is_empty())
