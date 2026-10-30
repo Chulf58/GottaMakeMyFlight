@@ -88,8 +88,9 @@ func test_a_party_boards_one_vehicle_together() -> void:
 
 ## One vehicle of `size` passengers entering on tick 100, with every booking's
 ## doors-close tick `close_after` ticks after the tick the first gets out
-## (found by an unconstrained run of the same vehicle); {tick: [bookings]}.
-func _events(size: int, close_after: int) -> Dictionary:
+## (found by an unconstrained run of the same vehicle); {tick: [bookings]}. With
+## `listed` false the map names other bookings, not these.
+func _events(size: int, close_after: int, listed := true) -> Dictionary:
 	var sim: LandsideSim = auto_free(LandsideSim.new())
 	assert_bool(sim.use_definition(LandsideTestWorld.STARTER)).is_true()
 	sim.wallet = Wallet.new()
@@ -103,7 +104,7 @@ func _events(size: int, close_after: int) -> Dictionary:
 	sim.add_vehicle(LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.DROP, aboard)
 	var closes := {}
 	for id in aboard:
-		closes[id] = first_out + close_after
+		closes[id if listed else id + 90] = first_out + close_after
 	var out := {}
 	for t in range(101, 400):
 		for event in sim.step(t, true, rng, closes):
@@ -127,6 +128,17 @@ func test_a_party_whose_stagger_would_run_to_doors_close_gets_out_at_once() -> v
 		for t in out:
 			total += (out[t] as Array).size()
 		assert_int(total).override_failure_message(case_name).is_equal(spec[0])
+
+
+func test_a_booking_missing_from_the_deadlines_gets_its_party_out_at_once() -> void:
+	# Nothing says when its flight closes: an error, and the safe side (no stagger).
+	var out := _events(3, 1000, false)
+	print("deadlines name other bookings: %s" % [out])
+	assert_int(out.size()).is_equal(1)
+	assert_array(out.values()[0]).is_equal([1, 2, 3])
+	# Control: with the deadlines named and far off, the stagger runs.
+	var free := _events(3, 1000)
+	assert_int(free.size()).is_equal(3)
 
 
 func test_a_party_reaching_its_stop_just_before_doors_close_all_gets_out_in_time() -> void:

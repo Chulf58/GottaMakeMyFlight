@@ -330,8 +330,9 @@ func get_vehicle(id: int) -> LandsideVehicle:
 ## With `can_release` false nobody gets out. A party gets out one passenger at
 ## a time, RELEASE_GAP_TICKS apart, and the rest stay aboard, unless the stagger
 ## would run to the doors-close tick of their flight (`closes`: booking id to
-## that tick, for the bookings aboard), when they all get out at once. `rng` draws
-## parked stays.
+## that tick, for the bookings aboard), when they all get out at once. An empty
+## `closes` means no doors-close limit; a booking aboard missing from a non-empty
+## one is an error and gets its party out at once. `rng` draws parked stays.
 func step(
 	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}
 ) -> Array[Dictionary]:
@@ -723,7 +724,14 @@ func _park(v: LandsideVehicle, rng: RandomNumberGenerator) -> void:
 func _release(v: LandsideVehicle, walk: Array, released: Array[Dictionary]) -> void:
 	var points: Array[Vector3] = []
 	points.assign(walk)
-	var close: int = _closes.get(v.bookings[0], FAR_MM)
+	var close := FAR_MM
+	if not _closes.is_empty():
+		if _closes.has(v.bookings[0]):
+			close = _closes[v.bookings[0]]
+		else:
+			# A caller left a booking out: get everyone out now, the safe side.
+			push_error("LandsideSim: no doors-close tick for booking %d" % v.bookings[0])
+			close = 0
 	var last := tick + v.release_wait + (v.bookings.size() - 1) * RELEASE_GAP_TICKS
 	var out: Array[int] = []
 	while not v.bookings.is_empty() and (out.is_empty() or last >= close):
