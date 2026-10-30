@@ -173,6 +173,10 @@ func test_one_icon_is_centred_and_two_stand_apart_along_the_screen() -> void:
 
 
 func test_the_views_show_a_passengers_needs_over_its_head() -> void:
+	# No shopping wish: a bored wisher shows its wish bubble in the hourglass's
+	# place (user ruling shopping-wish-icon-replaces-the-boredom-hourglass-for-
+	# wishers; tested in test_wish_icon_view.gd).
+	_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
 	var p := _calm_passenger()
 	_world.step()
 	var node := _views.node_for(p.id)

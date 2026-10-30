@@ -34,6 +34,9 @@ func _store_world(type: StringName, staffed := true) -> PassengerTestWorld:
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	if not staffed:
 		_world.auto_staff_roles = [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]
+	# Nobody has a shopping wish: these visits pay in full (test_shop_wishes
+	# covers wishes).
+	_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
 	_world.sim.shops.paid.connect(
 		func(id: int, room: int, amount: int) -> void: _paid.append([id, room, amount])
 	)

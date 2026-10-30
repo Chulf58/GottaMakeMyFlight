@@ -15,9 +15,10 @@ const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
 const FIRST_STATE := 1700
 ## The band in whole percent of early arrivals who finish a browse: 25% to
 ## 40%. Browsing 120 ticks (the cafe's dwell) at base spend 12 gives, on these
-## seeds, 33% (33 of 99), 42 visits at 16 a visit (117 a flight), and 8 early
-## arrivals bored at boarding against 35 with no kiosk; nobody who went
-## missed the flight.
+## seeds, 33% (33 of 99), 42 visits at 10 a visit (75 a flight; 16 and 117
+## before shopping wishes, as a wish for another kind settles for a kiosk at
+## half spend), and 8 early arrivals bored at boarding against 35 with no
+## kiosk; nobody who went missed the flight.
 const SHARE_MIN := 25
 const SHARE_MAX := 40
 

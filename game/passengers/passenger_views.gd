@@ -6,8 +6,8 @@ extends Node3D
 ## clock's alpha. A node is taken from the pool for a passenger's whole visit
 ## and returned when the passenger boards or a while after missing the flight.
 ## It reads the sim and never writes to it; animation never drives the sim.
-## Each node carries its thought bubble and its need icons (NeedIcons), set
-## each tick and laid out each frame.
+## Each node carries its thought bubble, its need icons (NeedIcons) and its
+## shopping wish icon (WishIconView), set each tick and laid out each frame.
 
 const CHARACTERS: Array[PackedScene] = [
 	preload("res://assets/people/tcp_male_character_01.glb"),
@@ -265,6 +265,7 @@ func _take(variant: int) -> Node3D:
 	node.add_child(bubble)
 	for sprite_name in NeedIcons.SPRITES:
 		node.add_child(NeedIcons.make_sprite(sprite_name))
+	node.add_child(WishIconView.make_sprite())
 	add_child(node)
 	return node
 
@@ -345,7 +346,9 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		node.set_meta(&"clip", clip)
 		(node.get_node("AnimationPlayer") as AnimationPlayer).play(clip)
 	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
-	NeedIcons.show_needs(node, NeedIcons.shown(p))
+	var wish := WishIconView.read(sim.shops, p)
+	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
+	WishIconView.show_wish(node, wish)
 
 
 ## Moves a passenger's drawn offset at security one tick's walk toward its

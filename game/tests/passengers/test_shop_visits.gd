@@ -38,6 +38,9 @@ func _kiosk_world(sides: Array = ["air"], displays := 2) -> PassengerTestWorld:
 	_ids = ShopTestLayout.build(grid, sides, displays)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	var sim := _world.sim
+	# Nobody has a shopping wish: these visits pay in full (test_shop_wishes
+	# covers wishes).
+	sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
 	sim.stage_changed.connect(
 		func(id: int, stage: Passenger.Stage) -> void:
 			if not _stages.has(id):

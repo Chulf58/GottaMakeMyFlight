@@ -25,6 +25,10 @@ extends RefCounted
 ## like the station signs, and stand side by side along the screen's x through
 ## their offsets in the billboard plane. While the passenger's thought bubble
 ## shows, the row sits on top of the bubble instead of over the head.
+## A bored passenger with a shopping wish shows its wish bubble (WishIconView)
+## at the end of the row instead of the hourglass (user ruling shopping-wish-
+## icon-replaces-the-boredom-hourglass-for-wishers); one with no wish keeps the
+## hourglass.
 
 enum Need { HUNGER, TOILET, BOREDOM }
 
@@ -47,8 +51,11 @@ const SPRITES := ["NeedIcon0", "NeedIcon1", "NeedIcon2"]
 static var _textures: Dictionary = {}
 
 
-## The needs whose icons show over `p`: hunger, toilet, boredom.
-static func shown(p: Passenger) -> Array[Need]:
+## The needs whose icons show over `p`: hunger, toilet, boredom. With
+## `wishing` (a shopping wish shows over `p`, WishIconView) the wish bubble
+## takes the boredom icon's place in the row (user ruling shopping-wish-icon-
+## replaces-the-boredom-hourglass-for-wishers), so boredom is left out.
+static func shown(p: Passenger, wishing := false) -> Array[Need]:
 	var out: Array[Need] = []
 	if p.stage == Passenger.Stage.MISSED or p.stage == Passenger.Stage.MADE:
 		return out
@@ -60,7 +67,7 @@ static func shown(p: Passenger) -> Array[Need]:
 		out.append(Need.HUNGER)
 	if p.toilet_need >= ToiletSim.NEED_AT and not in_stall:
 		out.append(Need.TOILET)
-	if BoredomSim.is_bored(p) and p.stage != Passenger.Stage.SHOP_BROWSE:
+	if BoredomSim.is_bored(p) and p.stage != Passenger.Stage.SHOP_BROWSE and not wishing:
 		out.append(Need.BOREDOM)
 	return out
 
@@ -129,16 +136,22 @@ static func unit_of(view: Viewport, camera: Camera3D) -> float:
 
 ## Lays out a passenger node's shown icons for this frame: ICON_PX on screen
 ## (`unit` from unit_of()), side by side, over the head, or on top of the
-## thought bubble while it shows. Does nothing with no camera.
+## thought bubble while it shows. A shopping wish bubble the node shows
+## (WishIconView.SPRITE) ends the row, WishIconView.WISH_PX on screen, in the
+## place the boredom icon would take. Does nothing with no camera.
 ## With `shown` false (the camera at the home zoom or farther out, shown_at())
-## the node's icons are hidden for this frame.
+## the node's icons and wish bubble are hidden for this frame.
 static func layout(
 	node: Node3D, bubble: Label3D, camera: Camera3D, unit: float, shown := true
 ) -> void:
 	var count: int = node.get_meta(&"needs", 0)
 	for i in count:
 		(node.get_node(SPRITES[i]) as Sprite3D).visible = shown
-	if count == 0 or not shown or camera == null or unit <= 0.0:
+	var wish := node.get_node_or_null(WishIconView.SPRITE) as Sprite3D
+	var wishing: bool = wish != null and node.get_meta(&"wish", "") != ""
+	if wish != null:
+		wish.visible = shown and wishing
+	if (count == 0 and not wishing) or not shown or camera == null or unit <= 0.0:
 		return
 	var anchor := Vector3(0.0, LIFT_M, 0.0)
 	var lift_px := 0.0
@@ -148,11 +161,38 @@ static func layout(
 		var depth := (at - camera.global_position).dot(-camera.global_basis.z)
 		if depth > 0.0:
 			lift_px = bubble_top_m(bubble) / (depth * unit) + GAP_PX
+	if not wishing:
+		for i in count:
+			var sprite := node.get_node(SPRITES[i]) as Sprite3D
+			sprite.position = anchor
+			sprite.pixel_size = ICON_PX * unit / SIZE
+			sprite.offset = offset_of(i, count, lift_px)
+		return
+	var widths: Array[float] = []
+	for i in count:
+		widths.append(ICON_PX)
+	widths.append(WishIconView.WISH_PX)
 	for i in count:
 		var sprite := node.get_node(SPRITES[i]) as Sprite3D
 		sprite.position = anchor
 		sprite.pixel_size = ICON_PX * unit / SIZE
-		sprite.offset = offset_of(i, count, lift_px)
+		sprite.offset = Vector2(row_x_px(i, widths) * SIZE / ICON_PX, offset_of(0, 1, lift_px).y)
+	wish.position = anchor
+	wish.pixel_size = WishIconView.WISH_PX * unit / WishIconView.SIZE
+	var wish_x := row_x_px(count, widths) * WishIconView.SIZE / WishIconView.WISH_PX
+	wish.offset = Vector2(wish_x, WishIconView.offset_for(lift_px).y)
+
+
+## The centre of item `index` of a row of items `widths` wide (screen
+## pixels), GAP_PX apart and centred on the anchor, in screen pixels along x.
+static func row_x_px(index: int, widths: Array[float]) -> float:
+	var total := GAP_PX * (widths.size() - 1)
+	for width in widths:
+		total += width
+	var x := -total / 2.0
+	for i in index:
+		x += widths[i] + GAP_PX
+	return x + widths[index] / 2.0
 
 
 ## How far the top of a one-line bubble reaches over its centre, in metres:
