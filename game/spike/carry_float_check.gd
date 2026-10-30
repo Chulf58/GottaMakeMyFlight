@@ -54,7 +54,8 @@ static func own_grips(props: CarryOnProps, id: int, i: int) -> Array[Vector3]:
 
 
 ## How far the grip of the hand holding bag `i` of passenger `id` is from the
-## bag's nearest own grip point (own_grips()), and the limit for its kind:
+## bag's nearest own grip point (own_grips(); a hard case's, the segment
+## between its two, conductor ruling 2026-10-30), and the limit for its kind:
 ## [gap, limit], gap INF when no hand holds it.
 static func grip_on_gap(props: CarryOnProps, id: int, i: int, body: Node3D) -> Array:
 	var holder: int = props.bag_state(id, i).get("held_by", -1)
@@ -67,8 +68,15 @@ static func grip_on_gap(props: CarryOnProps, id: int, i: int, body: Node3D) -> A
 	elif kind == SecurityLooks.Kind.CASE:
 		limit += CarryOnProps.FRONT_PALM_M
 	var grip := props.grip_of(body, holder)
+	var own := own_grips(props, id, i)
+	if kind == SecurityLooks.Kind.CASE:
+		# Turning between the side and the front carry the palm slides along the
+		# case's top from its handle edge to its front palm point (CarryOnProps.
+		# _case_transform): anywhere on that segment is on its grip.
+		var on := Geometry3D.get_closest_point_to_segment(grip, own[0], own[1])
+		return [on.distance_to(grip), limit]
 	var gap := INF
-	for at in own_grips(props, id, i):
+	for at in own:
 		gap = minf(gap, at.distance_to(grip))
 	return [gap, limit]
 
