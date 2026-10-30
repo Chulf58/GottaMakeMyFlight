@@ -49,7 +49,9 @@ extends RefCounted
 ## Money is settled once, when the browse finishes: spend() of the base spend
 ## of the visited room's type, nudged by mood, with the airside bonus, credited to
 ## PassengerSim.wallet as Wallet.Category.SHOP; then boredom is reset (unless
-## the type does not relieve it) and `paid` is emitted. A fallback visit pays
+## the type does not relieve it), the type's mood_bonus is added (an activity
+## or rest room's; capped at PassengerSim.MOOD_MAX) and `paid` is emitted. A
+## free type (base spend 0) credits nothing and emits nothing. A fallback visit pays
 ## FALLBACK_SHARE of spend() of the lower of the visited and the wished base
 ## spend, so settling for a dearer shop never earns more than the wished one,
 ## and costs the passenger FALLBACK_MOOD mood. A browse that does not finish
@@ -71,7 +73,8 @@ extends RefCounted
 ## After the money is in the wallet, for the '+$' pop over the kiosk.
 signal paid(passenger_id: int, room_id: int, amount: int)
 
-## Ticks spent browsing at the slot.
+## Ticks spent browsing at the slot, when the room's type sets no dwell of its
+## own (browse_ticks()).
 const BROWSE_TICKS := 120
 ## The tick between the end of the walk and the first tick of the browse: the
 ## walk step sees the passenger standing at the slot only on the tick after it
@@ -137,6 +140,12 @@ static func spend(base: int, mood: int, airside: bool) -> int:
 	return CafeSim.spend(base, mood, airside, CafeVisit.Outcome.COMPLETE)
 
 
+## Ticks a visit to a room of `type` stays at its slot: the type's dwell_ticks
+## (an activity or rest room's stay) when it has one, else BROWSE_TICKS.
+static func browse_ticks(type: RoomTypes.RoomType) -> int:
+	return type.dwell_ticks if type.dwell_ticks > 0 else BROWSE_TICKS
+
+
 func visit_of(passenger_id: int) -> ShopVisit:
 	return _core.visit_of(passenger_id)
 
@@ -187,6 +196,15 @@ func plan_visit(p: Passenger, browsing := false) -> Dictionary:
 			return {}
 		plan["fallback"] = false
 		return plan
+	return _plan_wished(p, wish)
+
+
+## The plan of a passenger with shopping wish `wish`: the nearest admitted slot
+## of the wished type, else of another shop that relieves boredom (a fallback),
+## else of an activity or rest room, which is no substitute for a shop and so
+## no fallback: with no shop to go to, a wisher takes the nearest one it has
+## time for, as a passenger with no wish does. Empty when none fits.
+func _plan_wished(p: Passenger, wish: StringName) -> Dictionary:
 	var admit := func(slot: Dictionary, route: Dictionary) -> bool:
 		return _admits(p, slot, route, false)
 	var wished := func(type: RoomTypes.RoomType) -> bool:
@@ -196,10 +214,15 @@ func plan_visit(p: Passenger, browsing := false) -> Dictionary:
 		plan["fallback"] = false
 		return plan
 	var other := func(type: RoomTypes.RoomType) -> bool:
-		return type.relieves_boredom and type.id != wish
+		return type.relieves_boredom and not type.activity and type.id != wish
 	plan = _plan(p, 0, other, admit)
 	if not plan.is_empty():
 		plan["fallback"] = true
+		return plan
+	var activity := func(type: RoomTypes.RoomType) -> bool: return type.activity
+	plan = _plan(p, 0, activity, admit)
+	if not plan.is_empty():
+		plan["fallback"] = false
 	return plan
 
 
@@ -270,7 +293,8 @@ func step(p: Passenger) -> void:
 	# A browse that completes on the deadline tick itself still settles: the
 	# deadline is the last tick the passenger may leave the slot.
 	var browsed := (
-		p.stage == Passenger.Stage.SHOP_BROWSE and _sim.tick - p.stage_tick >= BROWSE_TICKS
+		p.stage == Passenger.Stage.SHOP_BROWSE
+		and _sim.tick - p.stage_tick >= browse_ticks(_room_type(visit.room))
 	)
 	if browsed and _sim.tick <= visit.deadline:
 		_settle(p, visit)
@@ -428,17 +452,23 @@ static func _relieving(type: RoomTypes.RoomType) -> bool:
 ## `route`, with SPARE_TICKS more when `browsing`.
 func _admits(p: Passenger, slot: Dictionary, route: Dictionary, browsing: bool) -> bool:
 	var arrival := VisitForecast.arrival(
-		_sim, p, _visit_ticks(p, route["mm"]), slot["approach"], 0, _resume_stage(p)
+		_sim,
+		p,
+		_visit_ticks(p, route["mm"], _room_type(slot["room"])),
+		slot["approach"],
+		0,
+		_resume_stage(p)
 	)
 	if browsing:
 		arrival += SPARE_TICKS
 	return VisitForecast.admits(_sim, p, arrival)
 
 
-## Ticks from now until a visit walking `walk_mm` leaves its slot.
-func _visit_ticks(p: Passenger, walk_mm: int) -> int:
+## Ticks from now until a visit to a room of `type`, walking `walk_mm`, leaves
+## its slot.
+func _visit_ticks(p: Passenger, walk_mm: int, type: RoomTypes.RoomType) -> int:
 	var pre := PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0
-	return pre + JourneyForecast.walk_ticks(walk_mm) + ARRIVE_TICKS + BROWSE_TICKS
+	return pre + JourneyForecast.walk_ticks(walk_mm) + ARRIVE_TICKS + browse_ticks(type)
 
 
 func _live_deadline(p: Passenger, visit: ShopVisit) -> int:
@@ -484,17 +514,21 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 	if visit.fallback:
 		var wished := RoomTypes.get_type(wish_of(p)).base_spend
 		amount = int(spend(mini(type.base_spend, wished), p.mood, airside) * FALLBACK_SHARE)
-	if _sim.wallet == null:
-		push_error("ShopSim: no wallet to pay passenger %d's %d into" % [p.id, amount])
-		return
-	if not _sim.wallet.credit(amount, Wallet.Category.SHOP):
-		push_error("ShopSim: the wallet refused passenger %d's %d" % [p.id, amount])
-		return
+	# A free visit (the play area, the lounge) credits nothing and has no pop.
+	if amount > 0:
+		if _sim.wallet == null:
+			push_error("ShopSim: no wallet to pay passenger %d's %d into" % [p.id, amount])
+			return
+		if not _sim.wallet.credit(amount, Wallet.Category.SHOP):
+			push_error("ShopSim: the wallet refused passenger %d's %d" % [p.id, amount])
+			return
 	if type.relieves_boredom:
 		p.boredom = 0
+	p.mood = mini(p.mood + type.mood_bonus, PassengerSim.MOOD_MAX)
 	if visit.fallback:
 		p.mood = maxi(p.mood - FALLBACK_MOOD, 0)
-	paid.emit(p.id, visit.room, amount)
+	if amount > 0:
+		paid.emit(p.id, visit.room, amount)
 
 
 ## FacilitySlots.reconcile()'s check of one visit: its slot entry is brought

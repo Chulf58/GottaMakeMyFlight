@@ -111,6 +111,10 @@ enum Tool {
 	BAR_ROOM,
 	RESTAURANT_ROOM,
 	STALL_ROOM,
+	PLAY_AREA_ROOM,
+	LOUNGE_ROOM,
+	SHOWER_ROOM,
+	NAP_POD_ROOM,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -184,6 +188,10 @@ const TOOL_ROOMS := {
 	Tool.BAR_ROOM: &"bar",
 	Tool.RESTAURANT_ROOM: &"restaurant",
 	Tool.STALL_ROOM: &"stall",
+	Tool.PLAY_AREA_ROOM: &"play_area",
+	Tool.LOUNGE_ROOM: &"lounge",
+	Tool.SHOWER_ROOM: &"shower",
+	Tool.NAP_POD_ROOM: &"nap_pod",
 }
 ## Tools under which the room under the pointer is followed for its panel.
 const ROOM_FOCUS_TOOLS := [
@@ -216,6 +224,10 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.BAR_ROOM,
 	Tool.RESTAURANT_ROOM,
 	Tool.STALL_ROOM,
+	Tool.PLAY_AREA_ROOM,
+	Tool.LOUNGE_ROOM,
+	Tool.SHOWER_ROOM,
+	Tool.NAP_POD_ROOM,
 ]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
@@ -255,6 +267,10 @@ const AREA_TOOLS := [
 	Tool.BAR_ROOM,
 	Tool.RESTAURANT_ROOM,
 	Tool.STALL_ROOM,
+	Tool.PLAY_AREA_ROOM,
+	Tool.LOUNGE_ROOM,
+	Tool.SHOWER_ROOM,
+	Tool.NAP_POD_ROOM,
 	Tool.BELT,
 ]
 ## Zone id painted floors get. One terminal zone until zones become a tool.

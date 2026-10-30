@@ -67,7 +67,8 @@ func test_the_dining_page_follows_money_in_the_furniture_group_before_remove() -
 	assert_bool(all[page].get("page", false)).is_true()
 	assert_bool(_menu.category_button(page).visible).is_false()
 	assert_int(BuildMenu.group_start(page)).is_equal(_index("Furniture"))
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 1)
+	# The Activities page (F4-7) follows it, then Remove.
+	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 2)
 	assert_array(all[page]["tools"]).is_equal(TOOLS)
 	for tool in TOOLS:
 		assert_int(BuildMenu.category_of(tool)).is_equal(page)
@@ -97,7 +98,7 @@ func test_every_dining_card_shows_a_real_thumbnail() -> void:
 		assert_object(picture.texture).override_failure_message(path).is_not_null()
 
 
-func test_the_dining_tray_fits_the_column_and_next_goes_round_to_furniture() -> void:
+func test_the_dining_tray_fits_the_column_and_next_opens_the_activities_page() -> void:
 	var page := _index("Dining")
 	_menu.press_category(page)
 	var need := _menu.tray().get_combined_minimum_size()
@@ -107,7 +108,7 @@ func test_the_dining_tray_fits_the_column_and_next_goes_round_to_furniture() -> 
 	var next := _menu.card(TOOLS[0]).get_parent().find_child("CardNext", true, false) as Button
 	assert_object(next).is_not_null()
 	next.pressed.emit()
-	assert_int(_menu.open_category()).is_equal(_index("Furniture"))
+	assert_int(_menu.open_category()).is_equal(_index("Activities"))
 
 
 func test_picking_a_dining_tool_opens_its_page_and_presses_its_card() -> void:

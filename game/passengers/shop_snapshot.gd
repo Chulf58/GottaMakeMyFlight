@@ -94,12 +94,14 @@ static func _visit_problem(
 		return "the slot is not in room %d" % visit.room
 	if (visit.resume_stage == Passenger.Stage.TO_GATE) != p.cleared:
 		return "it resumes on the other side of security"
+	var type_id := StringName(grid.get_room(visit.room)["type"])
 	if p.stage == Passenger.Stage.SHOP_BROWSE:
 		if p.at != slot["approach"] or p.is_moving():
 			return "it is browsing but not on its slot"
-		if p.stage_tick > tick or p.stage_tick + ShopSim.BROWSE_TICKS <= tick:
+		var browse := ShopSim.browse_ticks(RoomTypes.get_type(type_id))
+		if p.stage_tick > tick or p.stage_tick + browse <= tick:
 			return "the browse does not run past the saved tick"
-	if visit.fallback != fallback_of(p, StringName(grid.get_room(visit.room)["type"])):
+	if visit.fallback != fallback_of(p, type_id):
 		return "its fallback flag does not fit the visit"
 	return ""
 
@@ -108,9 +110,10 @@ static func _visit_problem(
 ## planner decides it (ShopSim.plan_visit()): a relief visit (`p` is bored; a
 ## spare-time browse starts only when not bored, and no shop stage changes
 ## boredom) of a passenger who wishes for another kind. The wish is derived
-## from the passenger (WishTable.of()), as play derives it.
+## from the passenger (WishTable.of()), as play derives it. A visit to an
+## activity or rest room is never one.
 static func fallback_of(p: Passenger, kind: StringName) -> bool:
-	if not BoredomSim.is_bored(p):
+	if not BoredomSim.is_bored(p) or RoomTypes.get_type(kind).activity:
 		return false
 	var wish := WishTable.of(p)
 	return wish != WishTable.NONE and wish != kind

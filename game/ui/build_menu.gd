@@ -152,11 +152,25 @@ const CATEGORIES := [
 		[BuildMode.Tool.BAR_ROOM, BuildMode.Tool.RESTAURANT_ROOM, BuildMode.Tool.STALL_ROOM],
 		"page": true,
 	},
+	# The activity and rest rooms (F4-7): each takes its own piece from the
+	# Lounge and Fun furniture pages, so a page of their own holds just the room
+	# cards.
+	{
+		"name": "Activities",
+		"tools":
+		[
+			BuildMode.Tool.PLAY_AREA_ROOM,
+			BuildMode.Tool.LOUNGE_ROOM,
+			BuildMode.Tool.SHOWER_ROOM,
+			BuildMode.Tool.NAP_POD_ROOM,
+		],
+		"page": true,
+	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray, last in CATEGORIES (GDScript
 ## cannot take it from CATEGORIES.size(): tests check the two agree).
-const REMOVE_CATEGORY := 24
+const REMOVE_CATEGORY := 25
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -194,6 +208,11 @@ const ITEMS := {
 	BuildMode.Tool.BAR_ROOM: ["Bar", "cafe_room", "3x4 min"],
 	BuildMode.Tool.RESTAURANT_ROOM: ["Restaurant", "cafe_room", "4x4 min"],
 	BuildMode.Tool.STALL_ROOM: ["Grab-and-go", "cafe_room", "3x3 min"],
+	# The activity rooms borrow their main piece's thumbnail: no new art (F4-7).
+	BuildMode.Tool.PLAY_AREA_ROOM: ["Play area", "play_slide", "3x4 min"],
+	BuildMode.Tool.LOUNGE_ROOM: ["Lounge", "lounge_sofa", "2x3 min"],
+	BuildMode.Tool.SHOWER_ROOM: ["Shower", "shower_cubicle", "2x2 min"],
+	BuildMode.Tool.NAP_POD_ROOM: ["Nap pod", "nap_pod", "2x2 min"],
 	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
