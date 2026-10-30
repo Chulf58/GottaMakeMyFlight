@@ -2,10 +2,12 @@ class_name TestCarryOnKinds
 extends GdUnitTestSuite
 ## Carry-on bag kinds (decision carry-on-bag-kinds-backpack-shoulder-or-tote-
 ## bag-small-rolle): which kind a bag is (a fixed hash of the passenger's id,
-## no saved state), how each kind is carried (CarryOnProps' placement maths)
-## and what each kind does in a cell closed on both sides (only the hard case
-## turns to the front, a roller lifted at security included; worn bags keep
-## their carry, inside the corridor).
+## no saved state), how each kind is worn or pulled (CarryOnProps' static
+## transforms: the pull, the shoulder, the back, a trailing axle; the moves
+## between homes are tested in TestCarryLead) and what each kind does in a
+## cell closed on both sides (only the hard case turns to the front, a roller
+## lifted at security included; worn bags keep their carry, inside the
+## corridor).
 
 const CORRIDOR := Vector2i(4, 6)
 const IDS := 2000
@@ -227,31 +229,6 @@ func test_a_roller_swings_round_after_a_half_turn() -> void:
 		assert_float(worst).is_less(0.6)
 		assert_int(ticks).is_less_equal(12)
 		assert_float(from.distance_to(to)).is_greater(1.9)
-
-
-## The overhead route for a backpack: it starts and ends where asked, stays
-## on the body's centre plane in the middle, and while it crosses over the
-## head its lowest point is at OVERHEAD_M.
-func test_the_overhead_route_crosses_above_the_head() -> void:
-	var box := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK)
-	var on_floor := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
-	var worn := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(0.0, 1.1, -0.21))
-	var crossed := 0
-	for step in 21:
-		var k := step / 20.0
-		var at := CarryMoves.overhead(on_floor, worn, k, box)
-		if k == 0.0:
-			assert_vector(at.origin).is_equal_approx(on_floor.origin, Vector3.ONE * 0.0001)
-		if k == 1.0:
-			assert_vector(at.origin).is_equal_approx(worn.origin, Vector3.ONE * 0.0001)
-		if k > 1.0 / 3.0 and k < 2.0 / 3.0:
-			var lowest := INF
-			for i in 8:
-				lowest = minf(lowest, (at * box.get_endpoint(i)).y)
-			assert_float(lowest).is_equal_approx(CarryOnProps.OVERHEAD_M, 0.0001)
-			assert_float(at.origin.x).is_equal_approx(0.0, 0.0001)
-			crossed += 1
-	assert_int(crossed).is_greater(2)
 
 
 ## In a cell closed on both sides only a hand-carried bag comes to the front:

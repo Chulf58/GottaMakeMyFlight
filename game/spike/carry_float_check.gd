@@ -25,6 +25,12 @@ const OLD_OVERHEAD_AHEAD_M := 0.12
 ## carry handle, a backpack's grab loop, a shoulder bag's top edge), where
 ## CarryOnProps holds it now (held_point, through the front carry), and a
 ## roller's grip bar or a shoulder bag's strap bar.
+##
+## The point CarryOnProps placed at a hand's grip (hand_point) makes a HELD
+## verdict true by construction for a bag in a hand-led move: the bag was placed
+## from that grip. It counts only when on_bag() holds (the point within the
+## bag's mesh bounds as drawn, ON_BAG_M out), and that is the independent guard
+## against a bag placed from a grip point off its own body.
 static func grip_points(props: CarryOnProps, id: int, i: int) -> Array[Vector3]:
 	var bag: Node3D = props.props_of(id)["bags"][i]
 	var kind: SecurityLooks.Kind = props.props_of(id)["kinds"][i]

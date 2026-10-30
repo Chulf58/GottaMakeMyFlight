@@ -119,3 +119,59 @@ func test_the_two_bone_reach_lands_on_a_target_in_reach() -> void:
 	assert_float(joints[1].distance_to(target)).is_less(0.001)
 	assert_float(joints[0].distance_to(root)).is_equal_approx(0.3, 0.001)
 	assert_float(joints[0].distance_to(joints[1])).is_equal_approx(0.35, 0.001)
+
+
+## A hand-led move from the floor to the hand interrupted while the hand is
+## still reaching for the bag (k under REACH_SHARE) has not left its start, so
+## the next move (back to the floor) starts there, resting: its hand reaches
+## first and nothing holds the bag at its start. Control: stamped from the old
+## end as before (the hand, not held any more) the next move would start HELD,
+## the bag in the hand at once. A move past its reach, one that started held
+## and one not hand-led have all left their start.
+func test_a_move_interrupted_in_its_reach_starts_the_next_where_the_bag_is() -> void:
+	var floor_at := (SecurityLooks.Home.FLOOR * 2 + 0) * 2
+	var hand_at := (SecurityLooks.Home.HAND * 2 + 0) * 2
+	var bag := {
+		"was": floor_at,
+		"carry_from": SecurityLooks.Carry.HAND,
+		"home": hand_at,
+		"carry": SecurityLooks.Carry.HAND,
+		"led": true,
+	}
+	assert_bool(CarryLead.at_start(bag, 0.1)).is_true()
+	assert_bool(CarryLead.at_start(bag, CarryLead.REACH_SHARE + 0.01)).is_false()
+	# The stamp keeps "was" and "carry_from" of a move that has not left.
+	var next := bag.duplicate()
+	next["home"] = floor_at
+	var started := CarryLead.start_of(next)
+	assert_int(started[0]).is_equal(CarryLead.End.REST)
+	var to := CarryLead.end_of(next["home"], next["carry"])
+	assert_int(CarryLead.phase(0.05, started[0], to, started[1], 0)["holder"]).is_equal(-1)
+	var stale := next.duplicate()
+	stale["was"] = hand_at
+	assert_int(CarryLead.start_of(stale)[0]).is_equal(CarryLead.End.HELD)
+	var from_hand := stale.duplicate()
+	from_hand["home"] = floor_at
+	assert_bool(CarryLead.at_start(from_hand, 0.1)).is_false()
+	var not_led := bag.duplicate()
+	not_led["led"] = false
+	assert_bool(CarryLead.at_start(not_led, 0.1)).is_false()
+
+
+## Whether a move is hand-led is decided when it is stamped and kept to its
+## end: one stamped outside a toilet stall stays hand-led when its walker steps
+## into the stall, and one stamped inside stays on the stall's path after it
+## steps out. A swap is never hand-led. Control: a finished move leads no more.
+func test_a_hand_led_move_keeps_its_mode_across_a_stall_change() -> void:
+	var held := {"in_stall": false}
+	var bag := {"since": 0.0}
+	bag["led"] = CarryOnProps._leads(held, bag)
+	held["in_stall"] = true
+	assert_bool(CarryOnProps._leading(bag, 1.0)).is_true()
+	var in_stall := {"since": 0.0}
+	in_stall["led"] = CarryOnProps._leads({"in_stall": true}, in_stall)
+	assert_bool(CarryOnProps._leading(in_stall, 1.0)).is_false()
+	var swap := {"since": 0.0, "swap": true}
+	swap["led"] = CarryOnProps._leads({"in_stall": false}, swap)
+	assert_bool(CarryOnProps._leading(swap, 1.0)).is_false()
+	assert_bool(CarryOnProps._leading(bag, CarryOnProps.TRANSFER_TICKS)).is_false()

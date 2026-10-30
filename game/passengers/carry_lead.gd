@@ -58,6 +58,14 @@ static func start_of(bag: Dictionary) -> Array:
 	return [end_of(bag["was"], bag["carry_from"]), hand_of(bag["was"])]
 
 
+## Whether a hand-led move of `bag` (CarryOnProps' record, "led") drawn last
+## at `k` has not left its start: the hand was still reaching for the bag (a
+## move that starts HELD leaves at once). A move that interrupts it starts
+## where the bag is, at that start (CarryOnProps._stamp).
+static func at_start(bag: Dictionary, k: float) -> bool:
+	return bag.get("led", false) and k < span(start_of(bag)[0], End.HELD).x
+
+
 ## The hand of a place (0 right, 1 left).
 static func hand_of(place: int) -> int:
 	return (maxi(place, 0) / 2) % 2
@@ -246,7 +254,8 @@ static func plan(
 ## of `hand`. In a toilet stall (`in_stall`) a bag in the hand (`hand_carry`)
 ## goes between the floor and the front carry ahead of the body with no lift
 ## or push out: set down straight down, picked up upright first (decision
-## stall-bag-poses-as-built). Moved unchanged from CarryOnProps._place_bags.
+## stall-bag-poses-as-built-bags-stand-upright-against-the-insi). Moved
+## unchanged from CarryOnProps._place_bags.
 static func path(
 	start: Transform3D,
 	want: Transform3D,
