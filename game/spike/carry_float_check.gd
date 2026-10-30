@@ -46,11 +46,20 @@ static func own_grips(props: CarryOnProps, id: int, i: int) -> Array[Vector3]:
 			var top := bag.find_child("Pull_Top", true, false) as Node3D
 			var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
 			return [bar, xf * CarryOnProps.ROLLER_HANDLE]
-	var scale_by := xf.basis.get_scale().x
-	var ahead := CarryOnProps.carried_in_front(Vector3.ZERO, 0.0, scale_by, kind)
-	var palm := ahead.affine_inverse() * Vector3.ZERO
-	palm -= ahead.basis.inverse() * (Vector3.UP * CarryOnProps.FRONT_PALM_M)
-	return [xf * CarryOnProps.grip_anchor(kind), xf * palm]
+	var handle := case_handle_points(bag)
+	return [xf * handle[0], xf * handle[1]]
+
+
+## A hard case's handle edge and the top of its handle, in the case's own frame
+## (scale 1), read from its drawn body mesh: the top face's edge on its handle
+## side and the middle of that face. Never from a CarryOnProps placement
+## function: a point derived from the placement moves with a wrong placement,
+## and the grip then reads as on it.
+static func case_handle_points(bag: Node3D) -> Array[Vector3]:
+	var body := bag.find_child("CarryOnBag_Body", true, false) as MeshInstance3D
+	var box := (bag.global_transform.affine_inverse() * body.global_transform) * body.get_aabb()
+	var middle := box.get_center()
+	return [Vector3(middle.x, box.end.y, box.end.z), Vector3(middle.x, box.end.y, middle.z)]
 
 
 ## How far the grip of the hand holding bag `i` of passenger `id` is from the
