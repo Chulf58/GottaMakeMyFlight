@@ -229,3 +229,75 @@ func test_an_internal_airside_door_keeps_spots_on_both_sides() -> void:
 	assert_int(north).is_greater(0)
 	assert_int(south).is_greater(0)
 	assert_int(landside).is_equal(0)
+
+
+func _landside_spots(spots: StandingSpots) -> int:
+	var landside := 0
+	for id: int in spots.spots:
+		landside += int(spots.cell_of(id).y > ReferenceTerminal.AIRSIDE_MAX_Y)
+	return landside
+
+
+func _place(edit: BuildEdit) -> void:
+	var placed := _world.grid.apply(edit)
+	assert_bool(placed.ok).override_failure_message(placed.reason_text()).is_true()
+
+
+func _divider_door() -> void:
+	_place(
+		BuildEdit.place_wall(
+			Vector2i(15, ReferenceTerminal.DIVIDER_Y), BuildGrid.Side.NORTH, BuildGrid.WallKind.DOOR
+		)
+	)
+
+
+func test_a_landside_lobby_behind_an_internal_door_gets_no_spots() -> void:
+	_world = PassengerTestWorld.reference_world()
+	# A wall across the hall at the north edge of row 14 with a door at x = 12:
+	# the lobby north of it (rows 9-13) holds no entrance, and the divider door
+	# opens from it onto the airside.
+	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
+		if x != 12:
+			_place(BuildEdit.place_wall(Vector2i(x, 14), BuildGrid.Side.NORTH))
+	_place(BuildEdit.place_wall(Vector2i(12, 14), BuildGrid.Side.NORTH, BuildGrid.WallKind.DOOR))
+	_divider_door()
+	var spots := _world.sim.standing
+	spots.rebuild(_world.sim)
+	print("spots=%d landside=%d" % [spots.spots.size(), _landside_spots(spots)])
+	assert_int(spots.spots.size()).is_greater(100)
+	assert_int(_landside_spots(spots)).is_equal(0)
+
+
+func test_removing_the_scanners_does_not_open_the_divider_door() -> void:
+	_world = PassengerTestWorld.reference_world()
+	for id in ReferenceTerminal.object_ids(_world.grid)["scanners"]:
+		_place(BuildEdit.remove_object(id))
+	# The scanners leave gaps in the divider; wall them so only the door joins.
+	for x in ReferenceTerminal.SCANNER_XS:
+		_place(BuildEdit.place_wall(Vector2i(x, ReferenceTerminal.DIVIDER_Y), BuildGrid.Side.NORTH))
+	_divider_door()
+	var spots := _world.sim.standing
+	spots.rebuild(_world.sim)
+	print("spots=%d landside=%d" % [spots.spots.size(), _landside_spots(spots)])
+	assert_int(spots.spots.size()).is_greater(100)
+	assert_int(_landside_spots(spots)).is_equal(0)
+
+
+func test_a_scanner_in_the_open_hall_does_not_open_the_divider_door() -> void:
+	_world = PassengerTestWorld.reference_world()
+	# A scanner with nothing walled around it: its exit cell is in the same
+	# doorless component as the entrance.
+	var scanners_before: int = _world.sim.layout.scanners.size()
+	_place(BuildEdit.place_object(&"security_scanner", Vector2i(12, 15), 0))
+	_divider_door()
+	var spots := _world.sim.standing
+	spots.rebuild(_world.sim)
+	print(
+		(
+			"scanners=%d spots=%d landside=%d"
+			% [_world.sim.layout.scanners.size(), spots.spots.size(), _landside_spots(spots)]
+		)
+	)
+	assert_int(_world.sim.layout.scanners.size()).is_equal(scanners_before + 1)
+	assert_int(spots.spots.size()).is_greater(100)
+	assert_int(_landside_spots(spots)).is_equal(0)
