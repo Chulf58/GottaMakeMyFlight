@@ -25,6 +25,10 @@ const ROOM_TOOLS := {
 	BuildMode.Tool.BAR_ROOM: "bar",
 	BuildMode.Tool.RESTAURANT_ROOM: "restaurant",
 	BuildMode.Tool.STALL_ROOM: "stall",
+	BuildMode.Tool.PLAY_AREA_ROOM: "play_area",
+	BuildMode.Tool.LOUNGE_ROOM: "lounge",
+	BuildMode.Tool.SHOWER_ROOM: "shower",
+	BuildMode.Tool.NAP_POD_ROOM: "nap_pod",
 }
 
 var _port: SubViewport

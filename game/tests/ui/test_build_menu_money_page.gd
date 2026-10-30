@@ -66,8 +66,9 @@ func test_the_money_page_follows_fashion_in_the_furniture_group_before_remove() 
 	assert_bool(all[page].get("page", false)).is_true()
 	assert_bool(_menu.category_button(page).visible).is_false()
 	assert_int(BuildMenu.group_start(page)).is_equal(_index("Furniture"))
-	# The Dining page (F4-6) follows it; Remove comes after that.
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 2)
+	# The Dining page (F4-6) and the Activities page (F4-7) follow it; Remove
+	# comes after those.
+	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 3)
 	assert_int(_index("Dining")).is_equal(page + 1)
 	assert_array(all[page]["tools"]).is_equal(TOOLS)
 	for tool in TOOLS:

@@ -100,6 +100,15 @@ const MONEY_STAGE_TEXT := {
 	Passenger.Stage.SHOP_BROWSE: "Using the %s",
 }
 
+## What a passenger at an activity or rest room does there, by room type
+## (RoomType.activity), in place of "Browsing at the %s".
+const ACTIVITY_BROWSE_TEXT := {
+	&"play_area": "Playing in the %s",
+	&"lounge": "Relaxing in the %s",
+	&"shower": "Using the %s",
+	&"nap_pod": "Resting in the %s",
+}
+
 @export var clock: SimClock
 @export var flights: FlightSim
 @export var sim: PassengerSim
@@ -315,7 +324,10 @@ static func stage_text(passenger_sim: PassengerSim, p: Passenger) -> String:
 		var store := passenger_sim.shops.store_name(p.id)
 		if store != "":
 			var room := passenger_sim.grid.get_room(passenger_sim.shops.visit_of(p.id).room)
-			var relieves := RoomTypes.get_type(room["type"]).relieves_boredom
+			var type := RoomTypes.get_type(room["type"])
+			if type.activity and p.stage == Passenger.Stage.SHOP_BROWSE:
+				return ACTIVITY_BROWSE_TEXT[type.id] % store
+			var relieves := type.relieves_boredom
 			return (SHOP_STAGE_TEXT if relieves else MONEY_STAGE_TEXT)[p.stage] % store
 	return STAGE_TEXT[p.stage]
 

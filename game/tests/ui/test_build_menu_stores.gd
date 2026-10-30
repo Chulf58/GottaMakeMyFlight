@@ -98,10 +98,12 @@ func test_three_stores_pages_follow_fun_and_end_the_furniture_group_before_remov
 		assert_bool(_menu.category_button(page).visible).is_false()
 		assert_int(BuildMenu.group_start(page)).is_equal(furniture)
 	# The Money page (F4-5b; TestBuildMenuMoneyPage) follows Fashion and the
-	# Dining page (F4-6; TestBuildMenuDiningPage) is the last before Remove.
+	# Dining page (F4-6; TestBuildMenuDiningPage) and the Activities page (F4-7;
+	# TestBuildMenuActivitiesPage) are the last before Remove.
 	assert_int(_index("Money")).is_equal(_index("Fashion") + 1)
 	assert_int(_index("Dining")).is_equal(_index("Money") + 1)
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(_index("Dining") + 1)
+	assert_int(_index("Activities")).is_equal(_index("Dining") + 1)
+	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(_index("Activities") + 1)
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 
 
@@ -182,9 +184,10 @@ func test_next_runs_fun_through_the_stores_and_back_to_the_first_furniture_page(
 	_menu.press_category(_index("Fun"))
 	var want := PAGE_ORDER.duplicate()
 	# Fashion's Next opens the Money page (F4-5b), then the Dining page (F4-6),
-	# whose Next goes back to the start.
+	# then the Activities page (F4-7), whose Next goes back to the start.
 	want.append("Money")
 	want.append("Dining")
+	want.append("Activities")
 	want.append("Furniture")
 	for page_name in want:
 		_next_button(_menu.open_category()).pressed.emit()

@@ -40,9 +40,12 @@ const COUNTER_ROOMS := {
 	&"info_desk": &"",
 }
 ## The shop room types that need no server: open whenever the room is ready
-## (the ATM; decision currency-exchange-and-atm-visits-front-cell-slot-small-
-## fee-no-boredom).
-const SELF_SERVICE_ROOMS: Array[StringName] = [&"atm"]
+## (the ATM, decision currency-exchange-and-atm-visits-front-cell-slot-small-
+## fee-no-boredom; and the activity and rest rooms, F4-7: the play area, the
+## lounge, the shower and the nap pod).
+const SELF_SERVICE_ROOMS: Array[StringName] = [
+	&"atm", &"play_area", &"lounge", &"shower", &"nap_pod"
+]
 ## The counters that need no room.
 const ROOMLESS: Array[StringName] = [&"info_desk"]
 ## Where a server may stand, at facing 0 and in this order: behind the till,

@@ -35,11 +35,19 @@ class RoomType:
 	## the sit-down restaurant and the grab-and-go stall): all four use the
 	## cafe counter and table, and differ in the numbers below.
 	var food := false
+	## Whether it is an activity or rest room (the play area, the lounge, the
+	## shower, the nap pod): a shop-pipeline room with one required piece that
+	## is also its use piece, a visit of its own dwell_ticks that gives
+	## mood_bonus, and a fee (base_spend) that is 0 for a free one. A bored
+	## passenger with a shopping wish never settles for one as a fallback.
+	var activity := false
 	## Ticks to make an order at the counter, and ticks a served guest stays
-	## seated when nothing hurries it (a food room's visit length).
+	## seated when nothing hurries it (a food room's visit length). An activity
+	## room's dwell_ticks is its whole stay at the use slot (ShopSim.browse_
+	## ticks(); 0 elsewhere in the shop pipeline means ShopSim.BROWSE_TICKS).
 	var order_ticks := 0
 	var dwell_ticks := 0
-	## Mood a guest who finishes the visit gains.
+	## Mood a guest who finishes the visit gains (a food or activity room's).
 	var mood_bonus := 0
 	## The piece a ready room is charged upkeep for each game day, and the
 	## charge per piece (PriceTable); none for a room that costs nothing to run.
@@ -196,6 +204,43 @@ static func _build() -> void:
 	)
 	_add_money_store(&"atm", "ATM", Vector2i(1, 2), 3, [&"atm", "Needs an ATM"])
 
+	# Activities and rest services (F4-7; decisions furniture-set-modelled-on-
+	# copenhagen-airport-decor-calms-pas and food-and-drink-cafe-bar-sit-down-
+	# restaurant-and-grab-and-go-st, point 3): rooms on the shop pipeline that
+	# relieve boredom and give mood, with no counter and no server (they are
+	# self-service, ShopCounters.SELF_SERVICE_ROOMS). The play area and the
+	# lounge are free. The shower and the nap pod are paid services for long
+	# waits (PriceTable.SHOWER_FEE, NAP_POD_FEE) and give the most mood, the
+	# nap pod the longest stay. A passenger enters only when the forecast admits the whole
+	# stay (ShopSim). Each piece's slot is the cell in front of it. The numbers
+	# are [use slots per piece, fee, dwell ticks, mood bonus], tuning values
+	# pinned by test_activity_rooms; every dwell is above the kiosk's 120-tick
+	# browse.
+	_add_activity(
+		&"play_area",
+		"Play area",
+		Vector2i(3, 4),
+		[[&"play_slide", "Needs a slide"], [&"play_blocks", "Needs play blocks"]],
+		[2, 0, 150, 8]
+	)
+	_add_activity(
+		&"lounge", "Lounge", Vector2i(2, 3), [[&"lounge_sofa", "Needs a sofa"]], [2, 0, 240, 6]
+	)
+	_add_activity(
+		&"shower",
+		"Shower",
+		Vector2i(2, 2),
+		[[&"shower_cubicle", "Needs a shower"]],
+		[1, PriceTable.SHOWER_FEE, 200, 12]
+	)
+	_add_activity(
+		&"nap_pod",
+		"Nap pod",
+		Vector2i(2, 2),
+		[[&"nap_pod", "Needs a nap pod"]],
+		[1, PriceTable.NAP_POD_FEE, 300, 15]
+	)
+
 
 ## A food room type like the cafe: `numbers` is [base spend, order ticks,
 ## dwell ticks, mood bonus].
@@ -244,3 +289,24 @@ static func _add_money_store(
 	_add_store(id, display_name, min_size, fee, [piece, piece, 1])
 	_types[id].required = [piece]
 	_types[id].relieves_boredom = false
+
+
+## An activity room type: `pieces` ([BuildCatalog id, note] each) are all
+## required and the first is the use piece, and `numbers` is [use slots per
+## piece, fee, dwell ticks, mood bonus].
+static func _add_activity(
+	id: StringName, display_name: String, min_size: Vector2i, pieces: Array, numbers: Array
+) -> void:
+	var room := RoomType.new()
+	room.id = id
+	room.display_name = display_name
+	room.min_size = min_size
+	room.required = pieces
+	room.seat_piece = pieces[0][0]
+	room.seats_per_piece = numbers[0]
+	room.base_spend = numbers[1]
+	room.shop = true
+	room.activity = true
+	room.dwell_ticks = numbers[2]
+	room.mood_bonus = numbers[3]
+	_types[id] = room

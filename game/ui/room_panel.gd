@@ -77,6 +77,9 @@ func show_room(id: int) -> void:
 		_line("Stalls %d" % status.pieces.get(STALL, 0))
 		_line("Sinks %d" % status.pieces.get(SINK, 0))
 		_line((UPKEEP_READY if status.ok else UPKEEP_ONCE_READY) % status.upkeep)
+	elif RoomTypes.get_type(status.type_id).activity:
+		_line("Spots %d" % status.seats)
+		_line("Fee $%d per visit" % status.base_spend if status.base_spend > 0 else "Free to use")
 	elif RoomTypes.get_type(status.type_id).shop:
 		_line("Browse spots %d" % status.seats)
 		_line("Base spend $%d per visit" % status.base_spend)
