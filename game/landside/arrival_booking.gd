@@ -16,7 +16,8 @@ var flight_id := ""
 ## 0 or 1: which Toon character the passenger is drawn as.
 var variant := 0
 var arrival := ArrivalTypes.Type.TYPICAL
-## When the party means to get out (at the curb or in the car park).
+## When this passenger is meant to get out (at the curb or in the car park):
+## the party's time, plus LandsideSim.RELEASE_GAP_TICKS for each member before it.
 var unload_tick := 0
 var kind := LandsideVehicle.Kind.CAR
 var intent := LandsideVehicle.Intent.DROP

@@ -93,6 +93,8 @@ var curbs_built: Array[bool] = []
 var curbs_paid: Array[int] = []
 
 var _vehicles: Array[LandsideVehicle] = []
+## The doors-close tick of each booking aboard's flight, as step() was given.
+var _closes := {}
 var _by_id := {}
 var _next_id := 1
 ## Derived from the vehicles: the vehicle holding each curb berth (pulling in,
@@ -326,10 +328,15 @@ func get_vehicle(id: int) -> LandsideVehicle:
 ## {"vehicle": id, "bookings": Array[int], "walk": Array[Vector3]}: the
 ## bookings whose passengers got out and the walk from where they stepped out.
 ## With `can_release` false nobody gets out. A party gets out one passenger at
-## a time, RELEASE_GAP_TICKS apart, and the rest stay aboard. `rng` draws parked
-## stays.
-func step(now: int, can_release: bool, rng: RandomNumberGenerator) -> Array[Dictionary]:
+## a time, RELEASE_GAP_TICKS apart, and the rest stay aboard, unless the stagger
+## would run to the doors-close tick of their flight (`closes`: booking id to
+## that tick, for the bookings aboard), when they all get out at once. `rng` draws
+## parked stays.
+func step(
+	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}
+) -> Array[Dictionary]:
 	tick = now
+	_closes = closes
 	var released: Array[Dictionary] = []
 	for v in _vehicles:
 		v.release_wait = maxi(v.release_wait - 1, 0)
@@ -710,10 +717,17 @@ func _park(v: LandsideVehicle, rng: RandomNumberGenerator) -> void:
 
 
 ## The first passenger aboard gets out; the next may RELEASE_GAP_TICKS later.
+## When the last would step out at or after the doors-close tick of the flight
+## (`_closes`), all get out at once, as before the stagger, so the stagger never
+## costs a flight.
 func _release(v: LandsideVehicle, walk: Array, released: Array[Dictionary]) -> void:
 	var points: Array[Vector3] = []
 	points.assign(walk)
-	var out: Array[int] = [v.bookings.pop_front()]
+	var close: int = _closes.get(v.bookings[0], FAR_MM)
+	var last := tick + v.release_wait + (v.bookings.size() - 1) * RELEASE_GAP_TICKS
+	var out: Array[int] = []
+	while not v.bookings.is_empty() and (out.is_empty() or last >= close):
+		out.append(v.bookings.pop_front())
 	released.append({"vehicle": v.id, "bookings": out, "walk": points})
 	v.release_wait = 0 if v.bookings.is_empty() else RELEASE_GAP_TICKS
 
