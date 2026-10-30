@@ -148,6 +148,8 @@ var _visitor: Passenger
 var _label := ""
 var _plate_bag := -1
 var _plated := {}
+## Passenger id -> the stall it visited last (_stall_of()).
+var _last_stall := {}
 var _plate_task := false
 var _hold := false
 var _plates_saved := 0
@@ -487,6 +489,8 @@ static func _to_face(at: Vector3, a: Vector3, b: Vector3, c: Vector3) -> float:
 ## the move is first drawn at k 0, and its plates are taken.
 func _on_tick(_tick: int) -> void:
 	var p := _visitor
+	if p != null and _sim.toilets.visit_of(p.id) != null:
+		_stall_of(p)
 	if p == null or _plate_bag < 0 or _plate_task or _hold:
 		return
 	var props := _views.carry_on_props()
@@ -771,9 +775,13 @@ func _stall_nodes() -> Array[Node3D]:
 	return out
 
 
-## The stall `p` visits: its footprint centre, its way out and across.
+## The stall `p` visits (or last visited: a backpack goes back on after the
+## visit, "on-back"): its footprint centre, its way out and across.
 func _stall_of(p: Passenger) -> Dictionary:
-	var stall := _sim.toilets.visit_of(p.id).stall
+	var visit := _sim.toilets.visit_of(p.id)
+	if visit != null:
+		_last_stall[p.id] = visit.stall
+	var stall: Dictionary = _last_stall[p.id]
 	var out := SecurityLooks.world_dir(stall["front"])
 	return {
 		"centre": stall["use"] - out * ToiletLayout.USE_M,
