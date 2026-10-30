@@ -52,9 +52,12 @@ func _in_lane(lane: LandsideVehicle.Lane) -> int:
 	return count
 
 
-func test_a_multi_storey_holds_three_times_a_surface_lot() -> void:
+## The multi-storey holds 31 cars, one in each painted stall of its upper decks
+## and 9 on the ground floor clear of the hatched zone (decision
+## multi-storey-car-park-slots-fit-the-painted-stalls); the surface lot 12.
+func test_a_multi_storey_fills_its_31_slots_then_diverts() -> void:
 	assert_int(STARTER.lots[SURFACE].slots.size()).is_equal(12)
-	assert_int(STARTER.lots[MULTI_STOREY].slots.size()).is_equal(36)
+	assert_int(STARTER.lots[MULTI_STOREY].slots.size()).is_equal(31)
 	assert_int(STARTER.lots[MULTI_STOREY].kind).is_equal(LandsideLotSpot.Kind.MULTI_STOREY)
 	assert_bool(_sim.build_lot(MULTI_STOREY)).is_true()
 	var parked: Array[int] = []
@@ -66,11 +69,11 @@ func test_a_multi_storey_holds_three_times_a_surface_lot() -> void:
 	_run(1, 2500)
 	var free := _sim.free_slots(MULTI_STOREY)
 	print("parked %d diverted %d free %d" % [parked.size(), diverted.size(), free])
-	assert_int(parked.size()).is_equal(36)
-	assert_int(parked.count(MULTI_STOREY)).is_equal(36)
-	assert_int(diverted.size()).is_equal(4)
+	assert_int(parked.size()).is_equal(31)
+	assert_int(parked.count(MULTI_STOREY)).is_equal(31)
+	assert_int(diverted.size()).is_equal(9)
 	assert_int(_sim.free_slots(MULTI_STOREY)).is_equal(0)
-	assert_int(_sim.wallet.balance).is_equal(36 * LandsideSim.SURFACE_LOT_FEE)
+	assert_int(_sim.wallet.balance).is_equal(31 * LandsideSim.SURFACE_LOT_FEE)
 
 
 func test_a_surface_lot_holds_its_twelve() -> void:

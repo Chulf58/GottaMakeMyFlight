@@ -3,8 +3,11 @@ extends GdUnitTestSuite
 ## The multi-storey's slots, gate and ground-floor routes against the converted
 ## asset (board e3aa4367; decision multi-storey-car-park-ground-floor-cut-a-
 ## level-entrance-thro). Every slot holds the largest car on its deck top clear
-## of every wall; the gate and the way out stand in line with the entrance
-## opening, so no car crosses the apron at a slant; a ground-floor car's way in
+## of every wall and of the floor paint (decision multi-storey-car-park-slots-
+## fit-the-painted-stalls: one car inside each painted stall of the upper
+## decks, none on the ground floor's hatched zone); the gate and the way out
+## stand in line with the entrance opening, so no car crosses the apron at a
+## slant; a ground-floor car's way in
 ## and out never climbs or drops more than a few cm, through the gap cut in the
 ## ramp kerb, and its sides clear every wall on the way.
 
@@ -27,6 +30,15 @@ const RISE := 0.1
 ## The ground-floor front wall's middle line, in the asset's own frame (the
 ## wall runs z -23.2 to -21.9, 1.2 m over the floor at y 0.3).
 const FRONT_WALL_Z := -22.55
+## Slots by deck (decision multi-storey-car-park-slots-fit-the-painted-stalls):
+## 9 on the ground floor between the hatched zone and the back wall, 11 on
+## each upper deck, one in each painted stall.
+const SLOTS := 31
+const GROUND_SLOTS := 9
+## Floor paint is a level face this far over its deck top (measured: 0.7 to
+## 3.3 cm).
+const PAINT_MIN := 0.004
+const PAINT_MAX := 0.045
 
 var _spot: LandsideLotSpot
 var _paths: LandsidePaths
@@ -35,6 +47,9 @@ var _paths: LandsidePaths
 var _level := []
 var _upright := []
 var _upright_box: Array[AABB] = []
+## Deck top height -> the paint triangles on it, each a PackedVector2Array in
+## (x, z).
+var _paint := {}
 
 
 func before() -> void:
@@ -58,6 +73,17 @@ func before() -> void:
 			else:
 				_upright.append([a, b, c])
 				_upright_box.append(AABB(a, Vector3.ZERO).expand(b).expand(c))
+	for slot in _spot.slots:
+		_paint[slot.y] = []
+	for tri: Array in _level:
+		for deck: float in _paint:
+			var low := minf(minf(tri[0].y, tri[1].y), tri[2].y) - deck
+			var high := maxf(maxf(tri[0].y, tri[1].y), tri[2].y) - deck
+			if low > PAINT_MIN and high < PAINT_MAX:
+				var flat := PackedVector2Array()
+				for corner: Vector3 in tri:
+					flat.append(Vector2(corner.x, corner.z))
+				_paint[deck].append(flat)
 	asset.free()
 
 
@@ -94,9 +120,37 @@ func test_every_slot_holds_a_car_on_its_deck_top_clear_of_every_wall() -> void:
 			% [_spot.slots.size(), samples, lines]
 		)
 	)
-	assert_int(_spot.slots.size()).is_equal(36)
-	assert_int(samples).is_equal(36 * 23 * 11)
-	assert_int(lines).is_equal(36 * 2 * 6)
+	assert_int(_spot.slots.size()).is_equal(SLOTS)
+	assert_int(samples).is_equal(SLOTS * 23 * 11)
+	assert_int(lines).is_equal(SLOTS * 2 * 6)
+
+
+func test_no_parked_car_stands_on_a_painted_stall_line_or_the_hatched_zone() -> void:
+	var per_deck := {}
+	for slot in _spot.slots:
+		per_deck[slot.y] = int(per_deck.get(slot.y, 0)) + 1
+		var on := _paint_under(slot, Vector3.ZERO)
+		(
+			assert_int(on)
+			. override_failure_message("slot %s stands on %d paint faces" % [slot, on])
+			. is_equal(0)
+		)
+		# A control: the same car 2 m along the row stands on a painted line
+		# (upper decks), so the check meets the paint it is looking for.
+		if slot.y > 1.0:
+			assert_int(_paint_under(slot, Vector3(0.0, 0.0, 2.0))).is_greater(0)
+	# A control on the ground floor: a car in the middle of the hatched zone.
+	var hatch := Vector3(_spot.slots[0].x, _spot.slots[0].y, -26.5)
+	assert_int(_paint_under(hatch, Vector3.ZERO)).is_greater(0)
+	var counts := []
+	for deck: float in _paint:
+		counts.append("%.2f: %d paint faces" % [deck, _paint[deck].size()])
+	print("multi-storey slots by deck %s; %s" % [per_deck, counts])
+	assert_int(per_deck.get(_spot.aisle_front.y, 0)).is_equal(GROUND_SLOTS)
+	assert_int(per_deck.size()).is_equal(3)
+	for deck: float in per_deck:
+		if deck > 1.0:
+			assert_int(per_deck[deck]).is_equal((SLOTS - GROUND_SLOTS) / 2)
 
 
 func test_the_gate_and_the_way_out_stand_in_line_with_the_entrance_opening() -> void:
@@ -193,12 +247,28 @@ func test_a_ground_floor_car_drives_in_and_out_level_through_the_kerb_gap() -> v
 		% [worst_step, worst_at, worst_rise, lines]
 	)
 	print(report)
-	assert_int(routes).is_equal(12)
+	assert_int(routes).is_equal(GROUND_SLOTS)
 	# Every route passes the gap both ways (a control: the check met the kerb line).
 	assert_int(through_gap).is_greater_equal(routes * 2)
 	assert_float(worst_step).is_less_equal(MAX_STEP)
 	assert_float(worst_rise).is_less_equal(RISE)
 	assert_int(lines).is_greater(routes * 4 * 4)
+
+
+## How many paint triangles on `slot`'s deck the outline of a car parked
+## there, moved by `offset`, overlaps.
+func _paint_under(slot: Vector3, offset: Vector3) -> int:
+	var nose := LandsidePlaces.parked_heading(_spot, slot)
+	var side := Vector3(-nose.z, 0.0, nose.x)
+	var at := slot + offset
+	var outline := PackedVector2Array()
+	for c in [[1, 1], [1, -1], [-1, -1], [-1, 1]]:
+		var corner: Vector3 = at + nose * (HALF_LENGTH * c[0]) + side * (HALF_WIDTH * c[1])
+		outline.append(Vector2(corner.x, corner.z))
+	var hits := 0
+	for tri: PackedVector2Array in _paint[slot.y]:
+		hits += int(not Geometry2D.intersect_polygons(outline, tri).is_empty())
+	return hits
 
 
 ## 1 after checking that no upright face crosses the line from `a` to `b`.
