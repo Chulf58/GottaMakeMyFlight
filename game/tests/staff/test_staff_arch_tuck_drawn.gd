@@ -30,34 +30,9 @@ func after() -> void:
 	PassengerTestWorld.tracker = null
 
 
-## An officer sent to the lane's helper spot from two cells before its queue
-## entry, along the passage through the arch; returns its id.
-func _send_through() -> int:
-	var lane := LaneStaffWorld.lane_of(_w, _arch)
-	var front: Vector2i = lane["front"]
-	var path: Array[Vector2i] = [
-		lane["queue_entry"] + front * 2,
-		lane["queue_entry"] + front,
-		lane["queue_entry"],
-		lane["unpack"],
-		lane["arch"],
-		lane["pickup"],
-	]
-	var rest := _w.grid.find_staff_path(lane["pickup"], lane["helper_spot"])
-	rest.remove_at(0)
-	path.append_array(rest)
-	var m := _w.staff.get_member(_w.staff.hire(StaffMember.Role.SECURITY))
-	m.station = _arch
-	m.slot = StaffMember.Slot.HELPER
-	m.at = path[0]
-	m.set_path(path)
-	m.state = StaffMember.State.TO_STATION
-	_views.sync(true)
-	return m.id
-
-
 func test_an_officer_walking_through_the_arch_tucks_in_and_out_eased() -> void:
-	var id := _send_through()
+	var id := LaneStaffWorld.send_through_arch(_w, _arch)
+	_views.sync(true)
 	var m := _w.staff.get_member(id)
 	var arch: Vector2i = LaneStaffWorld.lane_of(_w, _arch)["arch"]
 	# Per tick: [in the passage, tuck weight, arms posed (active, weight)].

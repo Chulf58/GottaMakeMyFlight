@@ -24,24 +24,29 @@ const TUCK_TICKS := CarryOnProps.TRANSFER_TICKS
 static func in_arch_passage(grid: BuildGrid, m: StaffMember) -> bool:
 	if m.in_pool():
 		return false
-	if _def_at(grid, m.at) == SecurityLanes.ARCH:
+	if SecurityLooks.def_at(grid, m.at) == SecurityLanes.ARCH:
 		return true
-	return m.is_moving() and _def_at(grid, m.path[m.path_index + 1]) == SecurityLanes.ARCH
+	if not m.is_moving():
+		return false
+	return SecurityLooks.def_at(grid, m.path[m.path_index + 1]) == SecurityLanes.ARCH
 
 
 ## How far `record` has tucked in at sim time `now`: 0 swinging, 1 tucked. The
 ## turn eases out (fast at first) over TUCK_TICKS from where the last one began.
+## A turn that began after `now` (a record kept across a load that went back in
+## time) reads settled at its target.
 static func weight(record: Dictionary, now: float) -> float:
 	var target := 1.0 if record.get("tuck", false) else 0.0
-	if not record.has("since"):
+	if not record.has("since") or now < record["since"]:
 		return target
 	var k := clampf((now - record["since"]) / TUCK_TICKS, 0.0, 1.0)
 	return lerpf(record["from"], target, 1.0 - (1.0 - k) * (1.0 - k))
 
 
 ## Starts the turn in or out at `tick` when `inside` (in_arch_passage()) has
-## changed. A new record starts settled: a member drawn for the first time (a
-## hire at the entrance, a load) is not seen turning.
+## changed. A new (empty) record starts settled, so no turn is seen: a member
+## drawn for the first time (a hire at the entrance), and every member after a
+## load, since StaffCharacters starts its records over on each snapped sync.
 static func update(record: Dictionary, inside: bool, tick: float) -> void:
 	if not record.has("tuck"):
 		record["tuck"] = inside
@@ -80,9 +85,3 @@ static func arms_of(body: Node3D) -> Array[CarryArm]:
 		arms.append(arm)
 	body.set_meta(&"tuck_arms", arms)
 	return arms
-
-
-## The def id of the object on `cell`, or an empty name.
-static func _def_at(grid: BuildGrid, cell: Vector2i) -> StringName:
-	var id := grid.object_at(cell)
-	return StringName(grid.get_object(id).get("def", "")) if id != 0 else &""

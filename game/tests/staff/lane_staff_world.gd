@@ -79,3 +79,30 @@ static func helper_beside_vacancy(staff: StaffSim) -> String:
 		if StaffPosts.is_vacant(staff, station, StaffMember.Slot.PRIMARY):
 			return "helpers %s while station %d has no primary" % [helpers, station]
 	return ""
+
+
+## Hires an officer walking to `arch`'s helper spot from two cells before its
+## queue entry, along the passage through the arch (StaffSim's own way may run
+## round it); returns its id. Seat the lanes' primaries first, or a vacancy
+## recalls it.
+static func send_through_arch(world: PassengerTestWorld, arch: int) -> int:
+	var lane := lane_of(world, arch)
+	var front: Vector2i = lane["front"]
+	var path: Array[Vector2i] = [
+		lane["queue_entry"] + front * 2,
+		lane["queue_entry"] + front,
+		lane["queue_entry"],
+		lane["unpack"],
+		lane["arch"],
+		lane["pickup"],
+	]
+	var rest := world.grid.find_staff_path(lane["pickup"], lane["helper_spot"])
+	rest.remove_at(0)
+	path.append_array(rest)
+	var m := world.staff.get_member(world.staff.hire(StaffMember.Role.SECURITY))
+	m.station = arch
+	m.slot = StaffMember.Slot.HELPER
+	m.at = path[0]
+	m.set_path(path)
+	m.state = StaffMember.State.TO_STATION
+	return m.id

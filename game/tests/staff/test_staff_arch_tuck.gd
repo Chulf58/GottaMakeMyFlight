@@ -118,3 +118,11 @@ func test_turning_back_mid_turn_starts_where_the_arms_are() -> void:
 	assert_float(reached).is_greater(0.0)
 	assert_float(after).is_equal_approx(reached, 0.0001)
 	assert_float(StaffArchTuck.weight(record, 10.0 + t * 1.5)).is_equal(0.0)
+
+
+func test_a_record_from_a_later_tick_reads_settled_at_its_target() -> void:
+	# A record whose turn began after `now` (a load went back in time) is not
+	# held at the turn's start weight.
+	var stale := {"tuck": false, "from": 1.0, "since": 2000.0}
+	print("stale weight at an earlier tick: %f" % StaffArchTuck.weight(stale, 1000.0))
+	assert_float(StaffArchTuck.weight(stale, 1000.0)).is_equal(0.0)

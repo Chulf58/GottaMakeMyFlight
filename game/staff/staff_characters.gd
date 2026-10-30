@@ -19,7 +19,7 @@ extends Node3D
 ## Walking through a security lane's arch, a member tucks its arms in toward
 ## the body, eased in and out, so its hands stay clear of the narrow posts
 ## (StaffArchTuck): the passage state is taken each tick, the weight drawn
-## each frame.
+## each frame. A snapped sync starts each member's tuck over, settled.
 ##
 ## Edits, hires, fires and loads between ticks resync at once (snapped) on the
 ## next frame, so a paused game shows them. It reads the sim and never writes
@@ -136,6 +136,10 @@ func sync(snap: bool = false) -> void:
 			_prev[id] = _cur[id]
 		_cur[id] = now
 		_pose(node, m, (_cur[id] as Vector3) - (_prev[id] as Vector3))
+		# A snapped sync (a load among them: member ids survive it) starts the
+		# tuck over, settled where the member stands, with no turn from before.
+		if snap:
+			_tucks.erase(id)
 		var inside := StaffArchTuck.in_arch_passage(staff.sim.grid, m)
 		StaffArchTuck.update(_tucks.get_or_add(id, {}), inside, _tick())
 	for id in _nodes.keys():
