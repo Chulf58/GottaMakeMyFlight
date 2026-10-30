@@ -1,7 +1,7 @@
 class_name TestLandsideBuildState
 extends GdUnitTestSuite
 ## What the landside build tools change in LandsideSim (Landside 3/4): a
-## multi-storey holds three surface lots' worth of cars, a closed car park
+## multi-storey holds 31 cars to a surface lot's 12, a closed car park
 ## takes no new arrivals and drains, it can be removed only once it is empty,
 ## curb bays add berths, and the built, closed and paid state survives a save
 ## (decision landside-technical-design-arrival-bookings-landsidesim-vehic,
@@ -243,7 +243,7 @@ func test_a_car_never_reverses_into_a_berth_or_lands_on_the_queue() -> void:
 
 func test_a_car_past_a_bay_does_not_go_back_to_it() -> void:
 	# A car that has driven on past bay 0 (a diverted car at the multi-storey's
-	# turn, 46000 mm in) takes a starter berth, not the free bay behind it.
+	# turn, 39500 mm in) takes a starter berth, not the free bay behind it.
 	assert_bool(_sim.build_curb(0, 300)).is_true()
 	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
 	for i in 40:

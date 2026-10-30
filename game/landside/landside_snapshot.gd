@@ -11,7 +11,11 @@ extends RefCounted
 ## 4: a vehicle saves the ticks until the next of its passengers steps out
 ## (release_wait, LandsideSim.RELEASE_GAP_TICKS at most). Version 3 is refused,
 ## with no migration (decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
-const SAVE_VERSION := 4
+## 5: the multi-storey's slot table was re-laid (36 slots became 31, one in
+## each painted stall; decision multi-storey-car-park-slots-fit-the-painted-
+## stalls), so a saved slot index names a different stall. Version 4 is
+## refused, with no migration.
+const SAVE_VERSION := 5
 const KEYS := [
 	"save_version",
 	"tick",
