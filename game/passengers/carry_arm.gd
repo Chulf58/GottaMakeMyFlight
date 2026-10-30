@@ -46,6 +46,11 @@ const FOREARM_M := 0.3
 ## of the bag lying under the hand).
 @export var front_half_width := 0.1
 @export var front_up_degrees := -10.0
+## A hand-led bag move (CarryLead): how far (0 to 1) the arm turns from the
+## pose above to reach reach_target (world) with its grip (CarryOnProps.
+## grip_of: GRIP_ALONG_M past the Fingers bone), wrist straight, elbow out.
+@export var reach_weight := 0.0
+var reach_target := Vector3.ZERO
 
 
 func _process_modification_with_delta(_delta: float) -> void:
@@ -66,6 +71,7 @@ func _process_modification_with_delta(_delta: float) -> void:
 	var high := _front(skeleton, bones, pose, outward) if weight > 0.0 else low
 	# The arm turns between the two poses with the bag's move (front_weight),
 	# each bone placed on its blended parent.
+	var chain: Array[Transform3D] = []
 	var parent := Transform3D()
 	for i in bones.size():
 		var basis := _blend(low[i].basis, high[i].basis, weight)
@@ -73,7 +79,69 @@ func _process_modification_with_delta(_delta: float) -> void:
 			low[i].origin if i == 0 else (parent * skeleton.get_bone_rest(bones[i])).origin
 		)
 		parent = Transform3D(basis, origin)
-		skeleton.set_bone_global_pose(bones[i], parent)
+		chain.append(parent)
+	var reach := clampf(reach_weight, 0.0, 1.0)
+	if reach > 0.0:
+		var reached := _reach(skeleton, chain, outward)
+		for i in chain.size():
+			var basis := _blend(chain[i].basis, reached[i].basis, reach)
+			var origin: Vector3 = (
+				chain[i].origin
+				if i == 0
+				else (chain[i - 1] * skeleton.get_bone_rest(bones[i])).origin
+			)
+			chain[i] = Transform3D(basis, origin)
+	for i in bones.size():
+		skeleton.set_bone_global_pose(bones[i], chain[i])
+
+
+## The arm `chain` (arm, forearm, hand; skeleton space) turned so the grip
+## reaches reach_target: a two-bone reach (CarryStoop.two_bone) from the
+## shoulder, the elbow bent out and back, the wrist kept as it is.
+func _reach(skeleton: Skeleton3D, chain: Array[Transform3D], outward: float) -> Array[Transform3D]:
+	var target := skeleton.global_transform.affine_inverse() * reach_target
+	var shoulder := chain[0].origin
+	var elbow := chain[1].origin
+	var grip := _grip(skeleton, chain[2])
+	var joints := CarryStoop.two_bone(
+		shoulder,
+		elbow.distance_to(shoulder),
+		grip.distance_to(elbow),
+		target,
+		Vector3(outward, 0.0, -0.5)
+	)
+	var arm := chain[0]
+	var fore_in_arm := arm.affine_inverse() * chain[1]
+	var hand_in_fore := chain[1].affine_inverse() * chain[2]
+	arm.basis = CarryStoop.aim(arm.basis, elbow - shoulder, joints[0] - shoulder)
+	var fore := arm * fore_in_arm
+	var grip_now := _grip(skeleton, fore * hand_in_fore)
+	fore.basis = CarryStoop.aim(fore.basis, grip_now - fore.origin, joints[1] - fore.origin)
+	return [arm, fore, fore * hand_in_fore]
+
+
+## Where the grip is (skeleton space) for the hand bone at `hand`: the Fingers
+## bone as at rest on it, GRIP_ALONG_M along its own axis.
+func _grip(skeleton: Skeleton3D, hand: Transform3D) -> Vector3:
+	var fingers := skeleton.find_bone(CarryOnProps.GRIP_BONES[side])
+	var at := hand * skeleton.get_bone_rest(fingers)
+	var along := CarryOnProps.GRIP_ALONG_M / skeleton.global_transform.basis.get_scale().x
+	return at.origin + at.basis.y.normalized() * along
+
+
+## How far (world metres) the grip of arm `side` of `skeleton` reaches from
+## its shoulder joint, at rest with the elbow and wrist straight.
+static func reach_of(skeleton: Skeleton3D, side: int) -> float:
+	var ids: Array[int] = []
+	for bone: String in [FOREARMS[side], HANDS[side], CarryOnProps.GRIP_BONES[side]]:
+		ids.append(skeleton.find_bone(bone))
+	if ids.has(-1):
+		return 0.6
+	var scale_by := skeleton.global_transform.basis.get_scale().x
+	var upper := skeleton.get_bone_rest(ids[0]).origin.length()
+	var lower := skeleton.get_bone_rest(ids[1]).origin.length()
+	var hand := skeleton.get_bone_rest(ids[2]).origin.length()
+	return (upper + lower + hand) * scale_by + CarryOnProps.GRIP_ALONG_M
 
 
 ## A bone's rotation `weight` of the way from `low` to `high` (as rotations,

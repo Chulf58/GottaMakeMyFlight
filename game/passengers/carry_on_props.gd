@@ -28,45 +28,36 @@ extends Node3D
 ##   moved once per tick in sync() and drawn with the clock's alpha, so it
 ##   takes each corner where the body did instead of swinging with the body's
 ##   instant turn; the rods (Pull_Reach) stretch to the hand.
-## A roller is lifted by its handle and carried as the hard case is while its
-## walker is at security (narrow lane cells and tables) or runs (a long stride
-## kicks back into a trailing case); it goes between pull and lift over the
-## head. Worn bags keep their carry in a narrow cell: only a hand-carried bag
-## turns to the front (worn bags stay inside the body's width). At a toilet
-## stall (StallCarry) a roller and a backpack are taken in the hand too (the
-## backpack by its grab loop) and every hand-carried bag is held in front, from
-## just before the stall until the walker is clear of it, so nothing goes over
-## the head inside the stall and no roller trails over the bowl; inside, a bag
-## goes between the hand and the floor without the lift and the push out: set
-## down it turns round with the body already upright against the door and goes
-## straight down; picked up it rises upright first. A roller taken in hand for a
-## stall hangs by its grip bar, rods in, and goes between that and the pull by
-## the bar (_swap_transform: the rods run out or in from the hand as the axle
-## goes between under the hand and behind the walker), not over the head.
+## A roller is lifted and carried in the hand while its walker is at security
+## (narrow lane cells and tables) or runs (a long stride kicks back into a
+## trailing case), hung by its grip bar, rods in, and it goes between that and
+## the pull by the bar (_swap_transform: the rods run out or in from the hand
+## as the axle goes between under the hand and behind the walker). Worn bags
+## keep their carry in a narrow cell: only a hand-carried bag turns to the
+## front. At a toilet stall (StallCarry) a roller and a backpack are taken in
+## the hand too (the backpack by its grab loop) and every hand-carried bag is
+## held in front, from just before the stall until the walker is clear of it;
+## inside, a bag goes between the hand and the floor without the lift and the
+## push out: set down it turns round with the body already upright against the
+## door and goes straight down; picked up it rises upright first.
 ##
 ## A bag that changes home (or hand) moves there over TRANSFER_TICKS of sim
-## time (the clock's tick plus its alpha), lifted and kept out from the body; a
-## backpack going to or from the back, and a roller going to or from the pull,
-## take the overhead route (overhead()), along the body's centre plane, over
-## the head (a roller taken round the side met the legs and, in a narrow cell,
-## the wall); a roller in the hand joins it through a gate ahead of the body,
-## and a bag picked up from the floor ahead passes outside the thigh
-## (CarryMoves). Straps and rods retract while a bag is off the body and
-## stretch as it arrives; a shoulder bag is in place before its strap does. In
-## a turn between side and front carry the holding arm reaches further forward,
-## so the turning bag passes ahead of the thighs, and at a basic scanner the
-## bags go to the front BoothCarry.LEAD_M before the booth. It reads the sim
-## and the views and never writes either.
+## time (the clock's tick plus its alpha), led by the hand outside a stall
+## (CarryLead: the hand reaches a bag on the floor, in a tray, on the back or
+## the shoulder first, bending down for a low one (CarryStoop), the bag is
+## placed from the grip along its path, and the hand lets go once it is down);
+## the path is lifted and kept out from the body, and a bag picked up from the
+## floor ahead passes outside the thigh (CarryMoves). There is no overhead
+## route (decision carry-on-bags-stay-in-the-hand-during-every-move-no-
+## overhead). In a turn between side and front carry the holding arm reaches
+## further forward, so the turning bag passes ahead of the thighs, and at a
+## basic scanner the bags go to the front BoothCarry.LEAD_M before the booth.
+## It reads the sim and the views and never writes either.
 
 enum Arm { FREE, HAND, PULL, STRAP }
 ## Which bags _place_bags() places.
 enum Placing { HAND, NOT_HAND }
 
-const TRAY_MOUNTS := {
-	SecurityLooks.Tray.IN: [SecurityLanes.TRAY_TABLE, "Mount_TrayIn"],
-	SecurityLooks.Tray.OUT: [SecurityLanes.PICKUP_TABLE, "Mount_TrayOut"],
-}
-const SCAN_MOUNT := [SecurityLanes.XRAY_BELT, "Mount_TrayScan"]
 ## A bag in a tray rests on the tray's floor, this far above its mount.
 const TRAY_FLOOR_M := 0.012
 ## The grip sits this far past the knuckles along the hand's own axis.
@@ -149,6 +140,8 @@ const ROLLER_GRIP_PAST_TOP_M := 0.015
 ## swings out this far on the hand's side midway, clear of the trailing leg
 ## (0.15 m put it into a neighbouring stall's partition end from the row).
 const SWAP_OUT_M := 0.08
+## At security it swings this far out (the near shin met it at 0.08 m).
+const SWAP_OPEN_M := 0.2
 ## A roller held by its bar for a stall has the bar this far from the grip
 ## point, toward the bag's front (in the palm, a grip offset along the hand's
 ## axes): hung at the side the bag is that much further from the leg, across
@@ -174,14 +167,8 @@ const REACH_NODES := {
 	SecurityLooks.Kind.SHOULDER: ["Strap_Reach", "Strap_Top"],
 	SecurityLooks.Kind.ROLLER: ["Pull_Reach", "Pull_Top"],
 }
-## The overhead route: the bag's lowest point is this high while it crosses
-## over the head, and its origin keeps this far in front of or behind the
-## body's centre while it rises or comes down.
-const OVERHEAD_M := 2.05
-const ROUTE_FRONT_M := 0.45
-const ROUTE_BACK_M := 0.2
-## A roller on the overhead route to the pull is down by this much of the
-## move; its rods then come out to the hand.
+## A roller going to the pull (not hand-led, _reach_blend) has its rods in for
+## this much of the move; they then come out to the hand.
 const ROLLER_LAND := 0.85
 ## A shoulder bag going to the shoulder is in place by this much of the move,
 ## when its strap starts to stretch (_reach_blend).
@@ -251,22 +238,6 @@ static func mount_world(
 ) -> Transform3D:
 	var cells: Array[Vector2i] = [lane[piece]]
 	return BuildView.object_transform(grid, cells, lane["facing"]) * mount_local(piece, mount)
-
-
-## Where a riding tray is when its passenger is drawn at `body`: from the tray
-## table over the belt to the pickup table, by the body's progress along the
-## passage from the unpack cell to the pickup cell.
-static func ride(grid: BuildGrid, lane: Dictionary, body: Vector3) -> Transform3D:
-	var unpack := grid.cell_to_world(lane["unpack"])
-	var pickup := grid.cell_to_world(lane["pickup"])
-	var along := pickup - unpack
-	var t := clampf((body - unpack).dot(along) / along.length_squared(), 0.0, 1.0)
-	var start := mount_world(grid, lane, SecurityLanes.TRAY_TABLE, "Mount_TrayIn")
-	var mid := mount_world(grid, lane, SCAN_MOUNT[0], SCAN_MOUNT[1])
-	var end := mount_world(grid, lane, SecurityLanes.PICKUP_TABLE, "Mount_TrayOut")
-	if t < 0.5:
-		return start.interpolate_with(mid, t * 2.0)
-	return mid.interpolate_with(end, (t - 0.5) * 2.0)
 
 
 ## A carried hard case's transform for a grip at `grip` on a body drawn with
@@ -398,21 +369,6 @@ static func follow(at: Vector3, to: Vector3, dt: float, hand: int) -> Vector3:
 	return Vector3(out * r * sin(a), to.y, -r * cos(a))
 
 
-## The overhead route at `k` (0 to 1) from `from` to `to`, both in the body's
-## frame (x across, +z ahead), down by `land`: CarryMoves.overhead(), an end
-## held in the hand (`from_hand`, `to_hand`) joined through a gate ahead.
-static func overhead(
-	from: Transform3D,
-	to: Transform3D,
-	k: float,
-	box: AABB,
-	land := 1.0,
-	from_hand := false,
-	to_hand := false
-) -> Transform3D:
-	return CarryMoves.overhead(from, to, k, box, land, from_hand, to_hand)
-
-
 ## A bag lying flat with its length across a body turned to `yaw`.
 static func _flat(yaw: float, scale_by: float) -> Basis:
 	var forward := Basis(Vector3.UP, yaw) * Vector3.BACK
@@ -479,11 +435,17 @@ func sync() -> void:
 		var front := SecurityLooks.carry_front(sim, p) or at_stall or booth_bags
 		var held: Dictionary = _held.get(id, {"tray": null, "bags": []})
 		_held[id] = held
-		held["tray_at"] = tray_at
+		# A tray kept for a bag still moving out of it stays where it was, on the
+		# lane it was on: its passenger may have lost the lane (finished, sent
+		# back, the station closed), and lane_of() is then empty.
+		if tray_at != SecurityLooks.Tray.NONE or held["tray"] == null:
+			held["tray_at"] = tray_at
+			held["lane"] = SecurityLooks.lane_of(sim, p)
 		held["homes"] = homes
 		held["hands"] = hands
 		held["kinds"] = kinds
 		held["in_stall"] = StallCarry.in_stall(p)
+		held["security"] = p.stage in [Passenger.Stage.SECURITY_QUEUE, Passenger.Stage.SECURITY]
 		held["stall"] = StallCarry.stall_of(sim, p)
 		# At a booth a roller's lift into the hand ends before the front turn.
 		if booth_bags and BoothCarry.roller_rising(held, kinds, lifts, _tick()):
@@ -540,7 +502,10 @@ func sync() -> void:
 			if (
 				was[i]["kind"] == kinds[i]
 				and (
-					was[i].get("by_bar", false)
+					(
+						was[i].get("by_bar", false)
+						and (lift_stall or StallCarry.leaving(sim, p, StallCarry.LIFT_LEAD_M))
+					)
 					or (
 						was[i].get("swap", false)
 						and _tick() - float(was[i].get("changed", -INF)) < TRANSFER_TICKS
@@ -548,7 +513,6 @@ func sync() -> void:
 				)
 			):
 				hands[i] = (int(was[i]["place"]) / 2) % 2
-		held["lane"] = SecurityLooks.lane_of(sim, p)
 		held["scale"] = SecurityLooks.bag_scale(p)
 		var spots: Array[Transform3D] = []
 		for i in homes.size():
@@ -556,9 +520,6 @@ func sync() -> void:
 		held["floor"] = spots
 		if tray_at != SecurityLooks.Tray.NONE and held["tray"] == null:
 			held["tray"] = _take("security_tray")
-		elif tray_at == SecurityLooks.Tray.NONE and held["tray"] != null:
-			_give("security_tray", held["tray"])
-			held["tray"] = null
 		var bags: Array = held["bags"]
 		while bags.size() > homes.size():
 			var gone: Dictionary = bags.pop_back()
@@ -578,14 +539,10 @@ func sync() -> void:
 				SecurityLooks.Carry.HAND if lifted else SecurityLooks.KIND_CARRY[kinds[i]]
 			)
 			var place: int = (homes[i] * 2 + hands[i]) * 2 + int(lifted)
-			# Lifted for a stall alone (not at security or running): hung by the
-			# grip bar (_case_transform).
-			var by_bar: bool = (
-				lifted
-				and kinds[i] == SecurityLooks.Kind.ROLLER
-				and not _lifted(kinds[i], p, false, booth_bags)
-				and not kept[i]
-			)
+			# A lifted roller hangs by its grip bar (_case_transform) and goes
+			# between the hand and the pull by the bar (decision carry-on-bags-
+			# stay-in-the-hand-during-every-move-no-overhead).
+			var by_bar: bool = lifted and kinds[i] == SecurityLooks.Kind.ROLLER
 			# A roller lifted before and now that stops or starts being held by its
 			# bar for a stall (its walker turns late, or reaches security) moves
 			# between the two grips, not snaps: a new move, not a swap.
@@ -609,6 +566,17 @@ func sync() -> void:
 			bags[i]["carry"] = carry
 			bags[i]["by_bar"] = by_bar
 			_trail(bags[i], node, id, homes[i], hands[i])
+		# The tray goes once no bag is moving out of it (the hand takes a bag
+		# from the tray before the tray is gone).
+		var moving := bags.any(
+			func(b: Dictionary) -> bool:
+				return _tick() - float(b.get("changed", -INF)) < TRANSFER_TICKS
+		)
+		if tray_at == SecurityLooks.Tray.NONE and held["tray"] != null and not moving:
+			_give("security_tray", held["tray"])
+			held["tray"] = null
+			held["tray_at"] = tray_at
+			held["lane"] = SecurityLooks.lane_of(sim, p)
 	for id in _held.keys():
 		if not seen.has(id):
 			release(id)
@@ -632,6 +600,12 @@ static func _lifted(
 ## Returns every prop of passenger `id` to the pool.
 func release(id: int) -> void:
 	_released_at[id] = _tick()
+	# Its pooled body goes back with no reach or stoop of this passenger's
+	# moves: the next passenger it draws may have no bag to reach for.
+	for body: Node3D in _body_ids.keys():
+		if _body_ids[body] == id:
+			_arms_off(body)
+			_body_ids.erase(body)
 	var held: Dictionary = _held.get(id, {})
 	if held.is_empty():
 		return
@@ -707,6 +681,22 @@ func follows_of(id: int, index: int) -> int:
 func _bag_of(id: int, index: int) -> Dictionary:
 	var bags: Array = _held.get(id, {}).get("bags", [])
 	return bags[index] if index < bags.size() else {}
+
+
+## A copy of the record of bag `index` of passenger `id` (_held's "bags"
+## entry), for checks; {} when there is none.
+func bag_state(id: int, index: int) -> Dictionary:
+	return _bag_of(id, index).duplicate()
+
+
+## Where bag `index` of passenger `id` was placed from a hand's grip, as drawn
+## now (world; the point of the bag that was at the grip), or Vector3.INF when
+## it was not placed from a hand (resting, worn).
+func hand_point(id: int, index: int) -> Vector3:
+	var bag := _bag_of(id, index)
+	if int(bag.get("held_by", -1)) < 0:
+		return Vector3.INF
+	return (bag["node"] as Node3D).global_transform * (bag["held_at"] as Vector3)
 
 
 ## How many times passenger `id`'s props have been drawn (draw()): once a
@@ -818,6 +808,7 @@ func draw() -> void:
 		held["draw_seq"] = int(held.get("draw_seq", 0)) + 1
 		_place_bags(held, body, tray_xf, now, Placing.NOT_HAND)
 		_step_hand_bags(held, body)
+		_lead_arms(held, body, now)
 		_pose_arms(held, body, now)
 
 
@@ -837,9 +828,11 @@ func _step_hand_bags(held: Dictionary, body: Node3D) -> void:
 			bag["axle_now"] = _axle_drawn(bag, body, held["scale"], held["hands"][i])
 
 
-## Puts the bags of one passenger in place: only those going to a hand
-## (_on_pose(), _unposed()) or all but those (draw()). Every bag's new move is
-## stamped, whichever are placed.
+## Puts the bags of one passenger in place: those going to a hand, and those
+## in a hand-led move (CarryLead), which follow the hand, from the pose
+## (_on_pose(), _unposed()); all but the settled ones going to a hand in
+## draw(), which works out each moving bag's plan (its hand's targets) before
+## the arms are posed. Every bag's new move is stamped, whichever are placed.
 func _place_bags(
 	held: Dictionary, body: Node3D, tray_xf: Transform3D, now: float, placing: Placing
 ) -> void:
@@ -851,158 +844,203 @@ func _place_bags(
 		var kind: SecurityLooks.Kind = bag["kind"]
 		var hand_home: bool = homes[i] == SecurityLooks.Home.HAND
 		var stamp: bool = bag["home"] != bag["place"]
-		if (
-			not stamp
-			and (
-				(placing == Placing.HAND and not hand_home)
-				or (placing == Placing.NOT_HAND and hand_home)
-			)
-		):
+		if not stamp and not _leading(bag, now) and (placing == Placing.HAND) != hand_home:
 			continue
 		# A bag going to a hand is only stamped here (draw()), so its place
-		# (and a roller's follower) is worked out once, when it is placed.
+		# (and a roller's follower) is worked out once, when it is placed; one
+		# in a hand-led move is placed here too, for its hand's targets.
 		var stamp_only: bool = placing == Placing.NOT_HAND and hand_home
 		var want_reach := [REACH_BUILT_M]
 		var want := node.global_transform
-		if not stamp_only:
+		if not stamp_only or _leading(bag, now):
 			want = _bag_transform(held, body, tray_xf, i, homes[i], want_reach)
 		# A change of hand moves the bag across like a change of home.
 		if stamp:
-			# The move starts where the bag is, held in the passenger's frame,
-			# so a bag picked up while walking stays ahead of the legs. Its clock
-			# is the tick sync() saw the change on, not the frame it is drawn in.
-			# A new bag's move is over at once, so its start is never drawn.
-			var start := want if bag["home"] == -1 else node.global_transform
-			bag["from"] = _start_frame(bag, body).affine_inverse() * start
-			# The carry it was drawn with last, not one sync() saw in between
-			# (a frame can run several ticks).
-			bag["carry_from"] = bag.get(
-				"carry_placed", bag.get("carry_was", SecurityLooks.KIND_CARRY[kind])
-			)
-			# Set down in a toilet stall, a bag starts fixed in the stall: the
-			# body shuffles back to the seat as it sits and would drag a start
-			# held in its frame through its knees. One from the hand starts
-			# upright over its place by the door (StallCarry.set_down_start).
-			bag.erase("from_world")
-			if held.get("in_stall", false) and homes[i] == SecurityLooks.Home.FLOOR:
-				bag["from_world"] = body.global_transform * bag["from"]
-				if bag["carry"] == SecurityLooks.Carry.HAND:
-					var box := bag_box(kind)
-					bag["from_world"] = StallCarry.set_down_start(
-						want, box, StallCarry.lowest(start, box)
-					)
-			bag["since"] = bag["changed"] - (TRANSFER_TICKS if bag["home"] == -1 else 0.0)
-			bag["was"] = bag["home"]
-			bag["home"] = bag["place"]
-			bag["reach_from"] = _reach_of(node, kind)
-			if stamp_only:
+			_stamp(held, bag, body, want, i)
+			if stamp_only and not _leading(bag, now):
 				continue
+			if stamp_only:
+				want = _bag_transform(held, body, tray_xf, i, homes[i], want_reach)
 		bag["placed"] = int(bag.get("placed", 0)) + 1
 		var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
 		# The body this placement goes with, for the next move's start.
 		bag["body_at"] = body.global_transform
 		bag["settled"] = k >= 1.0
+		bag["placed_k"] = k
 		bag["carry_placed"] = bag["carry"]
 		var to_hand: bool = homes[i] == SecurityLooks.Home.HAND
-		var from_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
-		var from_floor: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.FLOOR
 		var reach: float = want_reach[0]
 		if k < 1.0:
 			var to_pull: bool = to_hand and bag["carry"] == SecurityLooks.Carry.PULL
-			reach = lerpf(
-				bag["reach_from"],
-				reach,
-				_reach_blend(kind, k, to_pull if kind == SecurityLooks.Kind.ROLLER else to_hand)
+			var blend := _reach_blend(
+				kind, k, to_pull if kind == SecurityLooks.Kind.ROLLER else to_hand
 			)
+			# Hand-led: a strap or rods as they were while the bag waits at its
+			# start, as they end up once it is at its end.
+			if _leading(bag, now):
+				blend = CarryLead.carry_t(k, bag)
+			reach = lerpf(bag["reach_from"], reach, blend)
 		_set_reach(node, kind, reach)
 		# A shoulder bag is in place by STRAP_PLACED of its move, so its strap
 		# stretches (_reach_blend) from a bag already on the shoulder, not
 		# through the strap hand raised at the chest.
-		if to_hand and kind == SecurityLooks.Kind.SHOULDER:
+		if to_hand and kind == SecurityLooks.Kind.SHOULDER and not _leading(bag, now):
 			k = minf(k / STRAP_PLACED, 1.0)
+		var holder := -1
 		if k >= 1.0:
 			node.global_transform = want
-			continue
-		if bag.get("swap", false):
+			if to_hand and bag["carry"] in [SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL]:
+				holder = held["hands"][i]
+		elif bag.get("swap", false):
 			var swapped := _swap_transform(held, body, i, k)
 			_set_reach(node, kind, swapped[1])
 			node.global_transform = swapped[0]
-			continue
-		var frame := body.global_transform
-		# Onto or off the back or the pull: over the head.
-		var high := [SecurityLooks.Carry.BACK, SecurityLooks.Carry.PULL]
-		var overhead_route: bool = (
-			(to_hand and bag["carry"] in high)
-			or (from_hand and bag.get("carry_from", SecurityLooks.KIND_CARRY[kind]) in high)
-		)
-		if overhead_route:
-			# A roller held in the hand at an end of the route joins it through
-			# a gate ahead of the body (CarryMoves); it lands at ROLLER_LAND only
-			# in the pull, where its rods then come out to the hand.
-			var roller := kind == SecurityLooks.Kind.ROLLER
-			var pulls: bool = to_hand and bag["carry"] == SecurityLooks.Carry.PULL
-			node.global_transform = (
-				frame
-				* overhead(
-					bag["from"],
-					frame.affine_inverse() * want,
-					k,
-					bag_box(kind),
-					ROLLER_LAND if roller and pulls else 1.0,
-					roller and from_hand and bag["carry_from"] == SecurityLooks.Carry.HAND,
-					roller and to_hand and bag["carry"] == SecurityLooks.Carry.HAND
-				)
-			)
-			continue
-		var start_now: Transform3D = bag.get("from_world", frame * (bag["from"] as Transform3D))
-		var placed := start_now.interpolate_with(want, k)
-		# A bag going up rises first and then comes across (picked up from
-		# the floor, it clears the legs); one going down is lifted on the
-		# way, over a table edge rather than through it. Either way it is
-		# kept TRANSFER_CLEAR_M from the body's centre line, on its hand's side.
-		# In a toilet stall a hand-carried bag goes between the floor and the
-		# front carry, both ahead of the body: no table to lift it over, and
-		# no push out from the body, which would put it into a partition or
-		# the door. Set down, it goes straight down by the door (its start is
-		# over its place); picked up, it rises upright first, ahead of the
-		# walker's feet, and tips over to the front carry once it is up.
-		var in_stall: bool = held.get("in_stall", false)
-		var hand_in_stall: bool = in_stall and bag["carry"] == SecurityLooks.Carry.HAND
-		var arc := 0.0 if hand_in_stall else 4.0 * k * (1.0 - k)
-		var rising := want.origin.y > start_now.origin.y
-		if hand_in_stall and rising:
-			var soon := 1.0 - (1.0 - k) * (1.0 - k)
-			var across := start_now.origin.lerp(want.origin, k * k)
-			var tip := clampf((k - 0.4) / 0.6, 0.0, 1.0)
-			# Out ahead of the walker's stride as it rises, back to the hand as
-			# it tips over.
-			var ahead := minf(k * 4.0, 1.0) * (1.0 - smoothstep(0.5, 1.0, k)) * PICK_AHEAD_M
-			across += Basis(Vector3.UP, body.rotation.y) * Vector3.BACK * ahead
-			placed = Transform3D(
-				start_now.interpolate_with(want, tip).basis,
-				Vector3(across.x, lerpf(start_now.origin.y, want.origin.y, soon), across.z)
-			)
-		elif hand_in_stall:
-			pass
-		elif rising and from_floor and not in_stall and CarryMoves.picks_up_ahead(bag["from"]):
-			placed = frame * CarryMoves.pick_up(bag["from"], frame.affine_inverse() * want, k)
-		elif rising:
-			var across := start_now.origin.lerp(want.origin, k * k)
-			placed.origin.x = across.x
-			placed.origin.z = across.z
-			placed.origin.y = lerpf(start_now.origin.y, want.origin.y, 1.0 - pow(1.0 - k, 4.0))
-			# Over the knee that steps forward, early in the move, and gone
-			# before the bag comes in under the arm that will hold it.
-			var early := 6.75 * k * (1.0 - k) * (1.0 - k) * pow(1.0 - k * k, 4.0)
-			placed.origin.y += KNEE_LIFT_M * early
+			holder = held["hands"][i]
 		else:
-			placed.origin.y += TRANSFER_LIFT_M * arc
-		var hand: int = held["hands"][i]
-		if kind == SecurityLooks.Kind.SHOULDER:
-			hand = SecurityLooks.worn_side(i)
-		var clear := StallCarry.STALL_CLEAR_M if in_stall else TRANSFER_CLEAR_M
-		placed.origin += _keep_out(placed.origin, body, hand, clear) * minf(arc * 2.0, 1.0)
-		node.global_transform = placed
+			var frame := body.global_transform
+			var start_now: Transform3D = bag.get("from_world", frame * (bag["from"] as Transform3D))
+			var hand: int = held["hands"][i]
+			var in_stall: bool = held.get("in_stall", false)
+			var flags := {
+				"in_stall": in_stall,
+				"hand_carry": bag["carry"] == SecurityLooks.Carry.HAND,
+				"from_floor": int(bag.get("was", -1)) / 4 == SecurityLooks.Home.FLOOR,
+				"hand": SecurityLooks.worn_side(i) if kind == SecurityLooks.Kind.SHOULDER else hand,
+				"clear": StallCarry.STALL_CLEAR_M if in_stall else TRANSFER_CLEAR_M,
+				"yaw": body.rotation.y,
+			}
+			if not _leading(bag, now):
+				node.global_transform = CarryLead.path(
+					start_now, want, k, frame, bag["from"], flags
+				)
+			else:
+				var drawn := {
+					"hand": hand,
+					"grips": [grip_of(body, 0), grip_of(body, 1)],
+					"shoulders_y": [_shoulder_of(body, 0).y, _shoulder_of(body, 1).y],
+					"bar_z":
+					(
+						_bar_z(node, _reach_of(node, kind))
+						if kind == SecurityLooks.Kind.ROLLER
+						else 0.0
+					),
+					"scale": held["scale"],
+					"strap_top":
+					(
+						_in_piece(_part(node, "Strap_Top"), node).origin
+						if kind == SecurityLooks.Kind.SHOULDER
+						else Vector3.ZERO
+					),
+				}
+				var plan := CarryLead.plan(bag, k, start_now, want, frame, flags, drawn)
+				bag["lead"] = plan
+				holder = plan["holder"]
+				var placed: Transform3D = plan["xf"]
+				if holder >= 0:
+					var at: Vector3 = placed.basis * (plan["anchor"] as Vector3)
+					placed = Transform3D(placed.basis, grip_of(body, holder) - at)
+				node.global_transform = placed
+		bag["held_by"] = holder
+		if holder >= 0:
+			bag["held_at"] = node.global_transform.affine_inverse() * grip_of(body, holder)
+
+
+## A new move of `bag` (bag `i`) to `want`: it starts where the bag is, held in
+## the passenger's frame (so a bag picked up while walking stays ahead of the
+## legs), or fixed in the world when it starts on the floor or in a tray (the
+## hand reaches it there, CarryLead). Its clock is the tick sync() saw the
+## change on, not the frame it is drawn in; a new bag's move is over at once,
+## so its start is never drawn.
+func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, i: int) -> void:
+	var node: Node3D = bag["node"]
+	var kind: SecurityLooks.Kind = bag["kind"]
+	var start := want if bag["home"] == -1 else node.global_transform
+	bag["from"] = _start_frame(bag, body).affine_inverse() * start
+	# A hand-led move whose hand was still reaching for the bag has not left
+	# its start: the new move starts there, as that one did (its "was",
+	# "carry_from" and "from_holder" kept), not in the hand it was going to,
+	# and on that move's clock, so the reach is not started again (a bag
+	# stamped again every few ticks would wait at its start for ever).
+	var unmoved := CarryLead.at_start(bag, bag.get("placed_k", 1.0))
+	if not unmoved:
+		# The carry it was drawn with last, not one sync() saw in between (a
+		# frame can run several ticks).
+		bag["carry_from"] = bag.get(
+			"carry_placed", bag.get("carry_was", SecurityLooks.KIND_CARRY[kind])
+		)
+		# Where the hand held it at the start, in its own frame, and the hand
+		# still holding it when its last move had not ended (CarryLead.start_of).
+		bag["anchor_from"] = bag.get("held_at", grip_anchor(kind))
+		bag["from_holder"] = -1 if bag.get("settled", true) else int(bag.get("held_by", -1))
+		bag["was"] = bag["home"]
+	var at: int = bag["was"]
+	bag.erase("from_world")
+	bag.erase("lead")
+	var homes: Array = held["homes"]
+	if held.get("in_stall", false) and homes[i] == SecurityLooks.Home.FLOOR:
+		# Set down in a toilet stall, a bag starts fixed in the stall: the body
+		# shuffles back to the seat as it sits and would drag a start held in
+		# its frame through its knees. One from the hand starts upright over its
+		# place by the door (StallCarry.set_down_start).
+		bag["from_world"] = body.global_transform * bag["from"]
+		if bag["carry"] == SecurityLooks.Carry.HAND:
+			var box := bag_box(kind)
+			bag["from_world"] = StallCarry.set_down_start(want, box, StallCarry.lowest(start, box))
+	elif at >= 0 and at / 4 == SecurityLooks.Home.TRAY:
+		# A bag in a tray waits there for the hand; one on the floor keeps its
+		# place by the walker, so a walker never steps into it.
+		bag["from_world"] = start
+	if not unmoved:
+		bag["since"] = bag["changed"] - (TRANSFER_TICKS if bag["home"] == -1 else 0.0)
+	# Hand-led or not is decided now and kept to the end of the move.
+	bag["led"] = _leads(held, bag)
+	bag["home"] = bag["place"]
+	bag["reach_from"] = _reach_of(node, kind)
+
+
+## Whether a move of `bag` stamped now is hand-led (CarryLead): not a roller
+## going between the hand and the pull by its bar (_swap_transform, held by the
+## bar throughout), not inside a toilet stall (its moves are decision
+## stall-bag-poses-as-built-bags-stand-upright-against-the-insi's, not
+## measured by the crossing probe). Kept in the bag's "led" to the move's end,
+## so a move that crosses into or out of a stall does not change mode.
+static func _leads(held: Dictionary, bag: Dictionary) -> bool:
+	return not bag.get("swap", false) and not held.get("in_stall", false)
+
+
+## Whether `bag` is in a hand-led move now (_leads(), as stamped): moving.
+static func _leading(bag: Dictionary, now: float) -> bool:
+	return bag.has("since") and _progress_of(bag, now) < 1.0 and bag.get("led", false)
+
+
+## Aims each hand of `body` at its target for the hand-led moves of its bags
+## (CarryArm.reach_weight) and bends it down as far as a low one needs
+## (CarryStoop). A hand in no move reaches for nothing.
+func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
+	var weights := [0.0, 0.0]
+	var targets := [Vector3.ZERO, Vector3.ZERO]
+	for bag: Dictionary in held["bags"]:
+		if not _leading(bag, now) or not bag.has("lead"):
+			continue
+		var plan: Dictionary = bag["lead"]
+		for hand in 2:
+			if plan["weights"][hand] > weights[hand]:
+				weights[hand] = plan["weights"][hand]
+				targets[hand] = plan["targets"][hand]
+	held["reach_on"] = [weights[0] > 0.0, weights[1] > 0.0]
+	var rig := _rig(body)
+	var stoop: CarryStoop = rig["stoop"]
+	stoop.targets.clear()
+	stoop.sides.clear()
+	stoop.weights.clear()
+	for hand in 2:
+		var arm := rig["arms"][hand] as CarryArm
+		arm.reach_weight = weights[hand]
+		arm.reach_target = targets[hand]
+		if weights[hand] > 0.0:
+			stoop.targets.append(targets[hand])
+			stoop.sides.append(hand)
+			stoop.weights.append(weights[hand])
 
 
 ## The body frame a new move of `bag` starts in: the body as it was when the
@@ -1039,21 +1077,6 @@ static func _reach_blend(kind: SecurityLooks.Kind, k: float, to_hand: bool) -> f
 	if to_hand:
 		return clampf((k - STRAP_PLACED) / (1.0 - STRAP_PLACED), 0.0, 1.0)
 	return clampf(k / 0.4, 0.0, 1.0)
-
-
-## How far to push a moving bag at `at` out to `clear` (TRANSFER_CLEAR_M, or
-## less in a toilet stall) from the body's centre line (zero when it is
-## already that far out); a bag on the centre line goes out on the side of
-## `hand` (0 right, 1 left).
-func _keep_out(at: Vector3, body: Node3D, hand: int, clear: float) -> Vector3:
-	var away := at - body.global_position
-	away.y = 0.0
-	var gap := away.length()
-	if gap >= clear:
-		return Vector3.ZERO
-	if gap < 0.05:
-		away = Basis(Vector3.UP, body.rotation.y) * (Vector3.LEFT if hand == 0 else Vector3.RIGHT)
-	return away.normalized() * (clear - gap)
 
 
 ## How far passenger `held` has turned to the front carry at sim time `now`,
@@ -1220,7 +1243,8 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 					strap[side] = on
 	# The arms keep what was set until it changes (most frames nothing does).
 	var tuck: float = held.get("tuck_weight", 0.0)
-	var key := [modes, strap, cases, beside, held["weight"], tuck]
+	var reach_on: Array = held.get("reach_on", [false, false])
+	var key := [modes, strap, cases, beside, held["weight"], tuck, reach_on]
 	if held.get("arm_key", []) == key and held.get("arm_body") == body:
 		return
 	held["arm_key"] = key
@@ -1229,7 +1253,7 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 	for side in arms.size():
 		var arm := arms[side] as CarryArm
 		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL
-		arm.active = modes[side] != Arm.FREE or cases > 0 or tuck > 0.0
+		arm.active = modes[side] != Arm.FREE or cases > 0 or tuck > 0.0 or reach_on[side]
 		var pulling: bool = modes[side] == Arm.PULL
 		arm.angle_degrees = PULL_OUT_DEGREES if pulling else 12.0
 		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5
@@ -1258,19 +1282,26 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 
 ## How far `bag` is through its move at sim time `now` (1 when settled or
 ## not started).
-func _progress_of(bag: Dictionary, now: float) -> float:
+static func _progress_of(bag: Dictionary, now: float) -> float:
 	if not bag.has("since"):
 		return 1.0
 	return clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
 
 
-## Turns off both CarryArms of a character with no bags.
+## Turns off both CarryArms of a character with no bags (or released), with
+## no reach, and its CarryStoop with no target.
 func _arms_off(body: Node3D) -> void:
 	if not body.has_meta(&"carry_rig"):
 		return
-	for arm: CarryArm in _rig(body)["arms"]:
+	var rig := _rig(body)
+	for arm: CarryArm in rig["arms"]:
 		arm.active = false
 		arm.front_weight = 0.0
+		arm.reach_weight = 0.0
+	var stoop: CarryStoop = rig["stoop"]
+	stoop.targets.clear()
+	stoop.sides.clear()
+	stoop.weights.clear()
 
 
 ## A character's grip, shoulder and spine attachments and CarryArm modifiers,
@@ -1280,6 +1311,9 @@ func _rig(body: Node3D) -> Dictionary:
 		return body.get_meta(&"carry_rig")
 	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var rig := {"grips": [], "arms": [], "shoulders": [], "spine": _attach(skeleton, SPINE_BONE)}
+	# Before the arms: the stoop bends the back and the arms reach from there.
+	rig["stoop"] = CarryStoop.new()
+	skeleton.add_child(rig["stoop"])
 	for side in GRIP_BONES.size():
 		rig["grips"].append(_attach(skeleton, GRIP_BONES[side]))
 		rig["shoulders"].append(_attach(skeleton, ARM_BONES[side]))
@@ -1304,14 +1338,7 @@ func _attach(skeleton: Skeleton3D, bone: String) -> BoneAttachment3D:
 
 
 func _tray_transform(held: Dictionary, body: Node3D) -> Transform3D:
-	var lane: Dictionary = held["lane"]
-	match held["tray_at"]:
-		SecurityLooks.Tray.RIDE:
-			return ride(sim.grid, lane, body.global_position)
-		SecurityLooks.Tray.IN, SecurityLooks.Tray.OUT:
-			var mount: Array = TRAY_MOUNTS[held["tray_at"]]
-			return mount_world(sim.grid, lane, mount[0], mount[1])
-	return Transform3D.IDENTITY
+	return CarryTray.placed(sim.grid, held["lane"], held["tray_at"], body.global_position)
 
 
 ## Bag `i`'s transform for its home now; `reach` gets its strap or rod length.
@@ -1421,7 +1448,10 @@ func _swap_transform(held: Dictionary, body: Node3D, i: int, k: float) -> Array:
 	var s := smoothstep(0.0, 1.0, k)
 	var t := s if to_pull else 1.0 - s
 	var axle := _hung_axle(bag, grip, scale_by).lerp(trailing, t)
-	axle += outward * SWAP_OUT_M * 4.0 * t * (1.0 - t)
+	# At security (no stall partition near) it swings out further, clear of
+	# the near shin; the bar stays in the hand.
+	var swing := SWAP_OPEN_M if held.get("security", false) else SWAP_OUT_M
+	axle += outward * swing * 4.0 * t * (1.0 - t)
 	var ref := outward.lerp(Vector3.UP, t).normalized()
 	var rods := _reach_base(_part(bag["node"], "Pull_Reach"))
 	var xf := pulled(grip, axle, scale_by, ref).translated(outward * BAR_PALM_M * (1.0 - t))
