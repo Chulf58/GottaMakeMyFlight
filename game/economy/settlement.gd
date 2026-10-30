@@ -49,7 +49,9 @@ extends Node
 ## Every screen stand on the grid, in a room or not, is charged with it
 ## (ScreenCoverage.daily_upkeep, PriceTable.SCREEN_UPKEEP a screen; decision
 ## boredom-and-shops-design-boredom-need-while-waiting-kiosk-sh, point 3), and
-## so is every prize podium (PrizeCar.daily_upkeep, PriceTable.PRIZE_CAR_UPKEEP).
+## so is every prize podium (PrizeCar.daily_upkeep, PriceTable.PRIZE_CAR_UPKEEP)
+## and every info screen (PriceTable.INFO_SCREEN_UPKEEP; the info screen is its own
+## piece, not a screen stand).
 ## The wallet pays the wages first and the upkeep from what is left; the rest of
 ## the upkeep is owed upkeep, kept apart from owed wages so the ledger books each
 ## under its own category. Repayment order, on every credit (credit_claim) and in
@@ -110,6 +112,8 @@ const MAX_WAGES := 1_000_000_000_000_000
 const MAX_WAGES_PAID_TODAY := MAX_WAGES + Wallet.MAX_BALANCE
 ## The most owed upkeep the state holds, for the same reason as MAX_WAGES.
 const MAX_UPKEEP := MAX_WAGES
+## The build catalog id of the info screen, charged PriceTable.INFO_SCREEN_UPKEEP a day.
+const INFO_SCREEN_ID := &"info_screen"
 
 ## In a scene these come from the wired nodes; tests call bind(). Without
 ## `staff` no wage is charged.
@@ -590,14 +594,25 @@ func _charge_upkeep(due: int, paid: int) -> void:
 
 
 ## The day's upkeep of every ready room on the sim's grid (RoomRules.daily_upkeep)
-## and of every screen stand on it; none without a grid.
+## and of every screen stand, prize podium and info screen on it; none without a
+## grid.
 func _upkeep_due() -> int:
 	if _sim == null or _sim.grid == null:
 		return 0
 	var due := ScreenCoverage.daily_upkeep(_sim.grid) + PrizeCar.daily_upkeep(_sim.grid)
+	due += _info_screen_upkeep(_sim.grid)
 	for room_id in _sim.grid.room_ids():
 		due += RoomRules.daily_upkeep(_sim.grid, room_id)
 	return due
+
+
+## What `grid`'s info screens cost to run for one game day.
+func _info_screen_upkeep(grid: BuildGrid) -> int:
+	var count := 0
+	for id in grid.object_ids():
+		if grid.get_object(id)["def"] == INFO_SCREEN_ID:
+			count += 1
+	return count * PriceTable.INFO_SCREEN_UPKEEP
 
 
 ## The wages of everyone on the roster for one day; none without a staff pool.
