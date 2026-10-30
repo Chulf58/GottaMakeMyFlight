@@ -80,6 +80,12 @@ const VISITORS := [
 const MOMENTS := {
 	"set-down": [[0.2, 0.3], [0.38, 0.44], [0.6, 0.7]],
 	"pick-up": [[0.3, 0.4], [0.5, 0.6], [0.68, 0.76]],
+	# A backpack taken off the back into the hand before the stall and put back
+	# on after it, mid-move, and off it as it comes into the front carry
+	# (anti-pattern a-float-hand-gap-of-0-does-not-prove-a-carried-bag-is-
+	# grippe: the palm on the loop, the pack clear of the body).
+	"off-back": [[0.45, 0.55], [0.9, 0.98]],
+	"on-back": [[0.45, 0.55]],
 }
 ## The close plate's camera: this high over the floor, offset this far across
 ## and out of the door from the middle of the body and the bag (the door's
@@ -143,6 +149,8 @@ var _visitor: Passenger
 var _label := ""
 var _plate_bag := -1
 var _plated := {}
+## Passenger id -> the stall it visited last (_stall_of()).
+var _last_stall := {}
 var _plate_task := false
 var _hold := false
 var _plates_saved := 0
@@ -262,7 +270,10 @@ func _visit(visitor: Array) -> void:
 	if left < 0:
 		_invalid("%s never left the stall by tick %d (stage %s)" % [_label, last, _name(p)])
 	if _plate_bag >= 0:
-		for move in ["set-down", "pick-up"]:
+		var moves := ["set-down", "pick-up"]
+		if visitor[1] == SecurityLooks.Kind.BACKPACK:
+			moves.append_array(["off-back", "on-back"])
+		for move in moves:
 			if not _plated.get(move, false):
 				_invalid("%s: the %s was not plated" % [_label, move])
 	_visitor = null
@@ -479,14 +490,24 @@ static func _to_face(at: Vector3, a: Vector3, b: Vector3, c: Vector3) -> float:
 ## the move is first drawn at k 0, and its plates are taken.
 func _on_tick(_tick: int) -> void:
 	var p := _visitor
-	if p == null or _plate_bag < 0 or _plate_task or _hold or not StallCarry.in_stall(p):
+	if p != null and _sim.toilets.visit_of(p.id) != null:
+		_stall_of(p)
+	if p == null or _plate_bag < 0 or _plate_task or _hold:
 		return
 	var props := _views.carry_on_props()
 	var move := PlateSteps.pending_move(props, p.id, _plate_bag)
 	if move == "":
 		return
 	var which := "set-down" if move.ends_with(">floor") else "pick-up"
-	if not (move.ends_with(">floor") or move.begins_with("floor>")) or _plated.has(which):
+	var floor_move := move.ends_with(">floor") or move.begins_with("floor>")
+	# A backpack taken off the back before the stall and put back on after it.
+	if move.begins_with("back") and move.contains(">hand"):
+		which = "off-back"
+	elif move.begins_with("hand") and move.contains(">back"):
+		which = "on-back"
+	elif not (floor_move and StallCarry.in_stall(p)):
+		return
+	if _plated.has(which):
 		return
 	_clock.set_paused(true)
 	_clock._accumulator = 0.0
@@ -755,9 +776,13 @@ func _stall_nodes() -> Array[Node3D]:
 	return out
 
 
-## The stall `p` visits: its footprint centre, its way out and across.
+## The stall `p` visits (or last visited: a backpack goes back on after the
+## visit, "on-back"): its footprint centre, its way out and across.
 func _stall_of(p: Passenger) -> Dictionary:
-	var stall := _sim.toilets.visit_of(p.id).stall
+	var visit := _sim.toilets.visit_of(p.id)
+	if visit != null:
+		_last_stall[p.id] = visit.stall
+	var stall: Dictionary = _last_stall[p.id]
 	var out := SecurityLooks.world_dir(stall["front"])
 	return {
 		"centre": stall["use"] - out * ToiletLayout.USE_M,
@@ -809,6 +834,8 @@ func _report() -> void:
 	PlateSteps.lead_sheet(_out_dir)
 	if _floats["float"] > 0 or _stall_float > 0:
 		_invalid("bags in the air: %d frames, %d in a stall" % [_floats["float"], _stall_float])
+	if _floats["grip_off"] > 0:
+		_invalid("a held bag is off its grip point (GRIP_ON): %d frames" % _floats["grip_off"])
 	if _stall_frames == 0:
 		_invalid("no bag was checked inside a stall")
 	if _float_control.size() != 2 or _float_control[0] != "float" or _float_control[1] == "float":

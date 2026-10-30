@@ -1520,8 +1520,8 @@ func _report() -> void:
 	print(FloatCheck.float_report(_floats))
 	print("LEAD_PLATED %s" % [_lead_plated.keys()])
 	PlateSteps.lead_sheet(_close_dir)
-	if _floats["float"] > 0:
-		_invalid("a carry-on bag floats (neither held, worn nor resting): %d" % _floats["float"])
+	if _floats["float"] > 0 or _floats["grip_off"] > 0:
+		_invalid("bags float or are held off their grip (GRIP_ON): %s" % [_floats])
 	if _float_control != ["float", "held"] and _float_control != ["float", "resting"]:
 		_invalid("the FLOAT control was not caught or not let go: %s" % [_float_control])
 	if _floats["held"] == 0 or _floats["resting"] == 0:

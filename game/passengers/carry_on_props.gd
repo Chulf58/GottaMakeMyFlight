@@ -266,10 +266,13 @@ static func grip_anchor(kind: SecurityLooks.Kind) -> Vector3:
 
 ## A hard case carried in front of the body (a cell closed on both sides):
 ## lying flat across the body, its handle on top just under the hand at `grip`
-## (FRONT_PALM_M below the knuckles).
+## (FRONT_PALM_M below the knuckles). A backpack hangs from its grab loop at the
+## grip, its back panel to the body (CarryWorn.loop_in_front).
 static func carried_in_front(
 	grip: Vector3, yaw: float, scale_by: float, kind := SecurityLooks.Kind.CASE
 ) -> Transform3D:
+	if kind == SecurityLooks.Kind.BACKPACK:
+		return CarryWorn.loop_in_front(grip, yaw, scale_by)
 	var size := bag_size(kind)
 	var flat := _flat(yaw, scale_by)
 	return Transform3D(flat, grip - Vector3.UP * (size.y * scale_by + FRONT_PALM_M))
@@ -290,25 +293,6 @@ static func worn_back(spine: Transform3D, yaw: float, scale_by: float) -> Transf
 	var basis := Basis(back.cross(along), back, along).scaled(Vector3.ONE * scale_by)
 	var top := bag_box(SecurityLooks.Kind.BACKPACK).end.z * scale_by
 	return Transform3D(basis, anchor - along * top)
-
-
-## A shoulder bag hung on the shoulder of `side` (0 right, 1 left) of a body
-## turned to `yaw` at `centre`, whose Arm bone is at `joint`: upright, its inner
-## face to the hip, the strap's bar STRAP_OVER_ARM_M over the joint and
-## STRAP_OUT_M out from the centre line. `strap_base` is Strap_Reach's position
-## in the bag. Returns [transform, the strap length in the bag's units].
-static func worn_shoulder(
-	joint: Vector3, centre: Vector3, yaw: float, side: int, scale_by: float, strap_base: Vector3
-) -> Array:
-	var turn := Basis(Vector3.UP, yaw)
-	var out := turn * (Vector3.LEFT if side == 0 else Vector3.RIGHT)
-	var forward := turn * Vector3.BACK
-	var bar := centre + out * STRAP_OUT_M + forward * (joint - centre).dot(forward)
-	bar.y = joint.y + STRAP_OVER_ARM_M
-	var basis := Basis(out.cross(Vector3.UP), out, Vector3.UP).scaled(Vector3.ONE * scale_by)
-	var length := STRAP_M / scale_by
-	var at := bar - basis * (strap_base + Vector3(0.0, 0.0, length))
-	return [Transform3D(basis, at), length]
 
 
 ## A roller pulled by its grip at `grip` with its axle at `axle` (on the floor,
@@ -1318,6 +1302,8 @@ func _rig(body: Node3D) -> Dictionary:
 		return body.get_meta(&"carry_rig")
 	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var rig := {"grips": [], "arms": [], "shoulders": [], "spine": _attach(skeleton, SPINE_BONE)}
+	# The stoop's pivot as drawn (CarryWorn.stoop_shift).
+	rig["pivot"] = _attach(skeleton, "Spine_01")
 	# Before the arms: the stoop bends the back and the arms reach from there.
 	rig["stoop"] = CarryStoop.new()
 	skeleton.add_child(rig["stoop"])
@@ -1385,13 +1371,17 @@ func _carry_transform(
 			return worn_back(_spine_of(body), body.rotation.y, scale_by)
 		SecurityLooks.Carry.SHOULDER:
 			var side := SecurityLooks.worn_side(i)
-			var hung := worn_shoulder(
-				_shoulder_of(body, side),
+			var joint := _shoulder_of(body, side)
+			var hung := CarryWorn.shoulder(
+				joint,
 				body.global_position,
 				body.rotation.y,
 				side,
 				scale_by,
-				_reach_base(_part(node, "Strap_Reach"))
+				_reach_base(_part(node, "Strap_Reach")),
+				CarryWorn.stoop_shift(
+					_rig(body)["stoop"], _rig(body)["pivot"].global_position, joint
+				)
 			)
 			reach[0] = hung[1]
 			return hung[0]

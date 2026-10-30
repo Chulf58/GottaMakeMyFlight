@@ -127,7 +127,7 @@ func test_a_shoulder_bag_hangs_from_the_shoulder_outside_the_hip() -> void:
 	var base := Vector3(0.0, 0.05, 0.14)
 	for side in 2:
 		var joint := Vector3(-0.206 if side == 0 else 0.206, 1.644, -0.061)
-		var hung := CarryOnProps.worn_shoulder(joint, Vector3.ZERO, 0.0, side, 1.0, base)
+		var hung := CarryWorn.shoulder(joint, Vector3.ZERO, 0.0, side, 1.0, base)
 		var xf: Transform3D = hung[0]
 		var length: float = hung[1]
 		var bar := xf * (base + Vector3(0.0, 0.0, length))

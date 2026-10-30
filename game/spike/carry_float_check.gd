@@ -19,6 +19,76 @@ const FLOAT_PRINTS := 40
 const OLD_OVERHEAD_M := 2.05
 const OLD_OVERHEAD_AHEAD_M := 0.12
 
+## GRIP_ON: while a hand holds a bag, its grip is this close to the bag's own
+## grip point (own_grips()), plus the palm offset a kind is held by on purpose
+## (a roller's bar BAR_PALM_M off the grip, a hard case in front FRONT_PALM_M
+## under it). HELD alone takes a point placed from the hand anywhere within
+## ON_BAG_M of the bag, so a pack hung 15 cm off its loop read as held
+## (anti-pattern a-float-hand-gap-of-0-does-not-prove-a-carried-bag-is-grippe).
+const GRIP_ON_M := 0.03
+const GRIP_ON_PRINTS := 40
+
+
+## The points of bag `i` of passenger `id` a hand holds it by, as drawn now
+## (world): a backpack's grab loop (its top), a shoulder bag's strap bar, a
+## roller's grip bar and carry handle, a hard case's handle edge and, carried
+## in front, the top of its handle under the palm.
+static func own_grips(props: CarryOnProps, id: int, i: int) -> Array[Vector3]:
+	var bag: Node3D = props.props_of(id)["bags"][i]
+	var kind: SecurityLooks.Kind = props.props_of(id)["kinds"][i]
+	var xf := bag.global_transform
+	match kind:
+		SecurityLooks.Kind.BACKPACK:
+			return [xf * CarryOnProps.BACKPACK_LOOP]
+		SecurityLooks.Kind.SHOULDER:
+			return [(bag.find_child("Strap_Top", true, false) as Node3D).global_position]
+		SecurityLooks.Kind.ROLLER:
+			var top := bag.find_child("Pull_Top", true, false) as Node3D
+			var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
+			return [bar, xf * CarryOnProps.ROLLER_HANDLE]
+	var handle := case_handle_points(bag)
+	return [xf * handle[0], xf * handle[1]]
+
+
+## A hard case's handle edge and the top of its handle, in the case's own frame
+## (scale 1), read from its drawn body mesh: the top face's edge on its handle
+## side and the middle of that face. Never from a CarryOnProps placement
+## function: a point derived from the placement moves with a wrong placement,
+## and the grip then reads as on it.
+static func case_handle_points(bag: Node3D) -> Array[Vector3]:
+	var body := bag.find_child("CarryOnBag_Body", true, false) as MeshInstance3D
+	var box := (bag.global_transform.affine_inverse() * body.global_transform) * body.get_aabb()
+	var middle := box.get_center()
+	return [Vector3(middle.x, box.end.y, box.end.z), Vector3(middle.x, box.end.y, middle.z)]
+
+
+## How far the grip of the hand holding bag `i` of passenger `id` is from the
+## bag's nearest own grip point (own_grips(); a hard case's, the segment
+## between its two, conductor ruling 2026-10-30), and the limit for its kind:
+## [gap, limit], gap INF when no hand holds it.
+static func grip_on_gap(props: CarryOnProps, id: int, i: int, body: Node3D) -> Array:
+	var holder: int = props.bag_state(id, i).get("held_by", -1)
+	if holder < 0 or body == null:
+		return [INF, GRIP_ON_M]
+	var kind: SecurityLooks.Kind = props.props_of(id)["kinds"][i]
+	var limit := GRIP_ON_M
+	if kind == SecurityLooks.Kind.ROLLER:
+		limit += CarryOnProps.BAR_PALM_M
+	elif kind == SecurityLooks.Kind.CASE:
+		limit += CarryOnProps.FRONT_PALM_M
+	var grip := props.grip_of(body, holder)
+	var own := own_grips(props, id, i)
+	if kind == SecurityLooks.Kind.CASE:
+		# Turning between the side and the front carry the palm slides along the
+		# case's top from its handle edge to its front palm point (CarryOnProps.
+		# _case_transform): anywhere on that segment is on its grip.
+		var on := Geometry3D.get_closest_point_to_segment(grip, own[0], own[1])
+		return [on.distance_to(grip), limit]
+	var gap := INF
+	for at in own:
+		gap = minf(gap, at.distance_to(grip))
+	return [gap, limit]
+
 
 ## The points of bag `i` of passenger `id` a hand can hold it by, as drawn
 ## now (world): its kind's grip anchor (a hard case's top edge, a roller's
@@ -190,6 +260,7 @@ static func watch_float(sim: PassengerSim, views: PassengerViews, counts: Dictio
 				continue
 			var state := float_state(sim, views, id, i)
 			counts[state[0]] += 1
+			_watch_grip_on(props, id, i, body, p, counts)
 			if state[0] != "float":
 				continue
 			var kind: String = SecurityLooks.Kind.keys()[props.props_of(id)["kinds"][i]]
@@ -217,6 +288,41 @@ static func watch_float(sim: PassengerSim, views: PassengerViews, counts: Dictio
 	counts["ms"] += (Time.get_ticks_usec() - began) / 1000.0
 
 
+## One bag's GRIP_ON check into `counts` (watch_float()): every frame a hand
+## holds it, its grip_on_gap(), the largest by kind, and a GRIP_ON_OFF line
+## (the first GRIP_ON_PRINTS) when it is over its kind's limit.
+static func _watch_grip_on(
+	props: CarryOnProps, id: int, i: int, body: Node3D, p: Passenger, counts: Dictionary
+) -> void:
+	var on := grip_on_gap(props, id, i, body)
+	if not (on[0] as float) < INF:
+		return
+	var kind: String = SecurityLooks.Kind.keys()[props.props_of(id)["kinds"][i]]
+	counts["grip_held"] += 1
+	var worst: Dictionary = counts["grip_max"]
+	worst[kind] = snappedf(maxf(float(worst.get(kind, 0.0)), on[0]), 0.001)
+	if on[0] <= on[1]:
+		return
+	counts["grip_off"] += 1
+	if counts["grip_off"] <= GRIP_ON_PRINTS:
+		var move := move_of(props, id, i)
+		print(
+			(
+				"GRIP_ON_OFF id=%d bag=%d kind=%s move=%s k=%.2f gap_m=%.3f limit_m=%.3f stage=%d"
+				% [
+					id,
+					i,
+					kind,
+					move if move != "" else "settled",
+					props.transfer_progress(id, i),
+					on[0],
+					on[1],
+					p.stage
+				]
+			)
+		)
+
+
 ## A fresh tally for watch_float().
 static func float_counts() -> Dictionary:
 	return {
@@ -227,13 +333,19 @@ static func float_counts() -> Dictionary:
 		"resting": 0,
 		"float": 0,
 		"by_move": {},
+		"grip_held": 0,
+		"grip_off": 0,
+		"grip_max": {},
 	}
 
 
-## The printable line of a watch_float() tally.
+## The printable line of a watch_float() tally, and its GRIP_ON line.
 static func float_report(counts: Dictionary) -> String:
 	return (
-		"FLOAT_TOTAL frames=%d check_ms=%.0f held=%d worn=%d resting=%d float=%d by_move=%s"
+		(
+			"FLOAT_TOTAL frames=%d check_ms=%.0f held=%d worn=%d resting=%d float=%d by_move=%s"
+			+ "\nGRIP_ON_TOTAL held_frames=%d off=%d max_gap_m_by_kind=%s"
+		)
 		% [
 			counts["frames"],
 			counts["ms"],
@@ -242,6 +354,9 @@ static func float_report(counts: Dictionary) -> String:
 			counts["resting"],
 			counts["float"],
 			counts["by_move"],
+			counts["grip_held"],
+			counts["grip_off"],
+			counts["grip_max"],
 		]
 	)
 

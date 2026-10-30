@@ -37,14 +37,11 @@ const STALL_PICK_REACH := 0.06
 ## share of the carry.
 const BACK_SIDE_M := 0.42
 const BACK_SHARE := 0.4
-## A backpack in a hand-led move is held this far from its grab loop (its own
-## frame, the loop mid-depth at y 0.082, the bag 0 to 0.177 deep, its top face
-## at z 0.21 and the loop's top at 0.235): past the face hung toward the body
-## and over the top (a grip offset), so less of the fingers, which curl 3 to 12
-## cm down and 7 to 13 cm back from the grip (measured, board item 5ed915b0),
-## reach into the top. No further: the probes' FLOAT check needs the grip within
-## 6 cm of the bag's bounds (z 0.295, y 0.237).
-const LOOP_OFFSET := Vector3(0.0, 0.15, 0.05)
+## Off the back into the hand, the hand eases into its carry pose from this
+## share of the carry (not 0.6): eased in while the pack still turned on its
+## lifted, pushed-out path, the grip came between the two and the pack into the
+## belly (stall_bags_probe, seed 3894526912, backpack_in at k 0.83).
+const BACK_EASE_IN := 0.8
 ## Off the floor a bag turns to hang from the hand over this share of its
 ## carry (off a tray, 0.35: the table is under it).
 const UPRIGHT_FROM_FLOOR := 0.2
@@ -83,8 +80,9 @@ const STALL_TOTE_BACK_M := 0.05
 ## move, and pushed as it is outside from this one on.
 const STALL_AHEAD_BACK := Vector2(0.35, 0.65)
 ## A backpack set down in a stall is held this far over its grab loop (its own
-## frame), the fingers over the top, not in it.
-const STALL_LOOP_UP := Vector3(0.0, 0.0, 0.06)
+## frame), the fingers over the top, not in it, and within the probes' GRIP_ON
+## 3 cm of the loop (6 cm left the hand off it).
+const STALL_LOOP_UP := Vector3(0.0, 0.0, 0.02)
 ## A hard case standing in a stall is held by the middle of its top end, the
 ## grip FRONT_PALM_M over it (the palm on the top, as on the handle in front).
 ## Its body is this deep (measured on the mesh): bag_box() takes in the handle,
@@ -213,7 +211,8 @@ static func carry_t(k: float, bag: Dictionary) -> float:
 ## is worn at an end), "weights": [right, left] how far each hand is aimed at
 ## its target (CarryArm.reach_weight), "targets_at": [right, left] the carry
 ## progress each hand aims at (-1 the start, 2 the end)}. `let_go` and
-## `reach` as for span().
+## `reach` as for span(); into a held end the hand eases into its carry pose
+## from `ease_in` of the carry.
 static func phase(
 	k: float,
 	from: End,
@@ -221,7 +220,8 @@ static func phase(
 	from_hand: int,
 	lead: int,
 	let_go := REACH_SHARE,
-	reach := REACH_SHARE
+	reach := REACH_SHARE,
+	ease_in := 0.6
 ) -> Dictionary:
 	var s := span(from, to, let_go, reach)
 	var t := (k - s.x) / maxf(s.y - s.x, 0.0001)
@@ -246,7 +246,7 @@ static func phase(
 			lead_w = smoothstep(0.0, 0.5 if swap else 0.4, t)
 		if to == End.HELD:
 			# Into the carry pose of the hand it ends in.
-			lead_w *= 1.0 - smoothstep(0.6, 1.0, t)
+			lead_w *= 1.0 - smoothstep(ease_in, 1.0, t)
 		if swap:
 			var old := 1 - lead
 			weights[old] = 1.0 - smoothstep(0.5, 1.0, t)
@@ -282,8 +282,10 @@ static func anchor(kind: SecurityLooks.Kind, bar_z: float) -> Vector3:
 	if kind == SecurityLooks.Kind.ROLLER:
 		return Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, bar_z)
 	if kind == SecurityLooks.Kind.BACKPACK:
-		# Held by the loop, the fingers outside the bag's face (LOOP_OFFSET).
-		return CarryOnProps.BACKPACK_LOOP + LOOP_OFFSET
+		# Held by its top grab loop, the pack hanging below the hand (conductor
+		# ruling 2026-10-30: held 15 cm off it, LOOP_OFFSET, the pack hung beside
+		# an open hand at k 0.5 off and onto the back).
+		return CarryOnProps.BACKPACK_LOOP
 	return CarryOnProps.grip_anchor(kind)
 
 
@@ -384,7 +386,9 @@ static func plan(
 	# (STALL_LET_GO): the body shuffles back to the seat as it sits.
 	var let_go := STALL_LET_GO if stall and set_down else REACH_SHARE
 	var reach := reach_of(bag)
-	var ph := phase(k, from_end, to_end, from_hand, lead, let_go, reach)
+	var off_back: bool = from_end == End.WORN and bag["carry_from"] == SecurityLooks.Carry.BACK
+	var ease_in := BACK_EASE_IN if off_back else 0.6
+	var ph := phase(k, from_end, to_end, from_hand, lead, let_go, reach, ease_in)
 	var t: float = ph["t"]
 	if stall and set_down and k <= span(from_end, to_end, let_go).y:
 		# And the hand is on the bag's path at once: the body turns round to sit
@@ -439,23 +443,33 @@ static func plan(
 	var held_at := anchor_from.lerp(anchor_to, t)
 	if case_up and from_end == End.REST and to_end == End.HELD:
 		held_at = case_tip_grip(anchor_from, anchor_to, stall_tip(t))
-	var off_back: bool = from_end == End.WORN and bag["carry_from"] == SecurityLooks.Carry.BACK
 	var on_back: bool = to_end == End.WORN and bag["carry"] == SecurityLooks.Carry.BACK
 	var on_path: Transform3D
 	if off_back or on_back:
 		var side := back_side(
 			frame.origin, flags["yaw"], lead, body["shoulders_y"][lead] - 0.1, body["scale"]
 		)
+		# Between the side hang and the hand the pack's middle is kept clear, not
+		# its origin (a bottom corner of its back panel): turning between hanging
+		# at the side and lying across the front, its body swung into the belly
+		# and the hips with the origin clear (board item stall-bags-probe-fails-on-
+		# main-at-backpack-out-1-quad-r-vert).
+		var by_middle := flags.duplicate()
+		by_middle["clear_at"] = CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).get_center()
 		if off_back and t < BACK_SHARE:
 			on_path = start.interpolate_with(side, smoothstep(0.0, 1.0, t / BACK_SHARE))
 		elif off_back:
 			var u := (t - BACK_SHARE) / (1.0 - BACK_SHARE)
-			on_path = path(side, want, u, frame, frame.affine_inverse() * side, flags)
+			# Not lifted over a table edge (there is none between the side hang and
+			# the hand): lifted TRANSFER_LIFT_M, the hand went over the shoulder, the
+			# turning pack round its forearm (stall_bags_probe, backpack_in at k 0.83).
+			by_middle["lift"] = 0.0
+			on_path = path(side, want, u, frame, frame.affine_inverse() * side, by_middle)
 		elif t > 1.0 - BACK_SHARE:
 			var u := (t - 1.0 + BACK_SHARE) / BACK_SHARE
 			on_path = side.interpolate_with(want, smoothstep(0.0, 1.0, u))
 		else:
-			on_path = path(start, side, t / (1.0 - BACK_SHARE), frame, bag["from"], flags)
+			on_path = path(start, side, t / (1.0 - BACK_SHARE), frame, bag["from"], by_middle)
 	else:
 		# A bag picked up off a stall's floor rises, whatever its origin does (a case
 		# stood on its end has its origin higher than flat in the hand).
@@ -538,9 +552,12 @@ static func plan(
 ## start in the body's frame); one going down is lifted on the way, over a
 ## table edge, and one set down on the floor (`to_floor`) goes out ahead first
 ## and down late; either way kept `clear` from the body's centre line on the side
-## of `hand`. In a toilet stall (`in_stall`) a bag in the hand (`hand_carry`)
-## goes between the floor and the front carry ahead of the body with no lift
-## or push out: set down straight down, picked up upright first (decision
+## of `hand` (its origin, or the point flag "clear_at" in its own frame), and
+## lifted TRANSFER_LIFT_M (or flag "lift") midway when it neither rises nor goes
+## to the floor. In a
+## toilet stall (`in_stall`) a bag in the hand (`hand_carry`) goes between the
+## floor and the front carry ahead of the body with no lift or push out: set
+## down straight down, picked up upright first (decision
 ## stall-bag-poses-as-built-bags-stand-upright-against-the-insi); a tote there
 ## goes as it does outside (pushed out to its side at the hip, it lay against
 ## the thigh of a walker sitting down, board item c7b0e7be), but picked up it
@@ -626,10 +643,13 @@ static func path(
 		placed.origin = Vector3(ahead.x, lerpf(start.origin.y, want.origin.y, k * k), ahead.z)
 		placed.origin.y += SET_DOWN_LIFT_M * arc
 	else:
-		placed.origin.y += CarryOnProps.TRANSFER_LIFT_M * arc
+		placed.origin.y += flags.get("lift", CarryOnProps.TRANSFER_LIFT_M) * arc
 	var clear: float = flags.get("clear", CarryOnProps.TRANSFER_CLEAR_M)
 	var yaw: float = flags.get("yaw", 0.0)
-	var push := keep_out(placed.origin, frame.origin, yaw, flags.get("hand", 0), clear)
+	# The point of the bag kept clear: its origin, or flag "clear_at" (its own
+	# frame).
+	var kept: Vector3 = placed * (flags.get("clear_at", Vector3.ZERO) as Vector3)
+	var push := keep_out(kept, frame.origin, yaw, flags.get("hand", 0), clear)
 	placed.origin += push * minf(arc * 2.0, 1.0)
 	return placed
 
