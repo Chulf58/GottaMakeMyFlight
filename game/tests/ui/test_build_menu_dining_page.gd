@@ -1,9 +1,10 @@
 class_name TestBuildMenuDiningPage
 extends GdUnitTestSuite
 ## The food rooms in the build menu (F4-6; decision food-and-drink-cafe-bar-
-## sit-down-restaurant-and-grab-and-go-st): one Dining page after the Money
-## page, behind the Furniture bar button, with the bar, restaurant and
-## grab-and-go stall room cards. They are furnished with the Shops tray's
+## sit-down-restaurant-and-grab-and-go-st): one Dining page, since HUD 6/7 the
+## second page of the Food group after the Food page (it followed the Money
+## page behind the Furniture button before), with the bar, restaurant and
+## grab-and-go stall room cards. They are furnished with the Cafe tray's
 ## counter and table, so the page holds only the rooms. Their cards borrow the
 ## cafe thumbnail (no new art).
 
@@ -60,15 +61,17 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-func test_the_dining_page_follows_money_in_the_furniture_group_before_remove() -> void:
+# Was "follows Money in the Furniture group"; since HUD 6/7 the Dining page
+# ends the Food group, after the Food page, and Services' first page follows.
+func test_the_dining_page_follows_food_in_the_food_group() -> void:
 	var all := BuildMenu.categories()
 	var page := _index("Dining")
-	assert_int(page).is_equal(_index("Money") + 1)
+	assert_int(page).is_equal(_index("Food") + 1)
 	assert_bool(all[page].get("page", false)).is_true()
 	assert_bool(_menu.category_button(page).visible).is_false()
-	assert_int(BuildMenu.group_start(page)).is_equal(_index("Furniture"))
-	# The Activities page (F4-7) follows it, then Remove.
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 2)
+	assert_int(BuildMenu.group_start(page)).is_equal(BuildMenu.group_index("Food"))
+	assert_int(BuildMenu.group_index("Services")).is_equal(page + 1)
+	assert_int(page).is_less(BuildMenu.REMOVE_CATEGORY)
 	assert_array(all[page]["tools"]).is_equal(TOOLS)
 	for tool in TOOLS:
 		assert_int(BuildMenu.category_of(tool)).is_equal(page)
@@ -98,7 +101,9 @@ func test_every_dining_card_shows_a_real_thumbnail() -> void:
 		assert_object(picture.texture).override_failure_message(path).is_not_null()
 
 
-func test_the_dining_tray_fits_the_column_and_next_opens_the_activities_page() -> void:
+# Next opened the Activities page before HUD 6/7; Dining is now the Food
+# group's last page, so Next goes back to the Food page.
+func test_the_dining_tray_fits_the_column_and_next_opens_the_food_page() -> void:
 	var page := _index("Dining")
 	_menu.press_category(page)
 	var need := _menu.tray().get_combined_minimum_size()
@@ -108,7 +113,7 @@ func test_the_dining_tray_fits_the_column_and_next_opens_the_activities_page() -
 	var next := _menu.card(TOOLS[0]).get_parent().find_child("CardNext", true, false) as Button
 	assert_object(next).is_not_null()
 	next.pressed.emit()
-	assert_int(_menu.open_category()).is_equal(_index("Activities"))
+	assert_int(_menu.open_category()).is_equal(_index("Food"))
 
 
 func test_picking_a_dining_tool_opens_its_page_and_presses_its_card() -> void:

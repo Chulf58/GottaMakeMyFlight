@@ -1,6 +1,6 @@
 class_name TestRoomPanel
 extends GdUnitTestSuite
-## The Shops category in BuildMenu (Cafe room, counter and table cards) and
+## The Cafe category in BuildMenu (Cafe room, counter and table cards) and
 ## the room info panel that follows the room under the pointer.
 
 var _port: SubViewport
@@ -46,7 +46,7 @@ func _cafe(rect := Rect2i(3, 3, 5, 4)) -> int:
 
 func _shops() -> int:
 	for i in BuildMenu.CATEGORIES.size():
-		if BuildMenu.CATEGORIES[i]["name"] == "Shops":
+		if BuildMenu.CATEGORIES[i]["name"] == "Cafe":
 			return i
 	return BuildMenu.NO_CATEGORY
 

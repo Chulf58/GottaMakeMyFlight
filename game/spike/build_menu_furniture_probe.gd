@@ -1,6 +1,8 @@
 extends SceneTree
 ## Windowed plate probe for the furniture pages of the build menu (Furniture
-## 4/4 F4-2; the Furniture category and its eight pages).
+## 4/4 F4-2), regrouped by HUD 6/7 into five group buttons, Decor, Food,
+## Services, Leisure and Shops (decision hud-6-7-furniture-groups-five-icon-
+## buttons-decor-food-servic), with 14 pages among them.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -8,20 +10,22 @@ extends SceneTree
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game \
 ##     -s res://spike/build_menu_furniture_probe.gd
 ##
-## For each of the eight pages: opens it through the Furniture button and the
-## Next cards, then proves that the tray's drawn rectangle is no wider than
-## BuildMenu.COLUMN_W and lies inside the window, that every card is visible,
-## holds its rendered thumbnail (the texture of THUMBNAIL_DIR for its card, no
-## placeholder tile, some opaque pixels) and has a name that fits the card's
-## width, and that the Next card names the page after it. It then picks Remove
-## and checks the tray closes and the Remove button is pressed. Every pass
-## value is printed, and a failure prints PROBE_INVALID and exits 1. Plates go
-## to tools/blender/out/f4-2/: one full-window plate per page
+## For each group: opens its first page through its bar button and each later
+## page through the Next cards, then proves for every page that the tray's
+## drawn rectangle is no wider than BuildMenu.COLUMN_W and lies inside the
+## window, that every card is visible, holds its rendered thumbnail (the
+## texture of THUMBNAIL_DIR for its card, no placeholder tile, some opaque
+## pixels) and has a name that fits the card's width, and that the last Next
+## card leads back to the group's first page. It then picks Remove and checks
+## the tray closes and the Remove button is pressed. Every pass value is
+## printed, and a failure prints PROBE_INVALID and exits 1. Plates go to
+## tools/blender/out/hud-6-7/groups/: one full-window plate per page
 ## (menu_page_<n>.png) and menu_pages_sheet.png, the lower part of every page
 ## in one image. The window is 1920x1080 at the project's 1.25 UI scale.
 
-const OUT_REL := "res://../tools/blender/out/f4-2"
-const PAGE_COUNT := 8
+const OUT_REL := "res://../tools/blender/out/hud-6-7/groups"
+const PAGE_COUNT := 14
+const GROUP_COUNT := 5
 const STAGE_LIMIT_MS := 60000
 ## The share of the window's height, from the bottom, a sheet tile keeps.
 const BAND_SHARE := 0.34
@@ -87,36 +91,55 @@ func _run() -> void:
 	root.add_child(menu)
 	mode.set_tool(BuildMode.Tool.NONE)
 	await _frames(4)
-	var first := _leader()
-	if first == BuildMenu.NO_CATEGORY:
-		_invalid("no Furniture category")
+	var leaders := _leaders()
+	if leaders.size() != GROUP_COUNT:
+		_invalid("%d group buttons, want %d" % [leaders.size(), GROUP_COUNT])
 		quit(1)
 		return
-	menu.category_button(first).pressed.emit()
 	var sheet: Image
 	var seen := {}
-	for n in PAGE_COUNT:
-		_stage = "page %d" % n
-		_stage_started_ms = Time.get_ticks_msec()
-		await _frames(4)
-		if menu.open_category() != first + n:
-			_invalid("page %d: open category is %d, want %d" % [n, menu.open_category(), first + n])
-		var img := await _grab()
-		_check_page(menu, first + n, seen)
-		_save(img, "menu_page_%d.png" % (n + 1))
-		var band := int(img.get_height() * BAND_SHARE)
-		var half := Vector2i(int(img.get_width() * 0.5), int(band * 0.5))
-		if sheet == null:
-			sheet = Image.create(half.x, half.y * PAGE_COUNT, false, Image.FORMAT_RGBA8)
-		var tile := img.get_region(Rect2i(0, img.get_height() - band, img.get_width(), band))
-		tile.resize(half.x, half.y, Image.INTERPOLATE_LANCZOS)
-		sheet.blit_rect(tile, Rect2i(Vector2i.ZERO, half), Vector2i(0, n * half.y))
-		_next_page(menu, first + n)
-	if menu.open_category() != first:
-		_invalid("the last Next card did not return to the first page")
-	if seen.size() != FurnitureTools.OBJECTS.size():
+	var n := 0
+	for first in leaders:
+		menu.category_button(first).pressed.emit()
+		var page: int = first
+		while true:
+			_stage = "page %d" % n
+			_stage_started_ms = Time.get_ticks_msec()
+			await _frames(4)
+			if menu.open_category() != page:
+				_invalid("page %d: open category is %d, want %d" % [n, menu.open_category(), page])
+			var img := await _grab()
+			print(
+				(
+					"GROUP %s page %s"
+					% [BuildMenu.bar_name(first), BuildMenu.categories()[page]["name"]]
+				)
+			)
+			_check_page(menu, page, seen)
+			_save(img, "menu_page_%d.png" % (n + 1))
+			var band := int(img.get_height() * BAND_SHARE)
+			var half := Vector2i(int(img.get_width() * 0.5), int(band * 0.5))
+			if sheet == null:
+				sheet = Image.create(half.x, half.y * PAGE_COUNT, false, Image.FORMAT_RGBA8)
+			var tile := img.get_region(Rect2i(0, img.get_height() - band, img.get_width(), band))
+			tile.resize(half.x, half.y, Image.INTERPOLATE_LANCZOS)
+			if n < PAGE_COUNT:
+				sheet.blit_rect(tile, Rect2i(Vector2i.ZERO, half), Vector2i(0, n * half.y))
+			n += 1
+			_next_page(menu, page)
+			page = menu.open_category()
+			if page == first or n > PAGE_COUNT:
+				break
+		if menu.open_category() != first:
+			_invalid("%s: the last Next card did not return to the first page" % first)
+	if n != PAGE_COUNT:
+		_invalid("the groups showed %d pages, want %d" % [n, PAGE_COUNT])
+	if seen.size() < FurnitureTools.OBJECTS.size():
 		_invalid(
-			"pages showed %d of %d furniture cards" % [seen.size(), FurnitureTools.OBJECTS.size()]
+			(
+				"pages showed %d cards, fewer than %d furniture"
+				% [seen.size(), FurnitureTools.OBJECTS.size()]
+			)
 		)
 	_save(sheet, "menu_pages_sheet.png")
 	_check_remove(menu, mode)
@@ -124,12 +147,14 @@ func _run() -> void:
 	quit(1 if _failed else 0)
 
 
-func _leader() -> int:
+## The first page of each group, in bar order.
+func _leaders() -> Array[int]:
+	var out: Array[int] = []
 	var all := BuildMenu.categories()
 	for i in all.size():
-		if all[i]["name"] == "Furniture":
-			return i
-	return BuildMenu.NO_CATEGORY
+		if all[i].has("group"):
+			out.append(i)
+	return out
 
 
 ## Presses the Next card of the open page, as a click would.

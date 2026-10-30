@@ -1,9 +1,9 @@
 class_name TestBuildMenuToilets
 extends GdUnitTestSuite
 ## The toilet in the build menu (Toilets 5/5): a Toilets tray right after
-## Shops holding the Toilet room tool, the toilet stall and the sink, with
-## their prices, the stall's daily upkeep as its hint, and the rendered room,
-## stall and sink thumbnails.
+## Cafe (Shops before HUD 6/7) holding the Toilet room tool, the toilet stall
+## and the sink, with their prices, the stall's daily upkeep as its hint, and
+## the rendered room, stall and sink thumbnails.
 
 const TOILET_TOOLS := [
 	BuildMode.Tool.TOILET_ROOM,
@@ -52,15 +52,15 @@ func _picture(tool: BuildMode.Tool) -> TextureRect:
 	return _menu.card(tool).find_children("*", "TextureRect", true, false)[0] as TextureRect
 
 
-func test_the_toilets_tray_follows_shops_and_holds_the_room_stall_and_sink() -> void:
+func test_the_toilets_tray_follows_cafe_and_holds_the_room_stall_and_sink() -> void:
 	var all := BuildMenu.categories()
-	var shops := _category_named("Shops")
+	var shops := _category_named("Cafe")
 	var toilets := _category_named("Toilets")
 	print("shops %d toilets %d remove %d" % [shops, toilets, BuildMenu.remove_category()])
 	assert_int(toilets).is_equal(shops + 1)
 	assert_array(all[toilets]["tools"]).is_equal(TOILET_TOOLS)
-	assert_str(_menu.category_button(toilets).text).is_equal("Toilets")
-	assert_str(_menu.category_button(toilets + 1).text).is_equal("Kiosk")
+	assert_str(_menu.category_button(toilets).tooltip_text).is_equal("Toilets")
+	assert_str(_menu.category_button(toilets + 1).tooltip_text).is_equal("Kiosk")
 	assert_int(BuildMenu.remove_category()).is_equal(BuildMenu.REMOVE_CATEGORY)
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 

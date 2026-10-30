@@ -65,8 +65,8 @@ func test_the_lane_tray_follows_security_and_security_keeps_the_scanner() -> voi
 	assert_array(all[lane]["tools"]).is_equal(LANE_TOOLS)
 	assert_int(BuildMenu.remove_category()).is_equal(BuildMenu.REMOVE_CATEGORY)
 	assert_str(all[BuildMenu.remove_category()]["name"]).is_equal("Remove")
-	assert_str(_menu.category_button(lane).text).is_equal("Lane")
-	assert_str(_menu.category_button(lane + 1).text).is_equal("Gates")
+	assert_str(_menu.category_button(lane).tooltip_text).is_equal("Lane")
+	assert_str(_menu.category_button(lane + 1).tooltip_text).is_equal("Gates")
 
 
 func test_every_tool_with_a_card_is_in_exactly_one_category() -> void:

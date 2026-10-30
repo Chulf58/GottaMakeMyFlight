@@ -2,8 +2,10 @@ class_name TestBuildMenuStores
 extends GdUnitTestSuite
 ## The store rooms and their pieces in the build menu (decision store-rooms-
 ## and-retail-pieces-go-on-stores-pages-behind-the-furniture-button): three
-## Stores pages, one per store, after the furniture pages and behind the same
-## Furniture bar button (the F4-2 page pattern). Each page holds the room tool,
+## Stores pages, one per store, behind the Shops group button since HUD 6/7
+## (decision hud-6-7-furniture-groups-five-icon-buttons-decor-food-servic; it
+## was the Furniture button before), the last group before Remove, with the
+## F4-2 page pattern. Each page holds the room tool,
 ## its counter or till and its shelf or rail, so the pharmacy counter and
 ## shelf left the Care page for the pharmacy's. Every card shows a rendered
 ## thumbnail (render_kit_thumbnails.py), never a placeholder tile.
@@ -85,25 +87,23 @@ func _next_button(page: int) -> Button:
 	return _menu.card(tool).get_parent().find_child("CardNext", true, false) as Button
 
 
-func test_three_stores_pages_follow_fun_and_end_the_furniture_group_before_remove() -> void:
+# Was "three Stores pages follow Fun in the Furniture group"; since HUD 6/7 they
+# are the Shops group: the pharmacy page carries the Shops button and the
+# other two are its later pages, the last before Remove.
+func test_three_stores_pages_make_the_shops_group_before_remove() -> void:
 	var all := BuildMenu.categories()
-	var fun := _index("Fun")
-	var furniture := _index("Furniture")
-	assert_int(fun).is_greater(furniture)
+	var shops := BuildMenu.group_index("Shops")
+	assert_int(shops).is_equal(_index("Pharmacy"))
+	assert_bool(_menu.category_button(shops).visible).is_true()
+	assert_str(_menu.category_button(shops).tooltip_text).is_equal("Shops")
 	for n in PAGE_ORDER.size():
 		var page := _index(PAGE_ORDER[n])
 		print("store page %s at %d" % [PAGE_ORDER[n], page])
-		assert_int(page).is_equal(fun + 1 + n)
-		assert_bool(all[page].get("page", false)).is_true()
-		assert_bool(_menu.category_button(page).visible).is_false()
-		assert_int(BuildMenu.group_start(page)).is_equal(furniture)
-	# The Money page (F4-5b; TestBuildMenuMoneyPage) follows Fashion and the
-	# Dining page (F4-6; TestBuildMenuDiningPage) and the Activities page (F4-7;
-	# TestBuildMenuActivitiesPage) are the last before Remove.
-	assert_int(_index("Money")).is_equal(_index("Fashion") + 1)
-	assert_int(_index("Dining")).is_equal(_index("Money") + 1)
-	assert_int(_index("Activities")).is_equal(_index("Dining") + 1)
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(_index("Activities") + 1)
+		assert_int(page).is_equal(shops + n)
+		assert_bool(all[page].get("page", false)).is_equal(n > 0)
+		assert_bool(_menu.category_button(page).visible).is_equal(n == 0)
+		assert_int(BuildMenu.group_start(page)).is_equal(shops)
+	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(_index("Fashion") + 1)
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 
 
@@ -180,19 +180,17 @@ func test_each_store_tray_fits_the_column_with_rotate_and_next() -> void:
 		assert_object(_next_button(page)).is_not_null()
 
 
-func test_next_runs_fun_through_the_stores_and_back_to_the_first_furniture_page() -> void:
-	_menu.press_category(_index("Fun"))
-	var want := PAGE_ORDER.duplicate()
-	# Fashion's Next opens the Money page (F4-5b), then the Dining page (F4-6),
-	# then the Activities page (F4-7), whose Next goes back to the start.
-	want.append("Money")
-	want.append("Dining")
-	want.append("Activities")
-	want.append("Furniture")
+# Was Fun through the stores, Money, Dining and Activities back to the first
+# furniture page; since HUD 6/7 Next stays inside the Shops group.
+func test_next_runs_through_the_stores_and_back_to_the_pharmacy_page() -> void:
+	var shops := BuildMenu.group_index("Shops")
+	_menu.category_button(shops).pressed.emit()
+	var want := PAGE_ORDER.slice(1)
+	want.append(PAGE_ORDER[0])
 	for page_name in want:
 		_next_button(_menu.open_category()).pressed.emit()
 		assert_int(_menu.open_category()).is_equal(_index(page_name))
-		assert_bool(_menu.category_button(_index("Furniture")).button_pressed).is_true()
+		assert_bool(_menu.category_button(shops).button_pressed).is_true()
 		assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
 
 
@@ -202,4 +200,6 @@ func test_picking_a_store_tool_opens_its_page_and_presses_its_card() -> void:
 			_mode.set_tool(tool)
 			assert_int(_menu.open_category()).is_equal(_index(page_name))
 			assert_bool(_menu.card(tool).button_pressed).is_true()
-			assert_bool(_menu.category_button(_index("Furniture")).button_pressed).is_true()
+			# The Shops group button since HUD 6/7 (was Furniture).
+			var shops := BuildMenu.group_index("Shops")
+			assert_bool(_menu.category_button(shops).button_pressed).is_true()
