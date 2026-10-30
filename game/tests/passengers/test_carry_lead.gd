@@ -291,6 +291,59 @@ func test_a_stall_case_is_held_by_its_top_and_round_its_edge_as_it_tips() -> voi
 	assert_float(straight.distance_to(_clamped(straight, solid))).is_equal(0.0)
 
 
+## Picked up off a stall's floor into the hand, a bag's move is stamped with
+## the short reach (STALL_PICK_REACH), so it is already being carried, placed
+## from the hand, just past it, and carry_t and at_start read the same reach.
+## Controls: the same move out of a stall, or one into a worn carry in a stall,
+## keeps REACH_SHARE and is still waiting at its start then.
+func test_a_stall_pick_up_into_the_hand_reaches_the_bag_soon() -> void:
+	var move := _to_floor(SecurityLooks.Kind.CASE)
+	var bag: Dictionary = move[0]
+	var body: Dictionary = move[1]
+	bag["home"] = (SecurityLooks.Home.HAND * 2 + 0) * 2
+	bag["was"] = (SecurityLooks.Home.FLOOR * 2 + 0) * 2
+	var open := bag.duplicate()
+	var worn := bag.duplicate()
+	worn["carry"] = SecurityLooks.Carry.SHOULDER
+	CarryLead.stamp_reach(bag, true, SecurityLooks.Home.HAND)
+	CarryLead.stamp_reach(open, false, SecurityLooks.Home.HAND)
+	CarryLead.stamp_reach(worn, true, SecurityLooks.Home.HAND)
+	print(
+		(
+			"reach: stall %.2f, outside %.2f, worn %.2f"
+			% [CarryLead.reach_of(bag), CarryLead.reach_of(open), CarryLead.reach_of(worn)]
+		)
+	)
+	assert_float(CarryLead.reach_of(bag)).is_equal(CarryLead.STALL_PICK_REACH)
+	assert_float(CarryLead.reach_of(open)).is_equal(CarryLead.REACH_SHARE)
+	assert_float(CarryLead.reach_of(worn)).is_equal(CarryLead.REACH_SHARE)
+	var k := CarryLead.STALL_PICK_REACH + 0.01
+	var start := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(0.0, 0.24, 0.5))
+	var want := Transform3D(Basis(), Vector3(0.0, 0.9, 0.3))
+	var flags := {"in_stall": true, "hand_carry": true, "hand": 0, "yaw": 0.0, "clear": 0.3}
+	var early := CarryLead.plan(bag, k, start, want, Transform3D(), flags, body)
+	var waits := CarryLead.plan(open, k, start, want, Transform3D(), flags, body)
+	assert_int(early["holder"]).is_equal(0)
+	assert_int(waits["holder"]).is_equal(-1)
+	bag["led"] = true
+	open["led"] = true
+	assert_float(CarryLead.carry_t(k, bag)).is_greater(0.0)
+	assert_float(CarryLead.carry_t(k, open)).is_equal(0.0)
+	assert_bool(CarryLead.at_start(bag, k)).is_false()
+	assert_bool(CarryLead.at_start(open, k)).is_true()
+
+
+## A case's stall top lies FRONT_PALM_M (world) over its top end at any scale:
+## in its own frame FRONT_PALM_M / scale (a two-bag case is drawn smaller).
+## Control: at scale 1 the lift is FRONT_PALM_M itself.
+func test_a_stall_case_top_is_front_palm_over_it_at_any_scale() -> void:
+	var top := CarryOnProps.bag_box(SecurityLooks.Kind.CASE).end.z
+	var big := CarryLead.stall_top(SecurityLooks.Kind.CASE, Vector3.ZERO)
+	var small := CarryLead.stall_top(SecurityLooks.Kind.CASE, Vector3.ZERO, 0.55)
+	assert_float(big.z - top).is_equal_approx(CarryOnProps.FRONT_PALM_M, 0.0001)
+	assert_float((small.z - top) * 0.55).is_equal_approx(CarryOnProps.FRONT_PALM_M, 0.0001)
+
+
 static func _clamped(at: Vector3, box: AABB) -> Vector3:
 	return at.clamp(box.position, box.end)
 

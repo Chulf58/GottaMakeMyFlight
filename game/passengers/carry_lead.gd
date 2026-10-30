@@ -26,6 +26,12 @@ enum End { HELD, WORN, REST }
 ## The share of a move the hand takes to reach a bag that is not in a hand at
 ## the start, and to come back from one it leaves.
 const REACH_SHARE := 0.25
+## Picking a bag up off a toilet stall's floor into the hand, the hand reaches
+## it over this share instead (CarryOnProps stamps it on the move, "reach"):
+## the walker already steps out as the move starts, about 0.1 m a tick, and a
+## bag left on the floor for REACH_SHARE was stepped through (stall_bags_probe,
+## board item c7b0e7be).
+const STALL_PICK_REACH := 0.06
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side, at shoulder height, this far out from the centre line, over this
 ## share of the carry.
@@ -95,15 +101,16 @@ const STALL_TIP_FROM := 0.4
 const STALL_CASE_EDGE_OUT_M := 0.08
 
 
-## Where a bag of `kind` standing in a stall is held: its top (`loose` its
-## kind's grip point: a roller's bar), a backpack STALL_LOOP_UP over its grab
-## loop, a hard case FRONT_PALM_M over the middle of its top end.
-static func stall_top(kind: SecurityLooks.Kind, loose: Vector3) -> Vector3:
+## Where a bag of `kind` standing in a stall is held (its own frame, the bag
+## drawn at `scale_by`): its top (`loose` its kind's grip point: a roller's
+## bar), a backpack STALL_LOOP_UP over its grab loop, a hard case FRONT_PALM_M
+## (world, as carried_in_front()) over the middle of its top end.
+static func stall_top(kind: SecurityLooks.Kind, loose: Vector3, scale_by := 1.0) -> Vector3:
 	if kind == SecurityLooks.Kind.BACKPACK:
 		return CarryOnProps.BACKPACK_LOOP + STALL_LOOP_UP
 	if kind == SecurityLooks.Kind.CASE:
-		var top := CarryOnProps.bag_box(kind).end.z
-		return Vector3(0.0, STALL_CASE_DEPTH_M * 0.5, top + CarryOnProps.FRONT_PALM_M)
+		var top := CarryOnProps.bag_box(kind).end.z + CarryOnProps.FRONT_PALM_M / scale_by
+		return Vector3(0.0, STALL_CASE_DEPTH_M * 0.5, top)
 	return loose
 
 
@@ -147,7 +154,29 @@ static func start_of(bag: Dictionary) -> Array:
 ## move that starts HELD leaves at once). A move that interrupts it starts
 ## where the bag is, at that start (CarryOnProps._stamp).
 static func at_start(bag: Dictionary, k: float) -> bool:
-	return bag.get("led", false) and k < span(start_of(bag)[0], End.HELD).x
+	return (
+		bag.get("led", false) and k < span(start_of(bag)[0], End.HELD, REACH_SHARE, reach_of(bag)).x
+	)
+
+
+## Stamps on `bag` (CarryOnProps' record of a move starting at its "was",
+## carried "carry", to `home`, a SecurityLooks.Home) the share of the move the
+## hand takes to reach it: STALL_PICK_REACH off a toilet stall's floor
+## (`in_stall`) into the hand, else none (REACH_SHARE).
+static func stamp_reach(bag: Dictionary, in_stall: bool, home: int) -> void:
+	var was: int = bag["was"]
+	var off_floor := was >= 0 and was / 4 == SecurityLooks.Home.FLOOR
+	var into_hand: bool = bag["carry"] in [SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL]
+	if in_stall and off_floor and home == SecurityLooks.Home.HAND and into_hand:
+		bag["reach"] = STALL_PICK_REACH
+	else:
+		bag.erase("reach")
+
+
+## The share of a move of `bag` (CarryOnProps' record) the hand takes to reach
+## it at its start: REACH_SHARE, or the one stamped on the move (STALL_PICK_REACH).
+static func reach_of(bag: Dictionary) -> float:
+	return bag.get("reach", REACH_SHARE)
 
 
 ## The hand of a place (0 right, 1 left).
@@ -166,17 +195,16 @@ static func lead_hand(from: End, to: End, from_hand: int, to_hand: int, fallback
 
 
 ## The part of the move (`x` the start, `y` the end of k) the bag is carried;
-## the hand comes back from a bag it leaves over the last `let_go` of it.
-static func span(from: End, to: End, let_go := REACH_SHARE) -> Vector2:
-	return Vector2(
-		0.0 if from == End.HELD else REACH_SHARE, 1.0 if to == End.HELD else 1.0 - let_go
-	)
+## the hand reaches a bag not in a hand over the first `reach` of it and comes
+## back from a bag it leaves over the last `let_go` of it.
+static func span(from: End, to: End, let_go := REACH_SHARE, reach := REACH_SHARE) -> Vector2:
+	return Vector2(0.0 if from == End.HELD else reach, 1.0 if to == End.HELD else 1.0 - let_go)
 
 
 ## How far along the carry a move of `bag` (CarryOnProps' record) is at `k`,
 ## 0 to 1 (0 while it waits at its start, 1 once it is at its end).
 static func carry_t(k: float, bag: Dictionary) -> float:
-	var s := span(start_of(bag)[0], end_of(bag["home"], bag["carry"]))
+	var s := span(start_of(bag)[0], end_of(bag["home"], bag["carry"]), REACH_SHARE, reach_of(bag))
 	return clampf((k - s.x) / maxf(s.y - s.x, 0.0001), 0.0, 1.0)
 
 
@@ -184,12 +212,18 @@ static func carry_t(k: float, bag: Dictionary) -> float:
 ## after it), "holder": the hand the bag is placed from (-1 while it rests or
 ## is worn at an end), "weights": [right, left] how far each hand is aimed at
 ## its target (CarryArm.reach_weight), "targets_at": [right, left] the carry
-## progress each hand aims at (-1 the start, 2 the end)}. `let_go` as for
-## span().
+## progress each hand aims at (-1 the start, 2 the end)}. `let_go` and
+## `reach` as for span().
 static func phase(
-	k: float, from: End, to: End, from_hand: int, lead: int, let_go := REACH_SHARE
+	k: float,
+	from: End,
+	to: End,
+	from_hand: int,
+	lead: int,
+	let_go := REACH_SHARE,
+	reach := REACH_SHARE
 ) -> Dictionary:
-	var s := span(from, to, let_go)
+	var s := span(from, to, let_go, reach)
 	var t := (k - s.x) / maxf(s.y - s.x, 0.0001)
 	var weights := [0.0, 0.0]
 	var aims := [0.0, 0.0]
@@ -227,8 +261,11 @@ static func phase(
 ## `k` of a move from `from` to `to`: lifting a bag off the floor
 ## (`from_floor`), through the reach and the carry to KEEP_T, gone by KEEP_T +
 ## KEEP_FADE; setting one down on it (`to_floor`), the same from the end back.
-static func floor_keep(k: float, from: End, to: End, from_floor: bool, to_floor: bool) -> float:
-	var s := span(from, to)
+## `reach` as for span().
+static func floor_keep(
+	k: float, from: End, to: End, from_floor: bool, to_floor: bool, reach := REACH_SHARE
+) -> float:
+	var s := span(from, to, REACH_SHARE, reach)
 	var t := (k - s.x) / maxf(s.y - s.x, 0.0001)
 	var keep := 0.0
 	if from == End.REST and from_floor:
@@ -346,7 +383,8 @@ static func plan(
 	# Set down from the hand in a toilet stall it is down and let go early
 	# (STALL_LET_GO): the body shuffles back to the seat as it sits.
 	var let_go := STALL_LET_GO if stall and set_down else REACH_SHARE
-	var ph := phase(k, from_end, to_end, from_hand, lead, let_go)
+	var reach := reach_of(bag)
+	var ph := phase(k, from_end, to_end, from_hand, lead, let_go, reach)
 	var t: float = ph["t"]
 	if stall and set_down and k <= span(from_end, to_end, let_go).y:
 		# And the hand is on the bag's path at once: the body turns round to sit
@@ -392,10 +430,10 @@ static func plan(
 	# held there from the floor, the hand was beside its side face as it rose.
 	var case_up: bool = stall and bag["kind"] == SecurityLooks.Kind.CASE
 	if stall and set_down:
-		anchor_from = stall_top(bag["kind"], loose)
+		anchor_from = stall_top(bag["kind"], loose, body["scale"])
 		anchor_to = anchor_from
 	elif case_up and from_end == End.REST and to_end == End.HELD:
-		anchor_from = stall_top(bag["kind"], loose)
+		anchor_from = stall_top(bag["kind"], loose, body["scale"])
 	elif stall and from_end == End.REST and to_end == End.HELD and not roller:
 		anchor_from = anchor_to
 	var held_at := anchor_from.lerp(anchor_to, t)
@@ -460,7 +498,7 @@ static func plan(
 		targets[lead] = by_side(targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, body)
 	var xf := on_path
 	if ph["holder"] < 0:
-		xf = start if k < span(from_end, to_end).x else want
+		xf = start if k < span(from_end, to_end, let_go, reach).x else want
 	# Only a hard case, which lies flat on the floor across the feet: a shoulder
 	# bag or a backpack lifted with the stoop kept bent the walker deep after a
 	# target far ahead (into a lane arch's post). In a stall every kind, stood
@@ -469,7 +507,7 @@ static func plan(
 	var keeps := [0.0, 0.0]
 	if bag["kind"] == SecurityLooks.Kind.CASE or stall:
 		keeps[lead] = floor_keep(
-			k, from_end, to_end, flags.get("from_floor", false), flags.get("to_floor", false)
+			k, from_end, to_end, flags.get("from_floor", false), flags.get("to_floor", false), reach
 		)
 	# Sitting down in a stall to set a bag down by the door, the back bends
 	# first (STALL_HIPS, CarryStoop.drops), as far as the reach needs at any

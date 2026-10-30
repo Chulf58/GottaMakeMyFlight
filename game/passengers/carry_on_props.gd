@@ -995,8 +995,10 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 		bag["from_world"] = start
 	if not unmoved:
 		bag["since"] = bag["changed"] - (TRANSFER_TICKS if bag["home"] == -1 else 0.0)
-	# Hand-led or not is decided now and kept to the end of the move.
+	# Hand-led or not is decided now and kept to the end of the move (and so is
+	# its reach, CarryLead.stamp_reach).
 	bag["led"] = _leads(held, bag)
+	CarryLead.stamp_reach(bag, held.get("in_stall", false), homes[i])
 	bag["home"] = bag["place"]
 	bag["reach_from"] = _reach_of(node, kind)
 
