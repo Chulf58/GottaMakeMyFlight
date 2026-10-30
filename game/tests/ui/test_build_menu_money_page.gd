@@ -66,7 +66,9 @@ func test_the_money_page_follows_fashion_in_the_furniture_group_before_remove() 
 	assert_bool(all[page].get("page", false)).is_true()
 	assert_bool(_menu.category_button(page).visible).is_false()
 	assert_int(BuildMenu.group_start(page)).is_equal(_index("Furniture"))
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 1)
+	# The Dining page (F4-6) follows it; Remove comes after that.
+	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 2)
+	assert_int(_index("Dining")).is_equal(page + 1)
 	assert_array(all[page]["tools"]).is_equal(TOOLS)
 	for tool in TOOLS:
 		assert_int(BuildMenu.category_of(tool)).is_equal(page)
@@ -124,9 +126,9 @@ func test_the_money_tray_fits_the_column_with_rotate_and_next() -> void:
 	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
 	var next := _menu.card(TOOLS[0]).get_parent().find_child("CardNext", true, false) as Button
 	assert_object(next).is_not_null()
-	# Next on the last page goes back to the first furniture page.
+	# Next goes to the Dining page, the last of the group, which goes back round.
 	next.pressed.emit()
-	assert_int(_menu.open_category()).is_equal(_index("Furniture"))
+	assert_int(_menu.open_category()).is_equal(_index("Dining"))
 
 
 func test_picking_a_money_tool_opens_its_page_and_presses_its_card() -> void:

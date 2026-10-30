@@ -111,6 +111,9 @@ static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, ti
 	var stage := p.stage
 	var unserved := UNSERVED_STAGES.has(stage)
 	var standing := stage == Passenger.Stage.CAFE_STANDING_UP
+	# A room missing from the layout is refused by the seat check below; the
+	# default type only keeps the other checks running until then.
+	var venue := RoomTypes.get_type(cafes.cafe(visit.room).get("type", &"cafe"))
 	var key := visit.seat_key.split(":")
 	var key_ok := key.size() == 2 and key[0].is_valid_int() and key[1].is_valid_int()
 	key_ok = key_ok and int(key[0]) >= 1 and int(key[1]) >= 0
@@ -133,16 +136,16 @@ static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, ti
 		[
 			(
 				stage != Passenger.Stage.CAFE_ORDER
-				or _runs_past(visit.service_end, p.stage_tick, CafeSim.ORDER_TICKS, tick)
+				or _runs_past(visit.service_end, p.stage_tick, venue.order_ticks, tick)
 			),
-			"the order does not end ORDER_TICKS after it started and after the saved tick"
+			"the order does not end order_ticks after it started and after the saved tick"
 		],
 		[
 			(
 				stage != Passenger.Stage.CAFE_SEATED
-				or _runs_past(visit.dwell_end, p.stage_tick, CafeSim.DWELL_TICKS, tick)
+				or _runs_past(visit.dwell_end, p.stage_tick, venue.dwell_ticks, tick)
 			),
-			"the dwell does not end DWELL_TICKS after it started and after the saved tick"
+			"the dwell does not end dwell_ticks after it started and after the saved tick"
 		],
 	]
 	for check in checks:

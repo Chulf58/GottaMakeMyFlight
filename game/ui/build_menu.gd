@@ -144,11 +144,19 @@ const CATEGORIES := [
 		],
 		"page": true,
 	},
+	# The food variants (F4-6): three rooms that take the Shops tray's counter and
+	# table, so a page of their own holds just the room cards.
+	{
+		"name": "Dining",
+		"tools":
+		[BuildMode.Tool.BAR_ROOM, BuildMode.Tool.RESTAURANT_ROOM, BuildMode.Tool.STALL_ROOM],
+		"page": true,
+	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray, last in CATEGORIES (GDScript
 ## cannot take it from CATEGORIES.size(): tests check the two agree).
-const REMOVE_CATEGORY := 23
+const REMOVE_CATEGORY := 24
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -182,6 +190,10 @@ const ITEMS := {
 	BuildMode.Tool.FASHION_RAIL: ["Clothes rail", "fashion_rail", ""],
 	BuildMode.Tool.EXCHANGE_ROOM: ["Exchange", "exchange_room", "2x3 min"],
 	BuildMode.Tool.ATM_ROOM: ["ATM", "atm_room", "1x2 min"],
+	# The food rooms borrow the cafe's thumbnail: no new art (F4-6).
+	BuildMode.Tool.BAR_ROOM: ["Bar", "cafe_room", "3x4 min"],
+	BuildMode.Tool.RESTAURANT_ROOM: ["Restaurant", "cafe_room", "4x4 min"],
+	BuildMode.Tool.STALL_ROOM: ["Grab-and-go", "cafe_room", "3x3 min"],
 	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
