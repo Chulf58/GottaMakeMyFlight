@@ -8,6 +8,8 @@ extends GdUnitTestSuite
 
 ## A basic scanner's exit cell in the reference terminal (the passage end).
 const SCANNER_EXIT := Vector2i(17, 7)
+## The airside partition test's wall runs along the north edge of this row.
+const PARTITION_Y := 5
 
 var _world: PassengerTestWorld
 
@@ -188,4 +190,42 @@ func test_a_door_in_the_security_divider_keeps_spots_airside() -> void:
 		landside += int(spots.cell_of(id).y > ReferenceTerminal.AIRSIDE_MAX_Y)
 	print("spots=%d landside=%d" % [spots.spots.size(), landside])
 	assert_int(spots.spots.size()).is_greater(100)
+	assert_int(landside).is_equal(0)
+
+
+## A partition across the airside lounge: this wall row is the north edge of
+## row 5, so the gate (and its exit door) is north of it and the concourse
+## south of it.
+func _partition_with_door(door_x: int) -> void:
+	# A door needs a plain wall on each side, so it goes in last.
+	var xs := range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1)
+	xs.erase(door_x)
+	xs.append(door_x)
+	for x: int in xs:
+		var kind := BuildGrid.WallKind.DOOR if x == door_x else BuildGrid.WallKind.PLAIN
+		var placed := _world.grid.apply(
+			BuildEdit.place_wall(Vector2i(x, PARTITION_Y), BuildGrid.Side.NORTH, kind)
+		)
+		assert_bool(placed.ok).override_failure_message(placed.reason_text()).is_true()
+
+
+func test_an_internal_airside_door_keeps_spots_on_both_sides() -> void:
+	_world = _seatless_world()
+	_partition_with_door(15)
+	var spots := _world.sim.standing
+	spots.rebuild(_world.sim)
+	var north := 0
+	var south := 0
+	var landside := 0
+	for id: int in spots.spots:
+		var y := spots.cell_of(id).y
+		if y > ReferenceTerminal.AIRSIDE_MAX_Y:
+			landside += 1
+		elif y >= PARTITION_Y:
+			south += 1
+		else:
+			north += 1
+	print("north=%d south=%d landside=%d" % [north, south, landside])
+	assert_int(north).is_greater(0)
+	assert_int(south).is_greater(0)
 	assert_int(landside).is_equal(0)
