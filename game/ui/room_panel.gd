@@ -84,7 +84,8 @@ func show_room(id: int) -> void:
 		_line("Browse spots %d" % status.seats)
 		_line("Base spend $%d per visit" % status.base_spend)
 	else:
-		_line("Seats %d" % status.seats)
+		if not RoomTypes.get_type(status.type_id).walk_on:
+			_line("Seats %d" % status.seats)
 		_line("Base spend $%d per visit" % status.base_spend)
 	reset_size()
 

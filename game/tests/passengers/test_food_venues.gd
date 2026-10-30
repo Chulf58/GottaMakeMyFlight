@@ -2,9 +2,10 @@ class_name TestFoodVenues
 extends GdUnitTestSuite
 ## The food rooms (F4-6; decision food-and-drink-cafe-bar-sit-down-restaurant-
 ## and-grab-and-go-st): a grab-and-go stall, a cafe, a bar and a sit-down
-## restaurant share the cafe counter and table and the CafeSim visit, and
-## differ in how long a visit takes and what it pays: stall < cafe < bar <
-## restaurant. The numbers are pinned here, then measured through real visits.
+## restaurant share the cafe counter and the CafeSim visit (the stall needs no
+## table: its guest walks on after paying), and differ in how long a visit
+## takes and what it pays: stall < cafe < bar < restaurant. The numbers are
+## pinned here, then measured through real visits.
 
 ## Smallest to largest.
 const VENUES: Array[StringName] = [&"stall", &"cafe", &"bar", &"restaurant"]
@@ -66,7 +67,8 @@ func _measure(venue: StringName) -> Dictionary:
 		world.step()
 		if ordered_at < 0 and p.stage == Passenger.Stage.CAFE_ORDER:
 			ordered_at = world.clock.tick
-		if p.stage == Passenger.Stage.CAFE_STANDING_UP:
+		# A seated guest ends at standing up; a stall guest walks on at once.
+		if p.stage == Passenger.Stage.CAFE_STANDING_UP or world.sim.cafes.visit_of(p.id) == null:
 			stood_at = world.clock.tick
 			gained = p.mood - before_step
 	assert_int(visit.outcome).is_equal(CafeVisit.Outcome.COMPLETE)
@@ -93,7 +95,7 @@ func test_the_numbers_run_stall_cafe_bar_restaurant() -> void:
 			var higher := CafeSim.spend(bases[i], 50, airside, CafeVisit.Outcome.COMPLETE)
 			assert_int(higher).is_greater(lower)
 	# Pinned values: the cafe keeps the numbers it always had.
-	assert_array(visits).is_equal([60, 180, 280, 480])
+	assert_array(visits).is_equal([30, 180, 280, 480])
 	assert_array(bases).is_equal([8, 15, 24, 40])
 	assert_int(RoomTypes.get_type(&"cafe").order_ticks).is_equal(CafeSim.ORDER_TICKS)
 	assert_int(RoomTypes.get_type(&"cafe").dwell_ticks).is_equal(CafeSim.DWELL_TICKS)

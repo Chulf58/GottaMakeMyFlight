@@ -7,7 +7,8 @@ extends RefCounted
 ##
 ## A load is refused, changing nothing, unless the state is one continuous play
 ## can reach: ids positive; each visit's seat (and, until served, its counter)
-## present in the cafe layout rebuilt from the saved grid; each queue in the
+## present in the cafe layout rebuilt from the saved grid (a walk-on visit, at
+## the stall, holds no seat: an empty key, and never served until over); each queue in the
 ## visit's room at an existing counter; served, outcome, settled and amount
 ## agreeing with the guest's stage; an order in progress, or a seated guest's
 ## dwell, that started on the guest's stage tick and ends after the saved tick;
@@ -77,7 +78,9 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid, tick: i
 		if not passengers.has(visit.passenger):
 			return {"error": "cafe visit of unknown passenger %d" % visit.passenger}
 		visits[visit.passenger] = visit
-		seats[visit.seat_key] = true
+		# A walk-on visit holds no seat: its key is empty (checked per visit).
+		if not visit.seat_key.is_empty():
+			seats[visit.seat_key] = true
 	for id in passengers:
 		var stage: Passenger.Stage = (passengers[id] as Passenger).stage
 		var at_cafe := Passenger.in_cafe(stage)
@@ -117,14 +120,21 @@ static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, ti
 	var key := visit.seat_key.split(":")
 	var key_ok := key.size() == 2 and key[0].is_valid_int() and key[1].is_valid_int()
 	key_ok = key_ok and int(key[0]) >= 1 and int(key[1]) >= 0
+	# A walk-on visit holds no seat and is never served until it is over.
+	if venue.walk_on:
+		key_ok = visit.seat_key.is_empty()
 	var checks := [
 		[visit.room >= 1 and visit.counter >= 1, "room and counter ids must be 1 or more"],
-		[key_ok, "seat key must be <table>:<seat>"],
+		[key_ok, "seat key must be <table>:<seat>, or empty for a walk-on venue"],
 		[
 			(visit.resume_stage == Passenger.Stage.TO_GATE) == p.cleared,
 			"it resumes on the other side of security"
 		],
-		[not cafes.seat(visit.room, visit.seat_key).is_empty(), "no such cafe seat"],
+		[
+			venue.walk_on or not cafes.seat(visit.room, visit.seat_key).is_empty(),
+			"no such cafe seat"
+		],
+		[not venue.walk_on or unserved, "a walk-on visit has no seat, sit or stand stage"],
 		[
 			visit.served or not cafes.counter(visit.room, visit.counter).is_empty(),
 			"no such cafe counter"
