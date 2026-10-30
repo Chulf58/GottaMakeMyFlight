@@ -103,6 +103,30 @@ func test_a_store_visitor_is_heading_to_and_browsing_at_that_store() -> void:
 		_world = null
 
 
+func test_an_exchange_or_atm_visitor_is_heading_to_and_using_it_not_browsing() -> void:
+	# F4-5b: people go to these for money, not to pass time (relieves_boredom
+	# false), so the line says "Using", where the other stores say "Browsing at".
+	var expected := {
+		&"exchange": ["Heading to the exchange", "Using the exchange"],
+		&"atm": ["Heading to the ATM", "Using the ATM"],
+	}
+	for type: StringName in expected:
+		var grid := BuildGrid.new()
+		MoneyTestLayout.build(grid, type)
+		_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+		_world.run_to(10)
+		# A spare-time walker: a bored passenger never plans one of these.
+		var p := ShopTestLayout.airside_guest(_world, 0, Vector2i(19, 5))
+		p.set_path(_world.grid.find_path(p.at, Vector2i(21, 5)))
+		assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.SHOP_BROWSE)
+		var seen := _walk_and_browse(p)
+		print("%s: %s" % [type, seen])
+		assert_int(p.stage).is_equal(Passenger.Stage.SHOP_BROWSE)
+		assert_array(seen).is_equal(expected[type])
+		_world.free_all()
+		_world = null
+
+
 func test_a_shop_stage_with_no_visit_names_no_store() -> void:
 	var grid := BuildGrid.new()
 	ShopTestLayout.build(grid, [])

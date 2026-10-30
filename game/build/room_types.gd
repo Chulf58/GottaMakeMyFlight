@@ -27,6 +27,10 @@ class RoomType:
 	var shop := false
 	## What one visit spends before mood and the airside bonus (a tuning value).
 	var base_spend := 0
+	## Whether a finished visit resets boredom (ShopSim). False for a shop people
+	## go to for money, not to pass time (the exchange and the ATM): a visit
+	## leaves boredom as it was, and a bored passenger never plans one.
+	var relieves_boredom := true
 	## The piece a ready room is charged upkeep for each game day, and the
 	## charge per piece (PriceTable); none for a room that costs nothing to run.
 	var upkeep_piece: StringName = &""
@@ -138,6 +142,23 @@ static func _build() -> void:
 		[[&"fashion_till", "Needs a till"], [&"fashion_rail", "Needs a clothes rail"], 2]
 	)
 
+	# The currency exchange and the ATM (F4-5b; decision currency-exchange-and-
+	# atm-visits-front-cell-slot-small-fee-no-boredom): the counter or ATM is
+	# both the required piece and the browse piece, its one visit slot the cell
+	# in front. A visit pays a small fee and does not lower boredom. 2x3 holds
+	# the counter with its server's cell behind and the slot in front; 1x2 holds
+	# the ATM and its slot. The exchange counter needs a server
+	# (ShopCounters.COUNTER_ROOMS); the ATM is self-service
+	# (ShopCounters.SELF_SERVICE_ROOMS). Fees are tuning values.
+	_add_money_store(
+		&"exchange",
+		"Exchange",
+		Vector2i(2, 3),
+		8,
+		[&"currency_exchange", "Needs an exchange counter"]
+	)
+	_add_money_store(&"atm", "ATM", Vector2i(1, 2), 3, [&"atm", "Needs an ATM"])
+
 
 ## A shop room type that needs `pieces[0]` (its counter or till) and
 ## `pieces[1]` (its browse piece, giving `pieces[2]` browse slots each), each
@@ -155,3 +176,14 @@ static func _add_store(
 	store.base_spend = base_spend
 	store.shop = true
 	_types[id] = store
+
+
+## A shop room type people visit for money: `piece` ([BuildCatalog id, note])
+## is its one required piece and its browse piece, with one slot, and a visit
+## does not relieve boredom.
+static func _add_money_store(
+	id: StringName, display_name: String, min_size: Vector2i, fee: int, piece: Array
+) -> void:
+	_add_store(id, display_name, min_size, fee, [piece, piece, 1])
+	_types[id].required = [piece]
+	_types[id].relieves_boredom = false

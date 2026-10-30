@@ -97,7 +97,10 @@ func test_three_stores_pages_follow_fun_and_end_the_furniture_group_before_remov
 		assert_bool(all[page].get("page", false)).is_true()
 		assert_bool(_menu.category_button(page).visible).is_false()
 		assert_int(BuildMenu.group_start(page)).is_equal(furniture)
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(_index("Fashion") + 1)
+	# The Money page (F4-5b; TestBuildMenuMoneyPage) follows Fashion and is the
+	# last page before Remove (was _index("Fashion") + 1 before it).
+	assert_int(_index("Money")).is_equal(_index("Fashion") + 1)
+	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(_index("Money") + 1)
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 
 
@@ -177,6 +180,8 @@ func test_each_store_tray_fits_the_column_with_rotate_and_next() -> void:
 func test_next_runs_fun_through_the_stores_and_back_to_the_first_furniture_page() -> void:
 	_menu.press_category(_index("Fun"))
 	var want := PAGE_ORDER.duplicate()
+	# Fashion's Next opens the Money page (F4-5b), whose Next goes back to the start.
+	want.append("Money")
 	want.append("Furniture")
 	for page_name in want:
 		_next_button(_menu.open_category()).pressed.emit()

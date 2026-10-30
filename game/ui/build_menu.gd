@@ -131,11 +131,24 @@ const CATEGORIES := [
 		[BuildMode.Tool.FASHION_ROOM, BuildMode.Tool.FASHION_TILL, BuildMode.Tool.FASHION_RAIL],
 		"page": true,
 	},
+	# The exchange and the ATM (F4-5b) share one Money page: each room with its
+	# one piece, four cards that fit beside the Rotate and Next column.
+	{
+		"name": "Money",
+		"tools":
+		[
+			BuildMode.Tool.EXCHANGE_ROOM,
+			BuildMode.Tool.EXCHANGE,
+			BuildMode.Tool.ATM_ROOM,
+			BuildMode.Tool.ATM,
+		],
+		"page": true,
+	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray, last in CATEGORIES (GDScript
 ## cannot take it from CATEGORIES.size(): tests check the two agree).
-const REMOVE_CATEGORY := 22
+const REMOVE_CATEGORY := 23
 const NO_CATEGORY := -1
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -167,6 +180,8 @@ const ITEMS := {
 	BuildMode.Tool.FASHION_ROOM: ["Fashion store", "fashion_room", "3x4 min"],
 	BuildMode.Tool.FASHION_TILL: ["Till", "fashion_till", ""],
 	BuildMode.Tool.FASHION_RAIL: ["Clothes rail", "fashion_rail", ""],
+	BuildMode.Tool.EXCHANGE_ROOM: ["Exchange", "exchange_room", "2x3 min"],
+	BuildMode.Tool.ATM_ROOM: ["ATM", "atm_room", "1x2 min"],
 	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],

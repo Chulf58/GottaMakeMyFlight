@@ -9,13 +9,16 @@ extends GdUnitTestSuite
 ## has a running cost, its upkeep.
 ##
 ## The three Stores pages (decision store-rooms-and-retail-pieces-go-on-stores-
-## pages-behind-the-furniture-button; TestBuildMenuStores) follow the eight
-## furniture pages behind the same button, so the group has eleven pages and
-## the pharmacy counter and shelf sit on the pharmacy's Stores page, not Care.
+## pages-behind-the-furniture-button; TestBuildMenuStores) and the Money page
+## (F4-5b; TestBuildMenuMoneyPage) follow the eight furniture pages behind the
+## same button, so the group has twelve pages, the pharmacy counter and shelf
+## sit on the pharmacy's Stores page, not Care, and the exchange counter and the
+## ATM on the Money page, not Desks.
 
-## The pages behind the Furniture button: eight furniture pages, then three
-## Stores pages (was 8 before the Stores pages joined the group).
-const PAGE_COUNT := 11
+## The pages behind the Furniture button: eight furniture pages, three Stores
+## pages and the Money page (was 8 before the Stores pages joined the group, 11
+## before the Money page did).
+const PAGE_COUNT := 12
 const MAX_CARDS_PER_PAGE := 4
 ## The store tools on the Stores pages that are not furniture pieces.
 const STORE_TOOLS := [
@@ -26,6 +29,8 @@ const STORE_TOOLS := [
 	BuildMode.Tool.FASHION_ROOM,
 	BuildMode.Tool.FASHION_TILL,
 	BuildMode.Tool.FASHION_RAIL,
+	BuildMode.Tool.EXCHANGE_ROOM,
+	BuildMode.Tool.ATM_ROOM,
 ]
 
 var _port: SubViewport

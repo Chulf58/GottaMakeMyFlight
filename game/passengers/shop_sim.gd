@@ -28,16 +28,19 @@ extends RefCounted
 ## BROWSE_COOLDOWN_TICKS. Every visit ends with that cooldown too.
 ##
 ## Every shop type runs on this pipeline (RoomTypes.RoomType.shop: the kiosk,
-## the pharmacy, duty free and fashion); what differs per type is its data: the
-## browse piece and its slots (ShopLayout), the counter or till that opens it
-## (ShopCounters.COUNTER_ROOMS) and its base spend. "Kiosk" below stands for
-## any of them.
+## the pharmacy, duty free, fashion, the exchange and the ATM); what differs per
+## type is its data: the browse piece and its slots (ShopLayout), the counter or
+## till that opens it (ShopCounters.COUNTER_ROOMS; an ATM needs none), its base
+## spend and whether a visit relieves boredom (RoomType.relieves_boredom). A
+## bored passenger plans only a shop that relieves it, so the exchange and the
+## ATM get spare-time browsers only. "Kiosk" below stands for any of them.
 ##
 ## Money is settled once, when the browse finishes: spend() of the base spend
 ## of the visited room's type, nudged by mood, with the airside bonus, credited to
-## PassengerSim.wallet as Wallet.Category.SHOP; then boredom is reset and
-## `paid` is emitted. A browse that does not finish (its deadline passed, its
-## slot or kiosk gone) pays nothing and leaves boredom as it was.
+## PassengerSim.wallet as Wallet.Category.SHOP; then boredom is reset (unless
+## the type does not relieve it) and `paid` is emitted. A browse that does not
+## finish (its deadline passed, its slot or kiosk gone) pays nothing and leaves
+## boredom as it was.
 ##
 ## Every phase checks the visit's deadline: the last tick the passenger can
 ## leave the slot and still reach the plane door VisitForecast.MARGIN_TICKS
@@ -142,16 +145,17 @@ func wants_browse(p: Passenger) -> bool:
 
 
 ## The visit `p` would start now, without starting it: {"slot", "route"} for
-## the free slot nearest by path (within its reach when `browsing`) when the
-## forecast admits the whole visit, with SPARE_TICKS more when browsing; else
-## empty. Changes nothing but the derived layout.
+## the free slot nearest by path (within its reach when `browsing`; of a shop
+## that relieves boredom when not) when the forecast admits the whole visit,
+## with SPARE_TICKS more when browsing; else empty. Changes nothing but the
+## derived layout.
 func plan_visit(p: Passenger, browsing := false) -> Dictionary:
 	if not CafeSim.START_STAGES.has(p.stage):
 		return {}
 	if StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE:
 		return {}
 	refresh()
-	var plan := _plan(p, _reach_mm(p) if browsing else 0)
+	var plan := _plan(p, _reach_mm(p) if browsing else 0, not browsing)
 	if plan.is_empty():
 		return {}
 	var slot: Dictionary = plan["slot"]
@@ -270,8 +274,9 @@ func browse_facing(p: Passenger) -> Vector2i:
 	return visit.slot["facing"]
 
 
-## The lower-case name of the shop type `passenger_id` is visiting ("kiosk",
-## "pharmacy"), or empty with no visit or when its room is gone.
+## The name of the shop type `passenger_id` is visiting in running text
+## ("kiosk", "pharmacy", "ATM": each word lower-cased unless it is all
+## capitals), or empty with no visit or when its room is gone.
 func store_name(passenger_id: int) -> String:
 	var visit := visit_of(passenger_id)
 	if visit == null:
@@ -279,7 +284,11 @@ func store_name(passenger_id: int) -> String:
 	var room := _sim.grid.get_room(visit.room)
 	if room.is_empty():
 		return ""
-	return RoomTypes.get_type(room["type"]).display_name.to_lower()
+	var words := RoomTypes.get_type(room["type"]).display_name.split(" ")
+	for i in words.size():
+		if words[i] != words[i].to_upper():
+			words[i] = words[i].to_lower()
+	return " ".join(words)
 
 
 ## Installs visits a ShopSnapshot.load() checked; rederive() then rebuilds the
@@ -325,12 +334,15 @@ func _passing_shop(p: Passenger) -> bool:
 ## The free slot of an open kiosk nearest `p` by path, with the walk:
 ## {"slot", "route"} (FacilitySlots.nearest()). Slots at the same octile distance are tried in
 ## display id and then index order, and on an equal path the one tried first
-## wins. Only slots within `reach_mm` by path count when it is above 0. Empty
-## when no free slot can be reached.
-func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
+## wins. Only slots within `reach_mm` by path count when it is above 0, and
+## only shops that relieve boredom when `for_relief`. Empty when no free slot
+## can be reached.
+func _plan(p: Passenger, reach_mm := 0, for_relief := false) -> Dictionary:
 	var slots: Array = []
 	for shop in layout.shops:
 		if not ShopCounters.room_open(_sim, shop["room"]):
+			continue
+		if for_relief and not _relieves(shop["room"]):
 			continue
 		for slot in shop["slots"]:
 			slots.append(
@@ -340,6 +352,11 @@ func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
 	if best.is_empty():
 		return {}
 	return {"slot": best["entry"], "route": best["route"]}
+
+
+## Whether a visit to room `room_id` relieves boredom (its type's flag).
+func _relieves(room_id: int) -> bool:
+	return RoomTypes.get_type(_sim.grid.get_room(room_id)["type"]).relieves_boredom
 
 
 ## Ticks from now until a visit walking `walk_mm` leaves its slot.
@@ -381,8 +398,8 @@ func _walk_step(p: Passenger, visit: ShopVisit) -> void:
 
 
 ## The browse finished: the money goes into the wallet, then boredom is reset
-## and `paid` is emitted. Without a wallet, or when the wallet refuses,
-## nothing is settled and an error says so.
+## (when the room's type relieves it) and `paid` is emitted. Without a wallet,
+## or when the wallet refuses, nothing is settled and an error says so.
 func _settle(p: Passenger, visit: ShopVisit) -> void:
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
 	var type := RoomTypes.get_type(_sim.grid.get_room(visit.room)["type"])
@@ -393,7 +410,8 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 	if not _sim.wallet.credit(amount, Wallet.Category.SHOP):
 		push_error("ShopSim: the wallet refused passenger %d's %d" % [p.id, amount])
 		return
-	p.boredom = 0
+	if type.relieves_boredom:
+		p.boredom = 0
 	paid.emit(p.id, visit.room, amount)
 
 

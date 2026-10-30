@@ -6,9 +6,10 @@ extends RefCounted
 ## services kit and the activities kit. Each is a plain object tool, placed and
 ## removed like a cafe table. Most are objects only, with no room type; the
 ## pharmacy counter and shelf are what a pharmacy room (F4-5, RoomTypes) needs
-## to be ready. BuildMode holds the Tool enum and answers tool_object() from
-## these tables, and BuildMenu shows the cards (PAGES, and the pharmacy's
-## Stores page) after its own.
+## to be ready, and the exchange counter and the ATM what an exchange or ATM
+## room (F4-5b) needs. BuildMode holds the Tool enum and answers tool_object()
+## from these tables, and BuildMenu shows the cards (PAGES, the pharmacy's
+## Stores page and the Money page) after its own.
 
 ## Tool -> catalog id.
 const OBJECTS := {
@@ -64,8 +65,10 @@ const ITEMS := {
 	BuildMode.Tool.BOOTH: ["Booth", "restaurant_booth", ""],
 	BuildMode.Tool.INFO_DESK: ["Info desk", "info_desk", ""],
 	BuildMode.Tool.INFO_SCREEN: ["Info screen", "info_screen", ""],
-	BuildMode.Tool.EXCHANGE: ["Exchange", "currency_exchange", ""],
-	BuildMode.Tool.ATM: ["ATM", "atm", ""],
+	# On the Money page beside their rooms ("Exchange", "ATM"), as the pharmacy
+	# counter is beside the Pharmacy card.
+	BuildMode.Tool.EXCHANGE: ["Counter", "currency_exchange", ""],
+	BuildMode.Tool.ATM: ["Cash machine", "atm", ""],
 	BuildMode.Tool.PHARMACY_COUNTER: ["Counter", "pharmacy_counter", ""],
 	BuildMode.Tool.PHARMACY_SHELF: ["Shelf", "pharmacy_shelf", ""],
 	BuildMode.Tool.SHOWER: ["Shower", "shower_cubicle", ""],
@@ -87,7 +90,8 @@ const RUNNING_COSTS := {
 ## The pages of the Furniture category (BuildMenu.CATEGORIES names them), each
 ## with at most four cards: a tray holds four cards and the Rotate and Next
 ## column in BuildMenu.COLUMN_W, and no more. The pharmacy counter and shelf
-## are on the pharmacy's Stores page (BuildMenu.CATEGORIES), beside its room.
+## are on the pharmacy's Stores page (BuildMenu.CATEGORIES), beside its room,
+## and the exchange counter and the ATM on the Money page, beside theirs.
 const PAGES := [
 	[BuildMode.Tool.BUSH, BuildMode.Tool.PLANTER, BuildMode.Tool.PLANT_POT, BuildMode.Tool.TREE],
 	[
@@ -103,12 +107,7 @@ const PAGES := [
 		BuildMode.Tool.DINING_TABLE,
 		BuildMode.Tool.BOOTH,
 	],
-	[
-		BuildMode.Tool.INFO_DESK,
-		BuildMode.Tool.INFO_SCREEN,
-		BuildMode.Tool.EXCHANGE,
-		BuildMode.Tool.ATM,
-	],
+	[BuildMode.Tool.INFO_DESK, BuildMode.Tool.INFO_SCREEN],
 	[BuildMode.Tool.SHOWER, BuildMode.Tool.NAP_POD],
 	[BuildMode.Tool.SOFA, BuildMode.Tool.ARMCHAIR, BuildMode.Tool.WORK_DESK],
 	[BuildMode.Tool.PLAY_BLOCKS, BuildMode.Tool.PLAY_SLIDE, BuildMode.Tool.PRIZE_PODIUM],

@@ -6,12 +6,13 @@ extends RefCounted
 ## slots; ShopSim owns who holds each one. Rebuilt after every grid edit.
 ##
 ## A shop is a ready room of a shop type (RoomTypes.RoomType.shop: the kiosk,
-## the pharmacy, duty free and fashion; RoomRules: its required pieces, its
-## size and an opening). Its slots are those of its type's browse pieces
+## the pharmacy, duty free, fashion, the exchange and the ATM; RoomRules: its
+## required pieces, its size and an opening). Its slots are those of its type's browse pieces
 ## (seat_piece) wholly inside it (the rule RoomRules counts pieces by): one in
 ## front of each of the first seats_per_piece footprint cells of a piece (both
 ## cells of a kiosk display stand, a duty free shelf or a fashion rail, the
-## first of a pharmacy shelf), slot index in footprint order, kept when that
+## first of a pharmacy shelf or an exchange counter, the one of an ATM), slot
+## index in footprint order, kept when that
 ## cell is walkable. A browser stands on the slot's cell facing the piece. A
 ## shop with no usable slot is left out. The slot's room tells ShopSim the
 ## type, and so the base spend, a visit pays.
