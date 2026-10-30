@@ -7,9 +7,10 @@ extends PanelContainer
 ## with the ghost's middle, says why in a few words. The status line above the
 ## tray still gives the whole reason.
 ##
-## It reads BuildMode's public hover: hover_edit(), check() and
-## ghost_screen_rect(). The Belt and the landside tools have no hover edit, so
-## their reasons stay on the status line alone, as do a dragged rectangle's
+## It reads BuildMode's public hover, hover_edit() and check(), and the ghost's
+## place on screen through GhostBounds over BuildMode's Ghost node. The Belt
+## and the landside tools have no hover edit, so their reasons stay on the
+## status line alone, as do a dragged rectangle's
 ## and a wall row's: while BuildMode.is_dragging() the drag owns the hover. A
 ## held button with no drag (pressing on a refused desk) keeps the card.
 ##
@@ -109,7 +110,7 @@ func refusal() -> BuildResult:
 func refresh() -> void:
 	var result := refusal()
 	var screen := get_viewport().get_visible_rect()
-	var ghost := build_mode.ghost_screen_rect() if result != null else Rect2()
+	var ghost := ghost_rect() if result != null else Rect2()
 	visible = result != null and ghost.has_area() and screen.intersects(ghost)
 	if not visible:
 		return
@@ -121,6 +122,11 @@ func refresh() -> void:
 	at.x = clampf(at.x, EDGE, maxf(EDGE, screen.end.x - size.x - EDGE))
 	at.y = clampf(at.y, EDGE, maxf(EDGE, screen.end.y - size.y - EDGE))
 	position = at
+
+
+## The drawn ghost's bounds on screen (GhostBounds), or an empty Rect2.
+func ghost_rect() -> Rect2:
+	return GhostBounds.screen_rect(GhostBounds.ghost_of(build_mode), get_viewport().get_camera_3d())
 
 
 ## A placed or removed piece can change the answer for the same edit.

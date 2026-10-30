@@ -426,10 +426,10 @@ func _process(_delta: float) -> void:
 	# Over a HUD Control the pointer is not over the world: no ghost, no hover.
 	# A rectangle in progress stays, hidden, until the pointer is back.
 	var over_ui := _pointer_over_ui()
-	_area_over_ui = over_ui and _drag_active()
+	_area_over_ui = over_ui and is_dragging()
 	if not over_ui:
 		_update_ghost(point)
-	elif _drag_active():
+	elif is_dragging():
 		_hide_area_ghost()
 	else:
 		_update_ghost(null)
@@ -447,13 +447,13 @@ func _notification(what: int) -> void:
 ## pointer takes the release before _unhandled_input sees it, which would leave
 ## the drag open with nothing applied.
 func _input(event: InputEvent) -> void:
-	if _drag_active() and event.is_action_released("build_apply"):
+	if is_dragging() and event.is_action_released("build_apply"):
 		finish_area()
 		finish_row()
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _drag_active() and _cancels_area(event):
+	if is_dragging() and _cancels_area(event):
 		cancel_area()
 		get_viewport().set_input_as_handled()
 		return
@@ -482,7 +482,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_released("build_apply"):
 		finish_area()
 		finish_row()
-	elif event is InputEventMouseMotion and _drag_active():
+	elif event is InputEventMouseMotion and is_dragging():
 		var point: Variant = _mouse_ground()
 		if point == null or _pointer_over_ui():
 			return
@@ -662,8 +662,9 @@ func _row_edits() -> Array[BuildEdit]:
 	return _row.edits(TOOL_WALL_KINDS[tool])
 
 
-## True while a rectangle or a wall row is being dragged.
-func _drag_active() -> bool:
+## True while a rectangle or a wall row is being dragged; the drag then owns
+## the hover (BuildMenu's refusal card, GhostReason, hides).
+func is_dragging() -> bool:
 	return _area.active or _row.active
 
 
@@ -680,53 +681,11 @@ func pointer_on_grid() -> bool:
 	return _pointer_on_grid
 
 
-## True while a rectangle or a wall row is being dragged; the drag then owns
-## the hover (BuildMenu's refusal card hides). A read; it changes nothing.
-func is_dragging() -> bool:
-	return _drag_active()
-
-
-## The drawn build ghost's bounds on screen, in viewport coordinates: every
-## ghost mesh's box projected through the viewport's camera. An empty Rect2
-## while no ghost is drawn, or with no camera (BuildMenu's refusal card sits
-## beside it). A read; it changes nothing.
-func ghost_screen_rect() -> Rect2:
-	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
-	if camera == null or not _ghost.visible:
-		return Rect2()
-	var points := PackedVector2Array()
-	for node in _ghost.find_children("*", "MeshInstance3D", true, false):
-		var mesh := node as MeshInstance3D
-		if mesh.mesh == null or _ghost_part_going(mesh):
-			continue
-		var box := mesh.global_transform * mesh.get_aabb()
-		for i in 8:
-			var corner := box.get_endpoint(i)
-			if not camera.is_position_behind(corner):
-				points.append(camera.unproject_position(corner))
-	if points.is_empty():
-		return Rect2()
-	var rect := Rect2(points[0], Vector2.ZERO)
-	for point in points:
-		rect = rect.expand(point)
-	return rect
-
-
-## True for a ghost part a redraw has queued for freeing (it stays a child
-## until the frame ends).
-func _ghost_part_going(node: Node) -> bool:
-	while node != null and node != _ghost:
-		if node.is_queued_for_deletion():
-			return true
-		node = node.get_parent()
-	return false
-
-
 ## True while a rectangle drag is on and the pointer is over the HUD, where the
 ## rectangle stops growing (BuildMenu keeps the status line, which says why,
 ## visible).
 func drag_held_by_ui() -> bool:
-	return _area_over_ui and _drag_active()
+	return _area_over_ui and is_dragging()
 
 
 ## The rectangle being dragged, or an empty Rect2i when no rectangle drag is on
@@ -937,7 +896,7 @@ func focused_room() -> int:
 
 ## Drops the rectangle or row being dragged with nothing applied.
 func cancel_area() -> void:
-	if not _drag_active():
+	if not is_dragging():
 		return
 	_area.cancel()
 	_row.cancel()
@@ -1146,7 +1105,7 @@ func _mouse_ground() -> Variant:
 
 func _update_ghost(point: Variant) -> void:
 	_pointer_on_grid = point != null and grid.in_bounds(grid.world_to_cell(point))
-	_landside_plan = null if _drag_active() else landside_plan_at(point)
+	_landside_plan = null if is_dragging() else landside_plan_at(point)
 	if _landside_plan != null or _is_landside_tool():
 		_pointer_on_grid = point != null
 		_hover_landside(_landside_plan)

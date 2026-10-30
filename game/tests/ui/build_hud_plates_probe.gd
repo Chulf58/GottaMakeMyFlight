@@ -151,7 +151,7 @@ func _run() -> void:
 		_invalid("c: no short reason beside the ghost")
 	# The card stands GAP right of the drawn ghost's bounds (or left of them at
 	# the window's edge), never on top of them.
-	var ghost := _mode.ghost_screen_rect()
+	var ghost := _menu.ghost_reason().ghost_rect()
 	var card := reason.get_global_rect()
 	var gap := minf(absf(card.position.x - ghost.end.x), absf(ghost.position.x - card.end.x))
 	print("PROBE c: ghost %s card %s gap %.1f" % [ghost, card, gap])

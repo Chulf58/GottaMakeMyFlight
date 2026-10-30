@@ -3,9 +3,9 @@ extends GdUnitTestSuite
 ## The short refusal reason beside the build ghost (HUD 6/7; decision hud-
 ## steal-list-self-clearing-alert-cards-money-hover-departu, item 6): a refused
 ## placement under the pointer shows a few words right of the drawn ghost's
-## on-screen bounds (BuildMode.ghost_screen_rect()), a placeable one shows
-## nothing, and the status line keeps the whole reason. A camera looks down on
-## the grid so the ghost has a place on screen.
+## on-screen bounds (GhostReason.ghost_rect(), from GhostBounds), a placeable
+## one shows nothing, a drag hides it, and the status line keeps the whole
+## reason. A camera looks down on the grid so the ghost has a place on screen.
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -81,7 +81,7 @@ func test_a_refused_placement_shows_its_short_reason_beside_the_ghost() -> void:
 	_mode.set_tool(BuildMode.Tool.DESK)
 	_hover(Vector2i(4, 4))
 	var card := _menu.ghost_reason()
-	var ghost := _mode.ghost_screen_rect()
+	var ghost := _menu.ghost_reason().ghost_rect()
 	var cell := _on_screen(Vector2i(4, 4))
 	print("card %s %s ghost %s cell %s" % [card.text(), _card_rect(), ghost, cell])
 	assert_bool(card.visible).is_true()
@@ -101,7 +101,7 @@ func test_a_large_ghost_puts_the_card_beside_its_bounds_not_the_pointer() -> voi
 			podium = tool
 	_mode.set_tool(podium)
 	_hover(Vector2i(2, 2))
-	var ghost := _mode.ghost_screen_rect()
+	var ghost := _menu.ghost_reason().ghost_rect()
 	var pointer := _on_screen(Vector2i(2, 2))
 	print(
 		(
@@ -177,6 +177,28 @@ func test_holding_the_button_on_a_refused_desk_keeps_the_card() -> void:
 	_mouse(false)
 
 
+## A wall row drag owns the hover: the card for the refused wall under the
+## pointer hides while it lasts and comes back when the drag ends.
+func test_an_active_drag_hides_the_card() -> void:
+	_mode.set_tool(BuildMode.Tool.WALL)
+	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(4, 4))).ok).is_true()
+	_hover(Vector2i(4, 4))
+	var before := _menu.ghost_reason().text()
+	print("wall before the drag: '%s'" % before)
+	# Control: a second wall on the same edge is refused, so the card shows.
+	assert_bool(_menu.ghost_reason().visible).is_true()
+	_mode.begin_row(_mode.grid.cell_to_world(Vector2i(4, 4)))
+	_mode.move_row(_mode.grid.cell_to_world(Vector2i(7, 4)))
+	assert_bool(_mode.is_dragging()).is_true()
+	_menu.ghost_reason().refresh()
+	print("during the drag: visible=%s" % _menu.ghost_reason().visible)
+	assert_bool(_menu.ghost_reason().visible).is_false()
+	_mode.cancel_area()
+	assert_bool(_mode.is_dragging()).is_false()
+	_hover(Vector2i(4, 4))
+	assert_str(_menu.ghost_reason().text()).is_equal(before)
+
+
 func test_no_tool_or_no_hover_shows_no_card() -> void:
 	_mode.set_tool(BuildMode.Tool.NONE)
 	_hover(Vector2i(4, 4))
@@ -185,14 +207,14 @@ func test_no_tool_or_no_hover_shows_no_card() -> void:
 	_mode._update_ghost(null)
 	_menu.ghost_reason().refresh()
 	assert_bool(_menu.ghost_reason().visible).is_false()
-	assert_bool(_mode.ghost_screen_rect().has_area()).is_false()
+	assert_bool(_menu.ghost_reason().ghost_rect().has_area()).is_false()
 
 
 func test_the_card_stays_inside_the_window_beside_a_ghost_near_its_edge() -> void:
 	_port.size = Vector2i(360, 320)
 	_mode.set_tool(BuildMode.Tool.DESK)
 	_hover(Vector2i(8, 5))
-	var ghost := _mode.ghost_screen_rect()
+	var ghost := _menu.ghost_reason().ghost_rect()
 	var card := _card_rect()
 	print("edge card %s ghost %s in %s" % [card, ghost, _port.size])
 	assert_bool(_menu.ghost_reason().visible).is_true()
