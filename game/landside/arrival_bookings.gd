@@ -10,8 +10,11 @@ extends RefCounted
 ## landside-groups-passengers-arrive-in-groups-that-share-a-car): a taxi
 ## carries 1-2, a car 1-4, and some cars mean to park. Each party draws one
 ## arrival type and one time in that type's window (ArrivalTypes), the time
-## it means to get out. Its vehicle enters the road that much free-flow drive
-## earlier (LandsideSim.lead_ticks()), so on a free road it gets out on time;
+## it means to get out (the window ends early enough for the whole party to
+## step out, one at a time, and each later member's own tick is
+## LandsideSim.RELEASE_GAP_TICKS after the one before). Its vehicle enters the
+## road that much free-flow drive earlier (LandsideSim.lead_ticks()), so on a
+## free road it gets out on time;
 ## a party scheduled with less notice than that enters at once and is late by
 ## the difference.
 ##
@@ -68,7 +71,11 @@ func schedule(flight_id: String, count: int) -> void:
 			intent = LandsideVehicle.Intent.PARK
 		var arrival := ArrivalTypes.draw(rng)
 		var span := ArrivalTypes.window(arrival, _sim.flights, flight_id, _sim.clock.tick)
-		var at := rng.randi_range(span.x, span.y)
+		# The party gets out one at a time (LandsideSim.RELEASE_GAP_TICKS apart), so
+		# its last member is out by the window's end (the drawn time is clamped, so
+		# the sim RNG draws stay as they were).
+		var stagger := (size - 1) * LandsideSim.RELEASE_GAP_TICKS
+		var at := mini(rng.randi_range(span.x, span.y), maxi(span.x, span.y - stagger))
 		var party := _next_id
 		for i in size:
 			var b := ArrivalBooking.new()
@@ -78,7 +85,7 @@ func schedule(flight_id: String, count: int) -> void:
 			b.flight_id = flight_id
 			b.variant = rng.randi_range(0, 1)
 			b.arrival = arrival
-			b.unload_tick = at
+			b.unload_tick = at + i * LandsideSim.RELEASE_GAP_TICKS
 			b.kind = kind
 			b.intent = intent
 			_bookings.append(b)
@@ -93,7 +100,11 @@ func step() -> void:
 		return
 	_settle_closed(landside)
 	var can_release := not _sim.layout.entrances.is_empty()
-	for event in landside.step(_sim.tick, can_release, _sim.clock.rng):
+	var closes := {}
+	for b in _bookings:
+		if b.state == ArrivalBooking.State.IN_VEHICLE:
+			closes[b.id] = _sim.flights.doors_close_tick(b.flight_id)
+	for event in landside.step(_sim.tick, can_release, _sim.clock.rng, closes):
 		var walk: Array[Vector3] = event["walk"]
 		for id: int in event["bookings"]:
 			var b: ArrivalBooking = _by_id[id]
@@ -171,10 +182,16 @@ func _board(landside: LandsideSim) -> void:
 		lead[intent] = landside.lead_ticks(intent)
 	var due := {}
 	var order := []
+	var early := {}
 	for b in _bookings:
-		if b.state != ArrivalBooking.State.AWAITING or _sim.tick < b.unload_tick - lead[b.intent]:
+		if b.state != ArrivalBooking.State.AWAITING or early.has(b.party):
 			continue
+		# A party boards one vehicle once its first member is due; the others
+		# follow, each with its own later expected tick.
 		if not due.has(b.party):
+			if _sim.tick < b.unload_tick - lead[b.intent]:
+				early[b.party] = true
+				continue
 			var members: Array[int] = []
 			due[b.party] = members
 			order.append([b.unload_tick, b.party])

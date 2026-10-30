@@ -52,6 +52,11 @@ const SPEED_MM := 500
 const GAP_MM := 7000
 ## How long a car stands in a curb berth once its passengers got out.
 const DWELL_TICKS := 60
+## Ticks between two passengers of one party stepping out. At the walking pace
+## (PassengerSim.WALK_MM, 98 mm a tick) that is about 0.69 m, so they do not stand
+## on one another (decision passenger-spacing-fixed-per-cause-standing-spots-
+## staggered-unloading-ordered-files, part 2).
+const RELEASE_GAP_TICKS := 7
 ## Tuning placeholder: the fee per car a surface lot earns when the car parks
 ## (decision landside-parking-houses-earn-a-parking-fee-per-car-paid-when).
 const SURFACE_LOT_FEE := 20
@@ -88,6 +93,8 @@ var curbs_built: Array[bool] = []
 var curbs_paid: Array[int] = []
 
 var _vehicles: Array[LandsideVehicle] = []
+## The doors-close tick of each booking aboard's flight, as step() was given.
+var _closes := {}
 var _by_id := {}
 var _next_id := 1
 ## Derived from the vehicles: the vehicle holding each curb berth (pulling in,
@@ -300,6 +307,8 @@ func drop_booking(vehicle_id: int, booking_id: int) -> void:
 		push_error("LandsideSim: vehicle %d does not carry booking %d" % [vehicle_id, booking_id])
 		return
 	v.bookings.erase(booking_id)
+	if v.bookings.is_empty():
+		v.release_wait = 0
 	if v.bookings.is_empty() and v.lane == LandsideVehicle.Lane.ROAD_IN:
 		v.intent = LandsideVehicle.Intent.DROP
 
@@ -318,10 +327,20 @@ func get_vehicle(id: int) -> LandsideVehicle:
 ## One tick at `now`. Returns the release events in order, each
 ## {"vehicle": id, "bookings": Array[int], "walk": Array[Vector3]}: the
 ## bookings whose passengers got out and the walk from where they stepped out.
-## With `can_release` false nobody gets out. `rng` draws parked stays.
-func step(now: int, can_release: bool, rng: RandomNumberGenerator) -> Array[Dictionary]:
+## With `can_release` false nobody gets out. A party gets out one passenger at
+## a time, RELEASE_GAP_TICKS apart, and the rest stay aboard, unless the stagger
+## would run to the doors-close tick of their flight (`closes`: booking id to
+## that tick, for the bookings aboard), when they all get out at once. An empty
+## `closes` means no doors-close limit; a booking aboard missing from a non-empty
+## one is an error and gets its party out at once. `rng` draws parked stays.
+func step(
+	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}
+) -> Array[Dictionary]:
 	tick = now
+	_closes = closes
 	var released: Array[Dictionary] = []
+	for v in _vehicles:
+		v.release_wait = maxi(v.release_wait - 1, 0)
 	_step_leaving()
 	for spot in definition.lots.size():
 		_step_lot(spot, can_release, released, rng)
@@ -395,7 +414,7 @@ func _step_lot(
 	for v in _members(LandsideVehicle.Lane.SLOT, spot):
 		match v.stage:
 			LandsideVehicle.Stage.PARKED:
-				if not v.bookings.is_empty() and can_release:
+				if not v.bookings.is_empty() and can_release and v.release_wait == 0:
 					_release(v, paths.lot_walk(spot, v.stop), released)
 			LandsideVehicle.Stage.DRIVE:
 				var stand := paths.slot_stand[spot][v.stop] as int
@@ -494,7 +513,7 @@ func _step_curb(can_release: bool, released: Array[Dictionary]) -> void:
 		if v.stage != LandsideVehicle.Stage.DWELL:
 			continue
 		if not v.bookings.is_empty():
-			if can_release:
+			if can_release and v.release_wait == 0:
 				_release(v, [definition.berth_get_out(v.stop)], released)
 				v.stage_tick = tick
 			continue
@@ -698,11 +717,27 @@ func _park(v: LandsideVehicle, rng: RandomNumberGenerator) -> void:
 	parked.emit(v.id, v.lot)
 
 
+## The first passenger aboard gets out; the next may RELEASE_GAP_TICKS later.
+## When the last would step out at or after the doors-close tick of the flight
+## (`_closes`), all get out at once, as before the stagger, so the stagger never
+## costs a flight.
 func _release(v: LandsideVehicle, walk: Array, released: Array[Dictionary]) -> void:
 	var points: Array[Vector3] = []
 	points.assign(walk)
-	released.append({"vehicle": v.id, "bookings": v.bookings.duplicate(), "walk": points})
-	v.bookings.clear()
+	var close := FAR_MM
+	if not _closes.is_empty():
+		if _closes.has(v.bookings[0]):
+			close = _closes[v.bookings[0]]
+		else:
+			# A caller left a booking out: get everyone out now, the safe side.
+			push_error("LandsideSim: no doors-close tick for booking %d" % v.bookings[0])
+			close = 0
+	var last := tick + v.release_wait + (v.bookings.size() - 1) * RELEASE_GAP_TICKS
+	var out: Array[int] = []
+	while not v.bookings.is_empty() and (out.is_empty() or last >= close):
+		out.append(v.bookings.pop_front())
+	released.append({"vehicle": v.id, "bookings": out, "walk": points})
+	v.release_wait = 0 if v.bookings.is_empty() else RELEASE_GAP_TICKS
 
 
 func _enter(v: LandsideVehicle, lane: LandsideVehicle.Lane, stage: LandsideVehicle.Stage) -> void:

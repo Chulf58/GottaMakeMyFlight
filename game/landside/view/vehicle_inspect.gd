@@ -20,7 +20,9 @@ static func text(
 		return "   ".join(parts)
 	parts.append("1 passenger" if v.bookings.size() == 1 else "%d passengers" % v.bookings.size())
 	var flight_ids := PackedStringArray()
-	# The latest of the party's drop-offs, in ticks past its unload tick.
+	# The latest of the party's drop-offs, in ticks past each passenger's own unload
+	# tick, which already counts the planned stagger (a party gets out one at a time),
+	# so a member waiting for its turn is not late.
 	var late := 0
 	var first := true
 	for id in v.bookings:

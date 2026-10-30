@@ -8,7 +8,10 @@ extends RefCounted
 
 ## 3: a car in a berth or a slot has a position along that berth's or slot's
 ## path (LandsidePaths), pulling in, standing or pulling out.
-const SAVE_VERSION := 3
+## 4: a vehicle saves the ticks until the next of its passengers steps out
+## (release_wait, LandsideSim.RELEASE_GAP_TICKS at most). Version 3 is refused,
+## with no migration (decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
+const SAVE_VERSION := 4
 const KEYS := [
 	"save_version",
 	"tick",
@@ -28,7 +31,17 @@ const BOOKING_INTS := [
 	"id", "party", "variant", "arrival", "unload_tick", "kind", "intent", "state", "vehicle"
 ]
 const VEHICLE_INTS := [
-	"id", "kind", "intent", "lane", "pos_mm", "stage", "stop", "lot", "stage_tick", "leave_tick"
+	"id",
+	"kind",
+	"intent",
+	"lane",
+	"pos_mm",
+	"stage",
+	"stop",
+	"lot",
+	"stage_tick",
+	"leave_tick",
+	"release_wait",
 ]
 ## The lane each stage may stand on.
 ## DRIVE on a berth or slot path is pulling in, LEAVE there pulling out.
@@ -376,6 +389,15 @@ static func _vehicle_problem(
 		return "a leaving car carries passengers"
 	if v.stage_tick < 0:
 		return "its stage tick is negative"
+	if v.release_wait < 0 or v.release_wait > LandsideSim.RELEASE_GAP_TICKS:
+		return "its release wait is out of range"
+	if v.release_wait > 0 and v.bookings.is_empty():
+		return "it waits to let a passenger out with nobody aboard"
+	var standing := (
+		v.stage == LandsideVehicle.Stage.DWELL or v.stage == LandsideVehicle.Stage.PARKED
+	)
+	if v.release_wait > 0 and not standing:
+		return "it waits to let a passenger out away from its berth or slot"
 	return ""
 
 
