@@ -15,11 +15,19 @@ extends SceneTree
 ## Every frame: the FLOAT check (spike/carry_float_check.gd) on every drawn
 ## bag of every passenger, and the stall's own tally of it for the visitor
 ## inside a stall (STALL_FLOAT); its control once. Every frame the visitor is
-## inside a stall: SELF, the drawn body's vertices (the hands holding a bag,
-## reaching for one or letting go of one left out) inside each of its bags'
-## meshes. One bag of each visitor (VISITORS) has its set-down and pick-up in
-## the stall caught as they start (the clock pauses with no time over) and plated at
-## each MOMENTS window, the paused clock stepped there a third of a tick a
+## inside a stall: SELF, the drawn body's vertices inside each of its bags'
+## meshes (left out per bag: the hands holding that bag, reaching for it or
+## letting go of it; a hand holding one bag still counts against the other),
+## and GRIP: every frame a hand holds a moving bag in the stall, how far straight
+## down from its grip the bag's mesh is and how far its nearest face is (a hard
+## case is held from above, its mesh GRIP_OVER_M at most under the grip, so a
+## hand beside it has none under it; a roller by its bar, its mesh GRIP_NEAR_M
+## at most from the grip, which may be inside the bar), with its control: the
+## same on a hard case's old stall grip point, its bounds' top corner
+## (CarryOnProps.grip_anchor), which must miss on its set-downs. One
+## bag of each visitor (VISITORS) has its set-down and pick-up in the stall
+## caught as they start (the clock pauses with no time over) and plated at each
+## MOMENTS window, the paused clock stepped there a third of a tick a
 ## frame: a close plate from over the stall (the partitions are 2.22 m tall,
 ## so a camera beside them sees nothing inside), and a detail plate of the bag
 ## from the side with every toilet stall hidden (a cutaway, so the hand on the
@@ -29,8 +37,9 @@ extends SceneTree
 ## that it is not dark, or tries the
 ## next camera; each moment prints the bag's FLOAT state and SELF_HEAD (head
 ## and neck points inside the bag). Any FLOAT, a control not caught, SELF or
-## SELF_HEAD over 0, a move not hand-led or a plate missing prints PROBE_INVALID
-## and exits 1. A guard thread calls OS.crash() on a stalled main thread.
+## SELF_HEAD over 0, a GRIP miss or its control not caught, a move not
+## hand-led or a plate missing prints PROBE_INVALID and exits 1. A guard thread
+## calls OS.crash() on a stalled main thread.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 1200 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -95,6 +104,16 @@ const MARGIN_PX := 8.0
 const DETAIL_SIDE_M := 1.0
 const DETAIL_UP_M := 0.45
 const SELF_PRINTS := 4
+## A hand holding a hard case has the case's mesh this close under its grip: on
+## its top FRONT_PALM_M, in front its handle as far under it and the face beside
+## the handle (3 cm wide, 3.6 cm proud) 7.6 cm. A hand holding a roller by its
+## bar has the roller's mesh this close to its grip (BAR_PALM_M off the bar's
+## middle, the bar 3.2 cm thick). A backpack is held by its loop with the grip
+## past its face (CarryLead.LOOP_OFFSET) and a tote by its strap, so theirs are
+## printed, not judged.
+const GRIP_OVER_M := 0.08
+const GRIP_NEAR_M := 0.05
+const GRIP_PRINTS := 3
 
 var _out_dir := ""
 var _failed := false
@@ -129,6 +148,12 @@ var _hold := false
 var _plates_saved := 0
 var _plates_wanted := 0
 var _not_led := 0
+## GRIP by "label move bag kind": [frames, misses, nearest, farthest]; the
+## control's frames and misses.
+var _grip_by := {}
+var _grip_misses := 0
+var _grip_control := [0, 0]
+var _case_sent := false
 
 
 func _initialize() -> void:
@@ -201,6 +226,7 @@ func _visit(visitor: Array) -> void:
 	_beat("spawn %s" % _label)
 	_visitor = _spawn(visitor[1], visitor[2])
 	_plate_bag = visitor[3]
+	_case_sent = _case_sent or visitor[1] == SecurityLooks.Kind.CASE
 	_plated = {}
 	print("VISITOR %s passenger=%d kinds=%s" % [_label, _visitor.id, _kinds(_visitor)])
 	var p := _visitor
@@ -289,20 +315,6 @@ func _check_frame(p: Passenger) -> void:
 		_float_control = FloatCheck.float_control(_sim, _views, p.id)
 	if not StallCarry.in_stall(p):
 		return
-	# The hands holding a bag (its home's carry, or placing it now), or reaching
-	# for one or letting go of it in a hand-led move (CarryLead's weights).
-	var grip: Array = CarryChecks.gripping(_sim, p)
-	for i in bags.size():
-		var bag := props.bag_state(p.id, i)
-		var hands := [int(bag.get("held_by", -1))]
-		if props.transfer_progress(p.id, i) < 1.0 and bag.has("lead"):
-			for hand in 2:
-				if float(bag["lead"]["weights"][hand]) > 0.0:
-					hands.append(hand)
-		for hand: int in hands:
-			if hand >= 0 and not grip.has([".R", ".L"][hand]):
-				grip.append([".R", ".L"][hand])
-	var own := CarryContact.body_points(body, grip)
 	var any := false
 	for i in bags.size():
 		_stall_frames += 1
@@ -312,6 +324,9 @@ func _check_frame(p: Passenger) -> void:
 		if move != "" and not props.bag_state(p.id, i).get("led", false):
 			_not_led += 1
 			print("NOT_LED %s bag=%d move=%s" % [_label, i, move])
+		_check_grip(p, props, body, bags[i], i, move)
+		var grip := _hands_on(p, props, i)
+		var own := CarryContact.body_points(body, grip)
 		var hits := CarryContact.inside_meshes(own, bags[i])
 		if hits == 0:
 			continue
@@ -339,6 +354,124 @@ func _check_frame(p: Passenger) -> void:
 				)
 			)
 	_self_frames += int(any)
+
+
+## The hands left out of SELF for bag `i` of `p`: the one holding it by its
+## home's carry (CarryProbeChecks.gripping, for this bag alone), the one placing
+## it now, and any reaching for it or letting go of it in a hand-led move
+## (CarryLead's weights).
+func _hands_on(p: Passenger, props: CarryOnProps, i: int) -> Array:
+	var hands := []
+	if SecurityLooks.bag_homes(_sim, p)[i] == SecurityLooks.Home.HAND:
+		match SecurityLooks.carry_of(p, i):
+			SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL:
+				hands.append(SecurityLooks.hand_of(_sim, p, i))
+			SecurityLooks.Carry.SHOULDER:
+				hands.append(SecurityLooks.worn_side(i))
+	var bag := props.bag_state(p.id, i)
+	hands.append(int(bag.get("held_by", -1)))
+	if props.transfer_progress(p.id, i) < 1.0 and bag.has("lead"):
+		for hand in 2:
+			if float(bag["lead"]["weights"][hand]) > 0.0:
+				hands.append(hand)
+	var out := []
+	for hand: int in hands:
+		if hand >= 0 and not out.has([".R", ".L"][hand]):
+			out.append([".R", ".L"][hand])
+	return out
+
+
+## GRIP for bag `i` (`node`) of `p` on `move`: while a hand holds it (places
+## it from its grip) in a hand-led move, the bag's mesh straight under the grip;
+## and the control on a hard case being set down: its old stall grip point.
+func _check_grip(
+	p: Passenger, props: CarryOnProps, body: Node3D, node: Node3D, i: int, move: String
+) -> void:
+	var bag := props.bag_state(p.id, i)
+	var holder := int(bag.get("held_by", -1))
+	if move == "" or holder < 0 or not bag.get("led", false):
+		return
+	var kind: SecurityLooks.Kind = bag["kind"]
+	var k := props.transfer_progress(p.id, i)
+	var at := props.grip_of(body, holder)
+	var over := _over(node, at)
+	var near := _near(node, at)
+	var key := "%s %s bag=%d %s" % [_label, move, i, SecurityLooks.Kind.keys()[kind]]
+	# [frames, misses, over from, over to, nearest from, nearest to]
+	var seen: Array = _grip_by.get(key, [0, 0, INF, 0.0, INF, 0.0])
+	var miss := false
+	if kind == SecurityLooks.Kind.CASE:
+		miss = over > GRIP_OVER_M
+	elif kind == SecurityLooks.Kind.ROLLER:
+		miss = near > GRIP_NEAR_M
+	_grip_by[key] = [
+		seen[0] + 1,
+		seen[1] + int(miss),
+		minf(seen[2], over),
+		maxf(seen[3], over),
+		minf(seen[4], near),
+		maxf(seen[5], near),
+	]
+	if miss:
+		_grip_misses += 1
+		if seen[1] < GRIP_PRINTS:
+			print("GRIP_MISS %s k=%.2f over_m=%.3f near_m=%.3f" % [key, k, over, near])
+	if kind == SecurityLooks.Kind.CASE and move.ends_with(">floor"):
+		var old: Vector3 = node.global_transform * CarryOnProps.grip_anchor(kind)
+		var old_over := _over(node, old)
+		_grip_control[0] += 1
+		_grip_control[1] += int(old_over > GRIP_OVER_M)
+		if _grip_control[0] <= GRIP_PRINTS:
+			print(
+				(
+					"GRIP_CONTROL %s k=%.2f over_m=%.3f old_over_m=%.3f old_near_m=%.3f"
+					% [key, k, over, old_over, _near(node, old)]
+				)
+			)
+
+
+## How far straight down from `at` the nearest face of `node`'s meshes is (as
+## drawn), or INF when none is under it.
+func _over(node: Node3D, at: Vector3) -> float:
+	var best := INF
+	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+		if not mi.is_visible_in_tree() or mi.mesh == null:
+			continue
+		var faces := mi.mesh.get_faces()
+		var xf := mi.global_transform
+		for f in range(0, faces.size() - 2, 3):
+			var hit: Variant = Geometry3D.ray_intersects_triangle(
+				at, Vector3.DOWN, xf * faces[f], xf * faces[f + 1], xf * faces[f + 2]
+			)
+			if hit != null:
+				best = minf(best, at.y - (hit as Vector3).y)
+	return best
+
+
+## How far the nearest face of `node`'s meshes (as drawn) is from `at`.
+func _near(node: Node3D, at: Vector3) -> float:
+	var best := INF
+	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+		if not mi.is_visible_in_tree() or mi.mesh == null:
+			continue
+		var faces := mi.mesh.get_faces()
+		var xf := mi.global_transform
+		for f in range(0, faces.size() - 2, 3):
+			best = minf(best, _to_face(at, xf * faces[f], xf * faces[f + 1], xf * faces[f + 2]))
+	return best
+
+
+## How far `at` is from the triangle `a`, `b`, `c`: from its plane when it
+## lies over the triangle, else from its nearest edge.
+static func _to_face(at: Vector3, a: Vector3, b: Vector3, c: Vector3) -> float:
+	var n := (b - a).cross(c - a)
+	if n.length_squared() > 1e-12:
+		n = n.normalized()
+		if Geometry3D.ray_intersects_triangle(at + n, -n, a, b, c) != null:
+			return absf(n.dot(at - a))
+	var best := at.distance_to(Geometry3D.get_closest_point_to_segment(at, a, b))
+	best = minf(best, at.distance_to(Geometry3D.get_closest_point_to_segment(at, b, c)))
+	return minf(best, at.distance_to(Geometry3D.get_closest_point_to_segment(at, c, a)))
 
 
 ## On each sim tick, after the views' sync: the visitor's bag 0 about to start
@@ -487,11 +620,19 @@ func _plate_close(p: Passenger, bag: Node3D, name: String) -> bool:
 		for node in stalls:
 			node.visible = false
 		var centre := _bounds(bag).get_center()
-		cam.fov = 50.0
-		cam.global_position = (centre + stall["across"] * DETAIL_SIDE_M + Vector3.UP * DETAIL_UP_M)
-		cam.look_at(centre)
 		var detail := _out_dir.path_join(name + "_detail_cutaway.png")
-		var done: bool = await PlateSteps.detail_plate(self, cam, body, bag, owners, frame, detail)
+		var done := false
+		# From the stall's one side, then (the hand on top of a small bag can hide
+		# it from every turn about the first) from the other.
+		for across: float in [1.0, -1.0]:
+			cam.fov = 50.0
+			cam.global_position = (
+				centre + stall["across"] * DETAIL_SIDE_M * across + Vector3.UP * DETAIL_UP_M
+			)
+			cam.look_at(centre)
+			done = await PlateSteps.detail_plate(self, cam, body, bag, owners, frame, detail)
+			if done:
+				break
 		for node in stalls:
 			node.visible = true
 		if done:
@@ -638,6 +779,32 @@ func _report() -> void:
 		)
 	)
 	print("SELF_HEAD_TOTAL checks=%d inside=%d" % [_head_checks, _self_head])
+	var grip_frames := 0
+	for key: String in _grip_by:
+		var g: Array = _grip_by[key]
+		grip_frames += int(g[0])
+		print(
+			(
+				"GRIP %s frames=%d misses=%d over_m=%.3f..%.3f near_m=%.3f..%.3f"
+				% [key, g[0], g[1], g[2], g[3], g[4], g[5]]
+			)
+		)
+	print(
+		(
+			(
+				"GRIP_TOTAL frames=%d judged_misses=%d over_limit_m=%.2f near_limit_m=%.2f"
+				+ " control frames=%d misses=%d"
+			)
+			% [
+				grip_frames,
+				_grip_misses,
+				GRIP_OVER_M,
+				GRIP_NEAR_M,
+				_grip_control[0],
+				_grip_control[1]
+			]
+		)
+	)
 	print("PLATES saved=%d wanted=%d" % [_plates_saved, _plates_wanted])
 	PlateSteps.lead_sheet(_out_dir)
 	if _floats["float"] > 0 or _stall_float > 0:
@@ -653,6 +820,10 @@ func _report() -> void:
 				% [self_total, _self_head]
 			)
 		)
+	if _grip_misses > 0 or grip_frames == 0:
+		_invalid("hands not on the bags they hold: %d GRIP misses" % _grip_misses)
+	if _grip_control[1] == 0 and _case_sent:
+		_invalid("the GRIP control was not caught: %s" % [_grip_control])
 	if _not_led > 0:
 		_invalid("%d frames of a stall move not hand-led" % _not_led)
 	if _plates_saved != _plates_wanted or _plates_wanted == 0:

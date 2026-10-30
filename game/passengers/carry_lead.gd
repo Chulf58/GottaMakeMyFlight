@@ -73,18 +73,53 @@ const STALL_CARRY_GRIP_M := 1.0
 const STALL_TOTE_LIFT_M := 0.25
 ## And it is held this far short of its place by the door until it goes down.
 const STALL_TOTE_BACK_M := 0.05
+## Picked up there it is not pushed out ahead (path()) to this share of the
+## move, and pushed as it is outside from this one on.
+const STALL_AHEAD_BACK := Vector2(0.35, 0.65)
 ## A backpack set down in a stall is held this far over its grab loop (its own
 ## frame), the fingers over the top, not in it.
 const STALL_LOOP_UP := Vector3(0.0, 0.0, 0.06)
+## A hard case standing in a stall is held by the middle of its top end, the
+## grip FRONT_PALM_M over it (the palm on the top, as on the handle in front).
+## Its body is this deep (measured on the mesh): bag_box() takes in the handle,
+## 3.6 cm proud of the face, so its top corner was in the air past the face,
+## where the hand hung beside the case (board item c7b0e7be).
+const STALL_CASE_DEPTH_M := 0.19
+## A bag picked up in a stall rises upright and tips into its carry from this
+## share of the carry on (path(), stall_tip()).
+const STALL_TIP_FROM := 0.4
+## As it tips the hand goes from a case's top over its top front edge to the
+## point it is carried by: along a curve pulled this far out past that edge
+## both ways, so the grip stays off the case (a straight blend between the two
+## took it 3.5 cm into the case midway).
+const STALL_CASE_EDGE_OUT_M := 0.08
 
 
-## Where a bag of `kind` standing in a stall is held to set it down: its top
-## (`loose` its kind's grip point: a case's top edge, a roller's bar), a
-## backpack STALL_LOOP_UP over its grab loop.
+## Where a bag of `kind` standing in a stall is held: its top (`loose` its
+## kind's grip point: a roller's bar), a backpack STALL_LOOP_UP over its grab
+## loop, a hard case FRONT_PALM_M over the middle of its top end.
 static func stall_top(kind: SecurityLooks.Kind, loose: Vector3) -> Vector3:
 	if kind == SecurityLooks.Kind.BACKPACK:
 		return CarryOnProps.BACKPACK_LOOP + STALL_LOOP_UP
+	if kind == SecurityLooks.Kind.CASE:
+		var top := CarryOnProps.bag_box(kind).end.z
+		return Vector3(0.0, STALL_CASE_DEPTH_M * 0.5, top + CarryOnProps.FRONT_PALM_M)
 	return loose
+
+
+## How far (0 to 1) a bag picked up in a stall has tipped from standing into
+## its carry at `t` of the carry (path()).
+static func stall_tip(t: float) -> float:
+	return clampf((t - STALL_TIP_FROM) / (1.0 - STALL_TIP_FROM), 0.0, 1.0)
+
+
+## The point of a hard case in the hand at `w` (stall_tip()) of its tip from
+## standing, held at `from` (stall_top()), into its carry, held at `to`: a curve
+## over its top front edge, STALL_CASE_EDGE_OUT_M out past it.
+static func case_tip_grip(from: Vector3, to: Vector3, w: float) -> Vector3:
+	var out := STALL_CASE_EDGE_OUT_M
+	var edge := Vector3(0.0, STALL_CASE_DEPTH_M + out, CarryOnProps.bag_box().end.z + out)
+	return from.lerp(edge, w).lerp(edge.lerp(to, w), w)
 
 
 ## The kind of end a bag's place (`place`, CarryOnProps' (home * 2 + hand) * 2
@@ -349,17 +384,23 @@ static func plan(
 	elif by_handle and to_end == End.REST:
 		anchor_to = CarryOnProps.ROLLER_HANDLE
 	# In a toilet stall (board item c7b0e7be) a bag is set down by its top as it
-	# stands, the highest point the hand can hold (a case's top edge, a
-	# backpack's grab loop, a roller's bar), from the start: the body turns
-	# round to sit in that frame. A hard case or a backpack is picked up by the
-	# point it is carried by in front (a case by its handle), the hand not
-	# sliding over it.
+	# stands (stall_top(): a case's top end, a backpack's grab loop, a roller's
+	# bar), from the start: the body turns round to sit in that frame. A
+	# backpack is picked up by the point it is carried by, the hand not sliding
+	# over it; a hard case by its top while it stands, the hand going over its
+	# top front edge to the point it is carried by as it tips (case_tip_grip()):
+	# held there from the floor, the hand was beside its side face as it rose.
+	var case_up: bool = stall and bag["kind"] == SecurityLooks.Kind.CASE
 	if stall and set_down:
 		anchor_from = stall_top(bag["kind"], loose)
 		anchor_to = anchor_from
+	elif case_up and from_end == End.REST and to_end == End.HELD:
+		anchor_from = stall_top(bag["kind"], loose)
 	elif stall and from_end == End.REST and to_end == End.HELD and not roller:
 		anchor_from = anchor_to
 	var held_at := anchor_from.lerp(anchor_to, t)
+	if case_up and from_end == End.REST and to_end == End.HELD:
+		held_at = case_tip_grip(anchor_from, anchor_to, stall_tip(t))
 	var off_back: bool = from_end == End.WORN and bag["carry_from"] == SecurityLooks.Carry.BACK
 	var on_back: bool = to_end == End.WORN and bag["carry"] == SecurityLooks.Carry.BACK
 	var on_path: Transform3D
@@ -437,6 +478,11 @@ static func plan(
 	if stall and to_end == End.REST:
 		keeps[lead] = 1.0
 		hips = STALL_HIPS
+	elif case_up and from_end == End.REST:
+		# Reaching down to a case's top to pick it up, the same: with the hips
+		# going down with the stoop (to its top, not its handle lower down), the
+		# knee came into the case (board item c7b0e7be).
+		hips = STALL_HIPS
 	return {
 		"holder": ph["holder"],
 		"xf": xf,
@@ -459,7 +505,8 @@ static func plan(
 ## or push out: set down straight down, picked up upright first (decision
 ## stall-bag-poses-as-built-bags-stand-upright-against-the-insi); a tote there
 ## goes as it does outside (pushed out to its side at the hip, it lay against
-## the thigh of a walker sitting down, board item c7b0e7be). A bag goes up
+## the thigh of a walker sitting down, board item c7b0e7be), but picked up it
+## is not pushed out ahead, toward the door. A bag goes up
 ## when its origin does, or with flag "rising" (plan(): a stall pick-up, which
 ## also goes flag "side" out to its hand's side midway). Moved
 ## from CarryOnProps._place_bags; the floor set-down added for board item 5ed915b0.
@@ -481,7 +528,7 @@ static func path(
 		# walker stepping out caught it low with a foot.
 		var soon := 1.0 - pow(1.0 - k, 4.0)
 		var across := start.origin.lerp(want.origin, k * k)
-		var tip := clampf((k - 0.4) / 0.6, 0.0, 1.0)
+		var tip := stall_tip(k)
 		# Out ahead of the walker's stride as it rises, back to the hand as it
 		# tips over, and out to its hand's side midway, off the leg stepping past
 		# it (hand-led it hangs where the hand can take it, short of the path).
@@ -499,7 +546,17 @@ static func path(
 	elif hand_in_stall:
 		pass
 	elif rising and flags.get("from_floor", false) and CarryMoves.picks_up_ahead(from_local):
-		placed = frame * CarryMoves.pick_up(from_local, frame.affine_inverse() * want, k)
+		var lifted := CarryMoves.pick_up(from_local, frame.affine_inverse() * want, k)
+		if in_stall:
+			# Not out ahead while the walker is still in the stall (CarryMoves'
+			# PICK_AHEAD_M push taken off again, back on by STALL_AHEAD_BACK as it
+			# steps out): by a stall's door a tote went through its leaves; across
+			# from the door without the side-out of pick_up() it went into the hips,
+			# and with no push at all its strap came back into the forearm.
+			var ahead := minf(k * 4.0, 1.0) * (1.0 - smoothstep(0.5, 1.0, k))
+			var held_back := 1.0 - smoothstep(STALL_AHEAD_BACK.x, STALL_AHEAD_BACK.y, k)
+			lifted.origin.z -= ahead * held_back * CarryOnProps.PICK_AHEAD_M
+		placed = frame * lifted
 	elif rising:
 		var across := start.origin.lerp(want.origin, k * k)
 		placed.origin.x = across.x

@@ -232,6 +232,69 @@ func test_a_roller_passed_between_pulling_hands_stays_held_by_its_bar() -> void:
 	assert_bool(holders.has(0) and holders.has(1)).is_true()
 
 
+## Picked up off a stall's floor, a hard case is held by its top while it
+## stands (to STALL_TIP_FROM of the carry): FRONT_PALM_M over the middle of its
+## top end, inside its face, not at its bounds' top corner, which takes in the
+## handle and is past the face. As it tips, the grip goes over its top front
+## edge to the point it is carried by, kept at least 2 cm off the case's body,
+## and the stoop to it bends the back first (STALL_HIPS). Controls: the bounds'
+## corner is past the face, a straight blend between the same two points goes
+## into the case, and out of a stall the hips go down with the stoop.
+func test_a_stall_case_is_held_by_its_top_and_round_its_edge_as_it_tips() -> void:
+	var move := _to_floor(SecurityLooks.Kind.CASE)
+	var bag: Dictionary = move[0]
+	var body: Dictionary = move[1]
+	bag["home"] = (SecurityLooks.Home.HAND * 2 + 0) * 2
+	bag["was"] = (SecurityLooks.Home.FLOOR * 2 + 0) * 2
+	var box := CarryOnProps.bag_box(SecurityLooks.Kind.CASE)
+	var top := CarryLead.stall_top(SecurityLooks.Kind.CASE, Vector3.ZERO)
+	var corner := CarryOnProps.grip_anchor(SecurityLooks.Kind.CASE)
+	# Standing on its end (its length up), and flat in the hand in front.
+	var start := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(0.0, 0.24, 0.5))
+	var want := Transform3D(Basis(), Vector3(0.0, 0.9, 0.3))
+	var carried := Vector3(0.0, box.end.y + CarryOnProps.FRONT_PALM_M, 0.0)
+	body["grips"] = [want * carried, Vector3(0.2, 0.9, 0.3)]
+	var stall := {"in_stall": true, "hand_carry": true, "hand": 0, "yaw": 0.0, "clear": 0.3}
+	# The case's body, its handle left out.
+	var solid := AABB(
+		Vector3(box.position.x, 0.0, box.position.z),
+		Vector3(box.size.x, CarryLead.STALL_CASE_DEPTH_M, box.size.z)
+	)
+	print("stall case top %s, bounds corner %s, case body %s" % [top, corner, solid])
+	assert_float(top.y).is_between(0.02, CarryLead.STALL_CASE_DEPTH_M - 0.02)
+	assert_float(top.z).is_equal_approx(box.end.z + CarryOnProps.FRONT_PALM_M, 0.0001)
+	assert_float(corner.y).is_greater(CarryLead.STALL_CASE_DEPTH_M + 0.02)
+	var nearest := INF
+	for step in 21:
+		var t := step / 20.0
+		var k := CarryLead.REACH_SHARE + (1.0 - CarryLead.REACH_SHARE) * t
+		var held: Vector3 = (
+			CarryLead.plan(bag, k, start, want, Transform3D(), stall, body)["anchor"]
+		)
+		if t <= CarryLead.STALL_TIP_FROM:
+			assert_vector(held).is_equal_approx(top, Vector3.ONE * 0.0001)
+		var off := held.distance_to(_clamped(held, solid))
+		nearest = minf(nearest, off)
+		assert_float(off).is_greater_equal(0.02)
+	var first := CarryLead.plan(bag, 0.1, start, want, Transform3D(), stall, body)
+	assert_vector(first["drops"][0]).is_equal(CarryLead.STALL_HIPS)
+	var open := stall.duplicate()
+	open["in_stall"] = false
+	var outside := CarryLead.plan(bag, 0.1, start, want, Transform3D(), open, body)
+	assert_vector(outside["drops"][0]).is_equal(CarryStoop.HIPS_ALL)
+	var end: Vector3 = CarryLead.plan(bag, 1.0, start, want, Transform3D(), stall, body)["anchor"]
+	assert_vector(end).is_equal_approx(carried, Vector3.ONE * 0.0001)
+	var straight := top.lerp(carried, 0.35)
+	print(
+		"tip: grip at least %.3f m off the case; a straight blend at 0.35: %s" % [nearest, straight]
+	)
+	assert_float(straight.distance_to(_clamped(straight, solid))).is_equal(0.0)
+
+
+static func _clamped(at: Vector3, box: AABB) -> Vector3:
+	return at.clamp(box.position, box.end)
+
+
 ## A move of a bag of `kind` from the right hand to the floor, as CarryOnProps
 ## records it, and a body for plan(): [bag, body].
 static func _to_floor(kind: SecurityLooks.Kind) -> Array:
