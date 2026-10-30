@@ -296,7 +296,7 @@ static func _booth_entry(sim: PassengerSim, cell: Vector2i) -> bool:
 
 ## Whether `cell` lies inside a basic scanner booth (a security_scanner).
 static func in_booth(grid: BuildGrid, cell: Vector2i) -> bool:
-	return _def_at(grid, cell) == &"security_scanner"
+	return def_at(grid, cell) == &"security_scanner"
 
 
 ## Whether `p` stands in a security lane's arch or walks into one now: there
@@ -306,16 +306,16 @@ static func in_booth(grid: BuildGrid, cell: Vector2i) -> bool:
 ## tray then, so nothing goes to the front. Leaving, the arch cell counts until
 ## it arrives in the cell past it.
 static func in_arch_passage(sim: PassengerSim, p: Passenger) -> bool:
-	if _def_at(sim.grid, p.at) == SecurityLanes.ARCH:
+	if def_at(sim.grid, p.at) == SecurityLanes.ARCH:
 		return true
 	if not p.is_moving() or p.path.size() < 2:
 		return false
 	var at := clampi(p.path_index, 0, p.path.size() - 2)
-	return _def_at(sim.grid, p.path[at + 1]) == SecurityLanes.ARCH
+	return def_at(sim.grid, p.path[at + 1]) == SecurityLanes.ARCH
 
 
 ## The def id of the object on `cell`, or an empty name.
-static func _def_at(grid: BuildGrid, cell: Vector2i) -> StringName:
+static func def_at(grid: BuildGrid, cell: Vector2i) -> StringName:
 	var id := grid.object_at(cell)
 	return StringName(grid.get_object(id).get("def", "")) if id != 0 else &""
 
