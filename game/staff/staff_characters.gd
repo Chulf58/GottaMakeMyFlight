@@ -16,6 +16,11 @@ extends Node3D
 ## work instead (post_yaw()). A fired member walking out to the
 ## entrance is drawn walking until it is gone.
 ##
+## Walking through a security lane's arch, a member tucks its arms in toward
+## the body, eased in and out, so its hands stay clear of the narrow posts
+## (StaffArchTuck): the passage state is taken each tick, the weight drawn
+## each frame.
+##
 ## Edits, hires, fires and loads between ticks resync at once (snapped) on the
 ## next frame, so a paused game shows them. It reads the sim and never writes
 ## to it.
@@ -39,6 +44,8 @@ var _pool: Array[Array] = [[], [], []]
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
 var _cur: Dictionary = {}
+## Member id -> its arch tuck record (StaffArchTuck).
+var _tucks: Dictionary = {}
 ## Something changed between ticks: the next sync snaps instead of interpolating.
 var _dirty := false
 
@@ -77,6 +84,12 @@ func active_count() -> int:
 ## A member's recorded position for the tick before (false) or now (true).
 func tick_position(id: int, current: bool) -> Vector3:
 	return (_cur if current else _prev).get(id, Vector3.ZERO)
+
+
+## How far member `id` has tucked its arms in for an arch now: 0 swinging, 1
+## tucked (StaffArchTuck.weight()).
+func tuck_of(id: int) -> float:
+	return StaffArchTuck.weight(_tucks.get(id, {}), _now())
 
 
 ## Where the member on duty at `station` is drawn, in world space: the
@@ -123,6 +136,8 @@ func sync(snap: bool = false) -> void:
 			_prev[id] = _cur[id]
 		_cur[id] = now
 		_pose(node, m, (_cur[id] as Vector3) - (_prev[id] as Vector3))
+		var inside := StaffArchTuck.in_arch_passage(staff.sim.grid, m)
+		StaffArchTuck.update(_tucks.get_or_add(id, {}), inside, _tick())
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
@@ -132,9 +147,11 @@ func sync(snap: bool = false) -> void:
 func draw() -> void:
 	var alpha := clock.alpha if clock != null else 1.0
 	var paused := clock == null or clock.paused
+	var now := _now()
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
+		StaffArchTuck.pose(node, StaffArchTuck.weight(_tucks.get(id, {}), now))
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
 		player.speed_scale = 0.0 if paused else base * clock.speed
@@ -176,10 +193,21 @@ func _release(id: int) -> void:
 	node.visible = false
 	(node.get_node("AnimationPlayer") as AnimationPlayer).stop()
 	node.set_meta(&"clip", "")
+	StaffArchTuck.pose(node, 0.0)
 	_pool[node.get_meta(&"role")].append(node)
 	_nodes.erase(id)
 	_prev.erase(id)
 	_cur.erase(id)
+	_tucks.erase(id)
+
+
+## Sim time now, between ticks: the tick and the clock's alpha.
+func _now() -> float:
+	return clock.tick + clock.alpha if clock != null else 0.0
+
+
+func _tick() -> float:
+	return float(clock.tick) if clock != null else 0.0
 
 
 ## `moved` is the step drawn between the two recorded positions; a walker faces
