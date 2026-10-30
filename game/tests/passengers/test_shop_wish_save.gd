@@ -137,7 +137,7 @@ func test_a_fallback_visit_saves_its_flag_and_settles_for_less_after_a_load() ->
 			% [saved["wish"], visits, data["passengers"]["save_version"]]
 		)
 	)
-	assert_int(int(data["passengers"]["save_version"])).is_equal(13)
+	assert_int(int(data["passengers"]["save_version"])).is_equal(14)
 	assert_int(visits.size()).is_equal(1)
 	assert_that(visits[0]["fallback"]).is_equal(true)
 	assert_bool(_load(data)).is_true()

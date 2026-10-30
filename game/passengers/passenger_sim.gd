@@ -63,7 +63,10 @@ signal checked_in(id: int, desk: int)
 ## 13: each shop visit saves whether it is a fallback (ShopSnapshot). Versions
 ## 11 and 12 are refused, with no migration (decision old-saves-are-not-
 ## supported-until-after-a-release-no-save-mi).
-const SAVE_VERSION := 13
+## 14: each standing passenger's claimed standing spot, under "standing"
+## (StandingSpots.to_list()). Version 13 is refused, with no migration; a
+## migrated older save has no claims.
+const SAVE_VERSION := 14
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -137,6 +140,9 @@ var shops := ShopSim.new()
 var security := SecurityRuntime.new()
 ## Arrival bookings by car and taxi, used while `landside` is set.
 var arrivals := ArrivalBookings.new()
+## Standing spots near the gate and the passengers' claims on them, for when
+## every gate seat is taken (StandingSpots).
+var standing := StandingSpots.new()
 ## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
 var wallet: Wallet
 var grid: BuildGrid
@@ -459,7 +465,12 @@ func world_position(p: Passenger) -> Vector3:
 			return front.lerp(spot, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
 		return spot
 	var at := p.grid_position()
-	return grid.origin + Vector3(at.x, 0.0, at.y)
+	var here := grid.origin + Vector3(at.x, 0.0, at.y)
+	if p.stage == Passenger.Stage.STANDING and standing.spot_of(p.id) != StandingSpots.NO_SPOT:
+		# Arrived at the spot's cell, it steps over onto the spot.
+		var point := standing.world_of(grid, standing.spot_of(p.id))
+		here = here.lerp(point, clampf((tick - p.stage_tick) / float(SHUFFLE_TICKS), 0.0, 1.0))
+	return here
 
 
 ## What the passenger's thought bubble says, or "" for nothing.
@@ -507,6 +518,7 @@ func to_snapshot() -> Dictionary:
 		self, _passengers, _schedule, _queues, _next_id, [_made, _missed], _scheduled.keys()
 	)
 	data["info_desk"] = info_desks.to_list()
+	data["standing"] = standing.to_list()
 	return data
 
 
@@ -532,6 +544,19 @@ func from_snapshot(data: Dictionary) -> bool:
 	if desk_state.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % desk_state["error"])
 		return false
+	# Standing claims are restored as saved, against spots derived from the
+	# loaded grid; a save migrated from before version 14 has none.
+	layout.rebuild(grid)
+	var spots := StandingSpots.new()
+	spots.rebuild(self)
+	var claims := spots.checked(data.get("standing", []), by_id)
+	if not data.has("standing") and int(data["save_version"]) >= SAVE_VERSION:
+		claims = {"error": "missing key 'standing'"}
+	if claims.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % claims["error"])
+		return false
+	spots.restore(claims["claims"])
+	standing = spots
 	tick = loaded["tick"]
 	_next_id = loaded["next_id"]
 	last_batch_seed = loaded["last_batch_seed"]
@@ -708,6 +733,8 @@ func _settled_leftovers(p: Passenger) -> String:
 		held.append("a kiosk visit")
 	if security.holds(p.id):
 		held.append("a security place")
+	if standing.spot_of(p.id) != StandingSpots.NO_SPOT:
+		held.append("a standing spot")
 	for q in _queues.values():
 		if (q["lane"] as Array).has(p.id) or (q["holding"] as Array).has(p.id):
 			held.append("a queue place")
@@ -811,6 +838,8 @@ func _advance(p: Passenger) -> void:
 				if p.stage == Passenger.Stage.STANDING:
 					next = Passenger.Stage.TO_EXIT
 				_set_stage(p, next)
+			elif p.stage == Passenger.Stage.STANDING:
+				_seat_from_spot(p)
 		Passenger.Stage.STANDING_UP:
 			if tick - p.stage_tick >= STAND_UP_TICKS:
 				_release_seat(p)
@@ -972,9 +1001,7 @@ func _to_gate(p: Passenger) -> void:
 		_set_stage(p, Passenger.Stage.TO_EXIT)
 		return
 	if p.seat_object == 0:
-		if not _claim_seat(p):
-			p.clear_path()
-			_set_stage(p, Passenger.Stage.STANDING)
+		_to_spot(p)
 		return
 	if p.is_moving():
 		return
@@ -983,6 +1010,60 @@ func _to_gate(p: Passenger) -> void:
 		_set_stage(p, Passenger.Stage.SITTING_DOWN)
 	else:
 		_release_seat(p)
+
+
+## No seat: a free seat first, else the nearest free standing spot
+## (StandingSpots), walked to and then stood on. With neither the passenger is
+## held where it is (StandingSpots.is_held()) and tries again on the tick it
+## got here and once a beat after.
+func _to_spot(p: Passenger) -> void:
+	var spot := standing.spot_of(p.id)
+	if spot == StandingSpots.NO_SPOT:
+		if p.stage_tick != tick and not _retry_now(p):
+			return
+		if _claim_seat(p):
+			return
+		spot = _claim_spot(p)
+		if spot == StandingSpots.NO_SPOT:
+			p.clear_path()
+			return
+	if p.is_moving():
+		return
+	if p.at == standing.cell_of(spot):
+		p.clear_path()
+		_set_stage(p, Passenger.Stage.STANDING)
+	else:
+		# Its path ended elsewhere (an edit): plan again on the next beat.
+		standing.release(p.id)
+
+
+## Claims the nearest free spot that `p` has a path to (StandingSpots.TRIES
+## nearest tried) and commits that path; NO_SPOT when none.
+func _claim_spot(p: Passenger) -> int:
+	var tries := 0
+	for spot in standing.free_nearest(p.at):
+		var target := standing.cell_of(spot)
+		var path: Array[Vector2i] = [p.at]
+		if target != p.at:
+			path = grid.find_path(p.at, target)
+		if not path.is_empty():
+			standing.claim(p.id, spot)
+			p.set_path(path)
+			return spot
+		tries += 1
+		if tries >= StandingSpots.TRIES:
+			break
+	return StandingSpots.NO_SPOT
+
+
+## A standing passenger takes a freed gate seat on its beat, which gives up
+## its spot.
+func _seat_from_spot(p: Passenger) -> void:
+	if standing.spot_of(p.id) == StandingSpots.NO_SPOT or not _retry_now(p):
+		return
+	if _claim_seat(p):
+		standing.release(p.id)
+		_set_stage(p, Passenger.Stage.TO_GATE)
 
 
 func _claim_seat(p: Passenger) -> bool:
@@ -1103,6 +1184,8 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 				break
 	var before := layout.security_lanes
 	layout.rebuild(grid)
+	# Rebuilt on the next tick (_reconcile), once however many edits came.
+	standing.stale = true
 	# A lane that broke or changed (SecurityLanes.broken()) ends its service at
 	# once: its admitted passengers go back to choosing, without clearance.
 	for arch in SecurityLanes.broken(before, layout.security_lanes):
@@ -1145,7 +1228,17 @@ func _reconcile() -> void:
 		if p.seat_object != 0 and not _seat_exists(p):
 			_release_seat(p)
 			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
-				_set_stage(p, Passenger.Stage.STANDING)
+				# Plans again: another seat or a standing spot.
+				p.clear_path()
+				_set_stage(p, Passenger.Stage.TO_GATE)
+	if standing.stale:
+		standing.rebuild(self)
+		# A claim whose spot the edit removed is dropped; the passenger plans
+		# again this tick.
+		for id in standing.drop_invalid():
+			var p: Passenger = _by_id[id]
+			p.clear_path()
+			_set_stage(p, Passenger.Stage.TO_GATE)
 	cafes.reconcile()
 	toilets.reconcile()
 	shops.reconcile()
@@ -1214,6 +1307,10 @@ func _retry_now(p: Passenger) -> bool:
 
 
 func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
+	# A standing spot is held only on the way to the gate and standing there:
+	# departure, a visit or the doors closing gives it up.
+	if stage != Passenger.Stage.TO_GATE and stage != Passenger.Stage.STANDING:
+		standing.release(p.id)
 	p.stage = stage
 	p.stage_tick = tick
 	stage_changed.emit(p.id, stage)
