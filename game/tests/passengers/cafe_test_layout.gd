@@ -23,9 +23,13 @@ const LAND_TABLE_2 := Vector2i(24, 11)
 ## {"air_room", "land_room", "air_counter", "land_counter", "air_table",
 ## "land_table"} (and "air_table_2", "land_table_2" with `extra_tables`).
 ## With a `shell` the terminal stands on its doors B and C (ReferenceTerminal),
-## for the windowed probe in the real scene.
+## for the windowed probe in the real scene. `venue` is the room type of both
+## rooms (cafe, bar, restaurant or stall).
 static func build(
-	grid: BuildGrid, extra_tables := false, shell: ShellDefinition = null
+	grid: BuildGrid,
+	extra_tables := false,
+	shell: ShellDefinition = null,
+	venue: StringName = &"cafe"
 ) -> Dictionary:
 	var built := ReferenceTerminal.build(grid, shell)
 	assert(built, "reference terminal refused")
@@ -41,8 +45,8 @@ static func build(
 	for result in grid.apply_batch(edits):
 		assert(result.ok, "cafe layout edit refused: %s" % result.reason_text())
 	var ids := {
-		"air_room": _apply(grid, BuildEdit.place_room(AIRSIDE_ROOM, &"cafe")).room_id,
-		"land_room": _apply(grid, BuildEdit.place_room(LANDSIDE_ROOM, &"cafe")).room_id,
+		"air_room": _apply(grid, BuildEdit.place_room(AIRSIDE_ROOM, venue)).room_id,
+		"land_room": _apply(grid, BuildEdit.place_room(LANDSIDE_ROOM, venue)).room_id,
 		"air_counter": _place(grid, &"cafe_counter", AIR_COUNTER),
 		"land_counter": _place(grid, &"cafe_counter", LAND_COUNTER),
 		"air_table": _place(grid, &"cafe_table", AIR_TABLE),

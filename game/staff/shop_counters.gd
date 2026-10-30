@@ -60,6 +60,16 @@ static func is_counter(grid: BuildGrid, id: int) -> bool:
 	return not record.is_empty() and COUNTER_ROOMS.has(StringName(record["def"]))
 
 
+## Whether the counter piece `def_id` works in a ready room of type `type_id`:
+## its own room type, and for the cafe counter every food room (a bar, a
+## restaurant and a stall use it too, decision food-and-drink-cafe-bar-sit-
+## down-restaurant-and-grab-and-go-st).
+static func works_in(def_id: StringName, type_id: StringName) -> bool:
+	if type_id == COUNTER_ROOMS[def_id]:
+		return true
+	return def_id == &"cafe_counter" and RoomTypes.get_type(type_id).food
+
+
 ## Whether `id` is a counter that needs no room (an info desk).
 static func is_roomless(grid: BuildGrid, id: int) -> bool:
 	return is_counter(grid, id) and ROOMLESS.has(StringName(grid.get_object(id)["def"]))
@@ -81,7 +91,7 @@ static func usable(grid: BuildGrid, counter: int) -> bool:
 		return false
 	var status := RoomRules.status(grid, room)
 	var def_id := StringName(grid.get_object(counter)["def"])
-	if not status.ok or status.type_id != COUNTER_ROOMS[def_id]:
+	if not status.ok or not works_in(def_id, status.type_id):
 		return false
 	return FacilitySlots.piece_inside(grid, counter, grid.get_room(room)["rect"])
 
@@ -104,7 +114,7 @@ static func counters(grid: BuildGrid) -> Array[int]:
 		if room == 0:
 			continue
 		var def_id := StringName(grid.get_object(id)["def"])
-		if ready.get(room, &"") != COUNTER_ROOMS[def_id]:
+		if not ready.has(room) or not works_in(def_id, ready[room]):
 			continue
 		if FacilitySlots.piece_inside(grid, id, grid.get_room(room)["rect"]):
 			out.append(id)

@@ -11,6 +11,15 @@ extends RefCounted
 ## and stands up; then its journey goes on where it left off: TO_SECURITY
 ## landside, TO_GATE airside. A guest seated at a gate stands up first.
 ##
+## A cafe here is any ready food room (RoomType.food): the cafe, the bar, the
+## sit-down restaurant and the grab-and-go stall (F4-6, decision food-and-
+## drink-cafe-bar-sit-down-restaurant-and-grab-and-go-st). They share the
+## counter and table and this whole lifecycle; the room type sets the order
+## time, the dwell, the base spend and the mood gain, so a visit's length and
+## pay run stall < cafe < bar < restaurant. The forecast counts the room's own
+## dwell, so a restaurant is only taken with lots of time, and a guest who runs
+## short leaves early and pays the short share at any of them.
+##
 ## Counters keep their own queue and lifecycle and never use the station
 ## loop. A queue holds every guest committed to the counter, walkers too, in
 ## commit order, never more than the counter's lane has cells; each guest
@@ -50,10 +59,11 @@ extends RefCounted
 ## After the money is in the wallet, for the '+$' pop over the counter.
 signal paid(passenger_id: int, room_id: int, amount: int)
 
-## Ticks to make an order once the guest is at the front.
-const ORDER_TICKS := 60
-## Ticks a guest stays seated when nothing hurries it.
-const DWELL_TICKS := 120
+## The cafe's ticks to make an order once the guest is at the front, and to
+## stay seated when nothing hurries it. The bar, restaurant and stall have
+## their own (RoomType.order_ticks and dwell_ticks).
+const ORDER_TICKS := RoomTypes.CAFE_ORDER_TICKS
+const DWELL_TICKS := RoomTypes.CAFE_DWELL_TICKS
 ## The approach cell is about a metre from the seated root, so the shuffle in
 ## and out takes longer than at a gate seat.
 const SHUFFLE_TICKS := 12
@@ -82,7 +92,8 @@ const MOOD_SPEND_SPAN := 40
 const AIRSIDE_SPEND_PERCENT := 125
 ## A guest who leaves early pays this share.
 const SHORT_SPEND_PERCENT := 50
-const SERVED_MOOD_BONUS := 10
+## The cafe's mood gain for a full visit (RoomType.mood_bonus per venue).
+const SERVED_MOOD_BONUS := RoomTypes.CAFE_MOOD_BONUS
 ## The stages a visit may start from: heading for security after check-in,
 ## heading for the gate, or waiting at it.
 const START_STAGES: Array[Passenger.Stage] = [
@@ -176,15 +187,15 @@ func plan_visit(p: Passenger, browsing := false) -> Dictionary:
 	):
 		return {}
 	refresh()
-	var plan := _plan(p, _reach_mm(p) if browsing else 0)
-	if plan.is_empty():
-		return {}
-	var arrival := CafeForecast.visit_arrival(_sim, p, plan["legs"])
-	if browsing:
-		arrival += BROWSE_SPARE_TICKS
-	if not CafeForecast.admits(_sim, p, arrival):
-		return {}
-	return plan
+	# The nearest venue whose whole visit fits: a restaurant that would not
+	# fit does not stop a guest from taking a stall or cafe further away.
+	for plan in _plans(p, _reach_mm(p) if browsing else 0):
+		var arrival := CafeForecast.visit_arrival(_sim, p, plan["legs"])
+		if browsing:
+			arrival += BROWSE_SPARE_TICKS
+		if CafeForecast.admits(_sim, p, arrival):
+			return plan
+	return {}
 
 
 ## Starts the visit a plan_visit() returned on this tick.
@@ -322,7 +333,8 @@ func step_counters() -> void:
 		if front.at != cells[0] or front.is_moving():
 			continue
 		q["serving"] = front.id
-		(_visits[front.id] as CafeVisit).service_end = _sim.tick + ORDER_TICKS
+		var ordering: CafeVisit = _visits[front.id]
+		ordering.service_end = _sim.tick + RoomTypes.get_type(ordering.venue).order_ticks
 		_set_stage.call(front, Passenger.Stage.CAFE_ORDER)
 
 
@@ -351,7 +363,7 @@ func step(p: Passenger) -> void:
 			_seat_step(p, visit)
 		Passenger.Stage.CAFE_SITTING_DOWN:
 			if _sim.tick - p.stage_tick >= PassengerSim.SIT_DOWN_TICKS:
-				visit.dwell_end = _sim.tick + DWELL_TICKS
+				visit.dwell_end = _sim.tick + RoomTypes.get_type(visit.venue).dwell_ticks
 				_set_stage.call(p, Passenger.Stage.CAFE_SEATED)
 		Passenger.Stage.CAFE_SEATED:
 			if _sim.tick >= visit.dwell_end:
@@ -459,15 +471,16 @@ func rederive() -> void:
 		var visit: CafeVisit = _visits[id]
 		_seats[visit.seat_key] = id
 		visit.seat = layout.seat(visit.room, visit.seat_key)
+		visit.venue = layout.cafe(visit.room).get("type", visit.venue)
 
 
-## The best visit for `p`: the cafe nearest by path whose soonest counter has
-## room in its queue and which has a free seat reachable from that counter,
-## ties to the lower room id. With `reach_mm` above 0, only cafes whose order
-## spot is that near, by octile distance and then by path. Empty when there
-## is none.
-func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
-	var best := {}
+## The visits `p` could start, nearest cafe by path first, ties to the lower
+## room id: one per cafe whose soonest counter has room in its queue and which
+## has a free seat reachable from that counter. With `reach_mm` above 0, only
+## cafes whose order spot is that near, by octile distance and then by path.
+## Empty when there is none.
+func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
+	var found: Array[Dictionary] = []
 	for cafe in layout.cafes:
 		var counter := _soonest_counter(cafe)
 		if counter.is_empty():
@@ -484,23 +497,29 @@ func _plan(p: Passenger, reach_mm := 0) -> Dictionary:
 		var mm: int = route["mm"]
 		if reach_mm > 0 and mm > reach_mm:
 			continue
-		if best.is_empty() or mm < best["mm"]:
-			best = {
-				"mm": mm, "room": cafe["room"], "counter": counter, "seat": seat, "route": route
-			}
-	if best.is_empty():
-		return best
-	var counter_id: int = best["counter"]["id"]
-	best["legs"] = {
-		"pre_ticks": PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0,
-		"to_queue_mm": best["mm"],
-		"order_ticks": _order_eta(counter_id),
-		"to_seat_mm": best["seat"]["mm"],
-		"dwell_ticks": DWELL_TICKS,
-		"leave_cell": best["seat"]["approach"],
-		"resume_stage": _resume_stage(p),
-	}
-	return best
+		var plan := {
+			"mm": mm,
+			"room": cafe["room"],
+			"type": cafe["type"],
+			"counter": counter,
+			"seat": seat,
+			"route": route,
+		}
+		plan["legs"] = {
+			"pre_ticks": PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0,
+			"to_queue_mm": mm,
+			"order_ticks": _order_eta(cafe["room"], counter["id"]),
+			"to_seat_mm": seat["mm"],
+			"dwell_ticks": RoomTypes.get_type(cafe["type"]).dwell_ticks,
+			"leave_cell": seat["approach"],
+			"resume_stage": _resume_stage(p),
+		}
+		found.append(plan)
+	found.sort_custom(
+		func(a: Dictionary, b: Dictionary) -> bool:
+			return a["mm"] < b["mm"] or (a["mm"] == b["mm"] and a["room"] < b["room"])
+	)
+	return found
 
 
 ## The open counter with room in its queue that would serve a newcomer
@@ -513,7 +532,7 @@ func _soonest_counter(cafe: Dictionary) -> Dictionary:
 			continue
 		if queue_of(counter["id"]).size() >= (counter["lane"] as Array).size():
 			continue
-		var eta := _order_eta(counter["id"])
+		var eta := _order_eta(cafe["room"], counter["id"])
 		if best.is_empty() or eta < best_eta:
 			best = counter
 			best_eta = eta
@@ -521,15 +540,17 @@ func _soonest_counter(cafe: Dictionary) -> Dictionary:
 
 
 ## Ticks until a newcomer joining a counter's queue now has its order: the
-## order in progress, the guests ahead and its own.
-func _order_eta(counter_id: int) -> int:
+## order in progress, the guests ahead and its own, each taking the order
+## time of the counter's room type.
+func _order_eta(room_id: int, counter_id: int) -> int:
+	var each := RoomTypes.get_type(layout.cafe(room_id)["type"]).order_ticks
 	var left := 0
 	var ahead := queue_of(counter_id).size()
 	var serving := serving_at(counter_id)
 	if serving != 0:
 		left = maxi(0, (_visits[serving] as CafeVisit).service_end - _sim.tick)
 		ahead -= 1
-	return left + ahead * ORDER_TICKS + ORDER_TICKS
+	return left + ahead * each + each
 
 
 ## The free seat nearest `from` that can be walked to from it, with the walk
@@ -569,7 +590,7 @@ func _reach_mm(p: Passenger) -> int:
 
 
 ## Whether some open counter's order spot is within the passenger's browse
-## reach, by octile distance (the cheap first test; _plan() checks the path).
+## reach, by octile distance (the cheap first test; _plans() checks the path).
 func _passing_cafe(p: Passenger) -> bool:
 	refresh()
 	var reach := _reach_mm(p)
@@ -598,6 +619,7 @@ func _commit(p: Passenger, plan: Dictionary) -> void:
 	var visit := CafeVisit.new()
 	visit.passenger = p.id
 	visit.room = plan["room"]
+	visit.venue = plan["type"]
 	visit.counter = counter_id
 	visit.seat_key = seat["key"]
 	visit.seat = layout.seat(visit.room, visit.seat_key)
@@ -718,7 +740,8 @@ func _end(p: Passenger, visit: CafeVisit) -> void:
 func _settle(p: Passenger, visit: CafeVisit) -> void:
 	if visit.settled or visit.outcome == CafeVisit.Outcome.NONE:
 		return
-	var base := RoomTypes.get_type(&"cafe").base_spend
+	var venue := RoomTypes.get_type(visit.venue)
+	var base := venue.base_spend
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
 	var amount := spend(base, p.mood, airside, visit.outcome)
 	if _sim.wallet == null:
@@ -731,7 +754,7 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 	visit.settled = true
 	p.hunger = 0
 	if visit.outcome == CafeVisit.Outcome.COMPLETE:
-		p.mood = mini(p.mood + SERVED_MOOD_BONUS, PassengerSim.MOOD_MAX)
+		p.mood = mini(p.mood + venue.mood_bonus, PassengerSim.MOOD_MAX)
 	paid.emit(p.id, visit.room, amount)
 
 

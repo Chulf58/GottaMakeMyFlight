@@ -16,11 +16,12 @@ extends GdUnitTestSuite
 ## ATM on the Money page, not Desks.
 
 ## The pages behind the Furniture button: eight furniture pages, three Stores
-## pages and the Money page (was 8 before the Stores pages joined the group, 11
-## before the Money page did).
-const PAGE_COUNT := 12
+## pages, the Money page and the Dining page (was 8 before the Stores pages
+## joined the group, 11 before the Money page did, 12 before the Dining page did).
+const PAGE_COUNT := 13
 const MAX_CARDS_PER_PAGE := 4
-## The store tools on the Stores pages that are not furniture pieces.
+## The store and food room tools on the Stores, Money and Dining pages that are
+## not furniture pieces.
 const STORE_TOOLS := [
 	BuildMode.Tool.PHARMACY_ROOM,
 	BuildMode.Tool.DUTY_FREE_ROOM,
@@ -31,6 +32,9 @@ const STORE_TOOLS := [
 	BuildMode.Tool.FASHION_RAIL,
 	BuildMode.Tool.EXCHANGE_ROOM,
 	BuildMode.Tool.ATM_ROOM,
+	BuildMode.Tool.BAR_ROOM,
+	BuildMode.Tool.RESTAURANT_ROOM,
+	BuildMode.Tool.STALL_ROOM,
 ]
 
 var _port: SubViewport

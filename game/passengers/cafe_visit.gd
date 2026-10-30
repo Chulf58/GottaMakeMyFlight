@@ -9,6 +9,10 @@ enum Outcome { NONE, COMPLETE, SHORT }
 
 var passenger := 0
 var room := 0
+## The room's type (RoomTypes: cafe, bar, restaurant or stall), kept so a visit
+## whose room is removed is still paid by its own numbers. Not saved: derived
+## from the room on load.
+var venue: StringName = &"cafe"
 var counter := 0
 ## The seat reserved when the visit was committed, "<table id>:<seat index>".
 var seat_key := ""

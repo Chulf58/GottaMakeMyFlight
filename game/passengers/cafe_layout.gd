@@ -6,7 +6,8 @@ extends RefCounted
 ## usable counters, their queue lanes and the seats; CafeSim owns who is
 ## queuing and sitting. Rebuilt after every grid edit, after TerminalLayout.
 ##
-## A cafe is a ready cafe room (RoomRules). Its counters are the cafe_counter
+## A cafe is a ready food room (RoomRules; RoomType.food: a cafe, bar,
+## restaurant or stall, all with the same counters and tables). Its counters are the cafe_counter
 ## pieces RoomRules counts for it; each has a fixed lane from its order spot
 ## (slot 0) straight out along its front, up to LANE_SLOTS cells, stopping at
 ## a closed step, a station lane, another object's interaction cell or a seat's
@@ -15,7 +16,8 @@ extends RefCounted
 
 const LANE_SLOTS := 4
 
-## One entry per cafe, in room id order: {"room": int, "counters": Array of
+## One entry per cafe, in room id order: {"room": int, "type": the room's
+## RoomTypes id (cafe, bar, restaurant or stall), "counters": Array of
 ## {"id": int, "lane": Array[Vector2i]} in id order, "seats": Array of seat
 ## entries in key order}. A seat entry is a BuildObjectDef seat descriptor
 ## plus "key" ("<table id>:<seat index>") and "object_id".
@@ -38,7 +40,7 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 			taken[spot] = true
 	for room_id in rooms:
 		var status := RoomRules.status(grid, room_id)
-		if status.type_id != &"cafe" or not status.ok:
+		if not RoomTypes.get_type(status.type_id).food or not status.ok:
 			continue
 		var area: Rect2i = grid.get_room(room_id)["rect"]
 		var seats := _seats(grid, ids, area)
@@ -58,7 +60,9 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 			if not lane.is_empty():
 				counters.append({"id": id, "lane": lane})
 		if not counters.is_empty() and not seats.is_empty():
-			cafes.append({"room": room_id, "counters": counters, "seats": seats})
+			cafes.append(
+				{"room": room_id, "type": status.type_id, "counters": counters, "seats": seats}
+			)
 
 
 ## The cafe entry for a room, or an empty dictionary when it is not usable.

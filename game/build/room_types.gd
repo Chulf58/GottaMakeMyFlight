@@ -31,16 +31,37 @@ class RoomType:
 	## go to for money, not to pass time (the exchange and the ATM): a visit
 	## leaves boredom as it was, and a bored passenger never plans one.
 	var relieves_boredom := true
+	## Whether passengers eat and drink here through CafeSim (the cafe, the bar,
+	## the sit-down restaurant and the grab-and-go stall): all four use the
+	## cafe counter and table, and differ in the numbers below.
+	var food := false
+	## Ticks to make an order at the counter, and ticks a served guest stays
+	## seated when nothing hurries it (a food room's visit length).
+	var order_ticks := 0
+	var dwell_ticks := 0
+	## Mood a guest who finishes the visit gains.
+	var mood_bonus := 0
 	## The piece a ready room is charged upkeep for each game day, and the
 	## charge per piece (PriceTable); none for a room that costs nothing to run.
 	var upkeep_piece: StringName = &""
 	var upkeep_per_piece := 0
+
+	## The ticks one visit takes at the counter and the table, queue and
+	## walking not counted: the order and the dwell.
+	func visit_ticks() -> int:
+		return order_ticks + dwell_ticks
 
 	## Whether a room of `size` cells is big enough, turned either way.
 	func fits(size: Vector2i) -> bool:
 		var straight := size.x >= min_size.x and size.y >= min_size.y
 		return straight or (size.x >= min_size.y and size.y >= min_size.x)
 
+
+## The cafe's order, dwell and mood bonus, which CafeSim names ORDER_TICKS,
+## DWELL_TICKS and SERVED_MOOD_BONUS.
+const CAFE_ORDER_TICKS := 60
+const CAFE_DWELL_TICKS := 120
+const CAFE_MOOD_BONUS := 10
 
 static var _types: Dictionary = {}
 
@@ -69,7 +90,23 @@ static func _build() -> void:
 	cafe.seat_piece = &"cafe_table"
 	cafe.seats_per_piece = 2
 	cafe.base_spend = 15
+	cafe.food = true
+	cafe.order_ticks = CAFE_ORDER_TICKS
+	cafe.dwell_ticks = CAFE_DWELL_TICKS
+	cafe.mood_bonus = CAFE_MOOD_BONUS
 	_types[cafe.id] = cafe
+
+	# The food variants (F4-6; decision food-and-drink-cafe-bar-sit-down-
+	# restaurant-and-grab-and-go-st): the same counter and table as the cafe,
+	# so a visit takes the same path through CafeSim, with a longer or shorter
+	# visit and a larger or smaller spend. Visit length and spend run stall <
+	# cafe < bar < restaurant. The bar lifts mood the most; the restaurant
+	# needs the most room. A guest who runs short of time leaves early and
+	# pays the short share like any cafe guest, so none of them causes a miss.
+	# All numbers are tuning values pinned by tests.
+	_add_food(&"stall", "Grab-and-go stall", Vector2i(3, 3), [8, 30, 30, 5])
+	_add_food(&"bar", "Bar", Vector2i(3, 4), [24, 80, 200, 20])
+	_add_food(&"restaurant", "Restaurant", Vector2i(4, 4), [40, 120, 360, 15])
 
 	# Bag room (decision baggage-rides-a-player-built-belt-from-check-in-to-a-
 	# bag-roo): where the check-in belt ends. It seats nobody and earns no
@@ -158,6 +195,26 @@ static func _build() -> void:
 		[&"currency_exchange", "Needs an exchange counter"]
 	)
 	_add_money_store(&"atm", "ATM", Vector2i(1, 2), 3, [&"atm", "Needs an ATM"])
+
+
+## A food room type like the cafe: `numbers` is [base spend, order ticks,
+## dwell ticks, mood bonus].
+static func _add_food(
+	id: StringName, display_name: String, min_size: Vector2i, numbers: Array
+) -> void:
+	var food := RoomType.new()
+	food.id = id
+	food.display_name = display_name
+	food.min_size = min_size
+	food.required = [[&"cafe_counter", "Needs a counter"], [&"cafe_table", "Needs a table"]]
+	food.seat_piece = &"cafe_table"
+	food.seats_per_piece = 2
+	food.base_spend = numbers[0]
+	food.food = true
+	food.order_ticks = numbers[1]
+	food.dwell_ticks = numbers[2]
+	food.mood_bonus = numbers[3]
+	_types[id] = food
 
 
 ## A shop room type that needs `pieces[0]` (its counter or till) and
