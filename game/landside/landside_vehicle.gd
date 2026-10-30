@@ -33,3 +33,7 @@ var lot := -1
 var stage_tick := 0
 ## PARKED: the absolute tick the car leaves; else 0.
 var leave_tick := 0
+## Ticks until the next of `bookings` may step out: a party gets out one
+## passenger at a time (LandsideSim.RELEASE_GAP_TICKS apart). 0 when the next
+## may get out at once, and always 0 with nobody aboard.
+var release_wait := 0
