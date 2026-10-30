@@ -42,14 +42,6 @@ const BACK_SHARE := 0.4
 ## lifted, pushed-out path, the grip came between the two and the pack into the
 ## belly (stall_bags_probe, seed 3894526912, backpack_in at k 0.83).
 const BACK_EASE_IN := 0.8
-## A backpack in a hand-led move is held this far from its grab loop (its own
-## frame, the loop mid-depth at y 0.082, the bag 0 to 0.177 deep, its top face
-## at z 0.21 and the loop's top at 0.235): past the face hung toward the body
-## and over the top (a grip offset), so less of the fingers, which curl 3 to 12
-## cm down and 7 to 13 cm back from the grip (measured, board item 5ed915b0),
-## reach into the top. No further: the probes' FLOAT check needs the grip within
-## 6 cm of the bag's bounds (z 0.295, y 0.237).
-const LOOP_OFFSET := Vector3(0.0, 0.15, 0.05)
 ## Off the floor a bag turns to hang from the hand over this share of its
 ## carry (off a tray, 0.35: the table is under it).
 const UPRIGHT_FROM_FLOOR := 0.2
@@ -88,8 +80,9 @@ const STALL_TOTE_BACK_M := 0.05
 ## move, and pushed as it is outside from this one on.
 const STALL_AHEAD_BACK := Vector2(0.35, 0.65)
 ## A backpack set down in a stall is held this far over its grab loop (its own
-## frame), the fingers over the top, not in it.
-const STALL_LOOP_UP := Vector3(0.0, 0.0, 0.06)
+## frame), the fingers over the top, not in it, and within the probes' GRIP_ON
+## 3 cm of the loop (6 cm left the hand off it).
+const STALL_LOOP_UP := Vector3(0.0, 0.0, 0.02)
 ## A hard case standing in a stall is held by the middle of its top end, the
 ## grip FRONT_PALM_M over it (the palm on the top, as on the handle in front).
 ## Its body is this deep (measured on the mesh): bag_box() takes in the handle,
@@ -289,8 +282,10 @@ static func anchor(kind: SecurityLooks.Kind, bar_z: float) -> Vector3:
 	if kind == SecurityLooks.Kind.ROLLER:
 		return Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, bar_z)
 	if kind == SecurityLooks.Kind.BACKPACK:
-		# Held by the loop, the fingers outside the bag's face (LOOP_OFFSET).
-		return CarryOnProps.BACKPACK_LOOP + LOOP_OFFSET
+		# Held by its top grab loop, the pack hanging below the hand (conductor
+		# ruling 2026-10-30: held 15 cm off it, LOOP_OFFSET, the pack hung beside
+		# an open hand at k 0.5 off and onto the back).
+		return CarryOnProps.BACKPACK_LOOP
 	return CarryOnProps.grip_anchor(kind)
 
 

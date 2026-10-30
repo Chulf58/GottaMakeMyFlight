@@ -81,9 +81,10 @@ const MOMENTS := {
 	"set-down": [[0.2, 0.3], [0.38, 0.44], [0.6, 0.7]],
 	"pick-up": [[0.3, 0.4], [0.5, 0.6], [0.68, 0.76]],
 	# A backpack taken off the back into the hand before the stall and put back
-	# on after it, mid-move (anti-pattern a-float-hand-gap-of-0-does-not-prove-a-
-	# carried-bag-is-grippe: the palm on the loop, the pack clear of the body).
-	"off-back": [[0.45, 0.55]],
+	# on after it, mid-move, and off it as it comes into the front carry
+	# (anti-pattern a-float-hand-gap-of-0-does-not-prove-a-carried-bag-is-
+	# grippe: the palm on the loop, the pack clear of the body).
+	"off-back": [[0.45, 0.55], [0.9, 0.98]],
 	"on-back": [[0.45, 0.55]],
 }
 ## The close plate's camera: this high over the floor, offset this far across
@@ -833,6 +834,8 @@ func _report() -> void:
 	PlateSteps.lead_sheet(_out_dir)
 	if _floats["float"] > 0 or _stall_float > 0:
 		_invalid("bags in the air: %d frames, %d in a stall" % [_floats["float"], _stall_float])
+	if _floats["grip_off"] > 0:
+		_invalid("a held bag is off its grip point (GRIP_ON): %d frames" % _floats["grip_off"])
 	if _stall_frames == 0:
 		_invalid("no bag was checked inside a stall")
 	if _float_control.size() != 2 or _float_control[0] != "float" or _float_control[1] == "float":

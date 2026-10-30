@@ -1,7 +1,7 @@
 class_name CarryWorn
 extends RefCounted
-## Where a worn shoulder bag hangs on its walker (CarryOnProps draws it; kept
-## out of carry_on_props.gd, which is at its line cap).
+## Where a worn shoulder bag hangs on its walker, and a backpack held in front
+## (CarryOnProps draws them; kept out of carry_on_props.gd, at its line cap).
 
 
 ## A shoulder bag hung on the shoulder of `side` (0 right, 1 left) of a body
@@ -66,3 +66,15 @@ static func stoop_shift(stoop: CarryStoop, pivot: Vector3, at: Vector3) -> Vecto
 		before += Vector3(0.0, hips.x, hips.y)
 	var unbent := CarryStoop.turn(before, aim, stoop.drawn).inverse() * rel
 	return skeleton.global_transform.basis * (rel - unbent)
+
+
+## A backpack held in front of a body turned to `yaw` by its top grab loop at
+## `grip` (CarryOnProps.carried_in_front): hanging upright below the hand, its
+## back panel (its y 0 face) toward the body, as worn on the chest (conductor
+## ruling 2026-10-30: lying flat it was held over its middle, 27 cm off its
+## loop).
+static func loop_in_front(grip: Vector3, yaw: float, scale_by: float) -> Transform3D:
+	var turn := Basis(Vector3.UP, yaw)
+	var basis := Basis(turn * Vector3.LEFT, turn * Vector3.BACK, Vector3.UP)
+	basis = basis.scaled(Vector3.ONE * scale_by)
+	return Transform3D(basis, grip - basis * CarryOnProps.BACKPACK_LOOP)

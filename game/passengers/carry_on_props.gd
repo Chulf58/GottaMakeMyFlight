@@ -266,10 +266,13 @@ static func grip_anchor(kind: SecurityLooks.Kind) -> Vector3:
 
 ## A hard case carried in front of the body (a cell closed on both sides):
 ## lying flat across the body, its handle on top just under the hand at `grip`
-## (FRONT_PALM_M below the knuckles).
+## (FRONT_PALM_M below the knuckles). A backpack hangs from its grab loop at the
+## grip, its back panel to the body (CarryWorn.loop_in_front).
 static func carried_in_front(
 	grip: Vector3, yaw: float, scale_by: float, kind := SecurityLooks.Kind.CASE
 ) -> Transform3D:
+	if kind == SecurityLooks.Kind.BACKPACK:
+		return CarryWorn.loop_in_front(grip, yaw, scale_by)
 	var size := bag_size(kind)
 	var flat := _flat(yaw, scale_by)
 	return Transform3D(flat, grip - Vector3.UP * (size.y * scale_by + FRONT_PALM_M))
