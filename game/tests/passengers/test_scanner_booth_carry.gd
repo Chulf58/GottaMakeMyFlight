@@ -292,13 +292,14 @@ func test_a_load_during_the_turn_in_draws_the_arms_tucked() -> void:
 			backpack = id
 			break
 	# Spawns until the next id is a backpack passenger, then sends it with one
-	# bag and one without.
+	# bag and one without. A skipped spawn is parked as MADE, a done stage the
+	# sim leaves alone (TO_GATE would walk an uncleared passenger to the gate).
 	var ids: Array[int] = []
 	while ids.size() < 2:
 		var id := w.send(1 if ids.is_empty() else 0)
 		var p := w.world.passenger(id)
 		if ids.is_empty() and SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.BACKPACK:
-			p.stage = Passenger.Stage.TO_GATE
+			p.stage = Passenger.Stage.MADE
 			continue
 		ids.append(id)
 		w.world.run_to(w.world.clock.tick + SecurityTestWorld.SPACING)
