@@ -365,6 +365,8 @@ var _area_over_ui := false
 ## outside the room it stands in ("" for none).
 var _front_warning := ""
 var _area := AreaDrag.new()
+## The room edge being dragged to resize a room (RoomResize).
+var _resize := RoomResize.new()
 ## The Wall or Glass row being dragged, and the status line text it shows.
 var _row := WallRowDrag.new()
 var _row_label := ""
@@ -490,10 +492,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _pointer_position().distance_to(_press_screen) < CLICK_SLOP_PX:
 				return
 			_drag_moved = true
-		if _area.active:
-			move_area(point)
-		else:
+		if _row.active:
 			move_row(point)
+		else:
+			move_area(point)
 
 
 ## Picks a tool.
@@ -601,6 +603,12 @@ func _apply_at(point: Vector3) -> BuildResult:
 ## Starts a Floor or Remove rectangle on the cell under a ground point. A press
 ## outside the grid is a plain click, which the grid refuses with its reason.
 func begin_area(point: Vector3) -> void:
+	# A room tool pressed in the outer band of a room of its type grabs that
+	# room's edge to resize it instead of marking a new room (RoomResize).
+	if TOOL_ROOMS.has(tool) and _resize.begin(grid, point, TOOL_ROOMS[tool]):
+		_status_note = ""
+		_hover_key = ""
+		return
 	var cell := grid.world_to_cell(point)
 	if not grid.in_bounds(cell):
 		if tool == Tool.BELT:
@@ -665,7 +673,7 @@ func _row_edits() -> Array[BuildEdit]:
 ## True while a rectangle or a wall row is being dragged; the drag then owns
 ## the hover (BuildMenu's refusal card, GhostReason, hides).
 func is_dragging() -> bool:
-	return _area.active or _row.active
+	return _area.active or _row.active or _resize.active
 
 
 ## The edit under the pointer, or null (BuildMenu prices it for the cost line).
@@ -694,9 +702,12 @@ func dragged_area() -> Rect2i:
 	return _area.rect() if _area.active else Rect2i()
 
 
-## Stretches the rectangle to the cell under a ground point.
+## Stretches the rectangle to the cell under a ground point, or moves the grabbed
+## room edge to the nearest grid line (RoomResize).
 func move_area(point: Vector3) -> void:
-	if _area.active:
+	if _resize.active:
+		_resize.move(grid, point)
+	elif _area.active:
 		_area.move(grid.world_to_cell(point))
 
 
@@ -712,6 +723,9 @@ func finish_area() -> AreaDrag.Outcome:
 
 
 func _finish_area() -> AreaDrag.Outcome:
+	if _resize.active:
+		_finish_resize()
+		return null
 	if not _area.active:
 		return null
 	_area.cancel()
@@ -742,6 +756,22 @@ func _finish_area() -> AreaDrag.Outcome:
 	_note_cell = _area.end_cell()
 	_show_status(null)
 	return outcome
+
+
+## Gives the room its dragged rectangle (RoomResize.finish()).
+func _finish_resize() -> void:
+	var before := _resize.original()
+	_hover_key = ""
+	grid.hold_signals()
+	var result := _resize.finish(grid, wallet())
+	if result != null and result.ok:
+		_reshape_belts(_rect_cells(before.merge(_resize.rect())))
+	grid.release_signals()
+	if result != null and result.ok:
+		grid_changed.emit()
+	_status_note = _resize.note
+	_note_cell = _resize.pointer_cell
+	_show_status(null)
 
 
 ## Marks the released rectangle as a room of the current room tool's type.
@@ -900,6 +930,7 @@ func cancel_area() -> void:
 		return
 	_area.cancel()
 	_row.cancel()
+	_resize.cancel()
 	_hover_key = ""
 	_show_status(null)
 
@@ -1110,7 +1141,7 @@ func _update_ghost(point: Variant) -> void:
 		_pointer_on_grid = point != null
 		_hover_landside(_landside_plan)
 		return
-	if _area.active:
+	if _area.active or _resize.active:
 		_draw_area()
 		return
 	if _row.active:
@@ -1292,8 +1323,24 @@ func _draw_row() -> void:
 	_show_status(null)
 
 
+## One tinted slab over the room's dragged rectangle, red when it would be refused.
+func _draw_resize() -> void:
+	var area := _resize.rect()
+	var key := "resize:%s" % area
+	if key == _hover_key:
+		return
+	_hover_key = key
+	_clear_ghost()
+	var fits := RoomResize.check(grid, _resize.room_id, area).ok
+	_ghost_slab(area, _valid_material if fits else _invalid_material)
+	_show_status(null)
+
+
 ## One tinted slab over the whole rectangle, with its size on the status line.
 func _draw_area() -> void:
+	if _resize.active:
+		_draw_resize()
+		return
 	if tool == Tool.BELT:
 		_draw_belt(_area.start_cell(), _area.end_cell())
 		return
@@ -1414,6 +1461,9 @@ func _edit_key(edit: BuildEdit) -> String:
 func _show_status(result: BuildResult) -> void:
 	if _row.active:
 		_set_status(_row_label)
+		return
+	if _resize.active:
+		_set_status(_resize.label(grid))
 		return
 	if _area.active and TOOL_ROOMS.has(tool):
 		_set_status(RoomTool.drag_label(grid, _area.rect(), TOOL_ROOMS[tool]))

@@ -14,6 +14,7 @@ enum Kind {
 	PLACE_ROOM,
 	REMOVE_ROOM,
 	RESHAPE_BELT,
+	RESIZE_ROOM,
 }
 
 var kind: Kind = Kind.PAINT_FLOOR
@@ -28,7 +29,8 @@ var def_id: StringName = &""
 var facing: int = 0
 var object_id: int = 0
 ## For PLACE_ROOM: the room's size in cells (`cell` is its north-west cell)
-## and its RoomTypes id. For REMOVE_ROOM: the room's id.
+## and its RoomTypes id. For REMOVE_ROOM: the room's id. For RESIZE_ROOM: the room's id
+## and its new rectangle (`cell` and `room_size`); its type and id stay.
 var room_size := Vector2i.ZERO
 var room_type: StringName = &""
 var room_id: int = 0
@@ -90,6 +92,15 @@ static func place_room(area: Rect2i, type: StringName) -> BuildEdit:
 
 static func remove_room(id: int) -> BuildEdit:
 	var edit := _make(Kind.REMOVE_ROOM, Vector2i.ZERO)
+	edit.room_id = id
+	return edit
+
+
+## Gives room `id` the rectangle `area`, keeping its type and id: the room
+## resize, one edit so a refusal leaves the room as it was.
+static func resize_room(id: int, area: Rect2i) -> BuildEdit:
+	var edit := _make(Kind.RESIZE_ROOM, area.position)
+	edit.room_size = area.size
 	edit.room_id = id
 	return edit
 

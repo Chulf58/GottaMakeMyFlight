@@ -342,6 +342,12 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 				result = BuildResult.accepted()
 			else:
 				result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
+		BuildEdit.Kind.RESIZE_ROOM:
+			if _rooms.has(edit.room_id):
+				var kept: StringName = _rooms[edit.room_id]["type"]
+				result = _check_place_room(Rect2i(edit.cell, edit.room_size), kept, edit.room_id)
+			else:
+				result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
 		BuildEdit.Kind.RESHAPE_BELT:
 			result = _check_reshape_belt(edit)
 	if result.ok:
@@ -698,6 +704,9 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_ROOM:
 			result.room_id = edit.room_id
 			_erase_room(edit.room_id)
+		BuildEdit.Kind.RESIZE_ROOM:
+			result.room_id = edit.room_id
+			_resize_room(edit.room_id, Rect2i(edit.cell, edit.room_size))
 		BuildEdit.Kind.RESHAPE_BELT:
 			# Same id, anchor and saved price; every belt piece is one cell.
 			result.object_id = object_at(edit.cell)
@@ -1019,9 +1028,10 @@ func _check_remove_floor(cell: Vector2i) -> BuildResult:
 
 
 ## A room needs a known type and a non-empty rectangle of floor cells inside
-## the grid that no other room covers. Its minimum size is not a placement
-## rule: RoomRules shows it as a note, so a tuning change never refuses a save.
-func _check_place_room(area: Rect2i, type: StringName) -> BuildResult:
+## the grid that no other room covers (`own_id`, a room being resized, does
+## not count as another). Its minimum size is not a placement rule: RoomRules
+## shows it as a note, so a tuning change never refuses a save.
+func _check_place_room(area: Rect2i, type: StringName, own_id := 0) -> BuildResult:
 	if RoomTypes.get_type(type) == null:
 		return BuildResult.refused(BuildResult.Reason.UNKNOWN_ROOM_TYPE)
 	var has_cells := area.size.x > 0 and area.size.y > 0
@@ -1032,13 +1042,19 @@ func _check_place_room(area: Rect2i, type: StringName) -> BuildResult:
 			var i := _index(Vector2i(x, y))
 			if _floor[i] == FLOOR_NONE:
 				return BuildResult.refused(BuildResult.Reason.NO_FLOOR)
-			if _room_at[i] != 0:
+			if _room_at[i] != 0 and _room_at[i] != own_id:
 				return BuildResult.refused(BuildResult.Reason.ROOM_OVERLAP)
 	return BuildResult.accepted()
 
 
 func _insert_room(room_id: int, type: StringName, area: Rect2i) -> void:
 	_rooms[room_id] = {"type": type, "rect": area}
+	_fill_room_cells(area, room_id)
+
+
+func _resize_room(room_id: int, area: Rect2i) -> void:
+	_fill_room_cells(_rooms[room_id]["rect"], 0)
+	_rooms[room_id]["rect"] = area
 	_fill_room_cells(area, room_id)
 
 
