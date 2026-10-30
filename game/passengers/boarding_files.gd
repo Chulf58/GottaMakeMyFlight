@@ -11,15 +11,20 @@ extends RefCounted
 ## apron stays last in its door file, walk left -apron_mm, until it is GAP_MM
 ## out, so the next one indoors cannot catch it at the door.
 ##
-## Admission: a walker joins a file only where it keeps GAP_MM of walk to the
-## walker ahead and to the walker behind. Until then it is pending and stands
-## where it is: a walker that has chosen its exit waits for its door file, and
-## the head of a door file waits at the door for the apron file. Pending
-## walkers are admitted at the start of each tick (PassengerSim), file by file
-## in (walk left, id) order. Nothing is released on a timer: the head of a file
-## always walks on or leaves it, so every wait ends.
+## Admission: a walker joins a file, in order of walk left, as soon as the
+## walker that would be ahead of it is at least GAP_MM ahead. Until then it is
+## pending and stands where it is: a walker that has chosen its exit waits for
+## its door file, and the head of a door file waits at the door for the apron
+## file. The walker that comes to be behind a newcomer is capped by it from
+## then on, so a waiting walker is never walked through. Pending walkers are
+## admitted at the start of each tick (PassengerSim), file by file in (walk
+## left, id) order. Nothing is released on a timer: the head of a file always
+## walks on or leaves it, so every wait ends.
 ##
-## Not guaranteed: walkers in different files are not spaced from each other,
+## Not guaranteed: right after a walker joins, the one behind it can be closer
+## than GAP_MM for a few ticks; it is capped at once, so it never moves closer
+## and the gap only grows. Walkers in different files are not spaced from each
+## other,
 ## so an indoor corridor shared by two doors' routes and the apron before the
 ## routes join stay unspaced, and walkers not heading out (seated, standing,
 ## queuing) are not spaced from walkers in a file.
@@ -233,9 +238,11 @@ func to_dict() -> Dictionary:
 ## sim's layout rebuilt from the loaded grid): {"files": BoardingFiles} or
 ## {"error": text}. Every walker heading out with an exit chosen must be in its
 ## door file or pending, every apron walker in the apron file of its walk's
-## plane and, while under GAP_MM out, in its door file; walkers next to each
-## other in a file are at least GAP_MM apart; a pending walker in a door file
-## is its head, standing at the door.
+## plane and, while under GAP_MM out, in its door file; walk left never goes
+## down along a file (the gap a walker had to the one ahead when it joined is
+## not checked again, since the one behind a newcomer may stand closer for a
+## few ticks); a pending walker in a door file stands at the door, with only
+## apron walkers ahead of it.
 static func checked(data: Variant, by_id: Dictionary, sim: PassengerSim) -> Dictionary:
 	if (
 		typeof(data) != TYPE_DICTIONARY
@@ -370,7 +377,8 @@ func _room(sim: PassengerSim, ids: Array, p: Passenger, in_door: bool) -> int:
 
 
 ## Where a walker with walk left `left` and id `id` goes in `ids`, or -1 when
-## it would be closer than GAP_MM to the walker ahead or behind.
+## it would be closer than GAP_MM to the walker ahead. The walker behind it
+## may be closer: it is capped by the newcomer from the next step on.
 func _slot(sim: PassengerSim, ids: Array, left: int, id: int, in_door: bool) -> int:
 	var at := ids.size()
 	for k in ids.size():
@@ -382,10 +390,6 @@ func _slot(sim: PassengerSim, ids: Array, left: int, id: int, in_door: bool) -> 
 	if at > 0:
 		var ahead := sim.get_passenger(ids[at - 1])
 		if left - (door_left(ahead) if in_door else plane_left(ahead)) < GAP_MM:
-			return -1
-	if at < ids.size():
-		var behind := sim.get_passenger(ids[at])
-		if (door_left(behind) if in_door else plane_left(behind)) - left < GAP_MM:
 			return -1
 	return at
 
@@ -437,8 +441,8 @@ func _load_door(entry: Variant, by_id: Dictionary) -> String:
 		var out := p.stage == Passenger.Stage.APRON and p.apron_mm < GAP_MM
 		if p.exit_object != door or not (heading or out) or _door_of.has(id):
 			return "passenger %d cannot be in door file %d" % [id, door]
-		if last != null and door_left(p) - door_left(last) < GAP_MM:
-			return "passengers %d and %d in door file %d are too close" % [last.id, id, door]
+		if last != null and door_left(p) < door_left(last):
+			return "passengers %d and %d in door file %d are out of order" % [last.id, id, door]
 		_door_of[id] = door
 		last = p
 	_doors[door] = ids
@@ -462,8 +466,8 @@ func _load_plane(entry: Variant, by_id: Dictionary) -> String:
 			key = mine
 		if mine != key or _planes.has(key):
 			return "passenger %d's walk ends at another plane than its apron file" % id
-		if last != null and plane_left(p) - plane_left(last) < GAP_MM:
-			return "passengers %d and %d in an apron file are too close" % [last.id, id]
+		if last != null and plane_left(p) < plane_left(last):
+			return "passengers %d and %d in an apron file are out of order" % [last.id, id]
 		last = p
 	for id: int in ids:
 		_plane_of[id] = key

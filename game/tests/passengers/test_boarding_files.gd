@@ -1,8 +1,9 @@
 class_name TestBoardingFiles
 extends GdUnitTestSuite
 ## The ordered boarding files in the running sim (BoardingFiles): over a full
-## boarding every file keeps its gap, walkers sharing a cell set off one at a
-## time, a newcomer that does not fit pends without moving, a walker whose way
+## boarding every file keeps its order and no walker closes in on the one
+## ahead, walkers sharing a cell set off one at a time, a newcomer joins in
+## front of a walker that is too close behind and caps it, a walker whose way
 ## changes takes its place again, a walker that leaves frees the one behind it,
 ## and nothing is let through on a timer. Each case builds its own world,
 ## because each one moves passengers through the files.
@@ -72,32 +73,39 @@ static func turn_out(world: PassengerTestWorld, p: Passenger, cell: Vector2i) ->
 	p.apron_mm = 0
 
 
-## Every adjacent pair in every file at least GAP apart; the first offence as
-## text, or "".
-static func gap_problem(world: PassengerTestWorld) -> String:
+## Every file in order of walk left, and no walker closer than GAP to the one
+## ahead of it that got closer since the last call: the first offence as text,
+## or "". `gaps` carries each adjacent pair's gap from call to call. A walker
+## just behind a newcomer may be closer than GAP, but it never closes in.
+static func spacing_problem(world: PassengerTestWorld, gaps: Dictionary) -> String:
 	var files := world.sim.files
-	var seen := {}
+	var now := {}
+	var problem := ""
 	for id in world.sim.passenger_ids():
-		var door := files.door_of(id)
-		if door != 0 and not seen.has("d%d" % door):
-			seen["d%d" % door] = true
-			var ids := files.door_file(door)
-			for k in range(1, ids.size()):
-				var a := world.passenger(ids[k - 1])
-				var b := world.passenger(ids[k])
-				var gap := BoardingFiles.door_left(b) - BoardingFiles.door_left(a)
-				if gap < GAP:
-					return "door %d: %d then %d only %d mm apart" % [door, a.id, b.id, gap]
-		var plane := files.plane_file_of(id)
-		if not plane.is_empty() and not seen.has("p%d" % plane[0]):
-			seen["p%d" % plane[0]] = true
-			for k in range(1, plane.size()):
-				var a := world.passenger(plane[k - 1])
-				var b := world.passenger(plane[k])
-				var gap := BoardingFiles.plane_left(b) - BoardingFiles.plane_left(a)
-				if gap < GAP:
-					return "apron: %d then %d only %d mm apart" % [a.id, b.id, gap]
-	return ""
+		var lists := []
+		if files.door_of(id) != 0:
+			lists.append(["door", files.door_file(files.door_of(id))])
+		if not files.plane_file_of(id).is_empty():
+			lists.append(["apron", files.plane_file_of(id)])
+		for entry: Array in lists:
+			var ids: Array[int] = entry[1]
+			var k := ids.find(id)
+			if k <= 0:
+				continue
+			var a := world.passenger(ids[k - 1])
+			var b := world.passenger(id)
+			var gap := BoardingFiles.door_left(b) - BoardingFiles.door_left(a)
+			if entry[0] == "apron":
+				gap = BoardingFiles.plane_left(b) - BoardingFiles.plane_left(a)
+			var key := "%s %d>%d" % [entry[0], a.id, b.id]
+			now[key] = gap
+			if gap < 0 and problem == "":
+				problem = "%s: %d behind %d out of order by %d mm" % [key, b.id, a.id, -gap]
+			elif gap < GAP and gaps.has(key) and gap < gaps[key] and problem == "":
+				problem = "%s closed from %d to %d mm" % [key, gaps[key], gap]
+	gaps.clear()
+	gaps.merge(now)
+	return problem
 
 
 ## The ground distance between two passengers' sim positions, in metres.
@@ -142,11 +150,12 @@ func _all_done(group: Array[Passenger]) -> bool:
 	return true
 
 
-func test_a_full_boarding_keeps_every_gap_and_no_two_filed_walkers_overlap() -> void:
+func test_a_full_boarding_keeps_order_never_closes_a_gap_and_no_filed_walkers_overlap() -> void:
 	_world = PassengerTestWorld.reference_world(4242)
 	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 24)
 	var doors := _world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
 	var problem := ""
+	var gaps := {}
 	var held := 0
 	var pended := 0
 	var close_filed := 0
@@ -177,7 +186,7 @@ func test_a_full_boarding_keeps_every_gap_and_no_two_filed_walkers_overlap() -> 
 				held += 1
 		most_filed = maxi(most_filed, filed)
 		_world.step()
-		problem = gap_problem(_world)
+		problem = spacing_problem(_world, gaps)
 		for pair: Array in close_pairs(_world):
 			close_any += 1
 			var a: Passenger = pair[0]
@@ -262,10 +271,11 @@ func test_two_walkers_on_one_cell_set_off_one_at_a_time() -> void:
 	)
 
 
-## A file down the x = 20 column, and a newcomer beside it that would stand
-## too close in front of the walker behind it: it pends, without moving, until
-## that walker has passed, and joins behind it.
-func test_a_newcomer_too_close_to_the_walker_behind_pends_until_it_passes() -> void:
+## A file down the x = 20 column, and a newcomer beside it a full gap behind
+## the walker ahead but too close in front of the walker behind: it joins at
+## once, between them, and the walker behind is capped by it and never closes
+## in; the gap only grows until it is a full GAP.
+func test_a_newcomer_joins_in_front_and_the_walker_behind_never_closes_in() -> void:
 	_world = boarding_world()
 	_world.run_to(BOARDING + 5)
 	var ahead := walker(_world, Vector2i(20, 5))
@@ -273,29 +283,36 @@ func test_a_newcomer_too_close_to_the_walker_behind_pends_until_it_passes() -> v
 	var newcomer := walker(_world, Vector2i(21, 6))
 	_world.step()
 	var door := ahead.exit_object
+	var gap := BoardingFiles.door_left(behind) - BoardingFiles.door_left(newcomer)
 	print(
 		(
-			"left ahead %d behind %d newcomer %d"
+			"left ahead %d newcomer %d behind %d"
 			% [
 				BoardingFiles.door_left(ahead),
-				BoardingFiles.door_left(behind),
-				BoardingFiles.door_left(newcomer)
+				BoardingFiles.door_left(newcomer),
+				BoardingFiles.door_left(behind)
 			]
 		)
 	)
-	assert_array(_world.sim.files.door_file(door)).is_equal([ahead.id, behind.id])
-	assert_bool(_world.sim.files.is_pending(newcomer.id)).is_true()
-	var waited := 0
-	while _world.sim.files.is_pending(newcomer.id):
-		assert_that(newcomer.at).is_equal(Vector2i(21, 6))
-		assert_int(newcomer.seg_mm).is_equal(0)
-		assert_str(gap_problem(_world)).is_empty()
-		waited += 1
+	assert_array(_world.sim.files.door_file(door)).is_equal([ahead.id, newcomer.id, behind.id])
+	assert_bool(_world.sim.files.is_pending(newcomer.id)).is_false()
+	assert_int(gap).is_less(GAP)
+	var capped := 0
+	var gaps := {}
+	while gap < GAP:
+		if (
+			_world.sim.files.allowed(_world.sim, behind, PassengerSim.WALK_MM)
+			< PassengerSim.WALK_MM
+		):
+			capped += 1
 		_world.step()
-	print("newcomer waited %d ticks" % waited)
-	assert_int(waited).is_greater(0)
-	assert_array(_world.sim.files.door_file(door)).is_equal([ahead.id, behind.id, newcomer.id])
-	assert_str(gap_problem(_world)).is_empty()
+		assert_str(spacing_problem(_world, gaps)).is_empty()
+		var next := BoardingFiles.door_left(behind) - BoardingFiles.door_left(newcomer)
+		assert_int(next).is_greater_equal(gap)
+		gap = next
+	print("behind capped %d ticks, gap now %d" % [capped, gap])
+	assert_int(capped).is_greater(0)
+	assert_array(_world.sim.files.door_file(door)).is_equal([ahead.id, newcomer.id, behind.id])
 	assert_bool(_run_until(_all_done.bind([ahead, behind, newcomer] as Array[Passenger]))).is_true()
 	assert_int(_world.sim.made_count()).is_equal(3)
 
@@ -318,7 +335,7 @@ func test_a_walker_whose_way_is_walled_off_takes_its_place_again() -> void:
 	print("path before %s, after %s, file %s" % [before, p.path, _world.sim.files.door_file(door)])
 	assert_that(p.path).is_not_equal(before)
 	assert_bool(_world.sim.files.holds(p.id)).is_true()
-	assert_str(gap_problem(_world)).is_empty()
+	assert_str(spacing_problem(_world, {})).is_empty()
 	assert_bool(_run_until(_all_done.bind([p, behind] as Array[Passenger]))).is_true()
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 	assert_int(behind.stage).is_equal(Passenger.Stage.MADE)
@@ -487,9 +504,10 @@ func test_walkers_from_two_doors_are_spaced_on_the_shared_apron() -> void:
 	var on_tail := 0
 	var nearest := 100.0
 	var problem := ""
+	var gaps := {}
 	while not _all_done(group) and _world.clock.tick < 4000 and problem == "":
 		_world.step()
-		problem = gap_problem(_world)
+		problem = spacing_problem(_world, gaps)
 		var doors := {}
 		for p in group:
 			if p.stage == Passenger.Stage.APRON:
