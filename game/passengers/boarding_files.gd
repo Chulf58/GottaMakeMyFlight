@@ -196,6 +196,15 @@ func allowed(sim: PassengerSim, p: Passenger, speed: int) -> int:
 	return step
 
 
+## Whether `p` is held back by the files on this tick: waiting to join, or
+## capped short of its own pace (a runner caught behind a slower walker).
+func held_back(sim: PassengerSim, p: Passenger) -> bool:
+	if not holds(p.id):
+		return false
+	var speed := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
+	return _pending.has(p.id) or allowed(sim, p, speed) < speed
+
+
 ## The pending walkers in admission order: those waiting at a door for the
 ## apron (in their door file, at the door), by plane, walk left and id, then
 ## those waiting for a door file, by door, walk left and id.

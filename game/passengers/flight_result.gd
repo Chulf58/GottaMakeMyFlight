@@ -13,6 +13,8 @@ const NO_SHOW_TEXT := {"no_entrance": NEVER_ARRIVED, "late": ARRIVED_LATE}
 ## A booking still in its car or taxi when the doors closed
 ## (ArrivalBookings.missed_by_flight): a missed flight, never a no-show.
 const WAITING_FOR_DROP_OFF := "Waiting for drop-off"
+## A passenger held up in a boarding line when the doors closed.
+const CROWDED_TEXT := "Held up by crowds at the gate"
 
 const STUCK_TEXT := {
 	Passenger.Stuck.NO_CHECKIN: "No check-in desk to go to",
@@ -20,6 +22,10 @@ const STUCK_TEXT := {
 	Passenger.Stuck.QUEUE_FULL: "Waiting outside a full queue",
 	Passenger.Stuck.NO_ROUTE: "No walkable route",
 	Passenger.Stuck.EXIT_BLOCKED: "The exit to the plane was blocked",
+	# Held back in a boarding line when the doors closed: the terminal's
+	# crowding cost the flight (decision a-late-passenger-held-up-by-people-
+	# traffic-at-boarding-misse).
+	Passenger.Stuck.CROWDED: CROWDED_TEXT,
 }
 
 const STAGE_TEXT := {

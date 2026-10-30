@@ -540,3 +540,50 @@ func test_walkers_from_two_doors_are_spaced_on_the_shared_apron() -> void:
 	assert_int(on_tail).is_greater(0)
 	assert_float(nearest).is_greater_equal(BODY_M)
 	assert_bool(_all_done(group)).is_true()
+
+
+## Doors close while a late walker is held back behind another flight's
+## walker in a boarding line: it misses, and the flight's result gives the
+## crowding reason; a late walker walking free at the head of the line misses
+## for the ordinary reason (decision a-late-passenger-held-up-by-people-traffic-
+## at-boarding-misse).
+func test_a_late_walker_held_in_a_line_at_doors_close_misses_from_crowds() -> void:
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	var closing := BOARDING + 60
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(BOARDING, closing))
+	_world.flights.add_flight("GMF202", PassengerTestWorld.starts_with(BOARDING, DOORS))
+	_world.run_to(BOARDING + 5)
+	var free := walker(_world, Vector2i(20, 3))
+	var other := walker(_world, Vector2i(20, 6), "GMF202")
+	var held := walker(_world, Vector2i(20, 6))
+	var held_ticks := 0
+	while _world.clock.tick < closing:
+		_world.step()
+		held_ticks += int(_world.sim.files.held_back(_world.sim, held))
+	assert_bool(_world.sim.files.held_back(_world.sim, held)).is_false()
+	var summary := FlightResult.summarize(_world.sim, PassengerTestWorld.FLIGHT)
+	print(
+		(
+			"held %d ticks; held %s %s, free %s %s; reasons %s"
+			% [
+				held_ticks,
+				Passenger.Stage.keys()[held.missed_stage],
+				Passenger.Stuck.keys()[held.missed_stuck],
+				Passenger.Stage.keys()[free.missed_stage],
+				Passenger.Stuck.keys()[free.missed_stuck],
+				summary["reasons"]
+			]
+		)
+	)
+	assert_int(held_ticks).is_greater(0)
+	assert_int(held.stage).is_equal(Passenger.Stage.MISSED)
+	assert_int(held.missed_stuck).is_equal(Passenger.Stuck.CROWDED)
+	assert_int(free.stage).is_equal(Passenger.Stage.MISSED)
+	assert_int(free.missed_stuck).is_equal(Passenger.Stuck.NONE)
+	assert_bool(other.is_done()).is_false()
+	var texts := {}
+	for reason: Dictionary in summary["reasons"]:
+		texts[reason["text"]] = reason["count"]
+	assert_int(texts.get(FlightResult.CROWDED_TEXT, 0)).is_equal(1)
+	assert_int(texts.get(FlightResult.STAGE_TEXT[free.missed_stage], 0)).is_equal(1)

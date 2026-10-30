@@ -718,6 +718,10 @@ func _finish(p: Passenger, made: bool) -> void:
 	if not made:
 		p.missed_stage = p.stage
 		p.missed_stuck = p.stuck
+		# Held up by people traffic at boarding, the miss is the terminal's
+		# (decision a-late-passenger-held-up-by-people-traffic-at-boarding-misse).
+		if p.stuck == Passenger.Stuck.NONE and files.held_back(self, p):
+			p.missed_stuck = Passenger.Stuck.CROWDED
 	_leave_station(p)
 	_release_seat(p)
 	cafes.cleanup(p)

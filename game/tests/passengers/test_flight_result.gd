@@ -192,6 +192,7 @@ func test_each_stuck_status_has_its_exact_reason_text_and_beats_the_stage() -> v
 		Passenger.Stuck.QUEUE_FULL: "Waiting outside a full queue",
 		Passenger.Stuck.NO_ROUTE: "No walkable route",
 		Passenger.Stuck.EXIT_BLOCKED: "The exit to the plane was blocked",
+		Passenger.Stuck.CROWDED: "Held up by crowds at the gate",
 	}
 	assert_int(expected.size()).is_equal(Passenger.Stuck.size() - 1)
 	for stuck in expected:
