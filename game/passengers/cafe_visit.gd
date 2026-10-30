@@ -14,7 +14,8 @@ var room := 0
 ## from the room on load.
 var venue: StringName = &"cafe"
 var counter := 0
-## The seat reserved when the visit was committed, "<table id>:<seat index>".
+## The seat reserved when the visit was committed, "<table id>:<seat index>";
+## empty for a walk-on visit.
 var seat_key := ""
 ## Where the journey goes on after the visit: TO_SECURITY or TO_GATE.
 var resume_stage: Passenger.Stage = Passenger.Stage.TO_GATE
@@ -29,5 +30,12 @@ var outcome: Outcome = Outcome.NONE
 ## Set once the visit's money is in the wallet.
 var settled := false
 var amount := 0
-## The reserved seat's descriptor (CafeLayout seat entry), derived again on load.
+## The reserved seat's descriptor (CafeLayout seat entry), derived again on load;
+## empty for a walk-on visit.
 var seat: Dictionary = {}
+
+
+## Whether the guest buys at the counter and walks on with no seat (the
+## grab-and-go stall): no seat is reserved, and no sit or stand phase follows.
+func walk_on() -> bool:
+	return RoomTypes.get_type(venue).walk_on

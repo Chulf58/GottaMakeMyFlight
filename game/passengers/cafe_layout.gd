@@ -12,7 +12,9 @@ extends RefCounted
 ## (slot 0) straight out along its front, up to LANE_SLOTS cells, stopping at
 ## a closed step, a station lane, another object's interaction cell or a seat's
 ## approach cell. A counter with no lane is left out. Its seats are the chairs
-## of the cafe_table pieces in the room whose approach cell is walkable.
+## of the cafe_table pieces in the room whose approach cell is walkable. A
+## walk-on room (the stall, RoomType.walk_on) needs only a counter and has no
+## seats.
 
 const LANE_SLOTS := 4
 
@@ -43,7 +45,11 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 		if not RoomTypes.get_type(status.type_id).food or not status.ok:
 			continue
 		var area: Rect2i = grid.get_room(room_id)["rect"]
-		var seats := _seats(grid, ids, area)
+		var walk_on := RoomTypes.get_type(status.type_id).walk_on
+		# A walk-on room has no seats, whatever table stands in it.
+		var seats: Array[Dictionary] = []
+		if not walk_on:
+			seats = _seats(grid, ids, area)
 		var approaches := {}
 		for seat in seats:
 			approaches[seat["approach"]] = true
@@ -59,7 +65,7 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 				taken[cell] = true
 			if not lane.is_empty():
 				counters.append({"id": id, "lane": lane})
-		if not counters.is_empty() and not seats.is_empty():
+		if not counters.is_empty() and (walk_on or not seats.is_empty()):
 			cafes.append(
 				{"room": room_id, "type": status.type_id, "counters": counters, "seats": seats}
 			)

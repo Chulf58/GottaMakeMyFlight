@@ -14,11 +14,17 @@ extends RefCounted
 ## A cafe here is any ready food room (RoomType.food): the cafe, the bar, the
 ## sit-down restaurant and the grab-and-go stall (F4-6, decision food-and-
 ## drink-cafe-bar-sit-down-restaurant-and-grab-and-go-st). They share the
-## counter and table and this whole lifecycle; the room type sets the order
-## time, the dwell, the base spend and the mood gain, so a visit's length and
-## pay run stall < cafe < bar < restaurant. The forecast counts the room's own
-## dwell, so a restaurant is only taken with lots of time, and a guest who runs
-## short leaves early and pays the short share at any of them.
+## counter and this whole lifecycle (all but the stall share the table too);
+## the room type sets the order time, the dwell, the base spend and the mood
+## gain, so a visit's length and pay run stall < cafe < bar < restaurant. The
+## forecast counts the room's own dwell, so a restaurant is only taken with
+## lots of time, and a guest who runs short leaves early and pays the short
+## share at any of them.
+##
+## The stall is the one walk-on venue (RoomType.walk_on): it needs only a
+## counter, its visit reserves no seat and has no sit or stand phase, and the
+## guest pays when the order is made and goes on from the counter. Its forecast
+## and deadline leave from the counter's order spot with no standing up.
 ##
 ## Counters keep their own queue and lifecycle and never use the station
 ## loop. A queue holds every guest committed to the counter, walkers too, in
@@ -190,7 +196,7 @@ func plan_visit(p: Passenger, browsing := false) -> Dictionary:
 	# The nearest venue whose whole visit fits: a restaurant that would not
 	# fit does not stop a guest from taking a stall or cafe further away.
 	for plan in _plans(p, _reach_mm(p) if browsing else 0):
-		var arrival := CafeForecast.visit_arrival(_sim, p, plan["legs"])
+		var arrival := _visit_arrival(p, plan["legs"])
 		if browsing:
 			arrival += BROWSE_SPARE_TICKS
 		if CafeForecast.admits(_sim, p, arrival):
@@ -234,10 +240,7 @@ func beat(p: Passenger) -> void:
 	var visit: CafeVisit = _visits.get(p.id)
 	if visit != null:
 		# The abandon-now forecast with live queues, once a second per guest.
-		if not visit.seat.is_empty():
-			visit.deadline = CafeForecast.live_deadline(
-				_sim, p, visit.seat["approach"], visit.resume_stage
-			)
+		visit.deadline = _live_deadline(p, visit)
 		return
 	var hungry := p.hunger >= HUNGRY_AT
 	@warning_ignore("integer_division")
@@ -269,23 +272,23 @@ func reconcile() -> void:
 		if visit == null:
 			continue
 		var p := _sim.get_passenger(id)
-		var seat := layout.seat(visit.room, visit.seat_key)
+		var walk_on := visit.walk_on()
+		var seat := {} if walk_on else layout.seat(visit.room, visit.seat_key)
 		var counter := layout.counter(visit.room, visit.counter)
-		if seat.is_empty() and visit.served:
+		var no_seat := seat.is_empty() and not walk_on
+		if no_seat and visit.served:
 			# No chair to get up from: a served guest pays and goes on at once,
 			# so no visit outlives its seat.
 			if visit.outcome == CafeVisit.Outcome.NONE:
 				visit.outcome = CafeVisit.Outcome.SHORT
 			_end(p, visit)
 			continue
-		if seat.is_empty() or (counter.is_empty() and not visit.served):
+		if no_seat or (counter.is_empty() and not visit.served):
 			_leave_early(p, visit)
 			continue
 		visit.seat = seat
 		if deadlines_stale:
-			visit.deadline = CafeForecast.live_deadline(
-				_sim, p, seat["approach"], visit.resume_stage
-			)
+			visit.deadline = _live_deadline(p, visit)
 	var counters: Array = _queues.keys()
 	counters.sort()
 	for counter_id in counters:
@@ -347,12 +350,10 @@ func step(p: Passenger) -> void:
 		return
 	var stage := p.stage
 	if stage != Passenger.Stage.CAFE_STANDING_UP:
-		if visit.resume_stage == Passenger.Stage.TO_SECURITY and not visit.seat.is_empty():
+		if visit.resume_stage == Passenger.Stage.TO_SECURITY:
 			# The rest of a landside journey runs through the scanners, whose
 			# queues can fill between beats: forecast it again every tick.
-			visit.deadline = CafeForecast.live_deadline(
-				_sim, p, visit.seat["approach"], visit.resume_stage
-			)
+			visit.deadline = _live_deadline(p, visit)
 		if _sim.tick >= visit.deadline:
 			_leave_early(p, visit)
 			return
@@ -469,7 +470,8 @@ func rederive() -> void:
 	_seats.clear()
 	for id in visit_ids():
 		var visit: CafeVisit = _visits[id]
-		_seats[visit.seat_key] = id
+		if not visit.seat_key.is_empty():
+			_seats[visit.seat_key] = id
 		visit.seat = layout.seat(visit.room, visit.seat_key)
 		visit.venue = layout.cafe(visit.room).get("type", visit.venue)
 
@@ -488,8 +490,10 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 		var lane: Array = counter["lane"]
 		if reach_mm > 0 and Passenger.octile_mm(p.at, lane[0]) > reach_mm:
 			continue
-		var seat := _free_seat(cafe, lane[0])
-		if seat.is_empty():
+		var walk_on := RoomTypes.get_type(cafe["type"]).walk_on
+		# A walk-on guest reserves no seat: the plan carries an empty one.
+		var seat := {} if walk_on else _free_seat(cafe, lane[0])
+		if seat.is_empty() and not walk_on:
 			continue
 		var route := _route(p, lane[queue_of(counter["id"]).size()])
 		if route.is_empty():
@@ -509,10 +513,11 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 			"pre_ticks": PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0,
 			"to_queue_mm": mm,
 			"order_ticks": _order_eta(cafe["room"], counter["id"]),
-			"to_seat_mm": seat["mm"],
+			"to_seat_mm": 0 if walk_on else seat["mm"],
 			"dwell_ticks": RoomTypes.get_type(cafe["type"]).dwell_ticks,
-			"leave_cell": seat["approach"],
+			"leave_cell": lane[0] if walk_on else seat["approach"],
 			"resume_stage": _resume_stage(p),
+			"walk_on": walk_on,
 		}
 		found.append(plan)
 	found.sort_custom(
@@ -577,6 +582,46 @@ func _route(p: Passenger, target: Vector2i) -> Dictionary:
 	return VisitRoute.plan(_sim.grid, p, target)
 
 
+## The tick `p` would reach the plane door after the planned visit. A walk-on
+## visit ends at the counter with the order: no walk to a seat, no sitting
+## down, no dwell and no standing up (CafeForecast.visit_arrival() is the
+## seated visit's).
+func _visit_arrival(p: Passenger, legs: Dictionary) -> int:
+	if not legs["walk_on"]:
+		return CafeForecast.visit_arrival(_sim, p, legs)
+	var duration := (
+		int(legs["pre_ticks"])
+		+ JourneyForecast.walk_ticks(legs["to_queue_mm"])
+		+ int(legs["order_ticks"])
+	)
+	return VisitForecast.arrival(_sim, p, duration, legs["leave_cell"], 0, legs["resume_stage"])
+
+
+## The cell a guest sets off from when it leaves the visit: its seat's approach
+## cell, or for a walk-on guest the counter's order spot. NO_CELL with neither.
+func _leave_cell(p: Passenger, visit: CafeVisit) -> Vector2i:
+	if not visit.walk_on():
+		return visit.seat.get("approach", Passenger.NO_CELL)
+	var lane: Array = layout.counter(visit.room, visit.counter).get("lane", [])
+	return lane[0] if not lane.is_empty() else p.at
+
+
+## Ticks a guest takes to set off from the leave cell: standing up from a
+## seat, nothing for a walk-on guest.
+func _leave_delay(visit: CafeVisit) -> int:
+	return 0 if visit.walk_on() else PassengerSim.STAND_UP_TICKS
+
+
+## The deadline of a visit under way, forecast again with the queues and
+## stations as they are now (VisitForecast.live_deadline()); the visit's own
+## when it has no cell to leave from.
+func _live_deadline(p: Passenger, visit: CafeVisit) -> int:
+	var cell := _leave_cell(p, visit)
+	if cell == Passenger.NO_CELL:
+		return visit.deadline
+	return VisitForecast.live_deadline(_sim, p, cell, _leave_delay(visit), visit.resume_stage)
+
+
 func _may_start(p: Passenger) -> bool:
 	return (
 		_sim.tick >= p.cafe_cooldown
@@ -621,12 +666,15 @@ func _commit(p: Passenger, plan: Dictionary) -> void:
 	visit.room = plan["room"]
 	visit.venue = plan["type"]
 	visit.counter = counter_id
-	visit.seat_key = seat["key"]
+	visit.seat_key = seat.get("key", "")
 	visit.seat = layout.seat(visit.room, visit.seat_key)
 	visit.resume_stage = _resume_stage(p)
-	visit.deadline = CafeForecast.deadline(_sim, p, seat["approach"], visit.resume_stage)
+	visit.deadline = VisitForecast.deadline(
+		_sim, p, _leave_cell(p, visit), _leave_delay(visit), visit.resume_stage
+	)
 	_visits[p.id] = visit
-	_seats[visit.seat_key] = p.id
+	if not visit.seat_key.is_empty():
+		_seats[visit.seat_key] = p.id
 	if not _queues.has(counter_id):
 		_queues[counter_id] = {"room": visit.room, "lane": [], "serving": 0}
 	(_queues[counter_id]["lane"] as Array).append(p.id)
@@ -674,6 +722,20 @@ func _queue_step(p: Passenger, visit: CafeVisit) -> void:
 
 
 func _serve(p: Passenger, visit: CafeVisit) -> void:
+	if visit.walk_on():
+		# The counters step before the guest's own deadline check, and this
+		# ends the visit on the spot: so the deadline is worked out again and
+		# enforced here, and a guest past it gives up unpaid.
+		visit.deadline = _live_deadline(p, visit)
+		if _sim.tick >= visit.deadline:
+			_abandon(p, visit)
+			return
+		# Paid at the counter: the guest goes on from it, with no seat to walk
+		# to and no sit or stand phase.
+		visit.served = true
+		visit.outcome = CafeVisit.Outcome.COMPLETE
+		_end(p, visit)
+		return
 	visit.served = true
 	var path := _sim.grid.find_path(p.at, visit.seat.get("approach", p.at))
 	if visit.seat.is_empty() or path.is_empty():

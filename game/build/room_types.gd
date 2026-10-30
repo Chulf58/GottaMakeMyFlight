@@ -35,6 +35,10 @@ class RoomType:
 	## the sit-down restaurant and the grab-and-go stall): all four use the
 	## cafe counter and table, and differ in the numbers below.
 	var food := false
+	## Whether a food room serves guests at the counter and lets them walk on
+	## (the grab-and-go stall): no table or seat is needed or reserved, and the
+	## visit has no sit or stand phase, so dwell_ticks is 0.
+	var walk_on := false
 	## Whether it is an activity or rest room (the play area, the lounge, the
 	## shower, the nap pod): a shop-pipeline room with one required piece that
 	## is also its use piece, a visit of its own dwell_ticks that gives
@@ -105,14 +109,16 @@ static func _build() -> void:
 	_types[cafe.id] = cafe
 
 	# The food variants (F4-6; decision food-and-drink-cafe-bar-sit-down-
-	# restaurant-and-grab-and-go-st): the same counter and table as the cafe,
-	# so a visit takes the same path through CafeSim, with a longer or shorter
-	# visit and a larger or smaller spend. Visit length and spend run stall <
-	# cafe < bar < restaurant. The bar lifts mood the most; the restaurant
-	# needs the most room. A guest who runs short of time leaves early and
-	# pays the short share like any cafe guest, so none of them causes a miss.
-	# All numbers are tuning values pinned by tests.
-	_add_food(&"stall", "Grab-and-go stall", Vector2i(3, 3), [8, 30, 30, 5])
+	# restaurant-and-grab-and-go-st): the bar and restaurant use the same
+	# counter and table as the cafe, so a visit takes the same path through
+	# CafeSim, with a longer visit and a larger spend. The grab-and-go stall
+	# needs only a counter: its guest buys, pays and walks on with no seat and
+	# no dwell. Visit length and spend run stall < cafe < bar < restaurant. The
+	# bar lifts mood the most; the restaurant needs the most room. A guest who
+	# runs short of time leaves early and pays the short share like any cafe
+	# guest, so none of them causes a miss. All numbers are tuning values
+	# pinned by tests.
+	_add_food(&"stall", "Grab-and-go stall", Vector2i(3, 3), [8, 30, 0, 5], false)
 	_add_food(&"bar", "Bar", Vector2i(3, 4), [24, 80, 200, 20])
 	_add_food(&"restaurant", "Restaurant", Vector2i(4, 4), [40, 120, 360, 15])
 
@@ -243,17 +249,21 @@ static func _build() -> void:
 
 
 ## A food room type like the cafe: `numbers` is [base spend, order ticks,
-## dwell ticks, mood bonus].
+## dwell ticks, mood bonus]. A room that is not `seated` needs only the
+## counter, has no seats and lets its guests walk on after paying.
 static func _add_food(
-	id: StringName, display_name: String, min_size: Vector2i, numbers: Array
+	id: StringName, display_name: String, min_size: Vector2i, numbers: Array, seated := true
 ) -> void:
 	var food := RoomType.new()
 	food.id = id
 	food.display_name = display_name
 	food.min_size = min_size
-	food.required = [[&"cafe_counter", "Needs a counter"], [&"cafe_table", "Needs a table"]]
-	food.seat_piece = &"cafe_table"
-	food.seats_per_piece = 2
+	food.required = [[&"cafe_counter", "Needs a counter"]]
+	if seated:
+		food.required.append([&"cafe_table", "Needs a table"])
+		food.seat_piece = &"cafe_table"
+		food.seats_per_piece = 2
+	food.walk_on = not seated
 	food.base_spend = numbers[0]
 	food.food = true
 	food.order_ticks = numbers[1]

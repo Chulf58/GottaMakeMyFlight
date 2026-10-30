@@ -24,12 +24,14 @@ const LAND_TABLE_2 := Vector2i(24, 11)
 ## "land_table"} (and "air_table_2", "land_table_2" with `extra_tables`).
 ## With a `shell` the terminal stands on its doors B and C (ReferenceTerminal),
 ## for the windowed probe in the real scene. `venue` is the room type of both
-## rooms (cafe, bar, restaurant or stall).
+## rooms (cafe, bar, restaurant or stall). With `tables` false no table is
+## placed (a stall needs none; a cafe is then not ready).
 static func build(
 	grid: BuildGrid,
 	extra_tables := false,
 	shell: ShellDefinition = null,
-	venue: StringName = &"cafe"
+	venue: StringName = &"cafe",
+	tables := true
 ) -> Dictionary:
 	var built := ReferenceTerminal.build(grid, shell)
 	assert(built, "reference terminal refused")
@@ -49,10 +51,11 @@ static func build(
 		"land_room": _apply(grid, BuildEdit.place_room(LANDSIDE_ROOM, venue)).room_id,
 		"air_counter": _place(grid, &"cafe_counter", AIR_COUNTER),
 		"land_counter": _place(grid, &"cafe_counter", LAND_COUNTER),
-		"air_table": _place(grid, &"cafe_table", AIR_TABLE),
-		"land_table": _place(grid, &"cafe_table", LAND_TABLE),
 	}
-	if extra_tables:
+	if tables:
+		ids["air_table"] = _place(grid, &"cafe_table", AIR_TABLE)
+		ids["land_table"] = _place(grid, &"cafe_table", LAND_TABLE)
+	if extra_tables and tables:
 		ids["air_table_2"] = _place(grid, &"cafe_table", AIR_TABLE_2)
 		ids["land_table_2"] = _place(grid, &"cafe_table", LAND_TABLE_2)
 	return ids
