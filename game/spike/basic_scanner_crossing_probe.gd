@@ -103,9 +103,11 @@ const RUNNER_ROLES := [
 	[-1, 1, false, false, true],
 	[-1, 1, false, true, true],
 ]
-## The moves plated close, and the progress window of each of their moments.
+## The moves plated close, and the progress window of each of their moments
+## (the first at 0.4, where a hard case lifted off the floor lay across the
+## thighs; board item 5ed915b0).
 const MOVE_PLATES: Array[String] = ["roller_lower", "repack_pickup_case"]
-const MOMENTS := [[0.0, 0.5], [0.5, 0.99], [1.0, 1.0]]
+const MOMENTS := [[0.3, 0.5], [0.5, 0.99], [1.0, 1.0]]
 ## A close plate's camera: this far out and this high, aimed at AIM_M over the
 ## floor at the body; the body must be CLOSE_MIN_PX tall in it.
 const CLOSE_M := 3.0
@@ -192,9 +194,8 @@ var _float_control := []
 var _lead_plated := {}
 ## The process frame a wanted plate move paused the clock on (_on_tick), or -1.
 var _hold_frame := -1
-## Passenger id -> its drawn pose (body, points, bags) last checked, and the
-## run's body-in-own-bag points over distinct poses (a paused frame measures
-## the same pose again).
+## Passenger id -> its drawn pose last checked; body-in-own-bag points over
+## distinct poses (a paused frame measures the same pose again).
 var _self_seen := {}
 var _self_distinct := 0
 
@@ -887,7 +888,7 @@ func _print_self_detail(
 		(
 			(
 				"SELF_DETAIL passenger=%d bag=%d kind=%d carry=%d k=%.2f turn=%.2f arm=%.2f"
-				+ " grip=%s moving=%s along=%.2f stage=%d bones=%s at=%s move=%s held_by=%d bag_at=%s"
+				+ " grip=%s moving=%s along=%.2f stage=%d bones=%s at=%s move=%s held_by=%s bag_at=%s"
 			)
 			% [
 				id,
@@ -904,15 +905,16 @@ func _print_self_detail(
 				CarryChecks.contact_bones(body, CarryChecks.gripping(_sim, p), bag),
 				_where_inside(to_body, own, bag),
 				FloatCheck.move_of(props_now, id, i),
-				int(props_now.bag_state(id, i).get("held_by", -1)),
+				["held_by", "led", "swap"].map(
+					func(key): return props_now.bag_state(id, i).get(key)
+				),
 				_where_inside(bag.global_transform.affine_inverse(), own, bag)
 			]
 		)
 	)
 
 
-## Diagnostic: up to four body points inside `bag`, in the frame `to_body`
-## takes world points to (the body's, or the bag's own).
+## Diagnostic: up to four body points inside `bag`, through `to_body` (a frame).
 func _where_inside(to_body: Transform3D, own: PackedVector3Array, bag: Node3D) -> Array:
 	var out := []
 	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):

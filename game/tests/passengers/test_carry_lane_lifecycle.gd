@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 ## in the tray (finished, or sent back); a pooled body released in the middle
 ## of a hand-led move keeps no reach or stoop for the next passenger it draws;
 ## every roller lifted at security hangs by its grip bar; a roller going
-## between the hand and the pull swings out SWAP_OPEN_M only at security.
+## between the hand and the pull goes round the hand's side only at security.
 ##
 ## The world is SecurityTestWorld's lane rooted at the arch on (5, 6).
 
@@ -277,13 +277,16 @@ func test_every_lifted_roller_hangs_by_its_bar() -> void:
 	assert_int(off_bar).is_equal(0)
 
 
-## A roller going between the hand and the pull (a swap, held by its bar)
-## swings its axle out by SWAP_OPEN_M at the middle of the move at security and
-## by SWAP_OUT_M elsewhere: the same move drawn with and without the security
-## flag differs by SWAP_OPEN_M - SWAP_OUT_M along the outward side. Every swap
-## seen has the flag set exactly while its walker is at security. Control: a
-## swap at security was seen.
-func test_the_wide_swap_swing_applies_only_at_security() -> void:
+## A roller going between the hand and the pull (a swap, held by its bar) goes
+## round the hand's side at security (CarryLead.swap_axle: midway its axle is
+## at least SWING_RADIUS_M from the body's centre) and swings out SWAP_OUT_M
+## elsewhere: the same move drawn without the security flag puts the axle
+## somewhere else. Every swap seen has the flag set exactly while its walker is
+## at security. Control: a swap at security was seen. Changed for board item
+## 5ed915b0: this test pinned a security swing SWAP_OPEN_M (0.2 m) wider than
+## the narrow one, and that swing still put the roller behind the shins of a
+## walker standing at a lane (crossing probe, lane mode).
+func test_the_wide_swap_route_applies_only_at_security() -> void:
 	var w := _make()
 	var views := _views_of(w)
 	var props := views.carry_on_props()
@@ -292,6 +295,7 @@ func test_the_wide_swap_swing_applies_only_at_security() -> void:
 	var at_security := 0
 	var elsewhere := 0
 	var wider := NAN
+	var apart := NAN
 	for i in 2500:
 		_tick(w, views)
 		var held: Dictionary = props._held.get(id, {})
@@ -307,20 +311,26 @@ func test_the_wide_swap_swing_applies_only_at_security() -> void:
 		at_security += 1
 		if is_nan(wider):
 			var body := views.node_for(id)
-			var outward: Vector3 = props._outward(body, held["hands"][0])
 			var open: Transform3D = props._swap_transform(held, body, 0, 0.5)[0]
 			held["security"] = false
 			var narrow: Transform3D = props._swap_transform(held, body, 0, 0.5)[0]
 			held["security"] = true
-			var axle := CarryOnProps.ROLLER_AXLE
-			wider = (open * axle - narrow * axle).dot(outward)
+			var axle := open * CarryOnProps.ROLLER_AXLE
+			var centre := body.global_position
+			wider = Vector2(axle.x - centre.x, axle.z - centre.z).length()
+			apart = axle.distance_to(narrow * CarryOnProps.ROLLER_AXLE)
 		if w.cleared.has(id):
 			break
 	print(
 		(
-			"swap frames at security %d, elsewhere %d; the security swing is %.4f m wider"
-			% [at_security, elsewhere, wider]
+			(
+				"swap frames at security %d, elsewhere %d; midway the axle is %.4f m out,"
+				+ " %.4f m from the narrow swing's"
+			)
+			% [at_security, elsewhere, wider, apart]
 		)
 	)
 	assert_int(at_security).is_greater(0)
-	assert_float(wider).is_equal_approx(CarryOnProps.SWAP_OPEN_M - CarryOnProps.SWAP_OUT_M, 0.002)
+	# The palm offset (BAR_PALM_M) moves the drawn axle a little either way.
+	assert_float(wider).is_greater_equal(CarryOnProps.SWING_RADIUS_M - CarryOnProps.BAR_PALM_M)
+	assert_float(apart).is_greater(0.01)

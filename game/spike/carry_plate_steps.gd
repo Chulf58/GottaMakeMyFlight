@@ -16,6 +16,10 @@ const DARK_STEP := 16
 ## A detail plate's camera: this far from the bag's middle, on the line from
 ## the bag to the close plate's camera.
 const DETAIL_M := 1.1
+## The sides a detail plate tries, turned about the bag from the close plate's
+## side, and the sight lines (of five) that must land on the bag first.
+const DETAIL_TURNS: Array[float] = [0.0, PI / 3.0, -PI / 3.0, 2.0 * PI / 3.0, -2.0 * PI / 3.0]
+const DETAIL_ON := 3
 ## The most a plate steps the paused clock between two drawn frames (a frame
 ## of a normal run at 60 fps and speed 1 is a third of a tick).
 const STEP_TICKS := 0.34
@@ -173,12 +177,14 @@ static func lead_sheet(dir: String) -> void:
 	print("LEAD_SHEET %s plates=%s" % [dir.path_join("contact_sheet_lead.png"), names])
 
 
-## A detail plate of `bag` from `cam` moved to DETAIL_M from the bag's middle,
-## toward where `cam` is now, aimed at the bag: saved to `path` only when the
-## bag's drawn bounds project inside `frame` (probe._box_in_frame), sight lines
-## land on it unblocked (probe._bag_seen, every mesh seen from either side)
-## and the plate is not dark. `owners` are the meshes that can block. Returns
-## whether it was saved; the camera is left where it was put.
+## A detail plate of `bag`: `cam` DETAIL_M from the bag's middle, aimed at it,
+## tried from the side `cam` is on now and then DETAIL_TURNS about the bag;
+## saved to `path` from the first side where the bag's drawn bounds project
+## inside `frame` (probe._box_in_frame), at least DETAIL_ON of five sight lines
+## land on the bag first (its own passenger in front of it counts against it
+## here, every mesh seen from either side) and the plate is not dark. `owners`
+## are the meshes that can block. Returns whether it was saved; the camera is
+## left where it was put.
 static func detail_plate(
 	probe: SceneTree,
 	cam: Camera3D,
@@ -196,28 +202,47 @@ static func detail_plate(
 		first = false
 	var centre := box.get_center()
 	var away := cam.global_position - centre
-	cam.global_position = centre + away.normalized() * DETAIL_M
-	cam.look_at(centre)
-	for f in 2:
-		await probe.process_frame
-	await RenderingServer.frame_post_draw
-	var img := probe.root.get_texture().get_image()
-	var holder := PlateSight.colliders(probe.root, owners, {body: "subject", bag: "bag"})
-	see_both_sides(holder)
-	await probe.physics_frame
-	await probe.physics_frame
-	var bounds: Dictionary = holder.get_meta("bounds")
 	var tag := path.get_file().get_basename()
-	var ok: bool = (
-		bounds.has("bag") and probe.call("_box_in_frame", cam, bounds["bag"], frame, tag + " bag")
-	)
-	ok = ok and probe.call("_bag_seen", cam, bounds["bag"], tag)
-	var dark := dark_share(img)
-	print("INFRAME %s dark=%.2f" % [tag, dark])
-	ok = ok and dark < DARK_SHARE
-	holder.free()
-	if ok and img.save_png(path) == OK:
-		print("PLATE saved %s size=%s" % [path, img.get_size()])
-		return true
+	for turn: float in DETAIL_TURNS:
+		cam.global_position = centre + (Basis(Vector3.UP, turn) * away).normalized() * DETAIL_M
+		cam.look_at(centre)
+		for f in 2:
+			await probe.process_frame
+		await RenderingServer.frame_post_draw
+		var img := probe.root.get_texture().get_image()
+		var holder := PlateSight.colliders(probe.root, owners, {body: "subject", bag: "bag"})
+		see_both_sides(holder)
+		await probe.physics_frame
+		await probe.physics_frame
+		var bounds: Dictionary = holder.get_meta("bounds")
+		var side := "%s turn %.2f" % [tag, turn]
+		var ok: bool = (
+			bounds.has("bag") and probe.call("_box_in_frame", cam, bounds["bag"], frame, side)
+		)
+		var on := lines_on_bag(cam, bounds.get("bag", AABB()))
+		var dark := dark_share(img)
+		print("INFRAME %s bag_lines_first_on=%d/5 dark=%.2f" % [side, on, dark])
+		ok = ok and on >= DETAIL_ON and dark < DARK_SHARE
+		holder.free()
+		if ok and img.save_png(path) == OK:
+			print("PLATE saved %s size=%s" % [path, img.get_size()])
+			return true
 	print("DETAIL_PLATE missed %s" % tag)
 	return false
+
+
+## How many of five sight lines from `cam` to `box` (its middle and four points
+## a sixth of its size out across and up) hit a body tagged "bag" first.
+static func lines_on_bag(cam: Camera3D, box: AABB) -> int:
+	var space := cam.get_world_3d().direct_space_state
+	var right := cam.global_transform.basis.x
+	var up := cam.global_transform.basis.y
+	var reach := box.size.length() / 6.0
+	var on := 0
+	for off in [Vector3.ZERO, right * reach, -right * reach, up * reach, -up * reach]:
+		var at: Vector3 = box.get_center() + off
+		var to := at + (at - cam.global_position).normalized() * 3.0
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(cam.global_position, to))
+		if not hit.is_empty() and str((hit.collider as Node).get_meta("subject", "")) == "bag":
+			on += 1
+	return on
