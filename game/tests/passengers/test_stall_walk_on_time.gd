@@ -111,3 +111,36 @@ func test_a_guest_giving_its_order_gives_up_unpaid_when_security_fills() -> void
 	assert_int(world.clock.tick).is_less(service_end)
 	assert_int(world.clock.tick).is_greater_equal(visit.deadline)
 	_assert_gave_up(world, guest, visit)
+
+
+## The counters step before the guest's own deadline check, and a walk-on
+## order ends the visit the moment it is made. A deadline that passes on the
+## very tick the order completes is therefore enforced by the order itself: the
+## guest gives up unpaid instead of paying in full and setting off too late.
+func test_a_deadline_passing_on_the_tick_the_order_completes_gives_up_unpaid() -> void:
+	var made := _admitted()
+	var world: PassengerTestWorld = made[0]
+	var guest: Passenger = made[1]
+	var visit: CafeVisit = made[2]
+	while guest.stage != Passenger.Stage.CAFE_ORDER and world.clock.tick < 1500:
+		world.step()
+	assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_ORDER)
+	var service_end := visit.service_end
+	# Two ticks before the order completes, with the deadline still ahead.
+	while world.clock.tick < service_end - 2:
+		world.step()
+	assert_int(visit.deadline).is_greater(service_end)
+	_burst(world)
+	world.step()
+	# One tick before: the burst has reached the queues, the guest's own check
+	# has not fired yet, and the deadline now falls at or before the tick the
+	# order ends.
+	var spot: Vector2i = world.sim.cafes.layout.counter(visit.room, visit.counter)["lane"][0]
+	var fresh := VisitForecast.live_deadline(world.sim, guest, spot, 0, visit.resume_stage)
+	print("service_end %d, deadline after the burst %d" % [service_end, fresh])
+	assert_int(world.clock.tick).is_equal(service_end - 1)
+	assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_ORDER)
+	assert_int(fresh).is_less_equal(service_end)
+	world.step()
+	assert_int(world.clock.tick).is_equal(service_end)
+	_assert_gave_up(world, guest, visit)

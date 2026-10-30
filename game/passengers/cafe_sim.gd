@@ -722,13 +722,21 @@ func _queue_step(p: Passenger, visit: CafeVisit) -> void:
 
 
 func _serve(p: Passenger, visit: CafeVisit) -> void:
-	visit.served = true
 	if visit.walk_on():
+		# The counters step before the guest's own deadline check, and this
+		# ends the visit on the spot: so the deadline is worked out again and
+		# enforced here, and a guest past it gives up unpaid.
+		visit.deadline = _live_deadline(p, visit)
+		if _sim.tick >= visit.deadline:
+			_abandon(p, visit)
+			return
 		# Paid at the counter: the guest goes on from it, with no seat to walk
 		# to and no sit or stand phase.
+		visit.served = true
 		visit.outcome = CafeVisit.Outcome.COMPLETE
 		_end(p, visit)
 		return
+	visit.served = true
 	var path := _sim.grid.find_path(p.at, visit.seat.get("approach", p.at))
 	if visit.seat.is_empty() or path.is_empty():
 		visit.outcome = CafeVisit.Outcome.SHORT

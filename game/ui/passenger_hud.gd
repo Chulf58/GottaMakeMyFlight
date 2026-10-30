@@ -86,6 +86,37 @@ const STAGE_TEXT := {
 	Passenger.Stage.SHOP_WALK: "Heading to a shop",
 	Passenger.Stage.SHOP_BROWSE: "Browsing at a shop",
 }
+## A cafe stage with a visit to the stall, bar or restaurant under way says so
+## in that venue's words; the cafe keeps STAGE_TEXT. The stall's guest walks
+## on after ordering, so it has no seat stages.
+const VENUE_STAGE_TEXT := {
+	&"stall":
+	{
+		Passenger.Stage.CAFE_WALK: "Heading to the food stall",
+		Passenger.Stage.CAFE_QUEUE: "Queuing at the food stall",
+		Passenger.Stage.CAFE_ORDER: "Grabbing a snack",
+	},
+	&"bar":
+	{
+		Passenger.Stage.CAFE_WALK: "Heading to the bar",
+		Passenger.Stage.CAFE_QUEUE: "Queuing at the bar",
+		Passenger.Stage.CAFE_ORDER: "Ordering a drink",
+		Passenger.Stage.CAFE_TO_SEAT: "Taking a drink to a seat",
+		Passenger.Stage.CAFE_SITTING_DOWN: "Sitting down at the bar",
+		Passenger.Stage.CAFE_SEATED: "Having a drink",
+		Passenger.Stage.CAFE_STANDING_UP: "Leaving the bar",
+	},
+	&"restaurant":
+	{
+		Passenger.Stage.CAFE_WALK: "Heading to the restaurant",
+		Passenger.Stage.CAFE_QUEUE: "Queuing at the restaurant",
+		Passenger.Stage.CAFE_ORDER: "Ordering a meal",
+		Passenger.Stage.CAFE_TO_SEAT: "Taking a meal to a table",
+		Passenger.Stage.CAFE_SITTING_DOWN: "Sitting down at the restaurant",
+		Passenger.Stage.CAFE_SEATED: "Having a meal",
+		Passenger.Stage.CAFE_STANDING_UP: "Leaving the restaurant",
+	},
+}
 ## A shop stage with a visit under way names the shop by its room type
 ## (ShopSim.store_name()): "Heading to the kiosk", "Browsing at the pharmacy".
 const SHOP_STAGE_TEXT := {
@@ -318,8 +349,12 @@ func status_text() -> String:
 
 ## What `p` is doing, for the follow line: its stage's text, naming the shop
 ## it is visiting when it has a visit under way (store_name() is empty when
-## there is no visit or its room is gone, so the room is there below).
+## there is no visit or its room is gone, so the room is there below), or the
+## venue's words for a visit to the stall, bar or restaurant.
 static func stage_text(passenger_sim: PassengerSim, p: Passenger) -> String:
+	var cafe_visit := passenger_sim.cafes.visit_of(p.id)
+	if cafe_visit != null and VENUE_STAGE_TEXT.get(cafe_visit.venue, {}).has(p.stage):
+		return VENUE_STAGE_TEXT[cafe_visit.venue][p.stage]
 	if SHOP_STAGE_TEXT.has(p.stage):
 		var store := passenger_sim.shops.store_name(p.id)
 		if store != "":
