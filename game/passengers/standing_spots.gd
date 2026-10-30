@@ -9,9 +9,18 @@ extends RefCounted
 ## from the grid and layout after an edit: a breadth-first walk over routable
 ## steps (BuildGrid.can_route, which never crosses a scanner) starts at the
 ## gate seats' access cells. The sim has no cell-level airside map, so the
-## walk keeps airside itself: it crosses no door wall, since a door in the
-## security divider is allowed (a door inside the airside also bounds it). A
-## terminal with no divider at all has no landside to keep out. The sim has
+## walk keeps airside itself. The grid stores no divider, so it labels the
+## doorless components (cells joined by routable steps that cross no door
+## wall). A component holding an entrance door is landside; one holding a gate
+## seat's access cell, a gate exit or the exit cell of a scanner that separates
+## an entrance component from another one, and no entrance, is trusted airside.
+## The walk crosses a door wall only between two trusted components, so a door
+## inside the airside is no boundary and the divider's door is, whatever
+## scanners the terminal has. A component with no anchor is never trusted, so
+## an internal airside room with no gate seat, gate exit or
+## scanner exit gets no spots (no worse than blocking every door). A terminal
+## with no divider at all has the gate and the entrance in one component:
+## the walk fills it, as it has no door to cross. The sim has
 ## one gate and no per-gate seat grouping, so every gate seat counts; with no
 ## seats the walk starts at the exit doors. Cells up to NEAR_STEPS steps out
 ## are the gate area, and cells up to OVERFLOW_STEPS out are the overflow.
@@ -103,7 +112,9 @@ func rebuild(sim: PassengerSim) -> void:
 	if seeds.is_empty():
 		for door in layout.exits:
 			seeds.append(layout.door_cell(grid, door))
-	var depth := _walk(grid, seeds, OVERFLOW_STEPS)
+	var components := _doorless_components(grid)
+	var trusted := _trusted_components(sim, components)
+	var depth := _walk_airside(grid, seeds, OVERFLOW_STEPS, components, trusted)
 	var per_row := columns(grid.size)
 	for cell: Vector2i in depth:
 		if excluded.has(cell) or not grid.is_walkable(cell) or grid.room_at(cell) != 0:
@@ -264,10 +275,74 @@ func restore(claims: Dictionary) -> void:
 		_claims[claims[passenger]] = passenger
 
 
-## Breadth-first steps from `seeds` over routable steps that cross no door
-## wall (the security divider may have one), up to `limit` steps. Cell ->
-## steps.
-static func _walk(grid: BuildGrid, seeds: Array[Vector2i], limit: int) -> Dictionary:
+## Labels every walkable cell with its doorless component: cells joined by
+## routable steps that cross no door wall.
+static func _doorless_components(grid: BuildGrid) -> Dictionary:
+	var components := {}
+	var any_door := func(a: Vector2i, b: Vector2i) -> bool: return _door_edge(grid, a, b)
+	var next_component := 0
+	for y in grid.size.y:
+		for x in grid.size.x:
+			var start := Vector2i(x, y)
+			if components.has(start) or not grid.is_walkable(start):
+				continue
+			var seeds: Array[Vector2i] = [start]
+			for cell: Vector2i in _walk(grid, seeds, -1, any_door):
+				components[cell] = next_component
+			next_component += 1
+	return components
+
+
+## The trusted airside doorless components: those holding a gate seat's access
+## cell, a gate exit door or the exit cell of a scanner that separates an
+## entrance component from another one, and no entrance door.
+## Anything else is not trusted, so the walk never crosses a door into or out
+## of it. An internal airside room with none of those anchors therefore gets
+## no spots (no worse than blocking every door).
+static func _trusted_components(sim: PassengerSim, components: Dictionary) -> Dictionary:
+	var grid := sim.grid
+	var layout := sim.layout
+	var unsafe := {}
+	for door in layout.entrances:
+		unsafe[components.get(layout.door_cell(grid, door), -1)] = true
+	var anchors: Array[Vector2i] = []
+	for seat in layout.seats:
+		anchors.append(seat["front"])
+	for door in layout.exits:
+		anchors.append(layout.door_cell(grid, door))
+	# A scanner trusts its exit side only when it separates an unsafe entry
+	# side from a different exit side: one in the entrance hall, or inside an
+	# isolated landside lobby, trusts nothing.
+	for scanner in layout.scanners:
+		var entry: int = components.get(grid.interaction_cell(scanner), -1)
+		var exit_cell := sim.security.exit_cell(scanner)
+		if unsafe.has(entry) and components.get(exit_cell, entry) != entry:
+			anchors.append(exit_cell)
+	var trusted := {}
+	for cell in anchors:
+		if components.has(cell) and not unsafe.has(components[cell]):
+			trusted[components[cell]] = true
+	return trusted
+
+
+## Breadth-first steps from `seeds` over routable steps, up to `limit` steps,
+## that cross a door wall only between two trusted components. Cell -> steps.
+static func _walk_airside(
+	grid: BuildGrid, seeds: Array[Vector2i], limit: int, components: Dictionary, trusted: Dictionary
+) -> Dictionary:
+	var untrusted_door := func(a: Vector2i, b: Vector2i) -> bool:
+		return (
+			_door_edge(grid, a, b)
+			and not (trusted.has(components.get(a, -1)) and trusted.has(components.get(b, -1)))
+		)
+	return _walk(grid, seeds, limit, untrusted_door)
+
+
+## Breadth-first steps from `seeds` over routable steps up to `limit` steps (-1
+## for no limit), none of which crosses an edge `blocked` names. Cell -> steps.
+static func _walk(
+	grid: BuildGrid, seeds: Array[Vector2i], limit: int, blocked: Callable
+) -> Dictionary:
 	var depth := {}
 	var frontier: Array[Vector2i] = []
 	for cell in seeds:
@@ -278,32 +353,32 @@ static func _walk(grid: BuildGrid, seeds: Array[Vector2i], limit: int) -> Dictio
 	while head < frontier.size():
 		var cell := frontier[head]
 		head += 1
-		if depth[cell] >= limit:
+		if limit >= 0 and depth[cell] >= limit:
 			continue
 		for step in STEPS:
 			var next := cell + step
 			if depth.has(next) or not grid.can_route(cell, next):
 				continue
-			if _crosses_door(grid, cell, next):
+			if _crosses_edge(cell, next, blocked):
 				continue
 			depth[next] = depth[cell] + 1
 			frontier.append(next)
 	return depth
 
 
-## Whether a step crosses a door wall: the step itself, or for a diagonal step
-## either of its two straight detours.
-static func _crosses_door(grid: BuildGrid, from: Vector2i, to: Vector2i) -> bool:
+## Whether a step crosses an edge `blocked` names: the step itself, or for a
+## diagonal step either of its two straight detours.
+static func _crosses_edge(from: Vector2i, to: Vector2i, blocked: Callable) -> bool:
 	var step := to - from
 	if step.x == 0 or step.y == 0:
-		return _door_edge(grid, from, to)
+		return blocked.call(from, to)
 	var across := from + Vector2i(step.x, 0)
 	var down := from + Vector2i(0, step.y)
 	return (
-		_door_edge(grid, from, across)
-		or _door_edge(grid, across, to)
-		or _door_edge(grid, from, down)
-		or _door_edge(grid, down, to)
+		blocked.call(from, across)
+		or blocked.call(across, to)
+		or blocked.call(from, down)
+		or blocked.call(down, to)
 	)
 
 
