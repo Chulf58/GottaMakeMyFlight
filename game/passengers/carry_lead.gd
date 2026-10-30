@@ -48,6 +48,10 @@ const UPRIGHT_FROM_FLOOR := 0.2
 ## one down, from as far before the end.
 const KEEP_T := 0.35
 const KEEP_FADE := 0.25
+## How high a bag set down on the floor rises midway: the full TRANSFER_LIFT_M
+## put the case top against the face of a body stooping to set it down, and
+## none put the hand low beside the case's top corner, palm out, not on it.
+const SET_DOWN_LIFT_M := 0.15
 
 
 ## The kind of end a bag's place (`place`, CarryOnProps' (home * 2 + hand) * 2
@@ -283,6 +287,12 @@ static func plan(
 	var anchor_to := loose
 	if to_end == End.HELD:
 		anchor_to = want.affine_inverse() * (body["grips"][to_hand] as Vector3)
+		if roller:
+			# Along the rods, on the bar as the rods are drawn now (they run out
+			# or in through the move), not where the end's rods put it: blending
+			# the two lengths again took the bar up to 8 cm off the hand passing
+			# a pulled roller between hands (crossing probe FLOAT, pull.R>pull.L).
+			anchor_to.z = loose.z
 	elif roller and to_end == End.REST:
 		anchor_to = CarryOnProps.ROLLER_HANDLE
 	var held_at := anchor_from.lerp(anchor_to, t)
@@ -405,11 +415,11 @@ static func path(
 		placed.origin.y += CarryOnProps.KNEE_LIFT_M * early
 	elif flags.get("to_floor", false) and not in_stall:
 		# Set down on the floor: out ahead first and down late, so it is not
-		# low in front of the thighs and the bent knees, and never lifted: the
-		# lift put the case top against the face of a body stooping to set it
-		# down (board item 5ed915b0).
+		# low in front of the thighs and the bent knees, lifted only
+		# SET_DOWN_LIFT_M (board item 5ed915b0).
 		var ahead := start.origin.lerp(want.origin, 1.0 - (1.0 - k) * (1.0 - k))
 		placed.origin = Vector3(ahead.x, lerpf(start.origin.y, want.origin.y, k * k), ahead.z)
+		placed.origin.y += SET_DOWN_LIFT_M * arc
 	else:
 		placed.origin.y += CarryOnProps.TRANSFER_LIFT_M * arc
 	var clear: float = flags.get("clear", CarryOnProps.TRANSFER_CLEAR_M)
