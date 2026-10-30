@@ -53,7 +53,7 @@ func after_test() -> void:
 func test_the_bar_has_a_staff_button_and_the_card_starts_closed() -> void:
 	var button := _menu.staff_button
 	assert_bool(_menu.bar().is_ancestor_of(button)).is_true()
-	assert_str(button.text).is_equal("Staff")
+	assert_str(button.tooltip_text).is_equal("Staff")
 	assert_bool(_menu.staff_open).is_false()
 	assert_bool(_panel.card().visible).is_false()
 	assert_bool(button.button_pressed).is_false()

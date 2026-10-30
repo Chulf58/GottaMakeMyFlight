@@ -2,7 +2,8 @@ class_name TestBuildMenuMoneyPage
 extends GdUnitTestSuite
 ## The currency exchange and ATM in the build menu (F4-5b; decision store-
 ## rooms-and-retail-pieces-go-on-stores-pages-behind-the-furniture-button): one
-## Money page after the Fashion page, behind the Furniture bar button, holding
+## Money page, since HUD 6/7 the last page of the Services group after Desks
+## and Care (it followed Fashion behind the Furniture button before), holding
 ## the exchange room, its counter, the ATM room and the ATM, four cards and the
 ## Rotate and Next column. The exchange counter and the ATM left the Desks page
 ## for it. Every card shows a rendered thumbnail, never a placeholder tile.
@@ -58,18 +59,18 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-func test_the_money_page_follows_fashion_in_the_furniture_group_before_remove() -> void:
+# Was "follows Fashion in the Furniture group"; since HUD 6/7 the Money page
+# ends the Services group, after Care, and Leisure's first page follows it.
+func test_the_money_page_follows_care_in_the_services_group() -> void:
 	var all := BuildMenu.categories()
 	var page := _index("Money")
 	print("money page at %d, remove at %d" % [page, BuildMenu.REMOVE_CATEGORY])
-	assert_int(page).is_equal(_index("Fashion") + 1)
+	assert_int(page).is_equal(_index("Care") + 1)
 	assert_bool(all[page].get("page", false)).is_true()
 	assert_bool(_menu.category_button(page).visible).is_false()
-	assert_int(BuildMenu.group_start(page)).is_equal(_index("Furniture"))
-	# The Dining page (F4-6) and the Activities page (F4-7) follow it; Remove
-	# comes after those.
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 3)
-	assert_int(_index("Dining")).is_equal(page + 1)
+	assert_int(BuildMenu.group_start(page)).is_equal(BuildMenu.group_index("Services"))
+	assert_int(BuildMenu.group_index("Leisure")).is_equal(page + 1)
+	assert_int(page).is_less(BuildMenu.REMOVE_CATEGORY)
 	assert_array(all[page]["tools"]).is_equal(TOOLS)
 	for tool in TOOLS:
 		assert_int(BuildMenu.category_of(tool)).is_equal(page)
@@ -127,9 +128,10 @@ func test_the_money_tray_fits_the_column_with_rotate_and_next() -> void:
 	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
 	var next := _menu.card(TOOLS[0]).get_parent().find_child("CardNext", true, false) as Button
 	assert_object(next).is_not_null()
-	# Next goes to the Dining page, the last of the group, which goes back round.
+	# Since HUD 6/7 Money is the last page of Services, so Next goes back to its
+	# first page, Desks (it opened the Dining page before).
 	next.pressed.emit()
-	assert_int(_menu.open_category()).is_equal(_index("Dining"))
+	assert_int(_menu.open_category()).is_equal(_index("Desks"))
 
 
 func test_picking_a_money_tool_opens_its_page_and_presses_its_card() -> void:
@@ -137,4 +139,6 @@ func test_picking_a_money_tool_opens_its_page_and_presses_its_card() -> void:
 		_mode.set_tool(tool)
 		assert_int(_menu.open_category()).is_equal(_index("Money"))
 		assert_bool(_menu.card(tool).button_pressed).is_true()
-		assert_bool(_menu.category_button(_index("Furniture")).button_pressed).is_true()
+		# The Services group button since HUD 6/7 (was Furniture).
+		var services := BuildMenu.group_index("Services")
+		assert_bool(_menu.category_button(services).button_pressed).is_true()

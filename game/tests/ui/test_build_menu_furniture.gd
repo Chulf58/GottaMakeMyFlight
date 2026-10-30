@@ -1,24 +1,22 @@
 class_name TestBuildMenuFurniture
 extends GdUnitTestSuite
-## The 29 furniture pieces in the build menu (Furniture 4/4 F4-2). The bar has
-## no room for more buttons, and a tray holds at most four cards beside its
-## Rotate card inside COLUMN_W, so the pieces sit on eight pages of one
-## Furniture category: its button opens the first page, and a Next card on
-## each page opens the following one (the last goes back to the first). Every
-## card shows its name, size, price, a rendered thumbnail and, where the piece
-## has a running cost, its upkeep.
+## The 29 furniture pieces in the build menu (Furniture 4/4 F4-2). A tray holds
+## at most four cards beside its Rotate card inside COLUMN_W, so the pieces sit
+## on pages. Every card shows its name, size, price, a rendered thumbnail and,
+## where the piece has a running cost, its upkeep.
 ##
-## The three Stores pages (decision store-rooms-and-retail-pieces-go-on-stores-
-## pages-behind-the-furniture-button; TestBuildMenuStores) and the Money page
-## (F4-5b; TestBuildMenuMoneyPage) follow the eight furniture pages behind the
-## same button, so the group has twelve pages, the pharmacy counter and shelf
-## sit on the pharmacy's Stores page, not Care, and the exchange counter and the
-## ATM on the Money page, not Desks.
+## Since HUD 6/7 (decision hud-6-7-furniture-groups-five-icon-buttons-decor-
+## food-servic) the pages sit behind five group buttons, Decor, Food, Services,
+## Leisure and Shops, in place of the one Furniture button (TestBuildMenuGroups
+## checks which page is in which group). A group's button opens its first page,
+## and a Next card on each page opens the group's following page (the last goes
+## back to the group's first). The pharmacy counter and shelf sit on the
+## pharmacy's page, not Care, and the exchange counter and the ATM on the Money
+## page, not Desks.
 
-## The pages behind the Furniture button: eight furniture pages, three Stores
-## pages, the Money page, the Dining page and the Activities page (was 8 before the
-## Stores pages joined the group, 11 before the Money page did, 12 before the
-## Dining page did, 13 before the Activities page did).
+## The furniture, store, food and activity pages, one after another from the
+## Furniture page and before Remove: eight furniture pages, three store pages
+## and the Money, Dining and Activities pages.
 const PAGE_COUNT := 14
 const MAX_CARDS_PER_PAGE := 4
 ## The store, food and activity room tools on the Stores, Money, Dining and
@@ -93,7 +91,9 @@ func _next_button(page: int) -> Button:
 	return _menu.card(tool).get_parent().find_child("CardNext", true, false) as Button
 
 
-func test_one_furniture_button_on_the_bar_leads_all_its_pages_before_remove() -> void:
+# Was one Furniture button over every page; HUD 6/7 put five group buttons in
+# its place, so a page that starts a group is not a later page.
+func test_five_group_buttons_lead_the_furniture_pages_before_remove() -> void:
 	var first := _leader()
 	assert_int(first).is_not_equal(BuildMenu.NO_CATEGORY)
 	var all := BuildMenu.categories()
@@ -102,12 +102,17 @@ func test_one_furniture_button_on_the_bar_leads_all_its_pages_before_remove() ->
 	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(all.size() - 1)
 	assert_int(BuildMenu.remove_category()).is_equal(all.size() - 1)
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
+	var leaders := 0
 	for i in all.size():
-		var is_page := first < i and i < first + PAGE_COUNT
+		var leads: bool = all[i].has("group")
+		var is_page := first < i and i < first + PAGE_COUNT and not leads
+		leaders += 1 if leads else 0
 		assert_bool(all[i].get("page", false)).override_failure_message("cat %d" % i).is_equal(
 			is_page
 		)
 		assert_bool(_menu.category_button(i).visible).is_equal(not is_page)
+	assert_int(leaders).is_equal(5)
+	assert_str(all[first]["group"]).is_equal("Decor")
 
 
 func test_the_pages_hold_every_furniture_tool_once_and_at_most_four_cards() -> void:
@@ -200,26 +205,38 @@ func test_every_page_tray_fits_the_column_and_the_reserved_height() -> void:
 		assert_object(column.find_child("CardRotate", true, false)).is_not_null()
 
 
+# Was one cycle through all 14 pages; since HUD 6/7 each group cycles alone.
 func test_the_next_card_opens_the_following_page_and_the_last_goes_back_to_the_first() -> void:
 	var pages := _pages()
-	_menu.press_category(pages[0])
-	for n in PAGE_COUNT:
-		assert_int(_menu.open_category()).is_equal(pages[n])
-		_next_button(pages[n]).pressed.emit()
-		assert_int(_menu.open_category()).is_equal(pages[(n + 1) % PAGE_COUNT])
+	for page in pages:
+		var following := page + 1
+		if following > pages[-1] or BuildMenu.categories()[following].has("group"):
+			following = BuildMenu.group_start(page)
+		# Close the tray first: pressing the open page's button would close it.
+		_mode.set_tool(BuildMode.Tool.NONE)
+		_menu.press_category(page)
+		assert_int(_menu.open_category()).is_equal(page)
+		_next_button(page).pressed.emit()
+		assert_int(_menu.open_category()).override_failure_message("page %d" % page).is_equal(
+			following
+		)
 		assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
 
 
-func test_the_furniture_button_stays_pressed_on_every_page_and_reopens_the_first() -> void:
-	var first := _leader()
+# Was the one Furniture button on every page; since HUD 6/7 it is the page's
+# own group button.
+func test_the_group_button_stays_pressed_on_its_pages_and_reopens_the_first() -> void:
 	for page in _pages():
+		var first := BuildMenu.group_start(page)
 		_menu.press_category(page)
 		for i in BuildMenu.categories().size():
 			assert_bool(_menu.category_button(i).button_pressed).is_equal(i == first)
-	# From the last page the Furniture button leads back to the first page.
-	_menu.press_category(first)
-	assert_int(_menu.open_category()).is_equal(first)
-	_menu.press_category(first)
+	# From the group's last page its button leads back to the group's first page.
+	var shops := BuildMenu.group_start(_pages()[-1])
+	assert_int(shops).is_less(_pages()[-1])
+	_menu.press_category(shops)
+	assert_int(_menu.open_category()).is_equal(shops)
+	_menu.press_category(shops)
 	assert_bool(_menu.is_tray_open()).is_false()
 
 
@@ -228,7 +245,10 @@ func test_picking_a_piece_by_tool_opens_its_page() -> void:
 	_mode.set_tool(tool)
 	assert_int(_menu.open_category()).is_equal(BuildMenu.category_of(tool))
 	assert_bool(_menu.card(tool).button_pressed).is_true()
-	assert_bool(_menu.category_button(_leader()).button_pressed).is_true()
+	# Since HUD 6/7 the podium's group button, not the Furniture one.
+	var group := BuildMenu.group_start(BuildMenu.category_of(tool))
+	assert_str(BuildMenu.bar_name(group)).is_equal("Leisure")
+	assert_bool(_menu.category_button(group).button_pressed).is_true()
 
 
 func test_remove_still_picks_the_remove_tool_and_has_no_tray() -> void:

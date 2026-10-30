@@ -15,6 +15,12 @@ extends CanvasLayer
 ## arrives meanwhile (the pointer moving over the grid changes it) waits and
 ## shows when the hold ends.
 ##
+## The bar buttons are icons with their names in tooltips (BarIcons, HUD 6/7).
+## The furniture and its rooms sit in five groups (Decor, Food, Services,
+## Leisure, Shops), each one bar button over a tray that pages when its group
+## holds more than one tray of cards. While the edit under the pointer is
+## refused, GhostReason shows a short reason beside the ghost.
+##
 ## The Staff button ends the bar, after the categories. It has no tray of
 ## cards: it opens the StaffPanel's hiring card in the tray's place (the panel
 ## follows staff_toggled), and it is shut by opening a category or picking a
@@ -25,10 +31,12 @@ extends CanvasLayer
 ## card shows its price and greys out while the wallet cannot pay it (it can
 ## still be picked, so the cost line can show the shortfall); a cost line above
 ## the status line shows what the tool, or the dragged Floor rectangle, would
-## cost and how short the wallet is. Prices stay in the price colour, never
-## red. With no wallet (BuildMode builds for free) the slot reads "--" and
-## every card says Free. Hovering the money slot shows today's money from the
-## DayLedger (MoneySlot) when day_ledger is set.
+## cost and how short the wallet is. Prices are in the neutral text colour
+## (HudPrice), never red: a red cost reads as "can't place" (decision hud-
+## steal-list-self-clearing-alert-cards-money-hover-departu). With no wallet
+## (BuildMode builds for free) the slot reads "--" and every card says Free.
+## Hovering the money slot shows today's money from the DayLedger (MoneySlot)
+## when day_ledger is set.
 
 ## The hiring card opened or closed (the StaffPanel shows it with this).
 signal staff_toggled(open: bool)
@@ -51,11 +59,13 @@ const CATEGORIES := [
 	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
 	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
 	{"name": "Gates", "tools": [BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN]},
+	# The cafe, its counter and its table. Named Shops until HUD 6/7 gave that
+	# name to the store group's button below.
 	{
-		"name": "Shops",
+		"name": "Cafe",
 		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
 	},
-	# The toilet room and its two pieces (Toilets 5/5). Shops holds three cards
+	# The toilet room and its two pieces (Toilets 5/5). Cafe holds three cards
 	# and Rotate already; six cards and Rotate are wider than COLUMN_W, so the
 	# toilet gets a tray of its own, as the Lane did.
 	{
@@ -89,31 +99,70 @@ const CATEGORIES := [
 		"name": "Baggage",
 		"tools": [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART],
 	},
-	# The furniture (Furniture 4/4 F4-2): its pieces on eight pages, because the
-	# bar has room for one more button and a tray holds four cards and Rotate in
-	# COLUMN_W. The first page has the bar button; a later page ("page": true)
-	# has none and is reached by the Next card on the page before it.
-	{"name": "Furniture", "tools": FurnitureTools.PAGES[0]},
+	# The furniture and the rooms that go with it, in five groups (decision
+	# hud-6-7-furniture-groups-five-icon-buttons-decor-food-servic): Decor, Food,
+	# Services, Leisure and Shops. A group's first page has the bar button and
+	# carries the group's name ("group"); a later page ("page": true) has none
+	# and is reached by the Next card on the page before it, and the group's
+	# last page leads back to its first. A tray holds four cards and the Rotate
+	# and Next column in COLUMN_W, so a group with more pieces pages inside its
+	# tray. The Dining, Money and Activities pages joined Food, Services and
+	# Leisure: the ruling named the eleven pages there were before them.
+	{"name": "Furniture", "group": "Decor", "tools": FurnitureTools.PAGES[0]},
 	{"name": "Features", "tools": FurnitureTools.PAGES[1], "page": true},
 	{"name": "Fittings", "tools": FurnitureTools.PAGES[2], "page": true},
-	{"name": "Food", "tools": FurnitureTools.PAGES[3], "page": true},
-	{"name": "Desks", "tools": FurnitureTools.PAGES[4], "page": true},
+	{"name": "Food", "group": "Food", "tools": FurnitureTools.PAGES[3]},
+	# The food variants (F4-6): three rooms that take the Cafe tray's counter and
+	# table, so a page of their own holds just the room cards.
+	{
+		"name": "Dining",
+		"tools":
+		[BuildMode.Tool.BAR_ROOM, BuildMode.Tool.RESTAURANT_ROOM, BuildMode.Tool.STALL_ROOM],
+		"page": true,
+	},
+	{"name": "Desks", "group": "Services", "tools": FurnitureTools.PAGES[4]},
 	{"name": "Care", "tools": FurnitureTools.PAGES[5], "page": true},
-	{"name": "Lounge", "tools": FurnitureTools.PAGES[6], "page": true},
+	# The exchange and the ATM (F4-5b) share one Money page: each room with its
+	# one piece, four cards that fit beside the Rotate and Next column.
+	{
+		"name": "Money",
+		"tools":
+		[
+			BuildMode.Tool.EXCHANGE_ROOM,
+			BuildMode.Tool.EXCHANGE,
+			BuildMode.Tool.ATM_ROOM,
+			BuildMode.Tool.ATM,
+		],
+		"page": true,
+	},
+	{"name": "Lounge", "group": "Leisure", "tools": FurnitureTools.PAGES[6]},
 	{"name": "Fun", "tools": FurnitureTools.PAGES[7], "page": true},
-	# The Stores pages (decision store-rooms-and-retail-pieces-go-on-stores-
-	# pages-behind-the-furniture-button), later pages of the same group: one per
-	# store, its room, then its counter or till and its shelf or rail, as the
-	# Toilets and Kiosk trays hold theirs.
+	# The activity and rest rooms (F4-7): each takes its own piece from the
+	# Lounge and Fun pages, so a page of their own holds just the room cards.
+	{
+		"name": "Activities",
+		"tools":
+		[
+			BuildMode.Tool.PLAY_AREA_ROOM,
+			BuildMode.Tool.LOUNGE_ROOM,
+			BuildMode.Tool.SHOWER_ROOM,
+			BuildMode.Tool.NAP_POD_ROOM,
+		],
+		"page": true,
+	},
+	# The store pages (decision store-rooms-and-retail-pieces-go-on-stores-
+	# pages-behind-the-furniture-button): one per store, its room, then its
+	# counter or till and its shelf or rail, as the Toilets and Kiosk trays hold
+	# theirs.
 	{
 		"name": "Pharmacy",
+		"group": "Shops",
 		"tools":
 		[
 			BuildMode.Tool.PHARMACY_ROOM,
 			BuildMode.Tool.PHARMACY_COUNTER,
 			BuildMode.Tool.PHARMACY_SHELF,
 		],
-		"page": true,
 	},
 	{
 		"name": "Duty free",
@@ -129,41 +178,6 @@ const CATEGORIES := [
 		"name": "Fashion",
 		"tools":
 		[BuildMode.Tool.FASHION_ROOM, BuildMode.Tool.FASHION_TILL, BuildMode.Tool.FASHION_RAIL],
-		"page": true,
-	},
-	# The exchange and the ATM (F4-5b) share one Money page: each room with its
-	# one piece, four cards that fit beside the Rotate and Next column.
-	{
-		"name": "Money",
-		"tools":
-		[
-			BuildMode.Tool.EXCHANGE_ROOM,
-			BuildMode.Tool.EXCHANGE,
-			BuildMode.Tool.ATM_ROOM,
-			BuildMode.Tool.ATM,
-		],
-		"page": true,
-	},
-	# The food variants (F4-6): three rooms that take the Shops tray's counter and
-	# table, so a page of their own holds just the room cards.
-	{
-		"name": "Dining",
-		"tools":
-		[BuildMode.Tool.BAR_ROOM, BuildMode.Tool.RESTAURANT_ROOM, BuildMode.Tool.STALL_ROOM],
-		"page": true,
-	},
-	# The activity and rest rooms (F4-7): each takes its own piece from the
-	# Lounge and Fun furniture pages, so a page of their own holds just the room
-	# cards.
-	{
-		"name": "Activities",
-		"tools":
-		[
-			BuildMode.Tool.PLAY_AREA_ROOM,
-			BuildMode.Tool.LOUNGE_ROOM,
-			BuildMode.Tool.SHOWER_ROOM,
-			BuildMode.Tool.NAP_POD_ROOM,
-		],
 		"page": true,
 	},
 	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
@@ -267,7 +281,8 @@ const CARD_SIZE := Vector2(112.0, 176.0)
 const THUMB_SIZE := 72.0
 ## The card hint labels' font size, as HudHint sets it.
 const CARD_HINT_FONT_SIZE := 14
-const CATEGORY_SIZE := Vector2(100.0, 44.0)
+## A bar button: an icon (BarIcons) with its name in the tooltip.
+const CATEGORY_SIZE := Vector2(52.0, 44.0)
 const ROTATE_SIZE := Vector2(72.0, 176.0)
 
 ## The one HUD theme (decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
@@ -322,6 +337,7 @@ var _price_labels: Dictionary = {}
 var _rect_cost_key := ""
 var _rect_cost := 0
 var _room_panel := RoomPanel.new()
+var _ghost_reason := GhostReason.new()
 ## True while the status line holds a grant message; the latest status text
 ## waits in _held_status until the hold ends.
 var _holding := false
@@ -385,8 +401,22 @@ static func running_cost(tool: BuildMode.Tool) -> int:
 	return CARD_RUNNING_COSTS.get(tool, FurnitureTools.RUNNING_COSTS.get(tool, 0))
 
 
-## The first page of the furniture group a category belongs to (CATEGORIES),
-## or the category itself when it is not a later page.
+## The name a category's bar button carries in its tooltip: its group's name
+## on a group's first page, else its own.
+static func bar_name(index: int) -> String:
+	return CATEGORIES[index].get("group", CATEGORIES[index]["name"])
+
+
+## The first page of the named group (its bar button), or NO_CATEGORY.
+static func group_index(group_name: String) -> int:
+	for i in CATEGORIES.size():
+		if CATEGORIES[i].get("group", "") == group_name:
+			return i
+	return NO_CATEGORY
+
+
+## The first page of the group a category belongs to (CATEGORIES), or the
+## category itself when it is not a later page.
 static func group_start(index: int) -> int:
 	while index > 0 and CATEGORIES[index].get("page", false):
 		index -= 1
@@ -424,6 +454,8 @@ func _ready() -> void:
 	_build_money()
 	_build_cost()
 	add_child(_room_panel)
+	_ghost_reason.build_mode = build_mode
+	add_child(_ghost_reason)
 	if build_mode != null:
 		_wallet = build_mode.wallet()
 		_room_panel.watch(build_mode)
@@ -584,6 +616,11 @@ func _pointer_on_grid() -> bool:
 
 func room_panel() -> RoomPanel:
 	return _room_panel
+
+
+## The short refusal reason beside the ghost.
+func ghost_reason() -> GhostReason:
+	return _ghost_reason
 
 
 func _set_staff_open(open: bool) -> void:
@@ -793,7 +830,11 @@ func _build_bar() -> void:
 	_bar.add_child(row)
 	for i in categories().size():
 		var button := Button.new()
-		button.text = categories()[i]["name"]
+		# A later page's button stays hidden: it is there to keep the indices.
+		if not categories()[i].get("page", false):
+			BarIcons.dress(button, bar_name(i))
+			# A name to find it by, now that it shows no text (BarDecor, BarCheckin).
+			button.name = "Bar" + bar_name(i).replace("-", "").replace(" ", "")
 		button.toggle_mode = true
 		button.custom_minimum_size = CATEGORY_SIZE
 		button.focus_mode = Control.FOCUS_NONE
@@ -802,7 +843,7 @@ func _build_bar() -> void:
 		row.add_child(button)
 		_category_buttons.append(button)
 	staff_button.name = "StaffButton"
-	staff_button.text = "Staff"
+	BarIcons.dress(staff_button, "Staff")
 	staff_button.toggle_mode = true
 	staff_button.custom_minimum_size = CATEGORY_SIZE
 	staff_button.focus_mode = Control.FOCUS_NONE

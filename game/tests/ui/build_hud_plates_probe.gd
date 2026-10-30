@@ -3,11 +3,18 @@ extends SceneTree
 ## real main.tscn with the starter terminal built:
 ##   a_no_tray_1920   no tool, tray closed
 ##   b_floor_drag_1920  Structure tray, Floor picked, a rectangle mid-drag
-##   c_checkin_refusal_1920  Check-in tray, a desk hovered off the floor
+##   c_checkin_refusal_1920  Check-in tray, a desk hovered off the floor, with
+##                    the short reason beside the ghost (GhostReason)
+##   e_ghost_over_bar_1920  the ghost hidden while the pointer is on the bar
+##   f_group_tray_1920  the Leisure group's tray on its second page (Fun)
+##   g_tooltip_1920   the pointer resting on the Decor icon, its tooltip open
+##   h_bar_3440       3440x1440, the Shops group's tray open
 ##   d_layout_1280    1280x720, Structure tray, Debug open, a long follow text
 ## Before each save it proves every HUD panel lies inside the window, that no
 ## two panels overlap, and that the 3D subject projects inside the frame clear
-## of every panel; otherwise it prints PROBE_INVALID and exits 1. A guard
+## of every panel; otherwise it prints PROBE_INVALID and exits 1. At 1920 and
+## 3440 it also proves the Debug button is clear of the icon bar (smoke
+## playtest 10, board 13d090fa) and prints the gap. A guard
 ## thread prints PROBE_INVALID and calls OS.crash() if the run passes
 ## LIMIT_MS, since a frozen main thread never reaches a check in _process.
 ##
@@ -16,7 +23,11 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game -s res://tests/ui/build_hud_plates_probe.gd
 
-const OUT_REL := "res://../tools/blender/out/hud-followups"
+const OUT_REL := "res://../tools/blender/out/hud-6-7"
+## The least gap between the bar's right end and the Debug button.
+const DEBUG_GAP := 24.0
+## How long the pointer rests on a bar icon before its tooltip is plated.
+const TOOLTIP_WAIT_MS := 1500
 const MARGIN_PX := 8.0
 const LIMIT_MS := 120000
 const OCCLUSION_STOP_M := 0.1
@@ -106,6 +117,7 @@ func _run() -> void:
 	_mode.set_tool(BuildMode.Tool.NONE)
 	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
 	await _frames(6)
+	_check_debug_clear("a")
 	await _plate("a_no_tray_1920", [])
 
 	_mode.set_tool(BuildMode.Tool.FLOOR)
@@ -124,14 +136,48 @@ func _run() -> void:
 	_mode.set_tool(BuildMode.Tool.DESK)
 	_warp(_mode.grid.cell_to_world(REFUSED_CELL))
 	await _frames(6)
-	if (
-		_mode.status_text().find("Facing") < 0
-		or _mode.status_text().length() <= "Facing auto".length()
-	):
+	# A refusal shows its reason alone on the status line (no "Facing" prefix
+	# since smoke playtest 5) and its short form beside the ghost (HUD 6/7).
+	var reason := _menu.ghost_reason()
+	print("PROBE c: status='%s' beside ghost='%s'" % [_mode.status_text(), reason.text()])
+	if _mode.status_text() == "" or _mode.status_text().begins_with("Facing"):
 		_invalid("c: no refusal on the status line: '%s'" % _mode.status_text())
+	if not reason.visible or reason.text() == "":
+		_invalid("c: no short reason beside the ghost")
 	await _plate("c_checkin_refusal_1920", [_mode.grid.cell_to_world(REFUSED_CELL)])
 
 	await _ghost_over_hud()
+
+	_mode.set_tool(BuildMode.Tool.NONE)
+	var leisure := BuildMenu.group_index("Leisure")
+	_menu.category_button(leisure).pressed.emit()
+	var next := _menu.tray().find_children("CardNext", "Button", true, false)
+	for button in next:
+		if (button as Button).is_visible_in_tree():
+			(button as Button).pressed.emit()
+			break
+	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
+	await _frames(6)
+	print("PROBE f: open page %s" % BuildMenu.categories()[_menu.open_category()]["name"])
+	if BuildMenu.group_start(_menu.open_category()) != leisure or _menu.open_category() == leisure:
+		_invalid("f: the Leisure tray is not on a later page")
+	await _plate("f_group_tray_1920", [])
+
+	_menu.category_button(leisure).pressed.emit()
+	_mode.set_tool(BuildMode.Tool.NONE)
+	await _tooltip_plate("Decor", "g_tooltip_1920")
+
+	DisplayServer.window_set_size(Vector2i(3440, 1440))
+	await _frames(10)
+	print("PROBE window=%s layout=%s" % [root.size, root.get_visible_rect().size])
+	if root.size != Vector2i(3440, 1440):
+		_invalid("h: the window is %s, not 3440x1440" % root.size)
+	_menu.category_button(BuildMenu.group_index("Shops")).pressed.emit()
+	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
+	await _frames(6)
+	_check_debug_clear("h")
+	await _plate("h_bar_3440", [])
+	_mode.set_tool(BuildMode.Tool.NONE)
 
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	await _frames(10)
@@ -188,6 +234,75 @@ func _ghost_over_hud() -> void:
 	await _plate("e_ghost_over_bar_1920", [])
 	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
 	await _frames(4)
+
+
+## The Debug button lies right of the icon bar's end, at least DEBUG_GAP clear.
+func _check_debug_clear(label: String) -> void:
+	var bar := _menu.bar().get_global_rect()
+	var debug := (_hud.find_child("DebugToggle", true, false) as Control).get_global_rect()
+	var gap := debug.position.x - bar.end.x
+	print("PROBE %s: bar %s debug %s gap %.1f" % [label, bar, debug, gap])
+	if bar.intersects(debug) or gap < DEBUG_GAP:
+		_invalid("%s: the Debug button is not clear of the bar" % label)
+
+
+## Rests the pointer on a bar icon until its tooltip opens, proves the tooltip
+## window is open inside the window and names the button, then plates it.
+func _tooltip_plate(button_name: String, label: String) -> void:
+	var button := _menu.category_button(BuildMenu.group_index(button_name))
+	if button_name != BuildMenu.bar_name(BuildMenu.group_index(button_name)):
+		_invalid("%s: no %s button" % [label, button_name])
+		return
+	_warp_screen(button.get_global_rect().get_center())
+	var until := Time.get_ticks_msec() + TOOLTIP_WAIT_MS
+	while Time.get_ticks_msec() < until:
+		await process_frame
+	var tip := _open_tooltip()
+	var hovered := root.gui_get_hovered_control()
+	print(
+		(
+			"PROBE %s: hovered=%s tooltip_text='%s' tooltip=%s"
+			% [label, hovered, button.tooltip_text, tip]
+		)
+	)
+	if hovered != button or button.tooltip_text != button_name:
+		_invalid("%s: the pointer is not resting on the %s icon" % [label, button_name])
+	if tip == null:
+		_invalid("%s: no tooltip window is open" % label)
+	else:
+		var rect := Rect2(Vector2(tip.position), Vector2(tip.size))
+		var texts := []
+		for node in _nodes(tip):
+			if node is Label:
+				texts.append((node as Label).text)
+		print("PROBE %s: tooltip rect %s in %s labels %s" % [label, rect, root.size, texts])
+		if not Rect2(Vector2.ZERO, Vector2(root.size)).encloses(rect):
+			_invalid("%s: the tooltip is outside the window" % label)
+		if not texts.has(button_name):
+			_invalid("%s: the tooltip does not say %s" % [label, button_name])
+	await RenderingServer.frame_post_draw
+	var path := _out_dir.path_join(label + ".png")
+	var err := root.get_texture().get_image().save_png(path)
+	print("PLATE saved %s err=%d" % [path, err])
+
+
+## The open tooltip window, or null: Godot adds it to the viewport as an
+## internal child, so it is looked for among internal children too.
+func _open_tooltip() -> Window:
+	for node in _nodes(root):
+		var window := node as Window
+		if window != null and window != root and window.visible:
+			return window
+	return null
+
+
+## Every node under `from`, internal children included.
+func _nodes(from: Node) -> Array[Node]:
+	var out: Array[Node] = []
+	for child in from.get_children(true):
+		out.append(child)
+		out.append_array(_nodes(child))
+	return out
 
 
 func _plate(label: String, subjects: Array) -> void:
@@ -284,6 +399,8 @@ func _panels() -> Dictionary:
 		out["tray"] = _menu.tray().get_global_rect()
 	if _menu.status_label().text != "":
 		out["status"] = _menu.status_label().get_global_rect()
+	if _menu.ghost_reason().visible:
+		out["ghost_reason"] = _menu.ghost_reason().get_global_rect()
 	out["money"] = (_menu.find_child("MoneySlot", true, false) as Control).get_global_rect()
 	out["flight"] = (_hud.find_child("FlightPanel", true, false) as Control).get_global_rect()
 	out["debug"] = (_hud.find_child("DebugCorner", true, false) as Control).get_global_rect()

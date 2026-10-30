@@ -2,8 +2,9 @@ class_name TestBuildMenuActivitiesPage
 extends GdUnitTestSuite
 ## The activity and rest rooms in the build menu (F4-7; decisions furniture-
 ## set-modelled-on-copenhagen-airport-decor-calms-pas and food-and-drink-cafe-
-## bar-sit-down-restaurant-and-grab-and-go-st): one Activities page after the
-## Dining page, behind the Furniture bar button, with the play area, lounge,
+## bar-sit-down-restaurant-and-grab-and-go-st): one Activities page, since HUD
+## 6/7 the last page of the Leisure group after Lounge and Fun (it followed the
+## Dining page behind the Furniture button before), with the play area, lounge,
 ## shower and nap pod room cards. Each room takes its piece from the Lounge,
 ## Fun, Care or Fittings furniture page, so the page holds only the rooms. The
 ## cards borrow their main piece's thumbnail (no new art).
@@ -63,14 +64,17 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-func test_the_activities_page_follows_dining_in_the_furniture_group_before_remove() -> void:
+# Was "follows Dining in the Furniture group, last before Remove"; since HUD 6/7
+# the Activities page ends the Leisure group, after Fun, and Shops follows.
+func test_the_activities_page_follows_fun_in_the_leisure_group() -> void:
 	var all := BuildMenu.categories()
 	var page := _index("Activities")
-	assert_int(page).is_equal(_index("Dining") + 1)
+	assert_int(page).is_equal(_index("Fun") + 1)
 	assert_bool(all[page].get("page", false)).is_true()
 	assert_bool(_menu.category_button(page).visible).is_false()
-	assert_int(BuildMenu.group_start(page)).is_equal(_index("Furniture"))
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(page + 1)
+	assert_int(BuildMenu.group_start(page)).is_equal(BuildMenu.group_index("Leisure"))
+	assert_int(BuildMenu.group_index("Shops")).is_equal(page + 1)
+	assert_int(page).is_less(BuildMenu.REMOVE_CATEGORY)
 	assert_array(all[page]["tools"]).is_equal(TOOLS)
 	for tool in TOOLS:
 		assert_int(BuildMenu.category_of(tool)).is_equal(page)
@@ -100,7 +104,9 @@ func test_every_activities_card_shows_a_real_thumbnail() -> void:
 		assert_object(picture.texture).override_failure_message(path).is_not_null()
 
 
-func test_the_activities_tray_fits_the_column_and_next_goes_round_to_furniture() -> void:
+# Next went round to the Furniture page before HUD 6/7; it now goes round to
+# the Leisure group's first page, Lounge.
+func test_the_activities_tray_fits_the_column_and_next_goes_round_to_lounge() -> void:
 	var page := _index("Activities")
 	_menu.press_category(page)
 	var need := _menu.tray().get_combined_minimum_size()
@@ -110,7 +116,7 @@ func test_the_activities_tray_fits_the_column_and_next_goes_round_to_furniture()
 	var next := _menu.card(TOOLS[0]).get_parent().find_child("CardNext", true, false) as Button
 	assert_object(next).is_not_null()
 	next.pressed.emit()
-	assert_int(_menu.open_category()).is_equal(_index("Furniture"))
+	assert_int(_menu.open_category()).is_equal(_index("Lounge"))
 
 
 func test_picking_an_activities_tool_opens_its_page_and_presses_its_card() -> void:
