@@ -289,6 +289,8 @@ const ROTATE_SIZE := Vector2(72.0, 176.0)
 ## A CanvasLayer does not pass a theme down, so every top-level HUD Control
 ## under a CanvasLayer sets it itself.
 const HUD_THEME := preload("res://ui/hud_theme.tres")
+## The refusal card's canvas layer: over the HUD (layer 2), under the intro (10).
+const GHOST_REASON_LAYER := 3
 ## How long a rescue grant's or wages-paid message stays on the status line, in seconds.
 const GRANT_HOLD_S := 8.0
 
@@ -455,7 +457,13 @@ func _ready() -> void:
 	_build_cost()
 	add_child(_room_panel)
 	_ghost_reason.build_mode = build_mode
-	add_child(_ghost_reason)
+	# Its own layer above the HUD panels (all on layer 2), as a tooltip is: it
+	# follows the pointer and must not slip under the staff hint card.
+	var reason_layer := CanvasLayer.new()
+	reason_layer.name = "GhostReasonLayer"
+	reason_layer.layer = GHOST_REASON_LAYER
+	reason_layer.add_child(_ghost_reason)
+	add_child(reason_layer)
 	if build_mode != null:
 		_wallet = build_mode.wallet()
 		_room_panel.watch(build_mode)

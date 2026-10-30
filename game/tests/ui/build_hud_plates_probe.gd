@@ -28,12 +28,15 @@ const OUT_REL := "res://../tools/blender/out/hud-6-7"
 const DEBUG_GAP := 24.0
 ## How long the pointer rests on a bar icon before its tooltip is plated.
 const TOOLTIP_WAIT_MS := 1500
+## Room kept free right of and below the refused cell for the refusal card.
+const CARD_ROOM := Vector2(200.0, 70.0)
 const MARGIN_PX := 8.0
 const LIMIT_MS := 120000
 const OCCLUSION_STOP_M := 0.1
 const FOCUS_CELL := Vector2i(20, 10)
-const DRAG_FROM := Vector2i(24, 6)
-const DRAG_TO := Vector2i(29, 11)
+## The rectangle stays above the staff hint card, which docks over the tray stack.
+const DRAG_FROM := Vector2i(24, 4)
+const DRAG_TO := Vector2i(31, 7)
 const REFUSED_CELL := Vector2i(27, 9)
 const LONG_FOLLOW := (
 	"Passenger 12345   Going through security   mood 100   "
@@ -134,7 +137,9 @@ func _run() -> void:
 	_mode.cancel_area()
 
 	_mode.set_tool(BuildMode.Tool.DESK)
-	_warp(_mode.grid.cell_to_world(REFUSED_CELL))
+	await _frames(4)
+	var refused_cell := _clear_refused_cell()
+	_warp(_mode.grid.cell_to_world(refused_cell))
 	await _frames(6)
 	# A refusal shows its reason alone on the status line (no "Facing" prefix
 	# since smoke playtest 5) and its short form beside the ghost (HUD 6/7).
@@ -144,7 +149,7 @@ func _run() -> void:
 		_invalid("c: no refusal on the status line: '%s'" % _mode.status_text())
 	if not reason.visible or reason.text() == "":
 		_invalid("c: no short reason beside the ghost")
-	await _plate("c_checkin_refusal_1920", [_mode.grid.cell_to_world(REFUSED_CELL)])
+	await _plate("c_checkin_refusal_1920", [_mode.grid.cell_to_world(refused_cell)])
 
 	await _ghost_over_hud()
 
@@ -234,6 +239,34 @@ func _ghost_over_hud() -> void:
 	await _plate("e_ghost_over_bar_1920", [])
 	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
 	await _frames(4)
+
+
+## A cell with no floor, nearest REFUSED_CELL, where a desk is refused and both
+## the ghost and the refusal card beside it (CARD_ROOM) stay clear of every HUD
+## panel, so the plate shows them; REFUSED_CELL when none is found.
+func _clear_refused_cell() -> Vector2i:
+	var panels := _panels()
+	var view := root.get_visible_rect().grow(-MARGIN_PX)
+	var best := REFUSED_CELL
+	var best_d := INF
+	for y in range(REFUSED_CELL.y - 15, REFUSED_CELL.y + 16):
+		for x in range(REFUSED_CELL.x - 25, REFUSED_CELL.x + 26):
+			var cell := Vector2i(x, y)
+			if not _mode.grid.in_bounds(cell) or _mode.grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
+				continue
+			var p := _cam.unproject_position(_mode.grid.cell_to_world(cell))
+			var room := Rect2(p - Vector2(40.0, 40.0), CARD_ROOM + Vector2(40.0, 40.0))
+			if not view.encloses(room):
+				continue
+			var clear := true
+			for key in panels:
+				clear = clear and not (panels[key] as Rect2).intersects(room)
+			var d := Vector2(cell - REFUSED_CELL).length()
+			if clear and d < best_d:
+				best = cell
+				best_d = d
+	print("PROBE c: refused cell %s (was %s)" % [best, REFUSED_CELL])
+	return best
 
 
 ## The Debug button lies right of the icon bar's end, at least DEBUG_GAP clear.
@@ -404,6 +437,12 @@ func _panels() -> Dictionary:
 	out["money"] = (_menu.find_child("MoneySlot", true, false) as Control).get_global_rect()
 	out["flight"] = (_hud.find_child("FlightPanel", true, false) as Control).get_global_rect()
 	out["debug"] = (_hud.find_child("DebugCorner", true, false) as Control).get_global_rect()
+	var hint := _main.find_child("StaffHintCard", true, false) as Control
+	if hint != null and hint.is_visible_in_tree():
+		out["staff_hint"] = hint.get_global_rect()
+	var debug_panel := _hud.find_child("DebugPanel", true, false) as Control
+	if debug_panel.is_visible_in_tree():
+		out["debug_panel"] = debug_panel.get_global_rect()
 	var follow := _hud.find_child("FollowText", true, false) as Label
 	if follow.text != "":
 		out["follow"] = follow.get_global_rect()

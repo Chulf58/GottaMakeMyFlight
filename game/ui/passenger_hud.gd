@@ -514,24 +514,18 @@ func press_starter_terminal() -> void:
 	(build_mode.get_node("BuildView") as BuildView).refresh(grid)
 
 
-## The Debug toggle at the bottom-right corner, with its panel above it.
+## The Debug toggle at the bottom-right corner, with its panel docked above the
+## bar's height, so the open panel never reaches over the right end of the
+## build bar (smoke playtest 10; HUD 6/7).
 func _build_debug() -> void:
-	var corner := VBoxContainer.new()
-	corner.name = "DebugCorner"
-	corner.theme = BuildMenu.HUD_THEME
-	corner.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	corner.offset_left = -16.0
-	corner.offset_right = -16.0
-	corner.offset_top = -BuildMenu.MARGIN
-	corner.offset_bottom = -BuildMenu.MARGIN
-	corner.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	corner.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	corner.alignment = BoxContainer.ALIGNMENT_END
-	add_child(corner)
+	var corner := _bottom_right_dock("DebugCorner", BuildMenu.MARGIN)
+	var dock := _bottom_right_dock(
+		"DebugPanelDock", BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
+	)
 	_debug_panel.name = "DebugPanel"
 	_debug_panel.visible = false
 	_debug_panel.custom_minimum_size = Vector2(DEBUG_W, 0.0)
-	corner.add_child(_debug_panel)
+	dock.add_child(_debug_panel)
 	var column := VBoxContainer.new()
 	_debug_panel.add_child(column)
 	var batch := Button.new()
@@ -557,6 +551,24 @@ func _build_debug() -> void:
 	toggle.focus_mode = Control.FOCUS_NONE
 	toggle.toggled.connect(set_debug_open)
 	corner.add_child(toggle)
+
+
+## A column anchored to the bottom-right corner, 16 px in, with its bottom edge
+## `bottom` px up; it grows up and to the left.
+func _bottom_right_dock(dock_name: String, bottom: float) -> VBoxContainer:
+	var dock := VBoxContainer.new()
+	dock.name = dock_name
+	dock.theme = BuildMenu.HUD_THEME
+	dock.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	dock.offset_left = -16.0
+	dock.offset_right = -16.0
+	dock.offset_top = -bottom
+	dock.offset_bottom = -bottom
+	dock.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	dock.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	dock.alignment = BoxContainer.ALIGNMENT_END
+	add_child(dock)
+	return dock
 
 
 ## Keeps the follow text bottom-left, left of BuildMenu's centre column, with

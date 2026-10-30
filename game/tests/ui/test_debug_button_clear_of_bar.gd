@@ -59,4 +59,15 @@ func test_the_debug_button_is_clear_of_the_bar() -> void:
 		assert_float(debug.size.x).is_greater(20.0)
 		assert_bool(bar.intersects(debug)).is_false()
 		assert_float(debug.position.x - bar.end.x).is_greater_equal(MIN_GAP)
+		# The open Debug panel is wider than the button: it docks above the bar's
+		# height, so it never reaches over the bar's right end (plate d at 1280).
+		hud.set_debug_open(true)
+		await await_idle_frame()
+		await await_idle_frame()
+		var panel := (hud.find_child("DebugPanel", true, false) as Control).get_global_rect()
+		print("window %s open debug panel %s" % [size, panel])
+		assert_float(panel.size.x).is_greater_equal(PassengerHud.DEBUG_W)
+		assert_bool(bar.intersects(panel)).is_false()
+		assert_float(panel.end.y).is_less_equal(bar.position.y)
+		assert_bool(panel.intersects(debug)).is_false()
 		port.free()
