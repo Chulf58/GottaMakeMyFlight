@@ -15,6 +15,10 @@ const WORDS := {
 	&"nap_pod": ["Heading to the nap pod", "Resting in the nap pod"],
 }
 
+## Room type -> the use slots its pieces give (one slide or sofa has two, a
+## shower or a nap pod one).
+const SPOTS := {&"play_area": 2, &"lounge": 2, &"shower": 1, &"nap_pod": 1}
+
 var _world: PassengerTestWorld
 
 
@@ -61,7 +65,10 @@ func test_the_room_panel_shows_spots_and_a_fee_or_free_to_use() -> void:
 		print("%s panel: %s" % [type, texts])
 		var fee := RoomTypes.get_type(type).base_spend
 		var want := "Fee $%d per visit" % fee if fee > 0 else "Free to use"
-		assert_array(texts).contains([RoomRules.READY, want])
+		# One use piece, or two for the play area and the lounge, each with its slots.
+		var spots := "Spots %d" % RoomRules.status(mode.grid, room).seats
+		assert_str(spots).is_equal("Spots %d" % SPOTS[type])
+		assert_array(texts).contains([RoomRules.READY, spots, want])
 		assert_array(texts).not_contains(["Base spend $%d per visit" % fee])
 		panel.free()
 		mode.free()

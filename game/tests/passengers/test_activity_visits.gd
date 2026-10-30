@@ -127,6 +127,16 @@ func test_a_wisher_takes_an_activity_room_with_no_fallback_penalty() -> void:
 	assert_bool(plan.is_empty()).is_false()
 	assert_bool(plan["fallback"]).is_false()
 	NeedsPolicy.arbitrate(_world.sim, p)
+	# The lounge does not fulfil the wish: the icon keeps the bare bubble (no
+	# tick, no cross) while the visit is under way.
+	var shops := _world.sim.shops
+	assert_object(shops.visit_of(p.id)).is_not_null()
+	var state := shops.visit_wish_state(p.id)
+	var shown := WishIconView.read(shops, p)
+	print("lounge visit by a duty free wisher: state %d, icon %s" % [state, shown])
+	assert_int(state).is_equal(WishTable.State.WANTED)
+	assert_array(shown).is_equal([&"duty_free", WishTable.State.WANTED])
+	assert_int(WishIconView.badge_of(shown[1])).is_equal(WishIconView.Badge.NONE)
 	_run_while_visiting(p)
 	assert_int(p.mood).is_equal(50 + RoomTypes.get_type(&"lounge").mood_bonus)
 

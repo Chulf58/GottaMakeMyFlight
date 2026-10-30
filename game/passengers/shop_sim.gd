@@ -359,7 +359,8 @@ func wish_of(p: Passenger) -> StringName:
 ## How the wish of `passenger_id` stands, for the view, from what the planner
 ## committed (WishTable.State): FULFILLED or SUBSTITUTED while a bored
 ## passenger's visit is under way (a fallback visit is SUBSTITUTED), WANTED
-## while a bored wisher has none, and NONE otherwise: no wish, not bored, a
+## while a bored wisher has none or only an activity or rest room (which meets
+## boredom but not a shopping wish), and NONE otherwise: no wish, not bored, a
 ## spare-time browse or no such passenger. A browse starts only when not bored
 ## and a relief visit only when bored, and no shop stage changes boredom, so
 ## boredom tells the two apart. Never plans or pathfinds.
@@ -371,7 +372,10 @@ func visit_wish_state(passenger_id: int) -> WishTable.State:
 	if visit != null:
 		if visit.fallback:
 			return WishTable.State.SUBSTITUTED
-		return WishTable.State.NONE if wish_of(p) == WishTable.NONE else WishTable.State.FULFILLED
+		var unmet := _room_type(visit.room).activity
+		if wish_of(p) == WishTable.NONE:
+			return WishTable.State.NONE
+		return WishTable.State.WANTED if unmet else WishTable.State.FULFILLED
 	return WishTable.State.NONE if wish_of(p) == WishTable.NONE else WishTable.State.WANTED
 
 
