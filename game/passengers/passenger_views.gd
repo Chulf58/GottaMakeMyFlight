@@ -6,8 +6,8 @@ extends Node3D
 ## clock's alpha. A node is taken from the pool for a passenger's whole visit
 ## and returned when the passenger boards or a while after missing the flight.
 ## It reads the sim and never writes to it; animation never drives the sim.
-## Each node carries its thought bubble and its need icons (NeedIcons), set
-## each tick and laid out each frame.
+## Each node carries its thought bubble, its need icons (NeedIcons) and its
+## shopping wish icon (WishIconView), set each tick and laid out each frame.
 
 const CHARACTERS: Array[PackedScene] = [
 	preload("res://assets/people/tcp_male_character_01.glb"),
@@ -206,6 +206,7 @@ func draw() -> void:
 		var base: float = node.get_meta(&"base_speed", 1.0)
 		player.speed_scale = 0.0 if paused else base * clock.speed
 		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
+		WishIconView.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
 	if _nodes.has(selected_id):
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
@@ -265,6 +266,7 @@ func _take(variant: int) -> Node3D:
 	node.add_child(bubble)
 	for sprite_name in NeedIcons.SPRITES:
 		node.add_child(NeedIcons.make_sprite(sprite_name))
+	node.add_child(WishIconView.make_sprite())
 	add_child(node)
 	return node
 
@@ -346,6 +348,7 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		(node.get_node("AnimationPlayer") as AnimationPlayer).play(clip)
 	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p))
+	WishIconView.show_wish(node, WishIconView.read(sim.shops, p))
 
 
 ## Moves a passenger's drawn offset at security one tick's walk toward its
