@@ -5,7 +5,8 @@ extends RefCounted
 ## placeable-plants-trees-foun). Each decor piece in TABLE has a calm value and
 ## a radius in cells; the bigger pieces (fountain, statue, tree) have both
 ## higher. The bin, the posts and the chain give nothing, and the bush
-## and benches give the least.
+## and benches give the least. A bin or a bag room in view takes calm back
+## (BackOfHouseView).
 ##
 ## A passenger who is inside the terminal and stands within a piece's radius
 ## (cells from the nearest cell of its footprint, as ScreenCoverage fans out
@@ -58,6 +59,7 @@ const AWAY_STAGES: Array[Passenger.Stage] = [
 var _sim: PassengerSim
 var _grid: BuildGrid
 var _calm: Dictionary = {}
+var _penalty: Dictionary = {}
 var _dirty := true
 
 
@@ -122,12 +124,27 @@ func bind(sim: PassengerSim) -> void:
 	_dirty = true
 	if _grid != null:
 		_grid.graph_changed.connect(func(_cells: Array[Vector2i]) -> void: _dirty = true)
+		# A room edit dirties no cell, so graph_changed misses a bag room.
+		_grid.edit_applied.connect(_on_edit_applied)
 
 
-## The summed calm per period at `cell`, before the cap; 0 where no decor
-## reaches or without a grid.
+## The summed calm per period at `cell`, before the cap and before the
+## back-of-house penalty; 0 where no decor reaches or without a grid.
 func calm_at(cell: Vector2i) -> int:
 	return int(cells().get(cell, 0))
+
+
+## The calm points per period lost at `cell` to the bins and bag rooms seen from
+## there (BackOfHouseView); 0 where none is seen or without a grid.
+func penalty_at(cell: Vector2i) -> int:
+	cells()
+	return int(_penalty.get(cell, 0))
+
+
+## The calm at `cell` after the penalty, before the cap: never below 0, since
+## the penalty eats decor calm and cannot cost mood by itself.
+func net_calm_at(cell: Vector2i) -> int:
+	return maxi(calm_at(cell) - penalty_at(cell), 0)
 
 
 ## Every calmed cell, as cell -> summed calm. Worked out again only after the
@@ -137,6 +154,7 @@ func cells() -> Dictionary:
 		return {}
 	if _dirty:
 		_calm.clear()
+		_penalty = BackOfHouseView.penalties(_grid)
 		for id in _grid.object_ids():
 			var record := _grid.get_object(id)
 			var def_id: StringName = record["def"]
@@ -150,13 +168,19 @@ func cells() -> Dictionary:
 
 
 ## Once a simulated second per passenger, after its mood changed: decor in
-## range lifts it a little, up to CEILING.
+## range lifts it a little, up to CEILING, less the penalty of the bins and bag
+## rooms it can see.
 func beat(p: Passenger) -> void:
 	if AWAY_STAGES.has(p.stage) or p.mood >= CEILING:
 		return
-	var calm := capped(calm_at(BoredomSim.watch_cell(p)))
+	var calm := capped(net_calm_at(BoredomSim.watch_cell(p)))
 	if calm <= 0:
 		return
 	@warning_ignore("integer_division")
 	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
 	p.mood = mini(p.mood + due(calm, beat_number), CEILING)
+
+
+func _on_edit_applied(edit: BuildEdit, _result: BuildResult) -> void:
+	if edit.kind == BuildEdit.Kind.PLACE_ROOM or edit.kind == BuildEdit.Kind.REMOVE_ROOM:
+		_dirty = true
