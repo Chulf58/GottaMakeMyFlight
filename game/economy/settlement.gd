@@ -48,7 +48,8 @@ extends Node
 ## point 2): RoomRules.daily_upkeep, PriceTable.TOILET_STALL_UPKEEP per stall.
 ## Every screen stand on the grid, in a room or not, is charged with it
 ## (ScreenCoverage.daily_upkeep, PriceTable.SCREEN_UPKEEP a screen; decision
-## boredom-and-shops-design-boredom-need-while-waiting-kiosk-sh, point 3).
+## boredom-and-shops-design-boredom-need-while-waiting-kiosk-sh, point 3), and
+## so is every prize podium (PrizeCar.daily_upkeep, PriceTable.PRIZE_CAR_UPKEEP).
 ## The wallet pays the wages first and the upkeep from what is left; the rest of
 ## the upkeep is owed upkeep, kept apart from owed wages so the ledger books each
 ## under its own category. Repayment order, on every credit (credit_claim) and in
@@ -593,7 +594,7 @@ func _charge_upkeep(due: int, paid: int) -> void:
 func _upkeep_due() -> int:
 	if _sim == null or _sim.grid == null:
 		return 0
-	var due := ScreenCoverage.daily_upkeep(_sim.grid)
+	var due := ScreenCoverage.daily_upkeep(_sim.grid) + PrizeCar.daily_upkeep(_sim.grid)
 	for room_id in _sim.grid.room_ids():
 		due += RoomRules.daily_upkeep(_sim.grid, room_id)
 	return due

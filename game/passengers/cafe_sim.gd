@@ -744,6 +744,8 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 	var base := venue.base_spend
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
 	var amount := spend(base, p.mood, airside, visit.outcome)
+	if _sim.boredom.prize.boosts(p):
+		amount = PrizeCar.boosted(amount)
 	if _sim.wallet == null:
 		push_error("CafeSim: no wallet to pay passenger %d's %d into" % [p.id, amount])
 		return
