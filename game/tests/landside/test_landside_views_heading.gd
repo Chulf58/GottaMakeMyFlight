@@ -32,7 +32,7 @@ const CLOSE_SURFACE_TICK := 45
 ## slots stand west of its middle.
 const PARKED_NOSE := {
 	0: {24.85: Vector3(-1, 0, 0), 38.55: Vector3(1, 0, 0)},
-	1: {-7.6: Vector3(-1, 0, 0)},
+	1: {-6.6: Vector3(-1, 0, 0)},
 }
 const PLACE_NAMES := {
 	LandsideVehicle.Lane.BERTH: "berth",

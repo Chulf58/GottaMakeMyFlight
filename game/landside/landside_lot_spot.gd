@@ -33,6 +33,11 @@ enum Kind { SURFACE, MULTI_STOREY }
 ## A multi-storey only: the way from the gate through the building's entrance
 ## in its ground-floor wall, from in front of it to just inside.
 @export var entrance := PackedVector3Array()
+## A multi-storey only: the way out through the entrance in its own lane, from
+## just inside to in front of it, where `exit` starts. A leaving car drives
+## from the aisle front or the foot of the lowest ramp to its first point.
+## Empty: the car leaves the way it came in, `entrance` reversed.
+@export var way_out := PackedVector3Array()
 ## Where the aisle between the stalls meets the gate side, on the ground. Cars
 ## and walkers turn between the aisle and a stall at the stall's z, at this x,
 ## on every deck.

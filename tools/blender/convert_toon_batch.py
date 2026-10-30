@@ -16,6 +16,8 @@ What it does, per asset:
 2. Rebind the palette atlas. Each FBX material is resolved by (pack, material name) to
    one of five pack-qualified materials, rebuilt as Principled with the atlas PNG that
    this script converts from the vendor PSD. An unknown material name stops the run.
+   A stem listed in VENDOR_EDITS then gets its geometry edit (tc_parking_2a: a level
+   way from the entrance to the ground-floor stalls).
 3. Characters: keep only the parts the Unity source prefab enables, drop shape keys,
    join the parts into one skinned mesh, retarget the idle action from the idle FBX onto
    the character armature as "idle", then add walk, run, sit_down, sit_idle and stand_up
@@ -36,11 +38,14 @@ import sys
 import bpy
 from mathutils import Matrix, Vector
 
-REPO = "C:\\Users\\chulf\\Gotta-make-my-flight"
+# The checkout this script sits in (tools/blender/ under it), so a run from a worktree
+# reads and writes that worktree, never the main checkout.
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(REPO, "tools", "blender", "anim"))
 sys.path.insert(0, os.path.join(REPO, "tools", "blender", "landside"))
 import curb_bay  # noqa: E402
+import parking_2a_entrance  # noqa: E402
 import toon_clips  # noqa: E402
 GAME = os.path.join(REPO, "game")
 ASSETS = os.path.join(GAME, "assets")
@@ -57,6 +62,10 @@ AUTHORED = "authored:"
 AUTHORED_BUILDERS = {"curb_bay": curb_bay}
 MARKERS = {"tp_curb_bay_01a": curb_bay.MARKERS}
 MARKER_PARENT = {"tp_curb_bay_01a": curb_bay.MESH_NAME}
+# Vendor models edited after the import and atlas rebind, before the part checks and the
+# export: stem -> module with edit(objs) and Fail. tc_parking_2a gets a level way from its
+# entrance to the ground-floor stalls (tools/blender/landside/parking_2a_entrance.py).
+VENDOR_EDITS = {"tc_parking_2a": parking_2a_entrance}
 
 # Vendor PSD -> PNG under game/assets/textures/. (png name, mipmaps)
 TEXTURES = {
@@ -1218,6 +1227,12 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
     if idle_fbx is None:
         drop_loose(stem, objs)
     rebind_materials(pack, objs)
+    if stem in VENDOR_EDITS:
+        try:
+            VENDOR_EDITS[stem].edit(objs)
+        except VENDOR_EDITS[stem].Fail as e:
+            die("%s: %s" % (stem, e))
+        bpy.context.view_layer.update()
     durations = {}
     seat = None
     intent = None

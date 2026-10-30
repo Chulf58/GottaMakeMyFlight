@@ -18,7 +18,8 @@ extends RefCounted
 ## its position: then through a multi-storey's entrance, on the ground to the
 ## aisle front or up the ramps of the decks below the slot's (each deck's way
 ## down, reversed), along the deck's aisle to the stall and into it, nose
-## first. Out, the car backs into the aisle and drives the same way back out
+## first. Out, the car backs into the aisle and drives the same way back out,
+## through the entrance or, when the lot has one, its own way_out beside it,
 ## and on to the exit lane's start. A car that reaches the gate empty turns
 ## round there, in front of the entrance or at the aisle front. A passenger
 ## from an upper deck walks the aisle, every ramp down and out through the
@@ -212,9 +213,13 @@ func _add_lot(lot: LandsideLotSpot) -> void:
 		var points := lot.access.duplicate()
 		_append_all(points, inside)
 		var stand := LandsideDefinition.length_mm(points)
-		var way_out := inside.slice(0, inside.size() - 1)
+		# Back the way it came; through the entrance in reverse, or out of the
+		# entrance's own way out.
+		var from := lot.entrance.size() if not lot.way_out.is_empty() else 0
+		var way_out := inside.slice(from, inside.size() - 1)
 		way_out.reverse()
 		_append_all(points, way_out)
+		_append_all(points, lot.way_out)
 		_append(points, lot.exit[0])
 		paths.append(points)
 		ends.append(LandsideDefinition.length_mm(points))

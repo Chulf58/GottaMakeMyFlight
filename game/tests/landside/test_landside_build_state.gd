@@ -1,7 +1,7 @@
 class_name TestLandsideBuildState
 extends GdUnitTestSuite
 ## What the landside build tools change in LandsideSim (Landside 3/4): a
-## multi-storey holds three surface lots' worth of cars, a closed car park
+## multi-storey holds 31 cars to a surface lot's 12, a closed car park
 ## takes no new arrivals and drains, it can be removed only once it is empty,
 ## curb bays add berths, and the built, closed and paid state survives a save
 ## (decision landside-technical-design-arrival-bookings-landsidesim-vehic,
@@ -52,9 +52,12 @@ func _in_lane(lane: LandsideVehicle.Lane) -> int:
 	return count
 
 
-func test_a_multi_storey_holds_three_times_a_surface_lot() -> void:
+## The multi-storey holds 31 cars, one in each painted stall of its upper decks
+## and 9 on the ground floor clear of the hatched zone (decision
+## multi-storey-car-park-slots-fit-the-painted-stalls); the surface lot 12.
+func test_a_multi_storey_fills_its_31_slots_then_diverts() -> void:
 	assert_int(STARTER.lots[SURFACE].slots.size()).is_equal(12)
-	assert_int(STARTER.lots[MULTI_STOREY].slots.size()).is_equal(36)
+	assert_int(STARTER.lots[MULTI_STOREY].slots.size()).is_equal(31)
 	assert_int(STARTER.lots[MULTI_STOREY].kind).is_equal(LandsideLotSpot.Kind.MULTI_STOREY)
 	assert_bool(_sim.build_lot(MULTI_STOREY)).is_true()
 	var parked: Array[int] = []
@@ -66,11 +69,11 @@ func test_a_multi_storey_holds_three_times_a_surface_lot() -> void:
 	_run(1, 2500)
 	var free := _sim.free_slots(MULTI_STOREY)
 	print("parked %d diverted %d free %d" % [parked.size(), diverted.size(), free])
-	assert_int(parked.size()).is_equal(36)
-	assert_int(parked.count(MULTI_STOREY)).is_equal(36)
-	assert_int(diverted.size()).is_equal(4)
+	assert_int(parked.size()).is_equal(31)
+	assert_int(parked.count(MULTI_STOREY)).is_equal(31)
+	assert_int(diverted.size()).is_equal(9)
 	assert_int(_sim.free_slots(MULTI_STOREY)).is_equal(0)
-	assert_int(_sim.wallet.balance).is_equal(36 * LandsideSim.SURFACE_LOT_FEE)
+	assert_int(_sim.wallet.balance).is_equal(31 * LandsideSim.SURFACE_LOT_FEE)
 
 
 func test_a_surface_lot_holds_its_twelve() -> void:
@@ -240,7 +243,7 @@ func test_a_car_never_reverses_into_a_berth_or_lands_on_the_queue() -> void:
 
 func test_a_car_past_a_bay_does_not_go_back_to_it() -> void:
 	# A car that has driven on past bay 0 (a diverted car at the multi-storey's
-	# turn, 46000 mm in) takes a starter berth, not the free bay behind it.
+	# turn, 39500 mm in) takes a starter berth, not the free bay behind it.
 	assert_bool(_sim.build_curb(0, 300)).is_true()
 	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
 	for i in 40:

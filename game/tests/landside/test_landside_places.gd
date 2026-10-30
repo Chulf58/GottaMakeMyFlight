@@ -181,5 +181,7 @@ func test_cars_parked_on_every_level_of_the_multi_storey_are_drawn_on_its_decks(
 	print("parked cars drawn by deck height %s" % [by_level])
 	views.free()
 	assert_int(by_level.size()).is_equal(3)
-	for level in [0.3, 5.33, 10.33]:
+	# The deck tops (tc_parking_2a.glb, measured 2026-10-30): 5.33 and 10.33 were the
+	# tops of the stall paint the first slot layout stood on, not of the decks.
+	for level in [0.3, 5.3, 10.3]:
 		assert_int(int(by_level.get(level, 0))).is_greater(0)

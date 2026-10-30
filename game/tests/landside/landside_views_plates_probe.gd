@@ -658,8 +658,8 @@ func _plate_distance() -> void:
 ## wheels), and at least one seen through the open side.
 func _plate_multi() -> void:
 	# Low from the west, through the open side under the first deck: the ground-floor
-	# slots are 4.4 m in from the west wall. The distance plate frames the whole building.
-	await _plate_parked("multi", Vector3(-7.6, 1.0, -28.0))
+	# slots are 5.4 m in from the west wall. The distance plate frames the whole building.
+	await _plate_parked("multi", Vector3(-6.6, 1.0, -27.8))
 
 
 ## The upper decks: a forced fixture after every other plate. The two parked cars'
@@ -676,7 +676,7 @@ func _plate_decks() -> void:
 			moved.append([id, _landside.definition.lots[1].slots[v.stop]])
 	print("DECKS moved %s" % [moved])
 	_views.snap()
-	await _plate_parked("decks", Vector3(-7.6, 8.0, -28.0))
+	await _plate_parked("decks", Vector3(-6.6, 8.0, -27.8))
 
 
 ## The parked cars in the multi-storey seen from the west at `focus`: each in frame, on

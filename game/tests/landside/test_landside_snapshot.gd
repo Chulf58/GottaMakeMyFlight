@@ -136,11 +136,12 @@ func test_bad_parts_are_refused_whole() -> void:
 
 func test_the_previous_part_version_is_refused_naming_the_version_it_needs() -> void:
 	var old: Dictionary = _data.duplicate(true)
-	# Version 4: a vehicle saves the ticks until its next passenger steps out.
-	old["save_version"] = 3
+	# Version 5: the multi-storey's slots were re-laid, so a version-4 slot
+	# index names a different stall.
+	old["save_version"] = 4
 	var loaded := LandsideSnapshot.load(old, LandsideTestWorld.with_berths(1))
-	assert_int(LandsideSnapshot.SAVE_VERSION).is_equal(4)
-	assert_str(str(loaded.get("error", ""))).is_equal("save_version must be 4")
+	assert_int(LandsideSnapshot.SAVE_VERSION).is_equal(5)
+	assert_str(str(loaded.get("error", ""))).is_equal("save_version must be 5")
 
 
 func test_a_booking_for_a_flight_not_scheduled_breaks_the_link() -> void:
