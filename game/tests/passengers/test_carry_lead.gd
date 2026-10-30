@@ -451,3 +451,83 @@ func test_a_stall_pick_up_rises_to_the_carry_not_to_the_low_hand() -> void:
 	print("stall pick-up target at k %.2f: %s; outside: %s" % [k, up, low])
 	assert_float(up.y).is_greater(CarryLead.STALL_CARRY_GRIP_M * 0.9)
 	assert_float(low.y).is_less(0.5)
+
+
+## A backpack going between the front carry (a stall's approach, StallCarry)
+## and the back, both ways, outside a stall (board item stall-bags-probe-fails-
+## on-main-at-backpack-out-1-quad-r-vert): on the path legs to and from the
+## side hang (path(), where the push out is at full weight, its arc past 0.5)
+## the bag's middle, not only its origin (a corner of its back panel), is kept
+## TRANSFER_CLEAR_M from the body's centre line, so its body does not swing
+## into the walker's belly and hips as it turns (windowed stall_bags_probe,
+## seeds 3894526912 and 2386967894: the middle 0.31 m out, belly vertices
+## inside it). Control: each leg was sampled at full push.
+func test_a_backpack_between_the_front_and_the_back_keeps_its_middle_clear() -> void:
+	var kind := SecurityLooks.Kind.BACKPACK
+	var middle := CarryOnProps.bag_box(kind).get_center()
+	var front := CarryOnProps.carried_in_front(Vector3(-0.1, 1.25, 0.32), 0.0, 1.0, kind)
+	var back := CarryOnProps.worn_back(Transform3D(Basis(), Vector3(0.0, 1.35, -0.05)), 0.0, 1.0)
+	var hand_at := (SecurityLooks.Home.HAND * 2 + 0) * 2
+	var body := {
+		"hand": 0,
+		"grips": [Vector3(-0.1, 1.25, 0.32), Vector3(0.25, 0.8, 0.05)],
+		"shoulders_y": [1.42, 1.42],
+		"bar_z": 0.0,
+		"scale": 1.0,
+		"strap_top": Vector3.ZERO,
+	}
+	var flags := {
+		"in_stall": false,
+		"hand_carry": true,
+		"from_floor": false,
+		"to_floor": false,
+		"hand": 0,
+		"clear": CarryOnProps.TRANSFER_CLEAR_M,
+		"yaw": 0.0,
+	}
+	var on_back := {
+		"kind": kind,
+		"was": hand_at + 1,
+		"carry_from": SecurityLooks.Carry.HAND,
+		"home": hand_at,
+		"carry": SecurityLooks.Carry.BACK,
+		"anchor_from": CarryLead.anchor(kind, 0.0),
+		"from": front,
+	}
+	var off_back := {
+		"kind": kind,
+		"was": hand_at,
+		"carry_from": SecurityLooks.Carry.BACK,
+		"home": hand_at + 1,
+		"carry": SecurityLooks.Carry.HAND,
+		"from": back,
+	}
+	for move: Array in [[on_back, front, back], [off_back, back, front]]:
+		var bag: Dictionary = move[0]
+		var started := CarryLead.start_of(bag)
+		var to := CarryLead.end_of(bag["home"], bag["carry"])
+		var s := CarryLead.span(started[0], to)
+		var nearest := INF
+		var sampled := 0
+		for step in 201:
+			var k := step / 200.0
+			var t := (k - s.x) / (s.y - s.x)
+			# The path leg (path()) of the move: before the side hang going on, after it
+			# coming off; u how far along it.
+			var u := t / (1.0 - CarryLead.BACK_SHARE)
+			if bag == off_back:
+				u = (t - CarryLead.BACK_SHARE) / (1.0 - CarryLead.BACK_SHARE)
+			if u < 0.15 or u > 0.85:
+				continue
+			var plan := CarryLead.plan(bag, k, move[1], move[2], Transform3D(), flags, body)
+			var at: Vector3 = (plan["xf"] as Transform3D) * middle
+			nearest = minf(nearest, Vector2(at.x, at.z).length())
+			sampled += 1
+		print(
+			(
+				"%s: middle at least %.3f m out over %d samples"
+				% ["hand>back" if bag == on_back else "back>hand", nearest, sampled]
+			)
+		)
+		assert_int(sampled).is_greater(20)
+		assert_float(nearest).is_greater_equal(CarryOnProps.TRANSFER_CLEAR_M - 0.001)

@@ -446,16 +446,23 @@ static func plan(
 		var side := back_side(
 			frame.origin, flags["yaw"], lead, body["shoulders_y"][lead] - 0.1, body["scale"]
 		)
+		# Between the side hang and the hand the pack's middle is kept clear, not
+		# its origin (a bottom corner of its back panel): turning between hanging
+		# at the side and lying across the front, its body swung into the belly
+		# and the hips with the origin clear (board item stall-bags-probe-fails-on-
+		# main-at-backpack-out-1-quad-r-vert).
+		var by_middle := flags.duplicate()
+		by_middle["clear_at"] = CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).get_center()
 		if off_back and t < BACK_SHARE:
 			on_path = start.interpolate_with(side, smoothstep(0.0, 1.0, t / BACK_SHARE))
 		elif off_back:
 			var u := (t - BACK_SHARE) / (1.0 - BACK_SHARE)
-			on_path = path(side, want, u, frame, frame.affine_inverse() * side, flags)
+			on_path = path(side, want, u, frame, frame.affine_inverse() * side, by_middle)
 		elif t > 1.0 - BACK_SHARE:
 			var u := (t - 1.0 + BACK_SHARE) / BACK_SHARE
 			on_path = side.interpolate_with(want, smoothstep(0.0, 1.0, u))
 		else:
-			on_path = path(start, side, t / (1.0 - BACK_SHARE), frame, bag["from"], flags)
+			on_path = path(start, side, t / (1.0 - BACK_SHARE), frame, bag["from"], by_middle)
 	else:
 		# A bag picked up off a stall's floor rises, whatever its origin does (a case
 		# stood on its end has its origin higher than flat in the hand).
@@ -538,9 +545,10 @@ static func plan(
 ## start in the body's frame); one going down is lifted on the way, over a
 ## table edge, and one set down on the floor (`to_floor`) goes out ahead first
 ## and down late; either way kept `clear` from the body's centre line on the side
-## of `hand`. In a toilet stall (`in_stall`) a bag in the hand (`hand_carry`)
-## goes between the floor and the front carry ahead of the body with no lift
-## or push out: set down straight down, picked up upright first (decision
+## of `hand` (its origin, or the point flag "clear_at" in its own frame). In a
+## toilet stall (`in_stall`) a bag in the hand (`hand_carry`) goes between the
+## floor and the front carry ahead of the body with no lift or push out: set
+## down straight down, picked up upright first (decision
 ## stall-bag-poses-as-built-bags-stand-upright-against-the-insi); a tote there
 ## goes as it does outside (pushed out to its side at the hip, it lay against
 ## the thigh of a walker sitting down, board item c7b0e7be), but picked up it
@@ -629,7 +637,10 @@ static func path(
 		placed.origin.y += CarryOnProps.TRANSFER_LIFT_M * arc
 	var clear: float = flags.get("clear", CarryOnProps.TRANSFER_CLEAR_M)
 	var yaw: float = flags.get("yaw", 0.0)
-	var push := keep_out(placed.origin, frame.origin, yaw, flags.get("hand", 0), clear)
+	# The point of the bag kept clear: its origin, or flag "clear_at" (its own
+	# frame).
+	var kept: Vector3 = placed * (flags.get("clear_at", Vector3.ZERO) as Vector3)
+	var push := keep_out(kept, frame.origin, yaw, flags.get("hand", 0), clear)
 	placed.origin += push * minf(arc * 2.0, 1.0)
 	return placed
 

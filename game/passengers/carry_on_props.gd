@@ -292,25 +292,6 @@ static func worn_back(spine: Transform3D, yaw: float, scale_by: float) -> Transf
 	return Transform3D(basis, anchor - along * top)
 
 
-## A shoulder bag hung on the shoulder of `side` (0 right, 1 left) of a body
-## turned to `yaw` at `centre`, whose Arm bone is at `joint`: upright, its inner
-## face to the hip, the strap's bar STRAP_OVER_ARM_M over the joint and
-## STRAP_OUT_M out from the centre line. `strap_base` is Strap_Reach's position
-## in the bag. Returns [transform, the strap length in the bag's units].
-static func worn_shoulder(
-	joint: Vector3, centre: Vector3, yaw: float, side: int, scale_by: float, strap_base: Vector3
-) -> Array:
-	var turn := Basis(Vector3.UP, yaw)
-	var out := turn * (Vector3.LEFT if side == 0 else Vector3.RIGHT)
-	var forward := turn * Vector3.BACK
-	var bar := centre + out * STRAP_OUT_M + forward * (joint - centre).dot(forward)
-	bar.y = joint.y + STRAP_OVER_ARM_M
-	var basis := Basis(out.cross(Vector3.UP), out, Vector3.UP).scaled(Vector3.ONE * scale_by)
-	var length := STRAP_M / scale_by
-	var at := bar - basis * (strap_base + Vector3(0.0, 0.0, length))
-	return [Transform3D(basis, at), length]
-
-
 ## A roller pulled by its grip at `grip` with its axle at `axle` (on the floor,
 ## the wheels' radius up): its length along the line from the axle to the grip,
 ## its back panel (rods, wheels) down toward the walker: its front faces `ref`
@@ -1385,7 +1366,7 @@ func _carry_transform(
 			return worn_back(_spine_of(body), body.rotation.y, scale_by)
 		SecurityLooks.Carry.SHOULDER:
 			var side := SecurityLooks.worn_side(i)
-			var hung := worn_shoulder(
+			var hung := CarryWorn.shoulder(
 				_shoulder_of(body, side),
 				body.global_position,
 				body.rotation.y,
