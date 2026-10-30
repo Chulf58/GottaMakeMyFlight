@@ -12,6 +12,22 @@ const CarryContact := preload("res://spike/carry_contact.gd")
 ## A plate whose sampled pixels are darker than DARK_LEVEL (every channel) over
 ## more than DARK_SHARE of the frame is a camera inside or against a mesh.
 const DARK_LEVEL := 0.06
+## A roller laid down from the pull (RollerPark, 16 ticks) is plated on the bar
+## late in its stand (k 0.3), then one sim tick apart through its park and
+## into its lay down, the frames a game at 3x draws (one tick a frame), and
+## near its end (the crossing probe's lead plates).
+const LEAD_MOMENTS_OF := {
+	"ROLLER pull>floor":
+	[
+		[0.29, 0.31],
+		[0.365, 0.385],
+		[0.43, 0.445],
+		[0.49, 0.51],
+		[0.555, 0.57],
+		[0.615, 0.635],
+		[0.8, 0.97],
+	],
+}
 const DARK_SHARE := 0.35
 const DARK_STEP := 16
 ## A detail plate's camera: this far from the bag's middle, on the line from
@@ -76,7 +92,8 @@ static func blocked(cam: Camera3D, at: Vector3, tag: String) -> bool:
 static func step_to(
 	tree: SceneTree, clock: SimClock, props: CarryOnProps, id: int, i: int, lo: float, hi: float
 ) -> void:
-	var left := ticks_to(props.transfer_progress(id, i), lo, hi)
+	var ticks := CarryLead.ticks_of(props.bag_state(id, i))
+	var left := ticks_to(props.transfer_progress(id, i), lo, hi, ticks)
 	while left > 0.0:
 		var step := minf(left, STEP_TICKS)
 		step_clock(clock, step)
@@ -86,12 +103,13 @@ static func step_to(
 
 
 ## The ticks to step for a move now at `k` to reach the window [lo, hi]: to its
-## middle (to 1 for a window at 1), none when it is already in or past it.
-static func ticks_to(k: float, lo: float, hi: float) -> float:
+## middle (to 1 for a window at 1), none when it is already in or past it;
+## `ticks` the move's length (CarryLead.ticks_of()).
+static func ticks_to(k: float, lo: float, hi: float, ticks := CarryOnProps.TRANSFER_TICKS) -> float:
 	if k >= lo:
 		return 0.0
 	var target := 1.0 if lo >= 1.0 else (lo + hi) * 0.5
-	return (target - k) * CarryOnProps.TRANSFER_TICKS + (0.01 if lo >= 1.0 else 0.0)
+	return (target - k) * ticks + (0.01 if lo >= 1.0 else 0.0)
 
 
 ## The move bag `i` of passenger `id` starts on its next draw (its place

@@ -537,7 +537,7 @@ func _on_tick(_tick: int) -> void:
 func _plate_lead(id: int, i: int, key: String) -> void:
 	var props := _views.carry_on_props()
 	var walk := key.ends_with(" walk")
-	var moments: Array = [[1.0, 1.0]] if walk else LEAD_MOMENTS
+	var moments: Array = [[1.0, 1.0]] if walk else PlateSteps.LEAD_MOMENTS_OF.get(key, LEAD_MOMENTS)
 	var move := FloatCheck.move_of(props, id, i)
 	var saved := 0
 	for m in moments.size():
@@ -588,7 +588,7 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 		var ok := await _plate_close(id, bags[i], name)
 		_clock.set_paused(false)
 		if not ok:
-			break
+			continue
 		saved += 1
 	if saved == moments.size():
 		_lead_plated[key] = true
