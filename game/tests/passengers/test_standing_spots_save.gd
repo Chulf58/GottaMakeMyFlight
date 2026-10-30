@@ -1,9 +1,9 @@
 class_name TestStandingSpotsSave
 extends GdUnitTestSuite
-## Standing spot claims in a save (PassengerSim version 14): a save taken
-## while passengers stand loads into a world that plays out exactly like the
-## one that never stopped, claims are restored as saved rather than
-## allocated again, a version 13 save is refused and bad claims are refused.
+## Standing spot claims in a save (PassengerSim version 14, kept in 15): a
+## save taken while passengers stand loads into a world that plays out exactly
+## like the one that never stopped, claims are restored as saved rather than
+## allocated again, a version 14 save is refused and bad claims are refused.
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
@@ -125,11 +125,11 @@ func test_claims_load_as_saved_not_allocated_again() -> void:
 	assert_int(_b.sim.standing.holder_of(far)).is_equal(p.id)
 
 
-func test_a_version_13_save_is_refused() -> void:
+func test_a_version_14_save_is_refused() -> void:
 	_a = _crowded_world()
 	var data := _save(_a)
-	assert_int(int(data["passengers"]["save_version"])).is_equal(14)
-	data["passengers"]["save_version"] = 13
+	assert_int(int(data["passengers"]["save_version"])).is_equal(15)
+	data["passengers"]["save_version"] = 14
 	_b = PassengerTestWorld.reference_world()
 	var before := _b.signature()
 	assert_bool(_b.sim.from_snapshot(data["passengers"])).is_false()
