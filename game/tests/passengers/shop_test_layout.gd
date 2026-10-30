@@ -56,6 +56,15 @@ static func airside_guest(
 	world: PassengerTestWorld, boredom: int, cell := AIRSIDE_CELL
 ) -> Passenger:
 	var p := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	to_airside(world, p, boredom, cell)
+	return p
+
+
+## Makes `p` what airside_guest() spawns: calm, cleared, with no bags, heading
+## for the gate from `cell`, `boredom` bored.
+static func to_airside(
+	world: PassengerTestWorld, p: Passenger, boredom: int, cell := AIRSIDE_CELL
+) -> void:
 	ToiletTestLayout.calm(p)
 	p.carry_on = 0
 	p.liquids = false
@@ -67,7 +76,6 @@ static func airside_guest(
 	p.clear_path()
 	p.boredom = boredom
 	p.shop_cooldown = 0
-	return p
 
 
 static func _place(grid: BuildGrid, def_id: StringName, anchor: Vector2i) -> int:

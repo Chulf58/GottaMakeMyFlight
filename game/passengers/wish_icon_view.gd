@@ -21,8 +21,10 @@ extends RefCounted
 ## planner's result, never a plan or a path. PassengerViews gives each pooled
 ## passenger node one sprite (make_sprite()), sets it each tick (show_wish(),
 ## which changes the texture only when the wish or its state changes) and lays
-## it out each frame (layout()): WISH_PX on screen, stacked over the need icon
-## row and hidden with it at the home zoom or farther out (decision passenger-
+## it out each frame with the need icons (NeedIcons.layout()): WISH_PX on
+## screen, at the end of the need icon row in place of the hourglass (user
+## ruling shopping-wish-icon-replaces-the-boredom-hourglass-for-wishers), and
+## hidden with the row at the home zoom or farther out (decision passenger-
 ## need-icons-hide-when-the-camera-is-zoomed-out-past, NeedIcons.shown_at()).
 
 enum Badge { NONE, TICK, CROSS }
@@ -131,32 +133,6 @@ static func show_wish(node: Node3D, wish: Array) -> void:
 ## screen pixels over its anchor.
 static func offset_for(lift_px: float) -> Vector2:
 	return Vector2(0.0, SIZE / 2.0 + lift_px * SIZE / WISH_PX)
-
-
-## Lays out a passenger node's wish icon for this frame: WISH_PX on screen
-## (`unit` from NeedIcons.unit_of()), centred over the need icon row, or where
-## the row would be when no need shows; on top of the thought bubble while it
-## shows. With `shown` false (NeedIcons.shown_at()) it is hidden.
-static func layout(
-	node: Node3D, bubble: Label3D, camera: Camera3D, unit: float, shown := true
-) -> void:
-	var sprite := node.get_node(SPRITE) as Sprite3D
-	sprite.visible = shown and node.get_meta(&"wish", "") != ""
-	if not sprite.visible or camera == null or unit <= 0.0:
-		return
-	var anchor := Vector3(0.0, NeedIcons.LIFT_M, 0.0)
-	var lift_px := 0.0
-	if bubble.text != "":
-		anchor = bubble.position
-		var at := node.global_transform * bubble.position
-		var depth := (at - camera.global_position).dot(-camera.global_basis.z)
-		if depth > 0.0:
-			lift_px = NeedIcons.bubble_top_m(bubble) / (depth * unit) + NeedIcons.GAP_PX
-	if node.get_meta(&"needs", 0) > 0:
-		lift_px += NeedIcons.ICON_PX + NeedIcons.GAP_PX
-	sprite.position = anchor
-	sprite.pixel_size = WISH_PX * unit / SIZE
-	sprite.offset = offset_for(lift_px)
 
 
 static func _paint(kind: StringName, badge: Badge) -> ImageTexture:

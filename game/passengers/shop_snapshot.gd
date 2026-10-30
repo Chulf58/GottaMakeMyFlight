@@ -16,7 +16,9 @@ extends RefCounted
 ## saved tick. "deadlines_stale" is kept as ToiletSnapshot keeps it. Each visit
 ## also saves whether it is a fallback (ShopVisit.fallback, true or false;
 ## PassengerSim save version 13): the wish is derived from the passenger, the
-## planner's choice is not.
+## planner's choice is not. The flag must fit the visit (fallback_of()): true
+## only for a bored passenger's relief visit to a room of another kind than
+## its wish, so a no-wish visit or a spare-time browse is never a fallback.
 
 const VISIT_FIELDS := ["passenger", "room", "display", "slot", "resume_stage", "deadline"]
 const RESUME_STAGES := [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
@@ -74,7 +76,7 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid, tick: i
 	var layout := ShopLayout.new()
 	layout.rebuild(grid)
 	for id in visits:
-		var problem := _visit_problem(visits[id], passengers[id], layout, tick)
+		var problem := _visit_problem(visits[id], passengers[id], layout, grid, tick)
 		if problem != "":
 			return {"error": "shop visit of passenger %d: %s" % [id, problem]}
 	return {"visits": visits, "deadlines_stale": data["deadlines_stale"]}
@@ -82,7 +84,9 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid, tick: i
 
 ## Why a visit cannot be what continuous play left by `tick`, or "" when it
 ## can.
-static func _visit_problem(visit: ShopVisit, p: Passenger, layout: ShopLayout, tick: int) -> String:
+static func _visit_problem(
+	visit: ShopVisit, p: Passenger, layout: ShopLayout, grid: BuildGrid, tick: int
+) -> String:
 	var slot := layout.slot(visit.display, visit.index)
 	if slot.is_empty():
 		return "no such browse slot"
@@ -95,7 +99,21 @@ static func _visit_problem(visit: ShopVisit, p: Passenger, layout: ShopLayout, t
 			return "it is browsing but not on its slot"
 		if p.stage_tick > tick or p.stage_tick + ShopSim.BROWSE_TICKS <= tick:
 			return "the browse does not run past the saved tick"
+	if visit.fallback != fallback_of(p, StringName(grid.get_room(visit.room)["type"])):
+		return "its fallback flag does not fit the visit"
 	return ""
+
+
+## Whether a visit of `p` to a room of type `kind` is a fallback, as the
+## planner decides it (ShopSim.plan_visit()): a relief visit (`p` is bored; a
+## spare-time browse starts only when not bored, and no shop stage changes
+## boredom) of a passenger who wishes for another kind. The wish is derived
+## from the passenger (WishTable.of()), as play derives it.
+static func fallback_of(p: Passenger, kind: StringName) -> bool:
+	if not BoredomSim.is_bored(p):
+		return false
+	var wish := WishTable.of(p)
+	return wish != WishTable.NONE and wish != kind
 
 
 static func _visit(entry: Variant) -> ShopVisit:

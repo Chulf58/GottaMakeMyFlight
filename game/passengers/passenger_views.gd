@@ -206,7 +206,6 @@ func draw() -> void:
 		var base: float = node.get_meta(&"base_speed", 1.0)
 		player.speed_scale = 0.0 if paused else base * clock.speed
 		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
-		WishIconView.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
 	if _nodes.has(selected_id):
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
@@ -347,8 +346,9 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		node.set_meta(&"clip", clip)
 		(node.get_node("AnimationPlayer") as AnimationPlayer).play(clip)
 	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
-	NeedIcons.show_needs(node, NeedIcons.shown(p))
-	WishIconView.show_wish(node, WishIconView.read(sim.shops, p))
+	var wish := WishIconView.read(sim.shops, p)
+	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
+	WishIconView.show_wish(node, wish)
 
 
 ## Moves a passenger's drawn offset at security one tick's walk toward its

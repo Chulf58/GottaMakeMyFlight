@@ -269,50 +269,124 @@ func test_the_views_show_substituted_when_the_wished_kind_is_missing() -> void:
 	)
 
 
-## Need icons hide at the home zoom or farther out (decision passenger-need-
-## icons-hide-when-the-camera-is-zoomed-out-past); the wish icon follows the
-## same rule, and closer in it keeps WISH_PX on screen, stacked over the need
-## row.
-func test_the_icon_sits_over_the_need_row_and_hides_at_the_home_zoom() -> void:
-	_wish_world([&"kiosk"], &"fashion")
+## User ruling shopping-wish-icon-replaces-the-boredom-hourglass-for-wishers:
+## a bored passenger with a wish shows the bubble in the need row in place of
+## the hourglass; one with no wish keeps the hourglass; hunger and toilet are
+## unchanged.
+func test_a_wish_takes_the_hourglass_place_and_other_needs_stay() -> void:
+	var p := Passenger.new()
+	p.stage = Passenger.Stage.TO_GATE
+	p.boredom = BoredomSim.MAX
+	assert_array(NeedIcons.shown(p)).is_equal([NeedIcons.Need.BOREDOM])
+	assert_array(NeedIcons.shown(p, false)).is_equal([NeedIcons.Need.BOREDOM])
+	assert_array(NeedIcons.shown(p, true)).is_empty()
+	p.hunger = CafeSim.HUNGRY_AT
+	p.toilet_need = ToiletSim.NEED_AT
+	assert_array(NeedIcons.shown(p, true)).is_equal([NeedIcons.Need.HUNGER, NeedIcons.Need.TOILET])
+	assert_array(NeedIcons.shown(p, false)).is_equal(
+		[NeedIcons.Need.HUNGER, NeedIcons.Need.TOILET, NeedIcons.Need.BOREDOM]
+	)
+
+
+## A TycoonCamera closer than its home zoom over a world of `types` where
+## every passenger wishes `wish`.
+func _rig_over(types: Array, wish: StringName) -> TycoonCamera:
+	_wish_world(types, wish)
 	var rig := (
 		(load("res://camera/tycoon_camera.tscn") as PackedScene).instantiate() as TycoonCamera
 	)
 	rig.home_distance = 40.0
 	add_child(rig)
 	rig.set_process(false)
-	var camera := rig.get_node("Camera3D") as Camera3D
-	camera.make_current()
+	rig.distance = 12.0
+	(rig.get_node("Camera3D") as Camera3D).make_current()
+	return rig
+
+
+func _need_sprite(node: Node3D, i: int) -> Sprite3D:
+	return node.get_node(NeedIcons.SPRITES[i]) as Sprite3D
+
+
+## A drawn sprite's centre along the row, in screen pixels.
+static func _row_x_px(sprite: Sprite3D, size: float, px: float) -> float:
+	return sprite.offset.x * px / size
+
+
+func test_a_bored_wisher_shows_the_bubble_in_the_row_and_no_hourglass() -> void:
+	var rig := _rig_over([&"kiosk"], &"kiosk")
 	var p := ShopTestLayout.airside_guest(_world, BoredomSim.MAX)
 	_views.sync()
 	var node := _views.node_for(p.id)
 	(node.get_node("Bubble") as Label3D).text = ""
-	var sprite := _sprite(node)
-	var seen := {}
-	for distance in [39.0, 40.0, 120.0, 12.0]:
-		rig.distance = distance
-		_views.draw()
-		seen[distance] = sprite.visible
-	print("home 40: distance -> visible %s" % seen)
-	assert_bool(seen[39.0]).is_true()
-	assert_bool(seen[12.0]).is_true()
-	assert_bool(seen[40.0]).is_false()
-	assert_bool(seen[120.0]).is_false()
-	var unit := NeedIcons.unit_of(get_viewport(), camera)
-	assert_float(unit).is_greater(0.0)
-	var needs: int = node.get_meta(&"needs", 0)
-	print("needs %d, offset %s, pixel_size %.6f" % [needs, sprite.offset, sprite.pixel_size])
-	# The hourglass shows for a bored passenger walking about: one need row.
-	assert_int(needs).is_equal(1)
-	assert_float(sprite.pixel_size).is_equal_approx(
+	_views.draw()
+	var wish := _sprite(node)
+	print(
+		(
+			"needs %d, wish visible %s offset %s"
+			% [node.get_meta(&"needs", 0), wish.visible, wish.offset]
+		)
+	)
+	assert_int(node.get_meta(&"needs", 0)).is_equal(0)
+	for i in NeedIcons.SPRITES.size():
+		assert_bool(_need_sprite(node, i).visible).is_false()
+	assert_bool(wish.visible).is_true()
+	assert_object(wish.texture).is_same(WishIconView.texture(&"kiosk", WishTable.State.WANTED))
+	# In the row, alone: centred, its bottom on the row's anchor over the head.
+	assert_vector(wish.position).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
+	assert_vector(wish.offset).is_equal_approx(WishIconView.offset_for(0.0), Vector2.ONE * 0.001)
+	var unit := NeedIcons.unit_of(get_viewport(), rig.get_node("Camera3D") as Camera3D)
+	assert_float(wish.pixel_size).is_equal_approx(
 		WishIconView.WISH_PX * unit / WishIconView.SIZE, 1e-9
 	)
-	var row_px := NeedIcons.ICON_PX + NeedIcons.GAP_PX
-	assert_vector(sprite.offset).is_equal_approx(
-		WishIconView.offset_for(row_px), Vector2.ONE * 0.001
+	# At the home zoom it hides with the need icons.
+	rig.distance = 40.0
+	_views.draw()
+	assert_bool(wish.visible).is_false()
+	rig.free()
+
+
+func test_a_bored_passenger_with_no_wish_keeps_the_hourglass() -> void:
+	var rig := _rig_over([&"kiosk"], WishTable.NONE)
+	var p := ShopTestLayout.airside_guest(_world, BoredomSim.MAX)
+	_views.sync()
+	var node := _views.node_for(p.id)
+	_views.draw()
+	assert_int(node.get_meta(&"needs", 0)).is_equal(1)
+	assert_bool(_need_sprite(node, 0).visible).is_true()
+	assert_object(_need_sprite(node, 0).texture).is_same(NeedIcons.texture(NeedIcons.Need.BOREDOM))
+	assert_bool(_sprite(node).visible).is_false()
+	rig.free()
+
+
+func test_a_hungry_wisher_shows_the_hunger_icon_then_the_bubble() -> void:
+	var rig := _rig_over([&"kiosk"], &"pharmacy")
+	var p := ShopTestLayout.airside_guest(_world, BoredomSim.MAX)
+	p.hunger = CafeSim.HUNGRY_AT
+	p.cafe_cooldown = 1000000
+	_views.sync()
+	var node := _views.node_for(p.id)
+	(node.get_node("Bubble") as Label3D).text = ""
+	_views.draw()
+	var hunger := _need_sprite(node, 0)
+	var wish := _sprite(node)
+	assert_int(node.get_meta(&"needs", 0)).is_equal(1)
+	assert_object(hunger.texture).is_same(NeedIcons.texture(NeedIcons.Need.HUNGER))
+	assert_bool(hunger.visible).is_true()
+	assert_bool(_need_sprite(node, 1).visible).is_false()
+	assert_bool(wish.visible).is_true()
+	var left := _row_x_px(hunger, NeedIcons.SIZE, NeedIcons.ICON_PX)
+	var right := _row_x_px(wish, WishIconView.SIZE, WishIconView.WISH_PX)
+	print("hunger at %.1f px, wish at %.1f px" % [left, right])
+	# Side by side, GAP_PX apart, the pair centred, both bottoms on the anchor.
+	assert_float(right - left).is_equal_approx(
+		(NeedIcons.ICON_PX + WishIconView.WISH_PX) / 2.0 + NeedIcons.GAP_PX, 0.001
 	)
-	assert_float(WishIconView.offset_for(row_px).y).is_greater(WishIconView.offset_for(0.0).y)
-	assert_vector(sprite.position).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
+	var row_left := left - NeedIcons.ICON_PX / 2.0
+	var row_right := right + WishIconView.WISH_PX / 2.0
+	assert_float(row_left + row_right).is_equal_approx(0.0, 0.01)
+	assert_float(hunger.offset.y).is_equal_approx(NeedIcons.SIZE / 2.0, 0.001)
+	assert_float(wish.offset.y).is_equal_approx(WishIconView.offset_for(0.0).y, 0.001)
+	assert_vector(hunger.position).is_equal(wish.position)
 	rig.free()
 
 
