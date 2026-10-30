@@ -13,7 +13,10 @@ extends RefCounted
 ## only in a kiosk stage or while getting up from a gate seat; the visit
 ## resuming on the passenger's side of security; a browser standing on its slot
 ## with no walk; and a browse that started on the stage tick and ends after the
-## saved tick. "deadlines_stale" is kept as ToiletSnapshot keeps it.
+## saved tick. "deadlines_stale" is kept as ToiletSnapshot keeps it. Each visit
+## also saves whether it is a fallback (ShopVisit.fallback, true or false;
+## PassengerSim save version 13): the wish is derived from the passenger, the
+## planner's choice is not.
 
 const VISIT_FIELDS := ["passenger", "room", "display", "slot", "resume_stage", "deadline"]
 const RESUME_STAGES := [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
@@ -33,6 +36,7 @@ static func save(shops: ShopSim) -> Dictionary:
 					"slot": visit.index,
 					"resume_stage": visit.resume_stage,
 					"deadline": visit.deadline,
+					"fallback": visit.fallback,
 				}
 			)
 		)
@@ -100,7 +104,10 @@ static func _visit(entry: Variant) -> ShopVisit:
 	for field in VISIT_FIELDS:
 		if not entry.has(field) or not WholeNumber.is_whole(entry[field]):
 			return null
+	if typeof(entry.get("fallback")) != TYPE_BOOL:
+		return null
 	var visit := ShopVisit.new()
+	visit.fallback = entry["fallback"]
 	visit.passenger = int(entry["passenger"])
 	visit.room = int(entry["room"])
 	visit.display = int(entry["display"])

@@ -154,6 +154,33 @@ func test_nearest_takes_the_free_slot_nearest_by_path_within_reach() -> void:
 	assert_int(_core.nearest(p, slots, mm)["entry"]["id"]).is_equal(first["id"])
 
 
+func test_nearest_skips_a_slot_admit_refuses_for_the_next_one_it_admits() -> void:
+	var stalls := _world.sim.toilets
+	stalls.refresh()
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.at = Vector2i(20, 14)
+	p.clear_path()
+	var slots: Array = []
+	for stall in stalls.layout.stalls:
+		if stall["room"] == _ids["land_room"]:
+			slots.append({"key": stall["id"], "order": [stall["id"]], "entry": stall})
+	var first: Dictionary = _core.nearest(p, slots)["entry"]
+	var asked: Array = []
+	var admit := func(entry: Dictionary, route: Dictionary) -> bool:
+		asked.append([entry["id"], int(route["mm"])])
+		return entry["id"] != first["id"]
+	var next := _core.nearest(p, slots, 0, false, admit)
+	print("admit asked %s" % [asked])
+	assert_bool(next.is_empty()).is_false()
+	assert_int(next["entry"]["id"]).is_not_equal(first["id"])
+	# Both stalls were asked, the nearer refused one among them.
+	assert_int(asked.size()).is_equal(2)
+	assert_array([asked[0][0], asked[1][0]]).contains([first["id"]])
+	# Nothing admitted: no slot.
+	var refuse := func(_entry: Dictionary, _route: Dictionary) -> bool: return false
+	assert_bool(_core.nearest(p, slots, 0, false, refuse).is_empty()).is_true()
+
+
 func test_a_piece_is_inside_only_with_its_interaction_cell() -> void:
 	var stall: int = _ids["land_stalls"][0]
 	var record := _world.grid.get_object(stall)

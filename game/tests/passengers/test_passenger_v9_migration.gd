@@ -87,7 +87,7 @@ func _needs(world: PassengerTestWorld) -> Array:
 
 
 func test_the_fixture_is_a_real_save_without_toilets() -> void:
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(12)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(13)
 	for version in [8, 9]:
 		var data := _old(version)
 		assert_bool(data.has("toilet")).is_false()

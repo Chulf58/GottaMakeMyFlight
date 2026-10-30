@@ -35,12 +35,26 @@ extends RefCounted
 ## bored passenger plans only a shop that relieves it, so the exchange and the
 ## ATM get spare-time browsers only. "Kiosk" below stands for any of them.
 ##
+## A passenger may have a shopping wish for one shop type (WishTable; ruling
+## store-variety-passengers-have-a-shopping-wish-weighted-by-arrival-type-
+## unmet-settles-for-less, decision shopping-wish-technical-design-id-hash-
+## wish-admissible-wished-slot-then-fallback). A bored wisher plans the
+## nearest free slot of its wished type whose whole visit the forecast admits,
+## and with none, the nearest admitted slot of any other shop that relieves
+## boredom: a fallback visit. Admission is asked of each slot in turn, so a
+## wished shop it has no time for never stops a fallback it has time for. A
+## passenger with no wish, and a spare-time browser, plan as before: the
+## nearest free slot, then the forecast of that one.
+##
 ## Money is settled once, when the browse finishes: spend() of the base spend
 ## of the visited room's type, nudged by mood, with the airside bonus, credited to
 ## PassengerSim.wallet as Wallet.Category.SHOP; then boredom is reset (unless
-## the type does not relieve it) and `paid` is emitted. A browse that does not
-## finish (its deadline passed, its slot or kiosk gone) pays nothing and leaves
-## boredom as it was.
+## the type does not relieve it) and `paid` is emitted. A fallback visit pays
+## FALLBACK_SHARE of spend() of the lower of the visited and the wished base
+## spend, so settling for a dearer shop never earns more than the wished one,
+## and costs the passenger FALLBACK_MOOD mood. A browse that does not finish
+## (its deadline passed, its slot or kiosk gone) pays nothing and leaves
+## boredom and mood as they were.
 ##
 ## Every phase checks the visit's deadline: the last tick the passenger can
 ## leave the slot and still reach the plane door VisitForecast.MARGIN_TICKS
@@ -74,6 +88,10 @@ const BROWSE_REACH_MM := 5000
 const AIRSIDE_BROWSE_REACH_MM := 8000
 ## A spare-time browser drops in only with this much spare beyond the margin.
 const SPARE_TICKS := 100
+## The share of the spend a fallback visit pays, and the mood it costs, once,
+## when it settles. Tuning values.
+const FALLBACK_SHARE := 0.5
+const FALLBACK_MOOD := 3
 ## The phases that check the deadline: all of them.
 const CHECKED_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.SHOP_WALK,
@@ -88,6 +106,10 @@ var deadlines_stale: bool:
 		return _core.deadlines_stale
 	set(value):
 		_core.deadlines_stale = value
+## How a passenger's shopping wish is found: called with a Passenger, it
+## returns a WishTable.CANDIDATES type or WishTable.NONE. Unset, WishTable.of()
+## decides; a test sets it to pin a wish.
+var wishes := Callable()
 
 var _sim: PassengerSim
 var _set_stage: Callable
@@ -144,28 +166,40 @@ func wants_browse(p: Passenger) -> bool:
 	return walking and _passing_shop(p)
 
 
-## The visit `p` would start now, without starting it: {"slot", "route"} for
-## the free slot nearest by path (within its reach when `browsing`; of a shop
-## that relieves boredom when not) when the forecast admits the whole visit,
-## with SPARE_TICKS more when browsing; else empty. Changes nothing but the
-## derived layout.
+## The visit `p` would start now, without starting it: {"slot", "route",
+## "fallback"} for the free slot nearest by path (within its reach when
+## `browsing`; of a shop that relieves boredom when not) when the forecast
+## admits the whole visit, with SPARE_TICKS more when browsing; else empty.
+## When not browsing and `p` has a wish, the nearest admitted slot of the
+## wished type, else the nearest admitted slot of another type, a fallback.
+## Changes nothing but the derived layout.
 func plan_visit(p: Passenger, browsing := false) -> Dictionary:
 	if not CafeSim.START_STAGES.has(p.stage):
 		return {}
 	if StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE:
 		return {}
 	refresh()
-	var plan := _plan(p, _reach_mm(p) if browsing else 0, not browsing)
-	if plan.is_empty():
-		return {}
-	var slot: Dictionary = plan["slot"]
-	var arrival := VisitForecast.arrival(
-		_sim, p, _visit_ticks(p, plan["route"]["mm"]), slot["approach"], 0, _resume_stage(p)
-	)
-	if browsing:
-		arrival += SPARE_TICKS
-	if not VisitForecast.admits(_sim, p, arrival):
-		return {}
+	var wish := WishTable.NONE if browsing else wish_of(p)
+	if wish == WishTable.NONE:
+		var keep := Callable() if browsing else _relieving
+		var plan := _plan(p, _reach_mm(p) if browsing else 0, keep)
+		if plan.is_empty() or not _admits(p, plan["slot"], plan["route"], browsing):
+			return {}
+		plan["fallback"] = false
+		return plan
+	var admit := func(slot: Dictionary, route: Dictionary) -> bool:
+		return _admits(p, slot, route, false)
+	var wished := func(type: RoomTypes.RoomType) -> bool:
+		return type.relieves_boredom and type.id == wish
+	var plan := _plan(p, 0, wished, admit)
+	if not plan.is_empty():
+		plan["fallback"] = false
+		return plan
+	var other := func(type: RoomTypes.RoomType) -> bool:
+		return type.relieves_boredom and type.id != wish
+	plan = _plan(p, 0, other, admit)
+	if not plan.is_empty():
+		plan["fallback"] = true
 	return plan
 
 
@@ -179,6 +213,7 @@ func commit_visit(p: Passenger, plan: Dictionary) -> void:
 	visit.index = slot["index"]
 	visit.slot = slot
 	visit.resume_stage = _resume_stage(p)
+	visit.fallback = plan["fallback"]
 	visit.deadline = VisitForecast.deadline(_sim, p, slot["approach"], 0, visit.resume_stage)
 	_core.reserve(visit)
 	p.late = false
@@ -291,6 +326,31 @@ func store_name(passenger_id: int) -> String:
 	return " ".join(words)
 
 
+## The shopping wish of `p`: a WishTable.CANDIDATES type or WishTable.NONE
+## (`wishes`, else WishTable.of()). For the view; it is never saved.
+func wish_of(p: Passenger) -> StringName:
+	return wishes.call(p) if wishes.is_valid() else WishTable.of(p)
+
+
+## How the wish of `passenger_id` stands, for the view, from what the planner
+## committed (WishTable.State): FULFILLED or SUBSTITUTED while a bored
+## passenger's visit is under way (a fallback visit is SUBSTITUTED), WANTED
+## while a bored wisher has none, and NONE otherwise: no wish, not bored, a
+## spare-time browse or no such passenger. A browse starts only when not bored
+## and a relief visit only when bored, and no shop stage changes boredom, so
+## boredom tells the two apart. Never plans or pathfinds.
+func visit_wish_state(passenger_id: int) -> WishTable.State:
+	var p := _sim.get_passenger(passenger_id)
+	if p == null or not BoredomSim.is_bored(p):
+		return WishTable.State.NONE
+	var visit := visit_of(passenger_id)
+	if visit != null:
+		if visit.fallback:
+			return WishTable.State.SUBSTITUTED
+		return WishTable.State.NONE if wish_of(p) == WishTable.NONE else WishTable.State.FULFILLED
+	return WishTable.State.NONE if wish_of(p) == WishTable.NONE else WishTable.State.WANTED
+
+
 ## Installs visits a ShopSnapshot.load() checked; rederive() then rebuilds the
 ## slot holders and the layout.
 func restore(state: Dictionary) -> void:
@@ -334,29 +394,45 @@ func _passing_shop(p: Passenger) -> bool:
 ## The free slot of an open kiosk nearest `p` by path, with the walk:
 ## {"slot", "route"} (FacilitySlots.nearest()). Slots at the same octile distance are tried in
 ## display id and then index order, and on an equal path the one tried first
-## wins. Only slots within `reach_mm` by path count when it is above 0, and
-## only shops that relieve boredom when `for_relief`. Empty when no free slot
-## can be reached.
-func _plan(p: Passenger, reach_mm := 0, for_relief := false) -> Dictionary:
+## wins. Only slots within `reach_mm` by path count when it is above 0, only
+## shops whose RoomType `keep` accepts when it is set, and only slots `admit`
+## accepts (a slot entry and its route) when it is set. Empty when no such
+## slot can be reached.
+func _plan(p: Passenger, reach_mm := 0, keep := Callable(), admit := Callable()) -> Dictionary:
 	var slots: Array = []
 	for shop in layout.shops:
 		if not ShopCounters.room_open(_sim, shop["room"]):
 			continue
-		if for_relief and not _relieves(shop["room"]):
+		if keep.is_valid() and not keep.call(_room_type(shop["room"])):
 			continue
 		for slot in shop["slots"]:
 			slots.append(
 				{"key": slot["key"], "order": [slot["display"], slot["index"]], "entry": slot}
 			)
-	var best := _core.nearest(p, slots, reach_mm)
+	var best := _core.nearest(p, slots, reach_mm, false, admit)
 	if best.is_empty():
 		return {}
 	return {"slot": best["entry"], "route": best["route"]}
 
 
-## Whether a visit to room `room_id` relieves boredom (its type's flag).
-func _relieves(room_id: int) -> bool:
-	return RoomTypes.get_type(_sim.grid.get_room(room_id)["type"]).relieves_boredom
+func _room_type(room_id: int) -> RoomTypes.RoomType:
+	return RoomTypes.get_type(_sim.grid.get_room(room_id)["type"])
+
+
+## Whether a visit to a room of `type` relieves boredom (its type's flag).
+static func _relieving(type: RoomTypes.RoomType) -> bool:
+	return type.relieves_boredom
+
+
+## Whether the forecast admits the whole of a visit to `slot` walking
+## `route`, with SPARE_TICKS more when `browsing`.
+func _admits(p: Passenger, slot: Dictionary, route: Dictionary, browsing: bool) -> bool:
+	var arrival := VisitForecast.arrival(
+		_sim, p, _visit_ticks(p, route["mm"]), slot["approach"], 0, _resume_stage(p)
+	)
+	if browsing:
+		arrival += SPARE_TICKS
+	return VisitForecast.admits(_sim, p, arrival)
 
 
 ## Ticks from now until a visit walking `walk_mm` leaves its slot.
@@ -398,12 +474,16 @@ func _walk_step(p: Passenger, visit: ShopVisit) -> void:
 
 
 ## The browse finished: the money goes into the wallet, then boredom is reset
-## (when the room's type relieves it) and `paid` is emitted. Without a wallet,
-## or when the wallet refuses, nothing is settled and an error says so.
+## (when the room's type relieves it), a fallback visit costs FALLBACK_MOOD
+## mood and `paid` is emitted. Without a wallet, or when the wallet refuses,
+## nothing is settled and an error says so.
 func _settle(p: Passenger, visit: ShopVisit) -> void:
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
-	var type := RoomTypes.get_type(_sim.grid.get_room(visit.room)["type"])
+	var type := _room_type(visit.room)
 	var amount := spend(type.base_spend, p.mood, airside)
+	if visit.fallback:
+		var wished := RoomTypes.get_type(wish_of(p)).base_spend
+		amount = int(spend(mini(type.base_spend, wished), p.mood, airside) * FALLBACK_SHARE)
 	if _sim.wallet == null:
 		push_error("ShopSim: no wallet to pay passenger %d's %d into" % [p.id, amount])
 		return
@@ -412,6 +492,8 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 		return
 	if type.relieves_boredom:
 		p.boredom = 0
+	if visit.fallback:
+		p.mood = maxi(p.mood - FALLBACK_MOOD, 0)
 	paid.emit(p.id, visit.room, amount)
 
 

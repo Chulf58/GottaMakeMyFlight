@@ -60,7 +60,10 @@ signal checked_in(id: int, desk: int)
 ## 12: the help visits and cooldowns of the info desks, under "info_desk"
 ## (InfoDesk.to_list()). A version 11 save is refused; a migrated older save has
 ## none.
-const SAVE_VERSION := 12
+## 13: each shop visit saves whether it is a fallback (ShopSnapshot). Versions
+## 11 and 12 are refused, with no migration (decision old-saves-are-not-
+## supported-until-after-a-release-no-save-mi).
+const SAVE_VERSION := 13
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,

@@ -119,8 +119,12 @@ func rederive() -> void:
 ## path, so slots further than the best path so far are skipped. On an equal
 ## path the slot tried first wins, or the one with the lower `order` when
 ## `tie_by_order` is set. Only slots within `reach_mm` by path count when it
-## is above 0.
-func nearest(p: Passenger, slots: Array, reach_mm := 0, tie_by_order := false) -> Dictionary:
+## is above 0, and only slots `admit` accepts when it is set: it takes a
+## slot's entry and its route and returns whether the visit fits, so a slot
+## that does not fit never hides a further one that does.
+func nearest(
+	p: Passenger, slots: Array, reach_mm := 0, tie_by_order := false, admit := Callable()
+) -> Dictionary:
 	var free: Array = []
 	for slot: Dictionary in slots:
 		if _holders.has(slot["key"]):
@@ -137,6 +141,8 @@ func nearest(p: Passenger, slots: Array, reach_mm := 0, tie_by_order := false) -
 			break
 		var route := VisitRoute.plan(_sim.grid, p, item[2]["approach"])
 		if route.is_empty() or (reach_mm > 0 and int(route["mm"]) > reach_mm):
+			continue
+		if admit.is_valid() and not admit.call(item[2], route):
 			continue
 		var mm := int(route["mm"])
 		var better: bool = best.is_empty() or mm < int(best["route"]["mm"])

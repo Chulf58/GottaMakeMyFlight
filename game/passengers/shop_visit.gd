@@ -16,6 +16,9 @@ var resume_stage: Passenger.Stage = Passenger.Stage.TO_GATE
 ## The last tick the passenger may still be browsing
 ## (VisitForecast.deadline() from the slot, with no delay to leave).
 var deadline := 0
+## Whether a bored passenger with a shopping wish settled for a shop of
+## another kind (WishTable): it pays less and loses mood when it settles.
+var fallback := false
 ## The reserved slot's ShopLayout entry, derived again on load.
 var slot: Dictionary = {}
 
