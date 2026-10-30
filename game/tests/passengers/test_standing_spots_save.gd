@@ -141,7 +141,14 @@ func test_bad_standing_claims_are_refused_whole() -> void:
 	var good := _save(_a)
 	var list: Array = good["passengers"]["standing"]
 	var first: Dictionary = list[0]
+	var stander := -1
+	for i in list.size():
+		if _a.passenger(list[i]["passenger"]).stage == Passenger.Stage.STANDING:
+			stander = i
+	assert_int(stander).is_greater_equal(0)
 	var cases := {
+		"standing without its claim":
+		func(d: Dictionary) -> void: (d["standing"] as Array).remove_at(stander),
 		"missing": func(d: Dictionary) -> void: d.erase("standing"),
 		"not a list": func(d: Dictionary) -> void: d["standing"] = {},
 		"unknown spot": func(d: Dictionary) -> void: d["standing"][0]["spot"] = -5,
@@ -159,3 +166,24 @@ func test_bad_standing_claims_are_refused_whole() -> void:
 		assert_str(_b.signature()).is_equal(before)
 		_b.free_all()
 	_b = null
+
+
+func test_a_room_placed_over_a_claimed_spot_drops_the_claim_and_saves_cleanly() -> void:
+	_a = TestStandingSpotClaims.seatless_world()
+	var p := TestStandingSpotClaims.cleared(_a)
+	for i in 300:
+		_a.step()
+		if p.stage == Passenger.Stage.STANDING:
+			break
+	assert_int(p.stage).is_equal(Passenger.Stage.STANDING)
+	var cell := _a.sim.standing.cell_of(_a.sim.standing.spot_of(p.id))
+	# A room edit relinks nothing, so it fires edit_applied but no graph_changed.
+	var room := _a.grid.apply(BuildEdit.place_room(Rect2i(cell, Vector2i.ONE), &"kiosk"))
+	assert_bool(room.ok).override_failure_message(room.reason_text()).is_true()
+	_a.step()
+	var spot := _a.sim.standing.spot_of(p.id)
+	print("room over %s: claim now %d, stage %s" % [cell, spot, Passenger.Stage.keys()[p.stage]])
+	if spot != StandingSpots.NO_SPOT:
+		assert_that(_a.sim.standing.cell_of(spot)).is_not_equal(cell)
+	_b = _load(JSON.parse_string(JSON.stringify(_save(_a))))
+	assert_str(_signature(_b)).is_equal(_signature(_a))

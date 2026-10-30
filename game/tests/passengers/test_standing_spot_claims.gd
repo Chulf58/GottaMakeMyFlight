@@ -222,3 +222,47 @@ func test_the_forecast_includes_the_walk_to_the_spot() -> void:
 	var arrival := JourneyForecast.arrival_tick(_world.sim, p)
 	print("walk %d mm, arrival %d, expected %d" % [walk, arrival, expected])
 	assert_int(arrival).is_equal(expected)
+
+
+func test_a_passenger_skips_spots_it_cannot_reach_behind_a_wall() -> void:
+	_world = PassengerTestWorld.reference_world()
+	# A wall between x 13 and 14 splits the airside into two seating areas.
+	for y in range(ReferenceTerminal.FLOOR_MIN.y, ReferenceTerminal.AIRSIDE_MAX_Y + 1):
+		var wall := _world.grid.apply(BuildEdit.place_wall(Vector2i(13, y), BuildGrid.Side.EAST))
+		assert_bool(wall.ok).override_failure_message(wall.reason_text()).is_true()
+	var spots := _world.sim.standing
+	spots.rebuild(_world.sim)
+	# Every seat and every right-hand spot but the farthest is taken, so the
+	# nearest free spots are all on the far side of the wall.
+	var fake := 90000
+	for seat in _world.sim.layout.seats:
+		_world.sim._seat_claims[seat["key"]] = fake
+		fake += 1
+	var right: Array[int] = []
+	var left := 0
+	for id: int in spots.spots:
+		if spots.cell_of(id).x >= 14:
+			right.append(id)
+		else:
+			left += 1
+	assert_int(left).is_greater(StandingSpots.TRIES)
+	var keyed := []
+	for id in right:
+		var d: Vector2i = spots.spots[id]["mm"] - (SCANNER_EXIT * 1000 + Vector2i(500, 500))
+		keyed.append([spots.tier_of(id), d.x * d.x + d.y * d.y, id])
+	keyed.sort()
+	var kept: int = keyed.back()[2]
+	for entry in keyed:
+		if entry[2] != kept:
+			spots.claim(fake, entry[2])
+			fake += 1
+	var p := cleared(_world)
+	_world.step()
+	print(
+		(
+			"left=%d right=%d kept %d at %s, claim %d"
+			% [left, right.size(), kept, spots.cell_of(kept), spots.spot_of(p.id)]
+		)
+	)
+	assert_int(spots.spot_of(p.id)).is_equal(kept)
+	assert_bool(spots.is_held(p)).is_false()

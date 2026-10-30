@@ -7,12 +7,17 @@ extends RefCounted
 ## Spots are points on a fixed 0.6 m lattice in grid-local millimetres, so a
 ## spot's id (its lattice index) stays the same across edits. They are derived
 ## from the grid and layout after an edit: a breadth-first walk over routable
-## steps (BuildGrid.can_route, which never crosses a scanner, so it stays
-## airside) starts at the gate seats' access cells. The sim has one gate and
-## no per-gate seat grouping, so every gate seat counts; with no seats the walk
-## starts at the exit doors. Cells up to NEAR_STEPS steps out are the gate
-## area, and cells up to OVERFLOW_STEPS out are the overflow. A cell holds
-## no spot when it is a queue lane, a scanner passage or exit, a security
+## steps (BuildGrid.can_route, which never crosses a scanner) starts at the
+## gate seats' access cells. The sim has no cell-level airside map, so the
+## walk keeps airside itself: it crosses no door wall, since a door in the
+## security divider is allowed (a door inside the airside also bounds it). A
+## terminal with no divider at all has no landside to keep out. The sim has
+## one gate and no per-gate seat grouping, so every gate seat counts; with no
+## seats the walk starts at the exit doors. Cells up to NEAR_STEPS steps out
+## are the gate area, and cells up to OVERFLOW_STEPS out are the overflow.
+## Claims only go to spots in the passenger's own route region (cells joined
+## by can_route steps). A cell holds no spot when it is a queue lane, a
+## scanner passage or exit, a security
 ## lane's kept-clear cell, a staff spot, an object's interaction cell, a seat
 ## access cell, a door cell or inside a room.
 ##
@@ -33,7 +38,8 @@ const NEAR_STEPS := 2
 const OVERFLOW_STEPS := 12
 const NEAR := 0
 const OVERFLOW := 1
-## The nearest free spots a claim tries a path to before it gives up.
+## The nearest free spots in the passenger's route region a claim tries a
+## path to before it gives up.
 const TRIES := 4
 const STEPS: Array[Vector2i] = [
 	Vector2i(0, -1),
@@ -56,6 +62,10 @@ var _claims: Dictionary = {}
 ## Passenger id -> spot id.
 var _spot_of: Dictionary = {}
 var _ids: Array[int] = []
+## Cell -> route region: cells joined by BuildGrid.can_route steps (the steps
+## passengers path over) share one, so a spot in another region cannot be
+## walked to.
+var _regions: Dictionary = {}
 
 
 ## Lattice points per grid row.
@@ -76,37 +86,26 @@ static func lattice_in(c: int) -> Array[int]:
 	return out
 
 
-## Derives the spots from the sim's grid and layout. Claims are kept; the sim
-## drops the ones whose spot is gone (drop_invalid()).
+## Derives the spots from the sim's grid and layout, and the route regions
+## claims are filtered by. Claims are kept; the sim drops the ones whose spot
+## is gone (drop_invalid()).
 func rebuild(sim: PassengerSim) -> void:
 	var grid := sim.grid
 	var layout := sim.layout
 	spots.clear()
 	stale = false
+	_regions = _route_regions(grid)
 	var excluded := _excluded_cells(sim)
-	var frontier: Array[Vector2i] = []
+	var seeds: Array[Vector2i] = []
 	for seat in layout.seats:
-		if not frontier.has(seat["front"]):
-			frontier.append(seat["front"])
-	if frontier.is_empty():
+		if not seeds.has(seat["front"]):
+			seeds.append(seat["front"])
+	if seeds.is_empty():
 		for door in layout.exits:
-			frontier.append(layout.door_cell(grid, door))
-	var depth := {}
-	for cell in frontier:
-		depth[cell] = 0
-	var head := 0
-	while head < frontier.size():
-		var cell := frontier[head]
-		head += 1
-		if depth[cell] >= OVERFLOW_STEPS:
-			continue
-		for step in STEPS:
-			var next := cell + step
-			if not depth.has(next) and grid.can_route(cell, next):
-				depth[next] = depth[cell] + 1
-				frontier.append(next)
+			seeds.append(layout.door_cell(grid, door))
+	var depth := _walk(grid, seeds, OVERFLOW_STEPS)
 	var per_row := columns(grid.size)
-	for cell in frontier:
+	for cell: Vector2i in depth:
 		if excluded.has(cell) or not grid.is_walkable(cell) or grid.room_at(cell) != 0:
 			continue
 		var tier := NEAR if depth[cell] <= NEAR_STEPS else OVERFLOW
@@ -165,13 +164,15 @@ func shortage(sim: PassengerSim) -> int:
 	return count
 
 
-## The free spots in claim order: the gate area before the overflow, then the
-## nearest to the centre of cell `from` (squared mm), then the lower id.
+## The free spots a passenger at cell `from` can walk to (its route region),
+## in claim order: the gate area before the overflow, then the nearest to the
+## centre of `from` (squared mm), then the lower id.
 func free_nearest(from: Vector2i) -> Array[int]:
 	var centre := from * CELL_MM + Vector2i(HALF_CELL_MM, HALF_CELL_MM)
+	var region: int = _regions.get(from, -1)
 	var keyed := []
 	for id in _ids:
-		if _claims.has(id):
+		if _claims.has(id) or _regions.get(spots[id]["cell"], -2) != region:
 			continue
 		var d: Vector2i = spots[id]["mm"] - centre
 		keyed.append([spots[id]["tier"], d.x * d.x + d.y * d.y, id])
@@ -221,8 +222,9 @@ func to_list() -> Array:
 ## passengers by id: {"claims": {passenger: spot}}, or {"error": text}. A
 ## claim must name a known passenger at most once, a spot that exists at most
 ## once, and a cleared passenger with no seat on its way to the gate or
-## standing on that spot's cell.
-func checked(list: Variant, by_id: Dictionary) -> Dictionary:
+## standing on that spot's cell. With `every_standing` (a version 14 save),
+## every STANDING passenger must hold one; a migrated older save has none.
+func checked(list: Variant, by_id: Dictionary, every_standing: bool) -> Dictionary:
 	if typeof(list) != TYPE_ARRAY:
 		return {"error": "standing must be a list"}
 	var claims := {}
@@ -246,6 +248,10 @@ func checked(list: Variant, by_id: Dictionary) -> Dictionary:
 			return {"error": "passenger %d cannot hold standing spot %d" % [id, spot]}
 		claims[id] = spot
 		taken[spot] = true
+	for id: int in by_id:
+		var standing := (by_id[id] as Passenger).stage == Passenger.Stage.STANDING
+		if every_standing and standing and not claims.has(id):
+			return {"error": "standing passenger %d holds no standing spot" % id}
 	return {"claims": claims}
 
 
@@ -256,6 +262,77 @@ func restore(claims: Dictionary) -> void:
 	for passenger: int in claims:
 		_spot_of[passenger] = claims[passenger]
 		_claims[claims[passenger]] = passenger
+
+
+## Breadth-first steps from `seeds` over routable steps that cross no door
+## wall (the security divider may have one), up to `limit` steps. Cell ->
+## steps.
+static func _walk(grid: BuildGrid, seeds: Array[Vector2i], limit: int) -> Dictionary:
+	var depth := {}
+	var frontier: Array[Vector2i] = []
+	for cell in seeds:
+		if not depth.has(cell):
+			depth[cell] = 0
+			frontier.append(cell)
+	var head := 0
+	while head < frontier.size():
+		var cell := frontier[head]
+		head += 1
+		if depth[cell] >= limit:
+			continue
+		for step in STEPS:
+			var next := cell + step
+			if depth.has(next) or not grid.can_route(cell, next):
+				continue
+			if _crosses_door(grid, cell, next):
+				continue
+			depth[next] = depth[cell] + 1
+			frontier.append(next)
+	return depth
+
+
+## Whether a step crosses a door wall: the step itself, or for a diagonal step
+## either of its two straight detours.
+static func _crosses_door(grid: BuildGrid, from: Vector2i, to: Vector2i) -> bool:
+	var step := to - from
+	if step.x == 0 or step.y == 0:
+		return _door_edge(grid, from, to)
+	var across := from + Vector2i(step.x, 0)
+	var down := from + Vector2i(0, step.y)
+	return (
+		_door_edge(grid, from, across)
+		or _door_edge(grid, across, to)
+		or _door_edge(grid, from, down)
+		or _door_edge(grid, down, to)
+	)
+
+
+static func _door_edge(grid: BuildGrid, a: Vector2i, b: Vector2i) -> bool:
+	return grid.wall_kind(a, BuildGrid.SIDE_STEP.find(b - a)) == BuildGrid.WallKind.DOOR
+
+
+## Labels every walkable cell with its route region, in row order.
+static func _route_regions(grid: BuildGrid) -> Dictionary:
+	var regions := {}
+	var next_region := 0
+	for y in grid.size.y:
+		for x in grid.size.x:
+			var start := Vector2i(x, y)
+			if regions.has(start) or not grid.is_walkable(start):
+				continue
+			regions[start] = next_region
+			var frontier: Array[Vector2i] = [start]
+			var head := 0
+			while head < frontier.size():
+				var cell := frontier[head]
+				head += 1
+				for step in STEPS:
+					var other := cell + step
+					if not regions.has(other) and grid.can_route(cell, other):
+						regions[other] = next_region
+						frontier.append(other)
+			next_region += 1
+	return regions
 
 
 static func _excluded_cells(sim: PassengerSim) -> Dictionary:

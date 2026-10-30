@@ -216,6 +216,9 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	arrivals.bind(self, _spawn)
 	clock.ticked.connect(on_tick)
 	grid.graph_changed.connect(_on_graph_changed)
+	# A room edit relinks no cells, so it fires edit_applied alone; it can
+	# still put a room over a standing spot.
+	grid.edit_applied.connect(_on_edit_applied)
 	if auto_schedule:
 		flights.occurrence_added.connect(_on_occurrence_added)
 	# After the layout handler above, so staff read a rebuilt layout on edits.
@@ -549,8 +552,9 @@ func from_snapshot(data: Dictionary) -> bool:
 	layout.rebuild(grid)
 	var spots := StandingSpots.new()
 	spots.rebuild(self)
-	var claims := spots.checked(data.get("standing", []), by_id)
-	if not data.has("standing") and int(data["save_version"]) >= SAVE_VERSION:
+	var current := int(data["save_version"]) >= SAVE_VERSION
+	var claims := spots.checked(data.get("standing", []), by_id, current)
+	if not data.has("standing") and current:
 		claims = {"error": "missing key 'standing'"}
 	if claims.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % claims["error"])
@@ -1191,6 +1195,11 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 	for arch in SecurityLanes.broken(before, layout.security_lanes):
 		for id in security.drop(arch):
 			_send_back(_by_id[id])
+
+
+## Any accepted edit: the standing spots are derived again on the next tick.
+func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
+	standing.stale = true
 
 
 ## Brings queues and seat claims in line with the layout after an edit: a

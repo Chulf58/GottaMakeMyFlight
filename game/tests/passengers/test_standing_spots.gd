@@ -170,3 +170,22 @@ func test_a_seatless_passenger_walks_to_its_spot_and_stands_on_it() -> void:
 	print("spot %d cell %s drawn %s spot %s" % [spot, p.at, drawn, point])
 	assert_float(drawn.distance_to(point)).is_less(0.001)
 	assert_int(_world.sim.standing.shortage(_world.sim)).is_equal(0)
+
+
+func test_a_door_in_the_security_divider_keeps_spots_airside() -> void:
+	_world = PassengerTestWorld.reference_world()
+	# The divider runs along the north edge of row 9; a door at (15, 9) puts
+	# landside (15, 9) two steps from the seat access cell (15, 7).
+	var door := BuildEdit.place_wall(
+		Vector2i(15, ReferenceTerminal.DIVIDER_Y), BuildGrid.Side.NORTH, BuildGrid.WallKind.DOOR
+	)
+	var placed := _world.grid.apply(door)
+	assert_bool(placed.ok).override_failure_message(placed.reason_text()).is_true()
+	var spots := _world.sim.standing
+	spots.rebuild(_world.sim)
+	var landside := 0
+	for id: int in spots.spots:
+		landside += int(spots.cell_of(id).y > ReferenceTerminal.AIRSIDE_MAX_Y)
+	print("spots=%d landside=%d" % [spots.spots.size(), landside])
+	assert_int(spots.spots.size()).is_greater(100)
+	assert_int(landside).is_equal(0)
