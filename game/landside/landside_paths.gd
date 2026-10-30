@@ -234,6 +234,10 @@ func _add_lot(lot: LandsideLotSpot) -> void:
 	slot_back.append(backs)
 	var turn := lot.access.duplicate()
 	_append(turn, lot.entrance[0] if not lot.entrance.is_empty() else lot.aisle_front)
+	# Back out down the way-out ramp (from its point at the entrance's first
+	# depth: the first point is inside the building), not across the slab edge.
+	if not lot.way_out.is_empty():
+		_append_all(turn, lot.way_out.slice(1))
 	_append(turn, lot.exit[0])
 	turn_path.append(turn)
 	turn_end.append(LandsideDefinition.length_mm(turn))

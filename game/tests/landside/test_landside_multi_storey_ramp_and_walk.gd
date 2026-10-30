@@ -56,25 +56,49 @@ func before() -> void:
 
 
 func test_the_access_lane_climbs_from_the_road_to_the_slab_in_small_steps() -> void:
-	var lane := _spot.access
+	_assert_ramp(_spot.access, 1.0, "access")
+
+
+## The way out mirrors it: the slab's height to the front edge, then down to the
+## road in the same steps, so a leaving car never dips under the slab top.
+func test_the_way_out_comes_down_from_the_slab_edge_in_small_steps() -> void:
+	# From the way out's point at the entrance's first depth (the first point is
+	# inside the building) on to the exit lane's first two points.
+	var lane := PackedVector3Array(_spot.way_out.slice(1))
+	lane.append(_spot.exit[0])
+	lane.append(_spot.exit[1])
+	_assert_ramp(lane, -1.0, "way out")
+	# The exit lane then runs on at road height.
+	assert_float(_spot.exit[0].y).is_equal_approx(ROAD_Y, EPS)
+	assert_float(_spot.exit[1].y).is_equal_approx(ROAD_Y, EPS)
+
+
+## Checks a lane over the apron between the slab and the road: `way` +1 climbs
+## road to slab, -1 comes down slab to road; no step more than MAX_STEP, per point
+## and per 0.25 m of travel, never the wrong way, and at slab height at and past
+## the slab's front edge (so no wheel sinks into it).
+func _assert_ramp(lane: PackedVector3Array, way: float, what: String) -> void:
 	var slab_y := _spot.entrance[0].y
+	var road := ROAD_Y if way > 0.0 else lane[lane.size() - 1].y
+	var low := lane[0] if way > 0.0 else lane[lane.size() - 1]
+	var high := lane[lane.size() - 1] if way > 0.0 else lane[0]
 	# The slab's front edge, from the spot's centre and footprint.
 	var edge_z := _spot.centre.z - _spot.footprint.y / 2.0
-	var climbs := 0
+	var slopes := 0
 	var worst := 0.0
 	for i in range(1, lane.size()):
-		var rise := lane[i].y - lane[i - 1].y
+		var rise := (lane[i].y - lane[i - 1].y) * way
 		worst = maxf(worst, absf(rise))
 		(
 			assert_float(absf(rise))
 			. override_failure_message(
-				"access %s to %s rises %.3f m" % [lane[i - 1], lane[i], rise]
+				"%s %s to %s rises %.3f m" % [what, lane[i - 1], lane[i], rise]
 			)
 			. is_less_equal(MAX_STEP + EPS)
 		)
 		assert_float(rise).is_greater_equal(-EPS)
 		if rise > EPS:
-			climbs += 1
+			slopes += 1
 	# Also per 0.25 m of travel, whatever the spacing of the points.
 	var length := LandsideDefinition.length_mm(lane) / 1000.0
 	var d := 0.0
@@ -87,18 +111,15 @@ func test_the_access_lane_climbs_from_the_road_to_the_slab_in_small_steps() -> v
 		before_y = y
 	print(
 		(
-			"access %d points, %d climbing, worst step %.3f m, %.2f -> %.2f, slab edge z %.2f"
-			% [lane.size(), climbs, worst, lane[0].y, lane[lane.size() - 1].y, edge_z]
+			"%s %d points, %d sloping, worst step %.3f m, %.2f -> %.2f, slab edge z %.2f"
+			% [what, lane.size(), slopes, worst, lane[0].y, lane[lane.size() - 1].y, edge_z]
 		)
 	)
-	# A control: the lane does climb, the whole way from road to slab.
-	assert_float(lane[0].y).is_equal_approx(ROAD_Y, EPS)
-	assert_float(lane[lane.size() - 1].y).is_equal_approx(slab_y, EPS)
-	assert_float(slab_y - ROAD_Y).is_greater(2.0 * MAX_STEP)
-	assert_int(climbs).is_greater_equal(ceili((slab_y - ROAD_Y) / MAX_STEP - EPS))
-	# It meets the entrance without a step, and is on the slab's height by the
-	# slab's front edge, so no wheel sinks into it.
-	assert_float(absf(slab_y - lane[lane.size() - 1].y)).is_less_equal(MAX_STEP)
+	# A control: the lane does slope, the whole way between road and slab.
+	assert_float(low.y).is_equal_approx(road, EPS)
+	assert_float(high.y).is_equal_approx(slab_y, EPS)
+	assert_float(slab_y - road).is_greater(2.0 * MAX_STEP)
+	assert_int(slopes).is_greater_equal(ceili((slab_y - road) / MAX_STEP - EPS))
 	for point in lane:
 		if point.z >= edge_z:
 			assert_float(point.y).is_equal_approx(slab_y, EPS)

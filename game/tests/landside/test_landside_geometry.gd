@@ -234,16 +234,18 @@ func test_the_multi_storey_walks_and_drives_stay_on_its_floors_and_ramps() -> vo
 	var kerbs := 0
 	var top := 0.0
 	var door := spot.entrance[spot.entrance.size() - 1]
+	# Past the slab's front edge the lanes are the apron ramp, which has no floor
+	# in the asset; the ramp and clearance tests check it.
+	var edge_z := spot.centre.z - spot.footprint.y / 2.0
 	for slot in spot.slots.size():
 		var path: PackedVector3Array = paths.slot_path[1][slot]
 		# In through the entrance and out of the way out; the path ends on the
 		# exit lane's start, on the road in front of the building.
 		var routes := [path.slice(path.find(spot.entrance[0]), path.size() - 1)]
 		assert_vector(path[path.size() - 2]).is_equal(spot.way_out[spot.way_out.size() - 1])
-		# A ground slot's passengers walk straight to the gate, as before.
-		if LandsidePaths.deck_of(spot, spot.slots[slot]) > 0:
-			var walk := PackedVector3Array(paths.lot_walk(1, slot))
-			routes.append(walk.slice(0, walk.find(door) + 1))
+		# The passengers walk the aisle and out through the entrance, on every deck.
+		var walk := PackedVector3Array(paths.lot_walk(1, slot))
+		routes.append(walk.slice(0, walk.find(door) + 1))
 		for route in routes:
 			assert_int(route.size()).is_greater(1)
 			for i in range(1, route.size()):
@@ -252,6 +254,8 @@ func test_the_multi_storey_walks_and_drives_stay_on_its_floors_and_ramps() -> vo
 				var parts := maxi(ceili(a.distance_to(b) / 0.25), 1)
 				for part in parts + 1:
 					var at := a.lerp(b, float(part) / parts)
+					if at.z < edge_z:
+						continue
 					var problem := _footing(faces, at)
 					if problem == KERB:
 						kerbs += 1
