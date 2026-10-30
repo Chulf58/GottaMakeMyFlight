@@ -40,7 +40,10 @@ extends SceneTree
 ## with the sim clock paused at that moment, from a camera of the probe's own
 ## round the body, each kept only when the body and the bag are in frame, big
 ## enough and hit by sight lines with no blocker (_plate_close()); a missing one
-## fails. Any failure prints PROBE_INVALID and exits 1.
+## fails. Any failure prints PROBE_INVALID and exits 1. Plate moments are
+## reached by stepping the paused clock, sight lines see meshes from either
+## side, dark plates are refused, and a bag's close plate has a detail plate
+## (PlateSteps).
 ##
 ## With --lane the east basic scanner is swapped for a security lane (as in the
 ## security visuals probe) and the west one removed, so every passenger walks
@@ -66,6 +69,7 @@ const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
+const PlateSteps := preload("res://spike/carry_plate_steps.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/security-booth"
 const CLOSE_OUT_REL := "res://../tools/blender/out/carry-selfclip"
@@ -186,6 +190,13 @@ var _floats := FloatCheck.float_counts()
 var _float_control := []
 ## Key -> true once its hand-led move plates are saved.
 var _lead_plated := {}
+## The process frame a wanted plate move paused the clock on (_on_tick), or -1.
+var _hold_frame := -1
+## Passenger id -> its drawn pose (body, points, bags) last checked, and the
+## run's body-in-own-bag points over distinct poses (a paused frame measures
+## the same pose again).
+var _self_seen := {}
+var _self_distinct := 0
 
 
 func _initialize() -> void:
@@ -431,8 +442,13 @@ func _cross() -> void:
 	var spawns := 0
 	var next_send := _clock.tick
 	var stop := Time.get_ticks_msec() + RUN_LIMIT_MS
+	_clock.ticked.connect(_on_tick)
 	while Time.get_ticks_msec() < stop:
 		await RenderingServer.frame_post_draw
+		# A hold no plate took (the move was not wanted after all) lets go.
+		if _hold_frame >= 0 and not _plate_task and Engine.get_process_frames() - _hold_frame > 3:
+			_hold_frame = -1
+			_clock.set_paused(false)
 		_watch_float()
 		_lead_plate_scan()
 		if not _roles.is_empty() and _clock.tick >= next_send and spawns < MAX_SPAWNS:
@@ -491,6 +507,29 @@ func _lead_plate_scan() -> void:
 			return
 
 
+## On each sim tick, after the views' sync: a bag about to start a move still
+## to be plated (PlateSteps.wanted) pauses the clock with no time left over, so
+## the move is first drawn at k 0 and its plate steps the clock to each moment.
+func _on_tick(_tick: int) -> void:
+	if _plate_task or _hold_frame >= 0:
+		return
+	var props := _views.carry_on_props()
+	var lead_open := _lane_mode or _move_plated.size() >= MOVE_PLATES.size()
+	for id in _sim.passenger_ids():
+		var kinds: Array = props.props_of(id)["kinds"]
+		var p := _sim.get_passenger(id)
+		for i in kinds.size():
+			var move := PlateSteps.pending_move(props, id, i)
+			var plated: Array[Dictionary] = [_move_plated, _lead_plated]
+			var repacked := p != null and p.incident_resolved
+			var near := move != "" and _near_booth(id)
+			if PlateSteps.wanted(kinds[i], move, repacked, near, plated, lead_open, LEAD_PLATES):
+				_clock.set_paused(true)
+				_clock._accumulator = 0.0
+				_hold_frame = Engine.get_process_frames()
+				return
+
+
 ## The close plates of one hand-led move (or walk) of bag `i` of passenger
 ## `id`, each with the sim clock paused at its moment; each prints the bag's
 ## FLOAT state, the stoop drawn and whether the passenger walks.
@@ -503,14 +542,11 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 	for m in moments.size():
 		var lo: float = moments[m][0]
 		var hi: float = moments[m][1]
-		var stop := Time.get_ticks_msec() + 5000
-		var k := props.transfer_progress(id, i)
-		while k < lo and Time.get_ticks_msec() < stop and _views.node_for(id) != null:
-			await process_frame
-			k = props.transfer_progress(id, i)
+		# The clock is held and stepped to the moment, so no window is jumped.
 		_clock.set_paused(true)
+		await PlateSteps.step_to(self, _clock, props, id, i, lo, hi)
 		await _frames(1)
-		k = props.transfer_progress(id, i)
+		var k := props.transfer_progress(id, i)
 		var body := _views.node_for(id)
 		var bags: Array = props.props_of(id)["bags"] if body != null else []
 		if (
@@ -555,30 +591,9 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 		saved += 1
 	if saved == moments.size():
 		_lead_plated[key] = true
+	_clock.set_paused(false)
+	_hold_frame = -1
 	_plate_task = false
-
-
-## One contact sheet of this run's hand-led move plates (lead_*.png in the
-## close plates folder), four across, each over its file name.
-func _lead_sheet() -> void:
-	var names: Array[String] = []
-	for file in DirAccess.get_files_at(_close_dir):
-		if file.begins_with("lead_") and file.ends_with(".png"):
-			names.append(file)
-	names.sort()
-	if names.is_empty():
-		return
-	var cell := Vector2i(480, 270)
-	var sheet := Image.create(
-		cell.x * 4, cell.y * ceili(names.size() / 4.0), false, Image.FORMAT_RGB8
-	)
-	for n in names.size():
-		var img := Image.load_from_file(_close_dir.path_join(names[n]))
-		img.convert(Image.FORMAT_RGB8)
-		img.resize(cell.x, cell.y)
-		sheet.blit_rect(img, Rect2i(Vector2i.ZERO, cell), Vector2i(n % 4, n / 4) * cell)
-	sheet.save_png(_close_dir.path_join("contact_sheet_lead.png"))
-	print("LEAD_SHEET %s plates=%s" % [_close_dir.path_join("contact_sheet_lead.png"), names])
 
 
 ## One frame of the FLOAT check, and its control on the first drawn bag.
@@ -747,6 +762,10 @@ func _check(id: int) -> void:
 			s["turn_frames"] += 1
 			s["turn_along"].append(snappedf(absf(local.z), 0.01))
 		s["self_contacts"] += self_hits
+		var pose := [body.global_transform, self_hits, bags.map(func(b): return b.global_transform)]
+		if self_hits > 0 and _self_seen.get(id, []) != pose:
+			_self_distinct += self_hits
+		_self_seen[id] = pose
 		if self_hits > 0:
 			print(
 				(
@@ -868,7 +887,7 @@ func _print_self_detail(
 		(
 			(
 				"SELF_DETAIL passenger=%d bag=%d kind=%d carry=%d k=%.2f turn=%.2f arm=%.2f"
-				+ " grip=%s moving=%s along=%.2f stage=%d bones=%s at=%s"
+				+ " grip=%s moving=%s along=%.2f stage=%d bones=%s at=%s move=%s held_by=%d bag_at=%s"
 			)
 			% [
 				id,
@@ -883,16 +902,19 @@ func _print_self_detail(
 				along,
 				p.stage,
 				CarryChecks.contact_bones(body, CarryChecks.gripping(_sim, p), bag),
-				_where_inside(body, own, bag)
+				_where_inside(to_body, own, bag),
+				FloatCheck.move_of(props_now, id, i),
+				int(props_now.bag_state(id, i).get("held_by", -1)),
+				_where_inside(bag.global_transform.affine_inverse(), own, bag)
 			]
 		)
 	)
 
 
-## Diagnostic: up to four body points inside `bag`, in the body's frame.
-func _where_inside(body: Node3D, own: PackedVector3Array, bag: Node3D) -> Array:
+## Diagnostic: up to four body points inside `bag`, in the frame `to_body`
+## takes world points to (the body's, or the bag's own).
+func _where_inside(to_body: Transform3D, own: PackedVector3Array, bag: Node3D) -> Array:
 	var out := []
-	var to_body := body.global_transform.affine_inverse()
 	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
 		var to_mesh := mi.global_transform.affine_inverse()
 		var faces := mi.mesh.get_faces()
@@ -1099,6 +1121,7 @@ func _plate_best(id: int, booth: Array, name: String) -> bool:
 		_rig.yaw = yaw
 		_rig.distance = 4.5
 		var holder := PlateSight.colliders(root, owners, {})
+		PlateSteps.see_both_sides(holder)
 		await physics_frame
 		await physics_frame
 		await _frames(2)
@@ -1112,6 +1135,9 @@ func _plate_best(id: int, booth: Array, name: String) -> bool:
 			ok = placed
 		var img := root.get_texture().get_image()
 		holder.free()
+		var dark := PlateSteps.dark_share(img)
+		print("INFRAME %s yaw %.2f dark=%.2f" % [name, yaw, dark])
+		ok = ok and dark < PlateSteps.DARK_SHARE
 		if ok:
 			_save(img, name)
 			_plates_saved += 1
@@ -1143,16 +1169,11 @@ func _plate_move(id: int, i: int, kind: String) -> void:
 	for m in MOMENTS.size():
 		var lo: float = MOMENTS[m][0]
 		var hi: float = MOMENTS[m][1]
-		var stop := Time.get_ticks_msec() + 10000
-		var k := props.transfer_progress(id, i)
-		while k < lo and Time.get_ticks_msec() < stop and _views.node_for(id) != null:
-			await process_frame
-			k = props.transfer_progress(id, i)
-			restarted = restarted or k < last_k
-			last_k = k
+		# The clock is held and stepped to the moment, so no window is jumped.
 		_clock.set_paused(true)
+		await PlateSteps.step_to(self, _clock, props, id, i, lo, hi)
 		await _frames(1)
-		k = props.transfer_progress(id, i)
+		var k := props.transfer_progress(id, i)
 		var bags: Array = props.props_of(id)["bags"]
 		var now_state: Array = _last_bag_state.get(id, [])
 		var same: bool = i < began.size() and i < now_state.size() and now_state[i] == began[i]
@@ -1172,6 +1193,8 @@ func _plate_move(id: int, i: int, kind: String) -> void:
 		saved += 1
 	if saved == MOMENTS.size():
 		_move_plated[kind] = true
+	_clock.set_paused(false)
+	_hold_frame = -1
 	_plate_task = false
 
 
@@ -1244,6 +1267,8 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 		if bag != null:
 			subjects[bag] = "bag"
 		var holder := PlateSight.colliders(root, owners, subjects)
+		# A mesh the camera is inside, or behind its one-sided face, blocks too.
+		PlateSteps.see_both_sides(holder)
 		await physics_frame
 		await physics_frame
 		var bounds: Dictionary = holder.get_meta("bounds")
@@ -1261,6 +1286,9 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 			ok = ok and shown["ok"]
 			if bag != null:
 				ok = _bag_seen(cam, bounds["bag"], tag) and ok
+			var dark := PlateSteps.dark_share(img)
+			print("INFRAME %s dark=%.2f" % [tag, dark])
+			ok = ok and dark < PlateSteps.DARK_SHARE
 		else:
 			print("INFRAME %s no bounds or unbaked: %s" % [tag, holder.get_meta("unbaked")])
 		holder.free()
@@ -1271,6 +1299,10 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 			else:
 				print("PLATE saved %s size=%s" % [path, img.get_size()])
 				saved = true
+				# The bag close up from the same side, for the hand and the legs.
+				if bag != null:
+					var detail := _close_dir.path_join(name + "_detail.png")
+					await PlateSteps.detail_plate(self, cam, body, bag, owners, frame, detail)
 			break
 	_cam.make_current()
 	cam.queue_free()
@@ -1329,14 +1361,20 @@ func _bags_in_frame(id: int, tag: String) -> bool:
 	var frame := Rect2(
 		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
 	)
-	var bags: Array[Node3D] = _views.carry_on_props().props_of(id)["bags"]
+	var props := _views.carry_on_props().props_of(id)
+	var bags: Array[Node3D] = props["bags"]
 	var shown := 0
-	for bag in bags:
+	for i in bags.size():
+		var bag := bags[i]
 		if not bag.is_visible_in_tree():
 			continue
 		var at := bag.global_position
 		if _cam.is_position_behind(at) or not frame.has_point(_cam.unproject_position(at)):
 			print("INFRAME %s bag at %s is out of frame" % [tag, at])
+			return false
+		# Nothing built (a chair, a rail, a wall) before the bag's middle.
+		var mid := bag.global_transform * CarryOnProps.bag_box(props["kinds"][i]).get_center()
+		if PlateSteps.blocked(_cam, mid, tag):
 			return false
 		shown += 1
 	print("INFRAME %s bags_in_frame=%d" % [tag, shown])
@@ -1362,7 +1400,8 @@ func _shown(body: Node3D, tag: String) -> bool:
 			PhysicsRayQueryParameters3D.create(_cam.global_position, base + Vector3(0.0, h, 0.0))
 		)
 		clear += int(hit.is_empty())
-	var ok := in_frame and clear >= 2 and hi.y - lo.y >= MIN_SUBJECT_PX
+	# Every line clear: a near occluder over the legs blocks one line only.
+	var ok := in_frame and clear == 3 and hi.y - lo.y >= MIN_SUBJECT_PX
 	print(
 		(
 			"INFRAME %s screen=(%.0f,%.0f)-(%.0f,%.0f) unblocked_lines=%d/3 ok=%s"
@@ -1464,7 +1503,12 @@ func _report() -> void:
 		_report_booth()
 	if totals["frames"] < 100:
 		_invalid("only %d passenger frames near a booth" % totals["frames"])
-	print("BODY_IN_OWN_BAG failing=%d THROUGH_PARTS=%d" % [totals["self"], totals["through"]])
+	print(
+		(
+			"BODY_IN_OWN_BAG failing=%d THROUGH_PARTS=%d distinct_poses=%d"
+			% [totals["self"], totals["through"], _self_distinct]
+		)
+	)
 	print(
 		(
 			"CASE_TURN_IN_OWN_BAG points=%d frames=%d distance_from_booth_centre_m=%s (reported, accepted)"
@@ -1473,7 +1517,7 @@ func _report() -> void:
 	)
 	print(FloatCheck.float_report(_floats))
 	print("LEAD_PLATED %s" % [_lead_plated.keys()])
-	_lead_sheet()
+	PlateSteps.lead_sheet(_close_dir)
 	if _floats["float"] > 0:
 		_invalid("a carry-on bag floats (neither held, worn nor resting): %d" % _floats["float"])
 	if _float_control != ["float", "held"] and _float_control != ["float", "resting"]:
