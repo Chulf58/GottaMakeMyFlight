@@ -1299,6 +1299,8 @@ func _rig(body: Node3D) -> Dictionary:
 		return body.get_meta(&"carry_rig")
 	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var rig := {"grips": [], "arms": [], "shoulders": [], "spine": _attach(skeleton, SPINE_BONE)}
+	# The stoop's pivot as drawn (CarryWorn.stoop_shift).
+	rig["pivot"] = _attach(skeleton, "Spine_01")
 	# Before the arms: the stoop bends the back and the arms reach from there.
 	rig["stoop"] = CarryStoop.new()
 	skeleton.add_child(rig["stoop"])
@@ -1366,13 +1368,17 @@ func _carry_transform(
 			return worn_back(_spine_of(body), body.rotation.y, scale_by)
 		SecurityLooks.Carry.SHOULDER:
 			var side := SecurityLooks.worn_side(i)
+			var joint := _shoulder_of(body, side)
 			var hung := CarryWorn.shoulder(
-				_shoulder_of(body, side),
+				joint,
 				body.global_position,
 				body.rotation.y,
 				side,
 				scale_by,
-				_reach_base(_part(node, "Strap_Reach"))
+				_reach_base(_part(node, "Strap_Reach")),
+				CarryWorn.stoop_shift(
+					_rig(body)["stoop"], _rig(body)["pivot"].global_position, joint
+				)
 			)
 			reach[0] = hung[1]
 			return hung[0]
