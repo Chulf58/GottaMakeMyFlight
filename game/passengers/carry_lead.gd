@@ -26,6 +26,12 @@ enum End { HELD, WORN, REST }
 ## The share of a move the hand takes to reach a bag that is not in a hand at
 ## the start, and to come back from one it leaves.
 const REACH_SHARE := 0.25
+## Picking a bag up off a toilet stall's floor into the hand, the hand reaches
+## it over this share instead (CarryOnProps stamps it on the move, "reach"):
+## the walker already steps out as the move starts, about 0.1 m a tick, and a
+## bag left on the floor for REACH_SHARE was stepped through (stall_bags_probe,
+## board item c7b0e7be).
+const STALL_PICK_REACH := 0.06
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side, at shoulder height, this far out from the centre line, over this
 ## share of the carry.
@@ -52,6 +58,75 @@ const KEEP_FADE := 0.25
 ## put the case top against the face of a body stooping to set it down, and
 ## none put the hand low beside the case's top corner, palm out, not on it.
 const SET_DOWN_LIFT_M := 0.15
+## Setting a bag down in a toilet stall the back bends first and the hips go
+## down (and back) only as far as the bent back leaves the hand short
+## (CarryStoop.drops): the hips dropping with every stoop brought the knees
+## forward into the bag by the door, the back alone left the hand up to 0.45 m
+## short of it (board item c7b0e7be).
+const STALL_HIPS := Vector3(1.0, 1.0, 1.0)
+## Set down from the hand in a toilet stall, the hand comes back from the bag
+## over this last share of the move (not REACH_SHARE): the body shuffles back
+## to the seat as it sits (0.4 m over 12 ticks), and a bag let go at the usual
+## k 0.75 was out of the hand's reach by then.
+const STALL_LET_GO := 0.55
+## A bag picked up from a stall's floor goes out this far to its hand's side
+## midway (the walker steps out past it).
+const STALL_PICK_SIDE_M := 0.12
+## A bag picked up in a stall rises toward its carry with the hand no lower than
+## this over the feet (the front carry holds it about 1.2 m up).
+const STALL_CARRY_GRIP_M := 1.0
+## A tote set down in a toilet stall rises this much midway, over the thighs.
+const STALL_TOTE_LIFT_M := 0.25
+## And it is held this far short of its place by the door until it goes down.
+const STALL_TOTE_BACK_M := 0.05
+## Picked up there it is not pushed out ahead (path()) to this share of the
+## move, and pushed as it is outside from this one on.
+const STALL_AHEAD_BACK := Vector2(0.35, 0.65)
+## A backpack set down in a stall is held this far over its grab loop (its own
+## frame), the fingers over the top, not in it.
+const STALL_LOOP_UP := Vector3(0.0, 0.0, 0.06)
+## A hard case standing in a stall is held by the middle of its top end, the
+## grip FRONT_PALM_M over it (the palm on the top, as on the handle in front).
+## Its body is this deep (measured on the mesh): bag_box() takes in the handle,
+## 3.6 cm proud of the face, so its top corner was in the air past the face,
+## where the hand hung beside the case (board item c7b0e7be).
+const STALL_CASE_DEPTH_M := 0.19
+## A bag picked up in a stall rises upright and tips into its carry from this
+## share of the carry on (path(), stall_tip()).
+const STALL_TIP_FROM := 0.4
+## As it tips the hand goes from a case's top over its top front edge to the
+## point it is carried by: along a curve pulled this far out past that edge
+## both ways, so the grip stays off the case (a straight blend between the two
+## took it 3.5 cm into the case midway).
+const STALL_CASE_EDGE_OUT_M := 0.08
+
+
+## Where a bag of `kind` standing in a stall is held (its own frame, the bag
+## drawn at `scale_by`): its top (`loose` its kind's grip point: a roller's
+## bar), a backpack STALL_LOOP_UP over its grab loop, a hard case FRONT_PALM_M
+## (world, as carried_in_front()) over the middle of its top end.
+static func stall_top(kind: SecurityLooks.Kind, loose: Vector3, scale_by := 1.0) -> Vector3:
+	if kind == SecurityLooks.Kind.BACKPACK:
+		return CarryOnProps.BACKPACK_LOOP + STALL_LOOP_UP
+	if kind == SecurityLooks.Kind.CASE:
+		var top := CarryOnProps.bag_box(kind).end.z + CarryOnProps.FRONT_PALM_M / scale_by
+		return Vector3(0.0, STALL_CASE_DEPTH_M * 0.5, top)
+	return loose
+
+
+## How far (0 to 1) a bag picked up in a stall has tipped from standing into
+## its carry at `t` of the carry (path()).
+static func stall_tip(t: float) -> float:
+	return clampf((t - STALL_TIP_FROM) / (1.0 - STALL_TIP_FROM), 0.0, 1.0)
+
+
+## The point of a hard case in the hand at `w` (stall_tip()) of its tip from
+## standing, held at `from` (stall_top()), into its carry, held at `to`: a curve
+## over its top front edge, STALL_CASE_EDGE_OUT_M out past it.
+static func case_tip_grip(from: Vector3, to: Vector3, w: float) -> Vector3:
+	var out := STALL_CASE_EDGE_OUT_M
+	var edge := Vector3(0.0, STALL_CASE_DEPTH_M + out, CarryOnProps.bag_box().end.z + out)
+	return from.lerp(edge, w).lerp(edge.lerp(to, w), w)
 
 
 ## The kind of end a bag's place (`place`, CarryOnProps' (home * 2 + hand) * 2
@@ -79,7 +154,29 @@ static func start_of(bag: Dictionary) -> Array:
 ## move that starts HELD leaves at once). A move that interrupts it starts
 ## where the bag is, at that start (CarryOnProps._stamp).
 static func at_start(bag: Dictionary, k: float) -> bool:
-	return bag.get("led", false) and k < span(start_of(bag)[0], End.HELD).x
+	return (
+		bag.get("led", false) and k < span(start_of(bag)[0], End.HELD, REACH_SHARE, reach_of(bag)).x
+	)
+
+
+## Stamps on `bag` (CarryOnProps' record of a move starting at its "was",
+## carried "carry", to `home`, a SecurityLooks.Home) the share of the move the
+## hand takes to reach it: STALL_PICK_REACH off a toilet stall's floor
+## (`in_stall`) into the hand, else none (REACH_SHARE).
+static func stamp_reach(bag: Dictionary, in_stall: bool, home: int) -> void:
+	var was: int = bag["was"]
+	var off_floor := was >= 0 and was / 4 == SecurityLooks.Home.FLOOR
+	var into_hand: bool = bag["carry"] in [SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL]
+	if in_stall and off_floor and home == SecurityLooks.Home.HAND and into_hand:
+		bag["reach"] = STALL_PICK_REACH
+	else:
+		bag.erase("reach")
+
+
+## The share of a move of `bag` (CarryOnProps' record) the hand takes to reach
+## it at its start: REACH_SHARE, or the one stamped on the move (STALL_PICK_REACH).
+static func reach_of(bag: Dictionary) -> float:
+	return bag.get("reach", REACH_SHARE)
 
 
 ## The hand of a place (0 right, 1 left).
@@ -97,17 +194,17 @@ static func lead_hand(from: End, to: End, from_hand: int, to_hand: int, fallback
 	return fallback
 
 
-## The part of the move (`x` the start, `y` the end of k) the bag is carried.
-static func span(from: End, to: End) -> Vector2:
-	return Vector2(
-		0.0 if from == End.HELD else REACH_SHARE, 1.0 if to == End.HELD else 1.0 - REACH_SHARE
-	)
+## The part of the move (`x` the start, `y` the end of k) the bag is carried;
+## the hand reaches a bag not in a hand over the first `reach` of it and comes
+## back from a bag it leaves over the last `let_go` of it.
+static func span(from: End, to: End, let_go := REACH_SHARE, reach := REACH_SHARE) -> Vector2:
+	return Vector2(0.0 if from == End.HELD else reach, 1.0 if to == End.HELD else 1.0 - let_go)
 
 
 ## How far along the carry a move of `bag` (CarryOnProps' record) is at `k`,
 ## 0 to 1 (0 while it waits at its start, 1 once it is at its end).
 static func carry_t(k: float, bag: Dictionary) -> float:
-	var s := span(start_of(bag)[0], end_of(bag["home"], bag["carry"]))
+	var s := span(start_of(bag)[0], end_of(bag["home"], bag["carry"]), REACH_SHARE, reach_of(bag))
 	return clampf((k - s.x) / maxf(s.y - s.x, 0.0001), 0.0, 1.0)
 
 
@@ -115,9 +212,18 @@ static func carry_t(k: float, bag: Dictionary) -> float:
 ## after it), "holder": the hand the bag is placed from (-1 while it rests or
 ## is worn at an end), "weights": [right, left] how far each hand is aimed at
 ## its target (CarryArm.reach_weight), "targets_at": [right, left] the carry
-## progress each hand aims at (-1 the start, 2 the end)}.
-static func phase(k: float, from: End, to: End, from_hand: int, lead: int) -> Dictionary:
-	var s := span(from, to)
+## progress each hand aims at (-1 the start, 2 the end)}. `let_go` and
+## `reach` as for span().
+static func phase(
+	k: float,
+	from: End,
+	to: End,
+	from_hand: int,
+	lead: int,
+	let_go := REACH_SHARE,
+	reach := REACH_SHARE
+) -> Dictionary:
+	var s := span(from, to, let_go, reach)
 	var t := (k - s.x) / maxf(s.y - s.x, 0.0001)
 	var weights := [0.0, 0.0]
 	var aims := [0.0, 0.0]
@@ -155,8 +261,11 @@ static func phase(k: float, from: End, to: End, from_hand: int, lead: int) -> Di
 ## `k` of a move from `from` to `to`: lifting a bag off the floor
 ## (`from_floor`), through the reach and the carry to KEEP_T, gone by KEEP_T +
 ## KEEP_FADE; setting one down on it (`to_floor`), the same from the end back.
-static func floor_keep(k: float, from: End, to: End, from_floor: bool, to_floor: bool) -> float:
-	var s := span(from, to)
+## `reach` as for span().
+static func floor_keep(
+	k: float, from: End, to: End, from_floor: bool, to_floor: bool, reach := REACH_SHARE
+) -> float:
+	var s := span(from, to, REACH_SHARE, reach)
 	var t := (k - s.x) / maxf(s.y - s.x, 0.0001)
 	var keep := 0.0
 	if from == End.REST and from_floor:
@@ -249,8 +358,9 @@ static func swap_axle(
 ## [right, left] shoulder joint heights, "bar_z": a roller's grip bar along it,
 ## "scale": the bag's scale}. Returns {"holder", "xf" (the bag at a resting or
 ## worn end, or on its path), "anchor" (the point of the bag in the holder's
-## grip, its own frame), "targets", "weights", "keeps" (each hand's, right then
-## left; keeps floor_keep(), flags "from_floor" and "to_floor")}.
+## grip, its own frame), "targets", "weights", "keeps", "drops" (each hand's,
+## right then left; keeps floor_keep(), flags "from_floor" and "to_floor";
+## drops CarryStoop.drops)}.
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side (back_side()).
 static func plan(
@@ -268,21 +378,37 @@ static func plan(
 	var from_hand: int = started[1]
 	var to_hand := hand_of(bag["home"])
 	var lead := lead_hand(from_end, to_end, from_hand, to_hand, body["hand"])
-	var ph := phase(k, from_end, to_end, from_hand, lead)
+	var stall: bool = flags.get("in_stall", false)
+	var set_down := from_end == End.HELD and to_end == End.REST
+	# Set down from the hand in a toilet stall it is down and let go early
+	# (STALL_LET_GO): the body shuffles back to the seat as it sits.
+	var let_go := STALL_LET_GO if stall and set_down else REACH_SHARE
+	var reach := reach_of(bag)
+	var ph := phase(k, from_end, to_end, from_hand, lead, let_go, reach)
 	var t: float = ph["t"]
+	if stall and set_down and k <= span(from_end, to_end, let_go).y:
+		# And the hand is on the bag's path at once: the body turns round to sit
+		# in one frame, and the bag eased out of the carry pose went through the
+		# door ahead (StallCarry.set_down_start).
+		ph["weights"][lead] = 1.0
 	var loose := anchor(bag["kind"], body["bar_z"])
 	if bag["kind"] == SecurityLooks.Kind.SHOULDER:
 		# A shoulder bag is lifted on and off the shoulder by its strap's top.
 		loose = body["strap_top"]
-	# A roller is held by its bar, which moves with its rods.
+	# A roller is held by its bar, which moves with its rods (in a stall they
+	# stay in, so it is held where the hand had it, BAR_PALM_M off the bar).
 	var roller: bool = bag["kind"] == SecurityLooks.Kind.ROLLER
 	var anchor_from: Vector3 = loose
-	if from_end == End.HELD and not roller:
+	if from_end == End.HELD and (not roller or flags.get("in_stall", false)):
 		anchor_from = bag["anchor_from"]
 	# Lying in a tray or on the floor a roller is taken (and left) by its carry
 	# handle on top, not by its bar down at the rod line (the forearm went
 	# through it, board item 5ed915b0); the hand slides to the bar as it lifts.
-	if roller and from_end == End.REST:
+	# Standing on its wheels in a toilet stall its bar is on top, and it is held
+	# by the bar throughout (decision stall-bag-poses-as-built-bags-stand-
+	# upright-against-the-insi).
+	var by_handle: bool = roller and not flags.get("in_stall", false)
+	if by_handle and from_end == End.REST:
 		anchor_from = CarryOnProps.ROLLER_HANDLE
 	var anchor_to := loose
 	if to_end == End.HELD:
@@ -293,9 +419,26 @@ static func plan(
 			# the two lengths again took the bar up to 8 cm off the hand passing
 			# a pulled roller between hands (crossing probe FLOAT, pull.R>pull.L).
 			anchor_to.z = loose.z
-	elif roller and to_end == End.REST:
+	elif by_handle and to_end == End.REST:
 		anchor_to = CarryOnProps.ROLLER_HANDLE
+	# In a toilet stall (board item c7b0e7be) a bag is set down by its top as it
+	# stands (stall_top(): a case's top end, a backpack's grab loop, a roller's
+	# bar), from the start: the body turns round to sit in that frame. A
+	# backpack is picked up by the point it is carried by, the hand not sliding
+	# over it; a hard case by its top while it stands, the hand going over its
+	# top front edge to the point it is carried by as it tips (case_tip_grip()):
+	# held there from the floor, the hand was beside its side face as it rose.
+	var case_up: bool = stall and bag["kind"] == SecurityLooks.Kind.CASE
+	if stall and set_down:
+		anchor_from = stall_top(bag["kind"], loose, body["scale"])
+		anchor_to = anchor_from
+	elif case_up and from_end == End.REST and to_end == End.HELD:
+		anchor_from = stall_top(bag["kind"], loose, body["scale"])
+	elif stall and from_end == End.REST and to_end == End.HELD and not roller:
+		anchor_from = anchor_to
 	var held_at := anchor_from.lerp(anchor_to, t)
+	if case_up and from_end == End.REST and to_end == End.HELD:
+		held_at = case_tip_grip(anchor_from, anchor_to, stall_tip(t))
 	var off_back: bool = from_end == End.WORN and bag["carry_from"] == SecurityLooks.Carry.BACK
 	var on_back: bool = to_end == End.WORN and bag["carry"] == SecurityLooks.Carry.BACK
 	var on_path: Transform3D
@@ -314,8 +457,25 @@ static func plan(
 		else:
 			on_path = path(start, side, t / (1.0 - BACK_SHARE), frame, bag["from"], flags)
 	else:
-		on_path = path(start, want, t, frame, bag["from"], flags)
-		if from_end == End.REST or to_end == End.REST:
+		# A bag picked up off a stall's floor rises, whatever its origin does (a case
+		# stood on its end has its origin higher than flat in the hand).
+		var lift := flags
+		var goal := want
+		if stall and from_end == End.REST and to_end == End.HELD:
+			lift = flags.duplicate()
+			lift["rising"] = true
+			# One bag out to its side midway; two stand on their hands' sides already.
+			lift["side"] = STALL_PICK_SIDE_M if body["scale"] >= 1.0 else 0.0
+			# It rises to where the hand carries it, not to where the stooping hand
+			# is now: the carry end follows the hand, and a path to it led the hand
+			# down with it, under the floor (board item c7b0e7be). Not a roller: held by
+			# its bar on top it stood up into the stooping head.
+			var low: float = frame.origin.y + STALL_CARRY_GRIP_M
+			if not roller:
+				goal = want.translated(Vector3.UP * maxf(low - (want * anchor_to).y, 0.0))
+		on_path = path(start, goal, t, frame, bag["from"], lift)
+		# (In a stall path() turns it: upright, tipped late into the carry.)
+		if (from_end == End.REST or to_end == End.REST) and not stall:
 			# Off the floor or a tray it turns to hang from the hand soon after it
 			# rises (off the floor sooner: lying flat it met the thighs); onto one
 			# it hangs until it is nearly down (the arm above it).
@@ -338,15 +498,29 @@ static func plan(
 		targets[lead] = by_side(targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, body)
 	var xf := on_path
 	if ph["holder"] < 0:
-		xf = start if k < span(from_end, to_end).x else want
+		xf = start if k < span(from_end, to_end, let_go, reach).x else want
 	# Only a hard case, which lies flat on the floor across the feet: a shoulder
 	# bag or a backpack lifted with the stoop kept bent the walker deep after a
-	# target far ahead (into a lane arch's post).
+	# target far ahead (into a lane arch's post). In a stall every kind, stood
+	# by the door (a roller lifted with the back straightening early was held
+	# short, into the thighs).
 	var keeps := [0.0, 0.0]
-	if bag["kind"] == SecurityLooks.Kind.CASE:
+	if bag["kind"] == SecurityLooks.Kind.CASE or stall:
 		keeps[lead] = floor_keep(
-			k, from_end, to_end, flags.get("from_floor", false), flags.get("to_floor", false)
+			k, from_end, to_end, flags.get("from_floor", false), flags.get("to_floor", false), reach
 		)
+	# Sitting down in a stall to set a bag down by the door, the back bends
+	# first (STALL_HIPS, CarryStoop.drops), as far as the reach needs at any
+	# height (kept on).
+	var hips := CarryStoop.HIPS_ALL
+	if stall and to_end == End.REST:
+		keeps[lead] = 1.0
+		hips = STALL_HIPS
+	elif case_up and from_end == End.REST:
+		# Reaching down to a case's top to pick it up, the same: with the hips
+		# going down with the stoop (to its top, not its handle lower down), the
+		# knee came into the case (board item c7b0e7be).
+		hips = STALL_HIPS
 	return {
 		"holder": ph["holder"],
 		"xf": xf,
@@ -354,6 +528,7 @@ static func plan(
 		"targets": targets,
 		"weights": ph["weights"],
 		"keeps": keeps,
+		"drops": [hips, hips],
 	}
 
 
@@ -366,7 +541,12 @@ static func plan(
 ## of `hand`. In a toilet stall (`in_stall`) a bag in the hand (`hand_carry`)
 ## goes between the floor and the front carry ahead of the body with no lift
 ## or push out: set down straight down, picked up upright first (decision
-## stall-bag-poses-as-built-bags-stand-upright-against-the-insi). Moved
+## stall-bag-poses-as-built-bags-stand-upright-against-the-insi); a tote there
+## goes as it does outside (pushed out to its side at the hip, it lay against
+## the thigh of a walker sitting down, board item c7b0e7be), but picked up it
+## is not pushed out ahead, toward the door. A bag goes up
+## when its origin does, or with flag "rising" (plan(): a stall pick-up, which
+## also goes flag "side" out to its hand's side midway). Moved
 ## from CarryOnProps._place_bags; the floor set-down added for board item 5ed915b0.
 static func path(
 	start: Transform3D,
@@ -380,30 +560,41 @@ static func path(
 	var hand_in_stall: bool = in_stall and flags.get("hand_carry", false)
 	var placed := start.interpolate_with(want, k)
 	var arc := 0.0 if hand_in_stall else 4.0 * k * (1.0 - k)
-	var rising := want.origin.y > start.origin.y
+	var rising: bool = flags.get("rising", want.origin.y > start.origin.y)
 	if hand_in_stall and rising:
-		var soon := 1.0 - (1.0 - k) * (1.0 - k)
+		# Up fast: hand-led, it rises only after the hand has reached it, and the
+		# walker stepping out caught it low with a foot.
+		var soon := 1.0 - pow(1.0 - k, 4.0)
 		var across := start.origin.lerp(want.origin, k * k)
-		var tip := clampf((k - 0.4) / 0.6, 0.0, 1.0)
+		var tip := stall_tip(k)
 		# Out ahead of the walker's stride as it rises, back to the hand as it
-		# tips over.
+		# tips over, and out to its hand's side midway, off the leg stepping past
+		# it (hand-led it hangs where the hand can take it, short of the path).
 		var ahead := (
 			minf(k * 4.0, 1.0) * (1.0 - smoothstep(0.5, 1.0, k)) * CarryOnProps.PICK_AHEAD_M
 		)
-		across += Basis(Vector3.UP, flags.get("yaw", 0.0)) * Vector3.BACK * ahead
+		var turn := Basis(Vector3.UP, flags.get("yaw", 0.0))
+		var side := Vector3.LEFT if flags.get("hand", 0) == 0 else Vector3.RIGHT
+		var out: float = flags.get("side", 0.0) * 4.0 * k * (1.0 - k)
+		across += turn * (Vector3.BACK * ahead + side * out)
 		placed = Transform3D(
 			start.interpolate_with(want, tip).basis,
 			Vector3(across.x, lerpf(start.origin.y, want.origin.y, soon), across.z)
 		)
 	elif hand_in_stall:
 		pass
-	elif (
-		rising
-		and flags.get("from_floor", false)
-		and not in_stall
-		and CarryMoves.picks_up_ahead(from_local)
-	):
-		placed = frame * CarryMoves.pick_up(from_local, frame.affine_inverse() * want, k)
+	elif rising and flags.get("from_floor", false) and CarryMoves.picks_up_ahead(from_local):
+		var lifted := CarryMoves.pick_up(from_local, frame.affine_inverse() * want, k)
+		if in_stall:
+			# Not out ahead while the walker is still in the stall (CarryMoves'
+			# PICK_AHEAD_M push taken off again, back on by STALL_AHEAD_BACK as it
+			# steps out): by a stall's door a tote went through its leaves; across
+			# from the door without the side-out of pick_up() it went into the hips,
+			# and with no push at all its strap came back into the forearm.
+			var ahead := minf(k * 4.0, 1.0) * (1.0 - smoothstep(0.5, 1.0, k))
+			var held_back := 1.0 - smoothstep(STALL_AHEAD_BACK.x, STALL_AHEAD_BACK.y, k)
+			lifted.origin.z -= ahead * held_back * CarryOnProps.PICK_AHEAD_M
+		placed = frame * lifted
 	elif rising:
 		var across := start.origin.lerp(want.origin, k * k)
 		placed.origin.x = across.x
@@ -413,7 +604,21 @@ static func path(
 		# the bag comes in under the arm that will hold it.
 		var early := 6.75 * k * (1.0 - k) * (1.0 - k) * pow(1.0 - k * k, 4.0)
 		placed.origin.y += CarryOnProps.KNEE_LIFT_M * early
-	elif flags.get("to_floor", false) and not in_stall:
+	elif flags.get("to_floor", false) and in_stall:
+		# A tote set down by a stall's door: out ahead first, up over the thighs
+		# of the walker sitting down, then down in front of the knees (straight out
+		# ahead at the hip it met the right thigh, board item c7b0e7be), turned to
+		# stand as it will by the door as it goes out and held STALL_TOTE_BACK_M
+		# short of its place until it goes down (up and turning, it reached into
+		# the door's leaves).
+		var down := smoothstep(0.55, 1.0, k)
+		var out := smoothstep(0.0, 0.35, k)
+		var short := Basis(Vector3.UP, flags.get("yaw", 0.0)) * Vector3.BACK * STALL_TOTE_BACK_M
+		var ahead := start.origin.lerp(want.origin - short * (1.0 - down), out)
+		placed.basis = start.interpolate_with(want, out).basis
+		placed.origin = Vector3(ahead.x, lerpf(start.origin.y, want.origin.y, down), ahead.z)
+		placed.origin.y += STALL_TOTE_LIFT_M * sin(PI * clampf((k - 0.1) / 0.75, 0.0, 1.0))
+	elif flags.get("to_floor", false):
 		# Set down on the floor: out ahead first and down late, so it is not
 		# low in front of the thighs and the bent knees, lifted only
 		# SET_DOWN_LIFT_M (board item 5ed915b0).
