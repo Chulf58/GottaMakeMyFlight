@@ -310,7 +310,9 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictiona
 		var node: Node3D = props.props_of(p.id)["bags"][0]
 		var bag := props.bag_state(p.id, 0)
 		var k := props.transfer_progress(p.id, 0)
-		if k >= 1.0 and float(out["ticks"]) < 0.0:
+		# Over once it is not the move drawn now (at its end, or a move stamped on
+		# its last tick: a late walker's roller lifted into the hand then).
+		if move != name and float(out["ticks"]) < 0.0:
 			out["ticks"] = now - began
 		var tag := (
 			"%s %.2f ticks/frame k=%.3f now %s body moved %.3f"

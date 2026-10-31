@@ -78,6 +78,23 @@ const TAKE_M := 0.05
 const UP_PART := 0.19
 ## Lifted off the floor to the park, the bag rises this much midway.
 const LIFT_M := 0.12
+## Off the floor, the walker moving this far from where it stood as the park
+## began ends the park early: the empty hand goes the rest of its way over the
+## top to the bar in UP_CUT_TICKS (up_ends()), there by CUT_ON of it (the last
+## frame alone must not leave the hand short of the bar). Held again by the bar, the bag
+## tips into the pull in the body's frame (_followed()), never left standing in
+## the world as the walker goes: a late walker runs off, and its hand was 0.31
+## m from one frame to the next at 1x, 1.0 m at 3x, reaching back for it. Left
+## by the hand, the bag stands still in the world, never sliding on the floor
+## (conductor ruling 2026-10-31 on board 5b0fa979).
+const MOVED_M := 0.01
+const UP_CUT_TICKS := 2.0
+const CUT_ON := 0.7
+## Taken again by the bar, the bag goes with the body from this share of the
+## way from the last frame it stood alone to now (_followed()): the hand on the
+## bar moves that share of the walker's step against the body, the bag the rest
+## in the world, on top of what the hand was short of the bar.
+const FOLLOW_SPLIT := 0.7
 
 
 ## Whether a hand-led move of `bag` (CarryOnProps' record, its "was",
@@ -128,14 +145,21 @@ static func holds_lift(bag: Dictionary, kind: SecurityLooks.Kind, home: int, now
 static func stamp(bag: Dictionary, body: Transform3D) -> void:
 	bag["park"] = true
 	bag["ticks"] = TICKS_DOWN
-	bag.erase("park_took")
+	for key in [
+		"park_took", "park_at", "park_cut", "park_last", "park_rel", "lift_last", "park_tip"
+	]:
+		bag.erase(key)
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
 		bag["ticks"] = TICKS_UP
 		bag["reach"] = REACH_END
 		bag["from_world"] = body * (bag["from"] as Transform3D)
-	var ahead := body.basis.z
-	var yaw := atan2(ahead.x, ahead.z)
-	bag["park_frame"] = Transform3D(Basis(Vector3.UP, yaw), body.origin)
+	bag["park_frame"] = _yawed(body)
+
+
+## `frame` turned about the vertical only (its yaw), at its origin.
+static func _yawed(frame: Transform3D) -> Transform3D:
+	var ahead := frame.basis.z
+	return Transform3D(Basis(Vector3.UP, atan2(ahead.x, ahead.z)), frame.origin)
 
 
 ## The roller parked (world) for a move led by `hand` (0 right, 1 left), in
@@ -174,10 +198,14 @@ static func _eased(t: float) -> float:
 
 
 ## Where the lift and the park of a floor>pull move of `bag` end (k): LIFT_END
-## and UP_PARK_END, later when its bag was taken late ("park_took", _taken()).
+## and UP_PARK_END, later when its bag was taken late ("park_took", _taken()),
+## the park sooner when the walker moved during it ("park_cut", MOVED_M).
 static func up_ends(bag: Dictionary) -> Vector2:
 	var lift := maxf(LIFT_END, float(bag.get("park_took", 0.0)) + UP_PART)
-	return Vector2(lift, maxf(UP_PARK_END, lift + UP_PART))
+	var park := maxf(UP_PARK_END, lift + UP_PART)
+	if bag.has("park_cut"):
+		park = minf(park, (bag["park_cut"] as Vector2).x + UP_CUT_TICKS / TICKS_UP)
+	return Vector2(lift, park)
 
 
 ## The roller turning on its axle from `from` to `to` (world, both on their
@@ -225,9 +253,8 @@ static func plan(
 	if not off_floor:
 		at = _onto_floor(k, start, want, parked, frame, go, bar, handle)
 	else:
-		at = _off_floor(
-			k, start, want, parked, _taken(bag, k, start * handle, body, lead), bar, handle
-		)
+		_taken(bag, k, start * handle, body, lead)
+		at = _off_floor(k, bag, start, want, parked, _yawed(frame), bar, handle)
 	var xf: Transform3D = at[1]
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	var weights := [0.0, 0.0]
@@ -294,28 +321,72 @@ static func _taken(bag: Dictionary, k: float, at: Vector3, body: Dictionary, lea
 	return -1.0
 
 
-## floor>pull at `k` (plan()), the bag taken off the floor at `took` (_taken()):
-## [held, xf, anchor, target, weight].
+## floor>pull of `bag` at `k` (plan()), the bag taken off the floor at its
+## "park_took" (_taken()), the body at `body` (yaw only): [held, xf, anchor,
+## target, weight].
 static func _off_floor(
 	k: float,
+	bag: Dictionary,
 	start: Transform3D,
 	want: Transform3D,
 	parked: Transform3D,
-	took: float,
+	body: Transform3D,
 	bar: Vector3,
 	handle: Vector3
 ) -> Array:
+	var took: float = bag.get("park_took", -1.0)
 	if took < 0.0 or k < took:
 		return [false, start, handle, handle, smoothstep(0.0, 1.0, k / REACH_END)]
-	var ends := up_ends({"park_took": took})
+	var ends := up_ends(bag)
 	if k < ends.x:
 		var t := (k - took) / (ends.x - took)
 		var lifted := start.interpolate_with(parked, _eased(t))
 		lifted.origin.y += LIFT_M * 4.0 * t * (1.0 - t)
+		bag["lift_last"] = body
 		return [true, lifted, handle, handle, 1.0]
 	if k < ends.y:
 		var v := smoothstep(0.0, 1.0, (k - ends.x) / (ends.y - ends.x))
-		return [false, parked, bar, over_top(handle, bar, v), 1.0]
-	var u := smoothstep(0.0, 1.0, (k - ends.y) / (1.0 - ends.y))
-	# Into the pull's arm pose as the bag comes onto the trail.
-	return [true, rolled(parked, want, u), bar, bar, 1.0 - smoothstep(0.0, 1.0, u)]
+		if not bag.has("park_at"):
+			bag["park_at"] = body.origin
+		if not bag.has("park_cut") and body.origin.distance_to(bag["park_at"]) > MOVED_M:
+			bag["park_cut"] = Vector2(k, v)
+		if bag.has("park_cut"):
+			var cut: Vector2 = bag["park_cut"]
+			ends = up_ends(bag)
+			v = lerpf(cut.y, 1.0, smoothstep(cut.x, lerpf(cut.x, ends.y, CUT_ON), k))
+		if k < ends.y:
+			bag["park_last"] = body
+			# The empty hand let go goes on with the walker by half its last step,
+			# less as it comes to the bar: a hand still in the world as a walker
+			# running on lets go moved 0.175 m against the body at 3x.
+			var last: Transform3D = bag.get("lift_last", body)
+			var hand := parked * over_top(handle, bar, v)
+			hand += (body.origin - last.origin) * 0.5 * (1.0 - v)
+			return [false, parked, bar, parked.affine_inverse() * hand, 1.0]
+	var tipped := _followed(bag, parked, body, k)
+	var from: float = bag.get("park_tip", ends.y)
+	var u := smoothstep(0.0, 1.0, (k - from) / (1.0 - from))
+	# Into the pull's arm pose as the bag comes onto the trail, from the frame
+	# the hand took it ("park_tip"; between two frames at 3x it had rolled
+	# 0.2 m toward the trail by the first).
+	tipped = rolled(tipped, want, u)
+	return [true, tipped, bar, bar, 1.0 - smoothstep(0.0, 1.0, u)]
+
+
+## The parked bag `parked` (world) carried with the body at `body` (yaw only)
+## from where the hand took it again at `k` ("park_tip"): kept on `bag`
+## ("park_rel") in the body's frame FOLLOW_SPLIT of the way from the last frame
+## it stood alone ("park_last") to now, so a walker going on moves the hand on
+## the bar and the bag each part of its step across that frame, not one of them
+## all of it (0.058 m a third of a tick for a walker running off, more than the
+## 5 cm a change of grip may move; split in halves, the hand short of the bar
+## by 2.6 cm put the bag 5.5 cm on).
+static func _followed(
+	bag: Dictionary, parked: Transform3D, body: Transform3D, k: float
+) -> Transform3D:
+	if not bag.has("park_rel"):
+		var last: Transform3D = bag.get("park_last", body)
+		var now := body.affine_inverse() * parked
+		bag["park_rel"] = (last.affine_inverse() * parked).interpolate_with(now, FOLLOW_SPLIT)
+		bag["park_tip"] = k
+	return body * (bag["park_rel"] as Transform3D)
