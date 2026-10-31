@@ -404,7 +404,9 @@ func _plate_ground_floor() -> void:
 				% [i, _clock.tick, v.stage, at, nose, step.length(), dot]
 			)
 		)
-		if not parked and step.length() <= 0.001:
+		# Frame 0 is the tick the gate lets the car in: it stood at the gate, so its
+		# view has not moved yet. Later frames must move.
+		if i > 0 and not parked and step.length() <= 0.001:
 			_invalid("ground frame %d: the car did not move" % i)
 		if not parked and step.length() > 0.001 and dot < 0.9:
 			_invalid("ground frame %d: the car moves %s but faces %s" % [i, step, nose])
