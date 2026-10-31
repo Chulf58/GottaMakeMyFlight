@@ -226,8 +226,14 @@ func test_a_body_released_mid_move_keeps_no_stoop_or_reach() -> void:
 	views._release(id)
 	_assert_no_reach(rig, "released")
 	w.world.passenger(id).stage = Passenger.Stage.MADE
+	# Nodes are pooled per body (PassengerLooks): the first later passenger drawn
+	# with this body takes the node; others are sent away unseen.
+	var variant: int = body.get_meta(&"variant")
 	var other := w.send(0)
-	w.world.passenger(other).variant = body.get_meta(&"variant")
+	while PassengerLooks.body_of(other, variant) != body.get_meta(&"body"):
+		w.world.passenger(other).stage = Passenger.Stage.MADE
+		other = w.send(0)
+	w.world.passenger(other).variant = variant
 	for i in 10:
 		_tick(w, views)
 	assert_object(views.node_for(other)).is_same(body)

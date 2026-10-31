@@ -54,9 +54,17 @@ func test_missed_passengers_release_their_node_for_reuse() -> void:
 	assert_object(_world.passenger(a)).is_null()
 	assert_object(_views.node_for(a)).is_null()
 	assert_int(_views.active_count()).is_equal(0)
+	# Nodes are pooled per body (PassengerLooks), so the reuse is checked on the
+	# first later passenger drawn with a's body; others are sent away unseen.
+	var body := PassengerLooks.body_of(a, 0)
 	var b := _world.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
+	while PassengerLooks.body_of(b, 0) != body:
+		_world.passenger(b).stage = Passenger.Stage.MADE
+		b = _world.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
+	print("reuse: a=%d b=%d body=%d" % [a, b, body])
 	_world.step()
 	assert_object(_views.node_for(b)).is_same(node_a)
+	assert_int(_views.active_count()).is_equal(1)
 
 
 func test_draw_position_interpolates_with_the_clock_alpha() -> void:

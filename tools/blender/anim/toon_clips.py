@@ -29,7 +29,9 @@ from mathutils import Matrix, Vector
 
 FPS = 25
 MIXAMO = "C:\\Users\\chulf\\Dome Farmer\\Animations"
-OUT_DIR = "C:\\Users\\chulf\\Gotta-make-my-flight\\tools\\blender\\out\\anim_clips"
+# tools/blender/out/anim_clips of the checkout this file sits in, so a worktree run
+# writes its own reports.
+OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "out", "anim_clips")
 SOURCES = {
     "male": {"walk": ("Male Locomotion Pack", "walking.fbx"), "run": ("Male Locomotion Pack", "standard run.fbx")},
     "female": {"walk": ("Female Locomotion Pack", "walking.fbx"), "run": ("Female Locomotion Pack", "running.fbx")},
