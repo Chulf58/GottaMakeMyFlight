@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## Decor calms the passengers near it (decision furniture-set-modelled-on-
 ## copenhagen-airport-decor-calms-pas): a passenger inside a piece's radius
 ## gains mood slowly, a passenger outside gains nothing, the total is capped,
-## the bin, posts and chain give nothing, and the covered cells follow the
+## the bin, posts and chain give no calm, and the covered cells follow the
 ## grid when decor is placed or removed.
 
 const SIZE := Vector2i(30, 20)
@@ -179,7 +179,7 @@ func test_decor_never_lifts_mood_above_the_ceiling() -> void:
 	assert_int(above.mood).is_equal(DecorEffect.CEILING + 5)
 
 
-func test_the_bin_the_posts_and_the_chain_give_nothing() -> void:
+func test_the_bin_the_posts_and_the_chain_give_no_calm() -> void:
 	_decor(&"trash_can", GUEST_CELL + Vector2i(0, -1))
 	_decor(&"metal_pole", GUEST_CELL + Vector2i(1, 0))
 	# The 1x3 chain, running along y from (11, 6) to (11, 8), beside the guest.
@@ -188,7 +188,10 @@ func test_the_bin_the_posts_and_the_chain_give_nothing() -> void:
 	assert_int(_world.sim.decor.calm_at(p.at)).is_equal(0)
 	_run_beats(p, BEATS)
 	print("bin, post and chain beside the guest: mood %d -> %d" % [START_MOOD, p.mood])
-	assert_int(p.mood).is_equal(START_MOOD)
+	# Changed with the back-of-house view penalty: the bin in view now drains
+	# 1 point per period (BackOfHouseView); the posts and the chain give and
+	# take nothing.
+	assert_int(p.mood).is_equal(START_MOOD - BEATS / DecorEffect.PERIOD_BEATS)
 	assert_dict(_world.sim.decor.cells()).is_empty()
 
 
