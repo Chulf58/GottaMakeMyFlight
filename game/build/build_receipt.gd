@@ -53,6 +53,8 @@ static func inverse_before(grid: BuildGrid, edit: BuildEdit) -> BuildEdit:
 			var room := grid.get_room(edit.room_id)
 			inverse = BuildEdit.place_room(room["rect"], room["type"])
 			inverse.room_id = edit.room_id
+		BuildEdit.Kind.RESIZE_ROOM:
+			inverse = BuildEdit.resize_room(edit.room_id, grid.get_room(edit.room_id)["rect"])
 		BuildEdit.Kind.RESHAPE_BELT:
 			var record := grid.get_object(grid.object_at(edit.cell))
 			inverse = BuildEdit.reshape_belt(edit.cell, record["def"], record["facing"])
