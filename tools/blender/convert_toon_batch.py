@@ -188,6 +188,10 @@ for _gender, _numbers in PASSENGER_BODIES.items():
             "Poses\\TCP_%s_Idle_01.fbx" % _g,
             "Prefabs\\%s Character Sources\\TCP_%s_Character_%s.prefab" % (_g, _g, _n),
         )
+# The passenger bodies carry the "shower" clip; the staff bodies (the 07s) never shower.
+SHOWER_STEMS = {"tcp_male_character_01", "tcp_female_character_01"} | {
+    "tcp_%s_character_%s" % (_gender, _n) for _gender, _numbers in PASSENGER_BODIES.items() for _n in _numbers
+}
 
 # Clothing tints. A character's parts whose names hold one of these words are its clothes;
 # every other part (skin, head, hair, beard, shoes, legs, jewellery, glasses, bags) keeps the
@@ -541,7 +545,7 @@ def build_character(stem, idle_fbx, prefab):
     # Walk, run and the sit clips go on after the rotation is applied, so the clip
     # module works in armature space == world space (tools/blender/anim/toon_clips.py).
     try:
-        durations = toon_clips.add_clips(stem, arm, action)
+        durations = toon_clips.add_clips(stem, arm, action, stem in SHOWER_STEMS)
     except toon_clips.Fail as e:
         die(str(e))
     bpy.context.scene.frame_start = f0
@@ -1232,8 +1236,9 @@ def check_clips(stem, path, js, durations):
     each with real motion (Root may stay constant, the clip as a whole may not)."""
     anims = js.get("animations", [])
     names = [a["name"] for a in anims]
-    if sorted(names) != sorted(toon_clips.CLIPS) or len(anims) != len(toon_clips.CLIPS):
-        die("%s: expected animations %s, file has %s" % (stem, sorted(toon_clips.CLIPS), names))
+    want_clips = toon_clips.clip_names(stem in SHOWER_STEMS)
+    if sorted(names) != sorted(want_clips) or len(anims) != len(want_clips):
+        die("%s: expected animations %s, file has %s" % (stem, sorted(want_clips), names))
     for a in anims:
         end = max(js["accessors"][s["input"]]["max"][0] for s in a["samplers"])
         start = min(js["accessors"][s["input"]]["min"][0] for s in a["samplers"])

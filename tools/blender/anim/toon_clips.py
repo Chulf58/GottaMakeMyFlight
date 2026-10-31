@@ -1,8 +1,9 @@
-"""Walk, run and sit clips for the Toon City People characters, baked in place.
+"""Walk, run, sit and shower clips for the Toon City People characters, baked in place.
 
 Called by tools/blender/convert_toon_batch.py from build_character, after the idle
 bake and after the armature's 90 degree X rotation is applied, so armature space is
-world space (Z up, the character faces -Y). Adds five actions next to "idle":
+world space (Z up, the character faces -Y). Adds five actions next to "idle", six on a
+passenger body:
 
 - walk, run (loop): retargeted from the Mixamo locomotion packs downloaded for Dome
   Farmer. Rotations are copied as world-space deltas from the Mixamo T-pose; each
@@ -15,6 +16,10 @@ world space (Z up, the character faces -Y). Adds five actions next to "idle":
   so these are authored on the toon rig. The origin stays at the feet: the passenger
   stands in front of the seat facing away from it, and the hips move back and down
   onto the seat. The seat the clip implies is printed as SIT_CONTRACT.
+- shower (loop, 5 s), passenger bodies only (staff never shower): authored on the toon
+  rig in tools/blender/anim/toon_shower.py.
+  The passenger stands with planted feet and washes the hair, the shoulders, the back
+  of the head, the chest and the belly; the run prints a SHOWER line with its checks.
 
 Every clip keys every bone on every frame at the characters' own 25 fps, so a later
 vertex-animation bake can sample any clip the same way.
@@ -36,8 +41,9 @@ SOURCES = {
     "male": {"walk": ("Male Locomotion Pack", "walking.fbx"), "run": ("Male Locomotion Pack", "standard run.fbx")},
     "female": {"walk": ("Female Locomotion Pack", "walking.fbx"), "run": ("Female Locomotion Pack", "running.fbx")},
 }
+# Every character's clips. Passenger bodies also carry "shower" (see clip_names).
 CLIPS = ("idle", "walk", "run", "sit_down", "sit_idle", "stand_up")
-LOOPING = ("idle", "walk", "run", "sit_idle")
+LOOPING = ("idle", "walk", "run", "sit_idle", "shower")
 
 # toon bone -> Mixamo bone (without the "mixamorig:" prefix)
 MAP = {"Hips": "Hips", "Spine_01": "Spine", "Spine_02": "Spine1", "Spine_03": "Spine2", "Neck": "Neck", "Head": "Head"}
@@ -654,9 +660,15 @@ def stash(arm, action):
     track.mute = True
 
 
-def add_clips(stem, arm, idle):
-    """Bake walk, run, sit_down, sit_idle and stand_up beside idle. Returns
-    {clip: duration_s}. Raises Fail on any check."""
+def clip_names(shower):
+    """The clips a character carries: CLIPS, plus "shower" for a passenger body."""
+    return CLIPS + (("shower",) if shower else ())
+
+
+def add_clips(stem, arm, idle, shower):
+    """Bake walk, run, sit_down, sit_idle and stand_up beside idle, and shower when
+    shower is true (passenger bodies; staff never shower). Returns {clip: duration_s}.
+    Raises Fail on any check."""
     os.makedirs(OUT_DIR, exist_ok=True)
     gender = "female" if "female" in stem else "male"
     rig = ToonRig(arm)
@@ -707,13 +719,19 @@ def add_clips(stem, arm, idle):
     report["clips"]["sit_down"] = {"frames": SIT_DOWN_FRAMES, "duration_s": SIT_DOWN_FRAMES / FPS}
     report["clips"]["sit_idle"] = {"frames": SIT_IDLE_FRAMES, "duration_s": SIT_IDLE_FRAMES / FPS}
     report["clips"]["stand_up"] = {"frames": SIT_DOWN_FRAMES, "duration_s": SIT_DOWN_FRAMES / FPS}
+    clips = clip_names(shower)
+    if shower:
+        import toon_shower  # noqa: E402 (it imports this module)
+
+        poses, report["clips"]["shower"] = toon_shower.shower_clip(rig, stem, stand)
+        actions["shower"] = bake(rig, "shower", poses)
     i0, i1 = idle.frame_range
     report["clips"]["idle"] = {"frames": int(i1 - i0), "duration_s": (i1 - i0) / FPS}
     report["seat"] = seat
-    report["looping"] = list(LOOPING)
-    for clip in CLIPS:
+    report["looping"] = [c for c in LOOPING if c in clips]
+    for clip in clips:
         stash(arm, actions[clip])
     arm.animation_data.action = None
     with open(os.path.join(OUT_DIR, stem + "_clips.json"), "w", newline="\n") as f:
         json.dump(report, f, indent=1)
-    return {c: report["clips"][c]["duration_s"] for c in CLIPS}
+    return {c: report["clips"][c]["duration_s"] for c in clips}
