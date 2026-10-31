@@ -50,7 +50,6 @@ func test_the_button_sits_outside_the_bar_and_opens_the_page() -> void:
 	assert_object(found).is_same(_page.button)
 	var dock := _page.dock.get_global_rect()
 	var bar := _menu.bar().get_global_rect()
-	print("dock %s bar %s" % [dock, bar])
 	assert_float(dock.position.x).is_equal(BuildMenu.MARGIN)
 	assert_float(dock.end.y).is_equal(bar.position.y - BuildMenu.GAP)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
@@ -77,7 +76,8 @@ func test_save_room_then_its_card_arms_the_paste_with_status_and_cost() -> void:
 	var texts: Array[String] = []
 	for label in _page.card(0).find_children("*", "Label", true, false):
 		texts.append((label as Label).text)
-	var price := PriceTable.price_of_object(&"cafe_counter")
+	# The card shows a paste on bare ground: the counter and 20 floor tiles.
+	var price := PriceTable.price_of_object(&"cafe_counter") + 20 * PriceTable.price_of_floor()
 	assert_array(texts).contains(["Cafe 5x4", "5x4", str(price)])
 	_page.card(0).pressed.emit()
 	assert_int(_mode.templates.armed).is_equal(0)

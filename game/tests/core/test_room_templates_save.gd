@@ -30,7 +30,12 @@ func _cafe() -> RoomTemplate:
 		{"def": "cafe_counter", "anchor": [1, 0], "facing": 0},
 		{"def": "cafe_table", "anchor": [1, 2], "facing": 0},
 	]
-	var data := {"name": "Cafe 5x4", "type": "cafe", "size": [5, 4], "pieces": pieces}
+	var floor_cells := []
+	for i in 20:
+		floor_cells.append([BuildGrid.FLOOR_TILE, 1])
+	var data := {
+		"name": "Cafe 5x4", "type": "cafe", "size": [5, 4], "pieces": pieces, "floor": floor_cells
+	}
 	var read := RoomTemplate.from_dict(data)
 	assert_bool(read.has("template")).is_true()
 	return read["template"]

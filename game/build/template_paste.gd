@@ -17,8 +17,11 @@ extends Node3D
 ## nothing and says why. Any BuildMode tool change (a key, a card, Esc) disarms
 ## it.
 ##
-## Not guaranteed: a paste does not lay floor or walls, and pieces next to a
-## belt do not reshape it (templates hold no belts).
+## A paste lays the template's floor on cells that have none (at the floor
+## price, in the cost shown first) and reshapes the belts on and next to the
+## room (BeltShaper), so a pasted bag room's belt ends where it should. Not
+## guaranteed: walls are not laid, and a belt that ran out of the saved room
+## is not kept, so the player draws the link to check-in again.
 
 signal status_changed(text: String)
 ## Emitted when it is armed, disarmed or turned.
@@ -160,33 +163,57 @@ func save_room(room_id: int) -> RoomTemplate:
 	return template
 
 
-## Whether the armed template can be pasted centred on `cell`: the grid's
-## rules on a copy of the grid for the whole plan, then the wallet.
-func check_at(cell: Vector2i) -> BuildResult:
-	var edits := library.get_template(armed).plan(cell, turns)
-	var scratch := BuildGrid.new(_mode.grid.size, _mode.grid.origin)
-	if not scratch.from_snapshot(_mode.grid.to_snapshot()):
-		push_error("TemplatePaste.check_at: the grid could not be copied to check the paste")
-		return BuildResult.refused(BuildResult.Reason.NONE)
-	var result := scratch.apply_sequence(edits, Callable())
+## The armed template's paste centred on `cell` and whether it may go there:
+## {"edits": the plan with its belt reshapes, "result": a BuildResult}. The
+## whole plan (floor, room, pieces) runs on a copy of the grid with the belt
+## crossing rule (BeltShaper.crossing_problem()); then the belts on and next to
+## the room are reshaped there, refused with BELT_CROSSING where a cell would
+## have four links; then the wallet must pay for all of it at full price.
+func plan_at(cell: Vector2i) -> Dictionary:
+	var grid := _mode.grid
+	var edits := library.get_template(armed).plan(cell, turns, grid)
+	var scratch := BuildGrid.new(grid.size, grid.origin)
+	if not scratch.from_snapshot(grid.to_snapshot()):
+		push_error("TemplatePaste.plan_at: the grid could not be copied to check the paste")
+		return {"edits": edits, "result": BuildResult.refused(BuildResult.Reason.NONE)}
+	var result := scratch.apply_sequence(edits, BeltShaper.crossing_problem)
 	if result.ok:
-		result = BuildTransaction.check(_mode.grid, edits, _mode.wallet())
-	return result
+		var near := BeltShaper.around(_cells(library.get_template(armed).rect_at(cell, turns)))
+		result = _four_links(scratch, near)
+		if result.ok:
+			var reshapes := BeltShaper.reshape_edits(scratch, near)
+			result = scratch.apply_sequence(reshapes, Callable())
+			edits.append_array(reshapes)
+	if result.ok:
+		result = BuildTransaction.check(grid, edits, _mode.wallet())
+	return {"edits": edits, "result": result}
+
+
+## Whether the armed template can be pasted centred on `cell` (plan_at()).
+func check_at(cell: Vector2i) -> BuildResult:
+	return plan_at(cell)["result"]
 
 
 ## Pastes the armed template centred on `cell`, all or nothing, as one undo
-## step. Returns the result; a refusal changes nothing.
+## step, and reshapes the belts it touches. Returns the result; a refusal
+## changes nothing.
 func paste_at(cell: Vector2i) -> BuildResult:
 	var template := library.get_template(armed)
-	var result := check_at(cell)
+	var planned := plan_at(cell)
+	var result: BuildResult = planned["result"]
 	if not result.ok:
-		_mode.grid.edit_refused.emit(template.plan(cell, turns)[0], result)
+		_mode.grid.edit_refused.emit(planned["edits"][0], result)
 		_set_status("%s  %s" % [template.name, result.reason_text()])
 		return result
+	# Fresh edits for the live grid: the check applied its own to the copy.
+	var edits := template.plan(cell, turns, _mode.grid)
+	for edit in planned["edits"]:
+		if edit.kind == BuildEdit.Kind.RESHAPE_BELT:
+			edits.append(edit)
 	var history := _mode.undo_history()
 	var before := _balance()
 	history.begin_action()
-	result = BuildTransaction.commit_plan(_mode.grid, template.plan(cell, turns), _mode.wallet())
+	result = BuildTransaction.commit_plan(_mode.grid, edits, _mode.wallet())
 	history.end_action()
 	if not result.ok:
 		push_error("TemplatePaste.paste_at: the grid refused a paste its copy accepted")
@@ -207,7 +234,7 @@ func preview_price() -> Vector2i:
 	var cell: Variant = _pointer_cell() if armed >= 0 else null
 	if cell == null:
 		return Vector2i.ZERO
-	var edits := library.get_template(armed).plan(cell, turns)
+	var edits := library.get_template(armed).plan(cell, turns, _mode.grid)
 	var needed := BuildTransaction.needed(_mode.grid, edits)
 	return Vector2i(needed, needed)
 
@@ -253,13 +280,19 @@ func _hover(cell: Variant) -> void:
 		_set_status(SAVE_ROOM % RoomTemplate.capture(_mode.grid, _mode.grid.room_at(cell)).name)
 		return
 	var template := library.get_template(armed)
-	var checked := check_at(cell)
+	var planned := plan_at(cell)
+	var checked: BuildResult = planned["result"]
 	var material := _valid_material if checked.ok else _invalid_material
-	for edit in template.plan(cell, turns):
+	# A belt cell is drawn in the shape its reshape gives it.
+	var shaped := {}
+	for edit in planned["edits"]:
+		if edit.kind == BuildEdit.Kind.RESHAPE_BELT:
+			shaped[edit.cell] = edit
+	for edit in planned["edits"]:
 		if edit.kind == BuildEdit.Kind.PLACE_ROOM:
 			_ghost_slab(Rect2i(edit.cell, edit.room_size), material)
-		else:
-			_ghost_piece(edit, material)
+		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
+			_ghost_piece(shaped.get(edit.cell, edit), material)
 	var text := PLACE_HINT % template.name
 	if not checked.ok:
 		text = "%s  %s" % [template.name, checked.reason_text()]
@@ -293,6 +326,24 @@ func _ghost_piece(edit: BuildEdit, material: Material) -> void:
 	)
 	node.scale = Vector3.ONE * 1.02
 	_ghost.add_child(node)
+
+
+## Belt cells among `cells` that would have four links: BELT_CROSSING, else
+## accepted.
+static func _four_links(grid: BuildGrid, cells: Array[Vector2i]) -> BuildResult:
+	var scene := BeltShaper.Scene.new(grid)
+	for at in cells:
+		if scene.is_belt(at) and scene.links(at).size() > 3:
+			return BuildResult.refused(BuildResult.Reason.BELT_CROSSING)
+	return BuildResult.accepted()
+
+
+static func _cells(area: Rect2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			out.append(Vector2i(x, y))
+	return out
 
 
 func _clear_ghost() -> void:

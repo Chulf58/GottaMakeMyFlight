@@ -105,14 +105,12 @@ func test_saving_a_room_keeps_its_type_size_and_pieces_from_its_corner() -> void
 	assert_str(_paste.status_text()).is_equal("Saved template Cafe 5x4")
 
 
-func test_a_piece_outside_the_room_and_desks_scanners_belts_doors_are_not_kept() -> void:
+func test_a_piece_outside_the_room_and_desks_scanners_doors_are_not_kept() -> void:
 	_commit(BuildEdit.place_object(&"plant_pot_1a", Vector2i(9, 4), 0))
 	assert_int(_saved().pieces.size()).is_equal(2)
-	for kept in [&"cafe_counter", &"cafe_table", &"plant_pot_1a"]:
+	for kept in [&"cafe_counter", &"cafe_table", &"plant_pot_1a", &"baggage_belt_end"]:
 		assert_bool(RoomTemplate.keeps_piece(kept)).is_true()
-	for left_out in [
-		&"checkin_desk", &"security_scanner", &"tray_table", &"baggage_belt", &"entrance_door"
-	]:
+	for left_out in [&"checkin_desk", &"security_scanner", &"tray_table", &"entrance_door"]:
 		var kept := RoomTemplate.keeps_piece(left_out)
 		assert_bool(kept).override_failure_message(String(left_out)).is_false()
 
@@ -222,7 +220,10 @@ func test_a_paste_over_a_piece_is_refused_whole() -> void:
 func test_a_paste_the_wallet_cannot_pay_is_refused_and_changes_nothing() -> void:
 	_saved()
 	_paste.arm(0)
-	var price := _paste.library.get_template(0).price()
+	# The cafe goes on floor already laid, so only its pieces are charged.
+	var price := (
+		PriceTable.price_of_object(&"cafe_counter") + PriceTable.price_of_object(&"cafe_table")
+	)
 	var wallet := _mode.wallet()
 	assert_bool(wallet.spend(wallet.balance - (price - 1), Wallet.Category.BUILD)).is_true()
 	var layout := _layout()
@@ -284,6 +285,8 @@ func test_a_bad_templates_snapshot_is_refused_and_keeps_the_list() -> void:
 		"bad facing": func(d: Dictionary) -> void: d["templates"][0]["pieces"][0]["facing"] = 4,
 		"zero size": func(d: Dictionary) -> void: d["templates"][0]["size"] = [0, 4],
 		"version": func(d: Dictionary) -> void: d["save_version"] = 2,
+		"short floor": func(d: Dictionary) -> void: d["templates"][0]["floor"].pop_back(),
+		"bad floor type": func(d: Dictionary) -> void: d["templates"][0]["floor"][0] = [0, 1],
 		"extra key": func(d: Dictionary) -> void: d["templates"][0]["colour"] = 1,
 	}
 	for label in cases:
