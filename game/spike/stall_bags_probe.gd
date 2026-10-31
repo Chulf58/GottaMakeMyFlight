@@ -16,6 +16,11 @@ extends SceneTree
 ##   up     standing up and stepping out: the bag picked up (every tick)
 ##   out    walking on out until the roller trails again (every 2nd tick,
 ##          straight after "up")
+## The "down" and "up" strips are a cutaway (CUTAWAY_STRIPS): every toilet
+## stall hidden for the strip and the camera out by the door, because a walker
+## stooping over the bags hides them from a camera straight over the stall (the
+## walker's own body was every blocker) and the partitions and door leaves are in
+## the way of a lower one.
 ## Every frame proves each bag and the body are inside its crop (their bounds'
 ## corners projected, with a margin), and sight lines are cast to each bag;
 ## each bag must be seen in 3 of 4 of a strip's frames (PlateSight; a bag under
@@ -45,6 +50,16 @@ const OCCLUDER_OWNERS: Array[String] = [
 	"Airside/Terminal", "BuildMode", "PlaneView", "PassengerViews"
 ]
 const MARGIN_PX := 8
+## Strips plated as a cutaway: every toilet stall hidden, the camera out by the
+## door, so the partitions and the leaves are not in the way and a bag a
+## stooping walker bends over is seen in front of the head.
+const CUTAWAY_STRIPS: Array[String] = ["down", "up"]
+## The cutaway camera: this far further out of the door than the aim point and
+## this high, with this field of view (a top-down camera over the stall cannot
+## see a bag the walker stoops over).
+const CUT_OUT_M := 1.6
+const CUT_UP_M := 4.0
+const CUT_FOV := 40.0
 const HANG_MS := 90000
 const LAST_TICKS := 2400
 ## [label, first bag's kind, bags, strips].
@@ -229,12 +244,19 @@ func _strip(p: Passenger, label: String, strip: String) -> void:
 	var cam := Camera3D.new()
 	cam.fov = FOV[strip]
 	_main.add_child(cam)
+	var cut: bool = strip in CUTAWAY_STRIPS
 	var eye: Vector3 = (
 		stall["centre"]
 		+ stall["across"] * SIDE_M
-		+ stall["out"] * AIM_OUT[strip]
-		+ Vector3.UP * STEEP_UP_M
+		+ stall["out"] * (AIM_OUT[strip] + (CUT_OUT_M if cut else 0.0))
+		+ Vector3.UP * (CUT_UP_M if cut else STEEP_UP_M)
 	)
+	var hidden: Array[Node3D] = []
+	if cut:
+		cam.fov = CUT_FOV
+		hidden = _stall_nodes()
+	for node in hidden:
+		node.visible = false
 	cam.look_at_from_position(eye, aim)
 	cam.make_current()
 	await _frames(4)
@@ -265,6 +287,8 @@ func _strip(p: Passenger, label: String, strip: String) -> void:
 		images.append(img.get_region(crop))
 		for t in step:
 			_clock.advance(SimClock.STEP)
+	for node in hidden:
+		node.visible = true
 	cam.queue_free()
 	# A bag hidden for a frame (under the walker's head, or the other bag as
 	# both cross over it) is allowed; most of the time each must be seen.
@@ -388,8 +412,20 @@ func _bags_seen(cam: Camera3D, bags: Array) -> int:
 		]
 		var hits := PlateSight.sight_lines(space, cam.global_position, targets, "bag%d" % b)
 		seen += 1 if not (hits["on_subject"] as Array).is_empty() else 0
+		if (hits["on_subject"] as Array).is_empty():
+			print("UNSEEN bag%d blockers=%s past=%s" % [b, hits["blockers"], hits["past"]])
 	holder.free()
 	return seen
+
+
+## The toilet stalls drawn now (BuildView's records).
+func _stall_nodes() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	for node in _main.get_node("BuildMode/BuildView").get_children():
+		var record: Dictionary = node.get_meta("record", {})
+		if StringName(record.get("def", "")) == &"toilet_stall" and (node as Node3D).visible:
+			out.append(node)
+	return out
 
 
 func _name(p: Passenger) -> String:
