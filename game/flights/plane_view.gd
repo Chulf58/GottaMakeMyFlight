@@ -9,7 +9,9 @@ extends Node3D
 ## flight's start ticks and the clock's alpha; it keeps nothing between frames
 ## and never writes back. A flight that may have been listed after its full
 ## lead-in began (a contract's first day, a one-off) flies a short straight-in
-## from SCHEDULED instead, entering where no camera can see it. Past the sun's
+## from SCHEDULED instead, entering where no camera can see it. A one-off added
+## after its own SCHEDULED tick (FlightSim.add_flight allows past starts; tests
+## and debug only) still appears partway along the straight-in. Past the sun's
 ## shadow distance it draws the plane's
 ## sun silhouette on the ground, so a far plane in the air still reads as
 ## airborne.
@@ -140,17 +142,17 @@ func starts_of(id: String) -> Array[int]:
 ## True when the flight was surely listed before its full lead-in starts, so
 ## the whole lead-in can be drawn. FlightSim keeps no record of when a flight
 ## was added, so this asks what the timetable guarantees: a contract's later
-## days are issued ISSUE_LEAD_TICKS before SCHEDULED, and the starter's first
-## day is issued at the opening with that same lead (FlightSim.starter_terms).
-## Any other contract's first day may be accepted as late as its SCHEDULED
-## tick, and a one-off may be added at any time.
+## days are issued ISSUE_LEAD_TICKS before SCHEDULED. Its first day may be
+## accepted as late as its SCHEDULED tick, the starter's included (AirportGate
+## searches ahead for a free slot but accepts at the current tick, so a gate
+## filled by contracts accepted while closed can push the starter's first day
+## to start at the opening). A one-off may be added at any time.
 func has_full_lead_in(id: String) -> bool:
 	var occurrence := FlightTimetable.parse_occurrence(id)
 	if occurrence.is_empty():
 		return false
-	var contract: String = occurrence["contract"]
-	var first: int = sim.start_days.get(contract, occurrence["day"])
-	return occurrence["day"] > first or contract == FlightSim.STARTER_TERMS["id"]
+	var first: int = sim.start_days.get(occurrence["contract"], occurrence["day"])
+	return occurrence["day"] > first
 
 
 ## Where a flight with `starts` is at sim time `time`: {phase, transform}, or

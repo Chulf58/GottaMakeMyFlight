@@ -7,7 +7,8 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path <game> -s res://spike/sky_path_plates_probe.gd
 ##
-## Boots main.tscn, opens the airport, waits for the starter's first flight and
+## Boots main.tscn, opens the airport, waits for the starter's second-day flight
+## (its first day takes the straight-in; the second has the full lead-in) and
 ## steps the sim by hand, forward only. Frame ticks are planned first from
 ## PlaneView.pose_at for each camera, then shot in time order. Plates, under
 ## tools/blender/out/sky_path/:
@@ -21,10 +22,11 @@ extends SceneTree
 ##     between the plane and its silhouette.
 ## Any failed proof prints PROBE_INVALID and the probe exits 1.
 
-const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const OUT_REL := "res://../tools/blender/out/sky_path"
 const MAIN_SCENE := "res://main/main.tscn"
+## Ticks the probe may step to reach the starter's second day.
+const DAY_LIMIT_TICKS := 40000
 const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 120000
 const FRAMES_PER_STRIP := 8
@@ -143,10 +145,17 @@ func _run() -> void:
 		_invalid("the airport did not open")
 		_finish()
 		return
-	_flight = StarterFlight.first_flight()
-	StarterFlight.advance_until(_clock, func() -> bool: return _sim.flight_ids().has(_flight), 200)
+	# The starter's first day flies the straight-in (it may be listed late);
+	# its second day is issued with the full lead and flies the terminal pass.
+	_flight = FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 1)
+	var guard := 0
+	while not _sim.flight_ids().has(_flight) and guard < DAY_LIMIT_TICKS:
+		_clock.advance(SimClock.STEP)
+		guard += 1
+		if guard % 500 == 0:
+			_beat("to_day_1")
 	if not _sim.flight_ids().has(_flight):
-		_invalid("the starter's first flight %s was not issued" % _flight)
+		_invalid("the starter's second-day flight %s was not issued" % _flight)
 		_finish()
 		return
 	var starts := _plane.starts_of(_flight)
@@ -245,6 +254,8 @@ func _step_to(target: int) -> void:
 	while _clock.tick < target and guard < 200000:
 		_clock.advance(SimClock.STEP)
 		guard += 1
+		if guard % 500 == 0:
+			_beat("step_to")
 
 
 func _meshes(node: Node) -> Array[MeshInstance3D]:

@@ -321,9 +321,10 @@ func test_an_offer_accepted_late_enters_unseen_on_the_straight_in() -> void:
 
 
 ## Where a plane pops in or out (the full lead-in's start, the straight-in's
-## entry, the climb-out's end) no camera sees it: every focus in the camera
-## bounds, every quarter-hour yaw and zoom from near to full. A control point
-## (ApproachStart) is seen by some camera.
+## entry, the climb-out's end) no camera sees it, on a sample of cameras: 25
+## focus points across the camera bounds (edges, halves, centre) x 24 yaws x 5
+## zooms from near to full. A sample, not every configuration. A control point
+## (ApproachStart) is seen by some sampled camera.
 func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
 	# The test runner's window is square; a 21:9 view sees wider than the
 	# game's 16:9, so it covers ultrawide windows too.
@@ -370,3 +371,34 @@ func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
 	)
 	assert_int(control_seen).is_greater(0)
 	assert_int(seen).is_equal(0)
+
+
+## Sol re-check regression: the starter's first day gets no exception. It is
+## accepted at the current tick like any contract, so a gate filled by
+## contracts accepted while closed can start it at the opening tick; it flies
+## the straight-in, and its later days the full lead-in.
+func test_the_starters_first_day_takes_the_straight_in() -> void:
+	var sim := _sim()
+	sim.open_airport()
+	var terms := FlightSim.starter_terms(sim.tick)
+	assert_bool(sim.accept_contract(terms)).is_true()
+	var view := _view(sim, _clock())
+	var first := FlightTimetable.occurrence_id(
+		FlightSim.DEFAULT_ID, sim.start_days[FlightSim.DEFAULT_ID]
+	)
+	var next := FlightTimetable.occurrence_id(
+		FlightSim.DEFAULT_ID, sim.start_days[FlightSim.DEFAULT_ID] + 1
+	)
+	assert_bool(view.has_full_lead_in(first)).is_false()
+	assert_bool(view.has_full_lead_in(next)).is_true()
+	var starts := view.starts_of(first)
+	var scheduled := starts[FlightSim.State.SCHEDULED]
+	for t in range(1, scheduled):
+		sim.on_tick(t)
+	view.update_pose()
+	assert_bool(view.visible).is_false()
+	sim.on_tick(scheduled)
+	sim.on_tick(scheduled + 1)
+	view.update_pose()
+	assert_bool(view.visible).is_true()
+	assert_float(view.position.x).is_equal_approx(_airside.straight_in_track()[0].x, 0.01)
