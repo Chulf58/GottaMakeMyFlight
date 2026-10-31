@@ -4,7 +4,8 @@ extends GdUnitTestSuite
 ## view-penalty-bins-cost-1-calm-and-bag-rooms-2): a bin costs 1 and a bag room
 ## 2, subtracted from the decor calm before the MAX_CALM cap. A plain wall or a
 ## tall piece (tree, statue, tall planter) in the way hides it; glass and a short
-## piece do not. Decor calm and screens see as before (test_decor_effect).
+## piece do not. Decor calm and screens see as before (test_decor_effect). Where the penalty
+## outweighs the decor, mood drains at the same scale and period.
 
 const SIZE := Vector2i(30, 20)
 const GUEST_CELL := Vector2i(12, 8)
@@ -83,12 +84,14 @@ func _run_beats(p: Passenger, world := _world) -> void:
 
 
 ## The mood after BEATS beats at GUEST_CELL in a fresh world holding `pieces`
-## (def id -> anchor cell).
-func _mood_with(pieces: Dictionary) -> int:
+## (def id -> anchor cell) and, if given, a bag room over `bag_room`.
+func _mood_with(pieces: Dictionary, bag_room := Rect2i()) -> int:
 	var world := _make_world()
 	_extra.append(world)
 	for def_id: StringName in pieces:
 		_decor(def_id, pieces[def_id], world)
+	if bag_room.has_area():
+		assert_bool(world.grid.apply(BuildEdit.place_room(bag_room, &"bag_room")).ok).is_true()
 	var p := _guest(GUEST_CELL, world)
 	_run_beats(p, world)
 	return p.mood
@@ -128,13 +131,56 @@ func test_a_bin_in_view_lowers_the_mood_gain_but_a_fountain_still_nets_positive(
 	assert_int(with_bin).is_greater(START_MOOD)
 
 
-func test_a_bin_alone_costs_no_mood_because_the_penalty_only_eats_decor_calm() -> void:
-	var mood := _mood_with({&"trash_can": BIN_CELL})
-	var decor := _world.sim.decor
+func test_a_bin_alone_lowers_mood_and_a_bag_room_alone_lowers_it_twice_as_much() -> void:
+	var bin := _mood_with({&"trash_can": BIN_CELL})
+	var bag_room := _mood_with({}, Rect2i(12, 5, 3, 2))
+	print(
+		(
+			"mood from %d after %d beats: bin in view %d, bag room in view %d"
+			% [START_MOOD, BEATS, bin, bag_room]
+		)
+	)
+	assert_int(bin).is_equal(START_MOOD - BEATS / DecorEffect.PERIOD_BEATS)
+	assert_int(bag_room).is_equal(START_MOOD - 2 * BEATS / DecorEffect.PERIOD_BEATS)
+	assert_int(START_MOOD - bag_room).is_equal(2 * (START_MOOD - bin))
+
+
+func test_a_bin_alone_has_negative_net_calm() -> void:
 	_decor(&"trash_can", BIN_CELL)
-	assert_int(decor.penalty_at(GUEST_CELL)).is_equal(1)
-	assert_int(decor.net_calm_at(GUEST_CELL)).is_equal(0)
-	assert_int(mood).is_equal(START_MOOD)
+	var decor := _world.sim.decor
+	assert_int(decor.calm_at(GUEST_CELL)).is_equal(0)
+	assert_int(decor.net_calm_at(GUEST_CELL)).is_equal(-1)
+
+
+func test_a_screened_bin_alone_costs_no_mood() -> void:
+	_wall(BIN_CELL + Vector2i(0, 1))
+	_decor(&"trash_can", BIN_CELL)
+	var p := _guest(GUEST_CELL)
+	_run_beats(p)
+	print("bin behind a wall: mood %d -> %d" % [START_MOOD, p.mood])
+	assert_int(p.mood).is_equal(START_MOOD)
+
+
+func test_the_drain_is_capped_and_mood_stops_at_zero() -> void:
+	for i in 6:
+		_decor(&"trash_can", Vector2i(11 + i % 3, 6 + i / 3))
+	var decor := _world.sim.decor
+	var p := _guest(GUEST_CELL)
+	p.mood = 2
+	var net := decor.net_calm_at(GUEST_CELL)
+	_run_beats(p)
+	print("net calm %d, mood 2 -> %d" % [net, p.mood])
+	assert_int(net).is_less(-DecorEffect.MAX_CALM)
+	assert_int(p.mood).is_equal(0)
+
+
+func test_mood_above_the_ceiling_is_still_drained() -> void:
+	_decor(&"trash_can", BIN_CELL)
+	var p := _guest(GUEST_CELL)
+	p.mood = DecorEffect.CEILING + 5
+	_run_beats(p)
+	print("mood %d -> %d" % [DecorEffect.CEILING + 5, p.mood])
+	assert_int(p.mood).is_equal(DecorEffect.CEILING + 5 - BEATS / DecorEffect.PERIOD_BEATS)
 
 
 func test_a_bin_behind_a_plain_wall_costs_nothing() -> void:

@@ -5,8 +5,8 @@ extends RefCounted
 ## placeable-plants-trees-foun). Each decor piece in TABLE has a calm value and
 ## a radius in cells; the bigger pieces (fountain, statue, tree) have both
 ## higher. The bin, the posts and the chain give nothing, and the bush
-## and benches give the least. A bin or a bag room in view takes calm back
-## (BackOfHouseView).
+## and benches give the least. A bin or a bag room in view takes calm back, and
+## where that outweighs the decor it drains mood (BackOfHouseView).
 ##
 ## A passenger who is inside the terminal and stands within a piece's radius
 ## (cells from the nearest cell of its footprint, as ScreenCoverage fans out
@@ -141,10 +141,10 @@ func penalty_at(cell: Vector2i) -> int:
 	return int(_penalty.get(cell, 0))
 
 
-## The calm at `cell` after the penalty, before the cap: never below 0, since
-## the penalty eats decor calm and cannot cost mood by itself.
+## The calm at `cell` after the penalty, before the cap: below 0 where the bins
+## and bag rooms in view outweigh the decor, and then mood drains.
 func net_calm_at(cell: Vector2i) -> int:
-	return maxi(calm_at(cell) - penalty_at(cell), 0)
+	return calm_at(cell) - penalty_at(cell)
 
 
 ## Every calmed cell, as cell -> summed calm. Worked out again only after the
@@ -169,16 +169,19 @@ func cells() -> Dictionary:
 
 ## Once a simulated second per passenger, after its mood changed: decor in
 ## range lifts it a little, up to CEILING, less the penalty of the bins and bag
-## rooms it can see.
+## rooms it can see. Where the penalty outweighs the decor, mood falls by the
+## shortfall (at most MAX_CALM per period, paid out the same way), to 0 at the
+## lowest, whatever the mood was.
 func beat(p: Passenger) -> void:
-	if AWAY_STAGES.has(p.stage) or p.mood >= CEILING:
+	if AWAY_STAGES.has(p.stage):
 		return
-	var calm := capped(net_calm_at(BoredomSim.watch_cell(p)))
-	if calm <= 0:
-		return
+	var net := net_calm_at(BoredomSim.watch_cell(p))
 	@warning_ignore("integer_division")
 	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
-	p.mood = mini(p.mood + due(calm, beat_number), CEILING)
+	if net < 0:
+		p.mood = maxi(p.mood - due(capped(-net), beat_number), 0)
+	elif net > 0 and p.mood < CEILING:
+		p.mood = mini(p.mood + due(capped(net), beat_number), CEILING)
 
 
 func _on_edit_applied(edit: BuildEdit, _result: BuildResult) -> void:
