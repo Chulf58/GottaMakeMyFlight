@@ -14,9 +14,11 @@ and game/passengers/standing_spots.gd).
 Pieces, written to game/assets/mess/ (one .glb each, a normal and a grown size):
 - mess_spill, mess_spill_grown: a cafe drink spill. A coffee-brown puddle with a darker
   rim, white wet highlights, and a tipped paper cup at the edge (two cups when grown).
-- mess_litter, mess_litter_grown: crumpled wrappers, flat wrappers and a crushed cup in
-  bright colours; the grown pile adds a fries carton with spilled fries.
-- mess_smear, mess_smear_grown: the toilet and shower room mess. A pale dirty-water
+- mess_litter, mess_litter_grown: the normal pile is five large light pieces (two flat
+  wrappers, a red crushed cup, two crumpled balls, 0.25-0.35 m each) so it reads at the
+  80 m home view; the grown pile is many smaller pieces in bright colours plus a fries
+  carton with spilled fries.
+- mess_smear, mess_smear_grown: the toilet and shower room mess. A dull teal dirty-water
   puddle with olive-brown smear streaks, dark flecks and a trail of muddy footprints.
 Normal props fit inside one cell (0.7-1.0 m across); grown props span 1.5-2.0 m.
 Everything is at most MAX_H tall (thin, so a passenger's foot passes through without a
@@ -25,7 +27,8 @@ never needs to block a path.
 
 The full bin, written to game/assets/decor/tc_trash_can_1a_full.glb: the existing
 tc_trash_can_1a.glb re-imported unchanged (its atlas rebound on import) with rubbish
-heaped on the lid, wrappers hanging from under the lid brim, a tied sack and loose
+overflowing the lid (three tied bin bags bulging over the rim, crumpled papers, a cup and a
+fries carton poking out), wrappers hanging from under the lid brim, a tied sack and loose
 wrappers on the floor beside it. Same origin and facing as the empty bin, so the game can
 swap one for the other.
 
@@ -90,6 +93,7 @@ MESS_PALETTE = {
     "olive": ("TP_Atlas_1A_D", 24, 2, 0.50, 0.0),  # murky olive, about 6b7212
     "olive_dark": ("TP_Atlas_1A_D", 24, 3, 0.75, 0.0),  # dark olive, about 454c1f
     "sack": ("TP_Atlas_1A_D", 3, 15, 0.35, 0.0),  # bin-bag grey, about 444444
+    "sack_light": ("TP_Atlas_1A_D", 2, 15, 0.30, 0.0),  # light bin-bag grey, about ababaa
 }
 
 
@@ -172,7 +176,7 @@ def cup_lying(name, x, y, yaw, length, r_base, r_mouth, flat, pal, band, parent,
         kit._finish_mesh(n, bm, p, parent, c)
 
 
-def wrapper(name, rng, x, y, length, width, pal, parent, c, z0=Z0, label=True):
+def wrapper(name, rng, x, y, length, width, pal, parent, c, z0=Z0, label=True, label_pal="white"):
     """A flat crinkled wrapper: a jagged rectangle 4 mm thick with a white label stripe."""
     hl, hw = length / 2.0, width / 2.0
     pts = [(-hl, -hw), (0.0, -hw * 1.1), (hl, -hw), (hl * 1.08, 0.0), (hl, hw), (0.0, hw * 0.95),
@@ -182,7 +186,7 @@ def wrapper(name, rng, x, y, length, width, pal, parent, c, z0=Z0, label=True):
     prism(name, place2d(pts, x, y, yaw), z0, z0 + 0.004, pal, parent, c)
     if label:
         stripe = [(-hl * 0.55, -hw * 0.35), (hl * 0.55, -hw * 0.35), (hl * 0.55, hw * 0.35), (-hl * 0.55, hw * 0.35)]
-        prism(name + "_Label", place2d(stripe, x, y, yaw), z0, z0 + 0.0065, "white", parent, c)
+        prism(name + "_Label", place2d(stripe, x, y, yaw), z0, z0 + 0.0065, label_pal, parent, c)
 
 
 def footprint(name, x, y, yaw, pal, parent, c):
@@ -223,12 +227,12 @@ def build_spill(root, c, grown):
 
 def build_litter(root, c, grown):
     rng = random.Random(23 if grown else 5)
-    spread = 0.75 if grown else 0.36
+    spread = 0.75 if grown else 0.34
     colours = ["red", "sun", "kid_blue", "white", "kid_green"]
     spots = []
 
     def spot(clear):
-        for _try in range(200):
+        for _try in range(400):
             t = rng.uniform(0.0, 2.0 * math.pi)
             d = spread * math.sqrt(rng.uniform(0.0, 1.0))
             p = (d * math.cos(t), d * math.sin(t))
@@ -237,7 +241,23 @@ def build_litter(root, c, grown):
                 return p
         raise RuntimeError("litter: no free spot")
 
-    n_ball, n_wrap = (7, 7) if grown else (3, 3)
+    if not grown:
+        # Five large, light pieces (0.25-0.35 m): at the 80 m home view many small outlined
+        # pieces read as dark specks, a few big light ones read as rubbish.
+        x, y = spot(0.14)
+        wrapper("Litter_Wrap_0", rng, x, y, 0.32, 0.21, "white", root, c, label_pal="red")
+        x, y = spot(0.14)
+        wrapper("Litter_Wrap_1", rng, x, y, 0.30, 0.20, "sun", root, c)
+        x, y = spot(0.12)
+        cup_lying("Litter_Cup_0", x, y, rng.uniform(0.0, 2.0 * math.pi), 0.28, 0.045, 0.065, 0.33,
+                  "red", "white", root, c)
+        x, y = spot(0.11)
+        lump("Litter_Ball_0", rng, x, y, Z0, 0.13, 0.045, "white", root, c)
+        x, y = spot(0.10)
+        lump("Litter_Ball_1", rng, x, y, Z0, 0.125, 0.045, "sun", root, c)
+        return
+
+    n_ball, n_wrap = 7, 7
     for i in range(n_ball):
         x, y = spot(0.09)
         lump("Litter_Ball_%d" % i, rng, x, y, Z0, rng.uniform(0.07, 0.09), 0.038, colours[i % len(colours)],
@@ -335,7 +355,7 @@ BIN_BRIM_Z = (0.918, 1.104)
 BIN_TOP_Z = 1.265
 BIN_TOP_R = 0.322
 BIN_BRIM_R = 0.514
-BIN_MAX_H = 1.60
+BIN_MAX_H = 1.70
 
 
 def lid_surface(r):
@@ -372,49 +392,71 @@ def import_bin():
     return ob
 
 
-# The heap over the lid: (radius, height) rings from its foot, sunk just inside the dome
-# below the brim top, to its crown, which clears the cap (1.392) by about 0.1 m.
-HEAP_RINGS = ((0.49, 1.10), (0.40, 1.30), (0.22, 1.44), (0.0, 1.49))
+# The overflow on the lid: tied bin bags bulging over the rim, each (angle degrees,
+# centre radius, bag radius, height, outward tilt degrees, swatch). Together they hide the
+# lid's cap; a tilt lowers the outer side to follow the dome down to the brim.
+BAGS = (
+    (35.0, 0.21, 0.25, 0.32, 22.0, "sack"),
+    (160.0, 0.22, 0.24, 0.30, 26.0, "sack_light"),
+    (275.0, 0.20, 0.25, 0.34, 20.0, "sack"),
+)
 
 
-def heap_surface(r):
-    for (r0, z0), (r1, z1) in zip(HEAP_RINGS, HEAP_RINGS[1:]):
-        if r1 <= r <= r0:
-            return z1 + (z0 - z1) * (r - r1) / (r0 - r1)
-    return lid_surface(r)
-
-
-def mound(name, rng, rings, segs, pal, parent, c):
-    """A jittered low-poly pile: rings of (radius, height), the last one the apex."""
-    bm = bmesh.new()
-    loops = []
-    for r, z in rings[:-1]:
-        loops.append([bm.verts.new((r * (1.0 + rng.uniform(-0.08, 0.08)) * math.cos(2 * math.pi * k / segs + 0.3 * z),
-                                    r * (1.0 + rng.uniform(-0.08, 0.08)) * math.sin(2 * math.pi * k / segs + 0.3 * z),
-                                    z + rng.uniform(-0.015, 0.015))) for k in range(segs)])
-    apex = bm.verts.new((0.0, 0.0, rings[-1][1]))
-    bm.faces.new(list(reversed(loops[0])))
-    for a, b in zip(loops, loops[1:]):
-        for k in range(segs):
-            j = (k + 1) % segs
-            bm.faces.new((a[k], a[j], b[j], b[k]))
-    for k in range(segs):
-        bm.faces.new((loops[-1][k], loops[-1][(k + 1) % segs], apex))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
+def posed(name, bm, m, pal, parent, c):
+    bmesh.ops.transform(bm, matrix=m, verts=bm.verts)
     return kit._finish_mesh(name, bm, pal, parent, c)
+
+
+def posed_box(name, lo, hi, m, pal, parent, c):
+    """A box from lo to hi in a local frame, then placed by the 4x4 `m`."""
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    bmesh.ops.scale(bm, vec=Vector(hi) - Vector(lo), verts=bm.verts)
+    bmesh.ops.translate(bm, vec=(Vector(lo) + Vector(hi)) / 2.0, verts=bm.verts)
+    return posed(name, bm, m, pal, parent, c)
+
+
+def posed_cone(name, z0, z1, r0, r1, m, pal, parent, c, segs=8):
+    """A frustum along local +z from z0 (radius r0) to z1 (radius r1), placed by `m`."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=segs, radius1=r0, radius2=r1, depth=z1 - z0)
+    bmesh.ops.translate(bm, vec=Vector((0.0, 0.0, (z0 + z1) / 2.0)), verts=bm.verts)
+    return posed(name, bm, m, pal, parent, c)
+
+
+def poke(deg, r, z, pitch_deg):
+    """A frame at (angle, radius, height) on the lid whose +z leans pitch_deg outward."""
+    t = math.radians(deg)
+    return (Matrix.Translation((r * math.cos(t), r * math.sin(t), z)) @ Matrix.Rotation(t, 4, "Z")
+            @ Matrix.Rotation(math.radians(pitch_deg), 4, "Y"))
 
 
 def build_bin_rubbish(root, c):
     rng = random.Random(41)
-    colours = ["red", "sun", "kid_blue", "coffee", "kid_green"]  # no white on the white heap
-    mound("Rubbish_Heap", rng, HEAP_RINGS, 10, "white", root, c)  # paper, light against the dark bin
-    # Crumpled wrappers on the heap and down to the brim.
-    for i in range(16):
-        t = 2.0 * math.pi * i / 16 + rng.uniform(-0.2, 0.2)
-        r = rng.uniform(0.10, 0.46)
-        lump("Rubbish_Ball_%d" % i, rng, r * math.cos(t), r * math.sin(t), heap_surface(r),
-             rng.uniform(0.08, 0.11), 0.09, colours[i % len(colours)], root, c, sink=0.03)
+    colours = ["red", "sun", "kid_blue", "white", "kid_green"]
+    for i, (deg, rc, rb, h, tilt, pal) in enumerate(BAGS):
+        t = math.radians(deg)
+        tangent = Vector((-math.sin(t), math.cos(t), 0.0))
+        xf = Matrix.Rotation(math.radians(tilt), 3, tangent)
+        bag = lump("Rubbish_Bag_%d" % i, rng, rc * math.cos(t), rc * math.sin(t), lid_surface(rc + 0.7 * rb),
+                   rb, h, pal, root, c, subdiv=2, jitter=0.10, sink=0.03, xf=xf)
+        top = max((bag.matrix_world @ v.co for v in bag.data.vertices), key=lambda p: p.z)
+        kit.cyl("Rubbish_Bag_%d_Tie" % i, top.x, top.y, top.z - 0.03, top.z + 0.06, 0.035, pal, root, c)
+    # Crumpled papers wedged between the bags and on the brim.
+    for i, (deg, r, pal) in enumerate(((95.0, 0.36, "white"), (215.0, 0.38, "white"), (330.0, 0.40, "sun"),
+                                       (0.0, 0.10, "white"), (250.0, 0.42, "coffee"))):
+        t = math.radians(deg)
+        lump("Rubbish_Paper_%d" % i, rng, r * math.cos(t), r * math.sin(t), lid_surface(r) + (0.18 if r < 0.2 else 0.0),
+             rng.uniform(0.09, 0.11), 0.10, pal, root, c, sink=0.02)
+    # A paper cup and a fries carton poking out of the pile at angles.
+    m = poke(100.0, 0.16, 1.32, 50.0)
+    posed_cone("Rubbish_Cup", 0.0, 0.20, 0.040, 0.055, m, "white", root, c)
+    posed_cone("Rubbish_Cup_Band", 0.12, 0.17, 0.051, 0.056, m, "red", root, c)
+    m = poke(220.0, 0.20, 1.30, 38.0)
+    posed_box("Rubbish_Carton", (-0.07, -0.045, 0.0), (0.07, 0.045, 0.20), m, "red", root, c)
+    for k, (fx, fy, lean) in enumerate(((-0.035, 0.0, -10.0), (0.0, 0.012, 6.0), (0.035, -0.01, 14.0))):
+        fm = m @ Matrix.Translation((fx, fy, 0.16)) @ Matrix.Rotation(math.radians(lean), 4, "Y")
+        posed_box("Rubbish_Fry_%d" % k, (-0.012, -0.012, 0.0), (0.012, 0.012, 0.12), fm, "sun", root, c)
     # Wrappers caught under the lid brim, hanging out and down.
     for i, deg in enumerate((25.0, 140.0, 215.0, 305.0)):
         t = math.radians(deg)
