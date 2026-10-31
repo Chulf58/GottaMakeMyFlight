@@ -1,4 +1,4 @@
-[gd_scene load_steps=38 format=3]
+[gd_scene load_steps=39 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -34,6 +34,7 @@
 [ext_resource type="Script" path="res://landside/landside_sim.gd" id="30_landside"]
 [ext_resource type="Script" path="res://landside/landside_views.gd" id="31_landsideview"]
 [ext_resource type="Resource" path="res://landside/starter_landside.tres" id="32_landsidedef"]
+[ext_resource type="Script" path="res://ambient/bird_flock.gd" id="33_birdflock"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(700, 700)
@@ -322,4 +323,11 @@ landside = NodePath("../LandsideSim")
 script = ExtResource("31_landsideview")
 landside = NodePath("../LandsideSim")
 clock = NodePath("../SimClock")
+save_game = NodePath("../SaveGame")
+
+[node name="BirdFlock" type="Node3D" parent="." node_paths=PackedStringArray("clock", "passenger_views", "landside_views", "save_game")]
+script = ExtResource("33_birdflock")
+clock = NodePath("../SimClock")
+passenger_views = NodePath("../PassengerViews")
+landside_views = NodePath("../LandsideViews")
 save_game = NodePath("../SaveGame")
