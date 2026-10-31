@@ -12,6 +12,8 @@ const GROUND: Array[String] = ["Lot", "Road"]
 const BODY_RADIUS := 0.85
 const BODY_UP := 0.375
 const SAMPLES := 64
+## Random flights per perch pair on top of the nine fixed ones (seed 2026).
+const SWEEP := 12
 
 var _world: Array[Dictionary] = []
 
@@ -59,6 +61,8 @@ func test_flights_clear_the_world() -> void:
 		names[e["name"]] = true
 	assert_bool(names.has("Porch_7") and names.has("Porch_8") and names.has("Canopy")).is_true()
 	var flights := 0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026
 	var clashes: Array[String] = []
 	var spots := BirdPerches.SPOTS
 	for i in spots.size():
@@ -73,12 +77,21 @@ func test_flights_clear_the_world() -> void:
 				[Vector3(-hi.x, 0, -hi.y), Vector3(hj.x, 0, hj.y)],
 				[Vector3(hi.x, 0, hi.y), Vector3(-hj.x, 0, -hj.y)],
 			]
-			for lift in [lifts.x, lifts.y]:
+			# The extremes, the middle lift, and a seeded random sweep of places
+			# anywhere in both patches at any lift in the zone's range.
+			var cases: Array = []
+			for lift in [lifts.x, (lifts.x + lifts.y) * 0.5, lifts.y]:
 				for pair in pairs:
-					var clash := _first_clash(spots[i] + pair[0], spots[j] + pair[1], lift)
-					if clash != "":
-						clashes.append("%d->%d lift %.1f: %s" % [i, j, lift, clash])
-					flights += 1
+					cases.append([pair[0], pair[1], lift])
+			for k in SWEEP:
+				var a := Vector3(rng.randf_range(-hi.x, hi.x), 0, rng.randf_range(-hi.y, hi.y))
+				var b := Vector3(rng.randf_range(-hj.x, hj.x), 0, rng.randf_range(-hj.y, hj.y))
+				cases.append([a, b, rng.randf_range(lifts.x, lifts.y)])
+			for c in cases:
+				var clash := _first_clash(spots[i] + c[0], spots[j] + c[1], c[2])
+				if clash != "":
+					clashes.append("%d->%d lift %.2f: %s" % [i, j, c[2], clash])
+				flights += 1
 	print("flights checked=", flights, " meshes=", _world.size(), " clashes=", clashes.size())
 	for c in clashes:
 		print("CLASH ", c)

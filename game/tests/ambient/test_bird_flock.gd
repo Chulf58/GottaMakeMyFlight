@@ -6,6 +6,7 @@ extends GdUnitTestSuite
 ## away and perches a new one.
 
 const STEP := 0.05
+const STARTER := preload("res://landside/starter_landside.tres")
 
 var _flock: BirdFlock
 var _save: SaveGame
@@ -185,3 +186,88 @@ func test_birds_never_leave_the_patches() -> void:
 	print("perched group checks=", landed, " flying group steps=", flights)
 	assert_int(landed).is_greater(0)
 	assert_int(flights).is_greater(0)
+
+
+func test_missing_dependencies_are_named() -> void:
+	var bare := BirdFlock.new()
+	(
+		assert_error(func() -> void: add_child(bare))
+		. is_push_error(
+			"BirdFlock: missing clock, passenger_views, landside_views, save_game; birds run degraded"
+		)
+	)
+	assert_int(bare.groups.size()).is_greater(0)
+	bare.free()
+
+
+## Through the real _process: a paused SimClock holds a flight and sets every
+## player to 0; at 3x a flight runs three times as fast and players run at 3.
+func test_real_clock_pause_and_three_times_speed() -> void:
+	var clock: SimClock = auto_free(SimClock.new())
+	clock.set_process(false)
+	add_child(clock)
+	var f := BirdFlock.new()
+	f.clock = clock
+	add_child(f)
+	f.rng.seed = 99
+	f.rebuild()
+	var g: Dictionary = f.groups[0]
+	f.step(STEP, PackedVector3Array([BirdPerches.SPOTS[g["spot"]]]))
+	f._process(0.5)
+	var b: Dictionary = g["birds"][0]
+	var held: Vector3 = (b["node"] as Node3D).position
+	var t: float = b["t"]
+	clock.set_paused(true)
+	f._process(1.0)
+	assert_vector((b["node"] as Node3D).position).is_equal(held)
+	assert_float(b["t"]).is_equal(t)
+	for bird in g["birds"]:
+		assert_float((bird["player"] as AnimationPlayer).speed_scale).is_equal(0.0)
+	clock.set_paused(false)
+	clock.set_speed(3)
+	f._process(0.1)
+	print("3x: t ", t, " -> ", b["t"])
+	assert_float(float(b["t"]) - t).is_equal_approx(0.3, 1e-4)
+	for og in f.groups:
+		for bird in og["birds"]:
+			assert_float((bird["player"] as AnimationPlayer).speed_scale).is_equal(3.0)
+	f.free()
+
+
+## Through the real _process and LandsideViews: building the surface lot
+## rebuilds the flock with the lot's perches there, removing it again drops
+## them.
+func test_building_a_lot_rebuilds_through_the_views() -> void:
+	var sim: LandsideSim = auto_free(LandsideSim.new())
+	sim.use_definition(STARTER)
+	var views: LandsideViews = auto_free(LandsideViews.new())
+	views.landside = sim
+	add_child(views)
+	var f := BirdFlock.new()
+	f.landside_views = views
+	add_child(f)
+	f._process(0.2)
+	var first: Node3D = f.groups[0]["birds"][0]["node"]
+	assert_bool(first.is_queued_for_deletion()).is_false()
+	assert_bool(sim.build_lot(0)).is_true()
+	f._process(BirdFlock.SCAN_S + 0.01)
+	assert_bool(first.is_queued_for_deletion()).is_true()
+	assert_array(f._lots_seen).is_equal([true, false])
+	var lot_closed := 0
+	var closed := f.closed_spots({})
+	for i in BirdPerches.SPOTS.size():
+		if BirdPerches.LOTS[i] == 0 and closed.has(i):
+			lot_closed += 1
+	var on_lot := 0
+	for g in f.groups:
+		on_lot += 1 if BirdPerches.LOTS[g["spot"]] == 0 else 0
+	print("groups after build=", f.groups.size(), " on lot=", on_lot, " lot closed=", lot_closed)
+	# A lot perch is closed now only because a group holds it.
+	assert_int(lot_closed).is_equal(on_lot)
+	assert_bool(sim.remove_lot(0)).is_true()
+	var second: Node3D = f.groups[0]["birds"][0]["node"]
+	f._process(BirdFlock.SCAN_S + 0.01)
+	assert_bool(second.is_queued_for_deletion()).is_true()
+	for g in f.groups:
+		assert_int(BirdPerches.LOTS[g["spot"]]).is_equal(-1)
+	f.free()

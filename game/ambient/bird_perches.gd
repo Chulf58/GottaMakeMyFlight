@@ -106,6 +106,17 @@ static func scatter_due(
 	return false
 
 
+## The ground-plane box (x, z) holding every patch grown by SCATTER_RADIUS:
+## a car or passenger outside it cannot scatter any group.
+static func reach() -> Rect2:
+	var box := Rect2(Vector2(SPOTS[0].x, SPOTS[0].z), Vector2.ZERO)
+	for i in SPOTS.size():
+		var half := HALVES[i] + Vector2.ONE * SCATTER_RADIUS
+		var c := Vector2(SPOTS[i].x, SPOTS[i].z)
+		box = box.merge(Rect2(c - half, half * 2.0))
+	return box
+
+
 ## The flat distance from `centre` to the nearest of `threats` (INF for none).
 static func nearest(centre: Vector3, threats: PackedVector3Array) -> float:
 	var best := INF

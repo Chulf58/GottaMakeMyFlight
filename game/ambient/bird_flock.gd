@@ -61,6 +61,10 @@ const PERCHED_CLIPS: Array[String] = ["idle_01", "idle_02", "eat", "hop"]
 const CLIP_HOLD_MIN := 2.0
 const CLIP_HOLD_MAX := 6.0
 const BLEND_S := 0.15
+## Real seconds between scatter checks. A car at 3x covers about 2 m in this
+## time, well inside the 6.3 m scatter radius; the frames between only move
+## the birds, so the per-frame cost does not grow with the passenger count.
+const SCAN_S := 0.15
 
 @export var clock: SimClock
 @export var passenger_views: PassengerViews
@@ -79,24 +83,51 @@ var rng := RandomNumberGenerator.new()
 var groups: Array[Dictionary] = []
 ## LandsideSim.lots_built when the flock was last perched; a change rebuilds.
 var _lots_seen: Array[bool] = []
+## The AnimationPlayer speed every bird has now (0 paused, else clock speed).
+var _anim_speed := 1.0
+## Real seconds to the next scatter check (SCAN_S apart).
+var _scan_left := 0.0
+## The threat buffer, refilled in place on each scatter check.
+var _threats := PackedVector3Array()
+## Passed to step() on frames between scatter checks; never filled.
+var _no_threats := PackedVector3Array()
 
 
 func _ready() -> void:
 	rng.randomize()
+	var missing := PackedStringArray()
+	for dep in ["clock", "passenger_views", "landside_views", "save_game"]:
+		if get(dep) == null:
+			missing.append(dep)
+	if not missing.is_empty():
+		# Fail loud (AGENTS.md P5), then keep the degraded flock running: no
+		# clock runs it at 1x real time, no views means nothing scatters it,
+		# no save_game means a load does not rebuild it.
+		push_error("BirdFlock: missing %s; birds run degraded" % ", ".join(missing))
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
 	rebuild()
 
 
 func _process(delta: float) -> void:
-	if _lots_now() != _lots_seen:
-		rebuild()
 	var paused := clock != null and clock.paused
 	var speed := float(clock.speed) if clock != null else 1.0
-	for g in groups:
-		for b in g["birds"]:
-			(b["player"] as AnimationPlayer).speed_scale = 0.0 if paused else speed
-	step(0.0 if paused else delta * speed, threats_now())
+	var anim := 0.0 if paused else speed
+	if anim != _anim_speed:
+		_anim_speed = anim
+		for g in groups:
+			for b in g["birds"]:
+				(b["player"] as AnimationPlayer).speed_scale = anim
+	if paused:
+		return
+	_scan_left -= delta
+	if _scan_left > 0.0:
+		step(delta * speed, _no_threats)
+		return
+	_scan_left = SCAN_S
+	if _lots_changed():
+		rebuild()
+	step(delta * speed, threats_now())
 
 
 ## Drops every bird and perches new groups on distinct perches that are there
@@ -136,10 +167,27 @@ func _lots_now() -> Array[bool]:
 	return landside_views.landside.lots_built.duplicate()
 
 
+## Whether LandsideSim.lots_built differs from the lots the flock perched for,
+## compared in place (no copy).
+func _lots_changed() -> bool:
+	if landside_views == null or landside_views.landside == null:
+		return not _lots_seen.is_empty()
+	var now := landside_views.landside.lots_built
+	if now.size() != _lots_seen.size():
+		return true
+	for i in now.size():
+		if now[i] != _lots_seen[i]:
+			return true
+	return false
+
+
 ## Where every drawn moving car (a parked one is still) and every drawn
-## passenger stands now.
+## passenger near a perch stands now: only points inside BirdPerches.reach()
+## (every patch grown by the scatter radius) are kept, so passengers indoors
+## never reach the per-group distance check. Refills one buffer in place.
 func threats_now() -> PackedVector3Array:
-	var out := PackedVector3Array()
+	_threats.resize(0)
+	var reach := BirdPerches.reach()
 	if landside_views != null and landside_views.landside != null:
 		var alpha := clock.alpha if clock != null else 1.0
 		for id in landside_views.landside.vehicle_ids():
@@ -147,14 +195,17 @@ func threats_now() -> PackedVector3Array:
 			if v == null or v.stage == LandsideVehicle.Stage.PARKED:
 				continue
 			var at := landside_views.pose_at(id, alpha).origin
-			if at != Vector3.ZERO:
-				out.append(at)
+			if at != Vector3.ZERO and reach.has_point(Vector2(at.x, at.z)):
+				_threats.append(at)
 	if passenger_views != null and passenger_views.sim != null:
 		for id in passenger_views.sim.passenger_ids():
 			var node := passenger_views.node_for(id)
-			if node != null and node.is_visible_in_tree():
-				out.append(node.global_position)
-	return out
+			if node == null or not node.is_visible_in_tree():
+				continue
+			var at := node.global_position
+			if reach.has_point(Vector2(at.x, at.z)):
+				_threats.append(at)
+	return _threats
 
 
 ## Advances the flock `dt` seconds of sim time with cars and passengers at
@@ -218,6 +269,7 @@ func _new_group(spot: int) -> Dictionary:
 			"hold": 0.0,
 			"landed": true,
 		}
+		(b["player"] as AnimationPlayer).speed_scale = _anim_speed
 		_place(node, at, Vector3.FORWARD.rotated(Vector3.UP, yaw + rng.randf_range(-0.6, 0.6)), 0.0)
 		_play(b, PERCHED_CLIPS[rng.randi_range(0, PERCHED_CLIPS.size() - 1)], rng.randf())
 		b["hold"] = rng.randf_range(CLIP_HOLD_MIN, CLIP_HOLD_MAX)

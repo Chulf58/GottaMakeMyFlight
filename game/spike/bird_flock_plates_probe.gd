@@ -22,12 +22,16 @@ const SIGHT := preload("res://spike/plate_sight.gd")
 const OUT_REL := "res://../tools/blender/out/birds"
 const MARGIN_PX := 8.0
 const SETTLE_FRAMES := 120
-const STRIP_GAP := 12
+## Sim ticks between perched tiles (SimClock.TICK_RATE 20: half a second).
+const STRIP_GAP_TICKS := 10
 const CROP := 360
 const TILE := 480
 const FEET_TOLERANCE := 0.03
-const WAIT_FRAMES := 9000
-const TAXIS := 4
+## Sim ticks to wait for a scatter (SimClock.TICK_RATE 20: three minutes).
+const WAIT_TICKS := 3600
+## Camera distance for the scatter strip, framing both perches and the arch.
+const FLIGHT_DISTANCE := 34.0
+const TAXIS := 6
 ## A typical landside zoom: the curb, road and forecourt in one view.
 const LANDSIDE_FOCUS := Vector3(-18.0, 0.0, -52.0)
 const LANDSIDE_DISTANCE := 45.0
@@ -49,6 +53,9 @@ var _labels: PackedStringArray = []
 var _group: Dictionary
 var _next := 0
 var _deadline := 0
+var _colliders: Node3D
+var _done := false
+var _next_tick := 0
 
 
 func _initialize() -> void:
@@ -69,24 +76,34 @@ func _initialize() -> void:
 
 func _process(_delta: float) -> bool:
 	_frame += 1
-	match _stage:
-		"settle":
-			return _stage_settle()
-		"landside":
-			return _stage_landside()
-		"perched":
-			return _stage_perched()
-		"wait":
-			return _stage_wait()
-		"flight":
-			return _stage_flight()
-	return false
+	if _done:
+		return true
+	# Stages, in order: settle, landside, perched, wait, frame, flight; each
+	# is a _stage_<name>() method that moves _stage on.
+	return call("_stage_" + _stage)
 
 
 func _invalid(msg: String) -> bool:
 	print("PROBE_INVALID ", msg)
-	quit(1)
+	_finish(1)
 	return false
+
+
+## Frees everything the probe made (the game scene and the sight colliders,
+## the held images and group) before quitting, so the exit is clean.
+func _finish(code: int) -> void:
+	if _done:
+		return
+	_done = true
+	_tiles.clear()
+	_group = {}
+	_flock = null
+	_rig = null
+	_cam = null
+	if _colliders != null:
+		_colliders.free()
+	_main.free()
+	quit(code)
 
 
 func _stage_settle() -> bool:
@@ -96,7 +113,7 @@ func _stage_settle() -> bool:
 		_rig.glide_to(LANDSIDE_FOCUS, LANDSIDE_DISTANCE)
 	if _frame == SETTLE_FRAMES - 5:
 		var owners: Array[Node] = [_main.get_node("Airside"), _main.get_node("LandsideViews")]
-		SIGHT.colliders(root, owners, {})
+		_colliders = SIGHT.colliders(root, owners, {})
 	if _frame >= SETTLE_FRAMES and not _rig.is_gliding():
 		_cam = root.get_viewport().get_camera_3d()
 		_stage = "landside"
@@ -119,34 +136,46 @@ func _stage_landside() -> bool:
 
 
 func _stage_perched() -> bool:
-	if _frame < _next or _rig.is_gliding():
+	if _frame < _next or _rig.is_gliding() or _clock.tick < _next_tick:
 		return false
-	if _tiles.is_empty() and not _prove_group(_group, true):
+	if not _prove_group(_group, true) or not _take_tile(_group):
 		return false
-	_tiles.append(_crop(_centre(_group)))
-	_labels.append("perched %s" % _clips(_group))
-	_next = _frame + STRIP_GAP
+	_labels.append("perched %s tick=%d" % [_clips(_group), _clock.tick])
+	_next_tick = _clock.tick + STRIP_GAP_TICKS
 	if _tiles.size() == 8:
 		_sheet("strip_perched.png")
 		for i in TAXIS:
 			_landside.add_vehicle(LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, [])
 		print("TAXIS added=", TAXIS)
 		_stage = "wait"
-		_deadline = _frame + WAIT_FRAMES
+		_deadline = _clock.tick + WAIT_TICKS
 	return false
 
 
+## Waits (in sim ticks) for the first group a real taxi scatters, in any
+## zone, then pauses the clock while the camera glides to frame its flight:
+## a paused flock holds every bird, so no flight time passes unseen.
 func _stage_wait() -> bool:
 	for g in _flock.groups:
-		if g["target"] >= 0 and BirdPerches.ZONES[g["spot"]] == BirdPerches.Zone.UNDER_CANOPY:
+		if g["target"] >= 0:
 			_group = g
 			var near := BirdPerches.nearest(BirdPerches.SPOTS[g["spot"]], _flock.threats_now())
 			print("SCATTER spot=", g["spot"], " target=", g["target"], " nearest_threat_m=", near)
-			_stage = "flight"
-			_next = _frame
+			_clock.set_paused(true)
+			var mid: Vector3 = (BirdPerches.SPOTS[g["spot"]] + BirdPerches.SPOTS[g["target"]]) * 0.5
+			_rig.glide_to(mid + Vector3.UP * 3.0, FLIGHT_DISTANCE)
+			_stage = "frame"
 			return false
-	if _frame > _deadline:
-		return _invalid("no canopy group scattered within %d frames" % WAIT_FRAMES)
+	if _clock.tick > _deadline:
+		return _invalid("no group scattered within %d ticks" % WAIT_TICKS)
+	return false
+
+
+func _stage_frame() -> bool:
+	if _rig.is_gliding():
+		return false
+	_clock.set_paused(false)
+	_stage = "flight"
 	return false
 
 
@@ -157,9 +186,8 @@ func _stage_flight() -> bool:
 	var landed: bool = _group["target"] < 0
 	var due := float(_tiles.size()) * float(b["dur"]) / 6.0
 	var take := (_tiles.size() < 7 and float(b["t"]) >= due) or (_tiles.size() == 7 and landed)
-	if not take:
+	if not take or not _prove_group(_group, landed) or not _take_tile(_group):
 		return false
-	_tiles.append(_crop(_centre(_group)))
 	_labels.append(
 		"%s t=%.2f/%.2f y=%.2f" % [_clips(_group), b["t"], b["dur"], b["node"].position.y]
 	)
@@ -167,9 +195,8 @@ func _stage_flight() -> bool:
 	if _tiles.size() < 8:
 		return false
 	_sheet("strip_scatter.png")
-	if _prove_group(_group, true):
-		print("PROBE_DONE")
-		quit(0)
+	print("PROBE_DONE")
+	_finish(0)
 	return false
 
 
@@ -268,7 +295,14 @@ func _prove_feet(g: Dictionary) -> bool:
 	var top: float = BirdPerches.SPOTS[g["spot"]].y
 	var low := INF
 	var high := -INF
+	var hopping := 0
 	for b in g["birds"]:
+		# A bird in its hop clip is off the ground by design (convert_crow.py
+		# CONTACT hop low_max 0.037 m, 0.055 m at 1.5x); it is counted, not
+		# measured.
+		if b["clip"] == "hop":
+			hopping += 1
+			continue
 		var lowest := INF
 		for mi in (b["node"] as Node).find_children("*", "MeshInstance3D", true, false):
 			var inst := mi as MeshInstance3D
@@ -278,7 +312,9 @@ func _prove_feet(g: Dictionary) -> bool:
 				lowest = minf(lowest, (inst.global_transform * v).y)
 		low = minf(low, lowest - top)
 		high = maxf(high, lowest - top)
-	print("FEET spot=", g["spot"], " gap_min_m=", low, " gap_max_m=", high)
+	print("FEET spot=", g["spot"], " gap_min_m=", low, " gap_max_m=", high, " hopping=", hopping)
+	if hopping == g["birds"].size():
+		return true
 	if absf(low) > FEET_TOLERANCE or absf(high) > FEET_TOLERANCE:
 		return _invalid("feet off the patch top by %.3f..%.3f m" % [low, high])
 	return true
@@ -288,17 +324,29 @@ func _image() -> Image:
 	return root.get_viewport().get_texture().get_image()
 
 
-## A CROP-pixel square of the rendered image around `centre`, scaled from the
-## visible rect (unproject_position) to the image's own pixels.
-func _crop(centre: Vector3) -> Image:
+## Crops a CROP-pixel square of the rendered image around group `g` (the
+## visible rect's unproject_position scaled to the image's own pixels) and
+## appends it as a tile, after proving every bird of the group projects inside
+## that square with a margin. False (and PROBE_INVALID) when one does not.
+func _take_tile(g: Dictionary) -> bool:
 	var img := _image()
 	var scale := Vector2(img.get_size()) / root.get_viewport().get_visible_rect().size
-	var sp := _cam.unproject_position(centre) * scale
+	var sp := _cam.unproject_position(_centre(g)) * scale
 	var r := Rect2i(Vector2i(sp) - Vector2i(CROP / 2, CROP / 2), Vector2i(CROP, CROP))
 	r.position = r.position.clamp(Vector2i.ZERO, img.get_size() - r.size)
+	var inner := Rect2(r).grow(-MARGIN_PX)
+	for b in g["birds"]:
+		var at: Vector3 = (b["node"] as Node3D).global_position + Vector3.UP * 0.35
+		var bp := _cam.unproject_position(at) * scale
+		if not inner.has_point(bp):
+			return _invalid(
+				"tile %d: bird at %s is at %s, outside crop %s" % [_tiles.size() + 1, at, bp, r]
+			)
+	print("TILE ", _tiles.size() + 1, " crop=", r, " birds_in_crop=", g["birds"].size())
 	var tile := img.get_region(r)
 	tile.resize(TILE, TILE, Image.INTERPOLATE_BILINEAR)
-	return tile
+	_tiles.append(tile)
+	return true
 
 
 func _sheet(name: String) -> void:
