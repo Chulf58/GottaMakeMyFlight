@@ -1,69 +1,54 @@
 class_name ShowerFoam
 extends Node3D
-## The foam and steam over a passenger in the shower (decision
+## The lather and steam over a passenger in the shower (decision
 ## activity-poses-sit-on-the-lounge-sofa-recline-in-the-nap-pod, the user's
-## answer "Foam and steam to cover the naked body. Icons stay"). A child of the
-## passenger's node, so it stands where the body stands: a column of toon-lit
-## foam balls from the shins up to the neck, built up from the feet as
-## `amount` grows, and a puff of steam rising over the cubicle while the
-## passenger is in. The head stays clear so the passenger is still readable,
-## and the mood bubble and need icons draw over it (no depth test).
-## PassengerViews sets the amount each tick from ActivityPoses.foam(); at 0
-## the node is hidden.
+## answers "Foam and steam to cover the naked body. Icons stay" and "Finer
+## lather"). A child of the passenger's node, so it stands where the body
+## stands: many small soap bubbles hugging the legs, hips, body and arms up
+## to the neck, drawn as one MultiMesh and built up from the feet as `amount`
+## grows, and thick steam rising out of the cubicle's open top. The head
+## stays clear so the passenger is still readable, and the mood bubble and
+## need icons draw over it (no depth test). PassengerViews adds one only to a
+## showering passenger and frees it when the shower ends, so a passenger
+## that is not showering carries no foam nodes and costs nothing.
 
-## The foam balls in the node's frame (feet at the origin, facing +Z): [x, y,
-## z, radius] in metres. A ring of four to six per height, wide enough to
-## cover the arms at the sides and kept inside the cubicle's glass (|x| 0.40,
-## |z| 0.37 from its middle).
-const BALLS: Array[Vector4] = [
-	Vector4(0.0, 0.32, 0.12, 0.13),
-	Vector4(0.0, 0.32, -0.12, 0.13),
-	Vector4(0.14, 0.38, 0.0, 0.13),
-	Vector4(-0.14, 0.38, 0.0, 0.13),
-	Vector4(0.1, 0.58, 0.13, 0.15),
-	Vector4(-0.1, 0.6, 0.13, 0.15),
-	Vector4(0.1, 0.6, -0.13, 0.15),
-	Vector4(-0.1, 0.58, -0.13, 0.15),
-	Vector4(0.0, 0.84, 0.15, 0.17),
-	Vector4(0.0, 0.84, -0.15, 0.17),
-	Vector4(0.17, 0.86, 0.0, 0.16),
-	Vector4(-0.17, 0.86, 0.0, 0.16),
-	Vector4(0.13, 1.08, 0.12, 0.17),
-	Vector4(-0.13, 1.1, 0.12, 0.17),
-	Vector4(0.13, 1.1, -0.12, 0.17),
-	Vector4(-0.13, 1.08, -0.12, 0.17),
-	Vector4(0.24, 1.0, 0.02, 0.12),
-	Vector4(-0.24, 1.0, 0.02, 0.12),
-	Vector4(0.0, 1.3, 0.14, 0.16),
-	Vector4(0.0, 1.3, -0.14, 0.16),
-	Vector4(0.19, 1.32, 0.0, 0.15),
-	Vector4(-0.19, 1.32, 0.0, 0.15),
-	Vector4(0.25, 1.24, 0.0, 0.11),
-	Vector4(-0.25, 1.24, 0.0, 0.11),
-	Vector4(0.12, 1.5, 0.08, 0.12),
-	Vector4(-0.12, 1.5, 0.08, 0.12),
-	Vector4(0.0, 1.5, -0.1, 0.12),
-	Vector4(0.17, 1.6, 0.0, 0.11),
-	Vector4(-0.17, 1.6, 0.0, 0.11),
-	Vector4(0.0, 1.57, 0.1, 0.1),
+## Body envelopes the bubbles cover, in the node's frame (feet at the
+## origin, facing +Z), for the Toon bodies standing in the idle clip: [centre
+## x, centre z, bottom y, top y, half width, half depth]. The body and arms
+## are one envelope (the hands hang in front of the hips), the legs another,
+## then a collar low enough to clear the chin of the shortest body.
+const PARTS: Array[Array] = [
+	[0.0, 0.0, 0.84, 1.56, 0.26, 0.17],
+	[0.0, 0.0, 0.14, 0.88, 0.2, 0.12],
+	[0.0, -0.02, 1.54, 1.6, 0.12, 0.1],
 ]
-## How far a ball swells and shrinks while the foam is up (share of its
-## radius), and how fast (radians per second).
-const WOBBLE := 0.07
-const WOBBLE_RATE := 3.0
+## Bubbles stand on a grid of this spacing over each envelope (jittered by
+## a third of it), with radii between the two below, so neighbours overlap
+## and no body shows through.
+const STEP_M := 0.05
+const R_MIN := 0.034
+const R_MAX := 0.056
+## Bubbles sit this share of their radius outside the envelope.
+const OUT := 0.3
+const SEED := 7
 ## The steam: soft white puffs rising from over the head, out of the
 ## cubicle's open 2.16 m top, growing and fading on a loop, each a share of
 ## the loop later than the last. They cast no shadow.
-const STEAM_PUFFS := 6
+const STEAM_PUFFS := 10
 const STEAM_FROM_M := 1.95
-const STEAM_RISE_M := 0.8
-const STEAM_LOOP_S := 2.4
-const STEAM_ALPHA := 0.55
+const STEAM_RISE_M := 0.9
+const STEAM_LOOP_S := 2.2
+const STEAM_ALPHA := 0.7
 
-## How much foam (0 to 1) is up now.
+static var _bubble: SphereMesh
+static var _buffer := PackedFloat32Array()
+static var _count := 0
+static var _puff: SphereMesh
+
+## How much lather (0 to 1) is up now.
 var amount := 0.0
 
-var _balls: Array[MeshInstance3D] = []
+var _lather := MultiMeshInstance3D.new()
 var _steam := Node3D.new()
 var _puffs: Array[MeshInstance3D] = []
 var _clock := 0.0
@@ -71,86 +56,120 @@ var _clock := 0.0
 
 func _init() -> void:
 	name = "ShowerFoam"
-	visible = false
-	var foam := StandardMaterial3D.new()
-	foam.albedo_color = Color(0.96, 0.98, 1.0)
-	foam.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
-	foam.specular_mode = BaseMaterial3D.SPECULAR_TOON
-	foam.roughness = 0.35
-	foam.rim_enabled = true
-	foam.rim = 0.4
-	var sphere := SphereMesh.new()
-	sphere.radius = 1.0
-	sphere.height = 2.0
-	sphere.radial_segments = 12
-	sphere.rings = 6
-	sphere.material = foam
-	for ball in BALLS:
-		var mi := MeshInstance3D.new()
-		mi.mesh = sphere
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.position = Vector3(ball.x, ball.y, ball.z)
-		add_child(mi)
-		_balls.append(mi)
+	_build_shared()
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = _bubble
+	multi.instance_count = _count
+	multi.buffer = _buffer
+	multi.visible_instance_count = 0
+	_lather.name = "Lather"
+	_lather.multimesh = multi
+	_lather.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_lather)
 	_steam.name = "Steam"
-	var puff := SphereMesh.new()
-	puff.radius = 1.0
-	puff.height = 2.0
-	puff.radial_segments = 10
-	puff.rings = 5
 	for i in STEAM_PUFFS:
 		var vapour := StandardMaterial3D.new()
 		vapour.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		vapour.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		vapour.albedo_color = Color(1.0, 1.0, 1.0, STEAM_ALPHA)
 		var mi := MeshInstance3D.new()
-		mi.mesh = puff
+		mi.mesh = _puff
 		mi.material_override = vapour
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_steam.add_child(mi)
 		_puffs.append(mi)
+	_steam.visible = false
 	add_child(_steam)
+	set_process(false)
 
 
 func _process(delta: float) -> void:
 	_clock += delta
-	if visible:
-		_shape()
+	_drift()
 
 
-## Sets how much foam is up (0 to 1) and shows or hides the foam and steam.
+## Sets how much lather is up (0 to 1): that share of the bubbles, lowest
+## first, so it builds from the feet and rinses off from the top. Steam
+## shows, and moves, past half.
 func set_amount(value: float) -> void:
 	amount = clampf(value, 0.0, 1.0)
-	visible = amount > 0.0
-	_steam.visible = amount > 0.5
-	_shape()
+	_lather.multimesh.visible_instance_count = roundi(amount * _count)
+	var steaming := amount > 0.5
+	_steam.visible = steaming
+	set_process(steaming)
+	if steaming:
+		_drift()
 
 
-## The foam balls showing now (their scale above zero), for checks.
-func balls_shown() -> int:
-	var shown := 0
-	for mi in _balls:
-		if mi.visible and mi.scale.x > 0.0:
-			shown += 1
-	return shown
+## The bubbles drawn now, and in all.
+func lather_shown() -> int:
+	return _lather.multimesh.visible_instance_count
 
 
-## Each ball is scaled by its share of the amount: the lower balls come first,
-## so the foam builds up from the feet and rinses off from the top down.
-func _shape() -> void:
-	for i in _balls.size():
-		var ball := BALLS[i]
-		var start := ball.y / 1.6 * 0.6
-		var grown := clampf((amount - start) / 0.4, 0.0, 1.0)
-		var wobble := 1.0 + WOBBLE * sin(_clock * WOBBLE_RATE + i * 1.7)
-		var r := ball.w * grown * wobble
-		_balls[i].visible = r > 0.0
-		_balls[i].scale = Vector3.ONE * maxf(r, 0.001)
+static func lather_count() -> int:
+	_build_shared()
+	return _count
+
+
+func _drift() -> void:
 	for i in _puffs.size():
 		var t := fposmod(_clock / STEAM_LOOP_S + i / float(_puffs.size()), 1.0)
-		var side := 0.12 * sin(i * 2.4)
 		var mi := _puffs[i]
-		mi.position = Vector3(side, STEAM_FROM_M + STEAM_RISE_M * t, 0.1 * cos(i * 2.4))
-		mi.scale = Vector3.ONE * lerpf(0.08, 0.24, t)
-		var vapour := mi.material_override as StandardMaterial3D
-		vapour.albedo_color.a = STEAM_ALPHA * sin(PI * t)
+		var x := 0.18 * sin(i * 2.4)
+		mi.position = Vector3(x, STEAM_FROM_M + STEAM_RISE_M * t, 0.13 * cos(i * 2.4))
+		mi.scale = Vector3.ONE * lerpf(0.12, 0.34, t)
+		(mi.material_override as StandardMaterial3D).albedo_color.a = STEAM_ALPHA * sin(PI * t)
+
+
+## The bubble and puff meshes and the bubbles' transforms, built once and
+## shared by every foam: the bubbles in height order, from a fixed seed.
+static func _build_shared() -> void:
+	if _bubble != null:
+		return
+	var soap := StandardMaterial3D.new()
+	soap.albedo_color = Color(0.97, 0.98, 1.0)
+	soap.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
+	soap.specular_mode = BaseMaterial3D.SPECULAR_TOON
+	soap.roughness = 0.3
+	soap.rim_enabled = true
+	soap.rim = 0.35
+	_bubble = SphereMesh.new()
+	_bubble.radius = 1.0
+	_bubble.height = 2.0
+	_bubble.radial_segments = 8
+	_bubble.rings = 4
+	_bubble.material = soap
+	_puff = SphereMesh.new()
+	_puff.radius = 1.0
+	_puff.height = 2.0
+	_puff.radial_segments = 10
+	_puff.rings = 5
+	var rng := RandomNumberGenerator.new()
+	rng.seed = SEED
+	var bubbles: Array[Vector4] = []
+	for part in PARTS:
+		var rx: float = part[4]
+		var rz: float = part[5]
+		# Ramanujan's ellipse perimeter, for the number of bubbles around.
+		var around := PI * (3.0 * (rx + rz) - sqrt((3.0 * rx + rz) * (rx + 3.0 * rz)))
+		var cols := ceili(around / STEP_M)
+		var rows := ceili((part[3] - part[2]) / STEP_M) + 1
+		for row in rows:
+			for col in cols:
+				var r := rng.randf_range(R_MIN, R_MAX)
+				var turn := (col + rng.randf_range(-0.33, 0.33) + 0.5 * (row % 2)) * TAU / cols
+				var y := clampf(
+					part[2] + (row + rng.randf_range(-0.33, 0.33)) * STEP_M, part[2], part[3]
+				)
+				var out := Vector2(cos(turn) * rx, sin(turn) * rz)
+				out += out.normalized() * r * OUT
+				bubbles.append(Vector4(part[0] + out.x, y, part[1] + out.y, r))
+	bubbles.sort_custom(func(a: Vector4, b: Vector4) -> bool: return a.y < b.y)
+	_count = bubbles.size()
+	_buffer.resize(_count * 12)
+	for i in _count:
+		var b := bubbles[i]
+		var row := [b.w, 0.0, 0.0, b.x, 0.0, b.w, 0.0, b.y, 0.0, 0.0, b.w, b.z]
+		for k in 12:
+			_buffer[i * 12 + k] = row[k]

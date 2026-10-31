@@ -9,6 +9,8 @@ extends GdUnitTestSuite
 ## world it was saved from.
 
 const SAVE_INTO_STAY := 30
+## A load this many ticks into the sit-down (of SIT_DOWN_TICKS 24).
+const MID_SIT_DOWN := 12
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -99,8 +101,9 @@ func test_each_piece_draws_its_own_pose() -> void:
 		var p := _visitor()
 		_world.run_to(_world.clock.tick + 60)
 		var node := _views.node_for(p.id)
-		var recline: float = (node.get_meta(&"recline") as PodRecline).amount
-		var foam := node.get_node("ShowerFoam") as ShowerFoam
+		var recline := _recline(node)
+		var foam := node.get_node_or_null("ShowerFoam") as ShowerFoam
+		var lather := foam.lather_shown() if foam != null else 0
 		print(
 			(
 				"%s: kind %d clip %s recline %.2f foam %.2f balls %d seated %s"
@@ -109,8 +112,8 @@ func test_each_piece_draws_its_own_pose() -> void:
 					ActivityPoses.kind(_world.sim, p),
 					_clip(p.id),
 					recline,
-					foam.amount,
-					foam.balls_shown(),
+					foam.amount if foam != null else 0.0,
+					lather,
 					node.get_meta(&"seated"),
 				]
 			)
@@ -120,8 +123,11 @@ func test_each_piece_draws_its_own_pose() -> void:
 		var reclines := type == &"nap_pod"
 		assert_float(recline).is_equal(1.0 if reclines else 0.0)
 		var showers := type == &"shower"
-		assert_bool(foam.visible).is_equal(showers)
-		assert_int(foam.balls_shown()).is_equal(ShowerFoam.BALLS.size() if showers else 0)
+		# Only a showering passenger carries foam, and only a reclining one a
+		# recline modifier.
+		assert_bool(foam != null).is_equal(showers)
+		assert_bool(node.has_meta(&"recline")).is_equal(reclines)
+		assert_int(lather).is_equal(ShowerFoam.lather_count() if showers else 0)
 		assert_bool(node.get_meta(&"seated")).is_equal(type != &"play_area")
 		# The thought bubble is still drawn over a showering passenger.
 		assert_bool((node.get_node("Bubble") as Label3D).visible).is_true()
@@ -278,9 +284,9 @@ func test_a_shower_visitor_steps_in_under_foam_and_steps_out_again() -> void:
 	assert_float(foam.amount).is_equal(1.0)
 	while _world.sim.shops.visit_of(p.id) != null and _world.clock.tick < 3000:
 		_world.step()
-	print("after: foam %.2f visible %s" % [foam.amount, foam.visible])
-	assert_float(foam.amount).is_equal(0.0)
-	assert_bool(foam.visible).is_false()
+	var left := node.get_node_or_null("ShowerFoam")
+	print("after: foam node %s, lather was %d bubbles" % [left, ShowerFoam.lather_count()])
+	assert_object(left).is_null()
 
 
 func test_a_loaded_world_draws_the_pose_the_saved_one_drew() -> void:
@@ -308,13 +314,90 @@ func test_a_loaded_world_draws_the_pose_the_saved_one_drew() -> void:
 	assert_float(want[0][3]).is_less(want[-1][3])
 
 
+func test_a_load_mid_sit_down_starts_the_clip_where_the_sim_is() -> void:
+	_open(&"lounge")
+	var p := _visitor()
+	_world.run_to(p.stage_tick + MID_SIT_DOWN)
+	var loaded := _load(_save(_world))
+	var views := _make_views(loaded)
+	views.snap()
+	var node := views.node_for(p.id)
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	var base: float = node.get_meta(&"base_speed")
+	var want := MID_SIT_DOWN * SimClock.STEP * base
+	var at := player.current_animation_position
+	var clip := player.current_animation
+	print(
+		(
+			"loaded %d ticks into sit-down: clip %s at %.3f s, want %.3f s"
+			% [MID_SIT_DOWN, clip, at, want]
+		)
+	)
+	views.free()
+	loaded.free_all()
+	assert_str(clip).is_equal("sit_down")
+	assert_float(at).is_equal_approx(want, 0.01)
+	assert_float(at).is_greater(0.3)
+
+
+func test_a_stay_cut_short_eases_the_body_back_to_its_slot() -> void:
+	_open(&"lounge")
+	var p := _visitor()
+	_world.run_to(p.stage_tick + 60)
+	# A re-forecast that brings the deadline close: the stay ends in 2 ticks.
+	_world.sim.shops.visit_of(p.id).deadline = _world.clock.tick + 2
+	var eased := _track_seat_offset(p, 20)
+	print("deadline moved: seat offset per tick %s" % [eased])
+	_assert_eased(eased)
+
+
+func test_a_removed_sofa_eases_the_body_off_its_spot() -> void:
+	_open(&"lounge")
+	var p := _visitor()
+	_world.run_to(p.stage_tick + 60)
+	assert_bool(_world.grid.apply(BuildEdit.remove_object(_ids["use"])).ok).is_true()
+	var eased := _track_seat_offset(p, 20)
+	print("sofa removed: seat offset per tick %s" % [eased])
+	_assert_eased(eased)
+
+
+## The length of the drawn step onto the seat (draw minus sim position) on
+## each of the next ticks, the current one first.
+func _track_seat_offset(p: Passenger, ticks: int) -> Array[float]:
+	var out: Array[float] = []
+	for i in ticks:
+		var step := _views.draw_position(p) - _world.sim.world_position(p)
+		out.append(snappedf(step.length(), 0.001))
+		_world.step()
+	return out
+
+
+## Seated at first, back on the slot at the end, never more than a walking
+## step in a tick, and over more than one tick.
+func _assert_eased(lengths: Array[float]) -> void:
+	assert_float(lengths[0]).is_greater(0.5)
+	assert_float(lengths[-1]).is_equal(0.0)
+	var walk := PassengerSim.WALK_MM / 1000.0 + 0.001
+	var between := 0
+	for i in range(1, lengths.size()):
+		assert_float(absf(lengths[i] - lengths[i - 1])).is_less_equal(walk)
+		if lengths[i] > 0.0 and lengths[i] < lengths[0]:
+			between += 1
+	assert_int(between).is_greater_equal(4)
+
+
+func _recline(node: Node3D) -> float:
+	var recline: PodRecline = node.get_meta(&"recline") if node.has_meta(&"recline") else null
+	return recline.amount if recline != null else 0.0
+
+
 func _drawn(views: PassengerViews, id: int) -> Array:
 	var node := views.node_for(id)
 	return [
 		views.tick_position(id, true).snapped(Vector3.ONE * 0.0001),
 		snappedf(node.rotation.y, 0.0001),
 		node.get_meta(&"clip", ""),
-		snappedf((node.get_meta(&"recline") as PodRecline).amount, 0.0001),
+		snappedf(_recline(node), 0.0001),
 	]
 
 

@@ -229,8 +229,8 @@ func _shower() -> void:
 	var foam := node.get_node("ShowerFoam") as ShowerFoam
 	print(
 		(
-			"SHOWER foam=%.2f balls=%d needs=%d"
-			% [foam.amount, foam.balls_shown(), node.get_meta(&"needs", 0)]
+			"SHOWER foam=%.2f lather=%d needs=%d"
+			% [foam.amount, foam.lather_shown(), node.get_meta(&"needs", 0)]
 		)
 	)
 	await _part_twin("shower_foam", cam, func(on: bool) -> void: foam.visible = on)

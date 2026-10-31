@@ -16,6 +16,10 @@ extends RefCounted
 ## out from the sim each tick, so a load or a clock that went back draws the
 ## pose for the loaded tick with nothing to reset (anti-pattern
 ## a-per-id-view-record-holding-a-sim-tick-must-start-over-on-l).
+## PassengerViews moves its drawn step toward offset() by at most a walking
+## step a tick, so a stay cut short (the deadline re-forecast closer) or a
+## piece removed mid-stay eases the body back to the slot cell over a few
+## ticks; only the clip switches at once.
 
 enum Kind { NONE, SEAT, RECLINE, SHOWER }
 
@@ -128,6 +132,50 @@ static func recline(sim: PassengerSim, p: Passenger) -> float:
 	var seated := sim.tick - p.stage_tick - PassengerSim.SIT_DOWN_TICKS
 	var before_up := _left(sim, p) - PassengerSim.STAND_UP_TICKS
 	return smoothstep(0.0, 1.0, minf(seated, before_up) / float(EASE_TICKS))
+
+
+## Ticks `p` has spent in its current sit_down or stand_up clip: from the
+## stay's start or the start of its stand-up on an activity visit, from the
+## stage's start on a gate, cafe or toilet seat. Never below 0.
+static func clip_ticks(sim: PassengerSim, p: Passenger) -> int:
+	var k := kind(sim, p)
+	if k == Kind.SEAT or k == Kind.RECLINE:
+		if pose(sim, p) == StageKinds.Pose.STANDING_UP:
+			return maxi(PassengerSim.STAND_UP_TICKS - 1 - _left(sim, p), 0)
+	return maxi(sim.tick - p.stage_tick, 0)
+
+
+## Puts the nap pod lean and the shower lather on a passenger's node, each only
+## while it is above 0: a PodRecline first on the skeleton (so it runs after
+## the animation and before the carry modifiers) and a ShowerFoam child, made
+## when needed and freed after, so a passenger that is neither reclining nor
+## showering carries neither and costs nothing.
+static func dress(node: Node3D, lean: float, lather: float) -> void:
+	var recline: PodRecline = node.get_meta(&"recline") if node.has_meta(&"recline") else null
+	if lean > 0.0 and recline == null:
+		recline = PodRecline.new()
+		recline.name = "PodRecline"
+		var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+		skeleton.add_child(recline)
+		skeleton.move_child(recline, 0)
+		node.set_meta(&"recline", recline)
+	elif lean <= 0.0 and recline != null:
+		recline.get_parent().remove_child(recline)
+		recline.queue_free()
+		node.remove_meta(&"recline")
+		recline = null
+	if recline != null:
+		recline.amount = lean
+	var foam := node.get_node_or_null("ShowerFoam") as ShowerFoam
+	if lather > 0.0 and foam == null:
+		foam = ShowerFoam.new()
+		node.add_child(foam)
+	elif lather <= 0.0 and foam != null:
+		node.remove_child(foam)
+		foam.queue_free()
+		foam = null
+	if foam != null:
+		foam.set_amount(lather)
 
 
 ## How much foam (0 to 1) covers a showering visitor now: building up over

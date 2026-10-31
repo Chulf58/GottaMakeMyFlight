@@ -41,6 +41,11 @@ var _props := CarryOnProps.new()
 ## Passenger id -> its drawn offset at security (SecurityLooks.target_offset),
 ## moved toward the target at walking speed once per tick.
 var _offsets: Dictionary = {}
+## Passenger id -> its drawn step onto a seat or into a shower on an activity
+## visit, moved toward ActivityPoses.offset() by at most a walking step a tick,
+## so a stay cut short or a removed piece eases the body back instead of
+## jumping. Holds no tick; snap() restarts it from the loaded world.
+var _seats: Dictionary = {}
 
 
 func _ready() -> void:
@@ -113,7 +118,7 @@ func draw_position(p: Passenger) -> Vector3:
 	return (
 		sim.world_position(p)
 		+ GateChairs.offset(sim, p)
-		+ ActivityPoses.offset(sim, p)
+		+ _seats.get(p.id, Vector3.ZERO)
 		+ _offsets.get(p.id, Vector3.ZERO)
 	)
 
@@ -132,6 +137,7 @@ func sync() -> void:
 			continue
 		seen[id] = true
 		_chase(p)
+		_chase_seat(p)
 		var now := draw_position(p)
 		if not _nodes.has(id):
 			_nodes[id] = _take(p)
@@ -156,6 +162,10 @@ func sync() -> void:
 func snap() -> void:
 	for id in sim.passenger_ids():
 		_offsets.erase(id)
+		_seats.erase(id)
+		var seat := ActivityPoses.offset(sim, sim.get_passenger(id))
+		if seat != Vector3.ZERO:
+			_seats[id] = seat
 		# A load starts every tray and bag over, with no transfer from before.
 		_props.release(id)
 		var target := SecurityLooks.target_offset(sim, sim.get_passenger(id))
@@ -274,13 +284,6 @@ func _take(p: Passenger) -> Node3D:
 	for sprite_name in NeedIcons.SPRITES:
 		node.add_child(NeedIcons.make_sprite(sprite_name))
 	node.add_child(WishIconView.make_sprite())
-	node.add_child(ShowerFoam.new())
-	# First on the skeleton, so it runs after the animation and before the
-	# carry modifiers CarryOnProps adds later.
-	var recline := PodRecline.new()
-	recline.name = "PodRecline"
-	node.find_children("*", "Skeleton3D", true, false)[0].add_child(recline)
-	node.set_meta(&"recline", recline)
 	add_child(node)
 	return node
 
@@ -293,6 +296,8 @@ func _release(id: int) -> void:
 	_pool[node.get_meta(&"body")].append(node)
 	_nodes.erase(id)
 	_offsets.erase(id)
+	_seats.erase(id)
+	ActivityPoses.dress(node, 0.0, 0.0)
 	_props.release(id)
 	_prev.erase(id)
 	_cur.erase(id)
@@ -369,12 +374,16 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		# Waiting in a cafe queue or ordering: face the counter.
 		var ahead := sim.cafes.counter_facing(p)
 		node.rotation.y = atan2(ahead.x, ahead.y)
-	(node.get_meta(&"recline") as PodRecline).amount = ActivityPoses.recline(sim, p)
-	(node.get_node("ShowerFoam") as ShowerFoam).set_amount(ActivityPoses.foam(sim, p))
+	ActivityPoses.dress(node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p))
 	node.set_meta(&"base_speed", base)
 	if node.get_meta(&"clip", "") != clip:
 		node.set_meta(&"clip", clip)
-		(node.get_node("AnimationPlayer") as AnimationPlayer).play(clip)
+		var player := node.get_node("AnimationPlayer") as AnimationPlayer
+		player.play(clip)
+		if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
+			# A view made mid-way (a load, a passenger just drawn) starts the
+			# clip where the sim is in it, not from its first frame.
+			player.seek(ActivityPoses.clip_ticks(sim, p) * SimClock.STEP * base, true)
 	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
@@ -391,6 +400,18 @@ func _chase(p: Passenger) -> void:
 		_offsets.erase(p.id)
 	else:
 		_offsets[p.id] = now
+
+
+## Moves a passenger's drawn activity step toward ActivityPoses.offset() by
+## at most a walking step: exactly onto it while the stay eases in and out.
+func _chase_seat(p: Passenger) -> void:
+	var target := ActivityPoses.offset(sim, p)
+	var now: Vector3 = _seats.get(p.id, Vector3.ZERO)
+	now = now.move_toward(target, PassengerSim.WALK_MM / 1000.0)
+	if now == Vector3.ZERO:
+		_seats.erase(p.id)
+	else:
+		_seats[p.id] = now
 
 
 func _at_security(p: Passenger) -> bool:
