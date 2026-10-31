@@ -3,7 +3,8 @@ extends GdUnitTestSuite
 ## How activity visitors are drawn (ActivityPoses; decision
 ## activity-poses-sit-on-the-lounge-sofa-recline-in-the-nap-pod): seated on
 ## the lounge sofa's seat mounts, seated and reclined in the nap pod, standing
-## in the shower under foam, and the play area unchanged. The seat spots come
+## in the shower under foam (the wash itself: TestShowerLooks), and the play
+## area unchanged. The seat spots come
 ## from the imported .glb mounts, the pose eases in and out at the edges of
 ## the one SHOP_BROWSE stage, and the view draws a loaded world exactly as the
 ## world it was saved from.
@@ -95,7 +96,7 @@ func test_each_piece_draws_its_own_pose() -> void:
 	var want := {
 		&"play_area": [ActivityPoses.Kind.NONE, "idle"],
 		&"lounge": [ActivityPoses.Kind.SEAT, "sit_idle"],
-		&"shower": [ActivityPoses.Kind.SHOWER, "idle"],
+		&"shower": [ActivityPoses.Kind.SHOWER, "shower"],
 		&"nap_pod": [ActivityPoses.Kind.RECLINE, "sit_idle"],
 	}
 	for type: StringName in want:
@@ -130,6 +131,8 @@ func test_each_piece_draws_its_own_pose() -> void:
 		assert_bool(foam != null).is_equal(showers)
 		assert_bool(node.has_meta(&"recline")).is_equal(reclines)
 		assert_int(lather).is_equal(ShowerFoam.lather_count() if showers else 0)
+		# Only a showering passenger has its clothes off.
+		assert_bool(node.has_meta(&"dressed")).is_equal(showers)
 		assert_bool(node.get_meta(&"seated")).is_equal(type != &"play_area")
 		# The thought bubble is still drawn over a showering passenger.
 		assert_bool((node.get_node("Bubble") as Label3D).visible).is_true()

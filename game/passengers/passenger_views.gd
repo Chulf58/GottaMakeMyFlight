@@ -16,7 +16,7 @@ const SIT_CLIP_SECONDS := 1.2
 ## the sim is in it is sought there: frames play the clip between ticks and
 ## may run it a frame ahead of or behind the sim.
 const SEEK_SLACK_TICKS := 1.5
-const LOOPED := ["idle", "walk", "run", "sit_idle"]
+const LOOPED := ["idle", "walk", "run", "sit_idle", "shower"]
 const MISSED_LINGER_TICKS := 200
 const BUBBLE_HEIGHT := 2.5
 const PICK_RADIUS_PX := 40.0
@@ -166,6 +166,16 @@ func sync() -> void:
 ## apron leg.
 func snap() -> void:
 	for id in sim.passenger_ids():
+		if _nodes.has(id):
+			# A node kept through the load starts over dressed, with no foam
+			# or recline (the sync below dresses it for the loaded tick), and
+			# goes back to the pool when the loaded passenger of that id has
+			# another body, so sync() takes one of the right body.
+			var kept: Node3D = _nodes[id]
+			ActivityPoses.dress(kept, 0.0, 0.0)
+			var p := sim.get_passenger(id)
+			if kept.get_meta(&"body") != PassengerLooks.body_of(id, p.variant):
+				_release(id)
 		_offsets.erase(id)
 		_seats.erase(id)
 		var seat := ActivityPoses.offset(sim, sim.get_passenger(id))
@@ -346,6 +356,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 			sim_mps
 			/ (PassengerLooks.CLIP_RUN_MPS[body] if p.late else PassengerLooks.CLIP_WALK_MPS[body])
 		)
+	# In the shower, between the step in and the step out: washing.
+	var washing := showering and not moving and ActivityPoses.washing(sim, p)
+	if washing:
+		clip = "shower"
 	var where := StageKinds.location(p.stage)
 	var at_gate := where == StageKinds.Location.GATE_SEAT and p.seat_object != 0
 	var at_cafe := (
@@ -383,13 +397,22 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		# Waiting in a cafe queue or ordering: face the counter.
 		var ahead := sim.cafes.counter_facing(p)
 		node.rotation.y = atan2(ahead.x, ahead.y)
-	ActivityPoses.dress(node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p))
+	ActivityPoses.dress(
+		node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p), ActivityPoses.bare(sim, p)
+	)
 	node.set_meta(&"base_speed", base)
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
 	var changed: bool = node.get_meta(&"clip", "") != clip
 	if changed:
 		node.set_meta(&"clip", clip)
 		player.play(clip)
+		if washing:
+			# A view made or snapped mid-wash (a load, a passenger just drawn)
+			# washes from where the sim is in the loop. The sim cannot move the
+			# loop on afterwards (the step in fixes its start), so the frames
+			# play it from there.
+			var length := player.get_animation(clip).length
+			player.seek(fposmod(ActivityPoses.wash_seconds(sim, p), length), true)
 	if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
 		# A view made or snapped mid-way (a load, a passenger just drawn)
 		# starts the clip where the sim is in it, not from its first frame.

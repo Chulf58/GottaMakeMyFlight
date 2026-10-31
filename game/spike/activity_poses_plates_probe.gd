@@ -29,9 +29,25 @@ extends SceneTree
 ##     --path game -s res://spike/activity_poses_plates_probe.gd
 ##
 ## Plates go to tools/blender/out/activity_poses/.
+##
+## With the user argument --shower-foam (after `--`) the probe runs only the
+## shower, for a male and then a female visitor, and writes to
+## tools/blender/out/shower_foam/: per body a real-time strip of the wash
+## (shower_<body>_strip: STRIP_LIVE frames STRIP_LIVE_MS apart, the clock and
+## the clip running at 1x), front and side true-scale views, a game view,
+## and a game view once it has stepped out with its clothes back on
+## (shower_<body>_after). Extra proofs: a twin with the clothes put back on
+## differs (the skin is drawn), a twin with the cubicle's steam (Haze) hidden
+## differs (the steam is drawn), two frames of the frozen body STRIP_LIVE_MS
+## apart differ by the lather alone (a control with the foam hidden barely
+## differs), a hand rises above the neck in the strip (washing the hair), and
+## the clothes are back on after the step out.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/activity_poses"
+const SHOWER_OUT_REL := "res://../tools/blender/out/shower_foam"
+const STRIP_LIVE := 6
+const STRIP_LIVE_MS := 400
 const MARGIN_PX := 8.0
 const MIN_DIFF_PX := 300
 const MIN_PART_PX := 40
@@ -62,10 +78,13 @@ var _ids := {}
 var _sheet: Array[Image] = []
 ## Passenger id -> [clip, ticks since it started], to seek clips while frozen.
 var _clips := {}
+var _shower_only := false
 
 
 func _initialize() -> void:
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	_shower_only = "--shower-foam" in OS.get_cmdline_user_args()
+	var rel := SHOWER_OUT_REL if _shower_only else OUT_REL
+	_out_dir = ProjectSettings.globalize_path(rel).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_seed = randi()
 	print("PROBE sim_seed=%d out_dir=%s" % [_seed, _out_dir])
@@ -75,8 +94,16 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	for type: StringName in [&"lounge", &"nap_pod", &"shower"]:
+	var types: Array[StringName] = [&"lounge", &"nap_pod", &"shower"]
+	if _shower_only:
+		types = [&"shower"]
+	for type: StringName in types:
 		if not await _boot(type):
+			continue
+		if _shower_only:
+			await _shower_foam()
+			_main.queue_free()
+			await _frames(3)
 			continue
 		match type:
 			&"lounge":
@@ -137,9 +164,10 @@ func _boot(type: StringName) -> bool:
 	return true
 
 
-## A bored passenger with no bags that commits to the room's piece.
-func _visitor() -> Passenger:
-	var id := _sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
+## A bored passenger with no bags that commits to the room's piece, of
+## `variant` (0 male, 1 female) when that is not -1.
+func _visitor(variant := -1) -> Passenger:
+	var id := _sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0), variant)
 	var p := _sim.get_passenger(id)
 	ToiletTestLayout.calm(p)
 	p.carry_on = 0
@@ -259,6 +287,168 @@ func _shower() -> void:
 	await _plate("distance", far, [p.id])
 
 
+## The --shower-foam plates: a male and then a female visitor washing bare
+## under the moving lather, and each back in its clothes after the step out.
+func _shower_foam() -> void:
+	for variant in [0, 1]:
+		var label := "male" if variant == 0 else "female"
+		var p := _visitor(variant)
+		var bare := func() -> bool:
+			return ActivityPoses.bare(_sim, p) and _clock.tick - p.stage_tick >= 40
+		if not await _until(bare):
+			_invalid("%s: the visitor never washed bare" % label)
+			return
+		p.hunger = CafeSim.HUNGER_MAX
+		await _until(
+			func() -> bool: return int(_views.node_for(p.id).get_meta(&"needs", 0)) > 0, 40
+		)
+		var node := _views.node_for(p.id)
+		print(
+			(
+				"SHOWER %s id=%d body=%s clip=%s bare=%s needs=%d"
+				% [
+					label,
+					p.id,
+					PassengerLooks.BODIES[node.get_meta(&"body")],
+					node.get_meta(&"clip", ""),
+					node.has_meta(&"dressed"),
+					node.get_meta(&"needs", 0)
+				]
+			)
+		)
+		if node.get_meta(&"clip", "") != "shower" or not node.has_meta(&"dressed"):
+			_invalid("%s: not washing bare" % label)
+		await _live_strip("shower_%s_strip" % label, p)
+		var spot := _spot()
+		await _ortho_set("shower_%s" % label, spot, [p.id], ["front", "side"])
+		var cam := _shower_cam(spot)
+		await _plate("shower_%s_game" % label, cam, [p.id], true)
+		var mi := PassengerLooks.body_mesh(node)
+		var bare_mesh := mi.mesh
+		var dressed: Mesh = node.get_meta(&"dressed")
+		await _part_twin(
+			"shower_%s_skin" % label,
+			cam,
+			func(on: bool) -> void: mi.mesh = bare_mesh if on else dressed
+		)
+		var haze := node.get_node("ShowerFoam/Haze") as Node3D
+		await _part_twin("shower_%s_haze" % label, cam, func(on: bool) -> void: haze.visible = on)
+		await _lather_moves(label, cam, node)
+		cam.queue_free()
+		var stepped_out := func() -> bool:
+			return (
+				ActivityPoses.kind(_sim, p) == ActivityPoses.Kind.SHOWER
+				and (ActivityPoses.share(_sim, p) <= 0.0)
+			)
+		if not await _until(stepped_out):
+			_invalid("%s: the visitor never stepped out" % label)
+			return
+		print(
+			(
+				"AFTER %s clip=%s dressed_again=%s mesh_is_bare=%s foam=%s"
+				% [
+					label,
+					node.get_meta(&"clip", ""),
+					not node.has_meta(&"dressed"),
+					mi.mesh == bare_mesh,
+					node.get_node_or_null("ShowerFoam")
+				]
+			)
+		)
+		if node.has_meta(&"dressed") or mi.mesh == bare_mesh:
+			_invalid("%s: the clothes did not come back on" % label)
+		await _plate("shower_%s_after" % label, _shower_cam(spot), [p.id])
+		await _until(func() -> bool: return _sim.shops.visit_of(p.id) == null)
+		# Off away from the shower, so the next visitor finds it free.
+		_sim.get_passenger(p.id).hunger = 0
+
+
+## A strip of `p` washing at 1x: the clock unpaused and the clip playing in
+## real time, a frame every STRIP_LIVE_MS with the sim ticked to match. Prints
+## each frame's hand and neck heights; a hand must rise above the neck.
+func _live_strip(file: String, p: Passenger) -> void:
+	var frames: Array[Image] = []
+	var cam := _shower_cam(_spot())
+	cam.make_current()
+	_clock.set_paused(false)
+	var ok := true
+	var raised := 0
+	for i in STRIP_LIVE:
+		await _frames(2)
+		var node := _views.node_for(p.id)
+		for up in [0.1, PassengerViews.BUBBLE_HEIGHT]:
+			ok = _in_frame(cam, node.global_position + Vector3.UP * up, "%s[%d]" % [file, i]) and ok
+		var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+		var heights := {}
+		for bone in ["Hand.L", "Hand.R", "Neck"]:
+			var pose := skeleton.get_bone_global_pose(skeleton.find_bone(bone))
+			heights[bone] = (skeleton.global_transform * pose).origin.y - node.global_position.y
+		if maxf(heights["Hand.L"], heights["Hand.R"]) > heights["Neck"]:
+			raised += 1
+		var player := node.get_node("AnimationPlayer") as AnimationPlayer
+		print(
+			(
+				"STRIP %s[%d] tick=%d clip=%s at=%.2fs hands=(%.2f,%.2f) neck=%.2f"
+				% [
+					file,
+					i,
+					_clock.tick,
+					player.current_animation,
+					player.current_animation_position,
+					heights["Hand.L"],
+					heights["Hand.R"],
+					heights["Neck"]
+				]
+			)
+		)
+		var img := _grab()
+		img.resize(img.get_width() / 2, img.get_height() / 2, Image.INTERPOLATE_BILINEAR)
+		frames.append(img)
+		var until := Time.get_ticks_msec() + STRIP_LIVE_MS
+		while Time.get_ticks_msec() < until:
+			await process_frame
+			_beat(file)
+		for k in roundi(STRIP_LIVE_MS * SimClock.TICK_RATE / 1000.0):
+			_tick()
+	cam.queue_free()
+	print("STRIP %s hands_above_neck=%d of %d" % [file, raised, STRIP_LIVE])
+	if not ok:
+		_invalid("%s: subject out of frame" % file)
+	if raised == 0:
+		_invalid("%s: no hand rose above the neck" % file)
+	_save(_row(frames), file + ".png")
+
+
+## Proves the lather moves on its own: the body frozen (clock paused, steam
+## hidden), two frames STRIP_LIVE_MS apart differ, and by far more than the
+## same pair with the foam hidden (the control).
+func _lather_moves(label: String, cam: Camera3D, node: Node3D) -> void:
+	cam.make_current()
+	_clock.set_paused(true)
+	var foam := node.get_node("ShowerFoam") as ShowerFoam
+	var steam := node.get_node("ShowerFoam/Steam") as Node3D
+	var haze := node.get_node("ShowerFoam/Haze") as Node3D
+	steam.visible = false
+	haze.visible = false
+	var diffs: Array[int] = []
+	for shown in [true, false]:
+		foam.visible = shown
+		await _frames(3)
+		var first := _grab()
+		var until := Time.get_ticks_msec() + STRIP_LIVE_MS
+		while Time.get_ticks_msec() < until:
+			await process_frame
+			_beat("lather " + label)
+		await _frames(1)
+		diffs.append(_diff(first, _grab()))
+	foam.visible = true
+	steam.visible = true
+	haze.visible = true
+	print("LATHER %s moving_diff_px=%d control_diff_px=%d" % [label, diffs[0], diffs[1]])
+	if diffs[0] < MIN_PART_PX or diffs[1] * 4 > diffs[0]:
+		_invalid("%s: the lather does not move (%s)" % [label, diffs])
+
+
 ## Where the room's piece is drawn, on the floor.
 func _spot() -> Vector3:
 	var record := _mode.grid.get_object(_ids["use"])
@@ -361,6 +551,16 @@ func _ortho(spot: Vector3, dir: Vector3) -> Camera3D:
 		cam.look_at_from_position(target + Vector3(0.0, 1.7, 0.001), target)
 	else:
 		cam.look_at_from_position(target + dir * 3.2, target)
+	return cam
+
+
+## A camera from the front right and above framing a showering passenger from
+## its feet to its thought bubble and need icons (PassengerViews.BUBBLE_HEIGHT).
+func _shower_cam(spot: Vector3) -> Camera3D:
+	var cam := Camera3D.new()
+	cam.fov = 40.0
+	_main.add_child(cam)
+	cam.look_at_from_position(spot + Vector3(1.7, 2.5, 3.9), spot + Vector3(0.0, 1.35, 0.4))
 	return cam
 
 
