@@ -9,13 +9,7 @@ extends Node3D
 ## Each node carries its thought bubble, its need icons (NeedIcons) and its
 ## shopping wish icon (WishIconView), set each tick and laid out each frame.
 
-const CHARACTERS: Array[PackedScene] = [
-	preload("res://assets/people/tcp_male_character_01.glb"),
-	preload("res://assets/people/tcp_female_character_01.glb"),
-]
-## Clip speeds measured by the Toon pipeline (SPEED lines), male then female.
-const CLIP_WALK_MPS: Array[float] = [1.952, 1.922]
-const CLIP_RUN_MPS: Array[float] = [5.295, 4.173]
+## Bodies, tints, bag colours and clip speeds: PassengerLooks.
 const SIT_CLIP_SECONDS := 1.2
 const LOOPED := ["idle", "walk", "run", "sit_idle"]
 const MISSED_LINGER_TICKS := 200
@@ -31,7 +25,8 @@ const PICK_RADIUS_PX := 40.0
 var follow_anchor := Node3D.new()
 var selected_id := 0
 
-var _pool: Array[Array] = [[], []]
+## Free nodes per body (PassengerLooks.BODIES).
+var _pool: Array[Array] = []
 ## Passenger id -> node.
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
@@ -61,7 +56,8 @@ func _ready() -> void:
 	_ring.mesh = torus
 	_ring.visible = false
 	add_child(_ring)
-	for scene in CHARACTERS:
+	for scene in PassengerLooks.SCENES:
+		_pool.append([])
 		var probe := scene.instantiate()
 		var player := probe.get_node("AnimationPlayer") as AnimationPlayer
 		for clip in LOOPED:
@@ -132,7 +128,7 @@ func sync() -> void:
 		_chase(p)
 		var now := draw_position(p)
 		if not _nodes.has(id):
-			_nodes[id] = _take(p.variant)
+			_nodes[id] = _take(p)
 			_cur[id] = now
 		_prev[id] = _cur[id]
 		_cur[id] = now
@@ -246,14 +242,20 @@ func _visible(p: Passenger) -> bool:
 	return true
 
 
-func _take(variant: int) -> Node3D:
-	var free: Array = _pool[variant]
+## A node of the passenger's body (PassengerLooks.body_of), from the pool when
+## one is free, painted with the passenger's clothing tint.
+func _take(p: Passenger) -> Node3D:
+	var body := PassengerLooks.body_of(p.id, p.variant)
+	var free: Array = _pool[body]
 	if not free.is_empty():
 		var reused: Node3D = free.pop_back()
 		reused.visible = true
+		PassengerLooks.paint_body(reused, body, PassengerLooks.tint_of(p.id))
 		return reused
-	var node := CHARACTERS[variant].instantiate() as Node3D
-	node.set_meta(&"variant", variant)
+	var node := PassengerLooks.SCENES[body].instantiate() as Node3D
+	node.set_meta(&"variant", p.variant)
+	node.set_meta(&"body", body)
+	PassengerLooks.paint_body(node, body, PassengerLooks.tint_of(p.id))
 	var bubble := Label3D.new()
 	bubble.name = "Bubble"
 	bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -275,7 +277,7 @@ func _release(id: int) -> void:
 	node.visible = false
 	(node.get_node("AnimationPlayer") as AnimationPlayer).stop()
 	node.set_meta(&"clip", "")
-	_pool[node.get_meta(&"variant")].append(node)
+	_pool[node.get_meta(&"body")].append(node)
 	_nodes.erase(id)
 	_offsets.erase(id)
 	_props.release(id)
@@ -305,10 +307,13 @@ func _pose(node: Node3D, p: Passenger) -> void:
 			clip = "stand_up"
 			base = SIT_CLIP_SECONDS / (PassengerSim.STAND_UP_TICKS / float(SimClock.TICK_RATE))
 	if moving:
-		var variant: int = node.get_meta(&"variant")
+		var body: int = node.get_meta(&"body")
 		var sim_mps := mm * SimClock.TICK_RATE / 1000.0
 		clip = "run" if p.late else "walk"
-		base = sim_mps / (CLIP_RUN_MPS[variant] if p.late else CLIP_WALK_MPS[variant])
+		base = (
+			sim_mps
+			/ (PassengerLooks.CLIP_RUN_MPS[body] if p.late else PassengerLooks.CLIP_WALK_MPS[body])
+		)
 	var where := StageKinds.location(p.stage)
 	var at_gate := where == StageKinds.Location.GATE_SEAT and p.seat_object != 0
 	var at_cafe := (

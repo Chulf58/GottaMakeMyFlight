@@ -73,7 +73,7 @@ func test_a_hired_agent_is_drawn_once_it_leaves_the_pool_and_walks() -> void:
 
 func test_staff_models_are_not_passenger_models() -> void:
 	for scene in StaffCharacters.CHARACTERS:
-		for passenger_scene in PassengerViews.CHARACTERS:
+		for passenger_scene in PassengerLooks.SCENES:
 			assert_str(scene.resource_path).is_not_equal(passenger_scene.resource_path)
 	assert_str(StaffCharacters.CHARACTERS[CHECKIN].resource_path).is_not_equal(
 		StaffCharacters.CHARACTERS[SECURITY].resource_path

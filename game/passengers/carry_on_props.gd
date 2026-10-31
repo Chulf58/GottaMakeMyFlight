@@ -521,6 +521,7 @@ func sync() -> void:
 			elif i >= bags.size():
 				bags.append({"node": _take(SecurityLooks.KIND_PIECES[kinds[i]]), "home": -1})
 			bags[i]["kind"] = kinds[i]
+		PassengerLooks.paint_bags(bags, p.id)
 		# A change of home or hand is stamped with this tick; draw() starts the
 		# move from where the bag was drawn last.
 		for i in bags.size():

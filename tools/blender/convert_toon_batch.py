@@ -22,7 +22,9 @@ What it does, per asset:
    join the parts into one skinned mesh, retarget the idle action from the idle FBX onto
    the character armature as "idle", then add walk, run, sit_down, sit_idle and stand_up
    (tools/blender/anim/toon_clips.py; it prints SPEED and SIT_CONTRACT lines).
-   Then move the vendor UV faults listed in UV_FIXES to their target swatch.
+   Before the join each part's vertices get the clothes' mark (CLOTH_ATTR, exported as
+   COLOR_0) that PassengerLooks tints by. Then move the vendor UV faults listed in UV_FIXES
+   to their target swatch, and stop if any face still samples the vendor magenta ramp.
 4. Export .glb (Y-up, no vertex colours), then RE-READ THE WRITTEN FILE and check
    materials, images, animations and bounds against the scene. Any mismatch stops the run.
 5. Write or patch the .glb.import so Godot runs the post-import material binder.
@@ -173,6 +175,30 @@ BATCH = {
         "Prefabs\\Male Character Sources\\TCP_Male_Character_07.prefab",
     ),
 }
+# Passenger bodies beyond 01 (decision comic-life-and-variety-visuals-first-passengers-get-10-more):
+# PassengerViews draws a passenger with one of the six bodies of its gender.
+PASSENGER_BODIES = {"male": ("02", "03", "06", "08", "09"), "female": ("03", "04", "05", "08", "11")}
+for _gender, _numbers in PASSENGER_BODIES.items():
+    _g = _gender.capitalize()
+    for _n in _numbers:
+        BATCH["tcp_%s_character_%s" % (_gender, _n)] = (
+            "TCP",
+            "people",
+            "TCP_%s_Character_%s.fbx" % (_g, _n),
+            "Poses\\TCP_%s_Idle_01.fbx" % _g,
+            "Prefabs\\%s Character Sources\\TCP_%s_Character_%s.prefab" % (_g, _g, _n),
+        )
+
+# Clothing tints. A character's parts whose names hold one of these words are its clothes;
+# every other part (skin, head, hair, beard, shoes, legs, jewellery, glasses, bags) keeps the
+# vendor colours. The clothes' vertices carry a white CLOTH_ATTR colour (COLOR_0 in the
+# .glb), every other vertex black; PassengerLooks moves the clothes onto a tinted atlas.
+CLOTH_WORDS = ("Jacket", "Pants", "Shirt", "Skirt", "Dress", "Tie")
+CLOTH_ATTR = "Cloth"
+# The vendor's magenta ramp (RGB about 225,0,181). A character face whose UV centre samples
+# it after the UV fixes stops the run (see UV_FIXES).
+MAGENTA = (225, 0, 181)
+MAGENTA_TOLERANCE = 24
 
 # Vendor UV faults repaired per asset, after the part join and before export:
 # (u0, v0, u1, v1) box the face's UV centroid falls in, the UV every loop of those faces
@@ -390,6 +416,7 @@ def build_character(stem, idle_fbx, prefab):
         die("%s: no mesh matches the prefab's active parts" % stem)
     for o in drop:
         bpy.data.objects.remove(o, do_unlink=True)
+    looks = mark_cloth(stem, keep)
     for o in keep:
         if o.data.shape_keys:
             o.shape_key_clear()
@@ -520,7 +547,63 @@ def build_character(stem, idle_fbx, prefab):
     bpy.context.scene.frame_start = f0
     bpy.context.scene.frame_end = f1
     bpy.context.scene.frame_set(f0)
-    return [arm, body], durations
+    return [arm, body], durations, looks
+
+
+def atlas_image(stem, meshes):
+    """The one atlas image bound to a character's parts."""
+    imgs = {
+        n.image for o in meshes for s in o.material_slots for n in s.material.node_tree.nodes if n.type == "TEX_IMAGE"
+    }
+    if len(imgs) != 1:
+        die("%s: expected one atlas image, found %d" % (stem, len(imgs)))
+    return imgs.pop()
+
+
+def mark_cloth(stem, parts):
+    """Give every part a CLOTH_ATTR point colour, white on clothes (see CLOTH_WORDS) and
+    black elsewhere, before the parts are joined. Returns the clothes' triangle count."""
+    named = {}
+    cloth_tris = 0
+    for o in parts:
+        kind = "cloth" if any(word in base_name(o.name) for word in CLOTH_WORDS) else "other"
+        named[base_name(o.name)] = kind
+        for attr in list(o.data.color_attributes):
+            o.data.color_attributes.remove(attr)
+        attr = o.data.color_attributes.new(CLOTH_ATTR, "BYTE_COLOR", "POINT")
+        value = (1.0, 1.0, 1.0, 1.0) if kind == "cloth" else (0.0, 0.0, 0.0, 1.0)
+        for item in attr.data:
+            item.color = value
+        o.data.color_attributes.active_color = attr
+        if kind == "cloth":
+            cloth_tris += sum(len(p.vertices) - 2 for p in o.data.polygons)
+    log("CLOTH %s cloth_triangles=%d parts=%s" % (stem, cloth_tris, sorted(named.items())))
+    if not cloth_tris:
+        die("%s: no part is clothing (CLOTH_WORDS)" % stem)
+    return cloth_tris
+
+
+def magenta_faces(stem, objs):
+    """Count a character's faces whose UV centre samples the vendor's magenta ramp, after
+    the UV fixes, from the bound material's atlas image; any stops the run."""
+    meshes = [o for o in objs if o.type == "MESH"]
+    img = atlas_image(stem, meshes)
+    w, h = img.size
+    px = img.pixels[:]
+    hits = 0
+    for o in meshes:
+        uv = o.data.uv_layers[0].data
+        for p in o.data.polygons:
+            lis = list(p.loop_indices)
+            x = min(max(int(sum(uv[li].uv.x for li in lis) / len(lis) * w), 0), w - 1)
+            y = min(max(int(sum(uv[li].uv.y for li in lis) / len(lis) * h), 0), h - 1)
+            i = (y * w + x) * 4
+            rgb = [round(c * 255) for c in px[i : i + 3]]
+            if all(abs(a - b) <= MAGENTA_TOLERANCE for a, b in zip(rgb, MAGENTA)):
+                hits += 1
+    log("MAGENTA %s faces=%d" % (stem, hits))
+    if hits:
+        die("%s: %d faces sample the vendor magenta ramp; add a UV_FIXES entry" % (stem, hits))
 
 
 def in_box(box, u, v):
@@ -1072,6 +1155,49 @@ def check_texcoords(stem, js):
     log("TEXCOORD %s primitives=%d all_have_texcoord_0=True" % (stem, prims))
 
 
+def glb_unit_values(path, js, index):
+    """Values of one float or normalized-integer accessor in the written .glb, in 0..1."""
+    acc = js["accessors"][index]
+    if acc["componentType"] == 5126:
+        return glb_accessor(path, js, index)
+    with open(path, "rb") as f:
+        data = f.read()
+    bin_start = 20 + struct.unpack_from("<I", data, 12)[0] + 8
+    view = js["bufferViews"][acc["bufferView"]]
+    width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[acc["type"]]
+    fmt, size, top = {5121: ("B", 1, 255.0), 5123: ("H", 2, 65535.0)}[acc["componentType"]]
+    stride = view.get("byteStride", size * width)
+    base = bin_start + view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    return [
+        tuple(v / top for v in struct.unpack_from("<%d%s" % (width, fmt), data, base + i * stride))
+        for i in range(acc["count"])
+    ]
+
+
+def check_cloth(stem, path, js, cloth_tris):
+    """The written file carries the clothes' mark (COLOR_0, see CLOTH_ATTR): exactly as many
+    triangles as the clothes have are white at all three corners, every other triangle is
+    black at all three, and none is mixed."""
+    white = black = mixed = 0
+    for mesh in js["meshes"]:
+        for prim in mesh["primitives"]:
+            if "COLOR_0" not in prim["attributes"]:
+                die("%s: written primitive has no COLOR_0 (the clothes' mark)" % stem)
+            cols = glb_unit_values(path, js, prim["attributes"]["COLOR_0"])
+            idx = glb_indices(path, js, prim["indices"])
+            for t in range(0, len(idx), 3):
+                marks = {cols[i][0] > 0.5 for i in idx[t : t + 3]}
+                if len(marks) > 1:
+                    mixed += 1
+                elif True in marks:
+                    white += 1
+                else:
+                    black += 1
+    log("CLOTH_FILE %s cloth_triangles=%d other_triangles=%d mixed=%d scene_cloth=%d" % (stem, white, black, mixed, cloth_tris))
+    if mixed or white != cloth_tris or not black:
+        die("%s: written clothes' mark is wrong" % stem)
+
+
 def check_uv_fixes(stem, path, js, fixed_tris):
     """No triangle of the written file has its UV centroid in a UV_FIXES box, and exactly
     as many triangles as fix_uvs moved have all three corners on the target UV. glTF
@@ -1237,10 +1363,11 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
             die("%s: %s" % (stem, e))
         bpy.context.view_layer.update()
     durations = {}
+    looks = None
     seat = None
     intent = None
     if idle_fbx is not None:
-        objs, durations = build_character(stem, idle_fbx, prefab)
+        objs, durations, looks = build_character(stem, idle_fbx, prefab)
         objs = list(bpy.context.scene.objects)
     else:
         # Static props: resize an indoor variant, record the intended parts, bake every
@@ -1255,6 +1382,8 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         check_seat(stem, seat, objs)
     fixed_tris = fix_uvs(stem, objs)
     bpy.context.view_layer.update()
+    if looks is not None:
+        magenta_faces(stem, objs)
 
     mats = sorted({s.material.name for o in objs if o.type == "MESH" for s in o.material_slots})
     imgs = sorted(i.name for i in bpy.data.images if i.users > 0)
@@ -1276,7 +1405,8 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         export_image_format="AUTO",
         export_cameras=False,
         export_lights=False,
-        export_vertex_color="NONE",
+        # A character's one colour is the clothes' mark (CLOTH_ATTR); props export none.
+        export_vertex_color="ACTIVE" if looks is not None else "NONE",
         export_all_vertex_colors=False,
         export_active_vertex_color_when_no_material=False,
         export_morph=False,
@@ -1347,6 +1477,7 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         die("%s: indoor variant is %.3f m tall, not under %.1f m" % (stem, f_hi.y, INDOOR_CEILING))
     if animated:
         check_clips(stem, out, js, durations)
+        check_cloth(stem, out, js, looks)
     if not animated and f_anims:
         die("%s: a prop carries animations %s" % (stem, f_anims))
     if not animated:
