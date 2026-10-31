@@ -40,6 +40,7 @@ func _world() -> PassengerTestWorld:
 		"bin": PassengerTestWorld.place(world.grid, MessSim.BIN_ID, Vector2i(5, 5), 0),
 		"table": PassengerTestWorld.place(world.grid, &"cafe_table", Vector2i(24, 4), 0),
 		"toilet": world.grid.apply(BuildEdit.place_room(Rect2i(10, 14, 3, 3), &"toilet")).room_id,
+		"counter": PassengerTestWorld.place(world.grid, &"cafe_counter", Vector2i(20, 4), 0),
 	}
 	return world
 
@@ -57,6 +58,11 @@ func _make_messes(world: PassengerTestWorld) -> void:
 	stall.room = _ids["toilet"]
 	stall.stall = {"approach": Vector2i(11, 15)}
 	world.sim.messes.toilet_used(stall)
+	# One walk-on stall order at a real cafe counter: a "counter:" source.
+	var order := CafeVisit.new()
+	order.venue = &"stall"
+	order.counter = _ids["counter"]
+	world.sim.messes.cafe_used(order)
 
 
 func test_a_save_through_json_loads_back_every_mess_bin_and_counter() -> void:
@@ -89,6 +95,10 @@ func test_a_save_through_json_loads_back_every_mess_bin_and_counter() -> void:
 	for source in a.sources():
 		assert_int(b.uses_of(source)).is_equal(a.uses_of(source))
 	assert_int(b.uses_of(MessSim.seat_source("%d:1" % _ids["table"]))).is_equal(1)
+	var counter := MessSim.counter_source(_ids["counter"])
+	assert_bool(saved["counters"].has(counter)).is_true()
+	assert_int(a.uses_of(counter)).is_equal(1)
+	assert_int(b.uses_of(counter)).is_equal(1)
 	for id in a.mess_ids():
 		assert_dict(b.get_mess(id)).is_equal(a.get_mess(id))
 	assert_str(MessTestKit.text_of(b.to_snapshot())).is_equal(MessTestKit.text_of(a.to_snapshot()))
