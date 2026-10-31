@@ -39,6 +39,7 @@ func _world() -> PassengerTestWorld:
 	_ids = {
 		"bin": PassengerTestWorld.place(world.grid, MessSim.BIN_ID, Vector2i(5, 5), 0),
 		"table": PassengerTestWorld.place(world.grid, &"cafe_table", Vector2i(24, 4), 0),
+		"toilet": world.grid.apply(BuildEdit.place_room(Rect2i(10, 14, 3, 3), &"toilet")).room_id,
 	}
 	return world
 
@@ -52,6 +53,10 @@ func _make_messes(world: PassengerTestWorld) -> void:
 	world.sim.messes.cafe_used(MessTestKit.cafe_visit(SPOT, "%d:1" % table))
 	world.sim.messes.add(MessSim.Kind.SPILL, Vector2i(20, 15))
 	world.sim.messes.add(MessSim.Kind.TOILET, Vector2i(8, 12))
+	var stall := ToiletVisit.new()
+	stall.room = _ids["toilet"]
+	stall.stall = {"approach": Vector2i(11, 15)}
+	world.sim.messes.toilet_used(stall)
 
 
 func test_a_save_through_json_loads_back_every_mess_bin_and_counter() -> void:
@@ -160,6 +165,19 @@ func test_a_save_that_does_not_fit_the_grid_is_refused_and_changes_nothing() -> 
 		"counter of nothing": func(d: Dictionary) -> void: d["counters"]["seat:999:0"] = 1,
 		"counter of a bad shape": func(d: Dictionary) -> void: d["counters"]["seat"] = 1,
 		"negative overflow": func(d: Dictionary) -> void: d["overflow"] = -1,
+		"next id 0": func(d: Dictionary) -> void: _renumber(d, 0),
+		"next id -1": func(d: Dictionary) -> void: _renumber(d, -1),
+		"young litter grown": func(d: Dictionary) -> void: _litter_of(d)["grown"] = true,
+		"old litter not grown": _age_litter,
+		"claimed": func(d: Dictionary) -> void: d["messes"][0]["claimed_by"] = 1,
+		"seat index the table lacks":
+		func(d: Dictionary) -> void: d["counters"]["seat:%d:5" % _ids["table"]] = 1,
+		"counter that is a table":
+		func(d: Dictionary) -> void: d["counters"]["counter:%d" % _ids["table"]] = 1,
+		"slot on a table":
+		func(d: Dictionary) -> void: d["counters"]["slot:%d:0" % _ids["table"]] = 1,
+		"shower that is a toilet room":
+		func(d: Dictionary) -> void: d["counters"]["shower:%d" % _ids["toilet"]] = 1,
 	}
 	var before := MessTestKit.text_of(_a.sim.messes.to_snapshot())
 	var refused := 0
@@ -183,3 +201,24 @@ func _grow_spill(data: Dictionary) -> void:
 	for mess: Dictionary in data["messes"]:
 		if int(mess["kind"]) == MessSim.Kind.SPILL:
 			mess["grown"] = true
+
+
+## Empties the saved messes and sets next_id to `next`, so no saved id can be
+## the reason for a refusal: only the next id.
+func _renumber(data: Dictionary, next: int) -> void:
+	data["next_id"] = next
+	data["messes"] = []
+
+
+## The saved litter mess.
+func _litter_of(data: Dictionary) -> Dictionary:
+	for mess: Dictionary in data["messes"]:
+		if int(mess["kind"]) == MessSim.Kind.LITTER:
+			return mess
+	return {}
+
+
+## Moves the save's tick on until its litter is old enough to have grown, and
+## leaves it not grown.
+func _age_litter(data: Dictionary) -> void:
+	data["tick"] = int(_litter_of(data)["born_tick"]) + MessSim.GROW_TICKS

@@ -10,8 +10,8 @@ extends RefCounted
 ## back out, and its journey goes on where it left off: TO_SECURITY landside,
 ## TO_GATE airside. A passenger seated at a gate stands up first. Using the
 ## stall resets the toilet need; there is no money and no mood bonus. Each use
-## (the need reset in the stall, not a visit given up before it) counts once
-## towards the room's next mess (MessSim).
+## (the need reset in the stall, also when the stall goes mid-use; not a visit
+## given up before it) counts once towards the room's next mess (MessSim).
 ##
 ## The toilet need (point 5) rises once a simulated second. From NEED_AT the
 ## passenger looks for the stall nearest by path; when every stall is
@@ -462,6 +462,7 @@ func _stall_gone(p: Passenger, visit: ToiletVisit) -> void:
 		_:
 			if p.stage == Passenger.Stage.TOILET_USE:
 				p.toilet_need = 0
+				_sim.messes.toilet_used(visit)
 			_end(p, visit)
 
 

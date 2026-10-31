@@ -16,8 +16,10 @@ extends SceneTree
 ## loads it back and prints the mess part before and after. Last it holds two
 ## passengers standing for BEATS beats, one on a mess and a control out of sight
 ## of any, and prints both moods. The pass values are positives: messes
-## that grew from 0, counters above 0, a mood gap. With no visit, no mess, a
-## near passenger not losing more than the control, or a refused save it prints
+## that grew from 0, counters above 0, a mood gap. With no visit, no litter or
+## no toilet mess, a
+## near passenger whose loss does not match the mess dirt cadence, a control that
+## sees a mess or loses mood, or a refused save it prints
 ## PROBE_INVALID and exits 1.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
@@ -177,6 +179,8 @@ func _report_messes(kinds: Dictionary) -> void:
 		)
 	if uses.is_empty():
 		_invalid("no real visit was counted")
+	if kinds.get(MessSim.Kind.LITTER, 0) <= 0 or kinds.get(MessSim.Kind.TOILET, 0) <= 0:
+		_invalid("real visits did not leave both litter and a toilet mess by tick %d" % _clock.tick)
 	if messes.mess_count() == 0:
 		_invalid("no mess appeared by tick %d" % _clock.tick)
 
@@ -193,37 +197,52 @@ func _measure_mood() -> void:
 	var near := _held(near_cell)
 	var control := _held(control_cell)
 	var dirt := messes.dirt_at(near_cell)
-	var until_beat := 0
-	while until_beat < BEATS:
+	# The loss the mess cadence predicts: on each of the near passenger's beats,
+	# DecorEffect.due() of the capped dirt it sees then.
+	var expected := 0
+	var control_dirt := 0
+	var beats := 0
+	while beats < BEATS:
 		for p in [near, control]:
 			ToiletTestLayout.calm(p)
 			p.late = false
 		_clock.advance(SimClock.STEP)
+		control_dirt = maxi(control_dirt, messes.dirt_at(control_cell))
 		if posmod(_clock.tick, PassengerSim.BEAT_TICKS) == posmod(near.id, PassengerSim.BEAT_TICKS):
-			until_beat += 1
+			beats += 1
+			var seen := mini(messes.dirt_at(near_cell), MessSim.MAX_DIRT)
+			@warning_ignore("integer_division")
+			expected += DecorEffect.due(seen, _clock.tick / PassengerSim.BEAT_TICKS)
+	var near_calm := _sim.decor.net_calm_at(near_cell)
+	var control_calm := _sim.decor.net_calm_at(control_cell)
+	var loss := 50 - near.mood
 	print(
 		(
 			(
-				"PROBE mood near cell=%s dirt=%d calm=%d stage=%s mood=%d | control cell=%s dirt=%d"
-				+ " calm=%d stage=%s mood=%d | beats=%d"
+				"PROBE mood near cell=%s dirt=%d calm=%d stage=%s mood=%d loss=%d expected_loss=%d"
+				+ " | control cell=%s max_dirt=%d calm=%d stage=%s mood=%d | beats=%d"
 			)
 			% [
 				near_cell,
 				dirt,
-				_sim.decor.net_calm_at(near_cell),
+				near_calm,
 				Passenger.Stage.keys()[near.stage],
 				near.mood,
+				loss,
+				expected,
 				control_cell,
-				messes.dirt_at(control_cell),
-				_sim.decor.net_calm_at(control_cell),
+				control_dirt,
+				control_calm,
 				Passenger.Stage.keys()[control.stage],
 				control.mood,
 				BEATS
 			]
 		)
 	)
-	if dirt <= 0 or near.mood >= control.mood:
-		_invalid("the passenger on the mess did not lose more mood than the control")
+	if near_calm != 0 or control_calm != 0 or control_dirt != 0:
+		_invalid("decor reaches a held passenger, or a mess is seen from the control")
+	if dirt <= 0 or loss <= 0 or loss != expected or control.mood != 50:
+		_invalid("the mood loss on the mess does not match its dirt, or the control lost mood")
 
 
 ## A walkable cell in the terminal that no mess is seen from and no decor or

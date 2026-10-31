@@ -11,24 +11,30 @@ const GUEST_CELL := Vector2i(15, 8)
 ## A multiple of DecorEffect.PERIOD_BEATS, so a run costs an exact number of points.
 const BEATS := 30
 
+## One world for the file; each case starts with no messes, measures fresh
+## guests and puts back the grid edits it made (_undo). Guests of earlier cases
+## stay standing where they were and are not read again.
 var _world: PassengerTestWorld
+var _undo: Array[BuildEdit] = []
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
+	_world = MessTestKit.open_world()
 
 
 func after() -> void:
+	_world.free_all()
+	_world = null
 	PassengerTestWorld.tracker = null
 
 
 func before_test() -> void:
-	_world = MessTestKit.open_world()
+	assert_bool(MessTestKit.clear(_world)).is_true()
 
 
 func after_test() -> void:
-	_world.free_all()
-	_world = null
+	MessTestKit.undo(_world, _undo)
 
 
 func _messes() -> MessSim:
@@ -67,6 +73,7 @@ func test_a_plain_wall_between_the_mess_and_the_guest_hides_it() -> void:
 	assert_int(_messes().dirt_at(GUEST_CELL)).is_equal(MessSim.DIRT)
 	var wall := BuildEdit.place_wall(MESS_CELL, BuildGrid.Side.SOUTH)
 	assert_bool(_world.grid.apply(wall).ok).is_true()
+	_undo.append(BuildEdit.remove_wall(MESS_CELL, BuildGrid.Side.SOUTH))
 	var p := MessTestKit.guest(_world, GUEST_CELL)
 	MessTestKit.run_beats(_world, p, BEATS)
 	print("dirt behind the wall %d, mood %d" % [_messes().dirt_at(GUEST_CELL), p.mood])

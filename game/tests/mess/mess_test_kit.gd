@@ -5,13 +5,14 @@ extends RefCounted
 ## held standing on a cell, and use counters set through a save round trip.
 
 const SIZE := Vector2i(30, 20)
-const BOARDING := 5000
-const DOORS := 6000
+const BOARDING := 40000
+const DOORS := 45000
 const START_MOOD := 50
 
 
 ## A 30 x 20 floored grid with an exit and an entrance and nothing else, run
-## to tick 10 so the staff are on duty.
+## to tick 10 so the staff are on duty. Its flight boards late, so one world
+## lasts a whole test file.
 static func open_world(seed := 1) -> PassengerTestWorld:
 	var grid := PassengerTestWorld.floored(SIZE)
 	PassengerTestWorld.place(grid, &"exit_door", Vector2i(2, 0), 0)
@@ -77,6 +78,32 @@ static func set_uses(world: PassengerTestWorld, sources: Array, count: int) -> b
 	for source: String in sources:
 		data["counters"][source] = count
 	return world.sim.messes.from_snapshot(data)
+
+
+## Empties `world`'s MessSim through its own load: no messes, bin fill, use
+## counters or diagnostics, ids from 1.
+static func clear(world: PassengerTestWorld) -> bool:
+	var empty := {
+		"save_version": MessSim.SAVE_VERSION,
+		"tick": world.sim.tick,
+		"next_id": 1,
+		"messes": [],
+		"bins": {},
+		"counters": {},
+		"overflow": 0,
+		"merged": 0,
+		"caught": 0,
+	}
+	return world.sim.messes.from_snapshot(empty)
+
+
+## Applies each edit in `edits` to `world`'s grid in reverse order, results
+## ignored: the undo list a test built as it changed the shared grid (an undo
+## of something the test removed itself is refused and changes nothing).
+static func undo(world: PassengerTestWorld, edits: Array[BuildEdit]) -> void:
+	for i in range(edits.size() - 1, -1, -1):
+		world.grid.apply(edits[i])
+	edits.clear()
 
 
 ## A save that went through JSON, as a file would.

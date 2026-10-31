@@ -9,32 +9,52 @@ extends GdUnitTestSuite
 
 const SPOT := Vector2i(15, 10)
 
+## One world for the file; each case starts with no messes and puts back the
+## grid edits it made (_undo).
 var _world: PassengerTestWorld
+var _undo: Array[BuildEdit] = []
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
+	_world = MessTestKit.open_world()
 
 
 func after() -> void:
+	_world.free_all()
+	_world = null
 	PassengerTestWorld.tracker = null
 
 
 func before_test() -> void:
-	_world = MessTestKit.open_world()
+	assert_bool(MessTestKit.clear(_world)).is_true()
 
 
 func after_test() -> void:
-	_world.free_all()
-	_world = null
+	MessTestKit.undo(_world, _undo)
 
 
 func _messes() -> MessSim:
 	return _world.sim.messes
 
 
+## Places `def_id` at `cell` and notes its removal for after_test().
+func _place(def_id: StringName, cell: Vector2i) -> int:
+	var id := PassengerTestWorld.place(_world.grid, def_id, cell, 0)
+	_undo.append(BuildEdit.remove_object(id))
+	return id
+
+
 func _bin(cell: Vector2i) -> int:
-	return PassengerTestWorld.place(_world.grid, MessSim.BIN_ID, cell, 0)
+	return _place(MessSim.BIN_ID, cell)
+
+
+## Applies `edit` and notes `back` for after_test(); whether it applied.
+func _edit(edit: BuildEdit, back: BuildEdit) -> bool:
+	var ok := _world.grid.apply(edit).ok
+	if ok:
+		_undo.append(back)
+	return ok
 
 
 func test_every_nth_use_of_one_source_leaves_one_mess_at_its_spot() -> void:
@@ -103,7 +123,7 @@ func test_a_bin_out_of_range_or_behind_a_wall_does_not() -> void:
 	var spot := Vector2i(5, 10)
 	var walled := _bin(spot + Vector2i(0, -2))
 	var wall := BuildEdit.place_wall(spot, BuildGrid.Side.NORTH)
-	assert_bool(_world.grid.apply(wall).ok).is_true()
+	assert_bool(_edit(wall, BuildEdit.remove_wall(spot, BuildGrid.Side.NORTH))).is_true()
 	MessTestKit.litter(_world, spot, "902:0")
 	print(
 		(
@@ -249,12 +269,16 @@ func test_an_edit_drops_a_mess_off_the_floor_a_removed_bins_fill_and_a_gone_sour
 	var kept := _messes().add(MessSim.Kind.SPILL, SPOT)
 	var dropped := _messes().add(MessSim.Kind.SPILL, Vector2i(25, 15))
 	var bin := _bin(Vector2i(4, 4))
-	MessTestKit.litter(_world, Vector2i(4, 5), "%d:0" % bin)
-	var source := MessSim.seat_source("%d:0" % bin)
+	var table := _place(&"cafe_table", Vector2i(8, 4))
+	MessTestKit.litter(_world, Vector2i(4, 5), "%d:0" % table)
+	var source := MessSim.seat_source("%d:0" % table)
 	assert_int(_messes().fill_of(bin)).is_equal(1)
 	assert_int(_messes().uses_of(source)).is_equal(MessSim.CAFE_EVERY)
-	assert_bool(_world.grid.apply(BuildEdit.remove_floor(Vector2i(25, 15))).ok).is_true()
+	var hole := Vector2i(25, 15)
+	var refloor := BuildEdit.paint_floor(hole, BuildGrid.FLOOR_TILE, 1)
+	assert_bool(_edit(BuildEdit.remove_floor(hole), refloor)).is_true()
 	assert_bool(_world.grid.apply(BuildEdit.remove_object(bin)).ok).is_true()
+	assert_bool(_world.grid.apply(BuildEdit.remove_object(table)).ok).is_true()
 	var stale := _messes().stale
 	_world.step()
 	print(

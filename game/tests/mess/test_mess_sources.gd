@@ -161,6 +161,35 @@ func test_a_toilet_use_counts_its_room_once_and_the_nth_leaves_a_toilet_mess() -
 	_assert_one_mess(MessSim.Kind.TOILET, approach)
 
 
+func test_a_stall_removed_during_use_still_counts_the_use_once() -> void:
+	var p := _toilet_visit()
+	var visit := _world.sim.toilets.visit_of(p.id)
+	var source := MessSim.toilet_source(visit.room)
+	var approach: Vector2i = visit.stall["approach"]
+	while p.stage != Passenger.Stage.TOILET_USE and _world.clock.tick < 3000:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.TOILET_USE)
+	assert_bool(_world.grid.apply(BuildEdit.remove_object(visit.stall_id)).ok).is_true()
+	while _world.sim.toilets.visit_of(p.id) != null and _world.clock.tick < 3000:
+		_world.step()
+	for i in 200:
+		_world.step()
+	print(
+		(
+			"stall removed mid-use: stage %s, need %d, uses %d, messes %d"
+			% [
+				Passenger.Stage.keys()[p.stage],
+				p.toilet_need,
+				_messes().uses_of(source),
+				_messes().mess_count()
+			]
+		)
+	)
+	assert_int(p.toilet_need).is_less(ToiletSim.NEED_AT)
+	assert_int(_messes().uses_of(source)).is_equal(MessSim.TOILET_EVERY)
+	_assert_one_mess(MessSim.Kind.TOILET, approach)
+
+
 func test_a_toilet_visit_given_up_on_the_way_counts_nothing() -> void:
 	var p := _toilet_visit()
 	var visit := _world.sim.toilets.visit_of(p.id)

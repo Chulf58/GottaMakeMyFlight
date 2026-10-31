@@ -84,9 +84,10 @@ const KIOSK_TYPE := &"kiosk"
 const SHOWER_TYPE := &"shower"
 const NO_CELL := Vector2i(-1, -1)
 const SAVE_VERSION := 1
-## What a source key names: an object (seat, counter, slot) or a room.
-const OBJECT_SOURCES := ["seat", "counter", "slot"]
-const ROOM_SOURCES := ["toilet", "shower"]
+## Source key kinds and how many ":" parts each has: "seat:<table>:<index>",
+## "counter:<id>", "slot:<display>:<index>", "toilet:<room>", "shower:<room>".
+const SOURCE_PARTS := {"seat": 3, "counter": 2, "slot": 3, "toilet": 2, "shower": 2}
+const COUNTER_ID := &"cafe_counter"
 ## The approach cell is looked for on these steps from the mess cell, in order.
 const AROUND: Array[Vector2i] = [
 	Vector2i(0, 1),
@@ -155,23 +156,38 @@ static func shower_source(room_id: int) -> String:
 	return "shower:%d" % room_id
 
 
-## Whether the seat, counter, display or room a source key names is on `grid`;
-## false for a key of no known shape.
+## Whether what a source key names is on `grid` as that kind of source: a seat
+## index the piece has, a cafe counter, a browse slot index the display piece
+## has, a room of the toilet or shower type. False for a key of no known shape.
 static func source_exists(grid: BuildGrid, source: String) -> bool:
 	var parts := source.split(":")
-	if parts.size() < 2 or not parts[1].is_valid_int():
+	if parts.size() != int(SOURCE_PARTS.get(parts[0], 0)):
 		return false
+	for part in parts.slice(1):
+		if not part.is_valid_int():
+			return false
 	var id := parts[1].to_int()
-	if OBJECT_SOURCES.has(parts[0]):
-		var slotted := parts[0] != "counter"
-		if parts.size() != (3 if slotted else 2):
-			return false
-		if slotted and not parts[2].is_valid_int():
-			return false
-		return not grid.get_object(id).is_empty()
-	if ROOM_SOURCES.has(parts[0]) and parts.size() == 2:
-		return not grid.get_room(id).is_empty()
-	return false
+	var index := parts[2].to_int() if parts.size() == 3 else 0
+	var def := BuildCatalog.get_def(grid.get_object(id).get("def", &""))
+	match parts[0]:
+		"toilet", "shower":
+			return grid.get_room(id).get("type", &"") == StringName(parts[0])
+		"counter":
+			return def != null and def.id == COUNTER_ID
+		"seat":
+			return def != null and index >= 0 and index < def.seats.size()
+	return def != null and index >= 0 and index < slots_of(def)
+
+
+## How many browse slots a display piece `def` gives in the shop room types
+## that use it (ShopLayout); 0 for a piece no shop browses at.
+static func slots_of(def: BuildObjectDef) -> int:
+	var most := 0
+	for type_id in RoomTypes.ids():
+		var type := RoomTypes.get_type(type_id)
+		if type.shop and type.seat_piece == def.id:
+			most = maxi(most, mini(type.seats_per_piece, def.size.x * def.size.y))
+	return most
 
 
 ## The walkable cell a cleaner stands on to clean a mess at `cell`: the cell
@@ -481,6 +497,9 @@ static func checked(data: Dictionary, grid: BuildGrid) -> Dictionary:
 		return {"error": "'messes' must be a list of at most %d" % MAX_MESSES}
 	var tick := int(data["tick"])
 	var next := int(data["next_id"])
+	# Ids start at 1: add() returns 0 for a refused mess.
+	if next < 1:
+		return {"error": "'next_id' must be 1 or more"}
 	var messes := {}
 	for entry: Variant in data["messes"]:
 		var mess := _checked_mess(entry, grid, tick, next)
@@ -525,8 +544,14 @@ static func _checked_mess(entry: Variant, grid: BuildGrid, tick: int, next: int)
 		return {"error": "mess %d has an unknown kind %d" % [id, kind]}
 	if int(data["born_tick"]) > tick:
 		return {"error": "mess %d was made after the save's tick" % id}
-	if typeof(data["grown"]) != TYPE_BOOL or (data["grown"] and kind != Kind.LITTER):
-		return {"error": "mess %d: 'grown' must be a bool, and true only for litter" % id}
+	# Growth runs at the start of each tick, so a save between ticks holds
+	# exactly the litter old enough as grown.
+	var grows := kind == Kind.LITTER and tick - int(data["born_tick"]) >= GROW_TICKS
+	if typeof(data["grown"]) != TYPE_BOOL or data["grown"] != grows:
+		return {"error": "mess %d: 'grown' must be %s at its age" % [id, grows]}
+	# No cleaner claims a mess until the cleaner slice.
+	if int(data["claimed_by"]) != 0:
+		return {"error": "mess %d: 'claimed_by' must be 0" % id}
 	var cell := _cell_of(data["cell"])
 	var approach := _cell_of(data["approach"])
 	if cell == NO_CELL or grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
