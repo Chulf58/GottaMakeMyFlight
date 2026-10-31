@@ -49,6 +49,8 @@ const ORTHO_BACK_M := 3.2
 ## the wall's inner face (BuildView.WALL_THICKNESS / 2 = 0.07 m), short of the
 ## piece (0.08 m in from the edge).
 const WALL_CUT_M := 0.075
+## The shower's back section cuts this far behind its middle (_back_cut).
+const SHOWER_BACK_CUT_M := -0.22
 const ORTHO_M := 3.0
 const HANG_MS := 120000
 const CUBE_CELL := Vector2i(24, 5)
@@ -435,7 +437,7 @@ func _stills(prefix: String, ids: Array[int]) -> void:
 	var half := _half_width()
 	var views := [
 		["front", Vector3(0, 0, 1), 0.05, true],
-		["back", Vector3(0, 0, -1), ORTHO_BACK_M - 0.5, false],
+		["back", Vector3(0, 0, -1), ORTHO_BACK_M - 0.5 + _back_cut(prefix), false],
 		["right", Vector3(1, 0, 0), 0.05, true],
 		["left", Vector3(-1, 0, 0), ORTHO_BACK_M - 0.6 - (half - WALL_CUT_M), false],
 		["top", Vector3.UP, 0.05, true],
@@ -448,6 +450,15 @@ func _stills(prefix: String, ids: Array[int]) -> void:
 	_main.add_child(far)
 	far.look_at_from_position(spot + Vector3(5.0, 9.0, 7.5), spot)
 	await _plate(prefix + "_distance", far, ids)
+
+
+## Where the back view's section cuts, out from the piece's middle toward its
+## back (negative): the middle for a sofa or pod, whose sitter sits in front
+## of it; for the shower, whose visitor stands at its middle and would be cut
+## in half there, just behind the body (its back 0.15 m behind the middle):
+## cut at 0.36 m, the cubicle's thick back panel hid the body.
+func _back_cut(prefix: String) -> float:
+	return SHOWER_BACK_CUT_M if prefix == "shower" else 0.0
 
 
 ## Half the piece's width (metres, along x): its footprint's cells.
