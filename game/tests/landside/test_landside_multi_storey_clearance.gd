@@ -9,7 +9,9 @@ extends GdUnitTestSuite
 ## stand in line with the entrance opening, so no car crosses the apron at a
 ## slant; a ground-floor car's way in
 ## and out never climbs or drops more than a few cm, through the gap cut in the
-## ramp kerb, and its sides clear every wall on the way.
+## ramp kerb, and its sides clear every wall on the way. Past the slab's front
+## edge the route is the apron ramp: it stays between road and slab, in the same
+## steps.
 
 const STARTER := preload("res://landside/starter_landside.tres")
 const MULTI_SCENE := preload("res://assets/landside/tc_parking_2a.glb")
@@ -27,6 +29,9 @@ const STEP := 0.25
 ## to 3 cm thick. The kerb it used to cross stands 0.2 m over the ramp.
 const MAX_STEP := 0.04
 const RISE := 0.1
+## The road top the lanes are authored on; the apron ramp runs from it up to the
+## slab.
+const ROAD_Y := 0.1
 ## The ground-floor front wall's middle line, in the asset's own frame (the
 ## wall runs z -23.2 to -21.9, 1.2 m over the floor at y 0.3).
 const FRONT_WALL_Z := -22.55
@@ -199,11 +204,13 @@ func test_a_ground_floor_car_drives_in_and_out_level_through_the_kerb_gap() -> v
 	var worst_at := Vector3.ZERO
 	var worst_rise := 0.0
 	var lines := 0
+	var apron := 0
+	var edge_z := _spot.centre.z - _spot.footprint.y / 2.0
 	for slot in _spot.slots.size():
 		if LandsidePaths.deck_of(_spot, _spot.slots[slot]) != 0:
 			continue
 		var path: PackedVector3Array = _paths.slot_path[1][slot]
-		var route := path.slice(path.find(_spot.entrance[0]), path.size() - 1)
+		var route := path.slice(path.find(_spot.entrance[0]), path.size())
 		assert_int(route.size()).is_greater(4)
 		routes += 1
 		var lowest := INF
@@ -215,18 +222,27 @@ func test_a_ground_floor_car_drives_in_and_out_level_through_the_kerb_gap() -> v
 			var parts := maxi(ceili(a.distance_to(b) / STEP), 1)
 			for part in parts + 1:
 				var at := a.lerp(b, float(part) / parts)
-				var y := _floor_near(at)
+				# Past the slab's front edge the lane is the apron ramp itself (the
+				# asset has no floor there): its height must stay between the road
+				# and the slab, and its steps count like the floor's.
+				var on_apron := at.z < edge_z
+				var y := at.y if on_apron else _floor_near(at)
 				(
 					assert_bool(is_nan(y))
 					. override_failure_message("slot %d: no floor under %s" % [slot, at])
 					. is_false()
 				)
+				if on_apron:
+					apron += 1
+					assert_float(y).is_greater_equal(ROAD_Y - 0.0001)
+					assert_float(y).is_less_equal(_spot.entrance[0].y + 0.0001)
 				if not is_nan(before_y) and absf(y - before_y) > worst_step:
 					worst_step = absf(y - before_y)
 					worst_at = at
 				before_y = y
-				lowest = minf(lowest, y)
-				highest = maxf(highest, y)
+				if not on_apron:
+					lowest = minf(lowest, y)
+					highest = maxf(highest, y)
 				samples += 1
 				# The ramp kerb runs x 1.0 to 1.7 beside the stalls.
 				if at.x > 1.05 and at.x < 1.65 and at.z < -24.0:
@@ -240,7 +256,8 @@ func test_a_ground_floor_car_drives_in_and_out_level_through_the_kerb_gap() -> v
 					lines += _assert_clear(a + s + up, b + s + up, "slot %d route" % slot)
 		worst_rise = maxf(worst_rise, highest - lowest)
 	var report := (
-		"ground-floor routes %d, samples %d, in the kerb gap %d, " % [routes, samples, through_gap]
+		"ground-floor routes %d, samples %d (apron %d), in the kerb gap %d, "
+		% [routes, samples, apron, through_gap]
 	)
 	report += (
 		"worst step %.3f m at %s, rise %.3f m, side lines %d"
@@ -250,6 +267,8 @@ func test_a_ground_floor_car_drives_in_and_out_level_through_the_kerb_gap() -> v
 	assert_int(routes).is_equal(GROUND_SLOTS)
 	# Every route passes the gap both ways (a control: the check met the kerb line).
 	assert_int(through_gap).is_greater_equal(routes * 2)
+	# And down the apron ramp (a control: the route does leave the asset's floor).
+	assert_int(apron).is_greater_equal(routes * 8)
 	assert_float(worst_step).is_less_equal(MAX_STEP)
 	assert_float(worst_rise).is_less_equal(RISE)
 	assert_int(lines).is_greater(routes * 4 * 4)

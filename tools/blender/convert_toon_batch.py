@@ -237,6 +237,9 @@ GROUND = {
     "tc_metal_pole_chain_1a": 0.74,
     # Road paint lifted off the road it lies on (curb_bay.LIFT), so it never z-fights.
     "tp_curb_bay_01a": 0.02,
+    # The apron in front of the entrance goes down to the lawn (the main scene's ground
+    # plane, y -0.1); the building itself still stands on 0 (parking_2a_entrance.py).
+    "tc_parking_2a": -0.10,
 }
 GROUND_CATEGORIES = ("decor", "vehicles", "landside")
 GROUND_TOLERANCE = 0.01
