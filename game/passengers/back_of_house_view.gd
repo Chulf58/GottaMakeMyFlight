@@ -41,16 +41,16 @@ static func penalties(grid: BuildGrid) -> Dictionary:
 		var def := BuildCatalog.get_def(def_id)
 		if PIECE_PENALTY.has(def_id) and def != null:
 			var cells := def.footprint(record["anchor"], record["facing"])
-			_add_seen(out, grid, cells, PIECE_PENALTY[def_id])
+			var low := cells[0]
+			var high := cells[0]
+			for cell in cells:
+				low = Vector2i(mini(low.x, cell.x), mini(low.y, cell.y))
+				high = Vector2i(maxi(high.x, cell.x), maxi(high.y, cell.y))
+			_add_seen(out, grid, Rect2i(low, high - low + Vector2i.ONE), PIECE_PENALTY[def_id])
 	for room_id in grid.room_ids():
 		var room := grid.get_room(room_id)
 		if ROOM_PENALTY.has(room["type"]):
-			var rect: Rect2i = room["rect"]
-			var cells: Array[Vector2i] = []
-			for y in range(rect.position.y, rect.end.y):
-				for x in range(rect.position.x, rect.end.x):
-					cells.append(Vector2i(x, y))
-			_add_seen(out, grid, cells, ROOM_PENALTY[room["type"]])
+			_add_seen(out, grid, room["rect"], ROOM_PENALTY[room["type"]])
 	return out
 
 
@@ -77,20 +77,16 @@ static func _tall_between(grid: BuildGrid, from: Vector2i, to: Vector2i) -> bool
 	return false
 
 
-## Adds `penalty` to every floored cell within REACH of `footprint` that sees
-## it, the footprint cells themselves apart.
-static func _add_seen(
-	out: Dictionary, grid: BuildGrid, footprint: Array[Vector2i], penalty: int
-) -> void:
-	var low := footprint[0]
-	var high := footprint[0]
-	for cell in footprint:
-		low = Vector2i(mini(low.x, cell.x), mini(low.y, cell.y))
-		high = Vector2i(maxi(high.x, cell.x), maxi(high.y, cell.y))
+## Adds `penalty` to every floored cell within REACH of `footprint` (a rectangle
+## of cells, as every piece and room is) that sees it, the footprint cells
+## themselves apart.
+static func _add_seen(out: Dictionary, grid: BuildGrid, footprint: Rect2i, penalty: int) -> void:
+	var low := footprint.position
+	var high := footprint.end - Vector2i.ONE
 	for y in range(low.y - REACH, high.y + REACH + 1):
 		for x in range(low.x - REACH, high.x + REACH + 1):
 			var cell := Vector2i(x, y)
-			if footprint.has(cell) or not grid.in_bounds(cell):
+			if footprint.has_point(cell) or not grid.in_bounds(cell):
 				continue
 			if grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
 				continue

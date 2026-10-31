@@ -236,6 +236,22 @@ func _penalty_through(def_id: StringName) -> int:
 	return world.sim.decor.penalty_at(Vector2i(14, 7))
 
 
+func test_a_large_bag_room_is_worked_out_in_one_pass_and_is_still_right() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(60, 60))
+	var room := Rect2i(8, 8, 40, 40)
+	assert_bool(grid.apply(BuildEdit.place_room(room, &"bag_room")).ok).is_true()
+	var started := Time.get_ticks_msec()
+	var seen := BackOfHouseView.penalties(grid)
+	var elapsed := Time.get_ticks_msec() - started
+	var ring := (40 + 2 * BackOfHouseView.REACH) * (40 + 2 * BackOfHouseView.REACH) - 40 * 40
+	print("40x40 bag room: %d cells see it, worked out in %d ms" % [seen.size(), elapsed])
+	assert_int(seen.size()).is_equal(ring)
+	assert_int(int(seen[Vector2i(7, 20)])).is_equal(2)
+	assert_int(int(seen[Vector2i(6, 6)])).is_equal(2)
+	assert_bool(seen.has(Vector2i(5, 20))).is_false()
+	assert_bool(seen.has(Vector2i(20, 20))).is_false()
+
+
 func test_a_bag_room_costs_two_and_only_outside_it_within_reach() -> void:
 	var decor := _world.sim.decor
 	assert_int(decor.penalty_at(Vector2i(13, 7))).is_equal(0)
