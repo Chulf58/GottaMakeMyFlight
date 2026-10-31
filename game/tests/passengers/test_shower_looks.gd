@@ -311,6 +311,98 @@ func test_the_lather_moves_within_its_envelope() -> void:
 	foam.free()
 
 
+## The body stands inside the lather's envelopes (ShowerFoam.PARTS, measured
+## over every body through both clips), so a view from any side, from behind
+## or from above reaches one of their surface points before the skin: each of
+## them lies inside a still bubble (board item bfe19c1e: the back and the top
+## of the shoulders showed through). The windowed coverage numbers, with the
+## lather moving, are spike/shower_lather_plates_probe.gd's.
+func test_the_lather_closes_every_side_and_the_top_of_the_body() -> void:
+	var bubbles := ShowerFoam.bubbles()
+	var points := _envelope_points()
+	var full := _coverage(points, bubbles, 1.0)
+	# Control: bubbles at 0.6 of their size leave gaps, so the check bites.
+	var thin := _coverage(points, bubbles, 0.6)
+	print(
+		(
+			(
+				"lather: %d bubbles over %d envelope points: %d uncovered, %d covered twice or more"
+				% [bubbles.size(), points.size(), full[0], full[1]]
+			)
+			+ "; at 0.6 of the size %d uncovered" % thin[0]
+		)
+	)
+	assert_int(points.size()).is_greater(2000)
+	assert_int(full[0]).is_equal(0)
+	assert_int(thin[0]).is_greater(50)
+
+
+## Points of the envelopes the body could show through: the side of each
+## envelope (where no other envelope holds it), the top of the body's outside
+## the collar, and the top of the legs' outside the body's.
+func _envelope_points() -> Array[Vector3]:
+	var parts := ShowerFoam.PARTS
+	var out: Array[Vector3] = []
+	for part: Array in parts:
+		var y: float = part[2]
+		while part[3] > part[2] and y <= part[3] + 1e-4:
+			for i in 48:
+				var turn := i * TAU / 48.0
+				var p := Vector3(part[0] + cos(turn) * part[4], y, part[1] + sin(turn) * part[5])
+				var held := false
+				for other: Array in parts:
+					held = held or (other != part and _inside(p, other))
+				if not held:
+					out.append(p)
+			y += 0.03
+	for top: Array in [[parts[0], parts[2]], [parts[1], parts[0]]]:
+		var part: Array = top[0]
+		for ring in range(2, 11):
+			for i in 48:
+				var turn := i * TAU / 48.0
+				var share := ring / 10.0
+				var p := Vector3(
+					part[0] + cos(turn) * part[4] * share,
+					part[3],
+					part[1] + sin(turn) * part[5] * share
+				)
+				if not _inside(p, top[1]):
+					out.append(p)
+	return out
+
+
+## Whether `p` lies inside envelope `part` (with 1 mm to spare).
+func _inside(p: Vector3, part: Array) -> bool:
+	if p.y < part[2] - 1e-3 or p.y > part[3] + 1e-3:
+		return false
+	var x: float = (p.x - part[0]) / (part[4] - 0.001)
+	var z: float = (p.z - part[1]) / (part[5] - 0.001)
+	return x * x + z * z < 1.0
+
+
+## Of `points`, how many lie in no bubble and how many in two or more, the
+## bubbles at `share` of their size.
+func _coverage(points: Array[Vector3], bubbles: Array[Vector4], share: float) -> Array[int]:
+	var bands := {}
+	for b in bubbles:
+		var key := floori(b.y / ShowerFoam.R_MAX)
+		if not bands.has(key):
+			bands[key] = []
+		bands[key].append(b)
+	var bare := 0
+	var twice := 0
+	for p in points:
+		var hits := 0
+		var key := floori(p.y / ShowerFoam.R_MAX)
+		for k in [key - 1, key, key + 1]:
+			for b: Vector4 in bands.get(k, []):
+				if p.distance_to(Vector3(b.x, b.y, b.z)) < b.w * share:
+					hits += 1
+		bare += 1 if hits == 0 else 0
+		twice += 1 if hits >= 2 else 0
+	return [bare, twice]
+
+
 func test_steam_fills_the_cubicle_with_the_lather_and_clears_with_the_rinse() -> void:
 	_open(&"shower")
 	var p := _visitor()

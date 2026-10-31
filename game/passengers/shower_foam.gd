@@ -26,20 +26,34 @@ extends Node3D
 ## chin of the shortest body. Measured 2026-10-31 over the skinned vertices of
 ## all 12 bodies through both clips: the legs need 0.254 by 0.274 m about
 ## (0.017, -0.012), the body without its arms 0.235 by 0.213 m about (0.005,
-## 0.007); each envelope here is about 1 cm larger.
+## 0.007); each envelope here is about 1 cm larger. The last two are single
+## rings that close the top of the body between its envelope and the collar
+## (a shoulder cap), so a view from above (the top, the game camera) does not
+## look down past the collar onto the chest and back (board item bfe19c1e).
 const PARTS: Array[Array] = [
 	[0.0, 0.01, 0.84, 1.56, 0.26, 0.225],
 	[0.017, -0.012, 0.14, 0.88, 0.265, 0.285],
 	[0.0, -0.02, 1.54, 1.6, 0.12, 0.1],
+	[0.0, 0.0, 1.56, 1.56, 0.215, 0.185],
+	[0.0, -0.01, 1.56, 1.56, 0.17, 0.145],
 ]
 ## Bubbles stand on a grid of this spacing over each envelope (jittered by
-## a third of it), with radii between the two below, so neighbours overlap
+## JITTER of it), with radii between the two below, so neighbours overlap
 ## and no body shows through.
 const STEP_M := 0.05
 const R_MIN := 0.034
 const R_MAX := 0.056
+const JITTER := 0.33
 ## Bubbles sit this share of their radius outside the envelope.
 const OUT := 0.3
+## Under that lather, a second layer of sparser, larger bubbles centred on the
+## envelope, on a grid of its own: where two outer bubbles drift apart (by up
+## to 0.7 of a radius between neighbours), it fills the gap, so the body does
+## not show through from behind or the sides (board item bfe19c1e).
+const INNER_STEP_M := 0.06
+const INNER_R_MIN := 0.045
+const INNER_JITTER := 0.15
+const INNER_OUT := 0.0
 const SEED := 7
 ## The lather's motion, as shares of a bubble's radius: how much it swells
 ## and how far it drifts from where it rests (the shader's uniforms).
@@ -220,22 +234,8 @@ static func _build_shared() -> void:
 	rng.seed = SEED
 	var bubbles: Array[Vector4] = []
 	for part in PARTS:
-		var rx: float = part[4]
-		var rz: float = part[5]
-		# Ramanujan's ellipse perimeter, for the number of bubbles around.
-		var around := PI * (3.0 * (rx + rz) - sqrt((3.0 * rx + rz) * (rx + 3.0 * rz)))
-		var cols := ceili(around / STEP_M)
-		var rows := ceili((part[3] - part[2]) / STEP_M) + 1
-		for row in rows:
-			for col in cols:
-				var r := rng.randf_range(R_MIN, R_MAX)
-				var turn := (col + rng.randf_range(-0.33, 0.33) + 0.5 * (row % 2)) * TAU / cols
-				var y := clampf(
-					part[2] + (row + rng.randf_range(-0.33, 0.33)) * STEP_M, part[2], part[3]
-				)
-				var out := Vector2(cos(turn) * rx, sin(turn) * rz)
-				out += out.normalized() * r * OUT
-				bubbles.append(Vector4(part[0] + out.x, y, part[1] + out.y, r))
+		_shell(bubbles, rng, part, [STEP_M, R_MIN, R_MAX, JITTER, OUT])
+		_shell(bubbles, rng, part, [INNER_STEP_M, INNER_R_MIN, R_MAX, INNER_JITTER, INNER_OUT])
 	bubbles.sort_custom(func(a: Vector4, b: Vector4) -> bool: return a.y < b.y)
 	_count = bubbles.size()
 	_buffer.resize(_count * 12)
@@ -244,3 +244,29 @@ static func _build_shared() -> void:
 		var row := [b.w, 0.0, 0.0, b.x, 0.0, b.w, 0.0, b.y, 0.0, 0.0, b.w, b.z]
 		for k in 12:
 			_buffer[i * 12 + k] = row[k]
+
+
+## Adds one layer of bubbles over envelope `part` (PARTS) to `bubbles`:
+## `grid` is [step, smallest radius, largest radius, jitter as a share of the
+## step, share of the radius out of the envelope].
+static func _shell(
+	bubbles: Array[Vector4], rng: RandomNumberGenerator, part: Array, grid: Array
+) -> void:
+	var step: float = grid[0]
+	var jitter: float = grid[3]
+	var rx: float = part[4]
+	var rz: float = part[5]
+	# Ramanujan's ellipse perimeter, for the number of bubbles around.
+	var around := PI * (3.0 * (rx + rz) - sqrt((3.0 * rx + rz) * (rx + 3.0 * rz)))
+	var cols := ceili(around / step)
+	var rows := ceili((part[3] - part[2]) / step) + 1
+	for row in rows:
+		for col in cols:
+			var r := rng.randf_range(grid[1], grid[2])
+			var turn := (col + rng.randf_range(-jitter, jitter) + 0.5 * (row % 2)) * TAU / cols
+			var y := clampf(
+				part[2] + (row + rng.randf_range(-jitter, jitter)) * step, part[2], part[3]
+			)
+			var out := Vector2(cos(turn) * rx, sin(turn) * rz)
+			out += out.normalized() * r * grid[4]
+			bubbles.append(Vector4(part[0] + out.x, y, part[1] + out.y, r))
