@@ -97,11 +97,13 @@ static func is_looker(p: Passenger) -> bool:
 	return posmod(p.id, LOOKER_ONE_IN) == 0
 
 
-## Follows `grid`: the reach is worked out again after any edit.
+## Follows `grid`: the reach is worked out again after any edit. A method, not
+## a lambda, is connected: a lambda reading _dirty would hold this car, which
+## holds the grid, and neither would ever free.
 func bind(grid: BuildGrid) -> void:
 	_grid = grid
 	_dirty = true
-	grid.graph_changed.connect(func(_cells: Array[Vector2i]) -> void: _dirty = true)
+	grid.graph_changed.connect(_on_graph_changed)
 
 
 ## Distance in cells from the nearest car that can be seen from `cell`, or
@@ -138,3 +140,7 @@ func looks(p: Passenger) -> bool:
 		return false
 	var gap := distance_at(BoredomSim.watch_cell(p))
 	return gap != NO_REACH and gap <= LOOK_RADIUS
+
+
+func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	_dirty = true
