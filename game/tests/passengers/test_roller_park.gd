@@ -36,6 +36,8 @@ var _views: PassengerViews
 ## walker lifts its roller into the hand, a move of its own): the test
 ## walker's flight is close.
 var _on_time: Passenger
+## Made late instead (_route()'s late_in): kept late on every tick from then.
+var _late := false
 
 
 func before() -> void:
@@ -227,6 +229,7 @@ func _roller_walker(seated: bool) -> Passenger:
 	_world = PassengerTestWorld.reference_world()
 	_world.run_to(10)
 	_on_time = null
+	_late = false
 	_world.clock.ticked.connect(_keep_on_time)
 	_views = PassengerViews.new()
 	_views.clock = _world.clock
@@ -256,7 +259,7 @@ func _roller_walker(seated: bool) -> Passenger:
 
 func _keep_on_time(_tick_now: int) -> void:
 	if _on_time != null:
-		_on_time.late = false
+		_on_time.late = _late
 
 
 ## One frame `ticks` sim ticks on, as the game draws them.
@@ -270,10 +273,20 @@ func _tick(ticks: float) -> void:
 ## Follows `p`'s roller through its move `name` ("pull>floor" or "floor>pull",
 ## hands left out) at `ticks` a frame, until AFTER_TICKS after it began:
 ## {"frames", "held", "parked", "ticks": how long it took, "fails": lines}.
-func _route(p: Passenger, name: String, ticks: float) -> Dictionary:
+## With `late_in` ("lift" or "park", _late_now()) the walker turns late in
+## that part of the move ("late_k", "-1" never), and every frame of the parking
+## move after that must still draw it pulled (a fail line otherwise).
+func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictionary:
 	var props := _views.carry_on_props()
 	var out := {
-		"frames": 0, "held": 0, "parked": 0, "ticks": -1.0, "fails": [], "worst": 0.0, "grasps": 0
+		"frames": 0,
+		"held": 0,
+		"parked": 0,
+		"ticks": -1.0,
+		"fails": [],
+		"worst": 0.0,
+		"grasps": 0,
+		"late_k": -1.0,
 	}
 	var began := -1.0
 	var last_xf := Transform3D()
@@ -311,6 +324,23 @@ func _route(p: Passenger, name: String, ticks: float) -> Dictionary:
 		var on := FloatCheck.grip_on_gap(props, p.id, 0, body)
 		var holder: int = bag.get("held_by", -1)
 		var lead := CarryLead.hand_of(bag["home"] if name == "floor>pull" else bag["was"])
+		if (
+			late_in != ""
+			and not _late
+			and move == name
+			and _late_now(late_in, name, k, bag, holder)
+		):
+			_late = true
+			p.late = true
+			out["late_k"] = k
+			print("%s turns late at k=%.3f holder %d" % [tag, k, holder])
+		if (
+			_late
+			and k < 1.0
+			and bag.get("park", false)
+			and bag["carry"] != SecurityLooks.Carry.PULL
+		):
+			out["fails"].append("%s parking move no longer pulled" % tag)
 		if holder >= 0:
 			out["held"] += 1
 			out["worst"] = maxf(out["worst"], on[0])
@@ -381,6 +411,21 @@ static func _by_park(name: String, k: float, bag: Dictionary) -> bool:
 	return k > ends.x - 0.06 and k < ends.y + 0.06
 
 
+## Whether a walker in parking move `name` (its record `bag`) at `k`, the bag
+## held by `holder`, is in its part `part`: "lift" the bag in the hand on its
+## way to the park (pull>floor standing up by the bar, floor>pull lifted off the
+## floor by the handle), "park" the bag standing alone at the park.
+static func _late_now(part: String, name: String, k: float, bag: Dictionary, holder: int) -> bool:
+	if part == "park":
+		return _in_park(name, k, bag)
+	if holder < 0:
+		return false
+	if name == "pull>floor":
+		return k > 0.15 and k < RollerPark.STAND_END - 0.05
+	var took: float = bag.get("park_took", 2.0)
+	return k > took + 0.03 and k < RollerPark.up_ends(bag).x - 0.03
+
+
 ## Whether `k` of a parking move `name` (its record `bag`) is inside its parked
 ## share.
 static func _in_park(name: String, k: float, bag: Dictionary) -> bool:
@@ -435,4 +480,72 @@ func test_a_roller_by_a_gate_chair_parks_to_change_grip_on_every_frame() -> void
 			assert_float(float(seen["ticks"])).is_between(
 				ticks_of_move - 0.01, ticks_of_move + 1.01
 			)
+			assert_int(fails.size()).is_equal(0)
+
+
+## A walker turning late while its roller parks (in the lift to the park, or
+## parked alone) keeps the park to its end (RollerPark.holds_lift()): at 1x and
+## 3x, every change of grip under GRASP_M a third of a tick, no FLOAT, GRIP_ON or
+## jump, and the parking move drawn pulled to its end. Controls: the walker
+## turned late in that part and the park's two changes of grip were seen; once
+## the move is over a roller standing up goes into the hand (carried by hand),
+## and one laid on the floor stays as it lies (pulled, its lift kept).
+func test_a_walker_turning_late_mid_park_keeps_the_park_sitting_down() -> void:
+	await _late_mid_park(true)
+
+
+## As above, standing up to walk off (floor>pull).
+func test_a_walker_turning_late_mid_park_keeps_the_park_standing_up() -> void:
+	await _late_mid_park(false)
+
+
+## A walker turning late in a parking move, sitting down (`down`) or standing
+## up, at each part and frame rate (the tests above).
+func _late_mid_park(down: bool) -> void:
+	for part: String in ["lift", "park"]:
+		for ticks: float in FRAME_TICKS:
+			var p := _roller_walker(not down)
+			if down:
+				for n in 4:
+					await _tick(0.5)
+				var seat: Dictionary = _world.sim.layout.seats[0]
+				p.seat_object = seat["object_id"]
+				p.stage = Passenger.Stage.SITTING_DOWN
+				p.clear_path()
+				p.stage_tick = _world.sim.tick
+			var name := "pull>floor" if down else "floor>pull"
+			var seen := await _route(p, name, ticks, part)
+			var fails: Array = seen["fails"]
+			var bag := _views.carry_on_props().bag_state(p.id, 0)
+			var line_of := "late in %s, %s %.2f ticks/frame: late at k=%.3f, held %d parked %d"
+			line_of += " grasps %d took %.2f ticks, worst grip %.3f, carry now %d, fails %d"
+			print(
+				(
+					line_of
+					% [
+						part,
+						name,
+						ticks,
+						seen["late_k"],
+						seen["held"],
+						seen["parked"],
+						seen["grasps"],
+						seen["ticks"],
+						seen["worst"],
+						bag["carry"],
+						fails.size()
+					]
+				)
+			)
+			for line: String in fails.slice(0, 12):
+				print("  ", line)
+			assert_float(float(seen["late_k"])).is_greater_equal(0.0)
+			assert_bool(p.late).is_true()
+			assert_int(int(seen["grasps"])).is_greater_equal(2)
+			var ticks_of_move := RollerPark.TICKS_DOWN if down else RollerPark.TICKS_UP
+			assert_float(float(seen["ticks"])).is_between(
+				ticks_of_move - 0.01, ticks_of_move + 1.01
+			)
+			var carry := SecurityLooks.Carry.PULL if down else SecurityLooks.Carry.HAND
+			assert_int(bag["carry"]).is_equal(carry)
 			assert_int(fails.size()).is_equal(0)

@@ -500,6 +500,9 @@ func sync() -> void:
 				)
 			):
 				hands[i] = (int(was[i]["place"]) / 2) % 2
+			# A roller parking on its wheels or lying on the floor keeps its lift.
+			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):
+				lifts[i] = int(was[i].get("place", 0)) % 2 == 1
 		held["scale"] = SecurityLooks.bag_scale(p)
 		var spots: Array[Transform3D] = []
 		for i in homes.size():

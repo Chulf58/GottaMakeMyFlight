@@ -97,6 +97,28 @@ static func parks(bag: Dictionary, in_stall: bool, home: int) -> bool:
 	)
 
 
+## Whether the lift of `bag` (CarryOnProps' record, a roller, of a bag of
+## `kind` now, going to `home`) is held as it is at `now` (sim tick). A walker
+## turning late lifts its roller into the hand (CarryOnProps._lifted); stamped
+## as a new move in the middle of a park, that move started held in the hand by
+## the bar, not the carry handle the hand had or the park it stood at, and the
+## bag jumped up to 0.215 m. So a parking move keeps its lift to its end (let go
+## at the bar regrasp, floor>pull, the swap into the hand started from the pull's
+## pose behind, not the park, and the bag jumped 0.2 m). A
+## roller staying on the floor keeps it too: lying there it is carried no way
+## (CarryOnProps' floor spot), and a new lift was a pick-up and set-down on the
+## spot, the hand 0.36 m from one frame to the next.
+static func holds_lift(bag: Dictionary, kind: SecurityLooks.Kind, home: int, now: float) -> bool:
+	if kind != SecurityLooks.Kind.ROLLER or bag.get("kind", -1) != kind:
+		return false
+	var place: int = bag.get("place", -2)
+	if home == SecurityLooks.Home.FLOOR and place >= 0 and place / 4 == home:
+		return true
+	if not bag.get("park", false):
+		return false
+	return now - float(bag.get("since", INF)) < CarryLead.ticks_of(bag)
+
+
 ## Stamps a parking move on `bag` (parks()): "park", its length, and
 ## "park_frame", the body's frame (`body`, the frame its "from" is in; yaw only)
 ## the park is placed in; a floor>pull also its reach (CarryLead.reach_of(),
