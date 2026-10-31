@@ -29,14 +29,17 @@ const OUT_REL := "res://../tools/blender/out/room_resize"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 60000
-## The strip of floor: columns 28 to 41, rows 28 to 32.
-const FLOOR_MIN := Vector2i(28, 28)
-const FLOOR_MAX := Vector2i(41, 32)
-const CAFE := Rect2i(29, 29, 4, 3)
-const TOILET := Rect2i(36, 29, 3, 3)
+## The strip of floor, in the middle of the 66 x 30 grid under the default camera:
+## columns 26 to 39, rows 12 to 16. The grid starts with no floor.
+const FLOOR_MIN := Vector2i(26, 12)
+const FLOOR_MAX := Vector2i(39, 16)
+const CAFE := Rect2i(27, 13, 4, 3)
+const TOILET := Rect2i(34, 13, 3, 3)
+## The row the edge is grabbed and dragged in: the cafe's middle row.
+const ROW := 14
 ## Grid lines (x) the east edge is dragged to.
-const LINE_FREE := 34
-const LINE_INTO_TOILET := 37
+const LINE_FREE := 32
+const LINE_INTO_TOILET := 35
 ## A mesh whose top is below this height is ground, not a blocker.
 const GROUND_TOP_M := 0.2
 
@@ -141,10 +144,10 @@ func _on_line(line: int, row: int) -> Vector3:
 	return _at(Vector2i(line, row)) - Vector3(0.5, 0.0, 0.0)
 
 
-## A ground point 0.1 m past grid line `line` in row 30: the edge snaps to the
+## A ground point 0.1 m past grid line `line` in row ROW: the edge snaps to the
 ## line, and the point stays in one cell when the mouse is warped onto it.
 func _drag_point(line: int) -> Vector3:
-	return _on_line(line, 30) + Vector3(0.1, 0.0, 0.0)
+	return _on_line(line, ROW) + Vector3(0.1, 0.0, 0.0)
 
 
 func _drag_room(tool: BuildMode.Tool, rect: Rect2i) -> int:
@@ -174,16 +177,16 @@ func _build_strip() -> void:
 func _drag_plates() -> void:
 	_build.set_tool(BuildMode.Tool.CAFE_ROOM)
 	# A press 0.1 m inside the cafe's east edge, in its middle row.
-	var press := _on_line(CAFE.end.x, 30) - Vector3(0.1, 0.0, 0.0)
+	var press := _on_line(CAFE.end.x, ROW) - Vector3(0.1, 0.0, 0.0)
 	_build.begin_area(press)
 	if not _build.is_dragging():
 		_invalid("the press did not start a drag")
 		return
-	await _drag_plate("valid", LINE_FREE, Rect2i(29, 29, 5, 3), true, "Cafe 5 x 3")
+	await _drag_plate("valid", LINE_FREE, Rect2i(27, 13, 5, 3), true, "Cafe 5 x 3")
 	await _drag_plate(
 		"refused",
 		LINE_INTO_TOILET,
-		Rect2i(29, 29, 8, 3),
+		Rect2i(27, 13, 8, 3),
 		false,
 		"Cafe 8 x 3  Overlaps another room"
 	)
@@ -238,7 +241,7 @@ func _drag_plate(label: String, line: int, expected: Rect2i, fits: bool, status:
 func _released_plate() -> void:
 	_beat("released")
 	var room := _build.grid.get_room(_cafe_id)
-	var expected := Rect2i(29, 29, 5, 3)
+	var expected := Rect2i(27, 13, 5, 3)
 	print(
 		(
 			"RELEASED room_id=%d rect=%s ghost_slabs=%d status='%s'"
