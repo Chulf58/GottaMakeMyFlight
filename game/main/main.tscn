@@ -37,7 +37,7 @@
 [ext_resource type="Script" path="res://ambient/bird_flock.gd" id="33_birdflock"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
-size = Vector2(700, 700)
+size = Vector2(2400, 2400)
 
 [sub_resource type="StandardMaterial3D" id="Material_ground"]
 albedo_color = Color(0.36, 0.5, 0.3, 1)
