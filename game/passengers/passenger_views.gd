@@ -106,10 +106,16 @@ func tick_position(id: int, current: bool) -> Vector3:
 
 
 ## Where a passenger is drawn on this tick: the sim's position, moved onto
-## its chair's pan at a gate seat (GateChairs) and by its drawn offset at
+## its chair's pan at a gate seat (GateChairs), onto its seat or into the
+## shower on an activity visit (ActivityPoses) and by its drawn offset at
 ## security (SecurityLooks).
 func draw_position(p: Passenger) -> Vector3:
-	return sim.world_position(p) + GateChairs.offset(sim, p) + _offsets.get(p.id, Vector3.ZERO)
+	return (
+		sim.world_position(p)
+		+ GateChairs.offset(sim, p)
+		+ ActivityPoses.offset(sim, p)
+		+ _offsets.get(p.id, Vector3.ZERO)
+	)
 
 
 ## A passenger's drawn offset at security now.
@@ -268,6 +274,13 @@ func _take(p: Passenger) -> Node3D:
 	for sprite_name in NeedIcons.SPRITES:
 		node.add_child(NeedIcons.make_sprite(sprite_name))
 	node.add_child(WishIconView.make_sprite())
+	node.add_child(ShowerFoam.new())
+	# First on the skeleton, so it runs after the animation and before the
+	# carry modifiers CarryOnProps adds later.
+	var recline := PodRecline.new()
+	recline.name = "PodRecline"
+	node.find_children("*", "Skeleton3D", true, false)[0].add_child(recline)
+	node.set_meta(&"recline", recline)
 	add_child(node)
 	return node
 
@@ -291,13 +304,18 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
 	var moving := (outside and p.apron_mm < p.apron_total_mm()) or p.is_moving()
 	var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
-	if _at_security(p) or _stepping_in_stall(p):
+	var activity := ActivityPoses.kind(sim, p)
+	var showering := activity == ActivityPoses.Kind.SHOWER
+	if _at_security(p) or _stepping_in_stall(p) or showering:
 		# The drawn step, so a held-back queue front does not walk in place and
-		# a step to the table, or into or out of a toilet stall, is not an idle
-		# slide.
+		# a step to the table, into or out of a toilet stall or into or out of
+		# a shower, is not an idle slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
 		moving = mm > 0
-	match StageKinds.pose(p.stage):
+	var seat_pose := StageKinds.pose(p.stage)
+	if activity != ActivityPoses.Kind.NONE:
+		seat_pose = ActivityPoses.pose(sim, p)
+	match seat_pose:
 		StageKinds.Pose.SITTING_DOWN:
 			clip = "sit_down"
 			base = SIT_CLIP_SECONDS / (PassengerSim.SIT_DOWN_TICKS / float(SimClock.TICK_RATE))
@@ -322,7 +340,8 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var at_stall := (
 		where == StageKinds.Location.FACILITY_SEAT and sim.toilets.use_facing(p) != Vector2i.ZERO
 	)
-	node.set_meta(&"seated", at_gate or at_cafe or at_stall)
+	var staying := activity != ActivityPoses.Kind.NONE
+	node.set_meta(&"seated", at_gate or at_cafe or at_stall or staying)
 	var works := SecurityLooks.face(sim, p)
 	node.set_meta(&"faces", works != Vector2.ZERO)
 	if at_gate:
@@ -336,6 +355,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		# Seated at Mount_Use, facing out of the stall door.
 		var out := sim.toilets.use_facing(p)
 		node.rotation.y = atan2(out.x, out.y)
+	elif staying:
+		# On the sofa or in the pod, or in the shower: facing out of the piece.
+		var out := ActivityPoses.facing(sim, p)
+		node.rotation.y = atan2(out.x, out.y)
 	elif works != Vector2.ZERO:
 		node.rotation.y = atan2(works.x, works.y)
 	elif sim.shops.browse_facing(p) != Vector2i.ZERO:
@@ -346,6 +369,8 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		# Waiting in a cafe queue or ordering: face the counter.
 		var ahead := sim.cafes.counter_facing(p)
 		node.rotation.y = atan2(ahead.x, ahead.y)
+	(node.get_meta(&"recline") as PodRecline).amount = ActivityPoses.recline(sim, p)
+	(node.get_node("ShowerFoam") as ShowerFoam).set_amount(ActivityPoses.foam(sim, p))
 	node.set_meta(&"base_speed", base)
 	if node.get_meta(&"clip", "") != clip:
 		node.set_meta(&"clip", clip)
