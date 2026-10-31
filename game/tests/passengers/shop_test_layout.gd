@@ -21,9 +21,12 @@ const AIRSIDE_CELL := Vector2i(19, 6)
 ## A grid holding the reference terminal, the floor east of it and a kiosk on
 ## each side named in `sides` ("air", "land"), and their ids: {"<side>_room",
 ## "<side>_counter", "<side>_displays" (object ids, north first)}. With no
-## sides it is the floor alone, the control a kiosk is compared with.
-static func build(grid: BuildGrid, sides: Array = ["air"], displays := 2) -> Dictionary:
-	var built := ReferenceTerminal.build(grid)
+## sides it is the floor alone, the control a kiosk is compared with. A probe
+## in the real main scene passes its shell (ReferenceTerminal.build).
+static func build(
+	grid: BuildGrid, sides: Array = ["air"], displays := 2, shell: ShellDefinition = null
+) -> Dictionary:
+	var built := ReferenceTerminal.build(grid, shell)
 	assert(built, "reference terminal refused")
 	var edits: Array[BuildEdit] = []
 	for y in range(FLOOR.position.y, FLOOR.end.y):

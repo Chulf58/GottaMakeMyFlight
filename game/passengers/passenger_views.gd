@@ -11,6 +11,11 @@ extends Node3D
 
 ## Bodies, tints, bag colours and clip speeds: PassengerLooks.
 const SIT_CLIP_SECONDS := 1.2
+## On an activity visit, a sit_down or stand_up clip more than this many
+## ticks, plus the ticks one frame runs at the clock's speed, away from where
+## the sim is in it is sought there: frames play the clip between ticks and
+## may run it a frame ahead of or behind the sim.
+const SEEK_SLACK_TICKS := 1.5
 const LOOPED := ["idle", "walk", "run", "sit_idle"]
 const MISSED_LINGER_TICKS := 200
 const BUBBLE_HEIGHT := 2.5
@@ -41,6 +46,11 @@ var _props := CarryOnProps.new()
 ## Passenger id -> its drawn offset at security (SecurityLooks.target_offset),
 ## moved toward the target at walking speed once per tick.
 var _offsets: Dictionary = {}
+## Passenger id -> its drawn step onto a seat or into a shower on an activity
+## visit, moved toward ActivityPoses.offset() by at most a walking step a tick,
+## so a stay cut short or a removed piece eases the body back instead of
+## jumping. Holds no tick; snap() restarts it from the loaded world.
+var _seats: Dictionary = {}
 
 
 func _ready() -> void:
@@ -106,10 +116,16 @@ func tick_position(id: int, current: bool) -> Vector3:
 
 
 ## Where a passenger is drawn on this tick: the sim's position, moved onto
-## its chair's pan at a gate seat (GateChairs) and by its drawn offset at
+## its chair's pan at a gate seat (GateChairs), onto its seat or into the
+## shower on an activity visit (ActivityPoses) and by its drawn offset at
 ## security (SecurityLooks).
 func draw_position(p: Passenger) -> Vector3:
-	return sim.world_position(p) + GateChairs.offset(sim, p) + _offsets.get(p.id, Vector3.ZERO)
+	return (
+		sim.world_position(p)
+		+ GateChairs.offset(sim, p)
+		+ _seats.get(p.id, Vector3.ZERO)
+		+ _offsets.get(p.id, Vector3.ZERO)
+	)
 
 
 ## A passenger's drawn offset at security now.
@@ -126,6 +142,7 @@ func sync() -> void:
 			continue
 		seen[id] = true
 		_chase(p)
+		_chase_seat(p)
 		var now := draw_position(p)
 		if not _nodes.has(id):
 			_nodes[id] = _take(p)
@@ -150,11 +167,19 @@ func sync() -> void:
 func snap() -> void:
 	for id in sim.passenger_ids():
 		_offsets.erase(id)
+		_seats.erase(id)
+		var seat := ActivityPoses.offset(sim, sim.get_passenger(id))
+		if seat != Vector3.ZERO:
+			_seats[id] = seat
 		# A load starts every tray and bag over, with no transfer from before.
 		_props.release(id)
 		var target := SecurityLooks.target_offset(sim, sim.get_passenger(id))
 		if target != Vector3.ZERO:
 			_offsets[id] = target
+		# Every clip is played again from the loaded tick: a node kept through
+		# the load still plays the clip it had, from where it was before.
+		if _nodes.has(id):
+			(_nodes[id] as Node3D).set_meta(&"clip", "")
 	sync()
 	for id in _cur:
 		_prev[id] = _cur[id]
@@ -280,6 +305,8 @@ func _release(id: int) -> void:
 	_pool[node.get_meta(&"body")].append(node)
 	_nodes.erase(id)
 	_offsets.erase(id)
+	_seats.erase(id)
+	ActivityPoses.dress(node, 0.0, 0.0)
 	_props.release(id)
 	_prev.erase(id)
 	_cur.erase(id)
@@ -291,13 +318,18 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
 	var moving := (outside and p.apron_mm < p.apron_total_mm()) or p.is_moving()
 	var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
-	if _at_security(p) or _stepping_in_stall(p):
+	var activity := ActivityPoses.kind(sim, p)
+	var showering := activity == ActivityPoses.Kind.SHOWER
+	if _at_security(p) or _stepping_in_stall(p) or showering:
 		# The drawn step, so a held-back queue front does not walk in place and
-		# a step to the table, or into or out of a toilet stall, is not an idle
-		# slide.
+		# a step to the table, into or out of a toilet stall or into or out of
+		# a shower, is not an idle slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
 		moving = mm > 0
-	match StageKinds.pose(p.stage):
+	var seat_pose := StageKinds.pose(p.stage)
+	if activity != ActivityPoses.Kind.NONE:
+		seat_pose = ActivityPoses.pose(sim, p)
+	match seat_pose:
 		StageKinds.Pose.SITTING_DOWN:
 			clip = "sit_down"
 			base = SIT_CLIP_SECONDS / (PassengerSim.SIT_DOWN_TICKS / float(SimClock.TICK_RATE))
@@ -322,7 +354,8 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var at_stall := (
 		where == StageKinds.Location.FACILITY_SEAT and sim.toilets.use_facing(p) != Vector2i.ZERO
 	)
-	node.set_meta(&"seated", at_gate or at_cafe or at_stall)
+	var staying := activity != ActivityPoses.Kind.NONE
+	node.set_meta(&"seated", at_gate or at_cafe or at_stall or staying)
 	var works := SecurityLooks.face(sim, p)
 	node.set_meta(&"faces", works != Vector2.ZERO)
 	if at_gate:
@@ -336,6 +369,10 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		# Seated at Mount_Use, facing out of the stall door.
 		var out := sim.toilets.use_facing(p)
 		node.rotation.y = atan2(out.x, out.y)
+	elif staying:
+		# On the sofa or in the pod, or in the shower: facing out of the piece.
+		var out := ActivityPoses.facing(sim, p)
+		node.rotation.y = atan2(out.x, out.y)
 	elif works != Vector2.ZERO:
 		node.rotation.y = atan2(works.x, works.y)
 	elif sim.shops.browse_facing(p) != Vector2i.ZERO:
@@ -346,10 +383,28 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		# Waiting in a cafe queue or ordering: face the counter.
 		var ahead := sim.cafes.counter_facing(p)
 		node.rotation.y = atan2(ahead.x, ahead.y)
+	ActivityPoses.dress(node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p))
 	node.set_meta(&"base_speed", base)
-	if node.get_meta(&"clip", "") != clip:
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	var changed: bool = node.get_meta(&"clip", "") != clip
+	if changed:
 		node.set_meta(&"clip", clip)
-		(node.get_node("AnimationPlayer") as AnimationPlayer).play(clip)
+		player.play(clip)
+	if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
+		# A view made or snapped mid-way (a load, a passenger just drawn)
+		# starts the clip where the sim is in it, not from its first frame.
+		var at := ActivityPoses.clip_ticks(sim, p) * SimClock.STEP * base
+		if changed:
+			player.seek(at, true)
+		elif activity != ActivityPoses.Kind.NONE and player.current_animation == clip:
+			# Only an activity stay can move the sim on within a clip (its
+			# deadline brought closer during a stand-up); a seat stage's clip
+			# runs its fixed ticks and is left to the frames, which seat
+			# moves such as RollerPark follow.
+			var speed := clock.speed if clock != null else 1
+			var slack := (SEEK_SLACK_TICKS + speed) * SimClock.STEP * base
+			if absf(player.current_animation_position - at) > slack:
+				player.seek(at, true)
 	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
@@ -366,6 +421,18 @@ func _chase(p: Passenger) -> void:
 		_offsets.erase(p.id)
 	else:
 		_offsets[p.id] = now
+
+
+## Moves a passenger's drawn activity step toward ActivityPoses.offset() by
+## at most a walking step: exactly onto it while the stay eases in and out.
+func _chase_seat(p: Passenger) -> void:
+	var target := ActivityPoses.offset(sim, p)
+	var now: Vector3 = _seats.get(p.id, Vector3.ZERO)
+	now = now.move_toward(target, PassengerSim.WALK_MM / 1000.0)
+	if now == Vector3.ZERO:
+		_seats.erase(p.id)
+	else:
+		_seats[p.id] = now
 
 
 func _at_security(p: Passenger) -> bool:

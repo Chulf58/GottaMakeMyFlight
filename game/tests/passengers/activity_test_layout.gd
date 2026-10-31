@@ -17,9 +17,10 @@ const TYPES: Array[StringName] = [&"play_area", &"lounge", &"shower", &"nap_pod"
 
 
 ## A grid holding ShopTestLayout's floor and a ready `type` room in its
-## airside half, and its ids: {"room", "use" (the use piece's object id)}.
-static func build(grid: BuildGrid, type: StringName) -> Dictionary:
-	ShopTestLayout.build(grid, [])
+## airside half, and its ids: {"room", "use" (the use piece's object id)}. A
+## probe in the real main scene passes its shell.
+static func build(grid: BuildGrid, type: StringName, shell: ShellDefinition = null) -> Dictionary:
+	ShopTestLayout.build(grid, [], 2, shell)
 	var ids := {
 		"room": _apply(grid, BuildEdit.place_room(ShopTestLayout.AIRSIDE_ROOM, type)).room_id
 	}
