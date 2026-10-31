@@ -108,13 +108,16 @@ func test_a_case_off_the_floor_is_held_with_the_palm_over_its_top() -> void:
 	assert_vector(over[TRAY_AT] as Vector3).is_equal_approx(Vector3.ZERO, Vector3.ONE * 0.0001)
 
 
-## A hard case lifted off the floor rises to the height over the feet the hand
-## had when its move was first drawn, not to where the hand is now: with the
-## hand drawn 0.3 m higher mid-move (as the move's own reach had pumped it),
-## the case is where it is with the hand where it was. A new move ("since")
-## measures again. Control: the end itself follows the higher hand. Board item
-## 2fbf5edb: on main the path rose with the hand, crossing probe seed 777.
-func test_a_case_off_the_floor_rises_to_the_hand_as_the_move_began() -> void:
+## A hard case lifted off the floor rises to a fixed height over the feet
+## (CarryLead.FLOOR_CASE_END_M), not to where the hand is drawn: the same move
+## first drawn with the hand low (early in a stand-up) or 0.3 m higher (late,
+## or already pumped up by the move's own reach), then drawn mid-move, puts the
+## case at one height, and at the end of the carry its grip is
+## FLOOR_CASE_END_M over the feet. Control: the ends handed in are 0.3 m apart.
+## Board item 2fbf5edb: on main the path rose with the hand (crossing probe seed
+## 777); in ebe2a76 the height was taken from whichever frame drew the move
+## first (Sol review).
+func test_a_case_off_the_floor_rises_to_a_fixed_height() -> void:
 	var lying := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
 	var flags := {"from_floor": true, "yaw": 0.0, "hand": 0}
 	var s := CarryLead.span(CarryLead.End.REST, CarryLead.End.HELD)
@@ -124,19 +127,28 @@ func test_a_case_off_the_floor_rises_to_the_hand_as_the_move_began() -> void:
 	high["grips"] = [Vector3(-0.3, 1.1, 0.05), Vector3(0.3, 1.1, 0.05)]
 	var at := func(body: Dictionary) -> Transform3D:
 		return CarryOnProps.carried(body["grips"][0], Vector3.ZERO, 0.0, 1.0)
-	var bag := _bag(FLOOR_AT, lying)
-	bag["since"] = 10.0
-	CarryLead.plan(bag, 0.0, lying, at.call(low), Transform3D(), flags, low)
-	var pumped := CarryLead.plan(bag, mid, lying, at.call(high), Transform3D(), flags, high)
+	var apart: float = (
+		(at.call(high) as Transform3D).origin.y - (at.call(low) as Transform3D).origin.y
+	)
+	assert_float(apart).is_equal_approx(0.3, 0.0001)
+	var heights := []
+	for first: Dictionary in [low, high]:
+		var bag := _bag(FLOOR_AT, lying)
+		bag["since"] = 10.0
+		CarryLead.plan(bag, 0.0, lying, at.call(first), Transform3D(), flags, first)
+		var later := CarryLead.plan(bag, mid, lying, at.call(high), Transform3D(), flags, high)
+		heights.append((later["xf"] as Transform3D).origin.y)
+	assert_float(heights[0]).is_equal_approx(heights[1], 0.0001)
 	var fresh := CarryLead.plan(
 		_bag(FLOOR_AT, lying), mid, lying, at.call(low), Transform3D(), flags, low
 	)
-	var y_pumped: float = (pumped["xf"] as Transform3D).origin.y
-	var y_fresh: float = (fresh["xf"] as Transform3D).origin.y
-	assert_float(y_pumped).is_equal_approx(y_fresh, 0.0001)
-	bag["since"] = 20.0
-	var again := CarryLead.plan(bag, mid, lying, at.call(high), Transform3D(), flags, high)
-	assert_float((again["xf"] as Transform3D).origin.y - y_fresh).is_greater(0.1)
+	assert_float((fresh["xf"] as Transform3D).origin.y).is_equal_approx(heights[0], 0.0001)
+	var edge := CarryOnProps.grip_anchor(SecurityLooks.Kind.CASE)
+	var done := CarryLead.plan(
+		_bag(FLOOR_AT, lying), 0.999, lying, at.call(high), Transform3D(), flags, high
+	)
+	var end_y: float = ((done["xf"] as Transform3D) * edge).y
+	assert_float(end_y).is_equal_approx(CarryLead.FLOOR_CASE_END_M, 0.01)
 
 
 ## Reaching for a pack on the back the hand starts at the side hang and ends at

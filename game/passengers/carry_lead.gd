@@ -105,6 +105,13 @@ const STALL_CASE_EDGE_OUT_M := 0.08
 ## the case's top behind the hand (crossing probe seed 777, Forearm.R in the
 ## case at k 0.46, board item 2fbf5edb).
 const FLOOR_PALM_FADE := Vector2(0.6, 1.0)
+## And it rises to its side carry with the grip this high over the feet
+## (floor_end()): measured in the side carry at the end of that move (1.023 and
+## 1.026 m, crossing probe seed 4242). A fixed height, not the hand's as drawn
+## on the move's first frame: that frame comes several ticks late at 3x or after
+## a slow frame, part way through a stand-up (1.146 m measured; Sol review of
+## ebe2a76).
+const FLOOR_CASE_END_M := 1.02
 
 
 ## Where a bag of `kind` standing in a stall is held (its own frame, the bag
@@ -127,21 +134,13 @@ static func floor_palm(t: float) -> float:
 
 
 ## The end of a hard case's lift off the floor into the hand (`want`, held at
-## `grip_at`, world, with the body drawn at `frame`), at the height over the
-## feet the hand had when this move of `bag` (CarryOnProps' record, its
-## "since") was first drawn, kept on the record: `want` follows the hand as
-## posed now, which this move poses, so a path rising to it raised the hand,
-## the end with it, and the hand again; its knee lift (and floor_palm()) pumped
-## the hand up past its carry, the forearm rising from a low elbow across the
-## case's top (crossing probe seed 777, board item 2fbf5edb).
-static func held_end(
-	bag: Dictionary, frame: Transform3D, want: Transform3D, grip_at: Vector3
-) -> Transform3D:
-	var since: float = bag.get("since", 0.0)
-	if not bag.has("end_since") or bag["end_since"] != since:
-		bag["end_since"] = since
-		bag["end_y"] = grip_at.y - frame.origin.y
-	return want.translated(Vector3.UP * (frame.origin.y + float(bag["end_y"]) - grip_at.y))
+## `grip_at`, world, with the body drawn at `frame`), with its grip
+## FLOOR_CASE_END_M over the feet, not where the hand is drawn now: `want`
+## follows the hand, which this move poses, so a path rising to it raised the
+## hand, the end with it, and the hand again (crossing probe seed 777, board
+## item 2fbf5edb).
+static func floor_end(frame: Transform3D, want: Transform3D, grip_at: Vector3) -> Transform3D:
+	return want.translated(Vector3.UP * (frame.origin.y + FLOOR_CASE_END_M - grip_at.y))
 
 
 ## How far (0 to 1) a bag picked up in a stall has tipped from standing into
@@ -498,7 +497,7 @@ static func plan(
 	elif stall and from_end == End.REST and to_end == End.HELD and not roller:
 		anchor_from = anchor_to
 	var held_at := anchor_from.lerp(anchor_to, t)
-	# A hard case lifted off the floor into the hand outside a stall (held_end(),
+	# A hard case lifted off the floor into the hand outside a stall (floor_end(),
 	# floor_palm()).
 	var floor_case: bool = (
 		bag["kind"] == SecurityLooks.Kind.CASE
@@ -554,7 +553,7 @@ static func plan(
 			if not roller:
 				goal = want.translated(Vector3.UP * maxf(low - (want * anchor_to).y, 0.0))
 		elif floor_case:
-			goal = held_end(bag, frame, want, want * anchor_to)
+			goal = floor_end(frame, want, want * anchor_to)
 		on_path = path(start, goal, t, frame, bag["from"], lift)
 		# (In a stall path() turns it: upright, tipped late into the carry.)
 		if (from_end == End.REST or to_end == End.REST) and not stall:
