@@ -136,12 +136,12 @@ func test_bad_parts_are_refused_whole() -> void:
 
 func test_the_previous_part_version_is_refused_naming_the_version_it_needs() -> void:
 	var old: Dictionary = _data.duplicate(true)
-	# Version 6: the multi-storey's lanes gained ramp points, so a version-5
+	# Version 7: the multi-storey's lanes gained sidewalk points, so a version-6
 	# lane position names a different place.
-	old["save_version"] = 5
+	old["save_version"] = 6
 	var loaded := LandsideSnapshot.load(old, LandsideTestWorld.with_berths(1))
-	assert_int(LandsideSnapshot.SAVE_VERSION).is_equal(6)
-	assert_str(str(loaded.get("error", ""))).is_equal("save_version must be 6")
+	assert_int(LandsideSnapshot.SAVE_VERSION).is_equal(7)
+	assert_str(str(loaded.get("error", ""))).is_equal("save_version must be 7")
 
 
 func test_a_booking_for_a_flight_not_scheduled_breaks_the_link() -> void:

@@ -97,13 +97,17 @@ func after() -> void:
 ## it is drawn moving, except backing out of a stall, where it points back.
 ## (Until cars drove a berth's or slot's path, the place was read at alpha 0.5;
 ## now a car can be drawn on the lane it just left at that alpha.)
+## Noses and moves are compared flat (board 0b82b7e4): a car now pitches on a
+## slope by its two axles, so going over a kerb its origin rises more steeply
+## than its nose points, and the rule here is the way it heads, not its pitch
+## (TestLandsideCarPitch checks that).
 func _check_tick() -> void:
 	for id in _landside.vehicle_ids():
 		if not _views.has_vehicle(id):
 			continue
 		var v := _landside.get_vehicle(id)
 		var pose := _views.pose_at(id, 1.0)
-		var nose := pose.basis.z
+		var nose := _flat(pose.basis.z)
 		var place := _place_name(v, pose.origin)
 		var want := _want(place)
 		if place == "slot":
@@ -114,11 +118,13 @@ func _check_tick() -> void:
 		_covered[place] = int(_covered.get(place, 0)) + 1
 		if want != Vector3.ZERO and nose.dot(want) < 0.99:
 			_wrong.append("%s vehicle %d nose %s want %s" % [place, id, nose, want])
-		var mid := _views.pose_at(id, 0.5).basis.z
+		var mid := _flat(_views.pose_at(id, 0.5).basis.z)
 		var a := _views.pose_at(id, 0.45).origin
 		var b := _views.pose_at(id, 0.55).origin
-		var moved := b - a
-		var same_heading := _views.pose_at(id, 0.45).basis.z.dot(_views.pose_at(id, 0.55).basis.z)
+		var moved := Vector3(b.x - a.x, 0.0, b.z - a.z)
+		var same_heading := _flat(_views.pose_at(id, 0.45).basis.z).dot(
+			_flat(_views.pose_at(id, 0.55).basis.z)
+		)
 		if moved.length() > 0.01 and same_heading > 0.999:
 			_moving_checked += 1
 			var way := mid.dot(moved.normalized())
@@ -127,6 +133,10 @@ func _check_tick() -> void:
 				way = -way
 			if way < 0.99:
 				_wrong.append("%s vehicle %d moves %s nose %s" % [place, id, moved, mid])
+
+
+static func _flat(v: Vector3) -> Vector3:
+	return Vector3(v.x, 0.0, v.z).normalized()
 
 
 ## Whether the car is drawn backing out of its stall halfway through the tick
@@ -157,7 +167,10 @@ func _place_name(v: LandsideVehicle, at: Vector3) -> String:
 	# corner itself either heading is right.
 	if absf(at.z - -45.0) > 0.01:
 		return "exit_to_road"
-	var corner: Vector3 = _landside.definition.lots[v.lot].exit[1]
+	# The corner is the exit lane's last bend (the multi-storey's lane has
+	# sidewalk points before it).
+	var exit := _landside.definition.lots[v.lot].exit
+	var corner: Vector3 = exit[exit.size() - 2]
 	return "exit_far_carriageway" if at.x > corner.x + 0.01 else "exit_corner"
 
 
