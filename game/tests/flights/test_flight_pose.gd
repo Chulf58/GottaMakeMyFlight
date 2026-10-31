@@ -91,3 +91,58 @@ func test_pushback_swings_the_nose_while_moving_back() -> void:
 	assert_float(start.basis.z.dot(Vector3.BACK)).is_equal_approx(1.0, 0.001)
 	assert_float(end.basis.z.dot(Vector3.BACK)).is_less(0.0)
 	assert_that(end.origin).is_equal(Vector3(0, 0, -30))
+
+
+func _l_track() -> PackedVector3Array:
+	var corners := PackedVector3Array(
+		[Vector3(0, 50, 0), Vector3(0, 50, 300), Vector3(300, 50, 300)]
+	)
+	return Airside.round_corners(corners, 100.0, 45.0, 4.0)
+
+
+## The arc of a 100 m turn starts 200 m along and is 157 m long. The nose turns
+## from +Z to +X, a left turn, so the left wing (+X) dips into it.
+func test_a_sky_turn_banks_into_the_turn_and_levels_on_the_straights() -> void:
+	var track := _l_track()
+	var straight := FlightPose.climb_out_pose(track, 60.0)
+	var turning := FlightPose.climb_out_pose(track, 200.0 + PI * 100.0 / 4.0)
+	var after_turn := FlightPose.climb_out_pose(track, FlightPose.path_length(track) - 50.0)
+	assert_float(straight.basis.x.y).is_equal_approx(0.0, 0.001)
+	assert_float(turning.basis.x.y).is_between(-0.4, -0.15)
+	assert_float(after_turn.basis.x.y).is_equal_approx(0.0, 0.001)
+	(
+		assert_float(after_turn.basis.z.slide(Vector3.UP).normalized().dot(Vector3.RIGHT))
+		. is_equal_approx(1.0, 0.0001)
+	)
+
+
+## The lead-in descends into its last point on the approach pitch; the
+## climb-out leaves its first point on the climb pitch; both stay under the
+## ceiling.
+func test_sky_poses_leave_and_meet_their_join_on_its_pitch() -> void:
+	var track := _l_track()
+	var length := FlightPose.path_length(track)
+	var lead_end := FlightPose.lead_in_pose(track, length)
+	var climb_start := FlightPose.climb_out_pose(track, 0.0)
+	assert_that(lead_end.origin).is_equal(track[track.size() - 1])
+	assert_that(climb_start.origin).is_equal(track[0])
+	assert_float(asin(lead_end.basis.z.y)).is_equal_approx(FlightPose.APPROACH_PITCH, 0.0001)
+	assert_float(asin(climb_start.basis.z.y)).is_equal_approx(FlightPose.CLIMB_PITCH, 0.0001)
+	var far_lead := FlightPose.lead_in_pose(track, 0.0)
+	assert_float(far_lead.origin.y).is_greater(70.0).is_less(FlightPose.SKY_CEILING)
+	assert_float(far_lead.basis.z.y).is_less(0.0)
+
+
+func test_flat_speed_is_the_speed_a_sky_phase_joins_at() -> void:
+	var path := PackedVector3Array([Vector3(0, 0, 0), Vector3(100, 0, 0), Vector3(400, 40, 0)])
+	var length := FlightPose.path_length(path)
+	var last := path[1].distance_to(path[2])
+	var takeoff := FlightPose.flat_speed(FlightSim.State.TAKEOFF, 1.0, path, 200.0)
+	assert_float(takeoff).is_equal_approx(2.0 * length / 200.0 * 300.0 / last, 0.0001)
+	var approach := FlightPose.flat_speed(FlightSim.State.APPROACH, 0.0, path, 100.0)
+	assert_float(approach).is_equal_approx(length / 100.0, 0.0001)
+	# The pose itself moves at that speed over the takeoff's last 0.1%.
+	var a := FlightPose.pose(FlightSim.State.TAKEOFF, 0.999, path, Vector3.RIGHT).origin
+	var b := FlightPose.pose(FlightSim.State.TAKEOFF, 1.0, path, Vector3.RIGHT).origin
+	var flat_step := Vector2(b.x - a.x, b.z - a.z).length() / (0.001 * 200.0)
+	assert_float(flat_step).is_equal_approx(takeoff, 0.01)

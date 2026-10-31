@@ -69,3 +69,27 @@ func test_airside_reports_a_missing_waypoint() -> void:
 	var airside := _airside()
 	airside.get_node("Stand").free()
 	assert_bool(airside.rebuild()).is_false()
+
+
+## An L corner rounded at 100 m: the arc points sit 100 m from the turn's centre
+## and the track keeps its ends. A 1000 m radius does not fit and gets the
+## widest turn that leaves the 45 m end straights.
+func test_round_corners_turns_on_a_circle_that_fits() -> void:
+	var corners := PackedVector3Array([Vector3(0, 9, 0), Vector3(0, 9, 300), Vector3(300, 9, 300)])
+	var track := Airside.round_corners(corners, 100.0, 45.0, 4.0)
+	assert_that(track[0]).is_equal(corners[0])
+	assert_that(track[track.size() - 1]).is_equal(corners[2])
+	assert_int(track.size()).is_greater(30)
+	for i in range(1, track.size() - 1):
+		assert_float(track[i].distance_to(Vector3(100, 9, 200))).is_equal_approx(100.0, 0.01)
+		assert_float(track[i].y).is_equal(9.0)
+	var wide := Airside.round_corners(corners, 1000.0, 45.0, 4.0)
+	assert_float(wide[1].distance_to(Vector3(0, 9, 45))).is_less(0.01)
+	assert_float(wide[2].distance_to(Vector3(255, 9, 45))).is_equal_approx(255.0, 0.01)
+
+
+func test_the_airside_gives_both_sky_tracks() -> void:
+	var airside := _airside()
+	assert_bool(airside.rebuild()).is_true()
+	assert_int(airside.lead_in_track().size()).is_greater_equal(5)
+	assert_int(airside.climb_out_track().size()).is_greater_equal(3)

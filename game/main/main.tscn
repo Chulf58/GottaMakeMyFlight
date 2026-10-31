@@ -125,6 +125,27 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -200)
 [node name="ClimbEnd" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 260, 45, -200)
 
+[node name="ArrivalEntry" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1000, 0, 736)
+
+[node name="ArrivalStraightIn" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -700, 0, -200)
+
+[node name="ArrivalPass" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 170, 0, -8)
+
+[node name="ArrivalTurnWest" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -480, 0, -8)
+
+[node name="ArrivalTurnNorth" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -480, 0, -200)
+
+[node name="DepartureTurn" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 480, 0, -200)
+
+[node name="DepartureExit" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 900, 0, 300)
+
 [node name="Terminal" parent="Airside" instance=ExtResource("7_terminal")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -80)
 
@@ -147,11 +168,20 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 144, 0, -200)
 script = ExtResource("4_sim")
 clock = NodePath("../SimClock")
 
-[node name="PlaneView" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "airside")]
+[node name="PlaneView" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "airside", "sun")]
 script = ExtResource("5_plane")
 clock = NodePath("../SimClock")
 sim = NodePath("../FlightSim")
 airside = NodePath("../Airside")
+sun = NodePath("../Sun")
+
+[node name="PlaneView2" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "airside", "sun")]
+script = ExtResource("5_plane")
+clock = NodePath("../SimClock")
+sim = NodePath("../FlightSim")
+airside = NodePath("../Airside")
+sun = NodePath("../Sun")
+slot = 1
 
 [node name="LandsideSim" type="Node" parent="." node_paths=PackedStringArray("finances")]
 script = ExtResource("30_landside")
