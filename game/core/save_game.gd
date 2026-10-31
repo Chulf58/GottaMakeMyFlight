@@ -48,7 +48,9 @@ signal loaded(ok: bool)
 ## 3: the landside (part "landside": arrival bookings, cars, taxis and car
 ## parks); version 2 saves are refused (no migration before a release).
 ## 4: the room templates (part "templates"); version 3 saves are refused.
-const SAVE_VERSION := 4
+## 5: the messes, bin fill and use counters (part "messes", MessSim); version 4
+## saves are refused (no migration before a release).
+const SAVE_VERSION := 5
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -113,6 +115,10 @@ func parts() -> Array[SavePart]:
 		),
 		SavePart.new(
 			"passengers", passengers.to_snapshot, _stage_passengers, passengers.from_snapshot
+		),
+		# Checked against the staged grid; installed after the grid it is on.
+		SavePart.new(
+			"messes", passengers.messes.to_snapshot, _stage_messes, passengers.messes.from_snapshot
 		),
 		SavePart.new("staff", staff.to_snapshot, _stage_staff, staff.from_snapshot),
 		# The bookings are PassengerSim's; the part holds them with the cars.
@@ -185,7 +191,7 @@ func parts() -> Array[SavePart]:
 func save_problem() -> String:
 	if clock.is_in_tick():
 		return "the game is in the middle of a tick"
-	if passengers.cafes.deadlines_stale or baggage.routes_stale:
+	if passengers.cafes.deadlines_stale or baggage.routes_stale or passengers.messes.stale:
 		return "the last build change settles on the next tick"
 	return ""
 
@@ -385,7 +391,7 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 ## Every part that keeps the tick was saved on the same one.
 func _ticks_problem(data: Dictionary) -> String:
 	var tick := str(data["clock"]["tick"]).to_int()
-	for key in ["flights", "passengers", "rating", "baggage", "landside"]:
+	for key in ["flights", "passengers", "messes", "rating", "baggage", "landside"]:
 		var value: Variant = data[key]["tick"]
 		var other := str(value).to_int() if typeof(value) == TYPE_STRING else int(value)
 		if other != tick:
@@ -420,6 +426,12 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	sim.layout.rebuild(grid)
 	staged["sim"] = sim
 	return ""
+
+
+## Checked against the staged grid: every mess on its floor, every bin and
+## every use counter's source on it.
+func _stage_messes(data: Dictionary, staged: Dictionary) -> String:
+	return str(MessSim.checked(data, staged["grid"]).get("error", ""))
 
 
 func _stage_staff(data: Dictionary, staged: Dictionary) -> String:

@@ -534,6 +534,8 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 	p.mood = mini(p.mood + type.mood_bonus, PassengerSim.MOOD_MAX)
 	if visit.fallback:
 		p.mood = maxi(p.mood - FALLBACK_MOOD, 0)
+	# A finished browse is one real use of its slot or room (MessSim).
+	_sim.messes.shop_used(visit, type.id)
 	if amount > 0:
 		paid.emit(p.id, visit.room, amount)
 
