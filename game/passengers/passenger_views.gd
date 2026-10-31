@@ -11,8 +11,10 @@ extends Node3D
 
 ## Bodies, tints, bag colours and clip speeds: PassengerLooks.
 const SIT_CLIP_SECONDS := 1.2
-## A sit_down or stand_up clip this many ticks away from where the sim is in
-## it is sought back (frames play it between ticks, so it may lead by one).
+## On an activity visit, a sit_down or stand_up clip more than this many
+## ticks, plus the ticks one frame runs at the clock's speed, away from where
+## the sim is in it is sought there: frames play the clip between ticks and
+## may run it a frame ahead of or behind the sim.
 const SEEK_SLACK_TICKS := 1.5
 const LOOPED := ["idle", "walk", "run", "sit_idle"]
 const MISSED_LINGER_TICKS := 200
@@ -390,14 +392,19 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		player.play(clip)
 	if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
 		# A view made or snapped mid-way (a load, a passenger just drawn)
-		# starts the clip where the sim is in it, not from its first frame,
-		# and a clip the sim moved on from (a deadline brought closer during
-		# a stand-up) follows it.
+		# starts the clip where the sim is in it, not from its first frame.
 		var at := ActivityPoses.clip_ticks(sim, p) * SimClock.STEP * base
-		var slack := SEEK_SLACK_TICKS * SimClock.STEP * base
-		var playing := player.current_animation == clip
-		if changed or (playing and absf(player.current_animation_position - at) > slack):
+		if changed:
 			player.seek(at, true)
+		elif activity != ActivityPoses.Kind.NONE and player.current_animation == clip:
+			# Only an activity stay can move the sim on within a clip (its
+			# deadline brought closer during a stand-up); a seat stage's clip
+			# runs its fixed ticks and is left to the frames, which seat
+			# moves such as RollerPark follow.
+			var speed := clock.speed if clock != null else 1
+			var slack := (SEEK_SLACK_TICKS + speed) * SimClock.STEP * base
+			if absf(player.current_animation_position - at) > slack:
+				player.seek(at, true)
 	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
