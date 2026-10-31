@@ -11,6 +11,8 @@ extends GdUnitTestSuite
 const SAVE_INTO_STAY := 30
 ## A load this many ticks into the sit-down (of SIT_DOWN_TICKS 24).
 const MID_SIT_DOWN := 12
+## Ticks the world plays on past that save before it is loaded back.
+const LATER_SIT_DOWN := 18
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -340,6 +342,63 @@ func test_a_load_mid_sit_down_starts_the_clip_where_the_sim_is() -> void:
 	assert_float(at).is_greater(0.3)
 
 
+func test_a_load_into_the_same_views_mid_sit_down_seeks_the_clip_back() -> void:
+	_open(&"lounge")
+	var p := _visitor()
+	var id := p.id
+	_world.run_to(p.stage_tick + MID_SIT_DOWN)
+	var saved := _save(_world)
+	_world.run_to(p.stage_tick + LATER_SIT_DOWN)
+	var node := _views.node_for(id)
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	var base: float = node.get_meta(&"base_speed")
+	# The frames played the clip on with the world (a headless run draws none).
+	player.seek(LATER_SIT_DOWN * SimClock.STEP * base, true)
+	var before := player.current_animation_position
+	_restore(saved)
+	_views.snap()
+	var at := player.current_animation_position
+	var want := MID_SIT_DOWN * SimClock.STEP * base
+	var clip := player.current_animation
+	print(
+		(
+			"same views: before the load %s at %.3f s, after %s at %.3f s, want %.3f s"
+			% [node.get_meta(&"clip"), before, clip, at, want]
+		)
+	)
+	assert_object(_views.node_for(id)).is_same(node)
+	assert_float(before).is_equal_approx(LATER_SIT_DOWN * SimClock.STEP * base, 0.01)
+	assert_str(clip).is_equal("sit_down")
+	assert_float(at).is_equal_approx(want, 0.01)
+
+
+func test_a_deadline_brought_closer_during_stand_up_moves_the_clip_on() -> void:
+	_open(&"lounge")
+	var p := _visitor()
+	_world.run_to(p.stage_tick + 60)
+	var visit := _world.sim.shops.visit_of(p.id)
+	visit.deadline = _world.clock.tick + 20
+	_world.step()
+	_world.step()
+	var node := _views.node_for(p.id)
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	var base: float = node.get_meta(&"base_speed")
+	var first := player.current_animation_position
+	visit.deadline -= 8
+	_world.step()
+	var at := player.current_animation_position
+	var ticks := ActivityPoses.clip_ticks(_world.sim, p)
+	print(
+		(
+			"stand-up %s at %.3f s, deadline 8 ticks closer: %d ticks in, clip at %.3f s"
+			% [player.current_animation, first, ticks, at]
+		)
+	)
+	assert_str(player.current_animation).is_equal("stand_up")
+	assert_int(ticks).is_greater(10)
+	assert_float(at).is_equal_approx(ticks * SimClock.STEP * base, 0.01)
+
+
 func test_a_stay_cut_short_eases_the_body_back_to_its_slot() -> void:
 	_open(&"lounge")
 	var p := _visitor()
@@ -413,6 +472,14 @@ func _save(world: PassengerTestWorld) -> String:
 			}
 		)
 	)
+
+
+## Loads a save back into the open world in place, as SaveGame does.
+func _restore(text: String) -> void:
+	var data: Dictionary = JSON.parse_string(text)
+	assert_bool(_world.clock.from_snapshot(data["clock"])).is_true()
+	assert_bool(_world.flights.from_snapshot(data["flights"])).is_true()
+	assert_bool(_world.sim.from_snapshot(data["passengers"])).is_true()
 
 
 func _load(text: String) -> PassengerTestWorld:

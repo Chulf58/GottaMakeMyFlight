@@ -11,6 +11,9 @@ extends Node3D
 
 ## Bodies, tints, bag colours and clip speeds: PassengerLooks.
 const SIT_CLIP_SECONDS := 1.2
+## A sit_down or stand_up clip this many ticks away from where the sim is in
+## it is sought back (frames play it between ticks, so it may lead by one).
+const SEEK_SLACK_TICKS := 1.5
 const LOOPED := ["idle", "walk", "run", "sit_idle"]
 const MISSED_LINGER_TICKS := 200
 const BUBBLE_HEIGHT := 2.5
@@ -171,6 +174,10 @@ func snap() -> void:
 		var target := SecurityLooks.target_offset(sim, sim.get_passenger(id))
 		if target != Vector3.ZERO:
 			_offsets[id] = target
+		# Every clip is played again from the loaded tick: a node kept through
+		# the load still plays the clip it had, from where it was before.
+		if _nodes.has(id):
+			(_nodes[id] as Node3D).set_meta(&"clip", "")
 	sync()
 	for id in _cur:
 		_prev[id] = _cur[id]
@@ -376,14 +383,21 @@ func _pose(node: Node3D, p: Passenger) -> void:
 		node.rotation.y = atan2(ahead.x, ahead.y)
 	ActivityPoses.dress(node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p))
 	node.set_meta(&"base_speed", base)
-	if node.get_meta(&"clip", "") != clip:
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	var changed: bool = node.get_meta(&"clip", "") != clip
+	if changed:
 		node.set_meta(&"clip", clip)
-		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		player.play(clip)
-		if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
-			# A view made mid-way (a load, a passenger just drawn) starts the
-			# clip where the sim is in it, not from its first frame.
-			player.seek(ActivityPoses.clip_ticks(sim, p) * SimClock.STEP * base, true)
+	if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
+		# A view made or snapped mid-way (a load, a passenger just drawn)
+		# starts the clip where the sim is in it, not from its first frame,
+		# and a clip the sim moved on from (a deadline brought closer during
+		# a stand-up) follows it.
+		var at := ActivityPoses.clip_ticks(sim, p) * SimClock.STEP * base
+		var slack := SEEK_SLACK_TICKS * SimClock.STEP * base
+		var playing := player.current_animation == clip
+		if changed or (playing and absf(player.current_animation_position - at) > slack):
+			player.seek(at, true)
 	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
