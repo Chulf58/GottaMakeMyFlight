@@ -299,7 +299,8 @@ func _in_frame(label: String, area: Rect2i) -> bool:
 
 ## Sight lines from the camera to the slab centre and the middle of each side
 ## against the AABB of every visible mesh outside BuildMode whose top is above
-## the floor. Prints the blockers.
+## the floor, except a mesh whose box holds the target (the ground under the
+## grid, printed as GROUND). Prints the blockers.
 func _clear_sight(label: String, area: Rect2i) -> bool:
 	var targets: Array[Vector3] = [
 		_slab_centre(area),
@@ -315,6 +316,10 @@ func _clear_sight(label: String, area: Rect2i) -> bool:
 		if box.end.y < GROUND_TOP_M:
 			continue
 		for p in targets:
+			if box.has_point(p):
+				# The target lies inside this mesh's box: it is the ground the grid sits on.
+				print("GROUND %s box=%s contains %s" % [mesh.get_path(), box, p])
+				break
 			if box.intersects_segment(_cam.global_position, p) != null:
 				blockers[mesh.get_path()] = true
 	print("SIGHT %s blockers=%s" % [label, blockers.keys()])
