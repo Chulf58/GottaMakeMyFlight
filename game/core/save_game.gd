@@ -47,7 +47,8 @@ signal loaded(ok: bool)
 ## 2: the bags (part "baggage"); version 1 saves are refused.
 ## 3: the landside (part "landside": arrival bookings, cars, taxis and car
 ## parks); version 2 saves are refused (no migration before a release).
-const SAVE_VERSION := 3
+## 4: the room templates (part "templates"); version 3 saves are refused.
+const SAVE_VERSION := 4
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -168,6 +169,12 @@ func parts() -> Array[SavePart]:
 				"rating", func(data: Dictionary) -> Dictionary: return RatingSnapshot.load(data)
 			),
 			_install_rating
+		),
+		SavePart.new(
+			"templates",
+			build_mode.templates.library.to_snapshot,
+			SavePart.scratch(RoomTemplates),
+			build_mode.templates.library.from_snapshot
 		),
 	]
 	return list
