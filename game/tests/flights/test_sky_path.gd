@@ -245,14 +245,16 @@ func test_the_layout_flies_inside_the_ruled_band() -> void:
 	var highest := -INF
 	var tightest := INF
 	var on_floor := 0
-	for kind in ["lead", "climb"]:
+	for kind in ["lead", "straight", "climb"]:
 		var track := view.lead_in_track() if kind == "lead" else view.climb_out_track()
+		if kind == "straight":
+			track = view.straight_in_track()
 		var length := FlightPose.path_length(track)
 		var at := 0.0
 		while at <= length:
 			var pose := (
 				FlightPose.lead_in_pose(track, at)
-				if kind == "lead"
+				if kind != "climb"
 				else FlightPose.climb_out_pose(track, at)
 			)
 			lowest = minf(lowest, pose.origin.y)
@@ -275,3 +277,96 @@ func test_the_layout_flies_inside_the_ruled_band() -> void:
 	var lead_room := FlightTimetable.ISSUE_LEAD_TICKS + FlightSim.PHASE_TICKS[0]
 	assert_float(lead_ticks).is_greater(300.0).is_less_equal(lead_room)
 	assert_float(climb_ticks).is_less(FlightTimetable.PRUNE_AFTER_TICKS)
+
+
+## Sol review regression: an offer accepted after opening whose first SCHEDULED
+## is close. AM departs 08:00, so accepted at 06:00 (tick 0) its SCHEDULED is
+## tick 440, far inside the full lead-in. The control shows the full lead-in
+## would already be mid-air on the first frame; the view must instead show
+## nothing until SCHEDULED, then the straight-in from its unseen entry, joining
+## the approach without a jump. The next day has the full lead-in again.
+func test_an_offer_accepted_late_enters_unseen_on_the_straight_in() -> void:
+	var sim := _sim()
+	sim.open_airport()
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
+	var view := _view(sim, _clock())
+	var starts := view.starts_of("AM-d0")
+	var scheduled := starts[FlightSim.State.SCHEDULED]
+	var approach := starts[FlightSim.State.APPROACH]
+	assert_int(scheduled).is_equal(440)
+	# Control: the full lead-in is already under way at the first frame.
+	var full: Dictionary = view.pose_at(starts, 0.0, true)
+	assert_bool(full.is_empty()).is_false()
+	assert_bool(view.has_full_lead_in("AM-d0")).is_false()
+	assert_bool(view.has_full_lead_in("AM-d1")).is_true()
+	sim.on_tick(1)
+	view.update_pose()
+	assert_bool(view.visible).is_false()
+	for t in range(2, scheduled + 2):
+		sim.on_tick(t)
+	view.update_pose()
+	assert_bool(view.visible).is_true()
+	assert_int(view.phase).is_equal(PlaneView.PHASE_LEAD_IN)
+	var entry := _airside.straight_in_track()[0]
+	assert_float(view.position.x).is_equal_approx(entry.x, 0.01)
+	assert_bool(view.pose_at(starts, scheduled - 0.5, false).is_empty()).is_true()
+	var a: Transform3D = view.pose_at(starts, approach - 0.001, false)["transform"]
+	var b: Transform3D = view.pose_at(starts, approach + 0.001, false)["transform"]
+	assert_float(a.origin.distance_to(b.origin)).is_less(0.02)
+	assert_float(_angle(a.basis.z, b.basis.z)).is_less(0.05)
+	var first_step := (
+		view.straight_in_to_go(starts, scheduled) - view.straight_in_to_go(starts, scheduled + 1)
+	)
+	assert_float(first_step).is_greater(view.lead_in_speed(starts)).is_less(6.0)
+
+
+## Where a plane pops in or out (the full lead-in's start, the straight-in's
+## entry, the climb-out's end) no camera sees it: every focus in the camera
+## bounds, every quarter-hour yaw and zoom from near to full. A control point
+## (ApproachStart) is seen by some camera.
+func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
+	# The test runner's window is square; a 21:9 view sees wider than the
+	# game's 16:9, so it covers ultrawide windows too.
+	var screen := auto_free(SubViewport.new()) as SubViewport
+	screen.size = Vector2i(2520, 1080)
+	add_child(screen)
+	var rig: TycoonCamera = load("res://camera/tycoon_camera.tscn").instantiate()
+	screen.add_child(rig)
+	var cam: Camera3D = rig.get_node("Camera3D")
+	var view := _view(_sim(), _clock())
+	var lead := view.lead_in_track()
+	var climb := view.climb_out_track()
+	var hidden_points: Array[Vector3] = []
+	var subjects := [
+		FlightPose.lead_in_pose(lead, 0.0).origin,
+		FlightPose.lead_in_pose(view.straight_in_track(), 0.0).origin,
+		FlightPose.climb_out_pose(climb, FlightPose.path_length(climb)).origin,
+	]
+	for origin: Vector3 in subjects:
+		for i in 8:
+			hidden_points.append(
+				origin + AABB(Vector3(-20, -6, -20), Vector3(40, 12, 40)).get_endpoint(i)
+			)
+	var control: Vector3 = _airside.phase_path(FlightSim.State.APPROACH)[0]
+	var seen := 0
+	var control_seen := 0
+	var edge := rig.bounds_half_extent
+	for fx in [-edge, -edge / 2.0, 0.0, edge / 2.0, edge]:
+		for fz in [-edge, -edge / 2.0, 0.0, edge / 2.0, edge]:
+			for step in 24:
+				for zoom in [6.0, 30.0, 80.0, 150.0, 300.0]:
+					rig.position = Vector3(fx, 0.0, fz)
+					rig.yaw = step * TAU / 24.0
+					rig.distance = zoom
+					rig.zoom(1.0)
+					control_seen += int(cam.is_position_in_frustum(control))
+					for p in hidden_points:
+						seen += int(cam.is_position_in_frustum(p))
+	print(
+		(
+			"sky unseen viewport=%s seen=%d control_seen=%d"
+			% [cam.get_viewport().get_visible_rect().size, seen, control_seen]
+		)
+	)
+	assert_int(control_seen).is_greater(0)
+	assert_int(seen).is_equal(0)

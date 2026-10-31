@@ -7,7 +7,10 @@ extends Node3D
 ## `slot`, so a second PlaneView (slot 1) draws the arriving plane while the one
 ## before it is still climbing out. Everything comes from the sim's tick, each
 ## flight's start ticks and the clock's alpha; it keeps nothing between frames
-## and never writes back. Past the sun's shadow distance it draws the plane's
+## and never writes back. A flight that may have been listed after its full
+## lead-in began (a contract's first day, a one-off) flies a short straight-in
+## from SCHEDULED instead, entering where no camera can see it. Past the sun's
+## shadow distance it draws the plane's
 ## sun silhouette on the ground, so a far plane in the air still reads as
 ## airborne.
 
@@ -15,6 +18,8 @@ const PLANE_SCENE := preload("res://assets/planes/tp_plane_05a.glb")
 ## pose_at phases beside the FlightSim states it passes through.
 const PHASE_LEAD_IN := -1
 const PHASE_CLIMB_OUT := FlightSim.State.DEPARTED
+## Cache key of the straight-in track (drawn as PHASE_LEAD_IN).
+const PHASE_STRAIGHT_IN := -2
 ## The previous moving state, whose path ends where this one begins.
 const PREVIOUS_MOVE := {
 	FlightSim.State.LANDING: FlightSim.State.APPROACH,
@@ -117,7 +122,7 @@ func sightings(time: float) -> Array[Dictionary]:
 	for id in sim.flight_ids():
 		if _gate_of(id) != gate:
 			continue
-		var at := pose_at(starts_of(id), time)
+		var at := pose_at(starts_of(id), time, has_full_lead_in(id))
 		if not at.is_empty():
 			at["id"] = id
 			out.append(at)
@@ -132,16 +137,36 @@ func starts_of(id: String) -> Array[int]:
 	return starts
 
 
+## True when the flight was surely listed before its full lead-in starts, so
+## the whole lead-in can be drawn. FlightSim keeps no record of when a flight
+## was added, so this asks what the timetable guarantees: a contract's later
+## days are issued ISSUE_LEAD_TICKS before SCHEDULED, and the starter's first
+## day is issued at the opening with that same lead (FlightSim.starter_terms).
+## Any other contract's first day may be accepted as late as its SCHEDULED
+## tick, and a one-off may be added at any time.
+func has_full_lead_in(id: String) -> bool:
+	var occurrence := FlightTimetable.parse_occurrence(id)
+	if occurrence.is_empty():
+		return false
+	var contract: String = occurrence["contract"]
+	var first: int = sim.start_days.get(contract, occurrence["day"])
+	return occurrence["day"] > first or contract == FlightSim.STARTER_TERMS["id"]
+
+
 ## Where a flight with `starts` is at sim time `time`: {phase, transform}, or
-## {} outside its sky window (before its lead-in, after its climb-out).
-func pose_at(starts: Array[int], time: float) -> Dictionary:
+## {} outside its sky window (before its lead-in, after its climb-out). With
+## `full_lead_in` false the arrival is the straight-in, drawn from SCHEDULED.
+func pose_at(starts: Array[int], time: float, full_lead_in := true) -> Dictionary:
 	var approach := starts[FlightSim.State.APPROACH]
 	var departed := starts[FlightSim.State.DEPARTED]
 	if time < approach:
-		var track := lead_in_track()
+		var track := lead_in_track() if full_lead_in else straight_in_track()
 		var speed := lead_in_speed(starts)
-		var distance := FlightPose.path_length(track) - speed * (approach - time)
-		if speed <= 0.0 or distance < 0.0:
+		var to_go := speed * (approach - time)
+		if not full_lead_in:
+			to_go = straight_in_to_go(starts, time)
+		var distance := FlightPose.path_length(track) - to_go
+		if speed <= 0.0 or distance < 0.0 or to_go < 0.0:
 			return {}
 		return {"phase": PHASE_LEAD_IN, "transform": FlightPose.lead_in_pose(track, distance)}
 	if time >= departed:
@@ -171,6 +196,19 @@ func lead_in_speed(starts: Array[int]) -> float:
 	return FlightPose.flat_speed(FlightSim.State.APPROACH, 0.0, path, ticks)
 
 
+## Metres the straight-in still has to fly at `time`, or -1 before SCHEDULED.
+## It covers its whole track between SCHEDULED and APPROACH, slowing evenly so
+## it meets the approach at the approach's own speed.
+func straight_in_to_go(starts: Array[int], time: float) -> float:
+	var span := float(starts[FlightSim.State.APPROACH] - starts[FlightSim.State.SCHEDULED])
+	var left := float(starts[FlightSim.State.APPROACH]) - time
+	if span <= 0.0 or left > span:
+		return -1.0
+	var speed := lead_in_speed(starts)
+	var slowing := (FlightPose.path_length(straight_in_track()) - speed * span) / (span * span)
+	return speed * left + slowing * left * left
+
+
 ## Flat metres per tick of the climb-out: the flat speed the takeoff ends at.
 func climb_out_speed(starts: Array[int]) -> float:
 	var ticks := starts[FlightSim.State.DEPARTED] - starts[FlightSim.State.TAKEOFF]
@@ -182,6 +220,12 @@ func lead_in_track() -> PackedVector3Array:
 	if not _paths.has(PHASE_LEAD_IN):
 		_paths[PHASE_LEAD_IN] = airside.lead_in_track()
 	return _paths[PHASE_LEAD_IN]
+
+
+func straight_in_track() -> PackedVector3Array:
+	if not _paths.has(PHASE_STRAIGHT_IN):
+		_paths[PHASE_STRAIGHT_IN] = airside.straight_in_track()
+	return _paths[PHASE_STRAIGHT_IN]
 
 
 func climb_out_track() -> PackedVector3Array:

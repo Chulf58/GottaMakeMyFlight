@@ -16,6 +16,7 @@ const REQUIRED_WAYPOINTS: Array[StringName] = [
 	&"RunwayEntry",
 	&"Liftoff",
 	&"ClimbEnd",
+	&"ArrivalStraightIn",
 	&"ArrivalEntry",
 	&"ArrivalPass",
 	&"ArrivalTurnWest",
@@ -99,6 +100,15 @@ func _points(names: Array[StringName]) -> PackedVector3Array:
 ## Every point has ApproachStart's height.
 func lead_in_track() -> PackedVector3Array:
 	return _sky_track(LEAD_IN_WAYPOINTS, graph.position_of(&"ApproachStart").y)
+
+
+## The short straight-in on the runway's extended centreline, ending at
+## ApproachStart, for an arrival listed too late for the full lead-in. Every
+## point has ApproachStart's height.
+func straight_in_track() -> PackedVector3Array:
+	return _sky_track(
+		[&"ArrivalStraightIn", &"ApproachStart"], graph.position_of(&"ApproachStart").y
+	)
 
 
 ## The departure's flat track, starting at ClimbEnd on the climb heading.

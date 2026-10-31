@@ -100,7 +100,8 @@ func test_several_days_run_without_growing_state() -> void:
 	assert_int(JSON.stringify(snapshot).length()).is_less_equal(day_one_size + 12)
 
 
-## PlaneView draws the flight holding the gate: SCHEDULED has not reached it yet.
+## flight_at_gate holds each day's occurrence from SCHEDULED until it departs
+## (PlaneView also draws the sky lead-in before and the climb-out after).
 func test_flight_at_gate_follows_each_days_occurrence() -> void:
 	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
 	assert_array(_sim.flight_ids()).is_equal(["AM-d0"])

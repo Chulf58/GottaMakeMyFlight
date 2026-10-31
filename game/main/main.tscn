@@ -126,7 +126,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -200)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 260, 45, -200)
 
 [node name="ArrivalEntry" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 760, 0, 520)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1000, 0, 736)
+
+[node name="ArrivalStraightIn" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -700, 0, -200)
 
 [node name="ArrivalPass" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 170, 0, -8)
