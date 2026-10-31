@@ -42,7 +42,8 @@ extends Node3D
 ## door and goes straight down; picked up it rises upright first.
 ##
 ## A bag that changes home (or hand) moves there over TRANSFER_TICKS of sim
-## time (the clock's tick plus its alpha), led by the hand outside a stall
+## time (the clock's tick plus its alpha; CarryLead.ticks_of(): a roller that
+## parks on its wheels, RollerPark.TICKS), led by the hand outside a stall
 ## (CarryLead: the hand reaches a bag on the floor, in a tray, on the back or
 ## the shoulder first, bending down for a low one (CarryStoop), the bag is
 ## placed from the grip along its path, and the hand lets go once it is down);
@@ -491,11 +492,17 @@ func sync() -> void:
 					)
 					or (
 						was[i].get("swap", false)
-						and _tick() - float(was[i].get("changed", -INF)) < TRANSFER_TICKS
+						and (
+							_tick() - float(was[i].get("changed", -INF))
+							< CarryLead.ticks_of(was[i])
+						)
 					)
 				)
 			):
 				hands[i] = (int(was[i]["place"]) / 2) % 2
+			# A roller parking on its wheels or lying on the floor keeps its lift.
+			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):
+				lifts[i] = int(was[i].get("place", 0)) % 2 == 1
 		held["scale"] = SecurityLooks.bag_scale(p)
 		var spots: Array[Transform3D] = []
 		for i in homes.size():
@@ -553,7 +560,7 @@ func sync() -> void:
 		# from the tray before the tray is gone).
 		var moving := bags.any(
 			func(b: Dictionary) -> bool:
-				return _tick() - float(b.get("changed", -INF)) < TRANSFER_TICKS
+				return _tick() - float(b.get("changed", -INF)) < CarryLead.ticks_of(b)
 		)
 		if tray_at == SecurityLooks.Tray.NONE and held["tray"] != null and not moving:
 			_give("security_tray", held["tray"])
@@ -620,7 +627,7 @@ func transfer_progress(id: int, index: int) -> float:
 	var bags: Array = _held.get(id, {}).get("bags", [])
 	if index >= bags.size() or not bags[index].has("since"):
 		return 1.0
-	return clampf((_now() - bags[index]["since"]) / TRANSFER_TICKS, 0.0, 1.0)
+	return _progress_of(bags[index], _now())
 
 
 ## How far passenger `id` has turned to the front carry: 0 side, 1 front.
@@ -845,7 +852,7 @@ func _place_bags(
 			if stamp_only:
 				want = _bag_transform(held, body, tray_xf, i, homes[i], want_reach)
 		bag["placed"] = int(bag.get("placed", 0)) + 1
-		var k := clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
+		var k := _progress_of(bag, now)
 		# The body this placement goes with, for the next move's start.
 		bag["body_at"] = body.global_transform
 		bag["settled"] = k >= 1.0
@@ -980,9 +987,9 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 	if not unmoved:
 		bag["since"] = bag["changed"] - (TRANSFER_TICKS if bag["home"] == -1 else 0.0)
 	# Hand-led or not is decided now and kept to the end of the move (and so is
-	# its reach, CarryLead.stamp_reach).
+	# its reach and length, CarryLead.stamp_move).
 	bag["led"] = _leads(held, bag)
-	CarryLead.stamp_reach(bag, held.get("in_stall", false), homes[i])
+	CarryLead.stamp_move(bag, held.get("in_stall", false), homes[i], body.global_transform)
 	bag["home"] = bag["place"]
 	bag["reach_from"] = _reach_of(node, kind)
 
@@ -1277,7 +1284,7 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 static func _progress_of(bag: Dictionary, now: float) -> float:
 	if not bag.has("since"):
 		return 1.0
-	return clampf((now - bag["since"]) / TRANSFER_TICKS, 0.0, 1.0)
+	return clampf((now - bag["since"]) / CarryLead.ticks_of(bag), 0.0, 1.0)
 
 
 ## Turns off both CarryArms of a character with no bags (or released), with

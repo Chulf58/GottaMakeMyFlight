@@ -171,6 +171,25 @@ static func stamp_reach(bag: Dictionary, in_stall: bool, home: int) -> void:
 		bag.erase("reach")
 
 
+## Stamps a new move of `bag` (CarryOnProps' record, as for stamp_reach()) with
+## its reach and its length (ticks_of()), with `body` the body's frame as it
+## starts: a roller laid on the floor from the pull or taken off it into the
+## pull parks on its wheels (RollerPark) and takes RollerPark.TICKS.
+static func stamp_move(bag: Dictionary, in_stall: bool, home: int, body: Transform3D) -> void:
+	stamp_reach(bag, in_stall, home)
+	bag.erase("ticks")
+	bag.erase("park")
+	if RollerPark.parks(bag, in_stall, home):
+		RollerPark.stamp(bag, body)
+
+
+## How many sim ticks the move of `bag` (CarryOnProps' record) takes: the
+## length stamped on it (stamp_move()), else CarryOnProps.TRANSFER_TICKS. Every
+## reader of a move's progress or end goes through this.
+static func ticks_of(bag: Dictionary) -> float:
+	return bag.get("ticks", CarryOnProps.TRANSFER_TICKS)
+
+
 ## The share of a move of `bag` (CarryOnProps' record) the hand takes to reach
 ## it at its start: REACH_SHARE, or the one stamped on the move (STALL_PICK_REACH).
 static func reach_of(bag: Dictionary) -> float:
@@ -200,8 +219,11 @@ static func span(from: End, to: End, let_go := REACH_SHARE, reach := REACH_SHARE
 
 
 ## How far along the carry a move of `bag` (CarryOnProps' record) is at `k`,
-## 0 to 1 (0 while it waits at its start, 1 once it is at its end).
+## 0 to 1 (0 while it waits at its start, 1 once it is at its end); for a
+## parking move (RollerPark), how far its rods have run (RollerPark.rods_t()).
 static func carry_t(k: float, bag: Dictionary) -> float:
+	if bag.get("park", false):
+		return RollerPark.rods_t(k, bag)
 	var s := span(start_of(bag)[0], end_of(bag["home"], bag["carry"]), REACH_SHARE, reach_of(bag))
 	return clampf((k - s.x) / maxf(s.y - s.x, 0.0001), 0.0, 1.0)
 
@@ -364,7 +386,8 @@ static func swap_axle(
 ## right then left; keeps floor_keep(), flags "from_floor" and "to_floor";
 ## drops CarryStoop.drops)}.
 ## A backpack goes on and off the back through a hang at the leading hand's
-## side (back_side()).
+## side (back_side()); a roller to or from the floor and the pull parks on its
+## wheels for the hand to change grip (RollerPark.plan()).
 static func plan(
 	bag: Dictionary,
 	k: float,
@@ -374,6 +397,8 @@ static func plan(
 	flags: Dictionary,
 	body: Dictionary
 ) -> Dictionary:
+	if bag.get("park", false):
+		return RollerPark.plan(bag, k, start, want, frame, flags, body)
 	var started := start_of(bag)
 	var from_end: End = started[0]
 	var to_end := end_of(bag["home"], bag["carry"])

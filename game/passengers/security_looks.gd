@@ -160,8 +160,24 @@ static func bag_homes(sim: PassengerSim, p: Passenger) -> Array[Home]:
 		return out
 	var home := Home.FLOOR if _seated(sim, p) else Home.HAND
 	for i in p.carry_on:
-		out.append(home)
+		out.append(Home.HAND if home == Home.FLOOR and _rolled_up(sim, p, i) else home)
 	return out
+
+
+## Whether bag `index` of `p` is a roller taken off the floor into the pull
+## while `p` stands up from a gate chair or a cafe seat: from
+## RollerPark.UP_LEAD_TICKS before the stand-up ends, so the roller parks on its
+## wheels beside a walker (nearly) still in place and is pulled onto the trail
+## as it walks off (it walks at once once up: parked after, the roller was 0.4 m
+## out of the hand's reach by the regrasp; started with the stand-up, the
+## seated hand fell 0.35 m short of the bag on the floor). Looks only: the
+## sim's stand-up is as long as before.
+static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
+	if p.stage not in [Passenger.Stage.STANDING_UP, Passenger.Stage.CAFE_STANDING_UP]:
+		return false
+	if bag_kind(p, index) != Kind.ROLLER:
+		return false
+	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS - RollerPark.UP_LEAD_TICKS
 
 
 ## Which hand holds bag `index` of `p` when it is carried: 0 the right, 1 the
