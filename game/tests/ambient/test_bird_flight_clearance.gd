@@ -95,7 +95,9 @@ func test_flights_clear_the_world() -> void:
 	print("flights checked=", flights, " meshes=", _world.size(), " clashes=", clashes.size())
 	for c in clashes:
 		print("CLASH ", c)
-	assert_int(flights).is_greater(100)
+	# 60 ordered same-zone perch pairs (three zones of five), each 9 fixed
+	# flights plus SWEEP random ones.
+	assert_int(flights).is_equal(60 * (9 + SWEEP))
 	assert_array(clashes).is_empty()
 
 

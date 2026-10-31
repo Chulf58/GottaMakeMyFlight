@@ -2,7 +2,8 @@ extends SceneTree
 ## Headless cost check for BirdFlock with 500 people on the map: the old
 ## per-frame path (every frame: collect every person, every perched group
 ## checks every point, every AnimationPlayer speed set) against the real
-## BirdFlock._process (scatter checks SCAN_S apart, the reach box first,
+## BirdFlock._process at 3x (a scatter check after every sim tick, here every
+## frame; the reach box first,
 ## player speed set on change only). People are 500 Node3D at fixed places
 ## (450 inside the terminal, 50 outdoors), read the way threats_now() reads
 ## passenger nodes; LandsideViews and PassengerViews are not in this scene.
@@ -39,6 +40,7 @@ class CostFlock:
 
 var _flock: CostFlock
 var _people: Array[Node3D] = []
+var _clock: SimClock
 
 
 func _initialize() -> void:
@@ -56,6 +58,7 @@ func _initialize() -> void:
 		holder.add_child(n)
 		_people.append(n)
 	var clock := SimClock.new()
+	_clock = clock
 	clock.set_process(false)
 	root.add_child(clock)
 	_flock = CostFlock.new()
@@ -90,8 +93,12 @@ func _process(_delta: float) -> bool:
 	var old_us := Time.get_ticks_usec() - t0
 	_flock.rebuild()
 	_flock.checks = 0
+	# 3x: a sim tick every frame at 60 fps, so a scatter check every frame,
+	# the most often the per-tick scan runs.
+	_clock.set_speed(3)
 	t0 = Time.get_ticks_usec()
 	for i in FRAMES:
+		_clock.advance(DT)
 		_flock._process(DT)
 	var new_us := Time.get_ticks_usec() - t0
 	print(

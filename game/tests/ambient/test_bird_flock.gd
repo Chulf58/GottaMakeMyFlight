@@ -8,21 +8,75 @@ extends GdUnitTestSuite
 const STEP := 0.05
 const STARTER := preload("res://landside/starter_landside.tres")
 
+
+## An intentional PassengerViews fake: no sim, so it draws no passengers and
+## the flock reads none; its own _ready (pools, rings) is skipped.
+class NoPassengerViews:
+	extends PassengerViews
+
+	func _ready() -> void:
+		pass
+
+	# The nodes PassengerViews builds as members, which its skipped _ready
+	# would have parented, are freed with the fake so none is left orphaned.
+	func _notification(what: int) -> void:
+		if what != NOTIFICATION_PREDELETE:
+			return
+		for n in [follow_anchor, _ring, _markers, _pops, _props]:
+			if n is Node and is_instance_valid(n) and (n as Node).get_parent() == null:
+				(n as Node).free()
+
+
+## A flock whose cars and passengers are one point the test moves, read on
+## the flock's own scan schedule (its _process is the real one).
+class OneCarFlock:
+	extends BirdFlock
+	var car := Vector3(1000, 0, 1000)
+
+	func threats_now() -> PackedVector3Array:
+		_threats.resize(0)
+		_threats.append(car)
+		return _threats
+
+
 var _flock: BirdFlock
 var _save: SaveGame
+var _clock: SimClock
+var _landside: LandsideSim
+var _views: LandsideViews
+var _pax: NoPassengerViews
 
 
+## Every dependency real (SimClock not processing; the tests advance it),
+## except the passenger views, an intentional fake.
 func before_test() -> void:
 	_save = auto_free(SaveGame.new())
-	_flock = BirdFlock.new()
-	_flock.save_game = _save
-	add_child(_flock)
-	_flock.rng.seed = 1234
-	_flock.rebuild()
+	_clock = auto_free(SimClock.new())
+	_clock.set_process(false)
+	add_child(_clock)
+	_landside = auto_free(LandsideSim.new())
+	_landside.use_definition(STARTER)
+	_views = auto_free(LandsideViews.new())
+	_views.landside = _landside
+	add_child(_views)
+	_pax = auto_free(NoPassengerViews.new())
+	add_child(_pax)
+	_flock = _wired(BirdFlock.new(), 1234)
 
 
 func after_test() -> void:
 	_flock.free()
+
+
+func _wired(f: BirdFlock, seed_value: int) -> BirdFlock:
+	f.clock = _clock
+	f.save_game = _save
+	f.landside_views = _views
+	f.passenger_views = _pax
+	add_child(f)
+	f.rng.seed = seed_value
+	f.rebuild()
+	return f
 
 
 func _run(seconds: float, threats: PackedVector3Array) -> void:
@@ -203,14 +257,8 @@ func test_missing_dependencies_are_named() -> void:
 ## Through the real _process: a paused SimClock holds a flight and sets every
 ## player to 0; at 3x a flight runs three times as fast and players run at 3.
 func test_real_clock_pause_and_three_times_speed() -> void:
-	var clock: SimClock = auto_free(SimClock.new())
-	clock.set_process(false)
-	add_child(clock)
-	var f := BirdFlock.new()
-	f.clock = clock
-	add_child(f)
-	f.rng.seed = 99
-	f.rebuild()
+	var clock := _clock
+	var f := _flock
 	var g: Dictionary = f.groups[0]
 	f.step(STEP, PackedVector3Array([BirdPerches.SPOTS[g["spot"]]]))
 	f._process(0.5)
@@ -231,26 +279,19 @@ func test_real_clock_pause_and_three_times_speed() -> void:
 	for og in f.groups:
 		for bird in og["birds"]:
 			assert_float((bird["player"] as AnimationPlayer).speed_scale).is_equal(3.0)
-	f.free()
 
 
-## Through the real _process and LandsideViews: building the surface lot
-## rebuilds the flock with the lot's perches there, removing it again drops
-## them.
+## Through the real _process, SimClock ticks and LandsideViews: building the
+## surface lot rebuilds the flock with the lot's perches there, removing it
+## again drops them.
 func test_building_a_lot_rebuilds_through_the_views() -> void:
-	var sim: LandsideSim = auto_free(LandsideSim.new())
-	sim.use_definition(STARTER)
-	var views: LandsideViews = auto_free(LandsideViews.new())
-	views.landside = sim
-	add_child(views)
-	var f := BirdFlock.new()
-	f.landside_views = views
-	add_child(f)
-	f._process(0.2)
+	var sim := _landside
+	var f := _flock
+	_tick_and_process(f)
 	var first: Node3D = f.groups[0]["birds"][0]["node"]
 	assert_bool(first.is_queued_for_deletion()).is_false()
 	assert_bool(sim.build_lot(0)).is_true()
-	f._process(BirdFlock.SCAN_S + 0.01)
+	_tick_and_process(f)
 	assert_bool(first.is_queued_for_deletion()).is_true()
 	assert_array(f._lots_seen).is_equal([true, false])
 	var lot_closed := 0
@@ -266,8 +307,41 @@ func test_building_a_lot_rebuilds_through_the_views() -> void:
 	assert_int(lot_closed).is_equal(on_lot)
 	assert_bool(sim.remove_lot(0)).is_true()
 	var second: Node3D = f.groups[0]["birds"][0]["node"]
-	f._process(BirdFlock.SCAN_S + 0.01)
+	_tick_and_process(f)
 	assert_bool(second.is_queued_for_deletion()).is_true()
 	for g in f.groups:
 		assert_int(BirdPerches.LOTS[g["spot"]]).is_equal(-1)
+
+
+## One sim tick on the real clock, then one frame of the flock.
+func _tick_and_process(f: BirdFlock) -> void:
+	_clock.advance(SimClock.STEP)
+	f._process(SimClock.STEP)
+
+
+## Regression for the 0.15 s real-time scan: at 3x a car passing 6.2 m from a
+## perch is inside the 6.3 m radius for 2.24 m of road, 0.075 real seconds,
+## between two of the old scan frames (1/60 s and 0.167 s). Scanning on every
+## sim tick (one per frame at 3x and 60 fps) catches it.
+func test_a_car_crossing_the_radius_between_old_scans_scatters() -> void:
+	var f: OneCarFlock = _wired(OneCarFlock.new(), 1234)
+	var g: Dictionary = f.groups[0]
+	var spot: Vector3 = BirdPerches.SPOTS[g["spot"]]
+	_clock.set_speed(3)
+	var dt := 1.0 / 60.0
+	var t := 0.0
+	var inside := 0
+	var caught_at := -1.0
+	for i in 30:
+		t += dt
+		f.car = Vector3(spot.x - 1.118 + 30.0 * (t - 0.04), 0.1, spot.z + 6.2)
+		if BirdPerches.scatter_due(spot, PackedVector3Array([f.car])):
+			inside += 1
+		_clock.advance(dt)
+		f._process(dt)
+		if g["target"] >= 0 and caught_at < 0.0:
+			caught_at = t
+	print("frames inside radius=", inside, " scattered at t=", caught_at)
+	assert_int(inside).is_greater(0)
+	assert_int(g["target"]).is_not_equal(-1)
 	f.free()

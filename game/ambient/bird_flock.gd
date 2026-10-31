@@ -61,9 +61,12 @@ const PERCHED_CLIPS: Array[String] = ["idle_01", "idle_02", "eat", "hop"]
 const CLIP_HOLD_MIN := 2.0
 const CLIP_HOLD_MAX := 6.0
 const BLEND_S := 0.15
-## Real seconds between scatter checks. A car at 3x covers about 2 m in this
-## time, well inside the 6.3 m scatter radius; the frames between only move
-## the birds, so the per-frame cost does not grow with the passenger count.
+## Without a clock (the degraded path) the scatter check runs this many real
+## seconds apart. With a clock it runs on the first frame after each sim tick
+## (SimClock.ticked, 20 a sim second): a car moves about 0.5 m of road per
+## tick at any game speed, so none can cross the 6.3 m scatter radius between
+## two checks (at 3x a car covers about 4.5 m in 0.15 real seconds, enough to
+## pass a perch's edge unseen). Frames without a tick only move the birds.
 const SCAN_S := 0.15
 
 @export var clock: SimClock
@@ -85,8 +88,10 @@ var groups: Array[Dictionary] = []
 var _lots_seen: Array[bool] = []
 ## The AnimationPlayer speed every bird has now (0 paused, else clock speed).
 var _anim_speed := 1.0
-## Real seconds to the next scatter check (SCAN_S apart).
+## Real seconds to the next scatter check when there is no clock.
 var _scan_left := 0.0
+## A sim tick has run since the last scatter check.
+var _tick_seen := true
 ## The threat buffer, refilled in place on each scatter check.
 var _threats := PackedVector3Array()
 ## Passed to step() on frames between scatter checks; never filled.
@@ -106,7 +111,27 @@ func _ready() -> void:
 		push_error("BirdFlock: missing %s; birds run degraded" % ", ".join(missing))
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
+	if clock != null:
+		clock.ticked.connect(_on_ticked)
 	rebuild()
+
+
+func _on_ticked(_tick: int) -> void:
+	_tick_seen = true
+
+
+## Whether this frame runs the scatter check: after a sim tick, or SCAN_S real
+## seconds apart without a clock.
+func _scan_due(delta: float) -> bool:
+	if clock != null:
+		var due := _tick_seen
+		_tick_seen = false
+		return due
+	_scan_left -= delta
+	if _scan_left > 0.0:
+		return false
+	_scan_left = SCAN_S
+	return true
 
 
 func _process(delta: float) -> void:
@@ -120,11 +145,9 @@ func _process(delta: float) -> void:
 				(b["player"] as AnimationPlayer).speed_scale = anim
 	if paused:
 		return
-	_scan_left -= delta
-	if _scan_left > 0.0:
+	if not _scan_due(delta):
 		step(delta * speed, _no_threats)
 		return
-	_scan_left = SCAN_S
 	if _lots_changed():
 		rebuild()
 	step(delta * speed, threats_now())
