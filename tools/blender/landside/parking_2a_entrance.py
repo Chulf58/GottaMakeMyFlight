@@ -19,6 +19,16 @@ joins the ground floor (y 0.3 at x 1.0) to the ramp's edge (its height at x 1.7)
 driving west along z -20 then never meets a step: 0.06 m down evenly over 0.7 m. New faces take
 their UVs from the faces they continue (kerb sides, kerb top, the ground floor quad), on
 every UV layer, and their material slot.
+
+It also adds the paved apron in front of the entrance (board ef2fd76d; decision
+car-park-slab-step-cars-climb-a-ramp-in-the-access-lane-data): a separate mesh object,
+Parking_2A_Apron, so the building's own bounds (the lot spot's footprint) stay as they
+are. It spans the entrance opening (x 2.05..7.95) from under the sidewalk (z -32) to the
+slab's front edge (z -26), its top at road height (y 0.1) to z -30 and then rising evenly
+to the slab (y 0.3), the same profile as the lot's access and way-out lane points in
+starter_landside.tres (lot spot 1 stands at world z -8, so local z -30 is the lanes' foot
+at world z -38). Its sides go down to the lawn (y -0.1). Every face takes one UV, the
+low end of the car park's own ramp to the first deck, so it is the same paving.
 """
 
 import bmesh
@@ -38,6 +48,18 @@ FLOOR_Y = 0.3
 GAP_END = -17.9
 WEDGE_STRIPS = 8
 TOL = 0.011
+# The apron (asset-local, Godot axes). Its x is the entrance opening in the front wall.
+APRON_NAME = "Parking_2A_Apron"
+APRON_X = (2.05, 7.95)
+# From under the sidewalk (world z -40; the sidewalk's back edge is near -39.7, its top
+# y 0.2), flat at road height to the lanes' foot, then up to the slab's front edge.
+APRON_START_Z = -32.0
+APRON_FOOT_Z = -30.0
+SLAB_EDGE_Z = -26.0
+ROAD_Y = 0.1
+LAWN_Y = -0.1
+# The ramp to the first deck behind the entrance: x 1.7..8.3 on z -21.9..-15.5.
+RAMP_X = (1.7, 8.3)
 
 
 class Fail(Exception):
@@ -160,8 +182,74 @@ def _add_face(bm, points, up, material, uvs, layers, min_dot=0.99):
     return face
 
 
+def _ramp_low_uv(bm, layers):
+    """Per UV layer, the UV of the low (y 0.3) end of the ramp to the first deck, taken
+    from its largest up-facing face; Fail when the ramp is not where it was measured or
+    its low end has more than one UV."""
+    faces = []
+    for f in bm.faces:
+        vs = [v.co for v in f.verts]
+        if abs(f.normal.y) < 0.9:
+            continue
+        if not all(RAMP_X[0] - TOL <= v.x <= RAMP_X[1] + TOL and KERB_Z[0] - TOL <= v.z <= KERB_Z[1] + TOL for v in vs):
+            continue
+        if not all(RAMP_Y[0] - TOL <= v.y <= RAMP_Y[1] + TOL for v in vs):
+            continue
+        faces.append(f)
+    if not faces:
+        raise Fail("no ramp face on x %s z %s" % (RAMP_X, KERB_Z))
+    face = max(faces, key=lambda f: f.calc_area())
+    out = []
+    for layer in layers:
+        low = {tuple(round(c, 5) for c in l[layer].uv) for l in face.loops if _near(l.vert.co.y, RAMP_Y[0])}
+        if len(low) != 1:
+            raise Fail("ramp low-end UVs: %s" % low)
+        out.append(low.pop())
+    return out, face.material_index, len(faces)
+
+
+def _apron_y(z):
+    """The apron's top at z: road height to the lanes' foot, then evenly up to the slab."""
+    if z <= APRON_FOOT_Z:
+        return ROAD_Y
+    return ROAD_Y + (FLOOR_Y - ROAD_Y) * (z - APRON_FOOT_Z) / (SLAB_EDGE_Z - APRON_FOOT_Z)
+
+
+def _add_apron(o, objs, uv, material):
+    """The apron as its own mesh object beside `o`, in `o`'s mesh space and transform,
+    with `o`'s UV layers and `material`; appended to `objs` so the converter's part
+    checks and export cover it."""
+    me = bpy.data.meshes.new(APRON_NAME)
+    me.materials.append(material)
+    bm = bmesh.new()
+    layers = [bm.loops.layers.uv.new(layer.name) for layer in o.data.uv_layers]
+    x0, x1 = APRON_X
+    za, zf, zs = APRON_START_Z, APRON_FOOT_Z, SLAB_EDGE_Z
+    flat = [[uv[k]] * 4 for k in range(len(layers))]
+    # Top: the flat run under and behind the sidewalk, then the slope to the slab.
+    _add_face(bm, [(x0, ROAD_Y, za), (x1, ROAD_Y, za), (x1, ROAD_Y, zf), (x0, ROAD_Y, zf)], (0, 1, 0), 0, flat, layers)
+    _add_face(bm, [(x0, ROAD_Y, zf), (x1, ROAD_Y, zf), (x1, FLOOR_Y, zs), (x0, FLOOR_Y, zs)], (0, 1, 0), 0, flat, layers, min_dot=0.99)
+    # The two sides, down to the lawn, and the front (inside the sidewalk).
+    for x, out in ((x0, -1), (x1, 1)):
+        pts = [(x, LAWN_Y, za), (x, ROAD_Y, za), (x, ROAD_Y, zf), (x, FLOOR_Y, zs), (x, LAWN_Y, zs)]
+        _add_face(bm, pts, (out, 0, 0), 0, [[uv[k]] * 5 for k in range(len(layers))], layers)
+    _add_face(bm, [(x0, LAWN_Y, za), (x0, ROAD_Y, za), (x1, ROAD_Y, za), (x1, LAWN_Y, za)], (0, 0, -1), 0, flat, layers)
+    bm.normal_update()
+    bm.to_mesh(me)
+    bm.free()
+    apron = bpy.data.objects.new(APRON_NAME, me)
+    for coll in o.users_collection:
+        coll.objects.link(apron)
+    apron.parent = o.parent
+    apron.matrix_parent_inverse = o.matrix_parent_inverse.copy()
+    apron.matrix_basis = o.matrix_basis.copy()
+    objs.append(apron)
+    return apron
+
+
 def edit(objs):
-    """Cut the kerb gap in Parking_2A. Prints one EDIT line with what changed."""
+    """Cut the kerb gap in Parking_2A and add the apron. Prints one EDIT line with what
+    changed and one APRON line."""
     mesh_objs = [o for o in objs if o.type == "MESH" and o.name == MESH_NAME]
     if len(mesh_objs) != 1:
         raise Fail("expected one %s mesh, found %d" % (MESH_NAME, len(mesh_objs)))
@@ -178,6 +266,17 @@ def edit(objs):
     side_uv_east = _uv_by_height(east, layers)
     top_uv = _uv_constant(top, layers)
     mat_side, mat_top, mat_floor = west.material_index, top.material_index, floor.material_index
+    ramp_uv, mat_ramp, ramp_faces = _ramp_low_uv(bm, layers)
+    # The slab's front face (y 0 to 0.3, in front of a 0.5 m lip before the floor quad)
+    # stands on SLAB_EDGE_Z across the whole apron, so the apron meets it with no gap.
+    fronts = [
+        f for f in bm.faces
+        if all(_near(v.co.z, SLAB_EDGE_Z) for v in f.verts)
+        and max(v.co.y for v in f.verts) > FLOOR_Y - TOL
+        and min(v.co.x for v in f.verts) < APRON_X[0] and max(v.co.x for v in f.verts) > APRON_X[1]
+    ]
+    if not fronts:
+        raise Fail("no slab front face on z %.2f across x %s" % (SLAB_EDGE_Z, APRON_X))
     faces_before = len(bm.faces)
 
     x0, x1 = KERB_X
@@ -240,5 +339,15 @@ def edit(objs):
         "custom_normals=%s uv_layers=%d"
         % (MESH_NAME, x0, x1, KERB_Z[0], GAP_END, faces_before, faces_after, FLOOR_Y, ramp_a,
            o.data.has_custom_normals, len(layers)),
+        flush=True,
+    )
+    apron = _add_apron(o, objs, ramp_uv, o.data.materials[mat_ramp])
+    ys = [v.co.y for v in apron.data.vertices]
+    print(
+        "TOON EDIT %s x=%.2f..%.2f z=%.2f..%.2f top_y=%.3f..%.3f bottom_y=%.3f faces=%d "
+        "material=%s uv_layers=%d uv0=%s ramp_faces_seen=%d"
+        % (APRON_NAME, APRON_X[0], APRON_X[1], APRON_START_Z, SLAB_EDGE_Z, _apron_y(APRON_START_Z),
+           _apron_y(SLAB_EDGE_Z), min(ys), len(apron.data.polygons), apron.data.materials[0].name,
+           len(apron.data.uv_layers), ramp_uv[0], ramp_faces),
         flush=True,
     )
