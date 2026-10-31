@@ -55,8 +55,18 @@ func before() -> void:
 	asset.free()
 
 
+## From the apron's foot, where the lane is back at road height past the
+## sidewalk (board 0b82b7e4 gave the lane a bump over the sidewalk, checked
+## against the surface in TestLandsideCarParkSurfaces), up to the slab.
 func test_the_access_lane_climbs_from_the_road_to_the_slab_in_small_steps() -> void:
-	_assert_ramp(_spot.access, 1.0, "access")
+	var foot := _spot.access.size() - 1
+	while foot > 0 and _spot.access[foot].y > ROAD_Y + EPS:
+		foot -= 1
+	# A control: the slice starts on the apron, behind the sidewalk, with the
+	# whole climb ahead of it.
+	assert_float(_spot.access[foot].z).is_greater(-39.0)
+	assert_int(_spot.access.size() - foot).is_greater_equal(6)
+	_assert_ramp(_spot.access.slice(foot), 1.0, "access")
 
 
 ## The way out mirrors it: the slab's height to the front edge, then down to the

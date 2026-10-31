@@ -31,8 +31,19 @@ extends SceneTree
 ## within 5 cm of its slot. Two stills follow: the kerb gap close up (the toon ramp
 ## over the floor wedge), and parked cars on the first deck inside its painted stalls
 ## (cars moved there as a fixture, as the views plates probe does).
+##
+## Board 0b82b7e4 adds three strips to tools/blender/out/carpark_followups/ (and the
+## access ramp strip goes there too): a car on the access lane over the sidewalk, a car
+## up the inside ramp to the first deck (ground slots held as a fixture so it takes a
+## deck slot), and a stand-in walker from the gate down the apron, along the sidewalk
+## and onto the road at the crossing. In every car frame a ray down at each axle meets
+## the surface within 3 cm (between the heights either side at a kerb), and in every
+## walker frame a ray down at its feet meets paving, never the lawn.
+##
+## Replay a seed with `-- --seed=<n>` after the script.
 
 const OUT_REL := "res://../tools/blender/out/landside/pull_in"
+const FOLLOWUP_REL := "res://../tools/blender/out/carpark_followups"
 const MAIN_SCENE := "res://main/main.tscn"
 const CAMERA_RIG := "TycoonCamera"
 const MARGIN_PX := 8.0
@@ -51,11 +62,14 @@ const GROUND_TARGET := Vector3(-1.0, 0.6, -28.0)
 const GAP_EYE := Vector3(-3.0, 1.9, -23.0)
 const GAP_MID := Vector3(1.35, 0.34, -27.9)
 ## First-deck stalls the fixture fills (index from the deck's first slot), and the
-## still from the first deck's aisle.
-const DECK_STALLS: Array[int] = [3, 4, 5]
+## still from the first deck's aisle. Every other stall: the camera looks along the
+## row, and in neighbouring stalls a tall van hides the car behind it (board 0b82b7e4,
+## seeds 3154279023 and 244551286), at z -24, -16 and -8; the eye is as high as the
+## second deck allows, so it looks over the nearer car at the next.
+const DECK_STALLS: Array[int] = [1, 3, 5]
 const DECK_WAIT_TICKS := 20000
-const DECK_EYE := Vector3(-0.5, 8.6, 0.0)
-const DECK_TARGET := Vector3(-6.6, 5.6, -12.0)
+const DECK_EYE := Vector3(-0.5, 9.4, 0.0)
+const DECK_TARGET := Vector3(-6.6, 5.6, -16.0)
 ## Low and side-on across the apron, so the access ramp's rise reads against the
 ## slab's front edge (z -34) with the car on the lane (x 3.5).
 const RAMP_EYE := Vector3(-3.0, 1.6, -43.0)
@@ -73,8 +87,37 @@ const OPENING_X := Vector2(2.05, 7.95)
 const FRONT_WALL_LOCAL_Z := -22.55
 const WALKER_HEIGHT := 1.7
 const WALKER_RADIUS := 0.25
+## Side-on and low from the west across the sidewalk the access lane crosses
+## (front kerb z -41.26, back kerb z -39.95), the car on the lane at x 3.5.
+const SIDEWALK_EYE := Vector3(-9.0, 1.0, -40.8)
+const SIDEWALK_TARGET := Vector3(3.5, 0.4, -40.8)
+const SIDEWALK_FROM := Vector3(3.5, 0.1, -43.0)
+const SIDEWALK_TO := Vector3(3.5, 0.1, -38.4)
+## On the ground floor, west of the inside ramp up to the first deck (x 5, from z -23.5
+## at y 0.5 to z -5.5 at y 4.3): the camera follows the car side-on from this x, no lower
+## than this height (the z and target height are the car's).
+const DECK_RAMP_EYE := Vector3(-3.5, 1.8, -14.5)
+const DECK_RAMP_TARGET := Vector3(5.0, 2.2, -14.5)
+const DECK_RAMP_FROM := Vector3(5.0, 0.5, -23.5)
+## The strip ends before the car rises into the first deck's opening, where the slab
+## above hides it from the ground floor.
+const DECK_RAMP_TO := Vector3(5.0, 3.9, -7.0)
+const DECK_RAMP_WAIT_TICKS := 20000
+## From over the road, looking at the apron, the sidewalk and the crossing at x -6.
+const CROSSING_EYE := Vector3(-1.5, 8.0, -55.0)
+const CROSSING_TARGET := Vector3(-1.5, 0.3, -39.5)
+## East of the way out (x 6.5), side-on, following a leaving car from the slab's front
+## edge (z -34) down the ramp onto the exit lane and over the sidewalk (to z -41.8).
+const WAY_OUT_EYE_X := 14.0
+const WAY_OUT_FROM := Vector3(6.5, 0.3, -34.0)
+const WAY_OUT_TO := Vector3(6.5, 0.1, -41.8)
+## A wheel or a foot is on the surface within this; at a kerb, between the heights
+## KERB_SLACK either side of it.
+const ON_SURFACE := 0.03
+const KERB_SLACK := 0.3
 
 var _out_dir := ""
+var _followup_dir := ""
 var _failed := false
 var _stage := "init"
 var _heartbeat_ms := 0
@@ -92,7 +135,9 @@ var _cam: Camera3D
 func _initialize() -> void:
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
-	print("PROBE out_dir=", _out_dir)
+	_followup_dir = ProjectSettings.globalize_path(FOLLOWUP_REL).simplify_path()
+	DirAccess.make_dir_recursive_absolute(_followup_dir)
+	print("PROBE out_dir=", _out_dir, " followup_dir=", _followup_dir)
 	_beat("init")
 	_guard = Thread.new()
 	_guard.start(_watch)
@@ -133,11 +178,19 @@ func _run() -> void:
 	if not _failed:
 		await _plate_ground_floor()
 	if not _failed:
+		var deck_car: int = await _plate_sidewalk()
+		if not _failed:
+			await _plate_deck_ramp(deck_car)
+	if not _failed:
 		await _plate_access_ramp()
 	if not _failed:
 		await _plate_ground_walk()
 	if not _failed:
+		await _plate_crossing_walk()
+	if not _failed:
 		await _plate_kerb_gap()
+	if not _failed:
+		await _plate_way_out()
 	if not _failed:
 		await _plate_upper_deck()
 	_guard_mutex.lock()
@@ -171,6 +224,9 @@ func _boot() -> void:
 	_main = (load(MAIN_SCENE) as PackedScene).instantiate()
 	_clock = _main.get_node("SimClock")
 	var sim_seed := randi()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--seed="):
+			sim_seed = int(arg.trim_prefix("--seed="))
 	_clock.seed_rng(sim_seed)
 	print("PROBE sim_seed=", sim_seed)
 	root.add_child(_main)
@@ -453,10 +509,12 @@ func _plate_ground_floor() -> void:
 func _plate_access_ramp() -> void:
 	var lot := _landside.definition.lots[MULTI]
 	var access := lot.access
-	var first := 1
-	while first < access.size() and access[first].y <= access[first - 1].y + 0.001:
-		first += 1
-	if first >= access.size():
+	# The climb starts at the apron's foot: the last point at road height (before
+	# it the lane goes up and down over the sidewalk).
+	var first := access.size() - 1
+	while first > 0 and access[first - 1].y > access[0].y + 0.001:
+		first -= 1
+	if first <= 0 or first >= access.size():
 		_invalid("the multi-storey's access lane has no ramp")
 		return
 	var start_mm := LandsideDefinition.length_mm(access.slice(0, first))
@@ -500,14 +558,16 @@ func _plate_access_ramp() -> void:
 			_invalid("ramp frame %d: the car went down the ramp" % i)
 		first_y = at.y if is_nan(first_y) else first_y
 		last_y = at.y
-		var crop := _tile_around(node.global_position)
+		var crop := _tile_around(_aabb_of(node).get_center())
 		if not _prove_in_frame("ramp/frame %d" % i, _aabb_of(node), Rect2(crop)):
 			return
 		await physics_frame
 		await physics_frame
 		if not _prove_visible("ramp/frame %d" % i, node):
 			return
-		if not _prove_on_lot("ramp/frame %d" % i, node):
+		if not (
+			_prove_on_lot("ramp/frame %d" % i, node) and _prove_wheels("ramp/frame %d" % i, node)
+		):
 			return
 		var img := await _grab()
 		strip.blit_rect(img, crop, Vector2i((i % 4) * STRIP_TILE.x, floori(i / 4.0) * STRIP_TILE.y))
@@ -515,27 +575,27 @@ func _plate_access_ramp() -> void:
 	# The control: the car did climb, and ended on the slab.
 	if last_y - first_y < 0.1 or absf(last_y - slab_y) > 0.05:
 		_invalid("the car rose %.3f m and ended at %.3f" % [last_y - first_y, last_y])
-	_save(strip, "landside_access_ramp_strip.png")
+	_save(strip, "carpark_apron_ramp_strip.png", _followup_dir)
 
 
 ## A ray down through the car's middle (its own colliders left out) first meets a mesh
-## of the multi-storey's drawn lot within 3 cm of the car's height.
+## of the multi-storey's drawn lot within 10 cm of the car's height: a car bridging a bend in the
+## ramp, one axle on each side, stands over the ground under its middle at the foot and
+## under it at the crest (_prove_wheels holds each wheel to 3 cm).
 func _prove_on_lot(label: String, car: Node3D) -> bool:
 	var lot := _views.get_node("LandsidePlaces") as LandsidePlaces
 	var park := lot.lot_node(MULTI) if lot != null else null
 	if park == null:
 		_invalid("%s: no drawn multi-storey" % label)
 		return false
-	var exclude: Array[RID] = []
-	for body in car.find_children("ProbeBody", "StaticBody3D", true, false):
-		exclude.append((body as StaticBody3D).get_rid())
+	var exclude := _bodies_of(car)
 	var at := car.global_position
 	var q := PhysicsRayQueryParameters3D.create(at + Vector3.UP, at + Vector3.DOWN)
 	q.exclude = exclude
 	var hit := _cam.get_world_3d().direct_space_state.intersect_ray(q)
 	var on: Node = hit.collider.get_parent() if hit else null
 	var gap: float = at.y - hit.position.y if hit else INF
-	var ok := hit and park.is_ancestor_of(hit.collider) and absf(gap) <= 0.03
+	var ok := hit and park.is_ancestor_of(hit.collider) and absf(gap) <= 0.1
 	print(
 		(
 			"SURFACE %s car_y=%.3f ground_y=%.3f gap=%.3f on=%s pitch=%.3f ok=%s"
@@ -743,8 +803,354 @@ func _parked_in_multi() -> int:
 	return count
 
 
-func _save(img: Image, file: String) -> void:
-	var path := _out_dir.path_join(file)
+# ------------------------------------------------------------ board 0b82b7e4
+
+
+## A car on the access lane over the sidewalk (its top 0.1 m over the road), side-on:
+## eight frames evenly from the road before the front kerb to the apron behind the
+## back kerb, each a STRIP_TILE tile around the car. Every frame proves the car in its
+## tile and hit by camera rays, and both axles on the surface. The car's id, or 0.
+func _plate_sidewalk() -> int:
+	var access := _landside.definition.lots[MULTI].access
+	var from_mm := LandsideDefinition.mm_along(access, SIDEWALK_FROM)
+	var to_mm := LandsideDefinition.mm_along(access, SIDEWALK_TO)
+	var id := await _await_on_access(from_mm - 3000)
+	if id == 0:
+		_invalid("no car came to the sidewalk on the access lane by tick %d" % TICK_LIMIT)
+		return 0
+	var v := _landside.get_vehicle(id)
+	while v.pos_mm < from_mm and _clock.tick < TICK_LIMIT:
+		_tick()
+	print("SIDEWALK vehicle=%d lane %d..%d mm" % [id, from_mm, to_mm])
+	await _place_camera("sidewalk", SIDEWALK_EYE, SIDEWALK_TARGET)
+	var gap := float(to_mm - from_mm) / LandsideSim.SPEED_MM / float(FRAMES - 1)
+	var strip := Image.create(STRIP_TILE.x * 4, STRIP_TILE.y * 2, false, Image.FORMAT_RGBA8)
+	var highest := -INF
+	for i in FRAMES:
+		if i > 0:
+			_advance(gap)
+		_views.draw()
+		var node := _views.node_for(id)
+		if node == null or v.lane != LandsideVehicle.Lane.ACCESS:
+			_invalid("sidewalk frame %d: vehicle %d left the access lane" % [i, id])
+			return 0
+		print("SIDEWALK_STRIP frame=%d tick=%d at=%s" % [i, _clock.tick, node.global_position])
+		highest = maxf(highest, node.global_position.y)
+		var crop := _tile_around(_aabb_of(node).get_center())
+		if not _prove_in_frame("sidewalk/frame %d" % i, _aabb_of(node), Rect2(crop)):
+			return 0
+		await physics_frame
+		await physics_frame
+		if not _prove_visible("sidewalk/frame %d" % i, node):
+			return 0
+		if not _prove_wheels("sidewalk/frame %d" % i, node):
+			return 0
+		var img := await _grab()
+		strip.blit_rect(img, crop, Vector2i((i % 4) * STRIP_TILE.x, floori(i / 4.0) * STRIP_TILE.y))
+	# The control: the car was lifted onto the sidewalk on the way.
+	print("SIDEWALK highest car origin %.3f" % highest)
+	if highest < 0.15:
+		_invalid("the car never rose onto the sidewalk (highest %.3f)" % highest)
+	_save(strip, "carpark_sidewalk_strip.png", _followup_dir)
+	return id
+
+
+## Car `id` up the inside ramp from the ground floor to the first deck, side-on from
+## the ground floor. A fixture: the car is still on the access lane (the sidewalk
+## strip's car), which every slot's path starts with, so its reserved ground slot is
+## swapped for the lowest free first-deck slot in the sim's slot table and its
+## position stays where it is. Then eight frames evenly along the ramp, each a
+## STRIP_TILE tile around the car, both axles on the ramp in every frame.
+func _plate_deck_ramp(id: int) -> void:
+	var lot := _landside.definition.lots[MULTI]
+	var v := _landside.get_vehicle(id)
+	var slots: Array = _landside._slots[MULTI]
+	var deck_slot := -1
+	for k in lot.slots.size():
+		if deck_slot < 0 and LandsidePaths.deck_of(lot, lot.slots[k]) == 1 and slots[k] == 0:
+			deck_slot = k
+	if v == null or v.lane != LandsideVehicle.Lane.ACCESS or v.lot != MULTI or deck_slot < 0:
+		_invalid(
+			"deck ramp: vehicle %d is not on the access lane, or no first-deck slot is free" % id
+		)
+		return
+	print("DECK_RAMP vehicle %d reserved slot %d -> first-deck slot %d" % [id, v.stop, deck_slot])
+	slots[v.stop] = 0
+	slots[deck_slot] = id
+	v.stop = deck_slot
+	var guard := 0
+	while v.lane != LandsideVehicle.Lane.SLOT and guard < DECK_RAMP_WAIT_TICKS:
+		_tick()
+		guard += 1
+	var path := _landside.paths.path(v.lane, v.lot, v.stop)
+	var from_mm := LandsideDefinition.mm_along(path, DECK_RAMP_FROM)
+	var to_mm := LandsideDefinition.mm_along(path, DECK_RAMP_TO)
+	while v.pos_mm < from_mm and _clock.tick < TICK_LIMIT:
+		_tick()
+	print("DECK_RAMP vehicle=%d slot=%d ramp %d..%d mm" % [id, v.stop, from_mm, to_mm])
+	var gap := float(to_mm - from_mm) / LandsideSim.SPEED_MM / float(FRAMES - 1)
+	var strip := Image.create(STRIP_TILE.x * 4, STRIP_TILE.y * 2, false, Image.FORMAT_RGBA8)
+	var steepest := 0.0
+	for i in FRAMES:
+		if i > 0:
+			_advance(gap)
+		_views.draw()
+		var node := _views.node_for(id)
+		if node == null:
+			_invalid("deck ramp frame %d: vehicle %d left the view" % [i, id])
+			return
+		# The camera keeps level with the car, side-on, under the first deck.
+		var at := node.global_position
+		var eye := Vector3(DECK_RAMP_EYE.x, clampf(at.y + 1.4, DECK_RAMP_EYE.y, 4.6), at.z)
+		await _place_camera("deck_ramp %d" % i, eye, Vector3(DECK_RAMP_TARGET.x, at.y + 0.6, at.z))
+		steepest = maxf(steepest, node.global_basis.z.y)
+		print(
+			(
+				"DECK_RAMP_STRIP frame=%d tick=%d at=%s nose=%s"
+				% [i, _clock.tick, node.global_position, node.global_basis.z]
+			)
+		)
+		var crop := _tile_around(_aabb_of(node).get_center())
+		if not _prove_in_frame("deck_ramp/frame %d" % i, _aabb_of(node), Rect2(crop)):
+			return
+		await physics_frame
+		await physics_frame
+		if not _prove_visible("deck_ramp/frame %d" % i, node):
+			return
+		if not _prove_wheels("deck_ramp/frame %d" % i, node):
+			return
+		var img := await _grab()
+		strip.blit_rect(img, crop, Vector2i((i % 4) * STRIP_TILE.x, floori(i / 4.0) * STRIP_TILE.y))
+	# The control: the car pitched up the ramp.
+	print("DECK_RAMP steepest nose %.3f" % steepest)
+	if steepest < 0.1:
+		_invalid("the car never pitched up the deck ramp (nose y %.3f)" % steepest)
+	_save(strip, "carpark_deck_ramp_strip.png", _followup_dir)
+
+
+## Board 0b82b7e4 fix round: a car leaving the ground floor (a fixture: a parked car's
+## leave tick brought in to now) down the way out from the slab's front edge, across
+## the hand-over onto the exit lane (its rear wheels still on the ramp behind the
+## lane's start, LandsidePaths.lead_in()) and over the sidewalk, side-on from the east
+## with the camera following it: eight frames evenly by distance, each a STRIP_TILE
+## tile around the car, both axles on the surface in every frame, and at least one
+## frame on the exit lane with the rear axle behind its start.
+func _plate_way_out() -> void:
+	var lot := _landside.definition.lots[MULTI]
+	# A fixture: a car parked on the ground floor leaves now (its leave tick brought in).
+	var id := 0
+	for vid in _landside.vehicle_ids():
+		var w := _landside.get_vehicle(vid)
+		if (
+			id == 0
+			and w.lot == MULTI
+			and w.stage == LandsideVehicle.Stage.PARKED
+			and LandsidePaths.deck_of(lot, lot.slots[w.stop]) == 0
+		):
+			id = vid
+	if id == 0:
+		_invalid("way out: no car parked on the ground floor")
+		return
+	var v := _landside.get_vehicle(id)
+	v.leave_tick = _clock.tick
+	var path := _landside.paths.path(LandsideVehicle.Lane.SLOT, MULTI, v.stop)
+	var from_mm := LandsideDefinition.mm_along(path, WAY_OUT_FROM)
+	var exit_from := LandsideDefinition.length_mm(path) - from_mm
+	var total := exit_from + LandsideDefinition.mm_along(lot.exit, WAY_OUT_TO)
+	var guard := 0
+	while (
+		(v.lane != LandsideVehicle.Lane.SLOT or v.pos_mm < from_mm) and guard < DECK_RAMP_WAIT_TICKS
+	):
+		_tick()
+		guard += 1
+		if guard % 200 == 0:
+			_beat("wait way out %d" % guard)
+			await process_frame
+	if v.lane != LandsideVehicle.Lane.SLOT or v.stage != LandsideVehicle.Stage.LEAVE:
+		_invalid("way out: vehicle %d did not leave down the way out (lane %d)" % [id, v.lane])
+		return
+	print(
+		(
+			"WAY_OUT vehicle=%d slot=%d from %d mm, %d mm to the exit lane, %d in all"
+			% [id, v.stop, v.pos_mm, exit_from, total]
+		)
+	)
+	var gap := float(total) / LandsideSim.SPEED_MM / float(FRAMES - 1)
+	var strip := Image.create(STRIP_TILE.x * 4, STRIP_TILE.y * 2, false, Image.FORMAT_RGBA8)
+	var straddled := 0
+	for i in FRAMES:
+		if i > 0:
+			_advance(gap)
+		_views.draw()
+		var node := _views.node_for(id)
+		if node == null:
+			_invalid("way out frame %d: vehicle %d left the view" % [i, id])
+			return
+		var at := node.global_position
+		var eye := Vector3(WAY_OUT_EYE_X, at.y + 1.1, at.z)
+		await _place_camera("way_out %d" % i, eye, at + Vector3.UP * 0.5)
+		# On the exit lane with the rear axle still behind its start, on the ramp.
+		var axles: Vector2 = node.get_meta(&"axles")
+		var on_exit := v.lane == LandsideVehicle.Lane.LOT_EXIT
+		straddled += int(on_exit and v.pos_mm < roundi(-axles.y * 1000.0))
+		print(
+			(
+				"WAY_OUT_STRIP frame=%d tick=%d lane=%d pos_mm=%d at=%s"
+				% [i, _clock.tick, v.lane, v.pos_mm, at]
+			)
+		)
+		var crop := _tile_around(_aabb_of(node).get_center())
+		if not _prove_in_frame("way_out/frame %d" % i, _aabb_of(node), Rect2(crop)):
+			return
+		await physics_frame
+		await physics_frame
+		if not (
+			_prove_visible("way_out/frame %d" % i, node)
+			and _prove_wheels("way_out/frame %d" % i, node)
+		):
+			return
+		var img := await _grab()
+		strip.blit_rect(img, crop, Vector2i((i % 4) * STRIP_TILE.x, floori(i / 4.0) * STRIP_TILE.y))
+	# The control: a frame caught the hand-over, rear wheels on the ramp behind the lane.
+	print("WAY_OUT frames on the exit lane with the rear still on the ramp: %d" % straddled)
+	if straddled < 1:
+		_invalid("no way-out frame straddled the hand-over onto the exit lane")
+	_save(strip, "carpark_way_out_strip.png", _followup_dir)
+
+
+## A stand-in walker on the ground-floor walk (LandsidePaths.lot_walk) from the gate
+## down the apron, along the sidewalk and onto the road at the crossing (x -6), from
+## over the road: eight frames evenly by distance, each a STRIP_TILE tile around the
+## walker. Every frame proves the walker in its tile and hit by camera rays, and a ray
+## down at its feet meets paving within 3 cm (between the heights either side at a
+## kerb), never the lawn. The cars are hidden for the plate.
+func _plate_crossing_walk() -> void:
+	var lot := _landside.definition.lots[MULTI]
+	var walk := _landside.paths.lot_walk(MULTI, 0)
+	var gate := walk.find(lot.access[lot.access.size() - 1])
+	var kerb := -1
+	for k in range(gate + 1, walk.size()):
+		if walk[k].y <= lot.access[0].y + 0.001 and walk[k].z < -41.0:
+			kerb = k
+			break
+	if gate < 0 or kerb < 0:
+		_invalid("the ground-floor walk has no gate or no road crossing: %s" % [walk])
+		return
+	var shown := PackedVector3Array(walk.slice(gate, kerb + 1))
+	shown.append(walk[kerb] + Vector3(0.0, 0.0, -1.5))
+	var hidden: Array[Node3D] = []
+	for id in _landside.vehicle_ids():
+		var car := _views.node_for(id)
+		if car != null and car.visible:
+			car.visible = false
+			hidden.append(car)
+	print("CROSSING hid %d vehicles; route %s" % [hidden.size(), shown])
+	var walker := MeshInstance3D.new()
+	walker.name = "ProbeWalker"
+	var capsule := CapsuleMesh.new()
+	capsule.radius = WALKER_RADIUS
+	capsule.height = WALKER_HEIGHT
+	walker.mesh = capsule
+	_main.add_child(walker)
+	walker.global_position = shown[0] + Vector3.UP * (WALKER_HEIGHT / 2.0)
+	await _place_camera("crossing", CROSSING_EYE, CROSSING_TARGET)
+	var total := LandsideDefinition.length_mm(shown)
+	var strip := Image.create(STRIP_TILE.x * 4, STRIP_TILE.y * 2, false, Image.FORMAT_RGBA8)
+	var on_sidewalk := 0
+	for i in FRAMES:
+		var at := LandsideDefinition.point_on(shown, roundi(total * i / float(FRAMES - 1)))
+		walker.global_position = at + Vector3.UP * (WALKER_HEIGHT / 2.0)
+		print("CROSSING_STRIP frame=%d at=%s" % [i, at])
+		var crop := _tile_around(at + Vector3.UP)
+		if not _prove_in_frame("crossing/frame %d" % i, _aabb_of(walker), Rect2(crop)):
+			break
+		await physics_frame
+		await physics_frame
+		if not _prove_visible("crossing/frame %d" % i, walker):
+			break
+		var under := _surface_check(
+			"crossing/frame %d feet" % i, at, Vector3(0, 0, 1), _bodies_of(walker)
+		)
+		if not under[0]:
+			_invalid("crossing frame %d: the walker is not on paving at %s" % [i, at])
+			break
+		on_sidewalk += int(absf(at.y - 0.2) < 0.005)
+		var img := await _grab()
+		strip.blit_rect(img, crop, Vector2i((i % 4) * STRIP_TILE.x, floori(i / 4.0) * STRIP_TILE.y))
+	walker.free()
+	for car in hidden:
+		car.visible = true
+	# The control: frames were taken on the sidewalk's top, not only on the apron.
+	print("CROSSING frames on the sidewalk %d" % on_sidewalk)
+	if not _failed and on_sidewalk < 2:
+		_invalid("only %d crossing frames on the sidewalk" % on_sidewalk)
+	if not _failed:
+		_save(strip, "carpark_walk_gate_to_crossing_strip.png", _followup_dir)
+
+
+## Both axles of a drawn car stand on the surface under them (_surface_check).
+func _prove_wheels(label: String, car: Node3D) -> bool:
+	var axles: Vector2 = car.get_meta(&"axles")
+	var exclude := _bodies_of(car)
+	var ok := true
+	for axle: float in [axles.x, axles.y]:
+		var wheel := car.global_transform * Vector3(0.0, 0.0, axle)
+		var tag := "%s %s" % [label, "front" if axle > 0.0 else "rear"]
+		ok = _surface_check(tag, wheel, car.global_basis.z, exclude)[0] and ok
+	if not ok:
+		_invalid("%s: a wheel is off the surface" % label)
+	return ok
+
+
+## Whether `at` stands on what a ray down there first meets (bodies `exclude` left
+## out): within ON_SURFACE, or, at a kerb (the surface KERB_SLACK ahead or behind along
+## `along` differs from it), between the heights either side; and not on the lawn.
+## Returns [ok, ground y].
+func _surface_check(label: String, at: Vector3, along: Vector3, exclude: Array[RID]) -> Array:
+	var flat := Vector3(along.x, 0.0, along.z).normalized()
+	var here := _ground_at(at, exclude)
+	var lo: float = here[0]
+	var hi: float = here[0]
+	for d in [-KERB_SLACK, KERB_SLACK]:
+		var y: float = _ground_at(at + flat * d, exclude)[0]
+		lo = minf(lo, y)
+		hi = maxf(hi, y)
+	var gap: float = at.y - here[0]
+	var kerb := hi - lo > ON_SURFACE
+	var on := (
+		absf(gap) <= ON_SURFACE or (kerb and at.y >= lo - ON_SURFACE and at.y <= hi + ON_SURFACE)
+	)
+	var lawn: bool = here[1] == "Ground"
+	var ok := on and not lawn and not is_nan(gap)
+	print(
+		(
+			"SURFACE %s y=%.3f ground=%.3f gap=%.3f on=%s kerb=%s ok=%s"
+			% [label, at.y, here[0], gap, here[1], kerb, ok]
+		)
+	)
+	return [ok, here[0]]
+
+
+## The first hit of a ray down through `at` (from 0.6 m over it): [y, the hit mesh's
+## name], or [NAN, "nothing"].
+func _ground_at(at: Vector3, exclude: Array[RID]) -> Array:
+	var q := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.6, at + Vector3.DOWN * 0.6)
+	q.exclude = exclude
+	var hit := _cam.get_world_3d().direct_space_state.intersect_ray(q)
+	if not hit:
+		return [NAN, "nothing"]
+	return [(hit.position as Vector3).y, String((hit.collider as Node).get_parent().name)]
+
+
+func _bodies_of(node: Node) -> Array[RID]:
+	var out: Array[RID] = []
+	for body in node.find_children("ProbeBody", "StaticBody3D", true, false):
+		out.append((body as StaticBody3D).get_rid())
+	return out
+
+
+func _save(img: Image, file: String, dir := "") -> void:
+	var path := (_out_dir if dir == "" else dir).path_join(file)
 	if img.save_png(path) != OK:
 		_invalid("could not save %s" % path)
 	else:
