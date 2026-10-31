@@ -4,9 +4,12 @@ extends RefCounted
 ## activity-poses-sit-on-the-lounge-sofa-recline-in-the-nap-pod): on the lounge
 ## sofa it sits on the piece's seat mount with the sit clips, in the nap pod it
 ## sits the same way and then leans back against the cushion with the head
-## tilted (PodRecline), and in the shower it steps into the cubicle and stands
-## there under foam and steam (ShowerFoam), its icons still showing. The play
-## area keeps the browse pose: standing in front of the piece, facing it.
+## tilted (PodRecline), and in the shower it steps into the cubicle and washes
+## there (the looping "shower" clip) under foam and steam (ShowerFoam), its
+## icons still showing. Once the lather is fully up its clothes come off: the
+## body draws skin where its clothes and shoes were (bare_mesh) until the
+## rinse starts. The play area keeps the browse pose: standing in front of the
+## piece, facing it.
 ##
 ## The sim runs every activity visit as one SHOP_BROWSE stage at the piece's
 ## slot cell (ShopLayout), so this view-only helper reads the pose from the
@@ -49,6 +52,15 @@ const SHUFFLE_TICKS := 12
 ## Ticks the nap pod's lean back takes once seated, and the foam's build-up
 ## once in the shower (and the same again at the end).
 const EASE_TICKS := 20
+## Below this height (metres, the body's rest pose) a showering body's parts
+## are its shoes, which come off with the clothes: where the lather's legs
+## start (ShowerFoam.PARTS).
+const FEET_M := 0.14
+## Bones whose vertices are bare skin on every body: the hands.
+const SKIN_BONES: Array[String] = ["Hand", "Finger", "Thumb"]
+
+## Body index (PassengerLooks.BODIES) -> its mesh with clothes and shoes off.
+static var _bare := {}
 
 
 ## How `p` is drawn now: NONE unless it is staying at a sofa, armchair, nap
@@ -149,8 +161,19 @@ static func clip_ticks(sim: PassengerSim, p: Passenger) -> int:
 ## while it is above 0: a PodRecline first on the skeleton (so it runs after
 ## the animation and before the carry modifiers) and a ShowerFoam child, made
 ## when needed and freed after, so a passenger that is neither reclining nor
-## showering carries neither and costs nothing.
-static func dress(node: Node3D, lean: float, lather: float) -> void:
+## showering carries neither and costs nothing. While `undressed`, the body
+## draws bare_mesh in place of its own mesh, which is kept in the node's
+## "dressed" meta and put back the moment `undressed` is false (step-out,
+## release).
+static func dress(node: Node3D, lean: float, lather: float, undressed := false) -> void:
+	if undressed != node.has_meta(&"dressed"):
+		var mi := PassengerLooks.body_mesh(node)
+		if undressed:
+			node.set_meta(&"dressed", mi.mesh)
+			mi.mesh = bare_mesh(node.get_meta(&"body"))
+		else:
+			mi.mesh = node.get_meta(&"dressed")
+			node.remove_meta(&"dressed")
 	var recline: PodRecline = node.get_meta(&"recline") if node.has_meta(&"recline") else null
 	if lean > 0.0 and recline == null:
 		recline = PodRecline.new()
@@ -185,6 +208,124 @@ static func foam(sim: PassengerSim, p: Passenger) -> float:
 		return 0.0
 	var spent := sim.tick - p.stage_tick
 	return smoothstep(0.0, 1.0, minf(spent, _left(sim, p)) / float(EASE_TICKS))
+
+
+## True while a showering visitor's lather is fully up: its clothes are off
+## from then until the rinse starts, so the body is never bare outside a full
+## lather.
+static func bare(sim: PassengerSim, p: Passenger) -> bool:
+	return foam(sim, p) >= 1.0
+
+
+## True while a showering visitor stands in the cubicle between its step in and
+## its step out: it plays the looping washing clip then.
+static func washing(sim: PassengerSim, p: Passenger) -> bool:
+	return kind(sim, p) == Kind.SHOWER and share(sim, p) >= 1.0
+
+
+## Seconds into the washing clip `p` is now: from the end of its step in.
+static func wash_seconds(sim: PassengerSim, p: Passenger) -> float:
+	return maxi(sim.tick - p.stage_tick - SHUFFLE_TICKS, 0) * SimClock.STEP
+
+
+## Body `body`'s mesh with its clothes and shoes off, made on first use and
+## shared by every showering passenger of that body (no passenger's own mesh or
+## material is changed). Surface 0 is the body's other parts as imported;
+## surface 1 is its clothes' triangles (PassengerLooks.cloth_split) and the
+## shoes' (below FEET_M), every vertex's UV moved to one texel of that body's
+## own hand skin (skin_uv), on the same shared atlas material.
+static func bare_mesh(body: int) -> Mesh:
+	if _bare.has(body):
+		return _bare[body]
+	var plain := PassengerLooks.plain_mesh(body)
+	var arrays := plain.surface_get_arrays(0)
+	var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var other := PackedInt32Array()
+	var skin := PackedInt32Array()
+	for t in range(0, index.size(), 3):
+		var first := index[t]
+		var off := (not colors.is_empty() and colors[first].r > 0.5) or verts[first].y < FEET_M
+		var into := skin if off else other
+		into.append_array([index[t], index[t + 1], index[t + 2]])
+	var flags: int = (plain as ArrayMesh).surface_get_format(0) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
+	var mesh := ArrayMesh.new()
+	arrays[Mesh.ARRAY_INDEX] = other
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
+	var uvs := PackedVector2Array()
+	uvs.resize(verts.size())
+	uvs.fill(skin_uv(body))
+	arrays[Mesh.ARRAY_INDEX] = skin
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
+	for i in 2:
+		mesh.surface_set_material(i, plain.surface_get_material(0))
+	_bare[body] = mesh
+	return mesh
+
+
+## The atlas UV of body `body`'s skin: the hand vertex (SKIN_BONES, outside
+## the clothes' mark) whose atlas colour is nearest the mean of all of them.
+static func skin_uv(body: int) -> Vector2:
+	var node := PassengerLooks.SCENES[body].instantiate()
+	var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var plain := PassengerLooks.plain_mesh(body)
+	var arrays := plain.surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	var per := bones.size() / uvs.size()
+	var skin_bone := {}
+	for b in skeleton.get_bone_count():
+		for part in SKIN_BONES:
+			if part in skeleton.get_bone_name(b):
+				skin_bone[b] = true
+	node.free()
+	var atlas := atlas_image(plain)
+	var hands: Array[Vector2] = []
+	var tones: Array[Color] = []
+	var mean := Color(0.0, 0.0, 0.0, 0.0)
+	for v in uvs.size():
+		if not colors.is_empty() and colors[v].r > 0.5:
+			continue
+		var top := 0
+		for k in per:
+			if weights[v * per + k] > weights[v * per + top]:
+				top = k
+		if skin_bone.has(bones[v * per + top]):
+			var tone := atlas_colour(atlas, uvs[v])
+			hands.append(uvs[v])
+			tones.append(tone)
+			mean += tone
+	if hands.is_empty():
+		push_error("ActivityPoses: %s has no hand skin" % PassengerLooks.BODIES[body])
+		return uvs[0]
+	mean /= float(hands.size())
+	var best := 0
+	for i in hands.size():
+		if _distance(tones[i], mean) < _distance(tones[best], mean):
+			best = i
+	return hands[best]
+
+
+## The decompressed atlas image a body mesh's material samples.
+static func atlas_image(mesh: Mesh) -> Image:
+	var material := mesh.surface_get_material(0) as ShaderMaterial
+	var atlas := (material.get_shader_parameter("albedo_texture") as Texture2D).get_image()
+	atlas.decompress()
+	return atlas
+
+
+## The colour of `atlas` at UV `uv`, at the nearest texel.
+static func atlas_colour(atlas: Image, uv: Vector2) -> Color:
+	var size := Vector2i(atlas.get_width(), atlas.get_height())
+	return atlas.get_pixelv(Vector2i(uv * Vector2(size)).clamp(Vector2i.ZERO, size - Vector2i.ONE))
+
+
+static func _distance(a: Color, b: Color) -> float:
+	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length()
 
 
 ## The visited piece's grid record with "index" (the slot index) added, for a

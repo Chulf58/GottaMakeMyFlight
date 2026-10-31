@@ -6,20 +6,27 @@ extends Node3D
 ## lather"). A child of the passenger's node, so it stands where the body
 ## stands: many small soap bubbles hugging the legs, hips, body and arms up
 ## to the neck, drawn as one MultiMesh and built up from the feet as `amount`
-## grows, and thick steam rising out of the cubicle's open top. The head
+## grows, each bubble swelling and drifting a little on its own slow loop
+## (shaders/shower_lather.gdshader, on the GPU, so the motion costs no CPU
+## work per frame), and thick steam rising out of the cubicle's open top. The head
 ## stays clear so the passenger is still readable, and the mood bubble and
 ## need icons draw over it (no depth test). PassengerViews adds one only to a
 ## showering passenger and frees it when the shower ends, so a passenger
 ## that is not showering carries no foam nodes and costs nothing.
 
 ## Body envelopes the bubbles cover, in the node's frame (feet at the
-## origin, facing +Z), for the Toon bodies standing in the idle clip: [centre
-## x, centre z, bottom y, top y, half width, half depth]. The body and arms
-## are one envelope (the hands hang in front of the hips), the legs another,
-## then a collar low enough to clear the chin of the shortest body.
+## origin, facing +Z), for the Toon bodies in both the idle clip (stepping in)
+## and the washing clip, whose stance puts one foot forward: [centre x, centre
+## z, bottom y, top y, half width, half depth]. The body is one envelope (the
+## hands hang in front of the hips at idle; the arms raised to wash are bare
+## skin outside it), the legs another, then a collar low enough to clear the
+## chin of the shortest body. Measured 2026-10-31 over the skinned vertices of
+## all 12 bodies through both clips: the legs need 0.254 by 0.274 m about
+## (0.017, -0.012), the body without its arms 0.235 by 0.213 m about (0.005,
+## 0.007); each envelope here is about 1 cm larger.
 const PARTS: Array[Array] = [
-	[0.0, 0.0, 0.84, 1.56, 0.26, 0.17],
-	[0.0, 0.0, 0.14, 0.88, 0.2, 0.12],
+	[0.0, 0.01, 0.84, 1.56, 0.26, 0.225],
+	[0.017, -0.012, 0.14, 0.88, 0.265, 0.285],
 	[0.0, -0.02, 1.54, 1.6, 0.12, 0.1],
 ]
 ## Bubbles stand on a grid of this spacing over each envelope (jittered by
@@ -31,6 +38,11 @@ const R_MAX := 0.056
 ## Bubbles sit this share of their radius outside the envelope.
 const OUT := 0.3
 const SEED := 7
+## The lather's motion, as shares of a bubble's radius: how much it swells
+## and how far it drifts from where it rests (the shader's uniforms).
+const SWELL := 0.15
+const DRIFT := 0.35
+const LATHER_SHADER := preload("res://shaders/shower_lather.gdshader")
 ## The steam: soft white puffs rising from over the head, out of the
 ## cubicle's open 2.16 m top, growing and fading on a loop, each a share of
 ## the loop later than the last. They cast no shadow.
@@ -66,6 +78,8 @@ func _init() -> void:
 	_lather.name = "Lather"
 	_lather.multimesh = multi
 	_lather.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# The shader moves bubbles past the instances' own bounds.
+	_lather.extra_cull_margin = motion_reach_m(R_MAX)
 	add_child(_lather)
 	_steam.name = "Steam"
 	for i in STEAM_PUFFS:
@@ -112,6 +126,29 @@ static func lather_count() -> int:
 	return _count
 
 
+## The furthest (metres) the lather's motion takes the surface of a bubble of
+## radius `radius` from where it rests: the shader's swell plus its drift,
+## whose offset is at most sqrt(1.25) of DRIFT long.
+static func motion_reach_m(radius: float) -> float:
+	return radius * (SWELL + DRIFT * sqrt(1.25))
+
+
+## The bubbles' rest transforms (centre and radius each), shared by every foam.
+static func bubbles() -> Array[Vector4]:
+	_build_shared()
+	var out: Array[Vector4] = []
+	for i in _count:
+		var b := _buffer.slice(i * 12, i * 12 + 12)
+		out.append(Vector4(b[3], b[7], b[11], b[0]))
+	return out
+
+
+## The material the bubbles draw with.
+static func soap() -> ShaderMaterial:
+	_build_shared()
+	return _bubble.material as ShaderMaterial
+
+
 func _drift() -> void:
 	for i in _puffs.size():
 		var t := fposmod(_clock / STEAM_LOOP_S + i / float(_puffs.size()), 1.0)
@@ -127,19 +164,16 @@ func _drift() -> void:
 static func _build_shared() -> void:
 	if _bubble != null:
 		return
-	var soap := StandardMaterial3D.new()
-	soap.albedo_color = Color(0.97, 0.98, 1.0)
-	soap.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
-	soap.specular_mode = BaseMaterial3D.SPECULAR_TOON
-	soap.roughness = 0.3
-	soap.rim_enabled = true
-	soap.rim = 0.35
+	var lather := ShaderMaterial.new()
+	lather.shader = LATHER_SHADER
+	lather.set_shader_parameter("swell", SWELL)
+	lather.set_shader_parameter("drift", DRIFT)
 	_bubble = SphereMesh.new()
 	_bubble.radius = 1.0
 	_bubble.height = 2.0
 	_bubble.radial_segments = 8
 	_bubble.rings = 4
-	_bubble.material = soap
+	_bubble.material = lather
 	_puff = SphereMesh.new()
 	_puff.radius = 1.0
 	_puff.height = 2.0
