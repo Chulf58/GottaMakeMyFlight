@@ -1216,15 +1216,14 @@ func _plate_arch(id: int) -> void:
 
 ## A close plate of passenger `id` (and `bag`, when given) saved to the close
 ## plates folder as `name`: a camera of the probe's own CLOSE_M out and
-## CLOSE_HEIGHT_M high, aimed at the body AIM_M over the floor (higher and
-## further back for a bag over the head), tries eight
-## headings round the body (facing it first) with the HUD hidden. A heading is
-## kept only when the body's and the bag's drawn bounds project inside the
-## viewport by MARGIN_PX, the body is CLOSE_MIN_PX tall or more, the body is
-## shown (PlateSight.person_shown(): sight lines land on it, none blocked),
-## and at least two of five sight lines to the bag land on it with none
-## blocked by anything but the passenger itself. Each heading prints its
-## numbers. The camera, the HUD and the game camera are put back.
+## CLOSE_HEIGHT_M high, aimed at the body AIM_M over the floor (higher and further
+## back for a bag over the head, nearer and lower for a crouched body, PlateSteps.
+## crouch_of()), tries 8 headings round the body (facing it first), HUD hidden. One is
+## kept only when the body's and the bag's drawn bounds project inside the viewport
+## by MARGIN_PX, the body is CLOSE_MIN_PX tall or more and shown (PlateSight.
+## person_shown(): sight lines land on it, none blocked), and at least two of five
+## sight lines to the bag land on it, blocked by nothing but the passenger. Each
+## heading prints its numbers. The camera, the HUD and the game camera are put back.
 func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 	var body := _views.node_for(id)
 	if body == null:
@@ -1254,8 +1253,9 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 	if bag != null:
 		for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
 			top = maxf(top, (mi.global_transform * mi.get_aabb()).end.y)
-	var aim := maxf(AIM_M, top * 0.5)
-	var back := CLOSE_M * maxf(1.0, (top + 0.3) / 2.3)
+	var low := PlateSteps.crouch_of(body)
+	var aim := maxf(AIM_M, top * 0.5) * low
+	var back := CLOSE_M * maxf(1.0, (top + 0.3) / 2.3) * low
 	for h in 8:
 		var look := body.global_position + Vector3(0.0, aim, 0.0)
 		var yaw := body.global_rotation.y + h * PI / 4.0

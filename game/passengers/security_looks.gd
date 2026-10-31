@@ -165,20 +165,19 @@ static func bag_homes(sim: PassengerSim, p: Passenger) -> Array[Home]:
 
 
 ## Whether bag `index` of `p` is a roller taken off the floor into the pull
-## while `p` stands up from a gate chair or a cafe seat: from the tick that
-## has its park (RollerPark.UP_PARK_END of RollerPark.TICKS) over as the
-## stand-up ends, so the roller parks on its wheels beside a walker still in
-## place and is pulled onto the trail as it walks off (it walks at once once
-## up: parked after, the roller was 0.4 m out of the hand's reach by the
-## regrasp; started with the stand-up, the seated hand fell 0.35 m short of the
-## bag on the floor). Looks only: the sim's stand-up is as long as before.
+## while `p` stands up from a gate chair or a cafe seat: from
+## RollerPark.UP_LEAD_TICKS before the stand-up ends, so the roller parks on its
+## wheels beside a walker (nearly) still in place and is pulled onto the trail
+## as it walks off (it walks at once once up: parked after, the roller was 0.4 m
+## out of the hand's reach by the regrasp; started with the stand-up, the
+## seated hand fell 0.35 m short of the bag on the floor). Looks only: the
+## sim's stand-up is as long as before.
 static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
 	if p.stage not in [Passenger.Stage.STANDING_UP, Passenger.Stage.CAFE_STANDING_UP]:
 		return false
 	if bag_kind(p, index) != Kind.ROLLER:
 		return false
-	var parked_by := ceilf(RollerPark.UP_PARK_END * RollerPark.TICKS)
-	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS - parked_by
+	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS - RollerPark.UP_LEAD_TICKS
 
 
 ## Which hand holds bag `index` of `p` when it is carried: 0 the right, 1 the

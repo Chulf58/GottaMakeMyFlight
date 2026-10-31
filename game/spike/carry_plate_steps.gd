@@ -12,20 +12,20 @@ const CarryContact := preload("res://spike/carry_contact.gd")
 ## A plate whose sampled pixels are darker than DARK_LEVEL (every channel) over
 ## more than DARK_SHARE of the frame is a camera inside or against a mesh.
 const DARK_LEVEL := 0.06
-## A roller laid down from the pull (RollerPark, 16 ticks) is plated on the bar
-## late in its stand (k 0.3), then one sim tick apart through its park and
-## into its lay down, the frames a game at 3x draws (one tick a frame), and
-## near its end (the crossing probe's lead plates).
+## A roller laid down from the pull (RollerPark, TICKS_DOWN 13) is plated on
+## the bar late in its stand (k 0.3), then one sim tick apart (1/13) from its
+## park into its lay down, the frames a game at 3x draws (one tick a frame),
+## and after its let go (the crossing probe's lead plates).
 const LEAD_MOMENTS_OF := {
 	"ROLLER pull>floor":
 	[
 		[0.29, 0.31],
-		[0.365, 0.385],
-		[0.43, 0.445],
-		[0.49, 0.51],
-		[0.555, 0.57],
-		[0.615, 0.635],
-		[0.8, 0.97],
+		[0.375, 0.395],
+		[0.45, 0.47],
+		[0.53, 0.55],
+		[0.605, 0.625],
+		[0.685, 0.70],
+		[0.86, 0.97],
 	],
 }
 const DARK_SHARE := 0.35
@@ -40,6 +40,28 @@ const DETAIL_ON := 3
 ## The most a plate steps the paused clock between two drawn frames (a frame
 ## of a normal run at 60 fps and speed 1 is a third of a tick).
 const STEP_TICKS := 0.34
+## A character standing has its shoulder joints about this high over its feet.
+const STANDING_SHOULDER_M := 1.4
+## Lower than this share of it a body is crouched (crouch_of()); a body this
+## high or higher, standing or near it, keeps the camera as it always was.
+const CROUCHED := 0.85
+
+
+## How low `body` is drawn now, for a close plate's camera (its distance and
+## aim times this): its shoulder joints' height over its feet as drawn (the
+## carry rig's bone attachments, after the stoop) over STANDING_SHOULDER_M, 0.5
+## to CROUCHED, else 1 (standing, or with no carry rig). A body crouched to a bag on the floor
+## is about 0.6 m shorter, and a camera framing it as if it stood drew it under
+## the probes' CLOSE_MIN_PX (crossing probe, roller laid down by a gate chair).
+static func crouch_of(body: Node3D) -> float:
+	var rig: Dictionary = body.get_meta(&"carry_rig", {})
+	if rig.is_empty():
+		return 1.0
+	var high := -INF
+	for joint: Node3D in rig["shoulders"]:
+		high = maxf(high, joint.global_position.y)
+	var low := (high - body.global_position.y) / STANDING_SHOULDER_M
+	return 1.0 if low > CROUCHED else maxf(low, 0.5)
 
 
 ## Every collider under `holder` (PlateSight.colliders) is hit from either

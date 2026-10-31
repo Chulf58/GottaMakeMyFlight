@@ -6,10 +6,11 @@ extends RefCounted
 ## handle are 0.215 m apart even with the rods in, more than twice the probes'
 ## GRIP_ON reach of either, so the hand changes grip while the bag stands
 ## parked on its wheels beside the passenger, on the hand's side, and every
-## frame a hand holds it, it holds the bar or the handle. Pure: CarryLead.plan()
-## hands such a move (stamped "park", stamp()) to plan() here.
+## frame a hand holds it, it holds the bar or the handle. CarryLead.plan()
+## hands such a move (stamped "park", stamp()) to plan() here, which writes
+## nothing but the moment the hand took a lying bag ("park_took", _taken()).
 ##
-## pull>floor goes in four parts of TICKS:
+## pull>floor goes in four parts of TICKS_DOWN:
 ## - stand (to STAND_END): the hand on the bar, the rods going in, the bag rolls
 ##   on its axle to the park and stands up on its wheels;
 ## - park (to PARK_END): no hand on the bag, which stands still at the park,
@@ -17,38 +18,64 @@ extends RefCounted
 ## - lay down (to LAY_END): the hand on the handle, the bag lifted out and laid
 ##   down ahead (CarryLead.path());
 ## - let go: the bag on the floor, the hand coming back.
-## floor>pull is the same backwards: the hand reaches the lying bag's handle
-## (to REACH_END), lifts it to the park (to LIFT_END), lets go while the hand
-## goes from the handle over the top to the bar (to UP_PARK_END), and holds the
-## bar as the bag tips back on its axle into the pull, its rods running out.
+## floor>pull (TICKS_UP) is the same backwards: the hand reaches the lying
+## bag's handle (taking it from REACH_END, once there), lifts it to the park,
+## lets go while the hand goes from the handle over the top to the bar
+## (up_ends()), and holds the bar as the bag tips back on its axle into the
+## pull, its rods running out.
 ## What it does not guarantee: the hand reaching its target (CarryArm's reach
 ## is limited; held, the bag is placed from where the grip is), or the park
 ## being clear of anything beside the passenger (a chair, a neighbour).
 
 ## A move that parks the roller takes this many sim ticks (not
-## CarryOnProps.TRANSFER_TICKS): four parts, the parked one over 3 ticks, so
-## a game at 3x (one tick a frame) draws the bag standing alone on 3 frames.
-## Short enough that a walker sitting down still reaches the floor with it
-## (at 20 ticks the lay down ended 9 cm short of the floor).
-const TICKS := 16.0
+## CarryOnProps.TRANSFER_TICKS), the parked part 3 ticks or more, so a game at
+## 3x (one tick a frame) draws the bag standing alone on 3 frames.
+const TICKS_DOWN := 13.0
+const TICKS_UP := 16.0
 ## pull>floor: the ends of the stand, the park and the lay down (k).
-const STAND_END := 0.35
-const PARK_END := 0.55
-const LAY_END := 0.8
-## floor>pull: the ends of the reach, the lift and the park (k).
+const STAND_END := 0.37
+const PARK_END := 0.6
+const LAY_END := 0.83
+## floor>pull: the ends of the reach, the lift and the park (k), and how many
+## ticks before the stand-up ends it starts (SecurityLooks): the hand takes
+## the lying bag about 20 ticks into the stand-up (the body comes 0.4 m forward
+## over its last 7 ticks, and only then is the bag in reach), and the park ends
+## 3 to 4 ticks into the walk off, beside the walker's way (UP_PARK_AHEAD_M).
 const REACH_END := 0.25
-const LIFT_END := 0.41
-const UP_PARK_END := 0.625
+const TAKE_BY := 0.4
+const LIFT_END := 0.55
+const UP_PARK_END := 0.74
+const UP_LEAD_TICKS := 9
 ## The park: the axle this far out on the hand's side of the body's centre
 ## line and this far ahead of it, in the body's frame when the move began:
 ## under the hand's shoulder, so the hand reaches its bar down beside the hip
 ## (0.42 m out the hand stopped up to 0.3 m short as the walker sat down).
+## Taken off the floor it parks further ahead (UP_PARK_AHEAD_M), where the
+## walker comes past it stepping off: parked 0.45 m ahead, the walker had gone
+## on and the hand was 0.16 m off the bar at 3x as it took it again.
 const PARK_SIDE_M := 0.32
 const PARK_AHEAD_M := 0.15
+const UP_PARK_AHEAD_M := 0.7
+## Laying it down and letting go, the stoop bends the back first and the hips
+## go down only as far as that leaves the hand short, not back (CarryStoop.
+## drops): with the hips going back as well, the hand of a walker sitting down
+## stopped 6 to 9 cm over the handle on the floor ahead, and the bag let go
+## dropped that far.
+const LAY_HIPS := Vector3(1.0, 0.0, 1.0)
 ## The empty hand goes from the bar to the handle over the bag's top through
 ## this point (own frame, scale 1): over the top end and out past the front
 ## panel (0.2 m), so it comes down onto the handle from outside the shell.
 const OVER_TOP := Vector3(0.0, 0.22, 0.33)
+## Off the floor the hand takes the lying bag once its grip is this close to
+## the handle (body["grips"]), from REACH_END on, and at TAKE_BY whatever: the
+## bag waits on the floor until then. The lift then runs to LIFT_END, or for
+## UP_PART of the move when it was taken late, and the park for UP_PART more
+## (up_ends()): taken late at 3x, a lift squeezed into 1.8 ticks drew the hand
+## 0.24 m from one frame to the next.
+## Taken at REACH_END on the clock, a walker still standing up had its hand
+## 0.18-0.29 m short, and the bag jumped that far into it.
+const TAKE_M := 0.05
+const UP_PART := 0.19
 ## Lifted off the floor to the park, the bag rises this much midway.
 const LIFT_M := 0.12
 
@@ -78,8 +105,10 @@ static func parks(bag: Dictionary, in_stall: bool, home: int) -> bool:
 ## walk off, 0.7 m in a third of a tick.
 static func stamp(bag: Dictionary, body: Transform3D) -> void:
 	bag["park"] = true
-	bag["ticks"] = TICKS
+	bag["ticks"] = TICKS_DOWN
+	bag.erase("park_took")
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
+		bag["ticks"] = TICKS_UP
 		bag["reach"] = REACH_END
 		bag["from_world"] = body * (bag["from"] as Transform3D)
 	var ahead := body.basis.z
@@ -89,16 +118,18 @@ static func stamp(bag: Dictionary, body: Transform3D) -> void:
 
 ## The roller parked (world) for a move led by `hand` (0 right, 1 left), in
 ## `frame` (stamp()'s), drawn at `scale_by`: standing on its wheels PARK_SIDE_M
-## out on the hand's side, its front panel to the back of the body (as it
+## out on the hand's side and `ahead`, its front panel to the back of the body (as it
 ## stands up from the pull behind, turning about its axle only), upright, its
 ## axle the wheels' radius up: the wheels (build_carry_on_kit.py, 0.03 m past
 ## the shell's bottom end) on the floor. Not leaning onto its front panel's
 ## bottom edge: the probes' rest check reads the lowest corner of the bag's
 ## mesh bounds, and leaning puts that corner (under the carry handle) through
 ## the floor by more than its 1 cm.
-static func park(frame: Transform3D, hand: int, scale_by: float) -> Transform3D:
+static func park(
+	frame: Transform3D, hand: int, scale_by: float, ahead := PARK_AHEAD_M
+) -> Transform3D:
 	var out := -1.0 if hand == 0 else 1.0
-	var axle := frame * Vector3(out * PARK_SIDE_M, 0.0, PARK_AHEAD_M)
+	var axle := frame * Vector3(out * PARK_SIDE_M, 0.0, ahead)
 	axle.y = frame.origin.y + CarryOnProps.ROLLER_AXLE.y * scale_by
 	var front := frame.basis * Vector3.FORWARD
 	var basis := Basis(front.cross(Vector3.UP), front, Vector3.UP).scaled(Vector3.ONE * scale_by)
@@ -109,7 +140,7 @@ static func park(frame: Transform3D, hand: int, scale_by: float) -> Transform3D:
 ## their new one at `k`: in while it stands up, out while it tips into the pull.
 static func rods_t(k: float, bag: Dictionary) -> float:
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
-		return smoothstep(UP_PARK_END, 1.0, k)
+		return smoothstep(up_ends(bag).y, 1.0, k)
 	return smoothstep(0.0, STAND_END, k)
 
 
@@ -118,6 +149,13 @@ static func rods_t(k: float, bag: Dictionary) -> float:
 static func _eased(t: float) -> float:
 	var x := clampf(t, 0.0, 1.0)
 	return x * x * x * (x * (x * 6.0 - 15.0) + 10.0)
+
+
+## Where the lift and the park of a floor>pull move of `bag` end (k): LIFT_END
+## and UP_PARK_END, later when its bag was taken late ("park_took", _taken()).
+static func up_ends(bag: Dictionary) -> Vector2:
+	var lift := maxf(LIFT_END, float(bag.get("park_took", 0.0)) + UP_PART)
+	return Vector2(lift, maxf(UP_PARK_END, lift + UP_PART))
 
 
 ## The roller turning on its axle from `from` to `to` (world, both on their
@@ -150,7 +188,8 @@ static func plan(
 	var started := CarryLead.start_of(bag)
 	var off_floor: bool = started[0] == CarryLead.End.REST
 	var lead: int = CarryLead.hand_of(bag["home"]) if off_floor else started[1]
-	var parked := park(bag["park_frame"], lead, body["scale"])
+	var ahead := UP_PARK_AHEAD_M if off_floor else PARK_AHEAD_M
+	var parked := park(bag["park_frame"], lead, body["scale"], ahead)
 	var bar := Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, body["bar_z"])
 	var handle := CarryOnProps.ROLLER_HANDLE
 	var go := flags.duplicate()
@@ -164,7 +203,9 @@ static func plan(
 	if not off_floor:
 		at = _onto_floor(k, start, want, parked, frame, go, bar, handle)
 	else:
-		at = _off_floor(k, start, want, parked, frame, go, bar, handle)
+		at = _off_floor(
+			k, start, want, parked, _taken(bag, k, start * handle, body, lead), bar, handle
+		)
 	var xf: Transform3D = at[1]
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	var weights := [0.0, 0.0]
@@ -179,7 +220,12 @@ static func plan(
 		"targets": targets,
 		"weights": weights,
 		"keeps": keeps,
-		"drops": [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL],
+		"drops":
+		(
+			[LAY_HIPS, LAY_HIPS]
+			if not off_floor and k >= PARK_END
+			else [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
+		),
 	}
 
 
@@ -212,27 +258,42 @@ static func _onto_floor(
 	return [false, want, handle, handle, back]
 
 
-## floor>pull at `k` (plan()): [held, xf, anchor, target, weight].
+## The k a floor>pull move of `bag` took the lying bag at (TAKE_M, TAKE_BY), the
+## hand `lead` of `body` (plan()'s) and the handle at `at` (world) as drawn now;
+## -1 while it has not. Kept on the move's record ("park_took"): the hand
+## reaching it is a pose, not a time.
+static func _taken(bag: Dictionary, k: float, at: Vector3, body: Dictionary, lead: int) -> float:
+	if bag.has("park_took"):
+		return bag["park_took"]
+	var grip: Vector3 = body["grips"][lead]
+	if k >= TAKE_BY or (k >= REACH_END and grip.distance_to(at) <= TAKE_M):
+		bag["park_took"] = k
+		return k
+	return -1.0
+
+
+## floor>pull at `k` (plan()), the bag taken off the floor at `took` (_taken()):
+## [held, xf, anchor, target, weight].
 static func _off_floor(
 	k: float,
 	start: Transform3D,
 	want: Transform3D,
 	parked: Transform3D,
-	_frame: Transform3D,
-	_go: Dictionary,
+	took: float,
 	bar: Vector3,
 	handle: Vector3
 ) -> Array:
-	if k < REACH_END:
+	if took < 0.0 or k < took:
 		return [false, start, handle, handle, smoothstep(0.0, 1.0, k / REACH_END)]
-	if k < LIFT_END:
-		var t := (k - REACH_END) / (LIFT_END - REACH_END)
-		var lifted := start.interpolate_with(parked, smoothstep(0.0, 1.0, t))
+	var ends := up_ends({"park_took": took})
+	if k < ends.x:
+		var t := (k - took) / (ends.x - took)
+		var lifted := start.interpolate_with(parked, _eased(t))
 		lifted.origin.y += LIFT_M * 4.0 * t * (1.0 - t)
 		return [true, lifted, handle, handle, 1.0]
-	if k < UP_PARK_END:
-		var v := smoothstep(0.0, 1.0, (k - LIFT_END) / (UP_PARK_END - LIFT_END))
+	if k < ends.y:
+		var v := smoothstep(0.0, 1.0, (k - ends.x) / (ends.y - ends.x))
 		return [false, parked, bar, over_top(handle, bar, v), 1.0]
-	var u := smoothstep(0.0, 1.0, (k - UP_PARK_END) / (1.0 - UP_PARK_END))
+	var u := smoothstep(0.0, 1.0, (k - ends.y) / (1.0 - ends.y))
 	# Into the pull's arm pose as the bag comes onto the trail.
-	return [true, rolled(parked, want, u), bar, bar, 1.0 - smoothstep(0.3, 1.0, u)]
+	return [true, rolled(parked, want, u), bar, bar, 1.0 - smoothstep(0.0, 1.0, u)]

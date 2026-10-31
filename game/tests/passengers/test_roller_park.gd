@@ -18,11 +18,15 @@ const FRAME_TICKS := [1.0 / 3.0, 1.0]
 ## Between two drawn frames 1/3 of a tick apart the bag and the hand's grip
 ## move less than SNAP_M (a snap to the move's start or end is 0.5 m or
 ## more; the fastest part of a move, the stand, about 0.15 m), and across a
-## change of grip at the park (the frame the hand leaves the bag standing, and
-## the frame it takes it again) less than GRASP_M: the bag still, the hand
-## ending its way to the grip.
+## change of grip (the hand taking the bag off the floor, leaving it standing
+## at the park and taking it again) less than GRASP_M: the bag still, the hand
+## ending its way to the grip. Let go on the floor at the end, the bag settles
+## less than DROP_M onto its place, the hand going back as fast as it likes.
+## Each scales with the ticks a frame (a game at 3x draws three times as far
+## between frames), but the drop, read at 1x only.
 const SNAP_M := 0.3
 const GRASP_M := 0.05
+const DROP_M := 0.03
 ## How long a walker is followed after its move began.
 const AFTER_TICKS := 22
 
@@ -92,7 +96,9 @@ func test_only_a_roller_between_the_pull_and_the_floor_parks() -> void:
 		var bag: Dictionary = c[0]
 		CarryLead.stamp_move(bag, c[1], c[2], body)
 		assert_bool(bag.get("park", false)).is_equal(c[3])
-		var ticks := RollerPark.TICKS if c[3] else CarryOnProps.TRANSFER_TICKS
+		var ticks := CarryOnProps.TRANSFER_TICKS
+		if c[3]:
+			ticks = RollerPark.TICKS_DOWN if c[2] == floor else RollerPark.TICKS_UP
 		assert_float(CarryLead.ticks_of(bag)).is_equal(ticks)
 	var case := _move(_place(hand, 0), pull, _place(floor, 0), pull)
 	case["kind"] = SecurityLooks.Kind.CASE
@@ -105,7 +111,8 @@ func test_only_a_roller_between_the_pull_and_the_floor_parks() -> void:
 	again["was"] = _place(floor, 0)
 	CarryLead.stamp_move(again, false, hand, body)
 	assert_float(CarryLead.ticks_of(again)).is_equal(CarryOnProps.TRANSFER_TICKS)
-	assert_float(RollerPark.TICKS).is_greater(CarryOnProps.TRANSFER_TICKS)
+	assert_float(RollerPark.TICKS_DOWN).is_greater(CarryOnProps.TRANSFER_TICKS)
+	assert_float(RollerPark.TICKS_UP).is_greater(CarryOnProps.TRANSFER_TICKS)
 
 
 ## Parked, the roller stands upright on its wheels, its axle the wheels'
@@ -178,7 +185,8 @@ func test_a_parking_plan_holds_a_grip_point_and_never_jumps() -> void:
 		)
 		CarryLead.stamp_move(bag, false, floor if down else hand, frame)
 		bag["home"] = bag["place"]
-		var parked := RollerPark.park(bag["park_frame"], 0, 1.0)
+		var ahead := RollerPark.PARK_AHEAD_M if down else RollerPark.UP_PARK_AHEAD_M
+		var parked := RollerPark.park(bag["park_frame"], 0, 1.0, ahead)
 		var plans := _plans(bag, pulled if down else lying, lying if down else pulled, frame)
 		var held := 0
 		var still := 0
@@ -196,7 +204,7 @@ func test_a_parking_plan_holds_a_grip_point_and_never_jumps() -> void:
 			elif k > RollerPark.STAND_END and k < RollerPark.LAY_END and down:
 				still += 1
 				assert_float(xf.origin.distance_to(parked.origin)).is_less(0.0001)
-			elif k > RollerPark.LIFT_END and k < RollerPark.UP_PARK_END and not down:
+			elif not down and k > RollerPark.up_ends(bag).x and k < RollerPark.up_ends(bag).y:
 				still += 1
 				assert_float(xf.origin.distance_to(parked.origin)).is_less(0.0001)
 			var moved := xf.origin.distance_to((was[2] as Transform3D).origin)
@@ -308,7 +316,7 @@ func _route(p: Passenger, name: String, ticks: float) -> Dictionary:
 			out["worst"] = maxf(out["worst"], on[0])
 			if on[0] > on[1]:
 				out["fails"].append("%s GRIP_ON gap %.3f > %.3f" % [tag, on[0], on[1]])
-		elif move != "" and bag.get("park", false) and _in_park(name, k):
+		elif move != "" and bag.get("park", false) and _in_park(name, k, bag):
 			out["parked"] += 1
 			var rest := FloatCheck.rest_gap(_world.sim, null, node)
 			if rest > FloatCheck.RESTING_M:
@@ -330,14 +338,15 @@ func _route(p: Passenger, name: String, ticks: float) -> Dictionary:
 		var grip := props.grip_of(body, lead)
 		if int(out["frames"]) > 1:
 			var moved := node.global_transform.origin.distance_to(last_xf.origin)
-			var reached := grip.distance_to(last_grip)
+			# The hand against the body (a walker walking off carries it 0.1 m a tick).
+			var reached := (grip - body.global_position).distance_to(last_grip)
 			var grasp := move != "" and holder != last_holder
-			# At the park the bag stands still and the hand slows onto and off it;
-			# taking the bag first and leaving it last the hand may come and go fast
-			# (each printed with what it moved).
-			var at_park := grasp and _by_park(name, k)
-			var step := (GRASP_M if at_park else SNAP_M) * ticks * 3.0
-			if at_park:
+			var let_go := grasp and holder < 0 and not _by_park(name, k, bag)
+			var step := (GRASP_M if grasp else SNAP_M) * ticks * 3.0
+			# At 3x a frame holds a tick of the set-down before it: the drop is read
+			# at 1x only.
+			var drop := DROP_M if ticks < 0.5 else SNAP_M * ticks * 3.0
+			if grasp and _by_park(name, k, bag):
 				out["grasps"] += 1
 			if grasp:
 				print(
@@ -346,12 +355,12 @@ func _route(p: Passenger, name: String, ticks: float) -> Dictionary:
 						% [tag, last_holder, holder, moved, reached]
 					)
 				)
-			if moved > step:
+			if moved > (drop if let_go else step):
 				out["fails"].append("%s bag jumped %.3f" % [tag, moved])
-			if reached > step:
+			if reached > (SNAP_M * ticks * 3.0 if let_go else step):
 				out["fails"].append("%s grip jumped %.3f" % [tag, reached])
 		last_xf = node.global_transform
-		last_grip = grip
+		last_grip = grip - body.global_position
 		last_holder = holder if move != "" else -2
 		if move != "" and int(out["frames"]) % 3 == 0:
 			var side: String = [".R", ".L"][lead] if holder >= 0 else ""
@@ -363,26 +372,29 @@ func _route(p: Passenger, name: String, ticks: float) -> Dictionary:
 	return out
 
 
-## Whether `k` of a parking move `name` is at its park: in its parked share or
-## within a frame of it.
-static func _by_park(name: String, k: float) -> bool:
+## Whether `k` of a parking move `name` (its record `bag`) is at its park: in
+## its parked share or within a frame of it.
+static func _by_park(name: String, k: float, bag: Dictionary) -> bool:
 	if name == "pull>floor":
 		return k > RollerPark.STAND_END - 0.06 and k < RollerPark.PARK_END + 0.06
-	return k > RollerPark.LIFT_END - 0.06 and k < RollerPark.UP_PARK_END + 0.06
+	var ends := RollerPark.up_ends(bag)
+	return k > ends.x - 0.06 and k < ends.y + 0.06
 
 
-## Whether `k` of a parking move `name` is inside its parked share.
-static func _in_park(name: String, k: float) -> bool:
+## Whether `k` of a parking move `name` (its record `bag`) is inside its parked
+## share.
+static func _in_park(name: String, k: float, bag: Dictionary) -> bool:
 	if name == "pull>floor":
 		return k > RollerPark.STAND_END + 0.01 and k < RollerPark.PARK_END - 0.01
-	return k > RollerPark.LIFT_END + 0.01 and k < RollerPark.UP_PARK_END - 0.01
+	var ends := RollerPark.up_ends(bag)
+	return k > ends.x + 0.01 and k < ends.y - 0.01
 
 
 ## Sitting down by a gate chair with a pulled roller, and standing up from it
 ## to walk off, at 1x and 3x: every held frame on the bar or the handle
 ## (GRIP_ON), no FLOAT, every parked frame on the floor and still, no jump
 ## between frames, no body point inside the bag, and the move over in
-## RollerPark.TICKS. Control: held and parked frames were seen.
+## its RollerPark.TICKS_DOWN or TICKS_UP. Control: held and parked frames were seen.
 func test_a_roller_by_a_gate_chair_parks_to_change_grip_on_every_frame() -> void:
 	for down in [true, false]:
 		for ticks: float in FRAME_TICKS:
@@ -419,7 +431,8 @@ func test_a_roller_by_a_gate_chair_parks_to_change_grip_on_every_frame() -> void
 			assert_int(int(seen["parked"])).is_greater(0)
 			# Both changes of grip at the park seen: onto it and off it.
 			assert_int(int(seen["grasps"])).is_greater_equal(2)
+			var ticks_of_move := RollerPark.TICKS_DOWN if down else RollerPark.TICKS_UP
 			assert_float(float(seen["ticks"])).is_between(
-				RollerPark.TICKS - 0.01, RollerPark.TICKS + 1.01
+				ticks_of_move - 0.01, ticks_of_move + 1.01
 			)
 			assert_int(fails.size()).is_equal(0)
