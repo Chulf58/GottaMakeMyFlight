@@ -161,7 +161,8 @@ func pose_at(id: int, alpha: float) -> Transform3D:
 			mm += off
 		dir = paths.facing(place[0], place[1], place[2], mm)
 	var axles: Vector2 = (_nodes[id] as Node3D).get_meta(&"axles")
-	return on_path(paths.path(place[0], place[1], place[2]), mm, dir, axles)
+	var path := paths.path(place[0], place[1], place[2])
+	return on_path(path, mm, dir, axles, paths.lead_in(place[0], place[1]))
 
 
 ## A car's pose `mm` along `path`, its nose the flat way `dir`: over the path
@@ -170,19 +171,34 @@ func pose_at(id: int, alpha: float) -> Transform3D:
 ## where each wheel stands, so on a slope it pitches and neither wheel floats
 ## or sinks. Each wheel is looked up that far along the path, ahead of the
 ## car or behind it by the way the nose faces (backing out, the front wheels
-## are behind on the path). A wheel past either end of the path takes the
-## end's height: every lane carries on flat from its ends (the access lane's
-## gate into the entrance, a slot's path into the exit lane), and carrying a
-## last ramp segment on would lift a wheel off the slab at the gate.
-static func on_path(path: PackedVector3Array, mm: int, dir: Vector3, axles: Vector2) -> Transform3D:
+## are behind on the path). A wheel before the path's start stands on `lead`,
+## the way that runs into the start (LandsidePaths.lead_in(): the multi-storey's
+## way-out ramp down to its exit lane), or at the start's height when there is
+## none. A wheel past the path's end takes the end's height: every lane
+## carries on flat from its end (the access lane's gate into the entrance, a
+## slot's path into the exit lane), and carrying a last ramp segment on would
+## lift a wheel off the slab at the gate.
+static func on_path(
+	path: PackedVector3Array, mm: int, dir: Vector3, axles: Vector2, lead := PackedVector3Array()
+) -> Transform3D:
 	var at := LandsideDefinition.point_at(path, mm)
 	var way := 1.0 if dir.dot(LandsideDefinition.heading_at(path, mm)) >= 0.0 else -1.0
-	var front := LandsideDefinition.point_at(path, mm + roundi(way * axles.x * 1000.0)).y
-	var rear := LandsideDefinition.point_at(path, mm + roundi(way * axles.y * 1000.0)).y
+	var front := _height_on(path, lead, mm + roundi(way * axles.x * 1000.0))
+	var rear := _height_on(path, lead, mm + roundi(way * axles.y * 1000.0))
 	var rise := clampf((front - rear) / (axles.x - axles.y), -1.0, 1.0)
 	at.y = front - axles.x * rise
 	var nose := dir * sqrt(1.0 - rise * rise) + Vector3.UP * rise
 	return Transform3D(Basis.looking_at(nose, Vector3.UP, true), at)
+
+
+## The height `mm` along `path`, a negative `mm` back along `lead` (which ends
+## where `path` starts), both clamped to their far ends.
+static func _height_on(path: PackedVector3Array, lead: PackedVector3Array, mm: int) -> float:
+	if mm >= 0 or lead.is_empty():
+		return LandsideDefinition.point_at(path, mm).y
+	var into := lead.duplicate()
+	into.append(path[0])
+	return LandsideDefinition.point_at(into, LandsideDefinition.length_mm(into) + mm).y
 
 
 ## Selects vehicle `id` (0 for none) and moves follow_anchor and the ring

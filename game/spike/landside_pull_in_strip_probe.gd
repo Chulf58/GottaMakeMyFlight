@@ -106,6 +106,11 @@ const DECK_RAMP_WAIT_TICKS := 20000
 ## From over the road, looking at the apron, the sidewalk and the crossing at x -6.
 const CROSSING_EYE := Vector3(-1.5, 8.0, -55.0)
 const CROSSING_TARGET := Vector3(-1.5, 0.3, -39.5)
+## East of the way out (x 6.5), side-on, following a leaving car from the slab's front
+## edge (z -34) down the ramp onto the exit lane and over the sidewalk (to z -41.8).
+const WAY_OUT_EYE_X := 14.0
+const WAY_OUT_FROM := Vector3(6.5, 0.3, -34.0)
+const WAY_OUT_TO := Vector3(6.5, 0.1, -41.8)
 ## A wheel or a foot is on the surface within this; at a kerb, between the heights
 ## KERB_SLACK either side of it.
 const ON_SURFACE := 0.03
@@ -184,6 +189,8 @@ func _run() -> void:
 		await _plate_crossing_walk()
 	if not _failed:
 		await _plate_kerb_gap()
+	if not _failed:
+		await _plate_way_out()
 	if not _failed:
 		await _plate_upper_deck()
 	_guard_mutex.lock()
@@ -919,6 +926,96 @@ func _plate_deck_ramp(id: int) -> void:
 	if steepest < 0.1:
 		_invalid("the car never pitched up the deck ramp (nose y %.3f)" % steepest)
 	_save(strip, "carpark_deck_ramp_strip.png", _followup_dir)
+
+
+## Board 0b82b7e4 fix round: a car leaving the ground floor (a fixture: a parked car's
+## leave tick brought in to now) down the way out from the slab's front edge, across
+## the hand-over onto the exit lane (its rear wheels still on the ramp behind the
+## lane's start, LandsidePaths.lead_in()) and over the sidewalk, side-on from the east
+## with the camera following it: eight frames evenly by distance, each a STRIP_TILE
+## tile around the car, both axles on the surface in every frame, and at least one
+## frame on the exit lane with the rear axle behind its start.
+func _plate_way_out() -> void:
+	var lot := _landside.definition.lots[MULTI]
+	# A fixture: a car parked on the ground floor leaves now (its leave tick brought in).
+	var id := 0
+	for vid in _landside.vehicle_ids():
+		var w := _landside.get_vehicle(vid)
+		if (
+			id == 0
+			and w.lot == MULTI
+			and w.stage == LandsideVehicle.Stage.PARKED
+			and LandsidePaths.deck_of(lot, lot.slots[w.stop]) == 0
+		):
+			id = vid
+	if id == 0:
+		_invalid("way out: no car parked on the ground floor")
+		return
+	var v := _landside.get_vehicle(id)
+	v.leave_tick = _clock.tick
+	var path := _landside.paths.path(LandsideVehicle.Lane.SLOT, MULTI, v.stop)
+	var from_mm := LandsideDefinition.mm_along(path, WAY_OUT_FROM)
+	var exit_from := LandsideDefinition.length_mm(path) - from_mm
+	var total := exit_from + LandsideDefinition.mm_along(lot.exit, WAY_OUT_TO)
+	var guard := 0
+	while (
+		(v.lane != LandsideVehicle.Lane.SLOT or v.pos_mm < from_mm) and guard < DECK_RAMP_WAIT_TICKS
+	):
+		_tick()
+		guard += 1
+		if guard % 200 == 0:
+			_beat("wait way out %d" % guard)
+			await process_frame
+	if v.lane != LandsideVehicle.Lane.SLOT or v.stage != LandsideVehicle.Stage.LEAVE:
+		_invalid("way out: vehicle %d did not leave down the way out (lane %d)" % [id, v.lane])
+		return
+	print(
+		(
+			"WAY_OUT vehicle=%d slot=%d from %d mm, %d mm to the exit lane, %d in all"
+			% [id, v.stop, v.pos_mm, exit_from, total]
+		)
+	)
+	var gap := float(total) / LandsideSim.SPEED_MM / float(FRAMES - 1)
+	var strip := Image.create(STRIP_TILE.x * 4, STRIP_TILE.y * 2, false, Image.FORMAT_RGBA8)
+	var straddled := 0
+	for i in FRAMES:
+		if i > 0:
+			_advance(gap)
+		_views.draw()
+		var node := _views.node_for(id)
+		if node == null:
+			_invalid("way out frame %d: vehicle %d left the view" % [i, id])
+			return
+		var at := node.global_position
+		var eye := Vector3(WAY_OUT_EYE_X, at.y + 1.1, at.z)
+		await _place_camera("way_out %d" % i, eye, at + Vector3.UP * 0.5)
+		# On the exit lane with the rear axle still behind its start, on the ramp.
+		var axles: Vector2 = node.get_meta(&"axles")
+		var on_exit := v.lane == LandsideVehicle.Lane.LOT_EXIT
+		straddled += int(on_exit and v.pos_mm < roundi(-axles.y * 1000.0))
+		print(
+			(
+				"WAY_OUT_STRIP frame=%d tick=%d lane=%d pos_mm=%d at=%s"
+				% [i, _clock.tick, v.lane, v.pos_mm, at]
+			)
+		)
+		var crop := _tile_around(_aabb_of(node).get_center())
+		if not _prove_in_frame("way_out/frame %d" % i, _aabb_of(node), Rect2(crop)):
+			return
+		await physics_frame
+		await physics_frame
+		if not (
+			_prove_visible("way_out/frame %d" % i, node)
+			and _prove_wheels("way_out/frame %d" % i, node)
+		):
+			return
+		var img := await _grab()
+		strip.blit_rect(img, crop, Vector2i((i % 4) * STRIP_TILE.x, floori(i / 4.0) * STRIP_TILE.y))
+	# The control: a frame caught the hand-over, rear wheels on the ramp behind the lane.
+	print("WAY_OUT frames on the exit lane with the rear still on the ramp: %d" % straddled)
+	if straddled < 1:
+		_invalid("no way-out frame straddled the hand-over onto the exit lane")
+	_save(strip, "carpark_way_out_strip.png", _followup_dir)
 
 
 ## A stand-in walker on the ground-floor walk (LandsidePaths.lot_walk) from the gate

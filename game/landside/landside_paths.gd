@@ -124,6 +124,18 @@ func facing(lane: LandsideVehicle.Lane, lot: int, stop: int, mm: int) -> Vector3
 	return dir
 
 
+## The way into the start of the path a car on `lane` of lot spot `lot`
+## follows, for a wheel still behind that start: a lot exit lane is reached
+## from its lot's way out (both a slot's path and the turn round end with it),
+## which on the multi-storey comes down the ramp from the slab. Every other path
+## starts where the way in is flat at the start's height (the road, a lane its
+## path begins with), so it has none: empty.
+func lead_in(lane: LandsideVehicle.Lane, lot: int) -> PackedVector3Array:
+	if lane == LandsideVehicle.Lane.LOT_EXIT:
+		return definition.lots[lot].way_out
+	return PackedVector3Array()
+
+
 ## How a position on the place `before` reads on the place `now` a tick
 ## later: the mm to take off a position on `before` to have it on `now`, 0
 ## when both share the coordinate (the same place, a lane and the path that

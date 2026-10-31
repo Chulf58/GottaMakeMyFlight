@@ -146,6 +146,63 @@ func test_a_car_up_the_inside_ramps_has_both_wheels_on_the_ramp() -> void:
 	assert_int(pitched).is_greater(40)
 
 
+## On the way out: from the entrance down the way-out ramp to the exit lane, a
+## car leaving a ground-floor and a first-deck slot, and one turning round at
+## the gate, then along the exit lane over the sidewalk to the far carriageway,
+## has both wheels on the surface. On the exit lane's first metres its rear
+## wheels are still on the ramp (LandsidePaths.lead_in()).
+func test_a_car_on_the_way_out_has_both_wheels_on_the_surface() -> void:
+	var found := _way_out_off(_paths.lead_in(LandsideVehicle.Lane.LOT_EXIT, 1))
+	print(
+		(
+			"way out: checked %d, pitched %d, off %s"
+			% [found["checked"], found["pitched"], found["off"]]
+		)
+	)
+	assert_array(found["off"]).is_empty()
+	assert_int(found["checked"]).is_greater(300)
+	# A control: the car did pitch on the way down and over the sidewalk.
+	assert_int(found["pitched"]).is_greater(40)
+
+
+## The control for the check: the exit lane's start with no way in behind it (a
+## rear wheel held at the lane's start height while it is still on the ramp, as
+## before the fix round) is found sunk into the ramp.
+func test_a_car_starting_the_exit_lane_with_no_way_in_is_found_sunk() -> void:
+	var found := _way_out_off(PackedVector3Array())
+	print("way out, no way in: %d off, first %s" % [found["off"].size(), found["off"].slice(0, 2)])
+	assert_int(found["off"].size()).is_greater_equal(3)
+
+
+## Every SAMPLE_MM of the way out, both wheels against the surface; the exit
+## lane is drawn with `lead` behind its start.
+func _way_out_off(lead: PackedVector3Array) -> Dictionary:
+	var legs: Array = []
+	for path: PackedVector3Array in [
+		_paths.slot_path[1][0], _paths.slot_path[1][9], _paths.turn_path[1]
+	]:
+		var from := LandsideDefinition.mm_along(path, _spot.way_out[1])
+		legs.append([path, from, LandsideDefinition.length_mm(path), PackedVector3Array()])
+	var exit := _spot.exit
+	legs.append([exit, 0, LandsideDefinition.mm_along(exit, Vector3(6.5, ROAD_Y, -45.0)), lead])
+	var off: Array[String] = []
+	var checked := 0
+	var pitched := 0
+	for leg: Array in legs:
+		var path: PackedVector3Array = leg[0]
+		for mm in range(leg[1], leg[2], SAMPLE_MM):
+			var dir := LandsideDefinition.heading_at(path, mm)
+			var pose := LandsideViews.on_path(path, mm, dir, _axles, leg[3])
+			pitched += int(absf(pose.basis.z.y) > 0.01)
+			for axle in [_axles.x, _axles.y]:
+				var wheel := pose * Vector3(0.0, 0.0, axle)
+				var gap := _gap(wheel)
+				checked += 1
+				if not is_nan(gap) and absf(gap) > ON:
+					off.append("%s gap %.3f" % [wheel, gap])
+	return {"off": off, "checked": checked, "pitched": pitched}
+
+
 ## A ground-floor passenger's walk from the gate to the far side of the road is
 ## on paving all the way: the apron, the sidewalk, then the road.
 func test_a_ground_floor_walk_stays_on_paving_from_the_gate_to_the_crossing() -> void:
