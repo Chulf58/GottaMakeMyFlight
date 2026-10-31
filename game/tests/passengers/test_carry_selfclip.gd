@@ -72,6 +72,73 @@ func test_off_the_floor_a_case_turns_to_hang_sooner() -> void:
 	assert_float(turned[0]).is_less(turned[1])
 
 
+## Lifting a hard case off the floor into the hand the grip is held
+## CarryOnProps.FRONT_PALM_M over the case's carry point (its top edge), so the
+## arm reaching out level ahead is over the case's top, not on it, and the case
+## is placed from that held point; by the end of the carry it is held by its
+## carry point again, as in the side carry. Control: off a tray the grip is on
+## the carry point. Board item 2fbf5edb: on main the grip was on the top edge
+## all the way and the crossing probe (seed 777) found Forearm.R in the case at
+## k 0.46.
+func test_a_case_off_the_floor_is_held_with_the_palm_over_its_top() -> void:
+	var lying := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
+	var hanging := CarryOnProps.carried(Vector3(-0.3, 0.8, 0.05), Vector3.ZERO, 0.0, 1.0)
+	var edge := CarryOnProps.grip_anchor(SecurityLooks.Kind.CASE)
+	var s := CarryLead.span(CarryLead.End.REST, CarryLead.End.HELD)
+	var mid := s.x + (s.y - s.x) * 0.28
+	var over := {}
+	for from_at: int in [FLOOR_AT, TRAY_AT]:
+		var flags := {"from_floor": from_at == FLOOR_AT, "yaw": 0.0, "hand": 0}
+		var bag := _bag(from_at, lying)
+		var plan := CarryLead.plan(bag, mid, lying, hanging, Transform3D(), flags, _body())
+		var xf: Transform3D = plan["xf"]
+		var target: Vector3 = plan["targets"][0]
+		assert_float(target.distance_to(xf * (plan["anchor"] as Vector3))).is_less(0.0001)
+		over[from_at] = target - xf * edge
+		# Reaching for it on the floor, the same height over its edge.
+		var reach := CarryLead.plan(bag, s.x * 0.5, lying, hanging, Transform3D(), flags, _body())
+		var reached: Vector3 = reach["targets"][0] - lying * edge
+		assert_float(reached.y).is_equal_approx((over[from_at] as Vector3).y, 0.0001)
+		var done := CarryLead.plan(bag, 1.0, lying, hanging, Transform3D(), flags, _body())
+		assert_vector(done["anchor"] as Vector3).is_equal_approx(edge, Vector3.ONE * 0.0001)
+	var palm := CarryOnProps.FRONT_PALM_M
+	assert_vector(over[FLOOR_AT] as Vector3).is_equal_approx(
+		Vector3(0.0, palm, 0.0), Vector3.ONE * 0.0001
+	)
+	assert_vector(over[TRAY_AT] as Vector3).is_equal_approx(Vector3.ZERO, Vector3.ONE * 0.0001)
+
+
+## A hard case lifted off the floor rises to the height over the feet the hand
+## had when its move was first drawn, not to where the hand is now: with the
+## hand drawn 0.3 m higher mid-move (as the move's own reach had pumped it),
+## the case is where it is with the hand where it was. A new move ("since")
+## measures again. Control: the end itself follows the higher hand. Board item
+## 2fbf5edb: on main the path rose with the hand, crossing probe seed 777.
+func test_a_case_off_the_floor_rises_to_the_hand_as_the_move_began() -> void:
+	var lying := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
+	var flags := {"from_floor": true, "yaw": 0.0, "hand": 0}
+	var s := CarryLead.span(CarryLead.End.REST, CarryLead.End.HELD)
+	var mid := s.x + (s.y - s.x) * 0.45
+	var low := _body()
+	var high := _body()
+	high["grips"] = [Vector3(-0.3, 1.1, 0.05), Vector3(0.3, 1.1, 0.05)]
+	var at := func(body: Dictionary) -> Transform3D:
+		return CarryOnProps.carried(body["grips"][0], Vector3.ZERO, 0.0, 1.0)
+	var bag := _bag(FLOOR_AT, lying)
+	bag["since"] = 10.0
+	CarryLead.plan(bag, 0.0, lying, at.call(low), Transform3D(), flags, low)
+	var pumped := CarryLead.plan(bag, mid, lying, at.call(high), Transform3D(), flags, high)
+	var fresh := CarryLead.plan(
+		_bag(FLOOR_AT, lying), mid, lying, at.call(low), Transform3D(), flags, low
+	)
+	var y_pumped: float = (pumped["xf"] as Transform3D).origin.y
+	var y_fresh: float = (fresh["xf"] as Transform3D).origin.y
+	assert_float(y_pumped).is_equal_approx(y_fresh, 0.0001)
+	bag["since"] = 20.0
+	var again := CarryLead.plan(bag, mid, lying, at.call(high), Transform3D(), flags, high)
+	assert_float((again["xf"] as Transform3D).origin.y - y_fresh).is_greater(0.1)
+
+
 ## Reaching for a pack on the back the hand starts at the side hang and ends at
 ## the loop; letting go of one it starts at the loop and ends at the side. In
 ## the carry the target is left as it is.

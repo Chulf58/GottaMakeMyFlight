@@ -97,6 +97,14 @@ const STALL_TIP_FROM := 0.4
 ## both ways, so the grip stays off the case (a straight blend between the two
 ## took it 3.5 cm into the case midway).
 const STALL_CASE_EDGE_OUT_M := 0.08
+## Lifting a hard case off the floor into the hand (not in a stall) the grip is
+## held CarryOnProps.FRONT_PALM_M over the point it is carried by (world up, the
+## palm on the top as in the front carry), easing to none over this share of
+## the carry, as the arm turns down into the side carry. Held at that point
+## itself, the arm reaching out level ahead of the stoop lay with the forearm on
+## the case's top behind the hand (crossing probe seed 777, Forearm.R in the
+## case at k 0.46, board item 2fbf5edb).
+const FLOOR_PALM_FADE := Vector2(0.6, 1.0)
 
 
 ## Where a bag of `kind` standing in a stall is held (its own frame, the bag
@@ -110,6 +118,30 @@ static func stall_top(kind: SecurityLooks.Kind, loose: Vector3, scale_by := 1.0)
 		var top := CarryOnProps.bag_box(kind).end.z + CarryOnProps.FRONT_PALM_M / scale_by
 		return Vector3(0.0, STALL_CASE_DEPTH_M * 0.5, top)
 	return loose
+
+
+## How far (world metres) the grip is held over a hard case's carry point at
+## `t` of its carry off the floor into the hand (FLOOR_PALM_FADE).
+static func floor_palm(t: float) -> float:
+	return CarryOnProps.FRONT_PALM_M * (1.0 - smoothstep(FLOOR_PALM_FADE.x, FLOOR_PALM_FADE.y, t))
+
+
+## The end of a hard case's lift off the floor into the hand (`want`, held at
+## `grip_at`, world, with the body drawn at `frame`), at the height over the
+## feet the hand had when this move of `bag` (CarryOnProps' record, its
+## "since") was first drawn, kept on the record: `want` follows the hand as
+## posed now, which this move poses, so a path rising to it raised the hand,
+## the end with it, and the hand again; its knee lift (and floor_palm()) pumped
+## the hand up past its carry, the forearm rising from a low elbow across the
+## case's top (crossing probe seed 777, board item 2fbf5edb).
+static func held_end(
+	bag: Dictionary, frame: Transform3D, want: Transform3D, grip_at: Vector3
+) -> Transform3D:
+	var since: float = bag.get("since", 0.0)
+	if not bag.has("end_since") or bag["end_since"] != since:
+		bag["end_since"] = since
+		bag["end_y"] = grip_at.y - frame.origin.y
+	return want.translated(Vector3.UP * (frame.origin.y + float(bag["end_y"]) - grip_at.y))
 
 
 ## How far (0 to 1) a bag picked up in a stall has tipped from standing into
@@ -466,6 +498,15 @@ static func plan(
 	elif stall and from_end == End.REST and to_end == End.HELD and not roller:
 		anchor_from = anchor_to
 	var held_at := anchor_from.lerp(anchor_to, t)
+	# A hard case lifted off the floor into the hand outside a stall (held_end(),
+	# floor_palm()).
+	var floor_case: bool = (
+		bag["kind"] == SecurityLooks.Kind.CASE
+		and not stall
+		and from_end == End.REST
+		and to_end == End.HELD
+		and flags.get("from_floor", false)
+	)
 	if case_up and from_end == End.REST and to_end == End.HELD:
 		held_at = case_tip_grip(anchor_from, anchor_to, stall_tip(t))
 	var on_back: bool = to_end == End.WORN and bag["carry"] == SecurityLooks.Carry.BACK
@@ -512,6 +553,8 @@ static func plan(
 			var low: float = frame.origin.y + STALL_CARRY_GRIP_M
 			if not roller:
 				goal = want.translated(Vector3.UP * maxf(low - (want * anchor_to).y, 0.0))
+		elif floor_case:
+			goal = held_end(bag, frame, want, want * anchor_to)
 		on_path = path(start, goal, t, frame, bag["from"], lift)
 		# (In a stall path() turns it: upright, tipped late into the carry.)
 		if (from_end == End.REST or to_end == End.REST) and not stall:
@@ -524,11 +567,15 @@ static func plan(
 				want.basis.get_rotation_quaternion(), w
 			)
 			on_path.basis = Basis(q).scaled(start.basis.get_scale().lerp(want.basis.get_scale(), w))
+	# A hard case off the floor into the hand is held with the palm over its top
+	# (FLOOR_PALM_FADE): the hand and the point the case is placed by both go up.
+	var palm := floor_palm(t) if floor_case else 0.0
+	held_at += on_path.basis.inverse() * (Vector3.UP * palm)
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	for hand in 2:
 		match float(ph["targets_at"][hand]):
 			-1.0:
-				targets[hand] = start * anchor_from
+				targets[hand] = start * anchor_from + Vector3.UP * palm
 			2.0:
 				targets[hand] = want * anchor_to
 			_:
