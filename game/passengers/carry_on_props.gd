@@ -508,6 +508,7 @@ func sync() -> void:
 		for i in homes.size():
 			spots.append(SecurityLooks.floor_spot(sim, p, i, homes.size()))
 		held["floor"] = spots
+		held["fixed_floor"] = SecurityLooks.activity_floor(sim, p, homes.size())
 		if tray_at != SecurityLooks.Tray.NONE and held["tray"] == null:
 			held["tray"] = _take("security_tray")
 		var bags: Array = held["bags"]
@@ -1361,6 +1362,8 @@ func _bag_transform(
 		SecurityLooks.Home.FLOOR:
 			if not (held.get("stall", {}) as Dictionary).is_empty():
 				return StallCarry.floor_place(held["stall"], bag_box(kind), scale_by, i, count)
+			if not (held.get("fixed_floor", []) as Array).is_empty():
+				return SecurityLooks.on_floor(held["fixed_floor"][i], bag_box(kind), scale_by)
 			var spot: Transform3D = held["floor"][i]
 			var placed := Transform3D(yaw, body.global_position) * spot
 			placed.origin.y = sim.grid.origin.y
