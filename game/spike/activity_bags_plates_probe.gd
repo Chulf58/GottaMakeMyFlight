@@ -10,17 +10,21 @@ extends SceneTree
 ## hand. A 1 m reference cube stands on the floor beside the piece.
 ##
 ## Plates (the orthographic ones true scale, 3 m tall):
-##   lounge: a roller alone on one seat, two bags on the other
+##   lounge: a roller alone on one seat, two bags on the other;
 ##     lounge_set_down, lounge_pick_up: strips of the roller visitor, every
-##       STRIP_STEP ticks; lounge_front, lounge_side, lounge_top, lounge_game
-##   pod (a hard case alone): pod_set_down, pod_pick_up, pod_front, pod_side,
-##     pod_top, pod_game
-##   shower (a roller alone): shower_set_down, shower_pick_up, shower_front,
-##     shower_side, shower_top, shower_game; distance: the shower room from 12 m
+##     STRIP_STEP ticks
+##   pod (a hard case alone): pod_set_down, pod_pick_up
+##   shower (a roller alone): shower_set_down, shower_pick_up
+##   and for each of lounge, pod and shower (_stills): _front, _back (a section
+##   through the piece's middle), _right, _left (the west wall cut away), _top,
+##   _game and _distance. No bottom view: the floor hides everything from below.
 ## Proofs before a save: the body (feet and chest) and every bag project inside
 ## the frame with a margin, a twin with the visitors hidden differs from the
-## plate, and sight lines (PlateSight, against the meshes drawn) land on every
-## bag in a still plate and on each bag in at least half of a strip's frames.
+## plate, a twin with only one passenger's body hidden differs for each
+## passenger (and for the strip's visitor on every strip frame), and sight
+## lines (PlateSight, against the meshes drawn) land on every bag in a still
+## plate (but the back and left ones) and on each bag in at least half of a
+## strip's frames.
 ## Otherwise PROBE_INVALID, exit 1. Each plate prints where every bag is in
 ## the piece's frame (+z out of its front) and its home.
 ##
@@ -36,6 +40,15 @@ const PlateSight := preload("res://spike/plate_sight.gd")
 const OUT_REL := "res://../tools/blender/out/activity-bags"
 const MARGIN_PX := 8.0
 const MIN_DIFF_PX := 300
+## Each passenger alone must change this many pixels of a plate (its twin with
+## only that passenger hidden).
+const MIN_PERSON_PX := 40
+## The orthographic cameras stand this far from the point they look at.
+const ORTHO_BACK_M := 3.2
+## The left view's near plane cuts this far inside the piece's cell edge: past
+## the wall's inner face (BuildView.WALL_THICKNESS / 2 = 0.07 m), short of the
+## piece (0.08 m in from the edge).
+const WALL_CUT_M := 0.075
 const ORTHO_M := 3.0
 const HANG_MS := 120000
 const CUBE_CELL := Vector2i(24, 5)
@@ -200,9 +213,7 @@ func _seat(prefix: String, bags: Array) -> void:
 	var ids: Array[int] = []
 	for p in people:
 		ids.append(p.id)
-	var spot := _spot()
-	await _ortho_set(prefix, spot, ids, ["front", "side", "top"])
-	await _plate(prefix + "_game", _game_cam(spot), ids)
+	await _stills(prefix, ids)
 	if not await _until(func() -> bool: return _left(a) <= ActivityPoses.SHUFFLE_TICKS + 3):
 		_invalid("%s: the visitor never got up" % prefix)
 		return
@@ -219,14 +230,7 @@ func _shower() -> void:
 	if not await _until(washing):
 		_invalid("shower: the visitor never washed")
 		return
-	var spot := _spot()
-	await _ortho_set("shower", spot, [p.id], ["front", "side", "top"])
-	await _plate("shower_game", _game_cam(spot), [p.id])
-	var far := Camera3D.new()
-	far.fov = 40.0
-	_main.add_child(far)
-	far.look_at_from_position(spot + Vector3(5.0, 9.0, 7.5), spot)
-	await _plate("distance", far, [p.id])
+	await _stills("shower", [p.id])
 	if not await _until(func() -> bool: return _left(p) <= ActivityPoses.DOOR_OUT_TICKS + 4):
 		_invalid("shower: the visitor never stepped out")
 		return
@@ -338,6 +342,7 @@ func _strip(file: String, p: Passenger) -> void:
 			)
 		)
 		var img := _grab()
+		ok = await _person_shown(label, p.id, img) and ok
 		img.resize(img.get_width() / 2, img.get_height() / 2, Image.INTERPOLATE_BILINEAR)
 		frames.append(img)
 		for k in STRIP_STEP:
@@ -416,25 +421,58 @@ func _bags_seen(cam: Camera3D, p: Passenger) -> Array[int]:
 	return out
 
 
-func _ortho_set(prefix: String, spot: Vector3, ids: Array[int], views: Array) -> void:
-	var dirs := {"front": Vector3(0, 0, 1), "side": Vector3(1, 0, 0), "top": Vector3.UP}
-	for view: String in views:
-		await _plate("%s_%s" % [prefix, view], _ortho(spot, dirs[view]), ids)
+## The still plates of a stay: five true-scale orthographic views (front, back,
+## right, left and top; the bottom is left out, the floor hides everything
+## from below), the game view and a distance view. The piece stands in the
+## room's north-west corner, so the back view is a section through the
+## piece's middle (the near plane cuts away the wall and the back half of the
+## piece, as the pod's shell would hide the sitter) and the left view cuts
+## away the west wall just outside the piece. Bags must be hit by sight lines
+## in every view but the back and left ones, where a bag beside the legs is
+## hidden behind them or the piece by design.
+func _stills(prefix: String, ids: Array[int]) -> void:
+	var spot := _spot()
+	var half := _half_width()
+	var views := [
+		["front", Vector3(0, 0, 1), 0.05, true],
+		["back", Vector3(0, 0, -1), ORTHO_BACK_M - 0.5, false],
+		["right", Vector3(1, 0, 0), 0.05, true],
+		["left", Vector3(-1, 0, 0), ORTHO_BACK_M - 0.6 - (half - WALL_CUT_M), false],
+		["top", Vector3.UP, 0.05, true],
+	]
+	for view: Array in views:
+		await _plate("%s_%s" % [prefix, view[0]], _ortho(spot, view[1], view[2]), ids, view[3])
+	await _plate(prefix + "_game", _game_cam(spot), ids)
+	var far := Camera3D.new()
+	far.fov = 40.0
+	_main.add_child(far)
+	far.look_at_from_position(spot + Vector3(5.0, 9.0, 7.5), spot)
+	await _plate(prefix + "_distance", far, ids)
+
+
+## Half the piece's width (metres, along x): its footprint's cells.
+func _half_width() -> float:
+	var record := _mode.grid.get_object(_ids["use"])
+	var def := BuildCatalog.get_def(record["def"])
+	var xs: Array[int] = []
+	for cell: Vector2i in def.footprint(record["anchor"], record["facing"]):
+		xs.append(cell.x)
+	return (xs.max() - xs.min() + 1) * 0.5
 
 
 ## A true-scale orthographic camera ORTHO_M tall looking at `spot` (1 m up)
-## from `dir`, close enough to stay inside the room.
-func _ortho(spot: Vector3, dir: Vector3) -> Camera3D:
+## from `dir`, ORTHO_BACK_M from that point, its near plane `near` out.
+func _ortho(spot: Vector3, dir: Vector3, near: float) -> Camera3D:
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.size = ORTHO_M
-	cam.near = 0.05
+	cam.near = near
 	_main.add_child(cam)
 	var target := spot + Vector3(0.6, 0.8, 0.5)
 	if dir == Vector3.UP:
 		cam.look_at_from_position(target + Vector3(0.0, 1.7, 0.001), target)
 	else:
-		cam.look_at_from_position(target + dir * 3.2, target)
+		cam.look_at_from_position(target + dir * ORTHO_BACK_M, target)
 	return cam
 
 
@@ -448,9 +486,10 @@ func _game_cam(spot: Vector3, back := 3.5) -> Camera3D:
 
 
 ## Saves a plate after proving each subject (its body and every bag) in frame,
-## each bag hit by a sight line, and the subjects drawn: a twin with them
-## hidden must differ by MIN_DIFF_PX pixels.
-func _plate(file: String, cam: Camera3D, ids: Array[int]) -> void:
+## each bag hit by a sight line (when `bags_seen`), the subjects drawn (a twin
+## with them all hidden differs by MIN_DIFF_PX pixels) and each passenger
+## drawn (a twin with only its body hidden differs by MIN_PERSON_PX).
+func _plate(file: String, cam: Camera3D, ids: Array[int], bags_seen := true) -> void:
 	_beat(file)
 	_clock.set_paused(true)
 	_seek_clips()
@@ -468,14 +507,17 @@ func _plate(file: String, cam: Camera3D, ids: Array[int]) -> void:
 		for b in p.carry_on:
 			ok = _in_frame(cam, _bag_centre(p, b), "%s p%d bag%d" % [file, id, b]) and ok
 		var hits := await _bags_seen(cam, p)
-		unseen += p.carry_on - hits.size()
+		if bags_seen:
+			unseen += p.carry_on - hits.size()
 		print(
 			(
-				"BAGS %s p%d homes=%s bags=%s seen=%s"
-				% [file, id, SecurityLooks.bag_homes(_sim, p), _bag_report(p), hits]
+				"BAGS %s p%d homes=%s bags=%s seen=%s required=%s"
+				% [file, id, SecurityLooks.bag_homes(_sim, p), _bag_report(p), hits, bags_seen]
 			)
 		)
 	var img := _grab()
+	for id in ids:
+		ok = await _person_shown(file, id, img) and ok
 	for id in ids:
 		_views.node_for(id).visible = false
 		for bag: Node3D in _views.carry_on_props().props_of(id)["bags"]:
@@ -498,6 +540,20 @@ func _plate(file: String, cam: Camera3D, ids: Array[int]) -> void:
 	_save(img, file + ".png")
 	_sheet.append(img)
 	cam.queue_free()
+
+
+## Whether passenger `id` is drawn in `img` (the frame as it is now): the twin
+## with only its body hidden differs by MIN_PERSON_PX pixels or more.
+func _person_shown(label: String, id: int, img: Image) -> bool:
+	var node := _views.node_for(id)
+	node.visible = false
+	await _frames(3)
+	var without := _grab()
+	node.visible = true
+	await _frames(2)
+	var diff := _diff(img, without)
+	print("PERSON %s p%d diff_px=%d need=%d" % [label, id, diff, MIN_PERSON_PX])
+	return diff >= MIN_PERSON_PX
 
 
 func _in_frame(cam: Camera3D, point: Vector3, label: String) -> bool:

@@ -278,13 +278,21 @@ func _drawn_stay(type: StringName, count: int, kind: SecurityLooks.Kind) -> void
 	print("%s: drift %.4f, after a snap %.4f" % [label, drift, snapped])
 	assert_float(drift).is_less(STILL_M)
 	assert_float(snapped).is_less(STILL_M)
-	# The pick-up and the walk off.
+	# The pick-up and the walk off: each bag stays where it stood until a
+	# hand takes it, while the body steps off or walks away.
 	var end := -1
+	var slide := {"most": 0.0, "frames": 0, "taken": {}}
 	while end < 0 or _world.clock.tick - end < AFTER_TICKS:
 		await _frame(MOVE_FRAME_TICKS)
 		_watch(p, checks)
+		_slide(p, still, slide)
 		if end < 0 and p.stage != Passenger.Stage.SHOP_BROWSE:
 			end = _world.clock.tick
+	var slid := "%s: slide %.4f over %d frames before a hand took it"
+	print(slid % [label, slide["most"], slide["frames"]])
+	assert_int(int(slide["frames"])).is_greater(0)
+	assert_int((slide["taken"] as Dictionary).size()).is_equal(count)
+	assert_float(float(slide["most"])).is_less(STILL_M)
 	print(
 		(
 			"%s: frames %d held %d resting %d float %s grip_off %s homes %s"
@@ -306,6 +314,132 @@ func _drawn_stay(type: StringName, count: int, kind: SecurityLooks.Kind) -> void
 	assert_array(checks["grip_off"]).is_empty()
 	for home in SecurityLooks.bag_homes(_world.sim, p):
 		assert_int(home).is_equal(SecurityLooks.Home.HAND)
+
+
+## Tallies in `slide` how far each bag of `p` has moved from where it stood
+## (`still`) on the frames before a hand first holds it, once its pick-up is
+## stamped ("most", "frames"; "taken" the bags a hand has held).
+func _slide(p: Passenger, still: Array[Transform3D], slide: Dictionary) -> void:
+	var props := _views.carry_on_props()
+	var now := _bag_positions(p)
+	for b in p.carry_on:
+		var state := props.bag_state(p.id, b)
+		if (slide["taken"] as Dictionary).has(b):
+			continue
+		if int(state.get("held_by", -1)) >= 0:
+			slide["taken"][b] = true
+			continue
+		if int(state.get("place", -1)) / 4 != SecurityLooks.Home.HAND:
+			continue
+		slide["frames"] = int(slide["frames"]) + 1
+		slide["most"] = maxf(slide["most"], still[b].origin.distance_to(now[b].origin))
+
+
+## A visit cut short with its bags down (the piece taken away under the
+## visitor): each bag is picked up from where it stood, not dragged with the
+## body as it eases back to its cell, and never floats.
+func test_bags_of_a_visit_cut_short_are_picked_up_where_they_stand() -> void:
+	for type in [&"lounge", &"shower"]:
+		_open(type, true)
+		var p := await _visitor(1, SecurityLooks.Kind.CASE)
+		var checks := {"frames": 0, "held": 0, "resting": 0, "float": [], "grip_off": []}
+		while not ActivityPoses.bags_down(_world.sim, p) or _world.clock.tick - p.stage_tick < 40:
+			await _frame(2.0)
+		await _frame(MOVE_FRAME_TICKS)
+		var still := _bag_positions(p)
+		assert_bool(_world.sim.grid.apply(BuildEdit.remove_object(_ids["use"])).ok).is_true()
+		var slide := {"most": 0.0, "frames": 0, "taken": {}}
+		for i in 2 * AFTER_TICKS:
+			await _frame(MOVE_FRAME_TICKS)
+			_watch(p, checks)
+			_slide(p, still, slide)
+		print(
+			(
+				"%s cut short: stage %s, slide %.4f over %d frames, taken %s, float %s"
+				% [
+					type,
+					Passenger.Stage.keys()[p.stage],
+					slide["most"],
+					slide["frames"],
+					slide["taken"],
+					checks["float"]
+				]
+			)
+		)
+		assert_int(int(slide["frames"])).is_greater(0)
+		assert_int((slide["taken"] as Dictionary).size()).is_equal(1)
+		assert_float(float(slide["most"])).is_less(STILL_M)
+		assert_array(checks["float"]).is_empty()
+
+
+## A nap pod visitor whose right side is closed (the room's wall beside its
+## slot cell, as seated facing out) carries and sets down its one bag in the
+## left hand, on the open side, from the start of the stay to its end: no
+## change of hand, the same after a snap and after a save and load.
+func test_a_closed_right_side_keeps_the_bag_in_the_left_hand() -> void:
+	_open(&"nap_pod", true)
+	# A wall on the west edge of the pod's slot cell: the right of a visitor
+	# seated facing out (south). The east is open.
+	var west := BuildGrid.SIDE_STEP.find(Vector2i(-1, 0))
+	var slot := ActivityTestLayout.PIECES[&"nap_pod"][0][1] + Vector2i(0, 1)
+	assert_bool(_world.sim.grid.apply(BuildEdit.place_wall(slot, west)).ok).is_true()
+	assert_bool(_world.sim.grid.has_wall(slot, BuildGrid.SIDE_STEP.find(Vector2i(1, 0)))).is_false()
+	var p := await _visitor(1)
+	var root := ActivityPoses.stay_frame(_world.sim, p)
+	var props := _views.carry_on_props()
+	var hands := {}
+	var save := ""
+	while p.stage == Passenger.Stage.SHOP_BROWSE:
+		await _frame(1.0)
+		var place := int(props.bag_state(p.id, 0).get("place", -1))
+		hands[SecurityLooks.hand_of(_world.sim, p, 0) * 10 + CarryLead.hand_of(place)] = true
+		if save == "" and ActivityPoses.bags_down(_world.sim, p):
+			await _frame(8.0)
+			_views.snap()
+			await _frame(0.0)
+			place = int(props.bag_state(p.id, 0).get("place", -1))
+			hands[SecurityLooks.hand_of(_world.sim, p, 0) * 10 + CarryLead.hand_of(place)] = true
+			save = _snapshot()
+			var spot := SecurityLooks.activity_floor(_world.sim, p, 1)[0]
+			# The open side: left of the seated visitor, +x in its frame.
+			assert_float((root.affine_inverse() * spot).origin.x).is_greater(0.0)
+			_compare_loaded(save, p, spot)
+	print("closed right: hands (sim * 10 + drawn) seen %s" % [hands.keys()])
+	assert_str(save).is_not_empty()
+	assert_array(hands.keys()).contains_exactly([11])
+
+
+func _snapshot() -> String:
+	return (
+		JSON
+		. stringify(
+			{
+				"clock": _world.clock.to_snapshot(),
+				"flights": _world.flights.to_snapshot(),
+				"grid": _world.grid.to_snapshot(),
+				"passengers": _world.sim.to_snapshot(),
+			}
+		)
+	)
+
+
+## The world saved in `text`, loaded: passenger `p` there has the same hand
+## and the same floor spot `spot`.
+func _compare_loaded(text: String, p: Passenger, spot: Transform3D) -> void:
+	var data: Dictionary = JSON.parse_string(text)
+	var grid := BuildGrid.new()
+	assert_bool(grid.from_snapshot(data["grid"])).is_true()
+	var loaded := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 99)
+	assert_bool(loaded.clock.from_snapshot(data["clock"])).is_true()
+	assert_bool(loaded.flights.from_snapshot(data["flights"])).is_true()
+	assert_bool(loaded.sim.from_snapshot(data["passengers"])).is_true()
+	var q := loaded.sim.get_passenger(p.id)
+	var spots := SecurityLooks.activity_floor(loaded.sim, q, 1)
+	print("loaded: hand %d spot %s" % [SecurityLooks.hand_of(loaded.sim, q, 0), spots])
+	assert_int(SecurityLooks.hand_of(loaded.sim, q, 0)).is_equal(1)
+	assert_int(spots.size()).is_equal(1)
+	assert_float(spots[0].origin.distance_to(spot.origin)).is_less(0.0001)
+	loaded.free_all()
 
 
 func _piece_record() -> Dictionary:

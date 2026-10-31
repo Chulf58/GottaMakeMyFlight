@@ -206,13 +206,15 @@ static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
 ## the cell beside the passenger on its right, for the way it walks (or last
 ## walked), is closed off by a wall or holds an object (a lane part, a desk)
 ## and the left is open: then the left, so the bag passes on the open side.
+## On an activity visit the way is the one it faces to set its bags down
+## (_stay_step), so the bag goes down on the open side.
 static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if p.carry_on > 1:
 		return index
-	if p.path.size() < 2:
-		return 0
-	var at := clampi(p.path_index, 0, p.path.size() - 2)
-	var step := p.path[at + 1] - p.path[at]
+	var step := _stay_step(sim, p)
+	if step == Vector2i.ZERO and p.path.size() >= 2:
+		var at := clampi(p.path_index, 0, p.path.size() - 2)
+		step = p.path[at + 1] - p.path[at]
 	if step == Vector2i.ZERO:
 		return 0
 	var right := world_dir(step).cross(Vector3.UP)
@@ -221,6 +223,20 @@ static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if _closed(sim.grid, cell, right_step) and not _closed(sim.grid, cell, -right_step):
 		return 1
 	return 0
+
+
+## The grid way an activity visitor (ActivityPoses.kind not NONE) faces as it
+## sets its bags down and picks them up: out of the piece on a sofa or nap pod
+## seat, into it at the shower's door. Zero for any other passenger. Its
+## visit's path is only its own cell (ShopSim clears it), so the way it walked
+## in is gone; this way comes from the piece, the same after a load.
+static func _stay_step(sim: PassengerSim, p: Passenger) -> Vector2i:
+	var kind := ActivityPoses.kind(sim, p)
+	if kind == ActivityPoses.Kind.NONE:
+		return Vector2i.ZERO
+	var out := ActivityPoses.stay_frame(sim, p).basis.z
+	var step := Vector2i(roundi(out.x), roundi(out.z))
+	return -step if kind == ActivityPoses.Kind.SHOWER else step
 
 
 ## The kind of carry-on bag `index` of `p`: a fixed hash of the passenger's id
