@@ -124,6 +124,18 @@ func facing(lane: LandsideVehicle.Lane, lot: int, stop: int, mm: int) -> Vector3
 	return dir
 
 
+## The way into the start of the path a car on `lane` of lot spot `lot`
+## follows, for a wheel still behind that start: a lot exit lane is reached
+## from its lot's way out (both a slot's path and the turn round end with it),
+## which on the multi-storey comes down the ramp from the slab. Every other path
+## starts where the way in is flat at the start's height (the road, a lane its
+## path begins with), so it has none: empty.
+func lead_in(lane: LandsideVehicle.Lane, lot: int) -> PackedVector3Array:
+	if lane == LandsideVehicle.Lane.LOT_EXIT:
+		return definition.lots[lot].way_out
+	return PackedVector3Array()
+
+
 ## How a position on the place `before` reads on the place `now` a tick
 ## later: the mm to take off a position on `before` to have it on `now`, 0
 ## when both share the coordinate (the same place, a lane and the path that
@@ -150,15 +162,18 @@ func handover(before: Array, now: Array) -> int:
 
 
 ## The walk of the passengers who get out of a car parked in slot `slot` of
-## lot spot `spot`: from the slot, on an upper deck along the aisle and down
-## every ramp to the aisle front, then the gate and the crossing.
+## lot spot `spot`: from the slot, along the aisle and (on an upper deck) down
+## every ramp to the aisle front, then out through the entrance opening when
+## the lot has one, then the gate and the crossing.
 func lot_walk(spot: int, slot: int) -> Array[Vector3]:
 	var lot := definition.lots[spot]
 	var at := lot.slots[slot]
 	var walk := PackedVector3Array([at])
 	var deck := deck_of(lot, at)
-	if deck > 0:
+	if deck > 0 or not lot.entrance.is_empty():
 		_append(walk, Vector3(lot.aisle_front.x, at.y, at.z))
+		if deck == 0:
+			_append(walk, lot.aisle_front)
 		for k in range(deck - 1, -1, -1):
 			_append_all(walk, lot.ramps[k])
 		var out_door := lot.entrance.duplicate()
@@ -231,6 +246,10 @@ func _add_lot(lot: LandsideLotSpot) -> void:
 	slot_back.append(backs)
 	var turn := lot.access.duplicate()
 	_append(turn, lot.entrance[0] if not lot.entrance.is_empty() else lot.aisle_front)
+	# Back out down the way-out ramp (from its point at the entrance's first
+	# depth: the first point is inside the building), not across the slab edge.
+	if not lot.way_out.is_empty():
+		_append_all(turn, lot.way_out.slice(1))
 	_append(turn, lot.exit[0])
 	turn_path.append(turn)
 	turn_end.append(LandsideDefinition.length_mm(turn))

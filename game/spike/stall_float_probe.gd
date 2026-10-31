@@ -8,9 +8,12 @@ extends SceneTree
 ## backpack, a shoulder tote, a roller, a roller with a second bag), each with a
 ## pressing toilet need, and drives the clock by hand, FRAME_TICKS a frame
 ## (frames fall part-way between ticks, as in a game drawn faster than it
-## ticks). A visitor not on its way to a stall RESEND_TICKS after it was sent
-## (late in the day it may not fit a visit before its flight) is replaced by
-## another of the same kind (printed).
+## ticks). A visitor is sent on the soonest flight whose doors close at least
+## MIN_LEAD_TICKS ahead (the clock is stepped to the next day's flight when
+## none does; still none: PROBE_INVALID). A visitor not on its way to a
+## stall RESEND_TICKS after it was sent is replaced by another of the same kind
+## (printed), MAX_RESENDS times at most, then PROBE_INVALID and the next visitor.
+## A visit past VISIT_MS of wall time crashes the probe (the guard thread).
 ##
 ## Every frame: the FLOAT check (spike/carry_float_check.gd) on every drawn
 ## bag of every passenger, and the stall's own tally of it for the visitor
@@ -56,8 +59,20 @@ const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/stall-bags"
 const HANG_MS := 90000
 const LAST_TICKS := 3000
-## A visitor not on its way to a stall this long after it was sent is replaced.
+## A visit running longer than this (wall clock) fails the probe even though
+## frames keep coming: the guard thread prints PROBE_INVALID and crashes.
+const VISIT_MS := 600000
+## A visitor not on its way to a stall this long after it was sent is replaced,
+## at most MAX_RESENDS times in a visit.
 const RESEND_TICKS := 900
+const MAX_RESENDS := 3
+## A visitor is sent on a flight whose doors close at least this many ticks
+## ahead (it needs the walk through check-in and security, a toilet visit and
+## the walk to the gate).
+const MIN_LEAD_TICKS := 1800
+## The most the clock is stepped for the next day's flight (a day is 28800
+## ticks; it is issued ISSUE_LEAD_TICKS before its start).
+const ADVANCE_LIMIT_TICKS := 40000
 ## Ticks drawn a frame near and in the stall, and while nothing moves (the
 ## walk there from afar, sitting on the seat).
 const FRAME_TICKS := 0.5
@@ -128,6 +143,8 @@ var _lock := Mutex.new()
 var _beat_ms := 0
 var _stage := "boot"
 var _stop := false
+## Wall-clock stamp (ms) of the visit now running, 0 between visits.
+var _visit_ms := 0
 
 var _main: Node3D
 var _sim: PassengerSim
@@ -232,7 +249,12 @@ func _run() -> void:
 func _visit(visitor: Array) -> void:
 	_label = visitor[0]
 	_beat("spawn %s" % _label)
+	_lock.lock()
+	_visit_ms = Time.get_ticks_msec()
+	_lock.unlock()
 	_visitor = _spawn(visitor[1], visitor[2])
+	if _visitor == null:
+		return
 	_plate_bag = visitor[3]
 	_case_sent = _case_sent or visitor[1] == SecurityLooks.Kind.CASE
 	_plated = {}
@@ -242,12 +264,33 @@ func _visit(visitor: Array) -> void:
 	var sent := _clock.tick
 	var visited := false
 	var left := -1
+	var resent := 0
 	while _clock.tick < last:
 		_beat("%s tick %d" % [_label, _clock.tick])
-		# One sent late in the day may never fit a toilet visit before its flight:
-		# another of the same kind is sent (printed).
+		# One that never gets to a stall (it missed its flight, or the queue held it
+		# up) is replaced by another of the same kind (printed), a few times at most.
 		if not Passenger.in_toilet(p.stage) and not visited and _clock.tick - sent > RESEND_TICKS:
+			resent += 1
+			print(
+				(
+					"LATE %s passenger=%d stage=%s sent=%d tick=%d wants_toilet=%s"
+					% [_label, p.id, _name(p), sent, _clock.tick, p.toilet_need]
+				)
+			)
+			if resent > MAX_RESENDS:
+				_invalid(
+					(
+						"%s: not on its way to a stall after %d sends (passenger %d at %s)"
+						% [_label, resent, p.id, _name(p)]
+					)
+				)
+				_visitor = null
+				_visit_end()
+				return
 			_visitor = _spawn(visitor[1], visitor[2])
+			if _visitor == null:
+				_visit_end()
+				return
 			print(
 				(
 					"RESEND %s passenger=%d (passenger %d at %s)"
@@ -277,6 +320,13 @@ func _visit(visitor: Array) -> void:
 			if not _plated.get(move, false):
 				_invalid("%s: the %s was not plated" % [_label, move])
 	_visitor = null
+	_visit_end()
+
+
+func _visit_end() -> void:
+	_lock.lock()
+	_visit_ms = 0
+	_lock.unlock()
 
 
 ## How many ticks the next frame draws: FAST_TICKS far from the stall or
@@ -293,7 +343,10 @@ func _ticks_now(p: Passenger) -> float:
 ## A passenger whose first bag is `kind`, with `count` bags and a pressing
 ## toilet need; the passengers spawned on the way have no bags and no needs.
 func _spawn(kind: SecurityLooks.Kind, count: int) -> Passenger:
-	var flight := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
+	var flight := _open_flight()
+	if flight == "":
+		_invalid("no flight with its doors closing %d or more ticks ahead" % MIN_LEAD_TICKS)
+		return null
 	while true:
 		var p := _sim.get_passenger(_sim.spawn_now(flight))
 		ToiletTestLayout.calm(p)
@@ -304,6 +357,37 @@ func _spawn(kind: SecurityLooks.Kind, count: int) -> Passenger:
 			p.toilet_cooldown = 0
 			return p
 	return null
+
+
+## The flight a visitor is sent on: the soonest whose doors close MIN_LEAD_TICKS
+## or more ahead. Day 0's flight is gone after the first visitors (a passenger
+## sent on a flight no longer listed is missed at once, and one sent late may
+## board without its toilet visit), so when none has the lead the clock is
+## stepped (nobody is waiting) until the next day's flight is issued, at most
+## ADVANCE_LIMIT_TICKS. "" when there is still none.
+func _open_flight() -> String:
+	var flights := _main.get_node("FlightSim") as FlightSim
+	var best := _flight_with_lead(flights)
+	if best == "":
+		var done := func() -> bool: return _flight_with_lead(flights) != ""
+		var from := _clock.tick
+		StarterFlight.advance_until(_clock, done, ADVANCE_LIMIT_TICKS)
+		print("ADVANCED the clock from tick %d to %d for a flight" % [from, _clock.tick])
+		best = _flight_with_lead(flights)
+	print("FLIGHT %s now=%d" % [best, _clock.tick])
+	return best
+
+
+## The listed flight whose doors close soonest, MIN_LEAD_TICKS or more ahead.
+func _flight_with_lead(flights: FlightSim) -> String:
+	var best := ""
+	var best_close := 0
+	for id in flights.flight_ids():
+		var close := flights.doors_close_tick(id)
+		if close >= _clock.tick + MIN_LEAD_TICKS and (best == "" or close < best_close):
+			best = id
+			best_close = close
+	return best
 
 
 func _kinds(p: Passenger) -> Array:
@@ -903,9 +987,13 @@ func _watch() -> void:
 		var stop := _stop
 		var stage := _stage
 		var silent := Time.get_ticks_msec() - _beat_ms
+		var visiting := Time.get_ticks_msec() - _visit_ms if _visit_ms > 0 else 0
 		_lock.unlock()
 		if stop:
 			return
 		if silent > HANG_MS:
 			print("PROBE_INVALID hang: stage=%s silent_ms=%d" % [stage, silent])
 			OS.crash("stall_float_probe: main thread stalled in %s" % stage)
+		if visiting > VISIT_MS:
+			print("PROBE_INVALID visit over its limit: stage=%s visit_ms=%d" % [stage, visiting])
+			OS.crash("stall_float_probe: a visit passed %d ms in %s" % [VISIT_MS, stage])

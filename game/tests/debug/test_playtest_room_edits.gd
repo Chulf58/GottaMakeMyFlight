@@ -27,6 +27,13 @@ func test_a_remove_room_edit_carries_the_room_id_and_no_cell() -> void:
 	assert_dict(data).is_equal({"kind": "REMOVE_ROOM", "room_id": 7})
 
 
+func test_a_resize_room_edit_carries_the_room_id_and_its_new_rectangle() -> void:
+	var data := PlaytestState.edit_data(BuildEdit.resize_room(7, Rect2i(2, 3, 6, 5)))
+	assert_dict(data).is_equal(
+		{"kind": "RESIZE_ROOM", "cell": [2, 3], "room_id": 7, "rect": [2, 3, 6, 5]}
+	)
+
+
 func test_the_grid_summary_lists_rooms_with_their_status() -> void:
 	var grid := _cafe_grid()
 	var ready := grid.apply(BuildEdit.place_room(Rect2i(1, 1, 5, 4), &"cafe")).room_id

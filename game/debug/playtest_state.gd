@@ -46,6 +46,9 @@ static func edit_data(edit: BuildEdit) -> Dictionary:
 		BuildEdit.Kind.REMOVE_ROOM:
 			data.erase("cell")
 			data["room_id"] = edit.room_id
+		BuildEdit.Kind.RESIZE_ROOM:
+			data["room_id"] = edit.room_id
+			data["rect"] = [edit.cell.x, edit.cell.y, edit.room_size.x, edit.room_size.y]
 	return data
 
 

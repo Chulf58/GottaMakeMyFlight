@@ -1,61 +1,51 @@
 extends SceneTree
-## Live windowed crossing of the basic security scanner (the interior kit's
-## security_scanner booth) by passengers carrying their carry-on (board item
-## basic-security-scanner-booth-is-narrower-than-the-walking-ch). Boots
-## main/main.tscn with a new random sim seed (printed), builds the starter
-## terminal through the HUD (two basic scanners), staffs it and opens the
-## airport, then sends passengers with chosen carry-on (each bag kind, two
-## bags, an alarm and a liquids repack, no bags) to security while the game
-## runs.
+## Live windowed crossing of the basic security scanner (the interior kit's security_scanner booth)
+## by passengers carrying their carry-on (board item
+## basic-security-scanner-booth-is-narrower-than-the-walking-ch). Boots main/main.tscn with a new
+## random sim seed (printed), builds the starter terminal through the HUD (two basic scanners),
+## staffs it and opens the airport, then sends passengers with chosen carry-on (each bag kind, two
+## bags, an alarm and a liquids repack, no bags) to security while the game runs. Each sent
+## passenger shows a body no passenger sent before showed (CrossingBodies), and the run fails
+## unless every passenger body was sent.
 ##
-## Every frame, every passenger near a booth is checked in the booth's own
-## frame: points of its drawn body and of every bag it holds or has on the
-## floor, against each booth mesh (a point is inside when a ray from it
-## crosses the mesh an odd number of times). The floor mat is left out: a
-## sole or a bag standing on a 1.2 cm mat is not a clip. Clearance is the gap
-## from each point to the nearest part beside it (side parts) or above it
-## (beam, lamp), at the same height and depth (a diagnostic on part bounds,
-## not a penetration depth). The contact count is a sampled check (body
-## vertices, bag surface points 4 cm apart), so for a passenger in the passage
-## every point past the passage edge is also traced in to the edge: a booth
-## part crossed on the way is a clip through a part thinner than the points
-## are apart. Body points inside the passenger's own carried bags are counted
-## too. Only one ruled clip outside the booth's length is printed instead of
-## failed (_ruled_self_clip()): a hard case turning from the side to the front
-## on the approach (accepted by the user 2026-10-29, "Accept, merge now").
-## Every other body-in-bag point fails, a roller's lift or lowering and a
-## pickup after a repack included, as does any contact or crossing; so does a
-## sent passenger that never crossed mid-booth, an alarm or liquids passenger
-## that never repacked, a bag kind never carried through, or a run that never
-## checked a whole roller lift, roller lowering, and a hard case's and a
-## shoulder bag's pickup after a repack (each printed with every SELF_DETAIL
-## point: the bag, its move, the arm and the contact points in the body's
-## frame). A passenger is followed until it has left the booth's surroundings
-## after security, so the moves past the exit are checked. Controls: a bag
-## set into a side panel must be inside its meshes, and a point just past the
-## panel must cross it. Two plates of one crossing (mid-booth, leaving) prove
-## the passenger and its bags are in frame and unblocked before they are
-## saved. Close plates of a roller's lowering and a hard case's pickup after a
-## repack, each at three moments (in its first half, its second half, settled), are taken
-## with the sim clock paused at that moment, from a camera of the probe's own
-## round the body, each kept only when the body and the bag are in frame, big
-## enough and hit by sight lines with no blocker (_plate_close()); a missing one
-## fails. Any failure prints PROBE_INVALID and exits 1. Plate moments are
-## reached by stepping the paused clock, sight lines see meshes from either
-## side, dark plates are refused, and a bag's close plate has a detail plate
-## (PlateSteps).
+## Every frame, every passenger near a booth is checked in the booth's own frame: points of its
+## drawn body and of every bag it holds or has on the floor, against each booth mesh (a point is
+## inside when a ray from it crosses the mesh an odd number of times). The floor mat is left out: a
+## sole or a bag standing on a 1.2 cm mat is not a clip. Clearance is the gap from each point to
+## the nearest part beside it (side parts) or above it (beam, lamp), at the same height and depth
+## (a diagnostic on part bounds, not a penetration depth). The contact count is a sampled check
+## (body vertices, bag surface points 4 cm apart), so for a passenger in the passage every point
+## past the passage edge is also traced in to the edge: a booth part crossed on the way is a clip
+## through a part thinner than the points are apart. Body points inside the passenger's own carried
+## bags are counted too. Only one ruled clip outside the booth's length is printed instead of
+## failed (_ruled_self_clip()): a hard case turning from the side to the front on the approach
+## (accepted by the user 2026-10-29, "Accept, merge now"). Every other body-in-bag point fails, a
+## roller's lift or lowering and a pickup after a repack included, as does any contact or crossing;
+## so does a sent passenger that never crossed mid-booth, an alarm or liquids passenger that never
+## repacked, a bag kind never carried through, or a run that never checked a whole roller lift,
+## roller lowering, and a hard case's and a shoulder bag's pickup after a repack (each printed with
+## every SELF_DETAIL point: the bag, its move, the arm and the contact points in the body's frame).
+## A passenger is followed until it has left the booth's surroundings after security, so the moves
+## past the exit are checked. Controls: a bag set into a side panel must be inside its meshes, and
+## a point just past the panel must cross it. Two plates of one crossing (mid-booth, leaving) prove
+## the passenger and its bags are in frame and unblocked before they are saved. Close plates of a
+## roller's lowering and a hard case's pickup after a repack, each at three moments (in its first
+## half, its second half, settled), are taken with the sim clock paused at that moment, from a
+## camera of the probe's own round the body, each kept only when the body and the bag are in frame,
+## big enough and hit by sight lines with no blocker (_plate_close()); a missing one fails. Any
+## failure prints PROBE_INVALID and exits 1. Plate moments are reached by stepping the paused
+## clock, sight lines see meshes from either side, dark plates are refused, and a bag's close plate
+## has a detail plate (PlateSteps).
 ##
-## With --lane the east basic scanner is swapped for a security lane (as in the
-## security visuals probe) and the west one removed, so every passenger walks
-## through the lane's arch, narrowed to fit inside its cell (decision security-
-## lane-arch-is-narrowed-to-fit-inside-its-cell-beside-a), and RUNNER_ROLES are
-## sent too, kept late so they run. The arch is checked as a booth is (its mat
-## left out); a bag in a tray on the X-ray belt beside it is checked for
-## contact but not traced in to the passage, which it is not in. Instead of the
-## booth's kind, move and crossing-plate requirements, the run must see every
-## sent passenger cross mid-arch, at least two of them running, a returner's
-## second pass, and a close plate of a passenger with its arms tucked mid-arch
-## (each crossing prints its tuck weight there).
+## With --lane the east basic scanner is swapped for a security lane (as in the security visuals
+## probe) and the west one removed, so every passenger walks through the lane's arch, narrowed to
+## fit inside its cell (decision security- lane-arch-is-narrowed-to-fit-inside-its-cell-beside-a),
+## and RUNNER_ROLES are sent too, kept late so they run. The arch is checked as a booth is (its mat
+## left out); a bag in a tray on the X-ray belt beside it is checked for contact but not traced in
+## to the passage, which it is not in. Instead of the booth's kind, move and crossing-plate
+## requirements, the run must see every sent passenger cross mid-arch, at least two of them
+## running, a returner's second pass, and a close plate of a passenger with its arms tucked
+## mid-arch (each crossing prints its tuck weight there).
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -71,6 +61,7 @@ const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const PlateSteps := preload("res://spike/carry_plate_steps.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
+const CrossingBodies := preload("res://spike/crossing_bodies.gd")
 const OUT_REL := "res://../tools/blender/out/security-booth"
 const CLOSE_OUT_REL := "res://../tools/blender/out/carry-selfclip"
 const MAIN_SCENE := "res://main/main.tscn"
@@ -79,7 +70,7 @@ const MARGIN_PX := 8.0
 const MIN_SUBJECT_PX := 60.0
 const RUN_LIMIT_MS := 240000
 const SEND_GAP_TICKS := 20
-const MAX_SPAWNS := 40
+const MAX_SPAWNS := 80
 ## Near a booth: inside this half-size around its origin, in its own frame
 ## (past BoothCarry.LEAD_M, so a roller's lift before the booth is checked whole).
 const NEAR := Vector3(0.9, 3.0, 3.2)
@@ -95,6 +86,8 @@ const ROLES := [
 	[-1, 2, true, false],
 	[-1, 0, false, false],
 	[SecurityLooks.Kind.BACKPACK, 1, false, false],
+	[-1, 1, false, false],
+	[-1, 1, false, false],
 ]
 const KIND_NAMES := ["case", "backpack", "shoulder", "roller"]
 ## Lane mode's extra roles, the fifth entry true: kept late, so they run.
@@ -198,6 +191,8 @@ var _hold_frame := -1
 ## distinct poses (a paused frame measures the same pose again).
 var _self_seen := {}
 var _self_distinct := 0
+## Body index -> the sent passenger that showed it (CrossingBodies).
+var _bodies := {}
 
 
 func _initialize() -> void:
@@ -537,7 +532,7 @@ func _on_tick(_tick: int) -> void:
 func _plate_lead(id: int, i: int, key: String) -> void:
 	var props := _views.carry_on_props()
 	var walk := key.ends_with(" walk")
-	var moments: Array = [[1.0, 1.0]] if walk else LEAD_MOMENTS
+	var moments: Array = [[1.0, 1.0]] if walk else PlateSteps.LEAD_MOMENTS_OF.get(key, LEAD_MOMENTS)
 	var move := FloatCheck.move_of(props, id, i)
 	var saved := 0
 	for m in moments.size():
@@ -588,7 +583,7 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 		var ok := await _plate_close(id, bags[i], name)
 		_clock.set_paused(false)
 		if not ok:
-			break
+			continue
 		saved += 1
 	if saved == moments.size():
 		_lead_plated[key] = true
@@ -636,7 +631,7 @@ func _send() -> void:
 	var at := _roles.find_custom(func(r: Array) -> bool: return r[0] == kind)
 	if at < 0:
 		at = _roles.find_custom(func(r: Array) -> bool: return r[0] == -1)
-	if at < 0:
+	if at < 0 or not CrossingBodies.take(p, _bodies):
 		return
 	var traits: Array = _roles.pop_at(at)
 	p.carry_on = traits[1]
@@ -1216,15 +1211,14 @@ func _plate_arch(id: int) -> void:
 
 ## A close plate of passenger `id` (and `bag`, when given) saved to the close
 ## plates folder as `name`: a camera of the probe's own CLOSE_M out and
-## CLOSE_HEIGHT_M high, aimed at the body AIM_M over the floor (higher and
-## further back for a bag over the head), tries eight
-## headings round the body (facing it first) with the HUD hidden. A heading is
-## kept only when the body's and the bag's drawn bounds project inside the
-## viewport by MARGIN_PX, the body is CLOSE_MIN_PX tall or more, the body is
-## shown (PlateSight.person_shown(): sight lines land on it, none blocked),
-## and at least two of five sight lines to the bag land on it with none
-## blocked by anything but the passenger itself. Each heading prints its
-## numbers. The camera, the HUD and the game camera are put back.
+## CLOSE_HEIGHT_M high, aimed at the body AIM_M over the floor (higher and further
+## back for a bag over the head, nearer and lower for a crouched body, PlateSteps.
+## crouch_of()), tries 8 headings round the body (facing it first), HUD hidden. One is
+## kept only when the body's and the bag's drawn bounds project inside the viewport
+## by MARGIN_PX, the body is CLOSE_MIN_PX tall or more and shown (PlateSight.
+## person_shown(): sight lines land on it, none blocked), and at least two of five
+## sight lines to the bag land on it, blocked by nothing but the passenger. Each
+## heading prints its numbers. The camera, the HUD and the game camera are put back.
 func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 	var body := _views.node_for(id)
 	if body == null:
@@ -1254,8 +1248,9 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 	if bag != null:
 		for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
 			top = maxf(top, (mi.global_transform * mi.get_aabb()).end.y)
-	var aim := maxf(AIM_M, top * 0.5)
-	var back := CLOSE_M * maxf(1.0, (top + 0.3) / 2.3)
+	var low := PlateSteps.crouch_of(body)
+	var aim := maxf(AIM_M, top * 0.5) * low
+	var back := CLOSE_M * maxf(1.0, (top + 0.3) / 2.3) * low
 	for h in 8:
 		var look := body.global_position + Vector3(0.0, aim, 0.0)
 		var yaw := body.global_rotation.y + h * PI / 4.0
@@ -1518,6 +1513,8 @@ func _report() -> void:
 		)
 	)
 	print(FloatCheck.float_report(_floats))
+	for stem in CrossingBodies.report(_bodies):
+		_invalid("no sent passenger showed body %s" % stem)
 	print("LEAD_PLATED %s" % [_lead_plated.keys()])
 	PlateSteps.lead_sheet(_close_dir)
 	if _floats["float"] > 0 or _floats["grip_off"] > 0:

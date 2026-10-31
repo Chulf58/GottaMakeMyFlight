@@ -15,7 +15,15 @@ extends RefCounted
 ## each painted stall; decision multi-storey-car-park-slots-fit-the-painted-
 ## stalls), so a saved slot index names a different stall. Version 4 is
 ## refused, with no migration.
-const SAVE_VERSION := 5
+## 6: the multi-storey's access lane and way out gained ramp points (and its exit
+## lane starts at z -38), so a saved lane and pos_mm name a different place: a
+## car at 19000 mm of the access lane was at the gate and is now part way up the
+## ramp. Version 5 is refused, with no migration.
+## 7: both multi-storey lanes gained points where they cross the sidewalk (its
+## top is 0.1 m over the road), so a saved access or exit pos_mm, and a slot
+## path pos_mm past the gate, names a place up to 40 mm away. Version 6 is
+## refused, with no migration.
+const SAVE_VERSION := 7
 const KEYS := [
 	"save_version",
 	"tick",
