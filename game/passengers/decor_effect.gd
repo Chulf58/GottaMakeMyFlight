@@ -123,7 +123,9 @@ func bind(sim: PassengerSim) -> void:
 	_grid = sim.grid
 	_dirty = true
 	if _grid != null:
-		_grid.graph_changed.connect(func(_cells: Array[Vector2i]) -> void: _dirty = true)
+		# Methods, not lambdas: a lambda reading _dirty would hold this effect,
+		# which holds the grid, and neither would ever free.
+		_grid.graph_changed.connect(_on_graph_changed)
 		# A room edit dirties no cell, so graph_changed misses a bag room.
 		_grid.edit_applied.connect(_on_edit_applied)
 
@@ -182,6 +184,10 @@ func beat(p: Passenger) -> void:
 		p.mood = maxi(p.mood - due(capped(-net), beat_number), 0)
 	elif net > 0 and p.mood < CEILING:
 		p.mood = mini(p.mood + due(capped(net), beat_number), CEILING)
+
+
+func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	_dirty = true
 
 
 func _on_edit_applied(edit: BuildEdit, _result: BuildResult) -> void:

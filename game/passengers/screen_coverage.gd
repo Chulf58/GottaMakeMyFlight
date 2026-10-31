@@ -110,11 +110,13 @@ static func _edge_open(grid: BuildGrid, cell: Vector2i, step: Vector2i) -> bool:
 	return not blocks_sight(grid.wall_kind(cell, BuildGrid.SIDE_STEP.find(step)))
 
 
-## Follows `grid`: the covered cells are worked out again after any edit.
+## Follows `grid`: the covered cells are worked out again after any edit. A
+## method, not a lambda, is connected: a lambda reading _dirty would hold this
+## coverage, which holds the grid, and neither would ever free.
 func bind(grid: BuildGrid) -> void:
 	_grid = grid
 	_dirty = true
-	grid.graph_changed.connect(func(_cells: Array[Vector2i]) -> void: _dirty = true)
+	grid.graph_changed.connect(_on_graph_changed)
 
 
 ## Whether any screen covers `cell`; none without a grid.
@@ -134,3 +136,7 @@ func cells() -> Dictionary:
 				_covered[cell] = true
 		_dirty = false
 	return _covered
+
+
+func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	_dirty = true
