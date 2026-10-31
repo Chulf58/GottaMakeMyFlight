@@ -12,6 +12,22 @@ const CarryContact := preload("res://spike/carry_contact.gd")
 ## A plate whose sampled pixels are darker than DARK_LEVEL (every channel) over
 ## more than DARK_SHARE of the frame is a camera inside or against a mesh.
 const DARK_LEVEL := 0.06
+## A roller laid down from the pull (RollerPark, TICKS_DOWN 13) is plated on
+## the bar late in its stand (k 0.3), then one sim tick apart (1/13) from its
+## park into its lay down, the frames a game at 3x draws (one tick a frame),
+## and after its let go (the crossing probe's lead plates).
+const LEAD_MOMENTS_OF := {
+	"ROLLER pull>floor":
+	[
+		[0.29, 0.31],
+		[0.375, 0.395],
+		[0.45, 0.47],
+		[0.53, 0.55],
+		[0.605, 0.625],
+		[0.685, 0.70],
+		[0.86, 0.97],
+	],
+}
 const DARK_SHARE := 0.35
 const DARK_STEP := 16
 ## A detail plate's camera: this far from the bag's middle, on the line from
@@ -21,9 +37,42 @@ const DETAIL_M := 1.1
 ## side, and the sight lines (of five) that must land on the bag first.
 const DETAIL_TURNS: Array[float] = [0.0, PI / 3.0, -PI / 3.0, 2.0 * PI / 3.0, -2.0 * PI / 3.0]
 const DETAIL_ON := 3
+## Failing every side level, a detail plate tries them again from this much
+## higher (the camera's line to the bag raised by this many metres a metre).
+const DETAIL_LIFTS: Array[float] = [0.0, 0.6, 1.2]
+## A hand whose palm (its grip point, CarryOnProps.grip_of()) is this close to
+## the bag's bounds holds it (the probes' GRIP_ON reach): a detail plate of it
+## must show the palm, projected PALM_MARGIN_PX inside the frame and the sight
+## line to it meeting nothing more than PALM_CLEAR_M before it (the hand's own
+## skin round the palm). A sitting walker's knee hid the palm on the bar.
+const PALM_REACH_M := 0.09
+const PALM_MARGIN_PX := 16.0
+const PALM_CLEAR_M := 0.06
 ## The most a plate steps the paused clock between two drawn frames (a frame
 ## of a normal run at 60 fps and speed 1 is a third of a tick).
 const STEP_TICKS := 0.34
+## A character standing has its shoulder joints about this high over its feet.
+const STANDING_SHOULDER_M := 1.4
+## Lower than this share of it a body is crouched (crouch_of()); a body this
+## high or higher, standing or near it, keeps the camera as it always was.
+const CROUCHED := 0.85
+
+
+## How low `body` is drawn now, for a close plate's camera (its distance and
+## aim times this): its shoulder joints' height over its feet as drawn (the
+## carry rig's bone attachments, after the stoop) over STANDING_SHOULDER_M, 0.5
+## to CROUCHED, else 1 (standing, or with no carry rig). A body crouched to a bag on the floor
+## is about 0.6 m shorter, and a camera framing it as if it stood drew it under
+## the probes' CLOSE_MIN_PX (crossing probe, roller laid down by a gate chair).
+static func crouch_of(body: Node3D) -> float:
+	var rig: Dictionary = body.get_meta(&"carry_rig", {})
+	if rig.is_empty():
+		return 1.0
+	var high := -INF
+	for joint: Node3D in rig["shoulders"]:
+		high = maxf(high, joint.global_position.y)
+	var low := (high - body.global_position.y) / STANDING_SHOULDER_M
+	return 1.0 if low > CROUCHED else maxf(low, 0.5)
 
 
 ## Every collider under `holder` (PlateSight.colliders) is hit from either
@@ -76,7 +125,8 @@ static func blocked(cam: Camera3D, at: Vector3, tag: String) -> bool:
 static func step_to(
 	tree: SceneTree, clock: SimClock, props: CarryOnProps, id: int, i: int, lo: float, hi: float
 ) -> void:
-	var left := ticks_to(props.transfer_progress(id, i), lo, hi)
+	var ticks := CarryLead.ticks_of(props.bag_state(id, i))
+	var left := ticks_to(props.transfer_progress(id, i), lo, hi, ticks)
 	while left > 0.0:
 		var step := minf(left, STEP_TICKS)
 		step_clock(clock, step)
@@ -86,12 +136,13 @@ static func step_to(
 
 
 ## The ticks to step for a move now at `k` to reach the window [lo, hi]: to its
-## middle (to 1 for a window at 1), none when it is already in or past it.
-static func ticks_to(k: float, lo: float, hi: float) -> float:
+## middle (to 1 for a window at 1), none when it is already in or past it;
+## `ticks` the move's length (CarryLead.ticks_of()).
+static func ticks_to(k: float, lo: float, hi: float, ticks := CarryOnProps.TRANSFER_TICKS) -> float:
 	if k >= lo:
 		return 0.0
 	var target := 1.0 if lo >= 1.0 else (lo + hi) * 0.5
-	return (target - k) * CarryOnProps.TRANSFER_TICKS + (0.01 if lo >= 1.0 else 0.0)
+	return (target - k) * ticks + (0.01 if lo >= 1.0 else 0.0)
 
 
 ## The move bag `i` of passenger `id` starts on its next draw (its place
@@ -186,9 +237,10 @@ static func lead_sheet(dir: String) -> void:
 ## saved to `path` from the first side where the bag's drawn bounds project
 ## inside `frame` (probe._box_in_frame), at least DETAIL_ON of five sight lines
 ## land on the bag first (its own passenger in front of it counts against it
-## here, every mesh seen from either side) and the plate is not dark. `owners`
-## are the meshes that can block. Returns whether it was saved; the camera is
-## left where it was put.
+## here, every mesh seen from either side), the plate is not dark and, held
+## (PALM_REACH_M), the palm holding it is seen (palm_seen()); then from
+## DETAIL_LIFTS higher. `owners` are the meshes that can block. Returns
+## whether it was saved; the camera is left where it was put.
 static func detail_plate(
 	probe: SceneTree,
 	cam: Camera3D,
@@ -208,10 +260,19 @@ static func detail_plate(
 		first = false
 	var centre := box.get_center()
 	var reach := maxf(DETAIL_M, box.size.length() * 0.55 / tan(deg_to_rad(cam.fov) * 0.5))
-	var away := cam.global_position - centre
+	var level := cam.global_position - centre
 	var tag := path.get_file().get_basename()
-	for turn: float in DETAIL_TURNS:
-		cam.global_position = centre + (Basis(Vector3.UP, turn) * away).normalized() * reach
+	var palm := palm_of(body, box)
+	print("INFRAME %s palm %s" % [tag, palm if palm.is_finite() else "none holding"])
+	var sides := []
+	for lift: float in DETAIL_LIFTS:
+		for turn: float in DETAIL_TURNS:
+			sides.append([lift, turn])
+	for lift_turn: Array in sides:
+		var turn: float = lift_turn[1]
+		var away := Basis(Vector3.UP, turn) * level
+		away.y += float(lift_turn[0]) * Vector2(away.x, away.z).length()
+		cam.global_position = centre + away.normalized() * reach
 		cam.look_at(centre)
 		for f in 2:
 			await probe.process_frame
@@ -222,7 +283,7 @@ static func detail_plate(
 		await probe.physics_frame
 		await probe.physics_frame
 		var bounds: Dictionary = holder.get_meta("bounds")
-		var side := "%s turn %.2f" % [tag, turn]
+		var side := "%s turn %.2f lift %.1f" % [tag, turn, lift_turn[0]]
 		var ok: bool = (
 			bounds.has("bag") and probe.call("_box_in_frame", cam, bounds["bag"], frame, side)
 		)
@@ -230,12 +291,56 @@ static func detail_plate(
 		var dark := dark_share(img)
 		print("INFRAME %s bag_lines_first_on=%d/5 dark=%.2f" % [side, on, dark])
 		ok = ok and on >= DETAIL_ON and dark < DARK_SHARE
+		if ok and palm.is_finite():
+			ok = palm_seen(cam, palm, frame, side)
 		holder.free()
 		if ok and img.save_png(path) == OK:
 			print("PLATE saved %s size=%s" % [path, img.get_size()])
 			return true
 	print("DETAIL_PLATE missed %s" % tag)
 	return false
+
+
+## The palm of `body`'s hand (CarryOnProps.grip_of(): the Fingers bone's
+## attachment, as posed after the arm's reach, and GRIP_ALONG_M along it)
+## nearest `box` (world), if within PALM_REACH_M of it; else not finite.
+static func palm_of(body: Node3D, box: AABB) -> Vector3:
+	var best := Vector3.INF
+	var near := PALM_REACH_M
+	for grip: BoneAttachment3D in body.find_children("*", "BoneAttachment3D", true, false):
+		if grip.bone_name not in CarryOnProps.GRIP_BONES:
+			continue
+		var along := grip.global_basis.y.normalized() * CarryOnProps.GRIP_ALONG_M
+		var at := grip.global_position + along
+		var gap := at.distance_to(at.clamp(box.position, box.end))
+		if gap <= near:
+			near = gap
+			best = at
+	return best
+
+
+## Whether `palm` (world) is seen from `cam`: in front of it, projected
+## PALM_MARGIN_PX inside `frame`, and the sight line to it meeting nothing
+## more than PALM_CLEAR_M short of it (the colliders up, as detail_plate() has
+## them). Printed with `tag`.
+static func palm_seen(cam: Camera3D, palm: Vector3, frame: Rect2, tag: String) -> bool:
+	var px := cam.unproject_position(palm)
+	var inside := not cam.is_position_behind(palm) and frame.grow(-PALM_MARGIN_PX).has_point(px)
+	var space := cam.get_world_3d().direct_space_state
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(cam.global_position, palm))
+	var short := 0.0
+	var by := "nothing"
+	if not hit.is_empty():
+		short = (hit.position as Vector3).distance_to(palm)
+		by = "%s %s" % [(hit.collider as Node).name, (hit.collider as Node).get_meta("mesh", "")]
+	var ok := inside and short <= PALM_CLEAR_M
+	print(
+		(
+			"INFRAME %s palm screen=(%.0f,%.0f) inside=%s first hit %s %.3f m short ok=%s"
+			% [tag, px.x, px.y, inside, by, short, ok]
+		)
+	)
+	return ok
 
 
 ## How many of five sight lines from `cam` to `box` (its middle and four points

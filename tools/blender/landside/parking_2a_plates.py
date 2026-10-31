@@ -10,6 +10,8 @@ tools/blender/out/parking_2a/plates/ (gitignored):
 - six orthographic views along the axes at true scale, with a 1 m reference cube beside
   the front-right corner;
 - a distance shot from the road side;
+- the paved apron in front of the entrance (Parking_2A_Apron) alone on the six axes with
+  a 1 m cube, then in place from low on the road side and from a distance;
 - a plan section of the ground floor (an orthographic camera under the first deck);
 - the gap close up from the stalls and from the ramp landing, after and before the edit.
 Every plate projects its subject's bounds into the frame (with a margin) and casts a ray
@@ -212,13 +214,20 @@ def render(sc, name):
     return path
 
 
-def six_axis(plates):
+def six_axis(plates, only=None, cube_at=(13.5, 0.5, -27.0), prefix=""):
+    """Six orthographic views at true scale with a 1 m cube: the whole asset, or only the
+    mesh object named `only` (the others removed first)."""
     sc, meshes = load("glb")
+    if only is not None:
+        for o in [o for o in meshes if o.name != only]:
+            bpy.data.objects.remove(o, do_unlink=True)
+        meshes = [o for o in sc.objects if o.type == "MESH"]
+        if [o.name for o in meshes] != [only]:
+            invalid("%s: expected only %s, have %s" % (prefix, only, [o.name for o in meshes]))
     lo, hi = bounds(meshes)
     size = hi - lo
-    print("BOUNDS_WRITTEN size_m=(%.3f, %.3f, %.3f)" % tuple(size), flush=True)
-    # Beside the front-right corner (Godot x 13.5, z -27).
-    cube = add_cube(sc, g2b(13.5, 0.5, -27.0))
+    print("BOUNDS_WRITTEN %s size_m=(%.3f, %.3f, %.3f)" % (only or "asset", *size), flush=True)
+    cube = add_cube(sc, g2b(*cube_at))
     lo2, hi2 = bounds(meshes + [cube])
     mid = (lo2 + hi2) / 2.0
     far = 200.0
@@ -240,8 +249,8 @@ def six_axis(plates):
             horiz = ext.y if abs(d.x) > 0.5 else ext.x
             scale = max(horiz, ext.z * aspect) * 1.12
         cam = camera(sc, mid + d * far, mid, ortho=scale)
-        prove(sc, cam, name, lo2, hi2, mid, subjects=meshes)
-        plates.append(render(sc, name))
+        prove(sc, cam, prefix + name, lo2, hi2, mid, subjects=meshes)
+        plates.append(render(sc, prefix + name))
         bpy.data.objects.remove(cam, do_unlink=True)
 
 
@@ -253,6 +262,35 @@ def distance(plates):
     cam = camera(sc, g2b(55.0, 40.0, -110.0), target, lens=50.0)
     prove(sc, cam, "distance", lo, hi, g2b(0.0, 14.0, -26.0), subjects=meshes)
     plates.append(render(sc, "distance"))
+
+
+# The apron in front of the entrance (parking_2a_entrance.py): x 2.05..7.95, z -32..-26.
+APRON = "Parking_2A_Apron"
+
+
+def apron_plates(plates):
+    """The apron alone on six axes with a 1 m cube off its front-west corner, then in place in
+    front of the building from the road side, low enough to read its rise."""
+    six_axis(plates, only=APRON, cube_at=(1.0, 0.4, -33.5), prefix="apron_")
+    sc, meshes = load("glb")
+    apron = [o for o in meshes if o.name == APRON]
+    if len(apron) != 1:
+        invalid("apron: %d objects named %s" % (len(apron), APRON))
+    lo, hi = bounds(apron)
+    print("BOUNDS_WRITTEN apron_in_place lo=%s hi=%s" % (tuple(round(c, 3) for c in lo), tuple(round(c, 3) for c in hi)), flush=True)
+    # East of the apron, behind it from these cameras.
+    add_cube(sc, g2b(10.0, 0.4, -29.0))
+    shots = {
+        # Low from the road side and to the west, across the apron's rise.
+        "apron_in_place": (g2b(-6.0, 2.2, -42.0), g2b(5.0, 0.2, -29.0), 35.0),
+        # The distance shot: from far down the road, the building with its apron.
+        "apron_distance": (g2b(-30.0, 14.0, -75.0), g2b(5.0, 0.2, -29.0), 50.0),
+    }
+    for name, (loc, target, lens) in shots.items():
+        cam = camera(sc, loc, target, lens=lens)
+        prove(sc, cam, name, lo, hi, g2b(5.0, 0.25, -28.0), subjects=apron)
+        plates.append(render(sc, name))
+        bpy.data.objects.remove(cam, do_unlink=True)
 
 
 def section(plates):
@@ -311,6 +349,7 @@ def main():
     plates = []
     six_axis(plates)
     distance(plates)
+    apron_plates(plates)
     section(plates)
     close_ups(plates, "glb")
     close_ups(plates, "fbx")
