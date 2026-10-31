@@ -245,6 +245,17 @@ func test_a_large_bag_room_is_worked_out_in_one_pass_and_is_still_right() -> voi
 	var elapsed := Time.get_ticks_msec() - started
 	var ring := (40 + 2 * BackOfHouseView.REACH) * (40 + 2 * BackOfHouseView.REACH) - 40 * 40
 	print("40x40 bag room: %d cells see it, worked out in %d ms" % [seen.size(), elapsed])
+	# The work stays linear in the area scanned: every cell of the 44x44 area is
+	# checked once against the room rectangle, and no room cell is ever listed.
+	var scanned := (40 + 2 * BackOfHouseView.REACH) * (40 + 2 * BackOfHouseView.REACH)
+	print(
+		(
+			"cells scanned %d, room cells listed %d"
+			% [BackOfHouseView.cells_scanned, BackOfHouseView.cells_listed]
+		)
+	)
+	assert_int(BackOfHouseView.cells_scanned).is_equal(scanned)
+	assert_int(BackOfHouseView.cells_listed).is_equal(0)
 	assert_int(seen.size()).is_equal(ring)
 	assert_int(int(seen[Vector2i(7, 20)])).is_equal(2)
 	assert_int(int(seen[Vector2i(6, 6)])).is_equal(2)

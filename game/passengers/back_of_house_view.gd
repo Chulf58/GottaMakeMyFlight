@@ -31,16 +31,26 @@ const TALL_IDS: Array[StringName] = [
 ## sample falls on a cell corner.
 const SAMPLES_PER_CELL := 8
 
+## Work counters of the last penalties() call, for tests: the cells scanned for
+## a footprint (each is one constant-time rectangle containment check) and the
+## footprint cells listed one by one. A room is never listed, so a large room
+## costs only its scan.
+static var cells_scanned := 0
+static var cells_listed := 0
+
 
 ## Every cell that sees back-of-house pieces on `grid`, as cell -> summed penalty.
 static func penalties(grid: BuildGrid) -> Dictionary:
 	var out := {}
+	cells_scanned = 0
+	cells_listed = 0
 	for id in grid.object_ids():
 		var record := grid.get_object(id)
 		var def_id: StringName = record["def"]
 		var def := BuildCatalog.get_def(def_id)
 		if PIECE_PENALTY.has(def_id) and def != null:
 			var cells := def.footprint(record["anchor"], record["facing"])
+			cells_listed += cells.size()
 			var low := cells[0]
 			var high := cells[0]
 			for cell in cells:
@@ -86,6 +96,7 @@ static func _add_seen(out: Dictionary, grid: BuildGrid, footprint: Rect2i, penal
 	for y in range(low.y - REACH, high.y + REACH + 1):
 		for x in range(low.x - REACH, high.x + REACH + 1):
 			var cell := Vector2i(x, y)
+			cells_scanned += 1
 			if footprint.has_point(cell) or not grid.in_bounds(cell):
 				continue
 			if grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
