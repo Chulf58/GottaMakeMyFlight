@@ -186,6 +186,9 @@ const CATEGORIES := [
 ## cannot take it from CATEGORIES.size(): tests check the two agree).
 const REMOVE_CATEGORY := 25
 const NO_CATEGORY := -1
+## The open category while the Templates page (TemplatesPage) is open; its
+## bar button presses it like a category (press_category()).
+const TEMPLATES_PAGE := -2
 ## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
 	BuildMode.Tool.FLOOR: ["Floor", "floor", "1x1 tile"],
@@ -317,6 +320,8 @@ var staff_button := Button.new()
 ## game-while-a-build-tray-is-open-closin). The frame is its on-screen sign.
 var build_session := BuildSession.new()
 var build_frame := BuildModeFrame.new()
+## The Templates page; press_category(TEMPLATES_PAGE) opens and closes it.
+var templates_page := TemplatesPage.new()
 
 var _open := NO_CATEGORY
 ## True while a category click clears the tool, so the tool_changed(NONE)
@@ -455,6 +460,7 @@ func _ready() -> void:
 	_build_status()
 	_build_money()
 	_build_cost()
+	templates_page.attach(self)
 	add_child(_room_panel)
 	_ghost_reason.build_mode = build_mode
 	# Its own layer above the HUD panels (all on layer 2), as a tooltip is: it
@@ -468,7 +474,8 @@ func _ready() -> void:
 		_wallet = build_mode.wallet()
 		_room_panel.watch(build_mode)
 		build_mode.tool_changed.connect(_on_tool_changed)
-		build_mode.status_changed.connect(_on_status_changed)
+		build_mode.status_changed.connect(_on_mode_status_changed)
+		build_mode.templates.status_changed.connect(_on_status_changed)
 		_on_status_changed(build_mode.status_text())
 		_on_tool_changed(build_mode.tool)
 	else:
@@ -671,6 +678,8 @@ func _refresh_money() -> void:
 ## A door over a paid wall costs its price less the wall's refund, but the
 ## wallet must still hold the full door price (BuildTransaction.needed).
 func _preview_price() -> Vector2i:
+	if build_mode.templates.armed >= 0:
+		return build_mode.templates.preview_price()
 	var area := build_mode.dragged_area()
 	if build_mode.tool == BuildMode.Tool.FLOOR and area.has_area():
 		var rect_cost := _floor_rect_cost(area)
@@ -702,6 +711,14 @@ func _floor_rect_cost(area: Rect2i) -> int:
 
 func _price_floor_rect(area: Rect2i) -> int:
 	return AreaDrag.floor_cost(build_mode.grid, area)
+
+
+## BuildMode's status line. While a template is armed, its empty text gives way
+## to the template's own (TemplatePaste), which BuildMode's hover would clear.
+func _on_mode_status_changed(text: String) -> void:
+	if text == "" and build_mode.templates.is_active():
+		text = build_mode.templates.status_text()
+	_on_status_changed(text)
 
 
 func _on_status_changed(text: String) -> void:
@@ -802,6 +819,7 @@ func _sync() -> void:
 		_category_buttons[i].set_pressed_no_signal(on)
 	for key in _cards:
 		_cards[key].set_pressed_no_signal(key == tool)
+	templates_page.sync(_open == TEMPLATES_PAGE)
 	build_session.set_building(_open != NO_CATEGORY or tool != BuildMode.Tool.NONE)
 
 

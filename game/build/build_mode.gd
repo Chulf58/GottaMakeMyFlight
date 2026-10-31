@@ -333,6 +333,8 @@ var pointer_override := Vector2(-1.0, -1.0)
 ## How many times the lane hint under the pointer was worked out afresh rather
 ## than reused; for the tests.
 var lane_hint_scans := 0
+## Saved room templates and their paste (TemplatePaste), made a child in _ready().
+var templates := TemplatePaste.new()
 
 ## False once R is pressed, until a tool is picked again. While true, the
 ## door tools ignore `facing` and use DoorPlacement.auto_facing().
@@ -420,6 +422,7 @@ func _ready() -> void:
 	if finances != null:
 		finances.wallet.changed.connect(_on_balance_changed)
 	_history.watch(grid, wallet())
+	add_child(templates)
 	set_tool(tool)
 
 
