@@ -348,6 +348,10 @@ func test_steam_fills_the_cubicle_with_the_lather_and_clears_with_the_rinse() ->
 	assert_object(haze.mesh).is_same(ShowerFoam.haze_box())
 	assert_float(box.x).is_less(cubicle.size.x - 0.05)
 	assert_float(box.z).is_less(cubicle.size.z - 0.05)
+	# ...and under its top, on the tray: no steam edge shows above the glass.
+	var top := ActivityPoses.SHOWER_TRAY_M + ShowerFoam.HAZE_FLOOR_M + box.y
+	print("steam top %.2f m, cubicle top %.2f m" % [top, cubicle.end.y])
+	assert_float(top).is_less_equal(cubicle.end.y)
 	while _world.sim.shops.visit_of(p.id) != null and _world.clock.tick < 3000:
 		_world.step()
 	assert_object(node.get_node_or_null("ShowerFoam")).is_null()

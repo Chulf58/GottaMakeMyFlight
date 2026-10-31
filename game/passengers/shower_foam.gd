@@ -56,8 +56,9 @@ const STEAM_LOOP_S := 2.2
 const STEAM_ALPHA := 0.7
 ## The steam inside the cubicle: one box, shared by every foam, standing on
 ## HAZE_FLOOR_M inside the shower_cubicle's glass (the piece is 0.84 m square
-## outside), drawn by HAZE_SHADER.
-const HAZE_SIZE_M := Vector3(0.62, 1.95, 0.64)
+## outside) and under its 2.16 m top (the foam stands on the 0.10 m tray),
+## drawn by HAZE_SHADER.
+const HAZE_SIZE_M := Vector3(0.62, 1.85, 0.64)
 const HAZE_FLOOR_M := 0.15
 const HAZE_SHADER := preload("res://shaders/shower_haze.gdshader")
 
