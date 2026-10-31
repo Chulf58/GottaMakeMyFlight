@@ -508,6 +508,7 @@ func sync() -> void:
 		for i in homes.size():
 			spots.append(SecurityLooks.floor_spot(sim, p, i, homes.size()))
 		held["floor"] = spots
+		ActivityCarry.sync(held, sim, p, homes.size())
 		if tray_at != SecurityLooks.Tray.NONE and held["tray"] == null:
 			held["tray"] = _take("security_tray")
 		var bags: Array = held["bags"]
@@ -981,9 +982,10 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 		if bag["carry"] == SecurityLooks.Carry.HAND:
 			var box := bag_box(kind)
 			bag["from_world"] = StallCarry.set_down_start(want, box, StallCarry.lowest(start, box))
-	elif at >= 0 and at / 4 == SecurityLooks.Home.TRAY:
-		# A bag in a tray waits there for the hand; one on the floor keeps its
-		# place by the walker, so a walker never steps into it.
+	elif at >= 0 and (at / 4 == SecurityLooks.Home.TRAY or ActivityCarry.fixed_start(held, at)):
+		# A bag in a tray or at an activity's fixed spot waits there for the
+		# hand; one on the floor keeps its place by the walker, so a walker never
+		# steps into it.
 		bag["from_world"] = start
 	if not unmoved:
 		bag["since"] = bag["changed"] - (TRANSFER_TICKS if bag["home"] == -1 else 0.0)
@@ -1359,8 +1361,9 @@ func _bag_transform(
 			at.y += TRAY_FLOOR_M
 			return Transform3D(tray_xf.basis.scaled(Vector3.ONE * scale_by), tray_xf * at)
 		SecurityLooks.Home.FLOOR:
-			if not (held.get("stall", {}) as Dictionary).is_empty():
-				return StallCarry.floor_place(held["stall"], bag_box(kind), scale_by, i, count)
+			var fixed := ActivityCarry.fixed_place(held, bag_box(kind), scale_by, i, count)
+			if not fixed.is_empty():
+				return fixed[0]
 			var spot: Transform3D = held["floor"][i]
 			var placed := Transform3D(yaw, body.global_position) * spot
 			placed.origin.y = sim.grid.origin.y

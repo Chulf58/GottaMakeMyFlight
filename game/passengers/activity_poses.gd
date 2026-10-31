@@ -9,7 +9,11 @@ extends RefCounted
 ## icons still showing. Once the lather is fully up its clothes come off: the
 ## body draws skin where its clothes and shoes were (bare_mesh) until the
 ## rinse starts. The play area keeps the browse pose: standing in front of the
-## piece, facing it.
+## piece, facing it. Carry-on bags go down on the floor beside the sofa or pod
+## seat while the visitor is on it, and outside the shower door for its stay
+## (bags_down(), SecurityLooks.activity_floor()); a showering visitor with bags
+## stands at the door to set them down before it steps in and to pick them up
+## after it steps out (DOOR_IN_TICKS, DOOR_OUT_TICKS).
 ##
 ## The sim runs every activity visit as one SHOP_BROWSE stage at the piece's
 ## slot cell (ShopLayout), so this view-only helper reads the pose from the
@@ -52,6 +56,14 @@ const SHUFFLE_TICKS := 12
 ## Ticks the nap pod's lean back takes once seated, and the foam's build-up
 ## once in the shower (and the same again at the end).
 const EASE_TICKS := 20
+## A showering visitor with bags stands this many ticks at the cubicle door,
+## facing it, before it steps in: it sets its bags down outside the door then
+## (SecurityLooks), a roller's park included (RollerPark.TICKS_DOWN, 13).
+const DOOR_IN_TICKS := 14
+## And this many after it has stepped out, facing the door again, picking its
+## bags up: the walk off starts as a roller's pick-up is as far on as a gate
+## sitter's is when it walks off (RollerPark.UP_LEAD_TICKS).
+const DOOR_OUT_TICKS := 10
 ## Below this height (metres, the body's rest pose) a showering body's parts
 ## are its shoes, which come off with the clothes: where the lather's legs
 ## start (ShowerFoam.PARTS).
@@ -87,12 +99,13 @@ static func pose(sim: PassengerSim, p: Passenger) -> StageKinds.Pose:
 
 
 ## How far (0 to 1) `p` has stepped from its slot cell onto its seat or into
-## the shower: up over the first SHUFFLE_TICKS of the stay, down over the last.
+## the shower: up over the first SHUFFLE_TICKS of the stay, down over the last
+## (at the shower with bags, inside the door pauses: _in_spent, _out_left).
 static func share(sim: PassengerSim, p: Passenger) -> float:
 	if kind(sim, p) == Kind.NONE:
 		return 0.0
-	var step_in := (sim.tick - p.stage_tick) / float(SHUFFLE_TICKS)
-	var step_out := _left(sim, p) / float(SHUFFLE_TICKS)
+	var step_in := _in_spent(sim, p) / float(SHUFFLE_TICKS)
+	var step_out := _out_left(sim, p) / float(SHUFFLE_TICKS)
 	return clampf(minf(step_in, step_out), 0.0, 1.0)
 
 
@@ -123,17 +136,48 @@ static func spot_of(grid: BuildGrid, record: Dictionary, index: int) -> Vector3:
 
 ## The grid direction a staying visitor faces: out of the front of its piece
 ## (sat on the sofa or in the pod, or looking out of the shower door), except
-## that a showering one faces into the cubicle while it steps in. Zero for
-## everyone else.
+## that a showering one faces into the cubicle while it steps in, and while it
+## stands at the door before that and after its step out (DOOR_IN_TICKS,
+## DOOR_OUT_TICKS). Zero for everyone else.
 static func facing(sim: PassengerSim, p: Passenger) -> Vector2i:
 	var piece := _piece(sim, p)
 	if piece.is_empty() or not KINDS.has(piece["def"]):
 		return Vector2i.ZERO
 	var out := TerminalLayout.front_of(piece["facing"])
-	var stepping_in := sim.tick - p.stage_tick < SHUFFLE_TICKS
-	if KINDS[piece["def"]] == Kind.SHOWER and stepping_in:
+	var at_door := _in_spent(sim, p) < SHUFFLE_TICKS or _out_left(sim, p) < 0
+	if KINDS[piece["def"]] == Kind.SHOWER and at_door:
 		return -out
 	return out
+
+
+## Whether the carry-on bags of `p` are down for its stay now (SecurityLooks
+## puts them on the floor): on the sofa or in the nap pod from the moment it is
+## on the seat (SHUFFLE_TICKS in) until it steps off (SHUFFLE_TICKS before the
+## end), so it sets them down sitting and picks them up as it leaves the seat;
+## at the shower from the start of the stay to DOOR_OUT_TICKS before its end,
+## so they are set down at the door before the step in, wait outside it and
+## are picked up after the step out.
+static func bags_down(sim: PassengerSim, p: Passenger) -> bool:
+	match kind(sim, p):
+		Kind.SHOWER:
+			return _left(sim, p) >= DOOR_OUT_TICKS
+		Kind.SEAT, Kind.RECLINE:
+			var on_seat := sim.tick - p.stage_tick >= SHUFFLE_TICKS
+			return on_seat and _left(sim, p) >= SHUFFLE_TICKS
+	return false
+
+
+## The frame of the stay of `p` in the world: on its slot's seat root (or the
+## middle of the shower's floor), turned to face out of the piece (+z out of
+## its front, +x on the left of one facing out). The identity for a passenger
+## kind() draws as NONE.
+static func stay_frame(sim: PassengerSim, p: Passenger) -> Transform3D:
+	var piece := _piece(sim, p)
+	if piece.is_empty() or not KINDS.has(piece["def"]):
+		return Transform3D.IDENTITY
+	var out := TerminalLayout.front_of(piece["facing"])
+	var at := spot_of(sim.grid, piece, piece["index"])
+	return Transform3D(Basis(Vector3.UP, atan2(out.x, out.y)), at)
 
 
 ## How far (0 to 1) a nap pod visitor leans back now: in over EASE_TICKS once
@@ -206,8 +250,8 @@ static func dress(node: Node3D, lean: float, lather: float, undressed := false) 
 static func foam(sim: PassengerSim, p: Passenger) -> float:
 	if kind(sim, p) != Kind.SHOWER:
 		return 0.0
-	var spent := sim.tick - p.stage_tick
-	return smoothstep(0.0, 1.0, minf(spent, _left(sim, p)) / float(EASE_TICKS))
+	var spent := _in_spent(sim, p)
+	return smoothstep(0.0, 1.0, minf(spent, _out_left(sim, p)) / float(EASE_TICKS))
 
 
 ## True while a showering visitor's lather is fully up: its clothes are off
@@ -225,7 +269,7 @@ static func washing(sim: PassengerSim, p: Passenger) -> bool:
 
 ## Seconds into the washing clip `p` is now: from the end of its step in.
 static func wash_seconds(sim: PassengerSim, p: Passenger) -> float:
-	return maxi(sim.tick - p.stage_tick - SHUFFLE_TICKS, 0) * SimClock.STEP
+	return maxi(_in_spent(sim, p) - SHUFFLE_TICKS, 0) * SimClock.STEP
 
 
 ## Body `body`'s mesh with its clothes and shoes off, made on first use and
@@ -361,3 +405,23 @@ static func _left(sim: PassengerSim, p: Passenger) -> int:
 	var type := RoomTypes.get_type(_room_type_id(sim, visit))
 	var end := mini(p.stage_tick + ShopSim.browse_ticks(type), visit.deadline)
 	return end - 1 - sim.tick
+
+
+## Ticks since `p` started its step onto its seat or into the shower: from the
+## stay's start, or at the shower with bags from DOOR_IN_TICKS after it
+## (negative before that).
+static func _in_spent(sim: PassengerSim, p: Passenger) -> int:
+	return sim.tick - p.stage_tick - _door(sim, p, DOOR_IN_TICKS)
+
+
+## Ticks left until `p` has stepped off its seat or out of the shower: the
+## stay's ticks left (_left), or at the shower with bags DOOR_OUT_TICKS fewer
+## (negative after that).
+static func _out_left(sim: PassengerSim, p: Passenger) -> int:
+	return _left(sim, p) - _door(sim, p, DOOR_OUT_TICKS)
+
+
+## `ticks` for a showering visitor with bags, which waits at the door to set
+## them down or pick them up; 0 for everyone else.
+static func _door(sim: PassengerSim, p: Passenger, ticks: int) -> int:
+	return ticks if p.carry_on > 0 and kind(sim, p) == Kind.SHOWER else 0

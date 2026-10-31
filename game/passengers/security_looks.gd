@@ -18,7 +18,8 @@ extends RefCounted
 ## reaches the unpack cell, and they ride the belt as on the first pass. At
 ## the basic scanner: SCAN carries the bags, REPACK puts them on the floor
 ## where the passenger stands, which holds the scanner. Outside security the
-## bags are carried, and set down while seated (bag_homes(), floor_spot()).
+## bags are carried, and set down while seated (bag_homes(), floor_spot()) or
+## on an activity visit (activity_floor()).
 ##
 ## Shared cells: the next queue front walks onto the unpack cell while the
 ## passenger before it still unpacks there, and a returner crosses the unpack
@@ -68,6 +69,26 @@ const FLOOR_APART_M := 0.16
 const SEAT_AHEAD_M := 0.62
 ## A bag at a cafe seat lies beside the chair, this far to the sitter's right.
 const CAFE_BESIDE_M := 0.45
+## A bag set down by a sofa or nap pod visitor stands upright on the floor
+## beside the seat, on the side of the hand that carries it, its back face this
+## far out from the seat's root (Mount_SitRoot) and its thickness (0.23 m at
+## most) toward the legs (0.15 m out): inside the piece's own width (0.42 m
+## out from a pod's or a sofa end seat's root, where a wall can stand). Lying
+## flat, a hard case was 0.35 m across and went into the wall or the shin.
+const ACTIVITY_BESIDE_M := 0.40
+## And its middle this far ahead of the seat's root: the widest bag (0.39 m
+## across) keeps 0.04 m clear of the piece's front, 0.15 m behind the root.
+const ACTIVITY_AHEAD_M := 0.15
+## A bag a showering visitor sets down stands upright outside the cubicle
+## door the same way, its back face this far out from the cubicle's middle line
+## (inside the cubicle's width, where a wall can stand beside the cell in front
+## of the door) and its thickness toward the line, clear of the legs walking
+## in (0.15 m out), on the side of the hand that carries it as the visitor
+## faces the door.
+const SHOWER_BAG_SIDE_M := 0.41
+## Its middle this far out from the cubicle's middle: the widest bag (0.39 m
+## across) keeps 0.03 m clear of the door's face at 0.42 m.
+const SHOWER_BAG_OUT_M := 0.65
 ## A bag in a toilet stall stands upright on its end (STALL_UPRIGHT) with its
 ## back face this far out from the stall's footprint centre: against the inside
 ## of the closed door's leaves (0.881 m, less a 0.02 m gap), so the deepest bag
@@ -185,13 +206,15 @@ static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
 ## the cell beside the passenger on its right, for the way it walks (or last
 ## walked), is closed off by a wall or holds an object (a lane part, a desk)
 ## and the left is open: then the left, so the bag passes on the open side.
+## On an activity visit the way is the one it faces to set its bags down
+## (_stay_step), so the bag goes down on the open side.
 static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if p.carry_on > 1:
 		return index
-	if p.path.size() < 2:
-		return 0
-	var at := clampi(p.path_index, 0, p.path.size() - 2)
-	var step := p.path[at + 1] - p.path[at]
+	var step := _stay_step(sim, p)
+	if step == Vector2i.ZERO and p.path.size() >= 2:
+		var at := clampi(p.path_index, 0, p.path.size() - 2)
+		step = p.path[at + 1] - p.path[at]
 	if step == Vector2i.ZERO:
 		return 0
 	var right := world_dir(step).cross(Vector3.UP)
@@ -200,6 +223,20 @@ static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if _closed(sim.grid, cell, right_step) and not _closed(sim.grid, cell, -right_step):
 		return 1
 	return 0
+
+
+## The grid way an activity visitor (ActivityPoses.kind not NONE) faces as it
+## sets its bags down and picks them up: out of the piece on a sofa or nap pod
+## seat, into it at the shower's door. Zero for any other passenger. Its
+## visit's path is only its own cell (ShopSim clears it), so the way it walked
+## in is gone; this way comes from the piece, the same after a load.
+static func _stay_step(sim: PassengerSim, p: Passenger) -> Vector2i:
+	var kind := ActivityPoses.kind(sim, p)
+	if kind == ActivityPoses.Kind.NONE:
+		return Vector2i.ZERO
+	var out := ActivityPoses.stay_frame(sim, p).basis.z
+	var step := Vector2i(roundi(out.x), roundi(out.z))
+	return -step if kind == ActivityPoses.Kind.SHOWER else step
 
 
 ## The kind of carry-on bag `index` of `p`: a fixed hash of the passenger's id
@@ -387,6 +424,46 @@ static func floor_spot(sim: PassengerSim, p: Passenger, index: int, count: int) 
 	return Transform3D(across, Vector3(side, 0.0, FLOOR_AHEAD_M))
 
 
+## Where each of the `count` floor bags of an activity visitor `p` stands, in
+## the world (empty for any other passenger): fixed while the body steps onto
+## its seat and off, or into the shower and out (ActivityPoses.stay_frame).
+## Each stands upright on its end (a roller on its wheels) on the floor, its
+## back face (y = 0) outward and its thickness toward the body: by a sofa or
+## nap pod seat in front of the piece, beside the legs on the side of the hand
+## that carries it (ACTIVITY_BESIDE_M, ACTIVITY_AHEAD_M); at the shower
+## outside the door, on the side of its hand as the visitor faces the door
+## (SHOWER_BAG_SIDE_M, SHOWER_BAG_OUT_M). Each origin is on the floor;
+## CarryOnProps lifts a bag by its own bounds onto it (on_floor()).
+static func activity_floor(sim: PassengerSim, p: Passenger, count: int) -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	var kind := ActivityPoses.kind(sim, p)
+	if kind == ActivityPoses.Kind.NONE:
+		return out
+	var frame := ActivityPoses.stay_frame(sim, p)
+	var shower := kind == ActivityPoses.Kind.SHOWER
+	for i in count:
+		# +1 on the left of one facing out of the piece, -1 on its right; facing
+		# the shower's door the hands swap sides.
+		var side := 1.0 if hand_of(sim, p, i) == 1 else -1.0
+		if shower:
+			side = -side
+		# Its length (z) up, its back (y) outward.
+		var upright := Basis(Vector3(0.0, 0.0, -side), Vector3(-side, 0.0, 0.0), Vector3.UP)
+		var at := Vector3(side * ACTIVITY_BESIDE_M, 0.0, ACTIVITY_AHEAD_M)
+		if shower:
+			at = Vector3(side * SHOWER_BAG_SIDE_M, 0.0, SHOWER_BAG_OUT_M)
+		out.append(frame * Transform3D(upright, at))
+	return out
+
+
+## A floor bag of bounds `box` (scale 1) at `spot` (activity_floor()) drawn at
+## `scale_by`: lifted so its lowest point is on the floor under the spot
+## (the CarryOnProps placement of an activity visitor's floor bags).
+static func on_floor(spot: Transform3D, box: AABB, scale_by: float) -> Transform3D:
+	var placed := Transform3D(spot.basis.scaled(Vector3.ONE * scale_by), spot.origin)
+	return placed.translated(Vector3.UP * (spot.origin.y - StallCarry.lowest(placed, box)))
+
+
 ## Whether the edge of `cell` toward `toward` (a straight grid step) has a
 ## wall, or the cell beyond holds an object.
 static func _side_closed(grid: BuildGrid, cell: Vector2i, toward: Vector2i) -> bool:
@@ -397,9 +474,13 @@ static func _side_closed(grid: BuildGrid, cell: Vector2i, toward: Vector2i) -> b
 
 
 ## Whether `p` sits at a gate chair, a cafe seat or in a toilet stall (or is
-## sitting down or standing up there). Stepping into or out of a stall is not
-## seated: the bags stay in hand.
+## sitting down or standing up there), or has its bags down on an activity
+## visit (ActivityPoses.bags_down: on a sofa or nap pod seat, or at the
+## shower). Stepping into or out of a stall is not seated: the bags stay in
+## hand.
 static func _seated(sim: PassengerSim, p: Passenger) -> bool:
+	if ActivityPoses.bags_down(sim, p):
+		return true
 	var where := StageKinds.location(p.stage)
 	if where == StageKinds.Location.GATE_SEAT and p.seat_object != 0:
 		return true
