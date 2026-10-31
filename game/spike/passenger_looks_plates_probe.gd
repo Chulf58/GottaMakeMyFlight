@@ -29,6 +29,8 @@ const VIEWS := {
 }
 const CROWD_ROWS := 3
 const CROWD_COLS := 8
+## Seated plates: body points this close to the hips in plan are the seat side.
+const SEAT_PROBE_M := 0.15
 
 var _out := ""
 var _failed := false
@@ -48,20 +50,31 @@ func _process(_delta: float) -> bool:
 
 func _run() -> void:
 	var seed := randi()
+	# --parts=six,tints,distance,crowd,seated picks what is shot (default: all).
+	var parts := ["six", "tints", "distance", "crowd", "seated"]
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
 			seed = int(arg.get_slice("=", 1))
-	print("PROBE seed=", seed, " out=", _out)
+		if arg.begins_with("--parts="):
+			parts = Array(arg.get_slice("=", 1).split(","))
+	print("PROBE seed=", seed, " out=", _out, " parts=", parts)
 	_studio()
 	root.add_child(_cam)
 	root.add_child(_stage)
 	_cam.current = true
-	for body in PassengerLooks.BODIES.size():
-		await _six_axis(body)
-	for variant in 2:
-		await _tint_sheet(variant)
-	await _distance()
-	await _crowd(seed)
+	if "six" in parts:
+		for body in PassengerLooks.BODIES.size():
+			await _six_axis(body)
+	if "tints" in parts:
+		for variant in 2:
+			await _tint_sheet(variant)
+	if "distance" in parts:
+		await _distance()
+	if "crowd" in parts:
+		await _crowd(seed)
+	if "seated" in parts:
+		for group in 4:
+			await _seated(group)
 	print("PROBE done failed=", _failed)
 	quit(1 if _failed else 0)
 
@@ -89,14 +102,14 @@ func _studio() -> void:
 
 
 ## A passenger of `body` with tint `tint` at `at`, facing `yaw`, idle at `phase`.
-func _person(body: int, tint: int, at: Vector3, yaw: float, phase: float) -> Node3D:
+func _person(body: int, tint: int, at: Vector3, yaw: float, phase: float, clip := "idle") -> Node3D:
 	var node := PassengerLooks.SCENES[body].instantiate() as Node3D
 	_stage.add_child(node)
 	PassengerLooks.paint_body(node, body, tint)
 	node.position = at
 	node.rotation.y = yaw
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
-	player.play("idle")
+	player.play(clip)
 	player.seek(phase * player.current_animation_length, true)
 	player.speed_scale = 0.0
 	return node
@@ -122,7 +135,11 @@ func _bounds(node: Node3D) -> AABB:
 	var box := AABB()
 	var first := true
 	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
-		var b := mi.global_transform * mi.get_aabb()
+		# A skinned body's own AABB is its rest (T) pose; take the drawn pose.
+		var local := mi.get_aabb()
+		if mi.skin != null:
+			local = mi.bake_mesh_from_current_skeleton_pose().get_aabb()
+		var b := mi.global_transform * local
 		box = b if first else box.merge(b)
 		first = false
 	if node is MeshInstance3D:
@@ -369,3 +386,74 @@ func _crowd(seed: int) -> void:
 	var img: Image = await _grab(false)
 	if ok:
 		_save(img, "crowd.png")
+
+
+## Three bodies of `group` (bodies group*3 .. +2), each seated in sit_idle on
+## the middle chair of its own gate seat row, placed as PassengerSim and
+## GateChairs place a seated passenger (SIT_FORWARD_M ahead of the seat cell,
+## CHAIR_OFFSET_M across, facing the row's front, +z at facing 0). Shot side-on
+## (orthographic, along the rows) so a gap between body and seat pan shows.
+## Prints SEAT_GAP: the lowest body point within SEAT_PROBE_M of the hips (in
+## plan) above the seat pan under the hips (a ray down onto the chair only).
+func _seated(group: int) -> void:
+	_clear()
+	var chairs := Node3D.new()
+	_stage.add_child(chairs)
+	var subjects := {}
+	var people: Array[Node3D] = []
+	for k in 3:
+		var body := group * 3 + k
+		var row := InteriorKit.instantiate(&"seat_row")
+		chairs.add_child(row)
+		row.position = Vector3(0, 0, k * 2.6)
+		var box := _bounds(row)
+		var seat := Vector3(box.get_center().x, 0, box.get_center().z)
+		var at := seat + Vector3(GateChairs.CHAIR_OFFSET_M[1], 0, PassengerSim.SIT_FORWARD_M)
+		var node := _person(body, 0, at, 0.0, 0.0, "sit_idle")
+		subjects[node] = PassengerLooks.BODIES[body]
+		people.append(node)
+		# The chair a person sits on is part of what the plate shows of it: its
+		# frame and back may stand in front of the legs and the seat.
+		subjects[row] = subjects[node]
+	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_cam.keep_aspect = Camera3D.KEEP_WIDTH
+	_cam.size = 8.0
+	var centre := Vector3(0, 0.8, 2.6)
+	_cam.global_position = centre + Vector3(12, 0, 0)
+	_cam.look_at(centre)
+	for i in 3:
+		await process_frame
+	var owners: Array[Node] = [chairs]
+	var holder := PlateSight.colliders(root, owners, {})
+	await physics_frame
+	await physics_frame
+	var space := _cam.get_world_3d().direct_space_state
+	for node in people:
+		var skel := node.find_child("Skeleton3D", true, false) as Skeleton3D
+		var hips := skel.global_transform * skel.get_bone_global_pose(skel.find_bone("Hips")).origin
+		var down := PhysicsRayQueryParameters3D.create(
+			Vector3(hips.x, 1.2, hips.z), Vector3(hips.x, 0.0, hips.z)
+		)
+		var hit := space.intersect_ray(down)
+		var mi := PassengerLooks.body_mesh(node)
+		var baked := mi.bake_mesh_from_current_skeleton_pose()
+		var low := INF
+		for s in baked.get_surface_count():
+			for v: Vector3 in baked.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+				var w := mi.global_transform * v
+				if Vector2(w.x - hips.x, w.z - hips.z).length() < SEAT_PROBE_M:
+					low = minf(low, w.y)
+		var pan: float = hit["position"].y if not hit.is_empty() else NAN
+		print(
+			(
+				"SEAT_GAP %s hips=%s pan_top=%.3f body_low=%.3f gap_m=%.3f"
+				% [subjects[node], hips, pan, low, low - pan]
+			)
+		)
+		if hit.is_empty():
+			_invalid("%s: no seat pan under the hips" % subjects[node])
+	holder.free()
+	var ok: bool = await _proven("seated_%d" % group, subjects, false)
+	var img: Image = await _grab(false)
+	if ok:
+		_save(img, "seated_%d.png" % group)

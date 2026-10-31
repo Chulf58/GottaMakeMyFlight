@@ -62,6 +62,15 @@ const TINTS := [[0.0, -1.0], [0.5, 0.6], [0.17, 0.08], [0.83, 0.95], [0.33, 0.3]
 ## at GREY_SAT instead of a hue turn, which would leave it grey.
 const GREY_BELOW := 0.15
 const GREY_SAT := 0.3
+## Cozy, not neon: a tinted swatch keeps at most this saturation, and a
+## swatch cell whose mean saturation is above SATURATED turns its hue by only
+## SATURATED_SCALE of the tint's turn (at most 0.15 of the wheel: a strong red
+## dress turns to a coral or a berry, never to lime). The choice is made per
+## atlas cell (SWATCH_PX), so one garment's gradient never splits in bands.
+const SAT_CAP := 0.55
+const SATURATED := 0.6
+const SATURATED_SCALE := 0.3
+const SWATCH_PX := Vector2i(32, 64)
 ## Texels recoloured around each clothes triangle's UV box, so filtering at
 ## its edge blends tinted texels only.
 const TEXEL_MARGIN := 1
@@ -242,26 +251,53 @@ static func tint_image(atlas: Image, texels: PackedInt32Array, tint: int) -> Ima
 	var width := out.get_width()
 	var turn: float = TINTS[tint][0]
 	var grey_hue: float = TINTS[tint][1]
+	var saturated := saturated_cells(out, texels)
+	var cols := width / SWATCH_PX.x
 	var done := {}
 	for t in texels:
 		var x := t % width
 		var y := t / width
+		var strong: bool = saturated[(y / SWATCH_PX.y) * cols + x / SWATCH_PX.x]
 		var c := out.get_pixel(x, y)
-		var key := c.to_rgba32()
+		var key := c.to_rgba32() * 2 + int(strong)
 		if not done.has(key):
-			done[key] = tinted(c, turn, grey_hue)
+			done[key] = tinted(c, turn, grey_hue, strong)
 		out.set_pixel(x, y, done[key])
 	out.generate_mipmaps()
 	return out
 
 
-## Colour `c` under a tint: a hue turn, or for a grey the tint's grey hue.
-static func tinted(c: Color, turn: float, grey_hue: float) -> Color:
+## Colour `c` under a tint: a hue turn (scaled down when it lies in a
+## saturated swatch) at no more than SAT_CAP saturation, or for a grey the
+## tint's grey hue.
+static func tinted(c: Color, turn: float, grey_hue: float, saturated := false) -> Color:
 	if turn == 0.0 and grey_hue < 0.0:
 		return c
 	if c.s < GREY_BELOW:
 		return Color.from_hsv(grey_hue, maxf(c.s, GREY_SAT), c.v, c.a)
-	return Color.from_hsv(fposmod(c.h + turn, 1.0), c.s, c.v, c.a)
+	# The turn as the shorter way round the wheel, -0.5..0.5.
+	var signed := fposmod(turn + 0.5, 1.0) - 0.5
+	if saturated:
+		signed *= SATURATED_SCALE
+	return Color.from_hsv(fposmod(c.h + signed, 1.0), minf(c.s, SAT_CAP), c.v, c.a)
+
+
+## Atlas cell (SWATCH_PX) index -> true when the mean saturation of `texels`
+## in it is above SATURATED.
+static func saturated_cells(atlas: Image, texels: PackedInt32Array) -> Dictionary:
+	var width := atlas.get_width()
+	var cols := width / SWATCH_PX.x
+	var sums := {}
+	for t in texels:
+		var x := t % width
+		var y := t / width
+		var cell := (y / SWATCH_PX.y) * cols + x / SWATCH_PX.x
+		var sum: Vector2 = sums.get(cell, Vector2.ZERO)
+		sums[cell] = sum + Vector2(atlas.get_pixel(x, y).s, 1.0)
+	var out := {}
+	for cell: int in sums:
+		out[cell] = sums[cell].x / sums[cell].y > SATURATED
+	return out
 
 
 ## Colours the "_Body" meshes of a passenger's bag nodes with its bag colour.

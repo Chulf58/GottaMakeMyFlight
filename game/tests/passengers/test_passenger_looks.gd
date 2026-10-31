@@ -65,13 +65,27 @@ func test_a_tint_turns_hues_and_colours_greys() -> void:
 	var red := Color.from_hsv(0.0, 0.8, 0.6)
 	var grey := Color(0.5, 0.5, 0.5)
 	assert_that(PassengerLooks.tinted(red, 0.0, -1.0)).is_equal(red)
-	var turned := PassengerLooks.tinted(red, 0.5, 0.6)
+	var turned := PassengerLooks.tinted(red, 0.5, 0.6, true)
 	print(
 		"red %s -> %s, grey %s -> %s" % [red, turned, grey, PassengerLooks.tinted(grey, 0.5, 0.6)]
 	)
-	assert_float(turned.h).is_equal_approx(0.5, 0.01)
-	assert_float(turned.s).is_equal_approx(0.8, 0.01)
+	# A saturated swatch turns by SATURATED_SCALE of the turn and is toned down to
+	# SAT_CAP (no neon); a muted one takes the full turn.
+	var moved := minf(turned.h, 1.0 - turned.h)
+	assert_float(moved).is_equal_approx(0.5 * PassengerLooks.SATURATED_SCALE, 0.01)
+	assert_float(turned.s).is_equal_approx(PassengerLooks.SAT_CAP, 0.01)
 	assert_float(turned.v).is_equal_approx(0.6, 0.01)
+	var muted := PassengerLooks.tinted(Color.from_hsv(0.0, 0.4, 0.6), 0.33, 0.3)
+	assert_float(muted.h).is_equal_approx(0.33, 0.01)
+	assert_float(muted.s).is_equal_approx(0.4, 0.01)
+	var most := 0.0
+	for tint in range(1, PassengerLooks.TINTS.size()):
+		for k in 20:
+			var c := Color.from_hsv(k / 20.0, 1.0, 0.9)
+			var t: Array = PassengerLooks.TINTS[tint]
+			most = maxf(most, PassengerLooks.tinted(c, t[0], t[1]).s)
+	print("most saturated tinted swatch: %.3f" % most)
+	assert_float(most).is_less_equal(PassengerLooks.SAT_CAP + 0.01)
 	var coloured := PassengerLooks.tinted(grey, 0.5, 0.6)
 	assert_float(coloured.h).is_equal_approx(0.6, 0.01)
 	assert_float(coloured.s).is_equal_approx(PassengerLooks.GREY_SAT, 0.01)

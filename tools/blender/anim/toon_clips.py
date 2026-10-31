@@ -118,6 +118,12 @@ SIT_DOWN_FRAMES = 30
 SIT_IDLE_FRAMES = 100
 SIT_LEAN_BUMP_DEG = 24.0
 SIT_BREATH_DEG = 3.0
+# The game's seat pans are at this height (gate chairs, cafe chairs). A body whose seated
+# pose rests higher (the female 03/04/05/08/11 bodies' thighs sit about 5 cm above it)
+# has its hips lowered by the difference, the legs re-solved to the same planted feet, so
+# it rests on the pan; one that rests lower is left as it is (a skirt hangs below the seat).
+SEAT_TOP_M = 0.53
+SEAT_FIT_TOLERANCE_M = 0.01
 
 
 class Fail(Exception):
@@ -521,6 +527,17 @@ def sit_clips(rig, stem, stand):
     p_r = {n: m.to_3x3().normalized() for n, m in p_mats.items()}
     if clamp > IK_CLAMP_TOLERANCE_M:
         raise Fail("%s sit: ankle out of reach by %.3f m" % (stem, clamp))
+    first = measure_seat(rig, p_mats)
+    drop = first["top"] - SEAT_TOP_M
+    if drop > SEAT_FIT_TOLERANCE_M:
+        p_hips = p_hips - Vector((0.0, 0.0, drop))
+        fracs = {}
+        p_mats, clamp = solve_sit_limbs(rig, stand, dict(p_rots), p_hips, fracs)
+        p_r = {n: m.to_3x3().normalized() for n, m in p_mats.items()}
+        fitted = measure_seat(rig, p_mats)["top"]
+        log("SIT_FIT %s seat_top_before=%.3f after=%.3f hips_lowered_m=%.3f" % (stem, first["top"], fitted, drop))
+        if clamp > IK_CLAMP_TOLERANCE_M or abs(fitted - SEAT_TOP_M) > SEAT_FIT_TOLERANCE_M:
+            raise Fail("%s sit: lowered seat rests at %.3f m (clamp %.3f)" % (stem, fitted, clamp))
 
     down = []
     s_hips = stand["Hips"].translation
