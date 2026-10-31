@@ -166,6 +166,16 @@ func sync() -> void:
 ## apron leg.
 func snap() -> void:
 	for id in sim.passenger_ids():
+		if _nodes.has(id):
+			# A node kept through the load starts over dressed, with no foam
+			# or recline (the sync below dresses it for the loaded tick), and
+			# goes back to the pool when the loaded passenger of that id has
+			# another body, so sync() takes one of the right body.
+			var kept: Node3D = _nodes[id]
+			ActivityPoses.dress(kept, 0.0, 0.0)
+			var p := sim.get_passenger(id)
+			if kept.get_meta(&"body") != PassengerLooks.body_of(id, p.variant):
+				_release(id)
 		_offsets.erase(id)
 		_seats.erase(id)
 		var seat := ActivityPoses.offset(sim, sim.get_passenger(id))

@@ -8,7 +8,10 @@ extends Node3D
 ## to the neck, drawn as one MultiMesh and built up from the feet as `amount`
 ## grows, each bubble swelling and drifting a little on its own slow loop
 ## (shaders/shower_lather.gdshader, on the GPU, so the motion costs no CPU
-## work per frame), and thick steam rising out of the cubicle's open top. The head
+## work per frame), steam filling the cubicle around the body (Haze,
+## shaders/shower_haze.gdshader: wisps drifting and rising on the inside of
+## the glass, coming with the lather and going with the rinse, clear at face
+## height), and thick steam rising out of the cubicle's open top. The head
 ## stays clear so the passenger is still readable, and the mood bubble and
 ## need icons draw over it (no depth test). PassengerViews adds one only to a
 ## showering passenger and frees it when the shower ends, so a passenger
@@ -51,17 +54,25 @@ const STEAM_FROM_M := 1.95
 const STEAM_RISE_M := 0.9
 const STEAM_LOOP_S := 2.2
 const STEAM_ALPHA := 0.7
+## The steam inside the cubicle: one box, shared by every foam, standing on
+## HAZE_FLOOR_M inside the shower_cubicle's glass (the piece is 0.84 m square
+## outside), drawn by HAZE_SHADER.
+const HAZE_SIZE_M := Vector3(0.62, 1.95, 0.64)
+const HAZE_FLOOR_M := 0.15
+const HAZE_SHADER := preload("res://shaders/shower_haze.gdshader")
 
 static var _bubble: SphereMesh
 static var _buffer := PackedFloat32Array()
 static var _count := 0
 static var _puff: SphereMesh
+static var _haze_box: BoxMesh
 
 ## How much lather (0 to 1) is up now.
 var amount := 0.0
 
 var _lather := MultiMeshInstance3D.new()
 var _steam := Node3D.new()
+var _haze := MeshInstance3D.new()
 var _puffs: Array[MeshInstance3D] = []
 var _clock := 0.0
 
@@ -81,6 +92,12 @@ func _init() -> void:
 	# The shader moves bubbles past the instances' own bounds.
 	_lather.extra_cull_margin = motion_reach_m(R_MAX)
 	add_child(_lather)
+	_haze.name = "Haze"
+	_haze.mesh = _haze_box
+	_haze.position.y = HAZE_FLOOR_M + HAZE_SIZE_M.y / 2.0
+	_haze.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_haze.visible = false
+	add_child(_haze)
 	_steam.name = "Steam"
 	for i in STEAM_PUFFS:
 		var vapour := StandardMaterial3D.new()
@@ -109,11 +126,18 @@ func _process(delta: float) -> void:
 func set_amount(value: float) -> void:
 	amount = clampf(value, 0.0, 1.0)
 	_lather.multimesh.visible_instance_count = roundi(amount * _count)
+	_haze.set_instance_shader_parameter(&"amount", amount)
+	_haze.visible = amount > 0.0
 	var steaming := amount > 0.5
 	_steam.visible = steaming
 	set_process(steaming)
 	if steaming:
 		_drift()
+
+
+## How much steam fills the cubicle now (0 to 1): as much as the lather.
+func haze_shown() -> float:
+	return _haze.get_instance_shader_parameter(&"amount") if _haze.visible else 0.0
 
 
 ## The bubbles drawn now, and in all.
@@ -141,6 +165,12 @@ static func bubbles() -> Array[Vector4]:
 		var b := _buffer.slice(i * 12, i * 12 + 12)
 		out.append(Vector4(b[3], b[7], b[11], b[0]))
 	return out
+
+
+## The box the cubicle's steam is drawn on, shared by every foam.
+static func haze_box() -> BoxMesh:
+	_build_shared()
+	return _haze_box
 
 
 ## The material the bubbles draw with.
@@ -174,6 +204,12 @@ static func _build_shared() -> void:
 	_bubble.radial_segments = 8
 	_bubble.rings = 4
 	_bubble.material = lather
+	var haze := ShaderMaterial.new()
+	haze.shader = HAZE_SHADER
+	haze.set_shader_parameter("centre_y", HAZE_FLOOR_M + HAZE_SIZE_M.y / 2.0)
+	_haze_box = BoxMesh.new()
+	_haze_box.size = HAZE_SIZE_M
+	_haze_box.material = haze
 	_puff = SphereMesh.new()
 	_puff.radius = 1.0
 	_puff.height = 2.0

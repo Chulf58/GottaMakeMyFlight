@@ -232,7 +232,8 @@ static func wash_seconds(sim: PassengerSim, p: Passenger) -> float:
 ## shared by every showering passenger of that body (no passenger's own mesh or
 ## material is changed). Surface 0 is the body's other parts as imported;
 ## surface 1 is its clothes' triangles (PassengerLooks.cloth_split) and the
-## shoes' (below FEET_M), every vertex's UV moved to one texel of that body's
+## shoes' (any corner below FEET_M, so a shoe triangle reaching up past the
+## line comes off too), every vertex's UV moved to one texel of that body's
 ## own hand skin (skin_uv), on the same shared atlas material.
 static func bare_mesh(body: int) -> Mesh:
 	if _bare.has(body):
@@ -245,10 +246,12 @@ static func bare_mesh(body: int) -> Mesh:
 	var other := PackedInt32Array()
 	var skin := PackedInt32Array()
 	for t in range(0, index.size(), 3):
-		var first := index[t]
-		var off := (not colors.is_empty() and colors[first].r > 0.5) or verts[first].y < FEET_M
+		var corners := [index[t], index[t + 1], index[t + 2]]
+		var off := not colors.is_empty() and colors[corners[0]].r > 0.5
+		for v: int in corners:
+			off = off or verts[v].y < FEET_M
 		var into := skin if off else other
-		into.append_array([index[t], index[t + 1], index[t + 2]])
+		into.append_array(corners)
 	var flags: int = (plain as ArrayMesh).surface_get_format(0) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
 	var mesh := ArrayMesh.new()
 	arrays[Mesh.ARRAY_INDEX] = other

@@ -37,7 +37,8 @@ extends SceneTree
 ## the clip running at 1x), front and side true-scale views, a game view,
 ## and a game view once it has stepped out with its clothes back on
 ## (shower_<body>_after). Extra proofs: a twin with the clothes put back on
-## differs (the skin is drawn), two frames of the frozen body STRIP_LIVE_MS
+## differs (the skin is drawn), a twin with the cubicle's steam (Haze) hidden
+## differs (the steam is drawn), two frames of the frozen body STRIP_LIVE_MS
 ## apart differ by the lather alone (a control with the foam hidden barely
 ## differs), a hand rises above the neck in the strip (washing the hair), and
 ## the clothes are back on after the step out.
@@ -330,6 +331,8 @@ func _shower_foam() -> void:
 			cam,
 			func(on: bool) -> void: mi.mesh = bare_mesh if on else dressed
 		)
+		var haze := node.get_node("ShowerFoam/Haze") as Node3D
+		await _part_twin("shower_%s_haze" % label, cam, func(on: bool) -> void: haze.visible = on)
 		await _lather_moves(label, cam, node)
 		cam.queue_free()
 		var stepped_out := func() -> bool:
@@ -424,7 +427,9 @@ func _lather_moves(label: String, cam: Camera3D, node: Node3D) -> void:
 	_clock.set_paused(true)
 	var foam := node.get_node("ShowerFoam") as ShowerFoam
 	var steam := node.get_node("ShowerFoam/Steam") as Node3D
+	var haze := node.get_node("ShowerFoam/Haze") as Node3D
 	steam.visible = false
+	haze.visible = false
 	var diffs: Array[int] = []
 	for shown in [true, false]:
 		foam.visible = shown
@@ -438,6 +443,7 @@ func _lather_moves(label: String, cam: Camera3D, node: Node3D) -> void:
 		diffs.append(_diff(first, _grab()))
 	foam.visible = true
 	steam.visible = true
+	haze.visible = true
 	print("LATHER %s moving_diff_px=%d control_diff_px=%d" % [label, diffs[0], diffs[1]])
 	if diffs[0] < MIN_PART_PX or diffs[1] * 4 > diffs[0]:
 		_invalid("%s: the lather does not move (%s)" % [label, diffs])
