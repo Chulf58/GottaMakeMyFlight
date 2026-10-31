@@ -7,7 +7,9 @@ extends RefCounted
 ## Emitted when a template is added or the list is replaced by a load.
 signal changed
 
-const SAVE_VERSION := 1
+## 2: each template holds its room's floor; version 1 is refused (no
+## migration before a release).
+const SAVE_VERSION := 2
 
 var _templates: Array[RoomTemplate] = []
 
