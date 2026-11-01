@@ -59,7 +59,8 @@ func test_a_remove_rectangle_skips_the_cell_that_would_cut_the_spot_off() -> voi
 			% [ROW, outcome.placed, outcome.skipped, outcome.first_reason]
 		)
 	)
-	assert_int(outcome.placed).is_equal(WIDTH - 1)
+	# WIDTH - 1 floor cells and the outer wall on the row's west and east ends.
+	assert_int(outcome.placed).is_equal(WIDTH + 1)
 	assert_int(outcome.skipped).is_equal(1)
 	assert_str(outcome.first_reason).is_equal(BuildResult.refused(SPOT).reason_text())
 	# Cells go in row order, so the last one would have closed the row.
@@ -70,7 +71,8 @@ func test_a_remove_rectangle_skips_the_cell_that_would_cut_the_spot_off() -> voi
 func test_a_remove_rectangle_that_leaves_a_way_round_is_all_removed() -> void:
 	var outcome := AreaDrag.clear(_grid, Rect2i(0, ROW, WIDTH - 1, 1))
 	print("row %d less one: removed %d, skipped %d" % [ROW, outcome.placed, outcome.skipped])
-	assert_int(outcome.placed).is_equal(WIDTH - 1)
+	# WIDTH - 1 floor cells and the outer wall on the row's west end.
+	assert_int(outcome.placed).is_equal(WIDTH)
 	assert_int(outcome.skipped).is_equal(0)
 	_expect_reachable()
 
@@ -80,7 +82,8 @@ func test_with_no_entrance_the_whole_row_is_removed() -> void:
 	assert_bool(_grid.staff_reach().is_empty()).is_true()
 	var outcome := AreaDrag.clear(_grid, Rect2i(0, ROW, WIDTH, 1))
 	print("no entrance: removed %d, skipped %d" % [outcome.placed, outcome.skipped])
-	assert_int(outcome.placed).is_equal(WIDTH)
+	# WIDTH floor cells and the outer wall on the row's west and east ends.
+	assert_int(outcome.placed).is_equal(WIDTH + 2)
 	assert_int(outcome.skipped).is_equal(0)
 	# Floor laid back on an open grid is never refused.
 	var painted := AreaDrag.fill_floor(_grid, Rect2i(0, ROW, WIDTH, 1), 1)

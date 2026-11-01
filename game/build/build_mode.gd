@@ -559,6 +559,8 @@ func _apply_at(point: Vector3) -> BuildResult:
 	var edit := edit_at(point)
 	if edit == null:
 		return null
+	# An earlier action's note must not hide this one's result.
+	_status_note = ""
 	var warning := front_warning(grid, edit)
 	var result := check(edit)
 	var refused_by_check := not result.ok
@@ -580,7 +582,12 @@ func _apply_at(point: Vector3) -> BuildResult:
 		grid_changed.emit()
 		if warning != "":
 			_status_note = warning
-			_note_cell = edit.cell
+			_note_cell = grid.world_to_cell(point)
+		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
+			# The ghost now re-checks the piece it just placed, which overlaps
+			# itself: say what was placed until the pointer leaves the cell.
+			_status_note = "%s placed" % BuildCatalog.get_def(edit.def_id).display_name
+			_note_cell = grid.world_to_cell(point)
 	_show_status(result)
 	# A refusal from the grid or the transaction (inside commit_plan()) was
 	# emitted there.

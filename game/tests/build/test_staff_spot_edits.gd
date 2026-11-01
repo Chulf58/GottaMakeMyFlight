@@ -62,7 +62,8 @@ func test_a_remove_rectangle_keeps_the_spot_and_its_last_way_out() -> void:
 	assert_int(_grid.floor_at(DESK_SPOT)).is_equal(BuildGrid.FLOOR_TILE)
 	assert_int(outcome.skipped).is_equal(2)
 	assert_str(outcome.first_reason).is_equal(BuildResult.REASON_TEXT[SPOT])
-	assert_int(outcome.placed).is_equal(34)
+	# 34 floor cells and the 18 edges of the grid's outer wall on the rectangle.
+	assert_int(outcome.placed).is_equal(52)
 	assert_bool(StaffSpots.blocked(_grid, _desk)).is_false()
 
 
