@@ -22,7 +22,7 @@ const IN_BAY_1 := Vector3(20.0, 0.0, -57.0)
 const NOWHERE := Vector3(200.0, 0.0, 100.0)
 ## The entrance of the site grid's one-room terminal: on the plot's south
 ## edge facing the road, its way out at world (20.5, -60), in front of bay 1.
-const ENTRANCE := Vector2i(63, 39)
+const ENTRANCE := Vector2i(63, 149)
 
 var _sim: LandsideSim
 var _wallet: Wallet
@@ -47,7 +47,7 @@ func before_test() -> void:
 func _site_grid() -> BuildGrid:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var edits: Array[BuildEdit] = []
-	for y in range(36, 40):
+	for y in range(146, 150):
 		for x in range(60, 67):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	grid.apply_batch(edits)

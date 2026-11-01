@@ -113,11 +113,10 @@ const QUEUE_STAGES := [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_Q
 @export var auto_schedule := true
 
 ## The apron walk after an exit door with no site (a test grid,
-## OutsideWalks.departure()), world points: from the forecourt through the
-## 2.3 m gap between the plot's north edge (z -100) and the parked plane's nose
-## (z -102.3), and to the plane's port door (the plane at the stand at
-## (-18, 0, -117) spans x -32.2 to -3.8 with its wings). On the site the
-## walks outside are SiteRoutes' instead.
+## OutsideWalks.departure()), world points: a fixed walk the boarding window
+## was measured on (test_boarding_window.gd), from the forecourt to a plane
+## door at (-14.5, 0, -106.5). On the site the walks outside are SiteRoutes'
+## instead, to the door at the live stand (ApronStand).
 var apron_waypoints := PackedVector3Array(
 	[
 		Vector3(-14.5, 0.0, -41.0),
@@ -1350,6 +1349,13 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 			_send_back(_by_id[id])
 	# Walkers outside keep a walk that is still there, or stop (site only).
 	OutsideWalks.revalidate(self)
+
+
+## The live plane stand moved (ApronStand): exits walk to its door from now
+## on, so the doors' walks outside are found again, as after an edit.
+func set_stand(stand: Dictionary) -> void:
+	layout.stand = stand
+	_on_graph_changed([] as Array[Vector2i])
 
 
 ## Any accepted edit: the standing spots are derived again on the next tick.

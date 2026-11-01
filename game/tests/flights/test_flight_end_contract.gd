@@ -6,11 +6,11 @@ extends GdUnitTestSuite
 ## contract. The end is saved (save version 4) and a load equals an
 ## uninterrupted run.
 ##
-## AM (08:00) has its first state at 440 + 28800 * day and is issued 2400 ticks
-## before it; PM (14:00) at 7640 + 28800 * day.
+## AM (08:00) has its first state at 140 + 28800 * day and is issued 2400 ticks
+## before it; PM (14:00) at 7340 + 28800 * day.
 
 const DAY := 28800
-## AM-d0 and AM-d1 are issued here (d1 at 26840), AM-d2 is not (at 56840).
+## AM-d0 and AM-d1 are issued here (d1 at 26540), AM-d2 is not (at 55340).
 const ENDED_AT := 26900
 
 var _log: Array[String] = []
@@ -65,7 +65,8 @@ func test_an_ended_contract_issues_no_later_day_but_issued_flights_still_fly() -
 	var added := _log.filter(func(line: String) -> bool: return " add " in line)
 	assert_array(added.filter(func(line: String) -> bool: return "AM-d2" in line)).is_empty()
 	assert_array(added.filter(func(line: String) -> bool: return "PM-d2" in line)).is_not_empty()
-	assert_array(_log).contains(["%d AM-d1 %d" % [DAY + 440 + 100, FlightSim.State.APPROACH]])
+	var am_first := GameCalendar.tick_at(0, 480) - FlightTimetable.departure_offset()
+	assert_array(_log).contains(["%d AM-d1 %d" % [DAY + am_first + 100, FlightSim.State.APPROACH]])
 	assert_int(sim.state_of("AM-d1")).is_equal(FlightSim.State.DEPARTED)
 
 

@@ -50,10 +50,14 @@ func _run(venue: StringName) -> Dictionary:
 	CafeTestLayout.build(grid, false, venue)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
+	# The guest spawns 700 ticks before boarding opens (tick 0 when boarding
+	# opened at tick 700), so its schedule is as tight as the case needs.
+	var spawn_at := PassengerTestWorld.boarding_tick() - 700
+	world.run_to(spawn_at)
 	var guest := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	guest.hunger = 0
 	guest.cafe_cooldown = 1000000
-	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < 600:
+	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < spawn_at + 600:
 		world.step()
 	(
 		assert_bool(world.sim.cafes.try_visit(guest))
@@ -61,7 +65,7 @@ func _run(venue: StringName) -> Dictionary:
 		. is_true()
 	)
 	var visit := world.sim.cafes.visit_of(guest.id)
-	while guest.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < 1500:
+	while guest.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < spawn_at + 1500:
 		world.step()
 	assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_SEATED)
 	var seated_at := world.clock.tick

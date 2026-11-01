@@ -4,10 +4,10 @@
 
 [resource]
 script = ExtResource("1_site")
-grid_origin = Vector3(-43, 0.22, -100)
-grid_size = Vector2i(86, 40)
+grid_origin = Vector3(-43, 0.22, -210)
+grid_size = Vector2i(86, 150)
 ground_height = 0.2
 road_z = -57.0
 road_height = 0.1
-plane_route = PackedVector3Array(-14.5, 0, -101, -14.5, 0, -106.5)
-obstacles = Array[Vector2i]([Vector2i(57, 39)])
+starter_offset = Vector2i(0, 110)
+obstacles = Array[Vector2i]([Vector2i(57, 149)])

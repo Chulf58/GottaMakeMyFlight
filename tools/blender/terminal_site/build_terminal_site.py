@@ -41,13 +41,20 @@ What it keeps and drops (measured on the shell, see the census this script print
     tile accent: a flat island lying 3 mm above the pads (y 0.2031), the dark checker
            tile patches, which read as a glitch on the empty plot (decision
            buildable-land-shows-as-an-outline-only-in-build-mode-the-da).
-  It keeps the paving pads at y 0.2 and the outer skirts at z -100 and -60.
+    north skirt: the Toon paving's upright edge faces along z -100 and round the back
+           dip's flared mouth (z -100..-98), which now lie inside the grown site.
+  It keeps the paving pads at y 0.2 and the outer skirts at z -60.
   fill_plot() then paves the strips x -43..-40 and 40..43 that
   the Toon paving stops short of and the two dips (with the airside dip's flared mouth),
   each top face on the UV of the nearest existing pad corner, and closes the new edges
-  with skirts down to y 0. The re-read proves the plot flat (up-facing heights only 0.2)
-  and covered (a 0.25 m sample grid over the plot, every sample on paving), so the pads
-  run on unbroken under the dropped accents.
+  with skirts down to y 0.
+- Grown site: the terminal site's grid runs 86 x 150 m from z -210 (terminal_site.tres), so
+  the plane parks north of the first plot. fill_plot() also paves x -43..43, z -210..-100
+  flat at PAVE_Y in the pads' swatch (user ruling plane-guard-area-shows-only-in-build-mode-
+  the-site-paving-ex, point 2: "the site's grey paving extends north to the grown site edge
+  at z -210"). The re-read proves the whole grown site flat (up-facing heights only 0.2) and
+  covered (a 0.25 m sample grid over it, every sample on paving), so the pads run on
+  unbroken under the dropped accents and into the north paving.
 - Poles: dropped. Every Poles island stands under the landside canopy between x -25.85 and
   25.85 and is part of its supports and lamps; the canopy goes, so they go.
 - Upper, Canopy, Facade, Porch_1..8, Door_1..8, Doorway_1..8, Lights (all of it): dropped.
@@ -80,7 +87,8 @@ SLAB_BOX = (-34.2, 33.2, -95.5, -64.1)  # x0, x1, z0, z1 of the old ground slab
 SLAB_TOL = 0.05
 SLAB_MIN_Y = 0.29  # an island in the slab box reaching this high is the slab
 SIGN_MIN_Y = 0.35  # any island reaching above this is a sign or facade remnant
-PLOT = (-43.0, 43.0, -100.0, -60.0)  # x0, x1, z0, z1 of the player's build plot
+PLOT = (-43.0, 43.0, -100.0, -60.0)  # x0, x1, z0, z1 of the first plot (the Toon paving)
+GROWN = (-43.0, 43.0, -210.0, -60.0)  # x0, x1, z0, z1 of the grown site (terminal_site.tres grid)
 PAVE_Y = 0.2  # the Toon paving pads' top; the plot is paved flat at this height
 PAVE_MAX_Y = 0.21  # above this an island is a raised paving block (tops 0.219, 0.238, 0.257)
 ACCENT_MIN_LIFT = 0.001  # a flat island wholly this far over PAVE_Y is a tile accent (y 0.2031)
@@ -174,6 +182,8 @@ def classify(lo, hi):
         return "dip kerb"
     if upright and hi.x - lo.x < 0.01 and abs(abs(lo.x) - LOT_HALF_X) < 0.01:
         return "inner skirt"
+    if upright and abs(lo.z - PLOT[2]) < 0.01 and hi.z <= BACK_FLARE[-1][1] + 0.01:
+        return "north skirt"
     if not upright and lo.y > PAVE_Y + ACCENT_MIN_LIFT:
         return "tile accent"
     return "keep"
@@ -230,7 +240,7 @@ def filter_lot(lot):
             rep("    ... and %d more like these" % (len(rows) - 3))
     for kind in sorted(kinds):
         rep("  kept    %-24s islands %4d tris %5d" % (kind, kinds[kind][0], kinds[kind][1]))
-    want = ["dip", "dip kerb", "inner skirt", "raised block", "sign", "slab", "tile accent"]
+    want = ["dip", "dip kerb", "inner skirt", "north skirt", "raised block", "sign", "slab", "tile accent"]
     if sorted(dropped) != want:
         die("expected the filter to drop %s, got %s" % (want, sorted(dropped)))
     if skirt_uv is None or not pad_loops:
@@ -295,7 +305,8 @@ def filter_road(road):
 
 def fill_plot(lot, pad_loops, skirt_uv):
     """Pave the rest of the plot flat at PAVE_Y: the strips x -43..-40 and 40..43 that the
-    Toon paving stops short of, and the two dips (x -12..12 at z -64..-60 and -100..-96).
+    Toon paving stops short of, the two dips (x -12..12 at z -64..-60 and -100..-96), and the
+    grown site north of the plot (x -43..43, z -210..-100).
     Each new top face takes the UV of the nearest existing pad corner (the paving's own
     swatch), each new skirt the paving edge skirt's UV. Skirts close the new edges down to
     y 0, as the Toon paving's own skirts do. Returns [(corners, normal)] in Godot world for
@@ -341,15 +352,18 @@ def fill_plot(lot, pad_loops, skirt_uv):
         curve = [(sx * cx, y, cz) for cx, cz in BACK_FLARE]
         for p, q in zip(curve, curve[1:]):
             quad([corner, p, q], (0, 1, 0), pad_uv(sx * 13.0, pz0 + 0.5))
-    # Skirts: the plot's outer sides at x -43 and 43, and its north and south edges along
-    # every new top face (the Toon paving keeps its own skirts elsewhere on those edges).
-    quad([(px0, 0.0, pz0), (px0, 0.0, pz1), (px0, y, pz1), (px0, y, pz0)], (-1, 0, 0), skirt_uv)
-    quad([(px1, 0.0, pz0), (px1, 0.0, pz1), (px1, y, pz1), (px1, y, pz0)], (1, 0, 0), skirt_uv)
-    flare_x = BACK_FLARE[0][0]
+    # The grown site north of the first plot, one flat top in the pads' swatch, meeting the
+    # plot's north edge at z -100 (whose Toon skirts filter_lot() dropped).
+    gx0, gx1, gz0, _gz1 = GROWN
+    quad([(gx0, y, gz0), (gx1, y, gz0), (gx1, y, pz0), (gx0, y, pz0)], (0, 1, 0), pad_uv(0.0, pz0))
+    # Skirts: the grown site's outer sides at x -43 and 43 and its north edge at z -210, and
+    # the south edge along every new top face (the Toon paving keeps its own skirts elsewhere
+    # on that edge).
+    quad([(gx0, 0.0, gz0), (gx0, 0.0, pz1), (gx0, y, pz1), (gx0, y, gz0)], (-1, 0, 0), skirt_uv)
+    quad([(gx1, 0.0, gz0), (gx1, 0.0, pz1), (gx1, y, pz1), (gx1, y, gz0)], (1, 0, 0), skirt_uv)
+    quad([(gx0, 0.0, gz0), (gx1, 0.0, gz0), (gx1, y, gz0), (gx0, y, gz0)], (0, 0, -1), skirt_uv)
     for xa, xb in tops:
-        quad([(xa, 0.0, pz0), (xb, 0.0, pz0), (xb, y, pz0), (xa, y, pz0)], (0, 0, -1), skirt_uv)
         quad([(xa, 0.0, pz1), (xb, 0.0, pz1), (xb, y, pz1), (xa, y, pz1)], (0, 0, 1), skirt_uv)
-    quad([(-flare_x, 0.0, pz0), (flare_x, 0.0, pz0), (flare_x, y, pz0), (-flare_x, y, pz0)], (0, 0, -1), skirt_uv)
     quad([(-DIP_HALF_X, 0.0, pz1), (DIP_HALF_X, 0.0, pz1), (DIP_HALF_X, y, pz1), (-DIP_HALF_X, y, pz1)],
          (0, 0, 1), skirt_uv)
     bm.to_mesh(lot.data)
@@ -555,11 +569,11 @@ def reread(path, tag):
 
 
 def plot_holes(lot):
-    """Samples on a 0.25 m grid over the plot (0.125 m in from its edges) not covered, seen
+    """Samples on a 0.25 m grid over the grown site (0.125 m in from its edges) not covered, seen
     from straight above, by an up-facing Lot triangle at PAVE_Y or higher. Uses the written
     triangles (positions in Godot world)."""
     tris = lot["tris_world"]
-    px0, px1, pz0, pz1 = PLOT
+    px0, px1, pz0, pz1 = GROWN
     cells = {}
     for a, b, c in tris:
         n = (b - a).cross(c - a)
@@ -642,29 +656,30 @@ def verify(site, shell, expected, added, road_dropped):
     lot = site["nodes"]["Lot"]
     high = [p for p in lot["pts"] if p.y > SIGN_MIN_Y]
     in_slab_high = [p for p in lot["pts"] if x0 < p.x < x1 and z0 < p.z < z1 and p.y > 0.25]
-    px0, px1, pz0, pz1 = PLOT
+    px0, px1, pz0, pz1 = GROWN
     on_plot = sum(1 for p in lot["pts"] if px0 <= p.x <= px1 and pz0 <= p.z <= pz1)
     rep("LOT written: points above y %.2f: %d; points inside the old slab box above y 0.25: %d; "
-        "highest point %.3f; points on the plot %d of %d" % (
+        "highest point %.3f; points on the grown site %d of %d" % (
             SIGN_MIN_Y, len(high), len(in_slab_high), lot["hi"].y, on_plot, len(lot["pts"])))
     if high or in_slab_high:
         die("written Lot still holds building geometry")
-    # The plot is flat paving: every up-facing Lot vertex inside it (5 cm in from its edges)
-    # sits at PAVE_Y (the tile accents 3 mm above it are dropped), and nothing is higher.
+    # The grown site is flat paving: every up-facing Lot vertex inside it (5 cm in from its
+    # edges) sits at PAVE_Y (the tile accents 3 mm above it are dropped), and nothing is higher.
     inner = [(p, n) for p, n in zip(lot["pts"], lot["nrm"])
              if px0 + 0.05 < p.x < px1 - 0.05 and pz0 + 0.05 < p.z < pz1 - 0.05]
     up_y = sorted({round(p.y, 4) for p, n in inner if n.y > 0.9})
     top = max(p.y for p, _n in inner)
-    rep("LOT plot surface: up-facing heights inside the plot %s; highest point inside %.4f" % (up_y, top))
+    rep("LOT grown site surface: up-facing heights inside the grown site %s; highest point inside %.4f"
+        % (up_y, top))
     if up_y != [PAVE_Y] or top > PAVE_Y + 1e-4:
-        die("the plot is not flat paving at y %.2f" % PAVE_Y)
-    # Coverage: a grid of 0.5 m samples over the plot; each must lie on an up-facing Lot
-    # triangle at PAVE_Y or above (no hole, no dip, no bare strip).
+        die("the grown site is not flat paving at y %.2f" % PAVE_Y)
+    # Coverage: a grid of 0.25 m samples over the grown site; each must lie on an up-facing
+    # Lot triangle at PAVE_Y or above (no hole, no dip, no bare strip).
     holes, n_samples = plot_holes(lot)
-    rep("LOT plot coverage: %d of %d samples (0.25 m grid, 0.125 m in from the edges) without paving at y >= %.2f%s"
-        % (len(holes), n_samples, PAVE_Y, (": first " + str(holes[:5])) if holes else ""))
+    rep("LOT grown site coverage: %d of %d samples (0.25 m grid, 0.125 m in from the edges) without "
+        "paving at y >= %.2f%s" % (len(holes), n_samples, PAVE_Y, (": first " + str(holes[:5])) if holes else ""))
     if holes:
-        die("the plot has unpaved spots")
+        die("the grown site has unpaved spots")
     # Every added face carries its intended normal in the written file.
     for corners, normal in added:
         for c in corners:

@@ -32,6 +32,12 @@ func _fed() -> AirportRating:
 	return rating
 
 
+## A few ticks after the doors close on the flight scheduled from tick 0, when
+## every bag still unloaded has missed its cutoff.
+func _just_after_doors_close() -> int:
+	return FlightSim.schedule_starts(0)[FlightSim.State.DOORS_CLOSED] + 5
+
+
 func _noon(day: int) -> int:
 	return GameCalendar.tick_at(day, 12 * 60)
 
@@ -110,7 +116,7 @@ func test_the_rating_hears_the_bag_sim_and_counts_each_bag_once() -> void:
 	_bind_world()
 	_rating.bind(_world.clock, _world.flights, _world.sim)
 	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 8)
-	_world.run_to(1900 + 5)
+	_world.run_to(_just_after_doors_close())
 	var settled := _bags.loaded_total + _bags.missed_total
 	print("bags settled %d missed %d" % [settled, _bags.missed_total])
 	assert_int(_bags.missed_total).is_greater(0)
@@ -122,7 +128,7 @@ func test_the_rating_hears_the_bag_sim_and_counts_each_bag_once() -> void:
 func test_with_no_bag_room_no_bag_is_checked_in_and_the_rating_is_not_marked_down() -> void:
 	_bind_world(false)
 	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 8)
-	_world.run_to(1900 + 5)
+	_world.run_to(_just_after_doors_close())
 	assert_int(_world.sim.made_count()).is_greater(0)
 	assert_array(_bags.bag_ids()).is_empty()
 	var parts := _rating.parts()
@@ -147,7 +153,7 @@ func test_a_bag_sim_set_after_the_first_bind_is_heard_on_the_next_bind() -> void
 	_rating.baggage = _bags
 	_rating.bind(_world.clock, _world.flights, _world.sim)
 	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 4)
-	_world.run_to(1900 + 5)
+	_world.run_to(_just_after_doors_close())
 	assert_int(_bags.missed_total).is_greater(0)
 	assert_int(_rating.parts()["bags_missed"]).is_equal(_bags.missed_total)
 
@@ -157,7 +163,7 @@ func test_a_rating_without_a_bag_sim_records_no_bags() -> void:
 	_rating = auto_free(AirportRating.new()) as AirportRating
 	_rating.bind(_world.clock, _world.flights, _world.sim)
 	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 4)
-	_world.run_to(1900 + 5)
+	_world.run_to(_just_after_doors_close())
 	assert_int(_rating.parts()["bags"]).is_equal(0)
 
 

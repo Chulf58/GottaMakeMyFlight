@@ -2,7 +2,11 @@ class_name Airside
 extends Node3D
 ## The one runway and one stand, as Marker3D waypoints placed in the scene
 ## (named children, in this node's own space) plus the taxiway links between
-## them. Builds the TaxiGraph and gives each flight phase its path. Also gives
+## them. Builds the TaxiGraph and gives each flight phase its path. The stand
+## moves with the terminal (ApronStand, decision plane-stand-design-airside-
+## moves-110-m-north-stand-snaps-to): set_stand() puts Stand, PushbackEnd and
+## StandLane (where the way north meets the taxi lane) where StandPlacement
+## says and rebuilds the graph. Also gives
 ## the two sky tracks views draw around a flight: the arrival lead-in into
 ## ApproachStart and the climb-out from ClimbEnd, each a flat track through its
 ## turn waypoints with wide round turns.
@@ -13,6 +17,7 @@ const REQUIRED_WAYPOINTS: Array[StringName] = [
 	&"RunwayExit",
 	&"Stand",
 	&"PushbackEnd",
+	&"StandLane",
 	&"RunwayEntry",
 	&"Liftoff",
 	&"ClimbEnd",
@@ -43,6 +48,9 @@ const SKY_ARC_STEP := 4.0
 @export var links := PackedStringArray()
 
 var graph := TaxiGraph.new()
+## How many times set_stand() moved the stand, so a view holding paths read
+## before (PlaneView) knows to read them again.
+var stand_moves := 0
 
 
 func _ready() -> void:
@@ -67,6 +75,24 @@ func rebuild() -> bool:
 			push_error("Airside: bad link '%s'" % pair)
 			ok = false
 	return ok
+
+
+## Puts the stand waypoints at StandPlacement's `stand` and rebuilds the
+## graph. False (with an error) when a stand waypoint is missing.
+func set_stand(stand: Dictionary) -> bool:
+	var points := {
+		&"Stand": StandPlacement.stand_point(stand),
+		&"PushbackEnd": StandPlacement.pushback_end(stand),
+		&"StandLane": StandPlacement.lane_join(stand),
+	}
+	for waypoint: StringName in points:
+		var marker := get_node_or_null(NodePath(String(waypoint))) as Marker3D
+		if marker == null:
+			push_error("Airside: missing waypoint '%s'" % waypoint)
+			return false
+		marker.position = transform.affine_inverse() * (points[waypoint] as Vector3)
+	stand_moves += 1
+	return rebuild()
 
 
 ## The path a plane follows in `state`, or an empty array for a state that

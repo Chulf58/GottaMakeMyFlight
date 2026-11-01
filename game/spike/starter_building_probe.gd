@@ -61,6 +61,8 @@ var _flights: FlightSim
 var _sim: PassengerSim
 var _staff: StaffSim
 var _grid: BuildGrid
+## Where the site moves the starter from the reference cells (SiteDefinition.starter_offset).
+var _shift := Vector2i.ZERO
 var _hud: PassengerHud
 var _menu: BuildMenu
 var _roof: RoofView
@@ -101,6 +103,7 @@ func _run() -> void:
 	# BuildMode builds its grid when it enters the tree, after _initialize().
 	await _frames(3)
 	_grid = (_main.get_node("BuildMode") as BuildMode).grid
+	_shift = ReferenceTerminal.offset_on(_grid)
 	_hud = _main.get_node("PassengerHud")
 	_menu = _main.get_node("BuildMenu")
 	_roof = _main.find_child("RoofView", true, false) as RoofView
@@ -165,8 +168,12 @@ func _counts() -> Dictionary:
 			if _grid.floor_at(Vector2i(x, y)) != BuildGrid.FLOOR_NONE:
 				floors += 1
 	var divider := 0
-	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
-		if _grid.has_wall(Vector2i(x, ReferenceTerminal.DIVIDER_Y), BuildGrid.Side.NORTH):
+	for x in range(
+		ReferenceTerminal.FLOOR_MIN.x + _shift.x, ReferenceTerminal.FLOOR_MAX.x + _shift.x + 1
+	):
+		if _grid.has_wall(
+			Vector2i(x, ReferenceTerminal.DIVIDER_Y + _shift.y), BuildGrid.Side.NORTH
+		):
 			divider += 1
 	return {
 		"floors": floors,
@@ -251,8 +258,8 @@ func _report_passengers() -> void:
 ## Notes each passenger standing at a check-in desk (and where) and each one on
 ## the apron or made, once a tick.
 func _sample() -> void:
-	var low := ReferenceTerminal.FLOOR_MIN
-	var high := ReferenceTerminal.FLOOR_MAX
+	var low := ReferenceTerminal.FLOOR_MIN + _shift
+	var high := ReferenceTerminal.FLOOR_MAX + _shift
 	for id in _sim.passenger_ids():
 		var p := _sim.get_passenger(id)
 		if p.stage == Passenger.Stage.CHECKIN:
@@ -291,8 +298,8 @@ func _plate_pair(prefix: String, filled: bool) -> void:
 
 
 func _corner_points() -> Array:
-	var low := ReferenceTerminal.FLOOR_MIN
-	var high := ReferenceTerminal.FLOOR_MAX + Vector2i.ONE
+	var low := ReferenceTerminal.FLOOR_MIN + _shift
+	var high := ReferenceTerminal.FLOOR_MAX + _shift + Vector2i.ONE
 	return [
 		_grid.cell_to_world(low),
 		_grid.cell_to_world(Vector2i(high.x, low.y)),
@@ -303,8 +310,8 @@ func _corner_points() -> Array:
 
 ## The footprint's middle at roof height, a point on the roof's top.
 func _roof_point() -> Vector3:
-	var low := ReferenceTerminal.FLOOR_MIN
-	var high := ReferenceTerminal.FLOOR_MAX + Vector2i.ONE
+	var low := ReferenceTerminal.FLOOR_MIN + _shift
+	var high := ReferenceTerminal.FLOOR_MAX + _shift + Vector2i.ONE
 	var middle := (_grid.cell_to_world(low) + _grid.cell_to_world(high)) / 2.0
 	return middle + Vector3(0.0, ROOF_TOP_M, 0.0)
 
@@ -316,14 +323,14 @@ func _interior_points(filled: bool) -> Array:
 	var out: Array = []
 	if not filled:
 		for cell in [Vector2i(13, 5), Vector2i(18, 5), Vector2i(13, 13), Vector2i(18, 13)]:
-			out.append(_grid.cell_to_world(cell))
+			out.append(_grid.cell_to_world(cell + _shift))
 		return out
 	var kinds := ReferenceTerminal.object_ids(_grid)
 	for kind in ["desks", "scanners"]:
 		for id in kinds[kind]:
 			out.append(_grid.cell_to_world(_grid.interaction_cell(id)))
 	# Seat rows have no front cell; the aisle beside them stands in.
-	out.append(_grid.cell_to_world(Vector2i(18, 4)))
+	out.append(_grid.cell_to_world(Vector2i(18, 4) + _shift))
 	return out
 
 
@@ -343,7 +350,7 @@ func _plate(label: String, framed: Array, visible: Array) -> void:
 			% [_rig.distance, _cam.global_position, _rig.position]
 		)
 	)
-	var under := _grid.cell_to_world(ReferenceTerminal.FLOOR_MIN) + Vector3(0.0, -1.0, 0.0)
+	var under := _grid.cell_to_world(ReferenceTerminal.FLOOR_MIN + _shift) + Vector3(0.0, -1.0, 0.0)
 	var control := _occluder(under)
 	print("  CONTROL point under the ground: %s" % (control if control != "" else "clear"))
 	if control == "":

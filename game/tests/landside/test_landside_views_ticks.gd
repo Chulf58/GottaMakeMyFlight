@@ -25,7 +25,9 @@ func after() -> void:
 
 
 func before_test() -> void:
-	_land = LandsideTestWorld.make(null, [], 3)
+	# The flight's first state is 300 ticks before the default 4000, so its
+	# departure and arrival window sit where they did before the taxi-in grew.
+	_land = LandsideTestWorld.make(null, FlightSim.schedule_starts(3700), 3)
 	_views = LandsideViews.new()
 	_views.landside = _land.landside
 	_views.clock = _land.world.clock

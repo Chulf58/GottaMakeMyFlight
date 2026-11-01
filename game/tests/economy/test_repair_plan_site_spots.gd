@@ -6,6 +6,8 @@ extends GdUnitTestSuite
 ## more spots than it keeps marks the plan capped.
 
 const SITE := preload("res://build/terminal_site.tres")
+## The row of the grid nearest the road, the site's southern edge.
+var _road_row := SITE.grid_size.y - 1
 
 
 ## A plan object set up on `grid` the way make() sets it up, before its search.
@@ -35,21 +37,24 @@ func test_the_empty_plot_scan_keeps_two_spots_a_column_and_is_capped() -> void:
 	var usec := Time.get_ticks_usec() - started
 	print("empty plot entrance scan: %d spots in %d ms" % [sources.size(), usec / 1000])
 	assert_int(sources.size()).is_equal(2 * SITE.grid_size.x)
-	assert_array(_column(sources, 40)).contains_exactly([Vector2i(40, 39), Vector2i(40, 38)])
+	assert_array(_column(sources, 40)).contains_exactly(
+		[Vector2i(40, _road_row), Vector2i(40, _road_row - 1)]
+	)
 	assert_bool(plan._capped).is_true()
 
 
-## Door objects on three sides of (40, 38), each served from a floored cell
+## Door objects on three sides of (40, road row - 1), each served from a floored cell
 ## away from it, box in the service cell of the spot nearest the road in
 ## column 40; the spots above them whose way out is blocked are passed over
 ## too, and the first two that work are kept.
 func test_a_boxed_in_nearest_spot_is_passed_over_for_farther_ones() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	# [object cell, the step to its interaction cell]
+	var served := _road_row - 1
 	var boxes := [
-		[Vector2i(39, 38), Vector2i(0, 1)],
-		[Vector2i(41, 38), Vector2i(0, 1)],
-		[Vector2i(40, 37), Vector2i(-1, 0)],
+		[Vector2i(39, served), Vector2i(0, 1)],
+		[Vector2i(41, served), Vector2i(0, 1)],
+		[Vector2i(40, served - 1), Vector2i(-1, 0)],
 	]
 	for box: Array in boxes:
 		var cell: Vector2i = box[0]
@@ -64,6 +69,6 @@ func test_a_boxed_in_nearest_spot_is_passed_over_for_farther_ones() -> void:
 	var plan := _plan_on(grid)
 	var spots := _column(plan._door_sources(&"entrance_door"), 40)
 	print("column 40 entrance spots %s" % [spots])
-	assert_array(spots).contains_exactly([Vector2i(40, 35), Vector2i(40, 34)])
+	assert_array(spots).contains_exactly([Vector2i(40, served - 3), Vector2i(40, served - 4)])
 	# A column beside it still keeps its two nearest the road.
 	assert_array(_column(plan._door_sources(&"entrance_door"), 20)).has_size(2)

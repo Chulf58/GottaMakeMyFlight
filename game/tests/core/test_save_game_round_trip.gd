@@ -10,10 +10,11 @@ extends GdUnitTestSuite
 ## and their checksums (SaveTestKit.checksum, which only reads) must match on
 ## every tick.
 ##
-## Both worlds start at 20:05 on day 0 (the clock is set before the first
-## tick, when nothing has happened yet), so the rollover comes a few thousand
-## ticks after the opening instead of eighteen game hours. The full-day run
-## from 06:00 is spike/save_game_probe.gd. before() plays it all once and
+## Both worlds start a little before 20:00 on day 0 (the clock is set before
+## the first tick, when nothing has happened yet), at the moment that puts the
+## starter's departure 17 minutes before midnight, so the rollover comes a few
+## thousand ticks after the opening instead of eighteen game hours. The full-day
+## run from 06:00 is spike/save_game_probe.gd. before() plays it all once and
 ## records what each case reads.
 
 const SEED := 6_102_026
@@ -23,6 +24,10 @@ const SAVE_LEAD := 100
 ## Ticks played past the start of day 1.
 const AFTER_ROLLOVER := 200
 const OPEN_LIMIT := 2000
+## Ticks before midnight (17 minutes) the starter departs, counting from the
+## opening a hundred ticks or so after the clock is set. It has to depart on
+## day 0, whose occurrence the test follows, whatever the phase lengths are.
+const DEPARTURE_BEFORE_MIDNIGHT_TICKS := 340
 
 var _path := SaveTestKit.run_path("test_save_game_round_trip")
 var _control: Node
@@ -34,7 +39,12 @@ var _run := {}
 func before() -> void:
 	_control = SaveTestKit.boot(self, SEED)
 	_source = SaveTestKit.boot(self, SEED)
-	var start := GameCalendar.tick_at(0, 20 * 60 + 5)
+	var start := (
+		GameCalendar.tick_at(1, 0)
+		- FlightTimetable.ISSUE_LEAD_TICKS
+		- FlightTimetable.departure_offset()
+		- DEPARTURE_BEFORE_MIDNIGHT_TICKS
+	)
 	for main in [_control, _source]:
 		var clock: SimClock = main.get_node("SimClock")
 		var data := clock.to_snapshot()

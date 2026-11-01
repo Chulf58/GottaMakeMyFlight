@@ -116,16 +116,18 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 	assert_str(_save.message_text()).contains("saved on tick")
 
 
-## Version 7 came with the player-built terminal on the airport site: a
-## version 6 save (from the Toon shell) is refused whole, with no migration,
-## and changes nothing.
+## Version 7 came with the player-built terminal on the airport site and
+## version 8 with the moving plane stand: a version 6 save (from the Toon
+## shell) and a version 7 one (before the airside moved north) are refused
+## whole, with no migration, and change nothing.
 func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
-	var old := _older()
-	assert_int(SaveGame.SAVE_VERSION).is_equal(7)
-	old["save_version"] = 6
-	_assert_refused(old, "version 6")
-	print("version 6: '%s'" % _save.message_text())
-	assert_str(_save.message_text()).contains("save_version must be 7")
+	assert_int(SaveGame.SAVE_VERSION).is_equal(8)
+	for version in [6, 7]:
+		var old := _older()
+		old["save_version"] = version
+		_assert_refused(old, "version %d" % version)
+		print("version %d: '%s'" % [version, _save.message_text()])
+		assert_str(_save.message_text()).contains("save_version must be 8")
 
 
 ## A grid saved in another frame than the site's (the Toon shell's 66 x 30

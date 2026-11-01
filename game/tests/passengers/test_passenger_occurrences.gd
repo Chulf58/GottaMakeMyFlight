@@ -8,12 +8,12 @@ extends GdUnitTestSuite
 
 const CONTRACT := "OCC"
 const OCCURRENCE := "OCC-d0"
-## 07:38 plus an hour: the occurrence's first state is at tick 1200, its doors
-## close at 3100 and it is pruned at 4980.
-const MINUTE := 518
+## 08:53: the occurrence's first state is at tick 1200, its doors
+## close at 3400 and it is pruned at 5700.
+const MINUTE := 533
 const FIRST := 1200
-const DOORS := 3100
-const PRUNED := 4980
+const DOORS := 3400
+const PRUNED := 5700
 const BOOKED := 12
 
 var _world: PassengerTestWorld
@@ -73,8 +73,9 @@ func test_arrivals_fall_inside_the_occurrence_window() -> void:
 		earliest = mini(earliest, spawned)
 		latest = maxi(latest, spawned)
 	# Relaxed passengers may come before the first state, up to three game hours
-	# before departure (ArrivalTypes); the departure is 1960 ticks after FIRST.
-	assert_int(earliest).is_greater_equal(FIRST + 1960 - ArrivalTypes.RELAXED_LEAD_TICKS)
+	# before departure (ArrivalTypes); the departure is 2260 ticks after FIRST.
+	var offset := FlightTimetable.departure_offset()
+	assert_int(earliest).is_greater_equal(FIRST + offset - ArrivalTypes.RELAXED_LEAD_TICKS)
 	assert_int(latest).is_less_equal(last)
 
 

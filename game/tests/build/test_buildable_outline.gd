@@ -3,7 +3,8 @@ extends GdUnitTestSuite
 ## The buildable-land outline (user ruling buildable-land-shows-as-an-outline-
 ## only-in-build-mode-the-da): drawn while build mode lasts, hidden outside it,
 ## and running round the terminal site's buildable bounds (the site's
-## BuildGrid, x -43..43 and z -100..-60, until land plots replace it).
+## BuildGrid, 86 x 150 m from z -210 since the airside moved 110 m north, until
+## land plots replace it).
 
 const SITE := preload("res://build/terminal_site.tres")
 const CAMERA := preload("res://camera/tycoon_camera.tscn")
@@ -30,6 +31,11 @@ func before() -> void:
 func after() -> void:
 	for node in [_outline, _menu, _mode]:
 		node.free()
+
+
+## The site's grid as a rectangle on the ground (x, z).
+func _plot() -> Rect2:
+	return Rect2(SITE.grid_origin.x, SITE.grid_origin.z, SITE.grid_size.x, SITE.grid_size.y)
 
 
 ## Every test starts and ends outside build mode.
@@ -64,18 +70,19 @@ func test_switching_trays_keeps_it_shown() -> void:
 func test_the_rectangle_is_the_site_grid() -> void:
 	var rects := _outline.rects()
 	assert_int(rects.size()).is_equal(1)
-	assert_that(rects[0]).is_equal(Rect2(-43.0, -100.0, 86.0, 40.0))
+	assert_that(rects[0]).is_equal(_plot())
 	assert_that(rects[0]).is_equal(BuildableOutline.buildable_rects(_mode.grid)[0])
 
 
 func test_points_are_the_buildable_corners() -> void:
 	var y := SITE.grid_origin.y + BuildableOutline.LIFT_M
+	var plot := _plot()
 	var want := PackedVector3Array(
 		[
-			Vector3(-43.0, y, -100.0),
-			Vector3(43.0, y, -100.0),
-			Vector3(43.0, y, -60.0),
-			Vector3(-43.0, y, -60.0),
+			Vector3(plot.position.x, y, plot.position.y),
+			Vector3(plot.end.x, y, plot.position.y),
+			Vector3(plot.end.x, y, plot.end.y),
+			Vector3(plot.position.x, y, plot.end.y),
 		]
 	)
 	var got := _outline.outline_points()
@@ -91,25 +98,31 @@ func test_points_are_the_buildable_corners() -> void:
 ## The strips run all round inside the edge: the mesh spans the rectangle
 ## exactly and covers each side's middle, and its centre is left open.
 func test_the_strips_run_all_round_inside_the_edge() -> void:
+	var plot := _plot()
+	var middle := plot.get_center()
 	var box := _outline.strip_mesh().get_aabb()
-	assert_bool(box.position.is_equal_approx(Vector3(-43.0, box.position.y, -100.0))).is_true()
-	assert_bool(box.end.is_equal_approx(Vector3(43.0, box.end.y, -60.0))).is_true()
+	var low := Vector3(plot.position.x, box.position.y, plot.position.y)
+	var high := Vector3(plot.end.x, box.end.y, plot.end.y)
+	assert_bool(box.position.is_equal_approx(low)).is_true()
+	assert_bool(box.end.is_equal_approx(high)).is_true()
 	var faces := _outline.strip_mesh().get_faces()
-	# 86 m sides in 43 pieces of 2 m and 40 m sides in 20, two triangles a piece.
-	assert_int(faces.size()).is_equal((43 + 20) * 2 * 6)
+	# Each side in pieces of 2 m (43 and 75 for the 86 m and 150 m sides, two of
+	# each), two triangles a piece.
+	var pieces := int(plot.size.x / 2.0) + int(plot.size.y / 2.0)
+	assert_int(faces.size()).is_equal(pieces * 2 * 6)
 	var w := BuildableOutline.MIN_WIDTH_M / 2.0
 	for probe in [
-		Vector2(0.0, -100.0 + w),
-		Vector2(0.0, -60.0 - w),
-		Vector2(-43.0 + w, -80.0),
-		Vector2(43.0 - w, -80.0),
+		Vector2(middle.x, plot.position.y + w),
+		Vector2(middle.x, plot.end.y - w),
+		Vector2(plot.position.x + w, middle.y),
+		Vector2(plot.end.x - w, middle.y),
 	]:
 		(
 			assert_bool(_covered(faces, probe))
 			. override_failure_message("%s uncovered" % probe)
 			. is_true()
 		)
-	assert_bool(_covered(faces, Vector2(0.0, -80.0))).is_false()
+	assert_bool(_covered(faces, middle)).is_false()
 
 
 ## Constant width on screen (user ruling buildable-outline-keeps-a-constant-on-
@@ -130,14 +143,25 @@ func test_width_measures_its_pixels_across_the_band_under_the_tycoon_camera() ->
 	var want := BuildableOutline.WIDTH_PX
 	# The close plates focus at the strips' height, as the plates probe does.
 	var edge_y := SITE.grid_origin.y + BuildableOutline.LIFT_M
-	# [focus, zoom, yaw, sides wholly or partly in view at least]
+	var plot := _plot()
+	var middle := plot.get_center()
+	# [focus, zoom, yaw, sides wholly or partly in view at least]. The plot is
+	# 150 m deep, not 40, so the far side is out of view from the south-edge pose
+	# and, over the middle, the north and south sides leave the view at the
+	# lower zooms: the counts are what the 86 x 150 m plot shows (measured), the
+	# width check on every side seen is unchanged.
 	var poses := [
-		[Vector3(-39.0, 0.0, -97.0), 18.0, 0.0, 2],
-		[Vector3(0.0, edge_y, -64.0), 18.0, 0.0, 2],
+		[Vector3(plot.position.x + 4.0, 0.0, plot.position.y + 3.0), 18.0, 0.0, 2],
+		[Vector3(middle.x, edge_y, plot.end.y - 4.0), 18.0, 0.0, 1],
+		[Vector3(middle.x, 0.0, middle.y), 30.0, 0.0, 1],
+		[Vector3(middle.x, 0.0, middle.y), 30.0, 0.7, 1],
+		[Vector3(middle.x, 0.0, middle.y), 80.0, 0.0, 2],
+		[Vector3(middle.x, 0.0, middle.y), 80.0, 0.7, 3],
+		[Vector3(middle.x, 0.0, middle.y), 150.0, 0.0, 3],
+		[Vector3(middle.x, 0.0, middle.y), 150.0, 0.7, 4],
+		[Vector3(middle.x, 0.0, middle.y), 300.0, 0.0, 4],
+		[Vector3(middle.x, 0.0, middle.y), 300.0, 0.7, 4],
 	]
-	for zoom in [30.0, 80.0, 150.0, 300.0]:
-		for yaw in [0.0, 0.7]:
-			poses.append([Vector3(0.0, 0.0, -80.0), zoom, yaw, 4 if zoom >= 80.0 else 1])
 	for pose in poses:
 		_pose(rig, pose[0], pose[1], pose[2])
 		_outline.fit(cam)
@@ -174,12 +198,14 @@ func test_width_measures_its_pixels_across_the_band_under_the_tycoon_camera() ->
 func test_a_corner_behind_the_camera_keeps_finite_clamped_widths() -> void:
 	var rig := _make_rig()
 	var cam: Camera3D = rig.get_node("Camera3D")
-	_pose(rig, Vector3(0.0, 0.0, -68.0), 6.0, 0.0)
+	var plot := _plot()
+	_pose(rig, Vector3(plot.get_center().x, 0.0, plot.end.y - 8.0), 6.0, 0.0)
 	var outer := _outline.outline_points()
 	var behind := [2, 3].filter(func(i: int) -> bool: return cam.is_position_behind(outer[i]))
 	assert_int(behind.size()).is_equal(2)
 	_outline.fit(cam)
-	var widest := 20.0
+	# Half the plot's shorter side, the most a band is let grow to.
+	var widest := minf(plot.size.x, plot.size.y) / 2.0
 	for edge in _outline.side_edges():
 		for k in range(0, edge.size(), 2):
 			var width := edge[k].distance_to(edge[k + 1])

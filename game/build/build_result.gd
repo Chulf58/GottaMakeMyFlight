@@ -41,6 +41,7 @@ enum Reason {
 	LANDSIDE_SPOT_TAKEN,
 	LANDSIDE_OCCUPIED,
 	ROOM_WALL,
+	PLANE_AREA,
 }
 
 const REASON_TEXT := {
@@ -84,6 +85,7 @@ const REASON_TEXT := {
 	Reason.LANDSIDE_SPOT_TAKEN: "Every spot of this kind nearby is already built",
 	Reason.LANDSIDE_OCCUPIED: "Cars are still in it. Close it and wait until it is empty",
 	Reason.ROOM_WALL: "A wall is in the way of the room",
+	Reason.PLANE_AREA: "A plane uses this apron. Build here after it takes off",
 }
 
 var ok: bool = true

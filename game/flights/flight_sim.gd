@@ -67,7 +67,11 @@ const STATE_COUNT := 11
 ## BOARDING is 1200 ticks (60 s): in the reference terminal the walk from the
 ## farthest gate seat out through the exit and along the apron to the plane
 ## door is about 915 ticks at walking pace (test_boarding_window.gd).
-const PHASE_TICKS: Array[int] = [100, 120, 140, 300, 40, 1200, 60, 120, 300, 200]
+## TAXI_IN (600) and TAXI_OUT (720) keep the peak taxi speed under 16 m/s on
+## the longest route a legal stand gives (decision plane-stand-design-airside-
+## moves-110-m-north-stand-snaps-to, point 5; test_airside_stand.gd). Departure
+## is the start of PUSHBACK, so a longer TAXI_IN only moves the arrival earlier.
+const PHASE_TICKS: Array[int] = [100, 120, 140, 600, 40, 1200, 60, 120, 720, 200]
 const DEFAULT_ID := "GMF101"
 ## Gates with a stand. Only gate C has one; more gates are a later slice.
 const GATES: Array[String] = ["C"]

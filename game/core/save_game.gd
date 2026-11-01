@@ -55,7 +55,10 @@ signal loaded(ok: bool)
 ## 7: the player-built terminal on the airport site (the grid in the site's
 ## frame, no Toon shell); version 6 saves are refused (no migration before a
 ## release).
-const SAVE_VERSION := 7
+## 8: the live plane stand (part "apron", ApronStand) and longer TAXI_IN and
+## TAXI_OUT phases, which move every flight's start ticks; version 7 saves
+## are refused (no migration before a release).
+const SAVE_VERSION := 8
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -78,6 +81,8 @@ const MESSAGE_SECONDS := 4.0
 @export var baggage: BaggageSim
 @export var day_ledger: DayLedger
 @export var landside: LandsideSim
+## The plane stand; none (a test world) saves no "apron" part.
+@export var apron: ApronStand
 ## Where F5 and F8 save and load. Tests point it at their own file.
 @export var quick_save_path := QUICK_SAVE_PATH
 
@@ -188,6 +193,19 @@ func parts() -> Array[SavePart]:
 			build_mode.templates.library.from_snapshot
 		),
 	]
+	if apron != null:
+		# After the flights, which say whether the stand is in use, and
+		# before the passengers, whose exits walk to its plane door.
+		var at := list.find_custom(func(part: SavePart) -> bool: return part.key == "passengers")
+		list.insert(
+			at,
+			SavePart.new(
+				"apron",
+				apron.to_snapshot,
+				SavePart.checked("apron", ApronStand.checked.bind(apron.site)),
+				apron.from_snapshot
+			)
+		)
 	return list
 
 
