@@ -408,6 +408,8 @@ func _stage_grid(data: Dictionary, staged: Dictionary) -> String:
 		if problem != "":
 			return problem
 	var grid := BuildGrid.new()
+	# The staged grid closes rooms in the way the live one does.
+	grid.shell_border = build_mode.grid.shell_border
 	if not grid.from_snapshot(data):
 		return "it was refused (see the error log)"
 	staged["grid"] = grid

@@ -10,9 +10,15 @@ extends RefCounted
 ## never cross security. After an edit only the links around the dirty cells
 ## are rebuilt.
 ##
+## Passengers walk only indoor cells (BuildGrid.is_indoor()): every other
+## cell's point is disabled, so a path is made of BuildGrid.can_passenger_route()
+## steps. One removed wall can turn a whole hall outdoor; set_indoor() then
+## switches those points off without relinking them.
+##
 ## A staff graph (`staff` set) links every BuildGrid.can_staff_route() step
 ## instead, through security objects along their axis (decision
-## staff-may-walk-through-security-scanners-and-lanes-so-shop-s).
+## staff-may-walk-through-security-scanners-and-lanes-so-shop-s), and keeps
+## every point on: staff access is physical.
 
 const NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(1, 0),
@@ -73,11 +79,22 @@ func update(grid: BuildGrid, dirty_cells: Array[Vector2i]) -> Array[Vector2i]:
 	return cells
 
 
+## Switches each cell's point on or off by whether it is indoor now, for the
+## cells whose indoor state changed with no edit on them. Links stay as they
+## are. Nothing for a staff graph.
+func set_indoor(grid: BuildGrid, cells: Array[Vector2i]) -> void:
+	if staff:
+		return
+	for cell in cells:
+		_astar.set_point_disabled(_id(cell), not grid.is_indoor(cell))
+
+
 ## Cells from `from` to `to`, both included, or an empty array when either
-## cell is not walkable or no route exists.
+## cell is not walkable (for passengers, not a BuildGrid.is_passenger_cell())
+## or no route exists.
 func find_path(grid: BuildGrid, from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
-	if not grid.is_walkable(from) or not grid.is_walkable(to):
+	if not _may_stand(grid, from) or not _may_stand(grid, to):
 		return cells
 	for id in _astar.get_id_path(_id(from), _id(to)):
 		@warning_ignore("integer_division")
@@ -87,6 +104,8 @@ func find_path(grid: BuildGrid, from: Vector2i, to: Vector2i) -> Array[Vector2i]
 
 func _relink(grid: BuildGrid, cell: Vector2i) -> void:
 	var id := _id(cell)
+	if not staff:
+		_astar.set_point_disabled(id, not grid.is_indoor(cell))
 	for offset in NEIGHBOURS:
 		var other := cell + offset
 		if not grid.in_bounds(other):
@@ -98,6 +117,10 @@ func _relink(grid: BuildGrid, cell: Vector2i) -> void:
 			_astar.connect_points(id, other_id)
 		elif linked and not open:
 			_astar.disconnect_points(id, other_id)
+
+
+func _may_stand(grid: BuildGrid, cell: Vector2i) -> bool:
+	return grid.is_walkable(cell) if staff else grid.is_passenger_cell(cell)
 
 
 func _id(cell: Vector2i) -> int:

@@ -138,7 +138,13 @@ func test_exit_blocked_when_the_exit_is_gone_or_walled() -> void:
 	_world.run_to(800)
 	assert_int(_world.passenger(walled).stuck).is_equal(Passenger.Stuck.NONE)
 	assert_int(_world.passenger(walled).stage).is_greater_equal(Passenger.Stage.TO_EXIT)
-	_world.grid.apply(BuildEdit.remove_object(exit_id))
+	# The exit's gap is walled with it: a door object fills its gap in the wall
+	# line, so removing it alone would let the outside into the whole terminal.
+	var gone: Array[BuildEdit] = [
+		BuildEdit.remove_object(exit_id), BuildEdit.place_wall(exit_cell, BuildGrid.Side.NORTH)
+	]
+	for result in _world.grid.apply_batch(gone):
+		assert_bool(result.ok).is_true()
 	var other := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.run_to(1100)
 	assert_int(_world.passenger(other).stuck).is_equal(Passenger.Stuck.EXIT_BLOCKED)

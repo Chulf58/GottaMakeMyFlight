@@ -46,6 +46,9 @@ func _shell_world() -> PassengerTestWorld:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(16, 29), 2)
 	PassengerTestWorld.place(grid, &"exit_door", Vector2i(16, 0), 0)
+	# Walls close the floor in, the doors filling their gaps (TerminalEnclosure),
+	# so passengers may come in at the entrance.
+	EnclosureKit.close_floor(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	world.sim.shell = SHELL
 	return world

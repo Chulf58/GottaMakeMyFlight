@@ -641,10 +641,19 @@ func _check_closed_while_waiting(close_it: Callable) -> void:
 	assert_int(out_by).is_not_equal(0)
 
 
+## The door's gap is walled in the same batch: a door object fills its gap in
+## the wall line, so removing it alone would let the outside into the whole
+## terminal (TerminalEnclosure) and no door would be usable.
 func test_a_walker_waiting_at_a_door_that_is_removed_does_not_board_for_free() -> void:
 	_check_closed_while_waiting(
-		func(door: int, _cell: Vector2i) -> bool:
-			return _world.grid.apply(BuildEdit.remove_object(door)).ok
+		func(door: int, cell: Vector2i) -> bool:
+			var side := BuildGrid.SIDE_STEP.find(_world.sim.layout.door_outward(_world.grid, door))
+			var edits: Array[BuildEdit] = [
+				BuildEdit.remove_object(door), BuildEdit.place_wall(cell, side)
+			]
+			return _world.grid.apply_batch(edits).all(
+				func(result: BuildResult) -> bool: return result.ok
+			)
 	)
 
 

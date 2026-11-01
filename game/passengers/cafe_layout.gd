@@ -12,9 +12,9 @@ extends RefCounted
 ## (slot 0) straight out along its front, up to LANE_SLOTS cells, stopping at
 ## a closed step, a station lane, another object's interaction cell or a seat's
 ## approach cell. A counter with no lane is left out. Its seats are the chairs
-## of the cafe_table pieces in the room whose approach cell is walkable. A
-## walk-on room (the stall, RoomType.walk_on) needs only a counter and has no
-## seats.
+## of the cafe_table pieces in the room whose approach cell is a passenger
+## cell (BuildGrid.is_passenger_cell(): walkable and walled in). A walk-on
+## room (the stall, RoomType.walk_on) needs only a counter and has no seats.
 
 const LANE_SLOTS := 4
 
@@ -103,7 +103,7 @@ static func _seats(grid: BuildGrid, ids: Array[int], area: Rect2i) -> Array[Dict
 		if def.seats.is_empty() or not FacilitySlots.piece_inside(grid, id, area):
 			continue
 		for seat in def.seat_descriptors(record["anchor"], record["facing"]):
-			if not grid.is_walkable(seat["approach"]):
+			if not grid.is_passenger_cell(seat["approach"]):
 				continue
 			seat["key"] = "%d:%d" % [id, seat["index"]]
 			seat["object_id"] = id
@@ -116,7 +116,7 @@ static func _lane(
 ) -> Array[Vector2i]:
 	var lane: Array[Vector2i] = []
 	var cell := grid.interaction_cell(counter_id)
-	if not grid.is_walkable(cell) or approaches.has(cell):
+	if not grid.is_passenger_cell(cell) or approaches.has(cell):
 		return lane
 	var front := TerminalLayout.front_of(grid.get_object(counter_id)["facing"])
 	lane.append(cell)
@@ -124,7 +124,7 @@ static func _lane(
 		var next := cell + front
 		if not grid.in_bounds(next) or taken.has(next) or approaches.has(next):
 			break
-		if not grid.can_route(cell, next):
+		if not grid.can_passenger_route(cell, next):
 			break
 		lane.append(next)
 		cell = next

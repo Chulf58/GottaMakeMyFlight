@@ -18,6 +18,8 @@ func _kinded_grid() -> BuildGrid:
 
 func _plain_grid() -> BuildGrid:
 	var grid := BuildGrid.new(Vector2i(4, 3))
+	# The border closes the floor in, so passengers may walk it.
+	grid.set_shell_border(true)
 	for y in 3:
 		for x in 4:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
@@ -35,6 +37,8 @@ func _through_json(data: Dictionary) -> Dictionary:
 func test_kinds_round_trip_through_json() -> void:
 	var snapshot := _kinded_grid().to_snapshot()
 	var other := BuildGrid.new()
+	# As the saved grid: its border closes it in (never saved).
+	other.set_shell_border(true)
 	assert_bool(other.from_snapshot(_through_json(snapshot))).is_true()
 	assert_str(JSON.stringify(other.to_snapshot())).is_equal(JSON.stringify(snapshot))
 	assert_int(other.wall_kind(Vector2i(0, 1), NORTH)).is_equal(BuildGrid.WallKind.GLASS)
@@ -49,9 +53,15 @@ func test_a_snapshot_from_before_kinds_loads_every_wall_as_plain() -> void:
 	assert_bool(values.all(func(v: int) -> bool: return v == 0 or v == 1)).is_true()
 	assert_int(values.count(1)).is_equal(4)
 	var other := BuildGrid.new()
+	# As the saved grid: its border closes it in (never saved), so the empty
+	# path below is the wall's doing, not the outside's.
+	other.set_shell_border(true)
 	assert_bool(other.from_snapshot(_through_json(old))).is_true()
 	for x in 4:
 		assert_int(other.wall_kind(Vector2i(x, 1), NORTH)).is_equal(BuildGrid.WallKind.PLAIN)
+	assert_bool(other.is_passenger_cell(Vector2i(2, 2))).is_true()
+	assert_bool(other.is_passenger_cell(Vector2i(2, 0))).is_true()
+	assert_int(other.find_path(Vector2i(2, 2), Vector2i(1, 2)).size()).is_equal(2)
 	assert_array(other.find_path(Vector2i(2, 2), Vector2i(2, 0))).is_empty()
 
 

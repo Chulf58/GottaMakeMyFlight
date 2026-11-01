@@ -23,6 +23,8 @@ func before() -> void:
 	PassengerTestWorld.tracker = self
 	_shell = load(SHELL)
 	var grid := BuildGrid.new(_shell.grid_size, _shell.grid_origin)
+	# As BuildMode with a shell: the facade closes the grid border.
+	grid.set_shell_border(true)
 	_plan = RepairPlan.make(grid, _shell)
 	if _plan.ok:
 		_price = RepairPlan.least_balance(grid, _plan.edits)
@@ -34,6 +36,8 @@ func after() -> void:
 
 func before_test() -> void:
 	var grid := BuildGrid.new(_shell.grid_size, _shell.grid_origin)
+	# As BuildMode with a shell: the facade closes the grid border.
+	grid.set_shell_border(true)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(100000))
 	_world.sim.shell = _shell
 	_grant = auto_free(RescueGrant.new())

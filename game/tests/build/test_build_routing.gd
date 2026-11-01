@@ -8,6 +8,8 @@ var _changes: Array = []
 
 func _floored_grid(size: Vector2i) -> BuildGrid:
 	var grid := BuildGrid.new(size)
+	# The border closes the floor in, so passengers may walk it.
+	grid.set_shell_border(true)
 	for y in size.y:
 		for x in size.x:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
@@ -95,6 +97,8 @@ func test_a_door_on_the_floor_edge_can_be_routed_into_along_its_axis() -> void:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	var door := grid.apply(BuildEdit.place_object(&"exit_door", Vector2i(2, 1), 0))
 	assert_bool(door.ok).is_true()
+	# Walls close the floor in around the door, so passengers may walk it.
+	assert_int(EnclosureKit.close_floor(grid)).is_greater(0)
 	var path := grid.find_path(Vector2i(0, 4), Vector2i(2, 1))
 	assert_that(path[path.size() - 2]).is_equal(Vector2i(2, 2))
 	assert_bool(grid.can_route(Vector2i(1, 1), Vector2i(2, 1))).is_false()

@@ -5,6 +5,8 @@ extends RefCounted
 ## x -22 to -10, z -30 to -14): a landside hall with two desks and the
 ## entrance on the south edge, a wall across y = 9 with two scanners in it,
 ## and an airside gate with four seat rows and the exit on the north edge.
+## Walls close it in on every side, the two door objects filling the gaps
+## they stand in, so all its floor is indoor (TerminalEnclosure).
 ## In a terminal shell (the starter terminal's layout) the same rooms stretch
 ## from the shell's gate door C on the north edge to its landside door B on the
 ## south edge, so passengers use the real door routes.
@@ -51,6 +53,8 @@ static func edits(shell: ShellDefinition = null) -> Array[BuildEdit]:
 	for x in range(floor_min.x, floor_max.x + 1):
 		if x != exit_cell.x:
 			out.append(BuildEdit.place_wall(Vector2i(x, floor_min.y), BuildGrid.Side.NORTH))
+		if x != entrance.x:
+			out.append(BuildEdit.place_wall(Vector2i(x, floor_max.y), BuildGrid.Side.SOUTH))
 		if not SCANNER_XS.has(x):
 			out.append(BuildEdit.place_wall(Vector2i(x, DIVIDER_Y), BuildGrid.Side.NORTH))
 	for y in range(floor_min.y, floor_max.y + 1):

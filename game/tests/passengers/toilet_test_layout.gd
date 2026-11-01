@@ -33,6 +33,8 @@ static func build(grid: BuildGrid, stalls := 2, shell: ShellDefinition = null) -
 		edits.append(BuildEdit.remove_wall(Vector2i(21, y), BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):
 		assert(result.ok, "toilet layout edit refused: %s" % result.reason_text())
+	# Walls close the floor in, so passengers may use it (TerminalEnclosure).
+	EnclosureKit.close_floor(grid)
 	var ids := {
 		"air_room": _apply(grid, BuildEdit.place_room(AIRSIDE_ROOM, &"toilet")).room_id,
 		"land_room": _apply(grid, BuildEdit.place_room(LANDSIDE_ROOM, &"toilet")).room_id,

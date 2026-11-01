@@ -183,6 +183,7 @@ static func can_finish(
 ## PriceTable.NO_PRICE when an edit has no price.
 static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 	var standing := BuildGrid.new(grid.size, grid.origin)
+	standing.shell_border = grid.shell_border
 	if not standing.from_snapshot(grid.to_snapshot()):
 		push_error("RepairPlan: the grid could not be copied to price the plan")
 		return PriceTable.NO_PRICE
@@ -207,6 +208,8 @@ static func make(grid: BuildGrid, shell: ShellDefinition = null) -> RepairPlan:
 	var plan := RepairPlan.new()
 	plan._shell = shell
 	plan._grid = BuildGrid.new(grid.size, grid.origin)
+	# The copy closes rooms in as the grid does (the shell's facade).
+	plan._grid.shell_border = grid.shell_border
 	plan._source = grid.to_snapshot()
 	if not plan._grid.from_snapshot(plan._source):
 		push_error("RepairPlan: the grid could not be copied")
@@ -789,6 +792,7 @@ func _failing_leg() -> int:
 		if here.is_empty():
 			return each
 	var trial := BuildGrid.new(_grid.size, _grid.origin)
+	trial.shell_border = _grid.shell_border
 	if not trial.from_snapshot(_source):
 		return Leg.DESK
 	for edit in _ordered(edits):

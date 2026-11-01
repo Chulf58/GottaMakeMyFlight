@@ -13,9 +13,10 @@ extends RefCounted
 ## cells of a kiosk display stand, a duty free shelf or a fashion rail, the
 ## first of a pharmacy shelf or an exchange counter, the one of an ATM), slot
 ## index in footprint order, kept when that
-## cell is walkable. A browser stands on the slot's cell facing the piece. A
-## shop with no usable slot is left out. The slot's room tells ShopSim the
-## type, and so the base spend, a visit pays.
+## cell is a passenger cell (BuildGrid.is_passenger_cell(): walkable and
+## walled in). A browser stands on the slot's cell facing the piece. A shop
+## with no usable slot is left out. The slot's room tells ShopSim the type,
+## and so the base spend, a visit pays.
 
 ## One entry per usable shop, in room id order: {"room": int, "slots": Array
 ## of {"key": "<piece id>:<index>", "display": object id of the browse piece,
@@ -50,7 +51,7 @@ func rebuild(grid: BuildGrid) -> void:
 			var cells := def.footprint(record["anchor"], record["facing"])
 			for i in mini(type.seats_per_piece, cells.size()):
 				var approach: Vector2i = cells[i] + front
-				if not grid.is_walkable(approach):
+				if not grid.is_passenger_cell(approach):
 					continue
 				(
 					slots

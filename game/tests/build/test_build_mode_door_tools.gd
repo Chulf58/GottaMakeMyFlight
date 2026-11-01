@@ -99,6 +99,8 @@ func test_the_ghost_check_and_the_click_agree() -> void:
 
 
 func test_tool_built_doors_give_the_terminal_an_entrance_and_an_open_exit() -> void:
+	# Walls close the floor in; each door takes down the wall on its way out.
+	EnclosureKit.close_floor(_mode.grid)
 	_place(BuildMode.Tool.ENTRANCE, Vector2i(4, 7), 2)
 	_place(BuildMode.Tool.EXIT, Vector2i(6, 2), 0)
 	var layout := TerminalLayout.new()

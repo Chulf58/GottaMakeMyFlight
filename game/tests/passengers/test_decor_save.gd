@@ -92,6 +92,8 @@ func _save(world: PassengerTestWorld) -> String:
 func _load(text: String) -> PassengerTestWorld:
 	var data: Dictionary = JSON.parse_string(text)
 	var grid := BuildGrid.new()
+	# As the saved floored grid: its border closes it in (never saved).
+	grid.set_shell_border(true)
 	assert_bool(grid.from_snapshot(data["grid"])).is_true()
 	var world := _make(grid)
 	assert_bool(world.clock.from_snapshot(data["clock"])).is_true()

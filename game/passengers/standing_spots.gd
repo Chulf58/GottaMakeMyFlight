@@ -7,7 +7,8 @@ extends RefCounted
 ## Spots are points on a fixed 0.6 m lattice in grid-local millimetres, so a
 ## spot's id (its lattice index) stays the same across edits. They are derived
 ## from the grid and layout after an edit: a breadth-first walk over routable
-## steps (BuildGrid.can_route, which never crosses a scanner) starts at the
+## steps (BuildGrid.can_passenger_route, which keeps indoors and never
+## crosses a scanner) starts at the
 ## gate seats' access cells. The sim has no cell-level airside map, so the
 ## walk keeps airside itself. The grid stores no divider, so it labels the
 ## doorless components (cells joined by routable steps that cross no door
@@ -25,7 +26,7 @@ extends RefCounted
 ## seats the walk starts at the exit doors. Cells up to NEAR_STEPS steps out
 ## are the gate area, and cells up to OVERFLOW_STEPS out are the overflow.
 ## Claims only go to spots in the passenger's own route region (cells joined
-## by can_route steps). A cell holds no spot when it is a queue lane, a
+## by can_passenger_route steps). A cell holds no spot when it is a queue lane, a
 ## scanner passage or exit, a security
 ## lane's kept-clear cell, a staff spot, an object's interaction cell, a seat
 ## access cell, a door cell or inside a room.
@@ -71,7 +72,8 @@ var _claims: Dictionary = {}
 ## Passenger id -> spot id.
 var _spot_of: Dictionary = {}
 var _ids: Array[int] = []
-## Cell -> route region: cells joined by BuildGrid.can_route steps (the steps
+## Cell -> route region: cells joined by BuildGrid.can_passenger_route
+## steps (the steps
 ## passengers path over) share one, so a spot in another region cannot be
 ## walked to.
 var _regions: Dictionary = {}
@@ -117,7 +119,7 @@ func rebuild(sim: PassengerSim) -> void:
 	var depth := _walk_airside(grid, seeds, OVERFLOW_STEPS, components, trusted)
 	var per_row := columns(grid.size)
 	for cell: Vector2i in depth:
-		if excluded.has(cell) or not grid.is_walkable(cell) or grid.room_at(cell) != 0:
+		if excluded.has(cell) or not grid.is_passenger_cell(cell) or grid.room_at(cell) != 0:
 			continue
 		var tier := NEAR if depth[cell] <= NEAR_STEPS else OVERFLOW
 		for j in lattice_in(cell.y):
@@ -280,8 +282,8 @@ func restore(claims: Dictionary) -> void:
 		_claims[claims[passenger]] = passenger
 
 
-## Labels every walkable cell with its doorless component: cells joined by
-## routable steps that cross no door wall.
+## Labels every passenger cell (BuildGrid.is_passenger_cell()) with its
+## doorless component: cells joined by routable steps that cross no door wall.
 static func _doorless_components(grid: BuildGrid) -> Dictionary:
 	var components := {}
 	var any_door := func(a: Vector2i, b: Vector2i) -> bool: return _door_edge(grid, a, b)
@@ -289,7 +291,7 @@ static func _doorless_components(grid: BuildGrid) -> Dictionary:
 	for y in grid.size.y:
 		for x in grid.size.x:
 			var start := Vector2i(x, y)
-			if components.has(start) or not grid.is_walkable(start):
+			if components.has(start) or not grid.is_passenger_cell(start):
 				continue
 			var seeds: Array[Vector2i] = [start]
 			for cell: Vector2i in _walk(grid, seeds, -1, any_door):
@@ -362,7 +364,7 @@ static func _walk(
 			continue
 		for step in STEPS:
 			var next := cell + step
-			if depth.has(next) or not grid.can_route(cell, next):
+			if depth.has(next) or not grid.can_passenger_route(cell, next):
 				continue
 			if _crosses_edge(cell, next, blocked):
 				continue
@@ -391,14 +393,14 @@ static func _door_edge(grid: BuildGrid, a: Vector2i, b: Vector2i) -> bool:
 	return grid.wall_kind(a, BuildGrid.SIDE_STEP.find(b - a)) == BuildGrid.WallKind.DOOR
 
 
-## Labels every walkable cell with its route region, in row order.
+## Labels every passenger cell with its route region, in row order.
 static func _route_regions(grid: BuildGrid) -> Dictionary:
 	var regions := {}
 	var next_region := 0
 	for y in grid.size.y:
 		for x in grid.size.x:
 			var start := Vector2i(x, y)
-			if regions.has(start) or not grid.is_walkable(start):
+			if regions.has(start) or not grid.is_passenger_cell(start):
 				continue
 			regions[start] = next_region
 			var frontier: Array[Vector2i] = [start]
@@ -408,7 +410,7 @@ static func _route_regions(grid: BuildGrid) -> Dictionary:
 				head += 1
 				for step in STEPS:
 					var other := cell + step
-					if not regions.has(other) and grid.can_route(cell, other):
+					if not regions.has(other) and grid.can_passenger_route(cell, other):
 						regions[other] = next_region
 						frontier.append(other)
 			next_region += 1

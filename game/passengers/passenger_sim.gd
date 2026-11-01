@@ -287,7 +287,7 @@ func spawn_batch(count: int, seed: int) -> bool:
 ## Spawns one passenger at the entrance now and returns its id, or 0 (with an
 ## error) when there is no entrance. `variant` -1 draws one from the sim RNG.
 func spawn_now(flight_id: String, variant := -1) -> int:
-	if layout.entrances.is_empty():
+	if layout.passenger_entrances.is_empty():
 		push_error("PassengerSim.spawn_now: the terminal has no entrance")
 		return 0
 	if variant < 0:
@@ -653,7 +653,7 @@ func _booked_passengers(flight_id: String) -> int:
 
 
 func _spawn_due() -> void:
-	if layout.entrances.is_empty():
+	if layout.passenger_entrances.is_empty():
 		return
 	while not _schedule.is_empty() and _schedule[0]["tick"] <= tick:
 		var entry: Dictionary = _schedule.pop_front()
@@ -680,9 +680,9 @@ func _spawn(
 	CarryOnTraits.draw(clock.rng, p)
 	p.toilet_need = clock.rng.randi_range(ToiletSim.NEED_START_MIN, ToiletSim.NEED_START_MAX)
 	p.boredom = BoredomSim.start_of(p.id)
-	p.at = layout.door_cell(grid, layout.entrances[0])
+	p.at = layout.door_cell(grid, layout.passenger_entrances[0])
 	p.clear_path()
-	p.apron = ShellRoutes.arrival(self, layout.entrances[0])
+	p.apron = ShellRoutes.arrival(self, layout.passenger_entrances[0])
 	if not walk.is_empty():
 		var road := p.apron
 		p.apron = walk.duplicate()
@@ -700,7 +700,7 @@ func _spawn(
 ## schedule for a closed flight will never board, so they are dropped and
 ## counted as no-shows, with the cause that holds now.
 func _close_doors() -> void:
-	var cause := "no_entrance" if layout.entrances.is_empty() else "late"
+	var cause := "no_entrance" if layout.passenger_entrances.is_empty() else "late"
 	var kept: Array[Dictionary] = []
 	for entry in _schedule:
 		if flights.is_doors_closed(entry["flight"]):
@@ -871,7 +871,14 @@ func _advance(p: Passenger) -> void:
 	match p.stage:
 		Passenger.Stage.SPAWNED:
 			# In from the road first, when the entrance has one (ShellRoutes).
-			if p.apron_mm >= p.apron_total_mm():
+			# An entrance whose cell walls no longer close in is not entered:
+			# the walker waits at its door until the gap is closed again.
+			if p.apron_mm < p.apron_total_mm():
+				pass
+			elif not grid.is_passenger_cell(p.at):
+				p.stuck = Passenger.Stuck.NO_ROUTE
+			else:
+				p.stuck = Passenger.Stuck.NONE
 				p.apron = []
 				p.apron_mm = 0
 				_set_stage(p, Passenger.Stage.TO_CHECKIN)
@@ -1246,7 +1253,7 @@ func _replan(p: Passenger) -> void:
 	var path: Array[Vector2i] = []
 	if keep == 0:
 		path = grid.find_path(here, target)
-	elif grid.can_route(here, next):
+	elif grid.can_passenger_route(here, next):
 		path = grid.find_path(next, target)
 		if path.is_empty():
 			path.append(next)

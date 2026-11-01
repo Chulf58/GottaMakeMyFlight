@@ -41,10 +41,19 @@ func after_test() -> void:
 	_world = null
 
 
+## A door's gap in the wall line is walled as the door goes: a door object
+## fills its gap, so removing it alone would let the outside into the whole
+## terminal (TerminalEnclosure), a repair RepairPlan does not plan yet.
 func _remove_all(kinds: Array[String]) -> void:
 	for kind in kinds:
 		for id in _ids[kind]:
-			assert_bool(_world.grid.apply(BuildEdit.remove_object(id)).ok).is_true()
+			var edits: Array[BuildEdit] = [BuildEdit.remove_object(id)]
+			var record := _world.grid.get_object(id)
+			if BuildCatalog.is_door(record["def"]):
+				var side := BuildGrid.SIDE_STEP.find(DoorPlacement.back_step(record["facing"]))
+				edits.append(BuildEdit.place_wall(record["anchor"], side))
+			for result in _world.grid.apply_batch(edits):
+				assert_bool(result.ok).is_true()
 
 
 ## Takes the floor off every free cell of row GAP_Y, cutting the entrance off

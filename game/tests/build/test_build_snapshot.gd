@@ -2,8 +2,11 @@ class_name TestBuildSnapshot
 extends GdUnitTestSuite
 
 
+## Its border closes the floor in (BuildGrid.shell_border, never saved), so
+## passengers may walk it; a grid loading its snapshot sets the same.
 func _built_grid() -> BuildGrid:
 	var grid := BuildGrid.new(Vector2i(10, 8))
+	grid.set_shell_border(true)
 	for y in 8:
 		for x in 10:
 			grid.apply(
@@ -29,6 +32,7 @@ func test_snapshot_round_trips_through_json() -> void:
 	var grid := _built_grid()
 	var snapshot := grid.to_snapshot()
 	var other := BuildGrid.new()
+	other.set_shell_border(true)
 	assert_bool(other.from_snapshot(_through_json(snapshot))).is_true()
 	assert_str(JSON.stringify(other.to_snapshot())).is_equal(JSON.stringify(snapshot))
 	assert_that(other.size).is_equal(Vector2i(10, 8))
@@ -56,6 +60,7 @@ func test_object_ids_keep_counting_after_a_load() -> void:
 func test_malformed_snapshot_is_rejected_and_grid_unchanged() -> void:
 	var good := _through_json(_built_grid().to_snapshot())
 	var other := BuildGrid.new(Vector2i(4, 4))
+	other.set_shell_border(true)
 	other.apply(BuildEdit.paint_floor(Vector2i(1, 1), BuildGrid.FLOOR_TILE, 3))
 	var before := JSON.stringify(other.to_snapshot())
 	var bad_cases: Array[Dictionary] = []
