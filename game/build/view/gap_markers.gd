@@ -29,6 +29,8 @@ const GAP_FILL := Color(0.937, 0.6, 0.137)
 ## The camera's field of view and the view's height when there is no camera.
 const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
+## Hidden signs kept for reuse when gaps close; any more are freed.
+const SPARE_SIGNS := 4
 
 static var _icon: ImageTexture
 
@@ -36,6 +38,8 @@ var _grid: BuildGrid
 var _bars := MultiMeshInstance3D.new()
 var _signs: Array[Sprite3D] = []
 var _shown_signs := 0
+## The screen unit the shown signs were last sized for.
+var _unit := 0.0
 ## Where each bar is drawn, kept here because a headless run reads the
 ## multimesh back as identities.
 var _bar_transforms: Array[Transform3D] = []
@@ -81,12 +85,18 @@ func rebuild() -> void:
 		multimesh.set_instance_transform(i, _bar_transforms[i])
 	while _signs.size() < runs.size():
 		_signs.append(_make_sign())
+	# Keep at most SPARE_SIGNS hidden signs for reuse; free the rest.
+	while _signs.size() > runs.size() + SPARE_SIGNS:
+		var surplus: Sprite3D = _signs.pop_back()
+		remove_child(surplus)
+		surplus.queue_free()
 	for i in _signs.size():
 		var shown := i < runs.size()
 		_signs[i].visible = shown
 		if shown:
 			_signs[i].position = runs[i].centre(_grid) + Vector3(0.0, SIGN_LIFT_M, 0.0)
 	_shown_signs = runs.size()
+	update_sizes(true)
 
 
 func strip_count() -> int:
@@ -137,24 +147,35 @@ func _bar_transform(edge: Vector3i) -> Transform3D:
 ## Keeps the signs MissMarkers.SIGN_PX tall on screen and the captions at
 ## their font size, as MissMarkers sizes its signs.
 func _process(_delta: float) -> void:
-	_resize_signs()
+	update_sizes()
 
 
-func _resize_signs() -> void:
+## Works out the screen unit from the camera's field of view and the rendered
+## view's height, and resizes the shown signs only when it changed (or when
+## `force`, after the shown set changed).
+func update_sizes(force := false) -> void:
 	var fov := FALLBACK_FOV
 	var height := FALLBACK_HEIGHT
 	if is_inside_tree():
-		var camera := get_viewport().get_camera_3d()
+		var view := get_viewport()
+		var camera := view.get_camera_3d()
 		if camera != null:
 			fov = camera.fov
-			var view := get_viewport()
-			height = view.get_visible_rect().size.y * view.get_stretch_transform().get_scale().y
-	## World units per screen pixel at one metre (a fixed-size sprite is drawn
-	## as if it stood one metre from the camera).
+		height = view.get_visible_rect().size.y * view.get_stretch_transform().get_scale().y
+	# World units per screen pixel at one metre (a fixed-size sprite is drawn
+	# as if it stood one metre from the camera).
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
-	for marker in _signs:
-		marker.pixel_size = MissMarkers.SIGN_PX * unit / MarkerIcons.SIZE
-		(marker.get_node("Caption") as Label3D).pixel_size = unit
+	if height > 0.0 and (force or unit != _unit):
+		_size_signs(unit)
+
+
+## Sizes the shown signs for the screen unit `unit`; hidden spares are sized
+## when they are shown again.
+func _size_signs(unit: float) -> void:
+	_unit = unit
+	for i in _shown_signs:
+		_signs[i].pixel_size = MissMarkers.SIGN_PX * unit / MarkerIcons.SIZE
+		(_signs[i].get_node("Caption") as Label3D).pixel_size = unit
 
 
 ## The caption under a sign.
@@ -189,14 +210,13 @@ func _make_sign() -> Sprite3D:
 	caption.offset = Vector2(0.0, -MissMarkers.CAPTION_GAP_PX)
 	marker.add_child(caption)
 	add_child(marker)
-	_resize_signs()
 	return marker
 
 
 ## The wall-gap icon, painted once: MarkerIcons' rounded square and outline
 ## filled amber, with a white wall line broken in the middle and an arrow
-## passing down through the opening. MarkerIcons' _shape and _segment are called
-## across classes so the queue-full sign's shape is reused, not copied.
+## passing down through the opening, drawn with MarkerIcons.shape_distance and
+## segment_distance so the queue-full sign's shape is reused, not copied.
 static func wall_gap_icon() -> Texture2D:
 	if _icon != null:
 		return _icon
@@ -206,7 +226,7 @@ static func wall_gap_icon() -> Texture2D:
 	for y in size:
 		for x in size:
 			var p := Vector2(x + 0.5 - half, y + 0.5 - half)
-			var edge := MarkerIcons._shape(p)
+			var edge := MarkerIcons.shape_distance(p)
 			var cover := clampf(0.5 - edge, 0.0, 1.0)
 			if cover <= 0.0:
 				img.set_pixel(x, y, Color(MarkerIcons.OUTLINE, 0.0))
@@ -226,14 +246,14 @@ static func wall_gap_icon() -> Texture2D:
 static func _broken_wall(p: Vector2) -> float:
 	# A thick wall line broken in the middle...
 	var wall := minf(
-		MarkerIcons._segment(p, Vector2(-36.0, -4.0), Vector2(-17.0, -4.0)),
-		MarkerIcons._segment(p, Vector2(17.0, -4.0), Vector2(36.0, -4.0))
+		MarkerIcons.segment_distance(p, Vector2(-36.0, -4.0), Vector2(-17.0, -4.0)),
+		MarkerIcons.segment_distance(p, Vector2(17.0, -4.0), Vector2(36.0, -4.0))
 	)
 	wall -= 9.0
 	# ...and an arrow passing down through the opening.
-	var shaft := MarkerIcons._segment(p, Vector2(0.0, -34.0), Vector2(0.0, 24.0))
+	var shaft := MarkerIcons.segment_distance(p, Vector2(0.0, -34.0), Vector2(0.0, 24.0))
 	var head := minf(
-		MarkerIcons._segment(p, Vector2(0.0, 30.0), Vector2(-13.0, 15.0)),
-		MarkerIcons._segment(p, Vector2(0.0, 30.0), Vector2(13.0, 15.0))
+		MarkerIcons.segment_distance(p, Vector2(0.0, 30.0), Vector2(-13.0, 15.0)),
+		MarkerIcons.segment_distance(p, Vector2(0.0, 30.0), Vector2(13.0, 15.0))
 	)
 	return minf(wall, minf(shaft, head) - 5.0)

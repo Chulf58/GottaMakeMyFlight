@@ -20,23 +20,25 @@ extends SceneTree
 ## all round with an entrance on the south (road) side and an exit on the
 ## wing's north (plane) side, so it is indoor and roofed; building B, a 10 x 10
 ## box whose south wall has a three-edge gap, so it is not indoor, has no roof
-## and shows one gap run. The roof height is a plate decision (kit walls 2.5 m
-## or the old Toon facade 5.2 m), so every roof plate is made for both options:
-## "kit" (top 2.8 m, fascia 0.6 m) and "facade" (top 5.2 m, fascia 2.9 m down
-## to just under the 2.5 m walls). No world seed: nothing here is random.
+## and shows one gap run. The roof is the ruled tall one (top 5.2 m, fascia
+## 2.9 m down to just under the 2.5 m walls, decision player-built-terminal-
+## roof-tall-5-2-m-roof-with-the-facade-f). No world seed: nothing here is
+## random.
 ##
-## Plates (tools/blender/out/roof_prototype/): per option, six orthographic
-## views of building A's roof alone at true scale beside a 1 m cube; the roof
-## zoomed out (150 m); the roof at distance (280 m, both buildings); the roof
-## mid-fade (level 0.5); the roof held drawn at 40 m (how the roof meets the
-## walls); then, roof option free, the roof gone at 45 m with the wall cutaway
-## at two headings, and building B's gap marker close up. A contact sheet per
-## batch. Every plate proves each subject is in frame (projected bounds inside
-## the viewport by MARGIN_PX, and at least a minimum size) and visible (rays
-## from the camera to points on the subject's surface whose first hit lands
-## on that point, with the site, every wall, post, floor tile, the roof and
-## the gap bars as colliders); otherwise it prints PROBE_INVALID, saves no
-## plate and exits 1.
+## Plates (tools/blender/out/roof_prototype/): six orthographic views of
+## building A's roof alone at true scale beside a 1 m cube; on one contact
+## sheet the roof zoomed out (150 m), at distance (280 m, both buildings),
+## mid-fade (level 0.5), held drawn at 40 m (how it meets the walls) and at
+## the 41.2 m home distance, and building B's gap marker close up and at the
+## home distance; on a second sheet the roof gone at 45 m with the wall
+## cutaway at two headings. Every plate proves each subject is in frame
+## (real bounds projected inside the viewport by MARGIN_PX, and at least a
+## minimum size) and visible (rays from the camera to points on the subject's
+## surface whose first hit lands on that point, with the site, every wall,
+## post, floor tile, the roof, the gap bars and the cube as colliders). The
+## gap sign draws over the world, so it is proven from its own screen
+## rectangle (shown, in frame, 56 px) and from its amber pixels on the grabbed
+## plate. Otherwise the probe prints PROBE_INVALID, saves no plate and exits 1.
 
 const OUT_REL := "res://../tools/blender/out/roof_prototype"
 const CAMERA := "res://camera/tycoon_camera.tscn"
@@ -95,6 +97,12 @@ var _guard: Thread
 var _proof_only := false
 var _break_frame := false
 var _break_occlusion := false
+## `--break-sign` hides the gap sign and `--break-sign-size` sets its
+## pixel_size to 0 just before the proofs: both must end in PROBE_INVALID.
+var _break_sign := false
+var _break_sign_size := false
+## `--gap-only` makes only the two gap marker shots (for the break controls).
+var _gap_only := false
 
 
 func _initialize() -> void:
@@ -149,8 +157,11 @@ func _watch() -> void:
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	_proof_only = args.has("--proof-only")
+	_gap_only = args.has("--gap-only")
 	_break_frame = args.has("--break-frame")
 	_break_occlusion = args.has("--break-occlusion")
+	_break_sign = args.has("--break-sign")
+	_break_sign_size = args.has("--break-sign-size")
 	print(
 		(
 			"PROBE modes proof_only=%s break_frame=%s break_occlusion=%s"
@@ -164,8 +175,9 @@ func _run() -> void:
 		(check["holder"] as Node).free()
 		_finish()
 		return
-	for option in OPTIONS:
-		await _plate_six_axis(grid, option)
+	if not _gap_only:
+		for option in OPTIONS:
+			await _plate_six_axis(grid, option)
 	var ctx := _scene(grid, true)
 	_report_views(ctx)
 	# The ruled tall roof at every zoom, then the gap marker close and at the
@@ -183,15 +195,17 @@ func _run() -> void:
 		["gap_marker_home", HOME_DISTANCE, YAW, -1.0, ["gap_bars_far", "gap_sign"]],
 	]
 	for i in shots.size():
-		await _shot(ctx, shots[i], sheet, Vector2i(i % 3, floori(i / 3.0)))
+		if not _gap_only or String(shots[i][0]).begins_with("gap"):
+			await _shot(ctx, shots[i], sheet, Vector2i(i % 3, floori(i / 3.0)))
 	var cut_sheet := Image.create(TILE.x * 2, TILE.y, false, Image.FORMAT_RGBA8)
 	var others := [
 		["cutaway_yaw40", 45.0, YAW, -1.0, ["hall_floor"]],
 		["cutaway_yaw220", 45.0, YAW + PI, -1.0, ["hall_floor"]],
 	]
 	for i in others.size():
-		await _shot(ctx, others[i], cut_sheet, Vector2i(i, 0))
-	if not _proof_only:
+		if not _gap_only:
+			await _shot(ctx, others[i], cut_sheet, Vector2i(i, 0))
+	if not _proof_only and not _gap_only:
 		_save(sheet, "roof_contact_sheet.png")
 		_save(cut_sheet, "cutaway_gap_sheet.png")
 	(ctx["holder"] as Node).queue_free()
@@ -362,6 +376,18 @@ func _scene(grid: BuildGrid, with_site: bool) -> Dictionary:
 func _report_views(ctx: Dictionary) -> void:
 	var roof: RoofView = ctx["roof"]
 	var markers: GapMarkers = ctx["markers"]
+	if markers.sign_count() > 0:
+		print(
+			(
+				"SIGNSIZE pixel_size=%s visible=%s stretch=%s camera=%s"
+				% [
+					markers.signs()[0].pixel_size,
+					root.get_visible_rect().size,
+					root.get_stretch_transform().get_scale(),
+					root.get_camera_3d(),
+				]
+			)
+		)
 	print(
 		(
 			"VIEWS roofed_cells=%d roof_box=%s roof_meshes=%d bars=%d signs=%d pieces=%s"
@@ -458,6 +484,12 @@ func _shot(ctx: Dictionary, shot: Array, sheet: Image, place: Vector2i) -> bool:
 	var bodies := _colliders(ctx)
 	await physics_frame
 	await physics_frame
+	var markers: GapMarkers = ctx["markers"]
+	if keys.has("gap_sign") and markers.sign_count() > 0:
+		if _break_sign:
+			markers.signs()[0].visible = false
+		if _break_sign_size:
+			markers.signs()[0].pixel_size = 0.0
 	var ok := true
 	for key in keys:
 		ok = _prove_subject(ctx, name + "/" + str(key), key) and ok
@@ -467,6 +499,8 @@ func _shot(ctx: Dictionary, shot: Array, sheet: Image, place: Vector2i) -> bool:
 	if not ok or _proof_only:
 		return ok
 	var img := await _grab()
+	if keys.has("gap_sign") and not _prove_sign_pixels(cam, name, markers, img):
+		return false
 	_save(img, name + ".png")
 	_blit(sheet, img, place)
 	print("SHOT %s grid_origin=%s" % [name, grid.origin])
@@ -554,11 +588,19 @@ func _prove_subject(ctx: Dictionary, label: String, key: String) -> bool:
 			ok = _prove_size(cam, label, _corners(edge[0]), 200.0) and ok
 			ok = _prove_seen(cam, label, edge[1], 0.8) and ok
 		"cube":
-			ok = _prove_in_frame(cam, label, _corners(_aabb_of(ctx["cube"])))
+			# The cube's own mesh bounds, and rays to its face centres (a
+			# camera sees at most three of the five upper faces).
+			var cube_box := _aabb_of(ctx["cube"])
+			ok = _prove_in_frame(cam, label, _corners(cube_box))
+			ok = _prove_seen(cam, label, _face_centres(cube_box), 0.4) and ok
 		"open_box":
-			var lo := grid.cell_to_world(OPEN_BOX.position) - Vector3(0.5, 0.0, 0.5)
-			var area := AABB(lo, Vector3(OPEN_BOX.size.x, 2.5, OPEN_BOX.size.y))
-			ok = _prove_in_frame(cam, label, _corners(area))
+			# Building B's drawn wall pieces, and rays to its floor tiles.
+			var walls := _drawn_box(ctx, OPEN_BOX)
+			ok = walls.has_volume()
+			if not ok:
+				_invalid("%s: no wall drawn in building B" % label)
+			ok = _prove_in_frame(cam, label, _corners(walls)) and ok
+			ok = _prove_seen(cam, label, _floor_targets(grid, OPEN_BOX), 0.5) and ok
 		"hall_floor":
 			var floor_lo := grid.cell_to_world(HALL.position) - Vector3(0.5, 0.0, 0.5)
 			var hall := AABB(floor_lo, Vector3(HALL.size.x, 2.5, HALL.size.y))
@@ -576,16 +618,110 @@ func _prove_subject(ctx: Dictionary, label: String, key: String) -> bool:
 			ok = _prove_size(cam, label, _corners(bars), floor_px) and ok
 			ok = _prove_seen(cam, label, targets, 0.8) and ok
 		"gap_sign":
-			# Drawn over the world (no depth test), so in frame is the proof.
-			var foot := markers.sign_positions()
-			if foot.is_empty():
-				_invalid("%s: no gap sign" % label)
-			else:
-				var top: Vector3 = foot[0] + Vector3(0.0, 1.0, 0.0)
-				ok = _prove_in_frame(cam, label, [foot[0] as Vector3, top])
+			ok = _prove_sign(cam, label, markers)
 		_:
 			_invalid("%s: unknown subject" % label)
 	return ok
+
+
+## The first gap sign as drawn: shown in the tree, its real screen rectangle
+## (a fixed-size billboard SIZE * pixel_size tall at one metre, standing on its
+## position) inside the frame, and SIGN_PX (56) plate pixels tall. Its no-
+## depth-test pixels are counted on the grabbed plate (_prove_sign_pixels).
+func _prove_sign(cam: Camera3D, label: String, markers: GapMarkers) -> bool:
+	if markers.sign_count() == 0:
+		_invalid("%s: no gap sign" % label)
+		return false
+	var marker: Sprite3D = markers.signs()[0]
+	# The rendered view: the visible rect times the window's stretch (1.25 windowed).
+	var stretch := root.get_stretch_transform().get_scale().y
+	var rendered := root.get_visible_rect().size.y * stretch
+	var plate_px := (
+		marker.pixel_size * MarkerIcons.SIZE * rendered / (2.0 * tan(deg_to_rad(cam.fov) / 2.0))
+	)
+	var rect := _sign_rect(cam, marker)
+	var view := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
+	var shown := marker.is_visible_in_tree()
+	var ok := shown and view.encloses(rect) and absf(plate_px - MissMarkers.SIGN_PX) <= 1.0
+	print(
+		(
+			"SIGN %s shown=%s rect=%s plate_px=%.1f want=%.0f ok=%s"
+			% [label, shown, rect, plate_px, MissMarkers.SIGN_PX, ok]
+		)
+	)
+	if not ok:
+		_invalid("%s: the sign is hidden, out of frame or not 56 px" % label)
+	return ok
+
+
+## The sign's rectangle in visible-rect pixels.
+func _sign_rect(cam: Camera3D, marker: Sprite3D) -> Rect2:
+	var foot := cam.unproject_position(marker.global_position)
+	var side := (
+		marker.pixel_size
+		* MarkerIcons.SIZE
+		* root.get_visible_rect().size.y
+		/ (2.0 * tan(deg_to_rad(cam.fov) / 2.0))
+	)
+	return Rect2(foot.x - side * 0.5, foot.y - side, side, side)
+
+
+## On the grabbed plate, the share of the sign's rectangle drawn in its amber
+## fill (the sign draws over walls and roof, so a ray cannot prove it). At
+## least a quarter must be amber.
+func _prove_sign_pixels(cam: Camera3D, label: String, markers: GapMarkers, img: Image) -> bool:
+	var scale := img.get_width() / root.get_visible_rect().size.x
+	var rect := _sign_rect(cam, markers.signs()[0])
+	var area := Rect2i(Vector2i(rect.position * scale), Vector2i(rect.size * scale)).intersection(
+		Rect2i(Vector2i.ZERO, img.get_size())
+	)
+	var amber := 0
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var c := img.get_pixel(x, y)
+			if c.h > 0.06 and c.h < 0.16 and c.s > 0.45 and c.v > 0.45:
+				amber += 1
+	var total := maxi(1, area.get_area())
+	var ok := amber * 4 >= total and area.get_area() > 0
+	var sample := img.get_pixelv(area.position + Vector2i(area.size.x / 5, area.size.y / 4))
+	print("SIGNPIXELS %s amber=%d/%d fill_sample=%s ok=%s" % [label, amber, total, sample, ok])
+	if not ok:
+		_invalid("%s: the sign's pixels are not on the plate" % label)
+	return ok
+
+
+## The world bounds of every wall piece BuildView drew with its foot inside
+## `area` (cells, grown by one edge), from its kit meshes.
+func _drawn_box(ctx: Dictionary, area: Rect2i) -> AABB:
+	var grid: BuildGrid = ctx["grid"]
+	var view: BuildView = ctx["view"]
+	var box := AABB()
+	var first := true
+	for piece in view.piece_counts():
+		if not String(piece).begins_with("wall"):
+			continue
+		for t in view.piece_transforms(piece):
+			var cell := grid.world_to_cell(t.origin)
+			if not area.grow(1).has_point(cell):
+				continue
+			for part in InteriorKit.meshes(piece):
+				var bounds: AABB = t * (part[1] as Transform3D) * (part[0] as Mesh).get_aabb()
+				box = bounds if first else box.merge(bounds)
+				first = false
+	return box
+
+
+## The centres of a box's top and four side faces.
+func _face_centres(box: AABB) -> Array[Vector3]:
+	var c := box.get_center()
+	var h := box.size * 0.5
+	return [
+		c + Vector3(0, h.y, 0),
+		c + Vector3(h.x, 0, 0),
+		c - Vector3(h.x, 0, 0),
+		c + Vector3(0, 0, h.z),
+		c - Vector3(0, 0, h.z),
+	]
 
 
 ## Points on the roof's top, on every third indoor cell each way.
@@ -783,6 +919,8 @@ func _colliders(ctx: Dictionary) -> Node3D:
 	var roof: RoofView = ctx["roof"]
 	if roof.roof_node().visible:
 		bodies.add_child(_body_for(roof.roof_node(), roof.roof_node().global_transform))
+	var cube: MeshInstance3D = ctx["cube"]
+	bodies.add_child(_body_for(cube, cube.global_transform))
 	if _break_occlusion:
 		var slab := BoxShape3D.new()
 		slab.size = Vector3(400.0, 0.5, 400.0)

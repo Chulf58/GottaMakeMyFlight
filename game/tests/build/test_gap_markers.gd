@@ -48,9 +48,66 @@ func test_open_edges_get_a_strip_each_and_a_sign_per_run() -> void:
 func test_closing_the_gap_clears_the_markers() -> void:
 	_remove(Vector2i(5, 2), BuildGrid.Side.EAST)
 	assert_int(_markers.sign_count()).is_equal(1)
+	var marker: Sprite3D = _markers.signs()[0]
+	assert_bool(marker.visible).is_true()
 	assert_bool(_grid.apply(BuildEdit.place_wall(Vector2i(5, 2), BuildGrid.Side.EAST)).ok).is_true()
 	assert_int(_markers.strip_count()).is_equal(0)
 	assert_int(_markers.sign_count()).is_equal(0)
+	# The sign that was shown is hidden (kept as a spare), not left standing.
+	assert_bool(is_instance_valid(marker)).is_true()
+	assert_bool(marker.visible).is_false()
+
+
+## Hidden signs are kept for reuse only up to SPARE_SIGNS; the rest are freed.
+func test_spare_signs_are_bounded_when_many_gaps_close() -> void:
+	var cells: Array[Vector2i] = [
+		Vector2i(2, 2), Vector2i(4, 2), Vector2i(2, 4), Vector2i(4, 4), Vector2i(5, 3)
+	]
+	var sides: Array[int] = [
+		BuildGrid.Side.NORTH,
+		BuildGrid.Side.NORTH,
+		BuildGrid.Side.SOUTH,
+		BuildGrid.Side.SOUTH,
+		BuildGrid.Side.EAST,
+	]
+	for i in cells.size():
+		_remove(cells[i], sides[i])
+	var runs := _markers.sign_count()
+	assert_int(runs).is_greater(GapMarkers.SPARE_SIGNS)
+	var made := _markers.signs().duplicate()
+	for i in cells.size():
+		assert_bool(_grid.apply(BuildEdit.place_wall(cells[i], sides[i])).ok).is_true()
+	assert_int(_markers.sign_count()).is_equal(0)
+	assert_int(_markers.signs().size()).is_equal(GapMarkers.SPARE_SIGNS)
+	var kept := 0
+	for marker: Sprite3D in made:
+		if marker.is_inside_tree():
+			kept += 1
+			assert_bool(marker.visible).is_false()
+		else:
+			assert_bool(marker.is_queued_for_deletion()).is_true()
+	assert_int(kept).is_equal(GapMarkers.SPARE_SIGNS)
+
+
+## The sign is MissMarkers.SIGN_PX (56 px) on screen, worked out as the
+## MissMarkers test does: pixel size times the icon's pixels, over the view's
+## size at one metre, at the window's rendered height.
+func test_the_sign_is_56_px_on_screen() -> void:
+	_remove(Vector2i(5, 2), BuildGrid.Side.EAST)
+	_markers.update_sizes(true)
+	var marker: Sprite3D = _markers.signs()[0]
+	var window := get_tree().root
+	var camera := window.get_camera_3d()
+	var fov := camera.fov if camera != null else GapMarkers.FALLBACK_FOV
+	var rendered := float(window.size.y)
+	var on_screen := (
+		marker.pixel_size * MarkerIcons.SIZE * rendered / (2.0 * tan(deg_to_rad(fov) / 2.0))
+	)
+	assert_float(on_screen).is_equal_approx(MissMarkers.SIGN_PX, 0.01)
+	var caption := _markers.caption_of(marker)
+	assert_float(caption.pixel_size * MarkerIcons.SIZE).is_equal_approx(
+		marker.pixel_size * MarkerIcons.SIZE * MarkerIcons.SIZE / MissMarkers.SIGN_PX, 1e-6
+	)
 
 
 ## The wall-gap sign is its own icon, not the queue-full "!", with the caption
