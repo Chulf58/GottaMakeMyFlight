@@ -31,8 +31,9 @@ const GRIP_ON_PRINTS := 40
 
 ## The points of bag `i` of passenger `id` a hand holds it by, as drawn now
 ## (world): a backpack's grab loop (its top), a shoulder bag's strap bar, a
-## roller's grip bar and carry handle, a hard case's handle edge and, carried
-## in front, the top of its handle under the palm.
+## roller's grip bar and carry handle, a hard case's handle edge, the top of
+## its handle under the palm carried in front and the middle of its top end
+## (case_handle_points()).
 static func own_grips(props: CarryOnProps, id: int, i: int) -> Array[Vector3]:
 	var bag: Node3D = props.props_of(id)["bags"][i]
 	var kind: SecurityLooks.Kind = props.props_of(id)["kinds"][i]
@@ -47,19 +48,41 @@ static func own_grips(props: CarryOnProps, id: int, i: int) -> Array[Vector3]:
 			var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
 			return [bar, xf * CarryOnProps.ROLLER_HANDLE]
 	var handle := case_handle_points(bag)
-	return [xf * handle[0], xf * handle[1]]
+	return [xf * handle[0], xf * handle[1], xf * handle[2]]
 
 
-## A hard case's handle edge and the top of its handle, in the case's own frame
-## (scale 1), read from its drawn body mesh: the top face's edge on its handle
-## side and the middle of that face. Never from a CarryOnProps placement
+## A hard case's handle edge, the top of its handle and the middle of its top
+## end, in the case's own frame (scale 1), read from its drawn body mesh: the
+## handle face's edge on the top end, the middle of the handle face, and the
+## middle of the top end. Standing in a toilet stall the case is held by the
+## middle of its top end, and as it tips into the carry the palm goes over the
+## top end's edge to the handle (decision toilet-stall-bag-moves-are-hand-led-
+## as-built-a-hard-case-is). Never from a CarryOnProps or CarryLead placement
 ## function: a point derived from the placement moves with a wrong placement,
 ## and the grip then reads as on it.
 static func case_handle_points(bag: Node3D) -> Array[Vector3]:
 	var body := bag.find_child("CarryOnBag_Body", true, false) as MeshInstance3D
 	var box := (bag.global_transform.affine_inverse() * body.global_transform) * body.get_aabb()
 	var middle := box.get_center()
-	return [Vector3(middle.x, box.end.y, box.end.z), Vector3(middle.x, box.end.y, middle.z)]
+	return [
+		Vector3(middle.x, box.end.y, box.end.z),
+		Vector3(middle.x, box.end.y, middle.z),
+		Vector3(middle.x, middle.y, box.end.z),
+	]
+
+
+## How far `grip` (world) is from hard case `bag`'s grip (case_handle_points(),
+## world): the nearest point on the line from the middle of its top end over
+## its handle edge to the middle of its handle face. The palm slides along the
+## handle face turning between the side and the front carry (conductor ruling
+## 2026-10-30), and along the top end in a toilet stall.
+static func case_grip_gap(bag: Node3D, grip: Vector3) -> float:
+	var xf := bag.global_transform
+	var own := case_handle_points(bag)
+	var edge := xf * own[0]
+	var on_face := Geometry3D.get_closest_point_to_segment(grip, edge, xf * own[1])
+	var on_end := Geometry3D.get_closest_point_to_segment(grip, xf * own[2], edge)
+	return minf(on_face.distance_to(grip), on_end.distance_to(grip))
 
 
 ## How far the grip of the hand holding bag `i` of passenger `id` is from the
@@ -77,13 +100,9 @@ static func grip_on_gap(props: CarryOnProps, id: int, i: int, body: Node3D) -> A
 	elif kind == SecurityLooks.Kind.CASE:
 		limit += CarryOnProps.FRONT_PALM_M
 	var grip := props.grip_of(body, holder)
-	var own := own_grips(props, id, i)
 	if kind == SecurityLooks.Kind.CASE:
-		# Turning between the side and the front carry the palm slides along the
-		# case's top from its handle edge to its front palm point (CarryOnProps.
-		# _case_transform): anywhere on that segment is on its grip.
-		var on := Geometry3D.get_closest_point_to_segment(grip, own[0], own[1])
-		return [on.distance_to(grip), limit]
+		return [case_grip_gap(props.props_of(id)["bags"][i], grip), limit]
+	var own := own_grips(props, id, i)
 	var gap := INF
 	for at in own:
 		gap = minf(gap, at.distance_to(grip))

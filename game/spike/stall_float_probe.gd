@@ -203,6 +203,10 @@ func _run() -> void:
 			seed = int(arg.trim_prefix("--seed="))
 	_clock.seed_rng(seed)
 	print("PROBE sim_seed=", seed)
+	# The probe builds the reference terminal itself (ToiletTestLayout), on an
+	# empty grid: the starter shell main.tscn places on the same cells refused
+	# its first wall.
+	(_main.get_node("BuildMode") as BuildMode).starter_shell = false
 	root.add_child(_main)
 	_clock.set_process(false)
 	_clock.set_paused(false)
