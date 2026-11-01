@@ -142,15 +142,19 @@ func test_a_remove_rectangle_refunds_at_the_saved_price() -> void:
 	_mode.begin_area(_at(Vector2i(2, 2)))
 	_mode.move_area(_at(Vector2i(5, 5)))
 	var outcome := _mode.finish_area()
-	# The seat row comes off first; the floor under it stays for a second drag.
-	var floors := 16 - 3
-	var expected := balance + PriceTable.refund_of(250) + floors * PriceTable.refund_of(25)
+	# The seat row comes off alone; the floor under it stays for a second drag.
+	var expected := balance + PriceTable.refund_of(250)
 	print("removed %d balance %d expected %d" % [outcome.placed, _wallet().balance, expected])
-	assert_int(outcome.placed).is_equal(1 + floors)
+	assert_int(outcome.placed).is_equal(1)
 	assert_int(_wallet().balance).is_equal(expected)
-	assert_str(_mode.status_text()).is_equal(
-		"Removed %d, refund %d" % [1 + floors, expected - balance]
-	)
+	assert_str(_mode.status_text()).is_equal("Removed 1, refund %d" % (expected - balance))
+	_mode.begin_area(_at(Vector2i(2, 2)))
+	_mode.move_area(_at(Vector2i(5, 5)))
+	outcome = _mode.finish_area()
+	var floors_refund := 16 * PriceTable.refund_of(25)
+	assert_int(outcome.placed).is_equal(16)
+	assert_int(_wallet().balance).is_equal(expected + floors_refund)
+	assert_str(_mode.status_text()).is_equal("Removed 16, refund %d" % floors_refund)
 
 
 func test_an_entrance_on_a_plain_wall_pays_the_door_and_refunds_the_wall() -> void:

@@ -111,18 +111,19 @@ func test_remove_takes_the_furniture_then_the_room_then_the_floor() -> void:
 	assert_int(_mode.grid.floor_at(Vector2i(4, 3))).is_equal(BuildGrid.FLOOR_NONE)
 
 
-func test_a_remove_drag_over_a_room_takes_the_room_and_furniture_but_keeps_floor() -> void:
+func test_a_remove_drag_over_a_room_takes_the_furniture_then_a_second_the_room_and_floor() -> void:
 	_mark_cafe(Rect2i(3, 3, 5, 4))
 	_click(BuildMode.Tool.COUNTER, Vector2i(4, 3))
 	_mode.set_tool(BuildMode.Tool.REMOVE)
 	_drag(Vector2i(2, 2), Vector2i(8, 7))
-	assert_array(_mode.grid.room_ids()).is_empty()
 	assert_array(_mode.grid.object_ids()).is_empty()
+	assert_array(_mode.grid.room_ids()).is_not_empty()
 	assert_int(_mode.grid.floor_at(Vector2i(5, 5))).is_equal(BuildGrid.FLOOR_TILE)
-	# Outside the room the same drag cleared the floor, as it always did.
-	assert_int(_mode.grid.floor_at(Vector2i(2, 2))).is_equal(BuildGrid.FLOOR_NONE)
+	assert_int(_mode.grid.floor_at(Vector2i(2, 2))).is_equal(BuildGrid.FLOOR_TILE)
 	_drag(Vector2i(2, 2), Vector2i(8, 7))
+	assert_array(_mode.grid.room_ids()).is_empty()
 	assert_int(_mode.grid.floor_at(Vector2i(5, 5))).is_equal(BuildGrid.FLOOR_NONE)
+	assert_int(_mode.grid.floor_at(Vector2i(2, 2))).is_equal(BuildGrid.FLOOR_NONE)
 
 
 func test_a_remove_drag_over_only_furniture_keeps_the_room() -> void:
