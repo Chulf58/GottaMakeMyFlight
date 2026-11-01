@@ -6,7 +6,10 @@
     },
     "godot": {
       "command": "/mnt/c/Users/chulf/Gotta-make-my-flight/tools/godot-mcp-wsl.sh",
-      "args": []
+      "args": [],
+      "env": {
+        "GODOT_MCP_DISABLE_ELICITATION": "1"
+      }
     }
   }
 }
