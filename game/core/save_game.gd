@@ -50,7 +50,9 @@ signal loaded(ok: bool)
 ## 4: the room templates (part "templates"); version 3 saves are refused.
 ## 5: the messes, bin fill and use counters (part "messes", MessSim); version 4
 ## saves are refused (no migration before a release).
-const SAVE_VERSION := 5
+## 6: cleaners (staff save version 4: each member's job and work left, and
+## mess claims checked against them); version 5 saves are refused.
+const SAVE_VERSION := 6
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

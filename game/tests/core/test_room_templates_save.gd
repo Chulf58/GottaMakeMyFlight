@@ -55,7 +55,7 @@ func test_a_new_game_starts_with_no_templates() -> void:
 func test_a_save_holds_the_templates_and_a_load_puts_them_back() -> void:
 	_library.add(_cafe())
 	var data := _taken()
-	assert_int(int(data["save_version"])).is_equal(5)
+	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
 	assert_int((data["templates"]["templates"] as Array).size()).is_equal(1)
 	var empty := {"save_version": RoomTemplates.SAVE_VERSION, "templates": []}
 	assert_bool(_library.from_snapshot(empty)).is_true()

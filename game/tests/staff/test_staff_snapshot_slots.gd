@@ -1,9 +1,8 @@
 class_name TestStaffSnapshotSlots
 extends GdUnitTestSuite
-## Staff save version 2 saves each member's post (slot). A version 1 save
-## (from before helpers and before lanes could be loaded) migrates with every
-## member on a primary post; a version 2 save missing a slot, or with a slot
-## that breaks the post rules, is refused naming the problem.
+## The staff save holds each member's post (slot). A save missing a slot, or
+## with a slot that breaks the post rules, is refused naming the problem, and
+## so is a save of an older version (no migration before a release).
 
 const PRIMARY := StaffMember.Slot.PRIMARY
 const HELPER := StaffMember.Slot.HELPER
@@ -81,7 +80,7 @@ func test_a_helper_round_trips_through_a_save() -> void:
 	assert_dict(JSON.parse_string(JSON.stringify(b.staff.to_snapshot()))).is_equal(data)
 
 
-func test_a_version_1_save_migrates_every_member_to_a_primary_post() -> void:
+func test_a_version_1_save_with_no_slots_is_refused_not_migrated() -> void:
 	var w := _world()
 	StaffTestKit.seat(w.staff, _arch(w), PRIMARY)
 	StaffTestKit.seat(w.staff, _scanner(w), PRIMARY)
@@ -89,16 +88,12 @@ func test_a_version_1_save_migrates_every_member_to_a_primary_post() -> void:
 	v1["save_version"] = 1
 	for record: Dictionary in v1["members"]:
 		record.erase("slot")
-	var kept := v1.duplicate(true)
 	var b := _world()
-	assert_bool(b.staff.from_snapshot(v1)).is_true()
-	# The save itself is left as it was given.
-	assert_dict(v1).is_equal(kept)
-	for id in b.staff.member_ids():
-		assert_int(b.staff.get_member(id).slot).is_equal(PRIMARY)
-	assert_bool(b.staff.is_open(_arch(b))).is_true()
-	assert_bool(b.staff.is_open(_scanner(b))).is_true()
-	assert_int(int(b.staff.to_snapshot()["save_version"])).is_equal(StaffSim.SAVE_VERSION)
+	var problem := str(StaffSnapshot.load(v1, b.sim).get("error", ""))
+	print("version 1: '%s'" % problem)
+	assert_str(problem).is_equal("save_version 1 is not %d" % StaffSim.SAVE_VERSION)
+	assert_bool(b.staff.from_snapshot(v1)).is_false()
+	assert_array(b.staff.member_ids()).is_empty()
 
 
 func test_bad_versions_and_slots_are_refused() -> void:
@@ -106,18 +101,17 @@ func test_bad_versions_and_slots_are_refused() -> void:
 	var helper_at := 1
 	assert_int(int(good["members"][helper_at]["slot"])).is_equal(HELPER)
 	var cases := {
-		"no slot in version 2":
+		"no slot":
 		[
 			_changed(good, func(d: Dictionary) -> void: d["members"][0].erase("slot")),
 			"has no 'slot'"
 		],
-		"a slot in version 1":
-		[
-			_changed(good, func(d: Dictionary) -> void: d["save_version"] = 1),
-			"version 1 member has a 'slot'"
-		],
+		"version 1":
+		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 1), "1 is not 4"],
+		"version 3":
+		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 3), "3 is not 4"],
 		"version 5":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 5), "is not 1 to 4"],
+		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 5), "5 is not 4"],
 		"unknown slot":
 		[
 			_changed(good, func(d: Dictionary) -> void: d["members"][helper_at]["slot"] = 7),

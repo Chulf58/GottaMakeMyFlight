@@ -44,10 +44,10 @@ signal staff_changed
 signal hired(id: int, role: StaffMember.Role)
 signal member_state_changed(id: int, state: StaffMember.State)
 
-## 2: members save their post (slot); StaffSnapshot migrates version 1.
+## 2: members save their post (slot).
 ## 3: shop servers (Role.SHOP) at counters; a version 2 save has none.
-## 4: cleaners (Role.CLEANER) and each member's job and work left; a version
-## 1 to 3 save has no cleaner.
+## 4: cleaners (Role.CLEANER) and each member's job and work left. Only this
+## version loads; older saves are refused (no migrations before a release).
 const SAVE_VERSION := 4
 ## Who fire() lets go first: [state, slot] pairs, a helper before a primary
 ## in the same state, so firing keeps stations open where it can.
@@ -416,7 +416,8 @@ func _finish_job(m: StaffMember) -> void:
 ## spot, which moved, walk to it (_off_spot()); leaving members whose service
 ## has ended walk out. Every primary post still claimed afterwards is one
 ## staff can work: the first step of the pass (StaffPosts). A cleaner whose
-## job went (its bin was removed) goes idle where it stands.
+## job went (its bin was removed) goes idle where it stands; one at work off
+## its job's spot, which an edit moved, walks to it and starts over.
 func _reconcile() -> void:
 	for i in range(_members.size() - 1, -1, -1):
 		var m := _members[i]
@@ -435,6 +436,16 @@ func _reconcile() -> void:
 			m.at = StaffMember.NO_CELL
 			m.clear_path()
 		var cleaner := m.role == StaffMember.Role.CLEANER
+		if (
+			cleaner
+			and m.state == StaffMember.State.ON_DUTY
+			and m.at != CleanerJobs.job_spot(self, m)
+		):
+			# An edit moved the job's spot (a bin's first free side): walk to
+			# it and start the work over there.
+			m.work_left = 0
+			_set_state(m, StaffMember.State.TO_STATION)
+			m.needs_replan = true
 		if (
 			m.state == StaffMember.State.ON_DUTY
 			and not cleaner

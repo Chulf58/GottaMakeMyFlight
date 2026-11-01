@@ -1,11 +1,10 @@
 class_name TestShopStaffSnapshot
 extends GdUnitTestSuite
-## Shop servers in the staff save (StaffSnapshot, version 3). A server on duty
-## or walking to a counter saves and loads to play on exactly as continuous
-## play. A version 2 save comes from before shop staff: it has none and loads
-## as it is, so its cafes and kiosks stay closed until the player hires; a
-## shop member in one is refused. A server must work a counter, and on duty it
-## stands on that counter's staff spot.
+## Shop servers in the staff save (StaffSnapshot). A server on duty or walking
+## to a counter saves and loads to play on exactly as continuous play. A save
+## of an older staff version is refused, never migrated (no save migrations
+## before a release). A server must work a counter, and on duty it stands on
+## that counter's staff spot.
 
 const SHOP := StaffMember.Role.SHOP
 
@@ -82,16 +81,17 @@ func test_servers_walking_and_on_duty_load_and_play_on_alike() -> void:
 	assert_bool(_b.staff.is_open(_ids["land_counter"])).is_true()
 
 
-func test_a_version_2_save_loads_with_no_servers_and_its_counters_stay_closed() -> void:
+func test_a_save_of_an_older_staff_version_is_refused_and_changes_nothing() -> void:
 	var data := _saved()
 	assert_int((data["members"] as Array).size()).is_greater(0)
-	data["save_version"] = 2
-	assert_bool(_w.staff.from_snapshot(data)).is_true()
-	assert_int(_w.staff.count(SHOP)).is_equal(0)
-	assert_array(_w.staff.stations_of(SHOP)).has_size(2)
-	for counter in _w.staff.stations_of(SHOP):
-		assert_bool(_w.staff.is_open(counter)).is_false()
-	assert_array(ShopCounters.closed(_w.sim)).contains_exactly(_w.staff.stations_of(SHOP))
+	var before := StaffTestKit.signature(_w.staff)
+	for version in [1, 2, 3]:
+		data["save_version"] = version
+		var problem := _load_error(data)
+		print("version %d: '%s'" % [version, problem])
+		assert_str(problem).is_equal("save_version %d is not 4" % version)
+		assert_bool(_w.staff.from_snapshot(data)).is_false()
+	assert_str(StaffTestKit.signature(_w.staff)).is_equal(before)
 
 
 func test_a_version_2_save_with_a_shop_member_is_refused() -> void:

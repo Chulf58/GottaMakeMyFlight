@@ -9,12 +9,15 @@ extends RefCounted
 ## job, walks the cleaner there, puts it on duty for work_ticks() and then
 ## cleans the mess or empties the bin.
 ##
-## The search is bounded: of the unclaimed jobs a cleaner has a way to (the
-## same staff reach region), the SEARCH_CANDIDATES nearest in a straight line
-## (Chebyshev, from where it stands or, in the pool, from the nearest entrance
-## door) get a path, and the shortest path wins; ties go to a mess before a bin,
-## then to the lower id. A job outside those few can lose to a nearer one by a
-## straight line that is longer by path. Nothing is random.
+## The search is bounded: the unclaimed jobs a cleaner may have a way to (the
+## same staff reach region; every job when the grid has no entrance and so no
+## regions) are tried nearest first in a straight line (Chebyshev, from where
+## it stands or, in the pool, from the nearest entrance door) until
+## SEARCH_CANDIDATES of them have a path, and the shortest of those paths
+## wins; ties go to a mess before a bin, then to the lower id. A job it has no
+## way to never uses up the bound, so one it can reach is always found. A job
+## outside the bound can lose to a nearer one by a straight line that is
+## longer by path. Nothing is random.
 
 ## Ticks of cleaning, by MessSim.Kind (LITTER, SPILL, TOILET). Tuning values: a
 ## check-in takes PassengerSim.CHECKIN_TICKS (60).
@@ -23,7 +26,7 @@ const CLEAN_TICKS: Array[int] = [30, 45, 60]
 const GROWN_EXTRA_TICKS := 30
 ## Ticks to empty a full bin.
 const EMPTY_TICKS := 40
-## How many of the nearest jobs by a straight line get a path in one search.
+## How many jobs with a path one search compares.
 const SEARCH_CANDIDATES := 6
 
 
@@ -37,7 +40,12 @@ static func work_ticks(staff: StaffSim, m: StaffMember) -> int:
 	var mess := staff.sim.messes.get_mess(m.job)
 	if mess.is_empty():
 		return 0
-	return CLEAN_TICKS[int(mess["kind"])] + (GROWN_EXTRA_TICKS if mess["grown"] else 0)
+	return clean_ticks(int(mess["kind"]), mess["grown"])
+
+
+## Ticks of cleaning a mess of `kind` (MessSim.Kind) takes, grown or not.
+static func clean_ticks(kind: int, grown: bool) -> int:
+	return CLEAN_TICKS[kind] + (GROWN_EXTRA_TICKS if grown else 0)
 
 
 ## Whether `m`'s job is still there: its mess, or a bin on the grid.
@@ -106,8 +114,8 @@ static func nearest(staff: StaffSim, m: StaffMember) -> Dictionary:
 	found.sort_custom(_before)
 	var best := {}
 	var best_mm := 0
-	for i in mini(found.size(), SEARCH_CANDIDATES):
-		var entry: Array = found[i]
+	var reached := 0
+	for entry: Array in found:
 		var way := StaffPosts.path_in(staff, m, entry[3])
 		if way.is_empty():
 			continue
@@ -115,6 +123,9 @@ static func nearest(staff: StaffSim, m: StaffMember) -> Dictionary:
 		if best.is_empty() or mm < best_mm:
 			best = {"job": entry[2], "bin": entry[1], "path": way}
 			best_mm = mm
+		reached += 1
+		if reached == SEARCH_CANDIDATES:
+			break
 	return best
 
 

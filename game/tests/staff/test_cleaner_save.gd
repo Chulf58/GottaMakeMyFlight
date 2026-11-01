@@ -164,6 +164,9 @@ func test_a_save_whose_jobs_and_claims_disagree_is_refused() -> void:
 		[func(m: Dictionary, _s: Dictionary) -> void: _mess(m, walking.job)["claimed_by"] = 0],
 		"a cleaner at work away from its job":
 		[func(_m: Dictionary, s: Dictionary) -> void: _move(_member(s, working.id), 6)],
+		"a cleaner at work one cell off its job's spot":
+		[func(_m: Dictionary, s: Dictionary) -> void: _move(_member(s, working.id), 1)],
+		"more work left than the job takes": [_overworked.bind(working.id)],
 		"walking with work left":
 		[func(_m: Dictionary, s: Dictionary) -> void: _member(s, walking.id)["work_left"] = 5],
 		"a bin job on a bin that is not full":
@@ -217,6 +220,13 @@ func _move(record: Dictionary, cells: int) -> void:
 	record["path"] = [cell]
 	record["path_index"] = 0
 	record["seg_mm"] = 0
+
+
+## Gives the cleaner at work more work left than its job can take: the most
+## any job takes (grown toilet mess time, above every litter, spill or bin
+## time) plus one.
+func _overworked(_messes: Dictionary, staff: Dictionary, worker: int) -> void:
+	_member(staff, worker)["work_left"] = CleanerJobs.clean_ticks(MessSim.Kind.TOILET, true) + 1
 
 
 ## The walker gives up its mess and takes the bin the other cleaner holds.

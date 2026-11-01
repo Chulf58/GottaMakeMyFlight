@@ -19,9 +19,11 @@ extends SceneTree
 ## from the save each run left, and the claims seen (cleaner -> jobs). The pass
 ## values are positives: messes that grew from 0, claims seen, original messes
 ## the cleaners cleared, and every original mess still there in the control.
-## With no mess, no claim, a shared job, a cleaner run that cleared nothing,
-## a control that lost a mess or a refused save it prints PROBE_INVALID and
-## exits 1.
+## It also prints the most cleaners holding distinct jobs on one tick. With
+## fewer than MIN_MESSES messes at the run limit, a cleaner that never claimed
+## a job, no tick where every cleaner held a distinct job, a shared job, a
+## cleaner run that cleared nothing, a control that lost a mess or a refused
+## save it prints PROBE_INVALID and exits 1.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const MAIN := "res://main/main.tscn"
@@ -146,8 +148,13 @@ func _grow_messes() -> void:
 			]
 		)
 	)
-	if _sim.messes.mess_count() == 0:
-		_invalid("no mess appeared by tick %d" % _clock.tick)
+	if _sim.messes.mess_count() < MIN_MESSES:
+		_invalid(
+			(
+				"only %d messes appeared by tick %d, fewer than %d"
+				% [_sim.messes.mess_count(), _clock.tick, MIN_MESSES]
+			)
+		)
 		_phase = 3
 		return
 	var data := _save.snapshot()
@@ -200,6 +207,10 @@ func _cleaners() -> void:
 	var claims := {}
 	var shared := 0
 	var reloaded := false
+	# The most cleaners holding distinct jobs on one tick, and that tick's jobs.
+	var together := 0
+	var together_at := -1
+	var together_jobs := {}
 	while _clock.tick < start + RUN_TICKS:
 		_clock.advance(SimClock.STEP)
 		var jobs := {}
@@ -215,6 +226,10 @@ func _cleaners() -> void:
 			claims[id][key] = true
 			if not reloaded and m.state == StaffMember.State.ON_DUTY:
 				reloaded = _reload(m)
+		if jobs.size() > together:
+			together = jobs.size()
+			together_at = _clock.tick
+			together_jobs = jobs.duplicate()
 	var seen := {}
 	for id: int in claims:
 		seen[id] = (claims[id] as Dictionary).keys()
@@ -238,8 +253,11 @@ func _cleaners() -> void:
 			]
 		)
 	)
-	if claims.is_empty():
-		_invalid("no cleaner claimed a job")
+	print("PROBE together most=%d tick=%d jobs=%s" % [together, together_at, together_jobs.keys()])
+	if claims.size() < CLEANERS:
+		_invalid("only %d of %d cleaners claimed a job" % [claims.size(), CLEANERS])
+	if together < CLEANERS:
+		_invalid("the cleaners never held %d distinct jobs at once" % CLEANERS)
 	if shared != 0:
 		_invalid("two cleaners held one job")
 	if left >= _originals.size():

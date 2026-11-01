@@ -151,3 +151,86 @@ func test_a_cleaner_with_no_way_to_its_mess_takes_another_and_leaves_it_unclaime
 	assert_int(int(near["claimed_by"])).is_equal(0)
 	assert_int(m.state).is_equal(StaffMember.State.IDLE)
 	assert_bool(m.search_failed).is_true()
+
+
+## With no entrance the grid has no staff reach regions, so the search cannot
+## filter by them: messes it has no way to must not use up the bound. Seven
+## walled-in messes are nearer in a straight line than the one it can reach.
+func test_with_no_entrance_walled_in_messes_never_hide_a_reachable_one() -> void:
+	var door: int = _world.sim.layout.entrances[0]
+	var record := _world.grid.get_object(door)
+	_edit(
+		BuildEdit.remove_object(door),
+		BuildEdit.place_object(record["def"], record["anchor"], record["facing"])
+	)
+	var box := Rect2i(18, 9, 3, 3)
+	for x in range(box.position.x, box.end.x):
+		_wall(Vector2i(x, box.position.y), BuildGrid.Side.NORTH)
+		_wall(Vector2i(x, box.end.y - 1), BuildGrid.Side.SOUTH)
+	for y in range(box.position.y, box.end.y):
+		_wall(Vector2i(box.position.x, y), BuildGrid.Side.WEST)
+		_wall(Vector2i(box.end.x - 1, y), BuildGrid.Side.EAST)
+	var walled := 0
+	for y in range(box.position.y, box.end.y):
+		for x in range(box.position.x, box.end.x):
+			if walled < CleanerJobs.SEARCH_CANDIDATES + 1:
+				walled += int(_messes().add(MessSim.Kind.LITTER, Vector2i(x, y)) != 0)
+	var open := _messes().add(MessSim.Kind.LITTER, Vector2i(5, 15))
+	var m := CleanerTestKit.cleaner_at(_world, START)
+	_world.step()
+	print(
+		(
+			"entrances %d, reach %d cells; %d walled messes, job %d (open %d)"
+			% [
+				_world.sim.layout.entrances.size(),
+				_world.grid.staff_reach().size(),
+				walled,
+				m.job,
+				open
+			]
+		)
+	)
+	assert_int(_world.sim.layout.entrances.size()).is_equal(0)
+	assert_int(walled).is_greater(CleanerJobs.SEARCH_CANDIDATES)
+	assert_int(m.job).is_equal(open)
+
+
+## A bin's spot is the first free cell around it. When an edit frees an
+## earlier side while a cleaner empties it from a later one, the cleaner walks
+## to the new spot and starts over, so a save taken then still loads.
+func test_a_bin_spot_an_edit_moves_sends_its_cleaner_to_the_new_spot() -> void:
+	var bin_at := Vector2i(20, 5)
+	var bin := PassengerTestWorld.place(_world.grid, MessSim.BIN_ID, bin_at, 0)
+	_undo.append(BuildEdit.remove_object(bin))
+	var blocker := PassengerTestWorld.place(_world.grid, MessSim.BIN_ID, bin_at + Vector2i(0, 1), 0)
+	var data := _messes().to_snapshot()
+	data["bins"][str(bin)] = MessSim.BIN_CAPACITY
+	assert_bool(_messes().from_snapshot(data)).is_true()
+	var m := CleanerTestKit.cleaner_at(_world, Vector2i(24, 5))
+	var working := func() -> bool: return m.state == StaffMember.State.ON_DUTY
+	assert_bool(CleanerTestKit.step_until(_world, working)).is_true()
+	var first_spot := m.at
+	assert_bool(_world.grid.apply(BuildEdit.remove_object(blocker)).ok).is_true()
+	var after_edit := [m.state, m.work_left, CleanerJobs.job_spot(_world.staff, m)]
+	var problem := str(StaffSnapshot.load(_world.staff.to_snapshot(), _world.sim).get("error", ""))
+	var emptied := func() -> bool: return _messes().fill_of(bin) == 0
+	assert_bool(CleanerTestKit.step_until(_world, emptied)).is_true()
+	print(
+		(
+			(
+				"worked from %s; after the edit state %d work %d spot %s; load check '%s';"
+				+ " emptied from %s"
+			)
+			% [first_spot, after_edit[0], after_edit[1], after_edit[2], problem, m.at]
+		)
+	)
+	assert_that(first_spot).is_equal(bin_at + Vector2i(1, 0))
+	assert_int(after_edit[0]).is_equal(StaffMember.State.TO_STATION)
+	assert_int(after_edit[1]).is_equal(0)
+	assert_that(after_edit[2]).is_equal(bin_at + Vector2i(0, 1))
+	assert_str(problem).is_empty()
+	assert_that(m.at).is_equal(bin_at + Vector2i(0, 1))
+
+
+func _wall(cell: Vector2i, side: int) -> void:
+	_edit(BuildEdit.place_wall(cell, side), BuildEdit.remove_wall(cell, side))
