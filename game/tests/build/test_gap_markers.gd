@@ -125,10 +125,25 @@ func test_the_sign_is_the_wall_gap_icon_with_its_caption_under_it() -> void:
 	assert_int(caption.vertical_alignment).is_equal(VERTICAL_ALIGNMENT_TOP)
 	assert_float(caption.offset.y).is_less(0.0)
 	# On the left half of the wall line the gap icon is white and the
-	# queue-full icon is its red fill.
+	# queue-full icon is its red fill. The queue-full icon is read as painted
+	# (queue_full_image): under the headless renderer the texture's own image
+	# can have been repainted by MissMarkers' Closed sign in an earlier suite.
 	var at := Vector2i(MarkerIcons.SIZE / 2 - 26, MarkerIcons.SIZE / 2 - 4)
 	var gap_pixel := GapMarkers.wall_gap_icon().get_image().get_pixelv(at)
-	var queue_pixel := MarkerIcons.queue_full().get_image().get_pixelv(at)
+	var queue_pixel := MarkerIcons.queue_full_image().get_pixelv(at)
 	assert_float(gap_pixel.b).is_greater(0.9)
 	assert_float(queue_pixel.b).is_less(0.4)
 	assert_bool(gap_pixel.is_equal_approx(queue_pixel)).is_false()
+
+
+## MarkerIcons.queue_full_image() is a fresh copy each time: repainting one
+## (as MissMarkers repaints the image it reads for its Closed sign) leaves the
+## next one red.
+func test_the_queue_full_image_is_a_fresh_copy() -> void:
+	var at := Vector2i(MarkerIcons.SIZE / 2 - 26, MarkerIcons.SIZE / 2 - 4)
+	var first := MarkerIcons.queue_full_image()
+	assert_float(first.get_pixelv(at).b).is_less(0.4)
+	first.set_pixelv(at, Color.WHITE)
+	var second := MarkerIcons.queue_full_image()
+	assert_float(second.get_pixelv(at).b).is_less(0.4)
+	assert_object(second).is_not_same(first)
