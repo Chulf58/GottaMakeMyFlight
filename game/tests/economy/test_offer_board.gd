@@ -25,7 +25,6 @@ static func record(id: String, day: int, minute: int, status := OfferBoard.OPEN)
 		"airline": "Gotta Air",
 		"destination": "Oslo",
 		"departure_minute": minute,
-		"gate": "C",
 		"plane_size": "small",
 		"booked_passengers": 20,
 		"fee_per_passenger": 25,
@@ -60,7 +59,8 @@ func test_a_day_draws_the_daily_count_of_valid_starter_offers() -> void:
 			assert_bool(OfferBoard.AIRLINES.has(offer["airline"])).is_true()
 			assert_bool(OfferBoard.DESTINATIONS.has(offer["destination"])).is_true()
 			assert_bool(OfferBoard.STARTER_SIZES.has(offer["plane_size"])).is_true()
-			assert_bool(FlightSim.GATES.has(offer["gate"])).is_true()
+			# FlightSim gives the gate on accept; an offer names none.
+			assert_bool(offer.has("gate")).is_false()
 			assert_int(offer["departure_minute"]).is_between(
 				OfferBoard.DEPARTURE_FIRST_MINUTE, OfferBoard.DEPARTURE_LAST_MINUTE
 			)
@@ -195,6 +195,8 @@ func test_a_bad_save_is_refused_whole_and_leaves_the_board_alone() -> void:
 	var before := _board.to_snapshot()
 	var cases: Array = [
 		with_first("colour", "red"),
+		# Offers no longer carry a gate.
+		with_first("gate", "C"),
 		with_first("status", "maybe"),
 		with_first("plane_size", "jumbo"),
 		with_first("day", -1),
@@ -216,7 +218,6 @@ func test_terms_no_draw_could_produce_are_refused() -> void:
 	var cases: Array = [
 		["airline", "Mystery Air"],
 		["destination", "Atlantis"],
-		["gate", "Z"],
 		["plane_size", "large"],
 		["booked_passengers", OfferBoard.STARTER_SIZES["small"][0] - 1],
 		["booked_passengers", OfferBoard.STARTER_SIZES["small"][1] + 1],

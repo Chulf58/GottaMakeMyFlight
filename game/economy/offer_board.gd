@@ -32,7 +32,6 @@ const OFFER_KEYS := [
 	"airline",
 	"destination",
 	"departure_minute",
-	"gate",
 	"plane_size",
 	"booked_passengers",
 	"fee_per_passenger",
@@ -192,7 +191,6 @@ func _draw(day: int, number: int, rng: RandomNumberGenerator, tier: int) -> Dict
 	var fees: Array = TIER_FEES[own]
 	var destination: String = DESTINATIONS[rng.randi_range(0, DESTINATIONS.size() - 1)]
 	var minute := DEPARTURE_FIRST_MINUTE + rng.randi_range(0, DEPARTURE_SLOTS) * DEPARTURE_STEP
-	var gate: String = FlightSim.GATES[rng.randi_range(0, FlightSim.GATES.size() - 1)]
 	var size: String = sizes.keys()[rng.randi_range(0, sizes.size() - 1)]
 	var booked_range: Array = sizes[size]
 	return {
@@ -201,7 +199,6 @@ func _draw(day: int, number: int, rng: RandomNumberGenerator, tier: int) -> Dict
 		"airline": airline,
 		"destination": destination,
 		"departure_minute": minute,
-		"gate": gate,
 		"plane_size": size,
 		"booked_passengers": rng.randi_range(booked_range[0], booked_range[1]),
 		"fee_per_passenger": rng.randi_range(fees[0], fees[1]),
@@ -324,8 +321,8 @@ func _undrawable_problem(entry: Dictionary) -> String:
 	var tier := tier_of(entry["airline"])
 	if tier < 0 or not DESTINATIONS.has(entry["destination"]):
 		return "offer %s has an airline or destination the board never draws" % entry["id"]
-	if not FlightSim.GATES.has(entry["gate"]) or not TIER_SIZES[tier].has(entry["plane_size"]):
-		return "offer %s has a gate or plane size the board never draws" % entry["id"]
+	if not TIER_SIZES[tier].has(entry["plane_size"]):
+		return "offer %s has a plane size the board never draws" % entry["id"]
 	return _range_problem(entry)
 
 

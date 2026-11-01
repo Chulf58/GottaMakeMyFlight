@@ -109,19 +109,29 @@ func test_a_building_between_exit_and_door_rejects_the_candidate_on_passenger_re
 	assert_str(result["status"]).is_equal(StandPlacement.UNAVAILABLE)
 
 
+## An exit on the grid's north row would park the plane with its tail 5 cm
+## into the shared lane zone, so it gets no stand (StandPlacement.clears_lane,
+## decision gates-technical-design-gate-desks-link-to-north-exits-one-st). The
+## next row is the deepest legal stand; its pushback ends 1 m short of the
+## lane's centreline, and its swing is on the lane.
 func test_the_deepest_legal_stand_pushes_back_onto_the_taxi_lane() -> void:
 	_grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	# The reference terminal with its exit on the grid's north row.
 	assert_bool(ReferenceTerminal.build(_grid, Vector2i(0, -2))).is_true()
-	var exit := _exit_at(Vector2i(20, 0))
+	assert_int(_exit_at(Vector2i(20, 0))).is_greater(0)
+	assert_str(_place({})["status"]).is_equal(StandPlacement.UNAVAILABLE)
+	# The same terminal one row south.
+	_grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	assert_bool(ReferenceTerminal.build(_grid, Vector2i(0, -1))).is_true()
+	var exit := _exit_at(Vector2i(20, 1))
 	var result := _place({})
 	var stand: Dictionary = result["stand"]
 	var back := StandPlacement.pushback_end(stand)
 	print("deepest: stand %s pushback end %s" % [StandPlacement.stand_point(stand), back])
 	assert_str(result["status"]).is_equal(StandPlacement.OK)
 	assert_int(stand["exit"]).is_equal(exit)
-	assert_float(stand["wall_z"]).is_equal_approx(-210.0, 0.001)
-	assert_float(back.z).is_equal_approx(StandPlacement.TAXI_LANE_Z, 0.001)
+	assert_float(stand["wall_z"]).is_equal_approx(-209.0, 0.001)
+	assert_float(back.z).is_equal_approx(StandPlacement.TAXI_LANE_Z + 1.0, 0.001)
 	assert_float(result["walk_m"]).is_between(6.9, 7.3)
 
 

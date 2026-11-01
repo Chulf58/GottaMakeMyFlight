@@ -123,7 +123,6 @@ func _setup() -> void:
 		"airline": "Gotta Air",
 		"destination": "Oslo",
 		"departure_minute": MINUTE,
-		"gate": "C",
 		"plane_size": "medium",
 		"booked_passengers": BOOKED,
 		"fee_per_passenger": FEE,

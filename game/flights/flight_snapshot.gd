@@ -14,6 +14,15 @@ extends RefCounted
 ## (FlightSim.end_contract). An ended contract's next_day is that day for good,
 ## and it no longer clashes with other contracts at its gate. A version 2 or 3
 ## save has none ended.
+##
+## Gates (decision gates-technical-design-gate-desks-link-to-north-exits-one-
+## st, point 5): every contract and flight gate must be one of the `gates` the
+## load is given (FlightSim.gate_ids()). An occurrence's gate may differ from
+## its contract's, since FlightSim.reassign_gate moves only the days not yet
+## issued. No two live flights may meet at a gate or on the runway or lane
+## (FlightTimetable.clash_on), except two one-offs, which add_flight never
+## compares; no running contract may meet another contract's live occurrence.
+## The keys are those of version 4, so the version stays 4.
 
 const KEYS := [
 	"save_version", "tick", "opened_tick", "contracts", "start_day", "next_day", "ended", "flights"
@@ -59,15 +68,16 @@ static func save(
 
 
 ## {"tick", "opened_tick", "contracts", "start_day", "next_day", "ended",
-## "flights"} ready to install, or {"error"}.
-static func load(data: Dictionary) -> Dictionary:
+## "flights"} ready to install, or {"error"}. `gates` are the gates with a
+## stand.
+static func load(data: Dictionary, gates: Array[String]) -> Dictionary:
 	var problem := _top_problem(data)
 	if problem != "":
 		return {"error": problem}
 	var tick := int(data["tick"])
 	var opened := int(data.get("opened_tick", 0))
 	var contracts: Array[Dictionary] = []
-	problem = _read_contracts(data["contracts"], tick, contracts)
+	problem = _read_contracts(data["contracts"], tick, gates, contracts)
 	var start_day := {}
 	var ended := {}
 	if problem == "":
@@ -84,7 +94,9 @@ static func load(data: Dictionary) -> Dictionary:
 	for contract in contracts:
 		next_day[contract["id"]] = int(data["next_day"][contract["id"]])
 	var flights: Array[Dictionary] = []
-	problem = _read_flights(data["flights"], contracts, start_day, next_day, ended, tick, flights)
+	problem = _read_flights(
+		data["flights"], contracts, start_day, next_day, ended, tick, gates, flights
+	)
 	if problem != "":
 		return {"error": problem}
 	return {
@@ -130,12 +142,14 @@ static func _top_problem(data: Dictionary) -> String:
 
 
 ## first_day must be one that accepting between tick 0 and `tick` gives.
-static func _read_contracts(entries: Array, tick: int, out: Array[Dictionary]) -> String:
+static func _read_contracts(
+	entries: Array, tick: int, gates: Array[String], out: Array[Dictionary]
+) -> String:
 	for entry in entries:
 		var problem := FlightContract.problem(entry, FlightContract.KEYS)
 		if problem != "":
 			return problem
-		if not FlightSim.GATES.has(entry["gate"]):
+		if not gates.has(entry["gate"]):
 			return "contract gate '%s' has no stand" % entry["gate"]
 		var contract := FlightContract.make(entry)
 		var earliest := FlightTimetable.first_day(contract, 0)
@@ -149,8 +163,8 @@ static func _read_contracts(entries: Array, tick: int, out: Array[Dictionary]) -
 	return ""
 
 
-## Contracts that still run must not hold one gate at the same time; an ended
-## contract's gate time is free.
+## Contracts that still run must not hold one gate, the runway or the lane at
+## the same time; an ended contract's time is free.
 static func _clash_problem(contracts: Array[Dictionary], ended: Dictionary) -> String:
 	for i in contracts.size():
 		for j in range(i):
@@ -258,12 +272,13 @@ static func _read_flights(
 	next_day: Dictionary,
 	ended: Dictionary,
 	tick: int,
+	gates: Array[String],
 	out: Array[Dictionary]
 ) -> String:
 	var seen := {}
 	var live := {}
 	for entry in entries:
-		var problem := _flight_problem(entry, seen)
+		var problem := _flight_problem(entry, seen, gates)
 		if problem == "":
 			var starts := _ints(entry["starts"])
 			if entry["contract"] == "":
@@ -284,28 +299,40 @@ static func _read_flights(
 		var expected := _expected_live(contract, start_day, next_day, tick)
 		if int(live.get(contract["id"], 0)) != expected:
 			return "occurrences of %s are missing" % contract["id"]
-	return _fixed_clash_problem(out, ended)
+	return _fixed_clash_problem(out, contracts, ended)
 
 
-## A live occurrence of an ended contract keeps its gate time: no other live
-## flight (a one-off or an occurrence of a running contract) may overlap it.
-## Only the ended contract's future days are released.
-static func _fixed_clash_problem(flights: Array[Dictionary], ended: Dictionary) -> String:
-	var last := FlightSim.State.DEPARTED
-	for fixed in flights:
-		if fixed["contract"] == "" or not ended.has(fixed["contract"]):
-			continue
-		for other in flights:
-			if other["id"] == fixed["id"] or other["gate"] != fixed["gate"]:
+## A live occurrence keeps the gate and time it was issued with, whether its
+## contract ended or moved since: no two live flights may meet (two one-offs
+## excepted), and no running contract may meet another's live occurrence.
+static func _fixed_clash_problem(
+	flights: Array[Dictionary], contracts: Array[Dictionary], ended: Dictionary
+) -> String:
+	for i in flights.size():
+		var a := flights[i]
+		for j in range(i):
+			var b := flights[j]
+			if a["contract"] == b["contract"]:
 				continue
-			var a: Array = fixed["starts"]
-			var b: Array = other["starts"]
-			if FlightTimetable.holds_overlap(a[0], a[last], b[0], b[last]):
-				return "flight %s clashes with %s of an ended contract" % [other["id"], fixed["id"]]
+			if FlightTimetable.clash_on(a["gate"], a["starts"], b["gate"], b["starts"]) == "":
+				continue
+			if ended.has(b["contract"]):
+				return "flight %s clashes with %s of an ended contract" % [a["id"], b["id"]]
+			if ended.has(a["contract"]):
+				return "flight %s clashes with %s of an ended contract" % [b["id"], a["id"]]
+			return "flights %s and %s clash" % [b["id"], a["id"]]
+	for contract in contracts:
+		if ended.has(contract["id"]):
+			continue
+		for flight in flights:
+			if flight["contract"] == "" or flight["contract"] == contract["id"]:
+				continue
+			if FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"]) != "":
+				return "contract %s clashes with flight %s" % [contract["id"], flight["id"]]
 	return ""
 
 
-static func _flight_problem(entry: Variant, seen: Dictionary) -> String:
+static func _flight_problem(entry: Variant, seen: Dictionary, gates: Array[String]) -> String:
 	if typeof(entry) != TYPE_DICTIONARY:
 		return "each flight must be a dictionary"
 	for key in entry.keys():
@@ -317,7 +344,7 @@ static func _flight_problem(entry: Variant, seen: Dictionary) -> String:
 	if typeof(entry["id"]) != TYPE_STRING or entry["id"] == "" or seen.has(entry["id"]):
 		return "flight ids must be unique, non-empty strings"
 	seen[entry["id"]] = true
-	if typeof(entry["gate"]) != TYPE_STRING or not FlightSim.GATES.has(entry["gate"]):
+	if typeof(entry["gate"]) != TYPE_STRING or not gates.has(entry["gate"]):
 		return "flight %s is at a gate with no stand" % entry["id"]
 	if typeof(entry["contract"]) != TYPE_STRING:
 		return "flight %s contract must be a string" % entry["id"]
@@ -342,15 +369,16 @@ static func _one_off_problem(
 	if not FlightTimetable.parse_occurrence(entry["id"]).is_empty():
 		return "one-off flight %s has an occurrence id" % entry["id"]
 	for contract in contracts:
-		if contract["gate"] != entry["gate"] or ended.has(contract["id"]):
+		if ended.has(contract["id"]):
 			continue
-		if FlightTimetable.contract_overlaps(contract, starts[0], starts[FlightSim.State.DEPARTED]):
+		if FlightTimetable.contract_meets(contract, entry["gate"], starts) != "":
 			return "flight %s clashes with contract %s" % [entry["id"], contract["id"]]
 	return ""
 
 
 ## An occurrence must be issued (from its contract's start day), not yet
-## pruned, and exactly as its contract schedules it.
+## pruned, and at the times its contract schedules. Its gate may be another
+## than its contract's: the one the contract had when it was issued.
 static func _occurrence_problem(
 	entry: Dictionary,
 	starts: Array[int],
@@ -370,7 +398,7 @@ static func _occurrence_problem(
 		return "flight %s was not issued" % entry["id"]
 	if entry["id"] != FlightTimetable.occurrence_id(contract["id"], day):
 		return "flight %s does not match its contract and day" % entry["id"]
-	if entry["gate"] != contract["gate"] or starts != FlightTimetable.starts_for(contract, day):
+	if starts != FlightTimetable.starts_for(contract, day):
 		return "flight %s does not match its contract's timetable" % entry["id"]
 	if tick >= FlightTimetable.prune_tick(contract, day):
 		return "flight %s should have been pruned" % entry["id"]

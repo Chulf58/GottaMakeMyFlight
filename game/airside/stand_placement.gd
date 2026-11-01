@@ -10,7 +10,8 @@ extends RefCounted
 ## north of the wall line the exit stands in. It is pushed back PUSHBACK_M,
 ## turned to face north, and taxis north to the taxi lane at TAXI_LANE_Z.
 ##
-## A candidate exit needs a clear aircraft route (swept_rects(): the parked
+## A candidate exit needs its parked plane clear of the shared lane zone
+## (clears_lane()), a clear aircraft route (swept_rects(): the parked
 ## plane, the pushback and its swing, the way north to the taxi lane, with no
 ## floor, wall, object or site obstacle under any of it) and a passenger walk
 ## from the exit over open ground to the plane door (walk_of()). Candidates
@@ -39,6 +40,10 @@ const DOOR_SIDE_M := 3.5
 const DOOR_AFT_M := 4.2
 const PUSHBACK_M := 29.0
 const TAXI_LANE_Z := -256.0
+## The runway's centreline (main.tscn's Airside runway markers).
+const RUNWAY_Z := -310.0
+## How far east and west the shared zones reach: past every waypoint and stand.
+const ZONE_HALF_LENGTH_M := 1000.0
 ## A walk from an exit to the plane door longer than this is warned about.
 const WALK_WARNING_M := 30.0
 
@@ -75,6 +80,31 @@ static func pushback_end(stand: Dictionary) -> Vector3:
 ## Where the way north from the stand meets the taxi lane.
 static func lane_join(stand: Dictionary) -> Vector3:
 	return Vector3(stand_point(stand).x, 0.0, TAXI_LANE_Z)
+
+
+## The shared RUNWAY ground as a world xz rectangle (x, z): the band a plane on
+## the runway sweeps, wingtips HALF_SPAN_M either side of the centreline. The
+## approach and takeoff fly along it. FlightTimetable reserves it (decision
+## gates-technical-design-gate-desks-link-to-north-exits-one-st, point 4).
+static func runway_zone() -> Rect2:
+	var north := RUNWAY_Z - HALF_SPAN_M
+	return Rect2(-ZONE_HALF_LENGTH_M, north, 2.0 * ZONE_HALF_LENGTH_M, 2.0 * HALF_SPAN_M)
+
+
+## The shared LANE ground: from the runway zone's south edge to the south edge
+## of the band a plane on the taxi lane sweeps, so the links between runway and
+## lane are in it. South of it each stand's own column and stand are private.
+static func lane_zone() -> Rect2:
+	var north := runway_zone().end.y
+	var south := TAXI_LANE_Z + HALF_SPAN_M
+	return Rect2(-ZONE_HALF_LENGTH_M, north, 2.0 * ZONE_HALF_LENGTH_M, south - north)
+
+
+## Whether the plane parked at `stand` stays out of the lane zone. One whose
+## tail reaches it would hold the shared lane for its whole turnaround, so it
+## is not a legal stand (the grid's north row misses by 5 cm).
+static func clears_lane(stand: Dictionary) -> bool:
+	return stand_point(stand).z - TAIL_M >= lane_zone().end.y
 
 
 ## The one source of the plane door for passengers: the points a walk outside
@@ -211,6 +241,8 @@ static func place(grid: BuildGrid, site: SiteDefinition, live: Dictionary) -> Di
 	for id in ids:
 		var stand := for_exit(grid, id)
 		if stand.is_empty() or not grid.is_passenger_cell(grid.get_object(id)["anchor"]):
+			continue
+		if not clears_lane(stand):
 			continue
 		if not aircraft_clear(grid, site, stand):
 			continue
