@@ -107,52 +107,79 @@ static func floor_cost(grid: BuildGrid, area: Rect2i) -> int:
 	return maxi(0, BuildTransaction.needed(grid, edits))
 
 
-## Removes, in each cell of `area`, what one Remove click on the middle of the
-## cell removes: the object standing there (the whole object, even where it
-## reaches past the rectangle), otherwise the room the cell is in (the whole
-## room), otherwise the floor. Walls are never touched, because a click only
-## takes a wall near a cell's edge. Objects go first, so the floor in front of
-## a removed desk is free to go. A cell with no floor and no object counts as
-## unchanged; the floor under an object or a room stays, as it does for a
-## click, so a second drag takes the floor of a removed room. Each removed
-## piece refunds its share of its saved price into `wallet`
-## (BuildTransaction.commit_batch()); a null wallet gets nothing.
+## Clears `area` in two passes (decision
+## remove-rectangle-clears-objects-first-then-floor-and-walls-o). While the
+## rectangle holds an object, it removes only the objects (each whole, even
+## where it reaches past the rectangle) and leaves floor, rooms and walls. With
+## no object in it, it removes the rooms in it (whole), the floor in it and the
+## walls inside it or on its edge, so a second drag takes what the first left.
+## A cell with no floor counts as unchanged. A piece the rules refuse (the
+## spot in front of an object left standing, a wall beside a door wall left
+## standing) is skipped. Each removed piece refunds its share of its saved
+## price into `wallet` (BuildTransaction.commit_batch()); a null wallet gets
+## nothing.
 static func clear(grid: BuildGrid, area: Rect2i, wallet: Wallet = null) -> Outcome:
 	var outcome := Outcome.new()
 	outcome.removing = true
 	var cells := _cells(area)
-	# Read every cell before the first edit: removing an object clears its
-	# occupancy, which must not turn its other cells into plain floor.
-	var held := {}
 	var objects: Array[int] = []
-	var rooms: Array[int] = []
 	for cell in cells:
 		var object_id := grid.object_at(cell)
-		var room_id := grid.room_at(cell)
-		if object_id == 0 and room_id == 0:
-			continue
-		held[cell] = true
 		if object_id != 0 and not objects.has(object_id):
 			objects.append(object_id)
-		elif object_id == 0 and not rooms.has(room_id):
-			rooms.append(room_id)
 	# DoorPlacement.check() adds nothing to a removal, so the batch's own
-	# in-order validation is the whole rule: a floor cell in front of a removed
-	# desk is judged after the desk is gone.
+	# in-order validation is the whole rule.
 	var edits: Array[BuildEdit] = []
-	for object_id in objects:
-		edits.append(BuildEdit.remove_object(object_id))
-	for room_id in rooms:
-		edits.append(BuildEdit.remove_room(room_id))
-	for cell in cells:
-		if held.has(cell):
-			continue
-		if grid.in_bounds(cell) and grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
-			outcome.unchanged += 1
-			continue
-		edits.append(BuildEdit.remove_floor(cell))
+	if objects.is_empty():
+		edits = _structure_edits(grid, area, cells, outcome)
+	else:
+		for object_id in objects:
+			edits.append(BuildEdit.remove_object(object_id))
 	_commit(outcome, grid, edits, wallet)
 	return outcome
+
+
+## The second pass of clear(), in the order the grid accepts them: the rooms
+## the cells are in (a room's floor cannot go while it stands), the walls (door
+## walls first, because a plain wall beside one is refused) and the floor.
+static func _structure_edits(
+	grid: BuildGrid, area: Rect2i, cells: Array[Vector2i], outcome: Outcome
+) -> Array[BuildEdit]:
+	var edits: Array[BuildEdit] = []
+	var rooms: Array[int] = []
+	for cell in cells:
+		var room_id := grid.room_at(cell)
+		if room_id != 0 and not rooms.has(room_id):
+			rooms.append(room_id)
+	for room_id in rooms:
+		edits.append(BuildEdit.remove_room(room_id))
+	var door_walls: Array[BuildEdit] = []
+	var other_walls: Array[BuildEdit] = []
+	for cell in cells:
+		# North and west of every cell, plus the south and east edges of the
+		# rectangle: each edge of the rectangle once.
+		var sides: Array[int] = [BuildGrid.Side.NORTH, BuildGrid.Side.WEST]
+		if cell.y == area.end.y - 1:
+			sides.append(BuildGrid.Side.SOUTH)
+		if cell.x == area.end.x - 1:
+			sides.append(BuildGrid.Side.EAST)
+		for side in sides:
+			var kind := grid.wall_kind(cell, side)
+			if kind == BuildGrid.WallKind.NONE:
+				continue
+			var edit := BuildEdit.remove_wall(cell, side)
+			if kind == BuildGrid.WallKind.DOOR:
+				door_walls.append(edit)
+			else:
+				other_walls.append(edit)
+	edits.append_array(door_walls)
+	edits.append_array(other_walls)
+	for cell in cells:
+		if grid.in_bounds(cell) and grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
+			outcome.unchanged += 1
+		else:
+			edits.append(BuildEdit.remove_floor(cell))
+	return edits
 
 
 ## Commits `edits` through BuildTransaction and counts what they did. A

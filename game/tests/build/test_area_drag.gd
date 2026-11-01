@@ -123,7 +123,7 @@ func test_fill_floor_skips_cells_outside_the_grid() -> void:
 	)
 
 
-func test_clear_removes_floor_and_whole_objects_but_not_walls() -> void:
+func test_clear_removes_whole_objects_first_then_floor_and_walls() -> void:
 	_paint_rect(Rect2i(2, 2, 8, 8))
 	(
 		assert_bool(_grid.apply(BuildEdit.place_object(&"checkin_desk", Vector2i(3, 3), 0)).ok)
@@ -140,9 +140,10 @@ func test_clear_removes_floor_and_whole_objects_but_not_walls() -> void:
 	assert_int(_grid.floor_at(Vector2i(3, 3))).is_equal(BuildGrid.FLOOR_TILE)
 	assert_str(outcome.message()).is_equal("Removed 1")
 	var floors := AreaDrag.clear(_grid, Rect2i(5, 5, 3, 3))
-	assert_int(floors.placed).is_equal(9)
+	# Nine floor cells and the wall inside the rectangle.
+	assert_int(floors.placed).is_equal(10)
 	assert_int(_grid.floor_at(Vector2i(6, 6))).is_equal(BuildGrid.FLOOR_NONE)
-	assert_bool(_grid.has_wall(Vector2i(6, 6), BuildGrid.Side.NORTH)).is_true()
+	assert_bool(_grid.has_wall(Vector2i(6, 6), BuildGrid.Side.NORTH)).is_false()
 
 
 func test_clear_takes_an_object_before_the_floor_it_reserved() -> void:
@@ -153,11 +154,17 @@ func test_clear_takes_an_object_before_the_floor_it_reserved() -> void:
 	)
 	# The desk stands on (3,3) and (4,3); (3,4) is its spot in front.
 	var outcome := AreaDrag.clear(_grid, Rect2i(3, 3, 1, 2))
-	assert_int(outcome.placed).is_equal(2)
+	assert_int(outcome.placed).is_equal(1)
 	assert_int(outcome.skipped).is_equal(0)
 	assert_array(_grid.object_ids()).is_empty()
-	assert_int(_grid.floor_at(Vector2i(3, 4))).is_equal(BuildGrid.FLOOR_NONE)
+	assert_int(_grid.floor_at(Vector2i(3, 4))).is_equal(BuildGrid.FLOOR_TILE)
 	assert_int(_grid.floor_at(Vector2i(3, 3))).is_equal(BuildGrid.FLOOR_TILE)
+	# The second drag has no object left, so the floor goes, the reserved cell too.
+	var floors := AreaDrag.clear(_grid, Rect2i(3, 3, 1, 2))
+	assert_int(floors.placed).is_equal(2)
+	assert_int(floors.skipped).is_equal(0)
+	assert_int(_grid.floor_at(Vector2i(3, 4))).is_equal(BuildGrid.FLOOR_NONE)
+	assert_int(_grid.floor_at(Vector2i(3, 3))).is_equal(BuildGrid.FLOOR_NONE)
 
 
 func test_clear_refuses_the_spot_in_front_of_an_object_it_leaves_standing() -> void:

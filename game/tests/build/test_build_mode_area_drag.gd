@@ -166,7 +166,7 @@ func test_a_press_outside_the_grid_is_refused_as_a_click() -> void:
 	)
 
 
-func test_a_remove_drag_clears_floor_and_the_object_it_touches() -> void:
+func test_a_remove_drag_clears_the_object_it_touches_and_a_second_the_floor() -> void:
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	_drag(Vector2i(2, 2), Vector2i(9, 9))
 	_mode.finish_area()
@@ -175,11 +175,15 @@ func test_a_remove_drag_clears_floor_and_the_object_it_touches() -> void:
 	_mode.set_tool(BuildMode.Tool.REMOVE)
 	_drag(Vector2i(4, 4), Vector2i(4, 5))
 	var outcome := _mode.finish_area()
-	assert_int(outcome.placed).is_equal(2)
+	assert_int(outcome.placed).is_equal(1)
 	assert_array(_mode.grid.object_ids()).is_empty()
 	assert_bool(_floored(Vector2i(4, 4))).is_true()
+	assert_bool(_floored(Vector2i(4, 5))).is_true()
+	assert_str(_mode.status_text()).is_equal("Removed 1")
+	_drag(Vector2i(4, 4), Vector2i(4, 5))
+	assert_int(_mode.finish_area().placed).is_equal(2)
+	assert_bool(_floored(Vector2i(4, 4))).is_false()
 	assert_bool(_floored(Vector2i(4, 5))).is_false()
-	assert_str(_mode.status_text()).is_equal("Removed 2")
 
 
 func test_the_summary_stays_on_the_status_line_until_the_pointer_leaves_the_cell() -> void:

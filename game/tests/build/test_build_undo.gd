@@ -209,11 +209,19 @@ func test_undo_of_a_remove_drag_brings_a_room_and_its_pieces_back() -> void:
 	var before := _balance()
 	var outcome := _drag(BuildMode.Tool.REMOVE, Rect2i(2, 2, 6, 5))
 	print("remove drag: %s" % outcome.message())
-	assert_int(_mode.grid.room_ids().size()).is_equal(0)
+	# The first drag takes the pieces only; the second takes the room and floor.
+	assert_int(_mode.grid.room_ids().size()).is_equal(1)
 	assert_int(_mode.grid.object_ids().size()).is_equal(0)
 	_undo_ok()
 	assert_dict(_mode.grid.to_snapshot()).is_equal(built)
 	assert_int(_mode.grid.room_at(Vector2i(2, 2))).is_equal(room)
+	assert_int(_balance()).is_equal(before)
+	_drag(BuildMode.Tool.REMOVE, Rect2i(2, 2, 6, 5))
+	_drag(BuildMode.Tool.REMOVE, Rect2i(2, 2, 6, 5))
+	assert_int(_mode.grid.room_ids().size()).is_equal(0)
+	_undo_ok()
+	_undo_ok()
+	assert_dict(_mode.grid.to_snapshot()).is_equal(built)
 	assert_int(_balance()).is_equal(before)
 	# Then the table, the counter and the room go back in turn.
 	for i in 3:
