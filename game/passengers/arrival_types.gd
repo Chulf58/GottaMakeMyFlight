@@ -3,10 +3,11 @@ extends RefCounted
 ## When a scheduled passenger arrives (decision
 ## passengers-get-an-arrival-type-rushed-typical-or-relaxed). Each one draws a
 ## type from the sim RNG: typical passengers arrive in the flight's usual
-## window, from just after its first state (SCHEDULED) to
+## window, from just after the arrival opening (ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS
+## before departure, the first state until the plane's taxi-in was lengthened) to
 ## PassengerSim.LAST_SPAWN_LEAD_TICKS before its doors close; rushed ones in
 ## the last RUSHED_SPAN_TICKS of that window; relaxed ones before the first
-## state, from RELAXED_LEAD_TICKS before departure (the start of PUSHBACK).
+## opening, from RELAXED_LEAD_TICKS before departure (the start of PUSHBACK).
 ## The flight timeline is not touched: FlightTimetable issues an occurrence
 ## ISSUE_LEAD_TICKS before its first state, earlier than any relaxed arrival.
 
@@ -18,8 +19,13 @@ const NAMES: Array[String] = ["rushed", "typical", "relaxed"]
 ## arrive two hours early).
 const SHARES: Array[int] = [15, 55, 30]
 ## Three game hours (user-ruled): the earliest relaxed arrival is this long
-## before departure, 1640 ticks before the first state.
+## before departure, 1340 ticks before the first state.
 const RELAXED_LEAD_TICKS := 3600
+## Passenger timing is set against departure, not the plane's arrival (decision
+## plane-stand-design-airside-moves-110-m-north-stand-snaps-to: a longer
+## TAXI_IN only brings the plane earlier). The usual window opens this long
+## before departure, as it did when the first state was 1960 ticks before it.
+const ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS := 1960
 ## Rushed passengers arrive in the last 15 game minutes of the usual window.
 const RUSHED_SPAN_TICKS := 300
 
@@ -40,12 +46,13 @@ static func draw(rng: RandomNumberGenerator) -> Type:
 static func window(type: Type, flights: FlightSim, flight_id: String, now: int) -> Vector2i:
 	var first_state := flights.state_start(flight_id, FlightSim.State.SCHEDULED)
 	var last := flights.doors_close_tick(flight_id) - PassengerSim.LAST_SPAWN_LEAD_TICKS
-	var span := Vector2i(first_state + 1, last)
+	var departure := flights.state_start(flight_id, FlightSim.State.PUSHBACK)
+	var opens := maxi(first_state, departure - ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS)
+	var span := Vector2i(opens + 1, last)
 	if type == Type.RUSHED:
 		span.x = maxi(span.x, last - RUSHED_SPAN_TICKS)
 	elif type == Type.RELAXED:
-		var departure := flights.state_start(flight_id, FlightSim.State.PUSHBACK)
-		span = Vector2i(departure - RELAXED_LEAD_TICKS, first_state)
+		span = Vector2i(departure - RELAXED_LEAD_TICKS, opens)
 	span.x = maxi(span.x, now + 1)
 	if span.x > span.y and type != Type.TYPICAL:
 		return window(Type.TYPICAL, flights, flight_id, now)

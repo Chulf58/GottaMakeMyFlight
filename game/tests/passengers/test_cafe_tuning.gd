@@ -46,6 +46,13 @@ func _flight(seed: int) -> Dictionary:
 	sim.cafes.paid.connect(func(id: int, _room: int, _amount: int) -> void: _paid[id] = true)
 	sim.outcome.connect(func(id: int, made: bool) -> void: _missed[id] = not made)
 	var count := PassengerSim.DEFAULT_PASSENGERS
+	# Scheduled when the arrival window opens, as the flight is issued well ahead
+	# of it in the game; passengers are timed against departure.
+	var opens := (
+		world.flights.state_start(PassengerTestWorld.FLIGHT, FlightSim.State.PUSHBACK)
+		- ArrivalTypes.ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS
+	)
+	world.run_to(opens)
 	assert_bool(sim.schedule_flight(PassengerTestWorld.FLIGHT, count)).is_true()
 	var boarding := world.flights.boarding_window(PassengerTestWorld.FLIGHT).x
 	world.run_to(world.flights.doors_close_tick(PassengerTestWorld.FLIGHT) + 1)

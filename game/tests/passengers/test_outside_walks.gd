@@ -9,15 +9,17 @@ extends GdUnitTestSuite
 ##
 ## Two walled boxes on a site-sized grid, each with an entrance on its south
 ## wall (A first, so new passengers head for it), and a third box with an
-## exit on its north wall, ten cells from the plane edge.
+## exit on its north wall, fifteen cells south of the plane door.
 
 const SITE := preload("res://build/terminal_site.tres")
-const ENTRANCE_A := Vector2i(11, 35)
-const ENTRANCE_B := Vector2i(21, 35)
-const EXIT_CELL := Vector2i(31, 10)
+## The cells of the layout below, moved by the site's starter_offset so the
+## boxes stand where the starter terminal does, beside the plane stand.
+var _entrance_a := Vector2i(11, 35) + SITE.starter_offset
+var _entrance_b := Vector2i(21, 35) + SITE.starter_offset
+var _exit_cell := Vector2i(31, 10) + SITE.starter_offset
 ## A wall of box A, away from its door.
-const GAP_A := Vector2i(10, 32)
-const GAP_B := Vector2i(20, 32)
+var _gap_a := Vector2i(10, 32) + SITE.starter_offset
+var _gap_b := Vector2i(20, 32) + SITE.starter_offset
 
 var _world: PassengerTestWorld
 var _exit := 0
@@ -34,13 +36,14 @@ func after() -> void:
 func before_test() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var edits: Array[BuildEdit] = []
+	var off := SITE.starter_offset
 	for box in [Rect2i(10, 30, 4, 6), Rect2i(20, 30, 4, 6), Rect2i(30, 10, 4, 4)]:
-		for y in range(box.position.y, box.end.y):
-			for x in range(box.position.x, box.end.x):
+		for y in range(box.position.y + off.y, box.end.y + off.y):
+			for x in range(box.position.x + off.x, box.end.x + off.x):
 				edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
-	edits.append(BuildEdit.place_object(&"entrance_door", ENTRANCE_A, 2))
-	edits.append(BuildEdit.place_object(&"entrance_door", ENTRANCE_B, 2))
-	edits.append(BuildEdit.place_object(&"exit_door", EXIT_CELL, 0))
+	edits.append(BuildEdit.place_object(&"entrance_door", _entrance_a, 2))
+	edits.append(BuildEdit.place_object(&"entrance_door", _entrance_b, 2))
+	edits.append(BuildEdit.place_object(&"exit_door", _exit_cell, 0))
 	for result in grid.apply_batch(edits):
 		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
 	EnclosureKit.close_floor(grid)
@@ -98,11 +101,11 @@ func _walk_left_is_open(p: Passenger, door: Vector2i) -> bool:
 
 func test_a_road_walker_whose_entrance_opens_walks_to_the_other_entrance() -> void:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	assert_vector(Vector2(p.at)).is_equal(Vector2(ENTRANCE_A))
+	assert_vector(Vector2(p.at)).is_equal(Vector2(_entrance_a))
 	_steps(50)
 	var here := p.apron_position()
 	var walked := p.apron_mm
-	_set_wall(GAP_A, true)
+	_set_wall(_gap_a, true)
 	print(
 		(
 			"walker %d at %s (%d mm) rerouted to %s, walk %s"
@@ -110,17 +113,17 @@ func test_a_road_walker_whose_entrance_opens_walks_to_the_other_entrance() -> vo
 		)
 	)
 	assert_array(_world.sim.layout.passenger_entrances).has_size(1)
-	assert_vector(Vector2(p.at)).is_equal(Vector2(ENTRANCE_B))
+	assert_vector(Vector2(p.at)).is_equal(Vector2(_entrance_b))
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NONE)
 	assert_int(p.apron_mm).is_between(walked - 2, walked + 2)
 	assert_vector(p.apron_position()).is_equal_approx(here, Vector3(0.01, 0.01, 0.01))
-	assert_vector(p.apron.back()).is_equal(_world.grid.cell_to_world(ENTRANCE_B))
-	assert_bool(_walk_left_is_open(p, ENTRANCE_B)).is_true()
+	assert_vector(p.apron.back()).is_equal(_world.grid.cell_to_world(_entrance_b))
+	assert_bool(_walk_left_is_open(p, _entrance_b)).is_true()
 	var inside := func(q: Passenger) -> bool: return q.stage >= Passenger.Stage.TO_CHECKIN
 	var ticks := _step_until(p, inside, 600)
 	print("walker %d came in at %s after %d ticks" % [p.id, p.at, ticks])
 	assert_int(ticks).is_less(600)
-	assert_vector(Vector2(p.at)).is_equal(Vector2(ENTRANCE_B))
+	assert_vector(Vector2(p.at)).is_equal(Vector2(_entrance_b))
 
 
 ## Forty walkers on the grid sent to entrance B by one wall edit: the walk
@@ -133,12 +136,12 @@ func test_many_walkers_reroute_in_one_revalidate() -> void:
 	_steps(50)
 	var searched := OutsideWalks.fields_searched
 	var started := Time.get_ticks_usec()
-	_set_wall(GAP_A, true)
+	_set_wall(_gap_a, true)
 	var usec := Time.get_ticks_usec() - started
 	searched = OutsideWalks.fields_searched - searched
 	var at_b := 0
 	for p in walkers:
-		if p.at == ENTRANCE_B and p.stuck == Passenger.Stuck.NONE:
+		if p.at == _entrance_b and p.stuck == Passenger.Stuck.NONE:
 			at_b += 1
 	print(
 		(
@@ -153,8 +156,8 @@ func test_many_walkers_reroute_in_one_revalidate() -> void:
 func test_with_no_entrance_left_the_walker_waits_where_it_stands_until_one_is_back() -> void:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	_steps(50)
-	_set_wall(GAP_A, true)
-	_set_wall(GAP_B, true)
+	_set_wall(_gap_a, true)
+	_set_wall(_gap_b, true)
 	assert_array(_world.sim.layout.passenger_entrances).is_empty()
 	var stood := p.apron_position()
 	_steps(40)
@@ -167,13 +170,13 @@ func test_with_no_entrance_left_the_walker_waits_where_it_stands_until_one_is_ba
 	assert_int(p.stage).is_equal(Passenger.Stage.SPAWNED)
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_ROUTE)
 	assert_vector(p.apron_position()).is_equal(stood)
-	_set_wall(GAP_A, false)
+	_set_wall(_gap_a, false)
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NONE)
 	var inside := func(q: Passenger) -> bool: return q.stage >= Passenger.Stage.TO_CHECKIN
 	var ticks := _step_until(p, inside, 600)
 	print("walker %d came in at %s after %d ticks" % [p.id, p.at, ticks])
 	assert_int(ticks).is_less(600)
-	assert_vector(Vector2(p.at)).is_equal(Vector2(ENTRANCE_A))
+	assert_vector(Vector2(p.at)).is_equal(Vector2(_entrance_a))
 
 
 ## A passenger put on the apron walk from the exit, 1.5 m out.
@@ -191,12 +194,17 @@ func test_an_apron_walker_walks_round_floor_laid_across_its_walk() -> void:
 	var p := _apron_walker()
 	var end: Vector3 = p.apron.back()
 	var here := p.apron_position()
-	assert_bool(_world.grid.apply(BuildEdit.paint_floor(Vector2i(31, 5), 1, 1)).ok).is_true()
+	(
+		assert_bool(
+			_world.grid.apply(BuildEdit.paint_floor(Vector2i(31, 5) + SITE.starter_offset, 1, 1)).ok
+		)
+		. is_true()
+	)
 	print("apron walker %d at %s, walk now %s" % [p.id, here, p.apron])
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NONE)
 	assert_vector(p.apron.back()).is_equal(end)
 	assert_vector(p.apron_position()).is_equal_approx(here, Vector3(0.01, 0.01, 0.01))
-	assert_bool(_walk_left_is_open(p, EXIT_CELL)).is_true()
+	assert_bool(_walk_left_is_open(p, _exit_cell)).is_true()
 	var made := func(q: Passenger) -> bool: return q.stage == Passenger.Stage.MADE
 	assert_int(_step_until(p, made, 600)).is_less(600)
 
@@ -205,7 +213,9 @@ func test_an_apron_walker_with_no_way_on_waits_until_it_is_cleared() -> void:
 	var p := _apron_walker()
 	var row: Array[BuildEdit] = []
 	for x in SITE.grid_size.x:
-		row.append(BuildEdit.paint_floor(Vector2i(x, 5), BuildGrid.FLOOR_TILE, 1))
+		row.append(
+			BuildEdit.paint_floor(Vector2i(x, 5) + SITE.starter_offset, BuildGrid.FLOOR_TILE, 1)
+		)
 	_world.grid.apply_batch(row)
 	var stood := p.apron_position()
 	_steps(30)
@@ -213,7 +223,12 @@ func test_an_apron_walker_with_no_way_on_waits_until_it_is_cleared() -> void:
 	assert_int(p.stage).is_equal(Passenger.Stage.APRON)
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_ROUTE)
 	assert_vector(p.apron_position()).is_equal(stood)
-	assert_bool(_world.grid.apply(BuildEdit.remove_floor(Vector2i(40, 5))).ok).is_true()
+	(
+		assert_bool(
+			_world.grid.apply(BuildEdit.remove_floor(Vector2i(40, 5) + SITE.starter_offset)).ok
+		)
+		. is_true()
+	)
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NONE)
 	var made := func(q: Passenger) -> bool: return q.stage == Passenger.Stage.MADE
 	var ticks := _step_until(p, made, 900)

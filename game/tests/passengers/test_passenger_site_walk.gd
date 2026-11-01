@@ -10,11 +10,10 @@ extends GdUnitTestSuite
 ## (OutsideWalks._default_departure) and an entrance has no road walk.
 
 const SITE := preload("res://build/terminal_site.tres")
-const ENTRANCE := Vector2i(16, 29)
-const EXIT := Vector2i(16, 0)
-## The site's plane door, the last point of its plane route.
-const PLANE_DOOR := Vector2(-14.5, -106.5)
-const LAST_TICK := 1900
+## The terminal below stands where the starter does, moved by the site's
+## starter_offset, so the plane stand is just north of its exit.
+var _entrance := Vector2i(16, 29) + SITE.starter_offset
+var _exit := Vector2i(16, 0) + SITE.starter_offset
 
 var _world: PassengerTestWorld
 
@@ -36,19 +35,20 @@ func after_test() -> void:
 	_world = null
 
 
-## Floor on columns 12 to 20, rows 0 to 29 of the site grid (rows 30 to 39 are
-## open ground to the road): the entrance on the south edge, a desk and a
+## Floor on columns 12 to 20, 30 rows from the site's starter offset (the rows
+## after them are open ground to the road): the entrance on the south edge, a desk and a
 ## scanner on the way, the exit on the north edge, no seats (passengers
 ## stand), walled in.
 func _site_world() -> PassengerTestWorld:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	var off := SITE.starter_offset
 	for y in range(0, 30):
 		for x in range(12, 21):
-			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
-	PassengerTestWorld.place(grid, &"entrance_door", ENTRANCE, 2)
-	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(13, 20), 0)
-	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(16, 10), 0)
-	PassengerTestWorld.place(grid, &"exit_door", EXIT, 0)
+			grid.apply(BuildEdit.paint_floor(Vector2i(x, y) + off, BuildGrid.FLOOR_TILE, 1))
+	PassengerTestWorld.place(grid, &"entrance_door", _entrance, 2)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(13, 20) + off, 0)
+	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(16, 10) + off, 0)
+	PassengerTestWorld.place(grid, &"exit_door", _exit, 0)
 	# Walls close the floor in, the doors filling their gaps (TerminalEnclosure).
 	EnclosureKit.close_floor(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
@@ -75,7 +75,7 @@ func test_a_new_passenger_starts_on_the_road_and_walks_in_through_the_entrance()
 	assert_int(p.stage).is_equal(Passenger.Stage.SPAWNED)
 	assert_float(start.z).is_equal_approx(SITE.road_z, 0.01)
 	assert_float(start.y).is_less(0.25)
-	var doorway := _doorway(ENTRANCE, 2)
+	var doorway := _doorway(_entrance, 2)
 	var crossed_doorway := false
 	var ticks := 0
 	while p.stage == Passenger.Stage.SPAWNED and ticks < 400:
@@ -86,7 +86,7 @@ func test_a_new_passenger_starts_on_the_road_and_walks_in_through_the_entrance()
 	print("ROAD arrival ticks=%d road_ticks=%d stage=%d at=%s" % [ticks, road_ticks, p.stage, p.at])
 	assert_bool(crossed_doorway).is_true()
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_CHECKIN)
-	assert_vector(p.at).is_equal(ENTRANCE)
+	assert_vector(p.at).is_equal(_entrance)
 	assert_array(p.apron).is_empty()
 	# At a walk, 98 mm a tick, plus the tick that turns it to check-in.
 	assert_int(road_ticks).is_greater(80)
@@ -126,7 +126,7 @@ func test_with_no_site_an_exit_walks_the_default_route() -> void:
 	var exit_id: int = _world.sim.layout.exits[0]
 	var entrance_id: int = _world.sim.layout.entrances[0]
 	var points := OutsideWalks.departure(_world.sim, exit_id)
-	var centre := _world.grid.cell_to_world(EXIT)
+	var centre := _world.grid.cell_to_world(_exit)
 	print("DEFAULT points=%d first=%s third=%s" % [points.size(), points[0], points[2]])
 	assert_int(points.size()).is_equal(3 + _world.sim.apron_waypoints.size())
 	assert_vector(points[0]).is_equal(centre)
@@ -148,17 +148,18 @@ func test_the_exit_walk_leaves_through_its_doorway_to_the_plane_door() -> void:
 	var first := _xz(walk.apron[0])
 	var last := _xz(walk.apron[walk.apron.size() - 1])
 	print("APRON points=%d mm=%d first=%s last=%s" % [walk.apron.size(), mm, first, last])
-	assert_vector(first).is_equal_approx(_xz(_world.grid.cell_to_world(EXIT)), Vector2.ONE * 1e-4)
-	assert_float(last.distance_to(PLANE_DOOR)).is_less(0.01)
-	var doorway := _doorway(EXIT, 0)
+	assert_vector(first).is_equal_approx(_xz(_world.grid.cell_to_world(_exit)), Vector2.ONE * 1e-4)
+	var stand := _world.sim.layout.live_stand(_world.grid)
+	assert_float(last.distance_to(_xz(StandPlacement.door_point(stand)))).is_less(0.01)
+	var doorway := _doorway(_exit, 0)
 	var through_door := false
 	for point in walk.apron:
 		through_door = through_door or _xz(point).distance_to(doorway) < 0.05
 	assert_bool(through_door).is_true()
 	assert_int(mm).is_equal(walk.apron_total_mm())
-	# The exit (x -26.5) is 12 m west of the plane route (x -14.5), which runs
-	# 7 m out to the plane door.
-	assert_int(mm).is_between(18000, 24000)
+	# The exit (x -26.5) is 4 m west of the plane door (x -22.5), which stands
+	# 5 m out from the doorway.
+	assert_int(mm).is_between(8500, 9500)
 
 
 ## A save taken on the road loads into a twin world, and the twin then plays
@@ -199,7 +200,7 @@ func test_a_passenger_walks_road_to_plane_and_makes_the_flight() -> void:
 	var p := _world.passenger(id)
 	var stages := {}
 	var on_apron_at := Vector2.INF
-	while _world.clock.tick < LAST_TICK and not p.is_done():
+	while _world.clock.tick < PassengerTestWorld.doors_tick() and not p.is_done():
 		_world.step()
 		stages[p.stage] = true
 		if p.stage == Passenger.Stage.APRON and on_apron_at == Vector2.INF:
@@ -216,6 +217,7 @@ func test_a_passenger_walks_road_to_plane_and_makes_the_flight() -> void:
 		Passenger.Stage.APRON,
 	]:
 		assert_bool(stages.has(stage)).is_true()
-	assert_float(on_apron_at.distance_to(_xz(_world.grid.cell_to_world(EXIT)))).is_less(0.5)
+	assert_float(on_apron_at.distance_to(_xz(_world.grid.cell_to_world(_exit)))).is_less(0.5)
 	var end := _world.sim.world_position(p)
-	assert_float(_xz(end).distance_to(PLANE_DOOR)).is_less(0.01)
+	var stand := _world.sim.layout.live_stand(_world.grid)
+	assert_float(_xz(end).distance_to(_xz(StandPlacement.door_point(stand)))).is_less(0.01)

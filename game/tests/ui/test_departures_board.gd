@@ -41,11 +41,13 @@ func _run_to(tick: int) -> void:
 
 
 func test_today_and_tomorrow_list_their_flights_in_time_order() -> void:
-	# Accepted at 09:00 for 20:00 and 10:40, plus 08:00, whose preparation
-	# window has passed, so it starts tomorrow (day 1).
+	# Accepted at 09:00 for 20:00 and 11:00, plus 08:00, whose preparation
+	# window has passed, so it starts tomorrow (day 1). Each holds the gate for
+	# 165 minutes (FlightTimetable.reserved_ticks()), so 08:00 and 11:00 do not
+	# clash (the 11:00 flight was 10:40 when a flight held it for 129).
 	_run_to(GameCalendar.tick_at(0, 9 * 60))
 	assert_bool(_sim.accept_contract(_terms("LATE", 20 * 60, "Rome", "Sunhop"))).is_true()
-	assert_bool(_sim.accept_contract(_terms("EARLY", 10 * 60 + 40, "Oslo", "Gotta Air"))).is_true()
+	assert_bool(_sim.accept_contract(_terms("EARLY", 11 * 60, "Oslo", "Gotta Air"))).is_true()
 	assert_bool(_sim.accept_contract(_terms("NEXT", 8 * 60, "Lisbon", "Sunhop"))).is_true()
 	var lines := DeparturesBoard.lines_for(_sim, _clock.tick)
 	print("board lines: %s" % " | ".join(lines))
@@ -54,11 +56,11 @@ func test_today_and_tomorrow_list_their_flights_in_time_order() -> void:
 		. contains_exactly(
 			[
 				DeparturesBoard.TODAY_HEADING,
-				"10:40  Oslo  Gotta Air",
+				"11:00  Oslo  Gotta Air",
 				"20:00  Rome  Sunhop",
 				DeparturesBoard.TOMORROW_HEADING,
 				"08:00  Lisbon  Sunhop",
-				"10:40  Oslo  Gotta Air",
+				"11:00  Oslo  Gotta Air",
 				"20:00  Rome  Sunhop",
 			]
 		)
@@ -109,14 +111,20 @@ func test_a_day_with_no_flights_says_none_while_the_other_lists_its_own() -> voi
 
 func test_more_flights_than_the_cap_collapse_into_a_count() -> void:
 	_run_to(GameCalendar.tick_at(0, 6 * 60 + 5))
-	var total := DeparturesBoard.MAX_ROWS_PER_DAY + 2
+	# One flight more than the cap. A gate holds each flight for
+	# FlightTimetable.reserved_ticks() (165 minutes), so a day has room for only
+	# six from 09:00 (seven did when the reservation was 129 minutes).
+	var total := DeparturesBoard.MAX_ROWS_PER_DAY + 1
+	var apart := ceili(float(FlightTimetable.reserved_ticks()) / GameCalendar.TICKS_PER_MINUTE)
 	for i in total:
-		var minute := 9 * 60 + i * 140
+		var minute := 9 * 60 + i * apart
 		assert_bool(_sim.accept_contract(_terms("F%d" % i, minute, "Oslo", "Gotta Air"))).is_true()
 	var lines := DeparturesBoard.lines_for(_sim, _clock.tick)
 	var today := lines.slice(1, lines.find(DeparturesBoard.TOMORROW_HEADING))
 	assert_int(today.size()).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
-	assert_str(today[today.size() - 1]).is_equal("+2 more")
+	assert_str(today[today.size() - 1]).is_equal(
+		"+%d more" % (total - DeparturesBoard.MAX_ROWS_PER_DAY)
+	)
 
 
 func test_the_node_shows_the_same_lines_after_a_refresh() -> void:

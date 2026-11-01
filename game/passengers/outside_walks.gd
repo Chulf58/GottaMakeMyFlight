@@ -46,7 +46,9 @@ static func departure(sim: PassengerSim, exit_door: int) -> Array[Vector3]:
 		return _default_departure(sim, exit_door)
 	if not sim.layout.outside_routes.has(exit_door):
 		return [] as Array[Vector3]
-	return SiteRoutes.departure(sim.grid, sim.site, sim.layout.outside_routes[exit_door])
+	return SiteRoutes.departure(
+		sim.grid, sim.site, sim.layout.outside_routes[exit_door], sim.layout.live_stand(sim.grid)
+	)
 
 
 ## Whether a road walker at the end of its walk may come in through the
@@ -75,16 +77,16 @@ static func revalidate(sim: PassengerSim) -> void:
 			if _clear_ahead(sim, p, door):
 				_walk_on(p)
 				continue
+			var stand := sim.layout.live_stand(sim.grid)
 			if to_plane.is_empty():
-				var edge := SiteRoutes.edge_cells(sim.grid, sim.site, SiteDefinition.PLANE_STEP)
-				to_plane = SiteRoutes.distances(sim.grid, sim.site, edge)
+				to_plane = StandPlacement.to_door(sim.grid, sim.site, stand)
 				fields_searched += 1
 			var cells := _cells_from(sim, p.apron_position(), to_plane)
 			if cells.is_empty():
 				p.stuck = Passenger.Stuck.NO_ROUTE
 				continue
 			var walk: Array[Vector3] = [p.apron_position()]
-			walk.append_array(SiteRoutes.to_plane(sim.grid, sim.site, cells))
+			walk.append_array(SiteRoutes.to_plane(sim.grid, sim.site, cells, stand))
 			_take(p, walk)
 			sim.files.reroute(sim, p)
 

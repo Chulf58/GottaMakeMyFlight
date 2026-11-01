@@ -45,11 +45,13 @@ func after_test() -> void:
 ## 10 m of open ground away, its exit the plane.
 func _site_world() -> PassengerTestWorld:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	# Where the starter terminal stands, beside the plane stand.
+	var off := SITE.starter_offset
 	for y in FLOOR_ROWS:
 		for x in range(15, 18):
-			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
-	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(16, FLOOR_ROWS - 1), 2)
-	PassengerTestWorld.place(grid, &"exit_door", Vector2i(16, 0), 0)
+			grid.apply(BuildEdit.paint_floor(Vector2i(x, y) + off, BuildGrid.FLOOR_TILE, 1))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(16, FLOOR_ROWS - 1) + off, 2)
+	PassengerTestWorld.place(grid, &"exit_door", Vector2i(16, 0) + off, 0)
 	# Walls close the floor in, the doors filling their gaps (TerminalEnclosure),
 	# so passengers may come in at the entrance.
 	EnclosureKit.close_floor(grid)

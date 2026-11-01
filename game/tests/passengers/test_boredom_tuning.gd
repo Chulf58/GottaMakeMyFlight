@@ -24,7 +24,7 @@ const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
 const SHARE_MIN := 26
 const SHARE_MAX := 33
 ## As FlightTimetable issues an occurrence well before its first state, the
-## earliest relaxed arrival (RELAXED_LEAD_TICKS before departure, 1640 ticks
+## earliest relaxed arrival (RELAXED_LEAD_TICKS before departure, 1340 ticks
 ## before the first state) is still ahead of the clock.
 const FIRST_STATE := 1700
 

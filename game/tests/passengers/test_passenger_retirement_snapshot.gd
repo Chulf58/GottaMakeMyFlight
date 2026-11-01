@@ -35,10 +35,10 @@ func _retired() -> void:
 	for i in 4:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	# Arrivals after this tick cannot reach the plane before the doors close.
-	_a.run_to(1700)
+	_a.run_to(PassengerTestWorld.doors_tick() - 200)
 	for i in 3:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_a.run_to(1900 + PassengerSim.SETTLED_KEEP_TICKS + 5)
+	_a.run_to(PassengerTestWorld.doors_tick() + PassengerSim.SETTLED_KEEP_TICKS + 5)
 	assert_int(_a.sim.passenger_ids().size()).is_equal(0)
 	assert_int(_a.sim.made_count() + _a.sim.missed_count()).is_equal(15)
 	assert_int(_a.sim.missed_count()).is_greater(0)
@@ -109,10 +109,10 @@ func test_inconsistent_totals_and_results_are_refused_whole() -> void:
 
 func test_totals_below_the_retained_settled_passengers_are_refused() -> void:
 	_a = PassengerTestWorld.reference_world(11)
-	_a.run_to(1890)
+	_a.run_to(PassengerTestWorld.doors_tick() - 10)
 	for i in 4:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_a.run_to(1950)
+	_a.run_to(PassengerTestWorld.doors_tick() + 50)
 	assert_int(_a.sim.passenger_ids().size()).is_equal(4)
 	var data := _round_trip()
 	_b = PassengerTestWorld.reference_world()

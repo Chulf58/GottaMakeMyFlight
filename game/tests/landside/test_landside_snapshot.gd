@@ -21,8 +21,9 @@ const BAD_CASES := [
 ]
 
 var _land: LandsideTestWorld
-## A JSON round trip of a part taken with cars on the road, in a berth and
-## in the lot, and bookings both waiting and aboard.
+## A JSON round trip of a part taken with cars on the road, in a berth (one
+## still holding it, not already pulling out) and in the lot, and bookings both
+## waiting and aboard.
 var _data: Dictionary
 
 
@@ -50,7 +51,17 @@ func _varied() -> bool:
 	for id in _land.landside.vehicle_ids():
 		lanes[_land.landside.get_vehicle(id).lane] = true
 	var lane := LandsideVehicle.Lane
-	return lanes.has(lane.ROAD_IN) and lanes.has(lane.BERTH) and lanes.has(lane.SLOT)
+	return lanes.has(lane.ROAD_IN) and _holder_of_a_berth() != 0 and lanes.has(lane.SLOT)
+
+
+## The id of a car in a berth that still holds it (pulling in or standing; a
+## car pulling out has given the berth up and may share it with the next), or 0.
+func _holder_of_a_berth() -> int:
+	for id in _land.landside.vehicle_ids():
+		var v := _land.landside.get_vehicle(id)
+		if v.lane == LandsideVehicle.Lane.BERTH and v.stage != LandsideVehicle.Stage.LEAVE:
+			return id
+	return 0
 
 
 func _first(key: String, field: String, value: Variant) -> Dictionary:
@@ -106,7 +117,8 @@ func _break(d: Dictionary, case_name: String) -> void:
 				LandsideVehicle.Stage.DWELL
 			)
 		"berth twice":
-			var copy: Dictionary = _first("vehicles", "lane", LandsideVehicle.Lane.BERTH)
+			var holder := _holder_of_a_berth()
+			var copy: Dictionary = _first("vehicles", "id", holder)
 			copy = copy.duplicate(true)
 			copy["id"] = d["next_vehicle_id"]
 			copy["bookings"] = []

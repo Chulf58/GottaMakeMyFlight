@@ -144,7 +144,7 @@ func has_working_path() -> bool:
 func repair_plan() -> RepairPlan:
 	_watch_grid()
 	if _plan == null:
-		_plan = RepairPlan.make(_sim.grid, _sim.site)
+		_plan = RepairPlan.make(_sim.grid, _sim.site, _sim.layout.stand)
 		_bound = _price_of(_plan)
 		plans_made += 1
 		if _in_tick and _clock != null:

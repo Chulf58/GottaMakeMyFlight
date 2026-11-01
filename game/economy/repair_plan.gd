@@ -90,6 +90,11 @@ const MAX_TRIES := 12
 const MAX_ATTEMPTS := 48
 ## New entrance spots kept per grid column on a site (_site_door_spots()).
 const SITE_SPOTS_PER_COLUMN := 2
+## Cells kept round what is built and the plane door's cell on a site, where
+## the plan may build, walk and wall in (_site_area()).
+const SITE_MARGIN := 4
+## Cells kept round the plan and what is built in least_balance()'s copy.
+const PRICE_MARGIN := 2
 const UNREACHED := 1 << 30
 ## The side each walkable cell is marked with.
 const LAND := 1
@@ -115,8 +120,9 @@ var fallback_price := -1
 var undo_failures := 0
 
 var _grid: BuildGrid
-## The snapshot of the grid make() was given, for _failing_leg().
-var _source := {}
+## A clone of the grid as make() was given it (its part on a site), for
+## _failing_leg() to rebuild the finished plan on.
+var _start: BuildGrid
 var _layout := TerminalLayout.new()
 var _site: SiteDefinition
 var _floor_price := -1
@@ -150,6 +156,8 @@ var _bad_leg := -1
 var _marks: Array[int] = [0, 0, 0]
 ## Set when a cap cut the choices short.
 var _capped := false
+## Set when the plan is made on part of a site only (_made_on()).
+var _partial := false
 
 
 ## Whether a new passenger can walk entrance, desk, scanner and exit on `grid`
@@ -190,45 +198,222 @@ static func can_finish(
 ## taken up is charged once, and one painted, taken up and painted again twice.
 ## An edit the copy refuses changes nothing there and is still quoted.
 ## PriceTable.NO_PRICE when an edit has no price.
+## The copy is only the part of `grid` the plan and what is built cover,
+## PRICE_MARGIN cells wider each way (_cropped()): a quote reads only the cells
+## and edges its edit touches, and a copy of the whole 86x150 site took over
+## 400 ms.
 static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
-	var standing := BuildGrid.new(grid.size, grid.origin)
-	if not standing.from_snapshot(grid.to_snapshot()):
+	var source := grid.to_snapshot()
+	var area := _built_area(source)
+	for edit in plan_edits:
+		area = _merged(area, edit.cell)
+	area = area.grow(PRICE_MARGIN).intersection(Rect2i(Vector2i.ZERO, grid.size))
+	var standing := BuildGrid.new(area.size, _origin_of(grid.origin, area))
+	if not standing.from_snapshot(_cropped(source, area)):
 		push_error("RepairPlan: the grid could not be copied to price the plan")
 		return PriceTable.NO_PRICE
 	standing.check_staff_reach = false
+	_move(plan_edits, -area.position)
 	var least := 0
 	var spent := 0
 	for edit in plan_edits:
 		var quote := BuildTransaction.quote(standing, edit)
 		if not quote.priced:
-			return PriceTable.NO_PRICE
+			least = PriceTable.NO_PRICE
+			break
 		least = maxi(least, spent + maxi(quote.net(), 0))
 		spent += quote.net()
 		var saved := edit.paid
 		edit.paid = quote.paid
 		standing.apply(edit)
 		edit.paid = saved
+	_move(plan_edits, area.position)
 	return least
 
 
 ## The plan for `grid` (left unchanged); on `site` its doors need walks
-## outside (TerminalLayout.site).
-static func make(grid: BuildGrid, site: SiteDefinition = null) -> RepairPlan:
+## outside (TerminalLayout.site), an exit's to the plane door at `stand`
+## (TerminalLayout.stand; empty for the starter stand).
+##
+## On a site the plan is made on a copy of only the part a repair can use
+## (_site_area()), with the site moved into that copy's frame (_site_within()),
+## and its edits are moved back to `grid`'s cells. The whole 86x150 site took
+## about 3 s, and RescueGrant.prepare() makes this plan on the main thread
+## before a new game's first frame and after every load. That part can leave
+## out the only repair (one whose floor or walk outside needs ground beyond
+## it), so a search there that finds none is no answer: the plan is made again
+## on the whole grid, which is slow but rare, and that search's result stands,
+## its fallback_price priced on the whole grid when its caps run out.
+static func make(grid: BuildGrid, site: SiteDefinition = null, stand := {}) -> RepairPlan:
+	var source := grid.to_snapshot()
+	var whole := Rect2i(Vector2i.ZERO, grid.size)
+	if site == null:
+		return _made_on(grid, source, whole, null, stand)
+	var area := _site_area(grid, source, site, stand)
+	var plan := _made_on(grid, source, area, site, stand)
+	if plan.ok or area == whole:
+		return plan
+	var on_whole := _made_on(grid, source, whole, site, stand)
+	on_whole.undo_failures += plan.undo_failures
+	return on_whole
+
+
+## The plan made on `area` of `grid` (whose to_snapshot() is `source`), with
+## its edits in `grid`'s cells. On a site, a plan made on less than the whole
+## grid is partial: one that finds no repair pushes nothing and prices no
+## fallback, since make() goes on to the whole grid.
+static func _made_on(
+	grid: BuildGrid, source: Dictionary, area: Rect2i, site: SiteDefinition, stand: Dictionary
+) -> RepairPlan:
 	var plan := RepairPlan.new()
+	if site != null:
+		plan._partial = area != Rect2i(Vector2i.ZERO, grid.size)
+		source = _cropped(source, area)
+		site = _site_within(site, area)
 	plan._site = site
 	plan._layout.site = site
-	plan._grid = BuildGrid.new(grid.size, grid.origin)
-	plan._source = grid.to_snapshot()
-	if not plan._grid.from_snapshot(plan._source):
+	plan._layout.stand = stand
+	plan._grid = BuildGrid.new(area.size, _origin_of(grid.origin, area))
+	if not plan._grid.from_snapshot(source):
 		push_error("RepairPlan: the grid could not be copied")
 		return plan
+	plan._start = plan._grid.clone()
 	# The search builds leg by leg, so a piece may stand on a corridor until a
 	# later leg's floor goes round it; _failing_leg() judges staff reach on the
 	# finished plan, floors and walls first.
 	plan._grid.check_staff_reach = false
 	plan._layout.rebuild(plan._grid)
 	plan.ok = plan._plan()
+	_move(plan.edits, area.position)
 	return plan
+
+
+## The part of a site grid a plan is made on: what is built (floor, walls and
+## objects; with nothing built, the starter shell's place) and the cell of the
+## plane door at the live stand, SITE_MARGIN cells wider each way and on down
+## to the grid's south edge, where the walks in from the road start.
+static func _site_area(
+	grid: BuildGrid, source: Dictionary, site: SiteDefinition, stand: Dictionary
+) -> Rect2i:
+	var area := _built_area(source)
+	if area.size == Vector2i.ZERO:
+		for edit in ReferenceTerminal.shell_edits(site.starter_offset):
+			area = _merged(area, edit.cell)
+	var live := stand if not stand.is_empty() else StandPlacement.starter_stand(grid, site)
+	area = _merged(area, StandPlacement.door_seed(grid, live)).grow(SITE_MARGIN)
+	area.end = Vector2i(area.end.x, grid.size.y)
+	return area.intersection(Rect2i(Vector2i.ZERO, grid.size))
+
+
+## The cells a snapshot has floor, a wall or an object on, as one rectangle
+## (zero sized when there are none). A wall marks the cell south or east of
+## its edge (the edge cell itself on the grid's south or east border), which
+## keeps the edge inside the rectangle.
+@warning_ignore("integer_division")
+static func _built_area(source: Dictionary) -> Rect2i:
+	var width := int(source["width"])
+	var height := int(source["height"])
+	var area := Rect2i()
+	var floors: Array = source["floor"]
+	for i in floors.size():
+		if int(floors[i]) != BuildGrid.FLOOR_NONE:
+			area = _merged(area, Vector2i(i % width, i / width))
+	var rows: Array = source["h_walls"]
+	for i in rows.size():
+		if int(rows[i]) != BuildGrid.WallKind.NONE:
+			area = _merged(area, Vector2i(i % width, mini(i / width, height - 1)))
+	var columns: Array = source["v_walls"]
+	for i in columns.size():
+		if int(columns[i]) != BuildGrid.WallKind.NONE:
+			area = _merged(area, Vector2i(mini(i % (width + 1), width - 1), i / (width + 1)))
+	for entry in source["objects"]:
+		var anchor := Vector2i(int(entry["anchor"][0]), int(entry["anchor"][1]))
+		var def := BuildCatalog.get_def(StringName(entry["def"]))
+		for cell in def.footprint(anchor, int(entry["facing"])):
+			area = _merged(area, cell)
+	return area
+
+
+## `area` grown to hold `cell`; a zero-sized `area` becomes `cell` alone.
+static func _merged(area: Rect2i, cell: Vector2i) -> Rect2i:
+	var one := Rect2i(cell, Vector2i.ONE)
+	return one if area.size == Vector2i.ZERO else area.merge(one)
+
+
+## A to_snapshot() dictionary holding only `area` of `source`, in `area`'s
+## frame: cell (0, 0) is `area`'s corner. Every object and room must lie
+## inside `area`.
+static func _cropped(source: Dictionary, area: Rect2i) -> Dictionary:
+	var width := int(source["width"])
+	var out := source.duplicate()
+	out["width"] = area.size.x
+	out["height"] = area.size.y
+	var at: Array = source["origin"]
+	out["origin"] = [at[0] + area.position.x, at[1], at[2] + area.position.y]
+	var cells := [area.position.x, area.size.x, area.position.y, area.size.y]
+	var north_south := [area.position.x, area.size.x, area.position.y, area.size.y + 1]
+	var west_east := [area.position.x, area.size.x + 1, area.position.y, area.size.y]
+	for key in ["floor", "zone", "floor_paid"]:
+		out[key] = _rows(source[key], width, cells)
+	for key in ["h_walls", "h_walls_paid"]:
+		out[key] = _rows(source[key], width, north_south)
+	for key in ["v_walls", "v_walls_paid"]:
+		out[key] = _rows(source[key], width + 1, west_east)
+	var objects := []
+	for entry in source["objects"]:
+		var moved: Dictionary = entry.duplicate()
+		moved["anchor"] = [
+			int(entry["anchor"][0]) - area.position.x, int(entry["anchor"][1]) - area.position.y
+		]
+		objects.append(moved)
+	out["objects"] = objects
+	var rooms := []
+	for entry in source["rooms"]:
+		var moved: Dictionary = entry.duplicate()
+		var rect: Array = entry["rect"]
+		moved["rect"] = [
+			int(rect[0]) - area.position.x, int(rect[1]) - area.position.y, rect[2], rect[3]
+		]
+		rooms.append(moved)
+	out["rooms"] = rooms
+	return out
+
+
+## The values of `window` [x, width, y, height] out of `values`, a row-major
+## array `stride` values wide, row by row.
+static func _rows(values: Array, stride: int, window: Array) -> Array:
+	var out := []
+	for y in range(window[2], window[2] + window[3]):
+		var start: int = y * stride + window[0]
+		out.append_array(values.slice(start, start + window[1]))
+	return out
+
+
+## The world corner of `area`'s cell (0, 0) on a grid whose own is at `origin`.
+static func _origin_of(origin: Vector3, area: Rect2i) -> Vector3:
+	return origin + Vector3(area.position.x, 0.0, area.position.y)
+
+
+## A copy of `site` in the frame of the part `area` of its grid: its grid,
+## starter place and obstacles moved, the road and heights as they are.
+static func _site_within(site: SiteDefinition, area: Rect2i) -> SiteDefinition:
+	var local: SiteDefinition = site.duplicate()
+	local.grid_origin = _origin_of(site.grid_origin, area)
+	local.grid_size = area.size
+	local.starter_offset = site.starter_offset - area.position
+	var kept: Array[Vector2i] = []
+	for cell in site.obstacles:
+		if area.has_point(cell):
+			kept.append(cell - area.position)
+	local.obstacles = kept
+	return local
+
+
+## Moves every edit's cell by `by`. A plan's edits all name cells (floor,
+## walls and placements), none an object or room by id alone.
+static func _move(plan_edits: Array[BuildEdit], by: Vector2i) -> void:
+	for edit in plan_edits:
+		edit.cell += by
 
 
 ## Where a leg's walkers stand once the leg is done: a desk's service cell,
@@ -307,6 +492,8 @@ func _plan() -> bool:
 	if _solve(Leg.DESK, sources):
 		edits = RepairEnclosure.without_undone_walls(_ordered(edits))
 		return true
+	if _partial:
+		return false
 	if _capped:
 		push_warning("RepairPlan: no repair within the caps; pricing a conservative one")
 		fallback_price = _fallback_price()
@@ -317,9 +504,10 @@ func _plan() -> bool:
 
 ## The price taken for a repair when the caps ran out: every essential at its
 ## price, plus floor for every bare cell in the area the terminal's floor
-## spans, one cell wider each way (the whole grid when it has no floor). A
-## repair buys at most one of each essential, and one that stays in that area
-## floors no more cells than this, so the player gets enough and may get more.
+## spans, one cell wider each way (the whole grid the plan is made on, see
+## make(), when it has no floor). A repair buys at most one of each essential,
+## and one that stays in that area floors no more cells than this, so the
+## player gets enough and may get more.
 ## The floor must be walled in (RepairEnclosure), so a plain wall is added
 ## for every edge of the area's cells that could need one (_open_edges()).
 func _fallback_price() -> int:
@@ -651,14 +839,17 @@ func _door_choices(def_id: StringName) -> Array:
 ## spots whose service cell the last search reached.
 func _door_sources(def_id: StringName, reached := false) -> Array:
 	# On a site a door needs its walk outside: an entrance to the road, an exit
-	# to the plane.
+	# to the plane door at the live stand.
 	var edge := (
 		SiteDefinition.ROAD_STEP if def_id == &"entrance_door" else SiteDefinition.PLANE_STEP
 	)
 	var to_edge := PackedInt32Array()
 	var spots := []
 	if _site != null:
-		to_edge = SiteRoutes.distances(_grid, _site, SiteRoutes.edge_cells(_grid, _site, edge))
+		if def_id == &"entrance_door":
+			to_edge = SiteRoutes.distances(_grid, _site, SiteRoutes.edge_cells(_grid, _site, edge))
+		else:
+			to_edge = StandPlacement.to_door(_grid, _site, _layout.live_stand(_grid))
 		spots = _site_door_spots(def_id, edge, to_edge)
 	else:
 		for y in _grid.size.y:
@@ -892,9 +1083,7 @@ func _failing_leg() -> int:
 		here = _next_cells(_grid, _layout, here, each)
 		if here.is_empty():
 			return each
-	var trial := BuildGrid.new(_grid.size, _grid.origin)
-	if not trial.from_snapshot(_source):
-		return Leg.DESK
+	var trial := _start.clone()
 	for edit in _ordered(edits):
 		if not trial.apply(edit).ok:
 			var at := edits.find(edit)

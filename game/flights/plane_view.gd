@@ -15,8 +15,24 @@ extends Node3D
 ## shadow distance it draws the plane's
 ## sun silhouette on the ground, so a far plane in the air still reads as
 ## airborne.
+##
+## On the ground (taxi in, at the stand, pushback, taxi out) the plane rides on
+## the surface under it: the terminal site's paving (ground_height, y 0.2) on
+## the site, the grass and taxiway (y 0) off it, with a PAVING_RAMP_M ramp just
+## outside the site's edge (ground_height_at()). Only the height changes; the
+## Airside paths, and so the taxi lengths and timings, stay as they are.
 
 const PLANE_SCENE := preload("res://assets/planes/tp_plane_05a.glb")
+## The terminal site, whose whole grid is paved flat at its ground_height
+## (tools/blender/terminal_site/build_terminal_site.py; user ruling plane-guard-
+## area-shows-only-in-build-mode-the-site-paving-ex, point 2).
+const SITE := preload("res://build/terminal_site.tres")
+## How far outside the site's edge the ground rises from y 0 to the paving.
+const PAVING_RAMP_M := 4.0
+## The moving states whose poses roll on the ground.
+const ON_GROUND: Array[int] = [
+	FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT
+]
 ## pose_at phases beside the FlightSim states it passes through.
 const PHASE_LEAD_IN := -1
 const PHASE_CLIMB_OUT := FlightSim.State.DEPARTED
@@ -63,7 +79,10 @@ var flight_id := ""
 ## Its pose_at phase on the last update_pose().
 var phase := PHASE_LEAD_IN
 
+## Phase and sky paths read from the airside, kept while its stand stays
+## where it was when they were read (_paths_stand, Airside.stand_moves).
 var _paths: Dictionary = {}
+var _paths_stand := 0
 var _far_shadow: Node3D
 var _far_material: StandardMaterial3D
 
@@ -184,10 +203,20 @@ func pose_at(starts: Array[int], time: float, full_lead_in := true) -> Dictionar
 	var progress := 1.0
 	if not REST_AFTER.has(state) and starts[state + 1] > starts[state]:
 		progress = (time - starts[state]) / float(starts[state + 1] - starts[state])
-	return {
-		"phase": state,
-		"transform": FlightPose.pose(moving, progress, _path(moving), _entry_dir(moving)),
-	}
+	var pose := FlightPose.pose(moving, progress, _path(moving), _entry_dir(moving))
+	if ON_GROUND.has(moving):
+		pose.origin.y += ground_height_at(pose.origin)
+	return {"phase": state, "transform": pose}
+
+
+## The ground's height under `point`: the site's paving height on the site,
+## 0 from PAVING_RAMP_M outside its edge, and a straight ramp between.
+static func ground_height_at(point: Vector3) -> float:
+	var low := Vector2(SITE.grid_origin.x, SITE.grid_origin.z)
+	var high := low + Vector2(SITE.grid_size)
+	var at := Vector2(point.x, point.z)
+	var outside := at.distance_to(at.clamp(low, high))
+	return SITE.ground_height * clampf(1.0 - outside / PAVING_RAMP_M, 0.0, 1.0)
 
 
 ## Flat metres per tick of the lead-in: the approach's own flat speed, so the
@@ -294,6 +323,9 @@ func _place_far_shadow() -> void:
 
 
 func _path(state: int) -> PackedVector3Array:
+	if _paths_stand != airside.stand_moves:
+		_paths.clear()
+		_paths_stand = airside.stand_moves
 	if not _paths.has(state):
 		_paths[state] = airside.phase_path(state)
 	return _paths[state]

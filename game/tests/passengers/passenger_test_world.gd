@@ -24,6 +24,25 @@ var auto_staff_roles: Array[StaffMember.Role] = []
 var _tracked := false
 
 
+## The tick the reference flight (FlightSim.schedule_starts(0)) opens boarding and
+## the tick it closes its doors, which tests that run the default flight wait for.
+static func boarding_tick() -> int:
+	return FlightSim.schedule_starts(0)[FlightSim.State.BOARDING]
+
+
+## The tick the reference flight's usual arrival window opens (ArrivalTypes): a
+## test that schedules passengers at the start of that window runs to it first.
+static func arrival_opens_tick() -> int:
+	return (
+		FlightSim.schedule_starts(0)[FlightSim.State.PUSHBACK]
+		- ArrivalTypes.ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS
+	)
+
+
+static func doors_tick() -> int:
+	return FlightSim.schedule_starts(0)[FlightSim.State.DOORS_CLOSED]
+
+
 ## Start ticks for a flight that starts boarding at `boarding` and closes its
 ## doors at `doors`.
 static func starts_with(boarding: int, doors: int) -> Array[int]:

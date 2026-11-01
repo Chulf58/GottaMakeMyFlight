@@ -46,8 +46,13 @@ func test_a_gate_clash_with_a_contract_names_both_and_the_gate() -> void:
 
 func test_a_gate_clash_with_a_one_off_flight_names_the_flight() -> void:
 	assert_bool(_sim.add_default_flight()).is_true()
-	assert_str(_sim.accept_problem(TestFlightContracts.terms("A2", 458))).is_equal(
-		"contract A2 clashes with flight GMF101 at gate C"
+	(
+		assert_str(
+			_sim.accept_problem(
+				TestFlightContracts.terms("A2", TestFlightContracts.bootstrap_minute())
+			)
+		)
+		. is_equal("contract A2 clashes with flight GMF101 at gate C")
 	)
 
 

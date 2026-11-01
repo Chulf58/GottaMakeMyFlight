@@ -105,7 +105,8 @@ func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
 
 
 ## Opened at tick 1, the starter's first state is at 2420 (the lead, rounded
-## up to a whole minute), issued at 20, departing 09:39 on day one.
+## up to a whole minute), issued at 20, departing 09:54 on day one (the
+## pushback, FlightTimetable.departure_offset() after the first state).
 func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 	assert_int(_opened["opened_tick"]).is_equal(1)
 	assert_array(_opened["contracts"]).is_equal([FlightSim.DEFAULT_ID])
@@ -117,7 +118,11 @@ func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 	assert_int(_opened["first_start"]).is_equal(20 + FlightTimetable.ISSUE_LEAD_TICKS)
 	assert_int(GameCalendar.day_of(_opened["pushback"])).is_equal(0)
 	var doors_text := GameCalendar.clock_text(_opened["doors_close"])
-	assert_str(_opened["departures"]).is_equal("09:39  Oslo  Gotta Air  doors close " + doors_text)
+	var departure_text := GameCalendar.clock_text(_opened["pushback"])
+	assert_str(departure_text).is_equal("09:54")
+	assert_str(_opened["departures"]).is_equal(
+		departure_text + "  Oslo  Gotta Air  doors close " + doors_text
+	)
 
 
 ## The clock and the timetable replace the elapsed time and the one-flight row.

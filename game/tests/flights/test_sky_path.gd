@@ -281,7 +281,7 @@ func test_the_layout_flies_inside_the_ruled_band() -> void:
 
 ## Sol review regression: an offer accepted after opening whose first SCHEDULED
 ## is close. AM departs 08:00, so accepted at 06:00 (tick 0) its SCHEDULED is
-## tick 440, far inside the full lead-in. The control shows the full lead-in
+## tick 140, far inside the full lead-in. The control shows the full lead-in
 ## would already be mid-air on the first frame; the view must instead show
 ## nothing until SCHEDULED, then the straight-in from its unseen entry, joining
 ## the approach without a jump. The next day has the full lead-in again.
@@ -293,7 +293,9 @@ func test_an_offer_accepted_late_enters_unseen_on_the_straight_in() -> void:
 	var starts := view.starts_of("AM-d0")
 	var scheduled := starts[FlightSim.State.SCHEDULED]
 	var approach := starts[FlightSim.State.APPROACH]
-	assert_int(scheduled).is_equal(440)
+	assert_int(scheduled).is_equal(
+		GameCalendar.tick_at(0, 480) - FlightTimetable.departure_offset()
+	)
 	# Control: the full lead-in is already under way at the first frame.
 	var full: Dictionary = view.pose_at(starts, 0.0, true)
 	assert_bool(full.is_empty()).is_false()

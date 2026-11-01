@@ -11,6 +11,7 @@ extends GdUnitTestSuite
 
 const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
+const SITE := preload("res://build/terminal_site.tres")
 const STUCK_LIMIT_S := 2.0
 ## The desk ticks count from the first passenger's arrival, the late spawn
 ## and the end from the first state of the starter's first flight. The first
@@ -20,8 +21,10 @@ const DESKS_GONE_TICK := 300
 const STUCK_CHECK_TICK := 600
 const DESKS_BACK_TICK := 610
 const CLEAR_CHECK_TICK := 800
-const LATE_SPAWN_TICK := 1890
-const END_TICK := 2600
+## The late spawn is this many ticks before the doors close, and the session
+## ends this many after the flight departs, whatever the phase lengths are.
+const LATE_SPAWN_BEFORE_DOORS_TICKS := 10
+const END_AFTER_DEPARTURE_TICKS := 20
 ## A cell of the site's open ground, off the starter terminal's floor.
 const OFF_FLOOR_CELL := Vector2i(12, 29)
 const ERROR_TEXT := "PlaytestHook test error"
@@ -48,6 +51,9 @@ var _snapshot: Dictionary
 var _events: Array[Dictionary] = []
 ## The first state of the starter's first flight.
 var _start := 0
+## The late spawn's tick and the session's last tick.
+var _late_tick := 0
+var _end_tick := 0
 
 
 func before() -> void:
@@ -76,7 +82,10 @@ func before() -> void:
 	# flight starts ISSUE_LEAD_TICKS later; the session's ticks count from it.
 	_run_to(1)
 	var starter := (_main.get_node("FlightSim") as FlightSim).contract_of(FlightSim.DEFAULT_ID)
-	_start = FlightTimetable.starts_for(starter, 0)[FlightSim.State.SCHEDULED]
+	var starts := FlightTimetable.starts_for(starter, 0)
+	_start = starts[FlightSim.State.SCHEDULED]
+	_late_tick = starts[FlightSim.State.DOORS_CLOSED] - LATE_SPAWN_BEFORE_DOORS_TICKS
+	_end_tick = starts[FlightSim.State.DEPARTED] + END_AFTER_DEPARTURE_TICKS
 	# The first passengers arrive well before the flight's first state; the
 	# desks go and come back while they walk to check-in.
 	while _sim.passenger_ids().is_empty() and _clock.tick < _start:
@@ -90,9 +99,9 @@ func before() -> void:
 	_put_back(desks)
 	_run_to(arrived + CLEAR_CHECK_TICK)
 	_check()
-	_run_to(_start + LATE_SPAWN_TICK)
+	_run_to(_late_tick)
 	_late_id = _sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
-	_run_to(_start + END_TICK)
+	_run_to(_end_tick)
 	# Before the last check, whose flush puts the room events in the file.
 	_mark_rooms()
 	push_error(ERROR_TEXT)
@@ -177,7 +186,7 @@ func test_the_late_passenger_is_logged_as_missed() -> void:
 
 func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	assert_bool(_snapshot["attached"]).is_true()
-	assert_int(_snapshot["tick"]).is_equal(_start + END_TICK)
+	assert_int(_snapshot["tick"]).is_equal(_end_tick)
 	assert_int(_start).is_equal(1 + 19 + FlightTimetable.ISSUE_LEAD_TICKS)
 	assert_str(_snapshot["flight_state"]).is_equal("DEPARTED")
 	# Settled passengers are retired 200 ticks after their outcome; the durable
@@ -198,12 +207,11 @@ func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	}
 	assert_dict(grid["objects"]).is_equal(objects)
 	assert_int(grid["walls"]["PLAIN"]).is_greater(0)
-	assert_array(grid["entrances"][0]["cell"]).is_equal(
-		[ReferenceTerminal.ENTRANCE_CELL.x, ReferenceTerminal.ENTRANCE_CELL.y]
-	)
-	assert_array(grid["exits"][0]["cell"]).is_equal(
-		[ReferenceTerminal.EXIT_CELL.x, ReferenceTerminal.EXIT_CELL.y]
-	)
+	# The site moves the starter by its starter_offset.
+	var entrance := ReferenceTerminal.ENTRANCE_CELL + SITE.starter_offset
+	var exit_cell := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
+	assert_array(grid["entrances"][0]["cell"]).is_equal([entrance.x, entrance.y])
+	assert_array(grid["exits"][0]["cell"]).is_equal([exit_cell.x, exit_cell.y])
 	assert_int(_snapshot["events"].size()).is_equal(5)
 	assert_int(_snapshot["event_total"]).is_greater(_snapshot["events"][4]["i"])
 	assert_array(_snapshot["stuck"]).is_empty()
