@@ -9,8 +9,12 @@ extends SceneTree
 ## shell with the debug button, hires a check-in agent and an officer, and
 ## follows the first flight: its landing on the runway at z -310 seen from the
 ## camera's focus clamp, a taxi-in strip, the plane nose-in at the north exit
-## (from above and from the apron), the guarded area, a passenger between the
-## exit and the plane door and a pushback strip. After its TAKEOFF it opens a
+## (from above and from the apron) in normal play with the guarded area hidden,
+## the same two views and the guarded area with a build tray open (user ruling
+## plane-guard-area-shows-only-in-build-mode-the-site-paving-ex), the grown
+## site's paving to its north edge at z -210 (the plane parks on it, checked
+## by a downward ray onto the site asset), a passenger between the exit and
+## the plane door and a pushback strip. After its TAKEOFF it opens a
 ## second north exit and blocks the starter exit's straight walk, so the stand
 ## moves; the next day's flight flies the lead-in pass whose shadow crosses the
 ## terminal and parks at the new stand. Plates go under
@@ -55,6 +59,8 @@ var _cam: Camera3D
 var _apron: ApronStand
 var _plane: PlaneView
 var _site: SiteDefinition
+var _menu: BuildMenu
+var _guard_view: Node3D
 
 
 func _initialize() -> void:
@@ -87,6 +93,8 @@ func _run() -> void:
 	_cam = _rig.get_node("Camera3D")
 	_apron = _main.get_node("ApronStand")
 	_plane = _main.get_node("PlaneView")
+	_menu = _main.get_node("BuildMenu")
+	_guard_view = _apron.get_node("GuardView")
 	_hud.dismiss_intro()
 	_clock.set_paused(true)
 	_hud.press_starter_terminal()
@@ -169,16 +177,116 @@ func _at_the_stand(id: String, starter: Vector3) -> void:
 	var rects := _apron.guard_rects()
 	print("PROBE guarded rects %s" % [rects])
 	if rects.size() != 2:
-		_fail("the guarded area is not shown while the plane is at the stand")
+		_fail("there is no guarded area while the plane is at the stand")
+		return
+	if not _guard_shown(false) or not _on_paving(starter):
+		return
+	await _tray_plates(starter, exit_point, gap, door, rects)
+	if _done:
+		return
+	await _paving_overview()
+	if not _done:
+		await _departure(id, starter, exit_point, door)
+
+
+## The nose-in views again and the whole guarded area, with a build tray open:
+## the orange area shows only then.
+func _tray_plates(
+	starter: Vector3, exit_point: Vector3, gap: Vector3, door: Vector3, rects: Array
+) -> void:
+	_menu.press_category(0)
+	await _frames(2)
+	print(
+		"PROBE tray open %s, build session %s" % [_menu.is_tray_open(), _menu.build_session.active]
+	)
+	if not _menu.is_tray_open() or not _guard_shown(true):
+		_fail("opening a build tray did not show the guarded area")
+		return
+	_view(starter + Vector3(0.0, 0.0, 6.0), 55.0, PI / 2.0)
+	await _plate("c2_nose_in_top_build_tray", [starter, exit_point], [gap])
+	if _done:
+		return
+	_view(starter + Vector3(4.0, 0.0, 8.0), 34.0, deg_to_rad(160.0))
+	await _plate("d2_nose_in_apron_side_build_tray", [starter, exit_point], [gap], [door])
+	if _done:
 		return
 	var corner_low := Vector3(rects[0].position.x, 0.3, rects[0].end.y)
 	var corner_north := Vector3(rects[1].get_center().x, 0.3, rects[1].position.y + 5.0)
 	_view(Vector3(starter.x, 0.0, -170.0), 240.0, 0.0)
 	await _plate(
-		"e_guarded_area", [corner_low, corner_north], [Vector3(starter.x + 15.0, 0.35, -180.0)]
+		"e_guarded_area_build_tray",
+		[corner_low, corner_north],
+		[Vector3(starter.x + 15.0, 0.35, -180.0)]
 	)
-	if not _done:
-		await _departure(id, starter, exit_point, door)
+	_menu.press_category(0)
+	await _frames(2)
+	if not _done and (_menu.is_tray_open() or not _guard_shown(false)):
+		_fail("closing the build tray did not hide the guarded area")
+
+
+## The grown site's paving from the starter shell to its north edge, z -210.
+func _paving_overview() -> void:
+	var low := _grid.origin
+	var high := low + Vector3(_grid.size.x, 0.0, _grid.size.y)
+	var y := _site.ground_height
+	var north_west := Vector3(low.x + 1.0, y, low.z + 1.0)
+	var north_east := Vector3(high.x - 1.0, y, low.z + 1.0)
+	for point in [north_west, north_east, Vector3(0.0, y, low.z + 30.0)]:
+		if not _on_paving(point):
+			return
+	_view(Vector3(0.0, 0.0, (low.z + high.z) / 2.0), 210.0, 0.0)
+	await _plate(
+		"k_site_paving_overview",
+		[north_west, north_east, Vector3(low.x + 1.0, y, high.z - 1.0)],
+		[north_west + Vector3.UP * 0.35, north_east + Vector3.UP * 0.35]
+	)
+
+
+## Whether the guarded area is drawn exactly when `want`; fails the probe if not.
+func _guard_shown(want: bool) -> bool:
+	var drawn := 0
+	for area in _guard_view.get_children():
+		if (area as Node3D).is_visible_in_tree():
+			drawn += 1
+	print(
+		(
+			"PROBE guard view visible_in_tree=%s, areas drawn %d (want shown %s)"
+			% [_guard_view.is_visible_in_tree(), drawn, want]
+		)
+	)
+	if (drawn > 0) != want:
+		_fail(
+			"the guarded area is %s" % ("hidden in build mode" if want else "shown in normal play")
+		)
+		return false
+	return true
+
+
+## Whether a ray straight down at `point` first meets the site asset's paving
+## at the ground height; fails the probe if not.
+func _on_paving(point: Vector3) -> bool:
+	var site_node := _main.get_node("Airside/Terminal")
+	var from := Vector3(point.x, 5.0, point.z)
+	var to := Vector3(point.x, -1.0, point.z)
+	var best_y := -INF
+	var best := ""
+	for node in site_node.find_children("*", "MeshInstance3D", true, false):
+		var instance := node as MeshInstance3D
+		var inverse := instance.global_transform.affine_inverse()
+		var hit: Dictionary = instance.mesh.generate_triangle_mesh().intersect_segment(
+			inverse * from, inverse * to
+		)
+		if hit.is_empty():
+			continue
+		var world_hit: Vector3 = instance.global_transform * (hit["position"] as Vector3)
+		if world_hit.y > best_y:
+			best_y = world_hit.y
+			best = instance.name
+	print("PROBE paving under (%.1f, %.1f): %s at y %.3f" % [point.x, point.z, best, best_y])
+	if absf(best_y - _site.ground_height) > 0.01:
+		_fail("no site paving at y %.2f under %s" % [_site.ground_height, point])
+		return false
+	return true
 
 
 func _departure(id: String, starter: Vector3, exit_point: Vector3, door: Vector3) -> void:

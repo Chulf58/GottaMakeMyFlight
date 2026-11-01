@@ -12,9 +12,13 @@ extends Node3D
 ## While a flight uses the stand, edits that build on its parked footprint or
 ## on the route it still has to sweep (pushback, swing and the way north to
 ## the taxi lane) are refused (edit_problem(), the guard of the site's
-## SiteGrid), and that area is drawn on the ground. Removals are always
-## allowed. A label over the stand shows a pending move with the time it will
-## happen, "no usable stand", and a walk from an exit to the plane door over
+## SiteGrid), and that area is drawn on the ground (GuardView) while build
+## mode lasts: during normal play only the plane shows (user ruling plane-
+## guard-area-shows-only-in-build-mode-the-site-paving-ex, point 1). Build
+## mode is BuildMenu's BuildSession, so GuardView follows its changed signal,
+## as BuildableOutline does. Removals are always allowed. A label over the
+## stand shows a pending move with the time it will happen, "no usable
+## stand", and a walk from an exit to the plane door over
 ## StandPlacement.WALK_WARNING_M, which refuses nothing.
 ##
 ## Only `live` is saved; wanted is worked out from the loaded grid.
@@ -39,6 +43,8 @@ const REMOVALS: Array[BuildEdit.Kind] = [
 @export var flights: FlightSim
 @export var airside: Airside
 @export var passengers: PassengerSim
+## The menu whose build session shows and hides the guarded area.
+@export var menu: BuildMenu
 
 var live: Dictionary = {}
 var wanted: Dictionary = {}
@@ -52,7 +58,15 @@ var site: SiteDefinition
 var _guard_key: Array = []
 var _guard_cells: Dictionary = {}
 var _label: Label3D
+## Holds the guarded-area meshes; shown only while build mode lasts.
+var _guard_view := Node3D.new()
 var _areas: Array[MeshInstance3D] = []
+
+
+func _init() -> void:
+	_guard_view.name = "GuardView"
+	_guard_view.visible = false
+	add_child(_guard_view)
 
 
 func _ready() -> void:
@@ -77,8 +91,10 @@ func _ready() -> void:
 		area.mesh = mesh
 		area.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		area.visible = false
-		add_child(area)
+		_guard_view.add_child(area)
 		_areas.append(area)
+	if menu != null:
+		watch(menu.build_session)
 	if build_mode == null or flights == null or build_mode.site == null:
 		return
 	bind(build_mode.grid, build_mode.site, flights)
@@ -112,6 +128,17 @@ func bind(on_grid: BuildGrid, on_site: SiteDefinition, on_flights: FlightSim) ->
 	grid.graph_changed.connect(_on_graph_changed)
 	flights.state_changed.connect(_on_state_changed)
 	refresh()
+
+
+## Shows the guarded area while `session` lasts, and hides it outside it.
+func watch(session: BuildSession) -> void:
+	if not session.changed.is_connected(set_building):
+		session.changed.connect(set_building)
+	set_building(session.active)
+
+
+func set_building(on: bool) -> void:
+	_guard_view.visible = on
 
 
 ## Works the wanted stand out again and lets the live one take it if it may.
