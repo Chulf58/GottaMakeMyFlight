@@ -142,7 +142,10 @@ const ACTIVITY_BROWSE_TEXT := {
 
 @export var clock: SimClock
 @export var flights: FlightSim
-@export var sim: PassengerSim
+@export var sim: PassengerSim:
+	set(value):
+		sim = value
+		_dirty_alert.sim = value
 @export var views: PassengerViews
 ## The landside's vehicles, for clicking a car or taxi; optional.
 @export var landside_views: LandsideViews
@@ -154,6 +157,7 @@ const ACTIVITY_BROWSE_TEXT := {
 var departures_settings_path := DeparturesBoard.SETTINGS_PATH
 
 var _departures_board := DeparturesBoard.new()
+var _dirty_alert := DirtyAlert.new()
 var _counts_label := Label.new()
 var _departures_label := Label.new()
 var _seed_label := Label.new()
@@ -221,6 +225,12 @@ func _ready() -> void:
 	_departures_board.clock = clock
 	_departures_board.settings_path = departures_settings_path
 	add_child(_departures_board)
+	# The offer sheet is a sibling layer; the card gives way to it when open.
+	# The panel comes later in the scene, so it has no sheet until its _ready.
+	var offers := get_node_or_null("../OfferPanel") as OfferPanel
+	if offers != null:
+		_dirty_alert.covered = func() -> bool: return offers.is_node_ready() and offers.is_open()
+	add_child(_dirty_alert)
 	if flights != null:
 		flights.doors_closed.connect(_on_doors_closed)
 	_build_debug()
@@ -301,6 +311,11 @@ func _shortcut_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## The dirty-terminal alert card, for tests and probes.
+func dirty_alert() -> DirtyAlert:
+	return _dirty_alert
+
+
 func refresh() -> void:
 	_drop_retired_selection()
 	# The panel always shows the latest flight to close, replacing an open one
@@ -314,6 +329,7 @@ func refresh() -> void:
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
 	_departures_board.refresh()
+	_dirty_alert.refresh()
 	_seed_label.text = seed_text()
 	_seed_label.visible = _seed_label.text != ""
 	_status_label.text = _status
@@ -648,6 +664,7 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
+		_dirty_alert.reset()
 		_frame_start_view()
 
 
