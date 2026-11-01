@@ -2,7 +2,7 @@ class_name TestStaffCharactersCleaner
 extends GdUnitTestSuite
 ## A cleaner is drawn with its own body (CLEANER_BODY): walking with the walk
 ## clip to its job, then the clean clip at work,
-## facing a bin it empties from the cell beside it, never asking for a
+## side-on to a bin it empties from the cell beside it, never asking for a
 ## station's post yaw.
 
 const CLEANER := StaffMember.Role.CLEANER
@@ -53,7 +53,7 @@ func test_the_cleaner_body_is_no_passenger_and_no_other_staff_body() -> void:
 	assert_int(mode).is_equal(Animation.LOOP_PINGPONG)
 
 
-func test_a_cleaner_walks_to_a_full_bin_and_empties_it_facing_it() -> void:
+func test_a_cleaner_walks_to_a_full_bin_and_empties_it_side_on_to_it() -> void:
 	var bin := PassengerTestWorld.place(_w.grid, MessSim.BIN_ID, BIN_AT, 0)
 	var data := _w.sim.messes.to_snapshot()
 	data["bins"][str(bin)] = MessSim.BIN_CAPACITY
@@ -79,4 +79,7 @@ func test_a_cleaner_walks_to_a_full_bin_and_empties_it_facing_it() -> void:
 	assert_str(walking).is_equal("walk")
 	assert_str(_clip(node)).is_equal(StaffCharacters.CLEAN_CLIP)
 	assert_that(ahead).is_not_equal(Vector2i.ZERO)
-	assert_float(node.rotation.y).is_equal_approx(facing, 0.001)
+	# Side-on to the can, a quarter turn from facing it, so the clean clip's
+	# forward bend goes along the can's side, not into it.
+	assert_float(node.rotation.y).is_equal_approx(_views.bin_yaw(m.at, BIN_AT), 0.001)
+	assert_float(absf(angle_difference(node.rotation.y, facing))).is_equal_approx(PI / 2.0, 0.001)

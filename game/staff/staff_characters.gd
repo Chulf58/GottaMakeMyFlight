@@ -7,8 +7,10 @@ extends Node3D
 ## grey trousers and a black apron (CLEANER_BODY) and, at work, plays the clean
 ## clip forward and back: no pack has a mop or sweep clip, and the closest, a
 ## bend to the floor and a pull (tools/blender/anim/toon_clips.py,
-## CLEAN_SOURCE), reads as picking litter up and wiping. It faces a bin it
-## empties from beside it; on a mess's own cell it keeps the way it walked in.
+## CLEAN_SOURCE), reads as picking litter up and wiping. At a bin it stands
+## side-on to the can (bin_yaw()), so the clip's forward bend goes along the
+## can's side and never into it; at a mess beside its cell it faces the mess,
+## and on a mess's own cell it keeps the way it walked in.
 ## The cleaner view also owns the mess view (MessViews), which draws the
 ## messes and full bins the cleaners work on. A member is drawn while it is on
 ## the floor (not in the pool). Each tick it records the position for the tick
@@ -125,6 +127,18 @@ func post_yaw(station: int, slot: StaffMember.Slot = StaffMember.Slot.PRIMARY) -
 	return atan2(front.x, front.y)
 
 
+## The yaw a cleaner emptying the bin on `bin` from `spot` is drawn with:
+## side-on to the can, a quarter turn from facing it, toward the side whose
+## next cell is walkable (the clip bends forward over about 0.65 m), the
+## clockwise side when both or neither are.
+func bin_yaw(spot: Vector2i, bin: Vector2i) -> float:
+	var ahead := bin - spot
+	var side := Vector2i(-ahead.y, ahead.x)
+	if not staff.sim.grid.is_walkable(spot + side) and staff.sim.grid.is_walkable(spot - side):
+		side = -side
+	return atan2(side.x, side.y)
+
+
 ## Records positions for the members on the floor and updates their poses. With
 ## `snap` both recorded positions are set to now, so nothing glides.
 func sync(snap: bool = false) -> void:
@@ -237,7 +251,7 @@ func _pose(node: Node3D, m: StaffMember, moved: Vector3) -> void:
 		var job := CleanerJobs.job_cell(staff, m)
 		var ahead := job - m.at
 		if ahead != Vector2i.ZERO and job != StaffMember.NO_CELL:
-			node.rotation.y = atan2(ahead.x, ahead.y)
+			node.rotation.y = bin_yaw(m.at, job) if m.job_bin else atan2(ahead.x, ahead.y)
 	elif m.state == StaffMember.State.ON_DUTY:
 		node.rotation.y = post_yaw(m.station, m.slot)
 	elif m.is_moving():

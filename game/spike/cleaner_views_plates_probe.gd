@@ -41,6 +41,18 @@ const OWNERS: Array[String] = ["Airside/Terminal", "BuildMode", "PassengerViews"
 ## Real-time limit on the cleaner phase.
 const CLEANER_LIMIT_MS := 240000
 const STRIP_FRAMES := 4
+## Cleaner bones measured against the bins' cans (each is a centre line: the
+## skin lies up to BONE_SKIN_M around it, so a bone nearer a can than that
+## puts skin inside the can's bounds).
+const BONES: Array[String] = [
+	"Head", "Neck", "Spine_03", "Spine_02", "Hand.L", "Hand.R", "Forearm.L", "Forearm.R"
+]
+const BONE_SKIN_M := 0.08
+## Clip time between two bend samples.
+const CLIP_STEP_S := 0.25
+## The can mesh of the full bin model.
+const CAN_MESH := "Trash_Can_1A"
+const BEND_PLATE_M := 4.5
 ## Sight lines a prop or rubbish check casts, each to one of its vertices.
 const THING_LINES := 12
 ## Real seconds between two strip frames (a frame count is no measure: the
@@ -60,6 +72,14 @@ var _messes: MessViews
 var _build: BuildMode
 var _saved: Array[Image] = []
 var _patch := Vector2i(-1, -1)
+var _cleaner := 0
+var _bin_ids: Array[int] = []
+var _can_boxes: Array[AABB] = []
+var _approach_frames := 0
+var _approach_min := INF
+var _approach_bone := ""
+var _approach_tick := 0
+var _approach_at := Vector3.ZERO
 
 
 func _initialize() -> void:
@@ -392,6 +412,7 @@ func _phase_messes() -> void:
 		if not _edit("bin at %s" % at, [BuildEdit.place_object(MessSim.BIN_ID, at, 0)]):
 			return
 		bins.append(_sim.grid.object_at(at))
+	_bin_ids = bins
 	var fill := func(data: Dictionary) -> void: data["bins"][str(bins[0])] = MessSim.BIN_CAPACITY
 	if not _reload(fill):
 		return
@@ -413,6 +434,11 @@ func _phase_messes() -> void:
 
 func _phase_cleaner() -> void:
 	var id := _staff.hire(StaffMember.Role.CLEANER)
+	_cleaner = id
+	for bin in _bin_ids:
+		_can_boxes.append(_can_box(bin))
+	print("CAN boxes=%s" % [_can_boxes])
+	process_frame.connect(_sample_approach)
 	_clock.set_paused(false)
 	var start := Time.get_ticks_msec()
 	var walked := false
@@ -439,15 +465,199 @@ func _phase_cleaner() -> void:
 			await _strip("cleaner_clean_strip", id, {"job_mess%d" % m.job: _messes.prop_for(m.job)})
 		elif not emptied and m.state == StaffMember.State.ON_DUTY and m.job_bin:
 			emptied = true
+			var deepest := await _bend_check(id)
+			await _bend_plate(id, m.job, deepest)
 			await _strip(
 				"cleaner_bin_strip", id, {"job_rubbish%d" % m.job: _messes.rubbish_for(m.job)}
 			)
+	process_frame.disconnect(_sample_approach)
+	print(
+		(
+			"APPROACH frames=%d min_clearance_m=%.3f bone=%s tick=%d drawn=%s"
+			% [_approach_frames, _approach_min, _approach_bone, _approach_tick, _approach_at]
+		)
+	)
+	if _approach_frames == 0:
+		_invalid("no walking frame was measured against the bins")
+	elif _approach_min < BONE_SKIN_M:
+		_invalid("the cleaner walks into a bin (clearance %.3f m)" % _approach_min)
 	print(
 		(
 			"PROBE cleaner done tick=%d messes=%d full_bins=%s"
 			% [_clock.tick, _sim.messes.mess_count(), _sim.messes.full_bins()]
 		)
 	)
+
+
+# ------------------------------------------------------------ bin clearance
+
+
+## The world bounds of the can of bin `bin`: the Trash_Can_1A mesh of the full
+## bin model (the same can the build view draws) at the bin's transform.
+func _can_box(bin: int) -> AABB:
+	var record := _sim.grid.get_object(bin)
+	var def := BuildCatalog.get_def(record["def"])
+	var model := MessViews.FULL_BIN.instantiate() as Node3D
+	model.visible = false
+	root.add_child(model)
+	model.global_transform = BuildView.object_transform(
+		_sim.grid, def.footprint(record["anchor"], record["facing"]), record["facing"]
+	)
+	var box := AABB()
+	for mesh: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		if mesh.name == CAN_MESH:
+			box = mesh.global_transform * mesh.mesh.get_aabb()
+	model.free()
+	return box
+
+
+## World positions of the cleaner's BONES (those its skeleton has), by name.
+func _bone_points(id: int) -> Dictionary:
+	var node := _chars.node_for(id)
+	var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var points := {}
+	for bone: String in BONES:
+		var i := skeleton.find_bone(bone)
+		if i >= 0:
+			points[bone] = skeleton.global_transform * skeleton.get_bone_global_pose(i).origin
+	return points
+
+
+## Distance from `p` to `box`, negative inside it (by the nearest face).
+static func _clearance(p: Vector3, box: AABB) -> float:
+	var lo := box.position
+	var hi := box.end
+	if box.has_point(p):
+		return -minf(
+			minf(minf(p.x - lo.x, hi.x - p.x), minf(p.y - lo.y, hi.y - p.y)),
+			minf(p.z - lo.z, hi.z - p.z)
+		)
+	var out := Vector3(
+		maxf(maxf(lo.x - p.x, 0.0), p.x - hi.x),
+		maxf(maxf(lo.y - p.y, 0.0), p.y - hi.y),
+		maxf(maxf(lo.z - p.z, 0.0), p.z - hi.z)
+	)
+	return out.length()
+
+
+## [clearance, bone] of the bone nearest any can, over `points`.
+func _nearest(points: Dictionary) -> Array:
+	var best := INF
+	var bone := ""
+	for name: String in points:
+		for box in _can_boxes:
+			var c := _clearance(points[name], box)
+			if c < best:
+				best = c
+				bone = name
+	return [best, bone]
+
+
+## Every frame while the cleaner walks: its bones' clearance from the cans.
+func _sample_approach() -> void:
+	var m := _staff.get_member(_cleaner)
+	if m == null or m.in_pool() or not m.is_moving() or _chars.node_for(_cleaner) == null:
+		return
+	var near := _nearest(_bone_points(_cleaner))
+	_approach_frames += 1
+	if near[0] < _approach_min:
+		_approach_min = near[0]
+		_approach_bone = near[1]
+		_approach_tick = _clock.tick
+		_approach_at = _chars.node_for(_cleaner).position
+
+
+## With cleaner `id` at work on a bin: the clean clip sampled every
+## CLIP_STEP_S from 0 to its end, each bone's clearance from the cans printed;
+## PROBE_INVALID when any bone comes within BONE_SKIN_M of a can. Returns the
+## clip time of the deepest bend (lowest head).
+func _bend_check(id: int) -> float:
+	paused = true
+	var node := _chars.node_for(id)
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	var was := player.current_animation_position
+	var length := player.get_animation(StaffCharacters.CLEAN_CLIP).length
+	var worst := INF
+	var worst_at := 0.0
+	var worst_bone := ""
+	var deepest := 0.0
+	var head_low := INF
+	var head_high := -INF
+	var t := 0.0
+	while t <= length + 0.001:
+		player.seek(minf(t, length), true)
+		var points := _bone_points(id)
+		var near := _nearest(points)
+		var head_y: float = (points.get("Head", Vector3.ZERO) as Vector3).y
+		print(
+			(
+				"BEND t=%.2f nearest_bone=%s clearance_m=%.3f head_y=%.3f facing=%.2f"
+				% [t, near[1], near[0], head_y, node.rotation.y]
+			)
+		)
+		if near[0] < worst:
+			worst = near[0]
+			worst_at = t
+			worst_bone = near[1]
+		if head_y < head_low:
+			head_low = head_y
+			deepest = t
+		head_high = maxf(head_high, head_y)
+		t += CLIP_STEP_S
+	player.seek(was, true)
+	paused = false
+	print(
+		(
+			"BEND summary min_clearance_m=%.3f bone=%s at_t=%.2f head_y %.3f..%.3f deepest_t=%.2f"
+			% [worst, worst_bone, worst_at, head_low, head_high, deepest]
+		)
+	)
+	if head_high - head_low < 0.3:
+		_invalid(
+			(
+				"the clean clip did not move the head (%.3f m): the sampling proves nothing"
+				% [head_high - head_low]
+			)
+		)
+	if worst < BONE_SKIN_M:
+		_invalid("the cleaner's %s comes within %.3f m of a bin's can" % [worst_bone, worst])
+	return deepest
+
+
+## A close plate of cleaner `id` held at clip time `at` (the deepest bend) at
+## bin `bin`, the camera across the line from the bin to the cleaner.
+func _bend_plate(id: int, bin: int, at: float) -> void:
+	var node := _chars.node_for(id)
+	var bin_at := _sim.grid.cell_to_world(_sim.grid.get_object(bin)["anchor"])
+	var across := (node.position - bin_at) * Vector3(1, 0, 1)
+	var middle := (node.position + bin_at) * 0.5
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	var best := {}
+	for turn in 8:
+		_aim(middle, BEND_PLATE_M, wrapf(turn * PI / 4.0, -PI, PI))
+		await _frames(4)
+		var forward := -_cam.global_transform.basis.z * Vector3(1, 0, 1)
+		var square := absf(forward.normalized().dot(across.normalized()))
+		if best.is_empty() or square < best["square"]:
+			best = {"yaw": _rig.yaw, "square": square}
+	_aim(middle, BEND_PLATE_M, best["yaw"])
+	await _frames(10)
+	paused = true
+	player.seek(at, true)
+	print(
+		(
+			"PLATE cleaner_bin_bend_close yaw=%.2f line_dot=%.2f clip_t=%.2f"
+			% [best["yaw"], best["square"], at]
+		)
+	)
+	var result := await _check("cleaner_bin_bend_close", {}, id)
+	var near := _nearest(_bone_points(id))
+	print("BEND plate nearest_bone=%s clearance_m=%.3f" % [near[1], near[0]])
+	if result["ok"]:
+		_save(result["image"], "cleaner_bin_bend_close")
+	else:
+		_invalid("cleaner_bin_bend_close: the cleaner is not shown")
+		_save(result["image"], "cleaner_bin_bend_close_INVALID", false)
 
 
 ## STRIP_FRAMES frames of cleaner `id`, the camera on it, STRIP_GAP_S seconds
