@@ -11,10 +11,11 @@ extends Node3D
 ## Each buildable rectangle gets a flat frame laid on the ground just inside its
 ## edge, so nothing hangs over the paving's skirt. The frame keeps about the
 ## same width on screen at every zoom (user ruling buildable-outline-keeps-a-
-## constant-on-screen-width-at-every-zoom): while it shows, every point of the
-## inner edge is set WIDTH_PX screen pixels in from the outer edge, measured at
-## its own depth from the camera, and refit only when the camera or the
-## view size changes. The colour is the HUD's teal for "normal" (decision hud-
+## constant-on-screen-width-at-every-zoom): while it shows, each side's inward
+## offset is solved at every piece end through the camera's own projection, so
+## the outer point and the point straight in from it lie WIDTH_PX apart on
+## screen whatever the pitch, yaw and depth. It is refit only when the camera or
+## the view size changes. The colour is the HUD's teal for "normal" (decision hud-
 ## look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale, point 2), kept
 ## apart from the ghost's green and red, the wall-gap bars' red and the road's
 ## yellow and white paint. Unshaded and casting no shadow.
@@ -28,25 +29,22 @@ extends Node3D
 ## The frame's width on screen, in the viewport's pixels (the 1536x864 base
 ## view at 1.25 stretch): about the 0.3 m strip seen from an 18 m build zoom.
 const WIDTH_PX := 12.0
-## Each side is drawn in pieces at most this long, each piece's inner edge set
-## from its own ends' depth.
+## Each side is drawn in pieces at most this long, the width solved at each
+## piece end.
 const SEGMENT_M := 2.0
-## The inward direction of each side, north, east, south and west.
+## The inward direction of each side, north, east, south and west. Side i runs
+## from corner i to corner i + 1.
 const SIDE_INWARD: Array[Vector3] = [Vector3.BACK, Vector3.LEFT, Vector3.FORWARD, Vector3.RIGHT]
 ## The width before any camera has been fitted, and the narrowest it gets.
 const FALLBACK_WIDTH_M := 0.3
 const MIN_WIDTH_M := 0.05
+## Bisection steps for one width: the bracket shrinks 2^18-fold, under a
+## millimetre on a 40 m plot.
+const SOLVE_STEPS := 18
 ## The strips lie this far over the grid's floor height, above the paving and
 ## the floor tiles at the edge.
 const LIFT_M := 0.05
 const COLOR := Color(0.2, 0.86, 0.86)
-## The inward direction of each outer corner, clockwise from the north-west.
-const INWARD: Array[Vector3] = [
-	Vector3(1.0, 0.0, 1.0),
-	Vector3(-1.0, 0.0, 1.0),
-	Vector3(-1.0, 0.0, -1.0),
-	Vector3(1.0, 0.0, -1.0)
-]
 
 ## The build mode whose grid is outlined; main.tscn sets it, and _ready()
 ## binds its grid.
@@ -57,10 +55,13 @@ const INWARD: Array[Vector3] = [
 var _grid: BuildGrid
 var _rects: Array[Rect2] = []
 var _height := 0.0
-## Each outer corner's inward width in metres, four per rectangle.
-var _widths := PackedFloat32Array()
+## The mitred inner corners, in the order of outline_points().
+var _inner := PackedVector3Array()
+## Per side (four per rectangle): each piece end's outer point and the point
+## straight in from it at that end's width, alternating.
+var _edges: Array[PackedVector3Array] = []
 var _strips := MeshInstance3D.new()
-## What the widths were last fitted to: camera transform, fov or size, view height.
+## What the widths were last fitted to: camera transform, fov or size, view size.
 var _fitted_key: Array = []
 
 
@@ -85,7 +86,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	fit(get_viewport().get_camera_3d(), get_viewport().get_visible_rect().size.y)
+	fit(get_viewport().get_camera_3d())
 
 
 ## The land the player may build on, as world rectangles on the ground
@@ -94,14 +95,37 @@ static func buildable_rects(grid: BuildGrid) -> Array[Rect2]:
 	return [Rect2(grid.origin.x, grid.origin.z, grid.size.x, grid.size.y)]
 
 
-## Metres on the ground that one viewport pixel covers at `point`, seen by
-## `camera` in a view `view_height` pixels tall.
-static func metres_per_pixel(camera: Camera3D, point: Vector3, view_height: float) -> float:
-	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
-		return camera.size / view_height
-	var depth := -(camera.global_transform.affine_inverse() * point).z
-	depth = maxf(depth, camera.near)
-	return 2.0 * depth * tan(deg_to_rad(camera.fov) / 2.0) / view_height
+## The ground width, MIN_WIDTH_M to `widest`, that sets the point `inward` of
+## `outer` WIDTH_PX viewport pixels from it as `camera` projects them. The
+## projected distance grows with the width along a ground ray, so it is found
+## by bisection. An outer point behind the camera gets MIN_WIDTH_M; an inner
+## point behind the camera counts as too wide; a grazing view whose widest
+## strip is still under WIDTH_PX gets `widest`.
+static func solve_width(camera: Camera3D, outer: Vector3, inward: Vector3, widest: float) -> float:
+	if widest <= MIN_WIDTH_M or camera.is_position_behind(outer):
+		return MIN_WIDTH_M
+	var at := camera.unproject_position(outer)
+	if _pixels(camera, at, outer + inward * MIN_WIDTH_M) >= WIDTH_PX:
+		return MIN_WIDTH_M
+	if _pixels(camera, at, outer + inward * widest) <= WIDTH_PX:
+		return widest
+	var low := MIN_WIDTH_M
+	var high := widest
+	for _i in SOLVE_STEPS:
+		var mid := (low + high) / 2.0
+		if _pixels(camera, at, outer + inward * mid) < WIDTH_PX:
+			low = mid
+		else:
+			high = mid
+	return (low + high) / 2.0
+
+
+## Viewport pixels from `at` to where `camera` projects `point`; INF when the
+## point is behind the camera.
+static func _pixels(camera: Camera3D, at: Vector2, point: Vector3) -> float:
+	if camera.is_position_behind(point):
+		return INF
+	return at.distance_to(camera.unproject_position(point))
 
 
 ## Outlines `grid`'s buildable land.
@@ -130,23 +154,29 @@ func redraw() -> void:
 	_rects = buildable_rects(_grid)
 	_height = _grid.origin.y + LIFT_M
 	_fitted_key = []
-	_build_mesh(func(_point: Vector3, _widest: float) -> float: return FALLBACK_WIDTH_M)
+	_build_mesh(
+		func(_point: Vector3, _inward: Vector3, widest: float) -> float:
+			return minf(FALLBACK_WIDTH_M, widest)
+	)
 
 
-## Sets the frame to WIDTH_PX on screen for `camera` in a view `view_height`
-## pixels tall. Does nothing when that is what it is fitted to.
-func fit(camera: Camera3D, view_height: float) -> void:
-	if camera == null or view_height <= 0.0 or _rects.is_empty():
+## Sets the frame to WIDTH_PX on screen for `camera`, in its viewport's
+## visible pixels. Does nothing when that is what it is fitted to.
+func fit(camera: Camera3D) -> void:
+	if camera == null or not camera.is_inside_tree() or _rects.is_empty():
+		return
+	var view := camera.get_viewport().get_visible_rect().size
+	if view.x <= 0.0 or view.y <= 0.0:
 		return
 	var lens := camera.size if camera.projection == Camera3D.PROJECTION_ORTHOGONAL else camera.fov
-	var key := [camera.global_transform, lens, view_height]
+	var key := [camera.global_transform, camera.projection, lens, view]
 	if key == _fitted_key:
 		return
 	_fitted_key = key
-	var width_at := func(point: Vector3, widest: float) -> float:
-		var metres := WIDTH_PX * metres_per_pixel(camera, point, view_height)
-		return clampf(metres, MIN_WIDTH_M, widest)
-	_build_mesh(width_at)
+	_build_mesh(
+		func(point: Vector3, inward: Vector3, widest: float) -> float:
+			return solve_width(camera, point, inward, widest)
+	)
 
 
 ## The rectangles drawn.
@@ -166,13 +196,17 @@ func outline_points() -> PackedVector3Array:
 	return out
 
 
-## The inner corners, in the order of outline_points().
+## The mitred inner corners, in the order of outline_points(): each lies in
+## from its outer corner by the two meeting sides' own widths there.
 func inner_points() -> PackedVector3Array:
-	var outer := outline_points()
-	var out := PackedVector3Array()
-	for i in outer.size():
-		out.append(outer[i] + INWARD[i % 4] * _widths[i])
-	return out
+	return _inner.duplicate()
+
+
+## Per side, four per rectangle in the order north, east, south, west: every
+## piece end's outer point followed by the point straight in from it at that
+## end's width (not the mitre), from the side's first corner to its last.
+func side_edges() -> Array[PackedVector3Array]:
+	return _edges.duplicate(true)
 
 
 ## The mesh the frame is drawn with.
@@ -181,35 +215,46 @@ func strip_mesh() -> Mesh:
 
 
 ## Quads from the outer edge to the inner edge, each side cut into pieces at
-## most SEGMENT_M long. `width_at(point, widest)` gives the width in metres at
-## an outer-edge point; the corners are mitred (moved in along both axes).
+## most SEGMENT_M long. `width_at(point, inward, widest)` gives the width in
+## metres at an outer-edge point of the side pointing `inward`. Each corner is
+## mitred: moved in along each meeting side's inward direction by that side's
+## width at the corner, so both inner edges meet there.
 ## Short pieces keep the width right where a far corner lies behind the camera.
 func _build_mesh(width_at: Callable) -> void:
 	var outer := outline_points()
-	_widths.resize(outer.size())
-	for i in outer.size():
-		_widths[i] = width_at.call(outer[i], _widest(floori(i / 4.0)))
-	var inner := inner_points()
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_edges.clear()
 	for r in _rects.size():
 		var widest := _widest(r)
 		for side in 4:
-			var a := r * 4 + side
-			var b := r * 4 + (side + 1) % 4
-			var pieces := maxi(1, ceili(outer[a].distance_to(outer[b]) / SEGMENT_M))
-			var prev_out := outer[a]
-			var prev_in := inner[a]
-			for k in range(1, pieces + 1):
-				var next_out := outer[a].lerp(outer[b], k / float(pieces))
-				var next_in := inner[b]
-				if k < pieces:
-					next_in = next_out + SIDE_INWARD[side] * width_at.call(next_out, widest)
-				for p in [prev_out, next_out, next_in, prev_out, next_in, prev_in]:
-					surface.set_normal(Vector3.UP)
-					surface.add_vertex(p)
-				prev_out = next_out
-				prev_in = next_in
+			var a := outer[r * 4 + side]
+			var b := outer[r * 4 + (side + 1) % 4]
+			var pieces := maxi(1, ceili(a.distance_to(b) / SEGMENT_M))
+			var edge := PackedVector3Array()
+			for k in pieces + 1:
+				var at := a.lerp(b, k / float(pieces))
+				var width: float = width_at.call(at, SIDE_INWARD[side], widest)
+				edge.append(at)
+				edge.append(at + SIDE_INWARD[side] * width)
+			_edges.append(edge)
+	_inner.resize(outer.size())
+	for i in outer.size():
+		var leaving := _edges[i]
+		var arriving := _edges[i - i % 4 + (i + 3) % 4]
+		var tail := arriving.size()
+		_inner[i] = outer[i] + leaving[1] - leaving[0] + arriving[tail - 1] - arriving[tail - 2]
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for s in _edges.size():
+		var edge := _edges[s]
+		var last := int(edge.size() / 2.0) - 1
+		for k in last:
+			var prev_in := _inner[s] if k == 0 else edge[k * 2 + 1]
+			var next_in := edge[k * 2 + 3]
+			if k + 1 == last:
+				next_in = _inner[s - s % 4 + (s + 1) % 4]
+			for p in [edge[k * 2], edge[k * 2 + 2], next_in, edge[k * 2], next_in, prev_in]:
+				surface.set_normal(Vector3.UP)
+				surface.add_vertex(p)
 	_strips.mesh = surface.commit()
 
 

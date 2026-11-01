@@ -8,8 +8,8 @@ extends SceneTree
 ##   edge_floor           floor tiles laid against the south edge, tray open;
 ##   paving_<west|east>   the paving close up where the accent bands were, tray closed;
 ##   sidewalk_<west|east> the Road's sidewalk where its accents were, tray closed.
-## Each plate also prints the frame's widths (metres and screen pixels at each corner),
-## which keep WIDTH_PX on screen at every zoom.
+## Each plate with the outline also prints, per side, the frame's width measured on screen
+## through the camera (see _print_widths), which keeps WIDTH_PX at every zoom.
 ## Every plate first projects its subject points into the viewport (with a margin, in
 ## front of the camera, off the build tray, the bar and the "Airport closed" hint card) and
 ## casts a physics ray from the
@@ -217,18 +217,57 @@ func _save_contact_sheet() -> void:
 	print("SHEET saved %s plates=%d" % [path, _sheet.size()])
 
 
-## Each corner's frame width in metres and, measured along x on screen, in viewport
-## pixels. A corner behind the camera is marked so; its width is the floor, and the
-## visible part of its sides is sized from their own 2 m pieces.
+## Each side's frame width as measured on screen, at every piece end and piece middle
+## whose outer and inner points are both in front of the camera and in the viewport:
+## "px" from the outer point to the point straight in from it (what the outline
+## solves), "perp" from the inner point to the outer edge's screen line (the band's
+## thickness across itself), each as min/mean/max in viewport pixels, and the
+## metres at the side's middle piece end.
 func _print_widths(label: String) -> void:
-	var outer := _outline.outline_points()
-	var inner := _outline.inner_points()
-	var parts: Array[String] = []
-	for i in outer.size():
-		if _cam.is_position_behind(outer[i]):
-			parts.append("behind")
-			continue
-		var along := Vector3(inner[i].x, outer[i].y, outer[i].z)
-		var px := _cam.unproject_position(outer[i]).distance_to(_cam.unproject_position(along))
-		parts.append("%.2fm/%.1fpx" % [absf(inner[i].x - outer[i].x), px])
-	print("WIDTH %s %s (want %.0f px)" % [label, ", ".join(parts), BuildableOutline.WIDTH_PX])
+	var view := Rect2(Vector2.ZERO, root.get_visible_rect().size)
+	var edges := _outline.side_edges()
+	var names := ["north", "east", "south", "west"]
+	for s in edges.size():
+		var edge: PackedVector3Array = edges[s]
+		var along: Array[float] = []
+		var across: Array[float] = []
+		var line_a := _cam.unproject_position(edge[0])
+		var line_b := _cam.unproject_position(edge[edge.size() - 2])
+		for k in range(0, edge.size(), 2):
+			var pairs := [[edge[k], edge[k + 1]]]
+			if k + 2 < edge.size():
+				pairs.append([(edge[k] + edge[k + 2]) / 2.0, (edge[k + 1] + edge[k + 3]) / 2.0])
+			for pair in pairs:
+				if _cam.is_position_behind(pair[0]) or _cam.is_position_behind(pair[1]):
+					continue
+				var a := _cam.unproject_position(pair[0])
+				var b := _cam.unproject_position(pair[1])
+				if not view.has_point(a) or not view.has_point(b):
+					continue
+				along.append(a.distance_to(b))
+				var closest := Geometry2D.get_closest_point_to_segment_uncapped(b, line_a, line_b)
+				across.append(b.distance_to(closest))
+		var mid := int(edge.size() / 4.0) * 2
+		print(
+			(
+				"WIDTH %s %s points=%d px=%s perp=%s middle=%.2fm (want %.0f px)"
+				% [
+					label,
+					names[s % 4],
+					along.size(),
+					_spread(along),
+					_spread(across),
+					edge[mid].distance_to(edge[mid + 1]),
+					BuildableOutline.WIDTH_PX
+				]
+			)
+		)
+
+
+func _spread(values: Array[float]) -> String:
+	if values.is_empty():
+		return "none"
+	var total := 0.0
+	for v in values:
+		total += v
+	return "%.2f/%.2f/%.2f" % [values.min(), total / values.size(), values.max()]

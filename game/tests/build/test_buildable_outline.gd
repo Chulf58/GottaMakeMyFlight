@@ -6,6 +6,7 @@ extends GdUnitTestSuite
 ## BuildGrid, x -43..43 and z -100..-60, until land plots replace it).
 
 const SITE := preload("res://build/terminal_site.tres")
+const CAMERA := preload("res://camera/tycoon_camera.tscn")
 
 var _mode: BuildMode
 var _menu: BuildMenu
@@ -112,38 +113,109 @@ func test_the_strips_run_all_round_inside_the_edge() -> void:
 
 
 ## Constant width on screen (user ruling buildable-outline-keeps-a-constant-on-
-## screen-width-at-every-zoom): a camera looking straight down from 20 m and
-## from 80 m over the plot's middle. The frame grows in metres with the depth
-## so it stays WIDTH_PX viewport pixels wide, and stays inside the edge.
-func test_width_keeps_its_pixels_at_two_distances() -> void:
-	var view_height := 864.0
-	var widths: Array[float] = []
-	for height in [20.0, 80.0]:
-		var cam := Camera3D.new()
-		cam.fov = 55.0
-		add_child(cam)
-		cam.global_transform = Transform3D(
-			Basis.from_euler(Vector3(-PI / 2.0, 0.0, 0.0)), Vector3(0.0, height, -80.0)
-		)
-		_outline.fit(cam, view_height)
-		var outer := _outline.outline_points()
-		var inner := _outline.inner_points()
-		var depth: float = height - outer[0].y
-		var want := (
-			BuildableOutline.WIDTH_PX * 2.0 * depth * tan(deg_to_rad(55.0) / 2.0) / view_height
-		)
-		for i in outer.size():
-			assert_float(absf(inner[i].x - outer[i].x)).is_equal_approx(want, 0.001)
-			assert_float(absf(inner[i].z - outer[i].z)).is_equal_approx(want, 0.001)
-		var box := _outline.strip_mesh().get_aabb()
-		assert_bool(box.position.is_equal_approx(Vector3(-43.0, box.position.y, -100.0))).is_true()
-		assert_bool(box.end.is_equal_approx(Vector3(43.0, box.end.y, -60.0))).is_true()
-		widths.append(absf(inner[0].x - outer[0].x))
-		cam.free()
-	# 20 m: about 0.29 m; 80 m: about 1.15 m, four times as wide in metres.
-	assert_float(widths[0]).is_between(0.25, 0.33)
-	assert_float(widths[1] / widths[0]).is_equal_approx((80.0 - 0.27) / (20.0 - 0.27), 0.001)
+## screen-width-at-every-zoom), measured in screen pixels: the real TycoonCamera,
+## with its zoom-following pitch, over the plot's middle at four zooms (80 m is
+## the home view) and two yaws. At every piece end and piece middle of every side
+## in view, the outer point and the point straight in from it project WIDTH_PX
+## apart, give or take one pixel.
+func test_width_measures_its_pixels_on_screen_under_the_tycoon_camera() -> void:
+	var rig: TycoonCamera = CAMERA.instantiate()
+	add_child(rig)
+	var cam: Camera3D = rig.get_node("Camera3D")
+	var view := Rect2(Vector2.ZERO, cam.get_viewport().get_visible_rect().size)
+	var want := BuildableOutline.WIDTH_PX
+	for zoom in [30.0, 80.0, 150.0, 300.0]:
+		for yaw in [0.0, 0.7]:
+			_pose(rig, Vector3(0.0, 0.0, -80.0), zoom, yaw)
+			_outline.fit(cam)
+			var sides_seen := 0
+			var edges := _outline.side_edges()
+			for s in edges.size():
+				var px := _measured_pixels(cam, edges[s], view)
+				if px.is_empty():
+					continue
+				sides_seen += 1
+				var low: float = px.min()
+				var high: float = px.max()
+				(
+					assert_bool(low >= want - 1.0 and high <= want + 1.0)
+					. override_failure_message(
+						(
+							"zoom %s yaw %s side %d: %d points, %.2f..%.2f px, want %.0f +- 1"
+							% [zoom, yaw, s, px.size(), low, high, want]
+						)
+					)
+					. is_true()
+				)
+			# The whole plot is in view from the home zoom out.
+			var all_in := 4 if zoom >= 80.0 else 1
+			(
+				assert_int(sides_seen)
+				. override_failure_message(
+					"zoom %s yaw %s: %d sides in view" % [zoom, yaw, sides_seen]
+				)
+				. is_greater_equal(all_in)
+			)
+	rig.free()
 	_outline.redraw()
+
+
+## A camera low over the south edge with that edge behind it: every width is
+## finite and inside MIN_WIDTH_M to half the plot, and so is the mesh.
+func test_a_corner_behind_the_camera_keeps_finite_clamped_widths() -> void:
+	var rig: TycoonCamera = CAMERA.instantiate()
+	add_child(rig)
+	var cam: Camera3D = rig.get_node("Camera3D")
+	_pose(rig, Vector3(0.0, 0.0, -68.0), 6.0, 0.0)
+	var outer := _outline.outline_points()
+	var behind := [2, 3].filter(func(i: int) -> bool: return cam.is_position_behind(outer[i]))
+	assert_int(behind.size()).is_equal(2)
+	_outline.fit(cam)
+	var widest := 20.0
+	for edge in _outline.side_edges():
+		for k in range(0, edge.size(), 2):
+			var width := edge[k].distance_to(edge[k + 1])
+			(
+				assert_bool(
+					width >= BuildableOutline.MIN_WIDTH_M - 0.0001 and width <= widest + 0.0001
+				)
+				. override_failure_message("%s: width %s" % [edge[k], width])
+				. is_true()
+			)
+	for p in _outline.inner_points():
+		assert_bool(p.is_finite()).is_true()
+	for p in _outline.strip_mesh().get_faces():
+		assert_bool(p.is_finite()).is_true()
+	rig.free()
+	_outline.redraw()
+
+
+## Places `rig` the way TycoonCamera's own controls would: focus, zoom and yaw,
+## its pitch from its zoom curve.
+func _pose(rig: TycoonCamera, focus: Vector3, zoom: float, yaw: float) -> void:
+	rig.position = focus
+	rig.distance = zoom
+	rig.yaw = yaw
+	rig.rotate_yaw(0.0)
+
+
+## Screen pixels from each outer point to the point straight in from it, at every
+## piece end and piece middle of one side's `edge` where both are in front of
+## `cam` and inside `view`.
+func _measured_pixels(cam: Camera3D, edge: PackedVector3Array, view: Rect2) -> Array[float]:
+	var out: Array[float] = []
+	for k in range(0, edge.size(), 2):
+		var pairs := [[edge[k], edge[k + 1]]]
+		if k + 2 < edge.size():
+			pairs.append([(edge[k] + edge[k + 2]) / 2.0, (edge[k + 1] + edge[k + 3]) / 2.0])
+		for pair in pairs:
+			if cam.is_position_behind(pair[0]) or cam.is_position_behind(pair[1]):
+				continue
+			var a := cam.unproject_position(pair[0])
+			var b := cam.unproject_position(pair[1])
+			if view.has_point(a) and view.has_point(b):
+				out.append(a.distance_to(b))
+	return out
 
 
 func _covered(faces: PackedVector3Array, at: Vector2) -> bool:
