@@ -4,15 +4,19 @@ extends Resource
 ## see it, authored in build/terminal_site.tres against tp_airport_site.glb
 ## (decision player-built-terminal-technical-design-site-plot-indoor-mask-
 ## passenger-eligibility, point 1): the build grid's frame, where the walks
-## outside join the road and the plane, and the kept site obstacles.
+## outside join the road, the starter terminal's place and the kept site
+## obstacles.
 ##
-## The road runs past the grid's south edge (+z, ROAD_STEP) and the apron and
-## the parked plane lie beyond its north edge (-z, PLANE_STEP). Passengers
-## walk the site's open ground between them (SiteRoutes).
+## The road runs past the grid's south edge (+z, ROAD_STEP). The grid reaches
+## north to z -210 (decision plane-stand-design-airside-moves-110-m-north-
+## stand-snaps-to, point 1), and the plane stand lies on it, straight out from
+## a north-facing exit (-z, PLANE_STEP; StandPlacement), with the taxi lane
+## beyond the north edge. Passengers walk the site's open ground between the
+## road, the doors and the plane (SiteRoutes).
 
 ## The grid step out over the edge the road runs along.
 const ROAD_STEP := Vector2i(0, 1)
-## The grid step out over the edge the apron lies beyond.
+## The grid step out of a door that faces the apron (north).
 const PLANE_STEP := Vector2i(0, -1)
 ## How far a saved grid origin may lie from the site's and still match (JSON
 ## round trips of floats).
@@ -20,23 +24,21 @@ const ORIGIN_TOLERANCE_M := 0.001
 
 ## World position of grid cell (0, 0)'s north-west corner; y is the floor,
 ## 2 cm above the site's paving.
-@export var grid_origin := Vector3(-43.0, 0.22, -100.0)
-@export var grid_size := Vector2i(86, 40)
+@export var grid_origin := Vector3(-43.0, 0.22, -210.0)
+@export var grid_size := Vector2i(86, 150)
 ## Height of the site's paving, where the walks outside run.
 @export var ground_height := 0.2
 ## Where a walk in from the road starts: the pavement line along the road
 ## (z) and its height, straight out from the grid cell the walk enters by.
 @export var road_z := -57.0
 @export var road_height := 0.1
-## The walk from the grid's north edge to the plane door, world points: along
-## the gap between the site and the parked plane's nose, then out to its port
-## door (the plane at the stand at (-18, 0, -117) spans x -32.2 to -3.8 with
-## its wings).
-@export
-var plane_route := PackedVector3Array([Vector3(-14.5, 0.0, -101.0), Vector3(-14.5, 0.0, -106.5)])
+## Where ReferenceTerminal's cells (and the starter shell) go on this grid:
+## the grid grew 110 rows north, so the starter keeps its world place (x -33
+## to -21, z -98 to -82).
+@export var starter_offset := Vector2i(0, 110)
 ## Grid cells kept site art stands on, which no walk crosses: the road's sign
-## post near (14.1, -59.9) reaches z -60.33, into cell (57, 39).
-@export var obstacles: Array[Vector2i] = [Vector2i(57, 39)]
+## post near (14.1, -59.9) reaches z -60.33, into cell (57, 149).
+@export var obstacles: Array[Vector2i] = [Vector2i(57, 149)]
 
 
 func is_obstacle(cell: Vector2i) -> bool:

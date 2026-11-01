@@ -19,10 +19,11 @@ extends RefCounted
 ## spot. An arch without a whole lane is in neither list, so is_usable() is
 ## false for it.
 ##
-## On the airport site (`site`) an entrance or exit is in service only while
-## it has a walk outside (SiteRoutes): an entrance to the road, an exit to the
-## plane. A door with none is listed in out_of_service, not refused, because
-## building passes through such states (decision player-built-terminal-
+## On the airport site (`site`) an entrance or exit is in service only
+## while it has a walk outside (SiteRoutes): an entrance to the road, an exit
+## to the plane door at the live stand (`stand`, ApronStand). A door with none
+## is listed in out_of_service, not refused, because building passes through
+## such states (decision player-built-terminal-
 ## technical-design-site-plot-indoor-mask-passenger-eligibility, point 6).
 
 const LANE_SLOTS := 6
@@ -30,6 +31,9 @@ const LANE_SLOTS := 6
 ## The airport site whose open ground passengers walk outside, or null (in a
 ## Toon shell or a test grid), when no door needs a walk outside.
 var site: SiteDefinition
+## The live plane stand on a site (StandPlacement), set by ApronStand; empty
+## means the starter stand (StandPlacement.starter_stand()).
+var stand: Dictionary = {}
 var desks: Array[int] = []
 var scanners: Array[int] = []
 ## Every entrance door, in id order. Staff come in through any of them: staff
@@ -157,6 +161,11 @@ func open_exits(grid: BuildGrid) -> Array[int]:
 	return open
 
 
+## The stand exits walk to on a site: `stand`, or the starter stand.
+func live_stand(grid: BuildGrid) -> Dictionary:
+	return stand if not stand.is_empty() else StandPlacement.starter_stand(grid, site)
+
+
 ## Whether door `door` has the walk outside a site asks for.
 func _has_way_out(door: int) -> bool:
 	return site == null or outside_routes.has(door)
@@ -176,8 +185,11 @@ func _route_doors(grid: BuildGrid, ids: Array[int]) -> void:
 		var edge := SiteDefinition.PLANE_STEP
 		if def == &"entrance_door":
 			edge = SiteDefinition.ROAD_STEP
-		if not fields.has(edge):
-			fields[edge] = SiteRoutes.distances(grid, site, SiteRoutes.edge_cells(grid, site, edge))
+			if not fields.has(edge):
+				var road := SiteRoutes.edge_cells(grid, site, edge)
+				fields[edge] = SiteRoutes.distances(grid, site, road)
+		elif not fields.has(edge):
+			fields[edge] = StandPlacement.to_door(grid, site, live_stand(grid))
 		var out := DoorPlacement.back_step(record["facing"])
 		var cells := SiteRoutes.door_cells(grid, site, record["anchor"], out, edge, fields[edge])
 		if cells.is_empty():

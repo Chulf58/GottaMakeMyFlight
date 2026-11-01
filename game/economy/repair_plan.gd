@@ -212,11 +212,13 @@ static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 
 
 ## The plan for `grid` (left unchanged); on `site` its doors need walks
-## outside (TerminalLayout.site).
-static func make(grid: BuildGrid, site: SiteDefinition = null) -> RepairPlan:
+## outside (TerminalLayout.site), an exit's to the plane door at `stand`
+## (TerminalLayout.stand; empty for the starter stand).
+static func make(grid: BuildGrid, site: SiteDefinition = null, stand := {}) -> RepairPlan:
 	var plan := RepairPlan.new()
 	plan._site = site
 	plan._layout.site = site
+	plan._layout.stand = stand
 	plan._grid = BuildGrid.new(grid.size, grid.origin)
 	plan._source = grid.to_snapshot()
 	if not plan._grid.from_snapshot(plan._source):
@@ -651,14 +653,17 @@ func _door_choices(def_id: StringName) -> Array:
 ## spots whose service cell the last search reached.
 func _door_sources(def_id: StringName, reached := false) -> Array:
 	# On a site a door needs its walk outside: an entrance to the road, an exit
-	# to the plane.
+	# to the plane door at the live stand.
 	var edge := (
 		SiteDefinition.ROAD_STEP if def_id == &"entrance_door" else SiteDefinition.PLANE_STEP
 	)
 	var to_edge := PackedInt32Array()
 	var spots := []
 	if _site != null:
-		to_edge = SiteRoutes.distances(_grid, _site, SiteRoutes.edge_cells(_grid, _site, edge))
+		if def_id == &"entrance_door":
+			to_edge = SiteRoutes.distances(_grid, _site, SiteRoutes.edge_cells(_grid, _site, edge))
+		else:
+			to_edge = StandPlacement.to_door(_grid, _site, _layout.live_stand(_grid))
 		spots = _site_door_spots(def_id, edge, to_edge)
 	else:
 		for y in _grid.size.y:

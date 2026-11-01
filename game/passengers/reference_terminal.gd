@@ -9,6 +9,11 @@ extends RefCounted
 ## they stand in, so all its floor is indoor (TerminalEnclosure).
 ## The debug starter button builds it on the airport site too, where its
 ## entrance has a walk in from the road and its exit one out to the plane.
+## Every function that makes edits takes an `offset` added to every cell: on
+## the airport site it is SiteDefinition.starter_offset, which keeps the
+## layout at its world place on the grown grid. Those that take a grid use the
+## grid's own (offset_on()) when given none, so the debug starter button needs
+## no offset of its own.
 
 const FLOOR_MIN := Vector2i(10, 2)
 const FLOOR_MAX := Vector2i(21, 17)
@@ -20,8 +25,26 @@ const EXIT_CELL := Vector2i(20, 2)
 const SCANNER_XS: Array[int] = [17, 19]
 
 
-## The layout's edits.
-static func edits() -> Array[BuildEdit]:
+## `offset`, or with null the offset of `grid`: its site's starter_offset on
+## the airport site's grid (SiteGrid), else none.
+static func offset_on(grid: BuildGrid, offset: Variant = null) -> Vector2i:
+	if offset != null:
+		return offset
+	var site_grid := grid as SiteGrid
+	if site_grid != null and site_grid.site != null:
+		return site_grid.site.starter_offset
+	return Vector2i.ZERO
+
+
+## The layout's edits, every cell moved by `offset`.
+static func edits(offset := Vector2i.ZERO) -> Array[BuildEdit]:
+	var out := _edits()
+	for edit in out:
+		edit.cell += offset
+	return out
+
+
+static func _edits() -> Array[BuildEdit]:
 	var out: Array[BuildEdit] = []
 	for y in range(FLOOR_MIN.y, FLOOR_MAX.y + 1):
 		for x in range(FLOOR_MIN.x, FLOOR_MAX.x + 1):
@@ -50,20 +73,22 @@ static func edits() -> Array[BuildEdit]:
 ## The starter shell's edits (decision terminal-growth-and-starter-building-
 ## move-the-airside-north, point 2): the floor, the outer walls and the two
 ## doors, with no desks, scanners, seats or divider.
-static func shell_edits() -> Array[BuildEdit]:
+static func shell_edits(offset := Vector2i.ZERO) -> Array[BuildEdit]:
 	var out: Array[BuildEdit] = []
-	for edit in edits():
+	for edit in _edits():
 		if not _is_interior(edit):
+			edit.cell += offset
 			out.append(edit)
 	return out
 
 
 ## What the debug starter button adds to the shell: the divider wall and the
 ## check-in desks, scanners and seat rows.
-static func interior_edits() -> Array[BuildEdit]:
+static func interior_edits(offset := Vector2i.ZERO) -> Array[BuildEdit]:
 	var out: Array[BuildEdit] = []
-	for edit in edits():
+	for edit in _edits():
 		if _is_interior(edit):
+			edit.cell += offset
 			out.append(edit)
 	return out
 
@@ -72,21 +97,22 @@ static func interior_edits() -> Array[BuildEdit]:
 ## build() (a debug layout). The edits go onto a copy first, so a refusal (the
 ## player built over the interior, or it is already there) returns its reason
 ## and leaves the grid as it was.
-static func fill_interior(grid: BuildGrid) -> BuildResult:
+static func fill_interior(grid: BuildGrid, offset: Variant = null) -> BuildResult:
+	var at := offset_on(grid, offset)
 	var trial := BuildGrid.new(grid.size, grid.origin)
 	if not trial.from_snapshot(grid.to_snapshot()):
 		push_error("ReferenceTerminal: the grid could not be copied for a trial fill")
 		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	var trial_result := trial.apply_sequence(interior_edits(), Callable())
+	var trial_result := trial.apply_sequence(interior_edits(at), Callable())
 	if not trial_result.ok:
 		return trial_result
-	return grid.apply_sequence(interior_edits(), Callable())
+	return grid.apply_sequence(interior_edits(at), Callable())
 
 
 ## Applies edits() to a fresh grid. Pushes an error and returns false at the
 ## first refused edit.
-static func build(grid: BuildGrid) -> bool:
-	for edit in edits():
+static func build(grid: BuildGrid, offset: Variant = null) -> bool:
+	for edit in edits(offset_on(grid, offset)):
 		var result := grid.apply(edit)
 		if not result.ok:
 			push_error(

@@ -63,7 +63,10 @@ var flight_id := ""
 ## Its pose_at phase on the last update_pose().
 var phase := PHASE_LEAD_IN
 
+## Phase and sky paths read from the airside, kept while its stand stays
+## where it was when they were read (_paths_stand, Airside.stand_moves).
 var _paths: Dictionary = {}
+var _paths_stand := 0
 var _far_shadow: Node3D
 var _far_material: StandardMaterial3D
 
@@ -294,6 +297,9 @@ func _place_far_shadow() -> void:
 
 
 func _path(state: int) -> PackedVector3Array:
+	if _paths_stand != airside.stand_moves:
+		_paths.clear()
+		_paths_stand = airside.stand_moves
 	if not _paths.has(state):
 		_paths[state] = airside.phase_path(state)
 	return _paths[state]

@@ -8,7 +8,9 @@ extends RefCounted
 ## never gets a second shell. The player owns it: it costs nothing, but every
 ## piece is saved at its list price (BuildEdit.paid), so demolishing one
 ## refunds PriceTable.REFUND_SHARE_PERCENT of it like any piece
-## (BuildTransaction). The roof is generated from the walls (RoofView).
+## (BuildTransaction). The roof is generated from the walls (RoofView). On the
+## airport site's grid (SiteGrid) it is moved by SiteDefinition.starter_offset,
+## so the shell keeps its world place on the grown site grid.
 
 
 ## What the shell's pieces cost together, in the order PriceTable lists them.
@@ -19,12 +21,13 @@ static func price() -> int:
 	return total
 
 
-## Places the shell on `grid`, every piece saved at its price and no wallet
-## touched. The edits go onto a copy first, so when one is refused (a grid too
-## small for the footprint) it pushes an error, returns false and leaves `grid`
-## untouched.
-static func place(grid: BuildGrid) -> bool:
-	var edits := ReferenceTerminal.shell_edits()
+## Places the shell on `grid`, moved by `offset` (null: the grid's own,
+## ReferenceTerminal.offset_on()), every piece saved at its price and no wallet
+## touched. The edits go onto a copy first, so when one is
+## refused (a grid too small for the footprint) it pushes an error, returns
+## false and leaves `grid` untouched.
+static func place(grid: BuildGrid, offset: Variant = null) -> bool:
+	var edits := ReferenceTerminal.shell_edits(ReferenceTerminal.offset_on(grid, offset))
 	for edit in edits:
 		edit.paid = _price_of(edit)
 	var trial := BuildGrid.new(grid.size, grid.origin)

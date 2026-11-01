@@ -400,7 +400,7 @@ static func _ghost_material(tint: Color) -> StandardMaterial3D:
 
 func _ready() -> void:
 	if site != null:
-		grid = BuildGrid.new(site.grid_size, site.grid_origin)
+		grid = SiteGrid.new(site)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
 	if starter_shell and not StarterShell.place(grid):

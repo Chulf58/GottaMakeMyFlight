@@ -6,7 +6,6 @@ extends GdUnitTestSuite
 ## out to the plane, and makes the flight.
 
 const SITE := preload("res://build/terminal_site.tres")
-const LAST_TICK := 1900
 
 var _world: PassengerTestWorld
 
@@ -21,7 +20,7 @@ func after() -> void:
 
 func before_test() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
-	assert_bool(ReferenceTerminal.build(grid)).is_true()
+	assert_bool(ReferenceTerminal.build(grid, SITE.starter_offset)).is_true()
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.sim.site = SITE
 
@@ -48,13 +47,14 @@ func test_both_doors_have_a_walk_outside_and_are_in_service() -> void:
 	# The walk in starts on the pavement line by the road, the walk out ends at
 	# the plane door.
 	assert_float(walk_in[0].z).is_equal_approx(SITE.road_z, 0.01)
-	assert_vector(walk_out[-1]).is_equal_approx(SITE.plane_route[-1], Vector3.ONE * 0.01)
+	var door := StandPlacement.door_point(layout.live_stand(_world.grid))
+	assert_vector(walk_out[-1]).is_equal_approx(door, Vector3.ONE * 0.01)
 
 
 func test_a_passenger_walks_from_the_road_to_the_plane_and_makes_the_flight() -> void:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	assert_int(p.apron_total_mm()).is_greater(0)
-	_world.run_to(LAST_TICK)
+	_world.run_to(FlightSim.schedule_starts(0)[FlightSim.State.DOORS_CLOSED])
 	print("stage %s at tick %d" % [Passenger.Stage.keys()[p.stage], _world.clock.tick])
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 	assert_int(_world.sim.made_count()).is_equal(1)
