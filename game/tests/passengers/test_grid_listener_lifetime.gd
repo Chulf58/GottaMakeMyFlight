@@ -1,7 +1,7 @@
 class_name TestGridListenerLifetime
 extends GdUnitTestSuite
 ## A RefCounted helper that follows a BuildGrid's signals while holding the
-## grid (ScreenCoverage, PrizeCar, DecorEffect) must not keep itself or the
+## grid (ScreenCoverage, PrizeCar, DecorEffect, MessSim) must not keep itself or the
 ## grid alive. A lambda that reads a member captures the helper strongly, so a
 ## lambda connected to the grid's signal and the helper's own _grid formed a
 ## cycle that neither freed: main.tscn left both at exit (board item 7c3e3427).
@@ -21,6 +21,10 @@ func test_prize_car_frees_with_its_grid() -> void:
 
 func test_decor_effect_frees_with_its_grid() -> void:
 	_assert_both_free(_bind_and_drop(&"decor"))
+
+
+func test_mess_sim_frees_with_its_grid() -> void:
+	_assert_both_free(_bind_and_drop(&"messes"))
 
 
 ## Binds a fresh helper of `kind` to a fresh grid, then drops the helper while
@@ -47,6 +51,14 @@ func _bind_and_drop(kind: StringName) -> Dictionary:
 			sim.grid = null
 			sim.free()
 			helper = decor
+		&"messes":
+			var sim := PassengerSim.new()
+			sim.grid = grid
+			var messes := MessSim.new()
+			messes.bind(sim)
+			sim.grid = null
+			sim.free()
+			helper = messes
 	var bound := grid.graph_changed.get_connections().size()
 	var helper_ref: WeakRef = weakref(helper)
 	helper = null

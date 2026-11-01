@@ -819,6 +819,8 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 	p.hunger = 0
 	if visit.outcome == CafeVisit.Outcome.COMPLETE:
 		p.mood = mini(p.mood + venue.mood_bonus, PassengerSim.MOOD_MAX)
+	# A settled visit is one real use of its seat (MessSim).
+	_sim.messes.cafe_used(visit)
 	paid.emit(p.id, visit.room, amount)
 
 
