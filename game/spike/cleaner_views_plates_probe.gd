@@ -48,16 +48,22 @@ const BONES: Array[String] = [
 	"Head", "Neck", "Spine_03", "Spine_02", "Hand.L", "Hand.R", "Forearm.L", "Forearm.R"
 ]
 const BONE_SKIN_M := 0.08
-## Clip time between two bend samples.
-const CLIP_STEP_S := 0.25
 ## The can mesh of the full bin model.
 const CAN_MESH := "Trash_Can_1A"
 const BEND_PLATE_M := 4.5
 ## Sight lines a prop or rubbish check casts, each to one of its vertices.
 const THING_LINES := 12
-## Real seconds between two strip frames (a frame count is no measure: the
-## windowed run draws hundreds of frames a second).
-const STRIP_GAP_S := 0.5
+## Real seconds between two strip frames, per strip (a frame count is no
+## measure: the windowed run draws hundreds of frames a second). Each strip
+## fits its frames inside the work or walk it shows.
+const WALK_GAP_S := 0.15
+const CLEAN_GAP_S := 0.5
+const BIN_GAP_S := 0.35
+## The least clip time a strip frame must move on from the one before.
+const MIN_CLIP_STEP_S := 0.02
+const CLEAN := StaffCharacters.CLEAN_CLIP
+## The rate the Toon clips are baked at (tools/blender/anim/toon_clips.py FPS).
+const CLIP_FPS := 25.0
 
 var _out_dir := ""
 var _failed := false
@@ -74,12 +80,11 @@ var _saved: Array[Image] = []
 var _patch := Vector2i(-1, -1)
 var _cleaner := 0
 var _bin_ids: Array[int] = []
-var _can_boxes: Array[AABB] = []
+## {name, box, bin, rubbish} for each can and each full bin's rubbish.
+var _boxes: Array[Dictionary] = []
+## Phase ("approach", "bend") -> box name -> [clearance, bone, where].
+var _mins := {}
 var _approach_frames := 0
-var _approach_min := INF
-var _approach_bone := ""
-var _approach_tick := 0
-var _approach_at := Vector3.ZERO
 
 
 func _initialize() -> void:
@@ -436,8 +441,19 @@ func _phase_cleaner() -> void:
 	var id := _staff.hire(StaffMember.Role.CLEANER)
 	_cleaner = id
 	for bin in _bin_ids:
-		_can_boxes.append(_can_box(bin))
-	print("CAN boxes=%s" % [_can_boxes])
+		_boxes.append({"name": "can%d" % bin, "box": _can_box(bin), "bin": bin, "rubbish": false})
+		var rubbish := _messes.rubbish_for(bin)
+		if rubbish != null:
+			_boxes.append(
+				{
+					"name": "rubbish%d" % bin,
+					"box": _rubbish_box(rubbish),
+					"bin": bin,
+					"rubbish": true
+				}
+			)
+	for entry: Dictionary in _boxes:
+		print("BOX %s %s" % [entry["name"], entry["box"]])
 	process_frame.connect(_sample_approach)
 	_clock.set_paused(false)
 	var start := Time.get_ticks_msec()
@@ -452,41 +468,55 @@ func _phase_cleaner() -> void:
 					% [walked, cleaned, emptied]
 				)
 			)
-			return
+			break
 		await _frames(1)
 		var m := _staff.get_member(id)
 		if m == null or m.in_pool() or _chars.node_for(id) == null:
 			continue
 		if not walked and m.is_moving() and m.job != 0:
 			walked = true
-			await _strip("cleaner_walk_strip", id, {})
+			await _strip("cleaner_walk_strip", id, {}, WALK_GAP_S, _walking, "walk")
 		elif not cleaned and m.state == StaffMember.State.ON_DUTY and not m.job_bin:
 			cleaned = true
-			await _strip("cleaner_clean_strip", id, {"job_mess%d" % m.job: _messes.prop_for(m.job)})
+			var things := {"job_mess%d" % m.job: _messes.prop_for(m.job)}
+			_clock.set_paused(true)
+			await _cleaner_plate("cleaner_home", id, _rig.home_distance)
+			_clock.set_paused(false)
+			await _strip("cleaner_clean_strip", id, things, CLEAN_GAP_S, _at_mess, CLEAN)
 		elif not emptied and m.state == StaffMember.State.ON_DUTY and m.job_bin:
 			emptied = true
+			# The sim waits (she stays at work) while the clip is sampled and
+			# the bend plate is taken; the strip then plays the work out.
+			_clock.set_paused(true)
 			var deepest := await _bend_check(id)
 			await _bend_plate(id, m.job, deepest)
-			await _strip(
-				"cleaner_bin_strip", id, {"job_rubbish%d" % m.job: _messes.rubbish_for(m.job)}
-			)
+			_clock.set_paused(false)
+			var rubbish := {"job_rubbish%d" % m.job: _messes.rubbish_for(m.job)}
+			await _strip("cleaner_bin_strip", id, rubbish, BIN_GAP_S, _at_bin, CLEAN)
 	process_frame.disconnect(_sample_approach)
-	print(
-		(
-			"APPROACH frames=%d min_clearance_m=%.3f bone=%s tick=%d drawn=%s"
-			% [_approach_frames, _approach_min, _approach_bone, _approach_tick, _approach_at]
-		)
-	)
+	print("APPROACH frames=%d" % _approach_frames)
 	if _approach_frames == 0:
 		_invalid("no walking frame was measured against the bins")
-	elif _approach_min < BONE_SKIN_M:
-		_invalid("the cleaner walks into a bin (clearance %.3f m)" % _approach_min)
+	_report_clearance("approach")
+	_report_clearance("bend")
 	print(
 		(
 			"PROBE cleaner done tick=%d messes=%d full_bins=%s"
 			% [_clock.tick, _sim.messes.mess_count(), _sim.messes.full_bins()]
 		)
 	)
+
+
+func _walking(m: StaffMember) -> bool:
+	return m.is_moving() and m.job != 0
+
+
+func _at_mess(m: StaffMember) -> bool:
+	return m.state == StaffMember.State.ON_DUTY and m.job != 0 and not m.job_bin
+
+
+func _at_bin(m: StaffMember) -> bool:
+	return m.state == StaffMember.State.ON_DUTY and m.job != 0 and m.job_bin
 
 
 # ------------------------------------------------------------ bin clearance
@@ -509,6 +539,15 @@ func _can_box(bin: int) -> AABB:
 			box = mesh.global_transform * mesh.mesh.get_aabb()
 	model.free()
 	return box
+
+
+## The world bounds of a full bin's drawn rubbish (the bags on the lid, the
+## bag and litter at the base): its Bin_Rubbish mesh as MessViews draws it.
+func _rubbish_box(rubbish: Node3D) -> AABB:
+	for mesh: MeshInstance3D in rubbish.find_children("*", "MeshInstance3D", true, false):
+		if mesh.mesh != null:
+			return mesh.global_transform * mesh.mesh.get_aabb()
+	return AABB()
 
 
 ## World positions of the cleaner's BONES (those its skeleton has), by name.
@@ -540,76 +579,104 @@ static func _clearance(p: Vector3, box: AABB) -> float:
 	return out.length()
 
 
-## [clearance, bone] of the bone nearest any can, over `points`.
-func _nearest(points: Dictionary) -> Array:
-	var best := INF
-	var bone := ""
-	for name: String in points:
-		for box in _can_boxes:
-			var c := _clearance(points[name], box)
+## Per box drawn now (a rubbish box only while its bin is still full and its
+## rubbish drawn): [clearance, bone] of the bone nearest it.
+func _nearest(points: Dictionary) -> Dictionary:
+	var result := {}
+	for entry: Dictionary in _boxes:
+		if entry["rubbish"] and _messes.rubbish_for(entry["bin"]) == null:
+			continue
+		var best := INF
+		var bone := ""
+		for name: String in points:
+			var c := _clearance(points[name], entry["box"])
 			if c < best:
 				best = c
 				bone = name
-	return [best, bone]
+		result[entry["name"]] = [best, bone]
+	return result
 
 
-## Every frame while the cleaner walks: its bones' clearance from the cans.
+## Keeps the lowest clearance per box for `phase`, with `where` (a tick or a
+## clip time) it was seen at.
+func _record(phase: String, near: Dictionary, where: String) -> void:
+	var mins: Dictionary = _mins.get_or_add(phase, {})
+	for name: String in near:
+		if not mins.has(name) or near[name][0] < mins[name][0]:
+			mins[name] = [near[name][0], near[name][1], where]
+
+
+## Prints the lowest clearance per box for `phase`; PROBE_INVALID for any box
+## a bone came within BONE_SKIN_M of.
+func _report_clearance(phase: String) -> void:
+	var mins: Dictionary = _mins.get(phase, {})
+	if mins.is_empty():
+		_invalid("no %s clearance was measured" % phase)
+		return
+	for name: String in mins:
+		var low: Array = mins[name]
+		var ok: bool = low[0] >= BONE_SKIN_M
+		print(
+			(
+				"CLEARANCE %s box=%s min_m=%.3f bone=%s at=%s ok=%s"
+				% [phase, name, low[0], low[1], low[2], ok]
+			)
+		)
+		if not ok:
+			_invalid(
+				"%s: the cleaner's %s comes within %.3f m of %s" % [phase, low[1], low[0], name]
+			)
+
+
+## Every frame while the cleaner walks: its bones' clearance from each box.
 func _sample_approach() -> void:
 	var m := _staff.get_member(_cleaner)
 	if m == null or m.in_pool() or not m.is_moving() or _chars.node_for(_cleaner) == null:
 		return
-	var near := _nearest(_bone_points(_cleaner))
 	_approach_frames += 1
-	if near[0] < _approach_min:
-		_approach_min = near[0]
-		_approach_bone = near[1]
-		_approach_tick = _clock.tick
-		_approach_at = _chars.node_for(_cleaner).position
+	var at := _chars.node_for(_cleaner).position
+	_record("approach", _nearest(_bone_points(_cleaner)), "tick %d %s" % [_clock.tick, at])
 
 
-## With cleaner `id` at work on a bin: the clean clip sampled every
-## CLIP_STEP_S from 0 to its end, each bone's clearance from the cans printed;
-## PROBE_INVALID when any bone comes within BONE_SKIN_M of a can. Returns the
-## clip time of the deepest bend (lowest head).
+## With cleaner `id` at work on a bin (the sim paused): the clean clip posed at
+## every baked frame (CLIP_FPS; the import thins keys, so a track's own keys
+## are fewer) and at its end, each pose's nearest bone per box printed and
+## kept for the "bend" report. Returns the clip time of the deepest bend
+## (lowest head).
 func _bend_check(id: int) -> float:
 	paused = true
 	var node := _chars.node_for(id)
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
 	var was := player.current_animation_position
-	var length := player.get_animation(StaffCharacters.CLEAN_CLIP).length
-	var worst := INF
-	var worst_at := 0.0
-	var worst_bone := ""
+	var clip := player.get_animation(StaffCharacters.CLEAN_CLIP)
+	var times: Array[float] = []
+	for k in floori(clip.length * CLIP_FPS + 0.001) + 1:
+		times.append(minf(k / CLIP_FPS, clip.length))
+	if not is_equal_approx(times[-1], clip.length):
+		times.append(clip.length)
 	var deepest := 0.0
 	var head_low := INF
 	var head_high := -INF
-	var t := 0.0
-	while t <= length + 0.001:
-		player.seek(minf(t, length), true)
+	for t in times:
+		player.seek(t, true)
 		var points := _bone_points(id)
 		var near := _nearest(points)
+		_record("bend", near, "t=%.2f" % t)
 		var head_y: float = (points.get("Head", Vector3.ZERO) as Vector3).y
-		print(
-			(
-				"BEND t=%.2f nearest_bone=%s clearance_m=%.3f head_y=%.3f facing=%.2f"
-				% [t, near[1], near[0], head_y, node.rotation.y]
-			)
-		)
-		if near[0] < worst:
-			worst = near[0]
-			worst_at = t
-			worst_bone = near[1]
+		var line := "BEND t=%.2f head_y=%.3f" % [t, head_y]
+		for name: String in near:
+			line += " %s=%.3f(%s)" % [name, near[name][0], near[name][1]]
+		print(line)
 		if head_y < head_low:
 			head_low = head_y
 			deepest = t
 		head_high = maxf(head_high, head_y)
-		t += CLIP_STEP_S
 	player.seek(was, true)
 	paused = false
 	print(
 		(
-			"BEND summary min_clearance_m=%.3f bone=%s at_t=%.2f head_y %.3f..%.3f deepest_t=%.2f"
-			% [worst, worst_bone, worst_at, head_low, head_high, deepest]
+			"BEND samples=%d clip_length=%.2f last_t=%.2f head_y %.3f..%.3f deepest_t=%.2f facing=%.2f"
+			% [times.size(), clip.length, times[-1], head_low, head_high, deepest, node.rotation.y]
 		)
 	)
 	if head_high - head_low < 0.3:
@@ -619,8 +686,6 @@ func _bend_check(id: int) -> float:
 				% [head_high - head_low]
 			)
 		)
-	if worst < BONE_SKIN_M:
-		_invalid("the cleaner's %s comes within %.3f m of a bin's can" % [worst_bone, worst])
 	return deepest
 
 
@@ -651,8 +716,7 @@ func _bend_plate(id: int, bin: int, at: float) -> void:
 		)
 	)
 	var result := await _check("cleaner_bin_bend_close", {}, id)
-	var near := _nearest(_bone_points(id))
-	print("BEND plate nearest_bone=%s clearance_m=%.3f" % [near[1], near[0]])
+	print("BEND plate nearest=%s" % [_nearest(_bone_points(id))])
 	if result["ok"]:
 		_save(result["image"], "cleaner_bin_bend_close")
 	else:
@@ -660,11 +724,33 @@ func _bend_plate(id: int, bin: int, at: float) -> void:
 		_save(result["image"], "cleaner_bin_bend_close_INVALID", false)
 
 
-## STRIP_FRAMES frames of cleaner `id`, the camera on it, STRIP_GAP_S seconds
+## A plate of cleaner `id` from `distance`, trying the four quarter turns.
+func _cleaner_plate(name: String, id: int, distance: float) -> void:
+	var result := {}
+	for turn in 4:
+		var yaw := wrapf(0.6 + turn * PI / 2.0, -PI, PI)
+		_aim(_chars.node_for(id).position, distance, yaw)
+		await _frames(20)
+		print("PLATE %s distance=%.1f yaw=%.2f tick=%d" % [name, distance, yaw, _clock.tick])
+		result = await _check(name, {}, id)
+		if result["ok"]:
+			_save(result["image"], name)
+			return
+	_invalid("%s: the cleaner is not shown from any side" % name)
+	_save(result["image"], name + "_INVALID", false)
+
+
+## STRIP_FRAMES frames of cleaner `id`, the camera on it, `gap_s` seconds
 ## apart; the first frame also checks `things` (the job's prop or rubbish).
-func _strip(name: String, id: int, things: Dictionary) -> void:
+## Every frame asserts `expect` (the member's state and job) and that `clip`
+## plays, and every frame after the first that the clip moved on from the
+## frame before.
+func _strip(
+	name: String, id: int, things: Dictionary, gap_s: float, expect: Callable, clip: String
+) -> void:
 	var frames: Array[Image] = []
 	var yaw := 0.6
+	var last := -1.0
 	for i in STRIP_FRAMES:
 		var node := _chars.node_for(id)
 		if node == null:
@@ -683,8 +769,33 @@ func _strip(name: String, id: int, things: Dictionary) -> void:
 				break
 		if not ok:
 			_invalid("%s: frame %d not shown from any side" % [name, i])
+		var m := _staff.get_member(id)
+		var player := node.get_node("AnimationPlayer") as AnimationPlayer
+		var playing := player.current_animation
+		var pos := player.current_animation_position
+		var moved := -1.0
+		if last >= 0.0 and playing == clip:
+			var length := player.get_animation(clip).length
+			moved = absf(pos - last)
+			if player.get_animation(clip).loop_mode == Animation.LOOP_LINEAR:
+				moved = fposmod(pos - last, length)
+		var as_expected: bool = expect.call(m)
+		print(
+			(
+				"STRIP %s frame=%d state=%d job=%d bin=%s clip=%s at=%.2f moved=%.2f expected=%s"
+				% [name, i, m.state, m.job, m.job_bin, playing, pos, moved, as_expected]
+			)
+		)
+		if not as_expected or playing != clip:
+			_invalid(
+				"%s frame %d: state %d, bin %s, clip %s" % [name, i, m.state, m.job_bin, playing]
+			)
+		elif i > 0 and moved <= MIN_CLIP_STEP_S:
+			_invalid("%s frame %d: the clip did not move on (%.3f s)" % [name, i, moved])
+		last = pos
 		frames.append(result["image"])
-		await create_timer(STRIP_GAP_S).timeout
+		if i + 1 < STRIP_FRAMES:
+			await create_timer(gap_s).timeout
 	_save(_strip_image(frames), name)
 
 

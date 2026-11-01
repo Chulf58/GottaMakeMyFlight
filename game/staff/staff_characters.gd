@@ -4,7 +4,7 @@ extends Node3D
 ## never look like passengers: a check-in agent in a navy skirt suit and a
 ## security officer in a white shirt and tie. A shop server wears the check-in
 ## agent's suit until it has a model of its own. A cleaner wears a blue shirt,
-## grey trousers and a black apron (CLEANER_BODY) and, at work, plays the clean
+## grey trousers and a red apron (CLEANER_BODY) and, at work, plays the clean
 ## clip forward and back: no pack has a mop or sweep clip, and the closest, a
 ## bend to the floor and a pull (tools/blender/anim/toon_clips.py,
 ## CLEAN_SOURCE), reads as picking litter up and wiping. At a bin it stands
