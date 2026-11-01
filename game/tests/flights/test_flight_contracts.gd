@@ -33,13 +33,13 @@ func before_test() -> void:
 	_sim.open_airport()
 
 
-static func terms(id: String, minute: int, gate := "C") -> Dictionary:
+## Offer terms: no gate, since FlightSim gives the contract one on accept.
+static func terms(id: String, minute: int) -> Dictionary:
 	return {
 		"id": id,
 		"airline": "Gotta Air",
 		"destination": "Oslo",
 		"departure_minute": minute,
-		"gate": gate,
 		"plane_size": "medium",
 		"booked_passengers": 40,
 		"fee_per_passenger": 25,

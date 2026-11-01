@@ -112,15 +112,16 @@ func _ready() -> void:
 ## are checked against it), the passengers before the staff, then the rest. A
 ## new part is one more entry here.
 func parts() -> Array[SavePart]:
+	# Flights are checked against the gates with a stand when the load runs.
+	var load_flights := func(data: Dictionary) -> Dictionary:
+		return FlightSnapshot.load(data, flights.gate_ids())
 	var list: Array[SavePart] = [
 		SavePart.new("grid", build_mode.grid.to_snapshot, _stage_grid, build_mode.load_snapshot),
 		SavePart.new("clock", clock.to_snapshot, SavePart.scratch(SimClock), clock.from_snapshot),
 		SavePart.new(
 			"flights",
 			flights.to_snapshot,
-			SavePart.checked(
-				"flights", func(data: Dictionary) -> Dictionary: return FlightSnapshot.load(data)
-			),
+			SavePart.checked("flights", load_flights),
 			flights.from_snapshot
 		),
 		SavePart.new(

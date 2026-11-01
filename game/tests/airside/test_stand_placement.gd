@@ -74,9 +74,11 @@ func test_the_starter_stand_sits_nose_in_at_the_starter_exit_with_its_door_on_th
 		)
 	)
 	# Exit centre x -22.5, wall line z -98 (its world place before the grid grew).
-	assert_vector(door).is_equal_approx(Vector3(-22.5, 0.0, -104.5), Vector3.ONE * 0.001)
-	assert_vector(at).is_equal_approx(Vector3(-26.0, 0.0, -115.0), Vector3.ONE * 0.001)
-	assert_float(at.z + StandPlacement.NOSE_M).is_equal_approx(-98.0 - 2.3, 0.001)
+	# The nose 2.2 m off the wall (StandPlacement.NOSE_GAP_M, was 2.3 m), so
+	# the stand and door sit 0.1 m nearer the wall than before.
+	assert_vector(door).is_equal_approx(Vector3(-22.5, 0.0, -104.4), Vector3.ONE * 0.001)
+	assert_vector(at).is_equal_approx(Vector3(-26.0, 0.0, -114.9), Vector3.ONE * 0.001)
+	assert_float(at.z + StandPlacement.NOSE_M).is_equal_approx(-98.0 - 2.2, 0.001)
 	assert_float(result["walk_m"]).is_between(6.9, 7.3)
 	assert_bool(result["warning"]).is_false()
 	assert_bool(StandPlacement.aircraft_clear(_grid, SITE, stand)).is_true()
@@ -121,7 +123,9 @@ func test_the_deepest_legal_stand_pushes_back_onto_the_taxi_lane() -> void:
 	assert_str(result["status"]).is_equal(StandPlacement.OK)
 	assert_int(stand["exit"]).is_equal(exit)
 	assert_float(stand["wall_z"]).is_equal_approx(-210.0, 0.001)
-	assert_float(back.z).is_equal_approx(StandPlacement.TAXI_LANE_Z, 0.001)
+	# 0.1 m short of the lane's centreline: the nose sits 2.2 m off the wall so
+	# the parked tail clears the shared lane zone (StandPlacement.NOSE_GAP_M).
+	assert_float(back.z).is_equal_approx(StandPlacement.TAXI_LANE_Z + 0.1, 0.001)
 	assert_float(result["walk_m"]).is_between(6.9, 7.3)
 
 

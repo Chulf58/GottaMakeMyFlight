@@ -25,6 +25,14 @@ extends Node
 ## opening (FlightTimetable.opening_day); the days it skipped were never
 ## flown, so they are never answered as departed.
 ##
+## Gates (decision gates-technical-design-gate-desks-link-to-north-exits-one-
+## st, points 4 and 5): gate_ids() lists the gates with a stand, from
+## gate_source. An accepted contract gets the lowest gate its whole timetable
+## fits at; reassign_gate moves its days not yet issued to another gate, while
+## the occurrences already issued keep theirs. Flights at different gates share
+## the runway and the taxi lane, so they must not hold either at the same time
+## (FlightTimetable.flight_holds); flights at one gate must not overlap there.
+##
 ## end_contract stops a contract's future days (decision low-rating-ends-one-
 ## airline-contract-per-low-day): what it already issued still flies and the
 ## contract stays on record, but it issues nothing more and no longer holds its
@@ -73,9 +81,10 @@ const STATE_COUNT := 11
 ## is the start of PUSHBACK, so a longer TAXI_IN only moves the arrival earlier.
 const PHASE_TICKS: Array[int] = [100, 120, 140, 600, 40, 1200, 60, 120, 720, 200]
 const DEFAULT_ID := "GMF101"
-## Gates with a stand. Only gate C has one; more gates are a later slice.
-const GATES: Array[String] = ["C"]
+## The gate of add_flight and add_default_flight unless told otherwise.
 const DEFAULT_GATE := "C"
+## The gates with a stand while gate_source is unset: the one stand so far.
+const DEFAULT_GATES: Array[String] = [DEFAULT_GATE]
 ## The contract the airport opens with (Economy 7/8), without its departure
 ## minute: starter_terms() sets that from the opening tick. Fee and size sit
 ## inside the offer board's ranges.
@@ -83,7 +92,6 @@ const STARTER_TERMS := {
 	"id": DEFAULT_ID,
 	"airline": "Gotta Air",
 	"destination": "Oslo",
-	"gate": DEFAULT_GATE,
 	"plane_size": "small",
 	"booked_passengers": 12,
 	"fee_per_passenger": 25,
@@ -108,6 +116,10 @@ var opened_tick: int = -1
 ## (AirportGate.try_open). Set by AirportGate.bind(); without one the airport
 ## stays closed until open_airport() is called.
 var gate: AirportGate
+## Returns the gate letters that have a stand now, as an Array of Strings
+## (gate_ids() sorts them). Gates slice 1b sets it from the placed gate desks;
+## tests set it to supply more gates. Unset: DEFAULT_GATES.
+var gate_source := Callable()
 ## Contract id -> its recorded start day, the first day that is or will be
 ## issued (see _start_day): a copy, so readers cannot change it. Writing it is
 ## an error.
@@ -189,7 +201,8 @@ func add_default_flight() -> bool:
 
 ## Adds a one-off flight. False (with an error) when the id is taken or has
 ## the occurrence form, `starts` is not STATE_COUNT non-decreasing ticks, the
-## gate has no stand, or the flight would hold the gate during an occurrence.
+## gate has no stand, or the flight would meet an occurrence at the gate or
+## on the runway or lane.
 func add_flight(id: String, starts: Array[int], gate := DEFAULT_GATE) -> bool:
 	var problem := _one_off_problem(id, starts, gate)
 	if problem != "":
@@ -201,15 +214,16 @@ func add_flight(id: String, starts: Array[int], gate := DEFAULT_GATE) -> bool:
 
 ## Accepts an offer's terms (FlightContract.TERM_KEYS) as a contract whose
 ## first occurrence is the first one whose whole preparation window is still
-## ahead. False (with an error) for bad terms, a used id or a gate clash.
-## Issues the first occurrence at once when it is already due and the airport
-## is open; while it is closed the contract waits for the opening.
+## ahead, at the lowest gate its timetable fits at (accept_gate). False (with
+## an error) for bad terms, a used id or no gate it fits at. Issues the first
+## occurrence at once when it is already due and the airport is open; while it
+## is closed the contract waits for the opening.
 func accept_contract(terms: Dictionary) -> bool:
 	var problem := accept_problem(terms)
 	if problem != "":
 		push_error("FlightSim.accept_contract: %s" % problem)
 		return false
-	var contract := _candidate(terms)
+	var contract := _candidate(terms, _assignment(terms)["gate"])
 	_contracts.append(contract)
 	_next_day[contract["id"]] = contract["first_day"]
 	_start_day[contract["id"]] = contract["first_day"]
@@ -217,18 +231,74 @@ func accept_contract(terms: Dictionary) -> bool:
 	return true
 
 
-## Why accept_contract would refuse `terms` right now (bad terms, a gate with no
-## stand, a used id or a gate clash), or "" when it would take them. Read-only:
-## it pushes no error and changes nothing, so a caller can ask first.
+## Why accept_contract would refuse `terms` right now (bad terms, a used id,
+## no gate with a stand, or a clash at every gate, named for the lowest one),
+## or "" when it would take them. Read-only: it pushes no error and changes
+## nothing, so a caller can ask first.
 func accept_problem(terms: Dictionary) -> String:
 	var problem := FlightContract.problem(terms, FlightContract.TERM_KEYS)
-	if problem == "" and not GATES.has(terms["gate"]):
-		problem = "gate '%s' has no stand" % terms["gate"]
 	if problem == "" and not contract_of(terms["id"]).is_empty():
 		problem = "contract id '%s' is already used" % terms["id"]
 	if problem != "":
 		return problem
-	return _clash_problem(_candidate(terms))
+	return _assignment(terms)["problem"]
+
+
+## The gate accept_contract would give `terms` now: the lowest gate with a
+## stand whose timetable it fits, or "" when it would refuse them.
+func accept_gate(terms: Dictionary) -> String:
+	if accept_problem(terms) != "":
+		return ""
+	return _assignment(terms)["gate"]
+
+
+## The gates with a stand now, sorted, from gate_source (DEFAULT_GATES while it
+## is unset). Pushes an error and lists none when the source returns anything
+## but an array of distinct, non-empty strings.
+func gate_ids() -> Array[String]:
+	var listed: Variant = gate_source.call() if gate_source.is_valid() else DEFAULT_GATES
+	var gates: Array[String] = []
+	if typeof(listed) != TYPE_ARRAY:
+		push_error("FlightSim.gate_source must return an array of gate letters")
+		return gates
+	for gate_id: Variant in listed:
+		if typeof(gate_id) != TYPE_STRING or gate_id == "" or gates.has(gate_id):
+			push_error("FlightSim.gate_source returned a bad gate list: %s" % [listed])
+			return [] as Array[String]
+		gates.append(gate_id)
+	gates.sort()
+	return gates
+
+
+## Moves a running contract's days not yet issued to `gate_id`. The
+## occurrences it already issued keep their gate and hold it until they are
+## pruned. False (with an error) when reassign_problem names a reason.
+func reassign_gate(contract_id: String, gate_id: String) -> bool:
+	var problem := reassign_problem(contract_id, gate_id)
+	if problem != "":
+		push_error("FlightSim.reassign_gate: %s" % problem)
+		return false
+	for i in _contracts.size():
+		if _contracts[i]["id"] == contract_id:
+			_contracts[i] = _at_gate(_contracts[i], gate_id)
+	return true
+
+
+## Why reassign_gate would refuse to move `contract_id` to `gate_id` now (an
+## unknown or ended contract, a gate with no stand, the gate it is at, or a
+## clash there as accept_problem checks one, its own issued occurrences left
+## out), or "". Read-only.
+func reassign_problem(contract_id: String, gate_id: String) -> String:
+	var contract := contract_of(contract_id)
+	if contract.is_empty():
+		return "no contract '%s'" % contract_id
+	if _ended.has(contract_id):
+		return "contract %s has ended" % contract_id
+	if not gate_ids().has(gate_id):
+		return "gate '%s' has no stand" % gate_id
+	if contract["gate"] == gate_id:
+		return "contract %s is already at gate %s" % [contract_id, gate_id]
+	return _clash_problem(_at_gate(contract, gate_id))
 
 
 ## Ends a contract: no day from its next unissued one on is ever issued, so the
@@ -304,6 +374,13 @@ func flight_contract_id(id: String) -> String:
 	return _find(id).get("contract", "")
 
 
+## The gate a live flight holds: for an occurrence issued before its contract
+## moved, the contract's old gate. A pruned occurrence answers with its
+## contract's gate now. "" for an unknown flight.
+func flight_gate(id: String) -> String:
+	return _find(id).get("gate", "")
+
+
 ## The live flight holding `gate` now (from its first state until it
 ## departs), or "". Occurrences at one gate never overlap.
 func flight_at_gate(gate: String) -> String:
@@ -366,7 +443,7 @@ func to_snapshot() -> Dictionary:
 ## the sim unchanged, when anything is missing, mistyped or inconsistent.
 ## Emits only snapshot_loaded: what the save had issued stays issued.
 func from_snapshot(data: Dictionary) -> bool:
-	var loaded := FlightSnapshot.load(data)
+	var loaded := FlightSnapshot.load(data, gate_ids())
 	if loaded.has("error"):
 		push_error("FlightSim.from_snapshot: %s" % loaded["error"])
 		return false
@@ -402,52 +479,109 @@ func _one_off_problem(id: String, starts: Array[int], gate: String) -> String:
 		return "has an id of the contract occurrence form"
 	if not FlightTimetable.starts_valid(starts):
 		return "needs %d non-decreasing start ticks, 0 or more" % STATE_COUNT
-	if not GATES.has(gate):
+	if not gate_ids().has(gate):
 		return "is at gate '%s', which has no stand" % gate
+	return _one_off_clash(starts, gate)
+
+
+## What a one-off at `gate` with `starts` would meet: a running contract's
+## days, or an issued occurrence, at the gate or on the runway or lane.
+func _one_off_clash(starts: Array[int], gate: String) -> String:
 	for contract in _contracts:
-		if contract["gate"] == gate and not _ended.has(contract["id"]):
-			if FlightTimetable.contract_overlaps(contract, starts[0], starts[State.DEPARTED]):
-				return "would hold gate %s during contract %s" % [gate, contract["id"]]
-	return _ended_hold_problem(starts, gate)
-
-
-## An ended contract released its future days, not the occurrences it issued:
-## "" unless the gate time over `starts` is held by one of those still live.
-func _ended_hold_problem(starts: Array[int], gate: String) -> String:
+		if not _ended.has(contract["id"]):
+			var on := FlightTimetable.contract_meets(contract, gate, starts)
+			if on != "":
+				return "would %s during contract %s" % [_held(on, gate), contract["id"]]
+	# Issued occurrences hold the gate they were issued at: an ended contract's,
+	# or one issued before its contract moved. Other one-offs are not checked.
 	for flight in _flights:
-		if flight["gate"] == gate and _ended.has(flight["contract"]):
-			var held: Array = flight["starts"]
-			var end: int = starts[State.DEPARTED]
-			if FlightTimetable.holds_overlap(starts[0], end, held[0], held[State.DEPARTED]):
-				return "would hold gate %s during %s" % [gate, flight["id"]]
+		if flight["contract"] != "":
+			var on := FlightTimetable.clash_on(gate, starts, flight["gate"], flight["starts"])
+			if on != "":
+				return "would %s during %s" % [_held(on, gate), flight["id"]]
 	return ""
 
 
-## The contract `terms` would become now, with its first day. Terms must be valid.
-func _candidate(terms: Dictionary) -> Dictionary:
+## "hold gate C", "use the runway" or "use the taxi lane" for a clash_on answer.
+static func _held(on: String, gate_id: String) -> String:
+	if on == FlightTimetable.GATE:
+		return "hold gate %s" % gate_id
+	return "use the %s" % _ground_name(on)
+
+
+## "at gate C", "on the runway" or "on the taxi lane" for a clash_on answer.
+static func _where(on: String, gate_id: String) -> String:
+	if on == FlightTimetable.GATE:
+		return "at gate %s" % gate_id
+	return "on the %s" % _ground_name(on)
+
+
+static func _ground_name(on: String) -> String:
+	return "runway" if on == FlightTimetable.RUNWAY else "taxi lane"
+
+
+## The contract `terms` would become now at `gate_id`, with its first day.
+## Terms must be valid.
+func _candidate(terms: Dictionary, gate_id: String) -> Dictionary:
 	var fields := terms.duplicate()
+	fields["gate"] = gate_id
 	fields["first_day"] = 0
 	fields["first_day"] = FlightTimetable.first_day(fields, tick)
 	return FlightContract.make(fields)
 
 
+## A read-only copy of `contract` at `gate_id`.
+static func _at_gate(contract: Dictionary, gate_id: String) -> Dictionary:
+	var fields := contract.duplicate()
+	fields["gate"] = gate_id
+	return FlightContract.make(fields)
+
+
+## {"gate": the lowest gate the contract made of valid `terms` fits at, or "";
+## "problem": "" or why none fits}. A clash on the runway or lane fails at every
+## gate, so it is named first (a candidate at gate "" meets nothing at a gate);
+## otherwise the lowest gate's clash is.
+func _assignment(terms: Dictionary) -> Dictionary:
+	var gates := gate_ids()
+	if gates.is_empty():
+		return {"gate": "", "problem": "no gate has a stand"}
+	var shared := _clash_problem(_candidate(terms, ""))
+	if shared != "":
+		return {"gate": "", "problem": shared}
+	var first := ""
+	for gate_id in gates:
+		var problem := _clash_problem(_candidate(terms, gate_id))
+		if problem == "":
+			return {"gate": gate_id, "problem": ""}
+		if first == "":
+			first = problem
+	return {"gate": "", "problem": first}
+
+
+## Why `contract` could not run beside the rest: a running contract, or a live
+## flight (a one-off, or an issued occurrence of another contract, which keeps
+## the gate it was issued at), that it would meet at its gate or on the runway
+## or lane; "" for none. Its own issued occurrences are left out: they are days
+## it no longer issues.
 func _clash_problem(contract: Dictionary) -> String:
 	for other in _contracts:
-		if not _ended.has(other["id"]) and FlightTimetable.contracts_clash(contract, other):
+		if other["id"] == contract["id"] or _ended.has(other["id"]):
+			continue
+		var on := FlightTimetable.contracts_clash_on(contract, other)
+		if on != "":
 			return (
-				"contract %s clashes with %s at gate %s"
-				% [contract["id"], other["id"], other["gate"]]
+				"contract %s clashes with %s %s"
+				% [contract["id"], other["id"], _where(on, other["gate"])]
 			)
-	# One-offs and the occurrences an ended contract issued before it ended.
 	for flight in _flights:
-		var starts: Array = flight["starts"]
-		var fixed: bool = flight["contract"] == "" or _ended.has(flight["contract"])
-		if fixed and flight["gate"] == contract["gate"]:
-			if FlightTimetable.contract_overlaps(contract, starts[0], starts[State.DEPARTED]):
-				return (
-					"contract %s clashes with flight %s at gate %s"
-					% [contract["id"], flight["id"], flight["gate"]]
-				)
+		if flight["contract"] == contract["id"]:
+			continue
+		var on := FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"])
+		if on != "":
+			return (
+				"contract %s clashes with flight %s %s"
+				% [contract["id"], flight["id"], _where(on, flight["gate"])]
+			)
 	return ""
 
 

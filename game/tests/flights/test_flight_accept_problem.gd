@@ -25,9 +25,16 @@ func test_malformed_terms_name_what_is_wrong() -> void:
 	assert_str(_sim.accept_problem({})).is_not_empty()
 
 
-func test_a_gate_without_a_stand_is_named() -> void:
-	assert_str(_sim.accept_problem(TestFlightContracts.terms("A1", 600, "B"))).is_equal(
-		"gate 'B' has no stand"
+## The gate is no longer an offer term (decision gates-technical-design-gate-
+## desks-link-to-north-exits-one-st, point 5): terms naming one are refused,
+## and with no gate that has a stand nothing can be accepted.
+func test_terms_naming_a_gate_and_no_gate_with_a_stand_are_named() -> void:
+	var terms := TestFlightContracts.terms("A1", 600)
+	terms["gate"] = "C"
+	assert_str(_sim.accept_problem(terms)).is_equal("unknown contract key 'gate'")
+	_sim.gate_source = func() -> Array[String]: return [] as Array[String]
+	assert_str(_sim.accept_problem(TestFlightContracts.terms("A1", 600))).is_equal(
+		"no gate has a stand"
 	)
 
 
@@ -44,15 +51,22 @@ func test_a_gate_clash_with_a_contract_names_both_and_the_gate() -> void:
 	assert_str(problem).is_equal("contract A2 clashes with A1 at gate C")
 
 
+## An hour after GMF101 the two overlap only at the gate. At the same time they
+## would also land together, which no gate avoids, so the runway is named
+## (decision gates-technical-design-gate-desks-link-to-north-exits-one-st).
 func test_a_gate_clash_with_a_one_off_flight_names_the_flight() -> void:
 	assert_bool(_sim.add_default_flight()).is_true()
+	var hour_later := TestFlightContracts.bootstrap_minute() + 60
+	assert_str(_sim.accept_problem(TestFlightContracts.terms("A2", hour_later))).is_equal(
+		"contract A2 clashes with flight GMF101 at gate C"
+	)
 	(
 		assert_str(
 			_sim.accept_problem(
 				TestFlightContracts.terms("A2", TestFlightContracts.bootstrap_minute())
 			)
 		)
-		. is_equal("contract A2 clashes with flight GMF101 at gate C")
+		. is_equal("contract A2 clashes with flight GMF101 on the runway")
 	)
 
 

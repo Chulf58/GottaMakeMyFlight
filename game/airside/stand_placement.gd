@@ -31,14 +31,21 @@ const TAIL_M := 14.85
 const HALF_SPAN_M := 14.2
 ## Farthest any part of the plane reaches from its stand point.
 const SWING_RADIUS_M := 20.6
-## The gap between the wall line and the nose.
-const NOSE_GAP_M := 2.3
+## The gap between the wall line and the nose. 2.2 m (2.3 m in decision
+## plane-stand-design-airside-moves-110-m-north-stand-snaps-to) so that a
+## plane parked at the site's north row keeps its tail 0.05 m clear of the
+## shared lane zone (clears_lane()); at 2.3 m it reached 0.05 m into it.
+const NOSE_GAP_M := 2.2
 ## The port door: this far to the plane's left (+x, nose to +z) and behind the
 ## nose.
 const DOOR_SIDE_M := 3.5
 const DOOR_AFT_M := 4.2
 const PUSHBACK_M := 29.0
 const TAXI_LANE_Z := -256.0
+## The runway's centreline (main.tscn's Airside runway markers).
+const RUNWAY_Z := -310.0
+## How far east and west the shared zones reach: past every waypoint and stand.
+const ZONE_HALF_LENGTH_M := 1000.0
 ## A walk from an exit to the plane door longer than this is warned about.
 const WALK_WARNING_M := 30.0
 
@@ -75,6 +82,32 @@ static func pushback_end(stand: Dictionary) -> Vector3:
 ## Where the way north from the stand meets the taxi lane.
 static func lane_join(stand: Dictionary) -> Vector3:
 	return Vector3(stand_point(stand).x, 0.0, TAXI_LANE_Z)
+
+
+## The shared RUNWAY ground as a world xz rectangle (x, z): the band a plane on
+## the runway sweeps, wingtips HALF_SPAN_M either side of the centreline. The
+## approach and takeoff fly along it. FlightTimetable reserves it (decision
+## gates-technical-design-gate-desks-link-to-north-exits-one-st, point 4).
+static func runway_zone() -> Rect2:
+	var north := RUNWAY_Z - HALF_SPAN_M
+	return Rect2(-ZONE_HALF_LENGTH_M, north, 2.0 * ZONE_HALF_LENGTH_M, 2.0 * HALF_SPAN_M)
+
+
+## The shared LANE ground: from the runway zone's south edge to the south edge
+## of the band a plane on the taxi lane sweeps, so the links between runway and
+## lane are in it. South of it each stand's own column and stand are private.
+static func lane_zone() -> Rect2:
+	var north := runway_zone().end.y
+	var south := TAXI_LANE_Z + HALF_SPAN_M
+	return Rect2(-ZONE_HALF_LENGTH_M, north, 2.0 * ZONE_HALF_LENGTH_M, south - north)
+
+
+## Whether the plane parked at `stand` stays out of the lane zone. One whose
+## tail reached it would hold the shared lane for its whole turnaround. Every
+## stand on the site does, the north row with 0.05 m to spare (NOSE_GAP_M);
+## test_shared_ground_holds.gd checks it.
+static func clears_lane(stand: Dictionary) -> bool:
+	return stand_point(stand).z - TAIL_M >= lane_zone().end.y
 
 
 ## The one source of the plane door for passengers: the points a walk outside
