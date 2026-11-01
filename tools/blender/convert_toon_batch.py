@@ -17,7 +17,7 @@ What it does, per asset:
    one of five pack-qualified materials, rebuilt as Principled with the atlas PNG that
    this script converts from the vendor PSD. An unknown material name stops the run.
    A stem listed in VENDOR_EDITS then gets its geometry edit (tc_parking_2a: a level
-   way from the entrance to the ground-floor stalls).
+   way from the entrance to the ground-floor stalls and an apron; tp_parking_01a: an apron).
 3. Characters: keep only the parts the Unity source prefab enables, drop shape keys,
    join the parts into one skinned mesh, retarget the idle action from the idle FBX onto
    the character armature as "idle", then add walk, run, sit_down, sit_idle and stand_up
@@ -47,6 +47,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(REPO, "tools", "blender", "anim"))
 sys.path.insert(0, os.path.join(REPO, "tools", "blender", "landside"))
 import curb_bay  # noqa: E402
+import parking_01a_apron  # noqa: E402
 import parking_2a_entrance  # noqa: E402
 import toon_clips  # noqa: E402
 GAME = os.path.join(REPO, "game")
@@ -66,8 +67,9 @@ MARKERS = {"tp_curb_bay_01a": curb_bay.MARKERS}
 MARKER_PARENT = {"tp_curb_bay_01a": curb_bay.MESH_NAME}
 # Vendor models edited after the import and atlas rebind, before the part checks and the
 # export: stem -> module with edit(objs) and Fail. tc_parking_2a gets a level way from its
-# entrance to the ground-floor stalls (tools/blender/landside/parking_2a_entrance.py).
-VENDOR_EDITS = {"tc_parking_2a": parking_2a_entrance}
+# entrance to the ground-floor stalls (tools/blender/landside/parking_2a_entrance.py);
+# tp_parking_01a gets a paved apron to the sidewalk (tools/blender/landside/parking_01a_apron.py).
+VENDOR_EDITS = {"tc_parking_2a": parking_2a_entrance, "tp_parking_01a": parking_01a_apron}
 
 # Vendor PSD -> PNG under game/assets/textures/. (png name, mipmaps)
 TEXTURES = {
@@ -284,6 +286,8 @@ GROUND = {
     # The apron in front of the entrance goes down to the lawn (the main scene's ground
     # plane, y -0.1); the building itself still stands on 0 (parking_2a_entrance.py).
     "tc_parking_2a": -0.10,
+    # The surface lot's apron to the sidewalk, likewise (parking_01a_apron.py).
+    "tp_parking_01a": -0.10,
 }
 GROUND_CATEGORIES = ("decor", "vehicles", "landside")
 GROUND_TOLERANCE = 0.01

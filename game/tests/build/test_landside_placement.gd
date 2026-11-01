@@ -247,7 +247,9 @@ func test_the_spot_nearer_the_doors_has_the_shorter_walk() -> void:
 	var multi := _placement.plan_build(LandsidePlacement.Kind.MULTI_STOREY, IN_MULTI)
 	print("walks: surface lot %.1f, multi-storey %.1f" % [lot.walk_m, multi.walk_m])
 	assert_float(lot.walk_m).is_less(multi.walk_m)
-	assert_float(lot.walk_m).is_equal_approx(46.4, 0.1)
+	# 45.7 since board 297c9eb8: the walk leaves the gate diagonally over the
+	# apron to (25, -38.2), not via (25, -37.5) by the entry post.
+	assert_float(lot.walk_m).is_equal_approx(45.7, 0.1)
 	assert_float(multi.walk_m).is_equal_approx(87.8, 0.1)
 
 

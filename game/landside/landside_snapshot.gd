@@ -23,7 +23,11 @@ extends RefCounted
 ## top is 0.1 m over the road), so a saved access or exit pos_mm, and a slot
 ## path pos_mm past the gate, names a place up to 40 mm away. Version 6 is
 ## refused, with no migration.
-const SAVE_VERSION := 7
+## 8: the surface lot's lanes gained the same sidewalk points (board 297c9eb8),
+## so a saved access or exit pos_mm of lot spot 0, and a slot path pos_mm past
+## its gate, names a place up to 40 mm away. Version 7 is refused, with no
+## migration.
+const SAVE_VERSION := 8
 const KEYS := [
 	"save_version",
 	"tick",

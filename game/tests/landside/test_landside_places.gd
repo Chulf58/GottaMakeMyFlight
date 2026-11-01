@@ -77,6 +77,8 @@ func test_the_surface_lot_stands_with_its_barriers_on_the_gate_and_the_exit() ->
 	_places.refresh()
 	var lot := _places.lot_node(0)
 	var spot: LandsideLotSpot = STARTER.lots[0]
+	# The gate is the access lane's last point.
+	var gate := spot.access[spot.access.size() - 1]
 	assert_object(lot).is_not_null()
 	assert_str(lot.scene_file_path).is_equal("res://assets/landside/tp_parking_01a.glb")
 	var entry := lot.find_child("TP_Parking_01A_Entry_Barrier", true, false) as MeshInstance3D
@@ -86,11 +88,11 @@ func test_the_surface_lot_stands_with_its_barriers_on_the_gate_and_the_exit() ->
 	print(
 		(
 			"lot at %s entry arm %s gate %s exit arm %s exit %s"
-			% [lot.position, entry_at, spot.access[2], exit_at, spot.exit[0]]
+			% [lot.position, entry_at, gate, exit_at, spot.exit[0]]
 		)
 	)
-	assert_float(entry_at.x).is_equal_approx(spot.access[2].x, 0.2)
-	assert_float(entry_at.z).is_equal_approx(spot.access[2].z, 0.2)
+	assert_float(entry_at.x).is_equal_approx(gate.x, 0.2)
+	assert_float(entry_at.z).is_equal_approx(gate.z, 0.2)
 	assert_float(exit_at.x).is_equal_approx(spot.exit[0].x, 0.2)
 	assert_float(exit_at.z).is_equal_approx(spot.exit[0].z, 0.2)
 
@@ -141,7 +143,8 @@ func test_a_closed_car_park_shows_a_closed_sign_over_its_gate() -> void:
 	var sign := _places.closed_sign(0)
 	assert_object(sign).is_not_null()
 	assert_str((sign.get_node("Caption") as Label3D).text).is_equal("Closed")
-	assert_float(sign.position.x).is_equal(STARTER.lots[0].access[2].x)
+	var access: PackedVector3Array = STARTER.lots[0].access
+	assert_float(sign.position.x).is_equal(access[access.size() - 1].x)
 	assert_bool(_landside.set_lot_closed(0, false)).is_true()
 	_places.refresh()
 	assert_object(_places.closed_sign(0)).is_null()
