@@ -3,7 +3,10 @@ extends Node3D
 ## Draws hired staff with pooled Toon characters, one model per role, so staff
 ## never look like passengers: a check-in agent in a navy skirt suit and a
 ## security officer in a white shirt and tie. A shop server wears the check-in
-## agent's suit until it has a model of its own. A member is drawn while it is on
+## agent's suit and a cleaner the officer's body until each has a model of its
+## own; a cleaner at work stands idle (its mop clips come later), facing a bin
+## it empties from beside it; on a mess's own cell it keeps the way it walked
+## in. A member is drawn while it is on
 ## the floor (not in the pool). Each tick it records the position for the tick
 ## before and the tick now, keyed by member id, and each frame it draws
 ## between the two with the clock's alpha, as PassengerViews does.
@@ -26,20 +29,17 @@ extends Node3D
 ## to it.
 
 const AGENT_SUIT := preload("res://assets/people/tcp_female_character_07.glb")
-## By StaffMember.Role: CHECKIN, SECURITY, SHOP.
-const CHARACTERS: Array[PackedScene] = [
-	AGENT_SUIT,
-	preload("res://assets/people/tcp_male_character_07.glb"),
-	AGENT_SUIT,
-]
+const OFFICER := preload("res://assets/people/tcp_male_character_07.glb")
+## By StaffMember.Role: CHECKIN, SECURITY, SHOP, CLEANER.
+const CHARACTERS: Array[PackedScene] = [AGENT_SUIT, OFFICER, AGENT_SUIT, OFFICER]
 ## Walk clip speeds measured by the Toon pipeline (SPEED lines), by role.
-const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922]
+const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922, 1.952]
 const LOOPED := ["idle", "walk"]
 
 @export var clock: SimClock
 @export var staff: StaffSim
 
-var _pool: Array[Array] = [[], [], []]
+var _pool: Array[Array] = [[], [], [], []]
 ## Member id -> node.
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
@@ -219,7 +219,12 @@ func _tick() -> float:
 func _pose(node: Node3D, m: StaffMember, moved: Vector3) -> void:
 	var clip := "idle"
 	var base := 1.0
-	if m.state == StaffMember.State.ON_DUTY:
+	if m.state == StaffMember.State.ON_DUTY and m.role == StaffMember.Role.CLEANER:
+		var job := CleanerJobs.job_cell(staff, m)
+		var ahead := job - m.at
+		if ahead != Vector2i.ZERO and job != StaffMember.NO_CELL:
+			node.rotation.y = atan2(ahead.x, ahead.y)
+	elif m.state == StaffMember.State.ON_DUTY:
 		node.rotation.y = post_yaw(m.station, m.slot)
 	elif m.is_moving():
 		clip = "walk"

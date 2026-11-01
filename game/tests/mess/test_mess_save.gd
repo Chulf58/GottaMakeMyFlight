@@ -179,7 +179,9 @@ func test_a_save_that_does_not_fit_the_grid_is_refused_and_changes_nothing() -> 
 		"next id -1": func(d: Dictionary) -> void: _renumber(d, -1),
 		"young litter grown": func(d: Dictionary) -> void: _litter_of(d)["grown"] = true,
 		"old litter not grown": _age_litter,
-		"claimed": func(d: Dictionary) -> void: d["messes"][0]["claimed_by"] = 1,
+		# Any claimed_by of 0 or more passes here; that it names a cleaner on
+		# that job is the staff load's check (test_cleaner_save.gd).
+		"claimed by a negative id": func(d: Dictionary) -> void: d["messes"][0]["claimed_by"] = -1,
 		"seat index the table lacks":
 		func(d: Dictionary) -> void: d["counters"]["seat:%d:5" % _ids["table"]] = 1,
 		"counter that is a table":

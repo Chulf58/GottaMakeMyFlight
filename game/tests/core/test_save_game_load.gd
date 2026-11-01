@@ -116,6 +116,17 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 	assert_str(_save.message_text()).contains("saved on tick")
 
 
+## Version 6 came with the cleaners: a version 5 save (from before them) is
+## refused whole, with no migration, and changes nothing.
+func test_a_version_5_save_from_before_the_cleaners_is_refused() -> void:
+	var old := _older()
+	assert_int(SaveGame.SAVE_VERSION).is_equal(6)
+	old["save_version"] = 5
+	_assert_refused(old, "version 5")
+	print("version 5: '%s'" % _save.message_text())
+	assert_str(_save.message_text()).contains("save_version must be 6")
+
+
 func test_a_bad_top_level_shape_is_refused() -> void:
 	var old := _older()
 	var unknown := old.duplicate(true)

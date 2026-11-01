@@ -2,9 +2,10 @@ class_name TestStaffSpotWalk
 extends GdUnitTestSuite
 ## Staff walk to their station's staff spot and are on duty only while they
 ## stand on it. A station whose spot an old save left blocked is never
-## staffed, and an old staff save with a member on duty on the service cell
-## loads with that member on the spot (decision
-## staff-spot-design-a-derived-staff-spot-behind-each-desk-and, points 3-4).
+## staffed (decision staff-spot-design-a-derived-staff-spot-behind-each-desk-
+## and, points 3-4). A staff save with a member on duty on the service cell is
+## refused, and an old one is refused by its version: no migration before a
+## release.
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
@@ -111,88 +112,43 @@ func test_a_station_whose_old_save_blocked_its_spot_is_never_staffed() -> void:
 
 
 ## A save of `_w` whose one member record is put on duty on its station's
-## service cell, as a save from before staff spots held it; as a version 1
-## save (no slot) when `v1`, else left a version 2 save.
-func _on_service_cell(m: StaffMember, v1: bool) -> Dictionary:
+## service cell, as a save from before staff spots held it.
+func _on_service_cell(m: StaffMember) -> Dictionary:
 	var data: Dictionary = JSON.parse_string(StaffTestKit.save_text(_w))
 	var service: Vector2i = _w.sim.layout.lanes[m.station][0]
 	var record: Dictionary = data["staff"]["members"][0]
 	record["at"] = [service.x, service.y]
 	record["path"] = [[service.x, service.y]]
 	record["path_index"] = 0
-	if v1:
-		data["staff"]["save_version"] = 1
-		record.erase("slot")
 	return data
 
 
-func test_an_old_save_with_a_member_on_the_service_cell_loads_it_on_the_spot() -> void:
+## An old staff save (version 1: no slot, its member on the service cell) is
+## refused, never migrated onto the spot (no migration before a release).
+func test_an_old_save_with_a_member_on_the_service_cell_is_refused() -> void:
 	_w = PassengerTestWorld.reference_world()
 	_w.auto_staff = false
 	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
 	assert_int(_until_on_duty(_w, m)).is_greater(0)
-	var data := _on_service_cell(m, true)
-	_b = StaffTestKit.load_world(JSON.stringify(data))
-	assert_object(_b).is_not_null()
-	var loaded := _b.staff.get_member(m.id)
-	print("migrated member %d state %d at %s" % [loaded.id, loaded.state, loaded.at])
-	assert_int(loaded.state).is_equal(StaffMember.State.ON_DUTY)
-	assert_that(loaded.at).is_equal(StaffSpots.spot_of(_b.grid, m.station))
-	for i in 50:
-		_w.step()
-		_b.step()
-	assert_that(loaded.at).is_equal(m.at)
-	assert_int(loaded.state).is_equal(m.state)
-
-
-## Only a version 1 save migrates: the same record in a version 2 save is an
-## on-duty member away from its post, and is refused.
-func test_a_version_2_save_with_a_member_on_the_service_cell_is_refused() -> void:
-	_w = PassengerTestWorld.reference_world()
-	_w.auto_staff = false
-	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
-	assert_int(_until_on_duty(_w, m)).is_greater(0)
-	var data := _on_service_cell(m, false)
-	# A version 2 save (from after staff spots) has no service-cell migration;
-	# version 3 only added shop staff.
-	assert_int(int(data["staff"]["save_version"])).is_equal(StaffSim.SAVE_VERSION)
-	data["staff"]["save_version"] = 2
+	var data := _on_service_cell(m)
+	data["staff"]["save_version"] = 1
+	(data["staff"]["members"][0] as Dictionary).erase("slot")
 	var loaded := StaffSnapshot.load(data["staff"], _w.sim)
-	print("v2 on the service cell: %s" % [loaded])
+	print("v1 on the service cell: %s" % [loaded])
+	assert_str(loaded.get("error", "")).is_equal("save_version 1 is not %d" % StaffSim.SAVE_VERSION)
+
+
+## A save of the current version with a member on duty on the service cell
+## has it on duty away from its post, and is refused.
+func test_a_save_with_a_member_on_the_service_cell_is_refused() -> void:
+	_w = PassengerTestWorld.reference_world()
+	_w.auto_staff = false
+	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
+	assert_int(_until_on_duty(_w, m)).is_greater(0)
+	var data := _on_service_cell(m)
+	assert_int(int(data["staff"]["save_version"])).is_equal(StaffSim.SAVE_VERSION)
+	var loaded := StaffSnapshot.load(data["staff"], _w.sim)
+	print("on the service cell: %s" % [loaded])
 	assert_str(loaded.get("error", "")).is_equal(
 		"member %d is on duty away from its post's staff spot" % m.id
 	)
-
-
-func test_an_old_save_on_duty_at_a_station_with_a_blocked_spot_loads_the_member_idle() -> void:
-	_w = _legacy_world()
-	var desk: int = ReferenceTerminal.object_ids(_w.grid)["desks"][0]
-	var service: Vector2i = _w.sim.layout.lanes[desk][0]
-	var data: Dictionary = JSON.parse_string(StaffTestKit.save_text(_w))
-	# An old save: its member record has no slot, as staff save version 1
-	# wrote it, so it loads through the version 1 migration.
-	data["staff"]["save_version"] = 1
-	data["staff"]["next_id"] = 2
-	data["staff"]["members"] = [
-		{
-			"id": 1,
-			"role": CHECKIN,
-			"state": StaffMember.State.ON_DUTY,
-			"station": desk,
-			"at": [service.x, service.y],
-			"path": [[service.x, service.y]],
-			"path_index": 0,
-			"seg_mm": 0,
-			"needs_replan": false,
-			"search_failed": false,
-			"leaving": false,
-		}
-	]
-	_b = StaffTestKit.load_world(JSON.stringify(data))
-	assert_object(_b).is_not_null()
-	var m := _b.staff.get_member(1)
-	print("member state %d station %d at %s" % [m.state, m.station, m.at])
-	assert_int(m.state).is_equal(StaffMember.State.IDLE)
-	assert_int(m.station).is_equal(0)
-	assert_that(m.at).is_equal(service)
-	assert_bool(_b.staff.is_staffed(desk)).is_false()
