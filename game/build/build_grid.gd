@@ -18,8 +18,10 @@ extends RefCounted
 ## placed with (BuildEdit.paid), so a removal refunds a share of what was
 ## actually paid (BuildTransaction). The grid itself never touches money.
 
-## After an accepted edit: the cells GridPathing relinked, so every committed
-## path through one of them may be stale. After a snapshot load: every cell.
+## After an accepted edit: the cells GridPathing relinked, and every floored
+## cell whose indoor state the edit changed (TerminalEnclosure), so every
+## committed path through one of them may be stale. After a snapshot load:
+## every cell. After set_shell_border(): the cells whose indoor state changed.
 signal graph_changed(cells: Array[Vector2i])
 ## After apply() or apply_batch() changed the grid data for one edit, before
 ## the graph is relinked (at once for apply(), at the end for a batch).
@@ -73,6 +75,10 @@ var check_staff_reach := true
 ## read before the edit changes anything (BuildReceipt), and a snapshot load
 ## marks it replaced. BuildMode sets it for one player action (UndoStack).
 var recorder: BuildReceipt = null
+## Whether every grid-border edge counts as walled for enclosure
+## (TerminalEnclosure): the Toon shell's facade stands there. BuildMode sets
+## it with set_shell_border() when it has a shell; a snapshot load keeps it.
+var shell_border := false
 
 var _floor := PackedByteArray()
 var _zone := PackedInt32Array()
@@ -120,6 +126,13 @@ var _next_room_id := 1
 var _floor_paid := PackedInt32Array()
 var _h_paid := PackedInt32Array()
 var _v_paid := PackedInt32Array()
+## 1 where TerminalEnclosure's flood from outside reaches a cell, 0 where
+## walls close it in (is_indoor()). Derived from the walls and door objects,
+## never saved; worked out again after an edit to either.
+var _outside := PackedByteArray()
+## Set by _commit() when an edit changed a wall or a door object, so the
+## enclosure is worked out again before the graph is relinked.
+var _enclosure_stale := false
 var _pathing := GridPathing.new()
 ## The staff A* graph (GridPathing with `staff` set), built when a staff path
 ## is first asked for and kept up to date by the same relinks from then on;
@@ -222,6 +235,32 @@ func interaction_cell(object_id: int) -> Vector2i:
 	return _def_of(object_id).interaction_cell(record["anchor"], record["facing"])
 
 
+## Whether `cell` is floor that walls close in on every side
+## (TerminalEnclosure).
+func is_indoor(cell: Vector2i) -> bool:
+	if not in_bounds(cell):
+		return false
+	var i := _index(cell)
+	return _floor[i] != FLOOR_NONE and _outside[i] == 0
+
+
+## The one passenger-cell eligibility rule: a passenger may stand on, queue
+## on, sit in front of or walk to `cell` only when it is walkable and indoor.
+## Staff are not bound by it (can_staff_route()).
+func is_passenger_cell(cell: Vector2i) -> bool:
+	return is_walkable(cell) and is_indoor(cell)
+
+
+## Sets whether the grid border counts as walled (shell_border), works the
+## enclosure out again and relinks every cell whose indoor state changed.
+func set_shell_border(closed: bool) -> void:
+	shell_border = closed
+	_enclosure_stale = true
+	var relinked := _relink_paths([] as Array[Vector2i])
+	if not relinked.is_empty():
+		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
+
+
 ## A cell is walkable when it has floor and no object, or a walk-through one.
 func is_walkable(cell: Vector2i) -> bool:
 	if not in_bounds(cell) or _floor[_index(cell)] == FLOOR_NONE:
@@ -257,6 +296,13 @@ func can_step(from: Vector2i, to: Vector2i) -> bool:
 ## a security object, which only its serviced passenger walks through.
 func can_route(from: Vector2i, to: Vector2i) -> bool:
 	return can_step(from, to) and not _is_security_cell(from) and not _is_security_cell(to)
+
+
+## A step passengers may take: can_route() between two indoor cells. The
+## passenger A* graph walks only these steps (GridPathing). can_route() stays
+## physical, for the rules about the structure (SecurityLanes).
+func can_passenger_route(from: Vector2i, to: Vector2i) -> bool:
+	return can_route(from, to) and is_indoor(from) and is_indoor(to)
 
 
 ## A step staff may take: any can_step(), so staff walk through a security
@@ -680,6 +726,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			result.dirty_cells = [edit.cell]
 		BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_WALL:
 			var placing := edit.kind == BuildEdit.Kind.PLACE_WALL
+			_enclosure_stale = true
 			_set_wall(edit.cell, edit.side, edit.wall_kind if placing else WallKind.NONE)
 			_set_wall_paid(edit.cell, edit.side, edit.paid if placing else 0)
 			result.dirty_cells = _edge_cells(edit.cell, edit.side)
@@ -692,8 +739,12 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			result.dirty_cells = _insert_object(
 				result.object_id, edit.def_id, edit.cell, edit.facing, edit.paid
 			)
+			# A door object's back edge closes the wall line it stands in.
+			_enclosure_stale = _enclosure_stale or BuildCatalog.is_door(edit.def_id)
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
+			var def_id: StringName = _objects[edit.object_id]["def"]
+			_enclosure_stale = _enclosure_stale or BuildCatalog.is_door(def_id)
 			result.dirty_cells = _erase_object(edit.object_id)
 		BuildEdit.Kind.PLACE_ROOM:
 			result.room_id = edit.room_id
@@ -846,6 +897,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		if data.has("origin"):
 			at = Vector3(data["origin"][0], data["origin"][1], data["origin"][2])
 		loaded = BuildGrid.new(loaded_size, at)
+		loaded.shell_border = shell_border
 		problem = loaded._load_cells(data)
 	if problem != "":
 		push_error("BuildGrid.from_snapshot: %s" % problem)
@@ -867,6 +919,8 @@ func from_snapshot(data: Dictionary) -> bool:
 	_floor_paid = loaded._floor_paid
 	_h_paid = loaded._h_paid
 	_v_paid = loaded._v_paid
+	_outside = loaded._outside
+	_enclosure_stale = false
 	_pathing = loaded._pathing
 	_staff_pathing = loaded._staff_pathing
 	_staff_reach_known = false
@@ -902,6 +956,10 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_floor_paid = _zeros_ints(cells)
 	_h_paid = _zeros_ints(size.x * (size.y + 1))
 	_v_paid = _zeros_ints((size.x + 1) * size.y)
+	# No walls and no doors yet: every cell is outside unless the border is.
+	_outside = _zeros_bytes(cells)
+	_outside.fill(0 if shell_border else 1)
+	_enclosure_stale = false
 
 
 ## Fills this fresh grid from a structurally valid snapshot and returns a
@@ -932,6 +990,7 @@ func _load_cells(data: Dictionary) -> String:
 		var paid := int(entry.get("paid", 0))
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
+	_outside = TerminalEnclosure.outside_cells(self, _h_walls, _v_walls, shell_border)
 	_pathing.rebuild(self)
 	_staff_pathing = null
 	return ""
@@ -1290,11 +1349,30 @@ func _passes_through(cell: Vector2i, step: Vector2i) -> bool:
 
 
 ## Relinks both A* graphs around `dirty` cells (the staff one once built) and
-## returns the cells relinked.
+## returns the cells relinked. When an edit left the enclosure stale it is
+## worked out again first, and every floored cell whose indoor state changed,
+## however far from the edit, has its passenger point switched and is
+## returned too: one removed wall can let the outside into a whole hall.
 func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
-	if _staff_pathing != null:
+	var flipped: Array[Vector2i] = []
+	if _enclosure_stale:
+		_enclosure_stale = false
+		var after := TerminalEnclosure.outside_cells(self, _h_walls, _v_walls, shell_border)
+		flipped = TerminalEnclosure.flipped_floor_cells(size.x, _floor, _outside, after)
+		_outside = after
+	if _staff_pathing != null and not dirty.is_empty():
 		_staff_pathing.update(self, dirty)
-	return _pathing.update(self, dirty)
+	var cells := _pathing.update(self, dirty)
+	if flipped.is_empty():
+		return cells
+	_pathing.set_indoor(self, flipped)
+	var seen := {}
+	for cell in cells:
+		seen[cell] = true
+	for cell in flipped:
+		if not seen.has(cell):
+			cells.append(cell)
+	return cells
 
 
 func _is_security_cell(cell: Vector2i) -> bool:

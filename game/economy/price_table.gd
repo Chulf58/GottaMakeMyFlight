@@ -150,11 +150,14 @@ const NAP_POD_FEE := 20
 ## charged-daily-at-midnight-unpaid-wages-carried-as-owed). Tuning values, to
 ## be checked in a playtest. One entry per StaffMember.Role; a test keeps the
 ## two in step. A shop server earns a little less than a check-in agent: about
-## four full cafe visits (base spend 15) a day pay for one.
+## four full cafe visits (base spend 15) a day pay for one. A cleaner earns
+## less than a server (decision cleaner-staff-and-messes-visits-leave-messes-
+## bins-fill-pooled-cleaners-nearest-mess: about 40 a day, no shifts).
 const WAGES := {
 	StaffMember.Role.CHECKIN: 60,
 	StaffMember.Role.SECURITY: 90,
 	StaffMember.Role.SHOP: 50,
+	StaffMember.Role.CLEANER: 40,
 }
 
 ## The share of its fee an airline pays for a passenger who makes the flight

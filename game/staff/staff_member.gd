@@ -7,9 +7,12 @@ extends RefCounted
 ## when it is sent to a station. Distances are whole millimetres, as for
 ## passengers (Passenger.segment_mm).
 
-## SHOP: a server at a cafe or kiosk counter (ShopCounters).
-enum Role { CHECKIN, SECURITY, SHOP }
-## WALKING_OUT: fired, on its way to the entrance; no longer staff.
+## SHOP: a server at a cafe or kiosk counter (ShopCounters). CLEANER: works no
+## station; it walks to a mess or a full bin, its job (CleanerJobs).
+enum Role { CHECKIN, SECURITY, SHOP, CLEANER }
+## WALKING_OUT: fired, on its way to the entrance; no longer staff. A cleaner
+## is TO_STATION while it walks to its job and ON_DUTY while it cleans or
+## empties it.
 enum State { IDLE, TO_STATION, ON_DUTY, WALKING_OUT }
 ## The post it works at its station (StaffPosts): PRIMARY opens the station,
 ## HELPER (at a whole security lane only) speeds up its repacks.
@@ -37,6 +40,13 @@ var search_failed := false
 ## Fired while a passenger was in service at its station: it stays on duty
 ## until that service ends, then leaves (StaffSim.fire()).
 var leaving := false
+## A cleaner's job: the mess id, or the bin object id when job_bin is set; 0
+## with no job. It holds the claim on it (MessSim.claim(); a bin's claim is
+## this job, CleanerJobs.bin_holder()), so no other cleaner takes it.
+var job := 0
+var job_bin := false
+## Ticks of cleaning or emptying left while on duty at its job; 0 otherwise.
+var work_left := 0
 ## StaffSim._replan() turned it back from a cell that went: `at` is that cell
 ## until it reaches the one it left (path[1]). Cleared on arriving there.
 var backing_out := false

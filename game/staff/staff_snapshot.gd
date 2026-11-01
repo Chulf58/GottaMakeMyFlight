@@ -5,30 +5,27 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## A save from before staff spots (a version 1 save) has its on-duty members
-## on the station's service cell (lane slot 0). Such a member loads standing
-## on the station's
-## staff spot, or, when an old layout left that spot blocked or out of reach
-## from every entrance, idle where it stood (walking out if it was leaving),
-## since the station can never be staffed. An on-duty member on a free spot
-## that no entrance reaches loads the same way.
+## Only the current version (StaffSim.SAVE_VERSION, 4) loads: an older save is
+## refused, never migrated (no save migrations before the first release,
+## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
-## Version 2 saves each member's post ("slot", StaffMember.Slot). A version 1
-## save comes from before helpers and before security lanes could be built or
-## loaded, so every member in it works a primary post: _migrated_v1() gives
-## each member record slot PRIMARY before the version 2 checks. Only a
-## version 1 save has the service-cell migration above: in a version 2 save a
-## member on duty away from its post's spot is refused. A version 2 save
-## missing a slot is refused. A helper must be a security officer at a
-## whole security lane and never leaving; a member with no station holds the
-## primary slot; each post (station and slot) is claimed at most once.
+## Each member saves its post ("slot", StaffMember.Slot). A helper must be a
+## security officer at a whole security lane and never leaving; a member with
+## no station holds the primary slot; each post (station and slot) is claimed
+## at most once; a member on duty stands on its post's staff spot. A shop
+## server's station must be a usable counter (ShopCounters). An on-duty member
+## on a free spot that no entrance reaches loads idle where it stands (walking
+## out if it was leaving), since the station can never be staffed.
 ##
-## Version 3 adds shop servers (StaffMember.Role.SHOP) at the counters of
-## ready cafes and kiosks (ShopCounters), saved like any member. A version 1
-## or 2 save comes from before them: it loads as it is, with no server, so its
-## cafes and kiosks stay closed until the player hires one; a shop member in
-## it is refused. A server's station must be a usable counter, and on duty it
-## stands on that counter's staff spot.
+## Cleaners (StaffMember.Role.CLEANER) save their job, whether it is a bin and
+## the work left. A cleaner has no station, slot or leaving flag; idle or
+## walking out it has no job, walking to its job it has no work left yet, and
+## on duty it stands still on its job's spot (CleanerJobs.spot_of(): the
+## mess's approach cell or the bin's) with work left of at most the job's
+## full time. Every other member has no job. The jobs are checked against the
+## messes, which load first: a mess job must be a saved mess claimed by that
+## cleaner, a bin job a full bin on the grid that no other cleaner holds, and
+## every claimed mess must be the job of the cleaner it names.
 
 const KEYS := ["save_version", "next_id", "members"]
 const MEMBER_KEYS := [
@@ -44,9 +41,12 @@ const MEMBER_KEYS := [
 	"needs_replan",
 	"search_failed",
 	"leaving",
+	"job",
+	"job_bin",
+	"work_left",
 ]
 const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "seg_mm"]
-const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving"]
+const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
 
 
 static func save(members: Array[StaffMember], next_id: int) -> Dictionary:
@@ -72,6 +72,9 @@ static func save(members: Array[StaffMember], next_id: int) -> Dictionary:
 					"search_failed": m.search_failed,
 					"leaving": m.leaving,
 					"backing_out": m.backing_out,
+					"job": m.job,
+					"job_bin": m.job_bin,
+					"work_left": m.work_left,
 				}
 			)
 		)
@@ -79,26 +82,21 @@ static func save(members: Array[StaffMember], next_id: int) -> Dictionary:
 
 
 ## {"next_id", "members"} restored, or {"error"}. The sim's layout and grid
-## must already hold the saved world. `saved` itself is never changed.
-static func load(saved: Dictionary, sim: PassengerSim) -> Dictionary:
+## must already hold the saved world. `saved` itself is never changed. The
+## cleaners' jobs are checked against `messes`, a {"messes", "bins"} state as
+## MessSim.checked() returns it, or, when it is empty, the sim's own MessSim
+## (MessSim.claim_state()).
+static func load(saved: Dictionary, sim: PassengerSim, messes := {}) -> Dictionary:
 	for key in KEYS:
 		if not saved.has(key):
 			return {"error": "missing '%s'" % key}
 	if not WholeNumber.is_whole(saved["save_version"]):
 		return {"error": "save_version is not a whole number"}
 	var data := saved
-	var version := int(saved["save_version"])
-	var v1 := version == 1
-	if version < 1 or version > StaffSim.SAVE_VERSION:
+	if int(saved["save_version"]) != StaffSim.SAVE_VERSION:
 		return {
-			"error":
-			"save_version %s is not 1, 2 or %d" % [saved["save_version"], StaffSim.SAVE_VERSION]
+			"error": "save_version %s is not %d" % [saved["save_version"], StaffSim.SAVE_VERSION]
 		}
-	if v1:
-		var migrated: Variant = _migrated_v1(saved)
-		if migrated is String:
-			return {"error": migrated}
-		data = migrated
 	if not WholeNumber.is_whole(data["next_id"]) or int(data["next_id"]) < 1:
 		return {"error": "next_id is not a whole number of at least 1"}
 	if typeof(data["members"]) != TYPE_ARRAY:
@@ -108,14 +106,10 @@ static func load(saved: Dictionary, sim: PassengerSim) -> Dictionary:
 	var claimed := {}
 	var last_id := 0
 	for record in data["members"]:
-		var parsed: Variant = _member(record, sim, v1)
+		var parsed: Variant = _member(record, sim)
 		if parsed is String:
 			return {"error": parsed}
 		var m: StaffMember = parsed
-		if m.role == StaffMember.Role.SHOP and version < 3:
-			return {
-				"error": "a version %d save has shop member %d, which came in 3" % [version, m.id]
-			}
 		if m.id <= last_id or m.id >= next_id:
 			return {"error": "member %d is out of order or not below next_id" % m.id}
 		last_id = m.id
@@ -127,39 +121,75 @@ static func load(saved: Dictionary, sim: PassengerSim) -> Dictionary:
 				}
 			claimed[post] = true
 		members.append(m)
+	var state := messes if not messes.is_empty() else sim.messes.claim_state()
+	var problem := _jobs_problem(members, state, sim.grid)
+	if problem != "":
+		return {"error": problem}
 	return {"next_id": next_id, "members": members}
 
 
-## A deep copy of a version 1 save with slot PRIMARY on every member record
-## (version 1 had no helpers), or a String naming what is wrong. Anything
-## else wrong is left for the version 2 checks.
-static func _migrated_v1(saved: Dictionary) -> Variant:
-	var data: Dictionary = saved.duplicate(true)
-	data["save_version"] = StaffSim.SAVE_VERSION
-	if typeof(data["members"]) != TYPE_ARRAY:
-		return data
-	for record: Variant in data["members"]:
-		if typeof(record) != TYPE_DICTIONARY:
+## Whether the cleaners' jobs and the claimed messes in `state` ({"messes",
+## "bins"}, see load()) agree: "" or what is wrong.
+static func _jobs_problem(
+	members: Array[StaffMember], state: Dictionary, grid: BuildGrid
+) -> String:
+	var messes: Dictionary = state["messes"]
+	var holders := {}
+	var bins_held := {}
+	for m in members:
+		if m.job == 0:
 			continue
-		if (record as Dictionary).has("slot"):
-			return "a version 1 member has a 'slot', which version 1 never saved"
-		record["slot"] = StaffMember.Slot.PRIMARY
-	return data
+		var spot: Vector2i
+		var most := CleanerJobs.EMPTY_TICKS
+		if m.job_bin:
+			if bins_held.has(m.job):
+				return "bin %d is the job of two cleaners" % m.job
+			bins_held[m.job] = true
+			var bin := grid.get_object(m.job)
+			if bin.get("def", &"") != MessSim.BIN_ID:
+				return "cleaner %d's job %d is not a bin on the grid" % [m.id, m.job]
+			if int(state["bins"].get(m.job, 0)) < MessSim.BIN_CAPACITY:
+				return "cleaner %d's bin %d is not full" % [m.id, m.job]
+			spot = MessSim.approach_for(grid, bin["anchor"])
+		else:
+			if not messes.has(m.job):
+				return "cleaner %d's job is mess %d, which is not saved" % [m.id, m.job]
+			var mess: Dictionary = messes[m.job]
+			if int(mess["claimed_by"]) != m.id:
+				return "cleaner %d's mess %d is not claimed by it" % [m.id, m.job]
+			holders[m.job] = m.id
+			spot = mess["approach"]
+			most = CleanerJobs.clean_ticks(int(mess["kind"]), mess["grown"])
+		if m.state != StaffMember.State.ON_DUTY:
+			continue
+		if m.at != spot:
+			return "cleaner %d works away from its job's spot %s" % [m.id, spot]
+		if m.work_left > most:
+			return (
+				"cleaner %d has %d ticks of work left, more than its job's %d"
+				% [m.id, m.work_left, most]
+			)
+	for id: int in messes:
+		var by := int(messes[id]["claimed_by"])
+		if by != 0 and holders.get(id, 0) != by:
+			return "mess %d is claimed by %d, which is no cleaner on that job" % [id, by]
+	return ""
 
 
 static func _slot_name(m: StaffMember) -> String:
 	return "helper" if m.slot == StaffMember.Slot.HELPER else "primary"
 
 
-## A StaffMember, or a String naming what is wrong with the record. `v1`: the
-## record comes from a version 1 save, the only kind the service-cell
-## migration applies to.
-static func _member(record: Variant, sim: PassengerSim, v1: bool) -> Variant:
+## A StaffMember, or a String naming what is wrong with the record.
+static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	if typeof(record) != TYPE_DICTIONARY:
 		return "a member is not a dictionary"
 	for key in MEMBER_KEYS:
 		if not record.has(key):
 			return "a member has no '%s'" % key
+	for key in ["job", "work_left"]:
+		if not WholeNumber.is_whole(record[key]) or int(record[key]) < 0:
+			return "member field '%s' is not a whole number of 0 or more" % key
 	for key in INT_FIELDS:
 		if not WholeNumber.is_whole(record[key]):
 			return "member field '%s' is not a whole number" % key
@@ -185,6 +215,9 @@ static func _member(record: Variant, sim: PassengerSim, v1: bool) -> Variant:
 	m.needs_replan = record["needs_replan"]
 	m.search_failed = record["search_failed"]
 	m.leaving = record["leaving"]
+	m.job = int(record["job"])
+	m.job_bin = record["job_bin"]
+	m.work_left = int(record["work_left"])
 	# Saves from before the flag existed have none: not backing out.
 	if record.has("backing_out"):
 		if typeof(record["backing_out"]) != TYPE_BOOL:
@@ -203,45 +236,23 @@ static func _member(record: Variant, sim: PassengerSim, v1: bool) -> Variant:
 		if not m.path.is_empty() and not _adjacent(m.path[m.path.size() - 1], cell):
 			return "member %d has a path that jumps" % m.id
 		m.path.append(cell)
-	if v1:
-		_migrate_service_cell(m, sim)
-	_release_unreachable(m, sim)
+	if m.role != StaffMember.Role.CLEANER:
+		_release_unreachable(m, sim)
 	var problem := _place_problem(m)
-	if problem == "":
+	if problem == "" and m.role == StaffMember.Role.CLEANER:
+		problem = _cleaner_problem(m)
+	elif problem == "":
 		problem = _duty_problem(m, sim)
+		if problem == "" and (m.job != 0 or m.job_bin or m.work_left != 0):
+			problem = "is no cleaner but has a job"
 	if problem != "":
 		return "member %d %s" % [m.id, problem]
 	return m
 
 
-## Moves a member an old save has on duty on its station's service cell onto
-## the station's staff spot, or, when the spot is blocked, lets it stand idle
-## there (or walk out, if it was leaving). Anything else is left for the
-## checks.
-static func _migrate_service_cell(m: StaffMember, sim: PassengerSim) -> void:
-	if m.state != StaffMember.State.ON_DUTY or m.path_index != m.path.size() - 1 or m.seg_mm != 0:
-		return
-	var lane: Array = sim.layout.lanes.get(m.station, [])
-	if lane.is_empty() or m.at != lane[0] or m.path[m.path_index] != m.at:
-		return
-	var stations := sim.layout.desks if m.role == StaffMember.Role.CHECKIN else sim.layout.scanners
-	if not stations.has(m.station):
-		return
-	var here: Array[Vector2i] = [m.at]
-	var never := _never_staffed(m, sim)
-	if not never:
-		m.at = StaffPosts.spot(sim.grid, sim.layout, m.station, m.slot)
-		here = [m.at]
-	m.set_path(here)
-	if not never:
-		return
-	_stand_down(m)
-
-
-## An on-duty member of an old save, standing on its station's free spot,
-## when staff can no longer reach that spot from any entrance (a layout saved
-## before the reach rule): it stands idle there, or walks out if it was
-## leaving, as StaffSim would release it.
+## An on-duty member standing on its station's free spot when staff can no
+## longer reach that spot from any entrance: it stands idle there, or walks
+## out if it was leaving, as StaffSim would release it.
 static func _release_unreachable(m: StaffMember, sim: PassengerSim) -> void:
 	if m.state != StaffMember.State.ON_DUTY or m.is_moving():
 		return
@@ -249,14 +260,6 @@ static func _release_unreachable(m: StaffMember, sim: PassengerSim) -> void:
 		return
 	if StaffPosts.unreachable(sim.grid, sim.layout, m.station, m.slot):
 		_stand_down(m)
-
-
-## Whether staff can never work `m`'s post: its spot is blocked, or no
-## entrance has a way to it.
-static func _never_staffed(m: StaffMember, sim: PassengerSim) -> bool:
-	if StaffPosts.blocked(sim.grid, sim.layout, m.station):
-		return true
-	return StaffPosts.unreachable(sim.grid, sim.layout, m.station, m.slot)
 
 
 ## Leaves the member idle where it stands, or walking out if it was leaving.
@@ -291,6 +294,30 @@ static func _place_problem(m: StaffMember) -> String:
 		length = Passenger.segment_mm(m.at, m.path[m.path_index + 1])
 	if m.seg_mm < 0 or (m.seg_mm > 0 and m.seg_mm >= length):
 		return "is further along its step than the step is long"
+	return ""
+
+
+## Whether a cleaner's state and job agree (see the class notes; the job
+## itself is checked by _jobs_problem()).
+static func _cleaner_problem(m: StaffMember) -> String:
+	if m.station != 0 or m.slot != StaffMember.Slot.PRIMARY or m.leaving:
+		return "is a cleaner with a station, a helper slot or leaving"
+	if m.job == 0 and m.job_bin:
+		return "has a bin job with no bin"
+	match m.state:
+		StaffMember.State.IDLE, StaffMember.State.WALKING_OUT:
+			if m.job != 0 or m.work_left != 0:
+				return "is a cleaner with no job to do but has one"
+			if m.state == StaffMember.State.IDLE and (m.is_moving() or m.needs_replan):
+				return "is idle but has a walk"
+		StaffMember.State.TO_STATION:
+			if m.job == 0 or m.work_left != 0:
+				return "walks to no job, or has work left before it gets there"
+		StaffMember.State.ON_DUTY:
+			if m.job == 0 or m.work_left < 1:
+				return "is cleaning with no job or no work left"
+			if m.is_moving() or m.needs_replan:
+				return "is on duty but walking"
 	return ""
 
 

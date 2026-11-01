@@ -67,9 +67,12 @@ static func reference_world(seed := 1) -> PassengerTestWorld:
 	return make(on_grid, FlightSim.schedule_starts(0), seed)
 
 
-## A grid of `size` with floor on every cell.
+## A grid of `size` with floor on every cell. Its border counts as walled
+## (BuildGrid.shell_border, as inside the Toon shell), so all the floor is
+## indoor and doors stand on the border with their way out open.
 static func floored(size: Vector2i) -> BuildGrid:
 	var on_grid := BuildGrid.new(size)
+	on_grid.set_shell_border(true)
 	for y in size.y:
 		for x in size.x:
 			on_grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))

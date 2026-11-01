@@ -15,6 +15,9 @@ const ROOM := Rect2i(3, 0, 6, 10)
 
 static func _grid(entrance_x: int) -> BuildGrid:
 	var grid := BuildGrid.new(Vector2i(12, 16))
+	# As inside the Toon shell: the border closes the grid in, so the plan may
+	# lay floor beside the room as before enclosure (TerminalEnclosure).
+	grid.set_shell_border(true)
 	for y in ROOM.size.y:
 		for x in range(ROOM.position.x, ROOM.end.x):
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))

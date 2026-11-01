@@ -56,8 +56,12 @@ func _make(cafe: bool, podium: Vector2i) -> void:
 	for y in range(EXTENSION.position.y, EXTENSION.end.y):
 		for x in range(EXTENSION.position.x, EXTENSION.end.x):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+		# The layout walled its floor's east side; the extension carries on.
+		var edge := Vector2i(EXTENSION.position.x - 1, y)
+		edits.append(BuildEdit.remove_wall(edge, BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):
 		assert_bool(result.ok).is_true()
+	EnclosureKit.close_floor(grid)
 	if podium != NONE:
 		PassengerTestWorld.place(grid, PrizeCar.PODIUM_ID, podium, 0)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))

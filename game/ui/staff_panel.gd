@@ -1,8 +1,10 @@
 class_name StaffPanel
 extends CanvasLayer
-## The hiring panel (Staff S2): for check-in agents, security officers and shop
-## staff (servers at cafe and kiosk counters), how many are hired and how many
-## are on duty, with Hire and Fire buttons that go through StaffSim. Nobody
+## The hiring panel (Staff S2): for check-in agents, security officers, shop
+## staff (servers at cafe and kiosk counters) and cleaners, how many are hired
+## and how many are on duty (cleaners: cleaning now), with Hire and Fire
+## buttons that go through StaffSim. Cleaners have no station, so no hint line
+## asks for one. Nobody
 ## is placed by hand: hired staff walk to a station on their own (ruling
 ## staff-are-hired-by-role-into-a-pool-and-walk-to-unstaffed-st). A new game
 ## has no staff, so the panel carries the hint (ruling
@@ -23,17 +25,22 @@ extends CanvasLayer
 ## card is always shown.
 
 const ROLES: Array[StaffMember.Role] = [
-	StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY, StaffMember.Role.SHOP
+	StaffMember.Role.CHECKIN,
+	StaffMember.Role.SECURITY,
+	StaffMember.Role.SHOP,
+	StaffMember.Role.CLEANER,
 ]
 const ROLE_NAMES := {
 	StaffMember.Role.CHECKIN: "Check-in agents",
 	StaffMember.Role.SECURITY: "Security officers",
 	StaffMember.Role.SHOP: "Shop staff",
+	StaffMember.Role.CLEANER: "Cleaners",
 }
 const ROLE_KEYS := {
 	StaffMember.Role.CHECKIN: "Checkin",
 	StaffMember.Role.SECURITY: "Security",
 	StaffMember.Role.SHOP: "Shop",
+	StaffMember.Role.CLEANER: "Cleaner",
 }
 const HINTS := {
 	StaffMember.Role.CHECKIN: "Hire a check-in agent",
@@ -56,7 +63,8 @@ const CLOSED_HINTS := {
 }
 ## The line shown once the airport opens: the starter's airline and destination.
 const OPEN_CUE := "Open! Starter contract: %s to %s, daily"
-const ROLE_WIDTH := 210.0
+## A column's least width: four roles fit centred over the bar.
+const ROLE_WIDTH := 180.0
 ## Width of the hint card's text, in layout pixels.
 const HINT_W := 560.0
 
@@ -126,9 +134,11 @@ func hint_label() -> Label:
 
 
 ## Hired and on duty; a member fired mid-service still works until that
-## service ends, so it is counted and named as leaving.
+## service ends, so it is counted and named as leaving. A cleaner is on duty
+## all day once hired, so its second count is how many are cleaning now.
 func counts_text(role: StaffMember.Role) -> String:
-	var text := "%d hired, %d on duty" % [staff.count(role), staff.on_duty_count(role)]
+	var working := "cleaning" if role == StaffMember.Role.CLEANER else "on duty"
+	var text := "%d hired, %d %s" % [staff.count(role), staff.on_duty_count(role), working]
 	var leaving := staff.leaving_count(role)
 	if leaving > 0:
 		text += ", %d leaving" % leaving

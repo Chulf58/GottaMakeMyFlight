@@ -20,7 +20,7 @@ static func plan(grid: BuildGrid, p: Passenger, target: Vector2i) -> Dictionary:
 	if not p.is_moving() or p.seg_mm == 0:
 		return stay
 	var next := p.path[p.path_index + 1]
-	if not grid.can_route(p.at, next):
+	if not grid.can_passenger_route(p.at, next):
 		return stay
 	var step_mm := Passenger.segment_mm(p.at, next)
 	var best := {}

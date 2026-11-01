@@ -40,6 +40,8 @@ func _mounts(path: String) -> Dictionary:
 
 func _floored() -> BuildGrid:
 	var grid := BuildGrid.new(GRID)
+	# The border closes the floor in, so passengers may use it.
+	grid.set_shell_border(true)
 	var edits: Array[BuildEdit] = []
 	for y in GRID.y:
 		for x in GRID.x:

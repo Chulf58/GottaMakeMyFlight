@@ -34,6 +34,8 @@ func after() -> void:
 
 func before_test() -> void:
 	var grid := BuildGrid.new(Vector2i(4, 11))
+	# As inside the Toon shell: the border closes the grid in.
+	grid.set_shell_border(true)
 	var floored: Array[Vector2i] = [Vector2i(0, 7), Vector2i(0, 8), Vector2i(0, 0), Vector2i(2, 0)]
 	for y in range(0, 11):
 		floored.append(Vector2i(1, y))

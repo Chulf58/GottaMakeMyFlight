@@ -43,9 +43,21 @@ extends RefCounted
 ## The cells each mess is seen from are a cache rebuilt after an add, a removal,
 ## a growth, a load and any grid change, never saved.
 ##
+## Cleaners (StaffSim, CleanerJobs) claim a mess (claim(), its claimed_by is the
+## cleaner's member id) so no other cleaner takes it, then clean it (clean()),
+## or claim a full bin (full_bins(); a bin's claim is its cleaner's job) and empty it
+## (empty_bin()). A claimed mess that goes another way (an edit took its floor,
+## remove()) emits claim_dropped, so its cleaner lets go of the job at once.
+##
 ## Saved as one SaveGame part ("messes"): the messes, the next id, the bin fill,
 ## every use counter and the diagnostics, so a load plays on exactly like an
-## unbroken run.
+## unbroken run. A saved claimed_by is any whole number of 0 or more here; that
+## it names a cleaner whose job is that mess is checked with the staff
+## (StaffSnapshot), which load after the messes.
+
+## A mess claimed by `cleaner` was removed by something other than its
+## cleaner's work: an edit (reconcile()) or remove().
+signal claim_dropped(id: int, cleaner: int)
 
 enum Kind { LITTER, SPILL, TOILET }
 
@@ -277,12 +289,64 @@ func add(kind: Kind, cell: Vector2i) -> int:
 	return id
 
 
-## Removes a mess; false for an unknown id.
+## Removes a mess; false for an unknown id. A claimed one emits claim_dropped.
 func remove(id: int) -> bool:
+	var cleaner := int(_messes.get(id, {}).get("claimed_by", 0))
+	if not _messes.erase(id):
+		return false
+	_seen_dirty = true
+	if cleaner != 0:
+		claim_dropped.emit(id, cleaner)
+	return true
+
+
+## Gives mess `id` to `cleaner` (a member id); false, changing nothing, for an
+## unknown mess or one already claimed.
+func claim(id: int, cleaner: int) -> bool:
+	if not _messes.has(id) or int(_messes[id]["claimed_by"]) != 0 or cleaner < 1:
+		return false
+	_messes[id]["claimed_by"] = cleaner
+	return true
+
+
+## Lets go of `cleaner`'s claim on mess `id`, if it holds one.
+func release(id: int, cleaner: int) -> void:
+	if _messes.has(id) and int(_messes[id]["claimed_by"]) == cleaner:
+		_messes[id]["claimed_by"] = 0
+
+
+## A cleaner finished mess `id`: it is gone, and so is the mood it cost. False
+## for an unknown id. Emits nothing: the cleaner is the one that cleaned it.
+func clean(id: int) -> bool:
 	if not _messes.erase(id):
 		return false
 	_seen_dirty = true
 	return true
+
+
+## The bins on the grid that are full, in id order: a cleaner empties them.
+func full_bins() -> Array[int]:
+	var full: Array[int] = []
+	for bin: int in _bins.keys():
+		if fill_of(bin) >= BIN_CAPACITY and _grid.get_object(bin).get("def", &"") == BIN_ID:
+			full.append(bin)
+	full.sort()
+	return full
+
+
+## A cleaner emptied `bin`: its fill goes back to 0, so it takes litter again.
+## False for an object that is not a bin.
+func empty_bin(bin: int) -> bool:
+	if _grid.get_object(bin).get("def", &"") != BIN_ID:
+		return false
+	_bins.erase(bin)
+	return true
+
+
+## The mess records and bin fill as they stand, for the staff load check
+## (StaffSnapshot): the same shape as checked() returns them. Read only.
+func claim_state() -> Dictionary:
+	return {"messes": _messes, "bins": _bins}
 
 
 func mess_ids() -> Array[int]:
@@ -398,6 +462,8 @@ func reconcile() -> void:
 				approach = approach_for(_grid, mess["cell"])
 		if approach == NO_CELL:
 			_messes.erase(id)
+			if int(mess["claimed_by"]) != 0:
+				claim_dropped.emit(id, int(mess["claimed_by"]))
 		else:
 			mess["approach"] = approach
 	for bin: int in _bins.keys():
@@ -549,9 +615,8 @@ static func _checked_mess(entry: Variant, grid: BuildGrid, tick: int, next: int)
 	var grows := kind == Kind.LITTER and tick - int(data["born_tick"]) >= GROW_TICKS
 	if typeof(data["grown"]) != TYPE_BOOL or data["grown"] != grows:
 		return {"error": "mess %d: 'grown' must be %s at its age" % [id, grows]}
-	# No cleaner claims a mess until the cleaner slice.
-	if int(data["claimed_by"]) != 0:
-		return {"error": "mess %d: 'claimed_by' must be 0" % id}
+	# claimed_by is 0 or more (checked above); that it names a live cleaner
+	# whose job is this mess is checked with the staff (StaffSnapshot).
 	var cell := _cell_of(data["cell"])
 	var approach := _cell_of(data["approach"])
 	if cell == NO_CELL or grid.floor_at(cell) == BuildGrid.FLOOR_NONE:

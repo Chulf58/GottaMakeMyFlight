@@ -99,7 +99,7 @@ func step() -> void:
 	if landside == null:
 		return
 	_settle_closed(landside)
-	var can_release := not _sim.layout.entrances.is_empty()
+	var can_release := not _sim.layout.passenger_entrances.is_empty()
 	var closes := {}
 	for b in _bookings:
 		if b.state == ArrivalBooking.State.IN_VEHICLE:
@@ -154,7 +154,7 @@ func restore(loaded: Dictionary) -> void:
 
 
 func _settle_closed(landside: LandsideSim) -> void:
-	var no_entrance := _sim.layout.entrances.is_empty()
+	var no_entrance := _sim.layout.passenger_entrances.is_empty()
 	var listed: Array[ArrivalBooking] = _bookings.duplicate()
 	for b in listed:
 		if not _sim.flights.is_doors_closed(b.flight_id):

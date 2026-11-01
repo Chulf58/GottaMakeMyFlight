@@ -39,6 +39,8 @@ static func build(
 		edits.append(BuildEdit.remove_wall(Vector2i(21, y), BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):
 		assert(result.ok, "shop layout edit refused: %s" % result.reason_text())
+	# Walls close the floor in, so passengers may use it (TerminalEnclosure).
+	EnclosureKit.close_floor(grid)
 	var ids := {}
 	for side: String in sides:
 		var rect := AIRSIDE_ROOM if side == "air" else LANDSIDE_ROOM
