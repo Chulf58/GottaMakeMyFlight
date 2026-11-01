@@ -8,15 +8,20 @@ extends GdUnitTestSuite
 
 const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
+const SITE := preload("res://build/terminal_site.tres")
 const DIR := "user://playtest_view_missing_test"
 ## Free starter-terminal floor on the landside, clear of every station and
-## staff spot; the second tray goes one cell off the first, as in the playtest.
-const FIRST_TRAY := Vector2i(20, 14)
-const SECOND_TRAY := Vector2i(20, 13)
+## staff spot, in the reference terminal's cells; the second tray goes one cell
+## off the first, as in the playtest. The site moves the terminal by its
+## starter_offset.
+const FIRST_TRAY_IN_TERMINAL := Vector2i(20, 14)
+const SECOND_TRAY_IN_TERMINAL := Vector2i(20, 13)
 
 var _main: Node
 var _hook: Node
 var _mode: BuildMode
+var _first_tray := FIRST_TRAY_IN_TERMINAL + SITE.starter_offset
+var _second_tray := SECOND_TRAY_IN_TERMINAL + SITE.starter_offset
 
 
 func before() -> void:
@@ -56,14 +61,14 @@ func _open_view_missing() -> Array[String]:
 func test_a_tray_placed_through_the_grid_gets_its_node_and_no_view_missing() -> void:
 	var grid := _mode.grid
 	var nodes_before := _view().object_node_count()
-	var first := grid.apply(BuildEdit.place_object(SecurityLanes.TRAY_TABLE, FIRST_TRAY, 0))
+	var first := grid.apply(BuildEdit.place_object(SecurityLanes.TRAY_TABLE, _first_tray, 0))
 	assert_bool(first.ok).is_true()
 	await await_idle_frame()
 	await await_idle_frame()
 	assert_object(_view().object_node(first.object_id)).is_not_null()
 	var removed := grid.apply(BuildEdit.remove_object(first.object_id))
 	assert_bool(removed.ok).is_true()
-	var second := grid.apply(BuildEdit.place_object(SecurityLanes.TRAY_TABLE, SECOND_TRAY, 0))
+	var second := grid.apply(BuildEdit.place_object(SecurityLanes.TRAY_TABLE, _second_tray, 0))
 	assert_bool(second.ok).is_true()
 	await await_idle_frame()
 	await await_idle_frame()
@@ -90,6 +95,6 @@ func test_a_tray_placed_through_the_grid_gets_its_node_and_no_view_missing() -> 
 		return
 	var centre := (
 		_view().global_transform
-		* BuildView.object_transform(grid, [SECOND_TRAY] as Array[Vector2i], 0).origin
+		* BuildView.object_transform(grid, [_second_tray] as Array[Vector2i], 0).origin
 	)
 	assert_float(node.global_position.distance_to(centre)).is_less(0.01)

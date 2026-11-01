@@ -46,7 +46,7 @@ func test_a_flight_spawns_its_passengers_ahead_of_doors_close() -> void:
 		var p := world.passenger(id)
 		assert_str(p.flight_id).is_equal(PassengerTestWorld.FLIGHT)
 		assert_int(p.spawn_tick).is_between(1, doors - PassengerSim.LAST_SPAWN_LEAD_TICKS)
-		assert_int(p.boarding_tick).is_equal(700)
+		assert_int(p.boarding_tick).is_equal(PassengerTestWorld.boarding_tick())
 		variants[p.variant] = true
 	assert_int(variants.size()).is_equal(2)
 

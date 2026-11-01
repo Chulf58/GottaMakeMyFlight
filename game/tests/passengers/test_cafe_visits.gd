@@ -142,7 +142,7 @@ func test_an_airside_visit_runs_every_stage_and_resumes_to_the_gate() -> void:
 	assert_int(p.stage).is_in([Passenger.Stage.TO_GATE, Passenger.Stage.TO_EXIT])
 	assert_int(_cafes().seat_holder(visit.seat_key)).is_equal(0)
 	assert_array(_cafes().queue_of(_ids["air_counter"])).is_empty()
-	_world.run_to(1900)
+	_world.run_to(PassengerTestWorld.doors_tick())
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 
 
@@ -156,7 +156,7 @@ func test_a_landside_visit_starts_after_check_in_and_resumes_to_security() -> vo
 	assert_array(_visit_stages(p.id)).is_equal(VISIT_STAGES)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_SECURITY)
 	assert_bool(p.cleared).is_false()
-	_world.run_to(1900)
+	_world.run_to(PassengerTestWorld.doors_tick())
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 
 
@@ -266,7 +266,7 @@ func test_removing_the_table_ends_the_visit_and_frees_the_queue() -> void:
 	assert_object(_cafes().visit_of(p.id)).is_null()
 	assert_array(_cafes().queue_of(_ids["air_counter"])).is_empty()
 	assert_bool(Passenger.in_cafe(p.stage)).is_false()
-	_world.run_to(1900)
+	_world.run_to(PassengerTestWorld.doors_tick())
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 
 
@@ -294,7 +294,7 @@ func test_doors_closing_on_a_guest_drops_its_visit() -> void:
 	# forecasts it afresh each second.
 	visit.dwell_end = 1000000
 	var key := visit.seat_key
-	while _world.clock.tick < 1900:
+	while _world.clock.tick < PassengerTestWorld.doors_tick():
 		visit.deadline = 1000000
 		_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.MISSED)

@@ -8,12 +8,11 @@ extends BuildGrid
 ## moves-110-m-north-stand-snaps-to, point 4) whether the edit builds where a
 ## plane at the stand still needs to go. Every way an edit reaches the grid (a
 ## click, an area drag, an undo, a template) goes through validate(), so one
-## check covers them all. Copies made for trial runs are plain BuildGrids
-## without the guard.
+## check covers them all. The trial copy BuildUndo checks an undo on is a
+## SiteGrid carrying the same guard, so it refuses what the live grid would.
 ##
-## Not guaranteed: an undo is tried on such a copy first (BuildUndo), so an
-## undo the guard refuses is refused on the live grid after the copy took it,
-## which BuildUndo reports as an error.
+## Not guaranteed: the other trial copies (templates, repair plans) are plain
+## BuildGrids without the guard.
 
 var site: SiteDefinition
 ## Called as guard(grid, edit) before every validation; returns a refusal or

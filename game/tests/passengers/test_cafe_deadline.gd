@@ -16,6 +16,10 @@ const CROWD_CELL := Vector2i(16, 12)
 ## scanners serve them (one per 20 ticks), so the queue keeps growing.
 const CROWD_EVERY := 7
 const CROWD_UNTIL := 700
+## The guest of the burst case spawns this long before boarding opens (it was
+## tick 0 when boarding opened at tick 700), so its schedule is as tight as
+## the case needs whatever the phase lengths are.
+const SPAWN_BEFORE_BOARDING := 700
 ## Passengers who check in at once, enough to make a seated guest's deadline
 ## pass (two scanners, SecurityRuntime.BASIC_SCAN_TICKS or more each).
 const BURST := 22
@@ -91,13 +95,15 @@ func test_a_burst_at_security_right_after_the_guests_beat_sends_it_on_at_once() 
 	CafeTestLayout.build(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
+	var spawn_at := PassengerTestWorld.boarding_tick() - SPAWN_BEFORE_BOARDING
+	world.run_to(spawn_at)
 	var guest := _new_passenger(world)
-	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < 600:
+	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < spawn_at + 600:
 		world.step()
 	assert_bool(world.sim.cafes.try_visit(guest)).is_true()
 	var visit := world.sim.cafes.visit_of(guest.id)
 	assert_int(visit.resume_stage).is_equal(Passenger.Stage.TO_SECURITY)
-	while guest.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < 900:
+	while guest.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < spawn_at + 900:
 		world.step()
 	assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_SEATED)
 	# The tick of the guest's beat has just been stepped.

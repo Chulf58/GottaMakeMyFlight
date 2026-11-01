@@ -51,7 +51,7 @@ func test_settled_passengers_are_kept_for_a_while_then_retired() -> void:
 	var ids := _reference(6)
 	ids.append_array(_late(2))
 	var kept_once := 0
-	while _world.clock.tick < 2300:
+	while _world.clock.tick < PassengerTestWorld.doors_tick() + 400:
 		_world.step()
 		for id in ids:
 			if not _outcomes.has(id):
@@ -72,14 +72,14 @@ func test_settled_passengers_are_kept_for_a_while_then_retired() -> void:
 func test_totals_and_flight_results_survive_retirement() -> void:
 	var ids := _reference(6)
 	ids.append_array(_late(2))
-	_world.run_to(1950)
+	_world.run_to(PassengerTestWorld.doors_tick() + 50)
 	var made := _world.sim.made_count()
 	var missed := _world.sim.missed_count()
 	assert_int(missed).is_greater(0)
 	var before := FlightResult.summarize(_world.sim, PassengerTestWorld.FLIGHT)
 	assert_int(before["made"]).is_equal(made)
 	assert_int(before["missed"]).is_equal(missed)
-	_world.run_to(1900 + PassengerSim.SETTLED_KEEP_TICKS + 5)
+	_world.run_to(PassengerTestWorld.doors_tick() + PassengerSim.SETTLED_KEEP_TICKS + 5)
 	assert_int(_world.sim.passenger_ids().size()).is_equal(0)
 	assert_int(_world.sim.made_count()).is_equal(made)
 	assert_int(_world.sim.missed_count()).is_equal(missed)
@@ -99,7 +99,7 @@ func test_passengers_still_on_their_way_are_never_retired() -> void:
 func test_a_settled_passenger_that_still_holds_something_is_not_retired() -> void:
 	_reference(0)
 	var ids := _late(1)
-	_world.run_to(1950)
+	_world.run_to(PassengerTestWorld.doors_tick() + 50)
 	var p := _world.passenger(ids[0])
 	assert_bool(p.is_done()).is_true()
 	assert_str(_world.sim._settled_leftovers(p)).is_equal("")
@@ -131,11 +131,11 @@ func test_a_guest_the_doors_caught_at_the_cafe_leaves_nothing_behind() -> void:
 		_world.step()
 	visit.dwell_end = 1000000
 	var key := visit.seat_key
-	while _world.clock.tick < 1900:
+	while _world.clock.tick < PassengerTestWorld.doors_tick():
 		visit.deadline = 1000000
 		_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.MISSED)
-	_world.run_to(1900 + PassengerSim.SETTLED_KEEP_TICKS + 2)
+	_world.run_to(PassengerTestWorld.doors_tick() + PassengerSim.SETTLED_KEEP_TICKS + 2)
 	assert_object(_world.passenger(id)).is_null()
 	assert_int(_world.sim.retire_refused).is_equal(0)
 	assert_object(_world.sim.cafes.visit_of(id)).is_null()

@@ -6,13 +6,13 @@ extends GdUnitTestSuite
 ## them and their pending arrivals, and the flight timeline and contract
 ## fields stay as they were.
 
-## 10:00: the occurrence departs at tick 4800, its first state is at 2840, it
-## is issued at 440 and its doors close at 4740.
+## 10:00: the occurrence departs at tick 4800, its first state is at 2540, it
+## is issued at 140 and its doors close at 4740.
 const CONTRACT := "ARR"
 const OCCURRENCE := "ARR-d0"
 const MINUTE := 600
-const FIRST := 2840
-const ISSUED := 440
+const FIRST := 2540
+const ISSUED := 140
 const DEPARTURE := 4800
 const BOOKED := 40
 ## The one-off flight's first state in the save tests.
@@ -53,7 +53,7 @@ func test_the_occurrence_exists_before_its_first_passenger_spawns() -> void:
 	var terms := TestFlightContracts.terms(CONTRACT, MINUTE)
 	terms["booked_passengers"] = BOOKED
 	assert_bool(_a.flights.accept_contract(terms)).is_true()
-	_a.run_to(FIRST + 1200)
+	_a.run_to(FIRST + PassengerTestWorld.doors_tick() - PassengerSim.LAST_SPAWN_LEAD_TICKS)
 	assert_int(_a.flights.state_start(OCCURRENCE, FlightSim.State.SCHEDULED)).is_equal(FIRST)
 	assert_int(_a.flights.state_start(OCCURRENCE, FlightSim.State.PUSHBACK)).is_equal(DEPARTURE)
 	assert_int(_issued_at).is_equal(ISSUED)
@@ -85,9 +85,11 @@ func _on_spawned(id: int) -> void:
 
 
 func test_the_timeline_and_contract_fields_are_unchanged() -> void:
-	var phases: Array[int] = [100, 120, 140, 300, 40, 1200, 60, 120, 300, 200]
+	# TAXI_IN is 600 and TAXI_OUT 720 (was 300 and 300): the plane stand moved
+	# 110 m north and the taxi speed stays under 16 m/s.
+	var phases: Array[int] = [100, 120, 140, 600, 40, 1200, 60, 120, 720, 200]
 	assert_array(FlightSim.PHASE_TICKS).is_equal(phases)
-	assert_int(FlightTimetable.departure_offset()).is_equal(1960)
+	assert_int(FlightTimetable.departure_offset()).is_equal(2260)
 	(
 		assert_array(FlightContract.KEYS)
 		. is_equal(

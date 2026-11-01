@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 ## never closes, and the opening accepts the starter contract.
 ##
 ## The reference terminal has a working path; PassengerTestWorld's one-off
-## GMF101 holds gate C over ticks 0 to 2580.
+## GMF101 holds gate C over ticks 0 to 3300.
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
@@ -99,13 +99,16 @@ func test_once_open_it_stays_open_after_everyone_is_fired() -> void:
 	assert_bool(_gate.is_open()).is_true()
 	assert_bool(_gate.ready_to_open()).is_false()
 	assert_int(_gate.blocker()).is_equal(AirportGate.Blocker.NONE)
+	# The starter waits for the one-off flight's gate time, so its first
+	# occurrence is issued after the fired staff are gone, at its issue tick.
+	_w.run_to(FlightTimetable.issue_tick(_w.flights.contract_of(STARTER), 0))
 	var first := FlightTimetable.occurrence_id(STARTER, 0)
 	_w.run_to(_w.flights.state_start(first, FlightSim.State.SCHEDULED) + 1)
 	assert_int(_w.flights.state_of(first)).is_equal(FlightSim.State.SCHEDULED)
 
 
 ## Opened at 1000, a whole minute: the starter's first state is 1000 + 2400,
-## so it is issued on the opening tick and departs 98 minutes after that.
+## so it is issued on the opening tick and departs 113 minutes after that.
 func test_the_starter_s_first_flight_starts_the_lead_after_opening_and_repeats_daily() -> void:
 	_make()
 	_w.run_to(1000)

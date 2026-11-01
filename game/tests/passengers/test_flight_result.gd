@@ -115,9 +115,9 @@ func test_passengers_who_made_the_flight_are_counted_apart_from_the_missed() -> 
 	_worlds.append(world)
 	for i in 2:
 		world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	world.run_to(1700)
+	world.run_to(PassengerTestWorld.doors_tick() - 200)
 	var late := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	world.run_to(1900)
+	world.run_to(PassengerTestWorld.doors_tick())
 	var summary := FlightResult.summarize(world.sim, PassengerTestWorld.FLIGHT)
 	assert_int(summary["made"]).is_equal(2)
 	assert_int(summary["missed"]).is_equal(1)

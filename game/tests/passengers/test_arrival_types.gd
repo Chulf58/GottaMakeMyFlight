@@ -141,8 +141,8 @@ func test_windows_are_read_from_the_flight() -> void:
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(FIRST))
 	_worlds.append(world)
 	var id := PassengerTestWorld.FLIGHT
-	var last := FIRST + 1900 - PassengerSim.LAST_SPAWN_LEAD_TICKS
-	var departure := FIRST + 1960
+	var last := FIRST + PassengerTestWorld.doors_tick() - PassengerSim.LAST_SPAWN_LEAD_TICKS
+	var departure := FIRST + FlightTimetable.departure_offset()
 	var now := world.clock.tick
 	var typical := ArrivalTypes.window(ArrivalTypes.Type.TYPICAL, world.flights, id, now)
 	var rushed := ArrivalTypes.window(ArrivalTypes.Type.RUSHED, world.flights, id, now)

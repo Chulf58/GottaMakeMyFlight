@@ -24,7 +24,7 @@ static func commit(grid: BuildGrid, receipt: BuildReceipt, wallet: Wallet) -> Bu
 	var edits := receipt.undo_edits()
 	var rule := rule_problem
 	var snapshot := grid.to_snapshot()
-	var scratch := BuildGrid.new(grid.size, grid.origin)
+	var scratch := _blank_copy_of(grid)
 	if not scratch.from_snapshot(snapshot):
 		push_error("BuildUndo.commit: the grid could not be copied to check the undo")
 		return BuildResult.refused(BuildResult.Reason.NONE)
@@ -42,6 +42,19 @@ static func commit(grid: BuildGrid, receipt: BuildReceipt, wallet: Wallet) -> Bu
 		return result
 	grid.release_signals()
 	return result
+
+
+## An empty grid of `grid`'s size and origin for the trial run. A site grid's
+## copy carries its guard, so the trial refuses what the live grid would (an
+## undone removal inside the plane's area), instead of the live grid refusing
+## it after the trial took it.
+static func _blank_copy_of(grid: BuildGrid) -> BuildGrid:
+	var site_grid := grid as SiteGrid
+	if site_grid == null:
+		return BuildGrid.new(grid.size, grid.origin)
+	var copy := SiteGrid.new(site_grid.site)
+	copy.guard = site_grid.guard
+	return copy
 
 
 ## The rules beyond BuildGrid.validate() for one undo edit on `grid` as the

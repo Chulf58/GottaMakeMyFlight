@@ -60,9 +60,11 @@ static func _read(main: Node) -> Dictionary:
 			if grid.floor_at(Vector2i(x, y)) != BuildGrid.FLOOR_NONE:
 				floors += 1
 	var kinds := ReferenceTerminal.object_ids(grid)
+	# The site moves the starter terminal by its starter_offset.
+	var shift := ReferenceTerminal.offset_on(grid)
 	var divider := 0
 	for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
-		if grid.has_wall(Vector2i(x, ReferenceTerminal.DIVIDER_Y), BuildGrid.Side.NORTH):
+		if grid.has_wall(Vector2i(x, ReferenceTerminal.DIVIDER_Y) + shift, BuildGrid.Side.NORTH):
 			divider += 1
 	return {
 		"floors": floors,

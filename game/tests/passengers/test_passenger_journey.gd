@@ -37,7 +37,7 @@ func test_routing_cannot_bypass_security() -> void:
 	assert_bool(_world.grid.find_path(Vector2i(12, 12), Vector2i(12, 5)).is_empty()).is_false()
 	var ids := _spawn_many(8, 15)
 	var airside_seen := 0
-	while _world.clock.tick < 1900:
+	while _world.clock.tick < PassengerTestWorld.doors_tick():
 		_world.step()
 		for id in ids:
 			var p := _world.passenger(id)
@@ -70,7 +70,7 @@ func test_without_a_scanner_nobody_reaches_the_gate() -> void:
 		assert_int(p.stage).is_equal(Passenger.Stage.TO_SECURITY)
 		assert_int(p.stuck).is_equal(Passenger.Stuck.NO_SECURITY)
 		assert_bool(p.cleared).is_false()
-	_world.run_to(1900)
+	_world.run_to(PassengerTestWorld.doors_tick())
 	for id in ids:
 		assert_int(_world.passenger(id).stage).is_equal(Passenger.Stage.MISSED)
 		assert_int(_world.passenger(id).seat_object).is_equal(0)
@@ -109,18 +109,18 @@ func test_made_before_doors_close_and_missed_at_doors_close() -> void:
 	var early: Array[Passenger] = []
 	for id in _spawn_many(3, 20):
 		early.append(_world.passenger(id))
-	_world.run_to(1700)
+	_world.run_to(PassengerTestWorld.doors_tick() - 200)
 	var late := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	_world.run_to(1899)
+	_world.run_to(PassengerTestWorld.doors_tick() - 1)
 	# The early three are made and retired by now, so they are held here.
 	for p in early:
 		assert_int(p.stage).is_equal(Passenger.Stage.MADE)
-		assert_int(p.outcome_tick).is_less(1900)
+		assert_int(p.outcome_tick).is_less(PassengerTestWorld.doors_tick())
 	assert_int(late.stage).is_not_equal(Passenger.Stage.MADE)
 	assert_int(_world.sim.missed_count()).is_equal(0)
 	_world.step()
 	assert_int(late.stage).is_equal(Passenger.Stage.MISSED)
-	assert_int(late.outcome_tick).is_equal(1900)
+	assert_int(late.outcome_tick).is_equal(PassengerTestWorld.doors_tick())
 	assert_int(_world.sim.made_count()).is_equal(3)
 	assert_int(_world.sim.missed_count()).is_equal(1)
 
@@ -131,11 +131,11 @@ func test_exit_blocked_when_the_exit_is_gone_or_walled() -> void:
 	var exit_cell := ReferenceTerminal.EXIT_CELL
 	_world.grid.apply(BuildEdit.place_wall(exit_cell, BuildGrid.Side.NORTH))
 	var walled := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_world.run_to(760)
+	_world.run_to(PassengerTestWorld.boarding_tick() + 60)
 	assert_int(_world.passenger(walled).stuck).is_equal(Passenger.Stuck.EXIT_BLOCKED)
 	assert_str(_world.sim.bubble_text(_world.passenger(walled))).is_equal("The exit is blocked")
 	_world.grid.apply(BuildEdit.remove_wall(exit_cell, BuildGrid.Side.NORTH))
-	_world.run_to(800)
+	_world.run_to(PassengerTestWorld.boarding_tick() + 100)
 	assert_int(_world.passenger(walled).stuck).is_equal(Passenger.Stuck.NONE)
 	assert_int(_world.passenger(walled).stage).is_greater_equal(Passenger.Stage.TO_EXIT)
 	# The exit's gap is walled with it: a door object fills its gap in the wall
@@ -146,7 +146,7 @@ func test_exit_blocked_when_the_exit_is_gone_or_walled() -> void:
 	for result in _world.grid.apply_batch(gone):
 		assert_bool(result.ok).is_true()
 	var other := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_world.run_to(1100)
+	_world.run_to(PassengerTestWorld.boarding_tick() + 400)
 	assert_int(_world.passenger(other).stuck).is_equal(Passenger.Stuck.EXIT_BLOCKED)
 
 
