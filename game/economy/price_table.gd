@@ -120,6 +120,17 @@ const LANDSIDE_PRICES := {
 	&"multi_storey": 5000,
 }
 
+## What a land plot costs, by how many plots the player has bought before it
+## (user ruling land-plot-price-rises-with-each-plot-bought-from-a-small-tun:
+## cheap first plots, each buy makes the next dearer, location plays no part).
+## Past the end each plot costs the last step more again (price_of_land_plot()).
+## Tuning values, to be checked in a playtest: the first plot is about a
+## sixth of the floor it holds (625 tiles at FLOOR_PRICE), the tenth more than
+## the starting budget.
+const LAND_PLOT_PRICES: Array[int] = [
+	2500, 3500, 5000, 7000, 9500, 12500, 16000, 20000, 24500, 29500
+]
+
 ## What a ready toilet room costs to run per stall per game day (decision
 ## toilet-design-queue-free-reservable-stalls-per-stall-daily-u, point 2),
 ## charged at midnight with the wages. A tuning value, to be checked in a
@@ -169,6 +180,19 @@ const MISSED_BAG_FEE_PERCENT := 50
 
 static func price_of_floor() -> int:
 	return FLOOR_PRICE
+
+
+## The price of the next land plot after `bought` plots (LAND_PLOT_PRICES),
+## NO_PRICE for a negative count.
+static func price_of_land_plot(bought: int) -> int:
+	if bought < 0:
+		push_error("PriceTable: no land price after %d plots" % bought)
+		return NO_PRICE
+	var last := LAND_PLOT_PRICES.size() - 1
+	if bought <= last:
+		return LAND_PLOT_PRICES[bought]
+	var step := LAND_PLOT_PRICES[last] - LAND_PLOT_PRICES[last - 1]
+	return LAND_PLOT_PRICES[last] + (bought - last) * step
 
 
 ## `kind` is a BuildGrid.WallKind. NONE and out-of-range kinds have no price.

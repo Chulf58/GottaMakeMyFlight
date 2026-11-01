@@ -131,6 +131,11 @@ var _outside := PackedByteArray()
 ## Set by _commit() when an edit changed a wall or a door object, so the
 ## enclosure is worked out again before the graph is relinked.
 var _enclosure_stale := false
+## Every cell an edit changed since the grid was reset or loaded (and, after a
+## load, every floored or walled one), as one rectangle, zero sized for none.
+## It only grows between loads. No wall or door stands outside it, so the flood
+## runs on it one cell wider only (flood_area()).
+var _built := Rect2i()
 ## The passenger A* graph, kept up to date by every relink once built; null
 ## until a load or the first find_path() builds it.
 var _pathing: GridPathing = null
@@ -911,6 +916,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_h_paid = loaded._h_paid
 	_v_paid = loaded._v_paid
 	_outside = loaded._outside
+	_built = loaded._built
 	_enclosure_stale = false
 	_pathing = loaded._pathing
 	_staff_pathing = loaded._staff_pathing
@@ -962,6 +968,7 @@ func clone() -> BuildGrid:
 	copy._h_paid = _h_paid.duplicate()
 	copy._v_paid = _v_paid.duplicate()
 	copy._outside = _outside.duplicate()
+	copy._built = _built
 	copy._enclosure_stale = _enclosure_stale
 	copy._staff_reach = _staff_reach.duplicate()
 	copy._staff_reach_known = _staff_reach_known
@@ -998,6 +1005,7 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	# No walls and no doors yet: every cell is outside.
 	_outside = _zeros_bytes(cells)
 	_outside.fill(1)
+	_built = Rect2i()
 	_enclosure_stale = false
 
 
@@ -1029,7 +1037,8 @@ func _load_cells(data: Dictionary) -> String:
 		var paid := int(entry.get("paid", 0))
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
-	_outside = TerminalEnclosure.outside_cells(self, _h_walls, _v_walls)
+	_built = TerminalEnclosure.built_area(size, _floor, _h_walls, _v_walls)
+	_outside = TerminalEnclosure.outside_within(self, _h_walls, _v_walls, flood_area())
 	_pathing = GridPathing.new()
 	_pathing.rebuild(self)
 	_staff_pathing = null
@@ -1388,17 +1397,32 @@ func _passes_through(cell: Vector2i, step: Vector2i) -> bool:
 	return step == axis or step == -axis
 
 
+## The part of the grid the flood from outside runs on: _built one cell wider
+## each way, inside the grid (TerminalEnclosure.outside_within()).
+func flood_area() -> Rect2i:
+	if _built.size == Vector2i.ZERO:
+		return Rect2i()
+	return _built.grow(1).intersection(Rect2i(Vector2i.ZERO, size))
+
+
 ## Relinks both A* graphs around `dirty` cells (the staff one once built) and
 ## returns the cells relinked. When an edit left the enclosure stale it is
-## worked out again first, and every floored cell whose indoor state changed,
-## however far from the edit, has its passenger point switched and is
-## returned too: one removed wall can let the outside into a whole hall.
+## worked out again first, on flood_area() only, and every floored cell whose
+## indoor state changed, however far from the edit, has its passenger point
+## switched and is returned too: one removed wall can let the outside into a
+## whole hall. Those points are switched by index straight from the flood
+## (GridPathing.set_outside()); on the 86x150 site that took the edit opening
+## a whole-site hall from about 13 ms to about 7 ms (board ee9914e6, L4).
 func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
-	var flipped: Array[Vector2i] = []
+	for cell in dirty:
+		var one := Rect2i(cell, Vector2i.ONE)
+		_built = one if _built.size == Vector2i.ZERO else _built.merge(one)
+	var flipped := PackedInt32Array()
 	if _enclosure_stale:
 		_enclosure_stale = false
-		var after := TerminalEnclosure.outside_cells(self, _h_walls, _v_walls)
-		flipped = TerminalEnclosure.flipped_floor_cells(size.x, _floor, _outside, after)
+		var area := flood_area()
+		var after := TerminalEnclosure.outside_within(self, _h_walls, _v_walls, area)
+		flipped = TerminalEnclosure.flipped_floor_indices(size.x, _floor, _outside, after, area)
 		_outside = after
 	if _staff_pathing != null and not dirty.is_empty():
 		_staff_pathing.update(self, dirty)
@@ -1410,13 +1434,14 @@ func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
 	if flipped.is_empty():
 		return cells
 	if _pathing != null:
-		_pathing.set_indoor(self, flipped)
+		_pathing.set_outside(flipped, _outside)
 	var seen := {}
 	for cell in cells:
-		seen[cell] = true
-	for cell in flipped:
-		if not seen.has(cell):
-			cells.append(cell)
+		seen[cell.x + cell.y * size.x] = true
+	for i in flipped:
+		if not seen.has(i):
+			@warning_ignore("integer_division")
+			cells.append(Vector2i(i % size.x, i / size.x))
 	return cells
 
 

@@ -36,6 +36,12 @@ const ORIGIN_TOLERANCE_M := 0.001
 ## the grid grew 110 rows north, so the starter keeps its world place (x -33
 ## to -21, z -98 to -82).
 @export var starter_offset := Vector2i(0, 110)
+## The side of a land plot in grid cells (LandPlots, user ruling land-plots-
+## are-uniform-square-plots-of-about-25x25-m-bought): the site is cut into
+## squares of this size from cell (0, 0). Where it does not divide the grid
+## the last column or row is the part left over (on the 86x150 site the east
+## column is 11 cells wide).
+@export var plot_size := 25
 ## Grid cells kept site art stands on, which no walk crosses: the road's sign
 ## post near (14.1, -59.9) reaches z -60.33, into cell (57, 149).
 @export var obstacles: Array[Vector2i] = [Vector2i(57, 149)]

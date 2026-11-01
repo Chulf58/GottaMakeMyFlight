@@ -8,8 +8,8 @@ extends Node3D
 ## pauses-the-game-while-a-build-tray-is-open-closin), so the outline follows its
 ## changed signal.
 ##
-## Each buildable rectangle gets a flat frame laid on the ground just inside its
-## edge, so nothing hangs over the paving's skirt. The frame keeps about the
+## Each loop of the buildable land's edge gets a flat frame laid on the ground
+## just inside it, so nothing hangs over the paving's skirt. The frame keeps about the
 ## same width on screen at every zoom (user ruling buildable-outline-keeps-a-
 ## constant-on-screen-width-at-every-zoom): while it shows, each side's inward
 ## offset is solved at every piece end through the camera's own projection, so
@@ -21,9 +21,12 @@ extends Node3D
 ## bars' red and the road's yellow and white paint. Unshaded and casting no
 ## shadow.
 ##
-## The land comes from buildable_rects() alone. Today it is the site's whole
-## BuildGrid; land plots (board ee9914e6) replace that one function with the
-## owned plots and call redraw() when a plot is bought.
+## The land comes from buildable_loops() alone: the edge of the owned land
+## plots on the site's grid (LandPlots.outline_loops()), or a grid's whole
+## rectangle when it has no land plots. A loop runs clockwise seen from above
+## with the land on its right, so a hole of land not owned gets its band on
+## the owned side too. It is drawn again whenever a plot is bought or the land
+## is loaded (LandPlots.changed).
 ##
 ## Like BuildView it draws in world space, so it sits at the world origin.
 
@@ -33,9 +36,6 @@ const WIDTH_PX := 12.0
 ## Each side is drawn in pieces at most this long, the width solved at each
 ## piece end.
 const SEGMENT_M := 2.0
-## The inward direction of each side, north, east, south and west. Side i runs
-## from corner i to corner i + 1.
-const SIDE_INWARD: Array[Vector3] = [Vector3.BACK, Vector3.LEFT, Vector3.FORWARD, Vector3.RIGHT]
 ## The width before any camera has been fitted, and the narrowest it gets.
 const FALLBACK_WIDTH_M := 0.3
 const MIN_WIDTH_M := 0.05
@@ -54,12 +54,13 @@ const COLOR := Color(0.2, 0.86, 0.86)
 @export var menu: BuildMenu
 
 var _grid: BuildGrid
-var _rects: Array[Rect2] = []
+var _loops: Array[PackedVector2Array] = []
 var _height := 0.0
 ## The mitred inner corners, in the order of outline_points().
 var _inner := PackedVector3Array()
-## Per side (four per rectangle): each piece end's outer point and the point
-## straight in from it at that end's width, alternating.
+## Per side (one per corner, in the order of outline_points()): each piece
+## end's outer point and the point straight in from it at that end's width,
+## alternating.
 var _edges: Array[PackedVector3Array] = []
 var _strips := MeshInstance3D.new()
 ## What the widths were last fitted to: camera transform, fov or size, view size.
@@ -90,10 +91,31 @@ func _process(_delta: float) -> void:
 	fit(get_viewport().get_camera_3d())
 
 
-## The land the player may build on, as world rectangles on the ground
-## (Rect2 x is world x, y is world z). Land plots will return the owned plots.
-static func buildable_rects(grid: BuildGrid) -> Array[Rect2]:
-	return [Rect2(grid.origin.x, grid.origin.z, grid.size.x, grid.size.y)]
+## The edge of the land the player may build on, as closed loops of corner
+## points on the ground (x is world x, y is world z), each clockwise seen from
+## above from its north-west corner: the owned plots on the site's grid, or
+## the whole grid when it has no land plots.
+static func buildable_loops(grid: BuildGrid) -> Array[PackedVector2Array]:
+	var site_grid := grid as SiteGrid
+	if site_grid != null and site_grid.land != null:
+		return site_grid.land.outline_loops(grid.origin)
+	var whole := Rect2(grid.origin.x, grid.origin.z, grid.size.x, grid.size.y)
+	return [
+		PackedVector2Array(
+			[
+				whole.position,
+				Vector2(whole.end.x, whole.position.y),
+				whole.end,
+				Vector2(whole.position.x, whole.end.y),
+			]
+		)
+	]
+
+
+## The ground direction straight in from a side running `along` (land on its
+## right, seen from above).
+static func inward_of(along: Vector3) -> Vector3:
+	return Vector3(-along.z, 0.0, along.x).normalized()
 
 
 ## The ground width, MIN_WIDTH_M to `widest`, that sets the point `inward` of
@@ -141,9 +163,13 @@ static func _pixels(camera: Camera3D, at: Vector2, line: Vector2, point: Vector3
 	return absf((camera.unproject_position(point) - at).cross(line))
 
 
-## Outlines `grid`'s buildable land.
+## Outlines `grid`'s buildable land, and again whenever its land plots change.
 func bind(grid: BuildGrid) -> void:
 	_grid = grid
+	var site_grid := grid as SiteGrid
+	if site_grid != null and site_grid.land != null:
+		if not site_grid.land.changed.is_connected(redraw):
+			site_grid.land.changed.connect(redraw)
 	redraw()
 
 
@@ -161,10 +187,10 @@ func set_building(on: bool) -> void:
 		_process(0.0)
 
 
-## Rebuilds the frame from buildable_rects(), at the fallback width until a
+## Rebuilds the frame from buildable_loops(), at the fallback width until a
 ## camera is fitted.
 func redraw() -> void:
-	_rects = buildable_rects(_grid)
+	_loops = buildable_loops(_grid)
 	_height = _grid.origin.y + LIFT_M
 	_fitted_key = []
 	_build_mesh(
@@ -176,7 +202,7 @@ func redraw() -> void:
 ## Sets the frame to WIDTH_PX on screen for `camera`, in its viewport's
 ## visible pixels. Does nothing when that is what it is fitted to.
 func fit(camera: Camera3D) -> void:
-	if camera == null or not camera.is_inside_tree() or _rects.is_empty():
+	if camera == null or not camera.is_inside_tree() or _loops.is_empty():
 		return
 	var view := camera.get_viewport().get_visible_rect().size
 	if view.x <= 0.0 or view.y <= 0.0:
@@ -192,20 +218,18 @@ func fit(camera: Camera3D) -> void:
 	)
 
 
-## The rectangles drawn.
-func rects() -> Array[Rect2]:
-	return _rects.duplicate()
+## The loops drawn.
+func loops() -> Array[PackedVector2Array]:
+	return _loops.duplicate()
 
 
-## The outer corners of every drawn rectangle at the strips' height, four per
-## rectangle, clockwise from the north-west seen from above.
+## The outer corners of every drawn loop at the strips' height, loop by loop,
+## each clockwise from its north-west corner seen from above.
 func outline_points() -> PackedVector3Array:
 	var out := PackedVector3Array()
-	for rect in _rects:
-		out.append(Vector3(rect.position.x, _height, rect.position.y))
-		out.append(Vector3(rect.end.x, _height, rect.position.y))
-		out.append(Vector3(rect.end.x, _height, rect.end.y))
-		out.append(Vector3(rect.position.x, _height, rect.end.y))
+	for loop in _loops:
+		for corner in loop:
+			out.append(Vector3(corner.x, _height, corner.y))
 	return out
 
 
@@ -215,9 +239,11 @@ func inner_points() -> PackedVector3Array:
 	return _inner.duplicate()
 
 
-## Per side, four per rectangle in the order north, east, south, west: every
-## piece end's outer point followed by the point straight in from it at that
-## end's width (not the mitre), from the side's first corner to its last.
+## Per side, one per corner in the order of outline_points() (side i runs from
+## corner i to the next corner of its loop; for a rectangle north, east, south,
+## west): every piece end's outer point followed by the point straight in from
+## it at that end's width (not the mitre), from the side's first corner to its
+## last.
 func side_edges() -> Array[PackedVector3Array]:
 	return _edges.duplicate(true)
 
@@ -231,46 +257,65 @@ func strip_mesh() -> Mesh:
 ## most SEGMENT_M long. `width_at(point, inward, widest)` gives the width in
 ## metres at an outer-edge point of the side pointing `inward`. Each corner is
 ## mitred: moved in along each meeting side's inward direction by that side's
-## width at the corner, so both inner edges meet there.
+## width at the corner, so both inner edges meet there (inside the land at a
+## corner where the land turns in, too).
 ## Short pieces keep the width right where a far corner lies behind the camera.
 func _build_mesh(width_at: Callable) -> void:
 	var outer := outline_points()
 	_edges.clear()
-	for r in _rects.size():
-		var widest := _widest(r)
-		for side in 4:
-			var a := outer[r * 4 + side]
-			var b := outer[r * 4 + (side + 1) % 4]
+	var base := 0
+	for loop in _loops:
+		var count := loop.size()
+		var widest := _widest(loop)
+		for k in count:
+			var a := outer[base + k]
+			var b := outer[base + (k + 1) % count]
+			var inward := inward_of(b - a)
 			var pieces := maxi(1, ceili(a.distance_to(b) / SEGMENT_M))
 			var edge := PackedVector3Array()
-			for k in pieces + 1:
-				var at := a.lerp(b, k / float(pieces))
-				var width: float = width_at.call(at, SIDE_INWARD[side], widest)
+			for j in pieces + 1:
+				var at := a.lerp(b, j / float(pieces))
+				var width: float = width_at.call(at, inward, widest)
 				edge.append(at)
-				edge.append(at + SIDE_INWARD[side] * width)
+				edge.append(at + inward * width)
 			_edges.append(edge)
+		base += count
 	_inner.resize(outer.size())
-	for i in outer.size():
-		var leaving := _edges[i]
-		var arriving := _edges[i - i % 4 + (i + 3) % 4]
-		var tail := arriving.size()
-		_inner[i] = outer[i] + leaving[1] - leaving[0] + arriving[tail - 1] - arriving[tail - 2]
+	base = 0
+	for loop in _loops:
+		var count := loop.size()
+		for k in count:
+			var leaving := _edges[base + k]
+			var arriving := _edges[base + (k + count - 1) % count]
+			var tail := arriving.size()
+			_inner[base + k] = (
+				outer[base + k] + leaving[1] - leaving[0] + arriving[tail - 1] - arriving[tail - 2]
+			)
+		base += count
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for s in _edges.size():
-		var edge := _edges[s]
-		var last := int(edge.size() / 2.0) - 1
-		for k in last:
-			var prev_in := _inner[s] if k == 0 else edge[k * 2 + 1]
-			var next_in := edge[k * 2 + 3]
-			if k + 1 == last:
-				next_in = _inner[s - s % 4 + (s + 1) % 4]
-			for p in [edge[k * 2], edge[k * 2 + 2], next_in, edge[k * 2], next_in, prev_in]:
-				surface.set_normal(Vector3.UP)
-				surface.add_vertex(p)
+	base = 0
+	for loop in _loops:
+		var count := loop.size()
+		for k in count:
+			var edge := _edges[base + k]
+			var last := int(edge.size() / 2.0) - 1
+			for j in last:
+				var prev_in := _inner[base + k] if j == 0 else edge[j * 2 + 1]
+				var next_in := edge[j * 2 + 3]
+				if j + 1 == last:
+					next_in = _inner[base + (k + 1) % count]
+				for p in [edge[j * 2], edge[j * 2 + 2], next_in, edge[j * 2], next_in, prev_in]:
+					surface.set_normal(Vector3.UP)
+					surface.add_vertex(p)
+		base += count
 	_strips.mesh = surface.commit()
 
 
-func _widest(rect_index: int) -> float:
-	var rect := _rects[rect_index]
-	return minf(rect.size.x, rect.size.y) / 2.0
+## The widest a band may grow on a loop: half its shortest side, so the band
+## stays inside a narrow part of the land.
+func _widest(loop: PackedVector2Array) -> float:
+	var shortest := INF
+	for k in loop.size():
+		shortest = minf(shortest, loop[k].distance_to(loop[(k + 1) % loop.size()]))
+	return shortest / 2.0

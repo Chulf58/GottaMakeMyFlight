@@ -93,6 +93,10 @@ const CATEGORIES := [
 			BuildMode.Tool.LOT_GATE,
 		],
 	},
+	# The Buy land tool (user ruling land-plots-are-bought-with-a-buy-land-
+	# tool-in-build-mode-buy), a tray of its own beside the landside tools, so
+	# the furniture groups still run on to Remove.
+	{"name": "Land", "tools": [BuildMode.Tool.BUY_LAND]},
 	# One Belt tool shapes itself (decision baggage-belts-are-one-auto-shaping-
 	# belt-tool-one-baggage-tray), so baggage fits one tray.
 	{
@@ -184,7 +188,7 @@ const CATEGORIES := [
 ]
 ## The category that is a single button with no tray, last in CATEGORIES (GDScript
 ## cannot take it from CATEGORIES.size(): tests check the two agree).
-const REMOVE_CATEGORY := 25
+const REMOVE_CATEGORY := 26
 const NO_CATEGORY := -1
 ## The open category while the Templates page (TemplatesPage) is open; its
 ## bar button presses it like a category (press_category()).
@@ -238,6 +242,7 @@ const ITEMS := {
 	BuildMode.Tool.SURFACE_LOT: ["Surface lot", "surface_lot", "32x24 m"],
 	BuildMode.Tool.MULTI_STOREY: ["Multi-storey", "multi_storey", "24x52 m"],
 	BuildMode.Tool.LOT_GATE: ["Open / close", "lot_gate", "A car park"],
+	BuildMode.Tool.BUY_LAND: ["Buy land", "buy_land", "25x25 m plot"],
 }
 ## The Lane tray's cards, as ITEMS (item() looks in both).
 const LANE_ITEMS := {
@@ -581,7 +586,18 @@ func card_price_label(tool: BuildMode.Tool) -> Label:
 
 ## False while the wallet cannot pay the card's price; true with no wallet.
 func is_card_affordable(tool: BuildMode.Tool) -> bool:
-	return _wallet == null or _wallet.can_afford(tool_price(tool))
+	return _wallet == null or _wallet.can_afford(_card_price(tool))
+
+
+## What a card's price slot shows: tool_price(), or for Buy land the price of
+## the next plot (LandPlots.next_price()), which rises with each plot bought.
+func _card_price(tool: BuildMode.Tool) -> int:
+	var land: LandPlots = null
+	if build_mode != null and build_mode.land_tool != null:
+		land = build_mode.land_tool.land
+	if tool == BuildMode.Tool.BUY_LAND and land != null:
+		return land.next_price()
+	return tool_price(tool)
 
 
 ## What greys out a card the wallet cannot pay: the theme's HudCard
@@ -667,7 +683,7 @@ func _on_balance_changed(_balance: int) -> void:
 func _refresh_money() -> void:
 	_money.text = MONEY_TEXT if _wallet == null else "Money  %d" % _wallet.balance
 	for tool in _price_labels:
-		var price := tool_price(tool)
+		var price := _card_price(tool)
 		var label: Label = _price_labels[tool]
 		label.text = PRICE_TEXT if _wallet == null or price == 0 else str(price)
 		_cards[tool].modulate = Color.WHITE if is_card_affordable(tool) else unaffordable_tint()
@@ -688,8 +704,11 @@ func _preview_price() -> Vector2i:
 		# Only the cells with no belt yet are bought; reshaping is free.
 		var line_cost := build_mode.belt_cells_to_buy() * tool_price(BuildMode.Tool.BELT)
 		return Vector2i(line_cost, line_cost)
-	if build_mode.tool in BuildMode.LANDSIDE_BUILD_TOOLS:
-		return build_mode.landside_preview_price()
+	if (
+		build_mode.tool in BuildMode.LANDSIDE_BUILD_TOOLS
+		or build_mode.tool == BuildMode.Tool.BUY_LAND
+	):
+		return _off_grid_price()
 	var edit := build_mode.hover_edit()
 	if edit == null or not _pointer_on_grid():
 		return Vector2i.ZERO
@@ -698,6 +717,16 @@ func _preview_price() -> Vector2i:
 	for step in plan:
 		net += BuildTransaction.quote(build_mode.grid, step).net()
 	return Vector2i(maxi(0, net), maxi(0, BuildTransaction.needed(build_mode.grid, plan)))
+
+
+## The landside build's or the land plot's price under the pointer, for the
+## tools that do not edit the grid.
+func _off_grid_price() -> Vector2i:
+	if build_mode.tool != BuildMode.Tool.BUY_LAND:
+		return build_mode.landside_preview_price()
+	if build_mode.land_tool == null or build_mode.land_tool.land == null:
+		return Vector2i.ZERO
+	return build_mode.land_tool.preview_price()
 
 
 ## A rectangle is priced once per rectangle and balance, not every frame.

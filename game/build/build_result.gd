@@ -42,6 +42,9 @@ enum Reason {
 	LANDSIDE_OCCUPIED,
 	ROOM_WALL,
 	PLANE_AREA,
+	LAND_NOT_OWNED,
+	LAND_OWNED,
+	LAND_NOT_TOUCHING,
 }
 
 const REASON_TEXT := {
@@ -86,6 +89,9 @@ const REASON_TEXT := {
 	Reason.LANDSIDE_OCCUPIED: "Cars are still in it. Close it and wait until it is empty",
 	Reason.ROOM_WALL: "A wall is in the way of the room",
 	Reason.PLANE_AREA: "A plane uses this apron. Build here after it takes off",
+	Reason.LAND_NOT_OWNED: "You do not own this land. Buy the plot with Buy land first",
+	Reason.LAND_OWNED: "You already own this plot",
+	Reason.LAND_NOT_TOUCHING: "Buy a plot next to land you own",
 }
 
 var ok: bool = true

@@ -25,8 +25,9 @@ const CLEAR_CHECK_TICK := 800
 ## ends this many after the flight departs, whatever the phase lengths are.
 const LATE_SPAWN_BEFORE_DOORS_TICKS := 10
 const END_AFTER_DEPARTURE_TICKS := 20
-## A cell of the site's open ground, off the starter terminal's floor.
-const OFF_FLOOR_CELL := Vector2i(12, 29)
+## A cell of the site's open ground, off the starter terminal's floor, on a new
+## game's land (land not owned refuses with LAND_NOT_OWNED first, LandPlots).
+const OFF_FLOOR_CELL := Vector2i(5, 120)
 const ERROR_TEXT := "PlaytestHook test error"
 ## The starter contract's booked passengers plus the one spawned too late.
 const PASSENGERS := FlightSim.STARTER_TERMS["booked_passengers"] + 1
