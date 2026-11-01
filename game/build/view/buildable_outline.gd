@@ -13,12 +13,13 @@ extends Node3D
 ## same width on screen at every zoom (user ruling buildable-outline-keeps-a-
 ## constant-on-screen-width-at-every-zoom): while it shows, each side's inward
 ## offset is solved at every piece end through the camera's own projection, so
-## the outer point and the point straight in from it lie WIDTH_PX apart on
-## screen whatever the pitch, yaw and depth. It is refit only when the camera or
-## the view size changes. The colour is the HUD's teal for "normal" (decision hud-
-## look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale, point 2), kept
-## apart from the ghost's green and red, the wall-gap bars' red and the road's
-## yellow and white paint. Unshaded and casting no shadow.
+## the band is WIDTH_PX thick on screen, measured across itself from the outer
+## edge's screen line, whatever the pitch, yaw and depth. It is refit only when
+## the camera or the view size changes. The colour is the HUD's teal for
+## "normal" (decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-
+## pale, point 2), kept apart from the ghost's green and red, the wall-gap
+## bars' red and the road's yellow and white paint. Unshaded and casting no
+## shadow.
 ##
 ## The land comes from buildable_rects() alone. Today it is the site's whole
 ## BuildGrid; land plots (board ee9914e6) replace that one function with the
@@ -96,36 +97,48 @@ static func buildable_rects(grid: BuildGrid) -> Array[Rect2]:
 
 
 ## The ground width, MIN_WIDTH_M to `widest`, that sets the point `inward` of
-## `outer` WIDTH_PX viewport pixels from it as `camera` projects them. The
-## projected distance grows with the width along a ground ray, so it is found
-## by bisection. An outer point behind the camera gets MIN_WIDTH_M; an inner
-## point behind the camera counts as too wide; a grazing view whose widest
-## strip is still under WIDTH_PX gets `widest`.
+## `outer` WIDTH_PX viewport pixels from the side's outer edge line as `camera`
+## projects them: the band's thickness across itself on screen. The side runs
+## square to `inward` on the ground, so its screen line is found by projecting
+## `outer` and a point a metre along the side. That thickness grows with the
+## width along a ground ray, so it is found by bisection. An outer point behind
+## the camera, or a side with no point a metre either way in front of it, gets
+## MIN_WIDTH_M; an inner point behind the camera counts as too wide; a grazing
+## view whose widest strip is still under WIDTH_PX gets `widest`.
 static func solve_width(camera: Camera3D, outer: Vector3, inward: Vector3, widest: float) -> float:
 	if widest <= MIN_WIDTH_M or camera.is_position_behind(outer):
 		return MIN_WIDTH_M
+	var along := inward.cross(Vector3.UP)
+	if camera.is_position_behind(outer + along):
+		along = -along
+		if camera.is_position_behind(outer + along):
+			return MIN_WIDTH_M
 	var at := camera.unproject_position(outer)
-	if _pixels(camera, at, outer + inward * MIN_WIDTH_M) >= WIDTH_PX:
+	var line := camera.unproject_position(outer + along) - at
+	if line.length() < 0.001:
 		return MIN_WIDTH_M
-	if _pixels(camera, at, outer + inward * widest) <= WIDTH_PX:
+	line = line.normalized()
+	if _pixels(camera, at, line, outer + inward * MIN_WIDTH_M) >= WIDTH_PX:
+		return MIN_WIDTH_M
+	if _pixels(camera, at, line, outer + inward * widest) <= WIDTH_PX:
 		return widest
 	var low := MIN_WIDTH_M
 	var high := widest
 	for _i in SOLVE_STEPS:
 		var mid := (low + high) / 2.0
-		if _pixels(camera, at, outer + inward * mid) < WIDTH_PX:
+		if _pixels(camera, at, line, outer + inward * mid) < WIDTH_PX:
 			low = mid
 		else:
 			high = mid
 	return (low + high) / 2.0
 
 
-## Viewport pixels from `at` to where `camera` projects `point`; INF when the
-## point is behind the camera.
-static func _pixels(camera: Camera3D, at: Vector2, point: Vector3) -> float:
+## Viewport pixels from the screen line through `at` along unit `line` to where
+## `camera` projects `point`; INF when the point is behind the camera.
+static func _pixels(camera: Camera3D, at: Vector2, line: Vector2, point: Vector3) -> float:
 	if camera.is_position_behind(point):
 		return INF
-	return at.distance_to(camera.unproject_position(point))
+	return absf((camera.unproject_position(point) - at).cross(line))
 
 
 ## Outlines `grid`'s buildable land.

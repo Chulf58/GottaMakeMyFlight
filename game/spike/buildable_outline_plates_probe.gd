@@ -219,10 +219,10 @@ func _save_contact_sheet() -> void:
 
 ## Each side's frame width as measured on screen, at every piece end and piece middle
 ## whose outer and inner points are both in front of the camera and in the viewport:
-## "px" from the outer point to the point straight in from it (what the outline
-## solves), "perp" from the inner point to the outer edge's screen line (the band's
-## thickness across itself), each as min/mean/max in viewport pixels, and the
-## metres at the side's middle piece end.
+## "perp" from the inner point to the outer edge's screen line through this piece end
+## and a neighbouring one (the band's thickness across itself, what the outline
+## solves), "px" from the outer point to the point straight in from it, each as
+## min/mean/max in viewport pixels, and the metres at the side's middle piece end.
 func _print_widths(label: String) -> void:
 	var view := Rect2(Vector2.ZERO, root.get_visible_rect().size)
 	var edges := _outline.side_edges()
@@ -231,32 +231,35 @@ func _print_widths(label: String) -> void:
 		var edge: PackedVector3Array = edges[s]
 		var along: Array[float] = []
 		var across: Array[float] = []
-		var line_a := _cam.unproject_position(edge[0])
-		var line_b := _cam.unproject_position(edge[edge.size() - 2])
 		for k in range(0, edge.size(), 2):
+			var neighbour := k + 2 if k + 2 < edge.size() else k - 2
 			var pairs := [[edge[k], edge[k + 1]]]
 			if k + 2 < edge.size():
 				pairs.append([(edge[k] + edge[k + 2]) / 2.0, (edge[k + 1] + edge[k + 3]) / 2.0])
 			for pair in pairs:
-				if _cam.is_position_behind(pair[0]) or _cam.is_position_behind(pair[1]):
+				if (
+					_cam.is_position_behind(pair[0])
+					or _cam.is_position_behind(pair[1])
+					or _cam.is_position_behind(edge[neighbour])
+				):
 					continue
 				var a := _cam.unproject_position(pair[0])
 				var b := _cam.unproject_position(pair[1])
 				if not view.has_point(a) or not view.has_point(b):
 					continue
 				along.append(a.distance_to(b))
-				var closest := Geometry2D.get_closest_point_to_segment_uncapped(b, line_a, line_b)
-				across.append(b.distance_to(closest))
+				var line := (_cam.unproject_position(edge[neighbour]) - a).normalized()
+				across.append(absf((b - a).cross(line)))
 		var mid := int(edge.size() / 4.0) * 2
 		print(
 			(
-				"WIDTH %s %s points=%d px=%s perp=%s middle=%.2fm (want %.0f px)"
+				"WIDTH %s %s points=%d perp=%s px=%s middle=%.2fm (want %.0f px)"
 				% [
 					label,
 					names[s % 4],
 					along.size(),
-					_spread(along),
 					_spread(across),
+					_spread(along),
 					edge[mid].distance_to(edge[mid + 1]),
 					BuildableOutline.WIDTH_PX
 				]
