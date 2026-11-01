@@ -25,7 +25,7 @@ static func _paint() -> ImageTexture:
 	for y in SIZE:
 		for x in SIZE:
 			var p := Vector2(x + 0.5 - half, y + 0.5 - half)
-			var edge := _shape(p)
+			var edge := shape_distance(p)
 			var cover := clampf(0.5 - edge, 0.0, 1.0)
 			if cover <= 0.0:
 				img.set_pixel(x, y, Color(OUTLINE, 0.0))
@@ -40,7 +40,7 @@ static func _paint() -> ImageTexture:
 
 
 ## Signed distance in pixels to the rounded square's edge, negative inside.
-static func _shape(p: Vector2) -> float:
+static func shape_distance(p: Vector2) -> float:
 	var radius := 22.0
 	var q := p.abs() - Vector2.ONE * (60.0 - radius)
 	return Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() + minf(maxf(q.x, q.y), 0.0) - radius
@@ -48,12 +48,12 @@ static func _shape(p: Vector2) -> float:
 
 ## Signed distance to the white "!". Image y runs down.
 static func _glyph(p: Vector2) -> float:
-	var bar := _segment(p, Vector2(0.0, -34.0), Vector2(0.0, 6.0)) - 9.0
+	var bar := segment_distance(p, Vector2(0.0, -34.0), Vector2(0.0, 6.0)) - 9.0
 	var dot := p.distance_to(Vector2(0.0, 28.0)) - 10.0
 	return minf(bar, dot)
 
 
-static func _segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+static func segment_distance(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var ab := b - a
 	var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
 	return p.distance_to(a + ab * t)
