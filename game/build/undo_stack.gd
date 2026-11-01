@@ -82,12 +82,12 @@ func end_action() -> void:
 
 ## Undoes the newest action (BuildUndo.commit()) and drops it from the history.
 ## Null when the history is empty; a refusal keeps it.
-func undo(shell: ShellDefinition = null) -> BuildResult:
+func undo() -> BuildResult:
 	var receipt := peek()
 	if receipt == null:
 		return null
 	_depth += 1
-	var result := BuildUndo.commit(_grid, receipt, _wallet, shell)
+	var result := BuildUndo.commit(_grid, receipt, _wallet)
 	_depth -= 1
 	if result.ok:
 		_receipts.pop_back()

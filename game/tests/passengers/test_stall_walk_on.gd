@@ -32,7 +32,7 @@ func after_test() -> void:
 
 func _world(venue: StringName, tables: bool) -> Array:
 	var grid := BuildGrid.new()
-	var ids := CafeTestLayout.build(grid, false, null, venue, tables)
+	var ids := CafeTestLayout.build(grid, false, venue, tables)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
 	return [world, ids]

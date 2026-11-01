@@ -6,7 +6,6 @@ extends GdUnitTestSuite
 ## spot, the money is short) is refused with nothing changed.
 
 const STARTER := preload("res://landside/starter_landside.tres")
-const SHELL := preload("res://build/toon_terminal_shell.tres")
 const START_MONEY := 20000
 const LOT_PRICE := 1200
 
@@ -26,7 +25,6 @@ func before_test() -> void:
 	_wallet = Wallet.new(START_MONEY)
 	_placement = LandsidePlacement.new()
 	_placement.sim = _sim
-	_placement.shell = SHELL
 	_placement.wallet = _wallet
 	_rng.seed = 3
 

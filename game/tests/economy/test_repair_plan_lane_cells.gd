@@ -15,12 +15,11 @@ const ROOM := Rect2i(3, 0, 6, 10)
 
 static func _grid(entrance_x: int) -> BuildGrid:
 	var grid := BuildGrid.new(Vector2i(12, 16))
-	# As inside the Toon shell: the border closes the grid in, so the plan may
-	# lay floor beside the room as before enclosure (TerminalEnclosure).
-	grid.set_shell_border(true)
 	for y in ROOM.size.y:
 		for x in range(ROOM.position.x, ROOM.end.x):
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	# Walls close the room in, so passengers may use it.
+	EnclosureKit.close_floor(grid)
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(entrance_x, 9), 2)
 	PassengerTestWorld.place(grid, &"exit_door", Vector2i(5, 0), 0)
 	SecurityLaneBuilder.build(grid, ARCH_AT, 0, SecurityLanes.RIGHT)
@@ -65,6 +64,8 @@ func test_the_plan_for_a_missing_exit_uses_the_lane_and_keeps_it_whole() -> void
 	for id in grid.object_ids():
 		if StringName(grid.get_object(id)["def"]) == &"exit_door":
 			assert_bool(grid.apply(BuildEdit.remove_object(id)).ok).is_true()
+	# The exit's gap is walled up, so only the exit is missing.
+	EnclosureKit.close_floor(grid)
 	var lanes := SecurityLaneBuilder.recognise(grid)
 	assert_int(lanes.complete_arches().size()).is_equal(1)
 	var layout := TerminalLayout.new()

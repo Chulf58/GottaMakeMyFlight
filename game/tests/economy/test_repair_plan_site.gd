@@ -17,7 +17,7 @@ var _least := -1
 func before() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var started := Time.get_ticks_usec()
-	_plan = RepairPlan.make(grid, null, SITE)
+	_plan = RepairPlan.make(grid, SITE)
 	_usec = Time.get_ticks_usec() - started
 	if _plan.ok:
 		_least = RepairPlan.least_balance(grid, _plan.edits)

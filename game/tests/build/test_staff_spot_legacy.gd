@@ -9,7 +9,7 @@ extends GdUnitTestSuite
 const DESK := &"checkin_desk"
 const SCANNER := &"security_scanner"
 const SEATS := &"seat_row"
-const SHELL := preload("res://build/toon_terminal_shell.tres")
+const SITE := preload("res://build/terminal_site.tres")
 
 
 ## `objects` as [def, anchor, facing] put straight into a snapshot of a
@@ -86,7 +86,7 @@ func test_the_reference_terminal_has_every_spot_free() -> void:
 
 func test_the_hand_built_terminal_builds_with_every_spot_free() -> void:
 	var mode := BuildMode.new()
-	mode.shell = SHELL
+	mode.site = SITE
 	add_child(mode)
 	var terminal := HandBuiltTerminal.new(mode)
 	terminal.build()

@@ -2,7 +2,7 @@ class_name TestRepairEnclosure
 extends GdUnitTestSuite
 ## RepairEnclosure, the walls a repair adds so its floor is closed in: every
 ## open floor edge of the floor joined to the repair's cells gets a plain wall,
-## except a door's way out, none inside a shell facade, and a wall the plan
+## except a door's way out, and a wall the plan
 ## places and later takes down is left out with its removal.
 
 
@@ -56,12 +56,6 @@ func test_a_hole_already_closed_in_gets_no_wall() -> void:
 	assert_int(walls.size()).is_equal(1)
 	assert_vector(Vector2(walls[0].cell)).is_equal(Vector2(4, 4))
 	assert_int(walls[0].side).is_equal(BuildGrid.Side.WEST)
-
-
-func test_inside_a_shell_facade_no_wall_is_wanted() -> void:
-	var grid := _patch()
-	grid.set_shell_border(true)
-	assert_array(RepairEnclosure.walls_for(grid, [Vector2i(4, 4)])).is_empty()
 
 
 func test_a_wall_placed_and_taken_down_again_is_left_out_with_its_removal() -> void:

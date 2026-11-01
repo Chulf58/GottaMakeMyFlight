@@ -106,10 +106,10 @@ func _expected_groups() -> int:
 	return total
 
 
-## The first group on a forecourt patch (perches 0 to 3).
-func _forecourt_group() -> Dictionary:
+## The first group on a road-edge patch (perches 0 and 1).
+func _road_edge_group() -> Dictionary:
 	for g in _flock.groups:
-		if g["spot"] < 4:
+		if g["spot"] < 2:
 			return g
 	return {}
 
@@ -167,19 +167,19 @@ func test_car_inside_radius_scatters_and_group_lands_elsewhere() -> void:
 	_assert_perched(g)
 
 
-func test_car_in_near_lane_leaves_a_forecourt_group_perched() -> void:
-	var g := _forecourt_group()
+func test_car_past_the_centre_line_leaves_a_road_edge_group_perched() -> void:
+	var g := _road_edge_group()
 	assert_dict(g).is_not_empty()
 	var spot: Vector3 = BirdPerches.SPOTS[g["spot"]]
 	var before: Array[Vector3] = []
 	for b in g["birds"]:
 		before.append((b["node"] as Node3D).position)
-	_run(5.0, PackedVector3Array([Vector3(spot.x, 0.1, -55.0)]))
+	_run(5.0, PackedVector3Array([Vector3(spot.x, 0.1, -50.0)]))
 	assert_int(g["target"]).is_equal(-1)
 	for i in before.size():
 		assert_vector((g["birds"][i]["node"] as Node3D).position).is_equal(before[i])
-	# Control: the same group does scatter once the car is at the berth.
-	_flock.step(STEP, PackedVector3Array([Vector3(spot.x, 0.1, -57.2)]))
+	# Control: the same group does scatter once the car is in the near lane.
+	_flock.step(STEP, PackedVector3Array([Vector3(spot.x, 0.1, -55.0)]))
 	assert_int(g["target"]).is_not_equal(-1)
 
 
@@ -229,7 +229,7 @@ func test_birds_never_leave_the_patches() -> void:
 	var landed := 0
 	var flights := 0
 	for i in roundi(60.0 / STEP):
-		var x := -32.0 + fmod(i * STEP * 3.0, 24.0)
+		var x := -40.0 + fmod(i * STEP * 3.0, 24.0)
 		_flock.step(STEP, PackedVector3Array([Vector3(x, 0.1, -57.2)]))
 		for g in _flock.groups:
 			if g["target"] < 0:

@@ -214,7 +214,7 @@ func _run() -> void:
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	_views = _main.get_node("PassengerViews") as PassengerViews
 	_beat("build")
-	var ids := ToiletTestLayout.build(mode.grid, 3, mode.shell)
+	var ids := ToiletTestLayout.build(mode.grid, 3)
 	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
 	await _frames(4)
 	_sim.toilets.refresh()

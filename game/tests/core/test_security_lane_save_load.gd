@@ -42,7 +42,8 @@ func after() -> void:
 
 ## Builds a whole lane, facing 0 and mirror RIGHT, on the first stretch of
 ## the building area with no object on it, flooring the cells that have none
-## (the starter terminal itself has no room for a lane), and returns its
+## and walling the floor in (the starter terminal itself has no room for a
+## lane), and returns its
 ## object ids (arch first), or an empty array when none fits.
 func _build_lane() -> Array[int]:
 	for y in _grid.size.y:
@@ -57,6 +58,8 @@ func _build_lane() -> Array[int]:
 			var lanes := SecurityLaneBuilder.recognise(_grid)
 			if lanes.is_complete(ids[0]):
 				_arch_cell = anchor
+				# Walls close the lane's floor in, so passengers may use it.
+				EnclosureKit.close_floor(_grid)
 				return ids
 			for id in ids:
 				_grid.apply(BuildEdit.remove_object(id))

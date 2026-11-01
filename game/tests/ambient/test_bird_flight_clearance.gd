@@ -1,10 +1,10 @@
 extends GdUnitTestSuite
 ## Every flight a group can make (each pair of perches in one zone, the
 ## zone's lowest and highest lift, three pairs of patch places) stays clear of
-## the shell (porches, facade, canopy and its poles, all shown from far out),
-## the curb bays and both car parks. A flying crow at bird scale 1.5 is taken
-## as a body BODY_UP above its origin with lines BODY_RADIUS to each side (its
-## wings span 1.65 m).
+## the airport site's kept art (beyond its paving and road), the curb bays
+## and both car parks. A flying crow at bird scale 1.5 is taken as a body
+## BODY_UP above its origin with lines BODY_RADIUS to each side (its wings
+## span 1.65 m).
 
 const WORLD := preload("res://tests/ambient/bird_world.gd")
 ## The paving the birds stand on and the road they fly over.
@@ -59,7 +59,7 @@ func test_flights_clear_the_world() -> void:
 	var names := {}
 	for e in _world:
 		names[e["name"]] = true
-	assert_bool(names.has("Porch_7") and names.has("Porch_8") and names.has("Canopy")).is_true()
+	assert_bool(names.has("TP_Curb_Bay_01A") and names.has("Parking_2A")).is_true()
 	var flights := 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
@@ -95,21 +95,21 @@ func test_flights_clear_the_world() -> void:
 	print("flights checked=", flights, " meshes=", _world.size(), " clashes=", clashes.size())
 	for c in clashes:
 		print("CLASH ", c)
-	# 60 ordered same-zone perch pairs (three zones of five), each 9 fixed
-	# flights plus SWEEP random ones.
-	assert_int(flights).is_equal(60 * (9 + SWEEP))
+	# 42 ordered same-zone perch pairs (two road-edge perches, five west and
+	# five east), each 9 fixed flights plus SWEEP random ones.
+	assert_int(flights).is_equal(42 * (9 + SWEEP))
 	assert_array(clashes).is_empty()
 
 
-func test_control_a_drop_through_a_porch_clashes() -> void:
-	# A body dropping straight down onto the forecourt under Porch_8 must
-	# clash, so the check above can see a porch at all.
-	var from := Vector3(-26.0, 6.0, -62.5)
-	var to := Vector3(-26.0, 0.5, -62.5)
+func test_control_a_drop_onto_a_curb_bay_clashes() -> void:
+	# A body dropping straight down onto a curb bay's kerb must clash, so the
+	# check above can see a curb bay at all.
+	var from := Vector3(-21.5, 6.0, -57.6)
+	var to := Vector3(-21.5, 0.05, -57.6)
 	var hit := ""
 	for e in _world:
 		var inv: Transform3D = e["inv"]
 		if not (e["mesh"] as TriangleMesh).intersect_segment(inv * from, inv * to).is_empty():
 			hit = e["name"]
 	print("control clash=", hit)
-	assert_str(hit).is_equal("Porch_8")
+	assert_str(hit).is_equal("TP_Curb_Bay_01A")

@@ -17,17 +17,14 @@ extends RefCounted
 
 ## Applies `receipt`'s undo to `grid` and settles it with `wallet` (null for
 ## free building). Returns accepted, or the first refusal with nothing changed.
-static func commit(
-	grid: BuildGrid, receipt: BuildReceipt, wallet: Wallet, shell: ShellDefinition = null
-) -> BuildResult:
+static func commit(grid: BuildGrid, receipt: BuildReceipt, wallet: Wallet) -> BuildResult:
 	var money := _money_problem(receipt.money, wallet)
 	if money != null:
 		return money
 	var edits := receipt.undo_edits()
-	var rule := rule_problem.bind(shell)
+	var rule := rule_problem
 	var snapshot := grid.to_snapshot()
 	var scratch := BuildGrid.new(grid.size, grid.origin)
-	scratch.shell_border = grid.shell_border
 	if not scratch.from_snapshot(snapshot):
 		push_error("BuildUndo.commit: the grid could not be copied to check the undo")
 		return BuildResult.refused(BuildResult.Reason.NONE)
@@ -51,12 +48,12 @@ static func commit(
 ## earlier edits left it, or null. An entrance or exit comes back only with no
 ## wall of any kind on its way out: the plain wall a placement takes down
 ## (DoorPlacement.edits_for()) is not taken down by an undo.
-static func rule_problem(grid: BuildGrid, edit: BuildEdit, shell: ShellDefinition) -> BuildResult:
+static func rule_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	if edit.kind == BuildEdit.Kind.PLACE_OBJECT and BuildCatalog.is_door(edit.def_id):
 		var side := BuildGrid.SIDE_STEP.find(DoorPlacement.back_step(edit.facing))
 		if grid.wall_kind(edit.cell, side) != BuildGrid.WallKind.NONE:
 			return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
-	var problem := DoorPlacement.edge_problem(grid, edit, shell)
+	var problem := DoorPlacement.edge_problem(grid, edit)
 	if problem == null:
 		problem = BeltShaper.crossing_problem(grid, edit)
 	return problem

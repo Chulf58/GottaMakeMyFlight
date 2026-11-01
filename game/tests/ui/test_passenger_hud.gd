@@ -149,28 +149,21 @@ func test_starter_terminal_builds_on_a_pristine_grid() -> void:
 	assert_str(_hud.status_text()).is_equal("Starter terminal built")
 
 
-func test_starter_terminal_in_a_shell_stands_on_doors_b_and_c() -> void:
-	var shell: ShellDefinition = load("res://build/toon_terminal_shell.tres")
+func test_starter_terminal_on_the_site_has_both_doors_in_service() -> void:
+	var site: SiteDefinition = load("res://build/terminal_site.tres")
 	var mode := BuildMode.new()
-	mode.shell = shell
+	mode.site = site
 	add_child(mode)
 	auto_free(mode)
 	_hud.build_mode = mode
 	_hud.press_starter_terminal()
 	assert_str(_hud.status_text()).is_equal("Starter terminal built")
-	var ids := ReferenceTerminal.object_ids(mode.grid)
-	var entrance := mode.grid.get_object(ids["entrances"][0])
-	var exit_door := mode.grid.get_object(ids["exits"][0])
-	(
-		assert_object(
-			shell.connection_for(&"entrance_door", entrance["anchor"], entrance["facing"])
-		)
-		. is_not_null()
-	)
-	(
-		assert_object(shell.connection_for(&"exit_door", exit_door["anchor"], exit_door["facing"]))
-		. is_not_null()
-	)
+	var layout := TerminalLayout.new()
+	layout.site = site
+	layout.rebuild(mode.grid)
+	assert_int(layout.passenger_entrances.size()).is_equal(1)
+	assert_int(layout.open_exits(mode.grid).size()).is_equal(1)
+	assert_array(layout.out_of_service).is_empty()
 
 
 func test_starter_terminal_refuses_a_painted_grid_and_says_so() -> void:

@@ -11,8 +11,8 @@ const HOOK := preload("res://debug/playtest_hook.gd")
 const DIR := "user://playtest_view_missing_test"
 ## Free starter-terminal floor on the landside, clear of every station and
 ## staff spot; the second tray goes one cell off the first, as in the playtest.
-const FIRST_TRAY := Vector2i(20, 20)
-const SECOND_TRAY := Vector2i(20, 19)
+const FIRST_TRAY := Vector2i(20, 14)
+const SECOND_TRAY := Vector2i(20, 13)
 
 var _main: Node
 var _hook: Node

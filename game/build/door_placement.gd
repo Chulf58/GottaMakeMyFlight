@@ -15,28 +15,22 @@ static func back_step(facing: int) -> Vector2i:
 ## BuildGrid.validate(), plus the edge rule for entrances and exits: a new one
 ## stands on the terminal's edge facing in (outside_door_problem()), and a
 ## standing one keeps its way out open: no wall of any kind on its back edge
-## and no floor on the cell beyond. Inside a `shell`, a new one must also stand
-## on one of its Toon doors of the right kind, a landside door for an entrance
-## and a gate door for an exit, facing out through it.
-static func check(grid: BuildGrid, edit: BuildEdit, shell: ShellDefinition = null) -> BuildResult:
+## and no floor on the cell beyond.
+static func check(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var result := grid.validate(edit)
 	if not result.ok:
 		return result
-	var problem := edge_problem(grid, edit, shell)
+	var problem := edge_problem(grid, edit)
 	return problem if problem != null else result
 
 
 ## check()'s rules beyond BuildGrid.validate(): the refusal, or null when the
 ## edit keeps every entrance and exit on the edge with its way out open.
-static func edge_problem(
-	grid: BuildGrid, edit: BuildEdit, shell: ShellDefinition = null
-) -> BuildResult:
+static func edge_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	match edit.kind:
 		BuildEdit.Kind.PLACE_OBJECT:
 			if not BuildCatalog.is_door(edit.def_id):
 				return null
-			if shell != null and shell.connection_for(edit.def_id, edit.cell, edit.facing) == null:
-				return BuildResult.refused(BuildResult.Reason.DOOR_NOT_AT_SHELL_DOOR)
 			var outside := outside_door_problem(grid, edit.cell, edit.facing)
 			return null if outside.ok else outside
 		BuildEdit.Kind.PLACE_WALL:

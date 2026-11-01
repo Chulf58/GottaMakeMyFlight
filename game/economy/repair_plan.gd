@@ -43,13 +43,13 @@ extends RefCounted
 ## an interaction cell is. A new piece goes where the
 ## search reaches first, in its settle order, trying facings 0 to 3, so the
 ## same grid always gives the same plan. With no entrance, every place an
-## entrance may stand (a landside Toon door in a shell, else any edge cell
-## facing in, on a site only those with a walk in from the road) starts the
+## entrance may stand (any edge cell facing in, on a site only those with a
+## walk in from the road) starts the
 ## desk leg's search at its own price, so the entrance and desk are chosen
 ## together; on a site a new exit likewise needs a walk out to the plane
 ## (SiteRoutes). Each choice is
 ## built on the copy with DoorPlacement's rules, with the floor it uses walled
-## in where no shell facade closes the grid border (RepairEnclosure), and
+## in (RepairEnclosure), and
 ## checked with the route test, which walks only floor walls close in; a
 ## choice that fails is undone edit by edit and the next one tried.
 ## When a later leg finds no choice that works, the plan backtracks: it undoes
@@ -118,7 +118,6 @@ var _grid: BuildGrid
 ## The snapshot of the grid make() was given, for _failing_leg().
 var _source := {}
 var _layout := TerminalLayout.new()
-var _shell: ShellDefinition
 var _site: SiteDefinition
 var _floor_price := -1
 ## Per cell index: search price, the cell it was reached from (-1 at a
@@ -193,7 +192,6 @@ static func can_finish(
 ## PriceTable.NO_PRICE when an edit has no price.
 static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 	var standing := BuildGrid.new(grid.size, grid.origin)
-	standing.shell_border = grid.shell_border
 	if not standing.from_snapshot(grid.to_snapshot()):
 		push_error("RepairPlan: the grid could not be copied to price the plan")
 		return PriceTable.NO_PRICE
@@ -213,18 +211,13 @@ static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 	return least
 
 
-## The plan for `grid` (left unchanged), inside `shell` when there is one; on
-## `site` its doors need walks outside (TerminalLayout.site).
-static func make(
-	grid: BuildGrid, shell: ShellDefinition = null, site: SiteDefinition = null
-) -> RepairPlan:
+## The plan for `grid` (left unchanged); on `site` its doors need walks
+## outside (TerminalLayout.site).
+static func make(grid: BuildGrid, site: SiteDefinition = null) -> RepairPlan:
 	var plan := RepairPlan.new()
-	plan._shell = shell
 	plan._site = site
 	plan._layout.site = site
 	plan._grid = BuildGrid.new(grid.size, grid.origin)
-	# The copy closes rooms in as the grid does (the shell's facade).
-	plan._grid.shell_border = grid.shell_border
 	plan._source = grid.to_snapshot()
 	if not plan._grid.from_snapshot(plan._source):
 		push_error("RepairPlan: the grid could not be copied")
@@ -327,9 +320,8 @@ func _plan() -> bool:
 ## spans, one cell wider each way (the whole grid when it has no floor). A
 ## repair buys at most one of each essential, and one that stays in that area
 ## floors no more cells than this, so the player gets enough and may get more.
-## Without a shell facade the floor must be walled in (RepairEnclosure), so a
-## plain wall is added for every edge of the area's cells that could need one
-## (_open_edges()).
+## The floor must be walled in (RepairEnclosure), so a plain wall is added
+## for every edge of the area's cells that could need one (_open_edges()).
 func _fallback_price() -> int:
 	var total := 0
 	for def_id in [&"entrance_door", &"checkin_desk", &"security_scanner", &"exit_door"]:
@@ -348,8 +340,7 @@ func _fallback_price() -> int:
 			var cell := Vector2i(x, y)
 			if _grid.floor_at(cell) == BuildGrid.FLOOR_NONE and not _no_floor.has(cell):
 				total += _price_of_floor(cell)
-	if not _grid.shell_border:
-		total += _open_edges(area) * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
+	total += _open_edges(area) * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
 	return total
 
 
@@ -666,12 +657,7 @@ func _door_sources(def_id: StringName, reached := false) -> Array:
 	)
 	var to_edge := PackedInt32Array()
 	var spots := []
-	if _shell != null:
-		var kind := ShellDoorConnection.kind_for(def_id)
-		for connection in _shell.connections:
-			if connection.kind == kind:
-				spots.append([connection.cell, connection.facing])
-	elif _site != null:
+	if _site != null:
 		to_edge = SiteRoutes.distances(_grid, _site, SiteRoutes.edge_cells(_grid, _site, edge))
 		spots = _site_door_spots(def_id, edge, to_edge)
 	else:
@@ -840,7 +826,7 @@ func _undo(undo: Array[BuildEdit]) -> void:
 ## edits_for()), adding what was applied to `done` and the edit that takes it
 ## back to `undo`. False on a refusal.
 func _build(edit: BuildEdit, done: Array[BuildEdit], undo: Array[BuildEdit]) -> bool:
-	if not DoorPlacement.check(_grid, edit, _shell).ok:
+	if not DoorPlacement.check(_grid, edit).ok:
 		return false
 	for step in DoorPlacement.edits_for(_grid, edit):
 		var before := 0
@@ -907,7 +893,6 @@ func _failing_leg() -> int:
 		if here.is_empty():
 			return each
 	var trial := BuildGrid.new(_grid.size, _grid.origin)
-	trial.shell_border = _grid.shell_border
 	if not trial.from_snapshot(_source):
 		return Leg.DESK
 	for edit in _ordered(edits):

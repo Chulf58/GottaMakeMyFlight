@@ -1,12 +1,12 @@
 extends RefCounted
 ## The outdoor surfaces the bird tests measure against, placed as main.tscn
-## and LandsidePlaces place them: the terminal shell (Airside/Terminal at
+## and LandsidePlaces place them: the airport site (Airside/Terminal at
 ## z -80), the starter curb bays and both car parks of the starter landside,
 ## built. Each entry: {"name", "mesh": TriangleMesh, "inv": world to mesh
 ## Transform3D, "xform": mesh to world, "box": world AABB}.
 
-const SHELL := "res://assets/buildings/tp_airport_shell.glb"
-const SHELL_AT := Vector3(0, 0, -80)
+const SITE := "res://assets/buildings/tp_airport_site.glb"
+const SITE_AT := Vector3(0, 0, -80)
 const LANDSIDE := "res://landside/starter_landside.tres"
 
 
@@ -14,9 +14,9 @@ static func build(parent: Node) -> Array[Dictionary]:
 	var definition: LandsideDefinition = load(LANDSIDE)
 	var holder := Node3D.new()
 	parent.add_child(holder)
-	var shell: Node3D = (load(SHELL) as PackedScene).instantiate()
-	shell.position = SHELL_AT
-	holder.add_child(shell)
+	var site: Node3D = (load(SITE) as PackedScene).instantiate()
+	site.position = SITE_AT
+	holder.add_child(site)
 	var places := LandsidePlaces.new()
 	var road_top := places.road_top
 	places.free()

@@ -34,8 +34,6 @@ func after() -> void:
 
 func before_test() -> void:
 	var grid := BuildGrid.new(Vector2i(4, 11))
-	# As inside the Toon shell: the border closes the grid in.
-	grid.set_shell_border(true)
 	var floored: Array[Vector2i] = [Vector2i(0, 7), Vector2i(0, 8), Vector2i(0, 0), Vector2i(2, 0)]
 	for y in range(0, 11):
 		floored.append(Vector2i(1, y))
@@ -45,6 +43,8 @@ func before_test() -> void:
 		floored.append(Vector2i(3, y))
 	for cell in floored:
 		assert_bool(grid.apply(BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, 1)).ok).is_true()
+	# Walls along the grid border close the floor in, floor the plan adds too.
+	EnclosureKit.wall_border(grid)
 	for anchor in [Vector2i(0, 0), Vector2i(0, 3), Vector2i(2, 0), Vector2i(3, 1), Vector2i(3, 4)]:
 		PassengerTestWorld.place(grid, &"seat_row", anchor, 1)
 	for cell in [Vector2i(2, 5), Vector2i(2, 6)]:

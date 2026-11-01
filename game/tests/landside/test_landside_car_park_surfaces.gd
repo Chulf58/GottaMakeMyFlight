@@ -4,17 +4,17 @@ extends GdUnitTestSuite
 ## the surface drawn under them (the road, the sidewalk, whose top is 0.1 m over
 ## the road, the paved apron and the slab), and a ground-floor passenger walks
 ## from the gate to the road crossing on paving, never over the lawn. The
-## surfaces are read from the meshes as main.tscn places them: the terminal
-## shell (its Road mesh carries the road and the sidewalk) at z -80, and
+## surfaces are read from the meshes as main.tscn places them: the airport
+## site (its Road mesh carries the road and the sidewalk) at z -80, and
 ## tc_parking_2a.glb on the lot spot's centre. Where there is neither, the lawn
 ## (main.tscn's Ground plane) is at y -0.1.
 
 const STARTER := preload("res://landside/starter_landside.tres")
-const SHELL_SCENE := preload("res://assets/buildings/tp_airport_shell.glb")
+const SITE_SCENE := preload("res://assets/buildings/tp_airport_site.glb")
 const MULTI_SCENE := preload("res://assets/landside/tc_parking_2a.glb")
 const CAR_SCENE := preload("res://assets/vehicles/tp_suv_01b.glb")
 ## main.tscn's Airside/Terminal.
-const SHELL_AT := Vector3(0.0, 0.0, -80.0)
+const SITE_AT := Vector3(0.0, 0.0, -80.0)
 const LAWN_Y := -0.1
 const ROAD_Y := 0.1
 const SIDEWALK_Y := 0.2
@@ -38,7 +38,7 @@ var _cells := {}
 func before() -> void:
 	_spot = STARTER.lots[1]
 	_paths = LandsidePaths.new(STARTER)
-	_add_faces(SHELL_SCENE, Transform3D(Basis(), SHELL_AT), false)
+	_add_faces(SITE_SCENE, Transform3D(Basis(), SITE_AT), false)
 	_add_faces(MULTI_SCENE, Transform3D(Basis(), _spot.centre), true)
 	var car: Node3D = CAR_SCENE.instantiate()
 	_axles = LandsideViews.axles_of(car)

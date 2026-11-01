@@ -25,7 +25,7 @@ func _framed(area: Rect2) -> Vector3:
 
 
 func test_the_game_opens_framed_on_the_starter_terminal_floor() -> void:
-	var area := StartView.area_for(_mode.grid, _mode.shell)
+	var area := StartView.area_for(_mode.grid)
 	assert_vector(_camera.home_position).is_equal_approx(_framed(area), Vector3.ONE * 0.001)
 	assert_vector(_camera.position).is_equal_approx(_camera.home_position, Vector3.ONE * 0.001)
 	assert_float(_camera.home_distance).is_less(60.0)

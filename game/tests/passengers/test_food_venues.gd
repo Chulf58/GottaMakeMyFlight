@@ -30,7 +30,7 @@ func after_test() -> void:
 ## A world with both rooms of the reference layout set to `venue`.
 func _world(venue: StringName) -> PassengerTestWorld:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid, false, null, venue)
+	CafeTestLayout.build(grid, false, venue)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
 	return world

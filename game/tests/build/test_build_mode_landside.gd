@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 ## landside's actions, and the menu lists the tools with their prices.
 
 const STARTER := preload("res://landside/starter_landside.tres")
-const SHELL := preload("res://build/toon_terminal_shell.tres")
+const SITE := preload("res://build/terminal_site.tres")
 
 const IN_LOT_0 := Vector3(32.0, 0.0, -22.0)
 const IN_MULTI := Vector3(0.0, 0.0, -8.0)
@@ -27,7 +27,7 @@ func before_test() -> void:
 	assert_bool(_sim.use_definition(STARTER)).is_true()
 	_sim.wallet = Wallet.new(0)
 	_mode = BuildMode.new()
-	_mode.shell = SHELL
+	_mode.site = SITE
 	_mode.finances = _finances
 	_mode.landside = _sim
 	add_child(_mode)
@@ -100,6 +100,8 @@ func test_an_unaffordable_click_is_refused_and_the_cost_line_shows_the_shortfall
 
 
 func test_hovering_a_spot_shows_its_capacity_and_walk_on_the_status_line() -> void:
+	# An entrance to measure the walk to.
+	assert_bool(ReferenceTerminal.build(_mode.grid)).is_true()
 	_mode.set_tool(BuildMode.Tool.SURFACE_LOT)
 	_mode._update_ghost(IN_LOT_0)
 	assert_str(_mode.status_text()).contains("12 spaces")

@@ -1,6 +1,6 @@
 class_name RoofCutaway
 extends RefCounted
-## The player-built roof's level rule (RoofView): ShellCutaway's roof rule
+## The player-built roof's level rule (RoofView): the Toon shell's old roof rule
 ## without its facade parts. View only: it changes no node, grid or path.
 ##
 ## The roof has a level from 0 (drawn) to 1 (gone). Its target turns 1 once
@@ -11,7 +11,7 @@ extends RefCounted
 ## roof-shows-from-far-away-and-fades-out-when-th; the threshold is a tuning
 ## value).
 
-## Tuning values, ShellCutaway's defaults.
+## Tuning values, the old shell roof's defaults.
 var roof_hide_below := 100.0
 var roof_show_above := 120.0
 var roof_fade_seconds := 0.4
@@ -34,7 +34,7 @@ func step(distance: float, delta: float) -> void:
 		roof_target = 1.0
 	elif distance > roof_show_above:
 		roof_target = 0.0
-	roof_level = ShellCutaway.approach(roof_level, roof_target, delta, roof_fade_seconds)
+	roof_level = move_toward(roof_level, roof_target, delta / roof_fade_seconds)
 
 
 ## Whether any of the roof is drawn (the level is below 1).

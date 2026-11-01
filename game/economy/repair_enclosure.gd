@@ -13,19 +13,15 @@ extends RefCounted
 ## over, so a gap in the player's own walls there is closed too. A wall goes
 ## only where that floor meets the outside: the grid border, or a cell with no
 ## floor that the outside reaches without crossing a wall or that floor. A
-## hole already closed in (floor taken up inside the walls) gets none. Inside
-## a Toon shell the grid border is the facade (BuildGrid.shell_border) and
-## all floor is closed in, so no wall is wanted.
+## hole already closed in (floor taken up inside the walls) gets none.
 
 
 ## Plain walls on every edge where the floor joined to `seeds` meets the
 ## outside (see the class notes) and that has no wall yet, except an entrance
 ## or exit door object's back edge, which the door fills. In cell order, sides
-## in Side order. Empty with a closed grid border.
+## in Side order.
 static func walls_for(grid: BuildGrid, seeds: Array) -> Array[BuildEdit]:
 	var out: Array[BuildEdit] = []
-	if grid.shell_border:
-		return out
 	# Door objects' back edges (edge_key()), which the doors close.
 	var backs := {}
 	for way in DoorPlacement.ways_out(grid):

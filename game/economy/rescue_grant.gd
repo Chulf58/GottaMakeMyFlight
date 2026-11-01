@@ -34,11 +34,22 @@ extends Node
 ## anything placed or painted (taking it away again costs nothing). While the
 ## wallet holds at least the bound, a repair it can pay for exists and no new
 ## plan is made. A grid change that is not an edit (a load) forgets the bound.
+##
+## A plan takes about a second on the airport site, so no tick should make one
+## that can be made outside the sim: _ready() (a new game) and SaveGame after
+## a load call prepare(), which works the bound out before the next tick. Inside
+## the ticks a plan is made at most once every REPLAN_TICKS: after a grid
+## change while the wallet is below the bound the grant waits for the next
+## allowed plan, so a burst of build clicks costs one plan, not one per click.
+## The grant is then paid up to REPLAN_TICKS later; the airport is stuck
+## either way, so nothing else changes.
 
 ## Paid, with the player-facing message.
 signal granted(amount: int, message: String)
 
 const SNAPSHOT_KEYS := ["granted"]
+## The fewest ticks between two plans made inside sim ticks (5 sim seconds).
+const REPLAN_TICKS := 100
 ## The name shown to the player for each piece a repair can place.
 const PIECE_NAMES := {
 	&"entrance_door": "entrance",
@@ -55,6 +66,10 @@ const PIECE_NAMES := {
 ## set it after bind(); without it a grant is the repair's shortfall alone.
 @export var settlement: Settlement
 
+## How many repair plans this grant has made, ticks and prepare() together.
+## A count only the tests read.
+var plans_made := 0
+
 var _clock: SimClock
 var _sim: PassengerSim
 var _wallet: Wallet
@@ -70,6 +85,9 @@ var _edit_seen := false
 ## The working-path answer for the grid as it stands, redone once it is stale.
 var _path_ok := false
 var _path_dirty := true
+## The tick of the last plan made inside a sim tick, or none yet.
+var _planned_tick := -REPLAN_TICKS
+var _in_tick := false
 
 
 func _ready() -> void:
@@ -77,6 +95,7 @@ func _ready() -> void:
 		push_error("RescueGrant: clock, passengers and finances must all be set")
 		return
 	bind(clock, passengers, finances.wallet)
+	prepare()
 
 
 ## Checks on `with_clock`'s ticks and pays into `with_wallet`. Binding the
@@ -90,6 +109,25 @@ func bind(with_clock: SimClock, sim: PassengerSim, with_wallet: Wallet) -> void:
 		_clock.ticked.disconnect(_on_tick)
 	_clock = with_clock
 	_clock.ticked.connect(_on_tick)
+	_planned_tick = -REPLAN_TICKS
+
+
+## Works out now, outside a sim tick, whether there is a working path and, when
+## there is none, the repair plan and its price bound, so the next tick starts
+## from a known bound (see the class notes). _ready() and SaveGame call it;
+## tests that bind() by hand call it when they want it. It starts afresh: the
+## kept plan, bound, path answer and replan wait are dropped, so none of them
+## outlives a load (whose clock may be earlier than the last plan's tick).
+func prepare() -> void:
+	_planned_tick = -REPLAN_TICKS
+	_plan = null
+	_bound = -1
+	_path_dirty = true
+	_edit_seen = false
+	if _sim == null or _sim.grid == null:
+		return
+	if not has_working_path():
+		repair_plan()
 
 
 ## Whether a new passenger can walk the whole journey on the grid as it stands.
@@ -106,8 +144,11 @@ func has_working_path() -> bool:
 func repair_plan() -> RepairPlan:
 	_watch_grid()
 	if _plan == null:
-		_plan = RepairPlan.make(_sim.grid, _sim.shell, _sim.site)
+		_plan = RepairPlan.make(_sim.grid, _sim.site)
 		_bound = _price_of(_plan)
+		plans_made += 1
+		if _in_tick and _clock != null:
+			_planned_tick = _clock.tick
 	return _plan
 
 
@@ -152,7 +193,9 @@ func from_snapshot(data: Dictionary) -> bool:
 
 
 func _on_tick(_tick: int) -> void:
+	_in_tick = true
 	evaluate()
+	_in_tick = false
 
 
 ## What the repair costs beyond the balance, or 0 when the wallet can pay for
@@ -160,6 +203,10 @@ func _on_tick(_tick: int) -> void:
 func _shortfall() -> int:
 	_watch_grid()
 	if _bound >= 0 and _wallet.balance >= _bound:
+		return 0
+	# A clock now earlier than the last plan (a load) does not hold a plan back.
+	var since := _clock.tick - _planned_tick
+	if _plan == null and _in_tick and since >= 0 and since < REPLAN_TICKS:
 		return 0
 	var cost := _price_of(repair_plan())
 	return maxi(cost - _wallet.balance, 0) if cost >= 0 else 0

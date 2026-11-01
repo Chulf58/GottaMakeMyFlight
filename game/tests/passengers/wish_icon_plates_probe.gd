@@ -1,8 +1,8 @@
 extends SceneTree
 ## Windowed probe of the shopping wish icons (WishIconView) in the real main
-## scene. The reference terminal stands on the Toon shell's doors with a kiosk
-## and a pharmacy east of its airside half (WishTestLayout's rooms, built here
-## through the grid's own edits on the shelled terminal). Eight bored
+## scene. The reference terminal stands on the airport site with a kiosk and
+## a pharmacy east of its airside half (WishTestLayout's rooms, built here
+## through the grid's own edits on the terminal). Eight bored
 ## passengers stand airside, wishing in turn for the kiosk, the pharmacy, duty
 ## free and fashion. The first four may shop at once, so the kiosk and pharmacy
 ## wishers are FULFILLED and the duty free and fashion wishers settle for less
@@ -147,10 +147,10 @@ func _run() -> void:
 	quit(1 if _failed else 0)
 
 
-## The shelled reference terminal and WishTestLayout's kiosk and pharmacy.
+## The reference terminal and WishTestLayout's kiosk and pharmacy.
 func _build() -> bool:
 	var grid := _mode.grid
-	if not ReferenceTerminal.build(grid, _mode.shell):
+	if not ReferenceTerminal.build(grid):
 		return false
 	var edits: Array[BuildEdit] = []
 	var floor_rect := ShopTestLayout.FLOOR

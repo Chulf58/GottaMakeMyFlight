@@ -124,21 +124,30 @@ func test_a_road_walker_whose_entrance_opens_walks_to_the_other_entrance() -> vo
 
 
 ## Forty walkers on the grid sent to entrance B by one wall edit: the walk
-## field to B is searched once for all of them.
+## field to B is searched once for all of them (OutsideWalks.fields_searched),
+## not once per walker.
 func test_many_walkers_reroute_in_one_revalidate() -> void:
 	var walkers: Array[Passenger] = []
 	for i in 40:
 		walkers.append(_world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT)))
 	_steps(50)
+	var searched := OutsideWalks.fields_searched
 	var started := Time.get_ticks_usec()
 	_set_wall(GAP_A, true)
 	var usec := Time.get_ticks_usec() - started
+	searched = OutsideWalks.fields_searched - searched
 	var at_b := 0
 	for p in walkers:
 		if p.at == ENTRANCE_B and p.stuck == Passenger.Stuck.NONE:
 			at_b += 1
-	print("%d walkers x 2 entrances: %d sent to B in %d us" % [walkers.size(), at_b, usec])
+	print(
+		(
+			"%d walkers x 2 entrances: %d sent to B in %d us, %d fields searched"
+			% [walkers.size(), at_b, usec, searched]
+		)
+	)
 	assert_int(at_b).is_equal(walkers.size())
+	assert_int(searched).is_equal(1)
 
 
 func test_with_no_entrance_left_the_walker_waits_where_it_stands_until_one_is_back() -> void:

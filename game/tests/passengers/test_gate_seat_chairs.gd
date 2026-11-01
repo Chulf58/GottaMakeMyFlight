@@ -80,11 +80,11 @@ func test_the_seat_row_mesh_has_four_pans_and_each_cell_maps_to_its_own() -> voi
 func test_a_seated_passenger_is_drawn_on_a_chair_at_every_facing() -> void:
 	var pans := _pan_centres()
 	var grid := BuildGrid.new(Vector2i(10, 10), Vector3(3.25, 0.3, -7.5))
-	# The border closes the floor in, so the seats are in service.
-	grid.set_shell_border(true)
 	for y in 10:
 		for x in 10:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	# Walls close the floor in, so the seats are in service.
+	EnclosureKit.close_floor(grid)
 	var anchors := [Vector2i(2, 1), Vector2i(8, 2), Vector2i(7, 8), Vector2i(1, 7)]
 	for facing in 4:
 		PassengerTestWorld.place(grid, &"seat_row", anchors[facing], facing)

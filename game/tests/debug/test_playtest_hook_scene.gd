@@ -1,8 +1,8 @@
 class_name TestPlaytestHookScene
 extends GdUnitTestSuite
 ## PlaytestHook on the real main scene, headless. before() plays one scripted
-## session once: the starter terminal on the Toon shell's doors B and C, an
-## Entrance placed away from any Toon door (refused), both check-in desks taken
+## session once: the starter terminal on the airport site, an Entrance placed
+## on bare ground off the floor (refused), both check-in desks taken
 ## away and put back (passengers stuck, the
 ## stuck_too_long anomaly raised and cleared), a passenger spawned too late to
 ## board, one push_error(), and the flight run to DEPARTED, then two cafe rooms
@@ -13,17 +13,17 @@ const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
 const STUCK_LIMIT_S := 2.0
 ## The desk ticks count from the first passenger's arrival, the late spawn
-## and the end from the first state of the starter's first flight.
+## and the end from the first state of the starter's first flight. The first
+## passengers walk about 25 m in from the road on the site before they queue,
+## so the stuck check waits until they have stood stuck past STUCK_LIMIT_S.
 const DESKS_GONE_TICK := 300
-const STUCK_CHECK_TICK := 420
-const DESKS_BACK_TICK := 430
-const CLEAR_CHECK_TICK := 600
+const STUCK_CHECK_TICK := 600
+const DESKS_BACK_TICK := 610
+const CLEAR_CHECK_TICK := 800
 const LATE_SPAWN_TICK := 1890
 const END_TICK := 2600
-const DOOR_B := Vector2i(16, 29)
-const GATE_C := Vector2i(16, 0)
-## A shell-edge cell more than the snap radius from any Toon door.
-const OFF_DOOR_CELL := Vector2i(12, 29)
+## A cell of the site's open ground, off the starter terminal's floor.
+const OFF_FLOOR_CELL := Vector2i(12, 29)
 const ERROR_TEXT := "PlaytestHook test error"
 ## The starter contract's booked passengers plus the one spawned too late.
 const PASSENGERS := FlightSim.STARTER_TERMS["booked_passengers"] + 1
@@ -70,7 +70,7 @@ func before() -> void:
 	StaffTestKit.staff_all(_main.get_node("Staff"))
 	var grid := _mode.grid
 	_mode.set_tool(BuildMode.Tool.ENTRANCE)
-	_mode.apply_at(grid.cell_to_world(OFF_DOOR_CELL))
+	_mode.apply_at(grid.cell_to_world(OFF_FLOOR_CELL))
 	_mode.set_tool(BuildMode.Tool.NONE)
 	# Staffed, the airport opens on the first tick and the starter's first
 	# flight starts ISSUE_LEAD_TICKS later; the session's ticks count from it.
@@ -123,14 +123,14 @@ func test_the_log_file_has_every_event_type() -> void:
 	assert_int(counts["passenger_made"] + counts["passenger_missed"]).is_equal(PASSENGERS)
 
 
-func test_a_door_away_from_the_toon_doors_is_logged_with_its_reason() -> void:
+func test_a_door_off_the_floor_is_logged_with_its_reason() -> void:
 	var refused := _of_type("build_refused").filter(
 		func(e): return e["data"]["kind"] == "PLACE_OBJECT"
 	)
 	assert_int(refused.size()).is_equal(1)
-	assert_str(refused[0]["data"]["reason"]).is_equal("DOOR_NOT_AT_SHELL_DOOR")
+	assert_str(refused[0]["data"]["reason"]).is_equal("NO_FLOOR")
 	var cell: Array = refused[0]["data"]["cell"]
-	assert_that(Vector2i(int(cell[0]), int(cell[1]))).is_equal(OFF_DOOR_CELL)
+	assert_that(Vector2i(int(cell[0]), int(cell[1]))).is_equal(OFF_FLOOR_CELL)
 
 
 func test_room_edits_are_logged_with_their_room() -> void:
@@ -187,8 +187,8 @@ func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	assert_int(summary["total"]).is_equal(0)
 	assert_dict(summary["by_stage"]).is_empty()
 	var grid: Dictionary = _snapshot["grid"]
-	# The 12 x 30 terminal, door B to gate C.
-	assert_int(grid["floor_cells"]).is_equal(12 * 30)
+	# The 12 x 16 starter terminal.
+	assert_int(grid["floor_cells"]).is_equal(12 * 16)
 	var objects := {
 		"checkin_desk": 2,
 		"security_scanner": 2,
@@ -198,8 +198,12 @@ func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	}
 	assert_dict(grid["objects"]).is_equal(objects)
 	assert_int(grid["walls"]["PLAIN"]).is_greater(0)
-	assert_array(grid["entrances"][0]["cell"]).is_equal([DOOR_B.x, DOOR_B.y])
-	assert_array(grid["exits"][0]["cell"]).is_equal([GATE_C.x, GATE_C.y])
+	assert_array(grid["entrances"][0]["cell"]).is_equal(
+		[ReferenceTerminal.ENTRANCE_CELL.x, ReferenceTerminal.ENTRANCE_CELL.y]
+	)
+	assert_array(grid["exits"][0]["cell"]).is_equal(
+		[ReferenceTerminal.EXIT_CELL.x, ReferenceTerminal.EXIT_CELL.y]
+	)
 	assert_int(_snapshot["events"].size()).is_equal(5)
 	assert_int(_snapshot["event_total"]).is_greater(_snapshot["events"][4]["i"])
 	assert_array(_snapshot["stuck"]).is_empty()

@@ -427,8 +427,8 @@ func _set_option(ctx: Dictionary, option: Array) -> void:
 
 ## Sets the roof for a shot: `forced` < 0 follows the zoom rule (RoofCutaway)
 ## from the rig's distance; otherwise the level is held at `forced`. The wall
-## cutaway is on only while no roof is drawn, as the shell gates its facade
-## (ShellCutaway's "cut only when roof is gone").
+## cutaway is on only while no roof is drawn, as RoofView gates it in
+## main.tscn.
 func _set_roof(ctx: Dictionary, forced: float) -> void:
 	var roof: RoofView = ctx["roof"]
 	var rig: TycoonCamera = ctx["rig"]

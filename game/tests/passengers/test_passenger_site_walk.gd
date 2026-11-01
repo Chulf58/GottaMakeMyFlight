@@ -1,17 +1,18 @@
-class_name TestPassengerShellWalk
+class_name TestPassengerSiteWalk
 extends GdUnitTestSuite
-## Passengers in the Toon terminal shell walk the door connections' outside
-## routes: from the road through landside door B into the player's terminal
-## (stage SPAWNED until they stand on the entrance cell), and out of gate C's
-## door along the apron to the plane. The lateness forecast counts the road
-## walk, a save taken on the road plays out the same, and a passenger makes
-## the flight along the whole path.
+## Passengers on the airport site walk SiteRoutes' walks outside: from the
+## road over open ground through the entrance's doorway into the terminal
+## (stage SPAWNED until they stand on the entrance cell), and out of the
+## exit's doorway over open ground to the plane door. The lateness forecast
+## counts the road walk as its own leg, a save taken on the road plays out the
+## same tick for tick, and a passenger makes the flight along the whole path.
+## With no site (a test grid) an exit walks the default route
+## (OutsideWalks._default_departure) and an entrance has no road walk.
 
-const SHELL := preload("res://build/toon_terminal_shell.tres")
-const LANDSIDE_B := Vector2i(16, 29)
-const GATE_C := Vector2i(16, 0)
-const GATE_C_DOORWAY := Vector2(-16.99, -95.25)
-const LANDSIDE_B_DOORWAY := Vector2(-16.99, -64.35)
+const SITE := preload("res://build/terminal_site.tres")
+const ENTRANCE := Vector2i(16, 29)
+const EXIT := Vector2i(16, 0)
+## The site's plane door, the last point of its plane route.
 const PLANE_DOOR := Vector2(-14.5, -106.5)
 const LAST_TICK := 1900
 
@@ -27,7 +28,7 @@ func after() -> void:
 
 
 func before_test() -> void:
-	_world = _shell_world()
+	_world = _site_world()
 
 
 func after_test() -> void:
@@ -35,21 +36,23 @@ func after_test() -> void:
 	_world = null
 
 
-## Floor on columns 12 to 20, every row: entrance at landside B, a desk and a
-## scanner on the way, the exit at gate C, no seats (passengers stand).
-func _shell_world() -> PassengerTestWorld:
-	var grid := BuildGrid.new(SHELL.grid_size, SHELL.grid_origin)
-	for y in SHELL.grid_size.y:
+## Floor on columns 12 to 20, rows 0 to 29 of the site grid (rows 30 to 39 are
+## open ground to the road): the entrance on the south edge, a desk and a
+## scanner on the way, the exit on the north edge, no seats (passengers
+## stand), walled in.
+func _site_world() -> PassengerTestWorld:
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	for y in range(0, 30):
 		for x in range(12, 21):
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
-	PassengerTestWorld.place(grid, &"entrance_door", LANDSIDE_B, 2)
+	PassengerTestWorld.place(grid, &"entrance_door", ENTRANCE, 2)
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(13, 20), 0)
 	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(16, 10), 0)
-	PassengerTestWorld.place(grid, &"exit_door", GATE_C, 0)
+	PassengerTestWorld.place(grid, &"exit_door", EXIT, 0)
 	# Walls close the floor in, the doors filling their gaps (TerminalEnclosure).
 	EnclosureKit.close_floor(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	world.sim.shell = SHELL
+	world.sim.site = SITE
 	return world
 
 
@@ -57,27 +60,33 @@ func _xz(v: Vector3) -> Vector2:
 	return Vector2(v.x, v.z)
 
 
-func test_a_new_passenger_starts_on_the_road_and_walks_in_through_door_b() -> void:
+## The middle of a door cell's back edge, where its walk outside crosses.
+func _doorway(cell: Vector2i, facing: int) -> Vector2:
+	var out := DoorPlacement.back_step(facing)
+	return _xz(_world.grid.cell_to_world(cell) + Vector3(out.x, 0.0, out.y) * 0.5)
+
+
+func test_a_new_passenger_starts_on_the_road_and_walks_in_through_the_entrance() -> void:
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var p := _world.passenger(id)
 	var start := _world.sim.world_position(p)
 	var road_ticks := JourneyForecast.walk_ticks(p.apron_total_mm())
 	print("ROAD start=%s apron_points=%d total_mm=%d" % [start, p.apron.size(), p.apron_total_mm()])
 	assert_int(p.stage).is_equal(Passenger.Stage.SPAWNED)
-	assert_float(start.z).is_greater(-60.3)
+	assert_float(start.z).is_equal_approx(SITE.road_z, 0.01)
 	assert_float(start.y).is_less(0.25)
+	var doorway := _doorway(ENTRANCE, 2)
 	var crossed_doorway := false
 	var ticks := 0
 	while p.stage == Passenger.Stage.SPAWNED and ticks < 400:
 		_world.step()
 		ticks += 1
-		var at := _xz(_world.sim.world_position(p))
-		if at.distance_to(LANDSIDE_B_DOORWAY) < 0.1:
+		if _xz(_world.sim.world_position(p)).distance_to(doorway) < 0.1:
 			crossed_doorway = true
-	print("ROAD arrival ticks=%d stage=%d at=%s" % [ticks, p.stage, p.at])
+	print("ROAD arrival ticks=%d road_ticks=%d stage=%d at=%s" % [ticks, road_ticks, p.stage, p.at])
 	assert_bool(crossed_doorway).is_true()
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_CHECKIN)
-	assert_vector(p.at).is_equal(LANDSIDE_B)
+	assert_vector(p.at).is_equal(ENTRANCE)
 	assert_array(p.apron).is_empty()
 	# At a walk, 98 mm a tick, plus the tick that turns it to check-in.
 	assert_int(road_ticks).is_greater(80)
@@ -93,6 +102,7 @@ func test_the_forecast_counts_the_road_walk_as_its_own_leg() -> void:
 	_world.run_to(_world.flights.boarding_window(PassengerTestWorld.FLIGHT).x)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	var total := p.apron_total_mm()
+	assert_int(total).is_greater(PassengerSim.WALK_MM)
 	p.apron_mm = total
 	var walked := JourneyForecast.arrival_tick(_world.sim, p)
 	var exact := 0
@@ -109,51 +119,51 @@ func test_the_forecast_counts_the_road_walk_as_its_own_leg() -> void:
 	assert_int(exact).is_equal(PassengerSim.WALK_MM)
 
 
-## An entrance or exit the shell does not know (only the debug starter
-## terminal places one) walks the default route, with a warning.
-func test_a_door_off_the_toon_doors_walks_the_default_route_with_a_warning() -> void:
-	var stray := PassengerTestWorld.place(_world.grid, &"exit_door", Vector2i(20, 0), 0)
-	# A lambda captures locals by value, so it fills an array it shares.
-	var points: Array[Vector3] = []
-	await (
-		assert_error(func() -> void: points.append_array(ShellRoutes.departure(_world.sim, stray)))
-		. is_push_warning(
-			(
-				"ShellRoutes: exit_door at (20, 0) is not on a Toon door;"
-				+ " its passengers walk the default route"
-			)
-		)
-	)
-	var centre := _world.grid.cell_to_world(Vector2i(20, 0))
+## With no site an exit walks out through its doorway, a metre on, then the
+## default apron waypoints, and an entrance has no road walk.
+func test_with_no_site_an_exit_walks_the_default_route() -> void:
+	_world.sim.site = null
+	var exit_id: int = _world.sim.layout.exits[0]
+	var entrance_id: int = _world.sim.layout.entrances[0]
+	var points := OutsideWalks.departure(_world.sim, exit_id)
+	var centre := _world.grid.cell_to_world(EXIT)
+	print("DEFAULT points=%d first=%s third=%s" % [points.size(), points[0], points[2]])
 	assert_int(points.size()).is_equal(3 + _world.sim.apron_waypoints.size())
 	assert_vector(points[0]).is_equal(centre)
+	assert_vector(points[1]).is_equal(centre + Vector3(0.0, 0.0, -0.5))
 	assert_vector(points[2]).is_equal(centre + Vector3(0.0, 0.0, -1.5))
 	assert_vector(points[3]).is_equal(_world.sim.apron_waypoints[0])
-	var stray_in := PassengerTestWorld.place(_world.grid, &"entrance_door", Vector2i(20, 29), 2)
-	assert_array(ShellRoutes.arrival(_world.sim, stray_in)).is_empty()
+	var waypoints := _world.sim.apron_waypoints
+	assert_vector(points[points.size() - 1]).is_equal(waypoints[waypoints.size() - 1])
+	assert_array(OutsideWalks.arrival(_world.sim, entrance_id)).is_empty()
+	# An id that is no door has no walk at all.
+	assert_array(OutsideWalks.departure(_world.sim, 9999)).is_empty()
 
 
-func test_the_exit_walk_leaves_through_gate_c_to_the_plane_door() -> void:
-	var exit_id := 0
-	for id in _world.sim.layout.exits:
-		exit_id = id
+func test_the_exit_walk_leaves_through_its_doorway_to_the_plane_door() -> void:
+	var exit_id: int = _world.sim.layout.exits[0]
 	var mm := _world.sim.apron_length_mm(exit_id)
 	var walk := Passenger.new()
-	walk.apron.assign(ShellRoutes.departure(_world.sim, exit_id))
+	walk.apron.assign(OutsideWalks.departure(_world.sim, exit_id))
 	var first := _xz(walk.apron[0])
 	var last := _xz(walk.apron[walk.apron.size() - 1])
 	print("APRON points=%d mm=%d first=%s last=%s" % [walk.apron.size(), mm, first, last])
-	assert_vector(first).is_equal_approx(_xz(_world.grid.cell_to_world(GATE_C)), Vector2.ONE * 1e-4)
+	assert_vector(first).is_equal_approx(_xz(_world.grid.cell_to_world(EXIT)), Vector2.ONE * 1e-4)
 	assert_float(last.distance_to(PLANE_DOOR)).is_less(0.01)
+	var doorway := _doorway(EXIT, 0)
 	var through_door := false
 	for point in walk.apron:
-		through_door = through_door or _xz(point).distance_to(GATE_C_DOORWAY) < 0.05
+		through_door = through_door or _xz(point).distance_to(doorway) < 0.05
 	assert_bool(through_door).is_true()
 	assert_int(mm).is_equal(walk.apron_total_mm())
-	assert_int(mm).is_between(12000, 20000)
+	# The exit (x -26.5) is 12 m west of the plane route (x -14.5), which runs
+	# 7 m out to the plane door.
+	assert_int(mm).is_between(18000, 24000)
 
 
-func test_a_save_on_the_road_plays_out_the_same() -> void:
+## A save taken on the road loads into a twin world, and the twin then plays
+## every tick the same as the world that kept running.
+func test_a_save_on_the_road_plays_out_the_same_tick_for_tick() -> void:
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	for i in 30:
 		_world.step()
@@ -161,17 +171,26 @@ func test_a_save_on_the_road_plays_out_the_same() -> void:
 	assert_int(p.stage).is_equal(Passenger.Stage.SPAWNED)
 	assert_int(p.apron_mm).is_greater(0)
 	var saved := JSON.parse_string(JSON.stringify(_world.sim.to_snapshot())) as Dictionary
-	var twin := _shell_world()
+	var twin := _site_world()
 	twin.clock.from_snapshot(_world.clock.to_snapshot())
 	twin.flights.from_snapshot(_world.flights.to_snapshot())
 	assert_bool(twin.sim.from_snapshot(saved)).is_true()
 	assert_vector(twin.sim.world_position(twin.passenger(id))).is_equal_approx(
 		_world.sim.world_position(p), Vector3.ONE * 1e-4
 	)
+	var same := 0
+	var first_diff := -1
 	for i in 200:
 		_world.step()
 		twin.step()
-	assert_str(twin.signature()).is_equal(_world.signature())
+		if twin.signature() == _world.signature():
+			same += 1
+		elif first_diff < 0:
+			first_diff = i
+	print("TWIN same=%d/200 first_diff=%d stage=%d" % [same, first_diff, p.stage])
+	# The walk in ends inside the 200 ticks, so both sides of it are compared.
+	assert_int(p.stage).is_not_equal(Passenger.Stage.SPAWNED)
+	assert_int(same).is_equal(200)
 	twin.free_all()
 
 
@@ -197,6 +216,6 @@ func test_a_passenger_walks_road_to_plane_and_makes_the_flight() -> void:
 		Passenger.Stage.APRON,
 	]:
 		assert_bool(stages.has(stage)).is_true()
-	assert_float(on_apron_at.distance_to(_xz(_world.grid.cell_to_world(GATE_C)))).is_less(0.5)
+	assert_float(on_apron_at.distance_to(_xz(_world.grid.cell_to_world(EXIT)))).is_less(0.5)
 	var end := _world.sim.world_position(p)
 	assert_float(_xz(end).distance_to(PLANE_DOOR)).is_less(0.01)
