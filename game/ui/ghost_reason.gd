@@ -36,7 +36,6 @@ const SHORT_TEXT := {
 	BuildResult.Reason.WALL_HOLDS_DOOR: "A door is beside it",
 	BuildResult.Reason.DOOR_NOT_ON_EDGE: "Needs the outside edge",
 	BuildResult.Reason.DOOR_WALLED: "Keep the edge open",
-	BuildResult.Reason.DOOR_NOT_AT_SHELL_DOOR: "Not a door spot",
 	BuildResult.Reason.ROOM_OVERLAP: "Overlaps a room",
 	BuildResult.Reason.IN_ROOM: "Remove the room first",
 	BuildResult.Reason.WALLET_FULL: "Money at its limit",
