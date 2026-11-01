@@ -104,9 +104,10 @@ func test_relaxed_passengers_arrive_before_the_first_state_up_to_3_h_before_depa
 	print("first state %d, departure %d, relaxed %s" % [FIRST, departure, relaxed])
 	assert_int(ArrivalTypes.RELAXED_LEAD_TICKS).is_equal(3 * 60 * GameCalendar.TICKS_PER_MINUTE)
 	assert_int(relaxed.min()).is_greater_equal(departure - ArrivalTypes.RELAXED_LEAD_TICKS)
-	assert_int(relaxed.max()).is_less_equal(FIRST)
+	var opens := departure - ArrivalTypes.ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS
+	assert_int(relaxed.max()).is_less_equal(opens)
 	# They come ahead of the window today's passengers arrive in.
-	assert_int(relaxed.min()).is_less(FIRST + 1 - 200)
+	assert_int(relaxed.min()).is_less(opens + 1 - 200)
 
 
 func test_rushed_passengers_spawn_late_in_the_window_and_typical_ones_in_all_of_it() -> void:
@@ -117,7 +118,11 @@ func test_rushed_passengers_spawn_late_in_the_window_and_typical_ones_in_all_of_
 	var typical: Array = by_type[ArrivalTypes.Type.TYPICAL]
 	assert_int(rushed.min()).is_greater_equal(last - ArrivalTypes.RUSHED_SPAN_TICKS)
 	assert_int(rushed.max()).is_less_equal(last)
-	assert_int(typical.min()).is_greater(FIRST)
+	var opens := (
+		world.flights.state_start(PassengerTestWorld.FLIGHT, FlightSim.State.PUSHBACK)
+		- ArrivalTypes.ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS
+	)
+	assert_int(typical.min()).is_greater(opens)
 	assert_int(typical.max()).is_less_equal(last)
 	# Typical arrivals spread over the whole window, early part included.
 	assert_int(typical.min()).is_less(last - ArrivalTypes.RUSHED_SPAN_TICKS)
@@ -143,15 +148,17 @@ func test_windows_are_read_from_the_flight() -> void:
 	var id := PassengerTestWorld.FLIGHT
 	var last := FIRST + PassengerTestWorld.doors_tick() - PassengerSim.LAST_SPAWN_LEAD_TICKS
 	var departure := FIRST + FlightTimetable.departure_offset()
+	# The usual window opens 1960 ticks before departure, 300 after the first state.
+	var opens := departure - ArrivalTypes.ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS
 	var now := world.clock.tick
 	var typical := ArrivalTypes.window(ArrivalTypes.Type.TYPICAL, world.flights, id, now)
 	var rushed := ArrivalTypes.window(ArrivalTypes.Type.RUSHED, world.flights, id, now)
 	var relaxed := ArrivalTypes.window(ArrivalTypes.Type.RELAXED, world.flights, id, now)
-	assert_object(typical).is_equal(Vector2i(FIRST + 1, last))
+	assert_object(typical).is_equal(Vector2i(opens + 1, last))
 	assert_object(rushed).is_equal(Vector2i(last - ArrivalTypes.RUSHED_SPAN_TICKS, last))
-	assert_object(relaxed).is_equal(Vector2i(departure - ArrivalTypes.RELAXED_LEAD_TICKS, FIRST))
+	assert_object(relaxed).is_equal(Vector2i(departure - ArrivalTypes.RELAXED_LEAD_TICKS, opens))
 	# Half of the relaxed window behind the clock: only what is ahead is used.
 	var mid := departure - ArrivalTypes.RELAXED_LEAD_TICKS + 100
 	assert_object(ArrivalTypes.window(ArrivalTypes.Type.RELAXED, world.flights, id, mid)).is_equal(
-		Vector2i(mid + 1, FIRST)
+		Vector2i(mid + 1, opens)
 	)

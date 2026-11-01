@@ -152,6 +152,7 @@ func _all_done(group: Array[Passenger]) -> bool:
 
 func test_a_full_boarding_keeps_order_never_closes_a_gap_and_no_filed_walkers_overlap() -> void:
 	_world = PassengerTestWorld.reference_world(4242)
+	_world.run_to(PassengerTestWorld.arrival_opens_tick())
 	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 24)
 	var doors := _world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
 	var problem := ""

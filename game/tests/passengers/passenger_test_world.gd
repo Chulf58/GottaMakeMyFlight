@@ -30,6 +30,15 @@ static func boarding_tick() -> int:
 	return FlightSim.schedule_starts(0)[FlightSim.State.BOARDING]
 
 
+## The tick the reference flight's usual arrival window opens (ArrivalTypes): a
+## test that schedules passengers at the start of that window runs to it first.
+static func arrival_opens_tick() -> int:
+	return (
+		FlightSim.schedule_starts(0)[FlightSim.State.PUSHBACK]
+		- ArrivalTypes.ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS
+	)
+
+
 static func doors_tick() -> int:
 	return FlightSim.schedule_starts(0)[FlightSim.State.DOORS_CLOSED]
 
