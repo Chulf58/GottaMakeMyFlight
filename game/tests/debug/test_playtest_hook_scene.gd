@@ -13,11 +13,13 @@ const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
 const STUCK_LIMIT_S := 2.0
 ## The desk ticks count from the first passenger's arrival, the late spawn
-## and the end from the first state of the starter's first flight.
+## and the end from the first state of the starter's first flight. The first
+## passengers walk about 25 m in from the road on the site before they queue,
+## so the stuck check waits until they have stood stuck past STUCK_LIMIT_S.
 const DESKS_GONE_TICK := 300
-const STUCK_CHECK_TICK := 420
-const DESKS_BACK_TICK := 430
-const CLEAR_CHECK_TICK := 600
+const STUCK_CHECK_TICK := 600
+const DESKS_BACK_TICK := 610
+const CLEAR_CHECK_TICK := 800
 const LATE_SPAWN_TICK := 1890
 const END_TICK := 2600
 ## A cell of the site's open ground, off the starter terminal's floor.

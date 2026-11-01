@@ -316,12 +316,7 @@ func _staff_up() -> bool:
 			return true
 	for id in _staff.member_ids():
 		var m := _staff.get_member(id)
-		print(
-			(
-				"STAFF %d role=%d state=%d station=%d at=%s"
-				% [id, m.role, m.state, m.station, m.at]
-			)
-		)
+		print("STAFF %d role=%d state=%d station=%d at=%s" % [id, m.role, m.state, m.station, m.at])
 	print(
 		(
 			"STATIONS desk %d usable=%s unreachable=%s scanner %d usable=%s unreachable=%s"
