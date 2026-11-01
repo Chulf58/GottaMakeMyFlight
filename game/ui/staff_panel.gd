@@ -61,6 +61,10 @@ const CLOSED_HINTS := {
 	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
 	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
 }
+## The banner line for an open wall gap, one for a single run of gap edges and
+## one with the count for several. It uses the sign's words, "Wall gap".
+const GAP_HINT := "Wall gap: close the open edge of the outer wall, marked in red"
+const GAPS_HINT := "%d wall gaps: close the open edges of the outer wall, marked in red"
 ## The line shown once the airport opens: the starter's airline and destination.
 const OPEN_CUE := "Open! Starter contract: %s to %s, daily"
 ## A column's least width: four roles fit centred over the bar.
@@ -83,6 +87,8 @@ var _hint_bottom := -1.0
 var _was_open := false
 ## The starter line while it shows, "" otherwise.
 var _open_cue := ""
+## How many runs of open edges the outer wall has, read again on every edit.
+var _gap_runs := 0
 ## Role -> the Label with its counts, its Hire and its Fire button.
 var _counts: Dictionary = {}
 var _hire: Dictionary = {}
@@ -109,6 +115,7 @@ func watch(with_staff: StaffSim) -> void:
 	staff.member_state_changed.connect(_on_member_state)
 	staff.sim.grid.graph_changed.connect(_on_graph_changed)
 	staff.sim.grid.edit_applied.connect(_on_edit_applied)
+	_scan_gaps()
 	if gate != null:
 		gate.changed.connect(refresh)
 		gate.flights.snapshot_loaded.connect(_on_snapshot_loaded)
@@ -133,6 +140,11 @@ func hint_label() -> Label:
 	return _hint
 
 
+## The banner card the hint sits in.
+func hint_card() -> Control:
+	return _hint_box
+
+
 ## Hired and on duty; a member fired mid-service still works until that
 ## service ends, so it is counted and named as leaving. A cleaner is on duty
 ## all day once hired, so its second count is how many are cleaning now.
@@ -145,14 +157,17 @@ func counts_text(role: StaffMember.Role) -> String:
 	return text
 
 
-## What keeps the airport closed, if it is, or the starter line after it
-## opened, then one line per role whose
+## What keeps the airport closed, if it is, then a line naming an open gap in
+## the outer wall (the red bars and "Wall gap" signs GapMarkers draws), or the
+## starter line after it opened, then one line per role whose
 ## stations stand but nobody of that role is hired and staying (members
 ## leaving do not count).
 func hint_text() -> String:
 	var lines := PackedStringArray()
 	if gate != null and gate.blocker() != AirportGate.Blocker.NONE:
 		lines.append(CLOSED_HINTS[gate.blocker()])
+	if _gap_runs > 0:
+		lines.append(GAP_HINT if _gap_runs == 1 else GAPS_HINT % _gap_runs)
 	if _open_cue != "":
 		lines.append(_open_cue)
 	for role in ROLES:
@@ -201,6 +216,7 @@ func _on_member_state(_id: int, _state: StaffMember.State) -> void:
 ## dropped and the open state re-read here, whichever ran first.
 func _on_snapshot_loaded() -> void:
 	_open_cue = ""
+	_scan_gaps()
 	_was_open = gate.is_open()
 	refresh()
 
@@ -216,7 +232,12 @@ func _on_flight_state(id: String, new_state: int) -> void:
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	_scan_gaps()
 	refresh()
+
+
+func _scan_gaps() -> void:
+	_gap_runs = EnclosureGaps.gap_runs(staff.sim.grid).size()
 
 
 ## A room edit changes no walk graph, so graph_changed never follows it, and
@@ -224,6 +245,7 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 ## graph_changed of an edit with dirty cells, so only a room edit is taken
 ## here. StaffSim connected first and has already reconciled its stations.
 func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
+	_scan_gaps()
 	if result.dirty_cells.is_empty():
 		refresh()
 

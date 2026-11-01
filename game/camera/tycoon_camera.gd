@@ -5,7 +5,15 @@ extends Node3D
 ## distance: steep and wide when far out, low and close in. WASD or a
 ## middle-mouse drag pans, Q/E or a right-mouse drag rotates, the wheel zooms,
 ## Home glides back to the start view. `glide_to` and `follow` move the focus
-## from code; any manual pan cancels both.
+## from code; any manual pan cancels both. The focus appears at the middle of
+## `room`, the screen share the open HUD panels leave free (PanelRoom sets it),
+## not of the whole screen.
+
+## The whole viewport, as fractions of it (x, y, width, height from the top left).
+const WHOLE_VIEW := Rect2(0.0, 0.0, 1.0, 1.0)
+## The steepest the view ray through the free area's middle may point away from
+## the ground (y of its direction), so a far-off aim never misses the ground.
+const MIN_RAY_DOWN := 0.05
 
 ## Closest and farthest zoom, in metres from the focus point.
 @export var min_distance := 6.0
@@ -35,6 +43,11 @@ extends Node3D
 @export var frame_margin := 1.3
 
 var yaw := 0.0
+## The share of the screen the open HUD panels leave free, as fractions of the
+## viewport. The focus point sits at its middle, not the screen's, and easing
+## toward `set_room`'s target moves it there. The whole viewport when no panel
+## is open.
+var room := WHOLE_VIEW
 ## The distance the wheel is zooming toward; `distance` catches up to it.
 var target_distance := 80.0
 ## The current distance. Setting it jumps there with no easing.
@@ -50,6 +63,12 @@ var _follow_target: Node3D
 var _gliding := false
 var _glide_position := Vector3.ZERO
 var _glide_yaw := NAN
+var _room_target := WHOLE_VIEW
+## The area the start view frames, kept so Home and a panel opening refit it.
+var _home_area := Rect2()
+## True from framing the start view or Home until the player pans, zooms,
+## rotates, follows or glides: a panel opening then also refits the distance.
+var _at_home := false
 
 @onready var _camera: Camera3D = $Camera3D
 
@@ -70,6 +89,7 @@ func _process(delta: float) -> void:
 		rotate_yaw(turn * key_rotate_speed * delta)
 	_step_focus(delta)
 	_step_distance(delta)
+	_step_room(delta)
 	_apply()
 
 
@@ -103,11 +123,13 @@ func pitch_for_distance(from_distance: float) -> float:
 func pan(amount: Vector2) -> void:
 	stop_follow()
 	_gliding = false
+	_at_home = false
 	var step := global_transform.basis * Vector3(amount.x, 0.0, amount.y) * _distance
 	position = _clamp_to_bounds(position + step)
 
 
 func rotate_yaw(radians: float) -> void:
+	_at_home = false
 	yaw = wrapf(yaw + radians, -PI, PI)
 	_apply()
 
@@ -115,6 +137,7 @@ func rotate_yaw(radians: float) -> void:
 ## Multiplies the target distance by `factor` and clamps it. The distance eases
 ## toward it over the next frames.
 func zoom(factor: float) -> void:
+	_at_home = false
 	target_distance = clampf(target_distance * factor, min_distance, max_distance)
 	_apply()
 
@@ -125,26 +148,34 @@ func glide_to(world_point: Vector3, to_distance := -1.0) -> void:
 	_begin_glide(world_point, to_distance, NAN)
 
 
-## Glides back to the start view: position, distance and yaw.
+## Glides back to the start view: position, distance and yaw. A framed start
+## view is fitted again to the screen share the panels leave free right now.
 func go_home() -> void:
+	if _home_area.has_area():
+		var view := framing_for(_home_area, _room_target)
+		home_position = view["position"]
+		home_distance = view["distance"]
 	_begin_glide(home_position, home_distance, home_yaw)
+	_at_home = true
 
 
 ## The focus point and distance that fit `area`, a ground rectangle in the
 ## world's x and z, seen at yaw 0 (x across the screen, z into it): the
 ## nearest distance, inside the zoom limits, at which the area grown by
-## `frame_margin` is wholly in view. The pitch follows the distance, so the
-## distance is found by bisection.
-func framing_for(area: Rect2) -> Dictionary:
+## `frame_margin` is wholly inside `free`, the share of the screen the open
+## panels leave (fractions of the viewport; the whole viewport by default),
+## with the focus at the middle of `free`. The pitch follows the distance, so
+## the distance is found by bisection.
+func framing_for(area: Rect2, free := WHOLE_VIEW) -> Dictionary:
 	var half := area.size * 0.5 * frame_margin
 	var fit := max_distance
-	if _fits(half, min_distance):
+	if _fits(half, min_distance, free):
 		fit = min_distance
-	elif _fits(half, max_distance):
+	elif _fits(half, max_distance, free):
 		var low := min_distance
 		for _i in 30:
 			var mid := (low + fit) / 2.0
-			if _fits(half, mid):
+			if _fits(half, mid, free):
 				fit = mid
 			else:
 				low = mid
@@ -152,10 +183,13 @@ func framing_for(area: Rect2) -> Dictionary:
 	return {"position": _clamp_to_bounds(Vector3(centre.x, 0.0, centre.y)), "distance": fit}
 
 
-## Makes the view that fits `area` the start view: Home returns to it, and the
-## camera jumps there now, with no glide.
-func frame_start_view(area: Rect2) -> void:
-	var view := framing_for(area)
+## Makes the view that fits `area` inside `free` the start view: Home returns
+## to it, and the camera jumps there now, with no glide.
+func frame_start_view(area: Rect2, free := WHOLE_VIEW) -> void:
+	_home_area = area
+	_room_target = free
+	room = free
+	var view := framing_for(area, free)
 	home_position = view["position"]
 	home_distance = view["distance"]
 	stop_follow()
@@ -163,13 +197,27 @@ func frame_start_view(area: Rect2) -> void:
 	position = home_position
 	yaw = home_yaw
 	distance = home_distance
+	_at_home = true
 	_apply()
+
+
+## Tells the camera which share of the screen the open panels leave free
+## (fractions of the viewport). The focus eases to the middle of it. When the
+## camera is still on the start view, the distance also eases to the one that
+## fits the start area inside `free`, unless `refit` is false (the panels only
+## changed size, which should move the view a little, not zoom it).
+func set_room(free: Rect2, refit := true) -> void:
+	_room_target = free
+	if refit and _at_home and _home_area.has_area():
+		home_distance = framing_for(_home_area, free)["distance"]
+		target_distance = clampf(home_distance, min_distance, max_distance)
 
 
 ## Keeps the focus on `node` until a manual pan, `glide_to`, `go_home` or
 ## `stop_follow`, or until the node is freed.
 func follow(node: Node3D) -> void:
 	_gliding = false
+	_at_home = false
 	_follow_target = node
 
 
@@ -187,6 +235,7 @@ func is_gliding() -> bool:
 
 func _begin_glide(world_point: Vector3, to_distance: float, to_yaw: float) -> void:
 	stop_follow()
+	_at_home = false
 	_gliding = true
 	_glide_position = _clamp_to_bounds(Vector3(world_point.x, 0.0, world_point.z))
 	_glide_yaw = to_yaw
@@ -232,31 +281,68 @@ func _step_distance(delta: float) -> void:
 	_distance = lerpf(_distance, target_distance, 1.0 - exp(-zoom_rate * delta))
 
 
+func _step_room(delta: float) -> void:
+	if room.is_equal_approx(_room_target):
+		room = _room_target
+		return
+	var blend := 1.0 - exp(-glide_rate * delta)
+	room = Rect2(
+		room.position.lerp(_room_target.position, blend), room.size.lerp(_room_target.size, blend)
+	)
+
+
 func _apply() -> void:
 	rotation.y = yaw
 	var pitch := deg_to_rad(pitch_for_distance(_distance))
-	_camera.position = Vector3(0.0, _distance * sin(pitch), _distance * cos(pitch))
+	_camera.position = _eye_offset(_aim_of(room), _distance)
 	_camera.rotation = Vector3(-pitch, 0.0, 0.0)
 
 
+## The middle of `free` on the screen, in view units: x -1 to 1 left to right,
+## y -1 to 1 bottom to top.
+func _aim_of(free: Rect2) -> Vector2:
+	var centre := free.get_center()
+	return Vector2(centre.x * 2.0 - 1.0, 1.0 - centre.y * 2.0)
+
+
+## Where the eye sits, relative to the focus point on the ground and at yaw 0,
+## for the view ray through `aim` (see _aim_of) to meet the ground at the
+## focus. With the aim at the screen's middle this is the old orbit position.
+func _eye_offset(aim: Vector2, from_distance: float) -> Vector3:
+	var pitch := deg_to_rad(pitch_for_distance(from_distance))
+	var half_tan := tan(deg_to_rad(_camera.fov) / 2.0)
+	var ray := Vector3(
+		aim.x * half_tan * _aspect(),
+		-sin(pitch) + aim.y * half_tan * cos(pitch),
+		-cos(pitch) - aim.y * half_tan * sin(pitch)
+	)
+	ray.y = minf(ray.y, -MIN_RAY_DOWN)
+	var height := from_distance * sin(pitch)
+	var along := height / -ray.y
+	return Vector3(-along * ray.x, height, -along * ray.z)
+
+
 ## True when the ground rectangle centred on the focus, `half` wide and deep
-## from its middle to its edges, is wholly in view from `from_distance` at the
-## pitch that distance gets.
-func _fits(half: Vector2, from_distance: float) -> bool:
+## from its middle to its edges, is wholly inside `free` (fractions of the
+## viewport) from `from_distance` at the pitch that distance gets, with the
+## focus at the middle of `free`.
+func _fits(half: Vector2, from_distance: float, free: Rect2) -> bool:
 	var pitch := deg_to_rad(pitch_for_distance(from_distance))
 	var half_tan := tan(deg_to_rad(_camera.fov) / 2.0)
 	var forward := Vector3(0.0, -sin(pitch), -cos(pitch))
 	var up := Vector3(0.0, cos(pitch), -sin(pitch))
-	var eye := Vector3(0.0, from_distance * sin(pitch), from_distance * cos(pitch))
+	var eye := _eye_offset(_aim_of(free), from_distance)
+	var low := Vector2(free.position.x * 2.0 - 1.0, 1.0 - free.end.y * 2.0)
+	var high := Vector2(free.end.x * 2.0 - 1.0, 1.0 - free.position.y * 2.0)
 	for sign_x in [-1.0, 1.0]:
 		for sign_z in [-1.0, 1.0]:
 			var to_corner := Vector3(sign_x * half.x, 0.0, sign_z * half.y) - eye
 			var depth := to_corner.dot(forward)
 			if depth <= 0.0:
 				return false
-			if absf(to_corner.x) > depth * half_tan * _aspect():
-				return false
-			if absf(to_corner.dot(up)) > depth * half_tan:
+			var across := to_corner.x / (depth * half_tan * _aspect())
+			var vertical := to_corner.dot(up) / (depth * half_tan)
+			if across < low.x or across > high.x or vertical < low.y or vertical > high.y:
 				return false
 	return true
 
