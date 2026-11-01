@@ -27,7 +27,9 @@ const HOVER_LIFT_M := 0.035
 ## The price floats this high over the hovered plot's middle.
 const LABEL_HEIGHT_M := 2.0
 const LABEL_FONT_SIZE := 64
-const LABEL_PIXEL_SIZE := 0.0016
+## With fixed_size the label keeps its screen size: about 28 px tall in the
+## 1536x864 view.
+const LABEL_PIXEL_SIZE := 0.0005
 const NO_PLOT := Vector2i(-1, -1)
 
 var land: LandPlots
@@ -66,6 +68,9 @@ func _init() -> void:
 	_price.font_size = LABEL_FONT_SIZE
 	_price.outline_size = 16
 	_price.no_depth_test = true
+	# Drawn after the transparent plot tints under it, so they never show through.
+	_price.render_priority = 10
+	_price.outline_render_priority = 9
 	_price.visible = false
 	for node: GeometryInstance3D in [_fills, _hover, _price]:
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

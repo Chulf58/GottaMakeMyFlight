@@ -29,7 +29,8 @@ const OUT_REL := "res://../tools/blender/out/land-plots"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 16.0
 const SETTLE_FRAMES := 30
-const OVERVIEW_DISTANCE := 150.0
+## Overview zooms tried nearest first until the plate's subject fits.
+const FIT_DISTANCES: Array[float] = [100.0, 120.0, 140.0, 165.0, 190.0, 220.0, 260.0, 300.0]
 const CLOSE_DISTANCE := 70.0
 const BUY := Vector2i(2, 4)
 const FAR := Vector2i(3, 2)
@@ -82,20 +83,22 @@ func _run() -> void:
 	_staff = _main.get_node("StaffPanel")
 	_land = _build.land_tool.land
 	await _frames(20)
-	var site_middle := _build.grid.cell_to_world(_build.grid.size / 2)
 	print("OWNED %s BUYABLE %s" % [_land.owned_plots(), _land.buyable_plots()])
 
 	_build.set_tool(BuildMode.Tool.FLOOR)
 	_point_at(Vector2(1, 1))
 	_expect(_outline.is_visible_in_tree(), "p1: outline hidden in build mode")
-	await _plate("p1_outline_build_mode", site_middle, OVERVIEW_DISTANCE, _outline.outline_points())
+	var corners := Array(_outline.outline_points())
+	var p1_focus := _centre(corners)
+	await _plate("p1_outline_build_mode", p1_focus, await _fit(p1_focus, corners), corners)
 
 	_build.set_tool(BuildMode.Tool.BUY_LAND)
 	_expect(_build.land_tool.is_visible_in_tree(), "p2: buy tool fills hidden")
 	var middles: Array = []
 	for plot in _land.buyable_plots():
 		middles.append(_middle(plot))
-	await _plate("p2_buy_tool_fills", site_middle, OVERVIEW_DISTANCE, middles)
+	var p2_focus := _centre(middles)
+	await _plate("p2_buy_tool_fills", p2_focus, await _fit(p2_focus, middles), middles)
 
 	var buy_focus := _middle(BUY)
 	_rig.position = buy_focus
@@ -210,6 +213,36 @@ func _plot_corners(plot: Vector2i) -> Array:
 		var inward := (Vector2(cells.get_center()) - Vector2(c)).normalized() * 0.5
 		out.append(Vector3(o.x + c.x + inward.x, o.y, o.z + c.y + inward.y))
 	return out
+
+
+## The middle of the points' bounding box on the ground.
+func _centre(points: Array) -> Vector3:
+	var low: Vector3 = points[0]
+	var high: Vector3 = points[0]
+	for p: Vector3 in points:
+		low = low.min(p)
+		high = high.max(p)
+	return (low + high) / 2.0
+
+
+## The nearest of FIT_DISTANCES that puts every point in frame and off the HUD,
+## or the furthest.
+func _fit(focus: Vector3, points: Array) -> float:
+	var frame := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
+	for distance in FIT_DISTANCES:
+		_rig.position = focus
+		_rig.target_distance = distance
+		_rig.distance = distance
+		await _frames(SETTLE_FRAMES)
+		var fits := true
+		for p: Vector3 in points:
+			var s := _cam.unproject_position(p)
+			var under := _hud_rects().any(func(r: Rect2) -> bool: return r.has_point(s))
+			fits = fits and not _cam.is_position_behind(p) and frame.has_point(s) and not under
+		print("FIT focus=%s distance=%.0f fits=%s" % [focus, distance, fits])
+		if fits:
+			return distance
+	return FIT_DISTANCES[-1]
 
 
 func _point_at(screen: Variant) -> void:
