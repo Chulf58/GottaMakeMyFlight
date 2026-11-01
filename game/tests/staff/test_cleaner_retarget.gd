@@ -157,19 +157,9 @@ func test_a_cleaner_with_no_way_to_its_mess_takes_another_and_leaves_it_unclaime
 ## filter by them: messes it has no way to must not use up the bound. Seven
 ## walled-in messes are nearer in a straight line than the one it can reach.
 func test_with_no_entrance_walled_in_messes_never_hide_a_reachable_one() -> void:
-	var door: int = _world.sim.layout.entrances[0]
-	var record := _world.grid.get_object(door)
-	_edit(
-		BuildEdit.remove_object(door),
-		BuildEdit.place_object(record["def"], record["anchor"], record["facing"])
-	)
+	_remove_entrance()
 	var box := Rect2i(18, 9, 3, 3)
-	for x in range(box.position.x, box.end.x):
-		_wall(Vector2i(x, box.position.y), BuildGrid.Side.NORTH)
-		_wall(Vector2i(x, box.end.y - 1), BuildGrid.Side.SOUTH)
-	for y in range(box.position.y, box.end.y):
-		_wall(Vector2i(box.position.x, y), BuildGrid.Side.WEST)
-		_wall(Vector2i(box.end.x - 1, y), BuildGrid.Side.EAST)
+	_wall_in(box)
 	var walled := 0
 	for y in range(box.position.y, box.end.y):
 		for x in range(box.position.x, box.end.x):
@@ -230,6 +220,54 @@ func test_a_bin_spot_an_edit_moves_sends_its_cleaner_to_the_new_spot() -> void:
 	assert_that(after_edit[2]).is_equal(bin_at + Vector2i(0, 1))
 	assert_str(problem).is_empty()
 	assert_that(m.at).is_equal(bin_at + Vector2i(0, 1))
+
+
+## A stranded cleaner (no entrance, so no reach regions) with 20 walled-in
+## messes and a reachable one behind them pays at most MAX_PATH_TRIES paths a
+## search, however many jobs it has no way to.
+func test_a_stranded_cleaner_tries_at_most_max_path_tries_paths_a_search() -> void:
+	_remove_entrance()
+	var box := Rect2i(16, 8, 5, 4)
+	_wall_in(box)
+	var walled := 0
+	for y in range(box.position.y, box.end.y):
+		for x in range(box.position.x, box.end.x):
+			walled += int(_messes().add(MessSim.Kind.LITTER, Vector2i(x, y)) != 0)
+	_messes().add(MessSim.Kind.LITTER, Vector2i(2, 2))
+	var m := CleanerTestKit.cleaner_at(_world, Vector2i(12, 10))
+	var before := CleanerJobs.path_calls
+	_world.step()
+	var tried := CleanerJobs.path_calls - before
+	print(
+		(
+			"%d walled messes; one search tried %d paths (cap %d); job %d failed %s"
+			% [walled, tried, CleanerJobs.MAX_PATH_TRIES, m.job, m.search_failed]
+		)
+	)
+	assert_int(walled).is_greater(CleanerJobs.MAX_PATH_TRIES)
+	assert_int(tried).is_equal(CleanerJobs.MAX_PATH_TRIES)
+	assert_int(m.job).is_equal(0)
+	assert_bool(m.search_failed).is_true()
+
+
+## Removes the terminal's entrance (put back after the case).
+func _remove_entrance() -> void:
+	var door: int = _world.sim.layout.entrances[0]
+	var record := _world.grid.get_object(door)
+	_edit(
+		BuildEdit.remove_object(door),
+		BuildEdit.place_object(record["def"], record["anchor"], record["facing"])
+	)
+
+
+## Walls round the outside of `box` (put back after the case).
+func _wall_in(box: Rect2i) -> void:
+	for x in range(box.position.x, box.end.x):
+		_wall(Vector2i(x, box.position.y), BuildGrid.Side.NORTH)
+		_wall(Vector2i(x, box.end.y - 1), BuildGrid.Side.SOUTH)
+	for y in range(box.position.y, box.end.y):
+		_wall(Vector2i(box.position.x, y), BuildGrid.Side.WEST)
+		_wall(Vector2i(box.end.x - 1, y), BuildGrid.Side.EAST)
 
 
 func _wall(cell: Vector2i, side: int) -> void:

@@ -13,11 +13,13 @@ extends RefCounted
 ## same staff reach region; every job when the grid has no entrance and so no
 ## regions) are tried nearest first in a straight line (Chebyshev, from where
 ## it stands or, in the pool, from the nearest entrance door) until
-## SEARCH_CANDIDATES of them have a path, and the shortest of those paths
-## wins; ties go to a mess before a bin, then to the lower id. A job it has no
-## way to never uses up the bound, so one it can reach is always found. A job
-## outside the bound can lose to a nearer one by a straight line that is
-## longer by path. Nothing is random.
+## SEARCH_CANDIDATES of them have a path or MAX_PATH_TRIES paths were tried,
+## whichever comes first, and the shortest path found wins; ties go to a mess
+## before a bin, then to the lower id. A few jobs it has no way to never hide
+## a reachable one behind them; more than MAX_PATH_TRIES - 1 nearer
+## unreachable jobs can, until some are cleaned (the bounded cost, paid once a
+## beat while its searches fail). A job outside the bound can lose to a nearer
+## one by a straight line that is longer by path. Nothing is random.
 
 ## Ticks of cleaning, by MessSim.Kind (LITTER, SPILL, TOILET). Tuning values: a
 ## check-in takes PassengerSim.CHECKIN_TICKS (60).
@@ -28,6 +30,12 @@ const GROWN_EXTRA_TICKS := 30
 const EMPTY_TICKS := 40
 ## How many jobs with a path one search compares.
 const SEARCH_CANDIDATES := 6
+## The most paths one search tries, found or not: a cleaner with no way to
+## most jobs (no entrance, so no reach regions to filter by) stops here.
+const MAX_PATH_TRIES := 12
+
+## How many paths nearest() has tried, for tests and profiling.
+static var path_calls := 0
 
 
 ## How long `m` works at its job once it arrives: by the mess's kind (more for
@@ -115,7 +123,9 @@ static func nearest(staff: StaffSim, m: StaffMember) -> Dictionary:
 	var best := {}
 	var best_mm := 0
 	var reached := 0
-	for entry: Array in found:
+	for i in mini(found.size(), MAX_PATH_TRIES):
+		var entry: Array = found[i]
+		path_calls += 1
 		var way := StaffPosts.path_in(staff, m, entry[3])
 		if way.is_empty():
 			continue
