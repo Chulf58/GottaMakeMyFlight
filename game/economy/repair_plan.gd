@@ -88,6 +88,8 @@ const LEG_DEFS: Array[StringName] = [&"checkin_desk", &"security_scanner", &"exi
 const MAX_CANDIDATES := 24
 const MAX_TRIES := 12
 const MAX_ATTEMPTS := 48
+## New entrance spots kept per grid column on a site (_site_door_spots()).
+const SITE_SPOTS_PER_COLUMN := 2
 const UNREACHED := 1 << 30
 ## The side each walkable cell is marked with.
 const LAND := 1
@@ -326,8 +328,8 @@ func _plan() -> bool:
 ## repair buys at most one of each essential, and one that stays in that area
 ## floors no more cells than this, so the player gets enough and may get more.
 ## Without a shell facade the floor must be walled in (RepairEnclosure), so a
-## plain wall round the area's outline is added; a repair whose floor winds
-## about inside the area may need more walls than that.
+## plain wall is added for every edge of the area's cells that could need one
+## (_open_edges()).
 func _fallback_price() -> int:
 	var total := 0
 	for def_id in [&"entrance_door", &"checkin_desk", &"security_scanner", &"exit_door"]:
@@ -347,9 +349,29 @@ func _fallback_price() -> int:
 			if _grid.floor_at(cell) == BuildGrid.FLOOR_NONE and not _no_floor.has(cell):
 				total += _price_of_floor(cell)
 	if not _grid.shell_border:
-		var outline := 2 * (area.size.x + area.size.y)
-		total += outline * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
+		total += _open_edges(area) * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
 	return total
+
+
+## How many edges of the cells in `area` have no wall and floor on at most one
+## side. RepairEnclosure walls only an edge with no wall between floor and a
+## cell with no floor; a repair never takes floor up, and a wall it takes down
+## lies on its walk, which it floors on both sides. So a repair that stays in
+## `area` places at most this many walls.
+func _open_edges(area: Rect2i) -> int:
+	var counted := {}
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			for side in 4:
+				var next := cell + BuildGrid.SIDE_STEP[side]
+				if _grid.wall_kind(cell, side) != BuildGrid.WallKind.NONE:
+					continue
+				var floored := _grid.floor_at(cell) != BuildGrid.FLOOR_NONE
+				if floored and _grid.floor_at(next) != BuildGrid.FLOOR_NONE:
+					continue
+				counted[RepairEnclosure.edge_key(cell, side)] = true
+	return counted.size()
 
 
 ## Repairs `leg` and every leg after it, backtracking over this leg's
@@ -692,10 +714,13 @@ func _door_sources(def_id: StringName, reached := false) -> Array:
 
 ## Where a door may stand on a site, as [cell, facing], each facing out over
 ## the grid edge `edge` leads to (the road for an entrance, the plane for an
-## exit) with a walk there down `to_edge`. An entrance takes one spot per
-## column, the free one nearest the road: with every cell a spot, each cell
-## would be the cheapest search source of itself and no desk could stand
-## beside one, and the scan of all 13,760 spots took over 200 ms.
+## exit) with a walk there down `to_edge`. An entrance takes at most
+## SITE_SPOTS_PER_COLUMN spots per column, the free ones nearest the road
+## whose service cell is not boxed in by objects (_boxed_in()); a column
+## with more such spots sets _capped, so a plan that fails is priced by
+## _fallback_price(). With every cell a spot, each cell would be the cheapest
+## search source of itself and no desk could stand beside one, and the scan
+## of all 13,760 spots took over 200 ms.
 func _site_door_spots(def_id: StringName, edge: Vector2i, to_edge: PackedInt32Array) -> Array:
 	var facing := 0
 	while DoorPlacement.back_step(facing) != edge:
@@ -707,14 +732,32 @@ func _site_door_spots(def_id: StringName, edge: Vector2i, to_edge: PackedInt32Ar
 				spots.append([Vector2i(x, y), facing])
 		return spots
 	for x in _grid.size.x:
+		var kept := 0
 		for y in range(_grid.size.y - 1, -1, -1):
 			var door := Vector2i(x, y)
-			if not _door_spot_free(door, door + TerminalLayout.front_of(facing), facing):
+			var inside := door + TerminalLayout.front_of(facing)
+			if not _door_spot_free(door, inside, facing) or _boxed_in(inside, door):
 				continue
-			if SiteRoutes.reaches(_grid, _site, door, edge, edge, to_edge):
-				spots.append([door, facing])
+			if not SiteRoutes.reaches(_grid, _site, door, edge, edge, to_edge):
+				continue
+			if kept == SITE_SPOTS_PER_COLUMN:
+				_capped = true
 				break
+			spots.append([door, facing])
+			kept += 1
 	return spots
+
+
+## Whether the search could not step on from `inside` to any neighbour but
+## `door`: each holds an object, must stay without floor or is off the grid.
+func _boxed_in(inside: Vector2i, door: Vector2i) -> bool:
+	for step in BuildGrid.SIDE_STEP:
+		var next := inside + step
+		if next == door or not _grid.in_bounds(next):
+			continue
+		if _grid.object_at(next) == 0 and not _no_floor.has(next):
+			return false
+	return true
 
 
 func _door_spot_free(door: Vector2i, inside: Vector2i, facing: int) -> bool:

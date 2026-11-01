@@ -106,7 +106,7 @@ func has_working_path() -> bool:
 func repair_plan() -> RepairPlan:
 	_watch_grid()
 	if _plan == null:
-		_plan = RepairPlan.make(_sim.grid, _sim.shell)
+		_plan = RepairPlan.make(_sim.grid, _sim.shell, _sim.site)
 		_bound = _price_of(_plan)
 	return _plan
 

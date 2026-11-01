@@ -56,15 +56,17 @@ static func may_enter(sim: PassengerSim, p: Passenger) -> bool:
 
 
 ## Checks every walker outside after a graph change (see the class notes).
-## Does nothing without a site.
+## Does nothing without a site. Each distance field it searches (to the plane,
+## to each entrance) is worked out once per call, however many walkers use it.
 static func revalidate(sim: PassengerSim) -> void:
 	if sim.site == null:
 		return
 	var to_plane := PackedInt32Array()
+	var to_doors := {}
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if p.stage == Passenger.Stage.SPAWNED:
-			_check_arrival(sim, p)
+			_check_arrival(sim, p, to_doors)
 		elif p.stage == Passenger.Stage.APRON:
 			var door := sim.layout.door_cell(sim.grid, p.exit_object)
 			if _clear_ahead(sim, p, door):
@@ -85,7 +87,8 @@ static func revalidate(sim: PassengerSim) -> void:
 
 ## A road walker keeps its walk while its entrance is in use and the walk is
 ## clear, and otherwise takes the shortest walk to an entrance in use.
-static func _check_arrival(sim: PassengerSim, p: Passenger) -> void:
+## `to_doors` keeps each entrance's distance field (entrance id -> field).
+static func _check_arrival(sim: PassengerSim, p: Passenger, to_doors: Dictionary) -> void:
 	var entrance := _entrance_at(sim, p.at)
 	if sim.layout.passenger_entrances.has(entrance) and _clear_ahead(sim, p, p.at):
 		_walk_on(p)
@@ -94,7 +97,7 @@ static func _check_arrival(sim: PassengerSim, p: Passenger) -> void:
 	var best_mm := 0
 	var best_door := 0
 	for door in sim.layout.passenger_entrances:
-		var walk := _walk_to(sim, p, door)
+		var walk := _walk_to(sim, p, door, to_doors)
 		if walk.is_empty():
 			continue
 		var mm := _length_mm(walk)
@@ -111,8 +114,11 @@ static func _check_arrival(sim: PassengerSim, p: Passenger) -> void:
 
 ## The walk from where `p` stands to entrance `door`, or empty. Off the grid
 ## (on the road) it walks back to the road point and in along the entrance's
-## walk; on the grid over open ground to the cell beyond the door.
-static func _walk_to(sim: PassengerSim, p: Passenger, door: int) -> Array[Vector3]:
+## walk; on the grid over open ground to the cell beyond the door, down the
+## door's field in `to_doors`, searched on first use.
+static func _walk_to(
+	sim: PassengerSim, p: Passenger, door: int, to_doors: Dictionary
+) -> Array[Vector3]:
 	var grid := sim.grid
 	var here := p.apron_position()
 	var route: Array[Vector2i] = sim.layout.outside_routes[door]
@@ -120,13 +126,15 @@ static func _walk_to(sim: PassengerSim, p: Passenger, door: int) -> Array[Vector
 	if not grid.in_bounds(grid.world_to_cell(here)):
 		walk.append_array(SiteRoutes.arrival(grid, sim.site, route))
 		return walk
-	var seeds: Array[Vector2i] = []
-	if route.size() > 1:
-		seeds.append(route[1])
-	else:
-		# The door stands on the road edge: out to the road first.
-		seeds = SiteRoutes.edge_cells(grid, sim.site, SiteDefinition.ROAD_STEP)
-	var cells := _cells_from(sim, here, SiteRoutes.distances(grid, sim.site, seeds))
+	if not to_doors.has(door):
+		var seeds: Array[Vector2i] = []
+		if route.size() > 1:
+			seeds.append(route[1])
+		else:
+			# The door stands on the road edge: out to the road first.
+			seeds = SiteRoutes.edge_cells(grid, sim.site, SiteDefinition.ROAD_STEP)
+		to_doors[door] = SiteRoutes.distances(grid, sim.site, seeds)
+	var cells := _cells_from(sim, here, to_doors[door])
 	if cells.is_empty():
 		return [] as Array[Vector3]
 	for cell in SiteRoutes.corners(cells):
