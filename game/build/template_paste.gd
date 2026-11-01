@@ -176,9 +176,6 @@ func plan_at(cell: Vector2i) -> Dictionary:
 	var grid := _mode.grid
 	var edits := library.get_template(armed).plan(cell, turns, grid)
 	var scratch := BuildUndo.trial_copy_of(grid)
-	if scratch == null:
-		push_error("TemplatePaste.plan_at: the grid could not be copied to check the paste")
-		return {"edits": edits, "result": BuildResult.refused(BuildResult.Reason.NONE)}
 	var result := scratch.apply_sequence(edits, BeltShaper.crossing_problem)
 	if result.ok:
 		var near := BeltShaper.around(_cells(library.get_template(armed).rect_at(cell, turns)))

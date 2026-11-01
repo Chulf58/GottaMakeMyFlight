@@ -23,14 +23,10 @@ static func commit(grid: BuildGrid, receipt: BuildReceipt, wallet: Wallet) -> Bu
 		return money
 	var edits := receipt.undo_edits()
 	var rule := rule_problem
-	var snapshot := grid.to_snapshot()
-	var scratch := trial_copy_of(grid, snapshot)
-	if scratch == null:
-		push_error("BuildUndo.commit: the grid could not be copied to check the undo")
-		return BuildResult.refused(BuildResult.Reason.NONE)
-	var trial := scratch.apply_sequence(edits, rule)
+	var trial := trial_copy_of(grid).apply_sequence(edits, rule)
 	if not trial.ok:
 		return trial
+	var snapshot := grid.to_snapshot()
 	var mark := grid.hold_signals()
 	var result := grid.apply_sequence(edits, rule)
 	if not result.ok:
@@ -44,25 +40,17 @@ static func commit(grid: BuildGrid, receipt: BuildReceipt, wallet: Wallet) -> Bu
 	return result
 
 
-## A copy of `grid` (from `snapshot`, its to_snapshot() when empty) to try
-## edits on before the live grid takes them, or null when the snapshot does not
-## load (from_snapshot() pushed why). It keeps the grid's class: a site grid's
-## copy is a SiteGrid carrying the same site and guard, so the trial refuses
-## what the live grid would (an edit inside the plane's area), instead of the
-## live grid refusing it after the trial took it. Every trial copy of a grid
-## edits may then reach (an undo, a template paste, the starter shell, the
-## debug interior) is made here.
-static func trial_copy_of(grid: BuildGrid, snapshot := {}) -> BuildGrid:
-	var copy: BuildGrid
-	var site_grid := grid as SiteGrid
-	if site_grid == null:
-		copy = BuildGrid.new(grid.size, grid.origin)
-	else:
-		copy = SiteGrid.new(site_grid.site)
-		(copy as SiteGrid).guard = site_grid.guard
-	if not copy.from_snapshot(grid.to_snapshot() if snapshot.is_empty() else snapshot):
-		return null
-	return copy
+## A copy of `grid` to try edits on before the live grid takes them, never
+## null: BuildGrid.clone(), which keeps the grid's class. A site grid's copy is
+## a SiteGrid carrying the same site and guard, so the trial refuses what the
+## live grid would (an edit inside the plane's area), instead of the live grid
+## refusing it after the trial took it. Every trial copy of a grid edits may
+## then reach (an undo, a template paste, the starter shell, the debug
+## interior) is made here. A copy through to_snapshot() and from_snapshot()
+## took about 0.7 s on the 86x150 site, every undo and every cell the paste
+## preview moved to; a clone takes a few milliseconds.
+static func trial_copy_of(grid: BuildGrid) -> BuildGrid:
+	return grid.clone()
 
 
 ## The rules beyond BuildGrid.validate() for one undo edit on `grid` as the

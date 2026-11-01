@@ -12,7 +12,9 @@ extends RefCounted
 ## Every change goes through validate() and apply() with a BuildEdit, so the
 ## preview, the click and a snapshot load share one set of rules. apply()
 ## then relinks the A* graph around the changed cells only (once for a whole
-## list of edits, see apply_batch()).
+## list of edits, see apply_batch()). The graph is built on a load and when a
+## path is first asked for, not by a new grid or a clone(): a check that never
+## asks for a path does not pay for it (about 0.2 s on the 86x150 site).
 ##
 ## Each floor cell, wall edge and object keeps the purchase price it was
 ## placed with (BuildEdit.paid), so a removal refunds a share of what was
@@ -129,7 +131,9 @@ var _outside := PackedByteArray()
 ## Set by _commit() when an edit changed a wall or a door object, so the
 ## enclosure is worked out again before the graph is relinked.
 var _enclosure_stale := false
-var _pathing := GridPathing.new()
+## The passenger A* graph, kept up to date by every relink once built; null
+## until a load or the first find_path() builds it.
+var _pathing: GridPathing = null
 ## The staff A* graph (GridPathing with `staff` set), built when a staff path
 ## is first asked for and kept up to date by the same relinks from then on;
 ## null until then, and after a load or a rebuild.
@@ -143,7 +147,6 @@ var _hold_depth := 0
 ## Vector3; null centres the grid on the world origin at height 0.
 func _init(grid_size := DEFAULT_SIZE, grid_origin: Variant = null) -> void:
 	_reset(grid_size, centred_origin(grid_size) if grid_origin == null else grid_origin)
-	_pathing.rebuild(self)
 
 
 ## The origin that centres a grid of `grid_size` on the world origin at y 0.
@@ -300,6 +303,9 @@ func can_staff_route(from: Vector2i, to: Vector2i) -> bool:
 
 
 func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
+	if _pathing == null:
+		_pathing = GridPathing.new()
+		_pathing.rebuild(self)
 	return _pathing.find_path(self, from, to)
 
 
@@ -920,6 +926,54 @@ func from_snapshot(data: Dictionary) -> bool:
 	return true
 
 
+## A copy of this grid to try edits on: the same data as from_snapshot() of
+## to_snapshot() would give (objects in id order), copied as it stands rather
+## than placed again, and of the same class (_blank_copy()). Its A* graphs are
+## built when a path is first asked for; its signals are its own, and it has
+## no recorder. On the 86x150 site a snapshot copy took about 0.7 s.
+func clone() -> BuildGrid:
+	var copy := _blank_copy()
+	copy.size = size
+	copy.origin = origin
+	copy.check_staff_reach = check_staff_reach
+	copy._floor = _floor.duplicate()
+	copy._zone = _zone.duplicate()
+	copy._h_walls = _h_walls.duplicate()
+	copy._v_walls = _v_walls.duplicate()
+	copy._occupant = _occupant.duplicate()
+	copy._reserved = _reserved.duplicate()
+	copy._spots = StaffSpots.new()
+	copy._objects = {}
+	var ids := object_ids()
+	ids.sort()
+	for object_id in ids:
+		var record: Dictionary = _objects[object_id].duplicate(true)
+		copy._objects[object_id] = record
+		copy._spots.add(
+			object_id, StaffSpots.cell_of(record["def"], record["anchor"], record["facing"])
+		)
+	copy._next_object_id = _next_object_id
+	copy._rooms = {}
+	for room_id in room_ids():
+		copy._rooms[room_id] = _rooms[room_id].duplicate(true)
+	copy._room_at = _room_at.duplicate()
+	copy._next_room_id = _next_room_id
+	copy._floor_paid = _floor_paid.duplicate()
+	copy._h_paid = _h_paid.duplicate()
+	copy._v_paid = _v_paid.duplicate()
+	copy._outside = _outside.duplicate()
+	copy._enclosure_stale = _enclosure_stale
+	copy._staff_reach = _staff_reach.duplicate()
+	copy._staff_reach_known = _staff_reach_known
+	return copy
+
+
+## An empty grid of this grid's class for clone() to fill. A subclass whose
+## constructor takes other arguments overrides it (SiteGrid).
+func _blank_copy() -> BuildGrid:
+	return BuildGrid.new(size, origin)
+
+
 func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	size = grid_size
 	origin = grid_origin
@@ -976,6 +1030,7 @@ func _load_cells(data: Dictionary) -> String:
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
 	_outside = TerminalEnclosure.outside_cells(self, _h_walls, _v_walls)
+	_pathing = GridPathing.new()
 	_pathing.rebuild(self)
 	_staff_pathing = null
 	return ""
@@ -1347,10 +1402,15 @@ func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
 		_outside = after
 	if _staff_pathing != null and not dirty.is_empty():
 		_staff_pathing.update(self, dirty)
-	var cells := _pathing.update(self, dirty)
+	# With no graph yet, the cells it would relink: the one built later links
+	# the grid as it is then.
+	var cells := (
+		GridPathing.neighbourhood(self, dirty) if _pathing == null else _pathing.update(self, dirty)
+	)
 	if flipped.is_empty():
 		return cells
-	_pathing.set_indoor(self, flipped)
+	if _pathing != null:
+		_pathing.set_indoor(self, flipped)
 	var seen := {}
 	for cell in cells:
 		seen[cell] = true

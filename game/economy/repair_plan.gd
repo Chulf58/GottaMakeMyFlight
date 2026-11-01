@@ -120,8 +120,9 @@ var fallback_price := -1
 var undo_failures := 0
 
 var _grid: BuildGrid
-## The snapshot of the grid make() was given, for _failing_leg().
-var _source := {}
+## A clone of the grid as make() was given it (its part on a site), for
+## _failing_leg() to rebuild the finished plan on.
+var _start: BuildGrid
 var _layout := TerminalLayout.new()
 var _site: SiteDefinition
 var _floor_price := -1
@@ -155,6 +156,8 @@ var _bad_leg := -1
 var _marks: Array[int] = [0, 0, 0]
 ## Set when a cap cut the choices short.
 var _capped := false
+## Set when the plan is made on part of a site only (_made_on()).
+var _partial := false
 
 
 ## Whether a new passenger can walk entrance, desk, scanner and exit on `grid`
@@ -236,24 +239,45 @@ static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 ## (_site_area()), with the site moved into that copy's frame (_site_within()),
 ## and its edits are moved back to `grid`'s cells. The whole 86x150 site took
 ## about 3 s, and RescueGrant.prepare() makes this plan on the main thread
-## before a new game's first frame and after every load. A repair that would
-## need ground outside that part is not found there.
+## before a new game's first frame and after every load. That part can leave
+## out the only repair (one whose floor or walk outside needs ground beyond
+## it), so a search there that finds none is no answer: the plan is made again
+## on the whole grid, which is slow but rare, and that search's result stands,
+## its fallback_price priced on the whole grid when its caps run out.
 static func make(grid: BuildGrid, site: SiteDefinition = null, stand := {}) -> RepairPlan:
-	var plan := RepairPlan.new()
 	var source := grid.to_snapshot()
-	var area := Rect2i(Vector2i.ZERO, grid.size)
+	var whole := Rect2i(Vector2i.ZERO, grid.size)
+	if site == null:
+		return _made_on(grid, source, whole, null, stand)
+	var area := _site_area(grid, source, site, stand)
+	var plan := _made_on(grid, source, area, site, stand)
+	if plan.ok or area == whole:
+		return plan
+	var on_whole := _made_on(grid, source, whole, site, stand)
+	on_whole.undo_failures += plan.undo_failures
+	return on_whole
+
+
+## The plan made on `area` of `grid` (whose to_snapshot() is `source`), with
+## its edits in `grid`'s cells. On a site, a plan made on less than the whole
+## grid is partial: one that finds no repair pushes nothing and prices no
+## fallback, since make() goes on to the whole grid.
+static func _made_on(
+	grid: BuildGrid, source: Dictionary, area: Rect2i, site: SiteDefinition, stand: Dictionary
+) -> RepairPlan:
+	var plan := RepairPlan.new()
 	if site != null:
-		area = _site_area(grid, source, site, stand)
+		plan._partial = area != Rect2i(Vector2i.ZERO, grid.size)
 		source = _cropped(source, area)
 		site = _site_within(site, area)
 	plan._site = site
 	plan._layout.site = site
 	plan._layout.stand = stand
 	plan._grid = BuildGrid.new(area.size, _origin_of(grid.origin, area))
-	plan._source = source
-	if not plan._grid.from_snapshot(plan._source):
+	if not plan._grid.from_snapshot(source):
 		push_error("RepairPlan: the grid could not be copied")
 		return plan
+	plan._start = plan._grid.clone()
 	# The search builds leg by leg, so a piece may stand on a corridor until a
 	# later leg's floor goes round it; _failing_leg() judges staff reach on the
 	# finished plan, floors and walls first.
@@ -468,6 +492,8 @@ func _plan() -> bool:
 	if _solve(Leg.DESK, sources):
 		edits = RepairEnclosure.without_undone_walls(_ordered(edits))
 		return true
+	if _partial:
+		return false
 	if _capped:
 		push_warning("RepairPlan: no repair within the caps; pricing a conservative one")
 		fallback_price = _fallback_price()
@@ -1057,9 +1083,7 @@ func _failing_leg() -> int:
 		here = _next_cells(_grid, _layout, here, each)
 		if here.is_empty():
 			return each
-	var trial := BuildGrid.new(_grid.size, _grid.origin)
-	if not trial.from_snapshot(_source):
-		return Leg.DESK
+	var trial := _start.clone()
 	for edit in _ordered(edits):
 		if not trial.apply(edit).ok:
 			var at := edits.find(edit)

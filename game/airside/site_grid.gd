@@ -8,11 +8,12 @@ extends BuildGrid
 ## moves-110-m-north-stand-snaps-to, point 4) whether the edit builds where a
 ## plane at the stand still needs to go. Every way an edit reaches the grid (a
 ## click, an area drag, an undo, a template) goes through validate(), so one
-## check covers them all. The trial copy BuildUndo checks an undo on is a
-## SiteGrid carrying the same guard, so it refuses what the live grid would.
+## check covers them all. Its clone() is a SiteGrid with the same site and
+## guard, so every trial copy BuildUndo.trial_copy_of() makes (an undo, a
+## template paste, the starter shell) refuses what the live grid would.
 ##
-## Not guaranteed: the other trial copies (templates, repair plans) are plain
-## BuildGrids without the guard.
+## Not guaranteed: the repair plan works on plain BuildGrid copies of a part
+## of the site (RepairPlan), without the guard.
 
 var site: SiteDefinition
 ## Called as guard(grid, edit) before every validation; returns a refusal or
@@ -31,3 +32,9 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 		if problem != null:
 			return problem
 	return super(edit, check_reach)
+
+
+func _blank_copy() -> BuildGrid:
+	var copy := SiteGrid.new(site)
+	copy.guard = guard
+	return copy
