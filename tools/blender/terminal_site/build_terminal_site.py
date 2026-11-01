@@ -34,13 +34,17 @@ What it keeps and drops (measured on the shell, see the census this script print
     dip:   an island lying wholly below y 0.15 (the two dips at x -12..12 by the old
            entrances, landside z -64..-60 and airside z -100..-96, and their markings);
     dip kerb: an upright island within x -12.35..12.35 (the dips' kerbs);
-    inner skirt: the paving's upright edge faces at x -40 and 40, which the fill buries.
-  It keeps the paving pads at y 0.2, the tile accents 3 mm above them and the outer
-  skirts at z -100 and -60. fill_plot() then paves the strips x -43..-40 and 40..43 that
+    inner skirt: the paving's upright edge faces at x -40 and 40, which the fill buries;
+    tile accent: a flat island lying 3 mm above the pads (y 0.2031), the dark checker
+           tile patches, which read as a glitch on the empty plot (decision
+           buildable-land-shows-as-an-outline-only-in-build-mode-the-da).
+  It keeps the paving pads at y 0.2 and the outer skirts at z -100 and -60.
+  fill_plot() then paves the strips x -43..-40 and 40..43 that
   the Toon paving stops short of and the two dips (with the airside dip's flared mouth),
   each top face on the UV of the nearest existing pad corner, and closes the new edges
-  with skirts down to y 0. The re-read proves the plot flat (up-facing heights only 0.2
-  and 0.2031) and covered (a 0.25 m sample grid over the plot, every sample on paving).
+  with skirts down to y 0. The re-read proves the plot flat (up-facing heights only 0.2)
+  and covered (a 0.25 m sample grid over the plot, every sample on paving), so the pads
+  run on unbroken under the dropped accents.
 - Poles: dropped. Every Poles island stands under the landside canopy between x -25.85 and
   25.85 and is part of its supports and lamps; the canopy goes, so they go.
 - Upper, Canopy, Facade, Porch_1..8, Door_1..8, Doorway_1..8, Lights (all of it): dropped.
@@ -75,11 +79,13 @@ SIGN_MIN_Y = 0.35  # any island reaching above this is a sign or facade remnant
 PLOT = (-43.0, 43.0, -100.0, -60.0)  # x0, x1, z0, z1 of the player's build plot
 PAVE_Y = 0.2  # the Toon paving pads' top; the plot is paved flat at this height
 PAVE_MAX_Y = 0.21  # above this an island is a raised paving block (tops 0.219, 0.238, 0.257)
+ACCENT_MIN_LIFT = 0.001  # a flat island wholly this far over PAVE_Y is a tile accent (y 0.2031)
 DIP_MAX_Y = 0.15  # below this an island is part of a dip (pads 0.10, markings 0.1065)
 DIP_HALF_X = 12.0  # the dips run x -12..12
 LOT_HALF_X = 40.0  # the Toon paving stops at x -40 and 40
 BACK_FLARE = ((14.0, -100.0), (13.0, -99.73), (12.27, -99.0), (12.0, -98.0))  # east half; west mirrors
 KEEP = ("Road", "Lot")
+SHORT_ROWS = ("raised block", "dip", "tile accent")  # census lists only the first 3 of these
 ROOT = "TP_Airport_Site_ROOT"
 
 report = []
@@ -164,6 +170,8 @@ def classify(lo, hi):
         return "dip kerb"
     if upright and hi.x - lo.x < 0.01 and abs(abs(lo.x) - LOT_HALF_X) < 0.01:
         return "inner skirt"
+    if not upright and lo.y > PAVE_Y + ACCENT_MIN_LIFT:
+        return "tile accent"
     return "keep"
 
 
@@ -212,13 +220,13 @@ def filter_lot(lot):
     for c in sorted(dropped):
         rows = dropped[c]
         rep("  dropped %-12s islands %4d tris %5d" % (c, len(rows), sum(r[2] for r in rows)))
-        for k, nf, nt, box in rows if c != "raised block" and c != "dip" else rows[:3]:
+        for k, nf, nt, box in rows if c not in SHORT_ROWS else rows[:3]:
             rep("    island %4d faces %3d tris %3d %s" % (k, nf, nt, box))
-        if c in ("raised block", "dip") and len(rows) > 3:
+        if c in SHORT_ROWS and len(rows) > 3:
             rep("    ... and %d more like these" % (len(rows) - 3))
     for kind in sorted(kinds):
         rep("  kept    %-24s islands %4d tris %5d" % (kind, kinds[kind][0], kinds[kind][1]))
-    want = ["dip", "dip kerb", "inner skirt", "raised block", "sign", "slab"]
+    want = ["dip", "dip kerb", "inner skirt", "raised block", "sign", "slab", "tile accent"]
     if sorted(dropped) != want:
         die("expected the filter to drop %s, got %s" % (want, sorted(dropped)))
     if skirt_uv is None or not pad_loops:
@@ -566,13 +574,13 @@ def verify(site, shell, expected, added):
     if high or in_slab_high:
         die("written Lot still holds building geometry")
     # The plot is flat paving: every up-facing Lot vertex inside it (5 cm in from its edges)
-    # sits at PAVE_Y or on a tile accent 3 mm above it, and nothing is higher.
+    # sits at PAVE_Y (the tile accents 3 mm above it are dropped), and nothing is higher.
     inner = [(p, n) for p, n in zip(lot["pts"], lot["nrm"])
              if px0 + 0.05 < p.x < px1 - 0.05 and pz0 + 0.05 < p.z < pz1 - 0.05]
     up_y = sorted({round(p.y, 4) for p, n in inner if n.y > 0.9})
     top = max(p.y for p, _n in inner)
     rep("LOT plot surface: up-facing heights inside the plot %s; highest point inside %.4f" % (up_y, top))
-    if not up_y or min(up_y) < PAVE_Y - 1e-4 or top > PAVE_Y + 0.004:
+    if up_y != [PAVE_Y] or top > PAVE_Y + 1e-4:
         die("the plot is not flat paving at y %.2f" % PAVE_Y)
     # Coverage: a grid of 0.5 m samples over the plot; each must lie on an up-facing Lot
     # triangle at PAVE_Y or above (no hole, no dip, no bare strip).
