@@ -13,7 +13,9 @@ Godot/glTF local space, x from the entrance (-x) to the back, y up, z across):
   two kerbed islands (y 0.2, z 4.75..6.15 either side, from x -7.0) that curve back to
   the side kerbs.
 - The barrier posts stand on x -7 at z +-7 (their bases x -7.3..-6.7, y 0..0.5), outside
-  the islands, on the lawn.
+  the islands, on the lawn. The two arms are separate child objects,
+  TP_Parking_01A_Entry_Barrier (hinge z +7) and TP_Parking_01A_Exit_Barrier (hinge z -7),
+  both hinged at x -7, y 1.5; edit() checks their hinges and arm boxes (BARRIERS) first.
 
 In the game LandsidePlaces turns the lot so local -x faces the road and puts the
 barrier line (local x -7) on the gate of lot spot 0 (world z -37.5). The road's sidewalk
@@ -50,6 +52,20 @@ TAB_END_X = -6.5
 TAB_INNER_Z = 6.3
 # The islands' outer edge at the front (z +-6.15, x -7.0..-6.23): the tabs keep clear of it.
 ISLAND_OUTER_Z = 6.15
+# The two barrier arms, as measured on the FBX import: parent-local hinge (in the mesh's
+# Godot axes) and the arm mesh's axis-aligned box about it. The tabs are placed from the
+# posts at these z, and the walk clearance in the tests from the same hinges.
+BARRIER_X = -7.0
+BARRIER_Y = 1.5
+BARRIER_Z = 7.0
+ARM_REACH = 6.6463
+ARM_HALF_X = 0.05
+ARM_HALF_Z = 0.25
+# name suffix -> (hinge z, mesh box low, mesh box high), the box in the hinge's own axes.
+BARRIERS = {
+    "Entry_Barrier": (BARRIER_Z, (-ARM_HALF_X, -ARM_HALF_Z, -ARM_REACH), (ARM_HALF_X, ARM_HALF_Z, ARM_HALF_Z)),
+    "Exit_Barrier": (-BARRIER_Z, (-ARM_HALF_X, -ARM_HALF_Z, -ARM_HALF_Z), (ARM_HALF_X, ARM_HALF_Z, ARM_REACH)),
+}
 TOL = 0.011
 
 
@@ -78,6 +94,36 @@ def _throat_floor(bm):
     if not front:
         raise Fail("the throat floor does not reach x %.2f" % FRONT_X)
     return max(faces, key=lambda f: f.calc_area()), len(faces)
+
+
+def _barriers_match(objs, parent):
+    """Fail unless the vendor file has exactly one entry and one exit barrier, each a child
+    of the lot mesh at its measured hinge, unrotated and unscaled, with its measured arm
+    box. The tabs and the walk clearance are placed from these numbers, so a moved or
+    resized barrier must stop the build, not get an apron cut for the old position."""
+    for suffix, (hinge_z, box_lo, box_hi) in BARRIERS.items():
+        name = "%s_%s" % (MESH_NAME, suffix)
+        found = [o for o in objs if o.name == name]
+        if len(found) != 1:
+            raise Fail("expected one %s, found %d" % (name, len(found)))
+        b = found[0]
+        if b.type != "MESH" or b.parent is not parent:
+            raise Fail("%s is not a mesh child of %s" % (name, MESH_NAME))
+        rel = parent.matrix_world.inverted() @ b.matrix_world
+        want = Vector((BARRIER_X, BARRIER_Y, hinge_z))
+        if (rel.translation - want).length > TOL:
+            raise Fail("%s hinge at %s, expected %s" % (name, _round(rel.translation), _round(want)))
+        if any(abs(rel.to_3x3()[i][j] - (1.0 if i == j else 0.0)) > TOL for i in range(3) for j in range(3)):
+            raise Fail("%s is rotated or scaled against %s" % (name, MESH_NAME))
+        vs = [v.co for v in b.data.vertices]
+        lo = tuple(min(v[i] for v in vs) for i in range(3))
+        hi = tuple(max(v[i] for v in vs) for i in range(3))
+        if any(not _near(lo[i], box_lo[i]) or not _near(hi[i], box_hi[i]) for i in range(3)):
+            raise Fail("%s box %s..%s, expected %s..%s" % (name, _round(lo), _round(hi), box_lo, box_hi))
+
+
+def _round(v):
+    return tuple(round(c, 3) for c in v)
 
 
 def _islands_clear(bm):
@@ -168,6 +214,7 @@ def edit(objs):
     if len(mesh_objs) != 1:
         raise Fail("expected one %s mesh, found %d" % (MESH_NAME, len(mesh_objs)))
     o = mesh_objs[0]
+    _barriers_match(objs, o)
     src = bmesh.new()
     src.from_mesh(o.data)
     src.normal_update()
