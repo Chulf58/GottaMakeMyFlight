@@ -89,6 +89,8 @@ func _run() -> void:
 		for group in 4:
 			await _seated(group, close)
 		_save(_sheet(close, 9, 240), "seated_close_sheet.png", SEAT_OUT_REL)
+	if "cafe" in parts:
+		await _cafe_overlaps()
 	print("PROBE done failed=", _failed)
 	quit(1 if _failed else 0)
 
@@ -528,6 +530,22 @@ func _overlaps(group: int, people: Array[Node3D], chairs: Node3D, subjects: Dict
 						break
 				print("SWEEP %s dy=%.3f min_dz=%.3f" % [subjects[people[k]], dy, found])
 		people[k].position += back
+
+
+## A measurement, not a check: each body seated in sit_idle on the cafe
+## table's left chair as CafeSim seats it (the chair's root, 0.55 m left of
+## the table's centre, facing the table; no seat shift), and CAFE_OVERLAP, the
+## body points inside the cafe_table piece (chairs and table are one mesh).
+func _cafe_overlaps() -> void:
+	_clear()
+	for body in PassengerLooks.BODIES.size():
+		var table := InteriorKit.instantiate(&"cafe_table")
+		_stage.add_child(table)
+		table.position = Vector3(0, 0, body * 3.0)
+		var chair := table.position + Vector3(-0.55, 0, 0)
+		var node := _person(body, 0, chair, PI / 2.0, 0.0, "sit_idle")
+		await _seek_all([node] as Array[Node3D], 0.0)
+		_overlap_total(node, table, "CAFE_OVERLAP", 0.0)
 
 
 func _seek_all(people: Array[Node3D], phase: float) -> void:
