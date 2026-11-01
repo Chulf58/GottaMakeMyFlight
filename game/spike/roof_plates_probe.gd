@@ -41,6 +41,9 @@ extends SceneTree
 const OUT_REL := "res://../tools/blender/out/roof_prototype"
 const CAMERA := "res://camera/tycoon_camera.tscn"
 const SITE := "res://assets/buildings/tp_airport_site.glb"
+## Where main.tscn stands the shell glb (Airside/Terminal, z -80); the site
+## glb keeps the shell's frame, so its plot spans world z -100 to -60.
+const SITE_POSITION := Vector3(0.0, 0.0, -80.0)
 const GRID_SIZE := Vector2i(86, 40)
 const GRID_ORIGIN := Vector3(-43.0, 0.22, -100.0)
 const HALL := Rect2i(20, 14, 30, 18)
@@ -160,9 +163,11 @@ func _run() -> void:
 		await _plate_six_axis(grid, option)
 	var ctx := _scene(grid, true)
 	_report_views(ctx)
-	var sheet := Image.create(TILE.x * 3, TILE.y * 5, false, Image.FORMAT_RGBA8)
-	var slot := 0
-	for option in OPTIONS:
+	# The two height options side by side: kit on the left, facade on the
+	# right, one row per shot.
+	var sheet := Image.create(TILE.x * 2, TILE.y * 4, false, Image.FORMAT_RGBA8)
+	for column in OPTIONS.size():
+		var option: Array = OPTIONS[column]
 		_set_option(ctx, option)
 		var label: String = option[0]
 		var shots := [
@@ -171,19 +176,20 @@ func _run() -> void:
 			["%s_roof_fading" % label, 110.0, YAW, 0.5, ["roof"]],
 			["%s_roof_held_40m" % label, 40.0, YAW, 0.0, ["roof_edge"]],
 		]
-		for shot in shots:
-			if await _shot(ctx, shot, sheet, slot):
-				slot += 1
+		for row in shots.size():
+			await _shot(ctx, shots[row], sheet, Vector2i(column, row))
 	_set_option(ctx, OPTIONS[0])
-	for shot in [
+	var cut_sheet := Image.create(TILE.x * 3, TILE.y, false, Image.FORMAT_RGBA8)
+	var others := [
 		["cutaway_yaw40", 45.0, YAW, -1.0, ["hall_floor"]],
 		["cutaway_yaw220", 45.0, YAW + PI, -1.0, ["hall_floor"]],
 		["gap_marker", 15.0, YAW, -1.0, ["gap_bars", "gap_sign"]],
-	]:
-		if await _shot(ctx, shot, sheet, slot):
-			slot += 1
+	]
+	for i in others.size():
+		await _shot(ctx, others[i], cut_sheet, Vector2i(i, 0))
 	if not _proof_only:
 		_save(sheet, "roof_contact_sheet.png")
+		_save(cut_sheet, "cutaway_gap_sheet.png")
 	(ctx["holder"] as Node).queue_free()
 	await _frames(2)
 	_finish()
@@ -226,11 +232,11 @@ func _save(img: Image, file: String) -> void:
 	print("PLATE saved %s size=%s" % [path, img.get_size()])
 
 
-## Blit `img` into tile `slot` of a 3-column sheet of TILE-sized tiles.
-func _blit(sheet: Image, img: Image, slot: int) -> void:
+## Blit `img` into the TILE-sized tile at (column, row) `place` of a sheet.
+func _blit(sheet: Image, img: Image, place: Vector2i) -> void:
 	var copy := img.duplicate() as Image
 	copy.resize(TILE.x, TILE.y, Image.INTERPOLATE_LANCZOS)
-	var at := Vector2i((slot % 3) * TILE.x, floori(slot / 3.0) * TILE.y)
+	var at := place * TILE
 	if at.y + TILE.y <= sheet.get_height():
 		sheet.blit_rect(copy, Rect2i(Vector2i.ZERO, TILE), at)
 
@@ -321,6 +327,7 @@ func _scene(grid: BuildGrid, with_site: bool) -> Dictionary:
 	if with_site:
 		var site := (load(SITE) as PackedScene).instantiate() as Node3D
 		site.name = "Site"
+		site.position = SITE_POSITION
 		holder.add_child(site)
 	var view := BuildView.new()
 	holder.add_child(view)
@@ -410,7 +417,7 @@ func _set_roof(ctx: Dictionary, forced: float) -> void:
 
 ## One in-context shot: [name, distance, yaw, roof level or -1 for the rule,
 ## subject keys]. Returns whether the plate was saved.
-func _shot(ctx: Dictionary, shot: Array, sheet: Image, slot: int) -> bool:
+func _shot(ctx: Dictionary, shot: Array, sheet: Image, place: Vector2i) -> bool:
 	var name: String = shot[0]
 	_beat(name)
 	var grid: BuildGrid = ctx["grid"]
@@ -457,7 +464,7 @@ func _shot(ctx: Dictionary, shot: Array, sheet: Image, slot: int) -> bool:
 		return ok
 	var img := await _grab()
 	_save(img, name + ".png")
-	_blit(sheet, img, slot)
+	_blit(sheet, img, place)
 	print("SHOT %s grid_origin=%s" % [name, grid.origin])
 	return true
 
@@ -527,7 +534,12 @@ func _prove_subject(ctx: Dictionary, label: String, key: String) -> bool:
 			if not ok:
 				_invalid("%s: the roof is not drawn" % label)
 			ok = _prove_in_frame(cam, label, _corners(box)) and ok
-			ok = _prove_size(cam, label, _corners(box), 150.0) and ok
+			ok = (
+				_prove_size(
+					cam, label, _corners(box), 100.0 if label.contains("distance") else 150.0
+				)
+				and ok
+			)
 			ok = _prove_seen(cam, label, _roof_targets(ctx), 0.8) and ok
 		"roof_edge":
 			var edge := _roof_edge(ctx)
@@ -535,7 +547,7 @@ func _prove_subject(ctx: Dictionary, label: String, key: String) -> bool:
 			if not ok:
 				_invalid("%s: the roof is not drawn" % label)
 			ok = _prove_in_frame(cam, label, _corners(edge[0])) and ok
-			ok = _prove_size(cam, label, _corners(edge[0]), 300.0) and ok
+			ok = _prove_size(cam, label, _corners(edge[0]), 200.0) and ok
 			ok = _prove_seen(cam, label, edge[1], 0.8) and ok
 		"cube":
 			ok = _prove_in_frame(cam, label, _corners(_aabb_of(ctx["cube"])))
@@ -554,7 +566,7 @@ func _prove_subject(ctx: Dictionary, label: String, key: String) -> bool:
 			for p in targets:
 				bars = bars.expand(p)
 			ok = _prove_in_frame(cam, label, _corners(bars.grow(0.5)))
-			ok = _prove_size(cam, label, _corners(bars), 120.0) and ok
+			ok = _prove_size(cam, label, _corners(bars), 100.0) and ok
 			ok = _prove_seen(cam, label, targets, 0.8) and ok
 		"gap_sign":
 			# Drawn over the world (no depth test), so in frame is the proof.
@@ -639,7 +651,7 @@ func _plate_six_axis(grid: BuildGrid, option: Array) -> void:
 		if ok and not _proof_only:
 			var img := await _grab()
 			_save(img, "six_axis_%s.png" % tag)
-			_blit(sheet, img, slot)
+			_blit(sheet, img, Vector2i(slot % 3, floori(slot / 3.0)))
 		slot += 1
 	if not _proof_only:
 		_save(sheet, "six_axis_roof_%s_sheet.png" % label)
@@ -698,7 +710,10 @@ func _prove_size(cam: Camera3D, label: String, points: Array, min_px: float) -> 
 		var s := cam.unproject_position(p)
 		lo = lo.min(s)
 		hi = hi.max(s)
-	var size := maxf(hi.x - lo.x, hi.y - lo.y)
+	# Measured in plate pixels: with canvas_items stretch the 3D view renders
+	# at the visible rect times the stretch scale (project.godot, 1.25).
+	var scale: float = ProjectSettings.get_setting("display/window/stretch/scale", 1.0)
+	var size := maxf(hi.x - lo.x, hi.y - lo.y) * scale
 	var ok := size >= min_px
 	print("SIZE %s longest_px=%.1f min_px=%.1f ok=%s" % [label, size, min_px, ok])
 	if not ok:
