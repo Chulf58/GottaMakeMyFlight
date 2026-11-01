@@ -10,8 +10,7 @@ extends RefCounted
 ## north of the wall line the exit stands in. It is pushed back PUSHBACK_M,
 ## turned to face north, and taxis north to the taxi lane at TAXI_LANE_Z.
 ##
-## A candidate exit needs its parked plane clear of the shared lane zone
-## (clears_lane()), a clear aircraft route (swept_rects(): the parked
+## A candidate exit needs a clear aircraft route (swept_rects(): the parked
 ## plane, the pushback and its swing, the way north to the taxi lane, with no
 ## floor, wall, object or site obstacle under any of it) and a passenger walk
 ## from the exit over open ground to the plane door (walk_of()). Candidates
@@ -32,8 +31,11 @@ const TAIL_M := 14.85
 const HALF_SPAN_M := 14.2
 ## Farthest any part of the plane reaches from its stand point.
 const SWING_RADIUS_M := 20.6
-## The gap between the wall line and the nose.
-const NOSE_GAP_M := 2.3
+## The gap between the wall line and the nose. 2.2 m (2.3 m in decision
+## plane-stand-design-airside-moves-110-m-north-stand-snaps-to) so that a
+## plane parked at the site's north row keeps its tail 0.05 m clear of the
+## shared lane zone (clears_lane()); at 2.3 m it reached 0.05 m into it.
+const NOSE_GAP_M := 2.2
 ## The port door: this far to the plane's left (+x, nose to +z) and behind the
 ## nose.
 const DOOR_SIDE_M := 3.5
@@ -101,8 +103,9 @@ static func lane_zone() -> Rect2:
 
 
 ## Whether the plane parked at `stand` stays out of the lane zone. One whose
-## tail reaches it would hold the shared lane for its whole turnaround, so it
-## is not a legal stand (the grid's north row misses by 5 cm).
+## tail reached it would hold the shared lane for its whole turnaround. Every
+## stand on the site does, the north row with 0.05 m to spare (NOSE_GAP_M);
+## test_shared_ground_holds.gd checks it.
 static func clears_lane(stand: Dictionary) -> bool:
 	return stand_point(stand).z - TAIL_M >= lane_zone().end.y
 
@@ -241,8 +244,6 @@ static func place(grid: BuildGrid, site: SiteDefinition, live: Dictionary) -> Di
 	for id in ids:
 		var stand := for_exit(grid, id)
 		if stand.is_empty() or not grid.is_passenger_cell(grid.get_object(id)["anchor"]):
-			continue
-		if not clears_lane(stand):
 			continue
 		if not aircraft_clear(grid, site, stand):
 			continue

@@ -31,8 +31,8 @@ const GATE := "gate"
 ## Cut points inside a phase, measured by test_shared_ground_holds.gd with
 ## PHASE_TICKS over stands across the whole site and the shortest taxi routes
 ## any stand can have, each with a margin of 10 or more ticks. The arriving
-## plane is off the runway by TAXI_IN + 239 (it is still on it as it turns off
-## the runway exit); the departing one is on it from TAXI_OUT + 343 and off the
+## plane is off the runway by TAXI_IN + 238 (it is still on it as it turns off
+## the runway exit); the departing one is on it from TAXI_OUT + 344 and off the
 ## lane by TAKEOFF + 28 (its tail swings over the lane as it lines up).
 const RUNWAY_VACATE_TICKS := 260
 const RUNWAY_ENTER_TICKS := 320

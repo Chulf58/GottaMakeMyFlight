@@ -16,8 +16,9 @@ const SITE := preload("res://build/terminal_site.tres")
 const FIRST := 3000
 ## Grid columns between sampled door lines; both edge columns are always in.
 const COLUMN_STEP := 6
-## Site wall rows sampled, from the deepest legal one (row 1) to the southmost.
-const ROWS: Array[int] = [1, 2, 4, 9, 20, 45, 90, 149]
+## Site wall rows sampled, from the north row (the deepest stand) to the
+## southmost.
+const ROWS: Array[int] = [0, 1, 2, 4, 9, 20, 45, 90, 149]
 ## An overlap smaller than this (m²) is two shapes sharing an edge, not a plane
 ## on the zone: a plane on the runway has its wingtips on the lane zone's edge,
 ## and single-precision poses put them up to a few hundredths of a millimetre
@@ -120,17 +121,9 @@ func _door_xs() -> Array[float]:
 	return xs
 
 
-## Wall lines: the deepest any legal stand can have (its parked tail 1 cm off
-## the lane zone's edge, StandPlacement.clears_lane), then the site's ROWS.
+## Wall lines: the site's ROWS, the north row first.
 func _wall_zs() -> Array[float]:
-	var deepest := (
-		0.01
-		+ StandPlacement.lane_zone().end.y
-		+ StandPlacement.TAIL_M
-		+ StandPlacement.NOSE_M
-		+ StandPlacement.NOSE_GAP_M
-	)
-	var zs: Array[float] = [deepest]
+	var zs: Array[float] = []
 	for row in ROWS:
 		zs.append(SITE.grid_origin.z + row)
 	return zs
@@ -170,28 +163,27 @@ func test_the_shared_zones_sit_on_the_scene_runway_and_taxi_lane() -> void:
 	)
 
 
-## A parked plane on the north row's wall line would put its tail 5 cm into the
-## lane traffic's band, holding the lane for the whole turnaround; that stand is
-## not legal. The next row clears it.
-func test_a_stand_whose_parked_tail_reaches_the_lane_is_not_legal() -> void:
+## A plane parked on the site's north row keeps its tail 0.05 m clear of the
+## lane traffic's band (StandPlacement.NOSE_GAP_M 2.2 m), so it does not hold
+## the lane for its turnaround. Control: at the old 2.3 m gap its tail reached
+## 0.05 m into the band.
+func test_the_north_row_parked_tail_clears_the_lane() -> void:
 	var north := StandPlacement.make(1, 0.5, SITE.grid_origin.z)
-	var next := StandPlacement.make(1, 0.5, SITE.grid_origin.z + 1.0)
-	var parked_north := Transform3D(Basis.IDENTITY, StandPlacement.stand_point(north))
-	var parked_next := Transform3D(Basis.IDENTITY, StandPlacement.stand_point(next))
+	var at := StandPlacement.stand_point(north)
+	var old := at + Vector3(0.0, 0.0, StandPlacement.NOSE_GAP_M - 2.3)
+	var edge := StandPlacement.lane_zone().end.y
+	var tail := at.z - StandPlacement.TAIL_M
 	print(
 		(
-			"north row tail z %.2f, next row tail z %.2f, lane band edge z %.2f"
-			% [
-				StandPlacement.stand_point(north).z - StandPlacement.TAIL_M,
-				StandPlacement.stand_point(next).z - StandPlacement.TAIL_M,
-				StandPlacement.lane_zone().end.y
-			]
+			"north row tail z %.3f (old gap %.3f), lane band edge z %.3f, clearance %.3f m"
+			% [tail, old.z - StandPlacement.TAIL_M, edge, tail - edge]
 		)
 	)
-	assert_bool(on_zone(footprint(parked_north), StandPlacement.lane_zone())).is_true()
-	assert_bool(StandPlacement.clears_lane(north)).is_false()
-	assert_bool(on_zone(footprint(parked_next), StandPlacement.lane_zone())).is_false()
-	assert_bool(StandPlacement.clears_lane(next)).is_true()
+	var lane := StandPlacement.lane_zone()
+	assert_bool(on_zone(footprint(Transform3D(Basis.IDENTITY, at)), lane)).is_false()
+	assert_bool(StandPlacement.clears_lane(north)).is_true()
+	assert_float(tail - edge).is_between(0.04, 0.06)
+	assert_bool(on_zone(footprint(Transform3D(Basis.IDENTITY, old)), lane)).is_true()
 
 
 func test_the_holds_cover_every_tick_the_footprint_is_on_the_runway_or_lane() -> void:

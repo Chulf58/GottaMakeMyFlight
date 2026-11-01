@@ -74,9 +74,11 @@ func test_the_starter_stand_sits_nose_in_at_the_starter_exit_with_its_door_on_th
 		)
 	)
 	# Exit centre x -22.5, wall line z -98 (its world place before the grid grew).
-	assert_vector(door).is_equal_approx(Vector3(-22.5, 0.0, -104.5), Vector3.ONE * 0.001)
-	assert_vector(at).is_equal_approx(Vector3(-26.0, 0.0, -115.0), Vector3.ONE * 0.001)
-	assert_float(at.z + StandPlacement.NOSE_M).is_equal_approx(-98.0 - 2.3, 0.001)
+	# The nose 2.2 m off the wall (StandPlacement.NOSE_GAP_M, was 2.3 m), so
+	# the stand and door sit 0.1 m nearer the wall than before.
+	assert_vector(door).is_equal_approx(Vector3(-22.5, 0.0, -104.4), Vector3.ONE * 0.001)
+	assert_vector(at).is_equal_approx(Vector3(-26.0, 0.0, -114.9), Vector3.ONE * 0.001)
+	assert_float(at.z + StandPlacement.NOSE_M).is_equal_approx(-98.0 - 2.2, 0.001)
 	assert_float(result["walk_m"]).is_between(6.9, 7.3)
 	assert_bool(result["warning"]).is_false()
 	assert_bool(StandPlacement.aircraft_clear(_grid, SITE, stand)).is_true()
@@ -109,29 +111,21 @@ func test_a_building_between_exit_and_door_rejects_the_candidate_on_passenger_re
 	assert_str(result["status"]).is_equal(StandPlacement.UNAVAILABLE)
 
 
-## An exit on the grid's north row would park the plane with its tail 5 cm
-## into the shared lane zone, so it gets no stand (StandPlacement.clears_lane,
-## decision gates-technical-design-gate-desks-link-to-north-exits-one-st). The
-## next row is the deepest legal stand; its pushback ends 1 m short of the
-## lane's centreline, and its swing is on the lane.
 func test_the_deepest_legal_stand_pushes_back_onto_the_taxi_lane() -> void:
 	_grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	# The reference terminal with its exit on the grid's north row.
 	assert_bool(ReferenceTerminal.build(_grid, Vector2i(0, -2))).is_true()
-	assert_int(_exit_at(Vector2i(20, 0))).is_greater(0)
-	assert_str(_place({})["status"]).is_equal(StandPlacement.UNAVAILABLE)
-	# The same terminal one row south.
-	_grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
-	assert_bool(ReferenceTerminal.build(_grid, Vector2i(0, -1))).is_true()
-	var exit := _exit_at(Vector2i(20, 1))
+	var exit := _exit_at(Vector2i(20, 0))
 	var result := _place({})
 	var stand: Dictionary = result["stand"]
 	var back := StandPlacement.pushback_end(stand)
 	print("deepest: stand %s pushback end %s" % [StandPlacement.stand_point(stand), back])
 	assert_str(result["status"]).is_equal(StandPlacement.OK)
 	assert_int(stand["exit"]).is_equal(exit)
-	assert_float(stand["wall_z"]).is_equal_approx(-209.0, 0.001)
-	assert_float(back.z).is_equal_approx(StandPlacement.TAXI_LANE_Z + 1.0, 0.001)
+	assert_float(stand["wall_z"]).is_equal_approx(-210.0, 0.001)
+	# 0.1 m short of the lane's centreline: the nose sits 2.2 m off the wall so
+	# the parked tail clears the shared lane zone (StandPlacement.NOSE_GAP_M).
+	assert_float(back.z).is_equal_approx(StandPlacement.TAXI_LANE_Z + 0.1, 0.001)
 	assert_float(result["walk_m"]).is_between(6.9, 7.3)
 
 
