@@ -50,8 +50,9 @@ func test_a_slot_that_has_passed_says_the_first_flight_is_tomorrow() -> void:
 
 func test_a_slot_still_ahead_says_nothing_extra() -> void:
 	_at(NOON)
-	assert_str(_panel.card_text("O0N2")).contains("Departs 20:00 daily   Gate")
+	assert_str(_panel.card_text("O0N2")).contains("Departs 20:00 daily   ")
 	assert_str(_panel.card_text("O0N2")).not_contains("first flight")
+	assert_str(_panel.card_text("O0N2")).not_contains("Gate")
 
 
 func test_the_note_agrees_with_the_day_the_sim_flies_the_accepted_offer() -> void:
@@ -77,11 +78,13 @@ func test_a_slot_whose_preparation_has_started_counts_as_passed() -> void:
 	_panel.close()
 	_panel.open()
 	assert_str(_panel.card_text("O0N2")).not_contains("first flight")
+	assert_str(_panel.card_text("O0N2")).not_contains("Gate")
 
 
 func test_the_note_appears_when_the_clock_passes_the_slot_while_open() -> void:
 	_at(NOON)
 	assert_str(_panel.card_text("O0N2")).not_contains("first flight")
+	assert_str(_panel.card_text("O0N2")).not_contains("Gate")
 	_sim.tick = GameCalendar.tick_at(0, 21 * 60)
 	await get_tree().process_frame
 	assert_str(_panel.card_text("O0N2")).contains("Departs 20:00 daily, first flight tomorrow")
@@ -102,9 +105,7 @@ func test_a_slot_two_days_out_names_the_day() -> void:
 
 func test_card_lines_without_a_note_are_unchanged() -> void:
 	var offer := TestOfferBoard.record("O0N9", 0, 600)
-	assert_str(OfferPanel.card_lines(offer)[1]).is_equal(
-		"Departs 10:00 daily   Gate C   Small plane"
-	)
+	assert_str(OfferPanel.card_lines(offer)[1]).is_equal("Departs 10:00 daily   Small plane")
 	assert_str(OfferPanel.card_lines(offer, "first flight tomorrow")[1]).is_equal(
-		"Departs 10:00 daily, first flight tomorrow   Gate C   Small plane"
+		"Departs 10:00 daily, first flight tomorrow   Small plane"
 	)

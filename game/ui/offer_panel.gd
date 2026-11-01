@@ -2,8 +2,9 @@ class_name OfferPanel
 extends CanvasLayer
 ## Today's airline offers (Economy 6/8b). A button at the top right shows how
 ## many offers are open; it opens a cream card sheet below it with one card per
-## open offer: airline, destination, departure, gate, plane size, booked
-## passengers and fee per passenger, with Accept and Decline. Look follows
+## open offer: airline, destination, departure, plane size, booked
+## passengers and fee per passenger, with Accept and Decline. No gate is named:
+## the player builds the terminal, which has none to name. Look follows
 ## decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale: cream
 ## cards, a dark navy outline and text, a Toon accent per element.
 ##
@@ -104,10 +105,7 @@ static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	return PackedStringArray(
 		[
 			"%s to %s" % [offer["airline"], offer["destination"]],
-			(
-				"Departs %s daily%s   Gate %s   %s plane"
-				% [time, then, offer["gate"], size.capitalize()]
-			),
+			"Departs %s daily%s   %s plane" % [time, then, size.capitalize()],
 			(
 				"%d passengers booked   $%d per passenger"
 				% [offer["booked_passengers"], offer["fee_per_passenger"]]
@@ -154,6 +152,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func is_open() -> bool:
 	return _sheet.visible
+
+
+## The open sheet's card, or null before the panel has built itself.
+func sheet() -> Control:
+	return _sheet
 
 
 ## Shows the sheet and pauses the clock, remembering how the player had it.
