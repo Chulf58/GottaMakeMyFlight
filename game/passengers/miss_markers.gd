@@ -147,7 +147,7 @@ func sign_text(station: int) -> String:
 ## outline and the white "!" stay, so the two signs read as one family.
 static func _closed_icon() -> Texture2D:
 	if _closed_texture == null:
-		var img := MarkerIcons.queue_full().get_image()
+		var img := MarkerIcons.queue_full_image()
 		for y in img.get_height():
 			for x in img.get_width():
 				var c := img.get_pixel(x, y)
