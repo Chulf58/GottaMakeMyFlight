@@ -94,8 +94,9 @@ func test_the_strips_run_all_round_inside_the_edge() -> void:
 	assert_bool(box.position.is_equal_approx(Vector3(-43.0, box.position.y, -100.0))).is_true()
 	assert_bool(box.end.is_equal_approx(Vector3(43.0, box.end.y, -60.0))).is_true()
 	var faces := _outline.strip_mesh().get_faces()
-	assert_int(faces.size()).is_equal(4 * 6)
-	var w := BuildableOutline.WIDTH_M / 2.0
+	# 86 m sides in 43 pieces of 2 m and 40 m sides in 20, two triangles a piece.
+	assert_int(faces.size()).is_equal((43 + 20) * 2 * 6)
+	var w := BuildableOutline.MIN_WIDTH_M / 2.0
 	for probe in [
 		Vector2(0.0, -100.0 + w),
 		Vector2(0.0, -60.0 - w),
@@ -108,6 +109,41 @@ func test_the_strips_run_all_round_inside_the_edge() -> void:
 			. is_true()
 		)
 	assert_bool(_covered(faces, Vector2(0.0, -80.0))).is_false()
+
+
+## Constant width on screen (user ruling buildable-outline-keeps-a-constant-on-
+## screen-width-at-every-zoom): a camera looking straight down from 20 m and
+## from 80 m over the plot's middle. The frame grows in metres with the depth
+## so it stays WIDTH_PX viewport pixels wide, and stays inside the edge.
+func test_width_keeps_its_pixels_at_two_distances() -> void:
+	var view_height := 864.0
+	var widths: Array[float] = []
+	for height in [20.0, 80.0]:
+		var cam := Camera3D.new()
+		cam.fov = 55.0
+		add_child(cam)
+		cam.global_transform = Transform3D(
+			Basis.from_euler(Vector3(-PI / 2.0, 0.0, 0.0)), Vector3(0.0, height, -80.0)
+		)
+		_outline.fit(cam, view_height)
+		var outer := _outline.outline_points()
+		var inner := _outline.inner_points()
+		var depth: float = height - outer[0].y
+		var want := (
+			BuildableOutline.WIDTH_PX * 2.0 * depth * tan(deg_to_rad(55.0) / 2.0) / view_height
+		)
+		for i in outer.size():
+			assert_float(absf(inner[i].x - outer[i].x)).is_equal_approx(want, 0.001)
+			assert_float(absf(inner[i].z - outer[i].z)).is_equal_approx(want, 0.001)
+		var box := _outline.strip_mesh().get_aabb()
+		assert_bool(box.position.is_equal_approx(Vector3(-43.0, box.position.y, -100.0))).is_true()
+		assert_bool(box.end.is_equal_approx(Vector3(43.0, box.end.y, -60.0))).is_true()
+		widths.append(absf(inner[0].x - outer[0].x))
+		cam.free()
+	# 20 m: about 0.29 m; 80 m: about 1.15 m, four times as wide in metres.
+	assert_float(widths[0]).is_between(0.25, 0.33)
+	assert_float(widths[1] / widths[0]).is_equal_approx((80.0 - 0.27) / (20.0 - 0.27), 0.001)
+	_outline.redraw()
 
 
 func _covered(faces: PackedVector3Array, at: Vector2) -> bool:

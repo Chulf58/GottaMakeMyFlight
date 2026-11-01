@@ -17,9 +17,12 @@ Godot world coordinates with the asset at (0, 0, -80), as main.tscn places the s
 (Godot x = Blender x, Godot y = Blender z, Godot z = -Blender y - 80).
 
 What it keeps and drops (measured on the shell, see the census this script prints):
-- Road: kept whole and unchanged (same mesh, same transform). The written file's Road is
-  compared with the shell file's Road (vertex and index counts, bounds, transform, and
-  every position) and the build fails on any difference.
+- Road: kept as it is (same transform, every triangle at the same position) except the
+  sidewalk tile accents, the flat islands 3 mm over the sidewalk (y 0.2031) beside the plot,
+  which read as dark checker patches (user ruling buildable-outline-keeps-a-constant-on-
+  screen-width-at-every-zoom, point 2, which relaxes 'Road identical' for this change only).
+  The written file's Road is compared with the shell file's Road: same world transform, and
+  its triangles are exactly the shell's minus the accent triangles; the build fails otherwise.
 - Lot: split into islands and filtered by geometry, because the shell exporter put the
   building's ground slab and two letter signs in Lot:
     slab:  an island inside the old slab box (x -34.2..33.2, z -95.5..-64.1, 5 cm
@@ -62,6 +65,7 @@ import math
 import os
 import struct
 import sys
+from collections import Counter
 
 import bmesh
 import bpy
@@ -239,6 +243,56 @@ def filter_lot(lot):
     return pad_loops, skirt_uv
 
 
+def is_accent_tri(tri):
+    """A flat triangle wholly at tile-accent height (y 0.2031): over PAVE_Y by
+    ACCENT_MIN_LIFT and under PAVE_MAX_Y. Road markings lie at 0.1065..0.1344 and the
+    sidewalk tops at 0.2, so only the accents match."""
+    return all(PAVE_Y + ACCENT_MIN_LIFT < p.y <= PAVE_MAX_Y for p in tri)
+
+
+def in_tri_xz(px, pz, a, b, c):
+    """Whether (px, pz) lies in triangle abc seen from straight above."""
+    d1 = (px - b.x) * (a.z - b.z) - (a.x - b.x) * (pz - b.z)
+    d2 = (px - c.x) * (b.z - c.z) - (b.x - c.x) * (pz - c.z)
+    d3 = (px - a.x) * (c.z - a.z) - (c.x - a.x) * (pz - a.z)
+    neg = d1 < -1e-9 or d2 < -1e-9 or d3 < -1e-9
+    pos = d1 > 1e-9 or d2 > 1e-9 or d3 > 1e-9
+    return not (neg and pos)
+
+
+def tri_key(tri):
+    return tuple(sorted(tuple(round(c, 4) for c in p) for p in tri))
+
+
+def filter_road(road):
+    """Drop the Road's sidewalk tile accents (the dark checker patches beside the plot),
+    every island all of whose triangles are accent triangles, and keep the rest of the Road
+    as it is. Returns the number of triangles dropped."""
+    mw = road.matrix_world
+    bm = bmesh.new()
+    bm.from_mesh(road.data)
+    bm.faces.ensure_lookup_table()
+    drop, rows = [], []
+    for comp in islands(bm):
+        tris = [tuple(g(mw @ v.co) for v in f.verts) for f in comp]
+        if all(is_accent_tri(t) for t in tris):
+            lo, hi = bbox([p for t in tris for p in t])
+            drop += comp
+            rows.append((len(comp), sum(len(f.verts) - 2 for f in comp), fmt(lo, hi)))
+    n_tris = sum(r[1] for r in rows)
+    rep("Road islands dropped as sidewalk tile accents: %d (tris %d)" % (len(rows), n_tris))
+    for nf, nt, box in rows:
+        rep("    accent faces %d tris %d %s" % (nf, nt, box))
+    if not rows:
+        die("expected sidewalk tile accents on the Road, found none")
+    bmesh.ops.delete(bm, geom=drop, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.to_mesh(road.data)
+    bm.free()
+    road.data.update()
+    return n_tris
+
+
 def fill_plot(lot, pad_loops, skirt_uv):
     """Pave the rest of the plot flat at PAVE_Y: the strips x -43..-40 and 40..43 that the
     Toon paving stops short of, and the two dips (x -12..12 at z -64..-60 and -100..-96).
@@ -326,6 +380,7 @@ def main():
         mw = o.matrix_world.copy()
         o.parent = root
         o.matrix_world = mw
+    road_dropped = filter_road(objs["Road"])
     pad_loops, skirt_uv = filter_lot(objs["Lot"])
     added = fill_plot(objs["Lot"], pad_loops, skirt_uv)
     for o in list(bpy.context.scene.objects):
@@ -365,7 +420,7 @@ def main():
         expected[o.name] = (o.parent.name if o.parent else None, tris)
     site = reread(OUT, "site")
     shell = reread(SHELL, "shell")
-    verify(site, shell, expected, added)
+    verify(site, shell, expected, added, road_dropped)
     path = os.path.join(REPORT_DIR, "census.txt")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(report) + "\n")
@@ -537,7 +592,7 @@ def plot_holes(lot):
     return holes, count
 
 
-def verify(site, shell, expected, added):
+def verify(site, shell, expected, added, road_dropped):
     names = set(site["nodes"])
     if names != {ROOT, *KEEP}:
         die("written site nodes %s, want %s" % (sorted(names), sorted({ROOT, *KEEP})))
@@ -551,17 +606,38 @@ def verify(site, shell, expected, added):
     if site["nodes"]["Road"]["mats"] != ["TP_Atlas_Simple_1A_D"] or site["nodes"]["Lot"]["mats"] != ["TP_Atlas_1A_D"]:
         die("node materials changed: Road %s Lot %s" % (site["nodes"]["Road"]["mats"], site["nodes"]["Lot"]["mats"]))
     a, b = site["nodes"]["Road"], shell["nodes"]["Road"]
-    same = (a["verts"] == b["verts"] and a["tris"] == b["tris"] and a["pos_hash"] == b["pos_hash"]
-            and (a["lo"] - b["lo"]).length < 1e-5 and (a["hi"] - b["hi"]).length < 1e-5
-            and all(abs(a["world"][r][c] - b["world"][r][c]) < 1e-6 for r in range(4) for c in range(4)))
+    # The Road is the shell's minus its sidewalk tile accents (user ruling buildable-outline-
+    # keeps-a-constant-on-screen-width-at-every-zoom, point 2). Every shell Road triangle
+    # that is not an accent must be in the written Road, and nothing else.
+    shell_accent = [t for t in b["tris_world"] if is_accent_tri(t)]
+    shell_rest = Counter(tri_key(t) for t in b["tris_world"] if not is_accent_tri(t))
+    site_all = Counter(tri_key(t) for t in a["tris_world"])
+    same_frame = all(abs(a["world"][r][c] - b["world"][r][c]) < 1e-6 for r in range(4) for c in range(4))
     rep("")
     rep("ROAD site  verts %d tris %d positions %s %s" % (a["verts"], a["tris"], a["pos_hash"], fmt(a["lo"], a["hi"])))
     rep("ROAD shell verts %d tris %d positions %s %s" % (b["verts"], b["tris"], b["pos_hash"], fmt(b["lo"], b["hi"])))
     rep("ROAD world transform site %s shell %s" % ([round(v, 6) for row in a["world"] for v in row],
                                                    [round(v, 6) for row in b["world"] for v in row]))
-    if not same:
-        die("the site's Road differs from the shell's Road")
-    rep("ROAD identical: vertex and triangle counts, bounds, world transform and every position")
+    rep("ROAD shell accent triangles %d (filter dropped %d); shell triangles left %d; site triangles %d; "
+        "site triangles not in the shell's rest %d; shell rest missing from the site %d" % (
+            len(shell_accent), road_dropped, sum(shell_rest.values()), sum(site_all.values()),
+            sum((site_all - shell_rest).values()), sum((shell_rest - site_all).values())))
+    if not same_frame or site_all != shell_rest or len(shell_accent) != road_dropped:
+        die("the site's Road is not the shell's Road minus its sidewalk tile accents")
+    # Under every dropped accent the sidewalk runs on: its centre lies on an up-facing site
+    # Road triangle at PAVE_Y.
+    walk = [t for t in a["tris_world"] if all(abs(p.y - PAVE_Y) < 1e-4 for p in t)]
+    bare = []
+    for t in shell_accent:
+        cx, cz = sum(p.x for p in t) / 3.0, sum(p.z for p in t) / 3.0
+        if not any(in_tri_xz(cx, cz, *w) for w in walk):
+            bare.append((round(cx, 2), round(cz, 2)))
+    rep("ROAD sidewalk under the dropped accents: %d of %d accent centres without sidewalk at y %.2f%s"
+        % (len(bare), len(shell_accent), PAVE_Y, (": " + str(bare[:5])) if bare else ""))
+    if bare:
+        die("dropping the Road accents left holes in the sidewalk")
+    rep("ROAD unchanged but for the dropped accents: same world transform and every other triangle "
+        "at the same positions")
     x0, x1, z0, z1 = SLAB_BOX
     lot = site["nodes"]["Lot"]
     high = [p for p in lot["pts"] if p.y > SIGN_MIN_Y]

@@ -6,9 +6,13 @@ extends SceneTree
 ##   tray_closed_overview the same view with the tray closed: no outline;
 ##   corner_<nw|ne|se|sw> each outline corner close up, tray open;
 ##   edge_floor           floor tiles laid against the south edge, tray open;
-##   paving_<west|east>   the paving close up where the accent bands were, tray closed.
+##   paving_<west|east>   the paving close up where the accent bands were, tray closed;
+##   sidewalk_<west|east> the Road's sidewalk where its accents were, tray closed.
+## Each plate also prints the frame's widths (metres and screen pixels at each corner),
+## which keep WIDTH_PX on screen at every zoom.
 ## Every plate first projects its subject points into the viewport (with a margin, in
-## front of the camera, off the build tray and bar) and casts a physics ray from the
+## front of the camera, off the build tray, the bar and the "Airport closed" hint card) and
+## casts a physics ray from the
 ## camera to each; a point out of frame, under the HUD or behind a collider prints
 ## PROBE_INVALID and the probe exits 1.
 ##
@@ -39,6 +43,7 @@ var _rig: Node3D
 var _build: BuildMode
 var _menu: BuildMenu
 var _outline: BuildableOutline
+var _staff: StaffPanel
 
 
 func _initialize() -> void:
@@ -70,6 +75,7 @@ func _run() -> void:
 	_build = _main.get_node("BuildMode")
 	_menu = _main.get_node("BuildMenu")
 	_outline = _main.get_node("BuildableOutline")
+	_staff = _main.get_node("StaffPanel")
 	await _frames(20)
 	_lay_edge_floor()
 	var corners := _outline.outline_points()
@@ -97,6 +103,11 @@ func _run() -> void:
 		var spot := Vector3(side[1], 0.2, -78.0)
 		var edges := [spot + Vector3(-4, 0, -3), spot + Vector3(4, 0, 3)]
 		await _plate("paving_" + side[0], spot, CLOSE_DISTANCE, edges, false)
+	# The Road's sidewalk where its tile accents were (x -27..-16 and 15..26, z -60..-58.75).
+	for side in [["west", -21.5], ["east", 20.5]]:
+		var walk := Vector3(side[1], 0.2, -59.4)
+		var ends := [walk + Vector3(-5.5, 0, 0), walk + Vector3(5.5, 0, 0)]
+		await _plate("sidewalk_" + side[0], walk + Vector3(0, 0, -2), 14.0, ends, false)
 	_save_contact_sheet()
 	print("PROBE done failed=%s" % _failed)
 	quit(1 if _failed else 0)
@@ -130,10 +141,16 @@ func _lay_edge_floor() -> void:
 		_invalid("edge floor: laid %d of %d" % [laid, EDGE_FLOOR.get_area()])
 
 
+## The bar, the open tray and the "Airport closed" hint card (StaffPanel's hint, its
+## card when the label sits in one).
 func _hud_rects() -> Array[Rect2]:
 	var out: Array[Rect2] = [_menu.bar().get_global_rect()]
 	if _menu.is_tray_open():
 		out.append(_menu.tray().get_global_rect())
+	var hint := _staff.hint_label()
+	if hint.is_visible_in_tree():
+		var card := hint.get_parent() as Control
+		out.append((card if card != null else hint).get_global_rect())
 	return out
 
 
@@ -164,6 +181,8 @@ func _plate(label: String, focus: Vector3, distance: float, points: Array, want:
 		if not hit.is_empty():
 			_invalid("%s: %s is hidden behind %s" % [label, p, hit["collider"]])
 			return
+	if want:
+		_print_widths(label)
 	var img := root.get_texture().get_image()
 	img.convert(Image.FORMAT_RGBA8)
 	var path := _out_dir.path_join("%s.png" % label)
@@ -196,3 +215,20 @@ func _save_contact_sheet() -> void:
 		_invalid("could not save " + path)
 		return
 	print("SHEET saved %s plates=%d" % [path, _sheet.size()])
+
+
+## Each corner's frame width in metres and, measured along x on screen, in viewport
+## pixels. A corner behind the camera is marked so; its width is the floor, and the
+## visible part of its sides is sized from their own 2 m pieces.
+func _print_widths(label: String) -> void:
+	var outer := _outline.outline_points()
+	var inner := _outline.inner_points()
+	var parts: Array[String] = []
+	for i in outer.size():
+		if _cam.is_position_behind(outer[i]):
+			parts.append("behind")
+			continue
+		var along := Vector3(inner[i].x, outer[i].y, outer[i].z)
+		var px := _cam.unproject_position(outer[i]).distance_to(_cam.unproject_position(along))
+		parts.append("%.2fm/%.1fpx" % [absf(inner[i].x - outer[i].x), px])
+	print("WIDTH %s %s (want %.0f px)" % [label, ", ".join(parts), BuildableOutline.WIDTH_PX])
