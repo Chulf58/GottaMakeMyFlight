@@ -153,10 +153,14 @@ func _at_the_stand(id: String, starter: Vector3) -> void:
 	print(
 		(
 			"PROBE parked at %s, starter stand %s, distance %.3f"
-			% [_plane.global_position, starter, _plane.global_position.distance_to(starter)]
+			% [
+				_plane.global_position,
+				starter,
+				_plane.global_position.distance_to(_parked(starter))
+			]
 		)
 	)
-	if _plane.global_position.distance_to(starter) > 0.05:
+	if _plane.global_position.distance_to(_parked(starter)) > 0.05:
 		_fail("the plane is not at the starter stand while boarding")
 		return
 	var exit_point := _grid.cell_to_world(ReferenceTerminal.EXIT_CELL + _site.starter_offset)
@@ -366,10 +370,10 @@ func _next_flight(first: String) -> void:
 	print(
 		(
 			"PROBE next flight parked at %s, moved stand %s, distance %.3f"
-			% [_plane.global_position, moved, _plane.global_position.distance_to(moved)]
+			% [_plane.global_position, moved, _plane.global_position.distance_to(_parked(moved))]
 		)
 	)
-	if _plane.global_position.distance_to(moved) > 0.05:
+	if _plane.global_position.distance_to(_parked(moved)) > 0.05:
 		_fail("the next flight did not park at the moved stand")
 		return
 	var old_gap := _grid.cell_to_world(ReferenceTerminal.EXIT_CELL + _site.starter_offset)
@@ -581,3 +585,9 @@ func _finish(code: int) -> void:
 	if _main != null:
 		_main.queue_free()
 	quit(code)
+
+
+## Where the plane rests over a stand point: on the ground there
+## (PlaneView.ground_height_at), the site's paving.
+func _parked(stand_point: Vector3) -> Vector3:
+	return stand_point + Vector3.UP * PlaneView.ground_height_at(stand_point)

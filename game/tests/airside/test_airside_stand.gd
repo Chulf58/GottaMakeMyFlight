@@ -4,7 +4,9 @@ extends GdUnitTestSuite
 ## airside-moves-110-m-north-stand-snaps-to, points 1, 5 and 6): the runway at
 ## z -310, the taxi lane at z -256, the lead-in pass kept at z -8; the taxi
 ## graph and PlaneView follow Airside.set_stand(); and the peak taxi speed on
-## the longest route a legal stand gives stays at or under about 16 m/s.
+## the longest route a legal stand gives stays at or under about 16 m/s. On
+## the ground the plane rides on the site's paving (y 0.2) and at y 0 off it,
+## with no step where it crosses the site's edge.
 
 const MAIN_SCENE := "res://main/main.tscn"
 const SITE := preload("res://build/terminal_site.tres")
@@ -116,12 +118,55 @@ func test_plane_view_reads_its_paths_again_after_the_stand_moves() -> void:
 	var after_move: Transform3D = view.pose_at(starts, parked)["transform"]
 	print("parked before %s, after %s" % [before_move.origin, after_move.origin])
 	var starter := StandPlacement.stand_point(StandPlacement.starter_stand(_grid, SITE))
-	assert_vector(before_move.origin).is_equal_approx(starter, Vector3.ONE * 0.001)
+	# Parked on the site's paving, so ground_height over the stand point.
+	var on_paving := Vector3.UP * SITE.ground_height
+	assert_vector(before_move.origin).is_equal_approx(starter + on_paving, Vector3.ONE * 0.001)
 	assert_vector(after_move.origin).is_equal_approx(
-		StandPlacement.stand_point(stand), Vector3.ONE * 0.001
+		StandPlacement.stand_point(stand) + on_paving, Vector3.ONE * 0.001
 	)
 	# Parked nose-in: the nose points +z, towards the terminal.
 	assert_float(after_move.basis.z.z).is_greater(0.99)
+
+
+func test_the_plane_rides_on_the_paving_on_the_site_and_at_y_0_off_it() -> void:
+	var view := PlaneView.new()
+	view.sim = auto_free(FlightSim.new()) as FlightSim
+	view.clock = auto_free(SimClock.new()) as SimClock
+	view.airside = _airside
+	add_child(view)
+	auto_free(view)
+	var starts := FlightSim.schedule_starts(FIRST)
+	var parked: Transform3D = (
+		view.pose_at(starts, float(starts[FlightSim.State.AT_STAND]) + 5.0)["transform"]
+	)
+	var lane_time := float(starts[FlightSim.State.TAXI_IN]) + 1.0
+	var lane: Transform3D = view.pose_at(starts, lane_time)["transform"]
+	print("at the stand %s, on the lane %s" % [parked.origin, lane.origin])
+	var starter := StandPlacement.stand_point(StandPlacement.starter_stand(_grid, SITE))
+	(
+		assert_float(
+			Vector2(parked.origin.x, parked.origin.z).distance_to(Vector2(starter.x, starter.z))
+		)
+		. is_less(0.01)
+	)
+	assert_float(parked.origin.y).is_equal_approx(0.2, 0.0001)
+	assert_float(lane.origin.z).is_less(SITE.grid_origin.z - PlaneView.PAVING_RAMP_M)
+	assert_float(lane.origin.y).is_equal_approx(0.0, 0.0001)
+	# Every tick of the taxi in and out: the height climbs to the paving and
+	# back with no step bigger than the ramp allows at taxi speed.
+	for state in [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT]:
+		var last := NAN
+		var biggest := 0.0
+		var high := 0.0
+		for t in range(starts[state], starts[state + 1] + 1):
+			var y: float = (view.pose_at(starts, float(t))["transform"] as Transform3D).origin.y
+			if not is_nan(last):
+				biggest = maxf(biggest, absf(y - last))
+			high = maxf(high, y)
+			last = y
+		print("state %d: highest %.3f, biggest step per tick %.4f m" % [state, high, biggest])
+		assert_float(high).is_equal_approx(0.2, 0.0001)
+		assert_float(biggest).is_greater(0.0).is_less(0.05)
 
 
 ## The fastest the plane moves over `state`, in m/s, sampled every tick.
