@@ -162,3 +162,24 @@ func test_home_fits_the_area_to_the_panels_open_now() -> void:
 	for i in 600:
 		_rig._process(0.05)
 	_assert_inside(ABOVE_TRAY)
+
+
+func test_a_shifted_view_keeps_the_eye_inside_the_zoom_limits() -> void:
+	_rig.frame_start_view(AREA, ABOVE_TRAY)
+	_rig.distance = _rig.max_distance
+	for i in 20:
+		_rig._process(0.05)
+	assert_float(_cam.position.length()).is_less_equal(_rig.max_distance + 0.001)
+	assert_float(_cam.position.length()).is_greater_equal(_rig.min_distance)
+	_rig.distance = _rig.min_distance
+	for i in 20:
+		_rig._process(0.05)
+	assert_float(_cam.position.length()).is_less_equal(_rig.max_distance)
+	assert_float(_cam.position.length()).is_greater_equal(_rig.min_distance - 0.001)
+
+
+func test_the_framed_eye_sits_at_the_framed_distance_and_the_area_fits() -> void:
+	_rig.frame_start_view(AREA, ABOVE_TRAY)
+	assert_float(_cam.position.length()).is_equal_approx(_rig.distance, 0.001)
+	assert_float(_rig.distance).is_between(_rig.min_distance, _rig.max_distance)
+	_assert_inside(ABOVE_TRAY)

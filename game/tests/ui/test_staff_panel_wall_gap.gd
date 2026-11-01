@@ -72,3 +72,14 @@ func test_neighbouring_open_edges_are_one_gap() -> void:
 	for y in [4, 5, 6]:
 		_open_gap(Vector2i(11, y), BuildGrid.Side.EAST)
 	assert_str(_panel.hint_text()).is_equal(StaffPanel.GAP_HINT)
+
+
+func test_a_batch_of_edits_scans_for_gaps_once() -> void:
+	var before_scans := _panel.gap_scans
+	var edits: Array[BuildEdit] = []
+	for y in [3, 4, 5, 6]:
+		edits.append(BuildEdit.remove_wall(Vector2i(11, y), BuildGrid.Side.EAST))
+	for result in _w.grid.apply_batch(edits):
+		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
+	assert_int(_panel.gap_scans - before_scans).is_equal(1)
+	assert_str(_panel.hint_text()).is_equal(StaffPanel.GAP_HINT)

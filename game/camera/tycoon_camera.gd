@@ -305,9 +305,10 @@ func _aim_of(free: Rect2) -> Vector2:
 	return Vector2(centre.x * 2.0 - 1.0, 1.0 - centre.y * 2.0)
 
 
-## Where the eye sits, relative to the focus point on the ground and at yaw 0,
-## for the view ray through `aim` (see _aim_of) to meet the ground at the
-## focus. With the aim at the screen's middle this is the old orbit position.
+## Where the eye sits, relative to the focus point on the ground and at yaw 0:
+## `from_distance` back along the view ray through `aim` (see _aim_of), so
+## the ray meets the ground at the focus and the eye is exactly `from_distance`
+## from it. With the aim at the screen's middle this is the old orbit position.
 func _eye_offset(aim: Vector2, from_distance: float) -> Vector3:
 	var pitch := deg_to_rad(pitch_for_distance(from_distance))
 	var half_tan := tan(deg_to_rad(_camera.fov) / 2.0)
@@ -317,9 +318,7 @@ func _eye_offset(aim: Vector2, from_distance: float) -> Vector3:
 		-cos(pitch) - aim.y * half_tan * sin(pitch)
 	)
 	ray.y = minf(ray.y, -MIN_RAY_DOWN)
-	var height := from_distance * sin(pitch)
-	var along := height / -ray.y
-	return Vector3(-along * ray.x, height, -along * ray.z)
+	return -ray.normalized() * from_distance
 
 
 ## True when the ground rectangle centred on the focus, `half` wide and deep

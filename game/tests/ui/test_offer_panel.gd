@@ -1,7 +1,7 @@
 class_name TestOfferPanel
 extends GdUnitTestSuite
 ## OfferPanel: a button with the open offer count, and a cream card per open
-## offer (airline, destination, departure, gate, size, booked passengers, fee
+## offer (airline, destination, departure, size, booked passengers, fee
 ## per passenger) with Accept and Decline wired to the board and FlightSim. A
 ## refused accept shows FlightSim.accept_problem's reason and leaves the offer.
 
@@ -58,7 +58,7 @@ func test_each_open_offer_has_a_card_with_its_terms() -> void:
 	assert_str(text).not_contains("Gate")
 
 
-func test_the_card_text_names_every_term_of_an_offer() -> void:
+func test_the_card_lines_show_airline_destination_departure_size_passengers_and_fee() -> void:
 	var offer := TestOfferBoard.record("O2N3", 2, 435)
 	offer["airline"] = "Blue Fjord"
 	offer["destination"] = "Rome"

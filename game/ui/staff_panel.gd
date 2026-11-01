@@ -79,6 +79,9 @@ const HINT_W := 560.0
 ## In a scene the BuildMenu whose Staff button opens the card.
 @export var menu: BuildMenu
 
+## How many whole-grid gap scans have run, for the tests.
+var gap_scans := 0
+
 var _card := PanelContainer.new()
 var _hint := Label.new()
 var _hint_box := PanelContainer.new()
@@ -237,16 +240,18 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 
 
 func _scan_gaps() -> void:
+	gap_scans += 1
 	_gap_runs = EnclosureGaps.gap_runs(staff.sim.grid).size()
 
 
 ## A room edit changes no walk graph, so graph_changed never follows it, and
-## StaffSim emits nothing when no one is hired. edit_applied comes before the
-## graph_changed of an edit with dirty cells, so only a room edit is taken
-## here. StaffSim connected first and has already reconciled its stations.
+## StaffSim emits nothing when no one is hired. An edit with dirty cells is
+## followed by graph_changed (once for a whole batch), which scans, so only an
+## edit without dirty cells is taken here. StaffSim connected first and has
+## already reconciled its stations.
 func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
-	_scan_gaps()
 	if result.dirty_cells.is_empty():
+		_scan_gaps()
 		refresh()
 
 
