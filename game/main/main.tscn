@@ -16,6 +16,7 @@
 [ext_resource type="Script" path="res://build/view/roof_view.gd" id="14_roofview"]
 [ext_resource type="Resource" path="res://build/terminal_site.tres" id="15_site"]
 [ext_resource type="Script" path="res://build/view/gap_markers.gd" id="34_gapmarkers"]
+[ext_resource type="Script" path="res://build/view/buildable_outline.gd" id="41_buildableoutline"]
 [ext_resource type="Script" path="res://economy/finances.gd" id="16_finances"]
 [ext_resource type="Script" path="res://economy/offer_desk.gd" id="17_offerdesk"]
 [ext_resource type="Script" path="res://ui/offer_panel.gd" id="18_offerpanel"]
@@ -291,6 +292,11 @@ build_mode = NodePath("../BuildMode")
 [node name="GapMarkers" type="Node3D" parent="." node_paths=PackedStringArray("build_mode")]
 script = ExtResource("34_gapmarkers")
 build_mode = NodePath("../BuildMode")
+
+[node name="BuildableOutline" type="Node3D" parent="." node_paths=PackedStringArray("build_mode", "menu")]
+script = ExtResource("41_buildableoutline")
+build_mode = NodePath("../BuildMode")
+menu = NodePath("../BuildMenu")
 
 [node name="OfferDesk" type="Node" parent="." node_paths=PackedStringArray("clock", "rating", "flights")]
 script = ExtResource("17_offerdesk")

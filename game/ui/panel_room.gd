@@ -1,0 +1,167 @@
+class_name PanelRoom
+extends Node
+## Keeps the terminal out from under the HUD panels (decision camera-makes-
+## room-for-open-panels-the-build-tray-banner-and). It finds which panels are
+## open (the build tray with its status and cost lines, the Staff card, the
+## banner above them, the Offers sheet and the flight result card), takes the
+## largest screen rectangle they leave free, and tells the TycoonCamera, which
+## puts its focus at the middle of that rectangle and, while it is still on the
+## start view, refits the start area inside it.
+##
+## Only a panel opening or closing refits the distance; a panel that merely
+## changes size (a banner line coming or going as the player builds) moves the
+## view a little and never zooms it. The camera does nothing on a build edit.
+
+## A cut that would leave less than this share of the viewport's width or
+## height is not taken, so a small window never shrinks the view to nothing.
+const MIN_SHARE := 0.25
+## Frames after a panel opens or closes in which a size change still refits the
+## distance: a card that has just appeared is not laid out until a frame later.
+const REFIT_FRAMES := 4
+## The least a free rectangle's edge may change to be sent to the camera again,
+## as a share of the viewport.
+const MIN_CHANGE := 0.004
+
+## The camera the free rectangle goes to; null leaves the view alone.
+var camera: TycoonCamera
+## The node holding BuildMenu, StaffPanel and OfferPanel as children, found by
+## name each time because the panels build themselves after the HUD.
+var scene_root: Node
+## The result card, held by PassengerHud.
+var result_card: Control
+
+var _last_key := 0
+var _refit_frames := 0
+var _last_free := Rect2(0.0, 0.0, 1.0, 1.0)
+
+
+## The largest rectangle of `viewport` that `panels` leave free, in the same
+## units. Each panel in turn cuts the rectangle on the side that keeps the most
+## area; one that overlaps nothing, or whose every cut would leave too little,
+## is skipped.
+static func free_rect(viewport: Rect2, panels: Array[Rect2]) -> Rect2:
+	var free := viewport
+	for panel in panels:
+		if not free.intersects(panel):
+			continue
+		var best := Rect2()
+		for kept in _kept_sides(free, panel):
+			var big_enough := (
+				kept.size.x >= viewport.size.x * MIN_SHARE
+				and kept.size.y >= viewport.size.y * MIN_SHARE
+			)
+			if big_enough and kept.get_area() > best.get_area():
+				best = kept
+		if best.has_area():
+			free = best
+	return free
+
+
+## The four pieces of `free` beside `panel`: above, left, right, below.
+static func _kept_sides(free: Rect2, panel: Rect2) -> Array[Rect2]:
+	var top := free.position.y
+	var left := free.position.x
+	return [
+		Rect2(left, top, free.size.x, panel.position.y - top),
+		Rect2(left, top, panel.position.x - left, free.size.y),
+		Rect2(panel.end.x, top, free.end.x - panel.end.x, free.size.y),
+		Rect2(left, panel.end.y, free.size.x, free.end.y - panel.end.y),
+	]
+
+
+func _process(_delta: float) -> void:
+	if camera == null:
+		return
+	var key := open_key()
+	var free := free_fraction()
+	var moved := (
+		absf(free.position.x - _last_free.position.x) > MIN_CHANGE
+		or absf(free.position.y - _last_free.position.y) > MIN_CHANGE
+		or absf(free.end.x - _last_free.end.x) > MIN_CHANGE
+		or absf(free.end.y - _last_free.end.y) > MIN_CHANGE
+	)
+	if key != _last_key:
+		_refit_frames = REFIT_FRAMES
+	var refit := _refit_frames > 0
+	_refit_frames = maxi(_refit_frames - 1, 0)
+	if key == _last_key and not moved:
+		return
+	camera.set_room(free, refit)
+	_last_key = key
+	_last_free = free
+
+
+## The free screen rectangle as fractions of the viewport.
+func free_fraction() -> Rect2:
+	var size := get_viewport().get_visible_rect().size
+	var free := free_rect(Rect2(Vector2.ZERO, size), open_rects())
+	return Rect2(free.position / size, free.size / size)
+
+
+## Takes the open panels and free rectangle now as the ones the camera already
+## has, so the next frame sends nothing. The start view is framed with them.
+func mark_sent() -> void:
+	_last_key = open_key()
+	_last_free = free_fraction()
+
+
+## Which panels are open, one bit each, so the camera can tell a panel opening
+## or closing from one changing size.
+func open_key() -> int:
+	var key := 0
+	var bit := 1
+	for panel in _panels():
+		if panel != null and panel.is_visible_in_tree():
+			key |= bit
+		bit <<= 1
+	var menu := _menu()
+	if menu != null and menu.is_tray_open():
+		key |= bit
+	return key
+
+
+## The screen rectangle of every open panel, the bottom ones first.
+func open_rects() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	var menu := _menu()
+	if menu != null and menu.is_tray_open():
+		rects.append(_tray_stack(menu))
+	for panel in _panels():
+		if panel != null and panel.is_visible_in_tree():
+			rects.append(panel.get_global_rect())
+	return rects
+
+
+## The Staff card, the banner above the bar, the Offers sheet and the result
+## card, in the order their rectangles are cut.
+func _panels() -> Array[Control]:
+	var panels: Array[Control] = []
+	var staff := _find("StaffPanel") as StaffPanel
+	panels.append(null if staff == null else staff.card())
+	panels.append(null if staff == null else staff.hint_card())
+	var offers := _find("OfferPanel") as OfferPanel
+	panels.append(null if offers == null else offers.sheet())
+	panels.append(result_card)
+	return panels
+
+
+## The tray, its status and cost lines and the bar under them, from the top of
+## the stack to the bottom of the screen. The status line comes and goes with
+## the pointer, so the fixed height of the stack is used, not the line.
+func _tray_stack(menu: BuildMenu) -> Rect2:
+	var size := get_viewport().get_visible_rect().size
+	var tray := menu.tray().get_global_rect()
+	var half := maxf(BuildMenu.COLUMN_W, tray.size.x) / 2.0
+	var top := size.y - BuildMenu.tray_stack_top()
+	return Rect2(size.x / 2.0 - half, top, half * 2.0, size.y - top)
+
+
+func _menu() -> BuildMenu:
+	return _find("BuildMenu") as BuildMenu
+
+
+func _find(node_name: String) -> Node:
+	if scene_root == null:
+		return null
+	var node := scene_root.get_node_or_null(node_name)
+	return node if node != null and node.is_node_ready() else null
