@@ -16,7 +16,9 @@ extends SceneTree
 ## the lather hidden counts the red pixels the body has in that view, the
 ## control that proves each view sees the body.
 ## Prints COVER <body> <view> worst=<px> at=<s> twin=<px> per body and view,
-## and COVER_TOTAL.
+## and COVER_TOTAL; PROBE_INVALID when one view shows more than MAX_VIEW_PX or
+## all of them together more than MAX_TOTAL_PX. A control pass (CONTROL lines)
+## draws the bubbles at CONTROL_SHARE of their size and must break a limit.
 ##
 ## Plates (lit, the real look): for a male and a female body at PLATE_TIMES
 ## through the clip, front, back, right, left and top orthographic views at
@@ -25,7 +27,8 @@ extends SceneTree
 ## time. Front, back and side views leave the cubicle out (its back panel
 ## hides the body); the top and game views stand the body in it, to show the
 ## lather inside the glass. Each plate proves the feet, chest and lather top
-## in frame and that a twin with the body hidden differs; otherwise
+## in frame, that sight lines to them land first on the passenger or its
+## lather (_sighted), and that a twin with the body hidden differs; otherwise
 ## PROBE_INVALID, exit 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
@@ -73,6 +76,19 @@ const ORTHO_M := 2.4
 const MARGIN_PX := 8.0
 const MIN_DIFF_PX := 300
 const TRAY_M := 0.10
+## The most bare torso and leg pixels the lather may let through: in any one
+## view of any body at any sample, and summed over every body, sample and
+## view. The lather of commit fee1a08 measured 19 and 663.
+const MAX_VIEW_PX := 30
+const MAX_TOTAL_PX := 1000
+## The control pass draws every bubble at this share of its size, and must
+## break the limits above, so the check is shown to bite.
+const CONTROL_SHARE := 0.6
+## Of a plate's three sight lines (feet, chest, lather top), at least this
+## many must land first on the passenger or its lather, and none may be
+## blocked in front of it.
+const MIN_SIGHT := 2
+const PlateSight := preload("res://spike/plate_sight.gd")
 
 var _out_dir := ""
 var _failed := false
@@ -82,6 +98,8 @@ var _cover_root: Node3D
 var _last: Array[Image] = []
 var _plate_vp: SubViewport
 var _plate_root: Node3D
+## What else in the plate world could stand in front of the passenger.
+var _occluders: Array[Node] = []
 
 
 func _initialize() -> void:
@@ -101,7 +119,10 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_build_cover_world()
-	await _cover()
+	if not await _cover(false):
+		_invalid("the lather lets bare skin through past the limits")
+	if await _cover(true):
+		_invalid("control: the lather at %.1f of its size kept within the limits" % CONTROL_SHARE)
 	if not "--cover-only" in OS.get_cmdline_user_args():
 		_build_plate_world()
 		for body in PLATE_BODIES:
@@ -147,8 +168,11 @@ func _aim(cam: Camera3D, dir: Vector3, target: Vector3, back: float) -> void:
 	cam.look_at_from_position(target + d * back, target, up)
 
 
-## Every body through the clip in every coverage view.
-func _cover() -> void:
+## Every body through the clip in every coverage view; with `control`, the
+## bubbles drawn at CONTROL_SHARE of their size. True when the bare pixels
+## keep within MAX_VIEW_PX and MAX_TOTAL_PX.
+func _cover(control: bool) -> bool:
+	var label := "CONTROL" if control else "COVER"
 	var total := 0
 	var twin_total := 0
 	var worst_all := 0
@@ -166,6 +190,13 @@ func _cover() -> void:
 		flat.vertex_color_use_as_albedo = true
 		mi.material_override = flat
 		var foam := _foam(node, false)
+		if control:
+			# This foam's own MultiMesh: the shared bubble list is untouched.
+			var mm := (foam.get_node("Lather") as MultiMeshInstance3D).multimesh
+			var shrink := Basis.from_scale(Vector3.ONE * CONTROL_SHARE)
+			for i in mm.instance_count:
+				var xf := mm.get_instance_transform(i)
+				mm.set_instance_transform(i, Transform3D(shrink * xf.basis, xf.origin))
 		var player := _player(node)
 		var length := player.get_animation("shower").length
 		var worst: Array[int] = []
@@ -196,8 +227,9 @@ func _cover() -> void:
 			worst_all = maxi(worst_all, worst[v])
 			print(
 				(
-					"COVER %s %s worst=%d at=%.2f twin=%d"
+					"%s %s %s worst=%d at=%.2f twin=%d"
 					% [
+						label,
 						PassengerLooks.BODIES[body],
 						COVER_VIEWS[v][0],
 						worst[v],
@@ -210,8 +242,8 @@ func _cover() -> void:
 				_invalid(
 					"%s %s: the body is not seen" % [PassengerLooks.BODIES[body], COVER_VIEWS[v][0]]
 				)
-		print("COVER_BODY %s counted_vertices=%d" % [PassengerLooks.BODIES[body], counted])
-		if body in PLATE_BODIES:
+		print("%s_BODY %s counted_vertices=%d" % [label, PassengerLooks.BODIES[body], counted])
+		if body in PLATE_BODIES and not control:
 			for v in COVER_VIEWS.size():
 				if masks[v] != null:
 					var mask_file := (
@@ -219,12 +251,27 @@ func _cover() -> void:
 					)
 					_save(masks[v], mask_file)
 		node.free()
+	var held := worst_all <= MAX_VIEW_PX and total <= MAX_TOTAL_PX
 	print(
 		(
-			"COVER_TOTAL bare_px=%d of twin_px=%d worst_single=%d samples=%d views=%d"
-			% [total, twin_total, worst_all, SAMPLES, COVER_VIEWS.size()]
+			(
+				"%s_TOTAL bare_px=%d of twin_px=%d worst_single=%d samples=%d views=%d"
+				+ " limits view<=%d total<=%d within=%s"
+			)
+			% [
+				label,
+				total,
+				twin_total,
+				worst_all,
+				SAMPLES,
+				COVER_VIEWS.size(),
+				MAX_VIEW_PX,
+				MAX_TOTAL_PX,
+				held
+			]
 		)
 	)
+	return held
 
 
 ## The red pixels (bare torso and legs) each coverage view shows now.
@@ -346,6 +393,7 @@ func _build_plate_world() -> void:
 	cube.mesh = box
 	cube.position = Vector3(-0.95, 0.5, -0.95)
 	_plate_root.add_child(cube)
+	_occluders = [floor_mi, cube]
 
 
 ## The plates of body `body` at `share` of the clip: five orthographic views
@@ -397,8 +445,12 @@ func _plates(body: int, share: float) -> void:
 		player.seek(t, true)
 		var img := await _grab()
 		var ok := true
+		var points: Array[Vector3] = []
 		for point: Vector3 in [Vector3(0, 0.15, 0), Vector3(0, 1.3, 0), Vector3(0, 1.62, 0)]:
+			points.append(node.global_transform * point)
+		for point in points:
 			ok = _in_frame(cam, point, "%s_%s" % [stem, view[0]]) and ok
+		ok = await _sighted(cam, node, points, "%s_%s" % [stem, view[0]]) and ok
 		node.visible = false
 		var without := await _grab()
 		node.visible = true
@@ -412,6 +464,54 @@ func _plates(body: int, share: float) -> void:
 	_save(_sheet(images), "%s_sheet.png" % stem)
 	node.free()
 	cubicle.free()
+
+
+## Whether sight lines from `cam` (PlateSight, against the meshes drawn now)
+## to `points` land first on the passenger `node` or its lather: at least
+## MIN_SIGHT of them, and none blocked in front of it. The occluders are the
+## floor, the 1 m cube and the passenger; the cubicle is left out, because its
+## glass panels are faces of the same meshes as its frame and a ray cannot
+## tell them apart (the twin difference and the opened plate cover it). The
+## translucent steam is left out too.
+func _sighted(cam: Camera3D, node: Node3D, points: Array[Vector3], label: String) -> bool:
+	var foam := node.get_node("ShowerFoam") as Node3D
+	var haze := foam.get_node("Haze") as Node3D
+	var steam := foam.get_node("Steam") as Node3D
+	var shown := [haze.visible, steam.visible]
+	haze.visible = false
+	steam.visible = false
+	var owners: Array[Node] = [node]
+	owners.append_array(_occluders)
+	var holder := PlateSight.colliders(_plate_root, owners, {node: "person"})
+	haze.visible = shown[0]
+	steam.visible = shown[1]
+	# The lather's bodies come from its MultiMesh, untagged: they are the
+	# passenger's too.
+	for body in holder.get_children():
+		if str(body.get_meta("mesh", "")) == "Lather":
+			body.set_meta("subject", "person")
+	await physics_frame
+	await physics_frame
+	var space := cam.get_world_3d().direct_space_state
+	var on := 0
+	var blockers: Array[String] = []
+	var past := 0
+	for point in points:
+		var from := cam.project_ray_origin(cam.unproject_position(point))
+		var hits := PlateSight.sight_lines(space, from, [point], "person")
+		on += (hits["on_subject"] as Array).size()
+		blockers.append_array(hits["blockers"])
+		past += int(hits["past"])
+	var unbaked: Array = holder.get_meta("unbaked")
+	var ok := on >= MIN_SIGHT and blockers.is_empty() and unbaked.is_empty()
+	print(
+		(
+			"SIGHT %s on=%d need=%d past=%d blockers=%s unbaked=%s ok=%s"
+			% [label, on, MIN_SIGHT, past, blockers, unbaked, ok]
+		)
+	)
+	holder.free()
+	return ok
 
 
 func _grab() -> Image:
