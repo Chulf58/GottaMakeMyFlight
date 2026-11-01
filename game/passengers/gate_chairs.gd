@@ -14,8 +14,9 @@ const CHAIR_OFFSET_M: Array[float] = [-0.08, 0.36, 0.08]
 
 
 ## The sideways step from the sim's position to the chair, turned with the
-## row. While sitting down or standing up it scales with how far the sim has
-## moved the passenger from the front cell towards the seat, so the step
+## row, plus the passenger's body's step forward and up off the chair
+## (PassengerLooks.SEAT_SHIFT_M). While sitting down or standing up it scales
+## with how far the sim has moved the passenger from the front cell towards the seat, so the step
 ## blends in and out with the shuffle. Zero away from a gate seat, and zero
 ## for a row an edit removed until the sim releases the seat on its next tick.
 ## A seat cell outside its row's footprint is a bug: reported, zero.
@@ -36,4 +37,7 @@ static func offset(sim: PassengerSim, p: Passenger) -> Vector3:
 	var full := (front - seat).length() * (1.0 - PassengerSim.SIT_FORWARD_M)
 	var share := clampf((sim.world_position(p) - front).length() / full, 0.0, 1.0)
 	var side := BuildObjectDef.rotate_point(Vector2(CHAIR_OFFSET_M[index], 0.0), record["facing"])
-	return Vector3(side.x, 0.0, side.y) * share
+	# The body's own step forward and up, clear of the chair (SEAT_SHIFT_M).
+	var shift := PassengerLooks.SEAT_SHIFT_M[PassengerLooks.body_of(p.id, p.variant)]
+	var ahead := (front - seat).normalized() * shift.x + Vector3.UP * shift.y
+	return (Vector3(side.x, 0.0, side.y) + ahead) * share

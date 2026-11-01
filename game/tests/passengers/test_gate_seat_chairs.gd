@@ -102,6 +102,8 @@ func test_a_seated_passenger_is_drawn_on_a_chair_at_every_facing() -> void:
 		var index := cells.find(seat["cell"])
 		var p := Passenger.new()
 		p.id = 1000 + checked
+		# Male and female bodies in turn: each is drawn with its own seat shift.
+		p.variant = checked % 2
 		p.stage = Passenger.Stage.SEATED
 		p.seat_object = seat["object_id"]
 		p.seat_cell = seat["cell"]
@@ -131,8 +133,11 @@ func test_a_seated_passenger_is_drawn_on_a_chair_at_every_facing() -> void:
 			)
 		)
 		assert_float(absf(sideways)).is_less(MATCH_M)
-		assert_float(forward).is_equal_approx(PassengerSim.SIT_FORWARD_M, 0.001)
-		assert_float(drawn.y).is_equal_approx(grid.origin.y, 0.001)
+		# Forward of the sim's spot and lifted by the body's own seat shift,
+		# which keeps it out of the chair's backrest and pan.
+		var shift := PassengerLooks.SEAT_SHIFT_M[PassengerLooks.body_of(p.id, p.variant)]
+		assert_float(forward).is_equal_approx(PassengerSim.SIT_FORWARD_M + shift.x, 0.001)
+		assert_float(drawn.y).is_equal_approx(grid.origin.y + shift.y, 0.001)
 		# Sitting down ends on the chair, starts at the front cell and is half
 		# way sideways half way through the shuffle.
 		p.stage = Passenger.Stage.SITTING_DOWN

@@ -55,6 +55,28 @@ const CLIP_WALK_MPS: Array[float] = [
 const CLIP_RUN_MPS: Array[float] = [
 	5.295, 5.295, 5.295, 5.295, 5.295, 5.295, 4.173, 4.173, 4.173, 4.173, 4.173, 4.173
 ]
+## Per body, how far a body seated on a gate seat row is drawn forward (x) and
+## up (y) of the sim's spot, so no part of it is inside the chair: the hips
+## clear the backrest and the backs of the female bodies' knees clear the pan's
+## front edge (their feet already sit forward in sit_idle, tools/blender/anim/
+## toon_clips.py SIT_SHIN_LEAN_DEG). A lift only where a dress hangs into the
+## pan (female_01 and female_05).
+## Measured by game/spike/passenger_looks_plates_probe.gd --parts=seated
+## --sweep (the least step leaving no body point inside the row) plus 1 cm.
+const SEAT_SHIFT_M: Array[Vector2] = [
+	Vector2(0.03, 0.0),
+	Vector2(0.035, 0.0),
+	Vector2(0.025, 0.0),
+	Vector2(0.025, 0.0),
+	Vector2(0.035, 0.0),
+	Vector2(0.03, 0.0),
+	Vector2(0.07, 0.02),
+	Vector2(0.06, 0.0),
+	Vector2(0.065, 0.0),
+	Vector2(0.06, 0.015),
+	Vector2(0.08, 0.0),
+	Vector2(0.065, 0.0),
+]
 ## Clothing tints: [hue turn of coloured swatches, hue given to grey swatches].
 ## Tint 0 is the vendor's own colours.
 const TINTS := [[0.0, -1.0], [0.5, 0.6], [0.17, 0.08], [0.83, 0.95], [0.33, 0.3], [0.67, 0.5]]

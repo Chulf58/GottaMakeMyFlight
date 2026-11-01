@@ -17,6 +17,16 @@ func test_a_body_stays_within_its_variant_and_every_body_is_drawn() -> void:
 	assert_int(seen.size()).is_equal(PassengerLooks.BODIES.size())
 
 
+## Every body has a seat shift (game/spike/passenger_looks_plates_probe.gd
+## measures it against the seat row), never backward or down, and lifted at
+## most 2 cm: more would show the body floating over the pan.
+func test_every_body_has_a_seat_shift_forward_and_at_most_a_small_lift() -> void:
+	assert_int(PassengerLooks.SEAT_SHIFT_M.size()).is_equal(PassengerLooks.BODIES.size())
+	for shift in PassengerLooks.SEAT_SHIFT_M:
+		assert_float(shift.x).is_greater(0.0)
+		assert_float(shift.y).is_between(0.0, 0.02)
+
+
 func test_the_look_is_the_same_for_the_same_id() -> void:
 	for id in [1, 7, 42, 1000]:
 		assert_int(PassengerLooks.body_of(id, 1)).is_equal(PassengerLooks.body_of(id, 1))

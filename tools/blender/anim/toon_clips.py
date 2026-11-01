@@ -130,6 +130,17 @@ SIT_BREATH_DEG = 3.0
 # it rests on the pan; one that rests lower is left as it is (a skirt hangs below the seat).
 SEAT_TOP_M = 0.53
 SEAT_FIT_TOLERANCE_M = 0.01
+# The female bodies' shorter thighs end over a 0.5 m deep gate pan, so with the feet
+# left where they stand (and the hips lowered onto the pan) the calves tuck back into
+# the pan's front edge. Seated, each of their legs points straight ahead of its hip
+# joint and its foot moves forward until the shin leans this far forward of vertical,
+# with the hips where they were; the seat is then lowered onto the pan to within
+# SEAT_FIT_FEMALE_M. A body that rests lower (female_01's dress) is left as it is.
+# Male bodies keep their standing feet and SEAT_FIT_TOLERANCE_M (their seats were
+# within 2 mm of the pan).
+SIT_SHIN_LEAN_DEG = {"female": 8.0}
+SEAT_FIT_FEMALE_M = 0.003
+SEAT_FIT_ROUNDS = 4
 
 
 class Fail(Exception):
@@ -486,15 +497,38 @@ def sit_pose(rig, stand, lean_extra=0.0, breath=0.0, head_yaw=0.0, hips_override
     return rots, hips
 
 
-def solve_sit_limbs(rig, stand, rots, hips, fracs):
-    """Legs by IK to the standing ankles, hands by IK onto the thighs. fracs holds how far
-    along each thigh the hand rests: chosen once (the largest reachable) for the seated
-    pose P, then reused, so breathing in sit_idle cannot make a hand hop."""
+def seat_ankles(rig, stand, rots, hips, lean_deg):
+    """Where each seated foot goes so its shin leans lean_deg forward of vertical, with
+    the ankle at its standing height and side offset and the knee one thigh from the hip
+    joint (the hips placed as they are)."""
+    s_r = {n: m.to_3x3().normalized() for n, m in stand.items()}
+    mats = rig.fk(rots, hips, ref_r=s_r)
+    lean = math.radians(lean_deg)
+    ankles = {}
+    for s in SIDES:
+        hip = mats["Quad" + s].translation
+        stood = stand["Foot" + s].translation
+        shin = rig.length["Shin" + s]
+        knee_x = hip.x
+        knee_z = stood.z + shin * math.cos(lean)
+        flat = rig.length["Quad" + s] ** 2 - (knee_x - hip.x) ** 2 - (knee_z - hip.z) ** 2
+        if flat <= 0.0:
+            raise Fail("sit: a knee over a leaning shin is out of the thigh's reach")
+        knee_y = hip.y - math.sqrt(flat)
+        ankles[s] = Vector((hip.x, knee_y - shin * math.sin(lean), stood.z))
+    return ankles
+
+
+def solve_sit_limbs(rig, stand, rots, hips, fracs, ankles=None):
+    """Legs by IK to the standing ankles (or to `ankles`, side -> seated ankle), hands by
+    IK onto the thighs. fracs holds how far along each thigh the hand rests: chosen once
+    (the largest reachable) for the seated pose P, then reused, so breathing in sit_idle
+    cannot make a hand hop."""
     s_r = {n: m.to_3x3().normalized() for n, m in stand.items()}
     mats = rig.fk(rots, hips, ref_r=s_r)
     clamp = 0.0
     for s in SIDES:
-        ankle = stand["Foot" + s].translation
+        ankle = ankles[s] if ankles else stand["Foot" + s].translation
         knee_hint = mats["Quad" + s].translation + FORWARD + Vector((0.0, 0.0, 0.3))
         clamp = max(clamp, rig.solve_limb("Quad" + s, "Shin" + s, "Foot" + s, rots, mats, ankle, knee_hint))
     mats = rig.fk(rots, hips, ref_r=s_r)
@@ -528,22 +562,39 @@ def solve_sit_limbs(rig, stand, rots, hips, fracs):
 def sit_clips(rig, stem, stand):
     s_r = {n: m.to_3x3().normalized() for n, m in stand.items()}
     p_rots, p_hips = sit_pose(rig, stand)
+    gender = "female" if "female" in stem else "male"
+    lean = SIT_SHIN_LEAN_DEG.get(gender)
+    ankles = seat_ankles(rig, stand, p_rots, p_hips, lean) if lean is not None else None
     fracs = {}
-    p_mats, clamp = solve_sit_limbs(rig, stand, dict(p_rots), p_hips, fracs)
+    p_mats, clamp = solve_sit_limbs(rig, stand, dict(p_rots), p_hips, fracs, ankles)
     p_r = {n: m.to_3x3().normalized() for n, m in p_mats.items()}
     if clamp > IK_CLAMP_TOLERANCE_M:
         raise Fail("%s sit: ankle out of reach by %.3f m" % (stem, clamp))
     first = measure_seat(rig, p_mats)
     drop = first["top"] - SEAT_TOP_M
-    if drop > SEAT_FIT_TOLERANCE_M:
-        p_hips = p_hips - Vector((0.0, 0.0, drop))
-        fracs = {}
-        p_mats, clamp = solve_sit_limbs(rig, stand, dict(p_rots), p_hips, fracs)
+    tolerance = SEAT_FIT_FEMALE_M if lean is not None else SEAT_FIT_TOLERANCE_M
+    if drop > tolerance:
+        fitted = first["top"]
+        moved = 0.0
+        for _ in range(SEAT_FIT_ROUNDS):
+            p_hips = p_hips - Vector((0.0, 0.0, fitted - SEAT_TOP_M))
+            moved += fitted - SEAT_TOP_M
+            if ankles is not None:
+                ankles = seat_ankles(rig, stand, p_rots, p_hips, lean)
+            fracs = {}
+            p_mats, clamp = solve_sit_limbs(rig, stand, dict(p_rots), p_hips, fracs, ankles)
+            fitted = measure_seat(rig, p_mats)["top"]
+            if abs(fitted - SEAT_TOP_M) <= tolerance:
+                break
         p_r = {n: m.to_3x3().normalized() for n, m in p_mats.items()}
-        fitted = measure_seat(rig, p_mats)["top"]
-        log("SIT_FIT %s seat_top_before=%.3f after=%.3f hips_lowered_m=%.3f" % (stem, first["top"], fitted, drop))
-        if clamp > IK_CLAMP_TOLERANCE_M or abs(fitted - SEAT_TOP_M) > SEAT_FIT_TOLERANCE_M:
-            raise Fail("%s sit: lowered seat rests at %.3f m (clamp %.3f)" % (stem, fitted, clamp))
+        log("SIT_FIT %s seat_top_before=%.3f after=%.3f hips_lowered_m=%.3f" % (stem, first["top"], fitted, moved))
+        if clamp > IK_CLAMP_TOLERANCE_M or abs(fitted - SEAT_TOP_M) > tolerance:
+            raise Fail("%s sit: fitted seat rests at %.3f m (clamp %.3f)" % (stem, fitted, clamp))
+    if ankles is not None:
+        log(
+            "SIT_FEET %s lean_deg=%.1f forward_of_standing_m=%s"
+            % (stem, lean, ["%.3f" % (stand["Foot" + s].translation.y - ankles[s].y) for s in SIDES])
+        )
 
     down = []
     s_hips = stand["Hips"].translation
@@ -566,14 +617,18 @@ def sit_clips(rig, stem, stand):
             # The knee bends in the standing pose's own plane at the start, so frame 0 is the
             # idle's first pose exactly, and in the seated pose's plane at the end.
             hint = stand["Shin" + s].translation.lerp(p_mats["Shin" + s].translation, u)
-            rig.solve_limb("Quad" + s, "Shin" + s, "Foot" + s, rots, mats, stand["Foot" + s].translation, hint)
+            # A seated foot set forward (ankles) slides there as the body sits down.
+            foot = stand["Foot" + s].translation
+            if ankles is not None:
+                foot = foot.lerp(ankles[s], u)
+            rig.solve_limb("Quad" + s, "Shin" + s, "Foot" + s, rots, mats, foot, hint)
         down.append(rig.fk(rots, hips, ref_r=s_r))
 
     idle_poses = []
     for k in range(SIT_IDLE_FRAMES + 1):
         w = 2.0 * math.pi * k / SIT_IDLE_FRAMES
         rots, hips = sit_pose(rig, stand, breath=SIT_BREATH_DEG * math.sin(2 * w), head_yaw=9.0 * math.sin(w), hips_override=p_hips)
-        mats, _ = solve_sit_limbs(rig, stand, rots, hips, fracs)
+        mats, _ = solve_sit_limbs(rig, stand, rots, hips, fracs, ankles)
         idle_poses.append(mats)
     seat = measure_seat(rig, p_mats)
     log(
