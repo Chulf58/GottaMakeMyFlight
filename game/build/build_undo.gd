@@ -27,6 +27,7 @@ static func commit(
 	var rule := rule_problem.bind(shell)
 	var snapshot := grid.to_snapshot()
 	var scratch := BuildGrid.new(grid.size, grid.origin)
+	scratch.shell_border = grid.shell_border
 	if not scratch.from_snapshot(snapshot):
 		push_error("BuildUndo.commit: the grid could not be copied to check the undo")
 		return BuildResult.refused(BuildResult.Reason.NONE)

@@ -8,6 +8,11 @@ extends RefCounted
 ## took, another object's interaction cell or a staff spot (StaffSpots), which
 ## passengers may cross but never queue on. Stations claim cells in id order.
 ##
+## Every cell a passenger uses here passes the one eligibility rule,
+## BuildGrid.is_passenger_cell(): walkable floor that walls close in. A lane
+## head, a seat front, a passage cell or an exit door cell on floor that is
+## not walled in is not in service.
+##
 ## A security lane (SecurityLanes) is one station keyed by its arch: a whole
 ## lane's arch is listed in scanners with its passage, and the cells it keeps
 ## clear (SecurityLanes.kept_clear_cells()) stop other queues like a staff
@@ -66,11 +71,11 @@ func rebuild(grid: BuildGrid) -> void:
 				desks.append(id)
 			&"security_scanner":
 				scanners.append(id)
-				passages[id] = grid.passage_cells(id)
+				passages[id] = _eligible_passage(grid, grid.passage_cells(id))
 			&"security_arch":
 				if security_lanes.is_complete(id):
 					scanners.append(id)
-					passages[id] = security_lanes.lane(id)["passage"]
+					passages[id] = _eligible_passage(grid, security_lanes.lane(id)["passage"])
 			&"entrance_door":
 				entrances.append(id)
 			&"exit_door":
@@ -101,11 +106,12 @@ func door_outward(grid: BuildGrid, door: int) -> Vector2i:
 	return -front_of(grid.get_object(door)["facing"])
 
 
-## An exit is open when nothing closes its outward edge: no wall on it, and
-## no floor beyond it (the door must stand on the terminal's boundary).
+## An exit is open when its cell is a passenger cell (walled in) and nothing
+## closes its outward edge: no wall on it, and no floor beyond it (the door
+## must stand on the terminal's boundary).
 func is_exit_open(grid: BuildGrid, door: int) -> bool:
 	var cell := door_cell(grid, door)
-	if cell == BuildObjectDef.NO_CELL:
+	if cell == BuildObjectDef.NO_CELL or not grid.is_passenger_cell(cell):
 		return false
 	var out := door_outward(grid, door)
 	if grid.has_wall(cell, BuildGrid.SIDE_STEP.find(out)):
@@ -134,7 +140,7 @@ func _lane(
 ) -> Array[Vector2i]:
 	var lane: Array[Vector2i] = []
 	var cell := grid.interaction_cell(station)
-	if cell == BuildObjectDef.NO_CELL or taken.has(cell) or not grid.is_walkable(cell):
+	if cell == BuildObjectDef.NO_CELL or taken.has(cell) or not grid.is_passenger_cell(cell):
 		return lane
 	var front := front_of(grid.get_object(station)["facing"])
 	lane.append(cell)
@@ -143,12 +149,24 @@ func _lane(
 		var next := cell + front
 		if not grid.in_bounds(next) or taken.has(next) or reserved.has(next):
 			break
-		if not grid.can_route(cell, next):
+		if not grid.can_passenger_route(cell, next):
 			break
 		lane.append(next)
 		taken[next] = true
 		cell = next
 	return lane
+
+
+## `cells`, or empty (a closed passage) when any of them is not a passenger
+## cell.
+static func _eligible_passage(grid: BuildGrid, cells: Array) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for cell: Vector2i in cells:
+		if not grid.is_passenger_cell(cell):
+			out.clear()
+			return out
+		out.append(cell)
+	return out
 
 
 func _add_seats(grid: BuildGrid, id: int) -> void:
@@ -158,7 +176,7 @@ func _add_seats(grid: BuildGrid, id: int) -> void:
 	var cells := def.footprint(record["anchor"], facing)
 	for i in cells.size():
 		var front := cells[i] + front_of(facing)
-		if grid.is_walkable(front):
+		if grid.is_passenger_cell(front):
 			seats.append(
 				{
 					"key": "%d:%d" % [id, i],

@@ -32,8 +32,13 @@ static func build(grid: BuildGrid, types: Array) -> Dictionary:
 	for y in range(ShopTestLayout.AIRSIDE_ROOM.position.y, ShopTestLayout.AIRSIDE_ROOM.end.y):
 		for x in range(ShopTestLayout.FLOOR.end.x, end_x):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+		# ShopTestLayout walled its floor's east side; the row carries on.
+		if end_x > ShopTestLayout.FLOOR.end.x:
+			var edge := Vector2i(ShopTestLayout.FLOOR.end.x - 1, y)
+			edits.append(BuildEdit.remove_wall(edge, BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):
 		assert(result.ok, "wish layout floor refused: %s" % result.reason_text())
+	EnclosureKit.close_floor(grid)
 	var ids := {"rooms": [], "counters": []}
 	for i in types.size():
 		var type: StringName = types[i]

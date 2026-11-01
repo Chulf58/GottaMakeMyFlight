@@ -91,6 +91,8 @@ func test_the_view_draws_in_the_grid_frame() -> void:
 
 func test_an_entrance_clicked_on_the_edge_paths_into_the_room() -> void:
 	var grid := _mode.grid
+	# Walls close the floor in; the entrance takes down the wall on its way out.
+	EnclosureKit.close_floor(grid)
 	var cell := Vector2i(6, ROOM_MIN.y)
 	_mode.set_tool(BuildMode.Tool.ENTRANCE)
 	var point := grid.cell_to_world(cell) + Vector3(0.1, 0, -0.45)

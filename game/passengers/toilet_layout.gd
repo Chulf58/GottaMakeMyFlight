@@ -6,8 +6,9 @@ extends RefCounted
 ## stalls; ToiletSim owns who holds each one. Rebuilt after every grid edit.
 ##
 ## A stall is a toilet_stall piece wholly inside a ready toilet room (the rule
-## RoomRules counts pieces by) whose approach cell, its interaction cell, is
-## walkable. It is 1 cell wide and 2 deep with its door at the front (decision
+## RoomRules counts pieces by) whose approach cell, its interaction cell, is a
+## passenger cell (BuildGrid.is_passenger_cell(): walkable and walled in).
+## It is 1 cell wide and 2 deep with its door at the front (decision
 ## toilet-stall-kit-piece-1x2-footprint-side-partitions-out-to): the walker
 ## stops on the approach cell, steps in to Mount_Turn in the front cell, turns
 ## and sits back to Mount_Use, just inside the rear cell. The stall cells are
@@ -42,7 +43,7 @@ func rebuild(grid: BuildGrid) -> void:
 			if record["def"] != &"toilet_stall" or not FacilitySlots.piece_inside(grid, id, area):
 				continue
 			var approach := grid.interaction_cell(id)
-			if not grid.is_walkable(approach):
+			if not grid.is_passenger_cell(approach):
 				continue
 			var front := TerminalLayout.front_of(record["facing"])
 			var use_cell: Vector2i = record["anchor"]

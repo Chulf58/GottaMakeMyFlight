@@ -407,6 +407,8 @@ static func _ghost_material(tint: Color) -> StandardMaterial3D:
 func _ready() -> void:
 	if shell != null:
 		grid = BuildGrid.new(shell.grid_size, shell.grid_origin)
+		# The shell's facade is the outer wall: the grid border closes rooms in.
+		grid.set_shell_border(true)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
 	grid.graph_changed.connect(_on_lane_graph_changed)

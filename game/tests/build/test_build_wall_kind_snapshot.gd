@@ -18,6 +18,8 @@ func _kinded_grid() -> BuildGrid:
 
 func _plain_grid() -> BuildGrid:
 	var grid := BuildGrid.new(Vector2i(4, 3))
+	# The border closes the floor in, so passengers may walk it.
+	grid.set_shell_border(true)
 	for y in 3:
 		for x in 4:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
@@ -35,6 +37,8 @@ func _through_json(data: Dictionary) -> Dictionary:
 func test_kinds_round_trip_through_json() -> void:
 	var snapshot := _kinded_grid().to_snapshot()
 	var other := BuildGrid.new()
+	# As the saved grid: its border closes it in (never saved).
+	other.set_shell_border(true)
 	assert_bool(other.from_snapshot(_through_json(snapshot))).is_true()
 	assert_str(JSON.stringify(other.to_snapshot())).is_equal(JSON.stringify(snapshot))
 	assert_int(other.wall_kind(Vector2i(0, 1), NORTH)).is_equal(BuildGrid.WallKind.GLASS)

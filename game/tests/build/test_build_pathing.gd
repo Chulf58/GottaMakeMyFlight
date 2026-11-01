@@ -4,6 +4,8 @@ extends GdUnitTestSuite
 
 func _floored_grid(size: Vector2i) -> BuildGrid:
 	var grid := BuildGrid.new(size)
+	# The border closes the floor in, so passengers may walk it.
+	grid.set_shell_border(true)
 	for y in size.y:
 		for x in size.x:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))

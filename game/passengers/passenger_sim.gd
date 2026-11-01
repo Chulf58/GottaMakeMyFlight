@@ -1246,7 +1246,7 @@ func _replan(p: Passenger) -> void:
 	var path: Array[Vector2i] = []
 	if keep == 0:
 		path = grid.find_path(here, target)
-	elif grid.can_route(here, next):
+	elif grid.can_passenger_route(here, next):
 		path = grid.find_path(next, target)
 		if path.is_empty():
 			path.append(next)

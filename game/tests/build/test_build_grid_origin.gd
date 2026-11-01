@@ -29,6 +29,8 @@ func _built_shell_grid() -> BuildGrid:
 	edits.append(BuildEdit.place_object(&"seat_row", Vector2i(15, 9), 2))
 	for edit in edits:
 		assert_bool(grid.apply(edit).ok).is_true()
+	# Walls close the floor in, so passengers may walk it (TerminalEnclosure).
+	EnclosureKit.close_floor(grid)
 	return grid
 
 

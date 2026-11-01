@@ -38,6 +38,8 @@ func _buy_all(grid: BuildGrid, edits: Array[BuildEdit], wallet: Wallet) -> bool:
 func test_a_floor_island_by_the_spot_is_not_taken_for_the_way_in() -> void:
 	var shell: ShellDefinition = load(SHELL)
 	var grid := BuildGrid.new(shell.grid_size, shell.grid_origin)
+	# As BuildMode with a shell: the facade closes the grid border.
+	grid.set_shell_border(true)
 	var island := 0
 	for x in grid.size.x:
 		var edit := _paint(Vector2i(x, ISLAND_ROW))
@@ -92,6 +94,8 @@ func test_a_cell_painted_twice_is_charged_once() -> void:
 func test_the_empty_shell_plan_paints_each_cell_once() -> void:
 	var shell: ShellDefinition = load(SHELL)
 	var grid := BuildGrid.new(shell.grid_size, shell.grid_origin)
+	# As BuildMode with a shell: the facade closes the grid border.
+	grid.set_shell_border(true)
 	var plan := RepairPlan.make(grid, shell)
 	assert_bool(plan.ok).is_true()
 	var painted := {}
