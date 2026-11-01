@@ -51,10 +51,11 @@ func test_loading_a_save_reframes_the_camera_on_what_it_built() -> void:
 	_camera.home_position = Vector3(99.0, 0.0, 99.0)
 	_camera.position = Vector3(99.0, 0.0, 99.0)
 	assert_bool(save.load_world(data)).is_true()
+	# The new game's shell stands too, so the view frames the shell and the tile.
+	var area := StartView.area_for(_mode.grid)
 	var cell_centre := _mode.grid.cell_to_world(Vector2i(3, 3))
-	assert_vector(_camera.home_position).is_equal_approx(
-		Vector3(cell_centre.x, 0.0, cell_centre.z), Vector3.ONE * 0.001
-	)
+	assert_bool(area.has_point(Vector2(cell_centre.x, cell_centre.z))).is_true()
+	assert_vector(_camera.home_position).is_equal_approx(_framed(area), Vector3.ONE * 0.001)
 	assert_vector(_camera.position).is_equal_approx(_camera.home_position, Vector3.ONE * 0.001)
 
 

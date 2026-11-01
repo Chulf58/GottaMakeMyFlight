@@ -305,6 +305,10 @@ const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
 ## The landside the curb, car park and Close tools build on (Landside 3/4). main.tscn
 ## sets it; without it those tools do nothing.
 @export var landside: LandsideSim
+## Starts the grid with the player-owned starter shell (StarterShell) when the
+## node enters the tree. main.tscn sets it; a load replaces the grid, so a
+## loaded game never gets a second shell. A bare BuildMode starts empty.
+@export var starter_shell := false
 
 ## The tool BuildMode starts on. main.tscn sets None, so a new game has no tool
 ## and a stray click on the world builds nothing; the Floor default keeps a bare
@@ -399,6 +403,8 @@ func _ready() -> void:
 		grid = BuildGrid.new(site.grid_size, site.grid_origin)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
+	if starter_shell:
+		StarterShell.place(grid)
 	grid.graph_changed.connect(_on_lane_graph_changed)
 	grid.graph_changed.connect(_on_grid_drawn_cells_changed)
 	_view.name = "BuildView"

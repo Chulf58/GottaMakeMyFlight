@@ -166,13 +166,13 @@ func test_starter_terminal_on_the_site_has_both_doors_in_service() -> void:
 	assert_array(layout.out_of_service).is_empty()
 
 
-func test_starter_terminal_refuses_a_painted_grid_and_says_so() -> void:
+func test_starter_terminal_leaves_a_painted_grid_alone_and_says_why() -> void:
 	var mode := _build_mode(BuildGrid.DEFAULT_SIZE)
 	mode.grid.apply(BuildEdit.paint_floor(Vector2i(3, 3), BuildGrid.FLOOR_TILE, 1))
 	var before := JSON.stringify(mode.grid.to_snapshot())
 	_hud.press_starter_terminal()
 	assert_str(JSON.stringify(mode.grid.to_snapshot())).is_equal(before)
-	assert_str(_hud.status_text()).contains("empty")
+	assert_str(_hud.status_text()).starts_with("Starter terminal not filled")
 	mode.grid.apply(BuildEdit.remove_floor(Vector2i(3, 3)))
 	var wall := mode.grid.apply(BuildEdit.place_wall(Vector2i(3, 3), BuildGrid.Side.NORTH))
 	assert_bool(wall.ok).is_true()
@@ -181,7 +181,7 @@ func test_starter_terminal_refuses_a_painted_grid_and_says_so() -> void:
 	assert_str(JSON.stringify(mode.grid.to_snapshot())).is_equal(before)
 
 
-func test_starter_terminal_refuses_a_grid_with_objects_and_says_so() -> void:
+func test_starter_terminal_leaves_a_grid_with_objects_alone_and_says_why() -> void:
 	var mode := _build_mode(BuildGrid.DEFAULT_SIZE)
 	for y in range(2, 7):
 		for x in range(2, 7):
@@ -190,7 +190,7 @@ func test_starter_terminal_refuses_a_grid_with_objects_and_says_so() -> void:
 	assert_bool(desk.ok).is_true()
 	_hud.press_starter_terminal()
 	assert_int(mode.grid.object_ids().size()).is_equal(1)
-	assert_str(_hud.status_text()).contains("empty")
+	assert_str(_hud.status_text()).starts_with("Starter terminal not filled")
 
 
 func test_starter_terminal_failure_is_reported_in_the_status() -> void:
