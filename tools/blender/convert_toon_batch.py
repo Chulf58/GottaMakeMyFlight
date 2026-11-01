@@ -175,6 +175,20 @@ BATCH = {
         "Prefabs\\Male Character Sources\\TCP_Male_Character_07.prefab",
     ),
 }
+# Cleaner bodies (StaffCharacters, decision cleaner-staff-and-messes-visits-leave-messes-
+# bins-fill-pooled-cleaners-nearest-mess): an apron over work clothes, a body no
+# passenger and no other staff role wears. They also carry the "clean" clip.
+CLEANER_STEMS = ("tcp_female_character_10",)
+for _stem in CLEANER_STEMS:
+    _g = "Female" if "female" in _stem else "Male"
+    _n = _stem[-2:]
+    BATCH[_stem] = (
+        "TCP",
+        "people",
+        "TCP_%s_Character_%s.fbx" % (_g, _n),
+        "Poses\\TCP_%s_Idle_01.fbx" % _g,
+        "Prefabs\\%s Character Sources\\TCP_%s_Character_%s.prefab" % (_g, _g, _n),
+    )
 # Passenger bodies beyond 01 (decision comic-life-and-variety-visuals-first-passengers-get-10-more):
 # PassengerViews draws a passenger with one of the six bodies of its gender.
 PASSENGER_BODIES = {"male": ("02", "03", "06", "08", "09"), "female": ("03", "04", "05", "08", "11")}
@@ -545,7 +559,7 @@ def build_character(stem, idle_fbx, prefab):
     # Walk, run and the sit clips go on after the rotation is applied, so the clip
     # module works in armature space == world space (tools/blender/anim/toon_clips.py).
     try:
-        durations = toon_clips.add_clips(stem, arm, action, stem in SHOWER_STEMS)
+        durations = toon_clips.add_clips(stem, arm, action, stem in SHOWER_STEMS, stem in CLEANER_STEMS)
     except toon_clips.Fail as e:
         die(str(e))
     bpy.context.scene.frame_start = f0
@@ -1236,7 +1250,7 @@ def check_clips(stem, path, js, durations):
     each with real motion (Root may stay constant, the clip as a whole may not)."""
     anims = js.get("animations", [])
     names = [a["name"] for a in anims]
-    want_clips = toon_clips.clip_names(stem in SHOWER_STEMS)
+    want_clips = toon_clips.clip_names(stem in SHOWER_STEMS, stem in CLEANER_STEMS)
     if sorted(names) != sorted(want_clips) or len(anims) != len(want_clips):
         die("%s: expected animations %s, file has %s" % (stem, sorted(want_clips), names))
     for a in anims:

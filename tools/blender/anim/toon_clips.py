@@ -41,6 +41,11 @@ SOURCES = {
     "male": {"walk": ("Male Locomotion Pack", "walking.fbx"), "run": ("Male Locomotion Pack", "standard run.fbx")},
     "female": {"walk": ("Female Locomotion Pack", "walking.fbx"), "run": ("Female Locomotion Pack", "running.fbx")},
 }
+# The cleaner bodies' "clean" clip. No downloaded pack has a mop or sweep clip; the
+# closest is the Farming Pack's bend down and pull from the floor, which reads as picking
+# litter up and wiping. It is retargeted in place (its hips drift is removed like the
+# walk's travel) and the view plays it forward and back, so it needs no loop seam.
+CLEAN_SOURCE = ("Farming Pack", "pull plant.fbx")
 # Every character's clips. Passenger bodies also carry "shower" (see clip_names).
 CLIPS = ("idle", "walk", "run", "sit_down", "sit_idle", "stand_up")
 LOOPING = ("idle", "walk", "run", "sit_idle", "shower")
@@ -715,14 +720,16 @@ def stash(arm, action):
     track.mute = True
 
 
-def clip_names(shower):
-    """The clips a character carries: CLIPS, plus "shower" for a passenger body."""
-    return CLIPS + (("shower",) if shower else ())
+def clip_names(shower, clean=False):
+    """The clips a character carries: CLIPS, plus "shower" for a passenger body and
+    "clean" for a cleaner body."""
+    return CLIPS + (("shower",) if shower else ()) + (("clean",) if clean else ())
 
 
-def add_clips(stem, arm, idle, shower):
-    """Bake walk, run, sit_down, sit_idle and stand_up beside idle, and shower when
-    shower is true (passenger bodies; staff never shower). Returns {clip: duration_s}.
+def add_clips(stem, arm, idle, shower, clean=False):
+    """Bake walk, run, sit_down, sit_idle and stand_up beside idle, shower when shower
+    is true (passenger bodies; staff never shower) and clean when clean is true (cleaner
+    bodies, CLEAN_SOURCE). Returns {clip: duration_s}.
     Raises Fail on any check."""
     os.makedirs(OUT_DIR, exist_ok=True)
     gender = "female" if "female" in stem else "male"
@@ -774,7 +781,10 @@ def add_clips(stem, arm, idle, shower):
     report["clips"]["sit_down"] = {"frames": SIT_DOWN_FRAMES, "duration_s": SIT_DOWN_FRAMES / FPS}
     report["clips"]["sit_idle"] = {"frames": SIT_IDLE_FRAMES, "duration_s": SIT_IDLE_FRAMES / FPS}
     report["clips"]["stand_up"] = {"frames": SIT_DOWN_FRAMES, "duration_s": SIT_DOWN_FRAMES / FPS}
-    clips = clip_names(shower)
+    clips = clip_names(shower, clean)
+    if clean:
+        poses, report["clips"]["clean"] = retarget(rig, stem, "clean", *CLEAN_SOURCE)
+        actions["clean"] = bake(rig, "clean", poses)
     if shower:
         import toon_shower  # noqa: E402 (it imports this module)
 
