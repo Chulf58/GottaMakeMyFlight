@@ -109,13 +109,21 @@ func bind(with_clock: SimClock, sim: PassengerSim, with_wallet: Wallet) -> void:
 		_clock.ticked.disconnect(_on_tick)
 	_clock = with_clock
 	_clock.ticked.connect(_on_tick)
+	_planned_tick = -REPLAN_TICKS
 
 
 ## Works out now, outside a sim tick, whether there is a working path and, when
 ## there is none, the repair plan and its price bound, so the next tick starts
 ## from a known bound (see the class notes). _ready() and SaveGame call it;
-## tests that bind() by hand call it when they want it.
+## tests that bind() by hand call it when they want it. It starts afresh: the
+## kept plan, bound, path answer and replan wait are dropped, so none of them
+## outlives a load (whose clock may be earlier than the last plan's tick).
 func prepare() -> void:
+	_planned_tick = -REPLAN_TICKS
+	_plan = null
+	_bound = -1
+	_path_dirty = true
+	_edit_seen = false
 	if _sim == null or _sim.grid == null:
 		return
 	if not has_working_path():
@@ -196,7 +204,9 @@ func _shortfall() -> int:
 	_watch_grid()
 	if _bound >= 0 and _wallet.balance >= _bound:
 		return 0
-	if _plan == null and _in_tick and _clock.tick - _planned_tick < REPLAN_TICKS:
+	# A clock now earlier than the last plan (a load) does not hold a plan back.
+	var since := _clock.tick - _planned_tick
+	if _plan == null and _in_tick and since >= 0 and since < REPLAN_TICKS:
 		return 0
 	var cost := _price_of(repair_plan())
 	return maxi(cost - _wallet.balance, 0) if cost >= 0 else 0

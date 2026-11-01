@@ -99,3 +99,48 @@ func test_a_burst_of_paid_edits_below_the_bound_plans_once_per_window() -> void:
 	_world.run_to(_world.clock.tick + RescueGrant.REPLAN_TICKS)
 	print("after the window: %d plans" % (_grant.plans_made - before_burst))
 	assert_int(_grant.plans_made - before_burst).is_equal(2)
+
+
+## A plan made in a tick late in a game does not hold planning back after an
+## earlier save loads: the clock goes back to the save's tick, the next build
+## edit is planned for within REPLAN_TICKS, not once the old tick comes round.
+func test_a_load_to_an_earlier_tick_does_not_keep_the_replan_wait() -> void:
+	var early := _world.clock.to_snapshot()
+	var plan := _grant.repair_plan()
+	var wallet := _world.sim.wallet
+	(
+		assert_bool(
+			wallet.credit(
+				RepairPlan.least_balance(_world.grid, plan.edits), Wallet.Category.OPENING
+			)
+		)
+		. is_true()
+	)
+	_world.run_to(500)
+	var first: Array[BuildEdit] = [plan.edits[0]]
+	assert_bool(BuildTransaction.commit_plan(_world.grid, first, wallet).ok).is_true()
+	var before_late := _grant.plans_made
+	_world.step()
+	var late_tick := _world.clock.tick
+	assert_int(_grant.plans_made).is_equal(before_late + 1)
+	assert_bool(_world.clock.from_snapshot(early)).is_true()
+	var loaded_tick := _world.clock.tick
+	var second: Array[BuildEdit] = [plan.edits[1]]
+	assert_bool(BuildTransaction.commit_plan(_world.grid, second, wallet).ok).is_true()
+	var before_load := _grant.plans_made
+	var waited := 0
+	while _grant.plans_made == before_load and waited < RescueGrant.REPLAN_TICKS:
+		_world.step()
+		waited += 1
+	print(
+		(
+			"late plan at tick %d, load back to tick %d, next plan after %d ticks"
+			% [late_tick, loaded_tick, waited]
+		)
+	)
+	assert_int(loaded_tick).is_less(late_tick - RescueGrant.REPLAN_TICKS)
+	assert_int(_grant.plans_made).is_equal(before_load + 1)
+	assert_int(waited).is_less(RescueGrant.REPLAN_TICKS)
+	# prepare(), as SaveGame calls it after a load, also starts afresh.
+	_grant.prepare()
+	assert_int(_grant.plans_made).is_equal(before_load + 2)
