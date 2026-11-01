@@ -161,6 +161,16 @@ var grid: BuildGrid
 ## from BuildMode in a scene; tests set it. Null: no road walk, and exits
 ## walk apron_waypoints.
 var shell: ShellDefinition
+## The airport site whose open ground gives the walks outside instead of the
+## shell's (OutsideWalks, SiteRoutes); tests set it. Setting it rebuilds the
+## layout, whose doors then need a walk outside to be in service.
+var site: SiteDefinition:
+	set(value):
+		site = value
+		layout.site = value
+		files.clear_derived()
+		if grid != null:
+			layout.rebuild(grid)
 var tick := 0
 var last_batch_seed := 0
 ## Scheduled passengers dropped when their flight's doors closed, by flight id:
@@ -662,8 +672,8 @@ func _spawn_due() -> void:
 
 ## A new passenger at the entrance, or, with a `walk` (where it got out of
 ## a car or taxi, ArrivalBookings), walking from there: the walk replaces the
-## road start of the entrance's shell route, or ends at the entrance's cell
-## when the entrance has none.
+## road start of the entrance's walk in (OutsideWalks), or ends at the
+## entrance's cell when the entrance has none.
 func _spawn(
 	flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL, walk: Array[Vector3] = []
 ) -> Passenger:
@@ -682,7 +692,7 @@ func _spawn(
 	p.boredom = BoredomSim.start_of(p.id)
 	p.at = layout.door_cell(grid, layout.passenger_entrances[0])
 	p.clear_path()
-	p.apron = ShellRoutes.arrival(self, layout.passenger_entrances[0])
+	p.apron = OutsideWalks.arrival(self, layout.passenger_entrances[0])
 	if not walk.is_empty():
 		var road := p.apron
 		p.apron = walk.duplicate()
@@ -870,12 +880,13 @@ func _step(p: Passenger) -> void:
 func _advance(p: Passenger) -> void:
 	match p.stage:
 		Passenger.Stage.SPAWNED:
-			# In from the road first, when the entrance has one (ShellRoutes).
-			# An entrance whose cell walls no longer close in is not entered:
-			# the walker waits at its door until the gap is closed again.
+			# In from the road first, when the entrance has one (OutsideWalks).
+			# An entrance passengers may not use is not entered: in a shell the
+			# walker waits at its door until the gap is closed again; on a site
+			# OutsideWalks.revalidate() sends it to another entrance first.
 			if p.apron_mm < p.apron_total_mm():
 				pass
-			elif not grid.is_passenger_cell(p.at):
+			elif not OutsideWalks.may_enter(self, p):
 				p.stuck = Passenger.Stuck.NO_ROUTE
 			else:
 				p.stuck = Passenger.Stuck.NONE
@@ -922,6 +933,9 @@ func _advance(p: Passenger) -> void:
 
 
 func _move(p: Passenger) -> void:
+	# A walker outside with no walk left stands where it is (OutsideWalks).
+	if StageKinds.is_outside(p.stage) and p.stuck == Passenger.Stuck.NO_ROUTE:
+		return
 	var speed := RUN_MM if p.late else WALK_MM
 	if files.holds(p.id):
 		speed = files.step_of(self, p, speed)
@@ -1234,9 +1248,9 @@ func _choose_exit(p: Passenger) -> void:
 	files.join_door(self, p)
 
 
-## The walk from an exit door's cell to the plane door (ShellRoutes.departure()).
+## The walk from an exit door's cell to the plane door (OutsideWalks).
 func _apron_points(exit_door: int) -> Array[Vector3]:
-	return ShellRoutes.departure(self, exit_door)
+	return OutsideWalks.departure(self, exit_door)
 
 
 ## An edit touched the committed path. Finish the current step if it is still
@@ -1305,6 +1319,8 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 	for arch in SecurityLanes.broken(before, layout.security_lanes):
 		for id in security.drop(arch):
 			_send_back(_by_id[id])
+	# Walkers outside keep a walk that is still there, or stop (site only).
+	OutsideWalks.revalidate(self)
 
 
 ## Any accepted edit: the standing spots are derived again on the next tick.

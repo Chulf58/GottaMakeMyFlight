@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SiteDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://build/site_definition.gd" id="1_site"]
+
+[resource]
+script = ExtResource("1_site")
+grid_origin = Vector3(-43, 0.22, -100)
+grid_size = Vector2i(86, 40)
+ground_height = 0.2
+road_z = -57.0
+road_height = 0.1
+plane_route = PackedVector3Array(-14.5, 0, -101, -14.5, 0, -106.5)
+obstacles = Array[Vector2i]([Vector2i(57, 39)])

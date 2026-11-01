@@ -44,10 +44,14 @@ extends RefCounted
 ## search reaches first, in its settle order, trying facings 0 to 3, so the
 ## same grid always gives the same plan. With no entrance, every place an
 ## entrance may stand (a landside Toon door in a shell, else any edge cell
-## facing in) starts the desk leg's search at its own price, so the entrance
-## and desk are chosen together. Each choice is
-## built on the copy with DoorPlacement's rules and checked with the route
-## test; a choice that fails is undone edit by edit and the next one tried.
+## facing in, on a site only those with a walk in from the road) starts the
+## desk leg's search at its own price, so the entrance and desk are chosen
+## together; on a site a new exit likewise needs a walk out to the plane
+## (SiteRoutes). Each choice is
+## built on the copy with DoorPlacement's rules, with the floor it uses walled
+## in where no shell facade closes the grid border (RepairEnclosure), and
+## checked with the route test, which walks only floor walls close in; a
+## choice that fails is undone edit by edit and the next one tried.
 ## When a later leg finds no choice that works, the plan backtracks: it undoes
 ## the earlier leg's choice and tries that leg's next one (MAX_TRIES choices
 ## per leg, MAX_ATTEMPTS built in all, so a plan always ends). Running out of
@@ -61,6 +65,8 @@ extends RefCounted
 ## objects after, and must build edit by edit on the original grid under every
 ## rule, reach included, with every station it uses staffable; one that does
 ## not is no repair and the search goes on to the next choice, within the caps.
+## The finished plan leaves out a wall it places and later takes down again
+## (RepairEnclosure.without_undone_walls()).
 ##
 ## Prices come from BuildTransaction. least_balance() is the money the plan
 ## needs at the start when its edits are bought one by one in order, each
@@ -111,6 +117,7 @@ var _grid: BuildGrid
 var _source := {}
 var _layout := TerminalLayout.new()
 var _shell: ShellDefinition
+var _site: SiteDefinition
 var _floor_price := -1
 ## Per cell index: search price, the cell it was reached from (-1 at a
 ## source), and the index of the source it came from.
@@ -145,13 +152,14 @@ var _capped := false
 
 
 ## Whether a new passenger can walk entrance, desk, scanner and exit on `grid`
-## as `layout` (rebuilt from that grid) describes it. With `staffed` false, a
+## as `layout` (rebuilt from that grid) describes it, from the first entrance
+## passengers may use (PassengerSim spawns there). With `staffed` false, a
 ## desk or scanner staff can never work still counts, so AirportGate can tell
 ## a missing way from a staff spot problem.
 static func has_working_path(grid: BuildGrid, layout: TerminalLayout, staffed := true) -> bool:
-	if layout.entrances.is_empty():
+	if layout.passenger_entrances.is_empty():
 		return false
-	var door := layout.door_cell(grid, layout.entrances[0])
+	var door := layout.door_cell(grid, layout.passenger_entrances[0])
 	var staffing := Staffing.STAFFABLE if staffed else Staffing.ANY
 	return can_finish(grid, layout, [door] as Array[Vector2i], Leg.DESK, staffing)
 
@@ -203,10 +211,15 @@ static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 	return least
 
 
-## The plan for `grid` (left unchanged), inside `shell` when there is one.
-static func make(grid: BuildGrid, shell: ShellDefinition = null) -> RepairPlan:
+## The plan for `grid` (left unchanged), inside `shell` when there is one; on
+## `site` its doors need walks outside (TerminalLayout.site).
+static func make(
+	grid: BuildGrid, shell: ShellDefinition = null, site: SiteDefinition = null
+) -> RepairPlan:
 	var plan := RepairPlan.new()
 	plan._shell = shell
+	plan._site = site
+	plan._layout.site = site
 	plan._grid = BuildGrid.new(grid.size, grid.origin)
 	# The copy closes rooms in as the grid does (the shell's facade).
 	plan._grid.shell_border = grid.shell_border
@@ -290,14 +303,14 @@ func _plan() -> bool:
 	if has_working_path(_grid, _layout):
 		return true
 	var sources := []
-	if _layout.entrances.is_empty():
+	if _layout.passenger_entrances.is_empty():
 		sources = _door_sources(&"entrance_door")
 	else:
-		var door := _layout.door_cell(_grid, _layout.entrances[0])
+		var door := _layout.door_cell(_grid, _layout.passenger_entrances[0])
 		sources = [{"cell": door, "cost": 0, "edits": [] as Array[BuildEdit]}]
 		_kept[door] = true
 	if _solve(Leg.DESK, sources):
-		edits = _ordered(edits)
+		edits = RepairEnclosure.without_undone_walls(_ordered(edits))
 		return true
 	if _capped:
 		push_warning("RepairPlan: no repair within the caps; pricing a conservative one")
@@ -312,6 +325,9 @@ func _plan() -> bool:
 ## spans, one cell wider each way (the whole grid when it has no floor). A
 ## repair buys at most one of each essential, and one that stays in that area
 ## floors no more cells than this, so the player gets enough and may get more.
+## Without a shell facade the floor must be walled in (RepairEnclosure), so a
+## plain wall round the area's outline is added; a repair whose floor winds
+## about inside the area may need more walls than that.
 func _fallback_price() -> int:
 	var total := 0
 	for def_id in [&"entrance_door", &"checkin_desk", &"security_scanner", &"exit_door"]:
@@ -330,6 +346,9 @@ func _fallback_price() -> int:
 			var cell := Vector2i(x, y)
 			if _grid.floor_at(cell) == BuildGrid.FLOOR_NONE and not _no_floor.has(cell):
 				total += _price_of_floor(cell)
+	if not _grid.shell_border:
+		var outline := 2 * (area.size.x + area.size.y)
+		total += outline * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
 	return total
 
 
@@ -422,6 +441,7 @@ func _label_regions() -> void:
 	_region.clear()
 	var land: Array[Vector2i] = []
 	var air: Array[Vector2i] = []
+	# Every entrance marks its side, in service for passengers or not.
 	for door in _layout.entrances:
 		land.append(_layout.door_cell(_grid, door))
 	for station in _layout.desks + _layout.scanners:
@@ -617,12 +637,21 @@ func _door_choices(def_id: StringName) -> Array:
 ## exit whose service cell the walk to it floors)}. With `reached`, only
 ## spots whose service cell the last search reached.
 func _door_sources(def_id: StringName, reached := false) -> Array:
+	# On a site a door needs its walk outside: an entrance to the road, an exit
+	# to the plane.
+	var edge := (
+		SiteDefinition.ROAD_STEP if def_id == &"entrance_door" else SiteDefinition.PLANE_STEP
+	)
+	var to_edge := PackedInt32Array()
 	var spots := []
 	if _shell != null:
 		var kind := ShellDoorConnection.kind_for(def_id)
 		for connection in _shell.connections:
 			if connection.kind == kind:
 				spots.append([connection.cell, connection.facing])
+	elif _site != null:
+		to_edge = SiteRoutes.distances(_grid, _site, SiteRoutes.edge_cells(_grid, _site, edge))
+		spots = _site_door_spots(def_id, edge, to_edge)
 	else:
 		for y in _grid.size.y:
 			for x in _grid.size.x:
@@ -637,6 +666,9 @@ func _door_sources(def_id: StringName, reached := false) -> Array:
 		if not _door_spot_free(door, inside, facing):
 			continue
 		if reached and _dist[_index(inside)] >= UNREACHED:
+			continue
+		var way_out := DoorPlacement.back_step(facing)
+		if _site != null and not SiteRoutes.reaches(_grid, _site, door, way_out, edge, to_edge):
 			continue
 		var door_edits := _floors([door] as Array[Vector2i])
 		door_edits.append(BuildEdit.place_object(def_id, door, facing))
@@ -656,6 +688,33 @@ func _door_sources(def_id: StringName, reached := false) -> Array:
 			)
 		)
 	return out
+
+
+## Where a door may stand on a site, as [cell, facing], each facing out over
+## the grid edge `edge` leads to (the road for an entrance, the plane for an
+## exit) with a walk there down `to_edge`. An entrance takes one spot per
+## column, the free one nearest the road: with every cell a spot, each cell
+## would be the cheapest search source of itself and no desk could stand
+## beside one, and the scan of all 13,760 spots took over 200 ms.
+func _site_door_spots(def_id: StringName, edge: Vector2i, to_edge: PackedInt32Array) -> Array:
+	var facing := 0
+	while DoorPlacement.back_step(facing) != edge:
+		facing += 1
+	var spots := []
+	if def_id != &"entrance_door":
+		for y in _grid.size.y:
+			for x in _grid.size.x:
+				spots.append([Vector2i(x, y), facing])
+		return spots
+	for x in _grid.size.x:
+		for y in range(_grid.size.y - 1, -1, -1):
+			var door := Vector2i(x, y)
+			if not _door_spot_free(door, door + TerminalLayout.front_of(facing), facing):
+				continue
+			if SiteRoutes.reaches(_grid, _site, door, edge, edge, to_edge):
+				spots.append([door, facing])
+				break
+	return spots
 
 
 func _door_spot_free(door: Vector2i, inside: Vector2i, facing: int) -> bool:
@@ -686,9 +745,11 @@ func _free_for_piece(cells: Array[Vector2i], walk: Dictionary, sided: bool) -> b
 
 
 ## Builds a choice's edits on the copy (the source's own, the walk to it and
-## the piece). Keeps them, with what takes them back in `undo`, when every
-## leg up to `leg` then works and leaves from the choice's cell; otherwise
-## undoes them and returns false.
+## the piece), then the walls that close in the floor it uses
+## (RepairEnclosure), since the route test walks only floor walls close in.
+## Keeps them, with what takes them back in `undo`, when every leg up to `leg`
+## then works and leaves from the choice's cell; otherwise undoes them and
+## returns false.
 func _try(choice: Dictionary, leg: int, undo: Array[BuildEdit]) -> bool:
 	var done: Array[BuildEdit] = []
 	var built := true
@@ -696,6 +757,15 @@ func _try(choice: Dictionary, leg: int, undo: Array[BuildEdit]) -> bool:
 		if not _build(edit, done, undo):
 			built = false
 			break
+	if built:
+		var used: Array = (choice["walk"] as Dictionary).keys()
+		for edit in done:
+			if edit.kind == BuildEdit.Kind.PAINT_FLOOR:
+				used.append(edit.cell)
+		for wall in RepairEnclosure.walls_for(_grid, used):
+			if not _build(wall, done, undo):
+				built = false
+				break
 	_layout.rebuild(_grid)
 	if built and _leg_works(leg, choice["next"]):
 		edits.append_array(done)
@@ -746,17 +816,19 @@ func _build(edit: BuildEdit, done: Array[BuildEdit], undo: Array[BuildEdit]) -> 
 					undo.append(BuildEdit.remove_floor(step.cell))
 			BuildEdit.Kind.REMOVE_WALL:
 				undo.append(BuildEdit.place_wall(step.cell, step.side, before))
+			BuildEdit.Kind.PLACE_WALL:
+				undo.append(BuildEdit.remove_wall(step.cell, step.side))
 			BuildEdit.Kind.PLACE_OBJECT:
 				undo.append(BuildEdit.remove_object(result.object_id))
 	return true
 
 
-## Whether the legs up to `leg` now work from the first entrance and the last
-## one can end at `next`.
+## Whether the legs up to `leg` now work from the first entrance passengers
+## may use and the last one can end at `next`.
 func _leg_works(leg: int, next: Vector2i) -> bool:
-	if _layout.entrances.is_empty():
+	if _layout.passenger_entrances.is_empty():
 		return false
-	var here: Array[Vector2i] = [_layout.door_cell(_grid, _layout.entrances[0])]
+	var here: Array[Vector2i] = [_layout.door_cell(_grid, _layout.passenger_entrances[0])]
 	for each in range(Leg.DESK, leg + 1):
 		# Staff reach is judged once the whole plan stands (_solve()).
 		here = _next_cells(_grid, _layout, here, each, Staffing.NOT_BLOCKED)
@@ -784,9 +856,9 @@ static func _ordered(plan_edits: Array[BuildEdit]) -> Array[BuildEdit]:
 ## staff reach included. Otherwise the leg whose choice to try again: the first
 ## leg with no such station, or the leg that added the edit a rebuild refused.
 func _failing_leg() -> int:
-	if _layout.entrances.is_empty():
+	if _layout.passenger_entrances.is_empty():
 		return Leg.DESK
-	var here: Array[Vector2i] = [_layout.door_cell(_grid, _layout.entrances[0])]
+	var here: Array[Vector2i] = [_layout.door_cell(_grid, _layout.passenger_entrances[0])]
 	for each in Leg.size():
 		here = _next_cells(_grid, _layout, here, each)
 		if here.is_empty():
