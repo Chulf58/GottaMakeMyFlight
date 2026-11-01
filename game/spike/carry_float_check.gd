@@ -72,24 +72,45 @@ static func case_handle_points(bag: Node3D) -> Array[Vector3]:
 
 
 ## How far `grip` (world) is from hard case `bag`'s grip (case_handle_points(),
-## world): the nearest point on the line from the middle of its top end over
-## its handle edge to the middle of its handle face. The palm slides along the
-## handle face turning between the side and the front carry (conductor ruling
-## 2026-10-30), and along the top end in a toilet stall.
-static func case_grip_gap(bag: Node3D, grip: Vector3) -> float:
+## world): the nearest point on its handle face, from the handle edge to the
+## middle (the palm slides along it turning between the side and the front
+## carry, conductor ruling 2026-10-30). In a toilet stall's set-down or pick-up
+## (`stall`) also on its top end, from the middle over to the handle edge: the
+## case stands there and is held by its top (decision toilet-stall-bag-moves-
+## are-hand-led-as-built-a-hard-case-is). Every other move is judged by the
+## handle face alone (conductor ruling 2026-11-01).
+static func case_grip_gap(bag: Node3D, grip: Vector3, stall := false) -> float:
 	var xf := bag.global_transform
 	var own := case_handle_points(bag)
 	var edge := xf * own[0]
 	var on_face := Geometry3D.get_closest_point_to_segment(grip, edge, xf * own[1])
-	var on_end := Geometry3D.get_closest_point_to_segment(grip, xf * own[2], edge)
-	return minf(on_face.distance_to(grip), on_end.distance_to(grip))
+	var gap := on_face.distance_to(grip)
+	if stall:
+		var on_end := Geometry3D.get_closest_point_to_segment(grip, xf * own[2], edge)
+		gap = minf(gap, on_end.distance_to(grip))
+	return gap
+
+
+## Whether bag `i` of passenger `id` (`p`) is in a toilet stall's set-down or
+## pick-up: `p` inside a stall (StallCarry.in_stall, as CarryOnProps plans the
+## move) and the bag moving to or from the floor.
+static func stall_move(props: CarryOnProps, id: int, i: int, p: Passenger) -> bool:
+	if not StallCarry.in_stall(p) or props.transfer_progress(id, i) >= 1.0:
+		return false
+	var bag := props.bag_state(id, i)
+	for place: int in [bag.get("was", -1), bag.get("home", -1)]:
+		if place >= 0 and place / 4 == SecurityLooks.Home.FLOOR:
+			return true
+	return false
 
 
 ## How far the grip of the hand holding bag `i` of passenger `id` is from the
-## bag's nearest own grip point (own_grips(); a hard case's, the segment
-## between its two, conductor ruling 2026-10-30), and the limit for its kind:
-## [gap, limit], gap INF when no hand holds it.
-static func grip_on_gap(props: CarryOnProps, id: int, i: int, body: Node3D) -> Array:
+## bag's nearest own grip point (own_grips(); a hard case's, case_grip_gap(),
+## its top end counted only in a stall move, `stall`), and the limit for its
+## kind: [gap, limit], gap INF when no hand holds it.
+static func grip_on_gap(
+	props: CarryOnProps, id: int, i: int, body: Node3D, stall := false
+) -> Array:
 	var holder: int = props.bag_state(id, i).get("held_by", -1)
 	if holder < 0 or body == null:
 		return [INF, GRIP_ON_M]
@@ -101,7 +122,7 @@ static func grip_on_gap(props: CarryOnProps, id: int, i: int, body: Node3D) -> A
 		limit += CarryOnProps.FRONT_PALM_M
 	var grip := props.grip_of(body, holder)
 	if kind == SecurityLooks.Kind.CASE:
-		return [case_grip_gap(props.props_of(id)["bags"][i], grip), limit]
+		return [case_grip_gap(props.props_of(id)["bags"][i], grip, stall), limit]
 	var own := own_grips(props, id, i)
 	var gap := INF
 	for at in own:
@@ -313,7 +334,7 @@ static func watch_float(sim: PassengerSim, views: PassengerViews, counts: Dictio
 static func _watch_grip_on(
 	props: CarryOnProps, id: int, i: int, body: Node3D, p: Passenger, counts: Dictionary
 ) -> void:
-	var on := grip_on_gap(props, id, i, body)
+	var on := grip_on_gap(props, id, i, body, stall_move(props, id, i, p))
 	if not (on[0] as float) < INF:
 		return
 	var kind: String = SecurityLooks.Kind.keys()[props.props_of(id)["kinds"][i]]

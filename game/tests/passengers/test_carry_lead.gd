@@ -236,7 +236,9 @@ func test_a_roller_passed_between_pulling_hands_stays_held_by_its_bar() -> void:
 ## stands (to STALL_TIP_FROM of the carry): FRONT_PALM_M over the middle of its
 ## top end, inside its face, not at its bounds' top corner, which takes in the
 ## handle and is past the face. As it tips, the grip goes over its top front
-## edge to the point it is carried by, kept at least 2 cm off the case's body,
+## edge to the point it is carried by, kept at least 2 cm off the case's body
+## (its top front edge cut off as the mesh is, _off_body(): the palm now rests
+## on that cut face, 1.9 cm from the uncut box's corner, board item e845dfe8),
 ## and the stoop to it bends the back first (STALL_HIPS). Controls: the bounds'
 ## corner is past the face, a straight blend between the same two points goes
 ## into the case, and out of a stall the hips go down with the stoop.
@@ -273,7 +275,7 @@ func test_a_stall_case_is_held_by_its_top_and_round_its_edge_as_it_tips() -> voi
 		)
 		if t <= CarryLead.STALL_TIP_FROM:
 			assert_vector(held).is_equal_approx(top, Vector3.ONE * 0.0001)
-		var off := held.distance_to(_clamped(held, solid))
+		var off := _off_body(held, solid)
 		nearest = minf(nearest, off)
 		assert_float(off).is_greater_equal(0.02)
 	var first := CarryLead.plan(bag, 0.1, start, want, Transform3D(), stall, body)
@@ -346,6 +348,21 @@ func test_a_stall_case_top_is_front_palm_over_it_at_any_scale() -> void:
 
 static func _clamped(at: Vector3, box: AABB) -> Vector3:
 	return at.clamp(box.position, box.end)
+
+
+## How far `at` is from a hard case's body `box` (its own frame, handle left
+## out) with its top front edge cut off STALL_CASE_CHAMFER_M both ways, as the
+## mesh is: past the cut, from the cut face, not from the box's corner.
+static func _off_body(at: Vector3, box: AABB) -> float:
+	var cut := CarryLead.STALL_CASE_CHAMFER_M
+	var end := box.end
+	if at.y + at.z > end.y + end.z - cut and at.y > end.y - cut and at.z > end.z - cut:
+		var x := clampf(at.x, box.position.x, end.x)
+		var on := Geometry3D.get_closest_point_to_segment(
+			at, Vector3(x, end.y - cut, end.z), Vector3(x, end.y, end.z - cut)
+		)
+		return at.distance_to(on)
+	return at.distance_to(_clamped(at, box))
 
 
 ## A move of a bag of `kind` from the right hand to the floor, as CarryOnProps

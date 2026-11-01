@@ -47,7 +47,8 @@ extends SceneTree
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 1200 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path game -s res://spike/stall_float_probe.gd [-- --seed=N --run=NAME]
+##     --path game -s res://spike/stall_float_probe.gd [-- --seed=N --run=NAME
+##     --only=case,roller --tip]
 ## Plates go to tools/blender/out/stall-bags/[NAME/].
 
 const FloatCheck := preload("res://spike/carry_float_check.gd")
@@ -102,6 +103,10 @@ const MOMENTS := {
 	"off-back": [[0.45, 0.55], [0.9, 0.98]],
 	"on-back": [[0.45, 0.55]],
 }
+## ++ --tip plates these instead for a set-down and a pick-up: a hard case's
+## tip into the carry and the let-go (board item e845dfe8). Each window is wider
+## than a step of the paused clock (a third of a tick).
+const TIP_MOMENTS := [[0.55, 0.62], [0.63, 0.7], [0.71, 0.78], [0.79, 0.86]]
 ## The close plate's camera: this high over the floor, offset this far across
 ## and out of the door from the middle of the body and the bag (the door's
 ## leaves, the rail over the door and the side partitions are under the line to
@@ -137,6 +142,7 @@ const GRIP_NEAR_M := 0.05
 const GRIP_PRINTS := 3
 
 var _out_dir := ""
+var _moments := MOMENTS.duplicate()
 var _failed := false
 var _guard := Thread.new()
 var _lock := Mutex.new()
@@ -186,6 +192,9 @@ func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--run="):
 			run = "/" + arg.get_slice("=", 1)
+		if arg == "--tip":
+			_moments["set-down"] = TIP_MOMENTS
+			_moments["pick-up"] = TIP_MOMENTS
 	_out_dir = ProjectSettings.globalize_path(OUT_REL + run).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=%s" % _out_dir)
@@ -612,7 +621,7 @@ func _plate_move(p: Passenger, which: String) -> void:
 	var props := _views.carry_on_props()
 	var move := FloatCheck.move_of(props, p.id, _plate_bag)
 	var saved := 0
-	var moments: Array = MOMENTS[which]
+	var moments: Array = _moments[which]
 	for m in moments.size():
 		var lo: float = moments[m][0]
 		var hi: float = moments[m][1]
