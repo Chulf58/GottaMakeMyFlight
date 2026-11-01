@@ -93,7 +93,7 @@ func apron_of(sim: PassengerSim, door: int) -> Dictionary:
 		_aprons_shell = sim.shell
 	if not _aprons.has(door):
 		var walk := Passenger.new()
-		walk.apron = ShellRoutes.departure(sim, door)
+		walk.apron = OutsideWalks.departure(sim, door)
 		var plane: Variant = null
 		if not walk.apron.is_empty():
 			plane = plane_key(walk.apron.back())
@@ -168,10 +168,34 @@ func join_plane(sim: PassengerSim, p: Passenger) -> bool:
 
 
 ## `p`'s route changed: it leaves its door file and joins again by its new
-## walk left, or waits.
+## walk left, or waits. Out on the apron (a new walk to the same plane door,
+## OutsideWalks) it takes its place in its apron file again by its new walk
+## left at once, and stays in its door file: its walk so far is kept.
 func reroute(sim: PassengerSim, p: Passenger) -> void:
+	if p.stage == Passenger.Stage.APRON:
+		_resort_plane(sim, p)
+		return
 	leave(p.id)
 	join_door(sim, p)
+
+
+## Puts apron walker `p` in its place in its apron file by walk left. The
+## walker now behind it is capped from its next step on.
+func _resort_plane(sim: PassengerSim, p: Passenger) -> void:
+	if not _plane_of.has(p.id):
+		return
+	var ids: Array = _planes[_plane_of[p.id]]
+	ids.erase(p.id)
+	var at := ids.size()
+	for k in ids.size():
+		var other := sim.get_passenger(ids[k])
+		if (
+			plane_left(p) < plane_left(other)
+			or (plane_left(p) == plane_left(other) and p.id < other.id)
+		):
+			at = k
+			break
+	ids.insert(at, p.id)
 
 
 ## Takes `id` out of every file and the pending set.
