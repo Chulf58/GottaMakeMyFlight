@@ -429,13 +429,20 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 
 
 ## Checked against the staged grid: every mess on its floor, every bin and
-## every use counter's source on it.
+## every use counter's source on it. Kept for the staff check of the
+## cleaners' claims.
 func _stage_messes(data: Dictionary, staged: Dictionary) -> String:
-	return str(MessSim.checked(data, staged["grid"]).get("error", ""))
+	var loaded := MessSim.checked(data, staged["grid"])
+	if loaded.has("error"):
+		return str(loaded["error"])
+	staged["messes"] = loaded
+	return ""
 
 
+## Checked against the staged layout, and the cleaners' jobs against the
+## staged messes.
 func _stage_staff(data: Dictionary, staged: Dictionary) -> String:
-	return str(StaffSnapshot.load(data, staged["sim"]).get("error", ""))
+	return str(StaffSnapshot.load(data, staged["sim"], staged["messes"]).get("error", ""))
 
 
 ## Checked against the scene's landside definition; kept for the links.

@@ -22,6 +22,16 @@ extends Node
 ## when it is in the pool or has no way out); while it walks it is no longer
 ## staff.
 ##
+## Cleaners (Role.CLEANER) work no station. An idle cleaner takes the nearest
+## job nobody holds, a mess or a full bin (CleanerJobs.nearest()), claims it
+## (MessSim.claim(); a bin by being its job) so no other cleaner takes it, walks
+## to it (TO_STATION), works it on duty for CleanerJobs.work_ticks() and then
+## cleans the mess (MessSim.clean()) or empties the bin (MessSim.empty_bin())
+## and takes the next. A cleaner whose job goes (an edit took the mess's floor
+## or the bin, MessSim.claim_dropped) or that has no way to it any more lets go
+## of it and searches again. A fired cleaner lets go of its job and walks out
+## at once; it never waits like a server mid-service.
+##
 ## PassengerSim steps it at the start of each tick, so every passenger step
 ## reads one staff state. Members are handled in id order, distances are whole
 ## millimetres and nothing is random, so a snapshot loaded at a tick boundary
@@ -36,7 +46,9 @@ signal member_state_changed(id: int, state: StaffMember.State)
 
 ## 2: members save their post (slot); StaffSnapshot migrates version 1.
 ## 3: shop servers (Role.SHOP) at counters; a version 2 save has none.
-const SAVE_VERSION := 3
+## 4: cleaners (Role.CLEANER) and each member's job and work left; a version
+## 1 to 3 save has no cleaner.
+const SAVE_VERSION := 4
 ## Who fire() lets go first: [state, slot] pairs, a helper before a primary
 ## in the same state, so firing keeps stations open where it can.
 const FIRE_ORDER := [
@@ -48,6 +60,10 @@ const FIRE_ORDER := [
 ]
 
 var sim: PassengerSim
+## Set on the copy StaffPosts plays a step on for a helper forecast: it shares
+## the live MessSim, so its cleaners take no job, finish none and let go of
+## no claim.
+var forecast := false
 
 var _members: Array[StaffMember] = []
 var _by_id: Dictionary = {}
@@ -69,6 +85,7 @@ func bind(with_sim: PassengerSim) -> void:
 	sim = with_sim
 	sim.grid.graph_changed.connect(_on_graph_changed)
 	sim.grid.edit_applied.connect(_on_edit_applied)
+	sim.messes.claim_dropped.connect(_on_claim_dropped)
 	_counters_dirty = true
 	_reconcile()
 
@@ -108,8 +125,12 @@ func fire(role: StaffMember.Role) -> bool:
 			var m := _members[i]
 			if m.role != role or m.state != state or m.slot != entry[1] or m.leaving:
 				continue
-			# A helper serves nobody itself, so it never waits for a service.
-			var serving := state == StaffMember.State.ON_DUTY and not m.is_helper()
+			# A helper or a cleaner serves nobody, so it never waits for a service.
+			var serving := (
+				state == StaffMember.State.ON_DUTY
+				and not m.is_helper()
+				and m.role != StaffMember.Role.CLEANER
+			)
 			if serving and _in_service(m.station):
 				m.leaving = true
 			elif _send_out(m):
@@ -204,11 +225,14 @@ func world_position(m: StaffMember) -> Vector3:
 	return sim.grid.origin + Vector3(at.x, 0.0, at.y)
 
 
-## Lets go of posts that went, plays the station-wide pass (StaffPosts.run())
-## and walks every walking member, in id order.
+## Lets go of posts that went, plays the station-wide pass (StaffPosts.run()),
+## works the cleaners' jobs (_work_jobs()) and walks every walking member, in
+## id order.
 func step() -> void:
 	_reconcile()
 	StaffPosts.run(self, _post, _repost)
+	if not forecast:
+		_work_jobs()
 	for m: StaffMember in _members.duplicate():
 		if m.state == StaffMember.State.TO_STATION or m.state == StaffMember.State.WALKING_OUT:
 			_walk(m)
@@ -251,13 +275,17 @@ func rederive() -> void:
 			_claims_of(m)[m.station] = m.id
 
 
-## The desks, the scanners or the usable counters, by role.
+## The desks, the scanners or the usable counters, by role. A cleaner has no
+## station: none.
 func stations_of(role: StaffMember.Role) -> Array[int]:
 	match role:
 		StaffMember.Role.CHECKIN:
 			return sim.layout.desks
 		StaffMember.Role.SHOP:
 			return _shop_counters()
+		StaffMember.Role.CLEANER:
+			var none: Array[int] = []
+			return none
 	return sim.layout.scanners
 
 
@@ -309,13 +337,75 @@ func _claims_of(m: StaffMember) -> Dictionary:
 	return _helpers if m.slot == StaffMember.Slot.HELPER else _claims
 
 
-## Gives up the member's post: no station, and the primary slot.
+## Gives up the member's post: no station, and the primary slot; a cleaner
+## lets go of its job and its claim on it.
 func _unclaim(m: StaffMember) -> void:
 	var claims := _claims_of(m)
 	if claims.get(m.station, 0) == m.id:
 		claims.erase(m.station)
 	m.station = 0
 	m.slot = StaffMember.Slot.PRIMARY
+	if m.job == 0:
+		return
+	# A bin's claim is the job itself (CleanerJobs.bin_holder()).
+	if not m.job_bin and not forecast:
+		sim.messes.release(m.job, m.id)
+	m.job = 0
+	m.job_bin = false
+	m.work_left = 0
+
+
+## Each cleaner, in id order: one on duty works a tick at its job and, done,
+## cleans the mess or empties the bin and goes idle; an idle one (one whose
+## last search failed only on its beat) takes the nearest job nobody holds
+## (CleanerJobs.nearest()) and sets out.
+func _work_jobs() -> void:
+	for m in _members:
+		if m.role != StaffMember.Role.CLEANER:
+			continue
+		if m.state == StaffMember.State.ON_DUTY:
+			m.work_left -= 1
+			if m.work_left > 0:
+				continue
+			_finish_job(m)
+		if m.state != StaffMember.State.IDLE:
+			continue
+		if m.search_failed and not StaffPosts.on_beat(m, sim.tick):
+			continue
+		var pick := CleanerJobs.nearest(self, m)
+		if pick.is_empty():
+			m.search_failed = true
+			continue
+		_take_job(m, pick["job"], pick["bin"], pick["path"])
+
+
+## Claims job `job` (a bin when `bin`) for idle cleaner `m` and sends it along
+## `path`, which starts where it stands or at an entrance's door cell.
+func _take_job(m: StaffMember, job: int, bin: bool, path: Array[Vector2i]) -> void:
+	if not bin and not sim.messes.claim(job, m.id):
+		push_error("StaffSim: mess %d was taken before cleaner %d could claim it" % [job, m.id])
+		return
+	m.search_failed = false
+	m.job = job
+	m.job_bin = bin
+	m.at = path[0]
+	m.set_path(path)
+	_set_state(m, StaffMember.State.TO_STATION)
+
+
+## A cleaner's work is done: the mess is cleaned or the bin emptied, and it
+## stands idle where it is.
+func _finish_job(m: StaffMember) -> void:
+	if m.job_bin:
+		sim.messes.empty_bin(m.job)
+	else:
+		sim.messes.clean(m.job)
+	m.job = 0
+	m.job_bin = false
+	m.work_left = 0
+	m.search_failed = false
+	m.clear_path()
+	_set_state(m, StaffMember.State.IDLE)
 
 
 ## Members of a station that is gone, not usable, or whose staff spot is
@@ -325,7 +415,8 @@ func _unclaim(m: StaffMember) -> void:
 ## pool (one walking out is gone); members on duty away from their post's
 ## spot, which moved, walk to it (_off_spot()); leaving members whose service
 ## has ended walk out. Every primary post still claimed afterwards is one
-## staff can work: the first step of the pass (StaffPosts).
+## staff can work: the first step of the pass (StaffPosts). A cleaner whose
+## job went (its bin was removed) goes idle where it stands.
 func _reconcile() -> void:
 	for i in range(_members.size() - 1, -1, -1):
 		var m := _members[i]
@@ -333,15 +424,22 @@ func _reconcile() -> void:
 			var workable := StaffPosts.workable(sim.grid, sim.layout, m.station, m.slot)
 			if not workable or not stations_of(m.role).has(m.station):
 				_release(m)
+		if m.job != 0 and not CleanerJobs.exists(self, m):
+			_release(m)
 		if not m.in_pool() and not sim.grid.is_walkable(m.at) and not _backing_out(m):
 			if m.state == StaffMember.State.WALKING_OUT:
 				_leave(m)
 				continue
-			if m.station != 0:
+			if m.station != 0 or m.job != 0:
 				_release(m)
 			m.at = StaffMember.NO_CELL
 			m.clear_path()
-		if m.state == StaffMember.State.ON_DUTY and m.at != spot_of(m.station, m.slot):
+		var cleaner := m.role == StaffMember.Role.CLEANER
+		if (
+			m.state == StaffMember.State.ON_DUTY
+			and not cleaner
+			and m.at != spot_of(m.station, m.slot)
+		):
 			_off_spot(m)
 		if m.leaving and not (m.state == StaffMember.State.ON_DUTY and _in_service(m.station)):
 			if not _send_out(m):
@@ -427,15 +525,19 @@ func _walk(m: StaffMember) -> void:
 	elif state == StaffMember.State.WALKING_OUT:
 		_leave(m)
 	else:
+		m.work_left = CleanerJobs.work_ticks(self, m)
 		_set_state(m, StaffMember.State.ON_DUTY)
 
 
-## Where a walking member is headed: its post's spot at its station, or, when
+## Where a walking member is headed: its post's spot at its station, a
+## cleaner's job spot (CleanerJobs.job_spot()), or, when
 ## it walks out, the door cell of the entrance with the shortest path from
 ## where it stands (the lower entrance id on a tie; NO_CELL when it reaches
 ## none).
 func _target(m: StaffMember) -> Vector2i:
 	if m.state != StaffMember.State.WALKING_OUT:
+		if m.role == StaffMember.Role.CLEANER:
+			return CleanerJobs.job_spot(self, m)
 		return spot_of(m.station, m.slot)
 	var best := StaffMember.NO_CELL
 	var best_mm := 0
@@ -547,6 +649,15 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 				m.needs_replan = true
 				break
 	_reconcile()
+
+
+## A claimed mess went by an edit or remove(): its cleaner lets go of the job
+## and stands idle where it is, searching again on its next step.
+func _on_claim_dropped(id: int, cleaner: int) -> void:
+	var m: StaffMember = _by_id.get(cleaner)
+	if m == null or m.job != id or m.job_bin:
+		return
+	_release(m)
 
 
 ## Any edit can change which counters are usable. A room edit changes no walk

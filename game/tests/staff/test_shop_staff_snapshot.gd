@@ -54,9 +54,10 @@ func _server_record(data: Dictionary) -> Dictionary:
 	return {}
 
 
-func test_the_save_is_version_3() -> void:
-	assert_int(StaffSim.SAVE_VERSION).is_equal(3)
-	assert_int(int(_saved()["save_version"])).is_equal(3)
+## Version 4 (cleaners) came after the shop servers' version 3.
+func test_the_save_is_version_4() -> void:
+	assert_int(StaffSim.SAVE_VERSION).is_equal(4)
+	assert_int(int(_saved()["save_version"])).is_equal(4)
 
 
 func test_servers_walking_and_on_duty_load_and_play_on_alike() -> void:

@@ -20,7 +20,8 @@ extends RefCounted
 ## blocked or out of reach), so every primary still claimed is valid and
 ## stays. Then, in order:
 ## 1. an on-duty helper whose lane has no primary walks to the primary spot;
-## 2. each idle member, in id order, takes the nearest vacant primary post of
+## 2. each idle member (cleaners aside: they have no post, CleanerJobs), in
+##    id order, takes the nearest vacant primary post of
 ##    its role (one whose last search failed waits for its beat);
 ## 3. each primary vacancy still open, in station id order, recalls the
 ##    nearest helper;
@@ -168,7 +169,7 @@ static func _pass_pending(staff: StaffSim, station: int) -> bool:
 		for m in _members(staff):
 			if m.role != StaffMember.Role.SECURITY or m.state != StaffMember.State.IDLE:
 				continue
-			if m.search_failed and not _on_beat(m, next):
+			if m.search_failed and not on_beat(m, next):
 				continue
 			if m.in_pool() or _joined(grid, m.at, post):
 				return true
@@ -209,6 +210,8 @@ static func _after_next_step(staff: StaffSim, station: int) -> int:
 	var sim := staff.sim
 	var next := StaffSim.new()
 	next.sim = sim
+	# It shares the live MessSim: its cleaners must not claim or clean.
+	next.forecast = true
 	if not next.from_snapshot(staff.to_snapshot()):
 		next.free()
 		push_error("StaffPosts.helper_from: the staff copy did not load; no helper forecast")
@@ -248,9 +251,11 @@ static func run(staff: StaffSim, post: Callable, repost: Callable) -> void:
 	_promote(staff, repost)
 	var spare: Array[StaffMember] = []
 	for m in _members(staff):
+		# A cleaner has no post: its jobs are CleanerJobs'.
 		if (
 			m.state != StaffMember.State.IDLE
-			or (m.search_failed and not _on_beat(m, staff.sim.tick))
+			or m.role == StaffMember.Role.CLEANER
+			or (m.search_failed and not on_beat(m, staff.sim.tick))
 		):
 			continue
 		if not _take_nearest(staff, m, StaffMember.Slot.PRIMARY, post):
@@ -290,7 +295,7 @@ static func path(grid: BuildGrid, from: Vector2i, to: Vector2i) -> Array[Vector2
 
 ## The path to `to` from where `m` stands, or, for a member in the pool, the
 ## shortest from any entrance's door cell (the lower entrance id on a tie).
-static func _path_in(staff: StaffSim, m: StaffMember, to: Vector2i) -> Array[Vector2i]:
+static func path_in(staff: StaffSim, m: StaffMember, to: Vector2i) -> Array[Vector2i]:
 	var grid := staff.sim.grid
 	if not m.in_pool():
 		return path(grid, m.at, to)
@@ -317,7 +322,7 @@ static func _members(staff: StaffSim) -> Array[StaffMember]:
 
 ## Whether `tick` is the member's beat (once a simulated second, staggered by
 ## id), when a member whose last search failed searches again.
-static func _on_beat(m: StaffMember, tick: int) -> bool:
+static func on_beat(m: StaffMember, tick: int) -> bool:
 	var beat := PassengerSim.BEAT_TICKS
 	return posmod(tick, beat) == posmod(m.id, beat)
 
@@ -348,7 +353,7 @@ static func _take_nearest(
 	for station in staff.stations_of(m.role):
 		if not is_vacant(staff, station, slot):
 			continue
-		var way := _path_in(staff, m, staff.spot_of(station, slot))
+		var way := path_in(staff, m, staff.spot_of(station, slot))
 		if way.is_empty():
 			continue
 		var mm := Passenger.path_mm(way)
