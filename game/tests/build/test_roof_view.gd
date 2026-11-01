@@ -52,12 +52,46 @@ func test_an_open_wall_takes_the_roof_away_and_closing_it_brings_it_back() -> vo
 	assert_bool(_view.roof_node().visible).is_true()
 
 
-func test_roof_height_moves_the_top() -> void:
-	_view.roof_height = 5.2
-	_view.fascia_depth = 2.9
-	_view.rebuild()
+## The ruled tall roof is the default (user ruling player-built-terminal-roof-
+## tall-5-2-m-roof-with-the-facade-f): top 5.2 m, its 2.9 m band reaching to
+## 2.3 m, under the top of the 2.5 m kit walls. The low option still works.
+func test_the_tall_roof_is_the_default_and_the_low_one_still_works() -> void:
 	assert_float(_view.roof_box().end.y).is_equal_approx(ORIGIN.y + 5.2, 0.001)
 	assert_float(_view.roof_box().position.y).is_equal_approx(ORIGIN.y + 2.3, 0.001)
+	assert_float(_view.roof_box().position.y - ORIGIN.y).is_less(InteriorKit.WALL_HEIGHT)
+	_view.roof_height = 2.8
+	_view.fascia_depth = 0.6
+	_view.rebuild()
+	assert_float(_view.roof_box().end.y).is_equal_approx(ORIGIN.y + 2.8, 0.001)
+	assert_float(_view.roof_box().position.y).is_equal_approx(ORIGIN.y + 2.2, 0.001)
+
+
+## Rooftop details stand on cells their fixed hash picks, only clear of the
+## roof's edge, inside the one roof mesh; a box too small for the margin has
+## none (the 4x3 box above).
+func test_details_stand_clear_of_the_edge_in_the_one_roof_mesh() -> void:
+	assert_bool(_view.detail_cells().is_empty()).is_true()
+	var grid := BuildGrid.new(Vector2i(24, 24), ORIGIN)
+	var edits: Array[BuildEdit] = []
+	for y in range(2, 22):
+		for x in range(2, 22):
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	grid.apply_batch(edits)
+	EnclosureKit.close_floor(grid)
+	_view.bind(grid)
+	var cells := _view.detail_cells()
+	assert_int(cells.size()).is_greater(0)
+	for cell: Vector2i in cells:
+		assert_int(cells[cell]).is_equal(RoofView.detail_kind(cell))
+		assert_bool(Rect2i(4, 4, 16, 16).has_point(cell)).is_true()
+	assert_int(_view.find_children("*", "MeshInstance3D", true, false).size()).is_equal(1)
+	assert_float(_view.roof_box().end.y).is_greater(ORIGIN.y + _view.roof_height)
+	# The same grid gives the same details.
+	_view.rebuild()
+	assert_dict(_view.detail_cells()).is_equal(cells)
+	_view.details = false
+	_view.rebuild()
+	assert_float(_view.roof_box().end.y).is_equal_approx(ORIGIN.y + _view.roof_height, 0.001)
 
 
 ## An L of floor: the overhang strips meet at the inner corner without

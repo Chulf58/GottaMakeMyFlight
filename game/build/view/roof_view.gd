@@ -21,27 +21,51 @@ extends Node3D
 ## fascia_depth. At a convex corner the north or south strip and both fascia
 ## faces run on by the overhang; at an inner corner the north or south strip
 ## and both fascia faces stop short by it, so no two faces overlap. The
-## colours are two texels of the Toon palette atlas (roof_uv, fascia_uv; the
-## defaults are the Toon terminal's Upper roof top and its edge band).
+## colours are texels of the Toon palette atlas: a slate blue-grey top that
+## stands apart from the site's pale paving and a light concrete fascia
+## (user ruling player-built-terminal-roof-tall-5-2-m-roof-with-the-facade-f:
+## tall 5.2 m roof, the 2.9 m facade band, a contrasting colour).
+##
+## Rooftop details: an air-conditioning box or a vent stands on a few roofed
+## cells, chosen by a fixed hash of the cell (detail_kind()), only where every
+## cell within DETAIL_MARGIN is roofed, so none sits on the edge. They are
+## plain toon boxes in the same mesh, so they are batched and fade with the
+## roof. (Toon Industries has Air_Conditioner and Air_Vent models, but that
+## pack is not converted into game/assets yet.)
 ##
 ## Like BuildView it draws in world space, so it sits at the world origin.
+
+enum Detail { NONE, AIR_CON, VENT }
 
 const ROOF_MATERIAL := "res://assets/materials/tp_atlas_toon.tres"
 const TOON := "res://shaders/toon.gdshader"
 const OUTLINE := "res://shaders/toon_outline.gdshader"
 const TOON_DISSOLVE := preload("res://shaders/toon_dissolve.gdshader")
 const OUTLINE_DISSOLVE := preload("res://shaders/toon_outline_dissolve.gdshader")
+## A detail stands only where every cell this many steps away is roofed.
+const DETAIL_MARGIN := 2
+## Hash buckets: of every DETAIL_BUCKETS cells, AIR_CON_BUCKETS get an
+## air-conditioning box and the next VENT_BUCKETS a vent.
+const DETAIL_BUCKETS := 97
+const AIR_CON_BUCKETS := 1
+const VENT_BUCKETS := 2
+## Box sizes in metres (x, height, z) and atlas texels: body and top.
+const AIR_CON_SIZE := Vector3(1.4, 0.9, 1.0)
+const VENT_SIZE := Vector3(0.5, 0.6, 0.5)
+const LIGHT_GREY_UV := Vector2(0.172, 0.215)
+const DARK_GREY_UV := Vector2(0.109, 0.215)
 
 ## The camera rig whose distance drives the fade. Without one the roof keeps
 ## whatever level draw_level() last set.
 @export var camera: TycoonCamera
-## Shape tuning in metres. The wall height the roof sits on is still a plate
-## decision (kit walls 2.5 m or the old facade's 5.2 m), so both are inputs.
-@export var roof_height := 2.8
-@export var fascia_depth := 0.6
+## Shape tuning in metres: the ruled tall roof on 2.5 m kit walls. The low
+## option (top 2.8 m, fascia 0.6 m) is still reachable through these.
+@export var roof_height := 5.2
+@export var fascia_depth := 2.9
 @export var overhang := 0.25
-@export var roof_uv := Vector2(0.546, 0.0141)
-@export var fascia_uv := Vector2(0.543, 0.054)
+@export var roof_uv := Vector2(0.078, 0.33)
+@export var fascia_uv := LIGHT_GREY_UV
+@export var details := true
 @export var roof_hide_below := 100.0
 @export var roof_show_above := 120.0
 @export var roof_fade_seconds := 0.4
@@ -187,10 +211,71 @@ func _build_mesh() -> ArrayMesh:
 			for side in 4:
 				if not _roofed_at(cell + BuildGrid.SIDE_STEP[side]):
 					_edge(st, cell, side, top, bottom)
+			if details:
+				_detail(st, cell, top)
 	var mesh := st.commit()
 	if not _materials.is_empty():
 		mesh.surface_set_material(0, _materials[0])
 	return mesh
+
+
+## Which detail a cell's fixed hash picks, before the margin rule.
+static func detail_kind(cell: Vector2i) -> Detail:
+	var bucket := posmod(cell.x * 92821 + cell.y * 68917, DETAIL_BUCKETS)
+	if bucket < AIR_CON_BUCKETS:
+		return Detail.AIR_CON
+	if bucket < AIR_CON_BUCKETS + VENT_BUCKETS:
+		return Detail.VENT
+	return Detail.NONE
+
+
+## The cells that carry a detail, with their kind: {Vector2i: Detail}.
+func detail_cells() -> Dictionary:
+	var out := {}
+	if _grid == null or not details:
+		return out
+	for y in _grid.size.y:
+		for x in _grid.size.x:
+			var cell := Vector2i(x, y)
+			var kind := detail_kind(cell)
+			if kind != Detail.NONE and _roofed_at(cell) and _clear_of_edge(cell):
+				out[cell] = kind
+	return out
+
+
+func _clear_of_edge(cell: Vector2i) -> bool:
+	for dy in range(-DETAIL_MARGIN, DETAIL_MARGIN + 1):
+		for dx in range(-DETAIL_MARGIN, DETAIL_MARGIN + 1):
+			if not _roofed_at(cell + Vector2i(dx, dy)):
+				return false
+	return true
+
+
+## A detail box on `cell` when its hash picks one and it is clear of the edge.
+func _detail(st: SurfaceTool, cell: Vector2i, top: float) -> void:
+	var kind := detail_kind(cell)
+	if kind == Detail.NONE or not _clear_of_edge(cell):
+		return
+	var size := AIR_CON_SIZE if kind == Detail.AIR_CON else VENT_SIZE
+	var side_uv := LIGHT_GREY_UV if kind == Detail.AIR_CON else DARK_GREY_UV
+	var top_uv := DARK_GREY_UV if kind == Detail.AIR_CON else LIGHT_GREY_UV
+	var centre := Vector2(cell) + Vector2(0.5, 0.5)
+	var half := Vector2(size.x, size.z) * 0.5
+	var lo := centre - half
+	var hi := centre + half
+	_flat(st, lo, hi, top + size.y, Vector3.UP, top_uv)
+	var corners := [lo, Vector2(hi.x, lo.y), hi, Vector2(lo.x, hi.y)]
+	for i in 4:
+		var a: Vector2 = corners[i]
+		var b: Vector2 = corners[(i + 1) % 4]
+		var mid := (a + b) * 0.5 - centre
+		var normal := Vector3(0.0, 0.0, signf(mid.y))
+		if absf(mid.x) > absf(mid.y):
+			normal = Vector3(signf(mid.x), 0.0, 0.0)
+		var quad := [
+			_world(a, top), _world(b, top), _world(b, top + size.y), _world(a, top + size.y)
+		]
+		_quad(st, quad, normal, side_uv)
 
 
 ## The overhang strip, its soffit and its fascia face on one outer edge.

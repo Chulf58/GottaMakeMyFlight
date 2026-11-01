@@ -5,11 +5,17 @@ extends Node3D
 ## builds-the-terminal-floor-outer-walls-auto-roof-land-plots-starter-one-
 ## floor, point 2: "an open gap is shown on screen"). Every gap edge gets a low
 ## red bar on the floor along the open wall line, all drawn as one multimesh,
-## and every run of gap edges gets the red "!" sign (MarkerIcons, the form of
-## the queue-full marker, decision queue-full-marker-a-red-sign-with-a-queue-
-## full-n-waiting-cap) over its middle. The sign is a billboard drawn over the
-## world (no depth test) at one screen size, like MissMarkers, so it reads at
-## every zoom. Redrawn when the grid's graph changes. View only.
+## and every run of gap edges gets a wall-gap sign over its middle: an amber
+## rounded square with a broken wall in white and the caption "Wall gap" under
+## it (user ruling player-built-terminal-roof-tall-5-2-m-roof-with-the-facade-f,
+## point 3), so the red "!" keeps meaning a full queue. The sign has the
+## queue-full sign's form (decision queue-full-marker-a-red-sign-with-a-queue-
+## full-n-waiting-cap): MarkerIcons' rounded square, outline and size, 56 px on
+## screen whatever the zoom, with MissMarkers' caption font and outline, both
+## billboards drawn over walls and roof (no depth test). The gap captions are
+## not part of MissMarkers' declutter layout (decision station-captions-
+## declutter-on-screen-overlap-staff-spot-reas). Redrawn when the grid's graph
+## changes. View only.
 ##
 ## Like BuildView it draws in world space, so it sits at the world origin.
 
@@ -18,9 +24,13 @@ const BAR_HEIGHT := 0.12
 const BAR_DEPTH := 0.16
 ## The sign's foot stands this high over the run's middle.
 const SIGN_LIFT_M := 1.6
-## The sign's height on screen for a 1080-pixel-tall view.
-const SIGN_PX := 48.0
-const REFERENCE_HEIGHT := 1080.0
+const CAPTION := "Wall gap"
+const GAP_FILL := Color(0.937, 0.6, 0.137)
+## The camera's field of view and the view's height when there is no camera.
+const FALLBACK_FOV := 55.0
+const FALLBACK_HEIGHT := 1080.0
+
+static var _icon: ImageTexture
 
 var _grid: BuildGrid
 var _bars := MultiMeshInstance3D.new()
@@ -124,10 +134,38 @@ func _bar_transform(edge: Vector3i) -> Transform3D:
 	return Transform3D(basis, at)
 
 
+## Keeps the signs MissMarkers.SIGN_PX tall on screen and the captions at
+## their font size, as MissMarkers sizes its signs.
+func _process(_delta: float) -> void:
+	_resize_signs()
+
+
+func _resize_signs() -> void:
+	var fov := FALLBACK_FOV
+	var height := FALLBACK_HEIGHT
+	if is_inside_tree():
+		var camera := get_viewport().get_camera_3d()
+		if camera != null:
+			fov = camera.fov
+			var view := get_viewport()
+			height = view.get_visible_rect().size.y * view.get_stretch_transform().get_scale().y
+	## World units per screen pixel at one metre (a fixed-size sprite is drawn
+	## as if it stood one metre from the camera).
+	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
+	for marker in _signs:
+		marker.pixel_size = MissMarkers.SIGN_PX * unit / MarkerIcons.SIZE
+		(marker.get_node("Caption") as Label3D).pixel_size = unit
+
+
+## The caption under a sign.
+func caption_of(marker: Sprite3D) -> Label3D:
+	return marker.get_node("Caption") as Label3D
+
+
 func _make_sign() -> Sprite3D:
 	var marker := Sprite3D.new()
 	marker.name = "GapSign"
-	marker.texture = MarkerIcons.queue_full()
+	marker.texture = wall_gap_icon()
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	marker.fixed_size = true
 	marker.no_depth_test = true
@@ -135,6 +173,67 @@ func _make_sign() -> Sprite3D:
 	marker.render_priority = 11
 	marker.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	marker.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
-	marker.pixel_size = SIGN_PX / REFERENCE_HEIGHT / MarkerIcons.SIZE
+	var caption := Label3D.new()
+	caption.name = "Caption"
+	caption.text = CAPTION
+	caption.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	caption.fixed_size = true
+	caption.no_depth_test = true
+	caption.render_priority = 12
+	caption.outline_render_priority = 11
+	caption.font_size = MissMarkers.CAPTION_FONT
+	caption.outline_size = MissMarkers.CAPTION_OUTLINE
+	caption.outline_modulate = MarkerIcons.OUTLINE
+	# Under the sign: its top edge a gap below the sign's foot.
+	caption.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	caption.offset = Vector2(0.0, -MissMarkers.CAPTION_GAP_PX)
+	marker.add_child(caption)
 	add_child(marker)
+	_resize_signs()
 	return marker
+
+
+## The wall-gap icon, painted once: MarkerIcons' rounded square and outline
+## filled amber, with a white wall line broken in the middle and an arrow
+## passing down through the opening. MarkerIcons' _shape and _segment are called
+## across classes so the queue-full sign's shape is reused, not copied.
+static func wall_gap_icon() -> Texture2D:
+	if _icon != null:
+		return _icon
+	var size := MarkerIcons.SIZE
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var half := size / 2.0
+	for y in size:
+		for x in size:
+			var p := Vector2(x + 0.5 - half, y + 0.5 - half)
+			var edge := MarkerIcons._shape(p)
+			var cover := clampf(0.5 - edge, 0.0, 1.0)
+			if cover <= 0.0:
+				img.set_pixel(x, y, Color(MarkerIcons.OUTLINE, 0.0))
+				continue
+			var inside := clampf(0.5 - (edge + MarkerIcons.OUTLINE_PX), 0.0, 1.0)
+			var colour := MarkerIcons.OUTLINE.lerp(GAP_FILL, inside)
+			var glyph := clampf(0.5 - _broken_wall(p), 0.0, 1.0) * inside
+			colour = colour.lerp(MarkerIcons.GLYPH, glyph)
+			colour.a = cover
+			img.set_pixel(x, y, colour)
+	img.generate_mipmaps()
+	_icon = ImageTexture.create_from_image(img)
+	return _icon
+
+
+## Signed distance in pixels to the white broken wall. Image y runs down.
+static func _broken_wall(p: Vector2) -> float:
+	# A thick wall line broken in the middle...
+	var wall := minf(
+		MarkerIcons._segment(p, Vector2(-36.0, -4.0), Vector2(-17.0, -4.0)),
+		MarkerIcons._segment(p, Vector2(17.0, -4.0), Vector2(36.0, -4.0))
+	)
+	wall -= 9.0
+	# ...and an arrow passing down through the opening.
+	var shaft := MarkerIcons._segment(p, Vector2(0.0, -34.0), Vector2(0.0, 24.0))
+	var head := minf(
+		MarkerIcons._segment(p, Vector2(0.0, 30.0), Vector2(-13.0, 15.0)),
+		MarkerIcons._segment(p, Vector2(0.0, 30.0), Vector2(13.0, 15.0))
+	)
+	return minf(wall, minf(shaft, head) - 5.0)

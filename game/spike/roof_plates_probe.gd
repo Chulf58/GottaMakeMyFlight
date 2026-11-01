@@ -56,8 +56,13 @@ const GAP_XS: Array[int] = [61, 62, 63]
 const EXPECT_INDOOR := 620
 const EXPECT_GAPS := 3
 const EXPECT_RUNS := 1
-## [label, roof_height, fascia_depth].
-const OPTIONS := [["kit", 2.8, 0.6], ["facade", 5.2, 2.9]]
+## [label, roof_height, fascia_depth]: the ruled tall roof (decision player-
+## built-terminal-roof-tall-5-2-m-roof-with-the-facade-f). The low option
+## (2.8 m, 0.6 m) is no longer drawn by default.
+const OPTIONS := [["tall", 5.2, 2.9]]
+## The distance the start camera frames the built area at (frame_start_view),
+## 41.2 m as the conductor measured it in the game.
+const HOME_DISTANCE := 41.2
 const SIX_AXIS := {
 	"front": Vector3(0, 0, 1),
 	"back": Vector3(0, 0, -1),
@@ -163,27 +168,26 @@ func _run() -> void:
 		await _plate_six_axis(grid, option)
 	var ctx := _scene(grid, true)
 	_report_views(ctx)
-	# The two height options side by side: kit on the left, facade on the
-	# right, one row per shot.
-	var sheet := Image.create(TILE.x * 2, TILE.y * 4, false, Image.FORMAT_RGBA8)
-	for column in OPTIONS.size():
-		var option: Array = OPTIONS[column]
-		_set_option(ctx, option)
-		var label: String = option[0]
-		var shots := [
-			["%s_roof_far" % label, 150.0, YAW, -1.0, ["roof", "cube"]],
-			["%s_roof_distance" % label, 280.0, YAW, -1.0, ["roof", "open_box"]],
-			["%s_roof_fading" % label, 110.0, YAW, 0.5, ["roof"]],
-			["%s_roof_held_40m" % label, 40.0, YAW, 0.0, ["roof_edge"]],
-		]
-		for row in shots.size():
-			await _shot(ctx, shots[row], sheet, Vector2i(column, row))
+	# The ruled tall roof at every zoom, then the gap marker close and at the
+	# camera's home distance, on one 3 x 3 sheet.
 	_set_option(ctx, OPTIONS[0])
-	var cut_sheet := Image.create(TILE.x * 3, TILE.y, false, Image.FORMAT_RGBA8)
+	var sheet := Image.create(TILE.x * 3, TILE.y * 3, false, Image.FORMAT_RGBA8)
+	var shots := [
+		["roof_far", 150.0, YAW, -1.0, ["roof", "cube"]],
+		["roof_distance", 280.0, YAW, -1.0, ["roof", "open_box"]],
+		["roof_fading", 110.0, YAW, 0.5, ["roof"]],
+		["roof_held_40m", 40.0, YAW, 0.0, ["roof_edge"]],
+		# The zoom rule hides the roof below 100 m; held drawn here to judge it.
+		["roof_home_41m", HOME_DISTANCE, YAW, 0.0, ["roof"]],
+		["gap_marker_close", 15.0, YAW, -1.0, ["gap_bars", "gap_sign"]],
+		["gap_marker_home", HOME_DISTANCE, YAW, -1.0, ["gap_bars_far", "gap_sign"]],
+	]
+	for i in shots.size():
+		await _shot(ctx, shots[i], sheet, Vector2i(i % 3, floori(i / 3.0)))
+	var cut_sheet := Image.create(TILE.x * 2, TILE.y, false, Image.FORMAT_RGBA8)
 	var others := [
 		["cutaway_yaw40", 45.0, YAW, -1.0, ["hall_floor"]],
 		["cutaway_yaw220", 45.0, YAW + PI, -1.0, ["hall_floor"]],
-		["gap_marker", 15.0, YAW, -1.0, ["gap_bars", "gap_sign"]],
 	]
 	for i in others.size():
 		await _shot(ctx, others[i], cut_sheet, Vector2i(i, 0))
@@ -431,7 +435,7 @@ func _shot(ctx: Dictionary, shot: Array, sheet: Image, place: Vector2i) -> bool:
 	rig.zoom(1.0)
 	_set_roof(ctx, shot[3])
 	await _frames(8)
-	if keys.has("gap_bars") and cam.global_position.z < focus.z:
+	if (keys.has("gap_bars") or keys.has("gap_bars_far")) and cam.global_position.z < focus.z:
 		# The gap is on the south wall: look from the south.
 		rig.yaw += PI
 		await _frames(8)
@@ -472,7 +476,7 @@ func _shot(ctx: Dictionary, shot: Array, sheet: Image, place: Vector2i) -> bool:
 ## Where the camera looks for a shot's subjects.
 func _focus(ctx: Dictionary, keys: Array) -> Vector3:
 	var grid: BuildGrid = ctx["grid"]
-	if keys.has("gap_bars"):
+	if keys.has("gap_bars") or keys.has("gap_bars_far"):
 		return EnclosureGaps.gap_runs(grid)[0].centre(grid)
 	if keys.has("open_box"):
 		return grid.cell_to_world(Vector2i(44, 20))
@@ -560,13 +564,16 @@ func _prove_subject(ctx: Dictionary, label: String, key: String) -> bool:
 			var hall := AABB(floor_lo, Vector3(HALL.size.x, 2.5, HALL.size.y))
 			ok = _prove_in_frame(cam, label, _corners(hall))
 			ok = _prove_seen(cam, label, _floor_targets(grid, HALL), 0.5) and ok
-		"gap_bars":
+		"gap_bars", "gap_bars_far":
 			var targets := _bar_targets(markers)
 			var bars := AABB(targets[0] if not targets.is_empty() else Vector3.ZERO, Vector3.ZERO)
 			for p in targets:
 				bars = bars.expand(p)
 			ok = _prove_in_frame(cam, label, _corners(bars.grow(0.5)))
-			ok = _prove_size(cam, label, _corners(bars), 100.0) and ok
+			# Close up the bars must be big enough to judge; at home zoom the
+			# sign carries the marker and the bars only need to be seen.
+			var floor_px := 100.0 if key == "gap_bars" else 20.0
+			ok = _prove_size(cam, label, _corners(bars), floor_px) and ok
 			ok = _prove_seen(cam, label, targets, 0.8) and ok
 		"gap_sign":
 			# Drawn over the world (no depth test), so in frame is the proof.

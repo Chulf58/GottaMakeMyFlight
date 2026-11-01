@@ -51,3 +51,27 @@ func test_closing_the_gap_clears_the_markers() -> void:
 	assert_bool(_grid.apply(BuildEdit.place_wall(Vector2i(5, 2), BuildGrid.Side.EAST)).ok).is_true()
 	assert_int(_markers.strip_count()).is_equal(0)
 	assert_int(_markers.sign_count()).is_equal(0)
+
+
+## The wall-gap sign is its own icon, not the queue-full "!", with the caption
+## "Wall gap" under it (user ruling player-built-terminal-roof-tall-5-2-m-
+## roof-with-the-facade-f, point 3), drawn over walls and roof.
+func test_the_sign_is_the_wall_gap_icon_with_its_caption_under_it() -> void:
+	_remove(Vector2i(5, 2), BuildGrid.Side.EAST)
+	var marker: Sprite3D = _markers.signs()[0]
+	assert_object(marker.texture).is_same(GapMarkers.wall_gap_icon())
+	assert_object(marker.texture).is_not_same(MarkerIcons.queue_full())
+	assert_bool(marker.no_depth_test).is_true()
+	var caption := _markers.caption_of(marker)
+	assert_str(caption.text).is_equal("Wall gap")
+	assert_bool(caption.no_depth_test).is_true()
+	assert_int(caption.vertical_alignment).is_equal(VERTICAL_ALIGNMENT_TOP)
+	assert_float(caption.offset.y).is_less(0.0)
+	# On the left half of the wall line the gap icon is white and the
+	# queue-full icon is its red fill.
+	var at := Vector2i(MarkerIcons.SIZE / 2 - 26, MarkerIcons.SIZE / 2 - 4)
+	var gap_pixel := GapMarkers.wall_gap_icon().get_image().get_pixelv(at)
+	var queue_pixel := MarkerIcons.queue_full().get_image().get_pixelv(at)
+	assert_float(gap_pixel.b).is_greater(0.9)
+	assert_float(queue_pixel.b).is_less(0.4)
+	assert_bool(gap_pixel.is_equal_approx(queue_pixel)).is_false()
