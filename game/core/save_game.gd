@@ -439,15 +439,14 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	var by_id := {}
 	for p: Passenger in loaded["passengers"]:
 		by_id[p.id] = p
-	var checks := [
-		sim.checked_info_desks(data, by_id, loaded["tick"]),
-		sim.checked_standing(data, by_id),
-		sim.checked_boarding(data, by_id),
-	]
-	for check: Dictionary in checks:
-		if check.has("error"):
-			sim.free()
-			return str(check["error"])
+	var held := sim.checked_info_desks(data, by_id, loaded["tick"])
+	if not held.has("error"):
+		held = sim.checked_standing(data, by_id)
+	if not held.has("error"):
+		held = sim.checked_boarding(data, by_id)
+	if held.has("error"):
+		sim.free()
+		return str(held["error"])
 	staged["passengers"] = loaded
 	staged["sim"] = sim
 	return ""
