@@ -403,8 +403,8 @@ func _ready() -> void:
 		grid = BuildGrid.new(site.grid_size, site.grid_origin)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
-	if starter_shell:
-		StarterShell.place(grid)
+	if starter_shell and not StarterShell.place(grid):
+		push_error("BuildMode: the starter shell does not fit this grid; it starts empty")
 	grid.graph_changed.connect(_on_lane_graph_changed)
 	grid.graph_changed.connect(_on_grid_drawn_cells_changed)
 	_view.name = "BuildView"

@@ -20,16 +20,22 @@ static func price() -> int:
 
 
 ## Places the shell on `grid`, every piece saved at its price and no wallet
-## touched. Pushes an error and returns false when an edit is refused; the
-## edits before it stay on the grid.
+## touched. The edits go onto a copy first, so when one is refused (a grid too
+## small for the footprint) it pushes an error, returns false and leaves `grid`
+## untouched.
 static func place(grid: BuildGrid) -> bool:
 	var edits := ReferenceTerminal.shell_edits()
 	for edit in edits:
 		edit.paid = _price_of(edit)
-	var result := grid.apply_sequence(edits, Callable())
+	var trial := BuildGrid.new(grid.size, grid.origin)
+	if not trial.from_snapshot(grid.to_snapshot()):
+		push_error("StarterShell: the grid could not be copied for a trial placement")
+		return false
+	var result := trial.apply_sequence(edits, Callable())
 	if not result.ok:
 		push_error("StarterShell: a piece was refused: %s" % result.reason_text())
-	return result.ok
+		return false
+	return grid.apply_sequence(edits, Callable()).ok
 
 
 static func _price_of(edit: BuildEdit) -> int:

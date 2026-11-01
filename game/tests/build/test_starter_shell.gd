@@ -212,3 +212,22 @@ func test_a_bare_build_mode_starts_empty_and_a_flagged_one_starts_with_the_shell
 	auto_free(flagged)
 	assert_int(_count_floor(flagged.grid)).is_equal(FLOOR_CELLS)
 	assert_int((_kinds(flagged.grid)["exits"] as Array).size()).is_equal(1)
+
+
+func test_a_grid_too_small_for_the_footprint_gets_no_shell_and_place_returns_false() -> void:
+	var grid := BuildGrid.new(Vector2i(16, 16), null)
+	var before := JSON.stringify(grid.to_snapshot())
+	var placed := [true]
+	(
+		assert_error(func() -> void: placed[0] = StarterShell.place(grid))
+		. is_push_error("StarterShell: a piece was refused: Outside the building area")
+	)
+	assert_bool(placed[0]).is_false()
+	assert_int(_count_floor(grid)).is_equal(0)
+	assert_str(JSON.stringify(grid.to_snapshot())).is_equal(before)
+
+
+func test_place_on_a_normal_grid_still_places_the_whole_shell() -> void:
+	var grid := BuildGrid.new(_site.grid_size, _site.grid_origin)
+	assert_bool(StarterShell.place(grid)).is_true()
+	assert_int(_count_floor(grid)).is_equal(FLOOR_CELLS)
