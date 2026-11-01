@@ -50,7 +50,9 @@ signal loaded(ok: bool)
 ## 4: the room templates (part "templates"); version 3 saves are refused.
 ## 5: the messes, bin fill and use counters (part "messes", MessSim); version 4
 ## saves are refused (no migration before a release).
-const SAVE_VERSION := 5
+## 6: cleaners (staff save version 4: each member's job and work left, and
+## mess claims checked against them); version 5 saves are refused.
+const SAVE_VERSION := 6
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -429,13 +431,20 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 
 
 ## Checked against the staged grid: every mess on its floor, every bin and
-## every use counter's source on it.
+## every use counter's source on it. Kept for the staff check of the
+## cleaners' claims.
 func _stage_messes(data: Dictionary, staged: Dictionary) -> String:
-	return str(MessSim.checked(data, staged["grid"]).get("error", ""))
+	var loaded := MessSim.checked(data, staged["grid"])
+	if loaded.has("error"):
+		return str(loaded["error"])
+	staged["messes"] = loaded
+	return ""
 
 
+## Checked against the staged layout, and the cleaners' jobs against the
+## staged messes.
 func _stage_staff(data: Dictionary, staged: Dictionary) -> String:
-	return str(StaffSnapshot.load(data, staged["sim"]).get("error", ""))
+	return str(StaffSnapshot.load(data, staged["sim"], staged["messes"]).get("error", ""))
 
 
 ## Checked against the scene's landside definition; kept for the links.

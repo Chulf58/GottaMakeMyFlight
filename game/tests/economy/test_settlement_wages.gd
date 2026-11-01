@@ -35,6 +35,17 @@ func test_every_role_has_a_wage() -> void:
 	assert_int(PriceTable.WAGES.size()).is_equal(StaffMember.Role.values().size())
 
 
+func test_midnight_charges_a_cleaner_its_daily_wage() -> void:
+	var cleaner := StaffMember.Role.CLEANER
+	_kit.hire(cleaner, 2)
+	_kit.charge(1)
+	print(
+		"cleaner wage %d, balance %d" % [PriceTable.wage_of(cleaner), _kit.world.sim.wallet.balance]
+	)
+	assert_int(PriceTable.wage_of(cleaner)).is_equal(40)
+	assert_int(_kit.world.sim.wallet.balance).is_equal(1000 - 2 * 40)
+
+
 func test_midnight_charges_each_member_the_wage_of_their_role_once() -> void:
 	_kit.hire(CHECKIN, 2)
 	_kit.hire(SECURITY)
