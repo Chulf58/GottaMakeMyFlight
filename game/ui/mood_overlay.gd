@@ -17,7 +17,10 @@ extends Node3D
 ## keys (WASD, Q, E, Home) and the save keys (F5, F8).
 ##
 ## Like BuildView it draws in world space, so it sits at the world origin.
-## While off it does no work.
+## While off it does no work. Without a PassengerSim and a grid on it there is
+## nothing to read: _ready() reports which one is missing, the button is
+## disabled, the key does nothing and nothing is saved. A grid that appears
+## later (set after _ready) is accepted at the next frame.
 
 ## The input action for the toggle key, bound to M in project.godot.
 const ACTION := &"toggle_mood_overlay"
@@ -27,7 +30,7 @@ const LEGEND_TEXT := "green fine, red waiting long or unhappy"
 ## The tint lies this far over the grid's floor height, above the floor tiles.
 const LIFT_M := 0.06
 ## The tint is redrawn when the sim has moved on this many ticks (a quarter
-## of a second).
+## of a second). A grid edit redraws it on the next frame regardless.
 const REFRESH_TICKS := 5
 const BUTTON_LEFT := 16.0
 const BUTTON_TOP := 292.0
@@ -39,6 +42,12 @@ var settings_path := HudFlagSetting.PATH
 var _shown := false
 var _cells := {}
 var _last_tick := -1
+## True while the grid's edits have not been drawn yet.
+var _dirty := false
+## True once a sim with a grid is there and the saved choice has been read.
+var _active := false
+## The grid whose graph_changed this is connected to.
+var _watched: BuildGrid
 var _tint := MultiMeshInstance3D.new()
 var _layer := CanvasLayer.new()
 var _toggle := Button.new()
@@ -69,14 +78,22 @@ func _ready() -> void:
 	_layer.name = "MoodOverlayHud"
 	_layer.add_child(_build_controls())
 	add_child(_layer)
-	_shown = HudFlagSetting.load_flag(settings_path, SETTING_KEY, false, WHO)
-	_apply_shown()
 	_toggle.toggled.connect(set_shown)
-	refresh()
+	if sim == null:
+		push_error("%s: sim (PassengerSim) is not set, the overlay is disabled" % WHO)
+	elif sim.grid == null:
+		push_error("%s: sim has no grid yet, the overlay is disabled until it has one" % WHO)
+	_apply_shown()
+	_try_activate()
 
 
 func _process(_delta: float) -> void:
-	if _shown and sim != null and absi(sim.tick - _last_tick) >= REFRESH_TICKS:
+	if not _active:
+		_try_activate()
+		return
+	if sim.grid != _watched:
+		_watch(sim.grid)
+	if _shown and (_dirty or absi(sim.tick - _last_tick) >= REFRESH_TICKS):
 		refresh()
 
 
@@ -88,6 +105,9 @@ func is_shown() -> bool:
 ## Shows or hides the tint and keeps the choice. The toggle button and the key
 ## both come through here.
 func set_shown(value: bool) -> void:
+	if not _active:
+		_toggle.set_pressed_no_signal(false)
+		return
 	if value == _shown:
 		return
 	_shown = value
@@ -103,8 +123,9 @@ func tinted_cells() -> Dictionary:
 
 ## Redraws the tint from the sim. A hidden overlay reads nothing.
 func refresh() -> void:
-	if not _shown or sim == null or sim.grid == null:
+	if not _shown or not _active:
 		return
+	_dirty = false
 	_last_tick = sim.tick
 	_cells = MoodTint.cells_for(sim)
 	_redraw()
@@ -113,7 +134,7 @@ func refresh() -> void:
 ## M toggles; a held key's repeats and modified presses are left alone.
 func _shortcut_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key == null or not key.pressed or not event.is_action_pressed(ACTION):
+	if not _active or key == null or not key.pressed or not event.is_action_pressed(ACTION):
 		return
 	if key.ctrl_pressed or key.alt_pressed or key.meta_pressed or key.shift_pressed:
 		return
@@ -140,6 +161,34 @@ func _build_controls() -> Control:
 	_legend.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_legend)
 	return row
+
+
+## Takes the saved choice and starts watching the grid once a sim with a grid
+## is there. Until then the button stays disabled and nothing is read or saved.
+func _try_activate() -> void:
+	_toggle.disabled = sim == null or sim.grid == null
+	if _toggle.disabled:
+		return
+	_active = true
+	_watch(sim.grid)
+	_shown = HudFlagSetting.load_flag(settings_path, SETTING_KEY, false, WHO)
+	_apply_shown()
+	refresh()
+
+
+## Marks the overlay dirty on every graph_changed of the grid, so an edit made
+## while the sim is paused is drawn on the next frame.
+func _watch(grid: BuildGrid) -> void:
+	if is_instance_valid(_watched) and _watched.graph_changed.is_connected(_on_graph_changed):
+		_watched.graph_changed.disconnect(_on_graph_changed)
+	_watched = grid
+	_dirty = true
+	if _watched != null:
+		_watched.graph_changed.connect(_on_graph_changed)
+
+
+func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	_dirty = true
 
 
 func _apply_shown() -> void:
