@@ -99,8 +99,8 @@ static func interior_edits(offset := Vector2i.ZERO) -> Array[BuildEdit]:
 ## and leaves the grid as it was.
 static func fill_interior(grid: BuildGrid, offset: Variant = null) -> BuildResult:
 	var at := offset_on(grid, offset)
-	var trial := BuildGrid.new(grid.size, grid.origin)
-	if not trial.from_snapshot(grid.to_snapshot()):
+	var trial := BuildUndo.trial_copy_of(grid)
+	if trial == null:
 		push_error("ReferenceTerminal: the grid could not be copied for a trial fill")
 		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
 	var trial_result := trial.apply_sequence(interior_edits(at), Callable())

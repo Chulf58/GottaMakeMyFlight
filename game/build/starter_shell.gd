@@ -30,8 +30,8 @@ static func place(grid: BuildGrid, offset: Variant = null) -> bool:
 	var edits := ReferenceTerminal.shell_edits(ReferenceTerminal.offset_on(grid, offset))
 	for edit in edits:
 		edit.paid = _price_of(edit)
-	var trial := BuildGrid.new(grid.size, grid.origin)
-	if not trial.from_snapshot(grid.to_snapshot()):
+	var trial := BuildUndo.trial_copy_of(grid)
+	if trial == null:
 		push_error("StarterShell: the grid could not be copied for a trial placement")
 		return false
 	var result := trial.apply_sequence(edits, Callable())

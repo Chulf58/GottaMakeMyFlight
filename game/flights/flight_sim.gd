@@ -69,7 +69,7 @@ const STATE_COUNT := 11
 ## door is about 915 ticks at walking pace (test_boarding_window.gd).
 ## TAXI_IN (600) and TAXI_OUT (720) keep the peak taxi speed under 16 m/s on
 ## the longest route a legal stand gives (decision plane-stand-design-airside-
-## moves-110-m-north-stand-snaps-to, point 5; test_taxi_budgets.gd). Departure
+## moves-110-m-north-stand-snaps-to, point 5; test_airside_stand.gd). Departure
 ## is the start of PUSHBACK, so a longer TAXI_IN only moves the arrival earlier.
 const PHASE_TICKS: Array[int] = [100, 120, 140, 600, 40, 1200, 60, 120, 720, 200]
 const DEFAULT_ID := "GMF101"

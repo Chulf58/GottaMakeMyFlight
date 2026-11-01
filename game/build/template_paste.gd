@@ -165,15 +165,18 @@ func save_room(room_id: int) -> RoomTemplate:
 
 ## The armed template's paste centred on `cell` and whether it may go there:
 ## {"edits": the plan with its belt reshapes, "result": a BuildResult}. The
-## whole plan (floor, room, pieces) runs on a copy of the grid with the belt
-## crossing rule (BeltShaper.crossing_problem()); then the belts on and next to
-## the room are reshaped there, refused with BELT_CROSSING where a cell would
-## have four links; then the wallet must pay for all of it at full price.
+## whole plan (floor, room, pieces) runs on a copy of the grid
+## (BuildUndo.trial_copy_of(), which keeps a site grid's plane guard, so a
+## paste the live grid would refuse part way is refused here whole) with the
+## belt crossing rule (BeltShaper.crossing_problem()); then the belts on and
+## next to the room are reshaped there, refused with BELT_CROSSING where a
+## cell would have four links; then the wallet must pay for all of it at full
+## price.
 func plan_at(cell: Vector2i) -> Dictionary:
 	var grid := _mode.grid
 	var edits := library.get_template(armed).plan(cell, turns, grid)
-	var scratch := BuildGrid.new(grid.size, grid.origin)
-	if not scratch.from_snapshot(grid.to_snapshot()):
+	var scratch := BuildUndo.trial_copy_of(grid)
+	if scratch == null:
 		push_error("TemplatePaste.plan_at: the grid could not be copied to check the paste")
 		return {"edits": edits, "result": BuildResult.refused(BuildResult.Reason.NONE)}
 	var result := scratch.apply_sequence(edits, BeltShaper.crossing_problem)

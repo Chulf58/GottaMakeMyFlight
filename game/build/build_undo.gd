@@ -24,8 +24,8 @@ static func commit(grid: BuildGrid, receipt: BuildReceipt, wallet: Wallet) -> Bu
 	var edits := receipt.undo_edits()
 	var rule := rule_problem
 	var snapshot := grid.to_snapshot()
-	var scratch := _blank_copy_of(grid)
-	if not scratch.from_snapshot(snapshot):
+	var scratch := trial_copy_of(grid, snapshot)
+	if scratch == null:
 		push_error("BuildUndo.commit: the grid could not be copied to check the undo")
 		return BuildResult.refused(BuildResult.Reason.NONE)
 	var trial := scratch.apply_sequence(edits, rule)
@@ -44,16 +44,24 @@ static func commit(grid: BuildGrid, receipt: BuildReceipt, wallet: Wallet) -> Bu
 	return result
 
 
-## An empty grid of `grid`'s size and origin for the trial run. A site grid's
-## copy carries its guard, so the trial refuses what the live grid would (an
-## undone removal inside the plane's area), instead of the live grid refusing
-## it after the trial took it.
-static func _blank_copy_of(grid: BuildGrid) -> BuildGrid:
+## A copy of `grid` (from `snapshot`, its to_snapshot() when empty) to try
+## edits on before the live grid takes them, or null when the snapshot does not
+## load (from_snapshot() pushed why). It keeps the grid's class: a site grid's
+## copy is a SiteGrid carrying the same site and guard, so the trial refuses
+## what the live grid would (an edit inside the plane's area), instead of the
+## live grid refusing it after the trial took it. Every trial copy of a grid
+## edits may then reach (an undo, a template paste, the starter shell, the
+## debug interior) is made here.
+static func trial_copy_of(grid: BuildGrid, snapshot := {}) -> BuildGrid:
+	var copy: BuildGrid
 	var site_grid := grid as SiteGrid
 	if site_grid == null:
-		return BuildGrid.new(grid.size, grid.origin)
-	var copy := SiteGrid.new(site_grid.site)
-	copy.guard = site_grid.guard
+		copy = BuildGrid.new(grid.size, grid.origin)
+	else:
+		copy = SiteGrid.new(site_grid.site)
+		(copy as SiteGrid).guard = site_grid.guard
+	if not copy.from_snapshot(grid.to_snapshot() if snapshot.is_empty() else snapshot):
+		return null
 	return copy
 
 

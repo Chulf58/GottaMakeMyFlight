@@ -19,7 +19,7 @@ const NAMES: Array[String] = ["rushed", "typical", "relaxed"]
 ## arrive two hours early).
 const SHARES: Array[int] = [15, 55, 30]
 ## Three game hours (user-ruled): the earliest relaxed arrival is this long
-## before departure, 1640 ticks before the first state.
+## before departure, 1340 ticks before the first state.
 const RELAXED_LEAD_TICKS := 3600
 ## Passenger timing is set against departure, not the plane's arrival (decision
 ## plane-stand-design-airside-moves-110-m-north-stand-snaps-to: a longer
