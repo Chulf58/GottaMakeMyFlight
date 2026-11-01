@@ -239,14 +239,16 @@ func test_the_spot_nearer_the_doors_has_the_shorter_walk() -> void:
 	assert_float(near_bay.walk_m).is_less(far_bay.walk_m)
 	# Bay 1 (x 12 to 28) lets its passengers out in front of the entrance
 	# (x 20.5, z -60), bay 0 (x -4 to 12) a bay further west.
-	assert_float(near_bay.walk_m).is_greater(0.0)
-	assert_float(far_bay.walk_m - near_bay.walk_m).is_greater(10.0)
+	assert_float(near_bay.walk_m).is_equal_approx(3.3, 0.1)
+	assert_float(far_bay.walk_m).is_equal_approx(16.5, 0.1)
 	# The surface lot is east by the entrance; the multi-storey is further,
 	# and its upper levels add the stairs.
 	var lot := _placement.plan_build(LandsidePlacement.Kind.SURFACE_LOT, IN_LOT_0)
 	var multi := _placement.plan_build(LandsidePlacement.Kind.MULTI_STOREY, IN_MULTI)
 	print("walks: surface lot %.1f, multi-storey %.1f" % [lot.walk_m, multi.walk_m])
 	assert_float(lot.walk_m).is_less(multi.walk_m)
+	assert_float(lot.walk_m).is_equal_approx(46.4, 0.1)
+	assert_float(multi.walk_m).is_equal_approx(87.8, 0.1)
 
 
 func test_without_an_entrance_the_preview_has_no_walk() -> void:

@@ -239,6 +239,9 @@ func load_world(data: Variant) -> bool:
 			_fail("Load", "the %s part was refused after it was checked" % part.key)
 			loaded.emit(false)
 			return false
+	# The rescue grant's repair bound, worked out now rather than in a tick.
+	if rescue_grant != null:
+		rescue_grant.prepare()
 	_say("Loaded", false)
 	loaded.emit(true)
 	return true

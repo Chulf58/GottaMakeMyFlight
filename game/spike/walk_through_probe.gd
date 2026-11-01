@@ -40,6 +40,12 @@ const TOOLS := {
 	&"exit_door": BuildMode.Tool.EXIT,
 }
 const TICKS_PER_FRAME := 10
+## The layout's counts: 12 x 16 floor, 64 walls (the outer ring less the two
+## door gaps, and the divider less its two scanner gaps), the two door gaps
+## as two gap runs before the doors.
+const EXPECT_FLOOR := 192
+const EXPECT_WALLS := 64
+const EXPECT_OPEN_GAPS := 2
 const END_TICK := 9000
 const MARGIN_PX := 8.0
 const HIT_TOLERANCE := 0.05
@@ -224,8 +230,15 @@ func _build_open(edits: Array[BuildEdit]) -> bool:
 			]
 		)
 	)
-	if _floor_count() == 0 or gaps == 0 or _markers.sign_count() == 0:
-		_invalid("no floor or no gap marker before the doors")
+	var counts := [
+		_expect("walled/floor", _floor_count(), EXPECT_FLOOR),
+		_expect("walled/walls", walls, EXPECT_WALLS),
+		_expect("walled/indoor", _indoor_count(), 0),
+		_expect("walled/roofed", _roof.roofed_cell_count(), 0),
+		_expect("walled/gap_edges", gaps, EXPECT_OPEN_GAPS),
+		_expect("walled/signs", _markers.sign_count(), EXPECT_OPEN_GAPS),
+	]
+	if counts.has(false):
 		return false
 	var entrance := ReferenceTerminal.ENTRANCE_CELL + OFFSET
 	return await _shot("gap_marker", entrance, 30.0, "gap")
@@ -256,10 +269,25 @@ func _build_doors(doors: Array[BuildEdit]) -> bool:
 			]
 		)
 	)
-	if layout.passenger_entrances.is_empty() or _roof.roofed_cell_count() == 0:
-		_invalid("the entrance is not in service or no roof appeared")
-		return false
-	return true
+	var counts := [
+		_expect("doors/entrances_in_service", layout.passenger_entrances.size(), 1),
+		_expect("doors/open_exits", layout.open_exits(_mode.grid).size(), 1),
+		_expect("doors/out_of_service", layout.out_of_service.size(), 0),
+		_expect("doors/gap_edges", EnclosureGaps.gap_edges(_mode.grid).size(), 0),
+		_expect("doors/signs", _markers.sign_count(), 0),
+		_expect("doors/indoor", _indoor_count(), EXPECT_FLOOR),
+		_expect("doors/roofed", _roof.roofed_cell_count(), EXPECT_FLOOR),
+	]
+	return not counts.has(false)
+
+
+## Prints a count against the value it must have; PROBE_INVALID when not.
+func _expect(label: String, got: int, want: int) -> bool:
+	var ok := got == want
+	print("EXPECT %s got=%d want=%d ok=%s" % [label, got, want, ok])
+	if not ok:
+		_invalid("%s is %d, not %d" % [label, got, want])
+	return ok
 
 
 ## One tool use for `edit` (moved by OFFSET), as a player clicks it.
@@ -432,6 +460,8 @@ func _shot(name: String, cell: Vector2i, distance: float, kind: String) -> bool:
 
 func _prove_build(name: String, kind: String, loud: bool) -> bool:
 	_camera_line(name)
+	if not _wall_cutaway_follows_roof(name, loud):
+		return false
 	match kind:
 		"gap":
 			return _prove_gap(name, loud)
@@ -440,6 +470,21 @@ func _prove_build(name: String, kind: String, loud: bool) -> bool:
 		"cutaway":
 			return _prove_cutaway(name, loud)
 	return _fail(loud, "unknown shot kind %s" % kind)
+
+
+## BuildView's wall cutaway is off while any roof is drawn and on while the
+## roof is hidden or there is none (RoofView gates it in main.tscn).
+func _wall_cutaway_follows_roof(name: String, loud: bool) -> bool:
+	var drawn := _roof.roof_node().visible
+	var ok := _view.cutaway_enabled != drawn
+	if loud:
+		print(
+			(
+				"GATE %s roofed=%d roof_visible=%s cutaway_enabled=%s ok=%s"
+				% [name, _roof.roofed_cell_count(), drawn, _view.cutaway_enabled, ok]
+			)
+		)
+	return ok or _fail(loud, "%s: the wall cutaway does not follow the roof" % name)
 
 
 func _prove_gap(name: String, loud: bool) -> bool:
@@ -504,7 +549,11 @@ func _passenger_shot(name: String, p: Passenger) -> bool:
 	await physics_frame
 	await physics_frame
 	_camera_line(name)
-	var proven := _in_frame(name, [foot, head], true) and _seen(name, [chest, head], 1.0, true)
+	var proven := (
+		_wall_cutaway_follows_roof(name, true)
+		and _in_frame(name, [foot, head], true)
+		and _seen(name, [chest, head], 1.0, true)
+	)
 	bodies.free()
 	if not proven:
 		return false

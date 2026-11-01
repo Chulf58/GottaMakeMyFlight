@@ -71,7 +71,10 @@ func _assert_refused(data: Dictionary) -> void:
 	assert_int(_target.sim.tick).is_equal(before_tick)
 
 
-func test_a_save_on_the_road_loads() -> void:
+## The loaded passenger stands where the source's does, and with the clock
+## and flights loaded too the two worlds then play every tick the same, the
+## end of the walk in included.
+func test_a_save_on_the_road_loads_and_plays_on_tick_for_tick() -> void:
 	var p := _source.passenger(1)
 	assert_int(p.stage).is_equal(Passenger.Stage.SPAWNED)
 	assert_int(int(_record()["apron_mm"])).is_greater(0)
@@ -79,6 +82,16 @@ func test_a_save_on_the_road_loads() -> void:
 	assert_vector(_target.sim.world_position(_target.passenger(1))).is_equal_approx(
 		_source.sim.world_position(p), Vector3.ONE * 1e-4
 	)
+	assert_bool(_target.clock.from_snapshot(_source.clock.to_snapshot())).is_true()
+	assert_bool(_target.flights.from_snapshot(_source.flights.to_snapshot())).is_true()
+	var same := 0
+	for i in 300:
+		_source.step()
+		_target.step()
+		same += int(_target.signature() == _source.signature())
+	print("twin ticks same=%d/300 stage=%d" % [same, p.stage])
+	assert_int(p.stage).is_not_equal(Passenger.Stage.SPAWNED)
+	assert_int(same).is_equal(300)
 
 
 func test_progress_past_the_end_of_the_walk_is_refused() -> void:
