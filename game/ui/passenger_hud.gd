@@ -226,9 +226,10 @@ func _ready() -> void:
 	_departures_board.settings_path = departures_settings_path
 	add_child(_departures_board)
 	# The offer sheet is a sibling layer; the card gives way to it when open.
+	# The panel comes later in the scene, so it has no sheet until its _ready.
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel
 	if offers != null:
-		_dirty_alert.covered = offers.is_open
+		_dirty_alert.covered = func() -> bool: return offers.is_node_ready() and offers.is_open()
 	add_child(_dirty_alert)
 	if flights != null:
 		flights.doors_closed.connect(_on_doors_closed)
