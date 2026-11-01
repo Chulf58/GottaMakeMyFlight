@@ -154,6 +154,7 @@ const ACTIVITY_BROWSE_TEXT := {
 var departures_settings_path := DeparturesBoard.SETTINGS_PATH
 
 var _departures_board := DeparturesBoard.new()
+var _dirty_alert := DirtyAlert.new()
 var _counts_label := Label.new()
 var _departures_label := Label.new()
 var _seed_label := Label.new()
@@ -221,6 +222,8 @@ func _ready() -> void:
 	_departures_board.clock = clock
 	_departures_board.settings_path = departures_settings_path
 	add_child(_departures_board)
+	_dirty_alert.sim = sim
+	add_child(_dirty_alert)
 	if flights != null:
 		flights.doors_closed.connect(_on_doors_closed)
 	_build_debug()
@@ -314,6 +317,7 @@ func refresh() -> void:
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
 	_departures_board.refresh()
+	_dirty_alert.refresh()
 	_seed_label.text = seed_text()
 	_seed_label.visible = _seed_label.text != ""
 	_status_label.text = _status
