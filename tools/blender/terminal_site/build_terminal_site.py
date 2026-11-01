@@ -17,9 +17,12 @@ Godot world coordinates with the asset at (0, 0, -80), as main.tscn places the s
 (Godot x = Blender x, Godot y = Blender z, Godot z = -Blender y - 80).
 
 What it keeps and drops (measured on the shell, see the census this script prints):
-- Road: kept whole and unchanged (same mesh, same transform). The written file's Road is
-  compared with the shell file's Road (vertex and index counts, bounds, transform, and
-  every position) and the build fails on any difference.
+- Road: kept as it is (same transform, every triangle at the same position) except the
+  sidewalk tile accents, the flat islands 3 mm over the sidewalk (y 0.2031) beside the plot,
+  which read as dark checker patches (user ruling buildable-outline-keeps-a-constant-on-
+  screen-width-at-every-zoom, point 2, which relaxes 'Road identical' for this change only).
+  The written file's Road is compared with the shell file's Road: same world transform, and
+  its triangles are exactly the shell's minus the accent triangles; the build fails otherwise.
 - Lot: split into islands and filtered by geometry, because the shell exporter put the
   building's ground slab and two letter signs in Lot:
     slab:  an island inside the old slab box (x -34.2..33.2, z -95.5..-64.1, 5 cm
@@ -34,13 +37,17 @@ What it keeps and drops (measured on the shell, see the census this script print
     dip:   an island lying wholly below y 0.15 (the two dips at x -12..12 by the old
            entrances, landside z -64..-60 and airside z -100..-96, and their markings);
     dip kerb: an upright island within x -12.35..12.35 (the dips' kerbs);
-    inner skirt: the paving's upright edge faces at x -40 and 40, which the fill buries.
-  It keeps the paving pads at y 0.2, the tile accents 3 mm above them and the outer
-  skirts at z -100 and -60. fill_plot() then paves the strips x -43..-40 and 40..43 that
+    inner skirt: the paving's upright edge faces at x -40 and 40, which the fill buries;
+    tile accent: a flat island lying 3 mm above the pads (y 0.2031), the dark checker
+           tile patches, which read as a glitch on the empty plot (decision
+           buildable-land-shows-as-an-outline-only-in-build-mode-the-da).
+  It keeps the paving pads at y 0.2 and the outer skirts at z -100 and -60.
+  fill_plot() then paves the strips x -43..-40 and 40..43 that
   the Toon paving stops short of and the two dips (with the airside dip's flared mouth),
   each top face on the UV of the nearest existing pad corner, and closes the new edges
-  with skirts down to y 0. The re-read proves the plot flat (up-facing heights only 0.2
-  and 0.2031) and covered (a 0.25 m sample grid over the plot, every sample on paving).
+  with skirts down to y 0. The re-read proves the plot flat (up-facing heights only 0.2)
+  and covered (a 0.25 m sample grid over the plot, every sample on paving), so the pads
+  run on unbroken under the dropped accents.
 - Poles: dropped. Every Poles island stands under the landside canopy between x -25.85 and
   25.85 and is part of its supports and lamps; the canopy goes, so they go.
 - Upper, Canopy, Facade, Porch_1..8, Door_1..8, Doorway_1..8, Lights (all of it): dropped.
@@ -58,6 +65,7 @@ import math
 import os
 import struct
 import sys
+from collections import Counter
 
 import bmesh
 import bpy
@@ -75,11 +83,13 @@ SIGN_MIN_Y = 0.35  # any island reaching above this is a sign or facade remnant
 PLOT = (-43.0, 43.0, -100.0, -60.0)  # x0, x1, z0, z1 of the player's build plot
 PAVE_Y = 0.2  # the Toon paving pads' top; the plot is paved flat at this height
 PAVE_MAX_Y = 0.21  # above this an island is a raised paving block (tops 0.219, 0.238, 0.257)
+ACCENT_MIN_LIFT = 0.001  # a flat island wholly this far over PAVE_Y is a tile accent (y 0.2031)
 DIP_MAX_Y = 0.15  # below this an island is part of a dip (pads 0.10, markings 0.1065)
 DIP_HALF_X = 12.0  # the dips run x -12..12
 LOT_HALF_X = 40.0  # the Toon paving stops at x -40 and 40
 BACK_FLARE = ((14.0, -100.0), (13.0, -99.73), (12.27, -99.0), (12.0, -98.0))  # east half; west mirrors
 KEEP = ("Road", "Lot")
+SHORT_ROWS = ("raised block", "dip", "tile accent")  # census lists only the first 3 of these
 ROOT = "TP_Airport_Site_ROOT"
 
 report = []
@@ -164,6 +174,8 @@ def classify(lo, hi):
         return "dip kerb"
     if upright and hi.x - lo.x < 0.01 and abs(abs(lo.x) - LOT_HALF_X) < 0.01:
         return "inner skirt"
+    if not upright and lo.y > PAVE_Y + ACCENT_MIN_LIFT:
+        return "tile accent"
     return "keep"
 
 
@@ -212,13 +224,13 @@ def filter_lot(lot):
     for c in sorted(dropped):
         rows = dropped[c]
         rep("  dropped %-12s islands %4d tris %5d" % (c, len(rows), sum(r[2] for r in rows)))
-        for k, nf, nt, box in rows if c != "raised block" and c != "dip" else rows[:3]:
+        for k, nf, nt, box in rows if c not in SHORT_ROWS else rows[:3]:
             rep("    island %4d faces %3d tris %3d %s" % (k, nf, nt, box))
-        if c in ("raised block", "dip") and len(rows) > 3:
+        if c in SHORT_ROWS and len(rows) > 3:
             rep("    ... and %d more like these" % (len(rows) - 3))
     for kind in sorted(kinds):
         rep("  kept    %-24s islands %4d tris %5d" % (kind, kinds[kind][0], kinds[kind][1]))
-    want = ["dip", "dip kerb", "inner skirt", "raised block", "sign", "slab"]
+    want = ["dip", "dip kerb", "inner skirt", "raised block", "sign", "slab", "tile accent"]
     if sorted(dropped) != want:
         die("expected the filter to drop %s, got %s" % (want, sorted(dropped)))
     if skirt_uv is None or not pad_loops:
@@ -229,6 +241,56 @@ def filter_lot(lot):
     bm.free()
     lot.data.update()
     return pad_loops, skirt_uv
+
+
+def is_accent_tri(tri):
+    """A flat triangle wholly at tile-accent height (y 0.2031): over PAVE_Y by
+    ACCENT_MIN_LIFT and under PAVE_MAX_Y. Road markings lie at 0.1065..0.1344 and the
+    sidewalk tops at 0.2, so only the accents match."""
+    return all(PAVE_Y + ACCENT_MIN_LIFT < p.y <= PAVE_MAX_Y for p in tri)
+
+
+def in_tri_xz(px, pz, a, b, c):
+    """Whether (px, pz) lies in triangle abc seen from straight above."""
+    d1 = (px - b.x) * (a.z - b.z) - (a.x - b.x) * (pz - b.z)
+    d2 = (px - c.x) * (b.z - c.z) - (b.x - c.x) * (pz - c.z)
+    d3 = (px - a.x) * (c.z - a.z) - (c.x - a.x) * (pz - a.z)
+    neg = d1 < -1e-9 or d2 < -1e-9 or d3 < -1e-9
+    pos = d1 > 1e-9 or d2 > 1e-9 or d3 > 1e-9
+    return not (neg and pos)
+
+
+def tri_key(tri):
+    return tuple(sorted(tuple(round(c, 4) for c in p) for p in tri))
+
+
+def filter_road(road):
+    """Drop the Road's sidewalk tile accents (the dark checker patches beside the plot),
+    every island all of whose triangles are accent triangles, and keep the rest of the Road
+    as it is. Returns the number of triangles dropped."""
+    mw = road.matrix_world
+    bm = bmesh.new()
+    bm.from_mesh(road.data)
+    bm.faces.ensure_lookup_table()
+    drop, rows = [], []
+    for comp in islands(bm):
+        tris = [tuple(g(mw @ v.co) for v in f.verts) for f in comp]
+        if all(is_accent_tri(t) for t in tris):
+            lo, hi = bbox([p for t in tris for p in t])
+            drop += comp
+            rows.append((len(comp), sum(len(f.verts) - 2 for f in comp), fmt(lo, hi)))
+    n_tris = sum(r[1] for r in rows)
+    rep("Road islands dropped as sidewalk tile accents: %d (tris %d)" % (len(rows), n_tris))
+    for nf, nt, box in rows:
+        rep("    accent faces %d tris %d %s" % (nf, nt, box))
+    if not rows:
+        die("expected sidewalk tile accents on the Road, found none")
+    bmesh.ops.delete(bm, geom=drop, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.to_mesh(road.data)
+    bm.free()
+    road.data.update()
+    return n_tris
 
 
 def fill_plot(lot, pad_loops, skirt_uv):
@@ -318,6 +380,7 @@ def main():
         mw = o.matrix_world.copy()
         o.parent = root
         o.matrix_world = mw
+    road_dropped = filter_road(objs["Road"])
     pad_loops, skirt_uv = filter_lot(objs["Lot"])
     added = fill_plot(objs["Lot"], pad_loops, skirt_uv)
     for o in list(bpy.context.scene.objects):
@@ -357,7 +420,7 @@ def main():
         expected[o.name] = (o.parent.name if o.parent else None, tris)
     site = reread(OUT, "site")
     shell = reread(SHELL, "shell")
-    verify(site, shell, expected, added)
+    verify(site, shell, expected, added, road_dropped)
     path = os.path.join(REPORT_DIR, "census.txt")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(report) + "\n")
@@ -529,7 +592,7 @@ def plot_holes(lot):
     return holes, count
 
 
-def verify(site, shell, expected, added):
+def verify(site, shell, expected, added, road_dropped):
     names = set(site["nodes"])
     if names != {ROOT, *KEEP}:
         die("written site nodes %s, want %s" % (sorted(names), sorted({ROOT, *KEEP})))
@@ -543,17 +606,38 @@ def verify(site, shell, expected, added):
     if site["nodes"]["Road"]["mats"] != ["TP_Atlas_Simple_1A_D"] or site["nodes"]["Lot"]["mats"] != ["TP_Atlas_1A_D"]:
         die("node materials changed: Road %s Lot %s" % (site["nodes"]["Road"]["mats"], site["nodes"]["Lot"]["mats"]))
     a, b = site["nodes"]["Road"], shell["nodes"]["Road"]
-    same = (a["verts"] == b["verts"] and a["tris"] == b["tris"] and a["pos_hash"] == b["pos_hash"]
-            and (a["lo"] - b["lo"]).length < 1e-5 and (a["hi"] - b["hi"]).length < 1e-5
-            and all(abs(a["world"][r][c] - b["world"][r][c]) < 1e-6 for r in range(4) for c in range(4)))
+    # The Road is the shell's minus its sidewalk tile accents (user ruling buildable-outline-
+    # keeps-a-constant-on-screen-width-at-every-zoom, point 2). Every shell Road triangle
+    # that is not an accent must be in the written Road, and nothing else.
+    shell_accent = [t for t in b["tris_world"] if is_accent_tri(t)]
+    shell_rest = Counter(tri_key(t) for t in b["tris_world"] if not is_accent_tri(t))
+    site_all = Counter(tri_key(t) for t in a["tris_world"])
+    same_frame = all(abs(a["world"][r][c] - b["world"][r][c]) < 1e-6 for r in range(4) for c in range(4))
     rep("")
     rep("ROAD site  verts %d tris %d positions %s %s" % (a["verts"], a["tris"], a["pos_hash"], fmt(a["lo"], a["hi"])))
     rep("ROAD shell verts %d tris %d positions %s %s" % (b["verts"], b["tris"], b["pos_hash"], fmt(b["lo"], b["hi"])))
     rep("ROAD world transform site %s shell %s" % ([round(v, 6) for row in a["world"] for v in row],
                                                    [round(v, 6) for row in b["world"] for v in row]))
-    if not same:
-        die("the site's Road differs from the shell's Road")
-    rep("ROAD identical: vertex and triangle counts, bounds, world transform and every position")
+    rep("ROAD shell accent triangles %d (filter dropped %d); shell triangles left %d; site triangles %d; "
+        "site triangles not in the shell's rest %d; shell rest missing from the site %d" % (
+            len(shell_accent), road_dropped, sum(shell_rest.values()), sum(site_all.values()),
+            sum((site_all - shell_rest).values()), sum((shell_rest - site_all).values())))
+    if not same_frame or site_all != shell_rest or len(shell_accent) != road_dropped:
+        die("the site's Road is not the shell's Road minus its sidewalk tile accents")
+    # Under every dropped accent the sidewalk runs on: its centre lies on an up-facing site
+    # Road triangle at PAVE_Y.
+    walk = [t for t in a["tris_world"] if all(abs(p.y - PAVE_Y) < 1e-4 for p in t)]
+    bare = []
+    for t in shell_accent:
+        cx, cz = sum(p.x for p in t) / 3.0, sum(p.z for p in t) / 3.0
+        if not any(in_tri_xz(cx, cz, *w) for w in walk):
+            bare.append((round(cx, 2), round(cz, 2)))
+    rep("ROAD sidewalk under the dropped accents: %d of %d accent centres without sidewalk at y %.2f%s"
+        % (len(bare), len(shell_accent), PAVE_Y, (": " + str(bare[:5])) if bare else ""))
+    if bare:
+        die("dropping the Road accents left holes in the sidewalk")
+    rep("ROAD unchanged but for the dropped accents: same world transform and every other triangle "
+        "at the same positions")
     x0, x1, z0, z1 = SLAB_BOX
     lot = site["nodes"]["Lot"]
     high = [p for p in lot["pts"] if p.y > SIGN_MIN_Y]
@@ -566,13 +650,13 @@ def verify(site, shell, expected, added):
     if high or in_slab_high:
         die("written Lot still holds building geometry")
     # The plot is flat paving: every up-facing Lot vertex inside it (5 cm in from its edges)
-    # sits at PAVE_Y or on a tile accent 3 mm above it, and nothing is higher.
+    # sits at PAVE_Y (the tile accents 3 mm above it are dropped), and nothing is higher.
     inner = [(p, n) for p, n in zip(lot["pts"], lot["nrm"])
              if px0 + 0.05 < p.x < px1 - 0.05 and pz0 + 0.05 < p.z < pz1 - 0.05]
     up_y = sorted({round(p.y, 4) for p, n in inner if n.y > 0.9})
     top = max(p.y for p, _n in inner)
     rep("LOT plot surface: up-facing heights inside the plot %s; highest point inside %.4f" % (up_y, top))
-    if not up_y or min(up_y) < PAVE_Y - 1e-4 or top > PAVE_Y + 0.004:
+    if up_y != [PAVE_Y] or top > PAVE_Y + 1e-4:
         die("the plot is not flat paving at y %.2f" % PAVE_Y)
     # Coverage: a grid of 0.5 m samples over the plot; each must lie on an up-facing Lot
     # triangle at PAVE_Y or above (no hole, no dip, no bare strip).
