@@ -147,10 +147,15 @@ func buy(plot: Vector2i, wallet: Wallet) -> BuildResult:
 	var problem := buy_problem(plot, wallet)
 	if problem != null:
 		return problem
-	if wallet != null and not wallet.spend(next_price(), Wallet.Category.BUILD):
-		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
+	var price := next_price()
+	# Owned and counted before the money moves, so a listener to the wallet
+	# (BuildMenu's card price) already reads the next plot's price.
 	_owned[plot.x + plot.y * plots.x] = 1
 	bought += 1
+	if wallet != null and not wallet.spend(price, Wallet.Category.BUILD):
+		_owned[plot.x + plot.y * plots.x] = 0
+		bought -= 1
+		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
 	changed.emit()
 	return BuildResult.accepted()
 

@@ -88,7 +88,10 @@ func test_one_click_buys_the_plot_and_building_there_is_then_allowed() -> void:
 	# middle row: four corners become eight.
 	assert_int(corners_before).is_equal(4)
 	assert_int(_outline.outline_points().size()).is_equal(8)
-	# The next plot costs more, on the card too.
+	# The next plot costs more, on the card's price slot too (the plates showed
+	# it kept the old price when the wallet moved before the count did).
+	var label: Label = _menu.card_price_label(BuildMode.Tool.BUY_LAND)
+	assert_str(label.text).is_equal(str(PriceTable.price_of_land_plot(1)))
 	assert_int(_menu.call("_card_price", BuildMode.Tool.BUY_LAND)).is_equal(
 		PriceTable.price_of_land_plot(1)
 	)
