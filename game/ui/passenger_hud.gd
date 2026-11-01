@@ -18,7 +18,9 @@ extends CanvasLayer
 ## When a flight's doors close, a dismissible FlightResultPanel opens under
 ## the top-right panel: made, missed and the main reasons; a later closing
 ## flight replaces it, and it hides itself when the game day changes. On
-## ready the camera frames the built area (StartView). A new game opens paused under the
+## ready the camera frames the built area (StartView) inside the screen share
+## the open panels leave free (PanelRoom, which keeps telling the camera as
+## panels open and close). A new game opens paused under the
 ## IntroDialogue (once per session, never in a probe, a test or a playtest);
 ## closing it starts the clock at 1x.
 ##
@@ -171,6 +173,7 @@ var _time_label := Label.new()
 var _speed_buttons: Array[Button] = []
 var _debug_panel := PanelContainer.new()
 var _result := FlightResultPanel.new()
+var _panel_room := PanelRoom.new()
 ## Flights whose doors closed and whose result is not summarized yet, oldest
 ## first, each with the game day it closed on (the clock can pass midnight
 ## before the next refresh). The sim marks the passengers missed after the doors_closed signal,
@@ -248,6 +251,11 @@ func _ready() -> void:
 		open_intro()
 	if save_game != null:
 		save_game.loaded.connect(_on_save_loaded)
+	_panel_room.name = "PanelRoom"
+	_panel_room.camera = camera
+	_panel_room.scene_root = get_parent()
+	_panel_room.result_card = _result
+	add_child(_panel_room)
 	_frame_start_view()
 	refresh()
 
@@ -678,7 +686,8 @@ func _on_save_loaded(ok: bool) -> void:
 
 func _frame_start_view() -> void:
 	if camera != null and build_mode != null:
-		camera.frame_start_view(StartView.area_for(build_mode.grid))
+		camera.frame_start_view(StartView.area_for(build_mode.grid), _panel_room.free_fraction())
+		_panel_room.mark_sent()
 
 
 func _on_doors_closed(flight_id: String) -> void:
