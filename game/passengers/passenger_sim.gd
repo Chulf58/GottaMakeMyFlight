@@ -574,28 +574,20 @@ func from_snapshot(data: Dictionary) -> bool:
 		by_id[p.id] = p
 	# A save migrated from before version 12 (PassengerSnapshot) has no info
 	# desk state: none is live. A version 12 save must carry it.
-	var desk_state := InfoDesk.checked(
-		data.get("info_desk", InfoDesk.EMPTY), by_id, loaded["tick"], grid
-	)
-	if not data.has("info_desk") and int(data["save_version"]) >= SAVE_VERSION:
-		desk_state = {"error": "missing key 'info_desk'"}
+	var desk_state := checked_info_desks(data, by_id, loaded["tick"])
 	if desk_state.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % desk_state["error"])
 		return false
 	# Standing claims are restored as saved, against spots derived from the
 	# loaded grid; a save migrated from before version 14 has none.
 	layout.rebuild(grid)
-	var current := int(data["save_version"]) >= SAVE_VERSION
 	var held := checked_standing(data, by_id)
 	if held.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % held["error"])
 		return false
 	var spots: StandingSpots = held["spots"]
 	var claims: Dictionary = held
-	# The boarding files load as saved; a migrated older save has none.
-	var boarding := BoardingFiles.checked(data.get("boarding", BoardingFiles.EMPTY), by_id, self)
-	if not data.has("boarding") and current:
-		boarding = {"error": "missing key 'boarding'"}
+	var boarding := checked_boarding(data, by_id)
 	if boarding.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % boarding["error"])
 		return false
@@ -650,6 +642,30 @@ func checked_standing(data: Dictionary, by_id: Dictionary) -> Dictionary:
 		return claims
 	claims["spots"] = spots
 	return claims
+
+
+## The info desk state in `data` checked against `by_id` (the loaded
+## passengers by id) at the saved tick `at`: InfoDesk.checked()'s dictionary or
+## {"error": why}. A save migrated from before version 12 has none (none is
+## live); a current one must carry it. Changes no sim state: from_snapshot()
+## installs the result, and SaveGame's staging runs the same check.
+func checked_info_desks(data: Dictionary, by_id: Dictionary, at: int) -> Dictionary:
+	var state := InfoDesk.checked(data.get("info_desk", InfoDesk.EMPTY), by_id, at, grid)
+	if not data.has("info_desk") and int(data["save_version"]) >= SAVE_VERSION:
+		return {"error": "missing key 'info_desk'"}
+	return state
+
+
+## The boarding files in `data` checked against `by_id`, with this sim's grid
+## and layout (rebuilt from the grid): {"files": BoardingFiles} or {"error":
+## why}. A migrated older save has none; a current one must carry them. Changes
+## no sim state: from_snapshot() installs the result, and SaveGame's staging
+## runs the same check.
+func checked_boarding(data: Dictionary, by_id: Dictionary) -> Dictionary:
+	var files_state := BoardingFiles.checked(data.get("boarding", BoardingFiles.EMPTY), by_id, self)
+	if not data.has("boarding") and int(data["save_version"]) >= SAVE_VERSION:
+		return {"error": "missing key 'boarding'"}
+	return files_state
 
 
 func _add_spawn(
