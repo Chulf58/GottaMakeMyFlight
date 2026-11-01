@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name PassengerSim
 extends Node
 ## The passengers as plain data, driven by SimClock ticks after FlightSim.
@@ -578,15 +579,13 @@ func from_snapshot(data: Dictionary) -> bool:
 	# Standing claims are restored as saved, against spots derived from the
 	# loaded grid; a save migrated from before version 14 has none.
 	layout.rebuild(grid)
-	var spots := StandingSpots.new()
-	spots.rebuild(self)
 	var current := int(data["save_version"]) >= SAVE_VERSION
-	var claims := spots.checked(data.get("standing", []), by_id, current)
-	if not data.has("standing") and current:
-		claims = {"error": "missing key 'standing'"}
-	if claims.has("error"):
-		push_error("PassengerSim.from_snapshot: %s" % claims["error"])
+	var held := checked_standing(data, by_id)
+	if held.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % held["error"])
 		return false
+	var spots: StandingSpots = held["spots"]
+	var claims: Dictionary = held
 	# The boarding files load as saved; a migrated older save has none.
 	var boarding := BoardingFiles.checked(data.get("boarding", BoardingFiles.EMPTY), by_id, self)
 	if not data.has("boarding") and current:
@@ -627,6 +626,24 @@ func from_snapshot(data: Dictionary) -> bool:
 	routes.clear()
 	_rederive()
 	return true
+
+
+## The standing spots derived from the loaded grid and the saved claims,
+## checked against `by_id` (the loaded passengers by id): {"spots":
+## StandingSpots, "claims": {passenger: spot}} or {"error": why}. Needs the
+## layout rebuilt from the grid. Changes no sim state: from_snapshot() installs
+## the result, and SaveGame's staging runs the same check, so the two agree.
+func checked_standing(data: Dictionary, by_id: Dictionary) -> Dictionary:
+	var spots := StandingSpots.new()
+	spots.rebuild(self)
+	var current := int(data["save_version"]) >= SAVE_VERSION
+	var claims := spots.checked(data.get("standing", []), by_id, current)
+	if not data.has("standing") and current:
+		claims = {"error": "missing key 'standing'"}
+	if claims.has("error"):
+		return claims
+	claims["spots"] = spots
+	return claims
 
 
 func _add_spawn(
