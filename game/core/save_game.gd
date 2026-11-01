@@ -424,10 +424,21 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	var loaded := PassengerSnapshot.load(data, grid)
 	if loaded.has("error"):
 		return str(loaded["error"])
-	staged["passengers"] = loaded
 	var sim := PassengerSim.new()
 	sim.grid = grid
 	sim.layout.rebuild(grid)
+	# The spots are derived past the security lanes' exit cells, which the
+	# runtime reads from its host's layout (a live sim binds it in bind()).
+	sim.security.bind(sim)
+	# The standing-spot check PassengerSim.from_snapshot() runs at install.
+	var by_id := {}
+	for p: Passenger in loaded["passengers"]:
+		by_id[p.id] = p
+	var held := sim.checked_standing(data, by_id)
+	if held.has("error"):
+		sim.free()
+		return str(held["error"])
+	staged["passengers"] = loaded
 	staged["sim"] = sim
 	return ""
 
