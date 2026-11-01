@@ -360,6 +360,15 @@ func mess_count() -> int:
 	return _messes.size()
 
 
+## The dirt of every mess summed at the sim's tick, before any per-passenger cap:
+## how dirty the terminal is (the dirty-terminal alert reads it). Read only.
+func total_dirt() -> int:
+	var total := 0
+	for mess: Dictionary in _messes.values():
+		total += dirt_of(mess, _sim.tick)
+	return total
+
+
 ## A copy of the mess record, or an empty dictionary for an unknown id.
 func get_mess(id: int) -> Dictionary:
 	return _messes.get(id, {}).duplicate()

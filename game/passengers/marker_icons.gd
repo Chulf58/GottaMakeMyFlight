@@ -11,21 +11,34 @@ const QUEUE_FILL := Color(0.847, 0.263, 0.231)
 const GLYPH := Color(1.0, 1.0, 1.0)
 
 static var _queue_full: ImageTexture
+## The painted icon, kept apart from the texture. Under the headless dummy
+## renderer a texture's get_image() hands back the texture's own stored Image,
+## so a caller that repaints it (MissMarkers._closed_icon) changes what every
+## later get_image() of the queue-full texture returns.
+static var _queue_full_image: Image
 
 
 static func queue_full() -> Texture2D:
 	if _queue_full == null:
-		_queue_full = _paint()
+		_queue_full_image = _paint()
+		_queue_full = ImageTexture.create_from_image(_queue_full_image.duplicate())
 	return _queue_full
 
 
-static func _paint() -> ImageTexture:
+## A fresh copy of the queue-full icon as painted, unchanged by anything a
+## caller did to an image read back from the texture.
+static func queue_full_image() -> Image:
+	queue_full()
+	return _queue_full_image.duplicate()
+
+
+static func _paint() -> Image:
 	var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
 	var half := SIZE / 2.0
 	for y in SIZE:
 		for x in SIZE:
 			var p := Vector2(x + 0.5 - half, y + 0.5 - half)
-			var edge := _shape(p)
+			var edge := shape_distance(p)
 			var cover := clampf(0.5 - edge, 0.0, 1.0)
 			if cover <= 0.0:
 				img.set_pixel(x, y, Color(OUTLINE, 0.0))
@@ -36,11 +49,11 @@ static func _paint() -> ImageTexture:
 			colour.a = cover
 			img.set_pixel(x, y, colour)
 	img.generate_mipmaps()
-	return ImageTexture.create_from_image(img)
+	return img
 
 
 ## Signed distance in pixels to the rounded square's edge, negative inside.
-static func _shape(p: Vector2) -> float:
+static func shape_distance(p: Vector2) -> float:
 	var radius := 22.0
 	var q := p.abs() - Vector2.ONE * (60.0 - radius)
 	return Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() + minf(maxf(q.x, q.y), 0.0) - radius
@@ -48,12 +61,12 @@ static func _shape(p: Vector2) -> float:
 
 ## Signed distance to the white "!". Image y runs down.
 static func _glyph(p: Vector2) -> float:
-	var bar := _segment(p, Vector2(0.0, -34.0), Vector2(0.0, 6.0)) - 9.0
+	var bar := segment_distance(p, Vector2(0.0, -34.0), Vector2(0.0, 6.0)) - 9.0
 	var dot := p.distance_to(Vector2(0.0, 28.0)) - 10.0
 	return minf(bar, dot)
 
 
-static func _segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+static func segment_distance(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var ab := b - a
 	var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
 	return p.distance_to(a + ab * t)

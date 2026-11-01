@@ -18,18 +18,33 @@ extends RefCounted
 ## clear (SecurityLanes.kept_clear_cells()) stop other queues like a staff
 ## spot. An arch without a whole lane is in neither list, so is_usable() is
 ## false for it.
+##
+## On the airport site (`site`) an entrance or exit is in service only while
+## it has a walk outside (SiteRoutes): an entrance to the road, an exit to the
+## plane. A door with none is listed in out_of_service, not refused, because
+## building passes through such states (decision player-built-terminal-
+## technical-design-site-plot-indoor-mask-passenger-eligibility, point 6).
 
 const LANE_SLOTS := 6
 
+## The airport site whose open ground passengers walk outside, or null (in a
+## Toon shell or a test grid), when no door needs a walk outside.
+var site: SiteDefinition
 var desks: Array[int] = []
 var scanners: Array[int] = []
 ## Every entrance door, in id order. Staff come in through any of them: staff
 ## access is physical.
 var entrances: Array[int] = []
 ## The entrances passengers may come in through, in id order: those whose cell
-## is a passenger cell (walled in). Passengers spawn and arrive only here.
+## is a passenger cell (walled in) and, on a site, that have a walk in from the
+## road. Passengers spawn and arrive only here.
 var passenger_entrances: Array[int] = []
 var exits: Array[int] = []
+## On a site, door id -> its walk outside (SiteRoutes.door_cells()) for each
+## entrance and exit that has one.
+var outside_routes: Dictionary = {}
+## On a site, the entrances and exits with no walk outside, in id order.
+var out_of_service: Array[int] = []
 ## Station id -> lane cells, slot 0 first.
 var lanes: Dictionary = {}
 ## Scanner id -> BuildGrid.passage_cells(), empty when the passage is closed.
@@ -51,6 +66,8 @@ func rebuild(grid: BuildGrid) -> void:
 	entrances.clear()
 	passenger_entrances.clear()
 	exits.clear()
+	outside_routes.clear()
+	out_of_service.clear()
 	lanes.clear()
 	passages.clear()
 	seats.clear()
@@ -58,6 +75,7 @@ func rebuild(grid: BuildGrid) -> void:
 	security_lanes.rebuild(grid)
 	var ids := grid.object_ids()
 	ids.sort()
+	_route_doors(grid, ids)
 	var reserved := {}
 	for id in ids:
 		var spot := grid.interaction_cell(id)
@@ -84,7 +102,7 @@ func rebuild(grid: BuildGrid) -> void:
 					passages[id] = _eligible_passage(grid, security_lanes.lane(id)["passage"])
 			&"entrance_door":
 				entrances.append(id)
-				if grid.is_passenger_cell(door_cell(grid, id)):
+				if grid.is_passenger_cell(door_cell(grid, id)) and _has_way_out(id):
 					passenger_entrances.append(id)
 			&"exit_door":
 				exits.append(id)
@@ -116,8 +134,11 @@ func door_outward(grid: BuildGrid, door: int) -> Vector2i:
 
 ## An exit is open when its cell is a passenger cell (walled in) and nothing
 ## closes its outward edge: no wall on it, and no floor beyond it (the door
-## must stand on the terminal's boundary).
+## must stand on the terminal's boundary). On a site it also needs its walk
+## out to the plane.
 func is_exit_open(grid: BuildGrid, door: int) -> bool:
+	if not _has_way_out(door):
+		return false
 	var cell := door_cell(grid, door)
 	if cell == BuildObjectDef.NO_CELL or not grid.is_passenger_cell(cell):
 		return false
@@ -134,6 +155,35 @@ func open_exits(grid: BuildGrid) -> Array[int]:
 		if is_exit_open(grid, door):
 			open.append(door)
 	return open
+
+
+## Whether door `door` has the walk outside a site asks for.
+func _has_way_out(door: int) -> bool:
+	return site == null or outside_routes.has(door)
+
+
+## Finds each entrance's walk in from the road and each exit's walk out to the
+## plane over the site's open ground; a door with none is out of service.
+func _route_doors(grid: BuildGrid, ids: Array[int]) -> void:
+	if site == null:
+		return
+	var fields := {}
+	for id in ids:
+		var record := grid.get_object(id)
+		var def := StringName(record["def"])
+		if def != &"entrance_door" and def != &"exit_door":
+			continue
+		var edge := SiteDefinition.PLANE_STEP
+		if def == &"entrance_door":
+			edge = SiteDefinition.ROAD_STEP
+		if not fields.has(edge):
+			fields[edge] = SiteRoutes.distances(grid, site, SiteRoutes.edge_cells(grid, site, edge))
+		var out := DoorPlacement.back_step(record["facing"])
+		var cells := SiteRoutes.door_cells(grid, site, record["anchor"], out, edge, fields[edge])
+		if cells.is_empty():
+			out_of_service.append(id)
+		else:
+			outside_routes[id] = cells
 
 
 func seat_index(key: String) -> int:
