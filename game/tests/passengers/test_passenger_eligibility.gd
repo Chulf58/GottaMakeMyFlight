@@ -119,3 +119,45 @@ func test_a_shop_slot_needs_closed_floor() -> void:
 	_set_wall(grid, ANNEX_WALL, BuildGrid.Side.EAST, true)
 	shops.rebuild(grid)
 	assert_bool(shops.slot(display, 0).is_empty()).is_false()
+
+
+## Passengers come in only through an entrance on closed floor; staff still
+## use every entrance.
+func test_an_entrance_needs_closed_floor() -> void:
+	var grid := BuildGrid.new()
+	assert_bool(ReferenceTerminal.build(grid)).is_true()
+	var entrance: int = ReferenceTerminal.object_ids(grid)["entrances"][0]
+	var layout := _terminal(grid)
+	assert_array(layout.passenger_entrances).contains_exactly([entrance])
+	_set_wall(grid, TERMINAL_WALL, BuildGrid.Side.WEST, false)
+	layout = _terminal(grid)
+	assert_array(layout.passenger_entrances).is_empty()
+	assert_array(layout.entrances).contains_exactly([entrance])
+	_set_wall(grid, TERMINAL_WALL, BuildGrid.Side.WEST, true)
+	layout = _terminal(grid)
+	assert_array(layout.passenger_entrances).contains_exactly([entrance])
+
+
+## An info desk on floor that is not walled in helps nobody, and a saved visit
+## to one is refused. The test floor's border is its wall
+## (PassengerTestWorld.floored()), so turning it off opens the whole floor.
+func test_an_info_desk_needs_closed_floor() -> void:
+	var world := InfoDeskTestLayout.world()
+	world.step()
+	var desk := world.grid.object_at(InfoDeskTestLayout.DESK_ANCHOR)
+	var desks := world.sim.info_desks
+	assert_array(desks.open_desks()).contains_exactly([desk])
+	var p := InfoDeskTestLayout.guest(world, Vector2i(9, 10), 50)
+	p.stuck = Passenger.Stuck.NO_ROUTE
+	var saved := {"visits": [[p.id, desk, InfoDesk.WALKING]], "cooldowns": []}
+	var tick := world.sim.tick
+	assert_dict(InfoDesk.checked(saved, {p.id: p}, tick, world.grid)).not_contains_keys(["error"])
+	world.grid.set_shell_border(false)
+	assert_bool(world.grid.is_passenger_cell(InfoDeskTestLayout.DESK_FRONT)).is_false()
+	assert_array(desks.open_desks()).is_empty()
+	var refused := InfoDesk.checked(saved, {p.id: p}, tick, world.grid)
+	print("refused visit: %s" % refused)
+	assert_dict(refused).contains_keys(["error"])
+	world.grid.set_shell_border(true)
+	assert_array(desks.open_desks()).contains_exactly([desk])
+	world.free_all()

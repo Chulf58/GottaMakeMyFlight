@@ -7,8 +7,10 @@ extends RefCounted
 ## and stands within RANGE_CELLS of a desk with a server on duty (StaffSim,
 ## the SHOP role, ShopCounters) walks to the desk's interaction cell, is helped
 ## there for HELP_TICKS, gains BOOST mood and plans its route again. A desk
-## nobody staffs does nothing, and neither does one out of range or one with no
-## walk of at most MAX_WALK_MM to it.
+## nobody staffs does nothing, and neither does one out of range, one with no
+## walk of at most MAX_WALK_MM to it, or one whose interaction cell walls do not
+## close in (BuildGrid.is_passenger_cell()); a visit to a desk that loses that
+## ends at once.
 ##
 ## The visit is not a journey stage: the passenger keeps its stage and its
 ## stuck status and PassengerSim skips the stage's own logic while the visit
@@ -112,13 +114,18 @@ func stuck_loss(p: Passenger) -> int:
 
 
 ## Staffed info desks (object ids, in id order): those with a server on duty
-## who is not leaving.
+## who is not leaving, whose interaction cell passengers may use
+## (BuildGrid.is_passenger_cell(): walled in).
 func open_desks() -> Array[int]:
 	var out: Array[int] = []
 	if _sim.staff == null:
 		return out
 	for id in _sim.staff.stations_of(StaffMember.Role.SHOP):
-		if ShopCounters.is_roomless(_sim.grid, id) and _sim.staff.is_open(id):
+		if (
+			ShopCounters.is_roomless(_sim.grid, id)
+			and _sim.staff.is_open(id)
+			and _sim.grid.is_passenger_cell(_sim.grid.interaction_cell(id))
+		):
 			out.append(id)
 	return out
 
@@ -156,6 +163,9 @@ func step(p: Passenger) -> void:
 		# Something else took the passenger on: the visit has nothing to hold.
 		_visits.erase(p.id)
 	elif not ShopCounters.is_roomless(_sim.grid, desk):
+		_drop(p)
+	elif not _sim.grid.is_passenger_cell(_sim.grid.interaction_cell(desk)):
+		# Walls no longer close the desk in: the visit, help or walk, ends.
 		_drop(p)
 	elif visit["end"] != WALKING:
 		if _sim.tick >= int(visit["end"]):
@@ -253,6 +263,8 @@ static func _visit_problem(
 		return "holds a passenger who is not stuck in a way a desk helps"
 	if not ShopCounters.is_roomless(grid, row[1]):
 		return "names an object that is not an info desk"
+	if not grid.is_passenger_cell(grid.interaction_cell(row[1])):
+		return "names a desk walls do not close in"
 	var end := row[2]
 	if end == WALKING:
 		return ""

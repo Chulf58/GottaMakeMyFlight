@@ -5,9 +5,13 @@ extends GdUnitTestSuite
 ## a wall edit that floods or closes every cell takes with its relink. Floor
 ## covers each grid inside a ring of walls one cell in from the border, with
 ## interior walls every 8 cells (each with a one-cell gap). The numbers are
-## printed for the record; the asserts only prove each run did its work.
+## printed for the record. The 66x30 opening edit has a budget that fails;
+## the other asserts prove each run did its work.
 
 const ROOM := 8
+## The most a wall edit that floods the whole 66x30 floor may take, in usec:
+## under one 60 fps frame. Measured about 3.6 ms on 2026-11-01.
+const SHELL_EDIT_BUDGET_USEC := 15000
 
 
 ## A grid of `size` floored inside a walled ring one cell in from the border,
@@ -49,7 +53,9 @@ func _flood_usec(grid: BuildGrid, border_closed: bool) -> int:
 	return runs[2]
 
 
-func _measure(size: Vector2i) -> void:
+## Builds the site, opens and closes its outer wall, prints the timings and
+## returns how long the opening edit took, in usec.
+func _measure(size: Vector2i) -> int:
 	var grid := _site(size)
 	var indoor := _indoor(grid)
 	var gap := Vector2i(1, size.y / 2)
@@ -85,11 +91,16 @@ func _measure(size: Vector2i) -> void:
 	assert_int(indoor).is_equal((size.x - 2) * (size.y - 2))
 	assert_int(opened).is_equal(0)
 	assert_int(_indoor(grid)).is_equal(indoor)
+	return open_usec
 
 
+## The shell-sized grid has a budget: one wall edit that lets the outside into
+## the whole floor, relink included, stays under SHELL_EDIT_BUDGET_USEC.
 func test_time_the_shell_sized_grid() -> void:
-	_measure(Vector2i(66, 30))
+	assert_int(_measure(Vector2i(66, 30))).is_less(SHELL_EDIT_BUDGET_USEC)
 
 
+## The largest grid is a printed measurement only (about 130 ms for the
+## opening edit on 2026-11-01); its budget belongs to the land-plots slice.
 func test_time_the_largest_grid() -> void:
-	_measure(Vector2i(BuildGrid.MAX_SIDE_CELLS, BuildGrid.MAX_SIDE_CELLS))
+	assert_int(_measure(Vector2i(BuildGrid.MAX_SIDE_CELLS, BuildGrid.MAX_SIDE_CELLS))).is_greater(0)

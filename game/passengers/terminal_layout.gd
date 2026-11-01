@@ -23,7 +23,12 @@ const LANE_SLOTS := 6
 
 var desks: Array[int] = []
 var scanners: Array[int] = []
+## Every entrance door, in id order. Staff come in through any of them: staff
+## access is physical.
 var entrances: Array[int] = []
+## The entrances passengers may come in through, in id order: those whose cell
+## is a passenger cell (walled in). Passengers spawn and arrive only here.
+var passenger_entrances: Array[int] = []
 var exits: Array[int] = []
 ## Station id -> lane cells, slot 0 first.
 var lanes: Dictionary = {}
@@ -44,6 +49,7 @@ func rebuild(grid: BuildGrid) -> void:
 	desks.clear()
 	scanners.clear()
 	entrances.clear()
+	passenger_entrances.clear()
 	exits.clear()
 	lanes.clear()
 	passages.clear()
@@ -78,6 +84,8 @@ func rebuild(grid: BuildGrid) -> void:
 					passages[id] = _eligible_passage(grid, security_lanes.lane(id)["passage"])
 			&"entrance_door":
 				entrances.append(id)
+				if grid.is_passenger_cell(door_cell(grid, id)):
+					passenger_entrances.append(id)
 			&"exit_door":
 				exits.append(id)
 			&"seat_row":
