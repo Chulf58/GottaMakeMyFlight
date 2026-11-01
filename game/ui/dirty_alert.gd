@@ -21,13 +21,25 @@ const BINS_TEXT := (
 	"The terminal is getting dirty. Place bins near the bar and toilets, "
 	+ "or hire more cleaners."
 )
-## Below the top row (money, rating, offers, day panel), centred, clear of the
-## room panel on the left and the departures board below it.
+## Below the top row (money, rating, offers, day panel), right edge a gap left
+## of the flight panel (which spans the right 460 px less its 20 px margin), so
+## the card sits in the free space beside it. It is WIDTH wide, or narrower
+## (the text wraps) when the viewport leaves less than that, down to MIN_WIDTH.
 const TOP := 76.0
 const WIDTH := 420.0
+const MIN_WIDTH := 240.0
+const RIGHT_GAP := 480.0
+const LEFT_MARGIN := 16.0
 
-## The passenger sim whose messes and staff the card reads.
-@export var sim: PassengerSim
+## The passenger sim whose messes and staff the card reads. A different sim is
+## a different world, so the card starts again (reset()).
+@export var sim: PassengerSim:
+	set(value):
+		sim = value
+		reset()
+## True while something covers the card's place (the open offer sheet); the card
+## stays down then and comes back when it is false.
+var covered := Callable()
 
 var _shown := false
 var _label := Label.new()
@@ -37,18 +49,23 @@ func _ready() -> void:
 	name = "DirtyAlert"
 	theme = BuildMenu.HUD_THEME
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Top centre, sized to its text up to WIDTH.
-	anchor_left = 0.5
-	anchor_right = 0.5
-	offset_left = -WIDTH / 2.0
-	offset_right = WIDTH / 2.0
+	anchor_left = 1.0
+	anchor_right = 1.0
 	offset_top = TOP
 	grow_vertical = Control.GROW_DIRECTION_END
+	_fit()
+	get_viewport().size_changed.connect(_fit)
 	_label.name = "DirtyAlertText"
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_label)
 	visible = false
+
+
+## The card's width for a viewport `viewport_w` wide: WIDTH, or what is left of
+## it between LEFT_MARGIN and the flight panel, never under MIN_WIDTH.
+static func width_for(viewport_w: float) -> float:
+	return clampf(viewport_w - RIGHT_GAP - LEFT_MARGIN, MIN_WIDTH, WIDTH)
 
 
 ## Whether the card is up when the dirt is `dirt` and it is `was_shown` now:
@@ -64,7 +81,16 @@ static func text_for(cleaners: int) -> String:
 	return HIRE_TEXT if cleaners <= 0 else BINS_TEXT
 
 
-## True while the card is up.
+## Puts the card back as at the start: down, with its dirt read afresh at the
+## next refresh(). A card that was up does not carry over to another world or a
+## load; the dirt then has to reach SHOW_AT again.
+func reset() -> void:
+	_shown = false
+	visible = false
+	_label.text = ""
+
+
+## True while the card is up (it can be up but covered, and then not drawn).
 func is_shown() -> bool:
 	return _shown
 
@@ -88,5 +114,11 @@ func refresh() -> void:
 ## shown_next(), the text follows the hired count.
 func refresh_with(dirt: int, cleaners: int) -> void:
 	_shown = shown_next(_shown, dirt)
-	visible = _shown
+	visible = _shown and not (covered.is_valid() and covered.call())
 	_label.text = text_for(cleaners) if _shown else ""
+
+
+func _fit() -> void:
+	var width := width_for(get_viewport().get_visible_rect().size.x)
+	offset_right = -RIGHT_GAP
+	offset_left = -RIGHT_GAP - width

@@ -142,7 +142,10 @@ const ACTIVITY_BROWSE_TEXT := {
 
 @export var clock: SimClock
 @export var flights: FlightSim
-@export var sim: PassengerSim
+@export var sim: PassengerSim:
+	set(value):
+		sim = value
+		_dirty_alert.sim = value
 @export var views: PassengerViews
 ## The landside's vehicles, for clicking a car or taxi; optional.
 @export var landside_views: LandsideViews
@@ -222,7 +225,10 @@ func _ready() -> void:
 	_departures_board.clock = clock
 	_departures_board.settings_path = departures_settings_path
 	add_child(_departures_board)
-	_dirty_alert.sim = sim
+	# The offer sheet is a sibling layer; the card gives way to it when open.
+	var offers := get_node_or_null("../OfferPanel") as OfferPanel
+	if offers != null:
+		_dirty_alert.covered = offers.is_open
 	add_child(_dirty_alert)
 	if flights != null:
 		flights.doors_closed.connect(_on_doors_closed)
@@ -302,6 +308,11 @@ func _shortcut_input(event: InputEvent) -> void:
 		if not key.echo:
 			press_speed(SPEED_KEYS[key.physical_keycode])
 		get_viewport().set_input_as_handled()
+
+
+## The dirty-terminal alert card, for tests and probes.
+func dirty_alert() -> DirtyAlert:
+	return _dirty_alert
 
 
 func refresh() -> void:
@@ -652,6 +663,7 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
+		_dirty_alert.reset()
 		_frame_start_view()
 
 
