@@ -13,7 +13,6 @@ extends Node3D
 ## ghost shows the edit under the mouse, tinted by check(), so the preview and
 ## the click use the same rules. Entrances and exits turn themselves to face
 ## in from the edge under the mouse until R is pressed (DoorPlacement.auto_facing()).
-## Inside a terminal shell they snap to its Toon doors instead (ShellDefinition).
 ## The Cafe tool drags a rectangle that marks floor as a cafe room (RoomTool);
 ## the counter and table tools furnish it, and RoomView shows what it needs.
 ## The Bag room tool does the same for a baggage room, and the Toilet room tool
@@ -244,11 +243,6 @@ const DOOR_HINTS := {
 	BuildResult.Reason.DOOR_WALLED: "Take down the glass or door wall behind the %s",
 	BuildResult.Reason.WALL_HOLDS_DOOR: "The wall behind the %s holds a door; pick another spot",
 }
-## The status line for a door tool refused with DOOR_NOT_AT_SHELL_DOOR.
-const SHELL_DOOR_HINTS := {
-	Tool.ENTRANCE: "Put the entrance on one of the building's landside doors",
-	Tool.EXIT: "Put the exit on one of the building's gate doors",
-}
 ## Tools whose drag lays a straight row of edges, applied on release.
 const DRAG_TOOLS := [Tool.WALL, Tool.GLASS]
 ## Tools whose drag is applied on release: a rectangle, or the Belt's line.
@@ -298,14 +292,10 @@ const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
 @export var grid_centred := true
 ## World position of the grid's north-west corner, its floor height included.
 @export var grid_origin := Vector3.ZERO
-## The terminal shell the player builds inside. When set, the grid takes its
-## frame (grid_size, grid_centred and grid_origin are not used), the Entrance
-## and Exit tools snap to its doors and load_snapshot() checks a save fits it.
-@export var shell: ShellDefinition
-## The terminal shell's cutaway, drawn over the same shell. Remove does not
-## pick an object the shell hides from the camera (ShellSight). main.tscn
-## sets it; without it nothing hides an object but the grid's own walls.
-@export var shell_view: ShellView
+## The airport site the player builds the terminal on. When set, the grid
+## takes its frame (grid_size, grid_centred and grid_origin are not used) and
+## load_snapshot() checks a save fits it (SiteDefinition.snapshot_problem()).
+@export var site: SiteDefinition
 ## Where building is paid from (BuildTransaction): a click or door costs its
 ## price, a Floor rectangle is all or nothing, a wall row stops when the
 ## money runs out, and removals refund a share of the saved price. main.tscn
@@ -405,10 +395,8 @@ static func _ghost_material(tint: Color) -> StandardMaterial3D:
 
 
 func _ready() -> void:
-	if shell != null:
-		grid = BuildGrid.new(shell.grid_size, shell.grid_origin)
-		# The shell's facade is the outer wall: the grid border closes rooms in.
-		grid.set_shell_border(true)
+	if site != null:
+		grid = BuildGrid.new(site.grid_size, site.grid_origin)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
 	grid.graph_changed.connect(_on_lane_graph_changed)
@@ -546,10 +534,6 @@ func edit_at(point: Vector3) -> BuildEdit:
 		return BuildEdit.place_wall(cell, side, TOOL_WALL_KINDS[tool])
 	var def_id := tool_object(tool)
 	if def_id != &"":
-		if shell != null and DOOR_NAMES.has(tool):
-			var door := shell.nearest(grid, def_id, point)
-			if door != null:
-				return BuildEdit.place_object(def_id, door.cell, door.facing)
 		var turn := facing
 		if _facing_is_auto():
 			turn = DoorPlacement.auto_facing(grid, def_id, point, facing)
@@ -829,7 +813,7 @@ func _lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
 func undo() -> BuildResult:
 	cancel_area()
 	var landside_first := landside_placement().has_undo_for(_history.peek())
-	var result := _landside_placement.undo() if landside_first else _history.undo(shell)
+	var result := _landside_placement.undo() if landside_first else _history.undo()
 	if result == null:
 		_status_note = UndoStack.NOTHING_TO_UNDO
 	elif result.ok:
@@ -954,7 +938,7 @@ func wallet() -> Wallet:
 ## no belt crossing and no lane part across a wall (LaneWall), then whether the
 ## wallet can pay for the edits it takes (BuildTransaction.check(), CANT_AFFORD).
 func check(edit: BuildEdit) -> BuildResult:
-	var result := DoorPlacement.check(grid, edit, shell)
+	var result := DoorPlacement.check(grid, edit)
 	if not result.ok:
 		return result
 	var crossing := BeltShaper.crossing_problem(grid, edit)
@@ -967,13 +951,13 @@ func check(edit: BuildEdit) -> BuildResult:
 
 
 ## Restores a BuildGrid.to_snapshot() dictionary into the grid and redraws.
-## With a shell, a save that does not fit it is refused first
-## (ShellDefinition.snapshot_problem()). Pushes an error and returns false,
+## With a site, a save in another frame than the site's is refused first
+## (SiteDefinition.snapshot_problem()). Pushes an error and returns false,
 ## leaving the grid as it was, on any refusal. A load never spends or
 ## credits: it bypasses BuildTransaction and keeps the saved purchase prices.
 ## It clears the undo history.
 func load_snapshot(data: Dictionary) -> bool:
-	var problem := shell.snapshot_problem(data) if shell != null else ""
+	var problem := site.snapshot_problem(data) if site != null else ""
 	if problem != "":
 		push_error("BuildMode.load_snapshot: %s" % problem)
 		return false
@@ -999,23 +983,21 @@ func _cancels_area(event: InputEvent) -> bool:
 	return click != null and click.pressed and click.button_index == MOUSE_BUTTON_RIGHT
 
 
-## A door tool picks its own facing until R is pressed; inside a shell, always.
+## A door tool picks its own facing until R is pressed.
 func _facing_is_auto() -> bool:
-	return (_auto_facing or shell != null) and DOOR_NAMES.has(tool)
+	return _auto_facing and DOOR_NAMES.has(tool)
 
 
 ## What Remove takes at a ground point: the object the pointer is on (seen
-## from the camera, or on the point's cell unless the terminal shell hides the
-## point, see ShellSight), then the wall the line of sight to the point meets
-## (WallPick), then a wall edge within WALL_PICK_DISTANCE of the point, then the
-## room, then the floor. A wall in the way hides the object by cell behind it.
+## from the camera, or on the point's cell), then the wall the line of sight
+## to the point meets (WallPick), then a wall edge within WALL_PICK_DISTANCE of
+## the point, then the room, then the floor. A wall in the way hides the object by cell behind it.
 func _removal_at(point: Vector3, cell: Vector2i, side: int) -> BuildEdit:
 	var object_id := _object_in_sight(point)
 	var camera := get_viewport().get_camera_3d()
 	var seen_wall := _wall_in_line_of_sight(camera, point)
 	if object_id == 0 and seen_wall.z < 0:
-		if not ShellSight.hides_point(shell_view, grid, camera, point):
-			object_id = grid.object_at(cell)
+		object_id = grid.object_at(cell)
 	if object_id != 0:
 		return BuildEdit.remove_object(object_id)
 	if seen_wall.z >= 0:
@@ -1045,7 +1027,7 @@ func _wall_in_line_of_sight(camera: Camera3D, point: Vector3) -> Vector3i:
 ## hides the ground behind it on screen, so a click on it picks a ground point
 ## beyond it, maybe beside a wall edge; the object the player sees under the
 ## pointer wins. An object behind a wall the view draws opaque
-## (_wall_in_sight) or behind the terminal shell (ShellSight) is not seen.
+## (_wall_in_sight) is not seen.
 func _object_in_sight(point: Vector3) -> int:
 	var camera := get_viewport().get_camera_3d()
 	if camera == null or camera.is_position_behind(point):
@@ -1066,8 +1048,6 @@ func _object_in_sight(point: Vector3) -> int:
 			nearest = distance
 			seen = object_id
 	if seen != 0 and nearest >= _wall_in_sight(from, point) - SIGHT_SLACK_M:
-		return 0
-	if seen != 0 and ShellSight.in_sight(shell_view, grid, from, point):
 		return 0
 	return seen
 
@@ -1184,11 +1164,11 @@ func _update_ghost(point: Variant) -> void:
 	_show_status(result)
 
 
-## The landside tools' rules (LandsidePlacement) for the sim, shell and wallet
+## The landside tools' rules (LandsidePlacement) for the sim, grid and wallet
 ## BuildMode has now.
 func landside_placement() -> LandsidePlacement:
 	_landside_placement.sim = landside
-	_landside_placement.shell = shell
+	_landside_placement.grid = grid
 	_landside_placement.wallet = wallet()
 	return _landside_placement
 
@@ -1495,9 +1475,7 @@ func _show_status(result: BuildResult) -> void:
 		text = "Facing auto" if _facing_is_auto() else "Facing %d" % facing
 	if refused:
 		var reason := result.reason_text()
-		if DOOR_NAMES.has(tool) and result.reason == BuildResult.Reason.DOOR_NOT_AT_SHELL_DOOR:
-			reason = SHELL_DOOR_HINTS[tool]
-		elif DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
+		if DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
 			reason = DOOR_HINTS[result.reason] % DOOR_NAMES[tool]
 		text += ("  " if text != "" else "") + reason
 	if _front_warning != "" and not refused:

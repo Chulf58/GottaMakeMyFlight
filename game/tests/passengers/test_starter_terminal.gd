@@ -1,11 +1,11 @@
 class_name TestStarterTerminal
 extends GdUnitTestSuite
-## The starter terminal inside the Toon shell: its entrance stands on landside
-## door B and its exit on gate C, so passengers walk the doors' real routes.
+## The starter terminal (ReferenceTerminal, the debug starter button's layout)
+## on the airport site: both its doors have a walk outside, so they are in
+## service, and a passenger walks in from the road, through the terminal and
+## out to the plane, and makes the flight.
 
-const SHELL := preload("res://build/toon_terminal_shell.tres")
-const LANDSIDE_B := Vector2i(16, 29)
-const GATE_C := Vector2i(16, 0)
+const SITE := preload("res://build/terminal_site.tres")
 const LAST_TICK := 1900
 
 var _world: PassengerTestWorld
@@ -20,10 +20,10 @@ func after() -> void:
 
 
 func before_test() -> void:
-	var grid := BuildGrid.new(SHELL.grid_size, SHELL.grid_origin)
-	assert_bool(ReferenceTerminal.build(grid, SHELL)).is_true()
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	assert_bool(ReferenceTerminal.build(grid)).is_true()
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	_world.sim.shell = SHELL
+	_world.sim.site = SITE
 
 
 func after_test() -> void:
@@ -31,41 +31,36 @@ func after_test() -> void:
 	_world = null
 
 
-func test_the_entrance_is_on_door_b_and_the_exit_on_gate_c() -> void:
+func test_both_doors_have_a_walk_outside_and_are_in_service() -> void:
 	var ids := ReferenceTerminal.object_ids(_world.grid)
-	assert_int(ids["entrances"].size()).is_equal(1)
-	assert_int(ids["exits"].size()).is_equal(1)
-	var entrance := _world.grid.get_object(ids["entrances"][0])
-	var exit_door := _world.grid.get_object(ids["exits"][0])
-	assert_that(entrance["anchor"]).is_equal(LANDSIDE_B)
-	assert_that(exit_door["anchor"]).is_equal(GATE_C)
-	var door_b := SHELL.connection_for(&"entrance_door", entrance["anchor"], entrance["facing"])
-	var gate_c := SHELL.connection_for(&"exit_door", exit_door["anchor"], exit_door["facing"])
-	assert_str(door_b.label if door_b != null else "").is_equal("B")
-	assert_str(gate_c.label if gate_c != null else "").is_equal("C")
+	var entrance: int = ids["entrances"][0]
+	var exit_door: int = ids["exits"][0]
+	var layout := _world.sim.layout
+	assert_bool(layout.outside_routes.has(entrance)).is_true()
+	assert_bool(layout.outside_routes.has(exit_door)).is_true()
+	assert_array(layout.out_of_service).is_empty()
+	assert_array(layout.passenger_entrances).contains_exactly([entrance])
+	var walk_in := OutsideWalks.arrival(_world.sim, entrance)
+	var walk_out := OutsideWalks.departure(_world.sim, exit_door)
+	print(
+		"walk in %s .. %s, walk out %s .. %s" % [walk_in[0], walk_in[-1], walk_out[0], walk_out[-1]]
+	)
+	# The walk in starts on the pavement line by the road, the walk out ends at
+	# the plane door.
+	assert_float(walk_in[0].z).is_equal_approx(SITE.road_z, 0.01)
+	assert_vector(walk_out[-1]).is_equal_approx(SITE.plane_route[-1], Vector3.ONE * 0.01)
 
 
-func test_both_doors_pass_the_shell_door_rules() -> void:
-	for object_id in _world.grid.object_ids():
-		var record := _world.grid.get_object(object_id)
-		if not BuildCatalog.is_door(record["def"]):
-			continue
-		var connection := SHELL.connection_for(record["def"], record["anchor"], record["facing"])
-		assert_object(connection).is_not_null()
-		var side := BuildGrid.SIDE_STEP.find(DoorPlacement.back_step(record["facing"]))
-		assert_int(_world.grid.wall_kind(record["anchor"], side)).is_equal(BuildGrid.WallKind.NONE)
-
-
-func test_a_passenger_walks_the_real_routes_and_makes_the_flight() -> void:
-	var entrance: int = ReferenceTerminal.object_ids(_world.grid)["entrances"][0]
-	assert_bool(ShellRoutes.arrival(_world.sim, entrance).size() > 2).is_true()
+func test_a_passenger_walks_from_the_road_to_the_plane_and_makes_the_flight() -> void:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	assert_int(p.apron_total_mm()).is_greater(0)
 	_world.run_to(LAST_TICK)
+	print("stage %s at tick %d" % [Passenger.Stage.keys()[p.stage], _world.clock.tick])
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 	assert_int(_world.sim.made_count()).is_equal(1)
 
 
-func test_without_a_shell_the_layout_is_the_reference_one() -> void:
+func test_on_the_default_grid_the_layout_is_the_reference_one() -> void:
 	var grid := BuildGrid.new()
 	assert_bool(ReferenceTerminal.build(grid)).is_true()
 	var ids := ReferenceTerminal.object_ids(grid)

@@ -21,7 +21,7 @@ extends RefCounted
 ## After an accepted edit: the cells GridPathing relinked, and every floored
 ## cell whose indoor state the edit changed (TerminalEnclosure), so every
 ## committed path through one of them may be stale. After a snapshot load:
-## every cell. After set_shell_border(): the cells whose indoor state changed.
+## every cell.
 signal graph_changed(cells: Array[Vector2i])
 ## After apply() or apply_batch() changed the grid data for one edit, before
 ## the graph is relinked (at once for apply(), at the end for a batch).
@@ -75,10 +75,6 @@ var check_staff_reach := true
 ## read before the edit changes anything (BuildReceipt), and a snapshot load
 ## marks it replaced. BuildMode sets it for one player action (UndoStack).
 var recorder: BuildReceipt = null
-## Whether every grid-border edge counts as walled for enclosure
-## (TerminalEnclosure): the Toon shell's facade stands there. BuildMode sets
-## it with set_shell_border() when it has a shell; a snapshot load keeps it.
-var shell_border := false
 
 var _floor := PackedByteArray()
 var _zone := PackedInt32Array()
@@ -249,16 +245,6 @@ func is_indoor(cell: Vector2i) -> bool:
 ## Staff are not bound by it (can_staff_route()).
 func is_passenger_cell(cell: Vector2i) -> bool:
 	return is_walkable(cell) and is_indoor(cell)
-
-
-## Sets whether the grid border counts as walled (shell_border), works the
-## enclosure out again and relinks every cell whose indoor state changed.
-func set_shell_border(closed: bool) -> void:
-	shell_border = closed
-	_enclosure_stale = true
-	var relinked := _relink_paths([] as Array[Vector2i])
-	if not relinked.is_empty():
-		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
 
 
 ## A cell is walkable when it has floor and no object, or a walk-through one.
@@ -897,7 +883,6 @@ func from_snapshot(data: Dictionary) -> bool:
 		if data.has("origin"):
 			at = Vector3(data["origin"][0], data["origin"][1], data["origin"][2])
 		loaded = BuildGrid.new(loaded_size, at)
-		loaded.shell_border = shell_border
 		problem = loaded._load_cells(data)
 	if problem != "":
 		push_error("BuildGrid.from_snapshot: %s" % problem)
@@ -956,9 +941,9 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_floor_paid = _zeros_ints(cells)
 	_h_paid = _zeros_ints(size.x * (size.y + 1))
 	_v_paid = _zeros_ints((size.x + 1) * size.y)
-	# No walls and no doors yet: every cell is outside unless the border is.
+	# No walls and no doors yet: every cell is outside.
 	_outside = _zeros_bytes(cells)
-	_outside.fill(0 if shell_border else 1)
+	_outside.fill(1)
 	_enclosure_stale = false
 
 
@@ -990,7 +975,7 @@ func _load_cells(data: Dictionary) -> String:
 		var paid := int(entry.get("paid", 0))
 		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
 	_next_object_id = int(data["next_object_id"])
-	_outside = TerminalEnclosure.outside_cells(self, _h_walls, _v_walls, shell_border)
+	_outside = TerminalEnclosure.outside_cells(self, _h_walls, _v_walls)
 	_pathing.rebuild(self)
 	_staff_pathing = null
 	return ""
@@ -1357,7 +1342,7 @@ func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
 	var flipped: Array[Vector2i] = []
 	if _enclosure_stale:
 		_enclosure_stale = false
-		var after := TerminalEnclosure.outside_cells(self, _h_walls, _v_walls, shell_border)
+		var after := TerminalEnclosure.outside_cells(self, _h_walls, _v_walls)
 		flipped = TerminalEnclosure.flipped_floor_cells(size.x, _floor, _outside, after)
 		_outside = after
 	if _staff_pathing != null and not dirty.is_empty():

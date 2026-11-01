@@ -1,12 +1,13 @@
 class_name LandsideTestWorld
 extends RefCounted
-## A PassengerTestWorld inside the Toon terminal shell (the reference terminal
-## on landside door B and gate C) with a LandsideSim on the starter road, for
+## A PassengerTestWorld on the airport site (the reference terminal on the
+## site grid, its doors walking out to the road and the plane) with a
+## LandsideSim on the starter road, for
 ## the landside tests. Records each booking's unload tick when the flight is
 ## scheduled and its release tick when its passenger gets out. Call free_all()
 ## when done (or set PassengerTestWorld.tracker in the suite's before()).
 
-const SHELL := preload("res://build/toon_terminal_shell.tres")
+const SITE := preload("res://build/terminal_site.tres")
 const STARTER := preload("res://landside/starter_landside.tres")
 
 var world: PassengerTestWorld
@@ -22,7 +23,7 @@ var passenger_of := {}
 
 ## `definition` defaults to the starter road; `starts` to a flight whose
 ## first state is at tick 4000, so every party has the notice its drive needs;
-## `grid` to the reference terminal in the shell.
+## `grid` to the reference terminal on the site grid.
 static func make(
 	definition: LandsideDefinition = null,
 	starts: Array[int] = [],
@@ -30,14 +31,14 @@ static func make(
 	grid: BuildGrid = null
 ) -> LandsideTestWorld:
 	if grid == null:
-		grid = BuildGrid.new(SHELL.grid_size, SHELL.grid_origin)
-		ReferenceTerminal.build(grid, SHELL)
+		grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+		ReferenceTerminal.build(grid)
 	var out := LandsideTestWorld.new()
 	out.world = PassengerTestWorld.make(
 		grid, starts if not starts.is_empty() else FlightSim.schedule_starts(4000), seed
 	)
 	out.sim = out.world.sim
-	out.sim.shell = SHELL
+	out.sim.site = SITE
 	out.landside = LandsideSim.new()
 	out.landside.use_definition(definition if definition != null else STARTER)
 	out.landside.wallet = out.sim.wallet

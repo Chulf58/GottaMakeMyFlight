@@ -88,7 +88,7 @@ func _build() -> void:
 	_staff = _main.get_node("Staff") as StaffSim
 	_save = _main.get_node("SaveGame") as SaveGame
 	var grid := mode.grid
-	var ids := CafeTestLayout.build(grid, false, mode.shell)
+	var ids := CafeTestLayout.build(grid, false)
 	for id: int in [ids["land_table"], ids["land_counter"]]:
 		_apply(grid, BuildEdit.remove_object(id))
 	_apply(grid, BuildEdit.remove_room(ids["land_room"]))

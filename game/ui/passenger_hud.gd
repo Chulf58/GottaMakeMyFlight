@@ -511,8 +511,7 @@ func set_debug_open(value: bool) -> void:
 
 
 ## Builds ReferenceTerminal on a pristine build grid (no floor, walls or
-## objects), a debug shortcut for what BuildMode's tools can also build. In a
-## terminal shell its entrance and exit stand on Toon doors B and C. Either
+## objects), a debug shortcut for what BuildMode's tools can also build. Either
 ## outcome is shown in the status line; a refusal changes nothing.
 func press_starter_terminal() -> void:
 	if build_mode == null:
@@ -521,7 +520,7 @@ func press_starter_terminal() -> void:
 	if not _is_pristine(grid):
 		_status = "Starter terminal needs an empty grid"
 		return
-	if not ReferenceTerminal.build(grid, build_mode.shell):
+	if not ReferenceTerminal.build(grid):
 		push_error("PassengerHud: the starter terminal did not fit the grid")
 		_status = "Starter terminal failed: it did not fit the grid"
 		(build_mode.get_node("BuildView") as BuildView).refresh(grid)
@@ -670,7 +669,7 @@ func _on_save_loaded(ok: bool) -> void:
 
 func _frame_start_view() -> void:
 	if camera != null and build_mode != null:
-		camera.frame_start_view(StartView.area_for(build_mode.grid, build_mode.shell))
+		camera.frame_start_view(StartView.area_for(build_mode.grid))
 
 
 func _on_doors_closed(flight_id: String) -> void:

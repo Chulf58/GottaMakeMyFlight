@@ -58,6 +58,10 @@ const DARK_GREY_UV := Vector2(0.109, 0.215)
 ## The camera rig whose distance drives the fade. Without one the roof keeps
 ## whatever level draw_level() last set.
 @export var camera: TycoonCamera
+## The build mode whose grid the roof covers; main.tscn sets it, and _ready()
+## binds its grid. While any roof is drawn its BuildView draws every wall whole
+## (BuildView.cutaway_enabled off), so no wall under the roof is cut to a stub.
+@export var build_mode: BuildMode
 ## Shape tuning in metres: the ruled tall roof on 2.5 m kit walls. The low
 ## option (top 2.8 m, fascia 0.6 m) is still reachable through these.
 @export var roof_height := 5.2
@@ -73,6 +77,8 @@ const DARK_GREY_UV := Vector2(0.109, 0.215)
 var cutaway := RoofCutaway.new()
 
 var _grid: BuildGrid
+## build_mode's wall view, or null.
+var _walls: BuildView
 var _roof := MeshInstance3D.new()
 ## The surface material and its outline pass, both on the dissolve shaders.
 var _materials: Array[ShaderMaterial] = []
@@ -91,6 +97,9 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	if build_mode != null:
+		_walls = build_mode.get_node_or_null("BuildView") as BuildView
+		bind(build_mode.grid)
 	cutaway.roof_hide_below = roof_hide_below
 	cutaway.roof_show_above = roof_show_above
 	cutaway.roof_fade_seconds = roof_fade_seconds
@@ -134,6 +143,8 @@ func draw_level(level: float) -> void:
 	for mat in _materials:
 		mat.set_shader_parameter("dissolve", level)
 	_roof.visible = _roofed > 0 and level < 1.0
+	if _walls != null and _walls.cutaway_enabled == _roof.visible:
+		_walls.cutaway_enabled = not _roof.visible
 	_roof.cast_shadow = (
 		GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		if level == 0.0
@@ -366,7 +377,7 @@ func _make_materials() -> String:
 
 
 ## A new material on `shader` holding every parameter value `source` has set
-## (as ShellView copies the shell roof's materials).
+## (as the Toon shell's roof materials were copied).
 static func _copy(source: ShaderMaterial, shader: Shader) -> ShaderMaterial:
 	var made := ShaderMaterial.new()
 	made.shader = shader

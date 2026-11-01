@@ -112,7 +112,7 @@ func _run() -> void:
 	if _sim.wallet != _wallet:
 		_invalid("PassengerSim does not pay into the Finances wallet")
 	_beat("build")
-	var ids := CafeTestLayout.build(mode.grid, true, mode.shell)
+	var ids := CafeTestLayout.build(mode.grid, true)
 	# Direct grid edits, like the starter terminal button: redraw the pieces.
 	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
 	await _frames(4)

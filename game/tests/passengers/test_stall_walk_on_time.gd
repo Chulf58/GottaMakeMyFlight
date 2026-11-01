@@ -47,7 +47,7 @@ func _burst(world: PassengerTestWorld) -> void:
 ## A landside guest admitted to a stall visit while security is empty.
 func _admitted() -> Array:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid, false, null, &"stall", false)
+	CafeTestLayout.build(grid, false, &"stall", false)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
 	var guest := _new_passenger(world)

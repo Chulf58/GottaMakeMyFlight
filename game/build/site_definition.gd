@@ -14,6 +14,9 @@ extends Resource
 const ROAD_STEP := Vector2i(0, 1)
 ## The grid step out over the edge the apron lies beyond.
 const PLANE_STEP := Vector2i(0, -1)
+## How far a saved grid origin may lie from the site's and still match (JSON
+## round trips of floats).
+const ORIGIN_TOLERANCE_M := 0.001
 
 ## World position of grid cell (0, 0)'s north-west corner; y is the floor,
 ## 2 cm above the site's paving.
@@ -38,3 +41,19 @@ var plane_route := PackedVector3Array([Vector3(-14.5, 0.0, -101.0), Vector3(-14.
 
 func is_obstacle(cell: Vector2i) -> bool:
 	return obstacles.has(cell)
+
+
+## Why a BuildGrid.to_snapshot() dictionary cannot be loaded on this site, or
+## "": BuildGridSnapshot.problem()'s structure check, then the grid frame,
+## which must be the site's size and origin.
+func snapshot_problem(data: Dictionary) -> String:
+	var problem := BuildGridSnapshot.problem(data)
+	if problem != "":
+		return problem
+	var saved_size := Vector2i(int(data["width"]), int(data["height"]))
+	if not data.has("origin") or saved_size != grid_size:
+		return "the grid was saved in another frame than the site's"
+	var saved: Array = data["origin"]
+	if Vector3(saved[0], saved[1], saved[2]).distance_to(grid_origin) > ORIGIN_TOLERANCE_M:
+		return "the grid was saved in another frame than the site's"
+	return ""

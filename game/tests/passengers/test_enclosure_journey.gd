@@ -8,7 +8,7 @@ extends GdUnitTestSuite
 
 ## A west wall of the landside hall, away from every passenger's path.
 const GAP := Vector2i(10, 12)
-const SHELL := preload("res://build/toon_terminal_shell.tres")
+const SITE := preload("res://build/terminal_site.tres")
 
 var _world: PassengerTestWorld
 
@@ -102,45 +102,57 @@ func test_a_queue_on_floor_that_opens_ends_and_forms_again_once_it_closes() -> v
 	assert_int(_step_until(p, back, 400)).is_less(400)
 
 
-## A passenger walking in from the road (ShellRoutes) whose entrance stops
-## being walled in waits at the door, out of the terminal, and comes in once
-## the wall is back. No new passenger is sent to that entrance meanwhile.
-func test_a_walker_from_the_road_waits_at_an_entrance_that_opens() -> void:
-	var grid := BuildGrid.new(SHELL.grid_size, SHELL.grid_origin)
-	assert_bool(ReferenceTerminal.build(grid, SHELL)).is_true()
+## On the airport site, a passenger walking in from the road (OutsideWalks)
+## whose only entrance stops being walled in stops on the road with no route,
+## out of the terminal, and walks on and comes in once the wall is back.
+func test_a_walker_from_the_road_stops_while_its_terminal_is_open() -> void:
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	assert_bool(ReferenceTerminal.build(grid)).is_true()
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	_world.sim.shell = SHELL
+	_world.sim.site = SITE
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	assert_int(p.apron_total_mm()).is_greater(0)
+	var started := func(q: Passenger) -> bool: return q.apron_mm > 2000
+	assert_int(_step_until(p, started, 200)).is_less(200)
 	_set_gap(true)
 	assert_array(_world.sim.layout.passenger_entrances).is_empty()
-	var walked := func(q: Passenger) -> bool: return q.apron_mm >= q.apron_total_mm()
-	assert_int(_step_until(p, walked, 3000)).is_less(3000)
+	_world.step()
+	var stopped_at := p.apron_mm
 	for i in 30:
 		_world.step()
 	print(
 		(
-			"road walker %d at its door: stage %s, stuck %s"
-			% [p.id, Passenger.Stage.keys()[p.stage], Passenger.Stuck.keys()[p.stuck]]
+			"road walker %d: walked %d of %d mm, then %d mm; stage %s, stuck %s"
+			% [
+				p.id,
+				stopped_at,
+				p.apron_total_mm(),
+				p.apron_mm,
+				Passenger.Stage.keys()[p.stage],
+				Passenger.Stuck.keys()[p.stuck]
+			]
 		)
 	)
 	assert_int(p.stage).is_equal(Passenger.Stage.SPAWNED)
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_ROUTE)
+	assert_int(p.apron_mm).is_equal(stopped_at)
+	assert_int(p.apron_mm).is_less(p.apron_total_mm())
 	_set_gap(false)
 	assert_int(_world.sim.layout.passenger_entrances.size()).is_equal(1)
 	var inside := func(q: Passenger) -> bool: return q.stage >= Passenger.Stage.TO_CHECKIN
-	assert_int(_step_until(p, inside, 10)).is_less(10)
+	assert_int(_step_until(p, inside, 3000)).is_less(3000)
 	assert_int(p.stuck).is_not_equal(Passenger.Stuck.NO_ROUTE)
 
 
-## A help visit ends when walls stop closing its info desk in. The test floor's
-## border is its wall (PassengerTestWorld.floored()), so turning it off opens
-## the whole floor.
+## A help visit ends when walls stop closing its info desk in. The test floor
+## is walled along the grid border (PassengerTestWorld.floored()), so taking
+## one border wall down opens the whole floor.
 func test_a_help_visit_ends_when_its_desk_loses_closed_floor() -> void:
 	_world = InfoDeskTestLayout.world()
 	var p := InfoDeskTestLayout.guest(_world, Vector2i(9, 10), 50)
 	var held := func(q: Passenger) -> bool: return _world.sim.info_desks.holds(q)
 	assert_int(_step_until(p, held, 200)).is_less(200)
-	_world.grid.set_shell_border(false)
+	var border_wall := BuildEdit.remove_wall(Vector2i(0, 10), BuildGrid.Side.WEST)
+	assert_bool(_world.grid.apply(border_wall).ok).is_true()
 	_world.step()
 	assert_bool(_world.sim.info_desks.holds(p)).is_false()

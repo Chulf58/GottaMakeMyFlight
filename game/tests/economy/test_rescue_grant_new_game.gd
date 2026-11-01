@@ -1,15 +1,16 @@
 class_name TestRescueGrantNewGame
 extends GdUnitTestSuite
-## A new game starts on the empty terminal shell with the starting budget
-## (smoke playtest 5). The budget buys a working path, so the airport is not
-## stuck and no grant is paid (ruling going-broke-a-one-off-rescue-grant-when-
-## the-airport-is-stuck). The control: the same empty shell with almost no
-## money is stuck and is paid the repair's shortfall. The repair plan for the
-## empty shell is made once in before().
+## A new game starts on the empty airport site plot with the starting budget
+## (smoke playtest 5). The budget buys a working, walled-in path, so the
+## airport is not stuck and no grant is paid (ruling going-broke-a-one-off-
+## rescue-grant-when-the-airport-is-stuck). The control: the same empty plot
+## with almost no money is stuck and is paid the repair's shortfall. The
+## repair plan for the empty plot is made once in before().
 
-const SHELL := "res://build/toon_terminal_shell.tres"
+const SITE := preload("res://build/terminal_site.tres")
+## Ticks the new game runs with the grant watching.
+const NEW_GAME_TICKS := 200
 
-var _shell: ShellDefinition
 var _plan: RepairPlan
 ## What the plan's repair needs in the wallet (least_balance), or -1.
 var _price := -1
@@ -21,11 +22,8 @@ var _granted: Array = []
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
-	_shell = load(SHELL)
-	var grid := BuildGrid.new(_shell.grid_size, _shell.grid_origin)
-	# As BuildMode with a shell: the facade closes the grid border.
-	grid.set_shell_border(true)
-	_plan = RepairPlan.make(grid, _shell)
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	_plan = RepairPlan.make(grid, SITE)
 	if _plan.ok:
 		_price = RepairPlan.least_balance(grid, _plan.edits)
 
@@ -35,11 +33,9 @@ func after() -> void:
 
 
 func before_test() -> void:
-	var grid := BuildGrid.new(_shell.grid_size, _shell.grid_origin)
-	# As BuildMode with a shell: the facade closes the grid border.
-	grid.set_shell_border(true)
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(100000))
-	_world.sim.shell = _shell
+	_world.sim.site = SITE
 	_grant = auto_free(RescueGrant.new())
 	_grant.bind(_world.clock, _world.sim, _world.sim.wallet)
 	_grant.granted.connect(_on_granted)
@@ -57,7 +53,7 @@ func _on_granted(amount: int, text: String) -> void:
 
 ## The plan finds a real repair on bare ground, within its caps, and the
 ## starting budget pays for it.
-func test_the_empty_shell_has_a_repair_the_starting_budget_pays_for() -> void:
+func test_the_empty_plot_has_a_repair_the_starting_budget_pays_for() -> void:
 	prints("plan ok", _plan.ok, "price", _price, "fallback", _plan.fallback_price)
 	assert_bool(_plan.ok).is_true()
 	assert_int(_plan.edits.size()).is_greater(0)
@@ -68,17 +64,18 @@ func test_a_new_game_with_the_starting_budget_gets_no_grant() -> void:
 	var wallet := _world.sim.wallet
 	assert_bool(wallet.credit(PriceTable.STARTING_BUDGET, Wallet.Category.OPENING)).is_true()
 	assert_bool(_grant.has_working_path()).is_false()
-	_world.run_to(3)
-	prints("balance", _world.sim.wallet.balance, "granted", _granted)
+	_world.run_to(NEW_GAME_TICKS)
+	prints("ticks", _world.clock.tick, "balance", _world.sim.wallet.balance, "granted", _granted)
+	assert_int(_world.clock.tick).is_equal(NEW_GAME_TICKS)
 	assert_array(_granted).is_empty()
 	assert_int(_world.sim.wallet.balance).is_equal(PriceTable.STARTING_BUDGET)
 
 
-## Control: an empty shell the wallet cannot build is stuck and gets the
+## Control: an empty plot the wallet cannot build is stuck and gets the
 ## shortfall once, the message naming the pieces to build. The money is just
 ## enough: buying the repair edit by edit through paid build transactions
 ## goes through, spends the wallet to exactly 0 and leaves a working path.
-func test_an_empty_shell_with_no_money_gets_the_shortfall() -> void:
+func test_an_empty_plot_with_no_money_gets_the_shortfall() -> void:
 	var wallet := _world.sim.wallet
 	assert_bool(wallet.credit(100, Wallet.Category.OPENING)).is_true()
 	_world.run_to(3)
@@ -93,6 +90,7 @@ func test_an_empty_shell_with_no_money_gets_the_shortfall() -> void:
 		var why := "buying %s at %s refused: %d" % [edit.kind, edit.cell, result.reason]
 		assert_bool(result.ok).override_failure_message(why).is_true()
 	var layout := TerminalLayout.new()
+	layout.site = SITE
 	layout.rebuild(grid)
 	prints("left", wallet.balance)
 	assert_int(wallet.balance).is_equal(0)

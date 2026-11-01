@@ -9,11 +9,11 @@ extends RefCounted
 
 ## The area in world x and z (a Rect2's y is z), or the whole grid when
 ## nothing is built and no starter terminal fits it.
-static func area_for(grid: BuildGrid, shell: ShellDefinition = null) -> Rect2:
+static func area_for(grid: BuildGrid) -> Rect2:
 	var cells := _built_cells(grid)
 	var whole := Rect2i(Vector2i.ZERO, grid.size)
 	if cells.size == Vector2i.ZERO:
-		cells = _starter_cells(shell)
+		cells = _starter_cells()
 	if cells.size == Vector2i.ZERO or not whole.encloses(cells):
 		cells = whole
 	var north_west := grid.origin + Vector3(cells.position.x, 0.0, cells.position.y)
@@ -44,11 +44,11 @@ static func _is_built(grid: BuildGrid, cell: Vector2i) -> bool:
 	return false
 
 
-static func _starter_cells(shell: ShellDefinition) -> Rect2i:
+static func _starter_cells() -> Rect2i:
 	var found := false
 	var low := Vector2i.ZERO
 	var high := Vector2i.ZERO
-	for edit in ReferenceTerminal.edits(shell):
+	for edit in ReferenceTerminal.edits():
 		if edit.kind != BuildEdit.Kind.PAINT_FLOOR:
 			continue
 		low = edit.cell if not found else low.min(edit.cell)

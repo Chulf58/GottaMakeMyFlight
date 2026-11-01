@@ -111,19 +111,18 @@ func test_floor_painted_inside_closed_walls_is_indoor() -> void:
 	assert_int(_grid.find_path(Vector2i(2, 3), Vector2i(4, 3)).size()).is_equal(3)
 
 
-## Floor touching the grid border with no wall there is outdoor, unless the
-## border counts as walled (the Toon shell's facade, BuildGrid.shell_border).
-func test_the_shell_border_closes_the_grid_edge() -> void:
+## Floor touching the grid border with no wall there is outdoor: the border
+## closes nothing in.
+func test_the_grid_border_closes_nothing_in() -> void:
 	var grid := BuildGrid.new(Vector2i(4, 3))
 	for y in 3:
 		for x in 4:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	assert_bool(grid.is_indoor(Vector2i(1, 1))).is_false()
 	assert_int(grid.find_path(Vector2i(0, 0), Vector2i(3, 2)).size()).is_equal(0)
-	grid.graph_changed.connect(_on_graph_changed)
-	grid.set_shell_border(true)
+	# Control: walled in, the same floor is indoor and walkable.
+	EnclosureKit.close_floor(grid)
 	assert_bool(grid.is_indoor(Vector2i(1, 1))).is_true()
-	assert_int(_emitted.size()).is_equal(12)
 	assert_int(grid.find_path(Vector2i(0, 0), Vector2i(3, 2)).size()).is_equal(4)
 
 
@@ -190,26 +189,3 @@ func test_undo_keeps_the_indoor_cells_right() -> void:
 	assert_int(_indoor_count()).is_equal(12)
 	assert_bool(BuildUndo.commit(_grid, closing, null).ok).is_true()
 	assert_int(_indoor_count()).is_equal(0)
-	# The same shell border on the copy BuildUndo checks against.
-	var shell := BuildGrid.new(Vector2i(4, 3))
-	shell.set_shell_border(true)
-	shell.apply(BuildEdit.paint_floor(Vector2i(1, 1), BuildGrid.FLOOR_TILE, 1))
-	shell.recorder = BuildReceipt.new()
-	shell.apply(BuildEdit.paint_floor(Vector2i(2, 1), BuildGrid.FLOOR_TILE, 1))
-	var painting := shell.recorder
-	shell.recorder = null
-	assert_bool(BuildUndo.commit(shell, painting, null).ok).is_true()
-	assert_bool(shell.is_indoor(Vector2i(1, 1))).is_true()
-	assert_bool(shell.is_indoor(Vector2i(2, 1))).is_false()
-
-
-## A load keeps the grid's own shell border.
-func test_a_snapshot_load_keeps_the_shell_border() -> void:
-	var shell := BuildGrid.new(Vector2i(4, 3))
-	shell.set_shell_border(true)
-	var bare := BuildGrid.new(Vector2i(4, 3))
-	bare.apply(BuildEdit.paint_floor(Vector2i(1, 1), BuildGrid.FLOOR_TILE, 1))
-	assert_bool(bare.is_indoor(Vector2i(1, 1))).is_false()
-	assert_bool(shell.from_snapshot(bare.to_snapshot())).is_true()
-	assert_bool(shell.shell_border).is_true()
-	assert_bool(shell.is_indoor(Vector2i(1, 1))).is_true()

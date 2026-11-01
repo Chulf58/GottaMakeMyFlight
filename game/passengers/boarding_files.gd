@@ -48,7 +48,7 @@ var _pending: Dictionary = {}
 var _delayed: Dictionary = {}
 ## Derived: exit door -> {"points", "mm", "plane"}, its walk to the plane.
 var _aprons: Dictionary = {}
-var _aprons_shell: ShellDefinition
+var _aprons_site: SiteDefinition
 ## Derived: the forecast's known walkers (own_times() entries) on _known_tick.
 var _known: Array = []
 var _known_tick := -1
@@ -88,9 +88,9 @@ func clear_derived() -> void:
 ## The walk outside from exit door `door`: {"points", "mm", "plane"}, with
 ## "plane" null when the door has no walk.
 func apron_of(sim: PassengerSim, door: int) -> Dictionary:
-	if _aprons_shell != sim.shell:
+	if _aprons_site != sim.site:
 		_aprons.clear()
-		_aprons_shell = sim.shell
+		_aprons_site = sim.site
 	if not _aprons.has(door):
 		var walk := Passenger.new()
 		walk.apron = OutsideWalks.departure(sim, door)

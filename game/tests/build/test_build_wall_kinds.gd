@@ -15,11 +15,11 @@ var _grid: BuildGrid
 ## A 5x5 floored grid split by a plain wall along the north edge of row 2.
 func before_test() -> void:
 	_grid = BuildGrid.new(Vector2i(5, 5))
-	# The border closes the floor in, so passengers may walk it.
-	_grid.set_shell_border(true)
 	for y in 5:
 		for x in 5:
 			_grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	# Walls close the floor in, so passengers may walk it.
+	EnclosureKit.close_floor(_grid)
 	for x in 5:
 		_grid.apply(BuildEdit.place_wall(Vector2i(x, 2), NORTH))
 

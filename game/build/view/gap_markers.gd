@@ -34,6 +34,10 @@ const SPARE_SIGNS := 4
 
 static var _icon: ImageTexture
 
+## The build mode whose grid's gaps are marked; main.tscn sets it, and
+## _ready() binds its grid.
+@export var build_mode: BuildMode
+
 var _grid: BuildGrid
 var _bars := MultiMeshInstance3D.new()
 var _signs: Array[Sprite3D] = []
@@ -59,6 +63,11 @@ func _init() -> void:
 	_bars.multimesh = multimesh
 	_bars.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_bars)
+
+
+func _ready() -> void:
+	if build_mode != null:
+		bind(build_mode.grid)
 
 
 ## Marks `grid`'s gaps and redraws them whenever its graph changes.

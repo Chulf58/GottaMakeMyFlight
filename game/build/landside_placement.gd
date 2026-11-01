@@ -56,8 +56,8 @@ class Plan:
 	var footprint := Vector2.ZERO
 	## Berths for a curb bay, parking spaces for a car park.
 	var capacity := 0
-	## The mean walk from the spot to the nearest landside door, in metres; -1
-	## when there is no shell door to measure to.
+	## The mean walk from the spot to the nearest entrance, in metres; -1 when
+	## there is no entrance to measure to.
 	var walk_m := -1.0
 	## BUILD: the price. REMOVE: the refund. 0 with no wallet.
 	var price := 0
@@ -69,7 +69,9 @@ class Plan:
 
 
 var sim: LandsideSim
-var shell: ShellDefinition
+## The terminal grid whose entrances the walks are measured to; BuildMode
+## sets it.
+var grid: BuildGrid
 var wallet: Wallet
 
 var _undo: Array[Dictionary] = []
@@ -111,14 +113,19 @@ static func walk_to_door_m(
 	return inside / lot.slots.size() + on_foot
 
 
-## The world points of the shell's landside doorways.
-static func landside_doors(shell_def: ShellDefinition) -> Array[Vector3]:
+## The world points where the entrances on `on_grid` open to the outside:
+## the middle of each entrance door's back edge, at ground height.
+static func landside_doors(on_grid: BuildGrid) -> Array[Vector3]:
 	var doors: Array[Vector3] = []
-	if shell_def == null:
+	if on_grid == null:
 		return doors
-	for connection in shell_def.connections:
-		if connection.kind == ShellDoorConnection.Kind.LANDSIDE and not connection.route.is_empty():
-			doors.append(connection.route[connection.route.size() - 1])
+	for object_id in on_grid.object_ids():
+		var record := on_grid.get_object(object_id)
+		if record["def"] != &"entrance_door":
+			continue
+		var out := DoorPlacement.back_step(record["facing"])
+		var at := on_grid.cell_to_world(record["anchor"]) + Vector3(out.x, 0.0, out.y) * 0.5
+		doors.append(Vector3(at.x, 0.0, at.z))
 	return doors
 
 
@@ -366,7 +373,7 @@ func _describe(plan: Plan) -> void:
 		plan.capacity = definition.curb_spots[plan.spot].berths.size()
 	else:
 		plan.capacity = definition.lots[plan.spot].slots.size()
-	plan.walk_m = walk_to_door_m(definition, plan.kind, plan.spot, landside_doors(shell))
+	plan.walk_m = walk_to_door_m(definition, plan.kind, plan.spot, landside_doors(grid))
 	var text := "%s: %s" % [NAMES[plan.kind], _capacity_text(plan)]
 	if plan.walk_m >= 0.0:
 		text += ", %d m walk to the nearest landside door" % roundi(plan.walk_m)

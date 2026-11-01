@@ -40,13 +40,13 @@ func _mounts(path: String) -> Dictionary:
 
 func _floored() -> BuildGrid:
 	var grid := BuildGrid.new(GRID)
-	# The border closes the floor in, so passengers may use it.
-	grid.set_shell_border(true)
 	var edits: Array[BuildEdit] = []
 	for y in GRID.y:
 		for x in GRID.x:
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	grid.apply_batch(edits)
+	# Walls close the floor in, so passengers may use it.
+	EnclosureKit.close_floor(grid)
 	return grid
 
 

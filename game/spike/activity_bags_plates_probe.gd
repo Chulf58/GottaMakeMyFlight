@@ -129,7 +129,7 @@ func _boot(type: StringName) -> bool:
 	(_mode.get_node("Ghost") as Node3D).visible = false
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	_views = _main.get_node("PassengerViews") as PassengerViews
-	_ids = ActivityTestLayout.build(_mode.grid, type, _mode.shell)
+	_ids = ActivityTestLayout.build(_mode.grid, type)
 	(_mode.get_node("BuildView") as BuildView).refresh(_mode.grid)
 	await _frames(4)
 	_sim.shops.refresh()

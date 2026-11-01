@@ -112,13 +112,12 @@ const QUEUE_STAGES := [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_Q
 @export var landside: LandsideSim
 @export var auto_schedule := true
 
-## The apron walk after an exit door with no terminal shell connection
-## (ShellRoutes.departure()), world points: the forecourt layout's walk into
-## the Toon terminal's south face, out of its airside face near gate C, through
-## the 2.3 m gap between that face (z -100) and the parked plane's nose
+## The apron walk after an exit door with no site (a test grid,
+## OutsideWalks.departure()), world points: from the forecourt through the
+## 2.3 m gap between the plot's north edge (z -100) and the parked plane's nose
 ## (z -102.3), and to the plane's port door (the plane at the stand at
-## (-18, 0, -117) spans x -32.2 to -3.8 with its wings). Inside the shell the
-## gate doors' authored routes are used instead (ShellDoorConnection.route).
+## (-18, 0, -117) spans x -32.2 to -3.8 with its wings). On the site the
+## walks outside are SiteRoutes' instead.
 var apron_waypoints := PackedVector3Array(
 	[
 		Vector3(-14.5, 0.0, -41.0),
@@ -158,13 +157,10 @@ var files := BoardingFiles.new()
 ## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
 var wallet: Wallet
 var grid: BuildGrid
-## The terminal shell whose Toon doors give the walks outside (ShellRoutes):
-## from BuildMode in a scene; tests set it. Null: no road walk, and exits
-## walk apron_waypoints.
-var shell: ShellDefinition
-## The airport site whose open ground gives the walks outside instead of the
-## shell's (OutsideWalks, SiteRoutes); tests set it. Setting it rebuilds the
-## layout, whose doors then need a walk outside to be in service.
+## The airport site whose open ground gives the walks outside (OutsideWalks,
+## SiteRoutes): from BuildMode in a scene; tests set it. Setting it rebuilds
+## the layout, whose doors then need a walk outside to be in service. Null (a
+## test grid): no road walk, and exits walk apron_waypoints.
 var site: SiteDefinition:
 	set(value):
 		site = value
@@ -213,7 +209,7 @@ func _ready() -> void:
 		return
 	if staff == null:
 		push_error("PassengerSim: no StaffSim is set, so every desk and scanner stays closed")
-	shell = build_mode.shell
+	site = build_mode.site
 	bind(clock, flights, build_mode.grid)
 	if auto_schedule:
 		for id in flights.flight_ids():
@@ -898,7 +894,7 @@ func _advance(p: Passenger) -> void:
 	match p.stage:
 		Passenger.Stage.SPAWNED:
 			# In from the road first, when the entrance has one (OutsideWalks).
-			# An entrance passengers may not use is not entered: in a shell the
+			# An entrance passengers may not use is not entered: with no site the
 			# walker waits at its door until the gap is closed again; on a site
 			# OutsideWalks.revalidate() sends it to another entrance first.
 			if p.apron_mm < p.apron_total_mm():

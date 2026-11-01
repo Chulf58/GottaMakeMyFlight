@@ -7,9 +7,8 @@ extends RefCounted
 ## and an airside gate with four seat rows and the exit on the north edge.
 ## Walls close it in on every side, the two door objects filling the gaps
 ## they stand in, so all its floor is indoor (TerminalEnclosure).
-## In a terminal shell (the starter terminal's layout) the same rooms stretch
-## from the shell's gate door C on the north edge to its landside door B on the
-## south edge, so passengers use the real door routes.
+## The debug starter button builds it on the airport site too, where its
+## entrance has a walk in from the road and its exit one out to the plane.
 
 const FLOOR_MIN := Vector2i(10, 2)
 const FLOOR_MAX := Vector2i(21, 17)
@@ -19,65 +18,39 @@ const AIRSIDE_MAX_Y := 8
 const ENTRANCE_CELL := Vector2i(18, 17)
 const EXIT_CELL := Vector2i(20, 2)
 const SCANNER_XS: Array[int] = [17, 19]
-## The Toon doors the shell layout stands on, by their porch sign.
-const SHELL_ENTRANCE_LABEL := "B"
-const SHELL_EXIT_LABEL := "C"
 
 
-## The layout's edits. With a `shell`, the entrance and exit stand on its
-## doors B and C (their cells and facings) and the floor runs between them;
-## empty (with an error) when the shell has no such door.
-static func edits(shell: ShellDefinition = null) -> Array[BuildEdit]:
-	var floor_min := FLOOR_MIN
-	var floor_max := FLOOR_MAX
-	var entrance := ENTRANCE_CELL
-	var entrance_facing := 2
-	var exit_cell := EXIT_CELL
-	var exit_facing := 0
-	if shell != null:
-		var door_in := _door(shell, ShellDoorConnection.Kind.LANDSIDE, SHELL_ENTRANCE_LABEL)
-		var door_out := _door(shell, ShellDoorConnection.Kind.AIRSIDE, SHELL_EXIT_LABEL)
-		if door_in == null or door_out == null:
-			push_error("ReferenceTerminal: the shell has no door B and gate C")
-			return []
-		entrance = door_in.cell
-		entrance_facing = door_in.facing
-		exit_cell = door_out.cell
-		exit_facing = door_out.facing
-		floor_min.y = exit_cell.y
-		floor_max.y = entrance.y
+## The layout's edits.
+static func edits() -> Array[BuildEdit]:
 	var out: Array[BuildEdit] = []
-	for y in range(floor_min.y, floor_max.y + 1):
-		for x in range(floor_min.x, floor_max.x + 1):
+	for y in range(FLOOR_MIN.y, FLOOR_MAX.y + 1):
+		for x in range(FLOOR_MIN.x, FLOOR_MAX.x + 1):
 			out.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
-	for x in range(floor_min.x, floor_max.x + 1):
-		if x != exit_cell.x:
-			out.append(BuildEdit.place_wall(Vector2i(x, floor_min.y), BuildGrid.Side.NORTH))
-		if x != entrance.x:
-			out.append(BuildEdit.place_wall(Vector2i(x, floor_max.y), BuildGrid.Side.SOUTH))
+	for x in range(FLOOR_MIN.x, FLOOR_MAX.x + 1):
+		if x != EXIT_CELL.x:
+			out.append(BuildEdit.place_wall(Vector2i(x, FLOOR_MIN.y), BuildGrid.Side.NORTH))
+		if x != ENTRANCE_CELL.x:
+			out.append(BuildEdit.place_wall(Vector2i(x, FLOOR_MAX.y), BuildGrid.Side.SOUTH))
 		if not SCANNER_XS.has(x):
 			out.append(BuildEdit.place_wall(Vector2i(x, DIVIDER_Y), BuildGrid.Side.NORTH))
-	for y in range(floor_min.y, floor_max.y + 1):
-		out.append(BuildEdit.place_wall(Vector2i(floor_min.x, y), BuildGrid.Side.WEST))
-		out.append(BuildEdit.place_wall(Vector2i(floor_max.x, y), BuildGrid.Side.EAST))
+	for y in range(FLOOR_MIN.y, FLOOR_MAX.y + 1):
+		out.append(BuildEdit.place_wall(Vector2i(FLOOR_MIN.x, y), BuildGrid.Side.WEST))
+		out.append(BuildEdit.place_wall(Vector2i(FLOOR_MAX.x, y), BuildGrid.Side.EAST))
 	out.append(BuildEdit.place_object(&"checkin_desk", Vector2i(11, 11), 0))
 	out.append(BuildEdit.place_object(&"checkin_desk", Vector2i(14, 11), 0))
 	for x in SCANNER_XS:
 		out.append(BuildEdit.place_object(&"security_scanner", Vector2i(x, DIVIDER_Y - 1), 0))
 	for anchor in [Vector2i(11, 3), Vector2i(14, 3), Vector2i(11, 6), Vector2i(14, 6)]:
 		out.append(BuildEdit.place_object(&"seat_row", anchor, 0))
-	out.append(BuildEdit.place_object(&"entrance_door", entrance, entrance_facing))
-	out.append(BuildEdit.place_object(&"exit_door", exit_cell, exit_facing))
+	out.append(BuildEdit.place_object(&"entrance_door", ENTRANCE_CELL, 2))
+	out.append(BuildEdit.place_object(&"exit_door", EXIT_CELL, 0))
 	return out
 
 
-## Applies edits(shell) to a fresh grid. Pushes an error and returns false
-## at the first refused edit, or at once when the shell has no door B and gate C.
-static func build(grid: BuildGrid, shell: ShellDefinition = null) -> bool:
-	var plan := edits(shell)
-	if plan.is_empty():
-		return false
-	for edit in plan:
+## Applies edits() to a fresh grid. Pushes an error and returns false at the
+## first refused edit.
+static func build(grid: BuildGrid) -> bool:
+	for edit in edits():
 		var result := grid.apply(edit)
 		if not result.ok:
 			push_error(
@@ -88,13 +61,6 @@ static func build(grid: BuildGrid, shell: ShellDefinition = null) -> bool:
 			)
 			return false
 	return true
-
-
-static func _door(shell: ShellDefinition, kind: int, label: String) -> ShellDoorConnection:
-	for connection in shell.connections:
-		if connection.kind == kind and connection.label == label:
-			return connection
-	return null
 
 
 ## The grid's object ids by kind, each list in id order. Every baggage belt
