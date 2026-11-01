@@ -22,7 +22,11 @@ const MAIN_SCENE := "res://main/main.tscn"
 const OUT_REL := "res://../tools/blender/out/hud-floor-overlay"
 const CROWD := 14
 const CROWD_LEAD_TICKS := 600
-const DISTANCE := 16.0
+const DISTANCE := 14.0
+## Cells at or past 0.9 badness the paused queue must show, beside a green one.
+const RED_CELLS := 1
+## The third plate waits for this many.
+const LATE_RED_CELLS := 4
 const MARGIN_PX := 24.0
 ## Plate pixels that must differ over the tinted patch for the tint to count.
 const MIN_CHANGED_PX := 400
@@ -109,7 +113,8 @@ func _spread() -> Array[float]:
 
 func _queue_shows_both_ends() -> bool:
 	var values := _spread()
-	return not values.is_empty() and values.max() >= 0.7 and values.min() <= 0.05
+	var reds := values.filter(func(value: float) -> bool: return value >= 0.9)
+	return not values.is_empty() and reds.size() >= RED_CELLS and values.min() <= 0.05
 
 
 func _plates() -> void:
@@ -165,6 +170,39 @@ func _plates() -> void:
 		_invalid("only %d plate pixels changed over the tinted patch" % changed)
 		return
 	_save(on_plate, "02_overlay_on")
+	await _late_plate()
+
+
+## Lets the queue run on at 3x until several passengers wait long or are stuck,
+## then plates the overlay again, framed on the tinted cells.
+func _late_plate() -> void:
+	_hud.press_speed(3)
+	var started := Time.get_ticks_msec()
+	while _red_count() < LATE_RED_CELLS:
+		if Time.get_ticks_msec() - started > WAIT_LIMIT_MS or _clock.tick > _doors_tick:
+			_invalid("fewer than %d red cells by tick %d" % [LATE_RED_CELLS, _clock.tick])
+			return
+		await process_frame
+	_hud.press_speed(0)
+	await _frames(5)
+	var cells := _overlay.tinted_cells()
+	print("PROBE late tick=%d red=%d cells=%d" % [_clock.tick, _red_count(), cells.size()])
+	var centre := Vector3.ZERO
+	for cell: Vector2i in cells:
+		centre += _sim.grid.cell_to_world(cell)
+	centre /= cells.size()
+	_rig.position = Vector3(centre.x, 0.0, centre.z)
+	await _frames(20)
+	if not _framed(cells, _screen_rect(cells)):
+		return
+	paused = true
+	var plate := await PlateSight.grab(self)
+	paused = false
+	_save(plate, "03_overlay_long_waits")
+
+
+func _red_count() -> int:
+	return _spread().filter(func(value: float) -> bool: return value >= 0.9).size()
 
 
 ## The screen bounds, in layout pixels, of the tinted cells' corners.

@@ -37,7 +37,9 @@ func _placed(cell: Vector2i, stage: Passenger.Stage, mood := 70) -> Passenger:
 func test_mood_badness_runs_from_fine_to_worst() -> void:
 	assert_float(MoodTint.mood_badness(100)).is_equal(0.0)
 	assert_float(MoodTint.mood_badness(Passenger.MOOD_START)).is_equal(0.0)
-	assert_float(MoodTint.mood_badness(45)).is_equal_approx(0.5, 0.001)
+	assert_float(MoodTint.mood_badness(64)).is_equal(0.0)
+	assert_float(MoodTint.mood_badness(60)).is_equal(0.0)
+	assert_float(MoodTint.mood_badness(40)).is_equal_approx(0.5, 0.001)
 	assert_float(MoodTint.mood_badness(20)).is_equal(1.0)
 	assert_float(MoodTint.mood_badness(0)).is_equal(1.0)
 
@@ -116,7 +118,7 @@ func test_cells_tint_under_passengers_and_lend_half_to_neighbours() -> void:
 
 func test_a_cell_takes_the_worst_passenger_on_it() -> void:
 	_placed(Vector2i(3, 3), Passenger.Stage.CHECKIN_QUEUE, 70)
-	_placed(Vector2i(3, 3), Passenger.Stage.CHECKIN_QUEUE, 45)
+	_placed(Vector2i(3, 3), Passenger.Stage.CHECKIN_QUEUE, 40)
 	assert_float(MoodTint.cells_for(_world.sim)[Vector2i(3, 3)]).is_equal_approx(0.5, 0.001)
 
 

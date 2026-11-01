@@ -9,8 +9,9 @@ extends RefCounted
 ## Read only: nothing here changes the sim.
 
 ## Mood at or above this is fine, at or below BAD_MOOD is as bad as it gets.
-## Passengers start at Passenger.MOOD_START, 70.
-const OK_MOOD := 70
+## Passengers start at Passenger.MOOD_START, 70, and sit in the low 60s within
+## seconds on a bare floor (measured in the plate run), so that still reads fine.
+const OK_MOOD := 60
 const BAD_MOOD := 20
 ## A queue place held this long is fine, and this long is as bad as it gets
 ## (ticks, SimClock.TICK_RATE a second: 10 s and 50 s).
@@ -19,10 +20,10 @@ const BAD_WAIT_TICKS := 1000
 ## How much of a cell's badness its four neighbours get.
 const SPREAD := 0.5
 ## Fine, halfway and bad. The overlay draws them at ALPHA.
-const GOOD_COLOR := Color(0.27, 0.78, 0.32)
-const MIDDLE_COLOR := Color(0.97, 0.84, 0.2)
-const BAD_COLOR := Color(0.9, 0.2, 0.17)
-const ALPHA := 0.55
+const GOOD_COLOR := Color(0.12, 0.7, 0.25)
+const MIDDLE_COLOR := Color(0.98, 0.8, 0.1)
+const BAD_COLOR := Color(0.88, 0.1, 0.1)
+const ALPHA := 0.7
 const NEIGHBOURS: Array[Vector2i] = [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
 ## The stages that are a wait in a queue for a station.
 const QUEUE_STAGES: Array[Passenger.Stage] = [
