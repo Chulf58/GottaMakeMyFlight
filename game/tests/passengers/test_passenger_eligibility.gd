@@ -139,8 +139,9 @@ func test_an_entrance_needs_closed_floor() -> void:
 
 
 ## An info desk on floor that is not walled in helps nobody, and a saved visit
-## to one is refused. The test floor's border is its wall
-## (PassengerTestWorld.floored()), so turning it off opens the whole floor.
+## to one is refused. The test floor is walled along the grid border
+## (PassengerTestWorld.floored()), so taking one border wall down opens the
+## whole floor.
 func test_an_info_desk_needs_closed_floor() -> void:
 	var world := InfoDeskTestLayout.world()
 	world.step()
@@ -152,12 +153,14 @@ func test_an_info_desk_needs_closed_floor() -> void:
 	var saved := {"visits": [[p.id, desk, InfoDesk.WALKING]], "cooldowns": []}
 	var tick := world.sim.tick
 	assert_dict(InfoDesk.checked(saved, {p.id: p}, tick, world.grid)).not_contains_keys(["error"])
-	world.grid.set_shell_border(false)
+	var border_wall := BuildEdit.remove_wall(Vector2i(0, 10), BuildGrid.Side.WEST)
+	assert_bool(world.grid.apply(border_wall).ok).is_true()
 	assert_bool(world.grid.is_passenger_cell(InfoDeskTestLayout.DESK_FRONT)).is_false()
 	assert_array(desks.open_desks()).is_empty()
 	var refused := InfoDesk.checked(saved, {p.id: p}, tick, world.grid)
 	print("refused visit: %s" % refused)
 	assert_dict(refused).contains_keys(["error"])
-	world.grid.set_shell_border(true)
+	var wall_back := BuildEdit.place_wall(Vector2i(0, 10), BuildGrid.Side.WEST)
+	assert_bool(world.grid.apply(wall_back).ok).is_true()
 	assert_array(desks.open_desks()).contains_exactly([desk])
 	world.free_all()

@@ -5,14 +5,15 @@ extends RefCounted
 ##
 ## User-ruled 2026-10-31 through the question form, "Outdoors, a bit larger":
 ## flocks perch where cars and passengers pass (road edge, curb bays, car
-## parks, forecourt) and are seen when the player looks at the landside, not
-## from the default view over the terminal.
+## parks) and are seen when the player looks at the landside, not from the
+## default view over the terminal.
 ##
-## Each perch is a patch of one flat outdoor surface with only open sky, or
-## the high entrance canopy, above it (test_bird_perches.gd measures every
-## patch against the shell and the car park models):
-## - the forecourt between the entrance porches (Porch_7, Porch_8: cut away
-##   at the default zoom but shown from far out, so no patch is under one);
+## No perch stands on the terminal plot (SiteDefinition, x -43 to 43, z -100
+## to -60), so birds never land where the player builds (user ruling
+## terminal-cutover-bird-perches-move-off-the-buildable-plot-re). Each perch
+## is a patch of one flat outdoor surface with only open sky above it
+## (test_bird_perches.gd measures every patch against the site, the curb
+## bays and the car park models):
 ## - the road edge at the curb in front of the west gap (y 0.1; the curb bay
 ##   kerb, TP_Curb_Bay_01A at 0.127, is uneven and has none);
 ## - the road's far sidewalk, west and east of the multi-storey;
@@ -20,20 +21,17 @@ extends RefCounted
 ## The multi-storey has none: its 10.3 m deck has the next slab at 20.3 m over
 ## it and the lower decks the one at 10 m, so every deck is under a slab.
 ##
-## A group only flies within its zone, where every flight clears the shell,
+## A group only flies within its zone, where every flight clears the site,
 ## the curb bays and the car parks (test_bird_flight_clearance.gd):
-## UNDER_CANOPY (forecourt and curb, arches over the porch roofs and under the
-## canopy), WEST and EAST (the sidewalk and lot either side of the 20 m tall
-## multi-storey, which no arch clears).
+## UNDER_CANOPY (the road edge; the name is from the Toon shell's entrance
+## canopy, which the site no longer has), WEST and EAST (the sidewalk and lot
+## either side of the 20 m tall multi-storey, which no arch clears).
 
 enum Zone { UNDER_CANOPY, WEST, EAST }
 
 ## Patch centres, on the surface top.
 const SPOTS: Array[Vector3] = [
-	Vector3(-30.1, 0.2, -62.8),
-	Vector3(-30.1, 0.2, -61.5),
-	Vector3(-21.2, 0.2, -62.8),
-	Vector3(-21.2, 0.2, -61.5),
+	Vector3(-37.9, 0.1, -57.6),
 	Vector3(-30.3, 0.1, -57.6),
 	Vector3(-38.0, 0.2, -40.6),
 	Vector3(-27.0, 0.2, -40.6),
@@ -48,10 +46,7 @@ const SPOTS: Array[Vector3] = [
 ]
 ## How far each patch reaches from its centre along x and z.
 const HALVES: Array[Vector2] = [
-	Vector2(0.75, 0.35),
-	Vector2(0.75, 0.35),
-	Vector2(0.75, 0.35),
-	Vector2(0.75, 0.35),
+	Vector2(0.8, 0.4),
 	Vector2(0.8, 0.4),
 	Vector2(1.5, 0.35),
 	Vector2(1.5, 0.35),
@@ -67,9 +62,6 @@ const HALVES: Array[Vector2] = [
 const ZONES: Array[int] = [
 	Zone.UNDER_CANOPY,
 	Zone.UNDER_CANOPY,
-	Zone.UNDER_CANOPY,
-	Zone.UNDER_CANOPY,
-	Zone.UNDER_CANOPY,
 	Zone.WEST,
 	Zone.WEST,
 	Zone.WEST,
@@ -82,14 +74,14 @@ const ZONES: Array[int] = [
 	Zone.EAST,
 ]
 ## The lot spot (LandsideSim.lots_built) a perch needs built, or -1.
-const LOTS: Array[int] = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, -1, -1, -1]
+const LOTS: Array[int] = [-1, -1, -1, -1, -1, -1, -1, 0, 0, -1, -1, -1]
 ## Birds in one patch stand at least this far apart at bird scale 1, so two
 ## perched crows (0.23 m wide, 0.56 m long) never overlap whatever their heading.
 const MIN_SPACING := 0.55
 ## A moving car or a passenger this close to a perched group scatters it. A
-## car at a curb berth straight in front of a forecourt patch is 4.4 m from
-## the front row and 5.8 m from the back row, and scatters both; a car passing
-## in the near lane (z -55) is 6.6 m or more from the forecourt and does not.
+## car passing in the near lane (z -55) is 2.6 m from a road-edge patch and
+## scatters it; a car past the road's centre line (z -50) is over 7.5 m away
+## and does not.
 const SCATTER_RADIUS := 6.3
 ## A scattered group prefers a perch with nothing this close.
 const LAND_CLEAR := 9.0

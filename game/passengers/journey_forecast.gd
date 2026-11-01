@@ -2,8 +2,8 @@ class_name JourneyForecast
 extends RefCounted
 ## Whether a passenger will make its flight at a walk. The forecast covers the
 ## whole remaining journey: the committed path, the queue wait and service at
-## the stations still ahead (after the road walk to the entrance, inside a
-## terminal shell), security up to its exit (SecurityForecast, which walks the
+## the stations still ahead (after the road walk to the entrance, on the
+## airport site), security up to its exit (SecurityForecast, which walks the
 ## passage itself, so it is not added again here), waiting at the gate until
 ## boarding opens, standing up, the walk to the nearest open exit and the
 ## apron walk to the plane door, with the wait behind the walkers known now
@@ -126,7 +126,7 @@ static func _to_gate(sim: PassengerSim, p: Passenger, routed: bool) -> Vector3i:
 	var wait := 0
 	var road_ticks := 0
 	if p.stage == Passenger.Stage.SPAWNED:
-		# The road walk to the entrance, inside a terminal shell, is a leg of
+		# The road walk to the entrance, on the site, is a leg of
 		# its own: the walk drops leftover distance where it meets the grid.
 		road_ticks = walk_ticks(p.apron_total_mm() - p.apron_mm)
 	var leg := StageKinds.leg(p.stage)

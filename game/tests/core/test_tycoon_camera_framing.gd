@@ -3,8 +3,7 @@ extends GdUnitTestSuite
 ## Framing the start view on an area: where the camera looks and how far it
 ## backs off, and Home returning to that view.
 
-## The starter terminal's floor in the Toon shell: x 10-21, z 0-29 cells from
-## the shell's origin (-33.5, -94.8), 12 by 30 m.
+## A 12 by 30 m area, the size of a small terminal's floor.
 const STARTER := Rect2(Vector2(-23.5, -94.8), Vector2(12.0, 30.0))
 
 var _rig: TycoonCamera

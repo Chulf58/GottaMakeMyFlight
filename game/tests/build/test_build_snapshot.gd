@@ -2,11 +2,9 @@ class_name TestBuildSnapshot
 extends GdUnitTestSuite
 
 
-## Its border closes the floor in (BuildGrid.shell_border, never saved), so
-## passengers may walk it; a grid loading its snapshot sets the same.
+## Walls close its floor in (EnclosureKit), so passengers may walk it.
 func _built_grid() -> BuildGrid:
 	var grid := BuildGrid.new(Vector2i(10, 8))
-	grid.set_shell_border(true)
 	for y in 8:
 		for x in 10:
 			grid.apply(
@@ -19,6 +17,7 @@ func _built_grid() -> BuildGrid:
 	grid.apply(BuildEdit.place_object(&"security_scanner", Vector2i(7, 3), 1))
 	grid.apply(BuildEdit.place_object(&"seat_row", Vector2i(2, 5), 2))
 	grid.apply(BuildEdit.remove_floor(Vector2i(9, 7)))
+	EnclosureKit.close_floor(grid)
 	return grid
 
 
@@ -32,7 +31,6 @@ func test_snapshot_round_trips_through_json() -> void:
 	var grid := _built_grid()
 	var snapshot := grid.to_snapshot()
 	var other := BuildGrid.new()
-	other.set_shell_border(true)
 	assert_bool(other.from_snapshot(_through_json(snapshot))).is_true()
 	assert_str(JSON.stringify(other.to_snapshot())).is_equal(JSON.stringify(snapshot))
 	assert_that(other.size).is_equal(Vector2i(10, 8))
@@ -60,8 +58,9 @@ func test_object_ids_keep_counting_after_a_load() -> void:
 func test_malformed_snapshot_is_rejected_and_grid_unchanged() -> void:
 	var good := _through_json(_built_grid().to_snapshot())
 	var other := BuildGrid.new(Vector2i(4, 4))
-	other.set_shell_border(true)
 	other.apply(BuildEdit.paint_floor(Vector2i(1, 1), BuildGrid.FLOOR_TILE, 3))
+	# Walls close the cell in, so the path check at the end can walk it.
+	EnclosureKit.close_floor(other)
 	var before := JSON.stringify(other.to_snapshot())
 	var bad_cases: Array[Dictionary] = []
 	# Every required key; "origin" is optional (test_build_grid_origin.gd).

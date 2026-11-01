@@ -23,7 +23,7 @@ func test_the_fallback_covers_the_walls_the_floor_needs() -> void:
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	RepairPlan.max_tries = 1
 	RepairPlan.max_attempts = 1
-	var plan := RepairPlan.make(grid, null, SITE)
+	var plan := RepairPlan.make(grid, SITE)
 	var walls := RepairEnclosure.walls_for(grid, floor).size()
 	var objects := 0
 	for def_id in [&"entrance_door", &"checkin_desk", &"security_scanner", &"exit_door"]:

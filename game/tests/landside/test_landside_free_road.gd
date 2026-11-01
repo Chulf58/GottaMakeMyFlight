@@ -92,12 +92,13 @@ func test_a_party_scheduled_with_notice_gets_out_on_its_unload_tick_and_walks_in
 	var p := _land.sim.get_passenger(_land.passenger_of.values()[0])
 	assert_int(p.stage).is_equal(Passenger.Stage.SPAWNED)
 	assert_vector(p.apron[0]).is_equal(STARTER.curb.get_out[0])
-	# The walk joins door B's route after its road start: the porch, then in.
+	# The walk joins the entrance's walk outside after its road start, onto the
+	# site's plot, then in.
 	assert_float(p.apron[1].z).is_less(-60.0)
 	var ticks := 0
-	while p.stage == Passenger.Stage.SPAWNED and ticks < 200:
+	while p.stage == Passenger.Stage.SPAWNED and ticks < 2000:
 		_land.step()
 		ticks += 1
 	print("walked in after %d ticks to %s" % [ticks, p.at])
 	assert_int(p.stage).is_not_equal(Passenger.Stage.SPAWNED)
-	assert_vector(p.at).is_equal(Vector2i(16, 29))
+	assert_vector(p.at).is_equal(ReferenceTerminal.ENTRANCE_CELL)

@@ -5,10 +5,11 @@ extends GdUnitTestSuite
 ## off a spot, a spot already built and an empty wallet, keep the price paid
 ## so a removal refunds half, and refuse a removal while a car is in the spot
 ## (undo is in test_landside_placement_undo.gd). The preview carries capacity
-## and the walk to the nearest landside door, so which spot to take is a choice.
+## and the walk to the nearest entrance on the terminal grid, so which spot to
+## take is a choice.
 
 const STARTER := preload("res://landside/starter_landside.tres")
-const SHELL := preload("res://build/toon_terminal_shell.tres")
+const SITE := preload("res://build/terminal_site.tres")
 const START_MONEY := 20000
 const LOT_PRICE := 1200
 const BAY_PRICE := 300
@@ -19,6 +20,9 @@ const IN_MULTI := Vector3(0.0, 0.0, -8.0)
 const IN_BAY_0 := Vector3(4.0, 0.0, -57.0)
 const IN_BAY_1 := Vector3(20.0, 0.0, -57.0)
 const NOWHERE := Vector3(200.0, 0.0, 100.0)
+## The entrance of the site grid's one-room terminal: on the plot's south
+## edge facing the road, its way out at world (20.5, -60), in front of bay 1.
+const ENTRANCE := Vector2i(63, 39)
 
 var _sim: LandsideSim
 var _wallet: Wallet
@@ -33,9 +37,23 @@ func before_test() -> void:
 	_wallet = Wallet.new(START_MONEY)
 	_placement = LandsidePlacement.new()
 	_placement.sim = _sim
-	_placement.shell = SHELL
+	_placement.grid = _site_grid()
 	_placement.wallet = _wallet
 	_rng.seed = 3
+
+
+## The site grid with a walled one-room terminal on its south edge and its
+## entrance at ENTRANCE.
+func _site_grid() -> BuildGrid:
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	var edits: Array[BuildEdit] = []
+	for y in range(36, 40):
+		for x in range(60, 67):
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	grid.apply_batch(edits)
+	EnclosureKit.close_floor(grid)
+	PassengerTestWorld.place(grid, &"entrance_door", ENTRANCE, 2)
+	return grid
 
 
 func _build(kind: LandsidePlacement.Kind, point: Vector3) -> BuildResult:
@@ -219,20 +237,20 @@ func test_the_spot_nearer_the_doors_has_the_shorter_walk() -> void:
 	var far_bay := _placement.plan_build(LandsidePlacement.Kind.CURB, IN_BAY_0)
 	print("walks: bay 0 %.1f, bay 1 %.1f" % [far_bay.walk_m, near_bay.walk_m])
 	assert_float(near_bay.walk_m).is_less(far_bay.walk_m)
-	# Bay 1 (x 12 to 28) lets its passengers out 5.0 m and 5.3 m from landside
-	# doors C and D; bay 0 (x -4 to 12) 10.1 m and 16.0 m from door C.
-	assert_float(near_bay.walk_m).is_equal_approx(5.1, 0.1)
-	assert_float(far_bay.walk_m).is_equal_approx(13.0, 0.1)
-	# The surface lot is by door D; the multi-storey is further, and its
-	# upper levels add the stairs.
+	# Bay 1 (x 12 to 28) lets its passengers out in front of the entrance
+	# (x 20.5, z -60), bay 0 (x -4 to 12) a bay further west.
+	assert_float(near_bay.walk_m).is_greater(0.0)
+	assert_float(far_bay.walk_m - near_bay.walk_m).is_greater(10.0)
+	# The surface lot is east by the entrance; the multi-storey is further,
+	# and its upper levels add the stairs.
 	var lot := _placement.plan_build(LandsidePlacement.Kind.SURFACE_LOT, IN_LOT_0)
 	var multi := _placement.plan_build(LandsidePlacement.Kind.MULTI_STOREY, IN_MULTI)
 	print("walks: surface lot %.1f, multi-storey %.1f" % [lot.walk_m, multi.walk_m])
 	assert_float(lot.walk_m).is_less(multi.walk_m)
 
 
-func test_without_a_shell_the_preview_has_no_walk() -> void:
-	_placement.shell = null
+func test_without_an_entrance_the_preview_has_no_walk() -> void:
+	_placement.grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var plan := _placement.plan_build(LandsidePlacement.Kind.SURFACE_LOT, IN_LOT_0)
 	assert_float(plan.walk_m).is_equal(-1.0)
 	assert_str(plan.text).is_equal("Surface lot: 12 spaces")

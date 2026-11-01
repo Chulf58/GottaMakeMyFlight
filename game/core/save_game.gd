@@ -52,7 +52,10 @@ signal loaded(ok: bool)
 ## saves are refused (no migration before a release).
 ## 6: cleaners (staff save version 4: each member's job and work left, and
 ## mess claims checked against them); version 5 saves are refused.
-const SAVE_VERSION := 6
+## 7: the player-built terminal on the airport site (the grid in the site's
+## frame, no Toon shell); version 6 saves are refused (no migration before a
+## release).
+const SAVE_VERSION := 7
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -401,15 +404,13 @@ func _ticks_problem(data: Dictionary) -> String:
 	return ""
 
 
-## The terminal shell's check, then the grid's own, on a staged grid.
+## The site's frame check, then the grid's own, on a staged grid.
 func _stage_grid(data: Dictionary, staged: Dictionary) -> String:
-	if build_mode.shell != null:
-		var problem := build_mode.shell.snapshot_problem(data)
+	if build_mode.site != null:
+		var problem := build_mode.site.snapshot_problem(data)
 		if problem != "":
 			return problem
 	var grid := BuildGrid.new()
-	# The staged grid closes rooms in the way the live one does.
-	grid.shell_border = build_mode.grid.shell_border
 	if not grid.from_snapshot(data):
 		return "it was refused (see the error log)"
 	staged["grid"] = grid

@@ -1,4 +1,4 @@
-[gd_scene load_steps=39 format=3]
+[gd_scene load_steps=40 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -6,15 +6,16 @@
 [ext_resource type="Script" path="res://flights/flight_sim.gd" id="4_sim"]
 [ext_resource type="Script" path="res://flights/plane_view.gd" id="5_plane"]
 [ext_resource type="Script" path="res://airside/airside.gd" id="6_airside"]
-[ext_resource type="PackedScene" path="res://assets/buildings/tp_airport_shell.glb" id="7_terminal"]
+[ext_resource type="PackedScene" path="res://assets/buildings/tp_airport_site.glb" id="7_terminal"]
 [ext_resource type="PackedScene" path="res://assets/airside/tp_runway_01a.glb" id="8_end"]
 [ext_resource type="PackedScene" path="res://assets/airside/tp_runway_03a.glb" id="9_strip"]
 [ext_resource type="Script" path="res://passengers/passenger_sim.gd" id="10_pax"]
 [ext_resource type="Script" path="res://passengers/passenger_views.gd" id="11_paxview"]
 [ext_resource type="Script" path="res://ui/passenger_hud.gd" id="12_hud"]
 [ext_resource type="Script" path="res://ui/build_menu.gd" id="13_menu"]
-[ext_resource type="Script" path="res://build/view/shell_view.gd" id="14_shellview"]
-[ext_resource type="Resource" path="res://build/toon_terminal_shell.tres" id="15_shell"]
+[ext_resource type="Script" path="res://build/view/roof_view.gd" id="14_roofview"]
+[ext_resource type="Resource" path="res://build/terminal_site.tres" id="15_site"]
+[ext_resource type="Script" path="res://build/view/gap_markers.gd" id="34_gapmarkers"]
 [ext_resource type="Script" path="res://economy/finances.gd" id="16_finances"]
 [ext_resource type="Script" path="res://economy/offer_desk.gd" id="17_offerdesk"]
 [ext_resource type="Script" path="res://ui/offer_panel.gd" id="18_offerpanel"]
@@ -84,10 +85,9 @@ surface_material_override/0 = SubResource("Material_ground")
 bounds_half_extent = 260.0
 home_position = Vector3(-0.5, 0, -79.8)
 
-[node name="BuildMode" type="Node3D" parent="." node_paths=PackedStringArray("finances", "shell_view", "landside")]
+[node name="BuildMode" type="Node3D" parent="." node_paths=PackedStringArray("finances", "landside")]
 script = ExtResource("3_build")
-shell = ExtResource("15_shell")
-shell_view = NodePath("../ShellView")
+site = ExtResource("15_site")
 finances = NodePath("../Finances")
 landside = NodePath("../LandsideSim")
 initial_tool = 0
@@ -271,10 +271,14 @@ day_ledger = NodePath("../DayLedger")
 settlement = NodePath("../Settlement")
 save_game = NodePath("../SaveGame")
 
-[node name="ShellView" type="Node" parent="." node_paths=PackedStringArray("shell", "camera")]
-script = ExtResource("14_shellview")
-shell = NodePath("../Airside/Terminal")
+[node name="RoofView" type="Node3D" parent="." node_paths=PackedStringArray("camera", "build_mode")]
+script = ExtResource("14_roofview")
 camera = NodePath("../TycoonCamera")
+build_mode = NodePath("../BuildMode")
+
+[node name="GapMarkers" type="Node3D" parent="." node_paths=PackedStringArray("build_mode")]
+script = ExtResource("34_gapmarkers")
+build_mode = NodePath("../BuildMode")
 
 [node name="OfferDesk" type="Node" parent="." node_paths=PackedStringArray("clock", "rating", "flights")]
 script = ExtResource("17_offerdesk")

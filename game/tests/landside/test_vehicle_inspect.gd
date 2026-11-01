@@ -27,9 +27,9 @@ func after_test() -> void:
 
 ## The starter road and the reference terminal without its entrance door.
 func _world_without_entrance() -> LandsideTestWorld:
-	var shell := LandsideTestWorld.SHELL
-	var grid := BuildGrid.new(shell.grid_size, shell.grid_origin)
-	for edit in ReferenceTerminal.edits(shell):
+	var site := LandsideTestWorld.SITE
+	var grid := BuildGrid.new(site.grid_size, site.grid_origin)
+	for edit in ReferenceTerminal.edits():
 		if edit.kind != BuildEdit.Kind.PLACE_OBJECT or edit.def_id != &"entrance_door":
 			assert_bool(grid.apply(edit).ok).is_true()
 	return LandsideTestWorld.make(null, [], 3, grid)

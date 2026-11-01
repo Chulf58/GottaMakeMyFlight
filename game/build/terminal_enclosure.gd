@@ -9,9 +9,7 @@ extends RefCounted
 ## one. Floor plays no part in the flood, so painting or removing floor never
 ## changes which cells are outside.
 ##
-## With `border_closed` every grid-border edge counts as walled: the Toon
-## shell's facade stands there (BuildGrid.shell_border). Without it a border
-## edge is open unless a wall or a door's back edge closes it.
+## A grid-border edge is open unless a wall or a door's back edge closes it.
 ##
 ## Pure: it reads the grid and the wall arrays it is given and changes
 ## nothing. BuildGrid keeps the result as derived data, never saved.
@@ -22,14 +20,14 @@ extends RefCounted
 ## BuildGrid's wall arrays (its layout: the north edge of (x, y) at
 ## x + y * size.x, the west edge at x + y * (size.x + 1)).
 static func outside_cells(
-	grid: BuildGrid, h_walls: PackedByteArray, v_walls: PackedByteArray, border_closed: bool
+	grid: BuildGrid, h_walls: PackedByteArray, v_walls: PackedByteArray
 ) -> PackedByteArray:
 	var w := grid.size.x
 	var h := grid.size.y
 	var outside := PackedByteArray()
 	outside.resize(w * h)
 	outside.fill(0)
-	if border_closed or w == 0 or h == 0:
+	if w == 0 or h == 0:
 		return outside
 	# A door object's back edge closes like a wall: mark it on copies.
 	var h_closed := h_walls.duplicate()

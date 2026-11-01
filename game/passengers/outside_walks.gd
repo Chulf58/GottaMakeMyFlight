@@ -1,10 +1,9 @@
 class_name OutsideWalks
 extends RefCounted
 ## PassengerSim's walks outside the terminal: in from the road to an entrance
-## (stage SPAWNED) and out from an exit to the plane (APRON). With a Toon
-## shell and no site they are ShellRoutes' authored walks. On the airport site
-## (PassengerSim.site) they are SiteRoutes' walks over open ground, and they
-## are kept valid as the player builds (decision player-built-terminal-
+## (stage SPAWNED) and out from an exit to the plane (APRON). On the airport
+## site (PassengerSim.site) they are SiteRoutes' walks over open ground, kept
+## valid as the player builds (decision player-built-terminal-
 ## technical-design-site-plot-indoor-mask-passenger-eligibility, point 6).
 ##
 ## After every graph change (revalidate()) each walker outside checks the
@@ -25,22 +24,26 @@ extends RefCounted
 ## Spacing of the points a walk left is checked at, in metres.
 const CHECK_STEP_M := 0.25
 
+## How many distance fields revalidate() has searched since the game started
+## (one per entrance, and one to the plane, per call at most). A count only
+## the tests read, to show a field is shared by every walker in a call.
+static var fields_searched := 0
+
 
 ## The walk in from the road to entrance `entrance`, or empty when there is
 ## none.
 static func arrival(sim: PassengerSim, entrance: int) -> Array[Vector3]:
-	if sim.site == null:
-		return ShellRoutes.arrival(sim, entrance)
-	if not sim.layout.outside_routes.has(entrance):
+	if sim.site == null or not sim.layout.outside_routes.has(entrance):
 		return [] as Array[Vector3]
 	return SiteRoutes.arrival(sim.grid, sim.site, sim.layout.outside_routes[entrance])
 
 
 ## The walk from exit `exit_door`'s cell to the plane door, or empty when
-## there is none.
+## there is none. With no site (a test grid): the cell's centre, its outer
+## edge, a metre beyond, then PassengerSim.apron_waypoints.
 static func departure(sim: PassengerSim, exit_door: int) -> Array[Vector3]:
 	if sim.site == null:
-		return ShellRoutes.departure(sim, exit_door)
+		return _default_departure(sim, exit_door)
 	if not sim.layout.outside_routes.has(exit_door):
 		return [] as Array[Vector3]
 	return SiteRoutes.departure(sim.grid, sim.site, sim.layout.outside_routes[exit_door])
@@ -75,6 +78,7 @@ static func revalidate(sim: PassengerSim) -> void:
 			if to_plane.is_empty():
 				var edge := SiteRoutes.edge_cells(sim.grid, sim.site, SiteDefinition.PLANE_STEP)
 				to_plane = SiteRoutes.distances(sim.grid, sim.site, edge)
+				fields_searched += 1
 			var cells := _cells_from(sim, p.apron_position(), to_plane)
 			if cells.is_empty():
 				p.stuck = Passenger.Stuck.NO_ROUTE
@@ -134,6 +138,7 @@ static func _walk_to(
 			# The door stands on the road edge: out to the road first.
 			seeds = SiteRoutes.edge_cells(grid, sim.site, SiteDefinition.ROAD_STEP)
 		to_doors[door] = SiteRoutes.distances(grid, sim.site, seeds)
+		fields_searched += 1
 	var cells := _cells_from(sim, here, to_doors[door])
 	if cells.is_empty():
 		return [] as Array[Vector3]
@@ -250,3 +255,20 @@ static func _entrance_at(sim: PassengerSim, cell: Vector2i) -> int:
 		if sim.layout.door_cell(sim.grid, door) == cell:
 			return door
 	return 0
+
+
+## departure() with no site: out through the cell's outer edge, a metre on,
+## then the default apron walk. Empty for an unknown door.
+static func _default_departure(sim: PassengerSim, exit_door: int) -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	var cell := sim.layout.door_cell(sim.grid, exit_door)
+	if cell == BuildObjectDef.NO_CELL:
+		return points
+	var centre := sim.grid.cell_to_world(cell)
+	var step := sim.layout.door_outward(sim.grid, exit_door)
+	var out := Vector3(step.x, 0.0, step.y)
+	points.append(centre)
+	points.append(centre + out * 0.5)
+	points.append(centre + out * 1.5)
+	points.append_array(Array(sim.apron_waypoints))
+	return points

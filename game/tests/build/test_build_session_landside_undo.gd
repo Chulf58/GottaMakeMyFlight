@@ -6,7 +6,7 @@ extends GdUnitTestSuite
 ## BuildSession).
 
 const STARTER := preload("res://landside/starter_landside.tres")
-const SHELL := preload("res://build/toon_terminal_shell.tres")
+const SITE := preload("res://build/terminal_site.tres")
 const IN_BAY_0 := Vector3(4.0, 0.0, -57.0)
 const IN_LOT_0 := Vector3(32.0, 0.0, -22.0)
 
@@ -22,7 +22,7 @@ func before_test() -> void:
 	_sim = auto_free(LandsideSim.new())
 	assert_bool(_sim.use_definition(STARTER)).is_true()
 	_mode = BuildMode.new()
-	_mode.shell = SHELL
+	_mode.site = SITE
 	_mode.finances = _finances
 	_mode.landside = _sim
 	add_child(_mode)

@@ -8,10 +8,10 @@ extends GdUnitTestSuite
 ## not reach (ruling rescue-grant-repair-price-never-removes-the-security-
 ## divider); and a floor cell is charged once however many edits paint it.
 
-const SHELL := "res://build/toon_terminal_shell.tres"
-## The row of floor laid across the empty shell as an island in front of the
-## doors, near where the cheapest desks' staff spots fall.
-const ISLAND_ROW := 25
+const SITE := preload("res://build/terminal_site.tres")
+## The row of floor laid across the empty site plot as an island near its
+## road edge, near where the cheapest desks' staff spots fall.
+const ISLAND_ROW := 34
 
 
 static func _paint(cell: Vector2i) -> BuildEdit:
@@ -28,6 +28,7 @@ func _buy_all(grid: BuildGrid, edits: Array[BuildEdit], wallet: Wallet) -> bool:
 		if not result.ok:
 			return false
 	var layout := TerminalLayout.new()
+	layout.site = SITE
 	layout.rebuild(grid)
 	return RepairPlan.has_working_path(grid, layout)
 
@@ -36,17 +37,14 @@ func _buy_all(grid: BuildGrid, edits: Array[BuildEdit], wallet: Wallet) -> bool:
 ## desks' spots fall. The link goes on to the walk, so the plan still finds a
 ## repair within its caps, and the money it names builds a working path.
 func test_a_floor_island_by_the_spot_is_not_taken_for_the_way_in() -> void:
-	var shell: ShellDefinition = load(SHELL)
-	var grid := BuildGrid.new(shell.grid_size, shell.grid_origin)
-	# As BuildMode with a shell: the facade closes the grid border.
-	grid.set_shell_border(true)
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var island := 0
 	for x in grid.size.x:
 		var edit := _paint(Vector2i(x, ISLAND_ROW))
 		if grid.validate(edit).ok and grid.apply(edit).ok:
 			island += 1
 	assert_int(island).is_greater(30)
-	var plan := RepairPlan.make(grid, shell)
+	var plan := RepairPlan.make(grid, SITE)
 	var price := RepairPlan.least_balance(grid, plan.edits) if plan.ok else -1
 	prints("island", island, "ok", plan.ok, "price", price, "fallback", plan.fallback_price)
 	assert_bool(plan.ok).is_true()
@@ -91,12 +89,9 @@ func test_a_cell_painted_twice_is_charged_once() -> void:
 
 
 ## A plan paints each cell at most once, so its price counts each tile once.
-func test_the_empty_shell_plan_paints_each_cell_once() -> void:
-	var shell: ShellDefinition = load(SHELL)
-	var grid := BuildGrid.new(shell.grid_size, shell.grid_origin)
-	# As BuildMode with a shell: the facade closes the grid border.
-	grid.set_shell_border(true)
-	var plan := RepairPlan.make(grid, shell)
+func test_the_empty_site_plan_paints_each_cell_once() -> void:
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	var plan := RepairPlan.make(grid, SITE)
 	assert_bool(plan.ok).is_true()
 	var painted := {}
 	var twice: Array[Vector2i] = []

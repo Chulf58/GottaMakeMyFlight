@@ -86,7 +86,7 @@ var seat_cell := NO_CELL
 var seat_front := NO_CELL
 var exit_object := 0
 ## The walk outside the terminal, world points: the road to the entrance
-## while SPAWNED (inside a terminal shell), the exit door to the plane door
+## while SPAWNED (on the airport site), the exit door to the plane door
 ## from APRON on. Empty while neither is under way.
 var apron: Array[Vector3] = []
 var apron_mm := 0

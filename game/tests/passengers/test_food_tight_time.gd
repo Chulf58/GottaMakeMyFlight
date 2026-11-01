@@ -47,7 +47,7 @@ func _checked_in(world: PassengerTestWorld) -> void:
 ## "left_at", "full" (what a full visit would have paid at that mood)}.
 func _run(venue: StringName) -> Dictionary:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid, false, null, venue)
+	CafeTestLayout.build(grid, false, venue)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
 	var guest := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))

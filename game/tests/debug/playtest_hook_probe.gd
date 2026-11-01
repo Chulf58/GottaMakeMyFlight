@@ -10,8 +10,8 @@ extends SceneTree
 ##
 ## Boots main.tscn with a new random world seed (printed) as the current scene,
 ## waits for the autoload to attach, builds the starter terminal with the HUD
-## button, sets a desk down on a desk (refused; the shell floors every cell a
-## Floor rectangle could reach, so a rectangle refuses nothing), takes both
+## button, sets a desk down on a desk (refused; a Floor rectangle on the open
+## plot refuses nothing), takes both
 ## check-in desks away for 30 sim seconds, counted from
 ## the first passenger's arrival (passengers get stuck and the stuck_too_long
 ## anomaly is raised, then cleared once the desks are back), and runs the
@@ -119,9 +119,8 @@ func _build() -> void:
 	StaffTestKit.staff_all(_main.get_node("Staff"))
 	var grid := _mode.grid
 	grid.edit_refused.connect(_count_refusal)
-	# A refused edit: a desk set down on a desk. The starter's shell already
-	# floors every cell a Floor rectangle could reach, so a rectangle would
-	# refuse nothing.
+	# A refused edit: a desk set down on a desk. A Floor rectangle on the open
+	# plot would refuse nothing.
 	var desk := _first_desk(grid)
 	if desk.is_empty():
 		_invalid("the starter terminal has no check-in desk to build over")

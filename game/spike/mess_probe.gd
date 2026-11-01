@@ -76,7 +76,7 @@ func _build() -> void:
 	mode.set_tool(BuildMode.Tool.NONE)
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	var grid := mode.grid
-	var ids := CafeTestLayout.build(grid, false, mode.shell)
+	var ids := CafeTestLayout.build(grid, false)
 	for id: int in [ids["land_table"], ids["land_counter"]]:
 		_apply(grid, BuildEdit.remove_object(id))
 	_apply(grid, BuildEdit.remove_room(ids["land_room"]))

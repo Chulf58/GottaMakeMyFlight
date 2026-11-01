@@ -67,21 +67,29 @@ static func reference_world(seed := 1) -> PassengerTestWorld:
 	return make(on_grid, FlightSim.schedule_starts(0), seed)
 
 
-## A grid of `size` with floor on every cell. Its border counts as walled
-## (BuildGrid.shell_border, as inside the Toon shell), so all the floor is
-## indoor and doors stand on the border with their way out open.
+## A grid of `size` with floor on every cell, walled in along the grid border
+## (EnclosureKit.close_floor()), so all the floor is indoor. A door place()s
+## on the border takes down the plain wall on its way out, as the build tools
+## do (DoorPlacement.edits_for()).
 static func floored(size: Vector2i) -> BuildGrid:
 	var on_grid := BuildGrid.new(size)
-	on_grid.set_shell_border(true)
+	var edits: Array[BuildEdit] = []
 	for y in size.y:
 		for x in size.x:
-			on_grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	on_grid.apply_batch(edits)
+	EnclosureKit.close_floor(on_grid)
 	return on_grid
 
 
+## Places `def_id` through the grid; an entrance or exit first takes down a
+## plain wall on its way out (DoorPlacement.edits_for()). Asserts it is
+## accepted and returns the object id.
 static func place(on_grid: BuildGrid, def_id: StringName, anchor: Vector2i, facing: int) -> int:
-	var result := on_grid.apply(BuildEdit.place_object(def_id, anchor, facing))
-	assert(result.ok, "test layout placement refused: %s" % result.reason_text())
+	var result := BuildResult.accepted()
+	for edit in DoorPlacement.edits_for(on_grid, BuildEdit.place_object(def_id, anchor, facing)):
+		result = on_grid.apply(edit)
+		assert(result.ok, "test layout placement refused: %s" % result.reason_text())
 	return result.object_id
 
 

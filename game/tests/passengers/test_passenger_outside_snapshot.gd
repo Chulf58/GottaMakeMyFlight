@@ -5,7 +5,9 @@ extends GdUnitTestSuite
 ## end of the walk, a non-finite or out-of-world point, or the old version 2
 ## is refused and leaves the sim exactly as it was.
 
-const SHELL := preload("res://build/toon_terminal_shell.tres")
+const SITE := preload("res://build/terminal_site.tres")
+## The terminal's floor rows; the rows south of it are open ground to the road.
+const FLOOR_ROWS := 30
 const ROAD_TICKS := 30
 
 var _source: PassengerTestWorld
@@ -23,12 +25,12 @@ func after() -> void:
 
 
 func before_test() -> void:
-	_source = _shell_world()
+	_source = _site_world()
 	_source.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_source.run_to(ROAD_TICKS)
 	_saved = JSON.parse_string(JSON.stringify(_source.sim.to_snapshot())) as Dictionary
 	# The target has state of its own, so a refused load has something to keep.
-	_target = _shell_world()
+	_target = _site_world()
 	_target.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_target.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_target.run_to(12)
@@ -39,18 +41,20 @@ func after_test() -> void:
 	_target.free_all()
 
 
-func _shell_world() -> PassengerTestWorld:
-	var grid := BuildGrid.new(SHELL.grid_size, SHELL.grid_origin)
-	for y in SHELL.grid_size.y:
+## A one-column terminal on the airport site: its entrance faces the road
+## 10 m of open ground away, its exit the plane.
+func _site_world() -> PassengerTestWorld:
+	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
+	for y in FLOOR_ROWS:
 		for x in range(15, 18):
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
-	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(16, 29), 2)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(16, FLOOR_ROWS - 1), 2)
 	PassengerTestWorld.place(grid, &"exit_door", Vector2i(16, 0), 0)
 	# Walls close the floor in, the doors filling their gaps (TerminalEnclosure),
 	# so passengers may come in at the entrance.
 	EnclosureKit.close_floor(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	world.sim.shell = SHELL
+	world.sim.site = SITE
 	return world
 
 

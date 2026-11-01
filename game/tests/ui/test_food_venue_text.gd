@@ -24,7 +24,7 @@ func after_test() -> void:
 ## The distinct follow-line texts a guest shows through a whole visit to `venue`.
 func _texts(venue: StringName) -> Array:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid, false, null, venue, venue != &"stall")
+	CafeTestLayout.build(grid, false, venue, venue != &"stall")
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
 	var p := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))

@@ -1,10 +1,10 @@
 class_name HandBuiltTerminal
 extends RefCounted
 ## A terminal built only through BuildMode's tools, the way a player paints
-## one, for the spike probes. Cells x 10-21, y 0-29 inside the Toon terminal
-## shell, laid out like ReferenceTerminal (desks, a security divider with two
-## scanners, seats, the entrance on landside door B at the south edge and the
-## exit on gate door C at the north edge, the shell's own door cells) plus a
+## one, for the spike probes. Cells x 10-21, y 0-29 of the airport site's
+## grid, walled in on every side and laid out like ReferenceTerminal (desks,
+## a security divider with two scanners, seats, the entrance at the south edge
+## facing the road and the exit at the north edge facing the plane) plus a
 ## landside wall across row LOBBY_Y with a door, and three glass walls in the
 ## west side.
 
@@ -17,9 +17,7 @@ const LOBBY_Y := 25
 const DOOR_X := 16
 const GLASS_YS: Array[int] = [11, 12, 13]
 const SCANNER_XS: Array[int] = [17, 19]
-## The shell's landside door B and gate door C (toon_terminal_shell.tres).
-## BuildMode snaps an entrance or exit tool to the nearest door of its kind,
-## so the tool only has to be used on these cells.
+## The entrance and exit cells, in the outer wall's gaps.
 const ENTRANCE_CELL := Vector2i(16, 29)
 const EXIT_CELL := Vector2i(16, 0)
 

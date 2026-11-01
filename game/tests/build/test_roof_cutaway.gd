@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## The player-built roof's level rule (RoofCutaway): drawn when the camera is
 ## far, gone when it is near, holding its last target inside the band, and
 ## fading at a constant rate (user ruling toon-terminal-roof-shows-from-far-
-## away-and-fades-out-when-th, the same rule as ShellCutaway's roof).
+## away-and-fades-out-when-th, the rule the Toon shell's roof had).
 
 var _cut: RoofCutaway
 
