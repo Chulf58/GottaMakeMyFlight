@@ -510,23 +510,32 @@ func set_debug_open(value: bool) -> void:
 	_debug_panel.visible = value
 
 
-## Builds ReferenceTerminal on a pristine build grid (no floor, walls or
-## objects), a debug shortcut for what BuildMode's tools can also build. Either
-## outcome is shown in the status line; a refusal changes nothing.
+## The debug starter button, a shortcut for what BuildMode's tools can also
+## build. On a pristine build grid (no floor, walls or objects) it builds the
+## whole ReferenceTerminal; on any other grid, the new-game shell included, it
+## adds the reference interior (divider, desks, scanners, seats) to what
+## stands (decision terminal-growth-and-starter-building-move-the-airside-
+## north, point 3). Either outcome is shown in the status line; a refusal
+## changes nothing.
 func press_starter_terminal() -> void:
 	if build_mode == null:
 		return
 	var grid := build_mode.grid
-	if not _is_pristine(grid):
-		_status = "Starter terminal needs an empty grid"
-		return
-	if not ReferenceTerminal.build(grid):
-		push_error("PassengerHud: the starter terminal did not fit the grid")
-		_status = "Starter terminal failed: it did not fit the grid"
-		(build_mode.get_node("BuildView") as BuildView).refresh(grid)
-		return
-	_status = "Starter terminal built"
-	(build_mode.get_node("BuildView") as BuildView).refresh(grid)
+	var view := build_mode.get_node("BuildView") as BuildView
+	if _is_pristine(grid):
+		if not ReferenceTerminal.build(grid):
+			push_error("PassengerHud: the starter terminal did not fit the grid")
+			_status = "Starter terminal failed: it did not fit the grid"
+			view.refresh(grid)
+			return
+		_status = "Starter terminal built"
+	else:
+		var result := ReferenceTerminal.fill_interior(grid)
+		if not result.ok:
+			_status = "Starter terminal not filled: %s" % result.reason_text()
+			return
+		_status = "Starter terminal filled"
+	view.refresh(grid)
 
 
 ## The Debug toggle at the bottom-right corner, with its panel docked above the

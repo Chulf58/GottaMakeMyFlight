@@ -91,6 +91,7 @@ site = ExtResource("15_site")
 finances = NodePath("../Finances")
 landside = NodePath("../LandsideSim")
 initial_tool = 0
+starter_shell = true
 
 [node name="Airside" type="Node3D" parent="."]
 script = ExtResource("6_airside")

@@ -47,6 +47,42 @@ static func edits() -> Array[BuildEdit]:
 	return out
 
 
+## The starter shell's edits (decision terminal-growth-and-starter-building-
+## move-the-airside-north, point 2): the floor, the outer walls and the two
+## doors, with no desks, scanners, seats or divider.
+static func shell_edits() -> Array[BuildEdit]:
+	var out: Array[BuildEdit] = []
+	for edit in edits():
+		if not _is_interior(edit):
+			out.append(edit)
+	return out
+
+
+## What the debug starter button adds to the shell: the divider wall and the
+## check-in desks, scanners and seat rows.
+static func interior_edits() -> Array[BuildEdit]:
+	var out: Array[BuildEdit] = []
+	for edit in edits():
+		if _is_interior(edit):
+			out.append(edit)
+	return out
+
+
+## Adds interior_edits() to a grid that already holds the shell, free like
+## build() (a debug layout). The edits go onto a copy first, so a refusal (the
+## player built over the interior, or it is already there) returns its reason
+## and leaves the grid as it was.
+static func fill_interior(grid: BuildGrid) -> BuildResult:
+	var trial := BuildGrid.new(grid.size, grid.origin)
+	if not trial.from_snapshot(grid.to_snapshot()):
+		push_error("ReferenceTerminal: the grid could not be copied for a trial fill")
+		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
+	var trial_result := trial.apply_sequence(interior_edits(), Callable())
+	if not trial_result.ok:
+		return trial_result
+	return grid.apply_sequence(interior_edits(), Callable())
+
+
 ## Applies edits() to a fresh grid. Pushes an error and returns false at the
 ## first refused edit.
 static func build(grid: BuildGrid) -> bool:
@@ -81,3 +117,12 @@ static func object_ids(grid: BuildGrid) -> Dictionary:
 		var kind: String = "belts" if BuildCatalog.is_belt(def) else kinds[def]
 		(out[kind] as Array).append(id)
 	return out
+
+
+static func _is_interior(edit: BuildEdit) -> bool:
+	match edit.kind:
+		BuildEdit.Kind.PLACE_WALL:
+			return edit.cell.y == DIVIDER_Y and edit.side == BuildGrid.Side.NORTH
+		BuildEdit.Kind.PLACE_OBJECT:
+			return edit.def_id != &"entrance_door" and edit.def_id != &"exit_door"
+	return false
