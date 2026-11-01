@@ -3,10 +3,14 @@ extends Node3D
 ## Draws hired staff with pooled Toon characters, one model per role, so staff
 ## never look like passengers: a check-in agent in a navy skirt suit and a
 ## security officer in a white shirt and tie. A shop server wears the check-in
-## agent's suit and a cleaner the officer's body until each has a model of its
-## own; a cleaner at work stands idle (its mop clips come later), facing a bin
-## it empties from beside it; on a mess's own cell it keeps the way it walked
-## in. A member is drawn while it is on
+## agent's suit until it has a model of its own. A cleaner wears a blue shirt,
+## grey trousers and a black apron (CLEANER_BODY) and, at work, plays the clean
+## clip forward and back: no pack has a mop or sweep clip, and the closest, a
+## bend to the floor and a pull (tools/blender/anim/toon_clips.py,
+## CLEAN_SOURCE), reads as picking litter up and wiping. It faces a bin it
+## empties from beside it; on a mess's own cell it keeps the way it walked in.
+## The cleaner view also owns the mess view (MessViews), which draws the
+## messes and full bins the cleaners work on. A member is drawn while it is on
 ## the floor (not in the pool). Each tick it records the position for the tick
 ## before and the tick now, keyed by member id, and each frame it draws
 ## between the two with the clock's alpha, as PassengerViews does.
@@ -30,11 +34,14 @@ extends Node3D
 
 const AGENT_SUIT := preload("res://assets/people/tcp_female_character_07.glb")
 const OFFICER := preload("res://assets/people/tcp_male_character_07.glb")
+const CLEANER_BODY := preload("res://assets/people/tcp_female_character_10.glb")
 ## By StaffMember.Role: CHECKIN, SECURITY, SHOP, CLEANER.
-const CHARACTERS: Array[PackedScene] = [AGENT_SUIT, OFFICER, AGENT_SUIT, OFFICER]
+const CHARACTERS: Array[PackedScene] = [AGENT_SUIT, OFFICER, AGENT_SUIT, CLEANER_BODY]
 ## Walk clip speeds measured by the Toon pipeline (SPEED lines), by role.
-const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922, 1.952]
+const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922, 1.922]
 const LOOPED := ["idle", "walk"]
+## The cleaner's work clip, played forward and back (it does not loop closed).
+const CLEAN_CLIP := "clean"
 
 @export var clock: SimClock
 @export var staff: StaffSim
@@ -56,6 +63,8 @@ func _ready() -> void:
 		var player := probe.get_node("AnimationPlayer") as AnimationPlayer
 		for clip in LOOPED:
 			player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
+		if player.has_animation(CLEAN_CLIP):
+			player.get_animation(CLEAN_CLIP).loop_mode = Animation.LOOP_PINGPONG
 		probe.free()
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
@@ -63,6 +72,10 @@ func _ready() -> void:
 		staff.staff_changed.connect(_mark_dirty)
 		if staff.sim != null:
 			staff.sim.grid.graph_changed.connect(_on_graph_changed)
+			var messes := MessViews.new()
+			messes.name = "MessViews"
+			messes.sim = staff.sim
+			add_child(messes)
 		sync(true)
 
 
@@ -220,6 +233,7 @@ func _pose(node: Node3D, m: StaffMember, moved: Vector3) -> void:
 	var clip := "idle"
 	var base := 1.0
 	if m.state == StaffMember.State.ON_DUTY and m.role == StaffMember.Role.CLEANER:
+		clip = CLEAN_CLIP
 		var job := CleanerJobs.job_cell(staff, m)
 		var ahead := job - m.at
 		if ahead != Vector2i.ZERO and job != StaffMember.NO_CELL:
