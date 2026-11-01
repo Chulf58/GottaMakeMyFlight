@@ -537,7 +537,7 @@ func edit_at(point: Vector3) -> BuildEdit:
 		var turn := facing
 		if _facing_is_auto():
 			turn = DoorPlacement.auto_facing(grid, def_id, point, facing)
-		return BuildEdit.place_object(def_id, cell, turn)
+		return BuildEdit.place_object(def_id, DoorPlacement.cell_under(grid, point), turn)
 	return null
 
 

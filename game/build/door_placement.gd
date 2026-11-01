@@ -6,6 +6,31 @@ extends RefCounted
 ## let it take the place of a plain wall. BuildMode calls them for the ghost
 ## and the click alike.
 
+## How far from a cell's edge a point still counts as on that edge's wall line:
+## half the wall's thickness, so a click on the wall's drawn width is on it.
+const LINE_SLACK_M := BuildView.WALL_THICKNESS * 0.5
+
+
+## The cell a piece placed at `point` takes: the cell under it, unless that has
+## no floor and the point is on the wall line it shares with a neighbour that
+## has, when it is that neighbour. floor() puts a point exactly on a cell's west
+## or north edge in that cell, so without this the east and south wall lines of
+## a room would pick the cell outside it and the north and west lines the cell
+## inside.
+static func cell_under(grid: BuildGrid, point: Vector3) -> Vector2i:
+	var cell := grid.world_to_cell(point)
+	if grid.floor_at(cell) != BuildGrid.FLOOR_NONE:
+		return cell
+	var offset := point - grid.cell_to_world(cell)
+	var best := cell
+	var best_gap := LINE_SLACK_M
+	for step in BuildGrid.SIDE_STEP:
+		var gap := 0.5 - (offset.x * step.x + offset.z * step.y)
+		if gap <= best_gap and grid.floor_at(cell + step) != BuildGrid.FLOOR_NONE:
+			best = cell + step
+			best_gap = gap
+	return best
+
 
 ## The grid step from a door's cell out through its back edge.
 static func back_step(facing: int) -> Vector2i:
@@ -67,7 +92,7 @@ static func outside_door_problem(grid: BuildGrid, anchor: Vector2i, facing: int)
 ## `point`. With neither, it returns `fallback`, so the refusal says the cell
 ## is not on the edge.
 static func auto_facing(grid: BuildGrid, def_id: StringName, point: Vector3, fallback: int) -> int:
-	var cell := grid.world_to_cell(point)
+	var cell := cell_under(grid, point)
 	var offset := point - grid.cell_to_world(cell)
 	var best := fallback
 	var best_tier := 2
