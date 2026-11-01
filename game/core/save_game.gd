@@ -434,11 +434,16 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	# The spots are derived past the security lanes' exit cells, which the
 	# runtime reads from its host's layout (a live sim binds it in bind()).
 	sim.security.bind(sim)
-	# The standing-spot check PassengerSim.from_snapshot() runs at install.
+	# The checks PassengerSim.from_snapshot() runs at install: info desks,
+	# standing spots, then boarding files.
 	var by_id := {}
 	for p: Passenger in loaded["passengers"]:
 		by_id[p.id] = p
-	var held := sim.checked_standing(data, by_id)
+	var held := sim.checked_info_desks(data, by_id, loaded["tick"])
+	if not held.has("error"):
+		held = sim.checked_standing(data, by_id)
+	if not held.has("error"):
+		held = sim.checked_boarding(data, by_id)
 	if held.has("error"):
 		sim.free()
 		return str(held["error"])
