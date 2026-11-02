@@ -6,7 +6,7 @@ extends SceneTree
 ## its card is pressed and the pointer (BuildMode.pointer_override) is put on:
 ##   1. free floor: the Templates page with its Save room and template cards,
 ##      the green paste ghost (room slab and both pieces), "Cafe 5x3: click to
-##      place, R turns it" on the status line and the cost on the cost line;
+##      place  R rotate" on the status line and the cost on the cost line;
 ##   2. the saved cafe: the red ghost and "Cafe 5x3  Overlaps another room";
 ##   3. free floor after R: the turned 3x5 ghost, green;
 ##   4. after the click: the pasted, turned cafe with its pieces built.
@@ -193,11 +193,11 @@ func _plates() -> void:
 	var template := _paste.library.get_template(0)
 	_point_at(FREE_CENTRE)
 	await _frames(6)
-	var hint := TemplatePaste.PLACE_HINT % template.name
+	var hint := RotateHint.compose(TemplatePaste.PLACE_HINT % template.name, _build)
 	await _ghost_plate("valid", template.rect_at(FREE_CENTRE, 0), true, hint, true)
 	_point_at(OVER_CAFE)
 	await _frames(6)
-	var refused := "%s  %s" % [template.name, "Overlaps another room"]
+	var refused := RotateHint.compose("%s  %s" % [template.name, "Overlaps another room"], _build)
 	await _ghost_plate("refused", template.rect_at(OVER_CAFE, 0), false, refused, false)
 	_paste.rotate_turns()
 	_point_at(FREE_CENTRE)

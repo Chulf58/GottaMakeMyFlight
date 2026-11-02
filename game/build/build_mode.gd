@@ -150,7 +150,7 @@ const BELT_HINT := "Drag to lay a belt"
 const NOT_IN_LANE := "Not part of a lane"
 ## The status line over an item placed inside a room whose front cell falls
 ## outside it: the room does not count the item (FacilitySlots.piece_inside).
-const FRONT_OUTSIDE_ROOM := "Its front is outside the room, so it will not count. R turns it"
+const FRONT_OUTSIDE_ROOM := "Its front is outside the room, so it will not count"
 ## The status line while a rectangle drag is held by the pointer being over the
 ## HUD: the rectangle keeps its last size and a release applies that one.
 const DRAG_OVER_UI := "Drag stops over the menu. Move back onto the floor to keep sizing"
