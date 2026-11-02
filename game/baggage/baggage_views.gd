@@ -10,8 +10,9 @@ extends Node3D
 ##
 ## A drawn bag turns at most TURN_PER_TICK a tick toward where its belt points,
 ## so a bag that turns on a cell centre (at a merge, or off a desk outlet) turns
-## over the next half cell instead of in one tick. A tick that does not follow
-## the last one recorded (a load) starts every bag over at its sim place.
+## over the next half cell instead of in one tick. A load (SaveGame.loaded)
+## starts every bag over at its sim place; a tick that does not follow the last
+## one recorded does the same when no load was seen.
 
 const BAG_SCENE := preload("res://assets/interior/baggage_bag.glb")
 const END_SCENE := preload("res://assets/interior/baggage_belt_end.glb")
@@ -33,6 +34,8 @@ const TURN_PER_TICK := PI / 2.0 * BaggageSim.BELT_MM / (Bag.CELL_MM / 2.0)
 
 @export var clock: SimClock
 @export var sim: BaggageSim
+## When set, a finished load starts every bag over at the loaded world.
+@export var save_game: SaveGame
 
 ## Bag id -> node.
 var _nodes := {}
@@ -49,6 +52,8 @@ func _ready() -> void:
 	_rest = mount_transform(END_SCENE, REST_MOUNT)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
+	if save_game != null:
+		save_game.loaded.connect(_on_loaded)
 
 
 func _process(_delta: float) -> void:
@@ -213,6 +218,18 @@ func sync() -> void:
 			_release(id)
 
 
+## Starts every bag over at the sim's place now, with no tick to run: a load
+## while paused, or back to the tick already showing, brings no tick for
+## _on_ticked to see a gap in. Releases every record, records the loaded
+## world with both ticks at its place, and draws it.
+func snap() -> void:
+	for id in _nodes.keys():
+		_release(id)
+	sync()
+	_last_tick = clock.tick if clock != null else -1
+	draw()
+
+
 ## Places every bag between its last two tick transforms.
 func draw() -> void:
 	var alpha := clock.alpha if clock != null else 1.0
@@ -231,6 +248,11 @@ func _on_ticked(tick: int) -> void:
 			_release(id)
 	_last_tick = tick
 	sync()
+
+
+func _on_loaded(ok: bool) -> void:
+	if ok:
+		snap()
 
 
 func _take() -> Node3D:

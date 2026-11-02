@@ -5,14 +5,16 @@ extends GdUnitTestSuite
 ## by at most its limit, a corner turns under TURN_PER_TICK so its drawn
 ## heading is the path's, a bag that turns on a cell centre (the side desk's
 ## bag turning onto the line at its feed, (6, 7)) turns over the next half
-## cell and is drawn slerped between ticks, and after a load every bag starts
-## over at its sim place.
+## cell and is drawn slerped between ticks, and after a load (a tick later, none
+## later while paused, or to the tick already showing) every bag starts over at
+## its sim place.
 
 const EPS := 0.0001
 
 var _world: BagTestWorld
 var _views: BaggageViews
 var _side := 0
+var _save: SaveGame
 
 
 func before_test() -> void:
@@ -22,6 +24,8 @@ func before_test() -> void:
 	_views = auto_free(BaggageViews.new())
 	_views.clock = _world.clock
 	_views.sim = _world.sim
+	_save = auto_free(SaveGame.new())
+	_views.save_game = _save
 	add_child(_views)
 
 
@@ -156,3 +160,67 @@ func test_after_a_load_back_every_bag_starts_over_at_its_sim_place() -> void:
 		Vector3(0.0, 0.0, -1.0), Vector3.ONE * EPS
 	)
 	assert_int(_views.active_count()).is_equal(1)
+
+
+func test_a_load_while_paused_snaps_every_bag_at_once() -> void:
+	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _side)
+	_world.run_to(5)
+	var sim_save := _world.sim.to_snapshot()
+	var clock_save := _world.clock.to_snapshot()
+	_world.run_to(60)
+	assert_vector(_drawn(bag.id).z).is_equal_approx(Vector3(1.0, 0.0, 0.0), Vector3.ONE * EPS)
+	assert_bool(_world.clock.from_snapshot(clock_save)).is_true()
+	assert_bool(_world.sim.from_snapshot(sim_save)).is_true()
+	# Paused: no tick follows the load, only SaveGame.loaded.
+	_save.loaded.emit(true)
+	var place := BaggageViews.belt_transform(_world.grid, _world.sim.get_bag(bag.id))
+	_views.draw()
+	var node := _views.node_for(bag.id)
+	assert_vector(node.transform.origin).is_equal_approx(place.origin, Vector3.ONE * EPS)
+	assert_vector(node.transform.basis.z).is_equal_approx(
+		Vector3(0.0, 0.0, -1.0), Vector3.ONE * EPS
+	)
+	assert_int(_views.active_count()).is_equal(1)
+	# The next tick follows the loaded clock, so it is a plain tick and not a gap.
+	_world.step()
+	assert_int(_views.active_count()).is_equal(1)
+
+
+func test_a_load_to_the_tick_already_showing_snaps_to_the_loaded_bag() -> void:
+	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _side)
+	_world.run_to(60)
+	# A second world on the same tick with its bag checked in later, so its bag
+	# lies somewhere else on the line.
+	var other := BagTestWorld.make(self, 600)
+	other.line()
+	var other_side := other.side_desk()
+	other.run_to(10)
+	other.sim.check_in(1, BagTestWorld.FLIGHT, other_side)
+	other.run_to(60)
+	_drawn(bag.id)
+	var shown_origin := _views.node_for(bag.id).transform.origin
+	assert_int(other.clock.tick).is_equal(_world.clock.tick)
+	assert_bool(_world.clock.from_snapshot(other.clock.to_snapshot())).is_true()
+	assert_bool(_world.sim.from_snapshot(other.sim.to_snapshot())).is_true()
+	_save.loaded.emit(true)
+	var loaded := _world.sim.get_bag(bag.id)
+	var place := BaggageViews.belt_transform(_world.grid, loaded)
+	_views.draw()
+	var node := _views.node_for(bag.id)
+	# Control: the loaded bag is not where the view drew the old one.
+	assert_float(place.origin.distance_to(shown_origin)).is_greater(0.3)
+	assert_vector(node.transform.origin).is_equal_approx(place.origin, Vector3.ONE * EPS)
+	assert_vector(node.transform.basis.z).is_equal_approx(place.basis.z, Vector3.ONE * EPS)
+	assert_int(_views.active_count()).is_equal(1)
+
+
+func test_a_failed_load_leaves_the_bags_as_they_were() -> void:
+	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _side)
+	_world.run_to(60)
+	var before := _drawn(bag.id)
+	var origin := _views.node_for(bag.id).transform.origin
+	_save.loaded.emit(false)
+	assert_vector(_views.node_for(bag.id).transform.origin).is_equal_approx(
+		origin, Vector3.ONE * EPS
+	)
+	assert_bool(_drawn(bag.id).is_equal_approx(before)).is_true()

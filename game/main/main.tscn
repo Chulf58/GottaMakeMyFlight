@@ -254,10 +254,11 @@ clock = NodePath("../SimClock")
 sim = NodePath("../PassengerSim")
 save_game = NodePath("../SaveGame")
 
-[node name="BaggageViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim")]
+[node name="BaggageViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game")]
 script = ExtResource("27_bagview")
 clock = NodePath("../SimClock")
 sim = NodePath("../BaggageSim")
+save_game = NodePath("../SaveGame")
 
 [node name="StaffCharacters" type="Node3D" parent="." node_paths=PackedStringArray("clock", "staff")]
 script = ExtResource("28_staffchars")
