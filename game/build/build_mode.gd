@@ -114,6 +114,7 @@ enum Tool {
 	LOUNGE_ROOM,
 	SHOWER_ROOM,
 	NAP_POD_ROOM,
+	BUY_LAND,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -329,6 +330,8 @@ var pointer_override := Vector2(-1.0, -1.0)
 var lane_hint_scans := 0
 ## Saved room templates and their paste (TemplatePaste), made a child in _ready().
 var templates := TemplatePaste.new()
+## The Buy land tool and the site's land plots (LandTool), made in _ready(); no land without a site.
+var land_tool: LandTool = null
 
 ## False once R is pressed, until a tool is picked again. While true, the
 ## door tools ignore `facing` and use DoorPlacement.auto_facing().
@@ -403,6 +406,7 @@ func _ready() -> void:
 		grid = SiteGrid.new(site)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
+	land_tool = LandTool.attach(self)
 	if starter_shell and not StarterShell.place(grid):
 		push_error("BuildMode: the starter shell does not fit this grid; it starts empty")
 	grid.graph_changed.connect(_on_lane_graph_changed)
@@ -552,6 +556,8 @@ func edit_at(point: Vector3) -> BuildEdit:
 ## step.
 func apply_at(point: Vector3) -> BuildResult:
 	# A landside action is not a grid action: it keeps its own undo record.
+	if tool == Tool.BUY_LAND:
+		return land_tool.buy_at(point) if land_tool.land != null else null
 	var landside_plan := landside_plan_at(point)
 	if landside_plan != null or _is_landside_tool():
 		return _apply_landside(landside_plan)
@@ -1135,9 +1141,8 @@ func _mouse_ground() -> Variant:
 func _update_ghost(point: Variant) -> void:
 	_pointer_on_grid = point != null and grid.in_bounds(grid.world_to_cell(point))
 	_landside_plan = null if is_dragging() else landside_plan_at(point)
-	if _landside_plan != null or _is_landside_tool():
-		_pointer_on_grid = point != null
-		_hover_landside(_landside_plan)
+	if _landside_plan != null or _is_landside_tool() or tool == Tool.BUY_LAND:
+		_hover_off_grid_tool(point)
 		return
 	if _area.active or _resize.active:
 		_draw_area()
@@ -1236,6 +1241,16 @@ func _hover_landside(plan: LandsidePlacement.Plan) -> void:
 	var valid := _area_remove_material if tool == Tool.REMOVE else _valid_material
 	LandsidePlacement.draw(_ghost, spots, plan, valid, _invalid_material, _marker_material)
 	_set_status(plan.text)
+
+
+## Hover for a landside tool, or Buy land (LandTool draws its own plot ghost).
+func _hover_off_grid_tool(point: Variant) -> void:
+	if tool != Tool.BUY_LAND:
+		_pointer_on_grid = point != null
+		_hover_landside(_landside_plan)
+		return
+	_ghost.visible = false
+	_set_status(land_tool.hover(point) if land_tool.land != null else "")
 
 
 func _landside_key(plan: LandsidePlacement.Plan) -> String:

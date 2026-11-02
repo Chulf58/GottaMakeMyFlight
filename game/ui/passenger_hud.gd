@@ -4,7 +4,8 @@ extends CanvasLayer
 ## counts, today's departures (DepartureList), and the speed buttons (Space
 ## toggles the pause, Shift+1/2/3 set the speed; plain number keys stay the
 ## build tool keys). On the left edge, the optional DeparturesBoard (B shows
-## and hides it).
+## and hides it). Left of the flight panel, under the top row, the alert
+## cards (AlertStack), which clear themselves and jump the camera when clicked.
 ## Bottom-left: the followed passenger's story, kept left of BuildMenu's
 ## centre column and growing upward when it wraps. Bottom-right: a collapsed
 ## Debug panel (a 300-passenger batch, a starter terminal on the Toon doors B
@@ -147,7 +148,7 @@ const ACTIVITY_BROWSE_TEXT := {
 @export var sim: PassengerSim:
 	set(value):
 		sim = value
-		_dirty_alert.sim = value
+		_alerts.sim = value
 @export var views: PassengerViews
 ## The landside's vehicles, for clicking a car or taxi; optional.
 @export var landside_views: LandsideViews
@@ -157,9 +158,11 @@ const ACTIVITY_BROWSE_TEXT := {
 @export var build_mode: BuildMode
 ## Where the departures board keeps its on/off choice; tests use their own.
 var departures_settings_path := DeparturesBoard.SETTINGS_PATH
+## Where the alert cards keep their on/off choice; tests use their own.
+var alert_settings_path := HudFlagSetting.PATH
 
 var _departures_board := DeparturesBoard.new()
-var _dirty_alert := DirtyAlert.new()
+var _alerts := AlertStack.new()
 var _counts_label := Label.new()
 var _departures_label := Label.new()
 var _seed_label := Label.new()
@@ -228,12 +231,14 @@ func _ready() -> void:
 	_departures_board.clock = clock
 	_departures_board.settings_path = departures_settings_path
 	add_child(_departures_board)
-	# The offer sheet is a sibling layer; the card gives way to it when open.
+	# The offer sheet is a sibling layer; the alert cards give way to it when open.
 	# The panel comes later in the scene, so it has no sheet until its _ready.
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel
 	if offers != null:
-		_dirty_alert.covered = func() -> bool: return offers.is_node_ready() and offers.is_open()
-	add_child(_dirty_alert)
+		_alerts.covered = func() -> bool: return offers.is_node_ready() and offers.is_open()
+	_alerts.camera = camera
+	_alerts.settings_path = alert_settings_path
+	add_child(_alerts)
 	if flights != null:
 		flights.doors_closed.connect(_on_doors_closed)
 	_build_debug()
@@ -255,6 +260,7 @@ func _ready() -> void:
 	_panel_room.camera = camera
 	_panel_room.scene_root = get_parent()
 	_panel_room.result_card = _result
+	_panel_room.alert_stack = _alerts
 	add_child(_panel_room)
 	_frame_start_view()
 	refresh()
@@ -319,9 +325,9 @@ func _shortcut_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## The dirty-terminal alert card, for tests and probes.
+## The dirty-terminal alert, one of the alert cards' causes, for tests and probes.
 func dirty_alert() -> DirtyAlert:
-	return _dirty_alert
+	return _alerts.dirty_source()
 
 
 func refresh() -> void:
@@ -337,7 +343,7 @@ func refresh() -> void:
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
 	_departures_board.refresh()
-	_dirty_alert.refresh()
+	_alerts.refresh()
 	_seed_label.text = seed_text()
 	_seed_label.visible = _seed_label.text != ""
 	_status_label.text = _status
@@ -680,7 +686,7 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
-		_dirty_alert.reset()
+		_alerts.reset()
 		_frame_start_view()
 
 

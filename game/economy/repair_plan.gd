@@ -68,6 +68,11 @@ extends RefCounted
 ## The finished plan leaves out a wall it places and later takes down again
 ## (RepairEnclosure.without_undone_walls()).
 ##
+## On the site's grid (SiteGrid) with land plots, the plan keeps to the land
+## the player owns (LandPlots): every cell not owned counts as one that must
+## stay without floor, so no floor, piece or door goes there, as the live grid
+## would refuse it. A wall on the edge of owned land may still stand.
+##
 ## Prices come from BuildTransaction. least_balance() is the money the plan
 ## needs at the start when its edits are bought one by one in order, each
 ## refund paying toward the later edits. The plan takes the cheapest choice
@@ -135,8 +140,11 @@ var _src := PackedInt32Array()
 var _order: Array[Vector2i] = []
 ## Cells a new piece may not cover: the walk planned so far.
 var _kept := {}
-## Cells beyond a standing door's back edge, which must stay without floor.
+## Cells beyond a standing door's back edge, which must stay without floor,
+## and every cell on land the player does not own (_unowned).
 var _no_floor := {}
+## The cells of the plan's grid on land the player does not own, as a set.
+var _unowned := {}
 ## Interaction cells and staff spots of standing objects, and cells some lane
 ## already holds.
 var _reserved := {}
@@ -247,13 +255,14 @@ static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 static func make(grid: BuildGrid, site: SiteDefinition = null, stand := {}) -> RepairPlan:
 	var source := grid.to_snapshot()
 	var whole := Rect2i(Vector2i.ZERO, grid.size)
+	var land: LandPlots = (grid as SiteGrid).land if grid is SiteGrid else null
 	if site == null:
-		return _made_on(grid, source, whole, null, stand)
+		return _made_on(grid, source, whole, null, stand, land)
 	var area := _site_area(grid, source, site, stand)
-	var plan := _made_on(grid, source, area, site, stand)
+	var plan := _made_on(grid, source, area, site, stand, land)
 	if plan.ok or area == whole:
 		return plan
-	var on_whole := _made_on(grid, source, whole, site, stand)
+	var on_whole := _made_on(grid, source, whole, site, stand, land)
 	on_whole.undo_failures += plan.undo_failures
 	return on_whole
 
@@ -263,9 +272,21 @@ static func make(grid: BuildGrid, site: SiteDefinition = null, stand := {}) -> R
 ## grid is partial: one that finds no repair pushes nothing and prices no
 ## fallback, since make() goes on to the whole grid.
 static func _made_on(
-	grid: BuildGrid, source: Dictionary, area: Rect2i, site: SiteDefinition, stand: Dictionary
+	grid: BuildGrid,
+	source: Dictionary,
+	area: Rect2i,
+	site: SiteDefinition,
+	stand: Dictionary,
+	land: LandPlots = null
 ) -> RepairPlan:
 	var plan := RepairPlan.new()
+	if land != null:
+		for y in area.size.y:
+			for x in area.size.x:
+				if not land.owns_cell(area.position + Vector2i(x, y)):
+					plan._unowned[Vector2i(x, y)] = true
+	# Before the first leg's _refresh_sets() too: the entrance sources come first.
+	plan._no_floor = plan._unowned.duplicate()
 	if site != null:
 		plan._partial = area != Rect2i(Vector2i.ZERO, grid.size)
 		source = _cropped(source, area)
@@ -614,7 +635,7 @@ static func _cheaper(a: Dictionary, b: Dictionary) -> bool:
 func _refresh_sets(leg: int) -> void:
 	_label_regions()
 	_forbidden = LAND if leg == Leg.EXIT else AIR
-	_no_floor.clear()
+	_no_floor = _unowned.duplicate()
 	for way in DoorPlacement.ways_out(_grid):
 		_no_floor[way[0] + way[1]] = true
 	_reserved.clear()

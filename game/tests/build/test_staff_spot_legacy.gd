@@ -88,6 +88,9 @@ func test_the_hand_built_terminal_builds_with_every_spot_free() -> void:
 	var mode := BuildMode.new()
 	mode.site = SITE
 	add_child(mode)
+	# Building on land the player does not own is refused (LandPlots); the hand-built
+	# terminal lies off a new game's land, so the whole site is owned.
+	LandKit.own_all(mode.land_tool.land)
 	var terminal := HandBuiltTerminal.new(mode)
 	terminal.build()
 	print("hand-built: applied %d, refused %s" % [terminal.applied, terminal.refused])

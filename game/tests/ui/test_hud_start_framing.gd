@@ -14,6 +14,9 @@ func before_test() -> void:
 	_main = SaveTestKit.boot(self, SEED)
 	_camera = _main.get_node("TycoonCamera")
 	_mode = _main.get_node("BuildMode")
+	# The edits here paint floor off a new game's land and building on unowned
+	# land is refused (LandPlots), so plots are bought out to it; a save accepts that.
+	LandKit.buy_to(_mode.land_tool.land, Vector2i(0, 0))
 
 
 func after_test() -> void:

@@ -42,12 +42,15 @@ func after_test() -> void:
 	_save.pending_path = ""
 
 
+## The first bare cell on land the player owns (building elsewhere is refused,
+## LandPlots).
 func _floor_cell() -> Vector2i:
-	var grid := (_main.get_node("BuildMode") as BuildMode).grid
+	var mode: BuildMode = _main.get_node("BuildMode")
+	var grid := mode.grid
 	for y in grid.size.y:
 		for x in grid.size.x:
 			var cell := Vector2i(x, y)
-			if grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
+			if grid.floor_at(cell) == BuildGrid.FLOOR_NONE and mode.land_tool.land.owns_cell(cell):
 				return cell
 	return Vector2i(-1, -1)
 

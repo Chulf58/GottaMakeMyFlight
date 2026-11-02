@@ -58,7 +58,7 @@ signal loaded(ok: bool)
 ## 8: the live plane stand (part "apron", ApronStand) and longer TAXI_IN and
 ## TAXI_OUT phases, which move every flight's start ticks; version 7 saves
 ## are refused (no migration before a release).
-const SAVE_VERSION := 8
+const SAVE_VERSION := 9
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -194,6 +194,17 @@ func parts() -> Array[SavePart]:
 			build_mode.templates.library.from_snapshot
 		),
 	]
+	if build_mode.land_tool != null and build_mode.land_tool.land != null:
+		# Right after the grid, whose built cells must stand on owned land.
+		list.insert(
+			1,
+			SavePart.new(
+				"land",
+				build_mode.land_tool.land.to_snapshot,
+				_stage_land,
+				build_mode.land_tool.land.from_snapshot
+			)
+		)
 	if apron != null:
 		# After the flights, which say whether the stand is in use, and
 		# before the passengers, whose exits walk to its plane door.
@@ -437,6 +448,15 @@ func _stage_grid(data: Dictionary, staged: Dictionary) -> String:
 		return "it was refused (see the error log)"
 	staged["grid"] = grid
 	return ""
+
+
+## The land plots (LandPlots): the site's plot counts, plots on the site, and
+## every built cell of the staged grid on owned land.
+func _stage_land(data: Dictionary, staged: Dictionary) -> String:
+	var problem := LandPlots.problem(data, build_mode.site)
+	if problem == "" and staged.has("grid"):
+		problem = LandPlots.grid_problem(data, build_mode.site, staged["grid"])
+	return problem
 
 
 ## Checked against the staged grid. Keeps the loaded passenger state and a

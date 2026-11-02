@@ -96,19 +96,61 @@ func test_a_front_carried_case_is_on_its_grip_and_a_displaced_one_is_not() -> vo
 	assert_float(off[0]).is_greater(off[1])
 
 
-## Both ends of the segment lie on the drawn case: the top face, its handle
-## edge and its middle (read here from the body mesh, not through the check).
+## Every grip point of the case lies on its drawn body mesh (within 1 mm of one
+## of its triangles, read here from the mesh, not through the check): the side
+## carry's top edge on its handle face (the chamfer's edge, also
+## CarryOnProps.grip_anchor()), the top of its handle and the middle and edge of
+## its top end. Control: the corner of the mesh's bounds at that edge (the
+## handle's height at the top end, the side carry's grip before 2026-11-02) is
+## not on it.
 func test_the_segment_ends_lie_on_the_cases_own_top() -> void:
 	var id: int = await _case_in_front()
 	assert_int(id).is_greater_equal(0)
 	var props := _views.carry_on_props()
 	var node: Node3D = props.bag_state(id, 0)["node"]
-	var box := (node.find_child("CarryOnBag_Body", true, false) as MeshInstance3D).get_aabb()
+	var body := node.find_child("CarryOnBag_Body", true, false) as MeshInstance3D
+	var to_case := node.global_transform.affine_inverse()
+	var faces: Array[Vector3] = []
+	for v: Vector3 in body.mesh.get_faces():
+		faces.append(to_case * (body.global_transform * v))
 	var own := FloatCheck.own_grips(props, id, 0)
-	var edge := node.global_transform.affine_inverse() * own[0]
-	var top := node.global_transform.affine_inverse() * own[1]
-	assert_float(edge.y).is_equal_approx(box.end.y, 0.001)
-	assert_float(edge.z).is_equal_approx(box.end.z, 0.001)
-	assert_float(top.y).is_equal_approx(box.end.y, 0.001)
-	assert_float(top.x).is_equal_approx(box.get_center().x, 0.001)
-	assert_float(top.z).is_equal_approx(box.get_center().z, 0.001)
+	assert_int(own.size()).is_equal(4)
+	for at: Vector3 in own:
+		var local := to_case * at
+		print("grip point %s on the mesh: %s" % [local, _on_mesh(faces, local)])
+		assert_bool(_on_mesh(faces, local)).is_true()
+	var edge := to_case * own[0]
+	var box := body.get_aabb()
+	var depth := CarryLead.STALL_CASE_DEPTH_M
+	var cut := CarryLead.STALL_CASE_CHAMFER_M
+	assert_vector(edge).is_equal_approx(Vector3(0.0, depth, box.end.z - cut), Vector3.ONE * 0.001)
+	var anchor := CarryOnProps.grip_anchor(SecurityLooks.Kind.CASE)
+	assert_vector(anchor).is_equal_approx(edge, Vector3.ONE * 0.001)
+	var corner := Vector3(0.0, box.end.y, box.end.z)
+	print("bounds corner %s on the mesh: %s" % [corner, _on_mesh(faces, corner)])
+	assert_bool(_on_mesh(faces, corner)).is_false()
+
+
+## Whether `at` is within 1 mm of one of the triangles `faces` (three points
+## each): inside one, off its plane by no more, or that near one of its edges.
+func _on_mesh(faces: Array[Vector3], at: Vector3) -> bool:
+	for t in range(0, faces.size(), 3):
+		var tri: Array[Vector3] = [faces[t], faces[t + 1], faces[t + 2]]
+		for e in 3:
+			var near := Geometry3D.get_closest_point_to_segment(at, tri[e], tri[(e + 1) % 3])
+			if near.distance_to(at) < 0.001:
+				return true
+		if (tri[1] - tri[0]).cross(tri[2] - tri[0]).length() < 0.0000001:
+			continue
+		var plane := Plane(tri[0], tri[1], tri[2])
+		var bary := Geometry3D.get_triangle_barycentric_coords(
+			plane.project(at), tri[0], tri[1], tri[2]
+		)
+		if (
+			bary.x >= 0.0
+			and bary.y >= 0.0
+			and bary.z >= 0.0
+			and absf(plane.distance_to(at)) < 0.001
+		):
+			return true
+	return false

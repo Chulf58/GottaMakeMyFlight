@@ -3,14 +3,17 @@ extends Node
 ## Keeps the terminal out from under the HUD panels (decision camera-makes-
 ## room-for-open-panels-the-build-tray-banner-and). It finds which panels are
 ## open (the build tray with its status and cost lines, the Staff card, the
-## banner above them, the Offers sheet and the flight result card), takes the
+## banner above them, the Offers sheet and the flight result card), and the
+## alert cards with their history tray (AlertStack.room_rect()), takes the
 ## largest screen rectangle they leave free, and tells the TycoonCamera, which
 ## puts its focus at the middle of that rectangle and, while it is still on the
 ## start view, refits the start area inside it.
 ##
 ## Only a panel opening or closing refits the distance; a panel that merely
 ## changes size (a banner line coming or going as the player builds) moves the
-## view a little and never zooms it. The camera does nothing on a build edit.
+## view a little and never zooms it. The alert cards are counted the same way:
+## a card coming or going only shifts the view. The camera does nothing on a
+## build edit.
 
 ## A cut that would leave less than this share of the viewport's width or
 ## height is not taken, so a small window never shrinks the view to nothing.
@@ -29,6 +32,9 @@ var camera: TycoonCamera
 var scene_root: Node
 ## The result card, held by PassengerHud.
 var result_card: Control
+## The alert card stack, held by PassengerHud; its rect is cut but never
+## counts as a panel opening or closing.
+var alert_stack: AlertStack
 
 var _last_key := 0
 var _refit_frames := 0
@@ -120,7 +126,8 @@ func open_key() -> int:
 	return key
 
 
-## The screen rectangle of every open panel, the bottom ones first.
+## The screen rectangle of every open panel, the bottom ones first, then the
+## alert cards.
 func open_rects() -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	var menu := _menu()
@@ -129,6 +136,10 @@ func open_rects() -> Array[Rect2]:
 	for panel in _panels():
 		if panel != null and panel.is_visible_in_tree():
 			rects.append(panel.get_global_rect())
+	if alert_stack != null:
+		var alerts := alert_stack.room_rect()
+		if alerts.has_area():
+			rects.append(alerts)
 	return rects
 
 

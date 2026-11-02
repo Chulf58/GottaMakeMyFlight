@@ -18,7 +18,8 @@ const RULED := {
 }
 ## The pages added after the ruling's eleven, and the group each joined.
 const LATER := {"Dining": "Food", "Money": "Services", "Activities": "Leisure"}
-## The bar buttons in order, by their tooltips.
+## The bar buttons in order, by their tooltips. Land (the Buy land tool, board
+## ee9914e6) came after the ruling, beside Landside.
 const BAR := [
 	"Structure",
 	"Doors",
@@ -30,6 +31,7 @@ const BAR := [
 	"Toilets",
 	"Kiosk",
 	"Landside",
+	"Land",
 	"Baggage",
 	"Decor",
 	"Food",

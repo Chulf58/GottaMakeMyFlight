@@ -25,6 +25,9 @@ func before() -> void:
 	_staff = _main.get_node("StaffPanel")
 	_offers = _main.get_node("OfferPanel")
 	_mode = _main.get_node("BuildMode")
+	# The build edit here paints floor off a new game's land, and building on land
+	# the player does not own is refused (LandPlots), so the whole site is owned.
+	LandKit.own_all(_mode.land_tool.land)
 
 
 func after() -> void:

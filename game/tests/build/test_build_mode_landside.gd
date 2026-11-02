@@ -31,6 +31,9 @@ func before_test() -> void:
 	_mode.finances = _finances
 	_mode.landside = _sim
 	add_child(_mode)
+	# Building on land the player does not own is refused (LandPlots); the cells
+	# here lie off a new game's land, so the whole site is owned.
+	LandKit.own_all(_mode.land_tool.land)
 	_rng.seed = 5
 
 

@@ -73,7 +73,7 @@ func test_off_the_floor_a_case_turns_to_hang_sooner() -> void:
 
 
 ## Lifting a hard case off the floor into the hand the grip is held
-## CarryOnProps.FRONT_PALM_M over the case's carry point (its top edge), so the
+## CarryLead.FLOOR_PALM_M over the case's carry point (its top edge), so the
 ## arm reaching out level ahead is over the case's top, not on it, and the case
 ## is placed from that held point; by the end of the carry it is held by its
 ## carry point again, as in the side carry. Control: off a tray the grip is on
@@ -101,7 +101,7 @@ func test_a_case_off_the_floor_is_held_with_the_palm_over_its_top() -> void:
 		assert_float(reached.y).is_equal_approx((over[from_at] as Vector3).y, 0.0001)
 		var done := CarryLead.plan(bag, 1.0, lying, hanging, Transform3D(), flags, _body())
 		assert_vector(done["anchor"] as Vector3).is_equal_approx(edge, Vector3.ONE * 0.0001)
-	var palm := CarryOnProps.FRONT_PALM_M
+	var palm := CarryLead.FLOOR_PALM_M
 	assert_vector(over[FLOOR_AT] as Vector3).is_equal_approx(
 		Vector3(0.0, palm, 0.0), Vector3.ONE * 0.0001
 	)

@@ -12,13 +12,19 @@ extends BuildGrid
 ## guard, so every trial copy BuildUndo.trial_copy_of() makes (an undo, a
 ## template paste, the starter shell) refuses what the live grid would.
 ##
+## It also asks `land` (LandPlots.edit_problem()) whether the edit builds on
+## land the player does not own; clones share the same land.
+##
 ## Not guaranteed: the repair plan works on plain BuildGrid copies of a part
-## of the site (RepairPlan), without the guard.
+## of the site (RepairPlan), without the guard; it keeps off unowned land
+## itself.
 
 var site: SiteDefinition
 ## Called as guard(grid, edit) before every validation; returns a refusal or
 ## null. Not set: nothing is guarded.
 var guard := Callable()
+## The site's land plots; null (a test grid): every cell counts as owned.
+var land: LandPlots = null
 
 
 func _init(on_site: SiteDefinition) -> void:
@@ -31,10 +37,15 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 		var problem: BuildResult = guard.call(self, edit)
 		if problem != null:
 			return problem
+	if land != null:
+		var unowned := land.edit_problem(edit)
+		if unowned != null:
+			return unowned
 	return super(edit, check_reach)
 
 
 func _blank_copy() -> BuildGrid:
 	var copy := SiteGrid.new(site)
 	copy.guard = guard
+	copy.land = land
 	return copy
