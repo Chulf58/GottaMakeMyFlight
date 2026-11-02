@@ -4,8 +4,8 @@ extends GdUnitTestSuite
 ## rooms-and-retail-pieces-go-on-stores-pages-behind-the-furniture-button): one
 ## Money page, since HUD 6/7 the last page of the Services group after Desks
 ## and Care (it followed Fashion behind the Furniture button before), holding
-## the exchange room, its counter, the ATM room and the ATM, four cards and the
-## Rotate and Next column. The exchange counter and the ATM left the Desks page
+## the exchange room, its counter, the ATM room and the ATM, four cards and the Next
+## column. The exchange counter and the ATM left the Desks page
 ## for it. Every card shows a rendered thumbnail, never a placeholder tile.
 
 const TOOLS := [
@@ -119,7 +119,7 @@ func test_every_money_card_shows_its_rendered_thumbnail() -> void:
 		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 
 
-func test_the_money_tray_fits_the_column_with_rotate_and_next() -> void:
+func test_the_money_tray_fits_the_column_with_next() -> void:
 	var page := _index("Money")
 	_menu.press_category(page)
 	var need := _menu.tray().get_combined_minimum_size()

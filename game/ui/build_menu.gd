@@ -53,9 +53,8 @@ const CATEGORIES := [
 	{"name": "Security", "tools": [BuildMode.Tool.SCANNER]},
 	# The security lane's four parts in flow order (decisions security-lane-
 	# parts-are-placed-separately-tray-table-x-ray-b and security-lane-parts-
-	# get-their-own-lane-build-category): five cards and the rotate card are
-	# wider than COLUMN_W, so they get a tray of their own, right after
-	# Security.
+	# get-their-own-lane-build-category): four parts get a tray of their own,
+	# right after Security.
 	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
 	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
 	# The gate desk (gates 1b) makes a gate of the north exit it stands by.
@@ -70,8 +69,8 @@ const CATEGORIES := [
 		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
 	},
 	# The toilet room and its two pieces (Toilets 5/5). Cafe holds three cards
-	# and Rotate already; six cards and Rotate are wider than COLUMN_W, so the
-	# toilet gets a tray of its own, as the Lane did.
+	# already; six cards are wider than COLUMN_W, so the toilet gets a tray of
+	# its own, as the Lane did.
 	{
 		"name": "Toilets",
 		"tools":
@@ -112,8 +111,8 @@ const CATEGORIES := [
 	# Services, Leisure and Shops. A group's first page has the bar button and
 	# carries the group's name ("group"); a later page ("page": true) has none
 	# and is reached by the Next card on the page before it, and the group's
-	# last page leads back to its first. A tray holds four cards and the Rotate
-	# and Next column in COLUMN_W, so a group with more pieces pages inside its
+	# last page leads back to its first. A tray holds four cards and the Next
+	# column in COLUMN_W, so a group with more pieces pages inside its
 	# tray. The Dining, Money and Activities pages joined Food, Services and
 	# Leisure: the ruling named the eleven pages there were before them.
 	{"name": "Furniture", "group": "Decor", "tools": FurnitureTools.PAGES[0]},
@@ -131,7 +130,7 @@ const CATEGORIES := [
 	{"name": "Desks", "group": "Services", "tools": FurnitureTools.PAGES[4]},
 	{"name": "Care", "tools": FurnitureTools.PAGES[5], "page": true},
 	# The exchange and the ATM (F4-5b) share one Money page: each room with its
-	# one piece, four cards that fit beside the Rotate and Next column.
+	# one piece, four cards that fit beside the Next column.
 	{
 		"name": "Money",
 		"tools":
@@ -296,7 +295,7 @@ const THUMB_SIZE := 72.0
 const CARD_HINT_FONT_SIZE := 14
 ## A bar button: an icon (BarIcons) with its name in the tooltip.
 const CATEGORY_SIZE := Vector2(52.0, 44.0)
-const ROTATE_SIZE := Vector2(72.0, 176.0)
+const NEXT_SIZE := Vector2(72.0, 176.0)
 
 ## The one HUD theme (decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
 ## A CanvasLayer does not pass a theme down, so every top-level HUD Control
@@ -927,18 +926,14 @@ func _build_tray() -> void:
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		_tray.add_child(row)
 		_rows.append(row)
-		var turns := false
 		for tool in categories()[i]["tools"]:
 			if item(tool).is_empty():
 				continue
 			var button := _make_card(tool)
 			row.add_child(button)
 			_cards[tool] = button
-			turns = turns or BuildMode.tool_object(tool) != &""
 		if next_page(i) != NO_CATEGORY:
-			row.add_child(_make_rotate_and_next_cards(next_page(i)))
-		elif turns:
-			row.add_child(_make_rotate_card())
+			row.add_child(_make_next_card(next_page(i)))
 
 
 func _make_card(tool: BuildMode.Tool) -> Button:
@@ -987,36 +982,18 @@ static func _no_key_hint(tool: BuildMode.Tool) -> String:
 	return "Drag" if BuildMode.AREA_TOOLS.has(tool) else "Click"
 
 
-func _make_rotate_card(height := ROTATE_SIZE.y) -> Button:
-	var button := Button.new()
-	button.name = "CardRotate"
-	button.custom_minimum_size = Vector2(ROTATE_SIZE.x, height)
-	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(func() -> void: build_mode.rotate_facing())
-	var column := _card_column(button)
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	_card_label(column, "Rotate", &"HudCardName")
-	_card_label(column, "Key R", &"HudHint")
-	return button
-
-
-## The Rotate card and, under it, the Next card that opens the page after this one.
-func _make_rotate_and_next_cards(next: int) -> VBoxContainer:
-	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 6)
-	var half := (ROTATE_SIZE.y - 6.0) / 2.0
-	stack.add_child(_make_rotate_card(half))
+## The Next card, which opens the page after this one.
+func _make_next_card(next: int) -> Button:
 	var button := Button.new()
 	button.name = "CardNext"
-	button.custom_minimum_size = Vector2(ROTATE_SIZE.x, half)
+	button.custom_minimum_size = NEXT_SIZE
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(press_category.bind(next))
 	var column := _card_column(button)
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	_card_label(column, "Next", &"HudCardName")
 	_card_label(column, categories()[next]["name"], &"HudHint")
-	stack.add_child(button)
-	return stack
+	return button
 
 
 func _card_column(button: Button) -> VBoxContainer:
