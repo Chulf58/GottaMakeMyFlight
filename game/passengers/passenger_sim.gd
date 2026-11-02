@@ -999,9 +999,14 @@ func _beat(p: Passenger) -> void:
 	if p.late:
 		change -= 1
 	# Standing at the gate for want of a seat wears on a passenger (user ruling
-	# 342df92a): a seat gains a point a beat, standing loses one every few.
+	# 342df92a): a seat gains a point a beat, standing on a spot loses one every
+	# few.
 	@warning_ignore("integer_division")
-	if p.stage == Passenger.Stage.STANDING and posmod(tick / BEAT_TICKS, STANDING_MOOD_BEATS) == 0:
+	if (
+		p.stage == Passenger.Stage.STANDING
+		and standing.spot_of(p.id) != StandingSpots.NO_SPOT
+		and posmod(tick / BEAT_TICKS, STANDING_MOOD_BEATS) == 0
+	):
 		change -= 1
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
 	decor.beat(p)
