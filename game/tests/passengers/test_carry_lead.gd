@@ -250,7 +250,9 @@ func test_a_stall_case_is_held_by_its_top_and_round_its_edge_as_it_tips() -> voi
 	bag["was"] = (SecurityLooks.Home.FLOOR * 2 + 0) * 2
 	var box := CarryOnProps.bag_box(SecurityLooks.Kind.CASE)
 	var top := CarryLead.stall_top(SecurityLooks.Kind.CASE, Vector3.ZERO)
-	var corner := CarryOnProps.grip_anchor(SecurityLooks.Kind.CASE)
+	# The bounds' corner itself (grip_anchor() was this until 2026-11-02; it is
+	# now on the mesh's top edge, CaseGrip.edge()).
+	var corner := Vector3(0.0, box.end.y, box.end.z)
 	# Standing on its end (its length up), and flat in the hand in front.
 	var start := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(0.0, 0.24, 0.5))
 	var want := Transform3D(Basis(), Vector3(0.0, 0.9, 0.3))

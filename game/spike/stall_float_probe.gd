@@ -26,8 +26,8 @@ extends SceneTree
 ## case is held from above, its mesh GRIP_OVER_M at most under the grip, so a
 ## hand beside it has none under it; a roller by its bar, its mesh GRIP_NEAR_M
 ## at most from the grip, which may be inside the bar), with its control: the
-## same on a hard case's old stall grip point, its bounds' top corner
-## (CarryOnProps.grip_anchor), which must miss on its set-downs. One
+## same on a hard case's old stall grip point, its bounds' top corner (the
+## side carry's grip_anchor before 2026-11-02), which must miss on its set-downs. One
 ## bag of each visitor (VISITORS) has its set-down and pick-up in the stall
 ## caught as they start (the clock pauses with no time over) and plated at each
 ## MOMENTS window, the paused clock stepped there a third of a tick a
@@ -525,7 +525,8 @@ func _check_grip(
 		if seen[1] < GRIP_PRINTS:
 			print("GRIP_MISS %s k=%.2f over_m=%.3f near_m=%.3f" % [key, k, over, near])
 	if kind == SecurityLooks.Kind.CASE and move.ends_with(">floor"):
-		var old: Vector3 = node.global_transform * CarryOnProps.grip_anchor(kind)
+		var box := CarryOnProps.bag_box(kind)
+		var old: Vector3 = node.global_transform * Vector3(0.0, box.end.y, box.end.z)
 		var old_over := _over(node, old)
 		_grip_control[0] += 1
 		_grip_control[1] += int(old_over > GRIP_OVER_M)

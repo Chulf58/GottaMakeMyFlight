@@ -27,12 +27,17 @@ const OLD_OVERHEAD_AHEAD_M := 0.12
 ## (anti-pattern a-float-hand-gap-of-0-does-not-prove-a-carried-bag-is-grippe).
 const GRIP_ON_M := 0.03
 const GRIP_ON_PRINTS := 40
+## Two vertex coordinates of a mesh this close are the same.
+const SAME_M := 0.001
+
+## case_handle_points() by body mesh and its transform in the case.
+static var _case_points := {}
 
 
 ## The points of bag `i` of passenger `id` a hand holds it by, as drawn now
 ## (world): a backpack's grab loop (its top), a shoulder bag's strap bar, a
-## roller's grip bar and carry handle, a hard case's handle edge, the top of
-## its handle under the palm carried in front and the middle of its top end
+## roller's grip bar and carry handle, a hard case's top edge on its handle
+## face, the top of its handle and the middle and handle edge of its top end
 ## (case_handle_points()).
 static func own_grips(props: CarryOnProps, id: int, i: int) -> Array[Vector3]:
 	var bag: Node3D = props.props_of(id)["bags"][i]
@@ -47,38 +52,91 @@ static func own_grips(props: CarryOnProps, id: int, i: int) -> Array[Vector3]:
 			var top := bag.find_child("Pull_Top", true, false) as Node3D
 			var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
 			return [bar, xf * CarryOnProps.ROLLER_HANDLE]
-	var handle := case_handle_points(bag)
-	return [xf * handle[0], xf * handle[1], xf * handle[2]]
+	var out: Array[Vector3] = []
+	for at in case_handle_points(bag):
+		out.append(xf * at)
+	return out
 
 
-## A hard case's handle edge, the top of its handle and the middle of its top
-## end, in the case's own frame (scale 1), read from its drawn body mesh: the
-## handle face's edge on the top end, the middle of the handle face, and the
-## middle of the top end. Standing in a toilet stall the case is held by the
-## middle of its top end, and as it tips into the carry the palm goes over the
-## top end's edge to the handle (decision toilet-stall-bag-moves-are-hand-led-
-## as-built-a-hard-case-is). Never from a CarryOnProps or CarryLead placement
-## function: a point derived from the placement moves with a wrong placement,
-## and the grip then reads as on it.
+## A hard case's grip points in its own frame (scale 1), read from the vertices
+## of its drawn body mesh: [the middle of its top edge on its handle face (the
+## chamfer's edge there, where the side carry holds it), the middle of its
+## handle's top, the middle of its top end, the middle of the top end's edge
+## to the chamfer]. Standing in a toilet stall the case is held by the middle
+## of its top end, and as it tips into the carry the palm goes over the top
+## end's edge and the chamfer to the handle face (decision toilet-stall-bag-
+## moves-are-hand-led-as-built-a-hard-case-is). Never from a CarryOnProps or
+## CarryLead placement function: a point derived from the placement moves with
+## a wrong placement, and the grip then reads as on it. Never from the mesh's
+## bounds either: their corner at the handle face's top end is in the air (the
+## handle is in the middle of the face), 4.7 cm off the chamfer.
 static func case_handle_points(bag: Node3D) -> Array[Vector3]:
 	var body := bag.find_child("CarryOnBag_Body", true, false) as MeshInstance3D
-	var box := (bag.global_transform.affine_inverse() * body.global_transform) * body.get_aabb()
-	var middle := box.get_center()
+	# The body in the case's frame from the local transforms (exact, so the
+	# key repeats; the global ones differ by rounding frame to frame).
+	var xf := Transform3D.IDENTITY
+	var at: Node = body
+	while at != null and at != bag:
+		xf = (at as Node3D).transform * xf
+		at = at.get_parent()
+	var key := [body.mesh, xf]
+	if not _case_points.has(key):
+		_case_points[key] = _case_points_of(body.mesh, xf)
+	return _case_points[key]
+
+
+## case_handle_points() of body mesh `mesh` drawn with `xf` in the case's frame.
+static func _case_points_of(mesh: Mesh, xf: Transform3D) -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	for v: Vector3 in mesh.get_faces():
+		points.append(xf * v)
+	# The handle's top: the highest vertices off the handle face.
+	var high := -INF
+	for p in points:
+		high = maxf(high, p.y)
+	var handle := _middle(points.filter(func(p: Vector3) -> bool: return p.y > high - SAME_M))
+	# The top end: the vertices furthest up the case's length.
+	var top := -INF
+	for p in points:
+		top = maxf(top, p.z)
+	var on_end := points.filter(func(p: Vector3) -> bool: return p.z > top - SAME_M)
+	var end_mid := _middle(on_end)
+	var end_edge := -INF
+	for p: Vector3 in on_end:
+		end_edge = maxf(end_edge, p.y)
+	# The handle face's top edge: of the vertices past the top end's height
+	# (the chamfer, the handle face and what stands on it), the ones
+	# furthest up the case's length.
+	var past := points.filter(func(p: Vector3) -> bool: return p.y > end_edge + SAME_M)
+	var edge_z := -INF
+	for p: Vector3 in past:
+		edge_z = maxf(edge_z, p.z)
+	var edge := _middle(past.filter(func(p: Vector3) -> bool: return p.z > edge_z - SAME_M))
 	return [
-		Vector3(middle.x, box.end.y, box.end.z),
-		Vector3(middle.x, box.end.y, middle.z),
-		Vector3(middle.x, middle.y, box.end.z),
+		edge,
+		handle,
+		Vector3(end_mid.x, end_mid.y, top),
+		Vector3(end_mid.x, end_edge, top),
 	]
 
 
+## The middle of the bounds of `points`.
+static func _middle(points: Array) -> Vector3:
+	var box := AABB(points[0], Vector3.ZERO)
+	for p: Vector3 in points:
+		box = box.expand(p)
+	return box.get_center()
+
+
 ## How far `grip` (world) is from hard case `bag`'s grip (case_handle_points(),
-## world): the nearest point on its handle face, from the handle edge to the
-## middle (the palm slides along it turning between the side and the front
+## world): the nearest point from its top edge on its handle face to the top of
+## its handle (the palm slides along it turning between the side and the front
 ## carry, conductor ruling 2026-10-30). In a toilet stall's set-down or pick-up
-## (`stall`) also on its top end, from the middle over to the handle edge: the
-## case stands there and is held by its top (decision toilet-stall-bag-moves-
-## are-hand-led-as-built-a-hard-case-is). Every other move is judged by the
-## handle face alone (conductor ruling 2026-11-01).
+## (`stall`) also on its top end, from the middle over the top end's edge and
+## the chamfer to the handle face's edge: the case stands there and is held by
+## its top (decision toilet-stall-bag-moves-are-hand-led-as-built-a-hard-case-
+## is). Every other move is judged by the handle face alone (conductor ruling
+## 2026-11-01).
 static func case_grip_gap(bag: Node3D, grip: Vector3, stall := false) -> float:
 	var xf := bag.global_transform
 	var own := case_handle_points(bag)
@@ -86,8 +144,10 @@ static func case_grip_gap(bag: Node3D, grip: Vector3, stall := false) -> float:
 	var on_face := Geometry3D.get_closest_point_to_segment(grip, edge, xf * own[1])
 	var gap := on_face.distance_to(grip)
 	if stall:
-		var on_end := Geometry3D.get_closest_point_to_segment(grip, xf * own[2], edge)
-		gap = minf(gap, on_end.distance_to(grip))
+		var end_edge := xf * own[3]
+		var on_end := Geometry3D.get_closest_point_to_segment(grip, xf * own[2], end_edge)
+		var on_cut := Geometry3D.get_closest_point_to_segment(grip, end_edge, edge)
+		gap = minf(gap, minf(on_end.distance_to(grip), on_cut.distance_to(grip)))
 	return gap
 
 

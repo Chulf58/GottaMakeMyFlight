@@ -158,6 +158,41 @@ func test_a_palm_on_the_top_end_outside_a_stall_move_is_off() -> void:
 		assert_float(held).is_less_equal(_limit())
 
 
+## The side carry holds the case by its top edge on its handle face, a point of
+## its mesh (CarryOnProps.grip_anchor(), CaseGrip.edge()): the check reads 0
+## there, in a stall move or not. Control: the corner of the case's bounds at
+## that edge (the handle's height at the top end, the side carry's grip and
+## the check's handle edge before 2026-11-02, when the check read 0 there) is
+## in the air, and the check reads its true distance to the edge (4.7 cm at
+## scale 1), in a stall move or not.
+func test_the_side_carry_grip_is_on_the_mesh_and_the_bounds_corner_is_off() -> void:
+	var box := CarryOnProps.bag_box()
+	var corner := Vector3(0.0, box.end.y, box.end.z)
+	var anchor := CarryOnProps.grip_anchor(SecurityLooks.Kind.CASE)
+	var depth := CarryLead.STALL_CASE_DEPTH_M
+	var edge := Vector3(0.0, depth, box.end.z - CarryLead.STALL_CASE_CHAMFER_M)
+	assert_vector(anchor).is_equal_approx(edge, Vector3.ONE * 0.001)
+	for s in SCALES:
+		var centre := AT + Basis(Vector3.UP, YAW) * Vector3(-0.3, 0.0, 0.0)
+		var side := CarryOnProps.carried(AT, centre, YAW, s)
+		var upright := Transform3D(_upright().scaled(Vector3.ONE * s), AT)
+		for xf: Transform3D in [side, upright]:
+			_case.global_transform = xf
+			var off_m := corner.distance_to(edge) * s
+			for stall: bool in [false, true]:
+				var at_corner := FloatCheck.case_grip_gap(_case, xf * corner, stall)
+				var at_anchor := FloatCheck.case_grip_gap(_case, xf * anchor, stall)
+				print(
+					(
+						"scale %.1f stall %s: bounds corner %.4f m (true %.4f m), anchor %.4f m"
+						% [s, stall, at_corner, off_m, at_anchor]
+					)
+				)
+				assert_float(off_m).is_greater(0.04 * s)
+				assert_float(at_corner).is_equal_approx(off_m, 0.001)
+				assert_float(at_anchor).is_less_equal(0.001)
+
+
 func test_a_hand_off_the_top_end_or_beside_the_case_is_off() -> void:
 	for s in SCALES:
 		_place(_upright(), s)
