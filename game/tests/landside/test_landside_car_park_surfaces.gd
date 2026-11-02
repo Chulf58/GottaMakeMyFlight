@@ -15,31 +15,27 @@ const MULTI_SCENE := preload("res://assets/landside/tc_parking_2a.glb")
 const CAR_SCENE := preload("res://assets/vehicles/tp_suv_01b.glb")
 ## main.tscn's Airside/Terminal.
 const SITE_AT := Vector3(0.0, 0.0, -80.0)
-const LAWN_Y := -0.1
 const ROAD_Y := 0.1
 const SIDEWALK_Y := 0.2
-## A wheel or a walker's feet stand within this of the surface under them.
-const ON := 0.03
-## Within this distance of a kerb (where the surface jumps), a wheel or a foot
-## may be anywhere between the heights on either side: it is going over it.
-const KERB_SLACK := 0.3
 const SAMPLE_MM := 50
-## The part of the map the meshes are read for (x and z), and the grid cell.
+## The multi-storey meshes are Parking_2A, Parking_2A_Apron and Parking_1B_Logo; the
+## site's are Lot and Road.
+const CAR_PARK_MESH := "Parking_"
+## The part of the map the meshes are read for (x and z).
 const AREA := Rect2(-15.0, -62.0, 30.0, 82.0)
-const CELL := 1.0
 
 var _spot: LandsideLotSpot
 var _paths: LandsidePaths
 var _axles: Vector2
-## Grid cell -> triangles [a, b, c, is_lot] over it.
-var _cells := {}
+var _map: LandsideSurfaceMap
 
 
 func before() -> void:
 	_spot = STARTER.lots[1]
 	_paths = LandsidePaths.new(STARTER)
-	_add_faces(SITE_SCENE, Transform3D(Basis(), SITE_AT), false)
-	_add_faces(MULTI_SCENE, Transform3D(Basis(), _spot.centre), true)
+	_map = LandsideSurfaceMap.new(AREA)
+	_map.add_scene(SITE_SCENE, Transform3D(Basis(), SITE_AT))
+	_map.add_scene(MULTI_SCENE, Transform3D(Basis(), _spot.centre))
 	var car: Node3D = CAR_SCENE.instantiate()
 	_axles = LandsideViews.axles_of(car)
 	car.free()
@@ -94,11 +90,11 @@ func test_a_car_on_the_lanes_has_both_wheels_on_the_surface() -> void:
 			pitched += int(absf(pose.basis.z.y) > 0.01)
 			for axle in [_axles.x, _axles.y]:
 				var wheel := pose * Vector3(0.0, 0.0, axle)
-				var gap := _gap(wheel)
+				var gap := _map.gap(wheel)
 				checked += 1
 				if not is_nan(gap):
 					worst = maxf(worst, absf(gap))
-					if absf(gap) > ON:
+					if absf(gap) > LandsideSurfaceMap.ON:
 						off.append("%s gap %.3f" % [wheel, gap])
 	print(
 		(
@@ -128,12 +124,12 @@ func test_a_car_up_the_inside_ramps_has_both_wheels_on_the_ramp() -> void:
 		pitched += int(absf(pose.basis.z.y) > 0.05)
 		for axle in [_axles.x, _axles.y]:
 			var wheel := pose * Vector3(0.0, 0.0, axle)
-			var gap := _gap(wheel)
+			var gap := _map.gap(wheel)
 			checked += 1
 			if not is_nan(gap) and absf(gap) > absf(worst):
 				worst = gap
 				worst_at = wheel
-			if not is_nan(gap) and absf(gap) > ON:
+			if not is_nan(gap) and absf(gap) > LandsideSurfaceMap.ON:
 				off.append("%s gap %.3f" % [wheel, gap])
 	print(
 		(
@@ -196,9 +192,9 @@ func _way_out_off(lead: PackedVector3Array) -> Dictionary:
 			pitched += int(absf(pose.basis.z.y) > 0.01)
 			for axle in [_axles.x, _axles.y]:
 				var wheel := pose * Vector3(0.0, 0.0, axle)
-				var gap := _gap(wheel)
+				var gap := _map.gap(wheel)
 				checked += 1
-				if not is_nan(gap) and absf(gap) > ON:
+				if not is_nan(gap) and absf(gap) > LandsideSurfaceMap.ON:
 					off.append("%s gap %.3f" % [wheel, gap])
 	return {"off": off, "checked": checked, "pitched": pitched}
 
@@ -243,11 +239,12 @@ func _lane_off_surface(lane: PackedVector3Array) -> Dictionary:
 	var length := LandsideDefinition.length_mm(lane)
 	for mm in range(0, length + 1, SAMPLE_MM):
 		var at := LandsideDefinition.point_at(lane, mm)
-		var top := _top(at)
-		sidewalk += int(absf(top[0] - SIDEWALK_Y) < 0.005 and not top[1])
-		lot += int(top[1])
-		var gap := _gap(at)
-		if not is_nan(gap) and absf(gap) > ON:
+		var top := _map.top(at)
+		var on_lot := str(top[1]).begins_with(CAR_PARK_MESH)
+		sidewalk += int(absf(top[0] - SIDEWALK_Y) < 0.005 and not on_lot)
+		lot += int(on_lot)
+		var gap := _map.gap(at)
+		if not is_nan(gap) and absf(gap) > LandsideSurfaceMap.ON:
 			off.append("%s gap %.3f" % [at, gap])
 	return {"off": off, "sidewalk": sidewalk, "lot": lot}
 
@@ -260,80 +257,12 @@ func _walk_off_paving(walk: PackedVector3Array) -> Dictionary:
 	var length := LandsideDefinition.length_mm(walk)
 	for mm in range(0, length + 1, SAMPLE_MM):
 		var at := LandsideDefinition.point_at(walk, mm)
-		var top := _top(at)
+		var top := _map.top(at)
 		sidewalk += int(absf(top[0] - SIDEWALK_Y) < 0.005 and absf(at.y - SIDEWALK_Y) < 0.005)
-		if top[0] <= LAWN_Y + 0.001:
+		if top[0] <= LandsideSurfaceMap.LAWN_Y + 0.001:
 			off.append("%s over the lawn" % at)
 			continue
-		var gap := _gap(at)
-		if not is_nan(gap) and absf(gap) > ON:
+		var gap := _map.gap(at)
+		if not is_nan(gap) and absf(gap) > LandsideSurfaceMap.ON:
 			off.append("%s gap %.3f" % [at, gap])
 	return {"off": off, "sidewalk": sidewalk}
-
-
-## How far `at` is over (+) or under (-) the surface below it; NAN within
-## KERB_SLACK of a kerb when `at` is between the heights either side of it
-## (going over it), and the gap to the nearer side when it is not.
-func _gap(at: Vector3) -> float:
-	var here: float = _top(at)[0]
-	var lo := here
-	var hi := here
-	for dx in [-KERB_SLACK, 0.0, KERB_SLACK]:
-		for dz in [-KERB_SLACK, 0.0, KERB_SLACK]:
-			var y: float = _top(at + Vector3(dx, 0.0, dz))[0]
-			lo = minf(lo, y)
-			hi = maxf(hi, y)
-	if hi - lo <= ON:
-		return at.y - here
-	if at.y >= lo - ON and at.y <= hi + ON:
-		return NAN
-	return at.y - hi if at.y > hi else at.y - lo
-
-
-## The top of the surface under `at` (the highest face no more than 0.5 m over
-## it), and whether it is the car park's own mesh; the lawn when there is none.
-func _top(at: Vector3) -> Array:
-	var from := Vector3(at.x, at.y + 0.5, at.z)
-	var best := LAWN_Y
-	var on_lot := false
-	for tri in _cells.get(_cell_of(at.x, at.z), []):
-		var hit: Variant = Geometry3D.ray_intersects_triangle(
-			from, Vector3.DOWN, tri[0], tri[1], tri[2]
-		)
-		if hit != null and (hit as Vector3).y > best:
-			best = (hit as Vector3).y
-			on_lot = tri[3]
-	return [best, on_lot]
-
-
-func _add_faces(scene: PackedScene, at: Transform3D, is_lot: bool) -> void:
-	var root: Node3D = scene.instantiate()
-	add_child(root)
-	for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
-		var to_world := at * mi.global_transform
-		var f := mi.mesh.get_faces()
-		for i in range(0, f.size(), 3):
-			var a: Vector3 = to_world * f[i]
-			var b: Vector3 = to_world * f[i + 1]
-			var c: Vector3 = to_world * f[i + 2]
-			var lo := Vector2(minf(a.x, minf(b.x, c.x)), minf(a.z, minf(b.z, c.z)))
-			var hi := Vector2(maxf(a.x, maxf(b.x, c.x)), maxf(a.z, maxf(b.z, c.z)))
-			if not AREA.intersects(Rect2(lo, hi - lo).abs().grow(0.01)):
-				continue
-			for cx in range(
-				floori(maxf(lo.x, AREA.position.x) / CELL),
-				floori(minf(hi.x, AREA.end.x) / CELL) + 1
-			):
-				for cz in range(
-					floori(maxf(lo.y, AREA.position.y) / CELL),
-					floori(minf(hi.y, AREA.end.y) / CELL) + 1
-				):
-					var key := Vector2i(cx, cz)
-					if not _cells.has(key):
-						_cells[key] = []
-					(_cells[key] as Array).append([a, b, c, is_lot])
-	root.free()
-
-
-static func _cell_of(x: float, z: float) -> Vector2i:
-	return Vector2i(floori(x / CELL), floori(z / CELL))

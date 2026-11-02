@@ -4,18 +4,23 @@ extends SceneTree
 ## corner of the grid, so it carries the "Needs a tray table" caption. The sign
 ## is then put (a) where its home caption would sit under the Offers button and
 ## (b) near the top edge of the screen, and each time the caption must end up
-## inside the frame by MissMarkers.VIEW_MARGIN_PX and clear of every visible HUD
-## control that takes the mouse.
+## inside the frame by MissMarkers.VIEW_MARGIN_PX, clear (by CAPTION_MARGIN_PX) of
+## every visible HUD control that draws something, whether or not it takes the
+## mouse, and off every miss-marker icon on screen (its own included).
 ## Boots main with a new random sim seed (printed). Before it saves a plate it
 ## proves its subjects: the hint sign exists and is visible, its icon projects
 ## inside the frame, the Offers button is visible, and the unmoved caption
 ## really is under the button (a) or outside the frame (b). It prints the
 ## rectangles it compared. Otherwise it prints PROBE_INVALID and exits 1.
+## The overlap check proves itself on synthetic rectangles first (a caption on an
+## icon, on a control, a hair inside the margin, and one well clear). The user
+## argument overlap_control (after --) then plants an icon on each caption, so
+## the run must fail with exit 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy --resolution 1536x864 \
-##     --path game -s res://spike/lane_hint_caption_plate_probe.gd
+##     --path game -s res://spike/lane_hint_caption_plate_probe.gd [-- overlap_control]
 ##
 ## The plates go to tools/blender/out/lane-hint-caption/.
 
@@ -43,22 +48,94 @@ func _frames(count: int) -> void:
 	await RenderingServer.frame_post_draw
 
 
-## Every visible control under a canvas layer that takes the mouse, in screen
-## pixels, found the way a player would meet them (not through MissMarkers).
-func _hud_controls(node: Node, to_screen: float, found: Array[Rect2], names: Array[String]) -> void:
+## True for a control that puts something on the screen: a panel, a button, a
+## colour fill, a label with text, a picture, or a control with a panel style.
+## The miss-marker rule's predicate, written out again here (not through
+## MissMarkers) so a mistake in the game's copy cannot hide in this check.
+func _draws_something(control: Control) -> bool:
+	if control is Panel or control is PanelContainer or control is BaseButton:
+		return true
+	if control is ColorRect:
+		return true
+	if control is Label:
+		return not (control as Label).text.is_empty()
+	if control is RichTextLabel:
+		return not (control as RichTextLabel).text.is_empty()
+	if control is TextureRect:
+		return (control as TextureRect).texture != null
+	return control.has_theme_stylebox_override("panel")
+
+
+## Every visible control under a visible canvas layer that draws something, in
+## screen pixels, whether or not it takes the mouse. A panel or button is
+## taken whole, not walked into; a layout container that draws nothing is walked
+## through. Found by walking the scene the way a player meets it.
+func _drawn_controls(
+	node: Node, to_screen: float, found: Array[Rect2], names: Array[String]
+) -> void:
 	for child in node.get_children():
 		if child is CanvasItem and not (child as CanvasItem).visible:
 			continue
-		if child is CanvasLayer and not (child as CanvasLayer).visible:
-			continue
-		if child is Control and (child as Control).mouse_filter == Control.MOUSE_FILTER_STOP:
+		if child is Control:
 			var control := child as Control
-			found.append(
-				Rect2(control.get_global_rect().position * to_screen, control.size * to_screen)
-			)
-			names.append(str(control.name))
+			var size := control.size * to_screen
+			if _draws_something(control) and size.x * size.y > 0.0:
+				found.append(Rect2(control.get_global_rect().position * to_screen, size))
+				names.append(str(control.name))
+				if control is Panel or control is PanelContainer or control is BaseButton:
+					continue
+		_drawn_controls(child, to_screen, found, names)
+
+
+## The icon of every visible miss-marker sign (queue full, closed, lane hint),
+## in screen pixels: the sign point is the icon's bottom centre.
+func _marker_icons(markers: MissMarkers, cam: Camera3D, to_screen: float) -> Array[Rect2]:
+	var icons: Array[Rect2] = []
+	for child in markers.get_children():
+		var sign := child as Sprite3D
+		if sign == null or not sign.visible or sign.get_node_or_null("Caption") == null:
 			continue
-		_hud_controls(child, to_screen, found, names)
+		if cam.is_position_behind(sign.global_position):
+			continue
+		var point := cam.unproject_position(sign.global_position) * to_screen
+		var side := MissMarkers.SIGN_PX
+		icons.append(Rect2(point.x - side / 2.0, point.y - side, side, side))
+	return icons
+
+
+## What `rect` collides with, as readable lines: a HUD control within
+## CAPTION_MARGIN_PX, or any icon at all (the miss-marker rule's two clearances).
+func _collisions(
+	rect: Rect2, controls: Array[Rect2], names: Array[String], icons: Array[Rect2]
+) -> Array[String]:
+	var found: Array[String] = []
+	var padded := rect.grow(MissMarkers.CAPTION_MARGIN_PX)
+	for i in controls.size():
+		if padded.intersects(controls[i]):
+			found.append("control %s %s" % [names[i], controls[i]])
+	for icon in icons:
+		if rect.intersects(icon):
+			found.append("icon %s" % icon)
+	return found
+
+
+## Proves _collisions can fail before any real caption is judged by it.
+func _self_test_collisions() -> bool:
+	var rect := Rect2(100.0, 100.0, 120.0, 30.0)
+	var none: Array[Rect2] = []
+	var no_names: Array[String] = []
+	var on_icon: Array[Rect2] = [Rect2(150.0, 110.0, 56.0, 56.0)]
+	var named: Array[String] = ["ctl"]
+	var inside_margin: Array[Rect2] = [Rect2(rect.end.x + 3.0, 100.0, 40.0, 30.0)]
+	var clear: Array[Rect2] = [Rect2(rect.end.x + 40.0, 100.0, 40.0, 30.0)]
+	var seen := [
+		_collisions(rect, none, no_names, on_icon).size(),
+		_collisions(rect, on_icon, named, none).size(),
+		_collisions(rect, inside_margin, named, none).size(),
+		_collisions(rect, clear, named, clear).size(),
+	]
+	print("PROBE overlap self-test hits (icon, control, margin, clear)=", seen)
+	return seen == [1, 1, 1, 0]
 
 
 func _find_offers(node: Node) -> Button:
@@ -81,7 +158,14 @@ func _put_sign(markers: MissMarkers, arch: int, cam: Camera3D, layout_point: Vec
 func _run() -> void:
 	var out_dir := ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	var control_run := OS.get_cmdline_user_args().has("overlap_control")
+	if not _self_test_collisions():
+		_invalid("the overlap check missed a planted overlap or flagged a clear one")
+		quit(1)
+		return
 	var main: Node3D = load(MAIN_SCENE).instantiate()
+	# The probe builds its own terminal below, so the scene's starter shell is off.
+	(main.get_node("BuildMode") as BuildMode).starter_shell = false
 	var clock: SimClock = main.get_node("SimClock")
 	var seed := randi()
 	clock.seed_rng(seed)
@@ -96,6 +180,7 @@ func _run() -> void:
 	var sim: PassengerSim = main.get_node("PassengerSim")
 	var grid := build_mode.grid
 	var corner := grid.size - Vector2i(10, 10)
+	print("PROBE terminal_offset=", ReferenceTerminal.offset_on(grid), " grid=", grid.size)
 	for y in 6:
 		for x in 6:
 			grid.apply(BuildEdit.paint_floor(corner + Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
@@ -146,11 +231,17 @@ func _run() -> void:
 		var rect := MissMarkers.caption_rect(point, caption.text, lift, caption.offset.x)
 		var controls: Array[Rect2] = []
 		var names: Array[String] = []
-		_hud_controls(main, to_screen, controls, names)
+		_drawn_controls(main, to_screen, controls, names)
+		var icons := _marker_icons(markers, cam, to_screen)
+		if control_run:
+			icons.append(rect.grow(-2.0))
 		var button := Rect2(offers.get_global_rect().position * to_screen, offers.size * to_screen)
 		print("CASE ", case["name"], " point=", point, " frame=", frame)
 		print("CASE home=", home, " moved=", rect, " visible=", caption.visible)
-		print("CASE hud_controls=", names.size(), " offers=", button)
+		print("CASE hud_controls=", names.size(), " ", names, " offers=", button)
+		print("CASE marker_icons=", icons.size(), " ", icons)
+		if icons.is_empty():
+			_invalid("%s: no miss-marker icon was found, not even the hint's own" % case["name"])
 		if not frame.grow(-SIGN_ICON_SLACK).has_point(point):
 			_invalid("%s: the icon point %s is not inside the frame" % [case["name"], point])
 		if not hint.visible or not caption.visible:
@@ -167,14 +258,10 @@ func _run() -> void:
 			_invalid("%s: the unmoved caption is inside the frame, nothing engaged" % case["name"])
 		if not inner.encloses(rect):
 			_invalid("%s: the caption %s is not inside the frame margin" % [case["name"], rect])
-		for i in controls.size():
-			if rect.intersects(controls[i]):
-				_invalid(
-					(
-						"%s: the caption %s is over the control %s %s"
-						% [case["name"], rect, names[i], controls[i]]
-					)
-				)
+		var hits := _collisions(rect, controls, names, icons)
+		print("CASE collisions=", hits.size(), " ", hits)
+		for hit in hits:
+			_invalid("%s: the caption %s collides with %s" % [case["name"], rect, hit])
 		var path := out_dir.path_join(str(case["name"]) + ".png")
 		img.save_png(path)
 		print("PLATE ", path, " size=", img.get_size())
