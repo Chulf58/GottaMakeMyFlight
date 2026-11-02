@@ -23,6 +23,10 @@ const AIRSIDE_MAX_Y := 8
 const ENTRANCE_CELL := Vector2i(18, 17)
 const EXIT_CELL := Vector2i(20, 2)
 const SCANNER_XS: Array[int] = [17, 19]
+## The gate desk the debug starter button adds (gate_desk_edit()), 3 cells
+## south of the exit, beside the way to it. Not in edits(): the tests' layout
+## stays as it was before gate desks.
+const GATE_DESK_CELL := Vector2i(19, 5)
 
 
 ## `offset`, or with null the offset of `grid`: its site's starter_offset on
@@ -93,6 +97,11 @@ static func interior_edits(offset := Vector2i.ZERO) -> Array[BuildEdit]:
 	return out
 
 
+## The gate desk that makes the exit a gate (GateDesks), moved by `offset`.
+static func gate_desk_edit(offset := Vector2i.ZERO) -> BuildEdit:
+	return BuildEdit.place_object(GateDesks.DESK, GATE_DESK_CELL + offset, 0)
+
+
 ## Adds interior_edits() to a grid that already holds the shell, free like
 ## build() (a debug layout). The edits go onto a copy first, so a refusal (the
 ## player built over the interior, or it is already there) returns its reason
@@ -128,8 +137,17 @@ static func build(grid: BuildGrid, offset: Variant = null) -> bool:
 ## The grid's object ids by kind, each list in id order. Every baggage belt
 ## piece (BuildCatalog.is_belt) is listed under "belts".
 static func object_ids(grid: BuildGrid) -> Dictionary:
-	var out := {"desks": [], "scanners": [], "seats": [], "entrances": [], "exits": [], "belts": []}
+	var out := {
+		"desks": [],
+		"scanners": [],
+		"seats": [],
+		"entrances": [],
+		"exits": [],
+		"belts": [],
+		"gate_desks": [],
+	}
 	var kinds := {
+		GateDesks.DESK: "gate_desks",
 		&"checkin_desk": "desks",
 		&"security_scanner": "scanners",
 		&"seat_row": "seats",

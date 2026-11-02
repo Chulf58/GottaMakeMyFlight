@@ -35,6 +35,8 @@ const OBJECT_PRICES := {
 	&"seat_row": 250,
 	&"entrance_door": 300,
 	&"exit_door": 300,
+	# A gate desk is priced like a check-in desk.
+	&"gate_desk": 400,
 	&"cafe_counter": 600,
 	&"cafe_table": 300,
 	# Belt pieces: a straight run is a little over a wall's price so a long

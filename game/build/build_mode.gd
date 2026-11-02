@@ -115,6 +115,7 @@ enum Tool {
 	SHOWER_ROOM,
 	NAP_POD_ROOM,
 	BUY_LAND,
+	GATE_DESK,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -138,29 +139,8 @@ const TOOL_ACTIONS := {
 	&"build_tool_exit": Tool.EXIT,
 	&"build_tool_none": Tool.NONE,
 }
-const TOOL_OBJECTS := {
-	Tool.DESK: &"checkin_desk",
-	Tool.SCANNER: &"security_scanner",
-	Tool.SEATS: &"seat_row",
-	Tool.ENTRANCE: &"entrance_door",
-	Tool.EXIT: &"exit_door",
-	Tool.COUNTER: &"cafe_counter",
-	Tool.TABLE: &"cafe_table",
-	Tool.CART: &"baggage_cart",
-	Tool.TRAY_TABLE: SecurityLanes.TRAY_TABLE,
-	Tool.XRAY_BELT: SecurityLanes.XRAY_BELT,
-	Tool.ARCH: SecurityLanes.ARCH,
-	Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
-	Tool.TOILET_STALL: &"toilet_stall",
-	Tool.TOILET_SINK: &"toilet_sink",
-	Tool.KIOSK_COUNTER: &"kiosk_counter",
-	Tool.KIOSK_DISPLAY: &"kiosk_display",
-	Tool.SCREEN: ScreenCoverage.SCREEN_ID,
-	Tool.DUTY_FREE_TILL: &"duty_free_till",
-	Tool.DUTY_FREE_SHELF: &"duty_free_shelf",
-	Tool.FASHION_TILL: &"fashion_till",
-	Tool.FASHION_RAIL: &"fashion_rail",
-}
+## The catalog id each object tool places (ToolObjects).
+const TOOL_OBJECTS := ToolObjects.OBJECTS
 ## The security lane part tools, in flow order.
 const LANE_TOOLS: Array[Tool] = [Tool.TRAY_TABLE, Tool.XRAY_BELT, Tool.ARCH, Tool.PICKUP_TABLE]
 ## What one belt cell costs, whatever piece it becomes.

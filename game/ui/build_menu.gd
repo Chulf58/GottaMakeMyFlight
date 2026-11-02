@@ -58,7 +58,11 @@ const CATEGORIES := [
 	# Security.
 	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
 	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
-	{"name": "Gates", "tools": [BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN]},
+	# The gate desk (gates 1b) makes a gate of the north exit it stands by.
+	{
+		"name": "Gates",
+		"tools": [BuildMode.Tool.GATE_DESK, BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN],
+	},
 	# The cafe, its counter and its table. Named Shops until HUD 6/7 gave that
 	# name to the store group's button below.
 	{
@@ -204,6 +208,9 @@ const ITEMS := {
 	BuildMode.Tool.DESK: ["Check-in desk", "desk", ""],
 	BuildMode.Tool.SCANNER: ["Scanner", "scanner", ""],
 	BuildMode.Tool.SEATS: ["Seats", "seats", ""],
+	# The gate desk borrows the info desk's thumbnail, as it borrows its piece,
+	# until its own art (gates 2/4).
+	BuildMode.Tool.GATE_DESK: ["Gate desk", "info_desk", ""],
 	BuildMode.Tool.SCREEN: ["Screen", "screen_stand", ""],
 	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
 	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],

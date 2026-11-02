@@ -301,6 +301,70 @@ func reassign_problem(contract_id: String, gate_id: String) -> String:
 	return _clash_problem(_at_gate(contract, gate_id))
 
 
+## Where the running contracts at `from_gates` would go if those gates went:
+## {"moves": contract id -> its new gate, "stuck": the contract ids no gate of
+## `to_gates` takes}. Oldest first, each to the lowest gate of `to_gates` its
+## timetable fits, checked as accept_problem checks one against the rest as
+## moved so far (decision gates-technical-design-gate-desks-link-to-north-
+## exits-one-st, point 6). Live flights are not moved: an issued occurrence
+## keeps its gate. Read-only; move_contracts() carries a plan out.
+func move_plan(from_gates: Array[String], to_gates: Array[String]) -> Dictionary:
+	var targets := to_gates.duplicate()
+	targets.sort()
+	var contracts := _contracts.duplicate()
+	var moves := {}
+	var stuck: Array[String] = []
+	for i in contracts.size():
+		var contract: Dictionary = contracts[i]
+		if _ended.has(contract["id"]) or not from_gates.has(contract["gate"]):
+			continue
+		var to := ""
+		for gate_id in targets:
+			if _clash_problem(_at_gate(contract, gate_id), contracts) == "":
+				to = gate_id
+				break
+		if to == "":
+			stuck.append(contract["id"])
+			continue
+		moves[contract["id"]] = to
+		contracts[i] = _at_gate(contract, to)
+	return {"moves": moves, "stuck": stuck}
+
+
+## Carries out a move_plan() whose "stuck" is empty, all moves or none: the
+## moves are checked in order on a scratch copy of the contracts, each as
+## reassign_gate() checks one against the rest as moved so far, and only when
+## every one fits does the copy replace the contracts. False (with an error,
+## nothing moved) when `plan` has stuck contracts, names a contract that is not
+## running, or a move no longer fits (the world changed since the plan).
+func move_contracts(plan: Dictionary) -> bool:
+	if not (plan["stuck"] as Array).is_empty():
+		push_error("FlightSim.move_contracts: contracts %s fit no gate" % [plan["stuck"]])
+		return false
+	var moves: Dictionary = plan["moves"]
+	var scratch := _contracts.duplicate()
+	var moved := 0
+	for i in scratch.size():
+		var contract: Dictionary = scratch[i]
+		if not moves.has(contract["id"]):
+			continue
+		var problem := (
+			"contract %s has ended" % contract["id"] if _ended.has(contract["id"]) else ""
+		)
+		if problem == "":
+			problem = _clash_problem(_at_gate(contract, moves[contract["id"]]), scratch)
+		if problem != "":
+			push_error("FlightSim.move_contracts: nothing moved: %s" % problem)
+			return false
+		scratch[i] = _at_gate(contract, moves[contract["id"]])
+		moved += 1
+	if moved != moves.size():
+		push_error("FlightSim.move_contracts: nothing moved: the plan names unknown contracts")
+		return false
+	_contracts = scratch
+	return true
+
+
 ## Ends a contract: no day from its next unissued one on is ever issued, so the
 ## occurrences already issued still fly and the contract stays on record (its
 ## fee and terms still answer for them). Its gate time is free for a new
@@ -563,8 +627,8 @@ func _assignment(terms: Dictionary) -> Dictionary:
 ## the gate it was issued at), that it would meet at its gate or on the runway
 ## or lane; "" for none. Its own issued occurrences are left out: they are days
 ## it no longer issues.
-func _clash_problem(contract: Dictionary) -> String:
-	for other in _contracts:
+func _clash_problem(contract: Dictionary, contracts: Array[Dictionary] = _contracts) -> String:
+	for other in contracts:
 		if other["id"] == contract["id"] or _ended.has(other["id"]):
 			continue
 		var on := FlightTimetable.contracts_clash_on(contract, other)

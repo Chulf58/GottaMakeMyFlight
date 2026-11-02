@@ -205,6 +205,8 @@ func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 		"seat_row": 4,
 		"entrance_door": 1,
 		"exit_door": 1,
+		# The debug starter button adds the gate desk by the exit.
+		"gate_desk": 1,
 	}
 	assert_dict(grid["objects"]).is_equal(objects)
 	assert_int(grid["walls"]["PLAIN"]).is_greater(0)

@@ -1,4 +1,4 @@
-[gd_scene load_steps=42 format=3]
+[gd_scene load_steps=44 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -39,6 +39,8 @@
 [ext_resource type="Resource" path="res://landside/starter_landside.tres" id="32_landsidedef"]
 [ext_resource type="Script" path="res://ambient/bird_flock.gd" id="33_birdflock"]
 [ext_resource type="Script" path="res://airside/apron_stand.gd" id="35_apron"]
+[ext_resource type="Script" path="res://airside/gate_desks.gd" id="36_gatedesks"]
+[ext_resource type="Script" path="res://flights/plane_fleet.gd" id="37_planefleet"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -191,6 +193,14 @@ airside = NodePath("../Airside")
 sun = NodePath("../Sun")
 slot = 1
 
+[node name="PlaneFleet" type="Node3D" parent="." node_paths=PackedStringArray("views", "clock", "sim", "airside", "sun")]
+script = ExtResource("37_planefleet")
+views = [NodePath("../PlaneView"), NodePath("../PlaneView2")]
+clock = NodePath("../SimClock")
+sim = NodePath("../FlightSim")
+airside = NodePath("../Airside")
+sun = NodePath("../Sun")
+
 [node name="LandsideSim" type="Node" parent="." node_paths=PackedStringArray("finances")]
 script = ExtResource("30_landside")
 definition = ExtResource("32_landsidedef")
@@ -205,8 +215,14 @@ finances = NodePath("../Finances")
 staff = NodePath("../Staff")
 landside = NodePath("../LandsideSim")
 
-[node name="ApronStand" type="Node3D" parent="." node_paths=PackedStringArray("build_mode", "flights", "airside", "passengers", "menu")]
+[node name="GateDesks" type="Node" parent="." node_paths=PackedStringArray("build_mode", "flights")]
+script = ExtResource("36_gatedesks")
+build_mode = NodePath("../BuildMode")
+flights = NodePath("../FlightSim")
+
+[node name="ApronStand" type="Node3D" parent="." node_paths=PackedStringArray("build_mode", "flights", "airside", "passengers", "menu", "gates")]
 script = ExtResource("35_apron")
+gates = NodePath("../GateDesks")
 build_mode = NodePath("../BuildMode")
 flights = NodePath("../FlightSim")
 airside = NodePath("../Airside")
@@ -332,7 +348,7 @@ layer = 2
 script = ExtResource("24_ratingbadge")
 rating = NodePath("../AirportRating")
 
-[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating", "baggage", "day_ledger", "landside", "apron")]
+[node name="SaveGame" type="Node" parent="." node_paths=PackedStringArray("clock", "build_mode", "flights", "passengers", "staff", "finances", "settlement", "rescue_grant", "offer_desk", "rating", "baggage", "day_ledger", "landside", "apron", "gates")]
 script = ExtResource("25_save")
 clock = NodePath("../SimClock")
 build_mode = NodePath("../BuildMode")
@@ -348,6 +364,7 @@ baggage = NodePath("../BaggageSim")
 day_ledger = NodePath("../DayLedger")
 landside = NodePath("../LandsideSim")
 apron = NodePath("../ApronStand")
+gates = NodePath("../GateDesks")
 
 [node name="LandsideViews" type="Node3D" parent="." node_paths=PackedStringArray("landside", "clock", "save_game")]
 script = ExtResource("31_landsideview")
