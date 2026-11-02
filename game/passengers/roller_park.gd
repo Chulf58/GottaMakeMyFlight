@@ -172,10 +172,19 @@ static func held_home(
 ## a bag of `kind` now) at `now`: the home (held_home()) and the hand the park
 ## was stamped with. A walker whose chair goes walks off on a new route, and the
 ## hand for its way (SecurityLooks.hand_of()) can be the other one: a new place,
-## stamped again as a generic move in the middle of the park.
+## stamped again as a generic move in the middle of the park. `collecting`:
+## the walker stands collecting its roller after its seat went in the park
+## (ParkRecovery), kept on `bag` ("collecting") for stamp().
 static func hold_park(
-	bag: Dictionary, kind: SecurityLooks.Kind, homes: Array, hands: Array, i: int, now: float
+	bag: Dictionary,
+	kind: SecurityLooks.Kind,
+	homes: Array,
+	hands: Array,
+	i: int,
+	now: float,
+	collecting := false
 ) -> void:
+	bag["collecting"] = collecting
 	homes[i] = held_home(bag, kind, homes[i], now)
 	if _parking(bag, kind, now):
 		hands[i] = CarryLead.hand_of(bag["place"])
@@ -207,18 +216,32 @@ static func lay_frame(bag: Dictionary, frame: Transform3D) -> Transform3D:
 ## the park is placed in; a floor>pull also its reach (CarryLead.reach_of(),
 ## for CarryLead.at_start()) and its start fixed in the world ("from_world"):
 ## held in the body's frame the lying bag swung round with a walker turning to
-## walk off, 0.7 m in a third of a tick.
+## walk off, 0.7 m in a third of a tick. A floor>pull of a walker standing to
+## collect its roller ("collecting", hold_park()) is marked "park_low": its
+## stoop bends the back first (LAY_HIPS) for the whole move. With the hips
+## going back as well, a walker standing (not standing up) stopped with its
+## grip at 0.274 m over a handle at 0.225 m, and the bag jumped 6.3 cm into
+## the hand at TAKE_BY.
 static func stamp(bag: Dictionary, body: Transform3D) -> void:
 	bag["park"] = true
 	bag["ticks"] = TICKS_DOWN
 	for key in [
-		"park_took", "park_at", "park_cut", "park_last", "park_rel", "lift_last", "park_tip"
+		"park_took",
+		"park_at",
+		"park_cut",
+		"park_last",
+		"park_rel",
+		"lift_last",
+		"park_tip",
+		"park_low",
 	]:
 		bag.erase(key)
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
 		bag["ticks"] = TICKS_UP
 		bag["reach"] = REACH_END
 		bag["from_world"] = body * (bag["from"] as Transform3D)
+		if bag.get("collecting", false):
+			bag["park_low"] = true
 	bag["park_frame"] = _yawed(body)
 
 
@@ -338,7 +361,7 @@ static func plan(
 		"drops":
 		(
 			[LAY_HIPS, LAY_HIPS]
-			if not off_floor and k >= PARK_END
+			if (not off_floor and k >= PARK_END) or bag.get("park_low", false)
 			else [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
 		),
 	}

@@ -130,6 +130,9 @@ var alarm := false
 var security_phase := 0
 var security_work := 0
 var incident_resolved := false
+## The sim tick a walker whose gate seat went while its roller parked stands
+## collecting the bag to (ParkRecovery), 0 when it collects none.
+var collect_tick := 0
 
 
 ## Whether the stage is one of a cafe visit's. The enum's order is not the

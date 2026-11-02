@@ -1,0 +1,166 @@
+class_name TestParkRecovery
+extends GdUnitTestSuite
+## A walker whose gate seat is removed while its roller parks to go onto the
+## floor stands collecting the bag before it walks on (ParkRecovery, decision
+## roller-park-interrupted-by-a-lost-seat-the-passenger-collect, board
+## d425a825), timed by the sim clock alone and kept through a save. The normal
+## sit-down and stand-up keep their timing, and a seat lost once the park is
+## over, or by a walker with no roller, sends the walker on at once.
+
+var _world: PassengerTestWorld
+
+
+## Every world a test makes is freed with the test (auto_free).
+func before() -> void:
+	PassengerTestWorld.tracker = self
+
+
+func after() -> void:
+	PassengerTestWorld.tracker = null
+
+
+## A walker by the reference terminal's first gate chair, a roller among its
+## bags when `roller`, standing at its front; sat down at it (SITTING_DOWN from
+## this tick) when `sit`.
+func _walker(roller: bool, sit := true) -> Passenger:
+	_world = PassengerTestWorld.reference_world()
+	_world.run_to(10)
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	while (SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER) != roller:
+		ToiletTestLayout.calm(p)
+		p.carry_on = 0
+		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	ToiletTestLayout.calm(p)
+	p.carry_on = 1
+	p.cleared = true
+	var seat: Dictionary = _world.sim.layout.seats[0]
+	p.seat_object = seat["object_id"]
+	p.seat_cell = seat["cell"]
+	p.seat_front = seat["front"]
+	p.at = seat["front"]
+	p.clear_path()
+	p.boarding_tick = _world.sim.tick + 100000
+	p.stage = Passenger.Stage.SITTING_DOWN if sit else Passenger.Stage.SEATED
+	p.stage_tick = _world.sim.tick
+	return p
+
+
+## Removes the walker's chair by a build edit; the sim settles it on its next
+## tick (PassengerSim._reconcile()).
+func _seat_goes() -> void:
+	var seat: int = _world.sim.layout.seats[0]["object_id"]
+	assert_bool(_world.sim.grid.apply(BuildEdit.remove_object(seat)).ok).is_true()
+
+
+## Steps until `p` has a path or `limit` ticks went by: the ticks it took.
+func _ticks_to_route(p: Passenger, limit: int) -> int:
+	for n in limit:
+		if p.path.size() >= 2:
+			return n
+		_world.step()
+	return -1
+
+
+## Its chair removed in the lift (2 ticks in) or the park (5 ticks in), the
+## walker is sent on to the gate but stands on its cell with no route until
+## ParkRecovery.collect_of() of the tick it sat down, and plans its way on that
+## tick. Control: it does get a route then.
+func test_a_seat_lost_mid_park_holds_the_walker_until_the_roller_is_collected() -> void:
+	for into: int in [2, 5]:
+		var p := _walker(true)
+		var sat := _world.sim.tick
+		var cell := p.at
+		for n in into:
+			_world.step()
+		_seat_goes()
+		_world.step()
+		var until := ParkRecovery.collect_of(sat)
+		print("seat gone %d ticks in at tick %d: collect to %d" % [into, _world.sim.tick, until])
+		assert_int(until).is_equal(sat + ceili(RollerPark.TICKS_DOWN) + ParkRecovery.COLLECT_TICKS)
+		assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+		assert_int(p.collect_tick).is_equal(until)
+		assert_int(p.seat_object).is_equal(0)
+		while _world.sim.tick < until:
+			# No route: its path only the cell it stands on (Passenger.clear_path()).
+			assert_int(p.path.size()).is_equal(1)
+			assert_that(p.at).is_equal(cell)
+			assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+			_world.step()
+		assert_int(p.collect_tick).is_equal(0)
+		assert_int(p.stage_tick).is_equal(until)
+		assert_int(p.path.size()).is_greater_equal(2)
+
+
+## The normal path: a roller walker sitting down is seated SIT_DOWN_TICKS after
+## and stands up and walks on STAND_UP_TICKS after its boarding, never held to
+## collect anything; its stand-up starts the roller's floor>pull
+## RollerPark.UP_LEAD_TICKS before the end, as before.
+func test_the_normal_sit_down_and_stand_up_keep_their_timing() -> void:
+	var p := _walker(true)
+	var sat := _world.sim.tick
+	while p.stage == Passenger.Stage.SITTING_DOWN:
+		assert_int(p.collect_tick).is_equal(0)
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.SEATED)
+	assert_int(p.stage_tick - sat).is_equal(PassengerSim.SIT_DOWN_TICKS)
+	p.boarding_tick = _world.sim.tick + 3
+	while p.stage == Passenger.Stage.SEATED:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.STANDING_UP)
+	var up := p.stage_tick
+	var homes := []
+	while p.stage == Passenger.Stage.STANDING_UP:
+		homes.append(SecurityLooks.bag_homes(_world.sim, p)[0])
+		assert_int(p.collect_tick).is_equal(0)
+		_world.step()
+	assert_int(p.stage_tick - up).is_equal(PassengerSim.STAND_UP_TICKS)
+	assert_int(p.collect_tick).is_equal(0)
+	# Into the hand UP_LEAD_TICKS before the stand-up's end: the floor>pull.
+	assert_int(homes.find(SecurityLooks.Home.HAND)).is_equal(
+		PassengerSim.STAND_UP_TICKS - RollerPark.UP_LEAD_TICKS
+	)
+
+
+## Only an interrupted park holds the walker: a seat lost once the park is over
+## (still sitting down, or seated), or by a walker with no roller, sends it on
+## with no hold; it plans its way on the tick it was sent (stage_tick).
+func test_a_seat_lost_outside_a_roller_park_sends_the_walker_on_at_once() -> void:
+	var cases := [
+		[true, true, ceili(RollerPark.TICKS_DOWN)],
+		[true, false, 2],
+		[false, true, 2],
+	]
+	for c: Array in cases:
+		var p := _walker(c[0], c[1])
+		for n: int in c[2]:
+			_world.step()
+		_seat_goes()
+		_world.step()
+		var sent := _world.sim.tick
+		print("roller %s sitting %s, %d ticks in: collect %d" % [c[0], c[1], c[2], p.collect_tick])
+		assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+		assert_int(p.collect_tick).is_equal(0)
+		assert_int(p.stage_tick).is_equal(sent)
+		assert_int(_ticks_to_route(p, 3)).is_between(0, 1)
+
+
+## A walker collecting its roller keeps its collect_tick through a save and a
+## load (a JSON round trip), and a version 16 save, which has none, is refused.
+func test_a_collecting_walker_keeps_its_hold_through_a_save() -> void:
+	var p := _walker(true)
+	_world.step()
+	_world.step()
+	_seat_goes()
+	_world.step()
+	var until := p.collect_tick
+	assert_int(until).is_greater(_world.sim.tick)
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
+	assert_int(int(saved["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
+	var old := saved.duplicate(true)
+	old["save_version"] = 16
+	for record: Dictionary in old["passengers"]:
+		record.erase("collect_tick")
+	assert_bool(_world.sim.from_snapshot(old)).is_false()
+	p.collect_tick = 0
+	assert_bool(_world.sim.from_snapshot(saved)).is_true()
+	assert_int(_world.passenger(p.id).collect_tick).is_equal(until)

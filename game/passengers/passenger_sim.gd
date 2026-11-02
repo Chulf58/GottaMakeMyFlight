@@ -76,7 +76,9 @@ signal checked_in(id: int, desk: int)
 ## (GateReach), so a version 15 save, whose claims followed the old global
 ## nearest rule, is refused with no migration (decision old-saves-are-not-
 ## supported-until-after-a-release-no-save-mi).
-const SAVE_VERSION := 16
+## 17: each passenger's collect_tick (ParkRecovery). Version 16 is refused,
+## with no migration; a migrated older save collects nothing.
+const SAVE_VERSION := 17
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -933,7 +935,8 @@ func _advance(p: Passenger) -> void:
 		Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_QUEUE:
 			_queue_move(p)
 		Passenger.Stage.TO_GATE:
-			_to_gate(p)
+			if not ParkRecovery.collecting(self, p):
+				_to_gate(p)
 		Passenger.Stage.SITTING_DOWN:
 			if tick - p.stage_tick >= SIT_DOWN_TICKS:
 				_set_stage(p, Passenger.Stage.SEATED)
@@ -1450,7 +1453,9 @@ func _reconcile() -> void:
 		if p.seat_object != 0 and not _seat_exists(p):
 			_release_seat(p)
 			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
-				# Plans again: another seat or a standing spot.
+				# Plans again: another seat or a standing spot (its roller collected
+				# first when its park was in progress).
+				ParkRecovery.on_seat_lost(self, p)
 				p.clear_path()
 				_set_stage(p, Passenger.Stage.TO_GATE)
 	if standing.stale:

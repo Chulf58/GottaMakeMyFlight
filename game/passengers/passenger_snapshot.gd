@@ -76,6 +76,7 @@ const INT_FIELDS := [
 	"toilet_cooldown",
 	"boredom",
 	"shop_cooldown",
+	"collect_tick",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := ["late", "cleared", "needs_replan", "liquids", "alarm", "incident_resolved"]
@@ -271,6 +272,7 @@ static func _record(p: Passenger) -> Dictionary:
 ## no toilet visits. Version 10 to 11: every passenger gets the boredom
 ## BoredomSim.start_of() gives its id; its toilet need, cooldown and any toilet
 ## visit are kept as saved, and it gets no kiosk cooldown and no kiosk visits.
+## Every migrated passenger collects no roller (collect_tick 0, ParkRecovery).
 ## Every step sets a field or block only when the save has none, so a value the
 ## save already holds is kept for the checks to accept or refuse. Any other save
 ## is returned as it is, for the checks to accept or refuse. The given
@@ -366,6 +368,7 @@ static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 		if typeof(record) == TYPE_DICTIONARY and _whole(record.get("id")):
 			_set_missing(record, "boredom", BoredomSim.start_of(int(record["id"])))
 			_set_missing(record, "shop_cooldown", 0)
+			_set_missing(record, "collect_tick", 0)
 	_set_missing(out, "shop", {"visits": [], "deadlines_stale": false})
 
 
@@ -453,6 +456,7 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.apron_mm >= 0
 		and p.apron_mm <= p.apron_total_mm()
 		and p.odometer_mm >= 0
+		and p.collect_tick >= 0
 		and p.hunger >= 0
 		and p.hunger <= CafeSim.HUNGER_MAX
 		and p.cafe_cooldown >= 0

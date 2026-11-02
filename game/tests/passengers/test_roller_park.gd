@@ -30,6 +30,8 @@ const GRASP_M := 0.05
 const DROP_M := 0.03
 ## How long a walker is followed after its move began.
 const AFTER_TICKS := 22
+## A walker drawn moving more than this from one frame to the next has set off.
+const OFF_M := 0.005
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -366,6 +368,8 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 		"late_k": -1.0,
 		"flip_k": -1.0,
 		"flips": 0,
+		"off_k": -1.0,
+		"off_took": -1.0,
 	}
 	var flip_at := -1.0
 	var last_since := -1.0
@@ -404,9 +408,9 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 		# its last tick: a late walker's roller lifted into the hand then).
 		if move != name and float(out["ticks"]) < 0.0:
 			out["ticks"] = now - stamped
+		var body_moved := body.global_position.distance_to(last_body)
 		var tag := (
-			"%s %.2f ticks/frame k=%.3f now %s body moved %.3f"
-			% [name, ticks, k, move, body.global_position.distance_to(last_body)]
+			"%s %.2f ticks/frame k=%.3f now %s body moved %.3f" % [name, ticks, k, move, body_moved]
 		)
 		last_body = body.global_position
 		out["frames"] += 1
@@ -425,6 +429,11 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 				else "pull>floor"
 			)
 		var lead := CarryLead.hand_of(bag["home"] if cur == "floor>pull" else bag["was"])
+		# Its seat gone, the walker sets off: the first frame of the floor>pull it
+		# moves on, and when the hand took the bag.
+		if _flipped and cur == "floor>pull" and float(out["off_k"]) < 0.0 and body_moved > OFF_M:
+			out["off_k"] = k
+			out["off_took"] = float(bag.get("park_took", -1.0))
 		if flip_in == "seat" and began == now:
 			_flip_to_floor = true
 			_resit = true
@@ -710,6 +719,39 @@ func test_a_walker_changing_home_mid_park_does_not_jump_standing_up() -> void:
 ## the wall went up during the park, and the hand for the way changed.
 func test_a_walker_changing_hand_mid_park_does_not_jump() -> void:
 	await _home_mid_park(true, true)
+
+
+## A walker sitting down whose chair is removed in the middle of the park (in
+## the lift or parked alone) stands where it is until it has collected its bag
+## (ParkRecovery): the park runs to its end, the hand takes the bag off the floor
+## and lifts it to the park, and only then does the walker set off, with no
+## FLOAT, GRIP_ON or jump on the way. Control: it set off in the floor>pull.
+func test_a_walker_whose_seat_goes_mid_park_collects_the_bag_before_walking_off() -> void:
+	for part: String in ["lift", "park"]:
+		for ticks: float in FRAME_TICKS:
+			var p := _roller_walker(false)
+			for n in 4:
+				await _tick(0.5)
+			var seat: Dictionary = _world.sim.layout.seats[0]
+			p.seat_object = seat["object_id"]
+			p.stage = Passenger.Stage.SITTING_DOWN
+			p.clear_path()
+			p.stage_tick = _world.sim.tick
+			var seen := await _route(p, "pull>floor", ticks, "", part)
+			var fails: Array = seen["fails"]
+			print(
+				(
+					"seat goes in %s, %.2f ticks/frame: at k=%.3f, set off at floor>pull k=%.3f took %.3f fails %d"
+					% [part, ticks, seen["flip_k"], seen["off_k"], seen["off_took"], fails.size()]
+				)
+			)
+			for line: String in fails.slice(0, 12):
+				print("  ", line)
+			assert_float(float(seen["flip_k"])).is_greater_equal(0.0)
+			assert_float(float(seen["off_k"])).is_greater_equal(0.0)
+			assert_float(float(seen["off_took"])).is_between(0.0, RollerPark.TAKE_BY + 0.03)
+			assert_float(float(seen["off_k"])).is_greater_equal(RollerPark.LIFT_END)
+			assert_int(fails.size()).is_equal(0)
 
 
 ## A walker changing home in a parking move, sitting down (`down`) or standing
