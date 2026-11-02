@@ -60,6 +60,11 @@ const SHORT_TEXT := {
 	BuildResult.Reason.GATE_IN_USE: "A flight is due here",
 	BuildResult.Reason.GATE_FLIGHTS_STUCK: "Flights have no gate",
 	BuildResult.Reason.DOOR_FRONT_BLOCKED: "Front spot blocked",
+	BuildResult.Reason.MOVE_STRADDLES: "A piece is on the edge",
+	BuildResult.Reason.MOVE_UNMOVABLE: "A piece cannot move",
+	BuildResult.Reason.MOVE_NO_FIT: "A piece does not fit",
+	BuildResult.Reason.MOVE_EXIT_BLOCKED: "Blocks a way out",
+	BuildResult.Reason.MOVE_CHANGED: "The room changed",
 }
 
 var build_mode: BuildMode
