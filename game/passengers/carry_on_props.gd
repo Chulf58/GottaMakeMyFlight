@@ -254,15 +254,14 @@ static func carried(
 
 
 ## The point of a hand-carried bag (in its own frame, scale 1) held at the grip
-## in the side carry: a hard case's top edge on its handle face, a lifted
-## roller's carry handle, a backpack's grab loop.
+## in the side carry: a hard case's top edge on its handle face, read from its
+## mesh (CaseGrip.edge()), a lifted roller's carry handle, a backpack's loop.
 static func grip_anchor(kind: SecurityLooks.Kind) -> Vector3:
 	if kind == SecurityLooks.Kind.ROLLER:
 		return ROLLER_HANDLE
 	if kind == SecurityLooks.Kind.BACKPACK:
 		return BACKPACK_LOOP
-	var box := bag_box(kind)
-	return Vector3(0.0, box.end.y, box.end.z)
+	return CaseGrip.anchor(kind)
 
 
 ## A hard case carried in front of the body (a cell closed on both sides):

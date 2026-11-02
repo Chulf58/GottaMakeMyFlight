@@ -89,22 +89,26 @@ const STALL_LOOP_UP := Vector3(0.0, 0.0, 0.02)
 ## 3.6 cm proud of the face, so its top corner was in the air past the face,
 ## where the hand hung beside the case (board item c7b0e7be).
 const STALL_CASE_DEPTH_M := 0.19
+## Its top front edge is cut off this far both ways (measured on the mesh).
+const STALL_CASE_CHAMFER_M := 0.03
 ## A bag picked up in a stall rises upright and tips into its carry from this
 ## share of the carry on (path(), stall_tip()).
 const STALL_TIP_FROM := 0.4
-## As it tips the hand goes from a case's top over its top front edge to the
-## point it is carried by: along a curve pulled this far out past that edge
-## both ways, so the grip stays off the case (a straight blend between the two
-## took it 3.5 cm into the case midway).
-const STALL_CASE_EDGE_OUT_M := 0.08
 ## Lifting a hard case off the floor into the hand (not in a stall) the grip is
-## held CarryOnProps.FRONT_PALM_M over the point it is carried by (world up, the
-## palm on the top as in the front carry), easing to none over this share of
-## the carry, as the arm turns down into the side carry. Held at that point
+## held FLOOR_PALM_M over the point it is carried by (world up, the palm over the
+## top as in the front carry), easing to none over this share of the carry, as
+## the arm turns down into the side carry. Held at that point
 ## itself, the arm reaching out level ahead of the stoop lay with the forearm on
 ## the case's top behind the hand (crossing probe seed 777, Forearm.R in the
 ## case at k 0.46, board item 2fbf5edb).
 const FLOOR_PALM_FADE := Vector2(0.6, 1.0)
+## Since 2026-11-02 the case is held by its top edge on its handle face
+## (CarryOnProps.grip_anchor(), on the mesh), 3.6 cm lower than the bounds
+## corner at the handle's height it was held by before. With FRONT_PALM_M (4 cm)
+## over that edge the forearm went into the case's top end at k 0.46 (crossing
+## probe seed 2449926952); 7.6 cm (the old height) is past the probes' GRIP_ON
+## limit for a case (7 cm). 6.5 cm keeps the palm over the case top within it.
+const FLOOR_PALM_M := 0.065
 ## And it rises to its side carry with the grip this high over the feet
 ## (floor_end()): measured in the side carry at the end of that move (1.023 and
 ## 1.026 m, crossing probe seed 4242). A fixed height, not the hand's as drawn
@@ -130,7 +134,7 @@ static func stall_top(kind: SecurityLooks.Kind, loose: Vector3, scale_by := 1.0)
 ## How far (world metres) the grip is held over a hard case's carry point at
 ## `t` of its carry off the floor into the hand (FLOOR_PALM_FADE).
 static func floor_palm(t: float) -> float:
-	return CarryOnProps.FRONT_PALM_M * (1.0 - smoothstep(FLOOR_PALM_FADE.x, FLOOR_PALM_FADE.y, t))
+	return FLOOR_PALM_M * (1.0 - smoothstep(FLOOR_PALM_FADE.x, FLOOR_PALM_FADE.y, t))
 
 
 ## The end of a hard case's lift off the floor into the hand (`want`, held at
@@ -150,12 +154,32 @@ static func stall_tip(t: float) -> float:
 
 
 ## The point of a hard case in the hand at `w` (stall_tip()) of its tip from
-## standing, held at `from` (stall_top()), into its carry, held at `to`: a curve
-## over its top front edge, STALL_CASE_EDGE_OUT_M out past it.
-static func case_tip_grip(from: Vector3, to: Vector3, w: float) -> Vector3:
-	var out := STALL_CASE_EDGE_OUT_M
-	var edge := Vector3(0.0, STALL_CASE_DEPTH_M + out, CarryOnProps.bag_box().end.z + out)
-	return from.lerp(edge, w).lerp(edge.lerp(to, w), w)
+## standing, held at `from` (stall_top()), into its carry, held at `to` (its
+## own frame): the palm rests on the case's top as it turns, the grip `up`
+## (CarryOnProps.FRONT_PALM_M world up, in the case's frame as drawn now) over
+## a point that slides from the middle of its top end over its top front edge
+## (STALL_CASE_CHAMFER_M), on it from 0.4 to 0.6 of the tip as the edge comes
+## up, and on to the top of its handle. `up_from`
+## and `up_to` are `up` at the tip's start and end, so it starts at `from` and
+## ends at `to`. A curve 8 cm out past the edge held the grip off the case, and
+## midway only the fingertips were at its corner, the case hanging beside an
+## open hand (conductor ruling 2026-11-01, board item e845dfe8); a straight
+## blend between the two took the grip 3.5 cm into the case.
+static func case_tip_grip(
+	from: Vector3, to: Vector3, w: float, up: Vector3, up_from: Vector3, up_to: Vector3
+) -> Vector3:
+	var box := CarryOnProps.bag_box()
+	var top := Vector3(0.0, STALL_CASE_DEPTH_M * 0.5, box.end.z)
+	var cut := STALL_CASE_CHAMFER_M
+	var edge_end := Vector3(0.0, STALL_CASE_DEPTH_M - cut, box.end.z)
+	var edge_face := Vector3(0.0, STALL_CASE_DEPTH_M, box.end.z - cut)
+	var handle := Vector3(0.0, box.end.y, box.get_center().z)
+	var on := top.lerp(edge_end, w / 0.4)
+	if w > 0.6:
+		on = edge_face.lerp(handle, (w - 0.6) / 0.4)
+	elif w > 0.4:
+		on = edge_end.lerp(edge_face, (w - 0.4) / 0.2)
+	return on + up + (from - top - up_from) * (1.0 - w) + (to - handle - up_to) * w
 
 
 ## The kind of end a bag's place (`place`, CarryOnProps' (home * 2 + hand) * 2
@@ -506,8 +530,6 @@ static func plan(
 		and to_end == End.HELD
 		and flags.get("from_floor", false)
 	)
-	if case_up and from_end == End.REST and to_end == End.HELD:
-		held_at = case_tip_grip(anchor_from, anchor_to, stall_tip(t))
 	var on_back: bool = to_end == End.WORN and bag["carry"] == SecurityLooks.Carry.BACK
 	var on_path: Transform3D
 	if off_back or on_back:
@@ -566,6 +588,17 @@ static func plan(
 				want.basis.get_rotation_quaternion(), w
 			)
 			on_path.basis = Basis(q).scaled(start.basis.get_scale().lerp(want.basis.get_scale(), w))
+	if case_up and from_end == End.REST and to_end == End.HELD:
+		# The palm on its top as it tips, world up of the case as path() turns it.
+		var palm_up := Vector3.UP * CarryOnProps.FRONT_PALM_M
+		held_at = case_tip_grip(
+			anchor_from,
+			anchor_to,
+			stall_tip(t),
+			on_path.basis.inverse() * palm_up,
+			start.basis.inverse() * palm_up,
+			want.basis.inverse() * palm_up
+		)
 	# A hard case off the floor into the hand is held with the palm over its top
 	# (FLOOR_PALM_FADE): the hand and the point the case is placed by both go up.
 	var palm := floor_palm(t) if floor_case else 0.0

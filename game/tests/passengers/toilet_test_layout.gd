@@ -16,35 +16,43 @@ const SINK_X := 26
 
 ## A grid holding the reference terminal and both toilet rooms with `stalls`
 ## stalls each, and their ids: {"air_room", "land_room", "air_stalls",
-## "land_stalls" (object ids, west first), "air_sink", "land_sink"}.
+## "land_stalls" (object ids, west first), "air_sink", "land_sink"}. Every
+## cell moves with the terminal (ReferenceTerminal.offset_on(): on the airport
+## site's grid its starter_offset, on a bare grid none).
 static func build(grid: BuildGrid, stalls := 2) -> Dictionary:
 	var built := ReferenceTerminal.build(grid)
 	assert(built, "reference terminal refused")
+	var at := ReferenceTerminal.offset_on(grid)
 	var edits: Array[BuildEdit] = []
 	for y in range(FLOOR.position.y, FLOOR.end.y):
 		for x in range(FLOOR.position.x, FLOOR.end.x):
-			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y) + at, BuildGrid.FLOOR_TILE, 1))
 	for x in range(FLOOR.position.x, FLOOR.end.x):
-		var cell := Vector2i(x, ReferenceTerminal.DIVIDER_Y)
+		var cell := Vector2i(x, ReferenceTerminal.DIVIDER_Y) + at
 		edits.append(BuildEdit.place_wall(cell, BuildGrid.Side.NORTH))
 	for y in [4, 5, 6, 7, 11, 12, 13, 14, 15]:
-		edits.append(BuildEdit.remove_wall(Vector2i(21, y), BuildGrid.Side.EAST))
+		edits.append(BuildEdit.remove_wall(Vector2i(21, y) + at, BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):
 		assert(result.ok, "toilet layout edit refused: %s" % result.reason_text())
 	# Walls close the floor in, so passengers may use it (TerminalEnclosure).
 	EnclosureKit.close_floor(grid)
 	var ids := {
-		"air_room": _apply(grid, BuildEdit.place_room(AIRSIDE_ROOM, &"toilet")).room_id,
-		"land_room": _apply(grid, BuildEdit.place_room(LANDSIDE_ROOM, &"toilet")).room_id,
+		"air_room": _apply(grid, BuildEdit.place_room(_moved(AIRSIDE_ROOM, at), &"toilet")).room_id,
+		"land_room":
+		_apply(grid, BuildEdit.place_room(_moved(LANDSIDE_ROOM, at), &"toilet")).room_id,
 		"air_stalls": [],
 		"land_stalls": [],
 	}
 	for i in stalls:
-		ids["air_stalls"].append(_place(grid, &"toilet_stall", Vector2i(STALL_X + i, 3)))
-		ids["land_stalls"].append(_place(grid, &"toilet_stall", Vector2i(STALL_X + i, 10)))
-	ids["air_sink"] = _place(grid, &"toilet_sink", Vector2i(SINK_X, 3))
-	ids["land_sink"] = _place(grid, &"toilet_sink", Vector2i(SINK_X, 10))
+		ids["air_stalls"].append(_place(grid, &"toilet_stall", Vector2i(STALL_X + i, 3) + at))
+		ids["land_stalls"].append(_place(grid, &"toilet_stall", Vector2i(STALL_X + i, 10) + at))
+	ids["air_sink"] = _place(grid, &"toilet_sink", Vector2i(SINK_X, 3) + at)
+	ids["land_sink"] = _place(grid, &"toilet_sink", Vector2i(SINK_X, 10) + at)
 	return ids
+
+
+static func _moved(rect: Rect2i, at: Vector2i) -> Rect2i:
+	return Rect2i(rect.position + at, rect.size)
 
 
 ## Leaves `p` with no need of its own: it starts no toilet or cafe visit on
