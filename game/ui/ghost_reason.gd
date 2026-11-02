@@ -43,6 +43,20 @@ const SHORT_TEXT := {
 	BuildResult.Reason.BELT_WALL: "A wall is in the way",
 	BuildResult.Reason.STAFF_SPOT: "Keep the staff spot free",
 	BuildResult.Reason.LANE_WALL: "A wall is in the lane",
+	BuildResult.Reason.BAD_ZONE: "Bad zone id",
+	BuildResult.Reason.NOT_A_BELT: "Only belts change shape",
+	BuildResult.Reason.LANDSIDE_NOT_ON_SPOT: "Needs a marked spot",
+	BuildResult.Reason.LANDSIDE_SPOT_TAKEN: "Spot already built",
+	BuildResult.Reason.LANDSIDE_OCCUPIED: "Cars are still in it",
+	BuildResult.Reason.ROOM_WALL: "A wall is in the way",
+	BuildResult.Reason.PLANE_AREA: "A plane is on the apron",
+	BuildResult.Reason.LAND_NOT_OWNED: "Buy this land first",
+	BuildResult.Reason.LAND_OWNED: "Plot already owned",
+	BuildResult.Reason.LAND_NOT_TOUCHING: "Not next to your land",
+	BuildResult.Reason.GATE_NO_EXIT: "No free exit nearby",
+	BuildResult.Reason.GATE_STAND_OVERLAP: "Gates are too close",
+	BuildResult.Reason.GATE_IN_USE: "A flight is due here",
+	BuildResult.Reason.GATE_FLIGHTS_STUCK: "Flights have no gate",
 }
 
 var build_mode: BuildMode
