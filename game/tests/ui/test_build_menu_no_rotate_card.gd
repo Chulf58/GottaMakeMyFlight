@@ -46,8 +46,10 @@ func test_a_paging_tray_still_has_its_next_card() -> void:
 			continue
 		paging += 1
 		var tool: BuildMode.Tool = BuildMenu.categories()[i]["tools"][0]
-		var next := _menu.card(tool).get_parent().find_child("CardNext", true, false)
+		var next := _menu.card(tool).get_parent().find_child("CardNext", true, false) as Control
 		assert_object(next).is_not_null()
+		# Full height: a half-height Next card (the old Rotate and Next stack) fails.
+		assert_float(next.custom_minimum_size.y).is_equal(BuildMenu.CARD_SIZE.y)
 	assert_int(paging).is_greater(0)
 
 
