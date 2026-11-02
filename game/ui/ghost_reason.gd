@@ -141,7 +141,9 @@ func refresh() -> void:
 	if at.x + size.x > screen.end.x - EDGE:
 		at.x = ghost.position.x - GAP - size.x
 	at.x = clampf(at.x, EDGE, maxf(EDGE, screen.end.x - size.x - EDGE))
-	at.y = clampf(at.y, EDGE, maxf(EDGE, screen.end.y - size.y - EDGE))
+	at.y = GhostCardNudge.clear_y(
+		Rect2(at, size), GhostCardNudge.hud_rects(self), screen.grow(-EDGE)
+	)
 	position = at
 
 
