@@ -975,6 +975,66 @@ func clone() -> BuildGrid:
 	return copy
 
 
+## A plain BuildGrid of only `area` of this grid, cell (0, 0) at `area`'s
+## corner: the grid from_snapshot() of RepairPlan's crop of to_snapshot()
+## gives, copied as it stands rather than placed again. Its passenger A* graph
+## is built when a path is first asked for. On the 86x150 site a crop through a
+## load took about 20 ms, most of it building that graph. Every object and room
+## must lie inside `area`; otherwise pushes an error and returns null.
+func cropped(area: Rect2i) -> BuildGrid:
+	var copy := BuildGrid.new(area.size, origin + Vector3(area.position.x, 0.0, area.position.y))
+	var shift := -area.position
+	for id in _objects:
+		var record: Dictionary = _objects[id].duplicate(true)
+		var cells := BuildCatalog.get_def(record["def"]).footprint(
+			record["anchor"], record["facing"]
+		)
+		for cell in cells:
+			if not area.has_point(cell):
+				push_error("BuildGrid.cropped: object %d lies outside %s" % [id, area])
+				return null
+		record["anchor"] += shift
+		copy._objects[id] = record
+		copy._spots.add(id, StaffSpots.cell_of(record["def"], record["anchor"], record["facing"]))
+	for id in _rooms:
+		var room: Dictionary = _rooms[id].duplicate(true)
+		if not area.encloses(room["rect"]):
+			push_error("BuildGrid.cropped: room %d lies outside %s" % [id, area])
+			return null
+		room["rect"] = Rect2i(room["rect"].position + shift, room["rect"].size)
+		copy._rooms[id] = room
+	var cells := [area.position.x, area.size.x, area.position.y, area.size.y]
+	var north_south := [area.position.x, area.size.x, area.position.y, area.size.y + 1]
+	var west_east := [area.position.x, area.size.x + 1, area.position.y, area.size.y]
+	copy._floor = _window(_floor, size.x, cells)
+	copy._zone = _window(_zone, size.x, cells)
+	copy._floor_paid = _window(_floor_paid, size.x, cells)
+	copy._occupant = _window(_occupant, size.x, cells)
+	copy._reserved = _window(_reserved, size.x, cells)
+	copy._room_at = _window(_room_at, size.x, cells)
+	copy._h_walls = _window(_h_walls, size.x, north_south)
+	copy._h_paid = _window(_h_paid, size.x, north_south)
+	copy._v_walls = _window(_v_walls, size.x + 1, west_east)
+	copy._v_paid = _window(_v_paid, size.x + 1, west_east)
+	copy._next_object_id = _next_object_id
+	copy._next_room_id = _next_room_id
+	copy._built = TerminalEnclosure.built_area(copy.size, copy._floor, copy._h_walls, copy._v_walls)
+	copy._outside = TerminalEnclosure.outside_within(
+		copy, copy._h_walls, copy._v_walls, copy.flood_area()
+	)
+	return copy
+
+
+## The values of `window` [x, width, y, height] out of `values`, a row-major
+## packed array `stride` values wide, row by row, in an array of its type.
+static func _window(values: Variant, stride: int, window: Array) -> Variant:
+	var out: Variant = values.slice(0, 0)
+	for y in range(window[2], window[2] + window[3]):
+		var start: int = y * stride + window[0]
+		out.append_array(values.slice(start, start + window[1]))
+	return out
+
+
 ## An empty grid of this grid's class for clone() to fill. A subclass whose
 ## constructor takes other arguments overrides it (SiteGrid).
 func _blank_copy() -> BuildGrid:
