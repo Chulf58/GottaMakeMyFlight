@@ -360,6 +360,8 @@ var _holding := false
 ## Counts grants, so only the latest grant's timer ends the hold.
 var _hold_generation := 0
 var _held_status := ""
+## The latest status text, before the rotate hint (RotateHint) is added to it.
+var _raw_status := ""
 ## True while the hold shows a rescue grant's message, false for a wage one.
 var _hold_is_grant := false
 ## A wages-paid message that waited for a rescue message's hold to end; "" if none.
@@ -485,6 +487,7 @@ func _ready() -> void:
 		build_mode.tool_changed.connect(_on_tool_changed)
 		build_mode.status_changed.connect(_on_mode_status_changed)
 		build_mode.templates.status_changed.connect(_on_status_changed)
+		build_mode.templates.armed_changed.connect(_show_status)
 		_on_status_changed(build_mode.status_text())
 		_on_tool_changed(build_mode.tool)
 	else:
@@ -680,6 +683,7 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 		var index := category_of(tool)
 		_open = NO_CATEGORY if index == remove_category() else index
 	_sync()
+	_show_status()
 
 
 func _on_balance_changed(_balance: int) -> void:
@@ -759,10 +763,18 @@ func _on_mode_status_changed(text: String) -> void:
 
 
 func _on_status_changed(text: String) -> void:
+	_raw_status = text
 	if _holding:
 		_held_status = text
 		return
-	_status.text = text
+	_show_status()
+
+
+## The status line: the latest status text and, while a piece or a template that
+## can turn is armed, the "R rotate" hint (RotateHint). A hold keeps its message.
+func _show_status() -> void:
+	if not _holding:
+		_status.text = RotateHint.compose(_raw_status, build_mode)
 
 
 ## A rescue message always wins the status line. A wages-paid message it cuts
@@ -775,7 +787,7 @@ func _on_granted(_amount: int, message: String) -> void:
 
 func _start_hold(message: String, is_grant: bool) -> void:
 	if not _holding:
-		_held_status = _status.text
+		_held_status = _raw_status
 	_holding = true
 	_hold_is_grant = is_grant
 	_status.text = message
@@ -807,7 +819,8 @@ func _on_loaded(ok: bool) -> void:
 	_pending_wages = ""
 	_holding = false
 	_held_status = build_mode.status_text() if build_mode != null else ""
-	_status.text = _held_status
+	_raw_status = _held_status
+	_show_status()
 
 
 ## The loaded world is a new one: build mode ends with the clock as loaded, the
@@ -839,7 +852,7 @@ func end_grant_hold() -> void:
 		return
 	_pending_wages = ""
 	_holding = false
-	_status.text = _held_status
+	_show_status()
 
 
 ## Shows the open category's row and marks the selected category and card.
