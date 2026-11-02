@@ -13,6 +13,9 @@ const BOARDING := 5000
 const DOORS := 6000
 const START_MOOD := 50
 const BEATS := 30
+## What standing at the gate costs over BEATS beats, at least (PassengerSim).
+@warning_ignore("integer_division")
+const STANDING_LOSS_MIN := BEATS / PassengerSim.STANDING_MOOD_BEATS
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
@@ -118,7 +121,10 @@ func test_a_loaded_world_calms_like_the_one_that_never_stopped() -> void:
 			% [saved, BEATS, guest.mood, twin.mood]
 		)
 	)
-	assert_int(guest.mood).is_greater(saved)
+	# The guest stands, which costs a point every STANDING_MOOD_BEATS beats
+	# (at least BEATS / STANDING_MOOD_BEATS of them); only the statue lifts it
+	# above that.
+	assert_int(guest.mood).is_greater(saved - STANDING_LOSS_MIN)
 	assert_int(twin.mood).is_equal(guest.mood)
 	assert_str(_b.signature()).is_equal(_a.signature())
 
@@ -134,7 +140,9 @@ func test_a_save_without_decor_loads_into_a_world_that_has_none() -> void:
 	_b.run_to(_b.clock.tick + BEATS * PassengerSim.BEAT_TICKS)
 	print("control: mood %d at the save, %d after %d more beats" % [saved, twin.mood, BEATS])
 	assert_int(_b.sim.decor.calm_at(GUEST_CELL)).is_equal(0)
-	assert_int(twin.mood).is_equal(saved)
+	# Only the standing loss moves it: BEATS / STANDING_MOOD_BEATS points, one more
+	# when the run starts on a loss beat.
+	assert_int(twin.mood).is_between(saved - STANDING_LOSS_MIN - 1, saved - STANDING_LOSS_MIN)
 
 
 func test_the_passenger_save_holds_nothing_about_decor() -> void:
