@@ -88,3 +88,43 @@ func test_visible_while_a_tray_is_open_and_hidden_once_it_closes() -> void:
 	print("tray closed: view visible %s, areas drawn %d" % [_view.visible, drawn])
 	assert_bool(_view.visible).is_false()
 	assert_int(drawn).is_equal(0)
+
+
+## The world xz rectangle a guarded mesh covers.
+func _area_rect(area: MeshInstance3D) -> Rect2:
+	var size := (area.mesh as PlaneMesh).size
+	return Rect2(Vector2(area.position.x, area.position.z) - size / 2.0, size)
+
+
+func _site_frame() -> Rect2:
+	return Rect2(Vector2(SITE.grid_origin.x, SITE.grid_origin.z), Vector2(SITE.grid_size))
+
+
+func test_no_drawn_area_reaches_past_the_site_edge() -> void:
+	_apron._process(0.0)
+	var frame := _site_frame()
+	var raw_past := 0
+	for rect in _apron.guard_rects():
+		if not frame.encloses(rect):
+			raw_past += 1
+	var drawn := 0
+	for area in _view.get_children():
+		if (area as MeshInstance3D).visible:
+			drawn += 1
+			var rect := _area_rect(area as MeshInstance3D)
+			print("drawn %s within site %s" % [rect, frame])
+			assert_bool(frame.grow(0.001).encloses(rect)).is_true()
+	print("raw rects past the edge: %d, drawn: %d" % [raw_past, drawn])
+	assert_int(raw_past).is_greater(0)
+	assert_int(drawn).is_equal(2)
+
+
+func test_clipping_leaves_an_interior_rect_alone_and_drops_an_outside_one() -> void:
+	var frame := _site_frame()
+	var inside := Rect2(frame.position + Vector2(10, 10), Vector2(8, 6))
+	var past := Rect2(frame.position - Vector2(5, 0), Vector2(8, 6))
+	var outside := Rect2(frame.position - Vector2(20, 0), Vector2(8, 6))
+	var out := ApronStand.clip_rects([inside, past, outside] as Array[Rect2], frame)
+	assert_int(out.size()).is_equal(2)
+	assert_that(out[0]).is_equal(inside)
+	assert_that(out[1]).is_equal(Rect2(frame.position, Vector2(3, 6)))

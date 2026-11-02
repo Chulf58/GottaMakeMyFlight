@@ -137,7 +137,8 @@ func _add_area() -> void:
 func _process(_delta: float) -> void:
 	if grid == null:
 		return
-	var rects := guard_rects()
+	var frame := Rect2(Vector2(site.grid_origin.x, site.grid_origin.z), Vector2(site.grid_size))
+	var rects := clip_rects(guard_rects(), frame)
 	while _areas.size() < rects.size():
 		_add_area()
 	for i in _areas.size():
@@ -271,6 +272,15 @@ func guard_rects() -> Array[Rect2]:
 	var out: Array[Rect2] = []
 	for gate: String in gate_stands:
 		out.append_array(_rects_of(busy_flight(gate), gate_stands[gate]["live"], gate))
+	return out
+
+
+## `rects` cut to `frame`; a rectangle wholly outside it is dropped.
+static func clip_rects(rects: Array[Rect2], frame: Rect2) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for rect in rects:
+		if rect.intersects(frame):
+			out.append(rect.intersection(frame))
 	return out
 
 
