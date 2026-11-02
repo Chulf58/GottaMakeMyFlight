@@ -124,6 +124,43 @@ func test_a_jump_never_zooms_out_a_camera_that_is_already_close() -> void:
 	assert_float(_camera.target_distance).is_equal(12.0)
 
 
+func test_a_jump_zooms_from_the_current_distance_not_one_still_easing_out() -> void:
+	_spills()
+	_stack.refresh()
+	_camera.distance = 12.0
+	_camera.target_distance = 200.0
+	assert_bool(_stack.press_card(DirtyAlert.KEY)).is_true()
+	assert_float(_camera.target_distance).is_equal(12.0)
+
+
+func test_the_sim_is_scanned_once_per_tick_however_often_it_refreshes() -> void:
+	_stack.refresh()
+	assert_int(_stack.scans).is_equal(1)
+	for i in 5:
+		_stack.refresh()
+	assert_int(_stack.scans).is_equal(1)
+	_world.step()
+	_stack.refresh()
+	assert_int(_stack.scans).is_equal(2)
+	_stack.refresh()
+	assert_int(_stack.scans).is_equal(2)
+
+
+func test_a_reset_or_a_new_sim_scans_again_on_the_same_tick() -> void:
+	_stack.refresh()
+	assert_int(_stack.scans).is_equal(1)
+	_stack.reset()
+	_stack.refresh()
+	assert_int(_stack.scans).is_equal(2)
+	var other := MessTestKit.open_world(2)
+	other.run_to(_world.sim.tick)
+	_stack.sim = other.sim
+	_stack.refresh()
+	assert_int(_stack.scans).is_equal(3)
+	_stack.sim = _world.sim
+	other.free_all()
+
+
 func test_the_history_tray_lists_each_card_with_when_it_cleared() -> void:
 	assert_bool(_stack.is_tray_open()).is_false()
 	_spills()

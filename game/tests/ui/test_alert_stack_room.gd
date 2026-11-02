@@ -8,6 +8,8 @@ extends GdUnitTestSuite
 
 const SEED := 5_120_311
 
+var _settings_path := SaveTestKit.run_path("alert_stack_room_setting")
+
 var _main: Node
 var _camera: TycoonCamera
 var _hud: PassengerHud
@@ -16,7 +18,12 @@ var _sim: PassengerSim
 
 
 func before() -> void:
-	_main = SaveTestKit.boot(self, SEED)
+	_main = load(SaveTestKit.MAIN).instantiate()
+	(_main.get_node("SimClock") as SimClock).seed_rng(SEED)
+	(_main.get_node("SimClock") as SimClock).set_paused(true)
+	# Its own settings file, so a player's alerts-off choice cannot fail this.
+	(_main.get_node("PassengerHud") as PassengerHud).alert_settings_path = _settings_path
+	add_child(_main)
 	_camera = _main.get_node("TycoonCamera")
 	_hud = _main.get_node("PassengerHud")
 	_sim = _main.get_node("PassengerSim")
@@ -25,6 +32,7 @@ func before() -> void:
 
 func after() -> void:
 	_main.free()
+	DirAccess.remove_absolute(_settings_path)
 
 
 func before_test() -> void:
@@ -77,7 +85,7 @@ func _spills() -> void:
 func test_a_drawn_card_is_cut_from_the_camera_room_and_never_zooms() -> void:
 	(
 		assert_bool(_stack.cards_on())
-		. override_failure_message("alert cards are switched off in user://hud_settings.cfg")
+		. override_failure_message("alert cards are switched off in the test settings file")
 		. is_true()
 	)
 	assert_bool(_stack.room_rect().has_area()).is_false()

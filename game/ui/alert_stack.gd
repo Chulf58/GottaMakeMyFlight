@@ -56,6 +56,10 @@ var sim: PassengerSim:
 var camera: TycoonCamera
 ## Where the on/off choice is kept; tests use their own file.
 var settings_path := HudFlagSetting.PATH
+## How many times the sim was scanned for the queue and no-route causes. Those
+## are read once per sim tick and kept (refresh() runs every rendered frame,
+## also while paused); tests count it.
+var scans := 0
 ## True while something covers the stack's place (the open offer sheet); the
 ## stack stays down then and comes back when it is false.
 var covered := Callable()
@@ -69,6 +73,9 @@ var _tray_lines := VBoxContainer.new()
 var _tray_button := Button.new()
 var _toggle := CheckButton.new()
 var _shown_revision := -1
+## The queue and no-route causes read at _scanned_tick; -1 means none kept.
+var _sim_causes: Array[Dictionary] = []
+var _scanned_tick := -1
 ## Key -> how many clicks its card has had, to step through its targets.
 var _clicks: Dictionary = {}
 
@@ -108,6 +115,7 @@ func reset() -> void:
 	_dirty.reset()
 	_board.reset()
 	_clicks.clear()
+	_scanned_tick = -1
 	_shown_revision = _board.revision
 	_sync_cards()
 	_sync_tray()
@@ -118,9 +126,14 @@ func refresh() -> void:
 	if sim == null:
 		return
 	_dirty.refresh()
+	if sim.tick != _scanned_tick:
+		_scanned_tick = sim.tick
+		scans += 1
+		_sim_causes.clear()
+		_sim_causes.append_array(AlertSources.queue_full(sim))
+		_sim_causes.append_array(AlertSources.no_route(sim))
 	var causes: Array[Dictionary] = []
-	causes.append_array(AlertSources.queue_full(sim))
-	causes.append_array(AlertSources.no_route(sim))
+	causes.append_array(_sim_causes)
 	causes.append_array(_dirty.cause())
 	_board.update(causes, sim.tick)
 	if _board.revision != _shown_revision:
@@ -182,7 +195,7 @@ func press_card(key: StringName) -> bool:
 	_clicks[key] = clicks + 1
 	var target: Vector3 = targets[clicks % targets.size()]
 	if camera != null:
-		camera.glide_to(target, minf(camera.target_distance, JUMP_DISTANCE))
+		camera.glide_to(target, minf(camera.distance, JUMP_DISTANCE))
 	jumped.emit(target)
 	return true
 
