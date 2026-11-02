@@ -59,11 +59,14 @@ static func stoop_shift(stoop: CarryStoop, pivot: Vector3, at: Vector3) -> Vecto
 	# Turned toward the target from where the pivot was before the hips went down
 	# and back (STOOP_DROP and HIP_BACK_M of the stoop, all hips; CarryStoop).
 	var drop: Vector3 = stoop.drops[0] if not stoop.drops.is_empty() else CarryStoop.HIPS_ALL
+	# With the back bent first (z 1) the hips did not go with it; z between 0
+	# and 1 is a blend of the two (CarryStoop.solved()), so is this: as a flag
+	# a shoulder bag snapped at the end of a collecting walker's stoop ease
+	# (RollerPark.drops_of()).
 	var before := from
-	if drop.z <= 0.0:
-		var hips := Vector2(CarryStoop.STOOP_DROP * drop.x, CarryStoop.HIP_BACK_M * drop.y)
-		hips *= stoop.drawn / skeleton.global_transform.basis.get_scale().x
-		before += Vector3(0.0, hips.x, hips.y)
+	var hips := Vector2(CarryStoop.STOOP_DROP * drop.x, CarryStoop.HIP_BACK_M * drop.y)
+	hips *= stoop.drawn / skeleton.global_transform.basis.get_scale().x
+	before += Vector3(0.0, hips.x, hips.y) * (1.0 - clampf(drop.z, 0.0, 1.0))
 	var unbent := CarryStoop.turn(before, aim, stoop.drawn).inverse() * rel
 	return skeleton.global_transform.basis * (rel - unbent)
 

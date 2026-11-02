@@ -499,7 +499,8 @@ func sync() -> void:
 				)
 			):
 				hands[i] = (int(was[i]["place"]) / 2) % 2
-			# A roller parking on its wheels or lying on the floor keeps its lift.
+			# A parking roller keeps home, hand and lift to the park's end; one lying, its lift.
+			RollerPark.hold_park(was[i], kinds[i], homes, hands, i, _tick(), p.collect_tick != 0)
 			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):
 				lifts[i] = int(was[i].get("place", 0)) % 2 == 1
 		held["scale"] = SecurityLooks.bag_scale(p)
@@ -1363,8 +1364,8 @@ func _bag_transform(
 			var fixed := ActivityCarry.fixed_place(held, bag_box(kind), scale_by, i, count)
 			if not fixed.is_empty():
 				return fixed[0]
-			var spot: Transform3D = held["floor"][i]
-			var placed := Transform3D(yaw, body.global_position) * spot
+			var at := Transform3D(yaw, body.global_position)
+			var placed: Transform3D = RollerPark.lay_frame(held["bags"][i], at) * held["floor"][i]
 			placed.origin.y = sim.grid.origin.y
 			return Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)
 	return _carry_transform(held, body, i, reach)
