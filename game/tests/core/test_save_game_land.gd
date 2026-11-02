@@ -73,16 +73,36 @@ func test_a_bought_plot_is_saved_and_loaded_with_the_count_bought() -> void:
 
 
 func test_a_save_whose_land_misses_a_built_cell_is_refused() -> void:
+	var clean := _taken()
+	# A new game's land, then (2, 4) bought and a floor built on it.
+	var start := _land().owned_plots().filter(func(p: Vector2i) -> bool: return p != BOUGHT)
+	var snapshot := {
+		"plot_counts": [4, 6],
+		"owned": start.map(func(p: Vector2i) -> Array: return [p.x, p.y]),
+		"bought": 0,
+	}
+	assert_bool(_land().from_snapshot(snapshot)).is_true()
+	assert_bool(_land().buy(BOUGHT, _mode.wallet()).ok).is_true()
+	var cell := Vector2i(60, 110)
+	assert_bool(_mode.grid.apply(BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, 1)).ok).is_true()
 	var data := _taken()
-	# The starter terminal stands on column 0, rows 4 and 5: drop row 5.
-	var owned: Array = (data["land"]["owned"] as Array).filter(
-		func(p: Array) -> bool: return not (int(p[0]) == 0 and int(p[1]) == 5)
+	# The control: the save as taken loads, with the floor on the bought plot.
+	assert_bool(_save.load_world(data)).is_true()
+	assert_bool(_mode.grid.floor_at(cell) != BuildGrid.FLOOR_NONE).is_true()
+	# (2, 3) is as reachable from the start land and keeps `bought` at 1, but
+	# the floor now stands on land the save does not own.
+	var owned: Array = (data["land"]["owned"] as Array).map(
+		func(p: Array) -> Array: return [2, 3] if int(p[0]) == 2 and int(p[1]) == 4 else p
 	)
+	assert_int(owned.size()).is_equal(7)
+	assert_array(owned).contains([[2, 3]])
 	data["land"]["owned"] = owned
+	assert_str(LandPlots.problem(data["land"], _mode.site)).is_empty()
 	var before := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(data)).is_false()
-	assert_str(_save.message_text()).contains("land")
+	assert_str(_save.message_text()).contains("built on land the player does not own")
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	assert_bool(_save.load_world(clean)).is_true()
 
 
 func test_a_save_cut_into_another_number_of_plots_is_refused() -> void:
