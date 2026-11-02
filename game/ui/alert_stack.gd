@@ -56,9 +56,10 @@ var sim: PassengerSim:
 var camera: TycoonCamera
 ## Where the on/off choice is kept; tests use their own file.
 var settings_path := HudFlagSetting.PATH
-## How many times the sim was scanned for the queue and no-route causes. Those
-## are read once per sim tick and kept (refresh() runs every rendered frame,
-## also while paused); tests count it.
+## How many times the passengers were scanned for the no-route cause. It is read
+## once per sim tick and kept (refresh() runs every rendered frame, also while
+## paused); tests count it. The queue-full cause is read on every refresh: it
+## is cheap, and a paused build session changes it without a tick.
 var scans := 0
 ## True while something covers the stack's place (the open offer sheet); the
 ## stack stays down then and comes back when it is false.
@@ -73,8 +74,8 @@ var _tray_lines := VBoxContainer.new()
 var _tray_button := Button.new()
 var _toggle := CheckButton.new()
 var _shown_revision := -1
-## The queue and no-route causes read at _scanned_tick; -1 means none kept.
-var _sim_causes: Array[Dictionary] = []
+## The no-route cause read at _scanned_tick; -1 means none kept.
+var _route_causes: Array[Dictionary] = []
 var _scanned_tick := -1
 ## Key -> how many clicks its card has had, to step through its targets.
 var _clicks: Dictionary = {}
@@ -129,11 +130,10 @@ func refresh() -> void:
 	if sim.tick != _scanned_tick:
 		_scanned_tick = sim.tick
 		scans += 1
-		_sim_causes.clear()
-		_sim_causes.append_array(AlertSources.queue_full(sim))
-		_sim_causes.append_array(AlertSources.no_route(sim))
+		_route_causes = AlertSources.no_route(sim)
 	var causes: Array[Dictionary] = []
-	causes.append_array(_sim_causes)
+	causes.append_array(AlertSources.queue_full(sim))
+	causes.append_array(_route_causes)
 	causes.append_array(_dirty.cause())
 	_board.update(causes, sim.tick)
 	if _board.revision != _shown_revision:

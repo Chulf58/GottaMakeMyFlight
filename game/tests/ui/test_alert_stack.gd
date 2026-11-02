@@ -63,6 +63,12 @@ func _spills() -> Array[Vector2i]:
 	return cells
 
 
+func _footprint_of(grid: BuildGrid, id: int) -> Array[Vector2i]:
+	var record := grid.get_object(id)
+	var def := BuildCatalog.get_def(StringName(record["def"]))
+	return def.footprint(record["anchor"], record["facing"])
+
+
 func _clean_all() -> void:
 	for id in _world.sim.messes.mess_ids():
 		assert_bool(_world.sim.messes.clean(id)).is_true()
@@ -144,6 +150,41 @@ func test_the_sim_is_scanned_once_per_tick_however_often_it_refreshes() -> void:
 	assert_int(_stack.scans).is_equal(2)
 	_stack.refresh()
 	assert_int(_stack.scans).is_equal(2)
+
+
+## Two desks whose lanes hold 3 each, both full, with the card up.
+func test_a_paused_build_edit_updates_the_queue_card_without_a_tick() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(10, 5))
+	var first := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(2, 1), 0)
+	var second := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(6, 1), 0)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 4), 3)
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	for i in 12:
+		world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		world.run_to(world.clock.tick + 12)
+	world.run_to(world.clock.tick + 25)
+	var stack := _stack_at(SaveTestKit.run_path("alert_stack_paused_edit"))
+	stack.sim = world.sim
+	stack.refresh()
+	world.run_to(world.clock.tick + AlertSources.QUEUE_HOLD_TICKS)
+	stack.refresh()
+	assert_array(stack.card_keys()).is_equal([AlertSources.QUEUE_CHECKIN])
+	assert_str(stack.card_text(AlertSources.QUEUE_CHECKIN)).contains("2 desks full")
+	(
+		assert_int((stack.board().alert(AlertSources.QUEUE_CHECKIN)["targets"] as Array).size())
+		. is_equal(2)
+	)
+	# The player takes a desk down in a paused build session: no tick passes.
+	var tick := world.sim.tick
+	assert_bool(grid.apply(BuildEdit.remove_object(second)).ok).is_true()
+	stack.refresh()
+	assert_int(world.sim.tick).is_equal(tick)
+	assert_str(stack.card_text(AlertSources.QUEUE_CHECKIN)).contains("1 desk full")
+	var targets: Array = stack.board().alert(AlertSources.QUEUE_CHECKIN)["targets"]
+	assert_int(targets.size()).is_equal(1)
+	assert_array(_footprint_of(grid, first)).contains([grid.world_to_cell(targets[0])])
+	stack.free()
+	world.free_all()
 
 
 func test_a_reset_or_a_new_sim_scans_again_on_the_same_tick() -> void:
