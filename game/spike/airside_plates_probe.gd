@@ -20,11 +20,13 @@ const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 90000
 const FRAME := 1.0 / 60.0
 const FOLLOW_DISTANCE := 75.0
-## Sim ticks sampled for the strip, four per row: landing, taxiing, takeoff.
+## Sim ticks sampled for the strip, four per row, with the states each row must show:
+## landing (approach to touchdown), taxiing (TAXI_IN) and takeoff (the TAKEOFF state,
+## ticks 3100 to 3300 from the first state).
 const STRIP_ROWS := [
-	["landing", [150, 228, 280, 345]],
-	["taxiing", [420, 500, 580, 655]],
-	["takeoff", [1590, 1670, 1730, 1770]],
+	["landing", [150, 228, 280, 345], [FlightSim.State.APPROACH, FlightSim.State.LANDING]],
+	["taxiing", [420, 500, 580, 655], [FlightSim.State.TAXI_IN]],
+	["takeoff", [3110, 3170, 3230, 3290], [FlightSim.State.TAKEOFF]],
 ]
 
 var _out_dir := ""
@@ -88,6 +90,10 @@ func _run() -> void:
 	_clock = _main.get_node("SimClock")
 	_clock.set_process(false)
 	root.add_child(_main)
+	# A node that defines _process gets processing turned on when it becomes ready, so
+	# turn the clock's off again now: only this probe steps it. Left on, the clock runs
+	# on during the frames of each sample and the plane flies on from the rig.
+	_clock.set_process(false)
 	_rig = _main.get_node("TycoonCamera")
 	_cam = _main.get_node("TycoonCamera/Camera3D")
 	_plane = _main.get_node("PlaneView")
@@ -252,9 +258,9 @@ func _sim() -> FlightSim:
 
 func _follow() -> void:
 	var p: Vector3 = _plane.global_position
-	# The focus is on the ground under the plane: a plane still in the air at the first
-	# sample would otherwise lift the focus with it and leave the frame.
-	_rig.position = Vector3(p.x, 0.0, p.z)
+	# The focus is on the plane itself: a plane still in the air at the first sample,
+	# with the focus on the ground under it, sits near the eye and leaves the frame.
+	_rig.position = p
 	_rig.bounds_half_extent = 400.0
 	_rig.distance = FOLLOW_DISTANCE
 	_rig.yaw = 0.0
@@ -269,12 +275,24 @@ func _strip() -> void:
 		for target in row[1]:
 			_step_to(_t0 + target)
 			_plane.update_pose()
+			# The first sample can come before the views have posed the plane (it is
+			# hidden and at the origin), and following that point leaves the frame. Let
+			# frames pass until the plane is shown, then follow where it is.
+			var wait := 0
+			while not _plane.visible and wait < 30:
+				await process_frame
+				_plane.update_pose()
+				wait += 1
 			_follow()
 			await physics_frame
 			await physics_frame
 			await _frames(2)
 			var model: Node3D = _plane.get_node("Pivot")
 			var tag := "%s_t%d" % [row[0], _clock.tick]
+			var state: int = _sim().state_of("GMF101-d0")
+			if not row[2].has(state):
+				_invalid("%s: flight state %d, the row needs one of %s" % [tag, state, row[2]])
+				continue
 			print(
 				(
 					"FRAME %s tick=%d state=%d pos=%s nose=%s pitch_deg=%.1f"

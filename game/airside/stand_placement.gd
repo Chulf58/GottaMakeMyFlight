@@ -31,6 +31,9 @@ const TAIL_M := 14.85
 const HALF_SPAN_M := 14.2
 ## Farthest any part of the plane reaches from its stand point.
 const SWING_RADIUS_M := 20.6
+## Whole cells (1 m each) two stands' exits need between them so the swings, each
+## 2 x SWING_RADIUS_M wide, do not meet.
+const EXIT_SPACING_CELLS := ceili(2.0 * SWING_RADIUS_M)
 ## The gap between the wall line and the nose. 2.2 m (2.3 m in decision
 ## plane-stand-design-airside-moves-110-m-north-stand-snaps-to) so that a
 ## plane parked at the site's north row keeps its tail 0.05 m clear of the

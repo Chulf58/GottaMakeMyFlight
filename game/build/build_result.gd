@@ -97,7 +97,8 @@ const REASON_TEXT := {
 	Reason.LAND_OWNED: "You already own this plot",
 	Reason.LAND_NOT_TOUCHING: "Buy a plot next to land you own",
 	Reason.GATE_NO_EXIT: "Put a gate desk within 4 cells of a north exit no other gate uses",
-	Reason.GATE_STAND_OVERLAP: "Its plane stand would overlap another gate's",
+	Reason.GATE_STAND_OVERLAP:
+	"Gates need %d m between exits. Widen the terminal" % StandPlacement.EXIT_SPACING_CELLS,
 	Reason.GATE_IN_USE: "A flight is still due at this gate. Remove it after the flight leaves",
 	Reason.GATE_FLIGHTS_STUCK:
 	"No other gate is free for these flights. Move them in Departures first",

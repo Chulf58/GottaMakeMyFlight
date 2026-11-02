@@ -213,15 +213,18 @@ func test_no_new_plan_while_the_wallet_covers_the_bound_and_a_raised_one_is_caug
 	assert_bool(_grant.evaluate()).is_false()
 	print("cut %d bound %d plan %s" % [cut, _grant._bound, _grant._plan])
 	assert_object(_grant._plan).is_null()
-	assert_int(_grant._bound).is_equal(900 + cut * PriceTable.price_of_floor())
+	var scanner := PriceTable.price_of_object(&"security_scanner")
+	assert_int(_grant._bound).is_equal(scanner + cut * PriceTable.price_of_floor())
 	assert_bool(wallet.spend(wallet.balance - 1000, Wallet.Category.BUILD)).is_true()
 	assert_bool(_grant.evaluate()).is_false()
-	assert_int(_grant._bound).is_equal(925)
+	# The raised plan needs the scanner and one floor tile.
+	var raised := scanner + PriceTable.price_of_floor()
+	assert_int(_grant._bound).is_equal(raised)
 	_remove_all(["exits"])
 	assert_bool(_grant.evaluate()).is_true()
 	print("grants %s" % [_granted])
 	var price := RepairPlan.least_balance(_world.grid, _grant.repair_plan().edits)
-	assert_int(price).is_greater_equal(925 + PriceTable.price_of_object(&"exit_door"))
+	assert_int(price).is_equal(raised + PriceTable.price_of_object(&"exit_door"))
 	assert_int(_granted[0][0]).is_equal(price - 1000)
 
 

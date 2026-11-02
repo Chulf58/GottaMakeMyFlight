@@ -326,7 +326,7 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 		if stands_overlap(stand, StandPlacement.for_exit(on_grid, link["exit"])):
 			var refusal := BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP, link["desk"])
 			if link["gate"] != "":
-				refusal.detail = "gate %s" % link["gate"]
+				refusal.detail = "gate %s is too close" % link["gate"]
 			return refusal
 	return BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP)
 

@@ -1118,8 +1118,15 @@ func _mouse_ground() -> Variant:
 	return point
 
 
+## True for a ground point over the grid's whole area, its far east and south
+## edge lines included (world_to_cell() puts those in a cell outside the grid).
+func _over_grid_area(point: Vector3) -> bool:
+	var local := point - grid.origin
+	return local.x >= 0.0 and local.z >= 0.0 and local.x <= grid.size.x and local.z <= grid.size.y
+
+
 func _update_ghost(point: Variant) -> void:
-	_pointer_on_grid = point != null and grid.in_bounds(grid.world_to_cell(point))
+	_pointer_on_grid = point != null and _over_grid_area(point)
 	_landside_plan = null if is_dragging() else landside_plan_at(point)
 	if _landside_plan != null or _is_landside_tool() or tool == Tool.BUY_LAND:
 		_hover_off_grid_tool(point)
