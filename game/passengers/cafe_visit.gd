@@ -33,6 +33,12 @@ var amount := 0
 ## The reserved seat's descriptor (CafeLayout seat entry), derived again on load;
 ## empty for a walk-on visit.
 var seat: Dictionary = {}
+## The table's placement (Relocation.placement()) `seat` was derived from;
+## derived again on load. Empty for a walk-on visit.
+var piece: Dictionary = {}
+## Set while the guest leaves a seat whose table moved and walks back to it
+## (Relocation); null otherwise. Saved.
+var relocation: Relocation = null
 
 
 ## Whether the guest buys at the counter and walks on with no seat (the

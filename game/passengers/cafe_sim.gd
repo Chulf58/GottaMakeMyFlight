@@ -59,6 +59,12 @@ extends RefCounted
 ## the airside bonus, resets hunger and lifts mood; leaving early pays part of
 ## it and resets hunger; giving up before being served pays nothing.
 ##
+## A table that moves with its room (Relocation) does not move its guests: a
+## guest sitting down, seated or getting up gets up at the old seat with
+## nothing paid, then is admitted again and walks to its seat at the new spot
+## for the dwell it still owes, or gives up unpaid; a served guest walking to
+## its seat is admitted again the same way. It never goes back to the queue.
+##
 ## Visits, queues and seats are handled in id and key order, with integer
 ## quantities only, so a save loaded at a tick boundary plays on exactly.
 
@@ -107,6 +113,12 @@ const START_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.TO_GATE,
 	Passenger.Stage.STANDING,
 	Passenger.Stage.SEATED,
+]
+## The stages a guest spends at its seat, off its approach cell.
+const SEAT_STAGES: Array[Passenger.Stage] = [
+	Passenger.Stage.CAFE_SITTING_DOWN,
+	Passenger.Stage.CAFE_SEATED,
+	Passenger.Stage.CAFE_STANDING_UP,
 ]
 
 var layout := CafeLayout.new()
@@ -272,6 +284,8 @@ func reconcile() -> void:
 		if visit == null:
 			continue
 		var p := _sim.get_passenger(id)
+		if _relocates(p, visit):
+			continue
 		var walk_on := visit.walk_on()
 		var seat := {} if walk_on else layout.seat(visit.room, visit.seat_key)
 		var counter := layout.counter(visit.room, visit.counter)
@@ -287,6 +301,7 @@ func reconcile() -> void:
 			_leave_early(p, visit)
 			continue
 		visit.seat = seat
+		visit.piece = Relocation.placement(_sim.grid, int(seat.get("object_id", 0)))
 		if deadlines_stale:
 			visit.deadline = _live_deadline(p, visit)
 	var counters: Array = _queues.keys()
@@ -364,15 +379,24 @@ func step(p: Passenger) -> void:
 			_seat_step(p, visit)
 		Passenger.Stage.CAFE_SITTING_DOWN:
 			if _sim.tick - p.stage_tick >= PassengerSim.SIT_DOWN_TICKS:
-				visit.dwell_end = _sim.tick + RoomTypes.get_type(visit.venue).dwell_ticks
+				var dwell := RoomTypes.get_type(visit.venue).dwell_ticks
 				_set_stage.call(p, Passenger.Stage.CAFE_SEATED)
+				if visit.relocation != null:
+					# Back at its table after a move: only the dwell it still
+					# owes, as if it had sat down that much earlier.
+					p.stage_tick = _sim.tick - (dwell - visit.relocation.left)
+					visit.relocation = null
+				visit.dwell_end = p.stage_tick + dwell
 		Passenger.Stage.CAFE_SEATED:
 			if _sim.tick >= visit.dwell_end:
 				visit.outcome = CafeVisit.Outcome.COMPLETE
 				_stand(p, visit)
 		Passenger.Stage.CAFE_STANDING_UP:
 			if _sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS:
-				_end(p, visit)
+				if visit.relocation != null and visit.relocation.returns():
+					_head_to_seat(p, visit)
+				else:
+					_end(p, visit)
 
 
 ## A guest who got up from a gate seat for the cafe sets off for its queue.
@@ -472,7 +496,14 @@ func rederive() -> void:
 		var visit: CafeVisit = _visits[id]
 		if not visit.seat_key.is_empty():
 			_seats[visit.seat_key] = id
-		visit.seat = layout.seat(visit.room, visit.seat_key)
+		var moving := visit.relocation != null and visit.relocation.exiting
+		if moving:
+			# Still getting up at the seat's old spot: its geometry is the saved one.
+			visit.seat = Relocation.seat_at(visit.relocation.source, visit.seat_key)
+			visit.piece = visit.relocation.source
+		else:
+			visit.seat = layout.seat(visit.room, visit.seat_key)
+			visit.piece = Relocation.placement(_sim.grid, int(visit.seat.get("object_id", 0)))
 		visit.venue = layout.cafe(visit.room).get("type", visit.venue)
 
 
@@ -668,6 +699,7 @@ func _commit(p: Passenger, plan: Dictionary) -> void:
 	visit.counter = counter_id
 	visit.seat_key = seat.get("key", "")
 	visit.seat = layout.seat(visit.room, visit.seat_key)
+	visit.piece = Relocation.placement(_sim.grid, int(visit.seat.get("object_id", 0)))
 	visit.resume_stage = _resume_stage(p)
 	visit.deadline = VisitForecast.deadline(
 		_sim, p, _leave_cell(p, visit), _leave_delay(visit), visit.resume_stage
@@ -760,6 +792,79 @@ func _seat_step(p: Passenger, visit: CafeVisit) -> void:
 		_end(p, visit)
 		return
 	p.set_path(path)
+
+
+## A guest whose table the grid now holds at another placement (Relocation):
+## one sitting down turns back and gets up, one seated gets up with the dwell
+## it still owes, one already getting up just finishes, all at the old seat and
+## with nothing settled; a served guest walking to its seat is admitted again
+## (_head_to_seat()). True when reconcile must leave the visit alone: held at
+## its old seat, or ended. A guest still queuing or ordering just takes the
+## table's new spot, as after any edit.
+func _relocates(p: Passenger, visit: CafeVisit) -> bool:
+	if visit.relocation != null and visit.relocation.exiting:
+		return true
+	var live := Relocation.placement(_sim.grid, int(visit.seat.get("object_id", 0)))
+	if not Relocation.moved(visit.piece, live):
+		return false
+	if p.stage == Passenger.Stage.CAFE_TO_SEAT:
+		_head_to_seat(p, visit)
+		return true
+	if not SEAT_STAGES.has(p.stage):
+		return false
+	var owed := RoomTypes.get_type(visit.venue).dwell_ticks
+	if visit.relocation != null:
+		owed = visit.relocation.left
+	match p.stage:
+		Passenger.Stage.CAFE_SITTING_DOWN:
+			visit.relocation = Relocation.leaving(visit.piece, owed)
+			# Turned back partway: getting up takes as long as sitting down took.
+			var spent := mini(_sim.tick - p.stage_tick, PassengerSim.SIT_DOWN_TICKS)
+			_set_stage.call(p, Passenger.Stage.CAFE_STANDING_UP)
+			p.stage_tick = _sim.tick - (PassengerSim.STAND_UP_TICKS - spent)
+		Passenger.Stage.CAFE_SEATED:
+			owed = maxi(visit.dwell_end - _sim.tick, 1)
+			visit.relocation = Relocation.leaving(visit.piece, owed)
+			_set_stage.call(p, Passenger.Stage.CAFE_STANDING_UP)
+		_:
+			# Already up and paid: it only finishes getting up where it sat.
+			visit.relocation = Relocation.leaving(visit.piece, -1)
+	return true
+
+
+## A served guest whose table moved heads for its seat at the new spot, when
+## the rest of the visit still fits before its flight: the walk there, sitting
+## down, the dwell it still owes, getting up and the way on (VisitForecast).
+## Otherwise, or with no seat it can reach, it gives up unpaid (ruling
+## moving-a-room-with-its-furniture-is-free-and-keeps-paid-pric, point 4).
+func _head_to_seat(p: Passenger, visit: CafeVisit) -> void:
+	refresh()
+	var owed := RoomTypes.get_type(visit.venue).dwell_ticks
+	if visit.relocation != null:
+		visit.relocation.exiting = false
+		owed = visit.relocation.left
+	var seat := layout.seat(visit.room, visit.seat_key)
+	var route := {}
+	if not seat.is_empty():
+		route = _route(p, seat["approach"])
+		if route.is_empty() and p.at == seat["approach"] and not p.is_moving():
+			route = {"path": [p.at], "keep": 0, "from": p.at, "mm": 0}
+	if route.is_empty():
+		_abandon(p, visit)
+		return
+	var ticks := JourneyForecast.walk_ticks(route["mm"]) + PassengerSim.SIT_DOWN_TICKS + owed
+	var arrival := VisitForecast.arrival(
+		_sim, p, ticks, seat["approach"], PassengerSim.STAND_UP_TICKS, visit.resume_stage
+	)
+	if not VisitForecast.admits(_sim, p, arrival):
+		_abandon(p, visit)
+		return
+	visit.seat = seat
+	visit.piece = Relocation.placement(_sim.grid, int(seat["object_id"]))
+	visit.deadline = _live_deadline(p, visit)
+	VisitRoute.start(p, route)
+	if p.stage != Passenger.Stage.CAFE_TO_SEAT:
+		_set_stage.call(p, Passenger.Stage.CAFE_TO_SEAT)
 
 
 ## The deadline passed or the cafe, counter or seat went away. A guest not yet

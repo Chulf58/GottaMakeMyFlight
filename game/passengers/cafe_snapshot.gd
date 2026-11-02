@@ -12,7 +12,11 @@ extends RefCounted
 ## visit's room at an existing counter; served, outcome, settled and amount
 ## agreeing with the guest's stage; an order in progress, or a seated guest's
 ## dwell, that started on the guest's stage tick and ends after the saved tick;
-## and the visit resuming on the guest's side of security. A save never holds
+## and the visit resuming on the guest's side of security. A visit following
+## its moved table saves its Relocation under "relocation" (absent otherwise):
+## a guest still getting up at the old seat is checked against the saved
+## spot's seat, owes no outcome until it is back, and one walking back or
+## sitting down again has left the old seat. A save never holds
 ## stale cafe state: between a grid edit and the next tick's reconcile,
 ## PassengerSim.to_snapshot() refuses (SaveGame waits for that tick), so
 ## "deadlines_stale" is always false and a piece missing from the rebuilt
@@ -49,6 +53,8 @@ static func save(cafes: CafeSim) -> Dictionary:
 		var record := {"seat_key": visit.seat_key}
 		for field in VISIT_INT_FIELDS + VISIT_BOOL_FIELDS:
 			record[field] = visit.get(field)
+		if visit.relocation != null:
+			record["relocation"] = visit.relocation.to_record()
 		visits.append(record)
 	return {
 		"visits": visits, "queues": cafes.queue_records(), "deadlines_stale": cafes.deadlines_stale
@@ -114,6 +120,14 @@ static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, ti
 	var stage := p.stage
 	var unserved := UNSERVED_STAGES.has(stage)
 	var standing := stage == Passenger.Stage.CAFE_STANDING_UP
+	var moving := visit.relocation
+	var exiting := moving != null and moving.exiting
+	# A guest getting up to follow its table to a new spot has no outcome yet.
+	var leaving := standing and not (moving != null and moving.returns())
+	# Still at the old seat: its seat is the saved spot's, not the grid's.
+	var seat := cafes.seat(visit.room, visit.seat_key)
+	if exiting:
+		seat = Relocation.seat_at(moving.source, visit.seat_key)
 	# A room missing from the layout is refused by the seat check below; the
 	# default type only keeps the other checks running until then.
 	var venue := RoomTypes.get_type(cafes.cafe(visit.room).get("type", &"cafe"))
@@ -130,18 +144,27 @@ static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, ti
 			(visit.resume_stage == Passenger.Stage.TO_GATE) == p.cleared,
 			"it resumes on the other side of security"
 		],
+		[venue.walk_on or not seat.is_empty(), "no such cafe seat"],
 		[
-			venue.walk_on or not cafes.seat(visit.room, visit.seat_key).is_empty(),
-			"no such cafe seat"
+			(
+				moving == null
+				or (exiting and standing)
+				or (
+					not exiting
+					and stage in [Passenger.Stage.CAFE_TO_SEAT, Passenger.Stage.CAFE_SITTING_DOWN]
+				)
+			),
+			"a relocation that does not match the stage"
 		],
+		[not exiting or moving.source["def"] == &"cafe_table", "a relocation from no table"],
 		[not venue.walk_on or unserved, "a walk-on visit has no seat, sit or stand stage"],
 		[
 			visit.served or not cafes.counter(visit.room, visit.counter).is_empty(),
 			"no such cafe counter"
 		],
 		[visit.served != unserved, "served does not match stage %d" % stage],
-		[(visit.outcome != CafeVisit.Outcome.NONE) == standing, "outcome does not match stage"],
-		[not visit.settled or standing, "settled before standing up"],
+		[(visit.outcome != CafeVisit.Outcome.NONE) == leaving, "outcome does not match stage"],
+		[not visit.settled or leaving, "settled before standing up"],
 		[visit.settled or visit.amount == 0, "an amount on a visit not settled"],
 		[
 			(
@@ -186,6 +209,10 @@ static func _visit(entry: Variant) -> CafeVisit:
 		if not entry.has(field) or typeof(entry[field]) != TYPE_BOOL:
 			return null
 		visit.set(field, entry[field])
+	if entry.has("relocation"):
+		visit.relocation = Relocation.from_record(entry["relocation"])
+		if visit.relocation == null:
+			return null
 	var outcome_ok := visit.outcome >= 0 and visit.outcome < CafeVisit.Outcome.size()
 	var settled_ok := not visit.settled or visit.outcome != CafeVisit.Outcome.NONE
 	if (

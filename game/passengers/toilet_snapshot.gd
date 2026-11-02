@@ -19,9 +19,21 @@ extends RefCounted
 ## (CafeSim.reconcile()) can save it true; it is kept, so the loaded game
 ## works the deadlines out again on its next tick as the saved one would. A
 ## visit whose stall that edit removed is still refused.
+##
+## A visit following its moved stall saves its Relocation under "relocation"
+## (absent otherwise). While the passenger still leaves the old spot, it is
+## checked against the stall entry of the saved spot, not the grid's.
 
 const VISIT_FIELDS := ["passenger", "room", "stall", "resume_stage", "deadline"]
 const RESUME_STAGES := [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
+## The stages of a passenger leaving a stall's old spot, and of one on its way
+## back into the stall at the new spot.
+const RELOCATED_EXITS := [Passenger.Stage.TOILET_STANDING_UP, Passenger.Stage.TOILET_EXIT]
+const RELOCATED_RETURNS := [
+	Passenger.Stage.TOILET_WALK,
+	Passenger.Stage.TOILET_ENTER,
+	Passenger.Stage.TOILET_SITTING_DOWN,
+]
 
 
 static func save(toilets: ToiletSim) -> Dictionary:
@@ -40,6 +52,10 @@ static func save(toilets: ToiletSim) -> Dictionary:
 				}
 			)
 		)
+	for i in visits.size():
+		var moving := toilets.visit_of(int(visits[i]["passenger"])).relocation
+		if moving != null:
+			visits[i]["relocation"] = moving.to_record()
 	return {"visits": visits, "deadlines_stale": toilets.deadlines_stale}
 
 
@@ -74,7 +90,7 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid, tick: i
 	var layout := ToiletLayout.new()
 	layout.rebuild(grid)
 	for id in visits:
-		var problem := _visit_problem(visits[id], passengers[id], layout, tick)
+		var problem := _visit_problem(visits[id], passengers[id], layout, grid, tick)
 		if problem != "":
 			return {"error": "toilet visit of passenger %d: %s" % [id, problem]}
 	return {"visits": visits, "deadlines_stale": data["deadlines_stale"]}
@@ -83,9 +99,17 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid, tick: i
 ## Why a visit cannot be what continuous play left by `tick`, or "" when it
 ## can.
 static func _visit_problem(
-	visit: ToiletVisit, p: Passenger, layout: ToiletLayout, tick: int
+	visit: ToiletVisit, p: Passenger, layout: ToiletLayout, grid: BuildGrid, tick: int
 ) -> String:
 	var stall := layout.stall(visit.stall_id)
+	var moving := visit.relocation
+	if moving != null and moving.exiting:
+		# Still leaving the stall's old spot: checked against the saved spot.
+		if moving.source["def"] != &"toilet_stall" or not RELOCATED_EXITS.has(p.stage):
+			return "a relocation that does not match the stage"
+		stall = ToiletLayout.entry_at(grid, visit.stall_id, visit.room, moving.source)
+	elif moving != null and not RELOCATED_RETURNS.has(p.stage):
+		return "a relocation that does not match the stage"
 	if stall.is_empty():
 		return "no such toilet stall"
 	if int(stall["room"]) != visit.room:
@@ -118,4 +142,8 @@ static func _visit(entry: Variant) -> ToiletVisit:
 	if visit.room < 1 or visit.stall_id < 1:
 		return null
 	visit.resume_stage = resume as Passenger.Stage
+	if entry.has("relocation"):
+		visit.relocation = Relocation.from_record(entry["relocation"])
+		if visit.relocation == null:
+			return null
 	return visit
