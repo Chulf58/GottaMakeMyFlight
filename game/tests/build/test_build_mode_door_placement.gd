@@ -157,5 +157,5 @@ func test_the_status_line_says_what_to_do() -> void:
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(3, 3))).ok).is_true()
 	_mode.set_tool(BuildMode.Tool.EXIT)
 	var blocked := _mode.apply_at(_mode.grid.cell_to_world(EDGE_CELLS[NORTH]))
-	assert_int(blocked.reason).is_equal(BuildResult.Reason.INTERACTION_BLOCKED)
-	assert_str(_mode.status_text()).is_equal("Clear the floor in front of the exit")
+	assert_int(blocked.reason).is_equal(BuildResult.Reason.DOOR_FRONT_BLOCKED)
+	assert_str(_mode.status_text()).is_equal("Something is in front of the door: gate seats")

@@ -49,6 +49,7 @@ enum Reason {
 	GATE_STAND_OVERLAP,
 	GATE_IN_USE,
 	GATE_FLIGHTS_STUCK,
+	DOOR_FRONT_BLOCKED,
 }
 
 const REASON_TEXT := {
@@ -102,6 +103,7 @@ const REASON_TEXT := {
 	Reason.GATE_IN_USE: "A flight is still due at this gate. Remove it after the flight leaves",
 	Reason.GATE_FLIGHTS_STUCK:
 	"No other gate is free for these flights. Move them in Departures first",
+	Reason.DOOR_FRONT_BLOCKED: "Something is in front of the door",
 }
 
 var ok: bool = true
