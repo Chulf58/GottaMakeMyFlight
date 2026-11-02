@@ -487,6 +487,10 @@ func _ready() -> void:
 		_sync()
 	if _wallet != null:
 		_wallet.changed.connect(_on_balance_changed)
+	if build_mode != null and build_mode.land_tool != null and build_mode.land_tool.land != null:
+		# A load changes the land and the next plot's price with the wallet
+		# unchanged; the Buy land card must follow.
+		build_mode.land_tool.land.changed.connect(_refresh_money)
 	_refresh_money()
 	if rescue_grant != null:
 		rescue_grant.granted.connect(_on_granted)

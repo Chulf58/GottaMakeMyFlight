@@ -172,3 +172,21 @@ static func _covered(faces: PackedVector3Array, at: Vector2) -> bool:
 		if Geometry2D.is_point_in_polygon(at, tri):
 			return true
 	return false
+
+
+func test_the_buy_land_card_follows_a_load_that_leaves_the_wallet_alone() -> void:
+	var wallet := _finances.wallet
+	var first := PriceTable.price_of_land_plot(0)
+	var second := PriceTable.price_of_land_plot(1)
+	assert_bool(wallet.from_snapshot({"balance": str(first)})).is_true()
+	assert_str(_menu.card_price_text(BuildMode.Tool.BUY_LAND)).is_equal(str(first))
+	assert_bool(_menu.is_card_affordable(BuildMode.Tool.BUY_LAND)).is_true()
+	var owned := _land().owned_plots().map(func(p: Vector2i) -> Array: return [p.x, p.y])
+	owned.append([BUYABLE.x, BUYABLE.y])
+	var snapshot := {"plot_counts": [4, 6], "owned": owned, "bought": 1}
+	assert_bool(_land().from_snapshot(snapshot)).is_true()
+	# The wallet did not change, so nothing but the land told the menu.
+	assert_int(wallet.balance).is_equal(first)
+	assert_str(_menu.card_price_text(BuildMode.Tool.BUY_LAND)).is_equal(str(second))
+	assert_bool(_menu.is_card_affordable(BuildMode.Tool.BUY_LAND)).is_false()
+	assert_that(_menu.card(BuildMode.Tool.BUY_LAND).modulate).is_equal(_menu.unaffordable_tint())

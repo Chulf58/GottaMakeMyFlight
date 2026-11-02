@@ -449,7 +449,7 @@ func _stage_grid(data: Dictionary, staged: Dictionary) -> String:
 	return ""
 
 
-## The land plots (LandPlots): the site's plot size, plots on the site, and
+## The land plots (LandPlots): the site's plot counts, plots on the site, and
 ## every built cell of the staged grid on owned land.
 func _stage_land(data: Dictionary, staged: Dictionary) -> String:
 	var problem := LandPlots.problem(data, build_mode.site)

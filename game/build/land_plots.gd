@@ -319,9 +319,53 @@ func to_snapshot() -> Dictionary:
 	return {"plot_counts": [plots.x, plots.y], "owned": owned, "bought": bought}
 
 
-## Why a to_snapshot() dictionary cannot be loaded on `site`, or "".
+## Why a to_snapshot() dictionary cannot be loaded on `site`, or "": it must
+## be well formed (snapshot_problem()) and a state the game can reach, which
+## is a new game's start land plus plots bought one at a time beside owned land:
+## no plot twice, all the start land owned, `bought` the plots beyond it, and
+## every owned plot joined to the start land by edges.
 static func problem(data: Dictionary, site: SiteDefinition) -> String:
-	return LandPlots.for_site(site).snapshot_problem(data)
+	var land := LandPlots.for_site(site)
+	var why := land.snapshot_problem(data)
+	if why != "":
+		return why
+	var start := LandPlots.for_site(site)
+	start.own_start(site)
+	return land._reachable_problem(data, start.owned_plots())
+
+
+## Why a well formed snapshot's ownership could not come from buying plots
+## from the `start` land, or "".
+func _reachable_problem(data: Dictionary, start: Array[Vector2i]) -> String:
+	var owned := {}
+	for entry in data["owned"]:
+		var plot := Vector2i(int(entry[0]), int(entry[1]))
+		if owned.has(plot):
+			return "owned plot %s is listed twice" % [entry]
+		owned[plot] = true
+	for plot in start:
+		if not owned.has(plot):
+			return "the start land plot %s is not owned" % [plot]
+	if int(data["bought"]) != owned.size() - start.size():
+		return (
+			"'bought' is %d but %d plots beyond the start land are owned"
+			% [int(data["bought"]), owned.size() - start.size()]
+		)
+	var joined := {}
+	var queue := start.duplicate()
+	for plot in queue:
+		joined[plot] = true
+	while not queue.is_empty():
+		var plot: Vector2i = queue.pop_back()
+		for step in EDGE_STEPS:
+			var next := plot + step
+			if owned.has(next) and not joined.has(next):
+				joined[next] = true
+				queue.append(next)
+	for plot: Vector2i in owned:
+		if not joined.has(plot):
+			return "owned plot %s is not joined to the start land by an edge" % [plot]
+	return ""
 
 
 ## Why a to_snapshot() dictionary cannot be loaded into these plots, or "".
