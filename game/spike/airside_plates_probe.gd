@@ -94,6 +94,9 @@ func _run() -> void:
 	await _frames(10)
 	# The plane's timeline is the subject, not staffing: open the airport directly
 	# (AirportGate.open() opens it ready or not), which issues the starter flight.
+	# The shell has no gate desk, and a closed gate keeps the airport closed.
+	if not StarterFlight.add_gate_desk((_main.get_node("BuildMode") as BuildMode).grid):
+		_invalid("the gate desk was refused")
 	var gate := _main.get_node("AirportGate") as AirportGate
 	if not gate.open():
 		_invalid("the airport did not open")

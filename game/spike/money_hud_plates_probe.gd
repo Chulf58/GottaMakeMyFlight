@@ -112,6 +112,11 @@ func _boot(world_seed: int) -> void:
 	_flights = _main.get_node("FlightSim") as FlightSim
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	await _frames(8)
+	# The shell has no gate: a contract needs a gate desk by the exit (GateDesks).
+	var desk := _mode.grid.apply(
+		ReferenceTerminal.gate_desk_edit(ReferenceTerminal.offset_on(_mode.grid))
+	)
+	_expect(desk.ok, "the gate desk was refused")
 	# A new game boots closed with no flight; open the airport directly (these
 	# plates are about money, not staffing), which accepts the starter and issues
 	# its first occurrence on the next tick, stepped by hand.
@@ -125,6 +130,11 @@ func _boot(world_seed: int) -> void:
 	await _frames(4)
 
 
+## A cell of the reference terminal's layout, moved to where the site puts it.
+func _at(cell: Vector2i) -> Vector2i:
+	return cell + ReferenceTerminal.offset_on(_mode.grid)
+
+
 ## Puts BuildMode's pointer over a cell of the grid through its pointer_override
 ## hook, so the cost line prices the tool under it instead of reading whatever
 ## the real mouse happens to cover. A plain warp_mouse plus a motion event at
@@ -132,7 +142,7 @@ func _boot(world_seed: int) -> void:
 ## cursor in this probe, so the hover is driven here instead.
 func _point_at_world() -> void:
 	var camera := _main.get_node("TycoonCamera/Camera3D") as Camera3D
-	var screen := camera.unproject_position(_mode.grid.cell_to_world(DRAG_FROM))
+	var screen := camera.unproject_position(_mode.grid.cell_to_world(_at(DRAG_FROM)))
 	_mode.pointer_override = screen
 	await _frames(6)
 	print(
@@ -158,8 +168,10 @@ func _scene_a() -> void:
 	var doors := GameCalendar.clock_text(
 		_flights.state_start(starter, FlightSim.State.DOORS_CLOSED)
 	)
+	var minute: int = _flights.contract_of(FlightSim.DEFAULT_ID)["departure_minute"]
+	var departs := "%02d:%02d" % [minute / 60, minute % 60]
 	_expect(
-		departures.text == "09:38  Oslo  Gotta Air  doors close " + doors,
+		departures.text == "%s  Oslo  Gotta Air  doors close %s" % [departs, doors],
 		"a: departures '%s'" % departures.text
 	)
 	var policy := _find_label(_hud, PassengerHud.DEBUG_POLICY_TEXT)
@@ -220,7 +232,10 @@ func _scene_c() -> void:
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	var camera := _main.get_node("TycoonCamera/Camera3D") as Camera3D
 	var corners := [
-		DRAG_FROM, DRAG_TO, Vector2i(DRAG_FROM.x, DRAG_TO.y), Vector2i(DRAG_TO.x, DRAG_FROM.y)
+		_at(DRAG_FROM),
+		_at(DRAG_TO),
+		_at(Vector2i(DRAG_FROM.x, DRAG_TO.y)),
+		_at(Vector2i(DRAG_TO.x, DRAG_FROM.y))
 	]
 	var view := root.get_visible_rect().grow(-8.0)
 	var end_screen := Vector2.ZERO
@@ -232,7 +247,7 @@ func _scene_c() -> void:
 		_expect(
 			view.has_point(screen), "c: cell %s projects outside the window (%s)" % [cell, screen]
 		)
-		if cell == DRAG_TO:
+		if cell == _at(DRAG_TO):
 			end_screen = screen
 	# The pointer goes first, so no HUD control is hovered and the motion does
 	# not stretch a rectangle that is not started yet.
@@ -241,8 +256,8 @@ func _scene_c() -> void:
 	motion.global_position = end_screen
 	root.push_input(motion, true)
 	await _frames(4)
-	_mode.begin_area(_mode.grid.cell_to_world(DRAG_FROM))
-	_mode.move_area(_mode.grid.cell_to_world(DRAG_TO))
+	_mode.begin_area(_mode.grid.cell_to_world(_at(DRAG_FROM)))
+	_mode.move_area(_mode.grid.cell_to_world(_at(DRAG_TO)))
 	await _frames(6)
 	_expect(
 		root.gui_get_hovered_control() == null,

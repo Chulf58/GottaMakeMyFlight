@@ -204,6 +204,10 @@ func _build() -> void:
 				"wall over the removed scanner"
 			)
 	_mode.set_tool(BuildMode.Tool.NONE)
+	# A contract needs a gate desk by the exit (GateDesks).
+	_must(
+		grid.apply(ReferenceTerminal.gate_desk_edit(ReferenceTerminal.offset_on(grid))), "gate desk"
+	)
 	_run_to(_clock.tick + 2)
 	var scanners: Array[int] = _sim.layout.scanners
 	print(

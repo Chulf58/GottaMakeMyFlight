@@ -17,6 +17,16 @@ static func first_flight() -> String:
 	return FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
 
 
+## Places the gate desk that makes the reference terminal's exit a gate, which a
+## grid built from the reference terminal lacks and without which the airport
+## stays closed (NO_GATE, decision gates-1b-as-built). False when it is refused.
+static func add_gate_desk(grid: BuildGrid) -> bool:
+	var result := grid.apply(ReferenceTerminal.gate_desk_edit(ReferenceTerminal.offset_on(grid)))
+	if not result.ok:
+		push_error("StarterFlight: the gate desk was refused: %s" % result.reason_text())
+	return result.ok
+
+
 ## One check-in agent per desk and one security officer per scanner, as the
 ## panel's Hire buttons hire them. Returns how many were hired.
 static func hire_per_station(sim: PassengerSim, staff: StaffSim) -> int:

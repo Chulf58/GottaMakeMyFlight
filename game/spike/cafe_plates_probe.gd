@@ -96,6 +96,9 @@ func _run() -> void:
 	var seed := randi()
 	clock.seed_rng(seed)
 	print("PROBE sim_seed=", seed)
+	# The probe builds its own terminal on an empty grid: the starter shell
+	# main.tscn places on the reference cells would refuse its first wall.
+	(main.get_node("BuildMode") as BuildMode).starter_shell = false
 	root.add_child(main)
 	clock.set_process(false)
 	clock.set_paused(false)
@@ -113,6 +116,8 @@ func _run() -> void:
 		_invalid("PassengerSim does not pay into the Finances wallet")
 	_beat("build")
 	var ids := CafeTestLayout.build(mode.grid, true)
+	if not StarterFlight.add_gate_desk(mode.grid):
+		_invalid("the gate desk was refused")
 	# Direct grid edits, like the starter terminal button: redraw the pieces.
 	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
 	await _frames(4)

@@ -30,32 +30,37 @@ static func build(
 ) -> Dictionary:
 	var built := ReferenceTerminal.build(grid)
 	assert(built, "reference terminal refused")
+	var at := ReferenceTerminal.offset_on(grid)
 	var edits: Array[BuildEdit] = []
 	for y in range(FLOOR.position.y, FLOOR.end.y):
 		for x in range(FLOOR.position.x, FLOOR.end.x):
-			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y) + at, BuildGrid.FLOOR_TILE, 1))
 	for x in range(FLOOR.position.x, FLOOR.end.x):
-		var cell := Vector2i(x, ReferenceTerminal.DIVIDER_Y)
+		var cell := Vector2i(x, ReferenceTerminal.DIVIDER_Y) + at
 		edits.append(BuildEdit.place_wall(cell, BuildGrid.Side.NORTH))
 	for y in [4, 5, 6, 7, 11, 12, 13, 14, 15]:
-		edits.append(BuildEdit.remove_wall(Vector2i(21, y), BuildGrid.Side.EAST))
+		edits.append(BuildEdit.remove_wall(Vector2i(21, y) + at, BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):
 		assert(result.ok, "cafe layout edit refused: %s" % result.reason_text())
 	# Walls close the floor in, so passengers may use it (TerminalEnclosure).
 	EnclosureKit.close_floor(grid)
 	var ids := {
-		"air_room": _apply(grid, BuildEdit.place_room(AIRSIDE_ROOM, venue)).room_id,
-		"land_room": _apply(grid, BuildEdit.place_room(LANDSIDE_ROOM, venue)).room_id,
-		"air_counter": _place(grid, &"cafe_counter", AIR_COUNTER),
-		"land_counter": _place(grid, &"cafe_counter", LAND_COUNTER),
+		"air_room": _apply(grid, BuildEdit.place_room(_moved(AIRSIDE_ROOM, at), venue)).room_id,
+		"land_room": _apply(grid, BuildEdit.place_room(_moved(LANDSIDE_ROOM, at), venue)).room_id,
+		"air_counter": _place(grid, &"cafe_counter", AIR_COUNTER + at),
+		"land_counter": _place(grid, &"cafe_counter", LAND_COUNTER + at),
 	}
 	if tables:
-		ids["air_table"] = _place(grid, &"cafe_table", AIR_TABLE)
-		ids["land_table"] = _place(grid, &"cafe_table", LAND_TABLE)
+		ids["air_table"] = _place(grid, &"cafe_table", AIR_TABLE + at)
+		ids["land_table"] = _place(grid, &"cafe_table", LAND_TABLE + at)
 	if extra_tables and tables:
-		ids["air_table_2"] = _place(grid, &"cafe_table", AIR_TABLE_2)
-		ids["land_table_2"] = _place(grid, &"cafe_table", LAND_TABLE_2)
+		ids["air_table_2"] = _place(grid, &"cafe_table", AIR_TABLE_2 + at)
+		ids["land_table_2"] = _place(grid, &"cafe_table", LAND_TABLE_2 + at)
 	return ids
+
+
+static func _moved(rect: Rect2i, at: Vector2i) -> Rect2i:
+	return Rect2i(rect.position + at, rect.size)
 
 
 static func _place(grid: BuildGrid, def_id: StringName, anchor: Vector2i) -> int:

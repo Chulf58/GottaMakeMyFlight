@@ -23,6 +23,7 @@ extends SceneTree
 ## Any failed proof prints PROBE_INVALID and the probe exits 1.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/sky_path"
 const MAIN_SCENE := "res://main/main.tscn"
 ## Ticks the probe may step to reach the starter's second day.
@@ -140,6 +141,9 @@ func _run() -> void:
 	_rig = _main.get_node("TycoonCamera")
 	_cam = _main.get_node("TycoonCamera/Camera3D")
 	await _frames(10)
+	# The shell has no gate desk, and a closed gate keeps the airport closed.
+	if not StarterFlight.add_gate_desk((_main.get_node("BuildMode") as BuildMode).grid):
+		_invalid("the gate desk was refused")
 	var gate := _main.get_node("AirportGate") as AirportGate
 	if not gate.open():
 		_invalid("the airport did not open")
