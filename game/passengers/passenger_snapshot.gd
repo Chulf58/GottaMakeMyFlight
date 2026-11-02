@@ -184,7 +184,7 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 	var ids := {}
 	for entry in data["passengers"]:
 		var p := _passenger(entry, grid, int(data["next_id"]))
-		if p == null or ids.has(p.id):
+		if p == null or ids.has(p.id) or not ParkRecovery.valid(p, out["tick"]):
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
 		ids[p.id] = p
 		passengers.append(p)
@@ -456,7 +456,6 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.apron_mm >= 0
 		and p.apron_mm <= p.apron_total_mm()
 		and p.odometer_mm >= 0
-		and p.collect_tick >= 0
 		and p.hunger >= 0
 		and p.hunger <= CafeSim.HUNGER_MAX
 		and p.cafe_cooldown >= 0

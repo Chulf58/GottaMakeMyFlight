@@ -370,8 +370,11 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 		"flips": 0,
 		"off_k": -1.0,
 		"off_took": -1.0,
+		"stoop_step": 0.0,
+		"stoop_top": 0.0,
 	}
 	var flip_at := -1.0
+	var last_stoop := -1.0
 	var last_since := -1.0
 	var last_ticks := 0.0
 	var began := -1.0
@@ -533,6 +536,17 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 				out["fails"].append("%s bag jumped %.3f" % [tag, moved])
 			if reached > (SNAP_M * ticks * 3.0 if let_go else step):
 				out["fails"].append("%s grip jumped %.3f" % [tag, reached])
+		# The back's stoop as drawn (CarryStoop.drawn), from frame to frame of a
+		# floor>pull once the bag is taken: its largest step and its largest value.
+		var rig: Dictionary = body.get_meta(&"carry_rig", {})
+		var stoop: float = (rig["stoop"] as CarryStoop).drawn if rig.has("stoop") else 0.0
+		if move == "floor>pull" and k > RollerPark.TAKE_BY:
+			if last_stoop >= 0.0:
+				out["stoop_step"] = maxf(out["stoop_step"], absf(stoop - last_stoop))
+			out["stoop_top"] = maxf(out["stoop_top"], stoop)
+			last_stoop = stoop
+		else:
+			last_stoop = -1.0
 		last_xf = node.global_transform
 		last_since = float(bag.get("since", -1.0))
 		last_ticks = CarryLead.ticks_of(bag)
@@ -848,11 +862,49 @@ func test_a_parking_move_keeps_its_home_to_its_end() -> void:
 		assert_bool(target.is_equal_approx(plans[1]["targets"][0])).is_true()
 
 
+## Collecting its roller after its seat went, a walker's back (CarryStoop.drawn)
+## changes from one frame to the next at 1x by no more than it does on the
+## normal pick-up as a walker stands up and walks off (the largest step of
+## that floor>pull once the bag is taken): its stoop eases from LAY_HIPS into
+## HIPS_ALL after the lift (RollerPark.drops_of()), never in a frame. Controls:
+## both walkers stooped, and the collecting one went past the lift's end.
+func test_a_collecting_walker_s_back_comes_up_no_faster_than_on_the_normal_pick_up() -> void:
+	var p := _roller_walker(true)
+	var normal := await _route(p, "floor>pull", FRAME_TICKS[0])
+	p = _roller_walker(false)
+	for n in 4:
+		await _tick(0.5)
+	var seat: Dictionary = _world.sim.layout.seats[0]
+	p.seat_object = seat["object_id"]
+	p.stage = Passenger.Stage.SITTING_DOWN
+	p.clear_path()
+	p.stage_tick = _world.sim.tick
+	var collect := await _route(p, "pull>floor", FRAME_TICKS[0], "", "lift")
+	var bag := _views.carry_on_props().bag_state(p.id, 0)
+	print(
+		(
+			"stoop step normal %.4f (top %.3f), collecting %.4f (top %.3f), lift end k %.3f"
+			% [
+				normal["stoop_step"],
+				normal["stoop_top"],
+				collect["stoop_step"],
+				collect["stoop_top"],
+				RollerPark.up_ends(bag).x
+			]
+		)
+	)
+	assert_float(float(normal["stoop_top"])).is_greater(0.0)
+	assert_float(float(collect["stoop_top"])).is_greater(0.0)
+	assert_float(float(collect["off_k"])).is_greater(RollerPark.LIFT_END)
+	assert_float(float(collect["stoop_step"])).is_less_equal(float(normal["stoop_step"]))
+
+
 ## A floor>pull stamped for a walker collecting its roller (hold_park()'s
 ## "collecting") bends the back first (LAY_HIPS) only until the lift ends
-## (RollerPark.up_ends().x, after the take at TAKE_BY here), and HIPS_ALL from
-## then on; one stamped without it keeps HIPS_ALL throughout. Control: both
-## stoops were seen.
+## (RollerPark.up_ends().x, after the take at TAKE_BY here), eases into
+## HIPS_ALL over LOW_EASE_TICKS (the back-first share falling every step) and
+## stays HIPS_ALL to k 1; one stamped without it keeps HIPS_ALL throughout.
+## Control: both stoops were seen.
 func test_a_collecting_pick_up_bends_the_back_first_only_to_the_lift_end() -> void:
 	var hand := SecurityLooks.Home.HAND
 	var floor := SecurityLooks.Home.FLOOR
@@ -869,30 +921,48 @@ func test_a_collecting_pick_up_bends_the_back_first_only_to_the_lift_end() -> vo
 		assert_bool(bag.get("park_low", false)).is_equal(collecting)
 		var low := 0
 		var all := 0
+		var easing := 0
 		var switched := -1.0
+		var last_z := 1.0
+		var ease_k := RollerPark.LOW_EASE_TICKS / RollerPark.TICKS_UP
 		for n in 401:
 			var k := n / 400.0
 			var body := {
 				"hand": 0, "bar_z": 0.255, "scale": 1.0, "grips": [Vector3.ZERO, Vector3.ZERO]
 			}
 			var drops: Array = CarryLead.plan(bag, k, lying, pulled, frame, flags, body)["drops"]
+			var d: Vector3 = drops[0]
 			var lift_end := RollerPark.up_ends(bag).x
-			var want := RollerPark.LAY_HIPS if collecting and k < lift_end else CarryStoop.HIPS_ALL
-			assert_that(drops[0]).is_equal(want)
-			if drops[0] == RollerPark.LAY_HIPS:
-				low += 1
+			if not collecting or k >= lift_end + ease_k:
+				assert_that(d).is_equal(CarryStoop.HIPS_ALL)
+			elif k <= lift_end:
+				assert_that(d).is_equal(RollerPark.LAY_HIPS)
 			else:
+				# Eased: between the two, the back-first share falling every step.
+				assert_float(d.z).is_less_equal(last_z)
+				assert_float(d.z).is_greater(0.0)
+				assert_float(d.x).is_equal(1.0)
+				assert_float(d.y).is_equal_approx(1.0 - d.z, 0.0001)
+				easing += 1
+			last_z = d.z
+			if d == RollerPark.LAY_HIPS:
+				low += 1
+			elif d == CarryStoop.HIPS_ALL:
 				all += 1
 				if switched < 0.0:
 					switched = k
 		print(
-			"collecting %s: LAY_HIPS %d HIPS_ALL %d from k=%.4f" % [collecting, low, all, switched]
+			(
+				"collecting %s: LAY_HIPS %d eased %d HIPS_ALL %d from k=%.4f"
+				% [collecting, low, easing, all, switched]
+			)
 		)
 		assert_int(all).is_greater(0)
 		if collecting:
 			assert_int(low).is_greater(0)
+			assert_int(easing).is_greater(0)
 			assert_float(switched).is_equal_approx(
-				RollerPark.TAKE_BY + RollerPark.UP_PART, 1.0 / 400.0
+				RollerPark.TAKE_BY + RollerPark.UP_PART + ease_k, 1.0 / 400.0
 			)
 		else:
 			assert_int(low).is_equal(0)

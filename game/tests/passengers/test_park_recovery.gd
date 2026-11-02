@@ -144,23 +144,83 @@ func test_a_seat_lost_outside_a_roller_park_sends_the_walker_on_at_once() -> voi
 		assert_int(_ticks_to_route(p, 3)).is_between(0, 1)
 
 
-## A walker collecting its roller keeps its collect_tick through a save and a
-## load (a JSON round trip), and a version 16 save, which has none, is refused.
-func test_a_collecting_walker_keeps_its_hold_through_a_save() -> void:
+## A save taken while a walker collects its roller (a JSON round trip) loads,
+## and the load sets it off at once: the view draws the bag in the pull after a
+## load (PassengerViews releases every carry record), so its collect_tick is
+## cleared and it plans its way on the next tick. A version 16 save, which has
+## none, is refused.
+func test_a_load_mid_collect_sets_the_walker_off_at_once() -> void:
 	var p := _walker(true)
 	_world.step()
 	_world.step()
 	_seat_goes()
 	_world.step()
 	var until := p.collect_tick
-	assert_int(until).is_greater(_world.sim.tick)
+	assert_int(until).is_greater(_world.sim.tick + 2)
 	var saved: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
 	assert_int(int(saved["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
+	assert_int(int(_record_of(saved, p.id)["collect_tick"])).is_equal(until)
 	var old := saved.duplicate(true)
 	old["save_version"] = 16
 	for record: Dictionary in old["passengers"]:
 		record.erase("collect_tick")
 	assert_bool(_world.sim.from_snapshot(old)).is_false()
-	p.collect_tick = 0
 	assert_bool(_world.sim.from_snapshot(saved)).is_true()
-	assert_int(_world.passenger(p.id).collect_tick).is_equal(until)
+	var loaded := _world.passenger(p.id)
+	var at := _world.sim.tick
+	print(
+		"loaded at tick %d: collect %d stage_tick %d" % [at, loaded.collect_tick, loaded.stage_tick]
+	)
+	assert_int(loaded.collect_tick).is_equal(0)
+	assert_int(loaded.stage_tick).is_equal(at + 1)
+	assert_int(_ticks_to_route(loaded, 3)).is_between(0, 2)
+
+
+## A saved collect_tick the sim could not have written is refused: too far
+## ahead of the save's tick, already past, on a walker not on its way to the
+## gate, or on one with no roller. Control: the save as written loads.
+func test_an_impossible_collect_tick_is_refused() -> void:
+	var p := _walker(true)
+	_world.step()
+	_seat_goes()
+	_world.step()
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
+	var tick := _world.sim.tick
+	var bad := [
+		["collect_tick", tick + ceili(RollerPark.TICKS_DOWN) + ParkRecovery.COLLECT_TICKS + 1],
+		["collect_tick", tick],
+		["collect_tick", -5],
+		["stage", Passenger.Stage.SEATED],
+		["carry_on", 0],
+	]
+	for c: Array in bad:
+		var data: Dictionary = saved.duplicate(true)
+		_record_of(data, p.id)[c[0]] = c[1]
+		print("%s = %s" % [c[0], c[1]])
+		assert_bool(_world.sim.from_snapshot(data)).is_false()
+	assert_bool(_world.sim.from_snapshot(saved)).is_true()
+
+
+## A walker late when its seat goes in the middle of the park is not held: it
+## carries its roller lifted and sets it down with no park (CarryOnProps.
+## _lifted()), and it must not miss its flight waiting for nothing.
+func test_a_late_walker_whose_seat_goes_mid_park_is_not_held() -> void:
+	var p := _walker(true)
+	_world.step()
+	p.late = true
+	_seat_goes()
+	_world.step()
+	var sent := _world.sim.tick
+	print("late: collect %d" % p.collect_tick)
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+	assert_int(p.collect_tick).is_equal(0)
+	assert_int(p.stage_tick).is_equal(sent)
+
+
+## The record of passenger `id` in a passenger save `data`.
+func _record_of(data: Dictionary, id: int) -> Dictionary:
+	for record: Dictionary in data["passengers"]:
+		if int(record["id"]) == id:
+			return record
+	assert_bool(false).override_failure_message("no record of passenger %d" % id).is_true()
+	return {}

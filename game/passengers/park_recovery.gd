@@ -16,9 +16,10 @@ extends RefCounted
 ## started sitting down (it stamps a change of home on the frame that sees it,
 ## as the stand-up's floor>pull does, SecurityLooks._rolled_up()); and a seat
 ## removed once the park is over (still sitting down, or seated) is left as it
-## was: the walker goes at once. The sim does not know whether the view parked
-## the roller (a walker late as it sat down set it down from the hand, with no
-## park), so such a walker stands the same ticks.
+## was: the walker goes at once. A walker late when its seat goes is not held
+## (on_seat_lost()), even one that turned late in the park (the park runs on,
+## RollerPark.holds_lift()); one turning late while held waits to the end. A
+## load releases a walker at once (on_load()).
 
 ## Ticks of the pick-up (floor>pull) the walker stands for: to the end of the
 ## lift to the park (RollerPark.LIFT_END) and one tick more, since the body is
@@ -39,7 +40,38 @@ static func on_seat_lost(sim: PassengerSim, p: Passenger) -> void:
 		return
 	if sim.tick - p.stage_tick >= ceili(RollerPark.TICKS_DOWN) or not _has_roller(p):
 		return
+	# A late walker carries its roller lifted in the hand (CarryOnProps._lifted())
+	# and sets it down with no park, so there is nothing to wait for: held, it
+	# could miss its flight.
+	if p.late:
+		return
 	p.collect_tick = collect_of(p.stage_tick)
+
+
+## Whether `p`'s collect_tick is one the sim could have saved at `tick`: none,
+## or on its way to the gate with a roller, collecting to a tick after `tick`
+## and no further on than a whole hold.
+static func valid(p: Passenger, tick: int) -> bool:
+	if p.collect_tick == 0:
+		return true
+	var ahead := p.collect_tick - tick
+	return (
+		p.stage == Passenger.Stage.TO_GATE
+		and _has_roller(p)
+		and ahead > 0
+		and ahead <= ceili(RollerPark.TICKS_DOWN) + COLLECT_TICKS
+	)
+
+
+## On a load at `tick`: a walker collecting its roller sets off at once (it
+## plans its way on the next tick, PassengerSim._to_spot()). The view drops
+## every carry record on a load and draws the bag at its home, in the pull,
+## so a walker kept waiting stood by a roller it already had.
+static func on_load(p: Passenger, tick: int) -> void:
+	if p.collect_tick == 0:
+		return
+	p.collect_tick = 0
+	p.stage_tick = tick + 1
 
 
 ## The tick a walker that started sitting down on `sat_tick` and lost its seat

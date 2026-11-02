@@ -13,10 +13,12 @@ extends SceneTree
 ##     bag's handle; take: the frame the hand took it ("park_took");
 ##   k050: the first frame at k 0.5 or later; before: one frame before the
 ##     lift's end (BEFORE_K); switch: the first at the lift's
-##     end (RollerPark.up_ends().x, the stoop back to HIPS_ALL); walk: the first
+##     end (RollerPark.up_ends().x, the stoop easing into HIPS_ALL); ease1, ease2:
+##     a third and two thirds through the ease (EASE_K); walk: the first
 ##     frame the body is drawn moving.
 ## Proof before a save: the feet, the head and the bag project inside the frame
-## by MARGIN_PX, the body is at least MIN_BODY_PX tall, and a twin with the
+## by MARGIN_PX, the body is at least MIN_BODY_PX tall, a twin with the bag alone
+## hidden differs by MIN_BAG_PX pixels, and a twin with the
 ## passenger and its bag hidden differs from the plate by MIN_DIFF_PX pixels
 ## (in frame is not visible). Otherwise PROBE_INVALID, exit 1. Each plate
 ## prints k, the grip's distance to the handle and the bar, the handle's height
@@ -34,6 +36,12 @@ const OUT_REL := "res://../tools/blender/out/park-recovery"
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 300.0
 const MIN_DIFF_PX := 2000
+## The bag alone (a twin with only it hidden) must change this many pixels, so
+## a roller hidden behind the body cannot pass.
+const MIN_BAG_PX := 1500
+## The stoop's ease from LAY_HIPS to HIPS_ALL after the lift (k), plated at a
+## third and two thirds of the way.
+const EASE_K := RollerPark.LOW_EASE_TICKS / RollerPark.TICKS_UP
 ## The camera, in the frame of the park (+z the way the walker faced as it sat
 ## down), out on the roller's side, and the point it looks at.
 const CAM_AT := Vector3(-2.9, 1.3, 1.3)
@@ -71,7 +79,7 @@ func _run() -> void:
 	if await _boot():
 		await _collect()
 	print("PROBE done plates=%d failed=%s" % [_saved.size(), _failed])
-	quit(1 if _failed or _saved.size() < 6 else 0)
+	quit(1 if _failed or _saved.size() < 8 else 0)
 
 
 func _boot() -> bool:
@@ -153,7 +161,7 @@ func _collect() -> void:
 	_p.stage_tick = _sim.tick
 	var props := _views.carry_on_props()
 	var gone := false
-	var wants := ["reach", "take", "k050", "before", "switch", "walk"]
+	var wants := ["reach", "take", "k050", "before", "switch", "ease1", "ease2", "walk"]
 	var last_body := Vector3.INF
 	var limit := _clock.tick + LIMIT_TICKS
 	while _clock.tick < limit and not wants.is_empty():
@@ -196,6 +204,10 @@ func _collect() -> void:
 			shot = "before"
 		elif wants.has("switch") and k >= RollerPark.up_ends(bag).x:
 			shot = "switch"
+		elif wants.has("ease1") and k >= RollerPark.up_ends(bag).x + EASE_K / 3.0:
+			shot = "ease1"
+		elif wants.has("ease2") and k >= RollerPark.up_ends(bag).x + EASE_K * 2.0 / 3.0:
+			shot = "ease2"
 		elif wants.has("walk") and moved > 0.005:
 			shot = "walk"
 		if shot != "":
@@ -244,8 +256,11 @@ func _plate(shot: String, body: Node3D, node: Node3D, bag: Dictionary, k: float,
 	await _frames(2)
 	var twin := root.get_texture().get_image()
 	body.visible = true
+	await _frames(2)
+	var bag_twin := root.get_texture().get_image()
 	node.visible = true
 	var diff := _diff(img, twin)
+	var bag_diff := _diff(img, bag_twin)
 	var props := _views.carry_on_props()
 	var grip := props.grip_of(body, lead)
 	var handle := node.global_transform * CarryOnProps.ROLLER_HANDLE
@@ -272,8 +287,14 @@ func _plate(shot: String, body: Node3D, node: Node3D, bag: Dictionary, k: float,
 			)
 		)
 	)
-	if tall < MIN_BODY_PX or diff < MIN_DIFF_PX:
-		_invalid("%s: body %.0f px tall, %d px from the passenger" % [shot, tall, diff])
+	print("PLATE %s bag alone changes %d px" % [shot, bag_diff])
+	if tall < MIN_BODY_PX or diff < MIN_DIFF_PX or bag_diff < MIN_BAG_PX:
+		_invalid(
+			(
+				"%s: body %.0f px tall, %d px from the passenger, %d from the bag"
+				% [shot, tall, diff, bag_diff]
+			)
+		)
 		return
 	var path := _out_dir.path_join("park_recovery_%s.png" % shot)
 	if img.save_png(path) != OK:

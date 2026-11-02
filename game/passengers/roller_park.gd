@@ -62,6 +62,9 @@ const UP_PARK_AHEAD_M := 0.7
 ## stopped 6 to 9 cm over the handle on the floor ahead, and the bag let go
 ## dropped that far.
 const LAY_HIPS := Vector3(1.0, 0.0, 1.0)
+## A collecting walker's stoop goes from LAY_HIPS to HIPS_ALL over this many
+## ticks from the lift's end (drops_of()).
+const LOW_EASE_TICKS := 3.0
 ## The empty hand goes from the bar to the handle over the bag's top through
 ## this point (own frame, scale 1): over the top end and out past the front
 ## panel (0.2 m), so it comes down onto the handle from outside the shell.
@@ -218,7 +221,7 @@ static func lay_frame(bag: Dictionary, frame: Transform3D) -> Transform3D:
 ## held in the body's frame the lying bag swung round with a walker turning to
 ## walk off, 0.7 m in a third of a tick. A floor>pull of a walker standing to
 ## collect its roller ("collecting", hold_park()) is marked "park_low": its
-## stoop bends the back first (LAY_HIPS) to the lift's end (_low()). With the hips
+## stoop bends the back first (LAY_HIPS) to the lift's end (drops_of()). With the hips
 ## going back as well, a walker standing (not standing up) stopped with its
 ## grip at 0.274 m over a handle at 0.225 m, and the bag jumped 6.3 cm into
 ## the hand at TAKE_BY.
@@ -358,22 +361,27 @@ static func plan(
 		"targets": targets,
 		"weights": weights,
 		"keeps": keeps,
-		"drops":
-		(
-			[LAY_HIPS, LAY_HIPS]
-			if (not off_floor and k >= PARK_END) or _low(bag, k)
-			else [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
-		),
+		"drops": [drops_of(bag, k), drops_of(bag, k)],
 	}
 
 
-## Whether a floor>pull of `bag` at `k` bends the back first (LAY_HIPS): marked
-## "park_low" (stamp()) and the hand still taking the bag off the floor or
-## lifting it, to the lift's end (up_ends().x, from the stamp and "park_took").
-## Kept on past it, a walker setting off from the park bent about 90 degrees at
-## the waist on straight legs, its free arm thrown up behind its back.
-static func _low(bag: Dictionary, k: float) -> bool:
-	return bag.get("park_low", false) and k < up_ends(bag).x
+## How the stoop of a parking move of `bag` at `k` moves the hips (CarryStoop's
+## drops): LAY_HIPS laying it down; for a floor>pull marked "park_low"
+## (stamp()) LAY_HIPS while the hand takes the bag off the floor and lifts it,
+## eased into HIPS_ALL over LOW_EASE_TICKS from the lift's end (up_ends().x,
+## from the stamp and "park_took"); else HIPS_ALL. Kept on past the lift, a
+## walker setting off from the park bent about 90 degrees at the waist on
+## straight legs, its free arm thrown up behind its back; switched in one
+## frame, its back came up from about 60 degrees and its head 0.3 m in two
+## frames (CarryStoop.solved() blends the two).
+static func drops_of(bag: Dictionary, k: float) -> Vector3:
+	if CarryLead.start_of(bag)[0] != CarryLead.End.REST:
+		return LAY_HIPS if k >= PARK_END else CarryStoop.HIPS_ALL
+	if not bag.get("park_low", false):
+		return CarryStoop.HIPS_ALL
+	var lift_end := up_ends(bag).x
+	var eased := smoothstep(lift_end, lift_end + LOW_EASE_TICKS / TICKS_UP, k)
+	return LAY_HIPS.lerp(CarryStoop.HIPS_ALL, eased)
 
 
 ## pull>floor at `k` (plan()): [held, xf, anchor, target, weight].

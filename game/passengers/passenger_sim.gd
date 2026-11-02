@@ -620,6 +620,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_by_id.clear()
 	for p in _passengers:
 		_by_id[p.id] = p
+		ParkRecovery.on_load(p, tick)
 		# A save from before version 14 stands passengers with no spot. Each is
 		# sent back to the gate with a cleared path; its stage tick is the next
 		# tick, so it plans a seat or spot then (_to_spot()).
@@ -782,6 +783,7 @@ func _finish(p: Passenger, made: bool) -> void:
 	_set_stage(p, Passenger.Stage.MADE if made else Passenger.Stage.MISSED)
 	p.stuck = Passenger.Stuck.NONE
 	p.late = false
+	p.collect_tick = 0
 	p.outcome_tick = tick
 	var result: Dictionary = flight_results.get(p.flight_id, {"made": 0, "missed": 0, "causes": {}})
 	if made:
