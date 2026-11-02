@@ -310,6 +310,8 @@ var pointer_override := Vector2(-1.0, -1.0)
 var lane_hint_scans := 0
 ## Saved room templates and their paste (TemplatePaste), made a child in _ready().
 var templates := TemplatePaste.new()
+## The picked-up room and its set-down (RoomMoveTool), made a child in _ready().
+var room_mover := RoomMoveTool.new()
 ## The Buy land tool and the site's land plots (LandTool), made in _ready(); no land without a site.
 var land_tool: LandTool = null
 
@@ -403,6 +405,7 @@ func _ready() -> void:
 		finances.wallet.changed.connect(_on_balance_changed)
 	_history.watch(grid, wallet())
 	add_child(templates)
+	add_child(room_mover)
 	set_tool(tool)
 
 
@@ -596,6 +599,8 @@ func begin_area(point: Vector3) -> void:
 	if TOOL_ROOMS.has(tool) and _resize.begin(grid, point, TOOL_ROOMS[tool]):
 		_status_note = ""
 		_hover_key = ""
+		return
+	if TOOL_ROOMS.has(tool) and room_mover.pick_up(point, TOOL_ROOMS[tool]):
 		return
 	var cell := grid.world_to_cell(point)
 	if not grid.in_bounds(cell):
