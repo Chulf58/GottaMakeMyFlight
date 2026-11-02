@@ -311,7 +311,7 @@ static func checked(data: Variant, by_id: Dictionary, sim: PassengerSim) -> Dict
 		if problem != "":
 			return {"error": problem}
 	for entry: Variant in data["planes"]:
-		var problem := files._load_plane(entry, by_id)
+		var problem := files._load_plane(entry, by_id, sim)
 		if problem != "":
 			return {"error": problem}
 	for value: Variant in data["pending"]:
@@ -520,7 +520,7 @@ func _member_problem(sim: PassengerSim, p: Passenger, door: int, last: Passenger
 	return ""
 
 
-func _load_plane(entry: Variant, by_id: Dictionary) -> String:
+func _load_plane(entry: Variant, by_id: Dictionary, sim: PassengerSim) -> String:
 	if typeof(entry) != TYPE_DICTIONARY or (entry as Dictionary).size() != 1:
 		return "boarding apron file %s is malformed" % str(entry).left(80)
 	var ids: Variant = _ids(entry.get("passengers"), by_id, "apron file")
@@ -530,8 +530,9 @@ func _load_plane(entry: Variant, by_id: Dictionary) -> String:
 	var last: Passenger = null
 	for id: int in ids:
 		var p: Passenger = by_id[id]
-		if p.stage != Passenger.Stage.APRON or p.apron.is_empty() or _plane_of.has(id):
-			return "passenger %d cannot be in an apron file" % id
+		var problem := _apron_member_problem(sim, p)
+		if problem != "":
+			return problem
 		var mine := plane_key(p.apron.back())
 		if key == null:
 			key = mine
@@ -543,6 +544,16 @@ func _load_plane(entry: Variant, by_id: Dictionary) -> String:
 	for id: int in ids:
 		_plane_of[id] = key
 	_planes[key] = ids
+	return ""
+
+
+## Why `p` cannot be in an apron file at all, or "": it is not on the apron,
+## is already in one, or came out of another gate's exit.
+func _apron_member_problem(sim: PassengerSim, p: Passenger) -> String:
+	if p.stage != Passenger.Stage.APRON or p.apron.is_empty() or _plane_of.has(p.id):
+		return "passenger %d cannot be in an apron file" % p.id
+	if not _left_by_its_gate(sim, p):
+		return "apron passenger %d left by exit %d, not its flight's gate" % [p.id, p.exit_object]
 	return ""
 
 
@@ -572,9 +583,20 @@ func _load_pending(value: Variant, by_id: Dictionary, sim: PassengerSim) -> Stri
 ## Whether `p`'s exit is an open exit in the sim's layout and its committed
 ## path ends at that exit's cell.
 static func _heads_for(sim: PassengerSim, p: Passenger) -> bool:
-	if not sim.layout.open_exits(sim.grid).has(p.exit_object):
+	if not sim.exits_for(p).has(p.exit_object):
 		return false
 	return p.path_end() == sim.layout.door_cell(sim.grid, p.exit_object)
+
+
+## Whether apron walker `p` came out of an exit it may leave by: with gate
+## desks, the exit of its flight's gate; with none, any. The exit need not be
+## open or even stand now: a walker already outside walks on when its exit
+## closes or goes behind it (OutsideWalks), and a save of that must load.
+static func _left_by_its_gate(sim: PassengerSim, p: Passenger) -> bool:
+	if not sim.layout.by_gate:
+		return true
+	var gate: String = sim.layout.exit_gates.get(p.exit_object, "")
+	return gate != "" and gate == sim.flights.flight_gate(p.flight_id)
 
 
 ## A walker that should be in a file and is not, or "".

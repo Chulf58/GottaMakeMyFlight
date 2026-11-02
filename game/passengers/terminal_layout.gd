@@ -25,6 +25,12 @@ extends RefCounted
 ## is listed in out_of_service, not refused, because building passes through
 ## such states (decision player-built-terminal-
 ## technical-design-site-plot-indoor-mask-passenger-eligibility, point 6).
+##
+## With gate desks (`by_gate`; decision gates-technical-design-gate-desks-
+## link-to-north-exits-one-st, point 7) each gate's exit walks to its own
+## gate's stand (exit_stands) and passengers leave only through the exit of
+## their flight's gate (open_exits_for()); an exit no gate holds is out of
+## service.
 
 const LANE_SLOTS := 6
 
@@ -34,6 +40,12 @@ var site: SiteDefinition
 ## The live plane stand on a site (StandPlacement), set by ApronStand; empty
 ## means the starter stand (StandPlacement.starter_stand()).
 var stand: Dictionary = {}
+## Set by PassengerSim.set_gate_stands(): exits go by gate.
+var by_gate := false
+## With by_gate: exit door id -> the live stand of its gate, and exit door id
+## -> that gate's letter.
+var exit_stands: Dictionary = {}
+var exit_gates: Dictionary = {}
 var desks: Array[int] = []
 var scanners: Array[int] = []
 ## Every entrance door, in id order. Staff come in through any of them: staff
@@ -161,9 +173,26 @@ func open_exits(grid: BuildGrid) -> Array[int]:
 	return open
 
 
+## The open exits a passenger of a flight at gate `gate` may leave by: with
+## by_gate the open exit of that gate, if any; otherwise every open exit.
+func open_exits_for(grid: BuildGrid, gate: String) -> Array[int]:
+	var open := open_exits(grid)
+	if not by_gate:
+		return open
+	return open.filter(func(door: int) -> bool: return exit_gates.get(door, "") == gate)
+
+
 ## The stand exits walk to on a site: `stand`, or the starter stand.
 func live_stand(grid: BuildGrid) -> Dictionary:
 	return stand if not stand.is_empty() else StandPlacement.starter_stand(grid, site)
+
+
+## The stand exit `door` walks to: with by_gate its gate's ({} for an exit no
+## gate holds), otherwise live_stand().
+func stand_of(grid: BuildGrid, door: int) -> Dictionary:
+	if by_gate:
+		return exit_stands.get(door, {})
+	return live_stand(grid)
 
 
 ## Whether door `door` has the walk outside a site asks for.
@@ -183,15 +212,23 @@ func _route_doors(grid: BuildGrid, ids: Array[int]) -> void:
 		if def != &"entrance_door" and def != &"exit_door":
 			continue
 		var edge := SiteDefinition.PLANE_STEP
+		var key: Variant = edge
 		if def == &"entrance_door":
 			edge = SiteDefinition.ROAD_STEP
-			if not fields.has(edge):
+			key = edge
+			if not fields.has(key):
 				var road := SiteRoutes.edge_cells(grid, site, edge)
-				fields[edge] = SiteRoutes.distances(grid, site, road)
-		elif not fields.has(edge):
-			fields[edge] = StandPlacement.to_door(grid, site, live_stand(grid))
+				fields[key] = SiteRoutes.distances(grid, site, road)
+		else:
+			var to_stand := stand_of(grid, id)
+			if to_stand.is_empty():
+				out_of_service.append(id)
+				continue
+			key = StandPlacement.door_point(to_stand)
+			if not fields.has(key):
+				fields[key] = StandPlacement.to_door(grid, site, to_stand)
 		var out := DoorPlacement.back_step(record["facing"])
-		var cells := SiteRoutes.door_cells(grid, site, record["anchor"], out, edge, fields[edge])
+		var cells := SiteRoutes.door_cells(grid, site, record["anchor"], out, edge, fields[key])
 		if cells.is_empty():
 			out_of_service.append(id)
 		else:

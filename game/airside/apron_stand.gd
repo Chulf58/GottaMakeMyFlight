@@ -23,6 +23,16 @@ extends Node3D
 ##
 ## Only `live` is saved; wanted is worked out from the loaded grid.
 ##
+## With gate desks (`gates`, GateDesks; decision gates-technical-design-gate-
+## desks-link-to-north-exits-one-st, point 2) there is one stand per gate,
+## straight out from its exit (gate_stands), in place of the one live stand.
+## A gate's link is sticky and its exit never moves, so its stand is fixed
+## while the gate lasts: the release rule above has nothing to wait for, and
+## a stand only comes and goes with its gate (GateDesks refuses ending a gate
+## while a flight is due there). Each gate's status (no usable stand, a long
+## walk) shows over its own stand, and the guard is the union of what each
+## gate's busy flight still needs. The save holds each gate's stand.
+##
 ## Not guaranteed: the live stand stays where it is while no legal stand
 ## exists, even when the player builds over its apron with no plane there.
 
@@ -45,6 +55,8 @@ const REMOVALS: Array[BuildEdit.Kind] = [
 @export var passengers: PassengerSim
 ## The menu whose build session shows and hides the guarded area.
 @export var menu: BuildMenu
+## The gate desks; set, there is one stand per gate (gate_stands).
+@export var gates: GateDesks
 
 var live: Dictionary = {}
 var wanted: Dictionary = {}
@@ -54,6 +66,9 @@ var placement: Dictionary = {}
 var last_release_tick := -1
 var grid: BuildGrid
 var site: SiteDefinition
+## With gates: gate letter -> {"live": its stand, "placement": its
+## StandPlacement.check() result}.
+var gate_stands: Dictionary = {}
 
 var _guard_key: Array = []
 var _guard_cells: Dictionary = {}
@@ -61,6 +76,9 @@ var _label: Label3D
 ## Holds the guarded-area meshes; shown only while build mode lasts.
 var _guard_view := Node3D.new()
 var _areas: Array[MeshInstance3D] = []
+var _area_material: StandardMaterial3D
+## With gates: gate letter -> its status Label3D.
+var _gate_labels: Dictionary = {}
 
 
 func _init() -> void:
@@ -79,54 +97,72 @@ func _ready() -> void:
 	_label.pixel_size = 0.02
 	_label.visible = false
 	add_child(_label)
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color = AREA_TINT
+	_area_material = StandardMaterial3D.new()
+	_area_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_area_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_area_material.albedo_color = AREA_TINT
 	for i in 2:
-		var area := MeshInstance3D.new()
-		area.name = "GuardedArea%d" % i
-		var mesh := PlaneMesh.new()
-		mesh.material = material
-		area.mesh = mesh
-		area.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		area.visible = false
-		_guard_view.add_child(area)
-		_areas.append(area)
+		_add_area()
 	if menu != null:
 		watch(menu.build_session)
 	if build_mode == null or flights == null or build_mode.site == null:
 		return
-	bind(build_mode.grid, build_mode.site, flights)
+	bind(build_mode.grid, build_mode.site, flights, gates)
 	if build_mode.grid is SiteGrid:
 		(build_mode.grid as SiteGrid).guard = edit_problem
 	_apply_live()
+
+
+## One more guarded-area mesh: two for the one stand, two per busy gate.
+func _add_area() -> void:
+	var area := MeshInstance3D.new()
+	area.name = "GuardedArea%d" % _areas.size()
+	var mesh := PlaneMesh.new()
+	mesh.material = _area_material
+	area.mesh = mesh
+	area.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	area.visible = false
+	_guard_view.add_child(area)
+	_areas.append(area)
 
 
 func _process(_delta: float) -> void:
 	if grid == null:
 		return
 	var rects := guard_rects()
+	while _areas.size() < rects.size():
+		_add_area()
 	for i in _areas.size():
 		_areas[i].visible = i < rects.size()
 		if i < rects.size():
 			var rect := rects[i]
 			(_areas[i].mesh as PlaneMesh).size = rect.size
 			_areas[i].position = Vector3(rect.get_center().x, AREA_LIFT_M, rect.get_center().y)
+	if gates != null:
+		_show_gate_labels()
+		return
 	var text := status_text()
 	_label.text = text
 	_label.visible = text != ""
 	_label.position = StandPlacement.stand_point(live) + Vector3.UP * STATUS_HEIGHT_M
 
 
-## Starts on the starter stand and follows the grid and the flights.
-func bind(on_grid: BuildGrid, on_site: SiteDefinition, on_flights: FlightSim) -> void:
+## Starts on the starter stand and follows the grid and the flights; with
+## `on_gates`, one stand per gate, worked out after each change of the links.
+func bind(
+	on_grid: BuildGrid, on_site: SiteDefinition, on_flights: FlightSim, on_gates: GateDesks = null
+) -> void:
 	grid = on_grid
 	site = on_site
 	flights = on_flights
-	live = StandPlacement.starter_stand(grid, site)
-	grid.graph_changed.connect(_on_graph_changed)
+	gates = on_gates
 	flights.state_changed.connect(_on_state_changed)
+	if gates != null:
+		live = {}
+		gates.changed.connect(refresh)
+	else:
+		live = StandPlacement.starter_stand(grid, site)
+		grid.graph_changed.connect(_on_graph_changed)
 	refresh()
 
 
@@ -143,14 +179,43 @@ func set_building(on: bool) -> void:
 
 ## Works the wanted stand out again and lets the live one take it if it may.
 func refresh() -> void:
+	if gates != null:
+		_refresh_gates()
+		return
 	placement = StandPlacement.place(grid, site, live)
 	wanted = placement["stand"]
 	try_release()
 
 
-## The flight between TAXI_IN and TAKEOFF at the stand, or "".
-func busy_flight() -> String:
+## Each gate's stand from its exit, and its check; tells the airside and the
+## passengers when the stands changed.
+func _refresh_gates() -> void:
+	var next := {}
+	for binding in gates.bindings:
+		var stand := StandPlacement.for_exit(grid, binding["exit"])
+		next[binding["gate"]] = {
+			"live": stand, "placement": StandPlacement.check(grid, site, binding["exit"], stand)
+		}
+	var moved := _stands_of(next) != _stands_of(gate_stands)
+	gate_stands = next
+	if moved:
+		_apply_live()
+
+
+## Gate letter -> its stand.
+static func _stands_of(entries: Dictionary) -> Dictionary:
+	var out := {}
+	for gate: String in entries:
+		out[gate] = entries[gate]["live"]
+	return out
+
+
+## The flight between TAXI_IN and TAKEOFF at the stand, or "". With gates,
+## the one at gate `gate`'s stand.
+func busy_flight(gate := "") -> String:
 	for id in flights.flight_ids():
+		if gate != "" and flights.flight_gate(id) != gate:
+			continue
 		var state := flights.state_of(id)
 		if state >= FlightSim.State.TAXI_IN and state < FlightSim.State.TAKEOFF:
 			return id
@@ -158,9 +223,9 @@ func busy_flight() -> String:
 
 
 ## The live stand takes the wanted one when they differ and no flight is
-## turning round. True when it moved.
+## turning round. True when it moved. With gates a stand never moves.
 func try_release() -> bool:
-	if same_stand(wanted, live) or busy_flight() != "":
+	if gates != null or same_stand(wanted, live) or busy_flight() != "":
 		return false
 	live = wanted
 	last_release_tick = flights.tick
@@ -183,24 +248,40 @@ static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 ## only what lies north of its tail on the way to the taxi lane. Empty while
 ## no flight is at the stand.
 func guard_rects() -> Array[Rect2]:
-	var id := busy_flight()
+	if gates == null:
+		return _rects_of(busy_flight(), live, "")
+	var out: Array[Rect2] = []
+	for gate: String in gate_stands:
+		out.append_array(_rects_of(busy_flight(gate), gate_stands[gate]["live"], gate))
+	return out
+
+
+## What flight `id` (none: "") still needs of `stand`, the stand of gate
+## `gate` ("" for the one stand).
+func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 	if id == "":
 		return [] as Array[Rect2]
 	if flights.state_of(id) < FlightSim.State.TAXI_OUT:
-		return StandPlacement.swept_rects(live)
+		return StandPlacement.swept_rects(stand)
 	var path := (
-		airside.phase_path(FlightSim.State.TAXI_OUT)
+		airside.phase_path(FlightSim.State.TAXI_OUT, gate)
 		if airside != null
-		else PackedVector3Array([StandPlacement.pushback_end(live), StandPlacement.lane_join(live)])
+		else PackedVector3Array(
+			[StandPlacement.pushback_end(stand), StandPlacement.lane_join(stand)]
+		)
 	)
 	var t := smoothstep(0.0, 1.0, flights.phase_progress(id, flights.tick))
 	var at := FlightPose.point_at(path, FlightPose.path_length(path) * t)
-	return StandPlacement.swept_rects(live, at.z + StandPlacement.TAIL_M)
+	return StandPlacement.swept_rects(stand, at.z + StandPlacement.TAIL_M)
 
 
 ## The grid cells guard_rects() covers, as a set, worked out once per tick.
 func guarded_cells() -> Dictionary:
-	var key := [flights.tick, busy_flight(), live["x"], live["wall_z"]]
+	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z")]
+	if gates != null:
+		key = [flights.tick, _stands_of(gate_stands)]
+		for gate: String in gate_stands:
+			key.append(busy_flight(gate))
 	if key != _guard_key:
 		_guard_key = key
 		_guard_cells = StandPlacement.cells_under(grid, guard_rects())
@@ -209,7 +290,11 @@ func guarded_cells() -> Dictionary:
 
 ## The guard of the site's grid (SiteGrid): a PLANE_AREA refusal for an
 ## edit that builds on a guarded cell, else null. Removals pass.
-func edit_problem(_on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+func edit_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+	if gates != null:
+		var gate_problem := gates.edit_problem(on_grid, edit)
+		if gate_problem != null:
+			return gate_problem
 	if REMOVALS.has(edit.kind):
 		return null
 	var cells := guarded_cells()
@@ -219,6 +304,38 @@ func edit_problem(_on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 		if cells.has(cell):
 			return BuildResult.refused(BuildResult.Reason.PLANE_AREA)
 	return null
+
+
+## What gate `gate`'s status label says, or "" for nothing.
+func gate_status_text(gate: String) -> String:
+	var entry: Dictionary = gate_stands.get(gate, {})
+	if entry.is_empty():
+		return ""
+	var checked_stand: Dictionary = entry["placement"]
+	if checked_stand["status"] == StandPlacement.UNAVAILABLE:
+		return "Gate %s: no usable stand. Keep its apron and the walk to it clear" % gate
+	if checked_stand["warning"]:
+		return "Gate %s: long walk to the plane: %d m" % [gate, roundi(checked_stand["walk_m"])]
+	return ""
+
+
+func _show_gate_labels() -> void:
+	for gate: String in _gate_labels.keys():
+		if not gate_stands.has(gate):
+			(_gate_labels[gate] as Label3D).queue_free()
+			_gate_labels.erase(gate)
+	for gate: String in gate_stands:
+		if not _gate_labels.has(gate):
+			var made := _label.duplicate() as Label3D
+			made.name = "Status%s" % gate
+			add_child(made)
+			_gate_labels[gate] = made
+		var label: Label3D = _gate_labels[gate]
+		label.text = gate_status_text(gate)
+		label.visible = label.text != ""
+		label.position = (
+			StandPlacement.stand_point(gate_stands[gate]["live"]) + Vector3.UP * STATUS_HEIGHT_M
+		)
 
 
 ## What the status label says, or "" for nothing.
@@ -237,15 +354,37 @@ func status_text() -> String:
 	return "\n".join(lines)
 
 
+## {"live": the live stand}, or with gates {"stands": gate letter -> its
+## stand}.
 func to_snapshot() -> Dictionary:
+	if gates != null:
+		return {"stands": _stands_of(gate_stands).duplicate(true)}
 	return {"live": live.duplicate()}
 
 
-## The live stand a to_snapshot() dictionary holds, as {"live": stand}, or
-## {"error": why} when it is malformed or its door and wall line lie outside
-## `on_site`'s grid.
+## The stands a to_snapshot() dictionary holds, as {"live": stand} or
+## {"stands": gate letter -> stand}, or {"error": why} when it is malformed or
+## a stand's door and wall line lie outside `on_site`'s grid.
 static func checked(data: Dictionary, on_site: SiteDefinition) -> Dictionary:
-	var saved: Variant = data.get("live")
+	if data.size() != 1 or not (data.has("live") or data.has("stands")):
+		return {"error": "an apron part holds 'live' or 'stands'"}
+	if data.has("live"):
+		var one := _checked_stand(data["live"], on_site)
+		return one if one.has("error") else {"live": one["stand"]}
+	if typeof(data["stands"]) != TYPE_DICTIONARY:
+		return {"error": "'stands' is not a dictionary"}
+	var stands := {}
+	for gate: Variant in data["stands"]:
+		if typeof(gate) != TYPE_STRING:
+			return {"error": "a stand's gate is not a letter"}
+		var one := _checked_stand(data["stands"][gate], on_site)
+		if one.has("error"):
+			return {"error": "gate %s: %s" % [gate, one["error"]]}
+		stands[gate] = one["stand"]
+	return {"stands": stands}
+
+
+static func _checked_stand(saved: Variant, on_site: SiteDefinition) -> Dictionary:
 	if not StandPlacement.is_stand(saved) or not WholeNumber.is_whole(saved["exit"]):
 		return {"error": "'live' is not a stand"}
 	var stand := StandPlacement.make(int(saved["exit"]), float(saved["x"]), float(saved["wall_z"]))
@@ -253,19 +392,45 @@ static func checked(data: Dictionary, on_site: SiteDefinition) -> Dictionary:
 	var frame := Rect2(low, Vector2(on_site.grid_size))
 	if int(stand["exit"]) < 0 or not frame.has_point(Vector2(stand["x"], stand["wall_z"])):
 		return {"error": "the live stand lies outside the site"}
-	return {"live": stand}
+	return {"stand": stand}
 
 
-## Loads the live stand (checked()) and works out the wanted one from the
-## grid. False (with an error) for a refused save.
+## Why saved gate stands `stands` do not belong to the gates in `bindings`
+## (GateDesks) on `on_grid`, or "": every gate needs its own stand, straight
+## out from its exit, and there is no other.
+static func stands_problem(
+	stands: Dictionary, bindings: Array[Dictionary], on_grid: BuildGrid
+) -> String:
+	if stands.size() != bindings.size():
+		return "there are %d gates but %d stands" % [bindings.size(), stands.size()]
+	for binding in bindings:
+		var saved: Dictionary = stands.get(binding["gate"], {})
+		if not same_stand(saved, StandPlacement.for_exit(on_grid, binding["exit"])):
+			return "gate %s's stand is not the one out from its exit" % binding["gate"]
+	return ""
+
+
+## Loads the stands (checked()) and works the rest out from the grid. False
+## (with an error) for a refused save, or for one of the other kind (one live
+## stand with gates, or gate stands without).
 func from_snapshot(data: Dictionary) -> bool:
 	if site == null:
 		push_error("ApronStand.from_snapshot: no site is bound")
 		return false
 	var loaded := checked(data, site)
+	if not loaded.has("error") and loaded.has("stands") != (gates != null):
+		loaded = {"error": "the save's stands are not of this airport's kind"}
+	if not loaded.has("error") and gates != null:
+		var problem := stands_problem(loaded["stands"], gates.bindings, grid)
+		if problem != "":
+			loaded = {"error": problem}
 	if loaded.has("error"):
 		push_error("ApronStand.from_snapshot: %s" % loaded["error"])
 		return false
+	if gates != null:
+		gate_stands = {}
+		refresh()
+		return true
 	live = loaded["live"]
 	_apply_live()
 	refresh()
@@ -273,11 +438,31 @@ func from_snapshot(data: Dictionary) -> bool:
 
 
 func _apply_live() -> void:
+	if gates != null:
+		_apply_gate_stands()
+		return
 	if airside != null:
 		airside.set_stand(live)
 	if passengers != null and passengers.grid != null:
 		passengers.set_stand(live)
 	live_changed.emit(live)
+
+
+## The gate stands to the airside (one set of stand waypoints per gate) and to
+## the passengers (each gate's exit walks to its own stand).
+func _apply_gate_stands() -> void:
+	var by_gate := _stands_of(gate_stands)
+	if airside != null:
+		airside.set_gate_stands(by_gate)
+	if passengers == null or passengers.grid == null:
+		return
+	var exit_stands := {}
+	var exit_gates := {}
+	for gate: String in by_gate:
+		var exit_id: int = by_gate[gate]["exit"]
+		exit_stands[exit_id] = by_gate[gate]
+		exit_gates[exit_id] = gate
+	passengers.set_gate_stands(exit_stands, exit_gates)
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:

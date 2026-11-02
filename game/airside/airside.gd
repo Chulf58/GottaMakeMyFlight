@@ -6,7 +6,14 @@ extends Node3D
 ## moves with the terminal (ApronStand, decision plane-stand-design-airside-
 ## moves-110-m-north-stand-snaps-to): set_stand() puts Stand, PushbackEnd and
 ## StandLane (where the way north meets the taxi lane) where StandPlacement
-## says and rebuilds the graph. Also gives
+## says and rebuilds the graph. With gate desks (decision gates-technical-
+## design-gate-desks-link-to-north-exits-one-st, point 3) set_gate_stands()
+## gives each gate its own Stand_<gate>, PushbackEnd_<gate> and
+## StandLane_<gate>. Every StandLane waypoint sits on the one taxi lane, so
+## the lane is a chain: TaxiWest, the StandLane waypoints and TaxiEast joined
+## in order of x (links between two of them in `links` give way to it), and a
+## plane taxis along it past the other gates' joins. While gates have stands
+## the one stand's own StandLane is not on the chain. Also gives
 ## the two sky tracks views draw around a flight: the arrival lead-in into
 ## ApproachStart and the climb-out from ClimbEnd, each a flat track through its
 ## turn waypoints with wide round turns.
@@ -35,6 +42,10 @@ const LEAD_IN_WAYPOINTS: Array[StringName] = [
 	&"ArrivalEntry", &"ArrivalPass", &"ArrivalTurnWest", &"ArrivalTurnNorth", &"ApproachStart"
 ]
 const CLIMB_OUT_WAYPOINTS: Array[StringName] = [&"ClimbEnd", &"DepartureTurn", &"DepartureExit"]
+## The taxi lane's two ends; with every StandLane waypoint they make the lane
+## chain.
+const LANE_ENDS: Array[StringName] = [&"TaxiWest", &"TaxiEast"]
+const STAND_LANE := "StandLane"
 ## Turn radius of the sky tracks, in metres. A corner too tight for it gets the
 ## widest turn that fits.
 const SKY_TURN_RADIUS := 160.0
@@ -51,6 +62,8 @@ var graph := TaxiGraph.new()
 ## How many times set_stand() moved the stand, so a view holding paths read
 ## before (PlaneView) knows to read them again.
 var stand_moves := 0
+## Gate letter -> the stand its waypoints were last put at (set_gate_stands()).
+var gate_stands: Dictionary = {}
 
 
 func _ready() -> void:
@@ -71,10 +84,38 @@ func rebuild() -> bool:
 			ok = false
 	for pair in links:
 		var ends := pair.split(">")
+		if ends.size() == 2 and _on_lane(ends[0]) and _on_lane(ends[1]):
+			continue
 		if ends.size() != 2 or not graph.link(StringName(ends[0]), StringName(ends[1])):
 			push_error("Airside: bad link '%s'" % pair)
 			ok = false
+	for gate: String in gate_stands:
+		graph.link(_gate_point(&"StandLane", gate), _gate_point(&"PushbackEnd", gate))
+		graph.link(_gate_point(&"PushbackEnd", gate), _gate_point(&"Stand", gate))
+	# With gate stands the one stand's StandLane is left off the chain: it would
+	# sit on a gate's join (the starter exit's) and add a zero-length step.
+	var chain: Array[StringName] = []
+	for child in get_children():
+		if child is Marker3D and _on_lane(child.name):
+			if gate_stands.is_empty() or child.name != &"StandLane":
+				chain.append(child.name)
+	chain.sort_custom(
+		func(a: StringName, b: StringName) -> bool:
+			return graph.position_of(a).x < graph.position_of(b).x
+	)
+	for i in range(1, chain.size()):
+		graph.link(chain[i - 1], chain[i])
 	return ok
+
+
+## Whether waypoint `waypoint` is on the taxi lane chain.
+static func _on_lane(waypoint: String) -> bool:
+	return LANE_ENDS.has(StringName(waypoint)) or waypoint.begins_with(STAND_LANE)
+
+
+## The waypoint `base` (Stand, PushbackEnd or StandLane) of gate `gate`.
+static func _gate_point(base: StringName, gate: String) -> StringName:
+	return StringName("%s_%s" % [base, gate])
 
 
 ## Puts the stand waypoints at StandPlacement's `stand` and rebuilds the
@@ -95,9 +136,48 @@ func set_stand(stand: Dictionary) -> bool:
 	return rebuild()
 
 
+## Gives each gate in `stands` (gate letter -> StandPlacement stand) its own
+## stand waypoints, drops those of gates no longer listed and rebuilds the
+## graph. Nothing changes when the stands are the ones already set.
+func set_gate_stands(stands: Dictionary) -> bool:
+	if stands == gate_stands:
+		return true
+	for gate: String in gate_stands:
+		if not stands.has(gate):
+			for base in [&"Stand", &"PushbackEnd", &"StandLane"]:
+				var gone := get_node_or_null(NodePath(String(_gate_point(base, gate))))
+				if gone != null:
+					remove_child(gone)
+					gone.free()
+	for gate: String in stands:
+		var stand: Dictionary = stands[gate]
+		var points := {
+			&"Stand": StandPlacement.stand_point(stand),
+			&"PushbackEnd": StandPlacement.pushback_end(stand),
+			&"StandLane": StandPlacement.lane_join(stand),
+		}
+		for base: StringName in points:
+			var waypoint := _gate_point(base, gate)
+			var marker := get_node_or_null(NodePath(String(waypoint))) as Marker3D
+			if marker == null:
+				marker = Marker3D.new()
+				marker.name = waypoint
+				add_child(marker)
+			marker.position = transform.affine_inverse() * (points[base] as Vector3)
+	gate_stands = stands.duplicate(true)
+	stand_moves += 1
+	return rebuild()
+
+
 ## The path a plane follows in `state`, or an empty array for a state that
-## stays put.
-func phase_path(state: int) -> PackedVector3Array:
+## stays put. `gate` names the gate whose stand it uses; a gate with no stand
+## waypoints of its own (no gate desks, one stand) uses Stand.
+func phase_path(state: int, gate := "") -> PackedVector3Array:
+	var stand := &"Stand"
+	var pushback := &"PushbackEnd"
+	if gate_stands.has(gate):
+		stand = _gate_point(&"Stand", gate)
+		pushback = _gate_point(&"PushbackEnd", gate)
 	var path := PackedVector3Array()
 	match state:
 		FlightSim.State.APPROACH:
@@ -105,11 +185,11 @@ func phase_path(state: int) -> PackedVector3Array:
 		FlightSim.State.LANDING:
 			path = _points([&"Touchdown", &"RunwayExit"])
 		FlightSim.State.TAXI_IN:
-			path = graph.route(&"RunwayExit", &"Stand")
+			path = graph.route(&"RunwayExit", stand)
 		FlightSim.State.PUSHBACK:
-			path = _points([&"Stand", &"PushbackEnd"])
+			path = _points([stand, pushback])
 		FlightSim.State.TAXI_OUT:
-			path = graph.route(&"PushbackEnd", &"RunwayEntry")
+			path = graph.route(pushback, &"RunwayEntry")
 		FlightSim.State.TAKEOFF:
 			path = _points([&"RunwayEntry", &"Liftoff", &"ClimbEnd"])
 	return path

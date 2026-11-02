@@ -29,8 +29,7 @@ extends VBoxContainer
 
 ## The input action for the toggle key, bound to B in project.godot.
 const ACTION := &"toggle_departures_board"
-const SETTINGS_PATH := "user://hud_settings.cfg"
-const SECTION := "hud"
+const SETTINGS_PATH := HudFlagSetting.PATH
 const SETTING_KEY := "departures_board"
 const TODAY_HEADING := "Today"
 const TOMORROW_HEADING := "Tomorrow"
@@ -426,24 +425,9 @@ func _apply_shown() -> void:
 ## The saved choice, on when nothing is saved yet. A settings file that exists
 ## but cannot be read is reported and the board stays on.
 func _load_setting() -> bool:
-	var cfg := ConfigFile.new()
-	var err := cfg.load(settings_path)
-	if err == ERR_FILE_NOT_FOUND:
-		return true
-	if err != OK:
-		push_error("DeparturesBoard: cannot read %s (error %d)" % [settings_path, err])
-		return true
-	return bool(cfg.get_value(SECTION, SETTING_KEY, true))
+	return HudFlagSetting.load_flag(settings_path, SETTING_KEY, true, "DeparturesBoard")
 
 
 ## Writes the choice next to any other settings already in the file.
 func _save_setting() -> void:
-	var cfg := ConfigFile.new()
-	var err := cfg.load(settings_path)
-	if err != OK and err != ERR_FILE_NOT_FOUND:
-		push_error("DeparturesBoard: cannot read %s (error %d)" % [settings_path, err])
-		return
-	cfg.set_value(SECTION, SETTING_KEY, _shown)
-	err = cfg.save(settings_path)
-	if err != OK:
-		push_error("DeparturesBoard: cannot write %s (error %d)" % [settings_path, err])
+	HudFlagSetting.save_flag(settings_path, SETTING_KEY, _shown, "DeparturesBoard")

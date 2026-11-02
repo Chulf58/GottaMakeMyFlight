@@ -42,6 +42,8 @@ const OBJECT_PIECES := {
 	&"seat_row": "seat_row",
 	&"entrance_door": "wall_door",
 	&"exit_door": "wall_door",
+	# The info desk's counter stands in until the gate desk's own art (gates 2/4).
+	&"gate_desk": "info_desk",
 	&"cafe_counter": "cafe_counter",
 	&"cafe_table": "cafe_table",
 	&"baggage_belt": "baggage_belt",
