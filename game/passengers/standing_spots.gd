@@ -179,21 +179,35 @@ func shortage(sim: PassengerSim) -> int:
 
 ## The free spots a passenger at cell `from` can walk to (its route region),
 ## in claim order: the gate area before the overflow, then the nearest to the
-## centre of `from` (squared mm), then the lower id.
-func free_nearest(from: Vector2i) -> Array[int]:
+## centre of `from` (squared mm), then the lower id. With `gate_cells` (the
+## cells of the passenger's gate desk, GateReach) the nearest to the desk comes
+## first, then the gate area before the overflow, then the lower id.
+func free_nearest(from: Vector2i, gate_cells: Array[Vector2i] = []) -> Array[int]:
 	var centre := from * CELL_MM + Vector2i(HALF_CELL_MM, HALF_CELL_MM)
 	var region: int = _regions.get(from, -1)
 	var keyed := []
 	for id in _ids:
 		if _claims.has(id) or _regions.get(spots[id]["cell"], -2) != region:
 			continue
-		var d: Vector2i = spots[id]["mm"] - centre
-		keyed.append([spots[id]["tier"], d.x * d.x + d.y * d.y, id])
+		if gate_cells.is_empty():
+			var d: Vector2i = spots[id]["mm"] - centre
+			keyed.append([spots[id]["tier"], d.x * d.x + d.y * d.y, id])
+		else:
+			keyed.append([_gate_distance_sq(spots[id]["mm"], gate_cells), spots[id]["tier"], id])
 	keyed.sort()
 	var out: Array[int] = []
 	for entry in keyed:
 		out.append(entry[2])
 	return out
+
+
+## The squared distance in mm from `mm` to the nearest centre of `cells`.
+func _gate_distance_sq(mm: Vector2i, cells: Array[Vector2i]) -> int:
+	var best := 1 << 60
+	for cell in cells:
+		var d := mm - (cell * CELL_MM + Vector2i(HALF_CELL_MM, HALF_CELL_MM))
+		best = mini(best, d.x * d.x + d.y * d.y)
+	return best
 
 
 func claim(passenger: int, spot: int) -> void:

@@ -46,6 +46,9 @@ var by_gate := false
 ## -> that gate's letter.
 var exit_stands: Dictionary = {}
 var exit_gates: Dictionary = {}
+## With by_gate: gate letter -> the cells of the gate desk linked to its exit
+## (GateReach), found on each rebuild; a gate with no desk in reach is absent.
+var gate_desks: Dictionary = {}
 var desks: Array[int] = []
 var scanners: Array[int] = []
 ## Every entrance door, in id order. Staff come in through any of them: staff
@@ -87,6 +90,7 @@ func rebuild(grid: BuildGrid) -> void:
 	lanes.clear()
 	passages.clear()
 	seats.clear()
+	gate_desks = GateReach.desks_of(grid, exit_gates) if by_gate else {}
 	security_lanes = SecurityLanes.new()
 	security_lanes.rebuild(grid)
 	var ids := grid.object_ids()
