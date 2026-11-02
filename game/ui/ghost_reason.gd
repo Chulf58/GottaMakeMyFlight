@@ -23,6 +23,8 @@ extends PanelContainer
 const GAP := 10.0
 ## The card keeps this far inside the window edges.
 const EDGE := 8.0
+## The most characters a short form has.
+const MAX_SHORT := 24
 ## Short forms of the longer BuildResult.REASON_TEXT lines; a reason missing
 ## here (already short, such as "Needs floor") shows its full text.
 const SHORT_TEXT := {
@@ -57,6 +59,7 @@ const SHORT_TEXT := {
 	BuildResult.Reason.GATE_STAND_OVERLAP: "Gates are too close",
 	BuildResult.Reason.GATE_IN_USE: "A flight is due here",
 	BuildResult.Reason.GATE_FLIGHTS_STUCK: "Flights have no gate",
+	BuildResult.Reason.DOOR_FRONT_BLOCKED: "Front spot blocked",
 }
 
 var build_mode: BuildMode
@@ -71,6 +74,11 @@ var _watched: BuildGrid
 
 ## The few words the card shows for a refusal.
 static func short_text(result: BuildResult) -> String:
+	if result.reason == BuildResult.Reason.DOOR_FRONT_BLOCKED and result.detail != "":
+		var blocker := result.detail.left(1).to_upper() + result.detail.substr(1)
+		var named := "%s in front" % blocker
+		if named.length() <= MAX_SHORT:
+			return named
 	return SHORT_TEXT.get(result.reason, result.reason_text())
 
 
