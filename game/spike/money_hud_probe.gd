@@ -24,6 +24,11 @@ const HANG_LIMIT_MS := 30000
 const TOTAL_LIMIT_MS := 120000
 ## Frames to wait so the containers have laid out before rectangles are read.
 const LAYOUT_FRAMES := 3
+## The cells the cost checks point at, beside the starter shell (its floor is
+## already laid, so a drag over it costs nothing): a drag of four by three floor
+## cells, moved to where the site puts the reference layout.
+const DRAG_FROM := Vector2i(2, 2)
+const DRAG_TO := Vector2i(5, 4)
 
 var _guard := Thread.new()
 var _mutex := Mutex.new()
@@ -57,7 +62,20 @@ func _process(_delta: float) -> bool:
 	if _phase == 0:
 		_check()
 		_fill_the_day()
+		_point_at(DRAG_FROM)
+		_start_desk_cost()
 		_phase = 1
+		_frame = 0
+		return false
+	if _phase == 1:
+		_check_desk_cost()
+		_start_drag_cost()
+		_phase = 2
+		_frame = 0
+		return false
+	if _phase == 2:
+		_check_drag_cost()
+		_phase = 3
 		_frame = 0
 		return false
 	_check_layout()
@@ -114,12 +132,37 @@ func _check() -> void:
 	_expect("desk price", prices[BuildMode.Tool.DESK], "400")
 	_expect("room is free", prices[BuildMode.Tool.CAFE_ROOM], BuildMenu.PRICE_TEXT)
 
+	print("LABEL debug policy=%s" % PassengerHud.DEBUG_POLICY_TEXT)
+
+
+## The cost line prices the tool under the pointer, which BuildMode reads on a
+## frame, so the pointer is put over a cell of the grid (pointer_override) and
+## the line is read some frames later.
+func _point_at(cell: Vector2i) -> void:
+	var mode: BuildMode = _main.get_node("BuildMode")
+	var camera := _main.get_node("TycoonCamera/Camera3D") as Camera3D
+	mode.pointer_override = camera.unproject_position(mode.grid.cell_to_world(_moved(mode, cell)))
+
+
+func _moved(mode: BuildMode, cell: Vector2i) -> Vector2i:
+	return cell + ReferenceTerminal.offset_on(mode.grid)
+
+
+func _start_desk_cost() -> void:
+	var menu: BuildMenu = _main.get_node("BuildMenu")
+	var wallet := (_main.get_node("Finances") as Finances).wallet
 	wallet.from_snapshot({"balance": "300"})
 	menu.press_card(BuildMode.Tool.DESK)
+
+
+func _check_desk_cost() -> void:
+	var menu: BuildMenu = _main.get_node("BuildMenu")
 	menu.refresh_preview()
 	print("LABEL money=%s cost=%s" % [menu.money_label().text, menu.preview_label().text])
 	_expect("money follows the wallet", menu.money_label().text, "Money  300")
-	_expect("money changed", menu.money_label().text != money_before, true)
+	_expect(
+		"money changed", menu.money_label().text != "Money  %d" % PriceTable.STARTING_BUDGET, true
+	)
 	_expect("desk greyed", menu.is_card_affordable(BuildMode.Tool.DESK), false)
 	_expect(
 		"desk card grey", menu.card(BuildMode.Tool.DESK).modulate, BuildMenu.unaffordable_tint()
@@ -127,22 +170,34 @@ func _check() -> void:
 	_expect("floor card normal", menu.card(BuildMode.Tool.FLOOR).modulate, Color.WHITE)
 	_expect("tool cost and shortfall", menu.preview_label().text, "Cost 400   Short by 100")
 
+
+func _start_drag_cost() -> void:
+	var mode: BuildMode = _main.get_node("BuildMode")
+	var wallet := (_main.get_node("Finances") as Finances).wallet
 	wallet.from_snapshot({"balance": "100"})
 	mode.set_tool(BuildMode.Tool.FLOOR)
-	mode.begin_area(mode.grid.cell_to_world(Vector2i(2, 2)))
-	mode.move_area(mode.grid.cell_to_world(Vector2i(5, 4)))
+	mode.begin_area(mode.grid.cell_to_world(_moved(mode, DRAG_FROM)))
+	_point_at(DRAG_TO)
+
+
+func _check_drag_cost() -> void:
+	var menu: BuildMenu = _main.get_node("BuildMenu")
+	var mode: BuildMode = _main.get_node("BuildMode")
+	mode.move_area(mode.grid.cell_to_world(_moved(mode, DRAG_TO)))
 	menu.refresh_preview()
 	print("LABEL drag cost=%s" % menu.preview_label().text)
 	_expect("drag cost and shortfall", menu.preview_label().text, "Cost 300   Short by 200")
 	mode.cancel_area()
-
-	print("LABEL debug policy=%s" % PassengerHud.DEBUG_POLICY_TEXT)
 
 
 ## Opens the airport (a closed one lists no contract) and adds three
 ## contracts so today's list is at its longest.
 func _fill_the_day() -> void:
 	var flights: FlightSim = _main.get_node("FlightSim")
+	# The shell has no gate: a contract needs a gate desk by the exit (GateDesks).
+	var grid: BuildGrid = (_main.get_node("BuildMode") as BuildMode).grid
+	var desk := grid.apply(ReferenceTerminal.gate_desk_edit(ReferenceTerminal.offset_on(grid)))
+	_expect("gate desk placed", desk.ok, true)
 	_expect("airport opened", flights.open_airport(), true)
 	for i in 3:
 		var terms := FlightSim.STARTER_TERMS.duplicate()

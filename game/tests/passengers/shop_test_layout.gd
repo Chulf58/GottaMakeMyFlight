@@ -25,15 +25,16 @@ const AIRSIDE_CELL := Vector2i(19, 6)
 static func build(grid: BuildGrid, sides: Array = ["air"], displays := 2) -> Dictionary:
 	var built := ReferenceTerminal.build(grid)
 	assert(built, "reference terminal refused")
+	var at := ReferenceTerminal.offset_on(grid)
 	var edits: Array[BuildEdit] = []
 	for y in range(FLOOR.position.y, FLOOR.end.y):
 		for x in range(FLOOR.position.x, FLOOR.end.x):
-			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y) + at, BuildGrid.FLOOR_TILE, 1))
 	for x in range(FLOOR.position.x, FLOOR.end.x):
-		var cell := Vector2i(x, ReferenceTerminal.DIVIDER_Y)
+		var cell := Vector2i(x, ReferenceTerminal.DIVIDER_Y) + at
 		edits.append(BuildEdit.place_wall(cell, BuildGrid.Side.NORTH))
 	for y in [4, 5, 6, 7, 11, 12, 13, 14, 15]:
-		edits.append(BuildEdit.remove_wall(Vector2i(21, y), BuildGrid.Side.EAST))
+		edits.append(BuildEdit.remove_wall(Vector2i(21, y) + at, BuildGrid.Side.EAST))
 	for result in grid.apply_batch(edits):
 		assert(result.ok, "shop layout edit refused: %s" % result.reason_text())
 	# Walls close the floor in, so passengers may use it (TerminalEnclosure).
@@ -41,12 +42,13 @@ static func build(grid: BuildGrid, sides: Array = ["air"], displays := 2) -> Dic
 	var ids := {}
 	for side: String in sides:
 		var rect := AIRSIDE_ROOM if side == "air" else LANDSIDE_ROOM
+		rect = Rect2i(rect.position + at, rect.size)
 		ids[side + "_room"] = _apply(grid, BuildEdit.place_room(rect, &"kiosk")).room_id
 		ids[side + "_counter"] = _place(grid, &"kiosk_counter", rect.position)
 		var stands: Array = []
 		for i in displays:
 			stands.append(
-				_place(grid, &"kiosk_display", Vector2i(DISPLAY_X, rect.position.y + 3 * i))
+				_place(grid, &"kiosk_display", Vector2i(DISPLAY_X + at.x, rect.position.y + 3 * i))
 			)
 		ids[side + "_displays"] = stands
 	return ids

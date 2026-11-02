@@ -121,6 +121,9 @@ func _run() -> void:
 			seed = int(arg.trim_prefix("--seed="))
 	_clock.seed_rng(seed)
 	print("PROBE sim_seed=", seed)
+	# The probe builds its own terminal on an empty grid: the starter shell
+	# main.tscn places on the reference cells would refuse its first wall.
+	(_main.get_node("BuildMode") as BuildMode).starter_shell = false
 	root.add_child(_main)
 	_clock.set_process(false)
 	_clock.set_paused(false)
@@ -133,6 +136,8 @@ func _run() -> void:
 	_views = _main.get_node("PassengerViews") as PassengerViews
 	_beat("build")
 	var ids := ToiletTestLayout.build(mode.grid, 3)
+	if not StarterFlight.add_gate_desk(mode.grid):
+		_invalid("the gate desk was refused")
 	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
 	await _frames(4)
 	_sim.toilets.refresh()
