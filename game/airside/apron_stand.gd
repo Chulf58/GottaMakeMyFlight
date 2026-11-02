@@ -31,7 +31,9 @@ extends Node3D
 ## a stand only comes and goes with its gate (GateDesks refuses ending a gate
 ## while a flight is due there). Each gate's status (no usable stand, a long
 ## walk) shows over its own stand, and the guard is the union of what each
-## gate's busy flight still needs. The save holds each gate's stand.
+## gate's busy flight still needs. The save holds each gate's stand. Its
+## GateLinksView child draws each gate's link from desk to exit to stand while
+## build mode lasts, and a sign over every gate desk that has no gate.
 ##
 ## Not guaranteed: the live stand stays where it is while no legal stand
 ## exists, even when the player builds over its apron with no plane there.
@@ -81,12 +83,16 @@ var _areas: Array[MeshInstance3D] = []
 var _area_material: StandardMaterial3D
 ## With gates: gate letter -> its status Label3D.
 var _gate_labels: Dictionary = {}
+## With gates: the desk-to-exit-to-stand links and the unlinked desks' signs.
+var _links_view := GateLinksView.new()
 
 
 func _init() -> void:
 	_guard_view.name = "GuardView"
 	_guard_view.visible = false
 	add_child(_guard_view)
+	_links_view.name = "GateLinks"
+	add_child(_links_view)
 
 
 func _ready() -> void:
@@ -162,6 +168,7 @@ func bind(
 	if gates != null:
 		live = {}
 		gates.changed.connect(refresh)
+		_links_view.bind(grid, gates)
 	else:
 		live = StandPlacement.starter_stand(grid, site)
 		grid.graph_changed.connect(_on_graph_changed)
@@ -177,6 +184,12 @@ func watch(session: BuildSession) -> void:
 
 func set_building(on: bool) -> void:
 	_guard_view.visible = on
+	_links_view.set_building(on)
+
+
+## The gate links view (for probes and tests).
+func links_view() -> GateLinksView:
+	return _links_view
 
 
 ## Works the wanted stand out again and lets the live one take it if it may.
