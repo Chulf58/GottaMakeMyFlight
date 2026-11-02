@@ -29,7 +29,21 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://spike/park_recovery_plates_probe.gd [-- --seed=N]
 ##
-## Plates go to tools/blender/out/park-recovery/.
+## Plates go to tools/blender/out/park-recovery/, or to the directory --out=<dir>
+## names.
+##
+## Hand-swap watch (board 6981b7ac part 3): with --follow=N the probe goes on N
+## ticks after the plates, a third of a tick a frame, and prints for each frame
+## both hands' grip distances to the roller's handle and bar, and the bag and
+## both grips as offsets from the walker's origin (not turned with it: a body
+## that turns on the spot in one frame would otherwise move everything it
+## carries). The hand holding at the first frame after the plates is PINNED: a
+## change of the bag's place to the other hand is
+## printed as SWAP, and the pinned hand keeps being measured, so a jump of the
+## pinned grip or of the bag (JUMP_M in a frame) is the bag or grip moving, and
+## a jump only in the "live" hand (CarryLead.hand_of(home) read fresh each frame,
+## as the plates do) is the measurement changing hands. The summary prints the
+## largest of each.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/park-recovery"
@@ -50,8 +64,26 @@ const LIMIT_TICKS := 400
 ## "before" is the last frame within this much k of the lift's end (one frame at
 ## 1x is 1/48), drawn still bending the back first.
 const BEFORE_K := 0.03
+## A move relative to the walker's origin, in one frame (a third of a tick), above this
+## is a jump (walking pulls the bag along smoothly, a few cm a frame at most).
+const JUMP_M := 0.03
 
 var _seed := 0
+var _follow_ticks := 0
+## --no-plates: no image is read or saved (a headless run of the follow watch).
+var _no_plates := false
+## --worn: the walker also wears a shoulder bag as its second bag (board 6981b7ac part 2).
+var _worn := false
+var _worn_prev := {}
+var _worn_worst := {
+	"w_body": 0.0,
+	"w_joint": 0.0,
+	"w_world": 0.0,
+	"j_world": 0.0,
+	"stale": 0.0,
+	"turn_frames": 0,
+	"turn_body": 0.0,
+}
 var _out_dir := ""
 var _failed := false
 var _main: Node3D
@@ -66,20 +98,30 @@ var _saved: Array[String] = []
 
 func _initialize() -> void:
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
-	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_seed = randi()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
 			_seed = int(arg.get_slice("=", 1))
-	print("PROBE sim_seed=%d out_dir=%s" % [_seed, _out_dir])
+		elif arg.begins_with("--follow="):
+			_follow_ticks = int(arg.get_slice("=", 1))
+		elif arg == "--no-plates":
+			_no_plates = true
+		elif arg == "--worn":
+			_worn = true
+		elif arg.begins_with("--out="):
+			_out_dir = arg.get_slice("=", 1)
+	DirAccess.make_dir_recursive_absolute(_out_dir)
+	print("PROBE sim_seed=%d out_dir=%s follow=%d" % [_seed, _out_dir, _follow_ticks])
 	_run.call_deferred()
 
 
 func _run() -> void:
 	if await _boot():
 		await _collect()
+		if _worn:
+			_worn_summary()
 	print("PROBE done plates=%d failed=%s" % [_saved.size(), _failed])
-	quit(1 if _failed or _saved.size() < 8 else 0)
+	quit(1 if _failed or (_saved.size() < 8 and not _no_plates) else 0)
 
 
 func _boot() -> bool:
@@ -128,11 +170,12 @@ func _walker() -> Passenger:
 	var p: Passenger = null
 	for attempt in 200:
 		p = _sim.get_passenger(_sim.spawn_now(StarterFlight.first_flight()))
-		if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER:
+		var second := SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.SHOULDER
+		if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER and (second or not _worn):
 			break
 		p.carry_on = 0
 	ToiletTestLayout.calm(p)
-	p.carry_on = 1
+	p.carry_on = 2 if _worn else 1
 	p.liquids = false
 	p.alarm = false
 	p.cleared = true
@@ -167,6 +210,8 @@ func _collect() -> void:
 	while _clock.tick < limit and not wants.is_empty():
 		await _step()
 		var body := _views.node_for(_p.id)
+		if _worn:
+			_watch_worn(props, body)
 		var bag := props.bag_state(_p.id, 0)
 		var k := props.transfer_progress(_p.id, 0)
 		var moved := body.global_position.distance_to(last_body)
@@ -212,9 +257,278 @@ func _collect() -> void:
 			shot = "walk"
 		if shot != "":
 			wants.erase(shot)
-			await _plate(shot, body, node, bag, k, lead)
+			if _no_plates:
+				print("PLATE %s skipped (--no-plates) k=%.3f tick %d" % [shot, k, _clock.tick])
+			else:
+				await _plate(shot, body, node, bag, k, lead)
 	if not wants.is_empty():
 		_invalid("plates never reached: %s" % [wants])
+	elif _follow_ticks > 0:
+		await _follow(props)
+
+
+## Follows the roller for _follow_ticks more ticks and prints the hand-swap watch
+## (see the header): flagged frames, then the largest jump of each measure.
+func _follow(props: CarryOnProps) -> void:
+	var body := _views.node_for(_p.id)
+	var pin := -1
+	var prev := {}
+	var worst := {"bag": 0.0, "pin": 0.0, "other": 0.0, "live": 0.0, "pin_gap": 0.0}
+	for key in ["kink_bag", "kink_bag_clip", "kink_pin", "kink_pin_clip"]:
+		worst[key] = 0.0
+	var live_switches := 0
+	var swaps := 0
+	var jumps_pin := 0
+	var end := _clock.tick + _follow_ticks
+	while _clock.tick < end:
+		await _step()
+		body = _views.node_for(_p.id)
+		var bag := props.bag_state(_p.id, 0)
+		var node: Node3D = props.props_of(_p.id)["bags"][0]
+		var handle := node.global_transform * CarryOnProps.ROLLER_HANDLE
+		var bar := node.global_transform * Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, 0.255)
+		var grips: Array[Vector3] = [props.grip_of(body, 0), props.grip_of(body, 1)]
+		var place_hand := CarryLead.hand_of(int(bag.get("place", 0)))
+		var live := CarryLead.hand_of(int(bag["home"]))
+		if pin < 0:
+			pin = int(bag.get("held_by", -1))
+			pin = pin if pin >= 0 else place_hand
+		var swap_now: bool = place_hand != pin
+		var row := {
+			"bag": node.global_position - body.global_position,
+			"g": [grips[0] - body.global_position, grips[1] - body.global_position],
+			"live": live,
+			"body": body.global_position,
+			"yaw": body.global_rotation.y,
+			"gw": grips[pin] if pin >= 0 else Vector3.ZERO,
+			"gap": [grips[0].distance_to(handle), grips[1].distance_to(handle)],
+			"clip": (body.get_node("AnimationPlayer") as AnimationPlayer).current_animation,
+		}
+		var flag := ""
+		if not prev.is_empty():
+			var bag_jump: float = row["bag"].distance_to(prev["bag"])
+			var pin_jump: float = row["g"][pin].distance_to(prev["g"][pin])
+			var other_jump: float = row["g"][1 - pin].distance_to(prev["g"][1 - pin])
+			var live_jump: float = row["g"][live].distance_to(prev["g"][prev["live"]])
+			var gap_jump := absf(row["gap"][pin] - prev["gap"][pin])
+			worst["bag"] = maxf(worst["bag"], bag_jump)
+			worst["pin"] = maxf(worst["pin"], pin_jump)
+			worst["other"] = maxf(worst["other"], other_jump)
+			worst["live"] = maxf(worst["live"], live_jump)
+			worst["pin_gap"] = maxf(worst["pin_gap"], gap_jump)
+			live_switches += int(live != prev["live"])
+			if bag_jump > JUMP_M or pin_jump > JUMP_M or gap_jump > JUMP_M:
+				jumps_pin += 1
+				flag += " PIN_JUMP"
+			if live_jump > JUMP_M and bag_jump <= JUMP_M and pin_jump <= JUMP_M:
+				flag += " LIVE_ONLY_JUMP"
+			if swap_now != bool(prev["swap"]):
+				swaps += 1
+				flag += " SWAP_%s" % ("START" if swap_now else "END")
+			flag += _kinks(row, prev, pin, worst)
+			if flag != "":
+				print(
+					(
+						(
+							"FOLLOW tick=%d k=%.3f pin=%d live=%d place_hand=%d held_by=%d swap=%s"
+							% [
+								_clock.tick,
+								props.transfer_progress(_p.id, 0),
+								pin,
+								live,
+								place_hand,
+								int(bag.get("held_by", -1)),
+								bag.get("swap", false)
+							]
+						)
+						+ (
+							" bag_jump=%.3f pin_jump=%.3f other_jump=%.3f live_jump=%.3f"
+							% [bag_jump, pin_jump, other_jump, live_jump]
+						)
+						+ (
+							" gap_pin=%.3f gap_other=%.3f bar_pin=%.3f%s"
+							% [
+								row["gap"][pin],
+								row["gap"][1 - pin],
+								grips[pin].distance_to(bar),
+								flag
+							]
+						)
+						+ (
+							" | world: body_move=%.3f yaw_deg=%.1f grip_move=%.3f stage=%d place=%d home=%d park=%s"
+							% [
+								row["body"].distance_to(prev["body"]),
+								rad_to_deg(angle_difference(prev["yaw"], row["yaw"])),
+								grips[pin].distance_to(prev["gw"]),
+								_p.stage,
+								int(bag.get("place", -9)),
+								int(bag["home"]),
+								bag.get("park", false)
+							]
+						)
+					)
+				)
+		if _worn:
+			_watch_worn(props, body)
+		row["swap"] = swap_now
+		prev = row
+	print(
+		(
+			"FOLLOW summary ticks=%d pin=%d swaps=%d live_switches=%d pin_jump_frames=%d"
+			% [_follow_ticks, pin, swaps, live_switches, jumps_pin]
+		)
+	)
+	print(
+		(
+			(
+				"FOLLOW max kink per frame (m; clip kept / clip changed): bag=%.3f / %.3f"
+				% [worst["kink_bag"], worst["kink_bag_clip"]]
+			)
+			+ " pinned_grip=%.3f / %.3f" % [worst["kink_pin"], worst["kink_pin_clip"]]
+		)
+	)
+	print(
+		(
+			(
+				"FOLLOW max per frame (m, from the walker origin): bag=%.3f pinned_grip=%.3f other_grip=%.3f"
+				% [worst["bag"], worst["pin"], worst["other"]]
+			)
+			+ " live_hand_grip=%.3f pinned_gap=%.3f" % [worst["live"], worst["pin_gap"]]
+		)
+	)
+
+
+## The worn shoulder bag (bag 1, --worn) this frame: its origin in the world,
+## in the body's own (turned) frame and off its shoulder joint (the Arm bone it
+## hangs from), and, while it is settled on the shoulder, how far it is drawn
+## from where the worn pose puts it with the body as it is now ("stale": a
+## bag placed before the body turned is off by the turn). A move of the bag on
+## the body or a stale bag is printed as WORN_JUMP, with the body's turn, move
+## and clip; the largest of each is kept for the summary (_worn_summary()).
+func _watch_worn(props: CarryOnProps, body: Node3D) -> void:
+	var worn: Node3D = props.props_of(_p.id)["bags"][1]
+	var joint: Vector3 = props._shoulder_of(body, SecurityLooks.worn_side(1))
+	var rig: Dictionary = props._rig(body)
+	var pivot: Vector3 = (rig["pivot"] as Node3D).global_position
+	var row := {
+		"w_world": worn.global_position,
+		"w_body": body.global_transform.affine_inverse() * worn.global_position,
+		"w_joint": worn.global_position - joint,
+		"j_world": joint,
+		"j_body": body.global_transform.affine_inverse() * joint,
+		"shift": body.global_basis.inverse() * CarryWorn.stoop_shift(rig["stoop"], pivot, joint),
+		"yaw": body.global_rotation.y,
+		"body": body.global_position,
+	}
+	var stale := 0.0
+	var on_shoulder: bool = (
+		props.bag_state(_p.id, 1).get("carry", -1) == SecurityLooks.Carry.SHOULDER
+		and int(props.bag_state(_p.id, 1).get("home", -1)) / 4 == SecurityLooks.Home.HAND
+		and props.transfer_progress(_p.id, 1) >= 1.0
+	)
+	if on_shoulder:
+		var fresh: Transform3D = props._carry_transform(props._held[_p.id], body, 1, [0.0])
+		stale = fresh.origin.distance_to(worn.global_position)
+	var prev := _worn_prev
+	_worn_prev = row
+	if prev.is_empty():
+		return
+	var jumps := {}
+	for key in ["w_body", "w_joint", "w_world", "j_world"]:
+		jumps[key] = (row[key] as Vector3).distance_to(prev[key])
+		_worn_worst[key] = maxf(_worn_worst[key], jumps[key])
+	_worn_worst["stale"] = maxf(_worn_worst["stale"], stale)
+	var turn := rad_to_deg(angle_difference(prev["yaw"], row["yaw"]))
+	if on_shoulder and absf(turn) > 1.0:
+		_worn_worst["turn_frames"] += 1
+		_worn_worst["turn_body"] = maxf(_worn_worst["turn_body"], jumps["w_body"])
+	var flagged: bool = jumps["w_body"] > JUMP_M or jumps["w_joint"] > JUMP_M or stale > 0.01
+	if not flagged and absf(turn) <= 1.0:
+		return
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	print(
+		(
+			(
+				"WORN tick=%d k=%.3f home=%d stage=%d shoulder=%s yaw_deg=%.1f body_move=%.3f clip=%s"
+				% [
+					_clock.tick,
+					props.transfer_progress(_p.id, 1),
+					int(props.bag_state(_p.id, 1).get("home", -1)),
+					_p.stage,
+					on_shoulder,
+					turn,
+					row["body"].distance_to(prev["body"]),
+					player.current_animation
+				]
+			)
+			+ (
+				(
+					" body_frame=%.3f off_joint=%.3f world=%.3f joint_world=%.3f stale=%.3f"
+					+ " shift_body=%s was %s joint_body=%s was %s drawn=%.2f world_at=%s%s"
+				)
+				% [
+					jumps["w_body"],
+					jumps["w_joint"],
+					jumps["w_world"],
+					jumps["j_world"],
+					stale,
+					row["shift"],
+					prev["shift"],
+					row["j_body"],
+					prev["j_body"],
+					(rig["stoop"] as CarryStoop).drawn,
+					row["w_world"],
+					" WORN_JUMP" if flagged else ""
+				]
+			)
+		)
+	)
+
+
+func _worn_summary() -> void:
+	print(
+		(
+			(
+				"WORN max per frame (m): body_frame=%.3f off_joint=%.3f world=%.3f joint_world=%.3f"
+				% [
+					_worn_worst["w_body"],
+					_worn_worst["w_joint"],
+					_worn_worst["w_world"],
+					_worn_worst["j_world"]
+				]
+			)
+			+ (
+				" stale=%.3f; on the shoulder in %d turning frames, body_frame max %.3f"
+				% [_worn_worst["stale"], _worn_worst["turn_frames"], _worn_worst["turn_body"]]
+			)
+		)
+	)
+
+
+## The kink of the bag and the pinned grip this frame (`row` against `prev`,
+## each as an offset from the walker's origin): how much its move this frame
+## differs from its move the frame before. A fast but smooth move (a hand
+## swinging the bag up) changes its speed a little a frame; a snap moves at
+## once and stops. Kept in `worst` apart for frames whose clip changed (a
+## clip is played with no blend, so the whole body snaps then). Returns the
+## flags for the frame.
+func _kinks(row: Dictionary, prev: Dictionary, pin: int, worst: Dictionary) -> String:
+	row["d_bag"] = (row["bag"] as Vector3) - prev["bag"]
+	row["d_pin"] = (row["g"][pin] as Vector3) - prev["g"][pin]
+	if not prev.has("d_bag"):
+		return ""
+	var clip_changed: bool = row["clip"] != prev["clip"]
+	var suffix := "_clip" if clip_changed else ""
+	var bag_kink := (row["d_bag"] as Vector3).distance_to(prev["d_bag"])
+	var pin_kink := (row["d_pin"] as Vector3).distance_to(prev["d_pin"])
+	worst["kink_bag" + suffix] = maxf(worst.get("kink_bag" + suffix, 0.0), bag_kink)
+	worst["kink_pin" + suffix] = maxf(worst.get("kink_pin" + suffix, 0.0), pin_kink)
+	var flags := ""
+	if clip_changed:
+		flags += " CLIP_%s>%s" % [prev["clip"], row["clip"]]
+	if bag_kink > JUMP_M or pin_kink > JUMP_M:
+		flags += " KINK bag=%.3f pin=%.3f" % [bag_kink, pin_kink]
+	return flags
 
 
 ## One sim step a third of a tick on, drawn.
@@ -318,7 +632,9 @@ func _diff(a: Image, b: Image) -> int:
 func _frames(count: int) -> void:
 	for i in count:
 		await process_frame
-	await RenderingServer.frame_post_draw
+	# Headless (--no-plates) draws nothing, so frame_post_draw never comes.
+	if not _no_plates:
+		await RenderingServer.frame_post_draw
 
 
 func _invalid(why: String) -> void:

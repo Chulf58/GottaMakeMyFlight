@@ -553,7 +553,7 @@ func sync() -> void:
 					and (by_bar or bags[i].get("by_bar", false))
 				)
 				bags[i]["place"] = place
-				bags[i]["changed"] = _tick()
+				bags[i]["changed"] = CarrySwap.changed_at(bags[i], lifted, _tick())
 				bags[i]["carry_was"] = bags[i].get("carry", carry)
 			bags[i]["carry"] = carry
 			bags[i]["by_bar"] = by_bar
@@ -1246,7 +1246,8 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 	# The arms keep what was set until it changes (most frames nothing does).
 	var tuck: float = held.get("tuck_weight", 0.0)
 	var reach_on: Array = held.get("reach_on", [false, false])
-	var key := [modes, strap, cases, beside, held["weight"], tuck, reach_on]
+	var swaps := CarrySwap.arm_shares(held, now)
+	var key := [modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps]
 	if held.get("arm_key", []) == key and held.get("arm_body") == body:
 		return
 	held["arm_key"] = key
@@ -1280,6 +1281,7 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 				# Beside a front-carried case, or tucked in through a booth.
 				arm.front_half_width = BoothCarry.free_hand_width(beside > 0, tuck)
 				arm.front_weight = maxf(held["weight"] if beside > 0 else 0.0, tuck)
+		CarrySwap.pose_arm(arm, swaps[side], held["weight"])
 
 
 ## How far `bag` is through its move at sim time `now` (1 when settled or
@@ -1455,9 +1457,7 @@ func _swap_transform(held: Dictionary, body: Node3D, i: int, k: float) -> Array:
 			trailing = _axle_drawn(bag, body, scale_by, hand)
 	else:
 		trailing = body.global_transform * ((bag["from"] as Transform3D) * ROLLER_AXLE)
-	# How far toward the pull: 0 hung, 1 pulled.
-	var s := smoothstep(0.0, 1.0, k)
-	var t := s if to_pull else 1.0 - s
+	var t := CarrySwap.pull_share(to_pull, k)
 	var hung := _hung_axle(bag, grip, scale_by)
 	var axle := hung.lerp(trailing, t) + outward * SWAP_OUT_M * 4.0 * t * (1.0 - t)
 	# At security (no stall partition near) round the hand's side, clear of the
