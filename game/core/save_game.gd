@@ -553,6 +553,7 @@ func _stage_gate_exits(sim: PassengerSim, staged: Dictionary) -> void:
 	for binding in bindings:
 		sim.layout.exit_stands[binding["exit"]] = stands[binding["gate"]]
 		sim.layout.exit_gates[binding["exit"]] = binding["gate"]
+		sim.layout.gate_desk_ids[binding["gate"]] = binding["desk"]
 	sim.layout.by_gate = true
 	var staged_flights := FlightSim.new()
 	var letters := _letters(bindings)

@@ -72,7 +72,11 @@ signal checked_in(id: int, desk: int)
 ## standing spot kept by a passenger setting off from it for the exit. Version
 ## 14 is refused, with no migration; a migrated older save has no files, so one
 ## taken while anyone walked out to the plane is refused.
-const SAVE_VERSION := 15
+## 16: seats and standing spots are chosen near the passenger's own gate desk
+## (GateReach), so a version 15 save, whose claims followed the old global
+## nearest rule, is refused with no migration (decision old-saves-are-not-
+## supported-until-after-a-release-no-save-mi).
+const SAVE_VERSION := 16
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -93,6 +97,8 @@ const SETTLED_KEEP_TICKS := 200
 const BEAT_TICKS := 20
 const SEAT_TRIES := 4
 const MOOD_MAX := 100
+## A passenger standing at the gate loses a mood point every this many beats.
+const STANDING_MOOD_BEATS := 4
 ## Seated, the feet stand this far in front of the seat cell's centre.
 const SIT_FORWARD_M := 0.45
 const SHUFFLE_TICKS := 8
@@ -996,6 +1002,16 @@ func _beat(p: Passenger) -> void:
 		change += 1
 	if p.late:
 		change -= 1
+	# Standing at the gate for want of a seat wears on a passenger (user ruling
+	# 342df92a): a seat gains a point a beat, standing on a spot loses one every
+	# few.
+	@warning_ignore("integer_division")
+	if (
+		p.stage == Passenger.Stage.STANDING
+		and standing.spot_of(p.id) != StandingSpots.NO_SPOT
+		and posmod(tick / BEAT_TICKS, STANDING_MOOD_BEATS) == 0
+	):
+		change -= 1
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
 	decor.beat(p)
 	messes.beat(p)
@@ -1153,7 +1169,7 @@ func _to_spot(p: Passenger) -> void:
 ## nearest tried) and commits that path; NO_SPOT when none.
 func _claim_spot(p: Passenger) -> int:
 	var tries := 0
-	for spot in standing.free_nearest(p.at):
+	for spot in standing.free_nearest(p.at, _gate_cells(p)):
 		var target := standing.cell_of(spot)
 		var path: Array[Vector2i] = [p.at]
 		if target != p.at:
@@ -1178,14 +1194,21 @@ func _seat_from_spot(p: Passenger) -> void:
 		_set_stage(p, Passenger.Stage.TO_GATE)
 
 
+## The free seats nearest the passenger's gate desk first, none farther than
+## GateReach.NEAR_CELLS from it, then the nearest to the passenger; with no gate
+## desk (no gates, or a flight without a gate) the nearest to the passenger.
 func _claim_seat(p: Passenger) -> bool:
+	var near := _gate_cells(p)
 	var free: Array = []
 	for seat in layout.seats:
-		if not _seat_claims.has(seat["key"]):
-			free.append([Passenger.octile_mm(p.at, seat["front"]), free.size(), seat])
+		if _seat_claims.has(seat["key"]):
+			continue
+		var reach := GateReach.cells_from(seat["cell"], near)
+		if near.is_empty() or reach <= GateReach.NEAR_CELLS:
+			free.append([reach, Passenger.octile_mm(p.at, seat["front"]), free.size(), seat])
 	free.sort()
 	for i in mini(free.size(), SEAT_TRIES):
-		var seat: Dictionary = free[i][2]
+		var seat: Dictionary = free[i][3]
 		var path := grid.find_path(p.at, seat["front"])
 		if path.is_empty():
 			continue
@@ -1196,6 +1219,15 @@ func _claim_seat(p: Passenger) -> bool:
 		p.set_path(path)
 		return true
 	return false
+
+
+## The cells of the gate desk of `p`'s flight, empty when there is none to
+## wait near (GateReach).
+func _gate_cells(p: Passenger) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if layout.by_gate:
+		out.assign(layout.gate_desks.get(flights.flight_gate(p.flight_id), out))
+	return out
 
 
 func _release_seat(p: Passenger) -> void:
@@ -1365,11 +1397,15 @@ func set_stand(stand: Dictionary) -> void:
 
 
 ## The gate stands changed (ApronStand with gate desks): each gate's exit
-## walks to its own stand (exit id -> stand, exit id -> gate letter).
-func set_gate_stands(exit_stands: Dictionary, exit_gates: Dictionary) -> void:
+## walks to its own stand (exit id -> stand, exit id -> gate letter), and its
+## passengers wait by its gate desk (gate letter -> desk object id).
+func set_gate_stands(
+	exit_stands: Dictionary, exit_gates: Dictionary, gate_desk_ids: Dictionary
+) -> void:
 	layout.by_gate = true
 	layout.exit_stands = exit_stands
 	layout.exit_gates = exit_gates
+	layout.gate_desk_ids = gate_desk_ids
 	_on_graph_changed([] as Array[Vector2i])
 
 

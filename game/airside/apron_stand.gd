@@ -69,6 +69,8 @@ var site: SiteDefinition
 ## With gates: gate letter -> {"live": its stand, "placement": its
 ## StandPlacement.check() result}.
 var gate_stands: Dictionary = {}
+## Gate letter -> the gate desk object id last sent to the passengers.
+var _desks_sent: Dictionary = {}
 
 var _guard_key: Array = []
 var _guard_cells: Dictionary = {}
@@ -196,7 +198,10 @@ func _refresh_gates() -> void:
 		next[binding["gate"]] = {
 			"live": stand, "placement": StandPlacement.check(grid, site, binding["exit"], stand)
 		}
-	var moved := _stands_of(next) != _stands_of(gate_stands)
+	var desks := {}
+	for binding in gates.bindings:
+		desks[binding["gate"]] = binding["desk"]
+	var moved := _stands_of(next) != _stands_of(gate_stands) or desks != _desks_sent
 	gate_stands = next
 	if moved:
 		_apply_live()
@@ -451,6 +456,9 @@ func _apply_live() -> void:
 ## The gate stands to the airside (one set of stand waypoints per gate) and to
 ## the passengers (each gate's exit walks to its own stand).
 func _apply_gate_stands() -> void:
+	_desks_sent = {}
+	for binding in gates.bindings:
+		_desks_sent[binding["gate"]] = binding["desk"]
 	var by_gate := _stands_of(gate_stands)
 	if airside != null:
 		airside.set_gate_stands(by_gate)
@@ -462,7 +470,7 @@ func _apply_gate_stands() -> void:
 		var exit_id: int = by_gate[gate]["exit"]
 		exit_stands[exit_id] = by_gate[gate]
 		exit_gates[exit_id] = gate
-	passengers.set_gate_stands(exit_stands, exit_gates)
+	passengers.set_gate_stands(exit_stands, exit_gates, _desks_sent.duplicate())
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
