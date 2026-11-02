@@ -18,6 +18,7 @@ Tests are gdUnit4 files under `game/tests/`, named `test_<name>.gd`, mirroring t
 5. **Free what the test creates.** Wrap each `Node` the test makes in `auto_free(...)`, or call `free()` or `queue_free()` yourself. A node left under root is a leak.
 6. **Keep a file small.** One concern per file, split by subject. A big file is slow to find a failure in and cannot run beside the others.
 7. **A test that writes to `user://` removes what it wrote, and writes to a per-process path.** Use `SaveTestKit.run_path(name)` (game/tests/core/save_test_kit.gd), never a fixed `user://` file name, and delete the file and its `.tmp` in teardown. Parallel Godot test runs share the `user://` folder, so a fixed name lets one run see or delete the other's file (user-ruled 2026-10-28, after test_baggage_save_game failed 6 of 6 parallel rounds on a fixed path).
+8. **Land in a test: `LandKit.own_all(land)` only for tests that never save.** Both helpers are in `game/tests/build/land_kit.gd`. `own_all(land: LandPlots)` marks every plot owned, which is the quick way to get a whole site to build on, but a save checks the `bought` list against the owned plots, so a saved game from it will not load back. A test that saves uses `LandKit.buy_to(land: LandPlots, target: Vector2i)`, which buys, for free, the plots that join `target` to the land already owned, so the land stays a state a save accepts.
 
 ## Running tests
 
