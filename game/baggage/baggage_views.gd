@@ -5,8 +5,14 @@ extends Node3D
 ## the belt top, turned along the edge it rides; the newest bag to reach a
 ## belt end rests on that end's slide (the end piece's Mount_BagRest); a bag
 ## waiting at its desk, an older bag in the room and a settled bag are not
-## drawn. Positions are recorded each tick and drawn between the last two
-## with the clock's alpha. Never writes sim state.
+## drawn. Transforms are recorded each tick and drawn between the last two
+## with the clock's alpha (the turn slerped). Never writes sim state.
+##
+## A drawn bag turns at most TURN_PER_TICK a tick toward where its belt points,
+## so a bag that turns on a cell centre (at a merge, or off a desk outlet) turns
+## over the next half cell instead of in one tick. A load (SaveGame.loaded)
+## starts every bag over at its sim place; a tick that does not follow the last
+## one recorded does the same when no load was seen.
 
 const BAG_SCENE := preload("res://assets/interior/baggage_bag.glb")
 const END_SCENE := preload("res://assets/interior/baggage_belt_end.glb")
@@ -19,9 +25,17 @@ const REST_MOUNT := "Mount_BagRest"
 ## the first and last 5 cm of a corner stay straight: a bag a desk drops half
 ## a cell into its corner lies where it would on a straight belt.
 const TURN_RADIUS := 0.45
+## Most a drawn bag turns in one tick, in radians: a quarter turn over half a
+## cell of travel (9 degrees), so a bag that turns on a cell centre lies along
+## its new edge by the time it leaves the cell. A corner turns a quarter over
+## 2 * TURN_RADIUS (5 degrees a tick), under this, so on a corner the drawn
+## heading is the path's.
+const TURN_PER_TICK := PI / 2.0 * BaggageSim.BELT_MM / (Bag.CELL_MM / 2.0)
 
 @export var clock: SimClock
 @export var sim: BaggageSim
+## When set, a finished load starts every bag over at the loaded world.
+@export var save_game: SaveGame
 
 ## Bag id -> node.
 var _nodes := {}
@@ -30,12 +44,16 @@ var _cur := {}
 var _pool: Array[Node3D] = []
 ## Mount_BagRest in the end piece's own frame.
 var _rest := Transform3D.IDENTITY
+## The tick sync() last recorded, or -1.
+var _last_tick := -1
 
 
 func _ready() -> void:
 	_rest = mount_transform(END_SCENE, REST_MOUNT)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
+	if save_game != null:
+		save_game.loaded.connect(_on_loaded)
 
 
 func _process(_delta: float) -> void:
@@ -66,6 +84,17 @@ static func mount_transform(scene: PackedScene, mount_name: String) -> Transform
 			parent = parent.get_parent() as Node3D
 	root.free()
 	return out
+
+
+## `from` turned toward `to` by at most `max_angle` radians, about the axis
+## between them, as a pure rotation (any scale dropped).
+static func turn_toward(from: Basis, to: Basis, max_angle: float) -> Basis:
+	var a := from.get_rotation_quaternion()
+	var b := to.get_rotation_quaternion()
+	var angle := a.angle_to(b)
+	if angle <= max_angle:
+		return Basis(b)
+	return Basis(a.slerp(b, max_angle / angle))
 
 
 ## Where a bag on a belt lies: `remain_mm` back from its cell's centre toward
@@ -175,14 +204,30 @@ func sync() -> void:
 		if now == null:
 			continue
 		drawn[bag.id] = true
+		var place: Transform3D = now
 		if not _nodes.has(bag.id):
 			_nodes[bag.id] = _take()
-			_cur[bag.id] = now
-		_prev[bag.id] = _cur[bag.id]
-		_cur[bag.id] = now
+			_cur[bag.id] = Transform3D(turn_toward(place.basis, place.basis, 0.0), place.origin)
+		var last: Transform3D = _cur[bag.id]
+		_prev[bag.id] = last
+		_cur[bag.id] = Transform3D(
+			turn_toward(last.basis, place.basis, TURN_PER_TICK), place.origin
+		)
 	for id in _nodes.keys():
 		if not drawn.has(id):
 			_release(id)
+
+
+## Starts every bag over at the sim's place now, with no tick to run: a load
+## while paused, or back to the tick already showing, brings no tick for
+## _on_ticked to see a gap in. Releases every record, records the loaded
+## world with both ticks at its place, and draws it.
+func snap() -> void:
+	for id in _nodes.keys():
+		_release(id)
+	sync()
+	_last_tick = clock.tick if clock != null else -1
+	draw()
 
 
 ## Places every bag between its last two tick transforms.
@@ -192,11 +237,22 @@ func draw() -> void:
 		var before: Transform3D = _prev[id]
 		var after: Transform3D = _cur[id]
 		var node: Node3D = _nodes[id]
-		node.transform = Transform3D(after.basis, before.origin.lerp(after.origin, alpha))
+		node.transform = Transform3D(
+			before.basis.slerp(after.basis, alpha), before.origin.lerp(after.origin, alpha)
+		)
 
 
-func _on_ticked(_tick: int) -> void:
+func _on_ticked(tick: int) -> void:
+	if tick != _last_tick + 1:
+		for id in _nodes.keys():
+			_release(id)
+	_last_tick = tick
 	sync()
+
+
+func _on_loaded(ok: bool) -> void:
+	if ok:
+		snap()
 
 
 func _take() -> Node3D:
