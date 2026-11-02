@@ -58,7 +58,7 @@ signal loaded(ok: bool)
 ## 8: the live plane stand (part "apron", ApronStand) and longer TAXI_IN and
 ## TAXI_OUT phases, which move every flight's start ticks; version 7 saves
 ## are refused (no migration before a release).
-const SAVE_VERSION := 8
+const SAVE_VERSION := 9
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
