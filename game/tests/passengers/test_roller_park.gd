@@ -38,11 +38,12 @@ var _views: PassengerViews
 var _on_time: Passenger
 ## Made late instead (_route()'s late_in): kept late on every tick from then.
 var _late := false
-## Its home changed in the middle of the move (_route()'s flip_in): the other
-## home kept on every tick from then, with the seat it sat at.
+## Its home changed in the middle of the move (_route()'s flip_in): sitting
+## down, its chair removed (_seat_goes()); standing up, sat down again at its
+## chair the tick its stand-up ended (_resit, armed).
 var _flipped := false
 var _flip_to_floor := false
-var _flip_seat := 0
+var _resit := false
 
 
 func before() -> void:
@@ -236,6 +237,8 @@ func _roller_walker(seated: bool) -> Passenger:
 	_on_time = null
 	_late = false
 	_flipped = false
+	_flip_to_floor = false
+	_resit = false
 	_world.clock.ticked.connect(_keep_on_time)
 	_views = PassengerViews.new()
 	_views.clock = _world.clock
@@ -267,13 +270,32 @@ func _keep_on_time(_tick_now: int) -> void:
 	if _on_time == null:
 		return
 	_on_time.late = _late
-	if not _flipped:
-		return
-	if _flip_to_floor:
-		_on_time.stage = Passenger.Stage.SEATED
-		_on_time.seat_object = _flip_seat
-	else:
-		_on_time.seat_object = 0
+	if _resit and _on_time.stage == Passenger.Stage.TO_EXIT:
+		# Up from the chair, it sits down at it again on the tick the stand-up
+		# ended, from the chair's front where the stand-up left it, as one whose
+		# facility visit was dropped before boarding does (PassengerSim: up, back
+		# to the gate, the seat claimed again). Not forced into SEATED: that put
+		# the body back on the seat in one frame, and its pose with it.
+		var seat: Dictionary = _world.sim.layout.seats[0]
+		_on_time.seat_object = seat["object_id"]
+		_on_time.seat_cell = seat["cell"]
+		_on_time.seat_front = seat["front"]
+		_on_time.boarding_tick = _world.sim.tick + 100000
+		_on_time.clear_path()
+		_on_time.stage = Passenger.Stage.SITTING_DOWN
+		_on_time.stage_tick = _world.sim.tick
+		_resit = false
+		_flipped = true
+
+
+## The chair of the walker sitting down at it removed, as a build edit does:
+## gone from the layout, and the sim's own reconcile (PassengerSim._reconcile())
+## frees the seat and sends the walker on to the gate, standing. Not seat_object
+## cleared alone: a body left sitting down at no seat is no longer turn-locked
+## (PassengerViews) and turned round to face its slide into the chair.
+func _seat_goes() -> void:
+	_world.sim.layout.seats.remove_at(0)
+	_world.sim._reconcile()
 
 
 ## One frame `ticks` sim ticks on, as the game draws them.
@@ -290,11 +312,13 @@ func _tick(ticks: float) -> void:
 ## With `late_in` ("lift" or "park", _late_now()) the walker turns late in
 ## that part of the move ("late_k", "-1" never), and every frame of the parking
 ## move after that must still draw it pulled (a fail line otherwise).
-## With `flip_in` (the same parts) the walker's home changes instead, in that
-## part of the move, to the other one (to the hand from the floor, to the floor
-## from the hand): "flip_k" is the k it did, "flips" how many new moves were
-## stamped after it, and the frame of each is checked for a jump of GRASP_M or
-## more (a fail line otherwise). The walker is followed AFTER_TICKS after it.
+## With `flip_in` the walker's home changes instead, to the other one: sitting
+## down ("lift" or "park", the same parts) its seat goes in that part, to the
+## hand from the floor; standing up ("seat") it sits down again at its chair as
+## the stand-up ends, to the floor from the hand. "flip_k" is the k it did,
+## "flips" how many new moves were stamped after it, and the frame of each is
+## checked for a jump of GRASP_M or more (a fail line otherwise). The walker is
+## followed AFTER_TICKS after it.
 func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := "") -> Dictionary:
 	var props := _views.carry_on_props()
 	var out := {
@@ -318,6 +342,7 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 	var last_body := Vector3.INF
 	var last_holder := -2
 	var parked_xf := Transform3D()
+	var parked_since := -1.0
 	while _world.clock.tick < 3000:
 		if not p.cleared:
 			break
@@ -330,7 +355,7 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 			continue
 		if (
 			(now - began > AFTER_TICKS and not _flipped)
-			or (_flipped and now - flip_at > AFTER_TICKS)
+			or (_flipped and flip_at >= 0.0 and now - flip_at > AFTER_TICKS)
 		):
 			break
 		var body := _views.node_for(p.id)
@@ -362,15 +387,18 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 				else "pull>floor"
 			)
 		var lead := CarryLead.hand_of(bag["home"] if cur == "floor>pull" else bag["was"])
+		if flip_in == "seat" and began == now:
+			_flip_to_floor = true
+			_resit = true
 		if (
-			flip_in != ""
+			flip_in not in ["", "seat"]
 			and not _flipped
 			and move == name
 			and _late_now(flip_in, name, k, bag, holder)
 		):
 			_flipped = true
-			_flip_to_floor = name == "floor>pull"
-			_flip_seat = _world.sim.layout.seats[0]["object_id"]
+			_seat_goes()
+		if _flipped and flip_at < 0.0:
 			flip_at = now
 			out["flip_k"] = k
 			print("%s home changes at k=%.3f holder %d" % [tag, k, holder])
@@ -409,12 +437,16 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 						% [tag, rest, low, _world.sim.grid.origin.y, body.global_position.y]
 					)
 				)
+			# Still within one park: a second parking move (after a change of home)
+			# parks somewhere else.
 			if (
 				int(out["parked"]) > 1
+				and float(bag.get("since", -1.0)) == parked_since
 				and node.global_transform.origin.distance_to(parked_xf.origin) > 0.001
 			):
 				out["fails"].append("%s parked bag moved" % tag)
 			parked_xf = node.global_transform
+			parked_since = float(bag.get("since", -1.0))
 		var grip := props.grip_of(body, lead)
 		if int(out["frames"]) > 1:
 			var moved := node.global_transform.origin.distance_to(last_xf.origin)
@@ -618,13 +650,12 @@ func _late_mid_park(down: bool) -> void:
 			assert_int(fails.size()).is_equal(0)
 
 
-## A walker's home changing in the middle of a parking move (not a lateness
-## flip, which holds the park, RollerPark.holds_lift()): sitting down, it gets
-## up again to the hand (seat_object cleared); standing up, it is seated again
-## on the floor. At each part and frame rate, the stamped move starts from the
-## pose drawn, never a jump of GRASP_M or more in the bag or the grip, and no
-## FLOAT, GRIP_ON or jump after it. Controls: the home changed in that part and
-## a new move was stamped after it.
+## A walker's home changing in the middle of a parking move: sitting down, its
+## chair is removed (_seat_goes(), in the lift or in the park), to the hand;
+## standing up, it sits down again at its chair as the stand-up ends (in the
+## park), to the floor. At each frame rate no new move stamped before the park
+## ended jumps GRASP_M or more in the bag or the grip, and no FLOAT, GRIP_ON or
+## jump follows. Controls: the home changed and a new move was stamped after it.
 func test_a_walker_changing_home_mid_park_does_not_jump_sitting_down() -> void:
 	await _home_mid_park(true)
 
@@ -637,7 +668,10 @@ func test_a_walker_changing_home_mid_park_does_not_jump_standing_up() -> void:
 ## A walker changing home in a parking move, sitting down (`down`) or standing
 ## up, at each part and frame rate (the tests above).
 func _home_mid_park(down: bool) -> void:
-	for part: String in ["lift", "park"]:
+	# Standing up, the home can go back to the floor only once the stand-up has
+	# ended (SecurityLooks: in the hand from UP_LEAD_TICKS before its end): never
+	# in the lift.
+	for part: String in ["lift", "park"] if down else ["seat"]:
 		for ticks: float in FRAME_TICKS:
 			var p := _roller_walker(not down)
 			if down:
@@ -671,3 +705,48 @@ func _home_mid_park(down: bool) -> void:
 			assert_float(float(seen["flip_k"])).is_greater_equal(0.0)
 			assert_int(int(seen["flips"])).is_greater_equal(1)
 			assert_int(fails.size()).is_equal(0)
+
+
+## A parking move keeps its home to its end whatever the walker's home turns
+## to (RollerPark.held_home()), marked held only while the two differ, and a
+## held park to the floor lays the bag in the frame the park was stamped in
+## (lay_frame()), not the body's; once the move's ticks are over the walker's
+## home is drawn. Both read the record and the sim tick only, and the plan of
+## the held move is the same for two hand heights drawn (CarryLead.plan()).
+func test_a_parking_move_keeps_its_home_to_its_end() -> void:
+	var hand := SecurityLooks.Home.HAND
+	var floor := SecurityLooks.Home.FLOOR
+	var roller := SecurityLooks.Kind.ROLLER
+	var pull := SecurityLooks.Carry.PULL
+	var body := Transform3D(Basis(Vector3.UP, 0.7), Vector3(3.0, 0.0, -2.0))
+	var turned := Transform3D(Basis(Vector3.UP, 2.3), Vector3(3.5, 0.0, -1.0))
+	var bag := _move(_place(hand, 0), pull, _place(floor, 0), pull)
+	bag["since"] = 100.0
+	CarryLead.stamp_move(bag, false, floor, body)
+	assert_bool(bag.get("park", false)).is_true()
+	var mid := 100.0 + RollerPark.TICKS_DOWN * 0.5
+	assert_int(RollerPark.held_home(bag, roller, floor, mid)).is_equal(floor)
+	assert_bool(bag.has("home_held")).is_false()
+	assert_bool(RollerPark.lay_frame(bag, turned).is_equal_approx(turned)).is_true()
+	assert_int(RollerPark.held_home(bag, roller, hand, mid)).is_equal(floor)
+	assert_bool(bag.get("home_held", false)).is_true()
+	var frame: Transform3D = bag["park_frame"]
+	assert_bool(RollerPark.lay_frame(bag, turned).is_equal_approx(frame)).is_true()
+	var after := 100.0 + RollerPark.TICKS_DOWN
+	assert_int(RollerPark.held_home(bag, roller, hand, after)).is_equal(hand)
+	assert_bool(bag.has("home_held")).is_false()
+	assert_int(RollerPark.held_home(bag, SecurityLooks.Kind.CASE, hand, mid)).is_equal(hand)
+	bag["home"] = bag["place"]
+	var flags := {"to_floor": true, "yaw": 0.0, "hand": 0}
+	var want := frame * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.6))
+	var start := CarryOnProps.pulled(Vector3(-0.25, 0.85, 0.05), Vector3(-0.35, 0.03, -0.95), 1.0)
+	for k: float in [0.2, 0.5, 0.7, 0.9]:
+		var plans := []
+		for grip_y: float in [0.3, 1.0]:
+			var grip := Vector3(0.0, grip_y, 0.0)
+			var drawn := {"hand": 0, "bar_z": 0.4, "scale": 1.0, "grips": [grip, grip]}
+			plans.append(CarryLead.plan(bag, k, body * start, want, body, flags, drawn))
+		var xf: Transform3D = plans[0]["xf"]
+		var target: Vector3 = plans[0]["targets"][0]
+		assert_bool(xf.is_equal_approx(plans[1]["xf"])).is_true()
+		assert_bool(target.is_equal_approx(plans[1]["targets"][0])).is_true()

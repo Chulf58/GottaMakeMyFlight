@@ -136,6 +136,44 @@ static func holds_lift(bag: Dictionary, kind: SecurityLooks.Kind, home: int, now
 	return now - float(bag.get("since", INF)) < CarryLead.ticks_of(bag)
 
 
+## The home (SecurityLooks.Home) `bag` (CarryOnProps' record, a roller of a bag
+## of `kind` now) is drawn going to while its walker's home is `home` at `now`
+## (sim tick): the home the parking move in progress goes to, until that move
+## ends ("home_held" on `bag` while that is not `home`, lay_frame()). A walker
+## whose home changes in the middle of a park (its chair removed as it sits
+## down; sitting down again as it stands up) stamped a new generic move there,
+## which started the hand with no weight (the arm dropped to rest) or put the
+## bag on the pull trail from the half-rolled stand: the bag moved up to 0.8 m
+## and the grip up to 0.9 m in one frame. The change waits for the end of the
+## park, as a lateness flip does (holds_lift()); the next move then starts from
+## the bag laid down or in the pull, as a park does.
+static func held_home(
+	bag: Dictionary, kind: SecurityLooks.Kind, home: SecurityLooks.Home, now: float
+) -> SecurityLooks.Home:
+	bag.erase("home_held")
+	if kind != SecurityLooks.Kind.ROLLER or bag.get("kind", -1) != kind:
+		return home
+	var place: int = bag.get("place", -2)
+	if place < 0 or not bag.get("park", false):
+		return home
+	if now - float(bag.get("since", INF)) >= CarryLead.ticks_of(bag):
+		return home
+	if home != place / 4:
+		bag["home_held"] = true
+	return (place / 4) as SecurityLooks.Home
+
+
+## The frame (world) the floor spot of `bag` (CarryOnProps' record) is laid in:
+## the body's `frame` (yaw only), or while the walker's home is held off the
+## floor for a park to the floor (held_home()) the frame that park is placed in
+## ("park_frame", stamp()), fixed in the world from the move's start. A walker
+## whose chair went as it sat down walks off, turned on the spot in one frame:
+## laid in the body's frame, the bag being laid down swung round with it, 0.73 m
+## in a third of a tick.
+static func lay_frame(bag: Dictionary, frame: Transform3D) -> Transform3D:
+	return bag["park_frame"] if bag.get("home_held", false) else frame
+
+
 ## Stamps a parking move on `bag` (parks()): "park", its length, and
 ## "park_frame", the body's frame (`body`, the frame its "from" is in; yaw only)
 ## the park is placed in; a floor>pull also its reach (CarryLead.reach_of(),
