@@ -208,9 +208,7 @@ const ITEMS := {
 	BuildMode.Tool.DESK: ["Check-in desk", "desk", ""],
 	BuildMode.Tool.SCANNER: ["Scanner", "scanner", ""],
 	BuildMode.Tool.SEATS: ["Seats", "seats", ""],
-	# The gate desk borrows the info desk's thumbnail, as it borrows its piece,
-	# until its own art (gates 2/4).
-	BuildMode.Tool.GATE_DESK: ["Gate desk", "info_desk", ""],
+	BuildMode.Tool.GATE_DESK: ["Gate desk", "gate_desk", ""],
 	BuildMode.Tool.SCREEN: ["Screen", "screen_stand", ""],
 	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
 	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
