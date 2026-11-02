@@ -24,6 +24,9 @@ func before() -> void:
 	data["tick"] = str(start)
 	assert_bool(clock.from_snapshot(data)).is_true()
 	SaveTestKit.start_airport(_main)
+	# The test bag room lies off a new game's land and building on unowned land
+	# is refused (LandPlots), so plots are bought out to it; a save accepts that.
+	LandKit.buy_to((_main.get_node("BuildMode") as BuildMode).land_tool.land, Vector2i(0, 0))
 	# Passengers check no bag until a ready bag room exists.
 	BagRoomKit.add((_main.get_node("BuildMode") as BuildMode).grid)
 	_save = SaveTestKit.save_game(_main)
