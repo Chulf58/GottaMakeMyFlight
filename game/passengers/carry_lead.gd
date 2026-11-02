@@ -95,13 +95,20 @@ const STALL_CASE_CHAMFER_M := 0.03
 ## share of the carry on (path(), stall_tip()).
 const STALL_TIP_FROM := 0.4
 ## Lifting a hard case off the floor into the hand (not in a stall) the grip is
-## held CarryOnProps.FRONT_PALM_M over the point it is carried by (world up, the
-## palm on the top as in the front carry), easing to none over this share of
-## the carry, as the arm turns down into the side carry. Held at that point
+## held FLOOR_PALM_M over the point it is carried by (world up, the palm over the
+## top as in the front carry), easing to none over this share of the carry, as
+## the arm turns down into the side carry. Held at that point
 ## itself, the arm reaching out level ahead of the stoop lay with the forearm on
 ## the case's top behind the hand (crossing probe seed 777, Forearm.R in the
 ## case at k 0.46, board item 2fbf5edb).
 const FLOOR_PALM_FADE := Vector2(0.6, 1.0)
+## Since 2026-11-02 the case is held by its top edge on its handle face
+## (CarryOnProps.grip_anchor(), on the mesh), 3.6 cm lower than the bounds
+## corner at the handle's height it was held by before. With FRONT_PALM_M (4 cm)
+## over that edge the forearm went into the case's top end at k 0.46 (crossing
+## probe seed 2449926952); 7.6 cm (the old height) is past the probes' GRIP_ON
+## limit for a case (7 cm). 6.5 cm keeps the palm over the case top within it.
+const FLOOR_PALM_M := 0.065
 ## And it rises to its side carry with the grip this high over the feet
 ## (floor_end()): measured in the side carry at the end of that move (1.023 and
 ## 1.026 m, crossing probe seed 4242). A fixed height, not the hand's as drawn
@@ -127,7 +134,7 @@ static func stall_top(kind: SecurityLooks.Kind, loose: Vector3, scale_by := 1.0)
 ## How far (world metres) the grip is held over a hard case's carry point at
 ## `t` of its carry off the floor into the hand (FLOOR_PALM_FADE).
 static func floor_palm(t: float) -> float:
-	return CarryOnProps.FRONT_PALM_M * (1.0 - smoothstep(FLOOR_PALM_FADE.x, FLOOR_PALM_FADE.y, t))
+	return FLOOR_PALM_M * (1.0 - smoothstep(FLOOR_PALM_FADE.x, FLOOR_PALM_FADE.y, t))
 
 
 ## The end of a hard case's lift off the floor into the hand (`want`, held at
