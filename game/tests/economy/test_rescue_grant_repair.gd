@@ -221,7 +221,7 @@ func test_no_new_plan_while_the_wallet_covers_the_bound_and_a_raised_one_is_caug
 	assert_bool(_grant.evaluate()).is_true()
 	print("grants %s" % [_granted])
 	var price := RepairPlan.least_balance(_world.grid, _grant.repair_plan().edits)
-	assert_int(price).is_greater_equal(925 + PriceTable.price_of_object(&"exit_door"))
+	assert_int(price).is_equal(925 + PriceTable.price_of_object(&"exit_door"))
 	assert_int(_granted[0][0]).is_equal(price - 1000)
 
 
