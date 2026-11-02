@@ -274,6 +274,8 @@ ITEMS = {
     ),
     # The boredom screen stand (one floor cell, its picture to the front).
     "screen_stand": ("1x1_tall", ["screen_stand"], []),
+    # The gate desk (Gates 2/4, build_gate_kit.py): 2.02 m to its gate board.
+    "gate_desk": ("2x1_tall", ["gate_desk"], []),
     # Landside (Landside 4/4). A piece is (name, Blender offset, Blender Z turn
     # in degrees[, the mesh objects to keep]); a car's nose (Godot +Z, Blender -Y)
     # turned -90 points along Blender -X, the way the near carriageway drives.

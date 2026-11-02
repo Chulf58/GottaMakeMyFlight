@@ -230,6 +230,14 @@
         "screen_stand.glb": "ce1af0312ab25c7ab335d1cc06d3fd293dfb7c40128eb7487b39d477080f82ac"
       }
     },
+    "gate_desk": {
+      "png": "gate_desk.png",
+      "class": "2x1_tall",
+      "style": 3,
+      "sources": {
+        "gate_desk.glb": "3b7ba60b3d656d65848a7354bff6f03c7b17512bff3b1aaaf1a5b0a36d28939c"
+      }
+    },
     "curb_bay": {
       "png": "curb_bay.png",
       "class": "bay",
