@@ -1,7 +1,7 @@
 class_name TestBuildMenuFurniture
 extends GdUnitTestSuite
 ## The 29 furniture pieces in the build menu (Furniture 4/4 F4-2). A tray holds
-## at most four cards beside its Rotate card inside COLUMN_W, so the pieces sit
+## at most four cards beside its Next card inside COLUMN_W, so the pieces sit
 ## on pages. Every card shows its name, size, price, a rendered thumbnail and,
 ## where the piece has a running cost, its upkeep.
 ##
@@ -201,8 +201,6 @@ func test_every_page_tray_fits_the_column_and_the_reserved_height() -> void:
 		assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
 		assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
 		assert_object(_next_button(page)).is_not_null()
-		var column := _menu.card(BuildMenu.categories()[page]["tools"][0]).get_parent()
-		assert_object(column.find_child("CardRotate", true, false)).is_not_null()
 
 
 # Was one cycle through all 14 pages; since HUD 6/7 each group cycles alone.

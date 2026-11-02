@@ -83,11 +83,15 @@ func test_save_room_then_its_card_arms_the_paste_with_status_and_cost() -> void:
 	assert_int(_mode.templates.armed).is_equal(0)
 	assert_bool(_page.card(0).button_pressed).is_true()
 	assert_bool(_page.visible).is_true()
-	assert_str(_menu.status_label().text).is_equal(TemplatePaste.PLACE_HINT % "Cafe 5x4")
+	assert_str(_menu.status_label().text).is_equal(
+		TemplatePaste.PLACE_HINT % "Cafe 5x4" + "  " + RotateHint.TEXT
+	)
 	# BuildMode's own hover clears its line with no tool; the paste's text stays.
 	_mode.status_changed.emit("")
-	assert_str(_menu.status_label().text).is_equal(TemplatePaste.PLACE_HINT % "Cafe 5x4")
+	assert_str(_menu.status_label().text).is_equal(
+		TemplatePaste.PLACE_HINT % "Cafe 5x4" + "  " + RotateHint.TEXT
+	)
 	_mode.status_changed.emit(UndoStack.UNDONE)
-	assert_str(_menu.status_label().text).is_equal(UndoStack.UNDONE)
+	assert_str(_menu.status_label().text).is_equal(UndoStack.UNDONE + "  " + RotateHint.TEXT)
 	_menu.press_category(BuildMenu.TEMPLATES_PAGE)
 	assert_int(_mode.templates.armed).is_equal(-1)
