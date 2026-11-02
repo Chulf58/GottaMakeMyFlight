@@ -12,7 +12,7 @@ extends RefCounted
 ##
 ## Passengers walk only indoor cells (BuildGrid.is_indoor()): every other
 ## cell's point is disabled, so a path is made of BuildGrid.can_passenger_route()
-## steps. One removed wall can turn a whole hall outdoor; set_indoor() then
+## steps. One removed wall can turn a whole hall outdoor; set_outside() then
 ## switches those points off without relinking them.
 ##
 ## A staff graph (`staff` set) links every BuildGrid.can_staff_route() step
@@ -79,14 +79,15 @@ func update(grid: BuildGrid, dirty_cells: Array[Vector2i]) -> Array[Vector2i]:
 	return cells
 
 
-## Switches each cell's point on or off by whether it is indoor now, for the
-## cells whose indoor state changed with no edit on them. Links stay as they
-## are. Nothing for a staff graph.
-func set_indoor(grid: BuildGrid, cells: Array[Vector2i]) -> void:
+## Switches the points of floored cells whose indoor state changed with no
+## edit on them, given as cell indices (x + y * width, the point ids), off
+## where `outside` (TerminalEnclosure.outside_cells()) is 1 and on where it is
+## 0. Links stay as they are. Nothing for a staff graph.
+func set_outside(indices: PackedInt32Array, outside: PackedByteArray) -> void:
 	if staff:
 		return
-	for cell in cells:
-		_astar.set_point_disabled(_id(cell), not grid.is_indoor(cell))
+	for i in indices:
+		_astar.set_point_disabled(i, outside[i] != 0)
 
 
 ## Cells from `from` to `to`, both included, or an empty array when either

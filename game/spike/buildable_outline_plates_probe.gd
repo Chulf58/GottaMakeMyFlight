@@ -79,7 +79,7 @@ func _run() -> void:
 	await _frames(20)
 	_lay_edge_floor()
 	var corners := _outline.outline_points()
-	print("OUTLINE rects=%s corners=%s" % [_outline.rects(), corners])
+	print("OUTLINE loops=%s corners=%s" % [_outline.loops(), corners])
 	var centre := Vector3(0.0, 0.0, -80.0)
 	_set_tray(true)
 	await _plate("tray_open_overview", centre, OVERVIEW_DISTANCE, corners, true)

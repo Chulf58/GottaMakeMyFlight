@@ -33,6 +33,9 @@ func before_test() -> void:
 	_mode.site = site
 	_mode.finances = _finances
 	add_child(_mode)
+	# Building on land the player does not own is refused (LandPlots); the cells
+	# here lie off a new game's land, so the whole site is owned.
+	LandKit.own_all(_mode.land_tool.land)
 	_mode.set_process(false)
 	_paste = _mode.templates
 	var edits: Array[BuildEdit] = []

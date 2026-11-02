@@ -22,13 +22,36 @@ extends RefCounted
 static func outside_cells(
 	grid: BuildGrid, h_walls: PackedByteArray, v_walls: PackedByteArray
 ) -> PackedByteArray:
+	return outside_within(grid, h_walls, v_walls, Rect2i(Vector2i.ZERO, grid.size))
+
+
+## outside_cells() with the flood kept to `within`, a rectangle of the grid:
+## every cell outside it is outside. That holds only when `within` holds every
+## cell beside a wall or a door object's back edge, with one cell to spare on
+## each side that is not on the grid border (BuildGrid keeps it so with
+## flood_area()). The cells along such a side then have no wall on any edge,
+## so each is outside and seeds the flood; along the grid border the border
+## edges decide, as in outside_cells(). The work grows with `within`, not the
+## grid: a small terminal on the 86x150 site floods a few hundred cells.
+static func outside_within(
+	grid: BuildGrid, h_walls: PackedByteArray, v_walls: PackedByteArray, within: Rect2i
+) -> PackedByteArray:
 	var w := grid.size.x
 	var h := grid.size.y
 	var outside := PackedByteArray()
 	outside.resize(w * h)
-	outside.fill(0)
-	if w == 0 or h == 0:
+	outside.fill(1)
+	within = within.intersection(Rect2i(Vector2i.ZERO, grid.size))
+	if within.size.x <= 0 or within.size.y <= 0:
 		return outside
+	var x0 := within.position.x
+	var x1 := within.end.x
+	var y0 := within.position.y
+	var y1 := within.end.y
+	for y in range(y0, y1):
+		var row := y * w
+		for x in range(x0, x1):
+			outside[row + x] = 0
 	# A door object's back edge closes like a wall: mark it on copies.
 	var h_closed := h_walls.duplicate()
 	var v_closed := v_walls.duplicate()
@@ -44,13 +67,14 @@ static func outside_cells(
 			BuildGrid.Side.EAST:
 				v_closed[cell.y * (w + 1) + cell.x + 1] = 1
 	var queue := PackedInt32Array()
-	queue.resize(w * h)
+	queue.resize(within.size.x * within.size.y)
 	var tail := 0
-	for i in _border_seeds(h_closed, v_closed, w, h):
+	for i in _side_seeds(h_closed, v_closed, w, h, within):
 		if outside[i] == 0:
 			outside[i] = 1
 			queue[tail] = i
 			tail += 1
+	# Cells outside `within` are already 1, so the flood never leaves it.
 	var head := 0
 	while head < tail:
 		var i := queue[head]
@@ -80,34 +104,75 @@ static func outside_cells(
 
 ## The floored cells whose outside state differs between `before` and
 ## `after` (two outside_cells() results for a grid `width` cells wide whose
-## floor array is `floors`), in index order: the cells that became indoor or
-## stopped being indoor.
-static func flipped_floor_cells(
-	width: int, floors: PackedByteArray, before: PackedByteArray, after: PackedByteArray
-) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+## floor array is `floors`), as indices in index order: the cells that became
+## indoor or stopped being indoor. Only `within` is compared, so every cell
+## outside it must be outside in both.
+static func flipped_floor_indices(
+	width: int,
+	floors: PackedByteArray,
+	before: PackedByteArray,
+	after: PackedByteArray,
+	within: Rect2i
+) -> PackedInt32Array:
+	var out := PackedInt32Array()
 	if before == after:
-		return cells
-	for i in after.size():
-		if before[i] != after[i] and floors[i] != BuildGrid.FLOOR_NONE:
-			@warning_ignore("integer_division")
-			cells.append(Vector2i(i % width, i / width))
-	return cells
+		return out
+	for y in range(within.position.y, within.end.y):
+		var row := y * width
+		for i in range(row + within.position.x, row + within.end.x):
+			if before[i] != after[i] and floors[i] != BuildGrid.FLOOR_NONE:
+				out.append(i)
+	return out
 
 
-## The cells (as indices) whose grid-border edge is open, some more than once.
-static func _border_seeds(
-	h_closed: PackedByteArray, v_closed: PackedByteArray, w: int, h: int
+## The smallest rectangle holding every floored cell and both cells beside
+## every wall (one on the grid's south or east border), zero sized when there
+## are none, for a grid `size` with BuildGrid's floor and wall arrays.
+@warning_ignore("integer_division")
+static func built_area(
+	size: Vector2i, floors: PackedByteArray, h_walls: PackedByteArray, v_walls: PackedByteArray
+) -> Rect2i:
+	var w := size.x
+	var low := Vector2i(w, size.y)
+	var high := Vector2i(-1, -1)
+	for i in floors.size():
+		if floors[i] != BuildGrid.FLOOR_NONE:
+			low = low.min(Vector2i(i % w, i / w))
+			high = high.max(Vector2i(i % w, i / w))
+	for i in h_walls.size():
+		if h_walls[i] != BuildGrid.WallKind.NONE:
+			var y := i / w
+			low = low.min(Vector2i(i % w, maxi(y - 1, 0)))
+			high = high.max(Vector2i(i % w, mini(y, size.y - 1)))
+	for i in v_walls.size():
+		if v_walls[i] != BuildGrid.WallKind.NONE:
+			var x := i % (w + 1)
+			low = low.min(Vector2i(maxi(x - 1, 0), i / (w + 1)))
+			high = high.max(Vector2i(mini(x, w - 1), i / (w + 1)))
+	if high.x < 0:
+		return Rect2i()
+	return Rect2i(low, high - low + Vector2i.ONE)
+
+
+## The cells (as indices) the flood starts from on the sides of `within`, some
+## more than once: along a side on the grid border, each cell whose border
+## edge is open; along any other side, every cell.
+static func _side_seeds(
+	h_closed: PackedByteArray, v_closed: PackedByteArray, w: int, h: int, within: Rect2i
 ) -> PackedInt32Array:
 	var seeds := PackedInt32Array()
-	for x in w:
-		if h_closed[x] == 0:
-			seeds.append(x)
-		if h_closed[h * w + x] == 0:
-			seeds.append((h - 1) * w + x)
-	for y in h:
-		if v_closed[y * (w + 1)] == 0:
-			seeds.append(y * w)
-		if v_closed[y * (w + 1) + w] == 0:
-			seeds.append(y * w + w - 1)
+	var top := within.position.y
+	var bottom := within.end.y - 1
+	var left := within.position.x
+	var right := within.end.x - 1
+	for x in range(left, within.end.x):
+		if top > 0 or h_closed[x] == 0:
+			seeds.append(top * w + x)
+		if bottom < h - 1 or h_closed[h * w + x] == 0:
+			seeds.append(bottom * w + x)
+	for y in range(top, within.end.y):
+		if left > 0 or v_closed[y * (w + 1)] == 0:
+			seeds.append(y * w + left)
+		if right < w - 1 or v_closed[y * (w + 1) + w] == 0:
+			seeds.append(y * w + right)
 	return seeds

@@ -20,6 +20,9 @@ func before_test() -> void:
 	_mode = auto_free(BuildMode.new())
 	_mode.site = SITE
 	add_child(_mode)
+	# Building on land the player does not own is refused (LandPlots); the cells
+	# here lie off a new game's land, so the whole site is owned.
+	LandKit.own_all(_mode.land_tool.land)
 	_roof = auto_free(RoofView.new())
 	add_child(_roof)
 	_roof.bind(_mode.grid)

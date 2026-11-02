@@ -6,9 +6,15 @@ extends GdUnitTestSuite
 ## covers each grid inside a ring of walls one cell in from the border, with
 ## interior walls every 8 cells (each with a one-cell gap). The numbers are
 ## printed for the record. The 86x40 opening edit has a budget that fails;
-## the other asserts prove each run did its work.
+## the other asserts prove each run did its work. The whole airport site, with
+## its passenger and staff graphs built as in a game, has the same budget for
+## the edit that opens its floor and the one that closes it (L4, board
+## ee9914e6).
 
+const SITE := preload("res://build/terminal_site.tres")
 const ROOM := 8
+## Runs per timed edit on the full site; the median is judged.
+const SITE_RUNS := 5
 ## The most a wall edit that floods the whole 86x40 floor may take, in usec:
 ## under one 60 fps frame. Measured about 3.6 ms on the old 66x30 grid on
 ## 2026-11-01.
@@ -101,6 +107,53 @@ func test_time_the_site_sized_grid() -> void:
 
 
 ## The largest grid is a printed measurement only (about 130 ms for the
-## opening edit on 2026-11-01); its budget belongs to the land-plots slice.
+## opening edit on 2026-11-01, about 33 ms with both graphs built after the
+## land-plots change). No site grid is that large: the budget is held on the
+## full airport site (test_time_the_full_site_with_its_graphs_built()).
 func test_time_the_largest_grid() -> void:
 	assert_int(_measure(Vector2i(BuildGrid.MAX_SIDE_CELLS, BuildGrid.MAX_SIDE_CELLS))).is_greater(0)
+
+
+## The full site (SiteDefinition.grid_size, 86x150) floored and walled like the
+## others, its passenger and staff A* graphs built: the wall edit that lets the
+## outside into the whole floor, and the one that closes it again, each stay
+## under SITE_EDIT_BUDGET_USEC, median of SITE_RUNS. Measured 2026-11-01 on
+## the same machine: about 13.3 ms opening and 10.1 ms closing before the
+## flood was kept to the built area and the points switched by index, about
+## 6.7 ms and 3.3 ms after.
+func test_time_the_full_site_with_its_graphs_built() -> void:
+	var size: Vector2i = SITE.grid_size
+	var grid := _site(size)
+	var indoor := _indoor(grid)
+	assert_int(indoor).is_equal((size.x - 2) * (size.y - 2))
+	# Both graphs exist from here on, so every edit relinks them as in a game.
+	assert_array(grid.find_path(Vector2i(2, 2), Vector2i(3, 3))).is_not_empty()
+	assert_array(grid.find_staff_path(Vector2i(2, 2), Vector2i(3, 3))).is_not_empty()
+	var gap := Vector2i(1, size.y / 2)
+	var opens: Array[int] = []
+	var closes: Array[int] = []
+	for i in SITE_RUNS:
+		var started := Time.get_ticks_usec()
+		assert_bool(grid.apply(BuildEdit.remove_wall(gap, BuildGrid.Side.WEST)).ok).is_true()
+		opens.append(Time.get_ticks_usec() - started)
+		assert_int(_indoor(grid)).is_equal(0)
+		assert_array(grid.find_path(Vector2i(2, 2), Vector2i(3, 3))).is_empty()
+		started = Time.get_ticks_usec()
+		assert_bool(grid.apply(BuildEdit.place_wall(gap, BuildGrid.Side.WEST)).ok).is_true()
+		closes.append(Time.get_ticks_usec() - started)
+		assert_int(_indoor(grid)).is_equal(indoor)
+	opens.sort()
+	closes.sort()
+	var open_usec := opens[SITE_RUNS / 2]
+	var close_usec := closes[SITE_RUNS / 2]
+	print(
+		(
+			(
+				"full site %dx%d, graphs built: opening edit %.2f ms, closing edit %.2f ms"
+				+ " (median of %d; runs %s / %s usec)"
+			)
+			% [size.x, size.y, open_usec / 1000.0, close_usec / 1000.0, SITE_RUNS, opens, closes]
+		)
+	)
+	assert_int(open_usec).is_less(SITE_EDIT_BUDGET_USEC)
+	assert_int(close_usec).is_less(SITE_EDIT_BUDGET_USEC)

@@ -2,9 +2,10 @@ class_name TestBuildableOutline
 extends GdUnitTestSuite
 ## The buildable-land outline (user ruling buildable-land-shows-as-an-outline-
 ## only-in-build-mode-the-da): drawn while build mode lasts, hidden outside it,
-## and running round the terminal site's buildable bounds (the site's
-## BuildGrid, 86 x 150 m from z -210 since the airside moved 110 m north, until
-## land plots replace it).
+## and running round the land the player owns. These cases own every land plot
+## (LandKit.own_all()), so the outline is the site's whole BuildGrid, 86 x 150 m
+## from z -210, and the width checks keep the large rectangle they were
+## measured on; test_build_mode_buy_land.gd covers the outline of a partly owned site.
 
 const SITE := preload("res://build/terminal_site.tres")
 const CAMERA := preload("res://camera/tycoon_camera.tscn")
@@ -19,6 +20,7 @@ func before() -> void:
 	_mode.initial_tool = BuildMode.Tool.NONE
 	_mode.site = SITE
 	add_child(_mode)
+	LandKit.own_all(_mode.land_tool.land)
 	_menu = BuildMenu.new()
 	_menu.build_mode = _mode
 	add_child(_menu)
@@ -67,11 +69,21 @@ func test_switching_trays_keeps_it_shown() -> void:
 	assert_bool(_outline.visible).is_true()
 
 
-func test_the_rectangle_is_the_site_grid() -> void:
-	var rects := _outline.rects()
-	assert_int(rects.size()).is_equal(1)
-	assert_that(rects[0]).is_equal(_plot())
-	assert_that(rects[0]).is_equal(BuildableOutline.buildable_rects(_mode.grid)[0])
+func test_the_loop_is_the_site_grid_when_every_plot_is_owned() -> void:
+	var loops := _outline.loops()
+	var plot := _plot()
+	assert_int(loops.size()).is_equal(1)
+	assert_that(loops[0]).is_equal(
+		PackedVector2Array(
+			[
+				plot.position,
+				Vector2(plot.end.x, plot.position.y),
+				plot.end,
+				Vector2(plot.position.x, plot.end.y)
+			]
+		)
+	)
+	assert_that(loops[0]).is_equal(BuildableOutline.buildable_loops(_mode.grid)[0])
 
 
 func test_points_are_the_buildable_corners() -> void:
