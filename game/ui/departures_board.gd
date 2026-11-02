@@ -39,7 +39,8 @@ const NONE_TEXT := "None"
 const NO_OTHER_TEXT := "No other gate exists"
 const PICKER_LABEL := "Move to:"
 const MOVED_TEXT := "%s now uses gate %s for the days not yet issued"
-const REFUSED_TEXT := "Refused: %s"
+const TAKEN_TEXT := "%s is taken by the %s %s flight"
+const BUSY_TEXT := "Gate %s is busy when this flight needs it"
 const MAX_ROWS_PER_DAY := 5
 ## Top and bottom padding of the gate buttons, below the theme's 6.
 const BUTTON_PAD_Y := 1.0
@@ -66,6 +67,11 @@ var _gates: Array[String] = []
 var _picker_key := ""
 var _message_key := ""
 var _message := ""
+## What FlightSim's refusal reads like: "contract Y clashes with X at gate A",
+## "... with flight X-d0 on the runway".
+var _clash := RegEx.create_from_string(
+	"^contract \\S+ clashes with (flight )?(\\S+) (at gate (\\S+)|on the runway|on the taxi lane)$"
+)
 
 
 ## The board's lines for the clock at `tick`: "Today" and its rows, then
@@ -119,6 +125,8 @@ static func _day_entries(sim: FlightSim, day: int, drop_departed: bool) -> Array
 					"contract": row["contract"],
 					"day": day,
 					"gate": row["gate"],
+					"active":
+					row["contract"] != "" and sim.active_contract_ids().has(row["contract"]),
 					"key": "%s_%d" % [row["contract"], day] if row["contract"] != "" else "",
 				}
 			)
@@ -146,6 +154,8 @@ func _ready() -> void:
 	_shown = _load_setting()
 	_apply_shown()
 	_toggle.toggled.connect(set_shown)
+	if flights != null:
+		flights.snapshot_loaded.connect(_on_snapshot_loaded)
 	refresh()
 
 
@@ -208,7 +218,7 @@ func _refresh(force: bool) -> void:
 		return
 	_entries = entries
 	_gates = gates
-	if _picker_key != "" and not _has_row(_picker_key):
+	if _picker_key != "" and not _picker_row_live():
 		_close_picker()
 	_lines = PackedStringArray()
 	for entry in entries:
@@ -228,10 +238,11 @@ func _refresh(force: bool) -> void:
 			_rows.add_child(label)
 
 
-func _has_row(key: String) -> bool:
+## True while the open picker's row is listed and its contract still runs.
+func _picker_row_live() -> bool:
 	for entry in _entries:
-		if entry["kind"] == "row" and entry["key"] == key:
-			return true
+		if entry["kind"] == "row" and entry["key"] == _picker_key:
+			return entry["active"]
 	return false
 
 
@@ -248,9 +259,8 @@ func _add_row(entry: Dictionary) -> void:
 	var button := Button.new()
 	button.text = "Gate %s" % entry["gate"]
 	button.focus_mode = Control.FOCUS_NONE
-	var movable: bool = key != "" and flights.active_contract_ids().has(entry["contract"])
-	button.disabled = not movable
-	if movable:
+	button.disabled = not entry["active"]
+	if entry["active"]:
 		button.name = "Gate_%s" % key
 		button.tooltip_text = "Move this flight to another gate"
 		button.pressed.connect(_on_gate_pressed.bind(key))
@@ -336,13 +346,60 @@ func _on_pick_pressed(contract_id: String, gate_id: String) -> void:
 	var problem := flights.reassign_problem(contract_id, gate_id)
 	_message_key = _picker_key
 	if problem != "":
-		_message = REFUSED_TEXT % problem
+		_message = friendly_reason(problem, gate_id)
 	else:
 		flights.reassign_gate(contract_id, gate_id)
 		var contract := flights.contract_of(contract_id)
 		_message = MOVED_TEXT % [contract["destination"], gate_id]
 		_picker_key = ""
 	_refresh(true)
+
+
+## A load replaces every contract and flight, so the open picker and the
+## message under it no longer describe anything: drop them and read the new
+## schedule.
+func _on_snapshot_loaded() -> void:
+	_close_picker()
+	_entries = []
+	_refresh(false)
+
+
+## The player-facing text for a FlightSim refusal `reason` of a move to
+## `gate_id`. The sim names contracts and flights by id; here the clashing
+## flight is named by its departure time and destination, as "Gate A is taken
+## by the 10:00 Oslo flight". A reason that is not a clash, or a flight that
+## cannot be resolved, reads "Gate A is busy when this flight needs it".
+func friendly_reason(reason: String, gate_id: String) -> String:
+	var found := _clash.search(reason)
+	if found == null:
+		return BUSY_TEXT % gate_id
+	var label := _flight_label(found.get_string(1) != "", found.get_string(2))
+	if label.is_empty():
+		return BUSY_TEXT % gate_id
+	var subject := "Gate %s" % found.get_string(4)
+	if found.get_string(3) == "on the runway":
+		subject = "The runway"
+	elif found.get_string(3) == "on the taxi lane":
+		subject = "The taxi lane"
+	return TAKEN_TEXT % [subject, label[0], label[1]]
+
+
+## [departure time, destination] of the contract (or, when `is_flight`, the
+## live flight) that FlightSim named by id, or [] when it is not known. A
+## one-off flight is named by its id.
+func _flight_label(is_flight: bool, id: String) -> PackedStringArray:
+	if is_flight:
+		var tick := flights.state_start(id, FlightSim.State.PUSHBACK)
+		if tick < 0:
+			return PackedStringArray()
+		var source := flights.contract_of(flights.flight_contract_id(id))
+		var named: String = source["destination"] if not source.is_empty() else id
+		return PackedStringArray([GameCalendar.clock_text(tick), named])
+	var contract := flights.contract_of(id)
+	if contract.is_empty():
+		return PackedStringArray()
+	var at := GameCalendar.tick_at(0, int(contract["departure_minute"]))
+	return PackedStringArray([GameCalendar.clock_text(at), contract["destination"]])
 
 
 ## B toggles; a held key's repeats and modified presses are left alone.

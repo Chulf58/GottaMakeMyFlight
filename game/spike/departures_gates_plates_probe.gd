@@ -164,7 +164,7 @@ func _size(entry: Array) -> void:
 	await _frames(3)
 	var message := _find_message()
 	print("REFUSED %s message=%s" % [tag, _board.message_text()])
-	if message == null or not _board.message_text().contains("clashes with X at gate A"):
+	if message == null or not _board.message_text().contains("Gate A is taken by the 10:00 Oslo"):
 		_invalid("%s: no refusal reason under the row" % tag)
 		return
 	if _sim.contract_of("Y")["gate"] != "B" or _board.picker_button("C") == null:
