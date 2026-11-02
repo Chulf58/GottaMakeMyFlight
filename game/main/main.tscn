@@ -336,12 +336,13 @@ clock = NodePath("../SimClock")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 
-[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate", "menu")]
+[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate", "menu", "save_game")]
 layer = 2
 script = ExtResource("22_staffpanel")
 staff = NodePath("../Staff")
 gate = NodePath("../AirportGate")
 menu = NodePath("../BuildMenu")
+save_game = NodePath("../SaveGame")
 
 [node name="RatingBadge" type="CanvasLayer" parent="." node_paths=PackedStringArray("rating")]
 layer = 2
