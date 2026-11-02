@@ -19,6 +19,10 @@ func before() -> void:
 	_desk = _main.get_node("OfferDesk")
 	_rating = _main.get_node("AirportRating")
 	_flights = _main.get_node("FlightSim")
+	# Flights need a gate: a gate desk by the new game's shell exit (GateDesks).
+	var grid := (_main.get_node("BuildMode") as BuildMode).grid
+	var desk := grid.apply(ReferenceTerminal.gate_desk_edit(ReferenceTerminal.offset_on(grid)))
+	assert_bool(desk.ok).is_true()
 
 
 func after() -> void:

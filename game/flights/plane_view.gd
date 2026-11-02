@@ -1,6 +1,9 @@
 class_name PlaneView
 extends Node3D
-## Draws one Toon plane for the flights of one gate: from a sky lead-in before
+## Draws one Toon plane for the flights of one gate (FlightSim.flight_gate(),
+## so an occurrence issued before its contract moved is drawn at its own
+## gate), on that gate's stand paths (PlaneFleet sets the gate): from a sky
+## lead-in before
 ## APPROACH, through landing, the stand and takeoff, to a climb-out after
 ## DEPARTED. Every frame it lists the gate's flights that are in the sky window
 ## at the clock's interpolated time, oldest first, and draws the one at index
@@ -79,10 +82,12 @@ var flight_id := ""
 ## Its pose_at phase on the last update_pose().
 var phase := PHASE_LEAD_IN
 
-## Phase and sky paths read from the airside, kept while its stand stays
-## where it was when they were read (_paths_stand, Airside.stand_moves).
+## Phase and sky paths read from the airside, kept while its stands stay
+## where they were and the gate is the one they were read for (_paths_stand,
+## Airside.stand_moves, _paths_gate).
 var _paths: Dictionary = {}
 var _paths_stand := 0
+var _paths_gate := ""
 var _far_shadow: Node3D
 var _far_material: StandardMaterial3D
 
@@ -141,7 +146,7 @@ func update_pose() -> void:
 func sightings(time: float) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for id in sim.flight_ids():
-		if _gate_of(id) != gate:
+		if sim.flight_gate(id) != gate:
 			continue
 		var at := pose_at(starts_of(id), time, has_full_lead_in(id))
 		if not at.is_empty():
@@ -285,13 +290,6 @@ func far_shadow_alpha() -> float:
 	return _far_material.albedo_color.a if _far_material != null else 0.0
 
 
-## A one-off flight's gate is not public; FlightSim refuses one at a gate
-## outside FlightSim.GATES, which is only DEFAULT_GATE so far. A second gate
-## needs FlightSim to say which gate a one-off holds.
-func _gate_of(id: String) -> String:
-	return sim.contract_of(sim.flight_contract_id(id)).get("gate", FlightSim.DEFAULT_GATE)
-
-
 func _new_model() -> Node3D:
 	var model: Node3D = PLANE_SCENE.instantiate()
 	model.position = model_offset
@@ -323,11 +321,12 @@ func _place_far_shadow() -> void:
 
 
 func _path(state: int) -> PackedVector3Array:
-	if _paths_stand != airside.stand_moves:
+	if _paths_stand != airside.stand_moves or _paths_gate != gate:
 		_paths.clear()
 		_paths_stand = airside.stand_moves
+		_paths_gate = gate
 	if not _paths.has(state):
-		_paths[state] = airside.phase_path(state)
+		_paths[state] = airside.phase_path(state, gate)
 	return _paths[state]
 
 

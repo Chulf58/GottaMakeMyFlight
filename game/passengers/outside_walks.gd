@@ -47,7 +47,10 @@ static func departure(sim: PassengerSim, exit_door: int) -> Array[Vector3]:
 	if not sim.layout.outside_routes.has(exit_door):
 		return [] as Array[Vector3]
 	return SiteRoutes.departure(
-		sim.grid, sim.site, sim.layout.outside_routes[exit_door], sim.layout.live_stand(sim.grid)
+		sim.grid,
+		sim.site,
+		sim.layout.outside_routes[exit_door],
+		sim.layout.stand_of(sim.grid, exit_door)
 	)
 
 
@@ -66,7 +69,8 @@ static func may_enter(sim: PassengerSim, p: Passenger) -> bool:
 static func revalidate(sim: PassengerSim) -> void:
 	if sim.site == null:
 		return
-	var to_plane := PackedInt32Array()
+	# Plane door point -> its distance field; one per stand with gate desks.
+	var to_planes := {}
 	var to_doors := {}
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
@@ -77,11 +81,15 @@ static func revalidate(sim: PassengerSim) -> void:
 			if _clear_ahead(sim, p, door):
 				_walk_on(p)
 				continue
-			var stand := sim.layout.live_stand(sim.grid)
-			if to_plane.is_empty():
-				to_plane = StandPlacement.to_door(sim.grid, sim.site, stand)
+			var stand := sim.layout.stand_of(sim.grid, p.exit_object)
+			if stand.is_empty():
+				p.stuck = Passenger.Stuck.NO_ROUTE
+				continue
+			var key := StandPlacement.door_point(stand)
+			if not to_planes.has(key):
+				to_planes[key] = StandPlacement.to_door(sim.grid, sim.site, stand)
 				fields_searched += 1
-			var cells := _cells_from(sim, p.apron_position(), to_plane)
+			var cells := _cells_from(sim, p.apron_position(), to_planes[key])
 			if cells.is_empty():
 				p.stuck = Passenger.Stuck.NO_ROUTE
 				continue

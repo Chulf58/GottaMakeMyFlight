@@ -91,10 +91,11 @@ func test_a_new_game_is_closed_with_no_contract_and_no_flight() -> void:
 	assert_str(_boot["clock"]).is_equal("Day 1  06:00")
 
 
-## The empty grid has no path; with the starter terminal the blocker is the
-## missing check-in agent.
+## A new game has no gate desk, so no gate (GateDesks): that is named first;
+## with the starter terminal and its gate desk the blocker is the missing
+## check-in agent.
 func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
-	assert_str(_boot["hint"]).is_equal(StaffPanel.CLOSED_HINTS[AirportGate.Blocker.NO_PATH])
+	assert_str(_boot["hint"]).is_equal(StaffPanel.CLOSED_HINTS[AirportGate.Blocker.NO_GATE])
 	assert_str(_opened["hint_built"]).is_equal(
 		(
 			"Airport closed: no check-in agent at a desk\n"

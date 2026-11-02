@@ -529,8 +529,9 @@ func set_debug_open(value: bool) -> void:
 ## whole ReferenceTerminal; on any other grid, the new-game shell included, it
 ## adds the reference interior (divider, desks, scanners, seats) to what
 ## stands (decision terminal-growth-and-starter-building-move-the-airside-
-## north, point 3). Either outcome is shown in the status line; a refusal
-## changes nothing.
+## north, point 3). Then, with no gate desk on the grid, it adds the gate desk
+## by the exit (ReferenceTerminal.gate_desk_edit()). Either outcome is shown in
+## the status line; a refusal changes nothing.
 func press_starter_terminal() -> void:
 	if build_mode == null:
 		return
@@ -549,6 +550,11 @@ func press_starter_terminal() -> void:
 			_status = "Starter terminal not filled: %s" % result.reason_text()
 			return
 		_status = "Starter terminal filled"
+	# Its exit becomes a gate, so flights can be given one (GateDesks).
+	if GateDesks.desk_ids(grid).is_empty():
+		var desk := grid.apply(ReferenceTerminal.gate_desk_edit(ReferenceTerminal.offset_on(grid)))
+		if not desk.ok:
+			_status += "; no gate desk: %s" % desk.reason_text()
 	view.refresh(grid)
 
 

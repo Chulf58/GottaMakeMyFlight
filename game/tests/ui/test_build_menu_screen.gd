@@ -41,11 +41,11 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-func test_the_gates_tray_holds_seats_then_the_screen() -> void:
+func test_the_gates_tray_holds_the_gate_desk_seats_then_the_screen() -> void:
 	var gates := _gates()
 	assert_int(gates).is_not_equal(BuildMenu.NO_CATEGORY)
 	assert_array(BuildMenu.categories()[gates]["tools"]).is_equal(
-		[BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN]
+		[BuildMode.Tool.GATE_DESK, BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN]
 	)
 	assert_int(BuildMenu.category_of(BuildMode.Tool.SCREEN)).is_equal(gates)
 	assert_str(str(BuildMode.TOOL_OBJECTS[BuildMode.Tool.SCREEN])).is_equal(

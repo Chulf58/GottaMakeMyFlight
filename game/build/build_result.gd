@@ -45,6 +45,10 @@ enum Reason {
 	LAND_NOT_OWNED,
 	LAND_OWNED,
 	LAND_NOT_TOUCHING,
+	GATE_NO_EXIT,
+	GATE_STAND_OVERLAP,
+	GATE_IN_USE,
+	GATE_FLIGHTS_STUCK,
 }
 
 const REASON_TEXT := {
@@ -92,6 +96,11 @@ const REASON_TEXT := {
 	Reason.LAND_NOT_OWNED: "You do not own this land. Buy the plot with Buy land first",
 	Reason.LAND_OWNED: "You already own this plot",
 	Reason.LAND_NOT_TOUCHING: "Buy a plot next to land you own",
+	Reason.GATE_NO_EXIT: "Put a gate desk within 4 cells of a north exit no other gate uses",
+	Reason.GATE_STAND_OVERLAP: "Its plane stand would overlap another gate's",
+	Reason.GATE_IN_USE: "A flight is still due at this gate. Remove it after the flight leaves",
+	Reason.GATE_FLIGHTS_STUCK:
+	"No other gate is free for these flights. Move them in Departures first",
 }
 
 var ok: bool = true
@@ -102,6 +111,9 @@ var object_id: int = 0
 var room_id: int = 0
 ## The object that caused a refusal, when one did.
 var blocking_object_id: int = 0
+## What a refusal names beyond its reason (the flights or gate it is about),
+## or "". reason_text() adds it after the reason.
+var detail := ""
 ## Cells whose walkability or step links may have changed. Empty on refusal.
 var dirty_cells: Array[Vector2i] = []
 
@@ -119,4 +131,6 @@ static func refused(why: Reason, blocker := 0) -> BuildResult:
 
 
 func reason_text() -> String:
+	if detail != "":
+		return "%s: %s" % [REASON_TEXT[reason], detail]
 	return REASON_TEXT[reason]

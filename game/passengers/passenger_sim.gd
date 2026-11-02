@@ -1210,7 +1210,7 @@ func _release_seat(p: Passenger) -> void:
 
 
 func _to_exit(p: Passenger) -> void:
-	if p.exit_object != 0 and not layout.open_exits(grid).has(p.exit_object):
+	if p.exit_object != 0 and not exits_for(p).has(p.exit_object):
 		_drop_exit(p)
 	if p.exit_object == 0:
 		if p.stuck == Passenger.Stuck.NONE or _retry_now(p):
@@ -1244,11 +1244,10 @@ func _drop_exit(p: Passenger) -> void:
 ## The pending walkers join their next file where they now fit, in
 ## BoardingFiles.pending_order(): before anyone steps, so each walks this tick.
 func _admit_pending() -> void:
-	var open := layout.open_exits(grid)
 	for p in files.pending_order(self):
 		# Its exit closed or went while it waited: it gives up its place and
 		# chooses an exit again on its step (_to_exit()).
-		if not open.has(p.exit_object):
+		if not exits_for(p).has(p.exit_object):
 			_drop_exit(p)
 		elif files.door_of(p.id) != 0:
 			_step_out(p)
@@ -1257,13 +1256,13 @@ func _admit_pending() -> void:
 
 
 func _choose_exit(p: Passenger) -> void:
-	var exits := layout.open_exits(grid)
+	var exits := exits_for(p)
 	if exits.is_empty():
 		p.stuck = Passenger.Stuck.EXIT_BLOCKED
 		p.clear_path()
 		return
 	# The routed forecasts price the same door (JourneyForecast.nearest_exit()).
-	var door := JourneyForecast.nearest_exit(self, p.at).x
+	var door := JourneyForecast.nearest_exit(self, p.at, p).x
 	var path: Array[Vector2i] = []
 	if door != 0:
 		path = grid.find_path(p.at, layout.door_cell(grid, door))
@@ -1274,6 +1273,13 @@ func _choose_exit(p: Passenger) -> void:
 	p.stuck = Passenger.Stuck.NONE
 	p.set_path(path)
 	files.join_door(self, p)
+
+
+## The open exits `p` may leave by: with gates, its flight's gate's exit
+## (TerminalLayout.open_exits_for()).
+func exits_for(p: Passenger) -> Array[int]:
+	var gate := flights.flight_gate(p.flight_id) if layout.by_gate else ""
+	return layout.open_exits_for(grid, gate)
 
 
 ## The walk from an exit door's cell to the plane door (OutsideWalks).
@@ -1355,6 +1361,15 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 ## on, so the doors' walks outside are found again, as after an edit.
 func set_stand(stand: Dictionary) -> void:
 	layout.stand = stand
+	_on_graph_changed([] as Array[Vector2i])
+
+
+## The gate stands changed (ApronStand with gate desks): each gate's exit
+## walks to its own stand (exit id -> stand, exit id -> gate letter).
+func set_gate_stands(exit_stands: Dictionary, exit_gates: Dictionary) -> void:
+	layout.by_gate = true
+	layout.exit_stands = exit_stands
+	layout.exit_gates = exit_gates
 	_on_graph_changed([] as Array[Vector2i])
 
 

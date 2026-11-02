@@ -24,9 +24,11 @@ extends Node
 
 signal changed
 
-## What keeps the airport closed, checked in the order NO_PATH, STAFF_SPOT,
-## NO_CHECKIN, NO_SECURITY.
-enum Blocker { NONE, NO_PATH, NO_CHECKIN, NO_SECURITY, STAFF_SPOT }
+## What keeps the airport closed, checked in the order NO_GATE, NO_PATH,
+## STAFF_SPOT, NO_CHECKIN, NO_SECURITY. NO_GATE: FlightSim has no gate, so no
+## flight could be given one (gates come from the placed gate desks, decision
+## gates-are-placed-gate-desks-each-desk-links-automatically-to).
+enum Blocker { NONE, NO_PATH, NO_CHECKIN, NO_SECURITY, STAFF_SPOT, NO_GATE }
 
 ## In a scene the wired nodes; tests call bind(). Place this node after the
 ## PassengerSim, so the layout is rebuilt before this reads it.
@@ -70,19 +72,28 @@ func is_open() -> bool:
 func blocker() -> Blocker:
 	if is_open():
 		return Blocker.NONE
+	if flights.gate_ids().is_empty():
+		return Blocker.NO_GATE
+	var path := _path_blocker()
+	if path != Blocker.NONE:
+		return path
+	if not _any_open(staff.sim.layout.desks):
+		return Blocker.NO_CHECKIN
+	if not _any_open(staff.sim.layout.scanners):
+		return Blocker.NO_SECURITY
+	return Blocker.NONE
+
+
+## NO_PATH, STAFF_SPOT or NONE, from the path answers kept until the grid
+## changes.
+func _path_blocker() -> Blocker:
 	if _path_dirty:
 		_path_ok = RepairPlan.has_working_path(staff.sim.grid, staff.sim.layout)
 		_route_ok = _path_ok or RepairPlan.has_working_path(staff.sim.grid, staff.sim.layout, false)
 		_path_dirty = false
 	if not _route_ok:
 		return Blocker.NO_PATH
-	if not _path_ok:
-		return Blocker.STAFF_SPOT
-	if not _any_open(staff.sim.layout.desks):
-		return Blocker.NO_CHECKIN
-	if not _any_open(staff.sim.layout.scanners):
-		return Blocker.NO_SECURITY
-	return Blocker.NONE
+	return Blocker.STAFF_SPOT if not _path_ok else Blocker.NONE
 
 
 func ready_to_open() -> bool:

@@ -60,6 +60,8 @@ const CLOSED_HINTS := {
 	),
 	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
 	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
+	AirportGate.Blocker.NO_GATE:
+	"Airport closed: place a gate desk by an exit that faces the planes",
 }
 ## The banner line for an open wall gap, one for a single run of gap edges and
 ## one with the count for several. It uses the sign's words, "Wall gap".

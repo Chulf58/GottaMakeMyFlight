@@ -277,6 +277,23 @@ static func place(grid: BuildGrid, site: SiteDefinition, live: Dictionary) -> Di
 	}
 
 
+## One gate's stand checked as place() checks a candidate (gates-technical-
+## design-gate-desks-link-to-north-exits-one-st, point 2): {"status": OK when
+## the plane's sweep is clear and exit `exit_id` has a walk to its door, else
+## UNAVAILABLE; "walk_m": that walk (-1 when UNAVAILABLE); "warning": whether
+## it is over WALK_WARNING_M}.
+static func check(
+	grid: BuildGrid, site: SiteDefinition, exit_id: int, stand: Dictionary
+) -> Dictionary:
+	var walk: Array[Vector3] = []
+	if aircraft_clear(grid, site, stand):
+		walk = walk_of(grid, site, exit_id, stand)
+	if walk.is_empty():
+		return {"status": UNAVAILABLE, "walk_m": -1.0, "warning": false}
+	var metres := walk_length(walk)
+	return {"status": OK, "walk_m": metres, "warning": metres > WALK_WARNING_M}
+
+
 ## The longest walk from any exit door that has one to the plane door at
 ## `stand`, in metres; 0 with none.
 static func longest_walk(grid: BuildGrid, site: SiteDefinition, stand: Dictionary) -> float:

@@ -58,7 +58,11 @@ signal loaded(ok: bool)
 ## 8: the live plane stand (part "apron", ApronStand) and longer TAXI_IN and
 ## TAXI_OUT phases, which move every flight's start ticks; version 7 saves
 ## are refused (no migration before a release).
-const SAVE_VERSION := 9
+## 9: the land plots (part "land"); version 8 saves are refused.
+## 10: the gates (part "gates", GateDesks: each gate's letter, desk and exit)
+## and one stand per gate in the apron part; version 9 saves are refused (no
+## migration before a release).
+const SAVE_VERSION := 10
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -83,6 +87,8 @@ const MESSAGE_SECONDS := 4.0
 @export var landside: LandsideSim
 ## The plane stand; none (a test world) saves no "apron" part.
 @export var apron: ApronStand
+## The gate desks; none (a test world) saves no "gates" part.
+@export var gates: GateDesks
 ## Where F5 and F8 save and load. Tests point it at their own file.
 @export var quick_save_path := QUICK_SAVE_PATH
 
@@ -112,18 +118,11 @@ func _ready() -> void:
 ## are checked against it), the passengers before the staff, then the rest. A
 ## new part is one more entry here.
 func parts() -> Array[SavePart]:
-	# Flights are checked against the gates with a stand when the load runs.
-	var load_flights := func(data: Dictionary) -> Dictionary:
-		return FlightSnapshot.load(data, flights.gate_ids())
 	var list: Array[SavePart] = [
 		SavePart.new("grid", build_mode.grid.to_snapshot, _stage_grid, build_mode.load_snapshot),
 		SavePart.new("clock", clock.to_snapshot, SavePart.scratch(SimClock), clock.from_snapshot),
-		SavePart.new(
-			"flights",
-			flights.to_snapshot,
-			SavePart.checked("flights", load_flights),
-			flights.from_snapshot
-		),
+		# Checked against the saved gates (or, with no gate desks, the live ones).
+		SavePart.new("flights", flights.to_snapshot, _stage_flights, flights.from_snapshot),
 		SavePart.new(
 			"passengers", passengers.to_snapshot, _stage_passengers, passengers.from_snapshot
 		),
@@ -205,19 +204,18 @@ func parts() -> Array[SavePart]:
 				build_mode.land_tool.land.from_snapshot
 			)
 		)
+	if gates != null:
+		# After the grid (and its land), whose desks and exits the gates are,
+		# and before the flights, which are checked against the gates.
+		var after := list.find_custom(func(part: SavePart) -> bool: return part.key == "clock")
+		list.insert(
+			after, SavePart.new("gates", gates.to_snapshot, _stage_gates, gates.from_snapshot)
+		)
 	if apron != null:
 		# After the flights, which say whether the stand is in use, and
 		# before the passengers, whose exits walk to its plane door.
 		var at := list.find_custom(func(part: SavePart) -> bool: return part.key == "passengers")
-		list.insert(
-			at,
-			SavePart.new(
-				"apron",
-				apron.to_snapshot,
-				SavePart.checked("apron", ApronStand.checked.bind(apron.site)),
-				apron.from_snapshot
-			)
-		)
+		list.insert(at, SavePart.new("apron", apron.to_snapshot, _stage_apron, apron.from_snapshot))
 	return list
 
 
@@ -450,6 +448,53 @@ func _stage_grid(data: Dictionary, staged: Dictionary) -> String:
 	return ""
 
 
+## The gates (GateDesks.checked()) against the staged grid; kept for the
+## flights, the stands and the passengers.
+func _stage_gates(data: Dictionary, staged: Dictionary) -> String:
+	var loaded := GateDesks.checked(data, staged["grid"])
+	if loaded.has("error"):
+		return str(loaded["error"])
+	staged["gates"] = loaded["gates"]
+	return ""
+
+
+## The flights against the saved gates (with no gate desks, the live gate set).
+## The data is kept too, for the passengers' check of their gates.
+func _stage_flights(data: Dictionary, staged: Dictionary) -> String:
+	var gate_set := flights.gate_ids()
+	if staged.has("gates"):
+		gate_set = _letters(staged["gates"])
+	var loaded := FlightSnapshot.load(data, gate_set)
+	if loaded.has("error"):
+		return str(loaded["error"])
+	staged["flights"] = loaded
+	staged["flights_data"] = data
+	return ""
+
+
+## The stands (ApronStand.checked()); with gate desks, each saved gate's
+## stand, straight out from its exit on the staged grid.
+func _stage_apron(data: Dictionary, staged: Dictionary) -> String:
+	var loaded := ApronStand.checked(data, apron.site)
+	if loaded.has("error"):
+		return str(loaded["error"])
+	if loaded.has("stands") != staged.has("gates"):
+		return "the save's stands are not of this airport's kind"
+	if staged.has("gates"):
+		var problem := ApronStand.stands_problem(loaded["stands"], staged["gates"], staged["grid"])
+		if problem != "":
+			return problem
+	staged["apron"] = loaded
+	return ""
+
+
+static func _letters(bindings: Array[Dictionary]) -> Array[String]:
+	var out: Array[String] = []
+	for binding in bindings:
+		out.append(binding["gate"])
+	return out
+
+
 ## The land plots (LandPlots): the site's plot counts, plots on the site, and
 ## every built cell of the staged grid on owned land.
 func _stage_land(data: Dictionary, staged: Dictionary) -> String:
@@ -469,6 +514,8 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 		return str(loaded["error"])
 	var sim := PassengerSim.new()
 	sim.grid = grid
+	if staged.has("gates") and staged.has("apron"):
+		_stage_gate_exits(sim, staged)
 	sim.layout.rebuild(grid)
 	# The spots are derived past the security lanes' exit cells, which the
 	# runtime reads from its host's layout (a live sim binds it in bind()).
@@ -489,6 +536,24 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	staged["passengers"] = loaded
 	staged["sim"] = sim
 	return ""
+
+
+## Gives the staged sim the saved gates' exits and stands, and a staged
+## FlightSim with the saved flights, so the checks see the exits each
+## passenger's gate allows, as the installed world will.
+func _stage_gate_exits(sim: PassengerSim, staged: Dictionary) -> void:
+	var stands: Dictionary = staged["apron"]["stands"]
+	var bindings: Array[Dictionary] = staged["gates"]
+	for binding in bindings:
+		sim.layout.exit_stands[binding["exit"]] = stands[binding["gate"]]
+		sim.layout.exit_gates[binding["exit"]] = binding["gate"]
+	sim.layout.by_gate = true
+	var staged_flights := FlightSim.new()
+	var letters := _letters(bindings)
+	staged_flights.gate_source = func() -> Array[String]: return letters
+	staged_flights.from_snapshot(staged["flights_data"])
+	staged["staged_flights"] = staged_flights
+	sim.flights = staged_flights
 
 
 ## Checked against the staged grid: every mess on its floor, every bin and

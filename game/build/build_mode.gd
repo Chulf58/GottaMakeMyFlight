@@ -1,6 +1,7 @@
-# gdlint:disable = max-public-methods
+# gdlint:disable = max-public-methods, max-file-lines
 # BuildMode is the one player build surface; undo (undo, undo_history) took it
-# past the 20-method cap.
+# past the 20-method cap, and the gate desk tool (Tool.GATE_DESK) past 1600
+# lines.
 class_name BuildMode
 extends Node3D
 ## The player's build tools over a BuildGrid. Keys 1 to 9 and 0 (or
@@ -115,6 +116,7 @@ enum Tool {
 	SHOWER_ROOM,
 	NAP_POD_ROOM,
 	BUY_LAND,
+	GATE_DESK,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -144,6 +146,7 @@ const TOOL_OBJECTS := {
 	Tool.SEATS: &"seat_row",
 	Tool.ENTRANCE: &"entrance_door",
 	Tool.EXIT: &"exit_door",
+	Tool.GATE_DESK: GateDesks.DESK,
 	Tool.COUNTER: &"cafe_counter",
 	Tool.TABLE: &"cafe_table",
 	Tool.CART: &"baggage_cart",

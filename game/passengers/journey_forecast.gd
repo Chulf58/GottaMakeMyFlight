@@ -103,7 +103,7 @@ static func own_times(sim: PassengerSim, p: Passenger, now: int, routed: bool) -
 			leave += PassengerSim.STAND_UP_TICKS
 		Passenger.Stage.STANDING_UP:
 			leave += maxi(0, PassengerSim.STAND_UP_TICKS - (now - p.stage_tick))
-	var exit := _exit_of(sim, Vector2i(leg.y, leg.z), routed)
+	var exit := _exit_of(sim, Vector2i(leg.y, leg.z), routed, p)
 	if exit.x == 0:
 		return {}
 	var plane_tick := leave + walk_ticks(exit.y + exit.z)
@@ -179,9 +179,11 @@ static func _soonest_scanner(
 ## PassengerSim._choose_exit() chooses it: the shortest walk inside along the
 ## grid's path, ties to the earlier door in TerminalLayout.open_exits(). Its id
 ## (x) and that walk in mm (y); x is 0 when no open exit can be walked to.
-static func nearest_exit(sim: PassengerSim, from: Vector2i) -> Vector2i:
+## With passenger `p`, only the exits it may leave by (PassengerSim.exits_for(),
+## its gate's exit with gate desks).
+static func nearest_exit(sim: PassengerSim, from: Vector2i, p: Passenger = null) -> Vector2i:
 	var best := Vector2i.ZERO
-	for door in sim.layout.open_exits(sim.grid):
+	for door in _exits(sim, p):
 		var mm := sim.routes.walk_mm(from, sim.layout.door_cell(sim.grid, door))
 		if mm < NEVER_MM and (best.x == 0 or mm < best.y):
 			best = Vector2i(door, mm)
@@ -193,19 +195,26 @@ static func nearest_exit(sim: PassengerSim, from: Vector2i) -> Vector2i:
 ## Unrouted: octile distance to each open exit, the least walk plus apron, ties
 ## to the earlier door in TerminalLayout.open_exits(). Routed: the exit
 ## nearest_exit() picks, as the passenger will, and that exit's apron.
-static func _exit_of(sim: PassengerSim, from: Vector2i, routed: bool) -> Vector3i:
+static func _exit_of(
+	sim: PassengerSim, from: Vector2i, routed: bool, p: Passenger = null
+) -> Vector3i:
 	if routed:
-		var door := nearest_exit(sim, from)
+		var door := nearest_exit(sim, from, p)
 		if door.x == 0:
 			return Vector3i.ZERO
 		return Vector3i(door.x, door.y, sim.files.apron_of(sim, door.x)["mm"])
 	var best := Vector3i.ZERO
-	for door in sim.layout.open_exits(sim.grid):
+	for door in _exits(sim, p):
 		var mm := Passenger.octile_mm(from, sim.layout.door_cell(sim.grid, door))
 		var apron: int = sim.files.apron_of(sim, door)["mm"]
 		if best.x == 0 or mm + apron < best.y + best.z:
 			best = Vector3i(door, mm, apron)
 	return best
+
+
+## The open exits `p` may leave by, or every open exit with no passenger.
+static func _exits(sim: PassengerSim, p: Passenger) -> Array[int]:
+	return sim.exits_for(p) if p != null else sim.layout.open_exits(sim.grid)
 
 
 ## Millimetres from `from` to `to`: octile, or with `routed` the length of

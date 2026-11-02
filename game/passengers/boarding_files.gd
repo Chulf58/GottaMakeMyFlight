@@ -572,7 +572,7 @@ func _load_pending(value: Variant, by_id: Dictionary, sim: PassengerSim) -> Stri
 ## Whether `p`'s exit is an open exit in the sim's layout and its committed
 ## path ends at that exit's cell.
 static func _heads_for(sim: PassengerSim, p: Passenger) -> bool:
-	if not sim.layout.open_exits(sim.grid).has(p.exit_object):
+	if not sim.exits_for(p).has(p.exit_object):
 		return false
 	return p.path_end() == sim.layout.door_cell(sim.grid, p.exit_object)
 
