@@ -76,6 +76,14 @@ const OVER_TOP := Vector3(0.0, 0.22, 0.33)
 ## 0.18-0.29 m short, and the bag jumped that far into it.
 const TAKE_M := 0.05
 const UP_PART := 0.19
+## Off the floor, the hand's reach for the lying bag is at full weight this many
+## ticks before REACH_END, and the rods start out this many ticks after the park
+## ends (rods_t()): at 3x (a tick a frame) the frame the hand takes the bag, or
+## takes the bar again, then has the hand already on its grip and the bar where
+## the hand reached for it. Taken on the last step of the reach's weight, the
+## grip of a walker walking off moved 0.18 m in that frame; with the rods running
+## out under the hand taking the bar of a walker sitting down again, 0.22 m.
+const SETTLE_TICKS := 1.0
 ## Lifted off the floor to the park, the bag rises this much midway.
 const LIFT_M := 0.12
 ## Off the floor, the walker moving this far from where it stood as the park
@@ -224,7 +232,7 @@ static func park(
 ## their new one at `k`: in while it stands up, out while it tips into the pull.
 static func rods_t(k: float, bag: Dictionary) -> float:
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
-		return smoothstep(up_ends(bag).y, 1.0, k)
+		return smoothstep(up_ends(bag).y + SETTLE_TICKS / TICKS_UP, 1.0, k)
 	return smoothstep(0.0, STAND_END, k)
 
 
@@ -374,7 +382,8 @@ static func _off_floor(
 ) -> Array:
 	var took: float = bag.get("park_took", -1.0)
 	if took < 0.0 or k < took:
-		return [false, start, handle, handle, smoothstep(0.0, 1.0, k / REACH_END)]
+		var reach := smoothstep(0.0, REACH_END - SETTLE_TICKS / TICKS_UP, k)
+		return [false, start, handle, handle, reach]
 	var ends := up_ends(bag)
 	if k < ends.x:
 		var t := (k - took) / (ends.x - took)
