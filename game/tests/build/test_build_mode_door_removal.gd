@@ -54,6 +54,7 @@ func test_removing_an_exit_puts_the_plain_wall_back_and_leaves_no_gap() -> void:
 	var result := _remove_door()
 	print("removed: ok=%s wall=%d" % [result.ok, _mode.grid.wall_kind(CELL, NORTH)])
 	assert_bool(result.ok).is_true()
+	assert_int(result.object_id).is_equal(_door_id)
 	assert_array(_mode.grid.object_ids()).is_empty()
 	assert_int(_mode.grid.wall_kind(CELL, NORTH)).is_equal(BuildGrid.WallKind.PLAIN)
 	assert_array(EnclosureGaps.gap_edges(_mode.grid)).is_empty()
