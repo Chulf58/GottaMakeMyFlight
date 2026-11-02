@@ -79,7 +79,9 @@ const INT_FIELDS := [
 	"collect_tick",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
-const BOOL_FIELDS := ["late", "cleared", "needs_replan", "liquids", "alarm", "incident_resolved"]
+const BOOL_FIELDS := [
+	"late", "cleared", "needs_replan", "liquids", "alarm", "incident_resolved", "sat_late"
+]
 
 
 ## `totals` is [made, missed]; `scheduled` the scheduled flight ids.
@@ -369,6 +371,7 @@ static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 			_set_missing(record, "boredom", BoredomSim.start_of(int(record["id"])))
 			_set_missing(record, "shop_cooldown", 0)
 			_set_missing(record, "collect_tick", 0)
+			_set_missing(record, "sat_late", false)
 	_set_missing(out, "shop", {"visits": [], "deadlines_stale": false})
 
 

@@ -16,10 +16,11 @@ extends RefCounted
 ## started sitting down (it stamps a change of home on the frame that sees it,
 ## as the stand-up's floor>pull does, SecurityLooks._rolled_up()); and a seat
 ## removed once the park is over (still sitting down, or seated) is left as it
-## was: the walker goes at once. A walker late when its seat goes is not held
-## (on_seat_lost()), even one that turned late in the park (the park runs on,
-## RollerPark.holds_lift()); one turning late while held waits to the end. A
-## load releases a walker at once (on_load()).
+## was: the walker goes at once. A walker late as it began sitting down
+## (Passenger.sat_late, note_sitting()) is not held; one turning late while
+## held waits to the end. sat_late is noted on the tick after the sit-down
+## began, so a frame that drew several ticks at once can have seen a later
+## lateness. A load releases a walker at once (on_load()).
 
 ## Ticks of the pick-up (floor>pull) the walker stands for: to the end of the
 ## lift to the park (RollerPark.LIFT_END) and one tick more, since the body is
@@ -40,12 +41,22 @@ static func on_seat_lost(sim: PassengerSim, p: Passenger) -> void:
 		return
 	if sim.tick - p.stage_tick >= ceili(RollerPark.TICKS_DOWN) or not _has_roller(p):
 		return
-	# A late walker carries its roller lifted in the hand (CarryOnProps._lifted())
-	# and sets it down with no park, so there is nothing to wait for: held, it
-	# could miss its flight.
-	if p.late:
+	# A walker late as it began sitting down carried its roller lifted in the
+	# hand (CarryOnProps._lifted()) and set it down with no park, so there is
+	# nothing to wait for: held, it could miss its flight. One that turned late
+	# after has its park run on (RollerPark.holds_lift()) and is held.
+	if p.sat_late:
 		return
 	p.collect_tick = collect_of(p.stage_tick)
+
+
+## Notes on `p` (of `sim`, at the start of a tick, before any step) whether it
+## was late as it began sitting down at a gate seat: on the tick after, p.late
+## is what the view saw when it stamped the roller's move (it syncs between
+## ticks), lifted in the hand or parked (CarryOnProps._lifted()).
+static func note_sitting(sim: PassengerSim, p: Passenger) -> void:
+	if p.stage == Passenger.Stage.SITTING_DOWN and sim.tick - p.stage_tick == 1:
+		p.sat_late = p.late
 
 
 ## Whether `p`'s collect_tick is one the sim could have saved at `tick`: none,

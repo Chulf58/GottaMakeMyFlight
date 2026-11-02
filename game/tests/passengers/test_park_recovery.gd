@@ -201,20 +201,39 @@ func test_an_impossible_collect_tick_is_refused() -> void:
 	assert_bool(_world.sim.from_snapshot(saved)).is_true()
 
 
-## A walker late when its seat goes in the middle of the park is not held: it
-## carries its roller lifted and sets it down with no park (CarryOnProps.
-## _lifted()), and it must not miss its flight waiting for nothing.
-func test_a_late_walker_whose_seat_goes_mid_park_is_not_held() -> void:
+## A walker late as it began sitting down is not held when its seat goes: it
+## carried its roller lifted and set it down with no park (CarryOnProps.
+## _lifted()), and it must not miss its flight waiting for nothing. Noted on
+## the tick after the sit-down began (ParkRecovery.note_sitting()).
+func test_a_walker_late_as_it_sat_down_is_not_held() -> void:
 	var p := _walker(true)
-	_world.step()
 	p.late = true
+	_world.step()
+	assert_bool(p.sat_late).is_true()
 	_seat_goes()
 	_world.step()
 	var sent := _world.sim.tick
-	print("late: collect %d" % p.collect_tick)
+	print("late as it sat: collect %d" % p.collect_tick)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
 	assert_int(p.collect_tick).is_equal(0)
 	assert_int(p.stage_tick).is_equal(sent)
+
+
+## A walker on time as it began sitting down that turns late in the park keeps
+## the park (RollerPark.holds_lift()), so when its seat goes it is held to
+## collect the roller like any other. Control: it was noted on time.
+func test_a_walker_turning_late_in_the_park_is_still_held() -> void:
+	var p := _walker(true)
+	var sat := _world.sim.tick
+	_world.step()
+	assert_bool(p.sat_late).is_false()
+	p.late = true
+	_world.step()
+	_seat_goes()
+	_world.step()
+	print("turned late in the park: late %s collect %d" % [p.late, p.collect_tick])
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+	assert_int(p.collect_tick).is_equal(ParkRecovery.collect_of(sat))
 
 
 ## The record of passenger `id` in a passenger save `data`.

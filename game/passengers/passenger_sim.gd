@@ -1452,6 +1452,7 @@ func _reconcile() -> void:
 			(q["holding"] as Array).push_front(last)
 			_by_id[last].stuck = Passenger.Stuck.QUEUE_FULL
 	for p in _passengers:
+		ParkRecovery.note_sitting(self, p)
 		if p.seat_object != 0 and not _seat_exists(p):
 			_release_seat(p)
 			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
