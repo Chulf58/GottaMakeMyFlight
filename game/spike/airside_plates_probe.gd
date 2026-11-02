@@ -20,12 +20,13 @@ const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 90000
 const FRAME := 1.0 / 60.0
 const FOLLOW_DISTANCE := 75.0
-## Sim ticks sampled for the strip, four per row: landing (approach to touchdown), taxiing
-## (TAXI_IN) and takeoff (the TAKEOFF state, ticks 3100 to 3300 from the first state).
+## Sim ticks sampled for the strip, four per row, with the states each row must show:
+## landing (approach to touchdown), taxiing (TAXI_IN) and takeoff (the TAKEOFF state,
+## ticks 3100 to 3300 from the first state).
 const STRIP_ROWS := [
-	["landing", [150, 228, 280, 345]],
-	["taxiing", [420, 500, 580, 655]],
-	["takeoff", [3110, 3170, 3230, 3290]],
+	["landing", [150, 228, 280, 345], [FlightSim.State.APPROACH, FlightSim.State.LANDING]],
+	["taxiing", [420, 500, 580, 655], [FlightSim.State.TAXI_IN]],
+	["takeoff", [3110, 3170, 3230, 3290], [FlightSim.State.TAKEOFF]],
 ]
 
 var _out_dir := ""
@@ -288,6 +289,10 @@ func _strip() -> void:
 			await _frames(2)
 			var model: Node3D = _plane.get_node("Pivot")
 			var tag := "%s_t%d" % [row[0], _clock.tick]
+			var state: int = _sim().state_of("GMF101-d0")
+			if not row[2].has(state):
+				_invalid("%s: flight state %d, the row needs one of %s" % [tag, state, row[2]])
+				continue
 			print(
 				(
 					"FRAME %s tick=%d state=%d pos=%s nose=%s pitch_deg=%.1f"
