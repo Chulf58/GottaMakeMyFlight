@@ -31,8 +31,8 @@ const MIN_RAY_DOWN := 0.05
 @export var zoom_rate := 10.0
 @export var glide_rate := 5.0
 @export var follow_rate := 6.0
-## Half the size of the square the focus point stays inside. The default
-## covers the whole airport: the runway at z = -200 runs x = -192 to 192.
+## Half the size of the square the focus point stays inside. The runway at
+## z = -310 lies just beyond the north edge of the default, so it is seen from the edge.
 @export var bounds_half_extent := 260.0
 ## The start view, on the build area, and where Home returns to.
 @export var home_position := Vector3.ZERO
