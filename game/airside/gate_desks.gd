@@ -35,6 +35,12 @@ extends Node
 
 signal changed
 
+## Why a gate desk has no gate (unlinked_on()). NO_EXIT: no north exit within
+## LINK_CELLS. EXIT_TAKEN: every exit in reach is another gate's. STAND_OVERLAP:
+## a free exit is in reach, but its stand would overlap a gate's. NO_LETTER: it
+## could link, but every gate letter is in use.
+enum Unlinked { NO_EXIT, EXIT_TAKEN, STAND_OVERLAP, NO_LETTER }
+
 const DESK := &"gate_desk"
 ## How far (in cells, either way, diagonals counting one) a desk's footprint may
 ## be from the exit it links to.
@@ -128,6 +134,66 @@ static func links_on(on_grid: BuildGrid, kept: Array[Dictionary]) -> Array[Dicti
 			stands.append(StandPlacement.for_exit(on_grid, exit))
 	links.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["desk"] < b["desk"])
 	return links
+
+
+## The gate desks the bindings give no gate, and why (decision gates-1b-as-
+## built-gatedesks-link-desks-to-north-exits-as-sti: a desk that cannot link
+## stays unlinked, and the Gates 2/4 view shows it). {} before bind().
+func unlinked() -> Dictionary:
+	if grid == null:
+		return {}
+	return unlinked_on(grid, bindings)
+
+
+## Desk id -> {"why": Unlinked, "gate": the gate letter the reason names, or
+## ""}, for every gate desk on `on_grid` that `links` gives no gate. EXIT_TAKEN
+## names the gate holding the nearest exit in reach; STAND_OVERLAP names the
+## first gate whose stand overlaps the nearest free exit's. Exits are taken
+## nearest first, ties to the lower id, as nearest_exit() takes them.
+static func unlinked_on(on_grid: BuildGrid, links: Array[Dictionary]) -> Dictionary:
+	var linked := {}
+	var gate_of_exit := {}
+	for link in links:
+		linked[link["desk"]] = true
+		gate_of_exit[link["exit"]] = link["gate"]
+	var out := {}
+	for desk in desk_ids(on_grid):
+		if not linked.has(desk):
+			out[desk] = _unlinked_reason(on_grid, desk, links, gate_of_exit)
+	return out
+
+
+static func _unlinked_reason(
+	on_grid: BuildGrid, desk: int, links: Array[Dictionary], gate_of_exit: Dictionary
+) -> Dictionary:
+	var reach := exits_in_reach(on_grid, desk_footprint(on_grid, desk))
+	if reach.is_empty():
+		return {"why": Unlinked.NO_EXIT, "gate": ""}
+	for exit in reach:
+		if gate_of_exit.has(exit):
+			continue
+		var stand := StandPlacement.for_exit(on_grid, exit)
+		for link in links:
+			if stands_overlap(stand, StandPlacement.for_exit(on_grid, link["exit"])):
+				return {"why": Unlinked.STAND_OVERLAP, "gate": link["gate"]}
+		return {"why": Unlinked.NO_LETTER, "gate": ""}
+	return {"why": Unlinked.EXIT_TAKEN, "gate": gate_of_exit[reach[0]]}
+
+
+## The north exits at most LINK_CELLS from `footprint` (diagonals counting
+## one), nearest first, ties to the lower id.
+static func exits_in_reach(on_grid: BuildGrid, footprint: Array[Vector2i]) -> Array[int]:
+	var found: Array[Vector2i] = []
+	for id in on_grid.object_ids():
+		if _is_gate_exit(on_grid, id):
+			var cells := reach_cells(on_grid, footprint, id)
+			if cells <= LINK_CELLS:
+				found.append(Vector2i(cells, id))
+	found.sort()
+	var out: Array[int] = []
+	for entry in found:
+		out.append(entry.y)
+	return out
 
 
 ## The cells gate desk `desk` stands on.
