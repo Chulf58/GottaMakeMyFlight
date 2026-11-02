@@ -87,7 +87,7 @@ func test_a_desk_whose_stand_would_overlap_another_gates_is_refused() -> void:
 	var near := _desk(EXIT_NEAR + Vector2i(0, 3))
 	print("overlap: %s" % near.reason_text())
 	assert_int(near.reason).is_equal(BuildResult.Reason.GATE_STAND_OVERLAP)
-	assert_str(near.reason_text()).contains("gate A")
+	assert_str(near.reason_text()).contains("gate A is too close")
 	# The text names the spacing the sweeps need and the fix (board 99678753).
 	var need := StandPlacement.EXIT_SPACING_CELLS
 	assert_str(near.reason_text()).contains("%d m between exits" % need)
