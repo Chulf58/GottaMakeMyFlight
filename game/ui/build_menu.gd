@@ -53,9 +53,8 @@ const CATEGORIES := [
 	{"name": "Security", "tools": [BuildMode.Tool.SCANNER]},
 	# The security lane's four parts in flow order (decisions security-lane-
 	# parts-are-placed-separately-tray-table-x-ray-b and security-lane-parts-
-	# get-their-own-lane-build-category): five cards and the rotate card are
-	# wider than COLUMN_W, so they get a tray of their own, right after
-	# Security.
+	# get-their-own-lane-build-category): four parts get a tray of their own,
+	# right after Security.
 	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
 	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
 	# The gate desk (gates 1b) makes a gate of the north exit it stands by.
@@ -70,8 +69,8 @@ const CATEGORIES := [
 		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
 	},
 	# The toilet room and its two pieces (Toilets 5/5). Cafe holds three cards
-	# and Rotate already; six cards and Rotate are wider than COLUMN_W, so the
-	# toilet gets a tray of its own, as the Lane did.
+	# already; six cards are wider than COLUMN_W, so the toilet gets a tray of
+	# its own, as the Lane did.
 	{
 		"name": "Toilets",
 		"tools":
@@ -112,8 +111,8 @@ const CATEGORIES := [
 	# Services, Leisure and Shops. A group's first page has the bar button and
 	# carries the group's name ("group"); a later page ("page": true) has none
 	# and is reached by the Next card on the page before it, and the group's
-	# last page leads back to its first. A tray holds four cards and the Rotate
-	# and Next column in COLUMN_W, so a group with more pieces pages inside its
+	# last page leads back to its first. A tray holds four cards and the Next
+	# column in COLUMN_W, so a group with more pieces pages inside its
 	# tray. The Dining, Money and Activities pages joined Food, Services and
 	# Leisure: the ruling named the eleven pages there were before them.
 	{"name": "Furniture", "group": "Decor", "tools": FurnitureTools.PAGES[0]},
@@ -131,7 +130,7 @@ const CATEGORIES := [
 	{"name": "Desks", "group": "Services", "tools": FurnitureTools.PAGES[4]},
 	{"name": "Care", "tools": FurnitureTools.PAGES[5], "page": true},
 	# The exchange and the ATM (F4-5b) share one Money page: each room with its
-	# one piece, four cards that fit beside the Rotate and Next column.
+	# one piece, four cards that fit beside the Next column.
 	{
 		"name": "Money",
 		"tools":
@@ -296,7 +295,7 @@ const THUMB_SIZE := 72.0
 const CARD_HINT_FONT_SIZE := 14
 ## A bar button: an icon (BarIcons) with its name in the tooltip.
 const CATEGORY_SIZE := Vector2(52.0, 44.0)
-const ROTATE_SIZE := Vector2(72.0, 176.0)
+const NEXT_SIZE := Vector2(72.0, 176.0)
 
 ## The one HUD theme (decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
 ## A CanvasLayer does not pass a theme down, so every top-level HUD Control
@@ -361,6 +360,8 @@ var _holding := false
 ## Counts grants, so only the latest grant's timer ends the hold.
 var _hold_generation := 0
 var _held_status := ""
+## The latest status text, before the rotate hint (RotateHint) is added to it.
+var _raw_status := ""
 ## True while the hold shows a rescue grant's message, false for a wage one.
 var _hold_is_grant := false
 ## A wages-paid message that waited for a rescue message's hold to end; "" if none.
@@ -486,6 +487,7 @@ func _ready() -> void:
 		build_mode.tool_changed.connect(_on_tool_changed)
 		build_mode.status_changed.connect(_on_mode_status_changed)
 		build_mode.templates.status_changed.connect(_on_status_changed)
+		build_mode.templates.armed_changed.connect(_show_status)
 		_on_status_changed(build_mode.status_text())
 		_on_tool_changed(build_mode.tool)
 	else:
@@ -681,6 +683,7 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 		var index := category_of(tool)
 		_open = NO_CATEGORY if index == remove_category() else index
 	_sync()
+	_show_status()
 
 
 func _on_balance_changed(_balance: int) -> void:
@@ -760,10 +763,18 @@ func _on_mode_status_changed(text: String) -> void:
 
 
 func _on_status_changed(text: String) -> void:
+	_raw_status = text
 	if _holding:
 		_held_status = text
 		return
-	_status.text = text
+	_show_status()
+
+
+## The status line: the latest status text and, while a piece or a template that
+## can turn is armed, the "R rotate" hint (RotateHint). A hold keeps its message.
+func _show_status() -> void:
+	if not _holding:
+		_status.text = RotateHint.compose(_raw_status, build_mode)
 
 
 ## A rescue message always wins the status line. A wages-paid message it cuts
@@ -776,7 +787,7 @@ func _on_granted(_amount: int, message: String) -> void:
 
 func _start_hold(message: String, is_grant: bool) -> void:
 	if not _holding:
-		_held_status = _status.text
+		_held_status = _raw_status
 	_holding = true
 	_hold_is_grant = is_grant
 	_status.text = message
@@ -808,7 +819,8 @@ func _on_loaded(ok: bool) -> void:
 	_pending_wages = ""
 	_holding = false
 	_held_status = build_mode.status_text() if build_mode != null else ""
-	_status.text = _held_status
+	_raw_status = _held_status
+	_show_status()
 
 
 ## The loaded world is a new one: build mode ends with the clock as loaded, the
@@ -840,7 +852,7 @@ func end_grant_hold() -> void:
 		return
 	_pending_wages = ""
 	_holding = false
-	_status.text = _held_status
+	_show_status()
 
 
 ## Shows the open category's row and marks the selected category and card.
@@ -927,18 +939,14 @@ func _build_tray() -> void:
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		_tray.add_child(row)
 		_rows.append(row)
-		var turns := false
 		for tool in categories()[i]["tools"]:
 			if item(tool).is_empty():
 				continue
 			var button := _make_card(tool)
 			row.add_child(button)
 			_cards[tool] = button
-			turns = turns or BuildMode.tool_object(tool) != &""
 		if next_page(i) != NO_CATEGORY:
-			row.add_child(_make_rotate_and_next_cards(next_page(i)))
-		elif turns:
-			row.add_child(_make_rotate_card())
+			row.add_child(_make_next_card(next_page(i)))
 
 
 func _make_card(tool: BuildMode.Tool) -> Button:
@@ -987,36 +995,18 @@ static func _no_key_hint(tool: BuildMode.Tool) -> String:
 	return "Drag" if BuildMode.AREA_TOOLS.has(tool) else "Click"
 
 
-func _make_rotate_card(height := ROTATE_SIZE.y) -> Button:
-	var button := Button.new()
-	button.name = "CardRotate"
-	button.custom_minimum_size = Vector2(ROTATE_SIZE.x, height)
-	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(func() -> void: build_mode.rotate_facing())
-	var column := _card_column(button)
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	_card_label(column, "Rotate", &"HudCardName")
-	_card_label(column, "Key R", &"HudHint")
-	return button
-
-
-## The Rotate card and, under it, the Next card that opens the page after this one.
-func _make_rotate_and_next_cards(next: int) -> VBoxContainer:
-	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 6)
-	var half := (ROTATE_SIZE.y - 6.0) / 2.0
-	stack.add_child(_make_rotate_card(half))
+## The Next card, which opens the page after this one.
+func _make_next_card(next: int) -> Button:
 	var button := Button.new()
 	button.name = "CardNext"
-	button.custom_minimum_size = Vector2(ROTATE_SIZE.x, half)
+	button.custom_minimum_size = NEXT_SIZE
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(press_category.bind(next))
 	var column := _card_column(button)
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	_card_label(column, "Next", &"HudCardName")
 	_card_label(column, categories()[next]["name"], &"HudHint")
-	stack.add_child(button)
-	return stack
+	return button
 
 
 func _card_column(button: Button) -> VBoxContainer:

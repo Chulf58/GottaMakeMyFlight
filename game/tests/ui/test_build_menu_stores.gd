@@ -169,7 +169,7 @@ func test_every_store_card_shows_its_rendered_thumbnail() -> void:
 			assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 
 
-func test_each_store_tray_fits_the_column_with_rotate_and_next() -> void:
+func test_each_store_tray_fits_the_column_with_next() -> void:
 	for page_name in PAGE_ORDER:
 		var page := _index(page_name)
 		_menu.press_category(page)

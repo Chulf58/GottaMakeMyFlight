@@ -3,7 +3,7 @@ extends ScrollContainer
 ## The Templates page of the build tray (decision room-templates-store-rooms-
 ## with-their-pieces-kept-in-each-sa): a Save room card that arms saving
 ## (TemplatePaste.arm_capture()), one card per saved template that arms its
-## paste, and a Rotate card. Its Templates button opens and closes it
+## paste. Its Templates button opens and closes it
 ## (BuildMenu.press_category(TEMPLATES_PAGE)); the page scrolls
 ## sideways when the cards are wider than the tray's column.
 ##
@@ -110,11 +110,6 @@ func _rebuild() -> void:
 		each.pressed.connect(func() -> void: _paste.arm(i))
 		_row.add_child(each)
 		_cards.append(each)
-	var rotate := _make_card("CardRotate", "Rotate", ["Key R"])
-	rotate.toggle_mode = false
-	rotate.custom_minimum_size.x = 72.0
-	rotate.pressed.connect(_rotate)
-	_row.add_child(rotate)
 	_mark_cards()
 
 
@@ -161,11 +156,6 @@ func _label(text: String, variation: StringName) -> Label:
 	label.theme_type_variation = variation
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return label
-
-
-func _rotate() -> void:
-	if _paste != null and _paste.armed >= 0:
-		_paste.rotate_turns()
 
 
 func _mark_cards() -> void:

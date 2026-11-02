@@ -88,7 +88,7 @@ const RUNNING_COSTS := {
 }
 
 ## The pages of the Furniture category (BuildMenu.CATEGORIES names them), each
-## with at most four cards: a tray holds four cards and the Rotate and Next
+## with at most four cards: a tray holds four cards and the Next
 ## column in BuildMenu.COLUMN_W, and no more. The pharmacy counter and shelf
 ## are on the pharmacy's Stores page (BuildMenu.CATEGORIES), beside its room,
 ## and the exchange counter and the ATM on the Money page, beside theirs.

@@ -94,15 +94,3 @@ func test_picking_a_baggage_tool_opens_its_category_and_marks_its_card() -> void
 		assert_int(_menu.open_category()).is_equal(_category_named("Baggage"))
 		assert_bool(_menu.is_tray_open()).is_true()
 		assert_bool(_menu.card(tool).button_pressed).is_true()
-
-
-func test_the_baggage_tray_has_a_rotate_card_that_turns_the_piece() -> void:
-	_menu.card(BuildMode.Tool.CART).pressed.emit()
-	var shown: Array[Button] = []
-	for button in _menu.tray().find_children("CardRotate", "Button", true, false):
-		if (button as Control).is_visible_in_tree():
-			shown.append(button)
-	assert_array(shown).has_size(1)
-	var before := _mode.facing
-	shown[0].pressed.emit()
-	assert_int(_mode.facing).is_equal((before + 1) % 4)

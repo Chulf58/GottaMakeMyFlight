@@ -31,7 +31,7 @@ const PICK_ROOM := "Click a room to save it as a template"
 const SAVE_ROOM := "Click to save %s as a template"
 const SAVED := "Saved template %s"
 const PLACED := "Placed %s for %d"
-const PLACE_HINT := "%s: click to place, R turns it"
+const PLACE_HINT := "%s: click to place"
 
 var library := RoomTemplates.new()
 ## The template a click pastes, or -1.
