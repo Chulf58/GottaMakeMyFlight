@@ -4,42 +4,26 @@ extends RefCounted
 ## 342df92a: they wait on the gate seats closest to their flight's gate desk, and
 ## with no seats near the gate they stand and get less calm).
 ##
-## A gate's place is its gate desk's footprint (GateDesks): the desk linked to
-## the gate's exit, found again from the grid on each layout rebuild as the
-## desk nearest that exit within GateDesks.LINK_CELLS, ties to the lower id. A
-## seat is near the gate when its cell is at most NEAR_CELLS from a desk cell
-## (diagonals counting one, the way GateDesks measures a link), so a seat row
-## beside the desk and the row across the gate area count, and a row in
-## another gate's corner does not. 8 cells is 8 m: two LINK_CELLS, the walk
-## across a gate lounge.
+## A gate's place is its gate desk's footprint (GateDesks). The desk is the one
+## the gate is bound to (GateDesks.bindings, the sticky and saved links), passed
+## in as gate letter -> desk object id; nothing here guesses a desk from where
+## it stands. A seat is near the gate when its cell is at most NEAR_CELLS from a
+## desk cell (diagonals counting one, the way GateDesks measures a link), so a
+## seat row beside the desk and the row across the gate area count, and a row in
+## another gate's corner does not. 8 cells is 8 m: twice GateDesks.LINK_CELLS,
+## the walk across a gate lounge.
 
 const NEAR_CELLS := 8
 
 
-## Gate letter -> the cells of the gate desk linked to its exit, for each of
-## `exit_gates` (exit id -> gate letter) that has a desk within reach. Each desk
-## serves one exit, the lower exit id first.
-static func desks_of(grid: BuildGrid, exit_gates: Dictionary) -> Dictionary:
+## Gate letter -> the cells of its gate desk, for each of `gate_desk_ids` (gate
+## letter -> desk object id) whose desk still stands on `grid`. A gate whose
+## desk an edit just removed is left out until ApronStand sends the gates again.
+static func cells_of(grid: BuildGrid, gate_desk_ids: Dictionary) -> Dictionary:
 	var out := {}
-	var taken := {}
-	var exits: Array = exit_gates.keys()
-	exits.sort()
-	for exit: int in exits:
-		# An edit just removed it; ApronStand sends the gates again after.
-		if grid.get_object(exit).is_empty():
-			continue
-		var best := 0
-		var best_cells := GateDesks.LINK_CELLS + 1
-		for desk in GateDesks.desk_ids(grid):
-			if taken.has(desk):
-				continue
-			var cells := GateDesks.reach_cells(grid, GateDesks.desk_footprint(grid, desk), exit)
-			if cells < best_cells:
-				best = desk
-				best_cells = cells
-		if best != 0:
-			taken[best] = true
-			out[exit_gates[exit]] = GateDesks.desk_footprint(grid, best)
+	for gate: String in gate_desk_ids:
+		if GateDesks.is_desk(grid, gate_desk_ids[gate]):
+			out[gate] = GateDesks.desk_footprint(grid, gate_desk_ids[gate])
 	return out
 
 

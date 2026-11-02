@@ -72,7 +72,11 @@ signal checked_in(id: int, desk: int)
 ## standing spot kept by a passenger setting off from it for the exit. Version
 ## 14 is refused, with no migration; a migrated older save has no files, so one
 ## taken while anyone walked out to the plane is refused.
-const SAVE_VERSION := 15
+## 16: seats and standing spots are chosen near the passenger's own gate desk
+## (GateReach), so a version 15 save, whose claims followed the old global
+## nearest rule, is refused with no migration (decision old-saves-are-not-
+## supported-until-after-a-release-no-save-mi).
+const SAVE_VERSION := 16
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -1393,11 +1397,15 @@ func set_stand(stand: Dictionary) -> void:
 
 
 ## The gate stands changed (ApronStand with gate desks): each gate's exit
-## walks to its own stand (exit id -> stand, exit id -> gate letter).
-func set_gate_stands(exit_stands: Dictionary, exit_gates: Dictionary) -> void:
+## walks to its own stand (exit id -> stand, exit id -> gate letter), and its
+## passengers wait by its gate desk (gate letter -> desk object id).
+func set_gate_stands(
+	exit_stands: Dictionary, exit_gates: Dictionary, gate_desk_ids: Dictionary
+) -> void:
 	layout.by_gate = true
 	layout.exit_stands = exit_stands
 	layout.exit_gates = exit_gates
+	layout.gate_desk_ids = gate_desk_ids
 	_on_graph_changed([] as Array[Vector2i])
 
 

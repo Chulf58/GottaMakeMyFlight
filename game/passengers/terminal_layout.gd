@@ -46,8 +46,11 @@ var by_gate := false
 ## -> that gate's letter.
 var exit_stands: Dictionary = {}
 var exit_gates: Dictionary = {}
-## With by_gate: gate letter -> the cells of the gate desk linked to its exit
-## (GateReach), found on each rebuild; a gate with no desk in reach is absent.
+## With by_gate: gate letter -> its gate desk's object id (GateDesks.bindings,
+## the saved links), set by PassengerSim.set_gate_stands().
+var gate_desk_ids: Dictionary = {}
+## With by_gate: gate letter -> the cells of its gate desk (GateReach), found on
+## each rebuild; a gate whose desk is gone is absent.
 var gate_desks: Dictionary = {}
 var desks: Array[int] = []
 var scanners: Array[int] = []
@@ -90,7 +93,7 @@ func rebuild(grid: BuildGrid) -> void:
 	lanes.clear()
 	passages.clear()
 	seats.clear()
-	gate_desks = GateReach.desks_of(grid, exit_gates) if by_gate else {}
+	gate_desks = GateReach.cells_of(grid, gate_desk_ids) if by_gate else {}
 	security_lanes = SecurityLanes.new()
 	security_lanes.rebuild(grid)
 	var ids := grid.object_ids()
