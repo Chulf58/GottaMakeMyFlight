@@ -30,6 +30,8 @@ const MAIN_SCENE := "res://main/main.tscn"
 const DAY_LIMIT_TICKS := 40000
 const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 120000
+## Frames in a row the eye must hold still before the camera counts as settled.
+const CAMERA_HELD_FRAMES := 8
 const FRAMES_PER_STRIP := 8
 const THUMB := Vector2i(768, 432)
 ## The terminal floor, from its walls (x -43..43, z -100..-40).
@@ -528,15 +530,21 @@ func _plan_far(starts: Array[int], kind: String, local_box: AABB) -> Array[int]:
 
 
 ## The HUD reacts to the tick (a departure raises the result card) and the camera eases
-## its view to the screen share the panels leave, over real time. Wait until the eye
-## stops moving, or the plane has moved on screen by the time the plate is grabbed.
+## its view to the screen share the panels leave, over real time. The camera processes
+## before the HUD, so the new target reaches it a frame or two after the draw: give that
+## time to arrive, then wait until the eye holds still for several frames in a row, or the
+## plane has moved on screen by the time the plate is grabbed.
 func _settle_camera() -> void:
+	await _frames(3)
 	var last := Vector3.INF
+	var held := 0
 	for i in 1200:
 		await process_frame
-		if _cam.global_position.distance_to(last) < 0.001:
+		var eye := _cam.global_position
+		held = held + 1 if eye.distance_to(last) < 0.001 else 0
+		last = eye
+		if held >= CAMERA_HELD_FRAMES:
 			return
-		last = _cam.global_position
 	_invalid("the camera never settled")
 
 
