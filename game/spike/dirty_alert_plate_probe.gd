@@ -1,5 +1,6 @@
 extends SceneTree
-## Windowed plates of the dirty-terminal alert card (decision cleaner-staff-and-
+## Windowed plates of the dirty-terminal alert card, now one card of the
+## AlertStack (HUD 1/7) (decision cleaner-staff-and-
 ## messes-visits-leave-messes-bins-fill-pooled-cleaners-nearest-mess, point 6;
 ## board Cleaner 5/5). Boots the real main scene with a new random sim seed
 ## (printed), builds ReferenceTerminal through the HUD's starter-terminal
@@ -42,7 +43,8 @@ var _main: Node
 var _clock: SimClock
 var _sim: PassengerSim
 var _hud: PassengerHud
-var _card: DirtyAlert
+var _alert: DirtyAlert
+var _stack: AlertStack
 
 
 func _initialize() -> void:
@@ -78,9 +80,10 @@ func _run() -> void:
 	(_main.get_node("BuildMode") as BuildMode).set_tool(BuildMode.Tool.NONE)
 	_clock.set_paused(true)
 	await _frames(2)
-	_card = _hud.find_child("DirtyAlert", true, false) as DirtyAlert
-	if _card == null:
-		_invalid("the HUD has no DirtyAlert")
+	_alert = _hud.dirty_alert()
+	_stack = _hud.find_child("AlertStack", false, false) as AlertStack
+	if _alert == null or _stack == null:
+		_invalid("the HUD has no alert stack")
 	else:
 		await _phase_clean()
 		if not _failed:
@@ -103,10 +106,10 @@ func _phase_clean() -> void:
 	print(
 		(
 			"CLEAN total_dirt=%d shown=%s visible=%s"
-			% [_sim.messes.total_dirt(), _card.is_shown(), _card.visible]
+			% [_sim.messes.total_dirt(), _alert.is_shown(), _card_drawn()]
 		)
 	)
-	if _card.is_shown() or _card.visible:
+	if _alert.is_shown() or _card_drawn():
 		_invalid("the card shows on a clean terminal")
 
 
@@ -129,12 +132,12 @@ func _phase_dirty() -> void:
 				_sim.messes.total_dirt(),
 				DirtyAlert.SHOW_AT,
 				cleaners,
-				_card.is_shown(),
-				_card.card_text()
+				_alert.is_shown(),
+				_alert.card_text()
 			]
 		)
 	)
-	if not _card.is_shown() or _card.card_text() != DirtyAlert.HIRE_TEXT:
+	if not _alert.is_shown() or _alert.card_text() != DirtyAlert.HIRE_TEXT:
 		_invalid("the card does not show the hire text on a dirty terminal")
 		return
 
@@ -143,8 +146,8 @@ func _phase_hired() -> void:
 	_sim.staff.hire(StaffMember.Role.CLEANER)
 	_hud.refresh()
 	await _frames(2)
-	print("HIRED cleaners=1 text=%s" % _card.card_text())
-	if _card.card_text() != DirtyAlert.BINS_TEXT:
+	print("HIRED cleaners=1 text=%s" % _alert.card_text())
+	if _alert.card_text() != DirtyAlert.BINS_TEXT:
 		_invalid("the card does not show the bins text once a cleaner is hired")
 		return
 	await _sizes("bins", DirtyAlert.BINS_TEXT, false)
@@ -169,25 +172,25 @@ func _sizes(tag: String, text: String, sheet: bool) -> void:
 					entry[0],
 					DisplayServer.window_get_size(),
 					root.get_visible_rect().size,
-					_card.card_text() == text
+					_alert.card_text() == text
 				]
 			)
 		)
-		if _card.card_text() != text or not _card.visible:
+		if _alert.card_text() != text or not _card_drawn():
 			_invalid("%s: the card is not up with its text" % entry[0])
 			return
 		await _plate("%s_%s" % [entry[0], tag])
 		if sheet and not _failed:
 			offers.open()
 			await _frames(3)
-			print("SHEET %s open=%s card_visible=%s" % [entry[0], offers.is_open(), _card.visible])
-			if not offers.is_open() or _card.visible:
+			print("SHEET %s open=%s card_visible=%s" % [entry[0], offers.is_open(), _card_drawn()])
+			if not offers.is_open() or _card_drawn():
 				_invalid("%s: the offer sheet is not open over a hidden card" % entry[0])
 				return
 			await _plate("%s_offers_open" % entry[0], false)
 			offers.close()
 			await _frames(3)
-			if not _card.visible:
+			if not _card_drawn():
 				_invalid("%s: the card did not come back when the sheet closed" % entry[0])
 
 
@@ -199,10 +202,10 @@ func _phase_cleaned() -> void:
 	print(
 		(
 			"CLEANED total_dirt=%d shown=%s visible=%s"
-			% [_sim.messes.total_dirt(), _card.is_shown(), _card.visible]
+			% [_sim.messes.total_dirt(), _alert.is_shown(), _card_drawn()]
 		)
 	)
-	if _card.is_shown() or _card.visible:
+	if _alert.is_shown() or _card_drawn():
 		_invalid("the card did not clear itself when the terminal was clean")
 
 
@@ -211,13 +214,14 @@ func _plate(name: String, card_up := true) -> void:
 	if not card_up:
 		await _save_plate(name)
 		return
-	var rect := _card.get_global_rect()
+	var card := _stack.card_node(DirtyAlert.KEY)
+	var rect := card.get_global_rect()
 	var view := root.get_visible_rect()
 	var inside := view.grow(-MARGIN_PX).encloses(rect)
 	print(
 		(
 			"IN_FRAME %s rect=%s viewport=%s card_visible_in_tree=%s inside=%s"
-			% [name, rect, view, _card.is_visible_in_tree(), inside]
+			% [name, rect, view, card.is_visible_in_tree(), inside]
 		)
 	)
 	var crowd := _overlaps(rect)
@@ -225,7 +229,7 @@ func _plate(name: String, card_up := true) -> void:
 	if not crowd.is_empty():
 		_invalid("%s: the card overlaps %s" % [name, crowd])
 		return
-	if not inside or not _card.is_visible_in_tree() or rect.size.x < 100.0:
+	if not inside or not card.is_visible_in_tree() or rect.size.x < 100.0:
 		_invalid("%s: the card is not in frame" % name)
 		return
 	await _save_plate(name)
@@ -241,14 +245,14 @@ func _save_plate(name: String) -> void:
 	print("PLATE saved %s size=%s" % [path, img.get_size()])
 
 
-## The names of the other visible HUD panels, buttons and labels whose rect
-## meets `rect`. Pieces inside another listed piece are not listed again.
+## The names of the visible HUD panels, buttons and labels outside the alert
+## stack whose rect meets `rect`. Pieces inside another listed piece are not listed again.
 func _overlaps(rect: Rect2) -> Array[String]:
 	var view := root.get_visible_rect().size
 	var hits: Array[String] = []
 	for node in _main.find_children("*", "Control", true, false):
 		var c := node as Control
-		if c == _card or _card.is_ancestor_of(c) or not c.is_visible_in_tree():
+		if c == _stack or _stack.is_ancestor_of(c) or not c.is_visible_in_tree():
 			continue
 		if not (c is PanelContainer or c is Button or c is Label):
 			continue
@@ -260,6 +264,12 @@ func _overlaps(rect: Rect2) -> Array[String]:
 		if r.intersects(rect):
 			hits.append("%s%s" % [c.name, r])
 	return hits
+
+
+## True when the dirty card is drawn: the stack is up and holds the card.
+func _card_drawn() -> bool:
+	var card := _stack.card_node(DirtyAlert.KEY)
+	return card != null and card.is_visible_in_tree()
 
 
 ## `count` indoor walkable object-free cells, three apart so no two spills
