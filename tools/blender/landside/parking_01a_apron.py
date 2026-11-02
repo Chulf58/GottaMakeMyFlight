@@ -33,6 +33,8 @@ is left out: it would lie inside the lot's floor slab. Every face takes one UV, 
 middle of the lot's own floor face in the throat, so it is the same asphalt.
 """
 
+import re
+
 import bmesh
 import bpy
 from mathutils import Vector
@@ -103,9 +105,10 @@ def _barriers_match(objs, parent):
     resized barrier must stop the build, not get an apron cut for the old position."""
     for suffix, (hinge_z, box_lo, box_hi) in BARRIERS.items():
         name = "%s_%s" % (MESH_NAME, suffix)
-        found = [o for o in objs if o.name == name]
+        # Blender numbers a duplicate "<name>.001", so the family is the name and its numbered copies.
+        found = [o for o in objs if re.fullmatch(re.escape(name) + r"(\.\d+)?", o.name)]
         if len(found) != 1:
-            raise Fail("expected one %s, found %d" % (name, len(found)))
+            raise Fail("expected one %s, found %d: %s" % (name, len(found), sorted(o.name for o in found)))
         b = found[0]
         if b.type != "MESH" or b.parent is not parent:
             raise Fail("%s is not a mesh child of %s" % (name, MESH_NAME))
