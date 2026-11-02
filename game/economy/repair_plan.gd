@@ -112,6 +112,10 @@ static var max_candidates := MAX_CANDIDATES
 static var max_tries := MAX_TRIES
 static var max_attempts := MAX_ATTEMPTS
 
+## The work every _search() did, a count only the tests read: searches run,
+## source cells seeded, cells settled and neighbour steps priced.
+var work := {"searches": 0, "seeded": 0, "settled": 0, "priced": 0}
+
 ## The edits to apply in order, each priced against the grid as it was when
 ## make() ran. Empty when the path already works.
 var edits: Array[BuildEdit] = []
@@ -207,17 +211,16 @@ static func can_finish(
 ## An edit the copy refuses changes nothing there and is still quoted.
 ## PriceTable.NO_PRICE when an edit has no price.
 ## The copy is only the part of `grid` the plan and what is built cover,
-## PRICE_MARGIN cells wider each way (_cropped()): a quote reads only the cells
-## and edges its edit touches, and a copy of the whole 86x150 site took over
-## 400 ms.
+## PRICE_MARGIN cells wider each way (BuildGrid.cropped()): a quote reads only
+## the cells and edges its edit touches, and a copy of the whole 86x150 site
+## took over 400 ms.
 static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
-	var source := grid.to_snapshot()
-	var area := _built_area(source)
+	var area := _built_area(grid.to_snapshot())
 	for edit in plan_edits:
 		area = _merged(area, edit.cell)
 	area = area.grow(PRICE_MARGIN).intersection(Rect2i(Vector2i.ZERO, grid.size))
-	var standing := BuildGrid.new(area.size, _origin_of(grid.origin, area))
-	if not standing.from_snapshot(_cropped(source, area)):
+	var standing := grid.cropped(area)
+	if standing == null:
 		push_error("RepairPlan: the grid could not be copied to price the plan")
 		return PriceTable.NO_PRICE
 	standing.check_staff_reach = false
@@ -253,31 +256,25 @@ static func least_balance(grid: BuildGrid, plan_edits: Array[BuildEdit]) -> int:
 ## on the whole grid, which is slow but rare, and that search's result stands,
 ## its fallback_price priced on the whole grid when its caps run out.
 static func make(grid: BuildGrid, site: SiteDefinition = null, stand := {}) -> RepairPlan:
-	var source := grid.to_snapshot()
 	var whole := Rect2i(Vector2i.ZERO, grid.size)
 	var land: LandPlots = (grid as SiteGrid).land if grid is SiteGrid else null
 	if site == null:
-		return _made_on(grid, source, whole, null, stand, land)
-	var area := _site_area(grid, source, site, stand)
-	var plan := _made_on(grid, source, area, site, stand, land)
+		return _made_on(grid, whole, null, stand, land)
+	var area := _site_area(grid, grid.to_snapshot(), site, stand)
+	var plan := _made_on(grid, area, site, stand, land)
 	if plan.ok or area == whole:
 		return plan
-	var on_whole := _made_on(grid, source, whole, site, stand, land)
+	var on_whole := _made_on(grid, whole, site, stand, land)
 	on_whole.undo_failures += plan.undo_failures
 	return on_whole
 
 
-## The plan made on `area` of `grid` (whose to_snapshot() is `source`), with
-## its edits in `grid`'s cells. On a site, a plan made on less than the whole
-## grid is partial: one that finds no repair pushes nothing and prices no
-## fallback, since make() goes on to the whole grid.
+## The plan made on `area` of `grid`, with its edits in `grid`'s cells. On a
+## site, a plan made on less than the whole grid is partial: one that finds no
+## repair pushes nothing and prices no fallback, since make() goes on to the
+## whole grid.
 static func _made_on(
-	grid: BuildGrid,
-	source: Dictionary,
-	area: Rect2i,
-	site: SiteDefinition,
-	stand: Dictionary,
-	land: LandPlots = null
+	grid: BuildGrid, area: Rect2i, site: SiteDefinition, stand: Dictionary, land: LandPlots = null
 ) -> RepairPlan:
 	var plan := RepairPlan.new()
 	if land != null:
@@ -289,13 +286,12 @@ static func _made_on(
 	plan._no_floor = plan._unowned.duplicate()
 	if site != null:
 		plan._partial = area != Rect2i(Vector2i.ZERO, grid.size)
-		source = _cropped(source, area)
 		site = _site_within(site, area)
 	plan._site = site
 	plan._layout.site = site
 	plan._layout.stand = stand
-	plan._grid = BuildGrid.new(area.size, _origin_of(grid.origin, area))
-	if not plan._grid.from_snapshot(source):
+	plan._grid = grid.cropped(area)
+	if plan._grid == null:
 		push_error("RepairPlan: the grid could not be copied")
 		return plan
 	plan._start = plan._grid.clone()
@@ -359,55 +355,6 @@ static func _built_area(source: Dictionary) -> Rect2i:
 static func _merged(area: Rect2i, cell: Vector2i) -> Rect2i:
 	var one := Rect2i(cell, Vector2i.ONE)
 	return one if area.size == Vector2i.ZERO else area.merge(one)
-
-
-## A to_snapshot() dictionary holding only `area` of `source`, in `area`'s
-## frame: cell (0, 0) is `area`'s corner. Every object and room must lie
-## inside `area`.
-static func _cropped(source: Dictionary, area: Rect2i) -> Dictionary:
-	var width := int(source["width"])
-	var out := source.duplicate()
-	out["width"] = area.size.x
-	out["height"] = area.size.y
-	var at: Array = source["origin"]
-	out["origin"] = [at[0] + area.position.x, at[1], at[2] + area.position.y]
-	var cells := [area.position.x, area.size.x, area.position.y, area.size.y]
-	var north_south := [area.position.x, area.size.x, area.position.y, area.size.y + 1]
-	var west_east := [area.position.x, area.size.x + 1, area.position.y, area.size.y]
-	for key in ["floor", "zone", "floor_paid"]:
-		out[key] = _rows(source[key], width, cells)
-	for key in ["h_walls", "h_walls_paid"]:
-		out[key] = _rows(source[key], width, north_south)
-	for key in ["v_walls", "v_walls_paid"]:
-		out[key] = _rows(source[key], width + 1, west_east)
-	var objects := []
-	for entry in source["objects"]:
-		var moved: Dictionary = entry.duplicate()
-		moved["anchor"] = [
-			int(entry["anchor"][0]) - area.position.x, int(entry["anchor"][1]) - area.position.y
-		]
-		objects.append(moved)
-	out["objects"] = objects
-	var rooms := []
-	for entry in source["rooms"]:
-		var moved: Dictionary = entry.duplicate()
-		var rect: Array = entry["rect"]
-		moved["rect"] = [
-			int(rect[0]) - area.position.x, int(rect[1]) - area.position.y, rect[2], rect[3]
-		]
-		rooms.append(moved)
-	out["rooms"] = rooms
-	return out
-
-
-## The values of `window` [x, width, y, height] out of `values`, a row-major
-## array `stride` values wide, row by row.
-static func _rows(values: Array, stride: int, window: Array) -> Array:
-	var out := []
-	for y in range(window[2], window[2] + window[3]):
-		var start: int = y * stride + window[0]
-		out.append_array(values.slice(start, start + window[1]))
-	return out
 
 
 ## The world corner of `area`'s cell (0, 0) on a grid whose own is at `origin`.
@@ -1132,6 +1079,8 @@ func _search(sources: Array) -> void:
 			_dist[at] = sources[i]["cost"]
 			_src[at] = i
 			_push(heap, Vector2i(_dist[at], at))
+			work["seeded"] += 1
+	work["searches"] += 1
 	var settled := PackedByteArray()
 	settled.resize(count)
 	while not heap.is_empty():
@@ -1139,13 +1088,21 @@ func _search(sources: Array) -> void:
 		if settled[top.y] == 1 or top.x > _dist[top.y]:
 			continue
 		settled[top.y] = 1
+		work["settled"] += 1
 		var cell := _cell(top.y)
 		_order.append(cell)
 		for step in BuildGrid.SIDE_STEP:
-			var price := _step_price(cell, cell + step)
+			# A settled cell already has its lowest price and no step costs less
+			# than 0, so the step to it (the one this cell came by, at least) is
+			# not priced.
+			var next: Vector2i = cell + step
+			if not _grid.in_bounds(next) or settled[_index(next)] == 1:
+				continue
+			work["priced"] += 1
+			var price := _step_price(cell, next)
 			if price < 0:
 				continue
-			var at := _index(cell + step)
+			var at := _index(next)
 			if top.x + price < _dist[at]:
 				_dist[at] = top.x + price
 				_prev[at] = top.y
