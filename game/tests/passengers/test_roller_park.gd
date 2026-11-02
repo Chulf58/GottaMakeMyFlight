@@ -846,3 +846,53 @@ func test_a_parking_move_keeps_its_home_to_its_end() -> void:
 		var target: Vector3 = plans[0]["targets"][0]
 		assert_bool(xf.is_equal_approx(plans[1]["xf"])).is_true()
 		assert_bool(target.is_equal_approx(plans[1]["targets"][0])).is_true()
+
+
+## A floor>pull stamped for a walker collecting its roller (hold_park()'s
+## "collecting") bends the back first (LAY_HIPS) only until the lift ends
+## (RollerPark.up_ends().x, after the take at TAKE_BY here), and HIPS_ALL from
+## then on; one stamped without it keeps HIPS_ALL throughout. Control: both
+## stoops were seen.
+func test_a_collecting_pick_up_bends_the_back_first_only_to_the_lift_end() -> void:
+	var hand := SecurityLooks.Home.HAND
+	var floor := SecurityLooks.Home.FLOOR
+	var pull := SecurityLooks.Carry.PULL
+	var frame := Transform3D()
+	var lying := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
+	var pulled := CarryOnProps.pulled(Vector3(-0.25, 0.85, 0.05), Vector3(-0.35, 0.03, -0.95), 1.0)
+	var flags := {"to_floor": false, "yaw": 0.0, "hand": 0}
+	for collecting: bool in [true, false]:
+		var bag := _move(_place(floor, 0), pull, _place(hand, 0), pull)
+		bag["collecting"] = collecting
+		CarryLead.stamp_move(bag, false, hand, frame)
+		bag["home"] = bag["place"]
+		assert_bool(bag.get("park_low", false)).is_equal(collecting)
+		var low := 0
+		var all := 0
+		var switched := -1.0
+		for n in 401:
+			var k := n / 400.0
+			var body := {
+				"hand": 0, "bar_z": 0.255, "scale": 1.0, "grips": [Vector3.ZERO, Vector3.ZERO]
+			}
+			var drops: Array = CarryLead.plan(bag, k, lying, pulled, frame, flags, body)["drops"]
+			var lift_end := RollerPark.up_ends(bag).x
+			var want := RollerPark.LAY_HIPS if collecting and k < lift_end else CarryStoop.HIPS_ALL
+			assert_that(drops[0]).is_equal(want)
+			if drops[0] == RollerPark.LAY_HIPS:
+				low += 1
+			else:
+				all += 1
+				if switched < 0.0:
+					switched = k
+		print(
+			"collecting %s: LAY_HIPS %d HIPS_ALL %d from k=%.4f" % [collecting, low, all, switched]
+		)
+		assert_int(all).is_greater(0)
+		if collecting:
+			assert_int(low).is_greater(0)
+			assert_float(switched).is_equal_approx(
+				RollerPark.TAKE_BY + RollerPark.UP_PART, 1.0 / 400.0
+			)
+		else:
+			assert_int(low).is_equal(0)

@@ -11,8 +11,10 @@ extends SceneTree
 ## Plates of the pick-up (floor>pull) that follows, from the roller's side:
 ##   reach: the first frame the hand is within RollerPark.TAKE_M of the lying
 ##     bag's handle; take: the frame the hand took it ("park_took");
-##   k050: the first frame at k 0.5 or later; walk: the first frame the body
-##     is drawn moving.
+##   k050: the first frame at k 0.5 or later; before: one frame before the
+##     lift's end (BEFORE_K); switch: the first at the lift's
+##     end (RollerPark.up_ends().x, the stoop back to HIPS_ALL); walk: the first
+##     frame the body is drawn moving.
 ## Proof before a save: the feet, the head and the bag project inside the frame
 ## by MARGIN_PX, the body is at least MIN_BODY_PX tall, and a twin with the
 ## passenger and its bag hidden differs from the plate by MIN_DIFF_PX pixels
@@ -37,6 +39,9 @@ const MIN_DIFF_PX := 2000
 const CAM_AT := Vector3(-2.9, 1.3, 1.3)
 const LOOK_AT := Vector3(-0.3, 0.8, 0.4)
 const LIMIT_TICKS := 400
+## "before" is the last frame within this much k of the lift's end (one frame at
+## 1x is 1/48), drawn still bending the back first.
+const BEFORE_K := 0.03
 
 var _seed := 0
 var _out_dir := ""
@@ -66,7 +71,7 @@ func _run() -> void:
 	if await _boot():
 		await _collect()
 	print("PROBE done plates=%d failed=%s" % [_saved.size(), _failed])
-	quit(1 if _failed or _saved.size() < 4 else 0)
+	quit(1 if _failed or _saved.size() < 6 else 0)
 
 
 func _boot() -> bool:
@@ -148,7 +153,7 @@ func _collect() -> void:
 	_p.stage_tick = _sim.tick
 	var props := _views.carry_on_props()
 	var gone := false
-	var wants := ["reach", "take", "k050", "walk"]
+	var wants := ["reach", "take", "k050", "before", "switch", "walk"]
 	var last_body := Vector3.INF
 	var limit := _clock.tick + LIMIT_TICKS
 	while _clock.tick < limit and not wants.is_empty():
@@ -183,6 +188,14 @@ func _collect() -> void:
 			shot = "take"
 		elif wants.has("k050") and k >= 0.5:
 			shot = "k050"
+		elif (
+			wants.has("before")
+			and k >= RollerPark.up_ends(bag).x - BEFORE_K
+			and k < RollerPark.up_ends(bag).x
+		):
+			shot = "before"
+		elif wants.has("switch") and k >= RollerPark.up_ends(bag).x:
+			shot = "switch"
 		elif wants.has("walk") and moved > 0.005:
 			shot = "walk"
 		if shot != "":

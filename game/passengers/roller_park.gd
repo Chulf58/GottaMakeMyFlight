@@ -218,7 +218,7 @@ static func lay_frame(bag: Dictionary, frame: Transform3D) -> Transform3D:
 ## held in the body's frame the lying bag swung round with a walker turning to
 ## walk off, 0.7 m in a third of a tick. A floor>pull of a walker standing to
 ## collect its roller ("collecting", hold_park()) is marked "park_low": its
-## stoop bends the back first (LAY_HIPS) for the whole move. With the hips
+## stoop bends the back first (LAY_HIPS) to the lift's end (_low()). With the hips
 ## going back as well, a walker standing (not standing up) stopped with its
 ## grip at 0.274 m over a handle at 0.225 m, and the bag jumped 6.3 cm into
 ## the hand at TAKE_BY.
@@ -361,10 +361,19 @@ static func plan(
 		"drops":
 		(
 			[LAY_HIPS, LAY_HIPS]
-			if (not off_floor and k >= PARK_END) or bag.get("park_low", false)
+			if (not off_floor and k >= PARK_END) or _low(bag, k)
 			else [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
 		),
 	}
+
+
+## Whether a floor>pull of `bag` at `k` bends the back first (LAY_HIPS): marked
+## "park_low" (stamp()) and the hand still taking the bag off the floor or
+## lifting it, to the lift's end (up_ends().x, from the stamp and "park_took").
+## Kept on past it, a walker setting off from the park bent about 90 degrees at
+## the waist on straight legs, its free arm thrown up behind its back.
+static func _low(bag: Dictionary, k: float) -> bool:
+	return bag.get("park_low", false) and k < up_ends(bag).x
 
 
 ## pull>floor at `k` (plan()): [held, xf, anchor, target, weight].
