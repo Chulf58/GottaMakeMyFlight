@@ -19,7 +19,10 @@ extends Node
 ## overlap another gate's; and a removal that would end a gate while a live
 ## flight is at it, or while one of its running contracts fits no other gate.
 ## A removal that ends a gate moves its contracts to the other gates first
-## (FlightSim.move_plan()), when the removal is applied.
+## (FlightSim.move_plan()), when the removal is applied. A desk only ever links
+## to an exit whose stand overlaps no linked gate's (links_on()), so no later
+## edit (an exit placed by a desk with no gate, an exit or desk removed) can
+## make overlapping gates once it is committed.
 ##
 ## FlightSim.gate_source is gate_ids(), so a gate has a stand exactly while it
 ## has a desk and an exit. `changed` fires after every refresh(), which runs on
@@ -100,27 +103,47 @@ func refresh() -> void:
 
 ## The links `on_grid` would have, given `kept`: each of `kept` whose desk and
 ## exit still stand, then a link for every other desk that has an exit to link
-## to, with gate "" (no letter yet). In desk id order.
+## to, with gate "" (no letter yet). In desk id order. A desk never links to an
+## exit whose stand would overlap a stand already linked, so no edit (an exit
+## placed by an unlinked desk, an exit or desk removed) can make overlapping
+## gates after it is committed.
 static func links_on(on_grid: BuildGrid, kept: Array[Dictionary]) -> Array[Dictionary]:
 	var links: Array[Dictionary] = []
 	var taken := {}
 	var linked := {}
+	var stands: Array[Dictionary] = []
 	for binding in kept:
 		if is_desk(on_grid, binding["desk"]) and _is_gate_exit(on_grid, binding["exit"]):
 			links.append(binding.duplicate())
 			taken[binding["exit"]] = true
 			linked[binding["desk"]] = true
+			stands.append(StandPlacement.for_exit(on_grid, binding["exit"]))
 	for desk in desk_ids(on_grid):
 		if linked.has(desk):
 			continue
-		var record := on_grid.get_object(desk)
-		var footprint := BuildCatalog.get_def(DESK).footprint(record["anchor"], record["facing"])
-		var exit := nearest_exit(on_grid, footprint, taken)
+		var exit := nearest_exit(on_grid, desk_footprint(on_grid, desk), taken, stands)
 		if exit != 0:
 			links.append({"gate": "", "desk": desk, "exit": exit})
 			taken[exit] = true
+			stands.append(StandPlacement.for_exit(on_grid, exit))
 	links.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["desk"] < b["desk"])
 	return links
+
+
+## The cells gate desk `desk` stands on.
+static func desk_footprint(on_grid: BuildGrid, desk: int) -> Array[Vector2i]:
+	var record := on_grid.get_object(desk)
+	return BuildCatalog.get_def(DESK).footprint(record["anchor"], record["facing"])
+
+
+## How many cells (diagonals counting one) `footprint` is from exit `exit`'s
+## cell.
+static func reach_cells(on_grid: BuildGrid, footprint: Array[Vector2i], exit: int) -> int:
+	var at: Vector2i = on_grid.get_object(exit)["anchor"]
+	var cells := 1 << 30
+	for cell in footprint:
+		cells = mini(cells, maxi(absi(cell.x - at.x), absi(cell.y - at.y)))
+	return cells
 
 
 static func is_desk(on_grid: BuildGrid, id: int) -> bool:
@@ -139,9 +162,14 @@ static func desk_ids(on_grid: BuildGrid) -> Array[int]:
 
 
 ## The exit door nearest `footprint` (at most LINK_CELLS away, diagonals
-## counting one) whose outside faces north and that is not in `taken`; ties to
-## the lower id. 0 for none.
-static func nearest_exit(on_grid: BuildGrid, footprint: Array[Vector2i], taken: Dictionary) -> int:
+## counting one) whose outside faces north, that is not in `taken` and whose
+## stand overlaps none of `stands`; ties to the lower id. 0 for none.
+static func nearest_exit(
+	on_grid: BuildGrid,
+	footprint: Array[Vector2i],
+	taken: Dictionary,
+	stands: Array[Dictionary] = []
+) -> int:
 	var best := 0
 	var best_cells := LINK_CELLS + 1
 	var ids := on_grid.object_ids()
@@ -149,10 +177,12 @@ static func nearest_exit(on_grid: BuildGrid, footprint: Array[Vector2i], taken: 
 	for id in ids:
 		if taken.has(id) or not _is_gate_exit(on_grid, id):
 			continue
-		var at: Vector2i = on_grid.get_object(id)["anchor"]
-		var cells := best_cells
-		for cell in footprint:
-			cells = mini(cells, maxi(absi(cell.x - at.x), absi(cell.y - at.y)))
+		var cells := reach_cells(on_grid, footprint, id)
+		if cells >= best_cells:
+			continue
+		var stand := StandPlacement.for_exit(on_grid, id)
+		if stands.any(func(other: Dictionary) -> bool: return stands_overlap(stand, other)):
+			continue
 		if cells < best_cells:
 			best = id
 			best_cells = cells
@@ -194,22 +224,27 @@ func edit_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 
 
 func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
-	var def := BuildCatalog.get_def(DESK)
+	var footprint := BuildCatalog.get_def(DESK).footprint(edit.cell, edit.facing)
 	var links := links_on(on_grid, bindings)
 	var taken := {}
+	var stands: Array[Dictionary] = []
 	for link in links:
 		taken[link["exit"]] = true
-	var exit := nearest_exit(on_grid, def.footprint(edit.cell, edit.facing), taken)
-	if exit == 0:
+		stands.append(StandPlacement.for_exit(on_grid, link["exit"]))
+	var reach := nearest_exit(on_grid, footprint, taken)
+	if reach == 0:
 		return BuildResult.refused(BuildResult.Reason.GATE_NO_EXIT)
-	var stand := StandPlacement.for_exit(on_grid, exit)
+	if nearest_exit(on_grid, footprint, taken, stands) != 0:
+		return null
+	# Every exit in reach would overlap a gate's stand: name the nearest's.
+	var stand := StandPlacement.for_exit(on_grid, reach)
 	for link in links:
 		if stands_overlap(stand, StandPlacement.for_exit(on_grid, link["exit"])):
 			var refusal := BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP, link["desk"])
 			if link["gate"] != "":
 				refusal.detail = "gate %s" % link["gate"]
 			return refusal
-	return null
+	return BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP)
 
 
 ## A refusal for removing object `id` from `on_grid`, or null. Only a removal
@@ -282,7 +317,8 @@ func to_snapshot() -> Dictionary:
 ## The bindings a to_snapshot() dictionary holds, checked against `on_grid`:
 ## {"gates": Array[Dictionary]} or {"error": why}. Each gate needs a letter
 ## from LETTERS, a gate desk and a north exit on the grid; letters, desks and
-## exits are each used once.
+## exits are each used once; and the set must be one the links make on the grid
+## (_set_problem()), so a load installs exactly the saved gates.
 static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 	if data.size() != SAVE_KEYS.size() or not data.has_all(SAVE_KEYS):
 		return {"error": "a gates part holds save_version and gates"}
@@ -304,7 +340,32 @@ static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 			used["%s:%s" % [key, binding[key]]] = true
 		out.append(binding)
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["desk"] < b["desk"])
+	var problem := _set_problem(out, on_grid)
+	if problem != "":
+		return {"error": problem}
 	return {"gates": out}
+
+
+## Why `bindings` (each checked alone) are not a set the game could have made on
+## `on_grid`, or "": a desk out of its exit's reach, two gates whose stands
+## overlap, or a desk with no saved gate that refresh() would link (the load
+## would then not be the saved world).
+static func _set_problem(bindings: Array[Dictionary], on_grid: BuildGrid) -> String:
+	for i in bindings.size():
+		var binding := bindings[i]
+		var footprint := desk_footprint(on_grid, binding["desk"])
+		if reach_cells(on_grid, footprint, binding["exit"]) > LINK_CELLS:
+			return "gate %s: its desk is out of its exit's reach" % binding["gate"]
+		var stand := StandPlacement.for_exit(on_grid, binding["exit"])
+		for other in bindings.slice(i + 1):
+			if stands_overlap(stand, StandPlacement.for_exit(on_grid, other["exit"])):
+				return "gates %s and %s have overlapping stands" % [binding["gate"], other["gate"]]
+	for link in links_on(on_grid, bindings):
+		if link["gate"] == "":
+			return (
+				"desk %d has no saved gate but would link to exit %d" % [link["desk"], link["exit"]]
+			)
+	return ""
 
 
 static func _entry_problem(entry: Variant, on_grid: BuildGrid, used: Dictionary) -> String:
@@ -354,4 +415,9 @@ func _on_edit_applied(edit: BuildEdit, _result: BuildResult) -> void:
 		(staying if stands else ending).append(binding["gate"])
 	if ending.is_empty():
 		return
-	flights.move_contracts(flights.move_plan(ending, staying))
+	# _removal_problem() refused any removal whose plan has stuck contracts, so a
+	# failure here is a defect: said loudly, never passed over.
+	var plan := flights.move_plan(ending, staying)
+	if not flights.move_contracts(plan):
+		push_error("GateDesks: the contracts of gates %s could not move: %s" % [ending, plan])
+		assert(false, "GateDesks: a removal that was checked left contracts unmoved")

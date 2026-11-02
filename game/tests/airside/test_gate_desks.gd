@@ -208,6 +208,66 @@ func test_the_links_round_trip_a_snapshot_and_bad_ones_are_refused() -> void:
 	assert_bool(GateDesks.checked(version, _grid).has("error")).is_true()
 
 
+func test_a_saved_set_the_links_would_not_make_is_refused() -> void:
+	assert_bool(_desk(DESK_WEST).ok).is_true()
+	var data := _gates.to_snapshot()
+	# A desk with no saved gate that refresh() would link on load.
+	var missing := data.duplicate(true)
+	(missing["gates"] as Array).clear()
+	# Desks built past the guard (as a hand-made save could hold them): one by
+	# the entrance, out of every exit's reach, and one by a second north exit
+	# whose stand overlaps gate A's.
+	_grid.guard = Callable()
+	var far := _desk(DESK_NOWHERE)
+	var near_exit := _add_exit(EXIT_NEAR)
+	var near := _desk(EXIT_NEAR + Vector2i(0, 3))
+	_grid.guard = _gates.edit_problem
+	assert_bool(far.ok and near.ok).is_true()
+	var out_of_reach := data.duplicate(true)
+	out_of_reach["gates"][0]["desk"] = far.object_id
+	var overlapping := data.duplicate(true)
+	(overlapping["gates"] as Array).append({"gate": "B", "desk": near.object_id, "exit": near_exit})
+	var errors := {}
+	for why: String in ["missing", "out_of_reach", "overlapping"]:
+		var broken: Dictionary = {
+			"missing": missing, "out_of_reach": out_of_reach, "overlapping": overlapping
+		}[why]
+		errors[why] = GateDesks.checked(broken, _grid).get("error", "accepted")
+	print("set checks: %s" % [errors])
+	assert_str(errors["missing"]).contains("no saved gate")
+	assert_str(errors["out_of_reach"]).contains("out of its exit's reach")
+	assert_str(errors["overlapping"]).contains("overlapping stands")
+	# A control: the live set is accepted.
+	assert_bool(GateDesks.checked(data, _grid).has("gates")).is_true()
+
+
+func test_an_exit_built_by_a_desk_with_no_gate_never_links_an_overlapping_gate() -> void:
+	var west := _desk(DESK_WEST)
+	# Its exit goes (no flight is due), so the west desk has no gate.
+	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(EXIT_WEST))).ok).is_true()
+	assert_array(_gates.gate_ids()).is_empty()
+	# A gate by a second north exit, 9 m west.
+	_add_exit(EXIT_NEAR)
+	assert_bool(_desk(EXIT_NEAR + Vector2i(0, 3)).ok).is_true()
+	# The exit comes back within the west desk's reach. Its stand would overlap
+	# the new gate's, so the west desk stays without a gate.
+	var back := _grid.apply(BuildEdit.place_object(&"exit_door", EXIT_WEST, 0))
+	print("exit back: %s; bindings %s" % [back.ok, _gates.bindings])
+	assert_bool(back.ok).is_true()
+	assert_array(_gates.gate_ids()).is_equal(["A"])
+	(
+		assert_bool(
+			_gates.bindings.any(func(b: Dictionary) -> bool: return b["desk"] == west.object_id)
+		)
+		. is_false()
+	)
+	for i in _gates.bindings.size():
+		for j in range(i + 1, _gates.bindings.size()):
+			var a := StandPlacement.for_exit(_grid, _gates.bindings[i]["exit"])
+			var b := StandPlacement.for_exit(_grid, _gates.bindings[j]["exit"])
+			assert_bool(GateDesks.stands_overlap(a, b)).is_false()
+
+
 ## Opens a north exit in the starter shell's wall at `cell`; its id.
 func _add_exit(cell: Vector2i) -> int:
 	assert_bool(_grid.apply(BuildEdit.remove_wall(cell, BuildGrid.Side.NORTH)).ok).is_true()

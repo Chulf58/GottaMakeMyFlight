@@ -122,3 +122,30 @@ func test_a_gate_b_passenger_boards_through_b_onto_bs_plane() -> void:
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 	assert_array(exits.keys()).contains_exactly_in_any_order([_exit_b, "plane"])
 	assert_vector(exits["plane"]).is_equal_approx(Vector2(door.x, door.z), Vector2.ONE * 0.001)
+
+
+## A saved apron walker must have come out of its flight's gate exit: one that
+## names gate A's exit while flying from B is refused on load.
+func test_a_save_with_an_apron_walker_from_another_gates_exit_is_refused() -> void:
+	var p := _world.passenger(_world.sim.spawn_now(FLIGHT_B))
+	var doors := _world.flights.doors_close_tick(FLIGHT_B)
+	while (
+		_world.clock.tick < doors
+		and not (p.stage == Passenger.Stage.APRON and p.apron_mm >= BoardingFiles.GAP_MM)
+	):
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.APRON)
+	var by_id := {p.id: p}
+	var data := _world.sim.to_snapshot()
+	var as_saved := _world.sim.checked_boarding(data, by_id)
+	p.exit_object = _exit_a
+	var other_gate := _world.sim.checked_boarding(data, by_id)
+	p.exit_object = _exit_b
+	print(
+		(
+			"own exit: %s; gate A's exit: %s"
+			% [as_saved.get("error", "ok"), other_gate.get("error", "ok")]
+		)
+	)
+	assert_bool(as_saved.has("error")).is_false()
+	assert_str(other_gate.get("error", "")).contains("not its flight's gate")

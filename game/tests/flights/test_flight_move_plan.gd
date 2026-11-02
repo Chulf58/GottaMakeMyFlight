@@ -71,3 +71,21 @@ func test_a_gate_with_no_contracts_plans_no_moves() -> void:
 	# A control: the same call for A does plan a move.
 	var for_a := _sim.move_plan(["A"] as Array[String], ["B", "C"] as Array[String])
 	assert_dict(for_a["moves"]).is_equal({"X": "B"})
+
+
+func test_a_plan_that_does_not_fit_whole_moves_nothing() -> void:
+	assert_str(_accept("X", 600)).is_equal("A")
+	assert_str(_accept("Y", 660)).is_equal("B")
+	# Both to C: X fits there, then Y overlaps X at C. Checked whole, nothing
+	# moves (it used to move X and then fail halfway).
+	var stale := {"moves": {"X": "C", "Y": "C"}, "stuck": []}
+	assert_bool(_sim.move_contracts(stale)).is_false()
+	var x_gate: String = _sim.contract_of("X")["gate"]
+	var y_gate: String = _sim.contract_of("Y")["gate"]
+	print("after the refused plan: X at %s, Y at %s" % [x_gate, y_gate])
+	assert_str(x_gate).is_equal("A")
+	assert_str(y_gate).is_equal("B")
+	# A control: moves that fit together go through together.
+	assert_bool(_sim.move_contracts({"moves": {"X": "C", "Y": "A"}, "stuck": []})).is_true()
+	assert_str(_sim.contract_of("X")["gate"]).is_equal("C")
+	assert_str(_sim.contract_of("Y")["gate"]).is_equal("A")

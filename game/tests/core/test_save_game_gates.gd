@@ -115,3 +115,29 @@ func test_a_save_whose_gates_or_stands_do_not_match_its_grid_is_refused() -> voi
 	assert_array(_gates.bindings).is_equal(before)
 	# A control: the clean save loads.
 	assert_bool(_save.load_world(clean)).is_true()
+
+
+## A save that leaves gate B out (its binding and its stand) is refused while
+## it is staged, so nothing is installed: the world after the refusal is the
+## world before it. (It used to pass staging; the load then linked desk B
+## again, refused the stands at install and returned false over a world
+## already half loaded.)
+func test_a_save_missing_a_gate_is_refused_whole_and_changes_nothing() -> void:
+	# No contract at B, so only the gates themselves can refuse the save.
+	if _flights.contract_of(STARTER)["gate"] != "A":
+		assert_bool(_flights.reassign_gate(STARTER, "A")).is_true()
+	var data := _taken()
+	var gates: Array = data["gates"]["gates"]
+	var kept := gates.filter(func(entry: Dictionary) -> bool: return entry["gate"] != "B")
+	data["gates"]["gates"] = kept
+	(data["apron"]["stands"] as Dictionary).erase("B")
+	assert_int(kept.size()).is_equal(1)
+	# Moved on from the save, so a part installed from it would show.
+	for i in 5:
+		SaveTestKit.step(_main)
+	var before := SaveTestKit.checksum(_main)
+	assert_bool(_save.load_world(data)).is_false()
+	print("refused: %s" % _save.message_text())
+	assert_str(_save.message_text()).contains("no saved gate")
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	assert_array(_flights.gate_ids()).is_equal(["A", "B"])
