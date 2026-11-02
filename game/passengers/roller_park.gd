@@ -159,16 +159,36 @@ static func held_home(
 	bag: Dictionary, kind: SecurityLooks.Kind, home: SecurityLooks.Home, now: float
 ) -> SecurityLooks.Home:
 	bag.erase("home_held")
-	if kind != SecurityLooks.Kind.ROLLER or bag.get("kind", -1) != kind:
+	if not _parking(bag, kind, now):
 		return home
-	var place: int = bag.get("place", -2)
-	if place < 0 or not bag.get("park", false):
-		return home
-	if now - float(bag.get("since", INF)) >= CarryLead.ticks_of(bag):
-		return home
+	var place: int = bag["place"]
 	if home != place / 4:
 		bag["home_held"] = true
 	return (place / 4) as SecurityLooks.Home
+
+
+## Holds bag `i`'s home and hand in `homes` and `hands` (CarryOnProps.sync()'s,
+## its walker's now) for the park in progress of `bag` (its record, a roller of
+## a bag of `kind` now) at `now`: the home (held_home()) and the hand the park
+## was stamped with. A walker whose chair goes walks off on a new route, and the
+## hand for its way (SecurityLooks.hand_of()) can be the other one: a new place,
+## stamped again as a generic move in the middle of the park.
+static func hold_park(
+	bag: Dictionary, kind: SecurityLooks.Kind, homes: Array, hands: Array, i: int, now: float
+) -> void:
+	homes[i] = held_home(bag, kind, homes[i], now)
+	if _parking(bag, kind, now):
+		hands[i] = CarryLead.hand_of(bag["place"])
+
+
+## Whether `bag` (CarryOnProps' record, of a bag of `kind` now) is in a parking
+## move of a roller at `now` (sim tick), its place stamped.
+static func _parking(bag: Dictionary, kind: SecurityLooks.Kind, now: float) -> bool:
+	if kind != SecurityLooks.Kind.ROLLER or bag.get("kind", -1) != kind:
+		return false
+	if int(bag.get("place", -2)) < 0 or not bag.get("park", false):
+		return false
+	return now - float(bag.get("since", INF)) < CarryLead.ticks_of(bag)
 
 
 ## The frame (world) the floor spot of `bag` (CarryOnProps' record) is laid in:

@@ -499,8 +499,8 @@ func sync() -> void:
 				)
 			):
 				hands[i] = (int(was[i]["place"]) / 2) % 2
-			# A parking roller keeps its home and lift to the park's end; one lying down, its lift.
-			homes[i] = RollerPark.held_home(was[i], kinds[i], homes[i], _tick())
+			# A parking roller keeps home, hand and lift to the park's end; one lying, its lift.
+			RollerPark.hold_park(was[i], kinds[i], homes, hands, i, _tick())
 			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):
 				lifts[i] = int(was[i].get("place", 0)) % 2 == 1
 		held["scale"] = SecurityLooks.bag_scale(p)

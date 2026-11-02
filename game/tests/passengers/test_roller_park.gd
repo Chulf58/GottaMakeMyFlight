@@ -13,8 +13,9 @@ extends GdUnitTestSuite
 
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
-## Ticks a frame: a game at 1x (20 ticks a second at 60 frames) and at 3x.
-const FRAME_TICKS := [1.0 / 3.0, 1.0]
+## Ticks a frame: a game at 1x (20 ticks a second at 60 frames), at 2x and at
+## 3x.
+const FRAME_TICKS := [1.0 / 3.0, 2.0 / 3.0, 1.0]
 ## Between two drawn frames 1/3 of a tick apart the bag and the hand's grip
 ## move less than SNAP_M (a snap to the move's start or end is 0.5 m or
 ## more; the fastest part of a move, the stand, about 0.15 m), and across a
@@ -44,6 +45,10 @@ var _late := false
 var _flipped := false
 var _flip_to_floor := false
 var _resit := false
+## Sitting down, a wall built on the walker's right once its chair has gone and
+## it has a route (_wall_on_its_right()), and what was seen as it went up.
+var _wall_right := false
+var _walled := {}
 
 
 func before() -> void:
@@ -239,6 +244,8 @@ func _roller_walker(seated: bool) -> Passenger:
 	_flipped = false
 	_flip_to_floor = false
 	_resit = false
+	_wall_right = false
+	_walled = {}
 	_world.clock.ticked.connect(_keep_on_time)
 	_views = PassengerViews.new()
 	_views.clock = _world.clock
@@ -270,6 +277,13 @@ func _keep_on_time(_tick_now: int) -> void:
 	if _on_time == null:
 		return
 	_on_time.late = _late
+	if (
+		_wall_right
+		and _walled.is_empty()
+		and _on_time.stage == Passenger.Stage.TO_GATE
+		and _on_time.path.size() >= 2
+	):
+		_wall_on_its_right()
 	if _resit and _on_time.stage == Passenger.Stage.TO_EXIT:
 		# Up from the chair, it sits down at it again on the tick the stand-up
 		# ended, from the chair's front where the stand-up left it, as one whose
@@ -288,14 +302,34 @@ func _keep_on_time(_tick_now: int) -> void:
 		_flipped = true
 
 
-## The chair of the walker sitting down at it removed, as a build edit does:
-## gone from the layout, and the sim's own reconcile (PassengerSim._reconcile())
-## frees the seat and sends the walker on to the gate, standing. Not seat_object
+## The chair of the walker sitting down at it removed by a build edit: the sim
+## rebuilds its layout and on its next tick (PassengerSim._reconcile()) frees
+## the seat and sends the walker on to the gate, standing. Not seat_object
 ## cleared alone: a body left sitting down at no seat is no longer turn-locked
 ## (PassengerViews) and turned round to face its slide into the chair.
 func _seat_goes() -> void:
-	_world.sim.layout.seats.remove_at(0)
-	_world.sim._reconcile()
+	var seat: int = _world.sim.layout.seats[0]["object_id"]
+	assert_bool(_world.sim.grid.apply(BuildEdit.remove_object(seat)).ok).is_true()
+
+
+## Once the walker whose chair went has a route, a wall built on the right of
+## its cell (its right for the way it goes), so the bag's hand for that way
+## (SecurityLooks.hand_of()) is the left. Kept: the tick it went up, whether the
+## park was in progress then, and the hand for the way after it.
+func _wall_on_its_right() -> void:
+	var p := _on_time
+	var at := clampi(p.path_index, 0, p.path.size() - 2)
+	var right := SecurityLooks.world_dir(p.path[at + 1] - p.path[at]).cross(Vector3.UP)
+	var side := BuildGrid.SIDE_STEP.find(Vector2i(roundi(right.x), roundi(right.z)))
+	assert_bool(_world.sim.grid.apply(BuildEdit.place_wall(p.at, side)).ok).is_true()
+	var bag := _views.carry_on_props().bag_state(p.id, 0)
+	var since := float(bag.get("since", -INF))
+	_walled = {
+		"tick": _world.sim.tick,
+		"mid": bag.get("park", false) and _world.sim.tick - since < CarryLead.ticks_of(bag),
+		"hand": SecurityLooks.hand_of(_world.sim, p, 0),
+		"park_hand": CarryLead.hand_of(bag.get("place", 0)),
+	}
 
 
 ## One frame `ticks` sim ticks on, as the game draws them.
@@ -337,6 +371,7 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 	var last_since := -1.0
 	var last_ticks := 0.0
 	var began := -1.0
+	var stamped := -1.0
 	var last_xf := Transform3D()
 	var last_grip := Vector3.INF
 	var last_body := Vector3.INF
@@ -351,6 +386,9 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 		var now := _world.clock.tick + _world.clock.alpha
 		if move == name and began < 0.0:
 			began = now
+			# Timed from the tick it was stamped on: at 2x the first frame drawing it
+			# can be a third of a tick later.
+			stamped = float(props.bag_state(p.id, 0).get("since", now))
 		if began < 0.0:
 			continue
 		if (
@@ -365,7 +403,7 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 		# Over once it is not the move drawn now (at its end, or a move stamped on
 		# its last tick: a late walker's roller lifted into the hand then).
 		if move != name and float(out["ticks"]) < 0.0:
-			out["ticks"] = now - began
+			out["ticks"] = now - stamped
 		var tag := (
 			"%s %.2f ticks/frame k=%.3f now %s body moved %.3f"
 			% [name, ticks, k, move, body.global_position.distance_to(last_body)]
@@ -665,15 +703,27 @@ func test_a_walker_changing_home_mid_park_does_not_jump_standing_up() -> void:
 	await _home_mid_park(false)
 
 
+## A walker sitting down whose chair is removed early in the park, and then has
+## a wall built on its right as it sets off (a new route, SecurityLooks.hand_of()
+## gives its bag the other hand), keeps the park's hand as well as its home to
+## the park's end (RollerPark.hold_park()): the same checks as above. Controls:
+## the wall went up during the park, and the hand for the way changed.
+func test_a_walker_changing_hand_mid_park_does_not_jump() -> void:
+	await _home_mid_park(true, true)
+
+
 ## A walker changing home in a parking move, sitting down (`down`) or standing
-## up, at each part and frame rate (the tests above).
-func _home_mid_park(down: bool) -> void:
+## up, at each part and frame rate (the tests above); with `wall`, the hand
+## changes after it (_wall_on_its_right()), in the lift only.
+func _home_mid_park(down: bool, wall := false) -> void:
 	# Standing up, the home can go back to the floor only once the stand-up has
 	# ended (SecurityLooks: in the hand from UP_LEAD_TICKS before its end): never
 	# in the lift.
-	for part: String in ["lift", "park"] if down else ["seat"]:
+	var parts := ["lift", "park"] if down else ["seat"]
+	for part: String in ["lift"] if wall else parts:
 		for ticks: float in FRAME_TICKS:
 			var p := _roller_walker(not down)
+			_wall_right = wall
 			if down:
 				for n in 4:
 					await _tick(0.5)
@@ -704,6 +754,10 @@ func _home_mid_park(down: bool) -> void:
 				print("  ", line)
 			assert_float(float(seen["flip_k"])).is_greater_equal(0.0)
 			assert_int(int(seen["flips"])).is_greater_equal(1)
+			if wall:
+				print("  wall: %s" % _walled)
+				assert_bool(_walled.get("mid", false)).is_true()
+				assert_int(int(_walled.get("hand", -1))).is_not_equal(_walled.get("park_hand", -1))
 			assert_int(fails.size()).is_equal(0)
 
 
