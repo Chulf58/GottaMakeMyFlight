@@ -96,8 +96,9 @@ static func rows_for_day(flights: FlightSim, day: int) -> Array[Dictionary]:
 	return _rows(flights, day)
 
 
-## {tick, doors, base, line, departed} for each flight leaving on `today`,
-## earliest first; `doors` is the tick its doors close.
+## {tick, doors, base, line, departed, contract, gate} for each flight leaving
+## on `today`, earliest first; `doors` is the tick its doors close, `contract`
+## the contract id ("" for a one-off) and `gate` the gate the flight holds.
 static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	var open := flights.opened_tick >= 0
@@ -113,19 +114,25 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 		var state := flights.state_of(FlightTimetable.occurrence_id(contract_id, today))
 		var title := "%s  %s" % [contract["destination"], contract["airline"]]
 		var doors := FlightTimetable.starts_for(contract, today)[FlightSim.State.DOORS_CLOSED]
-		rows.append(_row(tick, doors, title, state))
+		# An occurrence already issued keeps the gate it was issued at.
+		var gate := flights.flight_gate(FlightTimetable.occurrence_id(contract_id, today))
+		if gate == "":
+			gate = contract["gate"]
+		rows.append(_row(tick, doors, title, state, contract_id, gate))
 	for id in flights.flight_ids():
 		if flights.flight_contract_id(id) != "":
 			continue
 		var tick := flights.state_start(id, FlightSim.State.PUSHBACK)
 		if GameCalendar.day_of(tick) == today:
 			var doors := flights.doors_close_tick(id)
-			rows.append(_row(tick, doors, id, flights.state_of(id)))
+			rows.append(_row(tick, doors, id, flights.state_of(id), "", flights.flight_gate(id)))
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["tick"] < b["tick"])
 	return rows
 
 
-static func _row(tick: int, doors: int, title: String, state: int) -> Dictionary:
+static func _row(
+	tick: int, doors: int, title: String, state: int, contract_id: String, gate: String
+) -> Dictionary:
 	var base := "%s  %s" % [GameCalendar.clock_text(tick), title]
 	var line := base
 	var status: String = (
@@ -141,4 +148,6 @@ static func _row(tick: int, doors: int, title: String, state: int) -> Dictionary
 		"base": base,
 		"line": line,
 		"departed": state == FlightSim.State.DEPARTED,
+		"contract": contract_id,
+		"gate": gate,
 	}
