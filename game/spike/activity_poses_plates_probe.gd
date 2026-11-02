@@ -127,6 +127,9 @@ func _boot(type: StringName) -> bool:
 	_main = (load("res://main/main.tscn") as PackedScene).instantiate()
 	_clock = _main.get_node("SimClock") as SimClock
 	_clock.seed_rng(_seed)
+	# The probe builds its own terminal on an empty grid: the starter shell
+	# main.tscn places on the reference cells would refuse its first wall.
+	(_main.get_node("BuildMode") as BuildMode).starter_shell = false
 	root.add_child(_main)
 	_clock.set_process(false)
 	_clock.set_paused(false)
@@ -138,6 +141,8 @@ func _boot(type: StringName) -> bool:
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	_views = _main.get_node("PassengerViews") as PassengerViews
 	_ids = ActivityTestLayout.build(_mode.grid, type)
+	if not StarterFlight.add_gate_desk(_mode.grid):
+		_invalid("the gate desk was refused")
 	(_mode.get_node("BuildView") as BuildView).refresh(_mode.grid)
 	await _frames(4)
 	_sim.shops.refresh()
@@ -159,7 +164,10 @@ func _boot(type: StringName) -> bool:
 	grey.albedo_color = Color(0.55, 0.55, 0.6)
 	box.material = grey
 	cube.mesh = box
-	cube.position = _mode.grid.cell_to_world(CUBE_CELL) + Vector3(0.0, 0.5, 0.0)
+	cube.position = (
+		_mode.grid.cell_to_world(CUBE_CELL + ReferenceTerminal.offset_on(_mode.grid))
+		+ Vector3(0.0, 0.5, 0.0)
+	)
 	_main.add_child(cube)
 	return true
 
@@ -176,7 +184,7 @@ func _visitor(variant := -1) -> Passenger:
 	p.cleared = true
 	p.stage = Passenger.Stage.TO_GATE
 	p.stage_tick = _clock.tick
-	p.at = ShopTestLayout.AIRSIDE_CELL
+	p.at = ShopTestLayout.AIRSIDE_CELL + ReferenceTerminal.offset_on(_mode.grid)
 	p.clear_path()
 	p.boredom = 80
 	p.shop_cooldown = 0

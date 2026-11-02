@@ -80,6 +80,10 @@ const HINT_W := 560.0
 @export var gate: AirportGate
 ## In a scene the BuildMenu whose Staff button opens the card.
 @export var menu: BuildMenu
+## In a scene the SaveGame: once a load has installed every part the hint is
+## rebuilt from the loaded world (decision loading-a-save-always-comes-back-
+## paused-at-1x-speed-with-hin). Optional.
+@export var save_game: SaveGame
 
 ## How many whole-grid gap scans have run, for the tests.
 var gap_scans := 0
@@ -109,6 +113,8 @@ func _ready() -> void:
 		push_error("StaffPanel: no StaffSim is set")
 		return
 	watch(staff)
+	if save_game != null:
+		save_game.loaded.connect(_on_loaded)
 
 
 ## Follows `with_staff`'s hiring and members going on duty, and its grid's
@@ -224,6 +230,18 @@ func _on_snapshot_loaded() -> void:
 	_scan_gaps()
 	_was_open = gate.is_open()
 	refresh()
+
+
+## The flights part installs before the staff and the gates, so the refresh at
+## its snapshot_loaded saw half a world; this one runs when the load is done.
+func _on_loaded(ok: bool) -> void:
+	if not ok:
+		return
+	if gate != null:
+		_on_snapshot_loaded()
+	else:
+		_scan_gaps()
+		refresh()
 
 
 func _on_flight_state(id: String, new_state: int) -> void:

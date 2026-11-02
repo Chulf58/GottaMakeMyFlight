@@ -22,6 +22,9 @@ const ENTRANCE_CELL := Vector2i(16, 29)
 const EXIT_CELL := Vector2i(16, 0)
 
 var mode: BuildMode
+## Added to every cell: ReferenceTerminal.offset_on(grid) puts the terminal on the
+## land the airport site owns, which the default (none) does not.
+var offset := Vector2i.ZERO
 var applied := 0
 ## One line per refused or empty tool use.
 var refused: Array[String] = []
@@ -29,8 +32,9 @@ var refused: Array[String] = []
 var on_edit := Callable()
 
 
-func _init(with_mode: BuildMode) -> void:
+func _init(with_mode: BuildMode, with_offset := Vector2i.ZERO) -> void:
 	mode = with_mode
+	offset = with_offset
 
 
 func build() -> void:
@@ -78,10 +82,12 @@ func _use(tool: BuildMode.Tool, turns: int) -> void:
 
 
 func _at_cell(cell: Vector2i) -> void:
+	cell += offset
 	_record(mode.apply_at(mode.grid.cell_to_world(cell)), "%s at %s" % [mode.tool, cell])
 
 
 func _at_edge(cell: Vector2i, side: int) -> void:
+	cell += offset
 	var step := BuildGrid.SIDE_STEP[side]
 	var point := mode.grid.cell_to_world(cell) + Vector3(step.x * 0.45, 0.0, step.y * 0.45)
 	_record(mode.apply_at(point), "%s at %s side %d" % [mode.tool, cell, side])

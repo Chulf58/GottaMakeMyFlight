@@ -270,6 +270,12 @@ func load_world(data: Variant) -> bool:
 	# The rescue grant's repair bound, worked out now rather than in a tick.
 	if rescue_grant != null:
 		rescue_grant.prepare()
+	# Speed and pause are not save data (decision loading-a-save-always-comes-
+	# back-paused-at-1x-speed-with-hin): the clock part just installed the
+	# saved ones, and a load always waits for the player. Before the signal, so
+	# listeners see the final clock.
+	clock.set_paused(true)
+	clock.set_speed(1)
 	_say("Loaded", false)
 	loaded.emit(true)
 	return true

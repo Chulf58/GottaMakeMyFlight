@@ -228,6 +228,8 @@ func _run() -> void:
 	_views = _main.get_node("PassengerViews") as PassengerViews
 	_beat("build")
 	var ids := ToiletTestLayout.build(mode.grid, 3)
+	if not StarterFlight.add_gate_desk(mode.grid):
+		_invalid("the gate desk was refused")
 	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
 	await _frames(4)
 	_sim.toilets.refresh()

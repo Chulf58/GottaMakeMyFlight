@@ -20,11 +20,11 @@ const TYPES: Array[StringName] = [&"play_area", &"lounge", &"shower", &"nap_pod"
 ## airside half, and its ids: {"room", "use" (the use piece's object id)}.
 static func build(grid: BuildGrid, type: StringName) -> Dictionary:
 	ShopTestLayout.build(grid, [], 2)
-	var ids := {
-		"room": _apply(grid, BuildEdit.place_room(ShopTestLayout.AIRSIDE_ROOM, type)).room_id
-	}
+	var at := ReferenceTerminal.offset_on(grid)
+	var room := Rect2i(ShopTestLayout.AIRSIDE_ROOM.position + at, ShopTestLayout.AIRSIDE_ROOM.size)
+	var ids := {"room": _apply(grid, BuildEdit.place_room(room, type)).room_id}
 	for piece: Array in PIECES[type]:
-		var placed := _apply(grid, BuildEdit.place_object(piece[0], piece[1], 0)).object_id
+		var placed := _apply(grid, BuildEdit.place_object(piece[0], piece[1] + at, 0)).object_id
 		if not ids.has("use"):
 			ids["use"] = placed
 	return ids
