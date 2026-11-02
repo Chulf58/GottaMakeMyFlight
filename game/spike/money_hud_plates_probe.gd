@@ -26,8 +26,10 @@ const OUT_REL := "res://../tools/blender/out/money_hud"
 const LIMIT_MS := 180000
 const WINDOW := Vector2i(1920, 1080)
 const SCALES := [1.0, 1.25]
-const DRAG_FROM := Vector2i(12, 12)
-const DRAG_TO := Vector2i(15, 14)
+## Beside the starter shell, whose floor is laid (a drag over it costs nothing);
+## moved by _at() to where the site puts the reference layout.
+const DRAG_FROM := Vector2i(2, 2)
+const DRAG_TO := Vector2i(5, 4)
 
 var _out_dir := ""
 var _failed := false
@@ -155,6 +157,8 @@ func _point_at_world() -> void:
 
 
 func _scene_a() -> void:
+	# A new game starts with no tool; the cost line prices the floor tool under the pointer.
+	_mode.set_tool(BuildMode.Tool.FLOOR)
 	await _point_at_world()
 	_expect(
 		_menu.money_label().text == "Money  20000", "a: money text '%s'" % _menu.money_label().text

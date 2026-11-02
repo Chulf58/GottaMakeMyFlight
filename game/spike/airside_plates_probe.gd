@@ -97,6 +97,8 @@ func _run() -> void:
 	# The shell has no gate desk, and a closed gate keeps the airport closed.
 	if not StarterFlight.add_gate_desk((_main.get_node("BuildMode") as BuildMode).grid):
 		_invalid("the gate desk was refused")
+	# The gate's stand is made on the frames after the desk is placed.
+	await _frames(4)
 	var gate := _main.get_node("AirportGate") as AirportGate
 	if not gate.open():
 		_invalid("the airport did not open")
@@ -250,7 +252,10 @@ func _sim() -> FlightSim:
 
 func _follow() -> void:
 	var p: Vector3 = _plane.global_position
-	_rig.position = Vector3(p.x, p.y, p.z)
+	# The focus is on the ground under the plane: a plane still in the air at the first
+	# sample would otherwise lift the focus with it and leave the frame.
+	_rig.position = Vector3(p.x, 0.0, p.z)
+	_rig.bounds_half_extent = 400.0
 	_rig.distance = FOLLOW_DISTANCE
 	_rig.yaw = 0.0
 	_rig.zoom(1.0)
@@ -308,11 +313,12 @@ func _overview() -> void:
 	_beat("overview")
 	# The strip ran the clock to the end of the flight; rewind to mid-boarding through the
 	# sim's own snapshot so the plane stands at the gate.
+	var boarding := _sim().state_start("GMF101-d0", FlightSim.State.BOARDING) + 50
 	var snap := _sim().to_snapshot()
-	snap["tick"] = _t0 + 800
+	snap["tick"] = boarding
 	snap["flights"][0]["state"] = FlightSim.State.BOARDING
 	print("OVERVIEW restore=", _sim().from_snapshot(snap))
-	_clock.tick = _t0 + 800
+	_clock.tick = boarding
 	_plane.update_pose()
 	var airside: Node3D = _main.get_node("Airside")
 	for m in airside.get_children():

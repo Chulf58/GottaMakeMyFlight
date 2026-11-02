@@ -44,6 +44,9 @@ var _probing := false
 var _view_bad := false
 var _main: Node
 var _mode: BuildMode
+## Where the site puts the reference layout; every cell of the hand-built terminal
+## is moved by it.
+var _at := Vector2i.ZERO
 var _sim: PassengerSim
 var _clock: SimClock
 var _flights: FlightSim
@@ -94,6 +97,8 @@ func _initialize() -> void:
 	_clock = _main.get_node("SimClock") as SimClock
 	_clock.seed_rng(_seed)
 	_clock.set_process(false)
+	# The hand-built terminal goes on empty land: the starter shell would hold its cells.
+	(_main.get_node("BuildMode") as BuildMode).starter_shell = false
 	root.add_child(_main)
 	_mode = _main.get_node("BuildMode") as BuildMode
 	_sim = _main.get_node("PassengerSim") as PassengerSim
@@ -158,12 +163,13 @@ func _run() -> void:
 
 
 func _build() -> void:
+	_at = ReferenceTerminal.offset_on(_mode.grid)
 	# The hand-built terminal spends most of the starting budget on floor, so
 	# both variants get the same top-up and a whole lane can be bought.
 	var wallet := (_main.get_node("Finances") as Finances).wallet
 	wallet.credit(TOP_UP, Wallet.Category.OPENING)
 	print("WALLET balance=%d after a top-up of %d" % [wallet.balance, TOP_UP])
-	var builder := HandBuiltTerminal.new(_mode)
+	var builder := HandBuiltTerminal.new(_mode, _at)
 	builder.on_edit = func() -> void: _beat(_stage)
 	builder.build()
 	print(
@@ -175,18 +181,18 @@ func _build() -> void:
 	for line in builder.refused:
 		_invalid("hand-built terminal refused %s" % line)
 	var grid := _mode.grid
-	_remove_object_at(Vector2i(SCANNER_XS[0], DIVIDER_Y - 1))
-	_remove_object_at(Vector2i(SCANNER_XS[1], DIVIDER_Y - 1))
+	_remove_object_at(Vector2i(SCANNER_XS[0], DIVIDER_Y - 1) + _at)
+	_remove_object_at(Vector2i(SCANNER_XS[1], DIVIDER_Y - 1) + _at)
 	if _lane:
 		_must(
 			grid.apply(
-				BuildEdit.remove_wall(Vector2i(ARCH_CELL.x, DIVIDER_Y), BuildGrid.Side.NORTH)
+				BuildEdit.remove_wall(Vector2i(ARCH_CELL.x, DIVIDER_Y) + _at, BuildGrid.Side.NORTH)
 			),
 			"divider gap"
 		)
-		var lane := SecurityLanes.geometry(ARCH_CELL, 0, SecurityLanes.RIGHT)
+		var lane := SecurityLanes.geometry(ARCH_CELL + _at, 0, SecurityLanes.RIGHT)
 		_tool(BuildMode.Tool.ARCH)
-		_use(ARCH_CELL)
+		_use(ARCH_CELL + _at)
 		var tools := {
 			SecurityLanes.TRAY_TABLE: BuildMode.Tool.TRAY_TABLE,
 			SecurityLanes.XRAY_BELT: BuildMode.Tool.XRAY_BELT,
@@ -197,16 +203,23 @@ func _build() -> void:
 			_use(lane[part])
 	else:
 		_tool(BuildMode.Tool.SCANNER)
-		_use(Vector2i(SCANNER_XS[0], DIVIDER_Y - 1))
+		_use(Vector2i(SCANNER_XS[0], DIVIDER_Y - 1) + _at)
 		for x in [SCANNER_XS[1]]:
 			_must(
-				grid.apply(BuildEdit.place_wall(Vector2i(x, DIVIDER_Y), BuildGrid.Side.NORTH)),
+				grid.apply(
+					BuildEdit.place_wall(Vector2i(x, DIVIDER_Y) + _at, BuildGrid.Side.NORTH)
+				),
 				"wall over the removed scanner"
 			)
 	_mode.set_tool(BuildMode.Tool.NONE)
 	# A contract needs a gate desk by the exit (GateDesks).
 	_must(
-		grid.apply(ReferenceTerminal.gate_desk_edit(ReferenceTerminal.offset_on(grid))), "gate desk"
+		grid.apply(
+			BuildEdit.place_object(
+				GateDesks.DESK, HandBuiltTerminal.EXIT_CELL + Vector2i(1, 3) + _at, 0
+			)
+		),
+		"gate desk"
 	)
 	_run_to(_clock.tick + 2)
 	var scanners: Array[int] = _sim.layout.scanners

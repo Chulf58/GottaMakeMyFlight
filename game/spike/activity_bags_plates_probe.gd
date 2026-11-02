@@ -235,7 +235,8 @@ func _shower() -> void:
 	if not await _until(func() -> bool: return p.stage == Passenger.Stage.SHOP_BROWSE):
 		_invalid("shower: the visitor never reached the shower")
 		return
-	await _strip("shower_set_down", p)
+	# The roller still trails well behind the visitor on the first frames.
+	await _strip("shower_set_down", p, 9.0)
 	var washing := func() -> bool: return ActivityPoses.washing(_sim, p) and _spent(p) >= 60
 	if not await _until(washing):
 		_invalid("shower: the visitor never washed")
@@ -312,13 +313,13 @@ func _seek_clips() -> void:
 			player.seek(_clips[id][1] * SimClock.STEP * base, true)
 
 
-## A frozen frame strip of `p` and its bags from a 3/4 camera, every
+## A frozen frame strip of `p` and its bags from a 3/4 camera `back` m out, every
 ## STRIP_STEP ticks. Each frame proves the body and each bag in frame; each bag
 ## must be hit by a sight line in at least half the frames.
-func _strip(file: String, p: Passenger) -> void:
+func _strip(file: String, p: Passenger, back := 3.0) -> void:
 	_beat(file)
 	var frames: Array[Image] = []
-	var cam := _game_cam(_spot(), 3.0)
+	var cam := _game_cam(_spot(), back)
 	var ok := true
 	var seen := {}
 	for i in STRIP_FRAMES:

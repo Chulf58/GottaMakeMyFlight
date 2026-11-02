@@ -27,10 +27,13 @@ static func add_gate_desk(grid: BuildGrid) -> bool:
 	return result.ok
 
 
-## One check-in agent per desk and one security officer per scanner, as the
-## panel's Hire buttons hire them. Returns how many were hired.
+## One check-in agent per desk, one security officer per scanner and one cashier
+## per shop counter, as the panel's Hire buttons hire them. Returns how many were hired.
 static func hire_per_station(sim: PassengerSim, staff: StaffSim) -> int:
 	var hired := 0
+	# A cafe or kiosk counter is closed until a cashier works it.
+	for counter in sim.staff.stations_of(StaffMember.Role.SHOP):
+		hired += int(staff.hire(StaffMember.Role.SHOP) != 0)
 	for desk in sim.layout.desks:
 		hired += int(staff.hire(StaffMember.Role.CHECKIN) != 0)
 	for scanner in sim.layout.scanners:

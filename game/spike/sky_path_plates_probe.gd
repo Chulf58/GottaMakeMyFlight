@@ -144,6 +144,8 @@ func _run() -> void:
 	# The shell has no gate desk, and a closed gate keeps the airport closed.
 	if not StarterFlight.add_gate_desk((_main.get_node("BuildMode") as BuildMode).grid):
 		_invalid("the gate desk was refused")
+	# The gate's stand is made on the frames after the desk is placed.
+	await _frames(4)
 	var gate := _main.get_node("AirportGate") as AirportGate
 	if not gate.open():
 		_invalid("the airport did not open")
@@ -163,6 +165,9 @@ func _run() -> void:
 		_finish()
 		return
 	var starts := _plane.starts_of(_flight)
+	# The fleet hands its views to the gates on frames, and none passed in the day
+	# stepped by hand.
+	(_main.get_node("PlaneFleet") as PlaneFleet).update_views()
 	print("PROBE flight=%s starts=%s tick=%d" % [_flight, starts, _clock.tick])
 	var sun: DirectionalLight3D = _main.get_node("Sun")
 	print(
