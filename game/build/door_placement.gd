@@ -44,9 +44,29 @@ static func back_step(facing: int) -> Vector2i:
 static func check(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var result := grid.validate(edit)
 	if not result.ok:
-		return result
+		return _named_front_blocker(grid, edit, result)
 	var problem := edge_problem(grid, edit)
 	return problem if problem != null else result
+
+
+## A door whose front cell holds an object is refused with DOOR_FRONT_BLOCKED,
+## the blocker's name as the detail (decision door-placement-refusal-names-what-
+## blocks-the-spot-in-front). Any other refusal, and any other piece, is `result`.
+static func _named_front_blocker(
+	grid: BuildGrid, edit: BuildEdit, result: BuildResult
+) -> BuildResult:
+	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or not BuildCatalog.is_door(edit.def_id):
+		return result
+	if result.reason != BuildResult.Reason.INTERACTION_BLOCKED or result.blocking_object_id == 0:
+		return result
+	var blocker := BuildCatalog.get_def(grid.get_object(result.blocking_object_id).get("def", &""))
+	if blocker == null or blocker.display_name == "":
+		return result
+	var named := BuildResult.refused(
+		BuildResult.Reason.DOOR_FRONT_BLOCKED, result.blocking_object_id
+	)
+	named.detail = blocker.display_name.to_lower()
+	return named
 
 
 ## check()'s rules beyond BuildGrid.validate(): the refusal, or null when the
@@ -114,9 +134,19 @@ static func auto_facing(grid: BuildGrid, def_id: StringName, point: Vector3, fal
 
 ## The edits that carry out an edit check() accepted, in order. An entrance or
 ## exit with a plain wall on its back edge first removes that wall, which
-## cannot make the door's own placement invalid. Any other edit is itself.
+## cannot make the door's own placement invalid. Removing an entrance or exit
+## then puts a plain wall back on its back edge (decision removing-an-exit-or-
+## entrance-door-puts-the-plain-wall-back), so the terminal stays enclosed; the
+## wall is bought at its price, like any other. Any other edit is itself.
 static func edits_for(grid: BuildGrid, edit: BuildEdit) -> Array[BuildEdit]:
 	var plan: Array[BuildEdit] = [edit]
+	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
+		var record := grid.get_object(edit.object_id)
+		if not record.is_empty() and BuildCatalog.is_door(record["def"]):
+			var back := BuildGrid.SIDE_STEP.find(back_step(record["facing"]))
+			if grid.wall_kind(record["anchor"], back) == BuildGrid.WallKind.NONE:
+				plan.append(BuildEdit.place_wall(record["anchor"], back))
+		return plan
 	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or not BuildCatalog.is_door(edit.def_id):
 		return plan
 	var side := BuildGrid.SIDE_STEP.find(back_step(edit.facing))

@@ -26,6 +26,9 @@ class Outcome:
 	var removing := false
 	## Money the rectangle took (Floor) or paid back (Remove); 0 without a wallet.
 	var money := 0
+	## True when a Remove rectangle took money on balance (the walls it put
+	## back cost more than the refunds).
+	var charged := false
 	## When the wallet could not pay for the whole rectangle: the tiles it
 	## would have laid and what they cost. Nothing was applied.
 	var unaffordable_tiles := 0
@@ -39,7 +42,10 @@ class Outcome:
 			return "Nothing to remove" if removing else "Nothing to place"
 		var text := "%s %d" % [verb, placed]
 		if money != 0:
-			text += (", refund %d" if removing else " for %d") % money
+			if removing:
+				text += (", cost %d" if charged else ", refund %d") % money
+			else:
+				text += " for %d" % money
 		if skipped > 0:
 			text += ", skipped %d: %s" % [skipped, first_reason]
 		return text
@@ -113,6 +119,7 @@ static func floor_cost(grid: BuildGrid, area: Rect2i) -> int:
 ## where it reaches past the rectangle) and leaves floor, rooms and walls. With
 ## no object in it, it removes the rooms in it (whole), the floor in it and the
 ## walls inside it or on its edge, so a second drag takes what the first left.
+## An entrance or exit it removes gets its plain wall back (_commit_with_walls()).
 ## A cell with no floor counts as unchanged. A piece the rules refuse (the
 ## spot in front of an object left standing, a wall beside a door wall left
 ## standing) is skipped. Each removed piece refunds its share of its saved
@@ -132,11 +139,62 @@ static func clear(grid: BuildGrid, area: Rect2i, wallet: Wallet = null) -> Outco
 	var edits: Array[BuildEdit] = []
 	if objects.is_empty():
 		edits = _structure_edits(grid, area, cells, outcome)
-	else:
-		for object_id in objects:
-			edits.append(BuildEdit.remove_object(object_id))
-	_commit(outcome, grid, edits, wallet)
+		_commit(outcome, grid, edits, wallet)
+		return outcome
+	# An entrance or exit put back its plain wall (DoorPlacement.edits_for(),
+	# decision removing-an-exit-or-entrance-door-puts-the-plain-wall-back).
+	var walls: Array[BuildEdit] = []
+	for object_id in objects:
+		var plan := DoorPlacement.edits_for(grid, BuildEdit.remove_object(object_id))
+		edits.append(plan[0])
+		var wall: BuildEdit = null
+		if plan.size() > 1:
+			wall = plan[1]
+		walls.append(wall)
+	_commit_with_walls(outcome, grid, edits, walls, wallet)
 	return outcome
+
+
+## Removes the objects in `removals`, then puts back each wall in `walls` (the
+## same index, null for none) whose object came out: the wall is placed only
+## after its door is gone, because the grid itself takes a wall on a standing
+## door's way out. The wallet is asked once for the removals and the walls
+## together, so the rectangle is all or nothing on money; the two batches share
+## the one undo step of the caller's action. A wall's own success is not
+## counted as a removal.
+static func _commit_with_walls(
+	outcome: Outcome,
+	grid: BuildGrid,
+	removals: Array[BuildEdit],
+	walls: Array[BuildEdit],
+	wallet: Wallet
+) -> void:
+	var placed_walls: Array[BuildEdit] = []
+	for wall in walls:
+		if wall != null:
+			placed_walls.append(wall)
+	if placed_walls.is_empty():
+		_commit(outcome, grid, removals, wallet)
+		return
+	var everything: Array[BuildEdit] = removals.duplicate()
+	everything.append_array(placed_walls)
+	if not BuildTransaction.check(grid, everything, wallet).ok:
+		_commit(outcome, grid, everything, wallet)
+		return
+	var before := wallet.balance if wallet != null else 0
+	var results := BuildTransaction.commit_batch(grid, removals, wallet)
+	outcome._count(results)
+	var after_doors: Array[BuildEdit] = []
+	for i in removals.size():
+		if results[i].ok and walls[i] != null:
+			after_doors.append(walls[i])
+	if not after_doors.is_empty():
+		for result in BuildTransaction.commit_batch(grid, after_doors, wallet):
+			if not result.ok:
+				outcome._refuse(result)
+	if wallet != null:
+		outcome.money = absi(wallet.balance - before)
+		outcome.charged = wallet.balance < before
 
 
 ## The second pass of clear(), in the order the grid accepts them: the rooms

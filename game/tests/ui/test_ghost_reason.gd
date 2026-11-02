@@ -231,3 +231,37 @@ func test_every_short_reason_is_shorter_than_its_full_text() -> void:
 		var full: String = BuildResult.REASON_TEXT[reason]
 		assert_int(short.length()).override_failure_message(full).is_less(full.length())
 		assert_int(short.length()).override_failure_message(short).is_less_equal(24)
+
+
+## A reason whose status sentence is longer than the card's 24 characters needs
+## its own short form, or the card repeats the status line. The four gate reasons
+## are the ones the card once showed in full.
+func test_every_long_reason_has_a_short_form_that_differs_from_its_sentence() -> void:
+	var long_reasons := 0
+	for reason in BuildResult.REASON_TEXT:
+		var full: String = BuildResult.REASON_TEXT[reason]
+		if full.length() <= 24:
+			continue
+		long_reasons += 1
+		var short := GhostReason.short_text(BuildResult.refused(reason))
+		assert_bool(GhostReason.SHORT_TEXT.has(reason)).override_failure_message(full).is_true()
+		assert_str(short).override_failure_message(full).is_not_equal(full)
+		assert_int(short.length()).override_failure_message(short).is_less_equal(24)
+	# Control: the loop met the long sentences, the gate ones among them.
+	assert_int(long_reasons).is_greater(14)
+	for reason in [
+		BuildResult.Reason.GATE_NO_EXIT,
+		BuildResult.Reason.GATE_STAND_OVERLAP,
+		BuildResult.Reason.GATE_IN_USE,
+		BuildResult.Reason.GATE_FLIGHTS_STUCK,
+	]:
+		assert_bool(GhostReason.SHORT_TEXT.has(reason)).is_true()
+
+
+## The card drops a refusal's detail (the flights or gate it names); the status
+## line keeps it.
+func test_a_short_form_leaves_out_the_refusals_detail() -> void:
+	var result := BuildResult.refused(BuildResult.Reason.GATE_IN_USE)
+	result.detail = "IR204"
+	assert_str(GhostReason.short_text(result)).is_equal("A flight is due here")
+	assert_str(result.reason_text()).contains("IR204")

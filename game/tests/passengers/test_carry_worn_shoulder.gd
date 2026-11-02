@@ -2,8 +2,13 @@ class_name TestCarryWornShoulder
 extends GdUnitTestSuite
 ## CarryWorn.shoulder() stepped through a hand-led floor>shoulder move
 ## (CarryLead.plan()): the worn end keeps the strap bar on the joint, upright
-## and leaning. Pure, no scene. (The rig-level check that runs against main
-## too is TestCarryWornRig.)
+## and leaning; and CarryWorn.stoop_shift() on a bare skeleton. No game scene.
+## (The rig-level check that runs against main too is TestCarryWornRig.)
+
+const _PIVOT := Vector3(0.0, 1.0, 0.0)
+const _SHOULDER := Vector3(0.2, 1.5, 0.1)
+const _AIM := Vector3(0.3, 0.3, 0.6)
+const _DRAWN := 0.8
 
 
 ## A tote picked up off the floor onto the left shoulder (floor>shoulder.L,
@@ -88,3 +93,50 @@ func test_a_tote_put_on_the_shoulder_from_the_floor_is_worn_at_every_k() -> void
 		)
 		assert_float(inner).is_greater_equal(upright_inner - 0.0001)
 	assert_int(worn).is_greater(20)
+
+
+## CarryWorn.stoop_shift() of a stoop of _DRAWN aimed at a point off to the
+## side, the drop's z (a CarryStoop.drops entry) set to `z`. The aim is close
+## enough that the hips' move back changes which way the back turns, so the
+## shift tells the hips' share apart.
+func _shift_at(z: float) -> Vector3:
+	var skeleton := auto_free(Skeleton3D.new()) as Skeleton3D
+	add_child(skeleton)
+	var stoop := CarryStoop.new()
+	skeleton.add_child(stoop)
+	stoop.drawn = _DRAWN
+	stoop.targets = [_AIM]
+	stoop.drops = [Vector3(1.0, 1.0, z)]
+	return CarryWorn.stoop_shift(stoop, _PIVOT, _SHOULDER)
+
+
+## What the shift is when the hips' share of the stoop is `share` (1 all of
+## it, 0 none), worked from CarryStoop.turn() alone.
+func _shift_with_hips(share: float) -> Vector3:
+	var hips := Vector3(0.0, CarryStoop.STOOP_DROP, CarryStoop.HIP_BACK_M) * _DRAWN * share
+	var rel := _SHOULDER - _PIVOT
+	return rel - CarryStoop.turn(_PIVOT + hips, _AIM, _DRAWN).inverse() * rel
+
+
+## stoop_shift() reads the stoop drop's z as a weight of the hips' share (as
+## CarryStoop.solved() blends it), not a flag: z 0 keeps all of the hips' move
+## in the pivot it turns from, z 1 none of it, z 0.5 half. As a flag (hips kept
+## only at z <= 0, before commit 1002473) the 0.5 case came out as z 1.
+func test_the_drops_z_weights_the_hips_share_of_the_shift() -> void:
+	var with_hips := _shift_at(0.0)
+	var without := _shift_at(1.0)
+	var half := _shift_at(0.5)
+	print("z 0 %s, z 0.5 %s, z 1 %s" % [with_hips, half, without])
+	assert_vector(with_hips).is_equal_approx(_shift_with_hips(1.0), Vector3.ONE * 0.0001)
+	assert_vector(without).is_equal_approx(_shift_with_hips(0.0), Vector3.ONE * 0.0001)
+	assert_vector(half).is_equal_approx(_shift_with_hips(0.5), Vector3.ONE * 0.0001)
+	# Control: the two ends differ, and the middle is neither of them.
+	assert_float(with_hips.distance_to(without)).is_greater(0.01)
+	assert_float(half.distance_to(without)).is_greater(0.005)
+	assert_float(half.distance_to(with_hips)).is_greater(0.005)
+
+
+## A z past the ends is held to them, as CarryStoop.solved() clamps it.
+func test_a_drops_z_past_its_ends_is_held_to_them() -> void:
+	assert_vector(_shift_at(2.0)).is_equal_approx(_shift_at(1.0), Vector3.ONE * 0.0001)
+	assert_vector(_shift_at(-1.0)).is_equal_approx(_shift_at(0.0), Vector3.ONE * 0.0001)
