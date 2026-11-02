@@ -116,6 +116,7 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 	assert_str(_save.message_text()).contains("saved on tick")
 
 
+## Version 7 came with the player-built terminal on the airport site,
 ## version 8 with the moving plane stand, version 9 with land plots: a
 ## version 6 save (from the Toon shell), a version 7 one (before the airside
 ## moved north) and a version 8 one (no land) are refused whole, with no
