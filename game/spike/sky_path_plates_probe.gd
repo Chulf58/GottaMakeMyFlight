@@ -39,12 +39,13 @@ const TERMINAL_FLOOR := Rect2(-43.0, -100.0, 86.0, 60.0)
 const SIGHT_SLACK := 1.5
 ## The shadow must darken its ground point by at least this much luminance.
 const SHADOW_DARKENING := 0.05
-## Full zoom-out focus points, inside the camera's bounds.
+## Full zoom-out focus points, inside the camera's bounds (the runway at z = -310 lies
+## past the north edge, so the departure focus sits on the edge, z = -260).
 ## The arrival is seen from the south, as the game starts; the departure from
 ## the east end of the runway looking west (a quarter turn of the camera), so
 ## the climb-out comes toward the viewer clear of the HUD in the top right.
 const FAR_ARRIVAL_FOCUS := Vector3(-260.0, 0.0, -40.0)
-const FAR_DEPARTURE_FOCUS := Vector3(260.0, 0.0, -230.0)
+const FAR_DEPARTURE_FOCUS := Vector3(260.0, 0.0, -260.0)
 const FAR_DEPARTURE_YAW := PI / 2.0
 ## Where the HUD sits in the viewport (1536 x 864), measured on these plates:
 ## money and rating, Offers, the clock panel and result card, Departures, the
@@ -60,6 +61,9 @@ const HUD_BOXES: Array[Rect2] = [
 	# The right edge, where an arrival frame measured 2% HUD cover.
 	Rect2(1380, 0, 156, 864),
 ]
+## Planning keeps the plane this far from every HUD box: the plan is made before the HUD
+## settles the camera's view, which then shifts the plane on screen by a few tens of pixels.
+const PLAN_SLACK_PX := 40.0
 ## Share of the plane's screen box the HUD may cover.
 const HUD_COVER_LIMIT := 0.02
 ## The far silhouette must sit at least this many plane-sizes from the plane on
@@ -512,7 +516,7 @@ func _plan_far(starts: Array[int], kind: String, local_box: AABB) -> Array[int]:
 			continue
 		var pose: Transform3D = at["transform"]
 		var box := _in_frame(_corners(pose * local_box))
-		if pose.origin.y < 10.0 or not box.has_area() or _under_hud(box):
+		if pose.origin.y < 10.0 or not box.has_area() or _under_hud(box.grow(PLAN_SLACK_PX)):
 			continue
 		var ground := _plane.ground_point_of(pose.origin)
 		var gap := _cam.unproject_position(pose.origin).distance_to(_cam.unproject_position(ground))
@@ -523,6 +527,19 @@ func _plan_far(starts: Array[int], kind: String, local_box: AABB) -> Array[int]:
 	return _spread(candidates)
 
 
+## The HUD reacts to the tick (a departure raises the result card) and the camera eases
+## its view to the screen share the panels leave, over real time. Wait until the eye
+## stops moving, or the plane has moved on screen by the time the plate is grabbed.
+func _settle_camera() -> void:
+	var last := Vector3.INF
+	for i in 1200:
+		await process_frame
+		if _cam.global_position.distance_to(last) < 0.001:
+			return
+		last = _cam.global_position
+	_invalid("the camera never settled")
+
+
 func _shoot(tick: int, kind: String) -> Image:
 	_beat("shoot_%s_%d" % [kind, tick])
 	if _use_camera(kind):
@@ -530,6 +547,7 @@ func _shoot(tick: int, kind: String) -> Image:
 		await _frames(60)
 	_draw_at(tick)
 	_plane.update_pose()
+	await _settle_camera()
 	await physics_frame
 	await physics_frame
 	await _frames(2)
@@ -634,8 +652,12 @@ func _prove_airborne(tag: String) -> bool:
 		_invalid("%s: does not read as airborne" % tag)
 		return false
 	# The HUD is drawn over the 3D view; the plane must not sit under it.
+	# Hiding the HUD for the twin gives the camera more room, and it would ease to it
+	# while the twin is grabbed; hold the camera so both plates share one view.
+	_rig.set_process(false)
 	var shown := await _grab()
 	var bare: Image = (await PlateSight.hud_twin(self, _main))["image"]
+	_rig.set_process(true)
 	var scale := Vector2(shown.get_size()) / root.get_visible_rect().size
 	var on_plate := Rect2i(Rect2(box.position * scale, box.size * scale))
 	var covered := PlateSight.differing(shown, bare, on_plate, 2)
