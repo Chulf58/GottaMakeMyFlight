@@ -87,7 +87,11 @@ func test_a_desk_whose_stand_would_overlap_another_gates_is_refused() -> void:
 	var near := _desk(EXIT_NEAR + Vector2i(0, 3))
 	print("overlap: %s" % near.reason_text())
 	assert_int(near.reason).is_equal(BuildResult.Reason.GATE_STAND_OVERLAP)
-	assert_str(near.reason_text()).contains("gate A")
+	assert_str(near.reason_text()).contains("gate A is too close")
+	# The text names the spacing the sweeps need and the fix (board 99678753).
+	var need := StandPlacement.EXIT_SPACING_CELLS
+	assert_str(near.reason_text()).contains("%d m between exits" % need)
+	assert_str(near.reason_text()).contains("Widen the terminal")
 	assert_array(_gates.gate_ids()).is_equal(["A"])
 	# A control: the east desk, 44 m away, is accepted.
 	assert_bool(_desk(DESK_EAST).ok).is_true()
@@ -274,3 +278,25 @@ func _add_exit(cell: Vector2i) -> int:
 	var placed := _grid.apply(BuildEdit.place_object(&"exit_door", cell, 0))
 	assert_bool(placed.ok).is_true()
 	return placed.object_id
+
+
+func test_the_refusal_spacing_is_the_least_whole_gap_that_clears_two_stands() -> void:
+	var need := StandPlacement.EXIT_SPACING_CELLS
+	var base := StandPlacement.make(1, 20.5, 112.0)
+	var apart := StandPlacement.make(2, 20.5 + need, 112.0)
+	var one_short := StandPlacement.make(3, 20.5 + need - 1, 112.0)
+	print(
+		(
+			"spacing %d, overlap at %d: %s, at %d: %s"
+			% [
+				need,
+				need,
+				GateDesks.stands_overlap(base, apart),
+				need - 1,
+				GateDesks.stands_overlap(base, one_short)
+			]
+		)
+	)
+	assert_int(need).is_greater(0)
+	assert_bool(GateDesks.stands_overlap(base, apart)).is_false()
+	assert_bool(GateDesks.stands_overlap(base, one_short)).is_true()
