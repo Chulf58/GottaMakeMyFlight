@@ -38,6 +38,11 @@ var _views: PassengerViews
 var _on_time: Passenger
 ## Made late instead (_route()'s late_in): kept late on every tick from then.
 var _late := false
+## Its home changed in the middle of the move (_route()'s flip_in): the other
+## home kept on every tick from then, with the seat it sat at.
+var _flipped := false
+var _flip_to_floor := false
+var _flip_seat := 0
 
 
 func before() -> void:
@@ -230,6 +235,7 @@ func _roller_walker(seated: bool) -> Passenger:
 	_world.run_to(10)
 	_on_time = null
 	_late = false
+	_flipped = false
 	_world.clock.ticked.connect(_keep_on_time)
 	_views = PassengerViews.new()
 	_views.clock = _world.clock
@@ -258,8 +264,16 @@ func _roller_walker(seated: bool) -> Passenger:
 
 
 func _keep_on_time(_tick_now: int) -> void:
-	if _on_time != null:
-		_on_time.late = _late
+	if _on_time == null:
+		return
+	_on_time.late = _late
+	if not _flipped:
+		return
+	if _flip_to_floor:
+		_on_time.stage = Passenger.Stage.SEATED
+		_on_time.seat_object = _flip_seat
+	else:
+		_on_time.seat_object = 0
 
 
 ## One frame `ticks` sim ticks on, as the game draws them.
@@ -276,7 +290,12 @@ func _tick(ticks: float) -> void:
 ## With `late_in` ("lift" or "park", _late_now()) the walker turns late in
 ## that part of the move ("late_k", "-1" never), and every frame of the parking
 ## move after that must still draw it pulled (a fail line otherwise).
-func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictionary:
+## With `flip_in` (the same parts) the walker's home changes instead, in that
+## part of the move, to the other one (to the hand from the floor, to the floor
+## from the hand): "flip_k" is the k it did, "flips" how many new moves were
+## stamped after it, and the frame of each is checked for a jump of GRASP_M or
+## more (a fail line otherwise). The walker is followed AFTER_TICKS after it.
+func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := "") -> Dictionary:
 	var props := _views.carry_on_props()
 	var out := {
 		"frames": 0,
@@ -287,7 +306,12 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictiona
 		"worst": 0.0,
 		"grasps": 0,
 		"late_k": -1.0,
+		"flip_k": -1.0,
+		"flips": 0,
 	}
+	var flip_at := -1.0
+	var last_since := -1.0
+	var last_ticks := 0.0
 	var began := -1.0
 	var last_xf := Transform3D()
 	var last_grip := Vector3.INF
@@ -304,7 +328,10 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictiona
 			began = now
 		if began < 0.0:
 			continue
-		if now - began > AFTER_TICKS:
+		if (
+			(now - began > AFTER_TICKS and not _flipped)
+			or (_flipped and now - flip_at > AFTER_TICKS)
+		):
 			break
 		var body := _views.node_for(p.id)
 		var node: Node3D = props.props_of(p.id)["bags"][0]
@@ -325,7 +352,28 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictiona
 			out["fails"].append("%s FLOAT %s" % [tag, state])
 		var on := FloatCheck.grip_on_gap(props, p.id, 0, body)
 		var holder: int = bag.get("held_by", -1)
-		var lead := CarryLead.hand_of(bag["home"] if name == "floor>pull" else bag["was"])
+		# The parking move drawn now: the one it began as, else the one a change of
+		# home stamped (if it parks at all).
+		var cur := name
+		if _flipped:
+			cur = (
+				"floor>pull"
+				if bag.get("park", false) and CarryLead.start_of(bag)[0] == CarryLead.End.REST
+				else "pull>floor"
+			)
+		var lead := CarryLead.hand_of(bag["home"] if cur == "floor>pull" else bag["was"])
+		if (
+			flip_in != ""
+			and not _flipped
+			and move == name
+			and _late_now(flip_in, name, k, bag, holder)
+		):
+			_flipped = true
+			_flip_to_floor = name == "floor>pull"
+			_flip_seat = _world.sim.layout.seats[0]["object_id"]
+			flip_at = now
+			out["flip_k"] = k
+			print("%s home changes at k=%.3f holder %d" % [tag, k, holder])
 		if (
 			late_in != ""
 			and not _late
@@ -348,7 +396,7 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictiona
 			out["worst"] = maxf(out["worst"], on[0])
 			if on[0] > on[1]:
 				out["fails"].append("%s GRIP_ON gap %.3f > %.3f" % [tag, on[0], on[1]])
-		elif move != "" and bag.get("park", false) and _in_park(name, k, bag):
+		elif move != "" and bag.get("park", false) and _in_park(cur, k, bag):
 			out["parked"] += 1
 			var rest := FloatCheck.rest_gap(_world.sim, null, node)
 			if rest > FloatCheck.RESTING_M:
@@ -373,12 +421,12 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictiona
 			# The hand against the body (a walker walking off carries it 0.1 m a tick).
 			var reached := (grip - body.global_position).distance_to(last_grip)
 			var grasp := move != "" and holder != last_holder
-			var let_go := grasp and holder < 0 and not _by_park(name, k, bag)
+			var let_go := grasp and holder < 0 and not _by_park(cur, k, bag)
 			var step := (GRASP_M if grasp else SNAP_M) * ticks * 3.0
 			# At 3x a frame holds a tick of the set-down before it: the drop is read
 			# at 1x only.
 			var drop := DROP_M if ticks < 0.5 else SNAP_M * ticks * 3.0
-			if grasp and _by_park(name, k, bag):
+			if grasp and _by_park(cur, k, bag):
 				out["grasps"] += 1
 			if grasp:
 				print(
@@ -387,11 +435,28 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "") -> Dictiona
 						% [tag, last_holder, holder, moved, reached]
 					)
 				)
+			var since := float(bag.get("since", -1.0))
+			if _flipped and since != last_since and out["flip_k"] >= 0.0:
+				out["flips"] += 1
+				# Stamped before the move before it had run its length: a restamp in
+				# the middle of a park (one after its end is the next move, with the
+				# ordinary tail of the hand coming back).
+				var mid := float(_world.clock.tick) - last_since < last_ticks
+				var allowed := GRASP_M * ticks * 3.0
+				if mid and (moved > allowed or reached > allowed):
+					out["fails"].append(
+						(
+							"%s home change: bag moved %.3f grip %.3f > %.3f"
+							% [tag, moved, reached, allowed]
+						)
+					)
 			if moved > (drop if let_go else step):
 				out["fails"].append("%s bag jumped %.3f" % [tag, moved])
 			if reached > (SNAP_M * ticks * 3.0 if let_go else step):
 				out["fails"].append("%s grip jumped %.3f" % [tag, reached])
 		last_xf = node.global_transform
+		last_since = float(bag.get("since", -1.0))
+		last_ticks = CarryLead.ticks_of(bag)
 		last_grip = grip - body.global_position
 		last_holder = holder if move != "" else -2
 		if move != "" and int(out["frames"]) % 3 == 0:
@@ -550,4 +615,59 @@ func _late_mid_park(down: bool) -> void:
 			)
 			var carry := SecurityLooks.Carry.PULL if down else SecurityLooks.Carry.HAND
 			assert_int(bag["carry"]).is_equal(carry)
+			assert_int(fails.size()).is_equal(0)
+
+
+## A walker's home changing in the middle of a parking move (not a lateness
+## flip, which holds the park, RollerPark.holds_lift()): sitting down, it gets
+## up again to the hand (seat_object cleared); standing up, it is seated again
+## on the floor. At each part and frame rate, the stamped move starts from the
+## pose drawn, never a jump of GRASP_M or more in the bag or the grip, and no
+## FLOAT, GRIP_ON or jump after it. Controls: the home changed in that part and
+## a new move was stamped after it.
+func test_a_walker_changing_home_mid_park_does_not_jump_sitting_down() -> void:
+	await _home_mid_park(true)
+
+
+## As above, standing up (floor>pull) and sitting again.
+func test_a_walker_changing_home_mid_park_does_not_jump_standing_up() -> void:
+	await _home_mid_park(false)
+
+
+## A walker changing home in a parking move, sitting down (`down`) or standing
+## up, at each part and frame rate (the tests above).
+func _home_mid_park(down: bool) -> void:
+	for part: String in ["lift", "park"]:
+		for ticks: float in FRAME_TICKS:
+			var p := _roller_walker(not down)
+			if down:
+				for n in 4:
+					await _tick(0.5)
+				var seat: Dictionary = _world.sim.layout.seats[0]
+				p.seat_object = seat["object_id"]
+				p.stage = Passenger.Stage.SITTING_DOWN
+				p.clear_path()
+				p.stage_tick = _world.sim.tick
+			var name := "pull>floor" if down else "floor>pull"
+			var seen := await _route(p, name, ticks, "", part)
+			var fails: Array = seen["fails"]
+			print(
+				(
+					"home change in %s, %s %.2f ticks/frame: at k=%.3f, held %d parked %d new moves %d fails %d"
+					% [
+						part,
+						name,
+						ticks,
+						seen["flip_k"],
+						seen["held"],
+						seen["parked"],
+						seen["flips"],
+						fails.size()
+					]
+				)
+			)
+			for line: String in fails.slice(0, 12):
+				print("  ", line)
+			assert_float(float(seen["flip_k"])).is_greater_equal(0.0)
+			assert_int(int(seen["flips"])).is_greater_equal(1)
 			assert_int(fails.size()).is_equal(0)
