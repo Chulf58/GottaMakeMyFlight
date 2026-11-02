@@ -103,8 +103,9 @@ static func check(grid: BuildGrid, edits: Array[BuildEdit], wallet: Wallet) -> B
 ## the exact settlement of a partly applied plan does not fit, the grid is put
 ## back, the held signals are dropped and that refusal is returned and emitted
 ## the same way. Otherwise returns the last edit's result, or a copy of it with
-## every applied edit's dirty cells when all went through, or the first
-## refusal.
+## every applied edit's dirty cells when all went through (and the object id of
+## the last applied edit that names one, so a door removal that ends in a wall
+## still names the door), or the first refusal.
 static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet) -> BuildResult:
 	var quotes := _quotes(grid, plan, wallet == null)
 	var refusal := _refusal(quotes, wallet)
@@ -115,6 +116,7 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 	var applied: Array[bool] = []
 	var cleared: Array[Vector2i] = []
 	var result: BuildResult = null
+	var object_id := 0
 	var mark := grid.hold_signals()
 	for i in plan.size():
 		plan[i].paid = quotes[i].paid
@@ -122,6 +124,8 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 		if not result.ok:
 			break
 		applied.append(true)
+		if result.object_id != 0:
+			object_id = result.object_id
 		if i < plan.size() - 1:
 			cleared.append_array(result.dirty_cells)
 	var settlement := _settle(wallet, quotes, applied)
@@ -133,7 +137,7 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 	if not result.ok:
 		return result
 	var whole := BuildResult.accepted()
-	whole.object_id = result.object_id
+	whole.object_id = object_id
 	whole.room_id = result.room_id
 	whole.dirty_cells = result.dirty_cells.duplicate()
 	whole.dirty_cells.append_array(cleared)

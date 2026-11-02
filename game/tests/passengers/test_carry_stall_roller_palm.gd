@@ -59,10 +59,30 @@ static func _palm_of(move: Array, k: float, flags: Dictionary, from: Vector3) ->
 	return (plan["targets"][0] as Vector3) - on
 
 
+## The palm curve pinned to literals (not CarryLead's constants): 0.04 m at
+## most, smoothstepped in over t 0 to 0.25 and out over t 0.55 to 0.70. A
+## smoothstep is 0.5 half way, so t 0.125 and 0.625 give half the palm; 0.0625
+## is a quarter of the way in, 0.25 * 0.25 * (3 - 0.5) = 0.15625 of the palm.
+func test_the_palm_curve_is_zero_at_both_ends_full_on_the_plateau_and_eased_between() -> void:
+	var samples := {
+		0.0: 0.0,
+		0.0625: 0.04 * 0.15625,
+		0.125: 0.02,
+		0.25: 0.04,
+		0.4: 0.04,
+		0.5: 0.04,
+		0.55: 0.04,
+		0.625: 0.02,
+		0.7: 0.0,
+		0.85: 0.0,
+		1.0: 0.0,
+	}
+	for t in samples:
+		print("stall_bar_palm(%s) = %s want %s" % [t, CarryLead.stall_bar_palm(t), samples[t]])
+		assert_float(CarryLead.stall_bar_palm(t)).is_equal_approx(samples[t], 0.0001)
+
+
 func test_the_palm_is_over_the_bar_while_it_rises_and_off_at_both_ends() -> void:
-	assert_float(CarryLead.stall_bar_palm(0.0)).is_equal_approx(0.0, 0.0001)
-	assert_float(CarryLead.stall_bar_palm(1.0)).is_equal_approx(0.0, 0.0001)
-	assert_float(CarryLead.stall_bar_palm(0.5)).is_equal_approx(CarryLead.STALL_BAR_PALM_M, 0.0001)
 	var bar := CarryLead.anchor(SecurityLooks.Kind.ROLLER, BAR_Z)
 	var risen := 0
 	for step in 21:
@@ -73,7 +93,7 @@ func test_the_palm_is_over_the_bar_while_it_rises_and_off_at_both_ends() -> void
 		var high := _palm_of(_pick_up(1.2), k, STALL, bar)
 		assert_vector(low).is_equal_approx(want, Vector3.ONE * 0.0001)
 		assert_vector(high).is_equal_approx(want, Vector3.ONE * 0.0001)
-		risen += int(low.y > CarryLead.STALL_BAR_PALM_M * 0.9)
+		risen += int(low.y > 0.04 * 0.9)
 	print("stall roller pick-up: palm near full on %d of 21 steps" % risen)
 	assert_int(risen).is_greater(4)
 
