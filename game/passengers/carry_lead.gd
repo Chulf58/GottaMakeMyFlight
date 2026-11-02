@@ -116,6 +116,17 @@ const FLOOR_PALM_M := 0.065
 ## a slow frame, part way through a stand-up (1.146 m measured; Sol review of
 ## ebe2a76).
 const FLOOR_CASE_END_M := 1.02
+## Picking a roller up off a toilet stall's floor, the grip is held this far
+## (world up) over its bar as it rises standing, coming in over STALL_BAR_IN
+## of the carry and gone over STALL_BAR_OUT as it tips into the carry: held
+## at the bar itself, the straight arm lay across the roller's top behind the
+## hand (stall_float_probe seed 903959512, Forearm.R in the roller at k 0.55,
+## board item f396b087). Gone by 0.7, not 1.0: on with the grip sliding to
+## the carry's BAR_PALM_M, the hand was up to 5.7 cm off the roller at k 0.72
+## (the probe's GRIP limit is 5 cm).
+const STALL_BAR_PALM_M := 0.04
+const STALL_BAR_IN := 0.25
+const STALL_BAR_OUT := Vector2(0.55, 0.7)
 
 
 ## Where a bag of `kind` standing in a stall is held (its own frame, the bag
@@ -135,6 +146,14 @@ static func stall_top(kind: SecurityLooks.Kind, loose: Vector3, scale_by := 1.0)
 ## `t` of its carry off the floor into the hand (FLOOR_PALM_FADE).
 static func floor_palm(t: float) -> float:
 	return FLOOR_PALM_M * (1.0 - smoothstep(FLOOR_PALM_FADE.x, FLOOR_PALM_FADE.y, t))
+
+
+## How far (world metres) the grip is held over a roller's bar at `t` of its
+## carry off a toilet stall's floor into the hand (STALL_BAR_PALM_M): none on
+## the floor and none in the carry.
+static func stall_bar_palm(t: float) -> float:
+	var on := smoothstep(0.0, STALL_BAR_IN, t)
+	return STALL_BAR_PALM_M * on * (1.0 - smoothstep(STALL_BAR_OUT.x, STALL_BAR_OUT.y, t))
 
 
 ## The end of a hard case's lift off the floor into the hand (`want`, held at
@@ -601,7 +620,10 @@ static func plan(
 		)
 	# A hard case off the floor into the hand is held with the palm over its top
 	# (FLOOR_PALM_FADE): the hand and the point the case is placed by both go up.
+	# So is a roller off a stall's floor over its bar (stall_bar_palm()).
 	var palm := floor_palm(t) if floor_case else 0.0
+	if stall and roller and from_end == End.REST and to_end == End.HELD:
+		palm = stall_bar_palm(t)
 	held_at += on_path.basis.inverse() * (Vector3.UP * palm)
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	for hand in 2:
