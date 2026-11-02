@@ -8,19 +8,23 @@ extends RefCounted
 ## departure_minute is the scheduled departure (the start of PUSHBACK) in
 ## minutes past midnight; every other deadline of an occurrence derives from
 ## it by the fixed phase lengths in FlightSim.PHASE_TICKS.
+##
+## The gate is the one field that may change (user ruling gates-are-placed-
+## gate-desks-each-desk-links-automatically-to): it is not a term the airline
+## agreed to. FlightSim gives a contract its gate on accept and
+## FlightSim.reassign_gate replaces the contract with a copy at another gate.
 
-## The terms an offer carries.
+## The terms an offer carries. No gate: FlightSim picks one on accept.
 const TERM_KEYS := [
 	"id",
 	"airline",
 	"destination",
 	"departure_minute",
-	"gate",
 	"plane_size",
 	"booked_passengers",
 	"fee_per_passenger",
 ]
-## A stored contract: the terms plus first_day.
+## A stored contract: the terms plus its gate and first_day.
 const KEYS := [
 	"id",
 	"airline",
@@ -59,7 +63,7 @@ static func problem(data: Variant, keys: Array) -> String:
 	if typeof(id) != TYPE_STRING or _id_pattern.search(id) == null:
 		return "contract id must be letters and digits"
 	for key in TEXT_KEYS:
-		if typeof(data[key]) != TYPE_STRING or data[key] == "":
+		if keys.has(key) and (typeof(data[key]) != TYPE_STRING or data[key] == ""):
 			return "%s must be a non-empty string" % key
 	if not PLANE_SIZES.has(data["plane_size"]):
 		return "plane_size must be one of %s" % [PLANE_SIZES]

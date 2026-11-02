@@ -1,4 +1,4 @@
-[gd_scene load_steps=41 format=3]
+[gd_scene load_steps=42 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -17,6 +17,7 @@
 [ext_resource type="Resource" path="res://build/terminal_site.tres" id="15_site"]
 [ext_resource type="Script" path="res://build/view/gap_markers.gd" id="34_gapmarkers"]
 [ext_resource type="Script" path="res://build/view/buildable_outline.gd" id="41_buildableoutline"]
+[ext_resource type="Script" path="res://ui/mood_overlay.gd" id="42_moodoverlay"]
 [ext_resource type="Script" path="res://economy/finances.gd" id="16_finances"]
 [ext_resource type="Script" path="res://economy/offer_desk.gd" id="17_offerdesk"]
 [ext_resource type="Script" path="res://ui/offer_panel.gd" id="18_offerpanel"]
@@ -112,10 +113,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -310)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -256)
 
 [node name="PushbackEnd" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -144)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -143.9)
 
 [node name="Stand" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -115)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -114.9)
 
 [node name="StandLane" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -256)
@@ -298,6 +299,10 @@ build_mode = NodePath("../BuildMode")
 script = ExtResource("41_buildableoutline")
 build_mode = NodePath("../BuildMode")
 menu = NodePath("../BuildMenu")
+
+[node name="MoodOverlay" type="Node3D" parent="." node_paths=PackedStringArray("sim")]
+script = ExtResource("42_moodoverlay")
+sim = NodePath("../PassengerSim")
 
 [node name="OfferDesk" type="Node" parent="." node_paths=PackedStringArray("clock", "rating", "flights")]
 script = ExtResource("17_offerdesk")
