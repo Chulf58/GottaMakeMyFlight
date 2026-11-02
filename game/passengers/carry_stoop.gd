@@ -42,7 +42,8 @@ var keeps: Array[float] = []
 ## of STOOP_DROP they go down at a full stoop, y times HIP_BACK_M they go
 ## back; with z 1 the back bends first and the hips go down only as far as the
 ## fully bent back still leaves the hand short (a target out of reach up and
-## ahead bends the back only as far as brings the hand nearest). A passenger
+## ahead bends the back only as far as brings the hand nearest), between 0 and
+## 1 the two blended (solved()). A passenger
 ## setting a bag down by a toilet stall's door stoops that way
 ## (CarryLead.STALL_HIPS): the hips dropping with every stoop brought the knees
 ## forward into the bag (board item c7b0e7be).
@@ -85,19 +86,11 @@ func _process_modification_with_delta(_delta: float) -> void:
 			continue
 		var d: Vector3 = drops[i] if i < drops.size() else HIPS_ALL
 		var full := Vector2(STOOP_DROP * d.x, HIP_BACK_M * d.y) / to_world
-		var need := 0.0
-		var hips_need := 0.0
-		if d.z > 0.0:
-			need = needed(shoulder, pivot, aim_at, target, reach, 0.0, 0.0, true)
-			if need >= 1.0:
-				hips_need = hips_needed(shoulder, pivot, aim_at, target, reach, full)
-		else:
-			need = needed(shoulder, pivot, aim_at, target, reach, full.x, full.y)
-			hips_need = need
+		var got := solved(shoulder, pivot, aim_at, target, reach, full, d.z)
 		var w := low * clampf(weights[i], 0.0, 1.0)
-		if need * w > s:
-			s = need * w
-			hips_by = full * hips_need * w
+		if got.x * w > s:
+			s = got.x * w
+			hips_by = full * got.y * w
 	if s <= 0.0:
 		return
 	drawn = s
@@ -114,6 +107,34 @@ func _process_modification_with_delta(_delta: float) -> void:
 	skeleton.set_bone_global_pose(spine, back)
 	for i in LEGS.size():
 		_plant(skeleton, LEGS[i], feet[i])
+
+
+## The stoop (x) and the share of the hips' move `full` (y) that bring
+## `shoulder` within `reach` of `target` (needed(), hips_needed()), the back
+## bent first by `back_first` (a drops entry's z, 0 to 1): at 1 the back bends
+## first and the hips go only as far as that leaves the hand short, at 0 they
+## go with the back, between the two blended. A blend changes the pose
+## smoothly where the plan eases one into the other (RollerPark._low()):
+## switched in one frame, a walker's back came up from about 60 degrees to
+## upright and its head 0.3 m in two frames.
+static func solved(
+	shoulder: Vector3,
+	pivot: Vector3,
+	aim_at: Vector3,
+	target: Vector3,
+	reach: float,
+	full: Vector2,
+	back_first: float
+) -> Vector2:
+	var first := Vector2.ZERO
+	if back_first > 0.0:
+		first.x = needed(shoulder, pivot, aim_at, target, reach, 0.0, 0.0, true)
+		if first.x >= 1.0:
+			first.y = hips_needed(shoulder, pivot, aim_at, target, reach, full)
+		if back_first >= 1.0:
+			return first
+	var with := needed(shoulder, pivot, aim_at, target, reach, full.x, full.y)
+	return Vector2(with, with).lerp(first, clampf(back_first, 0.0, 1.0))
 
 
 ## The turn of the back at stoop `s` (0 to 1), toward `target` from `pivot`

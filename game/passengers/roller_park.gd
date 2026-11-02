@@ -62,6 +62,9 @@ const UP_PARK_AHEAD_M := 0.7
 ## stopped 6 to 9 cm over the handle on the floor ahead, and the bag let go
 ## dropped that far.
 const LAY_HIPS := Vector3(1.0, 0.0, 1.0)
+## A collecting walker's stoop goes from LAY_HIPS to HIPS_ALL over this many
+## ticks from the lift's end (drops_of()).
+const LOW_EASE_TICKS := 3.0
 ## The empty hand goes from the bar to the handle over the bag's top through
 ## this point (own frame, scale 1): over the top end and out past the front
 ## panel (0.2 m), so it comes down onto the handle from outside the shell.
@@ -76,6 +79,14 @@ const OVER_TOP := Vector3(0.0, 0.22, 0.33)
 ## 0.18-0.29 m short, and the bag jumped that far into it.
 const TAKE_M := 0.05
 const UP_PART := 0.19
+## Off the floor, the hand's reach for the lying bag is at full weight this many
+## ticks before REACH_END, and the rods start out this many ticks after the park
+## ends (rods_t()): at 3x (a tick a frame) the frame the hand takes the bag, or
+## takes the bar again, then has the hand already on its grip and the bar where
+## the hand reached for it. Taken on the last step of the reach's weight, the
+## grip of a walker walking off moved 0.18 m in that frame; with the rods running
+## out under the hand taking the bar of a walker sitting down again, 0.22 m.
+const SETTLE_TICKS := 1.0
 ## Lifted off the floor to the park, the bag rises this much midway.
 const LIFT_M := 0.12
 ## Off the floor, the walker moving this far from where it stood as the park
@@ -136,23 +147,104 @@ static func holds_lift(bag: Dictionary, kind: SecurityLooks.Kind, home: int, now
 	return now - float(bag.get("since", INF)) < CarryLead.ticks_of(bag)
 
 
+## The home (SecurityLooks.Home) `bag` (CarryOnProps' record, a roller of a bag
+## of `kind` now) is drawn going to while its walker's home is `home` at `now`
+## (sim tick): the home the parking move in progress goes to, until that move
+## ends ("home_held" on `bag` while that is not `home`, lay_frame()). A walker
+## whose home changes in the middle of a park (its chair removed as it sits
+## down; sitting down again as it stands up) stamped a new generic move there,
+## which started the hand with no weight (the arm dropped to rest) or put the
+## bag on the pull trail from the half-rolled stand: the bag moved up to 0.8 m
+## and the grip up to 0.9 m in one frame. The change waits for the end of the
+## park, as a lateness flip does (holds_lift()); the next move then starts from
+## the bag laid down or in the pull, as a park does.
+static func held_home(
+	bag: Dictionary, kind: SecurityLooks.Kind, home: SecurityLooks.Home, now: float
+) -> SecurityLooks.Home:
+	bag.erase("home_held")
+	if not _parking(bag, kind, now):
+		return home
+	var place: int = bag["place"]
+	if home != place / 4:
+		bag["home_held"] = true
+	return (place / 4) as SecurityLooks.Home
+
+
+## Holds bag `i`'s home and hand in `homes` and `hands` (CarryOnProps.sync()'s,
+## its walker's now) for the park in progress of `bag` (its record, a roller of
+## a bag of `kind` now) at `now`: the home (held_home()) and the hand the park
+## was stamped with. A walker whose chair goes walks off on a new route, and the
+## hand for its way (SecurityLooks.hand_of()) can be the other one: a new place,
+## stamped again as a generic move in the middle of the park. `collecting`:
+## the walker stands collecting its roller after its seat went in the park
+## (ParkRecovery), kept on `bag` ("collecting") for stamp().
+static func hold_park(
+	bag: Dictionary,
+	kind: SecurityLooks.Kind,
+	homes: Array,
+	hands: Array,
+	i: int,
+	now: float,
+	collecting := false
+) -> void:
+	bag["collecting"] = collecting
+	homes[i] = held_home(bag, kind, homes[i], now)
+	if _parking(bag, kind, now):
+		hands[i] = CarryLead.hand_of(bag["place"])
+
+
+## Whether `bag` (CarryOnProps' record, of a bag of `kind` now) is in a parking
+## move of a roller at `now` (sim tick), its place stamped.
+static func _parking(bag: Dictionary, kind: SecurityLooks.Kind, now: float) -> bool:
+	if kind != SecurityLooks.Kind.ROLLER or bag.get("kind", -1) != kind:
+		return false
+	if int(bag.get("place", -2)) < 0 or not bag.get("park", false):
+		return false
+	return now - float(bag.get("since", INF)) < CarryLead.ticks_of(bag)
+
+
+## The frame (world) the floor spot of `bag` (CarryOnProps' record) is laid in:
+## the body's `frame` (yaw only), or while the walker's home is held off the
+## floor for a park to the floor (held_home()) the frame that park is placed in
+## ("park_frame", stamp()), fixed in the world from the move's start. A walker
+## whose chair went as it sat down walks off, turned on the spot in one frame:
+## laid in the body's frame, the bag being laid down swung round with it, 0.73 m
+## in a third of a tick.
+static func lay_frame(bag: Dictionary, frame: Transform3D) -> Transform3D:
+	return bag["park_frame"] if bag.get("home_held", false) else frame
+
+
 ## Stamps a parking move on `bag` (parks()): "park", its length, and
 ## "park_frame", the body's frame (`body`, the frame its "from" is in; yaw only)
 ## the park is placed in; a floor>pull also its reach (CarryLead.reach_of(),
 ## for CarryLead.at_start()) and its start fixed in the world ("from_world"):
 ## held in the body's frame the lying bag swung round with a walker turning to
-## walk off, 0.7 m in a third of a tick.
+## walk off, 0.7 m in a third of a tick. A floor>pull of a walker standing to
+## collect its roller ("collecting", hold_park()) is marked "park_low": its
+## stoop bends the back first (LAY_HIPS) to the lift's end (drops_of()). With the hips
+## going back as well, a walker standing (not standing up) stopped with its
+## grip at 0.274 m over a handle at 0.225 m, and the bag jumped 6.3 cm into
+## the hand at TAKE_BY.
 static func stamp(bag: Dictionary, body: Transform3D) -> void:
 	bag["park"] = true
 	bag["ticks"] = TICKS_DOWN
 	for key in [
-		"park_took", "park_at", "park_cut", "park_last", "park_rel", "lift_last", "park_tip"
+		"park_took",
+		"park_at",
+		"park_cut",
+		"park_last",
+		"park_rel",
+		"lift_last",
+		"park_tip",
+		"park_low",
 	]:
 		bag.erase(key)
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
 		bag["ticks"] = TICKS_UP
 		bag["reach"] = REACH_END
 		bag["from_world"] = body * (bag["from"] as Transform3D)
+		if bag.get("collecting", false):
+			bag["park_low"] = true
 	bag["park_frame"] = _yawed(body)
 
 
@@ -186,7 +278,7 @@ static func park(
 ## their new one at `k`: in while it stands up, out while it tips into the pull.
 static func rods_t(k: float, bag: Dictionary) -> float:
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
-		return smoothstep(up_ends(bag).y, 1.0, k)
+		return smoothstep(up_ends(bag).y + SETTLE_TICKS / TICKS_UP, 1.0, k)
 	return smoothstep(0.0, STAND_END, k)
 
 
@@ -269,13 +361,27 @@ static func plan(
 		"targets": targets,
 		"weights": weights,
 		"keeps": keeps,
-		"drops":
-		(
-			[LAY_HIPS, LAY_HIPS]
-			if not off_floor and k >= PARK_END
-			else [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
-		),
+		"drops": [drops_of(bag, k), drops_of(bag, k)],
 	}
+
+
+## How the stoop of a parking move of `bag` at `k` moves the hips (CarryStoop's
+## drops): LAY_HIPS laying it down; for a floor>pull marked "park_low"
+## (stamp()) LAY_HIPS while the hand takes the bag off the floor and lifts it,
+## eased into HIPS_ALL over LOW_EASE_TICKS from the lift's end (up_ends().x,
+## from the stamp and "park_took"); else HIPS_ALL. Kept on past the lift, a
+## walker setting off from the park bent about 90 degrees at the waist on
+## straight legs, its free arm thrown up behind its back; switched in one
+## frame, its back came up from about 60 degrees and its head 0.3 m in two
+## frames (CarryStoop.solved() blends the two).
+static func drops_of(bag: Dictionary, k: float) -> Vector3:
+	if CarryLead.start_of(bag)[0] != CarryLead.End.REST:
+		return LAY_HIPS if k >= PARK_END else CarryStoop.HIPS_ALL
+	if not bag.get("park_low", false):
+		return CarryStoop.HIPS_ALL
+	var lift_end := up_ends(bag).x
+	var eased := smoothstep(lift_end, lift_end + LOW_EASE_TICKS / TICKS_UP, k)
+	return LAY_HIPS.lerp(CarryStoop.HIPS_ALL, eased)
 
 
 ## pull>floor at `k` (plan()): [held, xf, anchor, target, weight].
@@ -336,7 +442,8 @@ static func _off_floor(
 ) -> Array:
 	var took: float = bag.get("park_took", -1.0)
 	if took < 0.0 or k < took:
-		return [false, start, handle, handle, smoothstep(0.0, 1.0, k / REACH_END)]
+		var reach := smoothstep(0.0, REACH_END - SETTLE_TICKS / TICKS_UP, k)
+		return [false, start, handle, handle, reach]
 	var ends := up_ends(bag)
 	if k < ends.x:
 		var t := (k - took) / (ends.x - took)
