@@ -10,5 +10,5 @@ ground_height = 0.2
 road_z = -57.0
 road_height = 0.1
 starter_offset = Vector2i(0, 110)
-plot_size = 25
+plot_counts = Vector2i(4, 6)
 obstacles = Array[Vector2i]([Vector2i(57, 149)])

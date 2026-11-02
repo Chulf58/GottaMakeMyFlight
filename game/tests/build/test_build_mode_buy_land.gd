@@ -67,7 +67,7 @@ func test_hovering_a_buyable_plot_shows_its_price() -> void:
 	var label := _mode.land_tool.price_label()
 	assert_bool(label.visible).is_true()
 	assert_str(label.text).is_equal("Buy  %d" % price)
-	assert_str(_mode.status_text()).is_equal("Click to buy this 25x25 m plot")
+	assert_str(_mode.status_text()).is_equal("Click to buy this 21x25 m plot")
 	assert_vector(_mode.land_tool.preview_price()).is_equal(Vector2i(price, price))
 	assert_str(_menu.preview_text()).is_equal("Cost %d" % price)
 	assert_int(_menu.call("_card_price", BuildMode.Tool.BUY_LAND)).is_equal(price)
@@ -150,7 +150,7 @@ func test_the_outline_band_turns_round_an_inner_corner_inside_the_land() -> void
 	assert_bool(_mode.apply_at(_middle(Vector2i(2, 5))).ok).is_true()
 	var faces := _outline.strip_mesh().get_faces()
 	var o := SITE.grid_origin
-	var corner := Vector2(o.x + 50.0, o.z + 125.0)
+	var corner := Vector2(o.x + 44.0, o.z + 125.0)
 	var inside_corner := corner + Vector2(-0.1, 0.1)
 	var along_south := corner + Vector2(3.0, 0.1)
 	var along_west := corner + Vector2(-0.1, -3.0)

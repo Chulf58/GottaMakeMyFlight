@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## The land plots in the whole-world save (part "land", LandPlots): the plots
 ## owned and the count bought are saved and come back on a load through JSON,
 ## so the next plot keeps its price; a save whose land does not hold a built
-## cell, or that was cut at another plot size, is refused and the world is left
+## cell, or that was cut into another number of plots, is refused and the world is left
 ## as it was. One boot of main.tscn, with the starter terminal built.
 
 const SEED := 4_401_011
@@ -47,7 +47,7 @@ func test_a_bought_plot_is_saved_and_loaded_with_the_count_bought() -> void:
 	assert_bool(bought.ok).is_true()
 	var data := _taken()
 	assert_array((data["land"] as Dictionary).keys()).contains_exactly_in_any_order(
-		["plot_size", "owned", "bought"]
+		["plot_counts", "owned", "bought"]
 	)
 	assert_int(int(data["land"]["bought"])).is_equal(1)
 	assert_int((data["land"]["owned"] as Array).size()).is_equal(7)
@@ -55,7 +55,7 @@ func test_a_bought_plot_is_saved_and_loaded_with_the_count_bought() -> void:
 	(
 		assert_bool(
 			_land().from_snapshot(
-				{"plot_size": 25, "owned": start.map(func(p): return [p.x, p.y]), "bought": 0}
+				{"plot_counts": [4, 6], "owned": start.map(func(p): return [p.x, p.y]), "bought": 0}
 			)
 		)
 		. is_true()
@@ -85,9 +85,9 @@ func test_a_save_whose_land_misses_a_built_cell_is_refused() -> void:
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
 
 
-func test_a_save_cut_at_another_plot_size_is_refused() -> void:
+func test_a_save_cut_into_another_number_of_plots_is_refused() -> void:
 	var data := _taken()
-	data["land"]["plot_size"] = 20
+	data["land"]["plot_counts"] = [5, 6]
 	var before := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(data)).is_false()
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)

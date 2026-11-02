@@ -1,7 +1,8 @@
 class_name TestLandPlots
 extends GdUnitTestSuite
-## The site's land plots (LandPlots) on the 86x150 airport site cut into 25 m
-## squares: 4 columns (the east one 11 cells wide) by 6 rows. A new game owns
+## The site's land plots (LandPlots) on the 86x150 airport site cut into 4
+## columns of 22, 22, 21 and 21 cells by 6 rows of 25 (ruling land-plots-are-
+## near-even-columns-of-22-22-21-and-21-m-by-25). A new game owns
 ## the starter shell's plots, column 0 rows 4 and 5, plus every plot sharing
 ## an edge or a corner with them (ruling a-new-game-owns-the-land-plots-under-
 ## the-starter-shell-plus): columns 0 and 1, rows 3 to 5. A plot is bought only
@@ -22,14 +23,35 @@ func before_test() -> void:
 	_land.own_start(SITE)
 
 
-func test_the_site_is_cut_into_25_m_squares_with_the_rest_in_the_last_column() -> void:
-	assert_int(SITE.plot_size).is_equal(25)
+func test_the_site_is_cut_into_columns_of_22_22_21_and_21_by_rows_of_25() -> void:
+	assert_that(SITE.plot_counts).is_equal(Vector2i(4, 6))
 	assert_that(_land.plots).is_equal(Vector2i(4, 6))
-	assert_that(_land.plot_cells(Vector2i(0, 0))).is_equal(Rect2i(0, 0, 25, 25))
-	assert_that(_land.plot_cells(Vector2i(2, 5))).is_equal(Rect2i(50, 125, 25, 25))
-	assert_that(_land.plot_cells(Vector2i(3, 5))).is_equal(Rect2i(75, 125, 11, 25))
+	var widths: Array[int] = []
+	for column in 4:
+		widths.append(_land.plot_cells(Vector2i(column, 0)).size.x)
+	assert_array(widths).is_equal([22, 22, 21, 21])
+	assert_that(_land.plot_cells(Vector2i(0, 0))).is_equal(Rect2i(0, 0, 22, 25))
+	assert_that(_land.plot_cells(Vector2i(1, 2))).is_equal(Rect2i(22, 50, 22, 25))
+	assert_that(_land.plot_cells(Vector2i(2, 5))).is_equal(Rect2i(44, 125, 21, 25))
+	assert_that(_land.plot_cells(Vector2i(3, 5))).is_equal(Rect2i(65, 125, 21, 25))
+	assert_that(_land.plot_cells(Vector2i(4, 0))).is_equal(Rect2i())
+
+
+func test_the_24_plots_tile_the_grid_and_every_cell_is_in_the_plot_that_holds_it() -> void:
+	assert_int(_land.plots.x * _land.plots.y).is_equal(24)
+	var covered := 0
+	for y in 6:
+		for x in 4:
+			var cells := _land.plot_cells(Vector2i(x, y))
+			covered += cells.get_area()
+			assert_that(_land.plot_of(cells.position)).is_equal(Vector2i(x, y))
+			assert_that(_land.plot_of(cells.end - Vector2i.ONE)).is_equal(Vector2i(x, y))
+	assert_int(covered).is_equal(86 * 150)
 	assert_that(_land.plot_of(Vector2i(85, 149))).is_equal(Vector2i(3, 5))
+	assert_that(_land.plot_of(Vector2i(21, 24))).is_equal(Vector2i(0, 0))
+	assert_that(_land.plot_of(Vector2i(22, 25))).is_equal(Vector2i(1, 1))
 	assert_that(_land.plot_of(Vector2i(86, 0))).is_equal(Vector2i(-1, -1))
+	assert_that(_land.plot_of(Vector2i(0, -1))).is_equal(Vector2i(-1, -1))
 
 
 func test_a_new_game_owns_the_starter_plots_and_one_ring() -> void:
@@ -134,14 +156,14 @@ func test_building_off_owned_land_is_refused_and_removing_is_not() -> void:
 	assert_object(_land.edit_problem(BuildEdit.remove_floor(unowned))).is_null()
 	assert_object(_land.edit_problem(BuildEdit.remove_wall(unowned, 0))).is_null()
 	# A wall on the edge of owned land stands, named from either side.
-	assert_object(_land.edit_problem(BuildEdit.place_wall(Vector2i(49, 120), 1))).is_null()
-	assert_object(_land.edit_problem(BuildEdit.place_wall(Vector2i(50, 120), 3))).is_null()
+	assert_object(_land.edit_problem(BuildEdit.place_wall(Vector2i(43, 120), 1))).is_null()
+	assert_object(_land.edit_problem(BuildEdit.place_wall(Vector2i(44, 120), 3))).is_null()
 	assert_int(_land.edit_problem(BuildEdit.place_wall(unowned, 0)).reason).is_equal(
 		BuildResult.Reason.LAND_NOT_OWNED
 	)
 	# A room needs every cell owned.
-	var inside := BuildEdit.place_room(Rect2i(40, 120, 10, 3), &"cafe")
-	var across := BuildEdit.place_room(Rect2i(45, 120, 10, 3), &"cafe")
+	var inside := BuildEdit.place_room(Rect2i(30, 120, 10, 3), &"cafe")
+	var across := BuildEdit.place_room(Rect2i(40, 120, 10, 3), &"cafe")
 	assert_object(_land.edit_problem(inside)).is_null()
 	assert_int(_land.edit_problem(across).reason).is_equal(BuildResult.Reason.LAND_NOT_OWNED)
 	# Once bought, the plot takes floor.
@@ -152,13 +174,13 @@ func test_building_off_owned_land_is_refused_and_removing_is_not() -> void:
 func test_an_object_needs_its_whole_footprint_owned() -> void:
 	var def := BuildCatalog.get_def(&"security_scanner")
 	var straddle: BuildEdit = null
-	for x in range(40, 51):
+	for x in range(36, 47):
 		var xs := def.footprint(Vector2i(x, 120), 1).map(func(c: Vector2i) -> int: return c.x)
-		if xs.min() < 50 and xs.max() >= 50:
+		if xs.min() < 44 and xs.max() >= 44:
 			straddle = BuildEdit.place_object(&"security_scanner", Vector2i(x, 120), 1)
 			break
 	assert_object(straddle).is_not_null()
-	print("scanner footprint across x 50 from %s" % straddle.cell)
+	print("scanner footprint across x 44 from %s" % straddle.cell)
 	assert_int(_land.edit_problem(straddle).reason).is_equal(BuildResult.Reason.LAND_NOT_OWNED)
 	var inside := BuildEdit.place_object(&"security_scanner", Vector2i(30, 120), 1)
 	assert_object(_land.edit_problem(inside)).is_null()
@@ -168,28 +190,28 @@ func test_the_outline_runs_round_the_owned_plots() -> void:
 	var o := SITE.grid_origin
 	var start := _land.outline_loops(o)
 	assert_int(start.size()).is_equal(1)
-	assert_that(start[0]).is_equal(_world([[0, 75], [50, 75], [50, 150], [0, 150]]))
+	assert_that(start[0]).is_equal(_world([[0, 75], [44, 75], [44, 150], [0, 150]]))
 	# Buying (2, 5) makes an L: six corners, clockwise from the north-west.
 	assert_bool(_land.buy(Vector2i(2, 5), null).ok).is_true()
 	var grown := _land.outline_loops(o)
 	assert_int(grown.size()).is_equal(1)
 	assert_that(grown[0]).is_equal(
-		_world([[0, 75], [50, 75], [50, 125], [75, 125], [75, 150], [0, 150]])
+		_world([[0, 75], [44, 75], [44, 125], [65, 125], [65, 150], [0, 150]])
 	)
-	# The east column ends at the grid's edge, 11 cells on.
+	# The east column ends at the grid's edge, 21 cells on.
 	assert_bool(_land.buy(Vector2i(3, 5), null).ok).is_true()
 	var east := _land.outline_loops(o)
 	assert_that(east[0][3]).is_equal(Vector2(o.x + 86, o.z + 125))
 
 
 func test_a_hole_of_land_not_owned_gets_its_own_loop_running_the_other_way() -> void:
-	var land := LandPlots.new(Vector2i(30, 30), 10)
+	var land := LandPlots.new(Vector2i(30, 30), Vector2i(3, 3))
 	var ring := []
 	for y in 3:
 		for x in 3:
 			if Vector2i(x, y) != Vector2i(1, 1):
 				ring.append([x, y])
-	assert_bool(land.from_snapshot({"plot_size": 10, "owned": ring, "bought": 0})).is_true()
+	assert_bool(land.from_snapshot({"plot_counts": [3, 3], "owned": ring, "bought": 0})).is_true()
 	var loops := land.outline_loops(Vector3.ZERO)
 	assert_int(loops.size()).is_equal(2)
 	assert_that(loops[0]).is_equal(
@@ -202,9 +224,11 @@ func test_a_hole_of_land_not_owned_gets_its_own_loop_running_the_other_way() -> 
 
 
 func test_plots_meeting_at_a_corner_only_get_one_loop_each() -> void:
-	var land := LandPlots.new(Vector2i(20, 20), 10)
+	var land := LandPlots.new(Vector2i(20, 20), Vector2i(2, 2))
 	(
-		assert_bool(land.from_snapshot({"plot_size": 10, "owned": [[0, 0], [1, 1]], "bought": 0}))
+		assert_bool(
+			land.from_snapshot({"plot_counts": [2, 2], "owned": [[0, 0], [1, 1]], "bought": 0})
+		)
 		. is_true()
 	)
 	var loops := land.outline_loops(Vector3.ZERO)
@@ -219,7 +243,7 @@ func test_plots_meeting_at_a_corner_only_get_one_loop_each() -> void:
 func test_the_snapshot_round_trips_through_json() -> void:
 	assert_bool(_land.buy(Vector2i(2, 4), null).ok).is_true()
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_land.to_snapshot()))
-	assert_array(data.keys()).contains_exactly_in_any_order(["plot_size", "owned", "bought"])
+	assert_array(data.keys()).contains_exactly_in_any_order(["plot_counts", "owned", "bought"])
 	var loaded := LandPlots.for_site(SITE)
 	assert_bool(loaded.from_snapshot(data)).is_true()
 	assert_array(loaded.owned_plots()).is_equal(_land.owned_plots())
@@ -231,7 +255,7 @@ func test_a_broken_snapshot_is_refused() -> void:
 	var good := _land.to_snapshot()
 	assert_str(LandPlots.problem(good, SITE)).is_empty()
 	var other_size := good.duplicate()
-	other_size["plot_size"] = 20
+	other_size["plot_counts"] = [5, 6]
 	var off_site := good.duplicate()
 	off_site["owned"] = [[9, 9]]
 	var negative := good.duplicate()

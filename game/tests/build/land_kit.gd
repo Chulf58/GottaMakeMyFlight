@@ -11,7 +11,7 @@ static func own_all(land: LandPlots) -> void:
 		for x in land.plots.x:
 			owned.append([x, y])
 	var loaded := land.from_snapshot(
-		{"plot_size": land.plot_size, "owned": owned, "bought": land.bought}
+		{"plot_counts": [land.plots.x, land.plots.y], "owned": owned, "bought": land.bought}
 	)
 	assert(loaded, "LandKit.own_all: the land refused its own snapshot")
 

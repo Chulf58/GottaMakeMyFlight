@@ -14,8 +14,8 @@ extends Node3D
 ## is tinted like a build ghost, green when one click buys it and red when
 ## that would be refused, with its price floating over it. Prison Architect
 ## sells land by clicking a neighbouring parcel and Two Point Hospital shows
-## each plot's price on the plot itself (decision land-plots-are-uniform-
-## square-plots-of-about-25x25-m-bought, rationale); here the price shows on
+## each plot's price on the plot itself (decision land-plots-are-near-even-
+## columns-of-22-22-21-and-21-m-by-25, rationale); here the price shows on
 ## the hovered plot, and on BuildMenu's cost line (preview_price()).
 
 ## The fill over a plot the player may buy: the outline's teal, faint.

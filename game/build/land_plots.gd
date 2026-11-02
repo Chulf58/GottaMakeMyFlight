@@ -3,13 +3,14 @@ extends RefCounted
 ## The airport site's land plots and which of them the player owns (decision
 ## player-builds-the-terminal-floor-outer-walls-auto-roof-land-plots-starter-
 ## one-floor, answer 3, and the land-plot rulings of board ee9914e6). The site
-## grid is cut into square plots SiteDefinition.plot_size cells on a side from
-## cell (0, 0); where that does not divide the grid, the last column or row is
-## the part left over. A new game owns every plot the starter shell stands on
+## grid is cut into SiteDefinition.plot_counts plots across and down from cell
+## (0, 0), as evenly as whole cells allow: a width that does not divide gives
+## its extra cells one each to the first columns (ruling land-plots-are-near-
+## even-columns-of-22-22-21-and-21-m-by-25: 22, 22, 21 and 21 on the 86 cell
+## site, six rows of 25 down its 150). A new game owns every plot the starter shell stands on
 ## and every plot that shares an edge or a corner with one (own_start(),
 ## ruling a-new-game-owns-the-land-plots-under-the-starter-shell-plus). The
-## player buys a plot that shares an edge with owned land (ruling land-plots-
-## are-uniform-square-plots-of-about-25x25-m-bought) at the price
+## player buys a plot that shares an edge with owned land at the price
 ## PriceTable.price_of_land_plot() gives for the plots bought so far (ruling
 ## land-plot-price-rises-with-each-plot-bought-from-a-small-tun), paid from the
 ## wallet like building. Bought land is never sold and costs nothing to keep
@@ -30,14 +31,12 @@ const REMOVALS: Array[BuildEdit.Kind] = [
 	BuildEdit.Kind.REMOVE_OBJECT,
 	BuildEdit.Kind.REMOVE_ROOM,
 ]
-const SNAPSHOT_KEYS := ["plot_size", "owned", "bought"]
+const SNAPSHOT_KEYS := ["plot_counts", "owned", "bought"]
 ## The four plots that share an edge with a plot.
 const EDGE_STEPS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)
 ]
 
-## The side of a plot in grid cells.
-var plot_size := 1
 ## The site grid's size in cells.
 var grid_size := Vector2i.ZERO
 ## How many plots there are across (x) and down (y).
@@ -47,19 +46,36 @@ var bought := 0
 
 ## 1 per owned plot, at column + row * plots.x.
 var _owned := PackedByteArray()
+## The first grid cell of each column and row, then the grid's size
+## (plots.x + 1 and plots.y + 1 entries).
+var _column_starts := PackedInt32Array()
+var _row_starts := PackedInt32Array()
 
 
-func _init(site_grid_size := Vector2i.ONE, side := 1) -> void:
+func _init(site_grid_size := Vector2i.ONE, counts := Vector2i.ONE) -> void:
 	grid_size = site_grid_size
-	plot_size = maxi(side, 1)
-	plots = Vector2i(ceili(grid_size.x / float(plot_size)), ceili(grid_size.y / float(plot_size)))
+	plots = counts.clamp(Vector2i.ONE, grid_size.max(Vector2i.ONE))
+	_column_starts = _starts(grid_size.x, plots.x)
+	_row_starts = _starts(grid_size.y, plots.y)
 	_owned.resize(plots.x * plots.y)
 	_owned.fill(0)
 
 
 ## Unowned plots over `site`'s grid.
 static func for_site(site: SiteDefinition) -> LandPlots:
-	return LandPlots.new(site.grid_size, site.plot_size)
+	return LandPlots.new(site.grid_size, site.plot_counts)
+
+
+## Where `count` near-even parts of `length` cells start, then `length`: the
+## first `length % count` parts take one extra cell.
+static func _starts(length: int, count: int) -> PackedInt32Array:
+	@warning_ignore("integer_division")
+	var base := length / count
+	var extra := length % count
+	var out := PackedInt32Array()
+	for i in count + 1:
+		out.append(i * base + mini(i, extra))
+	return out
 
 
 func in_site(plot: Vector2i) -> bool:
@@ -70,14 +86,18 @@ func in_site(plot: Vector2i) -> bool:
 func plot_of(cell: Vector2i) -> Vector2i:
 	if cell.x < 0 or cell.y < 0 or cell.x >= grid_size.x or cell.y >= grid_size.y:
 		return Vector2i(-1, -1)
-	@warning_ignore("integer_division")
-	return Vector2i(cell.x / plot_size, cell.y / plot_size)
+	return Vector2i(
+		_column_starts.bsearch(cell.x, false) - 1, _row_starts.bsearch(cell.y, false) - 1
+	)
 
 
-## The grid cells of a plot, cut at the grid's edge.
+## The grid cells of a plot (empty for a plot off the site).
 func plot_cells(plot: Vector2i) -> Rect2i:
-	var area := Rect2i(plot * plot_size, Vector2i(plot_size, plot_size))
-	return area.intersection(Rect2i(Vector2i.ZERO, grid_size))
+	if not in_site(plot):
+		return Rect2i()
+	var start := Vector2i(_column_starts[plot.x], _row_starts[plot.y])
+	var end := Vector2i(_column_starts[plot.x + 1], _row_starts[plot.y + 1])
+	return Rect2i(start, end - start)
 
 
 func is_owned(plot: Vector2i) -> bool:
@@ -249,7 +269,7 @@ func outline_loops(origin: Vector3) -> Array[PackedVector2Array]:
 		var corners := _trace(leaving, first)
 		var points := PackedVector2Array()
 		for corner in corners:
-			var cell := (corner * plot_size).min(grid_size)
+			var cell := Vector2i(_column_starts[corner.x], _row_starts[corner.y])
 			points.append(Vector2(origin.x + cell.x, origin.z + cell.y))
 		loops.append(points)
 	return loops
@@ -289,13 +309,14 @@ func _trace(leaving: Dictionary, first: Vector2i) -> Array[Vector2i]:
 	return corners
 
 
-## JSON-safe state for a save: the plot size it was cut at, the owned plots
-## as [column, row] pairs row by row, and how many were bought.
+## JSON-safe state for a save: the plot counts it was cut into ([across,
+## down]), the owned plots as [column, row] pairs row by row, and how many
+## were bought.
 func to_snapshot() -> Dictionary:
 	var owned := []
 	for plot in owned_plots():
 		owned.append([plot.x, plot.y])
-	return {"plot_size": plot_size, "owned": owned, "bought": bought}
+	return {"plot_counts": [plots.x, plots.y], "owned": owned, "bought": bought}
 
 
 ## Why a to_snapshot() dictionary cannot be loaded on `site`, or "".
@@ -311,11 +332,21 @@ func snapshot_problem(data: Dictionary) -> String:
 	for key in data.keys():
 		if not SNAPSHOT_KEYS.has(key):
 			return "unknown key '%s'" % key
-	if not WholeNumber.is_whole(data["plot_size"]) or int(data["plot_size"]) != plot_size:
-		return "the land was cut into plots of another size than the site's"
+	if not _counts_match(data["plot_counts"]):
+		return "the land was cut into another number of plots than the site's"
 	if not WholeNumber.is_whole(data["bought"]) or int(data["bought"]) < 0:
 		return "'bought' must be a whole number from 0"
 	return _owned_problem(data["owned"])
+
+
+## Whether a snapshot's "plot_counts" value is this site's [across, down].
+func _counts_match(counts: Variant) -> bool:
+	if typeof(counts) != TYPE_ARRAY or counts.size() != 2:
+		return false
+	for i in 2:
+		if not WholeNumber.is_whole(counts[i]) or int(counts[i]) != plots[i]:
+			return false
+	return true
 
 
 ## Why a snapshot's "owned" value is not a list of [column, row] pairs on the
@@ -355,7 +386,7 @@ static func grid_problem(data: Dictionary, site: SiteDefinition, grid: BuildGrid
 
 ## Loads a to_snapshot() dictionary (one through JSON too), replacing what is
 ## owned and bought. Pushes an error and returns false, changing nothing, when
-## it is malformed or was saved for another plot size or grid.
+## it is malformed or was saved for another plot layout or grid.
 func from_snapshot(data: Dictionary) -> bool:
 	var why := snapshot_problem(data)
 	if why != "":

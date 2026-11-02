@@ -3,8 +3,8 @@ extends GdUnitTestSuite
 ## RepairPlan on a site grid (SiteGrid) with land plots keeps its repair on
 ## the land the player owns: no floor, piece or door on a cell of a plot not
 ## owned, because the live grid would refuse each one (LandPlots). A 30x12 grid
-## cut into 10-cell plots, of which only the east column (x 20 to 29) is owned,
-## holds a walled hall two cells wide on the west edge of that land (x 20 and
+## cut into 3 columns of 10 cells by 2 rows of 6, of which only the east column
+## (x 20 to 29) is owned, holds a walled hall two cells wide on the west edge of that land (x 20 and
 ## 21, y 2 to 9) with an entrance and an exit and nothing else, so the repair
 ## must lay floor to fit a desk and a scanner. The same grid with no land
 ## plots plans its repair further west, which shows the land changed the plan.
@@ -19,7 +19,7 @@ func before() -> void:
 	_site = SiteDefinition.new()
 	_site.grid_size = Vector2i(30, 12)
 	_site.grid_origin = Vector3.ZERO
-	_site.plot_size = 10
+	_site.plot_counts = Vector2i(3, 2)
 	_site.obstacles = [] as Array[Vector2i]
 
 
@@ -35,7 +35,7 @@ func _grid(with_land: bool) -> SiteGrid:
 		var land := LandPlots.for_site(_site)
 		(
 			assert_bool(
-				land.from_snapshot({"plot_size": 10, "owned": [[2, 0], [2, 1]], "bought": 0})
+				land.from_snapshot({"plot_counts": [3, 2], "owned": [[2, 0], [2, 1]], "bought": 0})
 			)
 			. is_true()
 		)

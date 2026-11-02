@@ -242,7 +242,7 @@ const ITEMS := {
 	BuildMode.Tool.SURFACE_LOT: ["Surface lot", "surface_lot", "32x24 m"],
 	BuildMode.Tool.MULTI_STOREY: ["Multi-storey", "multi_storey", "24x52 m"],
 	BuildMode.Tool.LOT_GATE: ["Open / close", "lot_gate", "A car park"],
-	BuildMode.Tool.BUY_LAND: ["Buy land", "buy_land", "25x25 m plot"],
+	BuildMode.Tool.BUY_LAND: ["Buy land", "buy_land", "about 21x25 m plot"],
 }
 ## The Lane tray's cards, as ITEMS (item() looks in both).
 const LANE_ITEMS := {
