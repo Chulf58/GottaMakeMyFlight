@@ -147,9 +147,11 @@ func unlinked() -> Dictionary:
 
 ## Desk id -> {"why": Unlinked, "gate": the gate letter the reason names, or
 ## ""}, for every gate desk on `on_grid` that `links` gives no gate. EXIT_TAKEN
-## names the gate holding the nearest exit in reach; STAND_OVERLAP names the
-## first gate whose stand overlaps the nearest free exit's. Exits are taken
-## nearest first, ties to the lower id, as nearest_exit() takes them.
+## names the gate holding the nearest exit in reach. STAND_OVERLAP only when
+## every free exit in reach overlaps a gate's stand, naming the first gate the
+## nearest free one overlaps; with any free exit that overlaps none, NO_LETTER.
+## Exits are taken nearest first, ties to the lower id, as nearest_exit() takes
+## them.
 static func unlinked_on(on_grid: BuildGrid, links: Array[Dictionary]) -> Dictionary:
 	var linked := {}
 	var gate_of_exit := {}
@@ -169,15 +171,31 @@ static func _unlinked_reason(
 	var reach := exits_in_reach(on_grid, desk_footprint(on_grid, desk))
 	if reach.is_empty():
 		return {"why": Unlinked.NO_EXIT, "gate": ""}
+	# Every free exit in nearest_exit()'s order: one whose stand overlaps no
+	# gate's would link, so only a missing letter can stop it; the overlap is
+	# the reason only when every free exit overlaps (named for the nearest).
+	var overlap := {}
 	for exit in reach:
 		if gate_of_exit.has(exit):
 			continue
-		var stand := StandPlacement.for_exit(on_grid, exit)
-		for link in links:
-			if stands_overlap(stand, StandPlacement.for_exit(on_grid, link["exit"])):
-				return {"why": Unlinked.STAND_OVERLAP, "gate": link["gate"]}
-		return {"why": Unlinked.NO_LETTER, "gate": ""}
+		var gate := _overlapping_gate(on_grid, StandPlacement.for_exit(on_grid, exit), links)
+		if gate == "":
+			return {"why": Unlinked.NO_LETTER, "gate": ""}
+		if overlap.is_empty():
+			overlap = {"why": Unlinked.STAND_OVERLAP, "gate": gate}
+	if not overlap.is_empty():
+		return overlap
 	return {"why": Unlinked.EXIT_TAKEN, "gate": gate_of_exit[reach[0]]}
+
+
+## The first of `links`' gates whose stand overlaps `stand`, or "".
+static func _overlapping_gate(
+	on_grid: BuildGrid, stand: Dictionary, links: Array[Dictionary]
+) -> String:
+	for link in links:
+		if stands_overlap(stand, StandPlacement.for_exit(on_grid, link["exit"])):
+			return link["gate"]
+	return ""
 
 
 ## The north exits at most LINK_CELLS from `footprint` (diagonals counting

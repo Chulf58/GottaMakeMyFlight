@@ -98,6 +98,50 @@ func test_a_desk_whose_free_exit_would_overlap_a_gate_names_that_gate() -> void:
 	assert_str(unlinked[west.object_id]["gate"]).is_equal(_gates.gate_ids()[0])
 
 
+func test_a_usable_farther_exit_means_no_letter_not_an_overlap() -> void:
+	var west := _desk(DESK_WEST)
+	var gate_a := _gates.binding_of("A")
+	# In the east shell's north wall, 40 m east of gate A's exit: its stand
+	# overlaps A's, while the east shell's own exit (44 m east) does not.
+	var near_cell := EXIT_WEST + Vector2i(40, 0)
+	assert_bool(_grid.apply(BuildEdit.remove_wall(near_cell, BuildGrid.Side.NORTH)).ok).is_true()
+	var near := _grid.apply(BuildEdit.place_object(&"exit_door", near_cell, 0))
+	assert_bool(near.ok).is_true()
+	var far := _grid.object_at(EXIT_EAST)
+	# A desk 2 cells from the near exit and 3 from the far one, built past the
+	# guard and the links (its links come from `only_a` below).
+	_grid.guard = Callable()
+	var desk := _desk(near_cell + Vector2i(0, 2))
+	assert_bool(desk.ok).is_true()
+	var a_stand := StandPlacement.for_exit(_grid, gate_a["exit"])
+	var overlaps := [
+		GateDesks.stands_overlap(StandPlacement.for_exit(_grid, near.object_id), a_stand),
+		GateDesks.stands_overlap(StandPlacement.for_exit(_grid, far), a_stand),
+	]
+	var order := GateDesks.exits_in_reach(_grid, GateDesks.desk_footprint(_grid, desk.object_id))
+	# Every letter in use: gate A is the only link, and the desk has none though
+	# its far exit is usable (what refresh() leaves when _free_letter() is "").
+	var only_a: Array[Dictionary] = [gate_a]
+	var unlinked := GateDesks.unlinked_on(_grid, only_a)
+	print(
+		(
+			"exits nearest first %s (near %d, far %d), overlap A %s, unlinked %s"
+			% [order, near.object_id, far, overlaps, unlinked]
+		)
+	)
+	assert_array(order).is_equal([near.object_id, far])
+	assert_array(overlaps).is_equal([true, false])
+	assert_bool(unlinked.has(west.object_id)).is_false()
+	assert_int(unlinked[desk.object_id]["why"]).is_equal(GateDesks.Unlinked.NO_LETTER)
+	# A control: with the far exit also overlapping (taken away), the overlap is
+	# the reason.
+	assert_bool(_grid.apply(BuildEdit.remove_object(far)).ok).is_true()
+	var only_near := GateDesks.unlinked_on(_grid, only_a)
+	print("far exit gone: %s" % [only_near])
+	assert_int(only_near[desk.object_id]["why"]).is_equal(GateDesks.Unlinked.STAND_OVERLAP)
+	assert_str(only_near[desk.object_id]["gate"]).is_equal("A")
+
+
 func test_exits_in_reach_are_nearest_first_within_the_link_reach() -> void:
 	var footprint := BuildCatalog.get_def(GateDesks.DESK).footprint(Vector2i(14, 115), 0)
 	_grid.apply(BuildEdit.remove_wall(EXIT_NEAR, BuildGrid.Side.NORTH))

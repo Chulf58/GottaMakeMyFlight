@@ -420,6 +420,7 @@ func _plate(
 			)
 		)
 		ok = ok and sign_ok
+		ok = _sign_framed(desk, marker) and ok
 		# Where a line out of its exit edge would run: 3 m out from that cell.
 		var exit := _grid.cell_to_world(pair[1] + _offset)
 		var would := exit + Vector3(0.0, GateLinksView.LIFT_M, -3.0)
@@ -452,6 +453,36 @@ func _camera_still() -> bool:
 			return true
 	_fail("the camera did not come to rest in %d frames" % STILL_LIMIT_FRAMES)
 	return false
+
+
+## Whether the whole unlinked sign and its whole caption lie inside the frame
+## margin, in layout pixels: the icon a SIGN_PX square standing on its foot,
+## the caption (MissMarkers.caption_size(), outline included) centred under the
+## foot a CAPTION_GAP_PX gap below it, both sized in screen pixels and turned
+## into layout pixels. Prints both rectangles.
+func _sign_framed(desk: int, marker: Sprite3D) -> bool:
+	if _cam.is_position_behind(marker.global_position):
+		print("  SIGN BOUNDS desk %d: behind the camera" % desk)
+		return false
+	var foot := _cam.unproject_position(marker.global_position)
+	var per := _layout_per_px()
+	var icon := MissMarkers.SIGN_PX * per
+	var sign_rect := Rect2(foot.x - icon / 2.0, foot.y - icon, icon, icon)
+	var text := _links.caption_of(marker).text
+	var size := MissMarkers.caption_size(text) * per
+	var caption_rect := Rect2(
+		foot.x - size.x / 2.0, foot.y + MissMarkers.CAPTION_GAP_PX * per, size.x, size.y
+	)
+	var frame := _frame_rect()
+	var sign_in := frame.encloses(sign_rect)
+	var caption_in := frame.encloses(caption_rect)
+	print(
+		(
+			"  SIGN BOUNDS desk %d sign %s in_frame=%s caption %s in_frame=%s frame %s"
+			% [desk, sign_rect, sign_in, caption_rect, caption_in, frame]
+		)
+	)
+	return sign_in and caption_in
 
 
 func _framed(what: String, point: Vector3) -> bool:
