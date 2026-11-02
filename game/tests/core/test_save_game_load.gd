@@ -116,10 +116,10 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 	assert_str(_save.message_text()).contains("saved on tick")
 
 
-## version 8 with the moving plane stand, version 9 with land plots: a version 6 save (from the Toon
-## shell), a version 7 one (before the airside moved north) and a version 8 one (no land) are refused
-## shell) and a version 7 one (before the airside moved north) are refused
-## whole, with no migration, and change nothing.
+## version 8 with the moving plane stand, version 9 with land plots: a
+## version 6 save (from the Toon shell), a version 7 one (before the airside
+## moved north) and a version 8 one (no land) are refused whole, with no
+## migration, and change nothing.
 func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
 	assert_int(SaveGame.SAVE_VERSION).is_equal(9)
 	for version in [6, 7, 8]:
