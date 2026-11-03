@@ -155,7 +155,7 @@ static func layout(
 		return
 	var anchor := Vector3(0.0, LIFT_M, 0.0)
 	var lift_px := 0.0
-	if bubble.text != "":
+	if bubble.text != "" and bubble.visible:
 		anchor = bubble.position
 		var at := node.global_transform * bubble.position
 		var depth := (at - camera.global_position).dot(-camera.global_basis.z)
