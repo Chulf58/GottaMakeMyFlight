@@ -80,7 +80,9 @@ signal checked_in(id: int, desk: int)
 ## with no migration; a migrated older save collects nothing.
 ## 18: a cafe or toilet visit following its moved piece saves its Relocation
 ## (CafeSnapshot, ToiletSnapshot). Version 17 is refused, with no migration.
-const SAVE_VERSION := 18
+## 19: shop visit relocation (ShopSnapshot saves a shop or activity visit's
+## Relocation). Version 18 is refused, with no migration.
+const SAVE_VERSION := 19
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,

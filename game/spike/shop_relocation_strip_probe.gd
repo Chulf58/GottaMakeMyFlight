@@ -42,13 +42,19 @@ const DISPLAY_AT := Vector2i(25, 10)
 const DISPLAY_TO := Vector2i(25, 13)
 const LOUNGE_SETTLE_TICKS := 60
 const KIOSK_SETTLE_TICKS := 20
+## A visitor this far into the stay is still sitting down (SIT_DOWN_TICKS 24).
+const EARLY_SETTLE_TICKS := 5
 const STRIP_STEP_TICKS := 4
+## Every tick is kept this long after the move: a pose jump shows in it.
+const DENSE_TICKS := 14
+## The camera aims this far south of the pieces' middle, to hold the approach cells.
+const AIM_SOUTH_M := 1.0
 const MAX_FRAMES := 60
 const LIMIT_TICKS := 1500
 ## Largest drawn step a tick may take: one walking step, measured on the
 ## position the views record for each tick (PassengerViews.tick_position()).
 const MAX_STEP_M := PassengerSim.WALK_MM / 1000.0 + 0.002
-const CAM_UP_M := 7.0
+const CAM_UP_M := 8.0
 const CAM_BACK_M := 3.0
 
 var _out_dir := ""
@@ -212,6 +218,18 @@ func _strip_lounge() -> void:
 	if p == null or not await _to_browse(p, LOUNGE_SETTLE_TICKS):
 		return
 	await _strip("lounge", p, _sofa, SOFA_AT, SOFA_TO)
+	# Let the first visitor finish its stay, then move the sofa back under a
+	# visitor still sitting down (the stand-up pose may jump from there).
+	var until := _clock.tick + LIMIT_TICKS
+	while _sim.shops.visit_of(p.id) != null and _clock.tick < until:
+		_beat("first visitor ends %d" % _clock.tick)
+		_clock.advance(SimClock.STEP)
+		if _clock.tick % 8 == 0:
+			await process_frame
+	var early := _visitor(false)
+	if early == null or not await _to_browse(early, EARLY_SETTLE_TICKS):
+		return
+	await _strip("lounge_early", early, _sofa, SOFA_TO, SOFA_AT)
 
 
 func _strip_kiosk() -> void:
@@ -229,7 +247,8 @@ func _strip(case: String, p: Passenger, id: int, from: Vector2i, to: Vector2i) -
 		_cam = Camera3D.new()
 		_cam.fov = 45.0
 		_main.add_child(_cam)
-	_cam.look_at_from_position(mid + Vector3(0.0, CAM_UP_M, CAM_BACK_M), mid)
+	var aim := mid + Vector3(0.0, 0.0, AIM_SOUTH_M)
+	_cam.look_at_from_position(aim + Vector3(0.0, CAM_UP_M, CAM_BACK_M), aim)
 	_cam.make_current()
 	_frames_kept.clear()
 	if not _move_piece(id, to):
@@ -266,7 +285,8 @@ func _strip(case: String, p: Passenger, id: int, from: Vector2i, to: Vector2i) -
 		if left_old and p.stage == Passenger.Stage.SHOP_BROWSE:
 			since_back += 1
 			back = true
-		var keep := (_clock.tick - move_tick) % STRIP_STEP_TICKS == 0
+		var since := _clock.tick - move_tick
+		var keep := since % STRIP_STEP_TICKS == 0 or since <= DENSE_TICKS
 		if keep or jumped or (back and since_back == 1):
 			await _keep_frame(case, p, old_centre, new_centre, step, ghosts)
 		if back and since_back >= STRIP_STEP_TICKS * 3:
