@@ -11,6 +11,7 @@ extends SceneTree
 ##   c. turned once over the free spot;
 ##   d. over the toilet room: red ghost, the status line and the ghost card;
 ##   e. the bag room (check-in desk) is not lifted, the status line says why;
+##   g. one cell east, the ghost over the original (no z-fighting of the slabs);
 ##   f. set down on the free spot, the belts reshaped; then one undo.
 ## Every plate proves its subject is in frame (the rectangle's corners and
 ## centre are projected and printed) and not hidden (sight lines against the
@@ -355,6 +356,9 @@ func _ghost_colour() -> Color:
 func _plates() -> void:
 	_build.set_tool(BuildMode.Tool.CAFE_ROOM)
 	_beat("pick_up")
+	# BuildView draws the pieces at the end of the frame that placed them, so a
+	# pick-up in that frame would find no node to dim.
+	await _frames(SETTLE_FRAMES)
 	var lifted := _mover.pick_up(_at(CAFE.position + Vector2i(1, 1)), &"cafe")
 	print("PICK_UP cafe lifted=%s room_id=%d" % [lifted, _mover.room_id])
 	if not lifted:
@@ -398,6 +402,11 @@ func _plates() -> void:
 	if not _menu.ghost_reason().visible:
 		_invalid("d: the ghost card is not shown")
 	await _plate("d_toilet", [toilet_rect, CAFE])
+	# g. one cell east: the ghost slab lies over the dim slab of the original.
+	var overlap_centre := Vector2i(27, 13)
+	await _hover(overlap_centre)
+	_report("g_overlap")
+	await _plate("g_overlap", [_rect_at(overlap_centre, CAFE.size), CAFE])
 	# f. set down on the free spot, the belts reshaped.
 	await _hover(FREE_CENTRE)
 	print("BELTS before %s" % [_belts()])
