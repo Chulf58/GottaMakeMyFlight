@@ -15,6 +15,8 @@ const MARGIN_PX := 6.0
 const NO_QUEUE := 1 << 30
 
 static var _text_sizes: Dictionary = {}
+static var _placed: Array[Rect2] = []
+static var _bins: Dictionary = {}
 
 
 ## 0 for the late bubble, which wins over every other text, else 1.
@@ -57,23 +59,21 @@ static func rect_of(
 	return Rect2(point - size / 2.0, size)
 
 
-## The ids of the entries (see entry()) to hide.
+## The ids of the entries (see entry()) to hide. Sorts `entries` in place
+## (placing order); the rectangles kept so far are found through RectBins, so a
+## bubble is compared only with those near it. The working arrays are reused.
 static func hidden(entries: Array[Dictionary]) -> Array[int]:
-	var order := entries.duplicate()
-	order.sort_custom(_placed_before)
-	var placed: Array[Rect2] = []
+	entries.sort_custom(_placed_before)
+	_placed.clear()
+	_bins.clear()
 	var out: Array[int] = []
-	for e: Dictionary in order:
+	for e: Dictionary in entries:
 		var rect: Rect2 = (e["rect"] as Rect2).grow(MARGIN_PX / 2.0)
-		var clash := false
-		for other in placed:
-			if rect.intersects(other):
-				clash = true
-				break
-		if clash:
+		if RectBins.hits(rect, _bins, _placed):
 			out.append(e["id"])
 		else:
-			placed.append(rect)
+			_placed.append(rect)
+			RectBins.file(_bins, rect, _placed.size() - 1)
 	return out
 
 

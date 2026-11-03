@@ -149,3 +149,100 @@ func test_views_hide_the_overlapping_bubble_of_the_passenger_further_back() -> v
 	assert_bool(_bubble(views, full).visible).is_false()
 	world.free_all()
 	PassengerTestWorld.tracker = null
+
+
+## User ruling "Bubble on top": a kept bubble's text is never covered, so it
+## draws above the need icons, the wish icon and the station signs and captions.
+func test_a_bubble_draws_above_icons_signs_and_captions() -> void:
+	PassengerTestWorld.tracker = self
+	var grid := BuildGrid.new()
+	ToiletTestLayout.build(grid)
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	var id := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var views := _views_with_camera(world, [id])
+	var node := views.node_for(id)
+	var bubble := _bubble(views, id)
+	assert_int(bubble.render_priority).is_equal(PassengerViews.BUBBLE_PRIORITY)
+	assert_int(bubble.outline_render_priority).is_equal(PassengerViews.BUBBLE_PRIORITY - 1)
+	for above in [MissMarkers.SIGN_PRIORITY, MissMarkers.CAPTION_PRIORITY]:
+		assert_int(bubble.render_priority).is_greater(above)
+		assert_int(bubble.outline_render_priority).is_greater(above)
+	for sprite_name in NeedIcons.SPRITES:
+		var sprite := node.get_node(sprite_name) as Sprite3D
+		assert_int(bubble.outline_render_priority).is_greater(sprite.render_priority)
+	var wish := node.get_node(WishIconView.SPRITE) as Sprite3D
+	assert_int(bubble.outline_render_priority).is_greater(wish.render_priority)
+	world.free_all()
+	PassengerTestWorld.tracker = null
+
+
+## A real lane with the higher ids at the front (the lane is reordered, since
+## ids do not join in order): the bubble nearest the front stays, and the lower id
+## that the id tie-break would keep is hidden. The camera looks along the
+## lane at bubble height, so every bubble projects to one point and overlaps.
+func _assert_front_of_lane_kept(world: PassengerTestWorld, station: int) -> void:
+	var lane: Array = world.sim._queues[station]["lane"]
+	assert_int(lane.size()).is_greater(1)
+	var descending := lane.duplicate()
+	descending.sort_custom(func(a: int, b: int) -> bool: return a > b)
+	lane.clear()
+	for id: int in descending:
+		lane.append(id)
+	var ids := world.sim.queue_of(station)
+	for id in ids:
+		world.passenger(id).stuck = Passenger.Stuck.QUEUE_FULL
+	assert_int(ids[0]).is_greater(ids[ids.size() - 1])
+	var lift := Vector3(0.0, PassengerViews.BUBBLE_HEIGHT, 0.0)
+	var front := world.sim.world_position(world.passenger(ids[0])) + lift
+	var back := world.sim.world_position(world.passenger(ids[ids.size() - 1])) + lift
+	assert_float(front.distance_to(back)).is_greater(0.5)
+	var views := PassengerViews.new()
+	views.clock = world.clock
+	views.sim = world.sim
+	add_child(views)
+	auto_free(views)
+	var camera := Camera3D.new()
+	add_child(camera)
+	auto_free(camera)
+	camera.current = true
+	camera.global_position = back + (back - front).normalized() * 12.0
+	camera.look_at(front)
+	views.sync()
+	views.draw()
+	assert_bool(_bubble(views, ids[0]).visible).is_true()
+	for id in ids.slice(1):
+		assert_bool(_bubble(views, id).visible).is_false()
+
+
+func test_the_front_of_a_check_in_lane_keeps_its_bubble_over_a_lower_id() -> void:
+	PassengerTestWorld.tracker = self
+	var grid := PassengerTestWorld.floored(Vector2i(6, 5))
+	var desk := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(2, 1), 0)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 4), 3)
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	for i in 4:
+		world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var guard := 0
+	while world.sim.queue_of(desk).size() < 3 and guard < 900:
+		world.step()
+		guard += 1
+	assert_int(world.sim.queue_of(desk).size()).is_greater(2)
+	_assert_front_of_lane_kept(world, desk)
+	world.free_all()
+	PassengerTestWorld.tracker = null
+
+
+func test_the_front_of_a_security_lane_keeps_its_bubble_over_a_lower_id() -> void:
+	PassengerTestWorld.tracker = self
+	var security := SecurityTestWorld.make(false)
+	security.send_all([[0, false, false], [0, false, false], [0, false, false]])
+	var guard := 0
+	while security.world.sim.queue_of(security.station).size() < 2 and guard < 900:
+		security.world.step()
+		guard += 1
+	var queued := security.world.sim.queue_of(security.station)
+	assert_int(queued.size()).is_greater(1)
+	assert_int(security.world.passenger(queued[0]).stage).is_equal(Passenger.Stage.SECURITY_QUEUE)
+	_assert_front_of_lane_kept(security.world, security.station)
+	security.world.free_all()
+	PassengerTestWorld.tracker = null

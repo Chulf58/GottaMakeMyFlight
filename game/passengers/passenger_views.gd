@@ -24,6 +24,9 @@ const CROSSFADE_SECONDS := 0.18
 const LOOPED := ["idle", "walk", "run", "sit_idle", "shower"]
 const MISSED_LINGER_TICKS := 200
 const BUBBLE_HEIGHT := 2.5
+## A speech bubble draws above the need icons and the station signs and
+## captions (user ruling: a kept bubble's text is never covered).
+const BUBBLE_PRIORITY := MissMarkers.CAPTION_PRIORITY + 2
 const PICK_RADIUS_PX := 40.0
 
 @export var clock: SimClock
@@ -66,6 +69,8 @@ var _seats: Dictionary = {}
 var _turns := PassengerTurns.new()
 ## True while snap() syncs: the step from the pre-load position is no heading.
 var _snapping := false
+## Working array of _declutter_bubbles, reused each frame.
+var _bubble_entries: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -279,7 +284,8 @@ func draw() -> void:
 ## on screen (BubbleDeclutter: late first, then nearest the front of the
 ## queue). Does nothing with no camera.
 func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
-	var entries: Array[Dictionary] = []
+	var entries := _bubble_entries
+	entries.clear()
 	var view := get_viewport() if is_inside_tree() else null
 	var to_output := view.get_stretch_transform().get_scale().y if view != null else 1.0
 	for id in _nodes:
@@ -357,6 +363,8 @@ func _take(p: Passenger) -> Node3D:
 	bubble.name = "Bubble"
 	bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	bubble.no_depth_test = true
+	bubble.render_priority = BUBBLE_PRIORITY
+	bubble.outline_render_priority = BUBBLE_PRIORITY - 1
 	bubble.font_size = 56
 	bubble.outline_size = 14
 	bubble.pixel_size = 0.006
