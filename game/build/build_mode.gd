@@ -846,6 +846,11 @@ func clear_undo() -> void:
 	_landside_placement.clear_undo()
 
 
+## The drawn node of object `object_id`, or null (RoomMoveTool dims them).
+func object_node(object_id: int) -> Node3D:
+	return _view.object_node(object_id)
+
+
 ## The undo history, newest action on top (read it, never change it).
 func undo_history() -> UndoStack:
 	return _history

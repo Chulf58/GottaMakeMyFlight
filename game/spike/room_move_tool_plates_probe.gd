@@ -285,6 +285,28 @@ func _hover(centre: Vector2i) -> void:
 	await _frames(SETTLE_FRAMES)
 
 
+## How many of the drawn objects' meshes carry a material override (the dim).
+func _dimmed_meshes() -> int:
+	var count := 0
+	for id in _build.grid.object_ids():
+		var node := _build.object_node(id)
+		if node == null:
+			continue
+		for mesh in node.find_children("*", "MeshInstance3D", true, false):
+			if (mesh as MeshInstance3D).material_override != null:
+				count += 1
+	return count
+
+
+func _object_meshes() -> int:
+	var count := 0
+	for id in _build.grid.object_ids():
+		var node := _build.object_node(id)
+		if node != null:
+			count += node.find_children("*", "MeshInstance3D", true, false).size()
+	return count
+
+
 func _report(label: String) -> void:
 	var meshes := _mover.ghost_node().find_children("*", "MeshInstance3D", true, false)
 	var pieces := 0
@@ -295,14 +317,16 @@ func _report(label: String) -> void:
 	var build_ghost := _build.get_node_or_null("Ghost") as Node3D
 	print(
 		(
-			"STATE %s active=%s turns=%d ghost_meshes=%d ghost_pieces=%d dim=%d"
+			"STATE %s active=%s turns=%d ghost_meshes=%d ghost_pieces=%d dim=%d dimmed_meshes=%d/%d"
 			% [
 				label,
 				_mover.active,
 				_mover.turns,
 				meshes.size(),
 				pieces,
-				_mover.get_node("RoomMoveDim").get_child_count()
+				_mover.get_node("RoomMoveDim").get_child_count(),
+				_dimmed_meshes(),
+				_object_meshes()
 			]
 		)
 	)

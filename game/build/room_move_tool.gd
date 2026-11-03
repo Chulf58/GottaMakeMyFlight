@@ -11,12 +11,17 @@ extends Node3D
 ## refuses, so the gesture was free. Then the ghost (the room's slab and its
 ## pieces) follows the pointer, green or red, the status line and the card
 ## beside the ghost say why a spot is refused, and R turns it a quarter. The
-## original room stays drawn, dimmed, until it is set down.
+## original room stays drawn until it is set down: its pieces are tinted dark
+## and a dark slab lies over its floor.
 ##
-## Set down: a click commits RoomMove.commit() as one undo step. A refused
-## spot changes nothing and the room stays in hand. Esc, a right-click or any
-## tool change drops it with no change, and so does a click on the spot it
-## was lifted from. The cost line shows only the new floor the spot needs.
+## Set down: a click commits the previewed plan through RoomMove.commit_move()
+## as one undo step, so a change between the preview and the click is refused
+## with nothing changed. A refused spot changes nothing and the room stays in
+## hand. Esc, a right-click or any tool change drops it with no change, and so
+## does a click on the spot it was lifted from. The room changing while it is
+## in hand (a piece placed, removed or changed in it, an undo, the room
+## resized or removed) cancels the move. The cost line shows only the new
+## floor the spot needs.
 ##
 ## Not done here: the cells that must stay clear for passengers leaving the
 ## room (RoomMove's keep_clear, passed empty until the passenger slice).
@@ -44,8 +49,14 @@ var _status := ""
 var _revision := 0
 var _key := ""
 var _from := Rect2i()
+## The room's pieces (object id -> record) as they were at pick-up.
+var _held := {}
 ## The plan under the pointer, or null while the pointer is off the grid.
 var _plan: RoomMove = null
+var _plan_centre := Vector2i.ZERO
+var _plan_turns := 0
+## The original's meshes while dimmed -> the material override each had.
+var _dimmed := {}
 var _valid_material := _tint(BuildMode.VALID_TINT)
 var _invalid_material := _tint(BuildMode.INVALID_TINT)
 var _dim_material := _tint(DIM_TINT)
@@ -117,6 +128,7 @@ func pick_up(point: Vector3, type: StringName) -> bool:
 	room_id = id
 	turns = 0
 	_from = rect
+	_held = _member_state()
 	_plan = null
 	_key = ""
 	_dim_original()
@@ -138,6 +150,7 @@ func cancel() -> void:
 	active = false
 	room_id = 0
 	turns = 0
+	_held.clear()
 	_plan = null
 	_key = ""
 	_clear_ghost()
@@ -155,15 +168,21 @@ func plan_at(centre: Vector2i) -> RoomMove:
 ## nothing, keeps the room in hand and says why. A spot that is the room's own
 ## place unturned is a cancel. Returns the result, or null for that cancel.
 func set_down(centre: Vector2i) -> BuildResult:
+	if _held_changed():
+		cancel()
+		return null
 	var name_of := _name_of(room_id)
-	var move := plan_at(centre)
+	var move := _previewed(centre)
 	if turns == 0 and move.to_rect == _from:
 		cancel()
 		return null
-	var id := room_id
-	var result := RoomMove.commit(
-		_mode.grid, id, centre, turns, _mode.wallet(), _mode.undo_history()
-	)
+	var result: BuildResult
+	if move.result.ok:
+		result = RoomMove.commit_move(_mode.grid, move, _mode.wallet(), _mode.undo_history())
+	else:
+		result = RoomMove.commit(
+			_mode.grid, room_id, centre, turns, _mode.wallet(), _mode.undo_history()
+		)
 	if not result.ok:
 		_set_status("%s  %s" % [name_of, result.reason_text()])
 		return result
@@ -171,6 +190,7 @@ func set_down(centre: Vector2i) -> BuildResult:
 	active = false
 	room_id = 0
 	turns = 0
+	_held.clear()
 	_plan = null
 	_key = ""
 	_clear_ghost()
@@ -211,8 +231,7 @@ func status_text() -> String:
 func hover_at(cell: Variant) -> void:
 	if not active:
 		return
-	var room := _mode.grid.get_room(room_id)
-	if room.is_empty() or room["rect"] != _from:
+	if _held_changed():
 		cancel()
 		return
 	var balance := _mode.wallet().balance if _mode.wallet() != null else 0
@@ -225,6 +244,8 @@ func hover_at(cell: Variant) -> void:
 	if cell == null:
 		return
 	_plan = plan_at(cell)
+	_plan_centre = cell
+	_plan_turns = turns
 	var ok := _plan.result.ok
 	var material := _valid_material if ok else _invalid_material
 	_ghost_slab(_plan.to_rect, material)
@@ -239,6 +260,37 @@ func hover_at(cell: Variant) -> void:
 	if not ok:
 		text = "%s  %s" % [_name_of(room_id), _plan.result.reason_text()]
 	_set_status(text)
+
+
+## The plan the ghost shows for `centre` when there is one, else a fresh plan.
+func _previewed(centre: Vector2i) -> RoomMove:
+	if _plan != null and _plan_centre == centre and _plan_turns == turns:
+		return _plan
+	return plan_at(centre)
+
+
+## The pieces whose cells lie in the room as they stand now, doors left out
+## (they stay behind): object id -> a copy of the record (def, anchor, facing,
+## paid).
+func _member_state() -> Dictionary:
+	var grid := _mode.grid
+	var state := {}
+	for y in range(_from.position.y, _from.end.y):
+		for x in range(_from.position.x, _from.end.x):
+			var object_id := grid.object_at(Vector2i(x, y))
+			if object_id == 0 or state.has(object_id):
+				continue
+			var record := grid.get_object(object_id)
+			if not BuildCatalog.is_door(record["def"]):
+				state[object_id] = record
+	return state
+
+
+## True when the room in hand was removed, resized or moved, or any of its
+## pieces was added, removed or changed since it was picked up.
+func _held_changed() -> bool:
+	var room := _mode.grid.get_room(room_id)
+	return room.is_empty() or room["rect"] != _from or _member_state() != _held
 
 
 ## True for a refusal that holds wherever the room goes.
@@ -276,19 +328,28 @@ func _pointer_cell() -> Variant:
 	return cell if _mode.grid.in_bounds(cell) else null
 
 
+## Tints the original's piece meshes (BuildView's nodes for the held ids) and
+## lays a dark slab over its floor.
 func _dim_original() -> void:
 	_clear_dim()
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(_from.size.x, 1.0, _from.size.y)
-	var box := MeshInstance3D.new()
-	box.name = "Dim"
-	box.mesh = mesh
-	box.material_override = _dim_material
-	box.position = (
+	for object_id in _held:
+		var node := _mode.object_node(object_id)
+		if node == null:
+			continue
+		for mesh in node.find_children("*", "MeshInstance3D", true, false):
+			_dimmed[mesh] = (mesh as MeshInstance3D).material_override
+			(mesh as MeshInstance3D).material_override = _dim_material
+	var box := BoxMesh.new()
+	box.size = Vector3(_from.size.x, 0.11, _from.size.y)
+	var slab := MeshInstance3D.new()
+	slab.name = "Dim"
+	slab.mesh = box
+	slab.material_override = _dim_material
+	slab.position = (
 		_mode.grid.cell_to_world(_from.position)
-		+ Vector3((_from.size.x - 1) / 2.0, 0.5, (_from.size.y - 1) / 2.0)
+		+ Vector3((_from.size.x - 1) / 2.0, 0.055, (_from.size.y - 1) / 2.0)
 	)
-	_dim.add_child(box)
+	_dim.add_child(slab)
 
 
 func _ghost_slab(area: Rect2i, material: Material) -> void:
@@ -323,6 +384,10 @@ func _clear_ghost() -> void:
 
 
 func _clear_dim() -> void:
+	for mesh in _dimmed:
+		if is_instance_valid(mesh):
+			(mesh as MeshInstance3D).material_override = _dimmed[mesh]
+	_dimmed.clear()
 	for child in _dim.get_children():
 		_dim.remove_child(child)
 		child.queue_free()

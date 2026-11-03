@@ -218,3 +218,108 @@ func test_a_click_on_the_spot_it_was_lifted_from_drops_it_without_an_undo_step()
 	assert_bool(_mover.active).is_false()
 	assert_that(_rect()).is_equal(CAFE)
 	assert_int(_mode.undo_history().size()).is_equal(undo_depth)
+
+
+func _piece_meshes(object_id: int) -> Array[MeshInstance3D]:
+	var meshes: Array[MeshInstance3D] = []
+	var node := _mode.object_node(object_id)
+	assert_object(node).is_not_null()
+	for mesh in node.find_children("*", "MeshInstance3D", true, false):
+		meshes.append(mesh as MeshInstance3D)
+	return meshes
+
+
+func test_an_edit_inside_the_held_room_cancels_the_move() -> void:
+	_pick_up()
+	_mover.hover_at(Vector2i(8, 7))
+	assert_bool(_mover.active).is_true()
+	# A bin placed in the room after pick-up: the ghost no longer shows the room.
+	_place(&"trash_can", Vector2i(7, 6), BIN_PAID)
+	_mover.hover_at(Vector2i(8, 7))
+	assert_bool(_mover.active).is_false()
+	assert_that(_rect()).is_equal(CAFE)
+	# A removal, then a click before the next hover: the set-down cancels.
+	_mode.set_tool(BuildMode.Tool.CAFE_ROOM)
+	_pick_up()
+	_mover.hover_at(Vector2i(8, 7))
+	var balance := _finances.wallet.balance
+	var undo_depth := _mode.undo_history().size()
+	var bin_before := _mode.grid.get_object(_bin)
+	_mode.grid.apply(BuildEdit.remove_object(_pot))
+	var result := _mover.set_down(Vector2i(8, 7))
+	print("edit in room: result null=%s active=%s" % [result == null, _mover.active])
+	assert_bool(result == null).is_true()
+	assert_bool(_mover.active).is_false()
+	assert_that(_rect()).is_equal(CAFE)
+	assert_that(_mode.grid.get_object(_bin)).is_equal(bin_before)
+	assert_int(_finances.wallet.balance).is_equal(balance)
+	assert_int(_mode.undo_history().size()).is_equal(undo_depth)
+
+
+func test_an_undo_while_the_room_is_held_cancels_the_move() -> void:
+	var history := _mode.undo_history()
+	history.begin_action()
+	var late_bin := _place(&"trash_can", Vector2i(7, 6), BIN_PAID)
+	history.end_action()
+	_pick_up()
+	_mover.hover_at(Vector2i(8, 7))
+	var undone := _mode.undo()
+	print("undo: ok=%s" % undone.ok)
+	assert_bool(undone.ok).is_true()
+	assert_dict(_mode.grid.get_object(late_bin)).is_empty()
+	assert_bool(_mover.active).is_true()
+	var result := _mover.set_down(Vector2i(8, 7))
+	assert_bool(result == null).is_true()
+	assert_bool(_mover.active).is_false()
+	assert_that(_rect()).is_equal(CAFE)
+
+
+func test_a_change_between_the_preview_and_the_set_down_is_refused_with_no_change() -> void:
+	_pick_up()
+	# Centre (16, 5): columns 13 to 20, rows 3 to 8, all bare ground.
+	_mover.hover_at(Vector2i(16, 5))
+	assert_bool(_mover.refusal() == null).is_true()
+	assert_int(_mover.preview_price().x).is_greater(0)
+	var balance := _finances.wallet.balance
+	var undo_depth := _mode.undo_history().size()
+	var bin_before := _mode.grid.get_object(_bin)
+	# Floor a cell of the previewed spot after the preview: the plan is out of date.
+	_mode.grid.apply(BuildEdit.paint_floor(Vector2i(15, 5), BuildGrid.FLOOR_TILE, 3))
+	var floor_before := _mode.grid.floor_at(Vector2i(14, 5))
+	var result := _mover.set_down(Vector2i(16, 5))
+	print("stale: reason=%s status=%s" % [result.reason, _mover.status_text()])
+	assert_bool(result.ok).is_false()
+	assert_int(result.reason).is_equal(BuildResult.Reason.MOVE_CHANGED)
+	assert_bool(_mover.active).is_true()
+	assert_that(_rect()).is_equal(CAFE)
+	assert_that(_mode.grid.get_object(_bin)).is_equal(bin_before)
+	assert_int(_mode.grid.floor_at(Vector2i(14, 5))).is_equal(floor_before)
+	assert_int(_finances.wallet.balance).is_equal(balance)
+	assert_int(_mode.undo_history().size()).is_equal(undo_depth)
+
+
+func test_every_piece_of_the_original_is_dimmed_while_held_and_restored_after() -> void:
+	await await_idle_frame()
+	var originals := {}
+	for id in [_bin, _pot]:
+		var meshes := _piece_meshes(id)
+		assert_int(meshes.size()).is_greater(0)
+		for mesh in meshes:
+			originals[mesh] = mesh.material_override
+	for how in 2:
+		_pick_up()
+		var dimmed := 0
+		for mesh in originals:
+			if (mesh as MeshInstance3D).material_override != originals[mesh]:
+				dimmed += 1
+		print("dimmed %d of %d meshes (how=%d)" % [dimmed, originals.size(), how])
+		assert_int(dimmed).is_equal(originals.size())
+		assert_int(_mover.get_node("RoomMoveDim").get_child_count()).is_equal(1)
+		if how == 0:
+			_mover.cancel()
+		else:
+			_mover.hover_at(Vector2i(8, 7))
+			assert_bool(_mover.set_down(Vector2i(8, 7)).ok).is_true()
+		for mesh in originals:
+			assert_object((mesh as MeshInstance3D).material_override).is_equal(originals[mesh])
+		assert_int(_mover.get_node("RoomMoveDim").get_child_count()).is_equal(0)
