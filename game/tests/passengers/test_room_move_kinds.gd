@@ -251,7 +251,21 @@ func test_a_load_refuses_a_slot_the_pieces_type_does_not_have() -> void:
 	var text := ShopMoveKit.save_text(_world)
 	assert_object(ShopMoveKit.load_twin(JSON.parse_string(text))).is_not_null()
 	# A shelf is two cells wide but has one browse slot (seats_per_piece 1): a
-	# relocation leaving its second cell cannot have happened.
+	# relocation leaving its second cell cannot have happened. No piece kind
+	# with an exit to play has such a gap (the sofa, the nap pod, the cubicle
+	# and the slide have a slot per cell), and a shelf's zero-tick exit is
+	# refused by the exit length too, so the reason is asserted on the check
+	# itself: slot 0 is refused for the exit, slot 1 for the slot.
+	var visit := _shops().visit_of(p.id)
+	visit.relocation = Relocation.leaving(shelf, -1)
+	var tick := _world.clock.tick
+	var at_zero := ShopSnapshot._relocation_problem(visit, p, _world.grid, tick)
+	assert_str(at_zero).contains("ticks to run")
+	visit.index = 1
+	var at_one := ShopSnapshot._relocation_problem(visit, p, _world.grid, tick)
+	assert_str(at_one).is_equal("slot 1 is not one of the piece's 1")
+	visit.index = 0
+	visit.relocation = null
 	var data: Dictionary = JSON.parse_string(text)
 	var entry: Dictionary = data["passengers"]["shop"]["visits"][0]
 	entry["slot"] = 1
