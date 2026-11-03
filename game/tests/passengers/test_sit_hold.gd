@@ -104,6 +104,41 @@ func test_a_walker_sitting_down_with_a_roller_stands_until_the_park_ends() -> vo
 		)
 
 
+## A load during the roller hold (PassengerViews.snap(): the views start every
+## record over) draws the body at the chair front, not at the sim's
+## already-shuffled place: the front is rebuilt from the chair, so a gate
+## passenger never jumps back up to 0.55 m into the seat. Control: the sim
+## itself had shuffled the body off the chair front by then, and the load
+## fell inside the hold.
+func test_a_load_during_the_roller_hold_keeps_the_body_at_the_chair_front() -> void:
+	var p := await _sitting_walker(true)
+	var front := _world.sim.grid.cell_to_world(p.seat_front)
+	for n in 5:
+		await _tick()
+	var shuffled := _world.sim.world_position(p).distance_to(front)
+	assert_float(shuffled).is_greater(0.1)
+	assert_int(SitHold.held_ticks(_views.carry_on_props(), _world.sim, p)).is_greater(0)
+	_views.snap()
+	var worst := _front_gap(p, front)
+	var frames := 1
+	var hold := ceili(RollerPark.TICKS_DOWN + SitHold.LET_GO_TICKS)
+	while _world.sim.tick - p.stage_tick < hold - 1:
+		await _tick()
+		frames += 1
+		worst = maxf(worst, _front_gap(p, front))
+	print(
+		"shuffled %.3f m off the front, drawn worst %.3f m, %d frames" % [shuffled, worst, frames]
+	)
+	assert_int(frames).is_greater(4)
+	assert_float(worst).is_less(0.02)
+
+
+## How far the drawn body of `p` stands from `front`, along the ground.
+func _front_gap(p: Passenger, front: Vector3) -> float:
+	var at := _views.node_for(p.id).global_position
+	return Vector2(at.x - front.x, at.z - front.z).length()
+
+
 ## With no roller it sits at once: sit_down from the first tick.
 func test_a_walker_sitting_down_with_no_roller_sits_at_once() -> void:
 	var p := await _sitting_walker(false)

@@ -138,6 +138,41 @@ func test_the_normal_sit_down_and_stand_up_keep_their_timing() -> void:
 	assert_int(homes.find(SecurityLooks.Home.HAND)).is_equal(PassengerSim.STAND_UP_TICKS)
 
 
+## The chair removed 5 ticks into a roller's stand-up (the sim clears the seat
+## and the walker keeps rising): the roller stays on the floor until the
+## stand-up has run its STAND_UP_TICKS, then goes into the hand, as with the
+## chair there. Before the fix the seat's loss turned the roller's home to
+## the hand on that tick, so the pick-up began while the body was rising.
+## Control: the chair is gone and the walker still stands up on the same tick.
+func test_a_chair_lost_while_standing_up_keeps_the_roller_down_until_the_stand_up_ends() -> void:
+	var p := _walker(true, false)
+	p.boarding_tick = _world.sim.tick + 3
+	while p.stage == Passenger.Stage.SEATED:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.STANDING_UP)
+	var up := p.stage_tick
+	for n in 5:
+		_world.step()
+	_seat_goes()
+	var homes := {}
+	while p.stage == Passenger.Stage.STANDING_UP:
+		homes[_world.sim.tick - up] = SecurityLooks.bag_homes(_world.sim, p)[0]
+		_world.step()
+	print("seat lost 5 ticks in, homes by tick %s" % [homes])
+	assert_int(p.seat_object).is_equal(0)
+	assert_int(p.stage_tick - up).is_equal(ParkRecovery.stand_up_ticks(p))
+	for n: int in homes:
+		var up_by := n >= PassengerSim.STAND_UP_TICKS
+		var want := SecurityLooks.Home.HAND if up_by else SecurityLooks.Home.FLOOR
+		(
+			assert_int(homes[n])
+			. override_failure_message("stand-up tick %d: home %d, not %d" % [n, homes[n], want])
+			. is_equal(want)
+		)
+	assert_int(homes[6]).is_equal(SecurityLooks.Home.FLOOR)
+	assert_int(homes[PassengerSim.STAND_UP_TICKS]).is_equal(SecurityLooks.Home.HAND)
+
+
 ## With no roller the stand-up keeps its STAND_UP_TICKS and is not held.
 func test_a_walker_with_no_roller_stands_up_and_walks_on_at_once() -> void:
 	var p := _walker(false, false)

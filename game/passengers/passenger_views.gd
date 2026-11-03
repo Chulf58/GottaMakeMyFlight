@@ -64,10 +64,9 @@ var _offsets: Dictionary = {}
 ## so a stay cut short or a removed piece eases the body back instead of
 ## jumping. Holds no tick; snap() restarts it from the loaded world.
 var _seats: Dictionary = {}
-## Passenger id -> where a walker sitting down with a roller stands while it
-## sets the roller down (SitHold.offset()), and the offset drawn on its last
-## tick (sit_offset()). Started over on a snap or a release.
-var _sit_from: Dictionary = {}
+## Passenger id -> the offset drawn on its last tick for a walker sitting down
+## with a roller (SitHold.offset(), sit_offset()). Holds no anchor: the chair
+## front is read from the seat on every sync. Started over on a snap or a release.
 var _sit_off: Dictionary = {}
 ## The yaw each view is drawn with, eased per tick (PassengerTurns); snap()
 ## starts every record over.
@@ -181,7 +180,7 @@ func sync() -> void:
 		if not _nodes.has(id):
 			_nodes[id] = _take(p)
 			_cur[id] = now
-		now += SitHold.offset(_props, sim, p, now, _sit_from)
+		now += SitHold.offset(_props, sim, p, now)
 		_sit_off[id] = now - draw_position(p)
 		_prev[id] = _cur[id]
 		_cur[id] = now
@@ -216,7 +215,6 @@ func snap() -> void:
 				_release(id)
 		_offsets.erase(id)
 		_seats.erase(id)
-		_sit_from.erase(id)
 		_sit_off.erase(id)
 		var seat := ActivityPoses.offset(sim, sim.get_passenger(id))
 		if seat != Vector3.ZERO:
@@ -410,7 +408,6 @@ func _release(id: int) -> void:
 	_nodes.erase(id)
 	_offsets.erase(id)
 	_seats.erase(id)
-	_sit_from.erase(id)
 	_sit_off.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
 	_props.release(id)

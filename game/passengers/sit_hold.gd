@@ -34,9 +34,9 @@ static func held_ticks(props: CarryOnProps, sim: PassengerSim, p: Passenger) -> 
 		return 0
 	var held := 0.0
 	for i in p.carry_on:
-		var bag := props.bag_state(p.id, i)
-		if int(bag.get("kind", -1)) != SecurityLooks.Kind.ROLLER:
+		if SecurityLooks.bag_kind(p, i) != SecurityLooks.Kind.ROLLER:
 			continue
+		var bag := props.bag_state(p.id, i)
 		var since := float(bag.get("since", -INF))
 		var place := int(bag.get("home", -1))
 		if bag.get("park", false) and since >= p.stage_tick - 1:
@@ -45,28 +45,47 @@ static func held_ticks(props: CarryOnProps, sim: PassengerSim, p: Passenger) -> 
 		elif place >= 0 and place / 4 == SecurityLooks.Home.HAND:
 			if bag.get("carry", -1) == SecurityLooks.Carry.PULL and since < p.stage_tick:
 				held = maxf(held, RollerPark.TICKS_DOWN + LET_GO_TICKS)
+		elif int(bag.get("was", -1)) < 0 and not p.sat_late:
+			# A bag with no record, or drawn for the first time with no move
+			# before it: the views started over on a load (PassengerViews.snap())
+			# and the roller is drawn at its home with no park to read the hold
+			# from. The hold is as long as a pull>floor park, from the sit-down's
+			# start, the same as before the load.
+			held = maxf(held, RollerPark.TICKS_DOWN + LET_GO_TICKS)
 	return clampi(ceili(held), 0, PassengerSim.SIT_DOWN_TICKS - MIN_SIT_TICKS)
+
+
+## Where `p` stands on the first tick of its sit-down at a gate chair or a cafe
+## seat, the chair front, in the world: the gate seat's front cell, or the cafe
+## seat's approach cell (where PassengerSim.world_position() and
+## CafeSim.seat_position() put it before their shuffle begins). Read from the
+## seat each time, never kept per passenger, so a load puts it back to the same
+## place; null with no such seat.
+static func chair_front(sim: PassengerSim, p: Passenger) -> Variant:
+	match StageKinds.location(p.stage):
+		StageKinds.Location.GATE_SEAT:
+			if p.seat_cell != Passenger.NO_CELL and p.seat_front != Passenger.NO_CELL:
+				return sim.grid.cell_to_world(p.seat_front)
+		StageKinds.Location.FACILITY_SEAT:
+			var visit := sim.cafes.visit_of(p.id)
+			if visit != null and not visit.seat.is_empty():
+				return sim.grid.cell_to_world(visit.seat["approach"])
+	return null
 
 
 ## The offset from `now` (where PassengerViews would draw `p` this tick) to
 ## where it stands while it sets its roller down at a gate chair or cafe seat
 ## (user ruling roller-laid-down-beside-the-passenger-s-feet-not-ahead): at
-## `from`[p.id], its drawn place on the sit-down's first tick (the chair
-## front), for held_ticks(), then easing into the seat over the sit_down clip.
-## The sim's shuffle into the seat (its first 8 ticks at a gate chair, 12 at a
-## cafe seat) drew a standing body sliding back 0.55 m. `from` is the views'
-## per-id record, erased here once `p` is not held.
-static func offset(
-	props: CarryOnProps, sim: PassengerSim, p: Passenger, now: Vector3, from: Dictionary
-) -> Vector3:
+## chair_front(), for held_ticks(), then easing into the seat over the sit_down
+## clip. The sim's shuffle into the seat (its first 8 ticks at a gate chair, 12
+## at a cafe seat) drew a standing body sliding back 0.55 m.
+static func offset(props: CarryOnProps, sim: PassengerSim, p: Passenger, now: Vector3) -> Vector3:
 	var held := 0
 	if StageKinds.pose(p.stage) == StageKinds.Pose.SITTING_DOWN:
 		held = held_ticks(props, sim, p)
-	if held <= 0:
-		from.erase(p.id)
+	var front: Variant = chair_front(sim, p)
+	if held <= 0 or front == null:
 		return Vector3.ZERO
-	if not from.has(p.id):
-		from[p.id] = now
 	var into := ActivityPoses.clip_ticks(sim, p) - held
 	var u := 0.0 if into < 0 else smoothstep(0.0, PassengerSim.SIT_DOWN_TICKS - held, into)
-	return ((from[p.id] as Vector3) - now) * (1.0 - u)
+	return ((front as Vector3) - now) * (1.0 - u)
