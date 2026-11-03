@@ -26,6 +26,12 @@ extends VBoxContainer
 ## ConfigFile at settings_path, "hud/departures_board", and read back when the
 ## board is built. On is the default. B is free of the build tool keys 1 to 0,
 ## the speed keys (Space, Shift+1/2/3) and the camera keys (WASD, Q, E, Home).
+##
+## While a passenger is inspected the whole board, its toggle too, steps aside
+## for the inspect card (step_aside(), decision passenger-inspect-thoughts-
+## recorded-at-sim-outcomes-saved-pin-marks-where point 6, user ruling "Card
+## replaces board"); B still turns the setting on and off meanwhile, and the
+## board comes back as that setting says when the passenger is deselected.
 
 ## The input action for the toggle key, bound to B in project.godot.
 const ACTION := &"toggle_departures_board"
@@ -156,6 +162,12 @@ func _ready() -> void:
 	if flights != null:
 		flights.snapshot_loaded.connect(_on_snapshot_loaded)
 	refresh()
+
+
+## Hides the whole board while `aside` (PassengerHud, while the inspect card
+## shows) and brings it back after; the on/off setting is left as it is.
+func step_aside(aside: bool) -> void:
+	visible = not aside
 
 
 ## True while the panel is on.

@@ -27,7 +27,9 @@ extends SceneTree
 ##   zoomed    the green pin from twice the home distance, still PIN_PX tall
 ##   roof      the same from far enough out that the roof shows: the pin is
 ##             drawn through it; the spot's ray result is printed, not required
-##   panels    the card with the departures board shown and any alert cards up
+##   panels    the card in the departures board's place: the board steps aside
+##             while a passenger is inspected and keeps its on/off setting
+##   back      after the deselect the board is back and the card is gone
 ## Plates go to tools/blender/out/passenger_inspect/.
 
 const OUT_REL := "res://../tools/blender/out/passenger_inspect"
@@ -253,11 +255,19 @@ func _prove_card(label: String) -> bool:
 	var inside := Rect2(Vector2.ZERO, view).grow(-MARGIN_PX).encloses(card)
 	var dock := _main.get_node("BuildMenu").find_child("TemplatesDock", true, false) as Control
 	var dock_rect := dock.get_global_rect() if dock != null else Rect2()
-	var clear := not card.intersects(column) and not card.intersects(dock_rect)
+	var mood := _main.find_child("MoodToggle", true, false) as Control
+	var mood_rect := (
+		mood.get_global_rect() if mood != null and mood.is_visible_in_tree() else Rect2()
+	)
+	var clear := (
+		not card.intersects(column)
+		and not card.intersects(dock_rect)
+		and not card.intersects(mood_rect)
+	)
 	print(
 		(
-			"CARD %s rect=%s column=%s templates=%s inside=%s clear=%s rows=%s"
-			% [label, card, column, dock_rect, inside, clear, _inspect.row_texts()]
+			"CARD %s rect=%s column=%s templates=%s mood=%s inside=%s clear=%s rows=%s"
+			% [label, card, column, dock_rect, mood_rect, inside, clear, _inspect.row_texts()]
 		)
 	)
 	if not (_inspect.visible and inside and clear and _inspect.row_texts().size() > 0):
@@ -391,14 +401,35 @@ func _plate_panels() -> void:
 	_beat("panels")
 	_rig.target_distance = _rig.home_distance
 	var board := _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
-	board.set_shown(true)
+	var setting := board.is_shown()
 	_hud.refresh()
 	await _frames(20)
-	print("BOARD shown=%s rect=%s" % [board.is_shown(), board.get_global_rect()])
+	print(
+		(
+			"BOARD inspecting visible=%s shown=%s rect=%s"
+			% [board.visible, board.is_shown(), board.get_global_rect()]
+		)
+	)
 	_prove_card("panels")
-	if _inspect.get_global_rect().intersects(board.get_global_rect()):
+	var drawn := board.is_visible_in_tree()
+	if drawn and _inspect.get_global_rect().intersects(board.get_global_rect()):
 		_invalid("panels: the card overlaps the departures board")
+	if drawn or board.is_shown() != setting:
+		_invalid("panels: the board did not step aside, or its setting changed")
 	await _grab("inspect_panels.png")
+	# Deselected, the board is back as its setting says and the card is gone.
+	_views.selected_id = 0
+	_hud.refresh()
+	await _frames(10)
+	print(
+		(
+			"BOARD deselected visible=%s shown=%s card=%s"
+			% [board.visible, board.is_shown(), _inspect.visible]
+		)
+	)
+	if not board.visible or board.is_shown() != setting or _inspect.visible:
+		_invalid("panels: the board did not come back after the deselect")
+	await _grab("inspect_board_back.png")
 
 
 func _sheet() -> void:

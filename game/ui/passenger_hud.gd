@@ -4,8 +4,9 @@ extends CanvasLayer
 ## counts, today's departures (DepartureList), and the speed buttons (Space
 ## toggles the pause, Shift+1/2/3 set the speed; plain number keys stay the
 ## build tool keys). On the left edge, the optional DeparturesBoard (B shows
-## and hides it). Left of the flight panel, under the top row, the alert
-## cards (AlertStack), which clear themselves and jump the camera when clicked.
+## and hides it), which steps aside while the inspect card shows. Left of the
+## flight panel, under the top row, the alert cards (AlertStack), which clear
+## themselves and jump the camera when clicked.
 ## Bottom-left: the followed passenger's inspect card (PassengerInspect:
 ## live status, its thoughts, and a pin where a clicked thought happened), or
 ## the followed vehicle's story, kept left of BuildMenu's centre column and
@@ -366,6 +367,8 @@ func refresh() -> void:
 	_follow_label.text = follow_text()
 	_inspect.refresh()
 	_follow_label.visible = not _inspect.visible
+	# The card takes the board's place on the left edge (decision 500fd5a0, point 6).
+	_departures_board.step_aside(_inspect.visible)
 	if clock != null:
 		for i in _speed_buttons.size():
 			var on := clock.paused if i == 0 else not clock.paused and clock.speed == i

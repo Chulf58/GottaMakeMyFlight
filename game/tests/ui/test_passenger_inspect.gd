@@ -5,7 +5,9 @@ extends GdUnitTestSuite
 ## thoughts, newest first; clicking a thought glides the camera to where the
 ## passenger was, stops following and pins the spot until another thought is
 ## clicked, the passenger is deselected or a game is loaded; the passenger's
-## name follows them again.
+## name follows them again. While the card shows, the departures board steps
+## aside and keeps its on/off setting, which B still toggles (point 6, user
+## ruling "Card replaces board").
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -13,6 +15,8 @@ var _camera: TycoonCamera
 var _hud: PassengerHud
 var _inspect: PassengerInspect
 var _id := 0
+## The departures board's on/off file for this run, never the player's.
+var _settings := ""
 
 
 func before() -> void:
@@ -42,6 +46,8 @@ func before_test() -> void:
 	_hud.sim = _world.sim
 	_hud.views = _views
 	_hud.camera = _camera
+	_settings = SaveTestKit.run_path("passenger_inspect_board")
+	_hud.departures_settings_path = _settings
 	add_child(_hud)
 	_inspect = _hud.find_child("PassengerInspect", true, false) as PassengerInspect
 	_id = _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
@@ -57,6 +63,7 @@ func after_test() -> void:
 	_camera.free()
 	_views.free()
 	_world.free_all()
+	DirAccess.remove_absolute(_settings)
 
 
 func _select() -> void:
@@ -193,3 +200,62 @@ func test_lateness_and_the_obstruction_show_on_their_own_and_together() -> void:
 	p.late = false
 	_hud.refresh()
 	assert_str(_inspect.now_text()).is_equal('Stuck: "Queue full"')
+
+
+func _board() -> DeparturesBoard:
+	return _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
+
+
+func _b_key() -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = KEY_B
+	event.physical_keycode = KEY_B
+	event.pressed = true
+	return event
+
+
+func test_the_board_steps_aside_while_a_passenger_is_inspected() -> void:
+	_hud.refresh()
+	assert_bool(_board().visible).is_true()
+	assert_bool(_board().is_shown()).is_true()
+	_select()
+	print("inspecting: board visible %s, shown %s" % [_board().visible, _board().is_shown()])
+	assert_bool(_inspect.visible).is_true()
+	assert_bool(_board().visible).is_false()
+	assert_bool(_board().is_shown()).is_true()
+	# Stepping aside writes nothing: the player's choice stays as it was.
+	assert_bool(FileAccess.file_exists(_settings)).is_false()
+	_views.selected_id = 0
+	_hud.refresh()
+	assert_bool(_inspect.visible).is_false()
+	assert_bool(_board().visible).is_true()
+	assert_bool(_board().is_shown()).is_true()
+
+
+func test_b_while_inspecting_changes_the_setting_and_the_board_stays_aside() -> void:
+	_select()
+	_board()._shortcut_input(_b_key())
+	_hud.refresh()
+	assert_bool(_board().is_shown()).is_false()
+	(
+		assert_bool(HudFlagSetting.load_flag(_settings, DeparturesBoard.SETTING_KEY, true, "test"))
+		. is_false()
+	)
+	assert_bool(_board().visible).is_false()
+	_board()._shortcut_input(_b_key())
+	_hud.refresh()
+	assert_bool(_board().is_shown()).is_true()
+	assert_bool(_board().visible).is_false()
+	_board()._shortcut_input(_b_key())
+	_views.selected_id = 0
+	_hud.refresh()
+	var panel := _board().find_child("DeparturesPanel", true, false) as Control
+	print(
+		(
+			"after deselect: board visible %s, shown %s, panel %s"
+			% [_board().visible, _board().is_shown(), panel.visible]
+		)
+	)
+	assert_bool(_board().visible).is_true()
+	assert_bool(_board().is_shown()).is_false()
+	assert_bool(panel.visible).is_false()
