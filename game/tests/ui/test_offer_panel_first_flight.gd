@@ -90,10 +90,50 @@ func test_the_note_appears_when_the_clock_passes_the_slot_while_open() -> void:
 	assert_str(_panel.card_text("O0N2")).contains("Departs 20:00 daily, first flight tomorrow")
 
 
-func test_no_note_while_the_airport_is_closed() -> void:
+func test_a_closed_airport_names_the_lead_the_first_flight_needs_after_opening() -> void:
 	_sim.tick = GameCalendar.tick_at(0, NOON)
 	_panel.open()
-	assert_str(_panel.card_text("O0N1")).not_contains("first flight")
+	for id in ["O0N1", "O0N2"]:
+		assert_str(_panel.card_text(id)).contains("first flight 3 h 53 min after opening")
+	assert_str(_panel.card_text("O0N2")).contains(
+		"Departs 20:00 daily, first flight 3 h 53 min after opening"
+	)
+
+
+func test_the_closed_lead_is_the_lead_the_sim_uses_at_opening() -> void:
+	var lead := OfferPanel.opening_lead_ticks()
+	assert_int(lead).is_equal(FlightTimetable.ISSUE_LEAD_TICKS + FlightTimetable.departure_offset())
+	var slot := GameCalendar.tick_at(0, 1200)
+	for case in [[slot - lead, 0], [slot - lead + 1, 1]]:
+		var sim := auto_free(FlightSim.new()) as FlightSim
+		sim.tick = case[0]
+		var terms := OfferBoard.terms_of(_desk.board.offer_of("O0N2"))
+		assert_bool(sim.accept_contract(terms)).is_true()
+		sim.open_airport()
+		assert_int(sim.start_days["O0N2"]).is_equal(case[1])
+
+
+func test_the_lead_text_reads_hours_and_minutes() -> void:
+	assert_str(OfferPanel.lead_text(50 * 60 * 20)).is_equal("50 h")
+	assert_str(OfferPanel.lead_text(170 * 20)).is_equal("2 h 50 min")
+	assert_str(OfferPanel.lead_text(45 * 20)).is_equal("45 min")
+
+
+func test_accepting_while_closed_repeats_the_lead_in_the_message() -> void:
+	_sim.tick = GameCalendar.tick_at(0, NOON)
+	_panel.open()
+	_panel.accept_button("O0N2").pressed.emit()
+	assert_str(_panel.message()).is_equal(
+		"Accepted Gotta Air to Oslo, first flight 3 h 53 min after opening"
+	)
+
+
+func test_accepting_a_slot_that_has_passed_repeats_tomorrow_in_the_message() -> void:
+	_at(NOON)
+	_panel.accept_button("O0N1").pressed.emit()
+	assert_str(_panel.message()).contains("first flight tomorrow")
+	_panel.accept_button("O0N2").pressed.emit()
+	assert_str(_panel.message()).not_contains("first flight")
 
 
 func test_a_slot_two_days_out_names_the_day() -> void:

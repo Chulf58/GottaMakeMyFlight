@@ -165,6 +165,7 @@ var alert_settings_path := HudFlagSetting.PATH
 
 var _departures_board := DeparturesBoard.new()
 var _alerts := AlertStack.new()
+var _hints := Hints.new()
 var _counts_label := Label.new()
 var _departures_label := Label.new()
 var _seed_label := Label.new()
@@ -273,6 +274,9 @@ func _ready() -> void:
 	_panel_room.result_card = _result
 	_panel_room.alert_stack = _alerts
 	add_child(_panel_room)
+	_hints.hud = self
+	_hints.scene_root = get_parent()
+	add_child(_hints)
 	_frame_start_view()
 	refresh()
 
