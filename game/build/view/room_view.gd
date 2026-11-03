@@ -4,12 +4,18 @@ extends Node3D
 ## green when RoomRules says it is ready and amber when it is not, and a label
 ## above its middle with the type and either "Ready" or the notes saying what
 ## it still needs. It follows the grid's own signals, so furniture placed by any
-## path (BuildMode, a probe, later systems) shows on the next frame.
+## path (BuildMode, a probe, later systems) shows on the next frame. Each frame
+## RoomLabelLayout slides a label clear of the HUD, caps its size on screen and
+## fades it out when the camera zooms in close.
 
 const TINT_Y := 0.06
 ## Height of the label's bottom line; the text grows upward from it, so more
 ## notes never cover the furniture.
 const LABEL_Y := 2.9
+const LABEL_FONT_SIZE := 40
+## The label is a world-size billboard at this pixel size until RoomLabelLayout caps
+## it on screen.
+const LABEL_PIXEL_SIZE := 0.01
 const READY_TINT := Color(0.35, 0.85, 0.45, 0.3)
 const NEEDS_TINT := Color(1.0, 0.68, 0.18, 0.34)
 const READY_TEXT := Color(0.75, 1.0, 0.8)
@@ -19,6 +25,8 @@ var _grid: BuildGrid
 var _dirty := false
 ## Room id -> [MeshInstance3D tint, Label3D].
 var _drawn: Dictionary = {}
+var _layout := RoomLabelLayout.new()
+var _labels: Array[Label3D] = []
 var _ready_material := _tint_material(READY_TINT)
 var _needs_material := _tint_material(NEEDS_TINT)
 
@@ -42,6 +50,7 @@ func watch(grid: BuildGrid) -> void:
 func _process(_delta: float) -> void:
 	if _dirty:
 		redraw()
+	layout_labels()
 
 
 func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
@@ -56,6 +65,22 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 ## The label over a room, or null when the room is not drawn.
 func label_of(room_id: int) -> Label3D:
 	return _drawn[room_id][1] if _drawn.has(room_id) else null
+
+
+## Lays the labels out for the camera and the HUD as they are now (every frame).
+func layout_labels() -> void:
+	if _drawn.is_empty() or not is_inside_tree():
+		return
+	var view := get_viewport()
+	var camera := view.get_camera_3d()
+	var scale := view.get_stretch_transform().get_scale()
+	_labels.clear()
+	for parts in _drawn.values():
+		_labels.append(parts[1])
+	var hud: Array[Rect2] = []
+	if camera != null:
+		hud = HudRects.collect(self, scale.y)
+	_layout.layout(_labels, camera, scale.y, view.get_visible_rect().size * scale, hud)
 
 
 ## Rebuilds every room's tint and label from the grid.
@@ -95,8 +120,8 @@ func _draw_room(room_id: int) -> void:
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	label.font_size = 40
-	label.pixel_size = 0.01
+	label.font_size = LABEL_FONT_SIZE
+	label.pixel_size = LABEL_PIXEL_SIZE
 	label.outline_size = 10
 	label.outline_modulate = Color(0.05, 0.05, 0.08)
 	label.modulate = READY_TEXT if status.ok else NEEDS_TEXT
