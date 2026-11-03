@@ -1,8 +1,10 @@
 extends SceneTree
-## Windowed plates of hand-held carry-on bags after the carry arm's outward turn
-## went from 12 to 6 degrees (CarrySwap.HAND_OUT_DEGREES) and a roller leaving a
-## toilet stall stays in the hand until StallCarry.LIFT_LEAD_M clear of the
-## stalls (board item a791eb90). Boots main.tscn with a new random sim seed
+## Windowed plates of hand-held carry-on bags: the carry arm turns out 12
+## degrees (CarrySwap.HAND_OUT_DEGREES) in every hand carry but a roller held
+## by its bar beside the stalls, which turns out StallCarry.BAR_OUT_DEGREES (6),
+## and a roller leaving a toilet stall stays in the hand until
+## StallCarry.LIFT_LEAD_M clear of the stalls (board item a791eb90). Each plate's
+## log line prints the holding arm's turn (arm_out). Boots main.tscn with a new random sim seed
 ## (printed; ++ --seed=N to replay), builds ToiletTestLayout's two toilet rooms
 ## on the reference terminal, opens the airport and sends two visitors with a
 ## pressing toilet need, one at a time, the clock stepped by hand:
@@ -27,13 +29,13 @@ extends SceneTree
 ##   timeout 900 Godot_v4.7.2-stable_win64_console.exe --path game \
 ##     --display-driver windows --rendering-driver vulkan --audio-driver Dummy \
 ##     -s res://spike/carry_arm_plates_probe.gd [-- --seed=N --out=C:/dir --only=crowd]
-## Plates go to tools/blender/out/carry-arm-6deg/ unless --out is given.
+## Plates go to tools/blender/out/carry-arm-scoped/ unless --out is given.
 
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const PlateSteps := preload("res://spike/carry_plate_steps.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
-const OUT_REL := "res://../tools/blender/out/carry-arm-6deg"
+const OUT_REL := "res://../tools/blender/out/carry-arm-scoped"
 const HANG_MS := 90000
 const LAST_TICKS := 3000
 const RESEND_TICKS := 900
@@ -277,8 +279,8 @@ func _case_frame(p: Passenger) -> bool:
 	var state := FloatCheck.float_state(_sim, _views, p.id, 0)
 	print(
 		(
-			"CASE walk passenger=%d remaining_mm=%d ahead=%s bag_side=%s side_offset_m=%.3f state=%s"
-			% [p.id, p.remaining_mm(), ahead, side, out.length(), state]
+			"CASE walk passenger=%d remaining_mm=%d ahead=%s bag_side=%s side_offset_m=%.3f state=%s %s"
+			% [p.id, p.remaining_mm(), ahead, side, out.length(), state, _arm(p)]
 		)
 	)
 	_clock.set_paused(true)
@@ -356,9 +358,24 @@ func _plate_leaving(p: Passenger, body: Node3D, bag: Node3D) -> void:
 
 func _leaving(p: Passenger) -> String:
 	return (
-		"leaving=%s leaving_with_lead=%s"
-		% [StallCarry.leaving(_sim, p), StallCarry.leaving(_sim, p, StallCarry.LIFT_LEAD_M)]
+		"leaving=%s leaving_with_lead=%s %s"
+		% [
+			StallCarry.leaving(_sim, p),
+			StallCarry.leaving(_sim, p, StallCarry.LIFT_LEAD_M),
+			_arm(p)
+		]
 	)
+
+
+## The out turn of the arm holding bag 0 of `p`, as drawn.
+func _arm(p: Passenger) -> String:
+	var props := _views.carry_on_props()
+	var body := _views.node_for(p.id)
+	var held: Dictionary = props._held.get(p.id, {})
+	if body == null or held.is_empty():
+		return "arm_out=none"
+	var arm: CarryArm = props._rig(body)["arms"][held["hands"][0]]
+	return "arm_out=%.2f" % arm.angle_degrees
 
 
 ## [over the stall's column, metres of the bag's box beyond the front plane].
@@ -648,11 +665,12 @@ func _fitted_fov(cam: Camera3D, box: AABB) -> float:
 	return clampf(rad_to_deg(2.0 * atan(half / FILL)), 5.0, 100.0)
 
 
-## `body`'s drawn bounds from the bag's lowest point up to 0.4 m over its top,
-## joined with the bag's: the hand, the bag and the thigh.
+## `body`'s drawn bounds from its feet (or the bag's lowest point, if lower) up to
+## 0.4 m over the bag's top, joined with the bag's: the hand, the bag, the thigh
+## and the feet (a plate asks for the feet in frame).
 func _lower_body(body: Node3D, bag: AABB) -> AABB:
 	var whole := _bounds(body)
-	var lo := bag.position.y - 0.05
+	var lo := minf(bag.position.y, whole.position.y) - 0.05
 	var hi := bag.end.y + 0.4
 	var cut := AABB(
 		Vector3(whole.position.x, lo, whole.position.z),

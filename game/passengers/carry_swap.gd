@@ -10,8 +10,10 @@ extends RefCounted
 ## back one still under way started again from its far end (the roller jumped
 ## 1.07 m from the pull to under the hand).
 
-## The holding arm's pose in the hand carry (CarryOnProps._pose_arms, Arm.HAND).
-const HAND_OUT_DEGREES := 6.0
+## The holding arm's pose in the hand carry (CarryOnProps._pose_arms, Arm.HAND;
+## a roller held by its bar beside the stalls turns out less,
+## StallCarry.hand_out_degrees()).
+const HAND_OUT_DEGREES := 12.0
 const HAND_SWING_KEPT := 0.5
 
 
@@ -83,13 +85,16 @@ static func arm_shares(held: Dictionary, now: float) -> Array:
 
 ## Poses `arm` (a CarryArm holding a swapping roller, `share` of the way to the
 ## pull, pull_share(); none when below 0) between the hand carry and the pull:
-## its out angle, kept swing, lean back and front weight (`front`, the hand
-## carry's) are blended, so the grip goes from the one to the other with the
-## roller's bar in it, instead of taking the end's pose at once.
-static func pose_arm(arm: CarryArm, share: float, front: float) -> void:
+## its out angle (from `hand_out`, the hand carry's now), kept swing, lean
+## back and front weight (`front`, the hand carry's) are blended, so the grip
+## goes from the one to the other with the roller's bar in it, instead of
+## taking the end's pose at once.
+static func pose_arm(
+	arm: CarryArm, share: float, front: float, hand_out := HAND_OUT_DEGREES
+) -> void:
 	if share < 0.0:
 		return
-	arm.angle_degrees = lerpf(HAND_OUT_DEGREES, CarryOnProps.PULL_OUT_DEGREES, share)
+	arm.angle_degrees = lerpf(hand_out, CarryOnProps.PULL_OUT_DEGREES, share)
 	arm.swing_kept = lerpf(HAND_SWING_KEPT, CarryOnProps.PULL_SWING_KEPT, share)
 	arm.lean_back_degrees = lerpf(0.0, CarryOnProps.PULL_LEAN_DEGREES, share)
 	arm.front_weight = lerpf(front, 0.0, share)
