@@ -32,6 +32,9 @@ const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 90000
 const FRAME := 1.0 / 60.0
 const FOLLOW_DISTANCE := 75.0
+## The material check: the plane alone has more than 30 surfaces (34 on its model), so 30 or
+## fewer means it was not walked and the check proved nothing.
+const PLANE_SURFACES_MIN := 31
 ## The taxi paving stage: ticks between samples, the nodes whose colliders are paving
 ## (a ray hit on anything else, the Ground grass included, is not), the site
 ## paving's north edge, and the top-down plates' height of view and the z they
@@ -178,6 +181,10 @@ func _run() -> void:
 		_invalid("the starter's first flight GMF101-d0 was not issued")
 		_finish()
 		return
+	_check_materials()
+	if _failed:
+		_finish()
+		return
 	_add_colliders(_main)
 	await physics_frame
 	print("PROBE speed_set=", _clock.set_speed(3), " speed=", _clock.speed)
@@ -249,6 +256,49 @@ func _corners(box: AABB) -> Array[Vector3]:
 	for i in 8:
 		out.append(box.get_endpoint(i))
 	return out
+
+
+## Every surface of every visible airside mesh and of the plane (visible or not, it hides
+## until its first pose) must have an active material, and a shader material a shader.
+## Runs before the overview adds its debug spheres. Counts what it walked so a check that
+## found nothing cannot pass.
+func _check_materials() -> void:
+	var plane_count := _surfaces_without_material(_plane, false, "PlaneView")
+	var airside_count := _surfaces_without_material(_main.get_node("Airside"), true, "Airside")
+	print(
+		(
+			"MATERIALS surfaces_checked=%d plane=%d airside=%d"
+			% [plane_count + airside_count, plane_count, airside_count]
+		)
+	)
+	if plane_count < PLANE_SURFACES_MIN:
+		_invalid("the plane contributed only %d surfaces, expected more than 30" % plane_count)
+
+
+## Prints BAD_MATERIAL per broken surface under root, marks the probe failed for each, and
+## returns the number of surfaces checked. A hidden mesh is skipped when visible_only.
+func _surfaces_without_material(root_node: Node, visible_only: bool, label: String) -> int:
+	var checked := 0
+	for mi in _meshes(root_node):
+		if mi.mesh == null or (visible_only and not mi.is_visible_in_tree()):
+			continue
+		for i in mi.mesh.get_surface_count():
+			checked += 1
+			var mat := mi.get_active_material(i)
+			var reason := ""
+			if mat == null:
+				reason = "null material"
+			elif mat is ShaderMaterial and (mat as ShaderMaterial).shader == null:
+				reason = "shader material without a shader"
+			if reason != "":
+				print(
+					(
+						"BAD_MATERIAL %s/%s surface %d (%s)"
+						% [label, root_node.get_path_to(mi), i, reason]
+					)
+				)
+				_failed = true
+	return checked
 
 
 func _add_colliders(node: Node) -> void:
@@ -499,6 +549,7 @@ func _overview() -> void:
 	_clock.tick = boarding
 	_plane.update_pose()
 	var airside: Node3D = _main.get_node("Airside")
+	var dots: Array[MeshInstance3D] = []
 	for m in airside.get_children():
 		if m is Marker3D:
 			var dot := MeshInstance3D.new()
@@ -510,6 +561,7 @@ func _overview() -> void:
 			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			dot.material_override = mat
 			airside.add_child(dot)
+			dots.append(dot)
 	var top := Camera3D.new()
 	top.projection = Camera3D.PROJECTION_ORTHOGONAL
 	top.size = 290.0
@@ -527,6 +579,10 @@ func _overview() -> void:
 	var pts: Array[Vector3] = _corners(_aabb_of(model)) + _corners(_aabb_of(terminal))
 	if _prove_in_frame("overview", pts):
 		_save(await _grab(), "overview_top.png")
+	# The spheres are this plate's markers only; free them so no later plate shows them.
+	for dot in dots:
+		dot.queue_free()
+	top.queue_free()
 
 
 ## Candidate default framings for the camera: projects the stand, the terminal's airside
