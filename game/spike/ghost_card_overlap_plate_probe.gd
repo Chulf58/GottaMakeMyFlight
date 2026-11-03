@@ -24,6 +24,8 @@ const MARGIN_PX := 8.0
 const SETTLE_FRAMES := 6
 const SAMPLE_STEP := 3
 const MAX_CANDIDATES := 60
+## A card nearer the hint card than GhostCardNudge.GAP minus this many pixels fails.
+const SLACK_PX := 1.0
 
 var _out_dir := ""
 var _failed := false
@@ -97,6 +99,7 @@ func _run() -> void:
 	var best := {}
 	var shown := 0
 	var overlapped := 0
+	var too_close := 0
 	for at: Vector2 in candidates:
 		_build.pointer_override = at
 		await _frames(SETTLE_FRAMES)
@@ -109,6 +112,8 @@ func _run() -> void:
 		var gap := _gap(reason.get_global_rect(), hint_card.get_global_rect())
 		if area > 0.0:
 			overlapped += 1
+		if area > 0.0 or gap < GhostCardNudge.GAP - SLACK_PX:
+			too_close += 1
 		# The plate shows the worst overlap, or with none the card nearest the hint card.
 		if best.is_empty() or area > best["area"] or (area == best["area"] and gap < best["gap"]):
 			best = {
@@ -133,14 +138,21 @@ func _run() -> void:
 		)
 	print(
 		(
-			"PROBE cards_shown=%d overlapped=%d plated_at=%s plated_gap_px=%.0f"
-			% [shown, overlapped, best.get("at"), best.get("gap", -1.0)]
+			"PROBE cards_shown=%d overlapped=%d too_close=%d plated_at=%s plated_gap_px=%.0f"
+			% [shown, overlapped, too_close, best.get("at"), best.get("gap", -1.0)]
 		)
 	)
-	if best.is_empty():
-		_invalid("no refused cell showed the reason card")
+	if best.is_empty() or shown < 1:
+		_invalid("no refused cell showed the reason card (cards_shown=%d)" % shown)
 		_finish()
 		return
+	if too_close > 0:
+		_invalid(
+			(
+				"%d of %d cards overlap the hint card or sit under %.0f px from it"
+				% [too_close, shown, GhostCardNudge.GAP - SLACK_PX]
+			)
+		)
 	_build.pointer_override = best["at"]
 	await _frames(SETTLE_FRAMES + 4)
 	await _plate(best, hint_card, screen)
@@ -204,6 +216,14 @@ func _plate(best: Dictionary, hint_card: Control, screen: Rect2) -> void:
 	if not reason.visible:
 		_invalid("the reason card is not visible")
 	var shared := reason.get_global_rect().intersection(hint_card.get_global_rect())
+	var plated_gap := _gap(reason.get_global_rect(), hint_card.get_global_rect())
+	if shared.has_area() or plated_gap < GhostCardNudge.GAP - SLACK_PX:
+		_invalid(
+			(
+				"the plated card has gap %.1f px, needs %.1f"
+				% [plated_gap, GhostCardNudge.GAP - SLACK_PX]
+			)
+		)
 	print(
 		(
 			"PLATE reason='%s' reason_rect=%s hint='%s' hint_rect=%s shared_px=%.0f"
