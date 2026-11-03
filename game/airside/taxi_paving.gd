@@ -18,6 +18,13 @@ extends MeshInstance3D
 ## of the runway. The strips are flat and face up, so the toon outline pass
 ## (cull_front) draws no seam where they meet.
 ##
+## A thin centre line runs along the lane and each link (user ruling taxiway-
+## look-runway-asphalt-with-a-yellow-centreline), in the runway's own line
+## marking colour and LINE_LIFT_M above the asphalt, as the runway's markings
+## sit over its own. A link's line stops at the lane line's edge and the lane
+## line runs half a line width past its end links, so the lines meet in a
+## square T or L and never overlap.
+##
 ## Not guaranteed: a route leg that is neither north-south nor east-west gets
 ## no strip (an error says so); every taxiway on the airside is one or the other.
 
@@ -30,11 +37,19 @@ const MATERIAL := preload("res://assets/materials/tp_atlas_simple_toon.tres")
 const ASPHALT_U := 0.5047
 const ASPHALT_V_FROM := 0.0010
 const ASPHALT_V_TO := 0.0614
+## The centre line: its width, its height over the asphalt (the runway's own
+## markings sit 0.007 m over its asphalt), and the atlas point of the runway's
+## line marking colour (the pale yellow of its edge lines and chevrons).
+const LINE_WIDTH_M := 0.5
+const LINE_LIFT_M := 0.01
+const MARKING_UV := Vector2(0.6083, 0.0067)
 ## How far apart two values may be and still count as the same, in metres.
 const SAME_M := 0.01
 
 ## The strips last built, as returned by strips().
 var shown: Array[Dictionary] = []
+## The centre lines last built, as returned by centrelines().
+var lines: Array[Rect2] = []
 
 
 func _init() -> void:
@@ -46,7 +61,8 @@ func _init() -> void:
 ## Builds the mesh for `routes` (world points) around the lane at `lane_z`.
 func show_routes(routes: Array[PackedVector3Array], lane_z: float) -> void:
 	shown = strips(routes, lane_z)
-	mesh = mesh_of(shown)
+	lines = centrelines(shown, lane_z)
+	mesh = mesh_of(shown, lines)
 
 
 ## The strips covering `routes`: each {"rect": Rect2 of world x and z,
@@ -127,10 +143,39 @@ static func _add_leg(
 	columns[key] = column
 
 
-## One flat, upward quad per strip, its atlas band running across the strip.
-static func mesh_of(strip_list: Array[Dictionary]) -> ArrayMesh:
+## The centre line of each strip in `strip_list` (as strips() returns them,
+## around the lane at `lane_z`), `line` wide. The lane's line runs from its
+## end links' centres plus half a line; a link's end at the lane's edge is
+## carried to the lane line's edge, so the two butt without overlapping.
+static func centrelines(
+	strip_list: Array[Dictionary], lane_z: float, width := WIDTH_M, line := LINE_WIDTH_M
+) -> Array[Rect2]:
+	var half := width / 2.0
+	var half_line := line / 2.0
+	var out: Array[Rect2] = []
+	for strip in strip_list:
+		var rect: Rect2 = strip["rect"]
+		if not strip["across_x"]:
+			var from_x := rect.position.x + half - half_line
+			var to_x := rect.end.x - half + half_line
+			out.append(Rect2(from_x, rect.get_center().y - half_line, to_x - from_x, line))
+			continue
+		var north := rect.position.y
+		var south := rect.end.y
+		if absf(south - (lane_z - half)) < SAME_M:
+			south = lane_z - half_line
+		if absf(north - (lane_z + half)) < SAME_M:
+			north = lane_z + half_line
+		out.append(Rect2(rect.get_center().x - half_line, north, line, south - north))
+	return out
+
+
+## One flat, upward quad per strip, its atlas band running across the strip,
+## and one per centre line in `line_list`, LINE_LIFT_M higher, in the marking
+## colour.
+static func mesh_of(strip_list: Array[Dictionary], line_list: Array[Rect2] = []) -> ArrayMesh:
 	var out := ArrayMesh.new()
-	if strip_list.is_empty():
+	if strip_list.is_empty() and line_list.is_empty():
 		return out
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
@@ -140,12 +185,7 @@ static func mesh_of(strip_list: Array[Dictionary]) -> ArrayMesh:
 		var rect: Rect2 = strip["rect"]
 		var across_x: bool = strip["across_x"]
 		var base := verts.size()
-		for corner: Vector2 in [
-			rect.position,
-			Vector2(rect.end.x, rect.position.y),
-			rect.end,
-			Vector2(rect.position.x, rect.end.y),
-		]:
+		for corner in _corners_of(rect):
 			verts.append(Vector3(corner.x, HEIGHT_M, corner.y))
 			normals.append(Vector3.UP)
 			var t: float = (
@@ -154,8 +194,14 @@ static func mesh_of(strip_list: Array[Dictionary]) -> ArrayMesh:
 				else (corner.y - rect.position.y) / rect.size.y
 			)
 			uvs.append(Vector2(ASPHALT_U, lerpf(ASPHALT_V_FROM, ASPHALT_V_TO, t)))
-		# Clockwise seen from above, Godot's front face.
-		index.append_array(PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3]))
+		index.append_array(_quad(base))
+	for rect in line_list:
+		var base := verts.size()
+		for corner in _corners_of(rect):
+			verts.append(Vector3(corner.x, HEIGHT_M + LINE_LIFT_M, corner.y))
+			normals.append(Vector3.UP)
+			uvs.append(MARKING_UV)
+		index.append_array(_quad(base))
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -165,6 +211,21 @@ static func mesh_of(strip_list: Array[Dictionary]) -> ArrayMesh:
 	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	out.surface_set_material(0, MATERIAL)
 	return out
+
+
+static func _corners_of(rect: Rect2) -> Array[Vector2]:
+	return [
+		rect.position,
+		Vector2(rect.end.x, rect.position.y),
+		rect.end,
+		Vector2(rect.position.x, rect.end.y)
+	]
+
+
+## The two triangles of the quad whose corners start at `base`, clockwise seen
+## from above (Godot's front face).
+static func _quad(base: int) -> PackedInt32Array:
+	return PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3])
 
 
 ## Whether the point (x, z) of `point` lies on one of `strip_list`'s strips.

@@ -4,7 +4,9 @@ extends GdUnitTestSuite
 ## link-from-each-stand-to-it-so-pla): one lane strip, one strip per other leg
 ## stopping at the lane's edge, and on main.tscn's airside every point of
 ## every ground route, sampled each metre, lies on a strip, for the one stand
-## and for two gates 44 m apart.
+## and for two gates 44 m apart. Each strip carries a centre line in the
+## runway's marking colour (user ruling taxiway-look-runway-asphalt-with-a-
+## yellow-centreline): a link's line butts on the lane's, never overlapping it.
 
 const MAIN_SCENE := "res://main/main.tscn"
 const LANE_Z := StandPlacement.TAXI_LANE_Z
@@ -160,6 +162,91 @@ func test_two_gates_routes_are_paved_everywhere_and_follow_the_stands() -> void:
 	var at_b := Vector3(StandPlacement.stand_point(STAND_B).x, 0, -225)
 	assert_bool(TaxiPaving.covers(_airside.paving.shown, at_a)).is_true()
 	assert_bool(TaxiPaving.covers(_airside.paving.shown, at_b)).is_true()
+	_assert_lines_fit(_airside.paving.shown, _airside.paving.lines)
+
+
+## Each line lies on paving: a link's line on its own strip, or on the lane
+## strip where it carries on to the lane line (within the link's x and the two
+## strips' joint z span, which they cover as they meet). The first (the lane's)
+## touches every other line, and no two lines share any area.
+func _assert_lines_fit(strip_list: Array[Dictionary], line_list: Array[Rect2]) -> void:
+	print("lines %s" % [line_list])
+	assert_int(line_list.size()).is_equal(strip_list.size())
+	var lane: Rect2 = strip_list[0]["rect"]
+	for i in line_list.size():
+		var strip_rect: Rect2 = strip_list[i]["rect"]
+		var line := line_list[i]
+		assert_bool(strip_rect.merge(lane).encloses(line)).is_true()
+		assert_float(line.position.x).is_greater_equal(strip_rect.position.x)
+		assert_float(line.end.x).is_less_equal(strip_rect.end.x)
+		if i > 0:
+			assert_bool(line_list[i].grow(TaxiPaving.SAME_M).intersects(line_list[0])).is_true()
+		for j in range(i + 1, line_list.size()):
+			assert_bool(line_list[i].intersects(line_list[j])).is_false()
+
+
+func test_centre_lines_butt_on_the_lane_line_in_a_clean_t() -> void:
+	var route := PackedVector3Array(
+		[
+			Vector3(30, 0, -310),
+			Vector3(30, 0, LANE_Z),
+			Vector3(-26, 0, LANE_Z),
+			Vector3(-26, 0, -143.9),
+			Vector3(-26, 0, -114.9),
+		]
+	)
+	var back := PackedVector3Array([Vector3(-26, 0, LANE_Z), Vector3(-132, 0, LANE_Z)])
+	var routes: Array[PackedVector3Array] = [route, back]
+	var strip_list := TaxiPaving.strips(routes, LANE_Z)
+	var got := TaxiPaving.centrelines(strip_list, LANE_Z)
+	var half := TaxiPaving.LINE_WIDTH_M / 2.0
+	# The lane's line: from the west end link's centre to the east one's, half a
+	# line past each, so the end corners are square.
+	assert_object(got[0]).is_equal(
+		Rect2(-132 - half, LANE_Z - half, 162 + TaxiPaving.LINE_WIDTH_M, TaxiPaving.LINE_WIDTH_M)
+	)
+	# The stand's link starts at the lane line's south edge.
+	assert_object(got[1]).is_equal(
+		Rect2(-26 - half, LANE_Z + half, TaxiPaving.LINE_WIDTH_M, -114.9 - (LANE_Z + half))
+	)
+	# The runway's link ends at the lane line's north edge.
+	assert_object(got[2]).is_equal(
+		Rect2(30 - half, -310, TaxiPaving.LINE_WIDTH_M, LANE_Z - half + 310)
+	)
+	_assert_lines_fit(strip_list, got)
+
+
+func test_centre_lines_sit_over_the_asphalt_in_the_runway_marking_colour() -> void:
+	var strip_list: Array[Dictionary] = [{"rect": Rect2(-10, -20, 30, 40), "across_x": true}]
+	var line_list: Array[Rect2] = [Rect2(4.75, -20, 0.5, 40)]
+	var mesh := TaxiPaving.mesh_of(strip_list, line_list)
+	var arrays := mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	assert_int(verts.size()).is_equal(8)
+	assert_int(index.size()).is_equal(12)
+	for i in range(4, 8):
+		assert_float(verts[i].y).is_equal_approx(
+			TaxiPaving.HEIGHT_M + TaxiPaving.LINE_LIFT_M, 0.0001
+		)
+		assert_vector(uvs[i]).is_equal_approx(TaxiPaving.MARKING_UV, Vector2(0.00001, 0.00001))
+	for t in range(6, 12, 3):
+		var a := verts[index[t]]
+		assert_float((verts[index[t + 1]] - a).cross(verts[index[t + 2]] - a).y).is_less(0.0)
+	# The atlas colour there is the runway's pale yellow marking.
+	var atlas: Image = (
+		(TaxiPaving.MATERIAL.get_shader_parameter("albedo_texture") as Texture2D).get_image()
+	)
+	atlas.decompress()
+	var size := atlas.get_size()
+	var colour := atlas.get_pixel(
+		int(TaxiPaving.MARKING_UV.x * size.x), int(TaxiPaving.MARKING_UV.y * size.y)
+	)
+	print("marking colour %s" % colour)
+	assert_float(colour.r).is_greater(0.85)
+	assert_float(colour.g).is_greater(0.7)
+	assert_float(colour.b).is_less(0.6)
 
 
 func test_paving_follows_a_stand_that_moves() -> void:
