@@ -33,6 +33,13 @@ extends RefCounted
 ## in turns back; one sitting down stands up again; one using the stall
 ## stands up (its need is reset). A visit whose stall is gone ends at once.
 ##
+## A stall that moves with its room (Relocation) does not move its user: one
+## stepping in or sitting down turns back, one using the stall stands up with
+## the use it still owes, and one already leaving finishes, all at the old
+## stall, with the need not reset; then it is admitted again and walks to the
+## stall at its new spot, or goes on with its journey. A walker whose stall
+## moved is admitted again the same way.
+##
 ## Visits and stalls are handled in id order with integer quantities only, so
 ## a save loaded at a tick boundary plays on exactly. Who owns which visit and
 ## stall, the choice of stall and the reconcile walk are FacilitySlots', shared
@@ -247,6 +254,10 @@ func step(p: Passenger) -> void:
 		Passenger.Stage.TOILET_SITTING_DOWN:
 			if spent >= PassengerSim.SIT_DOWN_TICKS:
 				_set_stage.call(p, Passenger.Stage.TOILET_USE)
+				if visit.relocation != null:
+					# Back in a stall that moved: only the use it still owes.
+					p.stage_tick = _sim.tick - (USE_TICKS - visit.relocation.left)
+					visit.relocation = null
 		Passenger.Stage.TOILET_USE:
 			if spent >= USE_TICKS:
 				p.toilet_need = 0
@@ -257,7 +268,10 @@ func step(p: Passenger) -> void:
 				_set_stage.call(p, Passenger.Stage.TOILET_EXIT)
 		Passenger.Stage.TOILET_EXIT:
 			if spent >= EXIT_TICKS:
-				_end(p, visit)
+				if visit.relocation != null and visit.relocation.returns():
+					_head_to_stall(p, visit)
+				else:
+					_end(p, visit)
 
 
 ## A passenger who got up from a gate seat for the toilet sets off for it.
@@ -326,7 +340,13 @@ func rederive() -> void:
 	_core.rederive()
 	for id in visit_ids():
 		var visit := visit_of(id)
-		visit.stall = layout.stall(visit.stall_id)
+		if visit.relocation != null and visit.relocation.exiting:
+			# Still leaving the stall's old spot: its geometry is the saved one.
+			visit.piece = visit.relocation.source
+			visit.stall = ToiletLayout.entry_at(_sim.grid, visit.stall_id, visit.room, visit.piece)
+		else:
+			visit.stall = layout.stall(visit.stall_id)
+			visit.piece = Relocation.placement(_sim.grid, visit.stall_id)
 
 
 ## The free stall nearest `p` by path, ties to the lower stall id, with the
@@ -374,6 +394,7 @@ func _commit(p: Passenger, stall: Dictionary, route: Dictionary) -> void:
 	visit.room = stall["room"]
 	visit.stall_id = stall["id"]
 	visit.stall = stall
+	visit.piece = Relocation.placement(_sim.grid, visit.stall_id)
 	visit.resume_stage = _resume_stage(p)
 	visit.deadline = VisitForecast.deadline(
 		_sim, p, stall["approach"], LEAVE_TICKS, visit.resume_stage
@@ -440,14 +461,104 @@ func _turn_back(p: Passenger, reverse: Passenger.Stage, length: int) -> void:
 
 ## FacilitySlots.reconcile()'s check of one visit: its stall entry is brought
 ## up to date, or the stall is gone and the visit ends.
+## A visit whose stall moved is relocated first (_relocates()).
 func _keep(p: Passenger, visit: ToiletVisit) -> bool:
+	if _relocates(p, visit):
+		return visit_of(p.id) == visit
 	var stall := layout.stall(visit.stall_id)
 	if stall.is_empty():
 		_stall_gone(p, visit)
 		return false
 	visit.stall = stall
+	visit.piece = Relocation.placement(_sim.grid, visit.stall_id)
 	visit.room = stall["room"]
 	return true
+
+
+## A passenger whose stall the grid now holds at another placement
+## (Relocation): one stepping in or sitting down turns back, one using the
+## stall stands up with the use it still owes, one already leaving just
+## finishes, all at the old stall with the need not reset; a walker is
+## admitted again (_head_to_stall()). True when reconcile must leave the visit
+## alone: held at its old stall, or (for a walker) handled.
+func _relocates(p: Passenger, visit: ToiletVisit) -> bool:
+	if visit.relocation != null and visit.relocation.exiting:
+		# A stall gone from the room meanwhile: it only finishes leaving.
+		visit.relocation.drop_return_unless(_sim.grid, visit.stall_id, &"toilet_stall", visit.room)
+		return true
+	if not Relocation.moved(visit.piece, Relocation.placement(_sim.grid, visit.stall_id)):
+		return false
+	if p.stage == Passenger.Stage.TOILET_WALK:
+		_head_to_stall(p, visit)
+		return true
+	if not STALL_STAGES.has(p.stage):
+		return false
+	var owed := USE_TICKS if visit.relocation == null else visit.relocation.left
+	match p.stage:
+		Passenger.Stage.TOILET_ENTER:
+			visit.relocation = Relocation.leaving(visit.piece, owed)
+			_turn_back(p, Passenger.Stage.TOILET_EXIT, ENTER_TICKS)
+		Passenger.Stage.TOILET_SITTING_DOWN:
+			visit.relocation = Relocation.leaving(visit.piece, owed)
+			_turn_back(p, Passenger.Stage.TOILET_STANDING_UP, PassengerSim.SIT_DOWN_TICKS)
+		Passenger.Stage.TOILET_USE:
+			owed = maxi(USE_TICKS - (_sim.tick - p.stage_tick), 1)
+			visit.relocation = Relocation.leaving(visit.piece, owed)
+			_set_stage.call(p, Passenger.Stage.TOILET_STANDING_UP)
+		_:
+			# Done with the stall: it only finishes leaving where it was.
+			visit.relocation = Relocation.leaving(visit.piece, -1)
+	return true
+
+
+## A passenger whose stall moved heads for it at the new spot, when the rest
+## of the visit still fits before its flight: the walk there, stepping in,
+## sitting down, the use it still owes and the way on (VisitForecast).
+## Otherwise, or with no stall it can reach, it goes on with its journey, its
+## need as it was (ruling moving-a-room-with-its-furniture-is-free-and-keeps-
+## paid-pric, point 4).
+func _head_to_stall(p: Passenger, visit: ToiletVisit) -> void:
+	refresh()
+	var owed := USE_TICKS
+	if visit.relocation != null:
+		visit.relocation.exiting = false
+		owed = visit.relocation.left
+	var stall := layout.stall(visit.stall_id)
+	var route := {}
+	if not stall.is_empty():
+		route = VisitRoute.plan(_sim.grid, p, stall["approach"])
+		if route.is_empty() and p.at == stall["approach"] and not p.is_moving():
+			route = {"path": [p.at], "keep": 0, "from": p.at, "mm": 0}
+	if route.is_empty():
+		_end(p, visit)
+		return
+	var ticks := (
+		JourneyForecast.walk_ticks(route["mm"]) + ENTER_TICKS + PassengerSim.SIT_DOWN_TICKS + owed
+	)
+	# Out of the old stall, the walk starts on the next tick (no double step).
+	if p.stage == Passenger.Stage.TOILET_EXIT:
+		ticks += 1
+	# The use must end before the deadline: on the deadline tick itself step()
+	# cuts it short instead.
+	ticks += 1
+	var arrival := VisitForecast.arrival(
+		_sim, p, ticks, stall["approach"], LEAVE_TICKS, visit.resume_stage
+	)
+	if not VisitForecast.admits(_sim, p, arrival):
+		_end(p, visit)
+		return
+	visit.stall = stall
+	visit.piece = Relocation.placement(_sim.grid, visit.stall_id)
+	visit.room = stall["room"]
+	visit.deadline = _live_deadline(p, visit)
+	if p.stage == Passenger.Stage.TOILET_EXIT:
+		# This tick took the last step out of the old stall: the walk starts on
+		# the next (_walk_step()), so no tick moves it by two steps at once.
+		p.clear_path()
+	else:
+		VisitRoute.start(p, route)
+	if p.stage != Passenger.Stage.TOILET_WALK:
+		_set_stage.call(p, Passenger.Stage.TOILET_WALK)
 
 
 ## The stall went away under the visit: a walker gives up; one inside the

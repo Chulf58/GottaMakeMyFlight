@@ -78,7 +78,9 @@ signal checked_in(id: int, desk: int)
 ## supported-until-after-a-release-no-save-mi).
 ## 17: each passenger's collect_tick (ParkRecovery). Version 16 is refused,
 ## with no migration; a migrated older save collects nothing.
-const SAVE_VERSION := 17
+## 18: a cafe or toilet visit following its moved piece saves its Relocation
+## (CafeSnapshot, ToiletSnapshot). Version 17 is refused, with no migration.
+const SAVE_VERSION := 18
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -234,6 +236,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	security.bind(self, _security_admitted, _security_cleared)
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	toilets.bind(self, _set_stage, _leave_station, _release_seat)
+	grid.set_meta(RoomMove.EXIT_CELLS_META, move_exit_cells)
 	boredom.bind(self)
 	decor.bind(self)
 	messes.bind(self)
@@ -474,6 +477,12 @@ func _any_open(stations: Array[int]) -> bool:
 		if _is_open(station):
 			return true
 	return false
+
+
+## The cells visitors need clear to leave the pieces they use: RoomMove's
+## keep_clear, set on the grid by bind() (Relocation.exit_cells()).
+func move_exit_cells() -> Array[Vector2i]:
+	return Relocation.exit_cells(self)
 
 
 ## Where the passenger stands on this tick, in world space.

@@ -29,6 +29,9 @@ const PICK_RADIUS_PX := 40.0
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
 var selected_id := 0
+## Moved pieces still in use, drawn at their old spot (RelocationGhosts).
+## Holds no tick: it compares with the sim every frame.
+var ghosts := RelocationGhosts.new()
 
 ## Free nodes per body (PassengerLooks.BODIES).
 var _pool: Array[Array] = []
@@ -79,6 +82,9 @@ func _ready() -> void:
 	_pops.name = "CafePops"
 	_pops.sim = sim
 	add_child(_pops)
+	ghosts.name = "RelocationGhosts"
+	ghosts.sim = sim
+	add_child(ghosts)
 	_props.name = "CarryOnProps"
 	_props.clock = clock
 	_props.sim = sim
