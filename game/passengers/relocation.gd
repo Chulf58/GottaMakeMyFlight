@@ -3,7 +3,11 @@ extends RefCounted
 ## A visitor's way back into its visit after the piece it was using moved with
 ## its room (decision move-rooms-technical-design-roommove-plan-of-existing-
 ## edits, parts 4 to 6; ruling moving-a-room-with-its-furniture-is-free-and-
-## keeps-paid-pric, points 2 and 4). Held by a cafe or toilet visit.
+## keeps-paid-pric, points 2 and 4). Held by a cafe, toilet or shop visit (a
+## kiosk display stand or an activity piece: ShopSim's browser or sitter is
+## "physically at" the piece while it browses; its exit is ActivityPoses.
+## exit_ticks(), none for a display stand, and the stay it still owes is
+## `left`, browse_ticks() at most).
 ##
 ## Each visit keeps the placement of its piece ({"def", "anchor", "facing"}) as
 ## it last saw it. When the sim's reconcile finds the piece at another
@@ -82,6 +86,8 @@ static func destination_ok(grid: BuildGrid, id: int, def_id: StringName, room_id
 		kind_ok = room["type"] == &"toilet"
 	elif def_id == &"cafe_table":
 		kind_ok = type != null and type.food and not type.walk_on
+	else:
+		kind_ok = type != null and type.shop and type.seat_piece == def_id
 	return kind_ok and FacilitySlots.piece_inside(grid, id, room["rect"])
 
 
@@ -174,6 +180,14 @@ static func exit_cells(sim: PassengerSim) -> Array[Vector2i]:
 		var p := sim.get_passenger(id)
 		if ToiletSim.STALL_STAGES.has(p.stage) and not stall.is_empty():
 			_add(out, [stall["use_cell"], stall["turn_cell"], stall["approach"]])
+	for id in sim.shops.visit_ids():
+		var visit := sim.shops.visit_of(id)
+		if sim.get_passenger(id).stage == Passenger.Stage.SHOP_BROWSE and not visit.slot.is_empty():
+			var approach: Vector2i = visit.slot["approach"]
+			_add(out, [approach])
+			if ActivityPoses.KINDS.has(visit.piece.get("def", &"")):
+				# A sitter or shower user is also on the piece's own cell.
+				_add(out, [approach + (visit.slot["facing"] as Vector2i)])
 	return out
 
 
@@ -192,6 +206,10 @@ static func ghosts(sim: PassengerSim) -> Array[Dictionary]:
 		var visit := sim.toilets.visit_of(id)
 		if ToiletSim.STALL_STAGES.has(sim.get_passenger(id).stage):
 			_ghost(out, sim.grid, visit.stall_id, visit.piece, visit.relocation)
+	for id in sim.shops.visit_ids():
+		var visit := sim.shops.visit_of(id)
+		if sim.get_passenger(id).stage == Passenger.Stage.SHOP_BROWSE:
+			_ghost(out, sim.grid, visit.display, visit.piece, visit.relocation)
 	return out
 
 

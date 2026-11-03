@@ -19,6 +19,12 @@ extends RefCounted
 ## planner's choice is not. The flag must fit the visit (fallback_of()): true
 ## only for a bored passenger's relief visit to a room of another kind than
 ## its wish, so a no-wish visit or a spare-time browse is never a fallback.
+##
+## A visit following its moved browse piece saves its Relocation under
+## "relocation" (absent otherwise). While the passenger still leaves the old
+## spot, it is checked against the slot entry of the saved spot, not the
+## grid's, and a visitor back at the piece stays the stay it still owes
+## (ShopSim.stay_ticks()).
 
 const VISIT_FIELDS := ["passenger", "room", "display", "slot", "resume_stage", "deadline"]
 const RESUME_STAGES := [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
@@ -42,6 +48,10 @@ static func save(shops: ShopSim) -> Dictionary:
 				}
 			)
 		)
+	for i in visits.size():
+		var moving := shops.visit_of(int(visits[i]["passenger"])).relocation
+		if moving != null:
+			visits[i]["relocation"] = moving.to_record()
 	return {"visits": visits, "deadlines_stale": shops.deadlines_stale}
 
 
@@ -88,6 +98,13 @@ static func _visit_problem(
 	visit: ShopVisit, p: Passenger, layout: ShopLayout, grid: BuildGrid, tick: int
 ) -> String:
 	var slot := layout.slot(visit.display, visit.index)
+	var moving := visit.relocation
+	var problem := _relocation_problem(visit, p, grid, tick)
+	if problem != "":
+		return problem
+	if moving != null and moving.exiting:
+		# Still leaving the piece's old spot: checked against the saved spot.
+		slot = ShopLayout.entry_at(visit.display, visit.index, visit.room, moving.source)
 	if slot.is_empty():
 		return "no such browse slot"
 	if int(slot["room"]) != visit.room:
@@ -98,11 +115,54 @@ static func _visit_problem(
 	if p.stage == Passenger.Stage.SHOP_BROWSE:
 		if p.at != slot["approach"] or p.is_moving():
 			return "it is browsing but not on its slot"
-		var browse := ShopSim.browse_ticks(RoomTypes.get_type(type_id))
+		var browse := ShopSim.stay_ticks(visit, RoomTypes.get_type(type_id))
 		if p.stage_tick > tick or p.stage_tick + browse <= tick:
 			return "the browse does not run past the saved tick"
 	if visit.fallback != fallback_of(p, type_id):
 		return "its fallback flag does not fit the visit"
+	return ""
+
+
+## Why a visit's Relocation cannot be what continuous play left, or "" when it
+## can (or there is none). Its source must be the browse piece of the visit's
+## room. A visitor leaving the old spot is browsing there with the exit of its
+## piece still to run: 1 to ActivityPoses.exit_ticks() ticks of the stay
+## (browse_ticks()) left; one that owes the stay still (left 1 to
+## browse_ticks()) is walking back or browsing it. A final exit (left -1) is
+## only leaving, and only while the end of the stay is under way. Whether the
+## piece is still there to return to is play's to judge when the exit ends
+## (ShopSim._head_to_piece()), so a removed piece is not a problem here.
+static func _relocation_problem(
+	visit: ShopVisit, p: Passenger, grid: BuildGrid, tick: int
+) -> String:
+	var moving := visit.relocation
+	if moving == null:
+		return ""
+	var room := grid.get_room(visit.room)
+	if room.is_empty():
+		return "a relocation in a room that is gone"
+	var type := RoomTypes.get_type(room["type"])
+	if type == null or not type.shop or moving.source["def"] != type.seat_piece:
+		return "a relocation from no browse piece of the room"
+	var cells := BuildCatalog.get_def(moving.source["def"]).footprint(
+		moving.source["anchor"], moving.source["facing"]
+	)
+	if visit.index >= mini(type.seats_per_piece, cells.size()):
+		return "slot %d is not one of the piece's %d" % [visit.index, type.seats_per_piece]
+	var dwell := ShopSim.browse_ticks(type)
+	if not moving.exiting:
+		if not moving.returns() or moving.left < 1 or moving.left > dwell:
+			return "a return owing %d ticks, not 1 to %d" % [moving.left, dwell]
+		if p.stage != Passenger.Stage.SHOP_WALK and p.stage != Passenger.Stage.SHOP_BROWSE:
+			return "a return that does not match the stage"
+		return ""
+	if p.stage != Passenger.Stage.SHOP_BROWSE:
+		return "an exit that is not browsing at the old piece"
+	if moving.returns() and (moving.left < 1 or moving.left > dwell):
+		return "a return owing %d ticks, not 1 to %d" % [moving.left, dwell]
+	var ends := p.stage_tick + dwell - tick
+	if ends < 1 or ends > ActivityPoses.exit_ticks(moving.source["def"], p.carry_on):
+		return "an exit with %d ticks to run" % ends
 	return ""
 
 
@@ -140,4 +200,8 @@ static func _visit(entry: Variant) -> ShopVisit:
 	if visit.room < 1 or visit.display < 1 or visit.index < 0:
 		return null
 	visit.resume_stage = resume as Passenger.Stage
+	if entry.has("relocation"):
+		visit.relocation = Relocation.from_record(entry["relocation"])
+		if visit.relocation == null:
+			return null
 	return visit
