@@ -79,10 +79,12 @@ var _last_tick := 0
 
 func _initialize() -> void:
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
-	DirAccess.make_dir_recursive_absolute(_out_dir)
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--ui-scale="):
 			root.content_scale_factor = float(arg.get_slice("=", 1))
+		elif arg.begins_with("--out="):
+			_out_dir = arg.get_slice("=", 1)
+	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_scale_tag = "_s%.2f" % root.content_scale_factor
 	print("PROBE ui_scale=%.2f" % root.content_scale_factor)
 	_beat("boot")
@@ -217,6 +219,7 @@ func _plate(main: Node3D, rig: TycoonCamera, cam: Camera3D, moment: Array) -> vo
 			]
 		)
 	)
+	_report_labels(main, rig, cam, shot)
 	var p := _sim.get_passenger(id)
 	print(
 		(
@@ -239,6 +242,31 @@ func _plate(main: Node3D, rig: TycoonCamera, cam: Camera3D, moment: Array) -> vo
 	else:
 		_invalid("%s: the subject is out of frame, hidden or under the HUD" % shot)
 		_save(img, "cafe_%s_INVALID%s.png" % [shot, _scale_tag])
+
+
+## Prints the zoom against the home distance, the fade the room labels should
+## have there and the alpha and visibility each label really has.
+func _report_labels(main: Node3D, rig: TycoonCamera, cam: Camera3D, shot: String) -> void:
+	var mode := main.get_node("BuildMode") as BuildMode
+	var views := mode.get_node("RoomView") as RoomView
+	var expected := RoomLabelLayout.zoom_alpha(cam)
+	for room_id: int in mode.grid.room_ids():
+		var label := views.label_of(room_id)
+		if label == null:
+			continue
+		print(
+			(
+				"LABEL %s room=%d zoom_ratio=%.2f expected_fade=%.2f label_alpha=%.2f visible=%s"
+				% [
+					shot,
+					room_id,
+					rig.distance / rig.home_distance,
+					expected,
+					label.modulate.a,
+					label.visible
+				]
+			)
+		)
 
 
 ## Where to look: the guest's head, or the pop label.

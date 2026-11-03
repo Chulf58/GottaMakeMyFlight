@@ -156,10 +156,7 @@ func refresh() -> void:
 
 ## The drawn ghost's bounds on screen (GhostBounds), or an empty Rect2.
 func ghost_rect() -> Rect2:
-	var ghost := GhostBounds.ghost_of(build_mode)
-	if build_mode != null and build_mode.room_mover.active:
-		ghost = build_mode.room_mover.ghost_node()
-	return GhostBounds.screen_rect(ghost, get_viewport().get_camera_3d())
+	return GhostBounds.build_rect(build_mode, get_viewport().get_camera_3d())
 
 
 ## A placed or removed piece can change the answer for the same edit.

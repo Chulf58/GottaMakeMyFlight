@@ -12,6 +12,15 @@ static func ghost_of(mode: BuildMode) -> Node3D:
 	return mode.get_node_or_null(GHOST_NODE) as Node3D if mode != null else null
 
 
+## The bounds on screen of what `mode` is placing: the room mover's ghost while
+## it is active, the build ghost otherwise. An empty Rect2 with no ghost.
+static func build_rect(mode: BuildMode, camera: Camera3D) -> Rect2:
+	var ghost := ghost_of(mode)
+	if mode != null and mode.room_mover.active:
+		ghost = mode.room_mover.ghost_node()
+	return screen_rect(ghost, camera)
+
+
 ## The drawn ghost's bounds on screen, in viewport coordinates: every ghost
 ## mesh's box projected through `camera`. An empty Rect2 while the ghost is
 ## hidden or holds no mesh, or with no camera. Parts a redraw has queued for
