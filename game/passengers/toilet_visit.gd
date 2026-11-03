@@ -16,6 +16,12 @@ var resume_stage: Passenger.Stage = Passenger.Stage.TO_GATE
 var deadline := 0
 ## The reserved stall's ToiletLayout entry, derived again on load.
 var stall: Dictionary = {}
+## The stall's placement (Relocation.placement()) `stall` was derived from;
+## derived again on load.
+var piece: Dictionary = {}
+## Set while the passenger leaves a stall that moved and walks back to it
+## (Relocation); null otherwise. Saved.
+var relocation: Relocation = null
 
 
 ## The stall's object id: the key FacilitySlots holds the stall by.

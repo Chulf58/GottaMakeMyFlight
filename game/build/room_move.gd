@@ -21,8 +21,10 @@ extends RefCounted
 ## (MOVE_EXIT_BLOCKED) or the wallet cannot pay for the new floor.
 ##
 ## The cells that must stay clear (`keep_clear`) are the way out of the
-## passengers leaving the room. The caller passes them in; passenger code is to
-## fill them (decision part 3). With none, nothing is kept clear.
+## passengers leaving the room. The caller may pass some in, and plan() and
+## commit_move() add the passenger side's own: the cells the Callable in the
+## grid's EXIT_CELLS_META meta returns (PassengerSim.move_exit_cells(), decision
+## part 3). With neither, nothing is kept clear.
 ##
 ## commit_move() is the move's own atomic commit (decision part 2). It plans
 ## the move again from the grid as it stands, reading each piece's def, paid,
@@ -42,6 +44,10 @@ extends RefCounted
 ##
 ## Not done here: the tool, ghost and status line (slice 2) and the passengers
 ## using the room (decision parts 4 to 6).
+
+## The grid meta holding the passenger side's keep-clear cells: a Callable
+## with no arguments returning Array[Vector2i].
+const EXIT_CELLS_META := &"room_move_exit_cells"
 
 ## The room being moved.
 var room_id := 0
@@ -90,7 +96,7 @@ static func plan(
 	move.edits = _edits(grid, move)
 	var floors := _floor_edits(move.edits)
 	move.cost = BuildTransaction.needed(grid, floors)
-	var trial := _trial(grid, move, move.edits, keep_clear)
+	var trial := _trial(grid, move, move.edits, _kept_clear(grid, keep_clear))
 	move.result = trial["result"]
 	move.edits.append_array(trial["reshapes"])
 	if move.result.ok:
@@ -145,6 +151,7 @@ static func commit_move(
 	history: UndoStack = null,
 	keep_clear: Array[Vector2i] = []
 ) -> BuildResult:
+	keep_clear = _kept_clear(grid, keep_clear)
 	var canon := _canonical(grid, move)
 	var result := canon.result
 	var edits := canon.edits
@@ -457,6 +464,18 @@ static func _apply(
 ## signals waits behind the signals already queued there.
 static func _emit_refused(grid: BuildGrid, edit: BuildEdit, refusal: BuildResult) -> void:
 	grid._emit_or_hold(func() -> void: grid.edit_refused.emit(edit, refusal))
+
+
+## `keep_clear` plus the cells the grid's EXIT_CELLS_META Callable returns,
+## each once.
+static func _kept_clear(grid: BuildGrid, keep_clear: Array[Vector2i]) -> Array[Vector2i]:
+	var out: Array[Vector2i] = keep_clear.duplicate()
+	var exits: Callable = grid.get_meta(EXIT_CELLS_META, Callable())
+	if exits.is_valid():
+		for cell: Vector2i in exits.call():
+			if not out.has(cell):
+				out.append(cell)
+	return out
 
 
 static func _floor_edits(edits: Array[BuildEdit]) -> Array[BuildEdit]:

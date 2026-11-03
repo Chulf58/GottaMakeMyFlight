@@ -12,7 +12,11 @@ extends RefCounted
 ## visit's room at an existing counter; served, outcome, settled and amount
 ## agreeing with the guest's stage; an order in progress, or a seated guest's
 ## dwell, that started on the guest's stage tick and ends after the saved tick;
-## and the visit resuming on the guest's side of security. A save never holds
+## and the visit resuming on the guest's side of security. A visit following
+## its moved table saves its Relocation under "relocation" (absent otherwise):
+## a guest still getting up at the old seat is checked against the saved
+## spot's seat, owes no outcome until it is back, and one walking back or
+## sitting down again has left the old seat. A save never holds
 ## stale cafe state: between a grid edit and the next tick's reconcile,
 ## PassengerSim.to_snapshot() refuses (SaveGame waits for that tick), so
 ## "deadlines_stale" is always false and a piece missing from the rebuilt
@@ -49,6 +53,8 @@ static func save(cafes: CafeSim) -> Dictionary:
 		var record := {"seat_key": visit.seat_key}
 		for field in VISIT_INT_FIELDS + VISIT_BOOL_FIELDS:
 			record[field] = visit.get(field)
+		if visit.relocation != null:
+			record["relocation"] = visit.relocation.to_record()
 		visits.append(record)
 	return {
 		"visits": visits, "queues": cafes.queue_records(), "deadlines_stale": cafes.deadlines_stale
@@ -93,7 +99,7 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid, tick: i
 	var cafes := CafeLayout.new()
 	cafes.rebuild(grid, terminal)
 	for id in visits:
-		var problem := _visit_problem(visits[id], passengers[id], cafes, tick)
+		var problem := _visit_problem(visits[id], passengers[id], cafes, grid, tick)
 		if problem != "":
 			return {"error": "cafe visit of passenger %d: %s" % [id, problem]}
 	var queues := _queues(data["queues"], visits, cafes)
@@ -110,10 +116,20 @@ static func load(data: Variant, passengers: Dictionary, grid: BuildGrid, tick: i
 
 ## Why a visit cannot be what continuous play left by `tick`, or "" when it
 ## can.
-static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, tick: int) -> String:
+static func _visit_problem(
+	visit: CafeVisit, p: Passenger, cafes: CafeLayout, grid: BuildGrid, tick: int
+) -> String:
 	var stage := p.stage
 	var unserved := UNSERVED_STAGES.has(stage)
 	var standing := stage == Passenger.Stage.CAFE_STANDING_UP
+	var moving := visit.relocation
+	var exiting := moving != null and moving.exiting
+	# Outcome and settlement of a relocating guest are _relocation_problem()'s.
+	var plain := moving == null
+	# Still at the old seat: its seat is the saved spot's, not the grid's.
+	var seat := cafes.seat(visit.room, visit.seat_key)
+	if exiting:
+		seat = Relocation.seat_at(moving.source, visit.seat_key)
 	# A room missing from the layout is refused by the seat check below; the
 	# default type only keeps the other checks running until then.
 	var venue := RoomTypes.get_type(cafes.cafe(visit.room).get("type", &"cafe"))
@@ -130,18 +146,18 @@ static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, ti
 			(visit.resume_stage == Passenger.Stage.TO_GATE) == p.cleared,
 			"it resumes on the other side of security"
 		],
-		[
-			venue.walk_on or not cafes.seat(visit.room, visit.seat_key).is_empty(),
-			"no such cafe seat"
-		],
+		[venue.walk_on or not seat.is_empty(), "no such cafe seat"],
 		[not venue.walk_on or unserved, "a walk-on visit has no seat, sit or stand stage"],
 		[
 			visit.served or not cafes.counter(visit.room, visit.counter).is_empty(),
 			"no such cafe counter"
 		],
 		[visit.served != unserved, "served does not match stage %d" % stage],
-		[(visit.outcome != CafeVisit.Outcome.NONE) == standing, "outcome does not match stage"],
-		[not visit.settled or standing, "settled before standing up"],
+		[
+			not plain or (visit.outcome != CafeVisit.Outcome.NONE) == standing,
+			"outcome does not match stage"
+		],
+		[not plain or not visit.settled or standing, "settled before standing up"],
 		[visit.settled or visit.amount == 0, "an amount on a visit not settled"],
 		[
 			(
@@ -157,11 +173,78 @@ static func _visit_problem(visit: CafeVisit, p: Passenger, cafes: CafeLayout, ti
 			),
 			"the dwell does not end dwell_ticks after it started and after the saved tick"
 		],
+		[
+			(
+				stage != Passenger.Stage.CAFE_SITTING_DOWN
+				or _runs_from(p.stage_tick, PassengerSim.SIT_DOWN_TICKS, tick)
+			),
+			"sitting down did not start by the saved tick or has run out"
+		],
+		[
+			not standing or _runs_from(p.stage_tick, PassengerSim.STAND_UP_TICKS, tick),
+			"getting up did not start by the saved tick or has run out"
+		],
 	]
 	for check in checks:
 		if not check[0]:
 			return check[1]
+	return _relocation_problem(visit, p, grid)
+
+
+## Why a visit's Relocation cannot be what continuous play left, or "" when it
+## can (or there is none). Its source must be a table with the visit's seat.
+## A return owes 1 to the room type's dwell_ticks, has been served and has no
+## outcome and nothing settled; while it still gets up at the old seat, the
+## table it goes back to must still be a cafe_table of the visit's room under
+## the saved id with that seat (Relocation.destination_ok(); the room need not
+## be ready, since the walls stay behind), and once it has left it walks to the
+## seat or sits down again. A final exit (left -1) only gets up at the old
+## seat: paid (it was leaving anyway), or given up with no outcome and nothing
+## paid, which only a table no longer returnable to leaves (the same test
+## Relocation.drop_return_unless() makes; a given-up exit beside a table it
+## could go back to would skip what it owes).
+static func _relocation_problem(visit: CafeVisit, p: Passenger, grid: BuildGrid) -> String:
+	var moving := visit.relocation
+	if moving == null:
+		return ""
+	var standing := p.stage == Passenger.Stage.CAFE_STANDING_UP
+	if (
+		moving.source["def"] != &"cafe_table"
+		or Relocation.seat_at(moving.source, visit.seat_key).is_empty()
+	):
+		return "a relocation from no table seat"
+	var table := int(visit.seat_key.split(":")[0])
+	var returnable := Relocation.destination_ok(grid, table, &"cafe_table", visit.room)
+	var none := visit.outcome == CafeVisit.Outcome.NONE
+	if not moving.returns():
+		var paid := visit.settled and not none
+		var given_up := none and not visit.settled
+		if not (moving.exiting and standing):
+			return "a final exit that is not getting up at the old seat"
+		if not visit.served or not (paid or given_up):
+			return "a final exit neither paid nor given up"
+		if given_up and returnable:
+			return "a given-up exit beside a table it can go back to"
+		return ""
+	if moving.exiting and not returnable:
+		return "the table it returns to is not in its room"
+	var dwell := RoomTypes.get_type(grid.get_room(visit.room)["type"]).dwell_ticks
+	if moving.left < 1 or moving.left > dwell:
+		return "a return owing %d dwell ticks, not 1 to %d" % [moving.left, dwell]
+	if not visit.served or not none or visit.settled:
+		return "a return that is not served and unpaid"
+	if not moving.exiting:
+		var back := [Passenger.Stage.CAFE_TO_SEAT, Passenger.Stage.CAFE_SITTING_DOWN]
+		return "" if back.has(p.stage) else "a return that does not match the stage"
+	if not standing:
+		return "a return that does not match the stage"
 	return ""
+
+
+## Whether a stage of `length` ticks that started at `start` has started but
+## not ended by `tick` (its step ends it on the tick it runs out).
+static func _runs_from(start: int, length: int, tick: int) -> bool:
+	return start <= tick and start + length > tick
 
 
 ## Whether a span of `length` ticks that started at `start` (the guest's stage
@@ -186,6 +269,10 @@ static func _visit(entry: Variant) -> CafeVisit:
 		if not entry.has(field) or typeof(entry[field]) != TYPE_BOOL:
 			return null
 		visit.set(field, entry[field])
+	if entry.has("relocation"):
+		visit.relocation = Relocation.from_record(entry["relocation"])
+		if visit.relocation == null:
+			return null
 	var outcome_ok := visit.outcome >= 0 and visit.outcome < CafeVisit.Outcome.size()
 	var settled_ok := not visit.settled or visit.outcome != CafeVisit.Outcome.NONE
 	if (

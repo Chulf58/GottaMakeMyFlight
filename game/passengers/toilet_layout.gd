@@ -42,29 +42,31 @@ func rebuild(grid: BuildGrid) -> void:
 			var record := grid.get_object(id)
 			if record["def"] != &"toilet_stall" or not FacilitySlots.piece_inside(grid, id, area):
 				continue
-			var approach := grid.interaction_cell(id)
-			if not grid.is_passenger_cell(approach):
-				continue
-			var front := TerminalLayout.front_of(record["facing"])
-			var use_cell: Vector2i = record["anchor"]
-			var turn_cell := use_cell + front
-			var centre := (grid.cell_to_world(use_cell) + grid.cell_to_world(turn_cell)) / 2.0
-			var out := Vector3(front.x, 0.0, front.y)
-			(
-				stalls
-				. append(
-					{
-						"id": id,
-						"room": room_id,
-						"approach": approach,
-						"turn_cell": turn_cell,
-						"use_cell": use_cell,
-						"front": front,
-						"turn": centre + out * TURN_M,
-						"use": centre + out * USE_M,
-					}
-				)
-			)
+			var entry := entry_at(grid, id, room_id, Relocation.placement(grid, id))
+			if grid.is_passenger_cell(entry["approach"]):
+				stalls.append(entry)
+
+
+## The stall entry of stall `id` in room `room_id` at placement `at`
+## (Relocation.placement()), whether or not the grid holds it there: a stall
+## that moved is still drawn and left from its old spot (Relocation).
+static func entry_at(grid: BuildGrid, id: int, room_id: int, at: Dictionary) -> Dictionary:
+	var def := BuildCatalog.get_def(at["def"])
+	var front := TerminalLayout.front_of(at["facing"])
+	var use_cell: Vector2i = at["anchor"]
+	var turn_cell := use_cell + front
+	var centre := (grid.cell_to_world(use_cell) + grid.cell_to_world(turn_cell)) / 2.0
+	var out := Vector3(front.x, 0.0, front.y)
+	return {
+		"id": id,
+		"room": room_id,
+		"approach": def.interaction_cell(at["anchor"], at["facing"]),
+		"turn_cell": turn_cell,
+		"use_cell": use_cell,
+		"front": front,
+		"turn": centre + out * TURN_M,
+		"use": centre + out * USE_M,
+	}
 
 
 ## A stall entry by object id, or an empty dictionary when it is not usable.
