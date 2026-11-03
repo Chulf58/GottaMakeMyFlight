@@ -447,12 +447,9 @@ func sync() -> void:
 		# A record made again after a load (PassengerViews.snap() releases every
 		# record, then syncs on the same tick) starts in the tuck it needs.
 		BoothCarry.update_tuck(held, tuck_in, _released_at.get(id, -1.0) == _tick(), _tick())
-		# A roller held by its bar for a stall stays in hand until the turn back
-		# from the front has finished, so it goes to the pull from the side, and,
-		# held in the hand the walk would not pull it in, until it is clear of
-		# the stalls by StallCarry.LIFT_LEAD_M more, so it is pulled in that hand
-		# away from them. The front itself follows the stall alone.
+		# A roller held by its bar for a stall stays so (StallCarry.keeps_bar()).
 		var was: Array = held["bags"]
+		var near_row := StallCarry.beside_row(sim, p)
 		# A roller lifted at a booth stays in hand until the turn back has ended.
 		var kept := BoothCarry.kept_lifted(
 			held,
@@ -465,18 +462,7 @@ func sync() -> void:
 		for i in kinds.size():
 			lifts[i] = lifts[i] or kept[i]
 		for i in mini(was.size(), kinds.size()):
-			if (
-				not lifts[i]
-				and was[i]["kind"] == kinds[i]
-				and was[i].get("by_bar", false)
-				and (
-					_front_weight(held, _tick()) > 0.0
-					or (
-						SecurityLooks.hand_of(sim, p, i) != (int(was[i]["place"]) / 2) % 2
-						and StallCarry.leaving(sim, p, StallCarry.LIFT_LEAD_M)
-					)
-				)
-			):
+			if StallCarry.keeps_bar(was[i], kinds[i], _front_weight(held, _tick()), near_row):
 				lifts[i] = true
 			# A roller going between the hand and the pull by its bar keeps its
 			# hand until it is there, and one held by its bar keeps its hand while
@@ -485,10 +471,7 @@ func sync() -> void:
 			if (
 				was[i]["kind"] == kinds[i]
 				and (
-					(
-						was[i].get("by_bar", false)
-						and (lift_stall or StallCarry.leaving(sim, p, StallCarry.LIFT_LEAD_M))
-					)
+					(was[i].get("by_bar", false) and (lift_stall or near_row))
 					or (
 						was[i].get("swap", false)
 						and (
@@ -558,6 +541,7 @@ func sync() -> void:
 			bags[i]["carry"] = carry
 			bags[i]["by_bar"] = by_bar
 			_trail(bags[i], node, id, homes[i], hands[i])
+		StallCarry.stamp_bar_turn(held, near_row, _tick())
 		# The tray goes once no bag is moving out of it (the hand takes a bag
 		# from the tray before the tray is gone).
 		var moving := bags.any(
@@ -1247,7 +1231,8 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 	var tuck: float = held.get("tuck_weight", 0.0)
 	var reach_on: Array = held.get("reach_on", [false, false])
 	var swaps := CarrySwap.arm_shares(held, now)
-	var key := [modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps]
+	var outs := StallCarry.hand_out_degrees(held, now)
+	var key := [modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps, outs]
 	if held.get("arm_key", []) == key and held.get("arm_body") == body:
 		return
 	held["arm_key"] = key
@@ -1258,7 +1243,7 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL
 		arm.active = modes[side] != Arm.FREE or cases > 0 or tuck > 0.0 or reach_on[side]
 		var pulling: bool = modes[side] == Arm.PULL
-		arm.angle_degrees = PULL_OUT_DEGREES if pulling else 12.0
+		arm.angle_degrees = PULL_OUT_DEGREES if pulling else outs[side]
 		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5
 		arm.lean_back_degrees = PULL_LEAN_DEGREES if pulling else 0.0
 		arm.front_upper_degrees = 0.0 if modes[side] == Arm.STRAP else 20.0
@@ -1281,7 +1266,7 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 				# Beside a front-carried case, or tucked in through a booth.
 				arm.front_half_width = BoothCarry.free_hand_width(beside > 0, tuck)
 				arm.front_weight = maxf(held["weight"] if beside > 0 else 0.0, tuck)
-		CarrySwap.pose_arm(arm, swaps[side], held["weight"])
+		CarrySwap.pose_arm(arm, swaps[side], held["weight"], outs[side])
 
 
 ## How far `bag` is through its move at sim time `now` (1 when settled or

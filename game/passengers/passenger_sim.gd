@@ -906,6 +906,7 @@ func _promote(q: Dictionary, cells: Array) -> void:
 func _step(p: Passenger) -> void:
 	if p.needs_replan:
 		_replan(p)
+	var from := p.stage
 	match StageKinds.facility(p.stage):
 		StageKinds.Facility.CAFE:
 			cafes.step(p)
@@ -916,7 +917,7 @@ func _step(p: Passenger) -> void:
 	# A help visit holds the passenger: its stage's own logic would plan again.
 	if info_desks.holds(p):
 		info_desks.step(p)
-	else:
+	elif not VisitHandBack.is_hand_back(from, p.stage):
 		_advance(p)
 	_move(p)
 	if posmod(tick, BEAT_TICKS) == posmod(p.id, BEAT_TICKS) and not p.is_done():

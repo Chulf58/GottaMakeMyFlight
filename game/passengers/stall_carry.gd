@@ -25,11 +25,17 @@ extends RefCounted
 const STALL_NEAR_M := 1.0
 ## A roller is taken off the pull into the hand this much further back (0.7 m
 ## is 7 ticks of walk, more than CarryOnProps.TRANSFER_TICKS), so it hangs at
-## the side before the front-carry turn starts. Leaving, a roller whose hand
-## is on the side the walk would pull it on is pulled once leaving() ends; one
-## in the other hand (the walker turned along the row of stalls) is pulled in
-## that hand once it is this much further clear (CarryOnProps).
+## the side before the front-carry turn starts. Leaving, a roller is pulled
+## only once it is this much further clear of the stalls than leaving() asks
+## (keeps_bar()), so it does not land beside the row of stall fronts.
 const LIFT_LEAD_M := 0.7
+## A hand holding a roller by its bar beside the stalls (beside_row()) turns
+## out this much in the side carry, not CarrySwap.HAND_OUT_DEGREES (board
+## a791eb90): turned out 12 degrees, a roller leaving a stall along the row
+## hung 1 to 3 cm inside the stall front plane as it passed the side
+## partition, at 6 its low edge keeps about 4.5 cm beyond it. Every other hand
+## carry keeps 12 degrees, which keeps a case clear of the hip and thigh.
+const BAR_OUT_DEGREES := 6.0
 ## The stall around its footprint centre: its door's outer face, half its
 ## width to the side partitions' outer faces, and its back.
 const DOOR_M := 0.9
@@ -93,6 +99,69 @@ static func leaving(sim: PassengerSim, p: Passenger, extra := 0.0) -> bool:
 		if near(stall, spot, margin) or near(stall, at, margin):
 			return true
 	return false
+
+
+## Whether `p` is near enough the stalls for a roller held by its bar to stay
+## in the hand and hang from a narrow arm: leaving() with LIFT_LEAD_M more.
+static func beside_row(sim: PassengerSim, p: Passenger) -> bool:
+	return leaving(sim, p, LIFT_LEAD_M)
+
+
+## Whether a roller held by its bar for a stall (`bag`, CarryOnProps' record
+## as sync() saw it last, still of `kind`) stays in the hand on this tick:
+## until the turn back from the front has ended (`front`, its weight now), so
+## it goes to the pull from the side, and while `near` (beside_row()), so it
+## is pulled away from the stalls, whichever hand holds it (a roller landing
+## beside the row of stall fronts clipped their partitions).
+static func keeps_bar(bag: Dictionary, kind: SecurityLooks.Kind, front: float, near: bool) -> bool:
+	return bag["kind"] == kind and bag.get("by_bar", false) and (front > 0.0 or near)
+
+
+## Stamps the narrow arm of each hand (right, then left) of `held`
+## (CarryOnProps' record, its bags just synced) at sync tick `now`: a hand is
+## narrow while it holds a roller by its bar and `near` (beside_row()). A
+## hand that changes eases from the turn it has at `now` (hand_out_degrees());
+## a new record starts in the turn it needs.
+static func stamp_bar_turn(held: Dictionary, near: bool, now: float) -> void:
+	var on := [false, false]
+	for i in (held["bags"] as Array).size():
+		var bag: Dictionary = held["bags"][i]
+		if near and bag.get("by_bar", false) and held["homes"][i] == SecurityLooks.Home.HAND:
+			on[held["hands"][i]] = true
+	if not held.has("bar_on"):
+		held["bar_on"] = on
+		held["bar_from"] = [1.0 if on[0] else 0.0, 1.0 if on[1] else 0.0]
+		held["bar_since"] = [-INF, -INF]
+		return
+	for side in 2:
+		if on[side] != held["bar_on"][side]:
+			held["bar_from"][side] = _bar_weight(held, side, now)
+			held["bar_since"][side] = now
+	held["bar_on"] = on
+
+
+## The out turn in the side carry (degrees) of each hand (right, then left) of
+## `held` (CarryOnProps' record) at sim time `now`: CarrySwap.HAND_OUT_DEGREES,
+## or BAR_OUT_DEGREES for a narrow hand (stamp_bar_turn()), eased between the
+## two over CarryOnProps.TRANSFER_TICKS from the turn the hand had when it
+## changed, so the arm does not jump; a swap to the pull starts from it
+## (CarrySwap.pose_arm).
+static func hand_out_degrees(held: Dictionary, now: float) -> Array:
+	var outs := []
+	for side in 2:
+		var w := _bar_weight(held, side, now)
+		outs.append(lerpf(CarrySwap.HAND_OUT_DEGREES, BAR_OUT_DEGREES, w))
+	return outs
+
+
+## How narrow hand `side` of `held` is at sim time `now`: 0 HAND_OUT_DEGREES,
+## 1 BAR_OUT_DEGREES.
+static func _bar_weight(held: Dictionary, side: int, now: float) -> float:
+	if not held.has("bar_on"):
+		return 0.0
+	var target := 1.0 if held["bar_on"][side] else 0.0
+	var k := clampf((now - held["bar_since"][side]) / CarryOnProps.TRANSFER_TICKS, 0.0, 1.0)
+	return lerpf(held["bar_from"][side], target, smoothstep(0.0, 1.0, k))
 
 
 ## The stall `p` is visiting while inside it (a ToiletLayout entry), or {}.

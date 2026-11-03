@@ -368,6 +368,8 @@ func _visit_ticks(p: Passenger, walk_mm: int) -> int:
 	return (
 		pre
 		+ JourneyForecast.walk_ticks(walk_mm)
+		# The guest is seen on the approach cell a tick after its last step.
+		+ 1
 		+ ENTER_TICKS
 		+ PassengerSim.SIT_DOWN_TICKS
 		+ USE_TICKS
