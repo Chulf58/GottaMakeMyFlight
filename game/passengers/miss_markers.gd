@@ -258,7 +258,9 @@ func draw() -> void:
 		width = view.get_visible_rect().size.x * view.get_stretch_transform().get_scale().x
 	var xform := camera.global_transform if camera != null else Transform3D()
 	var camera_id := camera.get_instance_id() if camera != null else 0
-	var hud := _hud_rects(to_output) if not _hint_signs.is_empty() else ([] as Array[Rect2])
+	var hud: Array[Rect2] = []
+	if not _hint_signs.is_empty():
+		hud = HudRects.collect(self, to_output)
 	if (
 		not _dirty
 		and camera_id == _view_camera
@@ -484,45 +486,10 @@ func _hint_spot_clear(rect: Rect2, inner: Rect2) -> bool:
 	return true
 
 
-## The rectangles (screen pixels) of what the HUD draws: the Controls under
-## every canvas layer beside this node or beside an ancestor of it, found by
-## draws_something(). Invisible ones and layout containers that draw nothing are
-## not counted, however large; a drawn control is, also one spanning the view. A
-## counted panel or button is not walked into: its children lie inside it.
-func _hud_rects(to_output: float) -> Array[Rect2]:
-	var rects: Array[Rect2] = []
-	var scale := Transform2D().scaled(Vector2(to_output, to_output))
-	var node: Node = self
-	while node != null and node.get_parent() != null:
-		node = node.get_parent()
-		for child in node.get_children():
-			if child is CanvasLayer and (child as CanvasLayer).visible:
-				_collect_hud(child, scale, rects)
-	return rects
-
-
-func _collect_hud(parent: Node, scale: Transform2D, rects: Array[Rect2]) -> void:
-	for child in parent.get_children():
-		if child is CanvasItem and not (child as CanvasItem).visible:
-			continue
-		if child is Control:
-			var control := child as Control
-			if draws_something(control) and control.size.x * control.size.y > 0.0:
-				var rect := (
-					scale
-					* control.get_global_transform_with_canvas()
-					* Rect2(Vector2.ZERO, control.size)
-				)
-				rects.append(rect)
-				if _is_box(control):
-					continue
-		_collect_hud(child, scale, rects)
-
-
 ## True for a Control that puts something on the screen: a panel, a button, a
 ## label with text, a picture, a colour fill, or any control with a panel style.
 static func draws_something(control: Control) -> bool:
-	if _is_box(control) or control is ColorRect:
+	if is_box(control) or control is ColorRect:
 		return true
 	if control is Label:
 		return not (control as Label).text.is_empty()
@@ -534,7 +501,7 @@ static func draws_something(control: Control) -> bool:
 
 
 ## A panel or a button: it draws a box and its children lie inside it.
-static func _is_box(control: Control) -> bool:
+static func is_box(control: Control) -> bool:
 	return control is Panel or control is PanelContainer or control is BaseButton
 
 
