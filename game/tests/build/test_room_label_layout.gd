@@ -130,7 +130,7 @@ func test_a_label_with_no_clear_spot_hides() -> void:
 
 
 ## A big partial panel (the offer sheet) blocks the way to the middle, but a
-## pocket below it is clear: the label goes there and is not hidden.
+## pocket beside it is clear: the label goes there and is not hidden.
 func test_a_label_with_a_blocked_way_to_the_middle_takes_a_clear_spot_elsewhere() -> void:
 	var rect := Rect2(700.0, 70.0, 200.0, 100.0)
 	var sheet: Array[Rect2] = [Rect2(630.0, 60.0, 700.0, 440.0)]
@@ -151,6 +151,27 @@ func test_a_label_with_a_blocked_way_to_the_middle_takes_a_clear_spot_elsewhere(
 	assert_vector(spot.size).is_equal(rect.size)
 	assert_bool(spot.grow(RoomLabelLayout.GAP_PX - 0.01).intersects(sheet[0])).is_false()
 	assert_bool(VIEW.grow(-RoomLabelLayout.VIEW_MARGIN_PX).encloses(spot)).is_true()
+
+
+## A drawn control over the whole view (a dim layer) hides the label at once: the
+## search for a spot is not entered.
+func test_a_hud_rect_over_the_whole_view_hides_the_label_without_a_search() -> void:
+	var rect := Rect2(700.0, 70.0, 200.0, 100.0)
+	var dim: Array[Rect2] = [VIEW]
+	RoomLabelLayout.ring_candidates = 0
+	assert_vector(RoomLabelLayout.slide_clear(rect, dim, VIEW.size).size).is_equal(Vector2.ZERO)
+	assert_int(RoomLabelLayout.ring_candidates).is_equal(0)
+	# Control: a panel that leaves a pocket still gets the ring search.
+	var sheet: Array[Rect2] = [Rect2(630.0, 60.0, 700.0, 440.0)]
+	RoomLabelLayout.slide_clear(rect, sheet, VIEW.size)
+	assert_int(RoomLabelLayout.ring_candidates).is_greater(0)
+	# In the layout: the label hides, counted, with no ring spot tried.
+	_aim(_camera, 30.0)
+	_add_button(VIEW)
+	RoomLabelLayout.ring_candidates = 0
+	_view.layout_labels()
+	assert_bool(_view.label_of(_room).visible).is_false()
+	assert_int(RoomLabelLayout.ring_candidates).is_equal(0)
 
 
 func test_the_label_never_draws_bigger_than_the_cap_on_screen() -> void:
