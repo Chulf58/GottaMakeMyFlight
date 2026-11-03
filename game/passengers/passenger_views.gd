@@ -16,6 +16,11 @@ const SIT_CLIP_SECONDS := 1.2
 ## the sim is in it is sought there: frames play the clip between ticks and
 ## may run it a frame ahead of or behind the sim.
 const SEEK_SLACK_TICKS := 1.5
+## A clip change blends from the pose drawn at the change over this much sim
+## time (ClipCrossfade; user ruling
+## passenger-turns-on-the-spot-ease-over-a-few-frames-and-anima); a view just
+## taken or snapped plays its clip with no blend.
+const CROSSFADE_SECONDS := 0.18
 const LOOPED := ["idle", "walk", "run", "sit_idle", "shower"]
 const MISSED_LINGER_TICKS := 200
 const BUBBLE_HEIGHT := 2.5
@@ -54,6 +59,11 @@ var _offsets: Dictionary = {}
 ## so a stay cut short or a removed piece eases the body back instead of
 ## jumping. Holds no tick; snap() restarts it from the loaded world.
 var _seats: Dictionary = {}
+## The yaw each view is drawn with, eased per tick (PassengerTurns); snap()
+## starts every record over.
+var _turns := PassengerTurns.new()
+## True while snap() syncs: the step from the pre-load position is no heading.
+var _snapping := false
 
 
 func _ready() -> void:
@@ -155,7 +165,7 @@ func sync() -> void:
 			_cur[id] = now
 		_prev[id] = _cur[id]
 		_cur[id] = now
-		_pose(_nodes[id], p)
+		_turn(_nodes[id], p, _pose(_nodes[id], p))
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
@@ -169,8 +179,10 @@ func sync() -> void:
 ## load removed lose their view, new ones get one), then makes the previous and
 ## current positions the same so the frame draws the current one. With no
 ## interval to take a heading from, a walker faces along its current path or
-## apron leg.
+## apron leg. Every turn and clip starts over, with no ease or blend from
+## before the load.
 func snap() -> void:
+	_turns.clear()
 	for id in sim.passenger_ids():
 		if _nodes.has(id):
 			# A node kept through the load starts over dressed, with no foam
@@ -196,13 +208,15 @@ func snap() -> void:
 		# the load still plays the clip it had, from where it was before.
 		if _nodes.has(id):
 			(_nodes[id] as Node3D).set_meta(&"clip", "")
+	_snapping = true
 	sync()
+	_snapping = false
 	for id in _cur:
 		_prev[id] = _cur[id]
 		var node: Node3D = _nodes[id]
 		var heading := walk_heading(sim.get_passenger(id))
 		if heading != Vector2.ZERO and not _turn_locked(node):
-			node.rotation.y = atan2(heading.x, heading.y)
+			_turns.place(id, atan2(heading.x, heading.y))
 	draw()
 
 
@@ -227,6 +241,7 @@ func walk_heading(p: Passenger) -> Vector2:
 ## Places every node between its last two tick positions.
 func draw() -> void:
 	var alpha := clock.alpha if clock != null else 1.0
+	var now := _now()
 	var paused := clock == null or clock.paused
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var unit := NeedIcons.unit_of(get_viewport() if is_inside_tree() else null, camera)
@@ -236,12 +251,14 @@ func draw() -> void:
 		var before: Vector3 = _prev[id]
 		var after: Vector3 = _cur[id]
 		node.position = before.lerp(after, alpha)
-		var heading := after - before
-		if heading.length() > 0.001 and not _turn_locked(node):
-			node.rotation.y = atan2(heading.x, heading.z)
+		if _turns.has(id):
+			node.rotation.y = _turns.drawn(id, alpha)
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
 		player.speed_scale = 0.0 if paused else base * clock.speed
+		var fade: ClipCrossfade = node.get_meta(&"crossfade")
+		fade.ease_to(now, CROSSFADE_SECONDS)
+		fade.drawn = true
 		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
 	if _nodes.has(selected_id):
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
@@ -309,6 +326,12 @@ func _take(p: Passenger) -> Node3D:
 	for sprite_name in NeedIcons.SPRITES:
 		node.add_child(NeedIcons.make_sprite(sprite_name))
 	node.add_child(WishIconView.make_sprite())
+	var fade := ClipCrossfade.new()
+	fade.name = "ClipCrossfade"
+	var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	skeleton.add_child(fade)
+	skeleton.move_child(fade, 0)
+	node.set_meta(&"crossfade", fade)
 	add_child(node)
 	return node
 
@@ -317,6 +340,9 @@ func _release(id: int) -> void:
 	var node: Node3D = _nodes[id]
 	node.visible = false
 	(node.get_node("AnimationPlayer") as AnimationPlayer).stop()
+	var fade: ClipCrossfade = node.get_meta(&"crossfade")
+	fade.stop()
+	fade.drawn = false
 	node.set_meta(&"clip", "")
 	_pool[node.get_meta(&"body")].append(node)
 	_nodes.erase(id)
@@ -324,11 +350,16 @@ func _release(id: int) -> void:
 	_seats.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
 	_props.release(id)
+	_turns.release(id)
 	_prev.erase(id)
 	_cur.erase(id)
 
 
-func _pose(node: Node3D, p: Passenger) -> void:
+## Sets the clip, dress, bubble and icons for this tick and returns the yaw
+## the passenger faces on this tick (NAN where it faces its walk or keeps its
+## turn).
+func _pose(node: Node3D, p: Passenger) -> float:
+	var face := NAN
 	var clip := "idle"
 	var base := 1.0
 	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
@@ -381,36 +412,47 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	if at_gate:
 		var facing: int = sim.grid.get_object(p.seat_object).get("facing", 0)
 		var front := TerminalLayout.front_of(facing)
-		node.rotation.y = atan2(front.x, front.y)
+		face = atan2(front.x, front.y)
 	elif at_cafe:
 		var looks := sim.cafes.seat_facing(p)
-		node.rotation.y = atan2(looks.x, looks.y)
+		face = atan2(looks.x, looks.y)
 	elif at_stall:
 		# Seated at Mount_Use, facing out of the stall door.
 		var out := sim.toilets.use_facing(p)
-		node.rotation.y = atan2(out.x, out.y)
+		face = atan2(out.x, out.y)
 	elif staying:
 		# On the sofa or in the pod, or in the shower: facing out of the piece.
 		var out := ActivityPoses.facing(sim, p)
-		node.rotation.y = atan2(out.x, out.y)
+		face = atan2(out.x, out.y)
 	elif works != Vector2.ZERO:
-		node.rotation.y = atan2(works.x, works.y)
+		face = atan2(works.x, works.y)
 	elif sim.shops.browse_facing(p) != Vector2i.ZERO:
 		# Browsing at a kiosk: face the display stand.
 		var shelf := sim.shops.browse_facing(p)
-		node.rotation.y = atan2(shelf.x, shelf.y)
+		face = atan2(shelf.x, shelf.y)
 	elif not moving and sim.cafes.counter_facing(p) != Vector2i.ZERO:
 		# Waiting in a cafe queue or ordering: face the counter.
 		var ahead := sim.cafes.counter_facing(p)
-		node.rotation.y = atan2(ahead.x, ahead.y)
+		face = atan2(ahead.x, ahead.y)
 	ActivityPoses.dress(
 		node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p), ActivityPoses.bare(sim, p)
 	)
 	node.set_meta(&"base_speed", base)
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
-	var changed: bool = node.get_meta(&"clip", "") != clip
+	var was: String = node.get_meta(&"clip", "")
+	var changed := was != clip
+	var fade: ClipCrossfade = node.get_meta(&"crossfade")
+	if fade.get_index() != 0:
+		# First on the skeleton (a recline added later goes in front of it).
+		fade.get_parent().move_child(fade, 0)
 	if changed:
 		node.set_meta(&"clip", clip)
+		# Blended from the pose drawn now; a view just taken or snapped has no
+		# clip before it and plays the new one alone.
+		if was != "":
+			fade.begin(_now())
+		else:
+			fade.stop()
 		player.play(clip)
 		if washing:
 			# A view made or snapped mid-wash (a load, a passenger just drawn)
@@ -438,6 +480,38 @@ func _pose(node: Node3D, p: Passenger) -> void:
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
 	WishIconView.show_wish(node, wish)
+	return face
+
+
+## The sim time now, in ticks, as frames draw it.
+func _now() -> float:
+	return clock.tick + clock.alpha if clock != null else 0.0
+
+
+## Turns a view one tick toward what it faces now (PassengerTurns): a seated
+## passenger, or one facing its work at security, faces `face`; any other
+## faces the step it was drawn over this tick, or `face` when it did not move,
+## or keeps the facing it had. A view just taken, or snapped, faces it at once,
+## and so does one stepping into, using or leaving a toilet stall: its bags are
+## kept clear of the partitions and the door for a body facing its step
+## (StallCarry), and one turning over 0.3 s swept them through a partition
+## (test_carry_in_stall).
+func _turn(node: Node3D, p: Passenger, face: float) -> void:
+	var step: Vector3 = _cur[p.id] - _prev[p.id]
+	var heading := walk_heading(p)
+	var keep := atan2(heading.x, heading.y) if heading != Vector2.ZERO else node.rotation.y
+	var target := _turns.target(p.id, keep)
+	if _turn_locked(node) and not is_nan(face):
+		target = face
+	elif step.length() > 0.001 and not _snapping:
+		target = atan2(step.x, step.z)
+	elif not is_nan(face):
+		target = face
+	if _snapping or not _turns.has(p.id) or _in_stall(p):
+		_turns.place(p.id, target)
+	else:
+		_turns.step(p.id, target)
+	node.rotation.y = _turns.drawn(p.id, clock.alpha if clock != null else 1.0)
 
 
 ## Moves a passenger's drawn offset at security one tick's walk toward its
@@ -472,6 +546,14 @@ func _at_security(p: Passenger) -> bool:
 ## grid path.
 func _stepping_in_stall(p: Passenger) -> bool:
 	return p.stage == Passenger.Stage.TOILET_ENTER or p.stage == Passenger.Stage.TOILET_EXIT
+
+
+## Stepping into, sitting in, or stepping out of a toilet stall.
+func _in_stall(p: Passenger) -> bool:
+	return (
+		StageKinds.facility(p.stage) == StageKinds.Facility.TOILET
+		and StageKinds.location(p.stage) == StageKinds.Location.FACILITY_SEAT
+	)
 
 
 ## A seated passenger, or one facing its work at security, keeps its rotation.

@@ -264,6 +264,14 @@ func test_a_shower_visitor_steps_in_under_foam_and_steps_out_again() -> void:
 	var out := TerminalLayout.front_of(record["facing"])
 	_world.step()
 	var stepping := _clip(p.id)
+	# The turn to face into the cubicle eases over PassengerTurns.TURN_TICKS
+	# (user ruling passenger-turns-on-the-spot-ease-over-a-few-frames-and-anima),
+	# so the facing is read once it has had them, still stepping in and dressed.
+	for n in PassengerTurns.TURN_TICKS:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.SHOP_BROWSE)
+	assert_float(ActivityPoses.share(_world.sim, p)).is_less(1.0)
+	assert_bool(ActivityPoses.bare(_world.sim, p)).is_false()
 	var yaw_in := _views.node_for(p.id).rotation.y
 	_world.run_to(p.stage_tick + 100)
 	var node := _views.node_for(p.id)

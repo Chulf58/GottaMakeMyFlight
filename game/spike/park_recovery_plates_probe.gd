@@ -32,9 +32,10 @@ extends SceneTree
 ## Plates go to tools/blender/out/park-recovery/, or to the directory --out=<dir>
 ## names.
 ##
-## Hand-swap watch (board 6981b7ac part 3): with --follow=N the probe goes on N
-## ticks after the plates, a third of a tick a frame, and prints for each frame
-## both hands' grip distances to the roller's handle and bar, and the bag and
+## Hand-swap watch (board 6981b7ac part 3): the probe goes on FOLLOW_TICKS
+## (or --follow=N) ticks after the plates, a third of a tick a frame, and
+## prints for each frame both hands' grip distances to the roller's handle and
+## bar, and the bag and
 ## both grips as offsets from the walker's origin (not turned with it: a body
 ## that turns on the spot in one frame would otherwise move everything it
 ## carries). The hand holding at the first frame after the plates is PINNED: a
@@ -44,6 +45,10 @@ extends SceneTree
 ## a jump only in the "live" hand (CarryLead.hand_of(home) read fresh each frame,
 ## as the plates do) is the measurement changing hands. The summary prints the
 ## largest of each.
+## The follow also checks every clip change it draws for a jump (_kinks), and
+## fails with PROBE_INVALID unless it measured at least one (board 908de167):
+## the walker walks off to another chair and sits there, so a follow of
+## FOLLOW_TICKS sees walk, run, idle and sit clips change.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
@@ -75,16 +80,32 @@ const STRIP_CELL := Vector2i(480, 270)
 ## A kink (change of a frame's move against the frame before) of the roller,
 ## the pinned grip or the grip's gap to the roller's own grip bar, on a frame
 ## of a swap between the hand and the pull, over this fails the probe
-## (SWAP_JUMP); a frame whose clip changed, and the one after it, is exempt
-## (clips play with no blend, board 908de167) and printed as EXEMPT.
+## (SWAP_JUMP), on every swap frame: a clip change crossfades (ClipCrossfade,
+## board 908de167), so a frame whose clip changed is checked like any other.
 const SWAP_KINK_M := 0.05
+## Ticks the follow watch runs after the plates unless --follow=N says
+## otherwise: the walker reaches another chair and sits down in about 100.
+const FOLLOW_TICKS := 200
+## A turn over this in one frame (degrees) fails the probe (PassengerTurns
+## eases every turn over 0.3 s).
+const TURN_DEG := 20.0
 
 var _seed := 0
-var _follow_ticks := 0
+var _follow_ticks := FOLLOW_TICKS
+## Clip changes the follow measured for a jump (_kinks), as "from>to@tick".
+var _clip_changes: Array[String] = []
+## Whether the walker stepped on the tick before this one and on this one, as
+## the views read it (tick positions), and the tick last read.
+var _stepped := [false, false]
+var _stepped_tick := -1
 ## --no-plates: no image is read or saved (a headless run of the follow watch).
 var _no_plates := false
 ## --worn: the walker also wears a shoulder bag as its second bag (board 6981b7ac part 2).
 var _worn := false
+## --walk-route: no park; the walker walks from the first gate chair to the
+## chair farthest from it by path, round its corners, and sits down there, so
+## --strip can draw a walking corner and the turn on the spot to the chair.
+var _walk_route := false
 ## --strip=A-B[,C-D]: windowed frame strips of every frame from tick A to tick
 ## B (and C to D), from a camera fixed in the world for the window (STRIP_CAM
 ## off the walker at the window's first frame), so a turn or a jump shows; each
@@ -133,6 +154,8 @@ func _initialize() -> void:
 			_no_plates = true
 		elif arg == "--worn":
 			_worn = true
+		elif arg == "--walk-route":
+			_walk_route = true
 		elif arg.begins_with("--strip="):
 			for part in arg.get_slice("=", 1).split(","):
 				_strips.append(Vector2i(int(part.get_slice("-", 0)), int(part.get_slice("-", 1))))
@@ -145,12 +168,16 @@ func _initialize() -> void:
 
 func _run() -> void:
 	if await _boot():
-		await _collect()
+		if _walk_route:
+			await _route_walk()
+		else:
+			await _collect()
 		_finish_strips()
 		if _worn:
 			_worn_summary()
 	print("PROBE done plates=%d failed=%s" % [_saved.size(), _failed])
-	quit(1 if _failed or (_saved.size() < 8 and not _no_plates) else 0)
+	var plates_short := _saved.size() < 8 and not _no_plates and not _walk_route
+	quit(1 if _failed or plates_short else 0)
 
 
 func _boot() -> bool:
@@ -293,8 +320,71 @@ func _collect() -> void:
 				await _plate(shot, body, node, bag, k, lead)
 	if not wants.is_empty():
 		_invalid("plates never reached: %s" % [wants])
-	elif _follow_ticks > 0:
+	else:
 		await _follow(props)
+
+
+## --walk-route: the walker, standing at the first gate chair's front, walks to
+## the chair farthest from it by path and sits down there, a third of a tick a
+## frame, with its turns checked and any --strip window drawn (_strip_step).
+## Prints the ticks it turned at a walking corner and began to sit down, so
+## strip windows can be set on them, and the largest turn in one frame while
+## walking on and on the spot.
+func _route_walk() -> void:
+	_p = _walker()
+	for n in 6:
+		await _step()
+	var best := {}
+	var route: Array[Vector2i] = []
+	for seat: Dictionary in _sim.layout.seats:
+		var path := _sim.grid.find_path(_p.at, seat["front"])
+		if path.size() > route.size():
+			route = path
+			best = seat
+	if best.is_empty():
+		_invalid("no gate chair has a path from the first one")
+		return
+	_sim._seat_claims[best["key"]] = _p.id
+	_p.seat_object = best["object_id"]
+	_p.seat_cell = best["cell"]
+	_p.seat_front = best["front"]
+	_p.set_path(route)
+	print("ROUTE to seat %s, %d cells" % [best["cell"], route.size()])
+	var props := _views.carry_on_props()
+	var corners: Array[int] = []
+	var sat := -1
+	var worst := {"walk": 0.0, "spot": 0.0}
+	var heading := INF
+	var yaw := INF
+	var limit := _clock.tick + LIMIT_TICKS
+	while _clock.tick < limit and (sat < 0 or _clock.tick < sat + 40):
+		var tick := _clock.tick
+		await _step()
+		var body := _views.node_for(_p.id)
+		await _strip_step(props, body)
+		if _clock.tick != tick:
+			var step := _views.tick_position(_p.id, true) - _views.tick_position(_p.id, false)
+			var now := atan2(step.x, step.z) if step.length() > 0.001 else INF
+			if is_finite(now) and is_finite(heading) and absf(angle_difference(heading, now)) > 0.5:
+				corners.append(_clock.tick)
+			heading = now
+			if sat < 0 and _p.stage == Passenger.Stage.SITTING_DOWN:
+				sat = _clock.tick
+		var turn := absf(angle_difference(yaw, body.rotation.y)) if is_finite(yaw) else 0.0
+		yaw = body.rotation.y
+		var key := "walk" if _stepped[0] and _stepped[1] else "spot"
+		worst[key] = maxf(worst[key], rad_to_deg(turn))
+	print(
+		(
+			(
+				"ROUTE walking corners at ticks %s, sitting down at tick %d; largest turn a frame"
+				% [corners, sat]
+			)
+			+ " walking on %.1f deg, on the spot %.1f deg" % [worst["walk"], worst["spot"]]
+		)
+	)
+	if corners.is_empty() or sat < 0:
+		_invalid("the route walk turned no corner or never sat down")
 
 
 ## Follows the roller for _follow_ticks more ticks and prints the hand-swap watch
@@ -448,6 +538,14 @@ func _follow(props: CarryOnProps) -> void:
 			+ " live_hand_grip=%.3f pinned_gap=%.3f" % [worst["live"], worst["pin_gap"]]
 		)
 	)
+	print(
+		(
+			"FOLLOW clip changes measured=%d (limit %.3f m): %s"
+			% [_clip_changes.size(), SWAP_KINK_M, ", ".join(_clip_changes)]
+		)
+	)
+	if _clip_changes.is_empty():
+		_invalid("the follow measured no clip change (follow=%d ticks)" % _follow_ticks)
 
 
 ## The worn shoulder bag (bag 1, --worn) this frame: its origin in the world,
@@ -561,8 +659,8 @@ func _worn_summary() -> void:
 ## each as an offset from the walker's origin): how much its move this frame
 ## differs from its move the frame before. A fast but smooth move (a hand
 ## swinging the bag up) changes its speed a little a frame; a snap moves at
-## once and stops. Kept in `worst` apart for frames whose clip changed (a
-## clip is played with no blend, so the whole body snaps then). Returns the
+## once and stops. Kept in `worst` apart for frames whose clip changed (the
+## change crossfades, ClipCrossfade), so the two can be compared. Returns the
 ## flags for the frame.
 func _kinks(row: Dictionary, prev: Dictionary, pin: int, worst: Dictionary) -> String:
 	row["d_bag"] = (row["bag"] as Vector3) - prev["bag"]
@@ -579,26 +677,51 @@ func _kinks(row: Dictionary, prev: Dictionary, pin: int, worst: Dictionary) -> S
 	var flags := ""
 	if clip_changed:
 		flags += " CLIP_%s>%s" % [prev["clip"], row["clip"]]
+		var over := bag_kink > SWAP_KINK_M or pin_kink > SWAP_KINK_M
+		if over and _in_strip_window():
+			# A strip capture's stall plays the clips on into the next sim
+			# steps (see _swap_check); the headless run (--no-plates) checks it.
+			flags += " EXEMPT_STRIP"
+		else:
+			_clip_changes.append("%s>%s@%d" % [prev["clip"], row["clip"], _clock.tick])
+			if over:
+				# Clips crossfade (board 908de167): a change moves nothing at once.
+				flags += " CLIP_JUMP"
+				_invalid(
+					(
+						"clip change jump at tick %d: bag kink %.3f, pinned grip kink %.3f m"
+						% [_clock.tick, bag_kink, pin_kink]
+					)
+				)
 	if bag_kink > JUMP_M or pin_kink > JUMP_M:
 		flags += " KINK bag=%.3f pin=%.3f" % [bag_kink, pin_kink]
 	return flags
 
 
-## Prints a turn of the walker over 20 degrees in a frame (TURN, so a strip
-## window can be set on it), and with --strip draws the frame of a window it
-## is in from the window's camera (proved in frame: feet, head, roller and the
-## holding hand inside MARGIN_PX; seen: hiding the walker and its roller
-## changes MIN_DIFF_PX pixels, else PROBE_INVALID). A window's sheet is saved
-## once its last tick has passed.
+## Prints a turn of the walker over TURN_DEG in a frame (TURN, so a strip
+## window can be set on it, marked walking when it stepped on the tick before
+## and steps on this one) and fails the probe on it: every turn eases, a
+## walking corner too (PassengerTurns), and with --strip draws the frame of a
+## window it is in from the window's camera (proved in frame: feet, head,
+## roller and the holding hand inside MARGIN_PX; seen: hiding the walker and
+## its roller changes MIN_DIFF_PX pixels, else PROBE_INVALID). A window's
+## sheet is saved once its last tick has passed.
 func _strip_step(props: CarryOnProps, body: Node3D) -> void:
+	if _clock.tick != _stepped_tick:
+		_stepped_tick = _clock.tick
+		var step := _views.tick_position(_p.id, true) - _views.tick_position(_p.id, false)
+		_stepped = [_stepped[1], step.length() > 0.001]
 	var yaw := body.global_rotation.y
-	if is_finite(_last_yaw) and absf(angle_difference(_last_yaw, yaw)) > deg_to_rad(20.0):
+	if is_finite(_last_yaw) and absf(angle_difference(_last_yaw, yaw)) > deg_to_rad(TURN_DEG):
+		var walking: bool = _stepped[0] and _stepped[1]
 		print(
 			(
-				"TURN tick=%d yaw_deg=%.1f"
-				% [_clock.tick, rad_to_deg(angle_difference(_last_yaw, yaw))]
+				"TURN tick=%d yaw_deg=%.1f walking=%s"
+				% [_clock.tick, rad_to_deg(angle_difference(_last_yaw, yaw)), walking]
 			)
 		)
+		# Turns ease over 0.3 s (PassengerTurns, board 908de167).
+		_invalid("the walker turned over 20 degrees in one frame at tick %d" % _clock.tick)
 	_last_yaw = yaw
 	if _no_plates:
 		return
@@ -723,8 +846,8 @@ func _swap_row(props: CarryOnProps, bag: Dictionary, row: Dictionary, grip: Vect
 ## Counts the swaps that start and the ones that turn back a swap under way
 ## (the place changes while one is), and on a frame of a swap fails the probe
 ## on a kink of the roller or the pinned grip, or a jump of the grip's gap to
-## the bar, over SWAP_KINK_M (a clip-change frame and the next are exempt).
-## Returns the frame's flags.
+## the bar, over SWAP_KINK_M, clip-change frames included. Returns the frame's
+## flags.
 func _swap_check(row: Dictionary, prev: Dictionary) -> String:
 	var flags := ""
 	var changed: bool = row["place"] != prev.get("place", row["place"])
@@ -743,18 +866,6 @@ func _swap_check(row: Dictionary, prev: Dictionary) -> String:
 	if axle_kink > SWAP_KINK_M:
 		flags += " SWAP_JUMP"
 		_invalid("swap jump at tick %d: roller axle kink %.3f m" % [_clock.tick, axle_kink])
-	if row.get("clip_changed", false) or prev.get("clip_changed", false):
-		_swap_worst["exempt"] += 1
-		print(
-			(
-				(
-					"EXEMPT tick=%d clip change (no blend, board 908de167): grip, roller and bar"
-					% _clock.tick
-				)
-				+ " kinks not checked; the axle kink %.3f m is" % axle_kink
-			)
-		)
-		return flags
 	# A strip frame's capture (a GPU read-back and a pixel diff) stalls the
 	# frames after it, and the clips play that stall into the next sim steps:
 	# windowed, the free arm moved 0.24 m a step while walking inside a strip
