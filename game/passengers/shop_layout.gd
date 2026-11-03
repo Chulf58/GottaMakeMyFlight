@@ -46,28 +46,34 @@ func rebuild(grid: BuildGrid) -> void:
 			var record := grid.get_object(id)
 			if record["def"] != type.seat_piece or not FacilitySlots.piece_inside(grid, id, area):
 				continue
-			var def := BuildCatalog.get_def(record["def"])
-			var front := TerminalLayout.front_of(record["facing"])
-			var cells := def.footprint(record["anchor"], record["facing"])
+			var at := Relocation.placement(grid, id)
+			var cells := BuildCatalog.get_def(at["def"]).footprint(at["anchor"], at["facing"])
 			for i in mini(type.seats_per_piece, cells.size()):
-				var approach: Vector2i = cells[i] + front
-				if not grid.is_passenger_cell(approach):
-					continue
-				(
-					slots
-					. append(
-						{
-							"key": key_of(id, i),
-							"display": id,
-							"index": i,
-							"room": room_id,
-							"approach": approach,
-							"facing": -front,
-						}
-					)
-				)
+				var entry := entry_at(id, i, room_id, at)
+				if grid.is_passenger_cell(entry["approach"]):
+					slots.append(entry)
 		if not slots.is_empty():
 			shops.append({"room": room_id, "slots": slots})
+
+
+## The slot entry of slot `index` of browse piece `display` in room `room_id`
+## at placement `at` (Relocation.placement()), whether or not the grid holds it
+## there and whether or not its approach cell is usable: a piece that moved is
+## still left from its old spot (Relocation). Empty when the piece has no such
+## slot.
+static func entry_at(display: int, index: int, room_id: int, at: Dictionary) -> Dictionary:
+	var cells := BuildCatalog.get_def(at["def"]).footprint(at["anchor"], at["facing"])
+	if index < 0 or index >= cells.size():
+		return {}
+	var front := TerminalLayout.front_of(at["facing"])
+	return {
+		"key": key_of(display, index),
+		"display": display,
+		"index": index,
+		"room": room_id,
+		"approach": cells[index] + front,
+		"facing": -front,
+	}
 
 
 ## A slot entry by display id and index, or an empty dictionary when it is not

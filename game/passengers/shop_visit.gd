@@ -21,6 +21,13 @@ var deadline := 0
 var fallback := false
 ## The reserved slot's ShopLayout entry, derived again on load.
 var slot: Dictionary = {}
+## The browse piece's placement (Relocation.placement()) `slot` was derived
+## from; derived again on load.
+var piece: Dictionary = {}
+## Set while the passenger leaves a browse piece that moved with its room, and
+## then while it walks back to it and stays the time still owed (Relocation);
+## null otherwise. Saved.
+var relocation: Relocation = null
 
 
 ## The slot's key, "<display id>:<index>", as ShopLayout keys it.
