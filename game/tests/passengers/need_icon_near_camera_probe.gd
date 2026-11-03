@@ -41,7 +41,7 @@ const ARRIVE_LIMIT_TICKS := 1500
 ## direction, so the subject stands between the focus and the lens.
 const AHEAD_M := 2.5
 ## Distances as a fraction of home_distance: the closest zoom, then a middle one.
-const CLOSE_RATIOS := [0.0, 0.4]
+const CLOSE_RATIOS := [0.0, 0.4, 0.7]
 
 var _out_dir := ""
 var _failed := false
@@ -140,8 +140,12 @@ func _plate(ratio: float) -> void:
 	var first := node.get_node(NeedIcons.SPRITES[0]) as Sprite3D
 	ok = _in_frame(node.global_transform * first.position, tag + " anchor") and ok
 	ok = _ray_clear(head, tag) and ok
-	if not first.visible:
-		_invalid("%s: the subject's icon is not visible" % tag)
+	# The fade (NeedIcons.near_alpha) must agree with the subject's icon: gone
+	# inside NEAR_HIDDEN_M of the camera, drawn beyond it.
+	var near := NeedIcons.near_alpha(_cam.global_position.distance_to(node.global_position))
+	print("PROBE %s near_alpha=%.2f icon_visible=%s" % [tag, near, first.visible])
+	if first.visible != (near > 0.0):
+		_invalid("%s: the subject's icon visibility disagrees with near_alpha %.2f" % [tag, near])
 		return
 	var to_plate := Vector2(root.get_texture().get_size()) / root.get_visible_rect().size
 	for id in _sim.passenger_ids():
