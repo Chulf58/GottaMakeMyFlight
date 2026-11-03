@@ -164,25 +164,33 @@ func plan_at(centre: Vector2i) -> RoomMove:
 	return RoomMove.plan(_mode.grid, room_id, centre, turns, _mode.wallet())
 
 
-## Sets the room down centred on `centre` as one undo step. A refusal changes
-## nothing, keeps the room in hand and says why. A spot that is the room's own
-## place unturned is a cancel. Returns the result, or null for that cancel.
+## Sets the room down centred on `centre` as one undo step, committing the plan
+## the ghost shows there (RoomMove.commit_move()). A refused plan stays refused
+## until the ghost is redrawn: it changes nothing, keeps the room in hand and
+## says why. A click at a spot and turn the ghost has not shown yet only shows
+## it, and committing takes another click. A spot that is the room's own place
+## unturned is a cancel. Returns the result, or null when nothing was committed
+## or refused (a cancel, or the plan only shown).
 func set_down(centre: Vector2i) -> BuildResult:
 	if _held_changed():
 		cancel()
 		return null
-	var name_of := _name_of(room_id)
-	var move := _previewed(centre)
-	if turns == 0 and move.to_rect == _from:
-		cancel()
+	var shown := _plan != null and _plan_centre == centre and _plan_turns == turns
+	if not shown:
+		hover_at(centre)
+	var move := _plan
+	if move == null or (turns == 0 and move.to_rect == _from):
+		if move != null:
+			cancel()
 		return null
-	var result: BuildResult
-	if move.result.ok:
-		result = RoomMove.commit_move(_mode.grid, move, _mode.wallet(), _mode.undo_history())
-	else:
-		result = RoomMove.commit(
-			_mode.grid, room_id, centre, turns, _mode.wallet(), _mode.undo_history()
-		)
+	if not shown:
+		return null
+	var name_of := _name_of(room_id)
+	if not move.result.ok:
+		_mode.grid.edit_refused.emit(BuildEdit.resize_room(room_id, move.to_rect), move.result)
+		_set_status("%s  %s" % [name_of, move.result.reason_text()])
+		return move.result
+	var result := RoomMove.commit_move(_mode.grid, move, _mode.wallet(), _mode.undo_history())
 	if not result.ok:
 		_set_status("%s  %s" % [name_of, result.reason_text()])
 		return result
@@ -260,13 +268,6 @@ func hover_at(cell: Variant) -> void:
 	if not ok:
 		text = "%s  %s" % [_name_of(room_id), _plan.result.reason_text()]
 	_set_status(text)
-
-
-## The plan the ghost shows for `centre` when there is one, else a fresh plan.
-func _previewed(centre: Vector2i) -> RoomMove:
-	if _plan != null and _plan_centre == centre and _plan_turns == turns:
-		return _plan
-	return plan_at(centre)
 
 
 ## The pieces whose cells lie in the room as they stand now, doors left out

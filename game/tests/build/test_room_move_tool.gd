@@ -323,3 +323,43 @@ func test_every_piece_of_the_original_is_dimmed_while_held_and_restored_after() 
 		for mesh in originals:
 			assert_object((mesh as MeshInstance3D).material_override).is_equal(originals[mesh])
 		assert_int(_mover.get_node("RoomMoveDim").get_child_count()).is_equal(0)
+
+
+func test_a_refused_preview_stays_refused_when_its_cause_goes_before_the_next_hover() -> void:
+	_pick_up()
+	# Centre (10, 3) puts the cafe on the toilet room: red.
+	_mover.hover_at(Vector2i(10, 3))
+	assert_int(_mover.refusal().reason).is_equal(BuildResult.Reason.ROOM_OVERLAP)
+	var balance := _finances.wallet.balance
+	var undo_depth := _mode.undo_history().size()
+	var bin_before := _mode.grid.get_object(_bin)
+	var toilet_id := _mode.grid.room_at(Vector2i(11, 1))
+	assert_bool(_mode.grid.apply(BuildEdit.remove_room(toilet_id)).ok).is_true()
+	# The spot would now be free, but the player never saw it green.
+	var result := _mover.set_down(Vector2i(10, 3))
+	print("stale refusal: reason=%s status=%s" % [result.reason, _mover.status_text()])
+	assert_bool(result.ok).is_false()
+	assert_int(result.reason).is_equal(BuildResult.Reason.ROOM_OVERLAP)
+	assert_bool(_mover.active).is_true()
+	assert_that(_rect()).is_equal(CAFE)
+	assert_that(_mode.grid.get_object(_bin)).is_equal(bin_before)
+	assert_int(_finances.wallet.balance).is_equal(balance)
+	assert_int(_mode.undo_history().size()).is_equal(undo_depth)
+	# Once the ghost is redrawn it is green and the next click commits it.
+	_mover.hover_at(Vector2i(10, 3))
+	assert_bool(_mover.refusal() == null).is_true()
+	assert_bool(_mover.set_down(Vector2i(10, 3)).ok).is_true()
+
+
+func test_a_click_on_a_spot_the_ghost_has_not_shown_only_shows_it() -> void:
+	_pick_up()
+	var undo_depth := _mode.undo_history().size()
+	var result := _mover.set_down(Vector2i(8, 7))
+	assert_bool(result == null).is_true()
+	assert_bool(_mover.active).is_true()
+	assert_that(_rect()).is_equal(CAFE)
+	assert_int(_mode.undo_history().size()).is_equal(undo_depth)
+	assert_bool(_mover.refusal() == null).is_true()
+	assert_int(_mover.ghost_node().get_child_count()).is_greater(0)
+	assert_bool(_mover.set_down(Vector2i(8, 7)).ok).is_true()
+	assert_that(_rect()).is_equal(Rect2i(5, 5, 8, 6))
