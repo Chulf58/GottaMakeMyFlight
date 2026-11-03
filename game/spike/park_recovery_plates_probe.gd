@@ -67,6 +67,10 @@ const BEFORE_K := 0.03
 ## A move relative to the walker's origin, in one frame (a third of a tick), above this
 ## is a jump (walking pulls the bag along smoothly, a few cm a frame at most).
 const JUMP_M := 0.03
+## The strip camera's place off the walker (world) and where it looks (--strip).
+const STRIP_CAM := Vector3(-0.6, 1.6, 3.6)
+const STRIP_LOOK := Vector3(-0.4, 0.7, 0.0)
+const STRIP_CELL := Vector2i(480, 270)
 
 var _seed := 0
 var _follow_ticks := 0
@@ -74,6 +78,16 @@ var _follow_ticks := 0
 var _no_plates := false
 ## --worn: the walker also wears a shoulder bag as its second bag (board 6981b7ac part 2).
 var _worn := false
+## --strip=A-B[,C-D]: windowed frame strips of every frame from tick A to tick
+## B (and C to D), from a camera fixed in the world for the window (STRIP_CAM
+## off the walker at the window's first frame), so a turn or a jump shows; each
+## frame is proved in frame and seen like a plate, and each window is also
+## saved as one contact sheet.
+var _strips: Array[Vector2i] = []
+var _strip_cam: Camera3D
+var _strip_imgs := {}
+var _strip_done := {}
+var _last_yaw := INF
 var _worn_prev := {}
 var _worn_worst := {
 	"w_body": 0.0,
@@ -108,6 +122,9 @@ func _initialize() -> void:
 			_no_plates = true
 		elif arg == "--worn":
 			_worn = true
+		elif arg.begins_with("--strip="):
+			for part in arg.get_slice("=", 1).split(","):
+				_strips.append(Vector2i(int(part.get_slice("-", 0)), int(part.get_slice("-", 1))))
 		elif arg.begins_with("--out="):
 			_out_dir = arg.get_slice("=", 1)
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -212,6 +229,7 @@ func _collect() -> void:
 		var body := _views.node_for(_p.id)
 		if _worn:
 			_watch_worn(props, body)
+		await _strip_step(props, body)
 		var bag := props.bag_state(_p.id, 0)
 		var k := props.transfer_progress(_p.id, 0)
 		var moved := body.global_position.distance_to(last_body)
@@ -283,6 +301,7 @@ func _follow(props: CarryOnProps) -> void:
 	while _clock.tick < end:
 		await _step()
 		body = _views.node_for(_p.id)
+		await _strip_step(props, body)
 		var bag := props.bag_state(_p.id, 0)
 		var node: Node3D = props.props_of(_p.id)["bags"][0]
 		var handle := node.global_transform * CarryOnProps.ROLLER_HANDLE
@@ -529,6 +548,112 @@ func _kinks(row: Dictionary, prev: Dictionary, pin: int, worst: Dictionary) -> S
 	if bag_kink > JUMP_M or pin_kink > JUMP_M:
 		flags += " KINK bag=%.3f pin=%.3f" % [bag_kink, pin_kink]
 	return flags
+
+
+## Prints a turn of the walker over 20 degrees in a frame (TURN, so a strip
+## window can be set on it), and with --strip draws the frame of a window it
+## is in from the window's camera (proved in frame: feet, head, roller and the
+## holding hand inside MARGIN_PX; seen: hiding the walker and its roller
+## changes MIN_DIFF_PX pixels, else PROBE_INVALID). A window's sheet is saved
+## once its last tick has passed.
+func _strip_step(props: CarryOnProps, body: Node3D) -> void:
+	var yaw := body.global_rotation.y
+	if is_finite(_last_yaw) and absf(angle_difference(_last_yaw, yaw)) > deg_to_rad(20.0):
+		print(
+			(
+				"TURN tick=%d yaw_deg=%.1f"
+				% [_clock.tick, rad_to_deg(angle_difference(_last_yaw, yaw))]
+			)
+		)
+	_last_yaw = yaw
+	if _no_plates:
+		return
+	for w in _strips.size():
+		if _clock.tick > _strips[w].y and _strip_imgs.has(w) and not _strip_done.has(w):
+			_strip_done[w] = true
+			_save_sheet(w)
+		if _clock.tick < _strips[w].x or _clock.tick > _strips[w].y or _failed:
+			continue
+		var node: Node3D = props.props_of(_p.id)["bags"][0]
+		var bag := props.bag_state(_p.id, 0)
+		var hand := maxi(int(bag.get("held_by", -1)), 0)
+		if not _strip_imgs.has(w):
+			_strip_imgs[w] = []
+			if _strip_cam == null:
+				_strip_cam = Camera3D.new()
+				_strip_cam.fov = 50.0
+				root.add_child(_strip_cam)
+			var at := body.global_position
+			_strip_cam.look_at_from_position(at + STRIP_CAM, at + STRIP_LOOK, Vector3.UP)
+		_strip_cam.current = true
+		await _frames(2)
+		var img := root.get_texture().get_image()
+		var points := {
+			"feet": body.global_position,
+			"head": body.global_position + Vector3.UP * 1.7,
+			"roller": node.global_position,
+			"hand": props.grip_of(body, hand),
+		}
+		var inside := Rect2(
+			Vector2.ONE * MARGIN_PX, Vector2(img.get_size()) - Vector2.ONE * 2.0 * MARGIN_PX
+		)
+		var flat := {}
+		for name: String in points:
+			flat[name] = _strip_cam.unproject_position(points[name])
+			if _strip_cam.is_position_behind(points[name]) or not inside.has_point(flat[name]):
+				_invalid(
+					(
+						"strip %d tick %d: %s at %s is out of frame"
+						% [w, _clock.tick, name, flat[name]]
+					)
+				)
+				return
+		body.visible = false
+		node.visible = false
+		await _frames(2)
+		var diff := _diff(img, root.get_texture().get_image())
+		body.visible = true
+		node.visible = true
+		if diff < MIN_DIFF_PX:
+			_invalid("strip %d tick %d: the walker changes %d px" % [w, _clock.tick, diff])
+			return
+		var n: int = (_strip_imgs[w] as Array).size()
+		var path := _out_dir.path_join("park_strip%d_%02d_t%d.png" % [w, n, _clock.tick])
+		img.save_png(path)
+		img.resize(STRIP_CELL.x, STRIP_CELL.y)
+		(_strip_imgs[w] as Array).append(img)
+		print(
+			(
+				"STRIP %d #%d tick=%d k=%.3f place=%d swap=%s held_by=%d diff_px=%d at=%s saved %s"
+				% [
+					w,
+					n,
+					_clock.tick,
+					props.transfer_progress(_p.id, 0),
+					int(bag.get("place", -9)),
+					bag.get("swap", false),
+					int(bag.get("held_by", -1)),
+					diff,
+					flat,
+					path
+				]
+			)
+		)
+
+
+## Saves strip window `w`'s frames as one contact sheet, four to a row.
+func _save_sheet(w: int) -> void:
+	var imgs: Array = _strip_imgs[w]
+	var rows := ceili(imgs.size() / 4.0)
+	var sheet := Image.create(STRIP_CELL.x * 4, STRIP_CELL.y * rows, false, Image.FORMAT_RGBA8)
+	for n in imgs.size():
+		var img: Image = imgs[n]
+		img.convert(Image.FORMAT_RGBA8)
+		var at := Vector2i(n % 4 * STRIP_CELL.x, n / 4 * STRIP_CELL.y)
+		sheet.blit_rect(img, Rect2i(Vector2i.ZERO, STRIP_CELL), at)
+	var path := _out_dir.path_join("park_strip%d_sheet.png" % w)
+	sheet.save_png(path)
+	print("STRIP %d sheet %d frames saved %s" % [w, imgs.size(), path])
 
 
 ## One sim step a third of a tick on, drawn.
