@@ -46,6 +46,7 @@ extends SceneTree
 ## largest of each.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
+const FloatCheck := preload("res://spike/carry_float_check.gd")
 const OUT_REL := "res://../tools/blender/out/park-recovery"
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 300.0
@@ -71,6 +72,12 @@ const JUMP_M := 0.03
 const STRIP_CAM := Vector3(-0.6, 1.6, 3.6)
 const STRIP_LOOK := Vector3(-0.4, 0.7, 0.0)
 const STRIP_CELL := Vector2i(480, 270)
+## A kink (change of a frame's move against the frame before) of the roller,
+## the pinned grip or the grip's gap to the roller's own grip bar, on a frame
+## of a swap between the hand and the pull, over this fails the probe
+## (SWAP_JUMP); a frame whose clip changed, and the one after it, is exempt
+## (clips play with no blend, board 908de167) and printed as EXEMPT.
+const SWAP_KINK_M := 0.05
 
 var _seed := 0
 var _follow_ticks := 0
@@ -85,6 +92,10 @@ var _worn := false
 ## saved as one contact sheet.
 var _strips: Array[Vector2i] = []
 var _strip_cam: Camera3D
+var _strip_xf := {}
+var _swap_starts := 0
+var _reversals := 0
+var _swap_worst := {"bag": 0.0, "pin": 0.0, "bar": 0.0, "exempt": 0}
 var _strip_imgs := {}
 var _strip_done := {}
 var _last_yaw := INF
@@ -135,6 +146,7 @@ func _initialize() -> void:
 func _run() -> void:
 	if await _boot():
 		await _collect()
+		_finish_strips()
 		if _worn:
 			_worn_summary()
 	print("PROBE done plates=%d failed=%s" % [_saved.size(), _failed])
@@ -323,6 +335,7 @@ func _follow(props: CarryOnProps) -> void:
 			"gap": [grips[0].distance_to(handle), grips[1].distance_to(handle)],
 			"clip": (body.get_node("AnimationPlayer") as AnimationPlayer).current_animation,
 		}
+		_swap_row(props, bag, row, grips[pin])
 		var flag := ""
 		if not prev.is_empty():
 			var bag_jump: float = row["bag"].distance_to(prev["bag"])
@@ -345,6 +358,7 @@ func _follow(props: CarryOnProps) -> void:
 				swaps += 1
 				flag += " SWAP_%s" % ("START" if swap_now else "END")
 			flag += _kinks(row, prev, pin, worst)
+			flag += _swap_check(row, prev)
 			if flag != "":
 				print(
 					(
@@ -397,6 +411,25 @@ func _follow(props: CarryOnProps) -> void:
 			% [_follow_ticks, pin, swaps, live_switches, jumps_pin]
 		)
 	)
+	print(
+		(
+			(
+				"FOLLOW swaps started=%d turned_back=%d max on swap frames (m): bag=%.3f"
+				% [_swap_starts, _reversals, _swap_worst["bag"]]
+			)
+			+ (
+				" pinned_grip=%.3f bar_gap=%.3f axle=%.3f exempt_frames=%d"
+				% [
+					_swap_worst["pin"],
+					_swap_worst["bar"],
+					_swap_worst.get("axle", 0.0),
+					_swap_worst["exempt"]
+				]
+			)
+		)
+	)
+	if _reversals < 1:
+		_invalid("no swap between the hand and the pull turned back in the follow")
 	print(
 		(
 			(
@@ -537,6 +570,7 @@ func _kinks(row: Dictionary, prev: Dictionary, pin: int, worst: Dictionary) -> S
 	if not prev.has("d_bag"):
 		return ""
 	var clip_changed: bool = row["clip"] != prev["clip"]
+	row["clip_changed"] = clip_changed
 	var suffix := "_clip" if clip_changed else ""
 	var bag_kink := (row["d_bag"] as Vector3).distance_to(prev["d_bag"])
 	var pin_kink := (row["d_pin"] as Vector3).distance_to(prev["d_pin"])
@@ -585,6 +619,8 @@ func _strip_step(props: CarryOnProps, body: Node3D) -> void:
 				root.add_child(_strip_cam)
 			var at := body.global_position
 			_strip_cam.look_at_from_position(at + STRIP_CAM, at + STRIP_LOOK, Vector3.UP)
+			_strip_xf[w] = _strip_cam.global_transform
+		_strip_cam.global_transform = _strip_xf[w]
 		_strip_cam.current = true
 		await _frames(2)
 		var img := root.get_texture().get_image()
@@ -639,6 +675,99 @@ func _strip_step(props: CarryOnProps, body: Node3D) -> void:
 				]
 			)
 		)
+
+
+## Saves every strip window not saved yet, and fails on a window with no
+## frame or fewer than its ticks' frames (three a tick).
+func _finish_strips() -> void:
+	if _no_plates:
+		return
+	for w in _strips.size():
+		var want := (_strips[w].y - _strips[w].x + 1) * 3
+		var got: int = (_strip_imgs.get(w, []) as Array).size()
+		print("STRIP %d frames %d of %d" % [w, got, want])
+		if got == 0:
+			_invalid("strip %d (ticks %s) has no frame" % [w, _strips[w]])
+			continue
+		if not _strip_done.has(w):
+			_strip_done[w] = true
+			_save_sheet(w)
+		if got != want:
+			_invalid("strip %d (ticks %s) has %d frames of %d" % [w, _strips[w], got, want])
+
+
+## The swap watch's part of the follow row: the roller's place (with its lift
+## bit), whether a swap between the hand and the pull is under way, and the
+## pinned grip's gap to the roller's own grip bar (from its geometry,
+## FloatCheck.own_grips, never from a placement function).
+func _swap_row(props: CarryOnProps, bag: Dictionary, row: Dictionary, grip: Vector3) -> void:
+	row["place"] = int(bag.get("place", -9))
+	row["lift_swap"] = bag.get("swap", false)
+	row["swap_on"] = row["lift_swap"] and props.transfer_progress(_p.id, 0) < 1.0
+	row["bar"] = grip.distance_to(FloatCheck.own_grips(props, _p.id, 0)[0])
+	var node: Node3D = props.props_of(_p.id)["bags"][0]
+	row["axle"] = node.global_transform * CarryOnProps.ROLLER_AXLE - (row["body"] as Vector3)
+	row["d_axle"] = Vector3.ZERO
+
+
+## Counts the swaps that start and the ones that turn back a swap under way
+## (the place changes while one is), and on a frame of a swap fails the probe
+## on a kink of the roller or the pinned grip, or a jump of the grip's gap to
+## the bar, over SWAP_KINK_M (a clip-change frame and the next are exempt).
+## Returns the frame's flags.
+func _swap_check(row: Dictionary, prev: Dictionary) -> String:
+	var flags := ""
+	var changed: bool = row["place"] != prev.get("place", row["place"])
+	if changed and row["lift_swap"]:
+		_swap_starts += 1
+		flags += " SWAP_PLACE %d>%d" % [prev["place"], row["place"]]
+		if prev.get("swap_on", false):
+			_reversals += 1
+			flags += " TURNED_BACK"
+	if not (row["swap_on"] or (changed and row["lift_swap"])) or not row.has("d_bag"):
+		return flags
+	if prev.has("axle"):
+		row["d_axle"] = (row["axle"] as Vector3) - prev["axle"]
+	var axle_kink: float = (row["d_axle"] as Vector3).distance_to(prev.get("d_axle", Vector3.ZERO))
+	_swap_worst["axle"] = maxf(_swap_worst.get("axle", 0.0), axle_kink)
+	if axle_kink > SWAP_KINK_M:
+		flags += " SWAP_JUMP"
+		_invalid("swap jump at tick %d: roller axle kink %.3f m" % [_clock.tick, axle_kink])
+	if row.get("clip_changed", false) or prev.get("clip_changed", false):
+		_swap_worst["exempt"] += 1
+		print(
+			(
+				(
+					"EXEMPT tick=%d clip change (no blend, board 908de167): grip, roller and bar"
+					% _clock.tick
+				)
+				+ " kinks not checked; the axle kink %.3f m is" % axle_kink
+			)
+		)
+		return flags
+	var bag_kink: float = (
+		(row["d_bag"] as Vector3).distance_to(prev.get("d_bag", Vector3.ZERO))
+		if prev.has("d_bag")
+		else 0.0
+	)
+	var pin_kink: float = (
+		(row["d_pin"] as Vector3).distance_to(prev.get("d_pin", Vector3.ZERO))
+		if prev.has("d_pin")
+		else 0.0
+	)
+	var bar_jump := absf(float(row["bar"]) - float(prev["bar"]))
+	_swap_worst["bag"] = maxf(_swap_worst["bag"], bag_kink)
+	_swap_worst["pin"] = maxf(_swap_worst["pin"], pin_kink)
+	_swap_worst["bar"] = maxf(_swap_worst["bar"], bar_jump)
+	if bag_kink > SWAP_KINK_M or pin_kink > SWAP_KINK_M or bar_jump > SWAP_KINK_M:
+		flags += " SWAP_JUMP"
+		_invalid(
+			(
+				"swap jump at tick %d: roller kink %.3f, grip kink %.3f, bar gap jump %.3f m"
+				% [_clock.tick, bag_kink, pin_kink, bar_jump]
+			)
+		)
+	return flags
 
 
 ## Saves strip window `w`'s frames as one contact sheet, four to a row.

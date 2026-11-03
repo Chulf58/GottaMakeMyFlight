@@ -553,7 +553,7 @@ func sync() -> void:
 					and (by_bar or bags[i].get("by_bar", false))
 				)
 				bags[i]["place"] = place
-				bags[i]["changed"] = CarrySwap.changed_at(bags[i], lifted, _tick())
+				bags[i]["changed"] = CarrySwap.start(bags[i], lifted, node, _tick())
 				bags[i]["carry_was"] = bags[i].get("carry", carry)
 			bags[i]["carry"] = carry
 			bags[i]["by_bar"] = by_bar
@@ -1456,7 +1456,7 @@ func _swap_transform(held: Dictionary, body: Node3D, i: int, k: float) -> Array:
 		if not trailing.is_finite():
 			trailing = _axle_drawn(bag, body, scale_by, hand)
 	else:
-		trailing = body.global_transform * ((bag["from"] as Transform3D) * ROLLER_AXLE)
+		trailing = CarrySwap.hung_trail(bag, body.global_transform)
 	var t := CarrySwap.pull_share(to_pull, k)
 	var hung := _hung_axle(bag, grip, scale_by)
 	var axle := hung.lerp(trailing, t) + outward * SWAP_OUT_M * 4.0 * t * (1.0 - t)

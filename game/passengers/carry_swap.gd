@@ -22,21 +22,49 @@ static func pull_share(to_pull: bool, k: float) -> float:
 	return s if to_pull else 1.0 - s
 
 
-## The tick a move of `bag` (CarryOnProps' record, its "swap" just set for the
-## move sync() saw at `now`) starts its clock from: `now`, except for a swap to
-## the pull (`lifted` false) that turns back a swap still under way (the move
-## being drawn is not hand-led, so it is a swap: CarryOnProps._leads): that one
-## is started as far before `now` as the swap under way had gone, so the
-## roller goes back from where it is drawn (their pull_share() agree, and
-## smoothstep(1 - k) is 1 - smoothstep(k)). A swap back to the hand needs no
-## such start: it begins at the roller as drawn ("from", CarryOnProps._stamp).
-static func changed_at(bag: Dictionary, lifted: bool, now: float) -> float:
-	if lifted or not bag.get("swap", false) or not bag.has("since") or bag.get("led", true):
+## The tick a move of `bag` (CarryOnProps' record, its "swap" and "place" just
+## set for the move sync() saw at `now`; `lifted` whether it goes to the hand;
+## its body `body`, as drawn) starts its clock from. `now`, except for a swap
+## that turns back a swap still under way (the move drawn last is not
+## hand-led, so it is a swap: CarryOnProps._leads). That one goes back along
+## the same path from where the roller was drawn last: its clock is started so
+## its share toward the pull then is the old one's (smoothstep(1 - k) is
+## 1 - smoothstep(k), with k "placed_k", the share drawn last), and it keeps
+## the old swap's trailing end. Turning back to the pull, the follower starts
+## at that end ("drawn_axle", CarryOnProps._axle_drawn) and follows on from
+## there; turning back to the hand, the end is kept in the body's frame
+## ("swap_trail", hung_trail()). A swap whose follower was started afresh
+## jumped the axle by the share times the gap (0.27 m after a corner, Sol
+## review of board 6981b7ac).
+static func start(bag: Dictionary, lifted: bool, body: Node3D, now: float) -> float:
+	var frame := body.global_transform
+	var k: float = bag.get("placed_k", 1.0)
+	var turning: bool = (
+		bag.get("swap", false) and bag.has("since") and not bag.get("led", true) and k < 1.0
+	)
+	var trail := Vector3.INF
+	if turning:
+		trail = bag.get("axle_now", Vector3.INF) if lifted else hung_trail(bag, frame)
+	bag.erase("swap_trail")
+	if not turning or not trail.is_finite():
 		return now
-	var k := clampf((now - float(bag["since"])) / CarryLead.ticks_of(bag), 0.0, 1.0)
-	if k >= 1.0:
-		return now
-	return now - (1.0 - k) * CarryOnProps.TRANSFER_TICKS
+	var drawn_at := float(bag["since"]) + k * CarryLead.ticks_of(bag)
+	if lifted:
+		bag["swap_trail"] = frame.affine_inverse() * trail
+	else:
+		bag["drawn_axle"] = trail
+		bag["drawn_at"] = drawn_at
+	return drawn_at - (1.0 - k) * CarryOnProps.TRANSFER_TICKS
+
+
+## Where the axle of a roller swapping to the hand starts (its trailing end,
+## world), its body drawn at `frame`: where it was let go, held in the body's
+## frame ("from", CarryOnProps._stamp), or the end of the pull swap it turned
+## back ("swap_trail", start()).
+static func hung_trail(bag: Dictionary, frame: Transform3D) -> Vector3:
+	if bag.has("swap_trail"):
+		return frame * (bag["swap_trail"] as Vector3)
+	return frame * ((bag["from"] as Transform3D) * CarryOnProps.ROLLER_AXLE)
 
 
 ## The share toward the pull (pull_share()) of each hand (right, then left)

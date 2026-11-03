@@ -5,45 +5,68 @@ extends GdUnitTestSuite
 ## goes between the two poses with it.
 
 
-## A swap to the pull that turns back a swap to the hand under way at k (old)
-## is started so that its share toward the pull at the turn equals the old
-## one's (the roller is drawn where it was): at every k 0.05 apart. Control:
-## started at `now` instead, as before the fix, the shares differ by up to the
-## whole way (the 1.07 m jump).
-func test_a_turned_back_swap_goes_on_from_where_the_roller_is() -> void:
+## The clock of a swap that turns back one under way, drawn last at k (old,
+## "placed_k"), in either direction: its share toward the pull at that draw
+## is the old one's, at every k 0.05 apart. This pins the clock only; the
+## roller's place at the turn is tested through the real views in
+## test_carry_swap_reversal.gd. Control: started at the draw instead, the
+## shares differ by up to the whole way (the 1.07 m jump).
+func test_a_turned_back_swap_keeps_its_share_toward_the_pull() -> void:
 	var worst := 0.0
 	var worst_unfixed := 0.0
-	for step in range(1, 20):
-		var k_old := step * 0.05
-		var since := 100.0
-		var now := since + k_old * CarryOnProps.TRANSFER_TICKS
-		var bag := {"swap": true, "led": false, "since": since}
-		var old_share := CarrySwap.pull_share(false, k_old)
-		var changed := CarrySwap.changed_at(bag, false, now)
-		var k_new := (now - changed) / CarryOnProps.TRANSFER_TICKS
-		worst = maxf(worst, absf(CarrySwap.pull_share(true, k_new) - old_share))
-		worst_unfixed = maxf(worst_unfixed, absf(CarrySwap.pull_share(true, 0.0) - old_share))
+	for lifted in [false, true]:
+		for step in range(1, 20):
+			var k_old := step * 0.05
+			var since := 100.0
+			var drawn := since + k_old * CarryOnProps.TRANSFER_TICKS
+			var bag := {
+				"swap": true,
+				"led": false,
+				"since": since,
+				"placed_k": k_old,
+				"from": Transform3D.IDENTITY,
+				"axle_now": Vector3(0.3, 0.03, -1.0),
+			}
+			var old_share := CarrySwap.pull_share(lifted, k_old)
+			var changed := CarrySwap.start(bag, lifted, _body(Transform3D.IDENTITY), drawn + 0.2)
+			var k_new := (drawn - changed) / CarryOnProps.TRANSFER_TICKS
+			worst = maxf(worst, absf(CarrySwap.pull_share(not lifted, k_new) - old_share))
+			var unfixed := absf(CarrySwap.pull_share(not lifted, 0.0) - old_share)
+			worst_unfixed = maxf(worst_unfixed, unfixed)
 	print("turned back: share gap %.6f, from the far end %.3f" % [worst, worst_unfixed])
 	assert_float(worst).is_less(0.0001)
 	assert_float(worst_unfixed).is_greater(0.9)
 
 
-## changed_at() starts every other move at `now`: a swap back to the hand (it
-## begins at the roller as drawn), a swap after a hand-led move (not a swap
-## under way), after a swap that has ended, and a bag with no move yet.
-## Control: the turned-back swap is started before `now`.
-func test_only_a_swap_to_the_pull_turning_one_back_starts_early() -> void:
+## start() keeps the old swap's trailing end: turning back to the pull it
+## seeds the follower there (at the old draw's time), turning back to the hand
+## it keeps the follower's last axle in the body's frame. Every other move
+## starts at `now` with no kept end: after a hand-led move, a swap that has
+## ended, a move that is not a swap, a bag with no move yet. Control: the
+## turned-back swaps start before `now`.
+func test_a_turned_back_swap_keeps_its_trailing_end() -> void:
 	var now := 103.0
-	var under_way := {"swap": true, "led": false, "since": 100.0}
-	assert_float(CarrySwap.changed_at(under_way, false, now)).is_less(now)
-	assert_float(CarrySwap.changed_at(under_way, true, now)).is_equal(now)
-	var led := {"swap": true, "led": true, "since": 100.0}
-	assert_float(CarrySwap.changed_at(led, false, now)).is_equal(now)
-	var ended := {"swap": true, "led": false, "since": now - CarryOnProps.TRANSFER_TICKS}
-	assert_float(CarrySwap.changed_at(ended, false, now)).is_equal(now)
-	var not_swap := {"swap": false, "led": false, "since": 100.0}
-	assert_float(CarrySwap.changed_at(not_swap, false, now)).is_equal(now)
-	assert_float(CarrySwap.changed_at({"swap": true, "led": false}, false, now)).is_equal(now)
+	var frame := Transform3D(Basis(Vector3.UP, 0.5), Vector3(2.0, 0.0, 1.0))
+	var from := Transform3D(Basis.IDENTITY, Vector3(-0.6, 0.0, -0.95))
+	var to_pull := {"swap": true, "led": false, "since": 100.0, "placed_k": 0.4, "from": from}
+	assert_float(CarrySwap.start(to_pull, false, _body(frame), now)).is_less(now)
+	var trail: Vector3 = frame * (from * CarryOnProps.ROLLER_AXLE)
+	assert_vector(to_pull["drawn_axle"]).is_equal_approx(trail, Vector3.ONE * 0.0001)
+	assert_float(to_pull["drawn_at"]).is_equal_approx(
+		100.0 + 0.4 * CarryOnProps.TRANSFER_TICKS, 0.0001
+	)
+	var axle := Vector3(1.4, 0.03, 0.2)
+	var to_hand := {"swap": true, "led": false, "since": 100.0, "placed_k": 0.4, "axle_now": axle}
+	assert_float(CarrySwap.start(to_hand, true, _body(frame), now)).is_less(now)
+	assert_vector(CarrySwap.hung_trail(to_hand, frame)).is_equal_approx(axle, Vector3.ONE * 0.0001)
+	for bag: Dictionary in [
+		{"swap": true, "led": true, "since": 100.0, "placed_k": 0.4, "from": from},
+		{"swap": true, "led": false, "since": 100.0, "placed_k": 1.0, "from": from},
+		{"swap": false, "led": false, "since": 100.0, "placed_k": 0.4, "from": from},
+		{"swap": true, "led": false, "placed_k": 0.4, "from": from, "swap_trail": Vector3.ONE},
+	]:
+		assert_float(CarrySwap.start(bag, false, _body(frame), now)).is_equal(now)
+		assert_bool(bag.has("drawn_axle") or bag.has("swap_trail")).is_false()
 
 
 ## The holding arm is posed between the hand carry (share 0) and the pull
@@ -95,3 +118,11 @@ func test_arm_shares_name_the_swapping_hand() -> void:
 	swapping["since"] = 100.0
 	swapping["swap"] = false
 	assert_float(CarrySwap.arm_shares(held, now)[1]).is_equal(-1.0)
+
+
+## A body node drawn at `frame`, freed after the test.
+func _body(frame: Transform3D) -> Node3D:
+	var body: Node3D = auto_free(Node3D.new())
+	add_child(body)
+	body.global_transform = frame
+	return body
