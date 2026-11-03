@@ -373,7 +373,7 @@ func _refresh() -> void:
 ## the note names the lead its slot needs after the opening.
 func _note_for(offer: Dictionary) -> String:
 	if flights.opened_tick < 0:
-		return "first flight needs %s after opening" % lead_text(opening_lead_ticks())
+		return "first flight %s after opening" % lead_text(opening_lead_ticks())
 	return first_flight_note(offer, flights.tick)
 
 

@@ -149,10 +149,11 @@ func _plate(ratio: float) -> void:
 		var sprite := other.get_node(NeedIcons.SPRITES[0]) as Sprite3D
 		print(
 			(
-				"WHO %s id=%d stage=%s needs=%d root_plate=%s head_plate=%s anchor_plate=%s"
+				"WHO %s id=%d dist_m=%.2f stage=%s needs=%d root_plate=%s head_plate=%s anchor_plate=%s"
 				% [
 					tag.get_slice(" ", 0),
 					id,
+					_cam.global_position.distance_to(other.global_position),
 					Passenger.Stage.keys()[_sim.get_passenger(id).stage],
 					other.get_meta(&"needs", 0),
 					(_cam.unproject_position(other.global_position) * to_plate).round(),
@@ -175,6 +176,7 @@ func _plate(ratio: float) -> void:
 				]
 			)
 		)
+	_print_hits(tag.get_slice(" ", 0))
 	var head_rect := _head_rect(head)
 	var own := _icon_rects(node)
 	var foreign := 0
@@ -202,6 +204,8 @@ func _plate(ratio: float) -> void:
 	if not ok:
 		_invalid("%s: the subject is out of frame or blocked" % tag)
 		return
+	if DisplayServer.get_name() == "headless":
+		return
 	var img := root.get_texture().get_image()
 	img.convert(Image.FORMAT_RGBA8)
 	_save(img, "%s.png" % tag.get_slice(" ", 0))
@@ -211,6 +215,49 @@ func _plate(ratio: float) -> void:
 	var small := img.get_region(crop)
 	small.resize(small.get_width() * 3, small.get_height() * 3, Image.INTERPOLATE_NEAREST)
 	_save(small, "%s_crop.png" % tag.get_slice(" ", 0))
+
+
+## Prints every pair where one passenger's icon row covers the centre of
+## another's head (the head bone of its skeleton, else 1.3 m over its root): the
+## owner's and the covered passenger's distance from the camera, so a fade
+## distance can be read off the plate.
+func _print_hits(shot: String) -> void:
+	var hits := 0
+	for owner_id in _sim.passenger_ids():
+		var owner_node := _views.node_for(owner_id)
+		for rect in _icon_rects(owner_node):
+			for other_id in _sim.passenger_ids():
+				if other_id == owner_id:
+					continue
+				var other := _views.node_for(other_id)
+				var head := _head_point(other)
+				if _cam.is_position_behind(head):
+					continue
+				if rect.grow(4.0).has_point(_cam.unproject_position(head)):
+					hits += 1
+					print(
+						(
+							"HIT %s owner=%d owner_dist_m=%.2f covers=%d covers_dist_m=%.2f"
+							% [
+								shot,
+								owner_id,
+								_cam.global_position.distance_to(owner_node.global_position),
+								other_id,
+								_cam.global_position.distance_to(other.global_position)
+							]
+						)
+					)
+	print("HITS %s total=%d" % [shot, hits])
+
+
+## The world position of a passenger's head: its head bone, else 1.3 m over the root.
+func _head_point(node: Node3D) -> Vector3:
+	for skeleton in node.find_children("*", "Skeleton3D", true, false):
+		var bones := skeleton as Skeleton3D
+		for i in bones.get_bone_count():
+			if bones.get_bone_name(i).to_lower().contains("head"):
+				return bones.global_transform * bones.get_bone_global_pose(i).origin
+	return node.global_position + Vector3(0.0, 1.3, 0.0)
 
 
 ## The height over the node's root of the top of its skinned body meshes, in
@@ -313,7 +360,8 @@ func _frames(count: int) -> void:
 	for i in count:
 		await process_frame
 		_beat(_stage)
-	await RenderingServer.frame_post_draw
+	if DisplayServer.get_name() != "headless":
+		await RenderingServer.frame_post_draw
 
 
 func _beat(stage: String) -> void:

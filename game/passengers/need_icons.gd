@@ -17,7 +17,8 @@ extends RefCounted
 ## stall, browsing at a kiosk) and for a passenger who missed the flight. All
 ## icons hide
 ## while the game camera is at its home zoom or farther out (shown_at()); the
-## follow panel still lists the needs.
+## follow panel still lists the needs. A passenger's icons also fade out as the
+## camera comes very close to that passenger (near_alpha()).
 ##
 ## PassengerViews gives every passenger node three Sprite3D icons (make_sprite())
 ## at one point over the head, so the body's turn never moves them, and lays
@@ -45,6 +46,14 @@ const ICON_PX := 30.0
 const GAP_PX := 4.0
 ## Height over the passenger's root of the icons' anchor, just over the head.
 const LIFT_M := 2.0
+## A passenger's icons fade out as the camera comes within NEAR_FULL_M of it and
+## are gone at NEAR_HIDDEN_M. Icons draw with no depth test at a 2.0 m anchor, so
+## near the lens one passenger's row lands on another's face. Read off the
+## need_icon_near_camera plates: at the 0.4x home zoom the seated rows stand
+## 6.2 to 8.8 m from the camera and a row at 6.85 m covered a face at 7.2 m, so
+## the icons are gone from 7.0 m and whole from 9.0 m (a 2 m fade).
+const NEAR_HIDDEN_M := 7.0
+const NEAR_FULL_M := 9.0
 ## The sprite names on a passenger node.
 const SPRITES := ["NeedIcon0", "NeedIcon1", "NeedIcon2"]
 
@@ -125,6 +134,13 @@ static func shown_at(camera: Camera3D) -> bool:
 	return rig == null or rig.distance < rig.home_distance
 
 
+## How opaque a passenger's icons are at `distance` metres from the camera (user
+## ruling passenger-need-icons-fade-out-when-the-camera-is-very-close): 0 at or
+## inside NEAR_HIDDEN_M, 1 at or beyond NEAR_FULL_M, linear between.
+static func near_alpha(distance: float) -> float:
+	return clampf(inverse_lerp(NEAR_HIDDEN_M, NEAR_FULL_M, distance), 0.0, 1.0)
+
+
 ## World units per output pixel at one metre from `camera` in `view`, or 0
 ## with no camera.
 static func unit_of(view: Viewport, camera: Camera3D) -> float:
@@ -145,13 +161,20 @@ static func layout(
 	node: Node3D, bubble: Label3D, camera: Camera3D, unit: float, shown := true
 ) -> void:
 	var count: int = node.get_meta(&"needs", 0)
+	var alpha := 1.0
+	if camera != null:
+		alpha = near_alpha(camera.global_position.distance_to(node.global_position))
+	var drawn := shown and alpha > 0.0
 	for i in count:
-		(node.get_node(SPRITES[i]) as Sprite3D).visible = shown
+		var icon := node.get_node(SPRITES[i]) as Sprite3D
+		icon.visible = drawn
+		icon.modulate.a = alpha
 	var wish := node.get_node_or_null(WishIconView.SPRITE) as Sprite3D
 	var wishing: bool = wish != null and node.get_meta(&"wish", "") != ""
 	if wish != null:
-		wish.visible = shown and wishing
-	if (count == 0 and not wishing) or not shown or camera == null or unit <= 0.0:
+		wish.visible = drawn and wishing
+		wish.modulate.a = alpha
+	if (count == 0 and not wishing) or not drawn or camera == null or unit <= 0.0:
 		return
 	var anchor := Vector3(0.0, LIFT_M, 0.0)
 	var lift_px := 0.0
