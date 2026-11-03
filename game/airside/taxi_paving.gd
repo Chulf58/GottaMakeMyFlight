@@ -25,8 +25,11 @@ extends MeshInstance3D
 ## line runs half a line width past its end links, so the lines meet in a
 ## square T or L and never overlap.
 ##
-## Not guaranteed: a route leg that is neither north-south nor east-west gets
-## no strip (an error says so); every taxiway on the airside is one or the other.
+## A route leg that is neither north-south nor east-west gets an oriented strip
+## of its own, WIDTH_M wide with square ends, carrying its centre line in the
+## same dict ("quad", "ts" and "line" in strips()). It is not merged with other
+## strips and may overlap them; every taxiway on the airside today is axis-
+## aligned, so this only keeps a future diagonal leg from being left unpaved.
 
 const WIDTH_M := 30.0
 ## Height of the paving's top. The runway's asphalt lies at y 0.1 and the
@@ -75,6 +78,7 @@ static func strips(
 	var lane_x := Vector2(INF, -INF)
 	# x in SAME_M steps -> {"x": the legs' x, "spans": merged z ranges (from, to)}.
 	var columns: Dictionary = {}
+	var oriented: Array[Dictionary] = []
 	for route in routes:
 		for i in range(1, route.size()):
 			var a := route[i - 1]
@@ -84,7 +88,7 @@ static func strips(
 			elif absf(a.x - b.x) < SAME_M:
 				_add_leg(columns, a.x, a.z, b.z, lane_z, half)
 			elif not a.is_equal_approx(b):
-				push_error("TaxiPaving: leg %s to %s is not north-south or east-west" % [a, b])
+				oriented.append(_oriented(Vector2(a.x, a.z), Vector2(b.x, b.z), half))
 	var out: Array[Dictionary] = []
 	if lane_x.x <= lane_x.y:
 		(
@@ -111,7 +115,41 @@ static func strips(
 					}
 				)
 			)
+	out.append_array(oriented)
 	return out
+
+
+## The strip of a leg from `a` to `b` (world x and z) that is neither north-south
+## nor east-west: {"rect": its bounding Rect2, "across_x": false, "quad": its four
+## corners clockwise seen from above, "ts": each corner's position across the
+## band (0 to 1), "line": the corners of its centre line}.
+static func _oriented(a: Vector2, b: Vector2, half: float) -> Dictionary:
+	var dir := (b - a).normalized()
+	var side := Vector2(-dir.y, dir.x)
+	var quad: Array[Vector2] = [a + side * half, b + side * half, b - side * half, a - side * half]
+	var ts: Array[float] = [0.0, 0.0, 1.0, 1.0]
+	var half_line := LINE_WIDTH_M / 2.0
+	var line: Array[Vector2] = [
+		a + side * half_line, b + side * half_line, b - side * half_line, a - side * half_line
+	]
+	if _signed_area(quad) < 0.0:
+		quad.reverse()
+		ts.reverse()
+		line.reverse()
+	var rect := Rect2(quad[0], Vector2.ZERO)
+	for corner in quad:
+		rect = rect.expand(corner)
+	return {"rect": rect, "across_x": false, "quad": quad, "ts": ts, "line": line}
+
+
+## Twice the area of `corners` seen in the x-z plane, positive when they run in
+## the order _corners_of gives a Rect2 (the front face seen from above).
+static func _signed_area(corners: Array[Vector2]) -> float:
+	var total := 0.0
+	for i in corners.size():
+		var next := corners[(i + 1) % corners.size()]
+		total += corners[i].x * next.y - next.x * corners[i].y
+	return total
 
 
 ## Adds the north-south leg at `x` from `z0` to `z1` to `columns`, its end on
@@ -146,7 +184,8 @@ static func _add_leg(
 ## The centre line of each strip in `strip_list` (as strips() returns them,
 ## around the lane at `lane_z`), `line` wide. The lane's line runs from its
 ## end links' centres plus half a line; a link's end at the lane's edge is
-## carried to the lane line's edge, so the two butt without overlapping.
+## carried to the lane line's edge, so the two butt without overlapping. An
+## oriented strip has its own line and gets none here.
 static func centrelines(
 	strip_list: Array[Dictionary], lane_z: float, width := WIDTH_M, line := LINE_WIDTH_M
 ) -> Array[Rect2]:
@@ -154,6 +193,8 @@ static func centrelines(
 	var half_line := line / 2.0
 	var out: Array[Rect2] = []
 	for strip in strip_list:
+		if strip.has("quad"):
+			continue
 		var rect: Rect2 = strip["rect"]
 		if not strip["across_x"]:
 			var from_x := rect.position.x + half - half_line
@@ -172,7 +213,7 @@ static func centrelines(
 
 ## One flat, upward quad per strip, its atlas band running across the strip,
 ## and one per centre line in `line_list`, LINE_LIFT_M higher, in the marking
-## colour.
+## colour. An oriented strip (strips() gives it "quad") brings its own line.
 static func mesh_of(strip_list: Array[Dictionary], line_list: Array[Rect2] = []) -> ArrayMesh:
 	var out := ArrayMesh.new()
 	if strip_list.is_empty() and line_list.is_empty():
@@ -182,6 +223,23 @@ static func mesh_of(strip_list: Array[Dictionary], line_list: Array[Rect2] = [])
 	var uvs := PackedVector2Array()
 	var index := PackedInt32Array()
 	for strip in strip_list:
+		if strip.has("quad"):
+			var quad_base := verts.size()
+			var quad: Array[Vector2] = strip["quad"]
+			var ts: Array[float] = strip["ts"]
+			for i in 4:
+				verts.append(Vector3(quad[i].x, HEIGHT_M, quad[i].y))
+				normals.append(Vector3.UP)
+				uvs.append(Vector2(ASPHALT_U, lerpf(ASPHALT_V_FROM, ASPHALT_V_TO, ts[i])))
+			index.append_array(_quad(quad_base))
+			var line: Array[Vector2] = strip["line"]
+			var line_base := verts.size()
+			for corner in line:
+				verts.append(Vector3(corner.x, HEIGHT_M + LINE_LIFT_M, corner.y))
+				normals.append(Vector3.UP)
+				uvs.append(MARKING_UV)
+			index.append_array(_quad(line_base))
+			continue
 		var rect: Rect2 = strip["rect"]
 		var across_x: bool = strip["across_x"]
 		var base := verts.size()
@@ -233,6 +291,10 @@ static func covers(strip_list: Array[Dictionary], point: Vector3) -> bool:
 	for strip in strip_list:
 		var rect: Rect2 = strip["rect"]
 		var at := Vector2(point.x, point.z)
+		if strip.has("quad"):
+			if _in_quad(strip["quad"], at):
+				return true
+			continue
 		if (
 			at.x >= rect.position.x - SAME_M
 			and at.x <= rect.end.x + SAME_M
@@ -241,3 +303,13 @@ static func covers(strip_list: Array[Dictionary], point: Vector3) -> bool:
 		):
 			return true
 	return false
+
+
+## Whether `at` lies on the quad `quad`, a SAME_M tolerance inside every edge.
+static func _in_quad(quad: Array[Vector2], at: Vector2) -> bool:
+	for i in 4:
+		var edge := quad[(i + 1) % 4] - quad[i]
+		# Clockwise corners seen from above: the strip lies on the side where this is >= 0.
+		if edge.cross(at - quad[i]) / edge.length() < -SAME_M:
+			return false
+	return true

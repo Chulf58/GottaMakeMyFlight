@@ -260,3 +260,55 @@ func test_paving_follows_a_stand_that_moves() -> void:
 	assert_bool(TaxiPaving.covers(_airside.paving.shown, b_leg)).is_true()
 	assert_object(_airside.paving.mesh).is_not_null()
 	assert_int((_airside.paving.mesh as ArrayMesh).get_surface_count()).is_equal(1)
+
+
+func test_a_diagonal_leg_gets_an_oriented_strip_that_covers_it() -> void:
+	var legs: Array[PackedVector3Array] = [
+		PackedVector3Array([Vector3(0, 0, -300), Vector3(120, 0, -230)]),
+		PackedVector3Array([Vector3(120, 0, -230), Vector3(0, 0, -300)]),
+		PackedVector3Array([Vector3(-40, 0, -300), Vector3(60, 0, -260)]),
+		PackedVector3Array([Vector3(60, 0, -300), Vector3(-40, 0, -260)]),
+	]
+	for leg in legs:
+		var routes: Array[PackedVector3Array] = [leg]
+		var strip_list := TaxiPaving.strips(routes, LANE_Z)
+		assert_int(strip_list.size()).is_equal(1)
+		assert_bool(strip_list[0].has("quad")).is_true()
+		var length := leg[0].distance_to(leg[1])
+		var steps := ceili(length)
+		for k in steps + 1:
+			var at := leg[0].lerp(leg[1], float(k) / steps)
+			assert_bool(TaxiPaving.covers(strip_list, at)).is_true()
+		# A point a little over half the width off the leg's middle is not paved.
+		var middle := leg[0].lerp(leg[1], 0.5)
+		var side := (leg[1] - leg[0]).cross(Vector3.UP).normalized()
+		var half := TaxiPaving.WIDTH_M / 2.0
+		assert_bool(TaxiPaving.covers(strip_list, middle + side * (half - 0.5))).is_true()
+		assert_bool(TaxiPaving.covers(strip_list, middle + side * (half + 0.5))).is_false()
+		assert_bool(TaxiPaving.covers(strip_list, middle - side * (half + 0.5))).is_false()
+		# Its mesh is one upward-facing strip quad and one centre-line quad.
+		var arrays := TaxiPaving.mesh_of(strip_list).surface_get_arrays(0)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		assert_int(verts.size()).is_equal(8)
+		assert_int(index.size()).is_equal(12)
+		for t in range(0, index.size(), 3):
+			var edge_a := verts[index[t + 1]] - verts[index[t]]
+			var edge_b := verts[index[t + 2]] - verts[index[t]]
+			assert_float(edge_b.cross(edge_a).y).is_greater(0.0)
+		assert_float(verts[4].y).is_equal_approx(
+			TaxiPaving.HEIGHT_M + TaxiPaving.LINE_LIFT_M, 0.0001
+		)
+
+
+func test_a_diagonal_leg_beside_the_lane_keeps_the_lane_strip() -> void:
+	var route := PackedVector3Array(
+		[Vector3(30, 0, LANE_Z), Vector3(-26, 0, LANE_Z), Vector3(80, 0, -300)]
+	)
+	var routes: Array[PackedVector3Array] = [route]
+	var strip_list := TaxiPaving.strips(routes, LANE_Z)
+	assert_int(strip_list.size()).is_equal(2)
+	assert_bool(strip_list[0].has("quad")).is_false()
+	assert_bool(strip_list[1].has("quad")).is_true()
+	assert_bool(TaxiPaving.covers(strip_list, Vector3(0, 0, LANE_Z))).is_true()
+	assert_bool(TaxiPaving.covers(strip_list, Vector3(27, 0, (LANE_Z - 300) / 2.0))).is_true()

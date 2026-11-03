@@ -301,6 +301,87 @@ func _prove_visible(label: String, subject: Node3D) -> bool:
 	return ok
 
 
+## A ground state's sampled poses must all lie on paving: samples were taken (a zero
+## count proves nothing), none sat on grass or on no surface, and at least one hit the
+## taxi paving itself, so the paving was engaged and not only the runway or the site.
+func _require_paved(label: String, count: int, grass: int, on_taxi_paving: int) -> void:
+	if count <= 0:
+		_invalid("%s: no samples" % label)
+	if grass != 0:
+		_invalid("%s: %d of %d samples are on grass or no surface" % [label, grass, count])
+	if on_taxi_paving <= 0:
+		_invalid("%s: no sample hit the taxi paving (%d samples)" % [label, count])
+
+
+## Rays from the current camera to a few representative points of the paving: the
+## middle of the lane and the middle of each link (the part north of the site's paving).
+## Each point in frame must be hit first on the taxi paving's own collider; the plane's
+## bodies and the colliders of hidden meshes are passed through. At least one point
+## must be in frame, so the check cannot pass by testing nothing.
+func _prove_paving_visible(label: String, paving: TaxiPaving) -> bool:
+	var frame := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
+	var space := _cam.get_world_3d().direct_space_state
+	var skip: Array[RID] = []
+	for body in _plane.find_children("*", "StaticBody3D", true, false):
+		skip.append((body as StaticBody3D).get_rid())
+	var checked := 0
+	var hits := 0
+	for strip in paving.shown:
+		var rect: Rect2 = strip["rect"]
+		var middle := rect.get_center()
+		if strip.has("quad"):
+			middle = (strip["quad"][0] + strip["quad"][2]) / 2.0
+		elif strip["across_x"]:
+			var south := minf(rect.end.y, PAVING_EDGE_Z)
+			if south <= rect.position.y:
+				continue
+			middle.y = (rect.position.y + south) / 2.0
+		var point := Vector3(middle.x, TaxiPaving.HEIGHT_M, middle.y)
+		if _cam.is_position_behind(point):
+			continue
+		var on_screen := _cam.unproject_position(point)
+		if not frame.has_point(on_screen):
+			continue
+		var from := _cam.project_ray_origin(on_screen)
+		var along := _cam.project_ray_normal(on_screen)
+		var hit := _visible_ray_hit(space, from, point + along * 0.5, skip)
+		var collider: Node = hit.get("collider")
+		var ok := collider != null and str(collider.get_path()).begins_with(PAVED_OWNERS[0])
+		checked += 1
+		hits += 1 if ok else 0
+		print("PAVING_VISIBLE %s point=%s hit=%s ok=%s" % [label, point, collider, ok])
+	var passed := checked > 0 and hits == checked
+	print("PAVING_VISIBLE %s hits=%d/%d ok=%s" % [label, hits, checked, passed])
+	if not passed:
+		_invalid(
+			(
+				"%s: the paving is occluded or no point was in frame (%d of %d)"
+				% [label, hits, checked]
+			)
+		)
+	return passed
+
+
+## The first visible surface on the ray from `from` to `to`: a hit on the collider of a
+## hidden mesh is passed through and the ray cast again, as _surface_hit() does.
+func _visible_ray_hit(
+	space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, skip: Array[RID]
+) -> Dictionary:
+	var exclude := skip.duplicate()
+	for i in 16:
+		var query := PhysicsRayQueryParameters3D.create(from, to)
+		query.exclude = exclude
+		var hit := space.intersect_ray(query)
+		var body: Node = hit.get("collider")
+		var shown := body as Node3D
+		if body != null and body.get_parent() is Node3D:
+			shown = body.get_parent() as Node3D
+		if body == null or shown == null or shown.is_visible_in_tree():
+			return hit
+		exclude.append(hit["rid"])
+	return {}
+
+
 ## Steps the sim by 60 fps frames at the clock's speed until it reaches `target`.
 func _step_to(target: int) -> void:
 	var guard := 0
@@ -562,6 +643,7 @@ func _taxi_paving() -> void:
 				% [state, count, lo, hi, on_taxi_paving, grass, grass_lo, grass_hi]
 			)
 		)
+		_require_paved("taxi state=%d" % state, count, grass, on_taxi_paving)
 	var in_state := samples.filter(func(c: Dictionary) -> bool: return c["state"] == ground[0])
 	if in_state.is_empty():
 		_invalid("taxi paving: no TAXI_IN samples")
@@ -606,7 +688,12 @@ func _taxi_paving() -> void:
 		var marks: Array[Vector3] = _corners(_aabb_of(model))
 		marks.append(Vector3(stand_x, 0.0, PAVING_EDGE_Z))
 		marks.append(Vector3(stand_x, 0.0, StandPlacement.TAXI_LANE_Z))
-		if _prove_in_frame(label, marks) and _prove_visible(label, model):
+		var paving := (_main.get_node("Airside") as Airside).paving
+		if (
+			_prove_in_frame(label, marks)
+			and _prove_visible(label, model)
+			and _prove_paving_visible(label, paving)
+		):
 			_save(await _grab(), "taxi_%s.png" % label)
 	await _lane_plates(in_state, stand_x, top)
 	_cam = rig_cam
@@ -685,7 +772,11 @@ func _lane_plates(in_state: Array, stand_x: float, top: Camera3D) -> void:
 	)
 	await _frames(4)
 	var model: Node3D = _plane.get_node("Pivot")
-	if _prove_in_frame("taxi_lane_top", marks) and _prove_visible("taxi_lane_top", model):
+	if (
+		_prove_in_frame("taxi_lane_top", marks)
+		and _prove_visible("taxi_lane_top", model)
+		and _prove_paving_visible("taxi_lane_top", paving)
+	):
 		_save(await _grab(), "taxi_lane_top.png")
 	var far := Camera3D.new()
 	far.fov = 50.0
@@ -696,7 +787,11 @@ func _lane_plates(in_state: Array, stand_x: float, top: Camera3D) -> void:
 	far.make_current()
 	_cam = far
 	await _frames(4)
-	if _prove_in_frame("taxi_distance", marks) and _prove_visible("taxi_distance", model):
+	if (
+		_prove_in_frame("taxi_distance", marks)
+		and _prove_visible("taxi_distance", model)
+		and _prove_paving_visible("taxi_distance", paving)
+	):
 		_save(await _grab(), "taxi_distance.png")
 	_cam = top
 	top.make_current()
@@ -787,6 +882,9 @@ func _two_gate_paving() -> void:
 					% [gate, state, count, lo, hi, on_taxi_paving, grass]
 				)
 			)
+			_require_paved(
+				"two gates: gate %s state=%d" % [gate, state], count, grass, on_taxi_paving
+			)
 	_plane.gate = FlightSim.DEFAULT_GATE
 	await _two_gate_plates(airside)
 
@@ -873,7 +971,10 @@ func _two_gate_plates(airside: Airside) -> void:
 	top.make_current()
 	_cam = top
 	await _frames(4)
-	if _prove_in_frame("two_gate_top", marks):
+	if (
+		_prove_in_frame("two_gate_top", marks)
+		and _prove_paving_visible("two_gate_top", airside.paving)
+	):
 		_save(await _grab(), "two_gate_top.png")
 	var far := Camera3D.new()
 	far.fov = 50.0
@@ -883,7 +984,10 @@ func _two_gate_plates(airside: Airside) -> void:
 	far.make_current()
 	_cam = far
 	await _frames(4)
-	if _prove_in_frame("two_gate_distance", marks):
+	if (
+		_prove_in_frame("two_gate_distance", marks)
+		and _prove_paving_visible("two_gate_distance", airside.paving)
+	):
 		_save(await _grab(), "two_gate_distance.png")
 	top.queue_free()
 	far.queue_free()
