@@ -121,3 +121,36 @@ func test_read_world_reports_the_neediest_passenger_and_the_rooms() -> void:
 	assert_int(world["stalls"]).is_equal(0)
 	assert_int(world["cafes"]).is_equal(0)
 	assert_int(world["scanners"]).is_equal(0)
+
+
+func test_a_ready_toilet_room_with_a_stall_is_a_usable_stall() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(10, 10))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 9), 2)
+	assert_bool(grid.apply(BuildEdit.place_room(Rect2i(2, 2, 5, 4), &"toilet")).ok).is_true()
+	PassengerTestWorld.place(grid, &"toilet_stall", Vector2i(5, 3), 1)
+	var sink := PassengerTestWorld.place(grid, &"toilet_sink", Vector2i(2, 2), 0)
+	_w = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	var ready := HintRules.read_world(_w.sim, [])
+	print("ready toilet: stalls=%d" % ready["stalls"])
+	assert_int(ready["stalls"]).is_equal(1)
+	# A room that exists but is not ready (no sink) has no usable stall.
+	assert_bool(grid.apply(BuildEdit.remove_object(sink)).ok).is_true()
+	var unready := HintRules.read_world(_w.sim, [])
+	print("unready toilet: stalls=%d" % unready["stalls"])
+	assert_int(unready["stalls"]).is_equal(0)
+
+
+func test_a_ready_cafe_is_a_usable_cafe_and_one_without_a_table_is_not() -> void:
+	var grid := BuildGrid.new()
+	CafeTestLayout.build(grid)
+	_w = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	var ready := HintRules.read_world(_w.sim, [])
+	print("ready cafes=%d" % ready["cafes"])
+	assert_int(ready["cafes"]).is_greater(0)
+	_w.free_all()
+	var bare := BuildGrid.new()
+	CafeTestLayout.build(bare, false, &"cafe", false)
+	_w = PassengerTestWorld.make(bare, FlightSim.schedule_starts(0))
+	var unready := HintRules.read_world(_w.sim, [])
+	print("no-table cafes=%d" % unready["cafes"])
+	assert_int(unready["cafes"]).is_equal(0)

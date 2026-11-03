@@ -214,3 +214,31 @@ func test_the_off_mode_runs_nothing_and_hides_the_settings_row() -> void:
 	assert_bool(hints.is_showing()).is_false()
 	assert_bool(hints.settings_row().visible).is_false()
 	assert_bool(FileAccess.file_exists(_path)).is_false()
+
+
+func test_a_cause_that_arrives_while_another_hint_shows_is_kept_for_after_the_gap() -> void:
+	var hints := _settled(_world(NO_DESK))
+	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
+	# A toilet need first appears while the check-in hint holds the slot.
+	var both := _world({"desks": 0, "scanners": 0, "stalls": 0, "max_toilet_need": 99})
+	_run(hints, 2.0, both)
+	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
+	# Past its dwell and the gap, with no category open and well short of IDLE_S.
+	_run(hints, Hints.DWELL_S + Hints.MIN_GAP_S, both)
+	assert_str(hints.shown_id()).is_equal(HintRules.TOILET)
+	assert_float(hints._idle).is_less(Hints.IDLE_S)
+
+
+func test_a_kept_opportunity_is_dropped_when_its_cause_clears() -> void:
+	var hints := _settled(_world(NO_DESK))
+	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	var both := _world({"desks": 0, "scanners": 0, "stalls": 0, "max_toilet_need": 99})
+	_run(hints, 2.0, both)
+	# The need goes away (a stall was built), so the toilet hint is moot.
+	_run(hints, 2.0, _world(NO_DESK))
+	_run(hints, Hints.DWELL_S + Hints.MIN_GAP_S + 5.0, _world(NO_DESK))
+	assert_bool(hints.is_seen(HintRules.TOILET)).is_false()
+	# The need comes back: it is a new opportunity, and the hint shows.
+	_run(hints, HintRules.HOLD_S + 0.5, both)
+	assert_str(hints.shown_id()).is_equal(HintRules.TOILET)

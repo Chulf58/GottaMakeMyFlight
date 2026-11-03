@@ -45,8 +45,6 @@ const MIN_GAP_S := 20.0
 ## Seconds without a build edit or a category opened before a due hint shows
 ## with no other opportunity.
 const IDLE_S := 45.0
-## How long a cause that has just become true counts as an opportunity.
-const EDGE_WINDOW_S := 6.0
 ## How often the world is read, in seconds.
 const READ_EVERY_S := 0.25
 ## The settings row, under the alert cards' column and above the Mood button.
@@ -81,7 +79,9 @@ var _grace := GRACE_S
 var _baselined := false
 var _prev: Array[StringName] = []
 var _held := {}
-var _edge_until := {}
+## Hint ids whose cause became true and whose hint has not shown yet: an
+## opportunity that stays until the cause clears or the hint shows.
+var _latched := {}
 var _clock := 0.0
 var _last_open: Array = []
 var _read_acc := 0.0
@@ -97,15 +97,26 @@ var _reset := Button.new()
 
 ## How a launch runs hints: ISOLATED with the explicit switch (in any context),
 ## PROFILE in a normal launch of the running scene, OFF otherwise (a probe or
-## test that builds the scene by hand, or a PlaytestHook run).
+## test that builds the scene by hand, any run started with -s / --script even
+## when it makes the game scene current, or a PlaytestHook run).
 static func mode_for(
-	in_current_scene: bool, playtest_on: bool, user_args: PackedStringArray, env_value: String
+	in_current_scene: bool,
+	playtest_on: bool,
+	script_run: bool,
+	user_args: PackedStringArray,
+	env_value: String
 ) -> Mode:
 	if user_args.has(SWITCH_ARG) or env_value == "1":
 		return Mode.ISOLATED
-	if in_current_scene and not playtest_on:
+	if in_current_scene and not playtest_on and not script_run:
 		return Mode.PROFILE
 	return Mode.OFF
+
+
+## True when the engine arguments run a script (-s or --script): a probe, a test
+## runner or a spike, never the player's launch.
+static func launched_by_script(engine_args: PackedStringArray) -> bool:
+	return engine_args.has("-s") or engine_args.has("--script")
 
 
 func _ready() -> void:
@@ -116,6 +127,7 @@ func _ready() -> void:
 		else mode_for(
 			_in_current_scene(),
 			_playtest_switch_on(),
+			launched_by_script(OS.get_cmdline_args()),
 			OS.get_cmdline_user_args(),
 			OS.get_environment(SWITCH_ENV)
 		)
@@ -218,7 +230,7 @@ func reset_session() -> void:
 	_baselined = false
 	_prev = []
 	_held = {}
-	_edge_until = {}
+	_latched = {}
 	_idle = 0.0
 	_since_end = INF
 	_read_acc = 0.0
@@ -314,29 +326,30 @@ func _track(causes: Array[StringName], delta: float) -> void:
 		if causes.has(id):
 			if not _prev.has(id):
 				_held[id] = 0.0
-				_edge_until[id] = _clock + EDGE_WINDOW_S
+				_latched[id] = true
 			_held[id] = float(_held.get(id, 0.0)) + delta
 		else:
 			_held[id] = 0.0
-			_edge_until.erase(id)
+			_latched.erase(id)
 	_prev = causes
 
 
 ## Which hints have an opportunity now: their category is open, their cause has
-## just become true, or the player has been idle for IDLE_S.
+## become true and not been shown yet (latched, so it survives another hint on
+## screen and the gap after it), or the player has been idle for IDLE_S.
 func _triggers(open_names: Array) -> Dictionary:
 	var out := {}
 	for id in HintRules.IDS:
 		var category_open := false
 		for category in HintRules.categories_for(id):
 			category_open = category_open or open_names.has(category)
-		var fresh: bool = float(_edge_until.get(id, -1.0)) > _clock
-		out[id] = category_open or fresh or _idle >= IDLE_S
+		out[id] = category_open or _latched.has(id) or _idle >= IDLE_S
 	return out
 
 
 func _show(id: StringName) -> void:
 	_shown_id = id
+	_latched.erase(id)
 	_dwell = 0.0
 	_body.text = HintRules.text(id)
 	_card.visible = true
