@@ -264,8 +264,39 @@ func draw() -> void:
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
 	_ring.visible = _nodes.has(selected_id)
+	_declutter_bubbles(camera, unit)
 	_props.draw()
 	_markers.draw()
+
+
+## Shows each speech bubble, then hides the ones that overlap a bubble kept
+## on screen (BubbleDeclutter: late first, then nearest the front of the
+## queue). Does nothing with no camera.
+func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
+	var entries: Array[Dictionary] = []
+	var view := get_viewport() if is_inside_tree() else null
+	var to_output := view.get_stretch_transform().get_scale().y if view != null else 1.0
+	for id in _nodes:
+		var node: Node3D = _nodes[id]
+		var bubble := node.get_node("Bubble") as Label3D
+		bubble.visible = true
+		if bubble.text == "" or camera == null or unit <= 0.0:
+			continue
+		var at := bubble.global_position
+		var depth := (at - camera.global_position).dot(-camera.global_basis.z)
+		if depth <= 0.0:
+			continue
+		var rect := BubbleDeclutter.rect_of(
+			camera.unproject_position(at) * to_output,
+			bubble.text,
+			bubble.font_size,
+			bubble.outline_size,
+			bubble.pixel_size / (depth * unit)
+		)
+		var rank: int = node.get_meta(&"bubble_rank", BubbleDeclutter.NO_QUEUE)
+		entries.append(BubbleDeclutter.entry(id, bubble.text, rank, rect))
+	for id in BubbleDeclutter.hidden(entries):
+		((_nodes[id] as Node3D).get_node("Bubble") as Label3D).visible = false
 
 
 ## The passenger drawn nearest a screen point within PICK_RADIUS_PX, or 0.
@@ -476,7 +507,12 @@ func _pose(node: Node3D, p: Passenger) -> float:
 			var slack := (SEEK_SLACK_TICKS + speed) * SimClock.STEP * base
 			if absf(player.current_animation_position - at) > slack:
 				player.seek(at, true)
-	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
+	var bubble_text := sim.bubble_text(p)
+	(node.get_node("Bubble") as Label3D).text = bubble_text
+	node.set_meta(
+		&"bubble_rank",
+		BubbleDeclutter.rank_of(sim, p) if bubble_text != "" else BubbleDeclutter.NO_QUEUE
+	)
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
 	WishIconView.show_wish(node, wish)
