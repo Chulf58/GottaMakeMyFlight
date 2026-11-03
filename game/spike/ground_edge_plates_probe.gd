@@ -250,7 +250,7 @@ func _plate_home() -> void:
 	print(
 		(
 			"HOME focus=%s distance=%.1f yaw=%.3f pitch=%.1f"
-			% [_rig.position, _rig.distance, _rig.yaw, _rig.pitch_for_distance(_rig.distance)]
+			% [_rig.position, _rig.distance, _rig.yaw, _rig.pitch_degrees()]
 		)
 	)
 	var at := _on_screen(_rig.position)

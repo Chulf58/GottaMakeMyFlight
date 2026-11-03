@@ -479,7 +479,7 @@ func _framed_subset(points: Array[Vector3]) -> Array[Vector3]:
 ## player pans to look at the roof.
 func _place(rig: TycoonCamera, box: AABB, d: float) -> void:
 	var c := box.get_center()
-	var pitch := deg_to_rad(rig.pitch_for_distance(d))
+	var pitch := deg_to_rad(rig.pitch_degrees())
 	var forward := Basis(Vector3.UP, YAW) * Vector3.FORWARD
 	var focus := Vector3(c.x, 0.0, c.z) + forward * box.end.y / tan(pitch)
 	rig.position = focus

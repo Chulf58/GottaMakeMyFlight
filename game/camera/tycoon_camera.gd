@@ -1,16 +1,29 @@
 class_name TycoonCamera
 extends Node3D
 ## Free tycoon camera. The rig sits on the ground at the focus point and yaws;
-## the child Camera3D orbits it at a clamped distance. The pitch follows the
-## distance: steep and wide when far out, low and close in. WASD or a
+## the child Camera3D orbits it at a clamped distance. Zooming changes only the
+## distance; the tilt is the player's angle setting, three steps (low, medium,
+## top-down) kept in the HUD settings file, with V cycling them (decision
+## camera-angle-is-a-player-setting-fixed-while-zooming). WASD or a
 ## middle-mouse drag pans, Q/E or a right-mouse drag rotates, the wheel zooms,
 ## Home glides back to the start view. `glide_to` and `follow` move the focus
 ## from code; any manual pan cancels both. The focus appears at the middle of
 ## `room`, the screen share the open HUD panels leave free (PanelRoom sets it),
 ## not of the whole screen.
 
+## The angle steps, from lowest to most top-down.
+enum AngleStep { LOW, MEDIUM, TOP_DOWN }
+
 ## The whole viewport, as fractions of it (x, y, width, height from the top left).
 const WHOLE_VIEW := Rect2(0.0, 0.0, 1.0, 1.0)
+## The camera pitch of each step, in degrees above the ground. Top-down stops
+## short of straight down so walls and passengers keep some side on. Low is the
+## old close-in tilt, medium close to the old home-view tilt (57).
+const STEP_PITCH_DEGREES: Array[float] = [38.0, 54.0, 70.0]
+## The settings-file key of the angle step, beside the other HUD settings.
+const ANGLE_KEY := "camera_angle"
+## The key that cycles the angle step.
+const ANGLE_KEYCODE := KEY_V
 ## The steepest the view ray through the free area's middle may point away from
 ## the ground (y of its direction), so a far-off aim never misses the ground.
 const MIN_RAY_DOWN := 0.05
@@ -18,9 +31,6 @@ const MIN_RAY_DOWN := 0.05
 ## Closest and farthest zoom, in metres from the focus point.
 @export var min_distance := 6.0
 @export var max_distance := 300.0
-## Pitch at the closest and the farthest zoom.
-@export var near_pitch_degrees := 35.0
-@export var far_pitch_degrees := 65.0
 ## Pan speed in focus-distance units per second at distance 1.
 @export var key_pan_speed := 0.6
 @export var drag_pan_speed := 0.0016
@@ -43,6 +53,11 @@ const MIN_RAY_DOWN := 0.05
 @export var frame_margin := 1.3
 
 var yaw := 0.0
+## The chosen angle step (see AngleStep); read from the settings file at _ready,
+## changed with set_angle_step.
+var angle_step := AngleStep.TOP_DOWN
+## The HUD settings file the angle step is kept in; tests point it elsewhere.
+var settings_path := HudFlagSetting.PATH
 ## The share of the screen the open HUD panels leave free, as fractions of the
 ## viewport. The focus point sits at its middle, not the screen's, and easing
 ## toward `set_room`'s target moves it there. The whole viewport when no panel
@@ -74,6 +89,9 @@ var _at_home := false
 
 
 func _ready() -> void:
+	angle_step = _clamped_step(
+		HudFlagSetting.load_int(settings_path, ANGLE_KEY, AngleStep.TOP_DOWN, "TycoonCamera")
+	)
 	position = home_position
 	yaw = home_yaw
 	distance = home_distance
@@ -96,6 +114,16 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("camera_home"):
 		go_home()
+	elif (
+		event is InputEventKey
+		and event.pressed
+		and not event.echo
+		and event.physical_keycode == ANGLE_KEYCODE
+		and not event.ctrl_pressed
+		and not event.meta_pressed
+		and not event.alt_pressed
+	):
+		cycle_angle_step()
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom(1.0 / zoom_factor)
@@ -108,13 +136,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			rotate_yaw(-event.relative.x * drag_rotate_speed)
 
 
-## Pitch in degrees for a zoom distance. Smoothstep on the log of the distance,
-## so each wheel notch changes the tilt by the same share and the curve is flat
-## at both ends: `near_pitch_degrees` at `min_distance`, `far_pitch_degrees` at
-## `max_distance`, and never steeper or lower than those.
-func pitch_for_distance(from_distance: float) -> float:
-	var t := inverse_lerp(log(min_distance), log(max_distance), log(from_distance))
-	return lerpf(near_pitch_degrees, far_pitch_degrees, smoothstep(0.0, 1.0, t))
+## The camera pitch in degrees: the chosen step's, the same at every zoom.
+func pitch_degrees() -> float:
+	return STEP_PITCH_DEGREES[angle_step]
+
+
+## Chooses the angle step (clamped to the three) and remembers it in the
+## settings file. The view tilts now; the start view, when still the current
+## view, is fitted again at the new angle.
+func set_angle_step(step: int) -> void:
+	angle_step = _clamped_step(step)
+	HudFlagSetting.save_int(settings_path, ANGLE_KEY, angle_step, "TycoonCamera")
+	set_room(_room_target)
+	_apply()
+
+
+## Moves to the next angle step, from top-down round to low.
+func cycle_angle_step() -> void:
+	set_angle_step((angle_step + 1) % STEP_PITCH_DEGREES.size())
 
 
 ## Moves the focus across the ground. `amount` is in the rig's own right and
@@ -164,8 +203,8 @@ func go_home() -> void:
 ## nearest distance, inside the zoom limits, at which the area grown by
 ## `frame_margin` is wholly inside `free`, the share of the screen the open
 ## panels leave (fractions of the viewport; the whole viewport by default),
-## with the focus at the middle of `free`. The pitch follows the distance, so
-## the distance is found by bisection.
+## with the focus at the middle of `free`, at the chosen angle. The distance is
+## found by bisection.
 func framing_for(area: Rect2, free := WHOLE_VIEW) -> Dictionary:
 	var half := area.size * 0.5 * frame_margin
 	var fit := max_distance
@@ -243,6 +282,12 @@ func _begin_glide(world_point: Vector3, to_distance: float, to_yaw: float) -> vo
 		target_distance = clampf(to_distance, min_distance, max_distance)
 
 
+func _clamped_step(step: int) -> AngleStep:
+	if step < 0 or step >= STEP_PITCH_DEGREES.size():
+		return AngleStep.TOP_DOWN
+	return step as AngleStep
+
+
 func _clamp_to_bounds(point: Vector3) -> Vector3:
 	return Vector3(
 		clampf(point.x, -bounds_half_extent, bounds_half_extent),
@@ -293,7 +338,7 @@ func _step_room(delta: float) -> void:
 
 func _apply() -> void:
 	rotation.y = yaw
-	var pitch := deg_to_rad(pitch_for_distance(_distance))
+	var pitch := deg_to_rad(pitch_degrees())
 	_camera.position = _eye_offset(_aim_of(room), _distance)
 	_camera.rotation = Vector3(-pitch, 0.0, 0.0)
 
@@ -310,7 +355,7 @@ func _aim_of(free: Rect2) -> Vector2:
 ## the ray meets the ground at the focus and the eye is exactly `from_distance`
 ## from it. With the aim at the screen's middle this is the old orbit position.
 func _eye_offset(aim: Vector2, from_distance: float) -> Vector3:
-	var pitch := deg_to_rad(pitch_for_distance(from_distance))
+	var pitch := deg_to_rad(pitch_degrees())
 	var half_tan := tan(deg_to_rad(_camera.fov) / 2.0)
 	var ray := Vector3(
 		aim.x * half_tan * _aspect(),
@@ -323,10 +368,10 @@ func _eye_offset(aim: Vector2, from_distance: float) -> Vector3:
 
 ## True when the ground rectangle centred on the focus, `half` wide and deep
 ## from its middle to its edges, is wholly inside `free` (fractions of the
-## viewport) from `from_distance` at the pitch that distance gets, with the
-## focus at the middle of `free`.
+## viewport) from `from_distance` at the chosen angle, with the focus at the
+## middle of `free`.
 func _fits(half: Vector2, from_distance: float, free: Rect2) -> bool:
-	var pitch := deg_to_rad(pitch_for_distance(from_distance))
+	var pitch := deg_to_rad(pitch_degrees())
 	var half_tan := tan(deg_to_rad(_camera.fov) / 2.0)
 	var forward := Vector3(0.0, -sin(pitch), -cos(pitch))
 	var up := Vector3(0.0, cos(pitch), -sin(pitch))

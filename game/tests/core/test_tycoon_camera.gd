@@ -7,6 +7,7 @@ var _rig: TycoonCamera
 func before_test() -> void:
 	var scene: PackedScene = load("res://camera/tycoon_camera.tscn")
 	_rig = auto_free(scene.instantiate()) as TycoonCamera
+	_rig.settings_path = SaveTestKit.run_path("camera_zoom")
 	add_child(_rig)
 
 
@@ -71,32 +72,26 @@ func test_zoom_is_smooth_not_a_jump() -> void:
 	assert_float(_rig.distance).is_equal_approx(before * 2.0, 0.01)
 
 
-func test_pitch_curve_endpoints() -> void:
-	assert_float(_rig.pitch_for_distance(_rig.min_distance)).is_equal_approx(35.0, 0.0001)
-	assert_float(_rig.pitch_for_distance(_rig.max_distance)).is_equal_approx(65.0, 0.0001)
+## Zooming changes only the distance: the pitch is the chosen step's at every
+## distance, including ones past the zoom limits (decision camera-angle-is-a-
+## player-setting-fixed-while-zooming; it replaced the old pitch-follows-zoom
+## curve, 35 degrees at 6 m to 65 degrees at 300 m).
+func test_pitch_does_not_depend_on_distance() -> void:
+	var pitch := _rig.pitch_degrees()
+	assert_float(pitch).is_equal_approx(70.0, 0.0001)
+	for d in [1.0, _rig.min_distance, _rig.home_distance, 150.0, _rig.max_distance, 1000.0]:
+		_rig.distance = d
+		assert_float(_rig.pitch_degrees()).is_equal_approx(pitch, 0.0001)
 
 
-func test_pitch_curve_rises_with_distance_and_stays_in_range() -> void:
-	var last := _rig.pitch_for_distance(_rig.min_distance)
-	for i in range(1, 201):
-		var d := lerpf(_rig.min_distance, _rig.max_distance, i / 200.0)
-		var pitch := _rig.pitch_for_distance(d)
-		assert_float(pitch).is_greater_equal(last)
-		assert_float(pitch).is_between(35.0, 65.0)
-		last = pitch
-	# Out-of-range distances hold the end values instead of overshooting.
-	assert_float(_rig.pitch_for_distance(1.0)).is_equal_approx(35.0, 0.0001)
-	assert_float(_rig.pitch_for_distance(1000.0)).is_equal_approx(65.0, 0.0001)
-
-
-func test_camera_tilt_follows_zoom() -> void:
+func test_camera_tilt_does_not_follow_zoom() -> void:
 	var cam: Camera3D = _rig.get_node("Camera3D")
 	_rig.distance = _rig.min_distance
 	_rig._process(0.0)
-	assert_float(rad_to_deg(-cam.rotation.x)).is_equal_approx(35.0, 0.001)
+	assert_float(rad_to_deg(-cam.rotation.x)).is_equal_approx(70.0, 0.001)
 	_rig.distance = _rig.max_distance
 	_rig._process(0.0)
-	assert_float(rad_to_deg(-cam.rotation.x)).is_equal_approx(65.0, 0.001)
+	assert_float(rad_to_deg(-cam.rotation.x)).is_equal_approx(70.0, 0.001)
 
 
 func test_camera_looks_at_the_focus_at_both_zoom_ends() -> void:

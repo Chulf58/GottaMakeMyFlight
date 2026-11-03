@@ -240,7 +240,7 @@ func test_zoomed_in_every_closed_caption_shows() -> void:
 
 func test_the_rig_pose_is_the_one_the_camera_gives_at_that_distance() -> void:
 	_frame_closed_signs(HOME_DISTANCE)
-	var expected := deg_to_rad((_rig as TycoonCamera).pitch_for_distance(HOME_DISTANCE))
+	var expected := deg_to_rad((_rig as TycoonCamera).pitch_degrees())
 	var forward := -_camera().global_transform.basis.z
 	assert_float(asin(-forward.y)).is_equal_approx(expected, 0.001)
 	assert_float(_camera().global_position.distance_to(_rig.position)).is_equal_approx(

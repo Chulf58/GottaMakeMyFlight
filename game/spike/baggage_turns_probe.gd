@@ -292,7 +292,7 @@ func _strips(flight: String) -> void:
 		_grid.cell_to_world(_cell(Vector2i(0, 1))) - _grid.cell_to_world(_cell(Vector2i.ZERO))
 	)
 	var centre := (_grid.cell_to_world(_cell(MERGE)) + _grid.cell_to_world(_cell(CORNER))) / 2.0
-	_rig.near_pitch_degrees = 68.0
+	_rig.angle_step = TycoonCamera.AngleStep.TOP_DOWN
 	var best_yaw := 0.0
 	var best_dot := -INF
 	for turn in 4:
