@@ -99,10 +99,12 @@ const FOLLOW_TICKS := 200
 ## A turn over this in one frame (degrees) fails the probe (PassengerTurns
 ## eases every turn over 0.3 s).
 const TURN_DEG := 20.0
-## A walker sitting down at a chair, or seated, drawn with its Spine_01 bone
-## more than this under where it is seated (sit_idle, no stoop) fails the
-## probe (SEAT_LOW): its hips went under the seat (board 76cb23c0).
+## A walker drawn in a seat clip (SEAT_CLIPS) with its Spine_01 bone more
+## than this under where it is seated (sit_idle, no stoop) fails the probe
+## (SEAT_LOW): its hips went under the seat (board 76cb23c0).
 const SEAT_DROP_M := 0.05
+## The clips a body is seated in, or between the seat and standing.
+const SEAT_CLIPS := ["sit_down", "sit_idle", "stand_up"]
 
 var _seed := 0
 var _follow_ticks := FOLLOW_TICKS
@@ -175,6 +177,10 @@ var _saved: Array[String] = []
 
 
 func _initialize() -> void:
+	# A frame is a third of a tick (_step), so the clips must play at 60 frames a
+	# second as in the game: uncapped, a fast window drew about 250 and the clips
+	# fell four times behind the sim (a sit_down 0.29 s in after 11 ticks).
+	Engine.max_fps = SimClock.TICK_RATE * 3
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	_seed = randi()
 	for arg in OS.get_cmdline_user_args():
@@ -1005,12 +1011,14 @@ func _swap_check(row: Dictionary, prev: Dictionary) -> String:
 	return flags
 
 
-## Keeps the lowest Spine_01 height over the body while the walker sits down or
-## is seated at a gate chair, and its height seated still (SEATED in sit_idle,
+## Keeps the lowest Spine_01 height over the body while the walker is drawn in
+## a seat clip (SEAT_CLIPS), and its height seated still (SEATED in sit_idle,
 ## the stoop not drawn; the last such frame, past the clip's crossfade), for
-## _seat_summary().
+## _seat_summary(). A walker sitting down with its roller stands (idle) until
+## the roller is down (SitHold), so its stoop is never measured here.
 func _seat_row(body: Node3D) -> void:
-	if _p.stage not in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	if player.current_animation not in SEAT_CLIPS:
 		return
 	var rig: Dictionary = body.get_meta(&"carry_rig", {})
 	if rig.is_empty():
@@ -1020,7 +1028,6 @@ func _seat_row(body: Node3D) -> void:
 	if high < _sit["low"]:
 		_sit["low"] = high
 		_sit["tick"] = _clock.tick
-	var player := body.get_node("AnimationPlayer") as AnimationPlayer
 	var still: bool = (
 		_p.stage == Passenger.Stage.SEATED
 		and (rig["stoop"] as CarryStoop).drawn == 0.0
@@ -1031,7 +1038,7 @@ func _seat_row(body: Node3D) -> void:
 		_sit["still"] += 1
 
 
-## Prints the lowest the walker was drawn sitting down or seated against its
+## Prints the lowest the walker was drawn in a seat clip against its
 ## height seated still, and fails the probe (SEAT_LOW) when it went more than
 ## SEAT_DROP_M under it, or when no seated frame was measured.
 func _seat_summary() -> void:
@@ -1089,8 +1096,17 @@ func _dump_row(props: CarryOnProps, body: Node3D) -> void:
 				]
 			)
 			+ (
-				" start=%s drawn=%.3f targets_y=%s weights=%s keeps=%s drops=%s spine_y=%.3f"
-				% [start, stoop.drawn, ys, stoop.weights, stoop.keeps, stoop.drops, pivot.y]
+				" start=%s drawn=%.3f targets_y=%s weights=%s keeps=%s drops=%s spine_y=%.3f clip=%s"
+				% [
+					start,
+					stoop.drawn,
+					ys,
+					stoop.weights,
+					stoop.keeps,
+					stoop.drops,
+					pivot.y,
+					_clip_at(body)
+				]
 			)
 		)
 	)
@@ -1231,3 +1247,9 @@ func _frames(count: int) -> void:
 func _invalid(why: String) -> void:
 	_failed = true
 	print("PROBE_INVALID %s" % why)
+
+
+## The clip `body` plays and how far into it (seconds), for --dump.
+func _clip_at(body: Node3D) -> String:
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	return "%s@%.2f" % [player.current_animation, player.current_animation_position]

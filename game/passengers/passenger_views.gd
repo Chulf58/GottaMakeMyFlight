@@ -420,13 +420,19 @@ func _pose(node: Node3D, p: Passenger) -> float:
 		# a shower, is not an idle slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
 		moving = mm > 0
+	var held := 0
 	var seat_pose := StageKinds.pose(p.stage)
 	if activity != ActivityPoses.Kind.NONE:
 		seat_pose = ActivityPoses.pose(sim, p)
 	match seat_pose:
 		StageKinds.Pose.SITTING_DOWN:
-			clip = "sit_down"
-			base = SIT_CLIP_SECONDS / (PassengerSim.SIT_DOWN_TICKS / float(SimClock.TICK_RATE))
+			# Standing while a pulled roller is set down (SitHold), then sitting
+			# over the ticks left.
+			held = SitHold.held_ticks(_props, p)
+			clip = "sit_down" if ActivityPoses.clip_ticks(sim, p) >= held else "idle"
+			if clip == "sit_down":
+				var sit_ticks := PassengerSim.SIT_DOWN_TICKS - held
+				base = SIT_CLIP_SECONDS / (sit_ticks / float(SimClock.TICK_RATE))
 		StageKinds.Pose.SEATED:
 			clip = "sit_idle"
 		StageKinds.Pose.STANDING_UP:
@@ -511,7 +517,7 @@ func _pose(node: Node3D, p: Passenger) -> float:
 	if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
 		# A view made or snapped mid-way (a load, a passenger just drawn)
 		# starts the clip where the sim is in it, not from its first frame.
-		var at := ActivityPoses.clip_ticks(sim, p) * SimClock.STEP * base
+		var at := maxi(ActivityPoses.clip_ticks(sim, p) - held, 0) * SimClock.STEP * base
 		if changed:
 			player.seek(at, true)
 		elif activity != ActivityPoses.Kind.NONE and player.current_animation == clip:
