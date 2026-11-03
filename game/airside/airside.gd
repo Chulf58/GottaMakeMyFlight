@@ -17,6 +17,10 @@ extends Node3D
 ## the two sky tracks views draw around a flight: the arrival lead-in into
 ## ApproachStart and the climb-out from ClimbEnd, each a flat track through its
 ## turn waypoints with wide round turns.
+##
+## Its TaxiPaving child paves every taxi route (taxi_routes()) after each
+## rebuild, so the paving follows the stands (user ruling pave-the-taxi-lane-
+## and-the-link-from-each-stand-to-it-so-pla).
 
 const REQUIRED_WAYPOINTS: Array[StringName] = [
 	&"ApproachStart",
@@ -64,6 +68,12 @@ var graph := TaxiGraph.new()
 var stand_moves := 0
 ## Gate letter -> the stand its waypoints were last put at (set_gate_stands()).
 var gate_stands: Dictionary = {}
+## The asphalt under the taxi routes, rebuilt with the graph.
+var paving := TaxiPaving.new()
+
+
+func _init() -> void:
+	add_child(paving)
 
 
 func _ready() -> void:
@@ -105,7 +115,19 @@ func rebuild() -> bool:
 	)
 	for i in range(1, chain.size()):
 		graph.link(chain[i - 1], chain[i])
+	paving.show_routes(taxi_routes(), StandPlacement.TAXI_LANE_Z)
 	return ok
+
+
+## Every ground route a plane takes: taxi in, pushback and taxi out, for each
+## gate with a stand, or for the one stand while no gate has one.
+func taxi_routes() -> Array[PackedVector3Array]:
+	var gates: Array = gate_stands.keys() if not gate_stands.is_empty() else [""]
+	var out: Array[PackedVector3Array] = []
+	for gate: String in gates:
+		for state in [FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT]:
+			out.append(phase_path(state, gate))
+	return out
 
 
 ## Whether waypoint `waypoint` is on the taxi lane chain.

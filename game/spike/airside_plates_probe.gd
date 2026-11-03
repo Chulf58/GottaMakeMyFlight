@@ -11,7 +11,19 @@ extends SceneTree
 ## hand (the clock's own process is off) with a 60 fps frame delta, so every frame is
 ## ticks, not wall time. Each plate proves the plane is in frame and hit by rays first;
 ## otherwise PROBE_INVALID is printed and the probe exits 1. Plates go to
-## tools/blender/out/airside_flight/.
+## tools/blender/out/airside_flight/, or to the directory --out=<dir> names.
+##
+## The taxi paving stage (board 9afe06b6 part 7) sets the flight's tick through
+## every ground state (TAXI_IN, PUSHBACK, TAXI_OUT), ray-casts down at the plane's
+## point each TAXI_SAMPLE_TICKS, and prints the plane's z range and whether the
+## surface under it is paving (a hit on the taxi paving, a runway piece or the site's
+## paving; PAVED_OWNERS). Two top-down plates of the stand-to-lane connector show the
+## plane on the connector and at the site paving's edge (z -210); each proves the plane,
+## the lane point and the paving edge are in frame. Then the plane mid-taxi on the lane,
+## from above and from a distance, with every paving strip in frame.
+##
+## --two-gate boots with no starter shell, builds a terminal with gates A and B 44 cells
+## apart and runs only _two_gate_paving(). Every run prints its world seed.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/airside_flight"
@@ -20,6 +32,34 @@ const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 90000
 const FRAME := 1.0 / 60.0
 const FOLLOW_DISTANCE := 75.0
+## The taxi paving stage: ticks between samples, the nodes whose colliders are paving
+## (a ray hit on anything else, the Ground grass included, is not), the site
+## paving's north edge, and the top-down plates' height of view and the z they
+## are centred on.
+const TAXI_SAMPLE_TICKS := 5
+const PAVED_OWNERS: Array[String] = [
+	"/root/Main/Airside/TaxiPaving", "/root/Main/Airside/Runway", "/root/Main/Airside/Terminal"
+]
+const PAVING_EDGE_Z := -210.0
+const TOP_VIEW_SIZE := 130.0
+const TOP_VIEW_Z := -200.0
+## The lane plates: the top-down view's height of view and centre (between TaxiWest and
+## TaxiEast, over the lane), and the distance camera's offset from what it looks at.
+const LANE_VIEW_SIZE := 170.0
+const LANE_VIEW_X := -51.0
+const LANE_VIEW_Z := -250.0
+const DISTANCE_OFFSET := Vector3(110.0, 130.0, 150.0)
+## The two-gate stage: ticks per state of the made-up timeline its poses are read on,
+## and the terminal, in cells from ReferenceTerminal.offset_on() (gates4_plates_probe.gd's
+## layout without seats): gate A's exit at x 20 and gate B's at x 64, 44 cells apart.
+const POSE_STATE_TICKS := 1000
+const TWO_GATE_FLOOR_MIN := Vector2i(10, 2)
+const TWO_GATE_FLOOR_MAX := Vector2i(65, 17)
+const TWO_GATE_DIVIDER_Y := 9
+const TWO_GATE_ENTRANCE := Vector2i(18, 17)
+const TWO_GATE_EXITS: Array[Vector2i] = [Vector2i(20, 2), Vector2i(64, 2)]
+const TWO_GATE_DESKS: Array[Vector2i] = [Vector2i(19, 5), Vector2i(63, 5)]
+const TWO_GATE_SCANNER_XS: Array[int] = [17, 19]
 ## Sim ticks sampled for the strip, four per row, with the states each row must show:
 ## landing (approach to touchdown), taxiing (TAXI_IN) and takeoff (the TAKEOFF state,
 ## ticks 3100 to 3300 from the first state).
@@ -30,6 +70,8 @@ const STRIP_ROWS := [
 ]
 
 var _out_dir := ""
+## --two-gate: the two-gate paving stage only (_two_gate_paving()).
+var _two_gate := false
 var _failed := false
 var _stage := "init"
 var _heartbeat_ms := 0
@@ -49,6 +91,11 @@ var _t0 := 0
 
 func _initialize() -> void:
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--out="):
+			_out_dir = arg.get_slice("=", 1)
+		elif arg == "--two-gate":
+			_two_gate = true
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=", _out_dir)
 	_beat("init")
@@ -88,7 +135,12 @@ func _watch() -> void:
 func _run() -> void:
 	_main = load(MAIN_SCENE).instantiate()
 	_clock = _main.get_node("SimClock")
+	var world_seed := randi()
+	_clock.seed_rng(world_seed)
+	print("PROBE world_seed=%d two_gate=%s" % [world_seed, _two_gate])
 	_clock.set_process(false)
+	if _two_gate:
+		(_main.get_node("BuildMode") as BuildMode).starter_shell = false
 	root.add_child(_main)
 	# A node that defines _process gets processing turned on when it becomes ready, so
 	# turn the clock's off again now: only this probe steps it. Left on, the clock runs
@@ -98,6 +150,10 @@ func _run() -> void:
 	_cam = _main.get_node("TycoonCamera/Camera3D")
 	_plane = _main.get_node("PlaneView")
 	await _frames(10)
+	if _two_gate:
+		await _two_gate_paving()
+		_finish()
+		return
 	# The plane's timeline is the subject, not staffing: open the airport directly
 	# (AirportGate.open() opens it ready or not), which issues the starter flight.
 	# The shell has no gate desk, and a closed gate keeps the airport closed.
@@ -126,6 +182,7 @@ func _run() -> void:
 	await physics_frame
 	print("PROBE speed_set=", _clock.set_speed(3), " speed=", _clock.speed)
 	await _strip()
+	await _taxi_paving()
 	await _overview()
 	await _framing()
 	await _stand_view()
@@ -242,6 +299,109 @@ func _prove_visible(label: String, subject: Node3D) -> bool:
 	if not ok:
 		_invalid("%s: occluded or not hit (%d of %d rays)" % [label, hits, targets.size()])
 	return ok
+
+
+## A ground state's sampled poses must all lie on paving: samples were taken (a zero
+## count proves nothing), none sat on grass or on no surface, and at least one hit the
+## taxi paving itself, so the paving was engaged and not only the runway or the site.
+## `needs_taxi_paving` is false for PUSHBACK, which runs on the stand's own site paving.
+func _require_paved(
+	label: String, count: int, grass: int, on_taxi_paving: int, needs_taxi_paving := true
+) -> void:
+	if count <= 0:
+		_invalid("%s: no samples" % label)
+	if grass != 0:
+		_invalid("%s: %d of %d samples are on grass or no surface" % [label, grass, count])
+	if needs_taxi_paving and on_taxi_paving <= 0:
+		_invalid("%s: no sample hit the taxi paving (%d samples)" % [label, count])
+
+
+## Rays from the current camera to a few representative points of the paving: the
+## middle of the lane and the middle of each link (the part between the runway's south
+## end, where the runway's own asphalt lies over the link, and the site's paving).
+## Each point in frame must be hit first on the taxi paving's own collider; the plane's
+## bodies and the colliders of hidden meshes are passed through. At least one point
+## must be in frame, so the check cannot pass by testing nothing.
+func _prove_paving_visible(label: String, paving: TaxiPaving) -> bool:
+	var frame := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
+	var space := _cam.get_world_3d().direct_space_state
+	var skip: Array[RID] = []
+	for body in _plane.find_children("*", "StaticBody3D", true, false):
+		skip.append((body as StaticBody3D).get_rid())
+	var runway_south := _runway_south()
+	print("PAVING_VISIBLE %s runway_south_z=%.1f" % [label, runway_south])
+	if runway_south == -INF:
+		_invalid("%s: no runway mesh found to bound the links" % label)
+		return false
+	var checked := 0
+	var hits := 0
+	for strip in paving.shown:
+		var rect: Rect2 = strip["rect"]
+		var middle := rect.get_center()
+		if strip.has("quad"):
+			middle = (strip["quad"][0] + strip["quad"][2]) / 2.0
+		elif strip["across_x"]:
+			var north := maxf(rect.position.y, runway_south)
+			var south := minf(rect.end.y, PAVING_EDGE_Z)
+			if south <= north:
+				continue
+			middle.y = (north + south) / 2.0
+		var point := Vector3(middle.x, TaxiPaving.HEIGHT_M, middle.y)
+		if _cam.is_position_behind(point):
+			continue
+		var on_screen := _cam.unproject_position(point)
+		if not frame.has_point(on_screen):
+			continue
+		var from := _cam.project_ray_origin(on_screen)
+		var along := _cam.project_ray_normal(on_screen)
+		var hit := _visible_ray_hit(space, from, point + along * 0.5, skip)
+		var collider: Node = hit.get("collider")
+		var ok := collider != null and str(collider.get_path()).begins_with(PAVED_OWNERS[0])
+		checked += 1
+		hits += 1 if ok else 0
+		print("PAVING_VISIBLE %s point=%s hit=%s ok=%s" % [label, point, collider, ok])
+	var passed := checked > 0 and hits == checked
+	print("PAVING_VISIBLE %s hits=%d/%d ok=%s" % [label, hits, checked, passed])
+	if not passed:
+		_invalid(
+			(
+				"%s: the paving is occluded or no point was in frame (%d of %d)"
+				% [label, hits, checked]
+			)
+		)
+	return passed
+
+
+## The southmost z of the runway's meshes (the Airside children named Runway*; the
+## RunwayExit and RunwayEntry markers have none).
+func _runway_south() -> float:
+	var south := -INF
+	for piece in _main.get_node("Airside").get_children():
+		if not String(piece.name).begins_with("Runway") or not piece is Node3D:
+			continue
+		for mi in _meshes(piece):
+			south = maxf(south, (mi.global_transform * mi.get_aabb()).end.z)
+	return south
+
+
+## The first visible surface on the ray from `from` to `to`: a hit on the collider of a
+## hidden mesh is passed through and the ray cast again, as _surface_hit() does.
+func _visible_ray_hit(
+	space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, skip: Array[RID]
+) -> Dictionary:
+	var exclude := skip.duplicate()
+	for i in 16:
+		var query := PhysicsRayQueryParameters3D.create(from, to)
+		query.exclude = exclude
+		var hit := space.intersect_ray(query)
+		var body: Node = hit.get("collider")
+		var shown := body as Node3D
+		if body != null and body.get_parent() is Node3D:
+			shown = body.get_parent() as Node3D
+		if body == null or shown == null or shown.is_visible_in_tree():
+			return hit
+		exclude.append(hit["rid"])
+	return {}
 
 
 ## Steps the sim by 60 fps frames at the clock's speed until it reaches `target`.
@@ -421,3 +581,441 @@ func _stand_view() -> void:
 		and _prove_visible("stand_view", model)
 	):
 		_save(await _grab(), "stand_view.png")
+
+
+## The plane's path over the ground states and what is under it.
+func _taxi_paving() -> void:
+	_beat("taxi_paving")
+	var ground: Array[int] = [
+		FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT
+	]
+	var skip: Array[RID] = []
+	for body in _plane.find_children("*", "StaticBody3D", true, false):
+		skip.append((body as StaticBody3D).get_rid())
+	var space := _plane.get_world_3d().direct_space_state
+	var samples: Array[Dictionary] = []
+	for state in ground:
+		var from := _sim().state_start("GMF101-d0", state)
+		var to := _sim().state_start("GMF101-d0", state + 1)
+		for t in range(from, to, TAXI_SAMPLE_TICKS):
+			_sim().tick = t
+			_clock.tick = t
+			_plane.update_pose()
+			var at: Vector3 = _plane.global_position
+			var hit := _surface_hit(space, at, skip)
+			var y: float = hit.get("position", Vector3(0, -99, 0)).y
+			var collider: Node = hit.get("collider")
+			(
+				samples
+				. append(
+					{
+						"tick": t,
+						"state": state,
+						"at": at,
+						"hit_y": y,
+						"collider": collider.get_path() if collider != null else NodePath(),
+						"paved": _is_paving(collider),
+					}
+				)
+			)
+	var last := {}
+	for s in samples:
+		if last.is_empty() or s["paved"] != last["paved"] or s["state"] != last["state"]:
+			print(
+				(
+					"TAXI change tick=%d state=%d x=%.1f z=%.1f hit_y=%.2f hit=%s paved=%s"
+					% [
+						s["tick"],
+						s["state"],
+						s["at"].x,
+						s["at"].z,
+						s["hit_y"],
+						s["collider"],
+						s["paved"]
+					]
+				)
+			)
+		last = s
+	for state in ground:
+		var lo := INF
+		var hi := -INF
+		var grass := 0
+		var on_taxi_paving := 0
+		var count := 0
+		var grass_lo := INF
+		var grass_hi := -INF
+		for s in samples:
+			if s["state"] != state:
+				continue
+			count += 1
+			lo = minf(lo, s["at"].z)
+			hi = maxf(hi, s["at"].z)
+			if str(s["collider"]).begins_with(PAVED_OWNERS[0]):
+				on_taxi_paving += 1
+			if not s["paved"]:
+				grass += 1
+				grass_lo = minf(grass_lo, s["at"].z)
+				grass_hi = maxf(grass_hi, s["at"].z)
+		print(
+			(
+				(
+					"TAXI state=%d samples=%d z=[%.1f, %.1f] on_taxi_paving=%d on_grass=%d"
+					+ " grass_z=[%.1f, %.1f]"
+				)
+				% [state, count, lo, hi, on_taxi_paving, grass, grass_lo, grass_hi]
+			)
+		)
+		_require_paved(
+			"taxi state=%d" % state, count, grass, on_taxi_paving, state != FlightSim.State.PUSHBACK
+		)
+	var in_state := samples.filter(func(c: Dictionary) -> bool: return c["state"] == ground[0])
+	if in_state.is_empty():
+		_invalid("taxi paving: no TAXI_IN samples")
+		return
+	var stand_x := float(_main.get_node("Airside/Stand").global_position.x)
+	var top := Camera3D.new()
+	top.projection = Camera3D.PROJECTION_ORTHOGONAL
+	top.size = TOP_VIEW_SIZE
+	top.far = 1000.0
+	_main.add_child(top)
+	top.look_at_from_position(
+		Vector3(stand_x, 400, TOP_VIEW_Z), Vector3(stand_x, 0, TOP_VIEW_Z), Vector3.FORWARD
+	)
+	top.make_current()
+	var rig_cam := _cam
+	_cam = top
+	var wanted := {"taxi_in_connector": -233.0, "taxi_in_paving_edge": PAVING_EDGE_Z}
+	for label in wanted:
+		var best := {}
+		for c in in_state:
+			if c["at"].z > PAVING_EDGE_Z + 60.0 or absf(c["at"].x - stand_x) > 1.0:
+				continue
+			if (
+				best.is_empty()
+				or absf(c["at"].z - wanted[label]) < absf(best["at"].z - wanted[label])
+			):
+				best = c
+		if best.is_empty():
+			_invalid("taxi paving %s: no TAXI_IN sample on the connector x %.1f" % [label, stand_x])
+			continue
+		_sim().tick = best["tick"]
+		_clock.tick = best["tick"]
+		_plane.update_pose()
+		await _frames(4)
+		print(
+			(
+				"TAXI plate %s tick=%d plane=%s paved=%s connector_x=%.1f"
+				% [label, best["tick"], _plane.global_position, best["paved"], stand_x]
+			)
+		)
+		var model: Node3D = _plane.get_node("Pivot")
+		var marks: Array[Vector3] = _corners(_aabb_of(model))
+		marks.append(Vector3(stand_x, 0.0, PAVING_EDGE_Z))
+		marks.append(Vector3(stand_x, 0.0, StandPlacement.TAXI_LANE_Z))
+		var paving := (_main.get_node("Airside") as Airside).paving
+		if (
+			_prove_in_frame(label, marks)
+			and _prove_visible(label, model)
+			and _prove_paving_visible(label, paving)
+		):
+			_save(await _grab(), "taxi_%s.png" % label)
+	await _lane_plates(in_state, stand_x, top)
+	_cam = rig_cam
+	rig_cam.make_current()
+	top.queue_free()
+
+
+## The first surface a ray straight down at `at` hits that the player can see: a hit
+## on the collider of a hidden mesh (the build-mode guard area, the buyable-land fills)
+## is passed through and the ray cast again. Colliders in `skip` are never hit.
+func _surface_hit(space: PhysicsDirectSpaceState3D, at: Vector3, skip: Array[RID]) -> Dictionary:
+	var exclude := skip.duplicate()
+	for i in 16:
+		var query := PhysicsRayQueryParameters3D.create(
+			Vector3(at.x, 60.0, at.z), Vector3(at.x, -20.0, at.z)
+		)
+		query.exclude = exclude
+		var hit := space.intersect_ray(query)
+		var body: Node = hit.get("collider")
+		var shown := body as Node3D
+		if body != null and body.get_parent() is Node3D:
+			shown = body.get_parent() as Node3D
+		if body == null or shown == null or shown.is_visible_in_tree():
+			return hit
+		exclude.append(hit["rid"])
+	return {}
+
+
+## Whether `collider` is a paved surface: the taxi paving, a runway piece or the
+## terminal site's paving. Anything else (the Ground grass, a hidden mesh's
+## collider) is not.
+func _is_paving(collider: Node) -> bool:
+	if collider == null:
+		return false
+	var path := str(collider.get_path())
+	for owner_path in PAVED_OWNERS:
+		if path.begins_with(owner_path):
+			return true
+	return false
+
+
+## The plane mid-taxi on the lane, halfway from the runway exit to its stand's join,
+## seen from straight above and from a distance. Both prove the plane and the lane's
+## and connectors' paving are in frame.
+func _lane_plates(in_state: Array, stand_x: float, top: Camera3D) -> void:
+	_beat("taxi_lane_plates")
+	_show_hud(false)
+	var exit_x := float(_main.get_node("Airside/TaxiEast").global_position.x)
+	var half_x := (exit_x + stand_x) / 2.0
+	var mid := {}
+	for c in in_state:
+		if absf(c["at"].z - StandPlacement.TAXI_LANE_Z) > 0.5:
+			continue
+		if mid.is_empty() or absf(c["at"].x - half_x) < absf(mid["at"].x - half_x):
+			mid = c
+	if mid.is_empty():
+		_invalid("taxi lane: no TAXI_IN sample on the lane")
+		return
+	_sim().tick = mid["tick"]
+	_clock.tick = mid["tick"]
+	_plane.update_pose()
+	print("TAXI plate lane tick=%d plane=%s paved=%s" % [mid["tick"], mid["at"], mid["paved"]])
+	var paving := (_main.get_node("Airside") as Airside).paving
+	var marks: Array[Vector3] = _corners(_aabb_of(_plane.get_node("Pivot")))
+	for strip in paving.shown:
+		var rect: Rect2 = strip["rect"]
+		var south := minf(rect.end.y, PAVING_EDGE_Z)
+		for x in [rect.position.x, rect.end.x]:
+			marks.append(Vector3(x, 0.0, rect.position.y))
+			marks.append(Vector3(x, 0.0, south))
+	top.size = LANE_VIEW_SIZE
+	top.look_at_from_position(
+		Vector3(LANE_VIEW_X, 400, LANE_VIEW_Z),
+		Vector3(LANE_VIEW_X, 0, LANE_VIEW_Z),
+		Vector3.FORWARD
+	)
+	await _frames(4)
+	var model: Node3D = _plane.get_node("Pivot")
+	if (
+		_prove_in_frame("taxi_lane_top", marks)
+		and _prove_visible("taxi_lane_top", model)
+		and _prove_paving_visible("taxi_lane_top", paving)
+	):
+		_save(await _grab(), "taxi_lane_top.png")
+	var far := Camera3D.new()
+	far.fov = 50.0
+	far.far = 2000.0
+	_main.add_child(far)
+	var lane_at := Vector3(LANE_VIEW_X, 0.0, LANE_VIEW_Z)
+	far.look_at_from_position(lane_at + DISTANCE_OFFSET, lane_at, Vector3.UP)
+	far.make_current()
+	_cam = far
+	await _frames(4)
+	if (
+		_prove_in_frame("taxi_distance", marks)
+		and _prove_visible("taxi_distance", model)
+		and _prove_paving_visible("taxi_distance", paving)
+	):
+		_save(await _grab(), "taxi_distance.png")
+	_cam = top
+	top.make_current()
+	far.queue_free()
+	_show_hud(true)
+
+
+## Shows or hides every HUD layer, so a paving plate shows the ground under the panels.
+func _show_hud(on: bool) -> void:
+	for layer in _main.find_children("*", "CanvasLayer", true, false):
+		(layer as CanvasLayer).visible = on
+
+
+## The two-gate layout (decision second-gate-needs-a-wider-terminal-the-12x16-starter-
+## holds-o): one wide terminal with gate A's exit and desk and gate B's 44 cells east,
+## as gates4_plates_probe.gd builds it without seats. No flight runs: each gate's
+## ground routes are sampled through PlaneView.pose_at(), the plane's own pose
+## function, with the view set to that gate, and the surface under each pose is
+## ray-cast as in _taxi_paving(). Then a top-down plate of the lane and both
+## connectors and a distance plate, each proving every strip is in frame.
+func _two_gate_paving() -> void:
+	_beat("two_gate_build")
+	var mode := _main.get_node("BuildMode") as BuildMode
+	(mode.get_node("Ghost") as Node3D).visible = false
+	(_main.get_node("PassengerHud") as PassengerHud).dismiss_intro()
+	if not _build_two_gates(mode):
+		return
+	await _frames(6)
+	var airside := _main.get_node("Airside") as Airside
+	var gates := airside.gate_stands.keys()
+	gates.sort()
+	print(
+		(
+			"TWO_GATE bindings=%s stands=%s exits_cells_apart=%d"
+			% [
+				(_main.get_node("GateDesks") as GateDesks).bindings,
+				airside.gate_stands,
+				TWO_GATE_EXITS[1].x - TWO_GATE_EXITS[0].x
+			]
+		)
+	)
+	if gates != ["A", "B"]:
+		_invalid("two gates: the gate stands are %s, not A and B" % [gates])
+		return
+	_add_colliders(_main)
+	await physics_frame
+	var skip: Array[RID] = []
+	for body in _plane.find_children("*", "StaticBody3D", true, false):
+		skip.append((body as StaticBody3D).get_rid())
+	var space := _plane.get_world_3d().direct_space_state
+	var starts: Array[int] = []
+	for state in FlightSim.State.DEPARTED + 1:
+		starts.append(state * POSE_STATE_TICKS)
+	var ground: Array[int] = [
+		FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT
+	]
+	for gate: String in gates:
+		_plane.gate = gate
+		for state in ground:
+			var count := 0
+			var grass := 0
+			var on_taxi_paving := 0
+			var lo := INF
+			var hi := -INF
+			for k in range(0, POSE_STATE_TICKS, TAXI_SAMPLE_TICKS):
+				var pose: Dictionary = _plane.pose_at(starts, float(starts[state] + k))
+				if pose.get("phase", -1) != state:
+					_invalid("two gates: gate %s tick %d is not in state %d" % [gate, k, state])
+					return
+				var at: Vector3 = (pose["transform"] as Transform3D).origin
+				var collider: Node = _surface_hit(space, at, skip).get("collider")
+				count += 1
+				lo = minf(lo, at.z)
+				hi = maxf(hi, at.z)
+				if collider != null and str(collider.get_path()).begins_with(PAVED_OWNERS[0]):
+					on_taxi_paving += 1
+				if not _is_paving(collider):
+					grass += 1
+					print(
+						"TWO_GATE grass gate=%s state=%d at=%s hit=%s" % [gate, state, at, collider]
+					)
+			print(
+				(
+					(
+						"TWO_GATE gate=%s state=%d samples=%d z=[%.1f, %.1f] on_taxi_paving=%d"
+						+ " on_grass=%d"
+					)
+					% [gate, state, count, lo, hi, on_taxi_paving, grass]
+				)
+			)
+			_require_paved(
+				"two gates: gate %s state=%d" % [gate, state],
+				count,
+				grass,
+				on_taxi_paving,
+				state != FlightSim.State.PUSHBACK
+			)
+	_plane.gate = FlightSim.DEFAULT_GATE
+	await _two_gate_plates(airside)
+
+
+## Builds the two-gate terminal through the grid, buying the land it needs.
+func _build_two_gates(mode: BuildMode) -> bool:
+	var grid := mode.grid
+	var offset := ReferenceTerminal.offset_on(grid)
+	var edits: Array[BuildEdit] = []
+	var lo := TWO_GATE_FLOOR_MIN
+	var hi := TWO_GATE_FLOOR_MAX
+	for y in range(lo.y, hi.y + 1):
+		for x in range(lo.x, hi.x + 1):
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y) + offset, BuildGrid.FLOOR_TILE, 1))
+	for x in range(lo.x, hi.x + 1):
+		if not TWO_GATE_EXITS.any(func(e: Vector2i) -> bool: return e.x == x):
+			edits.append(BuildEdit.place_wall(Vector2i(x, lo.y) + offset, BuildGrid.Side.NORTH))
+		if x != TWO_GATE_ENTRANCE.x:
+			edits.append(BuildEdit.place_wall(Vector2i(x, hi.y) + offset, BuildGrid.Side.SOUTH))
+		if not TWO_GATE_SCANNER_XS.has(x):
+			edits.append(
+				BuildEdit.place_wall(Vector2i(x, TWO_GATE_DIVIDER_Y) + offset, BuildGrid.Side.NORTH)
+			)
+	for y in range(lo.y, hi.y + 1):
+		edits.append(BuildEdit.place_wall(Vector2i(lo.x, y) + offset, BuildGrid.Side.WEST))
+		edits.append(BuildEdit.place_wall(Vector2i(hi.x, y) + offset, BuildGrid.Side.EAST))
+	edits.append(BuildEdit.place_object(&"checkin_desk", Vector2i(11, 11) + offset, 0))
+	for x in TWO_GATE_SCANNER_XS:
+		edits.append(
+			BuildEdit.place_object(
+				&"security_scanner", Vector2i(x, TWO_GATE_DIVIDER_Y - 1) + offset, 0
+			)
+		)
+	edits.append(BuildEdit.place_object(&"entrance_door", TWO_GATE_ENTRANCE + offset, 2))
+	for i in TWO_GATE_EXITS.size():
+		edits.append(BuildEdit.place_object(&"exit_door", TWO_GATE_EXITS[i] + offset, 0))
+		edits.append(BuildEdit.place_object(GateDesks.DESK, TWO_GATE_DESKS[i] + offset, 0))
+	var land := mode.land_tool.land
+	for edit in edits:
+		var plot: Vector2i = land.plot_of(edit.cell)
+		while not land.is_owned(plot):
+			var best := Vector2i(-1, -1)
+			var best_d := 1 << 30
+			for candidate in land.buyable_plots():
+				var d := absi(candidate.x - plot.x) + absi(candidate.y - plot.y)
+				if d < best_d:
+					best_d = d
+					best = candidate
+			if best == Vector2i(-1, -1) or not land.buy(best, null).ok:
+				_invalid("two gates: the land toward plot %s could not be bought" % plot)
+				return false
+	for edit in edits:
+		var result := grid.apply(edit)
+		if not result.ok:
+			_invalid("two gates: edit at %s refused: %s" % [edit.cell, result.reason_text()])
+			return false
+	return true
+
+
+## Top-down and distance plates of the two-gate paving.
+func _two_gate_plates(airside: Airside) -> void:
+	_beat("two_gate_plates")
+	_show_hud(false)
+	var marks: Array[Vector3] = []
+	var west := INF
+	var east := -INF
+	for strip in airside.paving.shown:
+		var rect: Rect2 = strip["rect"]
+		west = minf(west, rect.position.x)
+		east = maxf(east, rect.end.x)
+		var south := minf(rect.end.y, PAVING_EDGE_Z)
+		for x in [rect.position.x, rect.end.x]:
+			marks.append(Vector3(x, 0.0, rect.position.y))
+			marks.append(Vector3(x, 0.0, south))
+	print("TWO_GATE strips=%s" % [airside.paving.shown])
+	var centre := Vector3((west + east) / 2.0, 0.0, LANE_VIEW_Z)
+	var aspect := root.get_visible_rect().size.aspect()
+	var top := Camera3D.new()
+	top.projection = Camera3D.PROJECTION_ORTHOGONAL
+	top.size = maxf(LANE_VIEW_SIZE, (east - west + 60.0) / aspect)
+	top.far = 1000.0
+	_main.add_child(top)
+	top.look_at_from_position(centre + Vector3.UP * 400.0, centre, Vector3.FORWARD)
+	top.make_current()
+	_cam = top
+	await _frames(4)
+	if (
+		_prove_in_frame("two_gate_top", marks)
+		and _prove_paving_visible("two_gate_top", airside.paving)
+	):
+		_save(await _grab(), "two_gate_top.png")
+	var far := Camera3D.new()
+	far.fov = 50.0
+	far.far = 2000.0
+	_main.add_child(far)
+	far.look_at_from_position(centre + DISTANCE_OFFSET, centre, Vector3.UP)
+	far.make_current()
+	_cam = far
+	await _frames(4)
+	if (
+		_prove_in_frame("two_gate_distance", marks)
+		and _prove_paving_visible("two_gate_distance", airside.paving)
+	):
+		_save(await _grab(), "two_gate_distance.png")
+	top.queue_free()
+	far.queue_free()
