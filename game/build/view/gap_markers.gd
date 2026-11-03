@@ -14,8 +14,12 @@ extends Node3D
 ## screen whatever the zoom, with MissMarkers' caption font and outline, both
 ## billboards drawn over walls and roof (no depth test). The gap captions are
 ## not part of MissMarkers' declutter layout (decision station-captions-
-## declutter-on-screen-overlap-staff-spot-reas). Redrawn when the grid's graph
-## changes. View only.
+## declutter-on-screen-overlap-staff-spot-reas), but they keep clear of the HUD
+## by the same search as the room labels (decision status-banner-fades-under-
+## the-build-ghost-room-labels-slide, rule 2; RoomLabelLayout.slide_clear): a
+## caption under a HUD control slides toward the screen's middle, then tries
+## rings of other spots, and hides only with no clear spot. The sign's icon
+## stays where it stands. Redrawn when the grid's graph changes. View only.
 ##
 ## Like BuildView it draws in world space, so it sits at the world origin.
 
@@ -157,6 +161,7 @@ func _bar_transform(edge: Vector3i) -> Transform3D:
 ## their font size, as MissMarkers sizes its signs.
 func _process(_delta: float) -> void:
 	update_sizes()
+	update_captions()
 
 
 ## Works out the screen unit from the camera's field of view and the rendered
@@ -176,6 +181,50 @@ func update_sizes(force := false) -> void:
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
 	if height > 0.0 and (force or unit != _unit):
 		_size_signs(unit)
+
+
+## Lays the captions out for the camera and the HUD as they are now.
+func update_captions() -> void:
+	if _shown_signs == 0 or not is_inside_tree():
+		return
+	var view := get_viewport()
+	var camera := view.get_camera_3d()
+	var scale := view.get_stretch_transform().get_scale()
+	var hud: Array[Rect2] = []
+	if camera != null:
+		hud = HudRects.collect(self, scale.y)
+	layout_captions(camera, scale.y, view.get_visible_rect().size * scale, hud)
+
+
+## Puts each shown sign's caption back under its icon, then slides it clear of
+## `hud` (screen-pixel rectangles) when it touches one: toward the middle of a
+## view of `view_size`, else to the nearest clear spot on rings, else hidden.
+## `to_output` converts the camera's viewport coordinates to screen pixels, the
+## unit the captions are sized in. The slide is the caption's pixel offset, so
+## its world anchor, under the sign, stays put.
+func layout_captions(
+	camera: Camera3D, to_output: float, view_size: Vector2, hud: Array[Rect2]
+) -> void:
+	var view := Rect2(Vector2.ZERO, view_size)
+	var size := MissMarkers.caption_size(CAPTION)
+	for i in _shown_signs:
+		var caption := caption_of(_signs[i])
+		caption.visible = true
+		caption.offset = Vector2(0.0, -MissMarkers.CAPTION_GAP_PX)
+		if camera == null or camera.is_position_behind(_signs[i].global_position):
+			continue
+		var point := camera.unproject_position(_signs[i].global_position) * to_output
+		var rect := Rect2(
+			Vector2(point.x - size.x / 2.0, point.y + MissMarkers.CAPTION_GAP_PX), size
+		)
+		if not view.intersects(rect):
+			continue
+		var spot := RoomLabelLayout.slide_clear(rect, hud, view_size)
+		if spot.size == Vector2.ZERO:
+			caption.visible = false
+			continue
+		var shift := spot.position - rect.position
+		caption.offset += Vector2(shift.x, -shift.y)
 
 
 ## Sizes the shown signs for the screen unit `unit`; hidden spares are sized
