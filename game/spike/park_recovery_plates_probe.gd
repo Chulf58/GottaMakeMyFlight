@@ -101,8 +101,10 @@ const FOLLOW_TICKS := 200
 const TURN_DEG := 20.0
 ## A walker drawn in a seat clip (SEAT_CLIPS) with its Spine_01 bone more
 ## than this under where it is seated (sit_idle, no stoop) fails the probe
-## (SEAT_LOW): its hips went under the seat (board 76cb23c0).
-const SEAT_DROP_M := 0.05
+## (SEAT_LOW): its hips went under the seat (board 76cb23c0). Measured: the
+## seated-still height varied by under 0.1 mm over 379 frames (printed as
+## noise), so 5 mm is noise with margin, not a tolerance for a lower seat.
+const SEAT_EPS_M := 0.005
 ## The clips a body is seated in, or between the seat and standing.
 const SEAT_CLIPS := ["sit_down", "sit_idle", "stand_up"]
 
@@ -145,7 +147,15 @@ var _strips: Array[Vector2i] = []
 var _dump := Vector2i(1, 0)
 ## The lowest Spine_01 height over the body sitting down or seated, its tick,
 ## the height seated still (sit_idle, no stoop) and the frames of each.
-var _sit := {"low": INF, "tick": -1, "seated": NAN, "frames": 0, "still": 0}
+var _sit := {
+	"low": INF,
+	"tick": -1,
+	"seated": NAN,
+	"frames": 0,
+	"still": 0,
+	"still_lo": INF,
+	"still_hi": -INF
+}
 var _strip_cam: Camera3D
 var _strip_xf := {}
 var _swap_starts := 0
@@ -1036,11 +1046,15 @@ func _seat_row(body: Node3D) -> void:
 	if still:
 		_sit["seated"] = high
 		_sit["still"] += 1
+		_sit["still_lo"] = minf(_sit["still_lo"], high)
+		_sit["still_hi"] = maxf(_sit["still_hi"], high)
 
 
 ## Prints the lowest the walker was drawn in a seat clip against its
 ## height seated still, and fails the probe (SEAT_LOW) when it went more than
-## SEAT_DROP_M under it, or when no seated frame was measured.
+## SEAT_EPS_M under it, or when no seated frame was measured. The check is
+## first run on a height 2 * SEAT_EPS_M under the seated one, which must fail,
+## and on the seated height itself, which must pass.
 func _seat_summary() -> void:
 	print(
 		(
@@ -1052,7 +1066,26 @@ func _seat_summary() -> void:
 		return
 	if _sit["still"] == 0:
 		_invalid("the walker was never drawn seated still")
-	elif _sit["low"] < float(_sit["seated"]) - SEAT_DROP_M:
+		return
+	var seated: float = _sit["seated"]
+	print(
+		(
+			"SEAT noise %.4f m over %d still frames; self-test: %.3f low=%s, %.3f low=%s"
+			% [
+				_sit["still_hi"] - _sit["still_lo"],
+				_sit["still"],
+				seated - 2.0 * SEAT_EPS_M,
+				_seat_low(seated - 2.0 * SEAT_EPS_M, seated),
+				seated,
+				_seat_low(seated, seated),
+			]
+		)
+	)
+	if not _seat_low(seated - 2.0 * SEAT_EPS_M, seated) or _seat_low(seated, seated):
+		_invalid("the SEAT check self-test failed")
+	elif _sit["still_hi"] - _sit["still_lo"] > SEAT_EPS_M:
+		_invalid("the seated-still height varies more than SEAT_EPS_M")
+	elif _seat_low(_sit["low"], seated):
 		print("SEAT_LOW the hips went %.3f m under the seat" % (_sit["seated"] - _sit["low"]))
 		_invalid("the walker sitting down was drawn under its seat at tick %d" % _sit["tick"])
 
@@ -1253,3 +1286,9 @@ func _invalid(why: String) -> void:
 func _clip_at(body: Node3D) -> String:
 	var player := body.get_node("AnimationPlayer") as AnimationPlayer
 	return "%s@%.2f" % [player.current_animation, player.current_animation_position]
+
+
+## Whether a Spine_01 height `high` over the body is under the seat: more than
+## SEAT_EPS_M under `seated`, the height seated still.
+static func _seat_low(high: float, seated: float) -> bool:
+	return high < seated - SEAT_EPS_M

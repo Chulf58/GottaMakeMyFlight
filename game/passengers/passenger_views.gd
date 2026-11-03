@@ -428,7 +428,7 @@ func _pose(node: Node3D, p: Passenger) -> float:
 		StageKinds.Pose.SITTING_DOWN:
 			# Standing while a pulled roller is set down (SitHold), then sitting
 			# over the ticks left.
-			held = SitHold.held_ticks(_props, p)
+			held = SitHold.held_ticks(_props, sim, p)
 			clip = "sit_down" if ActivityPoses.clip_ticks(sim, p) >= held else "idle"
 			if clip == "sit_down":
 				var sit_ticks := PassengerSim.SIT_DOWN_TICKS - held

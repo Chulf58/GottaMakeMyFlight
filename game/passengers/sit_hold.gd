@@ -26,10 +26,11 @@ const LET_GO_TICKS := 1.0
 ## before the park is stamped (the sit-down's first tick, drawn before the
 ## bags), as long from now for a roller pulled in the hand. 0 when it sits at
 ## once (in a toilet stall too: a stall roller goes down by its own moves,
-## StallCarry); at most
+## StallCarry; and on a sofa or nap pod, whose visitor sets its roller down at
+## its slot cell before the sit-down starts, ActivityPoses.seat_door()); at most
 ## SIT_DOWN_TICKS - MIN_SIT_TICKS.
-static func held_ticks(props: CarryOnProps, p: Passenger) -> int:
-	if Passenger.in_toilet(p.stage):
+static func held_ticks(props: CarryOnProps, sim: PassengerSim, p: Passenger) -> int:
+	if Passenger.in_toilet(p.stage) or ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
 		return 0
 	var held := 0.0
 	for i in p.carry_on:

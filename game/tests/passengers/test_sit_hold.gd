@@ -112,3 +112,53 @@ func test_a_walker_sitting_down_with_no_roller_sits_at_once() -> void:
 	assert_int(clips.size()).is_greater(0)
 	for clip in clips:
 		assert_str(clip).is_equal("sit_down")
+
+
+## On the lounge sofa and in the nap pod a roller visitor sets the roller down
+## standing at its slot cell (ActivityPoses.seat_door()): the park and the
+## let-go end before the pose turns to SITTING_DOWN, the body draws idle until
+## then, and its drawn step onto the seat has not begun. Control: the park
+## was stamped, and the sit-down was reached.
+func test_a_sofa_or_pod_visitor_sets_its_roller_down_before_it_sits() -> void:
+	for type: StringName in [&"lounge", &"nap_pod"]:
+		var grid := BuildGrid.new()
+		ActivityTestLayout.build(grid, type)
+		_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+		_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
+		_world.auto_staff_roles = [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]
+		_world.run_to(10)
+		_views = PassengerViews.new()
+		_views.clock = _world.clock
+		_views.sim = _world.sim
+		add_child(_views)
+		var p := ShopTestLayout.airside_guest(_world, 0)
+		while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
+			p = ShopTestLayout.airside_guest(_world, 0)
+		p.boredom = 80
+		p.carry_on = 1
+		assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.BOREDOM)
+		while p.stage != Passenger.Stage.SHOP_BROWSE and _world.clock.tick < 3000:
+			await _tick()
+		assert_int(p.stage).is_equal(Passenger.Stage.SHOP_BROWSE)
+		var park_end := -1.0
+		var sat := -1
+		var clips: Array[String] = []
+		while sat < 0 and _world.clock.tick - p.stage_tick < 60:
+			await _tick()
+			var bag := _views.carry_on_props().bag_state(p.id, 0)
+			if bag.get("park", false):
+				park_end = float(bag["since"]) + CarryLead.ticks_of(bag) - p.stage_tick
+			var spent := _world.clock.tick - p.stage_tick
+			if ActivityPoses.pose(_world.sim, p) == StageKinds.Pose.SITTING_DOWN:
+				sat = spent
+			else:
+				clips.append(_views.node_for(p.id).get_meta(&"clip", ""))
+				assert_float(ActivityPoses.share(_world.sim, p)).is_equal(0.0)
+		print("%s: park ends %.1f ticks in, sits at %d, clips %s" % [type, park_end, sat, clips])
+		assert_float(park_end).is_greater_equal(RollerPark.TICKS_DOWN)
+		assert_int(sat).is_greater_equal(ceili(park_end + SitHold.LET_GO_TICKS))
+		for clip in clips:
+			assert_str(clip).is_equal("idle")
+		_views.free()
+		_world.free_all()
+		_views = null
