@@ -35,8 +35,8 @@ const HANG_MS := 120000
 const HEAD_M := 1.7
 const HEAD_RECT_M := 0.35
 const BLOCK_M := 0.5
-const WANT_PASSENGERS := 6
-const ARRIVE_LIMIT_TICKS := 6000
+const WANT_PASSENGERS := 10
+const ARRIVE_LIMIT_TICKS := 1500
 ## Metres the camera focus sits ahead of the subject, along the view's ground
 ## direction, so the subject stands between the focus and the lens.
 const AHEAD_M := 2.5
@@ -73,13 +73,12 @@ func _run() -> void:
 	_clock.seed_rng(world_seed)
 	print("PROBE sim_seed=", world_seed)
 	root.add_child(_main)
+	_clock.set_paused(true)
+	await _frames(5)
+	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
+	(_main.get_node("BuildMode") as BuildMode).set_tool(BuildMode.Tool.NONE)
+	await _frames(20)
 	_clock.set_process(false)
-	_clock.set_paused(false)
-	await _frames(3)
-	var mode := _main.get_node("BuildMode") as BuildMode
-	mode.set_process(false)
-	mode.set_tool(BuildMode.Tool.NONE)
-	(mode.get_node("Ghost") as Node3D).visible = false
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	_views = _main.get_node("PassengerViews") as PassengerViews
 	var staff := _main.get_node("Staff") as StaffSim
@@ -93,12 +92,15 @@ func _run() -> void:
 		_finish()
 		return
 	_beat("arrivals")
+	for i in WANT_PASSENGERS:
+		_sim.get_passenger(_sim.spawn_now(StarterFlight.first_flight())).hunger = 100
+	_clock.set_paused(false)
 	var until := _clock.tick + ARRIVE_LIMIT_TICKS
-	while _clock.tick < until and _sim.passenger_ids().size() < WANT_PASSENGERS:
+	while _clock.tick < until:
 		_clock.advance(SimClock.STEP)
+		for id in _sim.passenger_ids():
+			_sim.get_passenger(id).hunger = 100
 	await _frames(2)
-	for id in _sim.passenger_ids():
-		_sim.get_passenger(id).hunger = 100
 	print("PROBE passengers=%d" % _sim.passenger_ids().size())
 	_rig = _main.get_node("TycoonCamera") as TycoonCamera
 	_cam = _rig.get_node("Camera3D") as Camera3D
@@ -131,7 +133,9 @@ func _plate(ratio: float) -> void:
 		"close_%s id=%d distance=%.1f"
 		% ["min" if ratio <= 0.0 else "%.2f" % ratio, subject, _rig.distance]
 	)
-	var head := node.global_position + Vector3(0.0, HEAD_M, 0.0)
+	var body_top := _body_top_m(node)
+	var head := node.global_position + Vector3(0.0, body_top, 0.0)
+	print("PROBE %s body_top_m=%.2f icon_anchor_m=%.2f" % [tag, body_top, NeedIcons.LIFT_M])
 	var ok := _in_frame(head, tag + " head") and _in_frame(node.global_position, tag + " feet")
 	var first := node.get_node(NeedIcons.SPRITES[0]) as Sprite3D
 	ok = _in_frame(node.global_transform * first.position, tag + " anchor") and ok
@@ -139,6 +143,38 @@ func _plate(ratio: float) -> void:
 	if not first.visible:
 		_invalid("%s: the subject's icon is not visible" % tag)
 		return
+	var to_plate := Vector2(root.get_texture().get_size()) / root.get_visible_rect().size
+	for id in _sim.passenger_ids():
+		var other := _views.node_for(id)
+		var sprite := other.get_node(NeedIcons.SPRITES[0]) as Sprite3D
+		print(
+			(
+				"WHO %s id=%d stage=%s needs=%d root_plate=%s head_plate=%s anchor_plate=%s"
+				% [
+					tag.get_slice(" ", 0),
+					id,
+					Passenger.Stage.keys()[_sim.get_passenger(id).stage],
+					other.get_meta(&"needs", 0),
+					(_cam.unproject_position(other.global_position) * to_plate).round(),
+					(
+						(
+							_cam.unproject_position(
+								other.global_position + Vector3(0.0, _body_top_m(other), 0.0)
+							)
+							* to_plate
+						)
+						. round()
+					),
+					(
+						(
+							_cam.unproject_position(other.global_transform * sprite.position)
+							* to_plate
+						)
+						. round()
+					),
+				]
+			)
+		)
 	var head_rect := _head_rect(head)
 	var own := _icon_rects(node)
 	var foreign := 0
@@ -169,11 +205,25 @@ func _plate(ratio: float) -> void:
 	var img := root.get_texture().get_image()
 	img.convert(Image.FORMAT_RGBA8)
 	_save(img, "%s.png" % tag.get_slice(" ", 0))
-	var crop := Rect2i(head_rect.get_center() - Vector2(120, 120), Vector2i(240, 240))
+	var to_image := Vector2(img.get_size()) / root.get_visible_rect().size
+	var crop := Rect2i(head_rect.get_center() * to_image - Vector2(120, 120), Vector2i(240, 240))
 	crop = crop.intersection(Rect2i(Vector2i.ZERO, img.get_size()))
 	var small := img.get_region(crop)
 	small.resize(small.get_width() * 3, small.get_height() * 3, Image.INTERPOLATE_NEAREST)
 	_save(small, "%s_crop.png" % tag.get_slice(" ", 0))
+
+
+## The height over the node's root of the top of its skinned body meshes, in
+## metres (the body's own bounds, not an assumed height).
+func _body_top_m(node: Node3D) -> float:
+	var top := 0.0
+	for skeleton in node.find_children("*", "Skeleton3D", true, false):
+		for mesh in skeleton.find_children("*", "MeshInstance3D", true, false):
+			var box := (
+				(mesh as MeshInstance3D).global_transform * (mesh as MeshInstance3D).get_aabb()
+			)
+			top = maxf(top, box.end.y - node.global_position.y)
+	return top if top > 0.0 else HEAD_M
 
 
 ## The passenger with a shown icon nearest the rig's current focus.
