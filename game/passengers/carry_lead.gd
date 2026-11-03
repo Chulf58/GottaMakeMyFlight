@@ -156,12 +156,12 @@ static func stall_bar_palm(t: float) -> float:
 	return STALL_BAR_PALM_M * on * (1.0 - smoothstep(STALL_BAR_OUT.x, STALL_BAR_OUT.y, t))
 
 
-## The end of a hard case's lift off the floor into the hand (`want`, held at
-## `grip_at`, world, with the body drawn at `frame`), with its grip
-## FLOOR_CASE_END_M over the feet, not where the hand is drawn now: `want`
-## follows the hand, which this move poses, so a path rising to it raised the
-## hand, the end with it, and the hand again (crossing probe seed 777, board
-## item 2fbf5edb).
+## The end of a hard case's lift off the floor or out of a tray into the hand,
+## and of a roller's out of a tray (`want`, held at `grip_at`, world, with the
+## body drawn at `frame`), with its grip FLOOR_CASE_END_M over the feet, not
+## where the hand is drawn now: `want` follows the hand, which this move poses,
+## so a path rising to it raised the hand, the end with it, and the hand again
+## (crossing probe seed 777, board items 2fbf5edb and 2fd0356b).
 static func floor_end(frame: Transform3D, want: Transform3D, grip_at: Vector3) -> Transform3D:
 	return want.translated(Vector3.UP * (frame.origin.y + FLOOR_CASE_END_M - grip_at.y))
 
@@ -543,15 +543,20 @@ static func plan(
 	elif stall and from_end == End.REST and to_end == End.HELD and not roller:
 		anchor_from = anchor_to
 	var held_at := anchor_from.lerp(anchor_to, t)
-	# A hard case lifted off the floor into the hand outside a stall (floor_end(),
-	# floor_palm()).
-	var floor_case: bool = (
-		bag["kind"] == SecurityLooks.Kind.CASE
+	# A hard case lifted off the floor or out of a tray into the hand outside a
+	# stall, and a roller out of a tray, rise to floor_end(), not to `want`, which
+	# follows the hand this move poses: out of a lane tray the grip climbed to
+	# 1.66 m (a roller's to 1.56 m), the forearm in the case (board 2fd0356b).
+	# Only off the floor is a case's palm held over its top (floor_palm()). A
+	# roller off the floor parks on its wheels (RollerPark) or is not measured.
+	var from_floor: bool = flags.get("from_floor", false)
+	var case_up_out: bool = (
+		(bag["kind"] == SecurityLooks.Kind.CASE or (roller and not from_floor))
 		and not stall
 		and from_end == End.REST
 		and to_end == End.HELD
-		and flags.get("from_floor", false)
 	)
+	var floor_case: bool = case_up_out and from_floor and not roller
 	var on_back: bool = to_end == End.WORN and bag["carry"] == SecurityLooks.Carry.BACK
 	var on_path: Transform3D
 	if off_back or on_back:
@@ -596,7 +601,7 @@ static func plan(
 			var low: float = frame.origin.y + STALL_CARRY_GRIP_M
 			if not roller:
 				goal = want.translated(Vector3.UP * maxf(low - (want * anchor_to).y, 0.0))
-		elif floor_case:
+		elif case_up_out:
 			goal = floor_end(frame, want, want * anchor_to)
 		on_path = path(start, goal, t, frame, bag["from"], lift)
 		# (In a stall path() turns it: upright, tipped late into the carry.)

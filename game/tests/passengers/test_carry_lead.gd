@@ -450,7 +450,12 @@ func test_a_stall_set_down_is_held_from_its_start_and_a_roller_left_by_its_bar()
 ## Picked up off a stall's floor while the stooping hand is still low, a case's
 ## path rises toward the carry (the hand no lower than STALL_CARRY_GRIP_M over
 ## the feet), not toward where the low hand puts its carry end, which led the
-## hand down with it. Control: out of a stall the same move follows the low end.
+## hand down with it. Out of a stall a case no longer follows the low end
+## either: off the floor it rises to CarryLead.floor_end() (board 2fbf5edb),
+## and with no "from_floor" flag, as here, it is a case out of a tray, which
+## does the same since board 2fd0356b (it followed the hand up to 1.66 m).
+## Until then that was this test's control (the target following the low end
+## under 0.5 m); now both rise.
 func test_a_stall_pick_up_rises_to_the_carry_not_to_the_low_hand() -> void:
 	var move := _to_floor(SecurityLooks.Kind.CASE)
 	var bag: Dictionary = move[0]
@@ -469,7 +474,7 @@ func test_a_stall_pick_up_rises_to_the_carry_not_to_the_low_hand() -> void:
 	var low: Vector3 = CarryLead.plan(bag, k, start, want, Transform3D(), open, body)["targets"][0]
 	print("stall pick-up target at k %.2f: %s; outside: %s" % [k, up, low])
 	assert_float(up.y).is_greater(CarryLead.STALL_CARRY_GRIP_M * 0.9)
-	assert_float(low.y).is_less(0.5)
+	assert_float(low.y).is_greater(CarryLead.STALL_CARRY_GRIP_M * 0.9)
 
 
 ## A backpack going between the front carry (a stall's approach, StallCarry)

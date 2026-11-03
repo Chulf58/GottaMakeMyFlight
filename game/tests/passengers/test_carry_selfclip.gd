@@ -151,6 +151,45 @@ func test_a_case_off_the_floor_rises_to_a_fixed_height() -> void:
 	assert_float(end_y).is_equal_approx(CarryLead.FLOOR_CASE_END_M, 0.01)
 
 
+## A hard case or a roller lifted out of a tray into the hand rises to the same
+## fixed height (CarryLead.FLOOR_CASE_END_M grip over the feet) wherever the
+## hand is drawn: the move places the hand, and an end that followed it raised
+## the hand, the end with it and the hand again, to a grip 1.66 m up with the
+## forearm in the case at a lane's pickup table (board 2fd0356b). Mid-move, the
+## bag and the leading hand's target are where they are with the hand drawn
+## 0.3 m higher; at the end of the carry the grip is FLOOR_CASE_END_M up.
+## Control: the ends handed in are 0.3 m apart.
+func test_out_of_a_tray_a_case_or_roller_rises_to_a_fixed_height() -> void:
+	var in_tray := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.75, 0.56))
+	var flags := {"from_floor": false, "yaw": 0.0, "hand": 0}
+	var s := CarryLead.span(CarryLead.End.REST, CarryLead.End.HELD)
+	var mid := s.x + (s.y - s.x) * 0.45
+	var low := _body()
+	var high := _body()
+	high["grips"] = [Vector3(-0.3, 1.1, 0.05), Vector3(0.3, 1.1, 0.05)]
+	var at := func(body: Dictionary) -> Transform3D:
+		return CarryOnProps.carried(body["grips"][0], Vector3.ZERO, 0.0, 1.0)
+	var apart: float = (
+		(at.call(high) as Transform3D).origin.y - (at.call(low) as Transform3D).origin.y
+	)
+	assert_float(apart).is_equal_approx(0.3, 0.0001)
+	for kind in [SecurityLooks.Kind.CASE, SecurityLooks.Kind.ROLLER]:
+		var drawn := []
+		for body: Dictionary in [low, high]:
+			var bag := _bag(TRAY_AT, in_tray)
+			bag["kind"] = kind
+			var plan := CarryLead.plan(bag, mid, in_tray, at.call(body), Transform3D(), flags, body)
+			drawn.append([(plan["xf"] as Transform3D).origin, plan["targets"][0]])
+		print("kind %d mid-move bag and hand target, hand low then high: %s" % [kind, drawn])
+		assert_vector(drawn[0][0] as Vector3).is_equal_approx(drawn[1][0], Vector3.ONE * 0.0001)
+		assert_vector(drawn[0][1] as Vector3).is_equal_approx(drawn[1][1], Vector3.ONE * 0.0001)
+		var last := _bag(TRAY_AT, in_tray)
+		last["kind"] = kind
+		var done := CarryLead.plan(last, 0.999, in_tray, at.call(high), Transform3D(), flags, high)
+		var end_y: float = ((done["xf"] as Transform3D) * (done["anchor"] as Vector3)).y
+		assert_float(end_y).is_equal_approx(CarryLead.FLOOR_CASE_END_M, 0.01)
+
+
 ## Reaching for a pack on the back the hand starts at the side hang and ends at
 ## the loop; letting go of one it starts at the loop and ends at the side. In
 ## the carry the target is left as it is.
