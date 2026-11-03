@@ -43,7 +43,10 @@ func test_every_lane_along_the_road_keeps_the_centre_line_on_the_left() -> void:
 		)
 		assert_float(left.dot(to_centre)).is_greater(0.0)
 		checked += 1
-	assert_int(checked).is_equal(STARTER.lots.size() + 2)
+	# road_in has two stretches along the road (the through road from the east
+	# end, then the forecourt after it moves over), road_out one (the through
+	# road to the west end), and each lot exit one (board 0169bc4b).
+	assert_int(checked).is_equal(STARTER.lots.size() + 3)
 
 
 func test_the_near_carriageway_runs_west_with_the_curb_on_the_right() -> void:
