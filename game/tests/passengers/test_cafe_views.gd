@@ -177,7 +177,13 @@ func _text_box(label: Label3D) -> Rect2:
 			bottom = -size.y
 		VERTICAL_ALIGNMENT_CENTER:
 			bottom = -size.y / 2.0
-	var box := Rect2(Vector2(-size.x / 2.0 + label.offset.x * label.pixel_size, bottom), size)
+	var box := Rect2(
+		Vector2(
+			-size.x / 2.0 + label.offset.x * label.pixel_size,
+			bottom + label.offset.y * label.pixel_size
+		),
+		size
+	)
 	return box.grow(label.outline_size * label.pixel_size)
 
 
