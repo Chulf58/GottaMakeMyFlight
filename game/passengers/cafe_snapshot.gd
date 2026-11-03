@@ -173,6 +173,17 @@ static func _visit_problem(
 			),
 			"the dwell does not end dwell_ticks after it started and after the saved tick"
 		],
+		[
+			(
+				stage != Passenger.Stage.CAFE_SITTING_DOWN
+				or _runs_from(p.stage_tick, PassengerSim.SIT_DOWN_TICKS, tick)
+			),
+			"sitting down did not start by the saved tick or has run out"
+		],
+		[
+			not standing or _runs_from(p.stage_tick, PassengerSim.STAND_UP_TICKS, tick),
+			"getting up did not start by the saved tick or has run out"
+		],
 	]
 	for check in checks:
 		if not check[0]:
@@ -188,8 +199,10 @@ static func _visit_problem(
 ## the saved id with that seat (Relocation.destination_ok(); the room need not
 ## be ready, since the walls stay behind), and once it has left it walks to the
 ## seat or sits down again. A final exit (left -1) only gets up at the old
-## seat: paid (it was leaving anyway) or given up with no outcome and nothing
-## paid (its table left the room while it got up).
+## seat: paid (it was leaving anyway), or given up with no outcome and nothing
+## paid, which only a table no longer returnable to leaves (the same test
+## Relocation.drop_return_unless() makes; a given-up exit beside a table it
+## could go back to would skip what it owes).
 static func _relocation_problem(visit: CafeVisit, p: Passenger, grid: BuildGrid) -> String:
 	var moving := visit.relocation
 	if moving == null:
@@ -200,6 +213,8 @@ static func _relocation_problem(visit: CafeVisit, p: Passenger, grid: BuildGrid)
 		or Relocation.seat_at(moving.source, visit.seat_key).is_empty()
 	):
 		return "a relocation from no table seat"
+	var table := int(visit.seat_key.split(":")[0])
+	var returnable := Relocation.destination_ok(grid, table, &"cafe_table", visit.room)
 	var none := visit.outcome == CafeVisit.Outcome.NONE
 	if not moving.returns():
 		var paid := visit.settled and not none
@@ -208,8 +223,12 @@ static func _relocation_problem(visit: CafeVisit, p: Passenger, grid: BuildGrid)
 			return "a final exit that is not getting up at the old seat"
 		if not visit.served or not (paid or given_up):
 			return "a final exit neither paid nor given up"
+		if given_up and returnable:
+			return "a given-up exit beside a table it can go back to"
 		return ""
-	var dwell := RoomTypes.get_type(grid.get_room(visit.room).get("type", &"cafe")).dwell_ticks
+	if moving.exiting and not returnable:
+		return "the table it returns to is not in its room"
+	var dwell := RoomTypes.get_type(grid.get_room(visit.room)["type"]).dwell_ticks
 	if moving.left < 1 or moving.left > dwell:
 		return "a return owing %d dwell ticks, not 1 to %d" % [moving.left, dwell]
 	if not visit.served or not none or visit.settled:
@@ -219,14 +238,13 @@ static func _relocation_problem(visit: CafeVisit, p: Passenger, grid: BuildGrid)
 		return "" if back.has(p.stage) else "a return that does not match the stage"
 	if not standing:
 		return "a return that does not match the stage"
-	var table := int(visit.seat_key.split(":")[0])
-	var live := Relocation.placement(grid, table)
-	if (
-		not Relocation.destination_ok(grid, table, &"cafe_table", visit.room)
-		or Relocation.seat_at(live, visit.seat_key).is_empty()
-	):
-		return "the table it returns to is not in its room"
 	return ""
+
+
+## Whether a stage of `length` ticks that started at `start` has started but
+## not ended by `tick` (its step ends it on the tick it runs out).
+static func _runs_from(start: int, length: int, tick: int) -> bool:
+	return start <= tick and start + length > tick
 
 
 ## Whether a span of `length` ticks that started at `start` (the guest's stage

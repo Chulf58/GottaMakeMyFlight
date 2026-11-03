@@ -860,6 +860,12 @@ func _head_to_seat(p: Passenger, visit: CafeVisit) -> void:
 		_abandon(p, visit)
 		return
 	var ticks := JourneyForecast.walk_ticks(route["mm"]) + PassengerSim.SIT_DOWN_TICKS + owed
+	# Up from the old seat, the walk starts on the next tick (no double step).
+	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
+		ticks += 1
+	# The guest must start to get up before its deadline: on the deadline tick
+	# itself step() sends it off early, short-paid, instead of finishing.
+	ticks += 1
 	var arrival := VisitForecast.arrival(
 		_sim, p, ticks, seat["approach"], PassengerSim.STAND_UP_TICKS, visit.resume_stage
 	)

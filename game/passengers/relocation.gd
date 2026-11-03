@@ -66,15 +66,23 @@ func returns() -> bool:
 
 
 ## Whether object `id` on `grid` is still a `def_id` piece of room `room_id`
-## (FacilitySlots.piece_inside()), ready or not: a piece a visitor can return
-## to once the room is usable. After a move the walls stay behind, so the room
-## is often not ready yet while the visitor leaves the old spot.
+## (FacilitySlots.piece_inside()), and the room still the kind that uses it (a
+## toilet for a toilet_stall, a food room with seats for a cafe_table), ready
+## or not: a piece a visitor can return to once the room is usable. After a
+## move the walls stay behind, so the room is often not ready yet while the
+## visitor leaves the old spot.
 static func destination_ok(grid: BuildGrid, id: int, def_id: StringName, room_id: int) -> bool:
 	var record := grid.get_object(id)
 	var room := grid.get_room(room_id)
 	if record.is_empty() or room.is_empty() or record["def"] != def_id:
 		return false
-	return FacilitySlots.piece_inside(grid, id, room["rect"])
+	var type := RoomTypes.get_type(room["type"])
+	var kind_ok := false
+	if def_id == &"toilet_stall":
+		kind_ok = room["type"] == &"toilet"
+	elif def_id == &"cafe_table":
+		kind_ok = type != null and type.food and not type.walk_on
+	return kind_ok and FacilitySlots.piece_inside(grid, id, room["rect"])
 
 
 ## Keeps a visitor leaving the old spot from walking back to a piece that is no

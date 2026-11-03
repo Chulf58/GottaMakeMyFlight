@@ -34,8 +34,11 @@ const MOVED_TO := Vector2i(25, 10)
 const STRIP_STEP_TICKS := 4
 const MAX_FRAMES := 60
 const LIMIT_TICKS := 1500
-## Largest drawn step per tick that is not a teleport (test_room_move_toilet.gd).
-const MAX_STEP_M := 0.2
+## Largest drawn step a tick may take, as in test_room_move_toilet.gd: one
+## walking step. Measured on the position the views record for each tick
+## (PassengerViews.tick_position()), not on the node, which a frame draws
+## between two ticks; a frame is kept on every tick that takes more.
+const MAX_STEP_M := PassengerSim.WALK_MM / 1000.0 + 0.002
 const CAM_UP_M := 7.0
 const CAM_BACK_M := 3.0
 
@@ -195,6 +198,7 @@ func _strip() -> void:
 	)
 	var node := _views.node_for(p.id)
 	var last := node.global_position
+	var last_tick := _views.tick_position(p.id, true)
 	var worst := 0.0
 	var left_old := false
 	var resat := false
@@ -204,11 +208,14 @@ func _strip() -> void:
 		_clock.advance(SimClock.STEP)
 		await process_frame
 		node = _views.node_for(p.id)
-		var step := node.global_position.distance_to(last)
 		last = node.global_position
+		var at_tick := _views.tick_position(p.id, true)
+		var step := at_tick.distance_to(last_tick)
+		last_tick = at_tick
 		worst = maxf(worst, step)
-		if step > MAX_STEP_M:
-			print("JUMP tick=%d stage=%d step=%.3f at=%s" % [_clock.tick, p.stage, step, last])
+		var jumped := step > MAX_STEP_M
+		if jumped:
+			print("JUMP tick=%d stage=%d step=%.3f at=%s" % [_clock.tick, p.stage, step, at_tick])
 		var ghosts := Relocation.ghosts(_sim).size()
 		if ghosts == 0:
 			left_old = true
@@ -216,7 +223,7 @@ func _strip() -> void:
 			since_sat += 1
 			resat = true
 		var keep := (_clock.tick - move_tick) % STRIP_STEP_TICKS == 0
-		if keep or (resat and since_sat == 1):
+		if keep or jumped or (resat and since_sat == 1):
 			await _keep_frame(p, old_centre, new_centre, step, ghosts)
 		if resat and since_sat >= STRIP_STEP_TICKS * 3:
 			break

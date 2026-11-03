@@ -202,3 +202,78 @@ func test_a_toilet_save_owing_no_use_or_too_much_is_refused() -> void:
 			. is_false()
 		)
 	assert_bool(_loads(_with(data, "toilet", {"left": ToiletSim.USE_TICKS}))).is_true()
+
+
+func test_a_cafe_save_that_gave_up_beside_a_table_it_can_go_back_to_is_refused() -> void:
+	_cafe_exiting()
+	var data := _save()
+	# Served, no outcome, nothing paid, a final exit: only a lost table leaves that.
+	var given_up := _with(data, "cafe", {"left": -1})
+	assert_bool(_loads(given_up)).is_false()
+	assert_bool(_loads(given_up, _remove(_ids["air_table"]))).is_true()
+
+
+func test_a_relocation_save_returning_into_a_room_of_another_kind_is_refused() -> void:
+	_cafe_exiting()
+	var data := _save()
+	for kind in ["toilet", "stall"]:
+		(
+			assert_bool(_loads(_with_room_type(data, _ids["air_room"], kind)))
+			. override_failure_message(kind)
+			. is_false()
+		)
+	after_test()
+	_toilet_exiting()
+	data = _save()
+	assert_bool(_loads(_with_room_type(data, _ids["land_room"], "cafe"))).is_false()
+	assert_bool(_loads(data)).is_true()
+
+
+func test_a_cafe_save_getting_up_at_the_old_seat_outside_its_ticks_is_refused() -> void:
+	var p := _cafe_exiting()
+	var data := _save()
+	var tick := _world.clock.tick
+	assert_bool(_loads(_with_stage_tick(data, p.id, tick + 1))).is_false()
+	var expired := tick - PassengerSim.STAND_UP_TICKS
+	assert_bool(_loads(_with_stage_tick(data, p.id, expired))).is_false()
+	assert_bool(_loads(_with_stage_tick(data, p.id, expired + 1))).is_true()
+
+
+func test_a_cafe_save_sitting_down_outside_its_ticks_is_refused() -> void:
+	var grid := BuildGrid.new()
+	_ids = CafeTestLayout.build(grid)
+	_starts = PassengerTestWorld.starts_with(1500, 4000)
+	_world = PassengerTestWorld.make(grid, _starts)
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.hunger = 0
+	p.cafe_cooldown = 1000000
+	var started := false
+	while p.stage != Passenger.Stage.CAFE_SITTING_DOWN and _world.clock.tick < 1400:
+		_world.step()
+		if not started and p.stage == Passenger.Stage.TO_GATE:
+			started = _world.sim.cafes.try_visit(p)
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SITTING_DOWN)
+	var data := _save()
+	var tick := _world.clock.tick
+	assert_bool(_loads(data)).is_true()
+	assert_bool(_loads(_with_stage_tick(data, p.id, tick + 1))).is_false()
+	var expired := tick - PassengerSim.SIT_DOWN_TICKS
+	assert_bool(_loads(_with_stage_tick(data, p.id, expired))).is_false()
+
+
+## `data` with room `room_id` of the saved grid given room type `kind`.
+func _with_room_type(data: Dictionary, room_id: int, kind: String) -> Dictionary:
+	var out: Dictionary = data.duplicate(true)
+	for room: Dictionary in out["grid"]["rooms"]:
+		if int(room["id"]) == room_id:
+			room["type"] = kind
+	return out
+
+
+## `data` with passenger `id`'s saved stage tick set to `value`.
+func _with_stage_tick(data: Dictionary, id: int, value: int) -> Dictionary:
+	var out: Dictionary = data.duplicate(true)
+	for record: Dictionary in out["passengers"]["passengers"]:
+		if int(record["id"]) == id:
+			record["stage_tick"] = value
+	return out

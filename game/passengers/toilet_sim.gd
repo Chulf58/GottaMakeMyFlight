@@ -535,6 +535,12 @@ func _head_to_stall(p: Passenger, visit: ToiletVisit) -> void:
 	var ticks := (
 		JourneyForecast.walk_ticks(route["mm"]) + ENTER_TICKS + PassengerSim.SIT_DOWN_TICKS + owed
 	)
+	# Out of the old stall, the walk starts on the next tick (no double step).
+	if p.stage == Passenger.Stage.TOILET_EXIT:
+		ticks += 1
+	# The use must end before the deadline: on the deadline tick itself step()
+	# cuts it short instead.
+	ticks += 1
 	var arrival := VisitForecast.arrival(
 		_sim, p, ticks, stall["approach"], LEAVE_TICKS, visit.resume_stage
 	)
