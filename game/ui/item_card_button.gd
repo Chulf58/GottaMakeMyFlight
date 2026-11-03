@@ -1,0 +1,97 @@
+class_name ItemCardButton
+extends Button
+## A build tray's item card with its hover card (decision build-menu-items-show-
+## a-hover-card-with-a-description). Hovering the card pops a small info card
+## above it: the item's name, what it is, how it works and what it needs or
+## costs to run. Nothing extra shows until the pointer rests on the card. The
+## info is [about, how it works, needs], the fourth entry of an item in
+## BuildMenu.item().
+##
+## The card is a tooltip popup, as MoneySlot's is. It is placed above the item
+## card at its left edge through get_screen_transform() applied to a card-local
+## point (decision a-new-game-starts-with-no-build-tool-selected-refusal-
+## status), not from get_global_rect(), which would carry the card's own offset
+## twice. It keeps inside the window sideways.
+
+const HUD_THEME := preload("res://ui/hud_theme.tres")
+## The headings of the card's second and third parts.
+const HOW_HEADING := "How it works"
+const NEEDS_HEADING := "Needs and upkeep"
+## Width of the info card's text, in layout units.
+const CARD_TEXT_W := 280.0
+## Space between the item card and the info card above it.
+const CARD_GAP := 6.0
+
+## The item's name and its [about, how, needs] text.
+var title := ""
+var info: Array = []
+
+## The card last handed to the tooltip popup.
+var _card: Control
+
+
+## Gives the card its hover card. An empty `with_info` leaves it with none.
+func set_info(with_title: String, with_info: Array) -> void:
+	title = with_title
+	info = with_info
+	tooltip_text = card_text(title, info)
+
+
+## The info as plain text, one part per line under the name; "" with no info.
+## It is also what makes Godot ask for the hover card at all.
+static func card_text(card_title: String, card_info: Array) -> String:
+	if card_info.size() < 3:
+		return ""
+	return (
+		"%s\n%s\n%s: %s\n%s: %s"
+		% [card_title, card_info[0], HOW_HEADING, card_info[1], NEEDS_HEADING, card_info[2]]
+	)
+
+
+## The info card: the name, what the item is, then the two headed parts.
+func make_card() -> Control:
+	var box := VBoxContainer.new()
+	box.theme = HUD_THEME
+	box.name = "ItemInfoCard"
+	box.add_child(_text(title, &"HudTitle"))
+	box.add_child(_text(info[0], &""))
+	box.add_child(_text(HOW_HEADING, &"HudHint"))
+	box.add_child(_text(info[1], &""))
+	box.add_child(_text(NEEDS_HEADING, &"HudHint"))
+	box.add_child(_text(info[2], &""))
+	return box
+
+
+func _text(text: String, variation: StringName) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.theme_type_variation = variation
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size.x = CARD_TEXT_W
+	return label
+
+
+func _make_custom_tooltip(_for_text: String) -> Object:
+	if info.size() < 3:
+		return null
+	_card = make_card()
+	_card.tree_entered.connect(_place_card, CONNECT_ONE_SHOT | CONNECT_DEFERRED)
+	return _card
+
+
+## Where the popup's top-left goes: above the item card at its left edge, kept
+## inside the window sideways. `card_size` is the popup's size.
+func card_screen_position(card_size: Vector2) -> Vector2i:
+	var at := get_screen_transform() * Vector2(0.0, -card_size.y - CARD_GAP)
+	var room := get_viewport().get_visible_rect().size.x - card_size.x
+	return Vector2i(clampf(at.x, 0.0, maxf(room, 0.0)), maxf(at.y, 0.0))
+
+
+func _place_card() -> void:
+	if not is_inside_tree() or not is_instance_valid(_card) or not _card.is_inside_tree():
+		return
+	var popup := _card.get_window()
+	if popup == null or popup == get_window():
+		return
+	popup.reset_size()
+	popup.position = card_screen_position(Vector2(popup.size))
