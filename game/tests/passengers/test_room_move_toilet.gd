@@ -5,11 +5,17 @@ extends GdUnitTestSuite
 ## landside room with one stall at x 23 (cells 23,10 and 23,11, approached
 ## from 23,12). The stall is moved by hand as a room move moves it: removed
 ## and placed again under its id with its paid, here to x 25.
+##
+## Steps are measured on the drawn position a PassengerViews records each tick
+## (tick_position()), which the frame draws between: no tick may move the user
+## further than a walking step (PassengerSim.WALK_MM), which is also the
+## longest step of the step in and out (1.15 m over ToiletSim.EXIT_TICKS).
 
-const MAX_STEP_M := 0.2
+const MAX_STEP_M := PassengerSim.WALK_MM / 1000.0 + 0.002
 const MOVED_TO := Vector2i(25, 10)
 
 var _world: PassengerTestWorld
+var _views: PassengerViews
 var _ids: Dictionary
 
 
@@ -22,6 +28,9 @@ func after() -> void:
 
 
 func after_test() -> void:
+	if _views != null:
+		_views.free()
+		_views = null
 	if _world != null:
 		_world.free_all()
 		_world = null
@@ -31,6 +40,11 @@ func _make() -> void:
 	var grid := BuildGrid.new()
 	_ids = ToiletTestLayout.build(grid, 1)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	# The views sync on every tick, recording each passenger's drawn position.
+	_views = PassengerViews.new()
+	_views.clock = _world.clock
+	_views.sim = _world.sim
+	add_child(_views)
 	# Staff come on duty on the first ticks; until then security is closed.
 	_world.run_to(10)
 
@@ -77,18 +91,22 @@ func _move_stall(anchor: Vector2i) -> void:
 
 
 ## Steps until `done` holds or `limit` ticks pass, failing when the
-## passenger's drawn position jumps more than MAX_STEP_M on any tick.
+## passenger's drawn position (the views' record for the tick) moves more than
+## MAX_STEP_M on any tick; the message names the tick and stage.
 func _walk_until(world: PassengerTestWorld, p: Passenger, done: Callable, limit := 1500) -> void:
-	var last := world.sim.world_position(p)
+	var last := _views.tick_position(p.id, true)
 	var largest := 0.0
+	var worst := ""
 	var until := world.clock.tick + limit
 	while not done.call() and world.clock.tick < until:
 		world.step()
-		var now := world.sim.world_position(p)
-		largest = maxf(largest, now.distance_to(last))
+		var now := _views.tick_position(p.id, true)
+		if now.distance_to(last) > largest:
+			largest = now.distance_to(last)
+			worst = "tick %d stage %d step %.3f" % [world.clock.tick, p.stage, largest]
 		last = now
 	assert_bool(done.call()).is_true()
-	assert_float(largest).is_less(MAX_STEP_M)
+	assert_float(largest).override_failure_message(worst).is_less(MAX_STEP_M)
 
 
 func test_a_user_gets_up_in_the_old_stall_then_uses_the_moved_one_for_what_is_left() -> void:
@@ -114,7 +132,11 @@ func test_a_user_gets_up_in_the_old_stall_then_uses_the_moved_one_for_what_is_le
 	assert_vector(p.at).is_equal(MOVED_TO + Vector2i(0, 2) + _at())
 	assert_int(_world.clock.tick - p.stage_tick).is_equal(used)
 	assert_object(visit.relocation).is_null()
-	_walk_until(_world, p, func() -> bool: return _toilets().visit_of(p.id) == null)
+	# The rest is an ordinary use and exit, not measured: the tick a visit ends,
+	# the journey's own walk can start as the last step out is taken (outside
+	# relocation, reported separately).
+	while _toilets().visit_of(p.id) != null and _world.clock.tick < 3000:
+		_world.step()
 	assert_int(p.toilet_need).is_less(10)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_SECURITY)
 

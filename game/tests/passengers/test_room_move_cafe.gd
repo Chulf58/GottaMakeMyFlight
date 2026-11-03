@@ -8,9 +8,12 @@ extends GdUnitTestSuite
 ## placed again under its id with its paid, as RoomMove does; the RoomMove
 ## cases turn the whole room in place.
 
-const MAX_STEP_M := 0.2
+## The longest drawn step a tick may take: a walking step (PassengerSim.WALK_MM),
+## measured on the position the views record for each tick (tick_position()).
+const MAX_STEP_M := PassengerSim.WALK_MM / 1000.0 + 0.002
 
 var _world: PassengerTestWorld
+var _views: PassengerViews
 var _ids: Dictionary
 var _stages: Dictionary = {}
 
@@ -24,6 +27,9 @@ func after() -> void:
 
 
 func after_test() -> void:
+	if _views != null:
+		_views.free()
+		_views = null
 	if _world != null:
 		_world.free_all()
 		_world = null
@@ -34,6 +40,10 @@ func _make() -> void:
 	var grid := BuildGrid.new()
 	_ids = CafeTestLayout.build(grid)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 4000))
+	_views = PassengerViews.new()
+	_views.clock = _world.clock
+	_views.sim = _world.sim
+	add_child(_views)
 	_world.sim.stage_changed.connect(
 		func(id: int, stage: Passenger.Stage) -> void:
 			if not _stages.has(id):
@@ -79,17 +89,25 @@ func _move_table(anchor: Vector2i) -> void:
 
 ## Steps until `done` holds or `limit` ticks pass, failing on any tick the
 ## guest's drawn position jumps more than MAX_STEP_M. Returns the largest step.
-func _walk_until(p: Passenger, done: Callable, limit := 1500) -> float:
-	var last := _world.sim.world_position(p)
+## With `visit_end`, `done` is the visit ending and that last tick is not
+## measured: the tick a visit ends, the journey's own walk starts as the last
+## step off the seat is taken, outside relocation (reported separately).
+func _walk_until(p: Passenger, done: Callable, limit := 1500, visit_end := false) -> float:
+	var last := _views.tick_position(p.id, true)
 	var largest := 0.0
+	var worst := ""
 	var until := _world.clock.tick + limit
 	while not done.call() and _world.clock.tick < until:
 		_world.step()
-		var now := _world.sim.world_position(p)
-		largest = maxf(largest, now.distance_to(last))
+		var now := _views.tick_position(p.id, true)
+		if visit_end and done.call():
+			break
+		if now.distance_to(last) > largest:
+			largest = now.distance_to(last)
+			worst = "tick %d stage %d step %.3f" % [_world.clock.tick, p.stage, largest]
 		last = now
 	assert_bool(done.call()).is_true()
-	assert_float(largest).is_less(MAX_STEP_M)
+	assert_float(largest).override_failure_message(worst).is_less(MAX_STEP_M)
 	return largest
 
 
@@ -121,11 +139,23 @@ func test_a_seated_guest_gets_up_at_the_old_seat_then_sits_at_the_moved_table() 
 	assert_object(visit.relocation).is_null()
 	# Only the dwell it still owed when it got up.
 	assert_int(visit.dwell_end - _world.clock.tick).is_equal(owed - 1)
-	_walk_until(p, func() -> bool: return _cafes().visit_of(p.id) == null)
+	_walk_until(p, func() -> bool: return _cafes().visit_of(p.id) == null, 1500, true)
 	assert_int(visit.outcome).is_equal(CafeVisit.Outcome.COMPLETE)
 	assert_bool(visit.settled).is_true()
 	assert_int(_world.sim.wallet.balance).is_equal(cash + visit.amount)
 	assert_int(visit.amount).is_greater(0)
+
+
+func test_a_guest_walking_off_sideways_from_its_old_seat_takes_one_step_a_tick() -> void:
+	_make()
+	var p := _guest_to(Passenger.Stage.CAFE_SEATED)
+	# One cell east: the walk to the seat's new approach (25,7) sets off east,
+	# across the last step of getting up (south-west), so a tick taking both
+	# would move about 0.103 m.
+	_move_table(Vector2i(25, 6))
+	_walk_until(p, func() -> bool: return p.stage == Passenger.Stage.CAFE_TO_SEAT)
+	_walk_until(p, func() -> bool: return p.stage == Passenger.Stage.CAFE_SEATED)
+	assert_vector(p.at).is_equal(Vector2i(25, 7) + _at())
 
 
 func test_a_second_move_mid_exit_changes_the_walk_not_the_exit() -> void:
@@ -159,7 +189,7 @@ func test_a_guest_already_getting_up_finishes_at_the_old_seat_and_pays_once() ->
 	_world.step()
 	assert_int(visit.relocation.left).is_equal(-1)
 	assert_float(_cafes().seat_position(p).distance_to(stood_at)).is_less(MAX_STEP_M)
-	_walk_until(p, func() -> bool: return _cafes().visit_of(p.id) == null, 40)
+	_walk_until(p, func() -> bool: return _cafes().visit_of(p.id) == null, 40, true)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
 	assert_int(_world.sim.wallet.balance).is_equal(paid)
 	assert_int(Relocation.ghosts(_world.sim).size()).is_equal(0)
@@ -189,7 +219,7 @@ func test_a_guest_whose_rest_of_visit_misses_the_flight_gives_up_unpaid() -> voi
 	var cash := _world.sim.wallet.balance
 	_stages.erase(p.id)
 	_move_table(Vector2i(24, 5))
-	_walk_until(p, func() -> bool: return _cafes().visit_of(p.id) == null, 60)
+	_walk_until(p, func() -> bool: return _cafes().visit_of(p.id) == null, 60, true)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
 	assert_bool(visit.settled).is_false()
 	assert_int(_world.sim.wallet.balance).is_equal(cash)
@@ -230,7 +260,7 @@ func test_a_room_move_turned_in_place_relocates_the_guest_onto_the_new_seat() ->
 		. override_failure_message("%s, table %s" % [visit.seat, record])
 		. is_true()
 	)
-	_walk_until(p, func() -> bool: return _cafes().visit_of(p.id) == null)
+	_walk_until(p, func() -> bool: return _cafes().visit_of(p.id) == null, 1500, true)
 	assert_bool(visit.settled).is_true()
 	assert_int(_world.sim.wallet.balance).is_equal(cash + visit.amount)
 

@@ -65,6 +65,26 @@ func returns() -> bool:
 	return left >= 0
 
 
+## Whether object `id` on `grid` is still a `def_id` piece of room `room_id`
+## (FacilitySlots.piece_inside()), ready or not: a piece a visitor can return
+## to once the room is usable. After a move the walls stay behind, so the room
+## is often not ready yet while the visitor leaves the old spot.
+static func destination_ok(grid: BuildGrid, id: int, def_id: StringName, room_id: int) -> bool:
+	var record := grid.get_object(id)
+	var room := grid.get_room(room_id)
+	if record.is_empty() or room.is_empty() or record["def"] != def_id:
+		return false
+	return FacilitySlots.piece_inside(grid, id, room["rect"])
+
+
+## Keeps a visitor leaving the old spot from walking back to a piece that is no
+## longer one of its room's (removed, or its room gone): its return becomes a
+## final exit (left -1), and the visit ends when the exit does.
+func drop_return_unless(grid: BuildGrid, id: int, def_id: StringName, room_id: int) -> void:
+	if exiting and returns() and not destination_ok(grid, id, def_id, room_id):
+		left = -1
+
+
 ## The JSON shape of a save.
 func to_record() -> Dictionary:
 	var anchor: Vector2i = source["anchor"]
@@ -158,16 +178,25 @@ static func ghosts(sim: PassengerSim) -> Array[Dictionary]:
 	for id in sim.cafes.visit_ids():
 		var visit := sim.cafes.visit_of(id)
 		if CafeSim.SEAT_STAGES.has(sim.get_passenger(id).stage):
-			_ghost(out, sim.grid, int(visit.seat.get("object_id", 0)), visit.piece)
+			var seat_id := int(visit.seat.get("object_id", 0))
+			_ghost(out, sim.grid, seat_id, visit.piece, visit.relocation)
 	for id in sim.toilets.visit_ids():
 		var visit := sim.toilets.visit_of(id)
 		if ToiletSim.STALL_STAGES.has(sim.get_passenger(id).stage):
-			_ghost(out, sim.grid, visit.stall_id, visit.piece)
+			_ghost(out, sim.grid, visit.stall_id, visit.piece, visit.relocation)
 	return out
 
 
-static func _ghost(out: Array[Dictionary], grid: BuildGrid, id: int, seen: Dictionary) -> void:
-	if id == 0 or not moved(seen, placement(grid, id)):
+## Adds the stand-in of piece `id` last seen at `seen`: when the grid holds the
+## piece elsewhere, or, for a visitor still leaving the old spot (`moving`),
+## anywhere else or nowhere, so a piece removed while its visitor gets up is
+## still drawn under it.
+static func _ghost(
+	out: Array[Dictionary], grid: BuildGrid, id: int, seen: Dictionary, moving: Relocation
+) -> void:
+	var live := placement(grid, id)
+	var leaving := moving != null and moving.exiting and not seen.is_empty() and live != seen
+	if id == 0 or not (leaving or moved(seen, live)):
 		return
 	var entry := seen.duplicate()
 	entry["id"] = id

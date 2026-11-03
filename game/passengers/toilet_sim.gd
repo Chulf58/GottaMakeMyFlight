@@ -483,6 +483,8 @@ func _keep(p: Passenger, visit: ToiletVisit) -> bool:
 ## alone: held at its old stall, or (for a walker) handled.
 func _relocates(p: Passenger, visit: ToiletVisit) -> bool:
 	if visit.relocation != null and visit.relocation.exiting:
+		# A stall gone from the room meanwhile: it only finishes leaving.
+		visit.relocation.drop_return_unless(_sim.grid, visit.stall_id, &"toilet_stall", visit.room)
 		return true
 	if not Relocation.moved(visit.piece, Relocation.placement(_sim.grid, visit.stall_id)):
 		return false
@@ -543,7 +545,12 @@ func _head_to_stall(p: Passenger, visit: ToiletVisit) -> void:
 	visit.piece = Relocation.placement(_sim.grid, visit.stall_id)
 	visit.room = stall["room"]
 	visit.deadline = _live_deadline(p, visit)
-	VisitRoute.start(p, route)
+	if p.stage == Passenger.Stage.TOILET_EXIT:
+		# This tick took the last step out of the old stall: the walk starts on
+		# the next (_walk_step()), so no tick moves it by two steps at once.
+		p.clear_path()
+	else:
+		VisitRoute.start(p, route)
 	if p.stage != Passenger.Stage.TOILET_WALK:
 		_set_stage.call(p, Passenger.Stage.TOILET_WALK)
 

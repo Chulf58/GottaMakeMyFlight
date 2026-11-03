@@ -505,6 +505,10 @@ func rederive() -> void:
 			visit.seat = layout.seat(visit.room, visit.seat_key)
 			visit.piece = Relocation.placement(_sim.grid, int(visit.seat.get("object_id", 0)))
 		visit.venue = layout.cafe(visit.room).get("type", visit.venue)
+		if moving:
+			# Its room is often not ready while the guest gets up (the walls stay
+			# behind), so the type comes from the room itself.
+			visit.venue = _sim.grid.get_room(visit.room).get("type", visit.venue)
 
 
 ## The visits `p` could start, nearest cafe by path first, ties to the lower
@@ -803,6 +807,9 @@ func _seat_step(p: Passenger, visit: CafeVisit) -> void:
 ## table's new spot, as after any edit.
 func _relocates(p: Passenger, visit: CafeVisit) -> bool:
 	if visit.relocation != null and visit.relocation.exiting:
+		# A table gone from the room meanwhile: it only finishes getting up.
+		var table := int(visit.seat.get("object_id", 0))
+		visit.relocation.drop_return_unless(_sim.grid, table, &"cafe_table", visit.room)
 		return true
 	var live := Relocation.placement(_sim.grid, int(visit.seat.get("object_id", 0)))
 	if not Relocation.moved(visit.piece, live):
@@ -862,7 +869,12 @@ func _head_to_seat(p: Passenger, visit: CafeVisit) -> void:
 	visit.seat = seat
 	visit.piece = Relocation.placement(_sim.grid, int(seat["object_id"]))
 	visit.deadline = _live_deadline(p, visit)
-	VisitRoute.start(p, route)
+	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
+		# This tick took the last step off the old seat: the walk starts on the
+		# next (_seat_step()), so no tick moves it by two steps at once.
+		p.clear_path()
+	else:
+		VisitRoute.start(p, route)
 	if p.stage != Passenger.Stage.CAFE_TO_SEAT:
 		_set_stage.call(p, Passenger.Stage.CAFE_TO_SEAT)
 

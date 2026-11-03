@@ -103,13 +103,12 @@ static func _visit_problem(
 ) -> String:
 	var stall := layout.stall(visit.stall_id)
 	var moving := visit.relocation
+	var problem := _relocation_problem(visit, p, grid)
+	if problem != "":
+		return problem
 	if moving != null and moving.exiting:
 		# Still leaving the stall's old spot: checked against the saved spot.
-		if moving.source["def"] != &"toilet_stall" or not RELOCATED_EXITS.has(p.stage):
-			return "a relocation that does not match the stage"
 		stall = ToiletLayout.entry_at(grid, visit.stall_id, visit.room, moving.source)
-	elif moving != null and not RELOCATED_RETURNS.has(p.stage):
-		return "a relocation that does not match the stage"
 	if stall.is_empty():
 		return "no such toilet stall"
 	if int(stall["room"]) != visit.room:
@@ -122,6 +121,33 @@ static func _visit_problem(
 		var length: int = ToiletSim.PHASE_TICKS[p.stage]
 		if p.stage_tick > tick or p.stage_tick + length <= tick:
 			return "stage %d does not run past the saved tick" % p.stage
+	return ""
+
+
+## Why a visit's Relocation cannot be what continuous play left, or "" when it
+## can (or there is none). Its source must be a stall. A return owes 1 to
+## ToiletSim.USE_TICKS; while it still leaves the old spot, the stall it goes
+## back to must still be a toilet_stall of the visit's room under the saved id
+## (Relocation.destination_ok(); the room need not be ready, since the walls
+## stay behind), and once it has left it walks to the stall, steps in or sits
+## down. A final exit (left -1) only leaves the old spot.
+static func _relocation_problem(visit: ToiletVisit, p: Passenger, grid: BuildGrid) -> String:
+	var moving := visit.relocation
+	if moving == null:
+		return ""
+	if moving.source["def"] != &"toilet_stall":
+		return "a relocation from no stall"
+	var leaving := moving.exiting and RELOCATED_EXITS.has(p.stage)
+	if not moving.returns():
+		return "" if leaving else "a final exit that is not leaving the old stall"
+	if moving.left < 1 or moving.left > ToiletSim.USE_TICKS:
+		return "a return owing %d use ticks, not 1 to %d" % [moving.left, ToiletSim.USE_TICKS]
+	if not moving.exiting:
+		return "" if RELOCATED_RETURNS.has(p.stage) else "a return that does not match the stage"
+	if not leaving:
+		return "a return that does not match the stage"
+	if not Relocation.destination_ok(grid, visit.stall_id, &"toilet_stall", visit.room):
+		return "the stall it returns to is not in its room"
 	return ""
 
 
