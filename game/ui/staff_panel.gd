@@ -21,7 +21,8 @@ extends CanvasLayer
 ## above the bar, in the item tray's place, and a category or a tool closes it.
 ## The hint is not part of the card: it stays on screen in a card of its own just above
 ## the bar (above an open tray or card), whether the card is open or not, so a closed
-## airport is never hidden behind a closed card. Without a `menu` (a test) the
+## airport is never hidden behind a closed card. While the build ghost is over the
+## hint it fades to FADED_ALPHA (it never takes a click). Without a `menu` (a test) the
 ## card is always shown.
 
 const ROLES: Array[StaffMember.Role] = [
@@ -73,6 +74,10 @@ const OPEN_CUE := "Open! Starter contract: %s to %s, daily"
 const ROLE_WIDTH := 180.0
 ## Width of the hint card's text, in layout pixels.
 const HINT_W := 560.0
+## The hint card's opacity while the build ghost is over it, and how fast it
+## fades to that or back (opacity per second).
+const FADED_ALPHA := 0.35
+const FADE_SPEED := 6.0
 
 ## In a scene the Staff node; tests set it before the panel enters the tree.
 @export var staff: StaffSim
@@ -321,8 +326,24 @@ func _build_hint() -> void:
 	_place_hint()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_place_hint()
+	var ghost := Rect2()
+	if menu != null:
+		ghost = GhostBounds.build_rect(menu.build_mode, get_viewport().get_camera_3d())
+	fade_for(ghost, delta)
+
+
+## Fades the hint card to FADED_ALPHA while `ghost` (the build ghost's bounds on
+## screen, empty when there is none) overlaps it, and back to full opacity when
+## it does not, `delta` seconds of the fade. The card never takes a click, so
+## the ghost shows through and the pointer reaches the grid under it.
+func fade_for(ghost: Rect2, delta: float) -> void:
+	var covered := (
+		ghost.has_area() and _hint_box.visible and _hint_box.get_global_rect().intersects(ghost)
+	)
+	var target := FADED_ALPHA if covered else 1.0
+	_hint_box.modulate.a = move_toward(_hint_box.modulate.a, target, delta * FADE_SPEED)
 
 
 ## Docks the hint card above whatever stands over the bar now.
