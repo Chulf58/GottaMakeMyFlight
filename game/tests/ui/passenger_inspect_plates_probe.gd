@@ -12,7 +12,8 @@ extends SceneTree
 ## main.tscn boots with a random sim seed (printed), the starter terminal (the
 ## HUD's debug button), a check-in agent and a security officer hired, and two
 ## plant pots put straight on the grid beside the first gate seats (a forced
-## fixture that skips the wallet), then the 300-passenger debug batch. The sim
+## fixture that skips the wallet), then the 300-passenger debug batch as soon
+## as a flight opens for passengers (it is refused before that). The sim
 ## is stepped by the clock's own advance() until one passenger has a long-queue
 ## thought and one a nice-decor thought. Plates, each proving its subject in
 ## frame (projected inside the viewport with a margin) and, for the floor spot,
@@ -161,8 +162,6 @@ func _boot() -> void:
 	staff.hire(StaffMember.Role.SECURITY)
 	await _frames(4)
 	_place_plants()
-	_hud.press_debug_spawn()
-	print("PROBE batch seed=%d status=%s" % [_sim.last_batch_seed, _hud.status_text()])
 	await _frames(10)
 
 
@@ -174,7 +173,7 @@ func _place_plants() -> void:
 		for step: Vector2i in steps:
 			if placed >= 2:
 				break
-			var cell: Vector2i = seat["front"] + step * 2
+			var cell: Vector2i = seat["front"] + step
 			var result := _sim.grid.apply(BuildEdit.place_object(&"plant_pot_1a", cell, 0))
 			if result.ok:
 				placed += 1
@@ -197,6 +196,11 @@ func _thinkers() -> Dictionary:
 		for i in TICKS_PER_FRAME:
 			_tick()
 		_beat("think %d" % _clock.tick)
+		# The batch is refused until a flight opens for passengers.
+		if _sim.last_batch_seed == 0:
+			_hud.press_debug_spawn()
+			if _sim.last_batch_seed != 0:
+				print("BATCH tick=%d seed=%d" % [_clock.tick, _sim.last_batch_seed])
 		for id in _sim.passenger_ids():
 			var p := _sim.get_passenger(id)
 			for entry in PassengerThoughts.entries(p):
@@ -247,15 +251,19 @@ func _prove_card(label: String) -> bool:
 	var card := _inspect.get_global_rect()
 	var column := Rect2((view.x - BuildMenu.COLUMN_W) / 2.0, 0.0, BuildMenu.COLUMN_W, view.y)
 	var inside := Rect2(Vector2.ZERO, view).grow(-MARGIN_PX).encloses(card)
-	var clear := not card.intersects(column)
+	var dock := _main.get_node("BuildMenu").find_child("TemplatesDock", true, false) as Control
+	var dock_rect := dock.get_global_rect() if dock != null else Rect2()
+	var clear := not card.intersects(column) and not card.intersects(dock_rect)
 	print(
 		(
-			"CARD %s rect=%s column=%s inside=%s clear=%s rows=%s"
-			% [label, card, column, inside, clear, _inspect.row_texts()]
+			"CARD %s rect=%s column=%s templates=%s inside=%s clear=%s rows=%s"
+			% [label, card, column, dock_rect, inside, clear, _inspect.row_texts()]
 		)
 	)
 	if not (_inspect.visible and inside and clear and _inspect.row_texts().size() > 0):
-		_invalid("%s: card hidden, off screen, over the build column or empty" % label)
+		_invalid(
+			"%s: card hidden, off screen, over the build column or Templates, or empty" % label
+		)
 		return false
 	return true
 
@@ -284,17 +292,33 @@ func _spot_seen(label: String, required: bool) -> bool:
 	await physics_frame
 	await physics_frame
 	var spot := _inspect.marker.get_node("Spot") as MeshInstance3D
-	var target := spot.global_position
+	var centre := spot.global_position
 	var from := _cam.global_position
-	var query := PhysicsRayQueryParameters3D.create(
-		from, target + (target - from).normalized() * 0.05
+	var space := _cam.get_world_3d().direct_space_state
+	# The centre and 8 points round the disc: people standing on the cell can
+	# cover part of it, so one clear ray is enough.
+	var hits := 0
+	var blockers := {}
+	for i in 9:
+		var target := centre
+		if i > 0:
+			var angle := TAU * (i - 1) / 8.0
+			target += Vector3(cos(angle), 0.0, sin(angle)) * ThoughtMarker.SPOT_RADIUS_M * 0.8
+		var query := PhysicsRayQueryParameters3D.create(
+			from, target + (target - from).normalized() * 0.05
+		)
+		var hit := space.intersect_ray(query)
+		if not hit.is_empty() and spot.is_ancestor_of(hit["collider"]):
+			hits += 1
+		elif not hit.is_empty():
+			var by := str((hit["collider"] as Node).get_parent().name)
+			blockers[by] = int(blockers.get(by, 0)) + 1
+	var seen := hits > 0
+	print(
+		"SPOT %s seen=%s hits=%d/9 blocked_by=%s bodies=%d" % [label, seen, hits, blockers, bodies]
 	)
-	var hit := _cam.get_world_3d().direct_space_state.intersect_ray(query)
-	var seen: bool = not hit.is_empty() and spot.is_ancestor_of(hit["collider"])
-	var by := "nothing" if hit.is_empty() else str((hit["collider"] as Node).get_parent().name)
-	print("SPOT %s seen=%s first_hit=%s bodies=%d" % [label, seen, by, bodies])
 	if required and not seen:
-		_invalid("%s: the floor spot is hidden behind %s" % [label, by])
+		_invalid("%s: the floor spot is hidden behind %s" % [label, blockers])
 	return seen
 
 

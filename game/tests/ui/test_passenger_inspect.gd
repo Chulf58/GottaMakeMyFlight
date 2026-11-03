@@ -162,14 +162,16 @@ func test_deselecting_or_a_load_clears_the_pin() -> void:
 	assert_bool(_inspect.marker.is_shown()).is_false()
 
 
-func test_the_card_keeps_the_follow_texts_bottom_left_place() -> void:
+func test_the_card_sits_bottom_left_above_the_templates_button() -> void:
 	_select()
 	var label := _hud.find_child("FollowText", true, false) as Label
 	assert_float(_inspect.anchor_top).is_equal(1.0)
 	assert_float(_inspect.offset_left).is_equal(label.offset_left)
 	assert_float(_inspect.offset_right).is_less_equal(label.offset_right)
+	# The Templates dock's top edge, up from the bottom (TemplatesPage.attach()).
+	var dock_top := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP + BuildMenu.BAR_H
+	assert_float(-_inspect.offset_bottom).is_greater(dock_top)
 	assert_float(_inspect.offset_right - _inspect.offset_left).is_less_equal(PassengerInspect.MAX_W)
-	assert_float(_inspect.offset_bottom).is_equal(label.offset_bottom)
 	assert_int(_inspect.grow_vertical).is_equal(Control.GROW_DIRECTION_BEGIN)
 
 

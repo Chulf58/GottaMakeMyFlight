@@ -2,7 +2,7 @@ class_name PassengerInspect
 extends PanelContainer
 ## The inspect card of the followed passenger (HUD 4/7, decision passenger-
 ## inspect-thoughts-recorded-at-sim-outcomes-saved-pin-marks-where), in the
-## follow text's bottom-left place, which PassengerHud hides while the card
+## bottom-left place of the follow text, which PassengerHud hides while the card
 ## shows. Live status (stage, flight, mood, hunger, toilet need, boredom, and
 ## on their own line whether it runs late and what holds it up right now,
 ## both when both hold) is kept apart from its thoughts
@@ -18,6 +18,10 @@ extends PanelContainer
 ## The card's widest, so it stays a card on a wide screen.
 const MAX_W := 420.0
 const MIN_W := 160.0
+## The card's bottom edge, up from the bottom of the screen: one GAP above
+## BuildMenu's Templates button, which docks at the left edge one bar's height
+## above the category bar (TemplatesPage.attach()).
+const BOTTOM := BuildMenu.MARGIN + 2.0 * BuildMenu.BAR_H + 2.0 * BuildMenu.GAP
 
 var sim: PassengerSim
 var views: PassengerViews
@@ -80,8 +84,8 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(fit)
 
 
-## Bottom-left, left of BuildMenu's centre column, growing upward: the follow
-## text's place (PassengerHud.FOLLOW_TOP and FOLLOW_BOTTOM).
+## Bottom-left, left of BuildMenu's centre column and above its Templates
+## button, growing upward.
 func fit() -> void:
 	var room := (get_viewport().get_visible_rect().size.x - BuildMenu.COLUMN_W) / 2.0 - 28.0
 	anchor_left = 0.0
@@ -90,8 +94,8 @@ func fit() -> void:
 	anchor_bottom = 1.0
 	offset_left = 16.0
 	offset_right = 16.0 + clampf(room, MIN_W, MAX_W)
-	offset_top = -PassengerHud.FOLLOW_TOP
-	offset_bottom = -PassengerHud.FOLLOW_BOTTOM
+	offset_top = -BOTTOM
+	offset_bottom = -BOTTOM
 	grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 
