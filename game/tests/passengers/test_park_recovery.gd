@@ -93,10 +93,13 @@ func test_a_seat_lost_mid_park_holds_the_walker_until_the_roller_is_collected() 
 		assert_int(p.path.size()).is_greater_equal(2)
 
 
-## The normal path: a roller walker sitting down is seated SIT_DOWN_TICKS after
-## and stands up and walks on STAND_UP_TICKS after its boarding, never held to
-## collect anything; its stand-up starts the roller's floor>pull
-## RollerPark.UP_LEAD_TICKS before the end, as before.
+## The normal path: a roller walker sitting down is seated SIT_DOWN_TICKS after,
+## never held to collect anything. Standing up it is fully up before the
+## roller's floor>pull starts (STAND_UP_TICKS in, no longer
+## RollerPark.UP_LEAD_TICKS before), and it stands UP_HOLD_TICKS more at the
+## chair front picking it up before it walks on (decision standing-up-with-a-
+## roller-stand-up-then-pick-up-then-walk): the stage lasts
+## ParkRecovery.stand_up_ticks(), which the journey forecast counts too.
 func test_the_normal_sit_down_and_stand_up_keep_their_timing() -> void:
 	var p := _walker(true)
 	var sat := _world.sim.tick
@@ -110,17 +113,76 @@ func test_the_normal_sit_down_and_stand_up_keep_their_timing() -> void:
 		_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.STANDING_UP)
 	var up := p.stage_tick
+	# The forecast counts the hold: the same walker forecast with no bag
+	# reaches its exit door UP_HOLD_TICKS sooner.
+	var with_bag: int = JourneyForecast.own_times(_world.sim, p, up, false)["door_tick"]
+	p.carry_on = 0
+	var no_bag: int = JourneyForecast.own_times(_world.sim, p, up, false)["door_tick"]
+	p.carry_on = 1
 	var homes := []
 	while p.stage == Passenger.Stage.STANDING_UP:
 		homes.append(SecurityLooks.bag_homes(_world.sim, p)[0])
 		assert_int(p.collect_tick).is_equal(0)
 		_world.step()
-	assert_int(p.stage_tick - up).is_equal(PassengerSim.STAND_UP_TICKS)
-	assert_int(p.collect_tick).is_equal(0)
-	# Into the hand UP_LEAD_TICKS before the stand-up's end: the floor>pull.
-	assert_int(homes.find(SecurityLooks.Home.HAND)).is_equal(
-		PassengerSim.STAND_UP_TICKS - RollerPark.UP_LEAD_TICKS
+	var held := PassengerSim.STAND_UP_TICKS + ParkRecovery.UP_HOLD_TICKS
+	print(
+		(
+			"stand-up %d ticks, forecast door %d with the roller, %d without"
+			% [p.stage_tick - up, with_bag, no_bag]
+		)
 	)
+	assert_int(p.stage_tick - up).is_equal(held)
+	assert_int(with_bag - no_bag).is_equal(ParkRecovery.UP_HOLD_TICKS)
+	assert_int(p.collect_tick).is_equal(0)
+	# Into the hand once the stand-up is over: the floor>pull.
+	assert_int(homes.find(SecurityLooks.Home.HAND)).is_equal(PassengerSim.STAND_UP_TICKS)
+
+
+## The chair removed 5 ticks into a roller's stand-up (the sim clears the seat
+## and the walker keeps rising): the roller stays on the floor until the
+## stand-up has run its STAND_UP_TICKS, then goes into the hand, as with the
+## chair there. Before the fix the seat's loss turned the roller's home to
+## the hand on that tick, so the pick-up began while the body was rising.
+## Control: the chair is gone and the walker still stands up on the same tick.
+func test_a_chair_lost_while_standing_up_keeps_the_roller_down_until_the_stand_up_ends() -> void:
+	var p := _walker(true, false)
+	p.boarding_tick = _world.sim.tick + 3
+	while p.stage == Passenger.Stage.SEATED:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.STANDING_UP)
+	var up := p.stage_tick
+	for n in 5:
+		_world.step()
+	_seat_goes()
+	var homes := {}
+	while p.stage == Passenger.Stage.STANDING_UP:
+		homes[_world.sim.tick - up] = SecurityLooks.bag_homes(_world.sim, p)[0]
+		_world.step()
+	print("seat lost 5 ticks in, homes by tick %s" % [homes])
+	assert_int(p.seat_object).is_equal(0)
+	assert_int(p.stage_tick - up).is_equal(ParkRecovery.stand_up_ticks(p))
+	for n: int in homes:
+		var up_by := n >= PassengerSim.STAND_UP_TICKS
+		var want := SecurityLooks.Home.HAND if up_by else SecurityLooks.Home.FLOOR
+		(
+			assert_int(homes[n])
+			. override_failure_message("stand-up tick %d: home %d, not %d" % [n, homes[n], want])
+			. is_equal(want)
+		)
+	assert_int(homes[6]).is_equal(SecurityLooks.Home.FLOOR)
+	assert_int(homes[PassengerSim.STAND_UP_TICKS]).is_equal(SecurityLooks.Home.HAND)
+
+
+## With no roller the stand-up keeps its STAND_UP_TICKS and is not held.
+func test_a_walker_with_no_roller_stands_up_and_walks_on_at_once() -> void:
+	var p := _walker(false, false)
+	p.boarding_tick = _world.sim.tick + 3
+	while p.stage == Passenger.Stage.SEATED:
+		_world.step()
+	var up := p.stage_tick
+	while p.stage == Passenger.Stage.STANDING_UP:
+		_world.step()
+	assert_int(p.stage_tick - up).is_equal(PassengerSim.STAND_UP_TICKS)
 
 
 ## A walker with no roller has nothing to collect: its seat lost, it is sent on

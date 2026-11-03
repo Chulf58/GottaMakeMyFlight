@@ -10,7 +10,8 @@ extends SceneTree
 ##
 ## Plates of the pick-up (floor>pull) that follows, from the roller's side:
 ##   reach: the first frame the hand is within RollerPark.TAKE_M of the lying
-##     bag's handle; take: the frame the hand took it ("park_took");
+##     bag's handle (the take's own frame when the hand gets there after
+##     REACH_END, so takes it at once); take: the next frame the hand holds it
 ##   k050: the first frame at k 0.5 or later; before: one frame before the
 ##     lift's end (BEFORE_K); switch: the first at the lift's
 ##     end (RollerPark.up_ends().x, the stoop easing into HIPS_ALL); ease1, ease2:
@@ -99,6 +100,18 @@ const FOLLOW_TICKS := 200
 ## A turn over this in one frame (degrees) fails the probe (PassengerTurns
 ## eases every turn over 0.3 s).
 const TURN_DEG := 20.0
+## A walker drawn in a seat clip (SEAT_CLIPS) with its Spine_01 bone more
+## than this under where it is seated (sit_idle, no stoop) fails the probe
+## (SEAT_LOW): its hips went under the seat (board 76cb23c0). Measured: the
+## seated-still height varied by under 0.1 mm over 379 frames (printed as
+## noise), so 5 mm is noise with margin, not a tolerance for a lower seat.
+const SEAT_EPS_M := 0.005
+## The stoop's bend of the back past this (degrees, CarryStoop.bent) fails the
+## probe (TORSO): a roller park bends it at most RollerPark.BACK_CAP, about 45
+## (board 68c6027e).
+const TORSO_MAX_DEG := 46.0
+## The clips a body is seated in, or between the seat and standing.
+const SEAT_CLIPS := ["sit_down", "sit_idle", "stand_up"]
 
 var _seed := 0
 var _follow_ticks := FOLLOW_TICKS
@@ -135,6 +148,21 @@ var _loss_frames := 0
 ## frame is proved in frame and seen like a plate, and each window is also
 ## saved as one contact sheet.
 var _strips: Array[Vector2i] = []
+## The largest back bend the stoop drew (degrees) and its tick (_torso_row).
+var _torso := {"deg": 0.0, "tick": -1}
+## --dump=A-B: the ticks _dump_row() prints (none by default).
+var _dump := Vector2i(1, 0)
+## The lowest Spine_01 height over the body sitting down or seated, its tick,
+## the height seated still (sit_idle, no stoop) and the frames of each.
+var _sit := {
+	"low": INF,
+	"tick": -1,
+	"seated": NAN,
+	"frames": 0,
+	"still": 0,
+	"still_lo": INF,
+	"still_hi": -INF
+}
 var _strip_cam: Camera3D
 var _strip_xf := {}
 var _swap_starts := 0
@@ -166,6 +194,10 @@ var _saved: Array[String] = []
 
 
 func _initialize() -> void:
+	# A frame is a third of a tick (_step), so the clips must play at 60 frames a
+	# second as in the game: uncapped, a fast window drew about 250 and the clips
+	# fell four times behind the sim (a sit_down 0.29 s in after 11 ticks).
+	Engine.max_fps = SimClock.TICK_RATE * 3
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	_seed = randi()
 	for arg in OS.get_cmdline_user_args():
@@ -184,6 +216,9 @@ func _initialize() -> void:
 		elif arg.begins_with("--strip="):
 			for part in arg.get_slice("=", 1).split(","):
 				_strips.append(Vector2i(int(part.get_slice("-", 0)), int(part.get_slice("-", 1))))
+		elif arg.begins_with("--dump="):
+			var span := arg.get_slice("=", 1)
+			_dump = Vector2i(int(span.get_slice("-", 0)), int(span.get_slice("-", 1)))
 		elif arg.begins_with("--out="):
 			_out_dir = arg.get_slice("=", 1)
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -198,6 +233,8 @@ func _run() -> void:
 		else:
 			await _collect()
 		_finish_strips()
+		_seat_summary()
+		_torso_summary()
 		if _worn:
 			_worn_summary()
 	print("PROBE done plates=%d failed=%s" % [_saved.size(), _failed])
@@ -325,7 +362,7 @@ func _collect() -> void:
 		var handle := node.global_transform * CarryOnProps.ROLLER_HANDLE
 		var took := float(bag.get("park_took", -1.0))
 		var shot := ""
-		if wants.has("reach") and took < 0.0 and grip.distance_to(handle) <= RollerPark.TAKE_M:
+		if wants.has("reach") and grip.distance_to(handle) <= RollerPark.TAKE_M:
 			shot = "reach"
 		elif wants.has("take") and took >= 0.0:
 			shot = "take"
@@ -805,6 +842,9 @@ func _strip_step(props: CarryOnProps, body: Node3D) -> void:
 		# Turns ease over 0.3 s (PassengerTurns, board 908de167).
 		_invalid("the walker turned over 20 degrees in one frame at tick %d" % _clock.tick)
 	_last_yaw = yaw
+	_dump_row(props, body)
+	_seat_row(body)
+	_torso_row(body)
 	if _no_plates:
 		return
 	for w in _strips.size():
@@ -990,6 +1030,130 @@ func _swap_check(row: Dictionary, prev: Dictionary) -> String:
 	return flags
 
 
+## Keeps the lowest Spine_01 height over the body while the walker is drawn in
+## a seat clip (SEAT_CLIPS), and its height seated still (SEATED in sit_idle,
+## the stoop not drawn; the last such frame, past the clip's crossfade), for
+## _seat_summary(). A walker sitting down with its roller stands (idle) until
+## the roller is down (SitHold), so its stoop is never measured here.
+func _seat_row(body: Node3D) -> void:
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	if player.current_animation not in SEAT_CLIPS:
+		return
+	var rig: Dictionary = body.get_meta(&"carry_rig", {})
+	if rig.is_empty():
+		return
+	var high: float = (rig["pivot"] as Node3D).global_position.y - body.global_position.y
+	_sit["frames"] += 1
+	if high < _sit["low"]:
+		_sit["low"] = high
+		_sit["tick"] = _clock.tick
+	var still: bool = (
+		_p.stage == Passenger.Stage.SEATED
+		and (rig["stoop"] as CarryStoop).drawn == 0.0
+		and player.current_animation == "sit_idle"
+	)
+	if still:
+		_sit["seated"] = high
+		_sit["still"] += 1
+		_sit["still_lo"] = minf(_sit["still_lo"], high)
+		_sit["still_hi"] = maxf(_sit["still_hi"], high)
+
+
+## Prints the lowest the walker was drawn in a seat clip against its
+## height seated still, and fails the probe (SEAT_LOW) when it went more than
+## SEAT_EPS_M under it, or when no seated frame was measured. The check is
+## first run on a height 2 * SEAT_EPS_M under the seated one, which must fail,
+## and on the seated height itself, which must pass.
+func _seat_summary() -> void:
+	print(
+		(
+			"SEAT frames=%d still=%d spine_seated=%.3f lowest=%.3f at tick %d"
+			% [_sit["frames"], _sit["still"], _sit["seated"], _sit["low"], _sit["tick"]]
+		)
+	)
+	if _walk_route:
+		return
+	if _sit["still"] == 0:
+		_invalid("the walker was never drawn seated still")
+		return
+	var seated: float = _sit["seated"]
+	print(
+		(
+			"SEAT noise %.4f m over %d still frames; self-test: %.3f low=%s, %.3f low=%s"
+			% [
+				_sit["still_hi"] - _sit["still_lo"],
+				_sit["still"],
+				seated - 2.0 * SEAT_EPS_M,
+				_seat_low(seated - 2.0 * SEAT_EPS_M, seated),
+				seated,
+				_seat_low(seated, seated),
+			]
+		)
+	)
+	if not _seat_low(seated - 2.0 * SEAT_EPS_M, seated) or _seat_low(seated, seated):
+		_invalid("the SEAT check self-test failed")
+	elif _sit["still_hi"] - _sit["still_lo"] > SEAT_EPS_M:
+		_invalid("the seated-still height varies more than SEAT_EPS_M")
+	elif _seat_low(_sit["low"], seated):
+		print("SEAT_LOW the hips went %.3f m under the seat" % (_sit["seated"] - _sit["low"]))
+		_invalid("the walker sitting down was drawn under its seat at tick %d" % _sit["tick"])
+
+
+## --dump=A-B: prints a row a frame from tick A to tick B of the roller's move
+## and the stoop the walker is drawn with.
+func _dump_row(props: CarryOnProps, body: Node3D) -> void:
+	if _clock.tick < _dump.x or _clock.tick > _dump.y:
+		return
+	var bag := props.bag_state(_p.id, 0)
+	var rig: Dictionary = body.get_meta(&"carry_rig", {})
+	if rig.is_empty():
+		return
+	var stoop: CarryStoop = rig["stoop"]
+	var pivot := (rig["pivot"] as Node3D).global_position
+	var ys: Array[String] = []
+	for t in stoop.targets:
+		var local := body.global_transform.affine_inverse() * t
+		ys.append(
+			(
+				"(%.2f %.2f %.2f) yaw %.0f"
+				% [local.x, local.y, local.z, rad_to_deg(body.global_rotation.y)]
+			)
+		)
+	var start: Array = CarryLead.start_of(bag) if bag.has("was") else []
+	print(
+		(
+			(
+				"DUMP tick=%d a=%.2f stage=%s k=%.3f home=%s place=%s park=%s led=%s since=%s ticks=%s"
+				% [
+					_clock.tick,
+					_clock.alpha,
+					Passenger.Stage.keys()[_p.stage],
+					props.transfer_progress(_p.id, 0),
+					bag.get("home"),
+					bag.get("place"),
+					bag.get("park", false),
+					bag.get("led", false),
+					bag.get("since"),
+					bag.get("ticks"),
+				]
+			)
+			+ (
+				" start=%s drawn=%.3f targets_y=%s weights=%s keeps=%s drops=%s spine_y=%.3f clip=%s"
+				% [
+					start,
+					stoop.drawn,
+					ys,
+					stoop.weights,
+					stoop.keeps,
+					stoop.drops,
+					pivot.y,
+					_clip_at(body)
+				]
+			)
+		)
+	)
+
+
 ## Whether this tick is in a strip window, or the tick after one (--strip; a
 ## headless --no-plates run draws none).
 func _in_strip_window() -> bool:
@@ -1125,3 +1289,39 @@ func _frames(count: int) -> void:
 func _invalid(why: String) -> void:
 	_failed = true
 	print("PROBE_INVALID %s" % why)
+
+
+## The clip `body` plays and how far into it (seconds), for --dump.
+func _clip_at(body: Node3D) -> String:
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	return "%s@%.2f" % [player.current_animation, player.current_animation_position]
+
+
+## Whether a Spine_01 height `high` over the body is under the seat: more than
+## SEAT_EPS_M under `seated`, the height seated still.
+static func _seat_low(high: float, seated: float) -> bool:
+	return high < seated - SEAT_EPS_M
+
+
+## Keeps the largest bend of the back the stoop draws (CarryStoop.bent).
+func _torso_row(body: Node3D) -> void:
+	var rig: Dictionary = body.get_meta(&"carry_rig", {})
+	if rig.is_empty():
+		return
+	var deg := (rig["stoop"] as CarryStoop).bent * CarryStoop.STOOP_DEGREES
+	if deg > _torso["deg"]:
+		_torso = {"deg": deg, "tick": _clock.tick}
+
+
+## Prints the largest back bend and fails the probe (TORSO) past TORSO_MAX_DEG,
+## or when the stoop never bent the back (nothing was measured).
+func _torso_summary() -> void:
+	print("TORSO largest stoop bend %.1f deg at tick %d" % [_torso["deg"], _torso["tick"]])
+	if _walk_route:
+		return
+	if _torso["deg"] <= 0.0:
+		_invalid("the stoop never bent the back")
+	elif _torso["deg"] > TORSO_MAX_DEG:
+		_invalid(
+			"the stoop bent the back %.1f degrees at tick %d" % [_torso["deg"], _torso["tick"]]
+		)

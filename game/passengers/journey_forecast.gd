@@ -100,9 +100,9 @@ static func own_times(sim: PassengerSim, p: Passenger, now: int, routed: bool) -
 		leave = now
 	match p.stage:
 		Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED:
-			leave += PassengerSim.STAND_UP_TICKS
+			leave += ParkRecovery.stand_up_ticks(p)
 		Passenger.Stage.STANDING_UP:
-			leave += maxi(0, PassengerSim.STAND_UP_TICKS - (now - p.stage_tick))
+			leave += maxi(0, ParkRecovery.stand_up_ticks(p) - (now - p.stage_tick))
 	var exit := _exit_of(sim, Vector2i(leg.y, leg.z), routed, p)
 	if exit.x == 0:
 		return {}

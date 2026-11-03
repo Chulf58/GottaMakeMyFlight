@@ -140,14 +140,16 @@ func _piece_frame() -> Transform3D:
 
 
 ## Over a whole stay at each piece, the bags are on the floor exactly while
-## the visitor is on the seat (from SHUFFLE_TICKS into the stay to
-## SHUFFLE_TICKS before its end) at the sofa and the pod, and for the whole stay
+## the visitor is on the seat (from SHUFFLE_TICKS into the stay, or from its
+## start with a roller, to SHUFFLE_TICKS before its end) at the sofa and the
+## pod, and for the whole stay
 ## at the shower; in hand before it and once it is over.
 func test_bags_are_down_while_seated_and_for_the_whole_shower() -> void:
 	for type in TYPES:
 		for count in [1, 2]:
 			_open(type, false)
 			var p := await _visitor(count)
+			var door := ActivityPoses.seat_door(_world.sim, p)
 			var seen: Array = []
 			while p.stage == Passenger.Stage.SHOP_BROWSE:
 				seen.append(
@@ -161,9 +163,10 @@ func test_bags_are_down_while_seated_and_for_the_whole_shower() -> void:
 			for i in stay:
 				var spent: int = seen[i][0]
 				var left := stay - 1 - i
-				var on_seat := (
-					spent >= ActivityPoses.SHUFFLE_TICKS and left >= ActivityPoses.SHUFFLE_TICKS
-				)
+				# A roller is set down standing before the step onto the seat
+				# (ActivityPoses.SEAT_DOOR_TICKS, board 76cb23c0).
+				var stepped := spent >= ActivityPoses.SHUFFLE_TICKS or door > 0
+				var on_seat := stepped and left >= ActivityPoses.SHUFFLE_TICKS
 				var want := SecurityLooks.Home.FLOOR
 				if type != &"shower" and not on_seat:
 					want = SecurityLooks.Home.HAND

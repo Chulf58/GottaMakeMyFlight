@@ -67,7 +67,7 @@ static func stoop_shift(stoop: CarryStoop, pivot: Vector3, at: Vector3) -> Vecto
 	var hips := Vector2(CarryStoop.STOOP_DROP * drop.x, CarryStoop.HIP_BACK_M * drop.y)
 	hips *= stoop.drawn / skeleton.global_transform.basis.get_scale().x
 	before += Vector3(0.0, hips.x, hips.y) * (1.0 - clampf(drop.z, 0.0, 1.0))
-	var unbent := CarryStoop.turn(before, aim, stoop.drawn).inverse() * rel
+	var unbent := CarryStoop.turn(before, aim, stoop.bent).inverse() * rel
 	return skeleton.global_transform.basis * (rel - unbent)
 
 

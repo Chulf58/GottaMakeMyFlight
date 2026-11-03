@@ -64,6 +64,10 @@ var _offsets: Dictionary = {}
 ## so a stay cut short or a removed piece eases the body back instead of
 ## jumping. Holds no tick; snap() restarts it from the loaded world.
 var _seats: Dictionary = {}
+## Passenger id -> the offset drawn on its last tick for a walker sitting down
+## with a roller (SitHold.offset(), sit_offset()). Holds no anchor: the chair
+## front is read from the seat on every sync. Started over on a snap or a release.
+var _sit_off: Dictionary = {}
 ## The yaw each view is drawn with, eased per tick (PassengerTurns); snap()
 ## starts every record over.
 var _turns := PassengerTurns.new()
@@ -151,6 +155,12 @@ func draw_position(p: Passenger) -> Vector3:
 	)
 
 
+## How far passenger `id` is drawn from where the sim puts it while it stands
+## at the chair front setting its roller down (SitHold.offset()).
+func sit_offset(id: int) -> Vector3:
+	return _sit_off.get(id, Vector3.ZERO)
+
+
 ## A passenger's drawn offset at security now.
 func security_offset(id: int) -> Vector3:
 	return _offsets.get(id, Vector3.ZERO)
@@ -170,6 +180,8 @@ func sync() -> void:
 		if not _nodes.has(id):
 			_nodes[id] = _take(p)
 			_cur[id] = now
+		now += SitHold.offset(_props, sim, p, now)
+		_sit_off[id] = now - draw_position(p)
 		_prev[id] = _cur[id]
 		_cur[id] = now
 		_turn(_nodes[id], p, _pose(_nodes[id], p))
@@ -203,6 +215,7 @@ func snap() -> void:
 				_release(id)
 		_offsets.erase(id)
 		_seats.erase(id)
+		_sit_off.erase(id)
 		var seat := ActivityPoses.offset(sim, sim.get_passenger(id))
 		if seat != Vector3.ZERO:
 			_seats[id] = seat
@@ -395,6 +408,7 @@ func _release(id: int) -> void:
 	_nodes.erase(id)
 	_offsets.erase(id)
 	_seats.erase(id)
+	_sit_off.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
 	_props.release(id)
 	_turns.release(id)
@@ -420,13 +434,19 @@ func _pose(node: Node3D, p: Passenger) -> float:
 		# a shower, is not an idle slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
 		moving = mm > 0
+	var held := 0
 	var seat_pose := StageKinds.pose(p.stage)
 	if activity != ActivityPoses.Kind.NONE:
 		seat_pose = ActivityPoses.pose(sim, p)
 	match seat_pose:
 		StageKinds.Pose.SITTING_DOWN:
-			clip = "sit_down"
-			base = SIT_CLIP_SECONDS / (PassengerSim.SIT_DOWN_TICKS / float(SimClock.TICK_RATE))
+			# Standing while a pulled roller is set down (SitHold), then sitting
+			# over the ticks left.
+			held = SitHold.held_ticks(_props, sim, p)
+			clip = "sit_down" if ActivityPoses.clip_ticks(sim, p) >= held else "idle"
+			if clip == "sit_down":
+				var sit_ticks := PassengerSim.SIT_DOWN_TICKS - held
+				base = SIT_CLIP_SECONDS / (sit_ticks / float(SimClock.TICK_RATE))
 		StageKinds.Pose.SEATED:
 			clip = "sit_idle"
 		StageKinds.Pose.STANDING_UP:
@@ -511,7 +531,7 @@ func _pose(node: Node3D, p: Passenger) -> float:
 	if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
 		# A view made or snapped mid-way (a load, a passenger just drawn)
 		# starts the clip where the sim is in it, not from its first frame.
-		var at := ActivityPoses.clip_ticks(sim, p) * SimClock.STEP * base
+		var at := maxi(ActivityPoses.clip_ticks(sim, p) - held, 0) * SimClock.STEP * base
 		if changed:
 			player.seek(at, true)
 		elif activity != ActivityPoses.Kind.NONE and player.current_animation == clip:

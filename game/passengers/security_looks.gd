@@ -179,26 +179,45 @@ static func bag_homes(sim: PassengerSim, p: Passenger) -> Array[Home]:
 		for i in p.carry_on:
 			out.append(_security_home(sim, p, i))
 		return out
-	var home := Home.FLOOR if _seated(sim, p) else Home.HAND
+	var seated := _seated(sim, p)
 	for i in p.carry_on:
-		out.append(Home.HAND if home == Home.FLOOR and _rolled_up(sim, p, i) else home)
+		var down := seated or _lost_chair_roller(p, i)
+		out.append(Home.FLOOR if down and not _rolled_up(sim, p, i) else Home.HAND)
 	return out
 
 
+## Whether bag `index` of `p` is a roller on the floor of a gate chair that
+## was removed while `p` stands up from it (the sim clears the seat and the
+## walker keeps rising). It stays down until the stand-up has run
+## (_rolled_up()), as with the chair there: taken at once, the pick-up began
+## on a body still rising.
+static func _lost_chair_roller(p: Passenger, index: int) -> bool:
+	return (
+		p.stage == Passenger.Stage.STANDING_UP
+		and p.seat_object == 0
+		and bag_kind(p, index) == Kind.ROLLER
+	)
+
+
 ## Whether bag `index` of `p` is a roller taken off the floor into the pull
-## while `p` stands up from a gate chair or a cafe seat: from
-## RollerPark.UP_LEAD_TICKS before the stand-up ends, so the roller parks on its
-## wheels beside a walker (nearly) still in place and is pulled onto the trail
-## as it walks off (it walks at once once up: parked after, the roller was 0.4 m
-## out of the hand's reach by the regrasp; started with the stand-up, the
-## seated hand fell 0.35 m short of the bag on the floor). Looks only: the
-## sim's stand-up is as long as before.
+## while `p` stands up from a gate chair or a cafe seat. The timing differs:
+## - Gate chair (STANDING_UP): once the walker is up, STAND_UP_TICKS in. It
+##   stands at the chair front for ParkRecovery.UP_HOLD_TICKS more while the
+##   roller is picked up (ParkRecovery.stand_up_ticks()); started on a body
+##   still rising, the hand fell short and the bag jumped into it.
+## - Cafe seat (CAFE_STANDING_UP): RollerPark.UP_LEAD_TICKS before the stand-up
+##   ends, so the roller parks on its wheels beside a walker (nearly) still in
+##   place and is pulled onto the trail as it walks off at once (parked after,
+##   the roller was 0.4 m out of the hand's reach by the regrasp; started with
+##   the stand-up, the seated hand fell 0.35 m short of the bag on the floor).
+## Looks only: the sim's cafe stand-up is as long as before.
 static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
 	if p.stage not in [Passenger.Stage.STANDING_UP, Passenger.Stage.CAFE_STANDING_UP]:
 		return false
 	if bag_kind(p, index) != Kind.ROLLER:
 		return false
-	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS - RollerPark.UP_LEAD_TICKS
+	var lead := 0 if p.stage == Passenger.Stage.STANDING_UP else RollerPark.UP_LEAD_TICKS
+	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS - lead
 
 
 ## Which hand holds bag `index` of `p` when it is carried: 0 the right, 1 the

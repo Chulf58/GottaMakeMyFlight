@@ -553,7 +553,7 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 			"route": route,
 		}
 		plan["legs"] = {
-			"pre_ticks": PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0,
+			"pre_ticks": ParkRecovery.stand_up_ticks(p) if p.stage == Passenger.Stage.SEATED else 0,
 			"to_queue_mm": mm,
 			"order_ticks": _order_eta(cafe["room"], counter["id"]) + QUEUE_LAG_TICKS,
 			"to_seat_mm": 0 if walk_on else seat["mm"],
