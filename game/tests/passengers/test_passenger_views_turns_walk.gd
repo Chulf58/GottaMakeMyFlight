@@ -1,24 +1,29 @@
 class_name TestPassengerViewsTurnsWalk
 extends GdUnitTestSuite
-## A walking passenger faces its step at once; only turns on the spot ease
-## (user ruling passenger-turns-on-the-spot-ease-over-a-few-frames-and-anima,
-## board 908de167). A passenger pulling a roller walks from security to a cafe
-## and on to its seat, round the corners of its path, every frame drawn as the
-## game draws it, at 1x and at 3x. CarryOnProps._trail lays the roller's trail
-## on the pulling hand's side of the step's heading, so a body still easing
-## round a walking corner faced one way while its trail was laid for another.
-## Checked on each walking frame once the walker has stepped on for more than
-## a turn (past any turn from setting off): the body faces its step, the
-## heading the trail is laid on. The largest change in a frame of the distance
-## from the pulling hand to the axle (a settled pull, the same hand on both
-## frames) is printed, within a turn's ticks of a corner and elsewhere.
+## A roller stays with the hand round a walking corner (board 908de167, Sol
+## review of 302a33e). Every turn eases over 0.3 s, a walking corner too
+## (PassengerTurns; user ruling
+## passenger-turns-on-the-spot-ease-over-a-few-frames-and-anima). A passenger
+## pulling a roller walks from security to a cafe and on to its seat, round the
+## corners of its path, every frame drawn as the game draws it, at 1x and at
+## 3x. On each walking frame once the walker has stepped on for more than a
+## turn (past any turn from setting off), with the pull settled and the same
+## hand on it in both frames, the distance from the pulling hand to the axle
+## changes by less than REACH_JUMP_M in a frame within a turn's ticks of a
+## corner. The axle follower swings at a limited speed (CarryOnProps.follow),
+## so a body that snapped round the corner moved the hand 0.170 m off the axle
+## in one frame at 1x (6166b07); eased, 0.025 m.
 
 ## Ticks a frame: a game at 1x (20 ticks a second at 60 frames) and at 3x.
 const FRAME_TICKS := [1.0 / 3.0, 1.0]
 ## A heading change over this between two walking ticks is a corner.
 const CORNER_DEG := 30.0
-## Drawn this close to a heading (degrees), the body faces it.
-const ON_DEG := 0.06
+## The largest change in a frame of the hand-to-axle distance near a corner,
+## at 1x and at 3x (metres). Measured eased: 0.025 and 0.063; snapping
+## (6166b07): 0.170 and 0.078. At 3x a frame is a whole tick and the snap is
+## within 0.015 m of the eased worst, so only the 1x case tells them apart;
+## the 3x bound keeps headroom over the eased worst and guards a larger jump.
+const REACH_JUMP_M := [0.05, 0.09]
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -120,13 +125,14 @@ func _walk(p: Passenger, ticks: float) -> Array[Dictionary]:
 	return frames
 
 
-func _check(ticks: float) -> void:
+func _check(ticks: float, bound: float) -> void:
 	var p := _roller_walker()
 	var frames := await _walk(p, ticks)
 	var corners := 0
 	var checked := 0
 	var worst_yaw := 0.0
 	var reach := {"corner": 0.0, "other": 0.0}
+	var near := 0
 	var last := INF
 	var since_corner := 1000
 	for i in frames.size():
@@ -153,11 +159,12 @@ func _check(ticks: float) -> void:
 		var was := (before["grip"] as Vector3).distance_to(before["axle"])
 		var key := "corner" if since_corner < PassengerTurns.TURN_TICKS else "other"
 		reach[key] = maxf(reach[key], absf(now - was))
+		near += int(key == "corner")
 	print(
 		(
 			(
-				"%.2f ticks a frame: %d frames, %d walking corners, %d walking frames;"
-				% [ticks, frames.size(), corners, checked]
+				"%.2f ticks a frame: %d frames, %d walking corners, %d walking frames (%d near one);"
+				% [ticks, frames.size(), corners, checked, near]
 			)
 			+ " worst yaw off the step %.2f deg;" % worst_yaw
 			+ (
@@ -168,12 +175,13 @@ func _check(ticks: float) -> void:
 	)
 	assert_int(corners).is_greater(0)
 	assert_int(checked).is_greater(30)
-	assert_float(worst_yaw).is_less(ON_DEG)
+	assert_int(near).is_greater(0)
+	assert_float(reach["corner"]).is_less(bound)
 
 
-func test_a_roller_walker_faces_its_step_round_corners_at_1x() -> void:
-	await _check(FRAME_TICKS[0])
+func test_the_roller_stays_with_the_hand_round_corners_at_1x() -> void:
+	await _check(FRAME_TICKS[0], REACH_JUMP_M[0])
 
 
-func test_a_roller_walker_faces_its_step_round_corners_at_3x() -> void:
-	await _check(FRAME_TICKS[1])
+func test_the_roller_stays_with_the_hand_round_corners_at_3x() -> void:
+	await _check(FRAME_TICKS[1], REACH_JUMP_M[1])

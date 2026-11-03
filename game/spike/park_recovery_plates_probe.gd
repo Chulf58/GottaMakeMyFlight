@@ -86,8 +86,8 @@ const SWAP_KINK_M := 0.05
 ## Ticks the follow watch runs after the plates unless --follow=N says
 ## otherwise: the walker reaches another chair and sits down in about 100.
 const FOLLOW_TICKS := 200
-## A turn over this in one frame (degrees) fails the probe unless the walker
-## steps on from a step, where it faces its step at once (PassengerTurns).
+## A turn over this in one frame (degrees) fails the probe (PassengerTurns
+## eases every turn over 0.3 s).
 const TURN_DEG := 20.0
 
 var _seed := 0
@@ -699,9 +699,9 @@ func _kinks(row: Dictionary, prev: Dictionary, pin: int, worst: Dictionary) -> S
 
 
 ## Prints a turn of the walker over TURN_DEG in a frame (TURN, so a strip
-## window can be set on it) and fails the probe on it, unless the walker
-## stepped on the tick before and steps on this one (TURN_WALK: a walker faces
-## its step at once, PassengerTurns), and with --strip draws the frame of a
+## window can be set on it, marked walking when it stepped on the tick before
+## and steps on this one) and fails the probe on it: every turn eases, a
+## walking corner too (PassengerTurns), and with --strip draws the frame of a
 ## window it is in from the window's camera (proved in frame: feet, head,
 ## roller and the holding hand inside MARGIN_PX; seen: hiding the walker and
 ## its roller changes MIN_DIFF_PX pixels, else PROBE_INVALID). A window's
@@ -716,17 +716,12 @@ func _strip_step(props: CarryOnProps, body: Node3D) -> void:
 		var walking: bool = _stepped[0] and _stepped[1]
 		print(
 			(
-				"%s tick=%d yaw_deg=%.1f"
-				% [
-					"TURN_WALK" if walking else "TURN",
-					_clock.tick,
-					rad_to_deg(angle_difference(_last_yaw, yaw))
-				]
+				"TURN tick=%d yaw_deg=%.1f walking=%s"
+				% [_clock.tick, rad_to_deg(angle_difference(_last_yaw, yaw)), walking]
 			)
 		)
-		if not walking:
-			# Turns on the spot ease over 0.3 s (PassengerTurns, board 908de167).
-			_invalid("the walker turned over 20 degrees in one frame at tick %d" % _clock.tick)
+		# Turns ease over 0.3 s (PassengerTurns, board 908de167).
+		_invalid("the walker turned over 20 degrees in one frame at tick %d" % _clock.tick)
 	_last_yaw = yaw
 	if _no_plates:
 		return

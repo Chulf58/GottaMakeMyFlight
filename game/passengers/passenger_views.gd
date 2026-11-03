@@ -491,32 +491,26 @@ func _now() -> float:
 ## Turns a view one tick toward what it faces now (PassengerTurns): a seated
 ## passenger, or one facing its work at security, faces `face`; any other
 ## faces the step it was drawn over this tick, or `face` when it did not move,
-## or keeps the facing it had. Only a turn on the spot eases (setting off from
-## a stand is one); a walker stepping on faces its step at once, as the roller
-## it pulls trails on that heading (CarryOnProps._trail), and one that steps on
-## while a turn is under way is turned on to its step over the ticks the turn
-## has left (PassengerTurns.step). A view just taken, or snapped, faces it at
-## once, and so does one stepping into, using or leaving a toilet stall: its
-## bags are kept clear of the partitions and the door for a body facing its
-## step (StallCarry), and one turning over 0.3 s swept them through a partition
+## or keeps the facing it had. A view just taken, or snapped, faces it at once,
+## and so does one stepping into, using or leaving a toilet stall: its bags are
+## kept clear of the partitions and the door for a body facing its step
+## (StallCarry), and one turning over 0.3 s swept them through a partition
 ## (test_carry_in_stall).
 func _turn(node: Node3D, p: Passenger, face: float) -> void:
 	var step: Vector3 = _cur[p.id] - _prev[p.id]
 	var heading := walk_heading(p)
 	var keep := atan2(heading.x, heading.y) if heading != Vector2.ZERO else node.rotation.y
 	var target := _turns.target(p.id, keep)
-	var walking := false
 	if _turn_locked(node) and not is_nan(face):
 		target = face
 	elif step.length() > 0.001 and not _snapping:
 		target = atan2(step.x, step.z)
-		walking = true
 	elif not is_nan(face):
 		target = face
 	if _snapping or not _turns.has(p.id) or _in_stall(p):
-		_turns.place(p.id, target, walking)
+		_turns.place(p.id, target)
 	else:
-		_turns.step(p.id, target, walking)
+		_turns.step(p.id, target)
 	node.rotation.y = _turns.drawn(p.id, clock.alpha if clock != null else 1.0)
 
 

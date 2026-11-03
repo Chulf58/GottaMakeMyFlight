@@ -1,8 +1,7 @@
 class_name TestPassengerViewsTurns
 extends GdUnitTestSuite
-## A passenger's body turns on the spot over a few frames, never in one (user
-## ruling passenger-turns-on-the-spot-ease-over-a-few-frames-and-anima); a
-## walker faces its step at once (TestPassengerViewsTurnsWalk). A cafe guest
+## A passenger's body turns over a few frames, never in one (user ruling
+## passenger-turns-on-the-spot-ease-over-a-few-frames-and-anima). A cafe guest
 ## walks to the counter, turning at the corners of its path, turns on the spot
 ## in the queue to face the counter, sets off from the counter to its seat
 ## (an about-turn on the spot) and sits down. The run is drawn a third of a
@@ -125,33 +124,15 @@ func test_the_guest_reached_its_seat_and_turned_on_the_way() -> void:
 
 
 func test_no_frame_turns_the_body_more_than_the_bound() -> void:
-	# Turns on the spot (setting off included): a walker stepping on from a step
-	# faces its step at once, as the roller it pulls trails on that heading
-	# (Sol review of 302a33e; TestPassengerViewsTurnsWalk), so its frames are
-	# left out here and only counted.
 	var frames := _frames()
 	var worst := 0.0
 	var at := 0
-	var walked_before := false
-	var walking := false
-	var walking_turns := 0
 	for i in range(1, frames.size()):
-		if frames[i]["new_tick"]:
-			walked_before = walking
-			walking = _walking(frames[i])
 		var turn := _deg(frames[i - 1]["yaw"], frames[i]["yaw"])
-		if walked_before and walking:
-			walking_turns += int(turn > 0.5)
-			continue
 		if turn > worst:
 			worst = turn
 			at = frames[i]["tick"]
-	print(
-		(
-			"largest yaw change in one frame on the spot: %.2f deg at tick %d (%d walking turns)"
-			% [worst, at, walking_turns]
-		)
-	)
+	print("largest yaw change in one frame: %.2f deg at tick %d" % [worst, at])
 	assert_float(worst).is_less(MAX_FRAME_DEG)
 	assert_float(worst).is_greater(0.5)
 
