@@ -95,6 +95,24 @@ static func first_flight_note(offer: Dictionary, now: int) -> String:
 	return "first flight tomorrow" if ahead == 1 else "first flight on Day %d" % (first_day + 1)
 
 
+## Ticks a contract accepted while the airport is closed needs between the
+## airport opening and its departure to fly the first day's slot: the issue
+## lead plus the preparation before departure (FlightTimetable.opening_day).
+static func opening_lead_ticks() -> int:
+	return FlightTimetable.ISSUE_LEAD_TICKS + FlightTimetable.departure_offset()
+
+
+## `ticks` as "2 h 50 min", "45 min" or "3 h", rounded up to a whole minute.
+static func lead_text(ticks: int) -> String:
+	var minutes := -GameCalendar.floor_div(-ticks, GameCalendar.TICKS_PER_MINUTE)
+	var parts: PackedStringArray = []
+	if minutes >= 60:
+		parts.append("%d h" % (minutes / 60))
+	if minutes % 60 != 0:
+		parts.append("%d min" % (minutes % 60))
+	return " ".join(parts)
+
+
 ## The text lines of an offer's card: who and where, when and what plane, and
 ## the money. `note` (first_flight_note) follows the departure when not empty.
 static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
@@ -350,11 +368,12 @@ func _refresh() -> void:
 	_noted_tick = flights.tick
 
 
-## The first-flight note for an offer card right now: "" while the airport is
-## closed, because a contract accepted then starts at the opening.
+## The first-flight note for an offer card right now. While the airport is
+## closed a contract accepted starts at the opening, which is not known yet, so
+## the note names the lead its slot needs after the opening.
 func _note_for(offer: Dictionary) -> String:
 	if flights.opened_tick < 0:
-		return ""
+		return "first flight %s after opening" % lead_text(opening_lead_ticks())
 	return first_flight_note(offer, flights.tick)
 
 
@@ -459,8 +478,10 @@ func _on_accept(id: String) -> void:
 			&"HudProblemText"
 		)
 		return
+	var note := _note_for(offer)
 	if desk.board.accept(id, flights):
-		_say("Accepted %s to %s" % [offer["airline"], offer["destination"]])
+		var then := ", %s" % note if note != "" else ""
+		_say("Accepted %s to %s%s" % [offer["airline"], offer["destination"], then])
 
 
 ## Shows `text` under the cards, hiding the line when it is empty.
