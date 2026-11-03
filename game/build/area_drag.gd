@@ -265,7 +265,14 @@ static func _put_back(
 	grid.release_signals(mark)
 	for edit in removals:
 		outcome._refuse(settlement)
-		grid.edit_refused.emit(edit, settlement)
+		_emit_refused(grid, edit, settlement)
+
+
+## Emits edit_refused through the grid's own hold queue (as BuildTransaction
+## does), so a refusal made while a caller holds the grid's signals waits
+## behind the signals already queued there.
+static func _emit_refused(grid: BuildGrid, edit: BuildEdit, refusal: BuildResult) -> void:
+	grid._emit_or_hold(func() -> void: grid.edit_refused.emit(edit, refusal))
 
 
 ## The second pass of clear(), in the order the grid accepts them: the rooms
