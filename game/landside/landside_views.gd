@@ -1,7 +1,9 @@
 class_name LandsideViews
 extends Node3D
 ## Draws the landside's cars and taxis with the Toon vehicle models (Landside
-## 4/4), and the curb bays and car parks through LandsidePlaces. Each tick it
+## 4/4), and the curb bays and car parks through LandsidePlaces, whose barrier
+## arms lift for cars passing through them (LotBarriers, stepped each tick and
+## drawn each frame with the cars). Each tick it
 ## records where every vehicle on the map is (its lane, lot, berth or slot
 ## and position in mm) for the tick before and the tick now, keyed by vehicle
 ## id; each frame it draws between the two with the clock's alpha. A vehicle
@@ -53,6 +55,8 @@ var follow_anchor := Node3D.new()
 var selected_id := 0
 
 var _places := LandsidePlaces.new()
+## The car parks' barrier arms, lifted for cars passing through.
+var _barriers := LotBarriers.new()
 ## Vehicle id -> its drawn model.
 var _nodes := {}
 ## Vehicle id -> where it was on the tick before and on the tick now, each
@@ -114,15 +118,18 @@ func sync() -> void:
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
+	_barriers.step(_places, landside)
 
 
 ## Draws every vehicle at the sim's state now, with no tick to run (a load):
-## the node set follows the loaded vehicles, the selection is cleared, and
-## each vehicle is drawn where it stands.
+## the node set follows the loaded vehicles, the selection is cleared, each
+## vehicle is drawn where it stands, and each barrier arm where the loaded cars
+## want it.
 func snap() -> void:
 	for id in _nodes.keys():
 		_release(id)
 	selected_id = 0
+	_barriers.restart()
 	sync()
 	_settle()
 	draw()
@@ -134,6 +141,7 @@ func snap() -> void:
 func draw() -> void:
 	_places.refresh()
 	var alpha := clock.alpha if clock != null else 1.0
+	_barriers.draw(alpha)
 	for id in _nodes:
 		(_nodes[id] as Node3D).transform = pose_at(id, alpha)
 	if _nodes.has(selected_id):
@@ -255,6 +263,10 @@ func vehicle_count() -> int:
 
 func places() -> LandsidePlaces:
 	return _places
+
+
+func barriers() -> LotBarriers:
+	return _barriers
 
 
 ## Where a vehicle is now. A parked car faces into its stall

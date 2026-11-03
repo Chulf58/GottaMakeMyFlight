@@ -23,6 +23,11 @@ const SAMPLE_MM := 50
 const CAR_PARK_MESH := "Parking_"
 ## The part of the map the meshes are read for (x and z).
 const AREA := Rect2(-15.0, -62.0, 30.0, 82.0)
+## A walker's radius, and how much higher than the sidewalk's top a surface by its
+## feet may stand (paint and joints are under 1 cm; the planter bed's rim is 2 cm
+## at its edge and 6 cm on top).
+const WALKER_RADIUS := 0.25
+const RAISED := 0.01
 
 var _spot: LandsideLotSpot
 var _paths: LandsidePaths
@@ -228,6 +233,57 @@ func test_the_old_walk_from_the_gate_over_the_lawn_is_found_off_paving() -> void
 	var found := _walk_off_paving(old)
 	print("old walk: %d off, first %s" % [found["off"].size(), found["off"].slice(0, 2)])
 	assert_int(found["off"].size()).is_greater_equal(50)
+
+
+## Board 00291df0 point 3: the planter bed on the sidewalk west of the car park
+## (the site Road mesh raised up to 0.26 m over x -4..-3, z -41..-40) is never
+## under a ground-floor walker's feet or within a walker's radius of them: the
+## walk crosses the road east of the bed.
+func test_a_ground_floor_walk_keeps_clear_of_the_planter_bed() -> void:
+	var walk := _paths.lot_walk(1, 0)
+	var gate := walk.find(_spot.access[_spot.access.size() - 1])
+	var found := _near_raised(PackedVector3Array(walk.slice(gate)))
+	print("walk from the gate: %s" % found)
+	assert_array(found["near"]).is_empty()
+	# Control: the walk was checked along the sidewalk's top.
+	assert_int(found["sidewalk"]).is_greater_equal(60)
+
+
+## The control: the walk as it was, along the sidewalk to x -6 before crossing,
+## is found over the bed's rim.
+func test_the_old_walk_past_x_minus_6_is_found_on_the_planter_bed() -> void:
+	var old := PackedVector3Array(
+		[
+			Vector3(2.35, 0.2, -40.05),
+			Vector3(-6, 0.2, -40.05),
+			Vector3(-6, 0.2, -41.1),
+			Vector3(-6, 0.1, -41.4),
+		]
+	)
+	var found := _near_raised(old)
+	print("old walk: %d near the bed, first %s" % [found["near"].size(), found["near"].slice(0, 2)])
+	assert_int(found["near"].size()).is_greater_equal(10)
+
+
+## Samples a walk every SAMPLE_MM: the points on the sidewalk's top (not on the
+## car park's meshes) where the surface within WALKER_RADIUS of the feet, or under
+## them, stands higher than the sidewalk (a planter bed), and how many were checked.
+func _near_raised(walk: PackedVector3Array) -> Dictionary:
+	var near: Array[String] = []
+	var sidewalk := 0
+	for mm in range(0, LandsideDefinition.length_mm(walk) + 1, SAMPLE_MM):
+		var at := LandsideDefinition.point_at(walk, mm)
+		var top := _map.top(at)
+		if str(top[1]).begins_with(CAR_PARK_MESH) or absf(at.y - SIDEWALK_Y) > 0.005:
+			continue
+		sidewalk += 1
+		var highest := float(top[0])
+		for k in 8:
+			var around := at + Vector3(WALKER_RADIUS, 0.0, 0.0).rotated(Vector3.UP, k * PI / 4.0)
+			highest = maxf(highest, float(_map.top(around)[0]))
+		if highest > SIDEWALK_Y + RAISED:
+			near.append("%s %.3f" % [at, highest])
+	return {"near": near, "sidewalk": sidewalk}
 
 
 ## Samples a lane every SAMPLE_MM: the points whose height is off the surface,

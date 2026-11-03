@@ -250,7 +250,9 @@ func test_the_spot_nearer_the_doors_has_the_shorter_walk() -> void:
 	# 45.7 since board 297c9eb8: the walk leaves the gate diagonally over the
 	# apron to (25, -38.2), not via (25, -37.5) by the entry post.
 	assert_float(lot.walk_m).is_equal_approx(45.7, 0.1)
-	assert_float(multi.walk_m).is_equal_approx(87.8, 0.1)
+	# 79.7 since board 00291df0: the multi-storey walk crosses the road at
+	# x -2 (was x -6) to clear the planter bed, about 8 m shorter.
+	assert_float(multi.walk_m).is_equal_approx(79.7, 0.1)
 
 
 func test_without_an_entrance_the_preview_has_no_walk() -> void:
