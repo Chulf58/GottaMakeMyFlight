@@ -198,7 +198,9 @@ static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
 		return false
 	if bag_kind(p, index) != Kind.ROLLER:
 		return false
-	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS - RollerPark.UP_LEAD_TICKS
+	# At a gate chair it is taken once the walker is up (ParkRecovery.stand_up_ticks()).
+	var lead := 0 if p.stage == Passenger.Stage.STANDING_UP else RollerPark.UP_LEAD_TICKS
+	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS - lead
 
 
 ## Which hand holds bag `index` of `p` when it is carried: 0 the right, 1 the

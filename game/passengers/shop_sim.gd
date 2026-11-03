@@ -505,7 +505,7 @@ func _admits(p: Passenger, slot: Dictionary, route: Dictionary, browsing: bool) 
 ## Ticks from now until a visit to a room of `type`, walking `walk_mm`, leaves
 ## its slot.
 func _visit_ticks(p: Passenger, walk_mm: int, type: RoomTypes.RoomType) -> int:
-	var pre := PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0
+	var pre := ParkRecovery.stand_up_ticks(p) if p.stage == Passenger.Stage.SEATED else 0
 	return pre + JourneyForecast.walk_ticks(walk_mm) + ARRIVE_TICKS + browse_ticks(type)
 
 

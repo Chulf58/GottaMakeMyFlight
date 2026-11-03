@@ -32,6 +32,10 @@ extends RefCounted
 ## cut short, and the tip into the pull) is drawn as the walker goes, as it is
 ## for one walking off from a stand-up.
 const COLLECT_TICKS := ceili(RollerPark.TICKS_UP * RollerPark.LIFT_END) + 1
+## A gate sitter with a roller stands this many ticks at the chair front after
+## its stand-up, picking the roller up (stand_up_ticks()): the pick-up's lift,
+## as a collecting walker's (COLLECT_TICKS).
+const UP_HOLD_TICKS := ceili(RollerPark.TICKS_UP) + 1
 
 
 ## Whether `p` (of `sim`, its seat already released by the sim) loses its seat
@@ -114,6 +118,18 @@ static func collecting(sim: PassengerSim, p: Passenger) -> bool:
 	p.collect_tick = 0
 	p.stage_tick = sim.tick
 	return false
+
+
+## How many ticks the gate-chair stand-up (STANDING_UP) of `p` lasts: the
+## stand-up, then for a passenger with a roller UP_HOLD_TICKS more, standing
+## at the chair front while the roller is taken off the floor into the pull
+## (decision standing-up-with-a-roller-stand-up-then-pick-up-then-walk). The
+## pick-up began RollerPark.UP_LEAD_TICKS before the stand-up ended, on a body
+## still rising: with the roller beside the feet and the back bent at most 45
+## degrees the hand fell short and the bag jumped 0.11 to 0.31 m into it. The
+## sim, the journey forecast and the view all read it here.
+static func stand_up_ticks(p: Passenger) -> int:
+	return PassengerSim.STAND_UP_TICKS + (UP_HOLD_TICKS if _has_roller(p) else 0)
 
 
 static func _has_roller(p: Passenger) -> bool:

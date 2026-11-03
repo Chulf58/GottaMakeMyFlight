@@ -963,7 +963,7 @@ func _advance(p: Passenger) -> void:
 			elif p.stage == Passenger.Stage.STANDING:
 				_seat_from_spot(p)
 		Passenger.Stage.STANDING_UP:
-			if tick - p.stage_tick >= STAND_UP_TICKS:
+			if tick - p.stage_tick >= ParkRecovery.stand_up_ticks(p):
 				_release_seat(p)
 				# Up for a facility visit, or (its visit dropped) back to the
 				# gate while boarding has not started.

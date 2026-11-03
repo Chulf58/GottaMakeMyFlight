@@ -364,7 +364,7 @@ func _plan(p: Passenger) -> Dictionary:
 
 ## Ticks from now until a visit walking `walk_mm` starts to stand up.
 func _visit_ticks(p: Passenger, walk_mm: int) -> int:
-	var pre := PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0
+	var pre := ParkRecovery.stand_up_ticks(p) if p.stage == Passenger.Stage.SEATED else 0
 	return (
 		pre
 		+ JourneyForecast.walk_ticks(walk_mm)
