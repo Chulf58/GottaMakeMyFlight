@@ -488,6 +488,8 @@ func _ready() -> void:
 		build_mode.status_changed.connect(_on_mode_status_changed)
 		build_mode.templates.status_changed.connect(_on_status_changed)
 		build_mode.templates.armed_changed.connect(_show_status)
+		build_mode.room_mover.status_changed.connect(_on_status_changed)
+		build_mode.room_mover.active_changed.connect(_show_status)
 		_on_status_changed(build_mode.status_text())
 		_on_tool_changed(build_mode.tool)
 	else:
@@ -706,8 +708,8 @@ func _refresh_money() -> void:
 ## A door over a paid wall costs its price less the wall's refund, but the
 ## wallet must still hold the full door price (BuildTransaction.needed).
 func _preview_price() -> Vector2i:
-	if build_mode.templates.armed >= 0:
-		return build_mode.templates.preview_price()
+	if build_mode.room_mover.active or build_mode.templates.armed >= 0:
+		return _held_price()
 	var area := build_mode.dragged_area()
 	if build_mode.tool == BuildMode.Tool.FLOOR and area.has_area():
 		var rect_cost := _floor_rect_cost(area)
@@ -729,6 +731,13 @@ func _preview_price() -> Vector2i:
 	for step in plan:
 		net += BuildTransaction.quote(build_mode.grid, step).net()
 	return Vector2i(maxi(0, net), maxi(0, BuildTransaction.needed(build_mode.grid, plan)))
+
+
+## The price of the room in hand (RoomMoveTool) or of the armed template paste.
+func _held_price() -> Vector2i:
+	if build_mode.room_mover.active:
+		return build_mode.room_mover.preview_price()
+	return build_mode.templates.preview_price()
 
 
 ## The landside build's or the land plot's price under the pointer, for the
@@ -759,6 +768,8 @@ func _price_floor_rect(area: Rect2i) -> int:
 func _on_mode_status_changed(text: String) -> void:
 	if text == "" and build_mode.templates.is_active():
 		text = build_mode.templates.status_text()
+	elif text == "" and build_mode.room_mover.active:
+		text = build_mode.room_mover.status_text()
 	_on_status_changed(text)
 
 

@@ -115,6 +115,8 @@ func text() -> String:
 
 ## The refusal of the edit under the pointer, or null when the card has none to show.
 func refusal() -> BuildResult:
+	if build_mode != null and build_mode.room_mover.active:
+		return build_mode.room_mover.refusal()
 	if build_mode == null or build_mode.tool == BuildMode.Tool.NONE:
 		return null
 	if not build_mode.pointer_on_grid() or build_mode.is_dragging():
@@ -154,7 +156,10 @@ func refresh() -> void:
 
 ## The drawn ghost's bounds on screen (GhostBounds), or an empty Rect2.
 func ghost_rect() -> Rect2:
-	return GhostBounds.screen_rect(GhostBounds.ghost_of(build_mode), get_viewport().get_camera_3d())
+	var ghost := GhostBounds.ghost_of(build_mode)
+	if build_mode != null and build_mode.room_mover.active:
+		ghost = build_mode.room_mover.ghost_node()
+	return GhostBounds.screen_rect(ghost, get_viewport().get_camera_3d())
 
 
 ## A placed or removed piece can change the answer for the same edit.
