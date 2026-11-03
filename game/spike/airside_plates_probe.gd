@@ -304,17 +304,21 @@ func _prove_visible(label: String, subject: Node3D) -> bool:
 ## A ground state's sampled poses must all lie on paving: samples were taken (a zero
 ## count proves nothing), none sat on grass or on no surface, and at least one hit the
 ## taxi paving itself, so the paving was engaged and not only the runway or the site.
-func _require_paved(label: String, count: int, grass: int, on_taxi_paving: int) -> void:
+## `needs_taxi_paving` is false for PUSHBACK, which runs on the stand's own site paving.
+func _require_paved(
+	label: String, count: int, grass: int, on_taxi_paving: int, needs_taxi_paving := true
+) -> void:
 	if count <= 0:
 		_invalid("%s: no samples" % label)
 	if grass != 0:
 		_invalid("%s: %d of %d samples are on grass or no surface" % [label, grass, count])
-	if on_taxi_paving <= 0:
+	if needs_taxi_paving and on_taxi_paving <= 0:
 		_invalid("%s: no sample hit the taxi paving (%d samples)" % [label, count])
 
 
 ## Rays from the current camera to a few representative points of the paving: the
-## middle of the lane and the middle of each link (the part north of the site's paving).
+## middle of the lane and the middle of each link (the part between the runway's south
+## end, where the runway's own asphalt lies over the link, and the site's paving).
 ## Each point in frame must be hit first on the taxi paving's own collider; the plane's
 ## bodies and the colliders of hidden meshes are passed through. At least one point
 ## must be in frame, so the check cannot pass by testing nothing.
@@ -324,6 +328,11 @@ func _prove_paving_visible(label: String, paving: TaxiPaving) -> bool:
 	var skip: Array[RID] = []
 	for body in _plane.find_children("*", "StaticBody3D", true, false):
 		skip.append((body as StaticBody3D).get_rid())
+	var runway_south := _runway_south()
+	print("PAVING_VISIBLE %s runway_south_z=%.1f" % [label, runway_south])
+	if runway_south == -INF:
+		_invalid("%s: no runway mesh found to bound the links" % label)
+		return false
 	var checked := 0
 	var hits := 0
 	for strip in paving.shown:
@@ -332,10 +341,11 @@ func _prove_paving_visible(label: String, paving: TaxiPaving) -> bool:
 		if strip.has("quad"):
 			middle = (strip["quad"][0] + strip["quad"][2]) / 2.0
 		elif strip["across_x"]:
+			var north := maxf(rect.position.y, runway_south)
 			var south := minf(rect.end.y, PAVING_EDGE_Z)
-			if south <= rect.position.y:
+			if south <= north:
 				continue
-			middle.y = (rect.position.y + south) / 2.0
+			middle.y = (north + south) / 2.0
 		var point := Vector3(middle.x, TaxiPaving.HEIGHT_M, middle.y)
 		if _cam.is_position_behind(point):
 			continue
@@ -360,6 +370,18 @@ func _prove_paving_visible(label: String, paving: TaxiPaving) -> bool:
 			)
 		)
 	return passed
+
+
+## The southmost z of the runway's meshes (the Airside children named Runway*; the
+## RunwayExit and RunwayEntry markers have none).
+func _runway_south() -> float:
+	var south := -INF
+	for piece in _main.get_node("Airside").get_children():
+		if not String(piece.name).begins_with("Runway") or not piece is Node3D:
+			continue
+		for mi in _meshes(piece):
+			south = maxf(south, (mi.global_transform * mi.get_aabb()).end.z)
+	return south
 
 
 ## The first visible surface on the ray from `from` to `to`: a hit on the collider of a
@@ -643,7 +665,9 @@ func _taxi_paving() -> void:
 				% [state, count, lo, hi, on_taxi_paving, grass, grass_lo, grass_hi]
 			)
 		)
-		_require_paved("taxi state=%d" % state, count, grass, on_taxi_paving)
+		_require_paved(
+			"taxi state=%d" % state, count, grass, on_taxi_paving, state != FlightSim.State.PUSHBACK
+		)
 	var in_state := samples.filter(func(c: Dictionary) -> bool: return c["state"] == ground[0])
 	if in_state.is_empty():
 		_invalid("taxi paving: no TAXI_IN samples")
@@ -883,7 +907,11 @@ func _two_gate_paving() -> void:
 				)
 			)
 			_require_paved(
-				"two gates: gate %s state=%d" % [gate, state], count, grass, on_taxi_paving
+				"two gates: gate %s state=%d" % [gate, state],
+				count,
+				grass,
+				on_taxi_paving,
+				state != FlightSim.State.PUSHBACK
 			)
 	_plane.gate = FlightSim.DEFAULT_GATE
 	await _two_gate_plates(airside)
