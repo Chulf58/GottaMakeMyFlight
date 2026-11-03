@@ -14,9 +14,11 @@ extends RefCounted
 ## a drawn hand reaching the bag.
 ## What it does not guarantee: the view stamping the park on the tick the walker
 ## started sitting down (it stamps a change of home on the frame that sees it,
-## as the stand-up's floor>pull does, SecurityLooks._rolled_up()); and a seat
-## removed once the park is over (still sitting down, or seated) is left as it
-## was: the walker goes at once. A walker late as it began sitting down
+## as the stand-up's floor>pull does, SecurityLooks._rolled_up()). A seat
+## removed once the park is over (still sitting down, or seated) holds the
+## walker the same from that tick (board 6981b7ac): the roller lies parked, so
+## the pick-up starts then, where a walker set off at once had its hand reach
+## back and the bag jump into it. A walker late as it began sitting down
 ## (Passenger.sat_late, note_sitting()) is not held; one turning late while
 ## held waits to the end. sat_late is noted on the tick after the sit-down
 ## began, so a frame that drew several ticks at once can have seen a later
@@ -33,13 +35,15 @@ const COLLECT_TICKS := ceili(RollerPark.TICKS_UP * RollerPark.LIFT_END) + 1
 
 
 ## Whether `p` (of `sim`, its seat already released by the sim) loses its seat
-## in the middle of a roller's park: sitting down at a gate seat less than
-## RollerPark.TICKS_DOWN ticks, with a roller among its bags. If so it is to
-## stand where it is to the tick collect_of() gives, kept on `p`.
+## with a roller among its bags, sitting down or seated: in the middle of the
+## roller's park (sitting down less than RollerPark.TICKS_DOWN ticks), or once
+## it is over (decision seat-lost-after-a-roller-park-a-seated-passenger-still-
+## stand, board 6981b7ac), the bag then lying parked on the floor. If so it is
+## to stand where it is to the tick collect_of() gives, kept on `p`.
 static func on_seat_lost(sim: PassengerSim, p: Passenger) -> void:
-	if p.stage != Passenger.Stage.SITTING_DOWN:
+	if p.stage != Passenger.Stage.SITTING_DOWN and p.stage != Passenger.Stage.SEATED:
 		return
-	if sim.tick - p.stage_tick >= ceili(RollerPark.TICKS_DOWN) or not _has_roller(p):
+	if not _has_roller(p):
 		return
 	# A walker late as it began sitting down carried its roller lifted in the
 	# hand (CarryOnProps._lifted()) and set it down with no park, so there is
@@ -47,7 +51,11 @@ static func on_seat_lost(sim: PassengerSim, p: Passenger) -> void:
 	# after has its park run on (RollerPark.holds_lift()) and is held.
 	if p.sat_late:
 		return
-	p.collect_tick = collect_of(p.stage_tick)
+	var parked_at := p.stage_tick
+	if p.stage == Passenger.Stage.SEATED or sim.tick - parked_at >= ceili(RollerPark.TICKS_DOWN):
+		# The park is over and the roller lies parked: the pick-up starts now.
+		parked_at = sim.tick - ceili(RollerPark.TICKS_DOWN)
+	p.collect_tick = collect_of(parked_at)
 
 
 ## Notes on `p` (of `sim`, at the start of a tick, before any step) whether it

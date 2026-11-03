@@ -24,6 +24,9 @@ const CROSSFADE_SECONDS := 0.18
 const LOOPED := ["idle", "walk", "run", "sit_idle", "shower"]
 const MISSED_LINGER_TICKS := 200
 const BUBBLE_HEIGHT := 2.5
+## A speech bubble draws above the need icons and the station signs and
+## captions (user ruling: a kept bubble's text is never covered).
+const BUBBLE_PRIORITY := MissMarkers.CAPTION_PRIORITY + 2
 const PICK_RADIUS_PX := 40.0
 
 @export var clock: SimClock
@@ -33,6 +36,8 @@ const PICK_RADIUS_PX := 40.0
 
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
+## False shows every speech bubble, overlapping or not (plate probes compare).
+var declutter_bubbles := true
 var selected_id := 0
 ## Moved pieces still in use, drawn at their old spot (RelocationGhosts).
 ## Holds no tick: it compares with the sim every frame.
@@ -64,6 +69,8 @@ var _seats: Dictionary = {}
 var _turns := PassengerTurns.new()
 ## True while snap() syncs: the step from the pre-load position is no heading.
 var _snapping := false
+## Working array of _declutter_bubbles, reused each frame.
+var _bubble_entries: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -259,13 +266,51 @@ func draw() -> void:
 		var fade: ClipCrossfade = node.get_meta(&"crossfade")
 		fade.ease_to(now, CROSSFADE_SECONDS)
 		fade.drawn = true
-		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
 	if _nodes.has(selected_id):
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
 	_ring.visible = _nodes.has(selected_id)
+	# The icons lift over a bubble only while it shows, so they are laid out
+	# after the declutter has set each bubble's visibility for this frame.
+	_declutter_bubbles(camera, unit)
+	for id in _nodes:
+		var node: Node3D = _nodes[id]
+		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
 	_props.draw()
 	_markers.draw()
+
+
+## Shows each speech bubble, then hides the ones that overlap a bubble kept
+## on screen (BubbleDeclutter: late first, then nearest the front of the
+## queue). Does nothing with no camera.
+func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
+	var entries := _bubble_entries
+	entries.clear()
+	var view := get_viewport() if is_inside_tree() else null
+	var to_output := view.get_stretch_transform().get_scale().y if view != null else 1.0
+	for id in _nodes:
+		var node: Node3D = _nodes[id]
+		var bubble := node.get_node("Bubble") as Label3D
+		bubble.visible = true
+		if bubble.text == "" or camera == null or unit <= 0.0:
+			continue
+		var at := bubble.global_position
+		var depth := (at - camera.global_position).dot(-camera.global_basis.z)
+		if depth <= 0.0:
+			continue
+		var rect := BubbleDeclutter.rect_of(
+			camera.unproject_position(at) * to_output,
+			bubble.text,
+			bubble.font_size,
+			bubble.outline_size,
+			bubble.pixel_size / (depth * unit)
+		)
+		var rank: int = node.get_meta(&"bubble_rank", BubbleDeclutter.NO_QUEUE)
+		entries.append(BubbleDeclutter.entry(id, bubble.text, rank, rect))
+	if not declutter_bubbles:
+		return
+	for id in BubbleDeclutter.hidden(entries):
+		((_nodes[id] as Node3D).get_node("Bubble") as Label3D).visible = false
 
 
 ## The passenger drawn nearest a screen point within PICK_RADIUS_PX, or 0.
@@ -318,6 +363,8 @@ func _take(p: Passenger) -> Node3D:
 	bubble.name = "Bubble"
 	bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	bubble.no_depth_test = true
+	bubble.render_priority = BUBBLE_PRIORITY
+	bubble.outline_render_priority = BUBBLE_PRIORITY - 1
 	bubble.font_size = 56
 	bubble.outline_size = 14
 	bubble.pixel_size = 0.006
@@ -476,7 +523,12 @@ func _pose(node: Node3D, p: Passenger) -> float:
 			var slack := (SEEK_SLACK_TICKS + speed) * SimClock.STEP * base
 			if absf(player.current_animation_position - at) > slack:
 				player.seek(at, true)
-	(node.get_node("Bubble") as Label3D).text = sim.bubble_text(p)
+	var bubble_text := sim.bubble_text(p)
+	(node.get_node("Bubble") as Label3D).text = bubble_text
+	node.set_meta(
+		&"bubble_rank",
+		BubbleDeclutter.rank_of(sim, p) if bubble_text != "" else BubbleDeclutter.NO_QUEUE
+	)
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
 	WishIconView.show_wish(node, wish)
