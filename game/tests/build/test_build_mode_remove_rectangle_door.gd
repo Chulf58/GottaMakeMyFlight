@@ -167,3 +167,68 @@ func test_a_second_drag_takes_the_restored_wall_and_pays_only_its_own_refunds() 
 	assert_int(_mode.grid.floor_at(EXIT_CELL)).is_equal(BuildGrid.FLOOR_NONE)
 	assert_int(_finances.wallet.balance).is_equal(balance + want)
 	assert_bool(second.charged).is_false()
+
+
+## The wallet holds exactly the room the whole rectangle needs: the door's
+## refund less the wall's price. The door's refund alone would not fit, so the
+## two edits have to settle together.
+func _fill_wallet_to_the_net_of_the_exit() -> int:
+	var net := _refund_of(_door_id) - PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
+	_finances.wallet.balance = Wallet.MAX_BALANCE - net
+	return net
+
+
+func test_a_rectangle_over_an_exit_settles_when_only_the_net_fits_in_the_wallet() -> void:
+	var net := _fill_wallet_to_the_net_of_the_exit()
+	# Control: the refund alone does not fit, so settling the removal first would fail.
+	assert_int(_refund_of(_door_id)).is_greater(net)
+	var outcome := _drag(Rect2i(3, 2, 3, 1))
+	print(
+		(
+			"net fits: placed=%d skipped=%d balance %d want %d"
+			% [outcome.placed, outcome.skipped, _finances.wallet.balance, Wallet.MAX_BALANCE]
+		)
+	)
+	assert_int(outcome.placed).is_equal(1)
+	assert_int(outcome.skipped).is_equal(0)
+	assert_array(_mode.grid.object_ids()).is_equal([_desk_id])
+	assert_int(_mode.grid.wall_kind(EXIT_CELL, NORTH)).is_equal(BuildGrid.WallKind.PLAIN)
+	assert_int(_finances.wallet.balance).is_equal(Wallet.MAX_BALANCE)
+
+
+func test_a_rectangle_whose_net_does_not_fit_in_the_wallet_counts_only_the_removal() -> void:
+	_fill_wallet_to_the_net_of_the_exit()
+	# One short of the room the net needs.
+	_finances.wallet.balance += 1
+	var balance := _finances.wallet.balance
+	var outcome := _drag(Rect2i(3, 2, 3, 1))
+	print(
+		(
+			"full: placed=%d skipped=%d reason=%s"
+			% [outcome.placed, outcome.skipped, outcome.first_reason]
+		)
+	)
+	assert_int(outcome.placed).is_equal(0)
+	assert_int(outcome.skipped).is_equal(1)
+	assert_str(outcome.first_reason).is_equal(
+		BuildResult.REASON_TEXT[BuildResult.Reason.WALLET_FULL]
+	)
+	assert_array(_mode.grid.object_ids()).contains_exactly_in_any_order([_desk_id, _door_id])
+	assert_int(_mode.grid.wall_kind(EXIT_CELL, NORTH)).is_equal(BuildGrid.WallKind.NONE)
+	assert_int(_finances.wallet.balance).is_equal(balance)
+
+
+func test_a_rectangle_the_wallet_cannot_afford_counts_the_removal_not_its_wall() -> void:
+	var wall_price := PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
+	_finances.wallet.spend(_finances.wallet.balance - (wall_price - 1), Wallet.Category.BUILD)
+	var outcome := _drag(Rect2i(3, 2, 3, 1))
+	print(
+		(
+			"poor exit: tiles=%d cost=%d message=%s"
+			% [outcome.unaffordable_tiles, outcome.unaffordable_cost, outcome.message()]
+		)
+	)
+	assert_int(outcome.unaffordable_tiles).is_equal(1)
+	assert_int(outcome.unaffordable_cost).is_equal(wall_price)
+	assert_int(outcome.skipped).is_equal(0)
+	assert_str(outcome.message()).is_equal("Not enough money: 1 tiles cost %d" % wall_price)
