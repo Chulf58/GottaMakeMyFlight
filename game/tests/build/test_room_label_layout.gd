@@ -129,6 +129,30 @@ func test_a_label_with_no_clear_spot_hides() -> void:
 	assert_bool(_view.label_of(_room).visible).is_true()
 
 
+## A big partial panel (the offer sheet) blocks the way to the middle, but a
+## pocket below it is clear: the label goes there and is not hidden.
+func test_a_label_with_a_blocked_way_to_the_middle_takes_a_clear_spot_elsewhere() -> void:
+	var rect := Rect2(700.0, 70.0, 200.0, 100.0)
+	var sheet: Array[Rect2] = [Rect2(630.0, 60.0, 700.0, 440.0)]
+	# Control: the way toward the middle is blocked for the whole travel.
+	var toward := (
+		(VIEW.get_center() - rect.get_center()).normalized() * RoomLabelLayout.MAX_TRAVEL_PX
+	)
+	(
+		assert_bool(
+			sheet[0].grow(RoomLabelLayout.GAP_PX).intersects(
+				Rect2(rect.position + toward, rect.size)
+			)
+		)
+		. is_true()
+	)
+	var spot := RoomLabelLayout.slide_clear(rect, sheet, VIEW.size)
+	print("blocked way: spot %s" % spot)
+	assert_vector(spot.size).is_equal(rect.size)
+	assert_bool(spot.grow(RoomLabelLayout.GAP_PX - 0.01).intersects(sheet[0])).is_false()
+	assert_bool(VIEW.grow(-RoomLabelLayout.VIEW_MARGIN_PX).encloses(spot)).is_true()
+
+
 func test_the_label_never_draws_bigger_than_the_cap_on_screen() -> void:
 	var label := _view.label_of(_room)
 	# Far out the world-size label is small and stays as it was.

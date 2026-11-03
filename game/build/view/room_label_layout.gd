@@ -32,6 +32,13 @@ const HIDDEN_ALPHA := 0.02
 const GAP_PX := 6.0
 const STEP_PX := 6.0
 const MAX_TRAVEL_PX := 360.0
+## Past that, spots are tried on rings this far apart, each with a point every
+## RING_STEP_PX along it (at least RING_POINTS), from the direction of the middle
+## first, as the station captions do (MissMarkers); a ring spot stays inside the
+## view by VIEW_MARGIN_PX.
+const RING_STEP_PX := 32.0
+const RING_POINTS := 16
+const VIEW_MARGIN_PX := 8.0
 
 ## How many labels were hidden because no spot was clear of the HUD, summed over
 ## the layouts run.
@@ -72,20 +79,41 @@ static func label_rect(
 
 
 ## `rect` when it is clear of `hud` by GAP_PX, else the nearest spot toward the
-## middle of a view of `view_size` that is, at most MAX_TRAVEL_PX away. A
-## zero-size rectangle means there is none.
+## middle of a view of `view_size` that is, at most MAX_TRAVEL_PX away, else the
+## nearest clear spot inside the view on rings around `rect`, tried from the
+## direction of the middle first. A zero-size rectangle means there is none.
 static func slide_clear(rect: Rect2, hud: Array[Rect2], view_size: Vector2) -> Rect2:
 	if _is_clear(rect, hud):
 		return rect
 	var toward := view_size / 2.0 - rect.get_center()
-	if toward.is_zero_approx():
-		return Rect2()
-	var reach := minf(MAX_TRAVEL_PX, toward.length())
-	var step := toward.normalized() * STEP_PX
-	for k in range(1, int(reach / STEP_PX) + 1):
-		var moved := Rect2(rect.position + step * k, rect.size)
-		if _is_clear(moved, hud):
-			return moved
+	if not toward.is_zero_approx():
+		var reach := minf(MAX_TRAVEL_PX, toward.length())
+		var step := toward.normalized() * STEP_PX
+		for k in range(1, int(reach / STEP_PX) + 1):
+			var moved := Rect2(rect.position + step * k, rect.size)
+			if _is_clear(moved, hud):
+				return moved
+	return _ring_spot(rect, hud, view_size, toward)
+
+
+## The nearest spot inside the view and clear of `hud` on rings of growing radius
+## around `rect`, or a zero-size rectangle.
+static func _ring_spot(
+	rect: Rect2, hud: Array[Rect2], view_size: Vector2, toward: Vector2
+) -> Rect2:
+	var inner := Rect2(Vector2.ZERO, view_size).grow(-VIEW_MARGIN_PX)
+	var heading := toward.angle() if not toward.is_zero_approx() else 0.0
+	var radius := RING_STEP_PX
+	while radius <= view_size.length():
+		var points := maxi(RING_POINTS, ceili(TAU * radius / RING_STEP_PX))
+		for n in points:
+			## 0, then one step either side of the heading, then two, and so on.
+			var turn := ceili(n / 2.0) * (1.0 if n % 2 == 1 else -1.0)
+			var angle := heading + TAU * turn / points
+			var moved := Rect2(rect.position + Vector2.from_angle(angle) * radius, rect.size)
+			if inner.encloses(moved) and _is_clear(moved, hud):
+				return moved
+		radius += RING_STEP_PX
 	return Rect2()
 
 
