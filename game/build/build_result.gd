@@ -50,6 +50,11 @@ enum Reason {
 	GATE_IN_USE,
 	GATE_FLIGHTS_STUCK,
 	DOOR_FRONT_BLOCKED,
+	MOVE_STRADDLES,
+	MOVE_UNMOVABLE,
+	MOVE_NO_FIT,
+	MOVE_EXIT_BLOCKED,
+	MOVE_CHANGED,
 }
 
 const REASON_TEXT := {
@@ -104,6 +109,11 @@ const REASON_TEXT := {
 	Reason.GATE_FLIGHTS_STUCK:
 	"No other gate is free for these flights. Move them in Departures first",
 	Reason.DOOR_FRONT_BLOCKED: "Something is in front of the door",
+	Reason.MOVE_STRADDLES: "A piece sits across the room's edge",
+	Reason.MOVE_UNMOVABLE: "Desks, scanners and lane parts cannot move with a room",
+	Reason.MOVE_NO_FIT: "A piece does not fit at the new spot",
+	Reason.MOVE_EXIT_BLOCKED: "Keep the way out clear for the passengers leaving the room",
+	Reason.MOVE_CHANGED: "The room changed since it was picked up. Pick it up again",
 }
 
 var ok: bool = true
