@@ -250,6 +250,11 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 	assert_vector(icon.offset).is_equal_approx(
 		NeedIcons.offset_of(1, 2, lift_px), Vector2.ONE * 0.001
 	)
+	# A bubble hidden by the declutter leaves no gap: the row sits at the head.
+	bubble.visible = false
+	NeedIcons.layout(node, bubble, camera, unit)
+	assert_vector(icon.position).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
+	assert_vector(icon.offset).is_equal(NeedIcons.offset_of(1, 2))
 	camera.free()
 
 

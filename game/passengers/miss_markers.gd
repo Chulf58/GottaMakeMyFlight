@@ -59,10 +59,12 @@ const CAPTION_GAP_PX := 4.0
 const CAPTION_OUTLINE := 8
 ## Clear space kept between two shown captions.
 const CAPTION_MARGIN_PX := 6.0
-## Side of a broad-phase cell for the overlap test, and the most a staff-spot
-## caption is lifted looking for clear space.
-const BIN_PX := 160.0
+## The most a staff-spot caption is lifted looking for clear space.
 const MAX_LIFTS := 64
+## Draw order of the sign sprites and their captions among the no-depth-test
+## sprites; the passenger speech bubbles draw above both (PassengerViews).
+const SIGN_PRIORITY := 11
+const CAPTION_PRIORITY := 12
 const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
 const FALLBACK_WIDTH := 1920.0
@@ -328,7 +330,7 @@ func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2)
 			_stations.append(station)
 			var icon := Rect2(point.x - SIGN_PX / 2.0, point.y - SIGN_PX, SIGN_PX, SIGN_PX)
 			_icons.append(icon)
-			_bin(_icon_bins, icon, _icons.size() - 1)
+			RectBins.file(_icon_bins, icon, _icons.size() - 1)
 	_order.resize(_labels.size())
 	for i in _order.size():
 		_order[i] = i
@@ -389,12 +391,12 @@ func _place_caption(i: int, view_size: Vector2) -> void:
 			caption.offset += Vector2(
 				rect.position.x - _rects[i].position.x, _rects[i].end.y - rect.end.y
 			)
-		if _hits_in(rect.grow(CAPTION_MARGIN_PX), _bins, _placed):
+		if RectBins.hits(rect.grow(CAPTION_MARGIN_PX), _bins, _placed):
 			caption.visible = false
 			caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
 			return
 	_placed.append(rect)
-	_bin(_bins, rect, _placed.size() - 1)
+	RectBins.file(_bins, rect, _placed.size() - 1)
 
 
 ## Where staff-spot caption `i` goes: its own spot if clear, else lifted
@@ -423,9 +425,12 @@ func _clear_spot(i: int, view_size: Vector2) -> Rect2:
 			var rect := caption_rect(_points[i], text, step_y * lifts, side)
 			if rect.position.y < view.position.y:
 				break
-			if not view.encloses(rect) or _hits_in(rect.grow(CAPTION_MARGIN_PX), _bins, _placed):
+			if (
+				not view.encloses(rect)
+				or RectBins.hits(rect.grow(CAPTION_MARGIN_PX), _bins, _placed)
+			):
 				continue
-			if not _hits_in(rect, _icon_bins, _icons):
+			if not RectBins.hits(rect, _icon_bins, _icons):
 				return rect
 			if not best_found:
 				best = rect
@@ -472,7 +477,7 @@ func _hint_spot(i: int, view_size: Vector2) -> Rect2:
 
 
 func _hint_spot_usable(rect: Rect2, inner: Rect2) -> bool:
-	return _hint_spot_clear(rect, inner) and not _hits_in(rect, _icon_bins, _icons)
+	return _hint_spot_clear(rect, inner) and not RectBins.hits(rect, _icon_bins, _icons)
 
 
 ## True when `rect` is inside `inner` and off every HUD rectangle (by the margin).
@@ -503,35 +508,6 @@ static func draws_something(control: Control) -> bool:
 ## A panel or a button: it draws a box and its children lie inside it.
 static func is_box(control: Control) -> bool:
 	return control is Panel or control is PanelContainer or control is BaseButton
-
-
-## True when `rect` touches a rectangle in `rects`, found through `bins`.
-func _hits_in(rect: Rect2, bins: Dictionary, rects: Array[Rect2]) -> bool:
-	for cell in _bin_range(rect):
-		if bins.has(cell):
-			for at: int in bins[cell]:
-				if rect.intersects(rects[at]):
-					return true
-	return false
-
-
-## Files rectangle number `at` under every broad-phase cell it covers.
-static func _bin(bins: Dictionary, rect: Rect2, at: int) -> void:
-	for cell in _bin_range(rect):
-		if not bins.has(cell):
-			bins[cell] = []
-		(bins[cell] as Array).append(at)
-
-
-## The broad-phase cells a rectangle covers.
-static func _bin_range(rect: Rect2) -> Array[Vector2i]:
-	var low := Vector2i((rect.position / BIN_PX).floor())
-	var high := Vector2i((rect.end / BIN_PX).floor())
-	var cells: Array[Vector2i] = []
-	for y in range(low.y, high.y + 1):
-		for x in range(low.x, high.x + 1):
-			cells.append(Vector2i(x, y))
-	return cells
 
 
 func _placed_before(a: int, b: int) -> bool:
@@ -667,7 +643,7 @@ func _take_sign() -> Sprite3D:
 	sign.fixed_size = true
 	sign.no_depth_test = true
 	sign.shaded = false
-	sign.render_priority = 11
+	sign.render_priority = SIGN_PRIORITY
 	sign.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	sign.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
 	sign.pixel_size = SIGN_PX / FALLBACK_HEIGHT / MarkerIcons.SIZE
@@ -676,8 +652,8 @@ func _take_sign() -> Sprite3D:
 	caption.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	caption.fixed_size = true
 	caption.no_depth_test = true
-	caption.render_priority = 12
-	caption.outline_render_priority = 11
+	caption.render_priority = CAPTION_PRIORITY
+	caption.outline_render_priority = CAPTION_PRIORITY - 1
 	caption.font_size = CAPTION_FONT
 	caption.outline_size = CAPTION_OUTLINE
 	caption.outline_modulate = MarkerIcons.OUTLINE
