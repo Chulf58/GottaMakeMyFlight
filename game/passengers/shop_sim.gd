@@ -657,7 +657,16 @@ func _head_to_piece(p: Passenger, visit: ShopVisit) -> void:
 		owed = visit.relocation.left
 	var slot := layout.slot(visit.display, visit.index)
 	var route := {}
-	if not slot.is_empty() and ShopCounters.room_open(_sim, slot["room"]):
+	# The piece must still be one of the visit's own room (as for a cafe table
+	# or a toilet stall): in another room it is another shop's, and the visit
+	# was agreed for this one.
+	var usable := (
+		not slot.is_empty()
+		and int(slot["room"]) == visit.room
+		and Relocation.destination_ok(_sim.grid, visit.display, visit.piece["def"], visit.room)
+		and ShopCounters.room_open(_sim, visit.room)
+	)
+	if usable:
 		route = VisitRoute.plan(_sim.grid, p, slot["approach"])
 		if route.is_empty() and p.at == slot["approach"] and not p.is_moving():
 			route = {"path": [p.at], "keep": 0, "from": p.at, "mm": 0}
@@ -671,7 +680,6 @@ func _head_to_piece(p: Passenger, visit: ShopVisit) -> void:
 		return
 	visit.slot = slot
 	visit.piece = Relocation.placement(_sim.grid, visit.display)
-	visit.room = slot["room"]
 	visit.deadline = _live_deadline(p, visit)
 	VisitRoute.start(p, route)
 	if p.stage != Passenger.Stage.SHOP_WALK:

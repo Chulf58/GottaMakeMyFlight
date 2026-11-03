@@ -144,6 +144,11 @@ static func _relocation_problem(
 	var type := RoomTypes.get_type(room["type"])
 	if type == null or not type.shop or moving.source["def"] != type.seat_piece:
 		return "a relocation from no browse piece of the room"
+	var cells := BuildCatalog.get_def(moving.source["def"]).footprint(
+		moving.source["anchor"], moving.source["facing"]
+	)
+	if visit.index >= mini(type.seats_per_piece, cells.size()):
+		return "slot %d is not one of the piece's %d" % [visit.index, type.seats_per_piece]
 	var dwell := ShopSim.browse_ticks(type)
 	if not moving.exiting:
 		if not moving.returns() or moving.left < 1 or moving.left > dwell:
