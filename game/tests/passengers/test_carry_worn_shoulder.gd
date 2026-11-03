@@ -107,6 +107,8 @@ func _shift_at(z: float) -> Vector3:
 	stoop.drawn = _DRAWN
 	stoop.targets = [_AIM]
 	stoop.drops = [Vector3(1.0, 1.0, z)]
+	# CarryWorn turns by the back's drawn bend (CarryStoop.bent, board 68c6027e).
+	stoop.bent = _DRAWN
 	return CarryWorn.stoop_shift(stoop, _PIVOT, _SHOULDER)
 
 

@@ -10,7 +10,8 @@ extends SceneTree
 ##
 ## Plates of the pick-up (floor>pull) that follows, from the roller's side:
 ##   reach: the first frame the hand is within RollerPark.TAKE_M of the lying
-##     bag's handle; take: the frame the hand took it ("park_took");
+##     bag's handle (the take's own frame when the hand gets there after
+##     REACH_END, so takes it at once); take: the next frame the hand holds it
 ##   k050: the first frame at k 0.5 or later; before: one frame before the
 ##     lift's end (BEFORE_K); switch: the first at the lift's
 ##     end (RollerPark.up_ends().x, the stoop easing into HIPS_ALL); ease1, ease2:
@@ -105,6 +106,10 @@ const TURN_DEG := 20.0
 ## seated-still height varied by under 0.1 mm over 379 frames (printed as
 ## noise), so 5 mm is noise with margin, not a tolerance for a lower seat.
 const SEAT_EPS_M := 0.005
+## The stoop's bend of the back past this (degrees, CarryStoop.bent) fails the
+## probe (TORSO): a roller park bends it at most RollerPark.BACK_CAP, about 45
+## (board 68c6027e).
+const TORSO_MAX_DEG := 46.0
 ## The clips a body is seated in, or between the seat and standing.
 const SEAT_CLIPS := ["sit_down", "sit_idle", "stand_up"]
 
@@ -143,6 +148,8 @@ var _loss_frames := 0
 ## frame is proved in frame and seen like a plate, and each window is also
 ## saved as one contact sheet.
 var _strips: Array[Vector2i] = []
+## The largest back bend the stoop drew (degrees) and its tick (_torso_row).
+var _torso := {"deg": 0.0, "tick": -1}
 ## --dump=A-B: the ticks _dump_row() prints (none by default).
 var _dump := Vector2i(1, 0)
 ## The lowest Spine_01 height over the body sitting down or seated, its tick,
@@ -227,6 +234,7 @@ func _run() -> void:
 			await _collect()
 		_finish_strips()
 		_seat_summary()
+		_torso_summary()
 		if _worn:
 			_worn_summary()
 	print("PROBE done plates=%d failed=%s" % [_saved.size(), _failed])
@@ -354,7 +362,7 @@ func _collect() -> void:
 		var handle := node.global_transform * CarryOnProps.ROLLER_HANDLE
 		var took := float(bag.get("park_took", -1.0))
 		var shot := ""
-		if wants.has("reach") and took < 0.0 and grip.distance_to(handle) <= RollerPark.TAKE_M:
+		if wants.has("reach") and grip.distance_to(handle) <= RollerPark.TAKE_M:
 			shot = "reach"
 		elif wants.has("take") and took >= 0.0:
 			shot = "take"
@@ -836,6 +844,7 @@ func _strip_step(props: CarryOnProps, body: Node3D) -> void:
 	_last_yaw = yaw
 	_dump_row(props, body)
 	_seat_row(body)
+	_torso_row(body)
 	if _no_plates:
 		return
 	for w in _strips.size():
@@ -1292,3 +1301,27 @@ func _clip_at(body: Node3D) -> String:
 ## SEAT_EPS_M under `seated`, the height seated still.
 static func _seat_low(high: float, seated: float) -> bool:
 	return high < seated - SEAT_EPS_M
+
+
+## Keeps the largest bend of the back the stoop draws (CarryStoop.bent).
+func _torso_row(body: Node3D) -> void:
+	var rig: Dictionary = body.get_meta(&"carry_rig", {})
+	if rig.is_empty():
+		return
+	var deg := (rig["stoop"] as CarryStoop).bent * CarryStoop.STOOP_DEGREES
+	if deg > _torso["deg"]:
+		_torso = {"deg": deg, "tick": _clock.tick}
+
+
+## Prints the largest back bend and fails the probe (TORSO) past TORSO_MAX_DEG,
+## or when the stoop never bent the back (nothing was measured).
+func _torso_summary() -> void:
+	print("TORSO largest stoop bend %.1f deg at tick %d" % [_torso["deg"], _torso["tick"]])
+	if _walk_route:
+		return
+	if _torso["deg"] <= 0.0:
+		_invalid("the stoop never bent the back")
+	elif _torso["deg"] > TORSO_MAX_DEG:
+		_invalid(
+			"the stoop bent the back %.1f degrees at tick %d" % [_torso["deg"], _torso["tick"]]
+		)

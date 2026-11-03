@@ -48,12 +48,22 @@ var keeps: Array[float] = []
 ## (CarryLead.STALL_HIPS): the hips dropping with every stoop brought the knees
 ## forward into the bag (board item c7b0e7be).
 var drops: Array[Vector3] = []
+## How far each target's stoop may bend the back, a share of STOOP_DEGREES
+## (none given: 1, all of it). Past it the stoop goes on in the hips alone: a
+## roller park bends the back at most about 45 degrees (RollerPark.BACK_CAP,
+## user ruling roller-park-stoop-cap-the-back-at-about-45-degrees-and-push-
+## the-hips-back, board 68c6027e).
+var bends: Array[float] = []
 ## The stoop drawn last (0 to 1), for checks and plates.
 var drawn := 0.0
+## The back's bend drawn last, a share of STOOP_DEGREES (drawn, or less where
+## a bends entry capped it).
+var bent := 0.0
 
 
 func _process_modification_with_delta(_delta: float) -> void:
 	drawn = 0.0
+	bent = 0.0
 	var skeleton := get_skeleton()
 	if skeleton == null or targets.is_empty():
 		return
@@ -70,6 +80,7 @@ func _process_modification_with_delta(_delta: float) -> void:
 	var s := 0.0
 	# How far the hips go down and back (skeleton units).
 	var hips_by := Vector2.ZERO
+	var cap := 1.0
 	for i in targets.size():
 		var arm := skeleton.find_bone(CarryArm.ARM_BONES[sides[i]])
 		var shoulder := skeleton.get_bone_global_pose(arm).origin
@@ -86,14 +97,17 @@ func _process_modification_with_delta(_delta: float) -> void:
 			continue
 		var d: Vector3 = drops[i] if i < drops.size() else HIPS_ALL
 		var full := Vector2(STOOP_DROP * d.x, HIP_BACK_M * d.y) / to_world
-		var got := solved(shoulder, pivot, aim_at, target, reach, full, d.z)
+		var bend: float = bends[i] if i < bends.size() else 1.0
+		var got := solved(shoulder, pivot, aim_at, target, reach, full, d.z, bend)
 		var w := low * clampf(weights[i], 0.0, 1.0)
 		if got.x * w > s:
 			s = got.x * w
 			hips_by = full * got.y * w
+			cap = bend
 	if s <= 0.0:
 		return
 	drawn = s
+	bent = minf(s, cap)
 	var feet: Array[Transform3D] = []
 	for leg in LEGS:
 		feet.append(skeleton.get_bone_global_pose(skeleton.find_bone(leg[2])))
@@ -103,7 +117,7 @@ func _process_modification_with_delta(_delta: float) -> void:
 	low.origin.z -= hips_by.y
 	skeleton.set_bone_global_pose(hips, low)
 	var back := skeleton.get_bone_global_pose(spine)
-	back.basis = turn(pivot, aim_at, s) * back.basis
+	back.basis = turn(pivot, aim_at, bent) * back.basis
 	skeleton.set_bone_global_pose(spine, back)
 	for i in LEGS.size():
 		_plant(skeleton, LEGS[i], feet[i])
@@ -124,16 +138,23 @@ static func solved(
 	target: Vector3,
 	reach: float,
 	full: Vector2,
-	back_first: float
+	back_first: float,
+	bend := 1.0
 ) -> Vector2:
 	var first := Vector2.ZERO
 	if back_first > 0.0:
-		first.x = needed(shoulder, pivot, aim_at, target, reach, 0.0, 0.0, true)
+		first.x = needed(shoulder, pivot, aim_at, target, reach, 0.0, 0.0, true, bend)
+		# A capped back that leaves the hand short goes on in the hips.
+		var short := (
+			stooped(shoulder, pivot, aim_at, first.x, 0.0, 0.0, bend).distance_to(target) > reach
+		)
+		if bend < 1.0 and first.x >= bend - 1.0 / STEPS and short:
+			first.x = 1.0
 		if first.x >= 1.0:
-			first.y = hips_needed(shoulder, pivot, aim_at, target, reach, full)
+			first.y = hips_needed(shoulder, pivot, aim_at, target, reach, full, bend)
 		if back_first >= 1.0:
 			return first
-	var with := needed(shoulder, pivot, aim_at, target, reach, full.x, full.y)
+	var with := needed(shoulder, pivot, aim_at, target, reach, full.x, full.y, bend < 1.0, bend)
 	return Vector2(with, with).lerp(first, clampf(back_first, 0.0, 1.0))
 
 
@@ -155,9 +176,10 @@ static func stooped(
 	aim_at: Vector3,
 	s: float,
 	drop := STOOP_DROP,
-	back := HIP_BACK_M
+	back := HIP_BACK_M,
+	bend := 1.0
 ) -> Vector3:
-	var turned := pivot + turn(pivot, aim_at, s) * (shoulder - pivot)
+	var turned := pivot + turn(pivot, aim_at, minf(s, bend)) * (shoulder - pivot)
 	return turned - Vector3.UP * drop * s + Vector3.FORWARD * back * s
 
 
@@ -173,10 +195,11 @@ static func needed(
 	reach: float,
 	drop := STOOP_DROP,
 	back := HIP_BACK_M,
-	closest := false
+	closest := false,
+	bend := 1.0
 ) -> float:
 	var reaches := func(s: float) -> bool:
-		return stooped(shoulder, pivot, aim_at, s, drop, back).distance_to(target) <= reach
+		return stooped(shoulder, pivot, aim_at, s, drop, back, bend).distance_to(target) <= reach
 	if reaches.call(0.0):
 		return 0.0
 	for step in range(1, STEPS + 1):
@@ -198,8 +221,9 @@ static func needed(
 	var best := 0.0
 	var nearest := INF
 	for step in range(STEPS + 1):
-		var gap := stooped(shoulder, pivot, aim_at, step / float(STEPS), drop, back).distance_to(
-			target
+		var gap := (
+			stooped(shoulder, pivot, aim_at, step / float(STEPS), drop, back, bend)
+			. distance_to(target)
 		)
 		if gap < nearest:
 			nearest = gap
@@ -211,16 +235,24 @@ static func needed(
 ## (down, back) that brings `shoulder` within `reach` of `target` (1 when even
 ## all of it does not).
 static func hips_needed(
-	shoulder: Vector3, pivot: Vector3, aim_at: Vector3, target: Vector3, reach: float, full: Vector2
+	shoulder: Vector3,
+	pivot: Vector3,
+	aim_at: Vector3,
+	target: Vector3,
+	reach: float,
+	full: Vector2,
+	bend := 1.0
 ) -> float:
 	var lo := 0.0
 	var hi := 1.0
-	if stooped(shoulder, pivot, aim_at, 1.0, full.x, full.y).distance_to(target) > reach:
+	if stooped(shoulder, pivot, aim_at, 1.0, full.x, full.y, bend).distance_to(target) > reach:
 		return 1.0
 	for i in 12:
 		var mid := (lo + hi) * 0.5
 		if (
-			stooped(shoulder, pivot, aim_at, 1.0, full.x * mid, full.y * mid).distance_to(target)
+			stooped(shoulder, pivot, aim_at, 1.0, full.x * mid, full.y * mid, bend).distance_to(
+				target
+			)
 			<= reach
 		):
 			hi = mid

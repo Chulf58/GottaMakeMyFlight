@@ -80,6 +80,9 @@ var _clips := {}
 
 
 func _initialize() -> void:
+	# Frames run at 60 a second, as in the game (a strip seeks its clips to the
+	# sim's ticks itself, _seek_clips()).
+	Engine.max_fps = SimClock.TICK_RATE * 3
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_seed = randi()

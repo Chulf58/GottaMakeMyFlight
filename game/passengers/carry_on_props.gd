@@ -489,9 +489,12 @@ func sync() -> void:
 				lifts[i] = int(was[i].get("place", 0)) % 2 == 1
 		held["scale"] = SecurityLooks.bag_scale(p)
 		var spots: Array[Transform3D] = []
+		var frames: Array = []
 		for i in homes.size():
-			spots.append(SecurityLooks.floor_spot(sim, p, i, homes.size()))
+			spots.append(RollerPark.floor_spot(sim, p, kinds[i], hands[i], i, homes.size()))
+			frames.append(RollerPark.chair_front(sim, p, kinds[i]))
 		held["floor"] = spots
+		held["floor_at"] = frames
 		ActivityCarry.sync(held, sim, p, homes.size())
 		if tray_at != SecurityLooks.Tray.NONE and held["tray"] == null:
 			held["tray"] = _take("security_tray")
@@ -1004,6 +1007,7 @@ func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	var keeps := [0.0, 0.0]
 	var drops := [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
+	var bends := [1.0, 1.0]
 	for bag: Dictionary in held["bags"]:
 		if not _leading(bag, now) or not bag.has("lead"):
 			continue
@@ -1014,11 +1018,13 @@ func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 				targets[hand] = plan["targets"][hand]
 				keeps[hand] = plan["keeps"][hand]
 				drops[hand] = plan["drops"][hand]
+				bends[hand] = plan.get("bends", bends)[hand]
 	held["reach_on"] = [weights[0] > 0.0, weights[1] > 0.0]
 	var rig := _rig(body)
 	var stoop: CarryStoop = rig["stoop"]
 	for list: Array in [stoop.targets, stoop.sides, stoop.weights, stoop.keeps, stoop.drops]:
 		list.clear()
+	stoop.bends.clear()
 	for hand in 2:
 		var arm := rig["arms"][hand] as CarryArm
 		arm.reach_weight = weights[hand]
@@ -1029,6 +1035,7 @@ func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 			stoop.weights.append(weights[hand])
 			stoop.keeps.append(keeps[hand])
 			stoop.drops.append(drops[hand])
+			stoop.bends.append(bends[hand])
 
 
 ## The body frame a new move of `bag` starts in: the body as it was when the
@@ -1353,7 +1360,12 @@ func _bag_transform(
 			var fixed := ActivityCarry.fixed_place(held, bag_box(kind), scale_by, i, count)
 			if not fixed.is_empty():
 				return fixed[0]
-			var at := Transform3D(yaw, body.global_position)
+			# From where the sim draws the body, not where it stands while it
+			# sets its roller down (SitHold.offset()), so the bag stays put.
+			var id: int = _body_ids.get(body, -1)
+			var at := Transform3D(yaw, body.global_position - views.sit_offset(id))
+			if held["floor_at"][i] != null:
+				at = held["floor_at"][i]
 			var placed: Transform3D = RollerPark.lay_frame(held["bags"][i], at) * held["floor"][i]
 			placed.origin.y = sim.grid.origin.y
 			return Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)

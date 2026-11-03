@@ -61,7 +61,26 @@ const UP_PARK_AHEAD_M := 0.7
 ## drops): with the hips going back as well, the hand of a walker sitting down
 ## stopped 6 to 9 cm over the handle on the floor ahead, and the bag let go
 ## dropped that far.
-const LAY_HIPS := Vector3(1.0, 0.0, 1.0)
+## The hips also go back (HIP_BACK_M) now the body stands while it parks the
+## roller (SitHold, ActivityPoses.seat_door()): with the back capped at
+## BACK_CAP the hips go lower, and without going back the knees came forward
+## onto a roller lying close in front (user ruling roller-park-stoop-cap-the-
+## back-at-about-45-degrees-and-push-the-hips-back, board 68c6027e).
+const LAY_HIPS := Vector3(PARK_DROP, 1.0, 1.0)
+## The hips' drop of a parking move, a share of CarryStoop.STOOP_DROP: with the
+## back capped at BACK_CAP the hand stopped up to 6.5 cm short of a roller
+## beside the feet and of its park beside the hip at 0.6.
+const PARK_DROP := 1.25
+const PARK_HIPS := Vector3(PARK_DROP, 1.0, 0.0)
+## The back bends at most this share of CarryStoop.STOOP_DEGREES in a parking
+## move (about 45 degrees; CarryStoop.bends), the hips taking the rest: at 80
+## degrees the head folded under the shoulders lifting the roller.
+const BACK_CAP := 45.0 / CarryStoop.STOOP_DEGREES
+## A roller laid down at a gate chair lies this far out on its hand's side of
+## the passenger's line (floor_spot()), beside the feet and the chair's front
+## corner (a chair seat is about 0.5 m wide).
+const BESIDE_FEET_M := 0.34
+const FEET_AHEAD_M := 0.07
 ## A collecting walker's stoop goes from LAY_HIPS to HIPS_ALL over this many
 ## ticks from the lift's end (drops_of()).
 const LOW_EASE_TICKS := 3.0
@@ -244,6 +263,7 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"lift_last",
 		"park_tip",
 		"park_low",
+		"up_near",
 	]:
 		bag.erase(key)
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
@@ -252,6 +272,9 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		bag["from_world"] = body * (bag["from"] as Transform3D)
 		if bag.get("collecting", false):
 			bag["park_low"] = true
+		# Standing at a gate chair's front until the pick-up is over
+		# (ParkRecovery.stand_up_ticks()): parked beside it, not ahead.
+		bag["up_near"] = not is_nan(face)
 	bag["park_frame"] = _yawed(body)
 	if not is_nan(face) and CarryLead.start_of(bag)[0] == CarryLead.End.HELD:
 		bag["park_frame"] = Transform3D(Basis(Vector3.UP, face), body.origin)
@@ -262,6 +285,12 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 ## (PassengerViews turns the body to the same facing); NAN anywhere else.
 static func sit_face(sim: PassengerSim, p: Passenger) -> float:
 	var out := Vector2i.ZERO
+	# Up from a cafe seat or an activity piece it walks off at once: no face,
+	# so its pick-up parks ahead (UP_PARK_AHEAD_M, stamp()).
+	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
+		return NAN
+	if ActivityPoses.pose(sim, p) == StageKinds.Pose.STANDING_UP:
+		return NAN
 	var where := StageKinds.location(p.stage)
 	if ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
 		out = ActivityPoses.facing(sim, p)
@@ -271,6 +300,42 @@ static func sit_face(sim: PassengerSim, p: Passenger) -> float:
 	elif where == StageKinds.Location.FACILITY_SEAT:
 		out = sim.cafes.seat_facing(p)
 	return atan2(out.x, out.y) if out != Vector2i.ZERO else NAN
+
+
+## Where floor bag `index` of `count` of `p` (of `kind`, in hand `hand`) lies
+## in its frame: SecurityLooks.floor_spot(), but a roller lies beside the feet
+## on its hand's side, along the passenger's line (user ruling
+## roller-laid-down-beside-the-passenger-s-feet-not-ahead), FEET_AHEAD_M ahead;
+## at a gate chair in the chair front's frame (chair_front()), where the walker
+## stands to set it down and pick it up (SEAT_AHEAD_M ahead of the seated body,
+## across the feet, was 7 cm from its toes). With the back bent at most BACK_CAP the
+## hand could not reach it FLOOR_AHEAD_M ahead. A cafe seat's and a toilet
+## stall's spots are kept: the cafe's already lie beside the chair
+## (SecurityLooks.CAFE_BESIDE_M).
+static func floor_spot(
+	sim: PassengerSim, p: Passenger, kind: SecurityLooks.Kind, hand: int, index: int, count: int
+) -> Transform3D:
+	var spot := SecurityLooks.floor_spot(sim, p, index, count)
+	var where := StageKinds.location(p.stage)
+	if kind != SecurityLooks.Kind.ROLLER or where == StageKinds.Location.FACILITY_SEAT:
+		return spot
+	var out := -1.0 if hand == 0 else 1.0
+	return Transform3D(Basis.IDENTITY, Vector3(out * BESIDE_FEET_M, 0.0, FEET_AHEAD_M))
+
+
+## The frame (world, on the floor) a roller of `p` (of `kind`) lies in at a gate
+## chair: the chair front's cell turned to face out of the chair, fixed in the
+## world while the body moves into the seat and back out (the body's frame
+## carried the bag 0.55 m with it); null anywhere else (the body's frame).
+static func chair_front(sim: PassengerSim, p: Passenger, kind: SecurityLooks.Kind) -> Variant:
+	if kind != SecurityLooks.Kind.ROLLER or p.seat_object == 0:
+		return null
+	if StageKinds.location(p.stage) != StageKinds.Location.GATE_SEAT:
+		return null
+	var face := sit_face(sim, p)
+	if is_nan(face):
+		return null
+	return Transform3D(Basis(Vector3.UP, face), sim.grid.cell_to_world(p.seat_front))
 
 
 ## `frame` turned about the vertical only (its yaw), at its origin.
@@ -355,7 +420,7 @@ static func plan(
 	var started := CarryLead.start_of(bag)
 	var off_floor: bool = started[0] == CarryLead.End.REST
 	var lead: int = CarryLead.hand_of(bag["home"]) if off_floor else started[1]
-	var ahead := UP_PARK_AHEAD_M if off_floor else PARK_AHEAD_M
+	var ahead := UP_PARK_AHEAD_M if off_floor and not bag.get("up_near", false) else PARK_AHEAD_M
 	var parked := park(bag["park_frame"], lead, body["scale"], ahead)
 	var bar := Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, body["bar_z"])
 	var handle := CarryOnProps.ROLLER_HANDLE
@@ -387,6 +452,7 @@ static func plan(
 		"weights": weights,
 		"keeps": keeps,
 		"drops": [drops_of(bag, k), drops_of(bag, k)],
+		"bends": [BACK_CAP, BACK_CAP],
 	}
 
 
@@ -401,12 +467,12 @@ static func plan(
 ## frames (CarryStoop.solved() blends the two).
 static func drops_of(bag: Dictionary, k: float) -> Vector3:
 	if CarryLead.start_of(bag)[0] != CarryLead.End.REST:
-		return LAY_HIPS if k >= PARK_END else CarryStoop.HIPS_ALL
+		return LAY_HIPS if k >= PARK_END else PARK_HIPS
 	if not bag.get("park_low", false):
-		return CarryStoop.HIPS_ALL
+		return PARK_HIPS
 	var lift_end := up_ends(bag).x
 	var eased := smoothstep(lift_end, lift_end + LOW_EASE_TICKS / TICKS_UP, k)
-	return LAY_HIPS.lerp(CarryStoop.HIPS_ALL, eased)
+	return LAY_HIPS.lerp(PARK_HIPS, eased)
 
 
 ## pull>floor at `k` (plan()): [held, xf, anchor, target, weight].

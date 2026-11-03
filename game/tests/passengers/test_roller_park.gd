@@ -334,9 +334,15 @@ func _wall_on_its_right() -> void:
 	}
 
 
-## One frame `ticks` sim ticks on, as the game draws them.
+## One frame `ticks` sim ticks on, as the game draws them. The walker's clips
+## play on by the same sim time, as at 1x, 2x and 3x in the game (60 frames a
+## second, the clips at the clock's speed): played by the headless frame's own
+## time they hardly moved, and a walker standing up still drew its seated pose
+## when the pick-up began once it was up (decision standing-up-with-a-roller-
+## stand-up-then-pick-up-then-walk).
 func _tick(ticks: float) -> void:
 	_world.clock.advance(SimClock.STEP * ticks)
+	_play_clips(SimClock.STEP * ticks)
 	await get_tree().process_frame
 	await get_tree().create_timer(0.0, true, false, true).timeout
 	_views.carry_on_props()._unposed()
@@ -902,8 +908,8 @@ func test_a_collecting_walker_s_back_comes_up_no_faster_than_on_the_normal_pick_
 ## A floor>pull stamped for a walker collecting its roller (hold_park()'s
 ## "collecting") bends the back first (LAY_HIPS) only until the lift ends
 ## (RollerPark.up_ends().x, after the take at TAKE_BY here), eases into
-## HIPS_ALL over LOW_EASE_TICKS (the back-first share falling every step) and
-## stays HIPS_ALL to k 1; one stamped without it keeps HIPS_ALL throughout.
+## PARK_HIPS over LOW_EASE_TICKS (the back-first share falling every step) and
+## stays PARK_HIPS to k 1; one stamped without it keeps PARK_HIPS throughout.
 ## Control: both stoops were seen.
 func test_a_collecting_pick_up_bends_the_back_first_only_to_the_lift_end() -> void:
 	var hand := SecurityLooks.Home.HAND
@@ -934,20 +940,24 @@ func test_a_collecting_pick_up_bends_the_back_first_only_to_the_lift_end() -> vo
 			var d: Vector3 = drops[0]
 			var lift_end := RollerPark.up_ends(bag).x
 			if not collecting or k >= lift_end + ease_k:
-				assert_that(d).is_equal(CarryStoop.HIPS_ALL)
+				assert_that(d).is_equal(RollerPark.PARK_HIPS)
 			elif k <= lift_end:
 				assert_that(d).is_equal(RollerPark.LAY_HIPS)
 			else:
 				# Eased: between the two, the back-first share falling every step.
 				assert_float(d.z).is_less_equal(last_z)
 				assert_float(d.z).is_greater(0.0)
-				assert_float(d.x).is_equal(1.0)
-				assert_float(d.y).is_equal_approx(1.0 - d.z, 0.0001)
+				assert_float(d.x).is_equal(RollerPark.PARK_DROP)
+				# LAY_HIPS.lerp(HIPS_ALL, e) has z 1 - e: the hips' back share
+				# eases the same way (both 1 since the hips go back laying it
+				# down too, board 68c6027e).
+				var y := lerpf(RollerPark.LAY_HIPS.y, RollerPark.PARK_HIPS.y, 1.0 - d.z)
+				assert_float(d.y).is_equal_approx(y, 0.0001)
 				easing += 1
 			last_z = d.z
 			if d == RollerPark.LAY_HIPS:
 				low += 1
-			elif d == CarryStoop.HIPS_ALL:
+			elif d == RollerPark.PARK_HIPS:
 				all += 1
 				if switched < 0.0:
 					switched = k
@@ -966,3 +976,13 @@ func test_a_collecting_pick_up_bends_the_back_first_only_to_the_lift_end() -> vo
 			)
 		else:
 			assert_int(low).is_equal(0)
+
+
+## Plays the walker's clips `seconds` on by hand (PassengerViews sets their
+## speed_scale each frame, so the clip runs `seconds` times it).
+func _play_clips(seconds: float) -> void:
+	if _on_time == null or _views.node_for(_on_time.id) == null:
+		return
+	var player := _views.node_for(_on_time.id).get_node("AnimationPlayer") as AnimationPlayer
+	player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	player.advance(seconds)

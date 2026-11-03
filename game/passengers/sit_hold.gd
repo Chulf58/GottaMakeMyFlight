@@ -46,3 +46,27 @@ static func held_ticks(props: CarryOnProps, sim: PassengerSim, p: Passenger) -> 
 			if bag.get("carry", -1) == SecurityLooks.Carry.PULL and since < p.stage_tick:
 				held = maxf(held, RollerPark.TICKS_DOWN + LET_GO_TICKS)
 	return clampi(ceili(held), 0, PassengerSim.SIT_DOWN_TICKS - MIN_SIT_TICKS)
+
+
+## The offset from `now` (where PassengerViews would draw `p` this tick) to
+## where it stands while it sets its roller down at a gate chair or cafe seat
+## (user ruling roller-laid-down-beside-the-passenger-s-feet-not-ahead): at
+## `from`[p.id], its drawn place on the sit-down's first tick (the chair
+## front), for held_ticks(), then easing into the seat over the sit_down clip.
+## The sim's shuffle into the seat (its first 8 ticks at a gate chair, 12 at a
+## cafe seat) drew a standing body sliding back 0.55 m. `from` is the views'
+## per-id record, erased here once `p` is not held.
+static func offset(
+	props: CarryOnProps, sim: PassengerSim, p: Passenger, now: Vector3, from: Dictionary
+) -> Vector3:
+	var held := 0
+	if StageKinds.pose(p.stage) == StageKinds.Pose.SITTING_DOWN:
+		held = held_ticks(props, sim, p)
+	if held <= 0:
+		from.erase(p.id)
+		return Vector3.ZERO
+	if not from.has(p.id):
+		from[p.id] = now
+	var into := ActivityPoses.clip_ticks(sim, p) - held
+	var u := 0.0 if into < 0 else smoothstep(0.0, PassengerSim.SIT_DOWN_TICKS - held, into)
+	return ((from[p.id] as Vector3) - now) * (1.0 - u)
