@@ -326,8 +326,13 @@ func _track(causes: Array[StringName], delta: float) -> void:
 		if causes.has(id):
 			if not _prev.has(id):
 				_held[id] = 0.0
-				_latched[id] = true
+				# A seen hint is never picked, so latching it would leave a stale
+				# opportunity for Reset hints to fire at once.
+				if not _seen.get(id, false):
+					_latched[id] = true
 			_held[id] = float(_held.get(id, 0.0)) + delta
+			if _seen.get(id, false):
+				_latched.erase(id)
 		else:
 			_held[id] = 0.0
 			_latched.erase(id)

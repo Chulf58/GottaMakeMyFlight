@@ -28,7 +28,7 @@ const OUT_REL := "res://../tools/blender/out/hud-hints"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
 const SETTLE_FRAMES := 40
-const PROBE_STEP_PX := 24.0
+const PROBE_STEP_PX := 96.0
 const ALPHA_EPS := 0.02
 
 var _out_dir := ""
@@ -155,6 +155,20 @@ func _find_pointer(card: Control) -> Vector2:
 	var frame := root.get_visible_rect().grow(-MARGIN_PX * 4.0)
 	var best := Vector2(-1.0, -1.0)
 	var best_area := 0.0
+	# The ghost follows the pointer, so points at the card itself come first; the
+	# grid scan below is the fallback and is coarse to stay inside the time limit.
+	var centre := card.get_global_rect().get_center()
+	for offset: Vector2 in [Vector2.ZERO, Vector2(0, -80), Vector2(0, -160), Vector2(160, 0)]:
+		var at := centre + offset
+		if _menu.bar().get_global_rect().has_point(at):
+			continue
+		_build.pointer_override = at
+		await _frames(3)
+		var ghost := GhostBounds.build_rect(_build, _cam)
+		var shared := ghost.intersection(card.get_global_rect())
+		if ghost.has_area() and frame.encloses(ghost) and shared.has_area():
+			print("FOUND at=%s overlap_px=%.0f (near the card)" % [at, shared.get_area()])
+			return at
 	var y := frame.end.y
 	while y > frame.position.y:
 		var x := frame.position.x
