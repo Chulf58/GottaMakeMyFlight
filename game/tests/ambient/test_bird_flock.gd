@@ -22,7 +22,7 @@ class NoPassengerViews:
 	func _notification(what: int) -> void:
 		if what != NOTIFICATION_PREDELETE:
 			return
-		for n in [follow_anchor, _ring, _markers, _pops, _props]:
+		for n in [follow_anchor, _ring, _markers, _pops, _props, ghosts]:
 			if n is Node and is_instance_valid(n) and (n as Node).get_parent() == null:
 				(n as Node).free()
 
