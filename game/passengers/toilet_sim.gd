@@ -262,6 +262,7 @@ func step(p: Passenger) -> void:
 			if spent >= USE_TICKS:
 				p.toilet_need = 0
 				_sim.messes.toilet_used(visit)
+				_relieved(p, visit)
 				_set_stage.call(p, Passenger.Stage.TOILET_STANDING_UP)
 		Passenger.Stage.TOILET_STANDING_UP:
 			if spent >= PassengerSim.STAND_UP_TICKS:
@@ -449,6 +450,7 @@ func _leave_early(p: Passenger, visit: ToiletVisit) -> void:
 		Passenger.Stage.TOILET_USE:
 			p.toilet_need = 0
 			_sim.messes.toilet_used(visit)
+			_relieved(p, visit)
 			_set_stage.call(p, Passenger.Stage.TOILET_STANDING_UP)
 
 
@@ -576,6 +578,7 @@ func _stall_gone(p: Passenger, visit: ToiletVisit) -> void:
 			if p.stage == Passenger.Stage.TOILET_USE:
 				p.toilet_need = 0
 				_sim.messes.toilet_used(visit)
+				_relieved(p, visit)
 			_end(p, visit)
 
 
@@ -592,3 +595,8 @@ func _resume(p: Passenger, visit: ToiletVisit) -> void:
 	p.stuck = Passenger.Stuck.NONE
 	p.clear_path()
 	_set_stage.call(p, visit.resume_stage)
+
+
+## The need was reset: the passenger thinks of the relief, in the stall's room.
+func _relieved(p: Passenger, visit: ToiletVisit) -> void:
+	PassengerThoughts.record(p, PassengerThoughts.Kind.TOILET_RELIEF, _sim.tick, p.at, visit.room)

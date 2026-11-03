@@ -177,9 +177,13 @@ func cells() -> Dictionary:
 func beat(p: Passenger) -> void:
 	if AWAY_STAGES.has(p.stage):
 		return
-	var net := net_calm_at(BoredomSim.watch_cell(p))
+	var cell := BoredomSim.watch_cell(p)
+	var net := net_calm_at(cell)
 	@warning_ignore("integer_division")
 	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
+	# Nice decor is thought only where decor outweighs what spoils the view.
+	if net > 0:
+		PassengerThoughts.decor(p, _sim.tick, cell)
 	if net < 0:
 		p.mood = maxi(p.mood - due(capped(-net), beat_number), 0)
 	elif net > 0 and p.mood < CEILING:

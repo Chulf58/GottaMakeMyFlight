@@ -137,6 +137,12 @@ var collect_tick := 0
 ## saw it (ParkRecovery.note_sitting()): a late walker sets its roller down
 ## from the hand, with no park.
 var sat_late := false
+## Its last thoughts, oldest first, PassengerThoughts.STRIDE numbers each
+## (PassengerThoughts.record()).
+var thoughts := PackedInt64Array()
+## The tick each thought kind was last recorded, for repeat suppression apart
+## from the shown list; empty until the first thought.
+var thought_marks := PackedInt64Array()
 
 
 ## Whether the stage is one of a cafe visit's. The enum's order is not the

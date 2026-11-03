@@ -4,10 +4,13 @@ extends CanvasLayer
 ## counts, today's departures (DepartureList), and the speed buttons (Space
 ## toggles the pause, Shift+1/2/3 set the speed; plain number keys stay the
 ## build tool keys). On the left edge, the optional DeparturesBoard (B shows
-## and hides it). Left of the flight panel, under the top row, the alert
-## cards (AlertStack), which clear themselves and jump the camera when clicked.
-## Bottom-left: the followed passenger's story, kept left of BuildMenu's
-## centre column and growing upward when it wraps. Bottom-right: a collapsed
+## and hides it), which steps aside while the inspect card shows. Left of the
+## flight panel, under the top row, the alert cards (AlertStack), which clear
+## themselves and jump the camera when clicked.
+## Bottom-left: the followed passenger's inspect card (PassengerInspect:
+## live status, its thoughts, and a pin where a clicked thought happened), or
+## the followed vehicle's story, kept left of BuildMenu's centre column and
+## growing upward when it wraps. Bottom-right: a collapsed
 ## Debug panel (a 300-passenger batch, a starter terminal on the Toon doors B
 ## and C, the batch seed and their status). Clicking a passenger while no
 ## build tool is active follows it: the selection is a stable passenger id,
@@ -168,6 +171,8 @@ var _counts_label := Label.new()
 var _departures_label := Label.new()
 var _seed_label := Label.new()
 var _follow_label := Label.new()
+## The followed passenger's card; the follow text then hides.
+var _inspect := PassengerInspect.new()
 var _status_label := Label.new()
 var _status := ""
 ## True after a refused debug batch, until the next spawned one: the earlier
@@ -249,6 +254,13 @@ func _ready() -> void:
 	_follow_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_follow_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_follow_label)
+	_inspect.sim = sim
+	_inspect.views = views
+	_inspect.camera = camera
+	_inspect.flights = flights
+	_inspect.clock = clock
+	add_child(_inspect)
+	add_child(_inspect.marker)
 	_fit_follow()
 	get_viewport().size_changed.connect(_fit_follow)
 	if IntroDialogue.should_show(
@@ -353,6 +365,10 @@ func refresh() -> void:
 	_status_label.text = _status
 	_status_label.visible = _status != ""
 	_follow_label.text = follow_text()
+	_inspect.refresh()
+	_follow_label.visible = not _inspect.visible
+	# The card takes the board's place on the left edge (decision 500fd5a0, point 6).
+	_departures_board.step_aside(_inspect.visible)
 	if clock != null:
 		for i in _speed_buttons.size():
 			var on := clock.paused if i == 0 else not clock.paused and clock.speed == i
@@ -697,6 +713,7 @@ func _has_open_flight() -> bool:
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
 		_alerts.reset()
+		_inspect.on_loaded(ok)
 		_frame_start_view()
 
 

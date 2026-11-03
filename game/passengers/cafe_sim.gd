@@ -950,13 +950,16 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 	p.hunger = 0
 	if visit.outcome == CafeVisit.Outcome.COMPLETE:
 		p.mood = mini(p.mood + venue.mood_bonus, PassengerSim.MOOD_MAX)
+		PassengerThoughts.record(p, PassengerThoughts.Kind.MEAL, _sim.tick, p.at, visit.room)
 	# A settled visit is one real use of its seat (MessSim).
 	_sim.messes.cafe_used(visit)
 	paid.emit(p.id, visit.room, amount)
 
 
-## Gives up before being served: no charge and nothing changes for the guest.
+## Gives up before being served: no charge and nothing changes for the guest
+## but the thought of food given up.
 func _abandon(p: Passenger, visit: CafeVisit) -> void:
+	PassengerThoughts.record(p, PassengerThoughts.Kind.FOOD_GIVEN_UP, _sim.tick, p.at, visit.room)
 	_remove(visit)
 	_resume(p, visit)
 
