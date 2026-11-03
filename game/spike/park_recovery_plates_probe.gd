@@ -30,7 +30,8 @@ extends SceneTree
 ##     --path game -s res://spike/park_recovery_plates_probe.gd [-- --seed=N]
 ##
 ## Plates go to tools/blender/out/park-recovery/, or to the directory --out=<dir>
-## names.
+## names. --seated-loss removes the chair once the walker is seated, after the
+## park, and watches the bag's move per frame from then on (see _seated_loss).
 ##
 ## Hand-swap watch (board 6981b7ac part 3): the probe goes on FOLLOW_TICKS
 ## (or --follow=N) ticks after the plates, a third of a tick a frame, and
@@ -73,6 +74,15 @@ const BEFORE_K := 0.03
 ## A move relative to the walker's origin, in one frame (a third of a tick), above this
 ## is a jump (walking pulls the bag along smoothly, a few cm a frame at most).
 const JUMP_M := 0.03
+## The roller moving this much in the world in one frame (a third of a tick)
+## after the chair went and before the hand took it is a jump (the bag lies
+## still until then), and its move changing by LOSS_KINK_M between two
+## frames is a kink (the pick-up's own lift starts at 0.032 m a frame from rest
+## and peaks at 0.055 m a frame, measured); either fails --seated-loss
+## (_loss_summary()). Frames moving LOSS_PRINT_M or more are printed.
+const LOSS_JUMP_M := 0.05
+const LOSS_KINK_M := 0.05
+const LOSS_PRINT_M := 0.02
 ## The strip camera's place off the walker (world) and where it looks (--strip).
 const STRIP_CAM := Vector3(-0.6, 1.6, 3.6)
 const STRIP_LOOK := Vector3(-0.4, 0.7, 0.0)
@@ -106,6 +116,19 @@ var _worn := false
 ## chair farthest from it by path, round its corners, and sits down there, so
 ## --strip can draw a walking corner and the turn on the spot to the chair.
 var _walk_route := false
+## --seated-loss: the chair is removed once the walker is SEATED, after the
+## park (board 6981b7ac part 1, decision seat-lost-after-a-roller-park-a-seated-
+## passenger-still-stand), not in the lift of the park. From the removal to the
+## walk plate the bag's move in the world is watched every frame (_watch_loss(),
+## also in the default mode, for comparison); --seated-loss fails the probe on a
+## jump or a kink (_loss_summary()).
+var _seated_loss := false
+var _loss_prev := Vector3.INF
+var _loss_last := 0.0
+var _loss_before_take := 0.0
+var _loss_worst := 0.0
+var _loss_kink := 0.0
+var _loss_frames := 0
 ## --strip=A-B[,C-D]: windowed frame strips of every frame from tick A to tick
 ## B (and C to D), from a camera fixed in the world for the window (STRIP_CAM
 ## off the walker at the window's first frame), so a turn or a jump shows; each
@@ -156,6 +179,8 @@ func _initialize() -> void:
 			_worn = true
 		elif arg == "--walk-route":
 			_walk_route = true
+		elif arg == "--seated-loss":
+			_seated_loss = true
 		elif arg.begins_with("--strip="):
 			for part in arg.get_slice("=", 1).split(","):
 				_strips.append(Vector2i(int(part.get_slice("-", 0)), int(part.get_slice("-", 1))))
@@ -276,11 +301,19 @@ func _collect() -> void:
 		var off_floor: bool = (
 			bag.get("park", false) and CarryLead.start_of(bag)[0] == CarryLead.End.REST
 		)
-		if not gone and bag.get("park", false) and not off_floor and k >= 0.15:
+		var lost_now := _p.stage == Passenger.Stage.SEATED if _seated_loss else k >= 0.15
+		if not gone and bag.get("park", false) and not off_floor and lost_now:
 			gone = true
 			_mode.grid.apply(BuildEdit.remove_object(seat["object_id"]))
 			(_mode.get_node("BuildView") as BuildView).refresh(_mode.grid)
-			print("PROBE seat removed at pull>floor k=%.3f tick %d" % [k, _clock.tick])
+			print(
+				(
+					"PROBE seat removed at pull>floor k=%.3f tick %d stage %d"
+					% [k, _clock.tick, _p.stage]
+				)
+			)
+		if gone:
+			_watch_loss(props, float(bag.get("park_took", -1.0)) >= 0.0)
 		if not gone or not off_floor or k >= 1.0:
 			continue
 		if not bag.get("park_low", false):
@@ -310,7 +343,12 @@ func _collect() -> void:
 			shot = "ease1"
 		elif wants.has("ease2") and k >= RollerPark.up_ends(bag).x + EASE_K * 2.0 / 3.0:
 			shot = "ease2"
-		elif wants.has("walk") and moved > 0.005:
+		elif (
+			wants.has("walk")
+			and moved > 0.005
+			# The body sliding from the chair to its cell as the seat goes is not the walk.
+			and (not _seated_loss or k >= RollerPark.up_ends(bag).y)
+		):
 			shot = "walk"
 		if shot != "":
 			wants.erase(shot)
@@ -318,6 +356,7 @@ func _collect() -> void:
 				print("PLATE %s skipped (--no-plates) k=%.3f tick %d" % [shot, k, _clock.tick])
 			else:
 				await _plate(shot, body, node, bag, k, lead)
+	_loss_summary()
 	if not wants.is_empty():
 		_invalid("plates never reached: %s" % [wants])
 	else:
@@ -385,6 +424,49 @@ func _route_walk() -> void:
 	)
 	if corners.is_empty() or sat < 0:
 		_invalid("the route walk turned no corner or never sat down")
+
+
+## This frame's move of the roller in the world since the chair went (`took`:
+## the hand has taken it), kept for the largest before the take, the largest
+## overall and the largest change of the move between two frames; frames moving
+## LOSS_PRINT_M or more are printed.
+func _watch_loss(props: CarryOnProps, took: bool) -> void:
+	var node: Node3D = props.props_of(_p.id)["bags"][0]
+	var at := node.global_position
+	if is_finite(_loss_prev.x):
+		var move := at.distance_to(_loss_prev)
+		_loss_frames += 1
+		_loss_worst = maxf(_loss_worst, move)
+		_loss_kink = maxf(_loss_kink, absf(move - _loss_last))
+		if not took:
+			_loss_before_take = maxf(_loss_before_take, move)
+		if move >= LOSS_PRINT_M:
+			print("LOSS tick=%d bag_move=%.3f took=%s" % [_clock.tick, move, took])
+		_loss_last = move
+	_loss_prev = at
+
+
+## The roller's moves since the chair went (_watch_loss()): the largest in a
+## frame before the take, overall, and the largest kink. --seated-loss fails
+## the probe on a jump, a kink, or no frame measured.
+func _loss_summary() -> void:
+	print(
+		(
+			(
+				"LOSS summary frames=%d max bag move per frame (world, m): before the take=%.3f"
+				% [_loss_frames, _loss_before_take]
+			)
+			+ " overall=%.3f max kink=%.3f" % [_loss_worst, _loss_kink]
+		)
+	)
+	if not _seated_loss:
+		return
+	if _loss_frames == 0:
+		_invalid("the seated-loss watch measured no frame")
+	elif _loss_before_take > LOSS_JUMP_M:
+		_invalid("the bag moved %.3f m in a frame before the hand took it" % _loss_before_take)
+	elif _loss_kink > LOSS_KINK_M:
+		_invalid("the bag's move changed by %.3f m between two frames" % _loss_kink)
 
 
 ## Follows the roller for _follow_ticks more ticks and prints the hand-swap watch
