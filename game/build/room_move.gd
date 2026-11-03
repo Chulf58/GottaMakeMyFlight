@@ -24,10 +24,12 @@ extends RefCounted
 ## passengers leaving the room. The caller passes them in; passenger code is to
 ## fill them (decision part 3). With none, nothing is kept clear.
 ##
-## commit_move() is the move's own atomic commit (decision part 2). It reads
-## each removed piece from the grid itself and refuses with MOVE_CHANGED a plan
-## that does not remove and restore every piece of the room exactly once, with
-## the same def and paid, inside the new rectangle. It runs the whole move on a
+## commit_move() is the move's own atomic commit (decision part 2). It plans
+## the move again from the grid as it stands, reading each piece's def, paid,
+## anchor and facing and each floor cell itself, and refuses with MOVE_CHANGED
+## a plan that differs from that in any edit (a stale room, a moved, added or
+## repeated piece, a changed def, paid, anchor or facing, other floor). It
+## applies only its own fresh edits. It runs the whole move on a
 ## copy of the grid first, then checks the wallet: pieces move for free and
 ## keep their paid, so a later removal refunds what they were bought for, and
 ## only new floor is charged, at the normal price. A refusal changes neither
@@ -109,7 +111,8 @@ static func check(
 
 
 ## Plans the move (plan()) and commits it (commit_move()). A refused plan
-## changes nothing, and the grid emits edit_refused for it.
+## changes nothing, and the grid emits edit_refused for it (behind any signals
+## an outer BuildGrid.hold_signals() holds).
 static func commit(
 	grid: BuildGrid,
 	id: int,
@@ -121,18 +124,20 @@ static func commit(
 ) -> BuildResult:
 	var move := plan(grid, id, centre, quarter_turns, wallet, keep_clear)
 	if not move.result.ok:
-		grid.edit_refused.emit(BuildEdit.resize_room(id, move.to_rect), move.result)
+		_emit_refused(grid, BuildEdit.resize_room(id, move.to_rect), move.result)
 		return move.result
 	return commit_move(grid, move, wallet, history, keep_clear)
 
 
-## Commits `move` as one player action of `history` (null: no undo step):
-## checks its edits against the room as the grid holds it, tries them with
-## fresh belt reshapes on a copy of the grid, checks `wallet` (null: free) can
-## pay for the new floor, then applies them to the live grid with its signals
-## held until the floor is paid. Returns accepted with the room's id and the
-## changed cells, or the refusal, with nothing changed and the grid emitting
-## edit_refused for it. The plan's own belt reshapes are not used.
+## Commits `move` as one player action of `history` (null: no undo step).
+## The move is planned again from the grid as it stands (_canonical()), and
+## `move`'s edits other than belt reshapes must equal that plan field by field,
+## in order; then the fresh edits are tried with fresh belt reshapes on a copy
+## of the grid, `wallet` (null: free) must pay for the new floor, and they are
+## applied to the live grid with its signals held until the floor is paid.
+## Returns accepted with the room's id and the changed cells, or the refusal,
+## with nothing changed and the grid emitting edit_refused for it (behind any
+## signals an outer hold already queued). `move`'s own edits are never applied.
 static func commit_move(
 	grid: BuildGrid,
 	move: RoomMove,
@@ -140,27 +145,26 @@ static func commit_move(
 	history: UndoStack = null,
 	keep_clear: Array[Vector2i] = []
 ) -> BuildResult:
-	var edits: Array[BuildEdit] = []
-	for edit in move.edits:
-		if edit.kind != BuildEdit.Kind.RESHAPE_BELT:
-			edits.append(edit)
-	var result := _plan_problem(grid, move, edits)
+	var canon := _canonical(grid, move)
+	var result := canon.result
+	var edits := canon.edits
 	var floors := _floor_edits(edits)
 	for edit in floors:
 		edit.paid = BuildTransaction.quote(grid, edit, wallet == null).paid
 	if result.ok:
-		var trial := _trial(grid, move, edits, keep_clear)
+		var trial := _trial(grid, canon, edits, keep_clear)
 		result = trial["result"]
 		edits.append_array(trial["reshapes"])
 	if result.ok:
 		result = BuildTransaction.check(grid, floors, wallet)
+	var refused_edit := BuildEdit.resize_room(move.room_id, move.to_rect)
 	if not result.ok:
-		grid.edit_refused.emit(BuildEdit.resize_room(move.room_id, move.to_rect), result)
+		_emit_refused(grid, refused_edit, result)
 		return result
 	var cost := BuildTransaction.needed(grid, floors) if wallet != null else 0
 	if history != null:
 		history.begin_action()
-	result = _apply(grid, edits, cost, wallet, keep_clear)
+	result = _apply(grid, edits, cost, wallet, keep_clear, refused_edit)
 	if history != null:
 		history.end_action()
 	result.room_id = move.room_id
@@ -175,6 +179,12 @@ static func _shape(grid: BuildGrid, move: RoomMove, centre: Vector2i) -> BuildRe
 		return BuildResult.refused(BuildResult.Reason.NO_ROOM)
 	move.from_rect = room["rect"]
 	move.to_rect = rect_at(move.from_rect.size, centre, move.turns)
+	return _shape_rest(grid, move)
+
+
+## The checks of _shape() once `move`'s rectangles are set: the new rectangle
+## on the grid, the room's pieces (filling `move.pieces`) and no inner wall.
+static func _shape_rest(grid: BuildGrid, move: RoomMove) -> BuildResult:
 	var to := move.to_rect
 	if not grid.in_bounds(to.position) or not grid.in_bounds(to.end - Vector2i.ONE):
 		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
@@ -264,75 +274,67 @@ static func _turn_offset(room_size: Vector2i, quarter_turns: int) -> Vector2i:
 	return -low
 
 
-## MOVE_CHANGED (naming the piece where one is at fault) unless `edits` are
-## exactly a move of `move.room_id` as the grid holds it: each piece of the
-## room removed once, then restored once under its id with the def and paid
-## the grid holds for it, wholly inside `move.to_rect`; floor painted only
-## where there is none; one RESIZE_ROOM to `move.to_rect`; nothing else.
-## Also the room and piece refusals of _members() and ROOM_WALL.
-static func _plan_problem(grid: BuildGrid, move: RoomMove, edits: Array[BuildEdit]) -> BuildResult:
+## The move commit_move() may apply for `move`: planned again from the grid
+## as it stands, for the same room, turns and new rectangle, with fresh edits
+## (belt reshapes left out). Its `result` is MOVE_CHANGED, naming the piece
+## where one is at fault, when `move` no longer describes that plan: the room's
+## rectangle is no longer `move.from_rect`, `move.to_rect` is not the room's
+## size turned by `move.turns`, or `move`'s edits other than belt reshapes
+## differ from the fresh ones in order, kind or any field the grid reads (an
+## anchor, a facing, a def, a paid, an id, a floor cell, type or zone, the
+## room's rectangle). Otherwise NO_ROOM, the refusals of _shape_rest(), or
+## accepted.
+static func _canonical(grid: BuildGrid, move: RoomMove) -> RoomMove:
+	var canon := RoomMove.new()
+	canon.room_id = move.room_id
+	canon.turns = posmod(move.turns, 4)
+	canon.to_rect = move.to_rect
 	var room := grid.get_room(move.room_id)
 	if room.is_empty():
-		return BuildResult.refused(BuildResult.Reason.NO_ROOM)
-	var members: Array[int] = []
-	var result := _members(grid, room["rect"], members)
-	if result.ok:
-		result = _wall_problem(grid, move.to_rect)
-	var removed := {}
-	var restored := {}
-	var resizes := 0
-	for edit in edits:
-		if not result.ok:
+		canon.result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
+		return canon
+	canon.from_rect = room["rect"]
+	var turned := rect_at(canon.from_rect.size, Vector2i.ZERO, canon.turns).size
+	if canon.from_rect != move.from_rect or move.to_rect.size != turned:
+		canon.result = BuildResult.refused(BuildResult.Reason.MOVE_CHANGED)
+		return canon
+	canon.result = _shape_rest(grid, canon)
+	if not canon.result.ok:
+		return canon
+	canon.edits = _edits(grid, canon)
+	var given: Array[BuildEdit] = []
+	for edit in move.edits:
+		if edit.kind != BuildEdit.Kind.RESHAPE_BELT:
+			given.append(edit)
+	for i in maxi(given.size(), canon.edits.size()):
+		var mine: BuildEdit = given[i] if i < given.size() else null
+		var fresh: BuildEdit = canon.edits[i] if i < canon.edits.size() else null
+		if mine == null or fresh == null or _edit_key(mine) != _edit_key(fresh):
+			var blocker := mine.object_id if mine != null else fresh.object_id
+			canon.result = BuildResult.refused(BuildResult.Reason.MOVE_CHANGED, blocker)
 			break
-		if edit.kind == BuildEdit.Kind.RESIZE_ROOM:
-			resizes += 1
-		if not _edit_fits(grid, move, edit, members, removed, restored):
-			result = BuildResult.refused(BuildResult.Reason.MOVE_CHANGED, edit.object_id)
-	var whole := resizes == 1 and removed.size() == members.size()
-	if result.ok and not (whole and restored.size() == members.size()):
-		result = BuildResult.refused(BuildResult.Reason.MOVE_CHANGED)
-	return result
+	return canon
 
 
-## Whether one edit of a move plan is one _plan_problem() accepts, given the
-## pieces `removed` (id -> the record the grid holds) and `restored` (id ->
-## true) by the edits before it; adds this edit's piece to them.
-static func _edit_fits(
-	grid: BuildGrid,
-	move: RoomMove,
-	edit: BuildEdit,
-	members: Array[int],
-	removed: Dictionary,
-	restored: Dictionary
-) -> bool:
-	var fits := false
-	var id := edit.object_id
-	match edit.kind:
-		BuildEdit.Kind.REMOVE_OBJECT:
-			fits = members.has(id) and not removed.has(id)
-			if fits:
-				removed[id] = grid.get_object(id)
-		BuildEdit.Kind.PLACE_OBJECT:
-			var record: Dictionary = removed.get(id, {})
-			fits = (
-				not record.is_empty()
-				and not restored.has(id)
-				and record["def"] == edit.def_id
-				and int(record.get("paid", 0)) == edit.paid
-				and _inside(
-					BuildCatalog.get_def(edit.def_id).footprint(edit.cell, edit.facing),
-					move.to_rect
-				)
-			)
-			if fits:
-				restored[id] = true
-		BuildEdit.Kind.PAINT_FLOOR:
-			fits = grid.in_bounds(edit.cell) and grid.floor_at(edit.cell) == BuildGrid.FLOOR_NONE
-		BuildEdit.Kind.RESIZE_ROOM:
-			fits = (
-				edit.room_id == move.room_id and Rect2i(edit.cell, edit.room_size) == move.to_rect
-			)
-	return fits
+## Every field of `edit` the grid reads for the kinds a move uses. A floor's
+## paid is left out: commit_move() prices the floor itself.
+static func _edit_key(edit: BuildEdit) -> Array:
+	var paid := edit.paid if edit.kind == BuildEdit.Kind.PLACE_OBJECT else 0
+	return [
+		edit.kind,
+		edit.cell,
+		edit.side,
+		edit.wall_kind,
+		edit.floor_type,
+		edit.zone_id,
+		edit.def_id,
+		edit.facing,
+		edit.object_id,
+		edit.room_size,
+		edit.room_type,
+		edit.room_id,
+		paid,
+	]
 
 
 ## Runs `edits` on a copy of the grid with the keep-clear and belt crossing
@@ -407,11 +409,18 @@ static func _near(grid: BuildGrid, rects: Array[Rect2i]) -> Array[Vector2i]:
 ## Applies `edits` to the live grid with its signals held, then takes `cost`
 ## from `wallet` for the new floor, and only then publishes the signals. When
 ## either step fails (the copy accepted the same edits, so only a defect gets
-## here) the grid is put back from a snapshot and the held signals dropped.
-## The snapshot load is kept out of the open undo receipt and what the move
-## recorded in it is dropped, so the earlier undo history stays usable.
+## here) the grid is put back from a snapshot, the held signals are dropped
+## and the refusal is emitted for `refused_edit` (behind any signals an outer
+## hold queued earlier). The snapshot load is kept out of the open undo
+## receipt and what the move recorded in it is dropped, so the earlier undo
+## history stays usable.
 static func _apply(
-	grid: BuildGrid, edits: Array[BuildEdit], cost: int, wallet: Wallet, keep_clear: Array[Vector2i]
+	grid: BuildGrid,
+	edits: Array[BuildEdit],
+	cost: int,
+	wallet: Wallet,
+	keep_clear: Array[Vector2i],
+	refused_edit: BuildEdit
 ) -> BuildResult:
 	var snapshot := grid.to_snapshot()
 	var receipt := grid.recorder
@@ -439,7 +448,15 @@ static func _apply(
 			"RoomMove.commit_move: restoring the grid failed; the move stays applied, unpaid"
 		)
 		grid.release_signals()
+	_emit_refused(grid, refused_edit, result)
 	return result
+
+
+## Emits edit_refused through the grid's own hold queue (as
+## BuildTransaction does), so a refusal made while a caller holds the grid's
+## signals waits behind the signals already queued there.
+static func _emit_refused(grid: BuildGrid, edit: BuildEdit, refusal: BuildResult) -> void:
+	grid._emit_or_hold(func() -> void: grid.edit_refused.emit(edit, refusal))
 
 
 static func _floor_edits(edits: Array[BuildEdit]) -> Array[BuildEdit]:

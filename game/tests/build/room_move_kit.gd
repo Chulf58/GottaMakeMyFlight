@@ -22,8 +22,9 @@ var statue := 0
 var pot := 0
 
 
-func _init() -> void:
-	grid = BuildGrid.new(SIZE)
+## Builds the layout on `on` (a fresh SIZE grid when null).
+func _init(on: BuildGrid = null) -> void:
+	grid = on if on != null else BuildGrid.new(SIZE)
 	var edits: Array[BuildEdit] = []
 	for y in range(FLOORED.position.y, FLOORED.end.y):
 		for x in range(FLOORED.position.x, FLOORED.end.x):
