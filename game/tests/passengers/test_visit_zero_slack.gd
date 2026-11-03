@@ -62,11 +62,12 @@ func _entered(stage: Passenger.Stage) -> int:
 	return found
 
 
-## A cafe guest at the point it can start its visit, with the doors closing at
+## An airside guest at the point it can start a visit to a `venue` (a stall is a
+## walk-on counter: a grab and go order, no seat), with the doors closing at
 ## `doors`. Returns {"admitted", "deadline"}; the guest has started when admitted.
-func _cafe_start(doors: int) -> Dictionary:
+func _cafe_start(doors: int, venue: StringName = &"cafe", tables := true) -> Dictionary:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid)
+	CafeTestLayout.build(grid, false, venue, tables)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(BOARDING, doors))
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	_track(p)
@@ -90,6 +91,15 @@ func _cafe_run(p: Passenger) -> void:
 	while p.stage != Passenger.Stage.CAFE_STANDING_UP and _world.clock.tick < until:
 		_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_STANDING_UP)
+
+
+## Steps until the stall visit is over, and returns the tick it ended.
+func _stall_run(p: Passenger) -> int:
+	var until := _world.clock.tick + 1500
+	while _world.sim.cafes.visit_of(p.id) != null and _world.clock.tick < until:
+		_world.step()
+	assert_object(_world.sim.cafes.visit_of(p.id)).is_null()
+	return _world.clock.tick
 
 
 ## A landside toilet user at the point it can start its visit, with the doors
@@ -201,4 +211,38 @@ func test_a_toilet_visit_admitted_at_any_slack_is_not_cut_short() -> void:
 	assert_int(refused).is_greater(0)
 	# Standing up on the deadline tick is the same as finishing the use there.
 	assert_int(tightest).is_equal(0)
+	assert_str(report).is_empty()
+
+
+func test_a_stall_visit_admitted_at_any_slack_is_served_and_paid() -> void:
+	var base := _cafe_start(BASE_DOORS, &"stall", false)
+	assert_bool(base["admitted"]).is_true()
+	assert_bool(_world.sim.cafes.visit_of(base["p"].id).walk_on()).is_true()
+	var due := _stall_run(base["p"])
+	assert_int(_world.sim.wallet.balance).is_greater(0)
+	var shift: int = due - base["deadline"]
+	_free_world()
+	var admitted := 0
+	var refused := 0
+	var tightest := 1000
+	var report := ""
+	for k in OFFSETS:
+		var start := _cafe_start(BASE_DOORS + shift + k, &"stall", false)
+		if not start["admitted"]:
+			refused += 1
+		else:
+			admitted += 1
+			tightest = mini(tightest, start["deadline"] - due)
+			var ended := _stall_run(start["p"])
+			if ended != due or _world.sim.wallet.balance <= 0:
+				report += (
+					" slack %d: ended at %d (due %d), paid %d;"
+					% [start["deadline"] - due, ended, due, _world.sim.wallet.balance]
+				)
+		_free_world()
+	assert_int(admitted).is_greater(0)
+	assert_int(refused).is_greater(0)
+	# Served on the deadline tick is given up unpaid, so the tightest admitted
+	# is served a tick before it.
+	assert_int(tightest).is_equal(1)
 	assert_str(report).is_empty()
