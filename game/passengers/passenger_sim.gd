@@ -82,7 +82,9 @@ signal checked_in(id: int, desk: int)
 ## (CafeSnapshot, ToiletSnapshot). Version 17 is refused, with no migration.
 ## 19: shop visit relocation (ShopSnapshot saves a shop or activity visit's
 ## Relocation). Version 18 is refused, with no migration.
-const SAVE_VERSION := 19
+## 20: each passenger's thoughts and their repeat marks (PassengerThoughts).
+## Version 19 is refused, with no migration.
+const SAVE_VERSION := 20
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -1030,6 +1032,7 @@ func _beat(p: Passenger) -> void:
 	):
 		change -= 1
 	p.mood = clampi(p.mood + change, 0, MOOD_MAX)
+	PassengerThoughts.queued(p, tick)
 	decor.beat(p)
 	messes.beat(p)
 	# Every need rises first, then NeedsPolicy picks which one, if any, the

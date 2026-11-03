@@ -188,6 +188,8 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 		var p := _passenger(entry, grid, int(data["next_id"]))
 		if p == null or ids.has(p.id) or not ParkRecovery.valid(p, out["tick"]):
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
+		if not PassengerThoughts.ticks_ok(p, out["tick"]):
+			return {"error": "passenger %d has a thought after the saved tick" % p.id}
 		ids[p.id] = p
 		passengers.append(p)
 	var cafe := CafeSnapshot.load(data["cafe"], ids, grid, out["tick"])
@@ -257,6 +259,8 @@ static func _record(p: Passenger) -> Dictionary:
 	for point in p.apron:
 		apron.append([point.x, point.y, point.z])
 	record["apron"] = apron
+	record["thoughts"] = Array(p.thoughts)
+	record["thought_marks"] = Array(p.thought_marks)
 	return record
 
 
@@ -274,7 +278,8 @@ static func _record(p: Passenger) -> Dictionary:
 ## no toilet visits. Version 10 to 11: every passenger gets the boredom
 ## BoredomSim.start_of() gives its id; its toilet need, cooldown and any toilet
 ## visit are kept as saved, and it gets no kiosk cooldown and no kiosk visits.
-## Every migrated passenger collects no roller (collect_tick 0, ParkRecovery).
+## Every migrated passenger collects no roller (collect_tick 0, ParkRecovery)
+## and has no thoughts (PassengerThoughts).
 ## Every step sets a field or block only when the save has none, so a value the
 ## save already holds is kept for the checks to accept or refuse. Any other save
 ## is returned as it is, for the checks to accept or refuse. The given
@@ -372,6 +377,8 @@ static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 			_set_missing(record, "shop_cooldown", 0)
 			_set_missing(record, "collect_tick", 0)
 			_set_missing(record, "sat_late", false)
+			_set_missing(record, "thoughts", [])
+			_set_missing(record, "thought_marks", [])
 	_set_missing(out, "shop", {"visits": [], "deadlines_stale": false})
 
 
@@ -445,7 +452,12 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 	if typeof(entry) != TYPE_DICTIONARY:
 		return null
 	var record: Dictionary = entry
-	for field in INT_FIELDS + CELL_FIELDS + BOOL_FIELDS + ["flight_id", "path", "apron"]:
+	for field in (
+		INT_FIELDS
+		+ CELL_FIELDS
+		+ BOOL_FIELDS
+		+ ["flight_id", "path", "apron", "thoughts", "thought_marks"]
+	):
 		if not record.has(field):
 			return null
 	var p := Passenger.new()
@@ -529,7 +541,7 @@ static func _fill(p: Passenger, record: Dictionary, grid: BuildGrid) -> bool:
 			if not is_finite(axis) or absf(axis) > BuildGrid.MAX_ORIGIN_M:
 				return false
 		p.apron.append(Vector3(value[0], value[1], value[2]))
-	return true
+	return PassengerThoughts.fill(p, record["thoughts"], record["thought_marks"], grid)
 
 
 ## A cell from [x, y], or null. NO_CELL is allowed only when `may_be_none`.
