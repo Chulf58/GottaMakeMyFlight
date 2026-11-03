@@ -248,13 +248,16 @@ static func stamp_reach(bag: Dictionary, in_stall: bool, home: int) -> void:
 ## Stamps a new move of `bag` (CarryOnProps' record, as for stamp_reach()) with
 ## its reach and its length (ticks_of()), with `body` the body's frame as it
 ## starts: a roller laid on the floor from the pull or taken off it into the
-## pull parks on its wheels (RollerPark) and takes RollerPark.TICKS.
-static func stamp_move(bag: Dictionary, in_stall: bool, home: int, body: Transform3D) -> void:
+## pull parks on its wheels (RollerPark) and takes RollerPark.TICKS, parked in
+## `face` when it is a yaw (RollerPark.sit_face()).
+static func stamp_move(
+	bag: Dictionary, in_stall: bool, home: int, body: Transform3D, face := NAN
+) -> void:
 	stamp_reach(bag, in_stall, home)
 	bag.erase("ticks")
 	bag.erase("park")
 	if RollerPark.parks(bag, in_stall, home):
-		RollerPark.stamp(bag, body)
+		RollerPark.stamp(bag, body, face)
 
 
 ## How many sim ticks the move of `bag` (CarryOnProps' record) takes: the

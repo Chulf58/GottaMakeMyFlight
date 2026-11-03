@@ -89,6 +89,10 @@ const FOLLOW_TICKS := 200
 ## A turn over this in one frame (degrees) fails the probe (PassengerTurns
 ## eases every turn over 0.3 s).
 const TURN_DEG := 20.0
+## A walker sitting down at a chair, or seated, drawn with its Spine_01 bone
+## more than this under where it is seated (sit_idle, no stoop) fails the
+## probe (SEAT_LOW): its hips went under the seat (board 76cb23c0).
+const SEAT_DROP_M := 0.05
 
 var _seed := 0
 var _follow_ticks := FOLLOW_TICKS
@@ -112,6 +116,11 @@ var _walk_route := false
 ## frame is proved in frame and seen like a plate, and each window is also
 ## saved as one contact sheet.
 var _strips: Array[Vector2i] = []
+## --dump=A-B: the ticks _dump_row() prints (none by default).
+var _dump := Vector2i(1, 0)
+## The lowest Spine_01 height over the body sitting down or seated, its tick,
+## the height seated still (sit_idle, no stoop) and the frames of each.
+var _sit := {"low": INF, "tick": -1, "seated": NAN, "frames": 0, "still": 0}
 var _strip_cam: Camera3D
 var _strip_xf := {}
 var _swap_starts := 0
@@ -159,6 +168,9 @@ func _initialize() -> void:
 		elif arg.begins_with("--strip="):
 			for part in arg.get_slice("=", 1).split(","):
 				_strips.append(Vector2i(int(part.get_slice("-", 0)), int(part.get_slice("-", 1))))
+		elif arg.begins_with("--dump="):
+			var span := arg.get_slice("=", 1)
+			_dump = Vector2i(int(span.get_slice("-", 0)), int(span.get_slice("-", 1)))
 		elif arg.begins_with("--out="):
 			_out_dir = arg.get_slice("=", 1)
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -173,6 +185,7 @@ func _run() -> void:
 		else:
 			await _collect()
 		_finish_strips()
+		_seat_summary()
 		if _worn:
 			_worn_summary()
 	print("PROBE done plates=%d failed=%s" % [_saved.size(), _failed])
@@ -723,6 +736,8 @@ func _strip_step(props: CarryOnProps, body: Node3D) -> void:
 		# Turns ease over 0.3 s (PassengerTurns, board 908de167).
 		_invalid("the walker turned over 20 degrees in one frame at tick %d" % _clock.tick)
 	_last_yaw = yaw
+	_dump_row(props, body)
+	_seat_row(body)
 	if _no_plates:
 		return
 	for w in _strips.size():
@@ -906,6 +921,97 @@ func _swap_check(row: Dictionary, prev: Dictionary) -> String:
 			)
 		)
 	return flags
+
+
+## Keeps the lowest Spine_01 height over the body while the walker sits down or
+## is seated at a gate chair, and its height seated still (SEATED in sit_idle,
+## the stoop not drawn; the last such frame, past the clip's crossfade), for
+## _seat_summary().
+func _seat_row(body: Node3D) -> void:
+	if _p.stage not in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
+		return
+	var rig: Dictionary = body.get_meta(&"carry_rig", {})
+	if rig.is_empty():
+		return
+	var high: float = (rig["pivot"] as Node3D).global_position.y - body.global_position.y
+	_sit["frames"] += 1
+	if high < _sit["low"]:
+		_sit["low"] = high
+		_sit["tick"] = _clock.tick
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	var still: bool = (
+		_p.stage == Passenger.Stage.SEATED
+		and (rig["stoop"] as CarryStoop).drawn == 0.0
+		and player.current_animation == "sit_idle"
+	)
+	if still:
+		_sit["seated"] = high
+		_sit["still"] += 1
+
+
+## Prints the lowest the walker was drawn sitting down or seated against its
+## height seated still, and fails the probe (SEAT_LOW) when it went more than
+## SEAT_DROP_M under it, or when no seated frame was measured.
+func _seat_summary() -> void:
+	print(
+		(
+			"SEAT frames=%d still=%d spine_seated=%.3f lowest=%.3f at tick %d"
+			% [_sit["frames"], _sit["still"], _sit["seated"], _sit["low"], _sit["tick"]]
+		)
+	)
+	if _walk_route:
+		return
+	if _sit["still"] == 0:
+		_invalid("the walker was never drawn seated still")
+	elif _sit["low"] < float(_sit["seated"]) - SEAT_DROP_M:
+		print("SEAT_LOW the hips went %.3f m under the seat" % (_sit["seated"] - _sit["low"]))
+		_invalid("the walker sitting down was drawn under its seat at tick %d" % _sit["tick"])
+
+
+## --dump=A-B: prints a row a frame from tick A to tick B of the roller's move
+## and the stoop the walker is drawn with.
+func _dump_row(props: CarryOnProps, body: Node3D) -> void:
+	if _clock.tick < _dump.x or _clock.tick > _dump.y:
+		return
+	var bag := props.bag_state(_p.id, 0)
+	var rig: Dictionary = body.get_meta(&"carry_rig", {})
+	if rig.is_empty():
+		return
+	var stoop: CarryStoop = rig["stoop"]
+	var pivot := (rig["pivot"] as Node3D).global_position
+	var ys: Array[String] = []
+	for t in stoop.targets:
+		var local := body.global_transform.affine_inverse() * t
+		ys.append(
+			(
+				"(%.2f %.2f %.2f) yaw %.0f"
+				% [local.x, local.y, local.z, rad_to_deg(body.global_rotation.y)]
+			)
+		)
+	var start: Array = CarryLead.start_of(bag) if bag.has("was") else []
+	print(
+		(
+			(
+				"DUMP tick=%d a=%.2f stage=%s k=%.3f home=%s place=%s park=%s led=%s since=%s ticks=%s"
+				% [
+					_clock.tick,
+					_clock.alpha,
+					Passenger.Stage.keys()[_p.stage],
+					props.transfer_progress(_p.id, 0),
+					bag.get("home"),
+					bag.get("place"),
+					bag.get("park", false),
+					bag.get("led", false),
+					bag.get("since"),
+					bag.get("ticks"),
+				]
+			)
+			+ (
+				" start=%s drawn=%.3f targets_y=%s weights=%s keeps=%s drops=%s spine_y=%.3f"
+				% [start, stoop.drawn, ys, stoop.weights, stoop.keeps, stoop.drops, pivot.y]
+			)
+		)
+	)
 
 
 ## Whether this tick is in a strip window, or the tick after one (--strip; a

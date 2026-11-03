@@ -428,6 +428,7 @@ func sync() -> void:
 		held["hands"] = hands
 		held["kinds"] = kinds
 		held["in_stall"] = StallCarry.in_stall(p)
+		held["sit_face"] = RollerPark.sit_face(sim, p)
 		held["security"] = p.stage in [Passenger.Stage.SECURITY_QUEUE, Passenger.Stage.SECURITY]
 		held["stall"] = StallCarry.stall_of(sim, p)
 		# At a booth a roller's lift into the hand ends before the front turn.
@@ -976,7 +977,8 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 	# Hand-led or not is decided now and kept to the end of the move (and so is
 	# its reach and length, CarryLead.stamp_move).
 	bag["led"] = _leads(held, bag)
-	CarryLead.stamp_move(bag, held.get("in_stall", false), homes[i], body.global_transform)
+	var in_stall: bool = held.get("in_stall", false)
+	CarryLead.stamp_move(bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN))
 	bag["home"] = bag["place"]
 	bag["reach_from"] = _reach_of(node, kind)
 

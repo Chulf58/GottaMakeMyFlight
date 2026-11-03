@@ -225,7 +225,14 @@ static func lay_frame(bag: Dictionary, frame: Transform3D) -> Transform3D:
 ## going back as well, a walker standing (not standing up) stopped with its
 ## grip at 0.274 m over a handle at 0.225 m, and the bag jumped 6.3 cm into
 ## the hand at TAKE_BY.
-static func stamp(bag: Dictionary, body: Transform3D) -> void:
+##
+## A pull>floor of a walker with a place to face as it sits or stays
+## (`face`, a yaw, sit_face()) is parked in that facing, not the body's: a
+## walker that sits down turns on the spot to its chair over the first 6
+## ticks of the park (PassengerTurns), and parked off the way it walked in,
+## the roller stood 0.7 m ahead of the seated body, which folded down to it
+## with its hips 0.28 m under the seat (board 76cb23c0).
+static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 	bag["park"] = true
 	bag["ticks"] = TICKS_DOWN
 	for key in [
@@ -246,6 +253,24 @@ static func stamp(bag: Dictionary, body: Transform3D) -> void:
 		if bag.get("collecting", false):
 			bag["park_low"] = true
 	bag["park_frame"] = _yawed(body)
+	if not is_nan(face) and CarryLead.start_of(bag)[0] == CarryLead.End.HELD:
+		bag["park_frame"] = Transform3D(Basis(Vector3.UP, face), body.origin)
+
+
+## The yaw `p` faces once it has turned to sit or stay where it sets its bags
+## down: out of its gate chair or cafe seat, or out of the activity piece
+## (PassengerViews turns the body to the same facing); NAN anywhere else.
+static func sit_face(sim: PassengerSim, p: Passenger) -> float:
+	var out := Vector2i.ZERO
+	var where := StageKinds.location(p.stage)
+	if ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
+		out = ActivityPoses.facing(sim, p)
+	elif where == StageKinds.Location.GATE_SEAT and p.seat_object != 0:
+		var chair: Dictionary = sim.grid.get_object(p.seat_object)
+		out = TerminalLayout.front_of(chair.get("facing", 0)) if not chair.is_empty() else out
+	elif where == StageKinds.Location.FACILITY_SEAT:
+		out = sim.cafes.seat_facing(p)
+	return atan2(out.x, out.y) if out != Vector2i.ZERO else NAN
 
 
 ## `frame` turned about the vertical only (its yaw), at its origin.
