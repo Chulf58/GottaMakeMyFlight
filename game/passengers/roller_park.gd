@@ -492,7 +492,10 @@ static func _followed(
 	bag: Dictionary, parked: Transform3D, body: Transform3D, k: float
 ) -> Transform3D:
 	if not bag.has("park_rel"):
-		var last: Transform3D = bag.get("park_last", body)
+		# The step only: the last frame at the body's yaw now. A body turning as it
+		# goes (PassengerTurns eases a turn over 0.3 s) swung the bag the rest of
+		# its turn about the body that frame, 0.15 m in a frame at 3x.
+		var last := Transform3D(body.basis, (bag.get("park_last", body) as Transform3D).origin)
 		var now := body.affine_inverse() * parked
 		bag["park_rel"] = (last.affine_inverse() * parked).interpolate_with(now, FOLLOW_SPLIT)
 		bag["park_tip"] = k

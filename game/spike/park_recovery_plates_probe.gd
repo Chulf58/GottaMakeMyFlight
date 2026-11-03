@@ -75,8 +75,8 @@ const STRIP_CELL := Vector2i(480, 270)
 ## A kink (change of a frame's move against the frame before) of the roller,
 ## the pinned grip or the grip's gap to the roller's own grip bar, on a frame
 ## of a swap between the hand and the pull, over this fails the probe
-## (SWAP_JUMP); a frame whose clip changed, and the one after it, is exempt
-## (clips play with no blend, board 908de167) and printed as EXEMPT.
+## (SWAP_JUMP), on every swap frame: a clip change crossfades (ClipCrossfade,
+## board 908de167), so a frame whose clip changed is checked like any other.
 const SWAP_KINK_M := 0.05
 
 var _seed := 0
@@ -561,8 +561,8 @@ func _worn_summary() -> void:
 ## each as an offset from the walker's origin): how much its move this frame
 ## differs from its move the frame before. A fast but smooth move (a hand
 ## swinging the bag up) changes its speed a little a frame; a snap moves at
-## once and stops. Kept in `worst` apart for frames whose clip changed (a
-## clip is played with no blend, so the whole body snaps then). Returns the
+## once and stops. Kept in `worst` apart for frames whose clip changed (the
+## change crossfades, ClipCrossfade), so the two can be compared. Returns the
 ## flags for the frame.
 func _kinks(row: Dictionary, prev: Dictionary, pin: int, worst: Dictionary) -> String:
 	row["d_bag"] = (row["bag"] as Vector3) - prev["bag"]
@@ -579,16 +579,30 @@ func _kinks(row: Dictionary, prev: Dictionary, pin: int, worst: Dictionary) -> S
 	var flags := ""
 	if clip_changed:
 		flags += " CLIP_%s>%s" % [prev["clip"], row["clip"]]
+		var over := bag_kink > SWAP_KINK_M or pin_kink > SWAP_KINK_M
+		if over and _in_strip_window():
+			# A strip capture's stall plays the clips on into the next sim
+			# steps (see _swap_check); the headless run (--no-plates) checks it.
+			flags += " EXEMPT_STRIP"
+		elif over:
+			# Clips crossfade (board 908de167): a change moves nothing at once.
+			flags += " CLIP_JUMP"
+			_invalid(
+				(
+					"clip change jump at tick %d: bag kink %.3f, pinned grip kink %.3f m"
+					% [_clock.tick, bag_kink, pin_kink]
+				)
+			)
 	if bag_kink > JUMP_M or pin_kink > JUMP_M:
 		flags += " KINK bag=%.3f pin=%.3f" % [bag_kink, pin_kink]
 	return flags
 
 
 ## Prints a turn of the walker over 20 degrees in a frame (TURN, so a strip
-## window can be set on it), and with --strip draws the frame of a window it
-## is in from the window's camera (proved in frame: feet, head, roller and the
-## holding hand inside MARGIN_PX; seen: hiding the walker and its roller
-## changes MIN_DIFF_PX pixels, else PROBE_INVALID). A window's sheet is saved
+## window can be set on it) and fails the probe on it, and with --strip draws
+## the frame of a window it is in from the window's camera (proved in frame:
+## feet, head, roller and the holding hand inside MARGIN_PX; seen: hiding the
+## walker and its roller changes MIN_DIFF_PX pixels, else PROBE_INVALID). A window's sheet is saved
 ## once its last tick has passed.
 func _strip_step(props: CarryOnProps, body: Node3D) -> void:
 	var yaw := body.global_rotation.y
@@ -599,6 +613,8 @@ func _strip_step(props: CarryOnProps, body: Node3D) -> void:
 				% [_clock.tick, rad_to_deg(angle_difference(_last_yaw, yaw))]
 			)
 		)
+		# Turns ease over 0.3 s (PassengerTurns, board 908de167).
+		_invalid("the walker turned over 20 degrees in one frame at tick %d" % _clock.tick)
 	_last_yaw = yaw
 	if _no_plates:
 		return
@@ -723,8 +739,8 @@ func _swap_row(props: CarryOnProps, bag: Dictionary, row: Dictionary, grip: Vect
 ## Counts the swaps that start and the ones that turn back a swap under way
 ## (the place changes while one is), and on a frame of a swap fails the probe
 ## on a kink of the roller or the pinned grip, or a jump of the grip's gap to
-## the bar, over SWAP_KINK_M (a clip-change frame and the next are exempt).
-## Returns the frame's flags.
+## the bar, over SWAP_KINK_M, clip-change frames included. Returns the frame's
+## flags.
 func _swap_check(row: Dictionary, prev: Dictionary) -> String:
 	var flags := ""
 	var changed: bool = row["place"] != prev.get("place", row["place"])
@@ -743,18 +759,6 @@ func _swap_check(row: Dictionary, prev: Dictionary) -> String:
 	if axle_kink > SWAP_KINK_M:
 		flags += " SWAP_JUMP"
 		_invalid("swap jump at tick %d: roller axle kink %.3f m" % [_clock.tick, axle_kink])
-	if row.get("clip_changed", false) or prev.get("clip_changed", false):
-		_swap_worst["exempt"] += 1
-		print(
-			(
-				(
-					"EXEMPT tick=%d clip change (no blend, board 908de167): grip, roller and bar"
-					% _clock.tick
-				)
-				+ " kinks not checked; the axle kink %.3f m is" % axle_kink
-			)
-		)
-		return flags
 	# A strip frame's capture (a GPU read-back and a pixel diff) stalls the
 	# frames after it, and the clips play that stall into the next sim steps:
 	# windowed, the free arm moved 0.24 m a step while walking inside a strip

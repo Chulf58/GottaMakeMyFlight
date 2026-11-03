@@ -78,6 +78,12 @@ func test_a_seated_guest_sits_at_the_seat_root_facing_the_table() -> void:
 func test_an_ordering_guest_faces_the_counter() -> void:
 	var p := _guest()
 	_run_to_stage(p, Passenger.Stage.CAFE_ORDER)
+	# Its turn to the counter eases over PassengerTurns.TURN_TICKS (ruling
+	# passenger-turns-on-the-spot-ease-over-a-few-frames-and-anima), and may
+	# have begun only as it came to the counter.
+	for i in PassengerTurns.TURN_TICKS:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_ORDER)
 	# The counters face south (+y), so the guest looks north (-z): yaw pi.
 	var yaw := _views.node_for(p.id).rotation.y
 	print("ordering at %s yaw %.3f" % [p.at, yaw])
