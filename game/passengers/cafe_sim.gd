@@ -114,6 +114,11 @@ const START_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.STANDING,
 	Passenger.Stage.SEATED,
 ]
+## Ticks a seated visit takes beyond the forecast's legs, measured by
+## test_visit_zero_slack.gd: 2 where the guest is seen to have arrived (at the
+## queue slot, at the seat) a tick after its last step, and 1 so the stand-up
+## falls before the deadline tick, on which step() would pay it short.
+const SEATED_LAG_TICKS := 3
 ## The stages a guest spends at its seat, off its approach cell.
 const SEAT_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.CAFE_SITTING_DOWN,
@@ -547,7 +552,8 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 		plan["legs"] = {
 			"pre_ticks": PassengerSim.STAND_UP_TICKS if p.stage == Passenger.Stage.SEATED else 0,
 			"to_queue_mm": mm,
-			"order_ticks": _order_eta(cafe["room"], counter["id"]),
+			"order_ticks":
+			_order_eta(cafe["room"], counter["id"]) + (0 if walk_on else SEATED_LAG_TICKS),
 			"to_seat_mm": 0 if walk_on else seat["mm"],
 			"dwell_ticks": RoomTypes.get_type(cafe["type"]).dwell_ticks,
 			"leave_cell": lane[0] if walk_on else seat["approach"],

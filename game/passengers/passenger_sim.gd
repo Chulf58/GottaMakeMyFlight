@@ -107,6 +107,9 @@ const STANDING_MOOD_BEATS := 4
 const SIT_FORWARD_M := 0.45
 const SHUFFLE_TICKS := 8
 const QUEUE_STAGES := [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_QUEUE]
+## The last step out of a stall or off a seat: the tick it hands the passenger
+## back to its journey, the journey's own walk waits for the next tick.
+const HAND_BACK_STAGES := [Passenger.Stage.TOILET_EXIT, Passenger.Stage.CAFE_STANDING_UP]
 
 @export var clock: SimClock
 @export var flights: FlightSim
@@ -906,6 +909,7 @@ func _promote(q: Dictionary, cells: Array) -> void:
 func _step(p: Passenger) -> void:
 	if p.needs_replan:
 		_replan(p)
+	var from := p.stage
 	match StageKinds.facility(p.stage):
 		StageKinds.Facility.CAFE:
 			cafes.step(p)
@@ -916,7 +920,11 @@ func _step(p: Passenger) -> void:
 	# A help visit holds the passenger: its stage's own logic would plan again.
 	if info_desks.holds(p):
 		info_desks.step(p)
-	else:
+	elif not (
+		HAND_BACK_STAGES.has(from) and StageKinds.facility(p.stage) == StageKinds.Facility.NONE
+	):
+		# Not the tick a visit took its last step out: planning the journey's walk
+		# now would move the passenger two steps at once.
 		_advance(p)
 	_move(p)
 	if posmod(tick, BEAT_TICKS) == posmod(p.id, BEAT_TICKS) and not p.is_done():
