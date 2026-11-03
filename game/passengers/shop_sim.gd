@@ -46,6 +46,16 @@ extends RefCounted
 ## passenger with no wish, and a spare-time browser, plan as before: the
 ## nearest free slot, then the forecast of that one.
 ##
+## A browse piece that moves with its room (Relocation) does not move its
+## visitor: one browsing at it leaves where it stands, with nothing settled and
+## the stay it still owes (a lounge or nap pod sitter stands up, a shower user
+## steps out: ActivityPoses.exit_ticks(); a kiosk browser just turns away),
+## then is admitted again and walks to the piece at its new spot to stay the
+## time owed, or goes on unpaid when it no longer fits. One already at the end
+## of its stay finishes and settles at the old spot. A walker whose piece moved
+## is admitted again the same way. ActivityPoses reads the placement the visit
+## last saw (ShopVisit.piece), not the live grid.
+##
 ## Money is settled once, when the browse finishes: spend() of the base spend
 ## of the visited room's type, nudged by mood, with the airside bonus, credited to
 ## PassengerSim.wallet as Wallet.Category.SHOP; then boredom is reset (unless
@@ -146,6 +156,17 @@ static func browse_ticks(type: RoomTypes.RoomType) -> int:
 	return type.dwell_ticks if type.dwell_ticks > 0 else BROWSE_TICKS
 
 
+## Ticks the stay of `visit` in a room of `type` lasts from the start of its
+## browse stage: browse_ticks(), or, once the visitor is back at a piece that
+## moved (Relocation), the stay still owed. While it leaves the old spot the
+## stage clock is set so that the whole browse_ticks() ends with the exit.
+static func stay_ticks(visit: ShopVisit, type: RoomTypes.RoomType) -> int:
+	var moving := visit.relocation
+	if moving != null and not moving.exiting and moving.returns():
+		return moving.left
+	return browse_ticks(type)
+
+
 func visit_of(passenger_id: int) -> ShopVisit:
 	return _core.visit_of(passenger_id)
 
@@ -235,6 +256,7 @@ func commit_visit(p: Passenger, plan: Dictionary) -> void:
 	visit.display = slot["display"]
 	visit.index = slot["index"]
 	visit.slot = slot
+	visit.piece = Relocation.placement(_sim.grid, visit.display)
 	visit.resume_stage = _resume_stage(p)
 	visit.fallback = plan["fallback"]
 	visit.deadline = VisitForecast.deadline(_sim, p, slot["approach"], 0, visit.resume_stage)
@@ -294,8 +316,14 @@ func step(p: Passenger) -> void:
 	# deadline is the last tick the passenger may leave the slot.
 	var browsed := (
 		p.stage == Passenger.Stage.SHOP_BROWSE
-		and _sim.tick - p.stage_tick >= browse_ticks(_room_type(visit.room))
+		and _sim.tick - p.stage_tick >= stay_ticks(visit, _room_type(visit.room))
 	)
+	if visit.relocation != null and visit.relocation.exiting and visit.relocation.returns():
+		# Leaving a piece that moved, the stay still owed: no deadline cuts the
+		# exit short; when it ends the visit is admitted again.
+		if browsed:
+			_head_to_piece(p, visit)
+		return
 	if browsed and _sim.tick <= visit.deadline:
 		_settle(p, visit)
 		_end(p, visit)
@@ -390,7 +418,13 @@ func rederive() -> void:
 	_core.rederive()
 	for id in visit_ids():
 		var visit := visit_of(id)
-		visit.slot = layout.slot(visit.display, visit.index)
+		if visit.relocation != null and visit.relocation.exiting:
+			# Still leaving the piece's old spot: its geometry is the saved one.
+			visit.piece = visit.relocation.source
+			visit.slot = ShopLayout.entry_at(visit.display, visit.index, visit.room, visit.piece)
+		else:
+			visit.slot = layout.slot(visit.display, visit.index)
+			visit.piece = Relocation.placement(_sim.grid, visit.display)
 
 
 func _may_start(p: Passenger) -> bool:
@@ -545,6 +579,8 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 ## the browse began, and the visit ends unpaid (one still getting up from a
 ## gate seat lets the gate take over).
 func _keep(p: Passenger, visit: ShopVisit) -> bool:
+	if _relocates(p, visit):
+		return visit_of(p.id) == visit
 	var slot := layout.slot(visit.display, visit.index)
 	var closed := (
 		p.stage != Passenger.Stage.SHOP_BROWSE and not ShopCounters.room_open(_sim, visit.room)
@@ -556,7 +592,98 @@ func _keep(p: Passenger, visit: ShopVisit) -> bool:
 			_end(p, visit)
 		return false
 	visit.slot = slot
+	visit.piece = Relocation.placement(_sim.grid, visit.display)
 	return true
+
+
+## A passenger whose browse piece the grid now holds at another placement
+## (Relocation): one at the piece leaves it where it was, with the stay it
+## still owes (_start_exit()), and one walking there is admitted again for the
+## piece at its new spot (_head_to_piece()). True when reconcile must leave the
+## visit alone: held at its old piece, or (for a walker) handled.
+func _relocates(p: Passenger, visit: ShopVisit) -> bool:
+	if visit.relocation != null and visit.relocation.exiting:
+		# The room gone meanwhile ends the visit; otherwise the exit goes on at
+		# the old spot, and the return is judged when it ends.
+		if _sim.grid.get_room(visit.room).is_empty():
+			_end(p, visit)
+		return true
+	if not Relocation.moved(visit.piece, Relocation.placement(_sim.grid, visit.display)):
+		return false
+	if _sim.grid.get_room(visit.room).is_empty():
+		return false
+	match p.stage:
+		Passenger.Stage.SHOP_WALK:
+			_head_to_piece(p, visit)
+			return true
+		Passenger.Stage.SHOP_BROWSE:
+			_start_exit(p, visit)
+			return true
+	return false
+
+
+## A browser at a piece that moved leaves it where it stands. With the stay
+## still to go it plays the exit of an ordinary stay's end (ActivityPoses.
+## exit_ticks(), none for a kiosk display) and is then admitted again for the
+## piece at its new spot; the stage clock is set so that the exit ends with
+## the whole browse_ticks(). With the end of the stay already under way it
+## finishes and settles there as usual (a final exit).
+func _start_exit(p: Passenger, visit: ShopVisit) -> void:
+	var type := _room_type(visit.room)
+	var left := stay_ticks(visit, type) - (_sim.tick - p.stage_tick)
+	var exit := ActivityPoses.exit_ticks(visit.piece["def"], p.carry_on)
+	var remaining := left
+	if left <= exit:
+		visit.relocation = Relocation.leaving(visit.piece, -1)
+	else:
+		visit.relocation = Relocation.leaving(visit.piece, left)
+		remaining = exit
+	p.stage_tick = _sim.tick + remaining - browse_ticks(type)
+	if exit == 0:
+		_head_to_piece(p, visit)
+
+
+## A passenger whose browse piece moved heads for it at the new spot, when the
+## rest of the visit still fits before its flight: the walk there and the stay
+## it still owes (VisitForecast). Otherwise, or with no slot it can reach or
+## its shop closed, it goes on with its journey unpaid (ruling moving-a-room-
+## with-its-furniture-is-free-and-keeps-paid-pric, point 4).
+func _head_to_piece(p: Passenger, visit: ShopVisit) -> void:
+	refresh()
+	var type := _room_type(visit.room)
+	var owed := browse_ticks(type)
+	if visit.relocation != null:
+		visit.relocation.exiting = false
+		owed = visit.relocation.left
+	var slot := layout.slot(visit.display, visit.index)
+	var route := {}
+	# The piece must still be one of the visit's own room (as for a cafe table
+	# or a toilet stall): in another room it is another shop's, and the visit
+	# was agreed for this one.
+	var usable := (
+		not slot.is_empty()
+		and int(slot["room"]) == visit.room
+		and Relocation.destination_ok(_sim.grid, visit.display, visit.piece["def"], visit.room)
+		and ShopCounters.room_open(_sim, visit.room)
+	)
+	if usable:
+		route = VisitRoute.plan(_sim.grid, p, slot["approach"])
+		if route.is_empty() and p.at == slot["approach"] and not p.is_moving():
+			route = {"path": [p.at], "keep": 0, "from": p.at, "mm": 0}
+	if route.is_empty():
+		_end(p, visit)
+		return
+	var ticks := JourneyForecast.walk_ticks(route["mm"]) + ARRIVE_TICKS + owed
+	var arrival := VisitForecast.arrival(_sim, p, ticks, slot["approach"], 0, visit.resume_stage)
+	if not VisitForecast.admits(_sim, p, arrival):
+		_end(p, visit)
+		return
+	visit.slot = slot
+	visit.piece = Relocation.placement(_sim.grid, visit.display)
+	visit.deadline = _live_deadline(p, visit)
+	VisitRoute.start(p, route)
+	if p.stage != Passenger.Stage.SHOP_WALK:
+		_set_stage.call(p, Passenger.Stage.SHOP_WALK)
 
 
 ## The visit is over, finished or not: the passenger goes on with its journey.
