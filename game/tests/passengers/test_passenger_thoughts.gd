@@ -142,3 +142,18 @@ func test_nice_decor_is_kept_quiet_for_a_while_even_after_its_entry_is_dropped()
 	assert_int(newest["kind"]).is_equal(PassengerThoughts.Kind.NICE_DECOR)
 	assert_str(newest["text"]).is_equal("Nice decor here")
 	assert_bool(newest["positive"]).is_true()
+
+
+func test_the_recorder_refuses_a_thought_with_no_cell_or_the_wrong_facility() -> void:
+	var p := _passenger()
+	PassengerThoughts.record(p, PassengerThoughts.Kind.MEAL, 10, Passenger.NO_CELL, ROOM)
+	PassengerThoughts.record(p, PassengerThoughts.Kind.TOILET_RELIEF, 11, CELL, 0)
+	PassengerThoughts.record(p, PassengerThoughts.Kind.NICE_DECOR, 12, CELL, ROOM)
+	assert_int(PassengerThoughts.count(p)).is_equal(0)
+	assert_int(PassengerThoughts.mark_of(p, PassengerThoughts.Kind.MEAL)).is_equal(-1)
+	PassengerThoughts.record(p, PassengerThoughts.Kind.MEAL, 13, CELL, ROOM)
+	assert_int(PassengerThoughts.count(p)).is_equal(1)
+	assert_bool(PassengerThoughts.sound(PassengerThoughts.Kind.LONG_QUEUE, ROOM, 7)).is_true()
+	assert_bool(PassengerThoughts.sound(PassengerThoughts.Kind.LONG_QUEUE, 0, 7)).is_false()
+	assert_bool(PassengerThoughts.sound(PassengerThoughts.Kind.NICE_DECOR, 0, 0)).is_true()
+	assert_bool(PassengerThoughts.sound(PassengerThoughts.Kind.MEAL, ROOM, 1)).is_false()

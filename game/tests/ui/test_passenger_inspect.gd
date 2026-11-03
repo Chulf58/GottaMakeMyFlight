@@ -171,3 +171,23 @@ func test_the_card_keeps_the_follow_texts_bottom_left_place() -> void:
 	assert_float(_inspect.offset_right - _inspect.offset_left).is_less_equal(PassengerInspect.MAX_W)
 	assert_float(_inspect.offset_bottom).is_equal(label.offset_bottom)
 	assert_int(_inspect.grow_vertical).is_equal(Control.GROW_DIRECTION_BEGIN)
+
+
+func test_lateness_and_the_obstruction_show_on_their_own_and_together() -> void:
+	var p := _world.passenger(_id)
+	# This world has no check-in, so the passenger starts stuck: clear it, and
+	# the sim is not stepped again, so the hand-set state holds.
+	p.stuck = Passenger.Stuck.NONE
+	p.late = false
+	_select()
+	assert_str(_inspect.now_text()).is_equal("")
+	p.late = true
+	_hud.refresh()
+	assert_str(_inspect.now_text()).is_equal("Running late")
+	p.stuck = Passenger.Stuck.QUEUE_FULL
+	_hud.refresh()
+	print("late and stuck: %s (bubble %s)" % [_inspect.now_text(), _world.sim.bubble_text(p)])
+	assert_str(_inspect.now_text()).is_equal('Running late   Stuck: "Queue full"')
+	p.late = false
+	_hud.refresh()
+	assert_str(_inspect.now_text()).is_equal('Stuck: "Queue full"')

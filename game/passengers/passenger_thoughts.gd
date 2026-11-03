@@ -34,6 +34,9 @@ const TEXT := {
 	Kind.NICE_DECOR: "Nice decor here",
 }
 const POSITIVE := [Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR]
+## Kinds recorded at a facility: a cafe or toilet room, a desk or scanner. Nice
+## decor has none (facility 0).
+const AT_FACILITY := [Kind.MEAL, Kind.FOOD_GIVEN_UP, Kind.TOILET_RELIEF, Kind.LONG_QUEUE]
 
 const _KIND := 0
 const _TICK := 1
@@ -44,10 +47,20 @@ const _VALUE := 5
 
 
 ## The one recorder: adds a thought to `p`, dropping the oldest past CAP, and
-## marks its kind as last thought at `tick`.
+## marks its kind as last thought at `tick`. A thought with no cell, or a
+## facility its kind does not take (sound()), would make the save refuse to
+## load: it is refused here with an error instead.
 static func record(
 	p: Passenger, kind: Kind, tick: int, cell: Vector2i, facility := 0, value := 0
 ) -> void:
+	if cell == Passenger.NO_CELL or not sound(kind, facility, value):
+		push_error(
+			(
+				"PassengerThoughts: passenger %d's %s at %s, facility %d, value %d refused"
+				% [p.id, Kind.keys()[kind], cell, facility, value]
+			)
+		)
+		return
 	p.thoughts.append_array(PackedInt64Array([kind, tick, cell.x, cell.y, facility, value]))
 	var extra := p.thoughts.size() - CAP * STRIDE
 	if extra > 0:
@@ -123,33 +136,49 @@ static func mark_of(p: Passenger, kind: Kind) -> int:
 	return p.thought_marks[kind] if p.thought_marks.size() > kind else NO_MARK
 
 
+## Whether a `kind` thought may carry `facility` and `value`: a facility kind
+## (AT_FACILITY) has a positive facility and nice decor none; only a long
+## queue has a value (its minutes), never a negative one.
+static func sound(kind: int, facility: int, value: int) -> bool:
+	if kind < 0 or kind >= Kind.size():
+		return false
+	if (facility > 0) != (kind in AT_FACILITY) or facility < 0:
+		return false
+	return value >= 0 if kind == Kind.LONG_QUEUE else value == 0
+
+
 ## Fills `p` from a saved record's "thoughts" and "thought_marks", or returns
 ## false when either is malformed: whole numbers only, at most CAP thoughts of
-## STRIDE numbers, known kinds, cells on `grid` (or Passenger.NO_CELL for a
-## thought with no place), no negative facility or
-## value, and either no marks or one per kind. Ticks are checked by
-## ticks_ok().
+## STRIDE numbers, each sound() with its cell on `grid`, and one mark per kind
+## (no marks only with no thoughts) where every kept kind's newest thought
+## carries its kind's mark. Ticks are checked by ticks_ok().
 static func fill(p: Passenger, thoughts: Variant, marks: Variant, grid: BuildGrid) -> bool:
 	if typeof(thoughts) != TYPE_ARRAY or typeof(marks) != TYPE_ARRAY:
 		return false
 	var list: Array = thoughts
+	var mark_list: Array = marks
 	if list.size() % STRIDE != 0 or list.size() > CAP * STRIDE:
 		return false
-	if not (marks as Array).is_empty() and (marks as Array).size() != Kind.size():
+	var marks_ok := mark_list.size() == Kind.size() or (list.is_empty() and mark_list.is_empty())
+	if not marks_ok:
 		return false
-	for value in list + (marks as Array):
+	for value in list + mark_list:
 		if not WholeNumber.is_whole(value):
 			return false
+	var newest := {}
 	for start in range(0, list.size(), STRIDE):
 		var kind := int(list[start + _KIND])
 		var cell := Vector2i(int(list[start + _X]), int(list[start + _Y]))
-		var placed := grid.in_bounds(cell) or cell == Passenger.NO_CELL
-		if kind < 0 or kind >= Kind.size() or not placed:
+		if not sound(kind, int(list[start + _FACILITY]), int(list[start + _VALUE])):
 			return false
-		if int(list[start + _FACILITY]) < 0 or int(list[start + _VALUE]) < 0:
+		if not grid.in_bounds(cell):
+			return false
+		newest[kind] = int(list[start + _TICK])
+	for kind: int in newest:
+		if int(mark_list[kind]) != newest[kind]:
 			return false
 	p.thoughts = PackedInt64Array(list)
-	p.thought_marks = PackedInt64Array(marks)
+	p.thought_marks = PackedInt64Array(mark_list)
 	return true
 
 

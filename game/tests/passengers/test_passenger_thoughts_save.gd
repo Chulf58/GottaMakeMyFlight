@@ -4,7 +4,9 @@ extends GdUnitTestSuite
 ## inspect-thoughts-recorded-at-sim-outcomes-saved-pin-marks-where): the shown
 ## list and the repeat-suppression marks come back from JSON as they were, a
 ## version 19 save is refused with no migration, and a bad thought record
-## refuses the whole load and leaves the sim as it was.
+## refuses the whole load and leaves the sim as it was: a thought with no cell
+## or off the grid, a facility its kind does not take, or repeat marks that
+## are missing or disagree with the newest kept thought of a kind.
 
 var _world: PassengerTestWorld
 var _id := 0
@@ -81,6 +83,13 @@ func test_a_bad_thought_record_refuses_the_load() -> void:
 		"too many": func(r: Dictionary) -> void: _overfill(r),
 		"short marks": func(r: Dictionary) -> void: (r["thought_marks"] as Array).pop_back(),
 		"future mark": func(r: Dictionary) -> void: r["thought_marks"][0] = 999999,
+		"marks cleared": func(r: Dictionary) -> void: r["thought_marks"] = [],
+		"mark disagrees": func(r: Dictionary) -> void: r["thought_marks"][0] = 11,
+		"kept kind unmarked": func(r: Dictionary) -> void: r["thought_marks"][2] = -1,
+		"no cell": func(r: Dictionary) -> void: _set_cell(r, Passenger.NO_CELL),
+		"meal without a room": func(r: Dictionary) -> void: r["thoughts"][4] = 0,
+		"decor with a room": func(r: Dictionary) -> void: r["thoughts"][10] = 5,
+		"meal with a value": func(r: Dictionary) -> void: r["thoughts"][5] = 3,
 	}
 	for label: String in cases:
 		var data: Dictionary = good.duplicate(true)
@@ -97,8 +106,22 @@ func test_a_bad_thought_record_refuses_the_load() -> void:
 	assert_bool(_world.sim.from_snapshot(good)).is_true()
 
 
+static func _set_cell(record: Dictionary, cell: Vector2i) -> void:
+	record["thoughts"][2] = cell.x
+	record["thoughts"][3] = cell.y
+
+
 static func _overfill(record: Dictionary) -> void:
 	var list: Array = record["thoughts"]
 	var first := list.slice(0, PassengerThoughts.STRIDE)
 	while list.size() <= PassengerThoughts.CAP * PassengerThoughts.STRIDE:
 		list.append_array(first)
+
+
+func test_an_empty_list_may_have_no_marks() -> void:
+	var data := _saved()
+	var record := _record_of(data)
+	record["thoughts"] = []
+	record["thought_marks"] = []
+	assert_bool(_world.sim.from_snapshot(data)).is_true()
+	assert_int(PassengerThoughts.count(_world.passenger(_id))).is_equal(0)

@@ -3,8 +3,9 @@ extends PanelContainer
 ## The inspect card of the followed passenger (HUD 4/7, decision passenger-
 ## inspect-thoughts-recorded-at-sim-outcomes-saved-pin-marks-where), in the
 ## follow text's bottom-left place, which PassengerHud hides while the card
-## shows. Live status (stage, flight, mood, hunger, toilet need, boredom and
-## what holds the passenger up right now) is kept apart from its thoughts
+## shows. Live status (stage, flight, mood, hunger, toilet need, boredom, and
+## on their own line whether it runs late and what holds it up right now,
+## both when both hold) is kept apart from its thoughts
 ## (PassengerThoughts), newest first, one button each, coral for a bad thought
 ## and green for a good one.
 ##
@@ -111,9 +112,8 @@ func refresh() -> void:
 		"Mood %d   Hunger %d   Toilet %d   Boredom %d"
 		% [p.mood, p.hunger, p.toilet_need, p.boredom]
 	)
-	var now := sim.bubble_text(p)
-	_now.text = 'Now: "%s"' % now if now != "" else ""
-	_now.visible = now != ""
+	_now.text = now_line(sim, p)
+	_now.visible = _now.text != ""
 	var entries := PassengerThoughts.entries(p)
 	_heading.text = "Thoughts" if not entries.is_empty() else "Thoughts: none yet"
 	for i in _rows.size():
@@ -168,6 +168,25 @@ func clear_marker() -> void:
 func on_loaded(ok: bool) -> void:
 	if ok:
 		clear_marker()
+
+
+## Lateness and the current obstruction, each on its own: "Running late",
+## 'Stuck: "Queue full"' or both, "" for neither or once the journey ended.
+## The obstruction's words are the speech bubble's (PassengerSim.bubble_text(),
+## which shows the obstruction alone when both hold).
+static func now_line(passenger_sim: PassengerSim, p: Passenger) -> String:
+	if p.is_done():
+		return ""
+	var parts := PackedStringArray()
+	if p.late:
+		parts.append("Running late")
+	if p.stuck != Passenger.Stuck.NONE:
+		parts.append('Stuck: "%s"' % passenger_sim.bubble_text(p))
+	return "   ".join(parts)
+
+
+func now_text() -> String:
+	return _now.text if _now.visible else ""
 
 
 func name_text() -> String:
