@@ -344,23 +344,25 @@ func _booth(node: Node3D) -> Array:
 ## removed, as the security visuals probe builds it.
 func _build_lane(build: BuildMode) -> void:
 	var grid := build.grid
+	# The starter terminal's cells are moved by its site's starter offset.
+	var arch_at := ARCH_AT + ReferenceTerminal.offset_on(grid)
 	for cell in OLD_SCANNERS:
-		var old := grid.object_at(cell)
+		var old := grid.object_at(cell + arch_at - ARCH_AT)
 		if old != 0 and not grid.apply(BuildEdit.remove_object(old)).ok:
 			_invalid("could not remove the scanner at %s" % cell)
-	var lane := SecurityLanes.geometry(ARCH_AT, 0, SecurityLanes.LEFT)
-	for x in range(ARCH_AT.x - 2, ARCH_AT.x + 2):
-		var cell := Vector2i(x, ARCH_AT.y)
+	var lane := SecurityLanes.geometry(arch_at, 0, SecurityLanes.LEFT)
+	for x in range(arch_at.x - 2, arch_at.x + 2):
+		var cell := Vector2i(x, arch_at.y)
 		if grid.has_wall(cell, BuildGrid.Side.NORTH):
 			if not grid.apply(BuildEdit.remove_wall(cell, BuildGrid.Side.NORTH)).ok:
 				_invalid("could not open the divider at %s" % cell)
-	if not grid.apply(BuildEdit.place_object(SecurityLanes.ARCH, ARCH_AT, 0)).ok:
-		_invalid("could not place the arch")
-	for part in [SecurityLanes.TRAY_TABLE, SecurityLanes.XRAY_BELT, SecurityLanes.PICKUP_TABLE]:
-		if not grid.apply(BuildEdit.place_object(part, lane[part], 0)).ok:
-			_invalid("could not place %s" % part)
+	for part in SecurityLanes.PART_IDS:
+		var at: Vector2i = arch_at if part == SecurityLanes.ARCH else lane[part]
+		var placed := grid.apply(BuildEdit.place_object(part, at, 0))
+		if not placed.ok:
+			_invalid("could not place %s: %s" % [part, placed.reason_text()])
 	(build.get_node("BuildView") as BuildView).refresh(grid)
-	var arch := grid.object_at(ARCH_AT)
+	var arch := grid.object_at(arch_at)
 	var lanes := _sim.layout.security_lanes
 	print(
 		"LANE arch=%d status=%s scanners=%s" % [arch, lanes.status_text(arch), _sim.layout.scanners]
