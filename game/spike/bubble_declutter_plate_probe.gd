@@ -138,6 +138,8 @@ func _run() -> void:
 	var rig: TycoonCamera = main.get_node("TycoonCamera")
 	var cam: Camera3D = rig.get_node("Camera3D")
 	cam.make_current()
+	# Nodes take their place in draw(), which has not run since the sync.
+	views.draw()
 	var centre := Vector3.ZERO
 	for id in lane:
 		centre += views.node_for(id).position
@@ -147,10 +149,11 @@ func _run() -> void:
 		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2.0
 	)
 	for d in DISTANCES:
-		rig.position = centre * Vector3(1, 0, 1)
-		rig.yaw = 0.35
-		rig.distance = d
-		rig.zoom(1.0)
+		rig.glide_to(centre * Vector3(1, 0, 1), d)
+		for i in 240:
+			await _frames(1)
+			if not rig.is_gliding():
+				break
 		await _frames(8)
 		views.draw()
 		in_frame = true
@@ -164,12 +167,21 @@ func _run() -> void:
 					% [rig.distance, rig.pitch_for_distance(rig.distance)]
 				)
 			)
+			for id in tail:
+				var at := views.node_for(id).get_node("Bubble") as Label3D
+				print(
+					(
+						"INFRAME id=%d point=%s frame=%s"
+						% [id, cam.unproject_position(at.global_position), frame]
+					)
+				)
 			break
 	if not in_frame:
 		_invalid("the tail's bubbles do not all fit in the frame at any distance")
 	_check_bubbles(views, sim, cam, tail)
 	if _plate:
 		await _check_sight_and_save(views, cam, tail, out_dir)
+		await _save_declutter_off(views, cam, tail, out_dir)
 	print("PROBE done failed=", _failed)
 	quit(1 if _failed else 0)
 
@@ -274,3 +286,28 @@ func _check_sight_and_save(
 	var path := out_dir.path_join("01_queue_tail_bubbles.png")
 	img.save_png(path)
 	print("PLATE ", path, " size=", img.get_size())
+
+
+## The same frame with the declutter switched off: every bubble with text must
+## show again (a control that the first plate's hiding came from the declutter),
+## and the plate is saved for the before-and-after comparison.
+func _save_declutter_off(
+	views: PassengerViews, cam: Camera3D, tail: Array, out_dir: String
+) -> void:
+	views.declutter_bubbles = false
+	await _frames(3)
+	views.draw()
+	var visible_count := 0
+	for id in tail:
+		var bubble := views.node_for(id).get_node("Bubble") as Label3D
+		if bubble.text != "" and bubble.visible:
+			visible_count += 1
+			print("OFF id=%d text=%s rect=%s" % [id, bubble.text, _rect(views, cam, id)])
+	print("PROBE declutter_off visible_bubbles=%d of %d" % [visible_count, tail.size()])
+	if visible_count != tail.size():
+		_invalid("with the declutter off, not every bubble shows")
+	var img := await PlateSight.grab(self)
+	var path := out_dir.path_join("02_queue_tail_bubbles_declutter_off.png")
+	img.save_png(path)
+	print("PLATE ", path, " size=", img.get_size())
+	views.declutter_bubbles = true

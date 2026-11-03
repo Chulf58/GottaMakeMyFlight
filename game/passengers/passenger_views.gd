@@ -33,6 +33,8 @@ const PICK_RADIUS_PX := 40.0
 
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
+## False shows every speech bubble, overlapping or not (plate probes compare).
+var declutter_bubbles := true
 var selected_id := 0
 ## Moved pieces still in use, drawn at their old spot (RelocationGhosts).
 ## Holds no tick: it compares with the sim every frame.
@@ -259,12 +261,16 @@ func draw() -> void:
 		var fade: ClipCrossfade = node.get_meta(&"crossfade")
 		fade.ease_to(now, CROSSFADE_SECONDS)
 		fade.drawn = true
-		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
 	if _nodes.has(selected_id):
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
 	_ring.visible = _nodes.has(selected_id)
+	# The icons lift over a bubble only while it shows, so they are laid out
+	# after the declutter has set each bubble's visibility for this frame.
 	_declutter_bubbles(camera, unit)
+	for id in _nodes:
+		var node: Node3D = _nodes[id]
+		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
 	_props.draw()
 	_markers.draw()
 
@@ -295,6 +301,8 @@ func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
 		)
 		var rank: int = node.get_meta(&"bubble_rank", BubbleDeclutter.NO_QUEUE)
 		entries.append(BubbleDeclutter.entry(id, bubble.text, rank, rect))
+	if not declutter_bubbles:
+		return
 	for id in BubbleDeclutter.hidden(entries):
 		((_nodes[id] as Node3D).get_node("Bubble") as Label3D).visible = false
 
