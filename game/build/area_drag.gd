@@ -159,9 +159,14 @@ static func clear(grid: BuildGrid, area: Rect2i, wallet: Wallet = null) -> Outco
 ## same index, null for none) whose object came out: the wall is placed only
 ## after its door is gone, because the grid itself takes a wall on a standing
 ## door's way out. The wallet is asked once for the removals and the walls
-## together, so the rectangle is all or nothing on money; the two batches share
-## the one undo step of the caller's action. A wall's own success is not
-## counted as a removal.
+## together, so the rectangle is all or nothing on money. The two batches
+## settle as one: each runs against a scratch wallet with room either way, so
+## a refund that would pass Wallet.MAX_BALANCE before the wall is paid cannot
+## refuse the removal, and the net goes into the real wallet once. When that
+## does not fit, the grid is put back and nothing is paid. The two batches
+## share the one undo step of the caller's action. The outcome counts the
+## removals only: a wall's success is not a removal, and a rectangle refused
+## whole counts the objects it would have removed, not the walls.
 static func _commit_with_walls(
 	outcome: Outcome,
 	grid: BuildGrid,
@@ -179,22 +184,88 @@ static func _commit_with_walls(
 	var everything: Array[BuildEdit] = removals.duplicate()
 	everything.append_array(placed_walls)
 	if not BuildTransaction.check(grid, everything, wallet).ok:
-		_commit(outcome, grid, everything, wallet)
+		var refused := BuildTransaction.commit_batch(grid, everything, wallet)
+		if refused[0].reason == BuildResult.Reason.CANT_AFFORD:
+			outcome.unaffordable_tiles = removals.size()
+			outcome.unaffordable_cost = BuildTransaction.needed(grid, everything)
+		else:
+			outcome._count(refused.slice(0, removals.size()))
 		return
-	var before := wallet.balance if wallet != null else 0
-	var results := BuildTransaction.commit_batch(grid, removals, wallet)
+	var scratch: Wallet = null
+	var snapshot := {}
+	if wallet != null:
+		scratch = Wallet.new(Wallet.MAX_BALANCE / 2)
+		snapshot = grid.to_snapshot()
+	var start := scratch.balance if scratch != null else 0
+	var mark := grid.hold_signals()
+	var results := BuildTransaction.commit_batch(grid, removals, scratch)
 	outcome._count(results)
 	var after_doors: Array[BuildEdit] = []
 	for i in removals.size():
 		if results[i].ok and walls[i] != null:
 			after_doors.append(walls[i])
 	if not after_doors.is_empty():
-		for result in BuildTransaction.commit_batch(grid, after_doors, wallet):
+		for result in BuildTransaction.commit_batch(grid, after_doors, scratch):
 			if not result.ok:
 				outcome._refuse(result)
-	if wallet != null:
-		outcome.money = absi(wallet.balance - before)
-		outcome.charged = wallet.balance < before
+	if wallet == null:
+		grid.release_signals()
+		return
+	var net := scratch.balance - start
+	var settlement := _settle_net(wallet, net)
+	if not settlement.ok:
+		_put_back(outcome, grid, removals, snapshot, mark, settlement)
+		return
+	outcome.money = absi(net)
+	outcome.charged = net < 0
+	grid.release_signals()
+
+
+## Moves `net` (negative to take, positive to pay back) into `wallet`: the
+## whole of a rectangle's money in one step. Accepted, or refused with
+## CANT_AFFORD or WALLET_FULL, the wallet then unchanged.
+static func _settle_net(wallet: Wallet, net: int) -> BuildResult:
+	if net < 0 and not wallet.spend(-net, Wallet.Category.BUILD):
+		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
+	if net > 0 and not wallet.can_credit(net, Wallet.Category.BUILD):
+		return BuildResult.refused(BuildResult.Reason.WALLET_FULL)
+	if net > 0:
+		wallet.credit(net, Wallet.Category.BUILD)
+	return BuildResult.accepted()
+
+
+## Undoes a rectangle whose money did not settle: the grid goes back to
+## `snapshot`, the signals held since `mark` are dropped and every removal is
+## counted refused and emitted as edit_refused, as BuildTransaction does. When
+## the restore itself fails, the grid still holds the applied edits, so the
+## held signals are published and the failure is pushed as an error.
+static func _put_back(
+	outcome: Outcome,
+	grid: BuildGrid,
+	removals: Array[BuildEdit],
+	snapshot: Dictionary,
+	mark: int,
+	settlement: BuildResult
+) -> void:
+	outcome.placed = 0
+	outcome.skipped = 0
+	outcome.first_reason = ""
+	if not grid.from_snapshot(snapshot):
+		push_error(
+			(
+				(
+					"AreaDrag.clear: the settlement was refused (%s) and restoring the grid failed;"
+					+ " the applied edits stay on the grid, unpaid"
+				)
+				% settlement.reason_text()
+			)
+		)
+		grid.release_signals()
+		return
+	grid.release_signals(mark)
+	for edit in removals:
+		outcome._refuse(settlement)
+		grid.edit_refused.emit(edit, settlement)
 
 
 ## The second pass of clear(), in the order the grid accepts them: the rooms
