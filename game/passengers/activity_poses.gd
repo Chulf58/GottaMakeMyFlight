@@ -26,7 +26,10 @@ extends RefCounted
 ## PassengerViews moves its drawn step toward offset() by at most a walking
 ## step a tick, so a stay cut short (the deadline re-forecast closer) or a
 ## piece removed mid-stay eases the body back to the slot cell over a few
-## ticks; only the clip switches at once.
+## ticks; only the clip switches at once. The piece is the placement the visit
+## last saw (ShopVisit.piece), so a visitor still at a piece that moved with its
+## room (Relocation) keeps its pose at the old spot, and ShopSim sets the stage
+## clock so that the exit plays as the end of an ordinary stay (exit_ticks()).
 
 enum Kind { NONE, SEAT, RECLINE, SHOWER }
 
@@ -399,11 +402,37 @@ static func _piece(sim: PassengerSim, p: Passenger) -> Dictionary:
 	if visit == null:
 		return {}
 	var type := RoomTypes.get_type(_room_type_id(sim, visit))
+	# The piece as the visit last saw it (visit.piece): where a visitor stays
+	# or leaves a piece that moved with its room (Relocation).
 	var record := sim.grid.get_object(visit.display)
+	if not visit.piece.is_empty() and (not record.is_empty() or _exiting(visit)):
+		record = visit.piece.duplicate()
 	if type == null or not type.activity or record.is_empty():
 		return {}
 	record["index"] = visit.index
 	return record
+
+
+## Whether `visit` leaves a piece that moved (Relocation): it keeps its stay
+## at the old spot until the exit ends.
+static func _exiting(visit: ShopVisit) -> bool:
+	return visit.relocation != null and visit.relocation.exiting
+
+
+## Ticks the exit of a visitor of piece `def_id` takes before it can walk off,
+## as the end of an ordinary stay plays it: the stand-up of a sitter, preceded
+## by a nap pod's lean back, and the rinse and step out of a shower, with the
+## wait at the door to pick up bags when `carry_on` says there are some. Zero
+## for a piece with no exit to play (a play area, a kiosk display).
+static func exit_ticks(def_id: StringName, carry_on: int) -> int:
+	match KINDS.get(def_id, Kind.NONE):
+		Kind.SEAT:
+			return PassengerSim.STAND_UP_TICKS
+		Kind.RECLINE:
+			return PassengerSim.STAND_UP_TICKS + EASE_TICKS
+		Kind.SHOWER:
+			return EASE_TICKS + (DOOR_OUT_TICKS if carry_on > 0 else 0)
+	return 0
 
 
 static func _room_type_id(sim: PassengerSim, visit: ShopVisit) -> StringName:
@@ -417,7 +446,9 @@ static func _room_type_id(sim: PassengerSim, visit: ShopVisit) -> StringName:
 static func _left(sim: PassengerSim, p: Passenger) -> int:
 	var visit := sim.shops.visit_of(p.id)
 	var type := RoomTypes.get_type(_room_type_id(sim, visit))
-	var end := mini(p.stage_tick + ShopSim.browse_ticks(type), visit.deadline)
+	var end := p.stage_tick + ShopSim.stay_ticks(visit, type)
+	if not _exiting(visit):
+		end = mini(end, visit.deadline)
 	return end - 1 - sim.tick
 
 
