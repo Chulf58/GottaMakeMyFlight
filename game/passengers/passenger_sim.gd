@@ -1467,7 +1467,7 @@ func _reconcile() -> void:
 			_release_seat(p)
 			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
 				# Plans again: another seat or a standing spot (its roller collected
-				# first when its park was in progress).
+				# first when it had a roller, ParkRecovery).
 				ParkRecovery.on_seat_lost(self, p)
 				p.clear_path()
 				_set_stage(p, Passenger.Stage.TO_GATE)
