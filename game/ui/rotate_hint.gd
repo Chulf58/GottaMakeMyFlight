@@ -8,11 +8,16 @@ extends RefCounted
 const TEXT := "R rotate"
 
 
-## True while the tool places a catalog piece, or a template paste is armed.
+## True while the tool places a catalog piece, a template paste is armed or a
+## room is in hand (RoomMoveTool).
 static func applies(mode: BuildMode) -> bool:
 	if mode == null:
 		return false
-	return BuildMode.tool_object(mode.tool) != &"" or mode.templates.armed >= 0
+	return (
+		BuildMode.tool_object(mode.tool) != &""
+		or mode.templates.armed >= 0
+		or mode.room_mover.active
+	)
 
 
 ## `text` with the hint added when it applies.

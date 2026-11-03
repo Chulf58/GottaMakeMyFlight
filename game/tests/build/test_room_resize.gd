@@ -203,11 +203,13 @@ func test_a_piece_left_outside_makes_the_room_not_ready_and_stays_put() -> void:
 	assert_str(_mode.status_text()).is_equal("Cafe resized to 5 x 3: Needs a counter")
 
 
-func test_a_press_in_the_middle_or_with_another_rooms_tool_draws_instead() -> void:
+func test_a_press_in_the_middle_picks_the_room_up_and_another_rooms_tool_draws_instead() -> void:
 	_mode.set_tool(BuildMode.Tool.CAFE_ROOM)
 	_mode.begin_area(_at(Vector2i(5, 5)))
-	assert_that(_mode.dragged_area()).is_equal(Rect2i(5, 5, 1, 1))
-	_mode.cancel_area()
+	# Not a new room over the old one: the room is lifted to be moved (RoomMoveTool).
+	assert_bool(_mode.room_mover.active).is_true()
+	assert_that(_mode.dragged_area()).is_equal(Rect2i())
+	_mode.room_mover.cancel()
 	_mode.set_tool(BuildMode.Tool.TOILET_ROOM)
 	_mode.begin_area(_press(BuildGrid.Side.EAST))
 	assert_that(_mode.dragged_area()).is_equal(Rect2i(7, 4, 1, 1))
