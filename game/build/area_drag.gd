@@ -95,7 +95,7 @@ static func fill_floor(grid: BuildGrid, area: Rect2i, zone: int, wallet: Wallet 
 		else:
 			outcome._refuse(result)
 			# Never handed to apply_batch(), which logs the refusals it makes itself.
-			grid.edit_refused.emit(edit, result)
+			_emit_refused(grid, edit, result)
 	_commit(outcome, grid, edits, wallet)
 	return outcome
 
