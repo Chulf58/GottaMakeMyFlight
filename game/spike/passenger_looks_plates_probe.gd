@@ -43,6 +43,17 @@ const CLOSE_VIEWS := {
 	"front": Vector3(0, 0, 1),
 	"top": Vector3(0, 1, 0),
 }
+## Cafe close-ups (side and top of each body on its cafe chair).
+const CAFE_OUT_REL := "res://../tools/blender/out/cafe-chair"
+## Cafe close-ups: view name -> direction from the subject to the camera. The
+## chair faces +x, so +z is side-on; a front view would look through the table.
+const CAFE_VIEWS := {
+	"side": Vector3(0, 0, 1),
+	"top": Vector3(0, 1, 0),
+}
+## A cafe body whose lowest point is further than this over the chair pan
+## floats (a lift in CAFE_SEAT_SHIFT_M shows as a gap).
+const CAFE_FLOAT_M := 0.03
 
 var _out := ""
 var _failed := false
@@ -62,7 +73,8 @@ func _process(_delta: float) -> bool:
 
 func _run() -> void:
 	var seed := randi()
-	# --parts=six,tints,distance,crowd,seated picks what is shot (default: all).
+	# --parts=six,tints,distance,crowd,seated picks what is shot (default: all);
+	# cafe (the cafe chair checks and close-ups) runs only when named.
 	var parts := ["six", "tints", "distance", "crowd", "seated"]
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
@@ -90,7 +102,9 @@ func _run() -> void:
 			await _seated(group, close)
 		_save(_sheet(close, 9, 240), "seated_close_sheet.png", SEAT_OUT_REL)
 	if "cafe" in parts:
-		await _cafe_overlaps()
+		var cafe: Array[Image] = []
+		await _cafe(cafe)
+		_save(_sheet(cafe, 6, 240), "cafe_close_sheet.png", CAFE_OUT_REL)
 	print("PROBE done failed=", _failed)
 	quit(1 if _failed else 0)
 
@@ -532,20 +546,129 @@ func _overlaps(group: int, people: Array[Node3D], chairs: Node3D, subjects: Dict
 		people[k].position += back
 
 
-## A measurement, not a check: each body seated in sit_idle on the cafe
-## table's left chair as CafeSim seats it (the chair's root, 0.55 m left of
-## the table's centre, facing the table; no seat shift), and CAFE_OVERLAP, the
-## body points inside the cafe_table piece (chairs and table are one mesh).
-func _cafe_overlaps() -> void:
+## CAFE_OVERLAP: each body seated in sit_idle on the cafe table's left chair as
+## CafeSim and CafeChairs place it (the seat's root from the cafe_table's
+## BuildObjectDef, facing the table, plus the body's
+## PassengerLooks.CAFE_SEAT_SHIFT_M towards the table and up), the body points
+## inside the cafe_table piece (table and chairs are one piece) at each
+## SIT_PHASES point, which must be none. CAFE_OVERLAP_OLD is the control: the
+## same body at the bare seat root (where it was drawn before), which must
+## overlap, or the check could not see one. --sweep prints, per body and lift,
+## the least step towards the table that leaves no point inside. CAFE_FIT
+## prints how far the body is from the pan and from the chair back (_cafe_fit),
+## then each body alone is shot side-on and from above (CAFE_VIEWS).
+func _cafe(close: Array[Image]) -> void:
 	_clear()
+	var def := BuildCatalog.get_def(&"cafe_table")
+	var seat: Dictionary = def.seats[0]
+	var cell_x := float(seat["cell"].x) - (def.size.x - 1) / 2.0
+	var root := Vector3(cell_x + seat["root"].x, 0.0, seat["root"].y)
+	var facing := Vector3(seat["facing"].x, 0.0, seat["facing"].y)
+	var yaw := atan2(facing.x, facing.z)
+	print("CAFE_SEAT root=%s facing=%s" % [root, facing])
+	var people: Array[Node3D] = []
+	var tables: Array[Node3D] = []
+	var subjects := {}
 	for body in PassengerLooks.BODIES.size():
 		var table := InteriorKit.instantiate(&"cafe_table")
+		table.set_meta(&"cafe", true)
 		_stage.add_child(table)
 		table.position = Vector3(0, 0, body * 3.0)
-		var chair := table.position + Vector3(-0.55, 0, 0)
-		var node := _person(body, 0, chair, PI / 2.0, 0.0, "sit_idle")
-		await _seek_all([node] as Array[Node3D], 0.0)
-		_overlap_total(node, table, "CAFE_OVERLAP", 0.0)
+		var shift := PassengerLooks.CAFE_SEAT_SHIFT_M[body]
+		var at := table.position + root + facing * shift.x + Vector3.UP * shift.y
+		var node := _person(body, 0, at, yaw, 0.0, "sit_idle")
+		subjects[node] = PassengerLooks.BODIES[body]
+		people.append(node)
+		tables.append(table)
+	for phase in SIT_PHASES:
+		await _seek_all(people, phase)
+		for k in people.size():
+			var total := _overlap_total(people[k], tables[k], "CAFE_OVERLAP", phase)
+			if total > 0:
+				_invalid("%s: %d body points inside the cafe table" % [subjects[people[k]], total])
+	await _seek_all(people, 0.0)
+	for k in people.size():
+		var shift := PassengerLooks.CAFE_SEAT_SHIFT_M[k]
+		var back := facing * shift.x + Vector3.UP * shift.y
+		people[k].position -= back
+		var total := _overlap_total(people[k], tables[k], "CAFE_OVERLAP_OLD", 0.0)
+		if total == 0:
+			_invalid("control: %s does not overlap at the bare seat root" % subjects[people[k]])
+		if "--sweep" in OS.get_cmdline_user_args():
+			for dyi in 5:
+				var dy := dyi * 0.005
+				var found := -1.0
+				for dzi in 41:
+					var step := Vector3(0, dy, 0) + facing * (dzi * 0.005)
+					people[k].position += step
+					var empty := _seat_overlap(people[k], tables[k]).is_empty()
+					people[k].position -= step
+					if empty:
+						found = dzi * 0.005
+						break
+				print("CAFE_SWEEP %s dy=%.3f min_ahead=%.3f" % [subjects[people[k]], dy, found])
+		people[k].position += back
+	for k in people.size():
+		_cafe_fit(people[k], tables[k], subjects[people[k]])
+	await _cafe_close_ups(people, tables, subjects, close)
+
+
+## CAFE_FIT: the body's least clearance from the chair pan (pan_gap) and from
+## the chair back and its posts (back_gap), each the largest outward plane
+## distance of a body point from that part's convex island, so a point resting
+## on a face reads 0. A body floating over the pan (pan_gap over
+## CAFE_FLOAT_M) fails.
+func _cafe_fit(person: Node3D, table: Node3D, stem: String) -> void:
+	var islands := _islands(table)
+	var mi := PassengerLooks.body_mesh(person)
+	var baked := mi.bake_mesh_from_current_skeleton_pose()
+	var gaps := {"pan": INF, "back": INF}
+	for s in baked.get_surface_count():
+		for v: Vector3 in baked.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+			var w := mi.global_transform * v
+			for island: Dictionary in islands:
+				var part: String = island["part"]
+				var key := "back" if part.begins_with("back") else part
+				if not gaps.has(key):
+					continue
+				var out := -INF
+				for plane: Array in island["planes"]:
+					out = maxf(out, (w - (plane[0] as Vector3)).dot(plane[1]))
+				gaps[key] = minf(gaps[key], out)
+	print("CAFE_FIT %s pan_gap=%.3f back_gap=%.3f" % [stem, gaps["pan"], gaps["back"]])
+	if gaps["pan"] > CAFE_FLOAT_M:
+		_invalid("%s floats %.3f m over the cafe chair pan" % [stem, gaps["pan"]])
+
+
+## Each body alone on its cafe chair, orthographic and cropped square
+## (CAFE_VIEWS): side-on, so the hips on the pan and the back against the
+## chair back show, and from above.
+func _cafe_close_ups(
+	people: Array[Node3D], tables: Array[Node3D], subjects: Dictionary, close: Array[Image]
+) -> void:
+	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_cam.keep_aspect = Camera3D.KEEP_HEIGHT
+	_cam.size = 1.8
+	for k in people.size():
+		for j in people.size():
+			people[j].visible = j == k
+			tables[j].visible = j == k
+		var centre := Vector3(people[k].position.x - 0.1, 0.75, tables[k].position.z)
+		var stem: String = subjects[people[k]]
+		for view: String in CAFE_VIEWS:
+			var dir: Vector3 = CAFE_VIEWS[view]
+			_cam.global_position = centre + dir * 10.0
+			_cam.look_at(centre, Vector3.FORWARD if view == "top" else Vector3.UP)
+			var ok: bool = await _proven(
+				"cafe_%s/%s" % [view, stem], {people[k]: stem}, true, false, {tables[k]: stem}
+			)
+			var img: Image = await _grab(true)
+			if ok:
+				_save(img, "cafe_%s_%s.png" % [view, stem], CAFE_OUT_REL)
+			close.append(img)
+	for j in people.size():
+		people[j].visible = true
+		tables[j].visible = true
 
 
 func _seek_all(people: Array[Node3D], phase: float) -> void:
@@ -694,6 +817,8 @@ func _root_of(parent: Dictionary, k: Vector3i) -> Vector3i:
 func _part(box: AABB, row: Node3D) -> String:
 	var local := row.global_transform.affine_inverse() * box
 	var c := local.get_center()
+	if row.has_meta(&"cafe"):
+		return _cafe_part(local)
 	if local.size.y < 0.06 and c.y > 0.65:
 		return "armrest"
 	if local.size.x < 0.06 and local.size.y > 0.2 and c.y > 0.4:
@@ -703,6 +828,20 @@ func _part(box: AABB, row: Node3D) -> String:
 	if local.size.x > 0.5 and c.y >= 0.56:
 		return "back"
 	return "frame"
+
+
+## A cafe_table part named by its bounds in the piece's frame (build_cafe_table
+## in tools/blender/interior/build_cafe_kit.py: the table within 0.35 m of the
+## centre, a chair beyond 0.75 m on each side, its pan top at 0.53 m).
+func _cafe_part(local: AABB) -> String:
+	var c := local.get_center()
+	if absf(c.x) < 0.4:
+		return "table"
+	if local.size.y < 0.06 and c.y > 0.45 and c.y < 0.56:
+		return "pan"
+	if c.y > 0.6:
+		return "back_post" if local.size.z < 0.06 else "back"
+	return "leg"
 
 
 ## The part `p` is inside ("" when outside every island).

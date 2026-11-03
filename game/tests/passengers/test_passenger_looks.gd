@@ -27,6 +27,16 @@ func test_every_body_has_a_seat_shift_forward_and_at_most_a_small_lift() -> void
 		assert_float(shift.y).is_between(0.0, 0.02)
 
 
+## Every body has a cafe seat shift (the plates probe's --parts=cafe measures
+## it against the cafe_table), towards the table and never up by more than
+## 2 cm: more would show the body floating over the pan.
+func test_every_body_has_a_cafe_seat_shift_towards_the_table_and_a_small_lift() -> void:
+	assert_int(PassengerLooks.CAFE_SEAT_SHIFT_M.size()).is_equal(PassengerLooks.BODIES.size())
+	for shift in PassengerLooks.CAFE_SEAT_SHIFT_M:
+		assert_float(shift.x).is_greater(0.0)
+		assert_float(shift.y).is_between(0.0, 0.02)
+
+
 func test_the_look_is_the_same_for_the_same_id() -> void:
 	for id in [1, 7, 42, 1000]:
 		assert_int(PassengerLooks.body_of(id, 1)).is_equal(PassengerLooks.body_of(id, 1))

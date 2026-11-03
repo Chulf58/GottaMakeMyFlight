@@ -77,6 +77,27 @@ const SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.08, 0.0),
 	Vector2(0.065, 0.0),
 ]
+## Per body, how far a body seated on a cafe_table chair is drawn towards the
+## table (x) and up (y) of the sim's seat root (CafeChairs), so no part of it is
+## inside the chair's back posts, back or frame: at the bare root the hips and
+## lower spine sit 1.9-2 cm into the chair back. A lift only for female_01,
+## whose dress hangs into the pan (without it she needs 18.5 cm).
+## Measured by game/spike/passenger_looks_plates_probe.gd --parts=cafe --sweep
+## (the least step leaving no body point inside the cafe_table) plus 1 cm.
+const CAFE_SEAT_SHIFT_M: Array[Vector2] = [
+	Vector2(0.09, 0.0),
+	Vector2(0.105, 0.0),
+	Vector2(0.10, 0.0),
+	Vector2(0.085, 0.0),
+	Vector2(0.10, 0.0),
+	Vector2(0.09, 0.0),
+	Vector2(0.115, 0.01),
+	Vector2(0.10, 0.0),
+	Vector2(0.10, 0.0),
+	Vector2(0.10, 0.0),
+	Vector2(0.105, 0.0),
+	Vector2(0.095, 0.0),
+]
 ## Clothing tints: [hue turn of coloured swatches, hue given to grey swatches].
 ## Tint 0 is the vendor's own colours.
 const TINTS := [[0.0, -1.0], [0.5, 0.6], [0.17, 0.08], [0.83, 0.95], [0.33, 0.3], [0.67, 0.5]]

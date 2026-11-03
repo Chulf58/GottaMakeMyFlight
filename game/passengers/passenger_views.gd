@@ -143,13 +143,14 @@ func tick_position(id: int, current: bool) -> Vector3:
 
 
 ## Where a passenger is drawn on this tick: the sim's position, moved onto
-## its chair's pan at a gate seat (GateChairs), onto its seat or into the
-## shower on an activity visit (ActivityPoses) and by its drawn offset at
-## security (SecurityLooks).
+## its chair's pan at a gate seat (GateChairs), clear of its chair at a cafe
+## seat (CafeChairs), onto its seat or into the shower on an activity visit
+## (ActivityPoses) and by its drawn offset at security (SecurityLooks).
 func draw_position(p: Passenger) -> Vector3:
 	return (
 		sim.world_position(p)
 		+ GateChairs.offset(sim, p)
+		+ CafeChairs.offset(sim, p)
 		+ _seats.get(p.id, Vector3.ZERO)
 		+ _offsets.get(p.id, Vector3.ZERO)
 	)
