@@ -25,10 +25,9 @@ extends RefCounted
 const STALL_NEAR_M := 1.0
 ## A roller is taken off the pull into the hand this much further back (0.7 m
 ## is 7 ticks of walk, more than CarryOnProps.TRANSFER_TICKS), so it hangs at
-## the side before the front-carry turn starts. Leaving, a roller whose hand
-## is on the side the walk would pull it on is pulled once leaving() ends; one
-## in the other hand (the walker turned along the row of stalls) is pulled in
-## that hand once it is this much further clear (CarryOnProps).
+## the side before the front-carry turn starts. Leaving, a roller is pulled
+## only once it is this much further clear of the stalls than leaving() asks
+## (CarryOnProps), so it does not land beside the row of stall fronts.
 const LIFT_LEAD_M := 0.7
 ## The stall around its footprint centre: its door's outer face, half its
 ## width to the side partitions' outer faces, and its back.

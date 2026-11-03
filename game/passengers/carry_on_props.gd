@@ -448,10 +448,10 @@ func sync() -> void:
 		# record, then syncs on the same tick) starts in the tuck it needs.
 		BoothCarry.update_tuck(held, tuck_in, _released_at.get(id, -1.0) == _tick(), _tick())
 		# A roller held by its bar for a stall stays in hand until the turn back
-		# from the front has finished, so it goes to the pull from the side, and,
-		# held in the hand the walk would not pull it in, until it is clear of
-		# the stalls by StallCarry.LIFT_LEAD_M more, so it is pulled in that hand
-		# away from them. The front itself follows the stall alone.
+		# from the front has finished, so it goes to the pull from the side, and
+		# until it is clear of the stalls by StallCarry.LIFT_LEAD_M more, so it
+		# lands away from them (a roller landing beside the row of stall fronts
+		# clipped their partitions). The front itself follows the stall alone.
 		var was: Array = held["bags"]
 		# A roller lifted at a booth stays in hand until the turn back has ended.
 		var kept := BoothCarry.kept_lifted(
@@ -471,10 +471,7 @@ func sync() -> void:
 				and was[i].get("by_bar", false)
 				and (
 					_front_weight(held, _tick()) > 0.0
-					or (
-						SecurityLooks.hand_of(sim, p, i) != (int(was[i]["place"]) / 2) % 2
-						and StallCarry.leaving(sim, p, StallCarry.LIFT_LEAD_M)
-					)
+					or StallCarry.leaving(sim, p, StallCarry.LIFT_LEAD_M)
 				)
 			):
 				lifts[i] = true
@@ -1258,7 +1255,7 @@ func _pose_arms(held: Dictionary, body: Node3D, now: float) -> void:
 		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL
 		arm.active = modes[side] != Arm.FREE or cases > 0 or tuck > 0.0 or reach_on[side]
 		var pulling: bool = modes[side] == Arm.PULL
-		arm.angle_degrees = PULL_OUT_DEGREES if pulling else 12.0
+		arm.angle_degrees = PULL_OUT_DEGREES if pulling else CarrySwap.HAND_OUT_DEGREES
 		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5
 		arm.lean_back_degrees = PULL_LEAN_DEGREES if pulling else 0.0
 		arm.front_upper_degrees = 0.0 if modes[side] == Arm.STRAP else 20.0

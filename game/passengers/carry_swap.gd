@@ -11,7 +11,7 @@ extends RefCounted
 ## 1.07 m from the pull to under the hand).
 
 ## The holding arm's pose in the hand carry (CarryOnProps._pose_arms, Arm.HAND).
-const HAND_OUT_DEGREES := 12.0
+const HAND_OUT_DEGREES := 6.0
 const HAND_SWING_KEPT := 0.5
 
 
