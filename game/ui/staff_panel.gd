@@ -97,6 +97,8 @@ var _card := PanelContainer.new()
 var _hint := Label.new()
 var _hint_box := PanelContainer.new()
 var _hint_bottom := -1.0
+## True while a first-time hint holds the banner's slot (set_hint_yielded()).
+var _hint_yielded := false
 ## Whether the gate was open at the last refresh, so an opening is seen once.
 var _was_open := false
 ## The starter line while it shows, "" otherwise.
@@ -186,10 +188,36 @@ func hint_text() -> String:
 		lines.append(GAP_HINT if _gap_runs == 1 else GAPS_HINT % _gap_runs)
 	if _open_cue != "":
 		lines.append(_open_cue)
+	for role in hiring_hint_roles():
+		lines.append(HINTS[role])
+	return "\n".join(lines)
+
+
+## The roles whose hire line the banner shows: stations of the role stand and
+## nobody of it is hired and staying. The first-time hints compare this by
+## meaning, so a hint does not repeat a hire the banner already asks for.
+func hiring_hint_roles() -> Array[StaffMember.Role]:
+	var roles: Array[StaffMember.Role] = []
 	for role in ROLES:
 		if not staff.stations_of(role).is_empty() and _staying(role) == 0:
-			lines.append(HINTS[role])
-	return "\n".join(lines)
+			roles.append(role)
+	return roles
+
+
+## Hides the banner while a first-time hint (Hints) takes its slot above the
+## bar, and brings it back when the hint ends (decision first-time-hints-above-
+## the-build-bar-moment-of-need-per-profile-memory, point 1).
+func set_hint_yielded(yielded: bool) -> void:
+	_hint_yielded = yielded
+	_hint_box.visible = _hint.visible and not _hint_yielded
+
+
+## How far up from the bottom edge the banner's slot is docked, in layout
+## pixels: the first-time hint takes the same place.
+func hint_dock_bottom() -> float:
+	return (
+		_hint_bottom if _hint_bottom >= 0.0 else BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
+	)
 
 
 func refresh() -> void:
@@ -199,7 +227,7 @@ func refresh() -> void:
 		(_fire[role] as Button).disabled = _staying(role) == 0
 	_hint.text = hint_text()
 	_hint.visible = _hint.text != ""
-	_hint_box.visible = _hint.visible
+	_hint_box.visible = _hint.visible and not _hint_yielded
 
 
 ## Takes the starter line when the gate has opened since the last refresh with
