@@ -268,6 +268,10 @@ func _ready() -> void:
 	_inspect.built_card.selection = _built
 	_inspect.built_card.build_mode = build_mode
 	_inspect.built_card.gates = get_node_or_null("../GateDesks") as GateDesks
+	# Delete starts build mode through the bar's session (BuiltItemActions).
+	var menu := get_node_or_null("../BuildMenu") as BuildMenu
+	if menu != null:
+		_inspect.actions.session = menu.build_session
 	_outline.selection = _built
 	_outline.build_mode = build_mode
 	add_child(_outline)
