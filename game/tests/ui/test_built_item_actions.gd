@@ -206,6 +206,12 @@ func test_delete_on_a_room_removes_the_whole_room_as_one_step() -> void:
 	_room = _mode.grid.room_at(area.position)
 
 
+func test_a_fresh_pick_of_the_locked_cafe_tool_is_refused_at_tier_one() -> void:
+	assert_bool(_mode.require_unlocks).is_true()
+	_mode.set_tool(BuildMode.Tool.CAFE_ROOM)
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
+
+
 func test_move_on_a_room_picks_the_room_tool_and_lifts_the_room() -> void:
 	_select_room(_room)
 	var actions := _inspect.actions
