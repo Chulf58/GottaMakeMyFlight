@@ -43,9 +43,6 @@ const KIT_IDS: Array[StringName] = [
 ## The mounts that name where a passenger stands to use a piece, in the order
 ## a piece offers them (a piece has at most one of these).
 const USE_MOUNTS: Array[String] = ["Mount_Order", "Mount_Use", "Mount_Browse"]
-## Pieces used as a counter whose .glb has no use mount, and the offset their
-## catalog entry derives instead (a graphics follow-up: add Mount_Order).
-const DERIVED_USE_OFFSETS := {&"bar_counter": Vector2i(0, 2)}
 ## Vendor decor is not inset like the kit: a piece may overhang its cells by
 ## this much.
 const DECOR_OVERHANG := 0.05
@@ -225,9 +222,6 @@ func test_interaction_offsets_match_the_models_use_mounts() -> void:
 			if found != null:
 				assert_object(xf).override_failure_message("%s has two use mounts" % id).is_null()
 				xf = found
-		if xf == null and DERIVED_USE_OFFSETS.has(id):
-			_assert_derived_use_offset(id, def, piece)
-			continue
 		assert_bool(def.has_interaction).override_failure_message(str(id)).is_equal(xf != null)
 		if xf == null:
 			continue
@@ -244,25 +238,35 @@ func test_interaction_offsets_match_the_models_use_mounts() -> void:
 		assert_bool(inside).override_failure_message(str(id)).is_false()
 
 
-## A piece whose .glb has no use mount but is used as a counter (the bar
-## counter, which has seat mounts and a Mount_Staff only): its interaction
-## offset is the cell in front of its left half, the mirror of Mount_Staff.
-func _assert_derived_use_offset(id: StringName, def: BuildObjectDef, piece: String) -> void:
-	assert_bool(def.has_interaction).override_failure_message(str(id)).is_true()
-	assert_vector(Vector2(def.interaction_offset)).override_failure_message(str(id)).is_equal(
-		Vector2(DERIVED_USE_OFFSETS[id])
-	)
+## The bar counter's order cell is its Mount_Order (checked with every use
+## mount above). Its .glb had none until board 3405a04b, and its order cell was
+## derived by mirroring Mount_Staff; the mount keeps that cell, the mirror of
+## the staff cell behind the counter, in front of the left stool.
+func test_the_bar_order_cell_is_its_mount_order_mirroring_the_staff_cell() -> void:
+	var def := BuildCatalog.get_def(&"bar_counter")
+	var piece := InteriorKit.object_piece(&"bar_counter")
+	var order: Variant = _mount(piece, "Mount_Order")
 	var staff: Variant = _mount(piece, "Mount_Staff")
-	assert_object(staff).override_failure_message("%s has no Mount_Staff" % id).is_not_null()
-	var at: Vector3 = (staff as Transform3D).origin
-	var staff_cell := Vector2i(floori(at.x + def.size.x / 2.0), floori(at.z + def.size.y / 2.0))
-	print("%s: staff cell %s, derived order cell %s" % [id, staff_cell, def.interaction_offset])
-	assert_int(def.interaction_offset.x).is_equal(staff_cell.x)
-	assert_int(def.interaction_offset.y).is_equal(def.size.y - 1 - staff_cell.y)
+	assert_object(order).override_failure_message("bar_counter has no Mount_Order").is_not_null()
+	assert_object(staff).override_failure_message("bar_counter has no Mount_Staff").is_not_null()
+	var cells: Array[Vector2i] = []
+	for xf: Transform3D in [order, staff]:
+		cells.append(
+			Vector2i(floori(xf.origin.x + def.size.x / 2.0), floori(xf.origin.z + def.size.y / 2.0))
+		)
+	print("bar_counter: order cell %s, staff cell %s" % [cells[0], cells[1]])
+	assert_vector(Vector2(cells[0])).is_equal(Vector2(def.interaction_offset))
+	assert_int(cells[0].x).is_equal(cells[1].x)
+	assert_int(cells[0].y).is_equal(def.size.y - 1 - cells[1].y)
+	# The guest at the order spot faces the counter (-Z).
+	var forward: Vector3 = (order as Transform3D).basis * Vector3(0, 0, 1)
+	assert_float(forward.z).is_equal_approx(-1.0, 0.01)
 
 
 ## The restaurant table and booth catalogue the four Mount_SitRoot_* of their
-## .glb: each seat's root is the mount, and the chair faces the table.
+## .glb: each seat's root is the mount, and the chair faces the table. Each
+## seat's approach is the cell of its Mount_Approach_*, outside the footprint,
+## and that mount faces the seat's cell.
 func test_dining_seats_match_the_models_sit_mounts() -> void:
 	var mounts := {
 		"BL": Vector2i(0, 0), "BR": Vector2i(1, 0), "FL": Vector2i(0, 2), "FR": Vector2i(1, 2)
@@ -294,9 +298,34 @@ func test_dining_seats_match_the_models_sit_mounts() -> void:
 				assert_float(forward.z).override_failure_message(str(id)).is_equal_approx(
 					float(seat["facing"].y), 0.01
 				)
+				_assert_approach_mount(id, piece, key, seat, def.size)
 				matched += 1
 		print("%s: %d of 4 seats match their Mount_SitRoot" % [id, matched])
 		assert_int(matched).is_equal(4)
+
+
+## The seat's approach is the cell its Mount_Approach_<key> stands in, outside
+## the footprint, and the mount faces from there towards the seat's cell.
+func _assert_approach_mount(
+	id: StringName, piece: String, key: String, seat: Dictionary, size: Vector2i
+) -> void:
+	var xf: Variant = _mount(piece, "Mount_Approach_" + key)
+	assert_object(xf).override_failure_message("%s Mount_Approach_%s" % [id, key]).is_not_null()
+	if xf == null:
+		return
+	var at: Vector3 = (xf as Transform3D).origin
+	var cell := Vector2i(floori(at.x + size.x / 2.0), floori(at.z + size.y / 2.0))
+	print("%s %s: approach mount %s -> cell %s" % [id, key, at, cell])
+	assert_vector(Vector2(cell)).override_failure_message(str(id)).is_equal(
+		Vector2(seat["approach"])
+	)
+	var inside := cell.x >= 0 and cell.y >= 0 and cell.x < size.x and cell.y < size.y
+	assert_bool(inside).override_failure_message(str(id)).is_false()
+	var toward := Vector2(seat["cell"] - cell).normalized()
+	var forward: Vector3 = (xf as Transform3D).basis * Vector3(0, 0, 1)
+	assert_vector(Vector2(forward.x, forward.z)).override_failure_message(str(id)).is_equal_approx(
+		toward, Vector2(0.01, 0.01)
+	)
 
 
 ## The node the build view draws for a podium: BuildView.make_object_node()
