@@ -126,7 +126,7 @@ func test_a_car_on_its_way_when_the_lot_closes_goes_to_the_curb_instead() -> voi
 	var parked: Array[int] = []
 	_sim.parked.connect(func(_id: int, lot: int) -> void: parked.append(lot))
 	_car(LandsideVehicle.Intent.PARK)
-	# The lot's turn is 15 m in (30 ticks); close it before the car gets there.
+	# The lot's turn is about 18 m in (about 37 ticks); close it before the car gets there.
 	_run(1, 10)
 	assert_bool(_sim.set_lot_closed(SURFACE, true)).is_true()
 	_run(10, 1500)
@@ -245,7 +245,7 @@ func test_a_car_never_reverses_into_a_berth_or_lands_on_the_queue() -> void:
 
 func test_a_car_past_a_bay_does_not_go_back_to_it() -> void:
 	# A car that has driven on past bay 0 (a diverted car at the multi-storey's
-	# turn, 39500 mm in) takes a starter berth, not the free bay behind it.
+	# turn, 42531 mm in) takes a starter berth, not the free bay behind it.
 	assert_bool(_sim.build_curb(0, 300)).is_true()
 	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
 	for i in 40:

@@ -6,7 +6,7 @@ extends GdUnitTestSuite
 ## rating (unlike a no-show, it is in "missed"). With no entrance it is a
 ## 'never arrived' no-show, as before. The flight here closes its doors at
 ## tick 60, before the first car (on the road from tick 1) reaches the curb,
-## 94 ticks along the 47 m of road that is baked into the site.
+## about 101 ticks along the 50 m of road that is baked into the site.
 
 const BOARDING := 30
 const DOORS := 60
