@@ -1415,9 +1415,7 @@ func _ghost_object(def_id: StringName, anchor: Vector2i, turn: int, material: Ma
 	node.transform = BuildView.object_transform(grid, def.footprint(anchor, turn), turn)
 	node.scale = Vector3.ONE * 1.02
 	_ghost.add_child(node)
-	var spot := def.interaction_cell(anchor, turn)
-	if spot != BuildObjectDef.NO_CELL:
-		_ghost_tile(spot, _marker_material)
+	StationUseCells.draw(_ghost, grid, def_id, anchor, turn)
 
 
 ## The cells the ghost tints as covered while `edit` places a screen stand:
