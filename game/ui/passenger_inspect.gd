@@ -30,7 +30,11 @@ var flights: FlightSim
 var clock: SimClock
 ## The pin; PassengerHud puts it in the world.
 var marker := ThoughtMarker.new()
+## The selected built item's rows, shown in place of the passenger's while an
+## item is selected (BuiltItemCard); PassengerHud wires its selection.
+var built_card := BuiltItemCard.new()
 
+var _passenger_rows := VBoxContainer.new()
 var _name := Button.new()
 var _stage := Label.new()
 var _flight := Label.new()
@@ -48,9 +52,12 @@ func _init() -> void:
 	name = "PassengerInspect"
 	visible = false
 	theme = BuildMenu.HUD_THEME
-	var column := VBoxContainer.new()
+	var root := VBoxContainer.new()
+	add_child(root)
+	root.add_child(built_card)
+	var column := _passenger_rows
 	column.add_theme_constant_override("separation", 2)
-	add_child(column)
+	root.add_child(column)
 	_name.name = "PassengerName"
 	_name.focus_mode = Control.FOCUS_NONE
 	_name.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -99,14 +106,17 @@ func fit() -> void:
 	grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 
-## Shows the selected passenger, or hides the card with none (a car or taxi
-## followed on the landside clears the passenger selection). A pin of a
+## Shows the selected passenger, or the selected built item (BuiltItemCard), or
+## hides the card with neither (a car or taxi followed on the landside clears
+## the passenger selection). A pin of a
 ## passenger no longer selected is cleared.
 func refresh() -> void:
 	var p := _selected()
 	if _marked_id != 0 and (p == null or p.id != _marked_id):
 		clear_marker()
-	visible = p != null
+	built_card.refresh()
+	_passenger_rows.visible = p != null
+	visible = p != null or built_card.visible
 	if p == null:
 		return
 	_name.text = "Passenger %d" % p.id

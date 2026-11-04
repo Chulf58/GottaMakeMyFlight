@@ -173,6 +173,10 @@ var _seed_label := Label.new()
 var _follow_label := Label.new()
 ## The followed passenger's card; the follow text then hides.
 var _inspect := PassengerInspect.new()
+## The clicked built item (BuiltSelection) and its gold floor outline; the
+## inspect card shows its info in place of a passenger's.
+var _built := BuiltSelection.new()
+var _outline := BuiltOutline.new()
 var _status_label := Label.new()
 var _status := ""
 ## True after a refused debug batch, until the next spawned one: the earlier
@@ -260,6 +264,12 @@ func _ready() -> void:
 	_inspect.camera = camera
 	_inspect.flights = flights
 	_inspect.clock = clock
+	_inspect.built_card.sim = sim
+	_inspect.built_card.selection = _built
+	_inspect.built_card.build_mode = build_mode
+	_outline.selection = _built
+	_outline.build_mode = build_mode
+	add_child(_outline)
 	add_child(_inspect)
 	add_child(_inspect.marker)
 	_fit_follow()
@@ -291,6 +301,7 @@ func _process(_delta: float) -> void:
 ## A followed passenger the sim has retired is gone: clear the selection and
 ## let the camera go, instead of following the frozen anchor.
 func _drop_retired_selection() -> void:
+	_settle_built_selection()
 	if landside_views != null and landside_views.selected_id != 0:
 		if not landside_views.has_vehicle(landside_views.selected_id):
 			landside_views.selected_id = 0
@@ -316,12 +327,33 @@ func _unhandled_input(event: InputEvent) -> void:
 	if landside_views != null:
 		landside_views.select(vehicle)
 	views.selected_id = 0 if vehicle != 0 else views.pick(eye, click.position)
+	_built.clear()
+	if vehicle == 0 and views.selected_id == 0:
+		_pick_built(eye, click.position)
 	if vehicle != 0:
 		camera.follow(landside_views.follow_anchor)
 	elif views.selected_id != 0:
 		camera.follow(views.follow_anchor)
 	else:
 		camera.stop_follow()
+
+
+## Picks the built item under a click that met no vehicle and no passenger.
+func _pick_built(eye: Camera3D, at: Vector2) -> void:
+	var view := build_mode.get_node_or_null("BuildView") as BuildView
+	if view != null:
+		_built.pick(build_mode.grid, view, build_mode.landside_placement(), eye, at)
+
+
+## A built item stays selected only with no build tool picked, no passenger or
+## vehicle selected, and the item still standing.
+func _settle_built_selection() -> void:
+	var other := views != null and views.selected_id != 0
+	other = other or (landside_views != null and landside_views.selected_id != 0)
+	if build_mode == null or other or build_mode.tool != BuildMode.Tool.NONE:
+		_built.clear()
+	else:
+		_built.prune(build_mode.grid, build_mode.landside_placement())
 
 
 ## Space toggles the pause; Shift+1/2/3 set the speed. These run before
