@@ -37,8 +37,14 @@ extends Node
 ## millimetres and nothing is random, so a snapshot loaded at a tick boundary
 ## plays out exactly like continuous play. A search that finds no station is
 ## retried on the member's beat (once a simulated second, staggered by id).
+##
+## The player can close a station and open it again (`closures`,
+## StationClosures): a closed station admits nobody and gets no new posting,
+## and its members finish the service admitted before and are then released
+## idle where they stand.
 
-## Hiring, firing and loading; the counts may have changed.
+## Hiring, firing and loading, or the player closed or opened a station; the
+## counts or which stations are open may have changed.
 signal staff_changed
 ## A member was hired into the pool (hire() only, never a load).
 signal hired(id: int, role: StaffMember.Role)
@@ -46,9 +52,10 @@ signal member_state_changed(id: int, state: StaffMember.State)
 
 ## 2: members save their post (slot).
 ## 3: shop servers (Role.SHOP) at counters; a version 2 save has none.
-## 4: cleaners (Role.CLEANER) and each member's job and work left. Only this
+## 4: cleaners (Role.CLEANER) and each member's job and work left.
+## 5: the stations the player closed ("closed", StationClosures). Only this
 ## version loads; older saves are refused (no migrations before a release).
-const SAVE_VERSION := 4
+const SAVE_VERSION := 5
 ## Who fire() lets go first: [state, slot] pairs, a helper before a primary
 ## in the same state, so firing keeps stations open where it can.
 const FIRE_ORDER := [
@@ -64,6 +71,8 @@ var sim: PassengerSim
 ## the live MessSim, so its cleaners take no job, finish none and let go of
 ## no claim.
 var forecast := false
+## The stations the player closed, and what the inspect window asks of them.
+var closures: StationClosures
 
 var _members: Array[StaffMember] = []
 var _by_id: Dictionary = {}
@@ -78,6 +87,10 @@ var _helpers: Dictionary = {}
 ## out again after an edit when _counters_dirty is set.
 var _counters: Array[int] = []
 var _counters_dirty := true
+
+
+func _init() -> void:
+	closures = StationClosures.new(self)
 
 
 ## Called by PassengerSim.bind() once its layout is built.
@@ -186,10 +199,10 @@ func is_staffed(station: int, slot := StaffMember.Slot.PRIMARY) -> bool:
 
 ## Whether passengers are served at a desk, scanner or counter: it is usable
 ## (TerminalLayout.is_usable(), or one of the usable counters) and a member is
-## on duty there who is not leaving. Closed stations are what a closed sign
-## marks.
+## on duty there who is not leaving, and the player has not closed it
+## (closures). Closed stations are what a closed sign marks.
 func is_open(station: int) -> bool:
-	if not _usable(station) or not is_staffed(station):
+	if closures.is_closed(station) or not _usable(station) or not is_staffed(station):
 		return false
 	return not (_by_id[_claims[station]] as StaffMember).leaving
 
@@ -244,7 +257,7 @@ func step() -> void:
 ## during the tick. It is saved still leaving and on duty, and the loaded
 ## game's next step() lets it go on the same tick as one never saved.
 func to_snapshot() -> Dictionary:
-	return StaffSnapshot.save(_members, _next_id)
+	return StaffSnapshot.save(_members, _next_id, closures.live_ids())
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -258,6 +271,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		return false
 	_next_id = loaded["next_id"]
 	_members.assign(loaded["members"])
+	closures.assign(loaded["closed"])
 	_counters_dirty = true
 	rederive()
 	staff_changed.emit()
@@ -415,7 +429,9 @@ func _finish_job(m: StaffMember) -> void:
 ## pool (one walking out is gone); members on duty away from their post's
 ## spot, which moved, walk to it (_off_spot()); leaving members whose service
 ## has ended walk out. Every primary post still claimed afterwards is one
-## staff can work: the first step of the pass (StaffPosts). A cleaner whose
+## staff can work: the first step of the pass (StaffPosts). Members of a
+## station the player closed go idle where they stand once no service there
+## is left to finish (StationClosures.release_due()). A cleaner whose
 ## job went (its bin was removed) goes idle where it stands; one at work off
 ## its job's spot, which an edit moved, walks to it and starts over.
 func _reconcile() -> void:
@@ -425,6 +441,8 @@ func _reconcile() -> void:
 			var workable := StaffPosts.workable(sim.grid, sim.layout, m.station, m.slot)
 			if not workable or not stations_of(m.role).has(m.station):
 				_release(m)
+		if closures.release_due(m):
+			_release(m)
 		if m.job != 0 and not CleanerJobs.exists(self, m):
 			_release(m)
 		if not m.in_pool() and not sim.grid.is_walkable(m.at) and not _backing_out(m):

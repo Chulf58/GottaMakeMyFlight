@@ -53,10 +53,11 @@ func _server_record(data: Dictionary) -> Dictionary:
 	return {}
 
 
-## Version 4 (cleaners) came after the shop servers' version 3.
-func test_the_save_is_version_4() -> void:
-	assert_int(StaffSim.SAVE_VERSION).is_equal(4)
-	assert_int(int(_saved()["save_version"])).is_equal(4)
+## Version 4 (cleaners) came after the shop servers' version 3, and version 5
+## (the stations the player closed) after it.
+func test_the_save_is_version_5() -> void:
+	assert_int(StaffSim.SAVE_VERSION).is_equal(5)
+	assert_int(int(_saved()["save_version"])).is_equal(5)
 
 
 func test_servers_walking_and_on_duty_load_and_play_on_alike() -> void:
@@ -85,11 +86,11 @@ func test_a_save_of_an_older_staff_version_is_refused_and_changes_nothing() -> v
 	var data := _saved()
 	assert_int((data["members"] as Array).size()).is_greater(0)
 	var before := StaffTestKit.signature(_w.staff)
-	for version in [1, 2, 3]:
+	for version in [1, 2, 3, 4]:
 		data["save_version"] = version
 		var problem := _load_error(data)
 		print("version %d: '%s'" % [version, problem])
-		assert_str(problem).is_equal("save_version %d is not 4" % version)
+		assert_str(problem).is_equal("save_version %d is not 5" % version)
 		assert_bool(_w.staff.from_snapshot(data)).is_false()
 	assert_str(StaffTestKit.signature(_w.staff)).is_equal(before)
 

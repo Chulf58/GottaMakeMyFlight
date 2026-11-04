@@ -85,6 +85,7 @@ const HINT_RING_POINTS := 16
 const CLOSED_FILL := Color(0.47, 0.53, 0.62)
 const FILL_TOLERANCE := 0.1
 const CLOSED_CAPTION := "Closed"
+const PLAYER_CLOSED_CAPTION := "Closed by you"
 const SPOT_BLOCKED_CAPTION := "Closed: staff spot blocked"
 const UNREACHABLE_CAPTION := "Closed: staff can't reach"
 
@@ -227,6 +228,8 @@ func sync() -> void:
 		var sign := _show_sign(_closed_signs, station, "ClosedSign", _closed_icon())
 		var caption := CLOSED_CAPTION
 		match _closed_reason(station, counters):
+			MissSignals.PLAYER_CLOSED_REASON:
+				caption = PLAYER_CLOSED_CAPTION
 			MissSignals.SPOT_BLOCKED_REASON:
 				caption = SPOT_BLOCKED_CAPTION
 			MissSignals.UNREACHABLE_REASON:
@@ -570,16 +573,11 @@ func _sync_after_edit() -> void:
 
 
 ## Why `station` is closed (a MissSignals reason): for a counter in
-## `counters` from its staff spot, as MissSignals.closed_reason() says for a
-## desk or scanner.
+## `counters` as for a desk or scanner (MissSignals.staff_reason()).
 func _closed_reason(station: int, counters: Array[int]) -> String:
 	if not counters.has(station):
 		return MissSignals.closed_reason(sim, station)
-	if sim.staff.spot_blocked(station):
-		return MissSignals.SPOT_BLOCKED_REASON
-	if sim.staff.spot_unreachable(station):
-		return MissSignals.UNREACHABLE_REASON
-	return MissSignals.NO_STAFF_REASON
+	return MissSignals.staff_reason(sim, station)
 
 
 ## A hire, a fire or a member going on duty changes which stations are closed,
