@@ -16,8 +16,10 @@ extends RefCounted
 ## passenger is at the facility meeting it (at a cafe table, inside a toilet
 ## stall, browsing at a kiosk) and for a passenger who missed the flight. All
 ## icons hide
-## while the game camera is at its home zoom or farther out (shown_at()); the
-## follow panel still lists the needs. A passenger's icons also fade out as the
+## while the game camera is at its home zoom or farther out (shown_at()) and
+## while the N key has turned them off (NeedIconsToggle, on by default, decision
+## passenger-need-icons-toggle-key-n-on-by-default); the follow panel still
+## lists the needs. A passenger's icons also fade out as the
 ## camera comes very close to that passenger (near_alpha()).
 ##
 ## PassengerViews gives every passenger node three Sprite3D icons (make_sprite())
