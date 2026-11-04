@@ -177,6 +177,34 @@ func test_the_alert_cards_step_down_under_the_banner() -> void:
 	_assert_top_centre("banner with alerts", banner)
 
 
+## PanelRoom reads the card in the banner slot, whichever it is: with a first-time
+## hint showing (the status banner yielded), the camera's free room leaves the
+## hint's area out, with the tray closed and with it open.
+func test_the_camera_room_leaves_out_a_showing_hint() -> void:
+	var hints := _hud.find_child("Hints", false, false) as Hints
+	hints.card().visible = true
+	_staff.set_hint_yielded(true)
+	var room := _hud.get_node("PanelRoom") as PanelRoom
+	for tray in [false, true]:
+		if tray:
+			_menu.press_category(0)
+		for i in PanelRoom.REFIT_FRAMES + 4:
+			await get_tree().process_frame
+		var card := hints.card().get_global_rect()
+		var view := _view()
+		var free := room.free_fraction()
+		var free_px := Rect2(free.position * view, free.size * view)
+		print(
+			"HINT_ROOM tray=%s card=%s free=%s rects=%s" % [tray, card, free_px, room.open_rects()]
+		)
+		assert_bool(card.has_area()).is_true()
+		assert_float(card.position.y).is_less(view.x * 9.0 / 16.0 * TOP_BAND)
+		assert_bool(room.open_rects().has(card)).is_true()
+		assert_bool(free_px.intersects(card)).is_false()
+	hints.card().visible = false
+	_staff.set_hint_yielded(false)
+
+
 ## DirtyAlert.SHOW_AT spills on floored, object-free cells three apart.
 func _spills() -> void:
 	var grid := _sim.grid

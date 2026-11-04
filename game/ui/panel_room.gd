@@ -37,6 +37,10 @@ var camera: TycoonCamera
 ## The node holding BuildMenu, StaffPanel and OfferPanel as children, found by
 ## name each time because the panels build themselves after the HUD.
 var scene_root: Node
+## Returns the screen rectangle of the banner slot's visible card (the status
+## banner or a first-time hint), empty while none shows. PassengerHud sets it;
+## without one the status banner's card alone is read.
+var banner_rect := Callable()
 ## The result card, held by PassengerHud.
 var result_card: Control
 ## The alert card stack, held by PassengerHud; its rect is cut but never
@@ -156,10 +160,12 @@ func open_key() -> int:
 	var menu := _menu()
 	var tray_open := menu != null and menu.is_tray_open()
 	for panel in _panels():
-		var in_build_stack := tray_open and panel == _banner()
-		if panel != null and panel.is_visible_in_tree() and not in_build_stack:
+		if panel != null and panel.is_visible_in_tree():
 			key |= bit
 		bit <<= 1
+	if not tray_open and _banner().has_area():
+		key |= bit
+	bit <<= 1
 	if tray_open:
 		key |= bit
 	return key
@@ -173,10 +179,10 @@ func open_rects() -> Array[Rect2]:
 	if tray_open:
 		rects.append_array(_kept_rects if _kept else _build_stack(menu))
 	for panel in _panels():
-		if tray_open and panel == _banner():
-			continue
 		if panel != null and panel.is_visible_in_tree():
 			rects.append(panel.get_global_rect())
+	if not tray_open and _banner().has_area():
+		rects.append(_banner())
 	if alert_stack != null:
 		var alerts := alert_stack.room_rect()
 		if alerts.has_area():
@@ -184,13 +190,12 @@ func open_rects() -> Array[Rect2]:
 	return rects
 
 
-## The Staff card, the banner at the top centre, the Offers sheet and the result
-## card, in the order their rectangles are cut.
+## The Staff card, the Offers sheet and the result card, in the order their
+## rectangles are cut; the banner slot is `_banner()`.
 func _panels() -> Array[Control]:
 	var panels: Array[Control] = []
 	var staff := _find("StaffPanel") as StaffPanel
 	panels.append(null if staff == null else staff.card())
-	panels.append(null if staff == null else staff.hint_card())
 	var offers := _find("OfferPanel") as OfferPanel
 	panels.append(null if offers == null else offers.sheet())
 	panels.append(result_card)
@@ -202,14 +207,20 @@ func _panels() -> Array[Control]:
 func _build_stack(menu: BuildMenu) -> Array[Rect2]:
 	var rects: Array[Rect2] = [_tray_stack(menu)]
 	var banner := _banner()
-	if banner != null and banner.is_visible_in_tree():
-		rects.append(banner.get_global_rect())
+	if banner.has_area():
+		rects.append(banner)
 	return rects
 
 
-func _banner() -> Control:
+## The banner slot's visible card now, the status banner or a first-time hint;
+## empty while none shows.
+func _banner() -> Rect2:
+	if banner_rect.is_valid():
+		return banner_rect.call()
 	var staff := _find("StaffPanel") as StaffPanel
-	return null if staff == null else staff.hint_card()
+	if staff == null or not staff.hint_card().is_visible_in_tree():
+		return Rect2()
+	return staff.hint_card().get_global_rect()
 
 
 ## The tray, its status and cost lines and the bar under them, from the top of

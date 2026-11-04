@@ -7,8 +7,9 @@ extends SceneTree
 ##   banner  a long two-line closed-airport message in the banner
 ##   hint    a first-time hint holding the slot (the banner yields)
 ## Both window sizes have the same 1536x864 layout (stretch scale 1.25), so the
-## plates differ in pixels only. Each plate proves its card is inside the viewport by MARGIN_PX, in the top
-## band, centred, and clear of every other top HUD rectangle (all printed).
+## plates differ in pixels only. Each plate proves its card is inside the
+## viewport by MARGIN_PX, in the top band, centred, and clear of every other top
+## HUD rectangle (all printed).
 ## Otherwise PROBE_INVALID is printed and the probe exits 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):

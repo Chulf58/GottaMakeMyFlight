@@ -6,9 +6,9 @@ extends SceneTree
 ## and the probe drives advance() with explicit worlds, so every plate is
 ## deterministic.
 ##
-## Plate A: the check-in hint with the Check-in tray open, docked above the tray
-##   stack, the status banner gone from the slot.
-## Plate B: the toilet hint with no tray open, docked just above the bar.
+## Plate A: the check-in hint with the Check-in tray open, in the banner slot at
+##   the top centre, the status banner gone from the slot.
+## Plate B: the toilet hint with no tray open, in the same top-centre slot.
 ## Plate C: hints turned off with H's toggle: no card, the banner back, the
 ##   settings row (Hints (H), Reset hints) visible.
 ## Plate D: the build ghost over the hint, which fades to FADED_ALPHA.

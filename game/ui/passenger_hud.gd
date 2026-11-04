@@ -274,6 +274,7 @@ func _ready() -> void:
 	_panel_room.camera = camera
 	_panel_room.scene_root = get_parent()
 	_panel_room.result_card = _result
+	_panel_room.banner_rect = _banner_rect
 	_panel_room.alert_stack = _alerts
 	add_child(_panel_room)
 	_hints.hud = self
