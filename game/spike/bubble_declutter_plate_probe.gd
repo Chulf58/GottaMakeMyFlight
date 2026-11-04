@@ -161,12 +161,7 @@ func _run() -> void:
 			var at := views.node_for(id).get_node("Bubble") as Label3D
 			in_frame = in_frame and frame.has_point(cam.unproject_position(at.global_position))
 		if in_frame:
-			print(
-				(
-					"PROBE camera distance=%.1f pitch=%.1f"
-					% [rig.distance, rig.pitch_for_distance(rig.distance)]
-				)
-			)
+			print("PROBE camera distance=%.1f pitch=%.1f" % [rig.distance, rig.pitch_degrees()])
 			for id in tail:
 				var at := views.node_for(id).get_node("Bubble") as Label3D
 				print(

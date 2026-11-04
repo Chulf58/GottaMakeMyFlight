@@ -139,7 +139,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 260, 45, -310)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1000, 0, 736)
 
 [node name="ArrivalStraightIn" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -700, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1000, 0, -310)
 
 [node name="ArrivalPass" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 170, 0, -8)

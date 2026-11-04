@@ -177,7 +177,13 @@ func _text_box(label: Label3D) -> Rect2:
 			bottom = -size.y
 		VERTICAL_ALIGNMENT_CENTER:
 			bottom = -size.y / 2.0
-	var box := Rect2(Vector2(-size.x / 2.0 + label.offset.x * label.pixel_size, bottom), size)
+	var box := Rect2(
+		Vector2(
+			-size.x / 2.0 + label.offset.x * label.pixel_size,
+			bottom + label.offset.y * label.pixel_size
+		),
+		size
+	)
 	return box.grow(label.outline_size * label.pixel_size)
 
 
@@ -213,15 +219,15 @@ func test_the_pop_never_covers_the_room_label_on_screen() -> void:
 	print("text boxes pop=%s label=%s" % [_text_box(label), _text_box(room_label)])
 	assert_float(_text_box(label).size.y).is_greater(0.3)
 	assert_float(_text_box(room_label).size.y).is_greater(0.8)
-	# Every centred view (84 of 168) and most off-centre ones show both.
-	assert_int(_views_seen(cam, label, room_label, pops)).is_greater(100)
+	# Every centred view (252 of 504) and most off-centre ones show both.
+	assert_int(_views_seen(cam, label, room_label, pops)).is_greater(300)
 	cam.free()
 	rooms.free()
 
 
 ## Checks the pop against the room label from the game camera's own views:
-## its field of view, its tilt for each zoom distance (35 degrees close, 65 far)
-## from the closest to the farthest zoom, four turns, aimed at the ground under
+## its field of view, each of its three angle steps (the tilt no longer follows the zoom), from
+## the closest to the farthest zoom, four turns, aimed at the ground under
 ## the label and 5 m beside it, at three ages of the pop. Only the on-screen
 ## parts of the boxes count. Returns how many views had both on screen.
 func _views_seen(cam: Camera3D, label: Label3D, room_label: Label3D, pops: CafePops) -> int:
@@ -234,29 +240,37 @@ func _views_seen(cam: Camera3D, label: Label3D, room_label: Label3D, pops: CafeP
 	for age in [0.0, 0.5, 0.98]:
 		pops.advance(CafePops.POP_SECONDS * age - float(label.get_meta(&"age")))
 		for distance in [rig.min_distance, 12.0, 20.0, 40.0, 80.0, 150.0, rig.max_distance]:
-			var pitch := deg_to_rad(rig.pitch_for_distance(distance))
-			for yaw_step in 4:
-				for aside in [Vector3.ZERO, Vector3(4.0, 0.0, 3.0)]:
-					var yaw := yaw_step * PI / 2.0
-					var target: Vector3 = ground + aside
-					var back := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
-					cam.look_at_from_position(target + back * distance, target)
-					if cam.is_position_behind(label.global_position):
-						continue
-					var pop_box := _screen_box(cam, label).intersection(screen)
-					var label_box := _screen_box(cam, room_label).intersection(screen)
-					if not (pop_box.has_area() and label_box.has_area()):
-						continue
-					if pop_box.intersects(label_box):
-						print(
-							(
-								"OVERLAP age=%.2f d=%.0f yaw=%d aside=%s pop=%s label=%s"
-								% [age, distance, yaw_step, aside, pop_box, label_box]
-							)
+			for step in [
+				TycoonCamera.AngleStep.LOW,
+				TycoonCamera.AngleStep.MEDIUM,
+				TycoonCamera.AngleStep.TOP_DOWN
+			]:
+				rig.angle_step = step
+				var pitch := deg_to_rad(rig.pitch_degrees())
+				for yaw_step in 4:
+					for aside in [Vector3.ZERO, Vector3(4.0, 0.0, 3.0)]:
+						var yaw := yaw_step * PI / 2.0
+						var target: Vector3 = ground + aside
+						var back := Vector3(
+							sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)
 						)
-					assert_bool(pop_box.intersects(label_box)).is_false()
-					checked += 1
-	print("pop/label screen boxes checked=%d of 168" % checked)
+						cam.look_at_from_position(target + back * distance, target)
+						if cam.is_position_behind(label.global_position):
+							continue
+						var pop_box := _screen_box(cam, label).intersection(screen)
+						var label_box := _screen_box(cam, room_label).intersection(screen)
+						if not (pop_box.has_area() and label_box.has_area()):
+							continue
+						if pop_box.intersects(label_box):
+							print(
+								(
+									"OVERLAP step=%d age=%.2f d=%.0f yaw=%d aside=%s pop=%s label=%s"
+									% [step, age, distance, yaw_step, aside, pop_box, label_box]
+								)
+							)
+						assert_bool(pop_box.intersects(label_box)).is_false()
+						checked += 1
+	print("pop/label screen boxes checked=%d of 504" % checked)
 	rig.free()
 	return checked
 

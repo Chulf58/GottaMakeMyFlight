@@ -7,6 +7,7 @@ var _rig: TycoonCamera
 func before_test() -> void:
 	var scene: PackedScene = load("res://camera/tycoon_camera.tscn")
 	_rig = auto_free(scene.instantiate()) as TycoonCamera
+	_rig.settings_path = SaveTestKit.run_path("camera_motion")
 	add_child(_rig)
 
 

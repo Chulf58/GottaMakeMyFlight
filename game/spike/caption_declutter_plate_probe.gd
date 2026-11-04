@@ -96,7 +96,7 @@ func _run() -> void:
 	)
 	var rig: TycoonCamera = main.get_node("TycoonCamera")
 	var cam: Camera3D = rig.get_node("Camera3D")
-	print("PROBE zoom=%.2f pitch=%.1f" % [rig.distance, rig.pitch_for_distance(rig.distance)])
+	print("PROBE zoom=%.2f pitch=%.1f" % [rig.distance, rig.pitch_degrees()])
 	var closed := MissSignals.closed_stations(sim)
 	print("PROBE closed_stations=", closed.size())
 	if closed.size() < 4:
