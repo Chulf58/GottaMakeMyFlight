@@ -8,8 +8,8 @@ extends RefCounted
 ##
 ## Cells and their state come from the sim, never from a copy of its rules.
 ## The piece is written into the grid data for a moment
-## (BuildGrid.with_trial_object, the write staff reach already uses) and the
-## sim is asked about it there:
+## (BuildGrid.trial_answers, the write staff reach already uses, which calls
+## answers() and nothing else) and the sim is asked about it there:
 ## - Any piece with a use side: its passenger cell is
 ##   BuildObjectDef.interaction_cell, blocked when BuildGrid.interaction_problem
 ##   (the placement check's own rule) refuses it on the grid as it stands.
@@ -70,19 +70,35 @@ static func of(grid: BuildGrid, def_id: StringName, anchor: Vector2i, facing: in
 				arrow.append(cell + front)
 		out["flow"] = -front
 		return out
+	var answers := grid.trial_answers(def_id, anchor, facing)
+	if answers.is_empty():
+		return out
 	var spot := def.interaction_cell(anchor, facing)
 	if spot != BuildObjectDef.NO_CELL and grid.interaction_problem(spot, footprint) != null:
-		out["blocked"][spot] = true
-	grid.with_trial_object(def_id, anchor, facing, _ask_sim.bind(grid, def, out))
-	return out
+		answers["blocked"][spot] = true
+	return answers
 
 
-## Fills `out` for the piece written into `grid` as `id`.
-static func _ask_sim(id: int, grid: BuildGrid, def: BuildObjectDef, out: Dictionary) -> void:
+## What the sim says about the piece BuildGrid.trial_answers() wrote into `grid`
+## as `id`: the of() dictionary, and for a lane piece also "lane" (the
+## candidate it joins, or {}), "status" and "states" (use_cell_states). Only
+## trial_answers() calls it, while the piece is written in.
+static func answers(grid: BuildGrid, id: int) -> Dictionary:
+	var passenger: Array[Vector2i] = []
+	var staff_cells: Array[Vector2i] = []
+	var arrow: Array[Vector2i] = []
+	var out := {
+		"passenger": passenger,
+		"staff": staff_cells,
+		"blocked": {},
+		"arrow": arrow,
+		"flow": Vector2i.ZERO,
+	}
 	var record := grid.get_object(id)
+	var def := BuildCatalog.get_def(record["def"])
 	if SecurityLanes.is_part(def.id):
 		_lane_cells(grid, def.id, id, out)
-		return
+		return out
 	if def.has_interaction:
 		var spot := def.interaction_cell(record["anchor"], record["facing"])
 		out["passenger"].append(spot)
@@ -96,6 +112,7 @@ static func _ask_sim(id: int, grid: BuildGrid, def: BuildObjectDef, out: Diction
 		out["staff"].append(staff)
 		if StaffSpots.blocked(grid, id):
 			out["blocked"][staff] = true
+	return out
 
 
 ## The lane cells of the lane piece `id` on the trial grid.
@@ -109,6 +126,8 @@ static func _lane_cells(grid: BuildGrid, def_id: StringName, id: int, out: Dicti
 	if arch == 0:
 		return
 	var lane := lanes.candidate(arch)
+	out["lane"] = lane
+	out["status"] = lanes.status(arch)
 	out["flow"] = -(lane["front"] as Vector2i)
 	if def_id == SecurityLanes.ARCH:
 		out["passenger"].append_array([lane["queue_entry"], lane["unpack"]])
@@ -122,6 +141,7 @@ static func _lane_cells(grid: BuildGrid, def_id: StringName, id: int, out: Dicti
 		if def_id == SecurityLanes.XRAY_BELT:
 			out["staff"].append(lane["primary_spot"])
 	var states := lanes.use_cell_states(grid, arch)
+	out["states"] = states
 	for cell in out["passenger"] + out["staff"]:
 		if not states.get(cell, true):
 			out["blocked"][cell] = true

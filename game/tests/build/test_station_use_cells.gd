@@ -149,13 +149,6 @@ func _recognised(arch_cell: Vector2i) -> Array:
 	return [lanes.candidate(arch), lanes.status(arch), lanes.use_cell_states(_mode.grid, arch)]
 
 
-## _recognised() as the grid would be with `def_id` placed at `cell`.
-func _recognised_with(def_id: StringName, cell: Vector2i, facing: int) -> Array:
-	return _mode.grid.with_trial_object(
-		def_id, cell, facing, func(_id: int) -> Array: return _recognised(AT)
-	)
-
-
 ## The cells the sim names for `piece` in `lane`: [passenger, staff].
 func _sim_cells(piece: StringName, lane: Dictionary) -> Array:
 	match piece:
@@ -279,20 +272,22 @@ func test_a_queue_entry_reserved_by_another_station_shows_blocked_as_the_lane_ju
 
 func test_a_wall_between_a_part_and_its_cell_shows_blocked_as_the_lane_judges() -> void:
 	var lane := SecurityLanes.geometry(AT, 0, SecurityLanes.RIGHT)
-	var skip: Array[StringName] = [SecurityLanes.TRAY_TABLE]
-	SecurityLaneBuilder.build(_mode.grid, AT, 0, SecurityLanes.RIGHT, skip)
+	var ids := SecurityLaneBuilder.build(_mode.grid, AT, 0, SecurityLanes.RIGHT)
 	# Walls on both sides of the tray cell close the step into it for either
-	# mirror's lane, so LaneWall refuses the placement.
+	# mirror's lane. With the tray standing the lane is WALL_IN_LANE; taken
+	# away, LaneWall refuses putting it back.
 	for side in [BuildGrid.Side.WEST, BuildGrid.Side.EAST]:
 		assert_bool(_mode.grid.apply(BuildEdit.place_wall(lane["tray_table"], side)).ok).is_true()
+	var found := _recognised(AT)
+	assert_int(found[1]).is_equal(SecurityLanes.Status.WALL_IN_LANE)
+	var tray: int = ids[SecurityLanes.TRAY_TABLE]
+	assert_bool(_mode.grid.apply(BuildEdit.remove_object(tray)).ok).is_true()
 	var ghost := _ghost_at(BuildMode.Tool.TRAY_TABLE, lane["tray_table"], 0)
 	var edit := BuildEdit.place_object(SecurityLanes.TRAY_TABLE, lane["tray_table"], 0)
 	var check := _mode.check(edit)
 	print("walled tray: ghost blocked %s, placement says %d" % [ghost["blocked"], check.reason])
 	assert_int(check.reason).is_equal(BuildResult.Reason.LANE_WALL)
 	assert_array(ghost["blocked"]).is_equal([lane["unpack"]])
-	var found := _recognised_with(SecurityLanes.TRAY_TABLE, lane["tray_table"], 0)
-	assert_int(found[1]).is_equal(SecurityLanes.Status.WALL_IN_LANE)
 	_compare("walled tray", ghost, SecurityLanes.TRAY_TABLE, found)
 
 
@@ -314,9 +309,11 @@ func test_an_arch_takes_the_side_the_recogniser_picks() -> void:
 	PassengerTestWorld.place(_mode.grid, SecurityLanes.TRAY_TABLE, right["tray_table"], 0)
 	PassengerTestWorld.place(_mode.grid, SecurityLanes.PICKUP_TABLE, left["pickup_table"], 0)
 	var tie := _ghost_at(BuildMode.Tool.ARCH, AT, 0)
-	var tied := _recognised_with(SecurityLanes.ARCH, AT, 0)
+	var arch := PassengerTestWorld.place(_mode.grid, SecurityLanes.ARCH, AT, 0)
+	var tied := _recognised(AT)
 	assert_int(tied[0]["mirror"]).is_equal(SecurityLanes.RIGHT)
 	_compare("tie", tie, SecurityLanes.ARCH, tied)
+	assert_bool(_mode.grid.apply(BuildEdit.remove_object(arch)).ok).is_true()
 	# A second part on the left, turned the wrong way, still counts there.
 	PassengerTestWorld.place(_mode.grid, SecurityLanes.XRAY_BELT, left["xray_belt"], 3)
 	var more := _ghost_at(BuildMode.Tool.ARCH, AT, 0)
@@ -332,6 +329,83 @@ func test_no_tiles_for_a_piece_with_no_use_side_or_a_lane_part_with_no_arch() ->
 	assert_that(seats["flow"]).is_null()
 	var lone := _ghost_at(BuildMode.Tool.TRAY_TABLE, AT, 0)
 	assert_array(lone[StationUseCells.PASSENGER] + lone[StationUseCells.STAFF]).is_empty()
-	# The trial write leaves the grid as it was.
-	assert_int(_mode.grid.object_ids().size()).is_equal(0)
-	assert_int(_mode.grid.object_at(AT)).is_equal(0)
+
+
+## BuildGrid.can_route() from every cell to its east and south neighbours.
+func _routes(grid: BuildGrid) -> Array[bool]:
+	var out: Array[bool] = []
+	for y in grid.size.y:
+		for x in grid.size.x:
+			for step in [Vector2i(1, 0), Vector2i(0, 1)]:
+				out.append(grid.can_route(Vector2i(x, y), Vector2i(x, y) + step))
+	return out
+
+
+## Everything a trial write could disturb, read from `grid`.
+func _state(grid: BuildGrid, counts: Dictionary) -> Dictionary:
+	return {
+		"snapshot": grid.to_snapshot(),
+		"ids": grid.object_ids(),
+		"next_id": grid._next_object_id,
+		"occupant": grid._occupant.duplicate(),
+		"reserved": grid._reserved.duplicate(),
+		"spot_owners": grid._spots._owners.duplicate(true),
+		"path": _routes(grid),
+		"staff_path": grid.find_staff_path(Vector2i(0, 17), Vector2i(17, 0)),
+		"signals": counts.duplicate(),
+	}
+
+
+func test_a_trial_write_leaves_a_busy_grid_exactly_as_it_was() -> void:
+	var grid := _mode.grid
+	var counts := {"graph_changed": 0, "edit_applied": 0, "edit_refused": 0}
+	grid.graph_changed.connect(func(_cells: Array) -> void: counts["graph_changed"] += 1)
+	grid.edit_applied.connect(
+		func(_e: BuildEdit, _r: BuildResult) -> void: counts["edit_applied"] += 1
+	)
+	grid.edit_refused.connect(
+		func(_e: BuildEdit, _r: BuildResult) -> void: counts["edit_refused"] += 1
+	)
+	# A desk and a scanner with staff spots, a counter whose front reserves a
+	# cell, and a standing lane with its officer spots.
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(3, 3), 0)
+	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(3, 12), 0)
+	PassengerTestWorld.place(grid, &"cafe_counter", Vector2i(13, 3), 0)
+	SecurityLaneBuilder.build(grid, AT, 0, SecurityLanes.RIGHT)
+	var before := _state(grid, counts)
+	# Overlapping the desk, a front on the counter's front, on the standing arch
+	# turned, a part no arch takes, and clear floor.
+	var trials := [
+		[&"checkin_desk", Vector2i(3, 3), 1],
+		[&"checkin_desk", Vector2i(13, 5), 2],
+		[SecurityLanes.ARCH, AT, 2],
+		[SecurityLanes.XRAY_BELT, Vector2i(14, 14), 0],
+		[&"security_scanner", Vector2i(15, 12), 0],
+	]
+	for trial in trials:
+		assert_bool(grid.trial_answers(trial[0], trial[1], trial[2]).is_empty()).is_false()
+	# Off the grid: the scanner's front would fall outside, so nothing is written.
+	assert_bool(grid.trial_answers(&"security_scanner", Vector2i(17, 16), 0).is_empty()).is_true()
+	var after := _state(grid, counts)
+	var cells: int = before["occupant"].size() + before["reserved"].size()
+	print(
+		(
+			"trials %d+1 off grid: %d objects, %d cells, %d spots, paths %d/%d, signals %s"
+			% [
+				trials.size(),
+				before["ids"].size(),
+				cells,
+				before["spot_owners"].size(),
+				before["path"].size(),
+				before["staff_path"].size(),
+				before["signals"]
+			]
+		)
+	)
+	assert_int(before["ids"].size()).is_equal(7)
+	assert_int(before["spot_owners"].size()).is_equal(2)
+	assert_int(before["path"].size()).is_equal(18 * 18 * 2)
+	assert_bool(before["path"].has(false)).is_true()
+	assert_int(before["staff_path"].size()).is_greater(17)
+	for key in before:
+		assert_that(after[key]).override_failure_message("%s changed" % key).is_equal(before[key])
