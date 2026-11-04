@@ -30,7 +30,8 @@ const DELETE_REFUSED := "Can't delete: %s"
 
 ## The window's item card, which holds the selection, the build mode and the sim.
 var card: BuiltItemCard
-## Build mode as the player lives it; Delete starts it. Null leaves the game running.
+## Build mode as the player lives it; Delete starts it and refuses without one
+## (PassengerHud wires it from the BuildMenu).
 var session: BuildSession
 
 var _move_button := Button.new()
@@ -111,13 +112,17 @@ func press_move() -> bool:
 
 
 ## Removes the selected item or room as one refunded undo step, inside build
-## mode. Returns the result, or null when nothing is selected that can be deleted.
+## mode. Returns the result, or null when nothing is selected that can be deleted
+## or no session is wired (an error).
 func press_delete() -> BuildResult:
 	if card == null or card.build_mode == null or not _delete.get("ok", false):
 		return null
+	if session == null:
+		push_error("BuiltItemActions: no build session wired, so Delete cannot start build mode")
+		return null
 	var mode := card.build_mode
 	var edit: BuildEdit = _delete["edit"]
-	if mode.check(edit).ok and session != null:
+	if mode.check(edit).ok:
 		session.set_building(true)
 	var result := mode.apply_edit(edit)
 	if not result.ok:

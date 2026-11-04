@@ -91,10 +91,6 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	# Delete starts build mode through the bar's session (a sibling of PassengerHud).
-	var menu := get_node_or_null("../../BuildMenu") as BuildMenu
-	if menu != null and actions.session == null:
-		actions.session = menu.build_session
 	fit()
 	get_viewport().size_changed.connect(fit)
 
