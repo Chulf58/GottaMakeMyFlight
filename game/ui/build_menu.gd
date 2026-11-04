@@ -196,546 +196,64 @@ const NO_CATEGORY := -1
 ## The open category while the Templates page (TemplatesPage) is open; its
 ## bar button presses it like a category (press_category()).
 const TEMPLATES_PAGE := -2
-## Card per tool: [name, thumbnail, size text, hover card text]. The hover card
-## text is [what it is, how it works, what it needs or costs to run]
-## (ItemCardButton). Object sizes come from BuildCatalog.
+## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
-	BuildMode.Tool.FLOOR:
-	[
-		"Floor",
-		"floor",
-		"1x1 tile",
-		[
-			"Floor tile. Passengers can only walk and stand on floor.",
-			"Drag a rectangle to lay many tiles at once. Everything else is built on floor.",
-			"Land you own. Removing a tile refunds half."
-		]
-	],
-	BuildMode.Tool.WALL:
-	[
-		"Wall",
-		"wall",
-		"1 m edge",
-		[
-			"A wall along a tile edge. Passengers cannot cross it and it blocks the view.",
-			"Drag along a line to build a row. Walls close in the terminal and its rooms.",
-			"One wall per tile edge. Removing it refunds half."
-		]
-	],
-	BuildMode.Tool.GLASS:
-	[
-		"Glass",
-		"glass",
-		"1 m edge",
-		[
-			"A glass wall. Passengers cannot cross it, but it lets the view through.",
-			"Drag along a line like a wall. Screens and decor can be seen through glass.",
-			"Costs more than a plain wall. One per tile edge."
-		]
-	],
-	BuildMode.Tool.DOOR:
-	[
-		"Door",
-		"door",
-		"1 m edge",
-		[
-			"A door in a wall. Passengers walk through it.",
-			"Click a wall edge to put a door in the wall.",
-			"A plain wall on each side of it."
-		]
-	],
-	BuildMode.Tool.ENTRANCE:
-	[
-		"Entrance",
-		"entrance",
-		"",
-		[
-			"The way into the terminal. Passengers come in here from the road and car parks.",
-			"Place it on the outer edge of the terminal, facing in.",
-			"The outside edge with no floor behind it. Keep the spot in front clear."
-		]
-	],
-	BuildMode.Tool.EXIT:
-	[
-		"Exit",
-		"exit",
-		"",
-		[
-			"The way out to the planes. Passengers leave the terminal here to board.",
-			"Place it on the outer edge. A gate desk links to an exit that faces north (the planes).",
-			"The outside edge with no floor behind it. Keep the spot in front clear."
-		]
-	],
-	BuildMode.Tool.DESK:
-	[
-		"Check-in desk",
-		"desk",
-		"",
-		[
-			"Where passengers check in and hand over a bag.",
-			"A check-in agent works behind it. A belt from its back edge takes bags to a bag room.",
-			"An agent hired in Staff, or it stays closed. Keep the spot behind and in front clear."
-		]
-	],
-	BuildMode.Tool.SCANNER:
-	[
-		"Scanner",
-		"scanner",
-		"",
-		[
-			"A basic security scanner. Passengers walk through it to be screened.",
-			"A security officer works beside it. A full lane is faster but costs more.",
-			"An officer hired in Staff, or it stays closed. Keep its staff spot and way in clear."
-		]
-	],
-	BuildMode.Tool.SEATS:
-	[
-		"Seats",
-		"seats",
-		"",
-		[
-			"A row of seats. Passengers wait here for their flight and their mood recovers.",
-			"Place it near the gate and turn it. Waiting passengers sit on it.",
-			"No staff and no upkeep. Add enough seats for the passengers waiting."
-		]
-	],
-	BuildMode.Tool.GATE_DESK:
-	[
-		"Gate desk",
-		"gate_desk",
-		"",
-		[
-			"Makes a gate. It links to the nearest free north-facing exit; the plane parks out from it.",
-			"Each flight is given a gate. A gate takes the next free letter, starting at A.",
-			"Within 4 cells of a free north-facing exit, with room for the plane. No staff needed."
-		]
-	],
-	BuildMode.Tool.SCREEN:
-	[
-		"Screen",
-		"screen_stand",
-		"",
-		[
-			"A floor screen that entertains passengers waiting in front of it.",
-			"It covers a fan of floor up to 5 rows ahead. A plain wall blocks it, glass does not.",
-			"Costs upkeep every day, inside a room or not."
-		]
-	],
-	BuildMode.Tool.CAFE_ROOM:
-	[
-		"Cafe",
-		"cafe_room",
-		"3x3 min",
-		[
-			"Marks floor as a cafe. Hungry passengers eat and drink here and their mood rises.",
-			"Drag a rectangle, then add a counter and a table. Guests order, then sit at the table.",
-			"At least 3x3, with a counter and a table. Needs shop staff, or the counter stays closed."
-		]
-	],
-	BuildMode.Tool.COUNTER:
-	[
-		"Counter",
-		"counter",
-		"",
-		[
-			"The cafe counter, where guests order.",
-			"Place it inside a cafe, bar, restaurant or grab-and-go stall. A server stands there.",
-			"Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
-		]
-	],
-	BuildMode.Tool.TABLE:
-	[
-		"Table",
-		"table",
-		"",
-		[
-			"A table with a seat at each end. Cafe guests sit here to eat.",
-			"It seats two. A guest walks from the counter to a free seat.",
-			"Inside a cafe, bar or restaurant. A grab-and-go stall needs none."
-		]
-	],
-	BuildMode.Tool.TOILET_ROOM:
-	[
-		"Toilet",
-		"toilet_room",
-		"2x3 min",
-		[
-			"Marks floor as a toilet. Passengers who need one queue and use a stall.",
-			"Drag a rectangle, then add a stall and a sink inside.",
-			"At least 2x3, with a stall and a sink. Each stall costs upkeep every day when ready."
-		]
-	],
-	BuildMode.Tool.TOILET_STALL:
-	[
-		"Toilet stall",
-		"toilet_stall",
-		"",
-		[
-			"One toilet stall. One passenger uses it at a time.",
-			"Place it inside a toilet room. A passenger walks in from the cell in front.",
-			"Keep the spot in front clear. Costs upkeep every day once its room is ready."
-		]
-	],
-	BuildMode.Tool.TOILET_SINK:
-	[
-		"Sink",
-		"toilet_sink",
-		"",
-		[
-			"A sink. A toilet room is not ready without one.",
-			"Place it inside a toilet room.",
-			"Keep the spot in front clear. No upkeep of its own."
-		]
-	],
-	BuildMode.Tool.KIOSK_ROOM:
-	[
-		"Kiosk",
-		"kiosk_room",
-		"3x3 min",
-		[
-			"Marks floor as a kiosk, a small shop. Bored passengers browse here and pay.",
-			"Drag a rectangle, then add a counter and display stands. Guests browse at the stands.",
-			"At least 3x3, with a counter and a display stand. Shop staff serve at the counter."
-		]
-	],
-	BuildMode.Tool.KIOSK_COUNTER:
-	[
-		"Kiosk counter",
-		"kiosk_counter",
-		"",
-		[
-			"The kiosk's counter, with a till.",
-			"Place it inside a kiosk. A server stands behind it.",
-			"Wholly inside the kiosk. Shop staff hired in Staff, and the spot in front clear."
-		]
-	],
+	BuildMode.Tool.FLOOR: ["Floor", "floor", "1x1 tile"],
+	BuildMode.Tool.WALL: ["Wall", "wall", "1 m edge"],
+	BuildMode.Tool.GLASS: ["Glass", "glass", "1 m edge"],
+	BuildMode.Tool.DOOR: ["Door", "door", "1 m edge"],
+	BuildMode.Tool.ENTRANCE: ["Entrance", "entrance", ""],
+	BuildMode.Tool.EXIT: ["Exit", "exit", ""],
+	BuildMode.Tool.DESK: ["Check-in desk", "desk", ""],
+	BuildMode.Tool.SCANNER: ["Scanner", "scanner", ""],
+	BuildMode.Tool.SEATS: ["Seats", "seats", ""],
+	BuildMode.Tool.GATE_DESK: ["Gate desk", "gate_desk", ""],
+	BuildMode.Tool.SCREEN: ["Screen", "screen_stand", ""],
+	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
+	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
+	BuildMode.Tool.TABLE: ["Table", "table", ""],
+	BuildMode.Tool.TOILET_ROOM: ["Toilet", "toilet_room", "2x3 min"],
+	BuildMode.Tool.TOILET_STALL: ["Toilet stall", "toilet_stall", ""],
+	BuildMode.Tool.TOILET_SINK: ["Sink", "toilet_sink", ""],
+	BuildMode.Tool.KIOSK_ROOM: ["Kiosk", "kiosk_room", "3x3 min"],
+	BuildMode.Tool.KIOSK_COUNTER: ["Kiosk counter", "kiosk_counter", ""],
 	# The store rooms carry their RoomTypes names and minimum sizes; the pieces'
 	# short names suit their store's page (FurnitureTools.ITEMS has the
-	BuildMode.Tool.PHARMACY_ROOM:
-	[
-		# pharmacy's).
-		"Pharmacy",
-		"pharmacy_room",
-		"3x3 min",
-		[
-			"Marks floor as a pharmacy. Passengers browse and buy here.",
-			"Drag a rectangle, then add a counter and a shelf. Passengers browse at the shelf.",
-			"At least 3x3, with a counter and a shelf. Shop staff serve at the counter."
-		]
-	],
-	BuildMode.Tool.DUTY_FREE_ROOM:
-	[
-		"Duty free",
-		"duty_free_room",
-		"3x4 min",
-		[
-			"Marks floor as a duty free shop. Passengers browse and spend more than in a kiosk.",
-			"Drag a rectangle, then add a till and shelves. Passengers browse at the shelves.",
-			"At least 3x4, with a till and a shelf. Shop staff serve at the till."
-		]
-	],
-	BuildMode.Tool.DUTY_FREE_TILL:
-	[
-		"Till",
-		"duty_free_till",
-		"",
-		[
-			"The duty free shop's till.",
-			"Place it inside a duty free shop. A server stands behind it.",
-			"Wholly inside the shop. Shop staff hired in Staff, and the spot in front clear."
-		]
-	],
-	BuildMode.Tool.DUTY_FREE_SHELF:
-	[
-		"Shelf",
-		"duty_free_shelf",
-		"",
-		[
-			"A duty free shelf. Each one gives two browse spots.",
-			"Passengers browse from the cells in front of it.",
-			"Inside a duty free shop. Keep the cells in front clear."
-		]
-	],
-	BuildMode.Tool.FASHION_ROOM:
-	[
-		"Fashion store",
-		"fashion_room",
-		"3x4 min",
-		[
-			"Marks floor as a fashion store. Passengers browse and spend more than in a kiosk.",
-			"Drag a rectangle, then add a till and clothes rails. Passengers browse at the rails.",
-			"At least 3x4, with a till and a clothes rail. Shop staff serve at the till."
-		]
-	],
-	BuildMode.Tool.FASHION_TILL:
-	[
-		"Till",
-		"fashion_till",
-		"",
-		[
-			"The fashion store's till.",
-			"Place it inside a fashion store. A server stands behind it.",
-			"Wholly inside the store. Shop staff hired in Staff, and the spot in front clear."
-		]
-	],
-	BuildMode.Tool.FASHION_RAIL:
-	[
-		"Clothes rail",
-		"fashion_rail",
-		"",
-		[
-			"A clothes rail. Each one gives two browse spots.",
-			"Passengers browse from the cells in front of it.",
-			"Inside a fashion store. Keep the cells in front clear."
-		]
-	],
-	BuildMode.Tool.EXCHANGE_ROOM:
-	[
-		"Exchange",
-		"exchange_room",
-		"2x3 min",
-		[
-			"Marks floor as a currency exchange. Passengers change money and pay a small fee.",
-			"Drag a rectangle, then add a counter. A server works it.",
-			"At least 2x3, with a counter and shop staff. A visit does not cure boredom."
-		]
-	],
-	BuildMode.Tool.ATM_ROOM:
-	[
-		"ATM",
-		"atm_room",
-		"1x2 min",
-		[
-			"Marks floor as an ATM room. Passengers take out cash and pay a small fee.",
-			"Drag a rectangle, then add an ATM. It is self-service.",
-			"At least 1x2, with an ATM. No staff. A visit does not cure boredom."
-		]
-	],
-	BuildMode.Tool.BAR_ROOM:
-	[
-		# The food rooms borrow the cafe's thumbnail: no new art (F4-6).
-		"Bar",
-		"cafe_room",
-		"3x4 min",
-		[
-			"Marks floor as a bar. Guests stay longer than in a cafe, spend more, and gain most mood.",
-			"It uses the cafe counter and table. Guests order at the counter and sit at the table.",
-			"At least 3x4, with a counter and a table. Shop staff serve at the counter."
-		]
-	],
-	BuildMode.Tool.RESTAURANT_ROOM:
-	[
-		"Restaurant",
-		"cafe_room",
-		"4x4 min",
-		[
-			"Marks floor as a sit-down restaurant. Guests stay the longest and spend the most.",
-			"It uses the cafe counter and table. Guests order at the counter and sit at the table.",
-			"At least 4x4, with a counter and a table. Shop staff serve at the counter."
-		]
-	],
-	BuildMode.Tool.STALL_ROOM:
-	[
-		"Grab-and-go",
-		"cafe_room",
-		"3x3 min",
-		[
-			"Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat.",
-			"It needs only the cafe counter. A server hands over the order.",
-			"At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
-		]
-	],
-	BuildMode.Tool.PLAY_AREA_ROOM:
-	[
-		# The activity rooms borrow their main piece's thumbnail: no new art (F4-7).
-		"Play area",
-		"play_slide",
-		"3x4 min",
-		[
-			"Marks floor as a play area. Passengers stay and play for free and their mood rises.",
-			"Drag a rectangle, then add a slide and play blocks. It is self-service.",
-			"At least 3x4, with a slide and play blocks. No staff."
-		]
-	],
-	BuildMode.Tool.LOUNGE_ROOM:
-	[
-		"Lounge",
-		"lounge_sofa",
-		"2x3 min",
-		[
-			"Marks floor as a lounge. Passengers rest on the sofas for free and their mood rises.",
-			"Drag a rectangle, then add a sofa. It is self-service.",
-			"At least 2x3, with a sofa. No staff."
-		]
-	],
-	BuildMode.Tool.SHOWER_ROOM:
-	[
-		"Shower",
-		"shower_cubicle",
-		"2x2 min",
-		[
-			"Marks floor as a shower room. Passengers pay to wash during a long wait and gain mood.",
-			"Drag a rectangle, then add a shower cubicle. It is self-service.",
-			"At least 2x2, with a shower cubicle. No staff. Each stay pays you a fee."
-		]
-	],
-	BuildMode.Tool.NAP_POD_ROOM:
-	[
-		"Nap pod",
-		"nap_pod",
-		"2x2 min",
-		[
-			"Marks floor as a nap pod room. Passengers pay to rest during a long wait and gain mood.",
-			"Drag a rectangle, then add a nap pod. It is self-service.",
-			"At least 2x2, with a nap pod. No staff. Each stay pays you a fee."
-		]
-	],
-	BuildMode.Tool.KIOSK_DISPLAY:
-	[
-		"Display stand",
-		"kiosk_display",
-		"",
-		[
-			"A shelf unit. Each stand gives the kiosk two browse spots.",
-			"Passengers browse from the cells in front of it.",
-			"Inside a kiosk. Keep the cells in front clear."
-		]
-	],
-	BuildMode.Tool.BELT:
-	[
-		"Belt",
-		"belt",
-		"Drag a line",
-		[
-			"A baggage belt. It carries checked bags from a check-in desk to a bag room.",
-			"Drag a line. The belt shapes itself at turns and joins. Belts cannot cross.",
-			"Start at a check-in desk's back and end in a bag room. A wall in the way blocks it."
-		]
-	],
-	BuildMode.Tool.BAG_ROOM:
-	[
-		"Bag room",
-		"bag_room",
-		"2x2 min",
-		[
-			"Where checked bags end up. They are loaded onto the plane from here.",
-			"Drag a rectangle, then run a belt into it. The belt's end piece goes inside.",
-			"At least 2x2, with a belt end. A bag that arrives after the cutoff misses the plane."
-		]
-	],
-	BuildMode.Tool.CART:
-	[
-		"Bag cart",
-		"cart",
-		"",
-		[
-			"A baggage cart on wheels.",
-			"It is scenery. Bags move the same without it.",
-			"Takes 1x2 tiles. No upkeep."
-		]
-	],
-	BuildMode.Tool.CURB:
-	[
-		"Curb bay",
-		"curb_bay",
-		"16x3 m",
-		[
-			"A curb bay on the road outside. Cars and taxis stop here and drop passengers off.",
-			"Click one of the marked spots by the road. Each bay has two berths.",
-			"Marked spots only. The nearer an entrance, the shorter the walk."
-		]
-	],
-	BuildMode.Tool.SURFACE_LOT:
-	[
-		"Surface lot",
-		"surface_lot",
-		"32x24 m",
-		[
-			"A car park with 12 spaces. A car pays a fee when it parks.",
-			"Click a marked spot. Passengers walk from the car park to an entrance.",
-			"Marked spots only. Close it to let it drain before you remove it."
-		]
-	],
-	BuildMode.Tool.MULTI_STOREY:
-	[
-		"Multi-storey",
-		"multi_storey",
-		"24x52 m",
-		[
-			"A big car park with 31 spaces. A car pays a fee when it parks.",
-			"Click a marked spot. Passengers walk from the car park to an entrance.",
-			"Marked spots only. Close it to let it drain before you remove it."
-		]
-	],
-	BuildMode.Tool.LOT_GATE:
-	[
-		"Open / close",
-		"lot_gate",
-		"A car park",
-		[
-			"Opens or closes a car park.",
-			"Click a built car park. A closed one takes no new cars and empties out.",
-			"A car park can only be removed once no cars are in it."
-		]
-	],
-	BuildMode.Tool.BUY_LAND:
-	[
-		"Buy land",
-		"buy_land",
-		"about 21x25 m plot",
-		[
-			"Buys a plot of land. You can only build on land you own.",
-			"Click a highlighted plot. Its price shows on it and rises with each plot you buy.",
-			"A plot next to land you already own."
-		]
-	],
+	# pharmacy's).
+	BuildMode.Tool.PHARMACY_ROOM: ["Pharmacy", "pharmacy_room", "3x3 min"],
+	BuildMode.Tool.DUTY_FREE_ROOM: ["Duty free", "duty_free_room", "3x4 min"],
+	BuildMode.Tool.DUTY_FREE_TILL: ["Till", "duty_free_till", ""],
+	BuildMode.Tool.DUTY_FREE_SHELF: ["Shelf", "duty_free_shelf", ""],
+	BuildMode.Tool.FASHION_ROOM: ["Fashion store", "fashion_room", "3x4 min"],
+	BuildMode.Tool.FASHION_TILL: ["Till", "fashion_till", ""],
+	BuildMode.Tool.FASHION_RAIL: ["Clothes rail", "fashion_rail", ""],
+	BuildMode.Tool.EXCHANGE_ROOM: ["Exchange", "exchange_room", "2x3 min"],
+	BuildMode.Tool.ATM_ROOM: ["ATM", "atm_room", "1x2 min"],
+	# The food rooms borrow the cafe's thumbnail: no new art (F4-6).
+	BuildMode.Tool.BAR_ROOM: ["Bar", "cafe_room", "3x4 min"],
+	BuildMode.Tool.RESTAURANT_ROOM: ["Restaurant", "cafe_room", "4x4 min"],
+	BuildMode.Tool.STALL_ROOM: ["Grab-and-go", "cafe_room", "3x3 min"],
+	# The activity rooms borrow their main piece's thumbnail: no new art (F4-7).
+	BuildMode.Tool.PLAY_AREA_ROOM: ["Play area", "play_slide", "3x4 min"],
+	BuildMode.Tool.LOUNGE_ROOM: ["Lounge", "lounge_sofa", "2x3 min"],
+	BuildMode.Tool.SHOWER_ROOM: ["Shower", "shower_cubicle", "2x2 min"],
+	BuildMode.Tool.NAP_POD_ROOM: ["Nap pod", "nap_pod", "2x2 min"],
+	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
+	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
+	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
+	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
+	BuildMode.Tool.CURB: ["Curb bay", "curb_bay", "16x3 m"],
+	BuildMode.Tool.SURFACE_LOT: ["Surface lot", "surface_lot", "32x24 m"],
+	BuildMode.Tool.MULTI_STOREY: ["Multi-storey", "multi_storey", "24x52 m"],
+	BuildMode.Tool.LOT_GATE: ["Open / close", "lot_gate", "A car park"],
+	BuildMode.Tool.BUY_LAND: ["Buy land", "buy_land", "about 21x25 m plot"],
 }
 ## The Lane tray's cards, as ITEMS (item() looks in both).
 const LANE_ITEMS := {
-	BuildMode.Tool.TRAY_TABLE:
-	[
-		"Tray table",
-		"tray_table",
-		"",
-		[
-			"The tray table of a security lane, where passengers unpack their bags.",
-			"It stands beside the arch, on the side the lane's parts go.",
-			"Part of a whole lane: arch, tray table, X-ray belt and pickup table."
-		]
-	],
-	BuildMode.Tool.XRAY_BELT:
-	[
-		"X-ray belt",
-		"xray_belt",
-		"",
-		[
-			"The X-ray belt of a security lane. Bags ride through it.",
-			"It stands beside the arch. A lane officer works at it.",
-			"Part of a whole lane. Needs a security officer hired in Staff."
-		]
-	],
-	BuildMode.Tool.ARCH:
-	[
-		"Arch",
-		"arch",
-		"",
-		[
-			"The arch of a security lane. Passengers walk through it.",
-			"Place the arch first and the other parts around it. Its front faces the queue.",
-			"Part of a whole lane. Keep the spot in front and the walls around the lane clear."
-		]
-	],
-	BuildMode.Tool.PICKUP_TABLE:
-	[
-		"Pickup table",
-		"pickup_table",
-		"",
-		[
-			"The pickup table of a security lane, where passengers collect their bags.",
-			"It stands past the arch, where cleared passengers leave the lane.",
-			"Part of a whole lane: arch, tray table, X-ray belt and pickup table."
-		]
-	],
+	BuildMode.Tool.TRAY_TABLE: ["Tray table", "tray_table", ""],
+	BuildMode.Tool.XRAY_BELT: ["X-ray belt", "xray_belt", ""],
+	BuildMode.Tool.ARCH: ["Arch", "arch", ""],
+	BuildMode.Tool.PICKUP_TABLE: ["Pickup table", "pickup_table", ""],
 }
 ## Cards that say what the placed thing needs to work, in the warning colour,
 ## in place of the "Click" hint (the card has no height to spare). A bag room
@@ -890,7 +408,7 @@ static func remove_category() -> int:
 	return categories().size() - 1
 
 
-## A tool's card [name, thumbnail, size text, hover card text] from ITEMS, LANE_ITEMS or
+## A tool's card [name, thumbnail, size text] from ITEMS, LANE_ITEMS or
 ## FurnitureTools.ITEMS, or an empty array for a tool with no card.
 static func item(tool: BuildMode.Tool) -> Array:
 	return ITEMS.get(tool, LANE_ITEMS.get(tool, FurnitureTools.ITEMS.get(tool, [])))
@@ -1445,7 +963,7 @@ func _build_tray() -> void:
 func _make_card(tool: BuildMode.Tool) -> Button:
 	var card_item := item(tool)
 	var button := ItemCardButton.new()
-	button.set_info(card_item[0], card_item[3])
+	button.set_info(card_item[0], ItemInfo.of(tool))
 	button.name = "Card%s" % card_item[1].capitalize()
 	button.toggle_mode = true
 	button.custom_minimum_size = CARD_SIZE

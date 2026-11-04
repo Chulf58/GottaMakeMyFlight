@@ -4,14 +4,13 @@ extends Button
 ## a-hover-card-with-a-description). Hovering the card pops a small info card
 ## above it: the item's name, what it is, how it works and what it needs or
 ## costs to run. Nothing extra shows until the pointer rests on the card. The
-## info is [about, how it works, needs], the fourth entry of an item in
-## BuildMenu.item().
+## info is [about, how it works, needs] from ItemInfo.
 ##
 ## The card is a tooltip popup, as MoneySlot's is. It is placed above the item
-## card at its left edge through get_screen_transform() applied to a card-local
-## point (decision a-new-game-starts-with-no-build-tool-selected-refusal-
-## status), not from get_global_rect(), which would carry the card's own offset
-## twice. It keeps inside the window sideways.
+## card at its left edge from get_screen_transform() of the card's local origin
+## (decision a-new-game-starts-with-no-build-tool-selected-refusal-status), not
+## from get_global_rect(), which would carry the card's own offset twice. It keeps
+## inside the window sideways.
 
 const HUD_THEME := preload("res://ui/hud_theme.tres")
 ## The headings of the card's second and third parts.
@@ -80,11 +79,17 @@ func _make_custom_tooltip(_for_text: String) -> Object:
 
 
 ## Where the popup's top-left goes: above the item card at its left edge, kept
-## inside the window sideways. `card_size` is the popup's size.
+## inside the window sideways. `card_size` is the popup's size. The card's
+## screen position is the screen transform of its local origin; the popup's own
+## height and the gap are screen units already, so the UI scale is not applied to
+## them again.
 func card_screen_position(card_size: Vector2) -> Vector2i:
-	var at := get_screen_transform() * Vector2(0.0, -card_size.y - CARD_GAP)
+	var top := get_screen_transform() * Vector2.ZERO
 	var room := get_viewport().get_visible_rect().size.x - card_size.x
-	return Vector2i(clampf(at.x, 0.0, maxf(room, 0.0)), maxf(at.y, 0.0))
+	var at := Vector2(
+		clampf(top.x, 0.0, maxf(room, 0.0)), maxf(top.y - card_size.y - CARD_GAP, 0.0)
+	)
+	return Vector2i(at.round())
 
 
 func _place_card() -> void:
