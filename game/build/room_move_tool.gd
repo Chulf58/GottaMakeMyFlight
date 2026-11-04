@@ -120,9 +120,9 @@ func pick_up(point: Vector3, type: StringName) -> bool:
 	if id == 0 or grid.get_room(id)["type"] != type:
 		return false
 	var rect: Rect2i = grid.get_room(id)["rect"]
-	var whole := RoomMove.plan(grid, id, _centre_of(rect), 0)
-	if _never_moves(whole.result):
-		_set_status("%s  %s" % [_name_of(id), whole.result.reason_text()])
+	var refusal := never_moves_refusal(grid, id)
+	if refusal != null:
+		_set_status("%s  %s" % [_name_of(id), refusal.reason_text()])
 		return false
 	active = true
 	room_id = id
@@ -135,6 +135,16 @@ func pick_up(point: Vector3, type: StringName) -> bool:
 	_set_status(HINT % _name_of(id))
 	active_changed.emit()
 	return true
+
+
+## Why room `id` can move nowhere (a check-in desk, scanner or lane part in it,
+## or a piece across its edge), or null when some spot can take it. What
+## pick_up() refuses a room for, and what the inspect window's Move button
+## shows as its reason (BuiltItemActions).
+static func never_moves_refusal(grid: BuildGrid, id: int) -> BuildResult:
+	var rect: Rect2i = grid.get_room(id)["rect"]
+	var whole := RoomMove.plan(grid, id, _centre_of(rect), 0)
+	return whole.result if _never_moves(whole.result) else null
 
 
 func rotate_turns() -> void:
