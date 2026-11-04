@@ -320,6 +320,16 @@ func test_a_room_label_draws_dark_text_on_a_cream_card() -> void:
 	label.modulate.a = 0.4
 	RoomLabelLayout.sync_card(label)
 	assert_float(card.modulate.a).is_equal_approx(0.4, 0.001)
+	# The culling margins are written only when they change.
+	var margin := card.extra_cull_margin
+	assert_float(margin).is_greater(0.0)
+	card.extra_cull_margin = margin + 5.0
+	RoomLabelLayout.sync_card(label)
+	assert_float(card.extra_cull_margin).is_equal_approx(margin + 5.0, 0.001)
+	label.text = "A much longer\nlabel than before"
+	RoomLabelLayout.sync_card(label)
+	assert_float(card.extra_cull_margin).is_equal_approx(label.extra_cull_margin, 0.0001)
+	assert_float(label.extra_cull_margin).is_not_equal(margin)
 
 
 ## A stand-in for PassengerViews: one passenger node with one shown need icon

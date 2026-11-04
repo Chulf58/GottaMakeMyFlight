@@ -333,8 +333,9 @@ static func sync_card(label: Label3D) -> void:
 	var margin := (
 		2.0 * card.offset.length() * card.pixel_size + Vector2(size).length() * card.pixel_size
 	)
-	label.extra_cull_margin = margin
-	card.extra_cull_margin = margin
+	if not is_equal_approx(label.extra_cull_margin, margin):
+		label.extra_cull_margin = margin
+		card.extra_cull_margin = margin
 
 
 ## A cream rounded card `size` texels big with a CARD_BORDER_PX dark outline,

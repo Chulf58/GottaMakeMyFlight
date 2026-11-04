@@ -504,11 +504,19 @@ func _overhead_boxes(heads: bool) -> Array:
 		if depth <= _cam.near:
 			continue
 		if heads:
-			var crown := _cam.unproject_position(node.global_position + Vector3(0.0, 1.85, 0.0))
-			var chin := _cam.unproject_position(node.global_position + Vector3(0.0, 0.9, 0.0))
-			var half := 0.3 / (depth * unit)
-			var head := Rect2(crown, Vector2.ZERO).expand(chin)
-			boxes.append(["head_%s" % node.name, head.grow_individual(half, 0.0, half, 0.0)])
+			var crown_at := node.global_position + Vector3(0.0, 1.85, 0.0)
+			var chin_at := node.global_position + Vector3(0.0, 0.9, 0.0)
+			var forward := -_cam.global_basis.z
+			var head_depth := minf(
+				(crown_at - _cam.global_position).dot(forward),
+				(chin_at - _cam.global_position).dot(forward)
+			)
+			if head_depth > _cam.near:
+				var crown := _cam.unproject_position(crown_at)
+				var chin := _cam.unproject_position(chin_at)
+				var half := 0.3 / (head_depth * unit)
+				var head := Rect2(crown, Vector2.ZERO).expand(chin)
+				boxes.append(["head_%s" % node.name, head.grow_individual(half, 0.0, half, 0.0)])
 		for sprite_name: String in NeedIcons.SPRITES + [WishIconView.SPRITE]:
 			var sprite := node.get_node_or_null(sprite_name) as Sprite3D
 			if (
