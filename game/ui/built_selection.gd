@@ -75,14 +75,24 @@ func prune(grid: BuildGrid, placement: LandsidePlacement) -> void:
 			if grid.get_room(id).is_empty():
 				clear()
 		Kind.LANDSIDE:
-			if plan_of(placement) == null:
+			if not is_spot_built(placement):
 				clear()
+
+
+## Whether the selected landside spot is still built; flags only, no scan of the
+## cars, so it is cheap enough for every frame.
+func is_spot_built(placement: LandsidePlacement) -> bool:
+	if kind != Kind.LANDSIDE or placement == null or placement.sim == null:
+		return false
+	var sim := placement.sim
+	var built := sim.curbs_built if lot_kind == LandsidePlacement.Kind.CURB else sim.lots_built
+	return spot >= 0 and spot < built.size() and built[spot]
 
 
 ## The landside plan of the selected spot, or null when none is selected or the
 ## spot is no longer built. Its centre, footprint, capacity and cars are set.
 func plan_of(placement: LandsidePlacement) -> LandsidePlacement.Plan:
-	if kind != Kind.LANDSIDE or placement == null or placement.sim == null:
+	if not is_spot_built(placement):
 		return null
 	var centre: Vector3 = placement.sim.definition.curb_spots[spot].centre
 	if lot_kind != LandsidePlacement.Kind.CURB:
@@ -108,11 +118,7 @@ func outline_rect(grid: BuildGrid, placement: LandsidePlacement) -> Rect2:
 			var room := grid.get_room(id)
 			return _world_rect(grid, room["rect"]) if not room.is_empty() else Rect2()
 		Kind.LANDSIDE:
-			var plan := plan_of(placement)
-			if plan == null:
-				return Rect2()
-			var half := plan.footprint / 2.0
-			return Rect2(Vector2(plan.centre.x, plan.centre.z) - half, plan.footprint)
+			return _spot_rect(placement)
 	return Rect2()
 
 
@@ -147,6 +153,20 @@ func _pick_landside(placement: LandsidePlacement, ground: Vector3) -> void:
 	kind = Kind.LANDSIDE
 	lot_kind = plan.kind
 	spot = plan.spot
+
+
+## The selected landside spot's footprint from its definition, empty when it is
+## not built.
+func _spot_rect(placement: LandsidePlacement) -> Rect2:
+	if not is_spot_built(placement):
+		return Rect2()
+	var definition := placement.sim.definition
+	var centre := definition.curb_spots[spot].centre
+	var footprint := definition.curb_spots[spot].footprint
+	if lot_kind != LandsidePlacement.Kind.CURB:
+		centre = definition.lots[spot].centre
+		footprint = definition.lots[spot].footprint
+	return Rect2(Vector2(centre.x, centre.z) - footprint / 2.0, footprint)
 
 
 static func _bounds(cells: Array[Vector2i]) -> Rect2i:

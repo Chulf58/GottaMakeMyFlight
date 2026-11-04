@@ -56,6 +56,7 @@ var _static_stale := true
 var _live := {}
 var _live_tick := -1
 var _live_stale := true
+var _live_closed := false
 var _watched_grid: BuildGrid
 var _watched_staff: StaffSim
 
@@ -91,9 +92,10 @@ func refresh() -> void:
 	visible = not _static.is_empty()
 	if not visible:
 		return
-	# A car park's state is read straight from the landside sim, so it is cheap.
-	var landside: bool = _static["kind"] == Kind.LANDSIDE
-	if _live_stale or landside or sim.tick != _live_tick:
+	# A car park's car count scans the vehicles, so it follows the tick; its open or
+	# closed flag is one read, so a change of it alone also rebuilds.
+	var closed_changed: bool = _static["kind"] == Kind.LANDSIDE and _lot_closed() != _live_closed
+	if _live_stale or closed_changed or sim.tick != _live_tick:
 		_live = _build_live()
 		live_builds += 1
 		_live_tick = sim.tick
@@ -294,10 +296,16 @@ func _room_live() -> Dictionary:
 	return out
 
 
+## Whether the selected car park is closed (a curb bay never is).
+func _lot_closed() -> bool:
+	return _static["is_lot"] and sim.landside.lots_closed[_static["spot"]]
+
+
 func _landside_live() -> Dictionary:
 	var land := sim.landside
 	var spot: int = _static["spot"]
-	var closed: bool = _static["is_lot"] and land.lots_closed[spot]
+	var closed := _lot_closed()
+	_live_closed = closed
 	var cars := land.lot_cars(spot) if _static["is_lot"] else land.curb_cars(spot)
 	return {
 		"status": "Status: Closed" if closed else "Status: Open",

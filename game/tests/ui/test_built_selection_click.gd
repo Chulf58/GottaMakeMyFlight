@@ -297,9 +297,18 @@ func test_clicking_a_built_car_park_selects_it_and_a_click_beside_it_clears() ->
 	assert_int(selected.spot).is_equal(0)
 	assert_str(_inspect.built_card.name_text()).is_equal(LandsidePlacement.NAMES[lot_kind])
 	assert_str(_inspect.built_card.field_text("status")).is_equal("Status: Open")
+	var card := _inspect.built_card
+	var lives := card.live_builds
+	for i in 5:
+		_hud.refresh()
+	print("car park, 5 refreshes: live %d -> %d" % [lives, card.live_builds])
+	assert_int(card.live_builds).is_equal(lives)
 	_land.set_lot_closed(0, true)
 	_hud.refresh()
 	assert_str(_inspect.built_card.field_text("status")).is_equal("Status: Closed")
+	assert_int(card.live_builds).is_equal(lives + 1)
+	_hud.refresh()
+	assert_int(card.live_builds).is_equal(lives + 1)
 	_outline.refresh()
 	var frame := _outline.frame_aabb()
 	print("outline %s around car park %s" % [frame, lot.centre])
@@ -318,11 +327,21 @@ func test_a_click_while_a_template_is_being_saved_has_one_owner() -> void:
 	var saved := templates.library.size()
 	var middle := _room_area.position + _room_area.size / 2
 	_look_at(_cell_top(middle, 0.0))
+	# A passenger stands in the room. Control: with nothing armed the click
+	# picks the passenger.
+	var passenger := _sim.spawn_now(FLIGHT_ID)
+	_views.sync()
+	var over := _cell_top(middle, 0.0)
+	_views.node_for(passenger).position = over
+	await _click_world(over + Vector3(0.0, 1.0, 0.0))
+	assert_int(_views.selected_id).is_equal(passenger)
+	_views.selected_id = 0
+	_hud.refresh()
 	# Saving a room runs with no tool picked: the click saves the room under it
-	# and must not also select it.
+	# and must not also select the passenger standing there, or the room.
 	templates.arm_capture()
 	assert_bool(BuiltSelection.clicks_taken(_mode)).is_true()
-	await _click_world(_cell_top(middle, 0.0))
+	await _click_world(over + Vector3(0.0, 1.0, 0.0))
 	print(
 		(
 			"template saved %d -> %d, selection kind %d"
@@ -330,9 +349,11 @@ func test_a_click_while_a_template_is_being_saved_has_one_owner() -> void:
 		)
 	)
 	assert_int(templates.library.size()).is_equal(saved + 1)
+	assert_int(_views.selected_id).is_equal(0)
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
 	assert_bool(_inspect.visible).is_false()
-	# With the saving over, the same click selects the room.
+	# With the saving over and the passenger gone, the same click selects the room.
+	_views.node_for(passenger).position += Vector3(30.0, 0.0, 0.0)
 	assert_bool(BuiltSelection.clicks_taken(_mode)).is_false()
 	await _click_world(_cell_top(middle, 0.0))
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.ROOM)

@@ -321,7 +321,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if views == null or camera == null or build_mode == null:
 		return
-	if build_mode.tool != BuildMode.Tool.NONE:
+	# A tool, a template paste or save, or a room move owns the click: it selects
+	# nothing, whatever stands under it.
+	if BuiltSelection.clicks_taken(build_mode):
 		return
 	var eye := camera.get_node("Camera3D") as Camera3D
 	var vehicle := landside_views.pick(eye, click.position) if landside_views != null else 0
@@ -329,7 +331,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		landside_views.select(vehicle)
 	views.selected_id = 0 if vehicle != 0 else views.pick(eye, click.position)
 	_built.clear()
-	if vehicle == 0 and views.selected_id == 0 and not BuiltSelection.clicks_taken(build_mode):
+	if vehicle == 0 and views.selected_id == 0:
 		_pick_built(eye, click.position)
 	if vehicle != 0:
 		camera.follow(landside_views.follow_anchor)
