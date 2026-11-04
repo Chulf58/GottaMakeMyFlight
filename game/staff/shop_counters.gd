@@ -32,6 +32,8 @@ extends RefCounted
 ## Counter piece -> the room type it works in (empty for a roomless counter).
 const COUNTER_ROOMS := {
 	&"cafe_counter": &"cafe",
+	&"bar_counter": &"bar",
+	&"grab_and_go_stall": &"stall",
 	&"kiosk_counter": &"kiosk",
 	&"pharmacy_counter": &"pharmacy",
 	&"duty_free_till": &"duty_free",
@@ -64,13 +66,14 @@ static func is_counter(grid: BuildGrid, id: int) -> bool:
 
 
 ## Whether the counter piece `def_id` works in a ready room of type `type_id`:
-## its own room type, and for the cafe counter every food room (a bar, a
-## restaurant and a stall use it too, decision food-and-drink-cafe-bar-sit-
-## down-restaurant-and-grab-and-go-st).
+## its own room type, and for a food room every counter piece it accepts
+## (RoomType.counter_pieces: the cafe counter works in every food room, the bar
+## counter in a bar and the grab-and-go stall in a stall; decision food-and-
+## drink-cafe-bar-sit-down-restaurant-and-grab-and-go-st).
 static func works_in(def_id: StringName, type_id: StringName) -> bool:
 	if type_id == COUNTER_ROOMS[def_id]:
 		return true
-	return def_id == &"cafe_counter" and RoomTypes.get_type(type_id).food
+	return RoomTypes.get_type(type_id).counter_pieces.has(def_id)
 
 
 ## Whether `id` is a counter that needs no room (an info desk).

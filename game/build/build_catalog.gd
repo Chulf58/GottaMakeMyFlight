@@ -253,14 +253,23 @@ static func _build_decor() -> void:
 ## interaction cell on its Mount_Order, in front of the till (Mount_Staff
 ## behind it is not reserved until staff exist, as at the cafe counter); an ATM
 ## and a shower are used from their Mount_Use cell in front; the pharmacy shelf
-## from its Mount_Browse cell. Seats (Mount_SitRoot_*) are not catalogued yet:
-## nothing reads them for these pieces. The offsets are read from the .glb
-## mounts (a test keeps them in step).
+## from its Mount_Browse cell. Seats (Mount_SitRoot_*) are catalogued for the
+## restaurant table and booth only; the bar counter's two (stools at the
+## counter) are not used. The offsets are read from the .glb mounts (a test
+## keeps them in step).
 static func _build_services() -> void:
-	_add(&"bar_counter", "Bar counter", Vector2i(2, 2), Color(0.45, 0.3, 0.25), 1.54)
+	# The bar counter's .glb has no Mount_Order (only Mount_SitRoot_L/R inside the
+	# footprint and a Mount_Staff behind), so its order cell is derived: the cell
+	# in front of the left half, mirroring Mount_Staff, as at the cafe counter.
+	var bar := _add(&"bar_counter", "Bar counter", Vector2i(2, 2), Color(0.45, 0.3, 0.25), 1.54)
+	bar.has_interaction = true
+	bar.interaction_offset = Vector2i(0, 2)
 	_add_counter(&"grab_and_go_stall", "Grab-and-go stall", 2.25, Color(0.9, 0.6, 0.3))
-	_add(&"restaurant_table", "Restaurant table", Vector2i(2, 3), Color(0.6, 0.45, 0.35), 1.01)
-	_add(&"restaurant_booth", "Restaurant booth", Vector2i(2, 3), Color(0.65, 0.3, 0.3), 1.15)
+	# The dining table and the booth are 2x3 with the same four Mount_SitRoot_*
+	# (BL, BR at the back, FL, FR at the front): a chair in each outer-row cell,
+	# the middle row the table. A guest steps in from the cell behind the chair.
+	_add_dining(&"restaurant_table", "Restaurant table", Color(0.6, 0.45, 0.35), 1.01)
+	_add_dining(&"restaurant_booth", "Restaurant booth", Color(0.65, 0.3, 0.3), 1.15)
 	_add_counter(&"info_desk", "Info desk", 2.02, Color(0.3, 0.5, 0.75))
 	_add(&"info_screen", "Info screen", Vector2i.ONE, Color(0.16, 0.2, 0.3), 2.27)
 	_add_counter(&"currency_exchange", "Currency exchange", 2.16, Color(0.8, 0.7, 0.3))
@@ -290,6 +299,28 @@ static func _build_activities() -> void:
 	_add(&"lounge_armchair", "Lounge armchair", Vector2i.ONE, Color(0.5, 0.35, 0.6), 0.86)
 	_add(&"work_desk", "Work desk", Vector2i(2, 2), Color(0.45, 0.5, 0.55), 1.2)
 	_add(&"prize_podium", "Prize podium", Vector2i(6, 3), Color(0.8, 0.2, 0.25), 2.3)
+
+
+## A 2x3 restaurant table or booth with four seats: roots are the .glb's
+## Mount_SitRoot_BL/BR/FL/FR (0.55 m from the table centre, facing it), given
+## relative to the chair's cell centre.
+static func _add_dining(id: StringName, label: String, color: Color, height: float) -> void:
+	var dining := _add(id, label, Vector2i(2, 3), color, height)
+	for row in [0, 2]:
+		var facing := Vector2i(0, 1) if row == 0 else Vector2i(0, -1)
+		for column in [0, 1]:
+			(
+				dining
+				. seats
+				. append(
+					{
+						"cell": Vector2i(column, row),
+						"approach": Vector2i(column, row) - facing,
+						"root": Vector2(0.0, 0.45 * facing.y),
+						"facing": facing,
+					}
+				)
+			)
 
 
 ## A 2x1 counter, stall or desk served from the cell in front of its left half.

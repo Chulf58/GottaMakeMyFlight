@@ -59,14 +59,27 @@ static func status(grid: BuildGrid, room_id: int) -> RoomStatus:
 			TOO_SMALL % [type.display_name.to_lower(), type.min_size.x, type.min_size.y]
 		)
 	for need in type.required:
-		if result.pieces.get(need[0], 0) == 0:
+		if _count(result.pieces, type.pieces_for(need[0])) == 0:
 			result.notes.append(need[1])
 	if not has_opening(grid, area):
 		result.notes.append(NO_OPENING)
-	result.seats = result.pieces.get(type.seat_piece, 0) * type.seats_per_piece
+	if type.table_pieces.is_empty():
+		result.seats = result.pieces.get(type.seat_piece, 0) * type.seats_per_piece
+	else:
+		# A food room: each table piece gives the seats its catalog entry has.
+		for piece in type.table_pieces:
+			result.seats += result.pieces.get(piece, 0) * BuildCatalog.get_def(piece).seats.size()
 	result.upkeep = result.pieces.get(type.upkeep_piece, 0) * type.upkeep_per_piece
 	result.ok = result.notes.is_empty()
 	return result
+
+
+## How many of the pieces `ids` the count table `pieces` holds in all.
+static func _count(pieces: Dictionary, ids: Array[StringName]) -> int:
+	var total := 0
+	for id in ids:
+		total += pieces.get(id, 0)
+	return total
 
 
 ## What room `room_id` is charged at midnight (Settlement): its upkeep when it is

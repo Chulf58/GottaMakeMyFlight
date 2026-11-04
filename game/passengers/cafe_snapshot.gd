@@ -195,7 +195,7 @@ static func _visit_problem(
 ## can (or there is none). Its source must be a table with the visit's seat.
 ## A return owes 1 to the room type's dwell_ticks, has been served and has no
 ## outcome and nothing settled; while it still gets up at the old seat, the
-## table it goes back to must still be a cafe_table of the visit's room under
+## table it goes back to must still be a table piece of the visit's room under
 ## the saved id with that seat (Relocation.destination_ok(); the room need not
 ## be ready, since the walls stay behind), and once it has left it walks to the
 ## seat or sits down again. A final exit (left -1) only gets up at the old
@@ -208,13 +208,15 @@ static func _relocation_problem(visit: CafeVisit, p: Passenger, grid: BuildGrid)
 	if moving == null:
 		return ""
 	var standing := p.stage == Passenger.Stage.CAFE_STANDING_UP
+	var venue := RoomTypes.get_type(grid.get_room(visit.room).get("type", visit.venue))
+	var table_def := StringName(moving.source["def"])
 	if (
-		moving.source["def"] != &"cafe_table"
+		not venue.table_pieces.has(table_def)
 		or Relocation.seat_at(moving.source, visit.seat_key).is_empty()
 	):
 		return "a relocation from no table seat"
 	var table := int(visit.seat_key.split(":")[0])
-	var returnable := Relocation.destination_ok(grid, table, &"cafe_table", visit.room)
+	var returnable := Relocation.destination_ok(grid, table, table_def, visit.room)
 	var none := visit.outcome == CafeVisit.Outcome.NONE
 	if not moving.returns():
 		var paid := visit.settled and not none

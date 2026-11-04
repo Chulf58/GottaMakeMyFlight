@@ -32,9 +32,15 @@ class RoomType:
 	## leaves boredom as it was, and a bored passenger never plans one.
 	var relieves_boredom := true
 	## Whether passengers eat and drink here through CafeSim (the cafe, the bar,
-	## the sit-down restaurant and the grab-and-go stall): all four use the
-	## cafe counter and table, and differ in the numbers below.
+	## the sit-down restaurant and the grab-and-go stall): all four share the
+	## visit and differ in the numbers below and in the pieces they use.
 	var food := false
+	## A food room's counter and table pieces, its own piece first (it is the
+	## required one, the note names it) and then the cafe's, which a food room
+	## still accepts. Empty for a room that is not food; a walk-on room has no
+	## table pieces.
+	var counter_pieces: Array[StringName] = []
+	var table_pieces: Array[StringName] = []
 	## Whether a food room serves guests at the counter and lets them walk on
 	## (the grab-and-go stall): no table or seat is needed or reserved, and the
 	## visit has no sit or stand phase, so dwell_ticks is 0.
@@ -58,6 +64,15 @@ class RoomType:
 	var upkeep_piece: StringName = &""
 	var upkeep_per_piece := 0
 
+	## The pieces that count as the required piece `need_id`: for a food room's
+	## counter or table every piece it accepts, else the piece itself.
+	func pieces_for(need_id: StringName) -> Array[StringName]:
+		if counter_pieces.has(need_id):
+			return counter_pieces
+		if table_pieces.has(need_id):
+			return table_pieces
+		return [need_id]
+
 	## The ticks one visit takes at the counter and the table, queue and
 	## walking not counted: the order and the dwell.
 	func visit_ticks() -> int:
@@ -74,6 +89,9 @@ class RoomType:
 const CAFE_ORDER_TICKS := 60
 const CAFE_DWELL_TICKS := 120
 const CAFE_MOOD_BONUS := 10
+## The cafe's counter and table, accepted by every food room that has them.
+const CAFE_COUNTER: StringName = &"cafe_counter"
+const CAFE_TABLE: StringName = &"cafe_table"
 
 static var _types: Dictionary = {}
 
@@ -82,6 +100,14 @@ static func get_type(id: StringName) -> RoomType:
 	if _types.is_empty():
 		_build()
 	return _types.get(id)
+
+
+## Whether `piece_id` is a counter piece of some food room.
+static func is_food_counter(piece_id: StringName) -> bool:
+	for type_id in ids():
+		if get_type(type_id).counter_pieces.has(piece_id):
+			return true
+	return false
 
 
 static func ids() -> Array[StringName]:
@@ -97,30 +123,53 @@ static func _build() -> void:
 	cafe.id = &"cafe"
 	cafe.display_name = "Cafe"
 	cafe.min_size = Vector2i(3, 3)
-	cafe.required = [[&"cafe_counter", "Needs a counter"], [&"cafe_table", "Needs a table"]]
+	cafe.required = [[CAFE_COUNTER, "Needs a counter"], [CAFE_TABLE, "Needs a table"]]
 	# cafe_table.glb has two seat mounts, Mount_SitRoot_L and Mount_SitRoot_R.
-	cafe.seat_piece = &"cafe_table"
+	cafe.seat_piece = CAFE_TABLE
 	cafe.seats_per_piece = 2
 	cafe.base_spend = 15
 	cafe.food = true
+	cafe.counter_pieces = [CAFE_COUNTER]
+	cafe.table_pieces = [CAFE_TABLE]
 	cafe.order_ticks = CAFE_ORDER_TICKS
 	cafe.dwell_ticks = CAFE_DWELL_TICKS
 	cafe.mood_bonus = CAFE_MOOD_BONUS
 	_types[cafe.id] = cafe
 
 	# The food variants (F4-6; decision food-and-drink-cafe-bar-sit-down-
-	# restaurant-and-grab-and-go-st): the bar and restaurant use the same
-	# counter and table as the cafe, so a visit takes the same path through
-	# CafeSim, with a longer visit and a larger spend. The grab-and-go stall
-	# needs only a counter: its guest buys, pays and walks on with no seat and
-	# no dwell. Visit length and spend run stall < cafe < bar < restaurant. The
+	# restaurant-and-grab-and-go-st): a visit takes the same path through
+	# CafeSim as the cafe's, with a longer visit and a larger spend. Each room
+	# has its own pieces (the bar its bar counter, the restaurant its dining
+	# table and booth, the stall its grab-and-go stall; user-ruled 2026-11-04,
+	# "Make them work") and still accepts the cafe counter and table, so a
+	# player can build with either. The grab-and-go stall needs only a
+	# counter: its guest buys, pays and walks on with no seat and no dwell.
+	# Visit length and spend run stall < cafe < bar < restaurant. The
 	# bar lifts mood the most; the restaurant needs the most room. A guest who
 	# runs short of time leaves early and pays the short share like any cafe
 	# guest, so none of them causes a miss. All numbers are tuning values
 	# pinned by tests.
-	_add_food(&"stall", "Grab-and-go stall", Vector2i(3, 3), [8, 30, 0, 5], false)
-	_add_food(&"bar", "Bar", Vector2i(3, 4), [24, 80, 200, 20])
-	_add_food(&"restaurant", "Restaurant", Vector2i(4, 4), [40, 120, 360, 15])
+	_add_food(
+		&"stall",
+		"Grab-and-go stall",
+		Vector2i(3, 3),
+		[8, 30, 0, 5],
+		[[&"grab_and_go_stall", CAFE_COUNTER], []]
+	)
+	_add_food(
+		&"bar",
+		"Bar",
+		Vector2i(3, 4),
+		[24, 80, 200, 20],
+		[[&"bar_counter", CAFE_COUNTER], [CAFE_TABLE]]
+	)
+	_add_food(
+		&"restaurant",
+		"Restaurant",
+		Vector2i(4, 4),
+		[40, 120, 360, 15],
+		[[CAFE_COUNTER], [&"restaurant_table", &"restaurant_booth", CAFE_TABLE]]
+	)
 
 	# Bag room (decision baggage-rides-a-player-built-belt-from-check-in-to-a-
 	# bag-roo): where the check-in belt ends. It seats nobody and earns no
@@ -249,20 +298,25 @@ static func _build() -> void:
 
 
 ## A food room type like the cafe: `numbers` is [base spend, order ticks,
-## dwell ticks, mood bonus]. A room that is not `seated` needs only the
-## counter, has no seats and lets its guests walk on after paying.
+## dwell ticks, mood bonus] and `pieces` is [counter pieces, table pieces],
+## each in order with the room's own piece first. A room with no table pieces
+## needs only the counter, has no seats and lets its guests walk on after
+## paying. Seats come from each table piece's catalog seats (RoomRules).
 static func _add_food(
-	id: StringName, display_name: String, min_size: Vector2i, numbers: Array, seated := true
+	id: StringName, display_name: String, min_size: Vector2i, numbers: Array, pieces: Array
 ) -> void:
 	var food := RoomType.new()
 	food.id = id
 	food.display_name = display_name
 	food.min_size = min_size
-	food.required = [[&"cafe_counter", "Needs a counter"]]
+	food.counter_pieces.assign(pieces[0])
+	food.table_pieces.assign(pieces[1])
+	food.required = [[food.counter_pieces[0], "Needs a counter"]]
+	var seated := not food.table_pieces.is_empty()
 	if seated:
-		food.required.append([&"cafe_table", "Needs a table"])
-		food.seat_piece = &"cafe_table"
-		food.seats_per_piece = 2
+		food.required.append([food.table_pieces[0], "Needs a table"])
+		food.seat_piece = food.table_pieces[0]
+		food.seats_per_piece = BuildCatalog.get_def(food.seat_piece).seats.size()
 	food.walk_on = not seated
 	food.base_spend = numbers[0]
 	food.food = true
