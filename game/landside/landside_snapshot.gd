@@ -31,7 +31,12 @@ extends RefCounted
 ## the drop-off forecourt, and road_out moves back out of it to the west end
 ## (board 0169bc4b), so a saved road_in, road_out or berth path pos_mm names a
 ## place up to 3 m away. Version 8 is refused, with no migration.
-const SAVE_VERSION := 9
+## 10: road_in starts and road_out ends 2.6 m inside the road's drawn ends, the
+## lot exits run along the far carriageway's lane (board 5fb27ab3) and the berth
+## paths taper in and out along new curves, so a saved road_in, road_out, exit
+## or berth path pos_mm names a place up to 2.6 m away, and a berth path's far
+## side more. Version 9 is refused, with no migration.
+const SAVE_VERSION := 10
 const KEYS := [
 	"save_version",
 	"tick",

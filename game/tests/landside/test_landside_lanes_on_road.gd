@@ -31,6 +31,11 @@ const ROAD_END_X := 42.95
 ## Lot lanes are on the road while every corner is nearer the terminal than
 ## the far sidewalk's kerb (z -41.26).
 const LOT_LANE_MAX_Z := -43.5
+## The far carriageway's asphalt runs to here (the far sidewalk's kerb).
+const FAR_KERB_Z := -41.3
+## A car running along a carriageway keeps this far from the centre line, so
+## its side clears the dashes drawn on it.
+const CENTRE_LINE_CLEARANCE := 1.35
 const STEP_MM := 250
 
 var _map: LandsideSurfaceMap
@@ -49,6 +54,9 @@ func test_every_car_on_a_road_lane_has_its_corners_on_the_asphalt() -> void:
 		var lot: LandsideLotSpot = STARTER.lots[i]
 		checked += _check("lot %d access" % i, lot.access, LOT_LANE_MAX_Z, HALF_LENGTH, off)
 		checked += _check("lot %d exit" % i, lot.exit, LOT_LANE_MAX_Z, HALF_LENGTH, off)
+		# The run east along the far carriageway is all road, to the kerb.
+		var run := lot.exit.slice(lot.exit.size() - 2)
+		checked += _check("lot %d exit run" % i, run, FAR_KERB_Z, HALF_LENGTH, off)
 	print(
 		"corners checked %d, off the asphalt %d, first: %s" % [checked, off.size(), off.slice(0, 8)]
 	)
@@ -58,35 +66,93 @@ func test_every_car_on_a_road_lane_has_its_corners_on_the_asphalt() -> void:
 	assert_int(checked).is_greater(1500)
 
 
-## A car pulling into or out of a curb berth keeps its middle and both sides
-## on the asphalt. Its nose and tail corners are not asserted: on the berth
-## path's taper (LandsidePaths, BERTH_APPROACH_MM and BERTH_STRAIGHT_MM) the
-## kerb-side nose corner of a 5.2 m car reaches up to about 1 m over the
-## kerb where the sidewalk is widened for the get-out points
-## (berths 1 to 3, 6 and 7); that is measured and printed here, not fixed by
-## board 0169bc4b.
-func test_every_car_on_a_berth_path_keeps_its_sides_on_the_asphalt() -> void:
+## A car pulling into or out of a curb berth keeps its middle, both sides and
+## its nose and tail corners on the asphalt. On the old straight diagonal taper
+## (4750 mm in, 1500 mm straight) the kerb-side nose corner of a 5.2 m car
+## reached about 1 m over the kerb where the sidewalk is widened for the
+## get-out points (berths 1 to 3, 6 and 7): 60 samples (board 5fb27ab3).
+func test_every_car_on_a_berth_path_keeps_its_corners_on_the_asphalt() -> void:
 	var paths := LandsidePaths.new(STARTER)
 	var checked := 0
 	var off: Array[String] = []
 	var corners: Array[String] = []
 	for i in paths.berth_path.size():
 		checked += _check("berth %d" % i, paths.berth_path[i], INF, 0.0, off)
-		_check("berth %d" % i, paths.berth_path[i], INF, HALF_LENGTH, corners)
+		checked += _check("berth %d" % i, paths.berth_path[i], INF, HALF_LENGTH, corners)
 	print(
 		(
-			"berth sides checked %d, off the asphalt %d, first: %s"
-			% [checked, off.size(), off.slice(0, 8)]
-		)
-	)
-	print(
-		(
-			"berth nose and tail corners over the kerb (not asserted): %d %s"
-			% [corners.size(), corners]
+			"berth corners checked %d, off the asphalt %d, first: %s"
+			% [checked, off.size() + corners.size(), (off + corners).slice(0, 8)]
 		)
 	)
 	assert_array(off).is_empty()
+	assert_array(corners).is_empty()
 	assert_int(checked).is_greater(2000)
+
+
+## The control: the old straight diagonal taper, rebuilt here from the berth
+## positions, is found with corners over the kerb at the widened sidewalk.
+func test_the_old_straight_taper_is_found_over_the_kerb() -> void:
+	var paths := LandsidePaths.new(STARTER)
+	var off: Array[String] = []
+	for i in paths.berth_path.size():
+		var road := STARTER.road_in
+		var b := STARTER.berth_mm(i)
+		var at := STARTER.berth_position(i)
+		var dir := LandsideDefinition.heading_at(road, b)
+		var old := LandsidePaths._prefix(road, b - 4750)
+		old.append(at - dir * 1.5)
+		old.append(at)
+		old.append(at + dir * 1.5)
+		old.append(LandsideDefinition.point_on(road, b + 4750))
+		_check("old berth %d" % i, old, INF, HALF_LENGTH, off)
+	print("old taper: corners off the asphalt %d, first: %s" % [off.size(), off.slice(0, 4)])
+	assert_int(off.size()).is_greater_equal(40)
+
+
+## Board 5fb27ab3: a car appears at a lane's start and vanishes at its end
+## (road_in's start, road_out's end, a lot exit's end) with all four corners on
+## the drawn road, not half on the lawn past the Road mesh's end at x +-43.
+func test_a_car_at_a_lane_end_is_wholly_on_the_asphalt() -> void:
+	var ends: Array = [
+		[STARTER.road_in, 0],
+		[STARTER.road_out, LandsideDefinition.length_mm(STARTER.road_out)],
+	]
+	for lot: LandsideLotSpot in STARTER.lots:
+		ends.append([lot.exit, LandsideDefinition.length_mm(lot.exit)])
+	var off: Array[String] = []
+	for end: Array in ends:
+		var points: PackedVector3Array = end[0]
+		var at := LandsideDefinition.point_at(points, end[1])
+		var fwd := LandsideDefinition.heading_at(points, end[1])
+		var side := Vector3(fwd.z, 0.0, -fwd.x)
+		for s in [-1.0, 1.0]:
+			for f in [-1.0, 1.0]:
+				var corner: Vector3 = at + side * s * HALF_WIDTH + fwd * f * HALF_LENGTH
+				# 5 cm in from the mesh's edge, which a corner on it may graze.
+				corner.x -= signf(corner.x) * 0.05
+				var top := _map.top(corner)
+				if top[1] != "Road" or float(top[0]) >= ROAD_TOP:
+					off.append(
+						"end %s corner (%.2f, %.2f) on %s" % [at, corner.x, corner.z, top[1]]
+					)
+	print("lane ends checked %d, off the asphalt %d: %s" % [ends.size() * 4, off.size(), off])
+	assert_array(off).is_empty()
+
+
+## Board 5fb27ab3: a lot exit's run east along the far carriageway keeps its
+## car's side clear of the centre line's dashes (it ran at z -45, 1 m from the
+## line at z -46, under the 1.05 m half width).
+func test_a_lot_exit_runs_clear_of_the_centre_line() -> void:
+	for lot: LandsideLotSpot in STARTER.lots:
+		var run := lot.exit.slice(lot.exit.size() - 2)
+		assert_float(run[0].z).is_equal(run[1].z)
+		assert_float(run[0].x).is_less(run[1].x)
+		var gap := absf(run[0].z - STARTER.centre_line_z)
+		print("exit run z %.2f, %.2f m from the centre line" % [run[0].z, gap])
+		assert_float(gap).is_greater_equal(CENTRE_LINE_CLEARANCE)
+		# It is still on the far (eastbound) carriageway.
+		assert_float(run[0].z).is_greater(STARTER.centre_line_z)
 
 
 ## The control: the lanes as they were before board 0169bc4b, road_in from

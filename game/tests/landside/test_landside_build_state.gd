@@ -175,17 +175,17 @@ func test_curb_bays_add_berths_to_the_starter_curb() -> void:
 
 func test_a_built_bay_moves_the_queue_stop_upstream_of_its_first_berth() -> void:
 	assert_int(_sim.curb_stop_mm()).is_equal(STARTER.curb.stop_mm)
-	# Bay 0's first berth is at x 7.25 (38781 mm in), bay 1's at x 23.25 (22781
+	# Bay 0's first berth is at x 7.25 (36181 mm in), bay 1's at x 23.25 (20181
 	# mm). road_in comes in on the through road and moves over into the
-	# forecourt (3000 + 9031 mm to x 34), then runs on along z -55.
-	assert_int(STARTER.berth_mm(5)).is_equal(38781)
-	assert_int(STARTER.berth_mm(7)).is_equal(22781)
+	# forecourt (400 + 9031 mm to x 34), then runs on along z -55.
+	assert_int(STARTER.berth_mm(5)).is_equal(36181)
+	assert_int(STARTER.berth_mm(7)).is_equal(20181)
 	assert_bool(_sim.build_curb(0, 300)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(38781 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(36181 - LandsideSim.BERTH_APPROACH_MM)
 	assert_bool(_sim.build_curb(1, 300)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(22781 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(20181 - LandsideSim.BERTH_APPROACH_MM)
 	assert_bool(_sim.remove_curb(1)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(38781 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(36181 - LandsideSim.BERTH_APPROACH_MM)
 	# The starter curb's stop is the same distance before its first berth.
 	assert_int(STARTER.berth_mm(0) - LandsideSim.BERTH_APPROACH_MM).is_equal(STARTER.curb.stop_mm)
 

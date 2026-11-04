@@ -109,8 +109,10 @@ func test_a_jammed_curb_delays_release_by_measured_ticks_against_a_control() -> 
 	# The fourth and fifth wait at the stop for the first and second car's
 	# berths: that car's dwell, its way out until it is back on the road line,
 	# the curb clear for it to pull out, then the waiting car's own pull-in.
-	# Frozen as measured on commit 3dc5c6d, so a slower berth release fails here.
-	assert_array(jammed_delays).is_equal([0, 13, 32, 39, 76])
+	# Frozen as measured with the berth tapers of board 5fb27ab3 (the fourth and
+	# fifth were 39 and 76 on commit 3dc5c6d: the new taper is a little longer
+	# each way), so a slower berth release fails here.
+	assert_array(jammed_delays).is_equal([0, 13, 32, 41, 79])
 	assert_array([took[1], took[2], took[3], took[4], took[5]]).is_equal([0, 1, 2, 0, 1])
 
 
