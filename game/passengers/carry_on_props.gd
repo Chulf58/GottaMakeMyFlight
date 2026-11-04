@@ -869,6 +869,10 @@ func _place_bags(
 			if _leading(bag, now):
 				blend = CarryLead.carry_t(k, bag)
 			reach = lerpf(bag["reach_from"], reach, blend)
+			if RollerPark.queued(bag):
+				# Stood in a queue the bar is at a set height (RollerPark.queue_reach()).
+				var bar_in := _bar_z(node, REACH_BUILT_M) - REACH_BUILT_M
+				reach = RollerPark.queue_reach(bag, k, want_reach[0], bar_in, held["scale"])
 		_set_reach(node, kind, reach)
 		# A shoulder bag is in place by STRAP_PLACED of its move, so its strap
 		# stretches (_reach_blend) from a bag already on the shoulder, not
@@ -994,7 +998,7 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 		bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN), unmoved
 	)
 	bag["home"] = bag["place"]
-	bag["reach_from"] = REACH_BUILT_M if RollerPark.queued(bag) else _reach_of(node, kind)
+	bag["reach_from"] = _reach_of(node, kind)
 
 
 ## Whether a move of `bag` stamped now is hand-led (CarryLead): every move but

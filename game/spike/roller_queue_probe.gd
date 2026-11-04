@@ -15,7 +15,13 @@ extends SceneTree
 ##     most BESIDE_M from the feet, and held (held_by >= 0); control: walking in
 ##     before it, its axle trailed more than TRAIL_M behind.
 ##   QUEUE_HIPS: the hips (the carry rig's pivot) while it stands are at least
-##     HIPS_SHARE of their height walking in the pull after the tip.
+##     HIPS_SHARE of their height standing idle just before the stand (the
+##     roller still in the pull), and the stoop at most STOOP_EPS (walking hips
+##     sit lower, so a walking reference hid a crouch: Opus review of 700ffaa).
+##   BODY_IN_STOOD_BAG: no point of the body (its holding hand left out) is
+##     inside the stood roller's meshes on any stood frame (CarryContact, as
+##     drawn in this window; a headless count proves nothing).
+##   PLATE lines print the roller's up and flat (axle from the feet) as well.
 ##   REPULLED: QUEUE_TIP_TICKS + 3 ticks after it walks on, its move is over and
 ##     the axle trails more than TRAIL_M behind again.
 ##   FLOAT: no frame from the order to the strip's end draws the bag floating
@@ -38,6 +44,7 @@ extends SceneTree
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
+const CarryContact := preload("res://spike/carry_contact.gd")
 const OUT_REL := "res://../tools/blender/out/roller-queue"
 const GUESTS := 4
 const MARGIN_PX := 8.0
@@ -52,7 +59,8 @@ const LIMIT_TICKS := 4000
 const UPRIGHT_DOT := 0.95
 const BESIDE_M := 0.6
 const TRAIL_M := 0.8
-const HIPS_SHARE := 0.95
+const HIPS_SHARE := 0.99
+const STOOP_EPS := 0.01
 const STRIP_FRAMES := 6
 const TAG := "roller"
 const NO_TAG := "nothing_has_this_tag"
@@ -200,8 +208,15 @@ func _watch() -> void:
 			m["floats"] += 1
 		var into: int = _clock.tick - m["order_at"]
 		var stood_by := RollerPark.STILL_TICKS + RollerPark.QUEUE_STAND_TICKS + 3
+		var bag_state := _views.carry_on_props().bag_state(subject.id, 0)
+		# Standing idle before the stand, the roller still settled in the pull.
+		if subject.stage == Passenger.Stage.CAFE_ORDER and s["move"] == "":
+			if into >= 1 and not RollerPark.queued(bag_state):
+				m["idle_h"] = maxf(m.get("idle_h", -1.0), s["hips"])
 		if subject.stage == Passenger.Stage.CAFE_ORDER and into >= stood_by:
 			m["stand_h"] = minf(m["stand_h"], s["hips"])
+			m["stoop"] = maxf(m.get("stoop", 0.0), s["stoop"])
+			m["inside"] = maxi(m.get("inside", 0), _inside(subject))
 			if not m.has("stood_seen") and into >= stood_by + 2:
 				m["stood_seen"] = true
 				m["stood_ok"] = s["up"] >= UPRIGHT_DOT and s["flat"] <= BESIDE_M and s["held"] >= 0
@@ -264,16 +279,30 @@ func _sample(p: Passenger) -> Dictionary:
 	var axle := node.global_transform * CarryOnProps.ROLLER_AXLE
 	var rig: Dictionary = body.get_meta(&"carry_rig", {})
 	var hips := -1.0
+	var stoop := 0.0
 	if not rig.is_empty():
 		hips = (rig["pivot"] as Node3D).global_position.y - body.global_position.y
+		stoop = (rig["stoop"] as CarryStoop).drawn
 	return {
 		"up": node.global_transform.basis.z.normalized().dot(Vector3.UP),
 		"flat": Vector2(axle.x - body.global_position.x, axle.z - body.global_position.z).length(),
 		"held": int(props.bag_state(p.id, 0).get("held_by", -1)),
 		"settled": props.transfer_progress(p.id, 0) >= 1.0,
 		"hips": hips,
+		"stoop": stoop,
 		"move": FloatCheck.move_of(props, p.id, 0),
 	}
+
+
+## The body points of `p` (its holding hand left out) inside its roller's
+## meshes as drawn now (CarryContact).
+func _inside(p: Passenger) -> int:
+	var body := _views.node_for(p.id)
+	var props := _views.carry_on_props()
+	var node: Node3D = props.props_of(p.id)["bags"][0]
+	var holder := int(props.bag_state(p.id, 0).get("held_by", -1))
+	var sides: Array = [[".R", ".L"][holder]] if holder >= 0 else []
+	return CarryContact.inside_meshes(CarryContact.body_points(body, sides), node)
 
 
 func _summary(m: Dictionary, strip: Array[Image]) -> void:
@@ -284,15 +313,22 @@ func _summary(m: Dictionary, strip: Array[Image]) -> void:
 		_invalid("CONTROL: no guest seen pulling its roller walking in")
 	if not m["stood_ok"]:
 		_invalid("STOOD failed")
-	var share: float = m["stand_h"] / maxf(m["walk_h"], 0.001)
+	var idle: float = m.get("idle_h", -1.0)
+	var share: float = m["stand_h"] / maxf(idle, 0.001)
 	print(
 		(
-			"QUEUE_HIPS lowest hips standing %.3f m, walking %.3f m, share %.3f (>= %.2f)"
-			% [m["stand_h"], m["walk_h"], share, HIPS_SHARE]
+			(
+				"QUEUE_HIPS lowest hips stood %.3f m, standing idle before the stand %.3f m, "
+				+ "share %.3f (>= %.2f), stoop %.3f (<= %.2f); walking after %.3f m (info)"
+			)
+			% [m["stand_h"], idle, share, HIPS_SHARE, m.get("stoop", -1.0), STOOP_EPS, m["walk_h"]]
 		)
 	)
-	if m["walk_h"] <= 0.0 or share < HIPS_SHARE:
+	if idle <= 0.0 or share < HIPS_SHARE or float(m.get("stoop", 1.0)) > STOOP_EPS:
 		_invalid("QUEUE_HIPS the guest crouches holding its stood roller")
+	print("BODY_IN_STOOD_BAG most body points inside the stood roller %d (0)" % m.get("inside", -1))
+	if int(m.get("inside", -1)) != 0:
+		_invalid("BODY_IN_STOOD_BAG body points inside the stood roller")
 	if m["repulled"] <= TRAIL_M:
 		_invalid("REPULLED failed: %.3f" % m["repulled"])
 	print("FLOAT frames %d (0)" % m["floats"])
@@ -359,6 +395,7 @@ func _plate(shot: String, p: Passenger, fresh: bool) -> Image:
 			_invalid("%s: %s at %s is out of frame %s" % [shot, name, at, size])
 			return null
 	var sight := await _sight(bag)
+	var now := _sample(p)
 	var tall := (flat["feet"] as Vector2).distance_to(flat["head"])
 	body.visible = false
 	await _frames(2)
@@ -372,8 +409,24 @@ func _plate(shot: String, p: Passenger, fresh: bool) -> Image:
 	var bag_px := _diff(img, no_bag)
 	print(
 		(
-			"PLATE %s tick %d stage %d at=%s body_px=%.0f body_diff=%d bag_diff=%d sight=%s"
-			% [shot, _clock.tick, p.stage, flat, tall, body_px, bag_px, sight]
+			(
+				"PLATE %s tick %d stage %d up %.3f flat %.3f hips %.3f inside %d at=%s "
+				+ "body_px=%.0f body_diff=%d bag_diff=%d sight=%s"
+			)
+			% [
+				shot,
+				_clock.tick,
+				p.stage,
+				now["up"],
+				now["flat"],
+				now["hips"],
+				_inside(p),
+				flat,
+				tall,
+				body_px,
+				bag_px,
+				sight
+			]
 		)
 	)
 	var seen: bool = sight["on"] >= MIN_ON and (sight["blockers"] as Array).is_empty()

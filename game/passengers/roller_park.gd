@@ -163,8 +163,13 @@ const TIP_UP := 1.0 - UP_PARK_END
 ## QUEUE_AHEAD_TICKS past the tick while the walker stands. With the stand on a
 ## single still tick, a walker stepping up one place in a queue (its next path
 ## the tick after it arrives) stood the bag up and tipped it at once.
-## Its rods are out QUEUE_RODS of the way from in to the pull's length while it
-## stands, as ROLL_RODS while it rolls upright.
+## Its rods run out (or in) so the bar stands QUEUE_BAR_M over the floor
+## (queue_reach()), where the hand beside the hip reaches it standing straight
+## (CarryStoop bends nothing): the body rigs' shoulders are 1.644 m (male) and
+## 1.549 m (female) up, arms 0.632 and 0.645 m, so the bar at the park needs to
+## be 1.09 and 0.98 m up or more. With the rods ROLL_RODS of the pull's length
+## (0.83 to 1.22 m) the guests held it with their knees bent and the hips back
+## for the whole stand (Opus review of 700ffaa).
 const QUEUE_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.CAFE_QUEUE,
 	Passenger.Stage.CAFE_ORDER,
@@ -176,7 +181,7 @@ const STILL_TICKS := 4
 const QUEUE_STAND_TICKS := TICKS_DOWN * STAND_END
 const QUEUE_TIP_TICKS := TICKS_UP * TIP_UP
 const QUEUE_AHEAD_TICKS := 2.0
-const QUEUE_RODS := ROLL_RODS
+const QUEUE_BAR_M := 1.12
 
 
 ## Whether a hand-led move of `bag` (CarryOnProps' record, its "was",
@@ -309,6 +314,10 @@ static func queue_stand(
 		return
 	if not stands or now - float(bag["still_from"]) < STILL_TICKS or bag.has("queue_still"):
 		return
+	# One ask a still spell: a stand refused at its stamp (parks()) leaves a short
+	# pull>pull move, after which it would ask again every TRANSFER_TICKS.
+	if float(bag.get("queue_asked", -1.0)) == float(bag["still_from"]):
+		return
 	var place: int = bag.get("place", -1)
 	var pulled: bool = (
 		place >= 0
@@ -320,7 +329,12 @@ static func queue_stand(
 	)
 	if pulled:
 		bag["queue_still"] = true
+		bag["queue_asked"] = bag["still_from"]
 		bag["changed"] = now
+		# A swap's mark outlives its move (sync() sets it only on a change of
+		# place); left on a settled roller it made the stand a move not led by the
+		# hand (CarryOnProps._leads()), which parks() refuses.
+		bag["swap"] = false
 
 
 ## Whether `bag` (CarryOnProps' record) waits for its queue stand to be stamped
@@ -505,15 +519,8 @@ static func park(
 ## in, the walker crouched to a bar at 0.48 m, its hips 0.33 m low).
 static func rods_t(k: float, bag: Dictionary) -> float:
 	if queued(bag):
-		# From in (CarryOnProps' reach_from for a queue stand) to the pull's length:
-		# all out at the start, as drawn in the pull, QUEUE_RODS standing, all out
-		# again over the tip.
-		var at := k * CarryLead.ticks_of(bag)
-		var tip: float = bag.get("queue_tip", INF)
-		var share := lerpf(1.0, QUEUE_RODS, smoothstep(0.0, QUEUE_STAND_TICKS, minf(at, tip)))
-		if at <= tip:
-			return share
-		return lerpf(share, 1.0, smoothstep(tip, tip + QUEUE_TIP_TICKS, at))
+		# Its length is queue_reach()'s, not a blend from its start.
+		return queue_share(bag, k)
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
 		var park := up_ends(bag).y
 		var settle := SETTLE_TICKS / TICKS_UP
@@ -526,6 +533,33 @@ static func rods_t(k: float, bag: Dictionary) -> float:
 		var tip: float = bag["roll_tip"]
 		return lerpf(part, 1.0, smoothstep(tip + settle, tip + TIP_UP, up))
 	return smoothstep(0.0, STAND_END, k)
+
+
+## How far a queue stand of `bag` (queued()) at `k` has gone from the pull to
+## standing: 0 to 1 over QUEUE_STAND_TICKS, and from where it was at
+## "queue_tip" back to 0 over QUEUE_TIP_TICKS.
+static func queue_share(bag: Dictionary, k: float) -> float:
+	var at := k * CarryLead.ticks_of(bag)
+	var tip: float = bag.get("queue_tip", INF)
+	var share := smoothstep(0.0, QUEUE_STAND_TICKS, minf(at, tip))
+	if at <= tip:
+		return share
+	return lerpf(share, 0.0, smoothstep(tip, tip + QUEUE_TIP_TICKS, at))
+
+
+## The rods' length (the bag's units) of a queue stand of `bag` at `k`: from
+## `pull` (the pull's length now) to the length that stands the bar QUEUE_BAR_M
+## over the floor upright (park()), and back. `bar_in` is the bar's own z with
+## no rods out, less REACH_BUILT_M (CarryOnProps._bar_z()), `scale_by` the
+## bag's scale. The bar of a roller on its wheels is
+## (ROLLER_AXLE.y + bar_z - ROLLER_AXLE.z) * scale_by up.
+static func queue_reach(
+	bag: Dictionary, k: float, pull: float, bar_in: float, scale_by: float
+) -> float:
+	var axle := CarryOnProps.ROLLER_AXLE
+	var bar_z := QUEUE_BAR_M / scale_by - axle.y + axle.z
+	var stood := maxf(CarryOnProps.REACH_BUILT_M, bar_z - bar_in)
+	return lerpf(pull, stood, queue_share(bag, k))
 
 
 ## `k` (the move's share of its length) of a floor>pull move of `bag` in units of
