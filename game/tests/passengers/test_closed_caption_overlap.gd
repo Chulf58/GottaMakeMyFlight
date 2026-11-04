@@ -31,6 +31,8 @@ var _port: SubViewport
 var _rig: Node3D
 var _views: PassengerViews
 var _markers: MissMarkers
+## The camera angle step the rig is framed at (see _frame_closed_signs).
+var _angle := TycoonCamera.AngleStep.TOP_DOWN
 
 
 func before() -> void:
@@ -70,7 +72,8 @@ func _attach(world: PassengerTestWorld) -> void:
 
 
 ## The real tycoon camera rig `distance` metres from the closed signs' middle,
-## at the pitch the rig gives that distance, and a draw from it.
+## at the pitch of the angle step `_angle`, and a draw from it. The rig keeps its
+## settings in a file of its own, so the player's saved angle never reaches the test.
 func _frame_closed_signs(distance: float) -> void:
 	var sum := Vector3.ZERO
 	var closed := MissSignals.closed_stations(_world.sim)
@@ -81,7 +84,9 @@ func _frame_closed_signs(distance: float) -> void:
 	_rig = (load(CAMERA_SCENE) as PackedScene).instantiate() as Node3D
 	_rig.set("home_position", sum / closed.size())
 	_rig.set("home_distance", distance)
+	_rig.set("settings_path", SaveTestKit.run_path("caption_overlap"))
 	_port.add_child(_rig)
+	(_rig as TycoonCamera).set_angle_step(_angle)
 	_markers.draw()
 
 
@@ -215,37 +220,47 @@ func test_home_zoom_captions_keep_the_margin_between_them() -> void:
 	var closed := MissSignals.closed_stations(_world.sim)
 	# Control: the terminal has several closed stations to crowd together.
 	assert_int(closed.size()).is_greater(3)
-	_frame_closed_signs(HOME_DISTANCE)
-	var rects := _shown_rects()
-	assert_int(rects.size()).is_greater(0)
-	_assert_clear_by_the_margin(rects)
-	# Control: the crowd really was too tight for every caption, so some hid.
-	assert_int(rects.size()).is_less(closed.size())
+	for angle in TycoonCamera.AngleStep.values():
+		_angle = angle
+		_frame_closed_signs(HOME_DISTANCE)
+		var rects := _shown_rects()
+		assert_int(rects.size()).override_failure_message("angle %d" % angle).is_greater(0)
+		_assert_clear_by_the_margin(rects)
+		# Control: the crowd really was too tight for every caption, so some hid.
+		assert_int(rects.size()).override_failure_message("angle %d" % angle).is_less(closed.size())
 
 
 func test_every_closed_icon_stays_when_a_caption_hides() -> void:
-	_frame_closed_signs(HOME_DISTANCE)
-	for station: int in MissSignals.closed_stations(_world.sim):
-		assert_bool(_markers.closed_sign_for(station).visible).is_true()
+	for angle in TycoonCamera.AngleStep.values():
+		_angle = angle
+		_frame_closed_signs(HOME_DISTANCE)
+		for station: int in MissSignals.closed_stations(_world.sim):
+			assert_bool(_markers.closed_sign_for(station).visible).is_true()
 
 
 func test_zoomed_in_every_closed_caption_shows() -> void:
-	_frame_closed_signs(HOME_DISTANCE)
-	var far_shown := _shown_rects().size()
-	_frame_closed_signs(NEAR_DISTANCE)
-	var closed := MissSignals.closed_stations(_world.sim)
-	assert_int(_shown_rects().size()).is_equal(closed.size())
-	assert_int(far_shown).is_less(closed.size())
+	for angle in TycoonCamera.AngleStep.values():
+		_angle = angle
+		_frame_closed_signs(HOME_DISTANCE)
+		var far_shown := _shown_rects().size()
+		_frame_closed_signs(NEAR_DISTANCE)
+		var closed := MissSignals.closed_stations(_world.sim)
+		assert_int(_shown_rects().size()).override_failure_message("angle %d" % angle).is_equal(
+			closed.size()
+		)
+		assert_int(far_shown).override_failure_message("angle %d" % angle).is_less(closed.size())
 
 
 func test_the_rig_pose_is_the_one_the_camera_gives_at_that_distance() -> void:
-	_frame_closed_signs(HOME_DISTANCE)
-	var expected := deg_to_rad((_rig as TycoonCamera).pitch_degrees())
-	var forward := -_camera().global_transform.basis.z
-	assert_float(asin(-forward.y)).is_equal_approx(expected, 0.001)
-	assert_float(_camera().global_position.distance_to(_rig.position)).is_equal_approx(
-		HOME_DISTANCE, 0.01
-	)
+	for angle in TycoonCamera.AngleStep.values():
+		_angle = angle
+		_frame_closed_signs(HOME_DISTANCE)
+		var expected := deg_to_rad(TycoonCamera.STEP_PITCH_DEGREES[angle])
+		var forward := -_camera().global_transform.basis.z
+		assert_float(asin(-forward.y)).is_equal_approx(expected, 0.001)
+		assert_float(_camera().global_position.distance_to(_rig.position)).is_equal_approx(
+			HOME_DISTANCE, 0.01
+		)
 
 
 func test_a_staff_spot_caption_beats_a_wide_queue_full_one_that_overlaps_it() -> void:

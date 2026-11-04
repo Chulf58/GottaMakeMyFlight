@@ -12,8 +12,10 @@ extends SceneTree
 ## setting is not touched), returns Home, and saves a plate under
 ## tools/blender/out/camera-angle/. Each plate prints the step, pitch, distance
 ## and focus, proves the focus point is inside the viewport with a margin and
-## that the camera tilt is the step's pitch. Occlusion is not asserted (the
-## world has no colliders here): open every plate and look.
+## that the camera tilt is the step's pitch, and casts a ray from the camera to
+## the subject against the world's physics bodies. A blocked ray prints
+## PROBE_INVALID. The ray sees only bodies with colliders, so it does not prove
+## the view is clear of meshes: open every plate and look.
 ## A fourth plate zooms to the farthest distance on the low step, the view that
 ## shows most sky. Any failed proof prints PROBE_INVALID and the probe
 ## exits 1.
@@ -22,6 +24,9 @@ const OUT_REL := "res://../tools/blender/out/camera-angle"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 24.0
 const FRAME_LIMIT := 4000
+## The ray ends this far above the focus point, so a ground collider under it is
+## not the thing that blocks the view.
+const SUBJECT_LIFT := 1.0
 const STEP_NAMES := ["low", "medium", "top_down"]
 
 var _failed := false
@@ -95,11 +100,26 @@ func _plate(step: int, name: String, farthest: bool) -> void:
 		_invalid("%s: the focus point is outside the viewport margin" % name)
 	if not is_equal_approx(tilt, TycoonCamera.STEP_PITCH_DEGREES[step]):
 		_invalid("%s: the camera tilt is not the step's pitch" % name)
+	var blocked := _blocker_between(_cam.global_position, focus + Vector3.UP * SUBJECT_LIFT)
+	if not blocked.is_empty():
+		_invalid("%s: the focus point is occluded by %s" % [name, blocked])
 	var img := root.get_texture().get_image()
 	img.convert(Image.FORMAT_RGBA8)
 	var path := _out_dir.path_join("angle_%s.png" % name)
 	img.save_png(path)
 	print("PROBE plate ", path)
+
+
+## The name of the first physics body between `from` and `to`, or "" when the
+## ray is clear.
+func _blocker_between(from: Vector3, to: Vector3) -> String:
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	var hit := _cam.get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return ""
+	var body := hit["collider"] as Node
+	print("PROBE occluder %s at %s" % [body.get_path(), hit["position"]])
+	return String(body.get_path())
 
 
 func _frames(count: int) -> void:
