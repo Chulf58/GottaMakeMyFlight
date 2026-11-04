@@ -549,7 +549,10 @@ func apply_at(point: Vector3) -> BuildResult:
 
 ## Applies one prepared grid edit exactly as a click would: checked, paid
 ## through BuildTransaction, redrawn, and one undo step. For a caller that holds
-## an edit already (the inspect window's Delete), not a ground point.
+## an edit already (the inspect window's Delete), not a ground point. The active
+## tool is ignored. The status note, left only by a placement, stays on
+## edit.cell, which is not always the cell a click was on (object and room
+## removals leave it at zero, and a door placement may shift it).
 func apply_edit(edit: BuildEdit) -> BuildResult:
 	_history.begin_action()
 	var result := _commit_edit(edit, edit.cell)

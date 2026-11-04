@@ -7,6 +7,9 @@ extends GdUnitTestSuite
 
 const DESK := &"checkin_desk"
 const CELL := Vector2i(3, 3)
+const OTHER_CELL := Vector2i(7, 3)
+## A non-default facing, so a prepared edit is told apart from the active tool.
+const TURN := 1
 
 var _mode: BuildMode
 var _finances: Finances
@@ -32,7 +35,7 @@ func after_test() -> void:
 
 
 func test_apply_edit_places_charges_and_undoes_like_a_click() -> void:
-	# The reference: a click on the same cell with the same piece.
+	# The reference: a click on a cell with the same piece.
 	var before := _finances.wallet.balance
 	_mode.set_tool(BuildMode.Tool.DESK)
 	var clicked := _mode.apply_at(_mode.grid.cell_to_world(Vector2i(6, 6)))
@@ -42,18 +45,38 @@ func test_apply_edit_places_charges_and_undoes_like_a_click() -> void:
 	_mode.undo()
 	assert_int(_finances.wallet.balance).is_equal(before)
 
-	var result := _mode.apply_edit(BuildEdit.place_object(DESK, CELL, 0))
+	# The active tool must not matter: none first, then one that places something else.
+	_mode.set_tool(BuildMode.Tool.NONE)
+	var depth := _mode.undo_history().size()
+	var result := _mode.apply_edit(BuildEdit.place_object(DESK, CELL, TURN))
 	print(
 		(
-			"apply_edit: ok=%s cost=%d click cost=%d"
-			% [result.ok, before - _finances.wallet.balance, click_cost]
+			"apply_edit: ok=%s cost=%d click cost=%d depth %d -> %d"
+			% [
+				result.ok,
+				before - _finances.wallet.balance,
+				click_cost,
+				depth,
+				_mode.undo_history().size()
+			]
 		)
 	)
 	assert_bool(result.ok).is_true()
 	assert_int(before - _finances.wallet.balance).is_equal(click_cost)
 	assert_int(_mode.grid.object_at(CELL)).is_equal(result.object_id)
 	assert_int(_mode.grid.object_at(CELL)).is_not_equal(0)
+	assert_int(_mode.grid.get_object(result.object_id)["facing"]).is_equal(TURN)
+	assert_int(_mode.undo_history().size()).is_equal(depth + 1)
+
+	_mode.set_tool(BuildMode.Tool.WALL)
+	var other := _mode.apply_edit(BuildEdit.place_object(DESK, OTHER_CELL, TURN))
+	assert_bool(other.ok).is_true()
+	assert_int(_mode.grid.object_at(OTHER_CELL)).is_equal(other.object_id)
+	assert_int(_mode.undo_history().size()).is_equal(depth + 2)
 
 	assert_bool(_mode.undo().ok).is_true()
+	assert_bool(_mode.undo().ok).is_true()
 	assert_int(_mode.grid.object_at(CELL)).is_equal(0)
+	assert_int(_mode.grid.object_at(OTHER_CELL)).is_equal(0)
+	assert_int(_mode.undo_history().size()).is_equal(depth)
 	assert_int(_finances.wallet.balance).is_equal(before)
