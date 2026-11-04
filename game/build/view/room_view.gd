@@ -18,11 +18,30 @@ const LABEL_FONT_SIZE := 40
 const LABEL_PIXEL_SIZE := 0.01
 const READY_TINT := Color(0.35, 0.85, 0.45, 0.3)
 const NEEDS_TINT := Color(1.0, 0.68, 0.18, 0.34)
-const READY_TEXT := Color(0.75, 1.0, 0.8)
-const NEEDS_TEXT := Color(1.0, 0.85, 0.45)
+## Dark text on the label's cream card (RoomLabelLayout.make_card()): the HUD's
+## green for good and a dark amber for a room that still needs something, with a
+## thin cream outline that keeps the letters crisp on the card.
+const READY_TEXT := Color(0.13, 0.45, 0.22)
+const NEEDS_TEXT := Color(0.55, 0.3, 0.02)
+const LABEL_OUTLINE := 4
+## Under the need icons (10) and everything else drawn over passengers: the
+## card, then the text's outline, then the text.
+const LABEL_PRIORITY := 2
+## Metres added to the label's and card's culling box. Their bounds are taken in
+## the node's own axes, not the camera-facing ones, so a label slid clear of the
+## HUD (up to about 6.5 m in its plane) whose anchor is off screen was culled:
+## the top-down plate showed an empty card.
+const LABEL_CULL_M := 8.0
+## The name main.tscn gives PassengerViews, whose need icons labels slide clear of.
+const PASSENGER_VIEWS := "PassengerViews"
+
+## PassengerViews, whose passengers' need icons the labels slide clear of. Found
+## as a child named PASSENGER_VIEWS of an ancestor when not set.
+var passenger_views: Node
 
 var _grid: BuildGrid
 var _dirty := false
+var _warned_no_views := false
 ## Room id -> [MeshInstance3D tint, Label3D].
 var _drawn: Dictionary = {}
 var _layout := RoomLabelLayout.new()
@@ -78,9 +97,27 @@ func layout_labels() -> void:
 	for parts in _drawn.values():
 		_labels.append(parts[1])
 	var hud: Array[Rect2] = []
+	var icons: Array[Rect2] = []
 	if camera != null:
 		hud = HudRects.collect(self, scale.y)
-	_layout.layout(_labels, camera, scale.y, view.get_visible_rect().size * scale, hud)
+		icons = RoomLabelLayout.icon_rects(_passenger_views(), camera, scale.y)
+	_layout.layout(_labels, camera, scale.y, view.get_visible_rect().size * scale, hud, icons)
+
+
+func _passenger_views() -> Node:
+	if passenger_views != null and is_instance_valid(passenger_views):
+		return passenger_views
+	passenger_views = null
+	var up := get_parent()
+	while up != null and passenger_views == null:
+		passenger_views = up.get_node_or_null(PASSENGER_VIEWS)
+		up = up.get_parent()
+	if passenger_views == null and not _warned_no_views:
+		_warned_no_views = true
+		push_warning(
+			"RoomView: no %s found; labels do not slide clear of need icons" % PASSENGER_VIEWS
+		)
+	return passenger_views
 
 
 ## Rebuilds every room's tint and label from the grid.
@@ -122,9 +159,13 @@ func _draw_room(room_id: int) -> void:
 	label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	label.font_size = LABEL_FONT_SIZE
 	label.pixel_size = LABEL_PIXEL_SIZE
-	label.outline_size = 10
-	label.outline_modulate = Color(0.05, 0.05, 0.08)
+	label.outline_size = LABEL_OUTLINE
+	label.outline_modulate = RoomLabelLayout.CARD_FILL
 	label.modulate = READY_TEXT if status.ok else NEEDS_TEXT
+	label.render_priority = LABEL_PRIORITY
+	label.outline_render_priority = LABEL_PRIORITY - 1
+	label.extra_cull_margin = LABEL_CULL_M
 	label.position = middle + Vector3(0.0, LABEL_Y, 0.0)
 	add_child(label)
+	RoomLabelLayout.make_card(label).extra_cull_margin = LABEL_CULL_M
 	_drawn[room_id] = [tint, label]

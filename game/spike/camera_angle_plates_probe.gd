@@ -402,6 +402,67 @@ func _check_pop(space: PhysicsDirectSpaceState3D, name: String, at: Vector3, siz
 	if not blockers.is_empty():
 		_invalid("%s: a mesh stands in front of the pop" % name)
 	_check_pop_clear(name, label)
+	_check_labels_clear(name)
+
+
+## Every room label on screen draws on its cream card, and no need icon covers
+## the card (decision room-labels-sit-on-a-cream-card-and-slide-clear-of-need-
+## icons): an icon's centre inside the card grown by half an icon fails the
+## plate. Icons within 200 px of a card count as near, the control that the
+## labels stand in a crowd.
+func _check_labels_clear(name: String) -> void:
+	var rooms := _main.get_node("BuildMode/RoomView")
+	var unit := 2.0 * tan(deg_to_rad(_cam.fov) / 2.0) / root.get_visible_rect().size.y
+	var icons: Array[Vector2] = []
+	for node in _passenger_nodes():
+		for icon_name: String in NeedIcons.SPRITES + [WishIconView.SPRITE]:
+			var icon := node.get_node_or_null(icon_name) as Sprite3D
+			if (
+				icon != null
+				and icon.visible
+				and icon.modulate.a > 0.0
+				and not _cam.is_position_behind(icon.global_position)
+			):
+				var shift := Vector2(icon.offset.x, -icon.offset.y) * icon.pixel_size / unit
+				icons.append(_cam.unproject_position(icon.global_position) + shift)
+	var size := root.get_visible_rect().size
+	var cards := 0
+	var near := 0
+	for child in rooms.get_children():
+		var label := child as Label3D
+		if label == null or not label.visible:
+			continue
+		var card := label.get_node_or_null(RoomLabelLayout.CARD) as Sprite3D
+		if card == null:
+			_invalid("%s: room label '%s' has no card" % [name, label.text])
+			continue
+		var box := RoomLabelLayout.sprite_rect(card, _cam, unit)
+		if not Rect2(Vector2.ZERO, size).encloses(box):
+			continue
+		cards += 1
+		var covered: Array[String] = []
+		for at in icons:
+			if at.distance_to(box.get_center()) < 200.0:
+				near += 1
+			if box.grow(NeedIcons.ICON_PX / 2.0).has_point(at):
+				covered.append(str(at.round()))
+		print(
+			(
+				"PROBE %s label '%s' card=%s offset=%s covered=%s"
+				% [
+					name,
+					label.text.replace("\n", " "),
+					Rect2(box.position.round(), box.size.round()),
+					label.offset.round(),
+					covered
+				]
+			)
+		)
+		if not covered.is_empty():
+			_invalid("%s: need icons cover room label '%s'" % [name, label.text])
+	print("PROBE %s room cards in frame=%d icons near=%d" % [name, cards, near])
+	if cards == 0 or near == 0:
+		_invalid("%s: no room card in frame among icons, so the label check proves nothing" % name)
 
 
 ## The pop must cover no passenger's head and no need icon (board a48bca8d).
