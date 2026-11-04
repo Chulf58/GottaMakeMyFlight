@@ -1,3 +1,4 @@
+# gdlint:disable = max-file-lines
 class_name CarryOnProps
 extends Node3D
 ## The carry-on bags of every drawn passenger, and the trays at security
@@ -1001,13 +1002,15 @@ static func _leading(bag: Dictionary, now: float) -> bool:
 
 ## Aims each hand of `body` at its target for the hand-led moves of its bags
 ## (CarryArm.reach_weight) and bends it down as far as a low one needs
-## (CarryStoop). A hand in no move reaches for nothing.
+## (CarryStoop), with a backpack held by its loop as the plan says
+## (CarryArm.loop_grip). A hand in no move reaches for nothing.
 func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 	var weights := [0.0, 0.0]
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	var keeps := [0.0, 0.0]
 	var drops := [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
 	var bends := [1.0, 1.0]
+	var loops := [false, false]
 	for bag: Dictionary in held["bags"]:
 		if not _leading(bag, now) or not bag.has("lead"):
 			continue
@@ -1019,6 +1022,7 @@ func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 				keeps[hand] = plan["keeps"][hand]
 				drops[hand] = plan["drops"][hand]
 				bends[hand] = plan.get("bends", bends)[hand]
+				loops[hand] = plan.get("loops", loops)[hand]
 	held["reach_on"] = [weights[0] > 0.0, weights[1] > 0.0]
 	var rig := _rig(body)
 	var stoop: CarryStoop = rig["stoop"]
@@ -1029,6 +1033,7 @@ func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
 		var arm := rig["arms"][hand] as CarryArm
 		arm.reach_weight = weights[hand]
 		arm.reach_target = targets[hand]
+		arm.loop_grip = loops[hand]
 		if weights[hand] > 0.0:
 			stoop.targets.append(targets[hand])
 			stoop.sides.append(hand)

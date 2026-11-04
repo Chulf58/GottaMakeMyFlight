@@ -231,6 +231,8 @@ func _print_frame(
 		if hits > 0
 		else {}
 	)
+	if hits > 0:
+		bones["at"] = _inside_at(body, bag)
 	print(
 		(
 			"FRAME %s k=%.2f held_by=%d inside=%d grip=%s pack_mid=%s bones=%s"
@@ -245,6 +247,25 @@ func _print_frame(
 			]
 		)
 	)
+
+
+## The lowest, highest and middle of the body points inside `bag`, in the
+## pack's own frame (its grab loop is CarryOnProps.BACKPACK_LOOP).
+func _inside_at(body: Node3D, bag: Node3D) -> Array:
+	var own := CarryContact.body_points(body, CarryChecks.gripping(_world.world.sim, _subject))
+	var to_bag := bag.global_transform.affine_inverse()
+	var found: Array[Vector3] = []
+	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+		var to_mesh := mi.global_transform.affine_inverse()
+		var faces := mi.mesh.get_faces()
+		for pt in own:
+			var lp: Vector3 = to_mesh * pt
+			if mi.get_aabb().grow(0.001).has_point(lp) and CarryContact._odd(lp, faces):
+				found.append((to_bag * pt).snapped(Vector3.ONE * 0.005))
+	found.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.z < b.z)
+	if found.is_empty():
+		return []
+	return [found[0], found[found.size() / 2], found[-1]]
 
 
 ## A stand-in table top under the tray the pack waits in (the lane's own pickup

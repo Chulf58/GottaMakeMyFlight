@@ -41,6 +41,17 @@ const BACK_SHARE := 0.4
 ## toilet stall) is led by the hand on the side its resting end lies on, when
 ## that end is more than this far out from the body's centre line (back_lead()).
 const BACK_LEAD_SIDE_M := 0.15
+## Outside a toilet stall, the side hang is this far under the leading
+## shoulder joint (0.1 in a stall): 0.1 under it the arm folded with the elbow
+## up and back, and let go there it stood out sideways at shoulder height
+## (backpack_pickup_probe, seed 2811556352, board 41c159bc).
+const BACK_HANG_BELOW_M := 0.3
+const STALL_HANG_BELOW_M := 0.1
+## And the pack is held this far over its grab loop (its own frame), the most
+## the probes' GRIP_ON allows (3 cm, world: divided by the bag's scale): held at
+## the loop, the fingers went into
+## the pack's top (CarryArm.loop_grip keeps them over it).
+const BACK_LOOP_UP := Vector3(0.0, 0.0, 0.03)
 ## Off the back into the hand, the hand eases into its carry pose from this
 ## share of the carry (not 0.6): eased in while the pack still turned on its
 ## lifted, pushed-out path, the grip came between the two and the pack into the
@@ -441,11 +452,12 @@ static func by_side(
 	frame: Transform3D,
 	yaw: float,
 	lead: int,
-	body: Dictionary
+	body: Dictionary,
+	below := STALL_HANG_BELOW_M
 ) -> Vector3:
 	var out := Vector3.LEFT if lead == 0 else Vector3.RIGHT
 	var side := frame.origin + Basis(Vector3.UP, yaw) * (out * BACK_SIDE_M)
-	side.y = body["shoulders_y"][lead] - 0.1
+	side.y = body["shoulders_y"][lead] - below
 	var s := span(from, to)
 	if from == End.WORN and k < s.x:
 		return side.lerp(at, smoothstep(0.3, 1.0, k / s.x))
@@ -488,7 +500,8 @@ static func swap_axle(
 ## worn end, or on its path), "anchor" (the point of the bag in the holder's
 ## grip, its own frame), "targets", "weights", "keeps", "drops" (each hand's,
 ## right then left; keeps floor_keep(), flags "from_floor" and "to_floor";
-## drops CarryStoop.drops)}.
+## drops CarryStoop.drops), "loops" (each hand's CarryArm.loop_grip: a backpack
+## led on or off the back outside a stall, held BACK_LOOP_UP over its loop)}.
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side (back_side()); a roller to or from the floor and the pull parks on its
 ## wheels for the hand to change grip (RollerPark.plan()).
@@ -532,6 +545,10 @@ static func plan(
 	if bag["kind"] == SecurityLooks.Kind.SHOULDER:
 		# A shoulder bag is lifted on and off the shoulder by its strap's top.
 		loose = body["strap_top"]
+	var back_move := (off_back or on_back) and not stall
+	if back_move:
+		loose += BACK_LOOP_UP / body["scale"]
+	var below := BACK_HANG_BELOW_M if back_move else STALL_HANG_BELOW_M
 	# A roller is held by its bar, which moves with its rods (in a stall they
 	# stay in, so it is held where the hand had it, BAR_PALM_M off the bar).
 	var roller: bool = bag["kind"] == SecurityLooks.Kind.ROLLER
@@ -591,7 +608,7 @@ static func plan(
 	var on_path: Transform3D
 	if off_back or on_back:
 		var side := back_side(
-			frame.origin, flags["yaw"], lead, body["shoulders_y"][lead] - 0.1, body["scale"]
+			frame.origin, flags["yaw"], lead, body["shoulders_y"][lead] - below, body["scale"]
 		)
 		# Between the side hang and the hand the pack's middle is kept clear, not
 		# its origin (a bottom corner of its back panel): turning between hanging
@@ -674,7 +691,9 @@ static func plan(
 			_:
 				targets[hand] = on_path * held_at
 	if off_back or on_back:
-		targets[lead] = by_side(targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, body)
+		targets[lead] = by_side(
+			targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, body, below
+		)
 	var xf := on_path
 	if ph["holder"] < 0:
 		xf = start if k < span(from_end, to_end, let_go, reach).x else want
@@ -708,6 +727,7 @@ static func plan(
 		"weights": ph["weights"],
 		"keeps": keeps,
 		"drops": [hips, hips],
+		"loops": [back_move and lead == 0, back_move and lead == 1],
 	}
 
 
