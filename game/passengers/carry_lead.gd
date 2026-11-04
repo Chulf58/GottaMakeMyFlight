@@ -47,11 +47,13 @@ const BACK_LEAD_SIDE_M := 0.15
 ## (backpack_pickup_probe, seed 2811556352, board 41c159bc).
 const BACK_HANG_BELOW_M := 0.3
 const STALL_HANG_BELOW_M := 0.1
-## And the pack is held this far over its grab loop (its own frame), the most
-## the probes' GRIP_ON allows (3 cm, world: divided by the bag's scale): held at
-## the loop, the fingers went into
-## the pack's top (CarryArm.loop_grip keeps them over it).
-const BACK_LOOP_UP := Vector3(0.0, 0.0, 0.03)
+## And the pack is held this far over its grab loop (its own frame; world:
+## divided by the bag's scale): held at the loop, the fingers went into the
+## pack's top (CarryArm.loop_grip keeps them over it). 2 mm under the probes'
+## GRIP_ON cap (spike/carry_float_check.gd GRIP_ON_M, 3 cm; game code does not
+## load the spike): held at the cap itself, float error read gaps of 0.0300001
+## m over it (test_activity_bags, sofa and shower, board 41c159bc).
+const BACK_LOOP_UP := Vector3(0.0, 0.0, 0.028)
 ## Off the back into the hand, the hand eases into its carry pose from this
 ## share of the carry (not 0.6): eased in while the pack still turned on its
 ## lifted, pushed-out path, the grip came between the two and the pack into the
