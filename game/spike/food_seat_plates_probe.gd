@@ -455,16 +455,23 @@ func _plates(id: StringName, sheet: Array[Image]) -> void:
 		# in-context view prove each guest seen on its own.
 		await _shoot("%s_six_%s" % [id, view], subjects, sheet, piece)
 	# Side-on close-ups: across the guest's facing, so the hips on the cushion
-	# and the back against the chair back show.
+	# and the back against the chair back show. At the booth the bench's end
+	# panel stands on that side, so the view looks down over it from the open
+	# end, three-quarter from the front, about 50 degrees up.
 	_cam.size = 1.8
 	cube.visible = false
 	for node: Node3D in guests:
 		var facing: Vector3 = node.get_meta(&"facing")
 		var across := facing.cross(Vector3.UP).normalized()
 		var at: Vector3 = node.get_meta(&"root") + Vector3(0, 0.75, 0)
+		var dir := across
+		if id == &"restaurant_booth":
+			at = node.get_meta(&"root") + Vector3(0, 0.7, 0)
+			_cam.size = 2.3
+			dir = (across * 0.8 + facing * 0.4 + Vector3.UP * 1.1).normalized()
 		for other: Node3D in guests:
 			other.visible = other == node
-		_cam.global_position = at + across * 10.0
+		_cam.global_position = at + dir * 10.0
 		_cam.look_at(at, Vector3.UP)
 		await _shoot("%s_close" % guests[node], {node: guests[node]}, sheet)
 	for other: Node3D in guests:

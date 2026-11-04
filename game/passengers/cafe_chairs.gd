@@ -1,11 +1,14 @@
 class_name CafeChairs
 extends RefCounted
-## Where a cafe guest is drawn on its chair. CafeSim seats a guest at the
-## cafe_table's Mount_SitRoot (BuildObjectDef.seat_root_world), the same spot
+## Where a food-room guest is drawn on its seat. CafeSim seats a guest at the
+## table piece's Mount_SitRoot (BuildObjectDef.seat_root_world), the same spot
 ## for every body, while the bodies differ in how far their hips and back reach
 ## behind it. PassengerViews adds offset() to the sim's position, so each body
-## is drawn its own step towards the table and up
-## (PassengerLooks.CAFE_SEAT_SHIFT_M), clear of the chair's back and frame.
+## is drawn its own step towards the table and up for that piece
+## (PassengerLooks.seat_shift(): CAFE_SEAT_SHIFT_M at the cafe_table, the
+## smaller PIECE_SEAT_SHIFT_M at the restaurant table and booth), clear of the
+## seat's back and frame and of the table top. The piece is the visit's own
+## placement snapshot, which still names it after the table is removed.
 
 
 ## The body's step towards the table and up from the sim's position at a cafe
@@ -28,6 +31,7 @@ static func offset(sim: PassengerSim, p: Passenger) -> Vector3:
 	if full > 0.0:
 		share = clampf((sim.world_position(p) - approach).length() / full, 0.0, 1.0)
 	var facing: Vector2i = visit.seat["facing"]
-	var shift := PassengerLooks.CAFE_SEAT_SHIFT_M[PassengerLooks.body_of(p.id, p.variant)]
+	var body := PassengerLooks.body_of(p.id, p.variant)
+	var shift := PassengerLooks.seat_shift(StringName(visit.piece.get("def", &"")), body)
 	var ahead := Vector3(facing.x, 0.0, facing.y).normalized() * shift.x
 	return (ahead + Vector3.UP * shift.y) * share
