@@ -45,14 +45,23 @@ static func held_ticks(props: CarryOnProps, sim: PassengerSim, p: Passenger) -> 
 		elif place >= 0 and place / 4 == SecurityLooks.Home.HAND:
 			if bag.get("carry", -1) == SecurityLooks.Carry.PULL and since < p.stage_tick:
 				held = maxf(held, RollerPark.TICKS_DOWN + LET_GO_TICKS)
-		elif int(bag.get("was", -1)) < 0 and not p.sat_late:
+		elif int(bag.get("was", -1)) < 0 and not _late_at_start(sim, p):
 			# A bag with no record, or drawn for the first time with no move
 			# before it: the views started over on a load (PassengerViews.snap())
 			# and the roller is drawn at its home with no park to read the hold
 			# from. The hold is as long as a pull>floor park, from the sit-down's
-			# start, the same as before the load.
+			# start, the same as before the load. A walker late as it began
+			# sitting down set its roller down from the hand with no park, so
+			# there is no hold to make up.
 			held = maxf(held, RollerPark.TICKS_DOWN + LET_GO_TICKS)
 	return clampi(ceili(held), 0, PassengerSim.SIT_DOWN_TICKS - MIN_SIT_TICKS)
+
+
+## Whether `p` was late as it began sitting down: sat_late once
+## ParkRecovery.note_sitting() has noted it (a tick after the sit-down began),
+## and on the sit-down's first tick, before that, its lateness now.
+static func _late_at_start(sim: PassengerSim, p: Passenger) -> bool:
+	return p.sat_late or (p.late and sim.tick - p.stage_tick < 1)
 
 
 ## Where `p` stands on the first tick of its sit-down at a gate chair or a cafe
