@@ -7,9 +7,10 @@ extends RefCounted
 ## anyone is held; a scanner can be one short for the rest of a tick, after it
 ## moves its front into the passage, and the holding count covers that tick.
 
-## Why a closed station is closed: its staff spot is blocked (only an old save
-## can hold one), staff have no way from an entrance to the spot, or nobody is
-## on duty.
+## Why a closed station is closed: the player closed it (StationClosures),
+## its staff spot is blocked (only an old save can hold one), staff have no way
+## from an entrance to the spot, or nobody is on duty.
+const PLAYER_CLOSED_REASON := "Closed by you"
 const SPOT_BLOCKED_REASON := "Staff spot blocked"
 const UNREACHABLE_REASON := "Staff can't reach the staff spot"
 const NO_STAFF_REASON := "No staff on duty"
@@ -51,11 +52,21 @@ static func closed_stations(sim: PassengerSim) -> Array[int]:
 	return out
 
 
-## Why `station` is closed (SPOT_BLOCKED_REASON, UNREACHABLE_REASON or
-## NO_STAFF_REASON), or "" when it is not one of closed_stations().
+## Why `station` is closed (PLAYER_CLOSED_REASON, SPOT_BLOCKED_REASON,
+## UNREACHABLE_REASON or NO_STAFF_REASON), or "" when it is not one of
+## closed_stations().
 static func closed_reason(sim: PassengerSim, station: int) -> String:
 	if not closed_stations(sim).has(station):
 		return ""
+	return staff_reason(sim, station)
+
+
+## Why the closed desk, scanner or counter `station` takes nobody, the
+## player's closure first: PLAYER_CLOSED_REASON, SPOT_BLOCKED_REASON,
+## UNREACHABLE_REASON or NO_STAFF_REASON.
+static func staff_reason(sim: PassengerSim, station: int) -> String:
+	if sim.staff.closures.is_closed(station):
+		return PLAYER_CLOSED_REASON
 	if sim.staff.spot_blocked(station):
 		return SPOT_BLOCKED_REASON
 	if sim.staff.spot_unreachable(station):

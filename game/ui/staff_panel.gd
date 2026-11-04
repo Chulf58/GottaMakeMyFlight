@@ -63,6 +63,10 @@ const CLOSED_HINTS := {
 	),
 	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
 	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
+	AirportGate.Blocker.CHECKIN_CLOSED:
+	"Airport closed: you closed every check-in desk. Open one again to let passengers in",
+	AirportGate.Blocker.SECURITY_CLOSED:
+	"Airport closed: you closed every scanner and lane. Open one again to let passengers in",
 	AirportGate.Blocker.NO_GATE:
 	"Airport closed: place a gate desk by an exit that faces the planes",
 }
@@ -199,14 +203,19 @@ func hint_text() -> String:
 	return "\n".join(lines)
 
 
-## The roles whose hire line the banner shows: stations of the role stand and
-## nobody of it is hired and staying. The first-time hints compare this by
-## meaning, so a hint does not repeat a hire the banner already asks for.
+## The roles whose hire line the banner shows: stations of the role stand that
+## the player has not closed (StationClosures), and nobody of it is hired and
+## staying. A closed station asks for nobody. The first-time hints compare this
+## by meaning, so a hint does not repeat a hire the banner already asks for.
 func hiring_hint_roles() -> Array[StaffMember.Role]:
 	var roles: Array[StaffMember.Role] = []
 	for role in ROLES:
-		if not staff.stations_of(role).is_empty() and _staying(role) == 0:
-			roles.append(role)
+		if _staying(role) != 0:
+			continue
+		for station in staff.stations_of(role):
+			if not staff.closures.is_closed(station):
+				roles.append(role)
+				break
 	return roles
 
 

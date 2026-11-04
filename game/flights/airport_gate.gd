@@ -28,7 +28,20 @@ signal changed
 ## STAFF_SPOT, NO_CHECKIN, NO_SECURITY. NO_GATE: FlightSim has no gate, so no
 ## flight could be given one (gates come from the placed gate desks, decision
 ## gates-are-placed-gate-desks-each-desk-links-automatically-to).
-enum Blocker { NONE, NO_PATH, NO_CHECKIN, NO_SECURITY, STAFF_SPOT, NO_GATE }
+## CHECKIN_CLOSED and SECURITY_CLOSED take the place of NO_CHECKIN and
+## NO_SECURITY when no desk (or no scanner or lane) is open because the player
+## closed every one passengers could use (StationClosures), so the hint asks to
+## open one again instead of to hire.
+enum Blocker {
+	NONE,
+	NO_PATH,
+	NO_CHECKIN,
+	NO_SECURITY,
+	STAFF_SPOT,
+	NO_GATE,
+	CHECKIN_CLOSED,
+	SECURITY_CLOSED,
+}
 
 ## In a scene the wired nodes; tests call bind(). Place this node after the
 ## PassengerSim, so the layout is rebuilt before this reads it.
@@ -77,10 +90,12 @@ func blocker() -> Blocker:
 	var path := _path_blocker()
 	if path != Blocker.NONE:
 		return path
-	if not _any_open(staff.sim.layout.desks):
-		return Blocker.NO_CHECKIN
-	if not _any_open(staff.sim.layout.scanners):
-		return Blocker.NO_SECURITY
+	var desks := staff.sim.layout.desks
+	if not _any_open(desks):
+		return Blocker.CHECKIN_CLOSED if _player_closed(desks) else Blocker.NO_CHECKIN
+	var scanners := staff.sim.layout.scanners
+	if not _any_open(scanners):
+		return Blocker.SECURITY_CLOSED if _player_closed(scanners) else Blocker.NO_SECURITY
 	return Blocker.NONE
 
 
@@ -140,6 +155,18 @@ func _any_open(stations: Array[int]) -> bool:
 		if staff.is_open(station):
 			return true
 	return false
+
+
+## Whether the player closed at least one of `stations` and every other one
+## passengers could use (TerminalLayout.is_usable()).
+func _player_closed(stations: Array[int]) -> bool:
+	var closed := false
+	for station in stations:
+		if staff.closures.is_closed(station):
+			closed = true
+		elif staff.sim.layout.is_usable(station):
+			return false
+	return closed
 
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:

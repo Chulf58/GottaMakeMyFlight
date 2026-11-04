@@ -14,7 +14,7 @@ const CLEANER := StaffMember.Role.CLEANER
 static func reset(world: PassengerTestWorld) -> bool:
 	if not MessTestKit.clear(world):
 		return false
-	var empty := {"save_version": StaffSim.SAVE_VERSION, "next_id": 1, "members": []}
+	var empty := {"save_version": StaffSim.SAVE_VERSION, "next_id": 1, "members": [], "closed": []}
 	return world.staff.from_snapshot(empty)
 
 

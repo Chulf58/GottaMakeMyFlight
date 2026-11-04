@@ -5,9 +5,13 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## Only the current version (StaffSim.SAVE_VERSION, 4) loads: an older save is
+## Only the current version (StaffSim.SAVE_VERSION, 5) loads: an older save is
 ## refused, never migrated (no save migrations before the first release,
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
+##
+## "closed" lists the stations the player closed (StationClosures.live_ids()):
+## whole numbers in rising order, each an object on the grid that is a
+## closable station (StationClosures.closable_def()).
 ##
 ## Each member saves its post ("slot", StaffMember.Slot). A helper must be a
 ## security officer at a whole security lane and never leaving; a member with
@@ -27,7 +31,7 @@ extends RefCounted
 ## cleaner, a bin job a full bin on the grid that no other cleaner holds, and
 ## every claimed mess must be the job of the cleaner it names.
 
-const KEYS := ["save_version", "next_id", "members"]
+const KEYS := ["save_version", "next_id", "members", "closed"]
 const MEMBER_KEYS := [
 	"id",
 	"role",
@@ -49,7 +53,7 @@ const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "se
 const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
 
 
-static func save(members: Array[StaffMember], next_id: int) -> Dictionary:
+static func save(members: Array[StaffMember], next_id: int, closed: Array[int]) -> Dictionary:
 	var records := []
 	for m in members:
 		var path := []
@@ -78,25 +82,33 @@ static func save(members: Array[StaffMember], next_id: int) -> Dictionary:
 				}
 			)
 		)
-	return {"save_version": StaffSim.SAVE_VERSION, "next_id": next_id, "members": records}
+	return {
+		"save_version": StaffSim.SAVE_VERSION,
+		"next_id": next_id,
+		"members": records,
+		"closed": closed.duplicate(),
+	}
 
 
-## {"next_id", "members"} restored, or {"error"}. The sim's layout and grid
-## must already hold the saved world. `saved` itself is never changed. The
+## {"next_id", "members", "closed"} restored, or {"error"}. The sim's layout
+## and grid must already hold the saved world. `saved` itself is never changed. The
 ## cleaners' jobs are checked against `messes`, a {"messes", "bins"} state as
 ## MessSim.checked() returns it, or, when it is empty, the sim's own MessSim
 ## (MessSim.claim_state()).
 static func load(saved: Dictionary, sim: PassengerSim, messes := {}) -> Dictionary:
-	for key in KEYS:
-		if not saved.has(key):
-			return {"error": "missing '%s'" % key}
+	# The version first: an older save lacks the keys added since ("closed").
+	if not saved.has("save_version"):
+		return {"error": "missing 'save_version'"}
 	if not WholeNumber.is_whole(saved["save_version"]):
 		return {"error": "save_version is not a whole number"}
-	var data := saved
 	if int(saved["save_version"]) != StaffSim.SAVE_VERSION:
 		return {
 			"error": "save_version %s is not %d" % [saved["save_version"], StaffSim.SAVE_VERSION]
 		}
+	for key in KEYS:
+		if not saved.has(key):
+			return {"error": "missing '%s'" % key}
+	var data := saved
 	if not WholeNumber.is_whole(data["next_id"]) or int(data["next_id"]) < 1:
 		return {"error": "next_id is not a whole number of at least 1"}
 	if typeof(data["members"]) != TYPE_ARRAY:
@@ -125,7 +137,32 @@ static func load(saved: Dictionary, sim: PassengerSim, messes := {}) -> Dictiona
 	var problem := _jobs_problem(members, state, sim.grid)
 	if problem != "":
 		return {"error": problem}
-	return {"next_id": next_id, "members": members}
+	var closed: Variant = _closed(data["closed"], sim.grid)
+	if closed is String:
+		return {"error": closed}
+	return {"next_id": next_id, "members": members, "closed": closed}
+
+
+## The saved closed stations as ids, or a String naming what is wrong: a list
+## of whole numbers in rising order, each an object on `grid` of a closable
+## kind (StationClosures.closable_def()).
+static func _closed(value: Variant, grid: BuildGrid) -> Variant:
+	if typeof(value) != TYPE_ARRAY:
+		return "closed is not a list"
+	var out: Array[int] = []
+	for entry: Variant in value:
+		if not WholeNumber.is_whole(entry):
+			return "a closed station is not a whole number"
+		var id := int(entry)
+		if not out.is_empty() and id <= out[out.size() - 1]:
+			return "closed station %d is out of order or listed twice" % id
+		var record := grid.get_object(id)
+		if record.is_empty():
+			return "closed station %d is no object on the grid" % id
+		if not StationClosures.closable_def(StringName(record["def"])):
+			return "closed station %d is no station the player can close" % id
+		out.append(id)
+	return out
 
 
 ## Whether the cleaners' jobs and the claimed messes in `state` ({"messes",

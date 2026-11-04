@@ -107,11 +107,11 @@ func test_bad_versions_and_slots_are_refused() -> void:
 			"has no 'slot'"
 		],
 		"version 1":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 1), "1 is not 4"],
-		"version 3":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 3), "3 is not 4"],
-		"version 5":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 5), "5 is not 4"],
+		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 1), "1 is not 5"],
+		"version 4":
+		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 4), "4 is not 5"],
+		"version 6":
+		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 6), "6 is not 5"],
 		"unknown slot":
 		[
 			_changed(good, func(d: Dictionary) -> void: d["members"][helper_at]["slot"] = 7),
