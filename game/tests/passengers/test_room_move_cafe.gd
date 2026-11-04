@@ -40,7 +40,7 @@ func _make() -> void:
 	var grid := BuildGrid.new()
 	_ids = CafeTestLayout.build(grid)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 4000))
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

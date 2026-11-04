@@ -35,7 +35,7 @@ func after_test() -> void:
 func _make(use_lane: bool) -> SecurityTestWorld:
 	var w := SecurityTestWorld.make(use_lane)
 	_worlds.append(w)
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = w.world.clock
 	views.sim = w.world.sim
 	add_child(views)

@@ -90,7 +90,7 @@ func test_a_seated_passenger_is_drawn_on_a_chair_at_every_facing() -> void:
 		PassengerTestWorld.place(grid, &"seat_row", anchors[facing], facing)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	var sim := _world.sim
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.sim = sim
 	# In the tree, so freeing it frees the nodes it builds in _ready.
 	add_child(views)

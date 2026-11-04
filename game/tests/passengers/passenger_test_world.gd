@@ -86,6 +86,15 @@ static func reference_world(seed := 1) -> PassengerTestWorld:
 	return make(on_grid, FlightSim.schedule_starts(0), seed)
 
 
+## A PassengerViews whose need icon toggle reads an isolated settings path (never
+## the player's user://hud_settings.cfg, where N may have turned the icons off), as
+## every test view must be made. Set its clock and sim, then add_child() it.
+static func views() -> PassengerViews:
+	var made := PassengerViews.new()
+	made.need_icons_toggle.settings_path = SaveTestKit.run_path("test_views_hud_settings")
+	return made
+
+
 ## A grid of `size` with floor on every cell, walled in along the grid border
 ## (EnclosureKit.close_floor()), so all the floor is indoor. A door place()s
 ## on the border takes down the plain wall on its way out, as the build tools

@@ -249,7 +249,7 @@ func _roller_walker(seated: bool) -> Passenger:
 	_wall_right = false
 	_walled = {}
 	_world.clock.ticked.connect(_keep_on_time)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

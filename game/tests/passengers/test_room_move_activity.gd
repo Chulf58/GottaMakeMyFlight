@@ -45,7 +45,7 @@ func _make(type := &"lounge") -> void:
 	_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
 	# The room is self-service: no staff are needed.
 	_world.auto_staff_roles = [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

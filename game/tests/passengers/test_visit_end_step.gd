@@ -36,7 +36,7 @@ func after_test() -> void:
 
 
 func _views_on_world() -> void:
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

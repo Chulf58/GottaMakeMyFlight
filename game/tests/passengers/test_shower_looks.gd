@@ -51,7 +51,7 @@ func _open(type: StringName) -> void:
 
 
 func _make_views(world: PassengerTestWorld) -> PassengerViews:
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = world.clock
 	views.sim = world.sim
 	add_child(views)

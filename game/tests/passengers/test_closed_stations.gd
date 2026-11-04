@@ -34,7 +34,7 @@ func _unstaffed() -> PassengerTestWorld:
 
 
 func _attach() -> void:
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

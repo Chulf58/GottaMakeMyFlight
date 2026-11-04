@@ -38,6 +38,9 @@ const PICK_RADIUS_PX := 40.0
 var follow_anchor := Node3D.new()
 ## False shows every speech bubble, overlapping or not (plate probes compare).
 var declutter_bubbles := true
+## The N key's on/off choice for the need icons (NeedIconsToggle); a test points
+## its settings_path at a per-process file before the views enter the tree.
+var need_icons_toggle := NeedIconsToggle.new()
 var selected_id := 0
 ## Moved pieces still in use, drawn at their old spot (RelocationGhosts).
 ## Holds no tick: it compares with the sim every frame.
@@ -111,6 +114,7 @@ func _ready() -> void:
 	_props.sim = sim
 	_props.views = self
 	add_child(_props)
+	add_child(need_icons_toggle)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
 	if save_game != null:
@@ -266,7 +270,7 @@ func draw() -> void:
 	var paused := clock == null or clock.paused
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var unit := NeedIcons.unit_of(get_viewport() if is_inside_tree() else null, camera)
-	var icons_shown := NeedIcons.shown_at(camera)
+	var icons_shown := need_icons_toggle.is_shown() and NeedIcons.shown_at(camera)
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var before: Vector3 = _prev[id]

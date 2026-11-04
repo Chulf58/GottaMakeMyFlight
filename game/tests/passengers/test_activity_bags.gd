@@ -68,7 +68,7 @@ func _open(type: StringName, drawn: bool) -> void:
 	_world.run_to(10)
 	if not drawn:
 		return
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

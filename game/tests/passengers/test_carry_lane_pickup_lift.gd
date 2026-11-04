@@ -50,7 +50,7 @@ func _free() -> void:
 func _send(kind: SecurityLooks.Kind) -> void:
 	_free()
 	_world = SecurityTestWorld.make(true)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.world.clock
 	_views.sim = _world.world.sim
 	add_child(_views)
