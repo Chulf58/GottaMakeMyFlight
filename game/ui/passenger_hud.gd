@@ -242,6 +242,7 @@ func _ready() -> void:
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel
 	if offers != null:
 		_alerts.covered = func() -> bool: return offers.is_node_ready() and offers.is_open()
+	_alerts.avoid = _banner_rect
 	_alerts.camera = camera
 	_alerts.settings_path = alert_settings_path
 	add_child(_alerts)
@@ -721,6 +722,21 @@ func _frame_start_view() -> void:
 	if camera != null and build_mode != null:
 		camera.frame_start_view(StartView.area_for(build_mode.grid), _panel_room.free_fraction())
 		_panel_room.mark_sent()
+
+
+## The banner slot's screen rectangle while the status banner or a first-time
+## hint shows there, empty otherwise: the alert cards step down under it.
+func _banner_rect() -> Rect2:
+	var rect := Rect2()
+	var staff := get_parent().get_node_or_null("StaffPanel") as StaffPanel
+	var cards: Array[Control] = [_hints.card()]
+	if staff != null:
+		cards.append(staff.hint_card())
+	for card in cards:
+		if card.is_visible_in_tree():
+			var r := card.get_global_rect()
+			rect = r if not rect.has_area() else rect.merge(r)
+	return rect
 
 
 func _on_doors_closed(flight_id: String) -> void:

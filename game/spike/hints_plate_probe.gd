@@ -198,7 +198,7 @@ func _plate(file: String, id: StringName, expect_faded := false) -> void:
 	var alpha := card.modulate.a
 	print(
 		(
-			"PLATE %s shown=%s text='%s' card=%s alpha=%.3f banner_visible=%s dock=%.1f"
+			"PLATE %s shown=%s text='%s' card=%s alpha=%.3f banner_visible=%s top=%.1f"
 			% [
 				file,
 				_hints.shown_id(),
@@ -206,7 +206,7 @@ func _plate(file: String, id: StringName, expect_faded := false) -> void:
 				rect,
 				alpha,
 				banner.visible,
-				_staff.hint_dock_bottom()
+				StaffPanel.BANNER_TOP
 			]
 		)
 	)

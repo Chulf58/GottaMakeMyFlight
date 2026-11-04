@@ -2,8 +2,8 @@ class_name TestStaffPanelHintYield
 extends GdUnitTestSuite
 ## The status banner yields its slot while a first-time hint shows (decision
 ## first-time-hints-above-the-build-bar-moment-of-need-per-profile-memory,
-## point 1): it is hidden, comes back when the hint ends, and the hint docks
-## where the banner would.
+## point 1): it is hidden, comes back when the hint ends, and the hint takes
+## the banner's place at the top centre.
 
 var _w: PassengerTestWorld
 var _panel: StaffPanel
@@ -72,7 +72,9 @@ func test_the_hiring_roles_are_the_ones_the_banner_asks_for() -> void:
 	assert_array(_panel.hiring_hint_roles()).is_empty()
 
 
-func test_the_hint_docks_where_the_banner_does() -> void:
+func test_the_hint_takes_the_place_of_the_banner() -> void:
 	await _make()
-	var bar := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
-	assert_float(_panel.hint_dock_bottom()).is_equal_approx(bar, 0.01)
+	var view_w := get_viewport().get_visible_rect().size.x
+	var banner := _panel.hint_card().get_global_rect()
+	assert_float(banner.position.y).is_equal_approx(StaffPanel.BANNER_TOP, 0.5)
+	assert_float(banner.get_center().x).is_equal_approx(view_w / 2.0, 0.5)

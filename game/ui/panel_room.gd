@@ -3,7 +3,7 @@ extends Node
 ## Keeps the terminal out from under the HUD panels (decision camera-makes-
 ## room-for-open-panels-the-build-tray-banner-and). It finds which panels are
 ## open (the build tray with its status and cost lines, the Staff card, the
-## banner above them, the Offers sheet and the flight result card), and the
+## banner at the top centre, the Offers sheet and the flight result card), and the
 ## alert cards with their history tray (AlertStack.room_rect()), takes the
 ## largest screen rectangle they leave free, and tells the TycoonCamera, which
 ## puts its focus at the middle of that rectangle and, while it is still on the
@@ -15,8 +15,8 @@ extends Node
 ## cards are counted the same way: a card coming or going only shifts the
 ## view. The camera does nothing on a build edit.
 ##
-## The build stack (the tray and the banner above it) makes room once, when the
-## tray opens (decision camera-makes-room-once-per-build-mode-open-not-on-
+## The build stack (the tray, and the banner at the top centre) makes room once,
+## when the tray opens (decision camera-makes-room-once-per-build-mode-open-not-on-
 ## every-menu-switch). REFIT_FRAMES later its rectangles are kept, and the
 ## tray changing size, or the banner coming or going, while the player
 ## switches between build menus moves and zooms nothing. They are let go when
@@ -165,8 +165,7 @@ func open_key() -> int:
 	return key
 
 
-## The screen rectangle of every open panel, the bottom ones first, then the
-## alert cards.
+## The screen rectangle of every open panel, then the alert cards.
 func open_rects() -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	var menu := _menu()
@@ -185,7 +184,7 @@ func open_rects() -> Array[Rect2]:
 	return rects
 
 
-## The Staff card, the banner above the bar, the Offers sheet and the result
+## The Staff card, the banner at the top centre, the Offers sheet and the result
 ## card, in the order their rectangles are cut.
 func _panels() -> Array[Control]:
 	var panels: Array[Control] = []
@@ -199,7 +198,7 @@ func _panels() -> Array[Control]:
 
 
 ## The rectangles the build stack covers now: the tray with its lines and bar,
-## then the banner above it while it shows.
+## then the banner while it shows.
 func _build_stack(menu: BuildMenu) -> Array[Rect2]:
 	var rects: Array[Rect2] = [_tray_stack(menu)]
 	var banner := _banner()
