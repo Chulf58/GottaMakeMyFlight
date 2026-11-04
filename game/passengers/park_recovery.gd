@@ -27,7 +27,8 @@ extends RefCounted
 ## Ticks of the pick-up (floor>pull) the walker stands for: to the end of the
 ## lift to the park (RollerPark.LIFT_END) and one tick more, since the body is
 ## drawn moving over the tick before the sim's first step. Set off 9 ticks in
-## (RollerPark.UP_LEAD_TICKS, as a walker standing up does) it was drawn
+## (RollerPark.UP_LEAD_TICKS, the lead a stand-up's pick-up had before decision
+## standing-up-with-a-roller-stand-up-then-pick-up-then-walk) it was drawn
 ## walking at k 0.52, before the lift ended. The rest of the pick-up (the park,
 ## cut short, and the tip into the pull) is drawn as the walker goes, as it is
 ## for one walking off from a stand-up.

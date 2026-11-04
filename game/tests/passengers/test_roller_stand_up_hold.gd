@@ -248,3 +248,18 @@ func _loads(data: Dictionary) -> bool:
 	var loaded := twin.sim.from_snapshot(data["passengers"])
 	twin.free_all()
 	return loaded
+
+
+## A save taken in a cafe roller guest's hold, past a plain stand-up's
+## STAND_UP_TICKS, loads (CafeSnapshot reads CafeSim.up_ticks()).
+func test_a_save_in_a_cafe_roller_guests_hold_loads() -> void:
+	var p := _cafe_guest()
+	while p.stage == Passenger.Stage.CAFE_SEATED:
+		_world.step()
+	for i in PassengerSim.STAND_UP_TICKS + 6:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_STANDING_UP)
+	var spent := _world.clock.tick - p.stage_tick
+	print("saved %d ticks into a %d-tick cafe stand-up" % [spent, CafeSim.up_ticks(p)])
+	assert_int(spent).is_greater(PassengerSim.STAND_UP_TICKS)
+	assert_bool(_loads(_save())).is_true()

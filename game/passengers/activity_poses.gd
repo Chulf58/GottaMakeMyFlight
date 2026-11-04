@@ -66,8 +66,10 @@ const EASE_TICKS := 20
 ## (SecurityLooks), a roller's park included (RollerPark.TICKS_DOWN, 13).
 const DOOR_IN_TICKS := 14
 ## And this many after it has stepped out, facing the door again, picking its
-## bags up: the walk off starts as a roller's pick-up is as far on as a gate
-## sitter's is when it walks off (RollerPark.UP_LEAD_TICKS).
+## bags up: the walk off starts 10 ticks into a roller's 16-tick pick-up, as a
+## gate sitter's once did (RollerPark.UP_LEAD_TICKS, 9, and one tick more), and
+## the rest of the pick-up is drawn as it walks off. A sitter now stands for the
+## whole pick-up (SEAT_HOLD_TICKS, board 2c659e42); the shower was not changed.
 const DOOR_OUT_TICKS := 10
 ## A sofa or nap pod visitor with a roller stands this many ticks at its slot
 ## cell, facing out of the piece, before it steps onto the seat and sits down:

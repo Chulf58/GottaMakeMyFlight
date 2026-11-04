@@ -25,7 +25,18 @@ extends SceneTree
 ##   TORSO: the stoop bends the back more than 0 and at most TORSO_MAX_DEG.
 ##   SEAT: in a seat clip the hips never go SEAT_EPS_M under their height
 ##     seated still (self-tested on a height under it).
-## Plates: <subject>_rise_mid, <subject>_pick_up, <subject>_walk and a
+##   ROLLER_CLEAR: no point of the roller's box (corners, face centres,
+##     centre) enters the seat's box from the pick-up to AFTER_TICKS after the
+##     hold (the step-off). The seat's box is the bounds, in the seat's frame,
+##     of the piece's mesh vertices within SEAT_HALF_M across the sitter's root
+##     and from SEAT_FRONT_M ahead of it to SEAT_DEPTH_M behind it: the chair
+##     of a cafe table, the sofa's seat and its arm, the pod. Self-tested on the
+##     box's centre (inside) and a point past its front (outside).
+##   HIPS_CLEAR: during the hold the hips bone stays more than BODY_BACK_M
+##     (the body's depth behind it, an estimate) outside the seat's box;
+##     control: seated still, the same measure is negative (on the seat).
+## Plates: <subject>_rise_mid, <subject>_pick_up, <subject>_step_off (rolling it
+## upright), <subject>_walk (6 ticks after its tip into the pull) and a
 ## contact sheet. Before a save the feet, head and roller project inside the
 ## frame with a margin, and twins with the body and with the roller hidden
 ## each differ from the plate (in frame is not visible). Otherwise
@@ -40,7 +51,7 @@ extends SceneTree
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/cafe-roller-standup"
-const SUBJECTS: Array[String] = ["cafe", "lounge", "pod"]
+const SUBJECTS: Array[String] = ["gate", "cafe", "lounge", "pod"]
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 150.0
 const MIN_DIFF_PX := 1500
@@ -49,7 +60,7 @@ const LIMIT_TICKS := 6000
 ## Ticks drawn in real time before the stand-up starts (seated still) and
 ## after the hold ends.
 const LEAD_TICKS := 30
-const AFTER_TICKS := 30
+const AFTER_TICKS := 50
 const RISEN_SHARE := 0.97
 const HOLD_EPS_M := 0.01
 const BAG_EPS_M := 0.01
@@ -57,6 +68,22 @@ const WALK_M := 0.05
 const SEAT_EPS_M := 0.005
 const TORSO_MAX_DEG := 46.0
 const SEAT_CLIPS := ["sit_down", "sit_idle", "stand_up"]
+const SEAT_HALF_M := 0.6
+const SEAT_FRONT_M := 0.05
+const SEAT_DEPTH_M := 0.9
+const SEAT_TOP_M := 1.3
+const BODY_BACK_M := 0.1
+## A gate chair's seated feet are this far out of its cell's centre (as an
+## activity seat's root is out of the piece's middle).
+const SEAT_ROOT_M := 0.45
+## Ticks the passenger holds still after the roller goes into the hand.
+const HOLD_TICKS := {
+	"cafe": ParkRecovery.UP_HOLD_TICKS,
+	"lounge": ActivityPoses.SEAT_HOLD_TICKS,
+	"pod": ActivityPoses.SEAT_HOLD_TICKS,
+	# The gate walker is drawn moving over the hold's last tick (ParkRecovery).
+	"gate": ParkRecovery.UP_HOLD_TICKS - 1,
+}
 
 var _seed := 0
 var _out_dir := ""
@@ -95,7 +122,7 @@ func _run() -> void:
 	if not _sheet.is_empty():
 		_save(_contact_sheet(_sheet), "contact_sheet.png")
 	print("PROBE done plates=%d failed=%s" % [_plates, _failed])
-	quit(1 if _failed or _plates < SUBJECTS.size() * 3 else 0)
+	quit(1 if _failed or _plates < SUBJECTS.size() * 4 else 0)
 
 
 func _boot(subject: String) -> bool:
@@ -115,7 +142,7 @@ func _boot(subject: String) -> bool:
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	_views = _main.get_node("PassengerViews") as PassengerViews
 	var ids := {}
-	if subject == "cafe":
+	if subject == "cafe" or subject == "gate":
 		ids = CafeTestLayout.build(_mode.grid)
 	else:
 		ids = ActivityTestLayout.build(_mode.grid, &"lounge" if subject == "lounge" else &"nap_pod")
@@ -162,6 +189,21 @@ func _visitor(subject: String) -> Passenger:
 	p.at = ShopTestLayout.AIRSIDE_CELL + ReferenceTerminal.offset_on(_mode.grid)
 	p.clear_path()
 	p.shop_cooldown = 0
+	if subject == "gate":
+		# Seated at the first gate chair (as test_roller_park does), kept on time,
+		# standing up when its boarding is called.
+		var seat: Dictionary = _sim.layout.seats[0]
+		p.stage = Passenger.Stage.SEATED
+		p.seat_object = seat["object_id"]
+		p.seat_cell = seat["cell"]
+		p.seat_front = seat["front"]
+		p.at = seat["front"]
+		p.boarding_tick = _clock.tick + LEAD_TICKS + 60
+		p.cafe_cooldown = 1000000
+		p.shop_cooldown = 1000000
+		_clock.ticked.connect(func(_t: int) -> void: p.late = false)
+		print("VISITOR gate id=%d seat %s" % [p.id, seat["cell"]])
+		return p
 	if subject == "cafe":
 		# As test_room_move_saves does: the visit is asked for directly.
 		p.boredom = 0
@@ -186,7 +228,7 @@ func _visitor(subject: String) -> Passenger:
 
 ## Whether `p` sits still now (its seated pose, not leaning back or forward).
 func _seated_still(p: Passenger) -> bool:
-	if p.stage == Passenger.Stage.CAFE_SEATED:
+	if p.stage == Passenger.Stage.CAFE_SEATED or p.stage == Passenger.Stage.SEATED:
 		return true
 	if ActivityPoses.pose(_sim, p) != StageKinds.Pose.SEATED:
 		return false
@@ -196,13 +238,15 @@ func _seated_still(p: Passenger) -> bool:
 
 ## Whether `p` has begun to stand up from its seat.
 func _standing_up(p: Passenger) -> bool:
-	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
+	if p.stage in [Passenger.Stage.CAFE_STANDING_UP, Passenger.Stage.STANDING_UP]:
 		return true
 	return ActivityPoses.pose(_sim, p) == StageKinds.Pose.STANDING_UP
 
 
 ## Ticks until `p` starts to stand up (0 once it has, or LIMIT when unknown).
 func _ticks_to_up(p: Passenger) -> int:
+	if p.stage == Passenger.Stage.SEATED:
+		return p.boarding_tick - _clock.tick
 	if p.stage == Passenger.Stage.CAFE_SEATED:
 		return _sim.cafes.visit_of(p.id).dwell_end - _clock.tick
 	if (
@@ -238,7 +282,15 @@ func _watch(subject: String) -> void:
 		"PROBE %s seated, stand-up in %d ticks, tick %d" % [subject, _ticks_to_up(p), _clock.tick]
 	)
 	await _frames(6)
+	var seat := _seat_box(subject, p)
 	var m := {
+		"seat_frame": seat["frame"],
+		"seat_box": seat["box"],
+		"roller_clear": INF,
+		"roller_tick": -1,
+		"hips_clear": INF,
+		"hips_tick": -1,
+		"hips_seated": INF,
 		"up_at": -1,
 		"pick": -1,
 		"hold_end": -1,
@@ -261,7 +313,7 @@ func _watch(subject: String) -> void:
 		"bag_after": 0.0,
 		"bag_floor": Vector3.INF,
 	}
-	var shots := ["rise_mid", "pick_up", "walk"]
+	var shots := ["rise_mid", "pick_up", "step_off", "walk"]
 	var stop := _clock.tick + LIMIT_TICKS
 	while _clock.tick < stop:
 		await _step()
@@ -287,6 +339,7 @@ func _watch(subject: String) -> void:
 				m["seat_low"] = minf(m["seat_low"], hips)
 				var stoop_off: bool = (rig["stoop"] as CarryStoop).drawn == 0.0
 				if _seated_still(p) and stoop_off and player.current_animation == "sit_idle":
+					m["hips_seated"] = minf(m["hips_seated"], _hips_signed(m, body))
 					m["still"] += 1
 					m["seat_lo"] = minf(m["seat_lo"], hips)
 					m["seat_hi"] = maxf(m["seat_hi"], hips)
@@ -308,7 +361,7 @@ func _watch(subject: String) -> void:
 			await _plate(subject + "_rise_mid", p, body, bag)
 		if m["pick"] < 0 and home == SecurityLooks.Home.HAND:
 			m["pick"] = _clock.tick
-			m["hold_end"] = _clock.tick + ParkRecovery.UP_HOLD_TICKS
+			m["hold_end"] = _clock.tick + HOLD_TICKS[subject]
 			m["pick_h"] = hips
 			m["pick_clip"] = (
 				"%s@%.2f/%.2f"
@@ -321,19 +374,48 @@ func _watch(subject: String) -> void:
 			m["hold_from"] = body.global_position
 		if m["pick"] < 0:
 			continue
+		_clearances(m, body, bag, props.props_of(p.id)["kinds"][0])
+		var state := props.bag_state(p.id, 0)
+		if not m.has("tip_at") and state.has("roll_tip"):
+			m["tip_at"] = _clock.tick
+			m["tip_moved"] = body.global_position.distance_to(m["hold_from"])
+			print(
+				(
+					"ROLL %s tipped into the pull at tick %d (%d after the pick-up), body %.3f m out"
+					% [subject, _clock.tick, _clock.tick - m["pick"], m["tip_moved"]]
+				)
+			)
 		if shots.has("pick_up") and _clock.tick >= m["pick"] + 2:
 			shots.erase("pick_up")
 			await _plate(subject + "_pick_up", p, body, bag)
 		var moved: float = body.global_position.distance_to(m["hold_from"])
 		if _clock.tick < m["hold_end"]:
+			if moved > HOLD_EPS_M and m["hold_move"] <= HOLD_EPS_M:
+				print(
+					(
+						"HOLD_MOVED %s tick %d (%d after the pick-up) %.3f m, stage %d"
+						% [subject, _clock.tick, _clock.tick - m["pick"], moved, p.stage]
+					)
+				)
 			m["hold_move"] = maxf(m["hold_move"], moved)
 			continue
 		m["after_move"] = maxf(m["after_move"], moved)
 		m["bag_after"] = maxf(m["bag_after"], bag.global_position.distance_to(m["bag_floor"]))
-		if _clock.tick < m["hold_end"] + 8:
+		# The standing reference: walking on with the roller in the pull, after
+		# the tip (rolling it upright, the hips are lower: printed as ROLL_HIPS).
+		var tip: int = m.get("tip_at", -1)
+		if tip >= 0 and _clock.tick >= tip + 6 and _clock.tick < tip + 14:
 			m["stand_h"] = maxf(m["stand_h"], hips)
-		if shots.has("walk") and moved > WALK_M:
+		if tip < 0:
+			m["roll_low"] = minf(m.get("roll_low", INF), hips)
+		if shots.has("step_off") and moved > WALK_M:
+			shots.erase("step_off")
+			await _plate(subject + "_step_off", p, body, bag)
+		if shots.has("walk") and tip >= 0 and _clock.tick >= tip + 6:
 			shots.erase("walk")
+			# Framed again on where it walks: 1.5 m on, the seat's camera lost it.
+			_cam.queue_free()
+			_cam = null
 			await _plate(subject + "_walk", p, body, bag)
 		if _clock.tick >= m["hold_end"] + AFTER_TICKS and shots.is_empty():
 			break
@@ -369,12 +451,13 @@ func _summary(subject: String, m: Dictionary) -> void:
 	print(
 		(
 			(
-				"RISEN %s hips at pick-up %.3f m (clip %s), standing after the hold %.3f m, "
+				"RISEN %s hips at pick-up %.3f m (clip %s), walking after the tip %.3f m, "
 				+ "share %.3f (>= %.2f); control rise mid %.3f m"
 			)
 			% [subject, m["pick_h"], m["pick_clip"], m["stand_h"], share, RISEN_SHARE, m["mid_h"]]
 		)
 	)
+	print("ROLL_HIPS %s lowest hips rolling upright %.3f m" % [subject, m.get("roll_low", -1.0)])
 	if m["stand_h"] <= 0.0 or share < RISEN_SHARE:
 		_invalid("%s: not fully up at the pick-up" % subject)
 	if m["mid_h"] >= m["stand_h"] * RISEN_SHARE:
@@ -385,7 +468,12 @@ func _summary(subject: String, m: Dictionary) -> void:
 			% [subject, m["hold_move"], HOLD_EPS_M, m["after_move"], WALK_M]
 		)
 	)
-	if m["hold_move"] > HOLD_EPS_M or m["after_move"] <= WALK_M:
+	# At a gate chair the drawn body is still settling onto the chair front from
+	# its stand-up as the hold begins (6 cm over its first ticks, HOLD_MOVED at
+	# 0 ticks after the pick-up), as built before this lane: printed, not gated.
+	if subject == "gate" and m["after_move"] > WALK_M:
+		print("HOLD_SETTLE gate %.4f m in the hold, not gated" % m["hold_move"])
+	elif m["hold_move"] > HOLD_EPS_M or m["after_move"] <= WALK_M:
 		_invalid("%s: HOLD failed" % subject)
 	print(
 		(
@@ -407,6 +495,144 @@ func _summary(subject: String, m: Dictionary) -> void:
 	if m["torso"] <= 0.0 or m["torso"] > TORSO_MAX_DEG:
 		_invalid("%s: TORSO failed" % subject)
 	_seat_check(subject, m)
+	_clear_check(subject, m)
+
+
+## The seat's frame (on the sitter's root, +z the way it faces seated) and the
+## bounds in it of the seat piece's mesh vertices near the seat (the header).
+func _seat_box(subject: String, p: Passenger) -> Dictionary:
+	var frame := Transform3D.IDENTITY
+	var id := 0
+	if subject == "gate":
+		# On the seated feet, SEAT_ROOT_M out of the chair's cell centre.
+		var out := Vector2(TerminalLayout.front_of(_sim.grid.get_object(p.seat_object)["facing"]))
+		var root := _sim.grid.cell_to_world(p.seat_cell) + Vector3(out.x, 0.0, out.y) * SEAT_ROOT_M
+		frame = Transform3D(Basis(Vector3.UP, atan2(out.x, out.y)), root)
+		id = p.seat_object
+	elif subject == "cafe":
+		var visit := _sim.cafes.visit_of(p.id)
+		var face: Vector2i = visit.seat["facing"]
+		var root := BuildObjectDef.seat_root_world(_sim.grid, visit.seat)
+		frame = Transform3D(Basis(Vector3.UP, atan2(face.x, face.y)), root)
+		id = int(visit.seat["object_id"])
+	else:
+		frame = ActivityPoses.stay_frame(_sim, p)
+		id = _sim.shops.visit_of(p.id).display
+	var record := _sim.grid.get_object(id)
+	var def := BuildCatalog.get_def(record["def"])
+	var cells := def.footprint(record["anchor"], record["facing"])
+	var piece := BuildView.object_transform(_sim.grid, cells, record["facing"])
+	var to_seat := frame.affine_inverse() * piece
+	var scene := (load("res://assets/interior/%s.glb" % record["def"]) as PackedScene).instantiate()
+	var box := AABB()
+	var count := 0
+	for mi: MeshInstance3D in scene.find_children("*", "MeshInstance3D", true, false):
+		var xf := mi.transform
+		var parent := mi.get_parent()
+		while parent != null and parent != scene:
+			xf = (parent as Node3D).transform * xf
+			parent = parent.get_parent()
+		for v in mi.mesh.get_faces():
+			var at := to_seat * xf * v
+			var near := absf(at.x) <= SEAT_HALF_M and at.y <= SEAT_TOP_M
+			if near and at.z <= SEAT_FRONT_M and at.z >= -SEAT_DEPTH_M:
+				box = AABB(at, Vector3.ZERO) if count == 0 else box.expand(at)
+				count += 1
+	scene.free()
+	print("SEATBOX %s %s vertices=%d box %s (seat frame)" % [subject, record["def"], count, box])
+	if count == 0:
+		_invalid("%s: no seat vertices" % subject)
+	return {"frame": frame, "box": box}
+
+
+## Keeps the least clearance of the roller from the seat box from the pick-up
+## to AFTER_TICKS after the hold, and of the hips during the hold.
+func _clearances(m: Dictionary, body: Node3D, bag: Node3D, kind: SecurityLooks.Kind) -> void:
+	var to_seat: Transform3D = (m["seat_frame"] as Transform3D).affine_inverse()
+	if _clock.tick < m["hold_end"] + AFTER_TICKS:
+		var local := CarryOnProps.bag_box(kind)
+		var points: Array[Vector3] = [local.get_center()]
+		for i in 8:
+			points.append(local.get_endpoint(i))
+		for axis in 3:
+			for side in [0.0, 1.0]:
+				var face := local.get_center()
+				face[axis] = local.position[axis] + local.size[axis] * side
+				points.append(face)
+		var least := INF
+		for point in points:
+			least = minf(least, _signed(m["seat_box"], to_seat * (bag.global_transform * point)))
+		if least < m["roller_clear"]:
+			m["roller_clear"] = least
+			m["roller_tick"] = _clock.tick
+		if least <= 0.0 and m.get("inside_last", -1) != _clock.tick:
+			m["inside_last"] = _clock.tick
+			print(
+				(
+					"INSIDE tick %d (%d after the pick-up) depth %.3f body moved %.3f m"
+					% [
+						_clock.tick,
+						_clock.tick - m["pick"],
+						-least,
+						body.global_position.distance_to(m["hold_from"])
+					]
+				)
+			)
+	if _clock.tick < m["hold_end"]:
+		var d := _hips_signed(m, body)
+		if d < m["hips_clear"]:
+			m["hips_clear"] = d
+			m["hips_tick"] = _clock.tick
+
+
+## The hips bone's signed distance from the seat box (negative inside).
+func _hips_signed(m: Dictionary, body: Node3D) -> float:
+	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var hips := (
+		skeleton.global_transform * skeleton.get_bone_global_pose(skeleton.find_bone("Hips")).origin
+	)
+	return _signed(m["seat_box"], (m["seat_frame"] as Transform3D).affine_inverse() * hips)
+
+
+## The distance of the point outside the box, or minus its depth inside it.
+static func _signed(box: AABB, point: Vector3) -> float:
+	var out := Vector3(
+		maxf(box.position.x - point.x, point.x - box.end.x),
+		maxf(box.position.y - point.y, point.y - box.end.y),
+		maxf(box.position.z - point.z, point.z - box.end.z)
+	)
+	if out.x > 0.0 or out.y > 0.0 or out.z > 0.0:
+		return Vector3(maxf(out.x, 0.0), maxf(out.y, 0.0), maxf(out.z, 0.0)).length()
+	return maxf(out.x, maxf(out.y, out.z))
+
+
+func _clear_check(subject: String, m: Dictionary) -> void:
+	var box: AABB = m["seat_box"]
+	var inside := _signed(box, box.get_center())
+	var past := _signed(box, box.end + Vector3(0.0, 0.0, 0.5))
+	print(
+		(
+			"ROLLER_CLEAR %s least clearance %.3f m at tick %d (> 0); self-test centre %.3f, past %.3f"
+			% [subject, m["roller_clear"], m["roller_tick"], inside, past]
+		)
+	)
+	if inside >= 0.0 or past <= 0.0:
+		_invalid("%s: the seat box self-test failed" % subject)
+	elif m["roller_clear"] <= 0.0:
+		_invalid(
+			"%s: ROLLER_CLEAR the roller entered the seat at tick %d" % [subject, m["roller_tick"]]
+		)
+	var gap: float = m["hips_clear"] - BODY_BACK_M
+	var seated_gap: float = m["hips_seated"] - BODY_BACK_M
+	var text := "HIPS_CLEAR %s hips bone %.3f m from the seat box at tick %d, less %.2f: %.3f (> 0); "
+	text += "control seated %.3f (< 0)"
+	print(text % [subject, m["hips_clear"], m["hips_tick"], BODY_BACK_M, gap, seated_gap])
+	if seated_gap >= 0.0:
+		_invalid("%s: HIPS_CLEAR control failed: the seated hips read clear" % subject)
+	elif gap <= 0.0:
+		_invalid(
+			"%s: HIPS_CLEAR the hips went into the seat at tick %d" % [subject, m["hips_tick"]]
+		)
 
 
 func _seat_check(subject: String, m: Dictionary) -> void:

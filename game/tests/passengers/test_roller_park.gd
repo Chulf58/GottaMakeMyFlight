@@ -30,6 +30,9 @@ const GRASP_M := 0.05
 const DROP_M := 0.03
 ## How long a walker is followed after its move began.
 const AFTER_TICKS := 22
+## The largest frame-to-frame step of the back on a gate stand-up's pick-up at
+## 1x before it rolled its roller upright (measured on d8f2b53, board 2c659e42).
+const NORMAL_STOOP_STEP := 0.0986
 ## A walker drawn moving more than this from one frame to the next has set off.
 const OFF_M := 0.005
 
@@ -361,6 +364,31 @@ func _tick(ticks: float) -> void:
 ## "flips" how many new moves were stamped after it, and the frame of each is
 ## checked for a jump of GRASP_M or more (a fail line otherwise). The walker is
 ## followed AFTER_TICKS after it.
+## How long _route() watches a move `name` after it began: a floor>pull from a
+## seat rolls its roller upright until the walker is clear, up to
+## RollerPark.ROLL_TICKS more (board 2c659e42).
+static func _after_ticks(name: String) -> float:
+	if name == "floor>pull":
+		return AFTER_TICKS + RollerPark.ROLL_TICKS
+	return AFTER_TICKS
+
+
+## The move took its length: a pull>floor its RollerPark.TICKS_DOWN; a floor>pull
+## from a gate chair rolls its roller upright until the walker is clear (board
+## 2c659e42, re-baselined from TICKS_UP), so it is seen rolled and ends with its
+## tip between TICKS_UP and TICKS_UP + ROLL_TICKS.
+func _assert_move_ticks(seen: Dictionary, down: bool) -> void:
+	if down:
+		assert_float(float(seen["ticks"])).is_between(
+			RollerPark.TICKS_DOWN - 0.01, RollerPark.TICKS_DOWN + 1.01
+		)
+		return
+	assert_bool(seen.get("rolled", false)).is_true()
+	assert_float(float(seen["ticks"])).is_between(
+		RollerPark.TICKS_UP - 0.01, RollerPark.TICKS_UP + RollerPark.ROLL_TICKS + 1.01
+	)
+
+
 func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := "") -> Dictionary:
 	var props := _views.carry_on_props()
 	var out := {
@@ -405,14 +433,23 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 		if began < 0.0:
 			continue
 		if (
-			(now - began > AFTER_TICKS and not _flipped)
+			(now - began > _after_ticks(name) and not _flipped)
 			or (_flipped and flip_at >= 0.0 and now - flip_at > AFTER_TICKS)
 		):
 			break
 		var body := _views.node_for(p.id)
 		var node: Node3D = props.props_of(p.id)["bags"][0]
 		var bag := props.bag_state(p.id, 0)
-		var k := props.transfer_progress(p.id, 0)
+		var k_move := props.transfer_progress(p.id, 0)
+		# A floor>pull's phases in units of RollerPark.TICKS_UP (up_k()): the
+		# same as the move's share until it is made longer to roll its roller
+		# upright from a seat (decision leaving-a-seat-with-a-roller-roll-it-
+		# upright-until-clear-then-tip, board 2c659e42).
+		var k := k_move
+		if bag.get("park", false) and CarryLead.start_of(bag)[0] == CarryLead.End.REST:
+			k = RollerPark.up_k(bag, k_move)
+		if bag.get("rolls", false):
+			out["rolled"] = true
 		# Over once it is not the move drawn now (at its end, or a move stamped on
 		# its last tick: a late walker's roller lifted into the hand then).
 		if move != name and float(out["ticks"]) < 0.0:
@@ -470,7 +507,7 @@ func _route(p: Passenger, name: String, ticks: float, late_in := "", flip_in := 
 			print("%s turns late at k=%.3f holder %d" % [tag, k, holder])
 		if (
 			_late
-			and k < 1.0
+			and k_move < 1.0
 			and bag.get("park", false)
 			and bag["carry"] != SecurityLooks.Carry.PULL
 		):
@@ -642,10 +679,7 @@ func test_a_roller_by_a_gate_chair_parks_to_change_grip_on_every_frame() -> void
 			assert_int(int(seen["parked"])).is_greater(0)
 			# Both changes of grip at the park seen: onto it and off it.
 			assert_int(int(seen["grasps"])).is_greater_equal(2)
-			var ticks_of_move := RollerPark.TICKS_DOWN if down else RollerPark.TICKS_UP
-			assert_float(float(seen["ticks"])).is_between(
-				ticks_of_move - 0.01, ticks_of_move + 1.01
-			)
+			_assert_move_ticks(seen, down)
 			assert_int(fails.size()).is_equal(0)
 
 
@@ -708,10 +742,7 @@ func _late_mid_park(down: bool) -> void:
 			assert_float(float(seen["late_k"])).is_greater_equal(0.0)
 			assert_bool(p.late).is_true()
 			assert_int(int(seen["grasps"])).is_greater_equal(2)
-			var ticks_of_move := RollerPark.TICKS_DOWN if down else RollerPark.TICKS_UP
-			assert_float(float(seen["ticks"])).is_between(
-				ticks_of_move - 0.01, ticks_of_move + 1.01
-			)
+			_assert_move_ticks(seen, down)
 			var carry := SecurityLooks.Carry.PULL if down else SecurityLooks.Carry.HAND
 			assert_int(bag["carry"]).is_equal(carry)
 			assert_int(fails.size()).is_equal(0)
@@ -779,7 +810,7 @@ func test_a_walker_whose_seat_goes_mid_park_collects_the_bag_before_walking_off(
 ## changes after it (_wall_on_its_right()), in the lift only.
 func _home_mid_park(down: bool, wall := false) -> void:
 	# Standing up, the home can go back to the floor only once the stand-up has
-	# ended (SecurityLooks: in the hand from UP_LEAD_TICKS before its end): never
+	# ended (SecurityLooks: in the hand from STAND_UP_TICKS in, once it is up): never
 	# in the lift.
 	var parts := ["lift", "park"] if down else ["seat"]
 	for part: String in ["lift"] if wall else parts:
@@ -902,7 +933,11 @@ func test_a_collecting_walker_s_back_comes_up_no_faster_than_on_the_normal_pick_
 	assert_float(float(normal["stoop_top"])).is_greater(0.0)
 	assert_float(float(collect["stoop_top"])).is_greater(0.0)
 	assert_float(float(collect["off_k"])).is_greater(RollerPark.LIFT_END)
-	assert_float(float(collect["stoop_step"])).is_less_equal(float(normal["stoop_step"]))
+	# Re-baselined (board 2c659e42): the normal pick-up now rolls its roller
+	# upright from the chair (RollerPark.ROLL_TICKS) and its back moves less a
+	# frame, so the yardstick is that pick-up as it was before, measured on
+	# d8f2b53 (NORMAL_STOOP_STEP); the collecting walker did not change.
+	assert_float(float(collect["stoop_step"])).is_less_equal(NORMAL_STOOP_STEP)
 
 
 ## A floor>pull stamped for a walker collecting its roller (hold_park()'s
