@@ -148,13 +148,14 @@ func test_bad_parts_are_refused_whole() -> void:
 
 func test_the_previous_part_version_is_refused_naming_the_version_it_needs() -> void:
 	var old: Dictionary = _data.duplicate(true)
-	# Version 9: road_in and road_out move over between the through road and the
-	# forecourt (board 0169bc4b), so a version-8 road position names a
-	# different place.
-	old["save_version"] = 8
+	# Version 10: the lanes start and end 2.6 m inside the road's drawn ends, the
+	# lot exits run in the far carriageway's lane and the berth tapers are new
+	# curves (board 5fb27ab3), so a version-9 lane position names a different
+	# place.
+	old["save_version"] = 9
 	var loaded := LandsideSnapshot.load(old, LandsideTestWorld.with_berths(1))
-	assert_int(LandsideSnapshot.SAVE_VERSION).is_equal(9)
-	assert_str(str(loaded.get("error", ""))).is_equal("save_version must be 9")
+	assert_int(LandsideSnapshot.SAVE_VERSION).is_equal(10)
+	assert_str(str(loaded.get("error", ""))).is_equal("save_version must be 10")
 
 
 func test_a_booking_for_a_flight_not_scheduled_breaks_the_link() -> void:

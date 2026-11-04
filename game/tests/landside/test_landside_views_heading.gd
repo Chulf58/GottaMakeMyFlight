@@ -27,8 +27,9 @@ const ARRIVALS := {
 ## The surface lot (spot 0) closes on this tick, after car 2 turned into it, so
 ## the later parking cars go to the multi-storey (spot 1). It was 45 until
 ## road_in gained 3031 mm moving over into the forecourt (board 0169bc4b):
-## car 2 (6500 mm behind the taxi) now turns in on tick 52, 6 ticks later,
-## and car 31 not before tick 80.
+## car 2 (6500 mm behind the taxi) then turned in on tick 52, and car 31 not
+## before tick 80. road_in starts 2600 mm further in (board 5fb27ab3), so both
+## turn in about 5 ticks earlier, still either side of this tick.
 const CLOSE_SURFACE_TICK := 55
 ## The way a parked car faces, by lot spot and slot row x, written out from
 ## starter_landside.tres (not from LandsidePlaces): into the stall, away from
@@ -179,7 +180,7 @@ func _place_name(v: LandsideVehicle, at: Vector3) -> String:
 		return PLACE_NAMES[v.lane]
 	# The lot exit runs -z to the far carriageway, then +x along it; on the
 	# corner itself either heading is right.
-	if absf(at.z - -45.0) > 0.01:
+	if absf(at.z - -43.6) > 0.01:
 		return "exit_to_road"
 	# The corner is the exit lane's last bend (the multi-storey's lane has
 	# sidewalk points before it).

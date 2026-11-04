@@ -12,7 +12,10 @@ extends RefCounted
 ## so a car leaving road_in for it keeps its position. It tapers in to
 ## BERTH_STRAIGHT_MM before the berth and runs straight in; out it runs
 ## straight on, tapers back to the road line BERTH_APPROACH_MM past the berth
-## and drives along it to road_out's start.
+## and drives along it to road_out's start. The taper is not a straight
+## diagonal: it takes most of the sideways way early and flattens out, so the
+## kerb-side nose corner of a 5.2 m car (the tail corner, going out) does not
+## swing out over the kerb on the way (test_landside_lanes_on_road.gd).
 ##
 ## A slot's path starts with its lot's access lane, so a car at the gate keeps
 ## its position: then through a multi-storey's entrance, on the ground to the
@@ -26,7 +29,12 @@ extends RefCounted
 ## entrance to the gate, never straight through a floor.
 
 const BERTH_APPROACH_MM := 4750
-const BERTH_STRAIGHT_MM := 1500
+const BERTH_STRAIGHT_MM := 100
+## How much of the sideways way from the road line to the berth a car has
+## covered at each step of the taper in (the way out is its mirror image). A
+## step is the taper's length over one more than the number of entries; the
+## taper ends on the straight run, with all the sideways way covered.
+const BERTH_TAPER: Array[float] = [0.39, 0.56, 0.68, 0.76, 0.83, 0.88, 0.93, 0.97]
 ## A slot is on the deck whose aisle height is this close to its own.
 const DECK_TOLERANCE := 0.5
 ## A walk out of a car park climbs or drops at most this much between two of
@@ -200,12 +208,17 @@ func _add_berth(index: int) -> void:
 	var dir := LandsideDefinition.heading_at(road, b)
 	var straight := dir * (BERTH_STRAIGHT_MM / 1000.0)
 	var split := maxi(b - BERTH_APPROACH_MM, 0)
+	var join_mm := mini(b + BERTH_APPROACH_MM, out_mm)
+	var sideways := at - LandsideDefinition.point_on(road, b)
+	var taper_in := b - BERTH_STRAIGHT_MM - split
+	var taper_out := join_mm - b - BERTH_STRAIGHT_MM
 	var points := _prefix(road, split)
+	_append_all(points, _taper(road, sideways, split, taper_in, false))
 	_append(points, at - straight)
 	_append(points, at)
 	var stand := LandsideDefinition.length_mm(points)
 	_append(points, at + straight)
-	var join_mm := mini(b + BERTH_APPROACH_MM, out_mm)
+	_append_all(points, _taper(road, sideways, b + BERTH_STRAIGHT_MM, taper_out, true))
 	_append(points, LandsideDefinition.point_on(road, join_mm))
 	var join := LandsideDefinition.length_mm(points)
 	_append(points, definition.road_out[0])
@@ -253,6 +266,22 @@ func _add_lot(lot: LandsideLotSpot) -> void:
 	_append(turn, lot.exit[0])
 	turn_path.append(turn)
 	turn_end.append(LandsideDefinition.length_mm(turn))
+
+
+## The points between a berth's road line and its straight run: the way along
+## `road` from `from_mm` for `length` mm in BERTH_TAPER.size() + 1 equal steps,
+## each pushed `sideways` (road line to berth) by the share BERTH_TAPER gives
+## it, the last step's share first when `out`. The two ends are the caller's.
+static func _taper(
+	road: PackedVector3Array, sideways: Vector3, from_mm: int, length: int, out: bool
+) -> PackedVector3Array:
+	var points := PackedVector3Array()
+	var steps := BERTH_TAPER.size() + 1
+	for k in BERTH_TAPER.size():
+		var covered := BERTH_TAPER[BERTH_TAPER.size() - 1 - k if out else k]
+		var along := from_mm + roundi(float(length) * (k + 1) / steps)
+		_append(points, LandsideDefinition.point_on(road, along) + sideways * covered)
+	return points
 
 
 ## Inside the lot, from the gate to `slot`: through the entrance, then on the

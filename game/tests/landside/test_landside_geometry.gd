@@ -14,6 +14,11 @@ const LOT_SCENE := preload("res://assets/landside/tp_parking_01a.glb")
 const MULTI_SCENE := preload("res://assets/landside/tc_parking_2a.glb")
 const ROAD_EAST := 43.0
 const ROAD_WEST := -43.0
+## Where the lanes start and end: a car's origin, its 2.6 m half length inside
+## the road's drawn end, so a car appearing or vanishing there is on the
+## asphalt, not half on the lawn (board 5fb27ab3).
+const LANE_EAST := 40.4
+const LANE_WEST := -40.4
 ## The near kerb line in the main scene (measured on tp_airport_shell.glb, the
 ## shell at z -80): the curb bay asset's origin stands on it, +z into the road.
 const KERB_Z := -58.7
@@ -50,11 +55,13 @@ func test_every_lane_stays_inside_the_baked_road_or_the_lots_beside_it() -> void
 	for lane in [STARTER.road_in, STARTER.road_out]:
 		for point in lane:
 			assert_float(point.x).is_between(ROAD_WEST, ROAD_EAST)
-	assert_float(STARTER.road_in[0].x).is_equal(ROAD_EAST)
-	assert_float(STARTER.road_out[STARTER.road_out.size() - 1].x).is_equal(ROAD_WEST)
+	assert_float(STARTER.road_in[0].x).is_equal_approx(LANE_EAST, TOLERANCE)
+	assert_float(STARTER.road_out[STARTER.road_out.size() - 1].x).is_equal_approx(
+		LANE_WEST, TOLERANCE
+	)
 	for lot in STARTER.lots:
-		# A lot's exit lane ends on the road's east end, where its cars vanish.
-		assert_float(lot.exit[lot.exit.size() - 1].x).is_equal(ROAD_EAST)
+		# A lot's exit lane ends at the lanes' east end, where its cars vanish.
+		assert_float(lot.exit[lot.exit.size() - 1].x).is_equal_approx(LANE_EAST, TOLERANCE)
 		for point in lot.access:
 			assert_float(point.x).is_between(ROAD_WEST, ROAD_EAST)
 		for point in lot.exit:
