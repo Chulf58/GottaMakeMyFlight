@@ -161,6 +161,8 @@ var _piece_owner := {}
 var _cell_owner := {}
 ## Officer spot cell of a whole lane -> [the arch, the cell it works beside].
 var _officer_spots := {}
+## The interaction cells and staff spots of every object, as rebuild() saw them.
+var _others := {}
 
 
 ## The named cells of a lane rooted at an arch at `anchor` and `facing`, on
@@ -240,6 +242,7 @@ func rebuild(grid: BuildGrid) -> void:
 	var ids := grid.object_ids()
 	ids.sort()
 	var others := {}
+	_others = others
 	for id in ids:
 		for cell in [grid.interaction_cell(id), StaffSpots.spot_of(grid, id)]:
 			if cell != BuildObjectDef.NO_CELL:
@@ -274,6 +277,28 @@ func lane(arch: int) -> Dictionary:
 ## "arch_id" and "parts" (the parts found on it). Empty for no arch.
 func candidate(arch: int) -> Dictionary:
 	return _candidates.get(arch, {})
+
+
+## Use cell -> whether it is open, for the candidate `arch` is reported on, by
+## the rule _room_status() judges each cell with: the queue entry, the unpack,
+## arch and pickup cells (passage open, not walled from the part serving it)
+## and both officer spots. Cells the lane itself claimed count free. The build
+## ghost shows these (StationUseCells). Empty for no candidate.
+func use_cell_states(grid: BuildGrid, arch: int) -> Dictionary:
+	var lane := candidate(arch)
+	if lane.is_empty():
+		return {}
+	var open: bool = grid.passage_cells(arch) == lane["passage"]
+	var out := {}
+	for entry in SIDE_PARTS:
+		out[lane[entry[2]]] = open and not _walled(grid, lane[entry[0]], lane[entry[2]])
+	out[lane["pickup"]] = out[lane["pickup"]] and _free(grid, lane["pickup"], _others, arch)
+	var entry_cell: Vector2i = lane["queue_entry"]
+	out[entry_cell] = _free_step(grid, entry_cell, lane["unpack"], _others, arch)
+	for spot in [["primary_spot", "xray_belt"], ["helper_spot", "berth"]]:
+		var cell: Vector2i = lane[spot[0]]
+		out[cell] = _officer_spot_open(grid, cell, lane[spot[1]], _others, arch)
+	return out
 
 
 ## The arches with a whole lane, in id order.
@@ -466,25 +491,27 @@ func _claim(lane: Dictionary) -> void:
 	_officer_spots[lane["helper_spot"]] = [arch, lane["berth"]]
 
 
-## Free floor no earlier lane claimed: no object, no interaction cell and no
-## staff spot.
-func _free(grid: BuildGrid, cell: Vector2i, others: Dictionary) -> bool:
+## Free floor no earlier lane claimed (`own`, an arch, may have): no object,
+## no interaction cell and no staff spot.
+func _free(grid: BuildGrid, cell: Vector2i, others: Dictionary, own := 0) -> bool:
 	if not grid.in_bounds(cell) or grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
 		return false
-	return grid.object_at(cell) == 0 and not others.has(cell) and not _cell_owner.has(cell)
+	return grid.object_at(cell) == 0 and not others.has(cell) and _cell_owner.get(cell, own) == own
 
 
 ## `cell` is free and a routing step joins it to `to`.
-func _free_step(grid: BuildGrid, cell: Vector2i, to: Vector2i, others: Dictionary) -> bool:
-	return _free(grid, cell, others) and grid.can_route(cell, to)
+func _free_step(
+	grid: BuildGrid, cell: Vector2i, to: Vector2i, others: Dictionary, own := 0
+) -> bool:
+	return _free(grid, cell, others, own) and grid.can_route(cell, to)
 
 
 ## An officer spot is free, not walled off from the cell it works beside, and
 ## has a routing step out.
 func _officer_spot_open(
-	grid: BuildGrid, spot: Vector2i, beside: Vector2i, others: Dictionary
+	grid: BuildGrid, spot: Vector2i, beside: Vector2i, others: Dictionary, own := 0
 ) -> bool:
-	if not _free(grid, spot, others) or _walled(grid, spot, beside):
+	if not _free(grid, spot, others, own) or _walled(grid, spot, beside):
 		return false
 	return NEIGHBOURS.any(
 		func(offset: Vector2i) -> bool: return grid.can_route(spot, spot + offset)

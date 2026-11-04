@@ -330,8 +330,6 @@ var _coverage_material := _ghost_material(COVERAGE_TINT)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
-## The check of the edit the ghost shows; StationUseCells reads its refusal.
-var _ghost_result: BuildResult
 ## What the status line adds for the lane part under the pointer ("" for none).
 var _lane_hint := ""
 ## The hint last worked out and its cell; any grid edit drops it, so a pointer
@@ -1177,7 +1175,6 @@ func _update_ghost(point: Variant) -> void:
 	var result := check(edit)
 	_front_warning = warning if result.ok else ""
 	var valid := _area_remove_material if tool == Tool.REMOVE else _valid_material
-	_ghost_result = result
 	_draw_ghost(edit, valid if result.ok else _invalid_material)
 	_show_status(result)
 
@@ -1418,7 +1415,7 @@ func _ghost_object(def_id: StringName, anchor: Vector2i, turn: int, material: Ma
 	node.transform = BuildView.object_transform(grid, def.footprint(anchor, turn), turn)
 	node.scale = Vector3.ONE * 1.02
 	_ghost.add_child(node)
-	StationUseCells.draw(_ghost, grid, def_id, anchor, turn, _ghost_result)
+	StationUseCells.draw(_ghost, grid, def_id, anchor, turn)
 
 
 ## The cells the ghost tints as covered while `edit` places a screen stand:

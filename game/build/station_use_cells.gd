@@ -6,27 +6,28 @@ extends RefCounted
 ## staff spot in teal, a navy arrow for the way passengers walk, and a red
 ## tile under the colour for a cell that is blocked.
 ##
-## The cells come from the code the sim reads them from, never from a copy:
-## BuildObjectDef.interaction_cell() for the passenger cell of any piece with
-## a use side, StaffSpots.cell_of() for a check-in desk's or scanner's staff
-## spot, and SecurityLanes.geometry() for a lane (the arch shows its queue
-## entry and unpack cell and both officer spots; a tray table, X-ray belt or
-## pickup table shows the walk cell it serves, and the X-ray belt the primary
-## officer spot). A lane part takes the mirror of an arch already standing
-## where the part belongs; an arch takes the mirror with more parts already on
-## their cells; either way RIGHT, the recogniser's first try, on a tie or with
-## nothing placed.
+## Cells and their state come from the sim, never from a copy of its rules.
+## The piece is written into the grid data for a moment
+## (BuildGrid.with_trial_object, the write staff reach already uses) and the
+## sim is asked about it there:
+## - Any piece with a use side: its passenger cell is
+##   BuildObjectDef.interaction_cell, blocked when BuildGrid.interaction_problem
+##   (the placement check's own rule) refuses it on the grid as it stands.
+## - A check-in desk or scanner: its staff spot is StaffSpots.spot_of, blocked
+##   when StaffSpots.blocked says staff could never work it.
+## - A lane piece: SecurityLanes.rebuild on the trial grid picks the lane it
+##   joins (the arch's own candidate, or the first arch, in id order, whose
+##   candidate takes the part), so the side, mirror and facing are the
+##   recogniser's. The arch shows its queue entry and unpack cell and both
+##   officer spots; a tray table, X-ray belt or pickup table the cell it serves,
+##   the X-ray belt also the primary officer spot. Each cell's state is
+##   SecurityLanes.use_cell_states. A part no arch would take shows nothing.
 ##
-## A gate desk has no cell the sim uses: passengers wait near its footprint
-## (GateReach) and no staff work it. Its tiles are the row in front of it
-## (BuildObjectDef's front, +y at facing 0), with no staff tile.
-##
-## Not shown: a shop counter's server spot (ShopCounters), which is chosen
-## from the room it stands in once it is placed. A cell is blocked when it is
-## off the floor or under an object (a walk-through scanner aside, for a
-## passenger), or when the placement check refuses for that kind of cell
-## (INTERACTION_BLOCKED or INTERACTION_RESERVED for the passenger cell,
-## STAFF_SPOT for every staff tile).
+## A gate desk shows only a small arrow on the floor in front of it, pointing
+## in (user-ruled 2026-11-04, decision gate-desk-build-ghost-shows-a-front-
+## arrow-only): passengers wait near it and no staff work it. Not shown: a
+## shop counter's server spot (ShopCounters), chosen from its room once placed,
+## and the tiles of a piece standing where the ghost is (a Remove ghost).
 
 ## Colours from the HUD palette (decision hud-look-warm-cozy-cream-cards-with-
 ## a-dark-outline-toon-pale: sunny yellow attention, teal normal, coral red
@@ -43,80 +44,104 @@ const ARROW := "UseArrow"
 const BLOCKED_INSET := 0.5
 
 static var _materials := {}
+static var _see_through := {}
 static var _arrow_mesh: ArrayMesh
 
 
 ## The use cells of a `def_id` placed at `anchor` and `facing` on `grid`:
-## {"passenger": cells, "staff": cells, "arrow": the passenger cells the arrow
-## is centred over, "flow": the grid step passengers walk in}. Every list is
-## empty for a piece with no use side.
+## {"passenger": cells, "staff": cells, "blocked": cell -> true, "arrow": the
+## cells the arrow is centred over, "flow": the grid step passengers walk in}.
+## Every list is empty for a piece with no use side.
 static func of(grid: BuildGrid, def_id: StringName, anchor: Vector2i, facing: int) -> Dictionary:
 	var passenger: Array[Vector2i] = []
-	var staff_cells: Array[Vector2i] = []
+	var staff: Array[Vector2i] = []
 	var arrow: Array[Vector2i] = []
-	var out := {"passenger": passenger, "staff": staff_cells, "arrow": arrow, "flow": Vector2i.ZERO}
+	var out := {
+		"passenger": passenger, "staff": staff, "blocked": {}, "arrow": arrow, "flow": Vector2i.ZERO
+	}
 	var def := BuildCatalog.get_def(def_id)
-	if def == null:
+	if def == null or _stands(grid, def_id, anchor, facing):
 		return out
-	if SecurityLanes.is_part(def_id):
-		_lane_cells(grid, def_id, anchor, facing, out)
-	elif def_id == GateDesks.DESK:
+	var footprint := def.footprint(anchor, facing)
+	if def_id == GateDesks.DESK:
 		var front := BuildObjectDef.rotate_offset(Vector2i(0, 1), facing)
-		for cell in def.footprint(anchor, facing):
-			if not def.footprint(anchor, facing).has(cell + front):
-				out["passenger"].append(cell + front)
-		out["arrow"].assign(out["passenger"])
+		for cell in footprint:
+			if not footprint.has(cell + front):
+				arrow.append(cell + front)
 		out["flow"] = -front
-	elif def.has_interaction:
-		var spot := def.interaction_cell(anchor, facing)
-		out["passenger"].append(spot)
-		out["arrow"].append(spot)
-		for cell in def.footprint(anchor, facing):
-			if absi(cell.x - spot.x) + absi(cell.y - spot.y) == 1:
-				out["flow"] = cell - spot
-				break
-	var staff := StaffSpots.cell_of(def_id, anchor, facing)
-	if staff != BuildObjectDef.NO_CELL:
-		out["staff"].append(staff)
+		return out
+	var spot := def.interaction_cell(anchor, facing)
+	if spot != BuildObjectDef.NO_CELL and grid.interaction_problem(spot, footprint) != null:
+		out["blocked"][spot] = true
+	grid.with_trial_object(def_id, anchor, facing, _ask_sim.bind(grid, def, out))
 	return out
 
 
-## Whether the `role` (PASSENGER or STAFF) tile on `cell` is blocked, given
-## the placement check's `result` (null when there is none).
-static func blocked(grid: BuildGrid, cell: Vector2i, role: String, result: BuildResult) -> bool:
-	if not grid.in_bounds(cell) or grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
-		return true
-	var reason := BuildResult.Reason.NONE if result == null or result.ok else result.reason
-	if role == STAFF:
-		return grid.object_at(cell) != 0 or reason == BuildResult.Reason.STAFF_SPOT
-	if not grid.is_walkable(cell):
-		return true
-	var interaction := [
-		BuildResult.Reason.INTERACTION_BLOCKED, BuildResult.Reason.INTERACTION_RESERVED
-	]
-	return interaction.has(reason)
+## Fills `out` for the piece written into `grid` as `id`.
+static func _ask_sim(id: int, grid: BuildGrid, def: BuildObjectDef, out: Dictionary) -> void:
+	var record := grid.get_object(id)
+	if SecurityLanes.is_part(def.id):
+		_lane_cells(grid, def.id, id, out)
+		return
+	if def.has_interaction:
+		var spot := def.interaction_cell(record["anchor"], record["facing"])
+		out["passenger"].append(spot)
+		out["arrow"].append(spot)
+		for cell in def.footprint(record["anchor"], record["facing"]):
+			if absi(cell.x - spot.x) + absi(cell.y - spot.y) == 1:
+				out["flow"] = cell - spot
+				break
+	var staff := StaffSpots.spot_of(grid, id)
+	if staff != BuildObjectDef.NO_CELL:
+		out["staff"].append(staff)
+		if StaffSpots.blocked(grid, id):
+			out["blocked"][staff] = true
+
+
+## The lane cells of the lane piece `id` on the trial grid.
+static func _lane_cells(grid: BuildGrid, def_id: StringName, id: int, out: Dictionary) -> void:
+	var lanes := SecurityLanes.new()
+	lanes.rebuild(grid)
+	var arch := id if def_id == SecurityLanes.ARCH else 0
+	for each in lanes.arches:
+		if arch == 0 and (lanes.candidate(each)["parts"] as Dictionary).values().has(id):
+			arch = each
+	if arch == 0:
+		return
+	var lane := lanes.candidate(arch)
+	out["flow"] = -(lane["front"] as Vector2i)
+	if def_id == SecurityLanes.ARCH:
+		out["passenger"].append_array([lane["queue_entry"], lane["unpack"]])
+		out["arrow"].append(lane["unpack"])
+		out["staff"].append_array([lane["primary_spot"], lane["helper_spot"]])
+	else:
+		for entry in SecurityLanes.SIDE_PARTS:
+			if entry[0] == def_id:
+				out["passenger"].append(lane[entry[2]])
+				out["arrow"].append(lane[entry[2]])
+		if def_id == SecurityLanes.XRAY_BELT:
+			out["staff"].append(lane["primary_spot"])
+	var states := lanes.use_cell_states(grid, arch)
+	for cell in out["passenger"] + out["staff"]:
+		if not states.get(cell, true):
+			out["blocked"][cell] = true
 
 
 ## Adds the tiles and arrow for a `def_id` ghosted at `anchor` and `facing` to
 ## `parent`. Each tile is named PASSENGER or STAFF and carries the metas
 ## "role" (the same), "cell" and "blocked"; the arrow is named ARROW and
-## carries "role" and "flow". Names can gain a suffix beside a freed ghost.
+## carries "role" and "flow". Names can gain a suffix beside a freed ghost. A
+## tile on a cell an object stands on (the X-ray belt's arch cell) is drawn
+## through that object.
 static func draw(
-	parent: Node3D,
-	grid: BuildGrid,
-	def_id: StringName,
-	anchor: Vector2i,
-	facing: int,
-	result: BuildResult
+	parent: Node3D, grid: BuildGrid, def_id: StringName, anchor: Vector2i, facing: int
 ) -> void:
 	var cells := of(grid, def_id, anchor, facing)
 	for role in [PASSENGER, STAFF]:
 		var key := "passenger" if role == PASSENGER else "staff"
 		for cell: Vector2i in cells[key]:
-			if cell == BuildObjectDef.NO_CELL:
-				continue
-			var stopped := blocked(grid, cell, role, result)
-			var tile := _tile(role, stopped)
+			var stopped: bool = cells["blocked"].has(cell)
+			var tile := _tile(role, stopped, grid.object_at(cell) != 0)
 			tile.position = grid.cell_to_world(cell) + Vector3(0.0, 0.06, 0.0)
 			tile.name = role
 			tile.set_meta("role", role)
@@ -133,63 +158,12 @@ static func draw(
 	var arrow := MeshInstance3D.new()
 	arrow.name = ARROW
 	arrow.mesh = _arrow()
-	arrow.material_override = _material(ARROW_TINT)
+	arrow.material_override = _material(ARROW_TINT, grid.object_at(over[0]) != 0)
 	arrow.position = centre / over.size() + Vector3(0.0, 0.115, 0.0)
 	arrow.rotation.y = atan2(-float(flow.x), -float(flow.y))
 	arrow.set_meta("role", ARROW)
 	arrow.set_meta("flow", flow)
 	parent.add_child(arrow)
-
-
-## The lane cells for a lane part ghosted at `anchor` and `facing`.
-static func _lane_cells(
-	grid: BuildGrid, def_id: StringName, anchor: Vector2i, facing: int, out: Dictionary
-) -> void:
-	var lane := _lane_for(grid, def_id, anchor, facing)
-	out["flow"] = -(lane["front"] as Vector2i)
-	if def_id == SecurityLanes.ARCH:
-		out["passenger"].append_array([lane["queue_entry"], lane["unpack"]])
-		out["arrow"].append(lane["unpack"])
-		out["staff"].append_array([lane["primary_spot"], lane["helper_spot"]])
-		return
-	for entry in SecurityLanes.SIDE_PARTS:
-		if entry[0] == def_id:
-			out["passenger"].append(lane[entry[2]])
-			out["arrow"].append(lane[entry[2]])
-	if def_id == SecurityLanes.XRAY_BELT:
-		out["staff"].append(lane["primary_spot"])
-
-
-## The SecurityLanes.geometry() a piece at `anchor` would join: for a side
-## part, the lane of a standing arch with its facing at the arch cell either
-## mirror puts it; for the arch, the mirror with more parts already standing
-## on their cells with its facing. RIGHT first on a tie.
-static func _lane_for(
-	grid: BuildGrid, def_id: StringName, anchor: Vector2i, facing: int
-) -> Dictionary:
-	if def_id != SecurityLanes.ARCH:
-		for mirror in SecurityLanes.MIRRORS:
-			var offset: Vector2i = SecurityLanes.FRAME[def_id]
-			var arch := (
-				anchor - BuildObjectDef.rotate_offset(Vector2i(offset.x * mirror, offset.y), facing)
-			)
-			if _stands(grid, SecurityLanes.ARCH, arch, facing):
-				return SecurityLanes.geometry(arch, facing, mirror)
-		var right: Vector2i = SecurityLanes.FRAME[def_id]
-		var root := anchor - BuildObjectDef.rotate_offset(right, facing)
-		return SecurityLanes.geometry(root, facing, SecurityLanes.RIGHT)
-	var best := {}
-	var best_count := -1
-	for mirror in SecurityLanes.MIRRORS:
-		var lane := SecurityLanes.geometry(anchor, facing, mirror)
-		var count := 0
-		for part in SecurityLanes.PART_IDS:
-			if part != SecurityLanes.ARCH and _stands(grid, part, lane[part], facing):
-				count += 1
-		if count > best_count:
-			best = lane
-			best_count = count
-	return best
 
 
 ## Whether an object of `def_id` with `facing` stands anchored on `cell`.
@@ -203,35 +177,38 @@ static func _stands(grid: BuildGrid, def_id: StringName, cell: Vector2i, facing:
 	)
 
 
-static func _tile(role: String, stopped: bool) -> MeshInstance3D:
+static func _tile(role: String, stopped: bool, through: bool) -> MeshInstance3D:
 	var tint := PASSENGER_TINT if role == PASSENGER else STAFF_TINT
-	var tile := _box(0.96, BLOCKED_TINT if stopped else tint)
+	var tile := _box(0.96, BLOCKED_TINT if stopped else tint, through)
 	if stopped:
-		var inset := _box(0.96 * BLOCKED_INSET, tint)
+		var inset := _box(0.96 * BLOCKED_INSET, tint, through)
 		inset.position.y = 0.01
 		tile.add_child(inset)
 	return tile
 
 
-static func _box(width: float, tint: Color) -> MeshInstance3D:
+static func _box(width: float, tint: Color, through: bool) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(width, 0.08, width)
 	var box := MeshInstance3D.new()
 	box.mesh = mesh
-	box.material_override = _material(tint)
+	box.material_override = _material(tint, through)
 	return box
 
 
-static func _material(tint: Color) -> StandardMaterial3D:
-	if not _materials.has(tint):
+## The tint's material; `through` draws it over what stands in front of it.
+static func _material(tint: Color, through := false) -> StandardMaterial3D:
+	var cache := _see_through if through else _materials
+	if not cache.has(tint):
 		var material := StandardMaterial3D.new()
+		material.no_depth_test = through
 		material.albedo_color = tint
 		if tint.a < 1.0:
 			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
-		_materials[tint] = material
-	return _materials[tint]
+		cache[tint] = material
+	return cache[tint]
 
 
 ## A flat arrow 0.7 m long pointing along -z, its middle on the origin.
