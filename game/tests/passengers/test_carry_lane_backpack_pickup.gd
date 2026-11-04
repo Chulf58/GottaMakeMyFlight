@@ -1,12 +1,16 @@
 class_name TestCarryLaneBackpackPickup
 extends GdUnitTestSuite
 ## A backpack taken out of its tray at a security lane's pickup table and put
-## on the back (board 41c159bc): no part of the body is inside the pack on any
-## frame, the hand holding it stays under the shoulder joint, and a backpack
-## carried alone is led by the hand on the table's side, so the pack never
-## crosses the front of the body. Drawn through the real sim and views with the
-## walker's clips played by sim time, a third of a tick a frame, as the
-## crossing probe plates it.
+## on the back (board 41c159bc): the hand holding it stays under the shoulder
+## joint, and a backpack carried alone is led by the hand on the table's side,
+## so the pack never crosses the front of the body. Drawn through the real sim
+## and views with the walker's clips played by sim time, a third of a tick a
+## frame, as the crossing probe plates it.
+##
+## Body points inside the pack are printed, not checked: headless they read 0
+## where the windowed spike/backpack_pickup_probe.gd reads up to 158 a frame
+## for the same move (the leading hand's fingers in the pack), so this count
+## cannot fail on the clip. The windowed probe is the check for it.
 ##
 ## The world is SecurityTestWorld's lane rooted at the arch on (5, 6), built on
 ## either side (the crossing probe's lane is LEFT: its pickup table is on the
@@ -173,12 +177,12 @@ func _tray_to_back() -> Dictionary:
 
 
 ## A backpack lifted out of its tray at the pickup table onto the back, on
-## either side of a lane: no body point is inside the pack on any frame and the
-## highest grip while the hand holds it is under that hand's shoulder joint;
+## either side of a lane: the highest grip while the hand holds it is under
+## that hand's shoulder joint (body points inside it printed only, see above);
 ## carried alone it is held by the hand on the table's side and never goes
 ## past the centre line. Controls: the move was followed over all its frames,
 ## a hand held the pack, and the lanes put the table on both sides.
-func test_out_of_a_lane_tray_onto_the_back_the_hand_stays_out_of_the_pack() -> void:
+func test_out_of_a_lane_tray_onto_the_back_the_table_side_hand_leads() -> void:
 	var sides := {}
 	for sent: Array in SENT:
 		_send(sent[0], sent[1], sent[2])
@@ -213,7 +217,6 @@ func test_out_of_a_lane_tray_onto_the_back_the_hand_stays_out_of_the_pack() -> v
 		)
 		assert_int(seen["frames"]).is_greater_equal(CarryOnProps.TRANSFER_TICKS * 3 - 1)
 		assert_int(seen["held"]).is_greater(0)
-		assert_int(seen["inside"]).is_equal(0)
 		assert_float(seen["top"]).is_less(seen["shoulder"])
 		if sent[0] == 1:
 			sides[signf(seen["tray_x"])] = true

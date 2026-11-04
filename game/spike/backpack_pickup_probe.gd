@@ -192,6 +192,7 @@ func _case(name: String, bags: int, moments: Array) -> void:
 		frames += 1
 		inside += hits
 		var holder := int(props.bag_state(_subject.id, _bag).get("held_by", -1))
+		_print_frame(name, k, hits, body, bag, holder)
 		if holder >= 0:
 			top = maxf(
 				top, (body.global_transform.affine_inverse() * props.grip_of(body, holder)).y
@@ -212,6 +213,38 @@ func _case(name: String, bags: int, moments: Array) -> void:
 		_invalid("%s: plated %d of %d moments" % [name, next, moments.size()])
 	if inside > 0:
 		_invalid("%s: %d body points inside the pack over the move" % [name, inside])
+
+
+## One frame of the move: the body points inside the pack and the bones they
+## belong to, the holding hand's grip and the pack's middle in the body's frame.
+func _print_frame(
+	name: String, k: float, hits: int, body: Node3D, bag: Node3D, holder: int
+) -> void:
+	var props := _views.carry_on_props()
+	var to_body := body.global_transform.affine_inverse()
+	var hand := holder if holder >= 0 else (1 if _subject.carry_on == 1 else _bag)
+	var middle := (
+		bag.global_transform * CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).get_center()
+	)
+	var bones := (
+		CarryChecks.contact_bones(body, CarryChecks.gripping(_world.world.sim, _subject), bag)
+		if hits > 0
+		else {}
+	)
+	print(
+		(
+			"FRAME %s k=%.2f held_by=%d inside=%d grip=%s pack_mid=%s bones=%s"
+			% [
+				name,
+				k,
+				holder,
+				hits,
+				(to_body * props.grip_of(body, hand)).snapped(Vector3.ONE * 0.01),
+				(to_body * middle).snapped(Vector3.ONE * 0.01),
+				bones,
+			]
+		)
+	)
 
 
 ## A stand-in table top under the tray the pack waits in (the lane's own pickup
