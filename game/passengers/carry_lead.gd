@@ -265,12 +265,16 @@ static func stamp_reach(bag: Dictionary, in_stall: bool, home: int) -> void:
 ## starts (kept as "start_body", for back_lead()): a roller laid on the floor
 ## from the pull or taken off it into the pull parks on its wheels (RollerPark)
 ## and takes RollerPark.TICKS, parked in `face` when it is a yaw
-## (RollerPark.sit_face()).
+## (RollerPark.sit_face()). Stamped again before the move has left its start
+## (`unmoved`, at_start()), it is the same move and keeps the "start_body" it
+## started with: taken from a body that had turned since, the leading hand
+## changed while it still reached for the bag (Sol review, board 41c159bc).
 static func stamp_move(
-	bag: Dictionary, in_stall: bool, home: int, body: Transform3D, face := NAN
+	bag: Dictionary, in_stall: bool, home: int, body: Transform3D, face := NAN, unmoved := false
 ) -> void:
 	stamp_reach(bag, in_stall, home)
-	bag["start_body"] = body
+	if not (unmoved and bag.has("start_body")):
+		bag["start_body"] = body
 	bag.erase("ticks")
 	bag.erase("park")
 	if RollerPark.parks(bag, in_stall, home):

@@ -240,3 +240,79 @@ func test_back_lead_is_the_hand_on_the_resting_end_side() -> void:
 		assert_int(CarryLead.back_lead(0, ahead, frame, 1.0)).is_equal(0)
 		assert_int(CarryLead.back_lead(1, ahead, frame, 1.0)).is_equal(1)
 		assert_int(CarryLead.back_lead(0, left, frame, SecurityLooks.TWO_BAG_SCALE)).is_equal(0)
+
+
+## The lead of a backpack's tray>back move stamped again while the hand is
+## still reaching for it (CarryLead.at_start(): the same move,
+## CarryOnProps._stamp keeps its start) stays the hand of the body's frame as
+## the move first started, though the body has turned half round since: the
+## frame of the restamp put the tray on the other side and switched the hand
+## mid-reach (Sol review, board 41c159bc). Control: a new move stamped from the
+## turned body is led by the other hand, so the turn would switch it.
+func test_a_restamp_in_the_reach_keeps_the_lead_of_the_move_start() -> void:
+	var kind := SecurityLooks.Kind.BACKPACK
+	var tray_at := SecurityLooks.Home.TRAY * 4
+	var hand_at := SecurityLooks.Home.HAND * 4
+	var props := auto_free(CarryOnProps.new()) as CarryOnProps
+	var body := auto_free(Node3D.new()) as Node3D
+	var node := auto_free(Node3D.new()) as Node3D
+	add_child(body)
+	add_child(node)
+	# The tray on the body's left (+X; the body faces +Z), the bag's own hand the right.
+	node.global_position = Vector3(0.6, 0.8, 0.4)
+	var want := CarryOnProps.worn_back(Transform3D(Basis(), Vector3(0.0, 1.35, -0.05)), 0.0, 1.0)
+	var held := {"homes": [SecurityLooks.Home.HAND]}
+	var bag := {
+		"node": node,
+		"kind": kind,
+		"home": tray_at,
+		"place": hand_at,
+		"changed": 10.0,
+		"carry": SecurityLooks.Carry.BACK,
+		"carry_placed": SecurityLooks.Carry.BACK,
+	}
+	var dims := {
+		"hand": 0,
+		"grips": [Vector3(-0.2, 0.9, 0.05), Vector3(0.2, 0.9, 0.05)],
+		"shoulders_y": [1.42, 1.42],
+		"bar_z": 0.0,
+		"scale": 1.0,
+		"strap_top": Vector3.ZERO,
+	}
+	var flags := {
+		"in_stall": false,
+		"hand_carry": false,
+		"from_floor": false,
+		"to_floor": false,
+		"hand": 0,
+		"clear": CarryOnProps.TRANSFER_CLEAR_M,
+		"yaw": 0.0,
+	}
+	var start := node.global_transform
+	var k := CarryLead.REACH_SHARE * 0.5
+	props._stamp(held, bag, body, want, 0)
+	var first: Array = (
+		CarryLead.plan(bag, k, start, want, body.global_transform, flags, dims)["loops"]
+	)
+	# Drawn in the reach; the body turns half round; the move is stamped again.
+	bag["placed_k"] = k
+	assert_bool(CarryLead.at_start(bag, k)).is_true()
+	body.rotate_y(PI)
+	flags["yaw"] = PI
+	bag["changed"] = 11.0
+	props._stamp(held, bag, body, want, 0)
+	var again: Array = (
+		CarryLead.plan(bag, k, start, want, body.global_transform, flags, dims)["loops"]
+	)
+	# A new move from the turned body: the other hand.
+	var fresh := bag.duplicate()
+	fresh.erase("start_body")
+	var turned: Array = (
+		CarryLead.plan(fresh, k, start, want, body.global_transform, flags, dims)["loops"]
+	)
+	print(
+		"lead loops: first %s, restamped %s, new from the turned body %s" % [first, again, turned]
+	)
+	assert_array(first).is_equal([false, true])
+	assert_array(again).is_equal(first)
+	assert_array(turned).is_equal([true, false])
