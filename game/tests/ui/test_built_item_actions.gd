@@ -88,11 +88,12 @@ static func _is_free(grid: BuildGrid, area: Rect2i) -> bool:
 	return true
 
 
-## An entrance or exit whose back edge holds no wall, so removing it buys one.
+## An exit door whose back edge holds no wall, so removing it buys one. An
+## entrance is skipped: removing the only one is refused for another reason.
 func _door_without_back_wall() -> int:
 	for object_id in _mode.grid.object_ids():
 		var record := _mode.grid.get_object(object_id)
-		if not BuildCatalog.is_door(record["def"]):
+		if record["def"] != &"exit_door":
 			continue
 		var back := BuildGrid.SIDE_STEP.find(DoorPlacement.back_step(record["facing"]))
 		if _mode.grid.wall_kind(record["anchor"], back) == BuildGrid.WallKind.NONE:
@@ -293,12 +294,15 @@ func test_a_refused_delete_changes_nothing_and_says_why() -> void:
 	var door := _door_without_back_wall()
 	assert_int(door).is_not_equal(0)
 	var kept := _mode.wallet().balance
+	# The control: with the money the same removal is accepted.
+	assert_bool(_mode.check(BuildEdit.remove_object(door)).ok).is_true()
 	assert_bool(_mode.wallet().spend(kept, Wallet.Category.BUILD)).is_true()
 	_mode.clear_undo()
 	_select_object(door)
 	var actions := _inspect.actions
 	var refusal := _mode.check(BuildEdit.remove_object(door))
 	assert_bool(refusal.ok).is_false()
+	assert_int(refusal.reason).is_equal(BuildResult.Reason.CANT_AFFORD)
 	assert_bool(_menu.build_session.active).is_false()
 	var result := actions.press_delete()
 	print("refused delete ok %s | %s" % [result.ok, actions.reason_text()])
@@ -306,7 +310,9 @@ func test_a_refused_delete_changes_nothing_and_says_why() -> void:
 	var session_on := _menu.build_session.active
 	var undo_steps := _mode.undo_history().size()
 	var shown := actions.reason_text()
-	_mode.wallet().credit(kept, Wallet.Category.BUILD)
+	var restored := _mode.wallet().credit(kept, Wallet.Category.BUILD)
+	assert_bool(restored).is_true()
+	assert_int(_mode.wallet().balance).is_equal(kept)
 	assert_bool(result.ok).is_false()
 	assert_bool(left).is_false()
 	assert_bool(session_on).is_false()
