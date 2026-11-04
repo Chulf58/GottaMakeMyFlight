@@ -235,13 +235,7 @@ func _plate_off(file: String) -> void:
 	print(
 		(
 			"PLATE %s card_visible=%s banner_visible=%s banner_text='%s' row=%s"
-			% [
-				file,
-				_hints.card().visible,
-				_staff.hint_card().visible,
-				_staff.hint_label().text,
-				row
-			]
+			% [file, _hints.card().visible, _staff.hint_card().visible, _staff.hint_text(), row]
 		)
 	)
 	if _hints.card().visible:

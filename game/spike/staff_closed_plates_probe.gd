@@ -1,7 +1,7 @@
 extends SceneTree
 ## Windowed plates for the closed airport (board items staff follow-ups 3 and 4):
 ## the Closed sign over every unstaffed desk and scanner, and the staff panel
-## in the bottom category bar with the "Airport closed: ..." hint visible.
+## in the bottom category bar with the "To open the airport" checklist card visible.
 ## Boots the real main scene with a new random sim seed (printed), builds
 ## ReferenceTerminal through the HUD's starter-terminal button and hires nobody.
 ## Plates:
@@ -14,9 +14,10 @@ extends SceneTree
 ## margin; the plate against a twin rendered with the HUD's canvas layers hidden
 ## shows no HUD pixel over the signs or captions, and does show the HUD over the
 ## hint (and the card on plate 02); the hint, the bar and the card rects lie in
-## the window and overlap none of each other; the hint text starts with
-## "Airport closed:". The control: after one agent and one officer are hired and
-## on duty the airport opens, the Closed signs and the hint go, so the probe
+## the window and overlap none of each other; the card reads as the closed
+## airport ("To open the airport" over a row still to do). The control: after
+## one agent and one officer are hired and on duty the airport opens, the
+## Closed signs and the closed checklist go, so the probe
 ## sees the state it checks. Otherwise it prints PROBE_INVALID and exits 1. A
 ## guard thread calls OS.crash() on a stall.
 ##
@@ -270,8 +271,7 @@ func _plate(name: String, card_open: bool) -> void:
 ## The hint's card must cover no station (the screen box under its sign) and no
 ## sign or caption: it has its own backing, so it must not hide the world.
 func _hint_clear_of_stations(bodies: Array[Rect2], signs: Array[Rect2]) -> bool:
-	var card := _panel.hint_label().get_parent() as Control
-	var box := card.get_global_rect()
+	var box := _panel.hint_card().get_global_rect()
 	var ok := true
 	for rect in bodies + signs:
 		var overlap := box.intersects(rect)
@@ -285,13 +285,22 @@ func _hint_clear_of_stations(bodies: Array[Rect2], signs: Array[Rect2]) -> bool:
 ## The hint, the bar and (when open) the card lie in the window, overlap none of
 ## each other, show HUD pixels in the plate and read as the closed airport.
 func _hud_layout(img: Image, bare: Image, per_screen: float, card_open: bool) -> bool:
-	var hint := _panel.hint_label()
+	var hint := _panel.hint_card()
 	var rects := {"hint": hint.get_global_rect(), "bar": _menu.bar().get_global_rect()}
 	if card_open:
 		rects["card"] = _panel.card().get_global_rect()
 	var ok := _panel.card().visible == card_open and hint.is_visible_in_tree()
-	ok = ok and hint.text.begins_with("Airport closed:")
-	print("HINT visible=%s text='%s'" % [hint.is_visible_in_tree(), hint.text.replace("\n", " | ")])
+	ok = ok and _closed_card()
+	print(
+		(
+			"HINT visible=%s title='%s' rows='%s'"
+			% [
+				hint.is_visible_in_tree(),
+				_panel.hint_label().text,
+				" | ".join(_panel.checklist().row_texts())
+			]
+		)
+	)
 	var window := Rect2(Vector2.ZERO, root.get_visible_rect().size)
 	var names := rects.keys()
 	for i in names.size():
@@ -334,14 +343,27 @@ func _control() -> void:
 				closed_left.size(),
 				expected,
 				signs,
-				_panel.hint_label().text.replace("\n", " | ")
+				_panel.hint_text().replace("\n", " | ")
 			]
 		)
 	)
 	# The two hires staff one desk and one scanner, so the others stay closed.
 	var ok := gate.is_open() and closed_left.size() == expected - 2 and signs == closed_left.size()
-	if not ok or _panel.hint_label().text.begins_with("Airport closed:"):
+	if not ok or _closed_card():
 		_invalid("control: the airport did not open or its closed state did not follow")
+
+
+## The checklist card reads as the closed airport: its title, and at least one
+## row still to do on screen.
+func _closed_card() -> bool:
+	var todo := 0
+	for entry in _panel.card_lines():
+		todo += int(not entry["done"])
+	return (
+		_panel.hint_label().text == Checklist.TITLE_CLOSED
+		and todo > 0
+		and _panel.checklist().row_labels().size() == _panel.card_lines().size()
+	)
 
 
 func _save(img: Image, name: String) -> void:

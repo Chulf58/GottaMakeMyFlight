@@ -124,7 +124,7 @@ func test_the_closed_hint_stays_visible_with_the_card_closed_and_open() -> void:
 func test_the_hint_sits_above_the_bar_and_clear_of_the_card() -> void:
 	_menu.staff_button.pressed.emit()
 	await get_tree().process_frame
-	var hint := _panel.hint_label().get_global_rect()
+	var hint := _panel.hint_card().get_global_rect()
 	var card := _panel.card().get_global_rect()
 	var bar := _menu.bar().get_global_rect()
 	assert_float(hint.end.y).is_less_equal(card.position.y)
@@ -135,7 +135,18 @@ func test_the_hint_sits_above_the_bar_and_clear_of_the_card() -> void:
 
 
 func test_the_hint_does_not_take_mouse_input() -> void:
-	assert_int(_panel.hint_label().mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
+	var controls: Array[Control] = [_panel.hint_card()]
+	for node in _panel.hint_card().find_children("*", "Control", true, false):
+		controls.append(node as Control)
+	# The card, its title, its rows, their tick boxes and their labels.
+	assert_int(_panel.checklist().rows().size()).is_greater(0)
+	assert_int(controls.size()).is_equal(4 + 3 * _panel.checklist().rows().size())
+	for control in controls:
+		(
+			assert_int(control.mouse_filter)
+			. override_failure_message("%s takes mouse input" % control.get_path())
+			. is_equal(Control.MOUSE_FILTER_IGNORE)
+		)
 
 
 func test_the_hint_clears_the_tray_status_and_cost_lines_with_a_tray_open() -> void:
@@ -147,7 +158,7 @@ func test_the_hint_clears_the_tray_status_and_cost_lines_with_a_tray_open() -> v
 	_menu.preview_label().visible = true
 	await get_tree().process_frame
 	assert_bool(_menu.is_tray_open()).is_true()
-	var hint := _panel.hint_label().get_global_rect()
+	var hint := _panel.hint_card().get_global_rect()
 	assert_bool(hint.intersects(_menu.tray().get_global_rect())).is_false()
 	assert_bool(hint.intersects(_menu.status_label().get_global_rect())).is_false()
 	assert_bool(hint.intersects(_menu.preview_label().get_global_rect())).is_false()

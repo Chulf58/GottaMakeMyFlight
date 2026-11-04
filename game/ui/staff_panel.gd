@@ -53,28 +53,6 @@ const HINTS := {
 	StaffMember.Role.SECURITY: "Hire a security officer",
 	StaffMember.Role.SHOP: "Hire shop staff",
 }
-## One line per blocker. The checklist card shows Checklist lines instead;
-## these are kept because existing plate probes under game/spike read them.
-const CLOSED_HINTS := {
-	AirportGate.Blocker.NO_PATH:
-	(
-		"Airport closed: passengers need a way from an entrance through check-in"
-		+ " and security to an exit"
-	),
-	AirportGate.Blocker.STAFF_SPOT:
-	(
-		"Airport closed: staff can't reach the desk, scanner or lane passengers need."
-		+ " Clear its staff spot or the way to it"
-	),
-	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
-	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
-	AirportGate.Blocker.CHECKIN_CLOSED:
-	"Airport closed: you closed every check-in desk. Open one again to let passengers in",
-	AirportGate.Blocker.SECURITY_CLOSED:
-	"Airport closed: you closed every scanner and lane. Open one again to let passengers in",
-	AirportGate.Blocker.NO_GATE:
-	"Airport closed: place a gate desk by an exit that faces the planes",
-}
 ## The banner line for an open wall gap, one for a single run of gap edges and
 ## one with the count for several. It uses the sign's words, "Wall gap".
 const GAP_HINT := "Wall gap: close the open edge of the outer wall, marked in red"

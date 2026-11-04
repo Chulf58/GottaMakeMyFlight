@@ -66,6 +66,22 @@ func rows() -> Array[Node]:
 	return _rows.get_children()
 
 
+## The text label of each row, in order: what the card shows on screen.
+func row_labels() -> Array[Label]:
+	var out: Array[Label] = []
+	for row in _rows.get_children():
+		out.append(row.get_node("Text") as Label)
+	return out
+
+
+## The text of each row, in order.
+func row_texts() -> PackedStringArray:
+	var out := PackedStringArray()
+	for label in row_labels():
+		out.append(label.text)
+	return out
+
+
 func _row(text: String, done: bool) -> Control:
 	var row := HBoxContainer.new()
 	row.name = "Row"

@@ -80,7 +80,7 @@ func _run() -> void:
 		(
 			"PROBE hint='%s' visible=%s card_rect=%s alpha=%.2f"
 			% [
-				_staff.hint_label().text,
+				_staff.hint_text(),
 				card.is_visible_in_tree(),
 				card.get_global_rect(),
 				card.modulate.a

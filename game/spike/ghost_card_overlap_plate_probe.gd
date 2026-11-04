@@ -80,16 +80,15 @@ func _run() -> void:
 	_menu.press_card(BuildMode.Tool.GATE_DESK)
 	await _frames(10)
 	var screen := root.get_visible_rect()
-	var hint := _staff.hint_label()
-	var hint_card := (hint.get_parent() as Control) if hint.get_parent() is Control else hint
+	var hint_card := _staff.hint_card()
 	print(
 		(
 			"PROBE tool=%d tray_open=%s hint_visible=%s hint=%s hint_rect=%s"
 			% [
 				_build.tool,
 				_menu.is_tray_open(),
-				hint.is_visible_in_tree(),
-				hint.text,
+				hint_card.is_visible_in_tree(),
+				_staff.hint_text(),
 				hint_card.get_global_rect()
 			]
 		)
@@ -230,7 +229,7 @@ func _plate(best: Dictionary, hint_card: Control, screen: Rect2) -> void:
 			% [
 				reason.text(),
 				reason.get_global_rect(),
-				_staff.hint_label().text,
+				_staff.hint_text(),
 				hint_card.get_global_rect(),
 				shared.get_area() if shared.has_area() else 0.0
 			]
