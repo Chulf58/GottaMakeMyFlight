@@ -14,6 +14,13 @@ extends Node
 ## view a little and never zooms it. The alert cards are counted the same way:
 ## a card coming or going only shifts the view. The camera does nothing on a
 ## build edit.
+##
+## The build stack (the tray and the banner above it) makes room once, when the
+## tray opens (decision camera-makes-room-once-per-build-mode-open-not-on-
+## every-menu-switch). REFIT_FRAMES later its rectangles are kept, and the
+## tray changing size, or the banner coming or going, while the player
+## switches between build menus moves and zooms nothing. They are let go when
+## the tray closes. The other panels keep making room as they open and close.
 
 ## A cut that would leave less than this share of the viewport's width or
 ## height is not taken, so a small window never shrinks the view to nothing.
@@ -39,6 +46,13 @@ var alert_stack: AlertStack
 var _last_key := 0
 var _refit_frames := 0
 var _last_free := Rect2(0.0, 0.0, 1.0, 1.0)
+## Frames the tray has been open, counted up to the frame its stack is kept.
+var _tray_frames := 0
+## The tray and banner rectangles kept at that frame, and the viewport size
+## they were taken at; `_kept` is false while they follow the panels live.
+var _kept := false
+var _kept_rects: Array[Rect2] = []
+var _kept_size := Vector2.ZERO
 
 
 ## The largest rectangle of `viewport` that `panels` leave free, in the same
@@ -78,6 +92,7 @@ static func _kept_sides(free: Rect2, panel: Rect2) -> Array[Rect2]:
 func _process(_delta: float) -> void:
 	if camera == null:
 		return
+	_track_build_stack()
 	var key := open_key()
 	var free := free_fraction()
 	var moved := (
@@ -95,6 +110,28 @@ func _process(_delta: float) -> void:
 	camera.set_room(free, refit)
 	_last_key = key
 	_last_free = free
+
+
+## Counts the frames the tray has been open and, REFIT_FRAMES after it opened,
+## keeps the build stack's rectangles until the tray closes. A resized viewport
+## takes them again, since they are in pixels.
+func _track_build_stack() -> void:
+	var menu := _menu()
+	if menu == null or not menu.is_tray_open():
+		_tray_frames = 0
+		_kept = false
+		return
+	var size := get_viewport().get_visible_rect().size
+	if _kept and size != _kept_size:
+		_tray_frames = 0
+		_kept = false
+	if _kept:
+		return
+	_tray_frames += 1
+	if _tray_frames > REFIT_FRAMES:
+		_kept_rects = _build_stack(menu)
+		_kept_size = size
+		_kept = true
 
 
 ## The free screen rectangle as fractions of the viewport.
@@ -116,12 +153,14 @@ func mark_sent() -> void:
 func open_key() -> int:
 	var key := 0
 	var bit := 1
+	var menu := _menu()
+	var tray_open := menu != null and menu.is_tray_open()
 	for panel in _panels():
-		if panel != null and panel.is_visible_in_tree():
+		var in_build_stack := tray_open and panel == _banner()
+		if panel != null and panel.is_visible_in_tree() and not in_build_stack:
 			key |= bit
 		bit <<= 1
-	var menu := _menu()
-	if menu != null and menu.is_tray_open():
+	if tray_open:
 		key |= bit
 	return key
 
@@ -131,9 +170,12 @@ func open_key() -> int:
 func open_rects() -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	var menu := _menu()
-	if menu != null and menu.is_tray_open():
-		rects.append(_tray_stack(menu))
+	var tray_open := menu != null and menu.is_tray_open()
+	if tray_open:
+		rects.append_array(_kept_rects if _kept else _build_stack(menu))
 	for panel in _panels():
+		if tray_open and panel == _banner():
+			continue
 		if panel != null and panel.is_visible_in_tree():
 			rects.append(panel.get_global_rect())
 	if alert_stack != null:
@@ -154,6 +196,21 @@ func _panels() -> Array[Control]:
 	panels.append(null if offers == null else offers.sheet())
 	panels.append(result_card)
 	return panels
+
+
+## The rectangles the build stack covers now: the tray with its lines and bar,
+## then the banner above it while it shows.
+func _build_stack(menu: BuildMenu) -> Array[Rect2]:
+	var rects: Array[Rect2] = [_tray_stack(menu)]
+	var banner := _banner()
+	if banner != null and banner.is_visible_in_tree():
+		rects.append(banner.get_global_rect())
+	return rects
+
+
+func _banner() -> Control:
+	var staff := _find("StaffPanel") as StaffPanel
+	return null if staff == null else staff.hint_card()
 
 
 ## The tray, its status and cost lines and the bar under them, from the top of
