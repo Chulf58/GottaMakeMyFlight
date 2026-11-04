@@ -64,7 +64,10 @@ signal loaded(ok: bool)
 ## migration before a release).
 ## 11: the stations the player closed (staff save version 5, StationClosures);
 ## version 10 saves are refused (no migration before a release).
-const SAVE_VERSION := 11
+## 12: the build unlocks (part "unlocks", BuildUnlocks: the highest tier and the
+## made-flight count); version 11 saves are refused (no migration before a
+## release).
+const SAVE_VERSION := 12
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -91,6 +94,8 @@ const MESSAGE_SECONDS := 4.0
 @export var apron: ApronStand
 ## The gate desks; none (a test world) saves no "gates" part.
 @export var gates: GateDesks
+## The build unlocks; none (a test world) saves no "unlocks" part.
+@export var unlocks: BuildUnlocks
 ## Where F5 and F8 save and load. Tests point it at their own file.
 @export var quick_save_path := QUICK_SAVE_PATH
 
@@ -218,6 +223,15 @@ func parts() -> Array[SavePart]:
 		# before the passengers, whose exits walk to its plane door.
 		var at := list.find_custom(func(part: SavePart) -> bool: return part.key == "passengers")
 		list.insert(at, SavePart.new("apron", apron.to_snapshot, _stage_apron, apron.from_snapshot))
+	if unlocks != null:
+		list.append(
+			SavePart.new(
+				"unlocks",
+				unlocks.to_snapshot,
+				SavePart.scratch(BuildUnlocks),
+				unlocks.from_snapshot
+			)
+		)
 	return list
 
 

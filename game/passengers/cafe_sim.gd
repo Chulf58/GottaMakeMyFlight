@@ -134,6 +134,9 @@ var layout := CafeLayout.new()
 ## next tick. While it is set, PassengerSim.to_snapshot() refuses and SaveGame
 ## waits for that tick, so a save never holds it set.
 var deadlines_stale := false
+## False until the cafe tier opens (BuildUnlocks): no passenger then grows hungry or
+## loses mood to hunger. A bare sim has hunger, as tests and probes build it.
+var hunger_enabled := true
 
 var _sim: PassengerSim
 var _set_stage: Callable
@@ -256,7 +259,7 @@ func refuse(p: Passenger, browsing := false) -> void:
 ## mood and a visit under way has its deadline forecast again. Whether a
 ## visit starts is NeedsPolicy's to decide, after every need has risen.
 func beat(p: Passenger) -> void:
-	p.hunger = mini(p.hunger + 1, HUNGER_MAX)
+	p.hunger = mini(p.hunger + 1, HUNGER_MAX) if hunger_enabled else 0
 	var visit: CafeVisit = _visits.get(p.id)
 	if visit != null:
 		# The abandon-now forecast with live queues, once a second per guest.

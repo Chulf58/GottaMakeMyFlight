@@ -276,6 +276,9 @@ const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
 const PRICE_TEXT := "Free"
+## A locked card's last line, and its tint (the hover text says what unlocks it).
+const LOCKED_TEXT := "Locked"
+const LOCKED_TINT := Color(0.5, 0.5, 0.55)
 ## The money slot when BuildMode has no wallet.
 const MONEY_TEXT := "Money  --"
 
@@ -349,6 +352,9 @@ var _cost := Label.new()
 var _wallet: Wallet
 ## Card tool -> its price Label.
 var _price_labels: Dictionary = {}
+## Tool -> the card's last line and what it said unlocked (a locked card swaps it).
+var _hint_labels: Dictionary = {}
+var _hint_texts: Dictionary = {}
 ## The last dragged rectangle priced (rectangle and balance) and its cost.
 var _rect_cost_key := ""
 var _rect_cost := 0
@@ -501,6 +507,10 @@ func _ready() -> void:
 		# unchanged; the Buy land card must follow.
 		build_mode.land_tool.land.changed.connect(_refresh_money)
 	_refresh_money()
+	if build_mode != null and build_mode.unlocks != null:
+		build_mode.unlocks.tier_changed.connect(_on_tier_changed)
+		build_mode.unlocks.unlocked.connect(_on_unlocked)
+	_refresh_locks()
 	if rescue_grant != null:
 		rescue_grant.granted.connect(_on_granted)
 	if settlement != null:
@@ -700,8 +710,44 @@ func _refresh_money() -> void:
 		var price := _card_price(tool)
 		var label: Label = _price_labels[tool]
 		label.text = PRICE_TEXT if _wallet == null or price == 0 else str(price)
-		_cards[tool].modulate = Color.WHITE if is_card_affordable(tool) else unaffordable_tint()
+		_cards[tool].modulate = _card_tint(tool)
 	refresh_preview()
+
+
+## What a card says is locking it (BuildUnlocks.lock_text), "" when it is open
+## or the menu has no build mode.
+func _lock_text(tool: BuildMode.Tool) -> String:
+	if build_mode == null:
+		return ""
+	return BuildUnlocks.lock_text(build_mode.unlocks, build_mode.require_unlocks, tool)
+
+
+func _card_tint(tool: BuildMode.Tool) -> Color:
+	if _lock_text(tool) != "":
+		return LOCKED_TINT
+	return Color.WHITE if is_card_affordable(tool) else unaffordable_tint()
+
+
+## Greys the locked cards, with "Locked" on the last line and the requirement
+## (and how far the game is from it) in place of the hover card; an unlocked
+## card gets its own line and hover card back.
+func _refresh_locks() -> void:
+	for tool in _cards:
+		var text := _lock_text(tool)
+		var card_item := item(tool)
+		_hint_labels[tool].text = LOCKED_TEXT if text != "" else _hint_texts[tool]
+		_cards[tool].set_info(card_item[0], [] if text != "" else ItemInfo.of(tool))
+		if text != "":
+			_cards[tool].tooltip_text = text
+		_cards[tool].modulate = _card_tint(tool)
+
+
+func _on_tier_changed(_tier: int) -> void:
+	_refresh_locks()
+
+
+func _on_unlocked(_tier: int, text: String) -> void:
+	_start_hold(text, false)
 
 
 ## (what the placement costs net of refunds, what the wallet must hold for it).
@@ -994,10 +1040,14 @@ func _make_card(tool: BuildMode.Tool) -> Button:
 	if CARD_NEEDS.has(tool):
 		var need := _card_label(column, CARD_NEEDS[tool], &"HudAttentionText")
 		need.add_theme_font_size_override("font_size", CARD_HINT_FONT_SIZE)
+		_hint_labels[tool] = need
 	elif running_cost(tool) > 0:
-		_card_label(column, RUNNING_COST_TEXT % running_cost(tool), &"HudHint")
+		_hint_labels[tool] = _card_label(column, RUNNING_COST_TEXT % running_cost(tool), &"HudHint")
 	else:
-		_card_label(column, "Key %s" % key if key != "" else _no_key_hint(tool), &"HudHint")
+		_hint_labels[tool] = _card_label(
+			column, "Key %s" % key if key != "" else _no_key_hint(tool), &"HudHint"
+		)
+	_hint_texts[tool] = _hint_labels[tool].text
 	return button
 
 
