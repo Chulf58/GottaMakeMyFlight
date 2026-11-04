@@ -7,6 +7,15 @@ extends Resource
 ## curb or turn off for a car park, and leave along `road_out` or a lot's exit.
 ## The BuildGrid covers only the terminal's interior; all of this is off-grid.
 ##
+## Every lane runs on the road drawn in the site asset (tp_airport_site.glb's
+## Road mesh; test_landside_lanes_on_road.gd checks each car's corners
+## against it): a through road the full width between z -50.5 and -41.25 with
+## its centre line at z -46, and on the terminal side a drop-off forecourt (z
+## -58.5 to -50.5) that kerb noses close east of x 38.7 and west of x -38.7.
+## The starter's road_in comes in on the through road and moves over into the
+## forecourt, and its road_out moves back out to the through road before the
+## west end.
+##
 ## Traffic keeps right. The road runs along x with the terminal to the north
 ## (more negative z): the near carriageway, on the terminal side of
 ## `centre_line_z`, is westbound (toward -x) with the curb on a car's right,

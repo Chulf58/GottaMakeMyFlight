@@ -27,7 +27,11 @@ extends RefCounted
 ## so a saved access or exit pos_mm of lot spot 0, and a slot path pos_mm past
 ## its gate, names a place up to 40 mm away. Version 7 is refused, with no
 ## migration.
-const SAVE_VERSION := 8
+## 9: road_in comes in on the through road's westbound lane and moves over into
+## the drop-off forecourt, and road_out moves back out of it to the west end
+## (board 0169bc4b), so a saved road_in, road_out or berth path pos_mm names a
+## place up to 3 m away. Version 8 is refused, with no migration.
+const SAVE_VERSION := 9
 const KEYS := [
 	"save_version",
 	"tick",

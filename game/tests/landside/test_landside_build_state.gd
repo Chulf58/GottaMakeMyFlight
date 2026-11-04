@@ -126,7 +126,7 @@ func test_a_car_on_its_way_when_the_lot_closes_goes_to_the_curb_instead() -> voi
 	var parked: Array[int] = []
 	_sim.parked.connect(func(_id: int, lot: int) -> void: parked.append(lot))
 	_car(LandsideVehicle.Intent.PARK)
-	# The lot's turn is 15 m in (30 ticks); close it before the car gets there.
+	# The lot's turn is about 18 m in (about 37 ticks); close it before the car gets there.
 	_run(1, 10)
 	assert_bool(_sim.set_lot_closed(SURFACE, true)).is_true()
 	_run(10, 1500)
@@ -175,15 +175,17 @@ func test_curb_bays_add_berths_to_the_starter_curb() -> void:
 
 func test_a_built_bay_moves_the_queue_stop_upstream_of_its_first_berth() -> void:
 	assert_int(_sim.curb_stop_mm()).is_equal(STARTER.curb.stop_mm)
-	# Bay 0's first berth is at x 7.25 (35750 mm in), bay 1's at x 23.25 (19750 mm).
-	assert_int(STARTER.berth_mm(5)).is_equal(35750)
-	assert_int(STARTER.berth_mm(7)).is_equal(19750)
+	# Bay 0's first berth is at x 7.25 (38781 mm in), bay 1's at x 23.25 (22781
+	# mm). road_in comes in on the through road and moves over into the
+	# forecourt (3000 + 9031 mm to x 34), then runs on along z -55.
+	assert_int(STARTER.berth_mm(5)).is_equal(38781)
+	assert_int(STARTER.berth_mm(7)).is_equal(22781)
 	assert_bool(_sim.build_curb(0, 300)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(35750 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(38781 - LandsideSim.BERTH_APPROACH_MM)
 	assert_bool(_sim.build_curb(1, 300)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(19750 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(22781 - LandsideSim.BERTH_APPROACH_MM)
 	assert_bool(_sim.remove_curb(1)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(35750 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(38781 - LandsideSim.BERTH_APPROACH_MM)
 	# The starter curb's stop is the same distance before its first berth.
 	assert_int(STARTER.berth_mm(0) - LandsideSim.BERTH_APPROACH_MM).is_equal(STARTER.curb.stop_mm)
 
@@ -243,7 +245,7 @@ func test_a_car_never_reverses_into_a_berth_or_lands_on_the_queue() -> void:
 
 func test_a_car_past_a_bay_does_not_go_back_to_it() -> void:
 	# A car that has driven on past bay 0 (a diverted car at the multi-storey's
-	# turn, 39500 mm in) takes a starter berth, not the free bay behind it.
+	# turn, 42531 mm in) takes a starter berth, not the free bay behind it.
 	assert_bool(_sim.build_curb(0, 300)).is_true()
 	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
 	for i in 40:

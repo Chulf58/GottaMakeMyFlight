@@ -2,7 +2,8 @@ class_name TestLandsideViewsHeading
 extends GdUnitTestSuite
 ## Every drawn car and taxi faces its right-hand direction of travel
 ## (decision landside-traffic-drives-on-the-right-the-terminal-side-carri):
-## on road_in and road_out it heads -x on the terminal-side carriageway, on a
+## on road_in and road_out it heads -x on the terminal-side carriageway (and
+## west where they move over into and out of the drop-off forecourt), on a
 ## lot's access lane +z, in a curb berth -x, in a parking slot into its
 ## stall (away from the lot's middle aisle), and on the lot exit's stretch
 ## along the far carriageway +x. Moving between two ticks, on a lane or a
@@ -24,8 +25,11 @@ const ARRIVALS := {
 	50: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.PARK],
 }
 ## The surface lot (spot 0) closes on this tick, after car 2 turned into it, so
-## the later parking cars go to the multi-storey (spot 1).
-const CLOSE_SURFACE_TICK := 45
+## the later parking cars go to the multi-storey (spot 1). It was 45 until
+## road_in gained 3031 mm moving over into the forecourt (board 0169bc4b):
+## car 2 (6500 mm behind the taxi) now turns in on tick 52, 6 ticks later,
+## and car 31 not before tick 80.
+const CLOSE_SURFACE_TICK := 55
 ## The way a parked car faces, by lot spot and slot row x, written out from
 ## starter_landside.tres (not from LandsidePlaces): into the stall, away from
 ## the aisle. The surface lot's aisle runs along x 31.7, the multi-storey's
@@ -118,6 +122,8 @@ func _check_tick() -> void:
 		_covered[place] = int(_covered.get(place, 0)) + 1
 		if want != Vector3.ZERO and nose.dot(want) < 0.99:
 			_wrong.append("%s vehicle %d nose %s want %s" % [place, id, nose, want])
+		if place.ends_with("_lane_change") and nose.x > -0.4:
+			_wrong.append("%s vehicle %d nose %s not westbound" % [place, id, nose])
 		var mid := _flat(_views.pose_at(id, 0.5).basis.z)
 		var a := _views.pose_at(id, 0.45).origin
 		var b := _views.pose_at(id, 0.55).origin
@@ -161,6 +167,14 @@ func _place_name(v: LandsideVehicle, at: Vector3) -> String:
 	var standing := v.stage in [LandsideVehicle.Stage.DWELL, LandsideVehicle.Stage.PARKED]
 	if v.lane in [LandsideVehicle.Lane.BERTH, LandsideVehicle.Lane.SLOT] and not standing:
 		return "berth_path" if v.lane == LandsideVehicle.Lane.BERTH else "slot_path_lot%d" % v.lot
+	# road_in moves over from the through road into the drop-off forecourt
+	# and road_out back out of it (board 0169bc4b), on a stretch that runs
+	# across the road as well as along it: still westbound, which
+	# _check_tick checks.
+	if v.lane in [LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.ROAD_OUT]:
+		var lane := _landside.paths.path(v.lane, v.lot, v.stop)
+		if absf(LandsideDefinition.heading_at(lane, v.pos_mm).z) > 0.01:
+			return "%s_lane_change" % PLACE_NAMES[v.lane]
 	if PLACE_NAMES.has(v.lane):
 		return PLACE_NAMES[v.lane]
 	# The lot exit runs -z to the far carriageway, then +x along it; on the
@@ -190,7 +204,15 @@ static func _want(place: String) -> Vector3:
 func test_every_drawn_vehicle_faces_its_right_hand_direction_of_travel() -> void:
 	print("covered %s moving_checked %d wrong %s" % [_covered, _moving_checked, _wrong])
 	for place in [
-		"road_in", "berth", "road_out", "access", "slot_lot0", "slot_lot1", "exit_to_road"
+		"road_in",
+		"road_in_lane_change",
+		"berth",
+		"road_out",
+		"road_out_lane_change",
+		"access",
+		"slot_lot0",
+		"slot_lot1",
+		"exit_to_road"
 	]:
 		assert_int(int(_covered.get(place, 0))).is_greater(0)
 	assert_int(int(_covered.get("exit_far_carriageway", 0))).is_greater(0)
