@@ -401,6 +401,134 @@ func _check_pop(space: PhysicsDirectSpaceState3D, name: String, at: Vector3, siz
 		_invalid("%s: the pop is not in frame" % name)
 	if not blockers.is_empty():
 		_invalid("%s: a mesh stands in front of the pop" % name)
+	_check_pop_clear(name, label)
+	_check_labels_clear(name)
+
+
+## Every room label on screen draws on its cream card, and no need icon covers
+## the card (decision room-labels-sit-on-a-cream-card-and-slide-clear-of-need-
+## icons): an icon's or wish bubble's drawn box overlapping the card fails the
+## plate. Icons within 200 px of a card count as near, the control that the
+## labels stand in a crowd.
+func _check_labels_clear(name: String) -> void:
+	var rooms := _main.get_node("BuildMode/RoomView")
+	var unit := _unit()
+	var icons: Array[Rect2] = []
+	for entry in _overhead_boxes(false):
+		icons.append(entry[1])
+	var size := root.get_visible_rect().size
+	var cards := 0
+	var near := 0
+	for child in rooms.get_children():
+		var label := child as Label3D
+		if label == null or not label.visible:
+			continue
+		var card := label.get_node_or_null(RoomLabelLayout.CARD) as Sprite3D
+		if card == null:
+			_invalid("%s: room label '%s' has no card" % [name, label.text])
+			continue
+		var box := RoomLabelLayout.sprite_rect(card, _cam, unit)
+		if not Rect2(Vector2.ZERO, size).encloses(box):
+			continue
+		cards += 1
+		var covered: Array[String] = []
+		for icon in icons:
+			if icon.get_center().distance_to(box.get_center()) < 200.0:
+				near += 1
+			if box.intersects(icon):
+				covered.append(str(Rect2(icon.position.round(), icon.size.round())))
+		print(
+			(
+				"PROBE %s label '%s' card=%s offset=%s covered=%s"
+				% [
+					name,
+					label.text.replace("\n", " "),
+					Rect2(box.position.round(), box.size.round()),
+					label.offset.round(),
+					covered
+				]
+			)
+		)
+		if not covered.is_empty():
+			_invalid("%s: need icons cover room label '%s'" % [name, label.text])
+	print("PROBE %s room cards in frame=%d icons near=%d" % [name, cards, near])
+	if cards == 0 or near == 0:
+		_invalid("%s: no room card in frame among icons, so the label check proves nothing" % name)
+
+
+## The pop must cover no passenger's head and no need icon (board a48bca8d).
+## The pops are frozen, so the probe lays them out for this view itself. Each
+## head (the band from a seated chin to a standing crown, 0.6 m wide) and each
+## icon and wish bubble at its drawn size is projected here; each within 150 px
+## of the pop counts as near, as a control that the spot is crowded, and each
+## overlapping the pop's box fails the plate.
+func _check_pop_clear(name: String, label: Label3D) -> void:
+	var pops := _views.cafe_pops()
+	pops.lay_out(_cam)
+	var slot: int = label.get_meta(&"slot")
+	var box := pops.screen_rect(label, _cam, slot).grow(-CafePops.CLEAR_PX)
+	var near := 0
+	var covered: Array[String] = []
+	for entry in _overhead_boxes(true):
+		var rect: Rect2 = entry[1]
+		if rect.get_center().distance_to(box.get_center()) < 150.0:
+			near += 1
+		if box.intersects(rect):
+			covered.append("%s@%s" % [entry[0], Rect2(rect.position.round(), rect.size.round())])
+	print(
+		(
+			"PROBE %s pop slot=%d box=%s near=%d covered=%s"
+			% [name, slot, Rect2(box.position.round(), box.size.round()), near, covered]
+		)
+	)
+	if near == 0:
+		_invalid("%s: no head or icon near the pop, so the clearance check proves nothing" % name)
+	if not covered.is_empty():
+		_invalid("%s: the pop covers %s" % [name, covered])
+
+
+## Viewport pixels per metre at one metre from the camera, inverted.
+func _unit() -> float:
+	return 2.0 * tan(deg_to_rad(_cam.fov) / 2.0) / root.get_visible_rect().size.y
+
+
+## [kind, drawn box in viewport pixels] for every shown need icon and wish
+## bubble over a drawn passenger, at its real size (texture size times pixel
+## size, per metre of depth unless fixed size) and offset, and with `heads`
+## every passenger's head band too.
+func _overhead_boxes(heads: bool) -> Array:
+	var unit := _unit()
+	var boxes := []
+	for node in _passenger_nodes():
+		var depth := (node.global_position - _cam.global_position).dot(-_cam.global_basis.z)
+		if depth <= _cam.near:
+			continue
+		if heads:
+			var crown := _cam.unproject_position(node.global_position + Vector3(0.0, 1.85, 0.0))
+			var chin := _cam.unproject_position(node.global_position + Vector3(0.0, 0.9, 0.0))
+			var half := 0.3 / (depth * unit)
+			var head := Rect2(crown, Vector2.ZERO).expand(chin)
+			boxes.append(["head_%s" % node.name, head.grow_individual(half, 0.0, half, 0.0)])
+		for sprite_name: String in NeedIcons.SPRITES + [WishIconView.SPRITE]:
+			var sprite := node.get_node_or_null(sprite_name) as Sprite3D
+			if (
+				sprite == null
+				or not sprite.visible
+				or sprite.texture == null
+				or sprite.modulate.a <= 0.0
+			):
+				continue
+			var at := sprite.global_position
+			var d := (at - _cam.global_position).dot(-_cam.global_basis.z)
+			if d <= _cam.near:
+				continue
+			var scale := sprite.pixel_size / ((1.0 if sprite.fixed_size else d) * unit)
+			var size := sprite.texture.get_size() * scale
+			var centre := (
+				_cam.unproject_position(at) + Vector2(sprite.offset.x, -sprite.offset.y) * scale
+			)
+			boxes.append(["%s_%s" % [sprite_name, node.name], Rect2(centre - size / 2.0, size)])
+	return boxes
 
 
 func _on_paid(id: int, room: int, amount: int) -> void:

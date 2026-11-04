@@ -252,3 +252,186 @@ func _rig(home: float) -> TycoonCamera:
 	rig.set_process(false)
 	(rig.get_node("Camera3D") as Camera3D).make_current()
 	return rig
+
+
+## Whether a texel matches a colour within 8-bit rounding.
+func _near(texel: Color, colour: Color) -> bool:
+	return (
+		Vector4(texel.r, texel.g, texel.b, texel.a).distance_to(
+			Vector4(colour.r, colour.g, colour.b, colour.a)
+		)
+		< 0.01
+	)
+
+
+## WCAG contrast ratio of two colours.
+func _contrast(a: Color, b: Color) -> float:
+	var la := a.srgb_to_linear().get_luminance() + 0.05
+	var lb := b.srgb_to_linear().get_luminance() + 0.05
+	return maxf(la, lb) / minf(la, lb)
+
+
+## Board a48bca8d, decision room-labels-sit-on-a-cream-card-and-slide-clear-of-
+## need-icons: the label draws dark text on a cream card with a dark outline,
+## under the need icons, and the card follows the label's size cap and fade.
+func test_a_room_label_draws_dark_text_on_a_cream_card() -> void:
+	_aim(_camera, 30.0)
+	_view.layout_labels()
+	var label := _view.label_of(_room)
+	var card := label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	var font := ThemeDB.fallback_font
+	var text := font.get_multiline_string_size(
+		label.text, HORIZONTAL_ALIGNMENT_CENTER, -1, label.font_size
+	)
+	var pad := 2.0 * (label.outline_size + RoomLabelLayout.CARD_PAD_PX)
+	var image := card.texture.get_image()
+	print(
+		(
+			"card %s for text %s, pixel %s/%s, offset %s, alpha %s"
+			% [
+				image.get_size(),
+				text,
+				card.pixel_size,
+				label.pixel_size,
+				card.offset,
+				card.modulate.a
+			]
+		)
+	)
+	assert_vector(Vector2(image.get_size())).is_equal((text + Vector2.ONE * pad).ceil())
+	assert_float(card.pixel_size).is_equal(label.pixel_size)
+	assert_vector(card.offset).is_equal(label.offset + Vector2(0.0, text.y / 2.0))
+	var middle := image.get_pixel(image.get_width() / 2, image.get_height() / 2)
+	var top := image.get_pixel(image.get_width() / 2, 1)
+	assert_bool(_near(middle, RoomLabelLayout.CARD_FILL)).is_true()
+	assert_bool(_near(top, RoomLabelLayout.CARD_BORDER)).is_true()
+	# A corner texel is see-through: the card is rounded.
+	assert_float(image.get_pixel(0, 0).a).is_less(0.1)
+	# Dark text that reads on the card: both colours at a 4.5:1 contrast or more.
+	assert_float(_contrast(RoomView.READY_TEXT, RoomLabelLayout.CARD_FILL)).is_greater(4.5)
+	assert_float(_contrast(RoomView.NEEDS_TEXT, RoomLabelLayout.CARD_FILL)).is_greater(4.5)
+	# The card under the text's outline under the text, all under the need icons.
+	assert_int(card.render_priority).is_less(label.outline_render_priority)
+	assert_int(label.outline_render_priority).is_less(label.render_priority)
+	var need_icon := NeedIcons.make_sprite("probe")
+	assert_int(label.render_priority).is_less(need_icon.render_priority)
+	need_icon.free()
+	# The card fades with the label.
+	label.modulate.a = 0.4
+	RoomLabelLayout.sync_card(label)
+	assert_float(card.modulate.a).is_equal_approx(0.4, 0.001)
+
+
+## A stand-in for PassengerViews: one passenger node with one shown need icon
+## NeedIcons.ICON_PX on screen, standing where the icon draws at `point`.
+func _icon_at(point: Vector2) -> Sprite3D:
+	var views := Node3D.new()
+	_port.add_child(views)
+	var node := Node3D.new()
+	node.set_meta(&"body", 0)
+	views.add_child(node)
+	var icon := Sprite3D.new()
+	icon.name = "NeedIcon0"
+	icon.fixed_size = true
+	icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	icon.texture = ImageTexture.create_from_image(
+		Image.create(NeedIcons.SIZE, NeedIcons.SIZE, false, Image.FORMAT_RGBA8)
+	)
+	var unit := 2.0 * tan(deg_to_rad(_camera.fov) / 2.0) / VIEW.size.y
+	icon.pixel_size = NeedIcons.ICON_PX * unit / NeedIcons.SIZE
+	node.add_child(icon)
+	_view.passenger_views = views
+	_put_icon(icon, point)
+	return icon
+
+
+func _put_icon(icon: Sprite3D, point: Vector2) -> void:
+	var plane := Plane(Vector3.UP, _anchor.y)
+	var hit: Variant = plane.intersects_ray(
+		_camera.project_ray_origin(point), _camera.project_ray_normal(point)
+	)
+	icon.get_parent().global_position = hit
+
+
+## The card's box on screen now, from the card sprite's own size and offset.
+func _card(camera: Camera3D) -> Rect2:
+	var card := _view.label_of(_room).get_node(RoomLabelLayout.CARD) as Sprite3D
+	var unit := 2.0 * tan(deg_to_rad(camera.fov) / 2.0) / VIEW.size.y
+	return RoomLabelLayout.sprite_rect(card, camera, unit)
+
+
+## A need icon drawn on the label's card nudges the label a short way to a
+## clear spot; the label keeps that spot while the icon moves about elsewhere
+## and goes home once no icon is near. The icon itself never moves.
+func test_a_label_under_a_need_icon_nudges_clear_and_keeps_its_spot() -> void:
+	_aim(_camera, 30.0)
+	_view.layout_labels()
+	var home := _card(_camera)
+	var icon := _icon_at(home.get_center())
+	var unit := 2.0 * tan(deg_to_rad(_camera.fov) / 2.0) / VIEW.size.y
+	var icon_box := RoomLabelLayout.sprite_rect(icon, _camera, unit)
+	# Control: the icon is drawn on the card where it stands.
+	assert_bool(home.intersects(icon_box)).is_true()
+	var icon_at := icon.global_position
+	_view.layout_labels()
+	var label := _view.label_of(_room)
+	var moved := _card(_camera)
+	print("card %s (home %s) icon %s offset %s" % [moved, home, icon_box, label.offset])
+	assert_bool(label.visible).is_true()
+	assert_vector(label.offset).is_not_equal(Vector2.ZERO)
+	assert_bool(moved.intersects(icon_box)).is_false()
+	var reach := minf(RoomLabelLayout.NUDGE_PX, home.size.y) + 2.0 * NeedIcons.ICON_PX
+	assert_float(moved.get_center().distance_to(home.get_center())).is_less_equal(reach + 1.0)
+	assert_vector(icon.global_position).is_equal(icon_at)
+	assert_vector(label.position).is_equal(_anchor)
+	# A kept nudge is used while it stays clear, not searched again: plant one
+	# straight up by the card's height, which the search (toward the middle, to
+	# the right here) would not pick, and the label takes it.
+	var searched := label.offset
+	label.set_meta(&"nudge", Vector2(0.0, -home.size.y))
+	_view.layout_labels()
+	var kept := _card(_camera)
+	print("kept card %s, searched offset %s, now %s" % [kept, searched, label.offset])
+	assert_vector(label.offset).is_not_equal(searched)
+	(
+		assert_float(kept.get_center().distance_to(home.get_center() - Vector2(0.0, home.size.y)))
+		. is_less(1.0)
+	)
+	assert_bool(kept.intersects(icon_box)).is_false()
+	# The icon leaves: the label goes home.
+	_put_icon(icon, Vector2(-500.0, -500.0))
+	_view.layout_labels()
+	assert_vector(label.offset).is_equal(Vector2.ZERO)
+
+
+## Sol review of 0537708: at the farthest zoom a label slid clear of the HUD
+## is drawn far from its anchor, in the camera's axes. Its culling box (and its
+## card's), grown by the cull margin, must still hold the drawn card, or the
+## label is culled while the card shows empty.
+func test_a_label_slid_at_the_farthest_zoom_stays_inside_its_culling_box() -> void:
+	var rig := TycoonCamera.new()
+	var far := rig.max_distance
+	rig.free()
+	_aim(_camera, far)
+	_view.layout_labels()
+	_add_button(_rect(_camera).grow(10.0))
+	_view.layout_labels()
+	await get_tree().process_frame
+	var label := _view.label_of(_room)
+	var card := label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	assert_bool(label.visible).is_true()
+	assert_vector(label.offset).is_not_equal(Vector2.ZERO)
+	var right := _camera.global_basis.x
+	var up := _camera.global_basis.y
+	var drawn := (
+		card.global_position + (right * card.offset.x + up * card.offset.y) * card.pixel_size
+	)
+	for node: GeometryInstance3D in [label, card]:
+		var box: AABB = node.global_transform * node.get_aabb()
+		print("%s box %s margin %.2f drawn %s" % [node.name, box, node.extra_cull_margin, drawn])
+		# The control: the slide is real, the card is drawn metres from its anchor.
+		assert_float(drawn.distance_to(node.global_position)).is_greater(3.0)
+		assert_bool(box.grow(node.extra_cull_margin).has_point(drawn)).is_true()
+		# The margin alone holds it, whatever box Godot gives a billboard.
+		var bare := AABB(node.global_position, Vector3.ZERO)
+		assert_bool(bare.grow(node.extra_cull_margin).has_point(drawn)).is_true()
