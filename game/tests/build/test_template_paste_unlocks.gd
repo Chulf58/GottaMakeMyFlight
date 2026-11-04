@@ -103,3 +103,50 @@ func test_a_paste_with_a_required_but_missing_gate_is_refused() -> void:
 	assert_int(result.reason).is_equal(BuildResult.Reason.LOCKED)
 	assert_str(result.reason_text()).contains(BuildUnlocks.NOT_WIRED_TEXT)
 	assert_int(_mode.grid.floor_at(BARE_CENTRE)).is_equal(BuildGrid.FLOOR_NONE)
+
+
+## A toilet (a tier 1 room) saved with a baggage belt in it. The Belt tool is
+## tier 2 and places through its own path with no catalog object, so the belt
+## has to be held to the tool by id: the toilet alone would paste at tier 1.
+func _arm_toilet_with_belt() -> void:
+	var floor_edits: Array[BuildEdit] = []
+	for y in range(2, 6):
+		for x in range(10, 14):
+			floor_edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	_mode.grid.apply_batch(floor_edits)
+	var room := _commit(BuildEdit.place_room(Rect2i(10, 2, 3, 3), &"toilet")).room_id
+	_commit(BuildEdit.place_object(&"baggage_belt", Vector2i(11, 3), 0))
+	_mode.clear_undo()
+	var saved := _paste.save_room(room)
+	assert_object(saved).is_not_null()
+	var kept := saved.pieces.filter(func(p: Dictionary) -> bool: return p["def"] == &"baggage_belt")
+	assert_int(kept.size()).is_equal(1)
+	_paste.arm(_paste.library.size() - 1)
+
+
+func test_a_tier_1_template_holding_a_belt_is_refused_whole() -> void:
+	_arm_toilet_with_belt()
+	var snapshot := _mode.grid.to_snapshot()
+	var balance := _mode.wallet().balance
+	var result := _paste.paste_at(BARE_CENTRE)
+	print("belt paste: %s (%s)" % [result.ok, result.reason_text()])
+	assert_bool(result.ok).is_false()
+	assert_int(result.reason).is_equal(BuildResult.Reason.LOCKED)
+	assert_dict(_mode.grid.to_snapshot()).is_equal(snapshot)
+	assert_int(_mode.wallet().balance).is_equal(balance)
+	assert_int(_mode.undo_history().size()).is_equal(0)
+
+
+## The control: the same belt template goes down once the Belt tool is open.
+func test_the_same_belt_template_is_placed_at_tier_2() -> void:
+	_arm_toilet_with_belt()
+	assert_bool(_unlocks.from_snapshot({"tier": 2, "made": 50})).is_true()
+	var balance := _mode.wallet().balance
+	var result := _paste.paste_at(BARE_CENTRE)
+	print(
+		"unlocked belt paste: %s, balance %d -> %d" % [result.ok, balance, _mode.wallet().balance]
+	)
+	assert_bool(result.ok).is_true()
+	assert_int(_mode.grid.floor_at(BARE_CENTRE)).is_equal(BuildGrid.FLOOR_TILE)
+	assert_int(_mode.wallet().balance).is_less(balance)
+	assert_int(_mode.undo_history().size()).is_equal(1)

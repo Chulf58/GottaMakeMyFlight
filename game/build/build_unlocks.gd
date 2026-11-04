@@ -240,6 +240,13 @@ static func edits_lock_text(gate: BuildUnlocks, required: bool, edits: Array[Bui
 	return ""
 
 
+## The tool that places catalog object `def_id`, or NONE for a piece no tool places.
+## The Belt tool places all of BuildCatalog.BELT_IDS.
+static func tool_for_object(def_id: StringName) -> BuildMode.Tool:
+	_index_tools()
+	return _tool_by_def.get(def_id, BuildMode.Tool.NONE)
+
+
 ## What tier `tier` asks for: "Unlocks at 3 stars and 200 passengers".
 static func requirement_text(tier: int) -> String:
 	if tier < 2 or tier > TIERS.size():
@@ -362,6 +369,10 @@ static func _index_tools() -> void:
 			var def := BuildMode.tool_object(listed)
 			if def != &"" and not _tool_by_def.has(def):
 				_tool_by_def[def] = listed
+			if listed == BuildMode.Tool.BELT:
+				for belt_id in BuildCatalog.BELT_IDS:
+					if not _tool_by_def.has(belt_id):
+						_tool_by_def[belt_id] = listed
 			var room: StringName = BuildMode.TOOL_ROOMS.get(listed, &"")
 			if room != &"" and not _tool_by_room.has(room):
 				_tool_by_room[room] = listed
