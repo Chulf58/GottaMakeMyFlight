@@ -335,6 +335,7 @@ static func sync_card(label: Label3D) -> void:
 	)
 	if not is_equal_approx(label.extra_cull_margin, margin):
 		label.extra_cull_margin = margin
+	if not is_equal_approx(card.extra_cull_margin, margin):
 		card.extra_cull_margin = margin
 
 
