@@ -412,7 +412,7 @@ func step(p: Passenger) -> void:
 				visit.outcome = CafeVisit.Outcome.COMPLETE
 				_stand(p, visit)
 		Passenger.Stage.CAFE_STANDING_UP:
-			if _sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS:
+			if _sim.tick - p.stage_tick >= up_ticks(p):
 				if visit.relocation != null and visit.relocation.returns():
 					_head_to_seat(p, visit)
 				else:
@@ -453,7 +453,7 @@ func seat_position(p: Passenger) -> Vector3:
 		Passenger.Stage.CAFE_SITTING_DOWN:
 			return approach.lerp(root, shuffle)
 		Passenger.Stage.CAFE_STANDING_UP:
-			var left := PassengerSim.STAND_UP_TICKS - (_sim.tick - p.stage_tick)
+			var left := up_ticks(p) - (_sim.tick - p.stage_tick)
 			return approach.lerp(root, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
 	return root
 
@@ -662,9 +662,25 @@ func _leave_cell(p: Passenger, visit: CafeVisit) -> Vector2i:
 
 
 ## Ticks a guest takes to set off from the leave cell: standing up from a
-## seat, nothing for a walk-on guest.
-func _leave_delay(visit: CafeVisit) -> int:
-	return 0 if visit.walk_on() else PassengerSim.STAND_UP_TICKS
+## seat (up_ticks()), nothing for a walk-on guest.
+func _leave_delay(p: Passenger, visit: CafeVisit) -> int:
+	return 0 if visit.walk_on() else up_ticks(p)
+
+
+## How many ticks the stand-up from a cafe seat (CAFE_STANDING_UP) of `p`
+## lasts, to the tick it sets off from the seat's approach cell. A guest with no
+## roller stands up over STAND_UP_TICKS, shuffling out to the approach cell
+## over the last SHUFFLE_TICKS of it. A guest with a roller stands up fully
+## where it sat, stands there ParkRecovery.UP_HOLD_TICKS more while the roller
+## is taken off the floor into the pull, and only then shuffles out (decision
+## standing-up-with-a-roller-stand-up-then-pick-up-then-walk, board 2c659e42).
+## Its floor bag lies in the body's frame (SecurityLooks.floor_spot()), so a
+## shuffle before the pick-up would slide it along the floor with the body.
+## The sim, the cafe forecast and the view (seat_position()) all read it here.
+static func up_ticks(p: Passenger) -> int:
+	if not ParkRecovery.has_roller(p):
+		return PassengerSim.STAND_UP_TICKS
+	return PassengerSim.STAND_UP_TICKS + ParkRecovery.UP_HOLD_TICKS + SHUFFLE_TICKS
 
 
 ## The deadline of a visit under way, forecast again with the queues and
@@ -674,7 +690,7 @@ func _live_deadline(p: Passenger, visit: CafeVisit) -> int:
 	var cell := _leave_cell(p, visit)
 	if cell == Passenger.NO_CELL:
 		return visit.deadline
-	return VisitForecast.live_deadline(_sim, p, cell, _leave_delay(visit), visit.resume_stage)
+	return VisitForecast.live_deadline(_sim, p, cell, _leave_delay(p, visit), visit.resume_stage)
 
 
 func _may_start(p: Passenger) -> bool:
@@ -726,7 +742,7 @@ func _commit(p: Passenger, plan: Dictionary) -> void:
 	visit.piece = Relocation.placement(_sim.grid, int(visit.seat.get("object_id", 0)))
 	visit.resume_stage = _resume_stage(p)
 	visit.deadline = VisitForecast.deadline(
-		_sim, p, _leave_cell(p, visit), _leave_delay(visit), visit.resume_stage
+		_sim, p, _leave_cell(p, visit), _leave_delay(p, visit), visit.resume_stage
 	)
 	_visits[p.id] = visit
 	if not visit.seat_key.is_empty():
@@ -888,7 +904,7 @@ func _head_to_seat(p: Passenger, visit: CafeVisit) -> void:
 	# itself step() sends it off early, short-paid, instead of finishing.
 	ticks += 1
 	var arrival := VisitForecast.arrival(
-		_sim, p, ticks, seat["approach"], PassengerSim.STAND_UP_TICKS, visit.resume_stage
+		_sim, p, ticks, seat["approach"], up_ticks(p), visit.resume_stage
 	)
 	if not VisitForecast.admits(_sim, p, arrival):
 		_abandon(p, visit)

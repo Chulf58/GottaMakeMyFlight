@@ -19,7 +19,9 @@ extends RefCounted
 ## slot cell (ShopLayout), so this view-only helper reads the pose from the
 ## stage's own clock: it sits down over the first SIT_DOWN_TICKS of the stage
 ## and stands up over the last STAND_UP_TICKS before the stay ends (the type's
-## dwell, or the visit's deadline when that comes first). Everything is worked
+## dwell, or the visit's deadline when that comes first); a sofa or nap pod
+## visitor with a roller stands up that much earlier, at the seat, and then
+## picks its bags up there and steps off (up_tail()). Everything is worked
 ## out from the sim each tick, so a load or a clock that went back draws the
 ## pose for the loaded tick with nothing to reset (anti-pattern
 ## a-per-id-view-record-holding-a-sim-tick-must-start-over-on-l).
@@ -76,6 +78,15 @@ const DOOR_OUT_TICKS := 10
 ## at SHUFFLE_TICKS, the park ran into the sit_idle at 24 ticks, the stoop on a
 ## seated body.
 const SEAT_DOOR_TICKS := 15
+## And at the end of its stay it stands up fully at the seat, stands there this
+## many ticks more, facing out of the piece, while its bags are picked up (the
+## roller's whole floor>pull, beside its feet), and only then steps off to its
+## slot cell over SHUFFLE_TICKS (decision standing-up-with-a-roller-stand-up-
+## then-pick-up-then-walk, board 2c659e42): the hold a gate sitter has at its
+## chair front. Picked up as it stepped off, the bag came up while the body was
+## still rising; picked up from the slot cell, the body leaned back to reach
+## the bag beside the seat behind it.
+const SEAT_HOLD_TICKS := ParkRecovery.UP_HOLD_TICKS
 ## Below this height (metres, the body's rest pose) a showering body's parts
 ## are its shoes, which come off with the clothes: where the lather's legs
 ## start (ShowerFoam.PARTS).
@@ -97,13 +108,17 @@ static func kind(sim: PassengerSim, p: Passenger) -> Kind:
 
 
 ## The seat pose of a sofa or nap pod visitor now: sitting down over the first
-## SIT_DOWN_TICKS of the stay, standing up over its last STAND_UP_TICKS, and
-## seated between. UPRIGHT for every other passenger, a showering one included.
+## SIT_DOWN_TICKS of the stay, standing up over its last STAND_UP_TICKS (before
+## its last up_tail() ticks, standing), and seated between. UPRIGHT for every
+## other passenger, a showering one included.
 static func pose(sim: PassengerSim, p: Passenger) -> StageKinds.Pose:
 	var k := kind(sim, p)
 	if k != Kind.SEAT and k != Kind.RECLINE:
 		return StageKinds.Pose.UPRIGHT
-	if _left(sim, p) < PassengerSim.STAND_UP_TICKS:
+	var up_left := _up_left(sim, p)
+	if up_left < 0:
+		return StageKinds.Pose.UPRIGHT
+	if up_left < PassengerSim.STAND_UP_TICKS:
 		return StageKinds.Pose.STANDING_UP
 	var sat := sim.tick - p.stage_tick - seat_door(sim, p)
 	if sat < 0:
@@ -170,6 +185,8 @@ static func facing(sim: PassengerSim, p: Passenger) -> Vector2i:
 ## on the seat (SHUFFLE_TICKS in; with a roller from the stay's start, standing
 ## at its slot cell, seat_door()) until it steps off (SHUFFLE_TICKS before the
 ## end), so it sets them down sitting and picks them up as it leaves the seat;
+## with a roller until it has stood up (up_tail() before the end), so it picks
+## them up standing at the seat before it steps off;
 ## at the shower from the start of the stay to DOOR_OUT_TICKS before its end,
 ## so they are set down at the door before the step in, wait outside it and
 ## are picked up after the step out.
@@ -179,7 +196,8 @@ static func bags_down(sim: PassengerSim, p: Passenger) -> bool:
 			return _left(sim, p) >= DOOR_OUT_TICKS
 		Kind.SEAT, Kind.RECLINE:
 			var on_seat := _in_spent(sim, p) >= SHUFFLE_TICKS or seat_door(sim, p) > 0
-			return on_seat and _left(sim, p) >= SHUFFLE_TICKS
+			var tail := up_tail(sim, p)
+			return on_seat and _left(sim, p) >= (tail if tail > 0 else SHUFFLE_TICKS)
 	return false
 
 
@@ -202,7 +220,7 @@ static func recline(sim: PassengerSim, p: Passenger) -> float:
 	if kind(sim, p) != Kind.RECLINE:
 		return 0.0
 	var seated := sim.tick - p.stage_tick - seat_door(sim, p) - PassengerSim.SIT_DOWN_TICKS
-	var before_up := _left(sim, p) - PassengerSim.STAND_UP_TICKS
+	var before_up := _up_left(sim, p) - PassengerSim.STAND_UP_TICKS
 	return smoothstep(0.0, 1.0, minf(seated, before_up) / float(EASE_TICKS))
 
 
@@ -213,7 +231,7 @@ static func clip_ticks(sim: PassengerSim, p: Passenger) -> int:
 	var k := kind(sim, p)
 	if k == Kind.SEAT or k == Kind.RECLINE:
 		if pose(sim, p) == StageKinds.Pose.STANDING_UP:
-			return maxi(PassengerSim.STAND_UP_TICKS - 1 - _left(sim, p), 0)
+			return maxi(PassengerSim.STAND_UP_TICKS - 1 - _up_left(sim, p), 0)
 		return maxi(sim.tick - p.stage_tick - seat_door(sim, p), 0)
 	return maxi(sim.tick - p.stage_tick, 0)
 
@@ -421,15 +439,18 @@ static func _exiting(visit: ShopVisit) -> bool:
 
 ## Ticks the exit of a visitor of piece `def_id` takes before it can walk off,
 ## as the end of an ordinary stay plays it: the stand-up of a sitter, preceded
-## by a nap pod's lean back, and the rinse and step out of a shower, with the
-## wait at the door to pick up bags when `carry_on` says there are some. Zero
-## for a piece with no exit to play (a play area, a kiosk display).
-static func exit_ticks(def_id: StringName, carry_on: int) -> int:
+## by a nap pod's lean back and followed, with a `roller`, by the hold at the
+## seat to pick it up and the step off (SEAT_HOLD_TICKS, SHUFFLE_TICKS), and the
+## rinse and step out of a shower, with the wait at the door to pick up bags when `carry_on` says
+## there are some. Zero for a piece with no exit to play (a play area, a kiosk
+## display).
+static func exit_ticks(def_id: StringName, carry_on: int, roller := false) -> int:
+	var hold := SEAT_HOLD_TICKS + SHUFFLE_TICKS if roller else 0
 	match KINDS.get(def_id, Kind.NONE):
 		Kind.SEAT:
-			return PassengerSim.STAND_UP_TICKS
+			return PassengerSim.STAND_UP_TICKS + hold
 		Kind.RECLINE:
-			return PassengerSim.STAND_UP_TICKS + EASE_TICKS
+			return PassengerSim.STAND_UP_TICKS + EASE_TICKS + hold
 		Kind.SHOWER:
 			return EASE_TICKS + (DOOR_OUT_TICKS if carry_on > 0 else 0)
 	return 0
@@ -466,6 +487,12 @@ static func _out_left(sim: PassengerSim, p: Passenger) -> int:
 	return _left(sim, p) - _door(sim, p, DOOR_OUT_TICKS)
 
 
+## Ticks left until `p` has stood up from its seat: the stay's ticks left less
+## the ticks after it (up_tail()); negative after that.
+static func _up_left(sim: PassengerSim, p: Passenger) -> int:
+	return _left(sim, p) - up_tail(sim, p)
+
+
 ## `ticks` for a showering visitor with bags, which waits at the door to set
 ## them down or pick them up; 0 for everyone else.
 static func _door(sim: PassengerSim, p: Passenger, ticks: int) -> int:
@@ -478,7 +505,11 @@ static func seat_door(sim: PassengerSim, p: Passenger) -> int:
 	var k := kind(sim, p)
 	if k != Kind.SEAT and k != Kind.RECLINE:
 		return 0
-	for i in p.carry_on:
-		if SecurityLooks.bag_kind(p, i) == SecurityLooks.Kind.ROLLER:
-			return SEAT_DOOR_TICKS
-	return 0
+	return SEAT_DOOR_TICKS if ParkRecovery.has_roller(p) else 0
+
+
+## The ticks a sofa or nap pod visitor carrying a roller stays after its
+## stand-up: SEAT_HOLD_TICKS standing at the seat while it picks the roller up,
+## then SHUFFLE_TICKS stepping off; 0 for everyone else.
+static func up_tail(sim: PassengerSim, p: Passenger) -> int:
+	return SEAT_HOLD_TICKS + SHUFFLE_TICKS if seat_door(sim, p) > 0 else 0

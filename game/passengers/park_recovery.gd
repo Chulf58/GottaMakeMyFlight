@@ -47,7 +47,7 @@ const UP_HOLD_TICKS := ceili(RollerPark.TICKS_UP) + 1
 static func on_seat_lost(sim: PassengerSim, p: Passenger) -> void:
 	if p.stage != Passenger.Stage.SITTING_DOWN and p.stage != Passenger.Stage.SEATED:
 		return
-	if not _has_roller(p):
+	if not has_roller(p):
 		return
 	# A walker late as it began sitting down carried its roller lifted in the
 	# hand (CarryOnProps._lifted()) and set it down with no park, so there is
@@ -80,7 +80,7 @@ static func valid(p: Passenger, tick: int) -> bool:
 	var ahead := p.collect_tick - tick
 	return (
 		p.stage == Passenger.Stage.TO_GATE
-		and _has_roller(p)
+		and has_roller(p)
 		and ahead > 0
 		and ahead <= ceili(RollerPark.TICKS_DOWN) + COLLECT_TICKS
 	)
@@ -129,10 +129,11 @@ static func collecting(sim: PassengerSim, p: Passenger) -> bool:
 ## degrees the hand fell short and the bag jumped 0.11 to 0.31 m into it. The
 ## sim, the journey forecast and the view all read it here.
 static func stand_up_ticks(p: Passenger) -> int:
-	return PassengerSim.STAND_UP_TICKS + (UP_HOLD_TICKS if _has_roller(p) else 0)
+	return PassengerSim.STAND_UP_TICKS + (UP_HOLD_TICKS if has_roller(p) else 0)
 
 
-static func _has_roller(p: Passenger) -> bool:
+## Whether `p` carries a roller among its carry-on bags.
+static func has_roller(p: Passenger) -> bool:
 	for i in p.carry_on:
 		if SecurityLooks.bag_kind(p, i) == SecurityLooks.Kind.ROLLER:
 			return true

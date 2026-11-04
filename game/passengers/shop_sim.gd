@@ -631,7 +631,7 @@ func _relocates(p: Passenger, visit: ShopVisit) -> bool:
 func _start_exit(p: Passenger, visit: ShopVisit) -> void:
 	var type := _room_type(visit.room)
 	var left := stay_ticks(visit, type) - (_sim.tick - p.stage_tick)
-	var exit := ActivityPoses.exit_ticks(visit.piece["def"], p.carry_on)
+	var exit := ActivityPoses.exit_ticks(visit.piece["def"], p.carry_on, ParkRecovery.has_roller(p))
 	var remaining := left
 	if left <= exit:
 		visit.relocation = Relocation.leaving(visit.piece, -1)
