@@ -24,6 +24,11 @@ const FOREARMS: Array[String] = ["Forearm.R", "Forearm.L"]
 const HANDS: Array[String] = ["Hand.R", "Hand.L"]
 ## About the Toon forearm's length, to aim it.
 const FOREARM_M := 0.3
+## The way the elbow bends (skeleton space, x outward) on a reach with
+## loop_grip: down and a little out, not out and back.
+const LOOP_POLE := Vector3(0.3, -1.0, 0.0)
+## The finger bones (".R" or ".L" added) a loop_grip hand straightens.
+const LOOP_FINGERS: Array[String] = ["Fingers", "Fingertips", "Thumb", "Thumb_Tip"]
 
 ## Which arm: 0 the right, 1 the left (the order of CarryOnProps' hands).
 @export var side := 0
@@ -51,6 +56,10 @@ const FOREARM_M := 0.3
 ## grip_of: GRIP_ALONG_M past the Fingers bone), wrist straight, elbow out.
 @export var reach_weight := 0.0
 var reach_target := Vector3.ZERO
+## The reach holds a backpack by its grab loop (CarryLead plan "loops",
+## _reach_loop()): the hand level and the elbow down (LOOP_POLE), so the fingers
+## stay over the loop, out of the pack. Set by CarryOnProps with the reach.
+var loop_grip := false
 
 
 func _process_modification_with_delta(_delta: float) -> void:
@@ -93,12 +102,33 @@ func _process_modification_with_delta(_delta: float) -> void:
 			chain[i] = Transform3D(basis, origin)
 	for i in bones.size():
 		skeleton.set_bone_global_pose(bones[i], chain[i])
+	if loop_grip and reach > 0.0:
+		_straighten_fingers(skeleton, reach)
+
+
+## A hand over a backpack's grab loop (loop_grip): its fingers and thumb turned
+## `weight` of the way from the clip's curl to their rest, straight on from the
+## hand. Curled as the clips hold them, they went up to 6 cm under the grip,
+## into the loop and the pack's top below it (backpack_pickup_probe, board
+## 41c159bc).
+func _straighten_fingers(skeleton: Skeleton3D, weight: float) -> void:
+	var suffix: String = [".R", ".L"][side]
+	for name in LOOP_FINGERS:
+		var bone := skeleton.find_bone(name + suffix)
+		if bone < 0:
+			continue
+		var rest := skeleton.get_bone_rest(bone).basis.get_rotation_quaternion()
+		var now := skeleton.get_bone_pose_rotation(bone)
+		skeleton.set_bone_pose_rotation(bone, now.slerp(rest, weight))
 
 
 ## The arm `chain` (arm, forearm, hand; skeleton space) turned so the grip
 ## reaches reach_target: a two-bone reach (CarryStoop.two_bone) from the
-## shoulder, the elbow bent out and back, the wrist kept as it is.
+## shoulder, the elbow bent out and back, the wrist kept as it is (with
+## loop_grip, _reach_loop()).
 func _reach(skeleton: Skeleton3D, chain: Array[Transform3D], outward: float) -> Array[Transform3D]:
+	if loop_grip:
+		return _reach_loop(skeleton, chain, outward)
 	var target := skeleton.global_transform.affine_inverse() * reach_target
 	var shoulder := chain[0].origin
 	var elbow := chain[1].origin
@@ -118,6 +148,41 @@ func _reach(skeleton: Skeleton3D, chain: Array[Transform3D], outward: float) -> 
 	var grip_now := _grip(skeleton, fore * hand_in_fore)
 	fore.basis = CarryStoop.aim(fore.basis, grip_now - fore.origin, joints[1] - fore.origin)
 	return [arm, fore, fore * hand_in_fore]
+
+
+## _reach() for a hand holding a backpack by its grab loop: the hand level
+## (its axis along the way from the shoulder to the target, seen from above),
+## so the fingers lie over the loop, not down into the pack below it, and the
+## elbow down (LOOP_POLE), not out and back. The wrist is put where the level
+## hand's grip lands on the target. Posed as _reach() poses any other hand, the
+## hand pointed down at the loop and the fingers were up to 6 cm under it
+## inside the pack (backpack_pickup_probe, seed 2811556352, board 41c159bc).
+func _reach_loop(
+	skeleton: Skeleton3D, chain: Array[Transform3D], outward: float
+) -> Array[Transform3D]:
+	var target := skeleton.global_transform.affine_inverse() * reach_target
+	var shoulder := chain[0].origin
+	var elbow := chain[1].origin
+	var wrist := chain[2].origin
+	var hand_len := wrist.distance_to(_grip(skeleton, chain[2]))
+	var level := Vector3(target.x - shoulder.x, 0.0, target.z - shoulder.z)
+	level = level.normalized() if level.length() > 0.001 else Vector3(outward, 0.0, 0.0)
+	var joints := CarryStoop.two_bone(
+		shoulder,
+		elbow.distance_to(shoulder),
+		wrist.distance_to(elbow),
+		target - level * hand_len,
+		LOOP_POLE * Vector3(outward, 1.0, 1.0)
+	)
+	var arm := chain[0]
+	var fore_in_arm := arm.affine_inverse() * chain[1]
+	var hand_in_fore := chain[1].affine_inverse() * chain[2]
+	arm.basis = CarryStoop.aim(arm.basis, elbow - shoulder, joints[0] - shoulder)
+	var fore := arm * fore_in_arm
+	var wrist_now := (fore * hand_in_fore).origin
+	fore.basis = CarryStoop.aim(fore.basis, wrist_now - fore.origin, joints[1] - fore.origin)
+	var hand := fore * hand_in_fore
+	return [arm, fore, Transform3D(_pointed(hand.basis, level, 1.0), hand.origin)]
 
 
 ## Where the grip is (skeleton space) for the hand bone at `hand`: the Fingers
