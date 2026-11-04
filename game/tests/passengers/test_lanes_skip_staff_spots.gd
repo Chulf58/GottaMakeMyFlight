@@ -91,7 +91,7 @@ func test_a_station_closed_by_a_blocked_spot_says_why() -> void:
 	_w.staff.fire(StaffMember.Role.CHECKIN)
 	assert_str(MissSignals.closed_reason(_w.sim, desks[1])).is_equal(MissSignals.NO_STAFF_REASON)
 	# The Closed sign says why: a blocked spot, or plainly closed.
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = _w.clock
 	views.sim = _w.sim
 	add_child(views)

@@ -31,7 +31,7 @@ func before_test() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(10, 20))
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

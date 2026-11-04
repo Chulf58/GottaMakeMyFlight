@@ -34,7 +34,7 @@ func after_test() -> void:
 
 
 func _views_at(path: String) -> PassengerViews:
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = _world.clock
 	views.sim = _world.sim
 	views.need_icons_toggle.settings_path = path
@@ -174,3 +174,28 @@ func test_the_zoomed_out_hide_still_applies_while_the_toggle_is_on() -> void:
 func test_n_is_bound_to_the_toggle_action() -> void:
 	assert_bool(InputMap.has_action(NeedIconsToggle.ACTION)).is_true()
 	assert_bool(InputMap.event_is_action(_n_key(), NeedIconsToggle.ACTION)).is_true()
+
+
+## A test view built straight with the class would read the player's own
+## hud_settings.cfg; PassengerTestWorld.views() is the one place that builds one.
+func test_only_the_helper_builds_a_passenger_views() -> void:
+	# Not NoPassengerViews (a stub class of the bird flock test).
+	var needle := RegEx.create_from_string("(?<![A-Za-z])PassengerViews\\.new\\(\\)")
+	var offenders: Array[String] = []
+	var scanned := _scan("res://tests", needle, offenders)
+	print("test files scanned %d, files building a view directly: %s" % [scanned, offenders])
+	assert_int(scanned).is_greater(100)
+	assert_array(offenders).is_equal(["res://tests/passengers/passenger_test_world.gd"])
+
+
+## Counts the .gd files under `dir` and lists those holding `needle`.
+func _scan(dir: String, needle: RegEx, offenders: Array[String]) -> int:
+	var count := 0
+	for file in DirAccess.get_files_at(dir):
+		if file.ends_with(".gd"):
+			count += 1
+			if needle.search(FileAccess.get_file_as_string(dir.path_join(file))) != null:
+				offenders.append(dir.path_join(file))
+	for sub in DirAccess.get_directories_at(dir):
+		count += _scan(dir.path_join(sub), needle, offenders)
+	return count

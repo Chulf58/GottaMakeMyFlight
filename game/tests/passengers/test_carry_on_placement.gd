@@ -52,7 +52,7 @@ func after_test() -> void:
 func _make(kind := SecurityLooks.Kind.CASE) -> int:
 	var w := SecurityTestWorld.make(false)
 	_worlds.append(w)
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = w.world.clock
 	views.sim = w.world.sim
 	add_child(views)

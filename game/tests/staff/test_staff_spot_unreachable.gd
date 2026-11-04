@@ -82,7 +82,7 @@ func test_a_pocketed_spot_loads_and_its_desk_says_staff_cannot_reach_it() -> voi
 	var scanner: int = _w.sim.layout.scanners[0]
 	assert_bool(_w.staff.spot_unreachable(scanner)).is_false()
 	assert_str(MissSignals.closed_reason(_w.sim, scanner)).is_equal(MissSignals.NO_STAFF_REASON)
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = _w.clock
 	views.sim = _w.sim
 	add_child(views)
@@ -187,7 +187,7 @@ func test_an_on_duty_agent_at_a_pocketed_spot_loads_released() -> void:
 		assert_str(MissSignals.closed_reason(loaded.sim, desk)).is_equal(
 			MissSignals.UNREACHABLE_REASON
 		)
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = loaded.clock
 	views.sim = loaded.sim
 	add_child(views)

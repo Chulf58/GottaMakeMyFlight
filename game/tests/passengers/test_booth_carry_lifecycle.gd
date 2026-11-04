@@ -42,7 +42,7 @@ func _make(use_lane: bool) -> SecurityTestWorld:
 
 
 func _views_of(w: SecurityTestWorld) -> PassengerViews:
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = w.world.clock
 	views.sim = w.world.sim
 	add_child(views)

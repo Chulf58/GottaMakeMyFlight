@@ -20,7 +20,7 @@ func before_test() -> void:
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(5, 1), 0)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(30, 40))
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

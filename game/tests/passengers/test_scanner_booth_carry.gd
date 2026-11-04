@@ -336,7 +336,7 @@ func _arm_weights(views: PassengerViews, id: int) -> Array[float]:
 
 
 func _views_of(w: SecurityTestWorld) -> PassengerViews:
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = w.world.clock
 	views.sim = w.world.sim
 	add_child(views)

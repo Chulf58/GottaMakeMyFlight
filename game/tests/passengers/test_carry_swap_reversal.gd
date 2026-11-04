@@ -45,7 +45,7 @@ func after_test() -> void:
 func test_a_swap_turned_back_goes_on_from_where_the_roller_is() -> void:
 	var w := SecurityTestWorld.make(true)
 	_worlds.append(w)
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = w.world.clock
 	views.sim = w.world.sim
 	add_child(views)

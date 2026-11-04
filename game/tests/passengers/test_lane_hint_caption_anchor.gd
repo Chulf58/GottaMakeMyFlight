@@ -45,7 +45,7 @@ func before_test() -> void:
 	_port = SubViewport.new()
 	_port.size = Vector2i(1920, 1080)
 	add_child(_port)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	_port.add_child(_views)

@@ -22,7 +22,7 @@ func before_test() -> void:
 	ToiletTestLayout.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.run_to(10)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

@@ -32,7 +32,7 @@ func after_test() -> void:
 
 func _attach(world: PassengerTestWorld) -> void:
 	_world = world
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = world.clock
 	_views.sim = world.sim
 	add_child(_views)

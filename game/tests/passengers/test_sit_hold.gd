@@ -32,7 +32,7 @@ func after_test() -> void:
 func _sitting_walker(roller: bool) -> Passenger:
 	_world = PassengerTestWorld.reference_world()
 	_world.run_to(10)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)
@@ -162,7 +162,7 @@ func test_a_sofa_or_pod_visitor_sets_its_roller_down_before_it_sits() -> void:
 		_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
 		_world.auto_staff_roles = [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]
 		_world.run_to(10)
-		_views = PassengerViews.new()
+		_views = PassengerTestWorld.views()
 		_views.clock = _world.clock
 		_views.sim = _world.sim
 		add_child(_views)

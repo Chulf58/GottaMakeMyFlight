@@ -103,7 +103,7 @@ func test_the_late_text_is_the_one_the_sim_says() -> void:
 
 
 func _views_with_camera(world: PassengerTestWorld, ids: Array[int]) -> PassengerViews:
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = world.clock
 	views.sim = world.sim
 	add_child(views)
@@ -196,7 +196,7 @@ func _assert_front_of_lane_kept(world: PassengerTestWorld, station: int) -> void
 	var front := world.sim.world_position(world.passenger(ids[0])) + lift
 	var back := world.sim.world_position(world.passenger(ids[ids.size() - 1])) + lift
 	assert_float(front.distance_to(back)).is_greater(0.5)
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = world.clock
 	views.sim = world.sim
 	add_child(views)

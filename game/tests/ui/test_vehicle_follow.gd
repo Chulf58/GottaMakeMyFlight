@@ -28,7 +28,7 @@ func after() -> void:
 
 func before_test() -> void:
 	_land = LandsideTestWorld.make(null, [], 3)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _land.world.clock
 	_views.sim = _land.sim
 	add_child(_views)

@@ -43,7 +43,7 @@ func _start(grid: BuildGrid) -> void:
 	_world.sim.shops.paid.connect(
 		func(id: int, room: int, amount: int) -> void: _paid.append([id, room, amount])
 	)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)
