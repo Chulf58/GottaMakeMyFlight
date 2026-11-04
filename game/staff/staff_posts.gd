@@ -29,7 +29,8 @@ extends RefCounted
 ##    lane that has a primary and no helper.
 ## Distances are path lengths in whole millimetres; ties go to the lower
 ## station or member id. A vacancy is only one staff can work: usable, its
-## spot not blocked and reachable from an entrance. So a vacancy no entrance
+## spot not blocked and reachable from an entrance, and not closed by the
+## player (StationClosures). So a vacancy no entrance
 ## reaches never recalls a helper, and a helper is only posted where no
 ## vacancy is left that a member could reach: a helper never leaves a station
 ## closed.
@@ -156,8 +157,13 @@ static func _arrival(staff: StaffSim, station: int, now: int) -> int:
 ## it (step 4); one whose last search failed counts only on its beat, as in
 ## run(), judged on the tick the step runs. A vacancy the helper has no way to
 ## never moves it, so it costs no copy however long it stays open. Ways are
-## judged by staff reach regions (_joined()).
+## judged by staff reach regions (_joined()). Either way, an officer the step
+## releases from a station the player closed (StationClosures.release_due())
+## may take a post, or leave this one: the step is played on a copy then.
 static func _pass_pending(staff: StaffSim, station: int) -> bool:
+	for m in _members(staff):
+		if m.role == StaffMember.Role.SECURITY and staff.closures.release_due(m):
+			return true
 	var grid := staff.sim.grid
 	var helper := staff.staff_at(station, StaffMember.Slot.HELPER)
 	if helper == 0:
@@ -270,9 +276,11 @@ static func run(staff: StaffSim, post: Callable, repost: Callable) -> void:
 
 ## Whether `slot` at `station` is free for a member to take: a primary post
 ## nobody holds, or a helper post nobody holds at a lane whose primary post
-## is held. Either way staff must be able to work it.
+## is held. Either way staff must be able to work it, and the player has not
+## closed the station (StationClosures): a closed station gets no new posting,
+## though it stays workable, so those already there finish their service.
 static func is_vacant(staff: StaffSim, station: int, slot: StaffMember.Slot) -> bool:
-	if staff.staff_at(station, slot) != 0:
+	if staff.staff_at(station, slot) != 0 or staff.closures.is_closed(station):
 		return false
 	if slot == StaffMember.Slot.HELPER and staff.staff_at(station) == 0:
 		return false

@@ -173,7 +173,7 @@ func test_views_draw_each_passenger_with_its_body_and_tint() -> void:
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(5, 1), 0)
 	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(30, 40))
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = world.clock
 	views.sim = world.sim
 	add_child(views)

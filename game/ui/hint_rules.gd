@@ -126,7 +126,8 @@ static func read_world(sim: PassengerSim, hiring_roles: Array) -> Dictionary:
 ## The roles (check-in, security) with a verified shortage: a usable station
 ## staff can reach has nobody claimed to it (an agent walking there has claimed
 ## it) and no hired agent of the role is spare (idle in the pool). Unusable and
-## unreachable stations are not a shortage.
+## unreachable stations, and those the player closed (StationClosures), are not
+## a shortage.
 static func _shortage_roles(sim: PassengerSim) -> Array:
 	var roles := []
 	var staff := sim.staff
@@ -137,6 +138,7 @@ static func _shortage_roles(sim: PassengerSim) -> Array:
 		for station in staff.stations_of(role):
 			if (
 				sim.layout.is_usable(station)
+				and not staff.closures.is_closed(station)
 				and not staff.spot_blocked(station)
 				and not staff.spot_unreachable(station)
 				and staff.staff_at(station) == 0

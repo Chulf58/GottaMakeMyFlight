@@ -41,7 +41,7 @@ func _make() -> void:
 	_ids = ToiletTestLayout.build(grid, 1)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	# The views sync on every tick, recording each passenger's drawn position.
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

@@ -23,9 +23,10 @@ extends VBoxContainer
 ## saved: a load or a new world starts the stack again (reset()).
 ##
 ## The airport-closed banner (StaffPanel's hint card) is not in the stack: it
-## is ruled as its own card docked above the bar (decision staff-panel-behind-a-
-## staff-button-at-the-end-of-the-bottom-bar), PanelRoom makes room for it, and
-## it guides the opening rather than reporting a problem that comes and goes.
+## is ruled as its own card at the top centre (decision status-banner-and-first-
+## time-hints-sit-at-the-top-centre), PanelRoom makes room for it, and it guides
+## the opening rather than reporting a problem that comes and goes. The stack
+## sits under the banner while the two share columns (`avoid`).
 
 ## A card was clicked and the camera sent to `target`.
 signal jumped(target: Vector3)
@@ -44,6 +45,8 @@ const WIDTH := 420.0
 const MIN_WIDTH := 240.0
 const RIGHT_GAP := 480.0
 const LEFT_MARGIN := 16.0
+## The gap kept under the banner when the stack steps down for it.
+const BANNER_GAP := 8.0
 
 ## The passenger sim the causes are read from. A different sim is a different
 ## world, so the stack starts again.
@@ -64,6 +67,9 @@ var scans := 0
 ## True while something covers the stack's place (the open offer sheet); the
 ## stack stays down then and comes back when it is false.
 var covered := Callable()
+## Returns the banner's screen rectangle, empty while none shows; the stack
+## steps down under it when they share columns.
+var avoid := Callable()
 
 var _board := AlertBoard.new()
 var _dirty := DirtyAlert.new()
@@ -142,6 +148,7 @@ func refresh() -> void:
 		_sync_tray()
 	visible = not (covered.is_valid() and covered.call())
 	_cards.visible = _cards_on
+	_step_under_banner()
 
 
 ## The screen rectangle of the drawn cards and the open history tray, which the
@@ -355,6 +362,18 @@ func _on_card_input(event: InputEvent, key: StringName) -> void:
 
 static func _card_name(key: StringName) -> String:
 	return "AlertCard_%s" % key
+
+
+## Moves the stack's top edge under the banner while their columns overlap.
+func _step_under_banner() -> void:
+	var top := TOP
+	if avoid.is_valid():
+		var banner: Rect2 = avoid.call()
+		var left := global_position.x
+		if banner.has_area() and banner.position.x < left + size.x and banner.end.x > left:
+			top = maxf(TOP, banner.end.y + BANNER_GAP)
+	if not is_equal_approx(top, offset_top):
+		offset_top = top
 
 
 func _fit() -> void:

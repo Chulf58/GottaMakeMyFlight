@@ -62,7 +62,9 @@ signal loaded(ok: bool)
 ## 10: the gates (part "gates", GateDesks: each gate's letter, desk and exit)
 ## and one stand per gate in the apron part; version 9 saves are refused (no
 ## migration before a release).
-const SAVE_VERSION := 10
+## 11: the stations the player closed (staff save version 5, StationClosures);
+## version 10 saves are refused (no migration before a release).
+const SAVE_VERSION := 11
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

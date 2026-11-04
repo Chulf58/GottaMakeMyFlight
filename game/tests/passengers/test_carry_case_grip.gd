@@ -52,7 +52,7 @@ func _case_in_front() -> int:
 		)
 		. is_true()
 	)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.world.clock
 	_views.sim = _world.world.sim
 	add_child(_views)

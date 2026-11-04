@@ -173,6 +173,10 @@ var _seed_label := Label.new()
 var _follow_label := Label.new()
 ## The followed passenger's card; the follow text then hides.
 var _inspect := PassengerInspect.new()
+## The clicked built item (BuiltSelection) and its gold floor outline; the
+## inspect card shows its info in place of a passenger's.
+var _built := BuiltSelection.new()
+var _outline := BuiltOutline.new()
 var _status_label := Label.new()
 var _status := ""
 ## True after a refused debug batch, until the next spawned one: the earlier
@@ -242,6 +246,7 @@ func _ready() -> void:
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel
 	if offers != null:
 		_alerts.covered = func() -> bool: return offers.is_node_ready() and offers.is_open()
+	_alerts.avoid = _banner_rect
 	_alerts.camera = camera
 	_alerts.settings_path = alert_settings_path
 	add_child(_alerts)
@@ -259,6 +264,13 @@ func _ready() -> void:
 	_inspect.camera = camera
 	_inspect.flights = flights
 	_inspect.clock = clock
+	_inspect.built_card.sim = sim
+	_inspect.built_card.selection = _built
+	_inspect.built_card.build_mode = build_mode
+	_inspect.built_card.gates = get_node_or_null("../GateDesks") as GateDesks
+	_outline.selection = _built
+	_outline.build_mode = build_mode
+	add_child(_outline)
 	add_child(_inspect)
 	add_child(_inspect.marker)
 	_fit_follow()
@@ -273,6 +285,7 @@ func _ready() -> void:
 	_panel_room.camera = camera
 	_panel_room.scene_root = get_parent()
 	_panel_room.result_card = _result
+	_panel_room.banner_rect = _banner_rect
 	_panel_room.alert_stack = _alerts
 	add_child(_panel_room)
 	_hints.hud = self
@@ -289,6 +302,7 @@ func _process(_delta: float) -> void:
 ## A followed passenger the sim has retired is gone: clear the selection and
 ## let the camera go, instead of following the frozen anchor.
 func _drop_retired_selection() -> void:
+	_settle_built_selection()
 	if landside_views != null and landside_views.selected_id != 0:
 		if not landside_views.has_vehicle(landside_views.selected_id):
 			landside_views.selected_id = 0
@@ -307,19 +321,43 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if views == null or camera == null or build_mode == null:
 		return
-	if build_mode.tool != BuildMode.Tool.NONE:
+	# A tool, a template paste or save, or a room move owns the click: it selects
+	# nothing, whatever stands under it.
+	if BuiltSelection.clicks_taken(build_mode):
 		return
 	var eye := camera.get_node("Camera3D") as Camera3D
 	var vehicle := landside_views.pick(eye, click.position) if landside_views != null else 0
 	if landside_views != null:
 		landside_views.select(vehicle)
 	views.selected_id = 0 if vehicle != 0 else views.pick(eye, click.position)
+	_built.clear()
+	if vehicle == 0 and views.selected_id == 0:
+		_pick_built(eye, click.position)
 	if vehicle != 0:
 		camera.follow(landside_views.follow_anchor)
 	elif views.selected_id != 0:
 		camera.follow(views.follow_anchor)
 	else:
 		camera.stop_follow()
+
+
+## Picks the built item under a click that met no vehicle and no passenger.
+func _pick_built(eye: Camera3D, at: Vector2) -> void:
+	var view := build_mode.get_node_or_null("BuildView") as BuildView
+	if view != null:
+		_built.pick(build_mode.grid, view, build_mode.landside_placement(), eye, at)
+
+
+## A built item stays selected only while no build interaction owns the clicks
+## (BuiltSelection.clicks_taken()), no passenger or vehicle is selected, and the
+## item still stands.
+func _settle_built_selection() -> void:
+	var other := views != null and views.selected_id != 0
+	other = other or (landside_views != null and landside_views.selected_id != 0)
+	if build_mode == null or other or BuiltSelection.clicks_taken(build_mode):
+		_built.clear()
+	else:
+		_built.prune(build_mode.grid, build_mode.landside_placement())
 
 
 ## Space toggles the pause; Shift+1/2/3 set the speed. These run before
@@ -712,6 +750,8 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
+		# A loaded world may reuse the selected id for another item.
+		_built.clear()
 		_alerts.reset()
 		_inspect.on_loaded(ok)
 		_frame_start_view()
@@ -721,6 +761,21 @@ func _frame_start_view() -> void:
 	if camera != null and build_mode != null:
 		camera.frame_start_view(StartView.area_for(build_mode.grid), _panel_room.free_fraction())
 		_panel_room.mark_sent()
+
+
+## The banner slot's screen rectangle while the status banner or a first-time
+## hint shows there, empty otherwise: the alert cards step down under it.
+func _banner_rect() -> Rect2:
+	var rect := Rect2()
+	var staff := get_parent().get_node_or_null("StaffPanel") as StaffPanel
+	var cards: Array[Control] = [_hints.card()]
+	if staff != null:
+		cards.append(staff.hint_card())
+	for card in cards:
+		if card.is_visible_in_tree():
+			var r := card.get_global_rect()
+			rect = r if not rect.has_area() else rect.merge(r)
+	return rect
 
 
 func _on_doors_closed(flight_id: String) -> void:

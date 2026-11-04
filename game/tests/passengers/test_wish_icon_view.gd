@@ -79,7 +79,7 @@ func _wish_world(types: Array, wish: StringName) -> void:
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return wish
 	_world.run_to(10)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

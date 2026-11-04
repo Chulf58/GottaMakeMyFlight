@@ -634,6 +634,22 @@ func _reach_after(edits: Array[BuildEdit], lane_spots: Dictionary) -> Dictionary
 	return reach
 
 
+## StationUseCells.answers() with `def_id` written in under an unused id as _reach_after()
+## does (unchecked, silent, A* untouched), then put back; {} when off the grid.
+func trial_answers(def_id: StringName, at: Vector2i, turn: int) -> Dictionary:
+	var def := BuildCatalog.get_def(def_id)
+	var cells := def.footprint(at, turn) + [def.interaction_cell(at, turn)]
+	if not cells.all(func(c: Vector2i) -> bool: return in_bounds(c) or c == BuildObjectDef.NO_CELL):
+		return {}
+	var kept := [_occupant.duplicate(), _reserved.duplicate()]
+	_insert_object(_next_object_id, def_id, at, turn)
+	var out := StationUseCells.answers(self, _next_object_id)
+	_erase_object(_next_object_id)
+	_occupant = kept[0]
+	_reserved = kept[1]
+	return out
+
+
 ## Validates the edit and, if it is accepted, applies it and relinks the A*
 ## graph around its dirty cells. A refused edit changes nothing, and an edit
 ## with no dirty cells (a room) relinks and emits nothing.
@@ -1340,7 +1356,7 @@ func _check_place_object(def_id: StringName, anchor: Vector2i, facing: int) -> B
 	var problem := _footprint_problem(cells)
 	if problem != null:
 		return problem
-	problem = _interaction_problem(def.interaction_cell(anchor, facing), cells)
+	problem = interaction_problem(def.interaction_cell(anchor, facing), cells)
 	if problem != null:
 		return problem
 	return BuildResult.accepted()
@@ -1367,8 +1383,8 @@ func _footprint_problem(cells: Array[Vector2i]) -> BuildResult:
 
 ## A refusal when the interaction cell is unusable, or null. The cell must be
 ## free floor that no other object claims, with no wall between it and the
-## footprint.
-func _interaction_problem(spot: Vector2i, cells: Array[Vector2i]) -> BuildResult:
+## footprint. The build ghost asks it too (StationUseCells).
+func interaction_problem(spot: Vector2i, cells: Array[Vector2i]) -> BuildResult:
 	if spot == BuildObjectDef.NO_CELL:
 		return null
 	if not in_bounds(spot) or _floor[_index(spot)] == FLOOR_NONE:

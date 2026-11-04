@@ -71,7 +71,7 @@ func test_a_stall_room_with_only_a_counter_is_ready_and_usable() -> void:
 	assert_int(type.dwell_ticks).is_equal(0)
 	(
 		assert_array(type.required.map(func(need: Array) -> StringName: return need[0]))
-		. is_equal([&"cafe_counter"])
+		. is_equal([&"grab_and_go_stall"])
 	)
 
 

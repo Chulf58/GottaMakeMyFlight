@@ -55,7 +55,7 @@ func test_security_queuers_with_the_most_bags_are_drawn_with_their_arms_holding(
 	_w = SecurityTestWorld.make(false)
 	var bags := CarryOnTraits.MAX_BAGS
 	_w.send_all([[bags, false, false], [bags, false, false], [bags, false, false]])
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _w.world.clock
 	_views.sim = _w.world.sim
 	add_child(_views)

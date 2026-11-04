@@ -25,7 +25,7 @@ func before() -> void:
 	var grid := BuildGrid.new()
 	CafeTestLayout.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

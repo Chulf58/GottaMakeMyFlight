@@ -19,11 +19,13 @@ extends CanvasLayer
 ## The card belongs to the bottom category bar (decision hud-layout-bottom-
 ## category-bar-with-an-item-tray-time-and-fl): the bar's Staff button opens it
 ## above the bar, in the item tray's place, and a category or a tool closes it.
-## The hint is not part of the card: it stays on screen in a card of its own just above
-## the bar (above an open tray or card), whether the card is open or not, so a closed
-## airport is never hidden behind a closed card. While the build ghost is over the
-## hint it fades to FADED_ALPHA (it never takes a click). Without a `menu` (a test) the
-## card is always shown.
+## The hint is not part of the card: it stays on screen in a card of its own at
+## the top centre (decision status-banner-and-first-time-hints-sit-at-the-top-
+## centre), under the top row, whether the card or a build tray is open or not, so
+## a closed airport is never hidden behind a closed card and never sits over the
+## terminal being built. While the build ghost is over the hint it fades to
+## FADED_ALPHA (it never takes a click). Without a `menu` (a test) the card is
+## always shown.
 
 const ROLES: Array[StaffMember.Role] = [
 	StaffMember.Role.CHECKIN,
@@ -61,6 +63,10 @@ const CLOSED_HINTS := {
 	),
 	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
 	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
+	AirportGate.Blocker.CHECKIN_CLOSED:
+	"Airport closed: you closed every check-in desk. Open one again to let passengers in",
+	AirportGate.Blocker.SECURITY_CLOSED:
+	"Airport closed: you closed every scanner and lane. Open one again to let passengers in",
 	AirportGate.Blocker.NO_GATE:
 	"Airport closed: place a gate desk by an exit that faces the planes",
 }
@@ -72,8 +78,13 @@ const GAPS_HINT := "%d wall gaps: close the open edges of the outer wall, marked
 const OPEN_CUE := "Open! Starter contract: %s to %s, daily"
 ## A column's least width: four roles fit centred over the bar.
 const ROLE_WIDTH := 180.0
-## Width of the hint card's text, in layout pixels.
+## Width of the hint card's text, in layout pixels. With its padding the card
+## ends left of PassengerHud's flight panel on every window shape: the layout is
+## at least 1536 wide (1920 over the 1.25 stretch scale, aspect expand).
 const HINT_W := 560.0
+## The banner's top edge, under the top row and the Build mode sign (which ends
+## at about 64).
+const BANNER_TOP := 72.0
 ## The hint card's opacity while the build ghost is over it, and how fast it
 ## fades to that or back (opacity per second).
 const FADED_ALPHA := 0.35
@@ -96,7 +107,6 @@ var gap_scans := 0
 var _card := PanelContainer.new()
 var _hint := Label.new()
 var _hint_box := PanelContainer.new()
-var _hint_bottom := -1.0
 ## True while a first-time hint holds the banner's slot (set_hint_yielded()).
 var _hint_yielded := false
 ## Whether the gate was open at the last refresh, so an opening is seen once.
@@ -193,14 +203,19 @@ func hint_text() -> String:
 	return "\n".join(lines)
 
 
-## The roles whose hire line the banner shows: stations of the role stand and
-## nobody of it is hired and staying. The first-time hints compare this by
-## meaning, so a hint does not repeat a hire the banner already asks for.
+## The roles whose hire line the banner shows: stations of the role stand that
+## the player has not closed (StationClosures), and nobody of it is hired and
+## staying. A closed station asks for nobody. The first-time hints compare this
+## by meaning, so a hint does not repeat a hire the banner already asks for.
 func hiring_hint_roles() -> Array[StaffMember.Role]:
 	var roles: Array[StaffMember.Role] = []
 	for role in ROLES:
-		if not staff.stations_of(role).is_empty() and _staying(role) == 0:
-			roles.append(role)
+		if _staying(role) != 0:
+			continue
+		for station in staff.stations_of(role):
+			if not staff.closures.is_closed(station):
+				roles.append(role)
+				break
 	return roles
 
 
@@ -212,12 +227,19 @@ func set_hint_yielded(yielded: bool) -> void:
 	_hint_box.visible = _hint.visible and not _hint_yielded
 
 
-## How far up from the bottom edge the banner's slot is docked, in layout
-## pixels: the first-time hint takes the same place.
-func hint_dock_bottom() -> float:
-	return (
-		_hint_bottom if _hint_bottom >= 0.0 else BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
-	)
+## Anchors `card` at the top centre, growing down from BANNER_TOP. The
+## first-time hint card uses it too, so the two sit in the same place.
+static func anchor_banner(card: Control) -> void:
+	card.anchor_left = 0.5
+	card.anchor_right = 0.5
+	card.anchor_top = 0.0
+	card.anchor_bottom = 0.0
+	card.offset_left = 0.0
+	card.offset_right = 0.0
+	card.offset_top = BANNER_TOP
+	card.offset_bottom = BANNER_TOP
+	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card.grow_vertical = Control.GROW_DIRECTION_END
 
 
 func refresh() -> void:
@@ -334,10 +356,8 @@ func _build() -> void:
 	_build_hint()
 
 
-## The hint sits in a HUD card of its own, centred, growing up from the bottom
-## edge _place_hint() gives: just above the bar, above the open tray with its
-## status and cost lines, or above the staff card, so it never covers any of them
-## and has a backing to read against.
+## The hint sits in a HUD card of its own at the top centre, growing down from
+## BANNER_TOP, so it has a backing to read against.
 func _build_hint() -> void:
 	_hint_box.name = "StaffHintCard"
 	_hint_box.theme = BuildMenu.HUD_THEME
@@ -351,11 +371,10 @@ func _build_hint() -> void:
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hint_box.add_child(_hint)
-	_place_hint()
+	anchor_banner(_hint_box)
 
 
 func _process(delta: float) -> void:
-	_place_hint()
 	var ghost := Rect2()
 	if menu != null:
 		ghost = GhostBounds.build_rect(menu.build_mode, get_viewport().get_camera_3d())
@@ -372,18 +391,6 @@ func fade_for(ghost: Rect2, delta: float) -> void:
 	)
 	var target := FADED_ALPHA if covered else 1.0
 	_hint_box.modulate.a = move_toward(_hint_box.modulate.a, target, delta * FADE_SPEED)
-
-
-## Docks the hint card above whatever stands over the bar now.
-func _place_hint() -> void:
-	var bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
-	if menu != null and menu.is_tray_open():
-		bottom = BuildMenu.tray_stack_top() + BuildMenu.GAP
-	elif _card.visible and menu != null:
-		bottom += _card.get_combined_minimum_size().y + BuildMenu.GAP
-	if not is_equal_approx(bottom, _hint_bottom):
-		_hint_bottom = bottom
-		BuildMenu.anchor_bottom_centre(_hint_box, bottom)
 
 
 func _label(text: String, variation: StringName) -> Label:

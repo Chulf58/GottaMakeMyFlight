@@ -51,7 +51,7 @@ func _sitter(count: int) -> Passenger:
 	_free_world()
 	_world = PassengerTestWorld.reference_world()
 	_world.run_to(10)
-	_views = PassengerViews.new()
+	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)

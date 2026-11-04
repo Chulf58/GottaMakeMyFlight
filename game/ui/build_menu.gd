@@ -962,7 +962,8 @@ func _build_tray() -> void:
 
 func _make_card(tool: BuildMode.Tool) -> Button:
 	var card_item := item(tool)
-	var button := Button.new()
+	var button := ItemCardButton.new()
+	button.set_info(card_item[0], ItemInfo.of(tool))
 	button.name = "Card%s" % card_item[1].capitalize()
 	button.toggle_mode = true
 	button.custom_minimum_size = CARD_SIZE

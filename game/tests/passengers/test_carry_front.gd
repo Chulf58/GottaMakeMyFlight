@@ -40,7 +40,7 @@ func _make() -> SecurityTestWorld:
 	_worlds.append(w)
 	var wall := BuildEdit.place_wall(CORRIDOR, BuildGrid.Side.WEST)
 	assert_bool(w.world.sim.grid.apply(wall).ok).is_true()
-	var views := PassengerViews.new()
+	var views := PassengerTestWorld.views()
 	views.clock = w.world.clock
 	views.sim = w.world.sim
 	add_child(views)

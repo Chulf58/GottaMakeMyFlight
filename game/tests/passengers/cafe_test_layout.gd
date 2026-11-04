@@ -15,6 +15,7 @@ const AIR_TABLE := Vector2i(24, 6)
 const LAND_COUNTER := Vector2i(23, 10)
 const LAND_TABLE := Vector2i(24, 13)
 ## A second table per cafe, for queue tests that need more than two seats.
+const DINING_OFFSET := Vector2i(1, -2)
 const AIR_TABLE_2 := Vector2i(24, 4)
 const LAND_TABLE_2 := Vector2i(24, 11)
 
@@ -24,9 +25,17 @@ const LAND_TABLE_2 := Vector2i(24, 11)
 ## "land_table"} (and "air_table_2", "land_table_2" with `extra_tables`).
 ## `venue` is the room type of both
 ## rooms (cafe, bar, restaurant or stall). With `tables` false no table is
-## placed (a stall needs none; a cafe is then not ready).
+## placed (a stall needs none; a cafe is then not ready). `counter_def` and
+## `table_def` are the pieces placed; a 2x3 table (the dining table, the booth)
+## stands at DINING_OFFSET from the cafe table's spot, with its chairs on its
+## north and south rows, and has no second table.
 static func build(
-	grid: BuildGrid, extra_tables := false, venue: StringName = &"cafe", tables := true
+	grid: BuildGrid,
+	extra_tables := false,
+	venue: StringName = &"cafe",
+	tables := true,
+	counter_def: StringName = &"cafe_counter",
+	table_def: StringName = &"cafe_table"
 ) -> Dictionary:
 	var built := ReferenceTerminal.build(grid)
 	assert(built, "reference terminal refused")
@@ -47,13 +56,15 @@ static func build(
 	var ids := {
 		"air_room": _apply(grid, BuildEdit.place_room(_moved(AIRSIDE_ROOM, at), venue)).room_id,
 		"land_room": _apply(grid, BuildEdit.place_room(_moved(LANDSIDE_ROOM, at), venue)).room_id,
-		"air_counter": _place(grid, &"cafe_counter", AIR_COUNTER + at),
-		"land_counter": _place(grid, &"cafe_counter", LAND_COUNTER + at),
+		"air_counter": _place(grid, counter_def, AIR_COUNTER + at),
+		"land_counter": _place(grid, counter_def, LAND_COUNTER + at),
 	}
+	var dining := BuildCatalog.get_def(table_def).size.y == 3
+	var shift := DINING_OFFSET if dining else Vector2i.ZERO
 	if tables:
-		ids["air_table"] = _place(grid, &"cafe_table", AIR_TABLE + at)
-		ids["land_table"] = _place(grid, &"cafe_table", LAND_TABLE + at)
-	if extra_tables and tables:
+		ids["air_table"] = _place(grid, table_def, AIR_TABLE + shift + at)
+		ids["land_table"] = _place(grid, table_def, LAND_TABLE + shift + at)
+	if extra_tables and tables and not dining:
 		ids["air_table_2"] = _place(grid, &"cafe_table", AIR_TABLE_2 + at)
 		ids["land_table_2"] = _place(grid, &"cafe_table", LAND_TABLE_2 + at)
 	return ids
