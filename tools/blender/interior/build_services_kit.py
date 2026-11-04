@@ -26,7 +26,8 @@ Mounts are Mount_* empties in the piece's own frame (Godot axes, metres), unit s
 upright, +Z the way the passenger faces. Kinds: "sit_root" (where a seated passenger's
 ROOT goes, feet on the floor), "order" (a customer standing at the counter), "staff"
 (the server behind it), "use" (a passenger using a machine or cubicle), "browse" (a
-passenger at a shelf). A seated root is the seat cell's centre plus SIT_FORWARD toward
+passenger at a shelf), "approach" (the cell centre a guest steps in from before
+sitting down, facing the seat; board 3405a04b). A seated root is the seat cell's centre plus SIT_FORWARD toward
 the cell the passenger faces (passenger_sim SIT_FORWARD_M); the seated-fit check holds
 the root fixed, so the shuffle from the faced cell is not checked here.
 
@@ -69,13 +70,27 @@ BAR_ROOT_Z = 0.5 - SIT_FORWARD  # stool row z = +0.5, faces the counter row
 POD_ROOT_Z = 0.0 + SIT_FORWARD  # seat cell z = 0, faces +Z
 
 
-def four_seats():
-    return {
+def four_seats(approach):
+    """The four seats of a 2x3 table or booth and where a guest steps in to each.
+    approach "behind": the cell behind the chair (a chair is pulled out backwards),
+    facing the way the chair faces. approach "end": the cell beside the seat at the
+    open end of the bench (a booth's high back panel stands behind the seat), facing
+    in along the bench."""
+    mounts = {
         "Mount_SitRoot_FL": ("sit_root", (-0.5, 0.0, TABLE_ROOT_Z), 180.0),
         "Mount_SitRoot_FR": ("sit_root", (0.5, 0.0, TABLE_ROOT_Z), 180.0),
         "Mount_SitRoot_BL": ("sit_root", (-0.5, 0.0, -TABLE_ROOT_Z), 0.0),
         "Mount_SitRoot_BR": ("sit_root", (0.5, 0.0, -TABLE_ROOT_Z), 0.0),
     }
+    for row, z, yaw in (("F", 1.0, 180.0), ("B", -1.0, 0.0)):
+        for side, x in (("L", -0.5), ("R", 0.5)):
+            if approach == "behind":
+                mounts["Mount_Approach_" + row + side] = ("approach", (x, 0.0, 2.0 * z), yaw)
+            elif approach == "end":
+                mounts["Mount_Approach_" + row + side] = ("approach", (3.0 * x, 0.0, z), -90.0 if x > 0 else 90.0)
+            else:
+                raise ValueError("four_seats: approach must be 'behind' or 'end', not %r" % (approach,))
+    return mounts
 
 
 # piece -> footprint (cells x by z), mounts {name: (kind, Godot position, yaw in
@@ -83,16 +98,21 @@ def four_seats():
 SERVICES = {
     "bar_counter": {
         # Counter in the back row, stools in the front row facing it; the server
-        # stands in the cell behind the counter, as at cafe_counter.
+        # stands in the cell behind the counter, as at cafe_counter. A guest orders
+        # from the cell in front of the left stool, the mirror of Mount_Staff
+        # (board 3405a04b). The stools have no approach mount yet: the cell in
+        # front of the left stool is the order cell, and CafeLayout drops a
+        # counter whose order cell is a seat's approach.
         "footprint": (2, 2),
         "mounts": {
             "Mount_SitRoot_L": ("sit_root", (-0.5, 0.0, BAR_ROOT_Z), 180.0),
             "Mount_SitRoot_R": ("sit_root", (0.5, 0.0, BAR_ROOT_Z), 180.0),
             "Mount_Staff": ("staff", (-0.5, 0.0, -1.5), 0.0),
+            "Mount_Order": ("order", (-0.5, 0.0, 1.5), 180.0),
         },
     },
-    "restaurant_table": {"footprint": (2, 3), "mounts": four_seats()},
-    "restaurant_booth": {"footprint": (2, 3), "mounts": four_seats()},
+    "restaurant_table": {"footprint": (2, 3), "mounts": four_seats("behind")},
+    "restaurant_booth": {"footprint": (2, 3), "mounts": four_seats("end")},
     "grab_and_go_stall": {"footprint": (2, 1), "mounts": {"Mount_Order": ORDER, "Mount_Staff": STAFF}},
     "info_desk": {"footprint": (2, 1), "mounts": {"Mount_Order": ORDER, "Mount_Staff": STAFF}},
     "currency_exchange": {"footprint": (2, 1), "mounts": {"Mount_Order": ORDER, "Mount_Staff": STAFF}},

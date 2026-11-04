@@ -112,6 +112,48 @@ func test_the_step_blends_in_from_the_chair_front_and_out_again() -> void:
 	assert_vector(_views.draw_position(p)).is_equal_approx(approach, Vector3.ONE * 0.001)
 
 
+## A restaurant guest at the dining table or the booth is drawn with that
+## piece's own step (PassengerLooks.seat_shift(), board 3405a04b), not the cafe
+## chair's: the cafe step put the forearms into the dining table top.
+func test_a_restaurant_guest_takes_the_dining_piece_s_own_step() -> void:
+	for table: StringName in [&"restaurant_table", &"restaurant_booth"]:
+		_views.free()
+		_world.free_all()
+		var grid := BuildGrid.new()
+		CafeTestLayout.build(grid, false, &"restaurant", true, &"cafe_counter", table)
+		_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+		_views = PassengerTestWorld.views()
+		_views.clock = _world.clock
+		_views.sim = _world.sim
+		add_child(_views)
+		var p := _guest()
+		var visit := _world.sim.cafes.visit_of(p.id)
+		_run_to_stage(p, Passenger.Stage.CAFE_SEATED)
+		assert_str(String(visit.piece.get("def", &""))).is_equal(String(table))
+		var root := BuildObjectDef.seat_root_world(_world.grid, visit.seat)
+		var facing: Vector2i = visit.seat["facing"]
+		var ahead := Vector3(facing.x, 0.0, facing.y)
+		var own := p.variant
+		for variant in 2:
+			p.variant = variant
+			var body := PassengerLooks.body_of(p.id, p.variant)
+			var shift := PassengerLooks.seat_shift(table, body)
+			var cafe := PassengerLooks.CAFE_SEAT_SHIFT_M[body]
+			var drawn := _views.draw_position(p) - root
+			print(
+				(
+					"%s body %d drawn step %s, piece step %s, cafe step %s"
+					% [table, body, drawn, shift, cafe]
+				)
+			)
+			assert_vector(drawn).is_equal_approx(
+				ahead * shift.x + Vector3.UP * shift.y, Vector3.ONE * 0.001
+			)
+			# The control: the cafe chair's step is further towards the table.
+			assert_float(drawn.dot(ahead)).is_less(cafe.x - 0.05)
+		p.variant = own
+
+
 func test_no_step_away_from_a_cafe_seat() -> void:
 	var p := _guest()
 	_run_to_stage(p, Passenger.Stage.CAFE_ORDER)

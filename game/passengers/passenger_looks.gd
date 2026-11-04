@@ -98,6 +98,52 @@ const CAFE_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.105, 0.0),
 	Vector2(0.095, 0.0),
 ]
+## Per body, the step (as CAFE_SEAT_SHIFT_M) for a body seated on a cushion of
+## the services kit (board 3405a04b): its seats are shaped around the bare root
+## (build_services_kit.py), and the cafe chair's step puts the forearms into
+## the dining table top. Only a lift where a dress hangs into the cushion
+## (female_01 2 cm, female_05 1 cm), no step towards the table. Measured by
+## game/spike/food_seat_plates_probe.gd --parts=sweep (the least lift leaving
+## no body point inside the piece).
+const SERVICES_SEAT_SHIFT_M: Array[Vector2] = [
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2(0.0, 0.02),
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2(0.0, 0.01),
+	Vector2.ZERO,
+	Vector2.ZERO,
+]
+## Per body, the step for a body seated on the restaurant booth's bench: as
+## SERVICES_SEAT_SHIFT_M, plus a step towards the table where the hips reach
+## into the tilted back cushion (the least step plus 1 cm; female_01 needs her
+## 2 cm lift as well).
+const BOOTH_SEAT_SHIFT_M: Array[Vector2] = [
+	Vector2.ZERO,
+	Vector2(0.015, 0.0),
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2.ZERO,
+	Vector2(0.02, 0.02),
+	Vector2(0.025, 0.0),
+	Vector2(0.025, 0.0),
+	Vector2(0.025, 0.0),
+	Vector2(0.025, 0.0),
+	Vector2(0.025, 0.0),
+]
+## Piece -> its per-body seat step, for the pieces whose seats do not take
+## CAFE_SEAT_SHIFT_M (seat_shift()).
+const PIECE_SEAT_SHIFT_M := {
+	&"restaurant_table": SERVICES_SEAT_SHIFT_M,
+	&"restaurant_booth": BOOTH_SEAT_SHIFT_M,
+	&"bar_counter": SERVICES_SEAT_SHIFT_M,
+}
 ## Clothing tints: [hue turn of coloured swatches, hue given to grey swatches].
 ## Tint 0 is the vendor's own colours.
 const TINTS := [[0.0, -1.0], [0.5, 0.6], [0.17, 0.08], [0.83, 0.95], [0.33, 0.3], [0.67, 0.5]]
@@ -139,6 +185,19 @@ static var _split := {}
 static var _materials := {}
 ## "material id/colour" -> bag material.
 static var _bag_materials := {}
+
+
+## The step towards the table (x) and up (y) of the sim's seat root for `body`
+## seated at a seat of the piece `def_id`. The services kit's restaurant chairs,
+## booth benches and bar stools are shaped around the bare seat root
+## (build_services_kit.py), so a body there sits at the root, lifted or
+## stepped only where a dress or the hips reach into the cushion
+## (PIECE_SEAT_SHIFT_M); any other piece takes the cafe chair's
+## CAFE_SEAT_SHIFT_M.
+static func seat_shift(def_id: StringName, body: int) -> Vector2:
+	if PIECE_SEAT_SHIFT_M.has(def_id):
+		return PIECE_SEAT_SHIFT_M[def_id][body]
+	return CAFE_SEAT_SHIFT_M[body]
 
 
 ## The body index (into BODIES) a passenger is drawn with.

@@ -30,11 +30,29 @@ const FRONT := Vector3(0, 0, 1)
 const BACK := Vector3(0, 0, -1)
 const ORDER := [Vector3(-0.5, 0.0, 1.0), BACK]
 const STAFF := [Vector3(-0.5, 0.0, -1.0), FRONT]
-const FOUR_SEATS := {
+const RIGHT := Vector3(1, 0, 0)
+const LEFT := Vector3(-1, 0, 0)
+## The table's seats are stepped into from behind the chair, the booth's from
+## the bench's open end (build_services_kit.four_seats).
+const TABLE_SEATS := {
 	"Mount_SitRoot_FL": [Vector3(-0.5, 0.0, 0.55), BACK],
 	"Mount_SitRoot_FR": [Vector3(0.5, 0.0, 0.55), BACK],
 	"Mount_SitRoot_BL": [Vector3(-0.5, 0.0, -0.55), FRONT],
 	"Mount_SitRoot_BR": [Vector3(0.5, 0.0, -0.55), FRONT],
+	"Mount_Approach_FL": [Vector3(-0.5, 0.0, 2.0), BACK],
+	"Mount_Approach_FR": [Vector3(0.5, 0.0, 2.0), BACK],
+	"Mount_Approach_BL": [Vector3(-0.5, 0.0, -2.0), FRONT],
+	"Mount_Approach_BR": [Vector3(0.5, 0.0, -2.0), FRONT],
+}
+const BOOTH_SEATS := {
+	"Mount_SitRoot_FL": [Vector3(-0.5, 0.0, 0.55), BACK],
+	"Mount_SitRoot_FR": [Vector3(0.5, 0.0, 0.55), BACK],
+	"Mount_SitRoot_BL": [Vector3(-0.5, 0.0, -0.55), FRONT],
+	"Mount_SitRoot_BR": [Vector3(0.5, 0.0, -0.55), FRONT],
+	"Mount_Approach_FL": [Vector3(-1.5, 0.0, 1.0), RIGHT],
+	"Mount_Approach_FR": [Vector3(1.5, 0.0, 1.0), LEFT],
+	"Mount_Approach_BL": [Vector3(-1.5, 0.0, -1.0), RIGHT],
+	"Mount_Approach_BR": [Vector3(1.5, 0.0, -1.0), LEFT],
 }
 ## Piece -> {mount: [position, facing (+Z)]}, in the piece's own frame.
 const MOUNTS := {
@@ -43,9 +61,10 @@ const MOUNTS := {
 		"Mount_SitRoot_L": [Vector3(-0.5, 0.0, 0.05), BACK],
 		"Mount_SitRoot_R": [Vector3(0.5, 0.0, 0.05), BACK],
 		"Mount_Staff": [Vector3(-0.5, 0.0, -1.5), FRONT],
+		"Mount_Order": [Vector3(-0.5, 0.0, 1.5), BACK],
 	},
-	"restaurant_table": FOUR_SEATS,
-	"restaurant_booth": FOUR_SEATS,
+	"restaurant_table": TABLE_SEATS,
+	"restaurant_booth": BOOTH_SEATS,
 	"grab_and_go_stall": {"Mount_Order": ORDER, "Mount_Staff": STAFF},
 	"info_desk": {"Mount_Order": ORDER, "Mount_Staff": STAFF},
 	"currency_exchange": {"Mount_Order": ORDER, "Mount_Staff": STAFF},
