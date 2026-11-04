@@ -18,6 +18,7 @@ var _cam: Camera3D
 func before_test() -> void:
 	var scene: PackedScene = load("res://camera/tycoon_camera.tscn")
 	_rig = auto_free(scene.instantiate()) as TycoonCamera
+	_rig.settings_path = SaveTestKit.run_path("camera_room")
 	add_child(_rig)
 	_cam = _rig.get_node("Camera3D")
 

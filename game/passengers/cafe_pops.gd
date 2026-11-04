@@ -14,6 +14,11 @@ const RISE_M := 0.4
 ## Space between the pop's top line at the end of its rise and the bottom line
 ## of the room label (RoomView.LABEL_Y), which grows upward from there.
 const GAP_M := 0.6
+## How far the pop also hangs below the label, in the label's own plane (so it is
+## the same on screen at every camera pitch): the world gap above shrinks on
+## screen as the camera looks steeper down, and the top-down step (70 degrees)
+## would put the pop on the room label.
+const DROP_M := 0.4
 ## How far a pop paid while another of its room is up steps aside, wider
 ## than a "+$<amount>" pop.
 const SIDE_STEP_M := 1.3
@@ -77,7 +82,7 @@ func _on_paid(passenger_id: int, room_id: int, amount: int) -> void:
 	var label := _take()
 	label.set_meta(&"room", room_id)
 	label.set_meta(&"slot", side)
-	label.offset = Vector2(side * SIDE_STEP_M / label.pixel_size, 0.0)
+	label.offset = Vector2(side * SIDE_STEP_M, -DROP_M) / label.pixel_size
 	label.text = "+$%d" % amount
 	label.position = _point(passenger_id, room_id)
 	label.modulate = COLOR

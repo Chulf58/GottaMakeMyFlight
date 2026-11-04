@@ -319,14 +319,18 @@ func test_an_offer_accepted_late_enters_unseen_on_the_straight_in() -> void:
 	var first_step := (
 		view.straight_in_to_go(starts, scheduled) - view.straight_in_to_go(starts, scheduled + 1)
 	)
-	assert_float(first_step).is_greater(view.lead_in_speed(starts)).is_less(6.0)
+	# The entry lies 1000 m west, outside the view of every camera angle (the low
+	# angle looks farthest), and the straight-in covers it in the span from
+	# SCHEDULED, so it starts at about 11 m per tick and slows to the approach's speed.
+	assert_float(first_step).is_greater(view.lead_in_speed(starts)).is_less(12.0)
 
 
 ## Where a plane pops in or out (the full lead-in's start, the straight-in's
 ## entry, the climb-out's end) no camera sees it, on a sample of cameras: 25
 ## focus points across the camera bounds (edges, halves, centre) x 24 yaws x 5
-## zooms from near to full. A sample, not every configuration. A control point
-## (ApproachStart) is seen by some sampled camera.
+## zooms from near to full, at each of the three angle steps (the low step looks
+## farthest). A sample, not every configuration. A control point (ApproachStart)
+## is seen by some sampled camera at every step.
 func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
 	# The test runner's window is square; a 21:9 view sees wider than the
 	# game's 16:9, so it covers ultrawide windows too.
@@ -334,6 +338,7 @@ func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
 	screen.size = Vector2i(2520, 1080)
 	add_child(screen)
 	var rig: TycoonCamera = load("res://camera/tycoon_camera.tscn").instantiate()
+	rig.settings_path = SaveTestKit.run_path("sky_unseen")
 	screen.add_child(rig)
 	var cam: Camera3D = rig.get_node("Camera3D")
 	var view := _view(_sim(), _clock())
@@ -351,28 +356,31 @@ func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
 				origin + AABB(Vector3(-20, -6, -20), Vector3(40, 12, 40)).get_endpoint(i)
 			)
 	var control: Vector3 = _airside.phase_path(FlightSim.State.APPROACH)[0]
-	var seen := 0
-	var control_seen := 0
 	var edge := rig.bounds_half_extent
-	for fx in [-edge, -edge / 2.0, 0.0, edge / 2.0, edge]:
-		for fz in [-edge, -edge / 2.0, 0.0, edge / 2.0, edge]:
-			for step in 24:
-				for zoom in [6.0, 30.0, 80.0, 150.0, 300.0]:
-					rig.position = Vector3(fx, 0.0, fz)
-					rig.yaw = step * TAU / 24.0
-					rig.distance = zoom
-					rig.zoom(1.0)
-					control_seen += int(cam.is_position_in_frustum(control))
-					for p in hidden_points:
-						seen += int(cam.is_position_in_frustum(p))
-	print(
-		(
-			"sky unseen viewport=%s seen=%d control_seen=%d"
-			% [cam.get_viewport().get_visible_rect().size, seen, control_seen]
+	for angle in TycoonCamera.AngleStep.values():
+		rig.set_angle_step(angle)
+		var seen := 0
+		var control_seen := 0
+		for fx in [-edge, -edge / 2.0, 0.0, edge / 2.0, edge]:
+			for fz in [-edge, -edge / 2.0, 0.0, edge / 2.0, edge]:
+				for step in 24:
+					for zoom in [6.0, 30.0, 80.0, 150.0, 300.0]:
+						rig.position = Vector3(fx, 0.0, fz)
+						rig.yaw = step * TAU / 24.0
+						rig.distance = zoom
+						rig.zoom(1.0)
+						control_seen += int(cam.is_position_in_frustum(control))
+						for p in hidden_points:
+							seen += int(cam.is_position_in_frustum(p))
+		var label := "angle step %d" % angle
+		print(
+			(
+				"sky unseen %s viewport=%s seen=%d control_seen=%d"
+				% [label, cam.get_viewport().get_visible_rect().size, seen, control_seen]
+			)
 		)
-	)
-	assert_int(control_seen).is_greater(0)
-	assert_int(seen).is_equal(0)
+		assert_int(control_seen).override_failure_message(label).is_greater(0)
+		assert_int(seen).override_failure_message(label).is_equal(0)
 
 
 ## Sol re-check regression: the starter's first day gets no exception. It is

@@ -33,6 +33,8 @@ var marker := ThoughtMarker.new()
 ## The selected built item's rows, shown in place of the passenger's while an
 ## item is selected (BuiltItemCard); PassengerHud wires its selection.
 var built_card := BuiltItemCard.new()
+## Move and Delete under the item card (BuiltItemActions).
+var actions := BuiltItemActions.new()
 
 var _passenger_rows := VBoxContainer.new()
 var _name := Button.new()
@@ -55,6 +57,8 @@ func _init() -> void:
 	var root := VBoxContainer.new()
 	add_child(root)
 	root.add_child(built_card)
+	actions.card = built_card
+	root.add_child(actions)
 	var column := _passenger_rows
 	column.add_theme_constant_override("separation", 2)
 	root.add_child(column)
@@ -115,6 +119,7 @@ func refresh() -> void:
 	if _marked_id != 0 and (p == null or p.id != _marked_id):
 		clear_marker()
 	built_card.refresh()
+	actions.refresh()
 	_passenger_rows.visible = p != null
 	visible = p != null or built_card.visible
 	if p == null:

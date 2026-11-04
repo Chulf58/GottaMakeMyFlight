@@ -29,23 +29,24 @@ var cleared := {}
 var joined: Array[int] = []
 
 
-## `use_lane` true builds the lane, false the basic scanner.
-static func make(use_lane: bool, seed := 7) -> SecurityTestWorld:
+## `use_lane` true builds the lane (on side `mirror`, SecurityLanes.RIGHT or
+## LEFT), false the basic scanner.
+static func make(use_lane: bool, seed := 7, mirror := SecurityLanes.RIGHT) -> SecurityTestWorld:
 	var out := SecurityTestWorld.new()
 	out.lane = use_lane
-	var grid := build_grid(use_lane)
+	var grid := build_grid(use_lane, mirror)
 	out.world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(3000, 6000), seed)
 	out.station = out.world.sim.layout.scanners[0]
 	out.world.sim.stage_changed.connect(out._on_stage)
 	return out
 
 
-static func build_grid(use_lane: bool) -> BuildGrid:
+static func build_grid(use_lane: bool, mirror := SecurityLanes.RIGHT) -> BuildGrid:
 	var grid := PassengerTestWorld.floored(Vector2i(12, 16))
 	PassengerTestWorld.place(grid, &"entrance_door", START, 2)
 	PassengerTestWorld.place(grid, &"exit_door", Vector2i(5, 0), 0)
 	if use_lane:
-		SecurityLaneBuilder.build(grid, ARCH_AT, 0, SecurityLanes.RIGHT)
+		SecurityLaneBuilder.build(grid, ARCH_AT, 0, mirror)
 	else:
 		PassengerTestWorld.place(grid, &"security_scanner", SCANNER_AT, 0)
 	return grid

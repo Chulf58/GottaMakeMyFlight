@@ -981,7 +981,9 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 	# its reach and length, CarryLead.stamp_move).
 	bag["led"] = _leads(held, bag)
 	var in_stall: bool = held.get("in_stall", false)
-	CarryLead.stamp_move(bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN))
+	CarryLead.stamp_move(
+		bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN), unmoved
+	)
 	bag["home"] = bag["place"]
 	bag["reach_from"] = _reach_of(node, kind)
 
@@ -1000,42 +1002,13 @@ static func _leading(bag: Dictionary, now: float) -> bool:
 
 
 ## Aims each hand of `body` at its target for the hand-led moves of its bags
-## (CarryArm.reach_weight) and bends it down as far as a low one needs
-## (CarryStoop). A hand in no move reaches for nothing.
+## now (CarryLeadArms.apply()).
 func _lead_arms(held: Dictionary, body: Node3D, now: float) -> void:
-	var weights := [0.0, 0.0]
-	var targets := [Vector3.ZERO, Vector3.ZERO]
-	var keeps := [0.0, 0.0]
-	var drops := [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
-	var bends := [1.0, 1.0]
+	var plans := []
 	for bag: Dictionary in held["bags"]:
-		if not _leading(bag, now) or not bag.has("lead"):
-			continue
-		var plan: Dictionary = bag["lead"]
-		for hand in 2:
-			if plan["weights"][hand] > weights[hand]:
-				weights[hand] = plan["weights"][hand]
-				targets[hand] = plan["targets"][hand]
-				keeps[hand] = plan["keeps"][hand]
-				drops[hand] = plan["drops"][hand]
-				bends[hand] = plan.get("bends", bends)[hand]
-	held["reach_on"] = [weights[0] > 0.0, weights[1] > 0.0]
-	var rig := _rig(body)
-	var stoop: CarryStoop = rig["stoop"]
-	for list: Array in [stoop.targets, stoop.sides, stoop.weights, stoop.keeps, stoop.drops]:
-		list.clear()
-	stoop.bends.clear()
-	for hand in 2:
-		var arm := rig["arms"][hand] as CarryArm
-		arm.reach_weight = weights[hand]
-		arm.reach_target = targets[hand]
-		if weights[hand] > 0.0:
-			stoop.targets.append(targets[hand])
-			stoop.sides.append(hand)
-			stoop.weights.append(weights[hand])
-			stoop.keeps.append(keeps[hand])
-			stoop.drops.append(drops[hand])
-			stoop.bends.append(bends[hand])
+		if _leading(bag, now) and bag.has("lead"):
+			plans.append(bag["lead"])
+	CarryLeadArms.apply(held, plans, _rig(body))
 
 
 ## The body frame a new move of `bag` starts in: the body as it was when the
