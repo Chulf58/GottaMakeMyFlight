@@ -14,8 +14,9 @@ extends Node3D
 ## seated guest's head). lay_out() keeps a pop in its side slot while that slot
 ## covers no need icon, wish bubble, speech bubble or passenger head on screen,
 ## and otherwise moves it to the first clear slot in the ruled order 0, +1, -1,
-## +2, -2; with no clear slot it takes the one covering fewest. It runs when a
-## pop is paid and when the view changes, not every frame, so a passenger
+## +2, -2, ... out to +5 and -5; with none clear it takes the one covering
+## fewest. It runs when a pop is paid and when the view changes, not every
+## frame, so a passenger
 ## walking past does not make a pop jump. With no camera the slots keep the
 ## ruled order only.
 
@@ -34,8 +35,9 @@ const DROP_M := 0.4
 const SIDE_STEP_M := 1.3
 const FONT_SIZE := 64
 const COLOR := Color(1.0, 0.84, 0.3)
-## Side slots a pop tries to stay clear of passengers: 0, +1, -1, +2, -2.
-const SLOT_TRIES := 5
+## Side slots a pop tries to stay clear of passengers: 0, +1, -1, ... +5, -5
+## (the ruled order carried on; conductor ruling on the Sol review of f87409c).
+const SLOT_TRIES := 11
 ## Screen pixels a pop keeps from anything it must not cover.
 const CLEAR_PX := 4.0
 ## A passenger's head on screen: the band from a seated head's chin to a
@@ -128,7 +130,7 @@ static func slot_at(n: int) -> int:
 ## Puts every live pop in a side slot no other pop of its room holds. A pop
 ## whose own slot covers nothing drawn over a passenger (OVERHEAD) and no
 ## passenger's head keeps it; the others, oldest first, take the first clear
-## slot of the first SLOT_TRIES free ones in the order 0, +1, -1, +2, -2, or
+## slot of the first SLOT_TRIES free ones in the order 0, +1, -1, ... +5, -5, or
 ## else the one of those covering fewest. Does nothing with no camera.
 func lay_out(camera: Camera3D) -> void:
 	var unit := _unit(camera)
@@ -184,7 +186,9 @@ func screen_rect(label: Label3D, camera: Camera3D, side: int) -> Rect2:
 			return Rect2()
 		var scale := 1.0 / (depth * unit)
 		var top := camera.unproject_position(at) + Vector2(side * SIDE_STEP_M, DROP_M) * scale
-		var part := Rect2(top - Vector2(size.x / 2.0, 0.0) * scale, size * scale)
+		# The text hangs from `top`; its outline reaches outline_size above it.
+		var lift := label.outline_size * label.pixel_size
+		var part := Rect2(top - Vector2(size.x / 2.0, lift) * scale, size * scale)
 		box = part if not box.has_area() else box.merge(part)
 	return box.grow(CLEAR_PX)
 

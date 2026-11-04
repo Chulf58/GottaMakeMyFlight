@@ -69,6 +69,21 @@ func test_a_removed_room_loses_its_label_and_a_load_draws_the_saved_ones() -> vo
 	assert_str(_view().label_of(room_id).text).starts_with("Cafe\n")
 
 
+## Sol review of 0537708: the room labels lay out after PassengerViews has
+## drawn this frame's need icons, so they slide clear of where the icons are
+## now. PassengerViews keeps the default priority (its script and main.tscn
+## never set one) and RoomView processes after it.
+func test_room_labels_lay_out_after_the_passenger_views_draw() -> void:
+	var views_script := load("res://passengers/passenger_views.gd") as GDScript
+	assert_str(views_script.source_code).not_contains("process_priority")
+	var main := FileAccess.get_file_as_string("res://main/main.tscn")
+	var start := main.find('[node name="PassengerViews"')
+	assert_int(start).is_greater(0)
+	var section := main.substr(start, main.find("\n[", start + 1) - start)
+	assert_str(section).not_contains("process_priority")
+	assert_int(_view().process_priority).is_greater(0)
+
+
 ## SceneTree.process_frame fires before the nodes' _process, so the redraw
 ## lands one frame later.
 func _next_frame() -> void:

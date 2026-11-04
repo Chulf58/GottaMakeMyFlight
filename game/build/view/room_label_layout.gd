@@ -326,6 +326,15 @@ static func sync_card(label: Label3D) -> void:
 	card.pixel_size = label.pixel_size
 	card.offset = label.offset + Vector2(0.0, text.y / 2.0)
 	card.modulate.a = label.modulate.a
+	# Culling bounds come from the label's own axes, not the camera-facing ones
+	# its text is drawn in, so a slid label whose anchor is off screen was culled
+	# (an empty card in a plate). A margin of twice the slide plus the card's
+	# diagonal holds the drawn card at any turn, at any zoom.
+	var margin := (
+		2.0 * card.offset.length() * card.pixel_size + Vector2(size).length() * card.pixel_size
+	)
+	label.extra_cull_margin = margin
+	card.extra_cull_margin = margin
 
 
 ## A cream rounded card `size` texels big with a CARD_BORDER_PX dark outline,

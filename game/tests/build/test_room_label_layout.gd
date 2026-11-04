@@ -402,3 +402,36 @@ func test_a_label_under_a_need_icon_nudges_clear_and_keeps_its_spot() -> void:
 	_put_icon(icon, Vector2(-500.0, -500.0))
 	_view.layout_labels()
 	assert_vector(label.offset).is_equal(Vector2.ZERO)
+
+
+## Sol review of 0537708: at the farthest zoom a label slid clear of the HUD
+## is drawn far from its anchor, in the camera's axes. Its culling box (and its
+## card's), grown by the cull margin, must still hold the drawn card, or the
+## label is culled while the card shows empty.
+func test_a_label_slid_at_the_farthest_zoom_stays_inside_its_culling_box() -> void:
+	var rig := TycoonCamera.new()
+	var far := rig.max_distance
+	rig.free()
+	_aim(_camera, far)
+	_view.layout_labels()
+	_add_button(_rect(_camera).grow(10.0))
+	_view.layout_labels()
+	await get_tree().process_frame
+	var label := _view.label_of(_room)
+	var card := label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	assert_bool(label.visible).is_true()
+	assert_vector(label.offset).is_not_equal(Vector2.ZERO)
+	var right := _camera.global_basis.x
+	var up := _camera.global_basis.y
+	var drawn := (
+		card.global_position + (right * card.offset.x + up * card.offset.y) * card.pixel_size
+	)
+	for node: GeometryInstance3D in [label, card]:
+		var box: AABB = node.global_transform * node.get_aabb()
+		print("%s box %s margin %.2f drawn %s" % [node.name, box, node.extra_cull_margin, drawn])
+		# The control: the slide is real, the card is drawn metres from its anchor.
+		assert_float(drawn.distance_to(node.global_position)).is_greater(3.0)
+		assert_bool(box.grow(node.extra_cull_margin).has_point(drawn)).is_true()
+		# The margin alone holds it, whatever box Godot gives a billboard.
+		var bare := AABB(node.global_position, Vector3.ZERO)
+		assert_bool(bare.grow(node.extra_cull_margin).has_point(drawn)).is_true()

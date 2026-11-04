@@ -27,13 +27,10 @@ const LABEL_OUTLINE := 4
 ## Under the need icons (10) and everything else drawn over passengers: the
 ## card, then the text's outline, then the text.
 const LABEL_PRIORITY := 2
-## Metres added to the label's and card's culling box. Their bounds are taken in
-## the node's own axes, not the camera-facing ones, so a label slid clear of the
-## HUD (up to about 6.5 m in its plane) whose anchor is off screen was culled:
-## the top-down plate showed an empty card.
-const LABEL_CULL_M := 8.0
 ## The name main.tscn gives PassengerViews, whose need icons labels slide clear of.
 const PASSENGER_VIEWS := "PassengerViews"
+## Higher than PassengerViews' process priority, so the layout runs after it.
+const LAYOUT_PRIORITY := 1
 
 ## PassengerViews, whose passengers' need icons the labels slide clear of. Found
 ## as a child named PASSENGER_VIEWS of an ancestor when not set.
@@ -64,6 +61,13 @@ func watch(grid: BuildGrid) -> void:
 	grid.edit_applied.connect(_on_edit_applied)
 	grid.graph_changed.connect(_on_graph_changed)
 	redraw()
+
+
+## Processes after PassengerViews (default priority 0), which draws this
+## frame's need icons first, so labels slide clear of where the icons are now,
+## not where they were last frame (Sol review of 0537708).
+func _init() -> void:
+	process_priority = LAYOUT_PRIORITY
 
 
 func _process(_delta: float) -> void:
@@ -164,8 +168,7 @@ func _draw_room(room_id: int) -> void:
 	label.modulate = READY_TEXT if status.ok else NEEDS_TEXT
 	label.render_priority = LABEL_PRIORITY
 	label.outline_render_priority = LABEL_PRIORITY - 1
-	label.extra_cull_margin = LABEL_CULL_M
 	label.position = middle + Vector3(0.0, LABEL_Y, 0.0)
 	add_child(label)
-	RoomLabelLayout.make_card(label).extra_cull_margin = LABEL_CULL_M
+	RoomLabelLayout.make_card(label)
 	_drawn[room_id] = [tint, label]

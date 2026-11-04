@@ -428,3 +428,35 @@ func test_a_pop_stepping_aside_skips_a_slot_another_pop_holds() -> void:
 	assert_int(second.get_meta(&"slot")).is_equal(1)
 	assert_int(first.get_meta(&"slot")).is_not_equal(second.get_meta(&"slot"))
 	cam.free()
+
+
+## Sol review of f87409c: past the first five slots the ruled order carries on
+## (+3, -3, ... to +-5) before any covered slot is taken. Heads drawn in slots
+## 0, +1, -1, +2 and -2 send the pop to +3, which is clear.
+func test_a_pop_blocked_in_five_slots_takes_the_next_clear_one() -> void:
+	var p := _guest()
+	var pops := _views.cafe_pops()
+	_run_to_stage(p, Passenger.Stage.CAFE_STANDING_UP)
+	var label := pops.live_labels()[0]
+	var cam := _top_down_camera(label)
+	_stand_head_at(_views.node_for(p.id), cam, Vector2(-2000.0, 300.0))
+	var heads: Array[Node3D] = []
+	for side in [0, 1, -1, 2, -2]:
+		var head := Node3D.new()
+		head.set_meta(&"body", 0)
+		_views.add_child(head)
+		_stand_head_at(head, cam, pops.screen_rect(label, cam, side).get_center())
+		heads.append(head)
+	var blockers := pops.blocker_rects(cam)
+	# The control: each of the five slots is covered, +3 is not.
+	for side in [0, 1, -1, 2, -2]:
+		var box := pops.screen_rect(label, cam, side)
+		assert_bool(blockers.any(func(b: Rect2) -> bool: return b.intersects(box))).is_true()
+	var third := pops.screen_rect(label, cam, 3)
+	assert_bool(blockers.any(func(b: Rect2) -> bool: return b.intersects(third))).is_false()
+	pops.lay_out(cam)
+	print("pop slot %d with heads in 0, +-1, +-2" % label.get_meta(&"slot"))
+	assert_int(label.get_meta(&"slot")).is_equal(3)
+	for head in heads:
+		head.free()
+	cam.free()
