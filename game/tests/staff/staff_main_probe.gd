@@ -119,7 +119,7 @@ func _run_closed() -> void:
 	if gate.is_open() or occurrences != 0 or _spawned != 0:
 		_invalid("the airport opened or issued flights with nobody hired")
 		return
-	if not _panel.hint_text().begins_with("Airport closed:"):
+	if _panel.hint_label().text != Checklist.TITLE_CLOSED or _panel.hint_text() == "":
 		_invalid("the panel's hint does not say why the airport is closed")
 		return
 	var menu := _main.get_node("BuildMenu") as BuildMenu
@@ -142,7 +142,7 @@ func _run_closed() -> void:
 			]
 		)
 	)
-	if _panel.hint_text().contains("Hire a") or _staff.member_ids().size() != 2:
+	if _panel.hint_text().contains("on Staff") or _staff.member_ids().size() != 2:
 		_invalid("the panel's Hire buttons did not hire or did not clear the hiring lines")
 		return
 	_phase = 2
@@ -183,8 +183,14 @@ func _run_flight() -> bool:
 			]
 		)
 	)
-	if on_duty != 2 or _panel.hint_text() != "":
-		_invalid("the staff are not both on duty or the hint did not clear once open")
+	# Once open the card holds no opening checklist and no hire line; current
+	# gaps (a toilet, seats) may remain.
+	var closed_left := (
+		_panel.hint_label().text.contains(Checklist.TITLE_CLOSED)
+		or _panel.hint_text().contains("Hire a")
+	)
+	if on_duty != 2 or closed_left:
+		_invalid("the staff are not both on duty or the closed checklist stayed once open")
 		return true
 	if _count(Passenger.Stage.CHECKIN) == 0 or _sim.made_count() == 0:
 		_invalid("staffed stations did not get passengers onto the flight")

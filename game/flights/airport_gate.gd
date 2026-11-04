@@ -81,22 +81,34 @@ func is_open() -> bool:
 	return flights.opened_tick >= 0
 
 
-## What keeps the airport closed now, or NONE when it is open or may open.
+## What keeps the airport closed now, or NONE when it is open or may open:
+## the first of unmet().
 func blocker() -> Blocker:
+	var all := unmet()
+	return Blocker.NONE if all.is_empty() else all[0]
+
+
+## Every blocker that keeps the airport closed now, in blocker() order, or
+## none when it is open or may open. The checklist card lists them all (decision
+## checklist-card-shows-what-the-airport-still-needs). NO_PATH and STAFF_SPOT
+## never come together, and at most one of each check-in pair and each
+## security pair comes.
+func unmet() -> Array[Blocker]:
+	var out: Array[Blocker] = []
 	if is_open():
-		return Blocker.NONE
+		return out
 	if flights.gate_ids().is_empty():
-		return Blocker.NO_GATE
+		out.append(Blocker.NO_GATE)
 	var path := _path_blocker()
 	if path != Blocker.NONE:
-		return path
+		out.append(path)
 	var desks := staff.sim.layout.desks
 	if not _any_open(desks):
-		return Blocker.CHECKIN_CLOSED if _player_closed(desks) else Blocker.NO_CHECKIN
+		out.append(Blocker.CHECKIN_CLOSED if _player_closed(desks) else Blocker.NO_CHECKIN)
 	var scanners := staff.sim.layout.scanners
 	if not _any_open(scanners):
-		return Blocker.SECURITY_CLOSED if _player_closed(scanners) else Blocker.NO_SECURITY
-	return Blocker.NONE
+		out.append(Blocker.SECURITY_CLOSED if _player_closed(scanners) else Blocker.NO_SECURITY)
+	return out
 
 
 ## NO_PATH, STAFF_SPOT or NONE, from the path answers kept until the grid

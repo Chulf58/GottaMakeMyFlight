@@ -481,8 +481,8 @@ func _in_frame(label: String, area: Rect2i) -> bool:
 ## The rectangle's centre must not be under the hint card, the tray or the bar.
 func _clear_of_hud(label: String, area: Rect2i) -> bool:
 	var at := _cam.unproject_position(_slab_centre(area))
-	var hint := (_main.get_node("StaffPanel") as StaffPanel).hint_label()
-	var covers: Array[Control] = [hint.get_parent() as Control, _menu.bar()]
+	var hint_card := (_main.get_node("StaffPanel") as StaffPanel).hint_card()
+	var covers: Array[Control] = [hint_card, _menu.bar()]
 	if _menu.is_tray_open():
 		covers.append(_menu.tray())
 	var under: Array[String] = []

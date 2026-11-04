@@ -12,9 +12,12 @@ extends CanvasLayer
 ## stands and no agent is hired it asks for one, and the same for a scanner
 ## and an officer, and for a ready cafe or kiosk and shop staff; each line
 ## goes once someone of that role is hired.
-## While the airport is closed the hint first names what keeps it closed
-## (AirportGate.blocker(), decision airport-opening-design-stays-open-once-
-## opened-starter-flight-placed-after-opening); that line goes once it opens.
+## The hint is the checklist card (decision checklist-card-shows-what-the-
+## airport-still-needs, ChecklistCard and Checklist): while the airport is
+## closed it lists every opening need (AirportGate.unmet()), each ticked when
+## done; once it opens it lists the current gaps instead (HintRules causes,
+## read every GAP_POLL_S), with the wall gap and hiring lines in both. It hides
+## when nothing is left.
 ##
 ## The card belongs to the bottom category bar (decision hud-layout-bottom-
 ## category-bar-with-an-item-tray-time-and-fl): the bar's Staff button opens it
@@ -50,26 +53,6 @@ const HINTS := {
 	StaffMember.Role.SECURITY: "Hire a security officer",
 	StaffMember.Role.SHOP: "Hire shop staff",
 }
-const CLOSED_HINTS := {
-	AirportGate.Blocker.NO_PATH:
-	(
-		"Airport closed: passengers need a way from an entrance through check-in"
-		+ " and security to an exit"
-	),
-	AirportGate.Blocker.STAFF_SPOT:
-	(
-		"Airport closed: staff can't reach the desk, scanner or lane passengers need."
-		+ " Clear its staff spot or the way to it"
-	),
-	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
-	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
-	AirportGate.Blocker.CHECKIN_CLOSED:
-	"Airport closed: you closed every check-in desk. Open one again to let passengers in",
-	AirportGate.Blocker.SECURITY_CLOSED:
-	"Airport closed: you closed every scanner and lane. Open one again to let passengers in",
-	AirportGate.Blocker.NO_GATE:
-	"Airport closed: place a gate desk by an exit that faces the planes",
-}
 ## The banner line for an open wall gap, one for a single run of gap edges and
 ## one with the count for several. It uses the sign's words, "Wall gap".
 const GAP_HINT := "Wall gap: close the open edge of the outer wall, marked in red"
@@ -89,6 +72,9 @@ const BANNER_TOP := 72.0
 ## fades to that or back (opacity per second).
 const FADED_ALPHA := 0.35
 const FADE_SPEED := 6.0
+## Seconds between reads of the gaps once the airport is open: passenger needs
+## change with no signal.
+const GAP_POLL_S := 1.0
 
 ## In a scene the Staff node; tests set it before the panel enters the tree.
 @export var staff: StaffSim
@@ -105,7 +91,9 @@ const FADE_SPEED := 6.0
 var gap_scans := 0
 
 var _card := PanelContainer.new()
-var _hint := Label.new()
+var _checklist := ChecklistCard.new()
+## The card's title line.
+var _hint := _checklist.title_label()
 var _hint_box := PanelContainer.new()
 ## True while a first-time hint holds the banner's slot (set_hint_yielded()).
 var _hint_yielded := false
@@ -115,6 +103,9 @@ var _was_open := false
 var _open_cue := ""
 ## How many runs of open edges the outer wall has, read again on every edit.
 var _gap_runs := 0
+## The gap lines read at the last poll, while the airport is open.
+var _gaps: Array[Dictionary] = []
+var _since_poll := 0.0
 ## Role -> the Label with its counts, its Hire and its Fire button.
 var _counts: Dictionary = {}
 var _hire: Dictionary = {}
@@ -164,8 +155,14 @@ func fire_button(role: StaffMember.Role) -> Button:
 	return _fire[role]
 
 
+## The card's title line ("To open the airport", the starter line or "Your
+## airport needs"), shown whenever the card is.
 func hint_label() -> Label:
 	return _hint
+
+
+func checklist() -> ChecklistCard:
+	return _checklist
 
 
 ## The banner card the hint sits in.
@@ -185,22 +182,49 @@ func counts_text(role: StaffMember.Role) -> String:
 	return text
 
 
-## What keeps the airport closed, if it is, then a line naming an open gap in
-## the outer wall (the red bars and "Wall gap" signs GapMarkers draws), or the
-## starter line after it opened, then one line per role whose
-## stations stand but nobody of that role is hired and staying (members
-## leaving do not count).
+## What the card still asks for, one line each: the starter line while it
+## shows, then the text of every card line not yet done (card_lines()).
 func hint_text() -> String:
 	var lines := PackedStringArray()
-	if gate != null and gate.blocker() != AirportGate.Blocker.NONE:
-		lines.append(CLOSED_HINTS[gate.blocker()])
-	if _gap_runs > 0:
-		lines.append(GAP_HINT if _gap_runs == 1 else GAPS_HINT % _gap_runs)
 	if _open_cue != "":
 		lines.append(_open_cue)
-	for role in hiring_hint_roles():
-		lines.append(HINTS[role])
+	for entry in card_lines():
+		if not entry["done"]:
+			lines.append(entry["text"])
 	return "\n".join(lines)
+
+
+## The card's lines (Checklist lines): while the airport is closed every
+## opening need, ticked or not; a line naming an open gap in the outer wall
+## (the red bars and "Wall gap" signs GapMarkers draws); one line per role whose
+## stations stand but nobody of that role is hired and staying (members leaving
+## do not count), except check-in and security while closed, whose opening
+## lines already say to hire; and once open the gaps read at the last poll.
+func card_lines() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var closed := gate != null and not gate.is_open()
+	if closed:
+		out.append_array(Checklist.opening_lines(gate.unmet(), _opening_counts()))
+	if _gap_runs > 0:
+		out.append(Checklist.line(GAP_HINT if _gap_runs == 1 else GAPS_HINT % _gap_runs, false))
+	for role in hiring_hint_roles():
+		if not (closed and role in [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]):
+			out.append(Checklist.line(HINTS[role], false))
+	if gate != null and not closed:
+		out.append_array(_gaps)
+	return out
+
+
+## Reads the gaps again (open airport only) and refreshes when they changed.
+## _process calls it every GAP_POLL_S; tests call it directly.
+func poll_gaps() -> void:
+	var gaps: Array[Dictionary] = []
+	if gate != null and gate.is_open():
+		var world := HintRules.read_world(staff.sim, hiring_hint_roles())
+		gaps = Checklist.gap_lines(world, staff.sim.layout.seats.size(), _lock_texts())
+	if gaps != _gaps:
+		_gaps = gaps
+		refresh()
 
 
 ## The roles whose hire line the banner shows: stations of the role stand that
@@ -247,9 +271,46 @@ func refresh() -> void:
 	for role in ROLES:
 		(_counts[role] as Label).text = counts_text(role)
 		(_fire[role] as Button).disabled = _staying(role) == 0
-	_hint.text = hint_text()
-	_hint.visible = _hint.text != ""
+	var lines := card_lines()
+	_checklist.show_lines(_card_title(lines), lines)
+	_hint.visible = _hint.text != "" or not lines.is_empty()
 	_hint_box.visible = _hint.visible and not _hint_yielded
+
+
+## "To open the airport" while closed; once open (or with no gate) the starter
+## line while it shows, over "Your airport needs" when any line is left.
+func _card_title(lines: Array[Dictionary]) -> String:
+	if gate != null and not gate.is_open():
+		return Checklist.TITLE_CLOSED
+	var parts := PackedStringArray()
+	if _open_cue != "":
+		parts.append(_open_cue)
+	if not lines.is_empty():
+		parts.append(Checklist.TITLE_OPEN)
+	return "\n".join(parts)
+
+
+func _opening_counts() -> Dictionary:
+	var layout := staff.sim.layout
+	return {
+		"desks": layout.desks.size(),
+		"scanners": layout.scanners.size(),
+		"seats": layout.seats.size(),
+		"checkin_staying": _staying(StaffMember.Role.CHECKIN),
+		"security_staying": _staying(StaffMember.Role.SECURITY),
+	}
+
+
+## Why each gap line's build tool cannot be picked yet (BuildUnlocks.lock_text),
+## when the scene's build mode gates tools; empty without a menu.
+func _lock_texts() -> Dictionary:
+	var texts := {}
+	if menu == null or menu.build_mode == null:
+		return texts
+	var mode := menu.build_mode
+	for tool: BuildMode.Tool in Checklist.GAP_TOOLS.values():
+		texts[tool] = BuildUnlocks.lock_text(mode.unlocks, mode.require_unlocks, tool)
+	return texts
 
 
 ## Takes the starter line when the gate has opened since the last refresh with
@@ -258,6 +319,8 @@ func _track_opening() -> void:
 	if gate == null:
 		return
 	var open := gate.is_open()
+	if open and not _was_open:
+		_since_poll = GAP_POLL_S
 	if open and not _was_open and not gate.opened_without_starter:
 		var contract := gate.flights.contract_of(FlightSim.DEFAULT_ID)
 		if not contract.is_empty():
@@ -365,16 +428,17 @@ func _build_hint() -> void:
 	_hint_box.visible = false
 	add_child(_hint_box)
 	_hint.name = "StaffHint"
-	_hint.theme_type_variation = &"HudAttentionText"
 	_hint.custom_minimum_size = Vector2(HINT_W, 0.0)
-	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hint_box.add_child(_hint)
+	_hint_box.add_child(_checklist)
 	anchor_banner(_hint_box)
 
 
 func _process(delta: float) -> void:
+	if gate != null and gate.is_open():
+		_since_poll += delta
+		if _since_poll >= GAP_POLL_S:
+			_since_poll = 0.0
+			poll_gaps()
 	var ghost := Rect2()
 	if menu != null:
 		ghost = GhostBounds.build_rect(menu.build_mode, get_viewport().get_camera_3d())

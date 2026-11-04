@@ -173,8 +173,9 @@ func _gap_banner() -> void:
 	if before.contains("Wall gap") or not text.contains("Wall gap"):
 		_invalid("gap_banner: the banner did not start without the gap and gain it")
 		return
-	if not _staff.hint_card().is_visible_in_tree() or _staff.hint_label().text != text:
-		_invalid("gap_banner: the banner card does not show the line")
+	var rows := _staff.checklist().row_texts()
+	if not _staff.hint_card().is_visible_in_tree() or not rows.has(StaffPanel.GAP_HINT):
+		_invalid("gap_banner: the banner card does not show the line in a row: %s" % [rows])
 		return
 	var card := _staff.hint_card().get_global_rect()
 	if not Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(card):

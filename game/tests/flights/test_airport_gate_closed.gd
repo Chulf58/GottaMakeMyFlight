@@ -55,13 +55,13 @@ func test_closing_every_desk_asks_to_open_one_again() -> void:
 	print(
 		(
 			"blockers as desks close %s, agents %d, hint '%s'"
-			% [blockers, _w.staff.count(CHECKIN), _panel.hint_label().text]
+			% [blockers, _w.staff.count(CHECKIN), _panel.hint_text()]
 		)
 	)
 	assert_array(blockers).is_equal([BLOCKER.NONE, BLOCKER.CHECKIN_CLOSED])
 	assert_int(_w.staff.count(CHECKIN)).is_equal(2)
-	assert_str(_panel.hint_label().text.split("\n")[0]).is_equal(
-		StaffPanel.CLOSED_HINTS[BLOCKER.CHECKIN_CLOSED]
+	assert_str(_panel.hint_text().split("\n")[0]).is_equal(
+		"Check-in desk and an agent: you closed every desk, open one again"
 	)
 	_w.staff.closures.set_closed(_w.sim.layout.desks[0], false)
 	assert_int(_gate.blocker()).is_equal(BLOCKER.NONE)
@@ -70,13 +70,13 @@ func test_closing_every_desk_asks_to_open_one_again() -> void:
 func test_closing_every_scanner_asks_to_open_one_again() -> void:
 	StaffTestKit.staff_all(_w.staff)
 	var blockers := _close_each(_w.sim.layout.scanners)
-	print("blockers as scanners close %s, hint '%s'" % [blockers, _panel.hint_label().text])
+	print("blockers as scanners close %s, hint '%s'" % [blockers, _panel.hint_text()])
 	assert_int(blockers.back()).is_equal(BLOCKER.SECURITY_CLOSED)
 	assert_int(blockers.size()).is_greater(1)
 	for b: int in blockers.slice(0, blockers.size() - 1):
 		assert_int(b).is_equal(BLOCKER.NONE)
-	assert_str(_panel.hint_label().text.split("\n")[0]).is_equal(
-		StaffPanel.CLOSED_HINTS[BLOCKER.SECURITY_CLOSED]
+	assert_str(_panel.hint_text().split("\n")[0]).is_equal(
+		"Security scanner and an officer: you closed every scanner and lane, open one again"
 	)
 
 
@@ -85,6 +85,6 @@ func test_an_open_desk_with_nobody_at_it_still_asks_for_an_agent() -> void:
 	_w.staff.closures.set_closed(_w.sim.layout.desks[0], true)
 	print("one desk closed, no agent: blocker %d" % _gate.blocker())
 	assert_int(_gate.blocker()).is_equal(BLOCKER.NO_CHECKIN)
-	assert_str(_panel.hint_label().text.split("\n")[0]).is_equal(
-		StaffPanel.CLOSED_HINTS[BLOCKER.NO_CHECKIN]
+	assert_str(_panel.hint_text().split("\n")[0]).is_equal(
+		"Check-in desk and an agent: hire an agent on Staff"
 	)

@@ -122,9 +122,11 @@ func test_the_gate_names_the_staff_spot_and_the_hint_says_how_to_fix_it() -> voi
 	var first := panel.hint_text().split("\n")[0]
 	print("blocker %d, hint '%s'" % [gate.blocker(), panel.hint_text()])
 	assert_int(gate.blocker()).is_equal(AirportGate.Blocker.STAFF_SPOT)
-	assert_str(first).is_equal(StaffPanel.CLOSED_HINTS[AirportGate.Blocker.STAFF_SPOT])
+	# The entrance line is ticked (passengers have their way); the staff spot
+	# line is the first one still to do.
+	assert_str(first).is_equal(Checklist.STAFF_SPOT)
 	assert_str(first).contains("staff spot")
-	assert_str(first).is_not_equal(StaffPanel.CLOSED_HINTS[AirportGate.Blocker.NO_PATH])
+	assert_str(panel.hint_text()).not_contains(Checklist.ENTRANCE)
 
 
 ## A spot an old save left under a seat row is the same blocker for the gate.

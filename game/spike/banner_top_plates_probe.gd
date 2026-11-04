@@ -74,16 +74,21 @@ func _run() -> void:
 	_staff = _main.get_node("StaffPanel")
 	_hud = _main.get_node("PassengerHud")
 	_stack = _hud.find_child("AlertStack", false, false) as AlertStack
+	var hud_avoid := _stack.avoid
 	await _frames(30)
-	_staff.hint_label().text = (
-		StaffPanel.CLOSED_HINTS[AirportGate.Blocker.STAFF_SPOT] + "\n" + StaffPanel.GAP_HINT
-	)
+	var lines: Array[Dictionary] = [
+		Checklist.line(Checklist.STAFF_SPOT, false), Checklist.line(StaffPanel.GAP_HINT, false)
+	]
+	_staff.checklist().show_lines(Checklist.TITLE_CLOSED, lines)
 	_staff.hint_card().visible = true
 	_menu.press_category(0)
 	_spills(_main.get_node("PassengerSim"))
 	_hints = _make_hints()
 	for size in SIZES:
 		root.size = size
+		# The hint plate points the alert stack at the hint card; the banner plate
+		# gives it back the HUD's banner rect, as the game wires it.
+		_stack.avoid = hud_avoid
 		await _frames(30)
 		_hud.refresh()
 		await _plate("banner", size, _staff.hint_card())

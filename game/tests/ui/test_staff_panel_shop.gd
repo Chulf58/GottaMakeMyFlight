@@ -79,10 +79,10 @@ func test_removing_the_only_cafe_room_while_paused_clears_the_shop_hint() -> voi
 	_panel = auto_free(StaffPanel.new())
 	_panel.staff = _w.staff
 	add_child(_panel)
-	assert_str(_panel.hint_label().text).contains("Hire shop staff")
+	assert_str(_panel.hint_text()).contains("Hire shop staff")
 	# A room edit changes no walk graph, and with nobody hired StaffSim emits
 	# nothing: the panel has to follow the edit itself.
 	assert_bool(grid.apply(BuildEdit.remove_room(ids["air_room"])).ok).is_true()
 	assert_bool(grid.apply(BuildEdit.remove_room(ids["land_room"])).ok).is_true()
 	assert_array(_w.staff.stations_of(SHOP)).is_empty()
-	assert_str(_panel.hint_label().text).not_contains("Hire shop staff")
+	assert_str(_panel.hint_text()).not_contains("Hire shop staff")

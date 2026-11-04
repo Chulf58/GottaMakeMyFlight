@@ -51,7 +51,12 @@ func test_an_open_edge_is_named_on_the_banner() -> void:
 	assert_str(_panel.hint_text()).contains("Wall gap")
 	assert_str(_panel.hint_text()).is_equal(StaffPanel.GAP_HINT)
 	assert_bool(_panel.hint_card().visible).is_true()
-	assert_str(_panel.hint_label().text).contains("Wall gap")
+	# The line is drawn as a checklist row, not only listed in hint_text().
+	var shown := []
+	for label in _panel.checklist().row_labels():
+		if label.visible and label.text == StaffPanel.GAP_HINT:
+			shown.append(label.text)
+	assert_array(shown).contains_exactly([StaffPanel.GAP_HINT])
 
 
 func test_the_line_goes_once_the_gap_is_closed() -> void:

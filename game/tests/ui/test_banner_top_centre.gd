@@ -139,7 +139,7 @@ func test_the_layout_is_the_one_both_window_sizes_get() -> void:
 func test_the_banner_sits_at_the_top_centre() -> void:
 	await _settle()
 	assert_bool(_staff.hint_card().is_visible_in_tree()).is_true()
-	print("BANNER_TEXT lines=%d" % _staff.hint_label().get_line_count())
+	print("BANNER_TEXT rows=%d" % _staff.checklist().rows().size())
 	_assert_top_centre("banner", _staff.hint_card().get_global_rect())
 
 

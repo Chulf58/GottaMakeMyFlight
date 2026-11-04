@@ -263,10 +263,9 @@ func _hud_rects() -> Array[Rect2]:
 	var out: Array[Rect2] = [_menu.bar().get_global_rect()]
 	if _menu.is_tray_open():
 		out.append(_menu.tray().get_global_rect())
-	var hint := _staff.hint_label()
-	if hint.is_visible_in_tree():
-		var card := hint.get_parent() as Control
-		out.append((card if card != null else hint).get_global_rect())
+	var card := _staff.hint_card()
+	if card.is_visible_in_tree():
+		out.append(card.get_global_rect())
 	return out
 
 
