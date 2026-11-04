@@ -161,7 +161,8 @@ static func _relocation_problem(
 	if moving.returns() and (moving.left < 1 or moving.left > dwell):
 		return "a return owing %d ticks, not 1 to %d" % [moving.left, dwell]
 	var ends := p.stage_tick + dwell - tick
-	if ends < 1 or ends > ActivityPoses.exit_ticks(moving.source["def"], p.carry_on):
+	var roller := ParkRecovery.has_roller(p)
+	if ends < 1 or ends > ActivityPoses.exit_ticks(moving.source["def"], p.carry_on, roller):
 		return "an exit with %d ticks to run" % ends
 	return ""
 

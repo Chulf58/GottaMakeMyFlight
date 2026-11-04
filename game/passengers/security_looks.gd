@@ -200,24 +200,19 @@ static func _lost_chair_roller(p: Passenger, index: int) -> bool:
 
 
 ## Whether bag `index` of `p` is a roller taken off the floor into the pull
-## while `p` stands up from a gate chair or a cafe seat. The timing differs:
-## - Gate chair (STANDING_UP): once the walker is up, STAND_UP_TICKS in. It
-##   stands at the chair front for ParkRecovery.UP_HOLD_TICKS more while the
-##   roller is picked up (ParkRecovery.stand_up_ticks()); started on a body
-##   still rising, the hand fell short and the bag jumped into it.
-## - Cafe seat (CAFE_STANDING_UP): RollerPark.UP_LEAD_TICKS before the stand-up
-##   ends, so the roller parks on its wheels beside a walker (nearly) still in
-##   place and is pulled onto the trail as it walks off at once (parked after,
-##   the roller was 0.4 m out of the hand's reach by the regrasp; started with
-##   the stand-up, the seated hand fell 0.35 m short of the bag on the floor).
-## Looks only: the sim's cafe stand-up is as long as before.
+## while `p` stands up from a gate chair or a cafe seat: once it is up,
+## STAND_UP_TICKS in (decision standing-up-with-a-roller-stand-up-then-pick-up-
+## then-walk). It stands ParkRecovery.UP_HOLD_TICKS more while the roller is
+## picked up, at a gate chair's front (ParkRecovery.stand_up_ticks()) or where
+## it sat at a cafe seat (CafeSim.up_ticks()). Started on a body still rising,
+## the hand fell short and the bag jumped into it; at a cafe seat the pick-up
+## began RollerPark.UP_LEAD_TICKS before the stand-up ended (board 2c659e42).
 static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
 	if p.stage not in [Passenger.Stage.STANDING_UP, Passenger.Stage.CAFE_STANDING_UP]:
 		return false
 	if bag_kind(p, index) != Kind.ROLLER:
 		return false
-	var lead := 0 if p.stage == Passenger.Stage.STANDING_UP else RollerPark.UP_LEAD_TICKS
-	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS - lead
+	return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS
 
 
 ## Which hand holds bag `index` of `p` when it is carried: 0 the right, 1 the

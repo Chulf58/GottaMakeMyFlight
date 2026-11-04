@@ -36,11 +36,14 @@ const TICKS_UP := 16.0
 const STAND_END := 0.37
 const PARK_END := 0.6
 const LAY_END := 0.83
-## floor>pull: the ends of the reach, the lift and the park (k), and how many
-## ticks before the stand-up ends it starts (SecurityLooks): the hand takes
-## the lying bag about 20 ticks into the stand-up (the body comes 0.4 m forward
-## over its last 7 ticks, and only then is the bag in reach), and the park ends
-## 3 to 4 ticks into the walk off, beside the walker's way (UP_PARK_AHEAD_M).
+## floor>pull: the ends of the reach, the lift and the park (k), and the lead
+## (UP_LEAD_TICKS) its start once had over the end of a stand-up. No stand-up
+## uses the lead now: the pick-up starts once the passenger is up, and it stands
+## until the pick-up is over (ParkRecovery.UP_HOLD_TICKS, decision standing-up-
+## with-a-roller-stand-up-then-pick-up-then-walk, board 2c659e42). With the
+## lead the hand took the lying bag about 20 ticks into the stand-up, and the
+## park ended 3 to 4 ticks into the walk off, beside the walker's way
+## (UP_PARK_AHEAD_M).
 const REACH_END := 0.25
 const TAKE_BY := 0.4
 const LIFT_END := 0.55
@@ -125,6 +128,30 @@ const CUT_ON := 0.7
 ## bar moves that share of the walker's step against the body, the bag the rest
 ## in the world, on top of what the hand was short of the bar.
 const FOLLOW_SPLIT := 0.7
+## Leaving a seat (decision leaving-a-seat-with-a-roller-roll-it-upright-
+## until-clear-then-tip, board 2c659e42): a floor>pull stamped with a face
+## (sit_face(): a gate chair, a cafe seat, a sofa or nap pod) whose walker has
+## not moved by the park's end keeps the roller standing upright, held by the
+## bar and carried with the body (_followed()), until the body is CLEAR_M from
+## where it stood in the park, and only then tips it into the pull over TIP_UP.
+## Measured (cafe_roller_standup_probe, the roller's box against the seat's):
+## tipped at the seat, the pull's trail lay up to 0.33 m inside the sofa, pod
+## or chair; tipped 0.9 m out, 0.05 m in the sofa and 0.2 m in a cafe chair the
+## guest walked back past; 1.3 m out, the sofa and pod clear, the chair 0.04 m.
+## A trail tested as a segment behind the body tipped too soon: the roller
+## rides on the hand's side, off that line.
+## The move is then ROLL_TICKS longer (stamped at the park's end), and the tip
+## starts by then whatever. The lift, the park and the tip keep their timing
+## in ticks: every phase is read in up_k(), sim ticks over TICKS_UP.
+## Walkers moving before the park's end (a collecting walker, the shower's
+## door) tip as before.
+const CLEAR_M := 1.5
+## The share of the rods run out while it rolls upright. Measured hips while
+## rolling (probe ROLL_HIPS): 0.93 to 0.96 of standing at 0.45, 0.84 to 0.89 at
+## 0.3; with them in the bar was at 0.48 m, all out at 2.1 m.
+const ROLL_RODS := 0.45
+const ROLL_TICKS := 36.0
+const TIP_UP := 1.0 - UP_PARK_END
 
 
 ## Whether a hand-led move of `bag` (CarryOnProps' record, its "was",
@@ -264,6 +291,8 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"park_tip",
 		"park_low",
 		"up_near",
+		"rolls",
+		"roll_tip",
 	]:
 		bag.erase(key)
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
@@ -285,10 +314,11 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 ## (PassengerViews turns the body to the same facing); NAN anywhere else.
 static func sit_face(sim: PassengerSim, p: Passenger) -> float:
 	var out := Vector2i.ZERO
-	# Up from a cafe seat or an activity piece it walks off at once: no face,
-	# so its pick-up parks ahead (UP_PARK_AHEAD_M, stamp()).
-	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
-		return NAN
+	# Still rising from an activity piece: no face, so a pick-up parks ahead
+	# (UP_PARK_AHEAD_M, stamp()). A roller visitor picks up after it is up, in
+	# its hold (ActivityPoses.up_tail()), and a cafe guest stands where it sat
+	# (CafeSim.up_ticks()), so both have the seat's face and roll the roller
+	# upright until clear (ROLL_TICKS, board 2c659e42).
 	if ActivityPoses.pose(sim, p) == StageKinds.Pose.STANDING_UP:
 		return NAN
 	var where := StageKinds.location(p.stage)
@@ -365,11 +395,37 @@ static func park(
 
 
 ## How far a parking move of `bag` has run its rods from their old length to
-## their new one at `k`: in while it stands up, out while it tips into the pull.
+## their new one at `k`: in while it stands up, out while it tips into the pull
+## (a roller rolled upright, rolls(), runs them out ROLL_RODS of the way after
+## its park, so its bar is at the standing hand, and the rest over its tip,
+## "roll_tip": run out upright, the bar rose to 2.1 m with the hand on it; left
+## in, the walker crouched to a bar at 0.48 m, its hips 0.33 m low).
 static func rods_t(k: float, bag: Dictionary) -> float:
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
-		return smoothstep(up_ends(bag).y + SETTLE_TICKS / TICKS_UP, 1.0, k)
+		var park := up_ends(bag).y
+		var settle := SETTLE_TICKS / TICKS_UP
+		var up := up_k(bag, k)
+		if not rolls(bag):
+			return smoothstep(park + settle, 1.0, up)
+		var part := ROLL_RODS * smoothstep(park + settle, park + TIP_UP, up)
+		if not bag.has("roll_tip"):
+			return part
+		var tip: float = bag["roll_tip"]
+		return lerpf(part, 1.0, smoothstep(tip + settle, tip + TIP_UP, up))
 	return smoothstep(0.0, STAND_END, k)
+
+
+## `k` (the move's share of its length) of a floor>pull move of `bag` in units of
+## TICKS_UP: the same as `k` until the move is made longer to roll its roller
+## upright (rolls()), so its phases keep their length in ticks.
+static func up_k(bag: Dictionary, k: float) -> float:
+	return k * CarryLead.ticks_of(bag) / TICKS_UP
+
+
+## Whether the floor>pull of `bag` rolls its roller upright until clear (the
+## header's CLEAR_M), decided at the park's end (_off_floor()).
+static func rolls(bag: Dictionary) -> bool:
+	return bag.get("rolls", false)
 
 
 ## 0 to 1 over `t` (0 to 1), still at both ends (smootherstep): a stand that
@@ -435,8 +491,9 @@ static func plan(
 	if not off_floor:
 		at = _onto_floor(k, start, want, parked, frame, go, bar, handle)
 	else:
-		_taken(bag, k, start * handle, body, lead)
-		at = _off_floor(k, bag, start, want, parked, _yawed(frame), bar, handle)
+		var up := up_k(bag, k)
+		_taken(bag, up, start * handle, body, lead)
+		at = _off_floor(up, bag, start, want, parked, _yawed(frame), bar, handle)
 	var xf: Transform3D = at[1]
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	var weights := [0.0, 0.0]
@@ -471,7 +528,7 @@ static func drops_of(bag: Dictionary, k: float) -> Vector3:
 	if not bag.get("park_low", false):
 		return PARK_HIPS
 	var lift_end := up_ends(bag).x
-	var eased := smoothstep(lift_end, lift_end + LOW_EASE_TICKS / TICKS_UP, k)
+	var eased := smoothstep(lift_end, lift_end + LOW_EASE_TICKS / TICKS_UP, up_k(bag, k))
 	return LAY_HIPS.lerp(PARK_HIPS, eased)
 
 
@@ -561,14 +618,51 @@ static func _off_floor(
 			var hand := parked * over_top(handle, bar, v)
 			hand += (body.origin - last.origin) * 0.5 * (1.0 - v)
 			return [false, parked, bar, parked.affine_inverse() * hand, 1.0]
+	if _rolling(bag, k, body):
+		return [true, _followed(bag, parked, body, k), bar, bar, 1.0]
 	var tipped := _followed(bag, parked, body, k)
 	var from: float = bag.get("park_tip", ends.y)
-	var u := smoothstep(0.0, 1.0, (k - from) / (1.0 - from))
+	var span := 1.0 - from
+	if rolls(bag):
+		from = bag["roll_tip"]
+		span = TIP_UP
+	var u := smoothstep(0.0, 1.0, (k - from) / span)
 	# Into the pull's arm pose as the bag comes onto the trail, from the frame
 	# the hand took it ("park_tip"; between two frames at 3x it had rolled
 	# 0.2 m toward the trail by the first).
 	tipped = rolled(tipped, want, u)
 	return [true, tipped, bar, bar, 1.0 - smoothstep(0.0, 1.0, u)]
+
+
+## Whether the floor>pull of `bag` at `k` (up_k()), its park over and the body at
+## `body` (yaw only), still rolls its roller upright (the header's CLEAR_M). At
+## the park's end it decides once whether it rolls: stamped with a face
+## ("up_near") and the walker not moved in the park (no "park_cut"); then the
+## move is made ROLL_TICKS longer. It stops rolling, for good ("roll_tip", the
+## move then ending with the tip), once the body is CLEAR_M from where it stood
+## in the park ("park_at"), once its walker's home is no longer the hand
+## ("home_held", held_home(): one sitting down again tipped at the forced end,
+## 30 ticks on, before it could set the roller down again), or so late that the
+## tip only just ends with the move.
+static func _rolling(bag: Dictionary, k: float, body: Transform3D) -> bool:
+	if not bag.has("rolls"):
+		bag["rolls"] = bag.get("up_near", false) and not bag.has("park_cut")
+		if not bag["rolls"]:
+			return false
+		bag["ticks"] = TICKS_UP + ROLL_TICKS
+		if not bag.has("park_at"):
+			bag["park_at"] = body.origin
+	if not rolls(bag) or bag.has("roll_tip"):
+		return false
+	var last := (TICKS_UP + ROLL_TICKS) / TICKS_UP - TIP_UP
+	var near: bool = body.origin.distance_to(bag["park_at"]) < CLEAR_M
+	if near and k < last and not bag.get("home_held", false):
+		return true
+	bag["roll_tip"] = k
+	# The move ends with the tip, not ROLL_TICKS on: its home and hand are held
+	# only while it runs (hold_park()).
+	bag["ticks"] = (k + TIP_UP) * TICKS_UP
+	return false
 
 
 ## The parked bag `parked` (world) carried with the body at `body` (yaw only)

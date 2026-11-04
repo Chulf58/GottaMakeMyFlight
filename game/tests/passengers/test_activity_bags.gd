@@ -266,9 +266,10 @@ func _drawn_stay(type: StringName, count: int, kind: SecurityLooks.Kind) -> void
 			assert_float(from_seat).is_less(0.7)
 	var still := _bag_positions(p)
 	# Stays put while the visitor stays: up to just before the step off
-	# at the sofa and the pod, through the wash and the step out at the
-	# shower (the body moving under it).
-	var stop := ActivityPoses.SHUFFLE_TICKS
+	# at the sofa and the pod (with a roller, to the end of its stand-up at
+	# the seat, ActivityPoses.up_tail(), board 2c659e42), through the wash and
+	# the step out at the shower (the body moving under it).
+	var stop := maxi(ActivityPoses.SHUFFLE_TICKS, ActivityPoses.up_tail(_world.sim, p))
 	if type == &"shower":
 		stop = ActivityPoses.DOOR_OUT_TICKS
 	while _ticks_left(p) > stop:

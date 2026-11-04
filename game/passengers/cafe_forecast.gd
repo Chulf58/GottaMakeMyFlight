@@ -46,7 +46,7 @@ static func visit_arrival(sim: PassengerSim, p: Passenger, legs: Dictionary) -> 
 		p,
 		visit_end(sim, legs) - sim.tick,
 		legs["leave_cell"],
-		PassengerSim.STAND_UP_TICKS,
+		CafeSim.up_ticks(p),
 		legs["resume_stage"]
 	)
 
@@ -55,14 +55,14 @@ static func visit_arrival(sim: PassengerSim, p: Passenger, legs: Dictionary) -> 
 static func leave_ticks(
 	sim: PassengerSim, p: Passenger, cell: Vector2i, resume: Passenger.Stage
 ) -> int:
-	return VisitForecast.leave_ticks(sim, p, cell, PassengerSim.STAND_UP_TICKS, resume)
+	return VisitForecast.leave_ticks(sim, p, cell, CafeSim.up_ticks(p), resume)
 
 
 ## The last tick `p` can stand up at `cell` and arrive MARGIN_TICKS early.
 static func deadline(
 	sim: PassengerSim, p: Passenger, cell: Vector2i, resume: Passenger.Stage
 ) -> int:
-	return VisitForecast.deadline(sim, p, cell, PassengerSim.STAND_UP_TICKS, resume)
+	return VisitForecast.deadline(sim, p, cell, CafeSim.up_ticks(p), resume)
 
 
 ## The deadline of a visit under way, forecast again with the queues and
@@ -73,7 +73,7 @@ static func deadline(
 static func live_deadline(
 	sim: PassengerSim, p: Passenger, approach: Vector2i, resume: Passenger.Stage
 ) -> int:
-	return VisitForecast.live_deadline(sim, p, approach, PassengerSim.STAND_UP_TICKS, resume)
+	return VisitForecast.live_deadline(sim, p, approach, CafeSim.up_ticks(p), resume)
 
 
 ## Whether an arrival forecast leaves the margin before `p`'s doors close.
