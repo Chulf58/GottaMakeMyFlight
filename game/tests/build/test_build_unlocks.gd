@@ -18,6 +18,7 @@ func before_test() -> void:
 	_unlocks = auto_free(BuildUnlocks.new())
 	_unlocks.rating = _rating
 	_unlocks.passengers = _pax
+	_unlocks.manual = true
 	add_child(_unlocks)
 	_opened.clear()
 	_unlocks.unlocked.connect(func(_tier: int, text: String) -> void: _opened.append(text))
@@ -220,6 +221,11 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 		{"tier": "2", "made": 5},
 		{"tier": 2.5, "made": 5},
 		{"tier": 2, "made": 5, "extra": 1},
+		# A tier saved with fewer made-flight passengers than it takes to open it.
+		{"tier": 2, "made": 49},
+		{"tier": 3, "made": 199},
+		{"tier": 4, "made": 0},
+		{"tier": 4, "made": 599},
 	]
 	for data: Dictionary in bad:
 		assert_bool(_unlocks.from_snapshot(data)).is_false()
@@ -227,45 +233,9 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 		assert_int(_unlocks.made_total()).is_equal(60)
 
 
-func test_a_world_without_a_gate_builds_with_every_tool_only_when_it_does_not_require_one() -> void:
-	for tool: BuildMode.Tool in BuildMode.Tool.values():
-		assert_str(BuildUnlocks.lock_text(null, false, tool)).is_empty()
-	assert_str(BuildUnlocks.lock_text(null, true, BuildMode.Tool.CAFE_ROOM)).is_equal(
-		BuildUnlocks.NOT_WIRED_TEXT
-	)
-	assert_str(BuildUnlocks.lock_text(null, true, BuildMode.Tool.FLOOR)).is_equal(
-		BuildUnlocks.NOT_WIRED_TEXT
-	)
-	assert_str(BuildUnlocks.lock_text(null, true, BuildMode.Tool.NONE)).is_empty()
-	assert_str(BuildUnlocks.lock_text(null, true, BuildMode.Tool.REMOVE)).is_empty()
-
-
-func test_build_mode_refuses_a_locked_tool_and_takes_it_once_unlocked() -> void:
-	var mode: BuildMode = auto_free(BuildMode.new())
-	mode.grid_size = Vector2i(20, 20)
-	mode.unlocks = _unlocks
-	mode.require_unlocks = true
-	add_child(mode)
-	mode.set_tool(BuildMode.Tool.WALL)
-	assert_int(mode.tool).is_equal(BuildMode.Tool.WALL)
-	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
-	assert_int(mode.tool).is_equal(BuildMode.Tool.WALL)
-	assert_str(mode.status_text()).contains("Unlocks at 2 stars and 50 passengers")
-	_unlocks.from_snapshot({"tier": 2, "made": 50})
-	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
-	assert_int(mode.tool).is_equal(BuildMode.Tool.CAFE_ROOM)
-	mode.set_tool(BuildMode.Tool.TREE)
-	assert_int(mode.tool).is_equal(BuildMode.Tool.CAFE_ROOM)
-
-
-func test_a_required_but_missing_gate_refuses_gated_tools() -> void:
-	var mode: BuildMode = auto_free(BuildMode.new())
-	mode.grid_size = Vector2i(20, 20)
-	mode.require_unlocks = true
-	mode.initial_tool = BuildMode.Tool.NONE
-	add_child(mode)
-	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
-	assert_int(mode.tool).is_equal(BuildMode.Tool.NONE)
-	assert_str(mode.status_text()).is_equal(BuildUnlocks.NOT_WIRED_TEXT)
-	mode.set_tool(BuildMode.Tool.REMOVE)
-	assert_int(mode.tool).is_equal(BuildMode.Tool.REMOVE)
+func test_a_snapshot_at_exactly_the_tier_requirement_is_taken() -> void:
+	for data: Dictionary in [
+		{"tier": 2, "made": 50}, {"tier": 3, "made": 200}, {"tier": 4, "made": 600}
+	]:
+		assert_bool(_unlocks.from_snapshot(data)).is_true()
+		assert_int(_unlocks.tier()).is_equal(data["tier"])

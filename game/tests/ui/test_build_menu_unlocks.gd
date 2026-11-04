@@ -22,6 +22,7 @@ func before_test() -> void:
 	_unlocks = BuildUnlocks.new()
 	_unlocks.rating = _rating
 	_unlocks.passengers = _pax
+	_unlocks.manual = true
 	_port.add_child(_unlocks)
 	_mode = BuildMode.new()
 	_mode.grid_size = Vector2i(20, 20)

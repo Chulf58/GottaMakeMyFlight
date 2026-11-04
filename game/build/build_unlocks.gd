@@ -15,8 +15,9 @@ extends Node
 ## cafe_open(), so before it no passenger grows hungry, loses mood to food or
 ## gets the cafe hint. Bins unlock with the cafe.
 ##
-## BuildMode.set_tool() asks lock_text(); BuildMenu greys the locked cards with
-## the same text. The save keeps the tier and the made-flight count (part
+## BuildMode.set_tool() asks lock_text() and a template paste asks
+## edits_lock_text() for every room and piece it holds; BuildMenu greys the
+## locked cards with the same text. The save keeps the tier and the made-flight count (part
 ## "unlocks", SaveGame).
 
 ## The tier changed (a new game, an unlock or a load).
@@ -157,8 +158,11 @@ const TIERS := [
 	},
 ]
 
-## Tool -> the tier that opens it, built on first use.
+## Tool -> the tier that opens it, and the lowest-tier tool that places each
+## catalog object and each room type, built on first use.
 static var _by_tool: Dictionary = {}
+static var _tool_by_def: Dictionary = {}
+static var _tool_by_room: Dictionary = {}
 
 ## The airport rating the stars are read from and the passenger sim whose
 ## outcomes are counted and whose cafe hunger follows the cafe tier. The scene
@@ -167,6 +171,8 @@ static var _by_tool: Dictionary = {}
 @export var passengers: PassengerSim
 ## Ticks the day check; without it only check() unlocks.
 @export var clock: SimClock
+## True for a test or probe that has no clock on purpose and calls check() itself.
+@export var manual := false
 
 var _tier := START_TIER
 var _made := 0
@@ -176,6 +182,8 @@ var _checked_day := NO_DAY
 func _ready() -> void:
 	if rating == null or passengers == null:
 		push_error("BuildUnlocks: rating and passengers must be set; nothing will unlock")
+	if clock == null and not manual:
+		push_error("BuildUnlocks: no clock is set; nothing unlocks until check() is called")
 	if passengers != null:
 		passengers.outcome.connect(_on_outcome)
 	if clock != null:
@@ -189,10 +197,7 @@ func _ready() -> void:
 static func tier_of(tool: BuildMode.Tool) -> int:
 	if tool == BuildMode.Tool.NONE or tool == BuildMode.Tool.REMOVE:
 		return 0
-	if _by_tool.is_empty():
-		for i in TIERS.size():
-			for listed: BuildMode.Tool in TIERS[i]["tools"]:
-				_by_tool[listed] = i + 1
+	_index_tools()
 	return _by_tool.get(tool, UNLISTED_TIER)
 
 
@@ -206,6 +211,33 @@ static func lock_text(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) 
 	if gate == null:
 		return NOT_WIRED_TEXT if required else ""
 	return "" if gate.allows(tool) else gate.unlock_text(tool)
+
+
+## The tool `wanted` as a mode's starting tool: itself when it may be picked, else
+## NONE. A mode that requires unlocks and has no gate is a wiring error.
+static func start_tool(
+	gate: BuildUnlocks, required: bool, wanted: BuildMode.Tool
+) -> BuildMode.Tool:
+	if required and gate == null:
+		push_error("BuildMode: no BuildUnlocks is wired; every gated tool is refused")
+	return wanted if lock_text(gate, required, wanted) == "" else BuildMode.Tool.NONE
+
+
+## Why a plan cannot be built, or "" when it can: the lock text of the first
+## room or catalog object in `edits` whose tool is not open. A room type or
+## object no tool places is not gated.
+static func edits_lock_text(gate: BuildUnlocks, required: bool, edits: Array[BuildEdit]) -> String:
+	_index_tools()
+	for edit in edits:
+		var tool: BuildMode.Tool = BuildMode.Tool.NONE
+		if edit.kind == BuildEdit.Kind.PLACE_ROOM:
+			tool = _tool_by_room.get(edit.room_type, BuildMode.Tool.NONE)
+		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
+			tool = _tool_by_def.get(edit.def_id, BuildMode.Tool.NONE)
+		var text := lock_text(gate, required, tool)
+		if text != "":
+			return text
+	return ""
 
 
 ## What tier `tier` asks for: "Unlocks at 3 stars and 200 passengers".
@@ -312,7 +344,27 @@ static func _snapshot_problem(data: Dictionary) -> String:
 		return "tier %d is outside %d to %d" % [int(data["tier"]), START_TIER, TIERS.size()]
 	if int(data["made"]) < 0 or int(data["made"]) > MAX_MADE:
 		return "made %d is outside 0 to %d" % [int(data["made"]), MAX_MADE]
+	var need: int = TIERS[int(data["tier"]) - 1]["passengers"]
+	if int(data["made"]) < need:
+		return (
+			"tier %d needs %d passengers made, not %d"
+			% [int(data["tier"]), need, int(data["made"])]
+		)
 	return ""
+
+
+static func _index_tools() -> void:
+	if not _by_tool.is_empty():
+		return
+	for i in TIERS.size():
+		for listed: BuildMode.Tool in TIERS[i]["tools"]:
+			_by_tool[listed] = i + 1
+			var def := BuildMode.tool_object(listed)
+			if def != &"" and not _tool_by_def.has(def):
+				_tool_by_def[def] = listed
+			var room: StringName = BuildMode.TOOL_ROOMS.get(listed, &"")
+			if room != &"" and not _tool_by_room.has(room):
+				_tool_by_room[room] = listed
 
 
 func _open_to(reached: int) -> void:

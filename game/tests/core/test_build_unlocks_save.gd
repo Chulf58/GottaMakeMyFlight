@@ -61,3 +61,30 @@ func test_the_tier_and_the_count_survive_a_save_and_a_load() -> void:
 	_mode.set_tool(BuildMode.Tool.TREE)
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.TREE)
 	_mode.set_tool(BuildMode.Tool.NONE)
+
+
+## A save whose unlocks part is malformed (a tier above what its made-flight
+## count opens) is refused whole while it is staged: the world after the
+## refusal is the world before it, the earlier parts included.
+func test_a_malformed_unlocks_part_refuses_the_whole_load_and_changes_nothing() -> void:
+	assert_bool(_unlocks.from_snapshot({"tier": 2, "made": 70})).is_true()
+	SaveTestKit.step(_main)
+	var data: Dictionary = JSON.parse_string(JSON.stringify(_save.snapshot(), "", true, true))
+	data["unlocks"] = {"tier": 4, "made": 0}
+	# Moved on from the save, so a part installed from it would show.
+	for i in 5:
+		SaveTestKit.step(_main)
+	var before := SaveTestKit.checksum(_main)
+	var clock: SimClock = _main.get_node("SimClock")
+	var tick := clock.tick
+	var done := [true]
+	await (
+		assert_error(func() -> void: done[0] = _save.load_world(data))
+		. is_push_error("BuildUnlocks.from_snapshot: tier 4 needs 600 passengers made, not 0")
+	)
+	print("refused: %s" % _save.message_text())
+	assert_bool(done[0]).is_false()
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	assert_int(clock.tick).is_equal(tick)
+	assert_int(_unlocks.tier()).is_equal(2)
+	assert_int(_unlocks.made_total()).is_equal(70)

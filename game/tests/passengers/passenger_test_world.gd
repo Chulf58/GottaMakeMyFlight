@@ -60,6 +60,8 @@ static func make(on_grid: BuildGrid, starts: Array[int], seed := 1) -> Passenger
 	world.flights.add_flight(FLIGHT, starts)
 	world.grid = on_grid
 	world.sim = PassengerSim.new()
+	# Hunger is off in a bare sim (the cafe tier turns it on); these worlds feed it.
+	world.sim.cafes.hunger_enabled = true
 	world.sim.wallet = Wallet.new()
 	world.staff = StaffSim.new()
 	world.sim.staff = world.staff

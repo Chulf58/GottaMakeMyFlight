@@ -3,7 +3,9 @@ extends GdUnitTestSuite
 ## Hunger waits for the cafe tier (decision build-unlocks-need-stars-and-
 ## passengers-served-hunger-cafe-a): with CafeSim.hunger_enabled off no
 ## passenger starts hungry, grows hungry or loses mood to food, and the food
-## hint has no cause. A bare sim has hunger on, as every other test builds it.
+## hint has no cause. A bare sim has hunger off, so a game without the unlock
+## controller has no hungry passengers; PassengerTestWorld turns it on for the
+## tests that feed them.
 
 var _w: PassengerTestWorld
 
@@ -29,9 +31,28 @@ func _no_cafe() -> void:
 	_w = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 
 
-func test_a_bare_sim_has_hunger_on() -> void:
+func test_a_bare_sim_has_hunger_off_and_the_test_world_has_it_on() -> void:
+	var bare: PassengerSim = auto_free(PassengerSim.new())
+	assert_bool(bare.cafes.hunger_enabled).is_false()
 	_no_cafe()
 	assert_bool(_w.sim.cafes.hunger_enabled).is_true()
+
+
+## The start-hunger draw is taken whether hunger is on or not, so the random
+## stream (and every later roll) is the same either way.
+func test_the_start_hunger_draw_is_taken_with_hunger_off() -> void:
+	var off: PassengerSim = auto_free(PassengerSim.new())
+	var on: PassengerSim = auto_free(PassengerSim.new())
+	on.cafes.hunger_enabled = true
+	var rng_off := RandomNumberGenerator.new()
+	var rng_on := RandomNumberGenerator.new()
+	rng_off.seed = 77
+	rng_on.seed = 77
+	assert_int(off.cafes.start_hunger(rng_off)).is_equal(0)
+	assert_int(on.cafes.start_hunger(rng_on)).is_between(
+		CafeSim.HUNGER_START_MIN, CafeSim.HUNGER_START_MAX
+	)
+	assert_int(rng_off.randi()).is_equal(rng_on.randi())
 
 
 func test_with_hunger_off_a_new_passenger_is_not_hungry_and_stays_so() -> void:

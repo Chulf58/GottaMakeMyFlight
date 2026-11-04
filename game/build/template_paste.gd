@@ -175,6 +175,11 @@ func save_room(room_id: int) -> RoomTemplate:
 func plan_at(cell: Vector2i) -> Dictionary:
 	var grid := _mode.grid
 	var edits := library.get_template(armed).plan(cell, turns, grid)
+	var locked := BuildUnlocks.edits_lock_text(_mode.unlocks, _mode.require_unlocks, edits)
+	if locked != "":
+		var refusal := BuildResult.refused(BuildResult.Reason.LOCKED)
+		refusal.detail = locked
+		return {"edits": edits, "result": refusal}
 	var scratch := BuildUndo.trial_copy_of(grid)
 	var result := scratch.apply_sequence(edits, BeltShaper.crossing_problem)
 	if result.ok:
