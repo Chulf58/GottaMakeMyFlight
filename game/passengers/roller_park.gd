@@ -146,9 +146,10 @@ const FOLLOW_SPLIT := 0.7
 ## Walkers moving before the park's end (a collecting walker, the shower's
 ## door) tip as before.
 const CLEAR_M := 1.5
-## The share of the rods run out while it rolls upright: the bar at about 1.0 m
-## (0.48 m with them in, 2.1 m all out), where a standing walker's hand is.
-const ROLL_RODS := 0.3
+## The share of the rods run out while it rolls upright. Measured hips while
+## rolling (probe ROLL_HIPS): 0.93 to 0.96 of standing at 0.45, 0.84 to 0.89 at
+## 0.3; with them in the bar was at 0.48 m, all out at 2.1 m.
+const ROLL_RODS := 0.45
 const ROLL_TICKS := 36.0
 const TIP_UP := 1.0 - UP_PARK_END
 

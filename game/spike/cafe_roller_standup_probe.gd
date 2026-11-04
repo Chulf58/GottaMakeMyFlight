@@ -62,6 +62,9 @@ const LIMIT_TICKS := 6000
 const LEAD_TICKS := 30
 const AFTER_TICKS := 50
 const RISEN_SHARE := 0.97
+## Rolling the roller upright the hips stay at least this share of their height
+## walking after the tip (ROLL_HIPS; measured 0.93 to 0.96 with RollerPark.ROLL_RODS 0.45).
+const ROLL_SHARE := 0.92
 const HOLD_EPS_M := 0.01
 const BAG_EPS_M := 0.01
 const WALK_M := 0.05
@@ -457,7 +460,15 @@ func _summary(subject: String, m: Dictionary) -> void:
 			% [subject, m["pick_h"], m["pick_clip"], m["stand_h"], share, RISEN_SHARE, m["mid_h"]]
 		)
 	)
-	print("ROLL_HIPS %s lowest hips rolling upright %.3f m" % [subject, m.get("roll_low", -1.0)])
+	var roll_share: float = m.get("roll_low", 0.0) / maxf(m["stand_h"], 0.001)
+	print(
+		(
+			"ROLL_HIPS %s lowest hips rolling upright %.3f m, %.3f of walking (>= %.2f)"
+			% [subject, m.get("roll_low", -1.0), roll_share, ROLL_SHARE]
+		)
+	)
+	if roll_share < ROLL_SHARE:
+		_invalid("%s: ROLL_HIPS the walker crouches rolling its roller" % subject)
 	if m["stand_h"] <= 0.0 or share < RISEN_SHARE:
 		_invalid("%s: not fully up at the pick-up" % subject)
 	if m["mid_h"] >= m["stand_h"] * RISEN_SHARE:

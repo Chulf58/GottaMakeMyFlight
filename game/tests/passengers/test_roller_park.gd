@@ -384,8 +384,13 @@ func _assert_move_ticks(seen: Dictionary, down: bool) -> void:
 		)
 		return
 	assert_bool(seen.get("rolled", false)).is_true()
-	assert_float(float(seen["ticks"])).is_between(
-		RollerPark.TICKS_UP - 0.01, RollerPark.TICKS_UP + RollerPark.ROLL_TICKS + 1.01
+	(
+		assert_float(float(seen["ticks"]))
+		. is_between(
+			# Tipped because the walker got clear, not at the forced end (review).
+			RollerPark.TICKS_UP - 0.01,
+			RollerPark.TICKS_UP + RollerPark.ROLL_TICKS - 1.0
+		)
 	)
 
 
