@@ -71,17 +71,42 @@ func test_a_removed_room_loses_its_label_and_a_load_draws_the_saved_ones() -> vo
 
 ## Sol review of 0537708: the room labels lay out after PassengerViews has
 ## drawn this frame's need icons, so they slide clear of where the icons are
-## now. PassengerViews keeps the default priority (its script and main.tscn
-## never set one) and RoomView processes after it.
+## now. RoomView processes after PassengerViews, whether PassengerViews is
+## built from its script or placed by main.tscn (read from the scene's saved
+## properties, so no main scene is built).
 func test_room_labels_lay_out_after_the_passenger_views_draw() -> void:
-	var views_script := load("res://passengers/passenger_views.gd") as GDScript
-	assert_str(views_script.source_code).not_contains("process_priority")
-	var main := FileAccess.get_file_as_string("res://main/main.tscn")
-	var start := main.find('[node name="PassengerViews"')
-	assert_int(start).is_greater(0)
-	var section := main.substr(start, main.find("\n[", start + 1) - start)
-	assert_str(section).not_contains("process_priority")
-	assert_int(_view().process_priority).is_greater(0)
+	var bare := PassengerTestWorld.views()
+	var bare_priority := bare.process_priority
+	_free_unadded_members(bare)
+	var placed_priority := _placed_priority("res://main/main.tscn", "PassengerViews")
+	var room_priority := _view().process_priority
+	assert_int(room_priority).is_greater(bare_priority)
+	assert_int(room_priority).is_greater(placed_priority)
+
+
+## Frees `node` and the member nodes its field initialisers made, which are
+## only parented by _ready (never run here).
+func _free_unadded_members(node: Node) -> void:
+	for property in node.get_property_list():
+		var member: Variant = node.get(property.name)
+		if member is Node and member.get_parent() == null:
+			member.free()
+	node.free()
+
+
+## The process_priority the scene saves for its node `node_name`, or the Node
+## default of 0 when the scene does not set one.
+func _placed_priority(scene_path: String, node_name: String) -> int:
+	var state := (load(scene_path) as PackedScene).get_state()
+	for i in state.get_node_count():
+		if state.get_node_name(i) != node_name:
+			continue
+		for p in state.get_node_property_count(i):
+			if state.get_node_property_name(i, p) == &"process_priority":
+				return state.get_node_property_value(i, p)
+		return 0
+	fail("%s has no node %s" % [scene_path, node_name])
+	return 0
 
 
 ## SceneTree.process_frame fires before the nodes' _process, so the redraw
