@@ -736,7 +736,7 @@ func _spawn(
 	p.spawn_tick = tick
 	p.stage_tick = tick
 	p.boarding_tick = flights.boarding_window(flight_id).x
-	p.hunger = clock.rng.randi_range(CafeSim.HUNGER_START_MIN, CafeSim.HUNGER_START_MAX)
+	p.hunger = cafes.start_hunger(clock.rng)
 	CarryOnTraits.draw(clock.rng, p)
 	p.toilet_need = clock.rng.randi_range(ToiletSim.NEED_START_MIN, ToiletSim.NEED_START_MAX)
 	p.boredom = BoredomSim.start_of(p.id)

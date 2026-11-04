@@ -117,7 +117,7 @@ static func read_world(sim: PassengerSim, hiring_roles: Array) -> Dictionary:
 		"shortage_roles": _shortage_roles(sim),
 		"hiring_roles": hiring_roles,
 		"max_toilet_need": toilet,
-		"max_hunger": hunger,
+		"max_hunger": hunger if sim.cafes.hunger_enabled else 0,
 		"stalls": sim.toilets.layout.stalls.size(),
 		"cafes": sim.cafes.layout.cafes.size(),
 	}

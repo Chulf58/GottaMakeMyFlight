@@ -55,6 +55,7 @@ enum Reason {
 	MOVE_NO_FIT,
 	MOVE_EXIT_BLOCKED,
 	MOVE_CHANGED,
+	LOCKED,
 }
 
 const REASON_TEXT := {
@@ -114,6 +115,7 @@ const REASON_TEXT := {
 	Reason.MOVE_NO_FIT: "A piece does not fit at the new spot",
 	Reason.MOVE_EXIT_BLOCKED: "Keep the way out clear for the passengers leaving the room",
 	Reason.MOVE_CHANGED: "The room changed since it was picked up. Pick it up again",
+	Reason.LOCKED: "Not unlocked yet",
 }
 
 var ok: bool = true

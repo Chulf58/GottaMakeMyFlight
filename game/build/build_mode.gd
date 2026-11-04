@@ -283,6 +283,10 @@ const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
 ## The landside the curb, car park and Close tools build on (Landside 3/4). main.tscn
 ## sets it; without it those tools do nothing.
 @export var landside: LandsideSim
+## The tier gate set_tool() and the template paste ask (BuildUnlocks). main.tscn sets both;
+## without `require_unlocks` (a test world or probe) every tool can be picked.
+@export var unlocks: BuildUnlocks
+@export var require_unlocks := false
 ## Starts the grid with the player-owned starter shell (StarterShell) when the
 ## node enters the tree. main.tscn sets it; a load replaces the grid, so a
 ## loaded game never gets a second shell. A bare BuildMode starts empty.
@@ -386,6 +390,7 @@ func _ready() -> void:
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
 	land_tool = LandTool.attach(self)
+	tool = BuildUnlocks.start_tool(unlocks, require_unlocks, tool)
 	if starter_shell and not StarterShell.place(grid):
 		push_error("BuildMode: the starter shell does not fit this grid; it starts empty")
 	grid.graph_changed.connect(_on_lane_graph_changed)
@@ -483,6 +488,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Picks a tool.
 func set_tool(new_tool: Tool) -> void:
+	var locked := BuildUnlocks.lock_text(unlocks, require_unlocks, new_tool)
+	if locked != "":
+		_status_note = locked
+		_show_status(null)
+		return
 	cancel_area()
 	tool = new_tool
 	_auto_facing = true
