@@ -84,7 +84,7 @@ func test_a_shown_hint_takes_the_banner_slot_and_gives_it_back() -> void:
 	assert_bool(hints.card().visible).is_false()
 
 
-func test_the_hint_card_docks_where_the_banner_docks() -> void:
+func test_the_hint_card_sits_where_the_banner_sits() -> void:
 	var hints := _live()
 	for i in 8:
 		hints.advance(0.25, _world(), ["Check-in"])
@@ -93,8 +93,10 @@ func test_the_hint_card_docks_where_the_banner_docks() -> void:
 	var card := hints.card().get_global_rect()
 	assert_bool(card.has_area()).is_true()
 	var screen := get_viewport().get_visible_rect().size
-	var bottom := screen.y - card.end.y
-	assert_float(bottom).is_equal_approx(_panel().hint_dock_bottom(), 1.5)
+	assert_float(card.position.y).is_equal_approx(StaffPanel.BANNER_TOP, 1.5)
+	assert_float(card.get_center().x).is_equal_approx(screen.x / 2.0, 1.5)
+	var banner := _panel().hint_card().get_global_rect()
+	assert_float(card.position.y).is_equal_approx(banner.position.y, 1.5)
 
 
 func test_a_new_game_has_no_staffing_shortage_to_teach() -> void:
@@ -135,4 +137,6 @@ func test_a_probe_can_stop_the_world_reading_and_keep_the_card_docking() -> void
 	auto_free(hints)
 	hints._process(1.0)
 	assert_object(hints._sim).is_null()
-	assert_float(hints._dock_bottom).is_equal_approx(_panel().hint_dock_bottom(), 0.01)
+	assert_float(hints.card().get_global_rect().position.y).is_equal_approx(
+		StaffPanel.BANNER_TOP, 1.5
+	)

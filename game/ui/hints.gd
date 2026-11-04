@@ -1,9 +1,10 @@
 class_name Hints
 extends Node
 ## The first-time hints (HUD 7/7, decision first-time-hints-above-the-build-bar-
-## moment-of-need-per-profile-memory): one small card at a time in the slot above
-## the build bar, shared with the status banner (StaffPanel), which waits while a
-## hint shows. HintRules says what each hint teaches and when its cause is true.
+## moment-of-need-per-profile-memory): one small card at a time in the banner
+## slot at the top centre (decision status-banner-and-first-time-hints-sit-at-
+## the-top-centre), shared with the status banner (StaffPanel), which waits while
+## a hint shows. HintRules says what each hint teaches and when its cause is true.
 ##
 ## A hint is due on an opportunity, not a timer: the player opens the build
 ## category it is about, or its cause has just become true. A player who does
@@ -85,7 +86,6 @@ var _latched := {}
 var _clock := 0.0
 var _last_open: Array = []
 var _read_acc := 0.0
-var _dock_bottom := -1.0
 var _sim: PassengerSim
 var _card := PanelContainer.new()
 var _caption := Label.new()
@@ -286,7 +286,6 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
-	_dock()
 	fade_for(_ghost_rect(), delta)
 	if not reads_world:
 		return
@@ -448,18 +447,6 @@ func _on_loaded(ok: bool) -> void:
 		reset_session()
 
 
-## Docks the card in the banner's slot: just above the bar, the open tray or the
-## Staff card.
-func _dock() -> void:
-	var panel := _banner()
-	var bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
-	if panel != null:
-		bottom = panel.hint_dock_bottom()
-	if not is_equal_approx(bottom, _dock_bottom):
-		_dock_bottom = bottom
-		BuildMenu.anchor_bottom_centre(_card, bottom)
-
-
 func _in_current_scene() -> bool:
 	var current := get_tree().current_scene
 	return current != null and (current == self or current.is_ancestor_of(self))
@@ -496,7 +483,7 @@ func _build() -> void:
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(_body)
-	_dock()
+	StaffPanel.anchor_banner(_card)
 	_row.name = "HintsControls"
 	_row.theme = BuildMenu.HUD_THEME
 	_row.position = Vector2(ROW_LEFT, ROW_TOP)
