@@ -817,7 +817,8 @@ func _relocates(p: Passenger, visit: CafeVisit) -> bool:
 	if visit.relocation != null and visit.relocation.exiting:
 		# A table gone from the room meanwhile: it only finishes getting up.
 		var table := int(visit.seat.get("object_id", 0))
-		visit.relocation.drop_return_unless(_sim.grid, table, &"cafe_table", visit.room)
+		var def_id := StringName(visit.relocation.source["def"])
+		visit.relocation.drop_return_unless(_sim.grid, table, def_id, visit.room)
 		return true
 	var live := Relocation.placement(_sim.grid, int(visit.seat.get("object_id", 0)))
 	if not Relocation.moved(visit.piece, live):

@@ -71,7 +71,8 @@ func returns() -> bool:
 
 ## Whether object `id` on `grid` is still a `def_id` piece of room `room_id`
 ## (FacilitySlots.piece_inside()), and the room still the kind that uses it (a
-## toilet for a toilet_stall, a food room with seats for a cafe_table), ready
+## toilet for a toilet_stall, a food room with seats for one of its table
+## pieces: a cafe table, a dining table or a booth), ready
 ## or not: a piece a visitor can return to once the room is usable. After a
 ## move the walls stay behind, so the room is often not ready yet while the
 ## visitor leaves the old spot.
@@ -84,8 +85,8 @@ static func destination_ok(grid: BuildGrid, id: int, def_id: StringName, room_id
 	var kind_ok := false
 	if def_id == &"toilet_stall":
 		kind_ok = room["type"] == &"toilet"
-	elif def_id == &"cafe_table":
-		kind_ok = type != null and type.food and not type.walk_on
+	elif type != null and type.food:
+		kind_ok = not type.walk_on and type.table_pieces.has(def_id)
 	else:
 		kind_ok = type != null and type.shop and type.seat_piece == def_id
 	return kind_ok and FacilitySlots.piece_inside(grid, id, room["rect"])

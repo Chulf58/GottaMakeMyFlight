@@ -179,19 +179,19 @@ const TEXT := {
 	BuildMode.Tool.BAR_ROOM:
 	[
 		"Marks floor as a bar. Guests stay longer than in a cafe, spend more, and gain most mood.",
-		"It uses the cafe counter and table. Guests order at the counter and sit at the table.",
+		"Guests order at a bar counter or a cafe counter and sit at a cafe table.",
 		"At least 3x4, with a counter and a table. Shop staff serve at the counter."
 	],
 	BuildMode.Tool.RESTAURANT_ROOM:
 	[
 		"Marks floor as a sit-down restaurant. Guests stay the longest and spend the most.",
-		"It uses the cafe counter and table. Guests order at the counter and sit at the table.",
-		"At least 4x4, with a counter and a table. Shop staff serve at the counter."
+		"Guests order at a cafe counter and sit at a dining table, a booth or a cafe table.",
+		"At least 4x4, with a counter and a table or booth. Shop staff serve at the counter."
 	],
 	BuildMode.Tool.STALL_ROOM:
 	[
 		"Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat.",
-		"It needs only the cafe counter. A server hands over the order.",
+		"It needs only a grab stall or a cafe counter. A server hands over the order.",
 		"At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
 	],
 	BuildMode.Tool.PLAY_AREA_ROOM:
@@ -364,27 +364,27 @@ const TEXT := {
 	],
 	BuildMode.Tool.BAR_COUNTER:
 	[
-		"A bar counter for show.",
-		"A bar room works with the cafe counter and table, not with this piece.",
-		"No upkeep. It earns nothing."
+		"A bar counter, where guests order drinks.",
+		"Place it inside a bar. A server stands behind it and guests order from the cell in front.",
+		"Wholly inside the bar. Shop staff hired in Staff, and the spot in front clear."
 	],
 	BuildMode.Tool.GRAB_STALL:
 	[
-		"A grab-and-go stall for show.",
-		"A grab-and-go room works with the cafe counter, not with this piece.",
-		"No upkeep. It earns nothing."
+		"A grab-and-go stall, where guests buy and walk on.",
+		"Place it inside a grab-and-go room. A server hands over the order.",
+		"Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
 	],
 	BuildMode.Tool.DINING_TABLE:
 	[
-		"A restaurant table for show.",
-		"A restaurant room works with the cafe counter and table, not with this piece.",
-		"No upkeep. It earns nothing."
+		"A restaurant table with four seats.",
+		"Place it inside a restaurant. A guest walks from the counter to a free seat.",
+		"Wholly inside the restaurant, with the cell behind each chair clear."
 	],
 	BuildMode.Tool.BOOTH:
 	[
-		"A restaurant booth for show.",
-		"A restaurant room works with the cafe counter and table, not with this piece.",
-		"No upkeep. It earns nothing."
+		"A restaurant booth with four seats.",
+		"Place it inside a restaurant. A guest walks from the counter to a free seat.",
+		"Wholly inside the restaurant, with the cell behind each seat clear."
 	],
 	BuildMode.Tool.INFO_DESK:
 	[

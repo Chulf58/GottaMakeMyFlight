@@ -43,6 +43,9 @@ const KIT_IDS: Array[StringName] = [
 ## The mounts that name where a passenger stands to use a piece, in the order
 ## a piece offers them (a piece has at most one of these).
 const USE_MOUNTS: Array[String] = ["Mount_Order", "Mount_Use", "Mount_Browse"]
+## Pieces used as a counter whose .glb has no use mount, and the offset their
+## catalog entry derives instead (a graphics follow-up: add Mount_Order).
+const DERIVED_USE_OFFSETS := {&"bar_counter": Vector2i(0, 2)}
 ## Vendor decor is not inset like the kit: a piece may overhang its cells by
 ## this much.
 const DECOR_OVERHANG := 0.05
@@ -222,6 +225,9 @@ func test_interaction_offsets_match_the_models_use_mounts() -> void:
 			if found != null:
 				assert_object(xf).override_failure_message("%s has two use mounts" % id).is_null()
 				xf = found
+		if xf == null and DERIVED_USE_OFFSETS.has(id):
+			_assert_derived_use_offset(id, def, piece)
+			continue
 		assert_bool(def.has_interaction).override_failure_message(str(id)).is_equal(xf != null)
 		if xf == null:
 			continue
@@ -236,6 +242,61 @@ func test_interaction_offsets_match_the_models_use_mounts() -> void:
 		# The interaction cell lies outside the footprint.
 		var inside := cell.x >= 0 and cell.y >= 0 and cell.x < def.size.x and cell.y < def.size.y
 		assert_bool(inside).override_failure_message(str(id)).is_false()
+
+
+## A piece whose .glb has no use mount but is used as a counter (the bar
+## counter, which has seat mounts and a Mount_Staff only): its interaction
+## offset is the cell in front of its left half, the mirror of Mount_Staff.
+func _assert_derived_use_offset(id: StringName, def: BuildObjectDef, piece: String) -> void:
+	assert_bool(def.has_interaction).override_failure_message(str(id)).is_true()
+	assert_vector(Vector2(def.interaction_offset)).override_failure_message(str(id)).is_equal(
+		Vector2(DERIVED_USE_OFFSETS[id])
+	)
+	var staff: Variant = _mount(piece, "Mount_Staff")
+	assert_object(staff).override_failure_message("%s has no Mount_Staff" % id).is_not_null()
+	var at: Vector3 = (staff as Transform3D).origin
+	var staff_cell := Vector2i(floori(at.x + def.size.x / 2.0), floori(at.z + def.size.y / 2.0))
+	print("%s: staff cell %s, derived order cell %s" % [id, staff_cell, def.interaction_offset])
+	assert_int(def.interaction_offset.x).is_equal(staff_cell.x)
+	assert_int(def.interaction_offset.y).is_equal(def.size.y - 1 - staff_cell.y)
+
+
+## The restaurant table and booth catalogue the four Mount_SitRoot_* of their
+## .glb: each seat's root is the mount, and the chair faces the table.
+func test_dining_seats_match_the_models_sit_mounts() -> void:
+	var mounts := {
+		"BL": Vector2i(0, 0), "BR": Vector2i(1, 0), "FL": Vector2i(0, 2), "FR": Vector2i(1, 2)
+	}
+	for id in [&"restaurant_table", &"restaurant_booth"]:
+		var def := BuildCatalog.get_def(id)
+		var piece := InteriorKit.object_piece(id)
+		assert_int(def.seats.size()).is_equal(4)
+		var matched := 0
+		for key: String in mounts:
+			var xf: Variant = _mount(piece, "Mount_SitRoot_" + key)
+			assert_object(xf).override_failure_message("%s %s" % [id, key]).is_not_null()
+			var at: Vector3 = (xf as Transform3D).origin
+			for seat in def.seats:
+				if seat["cell"] != mounts[key]:
+					continue
+				var centre := Vector2(
+					mounts[key].x - def.size.x / 2.0 + 0.5, mounts[key].y - def.size.y / 2.0 + 0.5
+				)
+				var root: Vector2 = seat["root"]
+				assert_float(centre.x + root.x).override_failure_message(str(id)).is_equal_approx(
+					at.x, 0.01
+				)
+				assert_float(centre.y + root.y).override_failure_message(str(id)).is_equal_approx(
+					at.z, 0.01
+				)
+				# The mount's forward (+Z) is the way the chair faces.
+				var forward: Vector3 = (xf as Transform3D).basis * Vector3(0, 0, 1)
+				assert_float(forward.z).override_failure_message(str(id)).is_equal_approx(
+					float(seat["facing"].y), 0.01
+				)
+				matched += 1
+		print("%s: %d of 4 seats match their Mount_SitRoot" % [id, matched])
+		assert_int(matched).is_equal(4)
 
 
 ## The node the build view draws for a podium: BuildView.make_object_node()

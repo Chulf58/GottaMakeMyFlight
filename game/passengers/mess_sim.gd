@@ -99,7 +99,6 @@ const SAVE_VERSION := 1
 ## Source key kinds and how many ":" parts each has: "seat:<table>:<index>",
 ## "counter:<id>", "slot:<display>:<index>", "toilet:<room>", "shower:<room>".
 const SOURCE_PARTS := {"seat": 3, "counter": 2, "slot": 3, "toilet": 2, "shower": 2}
-const COUNTER_ID := &"cafe_counter"
 ## The approach cell is looked for on these steps from the mess cell, in order.
 const AROUND: Array[Vector2i] = [
 	Vector2i(0, 1),
@@ -185,7 +184,7 @@ static func source_exists(grid: BuildGrid, source: String) -> bool:
 		"toilet", "shower":
 			return grid.get_room(id).get("type", &"") == StringName(parts[0])
 		"counter":
-			return def != null and def.id == COUNTER_ID
+			return def != null and RoomTypes.is_food_counter(def.id)
 		"seat":
 			return def != null and index >= 0 and index < def.seats.size()
 	return def != null and index >= 0 and index < slots_of(def)

@@ -7,12 +7,13 @@ extends RefCounted
 ## queuing and sitting. Rebuilt after every grid edit, after TerminalLayout.
 ##
 ## A cafe is a ready food room (RoomRules; RoomType.food: a cafe, bar,
-## restaurant or stall, all with the same counters and tables). Its counters are the cafe_counter
-## pieces RoomRules counts for it; each has a fixed lane from its order spot
-## (slot 0) straight out along its front, up to LANE_SLOTS cells, stopping at
-## a closed step, a station lane, another object's interaction cell or a seat's
-## approach cell. A counter with no lane is left out. Its seats are the chairs
-## of the cafe_table pieces in the room whose approach cell is a passenger
+## restaurant or stall; each takes its own pieces and the cafe's). Its counters
+## are the RoomType.counter_pieces RoomRules counts for it; each has a fixed
+## lane from its order spot (slot 0) straight out along its front, up to
+## LANE_SLOTS cells, stopping at a closed step, a station lane, another
+## object's interaction cell or a seat's approach cell. A counter with no lane
+## is left out. Its seats are the chairs of the RoomType.table_pieces in the
+## room (a cafe table, a dining table or a booth) whose approach cell is a passenger
 ## cell (BuildGrid.is_passenger_cell(): walkable and walled in). A walk-on
 ## room (the stall, RoomType.walk_on) needs only a counter and has no seats.
 
@@ -45,18 +46,19 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 		if not RoomTypes.get_type(status.type_id).food or not status.ok:
 			continue
 		var area: Rect2i = grid.get_room(room_id)["rect"]
-		var walk_on := RoomTypes.get_type(status.type_id).walk_on
+		var type := RoomTypes.get_type(status.type_id)
+		var walk_on := type.walk_on
 		# A walk-on room has no seats, whatever table stands in it.
 		var seats: Array[Dictionary] = []
 		if not walk_on:
-			seats = _seats(grid, ids, area)
+			seats = _seats(grid, ids, area, type.table_pieces)
 		var approaches := {}
 		for seat in seats:
 			approaches[seat["approach"]] = true
 		var counters: Array[Dictionary] = []
 		for id in ids:
 			if (
-				grid.get_object(id)["def"] != &"cafe_counter"
+				not type.counter_pieces.has(StringName(grid.get_object(id)["def"]))
 				or not FacilitySlots.piece_inside(grid, id, area)
 			):
 				continue
@@ -95,12 +97,18 @@ func seat(room_id: int, key: String) -> Dictionary:
 	return {}
 
 
-static func _seats(grid: BuildGrid, ids: Array[int], area: Rect2i) -> Array[Dictionary]:
+static func _seats(
+	grid: BuildGrid, ids: Array[int], area: Rect2i, tables: Array[StringName]
+) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for id in ids:
 		var record := grid.get_object(id)
 		var def := BuildCatalog.get_def(record["def"])
-		if def.seats.is_empty() or not FacilitySlots.piece_inside(grid, id, area):
+		if (
+			not tables.has(def.id)
+			or def.seats.is_empty()
+			or not FacilitySlots.piece_inside(grid, id, area)
+		):
 			continue
 		for seat in def.seat_descriptors(record["anchor"], record["facing"]):
 			if not grid.is_passenger_cell(seat["approach"]):
