@@ -103,7 +103,7 @@ func press_move() -> bool:
 	var mode := card.build_mode
 	var rect: Rect2i = mode.grid.get_room(_move["room"])["rect"]
 	var point := mode.grid.cell_to_world(rect.position + (rect.size - Vector2i.ONE) / 2)
-	mode.set_tool(_move["tool"])
+	mode.set_tool_for_move(_move["tool"])
 	if mode.room_mover.pick_up(point, _move["type"]):
 		return true
 	mode.set_tool(BuildMode.Tool.NONE)
