@@ -20,7 +20,6 @@ const MOVE := "Move"
 const MOVE_ROOM := "Move room"
 const DELETE := "Delete"
 const DELETE_ROOM := "Delete room"
-const NO_LANE_PIECE := "Check-in desks, scanners and lane parts can't be moved yet"
 const NO_LOOSE_PIECE := "Single pieces outside a room can't be moved yet"
 const GONE := "It is no longer there"
 const NO_ROOM_TOOL := "This kind of room can't be moved yet"
@@ -207,9 +206,9 @@ func _room_to_move() -> Dictionary:
 			var record := grid.get_object(selection.id)
 			if record.is_empty():
 				return {"room": 0, "reason": GONE}
-			if _is_lane_piece(StringName(record["def"])):
-				return {"room": 0, "reason": NO_LANE_PIECE}
 			var room := grid.room_at(record["anchor"])
+			if _is_lane_piece(StringName(record["def"])):
+				return {"room": 0, "reason": _lane_piece_reason(room)}
 			return {"room": room, "reason": "" if room != 0 else NO_LOOSE_PIECE}
 	return {"room": 0, "reason": NO_LANDSIDE_MOVE}
 
@@ -223,6 +222,16 @@ func _delete_state() -> Dictionary:
 			var edit := BuildEdit.remove_room(card.selection.id)
 			return {"ok": true, "label": DELETE_ROOM, "reason": "", "edit": edit}
 	return _off(DELETE, NO_LANDSIDE_DELETE)
+
+
+## Why a check-in desk, scanner or lane part cannot move: what RoomMove refuses
+## its room with, or the base text of that refusal for a piece outside any room.
+func _lane_piece_reason(room: int) -> String:
+	if room != 0:
+		var refusal := RoomMoveTool.never_moves_refusal(card.sim.grid, room)
+		if refusal != null:
+			return refusal.reason_text()
+	return BuildResult.REASON_TEXT[BuildResult.Reason.MOVE_UNMOVABLE]
 
 
 static func _is_lane_piece(def_id: StringName) -> bool:

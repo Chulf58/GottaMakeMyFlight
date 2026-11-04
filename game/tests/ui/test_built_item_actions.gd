@@ -88,6 +88,23 @@ static func _is_free(grid: BuildGrid, area: Rect2i) -> bool:
 	return true
 
 
+## An entrance or exit whose back edge holds no wall, so removing it buys one.
+func _door_without_back_wall() -> int:
+	for object_id in _mode.grid.object_ids():
+		var record := _mode.grid.get_object(object_id)
+		if not BuildCatalog.is_door(record["def"]):
+			continue
+		var back := BuildGrid.SIDE_STEP.find(DoorPlacement.back_step(record["facing"]))
+		if _mode.grid.wall_kind(record["anchor"], back) == BuildGrid.WallKind.NONE:
+			return object_id
+	return 0
+
+
+## The text RoomMove refuses a desk, scanner or lane part with, from its source.
+func _unmovable_text() -> String:
+	return BuildResult.REASON_TEXT[BuildResult.Reason.MOVE_UNMOVABLE]
+
+
 func _selection() -> BuiltSelection:
 	return _inspect.built_card.selection
 
@@ -114,6 +131,7 @@ func _place_statue(cell: Vector2i) -> int:
 func test_delete_removes_the_item_refunds_it_and_one_undo_restores_it() -> void:
 	var statue := _place_statue(_plain_cell)
 	var before_balance := _mode.wallet().balance
+	var saved_price := int(_mode.grid.get_object(statue)["paid"])
 	_mode.clear_undo()
 	_select_object(statue)
 	var actions := _inspect.actions
@@ -145,7 +163,8 @@ func test_delete_removes_the_item_refunds_it_and_one_undo_restores_it() -> void:
 	)
 	assert_bool(result.ok).is_true()
 	assert_bool(_mode.grid.get_object(statue).is_empty()).is_true()
-	assert_int(paid_back).is_greater(0)
+	assert_int(saved_price).is_greater(0)
+	assert_int(paid_back).is_equal(PriceTable.refund_of(saved_price))
 	assert_bool(_menu.build_session.active).is_true()
 	assert_int(_mode.undo_history().size()).is_equal(1)
 	# The selection falls away with the item.
@@ -240,10 +259,60 @@ func test_move_is_disabled_with_a_reason_for_a_check_in_desk() -> void:
 	print("desk window: move disabled %s | %s" % [actions.move_disabled(), actions.reason_text()])
 	assert_bool(actions.visible).is_true()
 	assert_bool(actions.move_disabled()).is_true()
-	assert_str(actions.reason_text()).contains(BuiltItemActions.NO_LANE_PIECE)
+	assert_str(actions.reason_text()).contains(_unmovable_text())
 	assert_bool(actions.press_move()).is_false()
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
 	assert_bool(_mode.room_mover.active).is_false()
+
+
+func test_move_is_disabled_with_the_rooms_reason_for_a_scanner_and_a_lane_part() -> void:
+	var cell := _room_area.position + Vector2i.ONE
+	for def_id: StringName in [&"security_scanner", SecurityLanes.TRAY_TABLE]:
+		var placed := _mode.grid.apply(BuildEdit.place_object(def_id, cell, 0))
+		assert_bool(placed.ok).is_true()
+		_select_object(placed.object_id)
+		var actions := _inspect.actions
+		print(
+			(
+				"%s window: move disabled %s | %s"
+				% [def_id, actions.move_disabled(), actions.reason_text()]
+			)
+		)
+		assert_bool(actions.move_disabled()).is_true()
+		assert_str(actions.reason_text()).contains(_unmovable_text())
+		assert_bool(actions.press_move()).is_false()
+		assert_bool(_mode.room_mover.active).is_false()
+		_selection().clear()
+		_mode.grid.apply(BuildEdit.remove_object(placed.object_id))
+
+
+## Taking a door off puts its back wall back at the wall's price
+## (DoorPlacement.edits_for), so with an empty wallet BuildMode.check() refuses
+## the delete (CANT_AFFORD) and nothing may change.
+func test_a_refused_delete_changes_nothing_and_says_why() -> void:
+	var door := _door_without_back_wall()
+	assert_int(door).is_not_equal(0)
+	var kept := _mode.wallet().balance
+	assert_bool(_mode.wallet().spend(kept, Wallet.Category.BUILD)).is_true()
+	_mode.clear_undo()
+	_select_object(door)
+	var actions := _inspect.actions
+	var refusal := _mode.check(BuildEdit.remove_object(door))
+	assert_bool(refusal.ok).is_false()
+	assert_bool(_menu.build_session.active).is_false()
+	var result := actions.press_delete()
+	print("refused delete ok %s | %s" % [result.ok, actions.reason_text()])
+	var left := _mode.grid.get_object(door).is_empty()
+	var session_on := _menu.build_session.active
+	var undo_steps := _mode.undo_history().size()
+	var shown := actions.reason_text()
+	_mode.wallet().credit(kept, Wallet.Category.BUILD)
+	assert_bool(result.ok).is_false()
+	assert_bool(left).is_false()
+	assert_bool(session_on).is_false()
+	assert_int(undo_steps).is_equal(0)
+	assert_str(shown).contains(BuiltItemActions.DELETE_REFUSED % refusal.reason_text())
+	assert_str(shown).contains("Can't delete: ")
 
 
 func test_move_is_disabled_with_a_reason_for_a_lone_piece() -> void:
