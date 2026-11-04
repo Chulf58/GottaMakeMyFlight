@@ -197,3 +197,82 @@ func test_a_sofa_or_pod_visitor_sets_its_roller_down_before_it_sits() -> void:
 		_views.free()
 		_world.free_all()
 		_views = null
+
+
+## A late walker sets its roller down from the hand with no park
+## (CarryOnProps._lifted()), so a save and load on the first tick of its
+## sit-down, before ParkRecovery.note_sitting() notes sat_late a tick on, must
+## not hold the body standing for a park that never ran (board 5cdf7605).
+## Control: the same save and load of an on-time walker holds it for the
+## park's whole length.
+func test_a_late_walker_loaded_on_the_first_tick_of_its_sit_down_is_not_held() -> void:
+	for late in [true, false]:
+		var p := await _sitting_walker(true)
+		p.late = late
+		var saved: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
+		assert_bool(_world.sim.from_snapshot(saved)).is_true()
+		var loaded := _world.passenger(p.id)
+		_views.snap()
+		var held := SitHold.held_ticks(_views.carry_on_props(), _world.sim, loaded)
+		print(
+			(
+				"late %s: tick %d stage_tick %d held %d"
+				% [late, _world.sim.tick, loaded.stage_tick, held]
+			)
+		)
+		assert_int(_world.sim.tick - loaded.stage_tick).is_equal(0)
+		assert_bool(loaded.late).is_equal(late)
+		assert_bool(loaded.sat_late).is_false()
+		if late:
+			assert_int(held).is_equal(0)
+		else:
+			assert_int(held).is_equal(ceili(RollerPark.TICKS_DOWN + SitHold.LET_GO_TICKS))
+		_views.free()
+		_world.free_all()
+		_views = null
+
+
+## A cafe guest with a roller loaded during its hold is drawn at the seat's
+## approach anchor, the chair front SitHold.chair_front() reads from the
+## visit's seat each time (never kept per passenger), and not at the sim's
+## already-shuffled place. Control: the sim had moved the body off the anchor
+## by the load, and the roller is still held.
+func test_a_load_in_the_hold_of_a_cafe_sit_down_puts_the_body_at_the_approach() -> void:
+	var grid := BuildGrid.new()
+	CafeTestLayout.build(grid)
+	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	_views = PassengerTestWorld.views()
+	_views.clock = _world.clock
+	_views.sim = _world.sim
+	add_child(_views)
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
+		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
+	p.hunger = 0
+	p.cafe_cooldown = 1000000
+	while p.stage != Passenger.Stage.TO_GATE and _world.clock.tick < 900:
+		_world.step()
+	assert_bool(_world.sim.cafes.try_visit(p)).is_true()
+	while p.stage != Passenger.Stage.CAFE_SITTING_DOWN and _world.clock.tick < 1400:
+		_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SITTING_DOWN)
+	for n in 5:
+		_world.step()
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
+	assert_bool(_world.sim.from_snapshot(saved)).is_true()
+	var loaded := _world.passenger(p.id)
+	_views.snap()
+	var approach := _world.grid.cell_to_world(_world.sim.cafes.visit_of(p.id).seat["approach"])
+	var held := SitHold.held_ticks(_views.carry_on_props(), _world.sim, loaded)
+	var chair_front := SitHold.chair_front(_world.sim, loaded) as Vector3
+	var drawn := _front_gap(loaded, approach)
+	var at := _world.sim.world_position(loaded)
+	var shuffled := Vector2(at.x - approach.x, at.z - approach.z).length()
+	print(
+		"cafe load: held %d, drawn %.3f m, sim %.3f m from the approach" % [held, drawn, shuffled]
+	)
+	assert_float(shuffled).is_greater(0.1)
+	assert_int(held).is_greater(0)
+	assert_vector(chair_front).is_equal_approx(approach, Vector3.ONE * 0.001)
+	assert_float(drawn).is_less(0.02)
