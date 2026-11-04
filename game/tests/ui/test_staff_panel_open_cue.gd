@@ -64,7 +64,7 @@ func _depart_first_flight() -> void:
 
 func test_opening_replaces_the_closed_line_with_the_starter_contract() -> void:
 	_make()
-	assert_str(_panel.hint_label().text).starts_with("Airport closed: ")
+	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
 	assert_bool(_gate.open()).is_true()
 	assert_str(_panel.hint_label().text).is_equal(CUE)
 	assert_str(_panel.hint_text()).is_equal(CUE)

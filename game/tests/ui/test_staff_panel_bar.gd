@@ -115,10 +115,10 @@ func test_the_closed_hint_stays_visible_with_the_card_closed_and_open() -> void:
 	var hint := _panel.hint_label()
 	assert_bool(_panel.card().visible).is_false()
 	assert_bool(hint.is_visible_in_tree()).is_true()
-	assert_str(hint.text).starts_with("Airport closed:")
+	assert_str(hint.text).is_equal(Checklist.TITLE_CLOSED)
 	_menu.staff_button.pressed.emit()
 	assert_bool(hint.is_visible_in_tree()).is_true()
-	assert_str(hint.text).starts_with("Airport closed:")
+	assert_str(hint.text).is_equal(Checklist.TITLE_CLOSED)
 
 
 func test_the_hint_sits_above_the_bar_and_clear_of_the_card() -> void:

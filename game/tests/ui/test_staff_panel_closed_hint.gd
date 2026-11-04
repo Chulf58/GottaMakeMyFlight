@@ -8,6 +8,9 @@ extends GdUnitTestSuite
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
+## The checklist card's staff lines (Checklist.NEXT).
+const CI_HIRE := "Check-in desk and an agent: hire an agent on Staff"
+const SEC_HIRE := "Security scanner and an officer: hire an officer on Staff"
 
 var _w: PassengerTestWorld
 var _gate: AirportGate
@@ -52,35 +55,33 @@ func _until_on_duty(role: StaffMember.Role) -> void:
 
 func test_with_no_working_path_the_hint_names_the_path() -> void:
 	_make(false)
-	assert_str(_panel.hint_text()).is_equal(StaffPanel.CLOSED_HINTS[AirportGate.Blocker.NO_PATH])
+	# The checklist card lists every need still open, the path first.
 	assert_str(_panel.hint_text()).is_equal(
 		(
-			"Airport closed: passengers need a way from an entrance through check-in"
-			+ " and security to an exit"
+			"Entrance with a way through check-in and security to an exit\n"
+			+ "Check-in desk and an agent: place a desk\n"
+			+ "Security scanner and an officer: place a scanner\n"
+			+ "Seats near the gate"
 		)
 	)
+	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
 	assert_bool(_panel.hint_label().visible).is_true()
 
 
 func test_the_hint_follows_the_blocker_until_the_airport_opens() -> void:
 	_make()
-	assert_str(_panel.hint_text()).is_equal(
-		(
-			"Airport closed: no check-in agent at a desk\n"
-			+ "Hire a check-in agent\nHire a security officer"
-		)
-	)
+	assert_str(_panel.hint_text()).is_equal(CI_HIRE + "\n" + SEC_HIRE)
 	_panel.hire_button(CHECKIN).pressed.emit()
 	assert_str(_panel.hint_text()).is_equal(
-		"Airport closed: no check-in agent at a desk\nHire a security officer"
+		"Check-in desk and an agent: the agent is on the way\n" + SEC_HIRE
 	)
 	_until_on_duty(CHECKIN)
-	assert_str(_panel.hint_label().text).is_equal(
-		"Airport closed: no security officer at a scanner or lane\nHire a security officer"
+	assert_str(_panel.hint_text()).is_equal(
+		"Security scanner and an officer: hire an officer on Staff"
 	)
 	_panel.hire_button(SECURITY).pressed.emit()
-	assert_str(_panel.hint_label().text).is_equal(
-		"Airport closed: no security officer at a scanner or lane"
+	assert_str(_panel.hint_text()).is_equal(
+		"Security scanner and an officer: the officer is on the way"
 	)
 	_until_on_duty(SECURITY)
 	_w.step()
@@ -94,11 +95,12 @@ func test_the_hint_follows_the_blocker_until_the_airport_opens() -> void:
 ## Loading an open save refreshes the hint with no staff or grid event.
 func test_loading_an_open_save_clears_the_closed_line() -> void:
 	_make()
-	assert_str(_panel.hint_label().text).starts_with("Airport closed: ")
+	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
 	var data := _w.flights.to_snapshot()
 	data["opened_tick"] = 0
 	assert_bool(_w.flights.from_snapshot(data)).is_true()
-	assert_str(_panel.hint_label().text).is_equal("Hire a check-in agent\nHire a security officer")
+	assert_str(_panel.hint_text()).is_equal("Hire a check-in agent\nHire a security officer")
+	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_OPEN)
 
 
 ## Without a gate (the panel on its own) only the hiring lines show.

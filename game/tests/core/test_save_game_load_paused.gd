@@ -74,15 +74,17 @@ func test_the_staff_hint_card_shows_once_after_loading_a_save_with_no_staff() ->
 	SaveTestKit.step(_main)
 	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.CHECKIN)
 	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.SECURITY)
-	assert_str(_panel.hint_label().text).not_contains("Hire a")
+	assert_str(_panel.hint_text()).not_contains("hire an")
 	assert_bool(_save.load_from_file(_path)).is_true()
 	assert_bool(_panel.hint_card().visible).is_true()
 	assert_bool(_panel.hint_label().visible).is_true()
-	assert_str(_panel.hint_label().text).contains("Hire a check-in agent")
-	assert_str(_panel.hint_label().text).contains("Hire a security officer")
-	assert_str(_panel.hint_label().text).is_equal(_panel.hint_text())
+	assert_str(_panel.hint_text()).contains("Check-in desk and an agent: hire an agent on Staff")
+	assert_str(_panel.hint_text()).contains(
+		"Security scanner and an officer: hire an officer on Staff"
+	)
+	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
 	assert_int(_main.find_children("StaffHintCard", "", true, false).size()).is_equal(1)
-	var lines := _panel.hint_label().text.split("\n")
+	var lines := _panel.hint_text().split("\n")
 	var seen := {}
 	for line in lines:
 		assert_bool(seen.has(line)).is_false()
@@ -93,7 +95,7 @@ func test_a_second_load_does_not_duplicate_the_staff_hint() -> void:
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
 	SaveTestKit.step(_main)
 	assert_bool(_save.load_from_file(_path)).is_true()
-	var first := _panel.hint_label().text
+	var first := _panel.hint_text()
 	assert_bool(_save.load_from_file(_path)).is_true()
-	assert_str(_panel.hint_label().text).is_equal(first)
+	assert_str(_panel.hint_text()).is_equal(first)
 	assert_int(_main.find_children("StaffHintCard", "", true, false).size()).is_equal(1)

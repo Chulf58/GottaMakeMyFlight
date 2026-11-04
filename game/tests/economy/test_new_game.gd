@@ -10,6 +10,9 @@ extends GdUnitTestSuite
 ## before() records what each case reads.
 
 const MAIN := "res://main/main.tscn"
+## The checklist card's staff lines (Checklist.NEXT).
+const CI_HIRE := "Check-in desk and an agent: hire an agent on Staff"
+const SEC_HIRE := "Security scanner and an officer: hire an officer on Staff"
 
 var _main: Node
 var _boot := {}
@@ -30,7 +33,7 @@ func before() -> void:
 		"opened_tick": flights.opened_tick,
 		"departures": (hud.find_child("Departures", true, false) as Label).text,
 		"clock": (hud.find_child("Clock", true, false) as Label).text,
-		"hint": panel.hint_label().text,
+		"hint": panel.hint_text(),
 	}
 	_open(clock, flights, hud, panel)
 	_opened["panel_texts"] = _panel_texts(hud)
@@ -55,7 +58,7 @@ func after() -> void:
 ## starter's first issue.
 func _open(clock: SimClock, flights: FlightSim, hud: PassengerHud, panel: StaffPanel) -> void:
 	hud.press_starter_terminal()
-	_opened["hint_built"] = panel.hint_label().text
+	_opened["hint_built"] = panel.hint_text()
 	StaffTestKit.staff_all(_main.get_node("Staff"))
 	clock.set_paused(false)
 	clock.advance(SimClock.STEP)
@@ -91,17 +94,20 @@ func test_a_new_game_is_closed_with_no_contract_and_no_flight() -> void:
 	assert_str(_boot["clock"]).is_equal("Day 1  06:00")
 
 
-## A new game has no gate desk, so no gate (GateDesks): that is named first;
-## with the starter terminal and its gate desk the blocker is the missing
-## check-in agent.
+## A new game has nothing built, so the checklist card lists every opening
+## need (GateDesks: no gate desk, no gate); with the starter terminal only the
+## staff are left to hire.
 func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
-	assert_str(_boot["hint"]).is_equal(StaffPanel.CLOSED_HINTS[AirportGate.Blocker.NO_GATE])
-	assert_str(_opened["hint_built"]).is_equal(
+	assert_str(_boot["hint"]).is_equal(
 		(
-			"Airport closed: no check-in agent at a desk\n"
-			+ "Hire a check-in agent\nHire a security officer"
+			"Entrance with a way through check-in and security to an exit\n"
+			+ "Check-in desk and an agent: place a desk\n"
+			+ "Security scanner and an officer: place a scanner\n"
+			+ "Gate desk by an exit that faces the planes\n"
+			+ "Seats near the gate"
 		)
 	)
+	assert_str(_opened["hint_built"]).is_equal(CI_HIRE + "\n" + SEC_HIRE)
 	assert_str(_opened["hint_open"]).is_equal("Open! Starter contract: Gotta Air to Oslo, daily")
 
 
