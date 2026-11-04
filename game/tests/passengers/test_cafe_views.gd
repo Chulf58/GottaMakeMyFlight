@@ -321,3 +321,110 @@ func test_a_new_pop_takes_the_slot_an_expired_pop_freed() -> void:
 	assert_float(sides["+$7"]).is_equal_approx(CafePops.SIDE_STEP_M, 0.001)
 	assert_float(sides["+$9"]).is_equal_approx(-CafePops.SIDE_STEP_M, 0.001)
 	assert_float(sides["+$11"]).is_equal_approx(0.0, 0.001)
+
+
+## A camera at the top-down step looking down on the pop from 18 m, the
+## distance of the camera-angle pop plates. The views draw once through it, so
+## the need icons are laid out over the heads. The headless runner's stretch
+## scale would make an icon hundreds of pixels wide, so each shown icon is set
+## to NeedIcons.ICON_PX viewport pixels, its size at a stretch scale of 1.
+func _top_down_camera(label: Label3D) -> Camera3D:
+	var cam := Camera3D.new()
+	cam.fov = 55.0  # game/camera/tycoon_camera.tscn
+	add_child(cam)
+	var pitch := deg_to_rad(TycoonCamera.STEP_PITCH_DEGREES[TycoonCamera.AngleStep.TOP_DOWN])
+	var target := label.global_position
+	cam.look_at_from_position(target + Vector3(0.0, sin(pitch), cos(pitch)) * 18.0, target)
+	assert_object(get_viewport().get_camera_3d()).is_same(cam)
+	_views.draw()
+	var unit := 2.0 * tan(deg_to_rad(cam.fov) / 2.0) / get_viewport().get_visible_rect().size.y
+	for node in _views.get_children():
+		if node.has_meta(&"body"):
+			for icon_name in NeedIcons.SPRITES:
+				var icon := node.get_node(icon_name) as Sprite3D
+				icon.pixel_size = NeedIcons.ICON_PX * unit / NeedIcons.SIZE
+	return cam
+
+
+## Stands passenger node `node` so its head (1.4 m up) is drawn at `point` on
+## screen.
+func _stand_head_at(node: Node3D, cam: Camera3D, point: Vector2) -> void:
+	var origin := cam.project_ray_origin(point)
+	var plane := Plane(Vector3.UP, node.global_position.y + 1.4)
+	var hit: Variant = plane.intersects_ray(origin, cam.project_ray_normal(point))
+	assert_bool(hit is Vector3).is_true()
+	node.global_position = (hit as Vector3) - Vector3(0.0, 1.4, 0.0)
+
+
+## Board a48bca8d: at the top-down step a pop covered a seated guest's head.
+## A head drawn in the pop's box moves the pop to the next clear side slot.
+func test_a_pop_steps_aside_from_a_head_drawn_under_it() -> void:
+	var p := _guest()
+	var pops := _views.cafe_pops()
+	_run_to_stage(p, Passenger.Stage.CAFE_STANDING_UP)
+	var label := pops.live_labels()[0]
+	var cam := _top_down_camera(label)
+	var before := pops.screen_rect(label, cam, 0)
+	_stand_head_at(_views.node_for(p.id), cam, before.get_center())
+	var blockers := pops.blocker_rects(cam)
+	var covering := blockers.filter(func(b: Rect2) -> bool: return b.intersects(before))
+	print("pop box %s, blockers %s, covering %d" % [before, blockers, covering.size()])
+	# The control: the head is in the pop's box before the layout.
+	assert_int(covering.size()).is_greater(0)
+	pops.lay_out(cam)
+	var slot: int = label.get_meta(&"slot")
+	var after := pops.screen_rect(label, cam, slot)
+	print("pop slot %d box %s" % [slot, after])
+	assert_int(slot).is_not_equal(0)
+	assert_float(label.offset.x * label.pixel_size).is_equal_approx(
+		slot * CafePops.SIDE_STEP_M, 0.001
+	)
+	for blocker in blockers:
+		assert_bool(after.intersects(blocker)).is_false()
+	cam.free()
+
+
+## With nothing drawn under it, a pop keeps its slot through a layout, and a
+## pop that stepped aside keeps its new slot while that stays clear.
+func test_a_clear_pop_keeps_its_slot() -> void:
+	var p := _guest()
+	var pops := _views.cafe_pops()
+	_run_to_stage(p, Passenger.Stage.CAFE_STANDING_UP)
+	var label := pops.live_labels()[0]
+	var cam := _top_down_camera(label)
+	var node := _views.node_for(p.id)
+	# Far off screen to the left.
+	_stand_head_at(node, cam, Vector2(-2000.0, 300.0))
+	pops.lay_out(cam)
+	assert_int(label.get_meta(&"slot")).is_equal(0)
+	_stand_head_at(node, cam, pops.screen_rect(label, cam, 0).get_center())
+	pops.lay_out(cam)
+	var moved: int = label.get_meta(&"slot")
+	assert_int(moved).is_not_equal(0)
+	# The head leaves; the pop stays where it went instead of jumping back.
+	_stand_head_at(node, cam, Vector2(-2000.0, 300.0))
+	pops.lay_out(cam)
+	print("pop slots 0 -> %d -> %d" % [moved, label.get_meta(&"slot")])
+	assert_int(label.get_meta(&"slot")).is_equal(moved)
+	cam.free()
+
+
+## Two pops of one room never share a slot when one steps aside: a pop that
+## moves skips the slot the other keeps.
+func test_a_pop_stepping_aside_skips_a_slot_another_pop_holds() -> void:
+	var p := _guest()
+	var pops := _views.cafe_pops()
+	_run_to_stage(p, Passenger.Stage.CAFE_STANDING_UP)
+	var room := _world.sim.cafes.visit_of(p.id).room
+	_world.sim.cafes.paid.emit(p.id, room, 7)
+	var first := pops.live_labels()[0]
+	var second := pops.live_labels()[1]
+	assert_int(second.get_meta(&"slot")).is_equal(1)
+	var cam := _top_down_camera(first)
+	_stand_head_at(_views.node_for(p.id), cam, pops.screen_rect(first, cam, 0).get_center())
+	pops.lay_out(cam)
+	print("pop slots %d %d" % [first.get_meta(&"slot"), second.get_meta(&"slot")])
+	assert_int(first.get_meta(&"slot")).is_not_equal(0)
+	assert_int(second.get_meta(&"slot")).is_equal(1)
+	assert_int(first.get_meta(&"slot")).is_not_equal(second.get_meta(&"slot"))
+	cam.free()

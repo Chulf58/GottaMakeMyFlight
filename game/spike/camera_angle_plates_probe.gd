@@ -401,6 +401,55 @@ func _check_pop(space: PhysicsDirectSpaceState3D, name: String, at: Vector3, siz
 		_invalid("%s: the pop is not in frame" % name)
 	if not blockers.is_empty():
 		_invalid("%s: a mesh stands in front of the pop" % name)
+	_check_pop_clear(name, label)
+
+
+## The pop must cover no passenger's head and no need icon (board a48bca8d).
+## The pops are frozen, so the probe lays them out for this view itself. Head
+## centres (seated and standing) and icon centres are projected here; each
+## within 150 px of the pop counts as near, as a control that the spot is
+## crowded, and each inside the pop's box fails the plate.
+func _check_pop_clear(name: String, label: Label3D) -> void:
+	var pops := _views.cafe_pops()
+	pops.lay_out(_cam)
+	var slot: int = label.get_meta(&"slot")
+	var box := pops.screen_rect(label, _cam, slot).grow(-CafePops.CLEAR_PX)
+	var unit := 2.0 * tan(deg_to_rad(_cam.fov) / 2.0) / root.get_visible_rect().size.y
+	var points: Array[Vector2] = []
+	var kinds: Array[String] = []
+	for node in _passenger_nodes():
+		for head_m in [1.2, 1.65]:
+			var head: Vector3 = node.global_position + Vector3(0.0, head_m, 0.0)
+			if not _cam.is_position_behind(head):
+				points.append(_cam.unproject_position(head))
+				kinds.append("head_%s" % node.name)
+		for icon_name in NeedIcons.SPRITES:
+			var icon := node.get_node(icon_name) as Sprite3D
+			if (
+				icon.visible
+				and icon.modulate.a > 0.0
+				and not _cam.is_position_behind(icon.global_position)
+			):
+				var shift := Vector2(icon.offset.x, -icon.offset.y) * icon.pixel_size / unit
+				points.append(_cam.unproject_position(icon.global_position) + shift)
+				kinds.append("icon_%s" % node.name)
+	var near := 0
+	var covered: Array[String] = []
+	for i in points.size():
+		if points[i].distance_to(box.get_center()) < 150.0:
+			near += 1
+		if box.has_point(points[i]):
+			covered.append("%s@%s" % [kinds[i], points[i].round()])
+	print(
+		(
+			"PROBE %s pop slot=%d box=%s near=%d covered=%s"
+			% [name, slot, Rect2(box.position.round(), box.size.round()), near, covered]
+		)
+	)
+	if near == 0:
+		_invalid("%s: no head or icon near the pop, so the clearance check proves nothing" % name)
+	if not covered.is_empty():
+		_invalid("%s: the pop covers %s" % [name, covered])
 
 
 func _on_paid(id: int, room: int, amount: int) -> void:
