@@ -10,10 +10,10 @@ extends Node
 ## start view, refits the start area inside it.
 ##
 ## Only a panel opening or closing refits the distance; a panel that merely
-## changes size (a banner line coming or going as the player builds) moves the
-## view a little and never zooms it. The alert cards are counted the same way:
-## a card coming or going only shifts the view. The camera does nothing on a
-## build edit.
+## changes size moves the view a little and never zooms it (the banner is the
+## exception while the tray is open: see the build stack below). The alert
+## cards are counted the same way: a card coming or going only shifts the
+## view. The camera does nothing on a build edit.
 ##
 ## The build stack (the tray and the banner above it) makes room once, when the
 ## tray opens (decision camera-makes-room-once-per-build-mode-open-not-on-

@@ -6,8 +6,11 @@ extends GdUnitTestSuite
 ## mode-open-not-on-every-menu-switch).
 
 const SEED := 4_402_028
-## Trays of different sizes: Structure (four cards), Check-in (one), Lane
-## (four), Cafe (three) and Toilets (a tray of its own).
+## Trays with different card counts: Structure (four cards), Check-in (one),
+## Lane (four), Cafe (three) and Toilets (a tray of its own). Every tray is
+## narrower than BuildMenu.COLUMN_W (the widest, at 568 px, is below its 640), and
+## PanelRoom cuts a stack of that fixed width, so the tray's own size cannot move
+## the room; the case that does is the banner (the yield case below).
 const CATEGORIES := [0, 2, 4, 6, 7]
 
 var _main: Node
@@ -85,25 +88,19 @@ func test_opening_build_mode_reframes_once() -> void:
 	assert_float(_camera.distance).is_not_equal(distance_before)
 
 
-func test_switching_between_trays_moves_and_zooms_nothing() -> void:
+func test_switching_between_build_menus_moves_and_zooms_nothing() -> void:
 	_menu.press_category(CATEGORIES[0])
 	await _settle()
 	var eye := _eye.global_position
 	var distance := _camera.distance
 	var room := _camera.room
-	var widths: Array[float] = [_menu.tray().get_global_rect().size.x]
 	print("opened on %d: %s" % [CATEGORIES[0], _view()])
 	for category in CATEGORIES.slice(1):
 		_menu.press_category(category)
 		await _settle()
-		widths.append(_menu.tray().get_global_rect().size.x)
 		print("switched to %d (tray %s): %s" % [category, _menu.tray().get_global_rect(), _view()])
 		assert_int(_menu.open_category()).is_equal(category)
 		_assert_same_view(eye, distance, room)
-	# Control: the trays really differ in size, so a camera that followed them
-	# would have moved.
-	print("tray widths: ", widths)
-	assert_float(widths.max()).is_greater(widths.min())
 
 
 func test_a_hint_taking_the_banner_slot_on_a_switch_moves_nothing() -> void:
