@@ -493,6 +493,17 @@ func set_tool(new_tool: Tool) -> void:
 		_status_note = locked
 		_show_status(null)
 		return
+	_enter_tool(new_tool)
+
+
+## Picks a tool to move something already built: the tier lock gates picking a
+## new thing to build, not lifting what stands (BuildUnlocks, "only picking the
+## tool is gated"). A fresh pick from the menu still goes through set_tool().
+func set_tool_for_move(new_tool: Tool) -> void:
+	_enter_tool(new_tool)
+
+
+func _enter_tool(new_tool: Tool) -> void:
 	cancel_area()
 	tool = new_tool
 	_auto_facing = true

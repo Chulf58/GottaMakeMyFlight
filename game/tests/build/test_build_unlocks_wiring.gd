@@ -128,3 +128,19 @@ func test_a_required_but_missing_gate_refuses_gated_tools() -> void:
 	assert_str(mode.status_text()).is_equal(BuildUnlocks.NOT_WIRED_TEXT)
 	mode.set_tool(BuildMode.Tool.REMOVE)
 	assert_int(mode.tool).is_equal(BuildMode.Tool.REMOVE)
+
+
+func test_moving_something_built_picks_a_locked_tool_but_a_fresh_pick_stays_refused() -> void:
+	var mode: BuildMode = auto_free(BuildMode.new())
+	mode.grid_size = Vector2i(20, 20)
+	mode.unlocks = _unlocks
+	mode.require_unlocks = true
+	add_child(mode)
+	mode.set_tool(BuildMode.Tool.WALL)
+	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
+	assert_int(mode.tool).is_equal(BuildMode.Tool.WALL)
+	mode.set_tool_for_move(BuildMode.Tool.CAFE_ROOM)
+	assert_int(mode.tool).is_equal(BuildMode.Tool.CAFE_ROOM)
+	mode.set_tool(BuildMode.Tool.NONE)
+	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
+	assert_int(mode.tool).is_equal(BuildMode.Tool.NONE)
