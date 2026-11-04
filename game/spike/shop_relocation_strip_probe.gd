@@ -12,6 +12,11 @@ extends SceneTree
 ## visitor sits on the moved sofa, the clock is stepped one tick per frame and
 ## a frame is kept every STRIP_STEP_TICKS: stand-up at the old sofa under its
 ## ghost, the walk, the sit-down at the new one.
+## Cases "lounge_early" and "lounge_deep": the sofa moved again, each time
+## under a new visitor still sitting down, EARLY_SETTLE_TICKS and
+## DEEP_SETTLE_TICKS into its stay (board 23ddd6bc). It stands up from where
+## its sit-down had got to, and its drawn body must never come nearer the old
+## seat than it was on the tick before (NEARER_M) until it walks off.
 ## Case "kiosk": a landside passenger browses the display stand, which is moved
 ## to 25,13; the browser turns away at once and walks to the stand at its new
 ## spot.
@@ -44,6 +49,10 @@ const LOUNGE_SETTLE_TICKS := 60
 const KIOSK_SETTLE_TICKS := 20
 ## A visitor this far into the stay is still sitting down (SIT_DOWN_TICKS 24).
 const EARLY_SETTLE_TICKS := 5
+const DEEP_SETTLE_TICKS := 18
+## How much nearer its old seat a sitter's drawn body may come on one tick of
+## its exit: float noise only. A slide into the seat is a walking step a tick.
+const NEARER_M := 0.0005
 const STRIP_STEP_TICKS := 4
 ## Every tick is kept this long after the move: a pose jump shows in it.
 const DENSE_TICKS := 14
@@ -230,6 +239,26 @@ func _strip_lounge() -> void:
 	if early == null or not await _to_browse(early, EARLY_SETTLE_TICKS):
 		return
 	await _strip("lounge_early", early, _sofa, SOFA_TO, SOFA_AT)
+	if not await _until_gone(early):
+		return
+	var deep := _visitor(false)
+	if deep == null or not await _to_browse(deep, DEEP_SETTLE_TICKS):
+		return
+	await _strip("lounge_deep", deep, _sofa, SOFA_AT, SOFA_TO)
+
+
+## Steps the clock until the visit of `p` is over.
+func _until_gone(p: Passenger) -> bool:
+	var until := _clock.tick + LIMIT_TICKS
+	while _sim.shops.visit_of(p.id) != null and _clock.tick < until:
+		_beat("visitor %d ends %d" % [p.id, _clock.tick])
+		_clock.advance(SimClock.STEP)
+		if _clock.tick % 8 == 0:
+			await process_frame
+	if _sim.shops.visit_of(p.id) != null:
+		_invalid("visitor %d never finished its stay" % p.id)
+		return false
+	return true
 
 
 func _strip_kiosk() -> void:
@@ -251,6 +280,25 @@ func _strip(case: String, p: Passenger, id: int, from: Vector2i, to: Vector2i) -
 	_cam.look_at_from_position(aim + Vector3(0.0, CAM_UP_M, CAM_BACK_M), aim)
 	_cam.make_current()
 	_frames_kept.clear()
+	# A sitter's old seat: its drawn body may only move away from it until it
+	# walks off.
+	var seated := ActivityPoses.kind(_sim, p) != ActivityPoses.Kind.NONE
+	var seat := ActivityPoses.stay_frame(_sim, p).origin
+	var away := _away(p, seat)
+	var nearest := 0.0
+	print(
+		(
+			"PRE %s tick=%d pose=%d clip=%d share=%.3f away=%.3f"
+			% [
+				case,
+				_clock.tick,
+				ActivityPoses.pose(_sim, p),
+				ActivityPoses.clip_ticks(_sim, p),
+				ActivityPoses.share(_sim, p),
+				away,
+			]
+		)
+	)
 	if not _move_piece(id, to):
 		return
 	var move_tick := _clock.tick
@@ -282,6 +330,23 @@ func _strip(case: String, p: Passenger, id: int, from: Vector2i, to: Vector2i) -
 		var ghosts := Relocation.ghosts(_sim).size()
 		if p.stage == Passenger.Stage.SHOP_WALK:
 			left_old = true
+		if seated and not left_old and p.stage == Passenger.Stage.SHOP_BROWSE:
+			var now_away := _away(p, seat)
+			nearest = maxf(nearest, away - now_away)
+			print(
+				(
+					"EXIT %s tick=%d pose=%d clip=%d away=%.3f nearer=%.4f"
+					% [
+						case,
+						_clock.tick,
+						ActivityPoses.pose(_sim, p),
+						ActivityPoses.clip_ticks(_sim, p),
+						now_away,
+						away - now_away,
+					]
+				)
+			)
+			away = now_away
 		if left_old and p.stage == Passenger.Stage.SHOP_BROWSE:
 			since_back += 1
 			back = true
@@ -301,8 +366,19 @@ func _strip(case: String, p: Passenger, id: int, from: Vector2i, to: Vector2i) -
 		_invalid("%s: the visitor did not browse again at the moved piece" % case)
 	if worst > MAX_STEP_M:
 		_invalid("%s: the drawn visitor jumped %.3f m in one tick" % [case, worst])
+	if seated:
+		print("PROBE %s nearest_step_to_old_seat=%.4f" % [case, nearest])
+		if nearest > NEARER_M:
+			_invalid("%s: the sitter slid %.3f m into its old seat in one tick" % [case, nearest])
 	if not _frames_kept.is_empty():
 		_save(_sheet(_frames_kept), "shop_relocation_%s_strip.png" % case)
+
+
+## The ground distance from the drawn body of `p` (the position the views
+## recorded for this tick) to `spot`.
+func _away(p: Passenger, spot: Vector3) -> float:
+	var at := _views.tick_position(p.id, true)
+	return Vector2(at.x, at.z).distance_to(Vector2(spot.x, spot.z))
 
 
 func _keep_frame(

@@ -49,7 +49,9 @@ extends RefCounted
 ## A browse piece that moves with its room (Relocation) does not move its
 ## visitor: one browsing at it leaves where it stands, with nothing settled and
 ## the stay it still owes (a lounge or nap pod sitter stands up, a shower user
-## steps out: ActivityPoses.exit_ticks(); a kiosk browser just turns away),
+## steps out: ActivityPoses.exit_ticks(), or a sit-down or step-in still under
+## way turned back from where it had got to: turn_back_ticks(); a kiosk
+## browser just turns away),
 ## then is admitted again and walks to the piece at its new spot to stay the
 ## time owed, or goes on unpaid when it no longer fits. One already at the end
 ## of its stay finishes and settles at the old spot. A walker whose piece moved
@@ -626,12 +628,14 @@ func _relocates(p: Passenger, visit: ShopVisit) -> bool:
 ## still to go it plays the exit of an ordinary stay's end (ActivityPoses.
 ## exit_ticks(), none for a kiosk display) and is then admitted again for the
 ## piece at its new spot; the stage clock is set so that the exit ends with
-## the whole browse_ticks(). With the end of the stay already under way it
+## the whole browse_ticks(). A visitor still sitting down or stepping in turns
+## that back from where it had got to (ActivityPoses.turn_back_ticks()), with
+## no step further in first. With the end of the stay already under way it
 ## finishes and settles there as usual (a final exit).
 func _start_exit(p: Passenger, visit: ShopVisit) -> void:
 	var type := _room_type(visit.room)
 	var left := stay_ticks(visit, type) - (_sim.tick - p.stage_tick)
-	var exit := ActivityPoses.exit_ticks(visit.piece["def"], p.carry_on, ParkRecovery.has_roller(p))
+	var exit := ActivityPoses.turn_back_ticks(_sim, p)
 	var remaining := left
 	if left <= exit:
 		visit.relocation = Relocation.leaving(visit.piece, -1)
