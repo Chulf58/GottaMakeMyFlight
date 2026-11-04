@@ -6,6 +6,16 @@ extends VBoxContainer
 ## why), staff, queue and upkeep, a line left out when it does not apply. Info
 ## only; the actions come in later slices. PassengerInspect shows this in place
 ## of the passenger rows while a BuiltSelection holds an item.
+##
+## What the grid decides (name, room, upkeep, the item's kind, a room's
+## counters and readiness) is worked out when the selection or the grid
+## changes. What the sim decides (open or closed, staff, queue) is worked out
+## again once per sim tick, and when staff are hired, fired or change state.
+
+## What a selected object is, by its catalog identity. Staff work a DESK, a
+## SCANNER, an ARCH with a whole lane (an incomplete one is just unready) and a
+## COUNTER; a GATE_DESK links to a gate; a LANE_PART belongs to an arch's lane.
+enum Kind { PLAIN, DESK, SCANNER, ARCH, COUNTER, GATE_DESK, LANE_PART, ROOM, LANDSIDE }
 
 ## What a piece that is not a room costs to run per game day, by catalog id
 ## (the same charges Settlement books at midnight).
@@ -14,17 +24,40 @@ const PIECE_UPKEEP := {
 	&"prize_podium": PriceTable.PRIZE_CAR_UPKEEP,
 	&"info_screen": PriceTable.INFO_SCREEN_UPKEEP,
 }
+## The staffed and linked pieces by catalog id; the other lane parts and the
+## counters are found by SecurityLanes.is_part() and ShopCounters.
+const KIND_OF_DEF := {
+	&"checkin_desk": Kind.DESK,
+	&"security_scanner": Kind.SCANNER,
+	SecurityLanes.ARCH: Kind.ARCH,
+	GateDesks.DESK: Kind.GATE_DESK,
+}
+const FIELDS: Array[String] = ["where", "status", "staff", "queue", "upkeep"]
 
 var sim: PassengerSim
 var selection: BuiltSelection
 var build_mode: BuildMode
+## The gate links, for a gate desk's status; optional.
+var gates: GateDesks
+
+## How many times each half was worked out, for the tests.
+var static_builds := 0
+var live_builds := 0
 
 var _name := Label.new()
-var _status := Label.new()
-var _staff := Label.new()
-var _queue := Label.new()
-var _upkeep := Label.new()
-var _where := Label.new()
+var _labels := {}
+## The grid-derived part: "kind", "name", the texts that never change with the
+## sim ("where", "upkeep"), and per kind "id", "counters", "ready" (a room's
+## RoomStatus), "arch", "plan_kind"/"spot"/"capacity". Empty for no selection.
+var _static := {}
+var _static_key := ""
+var _static_stale := true
+## The sim-derived part, and the tick and staff state it was worked out for.
+var _live := {}
+var _live_tick := -1
+var _live_stale := true
+var _watched_grid: BuildGrid
+var _watched_staff: StaffSim
 
 
 func _init() -> void:
@@ -34,41 +67,43 @@ func _init() -> void:
 	_name.name = "ItemName"
 	_name.theme_type_variation = &"HudLarge"
 	add_child(_name)
-	for label in [_where, _status, _staff, _queue, _upkeep]:
+	for field in FIELDS:
+		var label := Label.new()
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_labels[field] = label
 		add_child(label)
-	_where.theme_type_variation = &"HudHint"
+	(_labels["where"] as Label).theme_type_variation = &"HudHint"
 
 
 ## Shows the selected item, or hides the card with none.
 func refresh() -> void:
-	var lines := lines_for()
-	visible = not lines.is_empty()
+	if selection == null or sim == null or build_mode == null:
+		visible = false
+		return
+	_watch()
+	var key := selection.key()
+	if key != _static_key or _static_stale:
+		_static = _build_static()
+		static_builds += 1
+		_static_key = key
+		_static_stale = false
+		_live_stale = true
+	visible = not _static.is_empty()
 	if not visible:
 		return
-	_name.text = lines["name"]
-	var labels := {"where": _where, "status": _status, "staff": _staff, "queue": _queue}
-	labels["upkeep"] = _upkeep
-	for key: String in labels:
-		var label: Label = labels[key]
-		label.text = lines.get(key, "")
-		label.visible = label.text != ""
+	# A car park's state is read straight from the landside sim, so it is cheap.
+	var landside: bool = _static["kind"] == Kind.LANDSIDE
+	if _live_stale or landside or sim.tick != _live_tick:
+		_live = _build_live()
+		live_builds += 1
+		_live_tick = sim.tick
+		_live_stale = false
+		_show()
 
 
-## The card's texts by field ("name", "where", "status", "staff", "queue",
-## "upkeep"; a field is left out when it does not apply), or an empty
-## dictionary for no selection.
-func lines_for() -> Dictionary:
-	if selection == null or sim == null or build_mode == null:
-		return {}
-	match selection.kind:
-		BuiltSelection.Kind.OBJECT:
-			return _object_lines(selection.id)
-		BuiltSelection.Kind.ROOM:
-			return _room_lines(selection.id)
-		BuiltSelection.Kind.LANDSIDE:
-			return _landside_lines()
-	return {}
+## Works the sim-derived lines out again on the next refresh, whatever the tick.
+func invalidate() -> void:
+	_live_stale = true
 
 
 func name_text() -> String:
@@ -76,72 +111,198 @@ func name_text() -> String:
 
 
 func field_text(field: String) -> String:
-	var labels := {"where": _where, "status": _status, "staff": _staff, "queue": _queue}
-	labels["upkeep"] = _upkeep
-	var label: Label = labels[field]
+	var label: Label = _labels[field]
 	return label.text if label.visible and visible else ""
 
 
-func _object_lines(object_id: int) -> Dictionary:
+func _show() -> void:
+	_name.text = _static["name"]
+	for field in FIELDS:
+		var label: Label = _labels[field]
+		label.text = _static.get(field, _live.get(field, ""))
+		label.visible = label.text != ""
+
+
+## Follows the grid's edits and the staff's changes, which make the cached
+## lines stale; reconnects when the sim's grid or staff is another object.
+func _watch() -> void:
+	if sim.grid != _watched_grid:
+		_watched_grid = sim.grid
+		_watched_grid.graph_changed.connect(_on_grid_changed)
+		_watched_grid.edit_applied.connect(_on_grid_edit)
+		_static_stale = true
+	if sim.staff != _watched_staff:
+		_watched_staff = sim.staff
+		if _watched_staff != null:
+			_watched_staff.staff_changed.connect(invalidate)
+			_watched_staff.member_state_changed.connect(_on_member_state)
+		_live_stale = true
+
+
+func _on_grid_changed(_cells: Array[Vector2i]) -> void:
+	_static_stale = true
+
+
+func _on_grid_edit(_edit: BuildEdit, _result: BuildResult) -> void:
+	_static_stale = true
+
+
+func _on_member_state(_id: int, _state: StaffMember.State) -> void:
+	invalidate()
+
+
+# ------------------------------------------------------------ the grid half
+
+
+func _build_static() -> Dictionary:
+	match selection.kind:
+		BuiltSelection.Kind.OBJECT:
+			return _object_static(selection.id)
+		BuiltSelection.Kind.ROOM:
+			return _room_static(selection.id)
+		BuiltSelection.Kind.LANDSIDE:
+			return _landside_static()
+	return {}
+
+
+func _object_static(object_id: int) -> Dictionary:
 	var grid := sim.grid
 	var record := grid.get_object(object_id)
 	if record.is_empty():
 		return {}
-	var def := BuildCatalog.get_def(record["def"])
-	var out := {"name": def.display_name}
+	var def_id := StringName(record["def"])
+	var out := {"kind": _kind_of(def_id, object_id), "id": object_id}
+	out["name"] = BuildCatalog.get_def(def_id).display_name
 	var room_id := grid.room_at(record["anchor"])
 	if room_id != 0:
 		out["where"] = "In %s" % RoomTypes.get_type(grid.get_room(room_id)["type"]).display_name
-	if _is_station(object_id):
-		out["status"] = _station_status(object_id)
-		out["staff"] = _staff_text([object_id])
-		var waiting := _waiting_at(object_id)
-		out["queue"] = "Queue: %d waiting" % waiting
-	var upkeep: int = PIECE_UPKEEP.get(StringName(record["def"]), 0)
+	var upkeep: int = PIECE_UPKEEP.get(def_id, 0)
 	if upkeep > 0:
-		out["upkeep"] = _upkeep_text(upkeep)
+		out["upkeep"] = BuildMenu.RUNNING_COST_TEXT % upkeep
 	return out
 
 
-func _room_lines(room_id: int) -> Dictionary:
-	var grid := sim.grid
-	var status := RoomRules.status(grid, room_id)
-	if status == null:
+## The kind of object `def_id` is; a counter is one by ShopCounters.
+func _kind_of(def_id: StringName, object_id: int) -> Kind:
+	if KIND_OF_DEF.has(def_id):
+		return KIND_OF_DEF[def_id]
+	if SecurityLanes.is_part(def_id):
+		return Kind.LANE_PART
+	return Kind.COUNTER if ShopCounters.is_counter(sim.grid, object_id) else Kind.PLAIN
+
+
+func _room_static(room_id: int) -> Dictionary:
+	var ready := RoomRules.status(sim.grid, room_id)
+	if ready == null:
 		return {}
-	var out := {"name": status.type_name}
-	out["status"] = _room_status(room_id, status)
-	var counters := _counters_in(room_id)
-	if not counters.is_empty():
-		out["staff"] = _staff_text(counters)
-		var waiting := 0
-		for counter in counters:
-			waiting += _waiting_at(counter)
-		out["queue"] = "Queue: %d waiting" % waiting
-	var upkeep := RoomRules.daily_upkeep(grid, room_id)
-	if upkeep > 0:
-		out["upkeep"] = _upkeep_text(upkeep)
+	var out := {"kind": Kind.ROOM, "id": room_id, "name": ready.type_name, "ready": ready}
+	var counters: Array[int] = []
+	var ids := sim.grid.object_ids()
+	ids.sort()
+	for id in ids:
+		if ShopCounters.room_of(sim.grid, id) == room_id:
+			counters.append(id)
+	out["counters"] = counters
+	if ready.ok and ready.upkeep > 0:
+		out["upkeep"] = BuildMenu.RUNNING_COST_TEXT % ready.upkeep
 	return out
 
 
-func _landside_lines() -> Dictionary:
+func _landside_static() -> Dictionary:
 	var plan := selection.plan_of(build_mode.landside_placement())
 	if plan == null:
 		return {}
-	var out := {"name": LandsidePlacement.NAMES[plan.kind]}
-	var closed := LandsidePlacement.is_lot(plan.kind) and sim.landside.lots_closed[plan.spot]
-	out["status"] = "Status: Closed" if closed else "Status: Open"
-	var unit := "berths" if plan.kind == LandsidePlacement.Kind.CURB else "spaces"
-	out["queue"] = "Cars: %d of %d %s" % [plan.cars, plan.capacity, unit]
+	return {
+		"kind": Kind.LANDSIDE,
+		"name": LandsidePlacement.NAMES[plan.kind],
+		"spot": plan.spot,
+		"is_lot": LandsidePlacement.is_lot(plan.kind),
+		"capacity": plan.capacity,
+		"unit": "berths" if plan.kind == LandsidePlacement.Kind.CURB else "spaces",
+	}
+
+
+# ------------------------------------------------------------ the sim half
+
+
+func _build_live() -> Dictionary:
+	var out := {}
+	match _static["kind"]:
+		Kind.DESK, Kind.SCANNER, Kind.COUNTER:
+			out = _station_live([_static["id"]])
+		Kind.ARCH:
+			out = _arch_live(_static["id"])
+		Kind.GATE_DESK:
+			out = {"status": _gate_status(_static["id"])}
+		Kind.LANE_PART:
+			var in_lane := sim.layout.security_lanes.lane_of_piece(_static["id"]) != 0
+			var text := "Part of a ready security lane" if in_lane else "Not in a whole lane"
+			out = {"status": "Status: %s" % text}
+		Kind.ROOM:
+			out = _room_live()
+		Kind.LANDSIDE:
+			out = _landside_live()
 	return out
 
 
-## A desk, a scanner or a shop or cafe counter: what staff work.
-func _is_station(object_id: int) -> bool:
-	return (
-		sim.layout.desks.has(object_id)
-		or sim.layout.scanners.has(object_id)
-		or ShopCounters.is_counter(sim.grid, object_id)
-	)
+## Status, staff and queue of the staff-worked `stations`.
+func _station_live(stations: Array) -> Dictionary:
+	var waiting := 0
+	for station in stations:
+		waiting += _waiting_at(station)
+	return {
+		"status": _station_status(stations[0]),
+		"staff": _staff_text(stations),
+		"queue": "Queue: %d waiting" % waiting,
+	}
+
+
+func _arch_live(arch: int) -> Dictionary:
+	var lanes := sim.layout.security_lanes
+	if not lanes.is_complete(arch):
+		return {"status": "Status: Not ready, %s" % lanes.status_text(arch).to_lower()}
+	return _station_live([arch])
+
+
+## "Linked to Gate B", or why the desk is unlinked (GateLinksView.caption_for).
+func _gate_status(desk: int) -> String:
+	if gates == null:
+		return ""
+	for binding in gates.bindings:
+		if binding["desk"] == desk:
+			return "Status: Linked to Gate %s" % binding["gate"]
+	var reason: Dictionary = gates.unlinked().get(desk, {})
+	if reason.is_empty():
+		return "Status: Not linked yet"
+	return "Status: %s" % GateLinksView.caption_for(reason).to_lower()
+
+
+func _room_live() -> Dictionary:
+	var ready: RoomRules.RoomStatus = _static["ready"]
+	var counters: Array[int] = _static["counters"]
+	var out := {}
+	if not ready.ok:
+		out["status"] = "Status: Not ready, %s" % ready.notes[0].to_lower()
+	elif not counters.is_empty() and not ShopCounters.room_open(sim, _static["id"]):
+		out["status"] = "Status: Closed, %s" % MissSignals.NO_STAFF_REASON.to_lower()
+	else:
+		out["status"] = "Status: Open"
+	if not counters.is_empty():
+		var staff_and_queue := _station_live(counters)
+		out["staff"] = staff_and_queue["staff"]
+		out["queue"] = staff_and_queue["queue"]
+	return out
+
+
+func _landside_live() -> Dictionary:
+	var land := sim.landside
+	var spot: int = _static["spot"]
+	var closed: bool = _static["is_lot"] and land.lots_closed[spot]
+	var cars := land.lot_cars(spot) if _static["is_lot"] else land.curb_cars(spot)
+	return {
+		"status": "Status: Closed" if closed else "Status: Open",
+		"queue": "Cars: %d of %d %s" % [cars, _static["capacity"], _static["unit"]],
+	}
 
 
 func _station_status(station: int) -> String:
@@ -155,16 +316,8 @@ func _station_status(station: int) -> String:
 	return "Status: Closed, %s" % reason.to_lower()
 
 
-func _room_status(room_id: int, status: RoomRules.RoomStatus) -> String:
-	if not status.ok:
-		return "Status: Not ready, %s" % status.notes[0].to_lower()
-	if not _counters_in(room_id).is_empty() and not ShopCounters.room_open(sim, room_id):
-		return "Status: Closed, %s" % MissSignals.NO_STAFF_REASON.to_lower()
-	return "Status: Open"
-
-
 ## "Staff: 1 on duty", "Staff: 1 on the way" or "Staff: none", over `stations`.
-func _staff_text(stations: Array[int]) -> String:
+func _staff_text(stations: Array) -> String:
 	var on_duty := 0
 	var coming := 0
 	if sim.staff != null:
@@ -192,17 +345,3 @@ func _waiting_at(station: int) -> int:
 		+ sim.holding_of(station).size()
 		+ sim.cafes.queue_of(station).size()
 	)
-
-
-func _counters_in(room_id: int) -> Array[int]:
-	var out: Array[int] = []
-	var ids := sim.grid.object_ids()
-	ids.sort()
-	for id in ids:
-		if ShopCounters.room_of(sim.grid, id) == room_id:
-			out.append(id)
-	return out
-
-
-static func _upkeep_text(amount: int) -> String:
-	return BuildMenu.RUNNING_COST_TEXT % amount

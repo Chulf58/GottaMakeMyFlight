@@ -11,8 +11,9 @@ const GOLD := Color(1.0, 0.85, 0.3)
 ## The frame's width on the grid, and on the landside, whose spots are far larger.
 const GRID_WIDTH_M := 0.12
 const LANDSIDE_WIDTH_M := 0.6
-## Lift over the floor top (ThoughtMarker.SPOT_LIFT_M), so it does not fight it.
-const LIFT_M := 0.03
+## Lift over the floor top: above the room tint (RoomView.TINT_Y), which would
+## otherwise cover the frame of a room or of a piece standing in one.
+const LIFT_M := RoomView.TINT_Y + 0.02
 ## A car park's slab and kerb stand above the ground (LandsidePlacement.SLAB_HEIGHT), so
 ## its frame sits higher.
 const LANDSIDE_LIFT_M := LandsidePlacement.SLAB_HEIGHT + 0.15

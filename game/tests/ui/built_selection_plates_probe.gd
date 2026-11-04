@@ -26,6 +26,7 @@ const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
 const GLIDE_FRAMES := 240
 const CAFE_SIZE := Vector2i(4, 4)
+const MIN_SEEN_TRIANGLES := 4
 
 var _failed := false
 var _main: Node3D
@@ -84,7 +85,11 @@ func _boot() -> void:
 	_mode.set_tool(BuildMode.Tool.NONE)
 	_hud.press_starter_terminal()
 	_build_cafe()
-	StaffTestKit.staff_all(_main.get_node("Staff"))
+	var staff: StaffSim = _main.get_node("Staff")
+	StaffTestKit.staff_all(staff)
+	# Seated without a hire, so say so, as a hire does: the staff panel's
+	# banner and the cards read the staff on this signal.
+	staff.staff_changed.emit()
 	await _frames(10)
 
 
@@ -143,7 +148,7 @@ func _plate_desk() -> void:
 	_click(centre + Vector3(0.0, 0.4, 0.0))
 	await _frames(4)
 	_expect(BuiltSelection.Kind.OBJECT, desk, "desk")
-	await _grab("desk_selected.png", "desk")
+	await _grab("desk_selected.png", "desk", ["status", "staff", "queue"])
 
 
 func _plate_cafe() -> void:
@@ -163,7 +168,7 @@ func _plate_cafe() -> void:
 	_click(grid.cell_to_world(open_cell))
 	await _frames(4)
 	_expect(BuiltSelection.Kind.ROOM, _cafe_room, "cafe")
-	await _grab("cafe_selected.png", "cafe")
+	await _grab("cafe_selected.png", "cafe", ["status", "staff", "queue"])
 
 
 func _plate_car_park() -> void:
@@ -179,7 +184,7 @@ func _plate_car_park() -> void:
 	print("HIT car park: kind %d spot %d" % [selection.kind, selection.spot])
 	if selection.kind != BuiltSelection.Kind.LANDSIDE or selection.spot != 0:
 		_invalid("the click did not select the car park")
-	await _grab("car_park_selected.png", "car_park")
+	await _grab("car_park_selected.png", "car_park", ["status", "queue"])
 
 
 func _show(point: Vector3, distance: float) -> void:
@@ -209,9 +214,11 @@ func _expect(kind: BuiltSelection.Kind, id: int, label: String) -> void:
 		_invalid("%s: the click selected the wrong thing" % label)
 
 
-func _grab(file: String, label: String) -> void:
+func _grab(file: String, label: String, fields: Array[String]) -> void:
 	_outline.refresh()
 	_prove_outline(label)
+	await _prove_outline_seen(label)
+	_prove_fields(label, fields)
 	var card := _inspect.built_card
 	print(
 		(
@@ -254,3 +261,60 @@ func _prove_outline(label: String) -> void:
 				_invalid("%s: an outline corner leaves the viewport" % label)
 	if not (_inspect.visible and view.encloses(_inspect.get_global_rect())):
 		_invalid("%s: the window is not fully on screen" % label)
+
+
+## The window's name and each of `fields` hold text.
+func _prove_fields(label: String, fields: Array[String]) -> void:
+	var card := _inspect.built_card
+	if card.name_text() == "":
+		_invalid("%s: the window has no name" % label)
+	for field in fields:
+		if card.field_text(field) == "":
+			_invalid("%s: the window's %s line is empty" % [label, field])
+
+
+## Occlusion: a ray from the camera to each triangle of the outline's mesh
+## meets the outline first for at least MIN_SEEN_TRIANGLES of its 8 (a tall
+## piece may cover the far side of a room's frame, so not all). Every visible
+## mesh gets a collider for the check, which is removed afterwards.
+func _prove_outline_seen(label: String) -> void:
+	var bodies: Array[Node] = []
+	for mi: MeshInstance3D in _main.find_children("*", "MeshInstance3D", true, false):
+		if mi.mesh == null or mi.skin != null or not mi.is_visible_in_tree():
+			continue
+		var faces := mi.mesh.get_faces()
+		if faces.is_empty():
+			continue
+		var shape := ConcavePolygonShape3D.new()
+		shape.set_faces(faces)
+		shape.backface_collision = true
+		var shape_node := CollisionShape3D.new()
+		shape_node.shape = shape
+		var body := StaticBody3D.new()
+		body.add_child(shape_node)
+		mi.add_child(body)
+		bodies.append(body)
+	await physics_frame
+	await physics_frame
+	var mesh_node := _outline.get_child(0) as MeshInstance3D
+	var faces := mesh_node.mesh.get_faces()
+	var from := _cam.global_position
+	var space := _cam.get_world_3d().direct_space_state
+	var seen := 0
+	var blockers := {}
+	for i in range(0, faces.size(), 3):
+		var centre := mesh_node.global_transform * ((faces[i] + faces[i + 1] + faces[i + 2]) / 3.0)
+		var query := PhysicsRayQueryParameters3D.create(
+			from, centre + (centre - from).normalized() * 0.05
+		)
+		var hit := space.intersect_ray(query)
+		if not hit.is_empty() and mesh_node.is_ancestor_of(hit["collider"]):
+			seen += 1
+		elif not hit.is_empty():
+			var by := str((hit["collider"] as Node).get_parent().name)
+			blockers[by] = int(blockers.get(by, 0)) + 1
+	for body in bodies:
+		body.free()
+	print("OCCLUSION %s outline triangles seen=%d/8 blocked_by=%s" % [label, seen, blockers])
+	if seen < MIN_SEEN_TRIANGLES:
+		_invalid("%s: the outline is hidden behind %s" % [label, blockers])

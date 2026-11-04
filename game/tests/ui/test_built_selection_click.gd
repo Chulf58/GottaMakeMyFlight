@@ -101,13 +101,27 @@ func _look_at(target: Vector3) -> void:
 	_eye.look_at_from_position(target + Vector3(0.0, 30.0, 4.0), target)
 
 
+## A real click: a mouse move then a left press pushed through the viewport, so
+## the click goes down the same input path as the player's (the GUI first, then
+## every unhandled-input node), and the frame it is dispatched in is waited for.
+## BuildMode and the template paste read the pointer from pointer_override
+## (their probe hook) rather than the window's mouse, so it is set to match.
 func _click_world(at: Vector3) -> void:
+	var screen := _eye.unproject_position(at)
+	print("click world %s -> screen %s" % [at, screen])
+	var motion := InputEventMouseMotion.new()
+	motion.position = screen
+	motion.global_position = screen
+	_mode.pointer_override = screen
+	get_viewport().push_input(motion, true)
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
-	click.position = _eye.unproject_position(at)
-	print("click world %s -> screen %s" % [at, click.position])
-	_hud._unhandled_input(click)
+	click.position = screen
+	click.global_position = screen
+	get_viewport().push_input(click, true)
+	await await_idle_frame()
+	_mode.pointer_override = Vector2(-1.0, -1.0)
 	_hud.refresh()
 
 
@@ -125,7 +139,7 @@ func _desk_anchor() -> Vector2i:
 
 func test_clicking_a_desk_selects_it_and_the_window_shows_its_name_and_staff() -> void:
 	var def := BuildCatalog.get_def(_mode.grid.get_object(_desk)["def"])
-	_click_world(_cell_top(_desk_anchor(), 0.4))
+	await _click_world(_cell_top(_desk_anchor(), 0.4))
 	var selected := _selection()
 	print("hit kind %d id %d (desk %d)" % [selected.kind, selected.id, _desk])
 	assert_int(selected.kind).is_equal(BuiltSelection.Kind.OBJECT)
@@ -156,7 +170,7 @@ func test_a_passenger_standing_at_the_desk_is_picked_before_the_desk() -> void:
 	_views.sync()
 	var at := _cell_top(_desk_anchor(), 0.0)
 	_views.node_for(passenger).position = at
-	_click_world(at + Vector3(0.0, 1.0, 0.0))
+	await _click_world(at + Vector3(0.0, 1.0, 0.0))
 	print("hit passenger %d, item kind %d" % [_views.selected_id, _selection().kind])
 	assert_int(_views.selected_id).is_equal(passenger)
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
@@ -164,7 +178,7 @@ func test_a_passenger_standing_at_the_desk_is_picked_before_the_desk() -> void:
 	assert_bool(_inspect.built_card.visible).is_false()
 	# And the reverse: clicking the desk clears the passenger.
 	_views.node_for(passenger).position += Vector3(30.0, 0.0, 0.0)
-	_click_world(_cell_top(_desk_anchor(), 0.4))
+	await _click_world(_cell_top(_desk_anchor(), 0.4))
 	assert_int(_selection().id).is_equal(_desk)
 	assert_int(_views.selected_id).is_equal(0)
 	assert_bool(_inspect.built_card.visible).is_true()
@@ -173,7 +187,7 @@ func test_a_passenger_standing_at_the_desk_is_picked_before_the_desk() -> void:
 func test_clicking_open_room_floor_selects_the_room() -> void:
 	var middle := _room_area.position + _room_area.size / 2
 	_look_at(_cell_top(middle, 0.0))
-	_click_world(_cell_top(middle, 0.0))
+	await _click_world(_cell_top(middle, 0.0))
 	var selected := _selection()
 	print(
 		(
@@ -201,17 +215,17 @@ func test_clicking_open_room_floor_selects_the_room() -> void:
 
 
 func test_clicking_plain_floor_clears_the_selection() -> void:
-	_click_world(_cell_top(_desk_anchor(), 0.4))
+	await _click_world(_cell_top(_desk_anchor(), 0.4))
 	assert_bool(_selection().is_selected()).is_true()
 	_look_at(_cell_top(_plain_cell, 0.0))
-	_click_world(_cell_top(_plain_cell, 0.0))
+	await _click_world(_cell_top(_plain_cell, 0.0))
 	print("plain floor %s: kind %d" % [_plain_cell, _selection().kind])
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
 	assert_bool(_inspect.visible).is_false()
 
 
 func test_clicking_a_wall_clears_the_selection_even_with_an_item_behind_it() -> void:
-	_click_world(_cell_top(_desk_anchor(), 0.4))
+	await _click_world(_cell_top(_desk_anchor(), 0.4))
 	assert_bool(_selection().is_selected()).is_true()
 	# The divider wall runs along the north edge of row DIVIDER_Y; the cutaway
 	# draws it as a 0.3 m stub from this camera, so the click lands on the stub.
@@ -241,7 +255,7 @@ func test_clicking_a_wall_clears_the_selection_even_with_an_item_behind_it() -> 
 	assert_int(_mode.grid.object_at(ground_cell)).is_equal(placed.object_id)
 	assert_int(seen.z).is_equal(BuildGrid.Side.NORTH)
 	assert_int(SightPick.seen_object(_mode.grid, view, _eye, ground)).is_equal(0)
-	_click_world(edge)
+	await _click_world(edge)
 	print("wall click: kind %d" % _selection().kind)
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
 	assert_bool(_inspect.visible).is_false()
@@ -250,13 +264,13 @@ func test_clicking_a_wall_clears_the_selection_even_with_an_item_behind_it() -> 
 
 func test_with_a_build_tool_picked_a_click_selects_nothing() -> void:
 	_mode.set_tool(BuildMode.Tool.FLOOR)
-	_click_world(_cell_top(_desk_anchor(), 0.4))
+	await _click_world(_cell_top(_desk_anchor(), 0.4))
 	print("tool picked: kind %d" % _selection().kind)
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
 	assert_bool(_inspect.visible).is_false()
 	# A selection made earlier is cleared when a tool is picked.
 	_mode.set_tool(BuildMode.Tool.NONE)
-	_click_world(_cell_top(_desk_anchor(), 0.4))
+	await _click_world(_cell_top(_desk_anchor(), 0.4))
 	assert_bool(_selection().is_selected()).is_true()
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	_hud.refresh()
@@ -270,7 +284,7 @@ func test_clicking_a_built_car_park_selects_it_and_a_click_beside_it_clears() ->
 		lot_kind = LandsidePlacement.Kind.MULTI_STOREY
 	assert_bool(_land.build_lot(0)).is_true()
 	_look_at(lot.centre)
-	_click_world(lot.centre)
+	await _click_world(lot.centre)
 	var selected := _selection()
 	print(
 		(
@@ -293,7 +307,117 @@ func test_clicking_a_built_car_park_selects_it_and_a_click_beside_it_clears() ->
 	assert_float(frame.size.z).is_equal_approx(lot.footprint.y, 0.001)
 	# Ground beside the car park, outside its footprint, clears.
 	var beside := lot.centre + Vector3(lot.footprint.x / 2.0 + 1.0, 0.0, 0.0)
-	_click_world(beside)
+	await _click_world(beside)
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
 	_land.set_lot_closed(0, false)
 	_land.remove_lot(0)
+
+
+func test_a_click_while_a_template_is_being_saved_has_one_owner() -> void:
+	var templates := _mode.templates
+	var saved := templates.library.size()
+	var middle := _room_area.position + _room_area.size / 2
+	_look_at(_cell_top(middle, 0.0))
+	# Saving a room runs with no tool picked: the click saves the room under it
+	# and must not also select it.
+	templates.arm_capture()
+	assert_bool(BuiltSelection.clicks_taken(_mode)).is_true()
+	await _click_world(_cell_top(middle, 0.0))
+	print(
+		(
+			"template saved %d -> %d, selection kind %d"
+			% [saved, templates.library.size(), _selection().kind]
+		)
+	)
+	assert_int(templates.library.size()).is_equal(saved + 1)
+	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
+	assert_bool(_inspect.visible).is_false()
+	# With the saving over, the same click selects the room.
+	assert_bool(BuiltSelection.clicks_taken(_mode)).is_false()
+	await _click_world(_cell_top(middle, 0.0))
+	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.ROOM)
+	# A selection made earlier goes when a paste is armed.
+	templates.arm(0)
+	_hud.refresh()
+	assert_bool(_selection().is_selected()).is_false()
+	templates.disarm()
+
+
+func test_a_room_being_moved_owns_the_clicks() -> void:
+	assert_bool(BuiltSelection.clicks_taken(_mode)).is_false()
+	_mode.room_mover.active = true
+	assert_bool(BuiltSelection.clicks_taken(_mode)).is_true()
+	_mode.room_mover.active = false
+
+
+func test_the_card_works_the_grid_half_once_and_the_sim_half_once_per_tick() -> void:
+	await _click_world(_cell_top(_desk_anchor(), 0.4))
+	var card := _inspect.built_card
+	var statics := card.static_builds
+	var lives := card.live_builds
+	for i in 5:
+		_hud.refresh()
+	print(
+		(
+			"5 refreshes: static %d -> %d, live %d -> %d"
+			% [statics, card.static_builds, lives, card.live_builds]
+		)
+	)
+	assert_int(card.static_builds).is_equal(statics)
+	assert_int(card.live_builds).is_equal(lives)
+	SaveTestKit.step(_main)
+	_hud.refresh()
+	assert_int(card.live_builds).is_equal(lives + 1)
+	assert_int(card.static_builds).is_equal(statics)
+	# A grid edit makes the grid half stale.
+	var placed := _mode.grid.apply(BuildEdit.place_object(&"statue_indoor", _plain_cell, 0))
+	assert_bool(placed.ok).is_true()
+	_hud.refresh()
+	assert_int(card.static_builds).is_equal(statics + 1)
+	_mode.grid.apply(BuildEdit.remove_object(placed.object_id))
+
+
+func test_a_gate_desk_shows_its_link_and_no_staff_or_queue() -> void:
+	var desks := GateDesks.desk_ids(_mode.grid)
+	assert_bool(desks.is_empty()).is_false()
+	_select_object(desks[0])
+	var card := _inspect.built_card
+	print(
+		(
+			"gate desk: %s | %s | staff '%s' queue '%s'"
+			% [
+				card.name_text(),
+				card.field_text("status"),
+				card.field_text("staff"),
+				card.field_text("queue")
+			]
+		)
+	)
+	assert_str(card.name_text()).is_equal("Gate desk")
+	assert_str(card.field_text("status")).starts_with("Status: Linked to Gate ")
+	assert_str(card.field_text("staff")).is_empty()
+	assert_str(card.field_text("queue")).is_empty()
+
+
+func test_an_incomplete_security_arch_says_what_the_lane_lacks() -> void:
+	var placed := _mode.grid.apply(BuildEdit.place_object(SecurityLanes.ARCH, _plain_cell, 0))
+	print("arch placement: ok %s %s" % [placed.ok, placed.reason_text()])
+	assert_bool(placed.ok).is_true()
+	_select_object(placed.object_id)
+	var card := _inspect.built_card
+	print(
+		(
+			"arch: %s | %s | staff '%s'"
+			% [card.name_text(), card.field_text("status"), card.field_text("staff")]
+		)
+	)
+	assert_str(card.field_text("status")).starts_with("Status: Not ready, ")
+	assert_str(card.field_text("staff")).is_empty()
+	assert_str(card.field_text("queue")).is_empty()
+	_mode.grid.apply(BuildEdit.remove_object(placed.object_id))
+
+
+func _select_object(object_id: int) -> void:
+	_selection().kind = BuiltSelection.Kind.OBJECT
+	_selection().id = object_id
+	_hud.refresh()

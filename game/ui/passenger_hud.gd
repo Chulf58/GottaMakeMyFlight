@@ -267,6 +267,7 @@ func _ready() -> void:
 	_inspect.built_card.sim = sim
 	_inspect.built_card.selection = _built
 	_inspect.built_card.build_mode = build_mode
+	_inspect.built_card.gates = get_node_or_null("../GateDesks") as GateDesks
 	_outline.selection = _built
 	_outline.build_mode = build_mode
 	add_child(_outline)
@@ -328,7 +329,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		landside_views.select(vehicle)
 	views.selected_id = 0 if vehicle != 0 else views.pick(eye, click.position)
 	_built.clear()
-	if vehicle == 0 and views.selected_id == 0:
+	if vehicle == 0 and views.selected_id == 0 and not BuiltSelection.clicks_taken(build_mode):
 		_pick_built(eye, click.position)
 	if vehicle != 0:
 		camera.follow(landside_views.follow_anchor)
@@ -345,12 +346,13 @@ func _pick_built(eye: Camera3D, at: Vector2) -> void:
 		_built.pick(build_mode.grid, view, build_mode.landside_placement(), eye, at)
 
 
-## A built item stays selected only with no build tool picked, no passenger or
-## vehicle selected, and the item still standing.
+## A built item stays selected only while no build interaction owns the clicks
+## (BuiltSelection.clicks_taken()), no passenger or vehicle is selected, and the
+## item still stands.
 func _settle_built_selection() -> void:
 	var other := views != null and views.selected_id != 0
 	other = other or (landside_views != null and landside_views.selected_id != 0)
-	if build_mode == null or other or build_mode.tool != BuildMode.Tool.NONE:
+	if build_mode == null or other or BuiltSelection.clicks_taken(build_mode):
 		_built.clear()
 	else:
 		_built.prune(build_mode.grid, build_mode.landside_placement())
@@ -746,6 +748,8 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
+		# A loaded world may reuse the selected id for another item.
+		_built.clear()
 		_alerts.reset()
 		_inspect.on_loaded(ok)
 		_frame_start_view()
