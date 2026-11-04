@@ -281,6 +281,9 @@ static func stamp_move(
 	bag.erase("park")
 	if RollerPark.parks(bag, in_stall, home):
 		RollerPark.stamp(bag, body, face)
+	# A queue stand asked for (RollerPark.queue_stand()) is stamped by this move
+	# or not at all, never by a later one.
+	bag.erase("queue_still")
 
 
 ## How many sim ticks the move of `bag` (CarryOnProps' record) takes: the

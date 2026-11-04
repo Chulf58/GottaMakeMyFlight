@@ -152,6 +152,31 @@ const CLEAR_M := 1.5
 const ROLL_RODS := 0.45
 const ROLL_TICKS := 36.0
 const TIP_UP := 1.0 - UP_PARK_END
+## Standing in a queue (decision a-guest-standing-still-in-a-queue-stands-the-
+## roller-up-beside-them, board 3dc86b54): a walker pulling its roller that has
+## stood still STILL_TICKS in one of QUEUE_STAGES stands it upright beside it,
+## held by the bar, with the pull>floor's stand (QUEUE_STAND_TICKS, the hand on
+## the bar, the bag rolled on its axle to the park), and keeps it there, carried
+## with the body, until it walks on (or its home or lift changes): then the bag
+## tips back into the pull over QUEUE_TIP_TICKS, as a rolled roller does. One
+## move from the pull to the pull ("queue", queue_stand()), its length kept
+## QUEUE_AHEAD_TICKS past the tick while the walker stands. With the stand on a
+## single still tick, a walker stepping up one place in a queue (its next path
+## the tick after it arrives) stood the bag up and tipped it at once.
+## Its rods are out QUEUE_RODS of the way from in to the pull's length while it
+## stands, as ROLL_RODS while it rolls upright.
+const QUEUE_STAGES: Array[Passenger.Stage] = [
+	Passenger.Stage.CAFE_QUEUE,
+	Passenger.Stage.CAFE_ORDER,
+	Passenger.Stage.CHECKIN_QUEUE,
+	Passenger.Stage.CHECKIN,
+	Passenger.Stage.SECURITY_QUEUE,
+]
+const STILL_TICKS := 4
+const QUEUE_STAND_TICKS := TICKS_DOWN * STAND_END
+const QUEUE_TIP_TICKS := TICKS_UP * TIP_UP
+const QUEUE_AHEAD_TICKS := 2.0
+const QUEUE_RODS := ROLL_RODS
 
 
 ## Whether a hand-led move of `bag` (CarryOnProps' record, its "was",
@@ -162,6 +187,14 @@ static func parks(bag: Dictionary, in_stall: bool, home: int) -> bool:
 	if bag["kind"] != SecurityLooks.Kind.ROLLER or in_stall or not bag.get("led", false):
 		return false
 	var started := CarryLead.start_of(bag)
+	if bag.get("queue_still", false):
+		# Stood up in a queue (queue_stand()): from the pull to the pull.
+		return (
+			started[0] == CarryLead.End.HELD
+			and bag["carry_from"] == SecurityLooks.Carry.PULL
+			and home == SecurityLooks.Home.HAND
+			and bag["carry"] == SecurityLooks.Carry.PULL
+		)
 	if started[0] == CarryLead.End.HELD:
 		return bag["carry_from"] == SecurityLooks.Carry.PULL and home == SecurityLooks.Home.FLOOR
 	var was: int = bag["was"]
@@ -239,6 +272,70 @@ static func hold_park(
 		hands[i] = CarryLead.hand_of(bag["place"])
 
 
+## Whether `p` stands in a queue or at its counter or desk (QUEUE_STAGES) with
+## no way left to walk on this tick.
+static func queue_still(p: Passenger) -> bool:
+	return p.stage in QUEUE_STAGES and not p.is_moving()
+
+
+## One sim tick (`now`) of the queue stand (the header's QUEUE_STAGES) of `bag`
+## (CarryOnProps' record, of a bag of `kind` now): `stands`, its walker stands
+## still in a queue with the roller wanted in the pull (not lifted). Counts the
+## still ticks ("still_from"); after STILL_TICKS of them a roller settled in
+## the pull is marked for a new move ("queue_still", restamps(), its "changed"
+## now), which stamp() makes a queue stand. While that move runs its length is
+## kept QUEUE_AHEAD_TICKS past `now`, and the first tick the walker no longer
+## stands starts its tip ("queue_tip", ticks into the move), the move then
+## ending with it.
+static func queue_stand(
+	bag: Dictionary, kind: SecurityLooks.Kind, stands: bool, now: float
+) -> void:
+	if kind != SecurityLooks.Kind.ROLLER or bag.get("kind", -1) != kind:
+		bag.erase("still_from")
+		return
+	if not stands or float(bag.get("still_from", now)) > now:
+		bag.erase("still_from")
+	if stands and not bag.has("still_from"):
+		bag["still_from"] = now
+	var at := now - float(bag.get("since", now))
+	if queued(bag) and at < CarryLead.ticks_of(bag):
+		if bag.has("queue_tip"):
+			return
+		if stands:
+			bag["ticks"] = maxf(CarryLead.ticks_of(bag), at + QUEUE_AHEAD_TICKS)
+			return
+		bag["queue_tip"] = at
+		bag["ticks"] = at + QUEUE_TIP_TICKS
+		return
+	if not stands or now - float(bag["still_from"]) < STILL_TICKS or bag.has("queue_still"):
+		return
+	var place: int = bag.get("place", -1)
+	var pulled: bool = (
+		place >= 0
+		and place / 4 == SecurityLooks.Home.HAND
+		and place % 2 == 0
+		and bag.get("home", -1) == place
+		and bag.get("carry", -1) == SecurityLooks.Carry.PULL
+		and bag.get("settled", false)
+	)
+	if pulled:
+		bag["queue_still"] = true
+		bag["changed"] = now
+
+
+## Whether `bag` (CarryOnProps' record) waits for its queue stand to be stamped
+## (queue_stand()): CarryOnProps stamps a new move though its place is the same.
+static func restamps(bag: Dictionary) -> bool:
+	return bag.get("queue_still", false)
+
+
+## Whether the move of `bag` (CarryOnProps' record) is a queue stand (the
+## header's QUEUE_STAGES): its rods start in (REACH_BUILT_M) and run out to
+## the pull's length at once (rods_t()), so they are drawn as they were.
+static func queued(bag: Dictionary) -> bool:
+	return bag.get("park", false) and bag.get("queue", false)
+
+
 ## Whether `bag` (CarryOnProps' record, of a bag of `kind` now) is in a parking
 ## move of a roller at `now` (sim tick), its place stamped.
 static func _parking(bag: Dictionary, kind: SecurityLooks.Kind, now: float) -> bool:
@@ -293,9 +390,15 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"up_near",
 		"rolls",
 		"roll_tip",
+		"queue",
+		"queue_tip",
 	]:
 		bag.erase(key)
-	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
+	if bag.get("queue_still", false):
+		bag.erase("queue_still")
+		bag["queue"] = true
+		bag["ticks"] = QUEUE_STAND_TICKS + QUEUE_AHEAD_TICKS
+	elif CarryLead.start_of(bag)[0] == CarryLead.End.REST:
 		bag["ticks"] = TICKS_UP
 		bag["reach"] = REACH_END
 		bag["from_world"] = body * (bag["from"] as Transform3D)
@@ -401,6 +504,16 @@ static func park(
 ## "roll_tip": run out upright, the bar rose to 2.1 m with the hand on it; left
 ## in, the walker crouched to a bar at 0.48 m, its hips 0.33 m low).
 static func rods_t(k: float, bag: Dictionary) -> float:
+	if queued(bag):
+		# From in (CarryOnProps' reach_from for a queue stand) to the pull's length:
+		# all out at the start, as drawn in the pull, QUEUE_RODS standing, all out
+		# again over the tip.
+		var at := k * CarryLead.ticks_of(bag)
+		var tip: float = bag.get("queue_tip", INF)
+		var share := lerpf(1.0, QUEUE_RODS, smoothstep(0.0, QUEUE_STAND_TICKS, minf(at, tip)))
+		if at <= tip:
+			return share
+		return lerpf(share, 1.0, smoothstep(tip, tip + QUEUE_TIP_TICKS, at))
 	if CarryLead.start_of(bag)[0] == CarryLead.End.REST:
 		var park := up_ends(bag).y
 		var settle := SETTLE_TICKS / TICKS_UP
@@ -488,7 +601,12 @@ static func plan(
 	# height fade alone the hand reaching the bar 0.6 m up beside a walker sitting
 	# down stopped 0.3 m short, the bag rising off its wheels with it.
 	var at: Array
-	if not off_floor:
+	if queued(bag):
+		# Beside the body as it stands now (a guest turning to its counter takes
+		# the roller round with it), held by the bar throughout.
+		parked = park(_yawed(frame), lead, body["scale"], PARK_AHEAD_M)
+		at = _queued(bag, k, start, want, parked, bar)
+	elif not off_floor:
 		at = _onto_floor(k, start, want, parked, frame, go, bar, handle)
 	else:
 		var up := up_k(bag, k)
@@ -523,6 +641,8 @@ static func plan(
 ## frame, its back came up from about 60 degrees and its head 0.3 m in two
 ## frames (CarryStoop.solved() blends the two).
 static func drops_of(bag: Dictionary, k: float) -> Vector3:
+	if queued(bag):
+		return PARK_HIPS
 	if CarryLead.start_of(bag)[0] != CarryLead.End.REST:
 		return LAY_HIPS if k >= PARK_END else PARK_HIPS
 	if not bag.get("park_low", false):
@@ -559,6 +679,28 @@ static func _onto_floor(
 		return [true, laid, handle, handle, 1.0]
 	var back := smoothstep(0.0, 1.0, (1.0 - k) / (1.0 - LAY_END))
 	return [false, want, handle, handle, back]
+
+
+## A queue stand of `bag` at `k` (plan()): [held, xf, anchor, target, weight].
+## Held by the bar throughout: rolled on its axle from the pull (`start`) to the
+## park beside the body (`parked`) over QUEUE_STAND_TICKS, standing there, and
+## from where it stood at "queue_tip" rolled back into the pull (`want`) over
+## QUEUE_TIP_TICKS, the arm easing back into its pull pose as it goes.
+static func _queued(
+	bag: Dictionary,
+	k: float,
+	start: Transform3D,
+	want: Transform3D,
+	parked: Transform3D,
+	bar: Vector3
+) -> Array:
+	var at := k * CarryLead.ticks_of(bag)
+	var tip: float = bag.get("queue_tip", INF)
+	var stood := rolled(start, parked, _eased(minf(at, tip) / QUEUE_STAND_TICKS))
+	if at < tip:
+		return [true, stood, bar, bar, 1.0]
+	var u := smoothstep(0.0, 1.0, (at - tip) / QUEUE_TIP_TICKS)
+	return [true, rolled(stood, want, u), bar, bar, 1.0 - u]
 
 
 ## The k a floor>pull move of `bag` took the lying bag at (TAKE_M, TAKE_BY), the

@@ -451,6 +451,12 @@ func sync() -> void:
 		# A roller held by its bar for a stall stays so (StallCarry.keeps_bar()).
 		var was: Array = held["bags"]
 		var near_row := StallCarry.beside_row(sim, p)
+		# Standing still in a queue, not turned to a front carry (RollerPark.queue_stand()).
+		var queue_still := (
+			RollerPark.queue_still(p)
+			and not front
+			and views.tick_position(id, true).distance_to(views.tick_position(id, false)) < 0.001
+		)
 		# A roller lifted at a booth stays in hand until the turn back has ended.
 		var kept := BoothCarry.kept_lifted(
 			held,
@@ -483,6 +489,9 @@ func sync() -> void:
 				)
 			):
 				hands[i] = (int(was[i]["place"]) / 2) % 2
+			# A roller pulled by a walker standing still in a queue is stood up beside it.
+			var stands := queue_still and homes[i] == SecurityLooks.Home.HAND and not lifts[i]
+			RollerPark.queue_stand(was[i], kinds[i], stands, _tick())
 			# A parking roller keeps home, hand and lift to the park's end; one lying, its lift.
 			RollerPark.hold_park(was[i], kinds[i], homes, hands, i, _tick(), p.collect_tick != 0)
 			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):
@@ -823,7 +832,7 @@ func _place_bags(
 		var node: Node3D = bag["node"]
 		var kind: SecurityLooks.Kind = bag["kind"]
 		var hand_home: bool = homes[i] == SecurityLooks.Home.HAND
-		var stamp: bool = bag["home"] != bag["place"]
+		var stamp: bool = bag["home"] != bag["place"] or RollerPark.restamps(bag)
 		if not stamp and not _leading(bag, now) and (placing == Placing.HAND) != hand_home:
 			continue
 		# A bag going to a hand is only stamped here (draw()), so its place
@@ -985,7 +994,7 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 		bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN), unmoved
 	)
 	bag["home"] = bag["place"]
-	bag["reach_from"] = _reach_of(node, kind)
+	bag["reach_from"] = REACH_BUILT_M if RollerPark.queued(bag) else _reach_of(node, kind)
 
 
 ## Whether a move of `bag` stamped now is hand-led (CarryLead): every move but
