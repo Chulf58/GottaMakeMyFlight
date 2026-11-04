@@ -331,8 +331,8 @@ func _islands(piece: Node3D) -> Array:
 				if n.dot(centre - pts[i]) > 0.0:
 					n = -n
 				planes.append([pts[i], n])
-			# Parts that touch at a corner weld into one island (the booth's end
-			# panels and back panel); the hull of such an island covers the gap
+			# Parts that share vertices weld into one island (the booth's base and
+			# back panel); the hull of such an island covers the gap
 			# between its parts, so it is tested by ray parity instead.
 			var convex := true
 			for plane: Array in planes:

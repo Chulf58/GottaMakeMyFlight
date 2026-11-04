@@ -86,8 +86,10 @@ def four_seats(approach):
         for side, x in (("L", -0.5), ("R", 0.5)):
             if approach == "behind":
                 mounts["Mount_Approach_" + row + side] = ("approach", (x, 0.0, 2.0 * z), yaw)
-            else:
+            elif approach == "end":
                 mounts["Mount_Approach_" + row + side] = ("approach", (3.0 * x, 0.0, z), -90.0 if x > 0 else 90.0)
+            else:
+                raise ValueError("four_seats: approach must be 'behind' or 'end', not %r" % (approach,))
     return mounts
 
 
@@ -97,16 +99,16 @@ SERVICES = {
     "bar_counter": {
         # Counter in the back row, stools in the front row facing it; the server
         # stands in the cell behind the counter, as at cafe_counter. A guest orders
-        # from the cell in front of the left stool, the mirror of Mount_Staff, and
-        # steps up onto a stool from the cell in front of it (board 3405a04b).
+        # from the cell in front of the left stool, the mirror of Mount_Staff
+        # (board 3405a04b). The stools have no approach mount yet: the cell in
+        # front of the left stool is the order cell, and CafeLayout drops a
+        # counter whose order cell is a seat's approach.
         "footprint": (2, 2),
         "mounts": {
             "Mount_SitRoot_L": ("sit_root", (-0.5, 0.0, BAR_ROOT_Z), 180.0),
             "Mount_SitRoot_R": ("sit_root", (0.5, 0.0, BAR_ROOT_Z), 180.0),
             "Mount_Staff": ("staff", (-0.5, 0.0, -1.5), 0.0),
             "Mount_Order": ("order", (-0.5, 0.0, 1.5), 180.0),
-            "Mount_Approach_L": ("approach", (-0.5, 0.0, 1.5), 180.0),
-            "Mount_Approach_R": ("approach", (0.5, 0.0, 1.5), 180.0),
         },
     },
     "restaurant_table": {"footprint": (2, 3), "mounts": four_seats("behind")},

@@ -62,8 +62,6 @@ const MOUNTS := {
 		"Mount_SitRoot_R": [Vector3(0.5, 0.0, 0.05), BACK],
 		"Mount_Staff": [Vector3(-0.5, 0.0, -1.5), FRONT],
 		"Mount_Order": [Vector3(-0.5, 0.0, 1.5), BACK],
-		"Mount_Approach_L": [Vector3(-0.5, 0.0, 1.5), BACK],
-		"Mount_Approach_R": [Vector3(0.5, 0.0, 1.5), BACK],
 	},
 	"restaurant_table": TABLE_SEATS,
 	"restaurant_booth": BOOTH_SEATS,
