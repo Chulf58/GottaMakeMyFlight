@@ -61,6 +61,71 @@ func test_a_load_keeps_the_closure() -> void:
 	assert_int(_b.staff.staff_at(_a)).is_equal(0)
 
 
+func _seat_row() -> int:
+	return int(_w.sim.layout.seats[0]["object_id"])
+
+
+## Places the reference terminal's gate desk; returns its id.
+func _gate_desk() -> int:
+	var placed := _w.grid.apply(ReferenceTerminal.gate_desk_edit())
+	assert_bool(placed.ok).is_true()
+	assert_str(String(_w.grid.get_object(placed.object_id)["def"])).is_equal(GateDesks.DESK)
+	return placed.object_id
+
+
+## The passenger being checked in at `desk`, or null.
+func _serving(world: PassengerTestWorld, desk: int) -> Passenger:
+	for id in world.sim.passenger_ids():
+		var p := world.passenger(id)
+		if p.station == desk and p.stage == Passenger.Stage.CHECKIN:
+			return p
+	return null
+
+
+func test_an_agent_finishing_at_a_closed_desk_is_released_on_the_same_tick_after_a_load() -> void:
+	var m := _w.staff.get_member(_w.staff.hire(CHECKIN))
+	m.station = _a
+	m.at = _w.staff.spot_of(_a)
+	m.clear_path()
+	m.state = StaffMember.State.ON_DUTY
+	_w.staff.rederive()
+	for i in 3:
+		_w.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	while _serving(_w, _a) == null and _w.clock.tick < 1500:
+		_w.step()
+	assert_object(_serving(_w, _a)).is_not_null()
+	_w.staff.closures.set_closed(_a, true)
+	_w.step()
+	assert_object(_serving(_w, _a)).is_not_null()
+	assert_str(_w.staff.closures.status_text(_a)).is_equal("Finishing current service")
+	_b = StaffTestKit.load_world(StaffTestKit.save_text(_w))
+	assert_object(_b).is_not_null()
+	assert_str(_b.staff.closures.status_text(_a)).is_equal("Finishing current service")
+	var released := [-1, -1]
+	var differing := 0
+	for i in 600:
+		_w.step()
+		_b.step()
+		differing += int(StaffTestKit.signature(_w.staff) != StaffTestKit.signature(_b.staff))
+		differing += int(_w.signature() != _b.signature())
+		for k in 2:
+			var world: PassengerTestWorld = [_w, _b][k]
+			if released[k] < 0 and world.staff.get_member(m.id).station != _a:
+				released[k] = world.clock.tick
+		if released[0] >= 0 and released[1] >= 0:
+			break
+	print(
+		(
+			"released at tick %d (continued) and %d (loaded), differing ticks %d"
+			% [released[0], released[1], differing]
+		)
+	)
+	assert_int(released[0]).is_greater(0)
+	assert_int(released[1]).is_equal(released[0])
+	assert_int(differing).is_equal(0)
+	assert_str(_b.staff.closures.status_text(_a)).is_equal("Closed by you")
+
+
 func test_a_version_4_staff_save_and_bad_closed_lists_are_refused() -> void:
 	_w.staff.closures.set_closed(_a, true)
 	var good: Dictionary = JSON.parse_string(JSON.stringify(_w.staff.to_snapshot()))
@@ -72,6 +137,8 @@ func test_a_version_4_staff_save_and_bad_closed_lists_are_refused() -> void:
 		"twice": [{"closed": [_a, _a]}, "closed station %d is out of order or listed twice" % _a],
 		"out of order": [{"closed": [_other, _a]}, "is out of order or listed twice"],
 		"not on the grid": [{"closed": [9999]}, "closed station 9999 is no object on the grid"],
+		"a seat row": [{"closed": [_seat_row()]}, "is no station the player can close"],
+		"a gate desk": [{"closed": [_gate_desk()]}, "is no station the player can close"],
 	}
 	var v4 := good.duplicate(true)
 	v4.erase("closed")

@@ -10,7 +10,8 @@ extends RefCounted
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
 ## "closed" lists the stations the player closed (StationClosures.live_ids()):
-## whole numbers in rising order, each an object on the grid.
+## whole numbers in rising order, each an object on the grid that is a
+## closable station (StationClosures.closable_def()).
 ##
 ## Each member saves its post ("slot", StaffMember.Slot). A helper must be a
 ## security officer at a whole security lane and never leaving; a member with
@@ -143,7 +144,8 @@ static func load(saved: Dictionary, sim: PassengerSim, messes := {}) -> Dictiona
 
 
 ## The saved closed stations as ids, or a String naming what is wrong: a list
-## of whole numbers in rising order, each an object on `grid`.
+## of whole numbers in rising order, each an object on `grid` of a closable
+## kind (StationClosures.closable_def()).
 static func _closed(value: Variant, grid: BuildGrid) -> Variant:
 	if typeof(value) != TYPE_ARRAY:
 		return "closed is not a list"
@@ -154,8 +156,11 @@ static func _closed(value: Variant, grid: BuildGrid) -> Variant:
 		var id := int(entry)
 		if not out.is_empty() and id <= out[out.size() - 1]:
 			return "closed station %d is out of order or listed twice" % id
-		if grid.get_object(id).is_empty():
+		var record := grid.get_object(id)
+		if record.is_empty():
 			return "closed station %d is no object on the grid" % id
+		if not StationClosures.closable_def(StringName(record["def"])):
+			return "closed station %d is no station the player can close" % id
 		out.append(id)
 	return out
 

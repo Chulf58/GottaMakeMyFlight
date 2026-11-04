@@ -37,6 +37,9 @@ const STATUS_TEXT := {
 	Status.SERVING: "Serving",
 }
 
+## The pieces besides the counters that are closable stations.
+const CLOSABLE_DEFS: Array[StringName] = [&"checkin_desk", &"security_scanner", SecurityLanes.ARCH]
+
 var staff: StaffSim
 
 ## Closed station id -> true.
@@ -93,6 +96,15 @@ func assign(closed: Array[int]) -> void:
 	_ids.clear()
 	for id in closed:
 		_ids[id] = true
+
+
+## Whether a piece of `def_id` is a station the player could close: a
+## check-in desk, a basic scanner, a lane's arch or a ShopCounters counter.
+## A save is checked with it: an arch whose lane is broken now is no station
+## (is_closable() is false), yet it may stay closed for when the lane is whole
+## again.
+static func closable_def(def_id: StringName) -> bool:
+	return CLOSABLE_DEFS.has(def_id) or ShopCounters.COUNTER_ROOMS.has(def_id)
 
 
 ## Whether the player can close `station`: a check-in desk, a scanner or a

@@ -63,6 +63,10 @@ const CLOSED_HINTS := {
 	),
 	AirportGate.Blocker.NO_CHECKIN: "Airport closed: no check-in agent at a desk",
 	AirportGate.Blocker.NO_SECURITY: "Airport closed: no security officer at a scanner or lane",
+	AirportGate.Blocker.CHECKIN_CLOSED:
+	"Airport closed: you closed every check-in desk. Open one again to let passengers in",
+	AirportGate.Blocker.SECURITY_CLOSED:
+	"Airport closed: you closed every scanner and lane. Open one again to let passengers in",
 	AirportGate.Blocker.NO_GATE:
 	"Airport closed: place a gate desk by an exit that faces the planes",
 }
