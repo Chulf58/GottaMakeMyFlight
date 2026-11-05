@@ -90,12 +90,16 @@ func place(sim: PassengerSim, files: BoardingFiles) -> void:
 		taken.append_array(_kept(p.id, own, spot))
 
 
-## Whether `p` may join its file now: true unless it keeps a wait spot whose
-## straight walk back to its point would come nearer to another waiter of
-## `files` than the gap or than it now stands.
+## Whether `p` may join its file now: true unless it keeps a wait spot it
+## has not reached yet (so the walk owed, owed_mm(), that orders the pending
+## walkers and the forecast is the walk it will make), or one whose straight
+## walk back to its point would come nearer to another waiter of `files` than
+## the gap or than it now stands.
 func may_return(sim: PassengerSim, files: BoardingFiles, p: Passenger) -> bool:
 	if not _spots.has(p.id) or not _spots[p.id]["out"]:
 		return true
+	if not at_spot(p):
+		return false
 	var order := files.pending_order(sim)
 	var others := _others(_taken(sim, files, order), p.id, order.size(), RETURNING)
 	var own := own_point(sim, p)
@@ -191,9 +195,12 @@ func to_list() -> Array:
 ## entry names a passenger not done, once, walked out 1 mm or more and at most
 ## its spot's length; a spot still kept ("out") belongs to a walker heading
 ## for its exit, sits within SAVED_SLACK_MM of a WAIT_SPOTS offset for that
-## walker's way out, can be stood on and walked to in the loaded grid, and is
-## GAP_MM from every other kept spot. BoardingFiles.checked() then checks each
-## kept spot's walker is pending. Returns a problem, or "".
+## walker's way out, can be stood on and walked to in the loaded grid, is
+## GAP_MM from every other kept spot, and of each two kept walks one keeps
+## clear of the other as placing a later spot does; a walk back is from a
+## WAIT_SPOTS offset for some grid heading (_back_problem()).
+## BoardingFiles.checked() then checks each kept spot's walker is pending.
+## Returns a problem, or "".
 func load_list(
 	list: Variant, by_id: Dictionary, sim: PassengerSim, files: BoardingFiles, standing: Dictionary
 ) -> String:
@@ -215,17 +222,63 @@ func load_list(
 		s["out"] = entry["out"]
 		if p == null or p.is_done() or _spots.has(id) or s["at"] < 1 or s["at"] > _length(s):
 			return "boarding waiter %d is unknown, repeated or off its walk" % id
+		var own := _loaded_base(sim, p, standing)
+		var problem := ""
 		if s["out"]:
-			var own := _loaded_base(sim, p, standing)
-			var problem := _kept_problem(sim, files, p, own, s["off"])
-			if problem != "":
-				return problem
+			problem = _kept_problem(sim, files, p, own, s["off"])
+		else:
+			problem = _back_problem(sim, p, own, s)
+		if problem != "":
+			return problem
+		if s["out"]:
+			var spot := own + Vector2(s["off"]) / 1000.0
 			for other: Array in kept:
-				if (own + Vector2(s["off"]) / 1000.0).distance_to(other[1]) < ROOM_M:
-					return "boarding waiters %d and %d wait closer than the gap" % [other[0], id]
-			kept.append([id, own + Vector2(s["off"]) / 1000.0])
+				if spot.distance_to(other[2]) < ROOM_M or not _either_after(own, spot, other):
+					return "boarding waiters %d and %d wait or walk within the gap" % [other[0], id]
+			kept.append([id, own, spot])
 		_spots[id] = s
 	return ""
+
+
+## Why returning entry `s` of `p` (its point `own`) is not a walk back from a
+## spot it could have been given, or "": the spot a WAIT_SPOTS offset for a
+## walker heading along any of the eight grid steps (its route may have changed
+## since), and the walk back from where it stands one it can make.
+static func _back_problem(sim: PassengerSim, p: Passenger, own: Vector2, s: Dictionary) -> String:
+	var off := Vector2(s["off"])
+	var given := false
+	for step: Vector2i in StandingSpots.STEPS:
+		var ahead := Vector2(step).normalized()
+		var left := Vector2(ahead.y, -ahead.x)
+		for at in WAIT_SPOTS:
+			if (
+				((left * at.y - ahead * at.x) * BoardingFiles.GAP_MM).distance_to(off)
+				<= SAVED_SLACK_MM
+			):
+				given = true
+	var share: float = s["at"] / off.length()
+	var now := own + off / 1000.0 * share
+	if not given or not _standable(sim.grid, own, now):
+		return "boarding waiter %d walks back from a spot it could not have been given" % p.id
+	return ""
+
+
+## Whether one of two kept walks, `own` to `spot` and other's [id, own, spot],
+## keeps clear of the other as placing a later spot does (place()).
+static func _either_after(own: Vector2, spot: Vector2, other: Array) -> bool:
+	var theirs: Array[Vector2] = _walk_points(other[1], other[2])
+	var mine: Array[Vector2] = _walk_points(own, spot)
+	var me_after := _clearance(spot, theirs) >= ROOM_M and _walk_clear(own, spot, theirs)
+	var them_after := _clearance(other[2], mine) >= ROOM_M and _walk_clear(other[1], other[2], mine)
+	return me_after or them_after
+
+
+## A kept spot and its walk back, every SAMPLE_M, as placing sees them.
+static func _walk_points(own: Vector2, spot: Vector2) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for entry: Array in _kept(0, own, spot):
+		out.append(entry[1])
+	return out
 
 
 ## Whether every kept spot's walker is pending in `files`, or a problem.

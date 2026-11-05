@@ -57,7 +57,7 @@ func test_walkers_waiting_on_one_cell_stand_apart() -> void:
 	_open_views()
 	var walkers := _turn_out(_world, WALKERS)
 	var sim := _world.sim
-	var spacing := _Spacing.new(walkers)
+	var spacing := _Spacing.new(walkers, sim)
 	var off_cell := 0
 	var off_drawn := 0.0
 	var at_spot := 0
@@ -117,7 +117,7 @@ func test_walkers_with_no_free_spot_wait_pending_and_never_close_in() -> void:
 	_world = _boarding()
 	var walkers := _turn_out(_world, CROWD)
 	var sim := _world.sim
-	var spacing := _Spacing.new(walkers)
+	var spacing := _Spacing.new(walkers, sim)
 	_world.step()
 	spacing.check(sim)
 	var spotless := walkers.filter(
@@ -184,6 +184,71 @@ func test_setting_off_from_standing_spots_adds_no_waiter_within_the_gap() -> voi
 		assert_bool(_gone(p)).is_true()
 	assert_int(spacing.closer).is_equal(0)
 	assert_int(spacing.closing).is_equal(0)
+
+
+## Room opens in the file while a waiter still walks out to its spot: it is
+## not admitted until it stands on its spot, so it never cuts in ahead of a
+## walker the forecast puts first; on every tick the door file is in order of
+## forecast door tick (JourneyForecast.own_times(), which counts the walk to
+## the spot and back still owed).
+func test_room_opening_while_a_waiter_walks_out_keeps_the_forecast_order() -> void:
+	_world = _boarding()
+	var sim := _world.sim
+	var lead := TestBoardingFiles.walker(_world, FILE_CELL)
+	var crowd := TestBoardingFiles.walker(_world, FILE_CELL)
+	var out := TestBoardingFiles.walker(_world, FILE_CELL)
+	var behind := TestBoardingFiles.walker(_world, FILE_CELL + Vector2i(0, 1))
+	_world.step()
+	_world.step()
+	var walking_out := sim.files.waiters.ids().has(out.id) and not sim.files.waiters.at_spot(out)
+	print(
+		(
+			"ORDER walking out %s pending %s, behind filed %s"
+			% [walking_out, sim.files.is_pending(out.id), sim.files.door_file(out.exit_object)]
+		)
+	)
+	assert_bool(walking_out).is_true()
+	assert_bool(sim.files.door_file(out.exit_object).has(behind.id)).is_true()
+	# Room opens: the walkers ahead board at once.
+	for p: Passenger in [lead, crowd]:
+		sim.files.leave(p.id)
+		sim.files.forget(p.id)
+		p.stage = Passenger.Stage.MADE
+	var out_of_order := 0
+	var admitted_walking_out := 0
+	for i in 40:
+		var was_out := (
+			sim.files.is_pending(out.id)
+			and sim.files.waiters.ids().has(out.id)
+			and not sim.files.waiters.at_spot(out)
+		)
+		_world.step()
+		if was_out and sim.files.door_of(out.id) != 0:
+			admitted_walking_out += 1
+		var ticks := sim.files.door_file(out.exit_object).map(
+			func(id: int) -> int:
+				return (
+					JourneyForecast
+					. own_times(sim, sim.get_passenger(id), sim.tick, false)["door_tick"]
+				)
+		)
+		for k in range(1, ticks.size()):
+			if ticks[k] < ticks[k - 1]:
+				out_of_order += 1
+				print(
+					(
+						"ORDER tick %d file %s door ticks %s"
+						% [sim.tick, sim.files.door_file(out.exit_object), ticks]
+					)
+				)
+	print(
+		(
+			"ORDER admitted while walking out %d, file out of forecast order %d"
+			% [admitted_walking_out, out_of_order]
+		)
+	)
+	assert_int(admitted_walking_out).is_equal(0)
+	assert_int(out_of_order).is_equal(0)
 
 
 ## The same walkers turned out in two fresh worlds take the same spots.
@@ -300,7 +365,15 @@ func test_bad_wait_spots_are_refused() -> void:
 	assert_int(list.size()).is_greater_equal(2)
 	_other = _load(saved)
 	var before := _signature(_other)
-	for name: String in ["walked past", "not a wait spot", "within the gap", "kept but filed"]:
+	var cases := [
+		"walked past",
+		"not a wait spot",
+		"within the gap",
+		"kept but filed",
+		"walking back from far off",
+		"kept walk past a spot",
+	]
+	for name: String in cases:
 		var bad := saved.duplicate(true)
 		_spoil(name, bad["passengers"]["boarding"]["waiters"], walkers[0].id)
 		var ok := _other.sim.from_snapshot(bad["passengers"])
@@ -354,6 +427,18 @@ static func _spoil(name: String, w: Array, filed: int) -> void:
 			w[1]["y"] = w[0]["y"]
 		"kept but filed":
 			w[0]["id"] = filed
+		"walking back from far off":
+			w[0]["out"] = false
+			w[0]["x"] = 100000
+			w[0]["y"] = 0
+			w[0]["at"] = 500
+		"kept walk past a spot":
+			# Beside-left of the same point (0.7 m) and two behind it: the walk
+			# to the far one passes 0.63 m from the near one's spot.
+			w[0]["x"] = -700
+			w[0]["y"] = 0
+			w[1]["x"] = -700
+			w[1]["y"] = 1400
 
 
 static func _boarding() -> PassengerTestWorld:
@@ -490,12 +575,16 @@ class _Spacing:
 	var _together := {}
 	var _last := {}
 
-	func _init(group: Array[Passenger], sim: PassengerSim = null) -> void:
+	## Takes every pair's distance before the first step: a pair within the gap
+	## is inherited, and each distance is the first one a later step compares.
+	func _init(group: Array[Passenger], sim: PassengerSim) -> void:
 		_group = group
 		for i in group.size():
 			for k in range(i + 1, group.size()):
 				var key := Vector2i(mini(group[i].id, group[k].id), maxi(group[i].id, group[k].id))
-				if sim == null or _apart(sim, group[i], group[k]) < FileWaiters.ROOM_M:
+				var d := _apart(sim, group[i], group[k])
+				_last[key] = d
+				if d < FileWaiters.ROOM_M:
 					_together[key] = true
 
 	func check(sim: PassengerSim) -> void:
