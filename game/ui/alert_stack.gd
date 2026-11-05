@@ -3,8 +3,9 @@ extends VBoxContainer
 ## The alert cards (HUD 1/7, decision hud-steal-list-self-clearing-alert-cards-
 ## money-hover-departu): a stack of small cards under the top HUD row, one per
 ## problem that is true right now, each clearing itself when its cause is
-## solved (AlertBoard). The causes are a full check-in or security queue and
-## passengers with no walkable route (AlertSources) and a dirty terminal
+## solved (AlertBoard). The causes are a full check-in or security queue,
+## passengers with no walkable route, passengers waiting for a gate place
+## (AlertSources) and a dirty terminal
 ## (DirtyAlert). Clicking a card glides the camera to the problem; the next
 ## click goes to the next place with the same problem (the next full desk, the
 ## next stuck passenger). The camera puts its focus in the middle of the screen
@@ -82,6 +83,7 @@ var _toggle := CheckButton.new()
 var _shown_revision := -1
 ## The no-route cause read at _scanned_tick; -1 means none kept.
 var _route_causes: Array[Dictionary] = []
+var _gate_causes: Array[Dictionary] = []
 var _scanned_tick := -1
 ## Key -> how many clicks its card has had, to step through its targets.
 var _clicks: Dictionary = {}
@@ -137,9 +139,11 @@ func refresh() -> void:
 		_scanned_tick = sim.tick
 		scans += 1
 		_route_causes = AlertSources.no_route(sim)
+		_gate_causes = AlertSources.gate_full(sim)
 	var causes: Array[Dictionary] = []
 	causes.append_array(AlertSources.queue_full(sim))
 	causes.append_array(_route_causes)
+	causes.append_array(_gate_causes)
 	causes.append_array(_dirty.cause())
 	_board.update(causes, sim.tick)
 	if _board.revision != _shown_revision:

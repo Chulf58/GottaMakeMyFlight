@@ -26,6 +26,18 @@ extends RefCounted
 ## admission, never interrupting a started one, and walks through the arch
 ## again from there. An incident resolves once (Passenger.incident_resolved).
 ##
+## Gate places (decision gate-full-design-passengers-reserve-a-gate-seat-or-
+## standing, points 2 and 3): the queue front is admitted through
+## ready_front() and admit_front(), which GateCapacity.admit_all() calls for
+## every station at once, so it can reserve a gate place first. Nobody is
+## cleared without a place (the host's `placed` check): a basic scanner's
+## passenger waits at the passage end, a lane's at the pickup cell. Positions
+## inside a lane are claimed before they are walked into and given up once
+## left: the arch walk stops on the arch cell until no one else is at the
+## pickup cell (in PICKUP, or stepping off it for the berth or the exit), and
+## a passenger sets off from the pickup cell to the exit only while no one
+## else is walking there.
+##
 ## Work phases (SCAN, UNPACK, REPACK, PICKUP) keep their remaining integer work
 ## on the passenger and lose rate() each tick, so a helper officer can raise
 ## the rate without a saved deadline going stale. Walking phases end
@@ -37,7 +49,8 @@ extends RefCounted
 ## `layout`, `tick`, get_passenger(id) and, unless `helper_from` names the
 ## station (a replay), `staff` (a StaffSim or null, read by rate()); bind()
 ## takes what to call when a
-## passenger is admitted and when it is cleared.
+## passenger is admitted, when it is cleared and to ask whether it holds a
+## gate place.
 
 enum Phase { NONE, SCAN, UNPACK, ARCH, TO_BERTH, REPACK, RETURN, PICKUP, LEAVE }
 
@@ -87,14 +100,19 @@ var helper_from := {}
 var _host: Object
 var _admitted: Callable
 var _cleared: Callable
+var _placed: Callable
 
 
 ## `admitted(p)` puts an admitted passenger in Stage.SECURITY; `cleared(p)`
-## sends a cleared one on to the gate. A null host lets go of it.
-func bind(host: Object, admitted := Callable(), cleared := Callable()) -> void:
+## sends a cleared one on to the gate; `placed(p)` says whether it may be
+## cleared (GateCapacity.placed(); always with none). A null host lets go of it.
+func bind(
+	host: Object, admitted := Callable(), cleared := Callable(), placed := Callable()
+) -> void:
 	_host = host
 	_admitted = admitted
 	_cleared = cleared
+	_placed = placed
 
 
 ## How much work a phase loses per tick at `station`: HELPER_RATE for a
@@ -223,33 +241,48 @@ func advance(station: int) -> void:
 
 
 ## Gives a free main position to the first returning passenger who stands at
-## the end of the return route, else (when `open`) to the queue front once it
-## stands on the first lane cell, unless it needs the berth and the berth is
-## taken. `queue` is PassengerSim's {"lane", "holding"} and `cells` the lane.
-func admit(station: int, queue: Dictionary, cells: Array, open: bool) -> void:
+## the end of the return route. True when the main position is taken (now or
+## already), so no queue front can be admitted on this tick.
+func admit_return(station: int) -> bool:
 	var record: Dictionary = records.get(station, {})
-	if not record.is_empty() and record["main"] != 0:
-		return
-	if not record.is_empty():
-		for id: int in record["returns"]:
-			var back: Passenger = _host.get_passenger(id)
-			if back.security_phase == Phase.RETURN and not back.is_moving():
-				(record["returns"] as Array).erase(id)
-				record["main"] = id
-				var path: Array[Vector2i] = [back.at]
-				path.append_array(_lane(station)["passage"])
-				_enter(back, Phase.ARCH, path)
-				return
+	if record.is_empty():
+		return false
+	if record["main"] != 0:
+		return true
+	for id: int in record["returns"]:
+		var back: Passenger = _host.get_passenger(id)
+		if back.security_phase == Phase.RETURN and not back.is_moving():
+			(record["returns"] as Array).erase(id)
+			record["main"] = id
+			var path: Array[Vector2i] = [back.at]
+			path.append_array(_arch_walk(station))
+			_enter(back, Phase.ARCH, path)
+			return true
+	return false
+
+
+## The queue front that admit_front() would admit (when `open`, once it
+## stands on the first lane cell, unless it needs the berth and the berth is
+## taken), or null. `queue` is PassengerSim's {"lane", "holding"} and `cells`
+## the lane. Call it after admit_return() came back false.
+func ready_front(station: int, queue: Dictionary, cells: Array, open: bool) -> Passenger:
 	var lane: Array = queue["lane"]
 	if not open or lane.is_empty():
-		return
+		return null
 	var front: Passenger = _host.get_passenger(lane[0])
 	if front.at != cells[0] or front.is_moving():
-		return
+		return null
+	var record: Dictionary = records.get(station, {})
+	if is_lane(station) and incident_open(front) and not record.is_empty() and record["berth"] != 0:
+		return null
+	return front
+
+
+## Admits the queue front ready_front() gave.
+func admit_front(station: int, queue: Dictionary) -> void:
+	var record: Dictionary = records.get(station, {})
+	var front: Passenger = _host.get_passenger((queue["lane"] as Array).pop_front())
 	var on_lane := is_lane(station)
-	if on_lane and incident_open(front) and not record.is_empty() and record["berth"] != 0:
-		return
-	lane.pop_front()
 	if record.is_empty():
 		record = {"admitted": [], "returns": [], "main": 0, "berth": 0}
 		records[station] = record
@@ -334,13 +367,17 @@ func _advance_one(station: int, record: Dictionary, p: Passenger) -> void:
 		Phase.SCAN:
 			if incident_open(p):
 				_enter(p, Phase.REPACK)
-			else:
+			elif _may_clear(p):
 				_clear(station, record, p)
 		Phase.UNPACK:
-			var passage: Array[Vector2i] = []
-			passage.assign(lane["passage"])
-			_enter(p, Phase.ARCH, passage)
+			_enter(p, Phase.ARCH, _arch_walk(station))
 		Phase.ARCH:
+			# Stopped on the arch cell: into the pickup cell once no one is there.
+			if p.at != lane["pickup"]:
+				if _pickup_free(record, lane["pickup"], p.id):
+					var step: Array[Vector2i] = [p.at, lane["pickup"]]
+					p.set_path(step)
+				return
 			record["main"] = 0
 			if incident_open(p):
 				var aside: Array[Vector2i] = [p.at, lane["berth"]]
@@ -350,19 +387,64 @@ func _advance_one(station: int, record: Dictionary, p: Passenger) -> void:
 		Phase.TO_BERTH:
 			_enter(p, Phase.REPACK)
 		Phase.REPACK:
-			p.incident_resolved = true
 			if not on_lane:
-				_clear(station, record, p)
+				if _may_clear(p):
+					p.incident_resolved = true
+					_clear(station, record, p)
 				return
+			p.incident_resolved = true
 			var back: Array[Vector2i] = [p.at]
 			back.append_array(lane["return_route"])
 			(record["returns"] as Array).append(p.id)
 			_enter(p, Phase.RETURN, back)
 		Phase.PICKUP:
-			var out: Array[Vector2i] = [p.at, lane["exit"]]
-			_enter(p, Phase.LEAVE, out)
+			if _may_clear(p) and _exit_free(record, p.id):
+				var out: Array[Vector2i] = [p.at, lane["exit"]]
+				_enter(p, Phase.LEAVE, out)
 		Phase.LEAVE:
 			_clear(station, record, p)
+
+
+## The arch walk of a lane: its passage up to the arch cell, short of the
+## pickup cell, which is claimed before it is walked into.
+func _arch_walk(station: int) -> Array[Vector2i]:
+	var walk: Array[Vector2i] = []
+	walk.assign(_lane(station)["passage"])
+	walk.pop_back()
+	return walk
+
+
+## Whether no one but `me` among `record`'s admitted passengers is at the
+## pickup cell `pickup`: in PICKUP, or stepping off it (LEAVE, TO_BERTH) and
+## not yet half way to the next cell, where it leaves the pickup cell.
+func _pickup_free(record: Dictionary, pickup: Vector2i, me: int) -> bool:
+	for id: int in record["admitted"]:
+		if id == me:
+			continue
+		var other: Passenger = _host.get_passenger(id)
+		if other.security_phase == Phase.PICKUP:
+			return false
+		var stepping := other.security_phase in [Phase.LEAVE, Phase.TO_BERTH]
+		if stepping and other.at == pickup:
+			if not other.is_moving():
+				return false
+			var next := other.path[other.path_index + 1]
+			if other.seg_mm * 2 < Passenger.segment_mm(pickup, next):
+				return false
+	return true
+
+
+## Whether no one but `me` is walking to the lane's exit cell.
+func _exit_free(record: Dictionary, me: int) -> bool:
+	for id: int in record["admitted"]:
+		if id != me and _host.get_passenger(id).security_phase == Phase.LEAVE:
+			return false
+	return true
+
+
+## Whether `p` may be cleared: it holds a gate place (the host's `placed`).
+func _may_clear(p: Passenger) -> bool:
+	return _placed.is_null() or _placed.call(p)
 
 
 func _lane(station: int) -> Dictionary:

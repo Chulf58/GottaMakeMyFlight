@@ -113,7 +113,9 @@ func test_the_forecast_equals_measured_clearance_at_the_basic_scanner() -> void:
 
 
 func test_the_forecast_equals_measured_clearance_at_the_lane() -> void:
-	_check_tier(true, 2197, LANE_PHASES)
+	# 2197 before the arch walk stopped on the arch cell to claim the pickup
+	# cell (decision gate-full-design-passengers-reserve-a-gate-seat-or-standing).
+	_check_tier(true, 2230, LANE_PHASES)
 
 
 static func _walk(mm: int) -> int:
@@ -143,14 +145,17 @@ func test_two_passengers_clear_at_hand_worked_ticks_at_the_basic_scanner() -> vo
 
 
 ## Lane, A with one bag and B with none: unpack, the passage to the pickup
-## cell (2000 mm), pickup and the step to the exit (1000 mm). B starts once A
-## has reached the pickup cell.
+## cell (1000 mm to the arch cell, where the walk stops to claim the pickup
+## cell, then 1000 mm on: decision gate-full-design-passengers-reserve-a-gate-
+## seat-or-standing, point 3), pickup and the step to the exit (1000 mm). B
+## starts once A has reached the pickup cell, and A is half way to the exit
+## before B gets to the arch.
 func test_two_passengers_clear_at_hand_worked_ticks_at_the_lane() -> void:
 	var at := _arrivals()
-	var a_past_arch := at.x + UNPACK + UNPACK_BAG + _walk(2000)
+	var a_past_arch := at.x + UNPACK + UNPACK_BAG + 2 * _walk(1000)
 	var a_clear := a_past_arch + PICKUP + PICKUP_BAG + _walk(1000)
 	var b_admitted := maxi(a_past_arch, at.y)
-	var b_clear := b_admitted + UNPACK + _walk(2000) + PICKUP + _walk(1000)
+	var b_clear := b_admitted + UNPACK + 2 * _walk(1000) + PICKUP + _walk(1000)
 	_check_two(true, Vector2i(a_clear, b_clear))
 
 

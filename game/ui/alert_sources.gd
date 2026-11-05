@@ -10,12 +10,15 @@ extends RefCounted
 ##   it (QUEUE_HOLD_TICKS each way).
 ## - passengers with no walkable route are the ones whose bubble says "I can't
 ##   get there" (Passenger.Stuck.NO_ROUTE): one card, pointing at them.
+## - passengers waiting for a gate place (GateCapacity.shortage()): one card,
+##   pointing at them.
 ## The dirty terminal card is DirtyAlert.cause(), which keeps its own band.
 ## It only reads the sim.
 
 const QUEUE_CHECKIN := &"queue_full_checkin"
 const QUEUE_SECURITY := &"queue_full_security"
 const NO_ROUTE := &"no_route"
+const GATE_FULL := &"gate_full"
 ## Three game minutes (one real second is one game minute at 1x).
 const QUEUE_HOLD_TICKS := 3 * GameCalendar.TICKS_PER_MINUTE
 ## A stuck passenger re-plans now and then; a minute each way keeps a passing
@@ -63,6 +66,34 @@ static func no_route(sim: PassengerSim) -> Array[Dictionary]:
 			"key": NO_ROUTE,
 			"title": "No walkable route",
 			"detail": "%s get where they are going" % who,
+			"targets": targets,
+			"show_after": ROUTE_HOLD_TICKS,
+			"clear_after": ROUTE_HOLD_TICKS,
+		}
+	]
+
+
+## The gate-full cause, or none: passengers waiting for a gate seat or
+## standing spot (GateCapacity.shortage()), at a security queue front, inside
+## security or on the way to the gate. One card, pointing at them. It is a
+## card only, with no sign in the world (the queue-full sign, decision
+## queue-full-marker-a-red-sign-with-a-queue-full-n-waiting-cap, still shows
+## over a security queue that fills behind a held front).
+static func gate_full(sim: PassengerSim) -> Array[Dictionary]:
+	var held := sim.gates.shortage(sim)
+	if held.is_empty():
+		return []
+	var targets: Array[Vector3] = []
+	for id in held:
+		if targets.size() < MAX_TARGETS:
+			var at := sim.world_position(sim.get_passenger(id))
+			targets.append(Vector3(at.x, 0.0, at.z))
+	var who := "1 passenger waits" if held.size() == 1 else "%d passengers wait" % held.size()
+	return [
+		{
+			"key": GATE_FULL,
+			"title": "Gate full",
+			"detail": "%s for a gate seat or a place to stand" % who,
 			"targets": targets,
 			"show_after": ROUTE_HOLD_TICKS,
 			"clear_after": ROUTE_HOLD_TICKS,

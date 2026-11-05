@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name StandingSpots
 extends RefCounted
 ## Where passengers stand at the gate when every gate seat is taken (decision
@@ -24,7 +25,11 @@ extends RefCounted
 ## the walk fills it, as it has no door to cross. The sim has
 ## one gate and no per-gate seat grouping, so every gate seat counts; with no
 ## seats the walk starts at the exit doors. Cells up to NEAR_STEPS steps out
-## are the gate area, and cells up to OVERFLOW_STEPS out are the overflow.
+## are the gate area, and every cell farther out is the overflow, with no step
+## cap (decision gate-full-design-passengers-reserve-a-gate-seat-or-standing,
+## point 1): up to OVERFLOW_STEPS out in any component the walk reaches, and
+## past that only in a trusted one, so an undivided check-in hall never gets
+## spots far from the gate.
 ## Claims only go to spots in the passenger's own route region (cells joined
 ## by can_passenger_route steps). A cell holds no spot when it is a queue lane, a
 ## scanner passage or exit, a security
@@ -34,7 +39,16 @@ extends RefCounted
 ## Passenger claims are separate from the spots: one spot per passenger and
 ## one passenger per spot. They are saved (to_list()) and restored as saved,
 ## never allocated again on load. A claim whose spot an edit removed is
-## dropped (drop_invalid()) and the passenger plans again.
+## dropped (drop_invalid()) and the passenger plans again. A reservation
+## (reserve(), GateCapacity) holds a spot for a passenger still inside
+## security: it is taken like a claim, but spot_of() does not report it, and
+## GateCapacity saves it.
+##
+## Roller spacing (decision gate-standing-spacing-standing-passengers-keep-
+## wider-apart-o): the lattice stays 0.6 m, but no spot within ROLLER_CLEAR_MM
+## of a taken spot whose passenger has a roller is free, and a passenger with
+## a roller takes no spot within ROLLER_CLEAR_MM of any taken spot, so a stood
+## roller (about 0.46 m out) never stands inside a neighbour.
 
 const NO_SPOT := -1
 const PITCH_MM := 600
@@ -44,8 +58,23 @@ const OFFSET_MM := 300
 const HALF_CELL_MM := 500
 ## Steps from a seat access cell that still count as the gate area.
 const NEAR_STEPS := 2
-## How far the overflow reaches, in steps from a seat access cell.
+## How far the overflow reaches into a component that is not trusted, in steps
+## from a seat access cell; in a trusted one it has no limit.
 const OVERFLOW_STEPS := 12
+## Taken spots closer than this to a roller passenger's spot are kept apart:
+## the four straight (0.6 m) and four diagonal (0.85 m) lattice neighbours.
+const ROLLER_CLEAR_MM := 900
+## The lattice offsets (columns, rows) closer than ROLLER_CLEAR_MM.
+const ROLLER_RING: Array[Vector2i] = [
+	Vector2i(-1, -1),
+	Vector2i(0, -1),
+	Vector2i(1, -1),
+	Vector2i(-1, 0),
+	Vector2i(1, 0),
+	Vector2i(-1, 1),
+	Vector2i(0, 1),
+	Vector2i(1, 1),
+]
 const NEAR := 0
 const OVERFLOW := 1
 ## The nearest free spots in the passenger's route region a claim tries a
@@ -67,11 +96,24 @@ const STEPS: Array[Vector2i] = [
 var spots: Dictionary = {}
 ## Set by an edit; the sim rebuilds on its next tick.
 var stale := true
+## Counts every change to the spots, claims and reservations, so a reader
+## can keep a figure worked out from them until the next change.
+var revision := 0
 ## Spot id -> passenger id.
 var _claims: Dictionary = {}
 ## Passenger id -> spot id.
 var _spot_of: Dictionary = {}
+## Spot id -> passenger id, and back, for reservations (reserve()).
+var _reserved: Dictionary = {}
+var _reserved_of: Dictionary = {}
+## Passenger ids with a roller among those holding a claim or reservation.
+var _rollers: Dictionary = {}
+## Lattice points per row of the grid the spots were derived from.
+var _per_row := 1
 var _ids: Array[int] = []
+## [from cell, gate cells] -> the spots of `from`'s route region in claim
+## order (_ordered()), free or not; derived again after a rebuild.
+var _orders: Dictionary = {}
 ## Cell -> route region: cells joined by BuildGrid.can_passenger_route
 ## steps (the steps
 ## passengers path over) share one, so a spot in another region cannot be
@@ -105,6 +147,7 @@ func rebuild(sim: PassengerSim) -> void:
 	var layout := sim.layout
 	spots.clear()
 	stale = false
+	revision += 1
 	_regions = _route_regions(grid)
 	var excluded := _excluded_cells(sim)
 	var seeds: Array[Vector2i] = []
@@ -116,16 +159,20 @@ func rebuild(sim: PassengerSim) -> void:
 			seeds.append(layout.door_cell(grid, door))
 	var components := _doorless_components(grid)
 	var trusted := _trusted_components(sim, components)
-	var depth := _walk_airside(grid, seeds, OVERFLOW_STEPS, components, trusted)
+	var depth := _walk_airside(grid, seeds, -1, components, trusted)
 	var per_row := columns(grid.size)
+	_per_row = per_row
 	for cell: Vector2i in depth:
 		if excluded.has(cell) or not grid.is_passenger_cell(cell) or grid.room_at(cell) != 0:
+			continue
+		if depth[cell] > OVERFLOW_STEPS and not trusted.has(components.get(cell, -1)):
 			continue
 		var tier := NEAR if depth[cell] <= NEAR_STEPS else OVERFLOW
 		for j in lattice_in(cell.y):
 			for i in lattice_in(cell.x):
 				var mm := Vector2i(OFFSET_MM + PITCH_MM * i, OFFSET_MM + PITCH_MM * j)
 				spots[j * per_row + i] = {"cell": cell, "mm": mm, "tier": tier}
+	_orders = {}
 	_ids.assign(spots.keys())
 	_ids.sort()
 
@@ -138,6 +185,11 @@ func spot_of(passenger: int) -> int:
 ## The passenger holding a spot, or 0.
 func holder_of(spot: int) -> int:
 	return _claims.get(spot, 0)
+
+
+## The route region of `cell` (cells joined by passenger route steps), or -1.
+func region_of(cell: Vector2i) -> int:
+	return _regions.get(cell, -1)
 
 
 func cell_of(spot: int) -> Vector2i:
@@ -182,12 +234,35 @@ func shortage(sim: PassengerSim) -> int:
 ## centre of `from` (squared mm), then the lower id. With `gate_cells` (the
 ## cells of the passenger's gate desk, GateReach) the nearest to the desk comes
 ## first, then the gate area before the overflow, then the lower id.
-func free_nearest(from: Vector2i, gate_cells: Array[Vector2i] = []) -> Array[int]:
+## Spots kept apart for a roller (ROLLER_CLEAR_MM) are not free; `roller`
+## says whether the passenger asking has one.
+func free_nearest(from: Vector2i, gate_cells: Array[Vector2i] = [], roller := false) -> Array[int]:
+	var out: Array[int] = []
+	for id in _ordered(from, gate_cells):
+		if is_free(id, roller):
+			out.append(id)
+	return out
+
+
+## The first of free_nearest(), or NO_SPOT.
+func first_free(from: Vector2i, gate_cells: Array[Vector2i] = [], roller := false) -> int:
+	for id in _ordered(from, gate_cells):
+		if is_free(id, roller):
+			return id
+	return NO_SPOT
+
+
+## Every spot in the route region of `from`, in free_nearest()'s order. The
+## order depends only on the spots, so it is kept until the next rebuild.
+func _ordered(from: Vector2i, gate_cells: Array[Vector2i]) -> Array[int]:
+	var key := [from, gate_cells]
+	if _orders.has(key):
+		return _orders[key]
 	var centre := from * CELL_MM + Vector2i(HALF_CELL_MM, HALF_CELL_MM)
 	var region: int = _regions.get(from, -1)
 	var keyed := []
 	for id in _ids:
-		if _claims.has(id) or _regions.get(spots[id]["cell"], -2) != region:
+		if _regions.get(spots[id]["cell"], -2) != region:
 			continue
 		if gate_cells.is_empty():
 			var d: Vector2i = spots[id]["mm"] - centre
@@ -198,6 +273,7 @@ func free_nearest(from: Vector2i, gate_cells: Array[Vector2i] = []) -> Array[int
 	var out: Array[int] = []
 	for entry in keyed:
 		out.append(entry[2])
+	_orders[key] = out
 	return out
 
 
@@ -210,20 +286,112 @@ func _gate_distance_sq(mm: Vector2i, cells: Array[Vector2i]) -> int:
 	return best
 
 
-func claim(passenger: int, spot: int) -> void:
+## Whether `spot` can be taken by a passenger with (`roller`) or without a
+## roller: neither claimed nor reserved, and no taken spot within
+## ROLLER_CLEAR_MM whose passenger has a roller, or any taken spot there when
+## this one has a roller.
+func is_free(spot: int, roller := false) -> bool:
+	if _claims.has(spot) or _reserved.has(spot):
+		return false
+	var col := posmod(spot, _per_row)
+	for off in ROLLER_RING:
+		if col + off.x < 0 or col + off.x >= _per_row:
+			continue
+		var holder: int = _claims.get(spot + off.y * _per_row + off.x, 0)
+		if holder == 0:
+			holder = _reserved.get(spot + off.y * _per_row + off.x, 0)
+		if holder != 0 and (roller or _rollers.has(holder)):
+			return false
+	return true
+
+
+## How many spots in the route region of `from` could still be taken by
+## anyone (is_free() for a roller passenger). Each new claim or reservation
+## takes at most 1 + ROLLER_RING.size() of them.
+func open_count(from: Vector2i) -> int:
+	var region: int = _regions.get(from, -1)
+	var count := 0
+	for id in _ids:
+		if _regions.get(spots[id]["cell"], -2) == region and is_free(id, true):
+			count += 1
+	return count
+
+
+## Claims `spot` for `passenger`, giving up its claim or reservation before.
+func claim(passenger: int, spot: int, roller := false) -> void:
 	release(passenger)
+	unreserve(passenger)
 	_claims[spot] = passenger
+	revision += 1
 	_spot_of[passenger] = spot
+	_note_roller(passenger, roller)
 
 
 func release(passenger: int) -> void:
 	if _spot_of.has(passenger):
+		revision += 1
 		_claims.erase(_spot_of[passenger])
 		_spot_of.erase(passenger)
+		if not _reserved_of.has(passenger):
+			_rollers.erase(passenger)
+
+
+## Holds `spot` for `passenger` while it is in security (GateCapacity).
+func reserve(passenger: int, spot: int, roller := false) -> void:
+	unreserve(passenger)
+	_reserved[spot] = passenger
+	revision += 1
+	_reserved_of[passenger] = spot
+	_note_roller(passenger, roller)
+
+
+## The spot reserved for a passenger, or NO_SPOT.
+func reserved_of(passenger: int) -> int:
+	return _reserved_of.get(passenger, NO_SPOT)
+
+
+func unreserve(passenger: int) -> void:
+	if _reserved_of.has(passenger):
+		revision += 1
+		_reserved.erase(_reserved_of[passenger])
+		_reserved_of.erase(passenger)
+		if not _spot_of.has(passenger):
+			_rollers.erase(passenger)
+
+
+## The reservations, passenger id -> spot id.
+func reservations() -> Dictionary:
+	return _reserved_of.duplicate()
+
+
+## A copy whose claims and reservations can change without touching these
+## (SecurityForecast); the spots themselves are shared.
+func copied() -> StandingSpots:
+	var out := StandingSpots.new()
+	out.spots = spots
+	out.stale = stale
+	out._ids = _ids
+	out._regions = _regions
+	out._orders = _orders
+	out._per_row = _per_row
+	out._claims = _claims.duplicate()
+	out._spot_of = _spot_of.duplicate()
+	out._reserved = _reserved.duplicate()
+	out._reserved_of = _reserved_of.duplicate()
+	out._rollers = _rollers.duplicate()
+	return out
+
+
+func _note_roller(passenger: int, roller: bool) -> void:
+	if roller:
+		_rollers[passenger] = true
+	else:
+		_rollers.erase(passenger)
 
 
 ## Releases every claim whose spot the last rebuild removed and returns those
-## passengers' ids in order.
+## passengers' ids in order. A reservation whose spot is gone is dropped too,
+## and not listed: GateCapacity reserves again.
 func drop_invalid() -> Array[int]:
 	var out: Array[int] = []
 	for passenger: int in _spot_of:
@@ -232,6 +400,9 @@ func drop_invalid() -> Array[int]:
 	out.sort()
 	for passenger in out:
 		release(passenger)
+	for passenger: int in _reserved_of.keys():
+		if not spots.has(_reserved_of[passenger]):
+			unreserve(passenger)
 	return out
 
 
@@ -288,12 +459,20 @@ func checked(list: Variant, by_id: Dictionary, every_standing: bool) -> Dictiona
 
 
 ## Replaces every claim with checked()'s claims.
-func restore(claims: Dictionary) -> void:
+## Reservations are dropped (GateCapacity restores its own); `by_id` (the
+## loaded passengers by id) says which holders have a roller.
+func restore(claims: Dictionary, by_id: Dictionary = {}) -> void:
+	revision += 1
 	_claims.clear()
 	_spot_of.clear()
+	_reserved.clear()
+	_reserved_of.clear()
+	_rollers.clear()
 	for passenger: int in claims:
 		_spot_of[passenger] = claims[passenger]
 		_claims[claims[passenger]] = passenger
+		if by_id.has(passenger) and ParkRecovery.has_roller(by_id[passenger]):
+			_rollers[passenger] = true
 
 
 ## Labels every passenger cell (BuildGrid.is_passenger_cell()) with its
