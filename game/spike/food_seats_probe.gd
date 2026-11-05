@@ -59,6 +59,11 @@ const ROLLER_STRIP_TICKS: Array[int] = [0, 7, 14, 18, 21, 24, 28, 34]
 ## at each end of the booth, held at the approach cell while the roller goes
 ## down (CafeSim.STEP_IN_HOLD_TICKS), then stepping in along the shuffle's path.
 const ROLLER_GUESTS := {"booth": [1, 3], "booth_alt": [0, 2]}
+## A booth roller guest's stand-up (CafeSim.up_ticks(): STAND_UP_TICKS 24, the
+## step out over its last 12, then ParkRecovery.UP_HOLD_TICKS picking the roller
+## up at the approach cell), strip frames by ticks into it.
+const UP_STRIP_TICKS: Array[int] = [0, 8, 14, 18, 23, 28, 33, 39]
+const UP_LIMIT_TICKS := 200
 const SETTLE_TICKS := 6
 const LIMIT_TICKS := 2400
 const MARGIN_PX := 8.0
@@ -218,6 +223,7 @@ func _guest(body: int, roller: bool) -> Passenger:
 
 func _watch(subject: String) -> void:
 	var bodies: Array = SUBJECTS[subject][3]
+	var risers: Array = []
 	for i in bodies.size():
 		var roller: bool = i in ROLLER_GUESTS.get(subject, [])
 		var p := _guest(bodies[i], roller)
@@ -254,6 +260,74 @@ func _watch(subject: String) -> void:
 		# Kept on its seat while the next guest comes.
 		visit.dwell_end = _clock.tick + 1000000
 		visit.deadline = _clock.tick + 1000000
+		if roller:
+			risers.append([label, p, visit])
+	# Once every seat is taken (so no newcomer takes a freed one), each roller
+	# guest stands up, steps out and picks its roller up.
+	for riser: Array in risers:
+		await _stand(riser[0], riser[1], riser[2])
+
+
+## Stands roller guest `p` up from its seat and steps it until it has set off
+## (or UP_LIMIT_TICKS), measuring the body and the roller inside the piece on
+## every frame and taking the strip at UP_STRIP_TICKS.
+func _stand(label: String, p: Passenger, visit: CafeVisit) -> void:
+	var piece := (_mode.get_node("BuildView") as BuildView).object_node(visit.seat["object_id"])
+	var frame := _seat_frame(visit.seat)
+	var islands := _islands(piece, frame)
+	_aim(frame, visit.seat)
+	visit.dwell_end = _clock.tick + 1
+	var strip: Array[Image] = []
+	var worst := {}
+	var bag_worst := {}
+	var frames := 0
+	var up_from := -1
+	var missed := 0
+	var stop := _clock.tick + UP_LIMIT_TICKS
+	while _clock.tick < stop:
+		_clock.advance(SimClock.STEP / 3.0)
+		await _frames(1)
+		if p.stage == Passenger.Stage.CAFE_SEATED:
+			continue
+		if p.stage != Passenger.Stage.CAFE_STANDING_UP:
+			break
+		if up_from < 0:
+			up_from = p.stage_tick
+		var body := _views.node_for(p.id)
+		var bag := _bag_of(p)
+		if body == null or bag == null:
+			_invalid("%s: no body or roller drawn standing up" % label)
+			return
+		var k := _clock.tick - up_from
+		frames += 1
+		var hits := _overlap(_points(body), islands)
+		if not hits.is_empty():
+			worst["k%d+%.2f" % [k, _clock.alpha]] = hits
+		var in_piece := _overlap(_mesh_points(bag), islands)
+		if not in_piece.is_empty():
+			bag_worst["k%d+%.2f" % [k, _clock.alpha]] = in_piece
+		if strip.size() < UP_STRIP_TICKS.size() and k >= UP_STRIP_TICKS[strip.size()]:
+			var shot := await _shot("%s_up_k%d" % [label, k], body, bag)
+			strip.append(shot)
+			missed += 1 if shot == null else 0
+	print("UP_INSIDE %s frames=%d frames_inside=%d %s" % [label, frames, worst.size(), worst])
+	print(
+		(
+			"UP_BAG_INSIDE %s frames=%d frames_inside=%d %s"
+			% [label, frames, bag_worst.size(), bag_worst]
+		)
+	)
+	if up_from < 0 or not worst.is_empty() or not bag_worst.is_empty():
+		_invalid("%s: no stand-up, or the body or roller inside the piece standing up" % label)
+	if strip.size() < UP_STRIP_TICKS.size() or missed > 0:
+		_invalid(
+			(
+				"%s: %d of %d stand-up frames, %d unproven"
+				% [label, strip.size(), UP_STRIP_TICKS.size(), missed]
+			)
+		)
+		return
+	_save(_row(strip), "standup_%s_strip.png" % label)
 
 
 ## Steps the guest from its walk to the seat to SETTLE_TICKS after it is
@@ -320,6 +394,8 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 		)
 	if not worst.is_empty():
 		_invalid("%s: body points inside the piece while sitting down or seated" % label)
+	if not bag_worst.is_empty():
+		_invalid("%s: roller points inside the piece while sitting down or seated" % label)
 	var body := _views.node_for(p.id)
 	_seated_checks(label, body, islands, frame)
 	var still := await _shot("%s_seated" % label, body, _bag_of(p) if roller else null)

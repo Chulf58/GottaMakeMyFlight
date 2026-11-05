@@ -183,7 +183,10 @@ static func _visit_problem(
 			"sitting down did not start by the saved tick or has run out"
 		],
 		[
-			not standing or _runs_from(p.stage_tick, CafeSim.up_ticks(p), tick),
+			(
+				not standing
+				or _runs_from(p.stage_tick, CafeSim.up_ticks(p, _piece_of(visit, seat, grid)), tick)
+			),
 			"getting up did not start by the saved tick or has run out"
 		],
 	]

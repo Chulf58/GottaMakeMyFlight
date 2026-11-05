@@ -373,6 +373,100 @@ func test_only_a_roller_guest_at_a_booth_holds_its_step_in() -> void:
 	assert_int((made[0] as PassengerTestWorld).sim.cafes.hold_now(p)).is_equal(0)
 
 
+## A booth roller guest stands up and steps out as one with no roller does,
+## then stands at the approach cell for ParkRecovery.UP_HOLD_TICKS picking its
+## roller up (CafeSim.up_ticks() for the booth), and the visit plan counts it.
+## Control: it started on the seat root and the step out moved it off it.
+func test_a_booth_roller_guest_steps_out_then_picks_its_roller_up() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var visit := world.sim.cafes.visit_of(p.id)
+	while p.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < 4000:
+		world.step()
+	visit.dwell_end = world.clock.tick + 1
+	while p.stage != Passenger.Stage.CAFE_STANDING_UP and world.clock.tick < 4000:
+		world.step()
+	var up := CafeSim.up_ticks(p, visit.piece)
+	assert_int(up).is_equal(PassengerSim.STAND_UP_TICKS + ParkRecovery.UP_HOLD_TICKS)
+	assert_int(CafeSim.up_ticks(p)).is_equal(up + CafeSim.SHUFFLE_TICKS)
+	var path := _track(world, p, Passenger.Stage.CAFE_STANDING_UP, up)
+	print("booth roller stand-up [ahead, across] per tick: %s" % [path])
+	assert_int(path.size()).is_equal(up)
+	assert_float(path[0].length()).is_less(0.001)
+	var held := path.slice(path.size() - ParkRecovery.UP_HOLD_TICKS)
+	for at: Vector2 in held:
+		assert_float(at.distance_to(Vector2(-0.45, 1.0))).is_less(0.001)
+	_assert_clear_of_the_end_panel(path)
+	var legs := {
+		"pre_ticks": 0,
+		"to_queue_mm": 0,
+		"order_ticks": 0,
+		"to_seat_mm": 0,
+		"dwell_ticks": 0,
+		"leave_cell": visit.seat["approach"],
+		"resume_stage": Passenger.Stage.TO_GATE,
+	}
+	# The plan's "up_ticks" leg is read (a boarding wait can hide a 12-tick
+	# difference in the arrival, so the leg is made long enough to show).
+	legs["up_ticks"] = up
+	var booth := CafeForecast.visit_arrival(world.sim, p, legs)
+	legs["up_ticks"] = up + 2000
+	assert_int(CafeForecast.visit_arrival(world.sim, p, legs)).is_greater(booth)
+
+
+## A booth roller lies fixed in the world at the approach cell where it was set
+## down, on the side away from the booth (RollerPark.chair_front(),
+## floor_spot()), on every tick of the sit-down and seated; never in the body's
+## frame, which carried it along the step in.
+func test_a_booth_roller_lies_fixed_at_the_approach_on_its_open_side() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var visit := world.sim.cafes.visit_of(p.id)
+	var approach := world.grid.cell_to_world(visit.seat["approach"])
+	var root := BuildObjectDef.seat_root_world(world.grid, visit.seat)
+	var kind := SecurityLooks.Kind.ROLLER
+	var checked := 0
+	for k in CafeSim.sit_ticks(p, visit.piece) + 10:
+		var front: Variant = RollerPark.chair_front(world.sim, p, kind)
+		assert_bool(front != null).override_failure_message("no fixed frame").is_true()
+		if front == null:
+			return
+		var spot := (front as Transform3D) * RollerPark.floor_spot(world.sim, p, kind, 0, 0, 1)
+		assert_vector((front as Transform3D).origin).is_equal_approx(approach, Vector3.ONE * 0.001)
+		var lie := _seat_xy(world, visit.seat, spot.origin)
+		var why := "the roller lies at %s, towards the booth" % [lie]
+		assert_float(lie.y).override_failure_message(why).is_greater(1.2)
+		# Inside the approach cell (1 m wide, centred 1 m across), with the
+		# roller's 0.33 m width.
+		assert_float(lie.y).is_less(1.5 - 0.165)
+		assert_float(spot.origin.distance_to(root)).is_greater(approach.distance_to(root))
+		checked += 1
+		world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SEATED)
+	assert_int(checked).is_greater(CafeSim.STEP_IN_HOLD_TICKS)
+
+
+## A booth roller guest turned back in its step-in hold (the table moved) is
+## still at the approach cell: its stand-up starts there, with no jump onto
+## the seat. Mirrors the turn-back's stage tick (CafeSim._relocates()).
+func test_a_booth_roller_guest_turned_back_in_its_hold_stays_at_the_approach() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var visit := world.sim.cafes.visit_of(p.id)
+	var approach := world.grid.cell_to_world(visit.seat["approach"])
+	for n in 5:
+		world.step()
+	p.stage = Passenger.Stage.CAFE_STANDING_UP
+	p.stage_tick = world.clock.tick - PassengerSim.STAND_UP_TICKS
+	for n in CafeSim.up_ticks(p, visit.piece) - PassengerSim.STAND_UP_TICKS:
+		var at := world.sim.cafes.seat_position(p)
+		assert_float(Vector2(at.x - approach.x, at.z - approach.z).length()).is_less(0.001)
+		p.stage_tick -= 1
+
+
 func test_a_cafe_table_guest_keeps_the_straight_shuffle() -> void:
 	var made := _sitting(&"cafe_table")
 	var path := _track(made[0], made[1], Passenger.Stage.CAFE_SITTING_DOWN, CafeSim.SHUFFLE_TICKS)

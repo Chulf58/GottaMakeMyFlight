@@ -436,7 +436,7 @@ func step(p: Passenger) -> void:
 				visit.outcome = CafeVisit.Outcome.COMPLETE
 				_stand(p, visit)
 		Passenger.Stage.CAFE_STANDING_UP:
-			if _sim.tick - p.stage_tick >= up_ticks(p):
+			if _sim.tick - p.stage_tick >= up_ticks(p, visit.piece):
 				if visit.relocation != null and visit.relocation.returns():
 					_head_to_seat(p, visit)
 				else:
@@ -480,7 +480,10 @@ func seat_position(p: Passenger) -> Vector3:
 				visit, approach, root, clampf(spent / float(SHUFFLE_TICKS), 0.0, 1.0)
 			)
 		Passenger.Stage.CAFE_STANDING_UP:
-			var left := up_ticks(p) - (_sim.tick - p.stage_tick)
+			var left := up_ticks(p, visit.piece) - (_sim.tick - p.stage_tick)
+			# At the approach cell through a booth roller guest's pick-up there.
+			if step_in_hold(p, visit.piece) > 0:
+				left -= ParkRecovery.UP_HOLD_TICKS
 			return _shuffle_at(visit, approach, root, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
 	return root
 
@@ -661,6 +664,7 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 			"order_ticks": _order_eta(cafe["room"], counter["id"]) + QUEUE_LAG_TICKS,
 			"to_seat_mm": 0 if walk_on else seat["mm"],
 			"sit_ticks": 0 if walk_on else sit_ticks(p, _placement_of(seat)),
+			"up_ticks": 0 if walk_on else up_ticks(p, _placement_of(seat)),
 			"dwell_ticks": RoomTypes.get_type(cafe["type"]).dwell_ticks,
 			"leave_cell": lane[0] if walk_on else seat["approach"],
 			"resume_stage": _resume_stage(p),
@@ -764,7 +768,7 @@ func _leave_cell(p: Passenger, visit: CafeVisit) -> Vector2i:
 ## Ticks a guest takes to set off from the leave cell: standing up from a
 ## seat (up_ticks()), nothing for a walk-on guest.
 func _leave_delay(p: Passenger, visit: CafeVisit) -> int:
-	return 0 if visit.walk_on() else up_ticks(p)
+	return 0 if visit.walk_on() else up_ticks(p, visit.piece)
 
 
 ## The ticks `p` stands at the approach cell at the start of its sit-down at a
@@ -800,11 +804,33 @@ func hold_now(p: Passenger) -> int:
 ## standing-up-with-a-roller-stand-up-then-pick-up-then-walk, board 2c659e42).
 ## Its floor bag lies in the body's frame (SecurityLooks.floor_spot()), so a
 ## shuffle before the pick-up would slide it along the floor with the body.
-## The sim, the cafe forecast and the view (seat_position()) all read it here.
-static func up_ticks(p: Passenger) -> int:
+## At a seat of a STEP_IN_PATH `piece` (a booth) the roller lies fixed at the
+## approach cell where it was set down (RollerPark.chair_front()), so the guest
+## stands up and steps out as one with no roller does, then picks it up there
+## over UP_HOLD_TICKS (board 5dc41129). The sim, the cafe forecast and the view
+## (seat_position()) all read it here.
+static func up_ticks(p: Passenger, piece := {}) -> int:
 	if not ParkRecovery.has_roller(p):
 		return PassengerSim.STAND_UP_TICKS
+	if step_in_hold(p, piece) > 0:
+		return PassengerSim.STAND_UP_TICKS + ParkRecovery.UP_HOLD_TICKS
 	return PassengerSim.STAND_UP_TICKS + ParkRecovery.UP_HOLD_TICKS + SHUFFLE_TICKS
+
+
+## The world spot of the root of `p`'s seat; its grid position with no seat.
+func seat_root(p: Passenger) -> Vector3:
+	var visit: CafeVisit = _visits.get(p.id)
+	if visit == null or visit.seat.is_empty():
+		return _sim.grid.origin + Vector3(p.grid_position().x, 0.0, p.grid_position().y)
+	return BuildObjectDef.seat_root_world(_sim.grid, visit.seat)
+
+
+## Whether `p` is a guest with a roller at a booth seat (step_in_hold()), whose
+## roller lies fixed at the seat's approach cell while it sits; false with no
+## visit.
+func booth_roller(p: Passenger) -> bool:
+	var visit: CafeVisit = _visits.get(p.id)
+	return visit != null and not visit.seat.is_empty() and step_in_hold(p, visit.piece) > 0
 
 
 ## The deadline of a visit under way, forecast again with the queues and
@@ -1031,7 +1057,7 @@ func _head_to_seat(p: Passenger, visit: CafeVisit) -> void:
 	# itself step() sends it off early, short-paid, instead of finishing.
 	ticks += 1
 	var arrival := VisitForecast.arrival(
-		_sim, p, ticks, seat["approach"], up_ticks(p), visit.resume_stage
+		_sim, p, ticks, seat["approach"], up_ticks(p, piece), visit.resume_stage
 	)
 	if not VisitForecast.admits(_sim, p, arrival):
 		_abandon(p, visit)
