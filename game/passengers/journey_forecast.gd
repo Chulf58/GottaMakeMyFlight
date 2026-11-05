@@ -74,7 +74,11 @@ static func arrival_from(
 ## the apron), "plane_tick": the tick it reaches the plane door, "plane": the
 ## plane's key (BoardingFiles.plane_key(), null with no walk outside), "trail":
 ## the distance out on the apron}; empty when it has no way to the plane.
-static func own_times(sim: PassengerSim, p: Passenger, now: int, routed: bool) -> Dictionary:
+## `cleared`, when 0 or more, is its SecurityForecast.eta() already worked out
+## (BoardingFiles.known() replays each station once for all it holds).
+static func own_times(
+	sim: PassengerSim, p: Passenger, now: int, routed: bool, cleared := -1
+) -> Dictionary:
 	if p.stage == Passenger.Stage.APRON:
 		var plane: Variant = null if p.apron.is_empty() else BoardingFiles.plane_key(p.apron.back())
 		return {
@@ -92,7 +96,7 @@ static func own_times(sim: PassengerSim, p: Passenger, now: int, routed: bool) -
 			now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id) + apron["mm"]),
 			apron["plane"]
 		)
-	var leg := _to_gate(sim, p, routed)
+	var leg := _to_gate(sim, p, routed, cleared)
 	if leg.x >= NEVER:
 		return {}
 	var leave := maxi(now + leg.x, p.boarding_tick)
@@ -120,7 +124,8 @@ static func _times(door: int, door_tick: int, plane_tick: int, plane: Variant) -
 
 
 ## Ticks until the passenger stands at the gate (x), and the gate cell (y, z).
-static func _to_gate(sim: PassengerSim, p: Passenger, routed: bool) -> Vector3i:
+## `cleared` as own_times() takes it.
+static func _to_gate(sim: PassengerSim, p: Passenger, routed: bool, cleared := -1) -> Vector3i:
 	var pos := p.path_end()
 	var mm := p.remaining_mm()
 	var wait := 0
@@ -143,7 +148,7 @@ static func _to_gate(sim: PassengerSim, p: Passenger, routed: bool) -> Vector3i:
 	elif leg == StageKinds.Leg.SECURITY:
 		# Walking to, queuing at or inside its station: the replay walks it
 		# all, up to the security exit.
-		var clear := SecurityForecast.eta(sim, p)
+		var clear := cleared if cleared >= 0 else SecurityForecast.eta(sim, p)
 		if clear >= NEVER:
 			return Vector3i(NEVER, pos.x, pos.y)
 		wait += clear

@@ -453,25 +453,56 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 ## once per tick: every passenger out to the plane, airside and not on a
 ## facility visit, or admitted to a security station. One being screened can
 ## come out onto a file's way just ahead of a filed walker and hold it back
-## (board 54c9e0ce), so it is known from its security forecast
-## (SecurityForecast.eta()). Those still walking to or queuing for security
-## are left out: a replay each per tick costs too much under a queue.
+## (board 54c9e0ce), so it is known from its security forecast, one replay
+## per station for all it holds (_cleared_at()). Those still walking to or
+## queuing for security are left out.
 func known(sim: PassengerSim) -> Array:
 	if _known_tick == sim.tick:
 		return _known
 	_known_tick = sim.tick
 	_known = []
+	var screened := {}
+	for id in sim.passenger_ids():
+		var q := sim.get_passenger(id)
+		if q.stage == Passenger.Stage.SECURITY and q.station != 0:
+			var ids: Array = screened.get(q.station, [])
+			ids.append(id)
+			screened[q.station] = ids
+	var cleared := {}
+	for station: int in screened:
+		cleared.merge(_cleared_at(sim, station, screened[station]))
 	for id in sim.passenger_ids():
 		var q := sim.get_passenger(id)
 		var leg := StageKinds.leg(q.stage)
 		var out := leg == StageKinds.Leg.AIRSIDE or leg == StageKinds.Leg.APRON
 		if q.is_done() or not (out or q.stage == Passenger.Stage.SECURITY):
 			continue
-		var own := JourneyForecast.own_times(sim, q, sim.tick, false)
+		var own := JourneyForecast.own_times(sim, q, sim.tick, false, cleared.get(id, -1))
 		if not own.is_empty():
 			own["id"] = id
 			_known.append(own)
 	return _known
+
+
+## SecurityForecast.eta() of each of `ids`, all admitted to `station`, from one
+## replay of the station: id -> ticks until cleared (JourneyForecast.NEVER for
+## one it never clears), ids left out when the station cannot be used (eta()
+## then answers alone). It plays the replay as SecurityForecast.clearance()
+## does for one admitted passenger, run on until the last is cleared; the
+## replay is the same whichever passenger it is run for, so each answer is
+## eta()'s. Kept here while SecurityForecast has no call for many passengers.
+static func _cleared_at(sim: PassengerSim, station: int, ids: Array) -> Dictionary:
+	var out := {}
+	if not sim.layout.passages.has(station) or not sim.layout.is_usable(station):
+		return out
+	var replay := SecurityForecast.new()
+	replay._setup(sim, station)
+	for id: int in ids:
+		if replay._units.has(id):
+			out[id] = replay._run(id)
+	# The runtime holds the replay as its host: let go, or neither is freed.
+	replay._runtime.bind(null)
+	return out
 
 
 ## `p`'s walk left in its door file (door_left()), with its walk back from a

@@ -161,3 +161,42 @@ func test_a_full_boarding_with_doors_later_keeps_its_gaps_and_forecasts() -> voi
 func _filed(p: Passenger) -> bool:
 	var files := _world.sim.files
 	return TestBoardingFiles.heading_out(p) and files.holds(p.id) and not files.is_pending(p.id)
+
+
+## The forecast's known walkers being screened are timed by one replay per
+## station (BoardingFiles._cleared_at()): each gets the same own times as its
+## own SecurityForecast.eta() gives, on every tick while a security lane
+## screens a stream of passengers, and some ticks have two or more screened.
+func test_one_replay_per_station_times_each_screened_walker_as_its_own_does() -> void:
+	var lane := SecurityTestWorld.make(true)
+	_world = lane.world
+	var traits := []
+	for i in 8:
+		traits.append([2 - i % 2, i == 0, i == 3])
+	var ids := lane.send_all(traits)
+	var compared := 0
+	var shared := 0
+	var differ: Array[String] = []
+	var all_cleared := func() -> bool:
+		return ids.all(func(id: int) -> bool: return lane.cleared.has(id))
+	while not all_cleared.call() and _world.clock.tick < 3000:
+		_world.step()
+		# Worked out afresh now, not as a forecast earlier in the tick saw it.
+		_world.sim.files.clear_derived()
+		var screened := 0
+		for own: Dictionary in _world.sim.files.known(_world.sim):
+			var q := _world.passenger(own["id"])
+			if q.stage != Passenger.Stage.SECURITY:
+				continue
+			screened += 1
+			var alone := JourneyForecast.own_times(_world.sim, q, _world.clock.tick, false)
+			alone["id"] = q.id
+			compared += 1
+			if alone != own:
+				differ.append("tick %d id %d: %s, alone %s" % [_world.clock.tick, q.id, own, alone])
+		shared += int(screened >= 2)
+	print("compared %d screened walkers, %d ticks with two or more" % [compared, shared])
+	assert_bool(all_cleared.call()).is_true()
+	assert_array(differ).is_empty()
+	assert_int(compared).is_greater(0)
+	assert_int(shared).is_greater(0)
