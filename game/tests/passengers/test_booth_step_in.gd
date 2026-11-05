@@ -26,6 +26,11 @@ const PANEL_FACE_M := 0.42
 ## From this share of the sit_down clip on, the hips are going back (the clip's
 ## Hips bone is 0.036 m back of its 0.53 m at 0.17, 0.08 m at 0.25).
 const HIPS_BACK_SHARE := 0.1
+## The stand_up clip brings the hips forward from about its tick 18 (the
+## windowed probe's UP_INSIDE read 4 to 18 points in the end panel at k18 and
+## k19 at five of sixteen booth guests, board 17b87a51): the body must be past
+## the panel by then.
+const HIPS_FORWARD_TICK := 18
 ## How far a roller guest's drawn spot may be from a guest's with no roller at
 ## the same share of the sit_down clip.
 const SAME_SPOT_M := 0.02
@@ -202,11 +207,45 @@ func test_a_booth_guest_stands_up_along_the_same_path() -> void:
 	var steps := _assert_no_lunge(path, 1.6)
 	print("booth stand-up [ahead, across] per tick: %s steps %s" % [path, steps])
 	assert_float(path[0].length()).is_less(0.001)
-	# The sim's last spot standing up: a tick's step from the approach cell.
-	assert_float(path[-2].distance_to(path[-1])).is_greater(0.05)
+	# Out at the approach cell STAND_UP_LEAD_TICKS before the stand-up ends.
+	var lead := CafeSim.STAND_UP_LEAD_TICKS
+	assert_int(lead).is_greater(0)
+	assert_float(path[-1 - lead].distance_to(path[-1])).is_less(0.001)
+	assert_float(path[-2 - lead].distance_to(path[-1])).is_greater(0.05)
 	assert_float(path[-1].x).is_less(-0.4)
 	assert_float(path[-1].y).is_greater(0.9)
 	_assert_clear_of_the_end_panel(path)
+
+
+## Stepping out with no roller, a booth guest is past the end panel (its centre beyond the
+## panel's face plus the body's half width) from the tick the stand_up clip
+## brings the hips forward on. Control: the guest started on the seat root and
+## was beside the panel in the ticks before, and moved out of the booth.
+func test_a_booth_guest_steps_out_past_the_end_panel_before_the_hips_come_forward() -> void:
+	var made := _sitting(&"restaurant_booth")
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	while p.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < 4000:
+		world.step()
+	world.sim.cafes.visit_of(p.id).dwell_end = world.clock.tick + 1
+	while p.stage != Passenger.Stage.CAFE_STANDING_UP and world.clock.tick < 4000:
+		world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_STANDING_UP)
+	var path := _track(world, p, Passenger.Stage.CAFE_STANDING_UP, CafeSim.up_ticks(p))
+	assert_int(path.size()).is_equal(PassengerSim.STAND_UP_TICKS)
+	assert_float(path[0].length()).is_less(0.001)
+	var beside := 0
+	for k in path.size():
+		var at := path[k]
+		if k < HIPS_FORWARD_TICK:
+			beside += 1 if at.y < PANEL_FACE_M + BODY_HALF_M else 0
+			continue
+		var why := "tick %d of the stand-up the body is %.2f m across, beside the panel" % [k, at.y]
+		assert_float(at.y).override_failure_message(why).is_greater_equal(
+			PANEL_FACE_M + BODY_HALF_M
+		)
+	assert_int(beside).is_greater(2)
+	assert_float(path[-1].y).is_greater(0.9)
 
 
 ## Drawn as PassengerViews draws it: the sim's spot with the cafe seat step
