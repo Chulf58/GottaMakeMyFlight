@@ -354,10 +354,10 @@ static func _pulls_roller(p: Passenger) -> bool:
 
 
 ## A lane move-up worth a plate: `id` sets off behind a walker pulling a
-## roller at a desk, neither held nor out of order.
+## roller in a lane of the place, neither held nor out of order.
 func _candidate(lane: Array[int], id: int) -> void:
 	var i := lane.find(id)
-	if not _plate_on or _plated or not _shot.is_empty() or i <= 0 or _place != "checkin":
+	if not _plate_on or _plated or not _shot.is_empty() or i <= 0:
 		return
 	var ahead := lane[i - 1]
 	if _held.has(id) or _held.has(ahead) or _order.has(id) or _order.has(ahead):
@@ -367,7 +367,7 @@ func _candidate(lane: Array[int], id: int) -> void:
 		_shot = [_clock.tick, id, ahead]
 
 
-## A plate of a check-in move-up: `id` walking up behind `ahead`, whose roller
+## A plate of a lane move-up at the place: `id` walking up behind `ahead`, whose roller
 ## stands beside it. Before the save the follower's feet and head, the roller
 ## and the head ahead project inside the frame by MARGIN_PX, and sight lines
 ## from the camera land first on the follower's body and on the roller
@@ -446,7 +446,7 @@ func _plate(id: int, ahead: int) -> void:
 		return
 	var img := await PlateSight.grab(self)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_REL))
-	var file := "/checkin_moveup_s%d_t%d.png" % [_seed, _clock.tick]
+	var file := "/%s_moveup_s%d_t%d.png" % [_place, _seed, _clock.tick]
 	var path := ProjectSettings.globalize_path(OUT_REL + file)
 	img.save_png(path)
 	print("PLATE saved %s tick %d follower %d ahead %d" % [path, _clock.tick, id, ahead])
