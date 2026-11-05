@@ -419,7 +419,7 @@ func station_eta(station: int, walk_mm: int, p: Passenger = null) -> int:
 		if candidate == null:
 			candidate = Passenger.new()
 			candidate.id = _next_id
-		var join := tick + JourneyForecast.walk_ticks(walk_mm) + 1
+		var join := tick + candidate.pace_ticks(walk_mm) + 1
 		return SecurityForecast.clearance(self, station, candidate, join)
 	var waiting := _station_slot(station)
 	var left := 0
@@ -994,7 +994,7 @@ func _move(p: Passenger) -> void:
 	# A walker outside with no walk left stands where it is (OutsideWalks).
 	if StageKinds.is_outside(p.stage) and p.stuck == Passenger.Stuck.NO_ROUTE:
 		return
-	var speed := RUN_MM if p.late else WALK_MM
+	var speed := p.pace_mm()
 	if files.holds(p.id) or files.waiters.back_mm(p.id) > 0:
 		speed = files.step_of(self, p, speed)
 	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:

@@ -226,6 +226,18 @@ func remaining_mm() -> int:
 	return maxi(mm, 0)
 
 
+## How far the sim walks it in a tick: at a run while late (PassengerSim._move(),
+## SecurityForecast).
+func pace_mm() -> int:
+	return PassengerSim.RUN_MM if late else PassengerSim.WALK_MM
+
+
+## The ticks it takes to walk `mm` at pace_mm().
+func pace_ticks(mm: int) -> int:
+	@warning_ignore("integer_division")
+	return (maxi(mm, 0) + pace_mm() - 1) / pace_mm()
+
+
 ## Walks `mm` along the path. Leftover distance at the end is dropped.
 func walk(mm: int) -> void:
 	if not is_moving():
