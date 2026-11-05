@@ -277,3 +277,18 @@ func test_a_load_in_the_hold_of_a_cafe_sit_down_puts_the_body_at_the_approach() 
 	assert_int(held).is_greater(0)
 	assert_vector(chair_front).is_equal_approx(approach, Vector3.ONE * 0.001)
 	assert_float(drawn).is_less(0.02)
+
+
+## At a gate chair the start of the roller's set-down from the pull stays in
+## the body's frame, as on main: no fixed start and no wall faces
+## (BoothRoller.fix_start() is for a booth seat only). Control: the park was
+## stamped.
+func test_a_gate_chair_set_down_starts_in_the_body_frame() -> void:
+	var p := await _sitting_walker(true)
+	for n in 3:
+		await _tick()
+	var bag := _views.carry_on_props().bag_state(p.id, 0)
+	print("gate chair set-down: park %s, fixed start %s" % [bag.get("park"), bag.has("from_world")])
+	assert_bool(bag.get("park", false)).is_true()
+	assert_bool(bag.has("from_world")).is_false()
+	assert_bool(bag.has("wall_faces")).is_false()

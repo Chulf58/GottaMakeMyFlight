@@ -423,9 +423,11 @@ func test_a_booth_roller_guest_steps_out_then_picks_its_roller_up() -> void:
 ## A booth roller lies fixed in the world at the approach cell where it was set
 ## down (RollerPark.chair_front(), floor_spot()), on every tick of the
 ## sit-down and seated, never in the body's frame, which carried it along the
-## step in: inside the cell, its outer edge inside a wall's face where a wall
-## stands on that edge, clear of the end panel and of the guest's feet, and on
-## the open side unless a wall stands there (BoothRoller).
+## step in: on its hand's side unless a wall stands on that edge of the cell,
+## inside the cell (inside the wall's face where a wall stands), clear of the
+## end panel and of the guest's feet (BoothRoller). The walls are read from
+## the grid here; control: the layout has a booth seat with its open side
+## walled.
 func test_a_booth_roller_lies_fixed_at_the_approach_inside_its_cell() -> void:
 	var made := _sitting(&"restaurant_booth", true)
 	var world: PassengerTestWorld = made[0]
@@ -433,6 +435,14 @@ func test_a_booth_roller_lies_fixed_at_the_approach_inside_its_cell() -> void:
 	var visit := world.sim.cafes.visit_of(p.id)
 	var approach := world.grid.cell_to_world(visit.seat["approach"])
 	var kind := SecurityLooks.Kind.ROLLER
+	var walled_open := 0
+	for seat: Dictionary in world.sim.cafes.layout.cafe(visit.room).get("seats", []):
+		var away: Vector3 = world.grid.cell_to_world(seat["approach"])
+		away -= BuildObjectDef.seat_root_world(world.grid, seat)
+		if _has_wall(world, seat["approach"], Vector3(away.x, 0.0, away.z)):
+			walled_open += 1
+	print("booth seats with the open side walled: %d" % walled_open)
+	assert_int(walled_open).is_greater(0)
 	var checked := 0
 	for k in CafeSim.sit_ticks(p, visit.piece) + 10:
 		var front: Variant = RollerPark.chair_front(world.sim, p, kind)
@@ -441,30 +451,38 @@ func test_a_booth_roller_lies_fixed_at_the_approach_inside_its_cell() -> void:
 			return
 		var frame := front as Transform3D
 		assert_vector(frame.origin).is_equal_approx(approach, Vector3.ONE * 0.001)
-		var lie := _seat_xy(
-			world, visit.seat, (frame * RollerPark.floor_spot(world.sim, p, kind, 0, 0, 1)).origin
-		)
-		# The approach cell's centre is 1 m across from the root.
-		var out := signf(lie.y - 1.0)
-		var root_side := signf(
-			(frame.affine_inverse() * BuildObjectDef.seat_root_world(world.grid, visit.seat)).x
-		)
-		var walled := BoothRoller.walled(world.sim, frame, -root_side if out > 0.0 else root_side)
-		var edge := BoothRoller.WALL_FACE_M if walled else 0.5
-		var why := "the roller lies at %s (walled %s)" % [lie, walled]
-		assert_float(absf(lie.y - 1.0) + ROLLER_HALF_M).override_failure_message(why).is_less_equal(
-			edge
-		)
-		assert_float(lie.y - ROLLER_HALF_M).override_failure_message(why).is_greater(PANEL_FACE_M)
-		assert_float(absf(lie.y - 1.0) - ROLLER_HALF_M).override_failure_message(why).is_greater(
-			FEET_HALF_M
-		)
-		if not BoothRoller.walled(world.sim, frame, -root_side):
-			assert_float(lie.y).override_failure_message(why).is_greater(1.0)
+		for hand in 2:
+			var own := -1.0 if hand == 0 else 1.0
+			var spot := (frame * RollerPark.floor_spot(world.sim, p, kind, hand, 0, 1)).origin
+			var across := (spot - frame.origin).dot(frame.basis.x)
+			var walled := _has_wall(world, visit.seat["approach"], frame.basis.x * own)
+			var want := -own if walled else own
+			var lie := _seat_xy(world, visit.seat, spot)
+			var why := "hand %d: the roller lies at %s (walled %s)" % [hand, lie, walled]
+			assert_float(signf(across)).override_failure_message(why).is_equal(want)
+			var edge := 0.5
+			if _has_wall(world, visit.seat["approach"], frame.basis.x * want):
+				edge = 0.5 - BuildView.WALL_THICKNESS / 2.0
+			var reach := absf(across) + ROLLER_HALF_M
+			assert_float(reach).override_failure_message(why).is_less_equal(edge)
+			var panel := lie.y - ROLLER_HALF_M
+			assert_float(panel).override_failure_message(why).is_greater(PANEL_FACE_M)
+			var feet := absf(across) - ROLLER_HALF_M
+			assert_float(feet).override_failure_message(why).is_greater(FEET_HALF_M)
 		checked += 1
 		world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SEATED)
 	assert_int(checked).is_greater(CafeSim.STEP_IN_HOLD_TICKS)
+
+
+## Whether a wall stands on the edge of `cell` that `towards` (world, flat)
+## points out through, read from the grid's own edge record.
+func _has_wall(world: PassengerTestWorld, cell: Vector2i, towards: Vector3) -> bool:
+	var step := Vector2i(roundi(signf(towards.x)), 0)
+	if absf(towards.z) > absf(towards.x):
+		step = Vector2i(0, roundi(signf(towards.z)))
+	var sides := {Vector2i(0, -1): 0, Vector2i(1, 0): 1, Vector2i(0, 1): 2, Vector2i(-1, 0): 3}
+	return world.grid.has_wall(cell, sides[step])
 
 
 ## A booth roller guest whose booth is moved (a room move, as
@@ -537,55 +555,59 @@ func test_a_cafe_table_guest_keeps_the_straight_shuffle() -> void:
 	assert_float(path[-1].length()).is_less(0.001)
 
 
-## A sit-down set-down's start fixed in the world inside a wall
-## (BoothRoller.clear_of_walls()) is pushed out along the wall's normal until
-## the roller's box clears the face turned any way about its axle (as the
-## move rolls it); one that is not a seat start is left where
-## it is. Control: the start was 0.1 m into the face.
-func test_a_set_down_start_in_a_wall_is_pushed_clear_of_its_face() -> void:
+## A booth set-down's roller drawn into a wall's face (BoothRoller.clear_of(),
+## with the faces BoothRoller.fix_start() keeps) moves back along the wall's
+## normal by exactly its depth in it, and one clear of the face is not moved.
+## Control: the roller was 0.1 m into the face.
+func test_a_booth_set_down_roller_in_a_wall_moves_back_by_its_depth() -> void:
 	var made := _sitting(&"restaurant_booth", true)
 	var world: PassengerTestWorld = made[0]
 	var cell := Vector2i(-1, -1)
-	var side := -1
+	var out := Vector3.ZERO
+	var steps := [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
 	for y in world.grid.size.y:
 		for x in world.grid.size.x:
 			for s in 4:
-				if side < 0 and world.grid.has_wall(Vector2i(x, y), s):
+				if out == Vector3.ZERO and world.grid.has_wall(Vector2i(x, y), s):
 					cell = Vector2i(x, y)
-					side = s
-	assert_int(side).is_greater_equal(0)
-	var step: Vector2i = BuildGrid.SIDE_STEP[side]
-	var out := Vector3(step.x, 0.0, step.y)
+					out = Vector3(steps[s].x, 0.0, steps[s].y)
+	assert_bool(out != Vector3.ZERO).override_failure_message("no wall in the layout").is_true()
+	var face := world.grid.cell_to_world(cell) + out * (0.5 - BuildView.WALL_THICKNESS / 2.0)
+	var faces := [[face, out]]
 	var box := CarryOnProps.bag_box(SecurityLooks.Kind.ROLLER)
 	var reach := -INF
 	for k in 8:
 		reach = maxf(reach, box.get_endpoint(k).dot(out))
-	var centre := world.grid.cell_to_world(cell)
-	var into := Transform3D(Basis.IDENTITY, centre + out * (BoothRoller.WALL_FACE_M - reach + 0.1))
-	var bag := {"kind": SecurityLooks.Kind.ROLLER, "seat_start": true, "from_world": into}
-	BoothRoller.clear_of_walls(bag, world.grid)
-	var pushed: Transform3D = bag["from_world"]
+	var into := Transform3D(Basis.IDENTITY, face - out * (reach - 0.1))
+	var moved := BoothRoller.clear_of(into, faces)
 	var deepest := -INF
 	for k in 8:
-		deepest = maxf(deepest, (pushed * box.get_endpoint(k) - centre).dot(out))
-	var moved := (into.origin - pushed.origin).length()
-	print(
-		(
-			"wall %s side %d: pushed %.3f m, box to %.3f m of the face %.3f"
-			% [cell, side, moved, deepest, BoothRoller.WALL_FACE_M]
+		deepest = maxf(deepest, (moved * box.get_endpoint(k) - face).dot(out))
+	var back := into.origin.distance_to(moved.origin)
+	print("wall at %s: moved back %.3f m, box to %.4f m past the face" % [cell, back, deepest])
+	assert_float(back).is_equal_approx(0.1, 0.0005)
+	assert_float(deepest).is_equal_approx(0.0, 0.0005)
+	var clear := Transform3D(Basis.IDENTITY, face - out * (reach + 0.05))
+	assert_vector(BoothRoller.clear_of(clear, faces).origin).is_equal(clear.origin)
+
+
+## The start of a roller's set-down from the pull is fixed in the world, with
+## the wall faces kept, only at a booth seat; at a cafe table it stays in the
+## body's frame as on main (CarryOnProps: frame * "from", no "from_world").
+## Control: the cafe table guest's park was stamped.
+func test_only_a_booth_set_down_starts_fixed_in_the_world() -> void:
+	for table: StringName in [&"cafe_table", &"restaurant_booth"]:
+		var made := _sitting(table, true, true)
+		var world: PassengerTestWorld = made[0]
+		var views: PassengerViews = made[2]
+		for n in 2:
+			world.step()
+			views.draw()
+		var bag := views.carry_on_props().bag_state((made[1] as Passenger).id, 0)
+		var booth := table == &"restaurant_booth"
+		print(
+			"%s set-down: park %s, fixed start %s" % [table, bag.get("park"), bag.has("from_world")]
 		)
-	)
-	assert_float(deepest).is_less_equal(BoothRoller.WALL_FACE_M + 0.0001)
-	assert_float(moved).is_greater_equal(0.099)
-	var axle := pushed * CarryOnProps.ROLLER_AXLE
-	for turn in 16:
-		var spun := Transform3D(Basis(Vector3.UP, TAU * turn / 16.0), Vector3.ZERO)
-		var turned := (
-			Transform3D(Basis.IDENTITY, axle) * spun * Transform3D(Basis.IDENTITY, -axle) * pushed
-		)
-		for k in 8:
-			var reach_out := (turned * box.get_endpoint(k) - centre).dot(out)
-			assert_float(reach_out).is_less_equal(BoothRoller.WALL_FACE_M + 0.0001)
-	var kept := {"kind": SecurityLooks.Kind.ROLLER, "from_world": into}
-	BoothRoller.clear_of_walls(kept, world.grid)
-	assert_vector((kept["from_world"] as Transform3D).origin).is_equal(into.origin)
+		assert_bool(bag.get("park", false)).is_true()
+		assert_bool(bag.has("from_world")).is_equal(booth)
+		assert_bool(bag.has("wall_faces")).is_equal(booth)

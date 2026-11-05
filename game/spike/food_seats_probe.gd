@@ -75,6 +75,14 @@ const UP_CONTROLS := {"booth_alt": [1]}
 const TORSO_MAX_DEG := 46.0
 ## A wall's height, for the roller-in-wall count (above any roller).
 const WALL_HEIGHT_M := 3.0
+## The roller's move in the world in one frame (a third of a tick) growing by
+## more than this over the frame before (a stop at a move's end is not a
+## jump), from the frame before the sit-down
+## on, is a jump (BAG_STEP; park_recovery_plates_probe's LOSS_KINK_M): a walk's
+## pull moves it 0.033 m a frame and the park's own roll eases up to 0.13 m a
+## frame by about 0.03 a frame, while 7648d56's push of the start out of a
+## wall moved it 0.272 m in one frame.
+const BAG_KINK_M := 0.05
 const SETTLE_TICKS := 6
 const LIMIT_TICKS := 2400
 const MARGIN_PX := 8.0
@@ -444,6 +452,11 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 	var bag_worst := {}
 	var wall_worst := {}
 	var walls := _walls_near(visit.seat["approach"])
+	var wall_easing := {}
+	var last_bag := Vector3.INF
+	var last_step := -1.0
+	var jumps := {}
+	var step_max := 0.0
 	var piece := (_mode.get_node("BuildView") as BuildView).object_node(visit.seat["object_id"])
 	var frame := _seat_frame(visit.seat)
 	var islands := _islands(piece, frame)
@@ -463,6 +476,11 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 			_invalid("%s: no body drawn" % label)
 			return
 		if p.stage == Passenger.Stage.CAFE_TO_SEAT:
+			# The roller's place the frame before the sit-down, for BAG_STEP.
+			var pulled := _bag_of(p) if roller else null
+			if pulled != null and last_bag != Vector3.INF:
+				last_step = pulled.global_position.distance_to(last_bag)
+			last_bag = pulled.global_position if pulled != null else Vector3.INF
 			continue
 		if sit_from < 0:
 			sit_from = p.stage_tick
@@ -483,8 +501,20 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 			if not in_piece.is_empty():
 				bag_worst["k%d+%.2f" % [k, _clock.alpha]] = in_piece
 			var in_wall := _in_walls(_mesh_points(bag), walls)
-			if in_wall > 0:
+			# A set-down that starts in a wall (the walk's pull trail, board
+			# 578435a7) eases out over BoothRoller.EASE_TICKS: reported, not judged.
+			var easing := k + _clock.alpha < BoothRoller.EASE_TICKS
+			if in_wall > 0 and easing:
+				wall_easing["k%d+%.2f" % [k, _clock.alpha]] = in_wall
+			elif in_wall > 0:
 				wall_worst["k%d+%.2f" % [k, _clock.alpha]] = in_wall
+			if last_bag != Vector3.INF:
+				var step := bag.global_position.distance_to(last_bag)
+				step_max = maxf(step_max, step)
+				if last_step >= 0.0 and step - last_step > BAG_KINK_M:
+					jumps["k%d+%.2f" % [k, _clock.alpha]] = snappedf(step, 0.001)
+				last_step = step
+			last_bag = bag.global_position
 		var due := strip.size() < ticks.size() and k >= ticks[strip.size()]
 		if due and p.stage == Passenger.Stage.CAFE_SITTING_DOWN:
 			# A roller strip's first frame is the first in which the roller is in
@@ -514,14 +544,22 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 	if roller:
 		print(
 			(
-				"BAG_IN_WALL %s walls=%d frames_inside=%d %s"
-				% [label, walls.size(), wall_worst.size(), wall_worst]
+				"BAG_IN_WALL %s walls=%d frames_inside=%d %s easing_out=%s"
+				% [label, walls.size(), wall_worst.size(), wall_worst, wall_easing]
 			)
 		)
 	if not bag_worst.is_empty() or not wall_worst.is_empty():
 		_invalid(
 			"%s: roller points inside the piece or a wall while sitting down or seated" % label
 		)
+	if roller:
+		print(
+			"BAG_STEP %s largest=%.3f m frames_over=%d %s" % [label, step_max, jumps.size(), jumps]
+		)
+		if jumps.size() > 0 or step_max <= 0.0:
+			_invalid(
+				"%s: the roller jumped (or never moved) from the frame before the sit-down" % label
+			)
 	var body := _views.node_for(p.id)
 	_seated_checks(label, body, islands, frame)
 	var still := await _shot("%s_seated" % label, body, _bag_of(p) if roller else null)
