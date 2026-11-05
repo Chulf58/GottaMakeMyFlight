@@ -1,112 +1,230 @@
 class_name FileWaiters
 extends RefCounted
-## Where walkers waiting to join a boarding file are drawn (board 3e3cb33e).
-## A pending walker stands where it chose its exit (BoardingFiles), so walkers
-## that chose it on one point wait there together, and the sim keeps them
-## there. In admission order (BoardingFiles.pending_order()), each pending
-## walker keeps the spot it had on the last placing while that is still
-## BoardingFiles.GAP_MM from every one placed before it, so it stands still
-## until it joins its file. Otherwise it is drawn on its own point when that
-## is GAP_MM from them, else on the first of WAIT_SPOTS, behind or beside its
-## point, that is, and that it can stand on (BODY_M clear, walked to over
-## steps a passenger can route). PassengerViews moves the drawn offset at a
-## walk, and back onto the walker's path once it joins.
+## Wait spots for walkers waiting to join a boarding file (board 3e3cb33e; the
+## sim fixes each cause, decision passenger-spacing-fixed-per-cause-standing-
+## spots-staggered-unloading-ordered-files). A walker that chose its exit where
+## it stands waits there to join its door file (BoardingFiles), so walkers that
+## chose it on one point would wait on it together. When a walker becomes
+## pending (assign()) within BoardingFiles.GAP_MM of a walker already waiting
+## (pending, or filed with no room to step), it is given a wait spot: the first
+## of WAIT_SPOTS, behind or beside its point, that is GAP_MM from each of them
+## and that it can stand on (BODY_M clear, reached in a straight line over
+## steps a passenger can route). It walks there in the sim while it waits
+## (step()), and once it joins its file it walks back to its point before it
+## walks on: the files count that walk back as walk left (BoardingFiles), and
+## the forecast counts what is owed of it (owed_mm()). A walker given no spot
+## because none is free does not join (BoardingFiles.join_door()): it gives up
+## its exit and stands where it is, choosing again on its next step.
 ##
-## Not guaranteed: with no free spot a waiter takes the one farthest from the
-## others; waiters are not drawn apart from filed walkers or from anyone else;
-## a walker that joins from a spot catches up with its path at up to twice a
-## walk. The placing is derived, never saved: a load places the waiters afresh.
+## A spot is fixed when given and kept until the walker is back on its point
+## or leaves the walk out (forget()); it is saved (to_list()) and checked on
+## load against the loaded grid (load_list()). Not guaranteed: walkers already
+## on one point when they turn out (none free and nowhere to stand) stay
+## there; waiters are not spaced from walkers with room to step or from anyone
+## not heading out.
 
-## Where a crowded waiter may be drawn, in GAP_MM, in the order tried:
-## (behind its own point, to its left), facing its way out.
+## Where a waiter may stand, in GAP_MM, in the order tried: (behind its own
+## point, to its left), facing its way out. Beside first, straight behind
+## last: the walkers coming up its file walk in along the line behind it.
 const WAIT_SPOTS: Array[Vector2] = [
-	Vector2(1, 0),
-	Vector2(1, 1),
-	Vector2(1, -1),
 	Vector2(0, 1),
 	Vector2(0, -1),
-	Vector2(2, 0),
+	Vector2(1, 1),
+	Vector2(1, -1),
 	Vector2(2, 1),
 	Vector2(2, -1),
+	Vector2(1, 0),
+	Vector2(2, 0),
 ]
-## How far a waiter's body reaches round its drawn point, in metres.
+## How far a waiter's body reaches round its point, in metres.
 const BODY_M := 0.25
-## How finely the walk from a waiter's own point to its drawn one is checked
-## for walls, in metres.
+## How finely the walk from a waiter's own point to its spot is checked for
+## walls, in metres.
 const SAMPLE_M := 0.1
 const CROWD_M := BoardingFiles.GAP_MM / 1000.0
-## The room a waiter needs from each one placed before it: CROWD_M, less a
+## The room a waiter needs from each one before it: CROWD_M, less a
 ## millimetre so a spot exactly CROWD_M away is not lost to rounding.
 const ROOM_M := CROWD_M - 0.001
+## The farthest a spot can be from its walker's point, in mm.
+const FARTHEST_MM := 1566
 
-## Set when the pending set changes: the waiters are placed again when asked.
-var stale := true
-## Pending passenger id -> its drawn offset, placed on _tick.
-var _offsets: Dictionary = {}
-var _tick := -1
-
-
-## Forgets every placing (a load or an edit): the next one starts afresh.
-func clear() -> void:
-	_offsets.clear()
-	stale = true
+## Passenger id -> {"off": Vector2i, the spot from its own point in grid-local
+## mm; "at": int, mm walked from its point toward the spot}.
+var _spots: Dictionary = {}
 
 
-## How far pending walker `p` of `files` is drawn from its own point now, in
-## metres on the ground; zero for a walker that is not pending, or one with
-## room where it stands.
-func offset(sim: PassengerSim, files: BoardingFiles, p: Passenger) -> Vector3:
-	if not files.is_pending(p.id):
-		return Vector3.ZERO
-	if stale or _tick != sim.tick:
-		_place(sim, files)
-	return _offsets.get(p.id, Vector3.ZERO)
-
-
-func _place(sim: PassengerSim, files: BoardingFiles) -> void:
-	_tick = sim.tick
-	stale = false
-	var before := _offsets
-	_offsets = {}
+## Gives pending walker `p` of `files` a wait spot if it stands within GAP_MM
+## of a walker already waiting. Returns false when it needs one and none is
+## free; true when it has one or needs none.
+func assign(sim: PassengerSim, files: BoardingFiles, p: Passenger) -> bool:
+	if _spots.has(p.id):
+		return true
+	var own := own_point(sim, p)
+	var waiting: Array[Passenger] = files.pending_order(sim)
+	for id in files.door_file(p.exit_object):
+		var filed := sim.get_passenger(id)
+		if files.allowed(sim, filed, PassengerSim.WALK_MM) == 0:
+			waiting.append(filed)
 	var placed: Array[Vector2] = []
-	for p in files.pending_order(sim):
-		var own := p.grid_position()
-		# A waiter keeps the spot it was given while that is still free, until
-		# it joins its file: it stands still there and the others do not
-		# shuffle round when one walks on.
-		var kept: Vector3 = before.get(p.id, Vector3.ZERO)
-		var spot := own + Vector2(kept.x, kept.z)
-		var keeps := kept != Vector3.ZERO and _clearance(spot, placed) >= ROOM_M
-		if not keeps or not _standable(sim.grid, own, spot):
-			spot = own
-			if _clearance(own, placed) < ROOM_M:
-				spot = _free_spot(sim, files, p, own, placed)
-		placed.append(spot)
-		if spot != own:
-			_offsets[p.id] = Vector3(spot.x - own.x, 0.0, spot.y - own.y)
+	for q in waiting:
+		if q.id != p.id:
+			# Where it will stand: its spot, if it is walking there.
+			placed.append(own_point(sim, q) + spot_of(q.id))
+	if _clearance(own, placed) >= ROOM_M:
+		return true
+	var spot := _free_spot(sim, files, p, own, placed)
+	if spot == own:
+		return false
+	var off := Vector2i(((spot - own) * 1000.0).round())
+	_spots[p.id] = {"off": off, "at": 0, "out": true}
+	return true
+
+
+## The ids with a wait spot, lowest first.
+func ids() -> Array[int]:
+	var out: Array[int] = []
+	out.assign(_spots.keys())
+	out.sort()
+	return out
+
+
+## `id`'s wait spot from its own point, in grid-local metres; zero with none.
+func spot_of(id: int) -> Vector2:
+	return Vector2(_spots[id]["off"]) / 1000.0 if _spots.has(id) else Vector2.ZERO
+
+
+## How far `p` stands from its own point now, in metres on the ground.
+func shift(p: Passenger) -> Vector3:
+	if not _spots.has(p.id) or p.stage != Passenger.Stage.TO_EXIT:
+		return Vector3.ZERO
+	var s: Dictionary = _spots[p.id]
+	var off: Vector2i = s["off"]
+	var share: float = s["at"] / Vector2(off).length()
+	return Vector3(off.x, 0.0, off.y) * share / 1000.0
+
+
+## The walk `p` has to its spot and back that it has not walked yet, in mm.
+func owed_mm(id: int) -> int:
+	if not _spots.has(id):
+		return 0
+	var length := _length(_spots[id])
+	return 2 * length - _spots[id]["at"] if _spots[id].get("out", true) else _spots[id]["at"]
+
+
+## The walk back from where `id` stands to its own point, in mm: walk left in
+## the files on top of its path.
+func back_mm(id: int) -> int:
+	return _spots[id]["at"] if _spots.has(id) else 0
+
+
+## Whether `p` stands on its spot, there to wait.
+func at_spot(p: Passenger) -> bool:
+	return _spots.has(p.id) and _spots[p.id]["at"] == _length(_spots[p.id])
+
+
+## One tick of `p`'s walk, `step` its room in the files and `speed` its pace:
+## a pending walker walks out to its spot; a filed one walks back to its point
+## first. Returns the step left for its path.
+func step(p: Passenger, pending: bool, step_mm: int, speed: int) -> int:
+	if not _spots.has(p.id):
+		return step_mm
+	var s: Dictionary = _spots[p.id]
+	var length := _length(s)
+	var walked := 0
+	if pending:
+		s["out"] = true
+		walked = mini(speed, length - s["at"])
+		s["at"] += walked
+	else:
+		s["out"] = false
+		walked = mini(step_mm, s["at"])
+		s["at"] -= walked
+		if s["at"] == 0:
+			_spots.erase(p.id)
+	p.odometer_mm += walked
+	# A pending walker has no room on its path (BoardingFiles.allowed()).
+	return 0 if pending else step_mm - walked
+
+
+## `id` has left the walk out: its spot is given up.
+func forget(id: int) -> void:
+	_spots.erase(id)
+
+
+## The spots for a save, by passenger id.
+func to_list() -> Array:
+	var ids: Array = _spots.keys()
+	ids.sort()
+	var out := []
+	for id: int in ids:
+		var s: Dictionary = _spots[id]
+		var off: Vector2i = s["off"]
+		out.append({"id": id, "x": off.x, "y": off.y, "at": s["at"], "out": s.get("out", true)})
+	return out
+
+
+## Loads a saved to_list(): every waiter is heading for its exit, its spot one
+## it can stand on in the loaded grid, at most FARTHEST_MM out, and walked at
+## most to it (BoardingFiles.checked() then checks each is held in the files).
+## Returns a problem, or "".
+func load_list(list: Variant, by_id: Dictionary, sim: PassengerSim) -> String:
+	if typeof(list) != TYPE_ARRAY:
+		return "boarding waiters must be a list"
+	for entry: Variant in list:
+		var keys := ["id", "x", "y", "at"]
+		if (
+			typeof(entry) != TYPE_DICTIONARY
+			or (entry as Dictionary).size() != 5
+			or typeof(entry.get("out")) != TYPE_BOOL
+			or not keys.all(func(k: String) -> bool: return WholeNumber.is_whole(entry.get(k)))
+		):
+			return "boarding waiter %s is malformed" % str(entry).left(80)
+		var id := int(entry["id"])
+		var p: Passenger = by_id.get(id)
+		var off := Vector2i(int(entry["x"]), int(entry["y"]))
+		var s := {"off": off, "at": int(entry["at"]), "out": entry["out"]}
+		var length := _length(s) if off != Vector2i.ZERO else 0
+		if (
+			p == null
+			or _spots.has(id)
+			or p.stage != Passenger.Stage.TO_EXIT
+			or length == 0
+			or length > FARTHEST_MM
+			or s["at"] < 0
+			or s["at"] > length
+		):
+			return "boarding waiter %d is unknown, repeated, not waiting or off its spot" % id
+		var own := own_point(sim, p)
+		if not _standable(sim.grid, own, own + Vector2(off) / 1000.0):
+			return "boarding waiter %d's spot cannot be stood on" % id
+		_spots[id] = s
+	return ""
+
+
+## Where `p` stands with no spot, in grid-local metres: its sim position less
+## its walk toward a spot (the sim's own spots: on load, those of the files it
+## still has).
+static func own_point(sim: PassengerSim, p: Passenger) -> Vector2:
+	var at := sim.world_position(p) - sim.grid.origin - sim.files.waiters.shift(p)
+	return Vector2(at.x, at.z)
+
+
+static func _length(s: Dictionary) -> int:
+	return roundi(Vector2(s["off"]).length())
 
 
 ## The first WAIT_SPOTS spot round `own` (grid-local metres) that `p` can
-## stand on, CROWD_M from every point in `placed`; with none, the standable
-## spot (`own` among them) farthest from them.
+## stand on, CROWD_M from every point in `placed`; `own` with none.
 static func _free_spot(
 	sim: PassengerSim, files: BoardingFiles, p: Passenger, own: Vector2, placed: Array[Vector2]
 ) -> Vector2:
 	var ahead := _way_out(sim, files, p, own)
 	var left := Vector2(ahead.y, -ahead.x)
-	var best := own
-	var best_room := _clearance(own, placed)
 	for at in WAIT_SPOTS:
 		var spot := own + (left * at.y - ahead * at.x) * CROWD_M
-		if not _standable(sim.grid, own, spot):
-			continue
-		var room := _clearance(spot, placed)
-		if room >= ROOM_M:
+		if _standable(sim.grid, own, spot) and _clearance(spot, placed) >= ROOM_M:
 			return spot
-		if room > best_room:
-			best = spot
-			best_room = room
-	return best
+	return own
 
 
 ## The ground direction `p` waits to walk in from `own`: its path's next step,
@@ -126,7 +244,7 @@ static func _way_out(
 	return way.normalized() if way != Vector2.ZERO else Vector2(0, -1)
 
 
-## Whether a waiter on `own` (grid-local metres) can be drawn at `spot`: the
+## Whether a waiter on `own` (grid-local metres) can stand at `spot`: the
 ## straight walk there crosses only steps a passenger can route, and so does
 ## the step from the spot's cell to each cell its body (BODY_M) reaches into.
 static func _standable(grid: BuildGrid, own: Vector2, spot: Vector2) -> bool:

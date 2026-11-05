@@ -71,10 +71,6 @@ var _seats: Dictionary = {}
 ## with a roller (SitHold.offset(), sit_offset()). Holds no anchor: the chair
 ## front is read from the seat on every sync. Started over on a snap or a release.
 var _sit_off: Dictionary = {}
-## Passenger id -> its drawn offset while it waits to join a boarding file
-## (FileWaiters), moved toward the target by at most a walking
-## step a tick. Holds no tick; snap() sets it on the target.
-var _waits: Dictionary = {}
 ## The yaw each view is drawn with, eased per tick (PassengerTurns); snap()
 ## starts every record over.
 var _turns := PassengerTurns.new()
@@ -153,8 +149,7 @@ func tick_position(id: int, current: bool) -> Vector3:
 ## Where a passenger is drawn on this tick: the sim's position, moved onto
 ## its chair's pan at a gate seat (GateChairs), clear of its chair at a cafe
 ## seat (CafeChairs), onto its seat or into the shower on an activity visit
-## (ActivityPoses), by its drawn offset at security (SecurityLooks) and off a
-## point it shares while it waits to join a boarding file (BoardingFiles).
+## (ActivityPoses) and by its drawn offset at security (SecurityLooks).
 func draw_position(p: Passenger) -> Vector3:
 	return (
 		sim.world_position(p)
@@ -162,7 +157,6 @@ func draw_position(p: Passenger) -> Vector3:
 		+ CafeChairs.offset(sim, p)
 		+ _seats.get(p.id, Vector3.ZERO)
 		+ _offsets.get(p.id, Vector3.ZERO)
-		+ _waits.get(p.id, Vector3.ZERO)
 	)
 
 
@@ -187,7 +181,6 @@ func sync() -> void:
 		seen[id] = true
 		_chase(p)
 		_chase_seat(p)
-		_chase_wait(p)
 		var now := draw_position(p)
 		if not _nodes.has(id):
 			_nodes[id] = _take(p)
@@ -236,10 +229,6 @@ func snap() -> void:
 		var target := SecurityLooks.target_offset(sim, sim.get_passenger(id))
 		if target != Vector3.ZERO:
 			_offsets[id] = target
-		_waits.erase(id)
-		var wait := sim.files.waiters.offset(sim, sim.files, sim.get_passenger(id))
-		if wait != Vector3.ZERO:
-			_waits[id] = wait
 		# Every clip is played again from the loaded tick: a node kept through
 		# the load still plays the clip it had, from where it was before.
 		if _nodes.has(id):
@@ -425,7 +414,6 @@ func _release(id: int) -> void:
 	_offsets.erase(id)
 	_seats.erase(id)
 	_sit_off.erase(id)
-	_waits.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
 	_props.release(id)
 	_turns.release(id)
@@ -570,10 +558,10 @@ func _pose(node: Node3D, p: Passenger) -> float:
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
 	WishIconView.show_wish(node, wish)
-	# A boarding-file waiter drawn off its point faces its way out once there,
-	# not back along its step aside.
+	# A boarding-file waiter on its wait spot (FileWaiters) faces its way out,
+	# not back along its walk to the spot.
 	var way := walk_heading(p)
-	if is_nan(face) and _waits.has(p.id) and way != Vector2.ZERO:
+	if is_nan(face) and sim.files.waiters.at_spot(p) and way != Vector2.ZERO:
 		face = atan2(way.x, way.y)
 	return face
 
@@ -631,18 +619,6 @@ func _chase_seat(p: Passenger) -> void:
 		_seats.erase(p.id)
 	else:
 		_seats[p.id] = now
-
-
-## Moves a boarding-file waiter's drawn offset toward FileWaiters.offset()
-## by at most a walking step.
-func _chase_wait(p: Passenger) -> void:
-	var target := sim.files.waiters.offset(sim, sim.files, p)
-	var now: Vector3 = _waits.get(p.id, Vector3.ZERO)
-	now = now.move_toward(target, PassengerSim.WALK_MM / 1000.0)
-	if now == Vector3.ZERO:
-		_waits.erase(p.id)
-	else:
-		_waits[p.id] = now
 
 
 func _at_security(p: Passenger) -> bool:

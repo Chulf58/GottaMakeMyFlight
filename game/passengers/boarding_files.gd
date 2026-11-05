@@ -27,16 +27,18 @@ extends RefCounted
 ## other,
 ## so an indoor corridor shared by two doors' routes and the apron before the
 ## routes join stay unspaced, and walkers not heading out (seated, standing,
-## queuing) are not spaced from walkers in a file. Pending walkers stand where
-## they chose their exit, so several can wait on one point; `waiters`
-## (FileWaiters) draws them apart.
+## queuing) are not spaced from walkers in a file. A pending walker that
+## chose its exit within GAP_MM of one already waiting walks to a wait spot
+## and joins from there (`waiters`, FileWaiters); its walk back to its point
+## counts as walk left for the walkers it is spaced from (_left()): it joins once
+## the walker ahead is GAP_MM from its point. With no free spot it does not join.
 
 ## The least walk between two walkers in one file, in mm.
 const GAP_MM := 700
 ## A save with no walker in any file.
-const EMPTY := {"doors": [], "planes": [], "pending": [], "delayed": []}
+const EMPTY := {"doors": [], "planes": [], "pending": [], "delayed": [], "waiters": []}
 
-## Where the pending walkers are drawn (derived, never saved).
+## The pending walkers' wait spots (saved under "waiters").
 var waiters := FileWaiters.new()
 
 ## Exit door id -> passenger ids, the one nearest the door first.
@@ -88,7 +90,6 @@ func clear_derived() -> void:
 	_aprons.clear()
 	_known.clear()
 	_known_tick = -1
-	waiters.clear()
 
 
 ## The walk outside from exit door `door`: {"points", "mm", "plane"}, with
@@ -137,14 +138,22 @@ func plane_file_of(id: int) -> Array[int]:
 	return out
 
 
-## `p`, which has just chosen its exit, joins that door's file, or is pending.
-## Returns whether it joined.
+## `p`, which has just chosen its exit, joins that door's file, or is pending
+## (with a wait spot where it is crowded, FileWaiters.assign()). Crowded with
+## no free spot, it gives its exit up and stands where it is, choosing again
+## on its next step. Returns whether it joined.
 func join_door(sim: PassengerSim, p: Passenger) -> bool:
 	var door := p.exit_object
 	var ids: Array = _doors.get(door, [])
 	var at := _slot(sim, ids, door_left(p), p.id, true)
 	if at < 0:
 		_hold(p.id, true)
+		if not waiters.assign(sim, self, p):
+			_hold(p.id, false)
+			p.exit_object = 0
+			p.clear_path()
+			if p.late:
+				_delayed[p.id] = true
 		return false
 	ids.insert(at, p.id)
 	_doors[door] = ids
@@ -211,13 +220,12 @@ func leave(id: int) -> void:
 	_take(_planes, _plane_of, id)
 
 
-## Marks `id` pending (`on`) or not; the waiters are placed again when drawn.
+## Marks `id` pending (`on`) or not.
 func _hold(id: int, on: bool) -> void:
 	if on:
 		_pending[id] = true
 	else:
 		_pending.erase(id)
-	waiters.stale = true
 
 
 ## After `p` stepped: once GAP_MM out on the apron it leaves its door file.
@@ -239,13 +247,15 @@ func allowed(sim: PassengerSim, p: Passenger, speed: int) -> int:
 	return step
 
 
-## The step `p`, at `speed`, takes this tick (allowed()), noting when the
-## files held it back while it was late.
+## The step `p`, at `speed`, takes along its path this tick (allowed()),
+## noting when the files held it back while it was late. A walker with a wait
+## spot walks to it while pending, and back to its point first once filed
+## (FileWaiters.step()).
 func step_of(sim: PassengerSim, p: Passenger, speed: int) -> int:
 	var step := allowed(sim, p, speed)
 	if p.late and step < speed:
 		_delayed[p.id] = true
-	return step
+	return waiters.step(p, _pending.has(p.id), step, speed)
 
 
 ## Whether the files held `p` back while it was late, on its way out.
@@ -254,9 +264,10 @@ func was_delayed(id: int) -> bool:
 
 
 ## `id` has left the walk out (made, missed or turned away): its delay is
-## forgotten.
+## forgotten, and its wait spot given up.
 func forget(id: int) -> void:
 	_delayed.erase(id)
+	waiters.forget(id)
 
 
 ## The pending walkers in admission order: those waiting at a door for the
@@ -296,7 +307,13 @@ func to_dict() -> Dictionary:
 	pending.sort()
 	var delayed: Array = _delayed.keys()
 	delayed.sort()
-	return {"doors": doors, "planes": planes, "pending": pending, "delayed": delayed}
+	return {
+		"doors": doors,
+		"planes": planes,
+		"pending": pending,
+		"delayed": delayed,
+		"waiters": waiters.to_list(),
+	}
 
 
 ## A saved to_dict() checked against the loaded passengers by id (with the
@@ -313,14 +330,18 @@ func to_dict() -> Dictionary:
 static func checked(data: Variant, by_id: Dictionary, sim: PassengerSim) -> Dictionary:
 	if (
 		typeof(data) != TYPE_DICTIONARY
-		or (data as Dictionary).size() != 4
+		or (data as Dictionary).size() != 5
 		or typeof(data.get("doors")) != TYPE_ARRAY
 		or typeof(data.get("planes")) != TYPE_ARRAY
 		or typeof(data.get("pending")) != TYPE_ARRAY
 		or typeof(data.get("delayed")) != TYPE_ARRAY
 	):
-		return {"error": "boarding must hold the lists doors, planes, pending and delayed"}
+		return {"error": "boarding must hold the lists doors, planes, pending, delayed, waiters"}
 	var files := BoardingFiles.new()
+	# Wait spots first: a door file is in order of walk left, walk back included.
+	var spots := files.waiters.load_list(data["waiters"], by_id, sim)
+	if spots != "":
+		return {"error": spots}
 	for entry: Variant in data["doors"]:
 		var problem := files._load_door(entry, by_id, sim)
 		if problem != "":
@@ -340,6 +361,9 @@ static func checked(data: Variant, by_id: Dictionary, sim: PassengerSim) -> Dict
 		if not out or files._delayed.has(id):
 			return {"error": "delayed walker %s is unknown, repeated or not on its way out" % value}
 		files._delayed[id] = true
+	for id: int in files.waiters.ids():
+		if not files.holds(id):
+			return {"error": "boarding waiter %d is in no file and not pending" % id}
 	var missing := files._unfiled(by_id)
 	if missing != "":
 		return {"error": missing}
@@ -440,14 +464,20 @@ func known(sim: PassengerSim) -> Array:
 	return _known
 
 
+## `p`'s walk left in its door file (door_left()), with its walk back from a
+## wait spot.
+func _left(p: Passenger) -> int:
+	return door_left(p) + waiters.back_mm(p.id)
+
+
 ## The step `p` may take behind the walker ahead of it in `ids`.
 func _room(sim: PassengerSim, ids: Array, p: Passenger, in_door: bool) -> int:
 	var k := ids.find(p.id)
 	if k <= 0:
 		return JourneyForecast.NEVER_MM
 	var ahead := sim.get_passenger(ids[k - 1])
-	var mine := door_left(p) if in_door else plane_left(p)
-	var theirs := door_left(ahead) if in_door else plane_left(ahead)
+	var mine := _left(p) if in_door else plane_left(p)
+	var theirs := _left(ahead) if in_door else plane_left(ahead)
 	return maxi(0, mine - theirs - GAP_MM)
 
 
