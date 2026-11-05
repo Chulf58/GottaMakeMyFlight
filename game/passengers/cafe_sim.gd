@@ -79,6 +79,12 @@ const DWELL_TICKS := RoomTypes.CAFE_DWELL_TICKS
 ## The approach cell is about a metre from the seated root, so the shuffle in
 ## and out takes longer than at a gate seat.
 const SHUFFLE_TICKS := 12
+## Pieces whose seats a guest shuffles into by a step forward beside the piece
+## to a line this far ahead of the seat root, then along that line: the booth
+## bench's end panel stands behind the root across the bench's whole depth, so
+## the straight line from the approach cell carried the body through it
+## (board 64ee4dc0, game/spike/food_seats_probe.gd).
+const STEP_IN_AHEAD_M := {&"restaurant_booth": 0.05}
 ## Seats tried per visit, nearest the counter first.
 const SEAT_TRIES := 4
 const HUNGER_START_MIN := 40
@@ -451,10 +457,36 @@ func seat_position(p: Passenger) -> Vector3:
 	var shuffle := clampf((_sim.tick - p.stage_tick) / float(SHUFFLE_TICKS), 0.0, 1.0)
 	match p.stage:
 		Passenger.Stage.CAFE_SITTING_DOWN:
-			return approach.lerp(root, shuffle)
+			return _shuffle_at(visit, approach, root, shuffle)
 		Passenger.Stage.CAFE_STANDING_UP:
 			var left := up_ticks(p) - (_sim.tick - p.stage_tick)
-			return approach.lerp(root, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
+			return _shuffle_at(visit, approach, root, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
+	return root
+
+
+## The spot `share` of the way along the shuffle from the approach cell to the
+## seat root: a straight line, or at a STEP_IN_AHEAD_M piece a step forward
+## beside the piece to the line that far ahead of the root, along it to the
+## spot in front of the root and back onto the root, slowing into the seat.
+func _shuffle_at(visit: CafeVisit, approach: Vector3, root: Vector3, share: float) -> Vector3:
+	var def := StringName(visit.piece.get("def", &""))
+	if not STEP_IN_AHEAD_M.has(def):
+		return approach.lerp(root, share)
+	var facing: Vector2i = visit.seat["facing"]
+	var ahead := Vector3(facing.x, 0.0, facing.y) * float(STEP_IN_AHEAD_M[def])
+	var corner := approach + ahead.normalized() * (root + ahead - approach).dot(ahead.normalized())
+	var points: Array[Vector3] = [approach, corner, root + ahead, root]
+	var whole := 0.0
+	for i in range(1, points.size()):
+		whole += points[i - 1].distance_to(points[i])
+	# Eased out, so the body is past the piece's end before the sit_down clip
+	# takes the hips back (in the probe from about tick 9 of the sit-down).
+	var along := (1.0 - (1.0 - share) * (1.0 - share)) * whole
+	for i in range(1, points.size()):
+		var leg := points[i - 1].distance_to(points[i])
+		if along <= leg and leg > 0.0:
+			return points[i - 1].lerp(points[i], along / leg)
+		along -= leg
 	return root
 
 

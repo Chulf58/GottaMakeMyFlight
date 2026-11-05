@@ -1,0 +1,658 @@
+extends SceneTree
+## Windowed probe of guests sitting down in the real game at the restaurant
+## booth's four seats (two at each open end of the benches) and on the bar
+## counter's two stools (board 64ee4dc0). For each piece the probe boots
+## main.tscn, builds the reference terminal with two venues (CafeTestLayout: a
+## restaurant with a booth, or a bar with only a bar counter), opens the
+## airport and sends guests one at a time; each is kept on its seat once
+## seated, so the next takes another seat. Other passengers are kept from the
+## venues. From the guest's walk to its seat the clock is stepped a third of a
+## tick a frame, with --fixed-fps 60, so the clips play in step with the sim.
+##
+## Checks, each printing the values it compared:
+##   SIT_INSIDE: on every frame from the start of the sit-down to SETTLE_TICKS
+##     after it, the body points (the posed mesh) inside a part of the seat's
+##     piece, by part (end_panel, table, counter, cushion, seat). Must be none.
+##   SEAT_GAP: seated still, the least outward distance of a body point from
+##     the seat's own cushion; over FLOAT_M the guest floats. HIP_ABOVE prints
+##     the hips bone over the cushion top.
+##   CONTROL: seated still, the same tests see the body lifted LIFT_M (gap over
+##     FLOAT_M), stepped back into the seat back (points inside) and, at the
+##     booth, sideways into its end panel or, at the bar, forward into the
+##     counter (points inside that part). A control that sees nothing fails.
+## Plates (tools/blender/out/food-seats/): sitdown_<piece>_<seat>_strip.png
+## (the sit-down at STRIP_TICKS), sitdown_<piece>_<seat>_seated.png and a
+## contact sheet. Before a save the body's bounds project inside the plate with
+## a margin, and a twin with the body hidden differs over at least SEEN_SHARE
+## of the body's box on screen (in frame is not visible). Otherwise
+## PROBE_INVALID, exit 1.
+##
+## Run (one windowed Godot run project-wide; take the slot first):
+##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
+##     --rendering-driver vulkan --audio-driver Dummy --fixed-fps 60 \
+##     --path game -s res://spike/food_seats_probe.gd [-- --seed=N]
+
+const StarterFlight := preload("res://spike/starter_flight.gd")
+const PlateSight := preload("res://spike/plate_sight.gd")
+const OUT_REL := "res://../tools/blender/out/food-seats"
+## Piece -> [venue, counter, table piece (or empty), the bodies wanted in turn].
+## male_02 and the female bodies take a booth step; female_01 and female_05 a
+## lift (PassengerLooks.seat_shift()).
+const SUBJECTS := {
+	"booth": [&"restaurant", &"cafe_counter", &"restaurant_booth", [1, 6, 9, 0]],
+	"bar": [&"bar", &"bar_counter", &"", [6, 9]],
+}
+const STRIP_TICKS: Array[int] = [0, 3, 6, 9, 12, 15, 18, 21]
+const SETTLE_TICKS := 6
+const LIMIT_TICKS := 2400
+const MARGIN_PX := 8.0
+const SEEN_SHARE := 0.15
+const TILE := 320
+const OVERLAP_SLACK_M := 0.002
+const FLOAT_M := 0.03
+const LIFT_M := 0.1
+## A piece part whose top is in this height band and that is thinner than
+## 0.2 m is a cushion.
+const PAN_TOP_RANGE := Vector2(0.45, 0.6)
+
+var _seed := 0
+var _out_dir := ""
+var _failed := false
+var _main: Node3D
+var _clock: SimClock
+var _mode: BuildMode
+var _sim: PassengerSim
+var _views: PassengerViews
+var _cam: Camera3D
+var _mine := {}
+var _sheet: Array[Image] = []
+var _plates := 0
+var _seats_done := 0
+
+
+func _initialize() -> void:
+	Engine.max_fps = SimClock.TICK_RATE * 3
+	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	DirAccess.make_dir_recursive_absolute(_out_dir)
+	_seed = randi()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--seed="):
+			_seed = int(arg.get_slice("=", 1))
+	print(
+		(
+			"PROBE sim_seed=%d out_dir=%s fixed_fps=%d"
+			% [_seed, _out_dir, Engine.physics_ticks_per_second]
+		)
+	)
+	_run.call_deferred()
+
+
+func _process(_delta: float) -> bool:
+	return false
+
+
+func _run() -> void:
+	var wanted := 0
+	for subject: String in SUBJECTS:
+		wanted += (SUBJECTS[subject][3] as Array).size()
+		if await _boot(subject):
+			await _watch(subject)
+		_main.queue_free()
+		_cam = null
+		await _frames(3)
+	if not _sheet.is_empty():
+		_save(_contact_sheet(_sheet), "sitdown_contact_sheet.png")
+	print("PROBE done seats=%d of %d plates=%d failed=%s" % [_seats_done, wanted, _plates, _failed])
+	quit(1 if _failed or _seats_done < wanted else 0)
+
+
+func _boot(subject: String) -> bool:
+	_main = (load("res://main/main.tscn") as PackedScene).instantiate()
+	_clock = _main.get_node("SimClock") as SimClock
+	_clock.seed_rng(_seed)
+	(_main.get_node("BuildMode") as BuildMode).starter_shell = false
+	root.add_child(_main)
+	_clock.set_process(false)
+	_clock.set_paused(false)
+	await _frames(3)
+	_mode = _main.get_node("BuildMode") as BuildMode
+	_mode.set_process(false)
+	_mode.set_tool(BuildMode.Tool.NONE)
+	(_mode.get_node("Ghost") as Node3D).visible = false
+	_sim = _main.get_node("PassengerSim") as PassengerSim
+	_views = _main.get_node("PassengerViews") as PassengerViews
+	var spec: Array = SUBJECTS[subject]
+	var table: StringName = spec[2]
+	var ids := CafeTestLayout.build(
+		_mode.grid, false, spec[0], table != &"", spec[1], table if table != &"" else &"cafe_table"
+	)
+	if not StarterFlight.add_gate_desk(_mode.grid):
+		_invalid("%s: the gate desk was refused" % subject)
+		return false
+	(_mode.get_node("BuildView") as BuildView).refresh(_mode.grid)
+	await _frames(4)
+	_sim.cafes.refresh()
+	_sim.shops.refresh()
+	_sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
+	_mine.clear()
+	# Only the probe's guests go to a venue.
+	_clock.ticked.connect(_keep_others_away)
+	var staff := _main.get_node("Staff") as StaffSim
+	var hired := StarterFlight.hire_per_station(_sim, staff)
+	var doors := StarterFlight.advance_until_open(
+		_clock, _main.get_node("FlightSim") as FlightSim, staff
+	)
+	var cafe := _sim.cafes.layout.cafe(ids["air_room"])
+	print(
+		(
+			"PROBE %s ids=%s hired=%d opened tick=%d seats=%d"
+			% [subject, ids, hired, _clock.tick, (cafe.get("seats", []) as Array).size()]
+		)
+	)
+	if hired == 0 or doors < 0 or cafe.is_empty():
+		_invalid("%s: the airport did not open or the venue has no seats" % subject)
+		return false
+	for layer in _main.find_children("*", "CanvasLayer", true, false):
+		(layer as CanvasLayer).visible = false
+	return true
+
+
+func _keep_others_away(_tick: int) -> void:
+	for id in _sim.passenger_ids():
+		if not _mine.has(id):
+			ToiletTestLayout.calm(_sim.get_passenger(id))
+
+
+## An airside guest of body `body` if one turns up in a few spawns (else the
+## last spawned), walking to its gate and asked to the venue.
+func _guest(body: int) -> Passenger:
+	var p: Passenger = null
+	for attempt in 40:
+		var id := _sim.spawn_now(
+			FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0), floori(body / 6.0)
+		)
+		p = _sim.get_passenger(id)
+		ToiletTestLayout.calm(p)
+		if PassengerLooks.body_of(p.id, p.variant) == body:
+			break
+	_mine[p.id] = true
+	p.carry_on = 0
+	p.liquids = false
+	p.alarm = false
+	p.cleared = true
+	p.stage = Passenger.Stage.TO_GATE
+	p.stage_tick = _clock.tick
+	p.at = ShopTestLayout.AIRSIDE_CELL + ReferenceTerminal.offset_on(_mode.grid)
+	p.clear_path()
+	_clock.ticked.connect(func(_t: int) -> void: p.late = false)
+	if not _sim.cafes.try_visit(p):
+		_invalid("guest %d: the visit was refused" % p.id)
+		return null
+	return p
+
+
+func _watch(subject: String) -> void:
+	for body: int in SUBJECTS[subject][3]:
+		var p := _guest(body)
+		if p == null:
+			return
+		var visit := _sim.cafes.visit_of(p.id)
+		var seat: Dictionary = visit.seat
+		var label := "%s_%s" % [subject, String(seat.get("key", "?")).replace(":", "-")]
+		print(
+			(
+				"GUEST %s id=%d body=%s seat=%s approach=%s root=%s facing=%s"
+				% [
+					label,
+					p.id,
+					PassengerLooks.BODIES[PassengerLooks.body_of(p.id, p.variant)],
+					seat.get("cell"),
+					seat.get("approach"),
+					BuildObjectDef.seat_root_world(_sim.grid, seat),
+					seat.get("facing"),
+				]
+			)
+		)
+		var stop := _clock.tick + LIMIT_TICKS
+		while _clock.tick < stop and p.stage != Passenger.Stage.CAFE_TO_SEAT:
+			_clock.advance(SimClock.STEP)
+			if _clock.tick % 10 == 0:
+				await process_frame
+		if p.stage != Passenger.Stage.CAFE_TO_SEAT:
+			_invalid("%s: never walked to its seat (stage %d)" % [label, p.stage])
+			return
+		await _sit(label, p, visit)
+		# Kept on its seat while the next guest comes.
+		visit.dwell_end = _clock.tick + 1000000
+		visit.deadline = _clock.tick + 1000000
+
+
+## Steps the guest from its walk to the seat to SETTLE_TICKS after it is
+## seated, measuring every frame and taking the strip and the still.
+func _sit(label: String, p: Passenger, visit: CafeVisit) -> void:
+	var piece := (_mode.get_node("BuildView") as BuildView).object_node(visit.seat["object_id"])
+	var frame := _seat_frame(visit.seat)
+	var islands := _islands(piece, frame)
+	var strip: Array[Image] = []
+	var worst := {}
+	var frames := 0
+	var seated_at := -1
+	var sit_from := -1
+	var missed := 0
+	_aim(frame, visit.seat)
+	var stop := _clock.tick + LIMIT_TICKS
+	while _clock.tick < stop:
+		_clock.advance(SimClock.STEP / 3.0)
+		await _frames(1)
+		var body := _views.node_for(p.id)
+		if body == null:
+			_invalid("%s: no body drawn" % label)
+			return
+		if p.stage == Passenger.Stage.CAFE_TO_SEAT:
+			continue
+		if sit_from < 0:
+			sit_from = p.stage_tick
+		if p.stage == Passenger.Stage.CAFE_SEATED and seated_at < 0:
+			seated_at = _clock.tick
+		var k := _clock.tick - sit_from
+		var hits := _overlap(_points(body), islands)
+		frames += 1
+		if not hits.is_empty():
+			var at := "k%d+%.2f" % [k, _clock.alpha]
+			worst[at] = hits
+		var due := strip.size() < STRIP_TICKS.size() and k >= STRIP_TICKS[strip.size()]
+		if due and p.stage == Passenger.Stage.CAFE_SITTING_DOWN:
+			var shot := await _shot("%s_k%d" % [label, k], body)
+			# A frame that fails its proof is left blank, and the strip is not saved.
+			strip.append(shot)
+			missed += 1 if shot == null else 0
+		if seated_at >= 0 and _clock.tick - seated_at >= SETTLE_TICKS:
+			break
+	if seated_at < 0:
+		_invalid("%s: never seated" % label)
+		return
+	print("SIT_INSIDE %s frames=%d frames_inside=%d %s" % [label, frames, worst.size(), worst])
+	if not worst.is_empty():
+		_invalid("%s: body points inside the piece while sitting down or seated" % label)
+	var body := _views.node_for(p.id)
+	_seated_checks(label, body, islands, frame)
+	var still := await _shot("%s_seated" % label, body)
+	if strip.size() < STRIP_TICKS.size() or missed > 0 or still == null:
+		_invalid(
+			(
+				"%s: %d of %d strip frames, %d unproven"
+				% [label, strip.size(), STRIP_TICKS.size(), missed]
+			)
+		)
+		return
+	var tiles: Array[Image] = strip.duplicate()
+	_save(_row(tiles), "sitdown_%s_strip.png" % label)
+	_save(still, "sitdown_%s_seated.png" % label)
+	_sheet.append(still)
+	_seats_done += 1
+
+
+## The seat's frame: origin the seat root, x to the guest's right, z the way
+## it faces.
+func _seat_frame(seat: Dictionary) -> Transform3D:
+	var facing: Vector2i = seat["facing"]
+	var f := Vector3(facing.x, 0.0, facing.y).normalized()
+	var r := f.cross(Vector3.UP)
+	return Transform3D(Basis(r, Vector3.UP, f), BuildObjectDef.seat_root_world(_sim.grid, seat))
+
+
+func _seated_checks(label: String, body: Node3D, islands: Array, frame: Transform3D) -> void:
+	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var hips := (
+		skeleton.global_transform * skeleton.get_bone_global_pose(skeleton.find_bone("Hips")).origin
+	)
+	var own := _own_cushion(islands)
+	if own.is_empty():
+		_invalid("%s: no cushion at the seat root" % label)
+		return
+	var top: float = (own["box"] as AABB).end.y
+	var gap := _gap(_points(body), own)
+	print("SEAT_GAP %s gap=%.3f HIP_ABOVE=%.3f cushion_top=%.3f" % [label, gap, hips.y - top, top])
+	if gap > FLOAT_M:
+		_invalid("%s floats %.3f m over the cushion" % [label, gap])
+	# Controls: the same tests on the body moved where they must see it.
+	var at := body.global_position
+	body.global_position = at + Vector3.UP * LIFT_M
+	var lifted := _gap(_points(body), own)
+	body.global_position = at - frame.basis.z * 0.2
+	var back := _sum(_overlap(_points(body), islands))
+	var side_part := "end_panel"
+	var aside := Vector3.ZERO
+	if label.begins_with("bar"):
+		side_part = "counter"
+		aside = frame.basis.z * 0.35
+	else:
+		# Towards the bench's open end, where the end panel stands.
+		var lateral := frame.basis.x * signf(_end_side(islands))
+		aside = lateral * 0.45
+	body.global_position = at + aside
+	var side := _overlap(_points(body), islands)
+	body.global_position = at
+	print(
+		(
+			"CONTROL %s lifted_gap=%.3f back_points=%d %s_points=%d %s"
+			% [label, lifted, back, side_part, side.get(side_part, 0), side]
+		)
+	)
+	if lifted <= FLOAT_M or back == 0 or side.get(side_part, 0) == 0:
+		_invalid("%s: a control saw nothing" % label)
+
+
+## The sign (in the seat frame's x) of the end panel nearest the seat root.
+func _end_side(islands: Array) -> float:
+	var best := INF
+	var side := 0.0
+	for island: Dictionary in islands:
+		if island["part"] == "end_panel" and absf(island["local_x"]) < best:
+			best = absf(island["local_x"])
+			side = island["local_x"]
+	return side
+
+
+func _own_cushion(islands: Array) -> Dictionary:
+	var best := {}
+	for island: Dictionary in islands:
+		if island["part"] == "cushion" and absf(island["local_x"]) < 0.45:
+			if best.is_empty() or absf(island["local_x"]) < absf(best["local_x"]):
+				best = island
+	return best
+
+
+# ------------------------------------------------------------ geometry
+
+
+func _points(body: Node3D) -> PackedVector3Array:
+	var mi := PassengerLooks.body_mesh(body)
+	var baked := mi.bake_mesh_from_current_skeleton_pose()
+	var out := PackedVector3Array()
+	if baked == null:
+		_invalid("%s: the posed body could not be baked" % body.name)
+		return out
+	for s in baked.get_surface_count():
+		for v: Vector3 in baked.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+			out.append(mi.global_transform * v)
+	return out
+
+
+func _sum(hits: Dictionary) -> int:
+	var total := 0
+	for key: String in hits:
+		total += hits[key]
+	return total
+
+
+func _overlap(points: PackedVector3Array, islands: Array) -> Dictionary:
+	var counts := {}
+	for p in points:
+		var part := _inside(islands, p)
+		if part != "":
+			counts[part] = counts.get(part, 0) + 1
+	return counts
+
+
+func _gap(points: PackedVector3Array, island: Dictionary) -> float:
+	var gap := INF
+	for p in points:
+		var out := -INF
+		for plane: Array in island["planes"]:
+			out = maxf(out, (p - (plane[0] as Vector3)).dot(plane[1]))
+		gap = minf(gap, out)
+	return gap
+
+
+## The piece's welded mesh islands in world space, each named by its bounds in
+## the seat frame: a thin tall part to a side is the booth's end_panel, a part
+## ahead of the root the table or the counter, a thin part with its top at
+## cushion height a cushion, anything else seat.
+func _islands(piece: Node3D, frame: Transform3D) -> Array:
+	var out := []
+	var to_seat := frame.affine_inverse()
+	var bar := String(piece.get_meta("record", {}).get("def", "")) == "bar_counter"
+	for mi: MeshInstance3D in piece.find_children("*", "MeshInstance3D", true, false):
+		var faces := mi.mesh.get_faces()
+		var tris := faces.size() / 3
+		var parent := {}
+		for t in tris:
+			var a := _root_of(parent, _weld(faces[t * 3]))
+			for c in [1, 2]:
+				var b := _root_of(parent, _weld(faces[t * 3 + c]))
+				if a != b:
+					parent[b] = a
+		var groups := {}
+		for t in tris:
+			var r := _root_of(parent, _weld(faces[t * 3]))
+			if not groups.has(r):
+				groups[r] = []
+			(groups[r] as Array).append(t)
+		for r: Vector3i in groups:
+			var pts := PackedVector3Array()
+			for t: int in groups[r]:
+				for c in 3:
+					pts.append(mi.global_transform * faces[t * 3 + c])
+			var box := AABB(pts[0], Vector3.ZERO)
+			var local := AABB(to_seat * pts[0], Vector3.ZERO)
+			for p in pts:
+				box = box.expand(p)
+				local = local.expand(to_seat * p)
+			var centre := box.get_center()
+			var planes := []
+			for i in range(0, pts.size(), 3):
+				var n := (pts[i + 1] - pts[i]).cross(pts[i + 2] - pts[i])
+				if n.length() < 1e-9:
+					continue
+				n = n.normalized()
+				if n.dot(centre - pts[i]) > 0.0:
+					n = -n
+				planes.append([pts[i], n])
+			var convex := true
+			for plane: Array in planes:
+				for p in pts:
+					if (p - (plane[0] as Vector3)).dot(plane[1]) > 1e-3:
+						convex = false
+						break
+				if not convex:
+					break
+			var part := "seat"
+			var mid := local.get_center()
+			if local.size.x < 0.1 and local.size.y > 0.5:
+				part = "end_panel"
+			elif mid.z > 0.25:
+				part = "counter" if bar else "table"
+			elif (
+				local.end.y > PAN_TOP_RANGE.x
+				and local.end.y < PAN_TOP_RANGE.y
+				and local.size.y < 0.2
+			):
+				part = "cushion"
+			(
+				out
+				. append(
+					{
+						"part": part,
+						"planes": planes,
+						"convex": convex,
+						"tris": pts,
+						"box": box,
+						"local_x": mid.x,
+					}
+				)
+			)
+	var names := {}
+	for island: Dictionary in out:
+		names[island["part"]] = names.get(island["part"], 0) + 1
+	print("ISLANDS %s %s" % [piece.get_meta("record", {}).get("def", "?"), names])
+	return out
+
+
+func _inside_by_parity(tris: PackedVector3Array, p: Vector3) -> bool:
+	var o := p + Vector3(1.3e-4, 0.0, 0.7e-4)
+	var crossings := 0
+	for i in range(0, tris.size(), 3):
+		var a := tris[i]
+		var b := tris[i + 1]
+		var c := tris[i + 2]
+		var det := (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z)
+		if absf(det) < 1e-12:
+			continue
+		var u := ((o.x - a.x) * (c.z - a.z) - (c.x - a.x) * (o.z - a.z)) / det
+		var v := ((b.x - a.x) * (o.z - a.z) - (o.x - a.x) * (b.z - a.z)) / det
+		if u < 0.0 or v < 0.0 or u + v > 1.0:
+			continue
+		if a.y + u * (b.y - a.y) + v * (c.y - a.y) > o.y:
+			crossings += 1
+	return crossings % 2 == 1
+
+
+func _weld(p: Vector3) -> Vector3i:
+	return Vector3i((p * 1000.0).round())
+
+
+func _root_of(parent: Dictionary, k: Vector3i) -> Vector3i:
+	while parent.has(k):
+		k = parent[k]
+	return k
+
+
+func _inside(islands: Array, p: Vector3) -> String:
+	for island: Dictionary in islands:
+		if not (island["box"] as AABB).grow(0.01).has_point(p):
+			continue
+		if not island["convex"]:
+			if _inside_by_parity(island["tris"], p):
+				return island["part"]
+			continue
+		var ok := true
+		for plane: Array in island["planes"]:
+			if (p - (plane[0] as Vector3)).dot(plane[1]) > -OVERLAP_SLACK_M:
+				ok = false
+				break
+		if ok:
+			return island["part"]
+	return ""
+
+
+# ------------------------------------------------------------ plates
+
+
+## A camera high on the side the guest comes from, a little in front of the
+## seat, looking at the seat root: the step in and the hips on the cushion
+## show, over the booth's end panel and the table's end.
+func _aim(frame: Transform3D, seat: Dictionary) -> void:
+	if _cam == null:
+		_cam = Camera3D.new()
+		_cam.fov = 40.0
+		_main.add_child(_cam)
+	var approach := _sim.grid.cell_to_world(seat["approach"]) - frame.origin
+	var lateral := approach.dot(frame.basis.x)
+	var across := frame.basis.x * (signf(lateral) if absf(lateral) > 0.1 else 1.0)
+	var dir := (across * 0.6 + frame.basis.z * 0.5 + Vector3.UP * 1.2).normalized()
+	var target := (frame.origin + approach * 0.5) + Vector3.UP * 0.6
+	_cam.look_at_from_position(target + dir * 4.6, target, Vector3.UP)
+	_cam.current = true
+	(_mode.get_node("BuildView") as BuildView).update_cutaway(_cam.global_transform.basis.z)
+
+
+## The square crop of the window round the subject, proven in frame and seen
+## (a twin with the body hidden differs over SEEN_SHARE of its box), or null.
+func _shot(name: String, body: Node3D) -> Image:
+	Engine.time_scale = 0.0
+	var img := root.get_texture().get_image()
+	img.convert(Image.FORMAT_RGBA8)
+	var side := mini(img.get_width(), img.get_height())
+	var crop := Rect2i((img.get_width() - side) / 2, (img.get_height() - side) / 2, side, side)
+	var per_px := _cam.get_viewport().get_visible_rect().size.y / float(img.get_height())
+	var pts := _points(body)
+	if pts.is_empty():
+		Engine.time_scale = 1.0
+		return null
+	var box := AABB(pts[0], Vector3.ZERO)
+	for p in pts:
+		box = box.expand(p)
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for k in 8:
+		var px := _cam.unproject_position(box.get_endpoint(k)) / per_px
+		lo = lo.min(px)
+		hi = hi.max(px)
+	var inside := Rect2(crop).grow(-MARGIN_PX)
+	var in_frame := inside.has_point(lo) and inside.has_point(hi)
+	body.visible = false
+	var twin := await PlateSight.grab(self, 2)
+	body.visible = true
+	await PlateSight.grab(self, 2)
+	Engine.time_scale = 1.0
+	var rect := Rect2i(Vector2i(lo.floor()), Vector2i((hi - lo).ceil())).intersection(crop)
+	var seen := PlateSight.differing(img, twin, rect, 2)
+	var samples := maxi(1, ceili(rect.size.x / 2.0) * ceili(rect.size.y / 2.0))
+	var share := seen / float(samples)
+	print(
+		(
+			"PROOF %s tick=%d box=%s px=%s..%s crop=%s in_frame=%s seen=%d of %d share=%.2f"
+			% [
+				name,
+				_clock.tick,
+				box.size,
+				lo.round(),
+				hi.round(),
+				crop,
+				in_frame,
+				seen,
+				samples,
+				share
+			]
+		)
+	)
+	if not in_frame or share < SEEN_SHARE:
+		_invalid("%s: the guest is not in frame or not seen" % name)
+		return null
+	_plates += 1
+	return img.get_region(crop)
+
+
+func _row(images: Array[Image]) -> Image:
+	var out := Image.create(TILE * images.size(), TILE, false, Image.FORMAT_RGBA8)
+	for i in images.size():
+		var small := images[i].duplicate() as Image
+		small.convert(Image.FORMAT_RGBA8)
+		small.resize(TILE, TILE, Image.INTERPOLATE_LANCZOS)
+		out.blit_rect(small, Rect2i(Vector2i.ZERO, small.get_size()), Vector2i(i * TILE, 0))
+	return out
+
+
+func _contact_sheet(plates: Array[Image]) -> Image:
+	var cols := 3
+	var rows := ceili(plates.size() / float(cols))
+	var out := Image.create(cols * TILE, rows * TILE, false, Image.FORMAT_RGBA8)
+	out.fill(Color(1, 1, 1))
+	for i in plates.size():
+		var small := plates[i].duplicate() as Image
+		small.convert(Image.FORMAT_RGBA8)
+		small.resize(TILE, TILE, Image.INTERPOLATE_LANCZOS)
+		out.blit_rect(
+			small, Rect2i(Vector2i.ZERO, small.get_size()), Vector2i(i % cols, i / cols) * TILE
+		)
+	return out
+
+
+func _invalid(msg: String) -> void:
+	print("PROBE_INVALID ", msg)
+	_failed = true
+
+
+func _frames(count: int) -> void:
+	for i in count:
+		await process_frame
+	await RenderingServer.frame_post_draw
+
+
+func _save(img: Image, file: String) -> void:
+	var path := _out_dir.path_join(file)
+	if img.save_png(path) != OK:
+		_invalid("could not save %s" % path)
+		return
+	print("PLATE saved %s size=%s" % [path, img.get_size()])
