@@ -16,7 +16,9 @@ extends RefCounted
 ## its moved table saves its Relocation under "relocation" (absent otherwise):
 ## a guest still getting up at the old seat is checked against the saved
 ## spot's seat, owes no outcome until it is back, and one walking back or
-## sitting down again has left the old seat. A save never holds
+## sitting down again has left the old seat. A guest whose sit-down was turned
+## back saves "turned_back" (true, absent otherwise) while it gets up there, so
+## the load gives its stand-up no lead (CafeSim.TURNED_BACK). A save never holds
 ## stale cafe state: between a grid edit and the next tick's reconcile,
 ## PassengerSim.to_snapshot() refuses (SaveGame waits for that tick), so
 ## "deadlines_stale" is always false and a piece missing from the rebuilt
@@ -55,6 +57,11 @@ static func save(cafes: CafeSim) -> Dictionary:
 			record[field] = visit.get(field)
 		if visit.relocation != null:
 			record["relocation"] = visit.relocation.to_record()
+			# The stand-up that reverses a sit-down has no lead (CafeSim.TURNED_BACK),
+			# and nothing else saved tells it from a seated guest's: only while it
+			# gets up at the old seat is the flag read, so only then is it saved.
+			if visit.relocation.exiting and visit.has_meta(CafeSim.TURNED_BACK):
+				record["turned_back"] = true
 		visits.append(record)
 	return {
 		"visits": visits, "queues": cafes.queue_records(), "deadlines_stale": cafes.deadlines_stale
@@ -221,6 +228,8 @@ static func _relocation_problem(visit: CafeVisit, p: Passenger, grid: BuildGrid)
 	if moving == null:
 		return ""
 	var standing := p.stage == Passenger.Stage.CAFE_STANDING_UP
+	if visit.has_meta(CafeSim.TURNED_BACK) and not (moving.exiting and standing):
+		return "a turned-back stand-up that is not getting up at the old seat"
 	var venue := RoomTypes.get_type(grid.get_room(visit.room).get("type", visit.venue))
 	var table_def := StringName(moving.source["def"])
 	if (
@@ -288,6 +297,13 @@ static func _visit(entry: Variant) -> CafeVisit:
 		visit.relocation = Relocation.from_record(entry["relocation"])
 		if visit.relocation == null:
 			return null
+	if entry.has("turned_back"):
+		# Written only as true, and only beside a relocation.
+		if typeof(entry["turned_back"]) != TYPE_BOOL or not entry["turned_back"]:
+			return null
+		if visit.relocation == null:
+			return null
+		visit.set_meta(CafeSim.TURNED_BACK, true)
 	var outcome_ok := visit.outcome >= 0 and visit.outcome < CafeVisit.Outcome.size()
 	var settled_ok := not visit.settled or visit.outcome != CafeVisit.Outcome.NONE
 	if (
