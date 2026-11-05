@@ -263,6 +263,33 @@ func test_the_bar_order_cell_is_its_mount_order_mirroring_the_staff_cell() -> vo
 	assert_float(forward.z).is_equal_approx(-1.0, 0.01)
 
 
+## The bar counter's two stools are seats (decision bar-guests-sit-at-the-bar-
+## counter-stools-first-then-at-table): each seat's root is its .glb
+## Mount_SitRoot_L/_R and faces the counter like the mount. The .glb has no
+## approach mounts for them, and neither approach is the order cell.
+func test_bar_stools_match_the_models_sit_mounts() -> void:
+	var def := BuildCatalog.get_def(&"bar_counter")
+	var piece := InteriorKit.object_piece(&"bar_counter")
+	assert_int(def.seats.size()).is_equal(2)
+	var matched := 0
+	for i in def.seats.size():
+		var seat: Dictionary = def.seats[i]
+		var xf: Variant = _mount(piece, ["Mount_SitRoot_L", "Mount_SitRoot_R"][i])
+		assert_object(xf).override_failure_message("bar_counter stool %d" % i).is_not_null()
+		var at: Vector3 = (xf as Transform3D).origin
+		var cell: Vector2i = seat["cell"]
+		var centre := Vector2(cell.x - def.size.x / 2.0 + 0.5, cell.y - def.size.y / 2.0 + 0.5)
+		var root: Vector2 = seat["root"]
+		var forward: Vector3 = (xf as Transform3D).basis * Vector3(0, 0, 1)
+		print("bar stool %d: root %s, mount %s" % [i, centre + root, at])
+		assert_float(centre.x + root.x).is_equal_approx(at.x, 0.01)
+		assert_float(centre.y + root.y).is_equal_approx(at.z, 0.01)
+		assert_float(forward.z).is_equal_approx(float(seat["facing"].y), 0.01)
+		assert_vector(Vector2(seat["approach"])).is_not_equal(Vector2(def.interaction_offset))
+		matched += 1
+	assert_int(matched).is_equal(2)
+
+
 ## The restaurant table and booth catalogue the four Mount_SitRoot_* of their
 ## .glb: each seat's root is the mount, and the chair faces the table. Each
 ## seat's approach is the cell of its Mount_Approach_*, outside the footprint,

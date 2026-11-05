@@ -13,7 +13,8 @@ extends RefCounted
 ## LANE_SLOTS cells, stopping at a closed step, a station lane, another
 ## object's interaction cell or a seat's approach cell. A counter with no lane
 ## is left out. Its seats are the chairs of the RoomType.table_pieces in the
-## room (a cafe table, a dining table or a booth) a guest can step into
+## room (a cafe table, a dining table, a booth or the bar counter's stools) a
+## guest can step into
 ## (RoomRules.reachable_seats(): no wall between the approach cell and the
 ## seat, the rule the room panel counts by) from an approach cell that is a
 ## passenger cell (BuildGrid.is_passenger_cell(): walkable and walled in). A walk-on
@@ -25,7 +26,9 @@ const LANE_SLOTS := 4
 ## RoomTypes id (cafe, bar, restaurant or stall), "counters": Array of
 ## {"id": int, "lane": Array[Vector2i]} in id order, "seats": Array of seat
 ## entries in key order}. A seat entry is a BuildObjectDef seat descriptor
-## plus "key" ("<table id>:<seat index>") and "object_id".
+## plus "key" ("<table id>:<seat index>"), "object_id" and "at_counter" (a
+## stool of a counter piece, such as the bar counter's: CafeSim gives these
+## out before table seats).
 var cafes: Array[Dictionary] = []
 
 
@@ -53,7 +56,7 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 		# A walk-on room has no seats, whatever table stands in it.
 		var seats: Array[Dictionary] = []
 		if not walk_on:
-			seats = _seats(grid, ids, area, type.table_pieces)
+			seats = _seats(grid, ids, area, type)
 		var approaches := {}
 		for seat in seats:
 			approaches[seat["approach"]] = true
@@ -100,14 +103,14 @@ func seat(room_id: int, key: String) -> Dictionary:
 
 
 static func _seats(
-	grid: BuildGrid, ids: Array[int], area: Rect2i, tables: Array[StringName]
+	grid: BuildGrid, ids: Array[int], area: Rect2i, type: RoomTypes.RoomType
 ) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for id in ids:
 		var record := grid.get_object(id)
 		var def := BuildCatalog.get_def(record["def"])
 		if (
-			not tables.has(def.id)
+			not type.table_pieces.has(def.id)
 			or def.seats.is_empty()
 			or not FacilitySlots.piece_inside(grid, id, area)
 		):
@@ -117,6 +120,7 @@ static func _seats(
 				continue
 			seat["key"] = "%d:%d" % [id, seat["index"]]
 			seat["object_id"] = id
+			seat["at_counter"] = type.counter_pieces.has(def.id)
 			out.append(seat)
 	return out
 

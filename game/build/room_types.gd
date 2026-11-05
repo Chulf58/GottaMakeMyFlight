@@ -37,8 +37,10 @@ class RoomType:
 	var food := false
 	## A food room's counter and table pieces, its own piece first (it is the
 	## required one, the note names it) and then the cafe's, which a food room
-	## still accepts. Empty for a room that is not food; a walk-on room has no
-	## table pieces.
+	## still accepts. The table pieces are every piece guests sit at, so the
+	## bar's include its bar counter (two stools), after the cafe table that
+	## the "Needs a table" note names. Empty for a room that is not food; a
+	## walk-on room has no table pieces.
 	var counter_pieces: Array[StringName] = []
 	var table_pieces: Array[StringName] = []
 	## Whether a food room serves guests at the counter and lets them walk on
@@ -144,10 +146,14 @@ static func _build() -> void:
 	# "Make them work") and still accepts the cafe counter and table, so a
 	# player can build with either. The grab-and-go stall needs only a
 	# counter: its guest buys, pays and walks on with no seat and no dwell.
-	# Visit length and spend run stall < cafe < bar < restaurant. The
-	# bar lifts mood the most; the restaurant needs the most room. A guest who
-	# runs short of time leaves early and pays the short share like any cafe
-	# guest, so none of them causes a miss. All numbers are tuning values
+	# The bar counter's two stools are seats too, so it is one of the bar's
+	# table pieces and a bar with only a bar counter is ready; its guests take
+	# a stool first, then a table seat (decision bar-guests-sit-at-the-bar-
+	# counter-stools-first-then-at-table). Visit length and spend run
+	# stall < cafe < bar < restaurant. The bar lifts mood the most; the
+	# restaurant needs the most room. A guest who runs short of time leaves
+	# early and pays the short share like any cafe guest, so none of them
+	# causes a miss. All numbers are tuning values
 	# pinned by tests.
 	_add_food(
 		&"stall",
@@ -161,7 +167,7 @@ static func _build() -> void:
 		"Bar",
 		Vector2i(3, 4),
 		[24, 80, 200, 20],
-		[[&"bar_counter", CAFE_COUNTER], [CAFE_TABLE]]
+		[[&"bar_counter", CAFE_COUNTER], [CAFE_TABLE, &"bar_counter"]]
 	)
 	_add_food(
 		&"restaurant",
