@@ -31,7 +31,9 @@ extends RefCounted
 ## ticks; only the clip switches at once. The piece is the placement the visit
 ## last saw (ShopVisit.piece), so a visitor still at a piece that moved with its
 ## room (Relocation) keeps its pose at the old spot, and ShopSim sets the stage
-## clock so that the exit plays as the end of an ordinary stay (exit_ticks()).
+## clock so that the exit plays as the end of an ordinary stay (exit_ticks()),
+## a sit-down or step-in still under way turned back from where it had got to
+## (turn_back_ticks()).
 
 enum Kind { NONE, SEAT, RECLINE, SHOWER }
 
@@ -456,6 +458,33 @@ static func exit_ticks(def_id: StringName, carry_on: int, roller := false) -> in
 		Kind.SHOWER:
 			return EASE_TICKS + (DOOR_OUT_TICKS if carry_on > 0 else 0)
 	return 0
+
+
+## Ticks the exit of `p` takes when its piece moves under it now (ShopSim,
+## Relocation): exit_ticks(), or fewer while the start of its stay is still
+## under way, so the exit turns that start back from where it had reached (as
+## CafeSim turns a sit-down back, board 23ddd6bc). A sitter stands up for as
+## long as it has been sitting down, a nap pod sitter leans forward for as long
+## as it has leant back, and a showering visitor steps out for as long as it has
+## been stepping in; the waits for bags (up_tail(), DOOR_OUT_TICKS) stay whole.
+## The stage clock then counts down from where the start had got to, so the
+## drawn body never steps further onto the seat or into the shower first.
+static func turn_back_ticks(sim: PassengerSim, p: Passenger) -> int:
+	var piece := _piece(sim, p)
+	if piece.is_empty():
+		return 0
+	var full := exit_ticks(piece["def"], p.carry_on, ParkRecovery.has_roller(p))
+	var spent := maxi(_in_spent(sim, p), 0)
+	var back := full
+	match KINDS.get(piece["def"], Kind.NONE):
+		Kind.SEAT:
+			back = mini(spent, PassengerSim.SIT_DOWN_TICKS) + up_tail(sim, p)
+		Kind.RECLINE:
+			var lean := clampi(spent - PassengerSim.SIT_DOWN_TICKS, 0, EASE_TICKS)
+			back = mini(spent, PassengerSim.SIT_DOWN_TICKS) + lean + up_tail(sim, p)
+		Kind.SHOWER:
+			back = mini(spent, EASE_TICKS) + _door(sim, p, DOOR_OUT_TICKS)
+	return mini(full, back)
 
 
 static func _room_type_id(sim: PassengerSim, visit: ShopVisit) -> StringName:
