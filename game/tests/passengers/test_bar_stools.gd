@@ -73,6 +73,34 @@ func test_no_seat_of_any_piece_is_stepped_into_from_its_order_cell() -> void:
 	assert_int(checked).is_greater_equal(8)
 
 
+## Each stool is stepped onto from its open side (board 64ee4dc0: from behind,
+## the right stool's guest walked through the stool). A wall between the right
+## stool and the cell to its right drops that stool; the left one stays.
+func test_a_wall_beside_the_right_stool_drops_it_and_keeps_the_left_one() -> void:
+	var made := _world(false)
+	var world: PassengerTestWorld = made[0]
+	var counter: int = made[1]["air_counter"]
+	var before := RoomRules.reachable_seats(world.grid, counter)
+	var at := ReferenceTerminal.offset_on(world.grid)
+	var right_stool := CafeTestLayout.AIR_COUNTER + Vector2i(1, 1) + at
+	var wall := world.grid.apply(BuildEdit.place_wall(right_stool, BuildGrid.Side.EAST))
+	assert_bool(wall.ok).override_failure_message(wall.reason_text()).is_true()
+	var after := RoomRules.reachable_seats(world.grid, counter)
+	print(
+		(
+			"bar stools reachable: %d open, %d with a wall east of %s (left %s)"
+			% [before.size(), after.size(), right_stool, after.map(func(s): return s["index"])]
+		)
+	)
+	# The control: both stools are reachable before the wall.
+	assert_int(before.size()).is_equal(2)
+	assert_int(after.size()).is_equal(1)
+	assert_int(after[0]["index"]).is_equal(0)
+	assert_vector(Vector2(after[0]["approach"])).is_equal(
+		Vector2(CafeTestLayout.AIR_COUNTER + Vector2i(-1, 1) + at)
+	)
+
+
 func test_a_bar_with_only_a_bar_counter_is_ready_seats_two_and_its_order_cell_has_a_lane() -> void:
 	var made := _world(false)
 	var world: PassengerTestWorld = made[0]

@@ -266,8 +266,10 @@ static func _build_services() -> void:
 	# (decision bar-guests-sit-at-the-bar-counter-stools-first-then-at-table).
 	# The cell behind the left stool is the order cell, and CafeLayout gives no
 	# queue lane to a counter whose order cell is a seat's approach, so a guest
-	# steps onto the left stool from its open side and onto the right one from
-	# behind. The .glb has no approach mounts for them.
+	# steps onto each stool from its open side, (-1, 1) and (2, 1). From behind,
+	# (1, 2), the right stool's guest walked through the stool (board 64ee4dc0,
+	# game/spike/food_seats_probe.gd); a stool whose side cell is blocked is not
+	# reachable (RoomRules.reachable_seats). The .glb has no approach mounts.
 	for column in [0, 1]:
 		(
 			bar
@@ -275,7 +277,7 @@ static func _build_services() -> void:
 			. append(
 				{
 					"cell": Vector2i(column, 1),
-					"approach": Vector2i(-1, 1) if column == 0 else Vector2i(1, 2),
+					"approach": Vector2i(-1, 1) if column == 0 else Vector2i(2, 1),
 					"root": Vector2(0.0, -0.45),
 					"facing": Vector2i(0, -1),
 				}
