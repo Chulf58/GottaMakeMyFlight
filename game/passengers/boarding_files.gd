@@ -27,12 +27,17 @@ extends RefCounted
 ## other,
 ## so an indoor corridor shared by two doors' routes and the apron before the
 ## routes join stay unspaced, and walkers not heading out (seated, standing,
-## queuing) are not spaced from walkers in a file.
+## queuing) are not spaced from walkers in a file. Pending walkers stand where
+## they chose their exit, so several can wait on one point; `waiters`
+## (FileWaiters) draws them apart.
 
 ## The least walk between two walkers in one file, in mm.
 const GAP_MM := 700
 ## A save with no walker in any file.
 const EMPTY := {"doors": [], "planes": [], "pending": [], "delayed": []}
+
+## Where the pending walkers are drawn (derived, never saved).
+var waiters := FileWaiters.new()
 
 ## Exit door id -> passenger ids, the one nearest the door first.
 var _doors: Dictionary = {}
@@ -83,6 +88,7 @@ func clear_derived() -> void:
 	_aprons.clear()
 	_known.clear()
 	_known_tick = -1
+	waiters.clear()
 
 
 ## The walk outside from exit door `door`: {"points", "mm", "plane"}, with
@@ -138,12 +144,12 @@ func join_door(sim: PassengerSim, p: Passenger) -> bool:
 	var ids: Array = _doors.get(door, [])
 	var at := _slot(sim, ids, door_left(p), p.id, true)
 	if at < 0:
-		_pending[p.id] = true
+		_hold(p.id, true)
 		return false
 	ids.insert(at, p.id)
 	_doors[door] = ids
 	_door_of[p.id] = door
-	_pending.erase(p.id)
+	_hold(p.id, false)
 	return true
 
 
@@ -153,17 +159,17 @@ func join_door(sim: PassengerSim, p: Passenger) -> bool:
 func join_plane(sim: PassengerSim, p: Passenger) -> bool:
 	var apron := apron_of(sim, p.exit_object)
 	if apron["plane"] == null:
-		_pending.erase(p.id)
+		_hold(p.id, false)
 		return true
 	var ids: Array = _planes.get(apron["plane"], [])
 	var at := _slot(sim, ids, apron["mm"], p.id, false)
 	if at < 0:
-		_pending[p.id] = true
+		_hold(p.id, true)
 		return false
 	ids.insert(at, p.id)
 	_planes[apron["plane"]] = ids
 	_plane_of[p.id] = apron["plane"]
-	_pending.erase(p.id)
+	_hold(p.id, false)
 	return true
 
 
@@ -200,9 +206,18 @@ func _resort_plane(sim: PassengerSim, p: Passenger) -> void:
 
 ## Takes `id` out of every file and the pending set.
 func leave(id: int) -> void:
-	_pending.erase(id)
+	_hold(id, false)
 	_take(_doors, _door_of, id)
 	_take(_planes, _plane_of, id)
+
+
+## Marks `id` pending (`on`) or not; the waiters are placed again when drawn.
+func _hold(id: int, on: bool) -> void:
+	if on:
+		_pending[id] = true
+	else:
+		_pending.erase(id)
+	waiters.stale = true
 
 
 ## After `p` stepped: once GAP_MM out on the apron it leaves its door file.
