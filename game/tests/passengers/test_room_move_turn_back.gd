@@ -210,76 +210,94 @@ func _roller_visitor_at(spent: int) -> Passenger:
 	return p
 
 
-## A roller visitor `spent` ticks into its stay when the piece moves, the
-## share of its step onto the seat at the move returned. The share never rises
-## during the exit (no slide onto the seat while the roller is picked up), holds
-## where it was through the pick-up, and the body never comes nearer the old
-## seat than it was.
-func _roller_turn_back(type: StringName, spent: int) -> float:
+## A roller visitor `spent` ticks into its stay when the piece moves, having
+## made `reached` ticks of its step onto the seat. The exit is played in full:
+## the stand-up (none in the door wait), then the roller's pick-up of exactly
+## SEAT_HOLD_TICKS ticks with the share unchanged from the move (the body stands
+## still, it neither slides onto the seat nor starts back), then the step back,
+## one twelfth of a step a tick, lasting exactly `reached` ticks and none when
+## it had not stepped. It walks off straight after. The body never comes nearer
+## the old seat than it was.
+func _roller_turn_back(type: StringName, spent: int, reached: int) -> void:
 	_make(type)
 	var p := _roller_visitor_at(spent)
 	var seat := ActivityPoses.stay_frame(_world.sim, p).origin
 	var before_move := _away(p, seat)
 	ShopMoveKit.move_piece(_world, _ids["use"], MOVED_TO)
 	_world.step()
-	var moved_at := _world.clock.tick
-	assert_bool(_world.sim.shops.visit_of(p.id).relocation.exiting).is_true()
-	var at_move := ActivityPoses.share(_world.sim, p)
+	var visit := _world.sim.shops.visit_of(p.id)
+	assert_bool(visit.relocation.exiting).is_true()
+	assert_int(visit.relocation.reached).is_equal(reached)
 	assert_float(before_move - _away(p, seat)).is_less(NEARER_M)
-	# Through the pick-up the body stays put, whatever its share.
-	var held := true
-	var rose := 0.0
-	var last := at_move
-	var until := moved_at + 200
-	var ticks := 0
+	# One row a tick of the exit: the pose and the share of the step onto the seat.
+	var rows: Array[Vector2] = []
+	var until := _world.clock.tick + 200
 	while p.stage == Passenger.Stage.SHOP_BROWSE and _world.clock.tick < until:
+		rows.append(Vector2(ActivityPoses.pose(_world.sim, p), ActivityPoses.share(_world.sim, p)))
 		_world.step()
-		if p.stage != Passenger.Stage.SHOP_BROWSE:
-			break
-		var share := ActivityPoses.share(_world.sim, p)
-		rose = maxf(rose, share - last)
-		last = share
-		ticks += 1
-		if ticks <= ParkRecovery.UP_HOLD_TICKS - 1:
-			held = held and absf(share - at_move) < 0.001
-	assert_float(rose).override_failure_message("share rose %.3f in the exit" % rose).is_less(0.001)
-	assert_bool(held).override_failure_message("share left %.2f in the pick-up" % at_move).is_true()
 	assert_int(p.stage).is_equal(Passenger.Stage.SHOP_WALK)
-	return at_move
+	var n := rows.size()
+	var held := reached / float(ActivityPoses.SHUFFLE_TICKS)
+	var standing := 0
+	while standing < n and rows[standing].x == StageKinds.Pose.STANDING_UP:
+		standing += 1
+	var bad := ""
+	for i in n:
+		if i >= standing and rows[i].x == StageKinds.Pose.STANDING_UP:
+			bad += " row %d stands up again;" % i
+		if i < n - reached and absf(rows[i].y - held) > 0.0001:
+			bad += " row %d share %.3f, held %.3f;" % [i, rows[i].y, held]
+		if i >= n - reached:
+			var back := n - 1 - i
+			var want := back / float(ActivityPoses.SHUFFLE_TICKS)
+			if absf(rows[i].y - want) > 0.0001:
+				bad += " row %d share %.3f, step back wants %.3f;" % [i, rows[i].y, want]
+	assert_str(bad).override_failure_message("exit of %d rows:%s" % [n, bad]).is_empty()
+	(
+		assert_int(n - reached - standing)
+		. override_failure_message("%d rows: %d stand up, %d step back" % [n, standing, reached])
+		. is_equal(ActivityPoses.SEAT_HOLD_TICKS)
+	)
+	# The stand-up is the part of the sit-down made, and none while in the door wait.
+	assert_bool(standing > 0).is_equal(spent > SEAT_DOOR)
 
 
 ## Moved while still standing at its slot cell setting the roller down: no
-## step made before the move, and none made after it.
+## step made before the move, and none made after it, so it leaves right after
+## the pick-up with no step back.
 func test_a_roller_sofa_visitor_moved_5_ticks_into_the_door_wait_never_steps_onto_the_sofa(
 ) -> void:
-	assert_float(_roller_turn_back(&"lounge", 5)).is_equal(0.0)
+	_roller_turn_back(&"lounge", 5, 0)
 
 
 func test_a_roller_sofa_visitor_moved_14_ticks_into_the_door_wait_never_steps_onto_the_sofa(
 ) -> void:
-	assert_float(_roller_turn_back(&"lounge", 14)).is_equal(0.0)
+	_roller_turn_back(&"lounge", 14, 0)
 
 
 ## Moved partway through its step onto the sofa (and so through the sit-down):
-## the share it had made is kept, and the positive control is that it is neither
-## 0 nor 1.
+## the step it had made is kept through the pick-up and then stepped back.
 func test_a_roller_sofa_visitor_moved_5_ticks_into_the_sit_down_keeps_that_step() -> void:
-	var share := _roller_turn_back(&"lounge", SEAT_DOOR + 5)
-	assert_float(share).is_between(0.4, 0.6)
+	_roller_turn_back(&"lounge", SEAT_DOOR + 5, 5)
 
 
 func test_a_roller_sofa_visitor_moved_10_ticks_into_the_sit_down_keeps_that_step() -> void:
-	var share := _roller_turn_back(&"lounge", SEAT_DOOR + 10)
-	assert_float(share).is_between(0.75, 0.9)
+	_roller_turn_back(&"lounge", SEAT_DOOR + 10, 10)
+
+
+## Control: stepped all the way onto the seat (the step is 12 ticks), it keeps
+## the whole step back.
+func test_a_roller_sofa_visitor_moved_18_ticks_into_the_sit_down_steps_back_the_whole_step(
+) -> void:
+	_roller_turn_back(&"lounge", SEAT_DOOR + 18, ActivityPoses.SHUFFLE_TICKS)
 
 
 func test_a_roller_nap_pod_visitor_moved_in_the_door_wait_never_steps_onto_the_seat() -> void:
-	assert_float(_roller_turn_back(&"nap_pod", 5)).is_equal(0.0)
+	_roller_turn_back(&"nap_pod", 5, 0)
 
 
 func test_a_roller_nap_pod_visitor_moved_5_ticks_into_the_sit_down_keeps_that_step() -> void:
-	var share := _roller_turn_back(&"nap_pod", SEAT_DOOR + 5)
-	assert_float(share).is_between(0.4, 0.6)
+	_roller_turn_back(&"nap_pod", SEAT_DOOR + 5, 5)
 
 
 ## The step made when the move came is saved with the Relocation: a save taken
