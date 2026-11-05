@@ -1,8 +1,8 @@
 extends SceneTree
 ## Windowed probe of boarding-file waiters on their wait spots (board 3e3cb33e,
 ## FileWaiters): it boots main.tscn with the reference terminal and its gate desk, opens the
-## airport, runs to boarding and turns WALKERS walkers with a roller each out
-## on one cell. Once at least MIN_WAITERS of them wait in their file, each
+## airport, runs to boarding and turns walkers with a roller each out on
+## FILE_CELLS. Once at least MIN_WAITERS of them wait in their file, each
 ## still for STILL_FOR ticks, it prints every waiter's sim and drawn point, the least
 ## distance between two waiters, and each roller's tilt (+z to up) and
 ## distance from its walker, then saves one plate. Before the save every
@@ -19,9 +19,21 @@ extends SceneTree
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const OUT_REL := "res://../tools/blender/out/file-walkers"
-const FILE_CELL := Vector2i(19, 6)
-## Enough that three wait on their spots at once for STILL_FOR ticks.
-const WALKERS := 8
+## Where the walkers turn out: four on seed 44974's cell and four on the cell
+## behind it, so the file holds them long enough for three or more to wait on
+## wait spots for STILL_FOR ticks. The last on each cell, finding no free spot,
+## waits on its point with the walker it turned out with (the probe's own
+## stack, inherited by the files); a plate subject stands alone.
+const FILE_CELLS: Array[Vector2i] = [
+	Vector2i(19, 6),
+	Vector2i(19, 6),
+	Vector2i(19, 6),
+	Vector2i(19, 6),
+	Vector2i(19, 7),
+	Vector2i(19, 7),
+	Vector2i(19, 7),
+	Vector2i(19, 7)
+]
 const MIN_WAITERS := 3
 const STILL_FOR := RollerPark.FILE_STILL_TICKS + RollerPark.QUEUE_STAND_TICKS + 3.0
 const LIMIT_TICKS := 400
@@ -98,8 +110,8 @@ func _boot() -> bool:
 
 
 ## A calm, cleared passenger of the first flight with one roller, turning to
-## the exit on FILE_CELL.
-func _walker() -> Passenger:
+## the exit on `cell`.
+func _walker(cell: Vector2i) -> Passenger:
 	for attempt in 400:
 		var p := _sim.get_passenger(_sim.spawn_now(StarterFlight.first_flight()))
 		if SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
@@ -115,7 +127,7 @@ func _walker() -> Passenger:
 		p.boredom = 0
 		p.stage = Passenger.Stage.TO_EXIT
 		p.stage_tick = _clock.tick
-		p.at = FILE_CELL + _offset
+		p.at = cell + _offset
 		p.clear_path()
 		p.apron = []
 		p.apron_mm = 0
@@ -125,7 +137,7 @@ func _walker() -> Passenger:
 
 
 func _waiters() -> bool:
-	var first := _walker()
+	var first := _walker(FILE_CELLS[0])
 	if first == null:
 		return _invalid("no roller guest")
 	var boarding := first.boarding_tick
@@ -137,8 +149,8 @@ func _waiters() -> bool:
 		_clock.advance(SimClock.STEP)
 	await _frames(2)
 	var walkers: Array[Passenger] = []
-	for i in WALKERS:
-		var p := _walker()
+	for cell in FILE_CELLS:
+		var p := _walker(cell)
 		if p == null:
 			return _invalid("no roller guest")
 		walkers.append(p)
@@ -161,7 +173,10 @@ func _waiters() -> bool:
 			)
 			var held := _sim.files.is_pending(p.id) and moved < 0.001
 			still[p.id] = float(still.get(p.id, 0.0)) + 1.0 / 3.0 if held else 0.0
-			if still[p.id] >= STILL_FOR:
+			# One of each group still on the point they all turned out on (the
+			# stack is the probe's own, inherited by the files): the plate is
+			# of waiters the files placed.
+			if still[p.id] >= STILL_FOR and _apart_from(p, waiting) and _alone(p, walkers):
 				waiting.append(p)
 		if waiting.size() >= MIN_WAITERS:
 			break
@@ -237,7 +252,8 @@ func _report(waiting: Array[Passenger]) -> bool:
 		Vector3(0, 0, 1),
 		Vector3(0, 0, -1)
 	]:
-		cam.look_at_from_position(centre + away.normalized() * 3.0 + Vector3.UP * 4.2, centre)
+		# Steep, so each roller beside its walker shows over the bodies.
+		cam.look_at_from_position(centre + away.normalized() * 1.8 + Vector3.UP * 5.5, centre)
 		cam.current = true
 		await _frames(3)
 		var why := await _check(cam, waiting, bags)
@@ -285,7 +301,8 @@ func _check(cam: Camera3D, waiting: Array[Passenger], bags: Dictionary) -> Strin
 		var to_bag: Array[Vector3] = [
 			box.get_center(),
 			box.get_center() + Vector3.UP * box.size.y * 0.3,
-			box.get_center() - Vector3.UP * box.size.y * 0.3
+			box.get_center() - Vector3.UP * box.size.y * 0.3,
+			box.get_center() + Vector3.UP * box.size.y * 0.45
 		]
 		var bag_line := PlateSight.sight_lines(space, cam.global_position, to_bag, "b%d" % p.id)
 		print("SIGHT %d person %s bag %s" % [p.id, shown, bag_line])
@@ -303,6 +320,24 @@ func _check(cam: Camera3D, waiting: Array[Passenger], bags: Dictionary) -> Strin
 
 static func _flat(at: Vector3) -> Vector2:
 	return Vector2(at.x, at.z)
+
+
+## Whether no other walker of `walkers` still heading out stands on `p`'s point.
+func _alone(p: Passenger, walkers: Array[Passenger]) -> bool:
+	for q in walkers:
+		var near := _flat(_sim.world_position(p)).distance_to(_flat(_sim.world_position(q)))
+		if q != p and q.stage == Passenger.Stage.TO_EXIT and near < 0.05:
+			return false
+	return true
+
+
+## Whether `p` stands the gap or more from every one of `chosen` in the sim.
+func _apart_from(p: Passenger, chosen: Array[Passenger]) -> bool:
+	for q in chosen:
+		var d := _flat(_sim.world_position(p)).distance_to(_flat(_sim.world_position(q)))
+		if d < FileWaiters.ROOM_M:
+			return false
+	return true
 
 
 func _invalid(msg: String) -> bool:

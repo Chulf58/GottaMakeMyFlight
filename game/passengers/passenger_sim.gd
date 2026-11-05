@@ -686,7 +686,9 @@ func checked_info_desks(data: Dictionary, by_id: Dictionary, at: int) -> Diction
 ## no sim state: from_snapshot() installs the result, and SaveGame's staging
 ## runs the same check.
 func checked_boarding(data: Dictionary, by_id: Dictionary) -> Dictionary:
-	var files_state := BoardingFiles.checked(data.get("boarding", BoardingFiles.EMPTY), by_id, self)
+	var standing := checked_standing(data, by_id)
+	var saved: Variant = data.get("boarding", BoardingFiles.EMPTY)
+	var files_state := BoardingFiles.checked(saved, by_id, self, standing)
 	if not data.has("boarding") and int(data["save_version"]) >= SAVE_VERSION:
 		return {"error": "missing key 'boarding'"}
 	return files_state
@@ -993,7 +995,7 @@ func _move(p: Passenger) -> void:
 	if StageKinds.is_outside(p.stage) and p.stuck == Passenger.Stuck.NO_ROUTE:
 		return
 	var speed := RUN_MM if p.late else WALK_MM
-	if files.holds(p.id):
+	if files.holds(p.id) or files.waiters.back_mm(p.id) > 0:
 		speed = files.step_of(self, p, speed)
 	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
 		var total := p.apron_total_mm()
