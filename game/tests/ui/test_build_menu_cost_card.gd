@@ -45,8 +45,14 @@ func test_the_cost_line_sits_on_the_hud_card_style() -> void:
 	assert_int(card.corner_radius_top_left).is_equal(hud.corner_radius_top_left)
 
 
+func test_the_card_is_a_copy_not_the_shared_hud_bar_style() -> void:
+	var hud := BuildMenu.HUD_THEME.get_stylebox("panel", "HudBar")
+	assert_object(_card_style()).is_not_same(hud)
+
+
 func test_the_cost_text_is_dark_on_the_card_and_neutral() -> void:
 	var label := _menu.preview_label()
+	assert_str(str(label.theme_type_variation)).is_equal("HudCardName")
 	var dark := BuildMenu.HUD_THEME.get_color("font_color", "HudCardName")
 	assert_object(label.get_theme_color("font_color")).is_equal(dark)
 	assert_int(label.get_theme_constant("outline_size")).is_equal(0)
