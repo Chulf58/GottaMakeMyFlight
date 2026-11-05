@@ -166,6 +166,12 @@ static func _ring_spot(
 	return Rect2()
 
 
+## The furthest, in screen pixels, a card `card_height` tall is nudged to clear
+## need icons: its height, at most NUDGE_PX, plus two icon widths.
+static func nudge_reach(card_height: float) -> float:
+	return minf(NUDGE_PX, card_height) + 2.0 * NeedIcons.ICON_PX
+
+
 static func _is_clear(rect: Rect2, hud: Array[Rect2]) -> bool:
 	var padded := rect.grow(GAP_PX)
 	for control in hud:
@@ -225,7 +231,7 @@ func _place(
 	# one (one card never hides another's text), within a reach that clears a
 	# row of icons. The last frame's nudge is kept while it stays clear, so a
 	# label does not jitter as passengers walk.
-	var reach := minf(NUDGE_PX, rect.size.y) + 2.0 * NeedIcons.ICON_PX
+	var reach := nudge_reach(rect.size.y)
 	var near := rect.grow(reach + GAP_PX)
 	var blockers: Array[Rect2] = hud.duplicate()
 	for other in icons + _placed:
@@ -327,9 +333,10 @@ static func sync_card(label: Label3D) -> void:
 	card.offset = label.offset + Vector2(0.0, text.y / 2.0)
 	card.modulate.a = label.modulate.a
 	# Culling bounds come from the label's own axes, not the camera-facing ones
-	# its text is drawn in, so a slid label whose anchor is off screen was culled
-	# (an empty card in a plate). A margin of twice the slide plus the card's
-	# diagonal holds the drawn card at any turn, at any zoom.
+	# its text is drawn in. Measured 2026-11-05: a slid label's text is culled
+	# even with its anchor on screen, while the card still draws (an empty card
+	# in a plate). The margin is what keeps the text drawn: twice the slide plus
+	# the card's diagonal holds the drawn card at any turn, at any zoom.
 	var margin := (
 		2.0 * card.offset.length() * card.pixel_size + Vector2(size).length() * card.pixel_size
 	)
