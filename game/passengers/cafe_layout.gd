@@ -14,10 +14,9 @@ extends RefCounted
 ## object's interaction cell or a seat's approach cell. A counter with no lane
 ## is left out. Its seats are the chairs of the RoomType.table_pieces in the
 ## room (a cafe table, a dining table, a booth or the bar counter's stools) a
-## guest can step into
-## (RoomRules.reachable_seats(): no wall between the approach cell and the
-## seat, the rule the room panel counts by) from an approach cell that is a
-## passenger cell (BuildGrid.is_passenger_cell(): walkable and walled in). A walk-on
+## guest can step into (RoomRules.reachable_seats(), the rule the room panel
+## counts by: the approach cell is a passenger cell and no wall stands between
+## it and the seat). A walk-on
 ## room (the stall, RoomType.walk_on) needs only a counter and has no seats.
 
 const LANE_SLOTS := 4
@@ -64,7 +63,7 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 		for id in ids:
 			if (
 				not type.counter_pieces.has(StringName(grid.get_object(id)["def"]))
-				or not FacilitySlots.piece_inside(grid, id, area)
+				or not RoomRules.piece_inside(grid, id, area)
 			):
 				continue
 			var lane := _lane(grid, id, taken, approaches)
@@ -112,12 +111,10 @@ static func _seats(
 		if (
 			not type.table_pieces.has(def.id)
 			or def.seats.is_empty()
-			or not FacilitySlots.piece_inside(grid, id, area)
+			or not RoomRules.piece_inside(grid, id, area)
 		):
 			continue
 		for seat in RoomRules.reachable_seats(grid, id):
-			if not grid.is_passenger_cell(seat["approach"]):
-				continue
 			seat["key"] = "%d:%d" % [id, seat["index"]]
 			seat["object_id"] = id
 			seat["at_counter"] = type.counter_pieces.has(def.id)

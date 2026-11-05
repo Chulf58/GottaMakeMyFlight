@@ -73,6 +73,56 @@ func test_a_wall_with_floor_beyond_it_still_drops_the_seats_behind_it() -> void:
 	assert_int(RoomRules.reachable_seats(grid, _ids["open"]).size()).is_equal(4)
 
 
+## A door between a seat and floor outside the enclosure: a guest may not
+## stand there (BuildGrid.is_passenger_cell), so the room and the venue both
+## drop the seat. Built on its own grid, since it opens the enclosure.
+func test_a_door_to_floor_outside_the_enclosure_drops_the_seats_behind_it() -> void:
+	var grid := BuildGrid.new()
+	var ids := CafeTestLayout.build(grid, false, &"restaurant", false)
+	var at := ReferenceTerminal.offset_on(grid)
+	var booth := grid.apply(BuildEdit.place_object(&"restaurant_booth", WALLED_BOOTH + at, 0))
+	assert_bool(booth.ok).override_failure_message(booth.reason_text()).is_true()
+	var seat_cells: Array[Vector2i] = [WALLED_BOOTH + Vector2i(1, 0), WALLED_BOOTH + Vector2i(1, 2)]
+	for seat_cell in seat_cells:
+		var cell := seat_cell + at
+		var edits: Array[BuildEdit] = [
+			BuildEdit.remove_wall(cell, BuildGrid.Side.EAST),
+			BuildEdit.place_wall(cell, BuildGrid.Side.EAST, BuildGrid.WallKind.DOOR),
+			BuildEdit.paint_floor(cell + Vector2i.RIGHT, BuildGrid.FLOOR_TILE, 1),
+		]
+		for result in grid.apply_batch(edits):
+			assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
+	# The controls: a door, and walkable floor beyond it that is not indoor.
+	for seat_cell in seat_cells:
+		var beyond := seat_cell + at + Vector2i.RIGHT
+		print(
+			(
+				"door at %s: kind %d, beyond walkable %s, indoor %s"
+				% [
+					seat_cell + at,
+					grid.wall_kind(seat_cell + at, BuildGrid.Side.EAST),
+					grid.is_walkable(beyond),
+					grid.is_indoor(beyond),
+				]
+			)
+		)
+		assert_int(grid.wall_kind(seat_cell + at, BuildGrid.Side.EAST)).is_equal(
+			BuildGrid.WallKind.DOOR
+		)
+		assert_bool(grid.is_walkable(beyond)).is_true()
+		assert_bool(grid.is_indoor(beyond)).is_false()
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	world.sim.cafes.refresh()
+	var reachable := RoomRules.reachable_seats(grid, booth.object_id).size()
+	var room := RoomRules.status(grid, ids["air_room"]).seats
+	var venue: int = world.sim.cafes.layout.cafe(ids["air_room"])["seats"].size()
+	var counts := [reachable, room, venue]
+	print("booth by doors to outdoor floor: reachable %d, room %d, venue %d" % counts)
+	assert_int(reachable).is_equal(2)
+	assert_int(room).is_equal(2)
+	assert_int(venue).is_equal(2)
+
+
 func test_the_room_and_the_venue_count_only_the_reachable_seats() -> void:
 	var air := RoomRules.status(_mode.grid, _ids["air_room"])
 	var land := RoomRules.status(_mode.grid, _ids["land_room"])

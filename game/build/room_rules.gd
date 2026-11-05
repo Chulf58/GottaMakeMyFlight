@@ -86,12 +86,13 @@ static func _count(pieces: Dictionary, ids: Array[StringName]) -> int:
 
 
 ## The seat descriptors (BuildObjectDef.seat_descriptors) of object
-## `object_id` a guest can step into: its approach cell is walkable and no
-## wall but a door stands between it and the seat's cell. A booth with an end
-## against a wall keeps only the two seats at its open end (decision
-## restaurant-booth-against-a-wall-counts-only-reachable-seats). The room's
-## seat count and the piece's info come from here; CafeLayout also asks that
-## the approach cell is indoor, as every passenger cell must be.
+## `object_id` a guest can step into: its approach cell is a passenger cell
+## (BuildGrid.is_passenger_cell(): walkable and walled in) and no wall but a
+## door stands between it and the seat's cell. A booth with an end against a
+## wall keeps only the two seats at its open end (decision restaurant-booth-
+## against-a-wall-counts-only-reachable-seats). The one seat rule: the room's
+## seat count, the piece's info and CafeLayout's seats all come from here, so
+## a floor that is not yet walled in has no seats.
 static func reachable_seats(grid: BuildGrid, object_id: int) -> Array[Dictionary]:
 	var record := grid.get_object(object_id)
 	var def := BuildCatalog.get_def(record["def"])
@@ -101,7 +102,7 @@ static func reachable_seats(grid: BuildGrid, object_id: int) -> Array[Dictionary
 		var side := BuildGrid.SIDE_STEP.find(seat["cell"] - approach)
 		var wall := grid.wall_kind(approach, side)
 		if (
-			grid.is_walkable(approach)
+			grid.is_passenger_cell(approach)
 			and (wall == BuildGrid.WallKind.NONE or wall == BuildGrid.WallKind.DOOR)
 		):
 			out.append(seat)
@@ -129,7 +130,8 @@ static func pieces_in(grid: BuildGrid, area: Rect2i) -> Dictionary:
 
 
 ## Whether object `object_id` lies wholly inside `area`, its interaction cell
-## included: the rule a piece counts for a room by.
+## included: the rule a piece counts for a room by. FacilitySlots.piece_inside()
+## and CafeLayout ask this one copy.
 static func piece_inside(grid: BuildGrid, object_id: int, area: Rect2i) -> bool:
 	var record := grid.get_object(object_id)
 	var def := BuildCatalog.get_def(record["def"])
