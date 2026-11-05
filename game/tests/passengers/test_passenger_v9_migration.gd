@@ -11,7 +11,7 @@ extends GdUnitTestSuite
 const SAVE_TICK := 205
 const TOILET_FIELDS := ["toilet_need", "toilet_cooldown"]
 ## Fields and blocks added after version 9, which neither fixture holds.
-const LATER_FIELDS := ["boredom", "shop_cooldown"]
+const LATER_FIELDS := ["boredom", "shop_cooldown", "seat_piece", "seat_exiting"]
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
@@ -87,7 +87,7 @@ func _needs(world: PassengerTestWorld) -> Array:
 
 
 func test_the_fixture_is_a_real_save_without_toilets() -> void:
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(20)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(21)
 	for version in [8, 9]:
 		var data := _old(version)
 		assert_bool(data.has("toilet")).is_false()

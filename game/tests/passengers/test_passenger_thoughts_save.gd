@@ -51,7 +51,7 @@ func test_thoughts_and_their_marks_come_back_from_json() -> void:
 	var thoughts := p.thoughts.duplicate()
 	var marks := p.thought_marks.duplicate()
 	var data := _saved()
-	assert_int(int(data["save_version"])).is_equal(20)
+	assert_int(int(data["save_version"])).is_equal(21)
 	assert_bool(_world.sim.from_snapshot(data)).is_true()
 	var back := _world.passenger(_id)
 	print("saved %s / %s, loaded %s / %s" % [thoughts, marks, back.thoughts, back.thought_marks])

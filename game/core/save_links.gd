@@ -202,7 +202,9 @@ static func _station_problem(passengers: Dictionary, sim: PassengerSim) -> Strin
 				"passengers: passenger %d is at %d, which is not a usable station"
 				% [passenger.id, passenger.station]
 			)
-		if passenger.seat_object != 0 and not _has_seat(layout, passenger):
+		# One getting up from a moved row keeps its old seat cell (GateRelocation).
+		var holds := passenger.seat_object != 0 and not passenger.seat_exiting
+		if holds and not _has_seat(layout, passenger):
 			return "passengers: passenger %d holds a seat that is not there" % passenger.id
 	return ""
 

@@ -84,7 +84,9 @@ signal checked_in(id: int, desk: int)
 ## Relocation). Version 18 is refused, with no migration.
 ## 20: each passenger's thoughts and their repeat marks (PassengerThoughts).
 ## Version 19 is refused, with no migration.
-const SAVE_VERSION := 20
+## 21: each passenger's seat placement and seat_exiting (GateRelocation).
+## Version 20 is refused, with no migration.
+const SAVE_VERSION := 21
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -1236,6 +1238,7 @@ func _claim_seat(p: Passenger) -> bool:
 		p.seat_object = seat["object_id"]
 		p.seat_cell = seat["cell"]
 		p.seat_front = seat["front"]
+		p.seat_piece = Relocation.placement(grid, seat["object_id"])
 		p.set_path(path)
 		return true
 	return false
@@ -1250,15 +1253,19 @@ func _gate_cells(p: Passenger) -> Array[Vector2i]:
 	return out
 
 
-func _release_seat(p: Passenger) -> void:
-	if p.seat_object == 0:
-		return
+## Gives up the claim on the seat `p` holds but leaves it the seat (it gets up
+## from a chair that moved, GateRelocation).
+func drop_seat_claim(p: Passenger) -> void:
 	for key in _seat_claims.keys():
 		if _seat_claims[key] == p.id:
 			_seat_claims.erase(key)
-	p.seat_object = 0
-	p.seat_cell = Passenger.NO_CELL
-	p.seat_front = Passenger.NO_CELL
+
+
+func _release_seat(p: Passenger) -> void:
+	if p.seat_object == 0:
+		return
+	drop_seat_claim(p)
+	p.forget_seat()
 
 
 func _to_exit(p: Passenger) -> void:
@@ -1468,7 +1475,7 @@ func _reconcile() -> void:
 			_by_id[last].stuck = Passenger.Stuck.QUEUE_FULL
 	for p in _passengers:
 		ParkRecovery.note_sitting(self, p)
-		if p.seat_object != 0 and not _seat_exists(p):
+		if p.seat_object != 0 and not GateRelocation.holds_seat(self, p, _set_stage):
 			_release_seat(p)
 			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
 				# Plans again: another seat or a standing spot (its roller collected
@@ -1505,13 +1512,6 @@ func _close_queue(station: int, q: Dictionary) -> void:
 		var p: Passenger = _by_id[id]
 		_send_back(p)
 		p.clear_path()
-
-
-func _seat_exists(p: Passenger) -> bool:
-	for seat in layout.seats:
-		if seat["object_id"] == p.seat_object and seat["cell"] == p.seat_cell:
-			return true
-	return false
 
 
 func _send_back(p: Passenger) -> void:
@@ -1585,7 +1585,8 @@ func _rederive() -> void:
 		)
 		if walking and p.station != 0:
 			_incoming[p.station] = _incoming.get(p.station, 0) + 1
-		if p.seat_object != 0:
+		# One getting up from a moved row has dropped its claim (GateRelocation).
+		if p.seat_object != 0 and not p.seat_exiting:
 			for seat in layout.seats:
 				if seat["object_id"] == p.seat_object and seat["cell"] == p.seat_cell:
 					_seat_claims[seat["key"]] = p.id

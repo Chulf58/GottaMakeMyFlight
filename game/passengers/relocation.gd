@@ -166,7 +166,8 @@ static func seat_at(at: Dictionary, key: String) -> Dictionary:
 
 ## The cells visitors at their pieces need clear to leave them: each cafe
 ## guest's seat and its approach cell while it sits down, sits or stands up,
-## and each toilet user's stall cells and approach cell while it is inside. A
+## and each toilet user's stall cells and approach cell while it is inside, and
+## each gate-seated passenger's seat cell and chair front (GateRelocation). A
 ## room move that sets a piece down on one is refused (RoomMove's keep_clear,
 ## decision part 3), in id order, each cell once.
 static func exit_cells(sim: PassengerSim) -> Array[Vector2i]:
@@ -189,6 +190,7 @@ static func exit_cells(sim: PassengerSim) -> Array[Vector2i]:
 			if ActivityPoses.KINDS.has(visit.piece.get("def", &"")):
 				# A sitter or shower user is also on the piece's own cell.
 				_add(out, [approach + (visit.slot["facing"] as Vector2i)])
+	_add(out, GateRelocation.exit_cells(sim))
 	return out
 
 
@@ -211,6 +213,10 @@ static func ghosts(sim: PassengerSim) -> Array[Dictionary]:
 		var visit := sim.shops.visit_of(id)
 		if sim.get_passenger(id).stage == Passenger.Stage.SHOP_BROWSE:
 			_ghost(out, sim.grid, visit.display, visit.piece, visit.relocation)
+	for id in sim.passenger_ids():
+		var p := sim.get_passenger(id)
+		if p.seat_object != 0 and GateRelocation.SEAT_STAGES.has(p.stage):
+			_ghost(out, sim.grid, p.seat_object, p.seat_piece, GateRelocation.leaving(p))
 	return out
 
 

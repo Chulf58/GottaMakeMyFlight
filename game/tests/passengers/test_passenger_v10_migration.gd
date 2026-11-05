@@ -89,6 +89,8 @@ func _v10() -> Dictionary:
 	for record: Dictionary in data["passengers"]:
 		record.erase("boredom")
 		record.erase("shop_cooldown")
+		record.erase("seat_piece")
+		record.erase("seat_exiting")
 	return data
 
 
@@ -111,7 +113,7 @@ func _needs(world: PassengerTestWorld) -> Array:
 
 
 func test_the_fixture_is_a_version_10_save_with_a_toilet_visit_under_way() -> void:
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(20)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(21)
 	var data := _v10()
 	assert_bool(_in_stall(_a)).is_true()
 	assert_array(data["toilet"]["visits"]).is_not_empty()
@@ -171,7 +173,7 @@ func test_a_migrated_world_saves_as_the_current_version_and_loads_again() -> voi
 	_b = _fresh()
 	assert_bool(_b.sim.from_snapshot(_v10())).is_true()
 	var again := _json(_b.sim.to_snapshot())
-	assert_int(int(again["save_version"])).is_equal(20)
+	assert_int(int(again["save_version"])).is_equal(21)
 	for record: Dictionary in again["passengers"]:
 		assert_bool(record.has("boredom")).is_true()
 	var third := _fresh()
