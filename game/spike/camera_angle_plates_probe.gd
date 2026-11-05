@@ -309,6 +309,9 @@ func _check_people(
 	var in_frame := 0
 	var blocked := 0
 	var must_shown := not need
+	# One entry per passenger in frame: shown (lines landed, none blocked) or
+	# the meshes in front, so a failed plate names what hides its people.
+	var proofs: Array[String] = []
 	for tag in bounds:
 		var box: AABB = bounds[tag]
 		var centre := box.get_center()
@@ -323,8 +326,10 @@ func _check_people(
 		var blockers: Array[String] = lines["blockers"]
 		if not blockers.is_empty():
 			blocked += 1
+			proofs.append("%s@%s blocked_by=%s" % [tag, _px(centre), blockers])
 		if on.size() >= 1 and blockers.is_empty():
 			shown += 1
+			proofs.append("%s@%s on=%d" % [tag, _px(centre), on.size()])
 			if need and Vector2(centre.x, centre.z).distance_to(Vector2(must.x, must.z)) < 0.6:
 				must_shown = true
 				print("PROBE %s subject %s at %s screen=%s" % [name, tag, centre, _px(centre)])
@@ -336,6 +341,7 @@ func _check_people(
 			% [name, bounds.size(), in_frame, shown, blocked]
 		)
 	)
+	print("PROBE %s people %s" % [name, proofs])
 	if shown == 0:
 		_invalid("%s: no passenger in frame is in plain sight" % name)
 	return must_shown
