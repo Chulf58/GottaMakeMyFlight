@@ -28,6 +28,10 @@ extends RefCounted
 
 const VISIT_FIELDS := ["passenger", "room", "display", "slot", "resume_stage", "deadline"]
 const RESUME_STAGES := [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
+## Ticks into a stay tried when _longest_exit() asks the sim how long a turned
+## back exit can be: more than the longest start of a stay (a stand-up, a lean
+## back, a door wait and a step) takes.
+const EXIT_SPAN_TICKS := 120
 
 
 static func save(shops: ShopSim) -> Dictionary:
@@ -126,7 +130,7 @@ static func _visit_problem(
 ## Why a visit's Relocation cannot be what continuous play left, or "" when it
 ## can (or there is none). Its source must be the browse piece of the visit's
 ## room. A visitor leaving the old spot is browsing there with the exit of its
-## piece still to run: 1 to ActivityPoses.exit_ticks() ticks of the stay
+## piece still to run: 1 to _longest_exit() ticks of the stay
 ## (browse_ticks()) left; one that owes the stay still (left 1 to
 ## browse_ticks()) is walking back or browsing it. A final exit (left -1) is
 ## only leaving, and only while the end of the stay is under way. Whether the
@@ -161,10 +165,37 @@ static func _relocation_problem(
 	if moving.returns() and (moving.left < 1 or moving.left > dwell):
 		return "a return owing %d ticks, not 1 to %d" % [moving.left, dwell]
 	var ends := p.stage_tick + dwell - tick
-	var roller := ParkRecovery.has_roller(p)
-	if ends < 1 or ends > ActivityPoses.exit_ticks(moving.source["def"], p.carry_on, roller):
+	if ends < 1 or ends > _longest_exit(visit, p, grid):
 		return "an exit with %d ticks to run" % ends
 	return ""
+
+
+## The most ticks the exit of `visit` can have to run when the piece moved
+## under `p`, having made `visit.relocation.reached` ticks of its step onto the
+## seat or into the shower: the greatest ActivityPoses.turn_back_ticks() over
+## the ticks into the stay at which that step is the one reach() reports. The
+## sim's own functions answer, on a bare sim holding the visit as the move left
+## it, so the bound moves with them (a roller visitor's pick-up and step off
+## are SEAT_HOLD_TICKS and only as long as the step made, ActivityPoses.up_tail()).
+static func _longest_exit(visit: ShopVisit, p: Passenger, grid: BuildGrid) -> int:
+	var moving := visit.relocation
+	var asked := ShopVisit.new()
+	asked.passenger = visit.passenger
+	asked.room = visit.room
+	asked.display = visit.display
+	asked.index = visit.index
+	asked.piece = moving.source
+	asked.relocation = moving
+	var sim := PassengerSim.new()
+	sim.grid = grid
+	sim.shops.restore({"visits": {p.id: asked}, "deadlines_stale": false})
+	var longest := 0
+	for into in EXIT_SPAN_TICKS:
+		sim.tick = p.stage_tick + into
+		if ActivityPoses.reach(sim, p) == moving.reached:
+			longest = maxi(longest, ActivityPoses.turn_back_ticks(sim, p))
+	sim.free()
+	return longest
 
 
 ## Whether a visit of `p` to a room of type `kind` is a fallback, as the
