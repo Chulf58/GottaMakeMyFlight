@@ -558,6 +558,11 @@ func _pose(node: Node3D, p: Passenger) -> float:
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
 	WishIconView.show_wish(node, wish)
+	# A boarding-file waiter on its wait spot (FileWaiters) faces its way out,
+	# not back along its walk to the spot.
+	var way := walk_heading(p)
+	if is_nan(face) and sim.files.waiters.at_spot(p) and way != Vector2.ZERO:
+		face = atan2(way.x, way.y)
 	return face
 
 

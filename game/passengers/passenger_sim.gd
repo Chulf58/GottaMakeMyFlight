@@ -86,7 +86,8 @@ signal checked_in(id: int, desk: int)
 ## Version 19 is refused, with no migration.
 ## 21: each passenger's seat placement and seat_exiting (GateRelocation).
 ## Version 20 is refused, with no migration.
-const SAVE_VERSION := 21
+## 22: boarding-file wait spots (FileWaiters). Version 21 is refused, no migration.
+const SAVE_VERSION := 22
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -518,7 +519,7 @@ func world_position(p: Passenger) -> Vector3:
 		here = here.lerp(point, clampf((tick - p.stage_tick) / float(SHUFFLE_TICKS), 0.0, 1.0))
 	elif p.stage == Passenger.Stage.TO_EXIT and standing.spot_of(p.id) != StandingSpots.NO_SPOT:
 		here = _off_spot(p)
-	return here
+	return here + files.waiters.shift(p)
 
 
 ## A walker setting off for the exit from its standing spot: on the spot until
@@ -685,7 +686,9 @@ func checked_info_desks(data: Dictionary, by_id: Dictionary, at: int) -> Diction
 ## no sim state: from_snapshot() installs the result, and SaveGame's staging
 ## runs the same check.
 func checked_boarding(data: Dictionary, by_id: Dictionary) -> Dictionary:
-	var files_state := BoardingFiles.checked(data.get("boarding", BoardingFiles.EMPTY), by_id, self)
+	var standing := checked_standing(data, by_id)
+	var saved: Variant = data.get("boarding", BoardingFiles.EMPTY)
+	var files_state := BoardingFiles.checked(saved, by_id, self, standing)
 	if not data.has("boarding") and int(data["save_version"]) >= SAVE_VERSION:
 		return {"error": "missing key 'boarding'"}
 	return files_state
@@ -992,7 +995,7 @@ func _move(p: Passenger) -> void:
 	if StageKinds.is_outside(p.stage) and p.stuck == Passenger.Stuck.NO_ROUTE:
 		return
 	var speed := RUN_MM if p.late else WALK_MM
-	if files.holds(p.id):
+	if files.holds(p.id) or files.waiters.back_mm(p.id) > 0:
 		speed = files.step_of(self, p, speed)
 	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
 		var total := p.apron_total_mm()

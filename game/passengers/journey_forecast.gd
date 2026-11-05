@@ -88,8 +88,8 @@ static func own_times(sim: PassengerSim, p: Passenger, now: int, routed: bool) -
 		var apron := sim.files.apron_of(sim, p.exit_object)
 		return _times(
 			p.exit_object,
-			now + walk_ticks(p.remaining_mm()),
-			now + walk_ticks(p.remaining_mm() + apron["mm"]),
+			now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id)),
+			now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id) + apron["mm"]),
 			apron["plane"]
 		)
 	var leg := _to_gate(sim, p, routed)
