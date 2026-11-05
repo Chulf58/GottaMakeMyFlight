@@ -80,7 +80,14 @@ const INT_FIELDS := [
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := [
-	"late", "cleared", "needs_replan", "liquids", "alarm", "incident_resolved", "sat_late"
+	"late",
+	"cleared",
+	"needs_replan",
+	"liquids",
+	"alarm",
+	"incident_resolved",
+	"sat_late",
+	"seat_exiting",
 ]
 
 
@@ -259,6 +266,7 @@ static func _record(p: Passenger) -> Dictionary:
 	for point in p.apron:
 		apron.append([point.x, point.y, point.z])
 	record["apron"] = apron
+	record["seat_piece"] = GateRelocation.piece_to_record(p.seat_piece)
 	record["thoughts"] = Array(p.thoughts)
 	record["thought_marks"] = Array(p.thought_marks)
 	return record
@@ -377,6 +385,8 @@ static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 			_set_missing(record, "shop_cooldown", 0)
 			_set_missing(record, "collect_tick", 0)
 			_set_missing(record, "sat_late", false)
+			_set_missing(record, "seat_exiting", false)
+			_set_missing(record, "seat_piece", {})
 			_set_missing(record, "thoughts", [])
 			_set_missing(record, "thought_marks", [])
 	_set_missing(out, "shop", {"visits": [], "deadlines_stale": false})
@@ -456,7 +466,7 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		INT_FIELDS
 		+ CELL_FIELDS
 		+ BOOL_FIELDS
-		+ ["flight_id", "path", "apron", "thoughts", "thought_marks"]
+		+ ["flight_id", "path", "apron", "seat_piece", "thoughts", "thought_marks"]
 	):
 		if not record.has(field):
 			return null
@@ -501,6 +511,7 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 	var index_ok := p.path_index >= 0 and p.path_index < maxi(p.path.size(), 1)
 	if (
 		not (variant_ok and range_ok and stage_ok and stuck_ok and index_ok)
+		or not GateRelocation.valid(p)
 		or p.id < 1
 		or p.id >= next_id
 	):
@@ -541,6 +552,10 @@ static func _fill(p: Passenger, record: Dictionary, grid: BuildGrid) -> bool:
 			if not is_finite(axis) or absf(axis) > BuildGrid.MAX_ORIGIN_M:
 				return false
 		p.apron.append(Vector3(value[0], value[1], value[2]))
+	var piece: Variant = GateRelocation.piece_from_record(record["seat_piece"])
+	if piece == null:
+		return false
+	p.seat_piece = piece
 	return PassengerThoughts.fill(p, record["thoughts"], record["thought_marks"], grid)
 
 

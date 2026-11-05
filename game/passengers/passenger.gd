@@ -84,6 +84,12 @@ var service_end := 0
 var seat_object := 0
 var seat_cell := NO_CELL
 var seat_front := NO_CELL
+## The placement ({"def", "anchor", "facing"}, Relocation.placement()) of the
+## seat row it holds, as the sim last saw it; empty with no seat. Once the row
+## moves it stays the placement being left (GateRelocation).
+var seat_piece: Dictionary = {}
+## Whether it is getting up from a seat row that moved, at seat_piece.
+var seat_exiting := false
 var exit_object := 0
 ## The walk outside the terminal, world points: the road to the entrance
 ## while SPAWNED (on the airport site), the exit door to the plane door
@@ -188,6 +194,15 @@ func set_path(cells: Array[Vector2i]) -> void:
 	path = cells
 	path_index = 0
 	seg_mm = 0
+
+
+## Gives up the gate seat it holds.
+func forget_seat() -> void:
+	seat_object = 0
+	seat_cell = NO_CELL
+	seat_front = NO_CELL
+	seat_piece = {}
+	seat_exiting = false
 
 
 func clear_path() -> void:

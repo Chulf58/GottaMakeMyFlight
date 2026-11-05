@@ -19,15 +19,29 @@ extends SceneTree
 ## user. Otherwise PROBE_INVALID, exit 1. A guard thread calls OS.crash() on
 ## a stall.
 ##
+## With `-- --case=gate` it draws the gate-seat case instead (move rooms 3b,
+## board fee68e85, GateRelocation): a cleared passenger is sent to a gate seat
+## and, once SEATED, its seat row is moved to GATE_MOVED_TO the way a room move
+## moves it. From the move until the passenger sits down again, one tick per
+## frame, a frame every STRIP_STEP_TICKS from a steep camera holding the old
+## row, the new row and the passenger, with the same in-frame, in-sight and
+## largest-jump checks (the row's meshes, its ghost and the passengers are the
+## pieces allowed between the camera and the passenger).
+##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 600 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path game -s res://spike/relocation_strip_probe.gd [-- --out=<dir>]
+##     --path game -s res://spike/relocation_strip_probe.gd [-- --case=gate] [--out=<dir>]
 ##
-## Plates go to tools/blender/out/relocation/ unless --out names a directory.
+## Plates go to tools/blender/out/relocation/ (the gate case: tools/blender/out/
+## move-rooms-gate-seats/) unless --out names a directory.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/relocation"
+const GATE_OUT_REL := "res://../tools/blender/out/move-rooms-gate-seats"
+## Where the gate case sets the passenger's seat row down (terminal cells): east
+## of the reference rows, beside the gate desk, clear of its chair fronts.
+const GATE_MOVED_TO := Vector2i(17, 6)
 const MARGIN_PX := 8.0
 const HANG_MS := 90000
 const MOVED_TO := Vector2i(25, 10)
@@ -43,6 +57,8 @@ const CAM_UP_M := 7.0
 const CAM_BACK_M := 3.0
 
 var _out_dir := ""
+var _gate := false
+var _cam_up := CAM_UP_M
 var _failed := false
 var _guard := Thread.new()
 var _lock := Mutex.new()
@@ -61,7 +77,9 @@ var _frames_kept: Array[Image] = []
 
 
 func _initialize() -> void:
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	_gate = OS.get_cmdline_user_args().has("--case=gate")
+	var rel := GATE_OUT_REL if _gate else OUT_REL
+	_out_dir = ProjectSettings.globalize_path(rel).simplify_path()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			_out_dir = arg.get_slice("=", 1)
@@ -107,7 +125,10 @@ func _run() -> void:
 		_invalid("the staff were not hired and the airport did not open")
 		_finish()
 		return
-	await _strip()
+	if _gate:
+		await _gate_strip()
+	else:
+		await _strip()
 	_finish()
 
 
@@ -184,7 +205,7 @@ func _strip() -> void:
 	_cam = Camera3D.new()
 	_cam.fov = 45.0
 	_main.add_child(_cam)
-	_cam.look_at_from_position(mid + Vector3(0.0, CAM_UP_M, CAM_BACK_M), mid)
+	_cam.look_at_from_position(mid + Vector3(0.0, _cam_up, CAM_BACK_M), mid)
 	_cam.make_current()
 	if not _move_stall():
 		return
@@ -263,7 +284,7 @@ func _keep_frame(
 	var node := _views.node_for(p.id)
 	var head := node.global_position + Vector3(0.0, 1.2, 0.0)
 	var label := "t%d" % _clock.tick
-	for pair: Array in [["user", head], ["old_stall", old_centre], ["new_stall", new_centre]]:
+	for pair: Array in [["user", head], ["old_piece", old_centre], ["new_piece", new_centre]]:
 		if not _in_frame(pair[1], "%s %s" % [label, pair[0]]):
 			return
 	if not _clear_sight(head, label):
@@ -277,7 +298,7 @@ func _keep_frame(
 			% [label, p.stage, node.global_position, step, ghosts, _views.ghosts.count()]
 		)
 	)
-	_save(img, "relocation_%s.png" % label)
+	_save(img, "%s_%s.png" % ["gate_seat" if _gate else "relocation", label])
 	_frames_kept.append(img)
 
 
@@ -289,6 +310,161 @@ func _in_frame(point: Vector3, label: String) -> bool:
 	if not inside:
 		_invalid("%s is outside the frame" % label)
 	return inside
+
+
+## A cleared passenger sent to a gate seat, run until SEATED.
+func _sitter() -> Passenger:
+	var p := _sim.get_passenger(
+		_sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
+	)
+	ToiletTestLayout.calm(p)
+	p.carry_on = 0
+	p.liquids = false
+	p.alarm = false
+	p.cleared = true
+	p.boarding_tick = _clock.tick + 100000
+	p.stage = Passenger.Stage.TO_GATE
+	p.stage_tick = _clock.tick
+	p.at = Vector2i(15, 5) + _offset()
+	p.clear_path()
+	var until := _clock.tick + LIMIT_TICKS
+	while p.stage != Passenger.Stage.SEATED and _clock.tick < until:
+		_clock.advance(SimClock.STEP)
+		if _clock.tick % 8 == 0:
+			_beat("to seat %d" % _clock.tick)
+			await process_frame
+	print(
+		(
+			"PROBE sitter=%d stage=%d tick=%d seat_object=%d"
+			% [p.id, p.stage, _clock.tick, p.seat_object]
+		)
+	)
+	if p.stage != Passenger.Stage.SEATED:
+		_invalid("the passenger never sat down at a gate seat")
+		return null
+	return p
+
+
+## The world centre of the footprint of seat row `id` at `anchor`.
+func _row_centre(id: int, anchor: Vector2i) -> Vector3:
+	var record := _mode.grid.get_object(id)
+	var def := BuildCatalog.get_def(record["def"])
+	var sum := Vector3.ZERO
+	var cells := def.footprint(anchor, record["facing"])
+	for cell in cells:
+		sum += _mode.grid.cell_to_world(cell)
+	return sum / cells.size()
+
+
+func _move_row(id: int) -> bool:
+	var record := _mode.grid.get_object(id)
+	var place := BuildEdit.place_object(record["def"], GATE_MOVED_TO + _offset(), record["facing"])
+	place.object_id = id
+	place.paid = int(record.get("paid", 0))
+	var ok := true
+	for result in _mode.grid.apply_batch([BuildEdit.remove_object(id), place]):
+		if not result.ok:
+			_invalid("the seat row move was refused: %s" % result.reason_text())
+			ok = false
+	(_mode.get_node("BuildView") as BuildView).refresh(_mode.grid)
+	return ok
+
+
+func _gate_strip() -> void:
+	var p: Passenger = await _sitter()
+	if p == null:
+		return
+	for i in 8:
+		_clock.advance(SimClock.STEP)
+		await process_frame
+	var row := p.seat_object
+	var old_centre := _row_centre(row, _mode.grid.get_object(row)["anchor"])
+	var new_centre := _row_centre(row, GATE_MOVED_TO + _offset())
+	var mid := (old_centre + new_centre) / 2.0
+	_cam_up = 9.0
+	_cam = Camera3D.new()
+	_cam.fov = 45.0
+	_main.add_child(_cam)
+	_cam.look_at_from_position(mid + Vector3(0.0, _cam_up, CAM_BACK_M), mid)
+	_cam.make_current()
+	await _frames(2)
+	# The camera in use and where it puts the strip's centre (the view centre).
+	print(
+		(
+			"CAMCHECK current=%s size=%s visible=%s mid_screen=%s"
+			% [_cam.current, root.size, root.get_visible_rect(), _cam.unproject_position(mid)]
+		)
+	)
+	var seated_at := _views.node_for(p.id).global_position
+	if not _move_row(row):
+		return
+	var move_tick := _clock.tick
+	await _frames(2)
+	print(
+		(
+			"MOVE tick=%d row=%d stage=%d seated_at=%s sim_ghosts=%d drawn_ghosts=%d"
+			% [
+				move_tick,
+				row,
+				p.stage,
+				seated_at,
+				Relocation.ghosts(_sim).size(),
+				_views.ghosts.count()
+			]
+		)
+	)
+	var last_tick := _views.tick_position(p.id, true)
+	var worst := 0.0
+	var left_old := false
+	var resat := false
+	var since_sat := 0
+	var stages: Array[int] = []
+	var was_late := p.late
+	var over := 0.0
+	while _clock.tick < move_tick + LIMIT_TICKS and _frames_kept.size() < MAX_FRAMES:
+		_beat("gate strip %d" % _clock.tick)
+		_clock.advance(SimClock.STEP)
+		await process_frame
+		if stages.is_empty() or stages[-1] != p.stage:
+			stages.append(p.stage)
+		var at_tick := _views.tick_position(p.id, true)
+		var step := at_tick.distance_to(last_tick)
+		last_tick = at_tick
+		worst = maxf(worst, step)
+		# A late passenger runs (PassengerSim.RUN_MM); it may have turned late
+		# on the tick before.
+		var cap := (PassengerSim.RUN_MM if p.late or was_late else PassengerSim.WALK_MM) / 1000.0
+		was_late = p.late
+		over = maxf(over, step - (cap + 0.002))
+		var jumped := step > cap + 0.002
+		if jumped:
+			print("JUMP tick=%d stage=%d step=%.3f at=%s" % [_clock.tick, p.stage, step, at_tick])
+		var ghosts := Relocation.ghosts(_sim).size()
+		if ghosts == 0:
+			left_old = true
+		var sitting := p.stage == Passenger.Stage.SITTING_DOWN or p.stage == Passenger.Stage.SEATED
+		if left_old and sitting:
+			since_sat += 1
+			resat = true
+		var keep := (_clock.tick - move_tick) % STRIP_STEP_TICKS == 0
+		if keep or jumped or (resat and since_sat == 1):
+			await _keep_frame(p, old_centre, new_centre, step, ghosts)
+		if resat and since_sat >= STRIP_STEP_TICKS * 3:
+			break
+	print(
+		(
+			"PROBE gate strip frames=%d worst_step=%.3f resat=%s stage=%d stages=%s seat_object=%d"
+			% [_frames_kept.size(), worst, resat, p.stage, stages, p.seat_object]
+		)
+	)
+	if not resat:
+		_invalid("the passenger did not sit down again after the move")
+	if over > 0.0:
+		_invalid("the drawn passenger jumped %.3f m in one tick" % worst)
+	if not stages.has(Passenger.Stage.STANDING_UP):
+		_invalid("the passenger never got up at the old seat (control)")
+	if not _frames_kept.is_empty():
+		_save(_sheet(_frames_kept), "gate_seat_strip.png")
 
 
 ## The sight line from the camera to the user's head against the box of every

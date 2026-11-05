@@ -19,12 +19,14 @@ const CHAIR_OFFSET_M: Array[float] = [-0.08, 0.36, 0.08]
 ## with how far the sim has moved the passenger from the front cell towards the seat, so the step
 ## blends in and out with the shuffle. Zero away from a gate seat, and zero
 ## for a row an edit removed until the sim releases the seat on its next tick.
-## A seat cell outside its row's footprint is a bug: reported, zero.
+## After a row moves, paused or not, the passenger keeps the chair it sits on
+## until it has got up (GateRelocation.chair_of()). A seat cell outside its
+## row's footprint is a bug: reported, zero.
 static func offset(sim: PassengerSim, p: Passenger) -> Vector3:
 	var at_gate_seat := StageKinds.location(p.stage) == StageKinds.Location.GATE_SEAT
 	if not at_gate_seat or p.seat_cell == Passenger.NO_CELL:
 		return Vector3.ZERO
-	var record := sim.grid.get_object(p.seat_object)
+	var record := GateRelocation.chair_of(sim, p)
 	if record.is_empty():
 		return Vector3.ZERO
 	var def := BuildCatalog.get_def(record["def"])
