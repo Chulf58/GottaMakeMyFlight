@@ -30,8 +30,10 @@ extends RefCounted
 ## standing, points 2 and 3): the queue front is admitted through
 ## ready_front() and admit_front(), which GateCapacity.admit_all() calls for
 ## every station at once, so it can reserve a gate place first. Nobody is
-## cleared without a place (the host's `placed` check): a basic scanner's
-## passenger waits at the passage end, a lane's at the pickup cell. Positions
+## cleared without a place (the host's `placed` check, before every
+## clearance): a basic scanner's passenger waits at the passage end, a lane's
+## at the pickup cell, or at the exit cell when its place went while it walked
+## there. Positions
 ## inside a lane are claimed before they are walked into and given up once
 ## left: the arch walk stops on the arch cell until no one else is at the
 ## pickup cell (in PICKUP, or stepping off it for the berth or the exit), and
@@ -402,7 +404,9 @@ func _advance_one(station: int, record: Dictionary, p: Passenger) -> void:
 				var out: Array[Vector2i] = [p.at, lane["exit"]]
 				_enter(p, Phase.LEAVE, out)
 		Phase.LEAVE:
-			_clear(station, record, p)
+			# At the exit cell: cleared only with its place, else it waits there.
+			if _may_clear(p):
+				_clear(station, record, p)
 
 
 ## The arch walk of a lane: its passage up to the arch cell, short of the

@@ -182,3 +182,62 @@ func test_malformed_gate_places_are_refused() -> void:
 	assert_bool(c.world.sim.from_snapshot(missing)).is_false()
 	var d := GateFullWorld.make()
 	assert_bool(d.world.sim.from_snapshot(good)).is_true()
+
+
+## A passenger of `world` with the given stage and, when `roller`, one bag that
+## is a roller (spawned until one is), else no bag.
+static func _holder(world: PassengerTestWorld, stage: Passenger.Stage, roller: bool) -> Passenger:
+	for attempt in 200:
+		var p := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
+		if ParkRecovery.has_roller(p) == roller:
+			p.carry_on = int(roller)
+			p.stage = stage
+			p.cleared = stage != Passenger.Stage.SECURITY
+			return p
+	return null
+
+
+## Saved standing claims and spot reservations are checked together against
+## the roller spacing (GateCapacity.checked(), the save gate
+## PassengerSim.checked_standing() runs): a roller reservation next to a
+## standing passenger and two reservations next to each other, one with a
+## roller, are refused; two plain neighbours are not.
+func test_saved_places_keep_the_roller_spacing() -> void:
+	_gate = GateFullWorld.make()
+	var world := _gate.world
+	var sim := world.sim
+	var spots := sim.standing
+	spots.rebuild(sim)
+	var ids: Array = spots.spots.keys()
+	ids.sort()
+	var a: int = ids[0]
+	var b := -1
+	for id: int in ids:
+		var d: Vector2i = spots.spots[id]["mm"] - spots.spots[a]["mm"]
+		if id != a and Vector2(d).length() < StandingSpots.ROLLER_CLEAR_MM:
+			b = id
+			break
+	assert_int(b).is_not_equal(-1)
+	var stander := _holder(world, Passenger.Stage.STANDING, false)
+	var roller := _holder(world, Passenger.Stage.SECURITY, true)
+	var plain := _holder(world, Passenger.Stage.SECURITY, false)
+	var by_id := {stander.id: stander, roller.id: roller, plain.id: plain}
+	var cases := {
+		"a roller reservation next to a stander":
+		[{stander.id: a}, [{"passenger": roller.id, "spot": b}]],
+		"two reservations next to each other, one with a roller":
+		[{}, [{"passenger": plain.id, "spot": a}, {"passenger": roller.id, "spot": b}]],
+	}
+	var accepted := []
+	for name: String in cases:
+		var result := GateCapacity.checked(cases[name][1], by_id, sim, spots, cases[name][0])
+		print("%s: %s" % [name, result.get("error", "accepted")])
+		if not result.has("error"):
+			accepted.append(name)
+	var plain_pair := GateCapacity.checked(
+		[{"passenger": plain.id, "spot": b}], by_id, sim, spots, {stander.id: a}
+	)
+	print("two plain neighbours: %s" % plain_pair.get("error", "accepted"))
+	assert_array(accepted).is_empty()
+	assert_bool(plain_pair.has("error")).is_false()

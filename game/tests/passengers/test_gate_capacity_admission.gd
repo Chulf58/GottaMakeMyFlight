@@ -91,35 +91,65 @@ func test_a_front_whose_boarding_is_open_is_admitted() -> void:
 	assert_int(front.stuck).is_equal(Passenger.Stuck.NONE)
 
 
-## 30 passengers through security at a gate with SPOTS places: every passenger
-## held for want of a place (GateCapacity.shortage()) is on its own cell.
-## Passengers waiting in the queue's holding list are a separate cause (board
-## c5b6664f) and are only printed.
+## 30 passengers queued at the two scanners of the seatless reference terminal
+## with every standing spot taken: each scanner's front is held GATE_FULL on
+## its own lane cell, so at least two passengers are held, each on its own
+## cell, none on a scanner exit. Passengers waiting in a queue's holding list
+## are a separate cause (board c5b6664f) and are only printed.
 func test_held_passengers_never_share_a_cell() -> void:
-	_gate = GateFullWorld.make()
-	var sim := _gate.world.sim
-	_gate.send_many(30)
-	_gate.world.run_to(_gate.world.clock.tick + 600)
+	_world = TestStandingSpotClaims.seatless_world()
+	var sim := _world.sim
+	var fake := 90000
+	for id: int in sim.standing.spots:
+		sim.standing.claim(fake, id)
+		fake += 1
+	var stations: Array[int] = []
+	stations.assign(sim.layout.scanners)
+	stations.sort()
+	for i in 30:
+		var station := stations[i % stations.size()]
+		var cells: Array = sim.layout.lanes[station]
+		var p := TestStandingSpotClaims.cleared(_world)
+		p.cleared = false
+		p.station = station
+		p.stage = Passenger.Stage.SECURITY_QUEUE
+		var q := sim._queue(station)
+		var place: int = (q["lane"] as Array).size()
+		if place < cells.size():
+			p.at = cells[place]
+			(q["lane"] as Array).append(p.id)
+		else:
+			p.at = cells[cells.size() - 1]
+			(q["holding"] as Array).append(p.id)
+	_world.run_to(_world.clock.tick + 200)
 	var held := sim.gates.shortage(sim)
-	var cells := {}
+	var cells_held := {}
 	for id in held:
-		cells[_gate.world.passenger(id).at] = true
+		cells_held[_world.passenger(id).at] = true
+	var exits := {}
+	for station in stations:
+		exits[sim.security.exit_cell(station)] = true
 	print(
 		(
-			"spots %d, claims %d, held %d on %d cells, lane %d, holding %d"
+			"stations %d, spots %d, claims %d, held %d on %d cells, lanes %d+%d, holding %d+%d"
 			% [
+				stations.size(),
 				sim.standing.spots.size(),
 				sim.standing.claim_count(),
 				held.size(),
-				cells.size(),
-				sim.queue_of(_gate.station).size(),
-				sim.holding_of(_gate.station).size()
+				cells_held.size(),
+				sim.queue_of(stations[0]).size(),
+				sim.queue_of(stations[1]).size(),
+				sim.holding_of(stations[0]).size(),
+				sim.holding_of(stations[1]).size()
 			]
 		)
 	)
-	assert_int(held.size()).is_greater(0)
-	assert_int(cells.size()).is_equal(held.size())
-	assert_bool(cells.has(GateFullWorld.SCANNER_EXIT)).is_false()
+	assert_int(stations.size()).is_equal(2)
+	assert_int(held.size()).is_greater_equal(2)
+	assert_int(cells_held.size()).is_equal(held.size())
+	for cell: Vector2i in cells_held:
+		assert_bool(exits.has(cell)).is_false()
 
 
 ## 30 cleared passengers in the seatless reference terminal, where standing

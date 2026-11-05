@@ -332,6 +332,7 @@ func on_tick(new_tick: int) -> void:
 	_close_doors()
 	var stations: Array = layout.lanes.keys()
 	stations.sort()
+	gates.recover(self)
 	for station in stations:
 		_step_station(station)
 	gates.admit(self)

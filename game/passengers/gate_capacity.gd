@@ -52,11 +52,68 @@ func copy(sim: PassengerSim) -> GateCapacity:
 
 
 ## Whether `p` may be cleared: its boarding is open on `host`'s tick, or it
-## holds a reserved seat or spot.
+## holds a reserved seat or spot that is still there (holds_place()) and can
+## be walked to from its station's exit cell, where it is cleared: both in one
+## route region (StandingSpots.region_of(), the cells joined by the steps
+## passengers path over).
 func placed(p: Passenger, host: Object) -> bool:
 	if host.tick >= p.boarding_tick:
 		return true
-	return seats.has(p.id) or _spots_of(host).reserved_of(p.id) != StandingSpots.NO_SPOT
+	var target := _target(host, p)
+	var spots := _spots_of(host)
+	var region := spots.region_of(_exit_of(_sim_of(host), p))
+	return target != Passenger.NO_CELL and region >= 0 and spots.region_of(target) == region
+
+
+## Where `p` is cleared: its security station's exit cell, or where it
+## stands without a station.
+static func _exit_of(sim: PassengerSim, p: Passenger) -> Vector2i:
+	return sim.security.exit_cell(p.station) if p.station != 0 else p.at
+
+
+## Whether `p`'s boarding is open, or it holds a reserved seat or spot that is
+## still there; no path is looked for.
+func holds_place(p: Passenger, host: Object) -> bool:
+	return host.tick >= p.boarding_tick or _target(host, p) != Passenger.NO_CELL
+
+
+## The cell `p` walks to for its reserved seat (the seat's access cell) or
+## spot, or NO_CELL when it holds none or an edit removed it.
+func _target(host: Object, p: Passenger) -> Vector2i:
+	var spots := _spots_of(host)
+	var spot := spots.reserved_of(p.id)
+	if spot != StandingSpots.NO_SPOT and spots.spots.has(spot):
+		return spots.cell_of(spot)
+	var key: String = seats.get(p.id, "")
+	if key != "":
+		for seat in _sim_of(host).layout.seats:
+			if seat["key"] == key:
+				return seat["front"]
+	return Passenger.NO_CELL
+
+
+## Every passenger inside the security `stations` of `host` whose boarding has
+## not opened and who cannot be cleared to its place (placed()) gives that
+## place up and reserves again from its station's exit, earliest boarding tick
+## first, then by id. Runs before the stations advance, so no one is cleared
+## on a place an edit removed.
+static func recover_all(
+	host: Object, runtime: SecurityRuntime, stations: Array[int], places: GateCapacity
+) -> void:
+	if places == null:
+		return
+	var lost := []
+	for station in stations:
+		for id: int in runtime.record_of(station).get("admitted", []):
+			var inside: Passenger = host.get_passenger(id)
+			if not places.placed(inside, host):
+				lost.append([inside.boarding_tick, id])
+	lost.sort()
+	for entry: Array in lost:
+		var inside: Passenger = host.get_passenger(entry[1])
+		places.seats.erase(inside.id)
+		places._spots_of(host).unreserve(inside.id)
+		places.reserve(host, inside, _exit_of(places._sim_of(host), inside))
 
 
 ## Reserves a free gate seat, else a free standing spot, for `p` as if it
@@ -94,8 +151,7 @@ func reserve(host: Object, p: Passenger, from: Vector2i) -> bool:
 ## Admits the ready queue fronts of the security `stations` of `host` (a
 ## PassengerSim, or a SecurityForecast replaying a copy), earliest boarding
 ## tick first, then by station id. `queues`, `cells` and `opens` are by
-## station; `places` is the allocator, or null to admit without one. Before
-## the fronts, admitted passengers who lost their place reserve again.
+## station; `places` is the allocator, or null to admit without one.
 static func admit_all(
 	host: Object,
 	runtime: SecurityRuntime,
@@ -105,16 +161,6 @@ static func admit_all(
 	opens: Dictionary,
 	places: GateCapacity
 ) -> void:
-	if places != null:
-		var lost := []
-		for station in stations:
-			for id: int in runtime.record_of(station).get("admitted", []):
-				var inside: Passenger = host.get_passenger(id)
-				if not places.placed(inside, host):
-					lost.append([inside.boarding_tick, id, station])
-		lost.sort()
-		for entry: Array in lost:
-			places.reserve(host, host.get_passenger(entry[1]), runtime.exit_cell(entry[2]))
 	var fronts := []
 	for station in stations:
 		if runtime.admit_return(station):
@@ -135,38 +181,50 @@ static func admit_all(
 
 ## The sim's tick of admissions: every security station of `sim`.
 func admit(sim: PassengerSim) -> void:
-	var stations: Array[int] = []
+	var stations := _stations(sim)
 	var queues := {}
 	var opens := {}
-	for station: int in sim.layout.passages:
-		stations.append(station)
+	for station in stations:
 		queues[station] = sim._queue(station)
 		opens[station] = sim._is_open(station)
-	stations.sort()
 	admit_all(sim, sim.security, stations, queues, sim.layout.lanes, opens, self)
 
 
-## `p` was cleared at its station's exit: its reservation becomes its seat or
-## spot claim, and it walks there. With boarding open, or no way there, it is
-## given up, and the passenger plans as any cleared one (GateCapacity.to_spot()).
+## The sim's recover_all(), before its stations advance.
+func recover(sim: PassengerSim) -> void:
+	recover_all(sim, sim.security, _stations(sim), self)
+
+
+static func _stations(sim: PassengerSim) -> Array[int]:
+	var stations: Array[int] = []
+	stations.assign(sim.layout.passages.keys())
+	stations.sort()
+	return stations
+
+
+## `p` was cleared at its station's exit: once its reserved seat or spot and a
+## path there are found (SecurityRuntime cleared it only with placed()), the
+## reservation becomes the seat or spot claim and it walks there. With boarding
+## open the reservation is given up, and the passenger heads for the exit.
 func on_cleared(sim: PassengerSim, p: Passenger) -> void:
 	var key: String = seats.get(p.id, "")
 	var spot := sim.standing.reserved_of(p.id)
+	if sim.tick < p.boarding_tick:
+		for seat in sim.layout.seats:
+			if seat["key"] == key:
+				var to_seat := _path(sim, p.at, seat["front"])
+				if not to_seat.is_empty():
+					seats.erase(p.id)
+					_take_seat(sim, p, seat, to_seat)
+					return
+		if spot != StandingSpots.NO_SPOT and sim.standing.spots.has(spot):
+			var to_spot := _path(sim, p.at, sim.standing.cell_of(spot))
+			if not to_spot.is_empty():
+				sim.standing.claim(p.id, spot, ParkRecovery.has_roller(p))
+				p.set_path(to_spot)
+				return
 	seats.erase(p.id)
 	sim.standing.unreserve(p.id)
-	if sim.tick >= p.boarding_tick:
-		return
-	for seat in sim.layout.seats:
-		if seat["key"] == key:
-			var path := _path(sim, p.at, seat["front"])
-			if not path.is_empty():
-				_take_seat(sim, p, seat, path)
-			return
-	if spot != StandingSpots.NO_SPOT:
-		var path := _path(sim, p.at, sim.standing.cell_of(spot))
-		if not path.is_empty():
-			sim.standing.claim(p.id, spot, ParkRecovery.has_roller(p))
-			p.set_path(path)
 
 
 ## A stage change gives up the reservation of a passenger leaving security
@@ -184,7 +242,7 @@ func shortage(sim: PassengerSim) -> Array[int]:
 	var out: Array[int] = []
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
-		var inside := p.stage == Passenger.Stage.SECURITY and not placed(p, sim)
+		var inside := p.stage == Passenger.Stage.SECURITY and not holds_place(p, sim)
 		if (
 			not p.is_done()
 			and (p.stuck == Passenger.Stuck.GATE_FULL or inside or sim.standing.is_held(p))
@@ -212,7 +270,7 @@ func scarce(sim: PassengerSim, station: int, target: Passenger) -> bool:
 		var p := sim.get_passenger(id)
 		if p.is_done() or id == target.id or sim.tick >= p.boarding_tick or p.seat_object != 0:
 			continue
-		if sim.standing.spot_of(id) != StandingSpots.NO_SPOT or placed(p, sim):
+		if sim.standing.spot_of(id) != StandingSpots.NO_SPOT or holds_place(p, sim):
 			continue
 		var counts := p.cleared
 		if p.stage == Passenger.Stage.SECURITY:
@@ -283,7 +341,9 @@ func to_list(sim: PassengerSim) -> Array:
 ## standing `claims` (passenger -> spot): {"seats": {id: key}, "spots": {id:
 ## spot}} or {"error": text}. Each names a passenger inside security and not
 ## cleared, at most once, and one seat that exists and nobody sits in or one
-## spot that exists and nobody claims, each at most once.
+## spot that exists and nobody claims, each at most once. The standing claims
+## and the spot reservations together keep the roller spacing
+## (spacing_problem()).
 static func checked(
 	list: Variant, by_id: Dictionary, sim: PassengerSim, spots: StandingSpots, claims: Dictionary
 ) -> Dictionary:
@@ -329,7 +389,35 @@ static func checked(
 				return {"error": "gate spot %d is unknown or taken" % spot}
 			taken[spot] = true
 			out["spots"][id] = spot
+	var problem := spacing_problem(spots, claims, out["spots"], by_id)
+	if problem != "":
+		return {"error": problem}
 	return out
+
+
+## Why the standing `claims` and spot `reservations` (passenger -> spot) of
+## the passengers `by_id` break the roller spacing, or "": each is taken on a
+## copy of `spots` in a fixed order (claims, then reservations, each by
+## passenger id), and each must be free there for its holder's roller state
+## (StandingSpots.is_free()), the rule every live claim and reservation passed.
+static func spacing_problem(
+	spots: StandingSpots, claims: Dictionary, reservations: Dictionary, by_id: Dictionary
+) -> String:
+	var check := spots.copied()
+	check.restore({})
+	for reserved in [false, true]:
+		var held: Dictionary = reservations if reserved else claims
+		var ids: Array = held.keys()
+		ids.sort()
+		for id: int in ids:
+			var roller := by_id.has(id) and ParkRecovery.has_roller(by_id[id])
+			if not check.is_free(held[id], roller):
+				return "passenger %d stands too close to a roller at spot %d" % [id, held[id]]
+			if reserved:
+				check.reserve(id, held[id], roller)
+			else:
+				check.claim(id, held[id], roller)
+	return ""
 
 
 ## Replaces the reservations with checked()'s, into `spots` (the loaded

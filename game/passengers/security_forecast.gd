@@ -217,6 +217,7 @@ func _run(target: int) -> int:
 
 ## One tick as PassengerSim plays it for this station and its passengers.
 func _step() -> void:
+	GateCapacity.recover_all(self, _runtime, _stations, _places)
 	for at in _stations:
 		_runtime.advance(at)
 		StationQueue.promote(_queues[at], _cells[at])
