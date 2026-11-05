@@ -1,56 +1,66 @@
 extends SceneTree
-## Windowed probe of a cafe guest with a roller standing in the counter queue
-## and ordering (board 3dc86b54, decision a-guest-standing-still-in-a-queue-
-## stands-the-roller-up-beside-them): the roller stood upright beside its feet,
-## held by the bar, and tipped back into the pull as it walks on to its seat.
-## It boots main.tscn, builds the reference terminal with a cafe
-## (CafeTestLayout), opens the airport and sends GUESTS hungry passengers with
-## one roller each to the cafe, so the first waits at the counter while the
-## rest queue. The subject is the first guest seen in CAFE_ORDER. The clock runs
-## a third of a tick a frame (60 frames a second, as in the game).
+## Windowed probe of the roller queue stand (board 3dc86b54, decision a-guest-
+## standing-still-in-a-queue-stands-the-roller-up-beside-them): guests with a
+## roller standing in the cafe's counter queue and ordering (--place=cafe, the
+## default) or in the check-in queue and at the desk (--place=checkin) stand it
+## upright beside their feet, held by the bar, and tip it back into the pull to
+## walk on. It boots main.tscn, builds the reference terminal with a cafe
+## (CafeTestLayout), opens the airport and sends GUESTS passengers with one
+## roller each, male and female in turn (PassengerSim.spawn_now's variant): to
+## the cafe from airside, or in at the doors to check in. The subject is the
+## first guest seen at the counter or desk (ORDER stage). The clock runs a third
+## of a tick a frame (60 frames a second, as in the game).
 ##
 ## Checks, each printing the values it compared (pass values are positives):
-##   STOOD: STILL_TICKS + QUEUE_STAND_TICKS + 3 ticks into its order the roller's
-##     shell is upright (its +z to world up at least UPRIGHT_DOT), its axle at
-##     most BESIDE_M from the feet, and held (held_by >= 0); control: walking in
-##     before it, its axle trailed more than TRAIL_M behind.
-##   QUEUE_HIPS: the hips (the carry rig's pivot) while it stands are at least
-##     HIPS_SHARE of their height standing idle just before the stand (the
+##   STOOD: STILL_TICKS + QUEUE_STAND_TICKS + 3 ticks into its order the subject's
+##     roller shell is upright (its +z to world up at least UPRIGHT_DOT), its axle
+##     at most BESIDE_M from the feet, and held (held_by >= 0); control: walking
+##     in before it, a guest's axle trailed more than TRAIL_M behind.
+##   QUEUE_HIPS: the subject's hips (the carry rig's pivot) while it stands are at
+##     least HIPS_SHARE of their height standing idle just before the stand (the
 ##     roller still in the pull), and the stoop at most STOOP_EPS (walking hips
 ##     sit lower, so a walking reference hid a crouch: Opus review of 700ffaa).
-##   BODY_IN_STOOD_BAG: no point of the body (its holding hand left out) is
-##     inside the stood roller's meshes on any stood frame (CarryContact, as
-##     drawn in this window; a headless count proves nothing).
-##   PLATE lines print the roller's up and flat (axle from the feet) as well.
-##   REPULLED: QUEUE_TIP_TICKS + 3 ticks after it walks on, its move is over and
-##     the axle trails more than TRAIL_M behind again.
+##   BODY_IN_STOOD_BAG: per guest (its body type printed), no point of its body
+##     (its holding hand left out) inside its stood roller's meshes on any frame
+##     STOOD_AFTER into a stand before its tip (CarryContact, as drawn in this
+##     window; a headless count proves nothing). At least one male and one female
+##     guest must stand (board 03454587).
+##   REPULLED: QUEUE_TIP_TICKS + 3 ticks after the subject walks on, its move is
+##     over and the axle trails more than TRAIL_M behind again.
 ##   FLOAT: no frame from the order to the strip's end draws the bag floating
 ##     (spike/carry_float_check.gd).
-## Plates: queue_stand (the subject stood ordering, a queueing guest behind
-## it), tip_strip (a frame each tick from the last still tick, six frames, one
-## camera) and a contact sheet. Before a save the feet, head and roller project
-## inside the frame with a margin, at least MIN_ON of five sight lines to the
-## roller land on it (PlateSight, the roller's colliders tagged) with no
-## blocker, and twins with the body and with the roller hidden each differ from
-## the plate. Otherwise PROBE_INVALID, exit 1.
+## Plates: queue_stand (the subject stood at the counter or desk), one stand
+## plate of a male and of a female guest (<place>_stand_<variant>_b<body>),
+## tip_strip (a frame each tick from the last still tick, six frames, one
+## camera) and a contact sheet. Before a save the feet, head and the roller's
+## body (its rods left out) project inside the frame with a margin, at least
+## MIN_ON of five sight lines land on the roller's body (its rods tagged apart,
+## anti-pattern a-hide-the-bag-twin-diff-passes-on-the-roller-s-rods) with no
+## blocker but its rods, the twin with the body hidden differs from the plate,
+## and the twin with the roller hidden differs in a window round the projected
+## roller body. Otherwise the subject's plates are PROBE_INVALID, exit 1; a
+## guest's stand plate is tried again each frame it stands, and PROBE_INVALID if
+## none of a variant's stands gave one.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path game -s res://spike/roller_queue_probe.gd [-- --seed=N]
+##     --path game -s res://spike/roller_queue_probe.gd [-- --seed=N] \
+##     [--place=checkin] [--out=<dir under tools/blender/out>]
 ##
-## Plates go to tools/blender/out/roller-queue/.
+## Plates go to tools/blender/out/roller-queue/ (or --out).
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
-const OUT_REL := "res://../tools/blender/out/roller-queue"
+const OUT_ROOT := "res://../tools/blender/out/"
 const GUESTS := 4
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 150.0
 const MIN_DIFF_PX := 1500
-const MIN_BAG_PX := 300
+const MIN_BAG_PX := 120
+const BAG_WINDOW_PX := 40
 ## One line landing is enough with none blocked: the roller is small, and tipping
 ## it turns its thin side to the camera (four of five lines went past it with no
 ## blocker on two tip frames); the twin with the roller hidden proves it drawn.
@@ -61,11 +71,33 @@ const BESIDE_M := 0.6
 const TRAIL_M := 0.8
 const HIPS_SHARE := 0.99
 const STOOP_EPS := 0.01
+const STOOD_AFTER := RollerPark.QUEUE_STAND_TICKS + 2.0
 const STRIP_FRAMES := 6
 const TAG := "roller"
+const ROD_TAG := "rods"
 const NO_TAG := "nothing_has_this_tag"
+const VARIANTS := ["male", "female"]
+## Camera ways round a plate's subject (_aim()), each low then high.
+const VIEWS := 3
+## Per place: the queue stages, the stage at the counter or desk, the stage
+## walking off from it.
+const PLACES := {
+	"cafe":
+	[
+		[Passenger.Stage.CAFE_QUEUE, Passenger.Stage.CAFE_ORDER],
+		Passenger.Stage.CAFE_ORDER,
+		Passenger.Stage.CAFE_TO_SEAT
+	],
+	"checkin":
+	[
+		[Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.CHECKIN],
+		Passenger.Stage.CHECKIN,
+		Passenger.Stage.TO_SECURITY
+	],
+}
 
 var _seed := 0
+var _place := "cafe"
 var _out_dir := ""
 var _failed := false
 var _main: Node3D
@@ -76,17 +108,28 @@ var _views: PassengerViews
 var _cam: Camera3D
 var _sheet: Array[Image] = []
 var _plates := 0
+## The tip strip's camera is placed: no guest plate moves it until the strip ends.
+var _strip_on := false
 
 
 func _initialize() -> void:
 	Engine.max_fps = SimClock.TICK_RATE * 3
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
-	DirAccess.make_dir_recursive_absolute(_out_dir)
+	var out := "roller-queue"
 	_seed = randi()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
 			_seed = int(arg.get_slice("=", 1))
-	print("PROBE sim_seed=%d out_dir=%s" % [_seed, _out_dir])
+		elif arg.begins_with("--place="):
+			_place = arg.get_slice("=", 1)
+		elif arg.begins_with("--out="):
+			out = arg.get_slice("=", 1)
+	_out_dir = ProjectSettings.globalize_path(OUT_ROOT + out).simplify_path()
+	DirAccess.make_dir_recursive_absolute(_out_dir)
+	print("PROBE sim_seed=%d place=%s out_dir=%s" % [_seed, _place, _out_dir])
+	if not PLACES.has(_place):
+		_invalid("unknown place %s" % _place)
+		quit(1)
+		return
 	_run.call_deferred()
 
 
@@ -94,9 +137,9 @@ func _run() -> void:
 	if await _boot():
 		await _watch()
 	if not _sheet.is_empty():
-		_save(_contact_sheet(_sheet), "contact_sheet.png")
+		_save(_contact_sheet(_sheet), "%s_contact_sheet.png" % _place)
 	print("PROBE done plates=%d failed=%s" % [_plates, _failed])
-	quit(1 if _failed or _plates < 2 else 0)
+	quit(1 if _failed or _plates < 4 else 0)
 
 
 func _boot() -> bool:
@@ -135,14 +178,15 @@ func _boot() -> bool:
 	return true
 
 
-## GUESTS passengers with one roller each, airside, committed to the cafe.
+## GUESTS passengers with one roller each, male and female in turn: airside and
+## committed to the cafe, or walking in to check in.
 func _guests() -> Array[Passenger]:
 	var out: Array[Passenger] = []
 	for attempt in 400:
 		if out.size() >= GUESTS:
 			break
 		var p := _sim.get_passenger(
-			_sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
+			_sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0), out.size() % 2)
 		)
 		if SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
 			p.carry_on = 0
@@ -151,13 +195,17 @@ func _guests() -> Array[Passenger]:
 		p.carry_on = 1
 		p.liquids = false
 		p.alarm = false
+		p.shop_cooldown = 1000000
+		p.boredom = 0
+		if _place == "checkin":
+			p.cafe_cooldown = 1000000
+			out.append(p)
+			continue
 		p.cleared = true
 		p.stage = Passenger.Stage.TO_GATE
 		p.stage_tick = _clock.tick
 		p.at = ShopTestLayout.AIRSIDE_CELL + ReferenceTerminal.offset_on(_mode.grid)
 		p.clear_path()
-		p.shop_cooldown = 1000000
-		p.boredom = 0
 		if _sim.cafes.try_visit(p):
 			out.append(p)
 	_clock.ticked.connect(
@@ -165,15 +213,22 @@ func _guests() -> Array[Passenger]:
 			for p in out:
 				p.late = false
 	)
-	print("GUESTS %s" % [out.map(func(p: Passenger) -> int: return p.id)])
+	var names: Array[String] = []
+	for p in out:
+		var b := PassengerLooks.body_of(p.id, p.variant)
+		names.append("%d:%s(b%d)" % [p.id, PassengerLooks.BODIES[b], b])
+	print("GUESTS %s" % [names])
 	return out
 
 
 func _watch() -> void:
 	var guests := _guests()
 	if guests.size() < 2:
-		_invalid("only %d guests committed to the cafe" % guests.size())
+		_invalid("only %d guests set off" % guests.size())
 		return
+	var stages: Array = PLACES[_place][0]
+	var order_stage: Passenger.Stage = PLACES[_place][1]
+	var off_stage: Passenger.Stage = PLACES[_place][2]
 	var subject: Passenger = null
 	var m := {
 		"walk_trail": 0.0,
@@ -185,18 +240,22 @@ func _watch() -> void:
 		"repulled": -1.0,
 		"floats": 0,
 	}
+	var by_guest := {}
+	var plated := {}
 	var stop := _clock.tick + LIMIT_TICKS
 	var strip: Array[Image] = []
 	while _clock.tick < stop:
 		await _step()
+		for p in guests:
+			await _track(p, by_guest.get_or_add(p.id, {}), stages, plated)
 		if subject == null:
 			for p in guests:
-				if p.stage == Passenger.Stage.CAFE_ORDER:
+				if p.stage == order_stage:
 					subject = p
 					m["order_at"] = _clock.tick
-					print("SUBJECT id=%d ordering at tick %d" % [p.id, _clock.tick])
+					print("SUBJECT id=%d at the %s at tick %d" % [p.id, _place, _clock.tick])
 			for p in guests:
-				if p.stage == Passenger.Stage.CAFE_WALK:
+				if p.stage in [Passenger.Stage.CAFE_WALK, Passenger.Stage.TO_CHECKIN]:
 					var s := _sample(p)
 					if not s.is_empty() and s["settled"]:
 						m["walk_trail"] = maxf(m["walk_trail"], s["flat"])
@@ -208,15 +267,13 @@ func _watch() -> void:
 			m["floats"] += 1
 		var into: int = _clock.tick - m["order_at"]
 		var stood_by := RollerPark.STILL_TICKS + RollerPark.QUEUE_STAND_TICKS + 3
-		var bag_state := _views.carry_on_props().bag_state(subject.id, 0)
 		# Standing idle before the stand, the roller still settled in the pull.
-		if subject.stage == Passenger.Stage.CAFE_ORDER and s["move"] == "":
-			if into >= 1 and not RollerPark.queued(bag_state):
+		if subject.stage == order_stage and s["move"] == "":
+			if into >= 1 and not s["queued"]:
 				m["idle_h"] = maxf(m.get("idle_h", -1.0), s["hips"])
-		if subject.stage == Passenger.Stage.CAFE_ORDER and into >= stood_by:
+		if subject.stage == order_stage and into >= stood_by and s["queued"] and not s["tipping"]:
 			m["stand_h"] = minf(m["stand_h"], s["hips"])
 			m["stoop"] = maxf(m.get("stoop", 0.0), s["stoop"])
-			m["inside"] = maxi(m.get("inside", 0), _inside(subject))
 			if not m.has("stood_seen") and into >= stood_by + 2:
 				m["stood_seen"] = true
 				m["stood_ok"] = s["up"] >= UPRIGHT_DOT and s["flat"] <= BESIDE_M and s["held"] >= 0
@@ -238,44 +295,87 @@ func _watch() -> void:
 						]
 					)
 				)
-				await _plate("queue_stand", subject, true)
-		if subject.stage == Passenger.Stage.CAFE_TO_SEAT and m["off_at"] < 0:
+				if await _plate("%s_queue_stand" % _place, subject, true) == null:
+					_invalid("%s_queue_stand: no valid plate" % _place)
+		if subject.stage == off_stage and m["off_at"] < 0:
 			m["off_at"] = _clock.tick
-		if m["off_at"] < 0 and subject.stage == Passenger.Stage.CAFE_ORDER:
+			_aim(subject)
+			_strip_on = true
+		if m["off_at"] < 0:
 			# The last still tick's frames: the strip starts on the walk-off.
 			continue
-		if m["off_at"] >= 0:
-			var after: int = _clock.tick - m["off_at"]
-			var tried: int = m.get("tried", 0)
-			if tried < STRIP_FRAMES and _clock.tick + _clock.alpha >= m["off_at"] + tried:
-				# Each frame of the strip tried once, a tick apart.
+		var after: int = _clock.tick - m["off_at"]
+		var tried: int = m.get("tried", 0)
+		var at_now := _clock.tick + _clock.alpha
+		if tried < STRIP_FRAMES and at_now >= m["off_at"] + tried:
+			# Frame k is tried on each third of tick k until one shows the bag
+			# body (a walker in the queue behind can hide it for a frame).
+			var img := await _plate("%s_tip_%d" % [_place, tried], subject, false, true)
+			if img != null:
+				strip.append(img)
+			if img != null or at_now + 0.34 >= m["off_at"] + tried + 1.0:
 				m["tried"] = tried + 1
-				var img := await _plate("tip_%d" % tried, subject, false)
-				if img != null:
-					strip.append(img)
-			if after == ceili(RollerPark.QUEUE_TIP_TICKS) + 3 and m["repulled"] < 0.0:
-				m["repulled"] = s["flat"] if s["settled"] and s["up"] < 0.8 else 0.0
-				print(
-					(
-						"REPULLED tick %d (%d after walking on) settled %s up %.3f trail %.3f m (> %.2f)"
-						% [_clock.tick, after, s["settled"], s["up"], s["flat"], TRAIL_M]
-					)
+				_strip_on = tried + 1 < STRIP_FRAMES
+		if after == ceili(RollerPark.QUEUE_TIP_TICKS) + 3 and m["repulled"] < 0.0:
+			m["repulled"] = s["flat"] if s["settled"] and s["up"] < 0.8 else 0.0
+			print(
+				(
+					"REPULLED tick %d (%d after walking on) settled %s up %.3f trail %.3f m (> %.2f)"
+					% [_clock.tick, after, s["settled"], s["up"], s["flat"], TRAIL_M]
 				)
-			if after >= 8 and after < 16:
-				m["walk_h"] = maxf(m["walk_h"], s["hips"])
-			if after >= 16 and int(m.get("tried", 0)) >= STRIP_FRAMES:
-				break
-	_summary(m, strip)
+			)
+		if after >= 8 and after < 16:
+			m["walk_h"] = maxf(m["walk_h"], s["hips"])
+		var all_off := guests.all(func(p: Passenger) -> bool: return not p.stage in stages)
+		if after >= 16 and int(m.get("tried", 0)) >= STRIP_FRAMES and all_off:
+			break
+	if subject != null and float(m.get("idle_h", -1.0)) <= 0.0:
+		# Stood up in the queue before it reached the desk: its idle in the queue.
+		m["idle_h"] = float((by_guest[subject.id] as Dictionary).get("idle", -1.0))
+	_summary(m, strip, guests, by_guest, plated)
 
 
-## The subject's roller as drawn now: {up, flat (axle from the feet, level),
-## held, settled, hips, move}; empty with no body or bag.
+## One frame of guest `p` into `g`: on frames STOOD_AFTER into a queue stand in
+## `stages` before its tip, the most body points inside its roller and the
+## frames counted; the first such stand of each variant tried for a plate.
+func _track(p: Passenger, g: Dictionary, stages: Array, plated: Dictionary) -> void:
+	var s := _sample(p)
+	if s.is_empty() or not p.stage in stages:
+		return
+	if s["still"] and not s["queued"] and s["move"] == "":
+		# Standing idle in the queue before any stand, the roller in the pull.
+		g["idle"] = maxf(float(g.get("idle", -1.0)), s["hips"])
+	if not s["queued"] or s["tipping"] or s["into"] < STOOD_AFTER or s["up"] < UPRIGHT_DOT:
+		return
+	g["frames"] = int(g.get("frames", 0)) + 1
+	var inside := _inside(p)
+	g["inside"] = maxi(int(g.get("inside", 0)), inside)
+	g["flat"] = s["flat"]
+	if inside > 0 and int(g.get("lines", 0)) < 3:
+		g["lines"] = int(g.get("lines", 0)) + 1
+		print(
+			(
+				"INSIDE tick %.2f id %d points %d stage %d into %.1f flat %.3f"
+				% [_clock.tick + _clock.alpha, p.id, inside, p.stage, s["into"], s["flat"]]
+			)
+		)
+	var variant: String = VARIANTS[p.variant]
+	if plated.has(variant) or int(g.get("tries", 0)) >= 30 or _strip_on:
+		return
+	g["tries"] = int(g.get("tries", 0)) + 1
+	var b := PassengerLooks.body_of(p.id, p.variant)
+	var shot := "%s_stand_%s_b%d" % [_place, variant, b]
+	if await _plate(shot, p, true, true) != null:
+		plated[variant] = shot
+
+
 func _sample(p: Passenger) -> Dictionary:
 	var body := _views.node_for(p.id)
 	var props := _views.carry_on_props()
 	if body == null or props.props_of(p.id).get("bags", []).is_empty():
 		return {}
 	var node: Node3D = props.props_of(p.id)["bags"][0]
+	var bag := props.bag_state(p.id, 0)
 	var axle := node.global_transform * CarryOnProps.ROLLER_AXLE
 	var rig: Dictionary = body.get_meta(&"carry_rig", {})
 	var hips := -1.0
@@ -283,14 +383,20 @@ func _sample(p: Passenger) -> Dictionary:
 	if not rig.is_empty():
 		hips = (rig["pivot"] as Node3D).global_position.y - body.global_position.y
 		stoop = (rig["stoop"] as CarryStoop).drawn
+	var now := _clock.tick + _clock.alpha
 	return {
 		"up": node.global_transform.basis.z.normalized().dot(Vector3.UP),
 		"flat": Vector2(axle.x - body.global_position.x, axle.z - body.global_position.z).length(),
-		"held": int(props.bag_state(p.id, 0).get("held_by", -1)),
+		"held": int(bag.get("held_by", -1)),
 		"settled": props.transfer_progress(p.id, 0) >= 1.0,
 		"hips": hips,
 		"stoop": stoop,
 		"move": FloatCheck.move_of(props, p.id, 0),
+		"queued": RollerPark.queued(bag),
+		"tipping": bag.has("queue_tip"),
+		"into": now - float(bag.get("since", now)),
+		"still":
+		_views.tick_position(p.id, true).distance_to(_views.tick_position(p.id, false)) < 0.001,
 	}
 
 
@@ -305,7 +411,9 @@ func _inside(p: Passenger) -> int:
 	return CarryContact.inside_meshes(CarryContact.body_points(body, sides), node)
 
 
-func _summary(m: Dictionary, strip: Array[Image]) -> void:
+func _summary(
+	m: Dictionary, strip: Array[Image], guests: Array[Passenger], by: Dictionary, plated: Dictionary
+) -> void:
 	print(
 		"CONTROL walking in, the roller's axle trailed %.3f m (> %.2f)" % [m["walk_trail"], TRAIL_M]
 	)
@@ -326,9 +434,38 @@ func _summary(m: Dictionary, strip: Array[Image]) -> void:
 	)
 	if idle <= 0.0 or share < HIPS_SHARE or float(m.get("stoop", 1.0)) > STOOP_EPS:
 		_invalid("QUEUE_HIPS the guest crouches holding its stood roller")
-	print("BODY_IN_STOOD_BAG most body points inside the stood roller %d (0)" % m.get("inside", -1))
-	if int(m.get("inside", -1)) != 0:
-		_invalid("BODY_IN_STOOD_BAG body points inside the stood roller")
+	var stood_by := {}
+	for p in guests:
+		var g: Dictionary = by.get(p.id, {})
+		var b := PassengerLooks.body_of(p.id, p.variant)
+		print(
+			(
+				(
+					"BODY_IN_STOOD_BAG %s guest %d %s b%d %s: stood frames %d, "
+					+ "most points inside %d (0), axle %.3f m out"
+				)
+				% [
+					_place,
+					p.id,
+					VARIANTS[p.variant],
+					b,
+					PassengerLooks.BODIES[b],
+					int(g.get("frames", 0)),
+					int(g.get("inside", 0)),
+					float(g.get("flat", -1.0))
+				]
+			)
+		)
+		if int(g.get("inside", 0)) != 0:
+			_invalid("BODY_IN_STOOD_BAG guest %d b%d" % [p.id, b])
+		if int(g.get("frames", 0)) > 0:
+			stood_by[p.variant] = int(stood_by.get(p.variant, 0)) + 1
+	print("STOOD guests by variant %s; plates %s" % [stood_by, plated])
+	for v in VARIANTS.size():
+		if not stood_by.has(v):
+			_invalid("no %s guest stood its roller up" % VARIANTS[v])
+		elif not plated.has(VARIANTS[v]):
+			_invalid("no valid stand plate of a %s guest" % VARIANTS[v])
 	if m["repulled"] <= TRAIL_M:
 		_invalid("REPULLED failed: %.3f" % m["repulled"])
 	print("FLOAT frames %d (0)" % m["floats"])
@@ -345,7 +482,7 @@ func _summary(m: Dictionary, strip: Array[Image]) -> void:
 		small.convert(Image.FORMAT_RGBA8)
 		small.resize(w, h, Image.INTERPOLATE_BILINEAR)
 		sheet.blit_rect(small, Rect2i(0, 0, w, h), Vector2i(w * (i % 3), h * (i / 3)))
-	_save(sheet, "tip_strip.png")
+	_save(sheet, "%s_tip_strip.png" % _place)
 	_sheet.append(sheet)
 	_plates += 1
 
@@ -355,45 +492,77 @@ func _step() -> void:
 	await _frames(1)
 
 
-## A plate of `p` and its roller from behind on the roller's side (from in front,
-## the counter it faces hid it). `fresh`: the camera is placed on the subject
-## now (kept for the strip after it), else
-## it only turns to the body. Returns the image (saved and on the sheet when
-## `fresh`), or null when the subject is not in frame or not in sight.
-func _plate(shot: String, p: Passenger, fresh: bool) -> Image:
+## Places the camera on `p` and its roller: behind on the roller's side (from
+## in front, the counter or desk it faces hid it).
+## `view` (VIEWS) picks the way round: in a check-in queue the walkers behind
+## can hide the first.
+func _aim(p: Passenger, view := 0) -> void:
+	var body := _views.node_for(p.id)
+	var bag: Node3D = _views.carry_on_props().props_of(p.id)["bags"][0]
+	var target := (body.global_position + bag.global_position) * 0.5 + Vector3.UP * 0.6
+	var ahead := body.global_transform.basis.z
+	ahead.y = 0.0
+	var side := bag.global_position - body.global_position
+	side.y = 0.0
+	var out := side.normalized()
+	var fwd := ahead.normalized()
+	var aways := [(-fwd * 0.8 + out * 1.3).normalized(), out, (fwd * 0.8 + out * 1.3).normalized()]
+	var away: Vector3 = aways[view % VIEWS]
+	var up := 1.1 if view < VIEWS else 2.4
+	if _cam == null:
+		_cam = Camera3D.new()
+		_cam.fov = 45.0
+		_main.add_child(_cam)
+	_cam.look_at_from_position(target + away * 3.2 + Vector3.UP * up, target, Vector3.UP)
+
+
+## A plate of `p` and its roller. `fresh`: the camera is placed on the subject
+## now (_aim()), else it only turns to it. `quiet`: a refusal is printed, not
+## PROBE_INVALID (tried again later). Returns the image (saved, and on the sheet
+## when `fresh`), or null when the subject is not in frame or not in sight.
+func _plate(shot: String, p: Passenger, fresh: bool, quiet := false) -> Image:
+	if not fresh:
+		return await _plate_from(shot, p, false, quiet, 0)
+	for view in VIEWS * 2:
+		var img := await _plate_from(shot, p, true, quiet or view < VIEWS * 2 - 1, view)
+		if img != null:
+			return img
+	return null
+
+
+## _plate() from camera `view` (_aim()), placed now when `fresh`. A strip frame
+## (not `fresh`) may have blockers (walkers passing) if MIN_ON lines land on the
+## roller body and the hidden-roller twin differs round it.
+func _plate_from(shot: String, p: Passenger, fresh: bool, quiet: bool, view: int) -> Image:
 	var body := _views.node_for(p.id)
 	var bag: Node3D = _views.carry_on_props().props_of(p.id)["bags"][0]
 	var target := (body.global_position + bag.global_position) * 0.5 + Vector3.UP * 0.6
 	if fresh or _cam == null:
-		var ahead := body.global_transform.basis.z
-		ahead.y = 0.0
-		var side := bag.global_position - body.global_position
-		side.y = 0.0
-		var away := (-ahead.normalized() * 0.8 + side.normalized() * 1.3).normalized()
-		if _cam == null:
-			_cam = Camera3D.new()
-			_cam.fov = 45.0
-			_main.add_child(_cam)
-		_cam.look_at_from_position(target + away * 3.2 + Vector3.UP * 1.1, target, Vector3.UP)
+		_aim(p, view)
 	else:
 		_cam.look_at(target, Vector3.UP)
 	_cam.current = true
 	await _frames(2)
 	var img := root.get_texture().get_image()
-	var size := Vector2(img.get_size())
+	# unproject_position() answers in the viewport's own size; the image is the
+	# window's (content scaling), so the bag window is scaled into it.
+	var size := root.get_visible_rect().size
+	var to_img := Vector2(img.get_size()) / size
 	var inside := Rect2(Vector2.ONE * MARGIN_PX, size - Vector2.ONE * 2.0 * MARGIN_PX)
 	var points := {
 		"feet": body.global_position,
 		"head": body.global_position + Vector3.UP * 1.7,
-		"bag": bag.global_position,
+		"bag_body": _shell_box(bag).get_center(),
 	}
 	var flat := {}
+	var why := ""
 	for name: String in points:
 		var at: Vector2 = _cam.unproject_position(points[name])
 		flat[name] = at
 		if _cam.is_position_behind(points[name]) or not inside.has_point(at):
-			_invalid("%s: %s at %s is out of frame %s" % [shot, name, at, size])
-			return null
+			why = "%s at %s is out of frame %s" % [name, at, size]
+	if why != "":
+		return _refused(shot, why, quiet)
 	var sight := await _sight(bag)
 	var now := _sample(p)
 	var tall := (flat["feet"] as Vector2).distance_to(flat["head"])
@@ -405,22 +574,29 @@ func _plate(shot: String, p: Passenger, fresh: bool) -> Image:
 	await _frames(2)
 	var no_bag := root.get_texture().get_image()
 	bag.visible = true
+	await _frames(2)
 	var body_px := _diff(img, no_body)
-	var bag_px := _diff(img, no_bag)
+	var centre := Vector2i((flat["bag_body"] as Vector2) * to_img)
+	var window := Rect2i(centre - Vector2i.ONE * BAG_WINDOW_PX, Vector2i.ONE * BAG_WINDOW_PX * 2)
+	window = window.intersection(Rect2i(Vector2i.ZERO, img.get_size()))
+	var bag_px := PlateSight.differing(img, no_bag, window, 2)
+	var points_in := _inside(p)
 	print(
 		(
 			(
-				"PLATE %s tick %d stage %d up %.3f flat %.3f hips %.3f inside %d at=%s "
-				+ "body_px=%.0f body_diff=%d bag_diff=%d sight=%s"
+				"PLATE %s tick %.2f id %d b%d stage %d up %.3f flat %.3f hips %.3f "
+				+ "BODY_IN_STOOD_BAG %d at=%s body_px=%.0f body_diff=%d bag_body_diff=%d sight=%s"
 			)
 			% [
 				shot,
-				_clock.tick,
+				_clock.tick + _clock.alpha,
+				p.id,
+				PassengerLooks.body_of(p.id, p.variant),
 				p.stage,
 				now["up"],
 				now["flat"],
 				now["hips"],
-				_inside(p),
+				points_in,
 				flat,
 				tall,
 				body_px,
@@ -429,16 +605,16 @@ func _plate(shot: String, p: Passenger, fresh: bool) -> Image:
 			]
 		)
 	)
-	var seen: bool = sight["on"] >= MIN_ON and (sight["blockers"] as Array).is_empty()
+	var seen: bool = (
+		sight["on"] >= MIN_ON and (not fresh or (sight["blockers"] as Array).is_empty())
+	)
 	seen = seen and sight["control_on"] == 0
 	if tall < MIN_BODY_PX or body_px < MIN_DIFF_PX or bag_px < MIN_BAG_PX or not seen:
-		_invalid(
-			(
-				"%s: body %.0f px, %d px body, %d px bag, sight %s"
-				% [shot, tall, body_px, bag_px, sight]
-			)
+		why = (
+			"body %.0f px, %d px body, %d px round the bag body, sight %s"
+			% [tall, body_px, bag_px, sight]
 		)
-		return null
+		return _refused(shot, why, quiet)
 	_save(img, shot + ".png")
 	if fresh:
 		_sheet.append(img)
@@ -446,13 +622,58 @@ func _plate(shot: String, p: Passenger, fresh: bool) -> Image:
 	return img
 
 
-## Sight lines from the camera to the roller's centre and four points round it
-## (PlateSight, the roller's colliders tagged TAG, every passenger and the
-## built terminal as possible blockers). Control: the same lines with a tag no
-## collider has land on nothing.
+func _refused(shot: String, why: String, quiet: bool) -> Image:
+	if quiet:
+		print("PLATE %s refused: %s" % [shot, why])
+	else:
+		_invalid("%s: %s" % [shot, why])
+	return null
+
+
+## The roller's body box (its meshes but the rods'), world space.
+func _shell_box(bag: Node3D) -> AABB:
+	var rods := _rods(bag)
+	var box := AABB()
+	var first := true
+	for mi in bag.find_children("*", "MeshInstance3D", true, false):
+		var inst := mi as MeshInstance3D
+		if (
+			inst.mesh == null
+			or rods.any(func(r: Node) -> bool: return r == inst or r.is_ancestor_of(inst))
+		):
+			continue
+		var part := inst.global_transform * inst.mesh.get_aabb()
+		box = part if first else box.merge(part)
+		first = false
+	return box
+
+
+func _rods(bag: Node3D) -> Array[Node]:
+	var out: Array[Node] = []
+	for name in CarryOnProps.REACH_NODES[SecurityLooks.Kind.ROLLER]:
+		var node := bag.find_child(name, true, false)
+		if node != null:
+			out.append(node)
+	return out
+
+
+## Sight lines from the camera to the roller body's centre and four points round
+## it (PlateSight, every passenger and the built terminal as possible blockers).
+## The rods are tagged ROD_TAG before the bag (the first match wins), so a line
+## landing on them is not on the body; a rod in front is not a blocker. Control:
+## the same lines with a tag no collider has land on nothing.
 func _sight(bag: Node3D) -> Dictionary:
 	var owners: Array[Node] = [_views, _mode.get_node("BuildView")]
-	var holder := PlateSight.colliders(root, owners, {bag: TAG})
+	var subjects := {}
+	var rod_meshes := {}
+	for rod in _rods(bag):
+		subjects[rod] = ROD_TAG
+		for mi in rod.find_children("*", "MeshInstance3D", true, false):
+			rod_meshes[mi.name] = true
+		if rod is MeshInstance3D:
+			rod_meshes[rod.name] = true
+	subjects[bag] = TAG
+	var holder := PlateSight.colliders(root, owners, subjects)
 	await physics_frame
 	await physics_frame
 	var box: AABB = (holder.get_meta("bounds") as Dictionary).get(TAG, AABB())
@@ -463,9 +684,12 @@ func _sight(bag: Node3D) -> Dictionary:
 	var lines := PlateSight.sight_lines(space, _cam.global_position, targets, TAG)
 	var control := PlateSight.sight_lines(space, _cam.global_position, targets, NO_TAG)
 	holder.free()
+	var blockers: Array = (lines["blockers"] as Array).filter(
+		func(n: String) -> bool: return not rod_meshes.has(n)
+	)
 	return {
 		"on": (lines["on_subject"] as Array).size(),
-		"blockers": lines["blockers"],
+		"blockers": blockers,
 		"control_on": (control["on_subject"] as Array).size(),
 	}
 

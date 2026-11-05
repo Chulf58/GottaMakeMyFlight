@@ -192,10 +192,23 @@ const STILL_TICKS := 4
 ## 99; 104 file waiters) tipped back within 11 ticks of the stand's start, a
 ## stand and a tip every few ticks; with 12, 2 stands, both held.
 const FILE_STILL_TICKS := 12
-const QUEUE_STAND_TICKS := TICKS_DOWN * STAND_END
+## The stand's roll from the pull to the park: with the park QUEUE_SIDE_M out
+## the way is longer than the pull>floor's stand (TICKS_DOWN * STAND_END, 4.8
+## ticks), whose pace stepped the bag 0.150 m and more a frame against the
+## body (test_roller_queue_stand JUMP_M 0.15, board 03454587).
+const QUEUE_STAND_TICKS := 5.5
 const QUEUE_TIP_TICKS := TICKS_UP * TIP_UP
 const QUEUE_AHEAD_TICKS := 2.0
 const QUEUE_BAR_M := 1.12
+## A queue stand parks the roller's axle this far out on the hand's side
+## (queue_park()), by the body's variant (male, then female; PassengerLooks
+## BODIES), not PARK_SIDE_M: the seat parks keep theirs. At 0.32 m the stood
+## roller took in the near leg of every male body (board 03454587; windowed
+## BODY_IN_STOOD_BAG 6 points for male_01, 26 for male_08) and the right leg of
+## the female ones by its shell's box (test_roller_stand_clearance). The idle
+## legs clear the shell's box from 0.41 m (male_08, left hand) and 0.345 m
+## (female_08, right hand); each has about 2 cm more.
+const QUEUE_SIDE_M: Array[float] = [0.43, 0.37]
 
 
 ## Whether a hand-led move of `bag` (CarryOnProps' record, its "was",
@@ -532,14 +545,22 @@ static func _yawed(frame: Transform3D) -> Transform3D:
 ## mesh bounds, and leaning puts that corner (under the carry handle) through
 ## the floor by more than its 1 cm.
 static func park(
-	frame: Transform3D, hand: int, scale_by: float, ahead := PARK_AHEAD_M
+	frame: Transform3D, hand: int, scale_by: float, ahead := PARK_AHEAD_M, side := PARK_SIDE_M
 ) -> Transform3D:
 	var out := -1.0 if hand == 0 else 1.0
-	var axle := frame * Vector3(out * PARK_SIDE_M, 0.0, ahead)
+	var axle := frame * Vector3(out * side, 0.0, ahead)
 	axle.y = frame.origin.y + CarryOnProps.ROLLER_AXLE.y * scale_by
 	var front := frame.basis * Vector3.FORWARD
 	var basis := Basis(front.cross(Vector3.UP), front, Vector3.UP).scaled(Vector3.ONE * scale_by)
 	return Transform3D(basis, axle - basis * CarryOnProps.ROLLER_AXLE)
+
+
+## The roller of a queue stand parked (world) beside a body drawn as `frame`
+## (yaw only is used), led by `hand`, drawn at `scale_by`, the body's look
+## `look` (PassengerLooks.BODIES index): park() QUEUE_SIDE_M out for its variant.
+static func queue_park(frame: Transform3D, hand: int, scale_by: float, look: int) -> Transform3D:
+	var variant := clampi(look / PassengerLooks.PER_VARIANT, 0, QUEUE_SIDE_M.size() - 1)
+	return park(_yawed(frame), hand, scale_by, PARK_AHEAD_M, QUEUE_SIDE_M[variant])
 
 
 ## How far a parking move of `bag` has run its rods from their old length to
@@ -669,7 +690,7 @@ static func plan(
 	if queued(bag):
 		# Beside the body as it stands now (a guest turning to its counter takes
 		# the roller round with it), held by the bar throughout.
-		parked = park(_yawed(frame), lead, body["scale"], PARK_AHEAD_M)
+		parked = queue_park(frame, lead, body["scale"], body.get("look", 0))
 		at = _queued(bag, k, start, want, parked, bar)
 	elif not off_floor:
 		at = _onto_floor(k, start, want, parked, frame, go, bar, handle)

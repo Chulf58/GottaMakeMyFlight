@@ -22,6 +22,10 @@ const FILE_WALKERS := 5
 const GATE_BOARDING := 240
 ## Frames that count as stood: this many ticks past the stand's start.
 const STOOD_AFTER := RollerPark.QUEUE_STAND_TICKS + 2.0
+## Seatless guests sent to stand at the gate together, so some wait in a file.
+const GATE_STANDERS := 4
+## A body turned more than this between two frames is turning (PassengerTurns).
+const TURN_RAD := 0.01
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -112,6 +116,109 @@ func test_a_gate_stander_stands_its_roller_and_tips_it_on_walking() -> void:
 	assert_int(mine["stood_standing"]).is_greater(0)
 	assert_int(mine["repulled"]).is_greater(0)
 	_assert_posture(mine)
+
+
+## GATE_STANDERS seatless guests with a roller stand it up at the gate. At
+## boarding each turns on the spot to face its way out while its file holds
+## it (pending), with its roller in its queue stand: the roller is carried
+## round the body (RollerPark.queue_park() is in the body's frame now), board
+## 03454587. On every turning frame of the stand (STOOD_AFTER in, stood or
+## tipping) the roller is held, and a stood one upright and beside the feet;
+## no frame draws it floating, and none steps it more than JUMP_M against the
+## body (TIP_JUMP_M tipping; _sample()'s checks). Control: frames turn the body
+## with the stand on, at least TURN_RAD a frame. Measured at 529f1d4: the stand
+## tips on the boarding tick (TO_EXIT, not yet held by a file), so the turns
+## come in the tip, not while stood.
+func test_a_gate_stander_turning_in_its_file_keeps_its_roller_in_hand() -> void:
+	_world = TestStandingSpotClaims.seatless_world(
+		PassengerTestWorld.starts_with(GATE_BOARDING, 4000)
+	)
+	_open_views()
+	for i in GATE_STANDERS:
+		var p := _roller_guest()
+		p.cleared = true
+		p.stage = Passenger.Stage.TO_GATE
+		p.stage_tick = _world.clock.tick + 1
+		p.at = TestStandingSpotClaims.SCANNER_EXIT
+		p.clear_path()
+		p.apron = []
+		p.apron_mm = 0
+		_followed.append(p)
+	var props := _views.carry_on_props()
+	var seen := {}
+	var turns := {}
+	var stop := _world.clock.tick + GATE_BOARDING + 300
+	var all_gone := func() -> bool:
+		return _followed.all(func(p: Passenger) -> bool: return _gone(p))
+	while _world.clock.tick < stop and not all_gone.call():
+		await _tick(1.0 / 3.0)
+		for p in _followed:
+			if _gone(p):
+				continue
+			_sample(p, props, seen.get_or_add(p.id, _fresh()))
+			_turning(p, props, turns.get_or_add(p.id, {"stood": 0, "tip": 0, "fails": []}))
+	var turned := 0
+	for p in _followed:
+		var mine: Dictionary = turns.get(p.id, {})
+		print(
+			(
+				"stander %d: turning frames stood %d tipping %d, largest turn %.3f rad, step %.3f m; %s"
+				% [
+					p.id,
+					mine.get("stood", 0),
+					mine.get("tip", 0),
+					mine.get("most", 0.0),
+					mine.get("step", 0.0),
+					_line(seen.get(p.id, {}))
+				]
+			)
+		)
+		turned += int(mine.get("stood", 0)) + int(mine.get("tip", 0))
+		for line: String in (mine.get("fails", []) as Array).slice(0, 5):
+			print(line)
+		assert_array(mine.get("fails", [])).is_empty()
+	_assert_clean(seen)
+	assert_int(turned).is_greater(0)
+
+
+## One frame of `p` into `mine`: a frame of its queue stand (STOOD_AFTER in)
+## in TO_EXIT whose body turned TURN_RAD or more since the last frame counts as
+## turning, stood or tipping; its roller must be held, and stood, upright and
+## beside. Keeps the largest turn and the bag's largest step against the body.
+func _turning(p: Passenger, props: CarryOnProps, mine: Dictionary) -> void:
+	var body := _views.node_for(p.id)
+	if body == null or props.props_of(p.id).get("bags", []).is_empty():
+		return
+	var node: Node3D = props.props_of(p.id)["bags"][0]
+	var yaw := body.global_rotation.y
+	var rel := node.global_position - body.global_position
+	var last: float = mine.get("yaw", yaw)
+	var last_rel: Vector3 = mine.get("rel", rel)
+	mine["yaw"] = yaw
+	mine["rel"] = rel
+	var bag := props.bag_state(p.id, 0)
+	var now := _world.clock.tick + _world.clock.alpha
+	var into := now - float(bag.get("since", now))
+	var turn := absf(wrapf(yaw - last, -PI, PI))
+	if not RollerPark.queued(bag) or into < STOOD_AFTER or p.stage != Passenger.Stage.TO_EXIT:
+		return
+	if turn < TURN_RAD:
+		return
+	var tipping := bag.has("queue_tip")
+	mine["tip" if tipping else "stood"] += 1
+	mine["most"] = maxf(mine.get("most", 0.0), turn)
+	mine["step"] = maxf(mine.get("step", 0.0), rel.distance_to(last_rel))
+	var up := node.global_transform.basis.z.normalized().dot(Vector3.UP)
+	var axle := node.global_transform * CarryOnProps.ROLLER_AXLE
+	var flat := Vector2(axle.x - body.global_position.x, axle.z - body.global_position.z)
+	var held := int(bag.get("held_by", -1)) >= 0
+	if not held or (not tipping and (up < Q.UPRIGHT_DOT or flat.length() > Q.BESIDE_M)):
+		mine["fails"].append(
+			(
+				"id %d tick %.2f turning %.3f rad tipping %s: up %.3f beside %.3f held %s"
+				% [p.id, now, turn, tipping, up, flat.length(), held]
+			)
+		)
 
 
 ## The still test (RollerPark.queue_still()): a walker waiting to join its file

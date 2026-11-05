@@ -922,6 +922,7 @@ func _place_bags(
 						else 0.0
 					),
 					"scale": held["scale"],
+					"look": int(body.get_meta(&"body", 0)),
 					"strap_top":
 					(
 						_in_piece(_part(node, "Strap_Top"), node).origin
