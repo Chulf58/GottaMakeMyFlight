@@ -13,6 +13,7 @@ extends RefCounted
 ## Load with preload(); no class_name.
 
 const GRIP_TOL_M := 0.001
+const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 
 var looks := 0
 ## Bag looks whose steps matched the draws and that were placed, and those not.
@@ -117,7 +118,7 @@ func _grip(props: CarryOnProps, body: Node3D, p: Passenger, id: int, i: int) -> 
 	var at := props.held_point(id, i)
 	if not at.is_finite():
 		return
-	var off := at.distance_to(props.grip_of(body, SecurityLooks.hand_of(_sim, p, i)))
+	var off := at.distance_to(props.grip_of(body, CarryChecks.drawn_hand(props, _sim, p, i)))
 	grips += 1
 	grip_max_m = maxf(grip_max_m, off)
 	if off > GRIP_TOL_M:

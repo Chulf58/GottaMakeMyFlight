@@ -452,6 +452,7 @@ func sync() -> void:
 		BoothCarry.update_tuck(held, tuck_in, _released_at.get(id, -1.0) == _tick(), _tick())
 		# A roller held by its bar for a stall stays so (StallCarry.keeps_bar()).
 		var was: Array = held["bags"]
+		PullSide.resolve(was, sim, views, p, kinds, homes, lifts, hands, _tick())
 		var near_row := StallCarry.beside_row(sim, p)
 		# Standing still in a queue, not turned to a front carry (RollerPark.queue_stand()).
 		var queue_still := (

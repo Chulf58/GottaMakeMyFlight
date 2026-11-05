@@ -16,9 +16,22 @@ const CONTROL_FRAMES := 5
 const CONTROL_DT := 0.1
 
 
+## The hand (0 right, 1 left) bag `i` of `p` is drawn in: a roller's from its
+## view place in `props` (PullSide picks a pulled roller's hand, not
+## SecurityLooks.hand_of()), any other bag's, or any bag without `props` or a
+## place yet, hand_of().
+static func drawn_hand(props: CarryOnProps, sim: PassengerSim, p: Passenger, i: int) -> int:
+	if props != null and SecurityLooks.bag_kind(p, i) == SecurityLooks.Kind.ROLLER:
+		var place := int(props.bag_state(p.id, i).get("place", -1))
+		if place >= 0:
+			return CarryLead.hand_of(place)
+	return SecurityLooks.hand_of(sim, p, i)
+
+
 ## The hands holding something of `p` now (".R", ".L"): a hard case's and a
-## roller's grip, a shoulder strap's hand; a backpack holds none.
-static func gripping(sim: PassengerSim, p: Passenger) -> Array:
+## roller's grip, a shoulder strap's hand; a backpack holds none. A roller's
+## hand is its drawn one with `props` (drawn_hand()).
+static func gripping(sim: PassengerSim, p: Passenger, props: CarryOnProps = null) -> Array:
 	var out: Array = []
 	var homes := SecurityLooks.bag_homes(sim, p)
 	for i in homes.size():
@@ -26,7 +39,7 @@ static func gripping(sim: PassengerSim, p: Passenger) -> Array:
 			continue
 		match SecurityLooks.carry_of(p, i):
 			SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL:
-				out.append([".R", ".L"][SecurityLooks.hand_of(sim, p, i)])
+				out.append([".R", ".L"][drawn_hand(props, sim, p, i)])
 			SecurityLooks.Carry.SHOULDER:
 				out.append([".R", ".L"][SecurityLooks.worn_side(i)])
 	return out
@@ -108,7 +121,7 @@ static func detached(
 	var lifted: bool = props.props_of(id)["carries"][i] == SecurityLooks.Carry.HAND
 	match kind if not lifted else SecurityLooks.Kind.CASE:
 		SecurityLooks.Kind.ROLLER:
-			var grip := props.grip_of(body, SecurityLooks.hand_of(sim, p, i))
+			var grip := props.grip_of(body, drawn_hand(props, sim, p, i))
 			var top := bag.find_child("Pull_Top", true, false) as Node3D
 			var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
 			var axle := bag.global_transform * CarryOnProps.ROLLER_AXLE
@@ -126,7 +139,7 @@ static func detached(
 			var spine: Vector3 = bone.call(CarryOnProps.SPINE_BONE)
 			var near := bag.global_transform * CarryOnProps.bag_box(kind).get_center()
 			return maxf(0.0, near.distance_to(spine) - 0.45)
-	var grip := props.grip_of(body, SecurityLooks.hand_of(sim, p, i))
+	var grip := props.grip_of(body, drawn_hand(props, sim, p, i))
 	var local := bag.global_transform.affine_inverse() * grip
 	var box := CarryOnProps.bag_box(kind)
 	return 0.0 if box.grow(reach / scale_by).has_point(local) else 1.0
