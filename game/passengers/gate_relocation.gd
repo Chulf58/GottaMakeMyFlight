@@ -102,6 +102,8 @@ static func valid(p: Passenger) -> bool:
 		return p.seat_piece.is_empty() and not p.seat_exiting
 	if p.seat_piece.is_empty() or p.seat_cell == Passenger.NO_CELL:
 		return false
+	if p.seat_piece["def"] != &"seat_row":
+		return false
 	var def := BuildCatalog.get_def(p.seat_piece["def"])
 	var cells := def.footprint(p.seat_piece["anchor"], p.seat_piece["facing"])
 	var index := cells.find(p.seat_cell)

@@ -502,3 +502,40 @@ func test_a_version_10_save_with_a_standing_up_passenger_gets_its_placement() ->
 		twin.step()
 	assert_int(q.stage).is_equal(Passenger.Stage.TO_GATE)
 	twin.free_all()
+
+
+## An old save derives the placement from the grid without the parser, so a seat
+## that names a desk (or any object that is not a seat row) must be refused: here
+## the seat cell and chair front are the desk's own, so only its def gives it away.
+func test_a_version_10_save_whose_seat_is_not_a_seat_row_is_refused() -> void:
+	var p := _sitter(Passenger.Stage.SEATED)
+	var data := _save()
+	var block: Dictionary = data["passengers"]
+	block["save_version"] = 10
+	block.erase("shop")
+	for record: Dictionary in block["passengers"]:
+		record.erase("boredom")
+		record.erase("shop_cooldown")
+		record.erase("seat_piece")
+		record.erase("seat_exiting")
+	var other := 0
+	for id in range(1, 60):
+		var held := _world.grid.get_object(id)
+		if not held.is_empty() and held["def"] != &"seat_row":
+			other = id
+			break
+	assert_int(other).is_not_equal(0)
+	var twin := _twin(data)
+	assert_object(twin).override_failure_message("control: the old save loads").is_not_null()
+	twin.free_all()
+	var desk := _world.grid.get_object(other)
+	var cell: Vector2i = (
+		BuildCatalog.get_def(desk["def"]).footprint(desk["anchor"], desk["facing"])[0]
+	)
+	var front := cell + TerminalLayout.front_of(desk["facing"])
+	for record: Dictionary in block["passengers"]:
+		if int(record["id"]) == p.id:
+			record["seat_object"] = other
+			record["seat_cell"] = [cell.x, cell.y]
+			record["seat_front"] = [front.x, front.y]
+	assert_object(_twin(data)).is_null()
