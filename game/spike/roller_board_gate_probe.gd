@@ -813,7 +813,7 @@ func _check(
 		(
 			(
 				"PLATE %s tick %.2f stage %d up %.3f flat %.3f hips %.3f clip %s inside %d "
-				+ "at=%s body_px=%.0f bag_body_diff=%d sight=%s"
+				+ "at=%s body_px=%.0f bag_body_diff=%d unbaked=%d sight=%s"
 			)
 			% [
 				shot,
@@ -827,6 +827,7 @@ func _check(
 				flat,
 				tall,
 				bag_px,
+				(holder.get_meta("unbaked") as Array).size(),
 				sight
 			]
 		)
@@ -886,6 +887,11 @@ func _colliders(bag: Node3D, body: Node3D) -> Node3D:
 	subjects[bag] = TAG
 	var holder := PlateSight.colliders(root, owners, subjects)
 	holder.set_meta("rod_meshes", rod_meshes)
+	var unbaked: Array = holder.get_meta("unbaked")
+	if not unbaked.is_empty():
+		# A skinned mesh without a collider is nothing a line can hit, so a
+		# line past it would read as clear.
+		_invalid("skinned meshes without a sight collider: %s" % [unbaked])
 	await physics_frame
 	await physics_frame
 	return holder
