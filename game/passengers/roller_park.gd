@@ -170,14 +170,28 @@ const TIP_UP := 1.0 - UP_PARK_END
 ## be 1.09 and 0.98 m up or more. With the rods ROLL_RODS of the pull's length
 ## (0.83 to 1.22 m) the guests held it with their knees bent and the hips back
 ## for the whole stand (Opus review of 700ffaa).
+## A walker standing at the gate for want of a seat (STANDING) stands it up too,
+## and so does one held in a boarding file (FILE_STAGES, filed_still()), board
+## 44b974cc: both had the roller in the long walking pull for the whole wait,
+## one standing at the gate desk with it inside the desk for about 373 ticks
+## (finding how-often-does-a-roller-in-the-walking-pull-clip-through-fur).
 const QUEUE_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.CAFE_QUEUE,
 	Passenger.Stage.CAFE_ORDER,
 	Passenger.Stage.CHECKIN_QUEUE,
 	Passenger.Stage.CHECKIN,
 	Passenger.Stage.SECURITY_QUEUE,
+	Passenger.Stage.STANDING,
 ]
+const FILE_STAGES: Array[Passenger.Stage] = [Passenger.Stage.TO_EXIT, Passenger.Stage.APRON]
 const STILL_TICKS := 4
+## A file waiter waits this long still before the stand. A file moves up in a
+## ripple: the walker behind waits for a full BoardingFiles.GAP_MM of room
+## (700 mm, 7 ticks at a walk), so most still spells in a file are 4 to 10 ticks.
+## With STILL_TICKS, 31 of 33 stands over three full boardings (seeds 4242, 7,
+## 99; 104 file waiters) tipped back within 11 ticks of the stand's start, a
+## stand and a tip every few ticks; with 12, 2 stands, both held.
+const FILE_STILL_TICKS := 12
 const QUEUE_STAND_TICKS := TICKS_DOWN * STAND_END
 const QUEUE_TIP_TICKS := TICKS_UP * TIP_UP
 const QUEUE_AHEAD_TICKS := 2.0
@@ -277,23 +291,40 @@ static func hold_park(
 		hands[i] = CarryLead.hand_of(bag["place"])
 
 
-## Whether `p` stands in a queue or at its counter or desk (QUEUE_STAGES) with
-## no way left to walk on this tick.
-static func queue_still(p: Passenger) -> bool:
-	return p.stage in QUEUE_STAGES and not p.is_moving()
+## Whether `p` stands in a queue, at its counter or desk or at the gate
+## (QUEUE_STAGES) with no way left to walk on this tick, or waits in a boarding
+## file of `sim` (filed_still()).
+static func queue_still(sim: PassengerSim, p: Passenger) -> bool:
+	if p.stage in QUEUE_STAGES:
+		return not p.is_moving()
+	return filed_still(sim, p)
+
+
+## Whether `p` is held in a boarding file of `sim` (FILE_STAGES): in a file or
+## waiting to join one, with no room to step on the next tick. Its path is still
+## open, so is_moving() holds while it waits.
+static func filed_still(sim: PassengerSim, p: Passenger) -> bool:
+	if not p.stage in FILE_STAGES or not sim.files.holds(p.id):
+		return false
+	return sim.files.allowed(sim, p, PassengerSim.WALK_MM) == 0
+
+
+## The still ticks `p` waits before its roller is stood up (queue_stand()).
+static func still_wait(p: Passenger) -> int:
+	return FILE_STILL_TICKS if p.stage in FILE_STAGES else STILL_TICKS
 
 
 ## One sim tick (`now`) of the queue stand (the header's QUEUE_STAGES) of `bag`
 ## (CarryOnProps' record, of a bag of `kind` now): `stands`, its walker stands
 ## still in a queue with the roller wanted in the pull (not lifted). Counts the
-## still ticks ("still_from"); after STILL_TICKS of them a roller settled in
-## the pull is marked for a new move ("queue_still", restamps(), its "changed"
-## now), which stamp() makes a queue stand. While that move runs its length is
-## kept QUEUE_AHEAD_TICKS past `now`, and the first tick the walker no longer
-## stands starts its tip ("queue_tip", ticks into the move), the move then
-## ending with it.
+## still ticks ("still_from"); after `wait` of them (still_wait()) a roller
+## settled in the pull is marked for a new move ("queue_still", restamps(), its
+## "changed" now), which stamp() makes a queue stand. While that move runs its
+## length is kept QUEUE_AHEAD_TICKS past `now`, and the first tick the walker no
+## longer stands starts its tip ("queue_tip", ticks into the move), the move
+## then ending with it.
 static func queue_stand(
-	bag: Dictionary, kind: SecurityLooks.Kind, stands: bool, now: float
+	bag: Dictionary, kind: SecurityLooks.Kind, stands: bool, now: float, wait := STILL_TICKS
 ) -> void:
 	if kind != SecurityLooks.Kind.ROLLER or bag.get("kind", -1) != kind:
 		bag.erase("still_from")
@@ -312,7 +343,7 @@ static func queue_stand(
 		bag["queue_tip"] = at
 		bag["ticks"] = at + QUEUE_TIP_TICKS
 		return
-	if not stands or now - float(bag["still_from"]) < STILL_TICKS or bag.has("queue_still"):
+	if not stands or now - float(bag["still_from"]) < wait or bag.has("queue_still"):
 		return
 	# One ask a still spell: a stand refused at its stamp (parks()) leaves a short
 	# pull>pull move, after which it would ask again every TRANSFER_TICKS.

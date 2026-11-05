@@ -21,8 +21,23 @@ const BESIDE_M := 0.6
 ## TRAIL_BEHIND_MIN_M 0.95, less the frame's slack).
 const TRAILS_M := 0.8
 ## Between two frames a third of a tick apart the bag moves less than this
-## against the body (a snap into or out of the stand is 0.5 m or more).
+## against the body (a snap into or out of the stand is 0.5 m or more). The cafe
+## case's largest step measured 0.147 m on 26ce797, a margin of only 3 mm: a
+## failure there just over JUMP_M may be that step grown, not a snap.
 const JUMP_M := 0.15
+## A tip watched before the security queue (check-in, a boarding file, a gate
+## standing spot; board 44b974cc) moves the bag less than this a frame against
+## the body. These walkers often turn as they walk off (a check-in queue's
+## bend, a gate spot facing away from the exit), and the turn (6 ticks,
+## PassengerTurns) swings the bag round the body as the tip lifts it into the
+## pull. The steps rise and fall in one smooth ease; peaks measured 2026-11-05
+## (seed 1): 0.155 to 0.182 m stepping up a check-in place or walking off the
+## desk, 0.195 m on a half turn in the check-in queue (the body's yaw 0.25 rad
+## a frame), 0.168 m turning from a gate spot to the exit. With a 6-tick tip
+## the check-in peak was still 0.159 m, so the pace is not the cause. A snap
+## out of the stand is 0.5 m or more. Security tips stay under JUMP_M, as
+## watched since 26ce797.
+const TIP_JUMP_M := 0.21
 ## Holding the stood roller the hips stay at least this share of their height
 ## standing idle just before the stand, and the stoop at most STOOP_EPS: with the
 ## bar at ROLL_RODS of the pull's length the guest held it with its knees bent
@@ -380,6 +395,8 @@ func test_a_cafe_guest_stands_its_roller_up_to_order_and_pulls_it_on() -> void:
 ## still long enough) in the security queue; through SECURITY_QUEUE into
 ## SECURITY no FLOAT frame, no jump over JUMP_M against the body, and the
 ## roller lifted into the hand in SECURITY as before (CarryOnProps._lifted()).
+## The FLOAT and jump watch starts in the check-in queue, so the check-in
+## stands and tips are watched too.
 func test_walkers_stand_rollers_up_at_check_in_and_security_then_lift_them() -> void:
 	_world = PassengerTestWorld.reference_world()
 	_world.run_to(10)
@@ -429,12 +446,21 @@ func test_walkers_stand_rollers_up_at_check_in_and_security_then_lift_them() -> 
 				# exclusions (a walker at a booth's queue front has it lifted).
 				var front: bool = props._held[p.id].get("front", false)
 				var pulled: bool = bag.get("carry", -1) == SecurityLooks.Carry.PULL
-				var still := RollerPark.queue_still(p) and pulled and not front
+				var still := RollerPark.queue_still(_world.sim, p) and pulled and not front
 				mine["still_run"] = int(mine.get("still_run", 0)) + 1 if still else 0
 				var needed := (RollerPark.STILL_TICKS + RollerPark.QUEUE_STAND_TICKS + 2) * 3
 				mine["security_still"] += int(mine["still_run"] > needed)
-			# Watched from the security queue to 30 ticks into SECURITY.
-			if p.stage == Passenger.Stage.SECURITY_QUEUE and not watch.has(p.id):
+			# Watched from the check-in queue (or the security queue, for a walker
+			# sent there) to 30 ticks into SECURITY.
+			var queueing := (
+				p.stage
+				in [
+					Passenger.Stage.CHECKIN_QUEUE,
+					Passenger.Stage.CHECKIN,
+					Passenger.Stage.SECURITY_QUEUE,
+				]
+			)
+			if queueing and not watch.has(p.id):
 				watch[p.id] = INF
 			if p.stage == Passenger.Stage.SECURITY and float(watch.get(p.id, -INF)) == INF:
 				watch[p.id] = _world.clock.tick + 30.0
@@ -457,6 +483,11 @@ func test_walkers_stand_rollers_up_at_check_in_and_security_then_lift_them() -> 
 			# lift into the hand at a booth's queue front steps 0.164 m a frame with
 			# the queue stand off too (STILL_TICKS 100000, same ticks and values).
 			var limit := JUMP_M if RollerPark.queued(bag) or last_queued.has(p.id) else SNAP_M
+			var tipping := (
+				bag.has("queue_tip") or (last_queued.has(p.id) and not RollerPark.queued(bag))
+			)
+			if tipping and p.stage < Passenger.Stage.SECURITY_QUEUE:
+				limit = TIP_JUMP_M
 			if last.has(p.id) and rel.distance_to(last[p.id]) > limit:
 				fails.append(
 					"%s bag jumped %.3f against the body" % [tag, rel.distance_to(last[p.id])]
@@ -482,7 +513,9 @@ func test_walkers_stand_rollers_up_at_check_in_and_security_then_lift_them() -> 
 	assert_int(checkin).is_greater(0)
 	assert_int(lifted).is_equal(watch.size())
 	assert_int(watch.size()).is_greater(0)
-	# Every walker held still long enough in the security queue stood its roller up.
+	# Every walker held still long enough in the security queue stood its roller up,
+	# and some were (else the line above passes on 0 >= 0).
+	assert_int(still).is_greater(0)
 	assert_int(security).is_greater_equal(still)
 
 
