@@ -94,8 +94,8 @@ func _target(host: Object, p: Passenger) -> Vector2i:
 
 ## Every passenger inside the security `stations` of `host` whose boarding has
 ## not opened and who cannot be cleared to its place (placed()) gives that
-## place up and reserves again from its station's exit, earliest boarding tick
-## first, then by id. Runs before the stations advance, so no one is cleared
+## place up, and then each reserves again from its station's exit, earliest
+## boarding tick first, then by id. Runs before the stations advance, so no one is cleared
 ## on a place an edit removed.
 static func recover_all(
 	host: Object, runtime: SecurityRuntime, stations: Array[int], places: GateCapacity
@@ -109,10 +109,13 @@ static func recover_all(
 			if not places.placed(inside, host):
 				lost.append([inside.boarding_tick, id])
 	lost.sort()
+	# Every lost place is given up before anyone reserves, so a later
+	# passenger's dead reservation never keeps a place from an earlier one.
+	for entry: Array in lost:
+		places.seats.erase(entry[1])
+		places._spots_of(host).unreserve(entry[1])
 	for entry: Array in lost:
 		var inside: Passenger = host.get_passenger(entry[1])
-		places.seats.erase(inside.id)
-		places._spots_of(host).unreserve(inside.id)
 		places.reserve(host, inside, _exit_of(places._sim_of(host), inside))
 
 

@@ -75,7 +75,7 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 	if not sim.layout.is_usable(station):
 		return JourneyForecast.NEVER
 	var replay := SecurityForecast.new()
-	replay._setup(sim, station, p)
+	replay._setup(sim, station, sim.gates.scarce(sim, station, p))
 	var ticks := JourneyForecast.NEVER
 	if replay._units.has(p.id) or replay._opens[station]:
 		if not replay._units.has(p.id):
@@ -89,6 +89,34 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 	# The runtime holds the replay as its host: let go, or neither is freed.
 	replay._runtime.bind(null)
 	return ticks
+
+
+## eta() of each of `ids` (passengers committed to `station`: walking to,
+## queuing at or inside it) from as few replays as eta() would play: id ->
+## ticks until cleared (JourneyForecast.NEVER for one it never clears). The
+## replay does not depend on which passenger it is run for, only on whether
+## the gate places are replayed (GateCapacity.scarce(), asked for each id as
+## eta() asks it), so one replay per answer to that is run on until each of
+## its ids is cleared. Ids not in the replay are left out; none when the
+## station cannot be used. It sets up, plays and lets go of the replays.
+static func clearances(sim: PassengerSim, station: int, ids: Array) -> Dictionary:
+	var out := {}
+	if not sim.layout.passages.has(station) or not sim.layout.is_usable(station):
+		return out
+	var replays := {}
+	for id: int in ids:
+		var scarce := sim.gates.scarce(sim, station, sim.get_passenger(id))
+		if not replays.has(scarce):
+			var made := SecurityForecast.new()
+			made._setup(sim, station, scarce)
+			replays[scarce] = made
+		var replay: SecurityForecast = replays[scarce]
+		if replay._units.has(id):
+			out[id] = replay._run(id)
+	for replay: SecurityForecast in replays.values():
+		# The runtime holds the replay as its host: let go, or neither is freed.
+		replay._runtime.bind(null)
+	return out
 
 
 ## Ticks until `p`, walking to, queuing at or inside its security station, is
@@ -113,12 +141,14 @@ func _on_cleared(p: Passenger) -> void:
 	_cleared[p.id] = tick
 
 
-func _setup(sim: PassengerSim, station: int, target: Passenger) -> void:
+## Copies `station`'s state, and with `scarce` (GateCapacity.scarce()) every
+## security station's and the gate places.
+func _setup(sim: PassengerSim, station: int, scarce: bool) -> void:
 	_sim = sim
 	tick = sim.tick
 	layout = sim.layout
 	_stations = [station]
-	if sim.gates.scarce(sim, station, target):
+	if scarce:
 		_places = sim.gates.copy(sim)
 		_stations.clear()
 		for other: int in sim.layout.passages:

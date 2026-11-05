@@ -134,3 +134,76 @@ func test_a_seat_removed_while_its_passenger_is_scanned() -> void:
 	print("seat %s removed; reservation now %s" % [key, sim.gates.seats.get(p.id, "none")])
 	_waits_on(p, sim.security.exit_cell(station))
 	_cleared_to_freed_spot(p, fake)
+
+
+## Two passengers inside security both lost their places: the later one (B,
+## a roller) still holds a spot it cannot reach behind a wall, beside the one
+## spot left. Every lost place is given up before anyone reserves, so the
+## earlier boarding tick (A) takes that spot; B's dead reservation does not
+## keep it from A.
+func test_the_earlier_boarding_reserves_first_when_both_lost_their_places() -> void:
+	_world = PassengerTestWorld.reference_world()
+	var sim := _world.sim
+	# A wall between x 13 and 14 splits the airside into two route regions.
+	for y in range(ReferenceTerminal.FLOOR_MIN.y, ReferenceTerminal.AIRSIDE_MAX_Y + 1):
+		var wall := _world.grid.apply(BuildEdit.place_wall(Vector2i(13, y), BuildGrid.Side.EAST))
+		assert_bool(wall.ok).override_failure_message(wall.reason_text()).is_true()
+	for seat in sim.layout.seats:
+		sim._seat_claims[seat["key"]] = 80000
+	var spots := sim.standing
+	spots.rebuild(sim)
+	var station: int = sim.layout.scanners.min()
+	var region := spots.region_of(sim.security.exit_cell(station))
+	var near := -1
+	var far := -1
+	for id: int in spots.spots:
+		for other in [id - 1, id + 1]:
+			if near >= 0 or not spots.spots.has(other):
+				continue
+			var d: Vector2i = spots.spots[id]["mm"] - spots.spots[other]["mm"]
+			var here := spots.region_of(spots.cell_of(id)) == region
+			var split := spots.region_of(spots.cell_of(other)) != region
+			if here and split and Vector2(d).length() < StandingSpots.ROLLER_CLEAR_MM:
+				near = id
+				far = other
+	assert_int(near).is_not_equal(-1)
+	var fake := 90000
+	for id: int in spots.spots:
+		if id != near and id != far:
+			spots.claim(fake, id)
+			fake += 1
+	var a := _inside(station, 2900, false)
+	var b := _inside(station, 3000, true)
+	spots.reserve(b.id, far, true)
+	sim.security.records[station] = {"admitted": [b.id, a.id], "returns": [], "main": 0, "berth": 0}
+	assert_bool(sim.gates.placed(b, sim)).is_false()
+	var stations: Array[int] = [station]
+	GateCapacity.recover_all(sim, sim.security, stations, sim.gates)
+	var held_a := spots.reserved_of(a.id)
+	var held_b := spots.reserved_of(b.id)
+	print(
+		(
+			"near %d far %d: A (earlier) holds %d, B (later, roller) holds %d"
+			% [near, far, held_a, held_b]
+		)
+	)
+	assert_int(held_a).is_equal(near)
+	assert_int(held_b).is_equal(StandingSpots.NO_SPOT)
+	sim.security.records.erase(station)
+
+
+## A passenger inside `station`'s security with boarding tick `boarding`, with
+## one roller bag when `roller`, else no bag.
+func _inside(station: int, boarding: int, roller: bool) -> Passenger:
+	for attempt in 200:
+		var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
+		if ParkRecovery.has_roller(p) != roller:
+			_world.sim._finish(p, true)
+			continue
+		p.carry_on = int(roller)
+		p.stage = Passenger.Stage.SECURITY
+		p.station = station
+		p.boarding_tick = boarding
+		return p
+	return null
