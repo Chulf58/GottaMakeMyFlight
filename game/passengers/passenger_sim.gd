@@ -76,19 +76,15 @@ signal checked_in(id: int, desk: int)
 ## (GateReach), so a version 15 save, whose claims followed the old global
 ## nearest rule, is refused with no migration (decision old-saves-are-not-
 ## supported-until-after-a-release-no-save-mi).
-## 17: each passenger's collect_tick (ParkRecovery). Version 16 is refused,
-## with no migration; a migrated older save collects nothing.
-## 18: a cafe or toilet visit following its moved piece saves its Relocation
-## (CafeSnapshot, ToiletSnapshot). Version 17 is refused, with no migration.
-## 19: shop visit relocation (ShopSnapshot saves a shop or activity visit's
-## Relocation). Version 18 is refused, with no migration.
-## 20: each passenger's thoughts and their repeat marks (PassengerThoughts).
-## Version 19 is refused, with no migration.
-## 21: each passenger's seat placement and seat_exiting (GateRelocation).
-## Version 20 is refused, with no migration.
-## 22: boarding-file wait spots (FileWaiters). Version 21 is refused, no migration.
-## 23: a Relocation saves the step its visitor had made (reached). 22 is refused.
-## 24: each passenger's halt_tick (QueueRipple). 23 is refused.
+## 17: each passenger's collect_tick (ParkRecovery); a migrated older save
+## collects nothing. 18: a cafe or toilet visit following its moved piece saves
+## its Relocation (CafeSnapshot, ToiletSnapshot). 19: a shop or activity
+## visit's Relocation (ShopSnapshot). 20: each passenger's thoughts and their
+## repeat marks (PassengerThoughts). 21: each passenger's seat placement and
+## seat_exiting (GateRelocation). 22: boarding-file wait spots (FileWaiters).
+## 23: a Relocation saves the step its visitor had made (reached). 24: each
+## passenger's halt_tick (QueueRipple). From 17 on, the version before is
+## refused, with no migration.
 const SAVE_VERSION := 24
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98

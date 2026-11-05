@@ -394,10 +394,19 @@ func _plate(id: int, ahead: int) -> void:
 	_cam.current = true
 	_cam.look_at_from_position(mid + side * 3.6 + Vector3.UP * 1.8, mid, Vector3.UP)
 	await process_frame
+	var owners: Array[Node] = [_views]
+	var holder := PlateSight.colliders(root, owners, {body: "follower", roller: "roller"})
+	var boxes: Dictionary = holder.get_meta("bounds")
+	if not boxes.has("roller"):
+		holder.queue_free()
+		print("PLATE refused: the roller ahead draws no mesh")
+		return
+	# The middle of the bag's meshes: the roller's origin is up at its handle.
+	var bag: Vector3 = (boxes["roller"] as AABB).get_center()
 	var points := {
 		"feet": body.global_position,
 		"head": body.global_position + Vector3.UP * 1.7,
-		"roller": roller.global_position + Vector3.UP * 0.3,
+		"roller": bag,
 		"ahead_head": front.global_position + Vector3.UP * 1.7,
 	}
 	var frame := Rect2(Vector2.ZERO, _cam.get_viewport().get_visible_rect().size).grow(-MARGIN_PX)
@@ -406,16 +415,22 @@ func _plate(id: int, ahead: int) -> void:
 		print("PLATE %s at %s (frame %s)" % [name, at, frame])
 		if _cam.is_position_behind(points[name]) or not frame.has_point(at):
 			print("PLATE refused: %s out of frame" % name)
+			holder.queue_free()
 			return
-	var owners: Array[Node] = [_views]
-	var holder := PlateSight.colliders(root, owners, {body: "follower", roller: "roller"})
 	await physics_frame
 	var space := holder.get_world_3d().direct_space_state
 	var eye := _cam.global_position
 	var to_body: Array[Vector3] = [
 		body.global_position + Vector3.UP * 1.0, body.global_position + Vector3.UP * 1.4
 	]
-	var to_roller: Array[Vector3] = [roller.global_position + Vector3.UP * 0.3]
+	# Its surface points nearest the camera: the bounds' middle can fall in a gap
+	# between the stood bag and its handle.
+	var skin := Array(QueueSpacing.surface(roller))
+	skin.sort_custom(
+		func(a: Vector3, b: Vector3) -> bool: return a.distance_to(eye) < b.distance_to(eye)
+	)
+	var to_roller: Array[Vector3] = []
+	to_roller.assign(skin.slice(0, 5))
 	var on_body := PlateSight.sight_lines(space, eye, to_body, "follower")
 	var on_roller := PlateSight.sight_lines(space, eye, to_roller, "roller")
 	var control := PlateSight.sight_lines(space, eye, to_body, NO_TAG)
