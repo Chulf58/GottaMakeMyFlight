@@ -492,6 +492,8 @@ func seat_position(p: Passenger) -> Vector3:
 ## cell to its seat root at `fraction` of the path's length: zero but at a
 ## STEP_IN_PATH piece. A roller guest there takes the path in the sim after its
 ## step-in hold (step_in_hold()), so no view ease adds it.
+## Only the tests read it, to sample the path's shape; the sim draws the path
+## through _shuffle_at().
 func shuffle_bend(p: Passenger, fraction: float) -> Vector3:
 	var visit: CafeVisit = _visits.get(p.id)
 	if visit == null or visit.seat.is_empty():

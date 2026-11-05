@@ -28,6 +28,11 @@ extends RefCounted
 
 const MARGIN_TICKS := VisitForecast.MARGIN_TICKS
 
+## leave_ticks(), deadline() and live_deadline() count the stand-up as the
+## guest's generic CafeSim.up_ticks(p), with no seat piece: at a booth a roller
+## guest's is SHUFFLE_TICKS shorter, so they run that much early. CafeSim
+## passes the piece itself (its _leave_delay()).
+
 
 ## The tick the guest stands up at the end of a visit that starts now.
 static func visit_end(sim: PassengerSim, legs: Dictionary) -> int:

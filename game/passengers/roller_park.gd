@@ -468,6 +468,12 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 	bag["park_frame"] = _yawed(body)
 	if not is_nan(face) and CarryLead.start_of(bag)[0] == CarryLead.End.HELD:
 		bag["park_frame"] = Transform3D(Basis(Vector3.UP, face), body.origin)
+		# The pull's trail fixed in the world where the move starts, as a
+		# floor>pull's start is: held in the body's frame it turned with a
+		# walker turning on the spot to its seat, and swung through a booth's
+		# end panel and seat (board 5dc41129). The hand still reaches the bar.
+		var began: Transform3D = bag.get("start_body", body)
+		bag["from_world"] = began * (bag["from"] as Transform3D)
 
 
 ## The yaw `p` faces once it has turned to sit or stay where it sets its bags
@@ -509,14 +515,9 @@ static func floor_spot(
 	var spot := SecurityLooks.floor_spot(sim, p, index, count)
 	var where := StageKinds.location(p.stage)
 	if kind == SecurityLooks.Kind.ROLLER and sim.cafes.booth_roller(p):
-		# Inside the approach cell on its open side, away from the booth: at
-		# CAFE_BESIDE_M towards it the roller lay 0.035 m into the end panel,
-		# and away from it reached past the cell's edge, towards a wall.
 		var front: Variant = chair_front(sim, p, kind)
 		if front != null:
-			var root := sim.cafes.seat_root(p)
-			var side := (front as Transform3D).affine_inverse() * root
-			spot.origin.x = (1.0 if side.x < 0.0 else -1.0) * PARK_SIDE_M
+			spot.origin.x = BoothRoller.side(sim, p, front as Transform3D) * PARK_SIDE_M
 		return spot
 	if kind != SecurityLooks.Kind.ROLLER or where == StageKinds.Location.FACILITY_SEAT:
 		return spot
