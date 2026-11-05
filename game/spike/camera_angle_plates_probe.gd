@@ -24,7 +24,9 @@ extends SceneTree
 ## airside, planes, people) that land on the subject (passengers, the roof) or
 ## reach it with nothing in front (the pop). A positive control first casts rays
 ## through the terminal's outer walls, and at least one must be blocked, so a
-## clear line is not just a world without colliders. Any failed proof prints
+## clear line is not just a world without colliders. Each plate waits for the
+## roof fade to end before its sight lines, and fails if the roof is drawn in
+## the sight test but not in the saved plate (or the reverse). Any failed proof prints
 ## PROBE_INVALID and the probe exits 1. A guard thread calls OS.crash() on a
 ## stall.
 
@@ -39,6 +41,8 @@ const PAY_LIMIT_TICKS := 1500
 const TICKS_PER_FRAME := 4
 ## Frames after placing the camera: the roof fades in 0.4 s.
 const SETTLE_FRAMES := 50
+## Frames to wait, after SETTLE_FRAMES, for the roof fade to reach its target.
+const FADE_LIMIT_FRAMES := 600
 const MID_DISTANCE := 40.0
 const CUTAWAY_DISTANCE := 16.0
 const POP_DISTANCE := 18.0
@@ -203,13 +207,27 @@ func _plate(step: int, name: String, yaw: float, focus: Vector3, dist: float, ki
 		if _cam.global_position.z < focus.z:
 			_rig.yaw = wrapf(yaw + PI, -PI, PI)
 	await _frames(SETTLE_FRAMES)
+	# The roof stays visible (and keeps every wall whole) until its fade ends,
+	# and SETTLE_FRAMES can pass inside the fade at a high frame rate. Sight
+	# lines built mid-fade hit a roof the saved plate no longer draws.
+	var roof := _main.get_node("RoofView") as RoofView
+	var fade := 0
+	while roof.cutaway.roof_level != roof.cutaway.roof_target and fade < FADE_LIMIT_FRAMES:
+		fade += 1
+		await process_frame
+	if roof.cutaway.roof_level != roof.cutaway.roof_target:
+		_invalid("%s: the roof fade did not end in %d frames" % [name, FADE_LIMIT_FRAMES])
+	var roof_seen := roof.roof_node().visible
 	var ground := Vector3(_rig.position.x, 0.0, _rig.position.z)
 	var at := _cam.unproject_position(ground)
 	var size := root.get_visible_rect().size
 	var tilt := rad_to_deg(-_cam.rotation.x)
 	print(
 		(
-			"PROBE %s step=%d pitch=%.2f tilt=%.2f yaw=%.2f distance=%.1f focus=%s eye=%s screen=%s"
+			(
+				"PROBE %s step=%d pitch=%.2f tilt=%.2f yaw=%.2f distance=%.1f focus=%s eye=%s"
+				+ " screen=%s roof_level=%.2f roof_drawn=%s fade_frames=%d"
+			)
 			% [
 				name,
 				step,
@@ -220,6 +238,9 @@ func _plate(step: int, name: String, yaw: float, focus: Vector3, dist: float, ki
 				ground,
 				_cam.global_position.round(),
 				at.round(),
+				roof.cutaway.roof_level,
+				roof_seen,
+				fade,
 			]
 		)
 	)
@@ -256,6 +277,10 @@ func _plate(step: int, name: String, yaw: float, focus: Vector3, dist: float, ki
 	await _frames(2)
 	var img := root.get_texture().get_image()
 	img.convert(Image.FORMAT_RGBA8)
+	if roof.roof_node().visible != roof_seen:
+		_invalid(
+			"%s: the roof was drawn=%s for the sight lines but not in the plate" % [name, roof_seen]
+		)
 	_last_img = img
 	_save(img, "angle_%s.png" % name)
 	return ok
