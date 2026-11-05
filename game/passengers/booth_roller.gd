@@ -51,11 +51,15 @@ static func walled(sim: PassengerSim, front: Transform3D, towards: float) -> boo
 ## edges of the cells under that start and under the walker (`body`'s origin),
 ## so clear_of() keeps the roller out of them. At every other seat it leaves the
 ## start in the body's frame, as before. Any older record is cleared first.
-static func fix_start(bag: Dictionary, booth: bool, grid: BuildGrid, body: Transform3D) -> void:
+static func fix_start(bag: Dictionary, booth: bool, sim: PassengerSim, body: Transform3D) -> void:
 	bag.erase("wall_faces")
 	bag.erase("start_push")
-	if not booth or not bag.get("park", false) or not bag.has("park_frame"):
+	# With no sim (CarryOnProps driven on its own, as tests do) there is no seat.
+	if not booth or sim == null:
 		return
+	if not bag.get("park", false) or not bag.has("park_frame"):
+		return
+	var grid := sim.grid
 	if CarryLead.start_of(bag)[0] != CarryLead.End.HELD:
 		return
 	var began: Transform3D = bag.get("start_body", body)
