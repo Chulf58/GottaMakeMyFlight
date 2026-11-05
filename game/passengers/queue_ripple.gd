@@ -82,17 +82,19 @@ static func desk_waits(sim: PassengerSim, station: int, p: Passenger) -> int:
 		ahead = ahead.slice(0, ahead.find(p.id))
 	var waits := 0
 	for id: int in ahead:
-		if pulls_roller(sim.get_passenger(id)):
-			waits += front_wait_ticks()
+		var left: Passenger = sim.get_passenger(id)
+		if pulls_roller(left):
+			waits += front_wait_ticks(left)
 	return waits
 
 
-## The ticks a desk front waits on a leaver pulling a roller, beyond its walk
-## up from the next place: the leaver's walk of FRONT_CLEAR_MM, which starts on
-## the tick it leaves (stepped before the front, as an earlier passenger is).
+## The ticks a desk front waits on `leaver`, pulling a roller, beyond its walk
+## up from the next place: the leaver's walk of FRONT_CLEAR_MM at its pace
+## (Passenger.pace_ticks(), a run while late), which starts on the tick it
+## leaves (stepped before the front, as an earlier passenger is).
 ## A leaver stepped after the front makes it wait one tick more.
-static func front_wait_ticks() -> int:
-	return JourneyForecast.walk_ticks(FRONT_CLEAR_MM) - 1
+static func front_wait_ticks(leaver: Passenger) -> int:
+	return leaver.pace_ticks(FRONT_CLEAR_MM) - 1
 
 
 ## Whether `p` pulls a roller behind it (SecurityLooks.bag_kind()).

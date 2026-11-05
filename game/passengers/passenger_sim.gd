@@ -406,7 +406,7 @@ func _station_slot(station: int) -> int:
 
 
 ## Ticks until a passenger who walks `walk_mm` to the back of `station`'s
-## queue is done there. At a desk: the walk, the service in progress, the
+## queue is done there. At a desk: the walk (at `p`'s pace), the service in progress, the
 ## passengers waiting and its own service. At a security station: until `p`
 ## (the candidate; a passenger with no carry-on when null) is cleared at the
 ## security exit (SecurityForecast). Station choice and the lateness forecast
@@ -426,8 +426,9 @@ func station_eta(station: int, walk_mm: int, p: Passenger = null) -> int:
 	if _queues.has(station) and _queues[station]["serving"] != 0:
 		left = _serving_left(_queues[station])
 		waiting -= 1
+	var walk := p.pace_ticks(walk_mm) if p != null else JourneyForecast.walk_ticks(walk_mm)
 	return (
-		JourneyForecast.walk_ticks(walk_mm)
+		walk
 		+ left
 		+ maxi(waiting, 0) * CHECKIN_TICKS
 		+ CHECKIN_TICKS

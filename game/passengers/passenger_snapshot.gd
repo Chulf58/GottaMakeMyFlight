@@ -199,6 +199,10 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
 		if not PassengerThoughts.ticks_ok(p, out["tick"]):
 			return {"error": "passenger %d has a thought after the saved tick" % p.id}
+		# QueueRipple waits STAND_TICKS from it: one after the saved tick would hold
+		# the lane behind it until then.
+		if p.halt_tick < 0 or p.halt_tick > out["tick"]:
+			return {"error": "passenger %d stopped walking after the saved tick" % p.id}
 		ids[p.id] = p
 		passengers.append(p)
 	var cafe := CafeSnapshot.load(data["cafe"], ids, grid, out["tick"])
