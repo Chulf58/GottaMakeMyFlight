@@ -13,8 +13,10 @@ extends RefCounted
 ## LANE_SLOTS cells, stopping at a closed step, a station lane, another
 ## object's interaction cell or a seat's approach cell. A counter with no lane
 ## is left out. Its seats are the chairs of the RoomType.table_pieces in the
-## room (a cafe table, a dining table or a booth) whose approach cell is a passenger
-## cell (BuildGrid.is_passenger_cell(): walkable and walled in). A walk-on
+## room (a cafe table, a dining table or a booth) a guest can step into
+## (RoomRules.reachable_seats(): no wall between the approach cell and the
+## seat, the rule the room panel counts by) from an approach cell that is a
+## passenger cell (BuildGrid.is_passenger_cell(): walkable and walled in). A walk-on
 ## room (the stall, RoomType.walk_on) needs only a counter and has no seats.
 
 const LANE_SLOTS := 4
@@ -110,7 +112,7 @@ static func _seats(
 			or not FacilitySlots.piece_inside(grid, id, area)
 		):
 			continue
-		for seat in def.seat_descriptors(record["anchor"], record["facing"]):
+		for seat in RoomRules.reachable_seats(grid, id):
 			if not grid.is_passenger_cell(seat["approach"]):
 				continue
 			seat["key"] = "%d:%d" % [id, seat["index"]]
