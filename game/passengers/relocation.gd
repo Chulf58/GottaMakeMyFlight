@@ -36,13 +36,20 @@ var exiting := true
 ## Service ticks still owed at the new spot, or -1 when the visit was already
 ## over and the visitor only finishes leaving.
 var left := -1
+## Ticks of the step from its slot cell onto the seat or into the shower
+## (0 to ActivityPoses.SHUFFLE_TICKS) the visitor had made when its piece moved:
+## the stage clock is set again for the exit, so nothing else remembers how far
+## it had stepped, and its exit steps back from there (ActivityPoses.share()).
+var reached := 0
 
 
-## A new relocation leaving `from` with `owed` service ticks still to do.
-static func leaving(from: Dictionary, owed: int) -> Relocation:
+## A new relocation leaving `from` with `owed` service ticks still to do, the
+## visitor `stepped` ticks into the step onto its seat.
+static func leaving(from: Dictionary, owed: int, stepped := 0) -> Relocation:
 	var out := Relocation.new()
 	out.source = from
 	out.left = owed
+	out.reached = stepped
 	return out
 
 
@@ -109,16 +116,17 @@ func to_record() -> Dictionary:
 		"facing": source["facing"],
 		"exiting": exiting,
 		"left": left,
+		"reached": reached,
 	}
 
 
 ## A relocation from a to_record() dictionary (also after JSON), or null when
-## it is malformed: an unknown piece, a facing outside 0 to 3, or a service
-## left below -1.
+## it is malformed: an unknown piece, a facing outside 0 to 3, a service left
+## below -1, or a step reached outside 0 to ActivityPoses.SHUFFLE_TICKS.
 static func from_record(data: Variant) -> Relocation:
 	if typeof(data) != TYPE_DICTIONARY:
 		return null
-	for key in ["def", "anchor", "facing", "exiting", "left"]:
+	for key in ["def", "anchor", "facing", "exiting", "left", "reached"]:
 		if not data.has(key):
 			return null
 	var anchor: Variant = data["anchor"]
@@ -132,8 +140,11 @@ static func from_record(data: Variant) -> Relocation:
 		and WholeNumber.is_whole(data["facing"])
 		and typeof(data["exiting"]) == TYPE_BOOL
 		and WholeNumber.is_whole(data["left"])
+		and WholeNumber.is_whole(data["reached"])
 	)
 	if not ok or int(data["facing"]) < 0 or int(data["facing"]) > 3 or int(data["left"]) < -1:
+		return null
+	if int(data["reached"]) < 0 or int(data["reached"]) > ActivityPoses.SHUFFLE_TICKS:
 		return null
 	var out := Relocation.new()
 	out.source = {
@@ -143,6 +154,7 @@ static func from_record(data: Variant) -> Relocation:
 	}
 	out.exiting = data["exiting"]
 	out.left = int(data["left"])
+	out.reached = int(data["reached"])
 	return out
 
 
