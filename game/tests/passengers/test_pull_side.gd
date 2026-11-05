@@ -15,6 +15,8 @@ extends GdUnitTestSuite
 ##     cell (its rim reaches over its cell's edge into the row);
 ##   FURNITURE: a bin on the south cell beside each run cell, no wall;
 ##   OPEN: nothing.
+## And a corner: walking east the route turns north (left) at CORNER, before
+## a north-south wall on the east edge of its column.
 
 const ROLLER := SecurityLooks.Kind.ROLLER
 const RIGHT_ROW := 10
@@ -23,6 +25,7 @@ const BOTH_ROW := 30
 const BIN_ROW := 40
 const FURNITURE_ROW := 50
 const OPEN_ROW := 60
+const CORNER := Vector2i(28, 4)
 const RUN := Vector2i(18, 24)
 const START_X := 10
 const END_X := 32
@@ -46,6 +49,8 @@ func before() -> void:
 		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, BIN_ROW - 1), 0))
 		edits.append(BuildEdit.paint_floor(Vector2i(x, FURNITURE_ROW + 1), BuildGrid.FLOOR_TILE, 1))
 		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, FURNITURE_ROW + 1), 0))
+	for y in range(CORNER.y - 3, CORNER.y + 3):
+		edits.append(BuildEdit.place_wall(Vector2i(CORNER.x, y), BuildGrid.Side.EAST))
 	for result in _grid.apply_batch(edits):
 		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
 
@@ -373,3 +378,32 @@ func test_hand_of_moves_a_set_down_roller_without_the_hold() -> void:
 	assert_int(PullSide.pick(swapped, _grid, frame, ahead, WALK_M, 1, now)).is_equal(0)
 	swapped["changed"] = now - PullSide.HOLD_TICKS
 	assert_int(PullSide.pick(swapped, _grid, frame, ahead, WALK_M, 1, now)).is_equal(1)
+
+
+func test_a_change_onto_the_inside_of_a_corner_waits_until_the_guest_has_turned() -> void:
+	# Half a metre before the corner, facing east; the route turns north (left).
+	var corner := _grid.cell_to_world(CORNER)
+	var frame := _pose(CORNER.y, corner.x - 0.5)
+	var north: Array = []
+	for k in PullSide.AHEAD_CELLS:
+		north.append(_grid.cell_to_world(CORNER + Vector2i(0, -1 - k)))
+	var ahead: Array = [corner]
+	ahead.append_array(north.slice(0, PullSide.AHEAD_CELLS - 1))
+	var now := FIRST_TICK + 50.0
+	# Control: the right roller is threatened only past the corner, where the
+	# wall runs on its side, and the left is clear there.
+	var poses := PullSide.walk_poses(frame, ahead, WALK_M * PullSide.LOOK_TICKS)
+	var right := PullSide.footprint(0, true)
+	assert_bool(PullSide.blocked(_grid, poses, right, true)).is_true()
+	assert_bool(PullSide.blocked(_grid, [frame], right, true)).is_false()
+	assert_bool(PullSide.blocked(_grid, poses, PullSide.footprint(1, false), true)).is_false()
+	assert_bool(PullSide.blocked(_grid, poses, PullSide.crossing(), true)).is_false()
+	assert_bool(PullSide.turns_to(poses, 1)).is_true()
+	# The left is the inside of the corner: the roller stays on the right.
+	var bag := {"kind": ROLLER, "place": _place(0)}
+	assert_int(PullSide.pick(bag, _grid, frame, ahead, WALK_M, 0, now)).is_equal(0)
+	assert_int(int(bag.get("pull_side_swaps", 0))).is_equal(0)
+	# Turned north at the corner, with the wall beside it on the right, it changes.
+	var turned := Transform3D(Basis(Vector3.UP, PI), corner)
+	assert_int(PullSide.pick(bag, _grid, turned, north, WALK_M, 0, now + 6.0)).is_equal(1)
+	assert_int(int(bag.get("pull_side_swaps", 0))).is_equal(1)

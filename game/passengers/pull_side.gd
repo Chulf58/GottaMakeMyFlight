@@ -47,7 +47,9 @@ extends RefCounted
 ## their ends run on by half a wall's thickness; a door is a way through and is
 ## left out. Furniture is the real meshes of each piece; it threatens the
 ## pulling side as a wall does (a scanner, a cafe table) and keeps the roller
-## off the other side.
+## off the other side. A change chosen by a threat ahead does not take the
+## roller onto the inside of a corner within the look-ahead (turns_to()): the
+## follower jumps there, so the change waits until the guest has turned.
 ##
 ## What it does not do: it does not look back along the route (a replan
 ## replaces the route; the roller's drawn depth stands in for it), it does
@@ -76,6 +78,8 @@ const AHEAD_CELLS := 3
 ## Ticks from the start of a roller's last move (its change to the left) before
 ## it may go back to the right: more than the probe's 12-tick swap-back window.
 const HOLD_TICKS := 2.0 * LOOK_TICKS
+## A heading change over this along the walk ahead is a corner (degrees).
+const CORNER_DEG := 45.0
 
 
 ## Sets `hands` (CarryOnProps.sync()'s, SecurityLooks.hand_of() so far) of a
@@ -176,6 +180,11 @@ static func pick(
 		# wall, not the scanner).
 		if not told:
 			return hand
+	elif not told and turns_to(poses, other):
+		# Not onto the inside of a corner ahead: the follower jumps there (the
+		# hand-to-axle distance changes 0.066 m in a frame at 1x, a 90 degree
+		# corner in the cafe walk). The change waits until the guest has turned.
+		return hand
 	return _change(bag, "pull_side_swaps", other)
 
 
@@ -206,6 +215,17 @@ static func may_return(
 		var at := Vector3(right.position.x, 0.0, depth - _bag_size().z)
 		right = right.merge(AABB(at, size))
 	return not (blocked(grid, poses, right, true) or blocked(grid, poses, crossing(), true))
+
+
+## Whether the walk `poses` (walk_poses(), the first the guest's pose now)
+## turns more than CORNER_DEG toward hand `hand`'s side (0 right, 1 left).
+static func turns_to(poses: Array, hand: int) -> bool:
+	var now := (poses[0] as Transform3D).basis.get_euler().y
+	var toward := 1.0 if hand == 1 else -1.0
+	for pose: Transform3D in poses:
+		if angle_difference(now, pose.basis.get_euler().y) * toward > deg_to_rad(CORNER_DEG):
+			return true
+	return false
 
 
 ## Whether `bag`'s last move was a queue stand (RollerPark.queued()) that
