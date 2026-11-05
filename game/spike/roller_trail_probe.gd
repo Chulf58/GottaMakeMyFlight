@@ -47,6 +47,18 @@ extends SceneTree
 ## in the pull and moved MIN_MOVE_M) and a wall self-test must hold, else
 ## PROBE_INVALID.
 ##
+## Wall classes (board 578435a7, hand-swap measure): each wall hit frame in the
+## walking pull (every bucket but spawn and STANDING) gets one class, in this
+## order: PARK (a RollerPark move), JAMB (the wall hit ends at a door or
+## opening and the roller is nearer that end), CORRIDOR (a wall within 0.6 m of
+## the guest's path on both sides), FLANK_BOTH (a wall on the pulling side
+## while SecurityLooks' closed test calls the other side closed too), FLANK (a
+## wall on the pulling side, the other side open: a swap would fix it), OTHER.
+## The table also gives the drawn hand, whether hand_of called the pulling side
+## closed, whether an object (not a wall) closed the other side, the hand
+## changes per 1000 walking frames and the swap-backs within 12 ticks. The
+## control: the classified frames equal the walking wall hit frames, above 0.
+##
 ## Plates: at most PLATES_PER_WORLD furniture overlap moments a world, each
 ## deeper than the last plated, close and wide, plus a contact sheet. Before a
 ## save the roller, the furniture mesh and the body project inside the frame
@@ -108,6 +120,16 @@ const BUCKETS: Array[String] = ["spawn", "STANDING", "after_tip", "CAFE_TO_SEAT"
 const TOP_FRAMES := 5
 ## A hit this deep or deeper counts as a bar failure (the phase-2 bar).
 const BAR_DEPTH_M := 0.05
+## Wall-hit classes (board 578435a7, hand-swap measure): a wall hit frame in the
+## walking pull (every bucket but spawn and STANDING) lands in exactly one.
+const CLASSES: Array[String] = ["FLANK", "FLANK_BOTH", "JAMB", "CORRIDOR", "PARK", "OTHER"]
+const NOT_WALKING: Array[String] = ["spawn", "STANDING"]
+const SIDE_CLEAR_M := 0.6
+const SIDE_SAMPLE_M := 0.1
+const TRAIL_LOOK_M := 1.2
+const EPISODE_GAP_TICKS := 20
+const SWAP_BACK_TICKS := 12
+const TOP_PLACES := 3
 
 var _seed := 0
 var _out_dir := ""
@@ -133,6 +155,10 @@ var _spawned_at := {}
 var _walls: Array[Dictionary] = []
 ## The totals over both worlds (same shape as the per-world _m's tally keys).
 var _all := {}
+## Wall-hit class tallies over both worlds (_new_classes) and the drawn hand's
+## changes over the walking frames (_new_hands).
+var _cls := {}
+var _hands := {}
 var _headless := false
 
 
@@ -158,6 +184,8 @@ func _run() -> void:
 	if not through or beside:
 		_invalid("the triangle test's self-test failed")
 	_all = {"pull": 0, "hit": 0, "moved": 0.0, "buckets": _new_buckets(), "frames": []}
+	_cls = _new_classes()
+	_hands = _new_hands()
 	for world in WORLDS:
 		if await _boot(world):
 			await _watch(world)
@@ -177,6 +205,7 @@ func _run() -> void:
 		)
 	)
 	_print_table("ALL", _all)
+	_print_classes()
 	if int(_all["pull"]) <= 0 or float(_all["moved"]) < MIN_MOVE_M:
 		_invalid(
 			(
@@ -254,6 +283,8 @@ func _collect_walls(world: String) -> void:
 			BuildView.wall_transform(grid, cell, edge.z)
 			* Transform3D(Basis.IDENTITY, Vector3(0.0, WALL_HEIGHT_M * 0.5, 0.0))
 		)
+		var xf := mi.global_transform
+		var along := Vector2i(roundi(xf.basis.x.x), roundi(xf.basis.x.z))
 		(
 			_walls
 			. append(
@@ -264,6 +295,9 @@ func _collect_walls(world: String) -> void:
 					"mi": mi,
 					"verts": box.get_faces(),
 					"wall": true,
+					"inv": xf.affine_inverse(),
+					"centre": xf.origin,
+					"ends": _wall_ends(grid, edge, along),
 				}
 			)
 		)
@@ -378,6 +412,7 @@ func _watch(world: String) -> void:
 	_side_walked.clear()
 	_spawned_at.clear()
 	_last_used.clear()
+	_hands["last"].clear()
 	_m = {
 		"pull": 0,
 		"hit": 0,
@@ -498,9 +533,247 @@ func _test_roller(
 		row["furn"] += int(hit_furn)
 		row["wall"] += int(hit_wall)
 		row["any"] += int(hit_furn or hit_wall)
+	var walking: bool = not bucket in NOT_WALKING
+	_track_hand(p, state, side_sign, walking)
+	if hit_wall and walking:
+		_classify(world, p, body, bag, state, worst_wall)
 	for found: Dictionary in [worst, worst_wall]:
 		if found.has("depth"):
 			await _record(world, p, body, bag, found, tag, bucket, fresh)
+
+
+func _new_classes() -> Dictionary:
+	var out := {}
+	for c in CLASSES:
+		out[c] = {
+			"frames": 0,
+			"eps": 0,
+			"hand0": 0,
+			"hand1": 0,
+			"deep": 0.0,
+			"pull_closed": 0,
+			"other_closed": 0,
+			"other_obj": 0,
+			"sim_differs": 0,
+			"no_step": 0,
+			"pull_wall": 0,
+			"other_wall": 0,
+			"no_sign": 0,
+			"flank_like": 0,
+			"places": {},
+			"last": {},
+		}
+	return out
+
+
+func _new_hands() -> Dictionary:
+	return {"walk": 0, "changes": 0, "swap_backs": 0, "pairs": {}, "last": {}}
+
+
+## Counts one walking-pull frame of the roller's drawn hand (the bag's view
+## place): a change from the last frame, and a change back within
+## SWAP_BACK_TICKS of the one before it. `pull_sign` pairs the hand with the
+## body side the axle is drawn on, to show which hand is which side.
+func _track_hand(p: Passenger, state: Dictionary, pull_sign: float, walking: bool) -> void:
+	if int(state.get("place", -1)) < 0:
+		return
+	var hand := CarryLead.hand_of(int(state["place"]))
+	var rec: Dictionary = _hands["last"].get(p.id, {"hand": hand, "change_tick": -100000})
+	if walking:
+		_hands["walk"] += 1
+		var pair := "hand %d side %d" % [hand, int(pull_sign)]
+		_hands["pairs"][pair] = int(_hands["pairs"].get(pair, 0)) + 1
+	if int(rec["hand"]) != hand:
+		if walking:
+			_hands["changes"] += 1
+			if _clock.tick - int(rec["change_tick"]) <= SWAP_BACK_TICKS:
+				_hands["swap_backs"] += 1
+		rec["change_tick"] = _clock.tick
+		rec["hand"] = hand
+	_hands["last"][p.id] = rec
+
+
+## Books one wall hit frame in the walking pull in exactly one class. PARK: the
+## move is a RollerPark move. JAMB: the wall hit is a wall end at a door or
+## opening, and the roller is nearer that end. CORRIDOR: a wall within
+## SIDE_CLEAR_M of the guest's path on both sides. FLANK_BOTH: a wall on the
+## pulling side while hand_of calls the other side closed too (a wall edge or
+## an object in the next cell). FLANK: a wall on the pulling side, the other
+## side open (a swap would fix it). OTHER: the rest.
+func _classify(
+	world: String, p: Passenger, body: Node3D, bag: Node3D, state: Dictionary, found: Dictionary
+) -> void:
+	var mesh: Dictionary = found["mesh"]
+	var grid := _mode.grid
+	var hand := CarryLead.hand_of(int(state.get("place", 0)))
+	var pull_sign := _side_sign(body, state.get("drawn_axle", bag.global_position))
+	var step := SecurityLooks._stay_step(_sim, p)
+	if step == Vector2i.ZERO and p.path.size() >= 2:
+		var at := clampi(p.path_index, 0, p.path.size() - 2)
+		step = p.path[at + 1] - p.path[at]
+	var pull_closed := false
+	var other_closed := false
+	var other_obj := false
+	if step != Vector2i.ZERO:
+		var right := SecurityLooks.world_dir(step).cross(Vector3.UP)
+		var right_step := Vector2i(signi(roundi(right.x)), signi(roundi(right.z)))
+		var pull_step := right_step if hand == 0 else -right_step
+		pull_closed = SecurityLooks._closed(grid, p.at, pull_step)
+		other_closed = SecurityLooks._closed(grid, p.at, -pull_step)
+		other_obj = other_closed and not _walled(grid, p.at, -pull_step)
+	var pull_wall := false
+	var other_wall := false
+	if pull_sign != 0.0:
+		var across := Basis(Vector3.UP, body.rotation.y) * Vector3.RIGHT * pull_sign
+		pull_wall = _wall_near(p.id, body.global_position, across)
+		other_wall = _wall_near(p.id, body.global_position, -across)
+	var cls := "OTHER"
+	if state.get("park", false):
+		cls = "PARK"
+	elif _at_wall_end(mesh, bag.global_position):
+		cls = "JAMB"
+	elif pull_wall and other_wall:
+		cls = "CORRIDOR"
+	elif (pull_wall or pull_closed) and other_closed and not other_wall:
+		cls = "FLANK_BOTH"
+	elif pull_wall and not other_wall and not other_closed:
+		cls = "FLANK"
+	var row: Dictionary = _cls[cls]
+	row["frames"] += 1
+	row["hand%d" % hand] += 1
+	row["deep"] = maxf(float(row["deep"]), float(found["depth"]))
+	row["pull_closed"] += int(pull_closed)
+	row["other_closed"] += int(other_closed)
+	row["other_obj"] += int(other_obj)
+	row["no_step"] += int(step == Vector2i.ZERO)
+	row["pull_wall"] += int(pull_wall)
+	row["other_wall"] += int(other_wall)
+	row["no_sign"] += int(pull_sign == 0.0)
+	row["flank_like"] += int(pull_wall and not other_wall and not other_closed)
+	row["sim_differs"] += int(SecurityLooks.hand_of(_sim, p, 0) != hand)
+	var key := "%s p%d %s" % [world, p.id, mesh["name"]]
+	if not row["last"].has(key) or _clock.tick - int(row["last"][key]) > EPISODE_GAP_TICKS:
+		row["eps"] += 1
+	row["last"][key] = _clock.tick
+	var place := "%s %s guest cell (%d,%d)" % [world, mesh["name"], p.at.x, p.at.y]
+	row["places"][place] = int(row["places"].get(place, 0)) + 1
+
+
+## Whether the edge of `cell` toward `toward` holds a wall.
+static func _walled(grid: BuildGrid, cell: Vector2i, toward: Vector2i) -> bool:
+	for axis in [Vector2i(toward.x, 0), Vector2i(0, toward.y)]:
+		var side := BuildGrid.SIDE_STEP.find(axis)
+		if side >= 0 and grid.has_wall(cell, side):
+			return true
+	return false
+
+
+## Whether a wall box lies within SIDE_CLEAR_M of the guest's path on the side
+## `dir` (a unit step across the path): from the guest and from the path points
+## up to TRAIL_LOOK_M behind it.
+func _wall_near(pid: int, at: Vector3, dir: Vector3) -> bool:
+	var samples: Array[Vector3] = [at]
+	var walked: Array = _walked.get(pid, [])
+	var length := 0.0
+	for i in range(walked.size() - 1, 0, -1):
+		length += (walked[i] as Vector3).distance_to(walked[i - 1])
+		if length > TRAIL_LOOK_M:
+			break
+		samples.append(walked[i - 1])
+	var half_len := 0.5 + BuildView.WALL_THICKNESS * 0.5
+	var half_thick := BuildView.WALL_THICKNESS * 0.5
+	for s in samples:
+		for k in range(1, int(SIDE_CLEAR_M / SIDE_SAMPLE_M) + 1):
+			var pt := s + dir * (k * SIDE_SAMPLE_M)
+			for wall: Dictionary in _walls:
+				var centre: Vector3 = wall["centre"]
+				if Vector2(centre.x - pt.x, centre.z - pt.z).length() > 1.2:
+					continue
+				var local: Vector3 = (wall["inv"] as Transform3D) * pt
+				if absf(local.x) <= half_len and absf(local.z) <= half_thick:
+					return true
+	return false
+
+
+## Whether the roller at `at` is nearer a wall end at a door or opening than
+## the wall's other end (the wall box `mesh`, its "ends" from _wall_ends).
+func _at_wall_end(mesh: Dictionary, at: Vector3) -> bool:
+	var local: Vector3 = (mesh["inv"] as Transform3D) * at
+	var sgn := 1 if local.x >= 0.0 else -1
+	for end: Dictionary in mesh["ends"]:
+		if int(end["sgn"]) == sgn and end["open"]:
+			return true
+	return false
+
+
+## The two ends of a wall edge (wall_edges form `edge`), each {sgn: +1 or -1
+## along the box's local x (`along` is its world direction in grid steps),
+## open: the wall goes on as a door, or stops with no wall across it}.
+static func _wall_ends(grid: BuildGrid, edge: Vector3i, along: Vector2i) -> Array[Dictionary]:
+	var ex := edge.x + (1 if edge.z == BuildGrid.Side.EAST else 0)
+	var ey := edge.y + (1 if edge.z == BuildGrid.Side.SOUTH else 0)
+	var horizontal := edge.z == BuildGrid.Side.NORTH or edge.z == BuildGrid.Side.SOUTH
+	var plus_first := (along.x > 0) if horizontal else (along.y > 0)
+	var ends: Array[Dictionary] = []
+	if horizontal:
+		ends.append(
+			_wall_end(
+				1 if plus_first else -1,
+				_kind(grid, ex + 1, ey, true),
+				_kind(grid, ex + 1, ey, false),
+				_kind(grid, ex + 1, ey - 1, false)
+			)
+		)
+		ends.append(
+			_wall_end(
+				-1 if plus_first else 1,
+				_kind(grid, ex - 1, ey, true),
+				_kind(grid, ex, ey, false),
+				_kind(grid, ex, ey - 1, false)
+			)
+		)
+	else:
+		ends.append(
+			_wall_end(
+				1 if plus_first else -1,
+				_kind(grid, ex, ey + 1, false),
+				_kind(grid, ex, ey + 1, true),
+				_kind(grid, ex - 1, ey + 1, true)
+			)
+		)
+		ends.append(
+			_wall_end(
+				-1 if plus_first else 1,
+				_kind(grid, ex, ey - 1, false),
+				_kind(grid, ex, ey, true),
+				_kind(grid, ex - 1, ey, true)
+			)
+		)
+	return ends
+
+
+static func _wall_end(sgn: int, inline: int, across_a: int, across_b: int) -> Dictionary:
+	var open := (
+		inline == BuildGrid.WallKind.DOOR
+		or (
+			inline == BuildGrid.WallKind.NONE
+			and across_a == BuildGrid.WallKind.NONE
+			and across_b == BuildGrid.WallKind.NONE
+		)
+	)
+	return {"sgn": sgn, "open": open}
+
+
+## The WallKind of the grid edge that starts at vertex (vx, vy) and runs east
+## (`horizontal`) or south; NONE past the grid.
+static func _kind(grid: BuildGrid, vx: int, vy: int, horizontal: bool) -> int:
+	if horizontal:
+		if vy < grid.size.y:
+			return grid.wall_kind(Vector2i(vx, vy), BuildGrid.Side.NORTH)
+		return grid.wall_kind(Vector2i(vx, vy - 1), BuildGrid.Side.SOUTH)
+	if vx < grid.size.x:
+		return grid.wall_kind(Vector2i(vx, vy), BuildGrid.Side.WEST)
+	return grid.wall_kind(Vector2i(vx - 1, vy), BuildGrid.Side.EAST)
 
 
 ## Which bucket a pull frame counts in: spawn, then the STANDING stage, then
@@ -933,6 +1206,90 @@ func _print_frames(title: String, frames: Array) -> void:
 		)
 		if seen.size() >= TOP_FRAMES:
 			break
+
+
+## The wall-hit class tables over both worlds, the top places per class, the
+## hand changes and the control: the classified frames must equal the wall hit
+## frames of the walking buckets, counted apart, and be above zero.
+func _print_classes() -> void:
+	var walking := 0
+	var wall_hits := 0
+	for b in BUCKETS:
+		if b in NOT_WALKING:
+			continue
+		walking += int(_all["buckets"][b]["pull"])
+		wall_hits += int(_all["buckets"][b]["wall"])
+	var total := 0
+	var episodes := 0
+	print(
+		(
+			"WALL_CLASS seed %d | walking pull frames %d | wall hit frames %d (%.1f per 1000)"
+			% [_seed, walking, wall_hits, 1000.0 * wall_hits / maxf(walking, 1.0)]
+		)
+	)
+	print(
+		(
+			"| class | frames | per 1000 walking | episodes | right hand | left hand | deepest m "
+			+ "| pull side closed | other side closed | other closed by object | sim hand differs "
+			+ "| no step | wall on pull side | wall on other side | no side | flank-like (swap fixes) |"
+		)
+	)
+	print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+	for c in CLASSES:
+		var row: Dictionary = _cls[c]
+		total += int(row["frames"])
+		episodes += int(row["eps"])
+		print(
+			(
+				"| %s | %d | %.1f | %d | %d | %d | %.3f | %d | %d | %d | %d | %d | %d | %d | %d | %d |"
+				% [
+					c,
+					row["frames"],
+					1000.0 * row["frames"] / maxf(walking, 1.0),
+					row["eps"],
+					row["hand0"],
+					row["hand1"],
+					row["deep"],
+					row["pull_closed"],
+					row["other_closed"],
+					row["other_obj"],
+					row["sim_differs"],
+					row["no_step"],
+					row["pull_wall"],
+					row["other_wall"],
+					row["no_sign"],
+					row["flank_like"],
+				]
+			)
+		)
+	print("| total | %d | | %d | | | | | | | | | | | | |" % [total, episodes])
+	for c in CLASSES:
+		var places: Dictionary = _cls[c]["places"]
+		var keys: Array = places.keys()
+		keys.sort_custom(func(a: String, b: String) -> bool: return places[a] > places[b])
+		for i in mini(TOP_PLACES, keys.size()):
+			print("PLACE %s %d: %s x%d frames" % [c, i + 1, keys[i], places[keys[i]]])
+	var hand_text := (
+		"HANDS seed %d: %d walking frames, %d hand changes (%.2f per 1000), "
+		+ "%d swap-backs within %d ticks; hand/side pairs %s"
+	)
+	print(
+		(
+			hand_text
+			% [
+				_seed,
+				_hands["walk"],
+				_hands["changes"],
+				1000.0 * _hands["changes"] / maxf(_hands["walk"], 1.0),
+				_hands["swap_backs"],
+				SWAP_BACK_TICKS,
+				_hands["pairs"]
+			]
+		)
+	)
+	print("CLASS_CONTROL classified %d == wall hits %d, above 0" % [total, wall_hits])
+	if total != wall_hits or total <= 0:
+		_invalid("the wall classes hold %d frames, the wall hits are %d" % [total, wall_hits])
 
 
 func _summary(world: String) -> void:
