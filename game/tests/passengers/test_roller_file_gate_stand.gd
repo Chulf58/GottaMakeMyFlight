@@ -73,12 +73,7 @@ func test_a_file_waiter_stands_its_roller_and_tips_it_on_walking() -> void:
 			stood += 1
 			assert_int(mine["stood"]).is_greater(0)
 			assert_int(mine["repulled"]).is_greater(0)
-			# A file waiter plays the walk clip on the spot while held (PassengerViews
-			# _pose() takes is_moving(), and its path is open), so there is no idle
-			# to measure the hips against: the share printed is the walk's bob.
-			# Only the stoop is held to (board 44b974cc report).
-			_print_posture(mine)
-			assert_float(float(mine["stood_stoop"])).is_less_equal(Q.STOOP_EPS)
+			_assert_posture(mine)
 		elif longest < RollerPark.FILE_STILL_TICKS:
 			# A ripple's wait: no stand, though STILL_TICKS would have asked for one.
 			short_seen += int(longest > RollerPark.STILL_TICKS)
@@ -155,6 +150,40 @@ func test_a_file_waiter_and_a_gate_stander_count_as_still() -> void:
 	assert_bool(RollerPark.queue_still(sim, second)).is_true()
 	assert_int(RollerPark.still_wait(second)).is_equal(RollerPark.STILL_TICKS)
 	assert_int(RollerPark.FILE_STILL_TICKS).is_greater(RollerPark.STILL_TICKS)
+
+
+## A walker held in its file (its path open, no room to step) is drawn
+## standing on the idle clip, not walking on the spot, and walks again once it
+## steps (PassengerViews._pose() takes the drawn step for a filed walker).
+func test_a_held_file_waiter_stands_idle_and_walks_when_it_steps() -> void:
+	_world = TestBoardingFiles.boarding_world()
+	_world.run_to(TestBoardingFiles.BOARDING + 5)
+	_open_views()
+	var first := TestBoardingFiles.walker(_world, FILE_CELL)
+	var second := TestBoardingFiles.walker(_world, FILE_CELL)
+	_followed = [first, second]
+	var held := {}
+	var stepping := {}
+	for i in 60:
+		await _tick(1.0 / 3.0)
+		var body := _views.node_for(second.id)
+		if body == null or _world.clock.tick < TestBoardingFiles.BOARDING + 7:
+			continue
+		var clip := str((body.get_node("AnimationPlayer") as AnimationPlayer).current_animation)
+		var moved := (
+			_views.tick_position(second.id, true).distance_to(
+				_views.tick_position(second.id, false)
+			)
+			> 0.001
+		)
+		var tally := stepping if moved else held
+		tally[clip] = int(tally.get(clip, 0)) + 1
+	print("held: %s, stepping: %s" % [held, stepping])
+	# Control: it was held, with its path open, and it then stepped.
+	assert_int(int(held.get("idle", 0)) + int(held.get("walk", 0))).is_greater(0)
+	assert_int(held.get("walk", 0)).is_equal(0)
+	assert_int(held.get("idle", 0)).is_greater(0)
+	assert_int(stepping.get("walk", 0)).is_greater(0)
 
 
 func _open_views() -> void:

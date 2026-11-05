@@ -433,10 +433,11 @@ func _pose(node: Node3D, p: Passenger) -> float:
 	var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
 	var activity := ActivityPoses.kind(sim, p)
 	var showering := activity == ActivityPoses.Kind.SHOWER
-	if _at_security(p) or _stepping_in_stall(p) or showering:
-		# The drawn step, so a held-back queue front does not walk in place and
-		# a step to the table, into or out of a toilet stall or into or out of
-		# a shower, is not an idle slide.
+	if _at_security(p) or _stepping_in_stall(p) or showering or sim.files.holds(p.id):
+		# The drawn step, so a held-back queue front or boarding-file waiter
+		# (its path still open) does not walk in place and a step to the
+		# table, into or out of a toilet stall or into or out of a shower, is
+		# not an idle slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
 		moving = mm > 0
 	var held := 0

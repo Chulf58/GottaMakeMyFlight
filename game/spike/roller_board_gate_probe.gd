@@ -6,17 +6,21 @@ extends SceneTree
 ## It boots main.tscn, builds the reference terminal with its gate desk, takes
 ## every gate seat out (so cleared guests stand on spots), opens the airport and
 ## sends GATE_GUESTS cleared guests with one roller each to the gate. Once
-## boarding opens and the first stander has walked off, FILE_WALKERS walkers with
-## a roller each turn out on one cell: they set off one at a time, so the later
-## ones wait in their file. The clock runs a third of a tick a frame.
+## boarding opens and the first stander has walked off, file walkers with a
+## roller each turn out on FILE_CELLS: they set off one at a time, so the later
+## ones wait in their file. Then four walkers stacked on one cell are checked
+## for other bags drawn on the stood roller (BLOCKER lines, no plate). The
+## clock runs a third of a tick a frame.
 ##
 ## Checks, each printing the values it compared:
 ##   STOOD: each subject's roller upright (+z to up >= UPRIGHT_DOT), its axle at
 ##     most BESIDE_M from the feet, held, STOOD_AFTER ticks into the stand.
 ##   HIPS: the lowest hips holding it against the same guest's hips standing
-##     still on the idle clip before the stand (>= HIPS_SHARE; the gate stander
-##     is held to it; a file waiter plays the walk clip on the spot while held,
-##     so its share is printed only), and the stoop (<= STOOP_EPS).
+##     still on the idle clip before the stand (>= HIPS_SHARE), and the stoop
+##     (<= STOOP_EPS).
+##   DESK_OVERLAP: points of the gate stander's stood roller body inside the
+##     gate desk's mesh (parity test; control: a point inside the counter) and
+##     the deepest from the mesh box's nearest face, on its first 30 stood frames.
 ##   BODY_IN_STOOD_BAG: body points (the holding hand left out) inside the stood
 ##     roller's meshes on stood frames (CarryContact, drawn in this window).
 ##   REPULLED: QUEUE_TIP_TICKS + 3 ticks after the tip starts the roller trails
@@ -44,10 +48,14 @@ const FloatCheck := preload("res://spike/carry_float_check.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 const OUT_REL := "res://../tools/blender/out/roller-board-gate"
 const GATE_GUESTS := 3
-## Four on one cell: the last waits about 24 ticks, alone on the cell once the
-## third has set off (about 16), so its stood roller is not hidden by theirs.
-const FILE_WALKERS := 4
-const FILE_CELL := Vector2i(19, 6)
+## Where the file walkers turn out: three on one cell, then one on each cell
+## beside it, a later id each. The walkers beside wait their turn in the file
+## (pending) alone on their cell; on one cell a walker ahead that sets off
+## pulls its roller back over the spot of the one behind (seed 44974: every
+## sight line to the stood roller hit that roller, BLOCKER lines).
+const FILE_CELLS: Array[Vector2i] = [
+	Vector2i(19, 6), Vector2i(19, 6), Vector2i(19, 6), Vector2i(18, 6), Vector2i(20, 6)
+]
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 150.0
 const MIN_BAG_PX := 120
@@ -78,6 +86,7 @@ var _sheet: Array[Image] = []
 var _plates := 0
 var _offset := Vector2i.ZERO
 var _keep: Array[Passenger] = []
+var _desk_control := {}
 
 
 func _initialize() -> void:
@@ -97,6 +106,7 @@ func _run() -> void:
 		var gate := await _gate_stander()
 		if not gate.is_empty():
 			await _file_waiter()
+			await _stacked_diag()
 	if not _sheet.is_empty():
 		_save(_contact_sheet(_sheet), "contact_sheet.png")
 	print("PROBE done plates=%d failed=%s" % [_plates, _failed])
@@ -199,6 +209,7 @@ func _gate_stander() -> Dictionary:
 		)
 	)
 	var m := _metrics()
+	m["desk"] = 0
 	var subject: Passenger = null
 	var stop := _clock.tick + LIMIT_TICKS
 	while _clock.tick < stop and subject == null:
@@ -223,15 +234,15 @@ func _gate_stander() -> Dictionary:
 	return m
 
 
-## FILE_WALKERS walkers turned out on FILE_CELL; the first whose roller stands
+## The file walkers turned out on FILE_CELLS; the first whose roller stands
 ## up in its file is the subject.
 func _file_waiter() -> void:
 	var walkers: Array[Passenger] = []
-	for i in FILE_WALKERS:
+	for cell in FILE_CELLS:
 		var p := _roller_guest()
 		p.stage = Passenger.Stage.TO_EXIT
 		p.stage_tick = _clock.tick
-		p.at = FILE_CELL + _offset
+		p.at = cell + _offset
 		walkers.append(p)
 	print(
 		(
@@ -269,7 +280,7 @@ func _file_waiter() -> void:
 		return
 	if not await _tip_strip("file", subject, m):
 		return
-	_summary("FILE", m, false)
+	_summary("FILE", m, true)
 
 
 func _metrics() -> Dictionary:
@@ -311,7 +322,31 @@ func _watch(p: Passenger, m: Dictionary) -> Dictionary:
 	if s["queued"] and s["into"] >= STOOD_AFTER and not s["tipping"]:
 		m["stood_h"] = minf(m["stood_h"], s["hips"])
 		m["stoop"] = maxf(m["stoop"], s["stoop"])
-		m["inside"] = maxi(m["inside"], _inside(p))
+		var inside := _inside(p)
+		if inside > 0 and int(m.get("inside_lines", 0)) < 5:
+			m["inside_lines"] = int(m.get("inside_lines", 0)) + 1
+			print(
+				(
+					"INSIDE tick %.2f id %d points %d clip %s into %.1f stage %d up %.3f flat %.3f"
+					% [
+						_clock.tick + _clock.alpha,
+						p.id,
+						inside,
+						s["clip"],
+						s["into"],
+						p.stage,
+						s["up"],
+						s["flat"]
+					]
+				)
+			)
+		m["inside"] = maxi(m["inside"], inside)
+		# The stood roller holds still: its first 30 stood frames are measured.
+		if m.has("desk") and int(m.get("desk_n", 0)) < 30:
+			m["desk_n"] = int(m.get("desk_n", 0)) + 1
+			var desk := _desk_depth(_views.carry_on_props().props_of(p.id)["bags"][0])
+			m["desk"] = maxi(int(m["desk"]), desk[0])
+			m["desk_m"] = maxf(float(m.get("desk_m", 0.0)), desk[1])
 	return s
 
 
@@ -357,6 +392,112 @@ func _inside(p: Passenger) -> int:
 
 
 ## Tries the stood plate of `p` each tick while it holds the stand in `stage`.
+## The stood roller's body (not its rods) against the gate desk's meshes:
+## [points of the body's surface (sampled every 2 cm) inside a desk mesh,
+## the deepest of them from the nearest face of that mesh's box, in metres].
+func _desk_depth(bag: Node3D) -> Array:
+	var points := PackedVector3Array()
+	var rods := _rods(bag)
+	for mi in bag.find_children("*", "MeshInstance3D", true, false):
+		var inst := mi as MeshInstance3D
+		if inst.mesh == null or rods.any(func(r: Node) -> bool: return r.is_ancestor_of(inst)):
+			continue
+		var faces := inst.mesh.get_faces()
+		for i in range(0, faces.size() - 2, 3):
+			var a := inst.global_transform * faces[i]
+			var ab := inst.global_transform * faces[i + 1] - a
+			var ac := inst.global_transform * faces[i + 2] - a
+			var n := maxi(1, ceili(maxf(ab.length(), ac.length()) / 0.02))
+			for u in n + 1:
+				for v in n + 1 - u:
+					points.append(a + ab * (u / float(n)) + ac * (v / float(n)))
+	var count := 0
+	var deepest := 0.0
+	var desks := _mode.get_node("BuildView").find_children(
+		"GateDesk*", "MeshInstance3D", true, false
+	)
+	if desks.is_empty():
+		_invalid("DESK_OVERLAP: no gate desk mesh found")
+	for mi in desks:
+		var desk := mi as MeshInstance3D
+		var to_local := desk.global_transform.affine_inverse()
+		var faces := desk.mesh.get_faces()
+		var box := desk.mesh.get_aabb()
+		var scale := desk.global_transform.basis.get_scale()
+		if not _desk_control.has(desk.name):
+			# Control: a point half a metre up in the middle of the counter is inside.
+			var probe := Vector3(box.get_center().x, 0.5, box.get_center().z)
+			_desk_control[desk.name] = CarryContact._odd(probe, faces)
+			print(
+				(
+					"DESK_CONTROL mesh %s box %s scale %s centre inside %s"
+					% [desk.name, box, scale, _desk_control[desk.name]]
+				)
+			)
+		for point in points:
+			var lp := to_local * point
+			if not box.has_point(lp) or not CarryContact._odd(lp, faces):
+				continue
+			count += 1
+			var lo := (lp - box.position) * scale
+			var hi := (box.end - lp) * scale
+			deepest = maxf(
+				deepest, minf(minf(minf(lo.x, hi.x), minf(lo.y, hi.y)), minf(lo.z, hi.z))
+			)
+	return [count, deepest]
+
+
+## Diagnosis only (no plate): four walkers stacked on one cell, as the first
+## file plates were; while the last holds its stood roller, BLOCKER lines name
+## every other bag drawn within 0.6 m of it.
+func _stacked_diag() -> void:
+	var walkers: Array[Passenger] = []
+	for i in 4:
+		var p := _roller_guest()
+		p.stage = Passenger.Stage.TO_EXIT
+		p.stage_tick = _clock.tick
+		p.at = Vector2i(19, 6) + _offset
+		walkers.append(p)
+	var last := walkers[3]
+	var m := _metrics()
+	var stop := _clock.tick + 60
+	var lines := 0
+	while _clock.tick < stop and lines < 12:
+		await _step()
+		if last.stage == Passenger.Stage.TO_EXIT and _stood(last, m):
+			_near_bags(last, _views.carry_on_props().props_of(last.id)["bags"][0])
+			lines += 1
+	print("STACKED diag: %d stood frames of %d checked" % [lines, last.id])
+
+
+## Every bag drawn within 0.6 m of `bag` (the subject `p`'s roller): whose it
+## is, its stage, move and distance.
+func _near_bags(p: Passenger, bag: Node3D) -> void:
+	var props := _views.carry_on_props()
+	for id in _sim.passenger_ids():
+		var bags: Array = props.props_of(id).get("bags", [])
+		for i in bags.size():
+			var node: Node3D = bags[i]
+			var d := node.global_position.distance_to(bag.global_position)
+			if node != bag and d < 0.6:
+				var other := _sim.get_passenger(id)
+				print(
+					(
+						"BLOCKER near %d: passenger %d bag %d stage %d move %s at %.3f m, cell %s (subject %s)"
+						% [
+							p.id,
+							id,
+							i,
+							other.stage,
+							FloatCheck.move_of(props, id, i),
+							d,
+							other.at,
+							p.at
+						]
+					)
+				)
+
+
 func _plate_retry(shot: String, p: Passenger, m: Dictionary, stage: Passenger.Stage) -> bool:
 	var s := _watch(p, m)
 	print(
@@ -477,6 +618,13 @@ func _summary(label: String, m: Dictionary, posture: bool) -> void:
 		_invalid("%s HIPS the guest crouches holding its stood roller" % label)
 	if m["stoop"] > STOOP_EPS:
 		_invalid("%s stoop drawn" % label)
+	if m.has("desk"):
+		print(
+			(
+				"%s DESK_OVERLAP stood roller body points inside the gate desk %d, deepest %.3f m"
+				% [label, m["desk"], m.get("desk_m", 0.0)]
+			)
+		)
 	print(
 		(
 			"%s BODY_IN_STOOD_BAG most body points inside the stood roller %d (0)"
@@ -548,6 +696,8 @@ func _plate(shot: String, p: Passenger, fresh: bool, strict := true) -> Image:
 				_plates += 1
 			return img
 		print("PLATE %s view %d refused: %s" % [shot, k, why])
+		if fresh and k == 0:
+			_near_bags(p, bag)
 	return null
 
 
