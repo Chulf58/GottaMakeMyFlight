@@ -65,6 +65,9 @@ const GUESTS := 4
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 150.0
 const MIN_DIFF_PX := 1500
+## Two plates of the same pose, a few frames apart, differ by at most this many
+## pixels; more and the twins were not taken of one still scene.
+const MAX_STILL_PX := 100
 const MIN_BAG_PX := 120
 const BAG_WINDOW_PX := 40
 ## One line landing is enough with none blocked: the roller is small, and tipping
@@ -571,9 +574,34 @@ func _plate(shot: String, p: Passenger, fresh: bool, quiet := false) -> Image:
 ## frame's sight colliders `holder`. A `strip` frame has the hand and bar in
 ## frame too, and every line's first hit is the subject's own; any other plate
 ## has no blocker on its lines. A refused strip frame is printed, not
-## PROBE_INVALID.
+## PROBE_INVALID. The scene is held (tree paused, every animation stopped)
+## while the plate and its twins are taken, so the twins differ by what was
+## hidden and not by a clip playing on.
 func _plate_from(
 	shot: String, p: Passenger, aim: bool, strip: bool, view: int, holder: Node3D, quiet := true
+) -> Image:
+	_hold_scene(true)
+	var img := await _shoot(shot, p, aim, strip, view, holder, quiet)
+	_hold_scene(false)
+	return img
+
+
+## Pauses (or lets go again) the tree and every AnimationPlayer under the
+## passenger views: in manual callback mode a player keeps its pose until
+## advanced, whatever calls play() or seek() on it.
+func _hold_scene(hold: bool) -> void:
+	paused = hold
+	var mode := (
+		AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+		if hold
+		else AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE
+	)
+	for player in _views.find_children("*", "AnimationPlayer", true, false):
+		(player as AnimationPlayer).callback_mode_process = mode
+
+
+func _shoot(
+	shot: String, p: Passenger, aim: bool, strip: bool, view: int, holder: Node3D, quiet: bool
 ) -> Image:
 	var body := _views.node_for(p.id)
 	var bag: Node3D = _views.carry_on_props().props_of(p.id)["bags"][0]
@@ -625,6 +653,8 @@ func _plate_from(
 	var no_bag := root.get_texture().get_image()
 	bag.visible = true
 	await _frames(2)
+	var again := root.get_texture().get_image()
+	var still_px := _diff(img, again)
 	var body_px := _diff(img, no_body)
 	var centre := Vector2i((flat["bag_body"] as Vector2) * to_img)
 	var window := Rect2i(centre - Vector2i.ONE * BAG_WINDOW_PX, Vector2i.ONE * BAG_WINDOW_PX * 2)
@@ -635,7 +665,8 @@ func _plate_from(
 		(
 			(
 				"PLATE %s tick %.2f id %d b%d stage %d up %.3f flat %.3f hips %.3f "
-				+ "BODY_IN_STOOD_BAG %d at=%s body_px=%.0f body_diff=%d bag_body_diff=%d sight=%s"
+				+ "BODY_IN_STOOD_BAG %d at=%s body_px=%.0f still_diff=%d body_diff=%d "
+				+ "bag_body_diff=%d unbaked=%d sight=%s"
 			)
 			% [
 				shot,
@@ -649,8 +680,10 @@ func _plate_from(
 				points_in,
 				flat,
 				tall,
+				still_px,
 				body_px,
 				bag_px,
+				(holder.get_meta("unbaked") as Array).size(),
 				sight
 			]
 		)
@@ -660,10 +693,19 @@ func _plate_from(
 		seen = seen and points.has("hand") and sight["own"] == sight["lines"]
 	else:
 		seen = seen and (sight["blockers"] as Array).is_empty()
-	if tall < MIN_BODY_PX or body_px < MIN_DIFF_PX or bag_px < MIN_BAG_PX or not seen:
+	if (
+		tall < MIN_BODY_PX
+		or still_px > MAX_STILL_PX
+		or body_px < MIN_DIFF_PX
+		or bag_px < MIN_BAG_PX
+		or not seen
+	):
+		var moved := Rect2i()
+		if still_px > MAX_STILL_PX:
+			moved = PlateSight.differing_box(img, again, Rect2i(Vector2i.ZERO, img.get_size()))
 		why = (
-			"body %.0f px, %d px body, %d px round the bag body, sight %s"
-			% [tall, body_px, bag_px, sight]
+			"body %.0f px, %d px between two still plates (in %s), %d px body, %d px round the bag, sight %s"
+			% [tall, still_px, moved, body_px, bag_px, sight]
 		)
 		return _refused(shot, why, quiet)
 	_save(img, shot + ".png")
@@ -724,6 +766,11 @@ func _colliders(bag: Node3D, body: Node3D) -> Node3D:
 	subjects[bag] = TAG
 	var holder := PlateSight.colliders(root, owners, subjects)
 	holder.set_meta("rod_meshes", rod_meshes)
+	var unbaked: Array = holder.get_meta("unbaked")
+	if not unbaked.is_empty():
+		# A skinned mesh without a collider is nothing a line can hit, so a
+		# line past it would read as clear.
+		_invalid("skinned meshes without a sight collider: %s" % [unbaked])
 	await physics_frame
 	await physics_frame
 	return holder
