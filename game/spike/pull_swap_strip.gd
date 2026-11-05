@@ -11,7 +11,8 @@ extends RefCounted
 ## and the head project inside the viewport by MARGIN_PX, and at least MIN_ON
 ## of the sight lines to the bag body (PlateSight, the bag body mesh tagged on
 ## its own, not the rods) land on it with none blocked. Otherwise a problem is
-## listed and the caller fails the run. Each plate prints the hand the bag is
+## listed and the caller fails the run, as it does when the bag has no BODY
+## mesh (the strip then ends). Each plate prints the hand the bag is
 ## drawn in, the hand holding it and the bar's distance to that hand's grip.
 ## Load with preload(); no class_name.
 
@@ -23,6 +24,8 @@ const MARGIN_PX := 8.0
 const MIN_ON := 2
 const TAG := "bag"
 const OUT_REL := "res://../tools/blender/out/pull-side"
+## The roller piece's shell (carry_roller.glb), the bag body the plates show.
+const BODY := "CarryRoller_Body"
 
 var saved: Array[Image] = []
 var problems: Array[String] = []
@@ -88,7 +91,11 @@ func _plate(
 	k: float,
 	place: int
 ) -> void:
-	var shell := bag.find_child("CarryOnBag_Body", true, false) as MeshInstance3D
+	var shell := bag.find_child(BODY, true, false) as MeshInstance3D
+	if shell == null:
+		problems.append("id %d: no %s mesh on the roller %s" % [p.id, BODY, bag.name])
+		done = true
+		return
 	var centre := shell.global_transform * shell.get_aabb().get_center()
 	var out := CarryLead.hand_of(place)
 	var turn := Basis(Vector3.UP, body.rotation.y)

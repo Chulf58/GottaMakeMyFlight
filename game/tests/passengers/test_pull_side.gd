@@ -304,3 +304,72 @@ func test_the_hand_holds_mid_transfer_mid_park_and_standing_still() -> void:
 	assert_int(PullSide.pick(still, _grid, frame, ahead, 0.0, 0, now)).is_equal(0)
 	for bag in [moving, parking, still]:
 		assert_int(int(bag.get("pull_side_swaps", 0))).is_equal(0)
+
+
+func test_in_a_queue_the_roller_is_in_hand_ofs_hand() -> void:
+	# Walking up to its cafe queue spot or standing at it, the roller is in
+	# SecurityLooks.hand_of()'s hand, either way and with no hold after a change
+	# of hand, so it is stood up (RollerPark.queue_stand()) where hand_of()
+	# puts it, as before PullSide.
+	var x := _grid.cell_to_world(Vector2i(RUN.x + 2, OPEN_ROW)).x
+	var frame := _pose(OPEN_ROW, x)
+	var ahead := _ahead(OPEN_ROW, x)
+	var now := FIRST_TICK + 50.0
+	var since := now - CarryOnProps.TRANSFER_TICKS - 1.0
+	for step_m in [WALK_M, 0.0]:
+		var left := {"kind": ROLLER, "place": _place(1), "was": _place(0), "changed": since}
+		assert_int(PullSide.pick(left, _grid, frame, ahead, step_m, 0, now, true)).is_equal(0)
+		var right := {"kind": ROLLER, "place": _place(0), "was": _place(1), "changed": since}
+		assert_int(PullSide.pick(right, _grid, frame, ahead, step_m, 1, now, true)).is_equal(1)
+		assert_int(int(right.get("pull_side_queue", 0))).is_equal(1)
+	# Not while its move is under way.
+	var moving := {"kind": ROLLER, "place": _place(1), "was": _place(0), "changed": now - 1.0}
+	assert_int(PullSide.pick(moving, _grid, frame, ahead, 0.0, 0, now, true)).is_equal(1)
+	# Control: out of a queue, standing still it holds and walking it keeps
+	# the left for the hold after a change of hand.
+	for step_m in [WALK_M, 0.0]:
+		var out := {"kind": ROLLER, "place": _place(1), "was": _place(0), "changed": since}
+		assert_int(PullSide.pick(out, _grid, frame, ahead, step_m, 0, now)).is_equal(1)
+
+
+func test_a_roller_stood_up_in_a_queue_leaves_it_in_hand_ofs_hand() -> void:
+	# Stood up on the left at a cafe queue spot, the guest turns out of the
+	# queue to its seat with hand_of() on the right: the change of hand carries
+	# the roller round, as before PullSide, where kept on the left its trail
+	# swung into a cafe table.
+	var x := _grid.cell_to_world(Vector2i(RUN.x + 2, OPEN_ROW)).x
+	var frame := _pose(OPEN_ROW, x)
+	var ahead := _ahead(OPEN_ROW, x)
+	var now := FIRST_TICK + 50.0
+	var ticks := 20.0
+	var stand := {"kind": ROLLER, "place": _place(1), "was": _place(1), "park": true}
+	stand.merge({"queue": true, "ticks": ticks, "since": now - ticks - 1.0, "changed": now - 30.0})
+	assert_bool(PullSide.holds(stand, now)).is_false()
+	assert_bool(PullSide.stood(stand, now)).is_true()
+	assert_int(PullSide.pick(stand.duplicate(), _grid, frame, ahead, WALK_M, 0, now)).is_equal(0)
+	# Control: once LOOK_TICKS past the stand's end the roller keeps its hand.
+	var later := now + PullSide.LOOK_TICKS
+	assert_bool(PullSide.stood(stand, later)).is_false()
+	stand["changed"] = later - PullSide.HOLD_TICKS + 1.0
+	assert_int(PullSide.pick(stand, _grid, frame, ahead, WALK_M, 0, later)).is_equal(1)
+
+
+func test_hand_of_moves_a_set_down_roller_without_the_hold() -> void:
+	# A new guest's roller is set down in hand_of()'s hand before its route is
+	# walked (the right); a tick later hand_of() says left. Held on the right,
+	# it swung behind the legs as the guest turned left onto its route.
+	var x := _grid.cell_to_world(Vector2i(RUN.x + 2, OPEN_ROW)).x
+	var frame := _pose(OPEN_ROW, x)
+	var ahead := _ahead(OPEN_ROW, x)
+	var now := FIRST_TICK + 50.0
+	var since := now - CarryOnProps.TRANSFER_TICKS - 2.0
+	assert_float(now - since).is_less(PullSide.HOLD_TICKS)
+	var set_down := {"kind": ROLLER, "place": _place(0), "was": -1, "changed": since}
+	assert_bool(PullSide.swapped(set_down)).is_false()
+	assert_int(PullSide.pick(set_down, _grid, frame, ahead, WALK_M, 1, now)).is_equal(1)
+	# After PullSide's own change to the right the hold stands.
+	var swapped := {"kind": ROLLER, "place": _place(0), "was": _place(1), "changed": since}
+	assert_bool(PullSide.swapped(swapped)).is_true()
+	assert_int(PullSide.pick(swapped, _grid, frame, ahead, WALK_M, 1, now)).is_equal(0)
+	swapped["changed"] = now - PullSide.HOLD_TICKS
+	assert_int(PullSide.pick(swapped, _grid, frame, ahead, WALK_M, 1, now)).is_equal(1)

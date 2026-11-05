@@ -18,12 +18,19 @@ extends RefCounted
 ## the look-ahead and a hold more, so a wall run cannot flicker and the roller is past the wall
 ## before it goes back. SecurityLooks.hand_of()'s one-cell look (a wall
 ## beside the guest on the right, none on the left) threatens a roller on the
-## right once it has held HOLD_TICKS, and moves it even with both sides
-## blocked, as before PullSide. Otherwise with both sides blocked it stays, and
-## the tick is counted on the bag ("pull_side_both"). It holds its hand while a move of the
-## bag is under way (a change of hand, a park) and while the guest stands
-## still. The change of hand is CarryOnProps' own move from one pull to the
-## other.
+## right once it has held HOLD_TICKS since a change of hand (at once after any
+## other move, such as the set-down of a new guest's roller), and moves it even
+## with both sides blocked, as before PullSide. Otherwise with both sides
+## blocked it stays, and the tick is counted on the bag ("pull_side_both"). It
+## holds its hand while a move of the bag is under way (a change of hand, a
+## park, any other move) and while the guest stands still. In a queue (RollerPark.QUEUE_STAGES but
+## the gate's STANDING, where hand_of()'s hand put it into the gate desk) and
+## for LOOK_TICKS after a queue stand ends, the roller is in hand_of()'s hand,
+## as before PullSide: a roller kept on the right up to a
+## cafe queue spot where hand_of() puts it on the left was stood up there on
+## the right, and leaving the spot, with no change of hand to carry it round,
+## its trail swung into a cafe table. The change of hand is CarryOnProps' own
+## move from one pull to the other.
 ##
 ## The tests place the roller's footprint (footprint()) behind the guest at
 ## each point of its walk from now to LOOK_TICKS ticks of its speed ahead, so
@@ -103,7 +110,8 @@ static func resolve(
 		for k in range(from, mini(p.path.size(), from + AHEAD_CELLS)):
 			ahead.append(sim.grid.cell_to_world(p.path[k]))
 		var frame := Transform3D(Basis(Vector3.UP, yaw), at)
-		hands[i] = pick(bag, sim.grid, frame, ahead, step.length(), hands[i], now)
+		var queued := p.stage in RollerPark.QUEUE_STAGES and p.stage != Passenger.Stage.STANDING
+		hands[i] = pick(bag, sim.grid, frame, ahead, step.length(), hands[i], now, queued)
 
 
 ## The hand (0 right, 1 left) bag record `bag` (CarryOnProps' record of a
@@ -113,7 +121,10 @@ static func resolve(
 ## walked this tick, `first` SecurityLooks.hand_of() (the hand to start a pull
 ## with; a roller on the left goes back to the right only while it is the
 ## right, its one-cell look finding no wall beside the guest on the right),
-## `now` sim time. A change of hand starts the roller's trail afresh
+## `now` sim time, `queued` the guest is in a queue (RollerPark.QUEUE_STAGES
+## but STANDING),
+## where the roller takes `first`, as it does just after a queue stand
+## (stood()). A change of hand starts the roller's trail afresh
 ## (CarryOnProps._trail() "walked"), straight behind on the new side: the old
 ## side's walked line ends in a jump across the legs.
 static func pick(
@@ -123,14 +134,22 @@ static func pick(
 	ahead: Array,
 	step_m: float,
 	first: int,
-	now: float
+	now: float,
+	queued := false
 ) -> int:
 	var hand := drawn_hand(bag, first)
 	# hand_of() finding a wall beside the guest on the right (and none on the
-	# left) threatens a roller on the right too, once it has held HOLD_TICKS,
-	# standing still as well (a queue beside a wall).
-	var told := first == 1 and hand == 0 and now - float(bag.get("changed", -INF)) >= HOLD_TICKS
-	if holds(bag, now) or (step_m < STILL_M and not told):
+	# left) threatens a roller on the right too, once it has held HOLD_TICKS
+	# since a change of hand (at once after any other move: a new guest's
+	# roller set down before its route turned hand_of() left), standing still
+	# as well.
+	var held := not swapped(bag) or now - float(bag.get("changed", -INF)) >= HOLD_TICKS
+	var told := first == 1 and hand == 0 and held
+	if holds(bag, now):
+		return hand
+	if queued or stood(bag, now):
+		return hand if hand == first else _change(bag, "pull_side_queue", first)
+	if step_m < STILL_M and not told:
 		return hand
 	var poses := walk_poses(frame, ahead, step_m * LOOK_TICKS)
 	if not told and not blocked(grid, poses, footprint(hand, true), true):
@@ -187,6 +206,23 @@ static func may_return(
 		var at := Vector3(right.position.x, 0.0, depth - _bag_size().z)
 		right = right.merge(AABB(at, size))
 	return not (blocked(grid, poses, right, true) or blocked(grid, poses, crossing(), true))
+
+
+## Whether `bag`'s last move was a queue stand (RollerPark.queued()) that
+## ended less than LOOK_TICKS before `now`: the guest is leaving its spot.
+static func stood(bag: Dictionary, now: float) -> bool:
+	var since := float(bag.get("since", -INF))
+	return RollerPark.queued(bag) and now - since < CarryLead.ticks_of(bag) + LOOK_TICKS
+
+
+## Whether `bag`'s last move was a change of hand, from one pull to the other.
+static func swapped(bag: Dictionary) -> bool:
+	var was := int(bag.get("was", -1))
+	var place := int(bag.get("place", -1))
+	if was < 0 or place < 0 or CarryLead.hand_of(was) == CarryLead.hand_of(place):
+		return false
+	var hand := SecurityLooks.Home.HAND
+	return was / 4 == hand and was % 2 == 0 and place / 4 == hand and place % 2 == 0
 
 
 ## The hand `bag` is drawn in now: its place's while it is in a hand
