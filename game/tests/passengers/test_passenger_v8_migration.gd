@@ -66,6 +66,8 @@ func _v8(work: int, bags := 2) -> Dictionary:
 		record.erase("toilet_cooldown")
 		record.erase("boredom")
 		record.erase("shop_cooldown")
+		record.erase("seat_piece")
+		record.erase("seat_exiting")
 		if int(record["id"]) == _id:
 			record["carry_on"] = bags
 			record["security_work"] = work

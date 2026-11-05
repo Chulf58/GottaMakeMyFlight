@@ -322,7 +322,6 @@ func _sitter() -> Passenger:
 	p.liquids = false
 	p.alarm = false
 	p.cleared = true
-	p.boarding_tick = _clock.tick + 100000
 	p.stage = Passenger.Stage.TO_GATE
 	p.stage_tick = _clock.tick
 	p.at = Vector2i(15, 5) + _offset()

@@ -92,29 +92,70 @@ static func exit_cells(sim: PassengerSim) -> Array[Vector2i]:
 	return out
 
 
-## Whether the seat state `p` was saved with makes sense: a placement only with
-## a seat, and getting up from a moved row only while standing up.
+## Whether the seat state `p` was saved with makes sense. With no seat: no
+## placement and not getting up. With a seat: the canonical placement of a
+## seat row whose footprint holds the seat cell, at one of its chairs, with the
+## chair front the row's own front of that cell; and getting up from a moved
+## row only while standing up.
 static func valid(p: Passenger) -> bool:
 	if p.seat_object == 0:
 		return p.seat_piece.is_empty() and not p.seat_exiting
-	if p.seat_exiting:
-		return p.stage == Passenger.Stage.STANDING_UP and not p.seat_piece.is_empty()
-	return true
+	if p.seat_piece.is_empty() or p.seat_cell == Passenger.NO_CELL:
+		return false
+	var def := BuildCatalog.get_def(p.seat_piece["def"])
+	var cells := def.footprint(p.seat_piece["anchor"], p.seat_piece["facing"])
+	var index := cells.find(p.seat_cell)
+	if index < 0 or index >= GateChairs.CHAIR_OFFSET_M.size():
+		return false
+	if p.seat_front != p.seat_cell + TerminalLayout.front_of(p.seat_piece["facing"]):
+		return false
+	return p.stage == Passenger.Stage.STANDING_UP or not p.seat_exiting
 
 
-## The JSON shape of a seat placement: Relocation's record of a final exit, or
-## empty for none.
+## A passenger from an old save (version 10 or older) has no placement: the
+## grid's own for the row it holds (empty when the row is gone, which valid()
+## then refuses).
+static func derive_piece(p: Passenger, grid: BuildGrid) -> void:
+	if p.seat_object != 0 and p.seat_piece.is_empty():
+		p.seat_piece = Relocation.placement(grid, p.seat_object)
+
+
+## The JSON shape of a seat placement, empty for none.
 static func piece_to_record(piece: Dictionary) -> Dictionary:
-	return {} if piece.is_empty() else Relocation.leaving(piece, -1).to_record()
+	if piece.is_empty():
+		return {}
+	var anchor: Vector2i = piece["anchor"]
+	return {"def": String(piece["def"]), "anchor": [anchor.x, anchor.y], "facing": piece["facing"]}
 
 
 ## A placement from piece_to_record() (also after JSON): the empty one for
-## none, null when malformed.
+## none, null when malformed: any key but the three, a def that is not a seat
+## row, or a facing outside 0 to 3.
 static func piece_from_record(data: Variant) -> Variant:
-	if typeof(data) == TYPE_DICTIONARY and (data as Dictionary).is_empty():
+	if typeof(data) != TYPE_DICTIONARY:
+		return null
+	var record: Dictionary = data
+	if record.is_empty():
 		return {}
-	var held := Relocation.from_record(data)
-	return null if held == null else held.source
+	var anchor: Variant = record.get("anchor")
+	var ok: bool = (
+		record.size() == 3
+		and record.get("def") == "seat_row"
+		and typeof(anchor) == TYPE_ARRAY
+		and anchor.size() == 2
+		and WholeNumber.is_whole(anchor[0])
+		and WholeNumber.is_whole(anchor[1])
+		and WholeNumber.is_whole(record.get("facing"))
+		and int(record["facing"]) >= 0
+		and int(record["facing"]) <= 3
+	)
+	if not ok:
+		return null
+	return {
+		"def": &"seat_row",
+		"anchor": Vector2i(int(anchor[0]), int(anchor[1])),
+		"facing": int(record["facing"]),
+	}
 
 
 ## Turns `p` back to STANDING_UP at its old seat. A sit-down turned back

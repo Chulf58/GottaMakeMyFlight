@@ -32,9 +32,11 @@ func after_test() -> void:
 		_world = null
 
 
-## A passenger in the reference terminal's first gate chair, a roller among its
-## bags when `roller`, in `stage` from this tick (SEATED, SITTING_DOWN or
-## STANDING_UP), with the seat placement the sim cached when it claimed the seat.
+## A passenger that claimed the reference terminal's first gate chair through
+## the sim (PassengerSim._claim_seat(): the claim, the cached seat placement and
+## the walk to the chair front are the production ones), a roller among its bags
+## when `roller`, then in `stage` from this tick: SITTING_DOWN or SEATED as the
+## sim got it there, STANDING_UP by setting the stage on a seated passenger.
 func _sitter(stage: Passenger.Stage, roller := false) -> Passenger:
 	_world = PassengerTestWorld.reference_world()
 	_starts = FlightSim.schedule_starts(0)
@@ -44,30 +46,66 @@ func _sitter(stage: Passenger.Stage, roller := false) -> Passenger:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	ToiletTestLayout.calm(p)
-	p.carry_on = 1 if roller else 0
-	p.cleared = true
-	var seat: Dictionary = _world.sim.layout.seats[0]
-	p.seat_object = seat["object_id"]
-	p.seat_cell = seat["cell"]
-	p.seat_front = seat["front"]
-	p.seat_piece = Relocation.placement(_world.grid, p.seat_object)
-	p.at = seat["front"]
-	p.clear_path()
-	p.boarding_tick = _world.sim.tick + 100000
-	p.stage = stage
-	p.stage_tick = _world.sim.tick
+	_send_to_gate(p, 1 if roller else 0)
+	var goal := Passenger.Stage.SEATED
+	if stage == Passenger.Stage.SITTING_DOWN:
+		goal = Passenger.Stage.SITTING_DOWN
+	while p.stage != goal and _world.sim.tick < 600:
+		_world.step()
+	assert_int(p.stage).is_equal(goal)
+	assert_int(p.seat_object).is_not_equal(0)
+	if stage == Passenger.Stage.STANDING_UP:
+		p.stage = stage
+		p.stage_tick = _world.sim.tick
 	return p
 
 
-## Moves the passenger's seat row to NEW_ANCHOR as a room move does.
-func _move_row(p: Passenger) -> void:
+## Sends `p`, cleared with `bags` carry-on bags, to the gate from the first
+## chair's front, so the sim claims a seat for it on the next beat.
+func _send_to_gate(p: Passenger, bags: int, other: PassengerTestWorld = null) -> void:
+	var world := other if other != null else _world
+	ToiletTestLayout.calm(p)
+	p.carry_on = bags
+	p.cleared = true
+	p.boarding_tick = world.sim.tick + 100000
+	p.at = world.sim.layout.seats[0]["front"]
+	p.clear_path()
+	p.stage = Passenger.Stage.TO_GATE
+	p.stage_tick = world.sim.tick
+
+
+## Moves the passenger's seat row to `anchor` as a room move does.
+func _move_row(p: Passenger, anchor := NEW_ANCHOR) -> void:
 	var record := _world.grid.get_object(p.seat_object)
-	var place := BuildEdit.place_object(record["def"], NEW_ANCHOR, record["facing"])
+	var place := BuildEdit.place_object(record["def"], anchor, record["facing"])
 	place.object_id = p.seat_object
 	place.paid = int(record.get("paid", 0))
 	for result in _world.grid.apply_batch([BuildEdit.remove_object(p.seat_object), place]):
 		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
+
+
+## The seat key ("<row id>:<chair index>") `p` holds in `world`'s layout.
+func _key_of(world: PassengerTestWorld, p: Passenger) -> String:
+	for seat: Dictionary in world.sim.layout.seats:
+		if seat["object_id"] == p.seat_object and seat["cell"] == p.seat_cell:
+			return seat["key"]
+	return ""
+
+
+## Whether another passenger can claim seat `key` in `world`: every other seat
+## is held by a stand-in, a rival is sent to the gate, and it must end up with
+## `key` (a claim `p` still held on it would leave the rival with nothing).
+func _rival_gets(world: PassengerTestWorld, key: String) -> bool:
+	for seat: Dictionary in world.sim.layout.seats:
+		if seat["key"] != key:
+			world.sim._seat_claims[seat["key"]] = -1
+	var rival := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	_send_to_gate(rival, 0, world)
+	for i in 40:
+		world.step()
+		if rival.seat_object != 0:
+			break
+	return world.sim._seat_claims.get(key, 0) == rival.id
 
 
 ## Steps until `p` leaves STANDING_UP, failing on a tick its drawn position
@@ -122,6 +160,13 @@ func _twin(data: Dictionary) -> PassengerTestWorld:
 		return twin
 	twin.free_all()
 	return null
+
+
+## A record of a passenger that holds a seat but is not getting up from a moved
+## row, with no placement saved.
+func _no_placement(record: Dictionary) -> void:
+	record["seat_piece"] = {}
+	record["seat_exiting"] = false
 
 
 ## Whether `data` loads, after `change` edits passenger `id`'s record.
@@ -341,6 +386,13 @@ func test_a_save_with_inconsistent_seat_state_is_refused() -> void:
 		"no seat but a placement": func(r: Dictionary) -> void: r["seat_object"] = 0,
 		"not a placement": func(r: Dictionary) -> void: r["seat_piece"] = "x",
 		"exiting not a bool": func(r: Dictionary) -> void: r["seat_exiting"] = 1,
+		"not a seat row": func(r: Dictionary) -> void: r["seat_piece"]["def"] = "checkin_desk",
+		"an unused relocation field": func(r: Dictionary) -> void: r["seat_piece"]["left"] = -1,
+		"seat cell outside the row": func(r: Dictionary) -> void: r["seat_cell"] = [5, 5],
+		"chair front not the row's": func(r: Dictionary) -> void: r["seat_front"] = [5, 5],
+		"row anchored away from the seat":
+		func(r: Dictionary) -> void: r["seat_piece"]["anchor"] = [30, 3],
+		"a seat and no placement": _no_placement,
 	}
 	for label: String in cases:
 		(
@@ -356,3 +408,97 @@ func test_a_version_20_save_is_refused() -> void:
 	assert_int(int(data["passengers"]["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	data["passengers"]["save_version"] = PassengerSim.SAVE_VERSION - 1
 	assert_object(_twin(data)).is_null()
+
+
+## The seat a passenger gets up from is free for another from the tick it turned
+## back, in the world that ran on and in the one loaded from its save.
+func test_the_seat_a_passenger_gets_up_from_can_be_claimed_also_after_a_load() -> void:
+	var p := _sitter(Passenger.Stage.SEATED)
+	var key := _key_of(_world, p)
+	_move_row(p)
+	_world.step()
+	assert_bool(p.seat_exiting).is_true()
+	assert_str(key).is_not_empty()
+	var twin := _twin(_save())
+	assert_object(twin).is_not_null()
+	assert_bool(twin.passenger(p.id).seat_exiting).is_true()
+	assert_bool(_rival_gets(_world, key)).override_failure_message("running world").is_true()
+	assert_bool(_rival_gets(twin, key)).override_failure_message("loaded world").is_true()
+	twin.free_all()
+
+
+## A row moved away and back while its passenger gets up: the seat is at the
+## cell it held again, but the passenger gave up its claim, so a load must not
+## give it back.
+func test_a_row_moved_away_and_back_leaves_the_seat_free_after_a_load() -> void:
+	var p := _sitter(Passenger.Stage.SEATED)
+	var key := _key_of(_world, p)
+	var home: Vector2i = p.seat_piece["anchor"]
+	_move_row(p)
+	for i in 3:
+		_world.step()
+	_move_row(p, home)
+	_world.step()
+	assert_bool(p.seat_exiting).is_true()
+	assert_int(p.stage).is_equal(Passenger.Stage.STANDING_UP)
+	var twin := _twin(_save())
+	assert_object(twin).is_not_null()
+	assert_bool(_rival_gets(_world, key)).override_failure_message("running world").is_true()
+	assert_bool(_rival_gets(twin, key)).override_failure_message("loaded world").is_true()
+	twin.free_all()
+
+
+## A passenger still walking to its chair when the row moves has not sat down:
+## it is released and chooses again, and ends seated on a chair the layout has.
+func test_a_passenger_walking_to_a_row_that_moves_chooses_again() -> void:
+	_world = PassengerTestWorld.reference_world()
+	_starts = FlightSim.schedule_starts(0)
+	_world.run_to(10)
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	_send_to_gate(p, 0)
+	p.at = Vector2i(15, 5)
+	p.clear_path()
+	var tries := 0
+	while p.seat_object == 0 and tries < 40:
+		_world.step()
+		tries += 1
+	assert_int(p.seat_object).is_not_equal(0)
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+	assert_dict(p.seat_piece).is_not_empty()
+	_move_row(p)
+	_world.step()
+	assert_bool(p.seat_exiting).is_false()
+	var stages: Array[int] = []
+	while p.stage != Passenger.Stage.SEATED and _world.sim.tick < 800:
+		_world.step()
+		stages.append(p.stage)
+	assert_int(p.stage).is_equal(Passenger.Stage.SEATED)
+	assert_array(stages).not_contains([Passenger.Stage.STANDING_UP])
+	assert_str(_key_of(_world, p)).is_not_empty()
+	assert_dict(p.seat_piece).is_equal(Relocation.placement(_world.grid, p.seat_object))
+
+
+## A version 10 save has no seat placement or exit flag: a passenger standing up
+## from a chair gets the grid's placement of its row, and finishes standing up.
+func test_a_version_10_save_with_a_standing_up_passenger_gets_its_placement() -> void:
+	var p := _sitter(Passenger.Stage.STANDING_UP)
+	var placement := p.seat_piece.duplicate()
+	var data := _save()
+	var block: Dictionary = data["passengers"]
+	block["save_version"] = 10
+	block.erase("shop")
+	for record: Dictionary in block["passengers"]:
+		record.erase("boredom")
+		record.erase("shop_cooldown")
+		record.erase("seat_piece")
+		record.erase("seat_exiting")
+	var twin := _twin(data)
+	assert_object(twin).is_not_null()
+	var q := twin.passenger(p.id)
+	assert_int(q.stage).is_equal(Passenger.Stage.STANDING_UP)
+	assert_dict(q.seat_piece).is_equal(placement)
+	assert_bool(q.seat_exiting).is_false()
+	for i in PassengerSim.STAND_UP_TICKS + 2:
+		twin.step()
+	assert_int(q.stage).is_equal(Passenger.Stage.TO_GATE)
+	twin.free_all()

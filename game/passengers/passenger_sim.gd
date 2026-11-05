@@ -1585,7 +1585,8 @@ func _rederive() -> void:
 		)
 		if walking and p.station != 0:
 			_incoming[p.station] = _incoming.get(p.station, 0) + 1
-		if p.seat_object != 0:
+		# One getting up from a moved row has dropped its claim (GateRelocation).
+		if p.seat_object != 0 and not p.seat_exiting:
 			for seat in layout.seats:
 				if seat["object_id"] == p.seat_object and seat["cell"] == p.seat_cell:
 					_seat_claims[seat["key"]] = p.id

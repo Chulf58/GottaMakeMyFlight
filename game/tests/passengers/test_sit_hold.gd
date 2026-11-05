@@ -54,6 +54,7 @@ func _sitting_walker(roller: bool) -> Passenger:
 	for n in 4:
 		await _tick()
 	p.seat_object = seat["object_id"]
+	p.seat_piece = Relocation.placement(_world.grid, p.seat_object)
 	p.stage = Passenger.Stage.SITTING_DOWN
 	p.stage_tick = _world.sim.tick
 	p.clear_path()

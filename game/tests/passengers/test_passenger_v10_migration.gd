@@ -89,6 +89,8 @@ func _v10() -> Dictionary:
 	for record: Dictionary in data["passengers"]:
 		record.erase("boredom")
 		record.erase("shop_cooldown")
+		record.erase("seat_piece")
+		record.erase("seat_exiting")
 	return data
 
 

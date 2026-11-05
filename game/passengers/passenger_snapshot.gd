@@ -165,6 +165,7 @@ static func save(
 ## A dictionary with the restored state, or with an "error" key.
 static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 	var data := _migrated(saved)
+	var migrated := not is_same(data, saved)
 	var problem := _top_problem(data)
 	if problem != "":
 		return {"error": problem}
@@ -192,7 +193,7 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 	var passengers: Array[Passenger] = []
 	var ids := {}
 	for entry in data["passengers"]:
-		var p := _passenger(entry, grid, int(data["next_id"]))
+		var p := _passenger(entry, grid, int(data["next_id"]), migrated)
 		if p == null or ids.has(p.id) or not ParkRecovery.valid(p, out["tick"]):
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
 		if not PassengerThoughts.ticks_ok(p, out["tick"]):
@@ -458,7 +459,9 @@ static func _arrival_ok(value: Variant) -> bool:
 
 
 ## A Passenger from its record, or null when the record is malformed.
-static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passenger:
+static func _passenger(
+	entry: Variant, grid: BuildGrid, next_id: int, migrated := false
+) -> Passenger:
 	if typeof(entry) != TYPE_DICTIONARY:
 		return null
 	var record: Dictionary = entry
@@ -473,6 +476,9 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 	var p := Passenger.new()
 	if not _fill(p, record, grid):
 		return null
+	if migrated:
+		# An old save has no seat placement: the grid's own (GateRelocation).
+		GateRelocation.derive_piece(p, grid)
 	var variant_ok := p.variant in [0, 1] and _arrival_ok(p.arrival_type)
 	var range_ok := (
 		p.mood >= 0

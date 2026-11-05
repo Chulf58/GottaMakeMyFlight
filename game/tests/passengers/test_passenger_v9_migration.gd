@@ -11,7 +11,7 @@ extends GdUnitTestSuite
 const SAVE_TICK := 205
 const TOILET_FIELDS := ["toilet_need", "toilet_cooldown"]
 ## Fields and blocks added after version 9, which neither fixture holds.
-const LATER_FIELDS := ["boredom", "shop_cooldown"]
+const LATER_FIELDS := ["boredom", "shop_cooldown", "seat_piece", "seat_exiting"]
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
