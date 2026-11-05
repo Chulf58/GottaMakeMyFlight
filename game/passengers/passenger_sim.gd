@@ -76,19 +76,16 @@ signal checked_in(id: int, desk: int)
 ## (GateReach), so a version 15 save, whose claims followed the old global
 ## nearest rule, is refused with no migration (decision old-saves-are-not-
 ## supported-until-after-a-release-no-save-mi).
-## 17: each passenger's collect_tick (ParkRecovery). Version 16 is refused,
-## with no migration; a migrated older save collects nothing.
-## 18: a cafe or toilet visit following its moved piece saves its Relocation
-## (CafeSnapshot, ToiletSnapshot). Version 17 is refused, with no migration.
-## 19: shop visit relocation (ShopSnapshot saves a shop or activity visit's
-## Relocation). Version 18 is refused, with no migration.
-## 20: each passenger's thoughts and their repeat marks (PassengerThoughts).
-## Version 19 is refused, with no migration.
-## 21: each passenger's seat placement and seat_exiting (GateRelocation).
-## Version 20 is refused, with no migration.
-## 22: boarding-file wait spots (FileWaiters). Version 21 is refused, no migration.
-## 23: a Relocation saves the step its visitor had made (reached). 22 is refused.
-const SAVE_VERSION := 23
+## 17: each passenger's collect_tick (ParkRecovery); a migrated older save
+## collects nothing. 18: a cafe or toilet visit following its moved piece saves
+## its Relocation (CafeSnapshot, ToiletSnapshot). 19: a shop or activity
+## visit's Relocation (ShopSnapshot). 20: each passenger's thoughts and their
+## repeat marks (PassengerThoughts). 21: each passenger's seat placement and
+## seat_exiting (GateRelocation). 22: boarding-file wait spots (FileWaiters).
+## 23: a Relocation saves the step its visitor had made (reached). 24: each
+## passenger's halt_tick (QueueRipple). From 17 on, the version before is
+## refused, with no migration.
+const SAVE_VERSION := 24
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -409,7 +406,7 @@ func _station_slot(station: int) -> int:
 
 
 ## Ticks until a passenger who walks `walk_mm` to the back of `station`'s
-## queue is done there. At a desk: the walk, the service in progress, the
+## queue is done there. At a desk: the walk (at `p`'s pace), the service in progress, the
 ## passengers waiting and its own service. At a security station: until `p`
 ## (the candidate; a passenger with no carry-on when null) is cleared at the
 ## security exit (SecurityForecast). Station choice and the lateness forecast
@@ -422,18 +419,20 @@ func station_eta(station: int, walk_mm: int, p: Passenger = null) -> int:
 		if candidate == null:
 			candidate = Passenger.new()
 			candidate.id = _next_id
-		var join := tick + JourneyForecast.walk_ticks(walk_mm) + 1
+		var join := tick + candidate.pace_ticks(walk_mm) + 1
 		return SecurityForecast.clearance(self, station, candidate, join)
 	var waiting := _station_slot(station)
 	var left := 0
 	if _queues.has(station) and _queues[station]["serving"] != 0:
 		left = _serving_left(_queues[station])
 		waiting -= 1
+	var walk := p.pace_ticks(walk_mm) if p != null else JourneyForecast.walk_ticks(walk_mm)
 	return (
-		JourneyForecast.walk_ticks(walk_mm)
+		walk
 		+ left
 		+ maxi(waiting, 0) * CHECKIN_TICKS
 		+ CHECKIN_TICKS
+		+ QueueRipple.desk_waits(self, station, null)
 	)
 
 
@@ -460,7 +459,8 @@ func wait_ticks(p: Passenger) -> int:
 		ahead = at if at >= 0 else lane.size() + holding.find(p.id)
 	if q["serving"] != 0:
 		ahead -= 1
-	return _serving_left(q) + maxi(ahead, 0) * CHECKIN_TICKS + CHECKIN_TICKS
+	var waits := QueueRipple.desk_waits(self, p.station, p)
+	return _serving_left(q) + maxi(ahead, 0) * CHECKIN_TICKS + CHECKIN_TICKS + waits
 
 
 ## SecurityRuntime admitted `p` at its station.
@@ -995,7 +995,7 @@ func _move(p: Passenger) -> void:
 	# A walker outside with no walk left stands where it is (OutsideWalks).
 	if StageKinds.is_outside(p.stage) and p.stuck == Passenger.Stuck.NO_ROUTE:
 		return
-	var speed := RUN_MM if p.late else WALK_MM
+	var speed := p.pace_mm()
 	if files.holds(p.id) or files.waiters.back_mm(p.id) > 0:
 		speed = files.step_of(self, p, speed)
 	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
@@ -1007,7 +1007,7 @@ func _move(p: Passenger) -> void:
 		elif p.stage == Passenger.Stage.APRON:
 			files.moved(p)
 	elif p.is_moving():
-		p.walk(speed)
+		QueueRipple.walk(p, speed, tick)
 	# A spot kept on setting off is given up once the walker is off its cell.
 	var spot := standing.spot_of(p.id)
 	if p.stage == Passenger.Stage.TO_EXIT and spot != StandingSpots.NO_SPOT:
@@ -1126,7 +1126,7 @@ func _join(p: Passenger) -> void:
 
 func _queue_move(p: Passenger) -> void:
 	var index := (_queue(p.station)["lane"] as Array).find(p.id)
-	if index < 0 or p.is_moving():
+	if index < 0 or p.is_moving() or not QueueRipple.sim_may_step(self, p):
 		return
 	var target: Vector2i = layout.lanes[p.station][index]
 	if p.at != target:

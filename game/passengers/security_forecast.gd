@@ -11,10 +11,11 @@ extends RefCounted
 ##
 ## The replay steps tick by tick as PassengerSim does (station first: phases,
 ## holding to lane, admission; then each passenger in id order: joining, moving
-## up the lane, walking at WALK_MM), but skips the ticks on which nothing can
+## up the lane, walking at the pace the sim gives it, Passenger.pace_mm(): a
+## run while late, board b13ac401), but skips the ticks on which nothing can
 ## change: no work runs out and nobody reaches a cell or joins. Read between
-## ticks it is exact for passengers who walk; a late passenger runs, so it
-## arrives sooner than forecast. Whether the station is open is taken as it
+## ticks it is exact while no one turns late or stops being late (lateness is
+## taken as it is now). Whether the station is open is taken as it
 ## is now: a closed station admits nobody new. Staff are not stepped: a lane's
 ## helper speeds the replayed repacks from the tick StaffPosts.helper_from()
 ## gives (now when on duty, its arrival when walking there, read after the
@@ -118,7 +119,7 @@ func _setup(sim: PassengerSim, station: int) -> void:
 	for id in sim.passenger_ids():
 		var walker := sim.get_passenger(id)
 		if walker.station == station and walker.stage == Passenger.Stage.TO_SECURITY:
-			var arrive := sim.tick + JourneyForecast.walk_ticks(walker.remaining_mm())
+			var arrive := sim.tick + walker.pace_ticks(walker.remaining_mm())
 			_add_walker(walker, arrive + 1, walker.path_end())
 
 
@@ -132,6 +133,8 @@ func _add(p: Passenger) -> Passenger:
 	copy.path_index = p.path_index
 	copy.seg_mm = p.seg_mm
 	copy.carry_on = p.carry_on
+	copy.late = p.late
+	copy.halt_tick = p.halt_tick
 	copy.liquids = p.liquids
 	copy.alarm = p.alarm
 	copy.incident_resolved = p.incident_resolved
@@ -153,6 +156,8 @@ func _add_walker(p: Passenger, join: int, cell: Vector2i) -> void:
 	copy.security_work = 0
 	copy.at = cell
 	copy.clear_path()
+	# Its walk ends on the tick before it joins (QueueRipple.walk()).
+	copy.halt_tick = join - 1
 	_joins[copy.id] = join
 
 
@@ -185,7 +190,7 @@ func _step() -> void:
 			_move_up(u)
 		if u.is_moving():
 			var was := u.at
-			u.walk(PassengerSim.WALK_MM)
+			QueueRipple.walk(u, u.pace_mm(), tick)
 			_changed = _changed or u.at != was
 
 
@@ -193,7 +198,7 @@ func _step() -> void:
 ## cells, so between two of its cells the path is the lane itself; elsewhere
 ## the grid's path is used as there.
 func _move_up(u: Passenger) -> void:
-	if not _misplaced(u):
+	if not _misplaced(u) or not QueueRipple.may_step(self, u, _queue["lane"], _cells, tick, false):
 		return
 	var index: int = (_queue["lane"] as Array).find(u.id)
 	var from := _cells.find(u.at)
@@ -236,7 +241,7 @@ func _next_event() -> int:
 			at = _joins[id]
 		elif u.is_moving():
 			var left := Passenger.segment_mm(u.path[u.path_index], u.path[u.path_index + 1])
-			at = tick + JourneyForecast.walk_ticks(left - u.seg_mm) + 1
+			at = tick + u.pace_ticks(left - u.seg_mm) + 1
 		elif u.stage == Passenger.Stage.SECURITY_QUEUE and _misplaced(u):
 			at = tick + 1
 		if u.stage == Passenger.Stage.SECURITY and _works(u):
@@ -261,7 +266,7 @@ func _skip(ticks: int) -> void:
 		if u.stage == Passenger.Stage.SECURITY and _works(u):
 			u.security_work -= ticks * _runtime.rate(_station, u.security_phase)
 		if u.is_moving():
-			u.walk(ticks * PassengerSim.WALK_MM)
+			u.walk(ticks * u.pace_mm())
 
 
 static func _works(u: Passenger) -> bool:

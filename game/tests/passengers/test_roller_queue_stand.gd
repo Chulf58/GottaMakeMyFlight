@@ -25,7 +25,7 @@ const TRAILS_M := 0.8
 ## case's largest step measured 0.147 m on 26ce797, a margin of only 3 mm: a
 ## failure there just over JUMP_M may be that step grown, not a snap.
 const JUMP_M := 0.15
-## A tip watched before the security queue (check-in, a boarding file, a gate
+## A tip watched up to and in the security queue (check-in, a boarding file, a gate
 ## standing spot; board 44b974cc) moves the bag less than this a frame against
 ## the body. These walkers often turn as they walk off (a check-in queue's
 ## bend, a gate spot facing away from the exit), and the turn (6 ticks,
@@ -35,8 +35,11 @@ const JUMP_M := 0.15
 ## desk, 0.195 m on a half turn in the check-in queue (the body's yaw 0.25 rad
 ## a frame), 0.168 m turning from a gate spot to the exit. With a 6-tick tip
 ## the check-in peak was still 0.159 m, so the pace is not the cause. A snap
-## out of the stand is 0.5 m or more. Security tips stay under JUMP_M, as
-## watched since 26ce797.
+## out of the stand is 0.5 m or more. A security-queue tip gets the same
+## allowance (conductor ruling, 2026-11-05, board 34b0c378): with the queue
+## ripple a walker tips its roller as it turns to step up, and the tip frames
+## measured 0.173 to 0.201 m (seed 1) with the body turning 0.194 to 0.252 rad
+## on the same frame, the check-in half turn's case.
 const TIP_JUMP_M := 0.21
 ## Holding the stood roller the hips stay at least this share of their height
 ## standing idle just before the stand, and the stoop at most STOOP_EPS: with the
@@ -486,7 +489,7 @@ func test_walkers_stand_rollers_up_at_check_in_and_security_then_lift_them() -> 
 			var tipping := (
 				bag.has("queue_tip") or (last_queued.has(p.id) and not RollerPark.queued(bag))
 			)
-			if tipping and p.stage < Passenger.Stage.SECURITY_QUEUE:
+			if tipping and p.stage <= Passenger.Stage.SECURITY_QUEUE:
 				limit = TIP_JUMP_M
 			if last.has(p.id) and rel.distance_to(last[p.id]) > limit:
 				fails.append(

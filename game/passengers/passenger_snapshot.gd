@@ -77,6 +77,7 @@ const INT_FIELDS := [
 	"boredom",
 	"shop_cooldown",
 	"collect_tick",
+	"halt_tick",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := [
@@ -198,6 +199,10 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
 		if not PassengerThoughts.ticks_ok(p, out["tick"]):
 			return {"error": "passenger %d has a thought after the saved tick" % p.id}
+		# QueueRipple waits STAND_TICKS from it: one after the saved tick would hold
+		# the lane behind it until then.
+		if p.halt_tick < 0 or p.halt_tick > out["tick"]:
+			return {"error": "passenger %d stopped walking after the saved tick" % p.id}
 		ids[p.id] = p
 		passengers.append(p)
 	var cafe := CafeSnapshot.load(data["cafe"], ids, grid, out["tick"])
@@ -385,6 +390,7 @@ static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 			_set_missing(record, "boredom", BoredomSim.start_of(int(record["id"])))
 			_set_missing(record, "shop_cooldown", 0)
 			_set_missing(record, "collect_tick", 0)
+			_set_missing(record, "halt_tick", 0)
 			_set_missing(record, "sat_late", false)
 			_set_missing(record, "seat_exiting", false)
 			_set_missing(record, "seat_piece", {})
