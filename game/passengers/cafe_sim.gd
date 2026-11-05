@@ -79,12 +79,18 @@ const DWELL_TICKS := RoomTypes.CAFE_DWELL_TICKS
 ## The approach cell is about a metre from the seated root, so the shuffle in
 ## and out takes longer than at a gate seat.
 const SHUFFLE_TICKS := 12
-## Pieces whose seats a guest shuffles into by a step forward beside the piece
-## to a line this far ahead of the seat root, then along that line: the booth
+## Pieces whose seats a guest shuffles into along a bent path: the spots it
+## passes between the approach cell and the seat root, as (ahead of the root,
+## across from it towards the approach cell) in metres. At the booth the
 ## bench's end panel stands behind the root across the bench's whole depth, so
-## the straight line from the approach cell carried the body through it
-## (board 64ee4dc0, game/spike/food_seats_probe.gd).
-const STEP_IN_AHEAD_M := {&"restaurant_booth": 0.05}
+## the straight line from the approach cell carried the body through it (board
+## 64ee4dc0, game/spike/food_seats_probe.gd). The guest steps forward inside
+## the approach cell to 0.68 m across, where half a body still clears the
+## panel's inner face (0.42 m), then slides in along a line 0.05 m ahead of the
+## root (0.075 m put a body's front into the table edge) and back onto it.
+const STEP_IN_PATH := {
+	&"restaurant_booth": [Vector2(0.04, 0.68), Vector2(0.05, 0.5), Vector2(0.05, 0.0)],
+}
 ## Seats tried per visit, nearest the counter first.
 const SEAT_TRIES := 4
 const HUNGER_START_MIN := 40
@@ -464,30 +470,69 @@ func seat_position(p: Passenger) -> Vector3:
 	return root
 
 
-## The spot `share` of the way along the shuffle from the approach cell to the
-## seat root: a straight line, or at a STEP_IN_AHEAD_M piece a step forward
-## beside the piece to the line that far ahead of the root, along it to the
-## spot in front of the root and back onto the root, slowing into the seat.
+## How far the drawn shuffle of `p` bends off the straight line from its
+## approach cell to its seat root at `fraction` of the path's length: zero but
+## at a STEP_IN_PATH piece. SitHold, which holds a roller guest at the approach
+## cell and then eases it into the seat, adds it so the guest takes the same
+## path.
+func shuffle_bend(p: Passenger, fraction: float) -> Vector3:
+	var visit: CafeVisit = _visits.get(p.id)
+	if visit == null or visit.seat.is_empty():
+		return Vector3.ZERO
+	var approach := _sim.grid.cell_to_world(visit.seat["approach"])
+	var root := BuildObjectDef.seat_root_world(_sim.grid, visit.seat)
+	var points := _shuffle_path(visit, approach, root)
+	return _along(points, fraction * _length(points)) - approach.lerp(root, fraction)
+
+
+## The spot `share` of the shuffle's time from the approach cell to the seat
+## root: the straight line at an even pace, or at a STEP_IN_PATH piece its bent
+## path, leaving the approach cell at walking pace and slowing to a stop on the
+## seat (a cubic in time). Fast enough in its middle that the body is past the
+## booth's end panel by about tick 9 of the sit-down, when the sit_down clip
+## takes the hips back.
 func _shuffle_at(visit: CafeVisit, approach: Vector3, root: Vector3, share: float) -> Vector3:
-	var def := StringName(visit.piece.get("def", &""))
-	if not STEP_IN_AHEAD_M.has(def):
+	var points := _shuffle_path(visit, approach, root)
+	if points.size() == 2:
 		return approach.lerp(root, share)
-	var facing: Vector2i = visit.seat["facing"]
-	var ahead := Vector3(facing.x, 0.0, facing.y) * float(STEP_IN_AHEAD_M[def])
-	var corner := approach + ahead.normalized() * (root + ahead - approach).dot(ahead.normalized())
-	var points: Array[Vector3] = [approach, corner, root + ahead, root]
+	var whole := _length(points)
+	var walk := PassengerSim.WALK_MM / 1000.0 * SHUFFLE_TICKS
+	var t := share
+	var along := (t * t * t - 2.0 * t * t + t) * walk + (3.0 * t * t - 2.0 * t * t * t) * whole
+	return _along(points, clampf(along, 0.0, whole))
+
+
+## The shuffle's spots in the world, from the approach cell to the seat root.
+func _shuffle_path(visit: CafeVisit, approach: Vector3, root: Vector3) -> Array[Vector3]:
+	var points: Array[Vector3] = [approach]
+	var def := StringName(visit.piece.get("def", &""))
+	if STEP_IN_PATH.has(def):
+		var facing: Vector2i = visit.seat["facing"]
+		var ahead := Vector3(facing.x, 0.0, facing.y)
+		var across := approach - root
+		across -= ahead * across.dot(ahead)
+		across = across.normalized()
+		for spot: Vector2 in STEP_IN_PATH[def]:
+			points.append(root + ahead * spot.x + across * spot.y)
+	points.append(root)
+	return points
+
+
+static func _length(points: Array[Vector3]) -> float:
 	var whole := 0.0
 	for i in range(1, points.size()):
 		whole += points[i - 1].distance_to(points[i])
-	# Eased out, so the body is past the piece's end before the sit_down clip
-	# takes the hips back (in the probe from about tick 9 of the sit-down).
-	var along := (1.0 - (1.0 - share) * (1.0 - share)) * whole
+	return whole
+
+
+## The spot `along` metres down the path `points`.
+static func _along(points: Array[Vector3], along: float) -> Vector3:
 	for i in range(1, points.size()):
 		var leg := points[i - 1].distance_to(points[i])
 		if along <= leg and leg > 0.0:
 			return points[i - 1].lerp(points[i], along / leg)
 		along -= leg
-	return root
+	return points[-1]
 
 
 ## The grid direction a seated guest faces, or zero with no seat.

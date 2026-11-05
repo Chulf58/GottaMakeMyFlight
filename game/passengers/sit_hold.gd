@@ -97,4 +97,7 @@ static func offset(props: CarryOnProps, sim: PassengerSim, p: Passenger, now: Ve
 		return Vector3.ZERO
 	var into := ActivityPoses.clip_ticks(sim, p) - held
 	var u := 0.0 if into < 0 else smoothstep(0.0, PassengerSim.SIT_DOWN_TICKS - held, into)
-	return ((front as Vector3) - now) * (1.0 - u)
+	# Along the cafe seat's own shuffle path, which bends round a booth's end
+	# panel (CafeSim.shuffle_bend(); zero at a gate chair and a straight shuffle).
+	var bend := sim.cafes.shuffle_bend(p, u)
+	return ((front as Vector3) - now) * (1.0 - u) + bend

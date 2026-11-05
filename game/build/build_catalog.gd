@@ -269,7 +269,9 @@ static func _build_services() -> void:
 	# steps onto each stool from its open side, (-1, 1) and (2, 1). From behind,
 	# (1, 2), the right stool's guest walked through the stool (board 64ee4dc0,
 	# game/spike/food_seats_probe.gd); a stool whose side cell is blocked is not
-	# reachable (RoomRules.reachable_seats). The .glb has no approach mounts.
+	# reachable (RoomRules.reachable_seats). Two counters side by side so seat 2
+	# of their 4 stools (accepted; the card says "N of M seats reachable"). The
+	# .glb has no approach mounts.
 	for column in [0, 1]:
 		(
 			bar

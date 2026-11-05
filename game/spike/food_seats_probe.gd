@@ -43,6 +43,10 @@ const SUBJECTS := {
 	"bar": [&"bar", &"bar_counter", &"", [6, 9]],
 }
 const STRIP_TICKS: Array[int] = [0, 3, 6, 9, 12, 15, 18, 21]
+## The guests (by their place in a subject's body list) who pull a roller: one
+## at each end of the booth, held at the approach cell while the roller goes
+## down (SitHold) and then eased into the seat along the shuffle's path.
+const ROLLER_GUESTS := {"booth": [1, 3]}
 const SETTLE_TICKS := 6
 const LIMIT_TICKS := 2400
 const MARGIN_PX := 8.0
@@ -163,20 +167,26 @@ func _keep_others_away(_tick: int) -> void:
 			ToiletTestLayout.calm(_sim.get_passenger(id))
 
 
-## An airside guest of body `body` if one turns up in a few spawns (else the
-## last spawned), walking to its gate and asked to the venue.
-func _guest(body: int) -> Passenger:
+## An airside guest of body `body` (pulling one roller with `roller`) if one
+## turns up in a few spawns (else the last spawned), walking to its gate and
+## asked to the venue.
+func _guest(body: int, roller: bool) -> Passenger:
 	var p: Passenger = null
-	for attempt in 40:
+	for attempt in 200:
 		var id := _sim.spawn_now(
 			FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0), floori(body / 6.0)
 		)
 		p = _sim.get_passenger(id)
 		ToiletTestLayout.calm(p)
-		if PassengerLooks.body_of(p.id, p.variant) == body:
+		p.carry_on = 1 if roller else 0
+		var has := not roller or SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER
+		if has and PassengerLooks.body_of(p.id, p.variant) == body:
 			break
+		p.carry_on = 0
 	_mine[p.id] = true
-	p.carry_on = 0
+	if roller and p.carry_on == 0:
+		_invalid("no roller guest of body %d turned up" % body)
+		return null
 	p.liquids = false
 	p.alarm = false
 	p.cleared = true
@@ -192,13 +202,17 @@ func _guest(body: int) -> Passenger:
 
 
 func _watch(subject: String) -> void:
-	for body: int in SUBJECTS[subject][3]:
-		var p := _guest(body)
+	var bodies: Array = SUBJECTS[subject][3]
+	for i in bodies.size():
+		var roller: bool = i in ROLLER_GUESTS.get(subject, [])
+		var p := _guest(bodies[i], roller)
 		if p == null:
 			return
 		var visit := _sim.cafes.visit_of(p.id)
 		var seat: Dictionary = visit.seat
 		var label := "%s_%s" % [subject, String(seat.get("key", "?")).replace(":", "-")]
+		if roller:
+			label += "_roller"
 		print(
 			(
 				"GUEST %s id=%d body=%s seat=%s approach=%s root=%s facing=%s"
