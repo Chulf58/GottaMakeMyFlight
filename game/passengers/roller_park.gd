@@ -450,6 +450,7 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"roll_tip",
 		"queue",
 		"queue_tip",
+		"seat_start",
 	]:
 		bag.erase(key)
 	if bag.get("queue_still", false):
@@ -474,6 +475,8 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		# end panel and seat (board 5dc41129). The hand still reaches the bar.
 		var began: Transform3D = bag.get("start_body", body)
 		bag["from_world"] = began * (bag["from"] as Transform3D)
+		# Pushed out of any wall by BoothRoller.clear_of_walls(), with the grid.
+		bag["seat_start"] = true
 
 
 ## The yaw `p` faces once it has turned to sit or stay where it sets its bags

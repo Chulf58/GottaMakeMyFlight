@@ -1001,6 +1001,7 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 	CarryLead.stamp_move(
 		bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN), unmoved
 	)
+	BoothRoller.clear_of_walls(bag, sim.grid)
 	bag["home"] = bag["place"]
 	bag["reach_from"] = _reach_of(node, kind)
 

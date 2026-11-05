@@ -535,3 +535,57 @@ func test_a_cafe_table_guest_keeps_the_straight_shuffle() -> void:
 	for at in path:
 		assert_float(absf(at.x * path[0].y - at.y * path[0].x)).is_less(0.001)
 	assert_float(path[-1].length()).is_less(0.001)
+
+
+## A sit-down set-down's start fixed in the world inside a wall
+## (BoothRoller.clear_of_walls()) is pushed out along the wall's normal until
+## the roller's box clears the face turned any way about its axle (as the
+## move rolls it); one that is not a seat start is left where
+## it is. Control: the start was 0.1 m into the face.
+func test_a_set_down_start_in_a_wall_is_pushed_clear_of_its_face() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var cell := Vector2i(-1, -1)
+	var side := -1
+	for y in world.grid.size.y:
+		for x in world.grid.size.x:
+			for s in 4:
+				if side < 0 and world.grid.has_wall(Vector2i(x, y), s):
+					cell = Vector2i(x, y)
+					side = s
+	assert_int(side).is_greater_equal(0)
+	var step: Vector2i = BuildGrid.SIDE_STEP[side]
+	var out := Vector3(step.x, 0.0, step.y)
+	var box := CarryOnProps.bag_box(SecurityLooks.Kind.ROLLER)
+	var reach := -INF
+	for k in 8:
+		reach = maxf(reach, box.get_endpoint(k).dot(out))
+	var centre := world.grid.cell_to_world(cell)
+	var into := Transform3D(Basis.IDENTITY, centre + out * (BoothRoller.WALL_FACE_M - reach + 0.1))
+	var bag := {"kind": SecurityLooks.Kind.ROLLER, "seat_start": true, "from_world": into}
+	BoothRoller.clear_of_walls(bag, world.grid)
+	var pushed: Transform3D = bag["from_world"]
+	var deepest := -INF
+	for k in 8:
+		deepest = maxf(deepest, (pushed * box.get_endpoint(k) - centre).dot(out))
+	var moved := (into.origin - pushed.origin).length()
+	print(
+		(
+			"wall %s side %d: pushed %.3f m, box to %.3f m of the face %.3f"
+			% [cell, side, moved, deepest, BoothRoller.WALL_FACE_M]
+		)
+	)
+	assert_float(deepest).is_less_equal(BoothRoller.WALL_FACE_M + 0.0001)
+	assert_float(moved).is_greater_equal(0.099)
+	var axle := pushed * CarryOnProps.ROLLER_AXLE
+	for turn in 16:
+		var spun := Transform3D(Basis(Vector3.UP, TAU * turn / 16.0), Vector3.ZERO)
+		var turned := (
+			Transform3D(Basis.IDENTITY, axle) * spun * Transform3D(Basis.IDENTITY, -axle) * pushed
+		)
+		for k in 8:
+			var reach_out := (turned * box.get_endpoint(k) - centre).dot(out)
+			assert_float(reach_out).is_less_equal(BoothRoller.WALL_FACE_M + 0.0001)
+	var kept := {"kind": SecurityLooks.Kind.ROLLER, "from_world": into}
+	BoothRoller.clear_of_walls(kept, world.grid)
+	assert_vector((kept["from_world"] as Transform3D).origin).is_equal(into.origin)
