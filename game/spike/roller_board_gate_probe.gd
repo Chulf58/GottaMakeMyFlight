@@ -32,8 +32,16 @@ extends SceneTree
 ## least MIN_ON of five sight lines land on the roller's BODY (its rods tagged
 ## apart, anti-pattern a-hide-the-bag-twin-diff-passes-on-the-roller-s-rods) with
 ## no blocker but its own rods, and the twin with the roller hidden differs from
-## the plate in a window round the projected bag body. Otherwise PROBE_INVALID,
-## exit 1.
+## the plate in a window round the projected bag body. A strip is shot low on
+## the roller's side (STRIP_LOW_M), and each strip frame also has the holding
+## hand's grip and the bar's top in frame, and the first thing every line (the
+## five to the roller's body, one to the hand, one to the bar) meets is the
+## subject's own body, rods or roller (board 03454587); a walker in the way
+## sends the frame round the other views (the one that works is kept), at most
+## STRIP_REFUSALS refused views a strip. The sight colliders are built once a
+## frame, for every view tried on it. The gate subject is the stander farthest
+## from the gate desk: the boarding crowd walks to the desk. Otherwise
+## PROBE_INVALID, exit 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -69,7 +77,15 @@ const HIPS_SHARE := 0.99
 const STOOP_EPS := 0.01
 const STOOD_AFTER := RollerPark.QUEUE_STAND_TICKS + 2.0
 const STRIP_FRAMES := 6
+## The tip strip's camera height (m over the subject's mid point, _plate()).
+const STRIP_LOW_M := 0.8
+## Refused views a tip strip may spend (each costs a few frames) before the
+## rest of its frames are skipped.
+const STRIP_REFUSALS := 60
+## Ticks the other gate standers get to stand after the first (_gate_stander()).
+const STAND_WAIT := 60
 const TAG := "roller"
+const SELF_TAG := "self"
 const ROD_TAG := "rods"
 const NO_TAG := "nothing_has_this_tag"
 
@@ -87,6 +103,7 @@ var _plates := 0
 var _offset := Vector2i.ZERO
 var _keep: Array[Passenger] = []
 var _desk_control := {}
+var _strip_refused := 0
 
 
 func _initialize() -> void:
@@ -191,7 +208,7 @@ func _roller_guest() -> Passenger:
 	return null
 
 
-## GATE_GUESTS standers: the first stood up is the subject; plate it, wait for
+## GATE_GUESTS standers: the one stood farthest from the desk is the subject; plate it, wait for
 ## boarding, and strip its tip as it walks off. Returns the metrics, empty on a
 ## failure.
 func _gate_stander() -> Dictionary:
@@ -210,13 +227,27 @@ func _gate_stander() -> Dictionary:
 	)
 	var m := _metrics()
 	m["desk"] = 0
-	var subject: Passenger = null
+	# The subject is the stander farthest from the gate desk: at boarding the
+	# crowd walks to the desk, and beside it every view of the tip was blocked
+	# (board 03454587). The others get STAND_WAIT ticks after the first stands.
+	var desk := _desk_centre()
+	var away := {}
+	var first := -1
 	var stop := _clock.tick + LIMIT_TICKS
-	while _clock.tick < stop and subject == null:
+	while _clock.tick < stop and (first < 0 or _clock.tick < first + STAND_WAIT):
 		await _step()
 		for p in guests:
 			if p.stage == Passenger.Stage.STANDING and _stood(p, m):
-				subject = p
+				var at := _views.node_for(p.id).global_position - desk
+				away[p] = Vector2(at.x, at.z).length()
+				first = _clock.tick if first < 0 else first
+		if away.size() == guests.size():
+			break
+	var subject: Passenger = null
+	for p: Passenger in away:
+		print("GATE stander id=%d stood %.2f m from the desk" % [p.id, away[p]])
+		if subject == null or away[p] > away[subject]:
+			subject = p
 	if subject == null:
 		_invalid("GATE: no stander stood its roller up")
 		return {}
@@ -542,6 +573,7 @@ func _tip_strip(label: String, p: Passenger, m: Dictionary) -> bool:
 		_invalid("%s: the roller never tipped" % label)
 		return false
 	print("TIP %s id %d starts at tick %.0f stage %d" % [label, p.id, tip_at, p.stage])
+	_strip_refused = 0
 	var strip: Array[Image] = []
 	var tried := 0
 	while _clock.tick < tip_at + RollerPark.QUEUE_TIP_TICKS + 16:
@@ -577,7 +609,12 @@ func _tip_strip(label: String, p: Passenger, m: Dictionary) -> bool:
 				)
 			m["repulled"] = maxf(m["repulled"], trail)
 	if strip.size() < STRIP_FRAMES:
-		_invalid("%s tip strip has %d of %d frames" % [label, strip.size(), STRIP_FRAMES])
+		_invalid(
+			(
+				"%s tip strip has %d of %d frames (%d of %d refused views spent)"
+				% [label, strip.size(), STRIP_FRAMES, _strip_refused, STRIP_REFUSALS]
+			)
+		)
 		return false
 	var w := strip[0].get_width() / 2
 	var h := strip[0].get_height() / 2
@@ -669,15 +706,37 @@ func _plate(shot: String, p: Passenger, fresh: bool, strict := true) -> Image:
 		[side.normalized(), 4.5],
 	]
 	if not strict:
-		# A strip in a crowd: steep views first, over the heads round it.
-		aways = aways.slice(3) + aways.slice(0, 3)
+		# A strip: low on the roller's side first, away from the crowd at the desk
+		# ahead, so the hand on the bar shows as well as the bag body (board
+		# 03454587: from the steep views the tip did not show); steep views last.
+		var out := side.normalized()
+		var fwd := ahead.normalized()
+		aways = [
+			[out, STRIP_LOW_M],
+			[(out * 1.3 - fwd * 0.6).normalized(), STRIP_LOW_M],
+			[(out * 1.3 + fwd * 0.6).normalized(), STRIP_LOW_M],
+			[out, 1.6],
+		]
+		aways += [[(-fwd * 0.8 + out * 1.3).normalized(), 2.6], [out, 2.6]]
+		# Over the heads of the standers on the spots beside it (seed 2012072536
+		# and the first run of this fix: every lower view crossed a neighbour).
+		aways += [[out, 4.5], [(-fwd * 0.8 + out * 1.3).normalized(), 4.5], [-fwd, 4.5]]
 	if _cam == null:
 		_cam = Camera3D.new()
 		_cam.fov = 45.0
 		_main.add_child(_cam)
-	var why := ""
-	for k in aways.size() if fresh else 1:
-		if fresh:
+	var holder := await _colliders(bag, body)
+	# View -1 only turns the camera kept from before to the body. A strip frame
+	# tries that, then the other views while refusals are left (walkers crowding
+	# the desk at boarding cross it); the view that works is kept.
+	var views: Array = range(aways.size()) if fresh else [-1]
+	if not fresh and not strict:
+		views += range(aways.size())
+	var img: Image = null
+	for k: int in views:
+		if not strict and _strip_refused >= STRIP_REFUSALS:
+			break
+		if k >= 0:
 			var away: Vector3 = aways[k][0]
 			var up: float = aways[k][1]
 			_cam.look_at_from_position(
@@ -687,25 +746,30 @@ func _plate(shot: String, p: Passenger, fresh: bool, strict := true) -> Image:
 			_cam.look_at(target, Vector3.UP)
 		_cam.current = true
 		await _frames(2)
-		why = await _check(shot, p, body, bag, strict)
+		var why := await _check(shot, p, body, bag, strict, holder)
 		if why == "":
-			var img := root.get_texture().get_image()
+			img = root.get_texture().get_image()
 			_save(img, shot + ".png")
 			if fresh and strict:
 				_sheet.append(img)
 				_plates += 1
-			return img
+			break
 		print("PLATE %s view %d refused: %s" % [shot, k, why])
+		if not strict:
+			_strip_refused += 1
 		if fresh and k == 0:
 			_near_bags(p, bag)
-	return null
+	holder.free()
+	return img
 
 
 ## "" when the plate now shows `p` and its roller body, else why not.
 ## A strip frame (not `strict`) may have a blocker on some lines (walkers
 ## passing, its own legs as it turns) if MIN_ON lines land on the bag body and
 ## the hidden-bag twin differs round it.
-func _check(shot: String, p: Passenger, body: Node3D, bag: Node3D, strict: bool) -> String:
+func _check(
+	shot: String, p: Passenger, body: Node3D, bag: Node3D, strict: bool, holder: Node3D
+) -> String:
 	var img := root.get_texture().get_image()
 	# unproject_position() answers in the viewport's own size; the image is the
 	# window's (content scaling), so the bag window is scaled into it.
@@ -718,13 +782,22 @@ func _check(shot: String, p: Passenger, body: Node3D, bag: Node3D, strict: bool)
 		"head": body.global_position + Vector3.UP * 1.7,
 		"bag_body": shell.get_center(),
 	}
+	var hand := int(_views.carry_on_props().bag_state(p.id, 0).get("held_by", -1))
+	if not strict:
+		# A strip frame shows the hand on the bar too (board 03454587).
+		var top := bag.find_child(
+			CarryOnProps.REACH_NODES[SecurityLooks.Kind.ROLLER][1], true, false
+		)
+		points["bar"] = (top as Node3D).global_position
+		if hand >= 0:
+			points["hand"] = _views.carry_on_props().grip_of(body, hand)
 	var flat := {}
 	for name: String in points:
 		var at: Vector2 = _cam.unproject_position(points[name])
 		flat[name] = at
 		if _cam.is_position_behind(points[name]) or not inside.has_point(at):
 			return "%s at %s is out of frame %s" % [name, at, size]
-	var sight := await _sight(bag)
+	var sight := _sight(holder, points)
 	bag.visible = false
 	await _frames(2)
 	var no_bag := root.get_texture().get_image()
@@ -758,10 +831,13 @@ func _check(shot: String, p: Passenger, body: Node3D, bag: Node3D, strict: bool)
 			]
 		)
 	)
-	var seen: bool = (
-		sight["on"] >= MIN_ON and (not strict or (sight["blockers"] as Array).is_empty())
-	)
-	seen = seen and sight["control_on"] == 0
+	var seen: bool = sight["on"] >= MIN_ON and sight["control_on"] == 0
+	if strict:
+		seen = seen and (sight["blockers"] as Array).is_empty()
+	else:
+		# Every line, to the bag body, the hand and the bar, first meets the
+		# subject's own body, its rods or roller, or nothing before the point.
+		seen = seen and points.has("hand") and sight["own"] == sight["lines"]
 	if tall < MIN_BODY_PX or bag_px < MIN_BAG_PX or not seen:
 		return "body %.0f px, %d px round the bag body, sight %s" % [tall, bag_px, sight]
 	return ""
@@ -794,13 +870,12 @@ func _rods(bag: Node3D) -> Array[Node]:
 	return out
 
 
-## Sight lines from the camera to the roller body's centre and four points round
-## it. The rods are tagged ROD_TAG before the bag (the first match wins), so a
-## line landing on them is not on the body; a rod in front is not a blocker.
-## Control: the same lines with a tag no collider has land on nothing.
-func _sight(bag: Node3D) -> Dictionary:
+## The sight colliders for one frame (PlateSight: every passenger and the
+## built terminal), `body` tagged SELF_TAG, the rods ROD_TAG before the bag
+## (the first match wins) and the bag TAG. Built once a frame (_plate()).
+func _colliders(bag: Node3D, body: Node3D) -> Node3D:
 	var owners: Array[Node] = [_views, _mode.get_node("BuildView")]
-	var subjects := {}
+	var subjects := {body: SELF_TAG}
 	var rod_meshes := {}
 	for rod in _rods(bag):
 		subjects[rod] = ROD_TAG
@@ -810,8 +885,20 @@ func _sight(bag: Node3D) -> Dictionary:
 			rod_meshes[rod.name] = true
 	subjects[bag] = TAG
 	var holder := PlateSight.colliders(root, owners, subjects)
+	holder.set_meta("rod_meshes", rod_meshes)
 	await physics_frame
 	await physics_frame
+	return holder
+
+
+## Sight lines from the camera to the roller body's centre and four points round
+## it, against `holder` (_colliders()); a rod in front is not a blocker.
+## "own" counts the lines (those five, and one to each of `points`' hand and
+## bar) whose first hit is the subject's own body, rods or roller, or nothing
+## short of the point. Control: the same lines with a tag no collider has land
+## on nothing.
+func _sight(holder: Node3D, points: Dictionary) -> Dictionary:
+	var rod_meshes: Dictionary = holder.get_meta("rod_meshes")
 	var box: AABB = (holder.get_meta("bounds") as Dictionary).get(TAG, AABB())
 	var targets: Array[Vector3] = [box.get_center()]
 	for f in [Vector3(0.3, 0, 0), Vector3(-0.3, 0, 0), Vector3(0, 0.3, 0), Vector3(0, -0.3, 0)]:
@@ -819,7 +906,13 @@ func _sight(bag: Node3D) -> Dictionary:
 	var space := _cam.get_world_3d().direct_space_state
 	var lines := PlateSight.sight_lines(space, _cam.global_position, targets, TAG)
 	var control := PlateSight.sight_lines(space, _cam.global_position, targets, NO_TAG)
-	holder.free()
+	var ends: Array[Vector3] = targets.duplicate()
+	var parts := {}
+	for name in ["hand", "bar"]:
+		if points.has(name):
+			ends.append(points[name])
+			parts[name] = _first_hit(space, points[name])
+	var own := ends.filter(func(at: Vector3) -> bool: return _first_is_own(space, at)).size()
 	var blockers: Array = (lines["blockers"] as Array).filter(
 		func(n: String) -> bool: return not rod_meshes.has(n)
 	)
@@ -828,7 +921,51 @@ func _sight(bag: Node3D) -> Dictionary:
 		"blockers": blockers,
 		"rod_hits": (lines["blockers"] as Array).size() - blockers.size(),
 		"control_on": (control["on_subject"] as Array).size(),
+		"own": own,
+		"lines": ends.size(),
+		"parts": parts,
 	}
+
+
+## The mesh a line from the camera to `at` first meets when it is not the
+## subject's own (_first_is_own()), else "" (printed with a refusal).
+func _first_hit(space: PhysicsDirectSpaceState3D, at: Vector3) -> String:
+	if _first_is_own(space, at):
+		return ""
+	var from := _cam.global_position
+	var hit := space.intersect_ray(
+		PhysicsRayQueryParameters3D.create(from, at + (at - from).normalized() * 0.05)
+	)
+	return str((hit.collider as Node).get_meta("mesh", "?"))
+
+
+## Whether the first thing a line from the camera to `at` (run 5 cm on) meets
+## is the subject's own body, its rods or roller (_colliders()' tags), or
+## nothing short of `at`.
+func _first_is_own(space: PhysicsDirectSpaceState3D, at: Vector3) -> bool:
+	var from := _cam.global_position
+	var hit := space.intersect_ray(
+		PhysicsRayQueryParameters3D.create(from, at + (at - from).normalized() * 0.05)
+	)
+	if hit.is_empty() or from.distance_to(hit.position) >= from.distance_to(at) - 0.05:
+		return true
+	return str((hit.collider as Node).get_meta("subject", "")) in [SELF_TAG, ROD_TAG, TAG]
+
+
+## The gate desk's middle (its meshes' world box).
+func _desk_centre() -> Vector3:
+	var desks := _mode.get_node("BuildView").find_children(
+		"GateDesk*", "MeshInstance3D", true, false
+	)
+	if desks.is_empty():
+		_invalid("GATE: no gate desk mesh found")
+		return Vector3.ZERO
+	var box := AABB()
+	for i in desks.size():
+		var mi := desks[i] as MeshInstance3D
+		var part := mi.global_transform * mi.get_aabb()
+		box = part if i == 0 else box.merge(part)
+	return box.get_center()
 
 
 func _contact_sheet(plates: Array[Image]) -> Image:

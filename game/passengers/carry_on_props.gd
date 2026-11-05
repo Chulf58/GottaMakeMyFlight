@@ -911,6 +911,8 @@ func _place_bags(
 					start_now, want, k, frame, bag["from"], flags
 				)
 			else:
+				# A roller's queue stand parks by the body's variant; PassengerViews sets it.
+				assert(kind != SecurityLooks.Kind.ROLLER or body.has_meta(&"body"), "no body index")
 				var drawn := {
 					"hand": hand,
 					"grips": [grip_of(body, 0), grip_of(body, 1)],
@@ -922,6 +924,8 @@ func _place_bags(
 						else 0.0
 					),
 					"scale": held["scale"],
+					"look":
+					int(body.get_meta(&"body")) if kind == SecurityLooks.Kind.ROLLER else -1,
 					"strap_top":
 					(
 						_in_piece(_part(node, "Strap_Top"), node).origin
