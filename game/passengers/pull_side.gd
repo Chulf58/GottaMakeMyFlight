@@ -7,12 +7,20 @@ extends RefCounted
 ## the answer is the bag's place, never saved. A two-bag guest keeps hand =
 ## index and every other bag keeps SecurityLooks.hand_of().
 ##
-## The rule is sticky. The roller stays in the hand it is drawn in (its view
-## place) while that side is clear. It goes to the other hand only when a wall
+## The roller stays in the hand it is drawn in (its view place) while that
+## side is clear. It goes to the other hand when a wall or a piece of furniture
 ## threatens the pulling side and the other side, and the way across behind
-## the guest, are clear of walls and furniture. It never goes back on its own
-## when both sides are clear. With both sides blocked it stays, and the tick is
-## counted on the bag ("pull_side_both"). It holds its hand while a move of the
+## the guest, are clear of walls and furniture. The right hand is the one it
+## prefers (decision pullside-amendment-the-roller-goes-back-to-the-right-hand-
+## on): a roller on the left goes back to the right once it has been on the
+## left HOLD_TICKS and the right's REACH footprint and the way across are clear
+## at the guest's pose now, at the roller's own drawn depth behind it and over
+## the look-ahead and a hold more, so a wall run cannot flicker and the roller is past the wall
+## before it goes back. SecurityLooks.hand_of()'s one-cell look (a wall
+## beside the guest on the right, none on the left) threatens a roller on the
+## right once it has held HOLD_TICKS, and moves it even with both sides
+## blocked, as before PullSide. Otherwise with both sides blocked it stays, and
+## the tick is counted on the bag ("pull_side_both"). It holds its hand while a move of the
 ## bag is under way (a change of hand, a park) and while the guest stands
 ## still. The change of hand is CarryOnProps' own move from one pull to the
 ## other.
@@ -30,13 +38,15 @@ extends RefCounted
 ## (the settled footprint meets the wall), so it never goes to and fro between
 ## two threats. Walls are BuildGrid's walled edges as BuildView draws them,
 ## their ends run on by half a wall's thickness; a door is a way through and is
-## left out. Furniture counts only against the side the roller would go to, as
-## the real meshes of each piece.
+## left out. Furniture is the real meshes of each piece; it threatens the
+## pulling side as a wall does (a scanner, a cafe table) and keeps the roller
+## off the other side.
 ##
 ## What it does not do: it does not look back along the route (a replan
-## replaces the route), it does not clear a wall end at a door (no hand
-## clears a jamb, finding which-kinds-of-wall-hit-make-up-the-walking-pull-
-## roller-s-wa), and its footprint is a box round the axle's whole range of
+## replaces the route; the roller's drawn depth stands in for it), it does
+## not clear a wall end at a door (no hand clears a jamb, finding which-kinds-
+## of-wall-hit-make-up-the-walking-pull-roller-s-wa), and its footprint is a
+## box round the axle's whole range of
 ## places, not the drawn bag.
 
 ## Ticks of walking ahead the threat test covers: the change of hand
@@ -56,6 +66,9 @@ const REACH_CELLS := 1
 const MARGIN_M := 0.04
 ## Route cells ahead resolve() hands to pick(): more than LOOK_TICKS of a run.
 const AHEAD_CELLS := 3
+## Ticks from the start of a roller's last move (its change to the left) before
+## it may go back to the right: more than the probe's 12-tick swap-back window.
+const HOLD_TICKS := 2.0 * LOOK_TICKS
 
 
 ## Sets `hands` (CarryOnProps.sync()'s, SecurityLooks.hand_of() so far) of a
@@ -97,8 +110,12 @@ static func resolve(
 ## pulled roller in hand) is pulled with on this tick. `frame` is the guest's
 ## pose now (its origin on the floor, -z of its basis behind it), `ahead` the
 ## world points of its route still to walk, in order, `step_m` how far it
-## walked this tick, `first` the hand to start with when the bag has no hand
-## yet (SecurityLooks.hand_of()), `now` sim time.
+## walked this tick, `first` SecurityLooks.hand_of() (the hand to start a pull
+## with; a roller on the left goes back to the right only while it is the
+## right, its one-cell look finding no wall beside the guest on the right),
+## `now` sim time. A change of hand starts the roller's trail afresh
+## (CarryOnProps._trail() "walked"), straight behind on the new side: the old
+## side's walked line ends in a jump across the legs.
 static func pick(
 	bag: Dictionary,
 	grid: BuildGrid,
@@ -109,10 +126,20 @@ static func pick(
 	now: float
 ) -> int:
 	var hand := drawn_hand(bag, first)
-	if holds(bag, now) or step_m < STILL_M:
+	# hand_of() finding a wall beside the guest on the right (and none on the
+	# left) threatens a roller on the right too, once it has held HOLD_TICKS,
+	# standing still as well (a queue beside a wall).
+	var told := first == 1 and hand == 0 and now - float(bag.get("changed", -INF)) >= HOLD_TICKS
+	if holds(bag, now) or (step_m < STILL_M and not told):
 		return hand
 	var poses := walk_poses(frame, ahead, step_m * LOOK_TICKS)
-	if not blocked(grid, poses, footprint(hand, true), true):
+	if not told and not blocked(grid, poses, footprint(hand, true), true):
+		if hand == 1 and first == 0:
+			# Clear for a hold as well, so the right is not threatened again
+			# as soon as the roller is there.
+			var on := walk_poses(frame, ahead, step_m * (LOOK_TICKS + HOLD_TICKS))
+			if may_return(bag, grid, frame, on, now):
+				return _change(bag, "pull_side_returns", 0)
 		return hand
 	var other := 1 - hand
 	var shut := (
@@ -125,16 +152,50 @@ static func pick(
 	)
 	if shut:
 		bag["pull_side_both"] = int(bag.get("pull_side_both", 0)) + 1
-		return hand
-	bag["pull_side_swaps"] = int(bag.get("pull_side_swaps", 0)) + 1
-	return 1 - hand
+		# Both sides blocked, the roller stays unless hand_of() tells it across,
+		# as before PullSide (by a scanner with a wall on the left it hit the
+		# wall, not the scanner).
+		if not told:
+			return hand
+	return _change(bag, "pull_side_swaps", other)
+
+
+## Counts a change of `bag` to `hand` in its `tally` and starts its trail
+## afresh; returns `hand`.
+static func _change(bag: Dictionary, tally: String, hand: int) -> int:
+	bag[tally] = int(bag.get(tally, 0)) + 1
+	bag.erase("walked")
+	return hand
+
+
+## Whether a roller `bag` on the left may go back to the right at `now`: it
+## has been there HOLD_TICKS since its last move began, and the right's REACH
+## footprint, run forward to beside the guest (hand_of()'s wall at a queue
+## spot ahead) and back to the roller's drawn depth (its "drawn_axle"), and
+## the way across meet no wall and no furniture at `poses` (walk_poses() from
+## `frame`, the guest's pose now).
+static func may_return(
+	bag: Dictionary, grid: BuildGrid, frame: Transform3D, poses: Array, now: float
+) -> bool:
+	if now - float(bag.get("changed", -INF)) < HOLD_TICKS:
+		return false
+	var right := footprint(0, true)
+	right.size.z = -right.position.z
+	if bag.has("drawn_axle"):
+		var depth := (frame.affine_inverse() * (bag["drawn_axle"] as Vector3)).z
+		var size := Vector3(right.size.x, right.size.y, _bag_size().z * 2.0)
+		var at := Vector3(right.position.x, 0.0, depth - _bag_size().z)
+		right = right.merge(AABB(at, size))
+	return not (blocked(grid, poses, right, true) or blocked(grid, poses, crossing(), true))
 
 
 ## The hand `bag` is drawn in now: its place's while it is in a hand
-## (CarryLead.hand_of()), else `first`.
+## (CarryLead.hand_of()) while it is pulled (in a hand, not lifted), else
+## `first`: a roller set down from a lift (out of a tray, past a stall) starts
+## its pull in hand_of()'s hand, as it did before PullSide.
 static func drawn_hand(bag: Dictionary, first: int) -> int:
 	var place := int(bag.get("place", -1))
-	if place >= 0 and place / 4 == SecurityLooks.Home.HAND:
+	if place >= 0 and place / 4 == SecurityLooks.Home.HAND and place % 2 == 0:
 		return CarryLead.hand_of(place)
 	return first
 

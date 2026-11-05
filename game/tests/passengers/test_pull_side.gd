@@ -1,22 +1,28 @@
 class_name TestPullSide
 extends GdUnitTestSuite
 ## The hand a one-bag guest pulls its roller with (PullSide; board 578435a7,
-## decision roller-hand-swap-design-a-pulled-roller-keeps-its-hand-while). A
+## decision roller-hand-swap-design-a-pulled-roller-keeps-its-hand-while as
+## amended by pullside-amendment-the-roller-goes-back-to-the-right-hand-on). A
 ## guest walks east along a row of a BuildGrid fixture, a tick at a time, and
 ## each tick's hand is what PullSide.pick() answers for the bag record, kept as
-## CarryOnProps keeps it (the place and the tick of a change). Walking east the
+## CarryOnProps keeps it (the place, the tick of a change and the drawn axle
+## TRAIL_M behind on the pulling side). Walking east the
 ## right hand is the south side. Rows, each with RUN cells of wall:
 ##   RIGHT: a wall on the south edge (the pulling side);
 ##   LEFT: a wall on the north edge only;
 ##   BOTH: walls on both edges;
 ##   BIN: a wall on the south edge and a bin on the north cell beside each run
-##     cell (its rim reaches over its cell's edge into the row).
+##     cell (its rim reaches over its cell's edge into the row);
+##   FURNITURE: a bin on the south cell beside each run cell, no wall;
+##   OPEN: nothing.
 
 const ROLLER := SecurityLooks.Kind.ROLLER
 const RIGHT_ROW := 10
 const LEFT_ROW := 20
 const BOTH_ROW := 30
 const BIN_ROW := 40
+const FURNITURE_ROW := 50
+const OPEN_ROW := 60
 const RUN := Vector2i(18, 24)
 const START_X := 10
 const END_X := 32
@@ -38,6 +44,8 @@ func before() -> void:
 		edits.append(BuildEdit.place_wall(Vector2i(x, BIN_ROW), BuildGrid.Side.SOUTH))
 		edits.append(BuildEdit.paint_floor(Vector2i(x, BIN_ROW - 1), BuildGrid.FLOOR_TILE, 1))
 		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, BIN_ROW - 1), 0))
+		edits.append(BuildEdit.paint_floor(Vector2i(x, FURNITURE_ROW + 1), BuildGrid.FLOOR_TILE, 1))
+		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, FURNITURE_ROW + 1), 0))
 	for result in _grid.apply_batch(edits):
 		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
 
@@ -88,6 +96,10 @@ func _walk(row: int, step_m: float, hand := 0) -> Dictionary:
 			bag["place"] = _place(picked)
 			bag["changed"] = now
 			changes.append([tick, x, picked])
+		var out := -1.0 if picked == 0 else 1.0
+		bag["drawn_axle"] = (
+			frame * Vector3(out * CarryOnProps.TRAIL_SIDE_M, 0.0, -CarryOnProps.TRAIL_M)
+		)
 		hands.append(picked)
 		xs.append(x)
 		var right := PullSide.footprint(0, false)
@@ -104,7 +116,7 @@ func test_a_right_wall_ahead_swaps_to_the_left_before_the_roller_reaches_it() ->
 	var first_hit: int = walk["first_hit"]
 	# Control: the right roller would meet the wall on this walk.
 	assert_int(first_hit).override_failure_message("no wall on the walk").is_greater(0)
-	assert_int(changes.size()).override_failure_message(str(changes)).is_equal(1)
+	assert_int(changes.size()).override_failure_message(str(changes)).is_equal(2)
 	assert_int(changes[0][2]).is_equal(1)
 	var done := int(changes[0][0]) + int(CarryOnProps.TRANSFER_TICKS)
 	(
@@ -116,19 +128,109 @@ func test_a_right_wall_ahead_swaps_to_the_left_before_the_roller_reaches_it() ->
 	)
 
 
-func test_the_hand_stays_left_after_the_run() -> void:
+func test_the_roller_goes_back_to_the_right_once_past_the_wall() -> void:
 	var walk := _walk(RIGHT_ROW, WALK_M)
+	var changes: Array = walk["changes"]
 	var hands: Array[int] = walk["hands"]
 	var xs: Array[float] = walk["xs"]
-	var past := _grid.cell_to_world(Vector2i(RUN.y + 3, RIGHT_ROW)).x
+	assert_int(changes.size()).override_failure_message(str(changes)).is_equal(2)
+	assert_int(changes[0][2]).is_equal(1)
+	assert_int(changes[1][2]).is_equal(0)
+	assert_int(int(walk["bag"].get("pull_side_returns", 0))).is_equal(1)
+	# The wall's east end, and where the guest was when the roller went back.
+	var wall_end := _grid.cell_to_world(Vector2i(RUN.y, RIGHT_ROW)).x - 0.5
+	var back_x: float = changes[1][1]
+	(
+		assert_float(back_x - wall_end)
+		. override_failure_message("went back %.2f m past the wall's end" % (back_x - wall_end))
+		. is_greater(CarryOnProps.TRAIL_M)
+	)
+	# On the left the whole run, and the right's reach footprint meets no wall
+	# from the tick it went back to the end of the walk.
+	var right := PullSide.footprint(0, true)
 	var after := 0
 	for t in hands.size():
-		if xs[t] > past:
+		var x := xs[t]
+		if x > wall_end - 1.0 and x < back_x - 0.001:
+			assert_int(hands[t]).override_failure_message("x %.2f" % x).is_equal(1)
+		if x >= back_x:
 			after += 1
-			assert_int(hands[t]).override_failure_message("x %.2f" % xs[t]).is_equal(1)
-	# Positive: the walk went on well past the run, both sides clear.
-	assert_int(after).is_greater(20)
-	assert_int(int(walk["bag"].get("pull_side_swaps", 0))).is_equal(1)
+			assert_int(hands[t]).is_equal(0)
+			assert_bool(PullSide.blocked(_grid, [_pose(RIGHT_ROW, x)], right, true)).is_false()
+	assert_int(after).is_greater(5)
+
+
+func test_the_left_hand_holds_for_the_minimum_hold() -> void:
+	var x := _grid.cell_to_world(Vector2i(RUN.x + 2, OPEN_ROW)).x
+	var frame := _pose(OPEN_ROW, x)
+	var ahead := _ahead(OPEN_ROW, x)
+	var now := FIRST_TICK + 50.0
+	var left := {"kind": ROLLER, "place": _place(1)}
+	left["drawn_axle"] = frame * Vector3(CarryOnProps.TRAIL_SIDE_M, 0.0, -CarryOnProps.TRAIL_M)
+	left["changed"] = now - PullSide.HOLD_TICKS + 1.0
+	assert_int(PullSide.pick(left, _grid, frame, ahead, WALK_M, 0, now)).is_equal(1)
+	# Past the hold it goes back to the right on the same open floor.
+	left["changed"] = now - PullSide.HOLD_TICKS
+	assert_int(PullSide.pick(left, _grid, frame, ahead, WALK_M, 0, now)).is_equal(0)
+	assert_int(int(left.get("pull_side_returns", 0))).is_equal(1)
+	# Not while SecurityLooks.hand_of() finds the right closed beside the guest.
+	var closed := {"kind": ROLLER, "place": _place(1), "changed": now - 100.0}
+	assert_int(PullSide.pick(closed, _grid, frame, ahead, WALK_M, 1, now)).is_equal(1)
+	# The hold is longer than the probe's 12-tick swap-back window.
+	assert_float(PullSide.HOLD_TICKS).is_greater(12.0)
+
+
+func test_furniture_on_the_pulling_side_swaps_to_the_left() -> void:
+	var walk := _walk(FURNITURE_ROW, WALK_M)
+	var changes: Array = walk["changes"]
+	# Control: the bins, not a wall, are in the right roller's reach footprint.
+	var frame := _pose(FURNITURE_ROW, _grid.cell_to_world(Vector2i(RUN.x + 2, FURNITURE_ROW)).x)
+	var right := PullSide.footprint(0, true)
+	assert_bool(PullSide.blocked(_grid, [frame], right, true)).is_true()
+	assert_bool(PullSide.blocked(_grid, [frame], right, false)).is_false()
+	assert_int(changes.size()).override_failure_message(str(changes)).is_greater_equal(1)
+	assert_int(changes[0][2]).is_equal(1)
+	var first_bin := _grid.cell_to_world(Vector2i(RUN.x, FURNITURE_ROW)).x - 0.5
+	assert_float(changes[0][1]).is_less(first_bin)
+
+
+func test_a_change_of_hand_starts_the_trail_behind_on_the_new_side() -> void:
+	var x := _grid.cell_to_world(Vector2i(RUN.x + 2, RIGHT_ROW)).x
+	var frame := _pose(RIGHT_ROW, x)
+	var now := FIRST_TICK + 50.0
+	var bag := {"kind": ROLLER, "place": _place(0), "changed": now - 20.0}
+	# The right side's walked line, as CarryOnProps._trail() keeps it.
+	var walked: Array = []
+	for k in 11:
+		walked.append(frame * Vector3(-CarryOnProps.TRAIL_SIDE_M, 0.0, -2.0 + k * 0.2))
+	bag["walked"] = walked
+	var right_axle := frame * Vector3(-CarryOnProps.TRAIL_SIDE_M, 0.0, -CarryOnProps.TRAIL_M)
+	bag["drawn_axle"] = right_axle
+	var picked := PullSide.pick(bag, _grid, frame, _ahead(RIGHT_ROW, x), WALK_M, 0, now)
+	assert_int(picked).is_equal(1)
+	# The next trail step (CarryOnProps._trail()): the left line's point now on
+	# what is left of the walked line, kept on the left and behind.
+	var line: Array = bag.get("walked", [])
+	line.append(frame * Vector3(CarryOnProps.TRAIL_SIDE_M, 0.0, 0.0))
+	var local := frame.affine_inverse() * CarryOnProps.trail(line, frame.basis * Vector3.FORWARD)
+	local.x = clampf(local.x, CarryOnProps.TRAIL_SIDE_MIN_M, CarryOnProps.TRAIL_SIDE_MAX_M)
+	local.z = minf(local.z, -CarryOnProps.TRAIL_BEHIND_MIN_M)
+	# Straight behind on the left's own line, not pulled in to the clamps by
+	# the jump across the legs at the end of the right's line.
+	assert_float(local.x).is_equal_approx(CarryOnProps.TRAIL_SIDE_M, 0.01)
+	assert_float(-local.z).is_equal_approx(CarryOnProps.TRAIL_M, 0.01)
+	# The drawn axle swings across to it (CarryOnProps.follow()) behind the
+	# legs: wherever it is nearer the centre line than TRAIL_SIDE_MIN_M it is
+	# at least TRAIL_BEHIND_MIN_M behind, and it gets there.
+	var at := frame.affine_inverse() * right_axle
+	var crossed := 0
+	for step in 30:
+		at = CarryOnProps.follow(at, local, 1.0 / 3.0, 1)
+		if absf(at.x) < CarryOnProps.TRAIL_SIDE_MIN_M:
+			crossed += 1
+			assert_float(-at.z).is_greater_equal(CarryOnProps.TRAIL_BEHIND_MIN_M)
+	assert_int(crossed).is_greater(0)
+	assert_float(at.x).is_equal_approx(local.x, 0.01)
 
 
 func test_a_left_wall_only_keeps_the_right_hand() -> void:
@@ -137,7 +239,7 @@ func test_a_left_wall_only_keeps_the_right_hand() -> void:
 	assert_int(int(left["bag"].get("pull_side_both", 0))).is_equal(0)
 	# Control in the same fixture: the right wall does make it swap.
 	var right := _walk(RIGHT_ROW, WALK_M)
-	assert_int((right["changes"] as Array).size()).is_equal(1)
+	assert_int((right["changes"] as Array).size()).is_equal(2)
 
 
 func test_walls_on_both_sides_keep_the_hand_and_are_counted() -> void:
@@ -151,7 +253,7 @@ func test_a_running_guest_starts_the_change_early_enough() -> void:
 	var run := _walk(RIGHT_ROW, RUN_M)
 	var walk := _walk(RIGHT_ROW, WALK_M)
 	var changes: Array = run["changes"]
-	assert_int(changes.size()).is_equal(1)
+	assert_int(changes.size()).is_equal(2)
 	var done := int(changes[0][0]) + int(CarryOnProps.TRANSFER_TICKS)
 	assert_int(run["first_hit"]).is_greater(0)
 	(
@@ -181,7 +283,7 @@ func test_furniture_on_the_destination_side_vetoes_the_swap() -> void:
 	assert_array(walk["changes"]).is_empty()
 	assert_int(int(walk["bag"].get("pull_side_both", 0))).is_greater(0)
 	# Control: the same wall without the bins swaps.
-	assert_int((_walk(RIGHT_ROW, WALK_M)["changes"] as Array).size()).is_equal(1)
+	assert_int((_walk(RIGHT_ROW, WALK_M)["changes"] as Array).size()).is_equal(2)
 
 
 func test_the_hand_holds_mid_transfer_mid_park_and_standing_still() -> void:

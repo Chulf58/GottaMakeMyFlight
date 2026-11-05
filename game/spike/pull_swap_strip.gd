@@ -1,8 +1,11 @@
 extends RefCounted
 ## A strip of plates of a pulled roller changing hands at the west wall
 ## (board 578435a7, PullSide), for roller_trail_probe.gd in a windowed run. The
-## first guest seen on CELLS with its roller in a move from one pull to the
-## other is plated every EVERY_FRAMES frames through the move and AFTER_FRAMES
+## first guest seen walking along the west wall (in column WEST_X or the one
+## before it, the wall on column 10's west edge; headless, its changes of hand
+## start in column 11) with
+## its roller in a move from one pull to the other is plated every
+## EVERY_FRAMES frames through the move and AFTER_FRAMES
 ## frames after it, from the side the roller goes to, above and behind. Each
 ## plate is saved only when the bag body's middle, the holding hand, the feet
 ## and the head project inside the viewport by MARGIN_PX, and at least MIN_ON
@@ -13,7 +16,7 @@ extends RefCounted
 ## Load with preload(); no class_name.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
-const CELLS: Array[Vector2i] = [Vector2i(10, 116), Vector2i(10, 117)]
+const WEST_X := 11
 const EVERY_FRAMES := 3
 const AFTER_FRAMES := 6
 const MARGIN_PX := 8.0
@@ -31,7 +34,7 @@ var _after := -1
 
 ## One frame of guest `p` (its drawn `body`, roller node `bag`, record copy
 ## `state`) of the windowed run of `tree` under `main`: starts the strip on the
-## first change of hand on CELLS, then plates its guest. `views` draws it.
+## first change of hand at the west wall, then plates its guest. `views` draws it.
 func look(
 	tree: SceneTree,
 	main: Node3D,
@@ -55,7 +58,7 @@ func look(
 		and CarryLead.hand_of(was) != CarryLead.hand_of(place)
 	)
 	if _id < 0:
-		if not swapping or not p.at in CELLS:
+		if not swapping or p.at.x > WEST_X:
 			return
 		_id = p.id
 		print("PULL_STRIP start id=%d cell=%s place %d -> %d" % [p.id, p.at, was, place])
