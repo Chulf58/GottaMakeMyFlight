@@ -138,7 +138,7 @@ static func pose(sim: PassengerSim, p: Passenger) -> StageKinds.Pose:
 static func share(sim: PassengerSim, p: Passenger) -> float:
 	if kind(sim, p) == Kind.NONE:
 		return 0.0
-	var step_in := _in_spent(sim, p) / float(SHUFFLE_TICKS)
+	var step_in := _stepped_in(sim, p) / float(SHUFFLE_TICKS)
 	var step_out := _out_left(sim, p) / float(SHUFFLE_TICKS)
 	return clampf(minf(step_in, step_out), 0.0, 1.0)
 
@@ -178,7 +178,7 @@ static func facing(sim: PassengerSim, p: Passenger) -> Vector2i:
 	if piece.is_empty() or not KINDS.has(piece["def"]):
 		return Vector2i.ZERO
 	var out := TerminalLayout.front_of(piece["facing"])
-	var at_door := _in_spent(sim, p) < SHUFFLE_TICKS or _out_left(sim, p) < 0
+	var at_door := _stepped_in(sim, p) < SHUFFLE_TICKS or _out_left(sim, p) < 0
 	if KINDS[piece["def"]] == Kind.SHOWER and at_door:
 		return -out
 	return out
@@ -199,7 +199,7 @@ static func bags_down(sim: PassengerSim, p: Passenger) -> bool:
 		Kind.SHOWER:
 			return _left(sim, p) >= DOOR_OUT_TICKS
 		Kind.SEAT, Kind.RECLINE:
-			var on_seat := _in_spent(sim, p) >= SHUFFLE_TICKS or seat_door(sim, p) > 0
+			var on_seat := _stepped_in(sim, p) >= SHUFFLE_TICKS or seat_door(sim, p) > 0
 			var tail := up_tail(sim, p)
 			return on_seat and _left(sim, p) >= (tail if tail > 0 else SHUFFLE_TICKS)
 	return false
@@ -509,6 +509,24 @@ static func _left(sim: PassengerSim, p: Passenger) -> int:
 ## (negative before that).
 static func _in_spent(sim: PassengerSim, p: Passenger) -> int:
 	return sim.tick - p.stage_tick - _door(sim, p, DOOR_IN_TICKS) - seat_door(sim, p)
+
+
+## How many of the SHUFFLE_TICKS of its step onto the seat or into the shower
+## `p` had made on the tick before this one, 0 to SHUFFLE_TICKS: what a
+## Relocation exit saves (reached), so the body does not step further in on the
+## tick the move is seen. The stage clock of an exit counts down to its end,
+## not up from the stay's start.
+static func reach(sim: PassengerSim, p: Passenger) -> int:
+	return clampi(_in_spent(sim, p) - 1, 0, SHUFFLE_TICKS)
+
+
+## The step in to count now: _in_spent(), or while `p` leaves a piece that
+## moved, the step it had made when the move came (Relocation.reached).
+static func _stepped_in(sim: PassengerSim, p: Passenger) -> int:
+	var visit := sim.shops.visit_of(p.id)
+	if visit != null and _exiting(visit):
+		return visit.relocation.reached
+	return _in_spent(sim, p)
 
 
 ## Ticks left until `p` has stepped off its seat or out of the shower: the
