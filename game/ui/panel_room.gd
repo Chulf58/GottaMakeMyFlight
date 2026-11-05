@@ -4,7 +4,8 @@ extends Node
 ## room-for-open-panels-the-build-tray-banner-and). It finds which panels are
 ## open (the build tray with its status and cost lines, the Staff card, the
 ## banner at the top centre, the Offers sheet and the flight result card), and the
-## alert cards with their history tray (AlertStack.room_rect()), takes the
+## alert cards with their history tray (AlertStack.room_rect()), and the category
+## bar across the bottom while no tray covers it, takes the
 ## largest screen rectangle they leave free, and tells the TycoonCamera, which
 ## puts its focus at the middle of that rectangle and, while it is still on the
 ## start view, refits the start area inside it.
@@ -168,6 +169,9 @@ func open_key() -> int:
 	bit <<= 1
 	if tray_open:
 		key |= bit
+	bit <<= 1
+	if menu != null and not tray_open and menu.bar().is_visible_in_tree():
+		key |= bit
 	return key
 
 
@@ -178,6 +182,8 @@ func open_rects() -> Array[Rect2]:
 	var tray_open := menu != null and menu.is_tray_open()
 	if tray_open:
 		rects.append_array(_kept_rects if _kept else _build_stack(menu))
+	elif menu != null and menu.bar().is_visible_in_tree():
+		rects.append(_bar_strip())
 	for panel in _panels():
 		if panel != null and panel.is_visible_in_tree():
 			rects.append(panel.get_global_rect())
@@ -221,6 +227,15 @@ func _banner() -> Rect2:
 	if staff == null or not staff.hint_card().is_visible_in_tree():
 		return Rect2()
 	return staff.hint_card().get_global_rect()
+
+
+## The category bar's strip across the bottom of the screen, which the start view
+## keeps clear while no tray covers it. Taken from the bar's fixed height, not its
+## laid-out rectangle, so the first frame, before layout, already has it.
+func _bar_strip() -> Rect2:
+	var size := get_viewport().get_visible_rect().size
+	var height := BuildMenu.MARGIN + BuildMenu.BAR_H
+	return Rect2(0.0, size.y - height, size.x, height)
 
 
 ## The tray, its status and cost lines and the bar under them, from the top of
