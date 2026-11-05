@@ -20,8 +20,9 @@ extends RefCounted
 ## A visit's legs: "pre_ticks" (getting up from a gate seat first),
 ## "to_queue_mm" (the walk to the queue), "order_ticks" (the queue wait and the
 ## order), "to_seat_mm" (the counter to the seat's approach cell),
-## "dwell_ticks", "leave_cell" (the seat's approach cell) and "resume_stage"
-## (TO_SECURITY landside, TO_GATE airside).
+## "sit_ticks" (sitting down there, CafeSim.sit_ticks(); SIT_DOWN_TICKS when
+## absent), "dwell_ticks", "leave_cell" (the seat's approach cell) and
+## "resume_stage" (TO_SECURITY landside, TO_GATE airside).
 
 const MARGIN_TICKS := VisitForecast.MARGIN_TICKS
 
@@ -34,7 +35,7 @@ static func visit_end(sim: PassengerSim, legs: Dictionary) -> int:
 		+ JourneyForecast.walk_ticks(legs["to_queue_mm"])
 		+ int(legs["order_ticks"])
 		+ JourneyForecast.walk_ticks(legs["to_seat_mm"])
-		+ PassengerSim.SIT_DOWN_TICKS
+		+ int(legs.get("sit_ticks", PassengerSim.SIT_DOWN_TICKS))
 		+ int(legs["dwell_ticks"])
 	)
 

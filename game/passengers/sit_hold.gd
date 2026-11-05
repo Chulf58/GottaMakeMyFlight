@@ -28,10 +28,14 @@ const LET_GO_TICKS := 1.0
 ## once (in a toilet stall too: a stall roller goes down by its own moves,
 ## StallCarry; and on a sofa or nap pod, whose visitor sets its roller down at
 ## its slot cell before the sit-down starts, ActivityPoses.seat_door()); at most
-## SIT_DOWN_TICKS - MIN_SIT_TICKS.
+## SIT_DOWN_TICKS - MIN_SIT_TICKS. At a booth (CafeSim.STEP_IN_PATH) it is the
+## sim's own step-in hold, CafeSim.STEP_IN_HOLD_TICKS, whatever the props say.
 static func held_ticks(props: CarryOnProps, sim: PassengerSim, p: Passenger) -> int:
 	if Passenger.in_toilet(p.stage) or ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
 		return 0
+	var step_in := sim.cafes.hold_now(p)
+	if step_in > 0:
+		return step_in
 	var held := 0.0
 	for i in p.carry_on:
 		if SecurityLooks.bag_kind(p, i) != SecurityLooks.Kind.ROLLER:
@@ -55,6 +59,13 @@ static func held_ticks(props: CarryOnProps, sim: PassengerSim, p: Passenger) -> 
 			# there is no hold to make up.
 			held = maxf(held, RollerPark.TICKS_DOWN + LET_GO_TICKS)
 	return clampi(ceili(held), 0, PassengerSim.SIT_DOWN_TICKS - MIN_SIT_TICKS)
+
+
+## How many ticks the sit-down of `p` lasts, for the view's sit_down clip:
+## SIT_DOWN_TICKS, plus the step-in hold of a roller guest at a booth
+## (CafeSim.sit_ticks()), which the clip waits out standing.
+static func sit_ticks(sim: PassengerSim, p: Passenger) -> int:
+	return PassengerSim.SIT_DOWN_TICKS + sim.cafes.hold_now(p)
 
 
 ## Whether `p` was late as it began sitting down: sat_late once
@@ -87,17 +98,18 @@ static func chair_front(sim: PassengerSim, p: Passenger) -> Variant:
 ## (user ruling roller-laid-down-beside-the-passenger-s-feet-not-ahead): at
 ## chair_front(), for held_ticks(), then easing into the seat over the sit_down
 ## clip. The sim's shuffle into the seat (its first 8 ticks at a gate chair, 12
-## at a cafe seat) drew a standing body sliding back 0.55 m.
+## at a cafe seat) drew a standing body sliding back 0.55 m. Zero at a booth,
+## where the sim itself keeps a roller guest at the approach cell through its
+## step-in hold and then takes it in along the bent path (CafeSim.sit_ticks()):
+## the ease here is a straight line, and the booth's path must not be added to
+## a sim spot already on it.
 static func offset(props: CarryOnProps, sim: PassengerSim, p: Passenger, now: Vector3) -> Vector3:
 	var held := 0
 	if StageKinds.pose(p.stage) == StageKinds.Pose.SITTING_DOWN:
 		held = held_ticks(props, sim, p)
 	var front: Variant = chair_front(sim, p)
-	if held <= 0 or front == null:
+	if held <= 0 or front == null or sim.cafes.hold_now(p) > 0:
 		return Vector3.ZERO
 	var into := ActivityPoses.clip_ticks(sim, p) - held
 	var u := 0.0 if into < 0 else smoothstep(0.0, PassengerSim.SIT_DOWN_TICKS - held, into)
-	# Along the cafe seat's own shuffle path, which bends round a booth's end
-	# panel (CafeSim.shuffle_bend(); zero at a gate chair and a straight shuffle).
-	var bend := sim.cafes.shuffle_bend(p, u)
-	return ((front as Vector3) - now) * (1.0 - u) + bend
+	return ((front as Vector3) - now) * (1.0 - u)

@@ -86,11 +86,23 @@ const SHUFFLE_TICKS := 12
 ## the straight line from the approach cell carried the body through it (board
 ## 64ee4dc0, game/spike/food_seats_probe.gd). The guest steps forward inside
 ## the approach cell to 0.68 m across, where half a body still clears the
-## panel's inner face (0.42 m), then slides in along a line 0.05 m ahead of the
-## root (0.075 m put a body's front into the table edge) and back onto it.
+## panel's outer face (0.42 m; its inner face is at 0.36 m), then slides in
+## along a line 0.05 m ahead of the root (0.075 m put a body's front into the
+## table edge) and back onto it. The step's front reaches up to about 0.17 m
+## into the cell ahead of the approach cell, which shows only where a piece's
+## mesh stands that near the cell's edge.
 const STEP_IN_PATH := {
 	&"restaurant_booth": [Vector2(0.04, 0.68), Vector2(0.05, 0.5), Vector2(0.05, 0.0)],
 }
+## A guest pulling a roller to a STEP_IN_PATH seat stands this long at the
+## approach cell at the start of its sit-down while it sets the roller down
+## (RollerPark.TICKS_DOWN, then SitHold.LET_GO_TICKS), and only then steps in
+## and sits as a guest with no roller does, over SIT_DOWN_TICKS (board
+## 5dc41129). Easing in over the ticks the sit-down had left took the hips
+## back before the body was past the booth's end panel: up to 116 body points
+## inside it. The sim, the forecasts, the save check and the view read it
+## through step_in_hold() and sit_ticks().
+const STEP_IN_HOLD_TICKS := 14
 ## Seats tried per visit, nearest the counter first.
 const SEAT_TRIES := 4
 const HUNGER_START_MIN := 40
@@ -410,7 +422,7 @@ func step(p: Passenger) -> void:
 		Passenger.Stage.CAFE_TO_SEAT:
 			_seat_step(p, visit)
 		Passenger.Stage.CAFE_SITTING_DOWN:
-			if _sim.tick - p.stage_tick >= PassengerSim.SIT_DOWN_TICKS:
+			if _sim.tick - p.stage_tick >= sit_ticks(p, visit.piece):
 				var dwell := RoomTypes.get_type(visit.venue).dwell_ticks
 				_set_stage.call(p, Passenger.Stage.CAFE_SEATED)
 				if visit.relocation != null:
@@ -460,21 +472,23 @@ func seat_position(p: Passenger) -> Vector3:
 		return _sim.grid.origin + Vector3(at.x, 0.0, at.y)
 	var approach := _sim.grid.cell_to_world(visit.seat["approach"])
 	var root := BuildObjectDef.seat_root_world(_sim.grid, visit.seat)
-	var shuffle := clampf((_sim.tick - p.stage_tick) / float(SHUFFLE_TICKS), 0.0, 1.0)
 	match p.stage:
 		Passenger.Stage.CAFE_SITTING_DOWN:
-			return _shuffle_at(visit, approach, root, shuffle)
+			# At the approach cell through a roller guest's step-in hold.
+			var spent := _sim.tick - p.stage_tick - step_in_hold(p, visit.piece)
+			return _shuffle_at(
+				visit, approach, root, clampf(spent / float(SHUFFLE_TICKS), 0.0, 1.0)
+			)
 		Passenger.Stage.CAFE_STANDING_UP:
 			var left := up_ticks(p) - (_sim.tick - p.stage_tick)
 			return _shuffle_at(visit, approach, root, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
 	return root
 
 
-## How far the drawn shuffle of `p` bends off the straight line from its
-## approach cell to its seat root at `fraction` of the path's length: zero but
-## at a STEP_IN_PATH piece. SitHold, which holds a roller guest at the approach
-## cell and then eases it into the seat, adds it so the guest takes the same
-## path.
+## How far the shuffle of `p` bends off the straight line from its approach
+## cell to its seat root at `fraction` of the path's length: zero but at a
+## STEP_IN_PATH piece. A roller guest there takes the path in the sim after its
+## step-in hold (step_in_hold()), so no view ease adds it.
 func shuffle_bend(p: Passenger, fraction: float) -> Vector3:
 	var visit: CafeVisit = _visits.get(p.id)
 	if visit == null or visit.seat.is_empty():
@@ -646,6 +660,7 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 			"to_queue_mm": mm,
 			"order_ticks": _order_eta(cafe["room"], counter["id"]) + QUEUE_LAG_TICKS,
 			"to_seat_mm": 0 if walk_on else seat["mm"],
+			"sit_ticks": 0 if walk_on else sit_ticks(p, _placement_of(seat)),
 			"dwell_ticks": RoomTypes.get_type(cafe["type"]).dwell_ticks,
 			"leave_cell": lane[0] if walk_on else seat["approach"],
 			"resume_stage": _resume_stage(p),
@@ -657,6 +672,11 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 			return a["mm"] < b["mm"] or (a["mm"] == b["mm"] and a["room"] < b["room"])
 	)
 	return found
+
+
+## The placement (Relocation.placement()) of the table piece `seat` is at.
+func _placement_of(seat: Dictionary) -> Dictionary:
+	return Relocation.placement(_sim.grid, int(seat.get("object_id", 0)))
 
 
 ## The open counter with room in its queue that would serve a newcomer
@@ -745,6 +765,30 @@ func _leave_cell(p: Passenger, visit: CafeVisit) -> Vector2i:
 ## seat (up_ticks()), nothing for a walk-on guest.
 func _leave_delay(p: Passenger, visit: CafeVisit) -> int:
 	return 0 if visit.walk_on() else up_ticks(p)
+
+
+## The ticks `p` stands at the approach cell at the start of its sit-down at a
+## seat of `piece` (a Relocation.placement()): STEP_IN_HOLD_TICKS with a roller
+## at a STEP_IN_PATH piece, 0 otherwise.
+static func step_in_hold(p: Passenger, piece: Dictionary) -> int:
+	if not STEP_IN_PATH.has(StringName(piece.get("def", &""))):
+		return 0
+	return STEP_IN_HOLD_TICKS if ParkRecovery.has_roller(p) else 0
+
+
+## How many ticks the sit-down (CAFE_SITTING_DOWN) of `p` at a seat of `piece`
+## lasts: the step-in hold, then SIT_DOWN_TICKS.
+static func sit_ticks(p: Passenger, piece: Dictionary) -> int:
+	return step_in_hold(p, piece) + PassengerSim.SIT_DOWN_TICKS
+
+
+## The step-in hold (step_in_hold()) of `p`'s sit-down now: 0 unless it is
+## sitting down at a cafe seat.
+func hold_now(p: Passenger) -> int:
+	var visit: CafeVisit = _visits.get(p.id)
+	if visit == null or p.stage != Passenger.Stage.CAFE_SITTING_DOWN:
+		return 0
+	return step_in_hold(p, visit.piece)
 
 
 ## How many ticks the stand-up from a cafe seat (CAFE_STANDING_UP) of `p`
@@ -942,8 +986,10 @@ func _relocates(p: Passenger, visit: CafeVisit) -> bool:
 	match p.stage:
 		Passenger.Stage.CAFE_SITTING_DOWN:
 			visit.relocation = Relocation.leaving(visit.piece, owed)
-			# Turned back partway: getting up takes as long as sitting down took.
-			var spent := mini(_sim.tick - p.stage_tick, PassengerSim.SIT_DOWN_TICKS)
+			# Turned back partway: getting up takes as long as sitting down took,
+			# none of it for a step-in hold at the approach cell.
+			var spent := _sim.tick - p.stage_tick - step_in_hold(p, visit.piece)
+			spent = clampi(spent, 0, PassengerSim.SIT_DOWN_TICKS)
 			_set_stage.call(p, Passenger.Stage.CAFE_STANDING_UP)
 			p.stage_tick = _sim.tick - (PassengerSim.STAND_UP_TICKS - spent)
 		Passenger.Stage.CAFE_SEATED:
@@ -976,7 +1022,8 @@ func _head_to_seat(p: Passenger, visit: CafeVisit) -> void:
 	if route.is_empty():
 		_abandon(p, visit)
 		return
-	var ticks := JourneyForecast.walk_ticks(route["mm"]) + PassengerSim.SIT_DOWN_TICKS + owed
+	var piece := Relocation.placement(_sim.grid, int(seat["object_id"]))
+	var ticks := JourneyForecast.walk_ticks(route["mm"]) + sit_ticks(p, piece) + owed
 	# Up from the old seat, the walk starts on the next tick (no double step).
 	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
 		ticks += 1
@@ -990,7 +1037,7 @@ func _head_to_seat(p: Passenger, visit: CafeVisit) -> void:
 		_abandon(p, visit)
 		return
 	visit.seat = seat
-	visit.piece = Relocation.placement(_sim.grid, int(seat["object_id"]))
+	visit.piece = piece
 	visit.deadline = _live_deadline(p, visit)
 	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
 		# This tick took the last step off the old seat: the walk starts on the

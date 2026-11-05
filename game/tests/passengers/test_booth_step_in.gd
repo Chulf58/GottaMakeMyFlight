@@ -8,24 +8,34 @@ extends GdUnitTestSuite
 ## the body through the end panel (windowed probe game/spike/food_seats_probe.gd:
 ## 4 to 176 body points inside it at every booth seat). It leaves the approach
 ## cell at walking pace, with no lunge, and stands up along the same path. A
-## guest with a roller, held at the approach cell while it sets the roller down
-## (SitHold), takes the same path into the seat. The cafe table's chairs, also
-## stepped into from a cell to the side, keep their straight shuffle.
+## guest with a roller stands at the approach cell while it sets the roller
+## down (CafeSim.STEP_IN_HOLD_TICKS), then steps in and sits exactly as a guest
+## with no roller does (board 5dc41129): eased in over the ticks the sit-down
+## had left, its hips went back while it was still beside the end panel. The
+## cafe table's chairs, also stepped into from a cell to the side, keep their
+## straight shuffle.
 
 ## The body reaches this far to each side of its spot: while the spot is
 ## nearer the seat root than this plus PANEL_FACE_M, part of the body is past
-## the end panel's inner face.
+## the end panel's outer face.
 const BODY_HALF_M := 0.25
-## The bench's end panel's inner face, across from the seat root
-## (tools/blender/interior/build_services_kit.py: the panel at x 0.86-0.92 m,
-## the roots at x 0.5 m).
+## The bench's end panel's outer face (towards the approach cell), across from
+## the seat root (tools/blender/interior/build_services_kit.py: the panel at
+## x 0.86-0.92 m, the roots at x 0.5 m, so its inner face is at 0.36 m).
 const PANEL_FACE_M := 0.42
+## From this share of the sit_down clip on, the hips are going back (the clip's
+## Hips bone is 0.036 m back of its 0.53 m at 0.17, 0.08 m at 0.25).
+const HIPS_BACK_SHARE := 0.1
+## How far a roller guest's drawn spot may be from a guest's with no roller at
+## the same share of the sit_down clip.
+const SAME_SPOT_M := 0.02
 ## The approach cell's forward edge, ahead of the root (the root is 0.45 m from
 ## the seat cell's centre towards the table, the approach cell beside it).
 const CELL_EDGE_M := 0.05
 const WALK_M := PassengerSim.WALK_MM / 1000.0
 
 var _worlds: Array[PassengerTestWorld] = []
+var _views: Array[PassengerViews] = []
 
 
 func before() -> void:
@@ -37,14 +47,18 @@ func after() -> void:
 
 
 func after_test() -> void:
+	for views in _views:
+		views.free()
+	_views.clear()
 	for world in _worlds:
 		world.free_all()
 	_worlds.clear()
 
 
 ## A guest of a restaurant with `table` (pulling a roller with `roller`)
-## stepped to the first tick of its sit-down.
-func _sitting(table: StringName, roller := false) -> Array:
+## stepped to the first tick of its sit-down; with `drawn`, drawn by real
+## PassengerViews from its visit's start (the views third in the result).
+func _sitting(table: StringName, roller := false, drawn := false) -> Array:
 	var grid := BuildGrid.new()
 	CafeTestLayout.build(grid, false, &"restaurant", true, &"cafe_counter", table)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
@@ -64,11 +78,21 @@ func _sitting(table: StringName, roller := false) -> Array:
 	while p.stage != Passenger.Stage.TO_GATE and world.clock.tick < 1500:
 		world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+	var views: PassengerViews = null
+	if drawn:
+		views = PassengerTestWorld.views()
+		views.clock = world.clock
+		views.sim = world.sim
+		add_child(views)
+		_views.append(views)
 	assert_bool(world.sim.cafes.try_visit(p)).override_failure_message("visit refused").is_true()
 	while p.stage != Passenger.Stage.CAFE_SITTING_DOWN and world.clock.tick < 3000:
 		world.step()
+		if views != null:
+			# The props are drawn a frame at a time (PassengerViews._process()).
+			views.draw()
 	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SITTING_DOWN)
-	return [world, p]
+	return [world, p, views]
 
 
 ## `at` in `seat`'s frame: [ahead of the root, across from the root].
@@ -191,7 +215,8 @@ func test_a_booth_guest_with_a_roller_takes_the_same_path_in() -> void:
 	var props: CarryOnProps = auto_free(CarryOnProps.new())
 	var held := SitHold.held_ticks(props, world.sim, p)
 	var path: Array[Vector2] = []
-	for k in PassengerSim.SIT_DOWN_TICKS + 1:
+	# The whole sit-down, its step-in hold first (CafeSim.sit_ticks()).
+	for k in CafeSim.sit_ticks(p, world.sim.cafes.visit_of(p.id).piece) + 1:
 		var now := world.sim.world_position(p) + CafeChairs.offset(world.sim, p)
 		path.append(_seat_xy(world, seat, now + SitHold.offset(props, world.sim, p, now)))
 		world.step()
@@ -202,6 +227,150 @@ func test_a_booth_guest_with_a_roller_takes_the_same_path_in() -> void:
 	assert_float(path[held - 1].distance_to(path[0])).is_less(0.001)
 	_assert_clear_of_the_end_panel(path)
 	assert_float(path[-1].length()).is_less(0.03)
+
+
+## On each tick of the sit-down of `p` (made by _sitting() with `drawn`), the
+## share of the sit_down clip `views` have played before it and the drawn spot
+## (seat frame): [share, spot]. The clip's place on a tick is (ticks into the
+## stage - held) / its ticks, as PassengerViews seeks it.
+func _drawn_sit_down(made: Array) -> Array:
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var views: PassengerViews = made[2]
+	var seat: Dictionary = world.sim.cafes.visit_of(p.id).seat
+	var out := []
+	var share := 0.0
+	while p.stage == Passenger.Stage.CAFE_SITTING_DOWN:
+		var node := views.node_for(p.id)
+		var player := node.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+		var at := world.sim.world_position(p)
+		var ease := SitHold.offset(
+			views.carry_on_props(), world.sim, p, at + CafeChairs.offset(world.sim, p)
+		)
+		# The sim takes the booth's path itself: no view ease on top of it.
+		assert_vector(ease).is_equal(Vector3.ZERO)
+		# Without the body's own seat step (CafeChairs), which differs by body.
+		out.append([share, _seat_xy(world, seat, at + ease)])
+		if node.get_meta(&"clip", "") == "sit_down":
+			share += SimClock.STEP * player.speed_scale / PassengerViews.SIT_CLIP_SECONDS
+		world.step()
+		views.draw()
+	return out
+
+
+## The spot of `drawn` (_drawn_sit_down()) at clip share `share`, between the
+## samples either side of it.
+func _spot_at(drawn: Array, share: float) -> Vector2:
+	for i in range(1, drawn.size()):
+		var a: float = drawn[i - 1][0]
+		var b: float = drawn[i][0]
+		if share <= b and b > a:
+			return (drawn[i - 1][1] as Vector2).lerp(drawn[i][1], (share - a) / (b - a))
+	return drawn[-1][1]
+
+
+## A roller guest at a booth stands at the approach cell while its roller goes
+## down, then is on a guest with no roller's spot at every share of the
+## sit_down clip from where the hips start going back: past the end panel
+## before the hips reach it (board 5dc41129: 116 body points in the panel when
+## it eased in over the 10 ticks left). Control: the guest with no roller sat
+## at the same seat, the roller guest's clip played whole once, from the end
+## of a hold as long as the roller's park, and moved off the approach cell.
+func test_a_booth_guest_with_a_roller_sits_down_as_one_with_no_roller() -> void:
+	var plain := _sitting(&"restaurant_booth", false, true)
+	var plain_key: String = (
+		(plain[0] as PassengerTestWorld).sim.cafes.visit_of(plain[1].id).seat["key"]
+	)
+	var bare := _drawn_sit_down(plain)
+	var made := _sitting(&"restaurant_booth", true, true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var key: String = world.sim.cafes.visit_of(p.id).seat["key"]
+	var hold := world.sim.cafes.hold_now(p)
+	var start := p.stage_tick
+	var drawn := _drawn_sit_down(made)
+	var bag := (made[2] as PassengerViews).carry_on_props().bag_state(p.id, 0)
+	var park_end := float(bag.get("since", INF)) + CarryLead.ticks_of(bag) - start
+	print("booth sit-down, no roller [share, spot]: %s" % [bare])
+	print(
+		"booth sit-down, roller held %d, park ends %.1f [share, spot]: %s" % [hold, park_end, drawn]
+	)
+	assert_str(key).is_equal(plain_key)
+	# The roller's park ran, and its hand let go before the clip started.
+	assert_bool(bag.get("park", false)).is_true()
+	assert_float(park_end + SitHold.LET_GO_TICKS).is_less_equal(hold)
+	assert_int(hold).is_greater_equal(ceili(RollerPark.TICKS_DOWN + SitHold.LET_GO_TICKS))
+	assert_int(bare.size()).is_equal(PassengerSim.SIT_DOWN_TICKS)
+	assert_int(drawn.size()).is_equal(hold + PassengerSim.SIT_DOWN_TICKS)
+	assert_float(bare[-1][0]).is_equal_approx(1.0, 0.05)
+	assert_float(drawn[-1][0]).is_equal_approx(1.0, 0.05)
+	var standing := 0
+	var compared := 0
+	for sample: Array in drawn:
+		var share: float = sample[0]
+		var at: Vector2 = sample[1]
+		if share <= 0.0:
+			standing += 1
+			assert_float(at.distance_to(drawn[0][1])).is_less(0.001)
+		elif share >= HIPS_BACK_SHARE:
+			compared += 1
+			var want := _spot_at(bare, share)
+			var why := "at clip share %.2f the roller guest is at %s, not %s" % [share, at, want]
+			assert_float(at.distance_to(want)).override_failure_message(why).is_less(SAME_SPOT_M)
+	assert_int(standing).is_greater_equal(hold - 1)
+	assert_int(compared).is_greater(15)
+	assert_float((drawn[-1][1] as Vector2).distance_to(drawn[0][1])).is_greater(1.0)
+
+
+## A roller guest's sit-down at a booth lasts its step-in hold longer, and the
+## visit's forecast and the save check count it: a save in the hold past
+## SIT_DOWN_TICKS loads and sits down on the same tick as it would have.
+func test_a_booth_roller_sit_down_is_longer_and_the_forecast_and_save_count_it() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var piece: Dictionary = world.sim.cafes.visit_of(p.id).piece
+	assert_int(CafeSim.STEP_IN_HOLD_TICKS).is_equal(
+		ceili(RollerPark.TICKS_DOWN + SitHold.LET_GO_TICKS)
+	)
+	assert_int(CafeSim.sit_ticks(p, piece)).is_equal(
+		PassengerSim.SIT_DOWN_TICKS + CafeSim.STEP_IN_HOLD_TICKS
+	)
+	var legs := {
+		"pre_ticks": 0, "to_queue_mm": 0, "order_ticks": 0, "to_seat_mm": 0, "dwell_ticks": 0
+	}
+	var plain_end := CafeForecast.visit_end(world.sim, legs)
+	legs["sit_ticks"] = CafeSim.sit_ticks(p, piece)
+	assert_int(CafeForecast.visit_end(world.sim, legs) - plain_end).is_equal(
+		CafeSim.STEP_IN_HOLD_TICKS
+	)
+	var start := p.stage_tick
+	var due := start + CafeSim.sit_ticks(p, piece)
+	world.run_to(start + PassengerSim.SIT_DOWN_TICKS + 2)
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SITTING_DOWN)
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(world.sim.to_snapshot()))
+	assert_bool(world.sim.from_snapshot(saved)).override_failure_message("load refused").is_true()
+	var loaded := world.passenger(p.id)
+	while loaded.stage == Passenger.Stage.CAFE_SITTING_DOWN and world.clock.tick < due + 5:
+		world.step()
+	print("booth roller sit-down from %d, seated at %d, due %d" % [start, loaded.stage_tick, due])
+	assert_int(loaded.stage).is_equal(Passenger.Stage.CAFE_SEATED)
+	assert_int(loaded.stage_tick).is_equal(due)
+
+
+## A guest with no roller at a booth, and one with a roller at a cafe table,
+## sit down over SIT_DOWN_TICKS as before.
+func test_only_a_roller_guest_at_a_booth_holds_its_step_in() -> void:
+	var made := _sitting(&"restaurant_booth")
+	var p: Passenger = made[1]
+	var booth: Dictionary = (made[0] as PassengerTestWorld).sim.cafes.visit_of(p.id).piece
+	assert_int(CafeSim.sit_ticks(p, booth)).is_equal(PassengerSim.SIT_DOWN_TICKS)
+	made = _sitting(&"cafe_table", true)
+	p = made[1]
+	var table: Dictionary = (made[0] as PassengerTestWorld).sim.cafes.visit_of(p.id).piece
+	assert_bool(ParkRecovery.has_roller(p)).is_true()
+	assert_int(CafeSim.sit_ticks(p, table)).is_equal(PassengerSim.SIT_DOWN_TICKS)
+	assert_int((made[0] as PassengerTestWorld).sim.cafes.hold_now(p)).is_equal(0)
 
 
 func test_a_cafe_table_guest_keeps_the_straight_shuffle() -> void:

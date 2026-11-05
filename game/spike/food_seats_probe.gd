@@ -20,33 +20,45 @@ extends SceneTree
 ##     FLOAT_M), stepped back into the seat back (points inside) and, at the
 ##     booth, sideways into its end panel or, at the bar, forward into the
 ##     counter (points inside that part). A control that sees nothing fails.
-## Plates (tools/blender/out/food-seats/): sitdown_<piece>_<seat>_strip.png
-## (the sit-down at STRIP_TICKS), sitdown_<piece>_<seat>_seated.png and a
-## contact sheet. Before a save the body's bounds project inside the plate with
-## a margin, and a twin with the body hidden differs over at least SEEN_SHARE
-## of the body's box on screen (in frame is not visible). Otherwise
-## PROBE_INVALID, exit 1.
+##   BAG_INSIDE (a guest pulling a roller): on the same frames, the roller's
+##     mesh points inside a part of the piece. Printed, not judged: where the
+##     roller lies is RollerPark's.
+## Plates (tools/blender/out/<--out, default food-seats>/):
+## sitdown_<piece>_<seat>_strip.png (the sit-down at STRIP_TICKS, or
+## ROLLER_STRIP_TICKS for a roller guest), sitdown_<piece>_<seat>_seated.png and
+## a contact sheet. Before a save the body's bounds (and a roller guest's
+## roller's) project inside the plate with a margin, and a twin with the body
+## (or the roller) hidden differs over at least SEEN_SHARE of its box on screen
+## (in frame is not visible). Otherwise PROBE_INVALID, exit 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy --fixed-fps 60 \
-##     --path game -s res://spike/food_seats_probe.gd [-- --seed=N]
+##     --path game -s res://spike/food_seats_probe.gd [-- --seed=N --out=DIR]
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
-const OUT_REL := "res://../tools/blender/out/food-seats"
+const OUT_REL := "res://../tools/blender/out/"
+const OUT_DEFAULT := "food-seats"
 ## Piece -> [venue, counter, table piece (or empty), the bodies wanted in turn].
 ## male_02 and the female bodies take a booth step; female_01 and female_05 a
-## lift (PassengerLooks.seat_shift()).
+## lift (PassengerLooks.seat_shift()). booth_alt is the booth again with the
+## rollers swapped to the other guests (ROLLER_GUESTS), so every seat is sat
+## down on with a roller and without one.
 const SUBJECTS := {
 	"booth": [&"restaurant", &"cafe_counter", &"restaurant_booth", [1, 6, 9, 0]],
+	"booth_alt": [&"restaurant", &"cafe_counter", &"restaurant_booth", [1, 6, 9, 0]],
 	"bar": [&"bar", &"bar_counter", &"", [6, 9]],
 }
 const STRIP_TICKS: Array[int] = [0, 3, 6, 9, 12, 15, 18, 21]
+## A roller guest's sit-down is CafeSim.STEP_IN_HOLD_TICKS (14) longer at a
+## booth: two frames in the hold, then the step in and the sit as STRIP_TICKS
+## from the hold's end.
+const ROLLER_STRIP_TICKS: Array[int] = [0, 7, 14, 18, 21, 24, 28, 34]
 ## The guests (by their place in a subject's body list) who pull a roller: one
 ## at each end of the booth, held at the approach cell while the roller goes
-## down (SitHold) and then eased into the seat along the shuffle's path.
-const ROLLER_GUESTS := {"booth": [1, 3]}
+## down (CafeSim.STEP_IN_HOLD_TICKS), then stepping in along the shuffle's path.
+const ROLLER_GUESTS := {"booth": [1, 3], "booth_alt": [0, 2]}
 const SETTLE_TICKS := 6
 const LIMIT_TICKS := 2400
 const MARGIN_PX := 8.0
@@ -76,12 +88,15 @@ var _seats_done := 0
 
 func _initialize() -> void:
 	Engine.max_fps = SimClock.TICK_RATE * 3
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
-	DirAccess.make_dir_recursive_absolute(_out_dir)
+	var out := OUT_DEFAULT
 	_seed = randi()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
 			_seed = int(arg.get_slice("=", 1))
+		if arg.begins_with("--out="):
+			out = arg.get_slice("=", 1)
+	_out_dir = ProjectSettings.globalize_path(OUT_REL + out).simplify_path()
+	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print(
 		(
 			"PROBE sim_seed=%d out_dir=%s fixed_fps=%d"
@@ -235,7 +250,7 @@ func _watch(subject: String) -> void:
 		if p.stage != Passenger.Stage.CAFE_TO_SEAT:
 			_invalid("%s: never walked to its seat (stage %d)" % [label, p.stage])
 			return
-		await _sit(label, p, visit)
+		await _sit(label, p, visit, roller)
 		# Kept on its seat while the next guest comes.
 		visit.dwell_end = _clock.tick + 1000000
 		visit.deadline = _clock.tick + 1000000
@@ -243,7 +258,9 @@ func _watch(subject: String) -> void:
 
 ## Steps the guest from its walk to the seat to SETTLE_TICKS after it is
 ## seated, measuring every frame and taking the strip and the still.
-func _sit(label: String, p: Passenger, visit: CafeVisit) -> void:
+func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
+	var ticks := ROLLER_STRIP_TICKS if roller else STRIP_TICKS
+	var bag_worst := {}
 	var piece := (_mode.get_node("BuildView") as BuildView).object_node(visit.seat["object_id"])
 	var frame := _seat_frame(visit.seat)
 	var islands := _islands(piece, frame)
@@ -274,9 +291,17 @@ func _sit(label: String, p: Passenger, visit: CafeVisit) -> void:
 		if not hits.is_empty():
 			var at := "k%d+%.2f" % [k, _clock.alpha]
 			worst[at] = hits
-		var due := strip.size() < STRIP_TICKS.size() and k >= STRIP_TICKS[strip.size()]
+		var bag := _bag_of(p) if roller else null
+		if roller and bag == null:
+			_invalid("%s: no roller drawn" % label)
+			return
+		if bag != null:
+			var in_piece := _overlap(_mesh_points(bag), islands)
+			if not in_piece.is_empty():
+				bag_worst["k%d+%.2f" % [k, _clock.alpha]] = in_piece
+		var due := strip.size() < ticks.size() and k >= ticks[strip.size()]
 		if due and p.stage == Passenger.Stage.CAFE_SITTING_DOWN:
-			var shot := await _shot("%s_k%d" % [label, k], body)
+			var shot := await _shot("%s_k%d" % [label, k], body, bag)
 			# A frame that fails its proof is left blank, and the strip is not saved.
 			strip.append(shot)
 			missed += 1 if shot == null else 0
@@ -286,17 +311,21 @@ func _sit(label: String, p: Passenger, visit: CafeVisit) -> void:
 		_invalid("%s: never seated" % label)
 		return
 	print("SIT_INSIDE %s frames=%d frames_inside=%d %s" % [label, frames, worst.size(), worst])
+	if roller:
+		print(
+			(
+				"BAG_INSIDE %s frames=%d frames_inside=%d %s"
+				% [label, frames, bag_worst.size(), bag_worst]
+			)
+		)
 	if not worst.is_empty():
 		_invalid("%s: body points inside the piece while sitting down or seated" % label)
 	var body := _views.node_for(p.id)
 	_seated_checks(label, body, islands, frame)
-	var still := await _shot("%s_seated" % label, body)
-	if strip.size() < STRIP_TICKS.size() or missed > 0 or still == null:
+	var still := await _shot("%s_seated" % label, body, _bag_of(p) if roller else null)
+	if strip.size() < ticks.size() or missed > 0 or still == null:
 		_invalid(
-			(
-				"%s: %d of %d strip frames, %d unproven"
-				% [label, strip.size(), STRIP_TICKS.size(), missed]
-			)
+			"%s: %d of %d strip frames, %d unproven" % [label, strip.size(), ticks.size(), missed]
 		)
 		return
 	var tiles: Array[Image] = strip.duplicate()
@@ -304,6 +333,26 @@ func _sit(label: String, p: Passenger, visit: CafeVisit) -> void:
 	_save(still, "sitdown_%s_seated.png" % label)
 	_sheet.append(still)
 	_seats_done += 1
+
+
+## The node of `p`'s first bag (its roller), or null when none is drawn.
+func _bag_of(p: Passenger) -> Node3D:
+	return _views.carry_on_props().bag_state(p.id, 0).get("node") as Node3D
+
+
+## Every vertex of the visible meshes under `node`, in the world.
+func _mesh_points(node: Node3D) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var meshes := node.find_children("*", "MeshInstance3D", true, false)
+	if node is MeshInstance3D:
+		meshes.append(node)
+	for mi: MeshInstance3D in meshes:
+		if mi.mesh == null or not mi.is_visible_in_tree():
+			continue
+		for s in mi.mesh.get_surface_count():
+			for v: Vector3 in mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+				out.append(mi.global_transform * v)
+	return out
 
 
 ## The seat's frame: origin the seat root, x to the guest's right, z the way
@@ -572,18 +621,34 @@ func _aim(frame: Transform3D, seat: Dictionary) -> void:
 
 
 ## The square crop of the window round the subject, proven in frame and seen
-## (a twin with the body hidden differs over SEEN_SHARE of its box), or null.
-func _shot(name: String, body: Node3D) -> Image:
+## (a twin with the body hidden differs over SEEN_SHARE of its box), and with
+## `bag` the same for the bag, or null.
+func _shot(name: String, body: Node3D, bag: Node3D = null) -> Image:
 	Engine.time_scale = 0.0
 	var img := root.get_texture().get_image()
 	img.convert(Image.FORMAT_RGBA8)
+	var ok := await _proven(name, img, body, _points(body))
+	if ok and bag != null:
+		ok = await _proven(name + "_bag", img, bag, _mesh_points(bag))
+	Engine.time_scale = 1.0
+	if not ok:
+		return null
+	_plates += 1
+	var side := mini(img.get_width(), img.get_height())
+	return img.get_region(
+		Rect2i((img.get_width() - side) / 2, (img.get_height() - side) / 2, side, side)
+	)
+
+
+## Whether `subject` (its points `pts`) is inside the square crop of `img` with
+## a margin and seen: a twin with it hidden differs over SEEN_SHARE of its box.
+func _proven(name: String, img: Image, subject: Node3D, pts: PackedVector3Array) -> bool:
 	var side := mini(img.get_width(), img.get_height())
 	var crop := Rect2i((img.get_width() - side) / 2, (img.get_height() - side) / 2, side, side)
 	var per_px := _cam.get_viewport().get_visible_rect().size.y / float(img.get_height())
-	var pts := _points(body)
 	if pts.is_empty():
-		Engine.time_scale = 1.0
-		return null
+		_invalid("%s: no points to prove" % name)
+		return false
 	var box := AABB(pts[0], Vector3.ZERO)
 	for p in pts:
 		box = box.expand(p)
@@ -595,11 +660,10 @@ func _shot(name: String, body: Node3D) -> Image:
 		hi = hi.max(px)
 	var inside := Rect2(crop).grow(-MARGIN_PX)
 	var in_frame := inside.has_point(lo) and inside.has_point(hi)
-	body.visible = false
+	subject.visible = false
 	var twin := await PlateSight.grab(self, 2)
-	body.visible = true
+	subject.visible = true
 	await PlateSight.grab(self, 2)
-	Engine.time_scale = 1.0
 	var rect := Rect2i(Vector2i(lo.floor()), Vector2i((hi - lo).ceil())).intersection(crop)
 	var seen := PlateSight.differing(img, twin, rect, 2)
 	var samples := maxi(1, ceili(rect.size.x / 2.0) * ceili(rect.size.y / 2.0))
@@ -622,10 +686,9 @@ func _shot(name: String, body: Node3D) -> Image:
 		)
 	)
 	if not in_frame or share < SEEN_SHARE:
-		_invalid("%s: the guest is not in frame or not seen" % name)
-		return null
-	_plates += 1
-	return img.get_region(crop)
+		_invalid("%s: the subject is not in frame or not seen" % name)
+		return false
+	return true
 
 
 func _row(images: Array[Image]) -> Image:
