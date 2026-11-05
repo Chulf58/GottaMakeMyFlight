@@ -49,7 +49,7 @@ extends SceneTree
 ##
 ## Wall classes (board 578435a7, hand-swap measure): each wall hit frame in the
 ## walking pull (every bucket but spawn and STANDING) gets one class, in this
-## order: PARK (a RollerPark move), JAMB (the wall hit ends at a door or
+## order: PARK (a RollerPark move still under way), JAMB (the wall hit ends at a door or
 ## opening and the roller is nearer that end), CORRIDOR (a wall within 0.6 m of
 ## the guest's path on both sides), FLANK_BOTH (a wall on the pulling side
 ## while SecurityLooks' closed test calls the other side closed too), FLANK (a
@@ -58,6 +58,12 @@ extends SceneTree
 ## closed, whether an object (not a wall) closed the other side, the hand
 ## changes per 1000 walking frames and the swap-backs within 12 ticks. The
 ## control: the classified frames equal the walking wall hit frames, above 0.
+##
+## Carry checks (board 578435a7, hand swap): every frame FLOAT and GRIP_ON over
+## every bag (FloatCheck), and for each pulled roller its drawn axle's SNAP
+## (on all pull frames and apart on a change of hand), SHIN and HEEL
+## (_check_axle()), with PullSide's own tallies of hand changes and ticks with
+## both sides blocked.
 ##
 ## Plates: at most PLATES_PER_WORLD furniture overlap moments a world, each
 ## deeper than the last plated, close and wide, plus a contact sheet. Before a
@@ -76,6 +82,9 @@ extends SceneTree
 ## Plates go to tools/blender/out/roller-trail/.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
+const FloatCheck := preload("res://spike/carry_float_check.gd")
+const CarryChecks := preload("res://spike/carry_probe_checks.gd")
+const PullSwapStrip := preload("res://spike/pull_swap_strip.gd")
 const OUT_REL := "res://../tools/blender/out/roller-trail"
 const WORLDS: Array[String] = ["cafe", "lounge"]
 const SPAWNS := 18
@@ -130,6 +139,8 @@ const TRAIL_LOOK_M := 1.2
 const EPISODE_GAP_TICKS := 20
 const SWAP_BACK_TICKS := 12
 const TOP_PLACES := 3
+## Slack on the SHIN and HEEL limits (_check_axle()).
+const LEG_SLACK_M := 0.02
 
 var _seed := 0
 var _out_dir := ""
@@ -160,6 +171,11 @@ var _all := {}
 var _cls := {}
 var _hands := {}
 var _headless := false
+## Every bag's FLOAT and GRIP_ON tally over both worlds (FloatCheck), and the
+## pulled rollers' axle checks (_check_axle()).
+var _float := {}
+var _axles := {}
+var _strip := PullSwapStrip.new()
 
 
 func _initialize() -> void:
@@ -186,6 +202,13 @@ func _run() -> void:
 	_all = {"pull": 0, "hit": 0, "moved": 0.0, "buckets": _new_buckets(), "frames": []}
 	_cls = _new_classes()
 	_hands = _new_hands()
+	_float = FloatCheck.float_counts()
+	_axles = {"last": {}, "min_side": INF, "min_behind": INF}
+	for key in ["looks", "snaps", "swap_looks", "swap_snaps", "settled", "shin", "heel"]:
+		_axles[key] = 0
+	for tally in ["pull_side_both", "pull_side_swaps"]:
+		_axles[tally] = {}
+		_axles[tally + "_sum"] = 0
 	for world in WORLDS:
 		if await _boot(world):
 			await _watch(world)
@@ -197,6 +220,8 @@ func _run() -> void:
 		await _frames(3)
 	if not _sheet.is_empty():
 		_save(_contact_sheet(_sheet), "contact_sheet.png")
+	if not _headless and (not _strip.done or not _strip.problems.is_empty()):
+		_invalid("PULL_STRIP done=%s problems=%s" % [_strip.done, _strip.problems])
 	var rate: float = 1000.0 * _all["hit"] / maxf(_all["pull"], 1.0)
 	print(
 		(
@@ -206,6 +231,7 @@ func _run() -> void:
 	)
 	_print_table("ALL", _all)
 	_print_classes()
+	_print_checks()
 	if int(_all["pull"]) <= 0 or float(_all["moved"]) < MIN_MOVE_M:
 		_invalid(
 			(
@@ -413,6 +439,8 @@ func _watch(world: String) -> void:
 	_spawned_at.clear()
 	_last_used.clear()
 	_hands["last"].clear()
+	_axles["last"].clear()
+	_fold_pull_side()
 	_m = {
 		"pull": 0,
 		"hit": 0,
@@ -457,6 +485,7 @@ func _watch(world: String) -> void:
 
 func _measure(world: String) -> void:
 	var props := _views.carry_on_props()
+	FloatCheck.watch_float(_sim, _views, _float)
 	for p: Passenger in _sim._passengers:
 		var body := _views.node_for(p.id)
 		if body == null or p.carry_on <= 0:
@@ -535,6 +564,9 @@ func _test_roller(
 		row["any"] += int(hit_furn or hit_wall)
 	var walking: bool = not bucket in NOT_WALKING
 	_track_hand(p, state, side_sign, walking)
+	_check_axle(p, body, bag, state)
+	if not _headless:
+		await _strip.look(self, _main, _views, p, body, bag, state)
 	if hit_wall and walking:
 		_classify(world, p, body, bag, state, worst_wall)
 	for found: Dictionary in [worst, worst_wall]:
@@ -593,8 +625,107 @@ func _track_hand(p: Passenger, state: Dictionary, pull_sign: float, walking: boo
 	_hands["last"][p.id] = rec
 
 
+## The pulled roller's drawn axle this frame (the bag's own ROLLER_AXLE point):
+## SNAP, a move past CarryChecks.snap_allowance() of the sim time since the last
+## look, on every pull frame and apart on the frames of a change of hand (a move
+## from one pull to the other); SHIN, settled (no move under way) with
+## the axle nearer the guest's centre line than TRAIL_SIDE_MIN_M; HEEL, settled
+## with it nearer behind than TRAIL_BEHIND_MIN_M while no further out than
+## TRAIL_SIDE_MAX_M (beyond that the follower swings it beside the legs). Each
+## less LEG_SLACK_M.
+func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> void:
+	var axle := bag.global_transform * CarryOnProps.ROLLER_AXLE
+	var now := _clock.tick + _clock.alpha
+	var place := int(state.get("place", -1))
+	var was := int(state.get("was", -1))
+	var moving := _moving(p, bag)
+	var swapping: bool = (
+		moving
+		and was >= 0
+		and was / 4 == SecurityLooks.Home.HAND
+		and place / 4 == SecurityLooks.Home.HAND
+		and CarryLead.hand_of(was) != CarryLead.hand_of(place)
+	)
+	var last: Array = _axles["last"].get(p.id, [])
+	if not last.is_empty():
+		var turns := [0, 0]
+		CarryChecks.judge_pulled(p.id, last, axle, body.rotation.y, now, turns)
+		_axles["looks"] += 1
+		_axles["snaps"] += turns[1]
+		_axles["swap_looks"] += int(swapping)
+		_axles["swap_snaps"] += turns[1] if swapping else 0
+	_axles["last"][p.id] = [axle, body.rotation.y, now]
+	# PullSide's own tallies on the bag (both sides blocked, hand changes).
+	for tally in ["pull_side_both", "pull_side_swaps"]:
+		var per: Dictionary = _axles[tally]
+		per[p.id] = maxi(int(per.get(p.id, 0)), int(state.get(tally, 0)))
+	if moving:
+		return
+	var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
+	var local := frame.affine_inverse() * axle
+	var out := -1.0 if CarryLead.hand_of(place) == 0 else 1.0
+	var side := local.x * out
+	var behind := -local.z
+	_axles["settled"] += 1
+	_axles["min_side"] = minf(float(_axles["min_side"]), side)
+	_axles["min_behind"] = minf(float(_axles["min_behind"]), behind)
+	var shin := side < CarryOnProps.TRAIL_SIDE_MIN_M - LEG_SLACK_M
+	_axles["shin"] += int(shin)
+	if shin and int(_axles["shin"]) <= TOP_EPISODES:
+		var at := [p.id, _clock.tick, side, behind, place, was, _stage(p), _tag(state, p.id)]
+		print("SHIN_AT id=%d tick=%d side=%.3f behind=%.3f place=%d was=%d %s %s" % at)
+	var heel := behind < CarryOnProps.TRAIL_BEHIND_MIN_M - LEG_SLACK_M
+	_axles["heel"] += int(heel and side <= CarryOnProps.TRAIL_SIDE_MAX_M)
+
+
+## Whether the roller `bag` (a node) of `p` is in a move still under way (a
+## change of hand, a park).
+func _moving(p: Passenger, bag: Node3D) -> bool:
+	var props := _views.carry_on_props()
+	var i: int = props.props_of(p.id)["bags"].find(bag)
+	return props.transfer_progress(p.id, i) < 1.0
+
+
+## The FLOAT and GRIP_ON tally and the axle checks (_check_axle()).
+func _print_checks() -> void:
+	print(FloatCheck.float_report(_float))
+	print(
+		(
+			"SNAP seed %d: %d looks, %d snaps; during a change of hand %d looks, %d snaps"
+			% [_seed, _axles["looks"], _axles["snaps"], _axles["swap_looks"], _axles["swap_snaps"]]
+		)
+	)
+	var a := _axles
+	print(
+		(
+			"LEGS seed %d: %d settled, SHIN %d (least side %.3f m), HEEL %d (least behind %.3f m)"
+			% [_seed, a["settled"], a["shin"], a["min_side"], a["heel"], a["min_behind"]]
+		)
+	)
+	_fold_pull_side()
+	print(
+		(
+			"PULL_SIDE seed %d: %d hand changes chosen, %d ticks with both sides blocked"
+			% [_seed, _axles["pull_side_swaps_sum"], _axles["pull_side_both_sum"]]
+		)
+	)
+	if int(_axles["looks"]) <= 0 or int(_float["frames"]) <= 0:
+		_invalid("the axle and FLOAT checks saw nothing")
+
+
+## Adds each roller's last PullSide tallies (a world's, kept by passenger id) to
+## the totals and starts the next world's.
+func _fold_pull_side() -> void:
+	for tally in ["pull_side_both", "pull_side_swaps"]:
+		var per: Dictionary = _axles[tally]
+		for n: int in per.values():
+			_axles[tally + "_sum"] += n
+		per.clear()
+
+
 ## Books one wall hit frame in the walking pull in exactly one class. PARK: the
-## move is a RollerPark move. JAMB: the wall hit is a wall end at a door or
+## move is a RollerPark move still under way (the record keeps "park" after
+## its end, until the next move is stamped). JAMB: the wall hit is a wall end at a door or
 ## opening, and the roller is nearer that end. CORRIDOR: a wall within
 ## SIDE_CLEAR_M of the guest's path on both sides. FLANK_BOTH: a wall on the
 ## pulling side while hand_of calls the other side closed too (a wall edge or
@@ -628,7 +759,9 @@ func _classify(
 		pull_wall = _wall_near(p.id, body.global_position, across)
 		other_wall = _wall_near(p.id, body.global_position, -across)
 	var cls := "OTHER"
-	if state.get("park", false):
+	# The record keeps "park" until the next move is stamped: only a park still
+	# under way is one.
+	if state.get("park", false) and _moving(p, bag):
 		cls = "PARK"
 	elif _at_wall_end(mesh, bag.global_position):
 		cls = "JAMB"

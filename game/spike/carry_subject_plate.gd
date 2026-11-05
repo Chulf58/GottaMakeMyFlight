@@ -15,6 +15,7 @@ extends RefCounted
 ## class_name.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const OUT_REL := "res://../tools/blender/out/carry-roller-diagonal"
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 200.0
@@ -89,7 +90,7 @@ func _aim(views: PassengerViews, sim: PassengerSim) -> void:
 	for i in bags.size():
 		if homes[i] != SecurityLooks.Home.HAND or props.transfer_progress(_id, i) < 1.0:
 			return
-	var hand := SecurityLooks.hand_of(sim, p, 0)
+	var hand := CarryChecks.drawn_hand(props, sim, p, 0)
 	var turn := Basis(Vector3.UP, body.rotation.y)
 	var side := turn * (Vector3.LEFT if hand == 0 else Vector3.RIGHT)
 	var behind := turn * Vector3.FORWARD
