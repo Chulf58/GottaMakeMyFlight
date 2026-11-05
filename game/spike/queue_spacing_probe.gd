@@ -164,6 +164,10 @@ func _send() -> void:
 		p.shop_cooldown = 1000000
 		p.cafe_cooldown = 1000000
 		p.boredom = 0
+		if _place == "security":
+			# Checked in already (SecurityTestWorld.send()), so security queues build.
+			p.stage = Passenger.Stage.TO_SECURITY
+			p.clear_path()
 	print("PROBE sent rollers=%d tick=%d" % [rollers, _clock.tick])
 
 
@@ -192,6 +196,14 @@ func _watch() -> void:
 				_move_ups += 1
 				_candidate(lane, id)
 			_moving[id] = p.is_moving()
+			if not p.is_moving() and p.at == _sim.layout.lanes[station][lane.find(id)]:
+				# Alone on its own place once: from here it moves up as any lane walker.
+				var shared := (lane + _sim.holding_of(station)).any(
+					func(o: int) -> bool: return o != id and _sim.get_passenger(o).at == p.at
+				)
+				if not shared:
+					_held.erase(id)
+					_order.erase(id)
 		for i in range(lane.size() - 1):
 			_measure(lane[i], lane[i + 1])
 		var left: int = _leaver.get(station, 0)
@@ -200,7 +212,7 @@ func _watch() -> void:
 			if d.is_empty() or d["body"] > LEAVER_M:
 				_leaver.erase(station)
 			else:
-				_measure(left, lane[0])
+				_measure(left, lane[0], true)
 
 
 ## Marks a newcomer `p` to `lane` that joined on a queue member's cell
@@ -224,13 +236,20 @@ func _serve(station: int) -> void:
 	(_served.get_or_add(station, []) as Array).append(_clock.tick)
 
 
-func _measure(a: int, b: int) -> void:
+## Measures pair `a`, `b` into its column and row. A desk leaver `a` against
+## the front `b` (`leaver`) goes in the "leaver" column: its row is "moveup"
+## while the front steps up to the desk, "wait" while the front stands and
+## the leaver walks off.
+func _measure(a: int, b: int, leaver := false) -> void:
 	var d := QueueSpacing.pair(_views, _sim, a, b)
 	if d.is_empty():
 		return
 	var moving := _sim.get_passenger(a).is_moving() or _sim.get_passenger(b).is_moving()
 	var column := "lane"
-	if _held.has(a) or _held.has(b):
+	if leaver:
+		moving = _sim.get_passenger(b).is_moving()
+		column = "leaver"
+	elif _held.has(a) or _held.has(b):
 		column = "held"
 	elif _order.has(a) or _order.has(b):
 		column = "order"
@@ -269,7 +288,14 @@ func _trace(a: int, b: int, d: Dictionary) -> void:
 func _report() -> int:
 	var failed := false
 	for key in [
-		"lane moveup", "lane still", "order moveup", "order still", "held moveup", "held still"
+		"lane moveup",
+		"lane still",
+		"leaver moveup",
+		"leaver still",
+		"order moveup",
+		"order still",
+		"held moveup",
+		"held still",
 	]:
 		var row: Array = _rows.get(key, [0, INF, 0, INF, 0, ""])
 		print(
@@ -292,11 +318,14 @@ func _report() -> int:
 				]
 			)
 		)
-		if key == "lane moveup" and (row[2] > 0 or row[4] > 0):
+		if key in ["lane moveup", "leaver moveup"] and (row[2] > 0 or row[4] > 0):
 			failed = true
-	print("CONTROL move-ups %d (> 0)" % _move_ups)
-	if _move_ups == 0:
-		print("PROBE_INVALID no lane member moved up")
+	var lane_frames: int = (_rows.get("lane moveup", [0]) as Array)[0]
+	print(
+		"CONTROL move-ups %d (> 0), lane pair frames moving up %d (> 0)" % [_move_ups, lane_frames]
+	)
+	if _move_ups == 0 or lane_frames == 0:
+		print("PROBE_INVALID no lane neighbours were measured moving up")
 		return 1
 	var best := 0
 	var best_station := 0
