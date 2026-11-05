@@ -103,6 +103,22 @@ const STEP_IN_PATH := {
 ## inside it. The sim, the forecasts, the save check and the view read it
 ## through step_in_hold() and sit_ticks().
 const STEP_IN_HOLD_TICKS := 14
+## Standing up from a STEP_IN_PATH seat with no roller, the guest is out along
+## the path this many ticks before the stand-up ends, then stands at the
+## approach cell. The stand_up clip brings the hips forward from about its tick
+## 18, when the body was only half way along the path (a share of 0.5) and
+## reached 4 to 18 points into the booth's end panel for four of twelve guests
+## with no roller, at seats 13-1, 13-2 and 13-3 (board 17b87a51,
+## game/spike/food_seats_probe.gd UP_TABLE). Stepping out sooner has the body
+## clear of the panel first. A roller guest keeps the step out it had: its
+## pick-up (RollerPark) is timed from where the walker stands, and with the
+## lead the roller reached into a wall at seat 13-3. A guest turned back
+## mid sit-down by a table move (_relocates()) gets up over the ticks it had sat
+## along the sit-down's own path, so it has no lead: the visit carries
+## TURNED_BACK until the next stand-up.
+const STAND_UP_LEAD_TICKS := 4
+## The meta a visit carries while its stand-up reverses a sit-down.
+const TURNED_BACK := &"turned_back"
 ## Seats tried per visit, nearest the counter first.
 const SEAT_TRIES := 4
 const HUNGER_START_MIN := 40
@@ -484,6 +500,9 @@ func seat_position(p: Passenger) -> Vector3:
 			# At the approach cell through a booth roller guest's pick-up there.
 			if step_in_hold(p, visit.piece) > 0:
 				left -= ParkRecovery.UP_HOLD_TICKS
+			# Out along the path early at a STEP_IN_PATH piece (STAND_UP_LEAD_TICKS).
+			if not visit.has_meta(TURNED_BACK):
+				left -= stand_up_lead(p, visit.piece)
 			return _shuffle_at(visit, approach, root, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
 	return root
 
@@ -782,6 +801,15 @@ static func step_in_hold(p: Passenger, piece: Dictionary) -> int:
 	return STEP_IN_HOLD_TICKS if ParkRecovery.has_roller(p) else 0
 
 
+## The ticks before the end of a stand-up from a seat of `piece` (a
+## Relocation.placement()) by which `p` is out at the approach cell:
+## STAND_UP_LEAD_TICKS with no roller at a STEP_IN_PATH piece, 0 otherwise.
+static func stand_up_lead(p: Passenger, piece: Dictionary) -> int:
+	if ParkRecovery.has_roller(p):
+		return 0
+	return STAND_UP_LEAD_TICKS if STEP_IN_PATH.has(StringName(piece.get("def", &""))) else 0
+
+
 ## How many ticks the sit-down (CAFE_SITTING_DOWN) of `p` at a seat of `piece`
 ## lasts: the step-in hold, then SIT_DOWN_TICKS.
 static func sit_ticks(p: Passenger, piece: Dictionary) -> int:
@@ -1020,9 +1048,11 @@ func _relocates(p: Passenger, visit: CafeVisit) -> bool:
 			spent = clampi(spent, 0, PassengerSim.SIT_DOWN_TICKS)
 			_set_stage.call(p, Passenger.Stage.CAFE_STANDING_UP)
 			p.stage_tick = _sim.tick - (PassengerSim.STAND_UP_TICKS - spent)
+			visit.set_meta(TURNED_BACK, true)
 		Passenger.Stage.CAFE_SEATED:
 			owed = maxi(visit.dwell_end - _sim.tick, 1)
 			visit.relocation = Relocation.leaving(visit.piece, owed)
+			visit.remove_meta(TURNED_BACK)
 			_set_stage.call(p, Passenger.Stage.CAFE_STANDING_UP)
 		_:
 			# Already up and paid: it only finishes getting up where it sat.
@@ -1100,6 +1130,7 @@ func _leave_early(p: Passenger, visit: CafeVisit) -> void:
 ## A served guest gets up: the visit is paid for as it does.
 func _stand(p: Passenger, visit: CafeVisit) -> void:
 	_settle(p, visit)
+	visit.remove_meta(TURNED_BACK)
 	_set_stage.call(p, Passenger.Stage.CAFE_STANDING_UP)
 
 
