@@ -47,6 +47,22 @@ static func nearest(views: PassengerViews, sim: PassengerSim, id: int) -> Dictio
 	return out
 
 
+## Passengers `a` and `b` as drawn now: {"body": body to body, "roller": the
+## nearer of each body to the other's rollers (INF with no roller)}, or {} when
+## either is not drawn.
+static func pair(views: PassengerViews, sim: PassengerSim, a: int, b: int) -> Dictionary:
+	var body_a := views.node_for(a)
+	var body_b := views.node_for(b)
+	if body_a == null or body_b == null:
+		return {}
+	var out := {"body": flat(body_a.global_position, body_b.global_position), "roller": INF}
+	for node in rollers(views, sim, a):
+		out["roller"] = minf(out["roller"], least(surface(node), body_b.global_position))
+	for node in rollers(views, sim, b):
+		out["roller"] = minf(out["roller"], least(surface(node), body_a.global_position))
+	return out
+
+
 ## Body points of the passengers near `id` inside its rollers, plus its own
 ## body points inside theirs (CarryContact, as drawn in this window).
 static func inside(views: PassengerViews, sim: PassengerSim, id: int) -> int:

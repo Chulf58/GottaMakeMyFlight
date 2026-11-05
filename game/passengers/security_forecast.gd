@@ -132,6 +132,7 @@ func _add(p: Passenger) -> Passenger:
 	copy.path_index = p.path_index
 	copy.seg_mm = p.seg_mm
 	copy.carry_on = p.carry_on
+	copy.halt_tick = p.halt_tick
 	copy.liquids = p.liquids
 	copy.alarm = p.alarm
 	copy.incident_resolved = p.incident_resolved
@@ -153,6 +154,8 @@ func _add_walker(p: Passenger, join: int, cell: Vector2i) -> void:
 	copy.security_work = 0
 	copy.at = cell
 	copy.clear_path()
+	# Its walk ends on the tick before it joins (QueueRipple.walk()).
+	copy.halt_tick = join - 1
 	_joins[copy.id] = join
 
 
@@ -185,7 +188,7 @@ func _step() -> void:
 			_move_up(u)
 		if u.is_moving():
 			var was := u.at
-			u.walk(PassengerSim.WALK_MM)
+			QueueRipple.walk(u, PassengerSim.WALK_MM, tick)
 			_changed = _changed or u.at != was
 
 
@@ -193,7 +196,7 @@ func _step() -> void:
 ## cells, so between two of its cells the path is the lane itself; elsewhere
 ## the grid's path is used as there.
 func _move_up(u: Passenger) -> void:
-	if not _misplaced(u):
+	if not _misplaced(u) or not QueueRipple.may_step(self, u, _queue["lane"], _cells, tick, false):
 		return
 	var index: int = (_queue["lane"] as Array).find(u.id)
 	var from := _cells.find(u.at)

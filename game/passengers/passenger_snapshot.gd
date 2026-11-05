@@ -77,6 +77,7 @@ const INT_FIELDS := [
 	"boredom",
 	"shop_cooldown",
 	"collect_tick",
+	"halt_tick",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
 const BOOL_FIELDS := [
@@ -385,6 +386,7 @@ static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 			_set_missing(record, "boredom", BoredomSim.start_of(int(record["id"])))
 			_set_missing(record, "shop_cooldown", 0)
 			_set_missing(record, "collect_tick", 0)
+			_set_missing(record, "halt_tick", 0)
 			_set_missing(record, "sat_late", false)
 			_set_missing(record, "seat_exiting", false)
 			_set_missing(record, "seat_piece", {})

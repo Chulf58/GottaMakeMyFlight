@@ -83,11 +83,10 @@ signal checked_in(id: int, desk: int)
 ## 19: shop visit relocation (ShopSnapshot saves a shop or activity visit's
 ## Relocation). Version 18 is refused, with no migration.
 ## 20: each passenger's thoughts and their repeat marks (PassengerThoughts).
-## Version 19 is refused, with no migration.
 ## 21: each passenger's seat placement and seat_exiting (GateRelocation).
-## Version 20 is refused, with no migration.
-## 22: boarding-file wait spots (FileWaiters). Version 21 is refused, no migration.
-const SAVE_VERSION := 22
+## 22: boarding-file wait spots (FileWaiters). 23: each passenger's halt_tick
+## (QueueRipple). From 20 on, the version before is refused, with no migration.
+const SAVE_VERSION := 23
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -433,6 +432,7 @@ func station_eta(station: int, walk_mm: int, p: Passenger = null) -> int:
 		+ left
 		+ maxi(waiting, 0) * CHECKIN_TICKS
 		+ CHECKIN_TICKS
+		+ QueueRipple.desk_waits(self, station, null)
 	)
 
 
@@ -459,7 +459,8 @@ func wait_ticks(p: Passenger) -> int:
 		ahead = at if at >= 0 else lane.size() + holding.find(p.id)
 	if q["serving"] != 0:
 		ahead -= 1
-	return _serving_left(q) + maxi(ahead, 0) * CHECKIN_TICKS + CHECKIN_TICKS
+	var waits := QueueRipple.desk_waits(self, p.station, p)
+	return _serving_left(q) + maxi(ahead, 0) * CHECKIN_TICKS + CHECKIN_TICKS + waits
 
 
 ## SecurityRuntime admitted `p` at its station.
@@ -1006,7 +1007,7 @@ func _move(p: Passenger) -> void:
 		elif p.stage == Passenger.Stage.APRON:
 			files.moved(p)
 	elif p.is_moving():
-		p.walk(speed)
+		QueueRipple.walk(p, speed, tick)
 	# A spot kept on setting off is given up once the walker is off its cell.
 	var spot := standing.spot_of(p.id)
 	if p.stage == Passenger.Stage.TO_EXIT and spot != StandingSpots.NO_SPOT:
@@ -1125,7 +1126,7 @@ func _join(p: Passenger) -> void:
 
 func _queue_move(p: Passenger) -> void:
 	var index := (_queue(p.station)["lane"] as Array).find(p.id)
-	if index < 0 or p.is_moving():
+	if index < 0 or p.is_moving() or not QueueRipple.sim_may_step(self, p):
 		return
 	var target: Vector2i = layout.lanes[p.station][index]
 	if p.at != target:

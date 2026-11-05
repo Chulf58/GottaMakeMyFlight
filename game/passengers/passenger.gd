@@ -139,6 +139,9 @@ var incident_resolved := false
 ## The sim tick a walker whose gate seat went while its roller parked stands
 ## collecting the bag to (ParkRecovery), 0 when it collects none.
 var collect_tick := 0
+## The sim tick its last walk on a path ended (QueueRipple.walk()): in a lane
+## the walker behind it steps up QueueRipple.STAND_TICKS after.
+var halt_tick := 0
 ## Whether it was late as it began sitting down at a gate seat, as the view
 ## saw it (ParkRecovery.note_sitting()): a late walker sets its roller down
 ## from the hand, with no park.
