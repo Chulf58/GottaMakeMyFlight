@@ -636,11 +636,12 @@ func _start_exit(p: Passenger, visit: ShopVisit) -> void:
 	var type := _room_type(visit.room)
 	var left := stay_ticks(visit, type) - (_sim.tick - p.stage_tick)
 	var exit := ActivityPoses.turn_back_ticks(_sim, p)
+	var stepped := ActivityPoses.reach(_sim, p)
 	var remaining := left
 	if left <= exit:
-		visit.relocation = Relocation.leaving(visit.piece, -1)
+		visit.relocation = Relocation.leaving(visit.piece, -1, stepped)
 	else:
-		visit.relocation = Relocation.leaving(visit.piece, left)
+		visit.relocation = Relocation.leaving(visit.piece, left, stepped)
 		remaining = exit
 	p.stage_tick = _sim.tick + remaining - browse_ticks(type)
 	if exit == 0:

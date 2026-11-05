@@ -26,6 +26,11 @@ const PANEL_FACE_M := 0.42
 ## From this share of the sit_down clip on, the hips are going back (the clip's
 ## Hips bone is 0.036 m back of its 0.53 m at 0.17, 0.08 m at 0.25).
 const HIPS_BACK_SHARE := 0.1
+## The stand_up clip brings the hips forward from about its tick 18 (the
+## windowed probe's UP_INSIDE read 4 to 18 points in the end panel at k18 and
+## k19 at five of sixteen booth guests, board 17b87a51): the body must be past
+## the panel by then.
+const HIPS_FORWARD_TICK := 18
 ## How far a roller guest's drawn spot may be from a guest's with no roller at
 ## the same share of the sit_down clip.
 const SAME_SPOT_M := 0.02
@@ -202,11 +207,104 @@ func test_a_booth_guest_stands_up_along_the_same_path() -> void:
 	var steps := _assert_no_lunge(path, 1.6)
 	print("booth stand-up [ahead, across] per tick: %s steps %s" % [path, steps])
 	assert_float(path[0].length()).is_less(0.001)
-	# The sim's last spot standing up: a tick's step from the approach cell.
-	assert_float(path[-2].distance_to(path[-1])).is_greater(0.05)
+	# Out at the approach cell STAND_UP_LEAD_TICKS before the stand-up ends.
+	var lead := CafeSim.STAND_UP_LEAD_TICKS
+	assert_int(lead).is_greater(0)
+	assert_float(path[-1 - lead].distance_to(path[-1])).is_less(0.001)
+	assert_float(path[-2 - lead].distance_to(path[-1])).is_greater(0.05)
 	assert_float(path[-1].x).is_less(-0.4)
 	assert_float(path[-1].y).is_greater(0.9)
 	_assert_clear_of_the_end_panel(path)
+
+
+## Stepping out with no roller, a booth guest is past the end panel (its centre beyond the
+## panel's face plus the body's half width) from the tick the stand_up clip
+## brings the hips forward on. Control: the guest started on the seat root and
+## was beside the panel in the ticks before, and moved out of the booth.
+func test_a_booth_guest_steps_out_past_the_end_panel_before_the_hips_come_forward() -> void:
+	var made := _sitting(&"restaurant_booth")
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	while p.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < 4000:
+		world.step()
+	world.sim.cafes.visit_of(p.id).dwell_end = world.clock.tick + 1
+	while p.stage != Passenger.Stage.CAFE_STANDING_UP and world.clock.tick < 4000:
+		world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_STANDING_UP)
+	var path := _track(world, p, Passenger.Stage.CAFE_STANDING_UP, CafeSim.up_ticks(p))
+	assert_int(path.size()).is_equal(PassengerSim.STAND_UP_TICKS)
+	assert_float(path[0].length()).is_less(0.001)
+	var beside := 0
+	for k in path.size():
+		var at := path[k]
+		if k < HIPS_FORWARD_TICK:
+			beside += 1 if at.y < PANEL_FACE_M + BODY_HALF_M else 0
+			continue
+		var why := "tick %d of the stand-up the body is %.2f m across, beside the panel" % [k, at.y]
+		assert_float(at.y).override_failure_message(why).is_greater_equal(
+			PANEL_FACE_M + BODY_HALF_M
+		)
+	assert_int(beside).is_greater(2)
+	assert_float(path[-1].y).is_greater(0.9)
+
+
+## Moves object `id` to the first of `shifts` (cells) the grid accepts, as a room
+## move does: removed and placed again under its id with its paid. A refused
+## spot is put back as it was. True when it moved.
+func _moved_booth(world: PassengerTestWorld, id: int, shifts: Array[Vector2i]) -> bool:
+	var record := world.grid.get_object(id)
+	var was := record.duplicate()
+	for shift in shifts:
+		var place := BuildEdit.place_object(
+			record["def"], record["anchor"] + shift, record["facing"]
+		)
+		place.object_id = id
+		place.paid = int(record.get("paid", 0))
+		var results := world.grid.apply_batch([BuildEdit.remove_object(id), place])
+		if results[1].ok:
+			return true
+		var back := BuildEdit.place_object(was["def"], was["anchor"], was["facing"])
+		back.object_id = id
+		back.paid = place.paid
+		world.grid.apply_batch([back])
+	return false
+
+
+## A booth moved while a guest with no roller is 6 ticks into sitting down turns
+## it back (CafeSim._relocates()): it gets up over the ticks it had sat, along
+## the sit-down's own path, so its spot is carried on without a snap. The
+## stand-up's lead (STAND_UP_LEAD_TICKS) is for a normal stand-up only. Control:
+## it was part way along the path when moved and was standing up afterwards.
+func test_a_booth_guest_turned_back_mid_sit_down_reverses_without_a_snap() -> void:
+	var made := _sitting(&"restaurant_booth")
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var cafes := world.sim.cafes
+	var visit := cafes.visit_of(p.id)
+	var spots: Array[Vector3] = [cafes.seat_position(p)]
+	for i in 6:
+		world.step()
+		spots.append(cafes.seat_position(p))
+	assert_int(p.stage).is_equal(Passenger.Stage.CAFE_SITTING_DOWN)
+	var id := int(visit.seat["object_id"])
+	var shifts: Array[Vector2i] = [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0)]
+	assert_bool(_moved_booth(world, id, shifts)).is_true()
+	var standing := 0
+	for i in 40:
+		world.step()
+		if p.stage != Passenger.Stage.CAFE_STANDING_UP:
+			break
+		standing += 1
+		spots.append(cafes.seat_position(p))
+	var largest := 0.0
+	for i in range(1, spots.size()):
+		largest = maxf(largest, spots[i].distance_to(spots[i - 1]))
+	var joint := spots[7].distance_to(spots[6])
+	var report := "largest %.3f m, the step turning back %.3f (a walking step %.3f)"
+	print("booth turned back, per-tick steps %s" % [report % [largest, joint, WALK_M]])
+	assert_int(standing).is_greater(3)
+	assert_float(joint).override_failure_message("snapped %.3f m" % joint).is_less(1.6 * WALK_M)
+	assert_float(largest).is_less(1.6 * WALK_M)
 
 
 ## Drawn as PassengerViews draws it: the sim's spot with the cafe seat step

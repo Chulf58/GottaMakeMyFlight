@@ -83,10 +83,13 @@ signal checked_in(id: int, desk: int)
 ## 19: shop visit relocation (ShopSnapshot saves a shop or activity visit's
 ## Relocation). Version 18 is refused, with no migration.
 ## 20: each passenger's thoughts and their repeat marks (PassengerThoughts).
+## Version 19 is refused, with no migration.
 ## 21: each passenger's seat placement and seat_exiting (GateRelocation).
-## 22: boarding-file wait spots (FileWaiters). 23: each passenger's halt_tick
-## (QueueRipple). From 20 on, the version before is refused, with no migration.
-const SAVE_VERSION := 23
+## Version 20 is refused, with no migration.
+## 22: boarding-file wait spots (FileWaiters). Version 21 is refused, no migration.
+## 23: a Relocation saves the step its visitor had made (reached). 22 is refused.
+## 24: each passenger's halt_tick (QueueRipple). 23 is refused.
+const SAVE_VERSION := 24
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
