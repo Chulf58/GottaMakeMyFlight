@@ -690,7 +690,8 @@ static func plan(
 	if queued(bag):
 		# Beside the body as it stands now (a guest turning to its counter takes
 		# the roller round with it), held by the bar throughout.
-		parked = queue_park(frame, lead, body["scale"], body.get("look", 0))
+		assert(body.has("look") and int(body["look"]) >= 0, "RollerPark: queued with no body look")
+		parked = queue_park(frame, lead, body["scale"], body["look"])
 		at = _queued(bag, k, start, want, parked, bar)
 	elif not off_floor:
 		at = _onto_floor(k, start, want, parked, frame, go, bar, handle)

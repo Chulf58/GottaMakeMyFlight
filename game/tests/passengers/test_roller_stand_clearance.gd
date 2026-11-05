@@ -82,6 +82,29 @@ func test_a_stood_roller_clears_every_body() -> void:
 	assert_int(hits).is_equal(0)
 
 
+## Discriminating control: the old spot (PARK_SIDE_M, 0.32 m out, as every
+## queue stand parked before board 03454587) takes in male_08's near leg, so
+## the shell box count above sees the defect it was written for.
+func test_the_old_park_side_fails_for_male_08() -> void:
+	var b := PassengerLooks.BODIES.find("tcp_male_character_08")
+	assert_int(b).is_greater_equal(0)
+	var hits := 0
+	for hand in 2:
+		# queue_park() at an upright frame, with the old side.
+		var parked := RollerPark.park(
+			Transform3D.IDENTITY, hand, 1.0, RollerPark.PARK_AHEAD_M, RollerPark.PARK_SIDE_M
+		)
+		for points: PackedVector3Array in _poses[b]:
+			hits += _inside(points, parked, 1.0)
+	print(
+		(
+			"body %d %s at PARK_SIDE_M %.2f: %d vertices inside (> 0)"
+			% [b, PassengerLooks.BODIES[b], RollerPark.PARK_SIDE_M, hits]
+		)
+	)
+	assert_int(hits).is_greater(0)
+
+
 ## The queue stand's spot is its own: the seat parks (pull>floor, floor>pull)
 ## keep PARK_SIDE_M (decisions e4e88745 and 211c0142 pin them).
 func test_the_seat_park_keeps_its_spot() -> void:

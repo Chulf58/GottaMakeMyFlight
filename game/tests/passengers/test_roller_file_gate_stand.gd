@@ -128,7 +128,10 @@ func test_a_gate_stander_stands_its_roller_and_tips_it_on_walking() -> void:
 ## body (TIP_JUMP_M tipping; _sample()'s checks). Control: frames turn the body
 ## with the stand on, at least TURN_RAD a frame. Measured at 529f1d4: the stand
 ## tips on the boarding tick (TO_EXIT, not yet held by a file), so the turns
-## come in the tip, not while stood.
+## come in the tip, not while stood. A stood roller while turning is not
+## reachable today, so the stood count is pinned at 0 and the tipping count must
+## be above 0: the test fails the day a stood roller starts turning, so that
+## case gets checked on purpose instead of passing unseen.
 func test_a_gate_stander_turning_in_its_file_keeps_its_roller_in_hand() -> void:
 	_world = TestStandingSpotClaims.seatless_world(
 		PassengerTestWorld.starts_with(GATE_BOARDING, 4000)
@@ -157,7 +160,8 @@ func test_a_gate_stander_turning_in_its_file_keeps_its_roller_in_hand() -> void:
 				continue
 			_sample(p, props, seen.get_or_add(p.id, _fresh()))
 			_turning(p, props, turns.get_or_add(p.id, {"stood": 0, "tip": 0, "fails": []}))
-	var turned := 0
+	var stood_turning := 0
+	var tip_turning := 0
 	for p in _followed:
 		var mine: Dictionary = turns.get(p.id, {})
 		print(
@@ -173,12 +177,15 @@ func test_a_gate_stander_turning_in_its_file_keeps_its_roller_in_hand() -> void:
 				]
 			)
 		)
-		turned += int(mine.get("stood", 0)) + int(mine.get("tip", 0))
+		stood_turning += int(mine.get("stood", 0))
+		tip_turning += int(mine.get("tip", 0))
 		for line: String in (mine.get("fails", []) as Array).slice(0, 5):
 			print(line)
 		assert_array(mine.get("fails", [])).is_empty()
 	_assert_clean(seen)
-	assert_int(turned).is_greater(0)
+	print("turning frames over all standers: stood %d tipping %d" % [stood_turning, tip_turning])
+	assert_int(stood_turning).is_equal(0)
+	assert_int(tip_turning).is_greater(0)
 
 
 ## One frame of `p` into `mine`: a frame of its queue stand (STOOD_AFTER in)
