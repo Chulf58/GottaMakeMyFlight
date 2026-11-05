@@ -139,6 +139,9 @@ var incident_resolved := false
 ## The sim tick a walker whose gate seat went while its roller parked stands
 ## collecting the bag to (ParkRecovery), 0 when it collects none.
 var collect_tick := 0
+## The sim tick its last walk on a path ended (QueueRipple.walk()): in a lane
+## the walker behind it steps up QueueRipple.STAND_TICKS after.
+var halt_tick := 0
 ## Whether it was late as it began sitting down at a gate seat, as the view
 ## saw it (ParkRecovery.note_sitting()): a late walker sets its roller down
 ## from the hand, with no park.
@@ -221,6 +224,18 @@ func remaining_mm() -> int:
 	for i in range(path_index, path.size() - 1):
 		mm += segment_mm(path[i], path[i + 1])
 	return maxi(mm, 0)
+
+
+## How far the sim walks it in a tick: at a run while late (PassengerSim._move(),
+## SecurityForecast).
+func pace_mm() -> int:
+	return PassengerSim.RUN_MM if late else PassengerSim.WALK_MM
+
+
+## The ticks it takes to walk `mm` at pace_mm().
+func pace_ticks(mm: int) -> int:
+	@warning_ignore("integer_division")
+	return (maxi(mm, 0) + pace_mm() - 1) / pace_mm()
 
 
 ## Walks `mm` along the path. Leftover distance at the end is dropped.

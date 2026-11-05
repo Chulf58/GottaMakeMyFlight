@@ -204,7 +204,11 @@ func test_a_full_boarding_keeps_order_never_closes_a_gap_and_no_filed_walkers_ov
 	# and close to it for the walkers that never ran (the forecast is at a walk).
 	var latest := -JourneyForecast.NEVER
 	var earliest := JourneyForecast.NEVER
+	var missed: Array[int] = []
 	for id: int in forecast:
+		if not made.has(id):
+			missed.append(id)
+			continue
 		latest = maxi(latest, made[id] - forecast[id])
 		if not ran.has(id):
 			earliest = mini(earliest, made[id] - forecast[id])
@@ -227,6 +231,12 @@ func test_a_full_boarding_keeps_order_never_closes_a_gap_and_no_filed_walkers_ov
 				latest
 			]
 		)
+	)
+	# A miss fails here by name, not on a missing made[] key (ruling 2026-11-05).
+	(
+		assert_array(missed)
+		. override_failure_message("filed walkers %s missed the flight" % [missed])
+		. is_empty()
 	)
 	assert_str(problem).is_empty()
 	assert_int(most_filed).is_greater_equal(10)
