@@ -254,15 +254,33 @@ static func _build_decor() -> void:
 ## behind it is not reserved until staff exist, as at the cafe counter); an ATM
 ## and a shower are used from their Mount_Use cell in front; the pharmacy shelf
 ## from its Mount_Browse cell. Seats (Mount_SitRoot_*) are catalogued for the
-## restaurant table and booth only; the bar counter's two (stools at the
-## counter) are not used yet. The offsets are read from the .glb mounts (a test
-## keeps them in step).
+## restaurant table, the booth and the bar counter's two stools. The offsets
+## are read from the .glb mounts (a test keeps them in step).
 static func _build_services() -> void:
 	# The bar counter's order cell is its Mount_Order: in front of the left stool,
 	# the mirror of Mount_Staff behind the counter.
 	var bar := _add(&"bar_counter", "Bar counter", Vector2i(2, 2), Color(0.45, 0.3, 0.25), 1.54)
 	bar.has_interaction = true
 	bar.interaction_offset = Vector2i(0, 2)
+	# Its stools (Mount_SitRoot_L/_R) stand in the front row facing the counter
+	# (decision bar-guests-sit-at-the-bar-counter-stools-first-then-at-table).
+	# The cell behind the left stool is the order cell, and CafeLayout gives no
+	# queue lane to a counter whose order cell is a seat's approach, so a guest
+	# steps onto the left stool from its open side and onto the right one from
+	# behind. The .glb has no approach mounts for them.
+	for column in [0, 1]:
+		(
+			bar
+			. seats
+			. append(
+				{
+					"cell": Vector2i(column, 1),
+					"approach": Vector2i(-1, 1) if column == 0 else Vector2i(1, 2),
+					"root": Vector2(0.0, -0.45),
+					"facing": Vector2i(0, -1),
+				}
+			)
+		)
 	_add_counter(&"grab_and_go_stall", "Grab-and-go stall", 2.25, Color(0.9, 0.6, 0.3))
 	# The dining table and the booth are 2x3 with the same four Mount_SitRoot_*
 	# (BL, BR at the back, FL, FR at the front): a chair in each outer-row cell,

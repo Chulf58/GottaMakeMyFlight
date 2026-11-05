@@ -93,6 +93,8 @@ func test_the_panel_shows_type_notes_seats_and_spend_of_the_focused_room() -> vo
 
 func test_the_panel_follows_furniture_placed_while_it_is_open() -> void:
 	_cafe()
+	# A seat counts only from a walled-in cell (RoomRules.reachable_seats()).
+	EnclosureKit.close_floor(_mode.grid)
 	_mode.set_tool(BuildMode.Tool.NONE)
 	_mode.update_room_focus(_mode.grid.cell_to_world(Vector2i(4, 4)))
 	_mode.grid.apply(BuildEdit.place_object(&"cafe_counter", Vector2i(4, 3), 0))

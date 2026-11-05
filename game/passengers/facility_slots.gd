@@ -30,15 +30,10 @@ var _layout_dirty := true
 
 
 ## Whether the whole footprint of an object, and its interaction cell when it
-## has one, lie in `area`: the rule RoomRules counts a room's pieces by.
+## has one, lie in `area`: the rule RoomRules counts a room's pieces by, asked
+## of RoomRules.piece_inside() so there is one copy of it.
 static func piece_inside(grid: BuildGrid, id: int, area: Rect2i) -> bool:
-	var record := grid.get_object(id)
-	var def := BuildCatalog.get_def(record["def"])
-	for cell in def.footprint(record["anchor"], record["facing"]):
-		if not area.has_point(cell):
-			return false
-	var spot := grid.interaction_cell(id)
-	return spot == BuildObjectDef.NO_CELL or area.has_point(spot)
+	return RoomRules.piece_inside(grid, id, area)
 
 
 ## Wires the sim and the facility's layout in; any edit of the sim's grid

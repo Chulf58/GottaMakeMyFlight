@@ -66,9 +66,12 @@ static func status(grid: BuildGrid, room_id: int) -> RoomStatus:
 	if type.table_pieces.is_empty():
 		result.seats = result.pieces.get(type.seat_piece, 0) * type.seats_per_piece
 	else:
-		# A food room: each table piece gives the seats its catalog entry has.
-		for piece in type.table_pieces:
-			result.seats += result.pieces.get(piece, 0) * BuildCatalog.get_def(piece).seats.size()
+		# A food room: each table piece in it gives the seats of its catalog entry
+		# a guest can reach (reachable_seats()).
+		for object_id in grid.object_ids():
+			var piece := StringName(grid.get_object(object_id)["def"])
+			if type.table_pieces.has(piece) and piece_inside(grid, object_id, area):
+				result.seats += reachable_seats(grid, object_id).size()
 	result.upkeep = result.pieces.get(type.upkeep_piece, 0) * type.upkeep_per_piece
 	result.ok = result.notes.is_empty()
 	return result
@@ -80,6 +83,30 @@ static func _count(pieces: Dictionary, ids: Array[StringName]) -> int:
 	for id in ids:
 		total += pieces.get(id, 0)
 	return total
+
+
+## The seat descriptors (BuildObjectDef.seat_descriptors) of object
+## `object_id` a guest can step into: its approach cell is a passenger cell
+## (BuildGrid.is_passenger_cell(): walkable and walled in) and no wall but a
+## door stands between it and the seat's cell. A booth with an end against a
+## wall keeps only the two seats at its open end (decision restaurant-booth-
+## against-a-wall-counts-only-reachable-seats). The one seat rule: the room's
+## seat count, the piece's info and CafeLayout's seats all come from here, so
+## a floor that is not yet walled in has no seats.
+static func reachable_seats(grid: BuildGrid, object_id: int) -> Array[Dictionary]:
+	var record := grid.get_object(object_id)
+	var def := BuildCatalog.get_def(record["def"])
+	var out: Array[Dictionary] = []
+	for seat in def.seat_descriptors(record["anchor"], record["facing"]):
+		var approach: Vector2i = seat["approach"]
+		var side := BuildGrid.SIDE_STEP.find(seat["cell"] - approach)
+		var wall := grid.wall_kind(approach, side)
+		if (
+			grid.is_passenger_cell(approach)
+			and (wall == BuildGrid.WallKind.NONE or wall == BuildGrid.WallKind.DOOR)
+		):
+			out.append(seat)
+	return out
 
 
 ## What room `room_id` is charged at midnight (Settlement): its upkeep when it is
@@ -96,17 +123,23 @@ static func daily_upkeep(grid: BuildGrid, room_id: int) -> int:
 static func pieces_in(grid: BuildGrid, area: Rect2i) -> Dictionary:
 	var counts := {}
 	for object_id in grid.object_ids():
-		var record := grid.get_object(object_id)
-		var def := BuildCatalog.get_def(record["def"])
-		var inside := true
-		for cell in def.footprint(record["anchor"], record["facing"]):
-			inside = inside and area.has_point(cell)
-		var spot := grid.interaction_cell(object_id)
-		if spot != BuildObjectDef.NO_CELL:
-			inside = inside and area.has_point(spot)
-		if inside:
-			counts[def.id] = counts.get(def.id, 0) + 1
+		if piece_inside(grid, object_id, area):
+			var def_id := StringName(grid.get_object(object_id)["def"])
+			counts[def_id] = counts.get(def_id, 0) + 1
 	return counts
+
+
+## Whether object `object_id` lies wholly inside `area`, its interaction cell
+## included: the rule a piece counts for a room by. FacilitySlots.piece_inside()
+## and CafeLayout ask this one copy.
+static func piece_inside(grid: BuildGrid, object_id: int, area: Rect2i) -> bool:
+	var record := grid.get_object(object_id)
+	var def := BuildCatalog.get_def(record["def"])
+	for cell in def.footprint(record["anchor"], record["facing"]):
+		if not area.has_point(cell):
+			return false
+	var spot := grid.interaction_cell(object_id)
+	return spot == BuildObjectDef.NO_CELL or area.has_point(spot)
 
 
 ## Whether some room cell on the edge of `area` has an open step to a floor

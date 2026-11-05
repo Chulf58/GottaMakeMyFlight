@@ -2,8 +2,9 @@ class_name BuiltItemCard
 extends VBoxContainer
 ## The selected built item's content inside the passenger inspect window
 ## (decision built-items-selectable-reuse-the-selection-window-move-delete-
-## close-open): its name, then one line each for status (open or closed and
-## why), staff, queue and upkeep, a line left out when it does not apply. Info
+## close-open): its name, then one line each for where it is, its reachable
+## seats (only when some cannot be reached), status (open or closed and why),
+## staff, queue and upkeep, a line left out when it does not apply. Info
 ## only; the actions come in later slices. PassengerInspect shows this in place
 ## of the passenger rows while a BuiltSelection holds an item.
 ##
@@ -32,7 +33,11 @@ const KIND_OF_DEF := {
 	SecurityLanes.ARCH: Kind.ARCH,
 	GateDesks.DESK: Kind.GATE_DESK,
 }
-const FIELDS: Array[String] = ["where", "status", "staff", "queue", "upkeep"]
+const FIELDS: Array[String] = ["where", "seats", "status", "staff", "queue", "upkeep"]
+## A seat piece some of whose seats a guest cannot reach (a booth with an end
+## against a wall; decision restaurant-booth-against-a-wall-counts-only-
+## reachable-seats) says how many of its seats count.
+const SEATS_REACHABLE_TEXT := "%d of %d seats reachable"
 
 var sim: PassengerSim
 var selection: BuiltSelection
@@ -174,7 +179,11 @@ func _object_static(object_id: int) -> Dictionary:
 		return {}
 	var def_id := StringName(record["def"])
 	var out := {"kind": _kind_of(def_id, object_id), "id": object_id}
-	out["name"] = BuildCatalog.get_def(def_id).display_name
+	var def := BuildCatalog.get_def(def_id)
+	out["name"] = def.display_name
+	var reachable := RoomRules.reachable_seats(grid, object_id).size()
+	if reachable < def.seats.size():
+		out["seats"] = SEATS_REACHABLE_TEXT % [reachable, def.seats.size()]
 	var room_id := grid.room_at(record["anchor"])
 	if room_id != 0:
 		out["where"] = "In %s" % RoomTypes.get_type(grid.get_room(room_id)["type"]).display_name

@@ -64,6 +64,9 @@ func test_a_furnished_open_room_is_ready() -> void:
 	var grid := _grid()
 	var room_id := _room(grid)
 	_furnish(grid)
+	# A seat counts only when a guest can reach it, from a walled-in cell
+	# (RoomRules.reachable_seats()).
+	EnclosureKit.close_floor(grid)
 	var status := RoomRules.status(grid, room_id)
 	assert_bool(status.ok).is_true()
 	assert_array(Array(status.notes)).is_empty()
@@ -79,6 +82,7 @@ func test_each_extra_table_adds_two_seats() -> void:
 	_place(grid, &"cafe_counter", Vector2i(3, 2))
 	_place(grid, &"cafe_table", Vector2i(3, 4))
 	_place(grid, &"cafe_table", Vector2i(3, 6))
+	EnclosureKit.close_floor(grid)
 	var status := RoomRules.status(grid, room_id)
 	assert_bool(status.ok).is_true()
 	assert_int(status.seats).is_equal(4)

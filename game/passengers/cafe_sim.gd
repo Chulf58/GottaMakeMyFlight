@@ -614,15 +614,18 @@ func _order_eta(room_id: int, counter_id: int) -> int:
 
 
 ## The free seat nearest `from` that can be walked to from it, with the walk
-## in "mm"; empty when none of the nearest SEAT_TRIES can.
+## in "mm"; empty when none of the nearest SEAT_TRIES can. A free stool at a
+## counter comes before any table seat, however near (decision bar-guests-
+## sit-at-the-bar-counter-stools-first-then-at-table).
 func _free_seat(cafe: Dictionary, from: Vector2i) -> Dictionary:
 	var free: Array = []
 	for seat in cafe["seats"]:
 		if not _seats.has(seat["key"]):
-			free.append([Passenger.octile_mm(from, seat["approach"]), free.size(), seat])
+			var rank := 0 if seat["at_counter"] else 1
+			free.append([rank, Passenger.octile_mm(from, seat["approach"]), free.size(), seat])
 	free.sort()
 	for i in mini(free.size(), SEAT_TRIES):
-		var seat: Dictionary = free[i][2]
+		var seat: Dictionary = free[i][3]
 		var path := _sim.grid.find_path(from, seat["approach"])
 		if path.is_empty():
 			continue
