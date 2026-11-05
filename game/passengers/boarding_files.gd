@@ -15,8 +15,10 @@ extends RefCounted
 ## walker that would be ahead of it is at least GAP_MM ahead. Until then it is
 ## pending and stands where it is: a walker that has chosen its exit waits for
 ## its door file, and the head of a door file waits at the door for the apron
-## file. The walker that comes to be behind a newcomer is capped by it from
-## then on, so a waiting walker is never walked through. Pending walkers are
+## file. While it waits in the line (not on a wait spot) it already holds the
+## filed walkers it would come in ahead of GAP_MM back, and once it joins the
+## one behind it is capped by it, so a waiting walker is never walked through
+## (board 54c9e0ce). Pending walkers are
 ## admitted at the start of each tick (PassengerSim), file by file in (walk
 ## left, id) order. Nothing is released on a timer: the head of a file always
 ## walks on or leaves it, so every wait ends.
@@ -234,13 +236,15 @@ func moved(p: Passenger) -> void:
 
 
 ## How far `p` may walk this tick, at most `speed`: nothing while pending, and
-## never closer than GAP_MM behind the walker ahead in each of its files.
+## never closer than GAP_MM behind the walker ahead in each of its files, or
+## behind a walker waiting to join its door file in the line (_room_behind_waiting()).
 func allowed(sim: PassengerSim, p: Passenger, speed: int) -> int:
 	if _pending.has(p.id):
 		return 0
 	var step := speed
 	if _door_of.has(p.id):
 		step = mini(step, _room(sim, _doors[_door_of[p.id]], p, true))
+		step = mini(step, _room_behind_waiting(sim, _door_of[p.id], p))
 	if _plane_of.has(p.id):
 		step = mini(step, _room(sim, _planes[_plane_of[p.id]], p, false))
 	return step
@@ -446,8 +450,12 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 
 ## The walkers the forecast knows of, each with its own times
 ## (JourneyForecast.own_times() at a walk, unrouted, plus "id"), worked out
-## once per tick: every passenger out to the plane, or airside and not on a
-## facility visit.
+## once per tick: every passenger out to the plane, airside and not on a
+## facility visit, or admitted to a security station. One being screened can
+## come out onto a file's way just ahead of a filed walker and hold it back
+## (board 54c9e0ce), so it is known from its security forecast
+## (SecurityForecast.eta()). Those still walking to or queuing for security
+## are left out: a replay each per tick costs too much under a queue.
 func known(sim: PassengerSim) -> Array:
 	if _known_tick == sim.tick:
 		return _known
@@ -456,7 +464,8 @@ func known(sim: PassengerSim) -> Array:
 	for id in sim.passenger_ids():
 		var q := sim.get_passenger(id)
 		var leg := StageKinds.leg(q.stage)
-		if q.is_done() or not (leg == StageKinds.Leg.AIRSIDE or leg == StageKinds.Leg.APRON):
+		var out := leg == StageKinds.Leg.AIRSIDE or leg == StageKinds.Leg.APRON
+		if q.is_done() or not (out or q.stage == Passenger.Stage.SECURITY):
 			continue
 		var own := JourneyForecast.own_times(sim, q, sim.tick, false)
 		if not own.is_empty():
@@ -480,6 +489,26 @@ func _room(sim: PassengerSim, ids: Array, p: Passenger, in_door: bool) -> int:
 	var mine := _left(p) if in_door else plane_left(p)
 	var theirs := _left(ahead) if in_door else plane_left(ahead)
 	return maxi(0, mine - theirs - GAP_MM)
+
+
+## The step filed walker `p` may take behind the walkers waiting to join door
+## `door`'s file that it would come in behind (walk left, _left(), below its
+## own): each holds it GAP_MM back, as it will once it joins, so a walker that
+## turns pending in the line ahead is never walked into (board 54c9e0ce). One
+## standing on its wait spot is off the line and holds no one: the line walks
+## past it. Pending walkers wait only on walkers ahead of them, so no wait
+## loops back.
+func _room_behind_waiting(sim: PassengerSim, door: int, p: Passenger) -> int:
+	var room := JourneyForecast.NEVER_MM
+	var mine := _left(p)
+	for id: int in _pending:
+		var q := sim.get_passenger(id)
+		if _door_of.has(id) or q.exit_object != door or waiters.at_spot(q):
+			continue
+		var theirs := _left(q)
+		if theirs < mine or (theirs == mine and id < p.id):
+			room = mini(room, maxi(0, mine - theirs - GAP_MM))
+	return room
 
 
 ## Where a walker with walk left `left` and id `id` goes in `ids`, or -1 when
