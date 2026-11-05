@@ -289,6 +289,9 @@ const GAP := 6.0
 const TRAY_H := 196.0
 const STATUS_H := 52.0
 const COST_H := 26.0
+## The cost card's padding around its text.
+const COST_PAD_X := 14.0
+const COST_PAD_Y := 2.0
 ## Width of the centre column the tray and status line live in; PassengerHud
 ## keeps the follow text left of it.
 const COLUMN_W := 640.0
@@ -1123,7 +1126,9 @@ func _build_status() -> void:
 	add_child(_status)
 
 
-## The cost line, centred over the status line's box.
+## The cost line, centred over the status line's box. It sits on the HUD card
+## (the bar's cream, dark-outlined style) with dark text, and the card is only
+## as wide as the text, so it reads over the busy apron stripes.
 func _build_cost() -> void:
 	_cost.name = "CostLine"
 	var bottom := MARGIN + BAR_H + GAP + TRAY_H + GAP + STATUS_H
@@ -1131,14 +1136,22 @@ func _build_cost() -> void:
 	_cost.anchor_right = 0.5
 	_cost.anchor_top = 1.0
 	_cost.anchor_bottom = 1.0
-	_cost.offset_left = -COLUMN_W / 2.0
-	_cost.offset_right = COLUMN_W / 2.0
+	_cost.offset_left = 0.0
+	_cost.offset_right = 0.0
 	_cost.offset_top = -bottom - COST_H
 	_cost.offset_bottom = -bottom
+	_cost.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_cost.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_cost.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_cost.theme = HUD_THEME
-	_cost.theme_type_variation = &"HudFloatText"
+	_cost.theme_type_variation = &"HudCardName"
+	var card := HUD_THEME.get_stylebox("panel", "HudBar").duplicate() as StyleBoxFlat
+	card.content_margin_left = COST_PAD_X
+	card.content_margin_right = COST_PAD_X
+	card.content_margin_top = COST_PAD_Y
+	card.content_margin_bottom = COST_PAD_Y
+	_cost.add_theme_stylebox_override("normal", card)
 	_cost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cost.visible = false
 	add_child(_cost)
