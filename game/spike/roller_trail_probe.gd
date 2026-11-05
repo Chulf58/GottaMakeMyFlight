@@ -33,17 +33,33 @@ extends SceneTree
 ##   PATH_SIDE: 1 m back along that path offset 0.3 m to the pulling side.
 ##   BODY: a 0.44 x 1.6 x 0.28 m box on the body (does the walker itself clip).
 ##
-## Plates: at most PLATES_PER_WORLD overlap moments a world, each deeper than
-## the last plated, close and wide, plus a contact sheet. Before a save the
-## roller, the furniture mesh and the body project inside the frame with a
-## margin, and twins with the roller hidden and with the piece hidden each
-## differ from the plate (in frame is not visible). Otherwise PROBE_INVALID,
-## exit 1.
+## Walls (board 578435a7, re-measure): every wall edge of the grid except a
+## door is a 0.14 m x 3 m box (BuildView.WALL_THICKNESS), tested like a piece
+## of furniture (box overlap, then a triangle of the wall crossing the roller's
+## box). Furniture hits and wall hits are counted apart: a frame can have both.
+## Probe guests spawn on SPAWN_CELLS, far from the gate desk, so the guest
+## standing in the desk (owned by board 44b974cc) does not dominate.
 ##
-## Run (one windowed Godot run project-wide; take the slot first):
-##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
-##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path game -s res://spike/roller_trail_probe.gd [-- --seed=N]
+## Every pull frame lands in one bucket: spawn (the first SETTLE_TICKS after a
+## spawn), STANDING (the stage), after_tip (AFTER_TIP_TICKS after a roll-upright
+## tip), CAFE_TO_SEAT (the stage), or walk (anything else). The walking rate is
+## everything but spawn and STANDING. A positive control (a roller was drawn
+## in the pull and moved MIN_MOVE_M) and a wall self-test must hold, else
+## PROBE_INVALID.
+##
+## Plates: at most PLATES_PER_WORLD furniture overlap moments a world, each
+## deeper than the last plated, close and wide, plus a contact sheet. Before a
+## save the roller, the furniture mesh and the body project inside the frame
+## with a margin, and twins with the roller hidden and with the piece hidden
+## each differ from the plate (in frame is not visible). Otherwise
+## PROBE_INVALID, exit 1. A headless run (no renderer) takes no plates and
+## measures all the same.
+##
+## Run (a windowed run takes the project's windowed lock; a headless run needs
+## none):
+##   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
+##     --path game -s res://spike/roller_trail_probe.gd -- --seed=N
+##   (windowed: --display-driver windows --rendering-driver vulkan instead)
 ##
 ## Plates go to tools/blender/out/roller-trail/.
 
@@ -78,6 +94,20 @@ const USE_STAGES := [
 ]
 const SIMPLE_HALF := Vector3(0.18, 0.3, 0.25)
 const BODY_HALF := Vector3(0.22, 0.8, 0.14)
+## Where probe guests spawn (reference-terminal cells, airside west: 5 to 6
+## cells from the gate desk at (19, 5) and at least 3 from the west wall, so
+## the trail behind a fresh guest is not in a wall); the first walkable one on
+## the grid is used, one after the other.
+const SPAWN_CELLS: Array[Vector2i] = [
+	Vector2i(13, 4), Vector2i(13, 6), Vector2i(14, 5), Vector2i(14, 7), Vector2i(13, 5)
+]
+const WALL_HEIGHT_M := 3.0
+## The roller must have moved this far from where it was first drawn in the pull.
+const MIN_MOVE_M := 1.0
+const BUCKETS: Array[String] = ["spawn", "STANDING", "after_tip", "CAFE_TO_SEAT", "walk"]
+const TOP_FRAMES := 5
+## A hit this deep or deeper counts as a bar failure (the phase-2 bar).
+const BAR_DEPTH_M := 0.05
 
 var _seed := 0
 var _out_dir := ""
@@ -99,12 +129,18 @@ var _side_walked := {}
 var _last_used := {}
 var _m := {}
 var _spawned_at := {}
+## Wall boxes (same keys as _meshes, plus "wall": true, no "oid" of a piece).
+var _walls: Array[Dictionary] = []
+## The totals over both worlds (same shape as the per-world _m's tally keys).
+var _all := {}
+var _headless := false
 
 
 func _initialize() -> void:
 	Engine.max_fps = SimClock.TICK_RATE * 3
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
+	_headless = DisplayServer.get_name() == "headless"
 	_seed = randi()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
@@ -121,24 +157,33 @@ func _run() -> void:
 	print("TRI_SELFTEST through=%s (true) beside=%s (false)" % [through, beside])
 	if not through or beside:
 		_invalid("the triangle test's self-test failed")
-	var totals := {"pull": 0, "hit": 0}
+	_all = {"pull": 0, "hit": 0, "moved": 0.0, "buckets": _new_buckets(), "frames": []}
 	for world in WORLDS:
 		if await _boot(world):
 			await _watch(world)
-			totals["pull"] += int(_m["pull"])
-			totals["hit"] += int(_m["hit"])
+			_all["pull"] += int(_m["pull"])
+			_all["hit"] += int(_m["hit"])
+			_all["moved"] = maxf(float(_all["moved"]), float(_m["moved"]))
 		_main.queue_free()
 		_cam = null
 		await _frames(3)
 	if not _sheet.is_empty():
 		_save(_contact_sheet(_sheet), "contact_sheet.png")
-	var rate: float = 1000.0 * totals["hit"] / maxf(totals["pull"], 1.0)
+	var rate: float = 1000.0 * _all["hit"] / maxf(_all["pull"], 1.0)
 	print(
 		(
 			"TRAIL_CLEAR all worlds: %d overlap frames in %d roller-pull frames = %.1f per 1000"
-			% [totals["hit"], totals["pull"], rate]
+			% [_all["hit"], _all["pull"], rate]
 		)
 	)
+	_print_table("ALL", _all)
+	if int(_all["pull"]) <= 0 or float(_all["moved"]) < MIN_MOVE_M:
+		_invalid(
+			(
+				"the pull was not engaged: %d pull frames, roller moved %.2f m (needs %.1f)"
+				% [_all["pull"], _all["moved"], MIN_MOVE_M]
+			)
+		)
 	print("PROBE done plates=%d failed=%s" % [_plates, _failed])
 	quit(1 if _failed else 0)
 
@@ -184,7 +229,56 @@ func _boot(world: String) -> bool:
 	for layer in _main.find_children("*", "CanvasLayer", true, false):
 		(layer as CanvasLayer).visible = false
 	_collect_meshes(world)
-	return not _meshes.is_empty()
+	_collect_walls(world)
+	return not _meshes.is_empty() and not _walls.is_empty()
+
+
+## One box mesh per wall edge but doors (a door is a way through), hidden and
+## under the main node so its global transform is live. The self-test puts a
+## box at the middle of a wall: it must read as inside.
+func _collect_walls(world: String) -> void:
+	_walls.clear()
+	var grid := _mode.grid
+	var thick := BuildView.WALL_THICKNESS
+	for edge in WallCutaway.wall_edges(grid):
+		var cell := Vector2i(edge.x, edge.y)
+		if grid.wall_kind(cell, edge.z) == BuildGrid.WallKind.DOOR:
+			continue
+		var mi := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(1.0 + thick, WALL_HEIGHT_M, thick)
+		mi.mesh = box
+		mi.visible = false
+		_main.add_child(mi)
+		mi.global_transform = (
+			BuildView.wall_transform(grid, cell, edge.z)
+			* Transform3D(Basis.IDENTITY, Vector3(0.0, WALL_HEIGHT_M * 0.5, 0.0))
+		)
+		(
+			_walls
+			. append(
+				{
+					"oid": -100 - _walls.size(),
+					"def": "wall",
+					"name": "wall_%d_%d_%d" % [edge.x, edge.y, edge.z],
+					"mi": mi,
+					"verts": box.get_faces(),
+					"wall": true,
+				}
+			)
+		)
+	print("WALLS %s boxes=%d (doors left out)" % [world, _walls.size()])
+	if _walls.is_empty():
+		_invalid("%s: no wall boxes" % world)
+		return
+	var first: Dictionary = _walls[0]
+	var at := (first["mi"] as MeshInstance3D).global_transform
+	var local := AABB(Vector3(-0.1, -0.1, -0.1), Vector3(0.2, 0.2, 0.2))
+	var inside := _verts_inside(first, at, local)
+	var apart := _verts_inside(first, at.translated_local(Vector3(3.0, 0.0, 0.0)), local)
+	print("WALL_SELFTEST %s at the wall=%d (>0) three metres along=%d (0)" % [world, inside, apart])
+	if inside <= 0 or apart != 0:
+		_invalid("%s: the wall self-test failed" % world)
 
 
 func _collect_meshes(world: String) -> void:
@@ -232,7 +326,7 @@ func _spawn(world: String, role: String, k: int) -> void:
 	p.cleared = true
 	p.stage = Passenger.Stage.TO_GATE
 	p.stage_tick = _clock.tick
-	p.at = ShopTestLayout.AIRSIDE_CELL + ReferenceTerminal.offset_on(_mode.grid)
+	p.at = _spawn_cell()
 	p.clear_path()
 	_ours.append(p)
 	_spawned_at[p.id] = _clock.tick
@@ -256,10 +350,33 @@ func _spawn(world: String, role: String, k: int) -> void:
 	print("SPAWN %s %s id=%d tick=%d stage=%s" % [world, role, p.id, _clock.tick, _stage(p)])
 
 
+## The next of SPAWN_CELLS (turn and turn about) that a guest can stand on.
+func _spawn_cell() -> Vector2i:
+	var offset := ReferenceTerminal.offset_on(_mode.grid)
+	var n := SPAWN_CELLS.size()
+	var start := _spawned_at.size() % n
+	for i in n:
+		var cell := SPAWN_CELLS[(start + i) % n] + offset
+		if _mode.grid.is_walkable(cell):
+			return cell
+	_invalid("no walkable spawn cell")
+	return ShopTestLayout.AIRSIDE_CELL + offset
+
+
+func _new_buckets() -> Dictionary:
+	var out := {}
+	for b in BUCKETS:
+		out[b] = {
+			"pull": 0, "furn": 0, "wall": 0, "any": 0, "deep": 0.0, "bar": 0, "eps_f": 0, "eps_w": 0
+		}
+	return out
+
+
 func _watch(world: String) -> void:
 	_ours.clear()
 	_walked.clear()
 	_side_walked.clear()
+	_spawned_at.clear()
 	_last_used.clear()
 	_m = {
 		"pull": 0,
@@ -280,6 +397,10 @@ func _watch(world: String) -> void:
 		"tips": {},
 		"spawn_pull": 0,
 		"spawn_hit": 0,
+		"buckets": _new_buckets(),
+		"frames": [],
+		"first_at": {},
+		"moved": 0.0,
 	}
 	var keep := func(_t: int) -> void:
 		for q in _ours:
@@ -332,6 +453,8 @@ func _test_roller(
 ) -> void:
 	_m["pull"] += 1
 	_m["rollers"][p.id] = true
+	var first: Vector3 = _m["first_at"].get_or_add(p.id, bag.global_position)
+	_m["moved"] = maxf(float(_m["moved"]), first.distance_to(bag.global_position))
 	var box := _obb(bag.global_transform, CarryOnProps.bag_box(kind))
 	var tag := _tag(state, p.id)
 	if state.has("roll_tip") and not _m["tips"].has(p.id):
@@ -343,24 +466,8 @@ func _test_roller(
 		tag = "spawn:" + tag
 		_m["spawn_pull"] += 1
 	_m["pull_stage"][_stage(p)] = int(_m["pull_stage"].get(_stage(p), 0)) + 1
-	var worst := {}
-	var any_box := false
-	for mesh: Dictionary in _meshes:
-		if int(mesh["oid"]) == used:
-			continue
-		var mi: MeshInstance3D = mesh["mi"]
-		var other := _obb(mi.global_transform, mi.get_aabb())
-		var depth := _sat(box, other)
-		if depth <= 0.0:
-			continue
-		any_box = true
-		var local := CarryOnProps.bag_box(kind)
-		var inside := _verts_inside(mesh, bag.global_transform, local)
-		if inside == 0:
-			continue
-		depth = _core_depth(mesh, bag.global_transform, local)
-		if worst.is_empty() or depth > float(worst["depth"]):
-			worst = {"mesh": mesh, "depth": depth, "inside": inside}
+	var worst := _worst_in(_meshes, box, bag, kind, used)
+	var worst_wall := _worst_in(_walls, box, bag, kind, used)
 	var floor_y := body.global_position.y
 	var axle: Vector3 = state.get("drawn_axle", bag.global_position)
 	var side_sign := _side_sign(body, axle)
@@ -380,26 +487,113 @@ func _test_roller(
 			_m["side"] += 1
 	if _body_hits(body, used):
 		_m["body"] += 1
-	if worst.is_empty():
-		if any_box:
-			_m["box_only"] += 1
-		return
-	_m["hit"] += 1
+	var bucket := _bucket(p, tag, fresh)
+	var hit_furn := worst.has("depth")
+	var hit_wall := worst_wall.has("depth")
+	if worst.has("box_only") or worst_wall.has("box_only"):
+		_m["box_only"] += 1
+	for t: Dictionary in [_m, _all]:
+		var row: Dictionary = t["buckets"][bucket]
+		row["pull"] += 1
+		row["furn"] += int(hit_furn)
+		row["wall"] += int(hit_wall)
+		row["any"] += int(hit_furn or hit_wall)
+	for found: Dictionary in [worst, worst_wall]:
+		if found.has("depth"):
+			await _record(world, p, body, bag, found, tag, bucket, fresh)
+
+
+## Which bucket a pull frame counts in: spawn, then the STANDING stage, then
+## after a roll-upright tip, then CAFE_TO_SEAT, else walk.
+func _bucket(p: Passenger, tag: String, fresh: bool) -> String:
 	if fresh:
-		_m["spawn_hit"] += 1
+		return "spawn"
+	if p.stage == Passenger.Stage.STANDING:
+		return "STANDING"
+	if tag.begins_with("after_tip"):
+		return "after_tip"
+	if p.stage == Passenger.Stage.CAFE_TO_SEAT:
+		return "CAFE_TO_SEAT"
+	return "walk"
+
+
+## The deepest piece of `list` the roller's mesh crosses, {mesh, depth, inside};
+## {"box_only": true} when only boxes met; {} when nothing is near.
+func _worst_in(
+	list: Array[Dictionary], box: Dictionary, bag: Node3D, kind: SecurityLooks.Kind, used: int
+) -> Dictionary:
+	var worst := {}
+	var local := CarryOnProps.bag_box(kind)
+	for mesh: Dictionary in list:
+		if int(mesh["oid"]) == used:
+			continue
+		var mi: MeshInstance3D = mesh["mi"]
+		if _sat(box, _obb(mi.global_transform, mi.get_aabb())) <= 0.0:
+			continue
+		if worst.is_empty():
+			worst = {"box_only": true}
+		var inside := _verts_inside(mesh, bag.global_transform, local)
+		if inside == 0:
+			continue
+		var depth := _core_depth(mesh, bag.global_transform, local)
+		if not worst.has("depth") or depth > float(worst["depth"]):
+			worst = {"mesh": mesh, "depth": depth, "inside": inside}
+	return worst
+
+
+## Books one frame with `worst` (furniture or a wall) in the episodes, the
+## per-piece, per-stage and per-tag counts, the worst-frames list and, for
+## furniture, a plate.
+func _record(
+	world: String,
+	p: Passenger,
+	body: Node3D,
+	bag: Node3D,
+	worst: Dictionary,
+	tag: String,
+	bucket: String,
+	fresh: bool
+) -> void:
 	var mesh: Dictionary = worst["mesh"]
+	var is_wall: bool = mesh.has("wall")
 	var oid: int = mesh["oid"]
-	var own: bool = _last_used.get(p.id, -1) == oid or _used_piece(p, true) == oid
+	var depth: float = worst["depth"]
 	var stage := _stage(p)
+	var own: bool = not is_wall and (_last_used.get(p.id, -1) == oid or _used_piece(p, true) == oid)
+	var frame := {
+		"world": world,
+		"pid": p.id,
+		"tick": _clock.tick,
+		"object":
+		String(mesh["name"]) if is_wall else "%s#%d %s" % [mesh["def"], oid, mesh["name"]],
+		"wall": is_wall,
+		"stage": stage,
+		"bucket": bucket,
+		"tag": tag,
+		"depth": depth,
+		"own": own,
+	}
+	for t: Dictionary in [_m, _all]:
+		(t["frames"] as Array).append(frame)
+		var row: Dictionary = t["buckets"][bucket]
+		row["deep"] = maxf(float(row["deep"]), depth)
+		row["bar"] += int(depth >= BAR_DEPTH_M)
+	if not is_wall:
+		_m["hit"] += 1
+		if fresh:
+			_m["spawn_hit"] += 1
 	var key := "%d:%d:%s" % [p.id, oid, mesh["name"]]
+	if not _m["episodes"].has(key):
+		for t: Dictionary in [_m, _all]:
+			t["buckets"][bucket]["eps_w" if is_wall else "eps_f"] += 1
 	var ep: Dictionary = _m["episodes"].get(key, {"frames": 0, "depth": 0.0})
 	ep["frames"] = int(ep["frames"]) + 1
-	if float(worst["depth"]) > float(ep["depth"]):
+	if not ep.has("pid") or depth > float(ep["depth"]):
 		(
 			ep
 			. merge(
 				{
-					"depth": worst["depth"],
+					"depth": depth,
 					"inside": worst["inside"],
 					"tick": _clock.tick,
 					"stage": stage,
@@ -414,13 +608,16 @@ func _test_roller(
 			)
 		)
 	_m["episodes"][key] = ep
-	var label := "%s%s" % [mesh["def"], " (own)" if own else ""]
+	var label := (
+		String(mesh["name"]) if is_wall else "%s%s" % [mesh["def"], " (own)" if own else ""]
+	)
 	_m["per_def"][label] = int(_m["per_def"].get(label, 0)) + 1
 	_m["per_stage"][stage] = int(_m["per_stage"].get(stage, 0)) + 1
 	_m["per_tag"][tag] = int(_m["per_tag"].get(tag, 0)) + 1
-	var depth: float = worst["depth"]
 	if (
-		_m["plates"] < PLATES_PER_WORLD
+		not _headless
+		and not is_wall
+		and _m["plates"] < PLATES_PER_WORLD
 		and not fresh
 		and depth >= PLATE_MIN_M
 		and depth > float(_m["best_plated"]) + PLATE_STEP_M
@@ -647,6 +844,97 @@ static func _tri_box(a: Vector3, b: Vector3, c: Vector3, h: Vector3) -> bool:
 	return true
 
 
+## The per-bucket table: pull frames, furniture and wall hit frames (and any),
+## their rates per 1000 pull frames, the deepest hit and the frames at or past
+## BAR_DEPTH_M, then the walking rate (everything but spawn and STANDING) and
+## the worst frames.
+func _print_table(label: String, t: Dictionary) -> void:
+	print("TABLE %s seed %d" % [label, _seed])
+	print(
+		(
+			(
+				"| state | pull | furniture | wall | any | furn/1000 | wall/1000 | deepest m "
+				+ "| >=%.2f m | furn episodes | wall episodes |"
+			)
+			% BAR_DEPTH_M
+		)
+	)
+	var walking := {
+		"pull": 0, "furn": 0, "wall": 0, "any": 0, "deep": 0.0, "bar": 0, "eps_f": 0, "eps_w": 0
+	}
+	var total := walking.duplicate()
+	for b in BUCKETS:
+		var row: Dictionary = t["buckets"][b]
+		print(_row_text(b, row))
+		for key in ["pull", "furn", "wall", "any", "bar", "eps_f", "eps_w"]:
+			total[key] += row[key]
+		total["deep"] = maxf(float(total["deep"]), float(row["deep"]))
+		if b != "spawn" and b != "STANDING":
+			for key in ["pull", "furn", "wall", "any", "bar", "eps_f", "eps_w"]:
+				walking[key] += row[key]
+			walking["deep"] = maxf(float(walking["deep"]), float(row["deep"]))
+	print(_row_text("walking (no spawn, no STANDING)", walking))
+	print(_row_text("all", total))
+	var frames: Array = (t["frames"] as Array).duplicate()
+	frames.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["depth"] > b["depth"])
+	_print_frames("WORST_FRAMES %s all states" % label, frames)
+	var settled := frames.filter(
+		func(f: Dictionary) -> bool: return f["bucket"] != "spawn" and f["bucket"] != "STANDING"
+	)
+	_print_frames("WORST_FRAMES %s walking" % label, settled)
+
+
+func _row_text(name: String, row: Dictionary) -> String:
+	var pull := maxf(float(row["pull"]), 1.0)
+	return (
+		"| %s | %d | %d | %d | %d | %.1f | %.1f | %.3f | %d | %d | %d |"
+		% [
+			name,
+			row["pull"],
+			row["furn"],
+			row["wall"],
+			row["any"],
+			1000.0 * row["furn"] / pull,
+			1000.0 * row["wall"] / pull,
+			row["deep"],
+			row["bar"],
+			row["eps_f"],
+			row["eps_w"]
+		]
+	)
+
+
+## The TOP_FRAMES deepest frames, one line per (guest, tick, object): the pull
+## is drawn three times a tick.
+func _print_frames(title: String, frames: Array) -> void:
+	print(title)
+	var seen := {}
+	for f: Dictionary in frames:
+		var key := "%s:%d:%d:%s" % [f["world"], f["pid"], f["tick"], f["object"]]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		print(
+			(
+				"  FRAME %s p%d tick %d hit %s (%s) state %s bucket %s tag %s depth %.3f own %s"
+				% [
+					f["world"],
+					f["pid"],
+					f["tick"],
+					f["object"],
+					"wall" if f["wall"] else "furniture",
+					f["stage"],
+					f["bucket"],
+					f["tag"],
+					f["depth"],
+					f["own"]
+				]
+			)
+		)
+		if seen.size() >= TOP_FRAMES:
+			break
+
+
 func _summary(world: String) -> void:
 	var pull: int = _m["pull"]
 	var per := func(n: int) -> float: return 1000.0 * n / maxf(pull, 1.0)
@@ -707,6 +995,8 @@ func _summary(world: String) -> void:
 				]
 			)
 		)
+	_print_table(world, _m)
+	print("PULL_MOVED %s roller moved up to %.2f m from where first drawn" % [world, _m["moved"]])
 	if pull == 0:
 		_invalid("%s: no roller was drawn in the pull" % world)
 
@@ -808,7 +1098,8 @@ func _invalid(msg: String) -> void:
 func _frames(count: int) -> void:
 	for i in count:
 		await process_frame
-	await RenderingServer.frame_post_draw
+	if not _headless:
+		await RenderingServer.frame_post_draw
 
 
 func _save(img: Image, file: String) -> void:
