@@ -451,7 +451,7 @@ func _pose(node: Node3D, p: Passenger) -> float:
 			held = SitHold.held_ticks(_props, sim, p)
 			clip = "sit_down" if ActivityPoses.clip_ticks(sim, p) >= held else "idle"
 			if clip == "sit_down":
-				var sit_ticks := PassengerSim.SIT_DOWN_TICKS - held
+				var sit_ticks := SitHold.sit_ticks(sim, p) - held
 				base = SIT_CLIP_SECONDS / (sit_ticks / float(SimClock.TICK_RATE))
 		StageKinds.Pose.SEATED:
 			clip = "sit_idle"

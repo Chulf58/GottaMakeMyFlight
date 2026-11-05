@@ -20,10 +20,18 @@ extends RefCounted
 ## A visit's legs: "pre_ticks" (getting up from a gate seat first),
 ## "to_queue_mm" (the walk to the queue), "order_ticks" (the queue wait and the
 ## order), "to_seat_mm" (the counter to the seat's approach cell),
-## "dwell_ticks", "leave_cell" (the seat's approach cell) and "resume_stage"
-## (TO_SECURITY landside, TO_GATE airside).
+## "sit_ticks" (sitting down there, CafeSim.sit_ticks(); SIT_DOWN_TICKS when
+## absent), "up_ticks" (standing up there, CafeSim.up_ticks() for the seat's
+## piece; the guest's own when absent), "dwell_ticks", "leave_cell" (the
+## seat's approach cell) and
+## "resume_stage" (TO_SECURITY landside, TO_GATE airside).
 
 const MARGIN_TICKS := VisitForecast.MARGIN_TICKS
+
+## leave_ticks(), deadline() and live_deadline() count the stand-up as the
+## guest's generic CafeSim.up_ticks(p), with no seat piece: at a booth a roller
+## guest's is SHUFFLE_TICKS shorter, so they run that much early. CafeSim
+## passes the piece itself (its _leave_delay()).
 
 
 ## The tick the guest stands up at the end of a visit that starts now.
@@ -34,7 +42,7 @@ static func visit_end(sim: PassengerSim, legs: Dictionary) -> int:
 		+ JourneyForecast.walk_ticks(legs["to_queue_mm"])
 		+ int(legs["order_ticks"])
 		+ JourneyForecast.walk_ticks(legs["to_seat_mm"])
-		+ PassengerSim.SIT_DOWN_TICKS
+		+ int(legs.get("sit_ticks", PassengerSim.SIT_DOWN_TICKS))
 		+ int(legs["dwell_ticks"])
 	)
 
@@ -46,7 +54,7 @@ static func visit_arrival(sim: PassengerSim, p: Passenger, legs: Dictionary) -> 
 		p,
 		visit_end(sim, legs) - sim.tick,
 		legs["leave_cell"],
-		CafeSim.up_ticks(p),
+		int(legs.get("up_ticks", CafeSim.up_ticks(p))),
 		legs["resume_stage"]
 	)
 

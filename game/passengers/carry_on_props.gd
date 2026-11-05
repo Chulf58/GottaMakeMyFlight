@@ -429,6 +429,8 @@ func sync() -> void:
 		held["kinds"] = kinds
 		held["in_stall"] = StallCarry.in_stall(p)
 		held["sit_face"] = RollerPark.sit_face(sim, p)
+		# At its booth seat (BoothRoller.fix_start()), not queuing for it.
+		held["booth"] = sim.cafes.booth_roller(p) and not is_nan(held["sit_face"])
 		held["security"] = p.stage in [Passenger.Stage.SECURITY_QUEUE, Passenger.Stage.SECURITY]
 		held["stall"] = StallCarry.stall_of(sim, p)
 		# At a booth a roller's lift into the hand ends before the front turn.
@@ -1001,6 +1003,7 @@ func _stamp(held: Dictionary, bag: Dictionary, body: Node3D, want: Transform3D, 
 	CarryLead.stamp_move(
 		bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN), unmoved
 	)
+	BoothRoller.fix_start(bag, held.get("booth", false), sim, body.global_transform)
 	bag["home"] = bag["place"]
 	bag["reach_from"] = _reach_of(node, kind)
 

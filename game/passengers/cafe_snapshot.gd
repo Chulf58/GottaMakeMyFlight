@@ -176,12 +176,17 @@ static func _visit_problem(
 		[
 			(
 				stage != Passenger.Stage.CAFE_SITTING_DOWN
-				or _runs_from(p.stage_tick, PassengerSim.SIT_DOWN_TICKS, tick)
+				or _runs_from(
+					p.stage_tick, CafeSim.sit_ticks(p, _piece_of(visit, seat, grid)), tick
+				)
 			),
 			"sitting down did not start by the saved tick or has run out"
 		],
 		[
-			not standing or _runs_from(p.stage_tick, CafeSim.up_ticks(p), tick),
+			(
+				not standing
+				or _runs_from(p.stage_tick, CafeSim.up_ticks(p, _piece_of(visit, seat, grid)), tick)
+			),
 			"getting up did not start by the saved tick or has run out"
 		],
 	]
@@ -189,6 +194,14 @@ static func _visit_problem(
 		if not check[0]:
 			return check[1]
 	return _relocation_problem(visit, p, grid)
+
+
+## The placement of the table piece `visit` sits at, as CafeSim derives it on
+## load: the saved spot while it still gets up there, else `seat`'s piece.
+static func _piece_of(visit: CafeVisit, seat: Dictionary, grid: BuildGrid) -> Dictionary:
+	if visit.relocation != null and visit.relocation.exiting:
+		return visit.relocation.source
+	return Relocation.placement(grid, int(seat.get("object_id", 0)))
 
 
 ## Why a visit's Relocation cannot be what continuous play left, or "" when it

@@ -508,6 +508,11 @@ static func floor_spot(
 ) -> Transform3D:
 	var spot := SecurityLooks.floor_spot(sim, p, index, count)
 	var where := StageKinds.location(p.stage)
+	if kind == SecurityLooks.Kind.ROLLER and sim.cafes.booth_roller(p):
+		var front: Variant = chair_front(sim, p, kind)
+		if front != null:
+			spot.origin.x = BoothRoller.side(sim, front as Transform3D, hand) * PARK_SIDE_M
+		return spot
 	if kind != SecurityLooks.Kind.ROLLER or where == StageKinds.Location.FACILITY_SEAT:
 		return spot
 	var out := -1.0 if hand == 0 else 1.0
@@ -517,16 +522,24 @@ static func floor_spot(
 ## The frame (world, on the floor) a roller of `p` (of `kind`) lies in at a gate
 ## chair: the chair front's cell turned to face out of the chair, fixed in the
 ## world while the body moves into the seat and back out (the body's frame
-## carried the bag 0.55 m with it); null anywhere else (the body's frame).
+## carried the bag 0.55 m with it); at a booth seat (CafeSim.booth_roller())
+## the same at the seat's approach cell, where it is set down before the step
+## in and picked up after the step out (board 5dc41129); null anywhere else
+## (the body's frame).
 static func chair_front(sim: PassengerSim, p: Passenger, kind: SecurityLooks.Kind) -> Variant:
-	if kind != SecurityLooks.Kind.ROLLER or p.seat_object == 0:
+	if kind != SecurityLooks.Kind.ROLLER:
 		return null
-	if StageKinds.location(p.stage) != StageKinds.Location.GATE_SEAT:
+	var where := StageKinds.location(p.stage)
+	var booth := where == StageKinds.Location.FACILITY_SEAT and sim.cafes.booth_roller(p)
+	if not booth and (p.seat_object == 0 or where != StageKinds.Location.GATE_SEAT):
 		return null
 	var face := sit_face(sim, p)
 	if is_nan(face):
 		return null
-	return Transform3D(Basis(Vector3.UP, face), sim.grid.cell_to_world(p.seat_front))
+	var at: Variant = sim.grid.cell_to_world(p.seat_front)
+	if booth:
+		at = SitHold.chair_front(sim, p)
+	return Transform3D(Basis(Vector3.UP, face), at as Vector3)
 
 
 ## `frame` turned about the vertical only (its yaw), at its origin.
@@ -699,7 +712,8 @@ static func plan(
 		var up := up_k(bag, k)
 		_taken(bag, up, start * handle, body, lead)
 		at = _off_floor(up, bag, start, want, parked, _yawed(frame), bar, handle)
-	var xf: Transform3D = at[1]
+	# Out of any wall at a booth seat (BoothRoller.fix_start()).
+	var xf := BoothRoller.drawn(at[1], bag, k, bar)
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	var weights := [0.0, 0.0]
 	var keeps := [0.0, 0.0]
