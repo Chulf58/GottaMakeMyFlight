@@ -435,3 +435,11 @@ func test_a_label_slid_at_the_farthest_zoom_stays_inside_its_culling_box() -> vo
 		# The margin alone holds it, whatever box Godot gives a billboard.
 		var bare := AABB(node.global_position, Vector3.ZERO)
 		assert_bool(bare.grow(node.extra_cull_margin).has_point(drawn)).is_true()
+
+
+func test_the_nudge_reach_is_the_card_height_capped_plus_two_icon_widths() -> void:
+	var icons := 2.0 * NeedIcons.ICON_PX
+	assert_float(RoomLabelLayout.nudge_reach(40.0)).is_equal(40.0 + icons)
+	assert_float(RoomLabelLayout.nudge_reach(RoomLabelLayout.NUDGE_PX * 3.0)).is_equal(
+		RoomLabelLayout.NUDGE_PX + icons
+	)

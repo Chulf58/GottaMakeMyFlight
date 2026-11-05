@@ -97,6 +97,9 @@ func _run() -> void:
 	_main = load(MAIN_SCENE).instantiate()
 	var clock: SimClock = _main.get_node("SimClock")
 	var world_seed := randi()
+	# PROBE_SEED replays a failed run's printed seed.
+	if OS.has_environment("PROBE_SEED"):
+		world_seed = OS.get_environment("PROBE_SEED").to_int()
 	clock.seed_rng(world_seed)
 	print("PROBE seed=", world_seed)
 	# The probe builds its own furnished terminal: the starter shell would
@@ -406,10 +409,14 @@ func _check_pop(space: PhysicsDirectSpaceState3D, name: String, at: Vector3, siz
 
 
 ## Every room label on screen draws on its cream card, and no need icon covers
-## the card (decision room-labels-sit-on-a-cream-card-and-slide-clear-of-need-
-## icons): an icon's or wish bubble's drawn box overlapping the card fails the
-## plate. Icons within 200 px of a card count as near, the control that the
-## labels stand in a crowd.
+## the card unless the label had no clear spot in reach (decision room-labels-
+## sit-on-a-cream-card-and-slide-clear-of-need-icons, and room-label-card-and-
+## cafe-pop-clearance-as-built, which accepts the HUD-only slide as the
+## fallback). An icon's or wish bubble's drawn box overlapping the card fails
+## the plate when _had_clear_spot() finds a spot the label did not take. Icons
+## within 200 px of a card count as near, the control that the labels stand in a
+## crowd. Each label prints which case applied: clear, fallback_used or
+## missed_spot.
 func _check_labels_clear(name: String) -> void:
 	var rooms := _main.get_node("BuildMode/RoomView")
 	var unit := _unit()
@@ -419,6 +426,14 @@ func _check_labels_clear(name: String) -> void:
 	var size := root.get_visible_rect().size
 	var cards := 0
 	var near := 0
+	var card_boxes := {}
+	for child in rooms.get_children():
+		var other := child as Label3D
+		if other == null or not other.visible:
+			continue
+		var other_card := other.get_node_or_null(RoomLabelLayout.CARD) as Sprite3D
+		if other_card != null:
+			card_boxes[other] = RoomLabelLayout.sprite_rect(other_card, _cam, unit)
 	for child in rooms.get_children():
 		var label := child as Label3D
 		if label == null or not label.visible:
@@ -437,23 +452,57 @@ func _check_labels_clear(name: String) -> void:
 				near += 1
 			if box.intersects(icon):
 				covered.append(str(Rect2(icon.position.round(), icon.size.round())))
+		var verdict := "clear"
+		if not covered.is_empty():
+			verdict = (
+				"fallback_used" if not _had_clear_spot(label, box, card_boxes) else "missed_spot"
+			)
 		print(
 			(
-				"PROBE %s label '%s' card=%s offset=%s covered=%s"
+				"PROBE %s label '%s' card=%s offset=%s covered=%s case=%s"
 				% [
 					name,
 					label.text.replace("\n", " "),
 					Rect2(box.position.round(), box.size.round()),
 					label.offset.round(),
-					covered
+					covered,
+					verdict
 				]
 			)
 		)
-		if not covered.is_empty():
-			_invalid("%s: need icons cover room label '%s'" % [name, label.text])
+		if verdict == "missed_spot":
+			_invalid(
+				"%s: need icons cover room label '%s' that had a clear spot" % [name, label.text]
+			)
 	print("PROBE %s room cards in frame=%d icons near=%d" % [name, cards, near])
 	if cards == 0 or near == 0:
 		_invalid("%s: no room card in frame among icons, so the label check proves nothing" % name)
+
+
+## Whether `label`, whose card now fills `box` (viewport pixels), had a spot clear
+## of the HUD, the need icons and the other labels' cards within its nudge reach:
+## the same search RoomLabelLayout runs (slide_clear() over nudge_reach()), from
+## the card's anchored place (its box less the nudge the layout stored on it).
+## Every other card counts as a blocker, a superset of the cards the layout had
+## placed before this one, so the probe never finds a spot the layout could not.
+func _had_clear_spot(label: Label3D, box: Rect2, card_boxes: Dictionary) -> bool:
+	var out := root.get_stretch_transform().get_scale().y
+	var anchored := Rect2(
+		box.position * out - label.get_meta(&"nudge", Vector2.ZERO), box.size * out
+	)
+	var blockers := HudRects.collect(_main.get_node("BuildMode/RoomView"), out)
+	blockers.append_array(RoomLabelLayout.icon_rects(_views, _cam, out))
+	for other: Label3D in card_boxes:
+		if other != label:
+			var rect: Rect2 = card_boxes[other]
+			blockers.append(Rect2(rect.position * out, rect.size * out))
+	var spot := RoomLabelLayout.slide_clear(
+		anchored,
+		blockers,
+		root.get_visible_rect().size * out,
+		RoomLabelLayout.nudge_reach(anchored.size.y)
+	)
+	return spot.size != Vector2.ZERO
 
 
 ## The pop must cover no passenger's head and no need icon (board a48bca8d).
