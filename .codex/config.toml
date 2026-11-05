@@ -1,0 +1,8 @@
+[mcp_servers.blender]
+command = "/mnt/c/Users/chulf/Gotta-make-my-flight/tools/blender-mcp-wsl.sh"
+
+[mcp_servers.godot]
+command = "/mnt/c/Users/chulf/Gotta-make-my-flight/tools/godot-mcp-wsl.sh"
+
+[mcp_servers.godot.env]
+GODOT_MCP_DISABLE_ELICITATION = "1"
