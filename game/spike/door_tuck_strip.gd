@@ -12,11 +12,15 @@ extends "res://spike/pull_swap_strip.gd"
 ## offset from the guest's centre line and the bag's distance to the door's
 ## middle. A plate that fails its checks is a problem; `done` is true once the
 ## strip is through. Load with preload(); no class_name.
+## `-- --strip-hand=0` plates a right-hand pull instead (board ed73cfb1: the
+## two hands from the same angle, _aim() framing from the pulling hand's side);
+## `--strip-out=<res path>` puts the plates elsewhere.
 
 const DOOR_OUT_REL := "res://../tools/blender/out/door-tuck"
 const START_M := 0.35
 const DOOR_EVERY_FRAMES := 9
 const PLATES := 6
+const LEFT := 1
 
 var _doors: Array[Vector3] = []
 var _door := Vector3.INF
@@ -39,8 +43,8 @@ func look(
 	if _id < 0:
 		# A left-hand pull (the side the rods met the legs on before the tuck
 		# was measured from the hips).
-		var left := CarryLead.hand_of(int(state.get("place", 0))) == 1
-		if props.transfer_progress(p.id, i) < 1.0 or not left:
+		var wanted := CarryLead.hand_of(int(state.get("place", 0))) == _arg("strip-hand", LEFT)
+		if props.transfer_progress(p.id, i) < 1.0 or not wanted:
 			return
 		var door := _door_near(main, body.global_position)
 		if not door.is_finite():
@@ -76,8 +80,8 @@ func _sheet() -> void:
 		sheet.blit_rect(
 			small, Rect2i(Vector2i.ZERO, cell), Vector2i(k % 3 * cell.x, k / 3 * cell.y)
 		)
-	var dir := ProjectSettings.globalize_path(DOOR_OUT_REL).simplify_path()
-	sheet.save_png(dir.path_join("door_tuck_sheet.png"))
+	var dir := ProjectSettings.globalize_path(_out_rel()).simplify_path()
+	sheet.save_png(dir.path_join("door_tuck_sheet_hand%d.png" % _arg("strip-hand", LEFT)))
 	print("PLATE saved %s" % dir.path_join("door_tuck_sheet.png"))
 
 
@@ -133,7 +137,7 @@ func _door_plate(
 	if shell == null:
 		return "id %d: no %s mesh on the roller %s" % [p.id, BODY, bag.name]
 	var place := int(state.get("place", -1))
-	var name := "door_tuck_id%d_%02d" % [p.id, _taken]
+	var name := "door_tuck_hand%d_id%d_%02d" % [CarryLead.hand_of(place), p.id, _taken]
 	var was_cam := main.get_viewport().get_camera_3d()
 	var cam := Camera3D.new()
 	cam.fov = 45.0
@@ -185,10 +189,26 @@ func _door_plate(
 	if picked < 0 or (verdict["bad"] as String) != "":
 		return "%s: %s" % [name, verdict["bad"]]
 	saved.append(img)
-	var dir := ProjectSettings.globalize_path(DOOR_OUT_REL).simplify_path()
+	var dir := ProjectSettings.globalize_path(_out_rel()).simplify_path()
 	DirAccess.make_dir_recursive_absolute(dir)
 	var path := dir.path_join(name + ".png")
 	if img.save_png(path) != OK:
 		return "%s: not saved to %s" % [name, path]
 	print("PLATE saved %s size=%s" % [path, img.get_size()])
 	return ""
+
+
+## The integer user argument `--<key>=N`, or `fallback`.
+static func _arg(key: String, fallback: int) -> int:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--%s=" % key):
+			return int(arg.get_slice("=", 1))
+	return fallback
+
+
+## Where the plates go: `--strip-out=<res path>`, or DOOR_OUT_REL.
+static func _out_rel() -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--strip-out="):
+			return arg.get_slice("=", 1)
+	return DOOR_OUT_REL

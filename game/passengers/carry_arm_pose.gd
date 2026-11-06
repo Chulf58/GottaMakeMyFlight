@@ -23,6 +23,14 @@ const STRAP_HAND_UP_DEGREES := 45.0
 const PULL_OUT_DEGREES := 12.0
 const PULL_SWING_KEPT := 0.2
 const PULL_LEAN_DEGREES := 12.0
+## The pulling upper arm's twist (CarryArm.twist_degrees, from its rest, the
+## same on both arms, mirrored), per skeleton: the male bodies, then the
+## female. Each keeps the right hand's mean grip where the clip's own twist
+## put it (within 0.5 cm in height and out from the thigh, walking), and the
+## left hand is its mirror (board ed73cfb1, spike/pull_grip_asym_probe.gd).
+## Walking only (walk_share()): standing idle the clip's own twist is already
+## near a mirror (0.0 and 0.8 cm), and running is left as it was.
+const PULL_TWIST_DEGREES: Array[float] = [40.0, 20.0]
 
 
 ## Aims each hand of `body` at its target for the hand-led moves of its bags
@@ -78,7 +86,8 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 	var reach_on: Array = held.get("reach_on", [false, false])
 	var swaps := CarrySwap.arm_shares(held, now)
 	var outs := StallCarry.hand_out_degrees(held, now)
-	var key := [modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps, outs]
+	var walk := walk_share(held, body)
+	var key := [modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps, outs, walk]
 	if held.get("arm_key", []) == key and held.get("arm_body") == body:
 		return
 	held["arm_key"] = key
@@ -113,6 +122,33 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 				arm.front_half_width = BoothCarry.free_hand_width(beside > 0, tuck)
 				arm.front_weight = maxf(held["weight"] if beside > 0 else 0.0, tuck)
 		CarrySwap.pose_arm(arm, swaps[side], held["weight"], outs[side])
+		# The set twist with the pull while walking, eased in and out with a
+		# swap's share and with the walk clip's crossfade.
+		var share: float = swaps[side]
+		arm.rest_twist_weight = walk * (share if share >= 0.0 else (1.0 if pulling else 0.0))
+		arm.twist_degrees = pull_twist_degrees(body)
+
+
+## How much of `body`'s drawn pose is the walk clip, 0 to 1: 1 walking, 0 in
+## any other clip, and in between through a crossfade (ClipCrossfade) to or
+## from the walk, as its weight eases (the clip blended from is kept in
+## `held`, "walk_from", while no crossfade runs).
+static func walk_share(held: Dictionary, body: Node3D) -> float:
+	var walking := 1.0 if body.get_meta(&"clip", "") == "walk" else 0.0
+	var fade := body.get_meta(&"crossfade", null) as ClipCrossfade
+	if fade == null or not fade.blending():
+		held["walk_from"] = walking
+		return walking
+	var was: float = held.get("walk_from", walking)
+	return lerpf(was, walking, smoothstep(0.0, 1.0, fade.weight))
+
+
+## The pulling upper arm's twist for passenger body `body` (PULL_TWIST_DEGREES
+## by the skeleton its body uses, PassengerLooks.PER_VARIANT; a node with no
+## body takes the male's).
+static func pull_twist_degrees(body: Node3D) -> float:
+	var female := int(body.get_meta(&"body", 0)) >= PassengerLooks.PER_VARIANT
+	return PULL_TWIST_DEGREES[1 if female else 0]
 
 
 ## Turns off both CarryArms of a character with no bags (or released), with
@@ -124,6 +160,7 @@ static func arms_off(props: CarryOnProps, body: Node3D) -> void:
 	for arm: CarryArm in rig["arms"]:
 		arm.active = false
 		arm.front_weight = 0.0
+		arm.rest_twist_weight = 0.0
 		arm.reach_weight = 0.0
 	var stoop: CarryStoop = rig["stoop"]
 	for list: Array in [stoop.targets, stoop.sides, stoop.weights, stoop.keeps, stoop.drops]:
