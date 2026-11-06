@@ -103,7 +103,7 @@ func _walk(row: int, step_m: float, hand := 0) -> Dictionary:
 			changes.append([tick, x, picked])
 		var out := -1.0 if picked == 0 else 1.0
 		bag["drawn_axle"] = (
-			frame * Vector3(out * CarryOnProps.TRAIL_SIDE_M, 0.0, -CarryOnProps.TRAIL_M)
+			frame * Vector3(out * RollerPull.TRAIL_SIDE_M, 0.0, -RollerPull.TRAIL_M)
 		)
 		hands.append(picked)
 		xs.append(x)
@@ -148,7 +148,7 @@ func test_the_roller_goes_back_to_the_right_once_past_the_wall() -> void:
 	(
 		assert_float(back_x - wall_end)
 		. override_failure_message("went back %.2f m past the wall's end" % (back_x - wall_end))
-		. is_greater(CarryOnProps.TRAIL_M)
+		. is_greater(RollerPull.TRAIL_M)
 	)
 	# On the left the whole run, and the right's reach footprint meets no wall
 	# from the tick it went back to the end of the walk.
@@ -171,7 +171,7 @@ func test_the_left_hand_holds_for_the_minimum_hold() -> void:
 	var ahead := _ahead(OPEN_ROW, x)
 	var now := FIRST_TICK + 50.0
 	var left := {"kind": ROLLER, "place": _place(1)}
-	left["drawn_axle"] = frame * Vector3(CarryOnProps.TRAIL_SIDE_M, 0.0, -CarryOnProps.TRAIL_M)
+	left["drawn_axle"] = frame * Vector3(RollerPull.TRAIL_SIDE_M, 0.0, -RollerPull.TRAIL_M)
 	left["changed"] = now - PullSide.HOLD_TICKS + 1.0
 	assert_int(PullSide.pick(left, _grid, frame, ahead, WALK_M, 0, now)).is_equal(1)
 	# Past the hold it goes back to the right on the same open floor.
@@ -204,36 +204,36 @@ func test_a_change_of_hand_starts_the_trail_behind_on_the_new_side() -> void:
 	var frame := _pose(RIGHT_ROW, x)
 	var now := FIRST_TICK + 50.0
 	var bag := {"kind": ROLLER, "place": _place(0), "changed": now - 20.0}
-	# The right side's walked line, as CarryOnProps._trail() keeps it.
+	# The right side's walked line, as RollerPull.step() keeps it.
 	var walked: Array = []
 	for k in 11:
-		walked.append(frame * Vector3(-CarryOnProps.TRAIL_SIDE_M, 0.0, -2.0 + k * 0.2))
+		walked.append(frame * Vector3(-RollerPull.TRAIL_SIDE_M, 0.0, -2.0 + k * 0.2))
 	bag["walked"] = walked
-	var right_axle := frame * Vector3(-CarryOnProps.TRAIL_SIDE_M, 0.0, -CarryOnProps.TRAIL_M)
+	var right_axle := frame * Vector3(-RollerPull.TRAIL_SIDE_M, 0.0, -RollerPull.TRAIL_M)
 	bag["drawn_axle"] = right_axle
 	var picked := PullSide.pick(bag, _grid, frame, _ahead(RIGHT_ROW, x), WALK_M, 0, now)
 	assert_int(picked).is_equal(1)
-	# The next trail step (CarryOnProps._trail()): the left line's point now on
+	# The next trail step (RollerPull.step()): the left line's point now on
 	# what is left of the walked line, kept on the left and behind.
 	var line: Array = bag.get("walked", [])
-	line.append(frame * Vector3(CarryOnProps.TRAIL_SIDE_M, 0.0, 0.0))
-	var local := frame.affine_inverse() * CarryOnProps.trail(line, frame.basis * Vector3.FORWARD)
-	local.x = clampf(local.x, CarryOnProps.TRAIL_SIDE_MIN_M, CarryOnProps.TRAIL_SIDE_MAX_M)
-	local.z = minf(local.z, -CarryOnProps.TRAIL_BEHIND_MIN_M)
+	line.append(frame * Vector3(RollerPull.TRAIL_SIDE_M, 0.0, 0.0))
+	var local := frame.affine_inverse() * RollerPull.trail(line, frame.basis * Vector3.FORWARD)
+	local.x = clampf(local.x, RollerPull.TRAIL_SIDE_MIN_M, RollerPull.TRAIL_SIDE_MAX_M)
+	local.z = minf(local.z, -RollerPull.TRAIL_BEHIND_MIN_M)
 	# Straight behind on the left's own line, not pulled in to the clamps by
 	# the jump across the legs at the end of the right's line.
-	assert_float(local.x).is_equal_approx(CarryOnProps.TRAIL_SIDE_M, 0.01)
-	assert_float(-local.z).is_equal_approx(CarryOnProps.TRAIL_M, 0.01)
-	# The drawn axle swings across to it (CarryOnProps.follow()) behind the
+	assert_float(local.x).is_equal_approx(RollerPull.TRAIL_SIDE_M, 0.01)
+	assert_float(-local.z).is_equal_approx(RollerPull.TRAIL_M, 0.01)
+	# The drawn axle swings across to it (RollerPull.follow()) behind the
 	# legs: wherever it is nearer the centre line than TRAIL_SIDE_MIN_M it is
 	# at least TRAIL_BEHIND_MIN_M behind, and it gets there.
 	var at := frame.affine_inverse() * right_axle
 	var crossed := 0
 	for step in 30:
-		at = CarryOnProps.follow(at, local, 1.0 / 3.0, 1)
-		if absf(at.x) < CarryOnProps.TRAIL_SIDE_MIN_M:
+		at = RollerPull.follow(at, local, 1.0 / 3.0, 1)
+		if absf(at.x) < RollerPull.TRAIL_SIDE_MIN_M:
 			crossed += 1
-			assert_float(-at.z).is_greater_equal(CarryOnProps.TRAIL_BEHIND_MIN_M)
+			assert_float(-at.z).is_greater_equal(RollerPull.TRAIL_BEHIND_MIN_M)
 	assert_int(crossed).is_greater(0)
 	assert_float(at.x).is_equal_approx(local.x, 0.01)
 

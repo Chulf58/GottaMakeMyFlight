@@ -320,9 +320,9 @@ func test_the_wide_swap_route_applies_only_at_security() -> void:
 		at_security += 1
 		if is_nan(off):
 			var body := views.node_for(id)
-			var drawn: Transform3D = props._swap_transform(held, body, 0, 0.5)[0]
+			var drawn: Transform3D = CarryHand.swap_transform(props, held, body, 0, 0.5)[0]
 			held["security"] = false
-			var narrow: Transform3D = props._swap_transform(held, body, 0, 0.5)[0]
+			var narrow: Transform3D = CarryHand.swap_transform(props, held, body, 0, 0.5)[0]
 			held["security"] = true
 			var axle := drawn * CarryOnProps.ROLLER_AXLE
 			var want := _swap_axle_midway(props, held, body)
@@ -351,7 +351,7 @@ func test_the_wide_swap_route_applies_only_at_security() -> void:
 ## Where the axle of the swapping roller (bag 0) of `held` drawn on `body` is
 ## midway (t 0.5) at security: CarryLead.swap_axle() between its axle hung
 ## under the grip and its trailing axle, moved out half of BAR_PALM_M on the
-## hand's side (CarryOnProps._swap_transform).
+## hand's side (CarryHand.swap_transform).
 func _swap_axle_midway(props: CarryOnProps, held: Dictionary, body: Node3D) -> Vector3:
 	var bag: Dictionary = held["bags"][0]
 	var scale_by: float = held["scale"]
@@ -361,10 +361,10 @@ func _swap_axle_midway(props: CarryOnProps, held: Dictionary, body: Node3D) -> V
 	if bag["carry"] == SecurityLooks.Carry.PULL:
 		trailing = bag.get("axle_now", Vector3.INF)
 		if not trailing.is_finite():
-			trailing = props._axle_drawn(bag, body, scale_by, hand)
+			trailing = RollerPull.drawn(props, bag, body, scale_by, hand)
 	else:
 		trailing = body.global_transform * ((bag["from"] as Transform3D) * CarryOnProps.ROLLER_AXLE)
-	var hung := props._hung_axle(bag, grip, scale_by)
+	var hung := CarryHand.hung_axle(props, bag, grip, scale_by)
 	var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
-	var axle := CarryLead.swap_axle(frame, hung, trailing, 0.5, hand, CarryOnProps.SWING_RADIUS_M)
-	return axle + CarryOnProps._outward(body, hand) * CarryOnProps.BAR_PALM_M * 0.5
+	var axle := CarryLead.swap_axle(frame, hung, trailing, 0.5, hand, RollerPull.SWING_RADIUS_M)
+	return axle + CarryHand._outward(body, hand) * CarryHand.BAR_PALM_M * 0.5

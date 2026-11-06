@@ -57,7 +57,7 @@ func test_hips_back_take_the_shoulder_back() -> void:
 ## it met the thighs); both are placed from the hand.
 func test_off_the_floor_a_case_turns_to_hang_sooner() -> void:
 	var lying := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
-	var hanging := CarryOnProps.carried(Vector3(-0.3, 0.8, 0.05), Vector3.ZERO, 0.0, 1.0)
+	var hanging := CarryHand.carried(Vector3(-0.3, 0.8, 0.05), Vector3.ZERO, 0.0, 1.0)
 	var k := CarryLead.REACH_SHARE + (1.0 - CarryLead.REACH_SHARE) * 0.15
 	var turned := []
 	for from_at: int in [FLOOR_AT, TRAY_AT]:
@@ -82,7 +82,7 @@ func test_off_the_floor_a_case_turns_to_hang_sooner() -> void:
 ## k 0.46.
 func test_a_case_off_the_floor_is_held_with_the_palm_over_its_top() -> void:
 	var lying := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
-	var hanging := CarryOnProps.carried(Vector3(-0.3, 0.8, 0.05), Vector3.ZERO, 0.0, 1.0)
+	var hanging := CarryHand.carried(Vector3(-0.3, 0.8, 0.05), Vector3.ZERO, 0.0, 1.0)
 	var edge := CarryOnProps.grip_anchor(SecurityLooks.Kind.CASE)
 	var s := CarryLead.span(CarryLead.End.REST, CarryLead.End.HELD)
 	var mid := s.x + (s.y - s.x) * 0.28
@@ -126,7 +126,7 @@ func test_a_case_off_the_floor_rises_to_a_fixed_height() -> void:
 	var high := _body()
 	high["grips"] = [Vector3(-0.3, 1.1, 0.05), Vector3(0.3, 1.1, 0.05)]
 	var at := func(body: Dictionary) -> Transform3D:
-		return CarryOnProps.carried(body["grips"][0], Vector3.ZERO, 0.0, 1.0)
+		return CarryHand.carried(body["grips"][0], Vector3.ZERO, 0.0, 1.0)
 	var apart: float = (
 		(at.call(high) as Transform3D).origin.y - (at.call(low) as Transform3D).origin.y
 	)
@@ -168,7 +168,7 @@ func test_out_of_a_tray_a_case_or_roller_rises_to_a_fixed_height() -> void:
 	var high := _body()
 	high["grips"] = [Vector3(-0.3, 1.1, 0.05), Vector3(0.3, 1.1, 0.05)]
 	var at := func(body: Dictionary) -> Transform3D:
-		return CarryOnProps.carried(body["grips"][0], Vector3.ZERO, 0.0, 1.0)
+		return CarryHand.carried(body["grips"][0], Vector3.ZERO, 0.0, 1.0)
 	var apart: float = (
 		(at.call(high) as Transform3D).origin.y - (at.call(low) as Transform3D).origin.y
 	)
@@ -251,7 +251,7 @@ func test_a_security_swap_goes_round_the_hand_side() -> void:
 	var frame := Transform3D(Basis(Vector3.UP, 0.4), Vector3(2.0, 0.0, 1.0))
 	var hung := frame * Vector3(-0.3, 0.35, 0.02)
 	var trailing := frame * Vector3(0.15, 0.03, -0.95)
-	var clear := CarryOnProps.SWING_RADIUS_M
+	var clear := RollerPull.SWING_RADIUS_M
 	var at_start := CarryLead.swap_axle(frame, hung, trailing, 0.0, 0, clear)
 	var at_end := CarryLead.swap_axle(frame, hung, trailing, 1.0, 0, clear)
 	assert_float(at_start.distance_to(hung)).is_less(0.0001)

@@ -197,7 +197,7 @@ func test_a_refused_stand_is_asked_for_once_a_still_spell() -> void:
 		RollerPark.queue_stand(bag, ROLLER, true, now)
 		now += 1.0
 	assert_bool(RollerPark.restamps(bag)).is_true()
-	assert_bool(CarryOnProps._leads({}, bag)).is_true()
+	assert_bool(CarryPlace.leads({}, bag)).is_true()
 	bag["led"] = true
 	bag["was"] = bag["home"]
 	bag["carry_from"] = SecurityLooks.Carry.PULL

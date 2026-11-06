@@ -46,7 +46,7 @@ const BOWL_TOP_M := 1.0
 ## them, StallCarry.LIFT_LEAD_M, and then lands behind the walker).
 const AFTER_M := 4.0
 ## Late in a move to the pull: from here on a roller is on its wheels behind
-## the walker (the overhead route lands by CarryOnProps.ROLLER_LAND; the swap
+## the walker (the overhead route lands by CarryPlace.ROLLER_LAND; the swap
 ## by the grip bar is most of the way back).
 const LANDED := 0.85
 ## A bag settled on a stall floor keeps out of the seated and standing feet,
@@ -386,8 +386,8 @@ func test_a_pulled_roller_trails_only_once_its_walker_is_out_of_the_stall() -> v
 	assert_int(landed).is_greater(0)
 	assert_int(landing).is_greater(0)
 	assert_int(last["carry"]).is_equal(SecurityLooks.Carry.PULL)
-	assert_float(last["axle_off"]).is_greater(CarryOnProps.TRAIL_BEHIND_MIN_M - 0.05)
-	assert_float(furthest).is_less(CarryOnProps.TRAIL_M + 0.2)
+	assert_float(last["axle_off"]).is_greater(RollerPull.TRAIL_BEHIND_MIN_M - 0.05)
+	assert_float(furthest).is_less(RollerPull.TRAIL_M + 0.2)
 
 
 ## Every kind, one bag and two: no bag reaches into a side partition on the
@@ -482,7 +482,7 @@ func test_a_bag_on_a_stall_floor_stands_upright_against_the_door() -> void:
 ## A roller taken in hand at a stall is held by its grip bar with its rods in,
 ## and goes between the pull and the hand by that bar: on every frame the hand
 ## holds it (in the pull, hung from the hand, and through both swaps) the bar
-## is in the hand (within the palm, CarryOnProps.BAR_PALM_M), no swap goes up
+## is in the hand (within the palm, CarryHand.BAR_PALM_M), no swap goes up
 ## over the head, and each swap happens with
 ## the bag at the side (the front-carry turn not under way). Controls: frames
 ## of both swaps were measured.
@@ -502,7 +502,7 @@ func test_a_roller_keeps_its_grip_bar_in_the_hand_through_the_swaps() -> void:
 		if frame["bar_gap"] >= 0.0 and not other_move:
 			held += 1
 			widest = maxf(widest, frame["bar_gap"])
-			if frame["bar_gap"] > CarryOnProps.BAR_PALM_M + 0.005:
+			if frame["bar_gap"] > CarryHand.BAR_PALM_M + 0.005:
 				loose += 1
 				if loose <= 3:
 					print("bar off the hand by %.3f: %s" % [frame["bar_gap"], _line(frame)])

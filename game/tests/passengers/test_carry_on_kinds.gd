@@ -104,7 +104,7 @@ func test_a_pulled_roller_runs_from_the_floor_to_the_hand() -> void:
 	for scale_by in [1.0, SecurityLooks.TWO_BAG_SCALE]:
 		var grip := Vector3(0.3, 1.0, -0.1)
 		var axle := Vector3(0.05, 0.03 * scale_by, -0.85)
-		var xf := CarryOnProps.pulled(grip, axle, scale_by)
+		var xf := RollerPull.pulled(grip, axle, scale_by)
 		assert_vector(xf * CarryOnProps.ROLLER_AXLE).is_equal_approx(axle, Vector3.ONE * 0.0001)
 		var local := xf.affine_inverse() * grip
 		assert_float(local.x).is_equal_approx(0.0, 0.0001)
@@ -116,7 +116,7 @@ func test_a_pulled_roller_runs_from_the_floor_to_the_hand() -> void:
 		toward.y = 0.0
 		assert_float(front.y).is_greater(0.0)
 		assert_float(front.dot(toward)).is_less(0.0)
-		var length := CarryOnProps._pull_length(grip, axle, scale_by, 0.22)
+		var length := RollerPull.pull_length(grip, axle, scale_by, 0.22)
 		var reached := 0.22 + length + CarryOnProps.ROLLER_GRIP_PAST_TOP_M
 		assert_float(reached).is_equal_approx(local.z, 0.0001)
 
@@ -150,10 +150,10 @@ func test_a_shoulder_bag_hangs_from_the_shoulder_outside_the_hip() -> void:
 ## hips), behind the body.
 func test_a_backpack_is_worn_behind_the_spine() -> void:
 	var spine := Transform3D(Basis(Vector3.RIGHT, -0.1), Vector3(0.0, 1.544, -0.047))
-	var xf := CarryOnProps.worn_back(spine, 0.0, 1.0)
+	var xf := CarryWorn.worn_back(spine, 0.0, 1.0)
 	var along := xf.basis.z.normalized()
 	var lean := rad_to_deg(along.angle_to(spine.basis.y.normalized()))
-	assert_float(lean).is_equal_approx(CarryOnProps.BACK_LEAN_DEGREES, 0.01)
+	assert_float(lean).is_equal_approx(CarryWorn.BACK_LEAN_DEGREES, 0.01)
 	var top := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z
 	var top_inner := xf * Vector3(0.0, 0.0, top)
 	var bottom_inner := (
@@ -161,9 +161,9 @@ func test_a_backpack_is_worn_behind_the_spine() -> void:
 	)
 	var up := spine.basis.y.normalized()
 	var out := (top_inner - spine.origin) - up * (top_inner - spine.origin).dot(up)
-	assert_float(out.length()).is_equal_approx(CarryOnProps.BACK_FROM_SPINE_M, 0.0001)
+	assert_float(out.length()).is_equal_approx(CarryWorn.BACK_FROM_SPINE_M, 0.0001)
 	assert_float((top_inner - spine.origin).dot(up)).is_equal_approx(
-		CarryOnProps.BACK_TOP_OVER_SPINE_M, 0.0001
+		CarryWorn.BACK_TOP_OVER_SPINE_M, 0.0001
 	)
 	# Behind the body (it faces +Z), the bottom further back than the top.
 	assert_float(top_inner.z).is_less(spine.origin.z)
@@ -176,20 +176,20 @@ func test_a_backpack_is_worn_behind_the_spine() -> void:
 ## any step it is TRAIL_M along `back`. Control: it moves round the corner.
 func test_a_trailing_axle_follows_the_walked_line() -> void:
 	var back := Vector3(0.0, 0.0, -1.0)
-	var start := CarryOnProps.trail([Vector3.ZERO], back)
-	assert_vector(start).is_equal_approx(back * CarryOnProps.TRAIL_M, Vector3.ONE * 0.0001)
+	var start := RollerPull.trail([Vector3.ZERO], back)
+	assert_vector(start).is_equal_approx(back * RollerPull.TRAIL_M, Vector3.ONE * 0.0001)
 	var walked: Array = [Vector3.ZERO]
 	for i in 30:
 		walked.append(walked[-1] + Vector3(0.0, 0.0, 0.08))
-	var axle := CarryOnProps.trail(walked, back)
+	var axle := RollerPull.trail(walked, back)
 	assert_vector(axle).is_equal_approx(
-		walked[-1] - Vector3(0.0, 0.0, CarryOnProps.TRAIL_M), Vector3.ONE * 0.0001
+		walked[-1] - Vector3(0.0, 0.0, RollerPull.TRAIL_M), Vector3.ONE * 0.0001
 	)
 	var corner: Vector3 = walked[-1]
 	var worst := 0.0
 	for i in 30:
 		walked.append(walked[-1] + Vector3(0.08, 0.0, 0.0))
-		axle = CarryOnProps.trail(walked, back)
+		axle = RollerPull.trail(walked, back)
 		# Off the walked polyline: the leg along z, then the leg along x.
 		var off := absf(axle.x) if axle.z < corner.z - 0.0001 else absf(axle.z - corner.z)
 		worst = maxf(worst, off)
@@ -207,21 +207,21 @@ func test_a_trailing_axle_follows_the_walked_line() -> void:
 func test_a_roller_swings_round_after_a_half_turn() -> void:
 	for hand in 2:
 		var out := -1.0 if hand == 0 else 1.0
-		var to := Vector3(out * 0.3, 0.03, -CarryOnProps.TRAIL_M)
-		var from := Vector3(-out * 0.3, 0.03, CarryOnProps.TRAIL_M)
-		assert_vector(CarryOnProps.follow(from, to, 0.0, hand)).is_equal_approx(
+		var to := Vector3(out * 0.3, 0.03, -RollerPull.TRAIL_M)
+		var from := Vector3(-out * 0.3, 0.03, RollerPull.TRAIL_M)
+		assert_vector(RollerPull.follow(from, to, 0.0, hand)).is_equal_approx(
 			from, Vector3.ONE * 0.0001
 		)
 		var at := from
 		var worst := 0.0
 		var ticks := 0
 		while at.distance_to(to) > 0.001 and ticks < 30:
-			var next := CarryOnProps.follow(at, to, 1.0, hand)
+			var next := RollerPull.follow(at, to, 1.0, hand)
 			worst = maxf(worst, next.distance_to(at))
 			at = next
 			ticks += 1
 			assert_float(Vector2(at.x, at.z).length()).is_greater_equal(
-				CarryOnProps.SWING_RADIUS_M - 0.0001
+				RollerPull.SWING_RADIUS_M - 0.0001
 			)
 		print(
 			"half-turn swing, hand %d: %d ticks, worst move per tick %.3f m" % [hand, ticks, worst]
@@ -307,7 +307,7 @@ func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 			SecurityLooks.Kind.SHOULDER:
 				assert_bool(hand[1]).is_false()
 				assert_float(hand[2]).is_equal(1.0)
-				assert_float(hand[3]).is_equal(CarryOnProps.STRAP_HAND_M)
+				assert_float(hand[3]).is_equal(CarryArmPose.STRAP_HAND_M)
 				assert_float(arms[1][2]).is_equal(0.0)
 			SecurityLooks.Kind.BACKPACK:
 				assert_bool(hand[0] or arms[1][0]).is_false()
