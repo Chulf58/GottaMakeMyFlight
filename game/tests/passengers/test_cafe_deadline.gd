@@ -119,12 +119,14 @@ func test_a_burst_at_security_right_after_the_guests_beat_sends_it_on_at_once() 
 	var approach: Vector2i = visit.seat["approach"]
 	var due := -1
 	while guest.stage == Passenger.Stage.CAFE_SEATED and world.clock.tick < beat_tick + 40:
-		world.step()
+		# Read before the step: the burst's waiters now count at once
+		# (SecurityForecast), so the step that makes it due also ends the visit.
 		var fresh := CafeForecast.live_deadline(
 			world.sim, guest, approach, Passenger.Stage.TO_SECURITY
 		)
-		if due < 0 and fresh <= world.clock.tick:
-			due = world.clock.tick
+		if due < 0 and fresh <= world.clock.tick + 1:
+			due = world.clock.tick + 1
+		world.step()
 	var left := world.clock.tick
 	print(
 		(

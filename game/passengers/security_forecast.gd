@@ -381,9 +381,7 @@ func _seek(u: Passenger) -> void:
 			ends.append(other.path_end())
 	var line: Array = _lines[u.station]
 	var free := StationQueue.free_index(queue, line, _units)
-	var target := StationQueue.walker_free(
-		free, StationQueue.admitted_at(_units, u.station, line)
-	)
+	var target := StationQueue.walker_free(free, StationQueue.admitted_at(_units, u.station, line))
 	if not StationQueue.head_for(_sim.grid, u, line, n, target, ends):
 		# A committed walker with no place left chooses again in the sim; a
 		# waiting passenger (_add_seekers()) waits on for one.
@@ -402,12 +400,16 @@ func _seek(u: Passenger) -> void:
 
 ## Whether standing walker `u` waits on its line cell for another walker
 ## heading for a cell ahead of it (StationQueue.head_for()).
-func _waits(u: Passenger) -> bool:
+## `frees` caches, by station, [free_index(), walker_free()] for one call of
+## _next_event().
+func _waits(u: Passenger, frees: Dictionary) -> bool:
 	var line: Array = _lines[u.station]
-	var members_free := StationQueue.free_index(_queues[u.station], line, _units)
-	var free := StationQueue.walker_free(
-		members_free, StationQueue.admitted_at(_units, u.station, line)
-	)
+	if not frees.has(u.station):
+		var found := StationQueue.free_index(_queues[u.station], line, _units)
+		var admitted := StationQueue.admitted_at(_units, u.station, line)
+		frees[u.station] = Vector2i(found, StationQueue.walker_free(found, admitted))
+	var members_free: int = frees[u.station].x
+	var free: int = frees[u.station].y
 	if free != members_free and line.find(u.at) == free:
 		# Behind an admitted passenger: it moves on when that one does.
 		return true
@@ -459,6 +461,7 @@ func _next_event() -> int:
 		_changed = false
 		return tick + 1
 	var best := -1
+	var frees := {}
 	for at in _stations:
 		# The repack rate changes on the tick the helper arrives.
 		if _helper_from[at] > tick and (best < 0 or _helper_from[at] < best):
@@ -477,7 +480,7 @@ func _next_event() -> int:
 			# A standing walker heads on or joins on the next tick, unless it
 			# waits for another (StationQueue.head_for()), which is that one's
 			# event.
-			if not _waits(u):
+			if not _waits(u, frees):
 				at = tick + 1
 		elif u.is_moving():
 			var left := Passenger.segment_mm(u.path[u.path_index], u.path[u.path_index + 1])
