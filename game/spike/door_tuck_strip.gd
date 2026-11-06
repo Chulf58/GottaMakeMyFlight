@@ -15,8 +15,8 @@ extends "res://spike/pull_swap_strip.gd"
 
 const DOOR_OUT_REL := "res://../tools/blender/out/door-tuck"
 const START_M := 0.35
-const DOOR_EVERY_FRAMES := 6
-const PLATES := 12
+const DOOR_EVERY_FRAMES := 9
+const PLATES := 6
 
 var _doors: Array[Vector3] = []
 var _door := Vector3.INF
@@ -56,6 +56,26 @@ func look(
 		problems.append(problem)
 	if _taken >= PLATES or problem.contains(BODY):
 		done = true
+		_sheet()
+
+
+## Saves the strip's plates side by side, three a row, as door_tuck_sheet.png.
+func _sheet() -> void:
+	if saved.is_empty():
+		return
+	var cell := saved[0].get_size() / 2
+	var rows := ceili(saved.size() / 3.0)
+	var sheet := Image.create_empty(cell.x * 3, cell.y * rows, false, Image.FORMAT_RGBA8)
+	for k in saved.size():
+		var small := saved[k].duplicate() as Image
+		small.convert(Image.FORMAT_RGBA8)
+		small.resize(cell.x, cell.y)
+		sheet.blit_rect(
+			small, Rect2i(Vector2i.ZERO, cell), Vector2i(k % 3 * cell.x, k / 3 * cell.y)
+		)
+	var dir := ProjectSettings.globalize_path(DOOR_OUT_REL).simplify_path()
+	sheet.save_png(dir.path_join("door_tuck_sheet.png"))
+	print("PLATE saved %s" % dir.path_join("door_tuck_sheet.png"))
 
 
 ## The middle of a one-cell doorway's door edge within START_M of `at` (level),

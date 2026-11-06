@@ -52,10 +52,13 @@ func _classify(
 ) -> void:
 	var before := int(_cls["JAMB"]["frames"])
 	super._classify(world, p, body, bag, state, found)
-	if int(_cls["JAMB"]["frames"]) == before or float(found["depth"]) < BAR_DEPTH_M:
+	var jamb := int(_cls["JAMB"]["frames"])
+	if jamb == before:
 		return
-	_deep += 1
-	if _deep <= TOP_DEEP:
+	_deep += int(float(found["depth"]) >= BAR_DEPTH_M)
+	if jamb <= TOP_DEEP:
+		var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
+		var axle := frame.affine_inverse() * (bag.global_transform * CarryOnProps.ROLLER_AXLE)
 		var at := [
 			world,
 			p.id,
@@ -65,9 +68,20 @@ func _classify(
 			p.at.y,
 			float(found["depth"]),
 			RollerPull.tuck_weight(state, _clock.tick + _clock.alpha),
+			axle.x,
+			axle.z,
+			_moving(p, bag),
 			_stage(p),
 		]
-		print("JAMB_DEEP_AT %s id=%d tick=%d %s guest (%d,%d) depth=%.3f tuck=%.2f %s" % at)
+		print(
+			(
+				(
+					"JAMB_AT %s id=%d tick=%d %s guest (%d,%d) depth=%.3f tuck=%.2f axle x=%.3f "
+					+ "z=%.3f moving=%s %s"
+				)
+				% at
+			)
+		)
 
 
 func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> void:

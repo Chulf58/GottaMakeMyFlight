@@ -50,8 +50,11 @@ func after() -> void:
 ## The guest walking north through the door, `off` metres east of the door's
 ## middle, the roller pulled in `hand`; `tucks` false is the control (no
 ## tuck). Returns per tick: the guest's z, the tuck weight, the roller's axle
-## side offset and whether its box meets a wall.
-func _walk(hand: int, tucks: bool, off := 0.0) -> Dictionary:
+## side offset and whether its box meets a wall. With `route_ends` the route
+## ends on the cell before the door, as a gate's route ends at its door out to
+## the apron, and the guest walks on.
+func _walk(hand: int, tucks: bool, off := 0.0, route_ends := false) -> Dictionary:
+	var last := _grid.cell_to_world(Vector2i(DOOR_X, WALL_ROW)).z
 	var bag := {"kind": ROLLER, "place": (SecurityLooks.Home.HAND * 2 + hand) * 2}
 	var x := _grid.cell_to_world(Vector2i(DOOR_X, 0)).x + off
 	var z := _grid.cell_to_world(Vector2i(DOOR_X, START_ROW)).z
@@ -64,7 +67,8 @@ func _walk(hand: int, tucks: bool, off := 0.0) -> Dictionary:
 		var frame := Transform3D(Basis(Vector3.UP, PI), Vector3(x, 0.0, z))
 		var ahead: Array = []
 		for k in range(1, PullSide.AHEAD_CELLS + 1):
-			ahead.append(Vector3(x, 0.0, z - k))
+			if not route_ends or z - k >= last - 0.001:
+				ahead.append(Vector3(x, 0.0, z - k))
 		if tucks:
 			PullSide.tuck(bag, _grid, frame, ahead, WALK_M, hand, now)
 		var w := RollerPull.tuck_weight(bag, now)
@@ -106,6 +110,18 @@ func test_the_tucked_roller_clears_the_jambs() -> void:
 				)
 				. is_equal(0)
 			)
+
+
+func test_a_route_ending_at_the_door_still_tucks_in_time() -> void:
+	for hand in 2:
+		var control := (_walk(hand, false, 0.0, true)["hits"] as Array).count(true)
+		assert_int(control).override_failure_message("no jamb hit").is_greater(0)
+		var hits := (_walk(hand, true, 0.0, true)["hits"] as Array).count(true)
+		(
+			assert_int(hits)
+			. override_failure_message("hand %d: %d ticks in a jamb" % [hand, hits])
+			. is_equal(0)
+		)
 
 
 func test_the_roller_tucks_in_line_and_swings_back_out_after() -> void:

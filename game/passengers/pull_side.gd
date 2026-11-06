@@ -195,10 +195,11 @@ static func pick(
 ## its side (RollerPull.tuck()), for a pull in `hand` (pick()'s, the hand it is
 ## drawn in, so the two agree on its side): tucked while its SETTLED footprint
 ## on that side meets a wall at any of the guest's poses from `frame` (its pose
-## now) along `ahead` for LOOK_TICKS of `step_m` (walk_poses()), the axle
-## easing in over RollerPull.TUCK_TICKS, well before the roller reaches the
-## wall; out once none does, so the roller is past it (user ruling a-guest-
-## pulling-a-roller-through-a-doorway-tucks-it-in-line, board cd4ff4e0). At a
+## now) along `ahead` for LOOK_TICKS and RollerPull.TUCK_TICKS of `step_m`
+## (walk_poses(), straight on past the route's end), so the axle is in line
+## (eased over TUCK_TICKS) before the roller reaches the wall; out once none
+## does, so the roller is past it (user ruling a-guest-pulling-a-roller-
+## through-a-doorway-tucks-it-in-line, board cd4ff4e0). At a
 ## doorway the jambs meet both sides, so no change of hand clears them; along
 ## a wall with the other side clear pick() changes hand first and the new side
 ## is clear. Standing still it stays as it is. Walls only, as pick() has them
@@ -214,7 +215,17 @@ static func tuck(
 ) -> void:
 	if step_m < STILL_M:
 		return
-	var poses := walk_poses(frame, ahead, step_m * LOOK_TICKS)
+	var look := step_m * (LOOK_TICKS + RollerPull.TUCK_TICKS)
+	# The route can end at the doorway (the gate's door out to the apron: the
+	# walk to the plane is not on it), so the look runs on straight past its end.
+	var route := ahead.duplicate()
+	var last: Vector3 = route[-1] if not route.is_empty() else frame.origin
+	var before: Vector3 = route[-2] if route.size() > 1 else frame.origin
+	var on := Vector3(last.x - before.x, 0.0, last.z - before.z)
+	if on.length() < 0.001:
+		on = frame.basis.z
+	route.append(last + on.normalized() * look)
+	var poses := walk_poses(frame, route, look)
 	RollerPull.tuck(bag, blocked(grid, poses, footprint(hand, false), false), now)
 
 
