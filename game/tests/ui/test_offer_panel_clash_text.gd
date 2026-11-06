@@ -52,7 +52,8 @@ func test_a_clash_with_a_one_off_flight_is_named_by_time_and_flight() -> void:
 	_panel.accept_button("O0N1").pressed.emit()
 	var text := _panel.message()
 	print("clash text: %s" % text)
-	assert_str(text).contains("the 07:53 flight GMF101")
+	assert_str(text).ends_with("it clashes with the 07:53 flight on the runway")
+	assert_str(text).not_contains("GMF101")
 	assert_str(text).contains("on the runway")
 	assert_str(text).not_contains("contract O0N1")
 	assert_object(_ids.search(text)).is_null()
@@ -63,3 +64,10 @@ func test_a_refusal_that_is_not_a_clash_keeps_the_sim_reason() -> void:
 	_sim.gate_source = func() -> Array[String]: return [] as Array[String]
 	_panel.accept_button("O0N1").pressed.emit()
 	assert_str(_panel.message()).is_equal("Can't accept Gotta Air to Oslo: no gate has a stand")
+
+
+func test_a_clash_shaped_reason_the_parser_misses_shows_no_ids() -> void:
+	_open_panel([600, 900, 1200])
+	var text := _panel._in_words("contract O0N2 clashes with O0N1 at the gate")
+	assert_str(text).is_equal("it clashes with another flight")
+	assert_object(_ids.search(text)).is_null()

@@ -45,6 +45,7 @@ const NO_OTHER_TEXT := "No other gate exists"
 const PICKER_LABEL := "Move to:"
 const MOVED_TEXT := "%s now uses gate %s for the days not yet issued"
 const TAKEN_TEXT := "%s is taken by the %s %s flight"
+const TAKEN_ONE_OFF_TEXT := "%s is taken by the %s flight"
 const BUSY_TEXT := "Gate %s is busy when this flight needs it"
 const MAX_ROWS_PER_DAY := 5
 ## Top and bottom padding of the gate buttons, below the theme's 6.
@@ -387,6 +388,8 @@ func friendly_reason(reason: String, gate_id: String) -> String:
 		subject = "The runway"
 	elif found["where"] == "on the taxi lane":
 		subject = "The taxi lane"
+	if label[1] == "":
+		return TAKEN_ONE_OFF_TEXT % [subject, label[0]]
 	return TAKEN_TEXT % [subject, label[0], label[1]]
 
 

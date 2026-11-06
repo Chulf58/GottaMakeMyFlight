@@ -29,7 +29,7 @@ static func parse_clash(reason: String) -> Dictionary:
 
 ## [departure time, destination, airline] of the contract (or, when
 ## `is_flight`, the live flight) `id`, or [] when it is not known. A one-off
-## flight has no airline ("") and is named by its id. A flight of a contract
+## flight has no airline or destination (both ""). A flight of a contract
 ## shows its pushback time; a contract shows its daily departure time.
 static func parts(sim: FlightSim, is_flight: bool, id: String) -> PackedStringArray:
 	if is_flight:
@@ -37,7 +37,7 @@ static func parts(sim: FlightSim, is_flight: bool, id: String) -> PackedStringAr
 		if tick < 0:
 			return PackedStringArray()
 		var source := sim.contract_of(sim.flight_contract_id(id))
-		var named: String = source["destination"] if not source.is_empty() else id
+		var named: String = source["destination"] if not source.is_empty() else ""
 		var airline: String = source["airline"] if not source.is_empty() else ""
 		return PackedStringArray([GameCalendar.clock_text(tick), named, airline])
 	var contract := sim.contract_of(id)
@@ -49,13 +49,13 @@ static func parts(sim: FlightSim, is_flight: bool, id: String) -> PackedStringAr
 
 
 ## "the 20:30 Blue Fjord flight to Oslo", or "" when the flight or contract is
-## not known. A one-off flight reads "the 10:00 flight GMF101".
+## not known. A one-off flight has no airline or destination and reads "the 10:00 flight".
 static func of(sim: FlightSim, is_flight: bool, id: String) -> String:
 	var label := parts(sim, is_flight, id)
 	if label.is_empty():
 		return ""
-	if label[2] == "":
-		return "the %s flight %s" % [label[0], label[1]]
+	if label[2] == "" or label[1] == "":
+		return "the %s flight" % label[0]
 	return "the %s %s flight to %s" % [label[0], label[2], label[1]]
 
 

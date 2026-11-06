@@ -488,11 +488,17 @@ func _on_accept(id: String) -> void:
 
 
 ## FlightSim's refusal `problem` for the player: a clash names what it ran
-## into by time, airline and destination, not by id. Any other refusal is
-## shown as the sim wrote it.
+## into by time, airline and destination, not by id. A clash in a shape
+## FlightLabel cannot read is warned about and shown without ids. Any other
+## refusal is shown as the sim wrote it.
 func _in_words(problem: String) -> String:
 	var ran_into := FlightLabel.clash_with(flights, problem)
-	return "it clashes with %s" % ran_into if ran_into != "" else problem
+	if ran_into != "":
+		return "it clashes with %s" % ran_into
+	if problem.contains("clashes"):
+		push_warning("OfferPanel: unreadable clash refusal from FlightSim: %s" % problem)
+		return "it clashes with another flight"
+	return problem
 
 
 ## Shows `text` under the cards, hiding the line when it is empty.
