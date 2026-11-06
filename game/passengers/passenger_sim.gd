@@ -35,57 +35,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 ## over its bag (BaggageSim).
 signal checked_in(id: int, desk: int)
 
-## 3: the walks outside carry heights ([x, y, z] apron points).
-## 4: hunger, the cafe cooldown and the cafe visits, queues and seats.
-## 5: durable made and missed totals, per-flight results and the flights
-## already scheduled; settled passengers are retired, so none of these are
-## rebuilt from the passenger list.
-## 6: each passenger and pending arrival carries its arrival type.
-## 7: each passenger carries its security traits (bags, liquids, alarm). A
-## version 6 save is migrated with zero bags and no flags; older ones are
-## refused.
-## 8: security service state (SecurityRuntime): each passenger's phase,
-## remaining work and resolved incident, and per station the admitted and
-## returning passengers, the main position and the berth. A version 7 save
-## keeps a basic scanner's service in progress exactly as it was.
-## 9: a lane's unpack work starts at 3 + 4 per bag, not 6 + 8. A version 8
-## save has its unpack work left scaled to the new start.
-## 10: each passenger's toilet need and toilet cooldown, and the toilet visits
-## under "toilet" (ToiletSnapshot). Versions 6 to 9 are migrated: each
-## passenger gets ToiletSim.migrated_need() of its id, and nobody is on a
-## toilet visit.
-## 11: each passenger's boredom (BoredomSim). Versions 6 to 10 are migrated:
-## each passenger gets BoredomSim.start_of() of its id; a version 10 save keeps
-## its toilet needs, cooldowns and visits as saved. Version 11 also holds each
-## passenger's kiosk cooldown and the kiosk visits under "shop" (ShopSnapshot);
-## an older save gets no cooldown and no kiosk visits.
-## 12: the help visits and cooldowns of the info desks, under "info_desk"
-## (InfoDesk.to_list()). A version 11 save is refused; a migrated older save has
-## none.
-## 13: each shop visit saves whether it is a fallback (ShopSnapshot). Versions
-## 11 and 12 are refused, with no migration (decision old-saves-are-not-
-## supported-until-after-a-release-no-save-mi).
-## 14: each standing passenger's claimed standing spot, under "standing"
-## (StandingSpots.to_list()). Version 13 is refused, with no migration; a
-## migrated older save has no claims.
-## 15: the boarding files, under "boarding" (BoardingFiles.to_dict()), and a
-## standing spot kept by a passenger setting off from it for the exit. Version
-## 14 is refused, with no migration; a migrated older save has no files, so one
-## taken while anyone walked out to the plane is refused.
-## 16: seats and standing spots are chosen near the passenger's own gate desk
-## (GateReach), so a version 15 save, whose claims followed the old global
-## nearest rule, is refused with no migration (decision old-saves-are-not-
-## supported-until-after-a-release-no-save-mi).
-## 17: each passenger's collect_tick (ParkRecovery); a migrated older save
-## collects nothing. 18: a cafe or toilet visit following its moved piece saves
-## its Relocation (CafeSnapshot, ToiletSnapshot). 19: a shop or activity
-## visit's Relocation (ShopSnapshot). 20: each passenger's thoughts and their
-## repeat marks (PassengerThoughts). 21: each passenger's seat placement and
-## seat_exiting (GateRelocation). 22: boarding-file wait spots (FileWaiters).
-## 23: a Relocation saves the step its visitor had made (reached). 24: each
-## passenger's halt_tick (QueueRipple). 25: gate places reserved at security
-## admission, under "gate_places" (GateCapacity). From 17 on, the version
-## before is refused, with no migration.
+## The history of SAVE_VERSION is in PassengerSimSave.
 const SAVE_VERSION := 25
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
@@ -230,7 +180,7 @@ func _ready() -> void:
 	bind(clock, flights, build_mode.grid)
 	if auto_schedule:
 		for id in flights.flight_ids():
-			schedule_flight(id, _booked_passengers(id))
+			schedule_flight(id, PassengerLifecycle.booked_passengers(self, id))
 
 
 func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -> void:
@@ -283,7 +233,7 @@ func schedule_flight(flight_id: String, count: int) -> bool:
 		var arrival := ArrivalTypes.draw(clock.rng)
 		var span := ArrivalTypes.window(arrival, flights, flight_id, clock.tick)
 		var at := clock.rng.randi_range(span.x, span.y)
-		_add_spawn(at, flight_id, clock.rng.randi_range(0, 1), arrival)
+		PassengerLifecycle.add_spawn(self, at, flight_id, clock.rng.randi_range(0, 1), arrival)
 	return true
 
 
@@ -305,7 +255,7 @@ func spawn_batch(count: int, seed: int) -> bool:
 		return false
 	last_batch_seed = seed
 	for i in count:
-		_add_spawn(tick + 1 + i, flight_id, rng.randi_range(0, 1))
+		PassengerLifecycle.add_spawn(self, tick + 1 + i, flight_id, rng.randi_range(0, 1))
 	return true
 
 
@@ -324,25 +274,25 @@ func on_tick(new_tick: int) -> void:
 	var started := Time.get_ticks_usec()
 	tick = new_tick
 	arrivals.step()
-	_spawn_due()
+	PassengerLifecycle.spawn_due(self)
 	if staff != null:
 		staff.step()
 	_reconcile()
 	messes.step()
-	_close_doors()
+	PassengerLifecycle.close_doors(self)
 	var stations: Array = layout.lanes.keys()
 	stations.sort()
 	gates.recover(self)
 	for station in stations:
-		_step_station(station)
+		PassengerStations.step(self, station)
 	gates.admit(self)
 	cafes.step_counters()
-	_admit_pending()
+	PassengerGates.admit_pending(self)
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
-	_retire_settled()
-	_prune_results()
+	PassengerLifecycle.retire_settled(self)
+	PassengerLifecycle.prune_results(self)
 	tick_usec_last = Time.get_ticks_usec() - started
 	tick_usec_max = maxi(tick_usec_max, tick_usec_last)
 	tick_usec_total += tick_usec_last
@@ -400,16 +350,6 @@ func holding_of(station: int) -> Array[int]:
 	return out
 
 
-## Passengers in front of a newcomer to `station`: its lane, holding area and
-## walkers on the way. At a desk the one being served is in the lane too.
-func _station_slot(station: int) -> int:
-	var count: int = _incoming.get(station, 0)
-	if _queues.has(station):
-		count += (_queues[station]["lane"] as Array).size()
-		count += (_queues[station]["holding"] as Array).size()
-	return count
-
-
 ## Ticks until a passenger who walks `walk_mm` to the back of `station`'s
 ## queue is done there. At a desk: the walk (at `p`'s pace), the service in progress, the
 ## passengers waiting and its own service. At a security station: until `p`
@@ -417,55 +357,14 @@ func _station_slot(station: int) -> int:
 ## security exit (SecurityForecast). Station choice and the lateness forecast
 ## both use it. A closed station never finishes (JourneyForecast.NEVER).
 func station_eta(station: int, walk_mm: int, p: Passenger = null) -> int:
-	if not _is_open(station):
-		return JourneyForecast.NEVER
-	if layout.passages.has(station):
-		var candidate := p
-		if candidate == null:
-			candidate = Passenger.new()
-			candidate.id = _next_id
-		var join := tick + candidate.pace_ticks(walk_mm) + 1
-		return SecurityForecast.clearance(self, station, candidate, join)
-	var waiting := _station_slot(station)
-	var left := 0
-	if _queues.has(station) and _queues[station]["serving"] != 0:
-		left = _serving_left(_queues[station])
-		waiting -= 1
-	var walk := p.pace_ticks(walk_mm) if p != null else JourneyForecast.walk_ticks(walk_mm)
-	return (
-		walk
-		+ left
-		+ maxi(waiting, 0) * CHECKIN_TICKS
-		+ CHECKIN_TICKS
-		+ QueueRipple.desk_waits(self, station, null)
-	)
+	return PassengerStations.eta(self, station, walk_mm, p)
 
 
 ## Ticks until the passenger's service at its current or next station ends:
 ## for a security stage, until it is cleared at the security exit
 ## (SecurityForecast.eta()).
 func wait_ticks(p: Passenger) -> int:
-	if StageKinds.leg(p.stage) == StageKinds.Leg.SECURITY:
-		if p.station == 0 and not _any_open(layout.scanners):
-			return JourneyForecast.NEVER
-		return SecurityRuntime.BASIC_SCAN_TICKS if p.station == 0 else SecurityForecast.eta(self, p)
-	if p.stage == Passenger.Stage.CHECKIN:
-		return maxi(0, p.service_end - tick)
-	if p.station == 0 and not _any_open(layout.desks):
-		return JourneyForecast.NEVER
-	if p.station == 0 or not _queues.has(p.station):
-		return CHECKIN_TICKS
-	var q: Dictionary = _queues[p.station]
-	var lane: Array = q["lane"]
-	var holding: Array = q["holding"]
-	var ahead: int = lane.size() + holding.size() + maxi(_incoming.get(p.station, 0) - 1, 0)
-	if p.stage in QUEUE_STAGES:
-		var at := lane.find(p.id)
-		ahead = at if at >= 0 else lane.size() + holding.find(p.id)
-	if q["serving"] != 0:
-		ahead -= 1
-	var waits := QueueRipple.desk_waits(self, p.station, p)
-	return _serving_left(q) + maxi(ahead, 0) * CHECKIN_TICKS + CHECKIN_TICKS + waits
+	return PassengerStations.wait_ticks(self, p)
 
 
 ## SecurityRuntime admitted `p` at its station.
@@ -508,16 +407,7 @@ func world_position(p: Passenger) -> Vector3:
 		var in_stall := Passenger.in_toilet(p.stage)
 		return toilets.stall_position(p) if in_stall else cafes.seat_position(p)
 	if where == StageKinds.Location.GATE_SEAT and p.seat_cell != Passenger.NO_CELL:
-		var front := grid.cell_to_world(p.seat_front)
-		var seat := grid.cell_to_world(p.seat_cell)
-		var spot := seat + (front - seat) * SIT_FORWARD_M
-		var shuffle := clampf((tick - p.stage_tick) / float(SHUFFLE_TICKS), 0.0, 1.0)
-		if p.stage == Passenger.Stage.SITTING_DOWN:
-			return front.lerp(spot, shuffle)
-		if p.stage == Passenger.Stage.STANDING_UP:
-			var left := STAND_UP_TICKS - (tick - p.stage_tick)
-			return front.lerp(spot, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
-		return spot
+		return PassengerGates.seat_point(self, p)
 	var at := p.grid_position()
 	var here := grid.origin + Vector3(at.x, 0.0, at.y)
 	if p.stage == Passenger.Stage.STANDING and standing.spot_of(p.id) != StandingSpots.NO_SPOT:
@@ -525,19 +415,8 @@ func world_position(p: Passenger) -> Vector3:
 		var point := standing.world_of(grid, standing.spot_of(p.id))
 		here = here.lerp(point, clampf((tick - p.stage_tick) / float(SHUFFLE_TICKS), 0.0, 1.0))
 	elif p.stage == Passenger.Stage.TO_EXIT and standing.spot_of(p.id) != StandingSpots.NO_SPOT:
-		here = _off_spot(p)
+		here = PassengerGates.off_spot(self, p)
 	return here + files.waiters.shift(p)
-
-
-## A walker setting off for the exit from its standing spot: on the spot until
-## it moves, then walking from the spot to its path's next cell.
-func _off_spot(p: Passenger) -> Vector3:
-	var spot := standing.world_of(grid, standing.spot_of(p.id))
-	if not p.is_moving():
-		return spot
-	var next := p.path[p.path_index + 1]
-	var t := p.seg_mm / float(Passenger.segment_mm(p.at, next))
-	return spot.lerp(grid.origin + Vector3(next.x + 0.5, 0.0, next.y + 0.5), t)
 
 
 ## What the passenger's thought bubble says, or "" for nothing.
@@ -566,9 +445,7 @@ func bubble_text(p: Passenger) -> String:
 
 ## The apron walk from an exit door to the plane, in millimetres.
 func apron_length_mm(exit_door: int) -> int:
-	var walk := Passenger.new()
-	walk.apron = _apron_points(exit_door)
-	return walk.apron_total_mm()
+	return PassengerGates.apron_length_mm(self, exit_door)
 
 
 ## JSON-safe state for a save. Reads only: it changes nothing in the sim or
@@ -579,17 +456,7 @@ func apron_length_mm(exit_door: int) -> int:
 ## Toilet deadlines left stale by that edit are saved stale and worked out
 ## again on the loaded game's next tick (ToiletSnapshot).
 func to_snapshot() -> Dictionary:
-	if cafes.deadlines_stale:
-		push_error("PassengerSim.to_snapshot: a grid edit settles on the next tick; save after it")
-		return {}
-	var data := PassengerSnapshot.save(
-		self, _passengers, _schedule, _queues, _next_id, [_made, _missed], _scheduled.keys()
-	)
-	data["info_desk"] = info_desks.to_list()
-	data["standing"] = standing.to_list()
-	data["gate_places"] = gates.to_list(self)
-	data["boarding"] = files.to_dict()
-	return data
+	return PassengerSimSave.to_snapshot(self)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -597,67 +464,7 @@ func to_snapshot() -> Dictionary:
 ## is missing, mistyped or inconsistent. The layout is rebuilt from the grid,
 ## which must already hold the saved grid.
 func from_snapshot(data: Dictionary) -> bool:
-	var loaded := PassengerSnapshot.load(data, grid)
-	if loaded.has("error"):
-		push_error("PassengerSim.from_snapshot: %s" % loaded["error"])
-		return false
-	var by_id := {}
-	for p: Passenger in loaded["passengers"]:
-		by_id[p.id] = p
-	# A save migrated from before version 12 (PassengerSnapshot) has no info
-	# desk state: none is live. A version 12 save must carry it.
-	var desk_state := checked_info_desks(data, by_id, loaded["tick"])
-	if desk_state.has("error"):
-		push_error("PassengerSim.from_snapshot: %s" % desk_state["error"])
-		return false
-	# Standing claims are restored as saved, against spots derived from the
-	# loaded grid; a save migrated from before version 14 has none.
-	layout.rebuild(grid)
-	var held := checked_standing(data, by_id)
-	if held.has("error"):
-		push_error("PassengerSim.from_snapshot: %s" % held["error"])
-		return false
-	var spots: StandingSpots = held["spots"]
-	var claims: Dictionary = held
-	var boarding := checked_boarding(data, by_id)
-	if boarding.has("error"):
-		push_error("PassengerSim.from_snapshot: %s" % boarding["error"])
-		return false
-	spots.restore(claims["claims"], by_id)
-	gates.restore(claims["gate"], spots, by_id)
-	standing = spots
-	files = boarding["files"]
-	tick = loaded["tick"]
-	_next_id = loaded["next_id"]
-	last_batch_seed = loaded["last_batch_seed"]
-	no_shows = loaded["no_shows"]
-	flight_results = loaded["flight_results"]
-	_scheduled = loaded["scheduled"]
-	_made = loaded["made"]
-	_missed = loaded["missed"]
-	_schedule = loaded["schedule"]
-	_queues = loaded["queues"]
-	security.restore(loaded["security"])
-	cafes.restore(loaded["cafe"])
-	toilets.restore(loaded["toilet"])
-	shops.restore(loaded["shop"])
-	info_desks.restore(desk_state)
-	_passengers = loaded["passengers"]
-	_by_id.clear()
-	for p in _passengers:
-		_by_id[p.id] = p
-		ParkRecovery.on_load(p, tick)
-		# A save from before version 14 stands passengers with no spot. Each is
-		# sent back to the gate with a cleared path; its stage tick is the next
-		# tick, so it plans a seat or spot then (GateCapacity.to_spot()).
-		if p.stage == Passenger.Stage.STANDING and standing.spot_of(p.id) == StandingSpots.NO_SPOT:
-			p.stage = Passenger.Stage.TO_GATE
-			p.stage_tick = tick + 1
-			p.clear_path()
-	layout.rebuild(grid)
-	routes.clear()
-	_rederive()
-	return true
+	return PassengerSimSave.from_snapshot(self, data)
 
 
 ## The standing spots derived from the loaded grid and the saved claims,
@@ -666,24 +473,7 @@ func from_snapshot(data: Dictionary) -> bool:
 ## layout rebuilt from the grid. Changes no sim state: from_snapshot() installs
 ## the result, and SaveGame's staging runs the same check, so the two agree.
 func checked_standing(data: Dictionary, by_id: Dictionary) -> Dictionary:
-	var spots := StandingSpots.new()
-	spots.rebuild(self)
-	var current := int(data["save_version"]) >= SAVE_VERSION
-	var claims := spots.checked(data.get("standing", []), by_id, current)
-	if not data.has("standing") and current:
-		claims = {"error": "missing key 'standing'"}
-	if claims.has("error"):
-		return claims
-	var gate := GateCapacity.checked(
-		data.get("gate_places", []), by_id, self, spots, claims["claims"]
-	)
-	if not data.has("gate_places") and current:
-		gate = {"error": "missing key 'gate_places'"}
-	if gate.has("error"):
-		return gate
-	claims["gate"] = gate
-	claims["spots"] = spots
-	return claims
+	return PassengerSimSave.checked_standing(self, data, by_id)
 
 
 ## The info desk state in `data` checked against `by_id` (the loaded
@@ -692,10 +482,7 @@ func checked_standing(data: Dictionary, by_id: Dictionary) -> Dictionary:
 ## live); a current one must carry it. Changes no sim state: from_snapshot()
 ## installs the result, and SaveGame's staging runs the same check.
 func checked_info_desks(data: Dictionary, by_id: Dictionary, at: int) -> Dictionary:
-	var state := InfoDesk.checked(data.get("info_desk", InfoDesk.EMPTY), by_id, at, grid)
-	if not data.has("info_desk") and int(data["save_version"]) >= SAVE_VERSION:
-		return {"error": "missing key 'info_desk'"}
-	return state
+	return PassengerSimSave.checked_info_desks(self, data, by_id, at)
 
 
 ## The boarding files in `data` checked against `by_id`, with this sim's grid
@@ -704,43 +491,12 @@ func checked_info_desks(data: Dictionary, by_id: Dictionary, at: int) -> Diction
 ## no sim state: from_snapshot() installs the result, and SaveGame's staging
 ## runs the same check.
 func checked_boarding(data: Dictionary, by_id: Dictionary) -> Dictionary:
-	var standing := checked_standing(data, by_id)
-	var saved: Variant = data.get("boarding", BoardingFiles.EMPTY)
-	var files_state := BoardingFiles.checked(saved, by_id, self, standing)
-	if not data.has("boarding") and int(data["save_version"]) >= SAVE_VERSION:
-		return {"error": "missing key 'boarding'"}
-	return files_state
-
-
-func _add_spawn(
-	at_tick: int, flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL
-) -> void:
-	var entry := {"tick": at_tick, "flight": flight_id, "variant": variant, "arrival": arrival}
-	var i := _schedule.size()
-	while i > 0 and _schedule[i - 1]["tick"] > at_tick:
-		i -= 1
-	_schedule.insert(i, entry)
+	return PassengerSimSave.checked_boarding(self, data, by_id)
 
 
 ## An occurrence was issued: its booked passengers arrive within its window.
 func _on_occurrence_added(flight_id: String) -> void:
-	schedule_flight(flight_id, _booked_passengers(flight_id))
-
-
-## A contract flight's booked passengers; DEFAULT_PASSENGERS for a one-off one.
-## An occurrence issued before this sim subscribed (a new game's starter
-## contract) is still a contract flight.
-func _booked_passengers(flight_id: String) -> int:
-	var contract := flights.contract_of(flights.flight_contract_id(flight_id))
-	return DEFAULT_PASSENGERS if contract.is_empty() else contract["booked_passengers"]
-
-
-func _spawn_due() -> void:
-	if layout.passenger_entrances.is_empty():
-		return
-	while not _schedule.is_empty() and _schedule[0]["tick"] <= tick:
-		var entry: Dictionary = _schedule.pop_front()
-		_spawn(entry["flight"], entry["variant"], entry["arrival"])
+	schedule_flight(flight_id, PassengerLifecycle.booked_passengers(self, flight_id))
 
 
 ## A new passenger at the entrance, or, with a `walk` (where it got out of
@@ -750,186 +506,16 @@ func _spawn_due() -> void:
 func _spawn(
 	flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL, walk: Array[Vector3] = []
 ) -> Passenger:
-	var p := Passenger.new()
-	p.id = _next_id
-	_next_id += 1
-	p.flight_id = flight_id
-	p.variant = variant
-	p.arrival_type = arrival
-	p.spawn_tick = tick
-	p.stage_tick = tick
-	p.boarding_tick = flights.boarding_window(flight_id).x
-	p.hunger = cafes.start_hunger(clock.rng)
-	CarryOnTraits.draw(clock.rng, p)
-	p.toilet_need = clock.rng.randi_range(ToiletSim.NEED_START_MIN, ToiletSim.NEED_START_MAX)
-	p.boredom = BoredomSim.start_of(p.id)
-	p.at = layout.door_cell(grid, layout.passenger_entrances[0])
-	p.clear_path()
-	p.apron = OutsideWalks.arrival(self, layout.passenger_entrances[0])
-	if not walk.is_empty():
-		var road := p.apron
-		p.apron = walk.duplicate()
-		if road.is_empty():
-			p.apron.append(grid.cell_to_world(p.at))
-		else:
-			p.apron.append_array(road.slice(1))
-	_passengers.append(p)
-	_by_id[p.id] = p
-	passenger_spawned.emit(p.id)
-	return p
-
-
-## Missed passengers are the ones already in the terminal. Those still on the
-## schedule for a closed flight will never board, so they are dropped and
-## counted as no-shows, with the cause that holds now.
-func _close_doors() -> void:
-	var cause := "no_entrance" if layout.passenger_entrances.is_empty() else "late"
-	var kept: Array[Dictionary] = []
-	for entry in _schedule:
-		if flights.is_doors_closed(entry["flight"]):
-			var counts: Dictionary = no_shows.get(entry["flight"], {"no_entrance": 0, "late": 0})
-			counts[cause] += 1
-			no_shows[entry["flight"]] = counts
-		else:
-			kept.append(entry)
-	if kept.size() != _schedule.size():
-		_schedule = kept
-	for flight_id in _scheduled.keys():
-		if flights.is_doors_closed(flight_id):
-			_scheduled.erase(flight_id)
-	for p in _passengers:
-		if not p.is_done() and flights.is_doors_closed(p.flight_id):
-			_finish(p, false)
+	return PassengerLifecycle.spawn(self, flight_id, variant, arrival, walk)
 
 
 func _finish(p: Passenger, made: bool) -> void:
-	if not made:
-		p.missed_stage = p.stage
-		# Held up by people traffic or a full gate, the miss is the terminal's.
-		p.missed_stuck = GateCapacity.miss_cause(self, p)
-	_leave_station(p)
-	_release_seat(p)
-	cafes.cleanup(p)
-	toilets.cleanup(p)
-	shops.cleanup(p)
-	info_desks.cleanup(p)
-	_set_stage(p, Passenger.Stage.MADE if made else Passenger.Stage.MISSED)
-	p.stuck = Passenger.Stuck.NONE
-	p.late = false
-	p.collect_tick = 0
-	p.outcome_tick = tick
-	var result: Dictionary = flight_results.get(p.flight_id, {"made": 0, "missed": 0, "causes": {}})
-	if made:
-		_made += 1
-		result["made"] += 1
-	else:
-		_missed += 1
-		result["missed"] += 1
-		var cause := Vector2i(p.missed_stage, p.missed_stuck)
-		result["causes"][cause] = int(result["causes"].get(cause, 0)) + 1
-		p.mood = 0
-		p.clear_path()
-	flight_results[p.flight_id] = result
-	outcome.emit(p.id, made)
-
-
-## Retires the settled passengers kept for SETTLED_KEEP_TICKS. One that still
-## holds a station, seat, cafe or toilet visit or queue place is a bug: it is
-## reported and kept, so nothing is left pointing at a passenger that is gone.
-func _retire_settled() -> void:
-	for i in range(_passengers.size() - 1, -1, -1):
-		var p := _passengers[i]
-		if not p.is_done() or tick - p.outcome_tick <= SETTLED_KEEP_TICKS:
-			continue
-		var leftover := _settled_leftovers(p)
-		if leftover != "":
-			retire_refused += 1
-			push_error("PassengerSim: settled passenger %d still holds %s" % [p.id, leftover])
-			continue
-		_by_id.erase(p.id)
-		_passengers.remove_at(i)
-
-
-## What a settled passenger still holds, or "" when it holds nothing.
-func _settled_leftovers(p: Passenger) -> String:
-	var held := PackedStringArray()
-	if p.station != 0:
-		held.append("a station")
-	if p.seat_object != 0 or _seat_claims.values().has(p.id):
-		held.append("a seat")
-	if cafes.visit_of(p.id) != null:
-		held.append("a cafe visit")
-	if toilets.visit_of(p.id) != null:
-		held.append("a toilet visit")
-	if shops.visit_of(p.id) != null:
-		held.append("a kiosk visit")
-	if security.holds(p.id):
-		held.append("a security place")
-	if standing.spot_of(p.id) != StandingSpots.NO_SPOT:
-		held.append("a standing spot")
-	if files.holds(p.id) or files.was_delayed(p.id):
-		held.append("a boarding file place")
-	for q in _queues.values():
-		if (q["lane"] as Array).has(p.id) or (q["holding"] as Array).has(p.id):
-			held.append("a queue place")
-		elif q["serving"] == p.id:
-			held.append("a service")
-	for record in cafes.queue_records():
-		if (record["lane"] as Array).has(p.id) or record["serving"] == p.id:
-			held.append("a cafe queue place")
-	return ", ".join(held)
-
-
-## Drops the results, no-shows and transport misses of flights FlightSim no
-## longer lists.
-func _prune_results() -> void:
-	if flight_results.is_empty() and no_shows.is_empty() and arrivals.missed_by_flight.is_empty():
-		return
-	var live := flights.flight_ids()
-	arrivals.prune(live)
-	for results in [flight_results, no_shows]:
-		for flight_id in results.keys():
-			if not live.has(flight_id):
-				results.erase(flight_id)
-
-
-## A station's tick: finished service, holding passengers moving into the
-## lane, then the next admission. Security stations go to SecurityRuntime and
-## are admitted after every station's step (GateCapacity.admit()).
-func _step_station(station: int) -> void:
-	var q := _queue(station)
-	var cells: Array = layout.lanes[station]
-	if layout.passages.has(station):
-		security.advance(station)
-		_promote(q, cells)
-		return
-	if q["serving"] != 0:
-		var served: Passenger = _by_id[q["serving"]]
-		if tick >= served.service_end and not served.is_moving():
-			q["serving"] = 0
-			served.station = 0
-			(q["lane"] as Array).erase(served.id)
-			_set_stage(served, Passenger.Stage.TO_SECURITY)
-			checked_in.emit(served.id, station)
-	_promote(q, cells)
-	if q["serving"] != 0 or (q["lane"] as Array).is_empty() or not _is_open(station):
-		return
-	var front: Passenger = _by_id[q["lane"][0]]
-	if front.at != cells[0] or front.is_moving():
-		return
-	q["serving"] = front.id
-	front.service_end = tick + CHECKIN_TICKS
-	_set_stage(front, Passenger.Stage.CHECKIN)
-
-
-func _promote(q: Dictionary, cells: Array) -> void:
-	for moved in StationQueue.promote(q, cells):
-		_by_id[moved].stuck = Passenger.Stuck.NONE
+	PassengerLifecycle.finish(self, p, made)
 
 
 func _step(p: Passenger) -> void:
 	if p.needs_replan:
-		_replan(p)
+		PassengerEdits.replan(self, p)
 	var from := p.stage
 	match StageKinds.facility(p.stage):
 		StageKinds.Facility.CAFE:
@@ -965,44 +551,22 @@ func _advance(p: Passenger) -> void:
 				p.apron = []
 				p.apron_mm = 0
 				_set_stage(p, Passenger.Stage.TO_CHECKIN)
-				_seek(p)
+				PassengerStations.seek(self, p)
 		Passenger.Stage.TO_CHECKIN, Passenger.Stage.TO_SECURITY:
-			_seek(p)
+			PassengerStations.seek(self, p)
 		Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_QUEUE:
-			_queue_move(p)
+			PassengerStations.queue_move(self, p)
 		Passenger.Stage.TO_GATE:
 			if not ParkRecovery.collecting(self, p):
-				_to_gate(p)
+				PassengerGates.to_gate(self, p)
 		Passenger.Stage.SITTING_DOWN:
-			if tick - p.stage_tick >= SIT_DOWN_TICKS:
-				_set_stage(p, Passenger.Stage.SEATED)
+			PassengerGates.step_sitting(self, p)
 		Passenger.Stage.SEATED, Passenger.Stage.STANDING:
-			if tick >= p.boarding_tick:
-				var next := Passenger.Stage.STANDING_UP
-				if p.stage == Passenger.Stage.STANDING:
-					next = Passenger.Stage.TO_EXIT
-				_set_stage(p, next)
-			elif p.stage == Passenger.Stage.STANDING:
-				GateCapacity.seat_from_spot(self, p)
+			PassengerGates.step_waiting(self, p)
 		Passenger.Stage.STANDING_UP:
-			if tick - p.stage_tick >= ParkRecovery.stand_up_ticks(p):
-				_release_seat(p)
-				# Up for a facility visit, or (its visit dropped) back to the
-				# gate while boarding has not started.
-				match StageKinds.visit_facility(self, p):
-					StageKinds.Facility.CAFE:
-						cafes.depart(p)
-					StageKinds.Facility.TOILET:
-						toilets.depart(p)
-					StageKinds.Facility.SHOP:
-						shops.depart(p)
-					_:
-						if tick < p.boarding_tick:
-							_set_stage(p, Passenger.Stage.TO_GATE)
-						else:
-							_set_stage(p, Passenger.Stage.TO_EXIT)
+			PassengerGates.step_stand_up(self, p)
 		Passenger.Stage.TO_EXIT:
-			_to_exit(p)
+			PassengerGates.to_exit(self, p)
 
 
 func _move(p: Passenger) -> void:
@@ -1076,119 +640,6 @@ func _beat(p: Passenger) -> void:
 	p.late = JourneyForecast.next_late(p.late, flights.doors_close_tick(p.flight_id) - arrival)
 
 
-## Walking to a desk or scanner: choose one, walk there, join its lane.
-func _seek(p: Passenger) -> void:
-	if p.station != 0 and not _is_open(p.station):
-		_leave_station(p)
-	if p.station == 0:
-		if p.stuck == Passenger.Stuck.NONE or _retry_now(p):
-			_choose_station(p)
-		return
-	if p.is_moving():
-		return
-	if (layout.lanes[p.station] as Array).has(p.at):
-		_join(p)
-	else:
-		_leave_station(p)
-		_choose_station(p)
-
-
-func _choose_station(p: Passenger) -> void:
-	var to_desk := p.stage == Passenger.Stage.TO_CHECKIN
-	var candidates := layout.desks if to_desk else layout.scanners
-	if candidates.is_empty():
-		p.stuck = Passenger.Stuck.NO_CHECKIN if to_desk else Passenger.Stuck.NO_SECURITY
-		return
-	var best := 0
-	var best_eta := 0
-	var best_path: Array[Vector2i] = []
-	if not _any_open(candidates) and candidates.any(layout.is_usable):
-		# Usable but none staffed, so all closed: wait where you stand.
-		p.stuck = Passenger.Stuck.NO_CHECKIN if to_desk else Passenger.Stuck.NO_SECURITY
-		p.clear_path()
-		return
-	for station in candidates:
-		if not _is_open(station):
-			continue
-		var cells: Array = layout.lanes[station]
-		var path := grid.find_path(p.at, cells[mini(_station_slot(station), cells.size() - 1)])
-		if path.is_empty():
-			continue
-		var eta := station_eta(station, Passenger.path_mm(path), p)
-		if best == 0 or eta < best_eta:
-			best = station
-			best_eta = eta
-			best_path = path
-	if best == 0:
-		p.stuck = Passenger.Stuck.NO_ROUTE
-		return
-	p.stuck = Passenger.Stuck.NONE
-	p.station = best
-	_incoming[best] = _incoming.get(best, 0) + 1
-	p.set_path(best_path)
-
-
-func _join(p: Passenger) -> void:
-	_incoming[p.station] = _incoming.get(p.station, 0) - 1
-	if StationQueue.join(_queue(p.station), layout.lanes[p.station], p.id):
-		p.stuck = Passenger.Stuck.NONE
-	else:
-		p.stuck = Passenger.Stuck.QUEUE_FULL
-	var to_desk := p.stage == Passenger.Stage.TO_CHECKIN
-	_set_stage(p, Passenger.Stage.CHECKIN_QUEUE if to_desk else Passenger.Stage.SECURITY_QUEUE)
-
-
-func _queue_move(p: Passenger) -> void:
-	var index := (_queue(p.station)["lane"] as Array).find(p.id)
-	if index < 0 or p.is_moving() or not QueueRipple.sim_may_step(self, p):
-		return
-	var target: Vector2i = layout.lanes[p.station][index]
-	if p.at != target:
-		var path := grid.find_path(p.at, target)
-		if path.is_empty():
-			_requeue(p)
-		else:
-			p.set_path(path)
-
-
-## A queued passenger with no way back to its lane cell would hold up the
-## passengers behind it. It leaves the queue and chooses a station again.
-func _requeue(p: Passenger) -> void:
-	_leave_station(p)
-	_send_back(p)
-	p.stuck = Passenger.Stuck.NO_ROUTE
-
-
-## Gate access needs clearance: only a cleared passenger claims a seat.
-func _to_gate(p: Passenger) -> void:
-	if not p.cleared:
-		push_error("PassengerSim: passenger %d reached the gate without clearance" % p.id)
-		return
-	if tick >= p.boarding_tick:
-		_release_seat(p)
-		_set_stage(p, Passenger.Stage.TO_EXIT)
-		return
-	if p.seat_object == 0:
-		GateCapacity.to_spot(self, p)
-		return
-	if p.is_moving():
-		return
-	if p.at == p.seat_front:
-		p.clear_path()
-		_set_stage(p, Passenger.Stage.SITTING_DOWN)
-	else:
-		_release_seat(p)
-
-
-## The cells of the gate desk of `p`'s flight, empty when there is none to
-## wait near (GateReach).
-func _gate_cells(p: Passenger) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
-	if layout.by_gate:
-		out.assign(layout.gate_desks.get(flights.flight_gate(p.flight_id), out))
-	return out
-
-
 ## Gives up the claim on the seat `p` holds but leaves it the seat (it gets up
 ## from a chair that moved, GateRelocation).
 func drop_seat_claim(p: Passenger) -> void:
@@ -1204,159 +655,20 @@ func _release_seat(p: Passenger) -> void:
 	p.forget_seat()
 
 
-func _to_exit(p: Passenger) -> void:
-	if p.exit_object != 0 and not exits_for(p).has(p.exit_object):
-		_drop_exit(p)
-	if p.exit_object == 0:
-		if p.stuck == Passenger.Stuck.NONE or _retry_now(p):
-			_choose_exit(p)
-		return
-	# A pending walker waits for _admit_pending(), at the start of a tick.
-	if p.is_moving() or files.is_pending(p.id):
-		return
-	if p.at == layout.door_cell(grid, p.exit_object):
-		_step_out(p)
-	else:
-		_drop_exit(p)
-
-
-## At its door, `p` steps out onto the apron if its apron file has room, or
-## waits at the door (BoardingFiles.join_plane()).
-func _step_out(p: Passenger) -> void:
-	if not files.join_plane(self, p):
-		return
-	p.apron = (files.apron_of(self, p.exit_object)["points"] as Array).duplicate()
-	p.apron_mm = 0
-	_set_stage(p, Passenger.Stage.APRON)
-
-
-## The exit choice is given up, and with it the place in the boarding files.
-func _drop_exit(p: Passenger) -> void:
-	p.exit_object = 0
-	files.leave(p.id)
-
-
-## The pending walkers join their next file where they now fit, in
-## BoardingFiles.pending_order(): before anyone steps, so each walks this tick.
-func _admit_pending() -> void:
-	for p in files.pending_order(self):
-		# Its exit closed or went while it waited: it gives up its place and
-		# chooses an exit again on its step (_to_exit()).
-		if not exits_for(p).has(p.exit_object):
-			_drop_exit(p)
-		elif files.door_of(p.id) != 0:
-			_step_out(p)
-		else:
-			files.join_door(self, p)
-
-
-func _choose_exit(p: Passenger) -> void:
-	var exits := exits_for(p)
-	if exits.is_empty():
-		p.stuck = Passenger.Stuck.EXIT_BLOCKED
-		p.clear_path()
-		return
-	# The routed forecasts price the same door (JourneyForecast.nearest_exit()).
-	var door := JourneyForecast.nearest_exit(self, p.at, p).x
-	var path: Array[Vector2i] = []
-	if door != 0:
-		path = grid.find_path(p.at, layout.door_cell(grid, door))
-	if path.is_empty():
-		p.stuck = Passenger.Stuck.NO_ROUTE
-		return
-	p.exit_object = door
-	p.stuck = Passenger.Stuck.NONE
-	p.set_path(path)
-	files.join_door(self, p)
-
-
 ## The open exits `p` may leave by: with gates, its flight's gate's exit
 ## (TerminalLayout.open_exits_for()).
 func exits_for(p: Passenger) -> Array[int]:
-	var gate := flights.flight_gate(p.flight_id) if layout.by_gate else ""
-	return layout.open_exits_for(grid, gate)
-
-
-## The walk from an exit door's cell to the plane door (OutsideWalks).
-func _apron_points(exit_door: int) -> Array[Vector3]:
-	return OutsideWalks.departure(self, exit_door)
-
-
-## An edit touched the committed path. Finish the current step if it is still
-## open and plan on from its end; otherwise turn back to the cell just left.
-## Arrival checks in each stage handle a target that is no longer reachable.
-func _replan(p: Passenger) -> void:
-	p.needs_replan = false
-	if not p.is_moving():
-		return
-	var target := p.path_end()
-	var here := p.at
-	var next := p.path[p.path_index + 1]
-	var keep := p.seg_mm
-	var path: Array[Vector2i] = []
-	if keep == 0:
-		path = grid.find_path(here, target)
-	elif grid.can_passenger_route(here, next):
-		path = grid.find_path(next, target)
-		if path.is_empty():
-			path.append(next)
-		path.push_front(here)
-	else:
-		keep = Passenger.segment_mm(here, next) - keep
-		p.at = next
-		path = grid.find_path(here, target)
-		if path.is_empty():
-			path.append(here)
-		path.push_front(next)
-	if path.size() < 2:
-		p.clear_path()
-		# No way on to its door: the walker chooses an exit again.
-		if p.stage == Passenger.Stage.TO_EXIT and p.exit_object != 0:
-			_drop_exit(p)
-		return
-	p.set_path(path)
-	p.seg_mm = keep
-	if p.stage != Passenger.Stage.TO_EXIT or p.exit_object == 0:
-		return
-	# No way on to its door: it chooses an exit again (_to_exit()).
-	if p.path_end() != layout.door_cell(grid, p.exit_object):
-		_drop_exit(p)
-	# A new way to the door changes the walk left: the walker takes its place
-	# in the door file again, or waits.
-	elif files.holds(p.id):
-		files.reroute(self, p)
+	return PassengerGates.exits_for(self, p)
 
 
 func _on_graph_changed(cells: Array[Vector2i]) -> void:
-	var touched := {}
-	for cell in cells:
-		touched[cell] = true
-	for p in _passengers:
-		if p.is_done() or p.stage == Passenger.Stage.SECURITY or p.stage == Passenger.Stage.APRON:
-			continue
-		for i in range(p.path_index, p.path.size()):
-			if touched.has(p.path[i]):
-				p.needs_replan = true
-				break
-	var before := layout.security_lanes
-	layout.rebuild(grid)
-	files.clear_derived()
-	# Rebuilt on the next tick (_reconcile), once however many edits came.
-	standing.stale = true
-	# A lane that broke or changed (SecurityLanes.broken()) ends its service at
-	# once: its admitted passengers go back to choosing, without clearance.
-	for arch in SecurityLanes.broken(before, layout.security_lanes):
-		for id in security.drop(arch):
-			_send_back(_by_id[id])
-	# Walkers outside keep a walk that is still there, or stop (site only).
-	OutsideWalks.revalidate(self)
+	PassengerEdits.graph_changed(self, cells)
 
 
 ## The live plane stand moved (ApronStand): exits walk to its door from now
 ## on, so the doors' walks outside are found again, as after an edit.
 func set_stand(stand: Dictionary) -> void:
-	layout.stand = stand
-	_on_graph_changed([] as Array[Vector2i])
+	PassengerEdits.set_stand(self, stand)
 
 
 ## The gate stands changed (ApronStand with gate desks): each gate's exit
@@ -1365,17 +677,12 @@ func set_stand(stand: Dictionary) -> void:
 func set_gate_stands(
 	exit_stands: Dictionary, exit_gates: Dictionary, gate_desk_ids: Dictionary
 ) -> void:
-	layout.by_gate = true
-	layout.exit_stands = exit_stands
-	layout.exit_gates = exit_gates
-	layout.gate_desk_ids = gate_desk_ids
-	_on_graph_changed([] as Array[Vector2i])
+	PassengerEdits.set_gate_stands(self, exit_stands, exit_gates, gate_desk_ids)
 
 
 ## Any accepted edit: the standing spots are derived again on the next tick.
 func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
-	standing.stale = true
-	files.clear_derived()
+	PassengerEdits.edit_applied(self)
 
 
 ## Brings queues and seat claims in line with the layout after an edit: a
@@ -1383,71 +690,11 @@ func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
 ## that got shorter moves its last passengers to the front of holding, and a
 ## removed seat leaves its passenger standing.
 func _reconcile() -> void:
-	var stations: Array = _queues.keys()
-	for station in security.records.keys():
-		if not stations.has(station):
-			stations.append(station)
-	stations.sort()
-	for station in stations:
-		var q: Dictionary = _queues.get(station, {"lane": [], "holding": [], "serving": 0})
-		if not layout.is_usable(station):
-			var members: Array = (q["lane"] as Array) + (q["holding"] as Array)
-			if q["serving"] != 0 and not members.has(q["serving"]):
-				members.append(q["serving"])
-			members.append_array(security.drop(station))
-			_queues.erase(station)
-			for id in members:
-				_send_back(_by_id[id])
-			continue
-		if not _queues.has(station):
-			continue
-		if not _is_open(station):
-			_close_queue(station, q)
-			continue
-		var cells: Array = layout.lanes[station]
-		while (q["lane"] as Array).size() > cells.size():
-			var last: int = (q["lane"] as Array).pop_back()
-			(q["holding"] as Array).push_front(last)
-			_by_id[last].stuck = Passenger.Stuck.QUEUE_FULL
-	for p in _passengers:
-		ParkRecovery.note_sitting(self, p)
-		if p.seat_object != 0 and not GateRelocation.holds_seat(self, p, _set_stage):
-			_release_seat(p)
-			if p.stage in [Passenger.Stage.SITTING_DOWN, Passenger.Stage.SEATED]:
-				# Plans again: another seat or a standing spot (its roller collected
-				# first when it had a roller, ParkRecovery).
-				ParkRecovery.on_seat_lost(self, p)
-				p.clear_path()
-				_set_stage(p, Passenger.Stage.TO_GATE)
-	if standing.stale:
-		standing.rebuild(self)
-		# A claim whose spot the edit removed is dropped; the passenger plans
-		# again this tick.
-		for id in standing.drop_invalid():
-			var p: Passenger = _by_id[id]
-			# One setting off for the exit just walks on from its cell.
-			if p.stage == Passenger.Stage.TO_EXIT:
-				continue
-			p.clear_path()
-			_set_stage(p, Passenger.Stage.TO_GATE)
+	PassengerStations.reconcile(self)
+	PassengerGates.reconcile_seats(self)
 	cafes.reconcile()
 	toilets.reconcile()
 	shops.reconcile()
-
-
-## A station without staff on duty: the passenger in service is finished (at
-## a security station every admitted passenger, SecurityRuntime), and
-## everyone else in its lane or holding list stops and chooses again.
-func _close_queue(station: int, q: Dictionary) -> void:
-	var serving: int = q["serving"]
-	var members: Array = (q["lane"] as Array) + (q["holding"] as Array)
-	members.erase(serving)
-	q["lane"] = [serving] if serving != 0 and not layout.passages.has(station) else []
-	q["holding"] = []
-	for id in members:
-		var p: Passenger = _by_id[id]
-		_send_back(p)
-		p.clear_path()
 
 
 func _send_back(p: Passenger) -> void:

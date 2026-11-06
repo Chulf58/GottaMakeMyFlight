@@ -102,9 +102,9 @@ func test_a_settled_passenger_that_still_holds_something_is_not_retired() -> voi
 	_world.run_to(PassengerTestWorld.doors_tick() + 50)
 	var p := _world.passenger(ids[0])
 	assert_bool(p.is_done()).is_true()
-	assert_str(_world.sim._settled_leftovers(p)).is_equal("")
+	assert_str(PassengerLifecycle.settled_leftovers(_world.sim, p)).is_equal("")
 	_world.sim._seat_claims["ghost_seat"] = p.id
-	assert_str(_world.sim._settled_leftovers(p)).contains("seat")
+	assert_str(PassengerLifecycle.settled_leftovers(_world.sim, p)).contains("seat")
 	var due := p.outcome_tick + PassengerSim.SETTLED_KEEP_TICKS + 3
 	_world.run_to(due)
 	assert_object(_world.passenger(p.id)).is_not_null()

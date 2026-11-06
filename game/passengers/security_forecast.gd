@@ -269,7 +269,7 @@ func _step() -> void:
 			_changed = _changed or u.at != was
 
 
-## PassengerSim._queue_move() on the copy. The lane is a straight line of
+## PassengerStations.queue_move() on the copy. The lane is a straight line of
 ## cells, so between two of its cells the path is the lane itself; elsewhere
 ## the grid's path is used as there.
 func _move_up(u: Passenger) -> void:

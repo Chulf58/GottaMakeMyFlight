@@ -4,7 +4,7 @@ extends GdUnitTestSuite
 ## keeps its route lengths until an edit (decision
 ## toilet-design-queue-free-reservable-stalls-per-stall-daily-u, point 3).
 ## With two exits whose walks outside differ a lot, a passenger picks the
-## exit nearest inside (PassengerSim._choose_exit()); the forecast picks the
+## exit nearest inside (PassengerGates.choose_exit()); the forecast picks the
 ## same one, so the passenger arrives when forecast, not after it. Route
 ## lengths are searched once and searched again only after a grid edit.
 

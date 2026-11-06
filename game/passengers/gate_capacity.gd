@@ -124,7 +124,7 @@ static func recover_all(
 func reserve(host: Object, p: Passenger, from: Vector2i) -> bool:
 	var sim := _sim_of(host)
 	var spots := _spots_of(host)
-	var near := sim._gate_cells(p)
+	var near := PassengerGates.gate_cells(sim, p)
 	var region := spots.region_of(from)
 	var taken := _seat_claims_of(host)
 	var held := {}
@@ -471,7 +471,7 @@ static func seat_from_spot(sim: PassengerSim, p: Passenger) -> void:
 ## desk (no gates, or a flight without a gate) the nearest to the passenger. A
 ## seat reserved for a passenger in security is not free.
 static func claim_seat(sim: PassengerSim, p: Passenger) -> bool:
-	var near := sim._gate_cells(p)
+	var near := PassengerGates.gate_cells(sim, p)
 	var held := {}
 	for key: String in sim.gates.seats.values():
 		held[key] = true
@@ -498,7 +498,7 @@ static func claim_seat(sim: PassengerSim, p: Passenger) -> bool:
 static func _claim_spot(sim: PassengerSim, p: Passenger) -> int:
 	var tries := 0
 	var roller := ParkRecovery.has_roller(p)
-	for spot in sim.standing.free_nearest(p.at, sim._gate_cells(p), roller):
+	for spot in sim.standing.free_nearest(p.at, PassengerGates.gate_cells(sim, p), roller):
 		var path := _path(sim, p.at, sim.standing.cell_of(spot))
 		if not path.is_empty():
 			sim.standing.claim(p.id, spot, roller)
