@@ -190,7 +190,7 @@ func _plans(bag: Dictionary, start: Transform3D, want: Transform3D, frame: Trans
 ## (pull>floor) let-go steps.
 func test_a_parking_plan_holds_a_grip_point_and_never_jumps() -> void:
 	var frame := Transform3D(Basis.IDENTITY, Vector3.ZERO)
-	var pulled := CarryOnProps.pulled(Vector3(-0.25, 0.85, 0.05), Vector3(-0.35, 0.03, -0.95), 1.0)
+	var pulled := RollerPull.pulled(Vector3(-0.25, 0.85, 0.05), Vector3(-0.35, 0.03, -0.95), 1.0)
 	var lying := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
 	var hand := SecurityLooks.Home.HAND
 	var floor := SecurityLooks.Home.FLOOR
@@ -891,7 +891,7 @@ func test_a_parking_move_keeps_its_home_to_its_end() -> void:
 	bag["home"] = bag["place"]
 	var flags := {"to_floor": true, "yaw": 0.0, "hand": 0}
 	var want := frame * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.6))
-	var start := CarryOnProps.pulled(Vector3(-0.25, 0.85, 0.05), Vector3(-0.35, 0.03, -0.95), 1.0)
+	var start := RollerPull.pulled(Vector3(-0.25, 0.85, 0.05), Vector3(-0.35, 0.03, -0.95), 1.0)
 	for k: float in [0.2, 0.5, 0.7, 0.9]:
 		var plans := []
 		for grip_y: float in [0.3, 1.0]:
@@ -957,7 +957,7 @@ func test_a_collecting_pick_up_bends_the_back_first_only_to_the_lift_end() -> vo
 	var pull := SecurityLooks.Carry.PULL
 	var frame := Transform3D()
 	var lying := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(0.0, 0.0, 0.56))
-	var pulled := CarryOnProps.pulled(Vector3(-0.25, 0.85, 0.05), Vector3(-0.35, 0.03, -0.95), 1.0)
+	var pulled := RollerPull.pulled(Vector3(-0.25, 0.85, 0.05), Vector3(-0.35, 0.03, -0.95), 1.0)
 	var flags := {"to_floor": false, "yaw": 0.0, "hand": 0}
 	for collecting: bool in [true, false]:
 		var bag := _move(_place(floor, 0), pull, _place(hand, 0), pull)

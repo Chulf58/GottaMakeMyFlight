@@ -82,7 +82,7 @@ static func held_by_hand(sim: PassengerSim, p: Passenger, lead := 0.0) -> bool:
 
 
 ## Whether a pulled roller of `p` would be at a stall: walking, the spot it
-## would trail to (CarryOnProps.TRAIL_M straight back from the tick position,
+## would trail to (RollerPull.TRAIL_M straight back from the tick position,
 ## along the step walked, as a new pull starts) or the walker itself is
 ## within CLEAR_M (plus `extra`) of a stall's box; standing, the walker is
 ## within that and a trail of one. Geometry only, whatever path the walker is on (a replanned
@@ -90,10 +90,10 @@ static func held_by_hand(sim: PassengerSim, p: Passenger, lead := 0.0) -> bool:
 static func leaving(sim: PassengerSim, p: Passenger, extra := 0.0) -> bool:
 	var at := sim.world_position(p)
 	var spot := at
-	var margin := CLEAR_M + extra + CarryOnProps.TRAIL_M
+	var margin := CLEAR_M + extra + RollerPull.TRAIL_M
 	if p.is_moving():
 		var step := Vector2(p.path[p.path_index + 1] - p.path[p.path_index]).normalized()
-		spot = at - Vector3(step.x, 0.0, step.y) * CarryOnProps.TRAIL_M
+		spot = at - Vector3(step.x, 0.0, step.y) * RollerPull.TRAIL_M
 		margin = CLEAR_M + extra
 	for stall: Dictionary in sim.toilets.layout.stalls:
 		if near(stall, spot, margin) or near(stall, at, margin):

@@ -80,15 +80,15 @@ func test_the_holding_arm_goes_between_the_two_poses() -> void:
 	assert_float(arm.lean_back_degrees).is_equal(0.0)
 	assert_float(arm.front_weight).is_equal(front)
 	CarrySwap.pose_arm(arm, 1.0, front)
-	assert_float(arm.swing_kept).is_equal(CarryOnProps.PULL_SWING_KEPT)
-	assert_float(arm.lean_back_degrees).is_equal(CarryOnProps.PULL_LEAN_DEGREES)
-	assert_float(arm.angle_degrees).is_equal(CarryOnProps.PULL_OUT_DEGREES)
+	assert_float(arm.swing_kept).is_equal(CarryArmPose.PULL_SWING_KEPT)
+	assert_float(arm.lean_back_degrees).is_equal(CarryArmPose.PULL_LEAN_DEGREES)
+	assert_float(arm.angle_degrees).is_equal(CarryArmPose.PULL_OUT_DEGREES)
 	assert_float(arm.front_weight).is_equal(0.0)
 	CarrySwap.pose_arm(arm, 0.5, front)
-	var mid_swing := (CarrySwap.HAND_SWING_KEPT + CarryOnProps.PULL_SWING_KEPT) / 2.0
+	var mid_swing := (CarrySwap.HAND_SWING_KEPT + CarryArmPose.PULL_SWING_KEPT) / 2.0
 	assert_float(arm.swing_kept).is_equal_approx(mid_swing, 0.0001)
 	assert_float(arm.lean_back_degrees).is_equal_approx(
-		CarryOnProps.PULL_LEAN_DEGREES / 2.0, 0.0001
+		CarryArmPose.PULL_LEAN_DEGREES / 2.0, 0.0001
 	)
 	assert_float(arm.front_weight).is_equal_approx(front / 2.0, 0.0001)
 	var swing := arm.swing_kept

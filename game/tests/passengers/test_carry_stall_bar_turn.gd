@@ -67,7 +67,7 @@ func test_only_a_bar_roller_beside_the_stalls_narrows() -> void:
 
 ## A roller held by its bar comes beside the stalls, turns back half way, comes
 ## beside them again and then swaps to the pull (the hand carry's turn there
-## going to CarryOnProps.PULL_OUT_DEGREES, CarrySwap.pose_arm): the arm's turn
+## going to CarryArmPose.PULL_OUT_DEGREES, CarrySwap.pose_arm): the arm's turn
 ## at each STEP_TICKS moves at most STEP_MAX_DEGREES, the first step after each
 ## change is where the last one was, and it reaches both ends. Control: the
 ## turn did narrow by the whole gap and come back.
@@ -101,7 +101,7 @@ func test_the_turn_eases_through_each_change_and_the_swap() -> void:
 	print("largest step %.3f deg, narrowest %.3f, last %.3f" % [worst, narrowest, last])
 	assert_float(worst).is_less_equal(STEP_MAX_DEGREES)
 	assert_float(narrowest).is_equal_approx(StallCarry.BAR_OUT_DEGREES, 0.0001)
-	assert_float(last).is_equal_approx(CarryOnProps.PULL_OUT_DEGREES, 0.0001)
+	assert_float(last).is_equal_approx(CarryArmPose.PULL_OUT_DEGREES, 0.0001)
 
 
 ## Through the real views: a hard case on its walk to a stall, side-carried
@@ -128,7 +128,7 @@ func test_the_real_arms_turn_wide_away_and_narrow_beside_the_stalls() -> void:
 	)
 	assert_int(run["narrow"]).is_greater(0)
 	assert_float(run["narrowest"]).is_equal_approx(StallCarry.BAR_OUT_DEGREES, 0.0001)
-	assert_float(run["last"]).is_equal_approx(CarryOnProps.PULL_OUT_DEGREES, 0.0001)
+	assert_float(run["last"]).is_equal_approx(CarryArmPose.PULL_OUT_DEGREES, 0.0001)
 	assert_float(run["worst"]).is_less_equal(FRAME_MAX_DEGREES)
 
 

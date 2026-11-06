@@ -405,7 +405,7 @@ static func queue_stand(
 		bag["changed"] = now
 		# A swap's mark outlives its move (sync() sets it only on a change of
 		# place); left on a settled roller it made the stand a move not led by the
-		# hand (CarryOnProps._leads()), which parks() refuses.
+		# hand (CarryPlace.leads()), which parks() refuses.
 		bag["swap"] = false
 
 
@@ -643,7 +643,7 @@ static func queue_share(bag: Dictionary, k: float) -> float:
 ## The rods' length (the bag's units) of a queue stand of `bag` at `k`: from
 ## `pull` (the pull's length now) to the length that stands the bar QUEUE_BAR_M
 ## over the floor upright (park()), and back. `bar_in` is the bar's own z with
-## no rods out, less REACH_BUILT_M (CarryOnProps._bar_z()), `scale_by` the
+## no rods out, less REACH_BUILT_M (CarryHand.bar_z()), `scale_by` the
 ## bag's scale. The bar of a roller on its wheels is
 ## (ROLLER_AXLE.y + bar_z - ROLLER_AXLE.z) * scale_by up.
 static func queue_reach(

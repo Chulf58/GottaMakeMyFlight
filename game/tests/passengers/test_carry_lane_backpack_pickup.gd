@@ -244,7 +244,7 @@ func test_back_lead_is_the_hand_on_the_resting_end_side() -> void:
 
 ## The lead of a backpack's tray>back move stamped again while the hand is
 ## still reaching for it (CarryLead.at_start(): the same move,
-## CarryOnProps._stamp keeps its start) stays the hand of the body's frame as
+## CarryPlace._stamp keeps its start) stays the hand of the body's frame as
 ## the move first started, though the body has turned half round since: the
 ## frame of the restamp put the tray on the other side and switched the hand
 ## mid-reach (Sol review, board 41c159bc). Control: a new move stamped from the
@@ -260,7 +260,7 @@ func test_a_restamp_in_the_reach_keeps_the_lead_of_the_move_start() -> void:
 	add_child(node)
 	# The tray on the body's left (+X; the body faces +Z), the bag's own hand the right.
 	node.global_position = Vector3(0.6, 0.8, 0.4)
-	var want := CarryOnProps.worn_back(Transform3D(Basis(), Vector3(0.0, 1.35, -0.05)), 0.0, 1.0)
+	var want := CarryWorn.worn_back(Transform3D(Basis(), Vector3(0.0, 1.35, -0.05)), 0.0, 1.0)
 	var held := {"homes": [SecurityLooks.Home.HAND]}
 	var bag := {
 		"node": node,
@@ -290,7 +290,7 @@ func test_a_restamp_in_the_reach_keeps_the_lead_of_the_move_start() -> void:
 	}
 	var start := node.global_transform
 	var k := CarryLead.REACH_SHARE * 0.5
-	props._stamp(held, bag, body, want, 0)
+	CarryPlace._stamp(props, held, bag, body, want, 0)
 	var first: Array = (
 		CarryLead.plan(bag, k, start, want, body.global_transform, flags, dims)["loops"]
 	)
@@ -300,7 +300,7 @@ func test_a_restamp_in_the_reach_keeps_the_lead_of_the_move_start() -> void:
 	body.rotate_y(PI)
 	flags["yaw"] = PI
 	bag["changed"] = 11.0
-	props._stamp(held, bag, body, want, 0)
+	CarryPlace._stamp(props, held, bag, body, want, 0)
 	var again: Array = (
 		CarryLead.plan(bag, k, start, want, body.global_transform, flags, dims)["loops"]
 	)

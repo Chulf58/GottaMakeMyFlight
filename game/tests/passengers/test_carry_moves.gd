@@ -41,7 +41,7 @@ func test_a_case_picked_up_ahead_stays_out_of_the_legs() -> void:
 	)
 	assert_bool(CarryMoves.picks_up_ahead(spot)).is_true()
 	for grip_z in [-0.1, 0.0, 0.15]:
-		var held := CarryOnProps.carried(Vector3(-0.38, 0.93, grip_z), Vector3.ZERO, 0.0, 1.0)
+		var held := CarryHand.carried(Vector3(-0.38, 0.93, grip_z), Vector3.ZERO, 0.0, 1.0)
 		for step in 61:
 			var k := step / 60.0
 			var xf := CarryMoves.pick_up(spot, held, k)

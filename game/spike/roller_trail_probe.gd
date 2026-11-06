@@ -541,12 +541,12 @@ func _test_roller(
 	var back := Basis(Vector3.UP, body.rotation.y) * Vector3.FORWARD
 	if (
 		walked.size() > 1
-		and _simple_hits(CarryOnProps.trail(walked, back), body.global_position, floor_y, used)
+		and _simple_hits(RollerPull.trail(walked, back), body.global_position, floor_y, used)
 	):
 		_m["centre"] += 1
 	var side_line: Array = _side_walked.get(p.id, [])
 	if side_line.size() > 1:
-		var at := CarryOnProps.trail(side_line, back)
+		var at := RollerPull.trail(side_line, back)
 		if side_sign != 0.0 and _simple_hits(at, body.global_position, floor_y, used):
 			_m["side"] += 1
 	if _body_hits(body, used):
@@ -669,13 +669,13 @@ func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> 
 	_axles["settled"] += 1
 	_axles["min_side"] = minf(float(_axles["min_side"]), side)
 	_axles["min_behind"] = minf(float(_axles["min_behind"]), behind)
-	var shin := side < CarryOnProps.TRAIL_SIDE_MIN_M - LEG_SLACK_M
+	var shin := side < RollerPull.TRAIL_SIDE_MIN_M - LEG_SLACK_M
 	_axles["shin"] += int(shin)
 	if shin and int(_axles["shin"]) <= TOP_EPISODES:
 		var at := [p.id, _clock.tick, side, behind, place, was, _stage(p), _tag(state, p.id)]
 		print("SHIN_AT id=%d tick=%d side=%.3f behind=%.3f place=%d was=%d %s %s" % at)
-	var heel := behind < CarryOnProps.TRAIL_BEHIND_MIN_M - LEG_SLACK_M
-	_axles["heel"] += int(heel and side <= CarryOnProps.TRAIL_SIDE_MAX_M)
+	var heel := behind < RollerPull.TRAIL_BEHIND_MIN_M - LEG_SLACK_M
+	_axles["heel"] += int(heel and side <= RollerPull.TRAIL_SIDE_MAX_M)
 
 
 ## Whether the roller `bag` (a node) of `p` is in a move still under way (a
@@ -1085,7 +1085,7 @@ func _remember(p: Passenger, body: Node3D) -> void:
 			side = _side_sign(body, state["drawn_axle"])
 		var across := Basis(Vector3.UP, body.rotation.y) * Vector3.RIGHT * side
 		var line: Array = _side_walked.get(p.id, [])
-		line.append(at + across * CarryOnProps.TRAIL_SIDE_M)
+		line.append(at + across * RollerPull.TRAIL_SIDE_M)
 		_side_walked[p.id] = _trim(line)
 	_walked[p.id] = _trim(walked)
 
