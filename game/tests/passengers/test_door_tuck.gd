@@ -186,3 +186,26 @@ func test_hand_of_does_not_take_a_tucked_roller_across() -> void:
 	assert_int(told).override_failure_message("control: hand_of() moves it").is_equal(1)
 	RollerPull.tuck(bag, true, FIRST_TICK - 10.0)
 	assert_int(PullSide.pick(bag, _grid, frame, ahead, WALK_M, 1, FIRST_TICK)).is_equal(0)
+
+
+func test_left_and_right_tucked_pulls_are_as_far_from_their_own_leg() -> void:
+	# The drawn hips sit off the body's origin (about 2.6 cm to its left,
+	# measured by door_tuck_probe.gd's ASYM); the legs are either side of them.
+	var hips := 0.026
+	var spread := 0.09
+	var legs := [hips - spread, hips + spread]
+	var trail := Vector3(0.0, 0.0, -RollerPull.TRAIL_M)
+	var gaps: Array[float] = []
+	for hand in 2:
+		var out := -1.0 if hand == 0 else 1.0
+		var axle := RollerPull.settle(trail + Vector3(out * 0.3, 0, 0), hand, 1.0, hips)
+		gaps.append(absf(axle.x - float(legs[hand])))
+		# On its own side of the hips, TUCK_SIDE_M out from them.
+		assert_float((axle.x - hips) * out).is_equal_approx(RollerPull.TUCK_SIDE_M, 0.0001)
+	assert_float(gaps[0]).is_equal_approx(gaps[1], 0.0001)
+	# Control: measured from the body's origin the left roller is nearer its leg.
+	var right := RollerPull.settle(trail, 0, 1.0)
+	var left := RollerPull.settle(trail, 1, 1.0)
+	var near_right := absf(right.x - float(legs[0]))
+	var near_left := absf(left.x - float(legs[1]))
+	assert_float(near_right - near_left).is_greater(0.04)

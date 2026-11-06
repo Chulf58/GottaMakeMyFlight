@@ -147,7 +147,8 @@ static func step(
 	# cross behind the legs to the other side (a zig-zag of diagonal steps
 	# swings the walked line about the body's heading).
 	var frame := Transform3D(turn, at)
-	cur = frame * settle(frame.affine_inverse() * cur, hand, tuck_weight(bag, props._tick()))
+	var hips := float(bag.get("hips_x", 0.0))
+	cur = frame * settle(frame.affine_inverse() * cur, hand, tuck_weight(bag, props._tick()), hips)
 	bag["axle"] = [bag["axle"][1] if bag.has("axle") else cur, cur]
 
 
@@ -167,7 +168,13 @@ static func drawn(
 	# ticks of a turning walker the blend can cross behind the legs.
 	var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
 	var now := props._now()
-	var local := settle(frame.affine_inverse() * at, hand, tuck_weight(bag, now))
+	# The tuck is measured from the legs as drawn: the hips' middle (the rig's
+	# Spine_01) is not on the body's origin (about 2.6 cm to its left).
+	var hips: Vector3 = (
+		frame.affine_inverse() * (props._rig(body)["pivot"] as Node3D).global_position
+	)
+	bag["hips_x"] = hips.x
+	var local := settle(frame.affine_inverse() * at, hand, tuck_weight(bag, now), hips.x)
 	at = frame * local
 	if bag.has("drawn_axle"):
 		var was := frame.affine_inverse() * (bag["drawn_axle"] as Vector3)
@@ -182,12 +189,14 @@ static func drawn(
 ## The axle point `local` (the body's frame: x across, +z ahead) kept behind
 ## the body on the pulling hand's side (`hand` 0 right, 1 left), from
 ## TRAIL_SIDE_MIN_M to TRAIL_SIDE_MAX_M out and at least TRAIL_BEHIND_MIN_M
-## behind, then `tuck` (tuck_weight()) of the way in to TUCK_SIDE_M out.
-static func settle(local: Vector3, hand: int, tuck: float) -> Vector3:
+## behind, then `tuck` (tuck_weight()) of the way in to TUCK_SIDE_M out from
+## `hips_x` (the drawn hips' middle across the body's frame), so a tucked
+## roller is as far from the leg on its side for either hand.
+static func settle(local: Vector3, hand: int, tuck: float, hips_x := 0.0) -> Vector3:
 	var out := -1.0 if hand == 0 else 1.0
-	var side := clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
+	var side := out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
 	return Vector3(
-		out * lerpf(side, TUCK_SIDE_M, tuck), local.y, minf(local.z, -TRAIL_BEHIND_MIN_M)
+		lerpf(side, hips_x + out * TUCK_SIDE_M, tuck), local.y, minf(local.z, -TRAIL_BEHIND_MIN_M)
 	)
 
 

@@ -140,6 +140,7 @@ func _asym(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> void:
 		"grip": _views.carry_on_props().grip_of(body, hand),
 		"bar": bar,
 		"rod_base": reach.global_position,
+		"spine_01": (_views.carry_on_props()._rig(body)["pivot"] as Node3D).global_position,
 	}
 	for bone in LEG_BONES:
 		pts[bone + "_own"] = _bone_at(skeleton, bone + own)

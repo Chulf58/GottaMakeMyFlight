@@ -1,7 +1,7 @@
 extends "res://spike/pull_swap_strip.gd"
 ## A strip of plates of a pulled roller going through a one-cell doorway (board
 ## cd4ff4e0), for door_tuck_probe.gd in a windowed run, in place of
-## PullSwapStrip. The first guest seen pulling a roller (settled, in no move)
+## PullSwapStrip. The first guest seen pulling a roller in the left hand (settled, in no move)
 ## with its body within START_M of the middle of a door edge whose two edges
 ## on along its wall line are walls (a one-cell doorway) is plated every
 ## EVERY_FRAMES frames, PLATES times, so the roller is plated from before it
@@ -37,7 +37,10 @@ func look(
 	var props := views.carry_on_props()
 	var i: int = props.props_of(p.id)["bags"].find(bag)
 	if _id < 0:
-		if props.transfer_progress(p.id, i) < 1.0:
+		# A left-hand pull (the side the rods met the legs on before the tuck
+		# was measured from the hips).
+		var left := CarryLead.hand_of(int(state.get("place", 0))) == 1
+		if props.transfer_progress(p.id, i) < 1.0 or not left:
 			return
 		var door := _door_near(main, body.global_position)
 		if not door.is_finite():
