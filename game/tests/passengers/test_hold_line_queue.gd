@@ -122,7 +122,12 @@ func test_a_walker_overtaken_on_the_way_joins_in_cell_order_without_turning_back
 				fail("passenger %d turned back at %s: %s" % [w.id, cells[i - 1], cells])
 
 
-func test_same_tick_arrivals_join_by_line_index_then_id() -> void:
+## Moved for the latched claim (decision hold-line-rebuild-the-security-line-
+## follows-where-people-sta): one walker at a time enters. B, a step from the
+## tail cell, would reach it soonest: it is latched and enters; then A, now the
+## soonest to the new tail, is latched and enters on the same tick, behind B
+## (it was same-tick arrivals by line index, then id).
+func test_the_walker_reaching_the_tail_soonest_is_latched_and_enters_alone() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(4, 4))
 	var line: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]
 	var lanes := {1: line.slice(0, 2)}
@@ -132,39 +137,27 @@ func test_same_tick_arrivals_join_by_line_index_then_id() -> void:
 	front.id = 100
 	front.at = line[0]
 	front.clear_path()
-	# A (id 5) reaches line[2] and B (id 9) line[1] on this tick: B first.
 	var a := _arriving(5, Vector2i(1, 2), Vector2i(0, 2))
 	var b := _arriving(9, Vector2i(1, 1), Vector2i(0, 1))
 	var by_id := {100: front, 5: a, 9: b}
-	var joined := StationQueue.arrive(grid, queues, lanes, lines, [a, b], by_id, 7)
+	var claims := {}
+	var joined := StationQueue.arrive(grid, queues, lanes, lines, [a, b], by_id, 7, [], claims)
 	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([9, 5])
 	assert_array(queues[1]["lane"]).is_equal([100, 9])
 	assert_array(queues[1]["holding"]).is_equal([5])
 	for w: Passenger in [a, b]:
 		assert_bool(w.is_moving()).is_false()
 		assert_int(w.halt_tick).is_equal(7)
-	assert_that(a.at).is_equal(Vector2i(0, 2))
-	# Both reach line[1]: the lower id joins; the other turns back where it
-	# is for line[2], the nearer way, never stepping onto the winner's cell.
-	queues[1] = {"lane": [100], "holding": [], "serving": 0}
-	var c := _arriving(5, Vector2i(1, 1), Vector2i(0, 1))
-	var d := _arriving(9, Vector2i(0, 2), Vector2i(0, 1))
-	by_id = {100: front, 5: c, 9: d}
-	joined = StationQueue.arrive(grid, queues, lanes, lines, [d, c], by_id, 7)
-	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([5])
-	assert_array(queues[1]["lane"]).is_equal([100, 5])
-	assert_bool(d.is_moving()).is_true()
-	assert_that(d.path_end()).is_equal(Vector2i(0, 2))
-	assert_vector(d.grid_position()).is_equal_approx(Vector2(0.5, 1.55), Vector2(0.001, 0.001))
-	d.walk(950)
-	assert_that(d.at).is_equal(Vector2i(0, 2))
+	assert_that(b.at).is_equal(line[1])
+	assert_that(a.at).is_equal(line[2])
+	assert_dict(claims).is_empty()
 
 
-## Moved for decision hold-line-rebuild-the-security-line-follows-where-
-## people-sta: same-tick entries go by where each stands along the line, the
-## walk still to go included, so one standing on the free cell is ahead of a
-## lower id still stepping onto it (it was line index, then id).
-func test_a_walker_standing_on_the_free_cell_beats_a_lower_id_stepping_onto_it() -> void:
+## Moved for the latched claim (decision hold-line-rebuild-the-security-line-
+## follows-where-people-sta): a latched claimant keeps the tail. One standing
+## on the tail cell without the claim does not enter and steps off it, off the
+## line (it was the one standing there entering ahead of a lower id).
+func test_a_latched_claimant_keeps_the_tail_from_a_walker_standing_on_it() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(4, 4))
 	var line: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]
 	var front := Passenger.new()
@@ -177,30 +170,32 @@ func test_a_walker_standing_on_the_free_cell_beats_a_lower_id_stepping_onto_it()
 	standing.stage = Passenger.Stage.TO_CHECKIN
 	standing.at = line[1]
 	standing.clear_path()
-	var reaching := _arriving(5, Vector2i(1, 1), Vector2i(0, 1))
+	var far := Passenger.new()
+	far.id = 5
+	far.station = 1
+	far.stage = Passenger.Stage.TO_CHECKIN
+	far.at = Vector2i(3, 3)
+	far.clear_path()
 	var queues := {1: {"lane": [100], "holding": [], "serving": 0}}
-	var by_id := {100: front, 5: reaching, 9: standing}
+	var by_id := {100: front, 5: far, 9: standing}
+	var claims := {1: 5}
 	var joined := StationQueue.arrive(
-		grid, queues, {1: line.slice(0, 2)}, {1: line}, [reaching, standing], by_id, 7
+		grid, queues, {1: line.slice(0, 2)}, {1: line}, [far, standing], by_id, 7, [], claims
 	)
-	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([9])
-	assert_array(queues[1]["lane"]).is_equal([100, 9])
-	# The one stepping onto it loses the cell and turns back on its step, to
-	# the cell it came from, off the line.
-	assert_bool(reaching.is_moving()).is_true()
-	assert_that(reaching.path_end()).is_equal(Vector2i(1, 1))
-	for i in 20:
-		reaching.walk(PassengerSim.WALK_MM)
-	assert_bool(reaching.is_moving()).is_false()
-	assert_bool(line.has(reaching.at)).is_false()
-	assert_that(reaching.at).is_not_equal(standing.at)
+	assert_array(joined).is_empty()
+	assert_array(queues[1]["lane"]).is_equal([100])
+	assert_dict(claims).is_equal({1: 5})
+	assert_that(far.path_end()).is_equal(line[1])
+	assert_bool(standing.is_moving()).is_true()
+	assert_bool(line.has(standing.path_end())).is_false()
 
 
 ## The last free cell of a full line: a lower id reaches it on the tick a
-## higher id stands on it. Moved for decision hold-line-rebuild-the-security-
-## line-follows-where-people-sta: the one standing there joins and the one
-## stepping onto it turns back, and every passenger keeps a cell of its own
-## over the ticks that follow (it was the lower id joining).
+## higher id stands on it. Moved for the latched claim (decision hold-line-
+## rebuild-the-security-line-follows-where-people-sta): the one standing there
+## reaches it soonest, is latched and joins; the one stepping onto it has no
+## claim and turns back, and every passenger keeps a cell of its own over the
+## ticks that follow.
 func test_a_mover_onto_the_last_cell_a_stander_holds_turns_back() -> void:
 	_world = HoldLineKit.desk_hall()
 	var desk: int = _world.sim.get_meta(&"desk")
@@ -308,10 +303,7 @@ func test_a_same_tick_loser_turns_back_and_never_walks_through_the_winner() -> v
 	print("loser to winner: at the loss %.3f m, least after %.3f m" % [start, least])
 	assert_float(least).is_greater_equal(start)
 	assert_array(queues[1]["holding"]).is_equal([9])
-	# Moved for decision hold-line-rebuild-the-security-line-follows-where-
-	# people-sta: it enters where it steps onto the line behind the winner,
-	# coming round by line[3] to face the front, and moves up from there.
-	assert_int(line.find(loser.at)).is_between(2, 3)
+	assert_that(loser.at).is_equal(line[2])
 
 
 ## A walker of station 1 on `from`, 950 mm into the step to `to`: it reaches

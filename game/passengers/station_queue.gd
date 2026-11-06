@@ -168,7 +168,8 @@ static func may_enter(queue: Dictionary, admitted: int) -> bool:
 ## - The claimant enters the queue, as its last member, when it stands on the
 ##   tail cell (tail()) or reaches it at its pace on this tick, and stops
 ##   there; behind an admitted passenger still on that place it stops and
-##   waits (may_enter()). Then the next claimant is chosen.
+##   waits (may_enter()). Then the next claimant is chosen, and it too enters
+##   on this tick when it can.
 ## - With no claimant, the walker that would reach the tail soonest (the walk
 ##   still to go, then id) is latched as it: it heads for the tail and keeps
 ##   heading for it as the tail moves up, on from the cell it steps to, never
@@ -212,27 +213,30 @@ static func arrive(
 		var index := line_index(line)
 		var admitted := admitted_at(by_id, station, line)
 		var mine: Array = by_station[station]
-		if claims.has(station):
-			var claimant: Passenger = by_id[claims[station]]
-			if _enter(queue, lanes[station], line, index, admitted, claimant, by_id, now):
-				joined.append(claimant)
-				mine.erase(claimant)
-				claims.erase(station)
 		var free := free_index(queue, line, by_id, index)
 		var to := tail(free, admitted)
-		if not claims.has(station) and to < line.size():
-			var best: Passenger = null
-			var best_ticks := 0
-			for w: Passenger in mine:
-				var ticks := _ticks_to(grid, w, line, to)
-				if ticks >= 0 and (best == null or ticks < best_ticks):
-					best = w
-					best_ticks = ticks
-			if best != null:
+		while true:
+			if not claims.has(station):
+				var best := _soonest(grid, mine, line, to)
+				if best == null:
+					break
 				claims[station] = best.id
+			var claimant: Passenger = by_id[claims[station]]
+			if not _enter(queue, lanes[station], line, index, admitted, claimant, by_id, now):
+				break
+			joined.append(claimant)
+			mine.erase(claimant)
+			claims.erase(station)
+			free = free_index(queue, line, by_id, index)
+			to = tail(free, admitted)
 		for w: Passenger in mine:
 			if claims.get(station, 0) == w.id:
-				_head_for_tail(grid, w, line, to, free, stranded)
+				var onto: int = index.get(w.path[w.path_index + 1], -1) if w.is_moving() else -1
+				if onto >= 0 and onto < free and w.path_index + 2 == w.path.size():
+					# Stepping onto the cell it headed for, now a member's: back
+					# first. One passing over a member's cell walks on.
+					turn_back(w)
+				_head_for_tail(grid, w, line, to, stranded)
 			else:
 				_stop_short(grid, w, line, index, to, free)
 	_pass_centres(queues, walkers, {}, by_id)
@@ -275,6 +279,21 @@ static func _enter(
 	return true
 
 
+## Of `walkers`, the one that would reach line[`to`] soonest (ties to the
+## lower id, as they come in id order), or null when none can.
+static func _soonest(grid: BuildGrid, walkers: Array, line: Array, to: int) -> Passenger:
+	if to >= line.size():
+		return null
+	var best: Passenger = null
+	var best_ticks := 0
+	for w: Passenger in walkers:
+		var ticks := _ticks_to(grid, w, line, to)
+		if ticks >= 0 and (best == null or ticks < best_ticks):
+			best = w
+			best_ticks = ticks
+	return best
+
+
 ## The ticks walker `w` would take to reach line[`to`] from where it is, or -1
 ## with no way there.
 static func _ticks_to(grid: BuildGrid, w: Passenger, line: Array, to: int) -> int:
@@ -292,7 +311,7 @@ static func _ticks_to(grid: BuildGrid, w: Passenger, line: Array, to: int) -> in
 ## The claimant heads for line[`to`]: on from the cell it steps to when it is
 ## moving, never back; one with no way there is put in `stranded`.
 static func _head_for_tail(
-	grid: BuildGrid, w: Passenger, line: Array, to: int, free: int, stranded: Array
+	grid: BuildGrid, w: Passenger, line: Array, to: int, stranded: Array
 ) -> void:
 	if to >= line.size() or w.path_end() == line[to]:
 		return
@@ -315,16 +334,20 @@ static func _head_for_tail(
 
 ## A walker with a reservation but no claim follows on toward the tail and
 ## stops a step short of it: of the tail cell and of every cell a member holds.
-## One about to step onto such a cell stops where its step ends; one standing
-## on one steps off it (step_off()); one standing elsewhere further off sets
-## off toward the tail again.
+## One stepping onto such a cell turns back on its step (turn_back()); one
+## whose next step would is cut where its step ends; one standing on one steps
+## off it (step_off()); one standing elsewhere further off sets off toward the
+## tail again.
 static func _stop_short(
 	grid: BuildGrid, w: Passenger, line: Array, index: Dictionary, to: int, free: int
 ) -> void:
 	var limit := mini(to, line.size() - 1)
 	if w.is_moving():
 		var after := w.path_index + 2
-		if after < w.path.size() and _short_of(index, w.path[after], to, free):
+		if _short_of(index, w.path[w.path_index + 1], to, free):
+			# Stepping onto such a cell: it turns back on its step.
+			turn_back(w)
+		elif after < w.path.size() and _short_of(index, w.path[after], to, free):
 			_stop_after_step(w)
 		return
 	if _short_of(index, w.at, to, free):
@@ -344,6 +367,21 @@ static func _stop_short(
 static func _short_of(index: Dictionary, cell: Vector2i, to: int, free: int) -> bool:
 	var at: int = index.get(cell, -1)
 	return at >= 0 and (at < free or at == to)
+
+
+## Turns walker `w` back on the step it is on, where it is: the same point,
+## now walked from the cell ahead back to the one it came from, where it
+## stops. A walker still on its cell just stays there.
+static func turn_back(w: Passenger) -> void:
+	if w.seg_mm == 0:
+		w.clear_path()
+		return
+	var next := w.path[w.path_index + 1]
+	var walked := Passenger.segment_mm(w.at, next) - w.seg_mm
+	var turned: Array[Vector2i] = [next, w.at]
+	w.at = next
+	w.set_path(turned)
+	w.seg_mm = walked
 
 
 ## Cuts walker `w`'s path at the end of the step it is on.
