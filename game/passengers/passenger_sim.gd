@@ -84,7 +84,8 @@ signal checked_in(id: int, desk: int)
 ## seat_exiting (GateRelocation). 22: boarding-file wait spots (FileWaiters).
 ## 23: a Relocation saves the step its visitor had made (reached). 24: each
 ## passenger's halt_tick (QueueRipple). 25: gate places reserved at security
-## admission, under "gate_places" (GateCapacity). From 17 on, the version
+## admission, under "gate_places" (GateCapacity). 26: a cafe roller turn-back
+## saves the step made as Relocation.reached (CafeSim). From 17 on, the version
 ## before is refused, with no migration.
 const SAVE_VERSION := 26
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
