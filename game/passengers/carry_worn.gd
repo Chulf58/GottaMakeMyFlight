@@ -3,10 +3,38 @@ extends RefCounted
 ## Where a worn shoulder bag hangs on its walker, and a backpack held in front
 ## (CarryOnProps draws them; kept out of carry_on_props.gd, at its line cap).
 
-## Worn backpack: its back panel this far behind the Spine_03 bone (clear of
-## the back, a skirt and long hair), its top this far above the bone.
+## Worn backpack: the top of its back panel this far behind the Spine_03 bone
+## and this far above it, for a body whose index is not known (BACK_ON_SPINE_M
+## is per body).
 const BACK_FROM_SPINE_M := 0.175
 const BACK_TOP_OVER_SPINE_M := 0.06
+## Per body (PassengerLooks.BODIES): where the top of a worn pack's panel is,
+## x behind the Spine_03 bone and y above it for one bag, z and w for two
+## (SecurityLooks.TWO_BAG_SCALE), so the panel rests on the back: the least gap
+## from the body's own back to the panel over its idle and walk clips is about
+## BACK_CLEAR_M (board 4af10dd0: 0.175 m behind and 0.06 m above for every
+## body stood it 0.04-0.13 m off the back). The height is the one, of
+## worn_back_sweep_probe.gd's TOPS_M, whose largest gap over the clips is
+## least (a top level with the shoulders meets them as they move; the male
+## shoulders reach a one-bag pack's top corners unless it hangs 6-9 cm lower).
+## Measured by game/spike/worn_back_sweep_probe.gd (12 bodies, both clips at
+## 64 moments, the least gap read on an outline 1 cm wider, EDGE_M).
+const BACK_ON_SPINE_M: Array[Vector4] = [
+	Vector4(0.086, -0.09, 0.097, 0.03),
+	Vector4(0.082, -0.06, 0.100, 0.00),
+	Vector4(0.081, -0.06, 0.100, 0.00),
+	Vector4(0.081, -0.06, 0.100, 0.00),
+	Vector4(0.081, -0.06, 0.081, -0.06),
+	Vector4(0.086, -0.09, 0.102, 0.00),
+	Vector4(0.081, -0.03, 0.110, 0.06),
+	Vector4(0.073, -0.03, 0.110, 0.06),
+	Vector4(0.072, -0.03, 0.110, 0.06),
+	Vector4(0.073, -0.03, 0.110, 0.06),
+	Vector4(0.065, -0.03, 0.092, 0.03),
+	Vector4(0.072, -0.03, 0.110, 0.06),
+]
+## The least panel gap BACK_ON_SPINE_M is measured for.
+const BACK_CLEAR_M := 0.004
 ## It leans in at the top by this much, its bottom out clear of the hips.
 const BACK_LEAN_DEGREES := 10.0
 
@@ -90,18 +118,39 @@ static func loop_in_front(grip: Vector3, yaw: float, scale_by: float) -> Transfo
 	return Transform3D(basis, grip - basis * CarryOnProps.BACKPACK_LOOP)
 
 
-## A backpack worn on a body turned to `yaw` whose Spine_03 bone is at `spine`
-## (world): its length along the bone leaning in at the top by
-## BACK_LEAN_DEGREES, the top of its back panel BACK_FROM_SPINE_M behind the
-## bone and BACK_TOP_OVER_SPINE_M above it.
-static func worn_back(spine: Transform3D, yaw: float, scale_by: float) -> Transform3D:
+## A backpack worn on body `body` (PassengerLooks.BODIES; -1 when not known)
+## turned to `yaw` whose Spine_03 bone is at `spine` (world): the top of its
+## back panel where BACK_ON_SPINE_M puts it for its size (BACK_FROM_SPINE_M
+## behind and BACK_TOP_OVER_SPINE_M above the bone for -1; worn_back_at()).
+static func worn_back(spine: Transform3D, yaw: float, scale_by: float, body := -1) -> Transform3D:
+	if body < 0 or body >= BACK_ON_SPINE_M.size():
+		# Not measured: main's placement, the plain lean.
+		var legacy := Vector2(BACK_FROM_SPINE_M, BACK_TOP_OVER_SPINE_M)
+		return worn_back_at(spine, yaw, scale_by, legacy, false)
+	var per := BACK_ON_SPINE_M[body]
+	var top := Vector2(per.x, per.y) if scale_by >= 1.0 else Vector2(per.z, per.w)
+	return worn_back_at(spine, yaw, scale_by, top, scale_by >= 1.0)
+
+
+## worn_back() with the top of the panel `top.x` behind the bone and `top.y`
+## above it: its length along the bone leaning in at the top by
+## BACK_LEAN_DEGREES about that top. With `follow_tilt` (one bag) the lean
+## grows by as far as the bone tilts back past upright, so a back leaning back
+## in an idle does not swing the pack's bottom into the hips (stooping and
+## leaning forward unchanged); two bags' smaller pack keeps the plain lean,
+## which rests it better (conductor ruling 2026-11-06, board 4af10dd0).
+static func worn_back_at(
+	spine: Transform3D, yaw: float, scale_by: float, top: Vector2, follow_tilt: bool
+) -> Transform3D:
 	var up := spine.basis.y.normalized()
 	var behind := Basis(Vector3.UP, yaw) * Vector3.FORWARD
 	var out := (behind - up * behind.dot(up)).normalized()
-	var anchor := spine.origin + out * BACK_FROM_SPINE_M + up * BACK_TOP_OVER_SPINE_M
+	var anchor := spine.origin + out * top.x + up * top.y
 	var lean := deg_to_rad(BACK_LEAN_DEGREES)
+	if follow_tilt:
+		lean += maxf(0.0, asin(clampf(up.dot(behind), -1.0, 1.0)))
 	var along := up * cos(lean) - out * sin(lean)
 	var back := out * cos(lean) + up * sin(lean)
 	var basis := Basis(back.cross(along), back, along).scaled(Vector3.ONE * scale_by)
-	var top := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z * scale_by
-	return Transform3D(basis, anchor - along * top)
+	var length := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z * scale_by
+	return Transform3D(basis, anchor - along * length)
