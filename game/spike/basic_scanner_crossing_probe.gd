@@ -634,7 +634,7 @@ func _send() -> void:
 	var at := _roles.find_custom(func(r: Array) -> bool: return r[0] == kind)
 	if at < 0:
 		at = _roles.find_custom(func(r: Array) -> bool: return r[0] == -1)
-	if at < 0 or not CrossingBodies.take(p, _bodies):
+	if at < 0 or not CrossingBodies.take(p, _bodies, _lane_mode):
 		return
 	var traits: Array = _roles.pop_at(at)
 	p.carry_on = traits[1]
