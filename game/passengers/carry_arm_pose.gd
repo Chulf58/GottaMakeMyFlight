@@ -131,16 +131,25 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 
 ## How much of `body`'s drawn pose is the walk clip, 0 to 1: 1 walking, 0 in
 ## any other clip, and in between through a crossfade (ClipCrossfade) to or
-## from the walk, as its weight eases (the clip blended from is kept in
-## `held`, "walk_from", while no crossfade runs).
+## from the walk, as its weight eases. A blend starts from the share drawn
+## last ("walk_from", taken when the clip changes, "walk_clip"): a blend cut
+## short by another change starts from the pose drawn last
+## (ClipCrossfade.begin()), not from the clip before the first blend (taken
+## from that clip, the twist went from half on to off in one frame,
+## test_pull_twist_walk_share).
 static func walk_share(held: Dictionary, body: Node3D) -> float:
-	var walking := 1.0 if body.get_meta(&"clip", "") == "walk" else 0.0
+	var clip: String = body.get_meta(&"clip", "")
+	var walking := 1.0 if clip == "walk" else 0.0
 	var fade := body.get_meta(&"crossfade", null) as ClipCrossfade
-	if fade == null or not fade.blending():
-		held["walk_from"] = walking
-		return walking
-	var was: float = held.get("walk_from", walking)
-	return lerpf(was, walking, smoothstep(0.0, 1.0, fade.weight))
+	var share := walking
+	if fade != null and fade.blending():
+		if held.get("walk_clip", clip) != clip:
+			held["walk_from"] = held.get("walk_share", walking)
+		var was: float = held.get("walk_from", walking)
+		share = lerpf(was, walking, smoothstep(0.0, 1.0, fade.weight))
+	held["walk_clip"] = clip
+	held["walk_share"] = share
+	return share
 
 
 ## The pulling upper arm's twist for passenger body `body` (PULL_TWIST_DEGREES
