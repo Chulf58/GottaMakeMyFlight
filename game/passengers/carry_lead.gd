@@ -144,6 +144,12 @@ const FLOOR_CASE_END_M := 1.02
 const STALL_BAR_PALM_M := 0.04
 const STALL_BAR_IN := 0.25
 const STALL_BAR_OUT := Vector2(0.55, 0.7)
+## A pulled roller passed from one pulling hand to the other (pull.R>pull.L)
+## goes toward its start mirrored across the body (pull_swap_goal()) and comes
+## onto the end the receiving hand pulls it at over this part of the carry,
+## once that hand is mostly back in its carry pose (phase(): its reach eases
+## out from 0.6).
+const PULL_SWAP_END := Vector2(0.85, 1.0)
 
 
 ## Where a bag of `kind` standing in a stall is held (its own frame, the bag
@@ -414,6 +420,23 @@ static func anchor(kind: SecurityLooks.Kind, bar_z: float) -> Vector3:
 	return CarryOnProps.grip_anchor(kind)
 
 
+## Where a pulled roller passed between the pulling hands goes, at `t` of the
+## carry: its start (world now) mirrored across the body drawn at `frame`,
+## the same pull on the other hand (the hands mirror, CarryArm.twist_degrees),
+## eased onto `want` (the receiving hand's pull) over PULL_SWAP_END. Not
+## `want` itself, which follows the hand this move poses: reaching across for
+## the bar, the receiving hand drew the pull's end to the giving hand's side,
+## the bar half way was 0.80 m from its shoulder, out of its reach, and the bag
+## jumped 0.15 m as it was handed over (test_roller_hand_change_reach).
+static func pull_swap_goal(
+	start: Transform3D, want: Transform3D, frame: Transform3D, t: float
+) -> Transform3D:
+	var flip := Basis(Vector3(-1.0, 0.0, 0.0), Vector3.UP, Vector3.BACK)
+	var local := frame.affine_inverse() * start
+	var goal := frame * Transform3D(flip * local.basis * flip, flip * local.origin)
+	return goal.interpolate_with(want, smoothstep(PULL_SWAP_END.x, PULL_SWAP_END.y, t))
+
+
 ## A backpack hanging from the leading hand (`hand` 0 right, 1 left) by its
 ## grab loop at the side, at `height` (world), of a body drawn at `frame`.
 static func back_side(
@@ -574,7 +597,18 @@ static func plan(
 	if by_handle and from_end == End.REST:
 		anchor_from = CarryOnProps.ROLLER_HANDLE
 	var anchor_to := loose
-	if to_end == End.HELD:
+	# Between two pulling hands a roller is held by its bar's middle in both
+	# (anchor_from above), and goes over to the other side (pull_swap_goal()).
+	var pull_swap: bool = (
+		roller
+		and not stall
+		and from_end == End.HELD
+		and to_end == End.HELD
+		and from_hand != to_hand
+		and bag["carry_from"] == SecurityLooks.Carry.PULL
+		and bag["carry"] == SecurityLooks.Carry.PULL
+	)
+	if to_end == End.HELD and not pull_swap:
 		anchor_to = want.affine_inverse() * (body["grips"][to_hand] as Vector3)
 		if roller:
 			# Along the rods, on the bar as the rods are drawn now (they run out
@@ -646,6 +680,8 @@ static func plan(
 		# stood on its end has its origin higher than flat in the hand).
 		var lift := flags
 		var goal := want
+		if pull_swap:
+			goal = pull_swap_goal(start, want, frame, t)
 		if stall and from_end == End.REST and to_end == End.HELD:
 			lift = flags.duplicate()
 			lift["rising"] = true
