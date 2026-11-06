@@ -33,7 +33,9 @@ static func panel_gap(points: PackedVector3Array, bag_xf: Transform3D, grow := 0
 	var to_bag := bag_xf.affine_inverse()
 	var scale_by := bag_xf.basis.get_scale().y
 	var wider := grow / scale_by
-	box = AABB(box.position - Vector3(wider, 0.0, wider), box.size + Vector3(wider, 0.0, wider) * 2.0)
+	box = AABB(
+		box.position - Vector3(wider, 0.0, wider), box.size + Vector3(wider, 0.0, wider) * 2.0
+	)
 	var best := INF
 	var at := Vector3.ZERO
 	var seen := 0
