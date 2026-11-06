@@ -16,7 +16,11 @@ extends SceneTree
 ##     before that).
 ##   RISEN: the hips (the carry rig's pivot) at the pick-up's first frame are
 ##     at least RISEN_SHARE of their height standing after the hold; control:
-##     at rise mid they are lower.
+##     at rise mid (the first frame the stand_up clip has played to the time
+##     its Hips track is half way up, _half_rise_s()) they are more than
+##     SEAT_EPS_M over their height seated still and under RISEN_SHARE of
+##     standing. At STAND_UP_TICKS / 2 the gate and cafe guests were already
+##     up (1.163 m, board 2fcb8475): the clip rises in its first half.
 ##   HOLD: the body moves at most HOLD_EPS_M during the hold; control: it moves
 ##     more than WALK_M after it.
 ##   BAG_STILL: the roller on the floor moves at most BAG_EPS_M from the
@@ -305,6 +309,8 @@ func _watch(subject: String) -> void:
 		"still": 0,
 		"seat_frames": 0,
 		"mid_h": -1.0,
+		"mid_s": -1.0,
+		"mid_clip": "",
 		"pick_h": -1.0,
 		"stand_h": -1.0,
 		"pick_clip": "",
@@ -352,14 +358,23 @@ func _watch(subject: String) -> void:
 		if m["up_at"] < 0 and _standing_up(p):
 			m["up_at"] = _clock.tick
 			m["bag_from"] = bag.global_position
+			m["mid_s"] = _half_rise_s(player)
 		if m["up_at"] < 0:
 			continue
-		var up_for: int = _clock.tick - m["up_at"]
 		if m["pick"] < 0 and home == SecurityLooks.Home.FLOOR:
 			m["bag_drift"] = maxf(m["bag_drift"], bag.global_position.distance_to(m["bag_from"]))
 			m["bag_floor"] = bag.global_position
-		if shots.has("rise_mid") and up_for >= PassengerSim.STAND_UP_TICKS / 2:
+		var rising: bool = player.current_animation == "stand_up" and m["mid_s"] >= 0.0
+		if shots.has("rise_mid") and rising and player.current_animation_position >= m["mid_s"]:
 			m["mid_h"] = hips
+			m["mid_clip"] = (
+				"stand_up@%.2f/%.2f s, %.2f ticks into the stand-up"
+				% [
+					player.current_animation_position,
+					player.current_animation_length,
+					_clock.tick + _clock.alpha - m["up_at"]
+				]
+			)
 			shots.erase("rise_mid")
 			await _plate(subject + "_rise_mid", p, body, bag)
 		if m["pick"] < 0 and home == SecurityLooks.Home.HAND:
@@ -455,9 +470,27 @@ func _summary(subject: String, m: Dictionary) -> void:
 		(
 			(
 				"RISEN %s hips at pick-up %.3f m (clip %s), walking after the tip %.3f m, "
-				+ "share %.3f (>= %.2f); control rise mid %.3f m"
+				+ "share %.3f (>= %.2f)"
 			)
-			% [subject, m["pick_h"], m["pick_clip"], m["stand_h"], share, RISEN_SHARE, m["mid_h"]]
+			% [subject, m["pick_h"], m["pick_clip"], m["stand_h"], share, RISEN_SHARE]
+		)
+	)
+	print(
+		(
+			(
+				"RISEN %s control rise mid %.3f m (clip %s, half rise at %.2f s): "
+				+ "over seated still %.3f + %.3f, under %.3f (%.2f of walking)"
+			)
+			% [
+				subject,
+				m["mid_h"],
+				m["mid_clip"],
+				m["mid_s"],
+				m["seat_hi"],
+				SEAT_EPS_M,
+				m["stand_h"] * RISEN_SHARE,
+				RISEN_SHARE
+			]
 		)
 	)
 	var roll_share: float = m.get("roll_low", 0.0) / maxf(m["stand_h"], 0.001)
@@ -471,7 +504,11 @@ func _summary(subject: String, m: Dictionary) -> void:
 		_invalid("%s: ROLL_HIPS the walker crouches rolling its roller" % subject)
 	if m["stand_h"] <= 0.0 or share < RISEN_SHARE:
 		_invalid("%s: not fully up at the pick-up" % subject)
-	if m["mid_h"] >= m["stand_h"] * RISEN_SHARE:
+	if m["mid_s"] < 0.0 or m["mid_clip"] == "":
+		_invalid("%s: RISEN control: rise mid never drawn" % subject)
+	elif m["mid_h"] <= m["seat_hi"] + SEAT_EPS_M:
+		_invalid("%s: RISEN control failed: the hips at rise mid have not risen" % subject)
+	elif m["mid_h"] >= m["stand_h"] * RISEN_SHARE:
 		_invalid("%s: RISEN control failed: the hips at rise mid are already up" % subject)
 	print(
 		(
@@ -678,6 +715,38 @@ func _seat_check(subject: String, m: Dictionary) -> void:
 		_invalid(
 			"%s: SEAT_LOW the hips went %.3f m under the seat" % [subject, seated - m["seat_low"]]
 		)
+
+
+## The time (seconds into `player`'s stand_up clip) its Hips position track is
+## first half way from its height at the start to its highest; -1 without one.
+func _half_rise_s(player: AnimationPlayer) -> float:
+	var clip := player.get_animation("stand_up")
+	if clip == null:
+		_invalid("RISEN control: no stand_up clip")
+		return -1.0
+	for track in clip.get_track_count():
+		var path := clip.track_get_path(track)
+		if (
+			clip.track_get_type(track) != Animation.TYPE_POSITION_3D
+			or path.get_concatenated_subnames() != "Hips"
+		):
+			continue
+		var heights: Array[float] = []
+		for i in 201:
+			heights.append(clip.position_track_interpolate(track, clip.length * i / 200.0).y)
+		var top: float = heights.max()
+		var half: float = (heights[0] + top) * 0.5
+		for i in heights.size():
+			if heights[i] >= half:
+				print(
+					(
+						"RISE_MID stand_up Hips track %.4f to %.4f, half way at %.3f s of %.3f s"
+						% [heights[0], top, clip.length * i / 200.0, clip.length]
+					)
+				)
+				return clip.length * i / 200.0
+	_invalid("RISEN control: the stand_up clip has no Hips position track")
+	return -1.0
 
 
 static func _seat_low(high: float, seated: float) -> bool:

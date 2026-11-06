@@ -52,11 +52,11 @@ extends RefCounted
 ## follower jumps there, so the change waits until the guest has turned.
 ##
 ## What it does not do: it does not look back along the route (a replan
-## replaces the route; the roller's drawn depth stands in for it), it does
-## not clear a wall end at a door (no hand clears a jamb, finding which-kinds-
-## of-wall-hit-make-up-the-walking-pull-roller-s-wa), and its footprint is a
-## box round the axle's whole range of
-## places, not the drawn bag.
+## replaces the route; the roller's drawn depth stands in for it), a change
+## of hand does not clear a wall end at a door (no hand clears a jamb, finding
+## which-kinds-of-wall-hit-make-up-the-walking-pull-roller-s-wa: tuck() pulls
+## the roller in line behind there instead), and its footprint is a box round
+## the axle's whole range of places, not the drawn bag.
 
 ## Ticks of walking ahead the threat test covers: the change of hand
 ## (CarryOnProps.TRANSFER_TICKS) and two more, so the change is over before the
@@ -97,25 +97,61 @@ static func resolve(
 	hands: Array,
 	now: float
 ) -> void:
-	if p.carry_on != 1:
-		return
 	for i in mini(was.size(), kinds.size()):
 		if kinds[i] != SecurityLooks.Kind.ROLLER or homes[i] != SecurityLooks.Home.HAND:
 			continue
 		if lifts[i]:
 			continue
 		var bag: Dictionary = was[i] if was[i].get("kind", -1) == kinds[i] else {}
-		var at := views.tick_position(p.id, true)
-		var step := at - views.tick_position(p.id, false)
-		step.y = 0.0
-		var yaw := atan2(step.x, step.z) if step.length() > 0.001 else 0.0
-		var ahead: Array = []
-		var from := maxi(p.path_index + 1, 0)
-		for k in range(from, mini(p.path.size(), from + AHEAD_CELLS)):
-			ahead.append(sim.grid.cell_to_world(p.path[k]))
-		var frame := Transform3D(Basis(Vector3.UP, yaw), at)
+		var walk := walk_of(sim, views, p)
+		var frame: Transform3D = walk[0]
+		var step_m: float = walk[2]
 		var queued := p.stage in RollerPark.QUEUE_STAGES and p.stage != Passenger.Stage.STANDING
-		hands[i] = pick(bag, sim.grid, frame, ahead, step.length(), hands[i], now, queued)
+		if p.carry_on == 1:
+			hands[i] = pick(bag, sim.grid, frame, walk[1], step_m, hands[i], now, queued)
+		if not bag.is_empty():
+			tuck(bag, sim.grid, frame, walk[1], step_m, hands[i], now)
+
+
+## [frame, ahead, step_m] of guest `p` this tick, as resolve() hands them to
+## pick() and tuck(): its pose at its tick position facing its step, the world
+## points of the next AHEAD_CELLS route cells, and how far it stepped.
+static func walk_of(sim: PassengerSim, views: PassengerViews, p: Passenger) -> Array:
+	var at := views.tick_position(p.id, true)
+	var step := at - views.tick_position(p.id, false)
+	step.y = 0.0
+	var yaw := atan2(step.x, step.z) if step.length() > 0.001 else 0.0
+	var ahead: Array = []
+	var from := maxi(p.path_index + 1, 0)
+	for k in range(from, mini(p.path.size(), from + AHEAD_CELLS)):
+		ahead.append(sim.grid.cell_to_world(p.path[k]))
+	return [Transform3D(Basis(Vector3.UP, yaw), at), ahead, step.length()]
+
+
+## tuck() for a bag record resolve() did not see (made in this sync: a new
+## guest, or every record after PassengerViews.snap() on a load): RollerPull.step()
+## calls it before the record's first draw with `frame` (the guest's pose as it
+## draws it, facing its body when it has not stepped) and `step_m`, and a tuck
+## it turns on starts in line, with no ease in (RollerPull.tuck()). It looks
+## even when the guest has not stepped (a snap puts both tick positions on one
+## spot): at its walking pace while it is on its way, else where it stands.
+static func tuck_now(
+	bag: Dictionary,
+	sim: PassengerSim,
+	p: Passenger,
+	frame: Transform3D,
+	step_m: float,
+	hand: int,
+	now: float
+) -> void:
+	var ahead: Array = []
+	var from := maxi(p.path_index + 1, 0)
+	for k in range(from, mini(p.path.size(), from + AHEAD_CELLS)):
+		ahead.append(sim.grid.cell_to_world(p.path[k]))
+	# A snap puts both tick positions on one spot: a guest still on its way
+	# looks ahead at its walking pace, one standing only where it stands.
+	var pace := p.pace_mm() / 1000.0 if p.is_moving() else STILL_M
+	tuck(bag, sim.grid, frame, ahead, step_m if step_m >= STILL_M else pace, hand, now)
 
 
 ## The hand (0 right, 1 left) bag record `bag` (CarryOnProps' record of a
@@ -148,7 +184,9 @@ static func pick(
 	# roller set down before its route turned hand_of() left), standing still
 	# as well.
 	var held := not swapped(bag) or now - float(bag.get("changed", -INF)) >= HOLD_TICKS
-	var told := first == 1 and hand == 0 and held
+	# Not while the roller is tucked in line behind (tuck()): it goes back out
+	# to the side it is drawn on, not across at hand_of()'s word mid-doorway.
+	var told := first == 1 and hand == 0 and held and RollerPull.tuck_weight(bag, now) <= 0.0
 	if holds(bag, now):
 		return hand
 	if queued or stood(bag, now):
@@ -186,6 +224,44 @@ static func pick(
 		# corner in the cafe walk). The change waits until the guest has turned.
 		return hand
 	return _change(bag, "pull_side_swaps", other)
+
+
+## Tucks pulled roller `bag` in line behind its guest, or lets it back out to
+## its side (RollerPull.tuck()), for a pull in `hand` (pick()'s, the hand it is
+## drawn in, so the two agree on its side): tucked while its SETTLED footprint
+## on that side meets a wall at any of the guest's poses from `frame` (its pose
+## now) along `ahead` for LOOK_TICKS and RollerPull.TUCK_TICKS of `step_m`
+## (walk_poses(), straight on past the route's end), so the axle is in line
+## (eased over TUCK_TICKS) before the roller reaches the wall; out once none
+## does, so the roller is past it (user ruling a-guest-pulling-a-roller-
+## through-a-doorway-tucks-it-in-line, board cd4ff4e0). At a
+## doorway the jambs meet both sides, so no change of hand clears them; along
+## a wall with the other side clear pick() changes hand first and the new side
+## is clear. Standing still it stays as it is. Walls only, as pick() has them
+## (doors left out, their ends run on).
+static func tuck(
+	bag: Dictionary,
+	grid: BuildGrid,
+	frame: Transform3D,
+	ahead: Array,
+	step_m: float,
+	hand: int,
+	now: float
+) -> void:
+	if step_m < STILL_M:
+		return
+	var look := step_m * (LOOK_TICKS + RollerPull.TUCK_TICKS)
+	# The route can end at the doorway (the gate's door out to the apron: the
+	# walk to the plane is not on it), so the look runs on straight past its end.
+	var route := ahead.duplicate()
+	var last: Vector3 = route[-1] if not route.is_empty() else frame.origin
+	var before: Vector3 = route[-2] if route.size() > 1 else frame.origin
+	var on := Vector3(last.x - before.x, 0.0, last.z - before.z)
+	if on.length() < 0.001:
+		on = frame.basis.z
+	route.append(last + on.normalized() * look)
+	var poses := walk_poses(frame, route, look)
+	RollerPull.tuck(bag, blocked(grid, poses, footprint(hand, false), false), now)
 
 
 ## Counts a change of `bag` to `hand` in its `tally` and starts its trail

@@ -32,6 +32,29 @@ const SWING_RADIUS_M := 0.55
 ## The probe's snap threshold: a drawn axle moving more than this a sim tick
 ## (the walk is about 0.07 m a tick; a swing at most SWING_TURN of arc).
 const SWING_JUMP_M := 0.6
+## Through a doorway or opening too narrow for the side offset (a roller
+## TRAIL_SIDE_M out reaches 0.46 m from the centre line; a one-cell doorway's
+## jambs are 0.43 m from a guest on the cell centre), the axle is tucked in
+## line behind the guest, this far out on the pulling hand's side (user ruling
+## a-guest-pulling-a-roller-through-a-doorway-tucks-it-in-line), so the bag's
+## outer side is about 0.15 m inside the jamb and the rods from the hand still
+## run down outside the legs (door_tuck_probe.gd's windowed leg check).
+## PullSide.tuck() says when; the axle eases in and back out over TUCK_TICKS.
+const TUCK_SIDE_M := 0.12
+const TUCK_TICKS := 6.0
+## The keys of a pull step() clears when the bag stops being pulled: the
+## follower's and the tuck's.
+const RELEASED: Array[String] = [
+	"axle",
+	"walked",
+	"drawn_axle",
+	"drawn_at",
+	"axle_now",
+	"tuck_on",
+	"tuck_since",
+	"tuck_from",
+	"hips_x",
+]
 
 
 ## A roller pulled by its grip at `grip` with its axle at `axle` (on the floor,
@@ -100,7 +123,8 @@ static func step(
 	if bag["carry"] != SecurityLooks.Carry.PULL or home != SecurityLooks.Home.HAND:
 		# Not pulled now: the next pull starts its follower afresh behind the
 		# walker, not from wherever it was last drawn (perhaps metres back).
-		for key in ["axle", "walked", "drawn_axle", "drawn_at", "axle_now"]:
+		# The tuck too: a pull taken up again looks for its own doorway.
+		for key in RELEASED:
 			bag.erase(key)
 		return
 	var side := Vector3.LEFT if hand == 0 else Vector3.RIGHT
@@ -110,6 +134,14 @@ static func step(
 	var step := at - props.views.tick_position(id, false)
 	var yaw := atan2(step.x, step.z) if step.length() > 0.001 else body.rotation.y
 	var turn := Basis(Vector3.UP, yaw)
+	if not bag.has("drawn_axle") and props.sim != null:
+		# A pull not drawn yet (a new record: a new guest, every record after a
+		# snap on a load, a pull taken up again) that PullSide.resolve() has
+		# not seen: tucked now if it needs to be, before its first draw.
+		var flat := Vector3(step.x, 0.0, step.z).length()
+		var p := props.sim.get_passenger(id)
+		if p != null:
+			PullSide.tuck_now(bag, props.sim, p, Transform3D(turn, at), flat, hand, props._tick())
 	var now := at + turn * side * TRAIL_SIDE_M
 	var walked: Array = bag.get("walked", [])
 	if walked.is_empty() or (walked[-1] as Vector3).distance_to(now) > 0.01:
@@ -135,11 +167,8 @@ static func step(
 	# cross behind the legs to the other side (a zig-zag of diagonal steps
 	# swings the walked line about the body's heading).
 	var frame := Transform3D(turn, at)
-	var local := frame.affine_inverse() * cur
-	var out := -1.0 if hand == 0 else 1.0
-	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
-	local.z = minf(local.z, -TRAIL_BEHIND_MIN_M)
-	cur = frame * local
+	var hips := float(bag.get("hips_x", 0.0))
+	cur = frame * settle(frame.affine_inverse() * cur, hand, tuck_weight(bag, props._tick()), hips)
 	bag["axle"] = [bag["axle"][1] if bag.has("axle") else cur, cur]
 
 
@@ -158,11 +187,14 @@ static func drawn(
 	# Behind the body as drawn now, on the pulling hand's side: between two
 	# ticks of a turning walker the blend can cross behind the legs.
 	var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
-	var local := frame.affine_inverse() * at
-	var out := -1.0 if hand == 0 else 1.0
-	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
-	local.z = minf(local.z, -TRAIL_BEHIND_MIN_M)
 	var now := props._now()
+	# The tuck is measured from the legs as drawn: the hips' middle (the rig's
+	# Spine_01) is not on the body's origin (about 2.6 cm to its left).
+	var hips: Vector3 = (
+		frame.affine_inverse() * (props._rig(body)["pivot"] as Node3D).global_position
+	)
+	bag["hips_x"] = hips.x
+	var local := settle(frame.affine_inverse() * at, hand, tuck_weight(bag, now), hips.x)
 	at = frame * local
 	if bag.has("drawn_axle"):
 		var was := frame.affine_inverse() * (bag["drawn_axle"] as Vector3)
@@ -172,3 +204,41 @@ static func drawn(
 	bag["drawn_at"] = now
 	bag["follows"] = int(bag.get("follows", 0)) + 1
 	return at
+
+
+## The axle point `local` (the body's frame: x across, +z ahead) kept behind
+## the body on the pulling hand's side (`hand` 0 right, 1 left), from
+## TRAIL_SIDE_MIN_M to TRAIL_SIDE_MAX_M out and at least TRAIL_BEHIND_MIN_M
+## behind, then `tuck` (tuck_weight()) of the way in to TUCK_SIDE_M out from
+## `hips_x` (the drawn hips' middle across the body's frame), so a tucked
+## roller is as far from the leg on its side for either hand.
+static func settle(local: Vector3, hand: int, tuck: float, hips_x := 0.0) -> Vector3:
+	var out := -1.0 if hand == 0 else 1.0
+	var side := out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
+	return Vector3(
+		lerpf(side, hips_x + out * TUCK_SIDE_M, tuck), local.y, minf(local.z, -TRAIL_BEHIND_MIN_M)
+	)
+
+
+## How far pulled roller `bag` (its record) is tucked in line behind at sim
+## time `now`: 0 (at its side) to 1 (TUCK_SIDE_M out), easing over TUCK_TICKS
+## from where it was when tuck() last turned it on or off.
+static func tuck_weight(bag: Dictionary, now: float) -> float:
+	var target := 1.0 if bag.get("tuck_on", false) else 0.0
+	if not bag.has("tuck_since"):
+		return target
+	var k := clampf((now - float(bag["tuck_since"])) / TUCK_TICKS, 0.0, 1.0)
+	return lerpf(float(bag.get("tuck_from", 0.0)), target, smoothstep(0.0, 1.0, k))
+
+
+## Turns `bag`'s tuck on or off (`on`) at sim time `now`: the axle eases there
+## from where it is (tuck_weight()).
+static func tuck(bag: Dictionary, on: bool, now: float) -> void:
+	if bag.get("tuck_on", false) == on:
+		return
+	# A pull with no tuck so far and not drawn yet (PullSide.tuck_now()) starts
+	# where it needs to be: there is no drawn place to ease from.
+	var fresh := not bag.has("tuck_since") and not bag.has("drawn_axle")
+	bag["tuck_from"] = (1.0 if on else 0.0) if fresh else tuck_weight(bag, now)
+	bag["tuck_since"] = now
+	bag["tuck_on"] = on

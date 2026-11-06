@@ -26,8 +26,17 @@ extends SceneTree
 ##   REPULLED: QUEUE_TIP_TICKS + 3 ticks after the tip starts the roller trails
 ##     more than TRAIL_M behind in the pull.
 ##   FLOAT: no frame from the stand to the strip's end draws the bag floating.
-## Plates: gate_stand, file_stand, gate_tip_strip, file_tip_strip (six frames a
-## tick apart from the tip's start, one camera) and a contact sheet. Before a
+##   TURN (gate): the strip subject's tip waits PassengerTurns.TURN_TICKS
+##     (RollerPark.tip_wait()) and its body turns more than TIP_TURN_RAD over
+##     them (decision gate-full-as-built, board f115d5da).
+##   CARRY_UPRIGHT (gate): over those ticks the roller stays upright
+##     (>= UPRIGHT_DOT), held and at most BESIDE_M from the feet.
+##   CARRY_CLEAR (gate): from the mark to the tip's end no point of the roller
+##     body is inside a built piece standing off the floor (wall, desk, seat);
+##     the nearest piece and its box gap are printed.
+## Plates: gate_stand, gate_carry_strip (the six-tick upright carry while the
+## body turns), gate_tip_strip, file_stand, file_tip_strip (six frames a tick
+## apart from the tip's start, one camera) and a contact sheet. Before a
 ## save the feet, head and roller project inside the frame with a margin, at
 ## least MIN_ON of five sight lines land on the roller's BODY (its rods tagged
 ## apart, anti-pattern a-hide-the-bag-twin-diff-passes-on-the-roller-s-rods) with
@@ -39,23 +48,26 @@ extends SceneTree
 ## subject's own body, rods or roller (board 03454587); a walker in the way
 ## sends the frame round the other views (the one that works is kept), at most
 ## STRIP_REFUSALS refused views a strip. The sight colliders are built once a
-## frame, for every view tried on it. The gate subject is the stander farthest
-## from the gate desk: the boarding crowd walks to the desk. Otherwise
-## PROBE_INVALID, exit 1.
+## frame, for every view tried on it; after the views on the roller's side
+## come RING_VIEWS round the subject. The gate stand subject is the first
+## stander that plates, those with no stood roller point inside the gate desk
+## first, then farthest from the desk (the boarding crowd walks to the desk).
+## The gate strip follows the first stander whose tip waits for its turn.
+## Otherwise PROBE_INVALID, exit 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://spike/roller_board_gate_probe.gd [-- --seed=N]
 ##
-## Plates go to tools/blender/out/roller-board-gate/.
+## Plates go to tools/blender/out/gate-stand/.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
-const OUT_REL := "res://../tools/blender/out/roller-board-gate"
-const GATE_GUESTS := 3
+const OUT_REL := "res://../tools/blender/out/gate-stand"
+const GATE_GUESTS := 5
 ## Where the file walkers turn out: three on one cell, then one on each cell
 ## beside it, a later id each. The walkers beside wait their turn in the file
 ## (pending) alone on their cell; on one cell a walker ahead that sets off
@@ -81,9 +93,16 @@ const STRIP_FRAMES := 6
 const STRIP_LOW_M := 0.8
 ## Refused views a tip strip may spend (each costs a few frames) before the
 ## rest of its frames are skipped.
-const STRIP_REFUSALS := 60
+const STRIP_REFUSALS := 150
 ## Ticks the other gate standers get to stand after the first (_gate_stander()).
 const STAND_WAIT := 60
+## Stand plate attempts (a third of a tick apart) a gate candidate gets when
+## another is left to try (_plate_retry()).
+const PLATE_TRIES_EARLY := 6
+## Views round the subject at each ring height (_plate()).
+const RING_VIEWS := 8
+## A built mesh less tall than this is floor (_build_gap()).
+const FLOOR_TOP_M := 0.05
 const TAG := "roller"
 const SELF_TAG := "self"
 const ROD_TAG := "rods"
@@ -243,23 +262,61 @@ func _gate_stander() -> Dictionary:
 				first = _clock.tick if first < 0 else first
 		if away.size() == guests.size():
 			break
-	var subject: Passenger = null
-	for p: Passenger in away:
-		print("GATE stander id=%d stood %.2f m from the desk" % [p.id, away[p]])
-		if subject == null or away[p] > away[subject]:
-			subject = p
-	if subject == null:
+	# Candidates, best first: a stood roller body clear of the gate desk, then
+	# farthest from the desk. Since gate-full spacing the nearest standers stand
+	# beside the desk and every view of their roller met the desk (board
+	# f115d5da), so each candidate is tried in turn until one plates.
+	var order: Array = away.keys()
+	var in_desk := {}
+	for p: Passenger in order:
+		var depth := _desk_depth(_views.carry_on_props().props_of(p.id)["bags"][0])
+		in_desk[p] = int(depth[0])
+		print(
+			(
+				(
+					"GATE stander id=%d cell %s tick %d stood %.2f m from the desk, "
+					+ "DESK_OVERLAP stood roller points in the desk %d, deepest %.3f m"
+				)
+				% [p.id, p.at - _offset, _clock.tick, away[p], in_desk[p], depth[1]]
+			)
+		)
+	order.sort_custom(
+		func(a: Passenger, b: Passenger) -> bool:
+			if (in_desk[a] == 0) != (in_desk[b] == 0):
+				return in_desk[a] == 0
+			return away[a] > away[b]
+	)
+	if order.is_empty():
 		_invalid("GATE: no stander stood its roller up")
 		return {}
-	print("GATE subject id=%d stood at tick %d" % [subject.id, _clock.tick])
-	if not await _plate_retry("gate_stand", subject, m, Passenger.Stage.STANDING):
+	var subject: Passenger = null
+	var idle_by: Dictionary = m.get("idle_by", {})
+	for p: Passenger in order:
+		var mc := _metrics()
+		mc["desk"] = 0
+		mc["idle_by"] = idle_by
+		print("GATE candidate id=%d at tick %d" % [p.id, _clock.tick])
+		var last: bool = p == order.back()
+		if await _plate_retry("gate_stand", p, mc, Passenger.Stage.STANDING, last):
+			subject = p
+			m = mc
+			break
+	if subject == null:
+		# Evidence only (not a plate): the standers and the desk from above.
+		_cam.look_at_from_position(desk + Vector3(0.0, 5.0, 3.0), desk, Vector3.UP)
+		await _frames(2)
+		_save(root.get_texture().get_image(), "gate_stand_diag.png")
 		return {}
+	m["id"] = subject.id
+	print("GATE subject id=%d plated at tick %d" % [subject.id, _clock.tick])
 	# Held through the wait: fast to two ticks before boarding, watching each tick.
 	while _clock.tick < subject.boarding_tick - 2 and subject.stage == Passenger.Stage.STANDING:
 		_clock.advance(SimClock.STEP)
 		await _frames(1)
 		_watch(subject, m)
-	if not await _tip_strip("gate", subject, m):
+	# The strip follows the first stander whose tip waits for its turn (the
+	# turning tip, RollerPark.tip_wait), not always the plated one.
+	if not await _tip_strip("gate", order, m, true):
 		return {}
 	_summary("GATE", m, true)
 	return m
@@ -309,7 +366,7 @@ func _file_waiter() -> void:
 		_invalid("FILE: the subject is not held in its file")
 	if not await _plate_retry("file_stand", subject, m, Passenger.Stage.TO_EXIT):
 		return
-	if not await _tip_strip("file", subject, m):
+	if not await _tip_strip("file", [subject], m, false):
 		return
 	_summary("FILE", m, true)
 
@@ -427,21 +484,7 @@ func _inside(p: Passenger) -> int:
 ## [points of the body's surface (sampled every 2 cm) inside a desk mesh,
 ## the deepest of them from the nearest face of that mesh's box, in metres].
 func _desk_depth(bag: Node3D) -> Array:
-	var points := PackedVector3Array()
-	var rods := _rods(bag)
-	for mi in bag.find_children("*", "MeshInstance3D", true, false):
-		var inst := mi as MeshInstance3D
-		if inst.mesh == null or rods.any(func(r: Node) -> bool: return r.is_ancestor_of(inst)):
-			continue
-		var faces := inst.mesh.get_faces()
-		for i in range(0, faces.size() - 2, 3):
-			var a := inst.global_transform * faces[i]
-			var ab := inst.global_transform * faces[i + 1] - a
-			var ac := inst.global_transform * faces[i + 2] - a
-			var n := maxi(1, ceili(maxf(ab.length(), ac.length()) / 0.02))
-			for u in n + 1:
-				for v in n + 1 - u:
-					points.append(a + ab * (u / float(n)) + ac * (v / float(n)))
+	var points := _shell_points(bag)
 	var count := 0
 	var deepest := 0.0
 	var desks := _mode.get_node("BuildView").find_children(
@@ -476,6 +519,26 @@ func _desk_depth(bag: Node3D) -> Array:
 				deepest, minf(minf(minf(lo.x, hi.x), minf(lo.y, hi.y)), minf(lo.z, hi.z))
 			)
 	return [count, deepest]
+
+
+## The stood roller body's surface (its meshes but the rods'), a point every 2 cm.
+func _shell_points(bag: Node3D) -> PackedVector3Array:
+	var points := PackedVector3Array()
+	var rods := _rods(bag)
+	for mi in bag.find_children("*", "MeshInstance3D", true, false):
+		var inst := mi as MeshInstance3D
+		if inst.mesh == null or rods.any(func(r: Node) -> bool: return r.is_ancestor_of(inst)):
+			continue
+		var faces := inst.mesh.get_faces()
+		for i in range(0, faces.size() - 2, 3):
+			var a := inst.global_transform * faces[i]
+			var ab := inst.global_transform * faces[i + 1] - a
+			var ac := inst.global_transform * faces[i + 2] - a
+			var n := maxi(1, ceili(maxf(ab.length(), ac.length()) / 0.02))
+			for u in n + 1:
+				for v in n + 1 - u:
+					points.append(a + ab * (u / float(n)) + ac * (v / float(n)))
+	return points
 
 
 ## Diagnosis only (no plate): four walkers stacked on one cell, as the first
@@ -529,7 +592,11 @@ func _near_bags(p: Passenger, bag: Node3D) -> void:
 				)
 
 
-func _plate_retry(shot: String, p: Passenger, m: Dictionary, stage: Passenger.Stage) -> bool:
+## `last`: no candidate is left after `p`, so a failure is PROBE_INVALID; else
+## it is printed and the caller tries the next one after PLATE_TRIES_EARLY.
+func _plate_retry(
+	shot: String, p: Passenger, m: Dictionary, stage: Passenger.Stage, last := true
+) -> bool:
 	var s := _watch(p, m)
 	print(
 		(
@@ -548,39 +615,105 @@ func _plate_retry(shot: String, p: Passenger, m: Dictionary, stage: Passenger.St
 			]
 		)
 	)
-	for attempt in 40:
+	for attempt in 40 if last else PLATE_TRIES_EARLY:
 		if await _plate(shot, p, true) != null:
 			return true
 		await _step()
 		s = _watch(p, m)
 		if s.is_empty() or p.stage != stage or s["tipping"]:
 			break
-	_invalid("%s: no valid plate while the roller stood" % shot)
+	if last:
+		_invalid("%s: no valid plate while the roller stood" % shot)
+	else:
+		print("PLATE %s: no valid plate of %d, next candidate" % [shot, p.id])
 	return false
 
 
-## The tip strip: a frame each tick from the tip's start, one camera, then the
-## REPULLED check.
-func _tip_strip(label: String, p: Passenger, m: Dictionary) -> bool:
+## The first of `candidates` whose roller is marked to tip (its walker walks
+## off), watched into `m` if it is m's "id" (else only sampled). `turning`:
+## only one whose tip waits for its turn (RollerPark.tip_wait()) counts.
+## Returns [passenger, mark tick, turn wait in whole ticks], empty on none.
+func _await_tip(label: String, candidates: Array, m: Dictionary, turning: bool) -> Array:
 	var stop := _clock.tick + 600
-	var tip_at := -1.0
-	while _clock.tick < stop and tip_at < 0.0:
+	var skipped := {}
+	while _clock.tick < stop:
 		await _step()
-		var s := _watch(p, m)
-		if not s.is_empty() and s["tipping"]:
-			tip_at = float(_clock.tick)
-	if tip_at < 0.0:
-		_invalid("%s: the roller never tipped" % label)
+		for c: Passenger in candidates:
+			var s := _watch(c, m) if int(m.get("id", c.id)) == c.id else _sample(c)
+			if s.is_empty() or not s["tipping"] or skipped.has(c):
+				continue
+			var bag := _views.carry_on_props().bag_state(c.id, 0)
+			var wait := float(bag["queue_tip"]) - float(s["into"])
+			var turn := PassengerTurns.TURN_TICKS if wait > PassengerTurns.TURN_TICKS / 2.0 else 0
+			print(
+				(
+					"TIP %s id %d marked at tick %.2f stage %d: queue_tip %.2f - into %.2f = %.2f, turn %d"
+					% [
+						label,
+						c.id,
+						_clock.tick + _clock.alpha,
+						c.stage,
+						bag["queue_tip"],
+						s["into"],
+						wait,
+						turn
+					]
+				)
+			)
+			if turning and turn == 0:
+				skipped[c] = true
+				continue
+			return [c, float(_clock.tick), turn]
+		if turning and skipped.size() == candidates.size():
+			# No tip waits (seed 2012072536: all five marked at the boarding tick
+			# with turn 0): strip the plated one, measuring every stander's turn
+			# during its tip (_tip_turns()); TURN then fails.
+			var own: Passenger = candidates[0]
+			for c: Passenger in candidates:
+				own = c if c.id == int(m.get("id", -1)) else own
+			print("TIP %s: no stander's tip waits for a turn; strip of id %d" % [label, own.id])
+			return [own, float(_clock.tick), 0]
+	_invalid("%s: no roller tipped" % label)
+	return []
+
+
+## The tip strip of the first of `candidates` to tip (_await_tip()): a frame
+## each tick from the mark, one camera, the turn's upright carry (TURN_TICKS
+## frames when its tip waits) then STRIP_FRAMES of the tip; then the TURN,
+## CARRY_UPRIGHT, CARRY_CLEAR and REPULLED checks.
+func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) -> bool:
+	var got := await _await_tip(label, candidates, m, turning)
+	if got.is_empty():
 		return false
-	print("TIP %s id %d starts at tick %.0f stage %d" % [label, p.id, tip_at, p.stage])
+	var p: Passenger = got[0]
+	var tip_at: float = got[1]
+	var turn: int = got[2]
+	var frames := STRIP_FRAMES + turn
+	var c := {"up": INF, "flat": 0.0, "free": 0, "gap": INF, "near": "", "points": 0}
+	c["yaw0"] = _views.node_for(p.id).global_rotation.y
+	# Every candidate's yaw at the mark, for the body's turn during its tip.
+	var yaws := {}
+	for o: Passenger in candidates:
+		if _views.node_for(o.id) != null:
+			yaws[o] = [_views.node_for(o.id).global_rotation.y, 0.0]
+	c["yaws"] = yaws
 	_strip_refused = 0
 	var strip: Array[Image] = []
 	var tried := 0
-	while _clock.tick < tip_at + RollerPark.QUEUE_TIP_TICKS + 16:
+	while _clock.tick < tip_at + turn + RollerPark.QUEUE_TIP_TICKS + 16:
 		# Frame k is tried on each third of tick k until one shows the bag body
 		# (a walker crossing the view can hide it for a frame), else skipped.
 		var now := _clock.tick + _clock.alpha
-		if tried < STRIP_FRAMES and now >= tip_at + tried:
+		if now < tip_at + turn + RollerPark.QUEUE_TIP_TICKS:
+			_carry(p, c, now < tip_at + turn)
+			for o: Passenger in yaws:
+				var node := _views.node_for(o.id)
+				if node != null:
+					var off := absf(angle_difference(float(yaws[o][0]), node.global_rotation.y))
+					yaws[o][1] = maxf(float(yaws[o][1]), off)
+		if tried == turn and not c.has("yaw1"):
+			c["yaw1"] = _views.node_for(p.id).global_rotation.y
+		if tried < frames and now >= tip_at + tried:
 			var img := await _plate(
 				"%s_tip_%d" % [label, tried], p, tried == 0 and strip.is_empty(), false
 			)
@@ -590,7 +723,8 @@ func _tip_strip(label: String, p: Passenger, m: Dictionary) -> bool:
 				tried += 1
 		await _step()
 		var s := _watch(p, m)
-		if not s.is_empty() and _clock.tick >= tip_at + ceili(RollerPark.QUEUE_TIP_TICKS) + 3:
+		var settle := tip_at + turn + ceili(RollerPark.QUEUE_TIP_TICKS) + 3
+		if not s.is_empty() and _clock.tick >= settle:
 			var trail: float = s["flat"] if s["settled"] and s["up"] < 0.8 else 0.0
 			if trail > m["repulled"]:
 				print(
@@ -608,26 +742,96 @@ func _tip_strip(label: String, p: Passenger, m: Dictionary) -> bool:
 					)
 				)
 			m["repulled"] = maxf(m["repulled"], trail)
-	if strip.size() < STRIP_FRAMES:
+	# The measures print whatever the strip's frames (a strip short of frames
+	# still says whether the body turned during its tip).
+	if turning:
+		_carry_check(label, p, c, turn)
+	if strip.size() < frames:
 		_invalid(
 			(
 				"%s tip strip has %d of %d frames (%d of %d refused views spent)"
-				% [label, strip.size(), STRIP_FRAMES, _strip_refused, STRIP_REFUSALS]
+				% [label, strip.size(), frames, _strip_refused, STRIP_REFUSALS]
 			)
 		)
 		return false
-	var w := strip[0].get_width() / 2
-	var h := strip[0].get_height() / 2
-	var sheet := Image.create(w * 3, h * 2, false, Image.FORMAT_RGBA8)
-	for i in strip.size():
-		var small := strip[i].duplicate() as Image
-		small.convert(Image.FORMAT_RGBA8)
-		small.resize(w, h, Image.INTERPOLATE_BILINEAR)
-		sheet.blit_rect(small, Rect2i(0, 0, w, h), Vector2i(w * (i % 3), h * (i / 3)))
+	if turn > 0:
+		var carry := _contact_sheet(strip.slice(0, turn), 3)
+		_save(carry, "%s_carry_strip.png" % label)
+		_sheet.append(carry)
+		_plates += 1
+	var sheet := _contact_sheet(strip.slice(turn), 3)
 	_save(sheet, "%s_tip_strip.png" % label)
 	_sheet.append(sheet)
 	_plates += 1
 	return true
+
+
+## One frame of `p`'s strip into `c`: on the upright carry (`carrying`, before
+## the tip) its lowest uprightness, farthest axle from the feet and frames not
+## held; to the tip's end the roller body's nearest built piece (_build_gap()).
+func _carry(p: Passenger, c: Dictionary, carrying: bool) -> void:
+	var s := _sample(p)
+	if s.is_empty():
+		return
+	if carrying:
+		c["up"] = minf(c["up"], s["up"])
+		c["flat"] = maxf(c["flat"], s["flat"])
+		c["free"] += int(s["held"] < 0)
+		c["carry_n"] = int(c.get("carry_n", 0)) + 1
+	var gap := _build_gap(_views.carry_on_props().props_of(p.id)["bags"][0])
+	if gap["gap"] < c["gap"]:
+		c["gap"] = gap["gap"]
+		c["near"] = gap["near"]
+		c["gap_at"] = _clock.tick + _clock.alpha
+	c["points"] = maxi(c["points"], gap["points"])
+
+
+## TURN, CARRY_UPRIGHT and CARRY_CLEAR of the turning strip subject `p`.
+func _carry_check(label: String, p: Passenger, c: Dictionary, turn: int) -> void:
+	# Each stander's largest body turn from the strip's mark to its tip's end:
+	# over TIP_TURN_RAD with no wait is the swing tip_wait() is there to stop.
+	for o: Passenger in c["yaws"]:
+		print(
+			(
+				"%s TIP_TURN id %d body turned at most %.3f rad from the mark to the tip's end (%s)"
+				% [label, o.id, c["yaws"][o][1], "strip" if o == p else "other"]
+			)
+		)
+	var turned := absf(angle_difference(float(c["yaw0"]), float(c.get("yaw1", c["yaw0"]))))
+	print(
+		(
+			"%s TURN id %d tip waited %d ticks (%d), body turned %.3f rad over them (> %.2f)"
+			% [label, p.id, turn, PassengerTurns.TURN_TICKS, turned, RollerPark.TIP_TURN_RAD]
+		)
+	)
+	if turn != PassengerTurns.TURN_TICKS or turned <= RollerPark.TIP_TURN_RAD:
+		_invalid("%s TURN: the strip subject did not turn before its tip" % label)
+	print(
+		(
+			(
+				"%s CARRY_UPRIGHT %d carry frames: lowest up %.3f (>= %.2f), "
+				+ "axle at most %.3f m from the feet (<= %.2f), frames not held %d (0)"
+			)
+			% [label, c.get("carry_n", 0), c["up"], UPRIGHT_DOT, c["flat"], BESIDE_M, c["free"]]
+		)
+	)
+	if int(c.get("carry_n", 0)) == 0 or c["up"] < UPRIGHT_DOT or c["free"] > 0:
+		_invalid("%s CARRY_UPRIGHT: the roller was not carried upright" % label)
+	if c["flat"] > BESIDE_M:
+		_invalid("%s CARRY_UPRIGHT: the roller left the body's side" % label)
+	print(
+		(
+			(
+				"%s CARRY_CLEAR carry and tip: nearest built piece %s, box gap %.3f m at tick %.2f; "
+				+ "roller body points inside built meshes %d (0)"
+			)
+			% [label, c["near"], c["gap"], c.get("gap_at", -1.0), c["points"]]
+		)
+	)
+	if c["near"] == "":
+		_invalid("%s CARRY_CLEAR: no built piece measured" % label)
+	elif c["points"] > 0:
+		_invalid("%s CARRY_CLEAR: the roller went into %s" % [label, c["near"]])
 
 
 func _summary(label: String, m: Dictionary, posture: bool) -> void:
@@ -721,6 +925,12 @@ func _plate(shot: String, p: Passenger, fresh: bool, strict := true) -> Image:
 		# Over the heads of the standers on the spots beside it (seed 2012072536
 		# and the first run of this fix: every lower view crossed a neighbour).
 		aways += [[out, 4.5], [(-fwd * 0.8 + out * 1.3).normalized(), 4.5], [-fwd, 4.5]]
+	# Then round the subject (board f115d5da: beside the gate desk every view on
+	# the roller's side met the desk).
+	for up in [1.6, 3.0] if strict else [1.6]:
+		for k in RING_VIEWS:
+			var a := TAU * k / RING_VIEWS
+			aways.append([Vector3(sin(a), 0.0, cos(a)), up])
 	if _cam == null:
 		_cam = Camera3D.new()
 		_cam.fov = 45.0
@@ -974,16 +1184,78 @@ func _desk_centre() -> Vector3:
 	return box.get_center()
 
 
-func _contact_sheet(plates: Array[Image]) -> Image:
+## `plates` at half size, `cols` to a row.
+func _contact_sheet(plates: Array[Image], cols := 2) -> Image:
 	var w := plates[0].get_width() / 2
 	var h := plates[0].get_height() / 2
-	var sheet := Image.create(w * 2, h * 2, false, Image.FORMAT_RGBA8)
-	for i in mini(plates.size(), 4):
+	var rows := ceili(plates.size() / float(cols))
+	var sheet := Image.create(w * cols, h * rows, false, Image.FORMAT_RGBA8)
+	for i in plates.size():
 		var small := plates[i].duplicate() as Image
 		small.convert(Image.FORMAT_RGBA8)
 		small.resize(w, h, Image.INTERPOLATE_BILINEAR)
-		sheet.blit_rect(small, Rect2i(0, 0, w, h), Vector2i(w * (i % 2), h * (i / 2)))
+		sheet.blit_rect(small, Rect2i(0, 0, w, h), Vector2i(w * (i % cols), h * (i / cols)))
 	return sheet
+
+
+## The roller body's (not its rods') nearest built piece that stands off the
+## floor (BuildView meshes and multimesh instances FLOOR_TOP_M tall or more), the
+## gap between their world boxes (0 when they overlap), and the body's surface
+## points inside the meshes it overlaps (parity, CarryContact):
+## {near, gap, points}.
+func _build_gap(bag: Node3D) -> Dictionary:
+	var shell := _shell_box(bag)
+	var out := {"near": "", "gap": INF, "points": 0}
+	var pieces: Array = []
+	var view := _mode.get_node("BuildView")
+	for mi in view.find_children("*", "MeshInstance3D", true, false):
+		var inst := mi as MeshInstance3D
+		if inst.mesh != null and inst.is_visible_in_tree():
+			pieces.append([inst.name, inst.mesh, inst.global_transform])
+	for mmi in view.find_children("*", "MultiMeshInstance3D", true, false):
+		var multi := mmi as MultiMeshInstance3D
+		if multi.multimesh == null or multi.multimesh.mesh == null:
+			continue
+		if not multi.is_visible_in_tree():
+			continue
+		var mm := multi.multimesh
+		var count := (
+			mm.visible_instance_count if mm.visible_instance_count >= 0 else mm.instance_count
+		)
+		for i in count:
+			pieces.append(
+				[multi.name, mm.mesh, multi.global_transform * mm.get_instance_transform(i)]
+			)
+	var points := PackedVector3Array()
+	for piece: Array in pieces:
+		var mesh: Mesh = piece[1]
+		var xf: Transform3D = piece[2]
+		var box := xf * mesh.get_aabb()
+		if box.size.y < FLOOR_TOP_M:
+			continue
+		var gap := _box_gap(shell, box)
+		if gap < out["gap"]:
+			out["gap"] = gap
+			out["near"] = str(piece[0])
+		if gap > 0.0:
+			continue
+		if points.is_empty():
+			points = _shell_points(bag)
+		var to_local := xf.affine_inverse()
+		var faces := mesh.get_faces()
+		for point in points:
+			var lp := to_local * point
+			if mesh.get_aabb().has_point(lp) and CarryContact._odd(lp, faces):
+				out["points"] += 1
+	return out
+
+
+## The distance between two boxes, 0 when they overlap.
+static func _box_gap(a: AABB, b: AABB) -> float:
+	var d := Vector3.ZERO
+	for axis in 3:
+		d[axis] = maxf(maxf(b.position[axis] - a.end[axis], a.position[axis] - b.end[axis]), 0.0)
+	return d.length()
 
 
 func _invalid(msg: String) -> void:
