@@ -59,6 +59,9 @@ const UP_LEAD_TICKS := 9
 const PARK_SIDE_M := 0.32
 const PARK_AHEAD_M := 0.15
 const UP_PARK_AHEAD_M := 0.7
+## A roller laid across the front at a booth (round_front()) is fastest at
+## this share of the lay (_across_eased()).
+const ACROSS_FASTEST := 0.6
 ## Laying it down and letting go, the stoop bends the back first and the hips
 ## go down only as far as that leaves the hand short, not back (CarryStoop.
 ## drops): with the hips going back as well, the hand of a walker sitting down
@@ -743,6 +746,10 @@ static func plan(
 		parked = queue_park(frame, lead, body["scale"], body["look"])
 		at = _queued(bag, k, start, want, parked, bar)
 	elif not off_floor:
+		# At a booth seat (BoothRoller.fix_start()'s "wall_faces") a roller pulled
+		# on the walled side is laid on the open side, round the front (across()).
+		if bag.has("wall_faces") and across(bag["park_frame"], parked, want):
+			go["across"] = bag["park_frame"]
 		at = _onto_floor(k, start, want, parked, frame, go, bar, handle)
 	else:
 		var up := up_k(bag, k)
@@ -815,11 +822,66 @@ static func _onto_floor(
 	if k <= LAY_END:
 		# Still at both ends: path()'s set-down comes down fastest at its end, and
 		# the bag reached the floor 8 cm a third of a tick.
-		var t := _eased((k - PARK_END) / (LAY_END - PARK_END))
+		var u := (k - PARK_END) / (LAY_END - PARK_END)
+		if go.has("across"):
+			# Across the front: no push from the body (path()'s keep_out()), its
+			# way and height eased with _across_eased(): with _eased(), its step
+			# grew 0.064 m a frame on the way round.
+			var share := _across_eased(u)
+			var flat := go.duplicate()
+			flat["clear"] = 0.0
+			var swung := CarryLead.path(
+				parked, want, share, frame, frame.affine_inverse() * parked, flat
+			)
+			var way := round_front(go["across"], parked.origin, want.origin, share)
+			swung.origin = Vector3(way.x, swung.origin.y, way.z)
+			return [true, swung, handle, handle, 1.0]
+		var t := _eased(u)
 		var laid := CarryLead.path(parked, want, t, frame, frame.affine_inverse() * parked, go)
 		return [true, laid, handle, handle, 1.0]
 	var back := smoothstep(0.0, 1.0, (1.0 - k) / (1.0 - LAY_END))
 	return [false, want, handle, handle, back]
+
+
+## Whether a set-down parked at `parked` lays its roller at `want` (both world)
+## on the other side of the centre line of `park_frame` (stamp()'s): pulled in
+## the hand on a booth's walled side, it lies on the open side
+## (BoothRoller.side()).
+static func across(park_frame: Transform3D, parked: Transform3D, want: Transform3D) -> bool:
+	var a := park_frame.affine_inverse() * parked.origin
+	var b := park_frame.affine_inverse() * want.origin
+	return a.x * b.x < 0.0
+
+
+## 0 to 1 over `t` (0 to 1), still at both ends: speeding up at one rate to
+## ACROSS_FASTEST, then slowing down at another as it comes to the floor. Its
+## step a frame grows by no more than 2 / (ACROSS_FASTEST n^2) of the way over
+## n frames. Sped up and slowed down alike (at 0.5), the 1.0 m round the front
+## in the lay's 9 frames grew 0.052 m in a frame.
+static func _across_eased(t: float) -> float:
+	var x := clampf(t, 0.0, 1.0)
+	if x < ACROSS_FASTEST:
+		return x * x / ACROSS_FASTEST
+	return 1.0 - (1.0 - x) * (1.0 - x) / (1.0 - ACROSS_FASTEST)
+
+
+## Where (world, its height that of `from`) a roller laid across goes at `t`
+## from `from` to `to` (world): round the front of `park_frame` (fixed in the
+## world from the move's start), its angle about the frame's origin turning
+## from the one to the other through straight ahead and its distance from it
+## from the one's to the other's (0.32-0.35 m at a booth), as
+## CarryLead.swap_axle() swings a roller round the hand's side. Pushed out to
+## TRANSFER_CLEAR_M midway as well, a longer way, its step grew 0.056 m in a
+## frame (eased alike at both ends). On a straight line pushed out from the
+## body's centre (CarryLead.keep_out()) the push turned from one side to the other as
+## the line passed 0.08 m ahead of the centre, and the roller jumped 0.43 m in
+## a third of a tick (food_seats_probe booth_alt_13-1 k9, board 2eaa9bc4).
+static func round_front(park_frame: Transform3D, from: Vector3, to: Vector3, t: float) -> Vector3:
+	var a := park_frame.affine_inverse() * from
+	var b := park_frame.affine_inverse() * to
+	var angle := lerpf(atan2(a.x, a.z), atan2(b.x, b.z), t)
+	var r := lerpf(Vector2(a.x, a.z).length(), Vector2(b.x, b.z).length(), t)
+	return park_frame * Vector3(r * sin(angle), a.y, r * cos(angle))
 
 
 ## A queue stand of `bag` at `k` (plan()): [held, xf, anchor, target, weight].

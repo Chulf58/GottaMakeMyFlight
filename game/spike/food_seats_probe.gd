@@ -35,7 +35,10 @@ extends SceneTree
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy --fixed-fps 60 \
 ##     --path game -s res://spike/food_seats_probe.gd \
-##     [-- --seed=N --out=DIR --subjects=booth,booth_alt]
+##     [-- --seed=N --out=DIR --subjects=booth,booth_alt --roller-strip=8,8.33]
+## --roller-strip takes a roller guest's sit-down strip at these ticks (thirds
+## allowed) instead of ROLLER_STRIP_TICKS: 7 to 11 show the set-down's lay
+## (RollerPark.PARK_END to LAY_END of its 13 ticks).
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
@@ -113,6 +116,8 @@ var _measure_only := false
 ## --subjects=a,b: run only these SUBJECTS (all when empty).
 var _only := PackedStringArray()
 var _out_dir := ""
+## --roller-strip=a,b: a roller guest's strip ticks (empty: ROLLER_STRIP_TICKS).
+var _roller_strip: Array[float] = []
 var _failed := false
 var _main: Node3D
 var _clock: SimClock
@@ -139,6 +144,9 @@ func _initialize() -> void:
 			out = arg.get_slice("=", 1)
 		if arg.begins_with("--subjects="):
 			_only = arg.get_slice("=", 1).split(",")
+		if arg.begins_with("--roller-strip="):
+			for at in arg.get_slice("=", 1).split(","):
+				_roller_strip.append(float(at))
 	_out_dir = ProjectSettings.globalize_path(OUT_REL + out).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print(
@@ -490,9 +498,16 @@ func _in_walls(points: PackedVector3Array, walls: Array[AABB]) -> int:
 ## Steps the guest from its walk to the seat to SETTLE_TICKS after it is
 ## seated, measuring every frame and taking the strip and the still.
 func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
-	var ticks: Array[int] = []
+	var ticks: Array[float] = []
 	if not _measure_only:
-		ticks = ROLLER_STRIP_TICKS if roller else STRIP_TICKS
+		var chosen: Array = ROLLER_STRIP_TICKS if roller else STRIP_TICKS
+		if roller and not _roller_strip.is_empty():
+			chosen = _roller_strip
+		for at in chosen:
+			ticks.append(float(at))
+	# Thirds of a tick only with --roller-strip (the clock's alpha can come to a
+	# whole tick a hair short); whole ticks otherwise, as before.
+	var fine := roller and not _roller_strip.is_empty()
 	var bag_worst := {}
 	var wall_worst := {}
 	var walls := _walls_near(visit.seat["approach"])
@@ -559,13 +574,14 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 					jumps["k%d+%.2f" % [k, _clock.alpha]] = snappedf(step, 0.001)
 				last_step = step
 			last_bag = bag.global_position
-		var due := strip.size() < ticks.size() and k >= ticks[strip.size()]
+		var now := k + _clock.alpha + 0.01 if fine else float(k)
+		var due := strip.size() < ticks.size() and now >= ticks[strip.size()]
 		if due and p.stage == Passenger.Stage.CAFE_SITTING_DOWN:
 			# A roller strip's first frame is the first in which the roller is in
 			# clear view before its second frame is due: a walker arriving can hide
 			# the roller it pulls behind it (7% seen at 13-3, k0).
-			var retry := bag != null and strip.is_empty() and k < ticks[1]
-			var shot := await _shot("%s_k%d" % [label, k], body, bag, retry)
+			var retry := bag != null and strip.is_empty() and now < ticks[1]
+			var shot := await _shot("%s_k%.2f" % [label, now], body, bag, retry)
 			if shot != null or not retry:
 				# A frame that fails its proof is left blank, and the strip is not saved.
 				strip.append(shot)
