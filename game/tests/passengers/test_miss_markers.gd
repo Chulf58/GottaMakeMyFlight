@@ -49,10 +49,10 @@ func _short_lane_world() -> PassengerTestWorld:
 	return world
 
 
-func _spawn_spaced(count: int) -> void:
+func _spawn_spaced(count: int, spacing := 12) -> void:
 	for i in count:
 		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-		_world.run_to(_world.clock.tick + 12)
+		_world.run_to(_world.clock.tick + spacing)
 
 
 func _desk_centre(desk: int) -> Vector3:
@@ -81,8 +81,10 @@ func test_a_full_desk_gets_a_sign_above_it() -> void:
 func test_the_sign_caption_counts_the_passengers_held_outside_the_lane() -> void:
 	_attach(_short_lane_world())
 	var desk: int = _world.sim.get_meta(&"desk")
-	_spawn_spaced(5)
-	_world.run_to(_world.clock.tick + 25)
+	# Closer together: the fifth walks on to the second hold cell
+	# (TerminalLayout.line_of()) and stands there before the first is served.
+	_spawn_spaced(5, 6)
+	_world.run_to(_world.clock.tick + 50)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	assert_str(_markers.sign_text(desk)).is_equal("Queue full · +2 waiting")
 

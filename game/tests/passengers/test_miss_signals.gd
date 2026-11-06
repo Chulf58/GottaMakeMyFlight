@@ -30,10 +30,10 @@ func _short_lane_world() -> PassengerTestWorld:
 	return world
 
 
-func _spawn_spaced(count: int) -> void:
+func _spawn_spaced(count: int, spacing := 12) -> void:
 	for i in count:
 		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-		_world.run_to(_world.clock.tick + 12)
+		_world.run_to(_world.clock.tick + spacing)
 
 
 func test_a_lane_at_capacity_or_with_overflow_is_full() -> void:
@@ -70,8 +70,10 @@ func test_an_exactly_full_lane_is_full_with_no_overflow() -> void:
 func test_overflow_is_counted_and_clears_when_the_queue_drains() -> void:
 	_world = _short_lane_world()
 	var desk: int = _world.sim.get_meta(&"desk")
-	_spawn_spaced(5)
-	_world.run_to(_world.clock.tick + 25)
+	# Closer together: the fifth walks on to the second hold cell
+	# (TerminalLayout.line_of()) and stands there before the first is served.
+	_spawn_spaced(5, 6)
+	_world.run_to(_world.clock.tick + 50)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	assert_dict(MissSignals.full_stations(_world.sim)).is_equal({desk: 2})
 	# Five services of 60 ticks; with no scanner the served stay stuck elsewhere.

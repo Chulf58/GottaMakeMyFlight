@@ -75,10 +75,12 @@ func test_lane_is_bounded_and_served_first_in_first_out() -> void:
 	_world = _short_lane_world()
 	var desk: int = _world.sim.get_meta(&"desk")
 	var spawned: Array[int] = []
+	# Six ticks apart: the fifth walks on to the second hold cell
+	# (TerminalLayout.line_of()) and stands there before the first is served.
 	for i in 5:
 		spawned.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-		_world.run_to(_world.clock.tick + 12)
-	_world.run_to(_world.clock.tick + 25)
+		_world.run_to(_world.clock.tick + 6)
+	_world.run_to(_world.clock.tick + 50)
 	assert_int(_world.sim.queue_of(desk).size()).is_equal(3)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	var served: Array[int] = []

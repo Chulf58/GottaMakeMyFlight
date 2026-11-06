@@ -14,8 +14,11 @@ extends SceneTree
 ## to the other body, so a failing pair says whose roller it is.
 ## Columns: "lane" pairs count against the ripple; "held" pairs have a member
 ## that was in a holding list or joined the lane on a cell another queue member
-## stood on (board c5b6664f) and are reported apart. Rows: "moveup" frames
-## (either member walking) and "still" frames.
+## stood on (board c5b6664f) and are reported apart; pairs of holders and the
+## lane's last member against the first holder are measured into it too.
+## Rows: "moveup" frames (either member walking) and "still" frames.
+## HOLDERS prints the most holders seen at one station and the frames on
+## which standing holders shared a cell (holders N on N distinct cells).
 ## Pass (each printed with the values it compared): in the lane column on
 ## moveup frames no body is within ROLLER_CLEAR_M of the other's roller and no
 ## two bodies are at BODY_ZERO_M. Control: lane members set off to move up
@@ -65,6 +68,11 @@ var _order := {}
 var _in_lane := {}
 var _moving := {}
 var _move_ups := 0
+## The most holders at one station on one frame, and the frames on which two
+## standing holders of one station shared a cell.
+var _holders_max := 0
+var _holders_shared := 0
+var _holder_frames := 0
 var _traced := 0
 ## Station -> the passenger who last left it.
 var _leaver := {}
@@ -206,7 +214,7 @@ func _watch() -> void:
 				_move_ups += 1
 				_candidate(lane, id)
 			_moving[id] = p.is_moving()
-			if not p.is_moving() and p.at == _sim.layout.lanes[station][lane.find(id)]:
+			if not p.is_moving() and p.at == _line(station)[lane.find(id)]:
 				# Alone on its own place once: from here it moves up as any lane walker.
 				var shared := (lane + _sim.holding_of(station)).any(
 					func(o: int) -> bool: return o != id and _sim.get_passenger(o).at == p.at
@@ -216,6 +224,13 @@ func _watch() -> void:
 					_order.erase(id)
 		for i in range(lane.size() - 1):
 			_measure(lane[i], lane[i + 1])
+		var holding := _sim.holding_of(station)
+		if not holding.is_empty():
+			_count_holders(holding)
+			if not lane.is_empty():
+				_measure(lane[lane.size() - 1], holding[0])
+			for i in range(holding.size() - 1):
+				_measure(holding[i], holding[i + 1])
 		var left: int = _leaver.get(station, 0)
 		if left != 0 and not lane.is_empty() and lane[0] != left and _views.node_for(left) != null:
 			var d := QueueSpacing.pair(_views, _sim, left, lane[0])
@@ -230,7 +245,7 @@ func _watch() -> void:
 ## member stands on: it then walks through that member to its place, the lane
 ## order not being the order on the cells ("order").
 func _joined(station: int, p: Passenger, lane: Array[int]) -> void:
-	var cells: Array = _sim.layout.lanes[station]
+	var cells: Array = _line(station)
 	for other in lane + _sim.holding_of(station):
 		if other != p.id and _sim.get_passenger(other).at == p.at:
 			_held[p.id] = true
@@ -240,6 +255,30 @@ func _joined(station: int, p: Passenger, lane: Array[int]) -> void:
 		if mine >= 0 and theirs > mine:
 			_order[p.id] = true
 			_order[other] = true
+
+
+## The places of `station`'s queue members in order: its lane cells, then its
+## hold cells where the layout derives them (TerminalLayout.line_of()).
+func _line(station: int) -> Array:
+	if _sim.layout.has_method("line_of"):
+		return _sim.layout.call("line_of", station)
+	return _sim.layout.lanes[station]
+
+
+## Counts the holders of one station on this frame and whether two of them
+## standing still share a cell.
+func _count_holders(holding: Array[int]) -> void:
+	_holders_max = maxi(_holders_max, holding.size())
+	_holder_frames += 1
+	var cells := {}
+	for id in holding:
+		var p := _sim.get_passenger(id)
+		if p.is_moving():
+			continue
+		if cells.has(p.at):
+			_holders_shared += 1
+			return
+		cells[p.at] = true
 
 
 func _serve(station: int) -> void:
@@ -345,6 +384,15 @@ func _report() -> int:
 		)
 		if key in ["lane moveup", "leaver moveup"] and (row[2] > 0 or row[4] > 0):
 			failed = true
+	print(
+		(
+			(
+				"HOLDERS most at one station %d; frames with holders %d, "
+				+ "with two standing holders on one cell %d"
+			)
+			% [_holders_max, _holder_frames, _holders_shared]
+		)
+	)
 	var lane_frames: int = (_rows.get("lane moveup", [0]) as Array)[0]
 	print(
 		"CONTROL move-ups %d (> 0), lane pair frames moving up %d (> 0)" % [_move_ups, lane_frames]

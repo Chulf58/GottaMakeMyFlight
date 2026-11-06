@@ -55,8 +55,12 @@ extends RefCounted
 ## 23: a Relocation saves the step its visitor had made (reached). 24: each
 ## passenger's halt_tick (QueueRipple). 25: gate places reserved at security
 ## admission, under "gate_places" (GateCapacity). 26: a cafe roller turn-back
-## saves the step made as Relocation.reached (CafeSim). From 17 on, the version
-## before is refused, with no migration.
+## saves the step made as Relocation.reached (CafeSim). 27: queue holders
+## stand on the hold line behind the lane (TerminalLayout.line_of()) and a
+## passenger done at a desk waits on it while every security line is full
+## (PassengerStations); the saved shape is the same, but a 26 save's holders
+## stand stacked on the lane's last cell. From 17 on, the version before is
+## refused, with no migration.
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it

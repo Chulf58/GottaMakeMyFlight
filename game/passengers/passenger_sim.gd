@@ -14,8 +14,10 @@ extends Node
 ## Stations are chosen by the earliest estimated service completion (walk,
 ## the service in progress and the queued workload), ties to the lower id,
 ## and the choice is kept until the station goes or the route is lost. Lanes
-## are TerminalLayout's fixed, bounded lanes; a passenger arriving at a full
-## lane waits in its station's holding list. Generic routing never crosses a
+## are TerminalLayout's fixed, bounded lanes; past a full lane a queue goes
+## on in its station's holding list, each holder on its own cell of the hold
+## line (TerminalLayout.line_of()), and a station whose line is full is not
+## chosen (PassengerStations). Generic routing never crosses a
 ## scanner; the passenger being serviced walks its passage, and only cleared
 ## passengers claim seats or head for the exit. Security service, at a basic
 ## scanner or a security lane, is SecurityRuntime's from admission on, and a
@@ -36,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 26
+const SAVE_VERSION := 27
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -288,6 +290,7 @@ func on_tick(new_tick: int) -> void:
 	gates.admit(self)
 	cafes.step_counters()
 	PassengerGates.admit_pending(self)
+	PassengerStations.arrive(self)
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
