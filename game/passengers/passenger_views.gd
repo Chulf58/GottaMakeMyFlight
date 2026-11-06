@@ -52,6 +52,10 @@ var _pool: Array[Array] = []
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
 var _cur: Dictionary = {}
+## Passenger id -> its stage at the sync before this one, to tell the tick a
+## cafe guest is handed back from CAFE_STANDING_UP (_up_with_roller()). Holds
+## no tick; snap() and release erase it.
+var _stages: Dictionary = {}
 var _ring := MeshInstance3D.new()
 ## Queue-full signs, drawn after the passengers.
 var _markers := MissMarkers.new()
@@ -190,6 +194,7 @@ func sync() -> void:
 		_prev[id] = _cur[id]
 		_cur[id] = now
 		_turn(_nodes[id], p, _pose(_nodes[id], p))
+		_stages[id] = p.stage
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
@@ -207,6 +212,7 @@ func sync() -> void:
 ## before the load.
 func snap() -> void:
 	_turns.clear()
+	_stages.clear()
 	for id in sim.passenger_ids():
 		if _nodes.has(id):
 			# A node kept through the load starts over dressed, with no foam
@@ -419,6 +425,7 @@ func _release(id: int) -> void:
 	_turns.release(id)
 	_prev.erase(id)
 	_cur.erase(id)
+	_stages.erase(id)
 
 
 ## Sets the clip, dress, bubble and icons for this tick and returns the yaw
@@ -638,13 +645,17 @@ func _stepping_in_stall(p: Passenger) -> bool:
 ## Up from its seat with a roller, past its stand-up clip: a sofa or nap pod
 ## visitor in its up_tail() (standing at the seat for the pick-up, then
 ## stepping off to its slot cell), or a cafe guest in CAFE_STANDING_UP after
-## STAND_UP_TICKS (the pick-up, then the shuffle out, CafeSim.up_ticks()). Its
-## drawn step picks the clip, so it holds still and then walks off. A booth
-## guest has stepped out by then and only holds; a guest with no roller steps
-## out while it rises, under the stand_up clip.
+## STAND_UP_TICKS (the pick-up, then the shuffle out, CafeSim.up_ticks()),
+## and on the tick it is handed back from that stage, when the shuffle's last
+## step is drawn. Its drawn step picks the clip, so it holds still and then
+## walks off. A booth guest has stepped out by then and only holds; a guest
+## with no roller steps out while it rises, under the stand_up clip.
 func _up_with_roller(p: Passenger, activity: ActivityPoses.Kind) -> bool:
 	if not ParkRecovery.has_roller(p):
 		return false
+	var was: int = _stages.get(p.id, -1)
+	if was == Passenger.Stage.CAFE_STANDING_UP and p.stage != was:
+		return true
 	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
 		return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS
 	if activity != ActivityPoses.Kind.SEAT and activity != ActivityPoses.Kind.RECLINE:

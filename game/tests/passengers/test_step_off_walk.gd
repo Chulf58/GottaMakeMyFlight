@@ -89,12 +89,14 @@ func _activity_guest(type: StringName) -> Passenger:
 	return p
 
 
-## One row per tick while `p` is in `stage`: [clip, drawn step mm, base speed].
-func _rows(p: Passenger, stage: Passenger.Stage) -> Array:
+## One row per tick while `p` is in `stage`: [clip, drawn step mm, base speed],
+## and with `hand_back` one more for the tick it has left `stage` (the stage
+## the sim hands it back to), whose drawn step is the last of the step off.
+func _rows(p: Passenger, stage: Passenger.Stage, hand_back := false) -> Array:
 	var rows: Array = []
 	while p.stage == stage and _world.clock.tick < 4000:
 		_world.step()
-		if p.stage != stage:
+		if p.stage != stage and not hand_back:
 			break
 		var node := _views.node_for(p.id)
 		var step := _views.tick_position(p.id, true) - _views.tick_position(p.id, false)
@@ -127,24 +129,30 @@ func test_a_cafe_roller_guest_walks_out_after_its_pick_up() -> void:
 		_world.step()
 	var held := PassengerSim.STAND_UP_TICKS + ParkRecovery.UP_HOLD_TICKS
 	# The tick it went into CAFE_STANDING_UP was row -1; _rows starts a tick on.
-	var rows := _rows(p, Passenger.Stage.CAFE_STANDING_UP)
-	print("cafe roller stand-up rows %s" % [rows])
-	assert_int(rows.size()).is_equal(CafeSim.up_ticks(p) - 1)
+	var rows := _rows(p, Passenger.Stage.CAFE_STANDING_UP, true)
+	print("cafe roller stand-up rows %s, then stage %d" % [rows, p.stage])
+	# Its last row is the hand-back tick: out of the stand-up, the shuffle's
+	# last step drawn.
+	assert_int(rows.size()).is_equal(CafeSim.up_ticks(p))
+	assert_int(p.stage).is_not_equal(Passenger.Stage.CAFE_STANDING_UP)
 	# Rising and holding still at the seat: the stand_up clip, the body still.
 	for row: Array in rows.slice(0, held - 1):
 		assert_str(row[0]).is_equal("stand_up")
 		assert_int(row[1]).is_equal(0)
 	_assert_walks(p, rows, held - 1)
-	assert_str(rows[rows.size() - 1][0]).is_equal("walk")
+	var last: Array = rows[rows.size() - 1]
+	assert_int(last[1]).is_greater(0)
+	assert_str(last[0]).is_equal("walk")
 
 
 func _assert_activity_walks_off(type: StringName) -> void:
 	var p := _activity_guest(type)
 	var tail := ActivityPoses.up_tail(_world.sim, p)
 	assert_int(tail).is_equal(ActivityPoses.SEAT_HOLD_TICKS + ActivityPoses.SHUFFLE_TICKS)
-	var rows := _rows(p, Passenger.Stage.SHOP_BROWSE)
-	var end := rows.size()
-	print("%s last rows %s" % [type, rows.slice(end - tail - 2)])
+	# With the hand-back tick: the walk on from its slot cell, still walk.
+	var rows := _rows(p, Passenger.Stage.SHOP_BROWSE, true)
+	var end := rows.size() - 1
+	print("%s last rows %s, then stage %d" % [type, rows.slice(end - tail - 2), p.stage])
 	# The hold at the seat: standing still, idle.
 	for row: Array in rows.slice(end - tail + 1, end - ActivityPoses.SHUFFLE_TICKS):
 		assert_str(row[0]).is_equal("idle")
