@@ -10,6 +10,7 @@ extends RefCounted
 ## are read here from main's drawing (grip_points()).
 ## Load with preload(); no class_name.
 
+const WornBackGap := preload("res://spike/worn_back_gap.gd")
 const HELD_M := 0.05
 const ON_BAG_M := 0.06
 const RESTING_M := 0.01
@@ -238,8 +239,8 @@ static func on_bag(bag: Node3D, at: Vector3) -> bool:
 ## How far a bag of `kind` worn its kind's way is from its place on `body` at
 ## `reach` (0 when on it): a pulled roller's bar from its hand and its axle
 ## from the floor, a shoulder bag's strap bar from its shoulder joint, a
-## backpack's middle from the Spine_03 bone. Read from CarryOnProps' bone
-## attachments, which follow the pose as drawn.
+## backpack's panel from the body's own back (back_gap()). Read from
+## CarryOnProps' bone attachments, which follow the pose as drawn.
 static func worn_gap(
 	props: CarryOnProps, id: int, i: int, body: Node3D, reach: float, kind: SecurityLooks.Kind
 ) -> float:
@@ -268,10 +269,19 @@ static func worn_gap(
 			# 0.1 m from it with the arm's own lean.
 			return maxf(0.0, top.global_position.distance_to(shoulder) - 0.2)
 		SecurityLooks.Kind.BACKPACK:
-			var spine: Vector3 = (rig["spine"] as Node3D).global_position
-			var near := bag.global_transform * CarryOnProps.bag_box(kind).get_center()
-			return maxf(0.0, near.distance_to(spine) - 0.45)
+			return back_gap(body, bag)
 	return INF
+
+
+## How far a backpack `bag` worn on `body` is off its back (0 when on it):
+## its panel's least distance to the body's own back vertices
+## (spike/worn_back_gap.gd) past WORN_GAP_M. It measured the pack's middle to
+## the Spine_03 bone less 0.45 m, which read a pack hanging 0.1 m off the back
+## as worn (anti-pattern the-worn-backpack-float-check-passes-a-backpack-
+## hanging-in-t). A point through the panel is BODY_IN_OWN_BAG's to fail.
+static func back_gap(body: Node3D, bag: Node3D) -> float:
+	var got: Array = WornBackGap.gap(body, bag)
+	return maxf(0.0, (got[0] as float) - WornBackGap.WORN_GAP_M)
 
 
 ## Bag `i` of passenger `id` as drawn now: [state ("held", "worn", "resting"
