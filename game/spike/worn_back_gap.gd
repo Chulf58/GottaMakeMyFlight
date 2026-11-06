@@ -25,11 +25,15 @@ static var _torso := {}
 ## the body points `points` (world): [the least distance (m) from a point
 ## behind the panel inside its outline to the panel's face (negative when a
 ## point is through it), the point, how many points were inside the
-## outline]. INF when none is.
-static func panel_gap(points: PackedVector3Array, bag_xf: Transform3D) -> Array:
+## outline]. INF when none is. `grow` (m) widens the outline on every side, so
+## a vertex that moves along its edge (a shoulder at the pack's top corner) is
+## counted on both sides of it.
+static func panel_gap(points: PackedVector3Array, bag_xf: Transform3D, grow := 0.0) -> Array:
 	var box := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK)
 	var to_bag := bag_xf.affine_inverse()
 	var scale_by := bag_xf.basis.get_scale().y
+	var wider := grow / scale_by
+	box = AABB(box.position - Vector3(wider, 0.0, wider), box.size + Vector3(wider, 0.0, wider) * 2.0)
 	var best := INF
 	var at := Vector3.ZERO
 	var seen := 0

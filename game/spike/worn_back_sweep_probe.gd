@@ -19,10 +19,15 @@ extends SceneTree
 const WornBackGap := preload("res://spike/worn_back_gap.gd")
 const CLIPS: Array[String] = ["idle", "walk"]
 const MOMENTS := 64
-const TOPS_M: Array[float] = [-0.03, 0.0, 0.03, 0.06]
+const TOPS_M: Array[float] = [-0.09, -0.06, -0.03, 0.0, 0.03, 0.06]
 const ROUNDS := 16
 ## Points behind the chest inside the panel outline, at the fewest.
 const MIN_POINTS := 3
+## The outline is widened by this much for the least gap only: a shoulder
+## vertex moving along the pack's top corner is then kept clear at every
+## moment, not only at the moments sampled (the largest gap is read on the
+## outline itself).
+const EDGE_M := 0.01
 
 var _props: CarryOnProps
 ## [body, spine (world), back points (world)] per posed moment.
@@ -74,7 +79,7 @@ func _process(_delta: float) -> bool:
 					best = found
 			var ok: bool = best[2] <= WornBackGap.WORN_GAP_M and best[3] >= MIN_POINTS
 			failed = failed or not ok
-			per[size * 2] = snappedf(best[0], 0.001)
+			per[size * 2] = ceilf(best[0] * 1000.0) / 1000.0
 			per[size * 2 + 1] = best[4]
 			print(
 				(
@@ -130,7 +135,8 @@ func _gaps(b: int, scale_by: float, top: Vector2) -> Array:
 			continue
 		var xf := CarryWorn.worn_back_at(pose[1], 0.0, scale_by, top, scale_by >= 1.0)
 		var got: Array = WornBackGap.panel_gap(pose[2], xf)
-		lo = minf(lo, got[0])
+		var edge: Array = WornBackGap.panel_gap(pose[2], xf, EDGE_M)
+		lo = minf(lo, edge[0])
 		hi = maxf(hi, got[0])
 		fewest = mini(fewest, got[2])
 	return [lo, hi, fewest]

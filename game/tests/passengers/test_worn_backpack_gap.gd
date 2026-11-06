@@ -71,8 +71,18 @@ func test_a_worn_backpack_rests_on_every_back() -> void:
 						pack.global_transform = _worn(body, pack, scale_by)
 						var got: Array = WornBackGap.gap(body, pack)
 						if got[0] < lo:
+							var player := body.get_node("AnimationPlayer") as AnimationPlayer
+							var local: Vector3 = pack.global_transform.affine_inverse() * got[1]
 							least = (
-								"%s %.2f s yaw %.1f scale %.2f" % [clip, n * 0.29, yaw, scale_by]
+								"%s %.2f s (at %.3f) yaw %.1f scale %.2f, pack-local %s"
+								% [
+									clip,
+									n * 0.29,
+									player.current_animation_position,
+									yaw,
+									scale_by,
+									local
+								]
 							)
 						lo = minf(lo, got[0])
 						hi = maxf(hi, got[0])

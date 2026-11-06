@@ -15,21 +15,23 @@ const BACK_TOP_OVER_SPINE_M := 0.06
 ## BACK_CLEAR_M (board 4af10dd0: 0.175 m behind and 0.06 m above for every
 ## body stood it 0.04-0.13 m off the back). The height is the one, of
 ## worn_back_sweep_probe.gd's TOPS_M, whose largest gap over the clips is
-## least (a top level with the shoulders meets them as they move). Measured by
-## game/spike/worn_back_sweep_probe.gd (12 bodies, both clips at 64 moments).
+## least (a top level with the shoulders meets them as they move; the male
+## shoulders reach a one-bag pack's top corners unless it hangs 6-9 cm lower).
+## Measured by game/spike/worn_back_sweep_probe.gd (12 bodies, both clips at
+## 64 moments, the least gap read on an outline 1 cm wider, EDGE_M).
 const BACK_ON_SPINE_M: Array[Vector4] = [
-	Vector4(0.101, 0.00, 0.096, 0.03),
-	Vector4(0.103, 0.00, 0.094, 0.03),
-	Vector4(0.103, 0.00, 0.094, 0.03),
-	Vector4(0.103, 0.00, 0.094, 0.03),
-	Vector4(0.103, 0.00, 0.094, 0.03),
-	Vector4(0.101, 0.00, 0.101, 0.00),
-	Vector4(0.080, -0.03, 0.094, 0.06),
-	Vector4(0.072, -0.03, 0.099, 0.06),
-	Vector4(0.071, -0.03, 0.099, 0.06),
-	Vector4(0.072, -0.03, 0.099, 0.06),
-	Vector4(0.064, -0.03, 0.083, 0.03),
-	Vector4(0.071, -0.03, 0.094, 0.06),
+	Vector4(0.086, -0.09, 0.097, 0.03),
+	Vector4(0.082, -0.06, 0.100, 0.00),
+	Vector4(0.081, -0.06, 0.100, 0.00),
+	Vector4(0.081, -0.06, 0.100, 0.00),
+	Vector4(0.081, -0.06, 0.081, -0.06),
+	Vector4(0.086, -0.09, 0.102, 0.00),
+	Vector4(0.081, -0.03, 0.110, 0.06),
+	Vector4(0.073, -0.03, 0.110, 0.06),
+	Vector4(0.072, -0.03, 0.110, 0.06),
+	Vector4(0.073, -0.03, 0.110, 0.06),
+	Vector4(0.065, -0.03, 0.092, 0.03),
+	Vector4(0.072, -0.03, 0.110, 0.06),
 ]
 ## The least panel gap BACK_ON_SPINE_M is measured for.
 const BACK_CLEAR_M := 0.004
