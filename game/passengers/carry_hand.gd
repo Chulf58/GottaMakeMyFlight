@@ -104,9 +104,9 @@ static func case_transform(
 	# surface from the side carry's to the front carry's, and stays at the hand.
 	var held_side := side_xf.affine_inverse() * grip
 	var held_ahead := ahead.affine_inverse() * grip
-	var turn := side_xf.basis.get_rotation_quaternion().slerp(
-		ahead.basis.get_rotation_quaternion(), weight
-	)
+	# A hard case tips its bottom end forward first (CaseTurn).
+	var hard := kind == SecurityLooks.Kind.CASE
+	var turn := CaseTurn.turn(side_xf.basis, ahead.basis, body.rotation.y, weight, hard)
 	var basis := Basis(turn).scaled(Vector3.ONE * scale_by)
 	return Transform3D(basis, grip - basis * held_side.lerp(held_ahead, weight))
 
