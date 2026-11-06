@@ -113,6 +113,17 @@ static func step(sim: PassengerSim, station: int) -> void:
 	sim._set_stage(front, Passenger.Stage.CHECKIN)
 
 
+## Whether `p`, waiting where it is for want of a place (QUEUE_FULL), has
+## one now: it chooses at once, not on its next beat, so a station that clears
+## its line fast is not left idle.
+static func _room_now(sim: PassengerSim, p: Passenger) -> bool:
+	if p.stuck != Passenger.Stuck.QUEUE_FULL:
+		return false
+	var to_desk := p.stage == Passenger.Stage.TO_CHECKIN
+	var room := _room(sim, sim.layout.desks if to_desk else sim.layout.scanners)
+	return room > 0 and room > seekers_before(sim, p, to_desk)
+
+
 ## Whether passenger `p`, done at a desk, waits on it: a security station is
 ## open and every free place on the open security lines goes to a passenger
 ## who has waited longer (seekers_before()).
@@ -142,7 +153,7 @@ static func seekers_before(sim: PassengerSim, p: Passenger, to_desk: bool) -> in
 	var mine := wait_key(p, to_desk)
 	var count := 0
 	for other in sim._passengers:
-		if other != p and _seeking(sim, other, to_desk) and wait_key(other, to_desk) < mine:
+		if other != p and is_seeking(sim, other, to_desk) and wait_key(other, to_desk) < mine:
 			count += 1
 	return count
 
@@ -153,7 +164,7 @@ static func wait_key(p: Passenger, to_desk: bool) -> Vector2i:
 	return Vector2i(p.stage_tick if to_desk else p.service_end, p.id)
 
 
-static func _seeking(sim: PassengerSim, p: Passenger, to_desk: bool) -> bool:
+static func is_seeking(sim: PassengerSim, p: Passenger, to_desk: bool) -> bool:
 	if not to_desk and p.stage == Passenger.Stage.CHECKIN:
 		return sim.tick >= p.service_end
 	var stage := Passenger.Stage.TO_CHECKIN if to_desk else Passenger.Stage.TO_SECURITY
@@ -172,7 +183,7 @@ static func seek(sim: PassengerSim, p: Passenger) -> void:
 	if p.station != 0 and not sim._is_open(p.station):
 		sim._leave_station(p)
 	if p.station == 0:
-		if p.stuck == Passenger.Stuck.NONE or sim._retry_now(p):
+		if p.stuck == Passenger.Stuck.NONE or sim._retry_now(p) or _room_now(sim, p):
 			choose(sim, p)
 		return
 	if p.is_moving():
