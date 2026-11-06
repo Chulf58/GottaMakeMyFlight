@@ -156,6 +156,7 @@ static func head_for(
 ## only when no other walker's path ends there. Those standing go first, then by line
 ## index, then id, so of two reaching the line on one tick the one nearer the
 ## front joins first and the next cell is then free for the other. One
+## standing on a cell the queue holds or takes steps off it (step_off()). One
 ## stepping onto the cell it was heading for when the queue holds it, or onto
 ## one another took on this tick, turns back on its step (turn_back()) and
 ## heads on from there; one passing over a member's cell walks on. A joiner
@@ -212,6 +213,11 @@ static func arrive(
 			lost[entry[3]] = true
 			turn_back(entry[4])
 			continue
+		if entry[1] < free and entry[2] == 0:
+			# Standing on a cell a member holds or takes on this tick: it steps off.
+			lost[entry[3]] = true
+			step_off(grid, entry[4], lines[entry[0]])
+			continue
 		if entry[1] != free:
 			continue
 		var w: Passenger = entry[4]
@@ -238,7 +244,45 @@ static func arrive(
 		if w.is_moving() and lines.has(w.station) and queues.has(w.station):
 			var line: Array = lines[w.station]
 			send_on(grid, w, line, free_index(queues[w.station], line, by_id))
+	_pass_centres(queues, walkers, lost, by_id)
 	return joined
+
+
+## A walker that would end this tick exactly on the centre of a cell a queue
+## member stands on, and walk on from it, is taken 1 mm further now, so it is
+## never left standing on that centre between two ticks.
+static func _pass_centres(
+	queues: Dictionary, walkers: Array, lost: Dictionary, by_id: Dictionary
+) -> void:
+	var held := {}
+	for queue: Dictionary in queues.values():
+		for id: int in members(queue):
+			if by_id.has(id):
+				held[(by_id[id] as Passenger).at] = true
+	for w: Passenger in walkers:
+		if lost.has(w.id) or not w.is_moving() or w.path_index + 2 >= w.path.size():
+			continue
+		var next := w.path[w.path_index + 1]
+		if held.has(next) and Passenger.segment_mm(w.at, next) - w.seg_mm == w.pace_mm():
+			w.walk(1)
+
+
+## Sends standing walker `w` off its cell of `line`: back to the cell it came
+## from when that is off the line, else to the first neighbour off the line it
+## may step to, straight ones first. It stays when there is none.
+static func step_off(grid: BuildGrid, w: Passenger, line: Array) -> void:
+	var cells: Array[Vector2i] = []
+	if w.path_index >= 1:
+		cells.append(w.path[w.path_index - 1])
+	for step: Vector2i in BuildGrid.SIDE_STEP:
+		cells.append(w.at + step)
+	for step: Vector2i in [Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]:
+		cells.append(w.at + step)
+	for cell in cells:
+		if not line.has(cell) and grid.can_passenger_route(w.at, cell):
+			var off: Array[Vector2i] = [w.at, cell]
+			w.set_path(off)
+			return
 
 
 ## Ordering of arrive()'s entries [station, line index, moving, id, ...]: by

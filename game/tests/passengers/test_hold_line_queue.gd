@@ -181,6 +181,79 @@ func test_a_lower_id_reaching_the_free_cell_beats_a_higher_id_standing_on_it() -
 	)
 	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([5])
 	assert_array(queues[1]["lane"]).is_equal([100, 5])
+	# The one standing there loses the cell and steps off it, off the line.
+	assert_bool(standing.is_moving()).is_true()
+	assert_bool(line.has(standing.path_end())).is_false()
+	for i in 12:
+		standing.walk(PassengerSim.WALK_MM)
+	assert_bool(standing.is_moving()).is_false()
+	assert_bool(line.has(standing.at)).is_false()
+	assert_that(standing.at).is_not_equal(reaching.at)
+
+
+## The last free cell of a full line: a lower id reaches it on the tick a
+## higher id stands on it. The lower id joins; the higher id steps off, and
+## every passenger keeps a cell of its own over the ticks that follow.
+func test_a_standing_loser_on_the_last_cell_steps_off_it() -> void:
+	_world = HoldLineKit.desk_hall()
+	var desk: int = _world.sim.get_meta(&"desk")
+	var line: Array = _world.sim.layout.line_of(desk)
+	for i in line.size() - 1:
+		HoldLineKit.member(_world, desk)
+	var last: Vector2i = line[line.size() - 1]
+	var mover := HoldLineKit.passenger(_world, last + Vector2i(1, 0), Passenger.Stage.TO_CHECKIN)
+	var stander := HoldLineKit.passenger(_world, last, Passenger.Stage.TO_CHECKIN)
+	var step: Array[Vector2i] = [mover.at, last]
+	mover.set_path(step)
+	mover.seg_mm = Passenger.STRAIGHT_MM - 50
+	for w: Passenger in [mover, stander]:
+		w.station = desk
+	_world.sim._incoming[desk] = 2
+	var shared := 0
+	for i in 60:
+		_world.step()
+		var cells := {}
+		for id in _world.sim.passenger_ids():
+			var p := _world.passenger(id)
+			if not p.is_moving():
+				shared += int(cells.has(p.at))
+				cells[p.at] = true
+	print("stander at %s station %d, mover at %s" % [stander.at, stander.station, mover.at])
+	assert_int(StationQueue.size_of(_world.sim._queue(desk))).is_equal(line.size())
+	assert_bool(_world.sim.holding_of(desk).has(mover.id)).is_true()
+	assert_that(mover.at).is_equal(last)
+	assert_bool(line.has(stander.at)).is_false()
+	assert_int(shared).is_equal(0)
+
+
+## A walker passing over a member's cell with exactly one tick's walk left to
+## its centre walks on past it: it never ends a tick on the centre.
+func test_a_walker_passing_over_a_member_never_ends_a_tick_on_its_centre() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(4, 4))
+	var line: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]
+	var by_id := {}
+	for i in 2:
+		var member := Passenger.new()
+		member.id = 100 + i
+		member.at = line[i]
+		member.clear_path()
+		by_id[member.id] = member
+	var passer := Passenger.new()
+	passer.id = 7
+	passer.station = 1
+	passer.stage = Passenger.Stage.TO_CHECKIN
+	passer.at = Vector2i(1, 1)
+	var path: Array[Vector2i] = [Vector2i(1, 1), line[1], line[2], line[3]]
+	passer.set_path(path)
+	passer.seg_mm = Passenger.STRAIGHT_MM - passer.pace_mm()
+	by_id[7] = passer
+	var queues := {1: {"lane": [100, 101], "holding": [], "serving": 0}}
+	StationQueue.arrive(grid, queues, {1: line.slice(0, 2)}, {1: line}, [passer], by_id, 7)
+	passer.walk(passer.pace_mm())
+	print("passer at %s seg %d, %s" % [passer.at, passer.seg_mm, passer.grid_position()])
+	assert_bool(passer.at == line[1] and passer.seg_mm == 0).is_false()
+	assert_bool(passer.grid_position() == Vector2(0.5, 1.5)).is_false()
+	assert_bool(passer.is_moving()).is_true()
 
 
 ## The case of the Sol review: a loser 1364 mm into a 1414 mm diagonal onto
