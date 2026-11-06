@@ -146,12 +146,12 @@ static func detached(
 
 
 ## How far a pulled roller's axle may move in `dt` sim ticks: the speed limit
-## of CarryOnProps.SWING_JUMP_M a tick over the time that really passed, plus
+## of RollerPull.SWING_JUMP_M a tick over the time that really passed, plus
 ## SNAP_SLACK_M. Nothing but STILL_M when no time passed.
 static func snap_allowance(dt: float) -> float:
 	if dt <= 0.0:
 		return STILL_M
-	return CarryOnProps.SWING_JUMP_M * dt + SNAP_SLACK_M
+	return RollerPull.SWING_JUMP_M * dt + SNAP_SLACK_M
 
 
 ## One pulled roller seen again: `last` is [axle, yaw, sim time] of the look
@@ -196,7 +196,7 @@ static func watch_pulled(
 ## tick, as at 120 fps). Returns the snaps each counted: "creeping" moves 0.2 m
 ## a look (the old check floored the time at a third of a tick and let it
 ## pass), "teleporting" jumps to its target and back, "following" is the real
-## CarryOnProps.follow() with its target 0.9 m across, "still" does not move,
+## RollerPull.follow() with its target 0.9 m across, "still" does not move,
 ## "no time passed" is a 0.05 m move and then none with the same look time.
 ## Expected snaps: CONTROL_FRAMES, CONTROL_FRAMES, 0, 0 and 1. Each kind's
 ## "travelled" is how far its axle got from where it started (a follower
@@ -219,7 +219,7 @@ static func snap_control() -> Dictionary:
 				"teleporting":
 					axle = target if f % 2 == 0 else steady
 				"following":
-					axle = CarryOnProps.follow(axle, target, CONTROL_DT, 0)
+					axle = RollerPull.follow(axle, target, CONTROL_DT, 0)
 			judge_pulled(0, last, axle, yaw, now, turns)
 		out[kind] = turns[1]
 		out[kind + " travelled"] = axle.distance_to(steady)
