@@ -1,7 +1,7 @@
 class_name CarrySwap
 extends RefCounted
 ## A roller going between hanging from the hand by its grip bar and the pull,
-## in the same hand (CarryOnProps._swap_transform, the bag's "swap"): how far
+## in the same hand (CarryHand.swap_transform, the bag's "swap"): how far
 ## toward the pull it is, the clock of a swap that turns back, and the holding
 ## arm's pose on the way (kept out of carry_on_props.gd, at its line cap).
 ##
@@ -10,7 +10,7 @@ extends RefCounted
 ## back one still under way started again from its far end (the roller jumped
 ## 1.07 m from the pull to under the hand).
 
-## The holding arm's pose in the hand carry (CarryOnProps._pose_arms, Arm.HAND;
+## The holding arm's pose in the hand carry (CarryArmPose.pose_arms, CarryArmPose.Arm.HAND;
 ## a roller held by its bar beside the stalls turns out less,
 ## StallCarry.hand_out_degrees()).
 const HAND_OUT_DEGREES := 12.0
@@ -28,12 +28,12 @@ static func pull_share(to_pull: bool, k: float) -> float:
 ## set for the move sync() saw at `now`; `lifted` whether it goes to the hand;
 ## its body `body`, as drawn) starts its clock from. `now`, except for a swap
 ## that turns back a swap still under way (the move drawn last is not
-## hand-led, so it is a swap: CarryOnProps._leads). That one goes back along
+## hand-led, so it is a swap: CarryPlace.leads). That one goes back along
 ## the same path from where the roller was drawn last: its clock is started so
 ## its share toward the pull then is the old one's (smoothstep(1 - k) is
 ## 1 - smoothstep(k), with k "placed_k", the share drawn last), and it keeps
 ## the old swap's trailing end. Turning back to the pull, the follower starts
-## at that end ("drawn_axle", CarryOnProps._axle_drawn) and follows on from
+## at that end ("drawn_axle", RollerPull.drawn) and follows on from
 ## there; turning back to the hand, the end is kept in the body's frame
 ## ("swap_trail", hung_trail()). A swap whose follower was started afresh
 ## jumped the axle by the share times the gap (0.27 m after a corner, Sol
@@ -61,7 +61,7 @@ static func start(bag: Dictionary, lifted: bool, body: Node3D, now: float) -> fl
 
 ## Where the axle of a roller swapping to the hand starts (its trailing end,
 ## world), its body drawn at `frame`: where it was let go, held in the body's
-## frame ("from", CarryOnProps._stamp), or the end of the pull swap it turned
+## frame ("from", CarryPlace._stamp), or the end of the pull swap it turned
 ## back ("swap_trail", start()).
 static func hung_trail(bag: Dictionary, frame: Transform3D) -> Vector3:
 	if bag.has("swap_trail"):
@@ -77,7 +77,7 @@ static func arm_shares(held: Dictionary, now: float) -> Array:
 	var bags: Array = held["bags"]
 	for i in bags.size():
 		var bag: Dictionary = bags[i]
-		var k := CarryOnProps._progress_of(bag, now)
+		var k := CarryPlace.progress_of(bag, now)
 		if bag.get("swap", false) and k < 1.0 and held["homes"][i] == SecurityLooks.Home.HAND:
 			shares[held["hands"][i]] = pull_share(bag["carry"] == SecurityLooks.Carry.PULL, k)
 	return shares
@@ -94,7 +94,7 @@ static func pose_arm(
 ) -> void:
 	if share < 0.0:
 		return
-	arm.angle_degrees = lerpf(hand_out, CarryOnProps.PULL_OUT_DEGREES, share)
-	arm.swing_kept = lerpf(HAND_SWING_KEPT, CarryOnProps.PULL_SWING_KEPT, share)
-	arm.lean_back_degrees = lerpf(0.0, CarryOnProps.PULL_LEAN_DEGREES, share)
+	arm.angle_degrees = lerpf(hand_out, CarryArmPose.PULL_OUT_DEGREES, share)
+	arm.swing_kept = lerpf(HAND_SWING_KEPT, CarryArmPose.PULL_SWING_KEPT, share)
+	arm.lean_back_degrees = lerpf(0.0, CarryArmPose.PULL_LEAN_DEGREES, share)
 	arm.front_weight = lerpf(front, 0.0, share)

@@ -3,6 +3,13 @@ extends RefCounted
 ## Where a worn shoulder bag hangs on its walker, and a backpack held in front
 ## (CarryOnProps draws them; kept out of carry_on_props.gd, at its line cap).
 
+## Worn backpack: its back panel this far behind the Spine_03 bone (clear of
+## the back, a skirt and long hair), its top this far above the bone.
+const BACK_FROM_SPINE_M := 0.175
+const BACK_TOP_OVER_SPINE_M := 0.06
+## It leans in at the top by this much, its bottom out clear of the hips.
+const BACK_LEAN_DEGREES := 10.0
+
 
 ## A shoulder bag hung on the shoulder of `side` (0 right, 1 left) of a body
 ## turned to `yaw` at `centre`, whose Arm bone is at `joint`: its inner face to
@@ -72,7 +79,7 @@ static func stoop_shift(stoop: CarryStoop, pivot: Vector3, at: Vector3) -> Vecto
 
 
 ## A backpack held in front of a body turned to `yaw` by its top grab loop at
-## `grip` (CarryOnProps.carried_in_front): hanging upright below the hand, its
+## `grip` (CarryHand.carried_in_front): hanging upright below the hand, its
 ## back panel (its y 0 face) toward the body, as worn on the chest (conductor
 ## ruling 2026-10-30: lying flat it was held over its middle, 27 cm off its
 ## loop).
@@ -81,3 +88,20 @@ static func loop_in_front(grip: Vector3, yaw: float, scale_by: float) -> Transfo
 	var basis := Basis(turn * Vector3.LEFT, turn * Vector3.BACK, Vector3.UP)
 	basis = basis.scaled(Vector3.ONE * scale_by)
 	return Transform3D(basis, grip - basis * CarryOnProps.BACKPACK_LOOP)
+
+
+## A backpack worn on a body turned to `yaw` whose Spine_03 bone is at `spine`
+## (world): its length along the bone leaning in at the top by
+## BACK_LEAN_DEGREES, the top of its back panel BACK_FROM_SPINE_M behind the
+## bone and BACK_TOP_OVER_SPINE_M above it.
+static func worn_back(spine: Transform3D, yaw: float, scale_by: float) -> Transform3D:
+	var up := spine.basis.y.normalized()
+	var behind := Basis(Vector3.UP, yaw) * Vector3.FORWARD
+	var out := (behind - up * behind.dot(up)).normalized()
+	var anchor := spine.origin + out * BACK_FROM_SPINE_M + up * BACK_TOP_OVER_SPINE_M
+	var lean := deg_to_rad(BACK_LEAN_DEGREES)
+	var along := up * cos(lean) - out * sin(lean)
+	var back := out * cos(lean) + up * sin(lean)
+	var basis := Basis(back.cross(along), back, along).scaled(Vector3.ONE * scale_by)
+	var top := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z * scale_by
+	return Transform3D(basis, anchor - along * top)

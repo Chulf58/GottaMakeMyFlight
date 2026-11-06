@@ -37,7 +37,7 @@ extends RefCounted
 ## a faster walker starts the change earlier and the roller is in its new hand
 ## before it reaches the wall. A wall threatens a side when it meets the REACH
 ## footprint (the axle as far out as the follower takes it at a corner,
-## CarryOnProps.TRAIL_SIDE_MAX_M). The other side is clear when the SETTLED
+## RollerPull.TRAIL_SIDE_MAX_M). The other side is clear when the SETTLED
 ## footprint (the axle where a straight pull keeps it, TRAIL_SIDE_M out) meets
 ## no wall and no furniture: a seat row beside the path, past where the roller
 ## runs, does not keep it on the wall's side. When the other side is threatened
@@ -129,7 +129,7 @@ static func resolve(
 ## but STANDING),
 ## where the roller takes `first`, as it does just after a queue stand
 ## (stood()). A change of hand starts the roller's trail afresh
-## (CarryOnProps._trail() "walked"), straight behind on the new side: the old
+## (RollerPull.step() "walked"), straight behind on the new side: the old
 ## side's walked line ends in a jump across the legs.
 static func pick(
 	bag: Dictionary,
@@ -290,7 +290,7 @@ static func walk_poses(frame: Transform3D, ahead: Array, look_m: float) -> Array
 
 ## The space a roller pulled in `hand` (0 right) takes behind its guest, in the
 ## guest's frame (+x its left, -z behind), as an AABB: its axle from
-## CarryOnProps.TRAIL_SIDE_MIN_M out to TRAIL_SIDE_MAX_M with `reach` (the
+## RollerPull.TRAIL_SIDE_MIN_M out to TRAIL_SIDE_MAX_M with `reach` (the
 ## follower at a corner) or TRAIL_SIDE_M and MARGIN_M without (a straight
 ## pull), and from
 ## TRAIL_BEHIND_MIN_M to TRAIL_M back, with the bag round it (bag_box(): its
@@ -298,12 +298,12 @@ static func walk_poses(frame: Transform3D, ahead: Array, look_m: float) -> Array
 ## long).
 static func footprint(hand: int, reach: bool) -> AABB:
 	var bag := _bag_size()
-	var inner := CarryOnProps.TRAIL_SIDE_MIN_M - bag.x
-	var axle_out := CarryOnProps.TRAIL_SIDE_MAX_M if reach else CarryOnProps.TRAIL_SIDE_M + MARGIN_M
+	var inner := RollerPull.TRAIL_SIDE_MIN_M - bag.x
+	var axle_out := RollerPull.TRAIL_SIDE_MAX_M if reach else RollerPull.TRAIL_SIDE_M + MARGIN_M
 	var outer := axle_out + bag.x
 	var x0 := -outer if hand == 0 else inner
-	var near := CarryOnProps.TRAIL_BEHIND_MIN_M - bag.z
-	var far := CarryOnProps.TRAIL_M + bag.z
+	var near := RollerPull.TRAIL_BEHIND_MIN_M - bag.z
+	var far := RollerPull.TRAIL_M + bag.z
 	return AABB(Vector3(x0, 0.0, -far), Vector3(outer - inner, bag.z, far - near))
 
 
@@ -311,7 +311,7 @@ static func footprint(hand: int, reach: bool) -> AABB:
 ## the two footprints, as deep as they are.
 static func crossing() -> AABB:
 	var right := footprint(0, false)
-	var inner := CarryOnProps.TRAIL_SIDE_MIN_M - _bag_size().x
+	var inner := RollerPull.TRAIL_SIDE_MIN_M - _bag_size().x
 	var size := Vector3(inner * 2.0, right.size.y, right.size.z)
 	return AABB(Vector3(-inner, 0.0, right.position.z), size)
 

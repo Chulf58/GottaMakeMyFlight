@@ -13,7 +13,7 @@ extends RefCounted
 
 ## A free hand tucked in: aimed this far out, about over the elbow, so the
 ## forearm points ahead and the fingers stay inside the booth's 0.41 m
-## half-opening (at CarryOnProps.FRONT_FREE_HAND_M they reach about 0.43 m).
+## half-opening (at CarryArmPose.FRONT_FREE_HAND_M they reach about 0.43 m).
 const TUCK_HAND_M := 0.22
 ## The same for a free hand beside a front-carried case: further out, so its
 ## fingertips stay clear of the case.
@@ -56,7 +56,7 @@ static func update_tuck(held: Dictionary, booth: bool, restored: bool, tick: flo
 ## case (`beside`) or not.
 static func free_hand_width(beside: bool, tuck: float) -> float:
 	var tucked_at := TUCK_BESIDE_M if beside else TUCK_HAND_M
-	return lerpf(CarryOnProps.FRONT_FREE_HAND_M, tucked_at, tuck)
+	return lerpf(CarryArmPose.FRONT_FREE_HAND_M, tucked_at, tuck)
 
 
 ## Whether a roller of `held` is going into the hand at `tick`: lifted now
