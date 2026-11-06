@@ -133,6 +133,40 @@ static func passenger_summary(sim: PassengerSim) -> Dictionary:
 	}
 
 
+## The wallet balance and the two debts the wallet could not pay (owed wages,
+## owed upkeep). Empty without a Finances; the debts read 0 without a
+## Settlement.
+static func money_summary(finances: Finances, settlement: Settlement) -> Dictionary:
+	if finances == null:
+		return {}
+	return {
+		"balance": finances.wallet.balance,
+		"wages_owed": settlement.wages_owed() if settlement != null else 0,
+		"upkeep_owed": settlement.upkeep_owed() if settlement != null else 0,
+	}
+
+
+## Bags: loaded and missed (durable totals), those still unsettled, and the
+## bags listed by state name (states with none left out). Empty without a
+## BaggageSim.
+static func bag_summary(sim: BaggageSim) -> Dictionary:
+	if sim == null:
+		return {}
+	var by_state := {}
+	var in_flight := 0
+	for bag in sim.bags():
+		var name := enum_name(Bag.State.keys(), bag.state)
+		by_state[name] = by_state.get(name, 0) + 1
+		if not bag.is_settled():
+			in_flight += 1
+	return {
+		"loaded": sim.loaded_total,
+		"missed": sim.missed_total,
+		"in_flight": in_flight,
+		"by_state": by_state,
+	}
+
+
 ## Every flight with its state name.
 static func flights_summary(flights: FlightSim) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []

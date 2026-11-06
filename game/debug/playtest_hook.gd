@@ -98,6 +98,7 @@ var grid: BuildGrid
 ## Optional parts: null in a scene without them, and their events are not logged.
 var baggage: BaggageSim
 var settlement: Settlement
+var finances: Finances
 
 var _configured := false
 var _scene: Node
@@ -357,6 +358,8 @@ func snapshot(event_count := 20) -> Dictionary:
 		"input_events": _input_count,
 		"debug_batch_seed": passengers.last_batch_seed,
 		"staff": _staff_summary(),
+		"money": PlaytestState.money_summary(finances, settlement),
+		"bags": PlaytestState.bag_summary(baggage),
 	}
 
 
@@ -451,6 +454,7 @@ func _find_parts(scene: Node) -> bool:
 	build_mode = null
 	baggage = null
 	settlement = null
+	finances = null
 	for child in scene.get_children():
 		if child is SimClock:
 			clock = child
@@ -466,6 +470,8 @@ func _find_parts(scene: Node) -> bool:
 			baggage = child
 		elif child is Settlement:
 			settlement = child
+		elif child is Finances:
+			finances = child
 	grid = build_mode.grid if build_mode != null else null
 	return clock != null and flights != null and passengers != null and grid != null
 
