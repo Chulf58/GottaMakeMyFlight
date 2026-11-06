@@ -168,6 +168,9 @@ var _incoming: Dictionary = {}
 ## Station -> the walker holding its claim on the line's tail
 ## (StationQueue.arrive()); saved.
 var _claims: Dictionary = {}
+## The passengers whose beat fell on this tick, forecast for lateness at the
+## tick's boundary (_settle_lateness()).
+var _late_due: Array[Passenger] = []
 ## Derived: seat key -> passenger id.
 var _seat_claims: Dictionary = {}
 var _made := 0
@@ -297,6 +300,7 @@ func on_tick(new_tick: int) -> void:
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
+	_settle_lateness()
 	PassengerLifecycle.retire_settled(self)
 	PassengerLifecycle.prune_results(self)
 	tick_usec_last = Time.get_ticks_usec() - started
@@ -634,16 +638,37 @@ func _beat(p: Passenger) -> void:
 	if not info_desks.holds(p):
 		NeedsPolicy.arbitrate(self, p)
 		info_desks.beat(p)
-	# A visiting guest walks: its visit's deadline keeps the margin for the rest.
-	if StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
-		p.late = false
+	_late_due.append(p)
+
+
+## The lateness of every passenger whose beat fell on this tick, forecast at
+## one boundary, after every passenger has stepped (decision hold-line-
+## rebuild-the-security-line-follows-where-people-sta): all against the same
+## state, from one security replay per mode (SecurityForecast.
+## begin_boundary()), and set together once all are forecast.
+func _settle_lateness() -> void:
+	if _late_due.is_empty():
 		return
-	# With no way to the plane the passenger is stuck, not late: it does not run.
+	SecurityForecast.begin_boundary(self)
+	var late: Array[bool] = []
+	for p in _late_due:
+		late.append(_late_now(p))
+	SecurityForecast.end_boundary()
+	for i in _late_due.size():
+		_late_due[i].late = late[i]
+	_late_due.clear()
+
+
+## Whether `p` is late now: a visiting guest walks (its visit's deadline keeps
+## the margin for the rest), and one with no way to the plane is stuck, not
+## late.
+func _late_now(p: Passenger) -> bool:
+	if p.is_done() or StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
+		return false
 	var arrival := JourneyForecast.arrival_tick(self, p)
 	if arrival >= JourneyForecast.NEVER:
-		p.late = false
-		return
-	p.late = JourneyForecast.next_late(p.late, flights.doors_close_tick(p.flight_id) - arrival)
+		return false
+	return JourneyForecast.next_late(p.late, flights.doors_close_tick(p.flight_id) - arrival)
 
 
 ## Gives up the claim on the seat `p` holds but leaves it the seat (it gets up

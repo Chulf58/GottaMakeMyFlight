@@ -344,8 +344,8 @@ static func _stop_short(
 	var limit := mini(to, line.size() - 1)
 	if w.is_moving():
 		var after := w.path_index + 2
-		if _short_of(index, w.path[w.path_index + 1], to, free):
-			# Stepping onto such a cell: it turns back on its step.
+		if int(index.get(w.path[w.path_index + 1], -1)) in range(0, free):
+			# Stepping onto a cell a member holds: it turns back on its step.
 			turn_back(w)
 		elif after < w.path.size() and _short_of(index, w.path[after], to, free):
 			_stop_after_step(w)

@@ -55,6 +55,12 @@ const HORIZON := 200000
 static var steps_played := 0
 ## The last waiting passenger's own clearance (clearance()): [key, ticks].
 static var _waiting_memo := []
+## While a tick's boundary is forecast (begin_boundary()): its sim, whether a
+## passenger waits for a place there, and its population replays by
+## [station (-1: every station, while one waits), scarce].
+static var _boundary_sim: PassengerSim = null
+static var _boundary_waiting := false
+static var _boundary := {}
 
 ## What SecurityRuntime reads from its host (see its header).
 var tick := 0
@@ -121,6 +127,10 @@ var _changed := true
 static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: int) -> int:
 	if not sim.layout.is_usable(station):
 		return JourneyForecast.NEVER
+	if sim == _boundary_sim and sim._by_id.get(p.id) == p:
+		var mine := p.station == station or PassengerStations.is_seeking(sim, p, false)
+		if mine:
+			return _from_population(sim, station, p)
 	if sim._by_id.get(p.id) == p and PassengerStations.is_seeking(sim, p, false):
 		return _waiting_clearance(sim, station, p)
 	var replay := SecurityForecast.new()
@@ -137,6 +147,41 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 	# The runtime holds the replay as its host: let go, or neither is freed.
 	replay._runtime.bind(null)
 	return ticks
+
+
+## Starts forecasting `sim` at one boundary of its tick: until end_boundary(),
+## the clearance of a passenger of the sim committed to its station or waiting
+## for a place comes from one population replay per [station, scarce], run on
+## for each passenger asked about, with no candidate (_from_population()).
+static func begin_boundary(sim: PassengerSim) -> void:
+	end_boundary()
+	_boundary_sim = sim
+	_boundary_waiting = false
+	for p in sim._passengers:
+		if PassengerStations.is_seeking(sim, p, false):
+			_boundary_waiting = true
+			break
+
+
+## Ends the boundary begin_boundary() started and lets go of its replays.
+static func end_boundary() -> void:
+	for replay: SecurityForecast in _boundary.values():
+		# The runtime holds the replay as its host: let go, or neither is freed.
+		replay._runtime.bind(null)
+	_boundary.clear()
+	_boundary_sim = null
+
+
+## clearance() of `p` from the boundary's population replay.
+static func _from_population(sim: PassengerSim, station: int, p: Passenger) -> int:
+	var scarce := sim.gates.scarce(sim, station, p)
+	var key := [-1 if _boundary_waiting else station, scarce]
+	if not _boundary.has(key):
+		var made := SecurityForecast.new()
+		made._setup(sim, station, scarce)
+		_boundary[key] = made
+	var replay: SecurityForecast = _boundary[key]
+	return replay._run(p.id) if replay._units.has(p.id) else JourneyForecast.NEVER
 
 
 ## clearance() of passenger `p` of the sim, waiting for a place: it takes the
