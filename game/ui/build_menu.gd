@@ -41,233 +41,18 @@ extends CanvasLayer
 ## The hiring card opened or closed (the StaffPanel shows it with this).
 signal staff_toggled(open: bool)
 
-const THUMBNAIL_DIR := "res://assets/ui/thumbnails/%s.png"
-const CATEGORIES := [
-	{
-		"name": "Structure",
-		"tools":
-		[BuildMode.Tool.FLOOR, BuildMode.Tool.WALL, BuildMode.Tool.GLASS, BuildMode.Tool.DOOR],
-	},
-	{"name": "Doors", "tools": [BuildMode.Tool.ENTRANCE, BuildMode.Tool.EXIT]},
-	{"name": "Check-in", "tools": [BuildMode.Tool.DESK]},
-	{"name": "Security", "tools": [BuildMode.Tool.SCANNER]},
-	# The security lane's four parts in flow order (decisions security-lane-
-	# parts-are-placed-separately-tray-table-x-ray-b and security-lane-parts-
-	# get-their-own-lane-build-category): four parts get a tray of their own,
-	# right after Security.
-	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
-	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
-	# The gate desk (gates 1b) makes a gate of the north exit it stands by.
-	{
-		"name": "Gates",
-		"tools": [BuildMode.Tool.GATE_DESK, BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN],
-	},
-	# The cafe, its counter and its table. Named Shops until HUD 6/7 gave that
-	# name to the store group's button below.
-	{
-		"name": "Cafe",
-		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
-	},
-	# The toilet room and its two pieces (Toilets 5/5). Cafe holds three cards
-	# already; six cards are wider than COLUMN_W, so the toilet gets a tray of
-	# its own, as the Lane did.
-	{
-		"name": "Toilets",
-		"tools":
-		[BuildMode.Tool.TOILET_ROOM, BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK],
-	},
-	# The kiosk room and its two pieces (Boredom 2/5), a tray of their own for
-	# the same reason as the toilet's.
-	{
-		"name": "Kiosk",
-		"tools":
-		[BuildMode.Tool.KIOSK_ROOM, BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
-	},
-	# The landside tools (Landside 3/4): a curb bay and the two car park kinds
-	# snap to the authored spots outside the terminal; Close opens or closes a
-	# car park so it can drain before Remove takes it back.
-	{
-		"name": "Landside",
-		"tools":
-		[
-			BuildMode.Tool.CURB,
-			BuildMode.Tool.SURFACE_LOT,
-			BuildMode.Tool.MULTI_STOREY,
-			BuildMode.Tool.LOT_GATE,
-		],
-	},
-	# The Buy land tool (user ruling land-plots-are-bought-with-a-buy-land-
-	# tool-in-build-mode-buy), a tray of its own beside the landside tools, so
-	# the furniture groups still run on to Remove.
-	{"name": "Land", "tools": [BuildMode.Tool.BUY_LAND]},
-	# One Belt tool shapes itself (decision baggage-belts-are-one-auto-shaping-
-	# belt-tool-one-baggage-tray), so baggage fits one tray.
-	{
-		"name": "Baggage",
-		"tools": [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART],
-	},
-	# The furniture and the rooms that go with it, in five groups (decision
-	# hud-6-7-furniture-groups-five-icon-buttons-decor-food-servic): Decor, Food,
-	# Services, Leisure and Shops. A group's first page has the bar button and
-	# carries the group's name ("group"); a later page ("page": true) has none
-	# and is reached by the Next card on the page before it, and the group's
-	# last page leads back to its first. A tray holds four cards and the Next
-	# column in COLUMN_W, so a group with more pieces pages inside its
-	# tray. The Dining, Money and Activities pages joined Food, Services and
-	# Leisure: the ruling named the eleven pages there were before them.
-	{"name": "Furniture", "group": "Decor", "tools": FurnitureTools.PAGES[0]},
-	{"name": "Features", "tools": FurnitureTools.PAGES[1], "page": true},
-	{"name": "Fittings", "tools": FurnitureTools.PAGES[2], "page": true},
-	{"name": "Food", "group": "Food", "tools": FurnitureTools.PAGES[3]},
-	# The food variants (F4-6): three rooms that take the Cafe tray's counter and
-	# table, so a page of their own holds just the room cards.
-	{
-		"name": "Dining",
-		"tools":
-		[BuildMode.Tool.BAR_ROOM, BuildMode.Tool.RESTAURANT_ROOM, BuildMode.Tool.STALL_ROOM],
-		"page": true,
-	},
-	{"name": "Desks", "group": "Services", "tools": FurnitureTools.PAGES[4]},
-	{"name": "Care", "tools": FurnitureTools.PAGES[5], "page": true},
-	# The exchange and the ATM (F4-5b) share one Money page: each room with its
-	# one piece, four cards that fit beside the Next column.
-	{
-		"name": "Money",
-		"tools":
-		[
-			BuildMode.Tool.EXCHANGE_ROOM,
-			BuildMode.Tool.EXCHANGE,
-			BuildMode.Tool.ATM_ROOM,
-			BuildMode.Tool.ATM,
-		],
-		"page": true,
-	},
-	{"name": "Lounge", "group": "Leisure", "tools": FurnitureTools.PAGES[6]},
-	{"name": "Fun", "tools": FurnitureTools.PAGES[7], "page": true},
-	# The activity and rest rooms (F4-7): each takes its own piece from the
-	# Lounge and Fun pages, so a page of their own holds just the room cards.
-	{
-		"name": "Activities",
-		"tools":
-		[
-			BuildMode.Tool.PLAY_AREA_ROOM,
-			BuildMode.Tool.LOUNGE_ROOM,
-			BuildMode.Tool.SHOWER_ROOM,
-			BuildMode.Tool.NAP_POD_ROOM,
-		],
-		"page": true,
-	},
-	# The store pages (decision store-rooms-and-retail-pieces-go-on-stores-
-	# pages-behind-the-furniture-button): one per store, its room, then its
-	# counter or till and its shelf or rail, as the Toilets and Kiosk trays hold
-	# theirs.
-	{
-		"name": "Pharmacy",
-		"group": "Shops",
-		"tools":
-		[
-			BuildMode.Tool.PHARMACY_ROOM,
-			BuildMode.Tool.PHARMACY_COUNTER,
-			BuildMode.Tool.PHARMACY_SHELF,
-		],
-	},
-	{
-		"name": "Duty free",
-		"tools":
-		[
-			BuildMode.Tool.DUTY_FREE_ROOM,
-			BuildMode.Tool.DUTY_FREE_TILL,
-			BuildMode.Tool.DUTY_FREE_SHELF,
-		],
-		"page": true,
-	},
-	{
-		"name": "Fashion",
-		"tools":
-		[BuildMode.Tool.FASHION_ROOM, BuildMode.Tool.FASHION_TILL, BuildMode.Tool.FASHION_RAIL],
-		"page": true,
-	},
-	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
-]
-## The category that is a single button with no tray, last in CATEGORIES (GDScript
-## cannot take it from CATEGORIES.size(): tests check the two agree).
-const REMOVE_CATEGORY := 26
-const NO_CATEGORY := -1
-## The open category while the Templates page (TemplatesPage) is open; its
-## bar button presses it like a category (press_category()).
-const TEMPLATES_PAGE := -2
-## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
-const ITEMS := {
-	BuildMode.Tool.FLOOR: ["Floor", "floor", "1x1 tile"],
-	BuildMode.Tool.WALL: ["Wall", "wall", "1 m edge"],
-	BuildMode.Tool.GLASS: ["Glass", "glass", "1 m edge"],
-	BuildMode.Tool.DOOR: ["Door", "door", "1 m edge"],
-	BuildMode.Tool.ENTRANCE: ["Entrance", "entrance", ""],
-	BuildMode.Tool.EXIT: ["Exit", "exit", ""],
-	BuildMode.Tool.DESK: ["Check-in desk", "desk", ""],
-	BuildMode.Tool.SCANNER: ["Scanner", "scanner", ""],
-	BuildMode.Tool.SEATS: ["Seats", "seats", ""],
-	BuildMode.Tool.GATE_DESK: ["Gate desk", "gate_desk", ""],
-	BuildMode.Tool.SCREEN: ["Screen", "screen_stand", ""],
-	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
-	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
-	BuildMode.Tool.TABLE: ["Table", "table", ""],
-	BuildMode.Tool.TOILET_ROOM: ["Toilet", "toilet_room", "2x3 min"],
-	BuildMode.Tool.TOILET_STALL: ["Toilet stall", "toilet_stall", ""],
-	BuildMode.Tool.TOILET_SINK: ["Sink", "toilet_sink", ""],
-	BuildMode.Tool.KIOSK_ROOM: ["Kiosk", "kiosk_room", "3x3 min"],
-	BuildMode.Tool.KIOSK_COUNTER: ["Kiosk counter", "kiosk_counter", ""],
-	# The store rooms carry their RoomTypes names and minimum sizes; the pieces'
-	# short names suit their store's page (FurnitureTools.ITEMS has the
-	# pharmacy's).
-	BuildMode.Tool.PHARMACY_ROOM: ["Pharmacy", "pharmacy_room", "3x3 min"],
-	BuildMode.Tool.DUTY_FREE_ROOM: ["Duty free", "duty_free_room", "3x4 min"],
-	BuildMode.Tool.DUTY_FREE_TILL: ["Till", "duty_free_till", ""],
-	BuildMode.Tool.DUTY_FREE_SHELF: ["Shelf", "duty_free_shelf", ""],
-	BuildMode.Tool.FASHION_ROOM: ["Fashion store", "fashion_room", "3x4 min"],
-	BuildMode.Tool.FASHION_TILL: ["Till", "fashion_till", ""],
-	BuildMode.Tool.FASHION_RAIL: ["Clothes rail", "fashion_rail", ""],
-	BuildMode.Tool.EXCHANGE_ROOM: ["Exchange", "exchange_room", "2x3 min"],
-	BuildMode.Tool.ATM_ROOM: ["ATM", "atm_room", "1x2 min"],
-	# The food rooms borrow the cafe's thumbnail: no new art (F4-6).
-	BuildMode.Tool.BAR_ROOM: ["Bar", "cafe_room", "3x4 min"],
-	BuildMode.Tool.RESTAURANT_ROOM: ["Restaurant", "cafe_room", "4x4 min"],
-	BuildMode.Tool.STALL_ROOM: ["Grab-and-go", "cafe_room", "3x3 min"],
-	# The activity rooms borrow their main piece's thumbnail: no new art (F4-7).
-	BuildMode.Tool.PLAY_AREA_ROOM: ["Play area", "play_slide", "3x4 min"],
-	BuildMode.Tool.LOUNGE_ROOM: ["Lounge", "lounge_sofa", "2x3 min"],
-	BuildMode.Tool.SHOWER_ROOM: ["Shower", "shower_cubicle", "2x2 min"],
-	BuildMode.Tool.NAP_POD_ROOM: ["Nap pod", "nap_pod", "2x2 min"],
-	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
-	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
-	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
-	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
-	BuildMode.Tool.CURB: ["Curb bay", "curb_bay", "16x3 m"],
-	BuildMode.Tool.SURFACE_LOT: ["Surface lot", "surface_lot", "32x24 m"],
-	BuildMode.Tool.MULTI_STOREY: ["Multi-storey", "multi_storey", "24x52 m"],
-	BuildMode.Tool.LOT_GATE: ["Open / close", "lot_gate", "A car park"],
-	BuildMode.Tool.BUY_LAND: ["Buy land", "buy_land", "about 21x25 m plot"],
-}
-## The Lane tray's cards, as ITEMS (item() looks in both).
-const LANE_ITEMS := {
-	BuildMode.Tool.TRAY_TABLE: ["Tray table", "tray_table", ""],
-	BuildMode.Tool.XRAY_BELT: ["X-ray belt", "xray_belt", ""],
-	BuildMode.Tool.ARCH: ["Arch", "arch", ""],
-	BuildMode.Tool.PICKUP_TABLE: ["Pickup table", "pickup_table", ""],
-}
-## Cards that say what the placed thing needs to work, in the warning colour,
-## in place of the "Click" hint (the card has no height to spare). A bag room
-## does nothing without a belt end.
-const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
-## Cards that say what the placed thing costs to run, in the plain hint style
-## (costs are never red), in place of the "Click" hint: a toilet stall is
-## charged its upkeep every game day once its room is ready, a screen stand
-## wherever it stands.
-const CARD_RUNNING_COSTS := {
-	BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP,
-	BuildMode.Tool.SCREEN: PriceTable.SCREEN_UPKEEP,
-}
-const RUNNING_COST_TEXT := "Upkeep %d/day"
+## The card, category and page data lives in BuildMenuCatalog; these are its
+## aliases, kept so every BuildMenu.X reference still resolves.
+const THUMBNAIL_DIR := BuildMenuCatalog.THUMBNAIL_DIR
+const CATEGORIES := BuildMenuCatalog.CATEGORIES
+const REMOVE_CATEGORY := BuildMenuCatalog.REMOVE_CATEGORY
+const NO_CATEGORY := BuildMenuCatalog.NO_CATEGORY
+const TEMPLATES_PAGE := BuildMenuCatalog.TEMPLATES_PAGE
+const ITEMS := BuildMenuCatalog.ITEMS
+const LANE_ITEMS := BuildMenuCatalog.LANE_ITEMS
+const CARD_NEEDS := BuildMenuCatalog.CARD_NEEDS
+const CARD_RUNNING_COSTS := BuildMenuCatalog.CARD_RUNNING_COSTS
+const RUNNING_COST_TEXT := BuildMenuCatalog.RUNNING_COST_TEXT
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
@@ -379,93 +164,62 @@ var _pending_wages := ""
 
 ## "3" for the key bound to a tool's action, or "" when the tool has none.
 static func key_hint(tool: BuildMode.Tool) -> String:
-	for action in BuildMode.TOOL_ACTIONS:
-		if BuildMode.TOOL_ACTIONS[action] != tool or not InputMap.has_action(action):
-			continue
-		for event in InputMap.action_get_events(action):
-			var key := event as InputEventKey
-			if key != null:
-				return OS.get_keycode_string(key.physical_keycode)
-	return ""
+	return BuildMenuCatalog.key_hint(tool)
 
 
 ## What a tool's card costs: the floor tile, one wall piece or the object.
 ## 0 for a tool with no price (Remove, a room, no tool).
 static func tool_price(tool: BuildMode.Tool) -> int:
-	if tool == BuildMode.Tool.FLOOR:
-		return PriceTable.price_of_floor()
-	if BuildMode.TOOL_WALL_KINDS.has(tool):
-		return PriceTable.price_of_wall(BuildMode.TOOL_WALL_KINDS[tool])
-	if BuildMode.tool_object(tool) != &"":
-		return PriceTable.price_of_object(BuildMode.tool_object(tool))
-	if tool == BuildMode.Tool.BELT:
-		return PriceTable.price_of_object(BuildMode.BELT_PRICE_ID)
-	if BuildMode.LANDSIDE_BUILD_TOOLS.has(tool):
-		return PriceTable.price_of_landside(
-			LandsidePlacement.PRICE_IDS[BuildMode.LANDSIDE_BUILD_TOOLS[tool]]
-		)
-	return 0
+	return BuildMenuCatalog.tool_price(tool)
 
 
 ## The categories in bar order (CATEGORIES).
 static func categories() -> Array:
-	return CATEGORIES.duplicate()
+	return BuildMenuCatalog.categories()
 
 
 ## The index of the Remove button, last in categories().
 static func remove_category() -> int:
-	return categories().size() - 1
+	return BuildMenuCatalog.remove_category()
 
 
 ## A tool's card [name, thumbnail, size text] from ITEMS, LANE_ITEMS or
 ## FurnitureTools.ITEMS, or an empty array for a tool with no card.
 static func item(tool: BuildMode.Tool) -> Array:
-	return ITEMS.get(tool, LANE_ITEMS.get(tool, FurnitureTools.ITEMS.get(tool, [])))
+	return BuildMenuCatalog.item(tool)
 
 
 ## What a card says its piece costs to run per day, or 0 for none.
 static func running_cost(tool: BuildMode.Tool) -> int:
-	return CARD_RUNNING_COSTS.get(tool, FurnitureTools.RUNNING_COSTS.get(tool, 0))
+	return BuildMenuCatalog.running_cost(tool)
 
 
 ## The name a category's bar button carries in its tooltip: its group's name
 ## on a group's first page, else its own.
 static func bar_name(index: int) -> String:
-	return CATEGORIES[index].get("group", CATEGORIES[index]["name"])
+	return BuildMenuCatalog.bar_name(index)
 
 
 ## The first page of the named group (its bar button), or NO_CATEGORY.
 static func group_index(group_name: String) -> int:
-	for i in CATEGORIES.size():
-		if CATEGORIES[i].get("group", "") == group_name:
-			return i
-	return NO_CATEGORY
+	return BuildMenuCatalog.group_index(group_name)
 
 
 ## The first page of the group a category belongs to (CATEGORIES), or the
 ## category itself when it is not a later page.
 static func group_start(index: int) -> int:
-	while index > 0 and CATEGORIES[index].get("page", false):
-		index -= 1
-	return index
+	return BuildMenuCatalog.group_start(index)
 
 
 ## The page the Next card of a category opens: the following page, the group's
 ## first page after its last, or NO_CATEGORY for a category with no pages.
 static func next_page(index: int) -> int:
-	if index + 1 < CATEGORIES.size() and CATEGORIES[index + 1].get("page", false):
-		return index + 1
-	var start := group_start(index)
-	return start if start != index else NO_CATEGORY
+	return BuildMenuCatalog.next_page(index)
 
 
 ## The category a tool belongs to, or NO_CATEGORY.
 static func category_of(tool: BuildMode.Tool) -> int:
-	var all := categories()
-	for i in all.size():
-		if all[i]["tools"].has(tool):
-			return i
-	return NO_CATEGORY
+	return BuildMenuCatalog.category_of(tool)
 
 
 func _ready() -> void:
@@ -475,11 +229,11 @@ func _ready() -> void:
 	build_session.changed.connect(build_frame.set_building)
 	add_child(build_session)
 	add_child(build_frame)
-	_build_bar()
-	_build_tray()
-	_build_status()
-	_build_money()
-	_build_cost()
+	BuildMenuLayout.build_bar(self)
+	BuildMenuLayout.build_tray(self)
+	BuildMenuLayout.build_status(self)
+	BuildMenuLayout.build_money(self)
+	BuildMenuLayout.build_cost(self)
 	templates_page.attach(self)
 	add_child(_room_panel)
 	_ghost_reason.build_mode = build_mode
@@ -618,12 +372,7 @@ func is_card_affordable(tool: BuildMode.Tool) -> bool:
 ## What a card's price slot shows: tool_price(), or for Buy land the price of
 ## the next plot (LandPlots.next_price()), which rises with each plot bought.
 func _card_price(tool: BuildMode.Tool) -> int:
-	var land: LandPlots = null
-	if build_mode != null and build_mode.land_tool != null:
-		land = build_mode.land_tool.land
-	if tool == BuildMode.Tool.BUY_LAND and land != null:
-		return land.next_price()
-	return tool_price(tool)
+	return BuildMenuPrices.card_price(self, tool)
 
 
 ## What greys out a card the wallet cannot pay: the theme's HudCard
@@ -633,23 +382,10 @@ static func unaffordable_tint() -> Color:
 
 
 ## What the current tool would cost now, as "Cost 400" and, when the wallet is
-## short, "Cost 400   Short by 300"; "" when nothing costs money, there is no
-## wallet or the pointer is not over a cell of the grid (no hover yet, over the
-## HUD, or over ground outside the grid). The cost is the net of the plan
-## BuildMode would apply under the pointer (a door over a paid wall also
-## refunds the wall, so it is cheaper than its card), or for a dragged Floor
-## rectangle the unfloored tiles the rules accept, as AreaDrag.fill_floor()
-## charges.
+## short, "Cost 400   Short by 300"; "" when nothing costs money (the rules are
+## in BuildMenuPrices.preview_text()).
 func preview_text() -> String:
-	if _wallet == null or build_mode == null:
-		return ""
-	var price := _preview_price()
-	if price.x <= 0:
-		return ""
-	var text := "Cost %d" % price.x
-	if price.y > _wallet.balance:
-		text += "   Short by %d" % (price.y - _wallet.balance)
-	return text
+	return BuildMenuPrices.preview_text(self)
 
 
 ## Sets the cost line from preview_text(), and shows the status line only while
@@ -751,61 +487,6 @@ func _on_tier_changed(_tier: int) -> void:
 
 func _on_unlocked(_tier: int, text: String) -> void:
 	_start_hold(text, false)
-
-
-## (what the placement costs net of refunds, what the wallet must hold for it).
-## A door over a paid wall costs its price less the wall's refund, but the
-## wallet must still hold the full door price (BuildTransaction.needed).
-func _preview_price() -> Vector2i:
-	if build_mode.room_mover.active or build_mode.templates.armed >= 0:
-		return _held_price()
-	var area := build_mode.dragged_area()
-	if build_mode.tool == BuildMode.Tool.FLOOR and area.has_area():
-		var rect_cost := _floor_rect_cost(area)
-		return Vector2i(rect_cost, rect_cost)
-	if build_mode.tool == BuildMode.Tool.BELT:
-		# Only the cells with no belt yet are bought; reshaping is free.
-		var line_cost := build_mode.belt_cells_to_buy() * tool_price(BuildMode.Tool.BELT)
-		return Vector2i(line_cost, line_cost)
-	if (
-		build_mode.tool in BuildMode.LANDSIDE_BUILD_TOOLS
-		or build_mode.tool == BuildMode.Tool.BUY_LAND
-	):
-		return _off_grid_price()
-	var edit := build_mode.hover_edit()
-	if edit == null or not _pointer_on_grid():
-		return Vector2i.ZERO
-	var plan := DoorPlacement.edits_for(build_mode.grid, edit)
-	var net := 0
-	for step in plan:
-		net += BuildTransaction.quote(build_mode.grid, step).net()
-	return Vector2i(maxi(0, net), maxi(0, BuildTransaction.needed(build_mode.grid, plan)))
-
-
-## The price of the room in hand (RoomMoveTool) or of the armed template paste.
-func _held_price() -> Vector2i:
-	if build_mode.room_mover.active:
-		return build_mode.room_mover.preview_price()
-	return build_mode.templates.preview_price()
-
-
-## The landside build's or the land plot's price under the pointer, for the
-## tools that do not edit the grid.
-func _off_grid_price() -> Vector2i:
-	if build_mode.tool != BuildMode.Tool.BUY_LAND:
-		return build_mode.landside_preview_price()
-	if build_mode.land_tool == null or build_mode.land_tool.land == null:
-		return Vector2i.ZERO
-	return build_mode.land_tool.preview_price()
-
-
-## A rectangle is priced once per rectangle and balance, not every frame.
-func _floor_rect_cost(area: Rect2i) -> int:
-	var key := "%s:%d" % [area, _wallet.balance]
-	if key != _rect_cost_key:
-		_rect_cost_key = key
-		_rect_cost = _price_floor_rect(area)
-	return _rect_cost
 
 
 func _price_floor_rect(area: Rect2i) -> int:
@@ -942,228 +623,4 @@ static func tray_stack_top() -> float:
 ## Anchors a control to the bottom centre with its bottom edge `bottom` px up;
 ## it grows up and out to both sides from there.
 static func anchor_bottom_centre(control: Control, bottom: float) -> void:
-	control.anchor_left = 0.5
-	control.anchor_right = 0.5
-	control.anchor_top = 1.0
-	control.anchor_bottom = 1.0
-	control.offset_left = 0.0
-	control.offset_right = 0.0
-	control.offset_top = -bottom
-	control.offset_bottom = -bottom
-	control.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	control.grow_vertical = Control.GROW_DIRECTION_BEGIN
-
-
-func _build_bar() -> void:
-	_bar.name = "CategoryBar"
-	_bar.theme = HUD_THEME
-	_bar.theme_type_variation = &"HudBar"
-	_bar.custom_minimum_size = Vector2(0.0, BAR_H)
-	anchor_bottom_centre(_bar, MARGIN)
-	add_child(_bar)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	_bar.add_child(row)
-	for i in categories().size():
-		var button := Button.new()
-		# A later page's button stays hidden: it is there to keep the indices.
-		if not categories()[i].get("page", false):
-			BarIcons.dress(button, bar_name(i))
-			# A name to find it by, now that it shows no text (BarDecor, BarCheckin).
-			button.name = "Bar" + bar_name(i).replace("-", "").replace(" ", "")
-		button.toggle_mode = true
-		button.custom_minimum_size = CATEGORY_SIZE
-		button.focus_mode = Control.FOCUS_NONE
-		button.pressed.connect(press_category.bind(i))
-		button.visible = not categories()[i].get("page", false)
-		row.add_child(button)
-		_category_buttons.append(button)
-	staff_button.name = "StaffButton"
-	BarIcons.dress(staff_button, "Staff")
-	staff_button.toggle_mode = true
-	staff_button.custom_minimum_size = CATEGORY_SIZE
-	staff_button.focus_mode = Control.FOCUS_NONE
-	staff_button.pressed.connect(press_staff)
-	row.add_child(staff_button)
-
-
-func _build_tray() -> void:
-	_tray.name = "ItemTray"
-	_tray.theme = HUD_THEME
-	_tray.custom_minimum_size = Vector2(0.0, TRAY_H)
-	anchor_bottom_centre(_tray, MARGIN + BAR_H + GAP)
-	add_child(_tray)
-	for i in categories().size():
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		row.alignment = BoxContainer.ALIGNMENT_CENTER
-		_tray.add_child(row)
-		_rows.append(row)
-		for tool in categories()[i]["tools"]:
-			if item(tool).is_empty():
-				continue
-			var button := _make_card(tool)
-			row.add_child(button)
-			_cards[tool] = button
-		if next_page(i) != NO_CATEGORY:
-			row.add_child(_make_next_card(next_page(i)))
-
-
-func _make_card(tool: BuildMode.Tool) -> Button:
-	var card_item := item(tool)
-	var button := ItemCardButton.new()
-	button.set_info(card_item[0], ItemInfo.of(tool))
-	button.name = "Card%s" % card_item[1].capitalize()
-	button.toggle_mode = true
-	button.custom_minimum_size = CARD_SIZE
-	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(press_card.bind(tool))
-	var column := _card_column(button)
-	var picture := TextureRect.new()
-	var path := THUMBNAIL_DIR % card_item[1]
-	if ResourceLoader.exists(path):
-		picture.texture = load(path)
-	elif PLACEHOLDER_THUMBNAILS.has(card_item[1]):
-		var tile := ColorRect.new()
-		tile.color = PLACEHOLDER_COLOR
-		tile.set_anchors_preset(Control.PRESET_FULL_RECT)
-		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		picture.add_child(tile)
-	else:
-		push_error("BuildMenu: no thumbnail at %s" % path)
-	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	picture.custom_minimum_size = Vector2(THUMB_SIZE, THUMB_SIZE)
-	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(picture)
-	var key := key_hint(tool)
-	_card_label(column, card_item[0], &"HudCardName")
-	_card_label(column, _size_text(tool), &"HudHint")
-	_price_labels[tool] = _card_label(column, PRICE_TEXT, &"HudPrice")
-	if CARD_NEEDS.has(tool):
-		var need := _card_label(column, CARD_NEEDS[tool], &"HudAttentionText")
-		need.add_theme_font_size_override("font_size", CARD_HINT_FONT_SIZE)
-		_hint_labels[tool] = need
-	elif running_cost(tool) > 0:
-		_hint_labels[tool] = _card_label(column, RUNNING_COST_TEXT % running_cost(tool), &"HudHint")
-	else:
-		_hint_labels[tool] = _card_label(
-			column, "Key %s" % key if key != "" else _no_key_hint(tool), &"HudHint"
-		)
-	_hint_texts[tool] = _hint_labels[tool].text
-	return button
-
-
-## What a card with no key says: a rectangle tool is drawn by dragging, any
-## other is a click.
-static func _no_key_hint(tool: BuildMode.Tool) -> String:
-	return "Drag" if BuildMode.AREA_TOOLS.has(tool) else "Click"
-
-
-## The Next card, which opens the page after this one.
-func _make_next_card(next: int) -> Button:
-	var button := Button.new()
-	button.name = "CardNext"
-	button.custom_minimum_size = NEXT_SIZE
-	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(press_category.bind(next))
-	var column := _card_column(button)
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	_card_label(column, "Next", &"HudCardName")
-	_card_label(column, categories()[next]["name"], &"HudHint")
-	return button
-
-
-func _card_column(button: Button) -> VBoxContainer:
-	var column := VBoxContainer.new()
-	column.set_anchors_preset(Control.PRESET_FULL_RECT)
-	column.offset_left = 6.0
-	column.offset_top = 6.0
-	column.offset_right = -6.0
-	column.offset_bottom = -6.0
-	column.add_theme_constant_override("separation", 1)
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	button.add_child(column)
-	return column
-
-
-func _card_label(column: VBoxContainer, text: String, variation: StringName) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.clip_text = true
-	label.theme_type_variation = variation
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(label)
-	return label
-
-
-func _size_text(tool: BuildMode.Tool) -> String:
-	if BuildMode.tool_object(tool) != &"":
-		var def := BuildCatalog.get_def(BuildMode.tool_object(tool))
-		return "%dx%d" % [def.size.x, def.size.y]
-	return item(tool)[2]
-
-
-func _build_status() -> void:
-	_status.name = "StatusLine"
-	var bottom := MARGIN + BAR_H + GAP + TRAY_H + GAP
-	_status.anchor_left = 0.5
-	_status.anchor_right = 0.5
-	_status.anchor_top = 1.0
-	_status.anchor_bottom = 1.0
-	_status.offset_left = -COLUMN_W / 2.0
-	_status.offset_right = COLUMN_W / 2.0
-	_status.offset_top = -bottom - STATUS_H
-	_status.offset_bottom = -bottom
-	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status.max_lines_visible = 2
-	_status.theme = HUD_THEME
-	_status.theme_type_variation = &"HudFloatText"
-	_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_status)
-
-
-## The cost line, centred over the status line's box. It sits on the HUD card
-## (the bar's cream, dark-outlined style) with dark text, and the card is only
-## as wide as the text, so it reads over the busy apron stripes.
-func _build_cost() -> void:
-	_cost.name = "CostLine"
-	var bottom := MARGIN + BAR_H + GAP + TRAY_H + GAP + STATUS_H
-	_cost.anchor_left = 0.5
-	_cost.anchor_right = 0.5
-	_cost.anchor_top = 1.0
-	_cost.anchor_bottom = 1.0
-	_cost.offset_left = 0.0
-	_cost.offset_right = 0.0
-	_cost.offset_top = -bottom - COST_H
-	_cost.offset_bottom = -bottom
-	_cost.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_cost.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_cost.theme = HUD_THEME
-	_cost.theme_type_variation = &"HudCardName"
-	var card := HUD_THEME.get_stylebox("panel", "HudBar").duplicate() as StyleBoxFlat
-	card.content_margin_left = COST_PAD_X
-	card.content_margin_right = COST_PAD_X
-	card.content_margin_top = COST_PAD_Y
-	card.content_margin_bottom = COST_PAD_Y
-	_cost.add_theme_stylebox_override("normal", card)
-	_cost.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_cost.visible = false
-	add_child(_cost)
-
-
-func _build_money() -> void:
-	var panel := _money_slot
-	panel.name = "MoneySlot"
-	panel.theme = HUD_THEME
-	panel.position = Vector2(16.0, 12.0)
-	panel.custom_minimum_size = Vector2(220.0, 0.0)
-	add_child(panel)
-	_money.text = MONEY_TEXT
-	_money.theme_type_variation = &"HudMoney"
-	panel.add_child(_money)
+	BuildMenuLayout.anchor_bottom_centre(control, bottom)

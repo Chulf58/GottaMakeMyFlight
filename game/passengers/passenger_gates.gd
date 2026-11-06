@@ -5,6 +5,10 @@ extends RefCounted
 ## boarding file, choosing an exit and stepping out onto the apron. Static
 ## helpers over a sim; the state stays on the sim.
 
+## A body's width, in metres: how far a passenger stepping onto the boarding
+## route stays from the walkers in the files.
+const BODY_M := 0.45
+
 
 ## Gate access needs clearance: only a cleared passenger claims a seat.
 static func to_gate(sim: PassengerSim, p: Passenger) -> void:
@@ -12,8 +16,18 @@ static func to_gate(sim: PassengerSim, p: Passenger) -> void:
 		push_error("PassengerSim: passenger %d reached the gate without clearance" % p.id)
 		return
 	if sim.tick >= p.boarding_tick:
-		sim._release_seat(p)
-		sim._set_stage(p, Passenger.Stage.TO_EXIT)
+		# Boarding is open: the walk to a gate place is cut, at the cell it
+		# stands on (on a cell boundary) or the one it is walking to, and from
+		# rest it steps onto the route when no filed walker is within a body's
+		# width (the security exit cell: hand_off_clear()).
+		if p.is_moving():
+			if p.seg_mm == 0:
+				p.clear_path()
+			elif p.path.size() > p.path_index + 2:
+				p.path = p.path.slice(0, p.path_index + 2)
+		if not p.is_moving() and hand_off_clear(sim, p):
+			sim._release_seat(p)
+			sim._set_stage(p, Passenger.Stage.TO_EXIT)
 		return
 	if p.seat_object == 0:
 		GateCapacity.to_spot(sim, p)
@@ -25,6 +39,36 @@ static func to_gate(sim: PassengerSim, p: Passenger) -> void:
 		sim._set_stage(p, Passenger.Stage.SITTING_DOWN)
 	else:
 		sim._release_seat(p)
+
+
+## Whether passenger `p`, about to turn to the exit from where it stands (the
+## security exit cell, a gate seat's front cell), has a clear slot: no walker in
+## a boarding file or waiting for one within a body's width, and none that can
+## close in this tick within a run step more. Walkers that can close in are
+## those on the move (walking, on the apron, or shifting to or from a wait
+## spot) and those of `p`'s own flight; a stopped walker of another flight
+## outside a body's width does not hold `p`, because the forecast does not
+## model a wait for it. Nothing here waits on `p`: a filed or pending walker is
+## never held for a passenger outside the files, so the wait ends.
+static func hand_off_clear(sim: PassengerSim, p: Passenger) -> bool:
+	var at := sim.world_position(p)
+	var shifting := sim.files.waiters.ids()
+	var near := BODY_M
+	var reach := BODY_M + PassengerSim.RUN_MM / 1000.0
+	for id in sim.passenger_ids():
+		if id == p.id or not sim.files.holds(id):
+			continue
+		var other := sim.get_passenger(id)
+		var moves := other.is_moving() or other.stage == Passenger.Stage.APRON
+		# A waiter on its spot is free to walk back once admitted, which happens
+		# before the tick's moves.
+		var waiting := sim.files.is_pending(id) and sim.files.waiters.at_spot(other)
+		moves = moves or (shifting.has(id) and not waiting)
+		var there := sim.world_position(other)
+		var apart := Vector2(at.x, at.z).distance_to(Vector2(there.x, there.z))
+		if apart < (reach if moves or other.flight_id == p.flight_id else near):
+			return false
+	return true
 
 
 ## The cells of the gate desk of `p`'s flight, empty when there is none to
@@ -80,10 +124,16 @@ static func step_waiting(sim: PassengerSim, p: Passenger) -> void:
 
 static func step_stand_up(sim: PassengerSim, p: Passenger) -> void:
 	if sim.tick - p.stage_tick >= ParkRecovery.stand_up_ticks(p):
+		var visit := StageKinds.visit_facility(sim, p)
+		# Up for the exit: it stays on its front cell until no filed walker
+		# is within a body's width (hand_off_clear()).
+		var for_exit := visit == StageKinds.Facility.NONE and sim.tick >= p.boarding_tick
+		if for_exit and not hand_off_clear(sim, p):
+			return
 		sim._release_seat(p)
 		# Up for a facility visit, or (its visit dropped) back to the
 		# gate while boarding has not started.
-		match StageKinds.visit_facility(sim, p):
+		match visit:
 			StageKinds.Facility.CAFE:
 				sim.cafes.depart(p)
 			StageKinds.Facility.TOILET:
