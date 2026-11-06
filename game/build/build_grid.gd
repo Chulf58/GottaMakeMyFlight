@@ -355,44 +355,7 @@ func passage_cells(object_id: int) -> Array[Vector2i]:
 ## false per cell and checks a whole line's reach at once.
 func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 	_handoff_edit = null
-	var result: BuildResult
-	match edit.kind:
-		BuildEdit.Kind.PAINT_FLOOR:
-			result = _check_paint_floor(edit)
-		BuildEdit.Kind.REMOVE_FLOOR:
-			result = _check_remove_floor(edit.cell)
-		BuildEdit.Kind.PLACE_WALL:
-			result = _check_place_wall(edit.cell, edit.side, edit.wall_kind)
-		BuildEdit.Kind.REMOVE_WALL:
-			result = _check_remove_wall(edit.cell, edit.side)
-		BuildEdit.Kind.PLACE_OBJECT:
-			if _restored_id_taken(edit.object_id, _objects, _next_object_id):
-				result = BuildResult.refused(BuildResult.Reason.OVERLAP, edit.object_id)
-			else:
-				result = _check_place_object(edit.def_id, edit.cell, edit.facing)
-		BuildEdit.Kind.REMOVE_OBJECT:
-			if _objects.has(edit.object_id):
-				result = BuildResult.accepted()
-			else:
-				result = BuildResult.refused(BuildResult.Reason.NO_OBJECT)
-		BuildEdit.Kind.PLACE_ROOM:
-			if _restored_id_taken(edit.room_id, _rooms, _next_room_id):
-				result = BuildResult.refused(BuildResult.Reason.ROOM_OVERLAP)
-			else:
-				result = _check_place_room(Rect2i(edit.cell, edit.room_size), edit.room_type)
-		BuildEdit.Kind.REMOVE_ROOM:
-			if _rooms.has(edit.room_id):
-				result = BuildResult.accepted()
-			else:
-				result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
-		BuildEdit.Kind.RESIZE_ROOM:
-			if _rooms.has(edit.room_id):
-				var kept: StringName = _rooms[edit.room_id]["type"]
-				result = _check_place_room(Rect2i(edit.cell, edit.room_size), kept, edit.room_id)
-			else:
-				result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
-		BuildEdit.Kind.RESHAPE_BELT:
-			result = _check_reshape_belt(edit)
+	var result := GridRules.check(self, edit)
 	if result.ok:
 		var spot_problem := _spots.edit_problem(self, edit)
 		if spot_problem == null:
@@ -405,13 +368,6 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 		if spot_problem != null:
 			result = spot_problem
 	return result
-
-
-## Whether a placement that brings an object or room back under its own id
-## (`id` above 0, an undo) cannot have it: the id is in use or was never
-## handed out. A placement with id 0 gets a fresh one.
-static func _restored_id_taken(id: int, records: Dictionary, next_id: int) -> bool:
-	return id != 0 and (id < 0 or id >= next_id or records.has(id))
 
 
 ## SecurityLanes.officer_spot_problem() for an edit that places an object or
@@ -460,182 +416,12 @@ func staff_reach() -> Dictionary:
 ## tried on the grid data, the reach worked out (one flood fill), and the data
 ## put back. The cost is that flood, and only when some spot is reached now.
 func staff_reach_problem(edits: Array[BuildEdit]) -> BuildResult:
-	_last_after_known = false
-	if not check_staff_reach or _reach_cleared:
-		return null
-	var fresh: Array[Vector2i] = []
-	var narrows := false
-	var parts := false
-	for edit in edits:
-		match edit.kind:
-			BuildEdit.Kind.PLACE_OBJECT:
-				narrows = true
-				parts = parts or SecurityLanes.is_part(edit.def_id)
-				var spot := StaffSpots.cell_of(edit.def_id, edit.cell, edit.facing)
-				if spot != BuildObjectDef.NO_CELL:
-					fresh.append(spot)
-			BuildEdit.Kind.REMOVE_FLOOR, BuildEdit.Kind.PLACE_WALL:
-				narrows = true
-			BuildEdit.Kind.REMOVE_OBJECT:
-				narrows = narrows or _is_entrance(edit.object_id)
-	if not narrows:
-		return null
-	var before := staff_reach()
-	if before.is_empty() or not (parts or _any_spot_reached(before, fresh)):
-		return null
-	var lane_spots := {}
-	_last_after = _reach_after(edits, lane_spots)
-	_last_after_known = true
-	return _reach_problem(before, _last_after, fresh, lane_spots)
+	return GridReach.staff_reach_problem(self, edits)
 
 
-## Whether applying all of `edits` leaves every staff spot staff reach now
-## (and every spot an edit places whose cell they reach now) still reached,
-## judged with one flood: then no edit in the batch can break the reach rule,
-## since the batch only takes cells away and each step leaves at least what
-## the whole batch leaves. False, so each edit is checked on its own, when
-## the batch places or removes an entrance, or places an object the grid
-## refuses as it stands or on a cell an earlier placement in it takes. Edits
-## that only add cells (floor, wall removals, rooms, belt reshapes) are left
-## out of the trial; a spot that only they bring into reach is judged with the
-## batch as one action.
-func _batch_keeps_reach(edits: Array[BuildEdit]) -> bool:
-	var trial: Array[BuildEdit] = []
-	var fresh: Array[Vector2i] = []
-	var claimed := {}
-	var parts := false
-	for edit in edits:
-		match edit.kind:
-			BuildEdit.Kind.REMOVE_FLOOR, BuildEdit.Kind.PLACE_WALL:
-				if not in_bounds(edit.cell) or edit.side < 0 or edit.side > 3:
-					return false
-				trial.append(edit)
-			BuildEdit.Kind.REMOVE_OBJECT:
-				if _is_entrance(edit.object_id):
-					return false
-			BuildEdit.Kind.PLACE_OBJECT:
-				if not _trial_placement(edit, claimed):
-					return false
-				trial.append(edit)
-				parts = parts or SecurityLanes.is_part(edit.def_id)
-				var spot := StaffSpots.cell_of(edit.def_id, edit.cell, edit.facing)
-				if spot != BuildObjectDef.NO_CELL:
-					fresh.append(spot)
-	if trial.is_empty():
-		return true
-	var before := staff_reach()
-	if before.is_empty() or not (parts or _any_spot_reached(before, fresh)):
-		return true
-	var lane_spots := {}
-	var after := _reach_after(trial, lane_spots)
-	return _reach_problem(before, after, fresh, lane_spots) == null
-
-
-## Whether staff reach (`before`) some staff spot now: a station's, a whole
-## lane's officer spot, or one of the `fresh` spots of stations being placed.
-func _any_spot_reached(before: Dictionary, fresh: Array[Vector2i]) -> bool:
-	return _spots.any_reached(before, fresh) or _recognised_lanes().any_reached(before)
-
-
-## The staff reach rule on a station's spot (StaffSpots.reach_problem()), on
-## a whole lane's officer spots (SecurityLanes.reach_problem()), then on the
-## officer spots of lanes the edits complete (`lane_spots`, spot -> arch, from
-## _reach_after()): one staff reach now that `after` loses is refused, naming
-## the arch when it already stands, as a placed station's spot names none.
-func _reach_problem(
-	before: Dictionary, after: Dictionary, fresh: Array[Vector2i], lane_spots: Dictionary
-) -> BuildResult:
-	var problem := _spots.reach_problem(before, after, fresh)
-	if problem == null:
-		problem = _recognised_lanes().reach_problem(before, after)
-	if problem != null:
-		return problem
-	for spot: Vector2i in lane_spots:
-		if before.has(spot) and not after.has(spot):
-			var arch: int = lane_spots[spot]
-			return BuildResult.refused(
-				BuildResult.Reason.STAFF_SPOT, arch if _objects.has(arch) else 0
-			)
-	return null
-
-
-## Whether a placement can join _batch_keeps_reach()'s trial: not an
-## entrance, accepted on the grid as it stands, and on cells (footprint and
-## interaction cell) no earlier placement in `claimed` takes. Claims its cells.
-func _trial_placement(edit: BuildEdit, claimed: Dictionary) -> bool:
-	if edit.def_id == StaffSpots.ENTRANCE:
-		return false
-	if not _check_place_object(edit.def_id, edit.cell, edit.facing).ok:
-		return false
-	var def := BuildCatalog.get_def(edit.def_id)
-	var cells := def.footprint(edit.cell, edit.facing)
-	var front := def.interaction_cell(edit.cell, edit.facing)
-	if front != BuildObjectDef.NO_CELL:
-		cells.append(front)
-	if cells.any(func(cell: Vector2i) -> bool: return claimed.has(cell)):
-		return false
-	for cell in cells:
-		claimed[cell] = true
-	return true
-
-
-func _is_entrance(object_id: int) -> bool:
-	return _objects.has(object_id) and _objects[object_id]["def"] == StaffSpots.ENTRANCE
-
-
-## StaffSpots.reach() of the grid as `edits` would leave it. Each edit that can
-## take cells away is written into the grid data (an object under an unused
-## id), the flood runs, and every write is undone in reverse order, so the
-## grid is exactly as it was. Nothing is emitted and the A* graph is untouched.
-## When an edit places a lane part, the lanes are recognised on the written
-## grid too, and the officer spots of lanes whole there and not as the grid
-## stands go into `lane_spots` (spot -> arch).
-func _reach_after(edits: Array[BuildEdit], lane_spots: Dictionary) -> Dictionary:
-	var standing := _recognised_lanes()
-	var parts := false
-	var undo := []
-	var trial_id := _next_object_id
-	for edit in edits:
-		match edit.kind:
-			BuildEdit.Kind.REMOVE_FLOOR:
-				undo.append([edit, _floor[_index(edit.cell)]])
-				_floor[_index(edit.cell)] = FLOOR_NONE
-			BuildEdit.Kind.PLACE_WALL:
-				undo.append([edit, _wall_value(edit.cell, edit.side)])
-				_set_wall(edit.cell, edit.side, edit.wall_kind)
-			BuildEdit.Kind.PLACE_OBJECT:
-				undo.append([edit, trial_id])
-				_insert_object(trial_id, edit.def_id, edit.cell, edit.facing)
-				trial_id += 1
-				parts = parts or SecurityLanes.is_part(edit.def_id)
-			BuildEdit.Kind.REMOVE_OBJECT:
-				# Only an entrance's removal takes cells away; it has no spot.
-				if _is_entrance(edit.object_id):
-					undo.append([edit, _objects[edit.object_id]])
-					_erase_object(edit.object_id)
-	var reach := StaffSpots.reach(self)
-	if parts:
-		var trial_lanes := SecurityLanes.new()
-		trial_lanes.rebuild(self)
-		lane_spots.merge(trial_lanes.new_officer_spots(standing))
-	for i in range(undo.size() - 1, -1, -1):
-		var edit: BuildEdit = undo[i][0]
-		match edit.kind:
-			BuildEdit.Kind.REMOVE_FLOOR:
-				_floor[_index(edit.cell)] = undo[i][1]
-			BuildEdit.Kind.PLACE_WALL:
-				_set_wall(edit.cell, edit.side, undo[i][1])
-			BuildEdit.Kind.PLACE_OBJECT:
-				_erase_object(undo[i][1])
-			BuildEdit.Kind.REMOVE_OBJECT:
-				var record: Dictionary = undo[i][1]
-				_insert_object(edit.object_id, record["def"], record["anchor"], record["facing"])
-				_objects[edit.object_id] = record
-	return reach
-
-
-## StationUseCells.answers() with `def_id` written in under an unused id as _reach_after()
-## does (unchecked, silent, A* untouched), then put back; {} when off the grid.
+## StationUseCells.answers() with `def_id` written in under an unused id as
+## GridReach._reach_after() does (unchecked, silent, A* untouched), then put
+## back; {} when off the grid.
 func trial_answers(def_id: StringName, at: Vector2i, turn: int) -> Dictionary:
 	var def := BuildCatalog.get_def(def_id)
 	var cells := def.footprint(at, turn) + [def.interaction_cell(at, turn)]
@@ -671,8 +457,8 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 	var results: Array[BuildResult] = []
 	var dirty: Array[Vector2i] = []
 	# One flood for the whole batch when it keeps every reached spot reached
-	# (_batch_keeps_reach()); otherwise each edit is checked as it comes.
-	_reach_cleared = check_staff_reach and _batch_keeps_reach(edits)
+	# (GridReach.batch_keeps_reach()); otherwise each edit is checked as it comes.
+	_reach_cleared = check_staff_reach and GridReach.batch_keeps_reach(self, edits)
 	for edit in edits:
 		var result := _commit(edit)
 		results.append(result)
@@ -697,7 +483,7 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 func apply_sequence(edits: Array[BuildEdit], rule: Callable) -> BuildResult:
 	var result := BuildResult.accepted()
 	var dirty: Array[Vector2i] = []
-	_reach_cleared = check_staff_reach and _batch_keeps_reach(edits)
+	_reach_cleared = check_staff_reach and GridReach.batch_keeps_reach(self, edits)
 	for edit in edits:
 		var problem: BuildResult = rule.call(self, edit) if rule.is_valid() else null
 		if problem != null:
@@ -847,49 +633,7 @@ func nearest_side(world: Vector3) -> Side:
 ## JSON-safe state for a save. Occupancy, reservations and the A* graph are
 ## derived, so they are rebuilt on load rather than stored.
 func to_snapshot() -> Dictionary:
-	var objects := []
-	var ids := object_ids()
-	ids.sort()
-	for object_id in ids:
-		var record: Dictionary = _objects[object_id]
-		var anchor: Vector2i = record["anchor"]
-		var entry := {
-			"id": object_id,
-			"def": str(record["def"]),
-			"anchor": [anchor.x, anchor.y],
-			"facing": record["facing"],
-			"paid": record["paid"],
-		}
-		objects.append(entry)
-	var rooms := []
-	for room_id in room_ids():
-		var area: Rect2i = _rooms[room_id]["rect"]
-		(
-			rooms
-			. append(
-				{
-					"id": room_id,
-					"type": str(_rooms[room_id]["type"]),
-					"rect": [area.position.x, area.position.y, area.size.x, area.size.y],
-				}
-			)
-		)
-	return {
-		"width": size.x,
-		"height": size.y,
-		"floor": Array(_floor),
-		"zone": Array(_zone),
-		"h_walls": Array(_h_walls),
-		"v_walls": Array(_v_walls),
-		"objects": objects,
-		"next_object_id": _next_object_id,
-		"origin": [origin.x, origin.y, origin.z],
-		"rooms": rooms,
-		"next_room_id": _next_room_id,
-		"floor_paid": Array(_floor_paid),
-		"h_walls_paid": Array(_h_paid),
-		"v_walls_paid": Array(_v_paid),
-	}
+	return BuildGridSave.to_snapshot(self)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
@@ -902,42 +646,8 @@ func to_snapshot() -> Dictionary:
 ## returns false, leaving the grid unchanged, when anything is missing,
 ## malformed or breaks a rule.
 func from_snapshot(data: Dictionary) -> bool:
-	var problem := BuildGridSnapshot.problem(data)
-	var loaded: BuildGrid = null
-	if problem == "":
-		var loaded_size := Vector2i(int(data["width"]), int(data["height"]))
-		var at := centred_origin(loaded_size)
-		if data.has("origin"):
-			at = Vector3(data["origin"][0], data["origin"][1], data["origin"][2])
-		loaded = BuildGrid.new(loaded_size, at)
-		problem = loaded._load_cells(data)
-	if problem != "":
-		push_error("BuildGrid.from_snapshot: %s" % problem)
+	if not BuildGridSave.load_into(self, data):
 		return false
-	size = loaded.size
-	origin = loaded.origin
-	_floor = loaded._floor
-	_zone = loaded._zone
-	_h_walls = loaded._h_walls
-	_v_walls = loaded._v_walls
-	_occupant = loaded._occupant
-	_reserved = loaded._reserved
-	_spots = loaded._spots
-	_objects = loaded._objects
-	_next_object_id = loaded._next_object_id
-	_rooms = loaded._rooms
-	_room_at = loaded._room_at
-	_next_room_id = loaded._next_room_id
-	_floor_paid = loaded._floor_paid
-	_h_paid = loaded._h_paid
-	_v_paid = loaded._v_paid
-	_outside = loaded._outside
-	_built = loaded._built
-	_enclosure_stale = false
-	_pathing = loaded._pathing
-	_staff_pathing = loaded._staff_pathing
-	_staff_reach_known = false
-	_lanes = null
 	if recorder != null:
 		recorder.replaced = true
 	var every: Array[Vector2i] = []
@@ -954,41 +664,7 @@ func from_snapshot(data: Dictionary) -> bool:
 ## built when a path is first asked for; its signals are its own, and it has
 ## no recorder. On the 86x150 site a snapshot copy took about 0.7 s.
 func clone() -> BuildGrid:
-	var copy := _blank_copy()
-	copy.size = size
-	copy.origin = origin
-	copy.check_staff_reach = check_staff_reach
-	copy._floor = _floor.duplicate()
-	copy._zone = _zone.duplicate()
-	copy._h_walls = _h_walls.duplicate()
-	copy._v_walls = _v_walls.duplicate()
-	copy._occupant = _occupant.duplicate()
-	copy._reserved = _reserved.duplicate()
-	copy._spots = StaffSpots.new()
-	copy._objects = {}
-	var ids := object_ids()
-	ids.sort()
-	for object_id in ids:
-		var record: Dictionary = _objects[object_id].duplicate(true)
-		copy._objects[object_id] = record
-		copy._spots.add(
-			object_id, StaffSpots.cell_of(record["def"], record["anchor"], record["facing"])
-		)
-	copy._next_object_id = _next_object_id
-	copy._rooms = {}
-	for room_id in room_ids():
-		copy._rooms[room_id] = _rooms[room_id].duplicate(true)
-	copy._room_at = _room_at.duplicate()
-	copy._next_room_id = _next_room_id
-	copy._floor_paid = _floor_paid.duplicate()
-	copy._h_paid = _h_paid.duplicate()
-	copy._v_paid = _v_paid.duplicate()
-	copy._outside = _outside.duplicate()
-	copy._built = _built
-	copy._enclosure_stale = _enclosure_stale
-	copy._staff_reach = _staff_reach.duplicate()
-	copy._staff_reach_known = _staff_reach_known
-	return copy
+	return BuildGridSave.clone(self)
 
 
 ## A plain BuildGrid of only `area` of this grid, cell (0, 0) at `area`'s
@@ -998,57 +674,7 @@ func clone() -> BuildGrid:
 ## load took about 20 ms, most of it building that graph. Every object and room
 ## must lie inside `area`; otherwise pushes an error and returns null.
 func cropped(area: Rect2i) -> BuildGrid:
-	var copy := BuildGrid.new(area.size, origin + Vector3(area.position.x, 0.0, area.position.y))
-	var shift := -area.position
-	for id in _objects:
-		var record: Dictionary = _objects[id].duplicate(true)
-		var cells := BuildCatalog.get_def(record["def"]).footprint(
-			record["anchor"], record["facing"]
-		)
-		for cell in cells:
-			if not area.has_point(cell):
-				push_error("BuildGrid.cropped: object %d lies outside %s" % [id, area])
-				return null
-		record["anchor"] += shift
-		copy._objects[id] = record
-		copy._spots.add(id, StaffSpots.cell_of(record["def"], record["anchor"], record["facing"]))
-	for id in _rooms:
-		var room: Dictionary = _rooms[id].duplicate(true)
-		if not area.encloses(room["rect"]):
-			push_error("BuildGrid.cropped: room %d lies outside %s" % [id, area])
-			return null
-		room["rect"] = Rect2i(room["rect"].position + shift, room["rect"].size)
-		copy._rooms[id] = room
-	var cells := [area.position.x, area.size.x, area.position.y, area.size.y]
-	var north_south := [area.position.x, area.size.x, area.position.y, area.size.y + 1]
-	var west_east := [area.position.x, area.size.x + 1, area.position.y, area.size.y]
-	copy._floor = _window(_floor, size.x, cells)
-	copy._zone = _window(_zone, size.x, cells)
-	copy._floor_paid = _window(_floor_paid, size.x, cells)
-	copy._occupant = _window(_occupant, size.x, cells)
-	copy._reserved = _window(_reserved, size.x, cells)
-	copy._room_at = _window(_room_at, size.x, cells)
-	copy._h_walls = _window(_h_walls, size.x, north_south)
-	copy._h_paid = _window(_h_paid, size.x, north_south)
-	copy._v_walls = _window(_v_walls, size.x + 1, west_east)
-	copy._v_paid = _window(_v_paid, size.x + 1, west_east)
-	copy._next_object_id = _next_object_id
-	copy._next_room_id = _next_room_id
-	copy._built = TerminalEnclosure.built_area(copy.size, copy._floor, copy._h_walls, copy._v_walls)
-	copy._outside = TerminalEnclosure.outside_within(
-		copy, copy._h_walls, copy._v_walls, copy.flood_area()
-	)
-	return copy
-
-
-## The values of `window` [x, width, y, height] out of `values`, a row-major
-## packed array `stride` values wide, row by row, in an array of its type.
-static func _window(values: Variant, stride: int, window: Array) -> Variant:
-	var out: Variant = values.slice(0, 0)
-	for y in range(window[2], window[2] + window[3]):
-		var start: int = y * stride + window[0]
-		out.append_array(values.slice(start, start + window[1]))
-	return out
+	return BuildGridSave.cropped(self, area)
 
 
 ## An empty grid of this grid's class for clone() to fill. A subclass whose
@@ -1085,152 +711,6 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_enclosure_stale = false
 
 
-## Fills this fresh grid from a structurally valid snapshot and returns a
-## problem string, or "" on success.
-func _load_cells(data: Dictionary) -> String:
-	for i in _floor.size():
-		_floor[i] = int(data["floor"][i])
-		_zone[i] = int(data["zone"][i])
-	for i in _h_walls.size():
-		_h_walls[i] = int(data["h_walls"][i])
-	for i in _v_walls.size():
-		_v_walls[i] = int(data["v_walls"][i])
-	var door_problem := _door_walls_problem()
-	if door_problem != "":
-		return door_problem
-	var paid_problem := _load_paid(data)
-	if paid_problem != "":
-		return paid_problem
-	var room_problem := _load_rooms(data)
-	if room_problem != "":
-		return room_problem
-	for entry in data["objects"]:
-		var anchor := Vector2i(int(entry["anchor"][0]), int(entry["anchor"][1]))
-		var def_id := StringName(entry["def"])
-		var problem := _load_object_problem(entry, def_id, anchor)
-		if problem != "":
-			return problem
-		var paid := int(entry.get("paid", 0))
-		_insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
-	_next_object_id = int(data["next_object_id"])
-	_built = TerminalEnclosure.built_area(size, _floor, _h_walls, _v_walls)
-	_outside = TerminalEnclosure.outside_within(self, _h_walls, _v_walls, flood_area())
-	_pathing = GridPathing.new()
-	_pathing.rebuild(self)
-	_staff_pathing = null
-	return ""
-
-
-## Why a snapshot's object entry cannot be loaded, or "".
-func _load_object_problem(entry: Dictionary, def_id: StringName, anchor: Vector2i) -> String:
-	var id := int(entry["id"])
-	var check := _check_place_object(def_id, anchor, int(entry["facing"]))
-	if not check.ok:
-		return "object %d refused: %s" % [id, check.reason_text()]
-	var paid := int(entry.get("paid", 0))
-	# No price history yet, so today's price caps what was paid. A belt
-	# piece keeps its price when it changes shape (RESHAPE_BELT), so the
-	# dearest belt piece caps every belt piece.
-	if paid > 0 and paid > _paid_cap(def_id):
-		return "object %d paid %d, more than its price" % [id, paid]
-	return ""
-
-
-## Fills the saved purchase prices from the optional PAID_KEYS and returns a
-## problem string, or "". Floor and walls must already be loaded. A price on a
-## cell with no floor or an edge with no wall could never have been paid, and
-## neither could one above today's PriceTable price for the piece: there is no
-## price history, so today's price is the cap.
-func _load_paid(data: Dictionary) -> String:
-	if not data.has(PAID_KEYS[0]):
-		return ""
-	for i in _floor_paid.size():
-		_floor_paid[i] = int(data["floor_paid"][i])
-		var cap := 0 if _floor[i] == FLOOR_NONE else PriceTable.price_of_floor()
-		if _floor_paid[i] > cap:
-			return "floor_paid %d at index %d is more than %d" % [_floor_paid[i], i, cap]
-	for i in _h_paid.size():
-		_h_paid[i] = int(data["h_walls_paid"][i])
-		var problem := _wall_paid_problem("h_walls_paid", i, _h_paid[i], _h_walls[i])
-		if problem != "":
-			return problem
-	for i in _v_paid.size():
-		_v_paid[i] = int(data["v_walls_paid"][i])
-		var problem := _wall_paid_problem("v_walls_paid", i, _v_paid[i], _v_walls[i])
-		if problem != "":
-			return problem
-	return ""
-
-
-func _wall_paid_problem(key: String, i: int, paid: int, kind: int) -> String:
-	var cap := 0 if kind == WallKind.NONE else PriceTable.price_of_wall(kind)
-	if paid > cap:
-		return "%s %d at index %d is more than %d" % [key, paid, i, cap]
-	return ""
-
-
-## Re-places the snapshot's rooms through the placement rules and returns a
-## problem string, or "". The floor must already be loaded.
-func _load_rooms(data: Dictionary) -> String:
-	if not data.has("rooms"):
-		return ""
-	for entry in data["rooms"]:
-		var r: Array = entry["rect"]
-		var area := Rect2i(int(r[0]), int(r[1]), int(r[2]), int(r[3]))
-		var type := StringName(entry["type"])
-		var check := _check_place_room(area, type)
-		if not check.ok:
-			return "room %d refused: %s" % [int(entry["id"]), check.reason_text()]
-		_insert_room(int(entry["id"]), type, area)
-	_next_room_id = int(data["next_room_id"])
-	return ""
-
-
-func _check_paint_floor(edit: BuildEdit) -> BuildResult:
-	if not in_bounds(edit.cell):
-		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	if edit.floor_type < 1 or edit.floor_type > MAX_FLOOR_TYPE:
-		return BuildResult.refused(BuildResult.Reason.BAD_FLOOR_TYPE)
-	if edit.zone_id < 0:
-		return BuildResult.refused(BuildResult.Reason.BAD_ZONE)
-	return BuildResult.accepted()
-
-
-func _check_remove_floor(cell: Vector2i) -> BuildResult:
-	if not in_bounds(cell):
-		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	var i := _index(cell)
-	if _floor[i] == FLOOR_NONE:
-		return BuildResult.refused(BuildResult.Reason.NO_FLOOR)
-	if _occupant[i] != 0:
-		return BuildResult.refused(BuildResult.Reason.OCCUPIED, _occupant[i])
-	if _reserved[i] != 0:
-		return BuildResult.refused(BuildResult.Reason.INTERACTION_RESERVED, _reserved[i])
-	if _room_at[i] != 0:
-		return BuildResult.refused(BuildResult.Reason.IN_ROOM)
-	return BuildResult.accepted()
-
-
-## A room needs a known type and a non-empty rectangle of floor cells inside
-## the grid that no other room covers (`own_id`, a room being resized, does
-## not count as another). Its minimum size is not a placement rule: RoomRules
-## shows it as a note, so a tuning change never refuses a save.
-func _check_place_room(area: Rect2i, type: StringName, own_id := 0) -> BuildResult:
-	if RoomTypes.get_type(type) == null:
-		return BuildResult.refused(BuildResult.Reason.UNKNOWN_ROOM_TYPE)
-	var has_cells := area.size.x > 0 and area.size.y > 0
-	if not has_cells or not in_bounds(area.position) or not in_bounds(area.end - Vector2i.ONE):
-		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	for y in range(area.position.y, area.end.y):
-		for x in range(area.position.x, area.end.x):
-			var i := _index(Vector2i(x, y))
-			if _floor[i] == FLOOR_NONE:
-				return BuildResult.refused(BuildResult.Reason.NO_FLOOR)
-			if _room_at[i] != 0 and _room_at[i] != own_id:
-				return BuildResult.refused(BuildResult.Reason.ROOM_OVERLAP)
-	return BuildResult.accepted()
-
-
 func _insert_room(room_id: int, type: StringName, area: Rect2i) -> void:
 	_rooms[room_id] = {"type": type, "rect": area}
 	_fill_room_cells(area, room_id)
@@ -1253,176 +733,11 @@ func _fill_room_cells(area: Rect2i, value: int) -> void:
 			_room_at[_index(Vector2i(x, y))] = value
 
 
-## A wall of `kind` on an empty edge, or in place of a wall of another kind.
-## A door needs a plain wall in line on both sides, and a plain wall beside a
-## door cannot change while the door stands.
-func _check_place_wall(cell: Vector2i, side: int, kind: int) -> BuildResult:
-	if not in_bounds(cell) or side < 0 or side > 3:
-		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	var problem := _wall_kind_problem(cell, side, kind)
-	if problem == null and _wall_value(cell, side) == WallKind.NONE:
-		problem = _wall_object_problem(cell, side)
-	return problem if problem != null else BuildResult.accepted()
-
-
-## A refusal when `kind` cannot go on the edge as things stand, or null.
-func _wall_kind_problem(cell: Vector2i, side: int, kind: int) -> BuildResult:
-	if kind < WallKind.PLAIN or kind > MAX_WALL_KIND:
-		return BuildResult.refused(BuildResult.Reason.BAD_WALL_KIND)
-	var existing := _wall_value(cell, side)
-	if existing == kind:
-		return BuildResult.refused(BuildResult.Reason.WALL_EXISTS)
-	if kind == WallKind.DOOR and not _between_plain_walls(cell, side):
-		return BuildResult.refused(BuildResult.Reason.DOOR_NEEDS_WALLS)
-	if existing == WallKind.PLAIN and _beside_door(cell, side):
-		return BuildResult.refused(BuildResult.Reason.WALL_HOLDS_DOOR)
-	return null
-
-
-## A refusal when a new wall on the edge would cut through an object or shut
-## an object off from its interaction cell, or null.
-func _wall_object_problem(cell: Vector2i, side: int) -> BuildResult:
-	var other := cell + SIDE_STEP[side]
-	if not in_bounds(other):
-		return null
-	var here := _occupant[_index(cell)]
-	var there := _occupant[_index(other)]
-	if here != 0 and here == there:
-		return BuildResult.refused(BuildResult.Reason.WALL_IN_FOOTPRINT, here)
-	for pair in [[here, other], [there, cell]]:
-		if pair[0] != 0 and _reserved[_index(pair[1])] == pair[0]:
-			return BuildResult.refused(BuildResult.Reason.INTERACTION_BLOCKED, pair[0])
-	return null
-
-
-func _check_remove_wall(cell: Vector2i, side: int) -> BuildResult:
-	if not in_bounds(cell) or side < 0 or side > 3:
-		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	var existing := _wall_value(cell, side)
-	if existing == WallKind.NONE:
-		return BuildResult.refused(BuildResult.Reason.NO_WALL)
-	if existing == WallKind.PLAIN and _beside_door(cell, side):
-		return BuildResult.refused(BuildResult.Reason.WALL_HOLDS_DOOR)
-	return BuildResult.accepted()
-
-
-## The two edges in line with an edge, one at either end, as [cell, side]
-## pairs on the same side. Either may lie outside the grid.
-func _inline_edges(cell: Vector2i, side: int) -> Array:
-	var along := Vector2i(1, 0) if side == Side.NORTH or side == Side.SOUTH else Vector2i(0, 1)
-	return [[cell - along, side], [cell + along, side]]
-
-
-func _between_plain_walls(cell: Vector2i, side: int) -> bool:
-	for edge in _inline_edges(cell, side):
-		if wall_kind(edge[0], edge[1]) != WallKind.PLAIN:
-			return false
-	return true
-
-
-func _beside_door(cell: Vector2i, side: int) -> bool:
-	for edge in _inline_edges(cell, side):
-		if wall_kind(edge[0], edge[1]) == WallKind.DOOR:
-			return true
-	return false
-
-
-## A problem string for the first door edge without a plain wall in line on
-## both sides, or "". Visits every edge once: north and west of each cell, the
-## south of the last row and the east of the last column.
-func _door_walls_problem() -> String:
-	for y in size.y:
-		for x in size.x:
-			var cell := Vector2i(x, y)
-			var sides := [Side.NORTH, Side.WEST]
-			if y == size.y - 1:
-				sides.append(Side.SOUTH)
-			if x == size.x - 1:
-				sides.append(Side.EAST)
-			for side in sides:
-				var is_door := _wall_value(cell, side) == WallKind.DOOR
-				if is_door and not _between_plain_walls(cell, side):
-					return "door at %s side %d needs a plain wall on each side" % [cell, side]
-	return ""
-
-
-func _check_place_object(def_id: StringName, anchor: Vector2i, facing: int) -> BuildResult:
-	var def := BuildCatalog.get_def(def_id)
-	if def == null:
-		return BuildResult.refused(BuildResult.Reason.UNKNOWN_OBJECT)
-	if facing < 0 or facing > 3:
-		return BuildResult.refused(BuildResult.Reason.BAD_FACING)
-	var cells := def.footprint(anchor, facing)
-	var problem := _footprint_problem(cells)
-	if problem != null:
-		return problem
-	problem = interaction_problem(def.interaction_cell(anchor, facing), cells)
-	if problem != null:
-		return problem
-	return BuildResult.accepted()
-
-
-## A refusal for the first footprint cell that cannot take an object, or null.
-func _footprint_problem(cells: Array[Vector2i]) -> BuildResult:
-	for cell in cells:
-		if not in_bounds(cell):
-			return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	for cell in cells:
-		var i := _index(cell)
-		if _floor[i] == FLOOR_NONE:
-			return BuildResult.refused(BuildResult.Reason.NO_FLOOR)
-		if _occupant[i] != 0:
-			return BuildResult.refused(BuildResult.Reason.OVERLAP, _occupant[i])
-		if _reserved[i] != 0:
-			return BuildResult.refused(BuildResult.Reason.INTERACTION_RESERVED, _reserved[i])
-		for side in [Side.EAST, Side.SOUTH]:
-			if cells.has(cell + SIDE_STEP[side]) and _wall_value(cell, side) != 0:
-				return BuildResult.refused(BuildResult.Reason.WALL_IN_FOOTPRINT)
-	return null
-
-
 ## A refusal when the interaction cell is unusable, or null. The cell must be
 ## free floor that no other object claims, with no wall between it and the
 ## footprint. The build ghost asks it too (StationUseCells).
 func interaction_problem(spot: Vector2i, cells: Array[Vector2i]) -> BuildResult:
-	if spot == BuildObjectDef.NO_CELL:
-		return null
-	if not in_bounds(spot) or _floor[_index(spot)] == FLOOR_NONE:
-		return BuildResult.refused(BuildResult.Reason.INTERACTION_BLOCKED)
-	var i := _index(spot)
-	if _occupant[i] != 0:
-		return BuildResult.refused(BuildResult.Reason.INTERACTION_BLOCKED, _occupant[i])
-	if _reserved[i] != 0:
-		return BuildResult.refused(BuildResult.Reason.INTERACTION_RESERVED, _reserved[i])
-	for side in 4:
-		if cells.has(spot + SIDE_STEP[side]) and _wall_value(spot, side) != 0:
-			return BuildResult.refused(BuildResult.Reason.INTERACTION_BLOCKED)
-	return null
-
-
-## The most a saved object of `def_id` can have been bought for.
-static func _paid_cap(def_id: StringName) -> int:
-	if not BuildCatalog.is_belt(def_id):
-		return PriceTable.price_of_object(def_id)
-	var cap := 0
-	for id in BuildCatalog.BELT_IDS:
-		cap = maxi(cap, PriceTable.price_of_object(id))
-	return cap
-
-
-## A belt piece on the cell can become any belt piece at any facing.
-func _check_reshape_belt(edit: BuildEdit) -> BuildResult:
-	if not in_bounds(edit.cell):
-		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	var object_id := object_at(edit.cell)
-	if object_id == 0:
-		return BuildResult.refused(BuildResult.Reason.NO_OBJECT)
-	var was_belt := BuildCatalog.is_belt(_objects[object_id]["def"])
-	if not was_belt or not BuildCatalog.is_belt(edit.def_id):
-		return BuildResult.refused(BuildResult.Reason.NOT_A_BELT, object_id)
-	if edit.facing < 0 or edit.facing > 3:
-		return BuildResult.refused(BuildResult.Reason.BAD_FACING)
-	return BuildResult.accepted()
+	return GridRules.interaction_problem(self, spot, cells)
 
 
 func _insert_object(
