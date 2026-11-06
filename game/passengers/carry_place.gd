@@ -308,7 +308,7 @@ static func bag_transform(
 				held, CarryOnProps.bag_box(kind), scale_by, i, count
 			)
 			if not fixed.is_empty():
-				return fixed[0]
+				return _off_walls(props, held, kind, fixed[0])
 			# From where the sim draws the body, not where it stands while it
 			# sets its roller down (SitHold.offset()), so the bag stays put.
 			var id: int = props._body_ids.get(body, -1)
@@ -317,8 +317,26 @@ static func bag_transform(
 				at = held["floor_at"][i]
 			var placed: Transform3D = RollerPark.lay_frame(held["bags"][i], at) * held["floor"][i]
 			placed.origin.y = props.sim.grid.origin.y
-			return Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)
+			var scaled := Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)
+			return _off_walls(props, held, kind, scaled)
 	return carry_transform(props, held, body, i, reach)
+
+
+## A roller lying on the floor at `xf` (world) moved out of the walls round it
+## (ParkWalls.shift(), PullSide.walls_near()), as its set-down's move draws it
+## (this is that move's end, "want") and as it lies settled after it: at a
+## seat walled on both sides the floor spot beside the feet reached into the
+## wall, and only the move was kept out of it, so the settled roller snapped
+## back in (board a40fdbaf). Worked out from `xf` alone, so it is the same on
+## every frame and after a load. Not in a toilet stall, whose walls are the
+## stall's own.
+static func _off_walls(
+	props: CarryOnProps, held: Dictionary, kind: SecurityLooks.Kind, xf: Transform3D
+) -> Transform3D:
+	if kind != SecurityLooks.Kind.ROLLER or held.get("in_stall", false) or props.sim == null:
+		return xf
+	xf.origin += ParkWalls.shift(xf, PullSide.walls_near(props.sim.grid, xf.origin))
+	return xf
 
 
 ## A carried bag's transform, its kind's way (the header), or `carry`'s way.

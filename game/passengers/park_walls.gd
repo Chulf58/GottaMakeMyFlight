@@ -2,34 +2,32 @@ class_name ParkWalls
 extends RefCounted
 ## Keeps a parked roller out of the walls beside a seat (board a40fdbaf).
 ## ParkSide first puts the hand, and so the park, on the open side; this is the
-## backstop for a seat walled on both sides and for a roller carried with the
-## body past a wall (the roll upright and the tip out through the lounge door,
-## whose jamb the tip grazed on its last frame). A
-## RollerPark move stamped with a seat's face (a gate chair, a cafe seat, a
-## booth, a sofa or nap pod) parks the roller standing PARK_SIDE_M out on the
-## hand's side, wherever the walls are. BoothRoller.fix_start() keeps, for such
-## a move, the walls round the walker as finite boxes (PullSide.walls_near(),
-## doors left out), and RollerPark.plan() moves the park out of them by
-## shift(), and then every frame of the move as it is drawn (the lift to the
-## park, the roll upright and the tip): at the lounge sofa's west seat the
-## park stood 0.04 m into the end of the wall beside the door, and the lift,
-## the park and the roll upright all drew the roller in it
+## backstop for a seat walled on both sides. A RollerPark move stamped with a
+## seat's face (a gate chair, a cafe seat, a booth, a sofa or nap pod) parks the
+## roller standing PARK_SIDE_M out on the hand's side. BoothRoller.fix_start()
+## keeps, for such a move, the walls round the walker as finite boxes
+## (PullSide.walls_near(), doors left out), and RollerPark.plan() moves the park
+## out of them by shift(), once for the move: the lift, the park, the roll
+## upright and the tip are all drawn from that one park, so the way out is the
+## same on every frame (moved frame by frame, a roller turning about a wall's
+## end flipped from along to across in one frame, 0.057 m). The roller lying on
+## the floor is moved the same way (CarryPlace._off_walls()), the set-down's end
+## and the settled roller alike. Before ParkSide, the lounge sofa's west seat
+## parked the roller 0.04 m into the end of the wall beside the door
 ## (roller_park_walls_probe, wall_22_113_3).
 ##
 ## The way out is the shortest one for each wall in turn, in the wall's own
-## frame: along it, past the wall's end, or across it, out of its face. At the
-## sofa that is along the wall, past its end, not towards the guest's legs. A
-## shift is worked out from the roller's transform alone, never from the hand:
-## the park's (its frame, hand and scale, fixed for the move) is the same on
-## every frame, so the roller lifted to it and rolled from it with the body
-## starts from the moved park. What it does not guarantee: that the shifted
-## park is clear of furniture, of the guest's legs (a park pushed across a
-## wall's middle comes nearer the body) or of a wall the boxes left out
-## (more than PullSide.REACH_CELLS from the walker's cell as the move was stamped).
+## frame: along it, past the wall's end, or across it, out of its face. A
+## shift is worked out from the roller's transform alone, never from the hand.
+## What it does not guarantee: that the shifted roller is clear of furniture, of
+## the guest's legs (a park pushed across a wall's middle comes nearer the
+## body), of a wall the boxes left out (more than PullSide.REACH_CELLS from the
+## walker's cell as the move was stamped), or of a wall it is carried past (the
+## tip out through the lounge door grazes the jamb, at depth 0, on its last
+## frame).
 
 ## A wall is read this much thicker and longer, so a roller that only touches
-## its face or end (the drawn mesh grazed the end of the wall beside the lounge
-## door on the tip's last frame) is moved clear of it.
+## its face or end is moved clear of it, not left touching it.
 const SLACK_M := 0.005
 ## Passes over the walls: a move out of one wall can put the park in the next
 ## one along.
