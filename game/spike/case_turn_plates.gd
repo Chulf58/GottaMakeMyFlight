@@ -2,36 +2,42 @@ class_name CaseTurnPlates
 extends RefCounted
 ## Close plates of a hard case in the hand part way through its turn from the
 ## side carry to the front carry (CaseTurn, board a82c613f), for the booth
-## crossing probe (basic_scanner_crossing_probe.gd calls scan() from its
-## _on_tick). With `--case-turn-plate=<passenger id>` the probe plates that
+## crossing probe (basic_scanner_crossing_probe.gd calls scan() first on each
+## sim tick). With `--case-turn-plate=<passenger id>` the probe plates that
 ## passenger's first turn to the front, when the case has turned TURN_LO to
 ## TURN_HI of the way, from each side of the body at SIDE_M, the sim clock
-## paused. `--case-turn-tag=<name>` names the plates (case_turn_<tag>_<side>),
-## so a run with the fix switched off can be told apart. Each plate is kept
-## only when the body's and the case's drawn bounds project inside the frame,
-## the body is shown (PlateSight.person_shown: sight lines land on it, none
-## blocked) and the case is seen (probe._bag_seen); a side tries SIDE_TURNS
-## about the side before it gives up. A side with no plate, or a target
-## passenger past security never plated, prints PROBE_INVALID.
+## paused. The turn lasts a few ticks, so once that passenger is at security
+## with a case in hand and no other plate runs, the plate task is held for it
+## (no other plate starts) until the turn. `--case-turn-tag=<name>` names the
+## plates (case_turn_<tag>_<side>), so a run with the fix switched off can be
+## told apart. Each plate is kept only when the body's and the case's drawn
+## bounds project inside the frame, the body is shown (PlateSight.person_shown:
+## sight lines land on it, none blocked) and the case is seen (probe._bag_seen);
+## a side tries SIDE_TURNS about the side before it gives up. A side with no
+## plate, or a target passenger past security never plated, prints PROBE_INVALID.
+
+enum State { IDLE, HELD, DONE }
 
 const PlateSight := preload("res://spike/plate_sight.gd")
 const PlateSteps := preload("res://spike/carry_plate_steps.gd")
 const TURN_LO := 0.3
 const TURN_HI := 0.6
-const SIDE_M := 2.6
-const HEIGHT_M := 1.1
-const AIM_M := 0.9
+const SIDE_M := 3.0
+const HEIGHT_M := 1.2
+const AIM_M := 1.0
 const MIN_PX := 300.0
 const SIDE_TURNS := [0.0, -PI / 8.0, PI / 8.0, -PI / 4.0, PI / 4.0]
 
 static var _target := -2
 static var _tag := ""
-static var _plated := false
+static var _state := State.IDLE
 
 
-## Called on each sim tick when no other plate holds the clock: when the target
-## passenger's hard case is part way through its turn to the front, pauses the
-## clock and starts the plates. Returns whether it took the plate task.
+## Called first on each sim tick. Holds the plate task for the target passenger
+## once it is at security with a case in hand and no other plate runs; when its
+## case is part way through its turn to the front, pauses the clock and starts
+## the plates. Returns whether it holds the plate task (the tick's other plate
+## checks are then skipped).
 static func scan(probe) -> bool:
 	if _target == -2:
 		_target = -1
@@ -41,31 +47,39 @@ static func scan(probe) -> bool:
 			elif arg.begins_with("--case-turn-tag="):
 				_tag = arg.get_slice("=", 1)
 		print("CASE_TURN_PLATE target=%d tag=%s" % [_target, _tag])
-	if _target < 0 or _plated:
+	if _target < 0 or _state == State.DONE:
 		return false
 	var sim: PassengerSim = probe._sim
 	var p := sim.get_passenger(_target)
 	if p == null:
 		return false
 	if p.stage > Passenger.Stage.SECURITY:
-		_plated = true
+		_state = State.DONE
+		probe._plate_task = false
 		probe._invalid("passenger %d left security with no case turn plate" % _target)
 		return false
 	var props: CarryOnProps = probe._views.carry_on_props()
-	var turn := props.bag_turn_of(_target)
-	if turn < TURN_LO or turn > TURN_HI or not SecurityLooks.carry_front(sim, p):
-		return false
 	var kinds: Array = props.props_of(_target)["kinds"]
 	var homes := SecurityLooks.bag_homes(sim, p)
+	var case := -1
 	for i in kinds.size():
 		if kinds[i] == SecurityLooks.Kind.CASE and homes[i] == SecurityLooks.Home.HAND:
-			_plated = true
-			probe._plate_task = true
-			probe._clock.set_paused(true)
-			probe._clock._accumulator = 0.0
-			_plate(probe, i)
-			return true
-	return false
+			case = i
+	if _state == State.IDLE:
+		if p.stage != Passenger.Stage.SECURITY or case < 0:
+			return false
+		if probe._plate_task or probe._hold_frame >= 0:
+			return false
+		_state = State.HELD
+		probe._plate_task = true
+		print("CASE_TURN_PLATE held for passenger %d at tick %d" % [_target, probe._clock.tick])
+	var turn := props.bag_turn_of(_target)
+	if case >= 0 and turn >= TURN_LO and turn <= TURN_HI and SecurityLooks.carry_front(sim, p):
+		_state = State.DONE
+		probe._clock.set_paused(true)
+		probe._clock._accumulator = 0.0
+		_plate(probe, case)
+	return true
 
 
 ## The two side plates of bag `i` of the target passenger, the clock paused.

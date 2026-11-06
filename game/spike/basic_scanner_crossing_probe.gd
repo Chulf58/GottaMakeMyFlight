@@ -510,7 +510,7 @@ func _lead_plate_scan() -> void:
 ## the move is first drawn at k 0 and its plate steps the clock to each moment.
 ## A hard case's turn to the front is plated first, when asked (CaseTurnPlates).
 func _on_tick(_tick: int) -> void:
-	if _plate_task or _hold_frame >= 0 or CaseTurnPlates.scan(self):
+	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0:
 		return
 	var props := _views.carry_on_props()
 	var lead_open := _lane_mode or _move_plated.size() >= MOVE_PLATES.size()
