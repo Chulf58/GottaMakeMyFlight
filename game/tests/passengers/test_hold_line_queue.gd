@@ -160,7 +160,11 @@ func test_same_tick_arrivals_join_by_line_index_then_id() -> void:
 	assert_that(d.at).is_equal(Vector2i(0, 2))
 
 
-func test_a_lower_id_reaching_the_free_cell_beats_a_higher_id_standing_on_it() -> void:
+## Moved for decision hold-line-rebuild-the-security-line-follows-where-
+## people-sta: same-tick entries go by where each stands along the line, the
+## walk still to go included, so one standing on the free cell is ahead of a
+## lower id still stepping onto it (it was line index, then id).
+func test_a_walker_standing_on_the_free_cell_beats_a_lower_id_stepping_onto_it() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(4, 4))
 	var line: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]
 	var front := Passenger.new()
@@ -179,22 +183,25 @@ func test_a_lower_id_reaching_the_free_cell_beats_a_higher_id_standing_on_it() -
 	var joined := StationQueue.arrive(
 		grid, queues, {1: line.slice(0, 2)}, {1: line}, [reaching, standing], by_id, 7
 	)
-	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([5])
-	assert_array(queues[1]["lane"]).is_equal([100, 5])
-	# The one standing there loses the cell and steps off it, off the line.
-	assert_bool(standing.is_moving()).is_true()
-	assert_bool(line.has(standing.path_end())).is_false()
-	for i in 12:
-		standing.walk(PassengerSim.WALK_MM)
-	assert_bool(standing.is_moving()).is_false()
-	assert_bool(line.has(standing.at)).is_false()
-	assert_that(standing.at).is_not_equal(reaching.at)
+	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([9])
+	assert_array(queues[1]["lane"]).is_equal([100, 9])
+	# The one stepping onto it loses the cell and turns back on its step, to
+	# the cell it came from, off the line.
+	assert_bool(reaching.is_moving()).is_true()
+	assert_that(reaching.path_end()).is_equal(Vector2i(1, 1))
+	for i in 20:
+		reaching.walk(PassengerSim.WALK_MM)
+	assert_bool(reaching.is_moving()).is_false()
+	assert_bool(line.has(reaching.at)).is_false()
+	assert_that(reaching.at).is_not_equal(standing.at)
 
 
 ## The last free cell of a full line: a lower id reaches it on the tick a
-## higher id stands on it. The lower id joins; the higher id steps off, and
-## every passenger keeps a cell of its own over the ticks that follow.
-func test_a_standing_loser_on_the_last_cell_steps_off_it() -> void:
+## higher id stands on it. Moved for decision hold-line-rebuild-the-security-
+## line-follows-where-people-sta: the one standing there joins and the one
+## stepping onto it turns back, and every passenger keeps a cell of its own
+## over the ticks that follow (it was the lower id joining).
+func test_a_mover_onto_the_last_cell_a_stander_holds_turns_back() -> void:
 	_world = HoldLineKit.desk_hall()
 	var desk: int = _world.sim.get_meta(&"desk")
 	var line: Array = _world.sim.layout.line_of(desk)
@@ -220,9 +227,9 @@ func test_a_standing_loser_on_the_last_cell_steps_off_it() -> void:
 				cells[p.at] = true
 	print("stander at %s station %d, mover at %s" % [stander.at, stander.station, mover.at])
 	assert_int(StationQueue.size_of(_world.sim._queue(desk))).is_equal(line.size())
-	assert_bool(_world.sim.holding_of(desk).has(mover.id)).is_true()
-	assert_that(mover.at).is_equal(last)
-	assert_bool(line.has(stander.at)).is_false()
+	assert_bool(_world.sim.holding_of(desk).has(stander.id)).is_true()
+	assert_that(stander.at).is_equal(last)
+	assert_bool(line.has(mover.at)).is_false()
 	assert_int(shared).is_equal(0)
 
 

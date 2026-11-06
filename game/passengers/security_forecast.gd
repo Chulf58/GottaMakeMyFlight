@@ -50,6 +50,10 @@ extends RefCounted
 ## Far enough that a replay this long has gone wrong.
 const HORIZON := 200000
 
+## Ticks played by every replay so far: the work the forecast costs, which
+## TestHoldLineForecast bounds per forecast.
+static var steps_played := 0
+
 ## What SecurityRuntime reads from its host (see its header).
 var tick := 0
 var layout: TerminalLayout
@@ -348,6 +352,7 @@ func _add(p: Passenger) -> Passenger:
 	var copy := Passenger.new()
 	copy.id = p.id
 	copy.stage = p.stage
+	copy.stage_tick = p.stage_tick
 	copy.station = p.station
 	copy.at = p.at
 	copy.path = p.path.duplicate()
@@ -400,6 +405,7 @@ func _run(target: int) -> int:
 		_skip(next - tick - 1)
 		tick = next
 		_step()
+		steps_played += 1
 	return mini(int(_cleared[target]) - _sim.tick, JourneyForecast.NEVER)
 
 

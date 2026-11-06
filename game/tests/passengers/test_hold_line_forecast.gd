@@ -6,6 +6,15 @@ extends GdUnitTestSuite
 ## rules, so its clearance equals the measured one for a holder at any index
 ## and for walkers that reach the line out of the order they chose in.
 
+## Just checked in, between the desks and the scanner lanes (CafeTestLayout).
+const CROWD_CELL := Vector2i(16, 12)
+## More than both scanners' lines hold together.
+const BURST := 32
+## The most replay ticks a forecast of the two-station burst may play on
+## average: 213 measured on the rebuild, against about 700 per replay before
+## it (decision hold-line-rebuild-the-security-line-follows-where-people-sta).
+const MAX_REPLAY_TICKS := 320.0
+
 var _w: SecurityTestWorld
 
 
@@ -89,27 +98,28 @@ func test_the_forecast_equals_the_sim_for_holders_at_every_index() -> void:
 	)
 
 
+## Later but nearer: P chooses first, far from the line; Q chooses next,
+## beside it, and reaches it first. Moved for decision hold-line-rebuild-the-
+## security-line-follows-where-people-sta: Q enters first and P lines up
+## behind it (P used to come up the line from its back while Q waited for it).
 func test_the_forecast_equals_the_sim_when_walkers_reach_the_line_out_of_order() -> void:
 	_w = SecurityTestWorld.make(false)
 	var sim := _w.world.sim
 	var line: Array = sim.layout.line_of(_w.station)
 	var p := sim.get_passenger(_w.send(1))
-	p.at = Vector2i(5, 14)
+	p.at = Vector2i(1, 2)
 	p.clear_path()
 	_w.world.step()
 	assert_that(p.path_end()).is_equal(line[0])
 	var q := sim.get_passenger(_w.send(2))
-	q.at = Vector2i(8, 8)
+	q.at = Vector2i(6, 9)
 	q.clear_path()
 	_w.world.step()
 	assert_that(q.path_end()).is_equal(line[1])
-	# Q reaches the line first and waits on its cell for P, heading for the
-	# cell ahead of it, so neither turns back.
-	for i in 40:
+	# Q reaches the line first and enters it while P is still on its way.
+	for i in 20:
 		_w.world.step()
-	assert_that(q.at).is_equal(line[1])
-	assert_bool(q.is_moving()).is_false()
-	assert_int(q.stage).is_equal(Passenger.Stage.TO_SECURITY)
+	assert_int(q.stage).is_equal(Passenger.Stage.SECURITY_QUEUE)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_SECURITY)
 	var ids: Array[int] = [p.id, q.id]
 	var forecasts := _forecasts(ids)
@@ -119,7 +129,7 @@ func test_the_forecast_equals_the_sim_when_walkers_reach_the_line_out_of_order()
 	var wrong := _wrong(forecasts)
 	var counts := [_w.joined, forecasts.size(), mid_step, _w.cleared]
 	print("joined %s, %d forecasts, %d mid-step, cleared %s" % counts)
-	assert_array(_w.joined).is_equal([p.id, q.id])
+	assert_array(_w.joined).is_equal([q.id, p.id])
 	assert_int(mid_step).is_greater(0)
 	(
 		assert_array(wrong)
@@ -170,3 +180,76 @@ func test_the_forecast_equals_the_sim_for_passengers_waiting_for_a_place() -> vo
 		. override_failure_message("[tick, id, forecast, waiting, -, measured] %s" % [wrong])
 		. is_empty()
 	)
+
+
+## Two scanners and a burst bigger than both lines (CafeTestLayout): the
+## replay plays both stations and the waiting passengers choose by the sim's
+## own estimate (PassengerStations.estimate()), so every forecast, for the
+## waiting and the committed at either station, equals the measured
+## clearance. It also bounds the forecast's work: replay ticks per replay.
+func test_the_forecast_equals_the_sim_at_two_stations_with_passengers_waiting() -> void:
+	var grid := BuildGrid.new()
+	CafeTestLayout.build(grid)
+	# A late flight: nobody in the burst misses it before it is cleared.
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(3000))
+	var sim := world.sim
+	var ids: Array[int] = []
+	for i in BURST:
+		var p := world.passenger(sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
+		p.stage = Passenger.Stage.TO_SECURITY
+		p.at = CROWD_CELL
+		p.clear_path()
+		ids.append(p.id)
+	var cleared := {}
+	var forecasts := []
+	var waiting := 0
+	var replays := 0
+	var steps := 0
+	for i in 3000:
+		if cleared.size() == ids.size():
+			break
+		# The replay takes a station as open or closed as it is now: forecast
+		# once both scanners are staffed.
+		if sim.tick % 10 == 0 and sim.layout.scanners.all(sim._is_open):
+			var pending: Array = ids.filter(
+				func(id: int) -> bool: return not cleared.has(id) and sim.get_passenger(id) != null
+			)
+			var etas := {}
+			for station: int in sim.layout.scanners:
+				var before := SecurityForecast.steps_played
+				var some := SecurityForecast.clearances(sim, station, pending)
+				steps += SecurityForecast.steps_played - before
+				replays += 1
+				etas.merge(some)
+			for id: int in etas:
+				var p := sim.get_passenger(id)
+				var seeking := p != null and PassengerStations.is_seeking(sim, p, false)
+				waiting += int(seeking)
+				forecasts.append([sim.tick, id, sim.tick + etas[id], int(seeking)])
+		world.step()
+		for id in ids:
+			var p := sim.get_passenger(id)
+			if p != null and p.stage == Passenger.Stage.TO_GATE and not cleared.has(id):
+				cleared[id] = sim.tick
+	var wrong := []
+	for entry: Array in forecasts:
+		if entry[2] != cleared.get(entry[1], -1):
+			wrong.append(entry + [cleared.get(entry[1], -1)])
+	var per := float(steps) / maxf(replays, 1.0)
+	print(
+		(
+			"%d forecasts, %d for waiting passengers, %d replays, %.0f ticks each"
+			% [forecasts.size(), waiting, replays, per]
+		)
+	)
+	world.free_all()
+	assert_int(cleared.size()).is_equal(ids.size())
+	assert_int(waiting).is_greater(0)
+	(
+		assert_array(wrong)
+		. override_failure_message("[tick, id, forecast, waiting, measured] %s" % [wrong])
+		. is_empty()
+	)
+	assert_float(per).is_less_equal(MAX_REPLAY_TICKS)

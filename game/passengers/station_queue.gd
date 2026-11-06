@@ -180,8 +180,8 @@ static func may_enter(queue: Dictionary, admitted: int) -> bool:
 ## - Behind an admitted passenger still on the line a walker does not enter
 ##   (may_enter()): it stops on its cell and waits there, and the tail is
 ##   behind it.
-## - Then the walkers off the queue, nearest the tail first, then id, are
-##   given the cells behind the tail in turn: a moving one is sent on toward
+## - Then the walkers off the queue, the longest on their way first, then id,
+##   are given the cells behind the tail in turn: a moving one is sent on toward
 ##   its cell (send_to()), a standing one sets off for it (approach()); one
 ##   with no way there is put in `stranded`.
 ## Returns the walkers that entered, in order, a moving one with halt_tick
@@ -270,8 +270,7 @@ static func arrive(
 		joined.append(w)
 		taken[Vector3i(station, into.x, into.y)] = true
 	# The queues no longer change on this tick. By station, the walkers off
-	# the queue, nearest the tail first (ties by id), are given the cells
-	# behind it in turn.
+	# the queue are given the cells behind the tail in turn.
 	var outside := {}
 	for w: Passenger in walkers:
 		if lost.has(w.id) or joined.has(w) or not lines.has(w.station):
@@ -298,14 +297,11 @@ static func arrive(
 				# Waiting behind an admitted passenger, on its cell.
 				continue
 			heading.append(w)
-		# From the cell each last reached, so the order changes only on the
-		# tick someone reaches a cell.
-		var mark: Vector2i = line[mini(to, line.size() - 1)]
+		# By how long each has been on its way (Passenger.stage_tick), then id:
+		# a fixed order, so no two walkers swap cells back and forth.
 		heading.sort_custom(
 			func(a: Passenger, b: Passenger) -> bool:
-				var da := (a.at - mark).length_squared()
-				var db := (b.at - mark).length_squared()
-				return da < db or (da == db and a.id < b.id)
+				return a.stage_tick < b.stage_tick or (a.stage_tick == b.stage_tick and a.id < b.id)
 		)
 		for j in heading.size():
 			var w: Passenger = heading[j]

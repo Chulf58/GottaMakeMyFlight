@@ -87,17 +87,26 @@ func test_lane_is_bounded_and_served_first_in_first_out() -> void:
 		_world.step()
 	assert_int(_world.sim.queue_of(desk).size()).is_equal(3)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
+	# Moved for decision hold-line-rebuild-the-security-line-follows-where-
+	# people-sta: the line's order is the order people stepped onto it, so first
+	# in is the first to enter the queue, not the first to choose the desk.
+	var entered := _world.sim.queue_of(desk) + _world.sim.holding_of(desk)
 	var served: Array[int] = []
 	var guard := 0
 	while served.size() < 5 and guard < 2000:
 		_world.step()
 		guard += 1
+		for id in _world.sim.queue_of(desk) + _world.sim.holding_of(desk):
+			if not entered.has(id):
+				entered.append(id)
 		for id in spawned:
 			var p := _world.passenger(id)
 			if p.stage == Passenger.Stage.CHECKIN and not served.has(id):
 				served.append(id)
 		assert_int(_world.sim.queue_of(desk).size()).is_less_equal(3)
-	assert_array(served).is_equal(spawned)
+	print("entered %s, served %s" % [entered, served])
+	assert_array(served).is_equal(entered)
+	assert_int(served.size()).is_equal(spawned.size())
 
 
 func test_holding_shows_queue_full_until_a_slot_frees() -> void:

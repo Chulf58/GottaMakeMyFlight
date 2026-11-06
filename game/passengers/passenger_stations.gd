@@ -14,7 +14,6 @@ extends RefCounted
 ## at check-in stays on the desk cell, still the desk's occupant, until a
 ## security place is free for it; the desk waits meanwhile.
 
-
 ## The ticks a lane's main position is held by the walk through its arch, at a
 ## walk (estimate()): a lane admits about every 29 ticks, unpack included
 ## (TestSecurityTierBalance's stream).
