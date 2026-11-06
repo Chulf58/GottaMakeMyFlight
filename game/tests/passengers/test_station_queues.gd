@@ -75,12 +75,16 @@ func test_lane_is_bounded_and_served_first_in_first_out() -> void:
 	_world = _short_lane_world()
 	var desk: int = _world.sim.get_meta(&"desk")
 	var spawned: Array[int] = []
-	# Six ticks apart: the fifth walks on to the second hold cell
-	# (TerminalLayout.line_of()) and stands there before the first is served.
+	# Three ticks apart: the fifth walks on past the first hold cell and turns
+	# back onto the second (TerminalLayout.line_of(), StationQueue.approach()),
+	# and stands there before the first is served.
 	for i in 5:
 		spawned.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-		_world.run_to(_world.clock.tick + 6)
-	_world.run_to(_world.clock.tick + 50)
+		_world.run_to(_world.clock.tick + 3)
+	for i in 120:
+		if _world.sim.holding_of(desk).size() == 2:
+			break
+		_world.step()
 	assert_int(_world.sim.queue_of(desk).size()).is_equal(3)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	var served: Array[int] = []
@@ -103,7 +107,12 @@ func test_holding_shows_queue_full_until_a_slot_frees() -> void:
 	for i in 4:
 		ids.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		_world.run_to(_world.clock.tick + 12)
-	_world.run_to(_world.clock.tick + 30)
+	# The fourth walks past the first hold cell and turns back onto it
+	# (StationQueue.approach()) before it joins.
+	for i in 120:
+		if _world.sim.holding_of(desk).size() == 1:
+			break
+		_world.step()
 	var fourth := _world.passenger(ids[3])
 	assert_array(_world.sim.holding_of(desk)).is_equal([ids[3]])
 	assert_int(fourth.stuck).is_equal(Passenger.Stuck.QUEUE_FULL)

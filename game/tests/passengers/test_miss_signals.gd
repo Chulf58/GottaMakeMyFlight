@@ -70,10 +70,14 @@ func test_an_exactly_full_lane_is_full_with_no_overflow() -> void:
 func test_overflow_is_counted_and_clears_when_the_queue_drains() -> void:
 	_world = _short_lane_world()
 	var desk: int = _world.sim.get_meta(&"desk")
-	# Closer together: the fifth walks on to the second hold cell
-	# (TerminalLayout.line_of()) and stands there before the first is served.
-	_spawn_spaced(5, 6)
-	_world.run_to(_world.clock.tick + 50)
+	# Closer together: the fifth walks on past the first hold cell and turns
+	# back onto the second (TerminalLayout.line_of(), StationQueue.approach()),
+	# and stands there before the first is served.
+	_spawn_spaced(5, 3)
+	for i in 120:
+		if _world.sim.holding_of(desk).size() == 2:
+			break
+		_world.step()
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	assert_dict(MissSignals.full_stations(_world.sim)).is_equal({desk: 2})
 	# Five services of 60 ticks; with no scanner the served stay stuck elsewhere.
