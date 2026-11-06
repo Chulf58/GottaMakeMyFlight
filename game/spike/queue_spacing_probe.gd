@@ -26,6 +26,13 @@ extends SceneTree
 ## at the busiest station of the place over WINDOW ticks from its first
 ## service (info, for comparing builds).
 ##
+## With --strip (windowed): STRIP_FRAMES frames of a full security queue
+## whose line runs on behind its lane (TerminalLayout.line_of()), STRIP_EVERY
+## ticks apart, from when STRIP_HOLDERS holders stand on their hold cells.
+## Before each save every member's feet and head project inside the frame by
+## MARGIN_PX and a sight line lands first on each holder's body (PlateSight),
+## else the frame is refused; PROBE_INVALID if not every frame is taken.
+##
 ## Run: Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
 ##   --path game -s res://spike/queue_spacing_probe.gd -- --place=checkin \
 ##   [--seed=N] [--ticks=N] [--extra=N]
@@ -52,6 +59,9 @@ const MARGIN_PX := 12.0
 const OUT_REL := "res://../tools/blender/out/queue-spacing"
 ## TRACE lines printed on failing lane pairs.
 const TRACES := 12
+const STRIP_FRAMES := 4
+const STRIP_EVERY := 15
+const STRIP_HOLDERS := 3
 
 var _seed := 0
 var _place := "checkin"
@@ -88,6 +98,12 @@ var _plate_tries := 0
 ## [set-off tick, follower id, id ahead] of the move-up to plate, or [].
 var _shot: Array = []
 var _cam: Camera3D
+var _strip_on := false
+## The station stripped (0 until one has enough holders), the frames still to
+## take and the tick the next is due.
+var _strip_station := 0
+var _strip_left := 0
+var _strip_next := 0
 
 
 func _initialize() -> void:
@@ -103,6 +119,8 @@ func _initialize() -> void:
 			_extra = int(arg.get_slice("=", 1))
 		elif arg == "--plate":
 			_plate_on = true
+		elif arg == "--strip":
+			_strip_on = true
 	if _extra < 0:
 		_extra = SECURITY_EXTRA if _place == "security" else EXTRA
 	print("PROBE sim_seed=%d place=%s ticks=%d extra=%d" % [_seed, _place, _ticks, _extra])
@@ -118,6 +136,8 @@ func _run() -> void:
 		_clock.advance(SimClock.STEP)
 		await process_frame
 		_watch()
+		if _strip_on:
+			await _strip_step()
 		if _plate_on and not _plated and not _shot.is_empty():
 			if _clock.tick >= int(_shot[0]) + SHOT_AFTER:
 				await _plate(_shot[1], _shot[2])
@@ -126,7 +146,107 @@ func _run() -> void:
 		print("PROBE_INVALID no move-up plate was taken")
 		quit(1)
 		return
+	if _strip_on and (_strip_station == 0 or _strip_left > 0):
+		print("PROBE_INVALID the strip has %d frames left" % _strip_left)
+		quit(1)
+		return
 	quit(_report())
+
+
+## Starts the strip at the first scanner with STRIP_HOLDERS holders all on
+## their places, then takes a frame every STRIP_EVERY ticks.
+func _strip_step() -> void:
+	if _strip_station == 0:
+		for station in _sim.layout.scanners:
+			if _sim.holding_of(station).size() >= STRIP_HOLDERS and _all_placed(station):
+				_strip_station = station
+				_strip_left = STRIP_FRAMES
+				_strip_next = _clock.tick
+				break
+	if _strip_left > 0 and _clock.tick >= _strip_next:
+		if await _strip_frame():
+			_strip_left -= 1
+		_strip_next = _clock.tick + STRIP_EVERY
+
+
+func _all_placed(station: int) -> bool:
+	var line := _line(station)
+	var members := _sim.queue_of(station) + _sim.holding_of(station)
+	for i in members.size():
+		var p := _sim.get_passenger(members[i])
+		if p.is_moving() or p.at != line[i]:
+			return false
+	return true
+
+
+## One strip frame of the stripped station's queue; returns whether it was saved.
+func _strip_frame() -> bool:
+	var members := _sim.queue_of(_strip_station) + _sim.holding_of(_strip_station)
+	var holding := _sim.holding_of(_strip_station)
+	var mid := Vector3.ZERO
+	var tags := {}
+	for id in members:
+		var node := _views.node_for(id)
+		if node == null:
+			print("STRIP refused: %d not drawn" % id)
+			return false
+		mid += node.global_position
+		tags[node] = "m%d" % id
+	mid /= members.size()
+	if _cam == null:
+		_cam = Camera3D.new()
+		_cam.fov = 50.0
+		_main.add_child(_cam)
+	_cam.current = true
+	_cam.look_at_from_position(mid + Vector3(6.0, 12.0, 6.0), mid, Vector3.UP)
+	await process_frame
+	var frame := Rect2(Vector2.ZERO, _cam.get_viewport().get_visible_rect().size).grow(-MARGIN_PX)
+	for id in members:
+		var feet := _views.node_for(id).global_position
+		for point in [feet, feet + Vector3.UP * 1.7]:
+			var at := _cam.unproject_position(point)
+			if _cam.is_position_behind(point) or not frame.has_point(at):
+				print("STRIP refused: %d at %s out of frame %s" % [id, at, frame])
+				return false
+	var owners: Array[Node] = [_views]
+	var holder := PlateSight.colliders(root, owners, tags)
+	await physics_frame
+	var space := holder.get_world_3d().direct_space_state
+	var eye := _cam.global_position
+	var seen := 0
+	var cells := {}
+	for id in holding:
+		var chest: Array[Vector3] = [_views.node_for(id).global_position + Vector3.UP * 1.2]
+		seen += int(
+			not PlateSight.sight_lines(space, eye, chest, "m%d" % id)["on_subject"].is_empty()
+		)
+		cells[_sim.get_passenger(id).at] = true
+	var middle: Array[Vector3] = [mid + Vector3.UP * 1.2]
+	var control := PlateSight.sight_lines(space, eye, middle, NO_TAG)
+	holder.queue_free()
+	print(
+		(
+			"STRIP t%d station %d members %d holders %d on %d cells, holders seen %d, control %d (0)"
+			% [
+				_clock.tick,
+				_strip_station,
+				members.size(),
+				holding.size(),
+				cells.size(),
+				seen,
+				control["on_subject"].size()
+			]
+		)
+	)
+	if seen < holding.size():
+		print("STRIP refused: a holder is hidden")
+		return false
+	var img := await PlateSight.grab(self)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_REL))
+	var file := "/security_holdline_s%d_t%d.png" % [_seed, _clock.tick]
+	img.save_png(ProjectSettings.globalize_path(OUT_REL + file))
+	print("PLATE saved %s" % ProjectSettings.globalize_path(OUT_REL + file))
+	return true
 
 
 func _boot() -> bool:
@@ -289,15 +409,24 @@ func _count_holders(station: int, holding: Array[int]) -> void:
 func _trace_holders(station: int, a: int, b: int) -> void:
 	var line := _line(station)
 	var members := _sim.queue_of(station) + _sim.holding_of(station)
-	var text := "HOLDTRACE t%d station %d line %d lane %d" % [
-		_clock.tick, station, line.size(), _sim.queue_of(station).size()
-	]
+	var text := (
+		"HOLDTRACE t%d station %d line %d lane %d"
+		% [_clock.tick, station, line.size(), _sim.queue_of(station).size()]
+	)
 	for id in [a, b]:
 		var p := _sim.get_passenger(id)
 		var index := members.find(id)
 		text += (
 			" | %d st%d stuck%d at %s index %d place %s halt %d"
-			% [id, p.stage, p.stuck, p.at, index, line[index] if index < line.size() else "none", p.halt_tick]
+			% [
+				id,
+				p.stage,
+				p.stuck,
+				p.at,
+				index,
+				line[index] if index < line.size() else "none",
+				p.halt_tick
+			]
 		)
 	print(text)
 

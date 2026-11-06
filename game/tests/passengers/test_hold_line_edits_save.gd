@@ -87,7 +87,11 @@ func test_an_edit_that_shortens_the_hold_line_sends_back_the_members_past_its_en
 	var members: Array[Passenger] = []
 	for i in 14:
 		members.append(HoldLineKit.member(_world, desk))
-	for wall in [[Vector2i(1, 11), Vector2i(0, 1)], [Vector2i(2, 11), Vector2i(0, 1)], [Vector2i(2, 11), Vector2i(1, 0)]]:
+	for wall in [
+		[Vector2i(1, 11), Vector2i(0, 1)],
+		[Vector2i(2, 11), Vector2i(0, 1)],
+		[Vector2i(2, 11), Vector2i(1, 0)]
+	]:
 		var side := BuildGrid.SIDE_STEP.find(wall[1])
 		assert_bool(grid.apply(BuildEdit.place_wall(wall[0], side)).ok).is_true()
 	_world.step()
