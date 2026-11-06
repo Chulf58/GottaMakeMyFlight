@@ -66,6 +66,14 @@ var _helper_from := {}
 var _cells := {}
 var _lines := {}
 var _queues := {}
+## By station: its line's cell -> index (StationQueue.line_index()); and, for
+## the tick being played, its queue's members (StationQueue.members()) with
+## id -> index, and its admitted copies by id (Stage.SECURITY), built when
+## first asked for and dropped when a queue changes (_drop_members()).
+var _line_at := {}
+var _members := {}
+var _member_at := {}
+var _inside := {}
 ## The copied gate places, or null when no admission waits for one.
 var _places: GateCapacity
 ## Passenger id -> its copy.
@@ -107,7 +115,9 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 	var replay := SecurityForecast.new()
 	# One committed to `station` is replayed where it is; any other is the
 	# candidate, even one waiting for a place.
-	replay._setup(sim, station, sim.gates.scarce(sim, station, p), 0 if p.station == station else p.id)
+	replay._setup(
+		sim, station, sim.gates.scarce(sim, station, p), 0 if p.station == station else p.id
+	)
 	var ticks := JourneyForecast.NEVER
 	if replay._units.has(p.id) or replay._opens[station]:
 		if not replay._units.has(p.id):
@@ -197,6 +207,7 @@ func _setup(sim: PassengerSim, station: int, scarce: bool, candidate := 0) -> vo
 		_helper_from[at] = StaffPosts.helper_from(sim.staff, at) if sim.staff != null else -1
 		_cells[at] = sim.layout.lanes[at]
 		_lines[at] = sim.layout.line_of(at)
+		_line_at[at] = StationQueue.line_index(_lines[at])
 		var record := sim.security.record_of(at)
 		if not record.is_empty():
 			records[at] = record
@@ -272,7 +283,10 @@ func _place_waiting() -> void:
 			for at: int in slots:
 				var size := (_lines[at] as Array).size()
 				# The least full for its line's length: places free in proportion.
-				if slots[at] < size and (best < 0 or slots[at] * _lines[best].size() < slots[best] * size):
+				if (
+					slots[at] < size
+					and (best < 0 or slots[at] * _lines[best].size() < slots[best] * size)
+				):
 					best = at
 		if best < 0:
 			return
@@ -370,6 +384,8 @@ func _step() -> void:
 		_runtime.advance(at)
 		StationQueue.promote(_queues[at], _cells[at])
 	GateCapacity.admit_all(self, _runtime, _stations, _queues, _cells, _opens, _places)
+	_drop_members()
+	_inside.clear()
 	var walkers: Array[Passenger] = []
 	for id in _order:
 		var u: Passenger = _units[id]
@@ -379,6 +395,7 @@ func _step() -> void:
 	for u in StationQueue.arrive(_sim.grid, _queues, _cells, _lines, walkers, _units, tick):
 		u.stage = Passenger.Stage.SECURITY_QUEUE
 		_changed = true
+		_drop_members()
 	_place_waiting()
 	for id in _order:
 		var u: Passenger = _units[id]
@@ -406,15 +423,17 @@ func _seek(u: Passenger) -> void:
 		return
 	var queue: Dictionary = _queues[u.station]
 	var n := StationQueue.size_of(queue)
-	var ends: Array[Vector2i] = []
-	for id in _order:
-		var other: Passenger = _units[id]
-		var walking := other.stage == Passenger.Stage.TO_SECURITY and other.is_moving()
-		if other != u and walking and other.station == u.station and not _left.has(id):
-			ends.append(other.path_end())
 	var line: Array = _lines[u.station]
-	var free := StationQueue.free_index(queue, line, _units)
-	var target := StationQueue.walker_free(free, StationQueue.admitted_at(_units, u.station, line))
+	var free := StationQueue.free_index(queue, line, _units, _line_at[u.station])
+	var target := StationQueue.walker_free(free, _admitted_at(u.station))
+	# Only a walker standing further back than the free cell waits for others.
+	var ends: Array[Vector2i] = []
+	if target < line.size() and int(_line_at[u.station].get(u.at, -1)) > target:
+		for id in _order:
+			var other: Passenger = _units[id]
+			var walking := other.stage == Passenger.Stage.TO_SECURITY and other.is_moving()
+			if other != u and walking and other.station == u.station and not _left.has(id):
+				ends.append(other.path_end())
 	if not StationQueue.head_for(_sim.grid, u, line, n, target, ends):
 		# A committed walker with no place left chooses again in the sim.
 		_left[u.id] = true
@@ -424,9 +443,41 @@ func _seek(u: Passenger) -> void:
 		StationQueue.join(queue, _cells[u.station], u.id)
 		u.stage = Passenger.Stage.SECURITY_QUEUE
 		_changed = true
+		_drop_members()
 	elif u.is_moving():
 		# Set off for the free cell; a walker that only waits changes nothing.
 		_changed = true
+
+
+## StationQueue.admitted_at() for `station`, over its admitted copies.
+func _admitted_at(station: int) -> int:
+	if not _inside.has(station):
+		var inside := {}
+		for id in _order:
+			var u: Passenger = _units[id]
+			if u.stage == Passenger.Stage.SECURITY and u.station == station:
+				inside[id] = u
+		_inside[station] = inside
+	return StationQueue.admitted_at(_inside[station], station, _lines[station])
+
+
+## The members of `station`'s queue and their indexes (StationQueue.members()),
+## for the tick being played.
+func _members_of(station: int) -> Array:
+	if not _members.has(station):
+		var members := StationQueue.members(_queues[station])
+		var index := {}
+		for i in members.size():
+			index[members[i]] = i
+		_members[station] = members
+		_member_at[station] = index
+	return _members[station]
+
+
+## Drops the members cached by _members_of(): a queue has changed.
+func _drop_members() -> void:
+	_members.clear()
+	_member_at.clear()
 
 
 ## Whether standing walker `u` waits on its line cell for another walker
@@ -436,17 +487,17 @@ func _seek(u: Passenger) -> void:
 func _waits(u: Passenger, frees: Dictionary) -> bool:
 	var line: Array = _lines[u.station]
 	if not frees.has(u.station):
-		var found := StationQueue.free_index(_queues[u.station], line, _units)
-		var admitted := StationQueue.admitted_at(_units, u.station, line)
+		var found := StationQueue.free_index(_queues[u.station], line, _units, _line_at[u.station])
+		var admitted := _admitted_at(u.station)
 		frees[u.station] = Vector2i(found, StationQueue.walker_free(found, admitted))
 	var members_free: int = frees[u.station].x
 	var free: int = frees[u.station].y
-	if free != members_free and line.find(u.at) == free:
+	var here := int(_line_at[u.station].get(u.at, -1))
+	if free != members_free and here == free:
 		# Behind an admitted passenger: it moves on when that one does.
 		return true
 	if free >= line.size():
 		return StationQueue.size_of(_queues[u.station]) < line.size()
-	var here := line.find(u.at)
 	if here <= free:
 		return false
 	for id in _order:
@@ -454,7 +505,7 @@ func _waits(u: Passenger, frees: Dictionary) -> bool:
 		if other == u or other.station != u.station or _left.has(id):
 			continue
 		if other.stage == Passenger.Stage.TO_SECURITY and other.is_moving():
-			var there := line.find(other.path_end())
+			var there := int(_line_at[u.station].get(other.path_end(), -1))
 			if there >= free and there < here:
 				return true
 	return false
@@ -463,24 +514,26 @@ func _waits(u: Passenger, frees: Dictionary) -> bool:
 ## PassengerStations.queue_move() on the copy, along the line as there
 ## (StationQueue.path_to()).
 func _move_up(u: Passenger) -> void:
-	var members := StationQueue.members(_queues[u.station])
-	var line: Array = _lines[u.station]
-	if not _misplaced(u) or not QueueRipple.may_step(self, u, members, line, tick, false):
+	if not _misplaced(u):
 		return
-	var path := StationQueue.path_to(_sim.grid, line, u.at, members.find(u.id))
+	var members := _members_of(u.station)
+	var line: Array = _lines[u.station]
+	if not QueueRipple.may_step(self, u, members, line, tick, false):
+		return
+	var path := StationQueue.path_to(_sim.grid, line, u.at, _member_at[u.station][u.id])
 	if path.size() >= 2:
 		u.set_path(path)
 
 
 ## A queue member standing still away from its place on the line: it moves
-## up on the next tick. A candidate joining a full line (clearance()) has no
-## place yet and waits where it stands until one is free.
+## up on the next tick.
 func _misplaced(u: Passenger) -> bool:
-	if u.stage != Passenger.Stage.SECURITY_QUEUE:
+	if u.stage != Passenger.Stage.SECURITY_QUEUE or u.is_moving():
 		return false
-	var index: int = StationQueue.members(_queues[u.station]).find(u.id)
+	_members_of(u.station)
+	var index: int = _member_at[u.station].get(u.id, -1)
 	var line: Array = _lines[u.station]
-	return index >= 0 and index < line.size() and not u.is_moving() and u.at != line[index]
+	return index >= 0 and index < line.size() and u.at != line[index]
 
 
 ## The next tick on which something can change, or -1 when nothing will:

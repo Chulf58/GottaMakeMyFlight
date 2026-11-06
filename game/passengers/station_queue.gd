@@ -67,15 +67,28 @@ static func path_to(grid: BuildGrid, line: Array, from: Vector2i, index: int) ->
 ## the queue's size and past every line cell a member stands on or is
 ## stepping onto, so a newcomer never joins on a cell a member has not left
 ## yet. It then joins as the queue's last member behind its place and moves
-## up with the ripple (QueueRipple). `by_id` maps ids to passengers.
-static func free_index(queue: Dictionary, line: Array, by_id: Dictionary) -> int:
+## up with the ripple (QueueRipple). `by_id` maps ids to passengers; `index`,
+## when given, maps each cell of `line` to its index (line_index()).
+static func free_index(queue: Dictionary, line: Array, by_id: Dictionary, index := {}) -> int:
+	if index.is_empty():
+		index = line_index(line)
 	var free := size_of(queue)
-	for id: int in members(queue):
-		var p: Passenger = by_id[id]
-		free = maxi(free, line.find(p.at) + 1)
-		if p.is_moving():
-			free = maxi(free, line.find(p.path[p.path_index + 1]) + 1)
+	for at: int in 2:
+		for id: int in queue["holding" if at == 1 else "lane"]:
+			var p: Passenger = by_id[id]
+			free = maxi(free, int(index.get(p.at, -1)) + 1)
+			if p.is_moving():
+				free = maxi(free, int(index.get(p.path[p.path_index + 1], -1)) + 1)
 	return free
+
+
+## Cell -> its index on `line`, the first when a cell repeats.
+static func line_index(line: Array) -> Dictionary:
+	var index := {}
+	for i in line.size():
+		if not index.has(line[i]):
+			index[line[i]] = i
+	return index
 
 
 ## The path from `from` to `line[index]` for a walker joining there: one that
@@ -219,9 +232,12 @@ static func arrive(
 	var lost := {}
 	var taken := {}
 	var admitted := {}
+	var indexes := {}
 	for entry: Array in arrivals:
 		var queue: Dictionary = queues[entry[0]]
-		var free := free_index(queue, lines[entry[0]], by_id)
+		if not indexes.has(entry[0]):
+			indexes[entry[0]] = line_index(lines[entry[0]])
+		var free := free_index(queue, lines[entry[0]], by_id, indexes[entry[0]])
 		if not admitted.has(entry[0]):
 			admitted[entry[0]] = admitted_at(by_id, entry[0], lines[entry[0]])
 		var target := walker_free(free, admitted[entry[0]])
@@ -266,15 +282,21 @@ static func arrive(
 		join(queue, lanes[entry[0]], w.id)
 		joined.append(w)
 		taken[[entry[0], cell]] = true
+	# The queues no longer change on this tick: one free cell per station.
+	var frees := {}
 	for w: Passenger in walkers:
 		if lost.has(w.id):
 			continue
 		if w.is_moving() and lines.has(w.station) and queues.has(w.station):
 			var line: Array = lines[w.station]
-			if not admitted.has(w.station):
-				admitted[w.station] = admitted_at(by_id, w.station, line)
-			var free := free_index(queues[w.station], line, by_id)
-			send_on(grid, w, line, walker_free(free, admitted[w.station]))
+			if not frees.has(w.station):
+				if not indexes.has(w.station):
+					indexes[w.station] = line_index(line)
+				var free := free_index(queues[w.station], line, by_id, indexes[w.station])
+				if not admitted.has(w.station):
+					admitted[w.station] = admitted_at(by_id, w.station, line)
+				frees[w.station] = walker_free(free, admitted[w.station])
+			send_on(grid, w, line, frees[w.station])
 	_pass_centres(queues, walkers, lost, by_id)
 	return joined
 

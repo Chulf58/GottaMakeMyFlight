@@ -152,10 +152,17 @@ func test_the_forecast_equals_the_sim_for_passengers_waiting_for_a_place() -> vo
 				var p := sim.get_passenger(id)
 				var seeking := PassengerStations.is_seeking(sim, p, false)
 				waiting += int(seeking and etas.has(id))
-				forecasts.append([sim.tick, id, sim.tick + etas.get(id, -sim.tick), int(seeking), 0])
+				forecasts.append(
+					[sim.tick, id, sim.tick + etas.get(id, -sim.tick), int(seeking), 0]
+				)
 		_w.world.step()
 	var wrong := _wrong(forecasts)
-	print("%d forecasts, %d for waiting passengers, line %d" % [forecasts.size(), waiting, line.size()])
+	print(
+		(
+			"%d forecasts, %d for waiting passengers, line %d"
+			% [forecasts.size(), waiting, line.size()]
+		)
+	)
 	assert_bool(ids.all(func(id: int) -> bool: return _w.cleared.has(id))).is_true()
 	assert_int(waiting).is_greater(0)
 	(
