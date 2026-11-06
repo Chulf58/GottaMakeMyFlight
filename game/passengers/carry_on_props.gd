@@ -494,7 +494,10 @@ func sync() -> void:
 				hands[i] = (int(was[i]["place"]) / 2) % 2
 			# A roller pulled by a walker standing still in a queue is stood up beside it.
 			var stands := queue_still and homes[i] == SecurityLooks.Home.HAND and not lifts[i]
-			RollerPark.queue_stand(was[i], kinds[i], stands, _tick(), RollerPark.still_wait(p))
+			var turn := RollerPark.tip_wait(node.rotation.y, views.walk_heading(p))
+			RollerPark.queue_stand(
+				was[i], kinds[i], stands, _tick(), RollerPark.still_wait(p), turn
+			)
 			# A parking roller keeps home, hand and lift to the park's end; one lying, its lift.
 			RollerPark.hold_park(was[i], kinds[i], homes, hands, i, _tick(), p.collect_tick != 0)
 			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):
