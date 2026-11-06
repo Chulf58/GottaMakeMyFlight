@@ -52,6 +52,10 @@ var _pool: Array[Array] = []
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
 var _cur: Dictionary = {}
+## Passenger id -> its stage at the sync before this one, to tell the tick a
+## cafe guest is handed back from CAFE_STANDING_UP (_up_with_roller()). Holds
+## no tick; snap() and release erase it.
+var _stages: Dictionary = {}
 var _ring := MeshInstance3D.new()
 ## Queue-full signs, drawn after the passengers.
 var _markers := MissMarkers.new()
@@ -190,6 +194,7 @@ func sync() -> void:
 		_prev[id] = _cur[id]
 		_cur[id] = now
 		_turn(_nodes[id], p, _pose(_nodes[id], p))
+		_stages[id] = p.stage
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
@@ -207,6 +212,7 @@ func sync() -> void:
 ## before the load.
 func snap() -> void:
 	_turns.clear()
+	_stages.clear()
 	for id in sim.passenger_ids():
 		if _nodes.has(id):
 			# A node kept through the load starts over dressed, with no foam
@@ -419,6 +425,7 @@ func _release(id: int) -> void:
 	_turns.release(id)
 	_prev.erase(id)
 	_cur.erase(id)
+	_stages.erase(id)
 
 
 ## Sets the clip, dress, bubble and icons for this tick and returns the yaw
@@ -433,11 +440,13 @@ func _pose(node: Node3D, p: Passenger) -> float:
 	var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
 	var activity := ActivityPoses.kind(sim, p)
 	var showering := activity == ActivityPoses.Kind.SHOWER
-	if _at_security(p) or _stepping_in_stall(p) or showering or sim.files.holds(p.id):
+	var drawn_step := _at_security(p) or _stepping_in_stall(p) or showering
+	if drawn_step or sim.files.holds(p.id) or _up_with_roller(p, activity):
 		# The drawn step, so a held-back queue front or boarding-file waiter
 		# (its path still open) does not walk in place and a step to the
-		# table, into or out of a toilet stall or into or out of a shower, is
-		# not an idle slide.
+		# table, into or out of a toilet stall or into or out of a shower, or
+		# a roller passenger's step off its seat after its pick-up, is not an
+		# idle slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
 		moving = mm > 0
 	var held := 0
@@ -534,7 +543,9 @@ func _pose(node: Node3D, p: Passenger) -> float:
 			# play it from there.
 			var length := player.get_animation(clip).length
 			player.seek(fposmod(ActivityPoses.wash_seconds(sim, p), length), true)
-	if seat_pose == StageKinds.Pose.SITTING_DOWN or seat_pose == StageKinds.Pose.STANDING_UP:
+	var seat_clip := seat_pose == StageKinds.Pose.SITTING_DOWN
+	seat_clip = seat_clip or seat_pose == StageKinds.Pose.STANDING_UP
+	if seat_clip and not moving:
 		# A view made or snapped mid-way (a load, a passenger just drawn)
 		# starts the clip where the sim is in it, not from its first frame.
 		var at := maxi(ActivityPoses.clip_ticks(sim, p) - held, 0) * SimClock.STEP * base
@@ -629,6 +640,28 @@ func _at_security(p: Passenger) -> bool:
 ## grid path.
 func _stepping_in_stall(p: Passenger) -> bool:
 	return p.stage == Passenger.Stage.TOILET_ENTER or p.stage == Passenger.Stage.TOILET_EXIT
+
+
+## Up from its seat with a roller, past its stand-up clip: a sofa or nap pod
+## visitor in its up_tail() (standing at the seat for the pick-up, then
+## stepping off to its slot cell), or a cafe guest in CAFE_STANDING_UP after
+## STAND_UP_TICKS (the pick-up, then the shuffle out, CafeSim.up_ticks()),
+## and on the tick it is handed back from that stage, when the shuffle's last
+## step is drawn. Its drawn step picks the clip, so it holds still and then
+## walks off. A booth guest has stepped out by then and only holds; a guest
+## with no roller steps out while it rises, under the stand_up clip.
+func _up_with_roller(p: Passenger, activity: ActivityPoses.Kind) -> bool:
+	if not ParkRecovery.has_roller(p):
+		return false
+	var was: int = _stages.get(p.id, -1)
+	if was == Passenger.Stage.CAFE_STANDING_UP and p.stage != was:
+		return true
+	if p.stage == Passenger.Stage.CAFE_STANDING_UP:
+		return sim.tick - p.stage_tick >= PassengerSim.STAND_UP_TICKS
+	if activity != ActivityPoses.Kind.SEAT and activity != ActivityPoses.Kind.RECLINE:
+		return false
+	var past_door := sim.tick - p.stage_tick >= ActivityPoses.seat_door(sim, p)
+	return past_door and ActivityPoses.pose(sim, p) == StageKinds.Pose.UPRIGHT
 
 
 ## Stepping into, sitting in, or stepping out of a toilet stall.

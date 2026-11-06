@@ -1,6 +1,6 @@
 class_name TestCarryWornRig
 extends GdUnitTestSuite
-## A worn shoulder tote placed by CarryOnProps._carry_transform() on the drawn
+## A worn shoulder tote placed by CarryPlace.carry_transform() on the drawn
 ## characters (male and female, idle and walk clips, the carry rig and its
 ## CarryStoop running): standing upright it hangs exactly where it hangs on
 ## main (strap bar STRAP_OUT_M out from the centre line, upright), at every
@@ -65,7 +65,7 @@ func _placed(body: Node3D, tote: Node3D) -> Array:
 		],
 	}
 	var reach := [CarryOnProps.REACH_BUILT_M]
-	var xf := _props._carry_transform(held, body, 1, reach)
+	var xf := CarryPlace.carry_transform(_props, held, body, 1, reach)
 	_props._set_reach(tote, SecurityLooks.Kind.SHOULDER, reach[0])
 	var top := tote.find_child("Strap_Top", true, false) as Node3D
 	var joint: Vector3 = (_props._rig(body)["shoulders"][1] as Node3D).global_position

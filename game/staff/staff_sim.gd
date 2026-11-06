@@ -602,7 +602,7 @@ func _no_way(m: StaffMember) -> void:
 
 
 ## An edit touched the rest of the path. The step in progress is kept, as
-## PassengerSim._replan() keeps a passenger's: while it can still be taken the
+## PassengerEdits.replan() keeps a passenger's: while it can still be taken the
 ## member finishes it and plans on from its end; when the edit closed it, or
 ## removed the cell it was entering, the member turns back to the cell it just
 ## left, from where it is; with no way on it walks to the end of what it has

@@ -151,7 +151,14 @@ func _drawn(views: PassengerViews, props: CarryOnProps, id: int) -> Dictionary:
 	if held.is_empty() or body == null:
 		return {}
 	var now := props._now()
-	props._place_bags(held, body, props._tray_transform(held, body), now, CarryOnProps.Placing.HAND)
+	CarryPlace.place_bags(
+		props,
+		held,
+		body,
+		CarryPlace.tray_transform(props, held, body),
+		now,
+		CarryOnProps.Placing.HAND
+	)
 	var bag: Dictionary = held["bags"][0]
 	var node: Node3D = bag["node"]
 	return {

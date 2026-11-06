@@ -166,16 +166,16 @@ func test_a_move_interrupted_in_its_reach_starts_the_next_where_the_bag_is() -> 
 func test_a_hand_led_move_keeps_its_mode_across_a_stall_change() -> void:
 	var held := {"in_stall": false}
 	var bag := {"since": 0.0}
-	bag["led"] = CarryOnProps._leads(held, bag)
+	bag["led"] = CarryPlace.leads(held, bag)
 	held["in_stall"] = true
-	assert_bool(CarryOnProps._leading(bag, 1.0)).is_true()
+	assert_bool(CarryPlace.leading(bag, 1.0)).is_true()
 	var in_stall := {"since": 0.0}
-	in_stall["led"] = CarryOnProps._leads({"in_stall": true}, in_stall)
-	assert_bool(CarryOnProps._leading(in_stall, 1.0)).is_true()
+	in_stall["led"] = CarryPlace.leads({"in_stall": true}, in_stall)
+	assert_bool(CarryPlace.leading(in_stall, 1.0)).is_true()
 	var swap := {"since": 0.0, "swap": true}
-	swap["led"] = CarryOnProps._leads({"in_stall": false}, swap)
-	assert_bool(CarryOnProps._leading(swap, 1.0)).is_false()
-	assert_bool(CarryOnProps._leading(bag, CarryOnProps.TRANSFER_TICKS)).is_false()
+	swap["led"] = CarryPlace.leads({"in_stall": false}, swap)
+	assert_bool(CarryPlace.leading(swap, 1.0)).is_false()
+	assert_bool(CarryPlace.leading(bag, CarryOnProps.TRANSFER_TICKS)).is_false()
 
 
 ## A pulled roller passed from the right hand to the left (pull.R>pull.L) is
@@ -191,7 +191,7 @@ func test_a_roller_passed_between_pulling_hands_stays_held_by_its_bar() -> void:
 	var rods := []
 	var ends := []
 	for hand in 2:
-		var xf := CarryOnProps.pulled(grips[hand], axles[hand], 1.0, Vector3.UP)
+		var xf := RollerPull.pulled(grips[hand], axles[hand], 1.0, Vector3.UP)
 		ends.append(xf)
 		rods.append(grips[hand].distance_to(axles[hand]) + CarryOnProps.ROLLER_AXLE.z - past)
 	var bag := {
@@ -489,8 +489,8 @@ func test_a_stall_pick_up_rises_to_the_carry_not_to_the_low_hand() -> void:
 func test_a_backpack_between_the_front_and_the_back_keeps_its_middle_clear() -> void:
 	var kind := SecurityLooks.Kind.BACKPACK
 	var middle := CarryOnProps.bag_box(kind).get_center()
-	var front := CarryOnProps.carried_in_front(Vector3(-0.1, 1.25, 0.32), 0.0, 1.0, kind)
-	var back := CarryOnProps.worn_back(Transform3D(Basis(), Vector3(0.0, 1.35, -0.05)), 0.0, 1.0)
+	var front := CarryHand.carried_in_front(Vector3(-0.1, 1.25, 0.32), 0.0, 1.0, kind)
+	var back := CarryWorn.worn_back(Transform3D(Basis(), Vector3(0.0, 1.35, -0.05)), 0.0, 1.0)
 	var hand_at := (SecurityLooks.Home.HAND * 2 + 0) * 2
 	var body := {
 		"hand": 0,
@@ -576,8 +576,8 @@ func test_a_backpack_off_the_back_is_on_the_hands_path_while_it_turns() -> void:
 	var kind := SecurityLooks.Kind.BACKPACK
 	var middle := CarryOnProps.bag_box(kind).get_center()
 	var pose := Vector3(-0.1, 1.0, 0.37)
-	var front := CarryOnProps.carried_in_front(pose, 0.0, 1.0, kind)
-	var back := CarryOnProps.worn_back(Transform3D(Basis(), Vector3(0.0, 1.35, -0.05)), 0.0, 1.0)
+	var front := CarryHand.carried_in_front(pose, 0.0, 1.0, kind)
+	var back := CarryWorn.worn_back(Transform3D(Basis(), Vector3(0.0, 1.35, -0.05)), 0.0, 1.0)
 	var hand_at := (SecurityLooks.Home.HAND * 2 + 0) * 2
 	var body := {
 		"hand": 0,

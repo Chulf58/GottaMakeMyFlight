@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## Security queuers drawn with the most carry-on bags a passenger can have
 ## (CarryOnTraits.MAX_BAGS, decision carry-on-at-security-costs-time-only-0-2-
 ## carry-on-bags-add-s), through the real sim and views (board 61df7fce). A
-## queuer holding 3 bags threw a script error in CarryOnProps._pose_arms
+## queuer holding 3 bags threw a script error in CarryArmPose.pose_arms
 ## (SecurityLooks.hand_of() gave the third bag hand 2), but no passenger has 3:
 ## the draw stops at MAX_BAGS and a save with more is refused. These cases go
 ## red if the cap is raised without the arms learning a third bag.

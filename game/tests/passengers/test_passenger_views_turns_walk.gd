@@ -10,7 +10,7 @@ extends GdUnitTestSuite
 ## turn (past any turn from setting off), with the pull settled and the same
 ## hand on it in both frames, the distance from the pulling hand to the axle
 ## changes by less than REACH_JUMP_M in a frame within a turn's ticks of a
-## corner. The axle follower swings at a limited speed (CarryOnProps.follow),
+## corner. The axle follower swings at a limited speed (RollerPull.follow),
 ## so a body that snapped round the corner moved the hand 0.170 m off the axle
 ## in one frame at 1x (6166b07); eased, 0.025 m.
 

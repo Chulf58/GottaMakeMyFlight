@@ -696,7 +696,9 @@ func _watch_worn(props: CarryOnProps, body: Node3D) -> void:
 		and props.transfer_progress(_p.id, 1) >= 1.0
 	)
 	if on_shoulder:
-		var fresh: Transform3D = props._carry_transform(props._held[_p.id], body, 1, [0.0])
+		var fresh: Transform3D = CarryPlace.carry_transform(
+			props, props._held[_p.id], body, 1, [0.0]
+		)
 		stale = fresh.origin.distance_to(worn.global_position)
 	var prev := _worn_prev
 	_worn_prev = row

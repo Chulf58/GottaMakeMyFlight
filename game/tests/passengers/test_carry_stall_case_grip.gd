@@ -128,12 +128,12 @@ func test_the_tip_keeps_the_palm_on_the_cases_top() -> void:
 
 
 ## Outside a stall move the top end is not a grip: a side-carried case (upright,
-## its handle face to the body, CarryOnProps.carried()) with the palm on its top
+## its handle face to the body, CarryHand.carried()) with the palm on its top
 ## end is off, though the same grip is on in a stall move.
 func test_a_palm_on_the_top_end_outside_a_stall_move_is_off() -> void:
 	for s in SCALES:
 		var centre := AT + Basis(Vector3.UP, YAW) * Vector3(-0.3, 0.0, 0.0)
-		var side := CarryOnProps.carried(AT, centre, YAW, s)
+		var side := CarryHand.carried(AT, centre, YAW, s)
 		_case.global_transform = side
 		var middle := CarryOnProps.bag_box().get_center()
 		var on_top := (
@@ -174,7 +174,7 @@ func test_the_side_carry_grip_is_on_the_mesh_and_the_bounds_corner_is_off() -> v
 	assert_vector(anchor).is_equal_approx(edge, Vector3.ONE * 0.001)
 	for s in SCALES:
 		var centre := AT + Basis(Vector3.UP, YAW) * Vector3(-0.3, 0.0, 0.0)
-		var side := CarryOnProps.carried(AT, centre, YAW, s)
+		var side := CarryHand.carried(AT, centre, YAW, s)
 		var upright := Transform3D(_upright().scaled(Vector3.ONE * s), AT)
 		for xf: Transform3D in [side, upright]:
 			_case.global_transform = xf

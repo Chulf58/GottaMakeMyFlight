@@ -177,7 +177,7 @@ static func grip_on_gap(
 	var kind: SecurityLooks.Kind = props.props_of(id)["kinds"][i]
 	var limit := GRIP_ON_M
 	if kind == SecurityLooks.Kind.ROLLER:
-		limit += CarryOnProps.BAR_PALM_M
+		limit += CarryHand.BAR_PALM_M
 	elif kind == SecurityLooks.Kind.CASE:
 		limit += CarryOnProps.FRONT_PALM_M
 	var grip := props.grip_of(body, holder)
@@ -308,7 +308,7 @@ static func rest_gap(sim: PassengerSim, tray: Node3D, bag: Node3D) -> float:
 		centre += box.get_center() / meshes.size()
 	var supports: Array[float] = [sim.grid.origin.y]
 	if tray != null and tray.visible:
-		var top := tray.global_transform * Vector3(0.0, CarryOnProps.TRAY_FLOOR_M, 0.0)
+		var top := tray.global_transform * Vector3(0.0, CarryPlace.TRAY_FLOOR_M, 0.0)
 		for mi: MeshInstance3D in tray.find_children("*", "MeshInstance3D", true, false):
 			var box := mi.global_transform * mi.get_aabb()
 			if box.grow(0.02).has_point(Vector3(centre.x, box.get_center().y, centre.z)):

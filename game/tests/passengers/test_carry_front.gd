@@ -171,7 +171,7 @@ func test_a_load_in_the_corridor_starts_in_the_front_carry() -> void:
 
 
 ## On the walk back, the case turns back to the side upright ahead of the arm
-## (CarryOnProps._bag_weight: the arm's weight squared on a turn from the
+## (CarryHand.bag_weight: the arm's weight squared on a turn from the
 ## front), so its lower end is not swung through the thigh, and both end the
 ## turn together. Control: the turn was seen part way (strictly between 0 and
 ## 1), so the two weights were compared mid-turn.
@@ -219,19 +219,19 @@ func test_a_reversed_case_turn_starts_from_where_the_case_is() -> void:
 	var flips: Array = [[10.0, true], [13.0, false], [15.0, true]]
 	for flip: Array in flips:
 		var at: float = flip[0]
-		var bag_then := props._bag_weight(held, at)
-		var arm_then := props._front_weight(held, at)
-		held["front_from"] = props._front_weight(held, at)
-		held["bag_from"] = props._bag_weight(held, at)
+		var bag_then := CarryHand.bag_weight(held, at)
+		var arm_then := CarryHand.front_weight(held, at)
+		held["front_from"] = CarryHand.front_weight(held, at)
+		held["bag_from"] = CarryHand.bag_weight(held, at)
 		held["front_since"] = at
 		held["front"] = flip[1]
 		print("flip at %.0f to front=%s: bag %.3f arm %.3f" % [at, flip[1], bag_then, arm_then])
-		assert_float(props._bag_weight(held, at)).is_equal_approx(bag_then, 0.0001)
-		assert_float(props._front_weight(held, at)).is_equal_approx(arm_then, 0.0001)
+		assert_float(CarryHand.bag_weight(held, at)).is_equal_approx(bag_then, 0.0001)
+		assert_float(CarryHand.front_weight(held, at)).is_equal_approx(arm_then, 0.0001)
 	# Control: the reversals came part way, so a restart from 0 or 1 would jump.
 	assert_float(held["bag_from"]).is_greater(0.0)
 	assert_float(held["bag_from"]).is_less(1.0)
 	var end := 15.0 + CarryOnProps.TRANSFER_TICKS
-	assert_float(props._bag_weight(held, end)).is_equal(1.0)
-	assert_float(props._front_weight(held, end)).is_equal(1.0)
+	assert_float(CarryHand.bag_weight(held, end)).is_equal(1.0)
+	assert_float(CarryHand.front_weight(held, end)).is_equal(1.0)
 	props.free()

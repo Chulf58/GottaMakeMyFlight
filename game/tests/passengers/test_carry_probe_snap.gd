@@ -12,7 +12,7 @@ const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 ## Allowance: the speed limit over the time that passed plus the slack, and
 ## nothing but STILL_M at zero (or negative) time.
 func test_the_allowance_follows_the_sim_time_that_passed() -> void:
-	var limit := CarryOnProps.SWING_JUMP_M
+	var limit := RollerPull.SWING_JUMP_M
 	assert_float(CarryChecks.snap_allowance(1.0)).is_equal_approx(
 		limit + CarryChecks.SNAP_SLACK_M, 0.0001
 	)
@@ -43,7 +43,7 @@ func test_a_broken_follower_inside_one_tick_is_caught() -> void:
 	var blind := counts.duplicate()
 	blind["creeping"] = 0
 	assert_bool(CarryChecks.snap_control_ok(blind)).is_false()
-	var old_allowance := CarryOnProps.SWING_JUMP_M * maxf(CarryChecks.CONTROL_DT, 0.34)
+	var old_allowance := RollerPull.SWING_JUMP_M * maxf(CarryChecks.CONTROL_DT, 0.34)
 	assert_float(0.2).is_less(old_allowance)
 	assert_float(0.2).is_greater(CarryChecks.snap_allowance(CarryChecks.CONTROL_DT))
 

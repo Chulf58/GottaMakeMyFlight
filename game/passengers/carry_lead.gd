@@ -241,7 +241,7 @@ static func start_of(bag: Dictionary) -> Array:
 ## Whether a hand-led move of `bag` (CarryOnProps' record, "led") drawn last
 ## at `k` has not left its start: the hand was still reaching for the bag (a
 ## move that starts HELD leaves at once). A move that interrupts it starts
-## where the bag is, at that start (CarryOnProps._stamp).
+## where the bag is, at that start (CarryPlace._stamp).
 static func at_start(bag: Dictionary, k: float) -> bool:
 	return (
 		bag.get("led", false) and k < span(start_of(bag)[0], End.HELD, REACH_SHARE, reach_of(bag)).x
@@ -422,7 +422,7 @@ static func back_side(
 	var out := Vector3.LEFT if hand == 0 else Vector3.RIGHT
 	var grip := centre + Basis(Vector3.UP, yaw) * (out * BACK_SIDE_M)
 	grip.y = height
-	return CarryOnProps.carried(grip, centre, yaw, scale_by, SecurityLooks.Kind.BACKPACK)
+	return CarryHand.carried(grip, centre, yaw, scale_by, SecurityLooks.Kind.BACKPACK)
 
 
 ## The hand that leads a backpack's move between the back and a resting end
@@ -479,7 +479,7 @@ static func by_side(
 ## `trailing`, both world) of a swap between the hand and the pull at
 ## security, the body drawn at `frame`, `hand` 0 right: round the hand's side
 ## of the body (its angle about the body's centre turns from the one to the
-## other through the hand's side, as CarryOnProps.follow() swings a pulled
+## other through the hand's side, as RollerPull.follow() swings a pulled
 ## roller), at least `clear` from the centre midway, so it passes outside the
 ## legs. A straight blend with a 0.2 m swing out took it behind the shins of a
 ## walker standing at a lane (board item 5ed915b0).
@@ -758,7 +758,7 @@ static func plan(
 ## is not pushed out ahead, toward the door. A bag goes up
 ## when its origin does, or with flag "rising" (plan(): a stall pick-up, which
 ## also goes flag "side" out to its hand's side midway). Moved
-## from CarryOnProps._place_bags; the floor set-down added for board item 5ed915b0.
+## from CarryPlace.place_bags; the floor set-down added for board item 5ed915b0.
 static func path(
 	start: Transform3D,
 	want: Transform3D,
