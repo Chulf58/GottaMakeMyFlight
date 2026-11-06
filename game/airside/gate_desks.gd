@@ -355,7 +355,10 @@ func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
 	var plan := flights.move_plan(ending, staying)
 	if not (plan["stuck"] as Array).is_empty():
 		var refusal := BuildResult.refused(BuildResult.Reason.GATE_FLIGHTS_STUCK)
-		refusal.detail = ", ".join(plan["stuck"])
+		var stuck := PackedStringArray()
+		for contract_id: String in plan["stuck"]:
+			stuck.append(FlightLabel.of(flights, false, contract_id))
+		refusal.detail = ", ".join(stuck)
 		return refusal
 	return null
 

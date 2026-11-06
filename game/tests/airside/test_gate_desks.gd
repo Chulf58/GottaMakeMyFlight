@@ -128,15 +128,17 @@ func test_removing_a_gate_moves_its_contracts_to_another_gate_first() -> void:
 
 func test_removing_the_only_gate_with_a_contract_is_refused_naming_it() -> void:
 	var west := _desk(DESK_WEST)
-	assert_str(_accept("X", 600)).is_equal("A")
+	assert_str(_accept("O0N7", 600)).is_equal("A")
 	var removed := _grid.apply(BuildEdit.remove_object(west.object_id))
 	var exit := _grid.apply(BuildEdit.remove_object(_grid.object_at(EXIT_WEST)))
 	print("desk removal: %s; exit removal: %s" % [removed.reason_text(), exit.reason_text()])
 	assert_int(removed.reason).is_equal(BuildResult.Reason.GATE_FLIGHTS_STUCK)
-	assert_str(removed.reason_text()).contains("X")
+	var text := removed.reason_text()
+	assert_str(text).ends_with("the 10:00 Gotta Air flight to Oslo")
+	assert_object(RegEx.create_from_string("O\\d+N\\d+|-d\\d+").search(text)).is_null()
 	assert_int(exit.reason).is_equal(BuildResult.Reason.GATE_FLIGHTS_STUCK)
 	assert_bool(GateDesks.is_desk(_grid, west.object_id)).is_true()
-	assert_str(_flights.contract_of("X")["gate"]).is_equal("A")
+	assert_str(_flights.contract_of("O0N7")["gate"]).is_equal("A")
 
 
 func test_removing_a_gate_with_a_flight_due_is_refused_until_it_has_left() -> void:
