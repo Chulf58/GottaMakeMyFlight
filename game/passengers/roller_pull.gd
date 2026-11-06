@@ -32,6 +32,16 @@ const SWING_RADIUS_M := 0.55
 ## The probe's snap threshold: a drawn axle moving more than this a sim tick
 ## (the walk is about 0.07 m a tick; a swing at most SWING_TURN of arc).
 const SWING_JUMP_M := 0.6
+## Through a doorway or opening too narrow for the side offset (a roller
+## TRAIL_SIDE_M out reaches 0.46 m from the centre line; a one-cell doorway's
+## jambs are 0.43 m from a guest on the cell centre), the axle is tucked in
+## line behind the guest, this far out on the pulling hand's side (user ruling
+## a-guest-pulling-a-roller-through-a-doorway-tucks-it-in-line), so the bag's
+## outer side is about 0.15 m inside the jamb and the rods from the hand still
+## run down outside the legs (door_tuck_probe.gd's windowed leg check).
+## PullSide.tuck() says when; the axle eases in and back out over TUCK_TICKS.
+const TUCK_SIDE_M := 0.12
+const TUCK_TICKS := 6.0
 
 
 ## A roller pulled by its grip at `grip` with its axle at `axle` (on the floor,
@@ -100,7 +110,9 @@ static func step(
 	if bag["carry"] != SecurityLooks.Carry.PULL or home != SecurityLooks.Home.HAND:
 		# Not pulled now: the next pull starts its follower afresh behind the
 		# walker, not from wherever it was last drawn (perhaps metres back).
-		for key in ["axle", "walked", "drawn_axle", "drawn_at", "axle_now"]:
+		for key in [
+			"axle", "walked", "drawn_axle", "drawn_at", "axle_now", "tuck_on", "tuck_since"
+		]:
 			bag.erase(key)
 		return
 	var side := Vector3.LEFT if hand == 0 else Vector3.RIGHT
@@ -135,11 +147,7 @@ static func step(
 	# cross behind the legs to the other side (a zig-zag of diagonal steps
 	# swings the walked line about the body's heading).
 	var frame := Transform3D(turn, at)
-	var local := frame.affine_inverse() * cur
-	var out := -1.0 if hand == 0 else 1.0
-	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
-	local.z = minf(local.z, -TRAIL_BEHIND_MIN_M)
-	cur = frame * local
+	cur = frame * settle(frame.affine_inverse() * cur, hand, tuck_weight(bag, props._tick()))
 	bag["axle"] = [bag["axle"][1] if bag.has("axle") else cur, cur]
 
 
@@ -158,11 +166,8 @@ static func drawn(
 	# Behind the body as drawn now, on the pulling hand's side: between two
 	# ticks of a turning walker the blend can cross behind the legs.
 	var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
-	var local := frame.affine_inverse() * at
-	var out := -1.0 if hand == 0 else 1.0
-	local.x = out * clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
-	local.z = minf(local.z, -TRAIL_BEHIND_MIN_M)
 	var now := props._now()
+	var local := settle(frame.affine_inverse() * at, hand, tuck_weight(bag, now))
 	at = frame * local
 	if bag.has("drawn_axle"):
 		var was := frame.affine_inverse() * (bag["drawn_axle"] as Vector3)
@@ -172,3 +177,36 @@ static func drawn(
 	bag["drawn_at"] = now
 	bag["follows"] = int(bag.get("follows", 0)) + 1
 	return at
+
+
+## The axle point `local` (the body's frame: x across, +z ahead) kept behind
+## the body on the pulling hand's side (`hand` 0 right, 1 left), from
+## TRAIL_SIDE_MIN_M to TRAIL_SIDE_MAX_M out and at least TRAIL_BEHIND_MIN_M
+## behind, then `tuck` (tuck_weight()) of the way in to TUCK_SIDE_M out.
+static func settle(local: Vector3, hand: int, tuck: float) -> Vector3:
+	var out := -1.0 if hand == 0 else 1.0
+	var side := clampf(local.x * out, TRAIL_SIDE_MIN_M, TRAIL_SIDE_MAX_M)
+	return Vector3(
+		out * lerpf(side, TUCK_SIDE_M, tuck), local.y, minf(local.z, -TRAIL_BEHIND_MIN_M)
+	)
+
+
+## How far pulled roller `bag` (its record) is tucked in line behind at sim
+## time `now`: 0 (at its side) to 1 (TUCK_SIDE_M out), easing over TUCK_TICKS
+## from where it was when tuck() last turned it on or off.
+static func tuck_weight(bag: Dictionary, now: float) -> float:
+	var target := 1.0 if bag.get("tuck_on", false) else 0.0
+	if not bag.has("tuck_since"):
+		return target
+	var k := clampf((now - float(bag["tuck_since"])) / TUCK_TICKS, 0.0, 1.0)
+	return lerpf(float(bag.get("tuck_from", 0.0)), target, smoothstep(0.0, 1.0, k))
+
+
+## Turns `bag`'s tuck on or off (`on`) at sim time `now`: the axle eases there
+## from where it is (tuck_weight()).
+static func tuck(bag: Dictionary, on: bool, now: float) -> void:
+	if bag.get("tuck_on", false) == on:
+		return
+	bag["tuck_from"] = tuck_weight(bag, now)
+	bag["tuck_since"] = now
+	bag["tuck_on"] = on

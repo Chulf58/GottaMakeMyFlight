@@ -52,11 +52,11 @@ extends RefCounted
 ## follower jumps there, so the change waits until the guest has turned.
 ##
 ## What it does not do: it does not look back along the route (a replan
-## replaces the route; the roller's drawn depth stands in for it), it does
-## not clear a wall end at a door (no hand clears a jamb, finding which-kinds-
-## of-wall-hit-make-up-the-walking-pull-roller-s-wa), and its footprint is a
-## box round the axle's whole range of
-## places, not the drawn bag.
+## replaces the route; the roller's drawn depth stands in for it), a change
+## of hand does not clear a wall end at a door (no hand clears a jamb, finding
+## which-kinds-of-wall-hit-make-up-the-walking-pull-roller-s-wa: tuck() pulls
+## the roller in line behind there instead), and its footprint is a box round
+## the axle's whole range of places, not the drawn bag.
 
 ## Ticks of walking ahead the threat test covers: the change of hand
 ## (CarryOnProps.TRANSFER_TICKS) and two more, so the change is over before the
@@ -97,8 +97,6 @@ static func resolve(
 	hands: Array,
 	now: float
 ) -> void:
-	if p.carry_on != 1:
-		return
 	for i in mini(was.size(), kinds.size()):
 		if kinds[i] != SecurityLooks.Kind.ROLLER or homes[i] != SecurityLooks.Home.HAND:
 			continue
@@ -115,7 +113,10 @@ static func resolve(
 			ahead.append(sim.grid.cell_to_world(p.path[k]))
 		var frame := Transform3D(Basis(Vector3.UP, yaw), at)
 		var queued := p.stage in RollerPark.QUEUE_STAGES and p.stage != Passenger.Stage.STANDING
-		hands[i] = pick(bag, sim.grid, frame, ahead, step.length(), hands[i], now, queued)
+		if p.carry_on == 1:
+			hands[i] = pick(bag, sim.grid, frame, ahead, step.length(), hands[i], now, queued)
+		if not bag.is_empty():
+			tuck(bag, sim.grid, frame, ahead, step.length(), hands[i], now)
 
 
 ## The hand (0 right, 1 left) bag record `bag` (CarryOnProps' record of a
@@ -148,7 +149,9 @@ static func pick(
 	# roller set down before its route turned hand_of() left), standing still
 	# as well.
 	var held := not swapped(bag) or now - float(bag.get("changed", -INF)) >= HOLD_TICKS
-	var told := first == 1 and hand == 0 and held
+	# Not while the roller is tucked in line behind (tuck()): it goes back out
+	# to the side it is drawn on, not across at hand_of()'s word mid-doorway.
+	var told := first == 1 and hand == 0 and held and RollerPull.tuck_weight(bag, now) <= 0.0
 	if holds(bag, now):
 		return hand
 	if queued or stood(bag, now):
@@ -186,6 +189,33 @@ static func pick(
 		# corner in the cafe walk). The change waits until the guest has turned.
 		return hand
 	return _change(bag, "pull_side_swaps", other)
+
+
+## Tucks pulled roller `bag` in line behind its guest, or lets it back out to
+## its side (RollerPull.tuck()), for a pull in `hand` (pick()'s, the hand it is
+## drawn in, so the two agree on its side): tucked while its SETTLED footprint
+## on that side meets a wall at any of the guest's poses from `frame` (its pose
+## now) along `ahead` for LOOK_TICKS of `step_m` (walk_poses()), the axle
+## easing in over RollerPull.TUCK_TICKS, well before the roller reaches the
+## wall; out once none does, so the roller is past it (user ruling a-guest-
+## pulling-a-roller-through-a-doorway-tucks-it-in-line, board cd4ff4e0). At a
+## doorway the jambs meet both sides, so no change of hand clears them; along
+## a wall with the other side clear pick() changes hand first and the new side
+## is clear. Standing still it stays as it is. Walls only, as pick() has them
+## (doors left out, their ends run on).
+static func tuck(
+	bag: Dictionary,
+	grid: BuildGrid,
+	frame: Transform3D,
+	ahead: Array,
+	step_m: float,
+	hand: int,
+	now: float
+) -> void:
+	if step_m < STILL_M:
+		return
+	var poses := walk_poses(frame, ahead, step_m * LOOK_TICKS)
+	RollerPull.tuck(bag, blocked(grid, poses, footprint(hand, false), false), now)
 
 
 ## Counts a change of `bag` to `hand` in its `tally` and starts its trail
