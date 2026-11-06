@@ -64,24 +64,40 @@ func test_a_hold_line_is_cut_short_rather_than_run_back_alongside_itself() -> vo
 	assert_array(holds).is_equal(_cells([Vector2i(0, 8), Vector2i(0, 9), Vector2i(1, 9)]))
 
 
+func test_a_hold_line_keeps_out_of_a_gap_one_cell_wide() -> void:
+	# Tables on (0, 10) and (2, 10) leave a gap at (1, 10): the line turns
+	# before it instead of standing in the way through.
+	var grid := PassengerTestWorld.floored(Vector2i(5, 25))
+	var desk := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(1, 1), 0)
+	PassengerTestWorld.place(grid, &"tray_table", Vector2i(0, 10), 0)
+	PassengerTestWorld.place(grid, &"tray_table", Vector2i(2, 10), 0)
+	var holds: Array = _layout(grid).holds[desk]
+	print("holds %s" % [holds])
+	assert_array(holds.slice(0, 2)).is_equal([Vector2i(1, 8), Vector2i(1, 9)])
+	assert_bool(holds.has(Vector2i(1, 10))).is_false()
+
+
 func test_a_hold_line_stops_at_a_door() -> void:
+	# Two columns wide: a corridor one cell wide is a gap the line keeps out of.
 	var grid := BuildGrid.new(Vector2i(4, 15))
 	var edits: Array[BuildEdit] = []
-	# The desk's far end, and a way round it to its staff spot (1, 0).
-	for cell in [Vector2i(2, 1), Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2)]:
-		edits.append(BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, 1))
 	for y in 15:
-		edits.append(BuildEdit.paint_floor(Vector2i(1, y), BuildGrid.FLOOR_TILE, 1))
+		for x in [1, 2]:
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	grid.apply_batch(edits)
 	EnclosureKit.close_floor(grid)
 	var desk := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(1, 1), 0)
 	var door := PassengerTestWorld.place(grid, &"entrance_door", Vector2i(1, 14), 2)
 	# The cell inside the door is its interaction cell, kept clear as well.
 	assert_that(grid.interaction_cell(door)).is_equal(Vector2i(1, 13))
+	var holds: Array = _layout(grid).holds[desk]
+	print("holds %s" % [holds])
 	var want: Array[Vector2i] = []
 	for y in range(8, 13):
 		want.append(Vector2i(1, y))
-	assert_array(_layout(grid).holds[desk]).is_equal(want)
+	assert_array(holds.slice(0, want.size())).is_equal(want)
+	assert_bool(holds.has(Vector2i(1, 13))).is_false()
+	assert_bool(holds.has(Vector2i(1, 14))).is_false()
 
 
 func test_a_hold_line_keeps_off_another_station_its_staff_spot_and_lane() -> void:

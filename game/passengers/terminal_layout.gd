@@ -12,8 +12,8 @@ extends RefCounted
 ## full-queue-design-a-derived-hold-line-behind-each-lane-gives): each step
 ## straight on, else to the left, else to the right, onto a routable passenger
 ## cell that no lane or earlier hold line took, that is not reserved like a
-## lane cell, not a door cell, a scanner passage or a seat front, and that
-## crosses no door wall, up to HOLD_SLOTS cells. A step that would put the
+## lane cell, not a door cell, a scanner passage or a seat front, not a gap
+## one cell wide, and that crosses no door wall, up to HOLD_SLOTS cells. A step that would put the
 ## line beside its own earlier cells is refused, so a line ends where it would
 ## turn back along itself. Hold lines are found after every lane, stations in
 ## id order. A station's line (line_of()) is its lane then its hold line:
@@ -367,6 +367,12 @@ static func _may_hold(
 	if not grid.can_passenger_route(from, to):
 		return false
 	if grid.wall_kind(from, BuildGrid.SIDE_STEP.find(to - from)) == BuildGrid.WallKind.DOOR:
+		return false
+	# A gap one cell wide (closed on both flanks of the step) is a way through:
+	# queuing in it would close it, and a walker there carries its bags in
+	# front (SecurityLooks.carry_front()).
+	var side := Vector2i(to.y - from.y, from.x - to.x)
+	if not grid.can_passenger_route(to, to + side) and not grid.can_passenger_route(to, to - side):
 		return false
 	for step in BuildGrid.SIDE_STEP:
 		if to + step != from and own.has(to + step):

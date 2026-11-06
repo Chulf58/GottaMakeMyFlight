@@ -81,10 +81,14 @@ func test_a_full_desk_gets_a_sign_above_it() -> void:
 func test_the_sign_caption_counts_the_passengers_held_outside_the_lane() -> void:
 	_attach(_short_lane_world())
 	var desk: int = _world.sim.get_meta(&"desk")
-	# Closer together: the fifth walks on to the second hold cell
-	# (TerminalLayout.line_of()) and stands there before the first is served.
-	_spawn_spaced(5, 6)
-	_world.run_to(_world.clock.tick + 50)
+	# Closer together: the fifth walks on past the first hold cell and turns
+	# back onto the second (TerminalLayout.line_of(), StationQueue.approach()),
+	# and stands there before the first is served.
+	_spawn_spaced(5, 3)
+	for i in 120:
+		if _world.sim.holding_of(desk).size() == 2:
+			break
+		_world.step()
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	assert_str(_markers.sign_text(desk)).is_equal("Queue full · +2 waiting")
 

@@ -69,15 +69,33 @@ func test_an_edit_that_reroutes_the_hold_line_re_places_its_holders() -> void:
 
 
 func test_an_edit_that_shortens_the_hold_line_sends_back_the_members_past_its_end() -> void:
-	var members := _queued(14)
-	var desk: int = _world.sim.get_meta(&"desk")
-	_wall([Vector2i(0, 1), Vector2i(1, 0), Vector2i(-1, 0)])
+	# A hall three cells wide (x 1 to 3; x 3 is the staff's way round the desk):
+	# the line runs straight down x = 1. Walls under (1, 11) and (2, 11) and east
+	# of (2, 11) end it there after one step across: 6 + 5 cells.
+	var grid := BuildGrid.new(Vector2i(5, 25))
+	var edits: Array[BuildEdit] = []
+	for y in 25:
+		for x in [1, 2, 3]:
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	grid.apply_batch(edits)
+	EnclosureKit.close_floor(grid)
+	var desk := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(1, 1), 0)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(3, 24), 2)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	_world.sim.set_meta(&"desk", desk)
+	assert_int(_world.sim.layout.line_of(desk).size()).is_equal(18)
+	var members: Array[Passenger] = []
+	for i in 14:
+		members.append(HoldLineKit.member(_world, desk))
+	for wall in [[Vector2i(1, 11), Vector2i(0, 1)], [Vector2i(2, 11), Vector2i(0, 1)], [Vector2i(2, 11), Vector2i(1, 0)]]:
+		var side := BuildGrid.SIDE_STEP.find(wall[1])
+		assert_bool(grid.apply(BuildEdit.place_wall(wall[0], side)).ok).is_true()
 	_world.step()
 	var line: Array = _world.sim.layout.line_of(desk)
-	assert_int(line.size()).is_equal(10)
+	assert_int(line.size()).is_equal(11)
 	var queued := _world.sim.queue_of(desk) + _world.sim.holding_of(desk)
-	assert_array(queued).is_equal(members.slice(0, 10).map(func(p: Passenger) -> int: return p.id))
-	for p in members.slice(10):
+	assert_array(queued).is_equal(members.slice(0, 11).map(func(p: Passenger) -> int: return p.id))
+	for p in members.slice(11):
 		assert_int(p.station).is_equal(0)
 		assert_int(p.stage).is_equal(Passenger.Stage.TO_CHECKIN)
 	_check_placed(members)
