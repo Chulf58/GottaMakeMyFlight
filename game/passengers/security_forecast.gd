@@ -291,6 +291,10 @@ func _place_waiting() -> void:
 		var u: Passenger = _units[id]
 		if id == _candidate:
 			var own := _candidate_station
+			if slots[own] >= (_lines[own] as Array).size():
+				# Taken by one who chose before it on this tick: it waits on.
+				_wait(id, _keys[id])
+				continue
 			u.station = own
 			u.at = _lines[own][slots[own]]
 			_joins[id] = tick + _candidate_walk
@@ -317,8 +321,9 @@ func _place_waiting() -> void:
 				best_eta = eta
 				best_path = path
 		if best < 0:
-			# No way to any line: it waits on, as one with no route does.
-			_left[id] = true
+			# Every free cell was taken by one who chose before it on this
+			# tick, or none can be walked to: it waits on.
+			_wait(id, _keys[id])
 			continue
 		u.station = best
 		u.clear_path()
