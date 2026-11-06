@@ -323,11 +323,11 @@ var _view := BuildView.new()
 var _room_view := RoomView.new()
 var _focus_room := 0
 var _ghost := Node3D.new()
-var _valid_material := _ghost_material(VALID_TINT)
-var _invalid_material := _ghost_material(INVALID_TINT)
-var _marker_material := _ghost_material(MARKER_TINT)
-var _area_remove_material := _ghost_material(AREA_REMOVE_TINT)
-var _coverage_material := _ghost_material(COVERAGE_TINT)
+var _valid_material := BuildGhost.material(VALID_TINT)
+var _invalid_material := BuildGhost.material(INVALID_TINT)
+var _marker_material := BuildGhost.material(MARKER_TINT)
+var _area_remove_material := BuildGhost.material(AREA_REMOVE_TINT)
+var _coverage_material := BuildGhost.material(COVERAGE_TINT)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
@@ -374,14 +374,6 @@ var _landside_plan: LandsidePlacement.Plan
 ## Where a ray meets the level plane y = `height`, or null when it never does.
 static func ground_point(from: Vector3, direction: Vector3, height := 0.0) -> Variant:
 	return Plane(Vector3.UP, height).intersects_ray(from, direction)
-
-
-static func _ghost_material(tint: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = tint
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	return material
 
 
 func _ready() -> void:
@@ -560,8 +552,8 @@ func apply_at(point: Vector3) -> BuildResult:
 	if tool == Tool.BUY_LAND:
 		return land_tool.buy_at(point) if land_tool.land != null else null
 	var landside_plan := landside_plan_at(point)
-	if landside_plan != null or _is_landside_tool():
-		return _apply_landside(landside_plan)
+	if landside_plan != null or BuildModeLandside.is_landside_tool(self):
+		return BuildModeLandside.apply(self, landside_plan)
 	_history.begin_action()
 	var result := _apply_at(point)
 	_history.end_action()
@@ -600,13 +592,13 @@ func _commit_edit(edit: BuildEdit, note_cell: Vector2i) -> BuildResult:
 		# A removed room's cells, read before it is gone: its dead ends change.
 		var touched: Array[Vector2i] = []
 		if edit.kind == BuildEdit.Kind.REMOVE_ROOM:
-			touched = _rect_cells(grid.get_room(edit.room_id).get("rect", Rect2i()))
+			touched = BuildDrags.rect_cells(grid.get_room(edit.room_id).get("rect", Rect2i()))
 		# The edit and the reshape it causes reach listeners as one change.
 		grid.hold_signals()
 		result = BuildTransaction.commit_plan(grid, DoorPlacement.edits_for(grid, edit), wallet())
 		if result.ok:
 			touched.append_array(result.dirty_cells)
-			_reshape_belts(touched)
+			BuildDrags.reshape_belts(self, touched)
 		grid.release_signals()
 	if result.ok:
 		_redraw()
@@ -631,45 +623,19 @@ func _commit_edit(edit: BuildEdit, note_cell: Vector2i) -> BuildResult:
 ## Starts a Floor or Remove rectangle on the cell under a ground point. A press
 ## outside the grid is a plain click, which the grid refuses with its reason.
 func begin_area(point: Vector3) -> void:
-	# A room tool pressed in the outer band of a room of its type grabs that
-	# room's edge to resize it instead of marking a new room (RoomResize).
-	if TOOL_ROOMS.has(tool) and _resize.begin(grid, point, TOOL_ROOMS[tool]):
-		_status_note = ""
-		_hover_key = ""
-		return
-	if TOOL_ROOMS.has(tool) and room_mover.pick_up(point, TOOL_ROOMS[tool]):
-		return
-	var cell := grid.world_to_cell(point)
-	if not grid.in_bounds(cell):
-		if tool == Tool.BELT:
-			_show_status(BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS))
-			return
-		apply_at(point)
-		return
-	_status_note = ""
-	_area.begin(cell, point, grid.size)
-	_hover_key = ""
+	BuildDrags.begin_area(self, point)
 
 
 ## Starts a Wall or Glass row on the cell under a ground point, on the edge side
 ## nearest the point. A press outside the grid is a plain click, which the grid
 ## refuses with its reason.
 func begin_row(point: Vector3) -> void:
-	if not DRAG_TOOLS.has(tool):
-		return
-	var cell := grid.world_to_cell(point)
-	if not grid.in_bounds(cell):
-		apply_at(point)
-		return
-	_status_note = ""
-	_row.begin(cell, grid.nearest_side(point), grid.size)
-	_hover_key = ""
+	BuildDrags.begin_row(self, point)
 
 
 ## Stretches the row to the cell under a ground point.
 func move_row(point: Vector3) -> void:
-	if _row.active:
-		_row.move(grid.world_to_cell(point))
+	BuildDrags.move_row(self, point)
 
 
 ## Lays the row (WallRowDrag.apply()): every edge the rules accept, stopping
@@ -681,23 +647,10 @@ func finish_row() -> AreaDrag.Outcome:
 	if not _row.active:
 		return null
 	_history.begin_action()
-	_row.cancel()
-	_hover_key = ""
-	var dirty: Array[Vector2i] = []
-	var outcome := WallRowDrag.apply(grid, _row_edits(), check, wallet(), dirty)
-	if outcome.placed > 0:
-		_reshape_belts(dirty)
-		_redraw()
-		grid_changed.emit()
+	var outcome := BuildDrags.lay_row(self)
 	_history.end_action()
-	_status_note = outcome.message()
-	_note_cell = _row.end_cell()
-	_show_status(null)
+	BuildDrags.report_row(self, outcome)
 	return outcome
-
-
-func _row_edits() -> Array[BuildEdit]:
-	return _row.edits(TOOL_WALL_KINDS[tool])
 
 
 ## True while a rectangle or a wall row is being dragged; the drag then owns
@@ -735,10 +688,7 @@ func dragged_area() -> Rect2i:
 ## Stretches the rectangle to the cell under a ground point, or moves the grabbed
 ## room edge to the nearest grid line (RoomResize).
 func move_area(point: Vector3) -> void:
-	if _resize.active:
-		_resize.move(grid, point)
-	elif _area.active:
-		_area.move(grid.world_to_cell(point))
+	BuildDrags.move_area(self, point)
 
 
 ## Applies the rectangle. A drag that never left its cell is applied as the
@@ -747,76 +697,9 @@ func move_area(point: Vector3) -> void:
 ## was a click or it marked a room. One undo step.
 func finish_area() -> AreaDrag.Outcome:
 	_history.begin_action()
-	var outcome := _finish_area()
+	var outcome := BuildDrags.finish_area(self)
 	_history.end_action()
 	return outcome
-
-
-func _finish_area() -> AreaDrag.Outcome:
-	if _resize.active:
-		_finish_resize()
-		return null
-	if not _area.active:
-		return null
-	_area.cancel()
-	_hover_key = ""
-	if tool == Tool.BELT:
-		lay_belt(_area.start_cell(), _area.end_cell())
-		return null
-	if _area.is_single_cell():
-		apply_at(_area.press_point)
-		return null
-	if TOOL_ROOMS.has(tool):
-		_finish_room()
-		return null
-	var outcome: AreaDrag.Outcome
-	if tool == Tool.REMOVE:
-		var touched := _cells_a_clear_touches(_area.rect())
-		grid.hold_signals()
-		outcome = AreaDrag.clear(grid, _area.rect(), wallet())
-		if outcome.placed > 0:
-			_reshape_belts(touched)
-		grid.release_signals()
-	else:
-		outcome = AreaDrag.fill_floor(grid, _area.rect(), TERMINAL_ZONE, wallet())
-	if outcome.placed > 0:
-		_redraw()
-		grid_changed.emit()
-	_status_note = outcome.message()
-	_note_cell = _area.end_cell()
-	_show_status(null)
-	return outcome
-
-
-## Gives the room its dragged rectangle (RoomResize.finish()).
-func _finish_resize() -> void:
-	var before := _resize.original()
-	_hover_key = ""
-	grid.hold_signals()
-	var result := _resize.finish(grid, wallet())
-	if result != null and result.ok:
-		_reshape_belts(_rect_cells(before.merge(_resize.rect())))
-	grid.release_signals()
-	if result != null and result.ok:
-		grid_changed.emit()
-	_status_note = _resize.note
-	_note_cell = _resize.pointer_cell
-	_show_status(null)
-
-
-## Marks the released rectangle as a room of the current room tool's type.
-func _finish_room() -> void:
-	var type: StringName = TOOL_ROOMS[tool]
-	grid.hold_signals()
-	var result := RoomTool.mark(grid, _area.rect(), type, wallet())
-	if result.ok:
-		_reshape_belts(_rect_cells(_area.rect()))
-	grid.release_signals()
-	if result.ok:
-		grid_changed.emit()
-	_status_note = RoomTool.message(grid, result, type)
-	_note_cell = _area.end_cell()
-	_show_status(null)
 
 
 ## Lays a belt line from cell `from` to cell `to` (BeltShaper.path()): buys a
@@ -826,24 +709,8 @@ func _finish_room() -> void:
 ## or the wallet cannot pay. A line over belt only does nothing. One undo step.
 func lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
 	_history.begin_action()
-	var result := _lay_belt(from, to)
+	var result := BuildDrags.lay_belt(self, from, to)
 	_history.end_action()
-	return result
-
-
-func _lay_belt(from: Vector2i, to: Vector2i) -> BuildResult:
-	var plan := BeltShaper.plan_line(grid, from, to, facing)
-	var result := plan.result
-	if result.ok and not plan.edits.is_empty():
-		result = BuildTransaction.commit_plan(grid, plan.edits, wallet())
-	if result.ok and not plan.edits.is_empty():
-		_redraw()
-		grid_changed.emit()
-	_belt_plan = null
-	_hover_key = ""
-	_show_status(result)
-	if not plan.result.ok:
-		grid.edit_refused.emit(BuildEdit.place_object(BELT_PRICE_ID, to, facing), result)
 	return result
 
 
@@ -871,7 +738,7 @@ func undo() -> BuildResult:
 	_hover_key = ""
 	if landside_first:
 		# The landside hover keeps this note until the pointer meets another plan.
-		_hover_key = _landside_key(landside_plan_at(point))
+		_hover_key = BuildModeLandside.hover_key(self, landside_plan_at(point))
 	_show_status(null)
 	return result
 
@@ -899,47 +766,6 @@ func belt_cells_to_buy() -> int:
 	if tool != Tool.BELT or _belt_plan == null or not _belt_plan.result.ok:
 		return 0
 	return _belt_plan.new_cells.size()
-
-
-## Reshapes the belts on and next to `cells` to fit their links (BeltShaper):
-## free RESHAPE_BELT edits, committed through BuildTransaction so they reach
-## listeners like any edit.
-func _reshape_belts(cells: Array[Vector2i]) -> void:
-	var edits := BeltShaper.reshape_edits(grid, BeltShaper.around(cells))
-	if edits.is_empty():
-		return
-	BuildTransaction.commit_plan(grid, edits, wallet())
-	_redraw()
-
-
-## The cells a Remove rectangle over `area` can change the belts next to, read
-## before it clears: the rectangle, the whole footprint of each object reaching
-## into it (a desk's outlet sits beside its far cell) and every bag room that
-## reaches into or touches it.
-func _cells_a_clear_touches(area: Rect2i) -> Array[Vector2i]:
-	var cells := _rect_cells(area)
-	var seen := {}
-	for cell in _rect_cells(area):
-		var object_id := grid.object_at(cell) if grid.in_bounds(cell) else 0
-		if object_id == 0 or seen.has(object_id):
-			continue
-		seen[object_id] = true
-		var record := grid.get_object(object_id)
-		var def := BuildCatalog.get_def(record["def"])
-		cells.append_array(def.footprint(record["anchor"], record["facing"]))
-	for room_id in grid.room_ids():
-		var room := grid.get_room(room_id)
-		if room["type"] == &"bag_room" and (room["rect"] as Rect2i).intersects(area.grow(1)):
-			cells.append_array(_rect_cells(room["rect"]))
-	return cells
-
-
-static func _rect_cells(area: Rect2i) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	for y in range(area.position.y, area.end.y):
-		for x in range(area.position.x, area.end.x):
-			cells.append(Vector2i(x, y))
-	return cells
 
 
 ## Follows the room under a ground point (null for none) while a room-focus
@@ -1076,7 +902,7 @@ func _mouse_ground() -> Variant:
 	var mouse := _pointer_position()
 	var from := camera.project_ray_origin(mouse)
 	var direction := camera.project_ray_normal(mouse)
-	if _is_landside_tool():
+	if BuildModeLandside.is_landside_tool(self):
 		return LandsidePlacement.ground_point(from, direction)
 	var point: Variant = grid_point(from, direction)
 	# Remove also takes a built landside spot, which stands off the grid, on the
@@ -1096,25 +922,25 @@ func _over_grid_area(point: Vector3) -> bool:
 func _update_ghost(point: Variant) -> void:
 	_pointer_on_grid = point != null and _over_grid_area(point)
 	_landside_plan = null if is_dragging() else landside_plan_at(point)
-	if _landside_plan != null or _is_landside_tool() or tool == Tool.BUY_LAND:
-		_hover_off_grid_tool(point)
+	if _landside_plan != null or BuildModeLandside.is_landside_tool(self) or tool == Tool.BUY_LAND:
+		BuildModeLandside.hover_off_grid_tool(self, point)
 		return
 	if _area.active or _resize.active:
 		_draw_area()
 		return
 	if _row.active:
-		_draw_row()
+		BuildGhost.draw_row(self)
 		return
 	if _status_note != "" and (point == null or grid.world_to_cell(point) != _note_cell):
 		_status_note = ""
 		_hover_key = ""
 		_show_status(null)
 	if tool == Tool.BELT:
-		_hover_belt(point)
+		BuildGhost.hover_belt(self, point)
 		return
 	var edit: BuildEdit = null if point == null else edit_at(point)
 	_hover_edit = edit
-	var hint := "" if point == null else _lane_hint_at(grid.world_to_cell(point))
+	var hint := "" if point == null else BuildStatus.lane_hint_at(self, grid.world_to_cell(point))
 	if edit == null:
 		_ghost.visible = false
 		_front_warning = ""
@@ -1125,7 +951,7 @@ func _update_ghost(point: Variant) -> void:
 			_show_status(null)
 		return
 	var warning := front_warning(grid, edit)
-	var key := _edit_key(edit) + "|" + hint + "|" + warning
+	var key := BuildStatus.edit_key(edit) + "|" + hint + "|" + warning
 	if key == _hover_key:
 		return
 	_hover_key = key
@@ -1133,17 +959,14 @@ func _update_ghost(point: Variant) -> void:
 	var result := check(edit)
 	_front_warning = warning if result.ok else ""
 	var valid := _area_remove_material if tool == Tool.REMOVE else _valid_material
-	_draw_ghost(edit, valid if result.ok else _invalid_material)
+	BuildGhost.draw(self, edit, valid if result.ok else _invalid_material)
 	_show_status(result)
 
 
 ## The landside tools' rules (LandsidePlacement) for the sim, grid and wallet
 ## BuildMode has now.
 func landside_placement() -> LandsidePlacement:
-	_landside_placement.sim = landside
-	_landside_placement.grid = grid
-	_landside_placement.wallet = wallet()
-	return _landside_placement
+	return BuildModeLandside.placement(self)
 
 
 ## What the current tool would do on the landside at a ground point (picked on
@@ -1152,318 +975,33 @@ func landside_placement() -> LandsidePlacement:
 ## Remove, off the grid, finds the built spot under it. Null for any other
 ## tool or point, and for a spot-less pointer.
 func landside_plan_at(point: Variant) -> LandsidePlacement.Plan:
-	if point == null:
-		return null
-	var placement := landside_placement()
-	if LANDSIDE_BUILD_TOOLS.has(tool):
-		return placement.plan_build(LANDSIDE_BUILD_TOOLS[tool], point)
-	if tool == Tool.LOT_GATE:
-		return placement.plan_toggle(point)
-	if tool == Tool.REMOVE and not grid.in_bounds(grid.world_to_cell(point)):
-		return placement.plan_remove(point)
-	return null
+	return BuildModeLandside.plan_at(self, point)
 
 
 ## (cost, money the wallet must hold) of the landside build under the pointer,
 ## zero for anything else (BuildMenu's cost line).
 func landside_preview_price() -> Vector2i:
-	if _landside_plan == null or _landside_plan.action != LandsidePlacement.Action.BUILD:
-		return Vector2i.ZERO
-	return Vector2i(_landside_plan.price, _landside_plan.price)
-
-
-func _is_landside_tool() -> bool:
-	return LANDSIDE_BUILD_TOOLS.has(tool) or tool == Tool.LOT_GATE
-
-
-## Ghosts and describes a landside plan: the free spots of the tool's kind in
-## the marker tint, the spot under the pointer valid or invalid, and its
-## capacity, walk and price on the status line.
-func _hover_landside(plan: LandsidePlacement.Plan) -> void:
-	var key := _landside_key(plan)
-	if key == _hover_key:
-		return
-	_hover_key = key
-	_status_note = ""
-	_clear_ghost()
-	if plan == null:
-		_ghost.visible = false
-		_set_status("")
-		return
-	var spots: Array[LandsidePlacement.Plan] = []
-	if LANDSIDE_BUILD_TOOLS.has(tool):
-		spots = landside_placement().free_spot_plans(LANDSIDE_BUILD_TOOLS[tool])
-	var valid := _area_remove_material if tool == Tool.REMOVE else _valid_material
-	LandsidePlacement.draw(_ghost, spots, plan, valid, _invalid_material, _marker_material)
-	_set_status(plan.text)
-
-
-## Hover for a landside tool, or Buy land (LandTool draws its own plot ghost).
-func _hover_off_grid_tool(point: Variant) -> void:
-	if tool != Tool.BUY_LAND:
-		_pointer_on_grid = point != null
-		_hover_landside(_landside_plan)
-		return
-	_ghost.visible = false
-	_set_status(land_tool.hover(point) if land_tool.land != null else "")
-
-
-func _landside_key(plan: LandsidePlacement.Plan) -> String:
-	return "landside:%d:%s" % [tool, "none" if plan == null else plan.text]
-
-
-## Applies a landside plan (null when the tool has no landside to build on).
-## Landside actions keep their own undo records (LandsidePlacement.apply()).
-func _apply_landside(plan: LandsidePlacement.Plan) -> BuildResult:
-	var result := landside_placement().apply(plan, _history.peek())
-	_hover_key = ""
-	_status_note = ""
-	return result
+	return BuildModeLandside.preview_price(self)
 
 
 ## Hides the rectangle's slab and size while the pointer is over the HUD; the
 ## cleared hover key makes _draw_area() draw both again on the way back.
 func _hide_area_ghost() -> void:
-	_pointer_on_grid = false
-	_ghost.visible = false
-	_hover_key = ""
-	_set_status(DRAG_OVER_UI)
+	BuildGhost.hide_area(self)
 
 
-## The Belt ghost for the one cell under the pointer, or none off the grid.
-func _hover_belt(point: Variant) -> void:
-	_hover_edit = null
-	if not _pointer_on_grid:
-		_belt_plan = null
-		_ghost.visible = false
-		if _hover_key != "":
-			_hover_key = ""
-			_show_status(null)
-		return
-	var cell := grid.world_to_cell(point)
-	_draw_belt(cell, cell)
-
-
-## The shaped pieces a Belt line from `from` to `to` would lay or reshape,
-## tinted by whether it can be laid; a refused line tints its cells instead.
-func _draw_belt(from: Vector2i, to: Vector2i) -> void:
-	var key := "belt:%s:%s:%d" % [from, to, facing]
-	if key == _hover_key:
-		return
-	_hover_key = key
-	_belt_plan = BeltShaper.plan_line(grid, from, to, facing)
-	var result := _belt_plan.result
-	if result.ok:
-		result = BuildTransaction.check(grid, _belt_plan.edits, wallet())
-	_clear_ghost()
-	var material := _valid_material if result.ok else _invalid_material
-	if _belt_plan.result.ok:
-		for piece in _belt_plan.shapes:
-			_ghost_object(piece[0], piece[1], piece[2], material)
-	else:
-		for cell in _belt_plan.cells:
-			if grid.in_bounds(cell):
-				_ghost_tile(cell, material)
-	_show_status(result)
-
-
-## The whole row a Wall or Glass drag would lay, one box per edge tinted by
-## whether it would be placed, with its length and cost on the status line.
-func _draw_row() -> void:
-	var cells := _row.cells()
-	var purse := wallet()
-	var key := "row:%s:%s:%d:%d" % [cells.front(), cells.back(), _row.side, tool]
-	if purse != null:
-		key += ":%d" % purse.balance
-	if key == _hover_key:
-		return
-	_hover_key = key
-	_hover_edit = null
-	var plan := WallRowDrag.preview(grid, _row_edits(), check, purse)
-	_clear_ghost()
-	for i in plan.edits.size():
-		var material := _valid_material if plan.valid[i] else _invalid_material
-		_ghost_wall(plan.edits[i].cell, plan.edits[i].side, material)
-	_row_label = "%s row of %d" % ["Glass" if tool == Tool.GLASS else "Wall", cells.size()]
-	_row_label += ", cost %d" % plan.cost
-	if plan.blocked > 0:
-		_row_label += ", %d blocked: %s" % [plan.blocked, plan.first_reason]
-	_show_status(null)
-
-
-## One tinted slab over the room's dragged rectangle, red when it would be refused.
-func _draw_resize() -> void:
-	var area := _resize.rect()
-	var key := "resize:%s" % area
-	if key == _hover_key:
-		return
-	_hover_key = key
-	_clear_ghost()
-	var fits := RoomResize.check(grid, _resize.room_id, area).ok
-	_ghost_slab(area, _valid_material if fits else _invalid_material)
-	_show_status(null)
-
-
-## One tinted slab over the whole rectangle, with its size on the status line.
 func _draw_area() -> void:
-	if _resize.active:
-		_draw_resize()
-		return
-	if tool == Tool.BELT:
-		_draw_belt(_area.start_cell(), _area.end_cell())
-		return
-	var area := _area.rect()
-	var purse := wallet()
-	var key := "area:%s" % area
-	if tool == Tool.FLOOR and purse != null:
-		key += ":%d" % purse.balance
-	if key == _hover_key:
-		return
-	_hover_key = key
-	_clear_ghost()
-	var material := _area_remove_material if tool == Tool.REMOVE else _valid_material
-	if TOOL_ROOMS.has(tool) and not RoomTool.check(grid, area, TOOL_ROOMS[tool]).ok:
-		material = _invalid_material
-	# A floor rectangle the wallet cannot pay for lays nothing (CANT_AFFORD).
-	if tool == Tool.FLOOR and purse != null and AreaDrag.floor_cost(grid, area) > purse.balance:
-		material = _invalid_material
-	_ghost_slab(area, material)
-	_show_status(null)
-
-
-func _clear_ghost() -> void:
-	for child in _ghost.get_children():
-		child.queue_free()
-	_ghost.visible = true
-
-
-func _draw_ghost(edit: BuildEdit, material: Material) -> void:
-	_clear_ghost()
-	match edit.kind:
-		BuildEdit.Kind.PAINT_FLOOR, BuildEdit.Kind.REMOVE_FLOOR:
-			_ghost_tile(edit.cell, material)
-		BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_WALL:
-			# A wall about to be removed is drawn bigger, so it reads at range.
-			_ghost_wall(edit.cell, edit.side, material, 2.0 if tool == Tool.REMOVE else 1.0)
-		BuildEdit.Kind.PLACE_OBJECT:
-			_ghost_object(edit.def_id, edit.cell, edit.facing, material)
-			for cell in coverage_preview(edit):
-				_ghost_tile(cell, _coverage_material).name = "Coverage"
-		BuildEdit.Kind.REMOVE_OBJECT:
-			var record := grid.get_object(edit.object_id)
-			_ghost_object(record["def"], record["anchor"], record["facing"], material)
-		BuildEdit.Kind.REMOVE_ROOM:
-			_ghost_slab(grid.get_room(edit.room_id)["rect"], material)
-
-
-## A tinted box over the wall edge of `cell` on `side`; `grow` thickens it.
-func _ghost_wall(cell: Vector2i, side: int, material: Material, grow := 1.0) -> void:
-	var extent := Vector3(1.0, BuildView.WALL_HEIGHT, BuildView.WALL_THICKNESS * 1.5 * grow)
-	if grow > 1.0:
-		extent += Vector3(0.04, 0.1, 0.0)
-	var wall := _ghost_box(extent, material)
-	wall.transform = BuildView.wall_transform(grid, cell, side).translated_local(
-		Vector3(0.0, extent.y / 2.0, 0.0)
-	)
-
-
-func _ghost_object(def_id: StringName, anchor: Vector2i, turn: int, material: Material) -> void:
-	var def := BuildCatalog.get_def(def_id)
-	var node := BuildView.make_object_node(def, material)
-	node.transform = BuildView.object_transform(grid, def.footprint(anchor, turn), turn)
-	node.scale = Vector3.ONE * 1.02
-	_ghost.add_child(node)
-	StationUseCells.draw(_ghost, grid, def_id, anchor, turn)
+	BuildGhost.draw_area(self)
 
 
 ## The cells the ghost tints as covered while `edit` places a screen stand:
 ## ScreenCoverage.covered_cells() where it would stand; empty for any other edit.
 func coverage_preview(edit: BuildEdit) -> Array[Vector2i]:
-	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or edit.def_id != ScreenCoverage.SCREEN_ID:
-		return []
-	return ScreenCoverage.covered_cells(grid, edit.cell, edit.facing)
-
-
-func _ghost_tile(cell: Vector2i, material: Material) -> MeshInstance3D:
-	var tile := _ghost_box(Vector3(0.96, 0.08, 0.96), material)
-	tile.position = grid.cell_to_world(cell) + Vector3(0.0, 0.06, 0.0)
-	return tile
-
-
-## One tinted slab over a rectangle of cells.
-func _ghost_slab(area: Rect2i, material: Material) -> void:
-	var slab := _ghost_box(Vector3(area.size.x - 0.04, 0.08, area.size.y - 0.04), material)
-	slab.position = (
-		grid.cell_to_world(area.position)
-		+ Vector3((area.size.x - 1) / 2.0, 0.06, (area.size.y - 1) / 2.0)
-	)
-
-
-func _ghost_box(extent: Vector3, material: Material) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = extent
-	var box := MeshInstance3D.new()
-	box.mesh = mesh
-	box.material_override = material
-	_ghost.add_child(box)
-	return box
-
-
-func _edit_key(edit: BuildEdit) -> String:
-	return (
-		"%d:%s:%d:%d:%d:%s:%s"
-		% [
-			edit.kind,
-			edit.cell,
-			edit.side,
-			edit.wall_kind,
-			edit.facing,
-			edit.object_id,
-			edit.room_id
-		]
-	)
+	return BuildGhost.coverage_preview(grid, edit)
 
 
 func _show_status(result: BuildResult) -> void:
-	if _row.active:
-		_set_status(_row_label)
-		return
-	if _resize.active:
-		_set_status(_resize.label(grid))
-		return
-	if _area.active and TOOL_ROOMS.has(tool):
-		_set_status(RoomTool.drag_label(grid, _area.rect(), TOOL_ROOMS[tool]))
-		return
-	# An undo's note shows under the Belt tool too.
-	if _status_note != "" and not _area.active:
-		_set_status(_status_note)
-		return
-	if tool == Tool.BELT:
-		var text := BELT_HINT
-		if _area.active and _belt_plan != null:
-			text = "Belt %d cells" % _belt_plan.cells.size()
-		if result != null and not result.ok:
-			text += "  " + result.reason_text()
-		_set_status(text)
-		return
-	if _area.active:
-		_set_status(_area.size_label())
-		return
-	var text := RoomTool.hint(TOOL_ROOMS[tool]) if TOOL_ROOMS.has(tool) else ""
-	var refused := result != null and not result.ok
-	# The facing is for an item that can be placed; a refusal shows its reason alone.
-	if tool_object(tool) != &"" and not refused:
-		text = "Facing auto" if _facing_is_auto() else "Facing %d" % facing
-	if refused:
-		var reason := result.reason_text()
-		if DOOR_NAMES.has(tool) and DOOR_HINTS.has(result.reason):
-			reason = DOOR_HINTS[result.reason] % DOOR_NAMES[tool]
-		text += ("  " if text != "" else "") + reason
-	if _front_warning != "" and not refused:
-		text += ("  " if text != "" else "") + _front_warning
-	if _lane_hint != "":
-		text += ("  " if text != "" else "") + _lane_hint
-	_set_status(text)
+	BuildStatus.show_status(self, result)
 
 
 ## What the status line says about the lane part at `cell`: the first thing
@@ -1473,21 +1011,7 @@ func _show_status(result: BuildResult) -> void:
 ## lane, any other object and empty floor. The lanes are recognised afresh
 ## from the grid, and only when the cell holds a lane part.
 static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
-	if not on_grid.in_bounds(cell):
-		return ""
-	var id := on_grid.object_at(cell)
-	if id == 0 or not SecurityLanes.is_part(StringName(on_grid.get_object(id)["def"])):
-		return ""
-	var lanes := SecurityLanes.new()
-	lanes.rebuild(on_grid)
-	if lanes.is_complete(id) or lanes.lane_of_piece(id) != 0:
-		return ""
-	if lanes.arches.has(id):
-		return lanes.status_text(id)
-	for arch in lanes.arches:
-		if (lanes.candidate(arch)["parts"] as Dictionary).values().has(id):
-			return lanes.status_text(arch)
-	return NOT_IN_LANE
+	return BuildStatus.lane_hint(on_grid, cell)
 
 
 ## FRONT_OUTSIDE_ROOM for an object edit whose footprint lies wholly in a room
@@ -1495,32 +1019,7 @@ static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
 ## (FacilitySlots.piece_inside), so a toilet stall placed so reads "Needs a
 ## toilet stall". "" for any other edit.
 static func front_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
-	if edit == null or edit.kind != BuildEdit.Kind.PLACE_OBJECT:
-		return ""
-	var def := BuildCatalog.get_def(edit.def_id)
-	if def == null or not def.has_interaction:
-		return ""
-	var room_id := on_grid.room_at(edit.cell)
-	if room_id == 0:
-		return ""
-	var area: Rect2i = on_grid.get_room(room_id)["rect"]
-	for cell in def.footprint(edit.cell, edit.facing):
-		if not area.has_point(cell):
-			return ""
-	if area.has_point(def.interaction_cell(edit.cell, edit.facing)):
-		return ""
-	return FRONT_OUTSIDE_ROOM
-
-
-## lane_hint() for the cell under the pointer, kept until the pointer moves to
-## another cell or the grid changes.
-func _lane_hint_at(cell: Vector2i) -> String:
-	if not _hint_cached or cell != _hint_cell:
-		lane_hint_scans += 1
-		_hint_cell = cell
-		_hint_cache = lane_hint(grid, cell)
-		_hint_cached = true
-	return _hint_cache
+	return BuildStatus.front_warning(on_grid, edit)
 
 
 func _on_lane_graph_changed(_cells: Array[Vector2i]) -> void:
