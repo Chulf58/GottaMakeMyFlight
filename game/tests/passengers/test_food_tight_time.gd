@@ -156,7 +156,10 @@ func _check_leaves_early(venue: StringName, held_up := false, lead := 700) -> vo
 
 
 func test_a_restaurant_guest_short_of_time_leaves_early_pays_less_and_makes_the_flight() -> void:
-	_check_leaves_early(&"restaurant")
+	# 820 ticks ahead (was 700): the forecast now counts the visit before the
+	# walk to security, so at 700 the visit no longer fits (it was forecast as
+	# the guest's own walk to its committed scanner, 116 ticks for any visit).
+	_check_leaves_early(&"restaurant", false, 820)
 
 
 ## Changed for decision a-late-passenger-held-up-by-people-traffic-at-boarding-
