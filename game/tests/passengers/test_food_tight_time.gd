@@ -45,14 +45,14 @@ func _checked_in(world: PassengerTestWorld) -> void:
 ## A landside guest admitted to a `venue` visit and seated, then the burst.
 ## Returns {"guest", "visit", "world", "mood" (when it got up), "seated_at",
 ## "left_at", "full" (what a full visit would have paid at that mood)}.
-func _run(venue: StringName) -> Dictionary:
+func _run(venue: StringName, lead := 700) -> Dictionary:
 	var grid := BuildGrid.new()
 	CafeTestLayout.build(grid, false, venue)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
-	# The guest spawns 700 ticks before boarding opens (tick 0 when boarding
-	# opened at tick 700), so its schedule is as tight as the case needs.
-	var spawn_at := PassengerTestWorld.boarding_tick() - 700
+	# The guest spawns `lead` ticks before boarding opens (700: tick 0 when
+	# boarding opened at tick 700), so its schedule is as tight as the case needs.
+	var spawn_at := PassengerTestWorld.boarding_tick() - lead
 	world.run_to(spawn_at)
 	var guest := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	guest.hunger = 0
@@ -93,8 +93,8 @@ func _run(venue: StringName) -> Dictionary:
 
 ## With `held_up`, the guest misses the flight in the boarding line instead of
 ## making it.
-func _check_leaves_early(venue: StringName, held_up := false) -> void:
-	var seen := _run(venue)
+func _check_leaves_early(venue: StringName, held_up := false, lead := 700) -> void:
+	var seen := _run(venue, lead)
 	var world: PassengerTestWorld = seen["world"]
 	var guest: Passenger = seen["guest"]
 	var visit: CafeVisit = seen["visit"]

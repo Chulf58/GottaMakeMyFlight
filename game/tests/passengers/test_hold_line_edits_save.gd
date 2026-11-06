@@ -200,3 +200,58 @@ func test_a_save_with_holders_on_the_line_plays_on_exactly() -> void:
 			moves += int(_world.passenger(id).is_moving())
 	print("holder moving frames %d" % moves)
 	assert_int(moves).is_greater(0)
+
+
+## A save taken on the tick before several waiting passengers are given places
+## at once (decision hold-line-rebuild-the-security-line-follows-where-people-
+## sta: free places by waiting age, the line's order by where people stand)
+## plays on exactly: the loaded sim gives the same places in the same order.
+func test_a_save_before_a_simultaneous_release_plays_on_exactly() -> void:
+	var grid := BuildGrid.new()
+	CafeTestLayout.build(grid)
+	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(3000))
+	var sim := _world.sim
+	var ids: Array[int] = []
+	for i in 32:
+		var p := _world.passenger(sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
+		p.stage = Passenger.Stage.TO_SECURITY
+		p.at = Vector2i(16, 12)
+		p.clear_path()
+		ids.append(p.id)
+	var data := {}
+	var released := 0
+	for i in 2000:
+		var waiting: Array[int] = []
+		for id in ids:
+			var p := sim.get_passenger(id)
+			if p != null and p.station == 0 and p.stage == Passenger.Stage.TO_SECURITY:
+				waiting.append(id)
+		var open := sim.layout.scanners.all(sim._is_open)
+		data = {
+			"clock": _world.clock.to_snapshot(),
+			"flights": _world.flights.to_snapshot(),
+			"grid": _world.grid.to_snapshot(),
+			"passengers": sim.to_snapshot(),
+		}
+		_world.step()
+		released = 0
+		for id in waiting:
+			released += int(sim.get_passenger(id).station != 0)
+		if open and released >= 2:
+			break
+	print("released %d at once on tick %d" % [released, sim.tick])
+	assert_int(released).is_greater_equal(2)
+	var loaded := BuildGrid.new()
+	assert_bool(loaded.from_snapshot(data["grid"])).is_true()
+	_other = PassengerTestWorld.make(loaded, FlightSim.schedule_starts(3000), 99)
+	assert_bool(_other.clock.from_snapshot(data["clock"])).is_true()
+	assert_bool(_other.flights.from_snapshot(data["flights"])).is_true()
+	assert_bool(_other.sim.from_snapshot(data["passengers"])).is_true()
+	_other.step()
+	assert_str(_other.signature()).is_equal(_world.signature())
+	for i in 300:
+		_world.step()
+		_other.step()
+		assert_str(_other.signature()).is_equal(_world.signature())

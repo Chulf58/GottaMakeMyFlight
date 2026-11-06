@@ -53,6 +53,8 @@ const HORIZON := 200000
 ## Ticks played by every replay so far: the work the forecast costs, which
 ## TestHoldLineForecast bounds per forecast.
 static var steps_played := 0
+## The last waiting passenger's own clearance (clearance()): [key, ticks].
+static var _waiting_memo := []
 
 ## What SecurityRuntime reads from its host (see its header).
 var tick := 0
@@ -114,9 +116,11 @@ var _changed := true
 static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: int) -> int:
 	if not sim.layout.is_usable(station):
 		return JourneyForecast.NEVER
+	if sim._by_id.get(p.id) == p and PassengerStations.is_seeking(sim, p, false):
+		return _waiting_clearance(sim, station, p)
 	var replay := SecurityForecast.new()
 	# One committed to `station` is replayed where it is; any other is the
-	# candidate, even one waiting for a place.
+	# candidate.
 	replay._setup(
 		sim, station, sim.gates.scarce(sim, station, p), 0 if p.station == station else p.id
 	)
@@ -127,6 +131,28 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 		ticks = replay._run(p.id)
 	# The runtime holds the replay as its host: let go, or neither is freed.
 	replay._runtime.bind(null)
+	return ticks
+
+
+## clearance() of passenger `p` of the sim, waiting for a place: it takes the
+## line the sim's own rule (PassengerStations.estimate()) gives it, whichever
+## station is asked about, so one replay answers for every station. The
+## answer is kept for the next ask about it on the same tick with the queues
+## as they were (JourneyForecast asks once per scanner in a row).
+static func _waiting_clearance(sim: PassengerSim, station: int, p: Passenger) -> int:
+	var scarce := sim.gates.scarce(sim, station, p)
+	var key := [sim.get_instance_id(), sim.tick, p.id, scarce, sim._incoming.duplicate()]
+	for at: int in sim.layout.scanners:
+		if sim._queues.has(at):
+			key.append(StationQueue.members(sim._queues[at]))
+	if not _waiting_memo.is_empty() and _waiting_memo[0] == key:
+		return _waiting_memo[1]
+	var replay := SecurityForecast.new()
+	replay._setup(sim, station, scarce)
+	var ticks := replay._run(p.id) if replay._units.has(p.id) else JourneyForecast.NEVER
+	# The runtime holds the replay as its host: let go, or neither is freed.
+	replay._runtime.bind(null)
+	_waiting_memo = [key, ticks]
 	return ticks
 
 
@@ -262,15 +288,14 @@ func _placed(p: Passenger) -> bool:
 ## soonest at among those with a free cell (ties to the lower station id), and
 ## set off for it from where they are; the candidate takes a free cell of its
 ## own station only, reached when its walk is over (_joins). One with no place
-## yet waits, and so does every one who has waited less.
-func _place_waiting() -> void:
-	if _waiting.is_empty():
-		return
+## yet waits, and so does every one who has waited less. `counts` holds, by
+## station, the walkers on their way to it.
+func _place_waiting(counts: Dictionary) -> void:
 	var slots := {}
 	var room := 0
 	for at in _stations:
 		if _opens[at]:
-			slots[at] = StationQueue.size_of(_queues[at]) + _walkers_to(at)
+			slots[at] = StationQueue.size_of(_queues[at]) + int(counts.get(at, 0))
 			room += maxi((_lines[at] as Array).size() - int(slots[at]), 0)
 	var placed: Array[int] = []
 	var at := 0
@@ -341,16 +366,6 @@ func _walkers_of(station: int) -> Array[Passenger]:
 		if u.stage == Passenger.Stage.TO_SECURITY and u.station == station and not _left.has(id):
 			out.append(u)
 	return out
-
-
-## The copies walking to `station`, the candidate with a place among them.
-func _walkers_to(station: int) -> int:
-	var count := 0
-	for id: int in _order:
-		var u: Passenger = _units[id]
-		var walking := u.stage == Passenger.Stage.TO_SECURITY and u.station == station
-		count += int(walking and not _left.has(id))
-	return count
 
 
 func _add(p: Passenger) -> Passenger:
@@ -453,7 +468,16 @@ func _step() -> void:
 			break
 		var u := walkers[i]
 		_changed = u.at != before[i][0] or u.path_end() != before[i][1]
-	_place_waiting()
+	if not _waiting.is_empty():
+		# The walkers each line has now, the candidate on its way among them.
+		var counts := {}
+		for u in walkers:
+			if u.stage == Passenger.Stage.TO_SECURITY and not _left.has(u.id):
+				counts[u.station] = counts.get(u.station, 0) + 1
+		if _joins.has(_candidate):
+			var own: int = _units[_candidate].station
+			counts[own] = counts.get(own, 0) + 1
+		_place_waiting(counts)
 	for id in _order:
 		var u: Passenger = _units[id]
 		if _cleared.has(id) or _left.has(id):
