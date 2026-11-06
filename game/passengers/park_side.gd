@@ -27,12 +27,13 @@ extends RefCounted
 ## a sofa or nap pod seat the approach (slot) cell and the seat root; at a
 ## booth seat a wall on that edge of the approach cell (BoothRoller.walled()),
 ## as BoothRoller.side() lays the roller. Walled on both sides or neither, the
-## hand is hand_of()'s own (`fallback`, live, as before), and ParkWalls moves
-## the park and the lying roller out of any wall.
+## hand is hand_of()'s own (`fallback`) as it chooses, kept like any other,
+## and ParkWalls moves the park and the lying roller out of any wall.
 
 ## A guest this many cells or fewer from where it parks chooses its hand.
 const NEAR_CELLS := 3
-## The sim metadata holding the stamps: passenger id -> [seat key, hand or -1].
+## The sim metadata holding the stamps: passenger id -> [seat key, hand]. A
+## loaded snapshot clears it (PassengerSimSave.from_snapshot()).
 const STAMPS := &"park_side_hands"
 const GATE_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.TO_GATE,
@@ -63,10 +64,13 @@ static func hand(sim: PassengerSim, p: Passenger, fallback: int) -> int:
 	if stamp.is_empty() or stamp[0] != seat["key"]:
 		if not _near(p, seat["cell"]):
 			return fallback
-		stamp = [seat["key"], _open(sim, seat)]
+		# Walled on both sides or neither: hand_of()'s own hand now, kept as
+		# well, so it cannot change mid-stay either.
+		var chosen := _open(sim, seat)
+		stamp = [seat["key"], chosen if chosen >= 0 else fallback]
 		stamps[p.id] = stamp
 		sim.set_meta(STAMPS, stamps)
-	return fallback if stamp[1] < 0 else stamp[1]
+	return stamp[1]
 
 
 ## The open side's hand at `seat` (_seat()): 0 or 1 when one side only is

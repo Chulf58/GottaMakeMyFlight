@@ -21,8 +21,10 @@ func after() -> void:
 func after_test() -> void:
 	if _views != null:
 		_views.free()
+	if _world != null:
 		_world.free_all()
 	_views = null
+	_world = null
 
 
 func _tick() -> void:
@@ -123,9 +125,36 @@ func test_a_wall_built_mid_stay_keeps_the_hand() -> void:
 	assert_bool(made.ok).is_true()
 	await _tick()
 	var kept := SecurityLooks.hand_of(_world.sim, p, 0)
+	# The seat had no wall when the hand was chosen: the stamp is still a hand,
+	# and a different fallback (hand_of()'s own look turning) does not move it.
+	var stamp: Array = (_world.sim.get_meta(&"park_side_hands", {}) as Dictionary).get(p.id, [])
+	var turned := ParkSide.hand(_world.sim, p, 1 - hand)
 	# ParkSide.STAMPS, spelled out so this file also runs against code without it.
 	_world.sim.remove_meta(&"park_side_hands")
 	var fresh := SecurityLooks.hand_of(_world.sim, p, 0)
-	print("wall built mid-stay: hand %d, kept %d, chosen afresh %d" % [hand, kept, fresh])
+	print(
+		(
+			"wall built mid-stay: hand %d, kept %d, stamp %s, other fallback %d, afresh %d"
+			% [hand, kept, stamp, turned, fresh]
+		)
+	)
 	assert_int(kept).is_equal(hand)
+	assert_int(stamp.size()).is_equal(2)
+	assert_bool(stamp[-1] in [0, 1]).is_true()
+	assert_int(turned).is_equal(hand)
 	assert_int(fresh).is_equal(1 - hand)
+
+
+## A stamp made after a snapshot is gone once the snapshot is loaded in place
+## (PassengerSimSave.from_snapshot()): the loaded guest chooses its hand
+## again. Control: the stamp was there before the load.
+func test_a_quick_load_clears_stamps_made_after_its_snapshot() -> void:
+	_world = PassengerTestWorld.reference_world()
+	_world.run_to(10)
+	var saved := _world.sim.to_snapshot()
+	_world.sim.set_meta(ParkSide.STAMPS, {1: ["gate (0, 0)", 1]})
+	assert_bool(_world.sim.has_meta(ParkSide.STAMPS)).is_true()
+	assert_bool(_world.sim.from_snapshot(saved)).is_true()
+	var left: Dictionary = _world.sim.get_meta(ParkSide.STAMPS, {})
+	print("quick load: stamps left %s" % [left])
+	assert_bool(left.is_empty()).is_true()

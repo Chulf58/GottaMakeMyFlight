@@ -21,7 +21,8 @@ extends "res://spike/roller_trail_probe.gd"
 ## SAMPLE_EVERY-th frame of an episode is printed. PARK_STAGES then totals hit
 ## frames by stage and wall, and PARK_EPISODE lists each (guest, wall) episode
 ## with the stages it ran through. The control: the PARK frames counted here
-## equal the trail probe's PARK class frames, above 0.
+## equal the trail probe's PARK class frames (0 is a clean run), and frames
+## drawn in a RollerPark move at all are above 0.
 ##
 ## Run (headless; plates are the trail probe's own and need a window):
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
@@ -30,6 +31,9 @@ extends "res://spike/roller_trail_probe.gd"
 const SAMPLE_EVERY := 6
 
 var _park_frames := 0
+## Frames a roller was drawn in a RollerPark move still under way, wall or
+## not: the control that the probe saw guests park at all.
+var _park_moves := 0
 var _by_stage := {}
 var _episodes := {}
 
@@ -124,12 +128,36 @@ func _summary(world: String) -> void:
 		)
 
 
+func _test_roller(
+	world: String,
+	p: Passenger,
+	body: Node3D,
+	bag: Node3D,
+	kind: SecurityLooks.Kind,
+	state: Dictionary,
+	used: int
+) -> void:
+	if state.get("park", false) and _views.carry_on_props().transfer_progress(p.id, 0) < 1.0:
+		_park_moves += 1
+	super._test_roller(world, p, body, bag, kind, state, used)
+
+
+## The control: the PARK frames counted here equal the trail probe's PARK class
+## (none at all is a clean run), and guests did park (frames drawn in a
+## RollerPark move, wall or not, above 0).
 func _print_classes() -> void:
 	super._print_classes()
 	var trail: int = _cls["PARK"]["frames"]
-	print("PARK_CONTROL counted %d == PARK class %d, above 0" % [_park_frames, trail])
-	if _park_frames != trail or _park_frames <= 0:
+	print(
+		(
+			"PARK_CONTROL counted %d == PARK class %d; park move frames %d, above 0"
+			% [_park_frames, trail, _park_moves]
+		)
+	)
+	if _park_frames != trail:
 		_invalid("the PARK frames counted here differ from the trail probe's PARK class")
+	if _park_moves <= 0:
+		_invalid("no roller was drawn in a RollerPark move: the probe saw no park")
 
 
 ## The stage of a RollerPark move of `state` (a bag record) at `k` of its length.
