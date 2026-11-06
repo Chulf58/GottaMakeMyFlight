@@ -93,7 +93,7 @@ const STRIP_FRAMES := 6
 const STRIP_LOW_M := 0.8
 ## Refused views a tip strip may spend (each costs a few frames) before the
 ## rest of its frames are skipped.
-const STRIP_REFUSALS := 60
+const STRIP_REFUSALS := 150
 ## Ticks the other gate standers get to stand after the first (_gate_stander()).
 const STAND_WAIT := 60
 ## Stand plate attempts (a third of a tick apart) a gate candidate gets when
@@ -269,11 +269,15 @@ func _gate_stander() -> Dictionary:
 	var order: Array = away.keys()
 	var in_desk := {}
 	for p: Passenger in order:
-		in_desk[p] = int(_desk_depth(_views.carry_on_props().props_of(p.id)["bags"][0])[0])
+		var depth := _desk_depth(_views.carry_on_props().props_of(p.id)["bags"][0])
+		in_desk[p] = int(depth[0])
 		print(
 			(
-				"GATE stander id=%d cell %s stood %.2f m from the desk, stood roller points in the desk %d"
-				% [p.id, p.at - _offset, away[p], in_desk[p]]
+				(
+					"GATE stander id=%d cell %s tick %d stood %.2f m from the desk, "
+					+ "DESK_OVERLAP stood roller points in the desk %d, deepest %.3f m"
+				)
+				% [p.id, p.at - _offset, _clock.tick, away[p], in_desk[p], depth[1]]
 			)
 		)
 	order.sort_custom(
@@ -660,7 +664,16 @@ func _await_tip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 				skipped[c] = true
 				continue
 			return [c, float(_clock.tick), turn]
-	_invalid("%s: no %sroller tipped" % [label, "turning " if turning else ""])
+		if turning and skipped.size() == candidates.size():
+			# No tip waits (seed 2012072536: all five marked at the boarding tick
+			# with turn 0): strip the plated one, measuring every stander's turn
+			# during its tip (_tip_turns()); TURN then fails.
+			var own: Passenger = candidates[0]
+			for c: Passenger in candidates:
+				own = c if c.id == int(m.get("id", -1)) else own
+			print("TIP %s: no stander's tip waits for a turn; strip of id %d" % [label, own.id])
+			return [own, float(_clock.tick), 0]
+	_invalid("%s: no roller tipped" % label)
 	return []
 
 
@@ -678,6 +691,12 @@ func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 	var frames := STRIP_FRAMES + turn
 	var c := {"up": INF, "flat": 0.0, "free": 0, "gap": INF, "near": "", "points": 0}
 	c["yaw0"] = _views.node_for(p.id).global_rotation.y
+	# Every candidate's yaw at the mark, for the body's turn during its tip.
+	var yaws := {}
+	for o: Passenger in candidates:
+		if _views.node_for(o.id) != null:
+			yaws[o] = [_views.node_for(o.id).global_rotation.y, 0.0]
+	c["yaws"] = yaws
 	_strip_refused = 0
 	var strip: Array[Image] = []
 	var tried := 0
@@ -687,6 +706,11 @@ func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 		var now := _clock.tick + _clock.alpha
 		if now < tip_at + turn + RollerPark.QUEUE_TIP_TICKS:
 			_carry(p, c, now < tip_at + turn)
+			for o: Passenger in yaws:
+				var node := _views.node_for(o.id)
+				if node != null:
+					var off := absf(angle_difference(float(yaws[o][0]), node.global_rotation.y))
+					yaws[o][1] = maxf(float(yaws[o][1]), off)
 		if tried == turn and not c.has("yaw1"):
 			c["yaw1"] = _views.node_for(p.id).global_rotation.y
 		if tried < frames and now >= tip_at + tried:
@@ -718,6 +742,10 @@ func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 					)
 				)
 			m["repulled"] = maxf(m["repulled"], trail)
+	# The measures print whatever the strip's frames (a strip short of frames
+	# still says whether the body turned during its tip).
+	if turning:
+		_carry_check(label, p, c, turn)
 	if strip.size() < frames:
 		_invalid(
 			(
@@ -735,8 +763,6 @@ func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 	_save(sheet, "%s_tip_strip.png" % label)
 	_sheet.append(sheet)
 	_plates += 1
-	if turning:
-		_carry_check(label, p, c, turn)
 	return true
 
 
@@ -762,6 +788,15 @@ func _carry(p: Passenger, c: Dictionary, carrying: bool) -> void:
 
 ## TURN, CARRY_UPRIGHT and CARRY_CLEAR of the turning strip subject `p`.
 func _carry_check(label: String, p: Passenger, c: Dictionary, turn: int) -> void:
+	# Each stander's largest body turn from the strip's mark to its tip's end:
+	# over TIP_TURN_RAD with no wait is the swing tip_wait() is there to stop.
+	for o: Passenger in c["yaws"]:
+		print(
+			(
+				"%s TIP_TURN id %d body turned at most %.3f rad from the mark to the tip's end (%s)"
+				% [label, o.id, c["yaws"][o][1], "strip" if o == p else "other"]
+			)
+		)
 	var turned := absf(angle_difference(float(c["yaw0"]), float(c.get("yaw1", c["yaw0"]))))
 	print(
 		(
