@@ -283,6 +283,42 @@ func test_a_booth_roller_guest_steps_out_past_the_end_panel_before_the_hips_come
 		assert_float(at.distance_to(Vector2(-0.45, 1.0))).is_less(0.001)
 
 
+## A booth roller guest whose approach cell is walled on one side only holds
+## its roller in the other hand (SecurityLooks.hand_of(), ParkSide), so the
+## park on its hand's side and the floor spot (BoothRoller.side()) are on the
+## same, open side (ruling a-guest-pulling-a-roller-through-a-doorway-tucks-
+## it-in-line): parked on the walled side and laid on the open one, the roller
+## crossed 0.43 m in front of the feet in one frame (food_seats_probe BAG_STEP
+## at 13-1). Each side is walled in turn. Control: the grid took each wall.
+func test_a_booth_roller_guest_walled_on_one_side_holds_it_on_the_open_side() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var seat: Dictionary = world.sim.cafes.visit_of(p.id).seat
+	var cell: Vector2i = seat["approach"]
+	var out: Vector2i = seat["facing"]
+	var front := Transform3D(Basis(Vector3.UP, atan2(out.x, out.y)), world.grid.cell_to_world(cell))
+	var sides: Array[int] = []
+	for towards in [-1.0, 1.0]:
+		var x: Vector3 = front.basis.x * towards
+		sides.append(BuildGrid.SIDE_STEP.find(Vector2i(roundi(x.x), roundi(x.z))))
+	for walled in 2:
+		var edits: Array[BuildEdit] = []
+		for side in sides:
+			if world.grid.has_wall(cell, side):
+				edits.append(BuildEdit.remove_wall(cell, side))
+		edits.append(BuildEdit.place_wall(cell, sides[walled]))
+		assert_bool(world.grid.apply_batch(edits)[-1].ok).is_true()
+		var hand := SecurityLooks.hand_of(world.sim, p, 0)
+		var own := -1.0 if hand == 0 else 1.0
+		var lies := BoothRoller.side(world.sim, front, hand)
+		print(
+			"booth walled on the %s: hand %d, lies %+.0f" % [["right", "left"][walled], hand, lies]
+		)
+		assert_int(hand).is_equal(1 - walled)
+		assert_float(lies).is_equal(own)
+
+
 ## Moves object `id` to the first of `shifts` (cells) the grid accepts, as a room
 ## move does: removed and placed again under its id with its paid. A refused
 ## spot is put back as it was. True when it moved.

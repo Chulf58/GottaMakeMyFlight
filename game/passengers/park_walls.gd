@@ -1,6 +1,10 @@
 class_name ParkWalls
 extends RefCounted
-## Keeps a parked roller out of the walls beside a seat (board a40fdbaf). A
+## Keeps a parked roller out of the walls beside a seat (board a40fdbaf).
+## ParkSide first puts the hand, and so the park, on the open side; this is the
+## backstop for a seat walled on both sides and for a roller carried with the
+## body past a wall (the roll upright and the tip out through the lounge door,
+## whose jamb the tip grazed on its last frame). A
 ## RollerPark move stamped with a seat's face (a gate chair, a cafe seat, a
 ## booth, a sofa or nap pod) parks the roller standing PARK_SIDE_M out on the
 ## hand's side, wherever the walls are. BoothRoller.fix_start() keeps, for such
@@ -23,7 +27,9 @@ extends RefCounted
 ## wall's middle comes nearer the body) or of a wall the boxes left out
 ## (more than PullSide.REACH_CELLS from the walker's cell as the move was stamped).
 
-## Slack past a wall's face or end, so a park moved out of it reads clear.
+## A wall is read this much thicker and longer, so a roller that only touches
+## its face or end (the drawn mesh grazed the end of the wall beside the lounge
+## door on the tip's last frame) is moved clear of it.
 const SLACK_M := 0.005
 ## Passes over the walls: a move out of one wall can put the park in the next
 ## one along.
@@ -39,7 +45,7 @@ static func shift(parked: Transform3D, walls: Array) -> Vector3:
 	for n in PASSES:
 		var any := false
 		for wall: Array in walls:
-			var out := _way_out(points, moved, wall)
+			var out := _way_out(points, moved, wall, SLACK_M)
 			if out != Vector3.ZERO:
 				moved += out
 				any = true
@@ -52,7 +58,7 @@ static func shift(parked: Transform3D, walls: Array) -> Vector3:
 static func inside(xf: Transform3D, walls: Array) -> bool:
 	var points := _points(xf)
 	for wall: Array in walls:
-		if _way_out(points, Vector3.ZERO, wall) != Vector3.ZERO:
+		if _way_out(points, Vector3.ZERO, wall, 0.0) != Vector3.ZERO:
 			return true
 	return false
 
@@ -68,10 +74,11 @@ static func _points(xf: Transform3D) -> Array[Vector3]:
 
 
 ## The shortest move (world, flat) of `points` (moved by `by`) out of `wall`
-## ([centre, axes, half size], axes 0 along the wall, 2 across it): zero when
+## ([centre, axes, half size], axes 0 along the wall, 2 across it), the wall
+## read `slack` thicker and longer: zero when
 ## the points' span misses the wall along or across it. A wall is taller than
 ## any roller, so its height is not read.
-static func _way_out(points: Array[Vector3], by: Vector3, wall: Array) -> Vector3:
+static func _way_out(points: Array[Vector3], by: Vector3, wall: Array, slack: float) -> Vector3:
 	var centre: Vector3 = wall[0]
 	var axes: Array = wall[1]
 	var half: Vector3 = wall[2]
@@ -83,13 +90,15 @@ static func _way_out(points: Array[Vector3], by: Vector3, wall: Array) -> Vector
 		var d := at + by - centre
 		a = Vector2(minf(a.x, d.dot(along)), maxf(a.y, d.dot(along)))
 		c = Vector2(minf(c.x, d.dot(across)), maxf(c.y, d.dot(across)))
-	if a.y <= -half.x or a.x >= half.x or c.y <= -half.z or c.x >= half.z:
+	var hx := half.x + slack
+	var hz := half.z + slack
+	if a.y <= -hx or a.x >= hx or c.y <= -hz or c.x >= hz:
 		return Vector3.ZERO
-	var on_along := _least(a, half.x)
-	var on_across := _least(c, half.z)
+	var on_along := _least(a, hx)
+	var on_across := _least(c, hz)
 	if absf(on_along) < absf(on_across):
-		return along * (on_along + signf(on_along) * SLACK_M)
-	return across * (on_across + signf(on_across) * SLACK_M)
+		return along * on_along
+	return across * on_across
 
 
 ## The shorter signed move of the span `span` (least, most) out of the
