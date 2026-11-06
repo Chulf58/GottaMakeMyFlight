@@ -270,7 +270,7 @@ func _step() -> void:
 		var u: Passenger = _units[id]
 		if u.stage == Passenger.Stage.TO_SECURITY and not _joins.has(id) and not _left.has(id):
 			walkers.append(u)
-	for u in StationQueue.arrive(_sim.grid, _queues, _cells, _lines, walkers, tick):
+	for u in StationQueue.arrive(_sim.grid, _queues, _cells, _lines, walkers, _units, tick):
 		u.stage = Passenger.Stage.SECURITY_QUEUE
 		_changed = true
 	for id in _order:
@@ -308,9 +308,10 @@ func _seek(u: Passenger) -> void:
 		if other != u and walking and other.station == u.station and not _left.has(id):
 			ends.append(other.path_end())
 	var line: Array = _lines[u.station]
-	if not StationQueue.head_for(_sim.grid, u, line, n, ends):
+	var free := StationQueue.free_index(queue, line, _units)
+	if not StationQueue.head_for(_sim.grid, u, line, n, free, ends):
 		_left[u.id] = true
-	elif not u.is_moving() and u.at == line[n]:
+	elif not u.is_moving() and free < line.size() and u.at == line[free]:
 		StationQueue.join(queue, _cells[u.station], u.id)
 		u.stage = Passenger.Stage.SECURITY_QUEUE
 	_changed = true
@@ -320,9 +321,11 @@ func _seek(u: Passenger) -> void:
 ## heading for a cell ahead of it (StationQueue.head_for()).
 func _waits(u: Passenger) -> bool:
 	var line: Array = _lines[u.station]
-	var n := StationQueue.size_of(_queues[u.station])
+	var free := StationQueue.free_index(_queues[u.station], line, _units)
+	if free >= line.size():
+		return StationQueue.size_of(_queues[u.station]) < line.size()
 	var here := line.find(u.at)
-	if here <= n:
+	if here <= free:
 		return false
 	for id in _order:
 		var other: Passenger = _units[id]
@@ -330,7 +333,7 @@ func _waits(u: Passenger) -> bool:
 			continue
 		if other.stage == Passenger.Stage.TO_SECURITY and other.is_moving():
 			var there := line.find(other.path_end())
-			if there >= n and there < here:
+			if there >= free and there < here:
 				return true
 	return false
 

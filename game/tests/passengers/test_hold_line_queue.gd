@@ -128,10 +128,15 @@ func test_same_tick_arrivals_join_by_line_index_then_id() -> void:
 	var lanes := {1: line.slice(0, 2)}
 	var lines := {1: line}
 	var queues := {1: {"lane": [100], "holding": [], "serving": 0}}
+	var front := Passenger.new()
+	front.id = 100
+	front.at = line[0]
+	front.clear_path()
 	# A (id 5) reaches line[2] and B (id 9) line[1] on this tick: B first.
 	var a := _arriving(5, Vector2i(1, 2), Vector2i(0, 2))
 	var b := _arriving(9, Vector2i(1, 1), Vector2i(0, 1))
-	var joined := StationQueue.arrive(grid, queues, lanes, lines, [a, b], 7)
+	var by_id := {100: front, 5: a, 9: b}
+	var joined := StationQueue.arrive(grid, queues, lanes, lines, [a, b], by_id, 7)
 	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([9, 5])
 	assert_array(queues[1]["lane"]).is_equal([100, 9])
 	assert_array(queues[1]["holding"]).is_equal([5])
@@ -144,7 +149,8 @@ func test_same_tick_arrivals_join_by_line_index_then_id() -> void:
 	queues[1] = {"lane": [100], "holding": [], "serving": 0}
 	var c := _arriving(5, Vector2i(1, 1), Vector2i(0, 1))
 	var d := _arriving(9, Vector2i(0, 2), Vector2i(0, 1))
-	joined = StationQueue.arrive(grid, queues, lanes, lines, [d, c], 7)
+	by_id = {100: front, 5: c, 9: d}
+	joined = StationQueue.arrive(grid, queues, lanes, lines, [d, c], by_id, 7)
 	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([5])
 	assert_array(queues[1]["lane"]).is_equal([100, 5])
 	assert_bool(d.is_moving()).is_true()

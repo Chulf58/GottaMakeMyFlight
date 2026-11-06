@@ -178,7 +178,9 @@ static func seek(sim: PassengerSim, p: Passenger) -> void:
 	if p.is_moving():
 		return
 	var line := sim.layout.line_of(p.station)
-	var n := StationQueue.size_of(sim._queue(p.station))
+	var q := sim._queue(p.station)
+	var n := StationQueue.size_of(q)
+	var free := StationQueue.free_index(q, line, sim._by_id)
 	var ends: Array[Vector2i] = []
 	for other in sim._passengers:
 		if other != p and other.station == p.station and other.is_moving():
@@ -187,10 +189,10 @@ static func seek(sim: PassengerSim, p: Passenger) -> void:
 				or other.stage == Passenger.Stage.TO_SECURITY
 			):
 				ends.append(other.path_end())
-	if not StationQueue.head_for(sim.grid, p, line, n, ends):
+	if not StationQueue.head_for(sim.grid, p, line, n, free, ends):
 		sim._leave_station(p)
 		choose(sim, p)
-	elif not p.is_moving() and p.at == line[n]:
+	elif not p.is_moving() and free < line.size() and p.at == line[free]:
 		join(sim, p)
 
 
@@ -211,7 +213,10 @@ static func arrive(sim: PassengerSim) -> void:
 		walkers.append(p)
 	if walkers.is_empty():
 		return
-	for p in StationQueue.arrive(sim.grid, sim._queues, sim.layout.lanes, lines, walkers, sim.tick):
+	var joined := StationQueue.arrive(
+		sim.grid, sim._queues, sim.layout.lanes, lines, walkers, sim._by_id, sim.tick
+	)
+	for p in joined:
 		_joined(sim, p)
 
 
@@ -242,7 +247,7 @@ static func choose(sim: PassengerSim, p: Passenger) -> void:
 		if at >= line.size():
 			full = full or not line.is_empty()
 			continue
-		var path := sim.grid.find_path(p.at, line[at])
+		var path := StationQueue.approach(sim.grid, line, p.at, at)
 		if path.is_empty():
 			continue
 		var station_eta := eta(sim, station, Passenger.path_mm(path), p)

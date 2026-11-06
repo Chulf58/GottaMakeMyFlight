@@ -226,7 +226,7 @@ func _watch() -> void:
 			_measure(lane[i], lane[i + 1])
 		var holding := _sim.holding_of(station)
 		if not holding.is_empty():
-			_count_holders(holding)
+			_count_holders(station, holding)
 			if not lane.is_empty():
 				_measure(lane[lane.size() - 1], holding[0])
 			for i in range(holding.size() - 1):
@@ -267,7 +267,7 @@ func _line(station: int) -> Array:
 
 ## Counts the holders of one station on this frame and whether two of them
 ## standing still share a cell.
-func _count_holders(holding: Array[int]) -> void:
+func _count_holders(station: int, holding: Array[int]) -> void:
 	_holders_max = maxi(_holders_max, holding.size())
 	_holder_frames += 1
 	var cells := {}
@@ -277,8 +277,29 @@ func _count_holders(holding: Array[int]) -> void:
 			continue
 		if cells.has(p.at):
 			_holders_shared += 1
+			if _traced < TRACES:
+				_traced += 1
+				_trace_holders(station, cells[p.at], id)
 			return
-		cells[p.at] = true
+		cells[p.at] = id
+
+
+## HOLDTRACE: two standing holders `a` and `b` of `station` on one cell, each
+## with its stage, cell, place on the line and the index it holds there.
+func _trace_holders(station: int, a: int, b: int) -> void:
+	var line := _line(station)
+	var members := _sim.queue_of(station) + _sim.holding_of(station)
+	var text := "HOLDTRACE t%d station %d line %d lane %d" % [
+		_clock.tick, station, line.size(), _sim.queue_of(station).size()
+	]
+	for id in [a, b]:
+		var p := _sim.get_passenger(id)
+		var index := members.find(id)
+		text += (
+			" | %d st%d stuck%d at %s index %d place %s halt %d"
+			% [id, p.stage, p.stuck, p.at, index, line[index] if index < line.size() else "none", p.halt_tick]
+		)
+	print(text)
 
 
 func _serve(station: int) -> void:
@@ -303,7 +324,8 @@ func _measure(a: int, b: int, leaver := false) -> void:
 	elif _order.has(a) or _order.has(b):
 		column = "order"
 	var key := "%s %s" % [column, "moveup" if moving else "still"]
-	if column == "lane" and moving and _traced < TRACES and d["roller"] < ROLLER_CLEAR_M:
+	var traced := (column == "lane" and moving) or column == "held"
+	if traced and _traced < TRACES and d["roller"] < ROLLER_CLEAR_M:
 		_traced += 1
 		_trace(a, b, d)
 	var row: Array = _rows.get_or_add(key, [0, INF, 0, INF, 0, ""])

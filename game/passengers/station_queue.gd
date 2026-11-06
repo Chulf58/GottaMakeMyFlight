@@ -63,23 +63,85 @@ static func path_to(grid: BuildGrid, line: Array, from: Vector2i, index: int) ->
 	return path
 
 
-## Sends a standing walker `w` toward line[n], the next free cell of its
-## station's `line`, unless it stands further back on the line and another
-## walker is heading for a cell between (`ends`: the path ends of the other
-## walkers to the station): it then waits where it is. True when it is on its
-## way, waits, or stands on line[n]; false when the line has no free cell or
-## no path leads to it.
-static func head_for(grid: BuildGrid, w: Passenger, line: Array, n: int, ends: Array) -> bool:
+## The index of the next free cell of `line` for a walker to join on: past
+## the queue's size and past every line cell a member stands on or is
+## stepping onto, so a newcomer never joins on a cell a member has not left
+## yet. It then joins as the queue's last member behind its place and moves
+## up with the ripple (QueueRipple). `by_id` maps ids to passengers.
+static func free_index(queue: Dictionary, line: Array, by_id: Dictionary) -> int:
+	var free := size_of(queue)
+	for id: int in members(queue):
+		var p: Passenger = by_id[id]
+		free = maxi(free, line.find(p.at) + 1)
+		if p.is_moving():
+			free = maxi(free, line.find(p.path[p.path_index + 1]) + 1)
+	return free
+
+
+## The path from `from` to `line[index]` for a walker joining there: one that
+## steps onto it facing the front of the line or across it (_faces_front()).
+## When the plain way would come at it from the front side it comes round by
+## line[index + 1], or, for the line's last cell, by a neighbour beside or
+## behind it off the line. A walker stopping with its back to the front would
+## leave its pulled roller trailing into the passenger ahead.
+static func approach(grid: BuildGrid, line: Array, from: Vector2i, index: int) -> Array[Vector2i]:
+	var path := path_to(grid, line, from, index)
+	if path.size() < 2 or _faces_front(line, index, path[path.size() - 2]):
+		return path
+	var cell: Vector2i = line[index]
+	var rounds: Array[Vector2i] = []
+	if index + 1 < line.size():
+		rounds.append(line[index + 1])
+	else:
+		for step: Vector2i in BuildGrid.SIDE_STEP:
+			var near := cell + step
+			if not line.has(near) and _faces_front(line, index, near):
+				rounds.append(near)
+	for near in rounds:
+		if near != from and not grid.can_passenger_route(near, cell):
+			continue
+		var round := (
+			path_to(grid, line, from, index + 1)
+			if line.find(near) == index + 1
+			else grid.find_path(from, near)
+		)
+		if not round.is_empty():
+			round.append(cell)
+			return round
+	return path
+
+
+## Whether a step from `from` onto line[index] faces the front of the line, or
+## across it: never away from line[index - 1].
+static func _faces_front(line: Array, index: int, from: Vector2i) -> bool:
+	if index == 0:
+		return true
+	var step: Vector2i = line[index] - from
+	var front: Vector2i = line[index - 1] - line[index]
+	return step.x * front.x + step.y * front.y >= 0
+
+
+## Sends a standing walker `w` toward line[free] (free_index()), unless it
+## stands further back on the line and another walker is heading for a cell
+## between (`ends`: the path ends of the other walkers to the station), or
+## every line cell is still taken by a member: it then waits where it is.
+## True when it is on its way, waits, or stands on line[free]; false when
+## the queue (`n` members) has no place left or no path leads there.
+static func head_for(
+	grid: BuildGrid, w: Passenger, line: Array, n: int, free: int, ends: Array
+) -> bool:
 	if n >= line.size():
 		return false
+	if free >= line.size():
+		return true
 	var here := line.find(w.at)
-	if here == n:
+	if here == free:
 		return true
 	for end: Vector2i in ends:
 		var there := line.find(end)
-		if here > n and there >= n and there < here:
+		if here > free and there >= free and there < here:
 			return true
-	var path := path_to(grid, line, w.at, n)
+	var path := approach(grid, line, w.at, free)
 	if path.size() < 2:
 		return false
 	w.set_path(path)
@@ -90,21 +152,22 @@ static func head_for(grid: BuildGrid, w: Passenger, line: Array, n: int, ends: A
 ## committed to a station of `queues`, whose lane cells are `lanes` and whose
 ## line is `lines`, by station. A walker standing on a line cell, or reaching
 ## one at its pace on this tick (it never covers more than one cell a tick),
-## joins when that cell is line[n], one reaching it on its way further back
+## joins when that cell is the next free one (free_index()), one reaching it on its way further back
 ## only when no other walker's path ends there. Those standing go first, then by line
 ## index, then id, so of two reaching the line on one tick the one nearer the
 ## front joins first and the next cell is then free for the other. A joiner
 ## that reaches its cell walks just onto it and stops there: the rest of its
 ## step is dropped, it is not drawn back. Then a walker whose path ends on a
-## cell the queue now holds is sent on toward line[n] (send_on()), never to
-## stop on that cell. Returns the joiners in join order, standing, a moving
-## one with halt_tick `now`.
+## cell the queue now holds is sent on toward the free cell (send_on()),
+## never to stop on that cell. `by_id` maps ids to passengers. Returns the
+## joiners in join order, standing, a moving one with halt_tick `now`.
 static func arrive(
 	grid: BuildGrid,
 	queues: Dictionary,
 	lanes: Dictionary,
 	lines: Dictionary,
 	walkers: Array,
+	by_id: Dictionary,
 	now: int
 ) -> Array[Passenger]:
 	var arrivals := []
@@ -131,11 +194,18 @@ static func arrive(
 	var joined: Array[Passenger] = []
 	for entry: Array in arrivals:
 		var queue: Dictionary = queues[entry[0]]
-		if entry[1] != size_of(queue):
+		if entry[1] != free_index(queue, lines[entry[0]], by_id):
 			continue
 		var w: Passenger = entry[4]
-		var cell: Vector2i = lines[entry[0]][entry[1]]
-		if entry[2] == 1 and w.path_end() != cell and ends.get([entry[0], cell], 0) > 0:
+		var line: Array = lines[entry[0]]
+		var cell: Vector2i = line[entry[1]]
+		# One passing over the cell on its way on takes it only when no other
+		# walker heads there and it steps onto it facing the front.
+		var passing: bool = entry[2] == 1 and w.path_index + 2 < w.path.size()
+		if (
+			passing
+			and (ends.get([entry[0], cell], 0) > 0 or not _faces_front(line, entry[1], w.at))
+		):
 			continue
 		if entry[2] == 1:
 			w.walk(entry[5])
@@ -145,7 +215,8 @@ static func arrive(
 		joined.append(w)
 	for w: Passenger in walkers:
 		if w.is_moving() and lines.has(w.station) and queues.has(w.station):
-			send_on(grid, w, lines[w.station], size_of(queues[w.station]))
+			var line: Array = lines[w.station]
+			send_on(grid, w, line, free_index(queues[w.station], line, by_id))
 	return joined
 
 
@@ -158,20 +229,34 @@ static func _before(a: Array, b: Array) -> bool:
 
 
 ## A walker `w` whose path ends on a cell of its station's `line` that a
-## queue member holds (index below `n`, the queue's size) heads for line[n]
-## instead: on from the cell it steps to, or turning back where it is when
-## that way is shorter, so it never stops on the held cell. A walker heading
-## for a free cell, off the line, or with no free cell left (it chooses again
-## at its path's end) is left as it is.
+## queue member holds or has not left yet (index below `n`, free_index())
+## heads for line[n] instead: on from the cell it steps to, or turning back where it is when
+## that way is shorter, so it never stops on the held cell. With no free cell
+## yet (members still stand on every cell) it stops short of the taken cells,
+## turning back mid-step only if it is stepping onto one, and waits. A walker
+## heading for a free cell or off the line is left as it is.
 static func send_on(grid: BuildGrid, w: Passenger, line: Array, n: int) -> void:
 	var end := line.find(w.path_end())
-	if end < 0 or end >= n or n >= line.size():
+	if end < 0 or end >= n:
 		return
-	var target: Vector2i = line[n]
 	var next := w.path[w.path_index + 1]
 	var seg := Passenger.segment_mm(w.at, next)
-	var ahead := _path(grid, next, target)
-	var back := _path(grid, w.at, target)
+	if n >= line.size():
+		# No cell is free yet: it stops short of the taken cells and waits.
+		var into := line.find(next)
+		if into < 0 or into >= n:
+			var stop: Array[Vector2i] = []
+			stop.assign(w.path.slice(0, w.path_index + 2))
+			_keep_step(w, stop)
+		else:
+			var walked := seg - w.seg_mm
+			var turned: Array[Vector2i] = [next, w.at]
+			w.at = next
+			w.set_path(turned)
+			w.seg_mm = walked
+		return
+	var ahead := _approach_or_here(grid, line, next, n)
+	var back := _approach_or_here(grid, line, w.at, n)
 	var via_ahead := seg - w.seg_mm + Passenger.path_mm(ahead)
 	var via_back := w.seg_mm + Passenger.path_mm(back)
 	if not back.is_empty() and (ahead.is_empty() or via_back < via_ahead):
@@ -189,16 +274,24 @@ static func send_on(grid: BuildGrid, w: Passenger, line: Array, n: int) -> void:
 		var path: Array[Vector2i] = []
 		path.assign(w.path.slice(0, w.path_index + 1))
 		path.append_array(ahead)
-		var index := w.path_index
-		var walked := w.seg_mm
-		w.path = path
-		w.path_index = index
-		w.seg_mm = walked
+		_keep_step(w, path)
 
 
-## The grid's path from `from` to `to`, or just [from] when they are one cell.
-static func _path(grid: BuildGrid, from: Vector2i, to: Vector2i) -> Array[Vector2i]:
-	if from == to:
+## Gives walker `w` the new `path`, which starts with the cells it walked, and
+## keeps it where it is along its step.
+static func _keep_step(w: Passenger, path: Array[Vector2i]) -> void:
+	var index := w.path_index
+	var walked := w.seg_mm
+	w.path = path
+	w.path_index = index
+	w.seg_mm = walked
+
+
+## approach(), or just [from] when it stands on line[index] already.
+static func _approach_or_here(
+	grid: BuildGrid, line: Array, from: Vector2i, index: int
+) -> Array[Vector2i]:
+	if from == line[index]:
 		var here: Array[Vector2i] = [from]
 		return here
-	return grid.find_path(from, to)
+	return approach(grid, line, from, index)
