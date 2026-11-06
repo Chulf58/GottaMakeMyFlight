@@ -13,10 +13,10 @@ extends RefCounted
 ## member, when it stands on or steps onto the tail cell (tail(): past every
 ## cell a member stands on or steps onto, and past an admitted passenger still
 ## on the line), so the members stand with no gap; walkers entering on one
-## tick go by line index, then the walk still to go, then id. The walkers off
-## the queue are given the cells behind the tail nearest first, so the cell a
-## walker chose gives it no priority. All of it is settled once a tick, before anyone steps (arrive()),
-## by PassengerSim and SecurityForecast alike.
+## tick go by line index, then the walk still to go, then id. The walkers
+## off the queue are given the cells behind the tail nearest first, so the
+## cell a walker chose gives it no priority. All of it is settled once a tick,
+## before anyone steps (arrive()), by PassengerSim and SecurityForecast alike.
 
 
 ## Moves passengers from the holding list into free places at the back of

@@ -127,14 +127,16 @@ func test_a_guest_giving_its_order_gives_up_unpaid_when_security_fills() -> void
 func test_a_deadline_passing_on_the_tick_the_order_completes_gives_up_unpaid() -> void:
 	# Moved for bounded lines (board c5b6664f): a burst reaches the queues over
 	# many ticks, so its size no longer lands the deadline on one chosen tick;
-	# the flight is moved a tick at a time until the deadline lands there.
-	var flight_from := 0
+	# the flight is moved a tick at a time until the deadline lands there (an
+	# earlier flight as a guest spawned that much later: a flight starting
+	# before tick 0 is not set up).
+	var shift := 0
 	var made := []
 	var service_end := 0
 	var fresh := 0
-	for attempt in 8:
+	for attempt in 12:
 		after_test()
-		made = _admitted(0, flight_from)
+		made = _admitted(maxi(-shift, 0), maxi(shift, 0))
 		var world: PassengerTestWorld = made[0]
 		var guest: Passenger = made[1]
 		var visit: CafeVisit = made[2]
@@ -150,11 +152,15 @@ func test_a_deadline_passing_on_the_tick_the_order_completes_gives_up_unpaid() -
 		world.step()
 		var spot: Vector2i = world.sim.cafes.layout.counter(visit.room, visit.counter)["lane"][0]
 		fresh = VisitForecast.live_deadline(world.sim, guest, spot, 0, visit.resume_stage)
-		var seen := [flight_from, service_end, fresh]
-		print("flight from %d: service_end %d, deadline after the burst %d" % seen)
-		if fresh == service_end:
+		var seen := [shift, service_end, fresh]
+		print("flight moved %d: service_end %d, deadline after the burst %d" % seen)
+		if fresh != service_end:
+			shift += service_end - fresh
+		elif guest.stage != Passenger.Stage.CAFE_ORDER:
+			# Its own check, earlier in the tick, fired: a tick later.
+			shift += 1
+		else:
 			break
-		flight_from += service_end - fresh
 	var world: PassengerTestWorld = made[0]
 	var guest: Passenger = made[1]
 	var visit: CafeVisit = made[2]
