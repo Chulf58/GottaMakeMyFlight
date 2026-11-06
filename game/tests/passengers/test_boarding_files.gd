@@ -393,7 +393,7 @@ func test_a_wait_is_never_ended_by_time_alone() -> void:
 	_world.step()
 	assert_bool(_world.sim.files.is_pending(second.id)).is_true()
 	for i in 5000:
-		_world.sim._admit_pending()
+		PassengerGates.admit_pending(_world.sim)
 		assert_int(_world.sim.files.allowed(_world.sim, second, PassengerSim.RUN_MM)).is_equal(0)
 	assert_bool(_world.sim.files.is_pending(second.id)).is_true()
 	assert_array(_world.sim.files.door_file(first.exit_object)).is_equal([first.id])

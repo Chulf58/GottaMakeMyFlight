@@ -181,7 +181,7 @@ static func _soonest_scanner(
 
 
 ## The open exit a passenger at `from` heads for, chosen as
-## PassengerSim._choose_exit() chooses it: the shortest walk inside along the
+## PassengerGates.choose_exit() chooses it: the shortest walk inside along the
 ## grid's path, ties to the earlier door in TerminalLayout.open_exits(). Its id
 ## (x) and that walk in mm (y); x is 0 when no open exit can be walked to.
 ## With passenger `p`, only the exits it may leave by (PassengerSim.exits_for(),
