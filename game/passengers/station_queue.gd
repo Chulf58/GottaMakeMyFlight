@@ -169,8 +169,9 @@ static func may_enter(queue: Dictionary, admitted: int) -> bool:
 ## - A walker standing on a line cell at or behind the tail (tail()), or
 ##   reaching one at its pace on this tick (it never covers more than one cell
 ##   a tick), enters the queue there, by line index, then the walk still to
-##   go, then id; one reaching a cell on its way on enters only when it steps
-##   onto it facing the front or across the line (_faces_front()). One that
+##   go, then id; one reaching a cell on its way on enters only on the tail
+##   cell, facing the front or across the line (_faces_front()), when no other
+##   walker heads there. One that
 ##   reaches its cell walks just onto it and stops; the cells it walked stay,
 ##   so its last step is kept (SecurityLooks.carry_front() reads it).
 ## - A walker standing on a cell a member holds or takes steps off it
@@ -246,13 +247,16 @@ static func arrive(
 				lost[w.id] = true
 				turn_back(w)
 			continue
-		if at < tail(free, admitted[station], held.get(station, -1)):
+		var to := tail(free, admitted[station], held.get(station, -1))
+		if at < to:
 			continue
-		# One passing over a cell on its way on enters there only facing the
-		# front, and not on a cell another walker heads for.
+		# One passing over a cell on its way on enters there only on the tail
+		# cell itself, facing the front, and when no other walker heads there:
+		# a route that crosses the line further back does not make it walk the
+		# line from there.
 		var passing := moving and w.path_index + 2 < w.path.size()
 		var headed: bool = ends.get(Vector3i(station, into.x, into.y), 0) > 0
-		if passing and (headed or not _faces_front(line, at, w.at)):
+		if passing and (at != to or headed or not _faces_front(line, at, w.at)):
 			continue
 		if not may_enter(queue, admitted[station]):
 			# Behind an admitted passenger: it stops here and waits.

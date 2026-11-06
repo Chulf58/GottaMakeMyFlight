@@ -111,18 +111,14 @@ func _check_tier(use_lane: bool, count: int, phases_wanted: Array) -> void:
 func test_the_forecast_equals_measured_clearance_at_the_basic_scanner() -> void:
 	# 2720 before a walker joined on the tick it reaches its cell
 	# (StationQueue.arrive()), not the tick after: seven passengers, a tick each.
-	# 2713 before the line followed where people stand (decision hold-line-
-	# rebuild-the-security-line-follows-where-people-sta): they enter it sooner.
-	_check_tier(false, 2381, BASIC_PHASES)
+	_check_tier(false, 2713, BASIC_PHASES)
 
 
 func test_the_forecast_equals_measured_clearance_at_the_lane() -> void:
 	# 2197 before the arch walk stopped on the arch cell to claim the pickup
 	# cell (decision gate-full-design-passengers-reserve-a-gate-seat-or-standing).
 	# 2230 before a walker joined on the tick it reaches its cell.
-	# 2223 before the line followed where people stand (decision hold-line-
-	# rebuild-the-security-line-follows-where-people-sta).
-	_check_tier(true, 2281, LANE_PHASES)
+	_check_tier(true, 2223, LANE_PHASES)
 
 
 static func _walk(mm: int) -> int:
