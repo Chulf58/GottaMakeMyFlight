@@ -2,13 +2,16 @@ extends SceneTree
 ## Headless probe of the spacing in desk and security lanes as they move up
 ## (board 34b0c378, QueueRipple). It boots main.tscn, builds CafeTestLayout
 ## with a gate desk, opens the airport, sends GUESTS calm passengers with a
-## roller each and EXTRA more of the first flight to check in, and plays
+## roller each and EXTRA more of the first flight to check in (SECURITY_EXTRA
+## at security, unless --extra is given), and plays
 ## TICKS ticks, one a frame. Each frame, for every lane of the place (desks
 ## for --place=checkin, scanners for --place=security), it measures each pair
 ## of lane neighbours and, at a desk, the passenger who just checked in
 ## against the new front: body to body and each body to the other's roller
 ## (QueueSpacing.pair(); node transforms only, so headless is valid for these
 ## distances, unlike body points inside a bag).
+## TRACE lines name each member's facing (yaw) and how near its own roller is
+## to the other body, so a failing pair says whose roller it is.
 ## Columns: "lane" pairs count against the ripple; "held" pairs have a member
 ## that was in a holding list or joined the lane on a cell another queue member
 ## stood on (board c5b6664f) and are reported apart. Rows: "moveup" frames
@@ -29,6 +32,11 @@ const QueueSpacing := preload("res://spike/queue_spacing.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const NO_TAG := "nothing_has_this_tag"
 const GUESTS := 4
+const EXTRA := 16
+## With EXTRA, security seeds 2 and 4 measured no in-order lane pair moving up
+## (every move-up pair was out of order: PROBE_INVALID); with 40 all of seeds
+## 1 to 4 build lanes of 369 to 924 in-order move-up frames (board de64b195).
+const SECURITY_EXTRA := 40
 const ROLLER_CLEAR_M := 0.30
 const BODY_ZERO_M := 0.001
 const WINDOW := 1000
@@ -45,7 +53,7 @@ const TRACES := 12
 var _seed := 0
 var _place := "checkin"
 var _ticks := 2500
-var _extra := 16
+var _extra := -1
 var _main: Node3D
 var _clock: SimClock
 var _sim: PassengerSim
@@ -87,6 +95,8 @@ func _initialize() -> void:
 			_extra = int(arg.get_slice("=", 1))
 		elif arg == "--plate":
 			_plate_on = true
+	if _extra < 0:
+		_extra = SECURITY_EXTRA if _place == "security" else EXTRA
 	print("PROBE sim_seed=%d place=%s ticks=%d extra=%d" % [_seed, _place, _ticks, _extra])
 	_run.call_deferred()
 
@@ -274,11 +284,26 @@ func _measure(a: int, b: int, leaver := false) -> void:
 ## tick, and the lane.
 func _trace(a: int, b: int, d: Dictionary) -> void:
 	var line := "TRACE t%d body %.3f roller %.3f" % [_clock.tick, d["body"], d["roller"]]
-	for id in [a, b]:
-		var p := _sim.get_passenger(id)
+	for pair in [[a, b], [b, a]]:
+		var p := _sim.get_passenger(pair[0])
+		var node := _views.node_for(pair[0])
+		var other := _views.node_for(pair[1]).global_position
+		var near := INF
+		for roller in QueueSpacing.rollers(_views, _sim, pair[0]):
+			near = minf(near, QueueSpacing.least(QueueSpacing.surface(roller), other))
 		line += (
-			" | %d st%d at %s moving %s halt %d station %d"
-			% [id, p.stage, p.at, p.is_moving(), p.halt_tick, p.station]
+			" | %d st%d at %s moving %s halt %d station %d yaw %.2f its roller to %d %.3f"
+			% [
+				pair[0],
+				p.stage,
+				p.at,
+				p.is_moving(),
+				p.halt_tick,
+				p.station,
+				node.rotation.y,
+				pair[1],
+				near
+			]
 		)
 		if p.station != 0:
 			line += " lane %s" % [_sim.queue_of(p.station)]
