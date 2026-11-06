@@ -78,27 +78,42 @@ func _sheet() -> void:
 	print("PLATE saved %s" % dir.path_join("door_tuck_sheet.png"))
 
 
-## The middle of a one-cell doorway's door edge within START_M of `at` (level),
-## or INF.
+## The middle of a one-cell doorway within START_M of `at` (level), or INF: an
+## edge with a door or no wall at all between two walled edges on its line
+## (roller_trail_probe.gd's JAMB counts both, and a door-only test found none).
 func _door_near(main: Node3D, at: Vector3) -> Vector3:
 	if _doors.is_empty():
 		var grid: BuildGrid = (main.get_node("BuildMode") as BuildMode).grid
+		var seen := {}
 		for edge in WallCutaway.wall_edges(grid):
 			var cell := Vector2i(edge.x, edge.y)
 			var side: int = edge.z
-			if grid.wall_kind(cell, side) != BuildGrid.WallKind.DOOR:
+			if not _solid(grid.wall_kind(cell, side)):
 				continue
 			var along := Vector2i(BuildGrid.SIDE_STEP[side].y, BuildGrid.SIDE_STEP[side].x)
-			var walled := 0
 			for k in [1, -1]:
-				var kind := grid.wall_kind(cell + along * k, side)
-				walled += int(kind != BuildGrid.WallKind.NONE and kind != BuildGrid.WallKind.DOOR)
-			if walled == 2:
-				_doors.append(BuildView.wall_transform(grid, cell, side).origin)
+				var gap: Vector2i = cell + along * k
+				if (
+					_solid(grid.wall_kind(gap, side))
+					or not _solid(grid.wall_kind(gap + along * k, side))
+				):
+					continue
+				var key := Vector3i(gap.x, gap.y, side)
+				if not seen.has(key):
+					seen[key] = true
+					_doors.append(BuildView.wall_transform(grid, gap, side).origin)
+		print("DOOR_STRIP doorways found %d" % _doors.size())
+		if _doors.is_empty():
+			_doors.append(Vector3.INF)
 	for door in _doors:
 		if Vector2(door.x - at.x, door.z - at.z).length() < START_M:
 			return door
 	return Vector3.INF
+
+
+## Whether wall kind `kind` stands in the way (a plain or glass wall).
+static func _solid(kind: int) -> bool:
+	return kind == BuildGrid.WallKind.PLAIN or kind == BuildGrid.WallKind.GLASS
 
 
 ## One plate of the strip: "" when saved, else what failed.

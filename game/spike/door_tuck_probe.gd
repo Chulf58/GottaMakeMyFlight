@@ -11,7 +11,7 @@ extends "res://spike/roller_trail_probe.gd"
 ##     centre line than TRAIL_SIDE_MIN_M a shin hit, so a tucked frame is one
 ##     by that measure; the windowed leg check below is the real test).
 ##   LEGS_REAL (windowed only; a headless skeleton is not posed): on every
-##     settled tucked frame, and on every LEG_EVERY-th settled untucked one,
+##     LEG_EVERY_TUCKED-th settled tucked frame and every LEG_EVERY-th untucked one,
 ##     the body points (CarryContact, gripping hand left out) inside the
 ##     roller's meshes, rods included, that belong to a leg bone (Quad, Shin,
 ##     Foot), and the least gap from the rods (the grip bar to Pull_Reach's
@@ -22,7 +22,8 @@ extends "res://spike/roller_trail_probe.gd"
 
 const DoorTuckStrip := preload("res://spike/door_tuck_strip.gd")
 const TOP_DEEP := 12
-const LEG_EVERY := 8
+const LEG_EVERY := 32
+const LEG_EVERY_TUCKED := 4
 const LEG_BONES: Array[String] = ["Quad", "Shin", "Foot"]
 
 var _deep := 0
@@ -51,7 +52,15 @@ func _classify(
 	world: String, p: Passenger, body: Node3D, bag: Node3D, state: Dictionary, found: Dictionary
 ) -> void:
 	var before := int(_cls["JAMB"]["frames"])
+	var other := int(_cls["OTHER"]["frames"])
 	super._classify(world, p, body, bag, state, found)
+	var w := RollerPull.tuck_weight(state, _clock.tick + _clock.alpha)
+	if int(_cls["OTHER"]["frames"]) > other:
+		# Does the tuck have a part in the OTHER class (the west wall by (10,117))?
+		_tuck["other_tucked"] = int(_tuck.get("other_tucked", 0)) + int(w > 0.0)
+		if int(_cls["OTHER"]["frames"]) <= TOP_DEEP:
+			var seen := [world, p.id, _clock.tick, found["mesh"]["name"], p.at, w, _stage(p)]
+			print("OTHER_AT %s id=%d tick=%d %s guest %s tuck=%.2f %s" % seen)
 	var jamb := int(_cls["JAMB"]["frames"])
 	if jamb == before:
 		return
@@ -97,9 +106,15 @@ func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> 
 		_tuck["settled"] += 1
 		_tuck["shin"] += int(_axles["shin"]) - shin
 		_tuck["heel"] += int(_axles["heel"]) - heel
-	_tuck["seen"] += 1
-	if not _headless and (tucked or int(_tuck["seen"]) % LEG_EVERY == 0):
+	var count := "seen_tucked" if tucked else "seen"
+	_tuck[count] = int(_tuck.get(count, 0)) + 1
+	var every := LEG_EVERY_TUCKED if tucked else LEG_EVERY
+	if not _headless and int(_tuck[count]) % every == 0:
 		_legs(p, body, bag, tucked)
+	if not _tuck.has("door_check") and p.at == Vector2i(20, 112):
+		# The door strip's doorway test, headless too (the strip runs windowed).
+		_tuck["door_check"] = DoorTuckStrip.new()._door_near(_main, body.global_position)
+		print("DOOR_CHECK id=%d at %s: doorway %s" % [p.id, p.at, _tuck["door_check"]])
 
 
 ## LEGS_REAL on one settled frame (see the header).
@@ -150,6 +165,10 @@ static func _segments_gap(a0: Vector3, a1: Vector3, b0: Vector3, b1: Vector3) ->
 func _print_classes() -> void:
 	super._print_classes()
 	print("JAMB_DEEP seed %d: %d JAMB frames %.2f m or deeper" % [_seed, _deep, BAR_DEPTH_M])
+	var share := 100.0 * int(_tuck["pulled"]) / maxf(float(_all["pull"]), 1.0)
+	var tuck_text := "TUCK_SHARE seed %d: TUCK_SIDE_M %.2f, %d of %d pulled frames tucked (%.1f%%)"
+	print(tuck_text % [_seed, RollerPull.TUCK_SIDE_M, _tuck["pulled"], _all["pull"], share])
+	print("OTHER_TUCKED seed %d: %d OTHER frames tucked" % [_seed, _tuck.get("other_tucked", 0)])
 	print(
 		(
 			"TUCK seed %d: %d pulled frames tucked, %d settled, SHIN %d, HEEL %d among them"
