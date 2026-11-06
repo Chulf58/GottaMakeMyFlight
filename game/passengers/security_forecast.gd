@@ -84,6 +84,9 @@ var _places: GateCapacity
 var _units := {}
 ## The copies' ids, ascending: the order PassengerSim steps passengers in.
 var _order: Array[int] = []
+## The ids of _order the replay steps: all but the waiting copies standing
+## where they wait, which nothing moves until they have a place.
+var _active: Array[int] = []
 ## Passenger id -> the tick the candidate (clearance()), on its way with a
 ## place, reaches it; it is not walked.
 var _joins := {}
@@ -265,6 +268,15 @@ func _add_waiting(p: Passenger) -> void:
 	copy.security_phase = SecurityRuntime.Phase.NONE
 	copy.security_work = 0
 	_wait(copy.id, PassengerStations.wait_key(p, false))
+	if not copy.is_moving():
+		_active.erase(copy.id)
+
+
+## Steps copy `id` from now on (_active).
+func _activate(id: int) -> void:
+	var at := _active.bsearch(id)
+	if at >= _active.size() or _active[at] != id:
+		_active.insert(at, id)
 
 
 ## Puts `id` among the waiting copies by its wait `key`.
@@ -313,6 +325,7 @@ func _place_waiting(counts: Dictionary) -> void:
 	_waiting = _waiting.slice(placed.size())
 	placed.sort()
 	for id in placed:
+		_activate(id)
 		var u: Passenger = _units[id]
 		if id == _candidate:
 			var own := _candidate_station
@@ -361,7 +374,7 @@ func _place_waiting(counts: Dictionary) -> void:
 ## The copies walking to `station`.
 func _walkers_of(station: int) -> Array[Passenger]:
 	var out: Array[Passenger] = []
-	for id: int in _order:
+	for id: int in _active:
 		var u: Passenger = _units[id]
 		if u.stage == Passenger.Stage.TO_SECURITY and u.station == station and not _left.has(id):
 			out.append(u)
@@ -393,6 +406,7 @@ func _add(p: Passenger) -> Passenger:
 	var at := _order.bsearch(copy.id)
 	if at >= _order.size() or _order[at] != copy.id:
 		_order.insert(at, copy.id)
+	_activate(copy.id)
 	return copy
 
 
@@ -443,7 +457,7 @@ func _step() -> void:
 		_changed = true
 	var walkers: Array[Passenger] = []
 	var before := []
-	for id in _order:
+	for id in _active:
 		var u: Passenger = _units[id]
 		var walker := u.stage == Passenger.Stage.TO_SECURITY and u.station != 0
 		if walker and not _joins.has(id) and not _left.has(id):
@@ -478,7 +492,7 @@ func _step() -> void:
 			var own: int = _units[_candidate].station
 			counts[own] = counts.get(own, 0) + 1
 		_place_waiting(counts)
-	for id in _order:
+	for id in _active:
 		var u: Passenger = _units[id]
 		if _cleared.has(id) or _left.has(id):
 			continue
@@ -550,7 +564,7 @@ func _next_event() -> int:
 		# The repack rate changes on the tick the helper arrives.
 		if _helper_from[at] > tick and (best < 0 or _helper_from[at] < best):
 			best = _helper_from[at]
-	for id in _order:
+	for id in _active:
 		if _cleared.has(id) or _left.has(id):
 			continue
 		var u: Passenger = _units[id]
@@ -598,7 +612,7 @@ func _next_event() -> int:
 func _skip(ticks: int) -> void:
 	if ticks <= 0:
 		return
-	for id in _order:
+	for id in _active:
 		if _cleared.has(id) or _left.has(id):
 			continue
 		var u: Passenger = _units[id]
