@@ -16,12 +16,15 @@ static func to_gate(sim: PassengerSim, p: Passenger) -> void:
 		push_error("PassengerSim: passenger %d reached the gate without clearance" % p.id)
 		return
 	if sim.tick >= p.boarding_tick:
-		# Boarding is open: the walk to a gate place is cut at the cell it is
-		# walking to, and from rest it steps onto the route when no filed
-		# walker is within a body's width (the security exit cell:
-		# hand_off_clear()).
-		if p.is_moving() and p.path.size() > p.path_index + 2:
-			p.path = p.path.slice(0, p.path_index + 2)
+		# Boarding is open: the walk to a gate place is cut, at the cell it
+		# stands on (on a cell boundary) or the one it is walking to, and from
+		# rest it steps onto the route when no filed walker is within a body's
+		# width (the security exit cell: hand_off_clear()).
+		if p.is_moving():
+			if p.seg_mm == 0:
+				p.clear_path()
+			elif p.path.size() > p.path_index + 2:
+				p.path = p.path.slice(0, p.path_index + 2)
 		if not p.is_moving() and hand_off_clear(sim, p):
 			sim._release_seat(p)
 			sim._set_stage(p, Passenger.Stage.TO_EXIT)
@@ -40,25 +43,27 @@ static func to_gate(sim: PassengerSim, p: Passenger) -> void:
 
 ## Whether passenger `p`, about to turn to the exit from where it stands (the
 ## security exit cell, a gate seat's front cell), has a clear slot: no walker in
-## a boarding file or waiting for one within a body's width plus one run step of
-## it. The step keeps a walker on its way to the cell from closing in before `p`
-## has set off. Only walkers on the move or of `p`'s own flight count: the
-## forecast does not model a wait for a stopped file of another flight, which
-## could hold back a passenger it says makes its flight. Nothing here waits on
-## `p`: a filed or pending walker is never held for a passenger outside the
-## files, so the wait ends.
+## a boarding file or waiting for one within a body's width, and none that can
+## close in this tick within a run step more. Walkers that can close in are
+## those on the move (walking, on the apron, or shifting to or from a wait
+## spot) and those of `p`'s own flight; a stopped walker of another flight
+## outside a body's width does not hold `p`, because the forecast does not
+## model a wait for it. Nothing here waits on `p`: a filed or pending walker is
+## never held for a passenger outside the files, so the wait ends.
 static func hand_off_clear(sim: PassengerSim, p: Passenger) -> bool:
 	var at := sim.world_position(p)
+	var shifting := sim.files.waiters.ids()
+	var near := BODY_M
 	var reach := BODY_M + PassengerSim.RUN_MM / 1000.0
 	for id in sim.passenger_ids():
 		if id == p.id or not sim.files.holds(id):
 			continue
 		var other := sim.get_passenger(id)
-		var walking := other.is_moving() or other.stage == Passenger.Stage.APRON
-		if not walking and other.flight_id != p.flight_id:
-			continue
+		var moves := other.is_moving() or other.stage == Passenger.Stage.APRON
+		moves = moves or (shifting.has(id) and not sim.files.waiters.at_spot(other))
 		var there := sim.world_position(other)
-		if Vector2(at.x, at.z).distance_to(Vector2(there.x, there.z)) < reach:
+		var apart := Vector2(at.x, at.z).distance_to(Vector2(there.x, there.z))
+		if apart < (reach if moves or other.flight_id == p.flight_id else near):
 			return false
 	return true
 

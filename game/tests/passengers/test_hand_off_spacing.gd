@@ -150,25 +150,76 @@ func test_a_passenger_walking_to_its_gate_place_when_boarding_opens_sets_off_fro
 	assert_float(near[0]).is_greater_equal(TestBoardingFiles.BODY_M)
 
 
-## The wait for a clear slot is not modelled by the forecast, so only walkers
-## that are moving or of the passenger's own flight hold it: a stopped file of
-## another flight (waiting at its door, say) does not.
-func test_only_walkers_on_the_move_or_of_its_own_flight_hold_a_passenger_at_a_hand_off() -> void:
+## The walk is cut on a cell boundary too (seg_mm 0): the next segment of the
+## old walk is not started, and with nobody near the passenger sets off at once.
+func test_a_gate_walk_is_cut_at_the_cell_when_boarding_opens_on_a_cell_boundary() -> void:
+	_world = PassengerTestWorld.reference_world(3)
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	TestBoardingFiles.turn_out(_world, p, WALK_START)
+	p.stage = Passenger.Stage.TO_GATE
+	for i in 400:
+		_world.step()
+		if p.stage == Passenger.Stage.TO_GATE and p.is_moving():
+			break
+	assert_bool(p.is_moving() and p.stage == Passenger.Stage.TO_GATE).is_true()
+	p.seg_mm = 0
+	var cell := p.at
+	p.boarding_tick = _world.clock.tick + 1
+	_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_EXIT)
+	assert_that(p.at).is_equal(cell)
+	assert_int(p.seg_mm).is_equal(0)
+
+
+## An other-flight walker that is moving holds a passenger at a hand-off like
+## any other, and the passenger sets off at least a body's width from it.
+func test_a_walker_of_another_flight_on_the_hand_off_cell_holds_the_passenger_until_it_is_clear(
+) -> void:
+	_world = TestBoardingFiles.boarding_world()
+	_world.run_to(BOARDING + 5)
+	var filed := TestBoardingFiles.walker(_world, SECURITY_EXIT)
+	filed.flight_id = "GMF202"
+	var cleared := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	TestBoardingFiles.turn_out(_world, cleared, SECURITY_EXIT)
+	cleared.stage = Passenger.Stage.TO_GATE
+	_world.step()
+	assert_bool(_world.sim.files.holds(filed.id)).is_true()
+	var result := _until_it_sets_off(cleared)
+	print("cleared waited %d ticks, then %.3f m from the nearest filed walker" % result)
+	assert_int(result[0]).is_greater(0)
+	assert_float(result[1]).is_greater_equal(TestBoardingFiles.BODY_M)
+
+
+## The forecast does not model a wait for a stopped file of another flight, so
+## such a walker holds a passenger only inside a body's width. Stopped walkers
+## of the passenger's own flight, and walkers on the move, also hold it within
+## a run step beyond.
+func test_a_stopped_walker_of_another_flight_holds_a_passenger_only_inside_a_body_width() -> void:
 	_world = TestBoardingFiles.boarding_world()
 	_world.run_to(BOARDING + 5)
 	var filed := TestBoardingFiles.walker(_world, SECURITY_EXIT)
 	_world.step()
 	assert_bool(_world.sim.files.holds(filed.id)).is_true()
+	var moving_path := filed.path.duplicate()
 	var cleared := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	TestBoardingFiles.turn_out(_world, cleared, SECURITY_EXIT)
 	cleared.stage = Passenger.Stage.TO_GATE
-	# Moving, of another flight, within reach of the cell: it holds.
-	assert_bool(filed.is_moving()).is_true()
-	filed.flight_id = "GMF202"
-	assert_bool(PassengerGates.hand_off_clear(_world.sim, cleared)).is_false()
-	# Stopped, of another flight: no hold.
 	filed.clear_path()
+	filed.flight_id = "GMF202"
+	# On the same cell: held, though it is stopped and of another flight.
+	assert_bool(PassengerGates.hand_off_clear(_world.sim, cleared)).is_false()
+	# Half a metre off, in the walker's own cell's next cell: not held.
+	var off := Vector2i(SECURITY_EXIT.x - 1, SECURITY_EXIT.y)
+	cleared.at = off
+	cleared.set_path([off, SECURITY_EXIT] as Array[Vector2i])
+	cleared.seg_mm = 500
+	assert_float(TestBoardingFiles.apart(_world, cleared, filed)).is_equal_approx(0.5, 0.01)
 	assert_bool(PassengerGates.hand_off_clear(_world.sim, cleared)).is_true()
-	# Stopped, of its own flight: the hold stands.
+	# The same half metre, of its own flight: held by the run-step margin.
 	filed.flight_id = PassengerTestWorld.FLIGHT
+	assert_bool(PassengerGates.hand_off_clear(_world.sim, cleared)).is_false()
+	# And on the move, of another flight: held too.
+	filed.flight_id = "GMF202"
+	filed.set_path(moving_path)
+	assert_bool(filed.is_moving()).is_true()
 	assert_bool(PassengerGates.hand_off_clear(_world.sim, cleared)).is_false()
