@@ -155,7 +155,10 @@ static func head_for(
 ## joins when that cell is the next free one (free_index()), one reaching it on its way further back
 ## only when no other walker's path ends there. Those standing go first, then by line
 ## index, then id, so of two reaching the line on one tick the one nearer the
-## front joins first and the next cell is then free for the other. A joiner
+## front joins first and the next cell is then free for the other. One
+## stepping onto the cell it was heading for when the queue holds it, or onto
+## one another took on this tick, turns back on its step (turn_back()) and
+## heads on from there; one passing over a member's cell walks on. A joiner
 ## that reaches its cell walks just onto it and stops there: the rest of its
 ## step is dropped, it is not drawn back. Then a walker whose path ends on a
 ## cell the queue now holds is sent on toward the free cell (send_on()),
@@ -192,9 +195,24 @@ static func arrive(
 			arrivals.append([w.station, there, 1, w.id, w, need])
 	arrivals.sort_custom(_before)
 	var joined: Array[Passenger] = []
+	var lost := {}
+	var taken := {}
 	for entry: Array in arrivals:
 		var queue: Dictionary = queues[entry[0]]
-		if entry[1] != free_index(queue, lines[entry[0]], by_id):
+		var free := free_index(queue, lines[entry[0]], by_id)
+		var into: Vector2i = lines[entry[0]][entry[1]]
+		var contested: bool = (
+			entry[1] < free
+			and entry[2] == 1
+			and (taken.has([entry[0], into]) or (entry[4] as Passenger).path_end() == into)
+		)
+		if contested:
+			# Stepping onto the cell it was heading for, now taken, or one another
+			# took on this tick: it loses it and turns back.
+			lost[entry[3]] = true
+			turn_back(entry[4])
+			continue
+		if entry[1] != free:
 			continue
 		var w: Passenger = entry[4]
 		var line: Array = lines[entry[0]]
@@ -213,19 +231,39 @@ static func arrive(
 			w.halt_tick = now
 		join(queue, lanes[entry[0]], w.id)
 		joined.append(w)
+		taken[[entry[0], cell]] = true
 	for w: Passenger in walkers:
+		if lost.has(w.id):
+			continue
 		if w.is_moving() and lines.has(w.station) and queues.has(w.station):
 			var line: Array = lines[w.station]
 			send_on(grid, w, line, free_index(queues[w.station], line, by_id))
 	return joined
 
 
-## Ordering of arrive()'s entries [station, line index, moving, id, ...].
+## Ordering of arrive()'s entries [station, line index, moving, id, ...]: by
+## station, line index, then id. Whether a walker stands or steps onto the
+## cell on this tick plays no part.
 static func _before(a: Array, b: Array) -> bool:
-	for i in 4:
+	for i in [0, 1, 3]:
 		if a[i] != b[i]:
 			return a[i] < b[i]
 	return false
+
+
+## Turns walker `w` back on the step it is on, where it is: the same point,
+## now walked from the cell ahead back to the one it came from, where it
+## stops. A walker still on its cell just stays there.
+static func turn_back(w: Passenger) -> void:
+	if w.seg_mm == 0:
+		w.clear_path()
+		return
+	var next := w.path[w.path_index + 1]
+	var walked := Passenger.segment_mm(w.at, next) - w.seg_mm
+	var turned: Array[Vector2i] = [next, w.at]
+	w.at = next
+	w.set_path(turned)
+	w.seg_mm = walked
 
 
 ## A walker `w` whose path ends on a cell of its station's `line` that a

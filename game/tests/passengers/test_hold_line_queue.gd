@@ -160,6 +160,78 @@ func test_same_tick_arrivals_join_by_line_index_then_id() -> void:
 	assert_that(d.at).is_equal(Vector2i(0, 2))
 
 
+func test_a_lower_id_reaching_the_free_cell_beats_a_higher_id_standing_on_it() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(4, 4))
+	var line: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]
+	var front := Passenger.new()
+	front.id = 100
+	front.at = line[0]
+	front.clear_path()
+	var standing := Passenger.new()
+	standing.id = 9
+	standing.station = 1
+	standing.stage = Passenger.Stage.TO_CHECKIN
+	standing.at = line[1]
+	standing.clear_path()
+	var reaching := _arriving(5, Vector2i(1, 1), Vector2i(0, 1))
+	var queues := {1: {"lane": [100], "holding": [], "serving": 0}}
+	var by_id := {100: front, 5: reaching, 9: standing}
+	var joined := StationQueue.arrive(
+		grid, queues, {1: line.slice(0, 2)}, {1: line}, [reaching, standing], by_id, 7
+	)
+	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([5])
+	assert_array(queues[1]["lane"]).is_equal([100, 5])
+
+
+## The case of the Sol review: a loser 1364 mm into a 1414 mm diagonal onto
+## the cell a lower id takes on the same tick, the next free cell behind the
+## winner. Walls west of (1, 1) and (1, 2) make the way back round by (1, 3)
+## longer than on through the winner's cell. It turns back on its step and
+## heads on from where it came, never nearer the winner than when it lost.
+func test_a_same_tick_loser_turns_back_and_never_walks_through_the_winner() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(4, 4))
+	var west := BuildGrid.SIDE_STEP.find(Vector2i(-1, 0))
+	for cell in [Vector2i(1, 1), Vector2i(1, 2)]:
+		assert_bool(grid.apply(BuildEdit.place_wall(cell, west)).ok).is_true()
+	var line: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]
+	var front := Passenger.new()
+	front.id = 100
+	front.at = line[0]
+	front.clear_path()
+	var winner := _arriving(5, Vector2i(1, 1), Vector2i(0, 1))
+	var loser := Passenger.new()
+	loser.id = 9
+	loser.station = 1
+	loser.stage = Passenger.Stage.TO_CHECKIN
+	loser.at = Vector2i(1, 2)
+	var diagonal: Array[Vector2i] = [Vector2i(1, 2), Vector2i(0, 1)]
+	loser.set_path(diagonal)
+	loser.seg_mm = 1364
+	var queues := {1: {"lane": [100], "holding": [], "serving": 0}}
+	var by_id := {100: front, 5: winner, 9: loser}
+	var lanes := {1: line.slice(0, 2)}
+	var lines := {1: line}
+	var before := loser.grid_position()
+	var joined := StationQueue.arrive(grid, queues, lanes, lines, [winner, loser], by_id, 7)
+	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([5])
+	assert_vector(loser.grid_position()).is_equal_approx(before, Vector2(0.001, 0.001))
+	var least := loser.grid_position().distance_to(winner.grid_position())
+	var start := least
+	for tick in range(8, 60):
+		if (queues[1]["holding"] as Array).has(9):
+			break
+		if not loser.is_moving():
+			var free := StationQueue.free_index(queues[1], line, by_id)
+			StationQueue.head_for(grid, loser, line, 2, free, [])
+		StationQueue.arrive(grid, queues, lanes, lines, [loser], by_id, tick)
+		loser.walk(PassengerSim.WALK_MM)
+		least = minf(least, loser.grid_position().distance_to(winner.grid_position()))
+	print("loser to winner: at the loss %.3f m, least after %.3f m" % [start, least])
+	assert_float(least).is_greater_equal(start)
+	assert_array(queues[1]["holding"]).is_equal([9])
+	assert_that(loser.at).is_equal(line[2])
+
+
 ## A walker of station 1 on `from`, 950 mm into the step to `to`: it reaches
 ## `to` this tick at a walk.
 static func _arriving(id: int, from: Vector2i, to: Vector2i) -> Passenger:

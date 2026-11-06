@@ -150,6 +150,10 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	sim.layout.rebuild(sim.grid)
 	sim.routes.clear()
 	sim._rederive()
+	# A layout built differently from the one saved (a shorter or rerouted
+	# line) leaves no queue longer than its line (PassengerStations.fit_line()).
+	PassengerStations.fit_lines(sim)
+	sim._rederive()
 	return true
 
 

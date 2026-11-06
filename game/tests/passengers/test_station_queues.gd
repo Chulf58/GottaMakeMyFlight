@@ -104,11 +104,11 @@ func test_holding_shows_queue_full_until_a_slot_frees() -> void:
 	_world = _short_lane_world()
 	var desk: int = _world.sim.get_meta(&"desk")
 	var ids: Array[int] = []
+	# Six ticks apart: the fourth walks past the first hold cell and turns back
+	# onto it (StationQueue.approach()), and joins before the first is served.
 	for i in 4:
 		ids.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-		_world.run_to(_world.clock.tick + 12)
-	# The fourth walks past the first hold cell and turns back onto it
-	# (StationQueue.approach()) before it joins.
+		_world.run_to(_world.clock.tick + 6)
 	for i in 120:
 		if _world.sim.holding_of(desk).size() == 1:
 			break

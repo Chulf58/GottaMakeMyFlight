@@ -345,17 +345,49 @@ static func reconcile(sim: PassengerSim) -> void:
 		if not sim._is_open(station):
 			close_queue(sim, station, q)
 			continue
-		var cells: Array = sim.layout.lanes[station]
-		while (q["lane"] as Array).size() > cells.size():
-			var last: int = (q["lane"] as Array).pop_back()
-			(q["holding"] as Array).push_front(last)
-			sim._by_id[last].stuck = Passenger.Stuck.QUEUE_FULL
-		var line := sim.layout.line_of(station)
-		while StationQueue.size_of(q) > line.size():
-			var out: Passenger = sim._by_id[(q["holding"] as Array).pop_back()]
-			sim._send_back(out)
-			_wait_full(out)
-			out.stuck = Passenger.Stuck.NONE
+		fit_line(sim, station, q)
+
+
+## Fits the queue of usable `station` and the walkers heading to it to its
+## line as the layout now stands (after an edit, or on a load): a lane that got
+## shorter moves its last members to the front of holding, the members past a
+## shorter line's end are sent back to choose again, and a walker heading for
+## a cell no longer on the line finishes the step it is on and then heads for
+## the next free cell from there (seek()). Each sent back finishes its step.
+static func fit_line(sim: PassengerSim, station: int, q: Dictionary) -> void:
+	var cells: Array = sim.layout.lanes[station]
+	while (q["lane"] as Array).size() > cells.size():
+		var last: int = (q["lane"] as Array).pop_back()
+		(q["holding"] as Array).push_front(last)
+		sim._by_id[last].stuck = Passenger.Stuck.QUEUE_FULL
+	var line := sim.layout.line_of(station)
+	while StationQueue.size_of(q) > line.size():
+		var out: Passenger = sim._by_id[(q["holding"] as Array).pop_back()]
+		sim._send_back(out)
+		_wait_full(out)
+		out.stuck = Passenger.Stuck.NONE
+	for p in sim._passengers:
+		var walking := (
+			p.stage == Passenger.Stage.TO_CHECKIN or p.stage == Passenger.Stage.TO_SECURITY
+		)
+		if walking and p.station == station and p.is_moving() and not line.has(p.path_end()):
+			var stop: Array[Vector2i] = []
+			stop.assign(p.path.slice(0, p.path_index + 2))
+			if stop.size() < p.path.size():
+				var index := p.path_index
+				var walked := p.seg_mm
+				p.path = stop
+				p.path_index = index
+				p.seg_mm = walked
+
+
+## fit_line() for every usable station with a queue, as after a load.
+static func fit_lines(sim: PassengerSim) -> void:
+	var stations: Array = sim._queues.keys()
+	stations.sort()
+	for station: int in stations:
+		if sim.layout.is_usable(station):
+			fit_line(sim, station, sim._queues[station])
 
 
 ## A station without staff on duty: the passenger in service is finished (at

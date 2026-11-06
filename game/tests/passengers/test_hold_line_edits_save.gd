@@ -69,31 +69,15 @@ func test_an_edit_that_reroutes_the_hold_line_re_places_its_holders() -> void:
 
 
 func test_an_edit_that_shortens_the_hold_line_sends_back_the_members_past_its_end() -> void:
-	# A hall three cells wide (x 1 to 3; x 3 is the staff's way round the desk):
-	# the line runs straight down x = 1. Walls under (1, 11) and (2, 11) and east
-	# of (2, 11) end it there after one step across: 6 + 5 cells.
-	var grid := BuildGrid.new(Vector2i(5, 25))
-	var edits: Array[BuildEdit] = []
-	for y in 25:
-		for x in [1, 2, 3]:
-			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
-	grid.apply_batch(edits)
-	EnclosureKit.close_floor(grid)
-	var desk := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(1, 1), 0)
-	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(3, 24), 2)
+	var grid := _narrow_hall()
+	var desk := _desk_of(grid)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
 	_world.sim.set_meta(&"desk", desk)
 	assert_int(_world.sim.layout.line_of(desk).size()).is_equal(18)
 	var members: Array[Passenger] = []
 	for i in 14:
 		members.append(HoldLineKit.member(_world, desk))
-	for wall in [
-		[Vector2i(1, 11), Vector2i(0, 1)],
-		[Vector2i(2, 11), Vector2i(0, 1)],
-		[Vector2i(2, 11), Vector2i(1, 0)]
-	]:
-		var side := BuildGrid.SIDE_STEP.find(wall[1])
-		assert_bool(grid.apply(BuildEdit.place_wall(wall[0], side)).ok).is_true()
+	_shorten(grid)
 	_world.step()
 	var line: Array = _world.sim.layout.line_of(desk)
 	assert_int(line.size()).is_equal(11)
@@ -103,6 +87,88 @@ func test_an_edit_that_shortens_the_hold_line_sends_back_the_members_past_its_en
 		assert_int(p.station).is_equal(0)
 		assert_int(p.stage).is_equal(Passenger.Stage.TO_CHECKIN)
 	_check_placed(members)
+
+
+## A hall three cells wide (x 1 to 3; x 3 is the staff's way round the desk)
+## whose desk (_desk_of()) has its line straight down x = 1, 18 cells.
+## _shorten() ends it at (2, 11): 6 + 5 cells.
+static func _narrow_hall() -> BuildGrid:
+	var grid := BuildGrid.new(Vector2i(5, 25))
+	var edits: Array[BuildEdit] = []
+	for y in 25:
+		for x in [1, 2, 3]:
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	grid.apply_batch(edits)
+	EnclosureKit.close_floor(grid)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(1, 1), 0)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(3, 24), 2)
+	return grid
+
+
+static func _desk_of(grid: BuildGrid) -> int:
+	for id in grid.object_ids():
+		if StringName(grid.get_object(id)["def"]) == &"checkin_desk":
+			return id
+	return 0
+
+
+## Walls under (1, 11) and (2, 11) and east of (2, 11).
+static func _shorten(grid: BuildGrid) -> void:
+	var walls := [
+		[Vector2i(1, 11), Vector2i(0, 1)],
+		[Vector2i(2, 11), Vector2i(0, 1)],
+		[Vector2i(2, 11), Vector2i(1, 0)],
+	]
+	for wall: Array in walls:
+		var side := BuildGrid.SIDE_STEP.find(wall[1])
+		assert(grid.apply(BuildEdit.place_wall(wall[0], side)).ok)
+
+
+func test_a_walker_heading_for_a_cell_an_edit_takes_off_the_line_heads_on() -> void:
+	_queued(10)
+	var desk: int = _world.sim.get_meta(&"desk")
+	var w := HoldLineKit.passenger(_world, Vector2i(8, 14), Passenger.Stage.TO_CHECKIN)
+	_world.step()
+	var old_cell: Vector2i = _world.sim.layout.line_of(desk)[10]
+	assert_that(w.path_end()).is_equal(old_cell)
+	_wall([Vector2i(0, 1)])
+	var on_old := 0
+	for i in 200:
+		_world.step()
+		on_old += int(w.at == old_cell)
+		if HoldLineKit.settled(_world, desk) and w.stage == Passenger.Stage.CHECKIN_QUEUE:
+			break
+	var line: Array = _world.sim.layout.line_of(desk)
+	var seen := [old_cell, line[10], w.at, on_old]
+	print("old cell %s, new line[10] %s, walker at %s, on the old cell %d ticks" % seen)
+	assert_bool(line.has(old_cell)).is_false()
+	assert_int(on_old).is_equal(0)
+	assert_int(w.stage).is_equal(Passenger.Stage.CHECKIN_QUEUE)
+	assert_that(w.at).is_equal(line[10])
+
+
+func test_a_save_loaded_on_a_shorter_line_fits_the_queue_to_it() -> void:
+	_world = PassengerTestWorld.make(_narrow_hall(), PassengerTestWorld.starts_with(4000, 5000))
+	var desk := _desk_of(_world.grid)
+	var members: Array[Passenger] = []
+	for i in 14:
+		members.append(HoldLineKit.member(_world, desk))
+	_world.step()
+	var data := _world.sim.to_snapshot()
+	var grid := BuildGrid.new()
+	assert_bool(grid.from_snapshot(_world.grid.to_snapshot())).is_true()
+	_shorten(grid)
+	_other = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	assert_bool(_other.clock.from_snapshot(_world.clock.to_snapshot())).is_true()
+	assert_bool(_other.sim.from_snapshot(data)).is_true()
+	var line: Array = _other.sim.layout.line_of(desk)
+	var queued := _other.sim.queue_of(desk) + _other.sim.holding_of(desk)
+	assert_int(line.size()).is_equal(11)
+	assert_array(queued).is_equal(members.slice(0, 11).map(func(p: Passenger) -> int: return p.id))
+	for p in members.slice(11):
+		var loaded := _other.passenger(p.id)
+		assert_int(loaded.station).is_equal(0)
+		assert_int(loaded.stage).is_equal(Passenger.Stage.TO_CHECKIN)
 
 
 func test_a_save_with_holders_on_the_line_plays_on_exactly() -> void:
