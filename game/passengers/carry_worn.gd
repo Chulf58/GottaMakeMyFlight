@@ -123,10 +123,12 @@ static func loop_in_front(grip: Vector3, yaw: float, scale_by: float) -> Transfo
 ## back panel where BACK_ON_SPINE_M puts it for its size (BACK_FROM_SPINE_M
 ## behind and BACK_TOP_OVER_SPINE_M above the bone for -1; worn_back_at()).
 static func worn_back(spine: Transform3D, yaw: float, scale_by: float, body := -1) -> Transform3D:
-	var top := Vector2(BACK_FROM_SPINE_M, BACK_TOP_OVER_SPINE_M)
-	if body >= 0 and body < BACK_ON_SPINE_M.size():
-		var per := BACK_ON_SPINE_M[body]
-		top = Vector2(per.x, per.y) if scale_by >= 1.0 else Vector2(per.z, per.w)
+	if body < 0 or body >= BACK_ON_SPINE_M.size():
+		# Not measured: main's placement, the plain lean.
+		var legacy := Vector2(BACK_FROM_SPINE_M, BACK_TOP_OVER_SPINE_M)
+		return worn_back_at(spine, yaw, scale_by, legacy, false)
+	var per := BACK_ON_SPINE_M[body]
+	var top := Vector2(per.x, per.y) if scale_by >= 1.0 else Vector2(per.z, per.w)
 	return worn_back_at(spine, yaw, scale_by, top, scale_by >= 1.0)
 
 
