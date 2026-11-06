@@ -86,7 +86,7 @@ signal checked_in(id: int, desk: int)
 ## passenger's halt_tick (QueueRipple). 25: gate places reserved at security
 ## admission, under "gate_places" (GateCapacity). From 17 on, the version
 ## before is refused, with no migration.
-const SAVE_VERSION := 25
+const SAVE_VERSION := 26
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
