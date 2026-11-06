@@ -355,18 +355,22 @@ func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
 	var plan := flights.move_plan(ending, staying)
 	if not (plan["stuck"] as Array).is_empty():
 		var refusal := BuildResult.refused(BuildResult.Reason.GATE_FLIGHTS_STUCK)
-		refusal.detail = ", ".join(plan["stuck"])
+		var stuck := PackedStringArray()
+		for contract_id: String in plan["stuck"]:
+			stuck.append(FlightLabel.of(flights, false, contract_id))
+		refusal.detail = ", ".join(stuck)
 		return refusal
 	return null
 
 
-## The live flights at any of `gates` that have not departed.
+## The live flights at any of `gates` that have not departed, each named by
+## its time, airline and destination.
 func _live_flights_at(gates: Array[String]) -> PackedStringArray:
 	var out: PackedStringArray = []
 	for flight_id in flights.flight_ids():
 		var at_gate := gates.has(flights.flight_gate(flight_id))
 		if at_gate and flights.state_of(flight_id) < FlightSim.State.DEPARTED:
-			out.append(flight_id)
+			out.append(FlightLabel.of(flights, true, flight_id))
 	return out
 
 
