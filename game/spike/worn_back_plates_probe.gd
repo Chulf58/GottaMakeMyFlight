@@ -131,6 +131,12 @@ func _place(pack: Node3D, body: Node3D, scale_by: float, state: String) -> void:
 
 
 func _bounds(node: Node3D) -> AABB:
+	if not node.find_children("*", "Skeleton3D", true, false).is_empty():
+		# A skinned body's own AABB is its bind pose's (arms out); bake the pose.
+		var baked := PlateSight.colliders(root, [node] as Array[Node], {node: "drawn"})
+		var posed: AABB = baked.get_meta("bounds")["drawn"]
+		baked.free()
+		return posed
 	var box := AABB()
 	var first := true
 	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
@@ -164,8 +170,12 @@ func _in_frame(box: AABB, label: String) -> bool:
 	return ok
 
 
-## Sight lines from the camera to points of `pack`: [landed, blocked].
+## Sight lines from the camera to points of `pack`: [landed, blocked, whether
+## every blocker is a mesh of owners[0] (the wearer's own body)].
 func _sight(owners: Array[Node], pack: Node3D) -> Array:
+	var own := {}
+	for mi in owners[0].find_children("*", "MeshInstance3D", true, false):
+		own[str(mi.name)] = true
 	var holder := PlateSight.colliders(root, owners, {pack: "pack"})
 	await physics_frame
 	await physics_frame
@@ -177,7 +187,11 @@ func _sight(owners: Array[Node], pack: Node3D) -> Array:
 	var space := _cam.get_world_3d().direct_space_state
 	var got := PlateSight.sight_lines(space, _cam.global_position, targets, "pack")
 	holder.queue_free()
-	return [got["on_subject"].size(), got["blockers"].size()]
+	var own_only: bool = not got["blockers"].is_empty()
+	for name in got["blockers"]:
+		own_only = own_only and own.has(name)
+	print("SIGHT_BLOCKERS %s" % [got["blockers"]])
+	return [got["on_subject"].size(), got["blockers"].size(), own_only]
 
 
 func _shoot(name: String) -> Image:
@@ -242,6 +256,10 @@ func _six_and_close(state: String, b: int) -> void:
 				# Control: the body stands between this camera and the pack.
 				if seen[1] == 0:
 					_invalid("%s front: no line to the pack was blocked" % tag)
+			elif seen[0] == 0 and seen[2]:
+				# A small pack narrower than the shoulders is behind the wearer's
+				# own arm from the side: the view shows that, not a lost subject.
+				print("HIDDEN_BY_OWN_BODY %s_%s" % [tag, view])
 			elif seen[0] == 0:
 				_invalid("%s_%s: no sight line lands on the pack" % [tag, view])
 			_sheet(state, await _shoot("%s_%s" % [tag, view]))
@@ -309,7 +327,7 @@ func _distance(state: String) -> void:
 		_place(packs[b], bodies[b], 1.0 if b % 2 == 0 else SecurityLooks.TWO_BAG_SCALE, state)
 	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
 	_cam.fov = 40.0
-	_cam.global_position = Vector3(-4.0, 3.2, -9.0)
+	_cam.global_position = Vector3(0.0, 4.0, -24.0)
 	_cam.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
 	var all := _bounds(bodies[0])
 	for n in bodies.size():
