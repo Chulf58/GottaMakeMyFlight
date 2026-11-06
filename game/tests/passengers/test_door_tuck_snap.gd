@@ -35,7 +35,9 @@ func _frame() -> void:
 	_views.carry_on_props()._unposed()
 
 
-func test_a_snap_beside_a_wall_draws_the_roller_tucked_at_once() -> void:
+## A roller guest on its way to a cafe seat, with walls built on both sides of
+## a stretch of its route ahead.
+func _corridor_walker(start := 2) -> Passenger:
 	var grid := BuildGrid.new()
 	CafeTestLayout.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
@@ -57,7 +59,7 @@ func test_a_snap_beside_a_wall_draws_the_roller_tucked_at_once() -> void:
 	# Walls on both sides of a stretch of the route ahead (a corridor no change
 	# of hand clears, as a doorway): the roller tucks there.
 	var edits: Array[BuildEdit] = []
-	for k in range(p.path_index + 2, mini(p.path_index + 8, p.path.size() - 1)):
+	for k in range(p.path_index + start, mini(p.path_index + start + 6, p.path.size() - 1)):
 		var d: Vector2i = p.path[k + 1] - p.path[k]
 		var sides := (
 			[BuildGrid.Side.NORTH, BuildGrid.Side.SOUTH]
@@ -69,7 +71,12 @@ func test_a_snap_beside_a_wall_draws_the_roller_tucked_at_once() -> void:
 	var placed := 0
 	for result in grid.apply_batch(edits):
 		placed += int(result.ok)
-	assert_int(placed).override_failure_message("no corridor wall placed").is_greater(3)
+	assert_int(placed).override_failure_message("no corridor wall placed").is_greater(1)
+	return p
+
+
+func test_a_snap_beside_a_wall_draws_the_roller_tucked_at_once() -> void:
+	var p := _corridor_walker()
 	var props := _views.carry_on_props()
 	var tucked := false
 	while not tucked and p.stage != Passenger.Stage.CAFE_SEATED and _world.clock.tick < MAX_TICK:
@@ -94,3 +101,37 @@ func test_a_snap_beside_a_wall_draws_the_roller_tucked_at_once() -> void:
 	var out := -1.0 if CarryLead.hand_of(int(after["place"])) == 0 else 1.0
 	var side := (local.x - float(after.get("hips_x", 0.0))) * out
 	assert_float(side).is_less(RollerPull.TUCK_SIDE_M + 0.03)
+
+
+func test_a_snap_before_the_walls_keeps_the_tuck_that_was_coming() -> void:
+	# The tuck turns on LOOK_TICKS and TUCK_TICKS of walk before the roller's
+	# settled footprint reaches the walls; a snap at that moment must look as
+	# far ahead as a walking guest does, not a standing one's few centimetres.
+	# The corridor starts six cells on, so the guest is walking when the tuck
+	# turns on.
+	var p := _corridor_walker(6)
+	var props := _views.carry_on_props()
+	var on := false
+	while not on and p.stage != Passenger.Stage.CAFE_SEATED and _world.clock.tick < MAX_TICK:
+		await _frame()
+		var state := props.bag_state(p.id, 0)
+		on = (
+			state.get("carry", -1) == SecurityLooks.Carry.PULL
+			and state.get("tuck_on", false)
+			and p.is_moving()
+		)
+	assert_bool(on).override_failure_message("the walk never tucked").is_true()
+	# Control: the walls are still ahead (the settled footprint is clear here).
+	var body := _views.node_for(p.id)
+	var hand := CarryLead.hand_of(int(props.bag_state(p.id, 0)["place"]))
+	var here := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
+	var clear := not PullSide.blocked(
+		_world.sim.grid, [here], PullSide.footprint(hand, false), false
+	)
+	assert_bool(clear).override_failure_message("snapped at the walls, not before").is_true()
+	assert_bool(p.is_moving()).is_true()
+	_views.snap()
+	await _frame()
+	var after := props.bag_state(p.id, 0)
+	assert_bool(after.get("tuck_on", false)).override_failure_message("tuck lost").is_true()
+	assert_float(RollerPull.tuck_weight(after, props._now())).is_equal(1.0)

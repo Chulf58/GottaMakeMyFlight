@@ -134,7 +134,7 @@ static func walk_of(sim: PassengerSim, views: PassengerViews, p: Passenger) -> A
 ## draws it, facing its body when it has not stepped) and `step_m`, and a tuck
 ## it turns on starts in line, with no ease in (RollerPull.tuck()). It looks
 ## even when the guest has not stepped (a snap puts both tick positions on one
-## spot), from where it stands.
+## spot): at its walking pace while it is on its way, else where it stands.
 static func tuck_now(
 	bag: Dictionary,
 	sim: PassengerSim,
@@ -148,7 +148,10 @@ static func tuck_now(
 	var from := maxi(p.path_index + 1, 0)
 	for k in range(from, mini(p.path.size(), from + AHEAD_CELLS)):
 		ahead.append(sim.grid.cell_to_world(p.path[k]))
-	tuck(bag, sim.grid, frame, ahead, maxf(step_m, STILL_M), hand, now)
+	# A snap puts both tick positions on one spot: a guest still on its way
+	# looks ahead at its walking pace, one standing only where it stands.
+	var pace := p.pace_mm() / 1000.0 if p.is_moving() else STILL_M
+	tuck(bag, sim.grid, frame, ahead, step_m if step_m >= STILL_M else pace, hand, now)
 
 
 ## The hand (0 right, 1 left) bag record `bag` (CarryOnProps' record of a
