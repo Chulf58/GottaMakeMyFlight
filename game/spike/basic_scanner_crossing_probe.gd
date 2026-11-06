@@ -69,7 +69,6 @@ const RAY := Vector3(0.0013, 1.0, 0.0007)
 const MARGIN_PX := 8.0
 const MIN_SUBJECT_PX := 60.0
 const RUN_LIMIT_MS := 240000
-const LANE_RUN_LIMIT_MS := 600000  # 240 s sent 8 to 10 of 15 lane roles (a82c613f)
 const SEND_GAP_TICKS := 20
 const MAX_SPAWNS := 80
 ## Near a booth: inside this half-size around its origin, in its own frame
@@ -440,7 +439,7 @@ func _cross() -> void:
 		_roles.append_array(RUNNER_ROLES.duplicate(true))
 	var spawns := 0
 	var next_send := _clock.tick
-	var stop := Time.get_ticks_msec() + (LANE_RUN_LIMIT_MS if _lane_mode else RUN_LIMIT_MS)
+	var stop := Time.get_ticks_msec() + RUN_LIMIT_MS
 	_clock.ticked.connect(_on_tick)
 	while Time.get_ticks_msec() < stop:
 		await RenderingServer.frame_post_draw
