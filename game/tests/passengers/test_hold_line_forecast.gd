@@ -78,7 +78,9 @@ func test_the_forecast_equals_the_sim_for_holders_at_every_index() -> void:
 	for i in 14:
 		ids.append(_w.send(2))
 		_w.world.run_to(_w.world.clock.tick + 2)
-	var forecasts := _forecasts(ids, 6, true)
+	# Every 5 ticks: moved from 6 for decision hold-line-rebuild-the-security-
+	# line-follows-where-people-sta, whose holders' moves fell between samples.
+	var forecasts := _forecasts(ids, 5, true)
 	var deepest := -1
 	var mid_step := 0
 	for entry: Array in forecasts:
@@ -116,8 +118,11 @@ func test_the_forecast_equals_the_sim_when_walkers_reach_the_line_out_of_order()
 	q.clear_path()
 	_w.world.step()
 	assert_that(q.path_end()).is_equal(line[1])
-	# Q reaches the line first and enters it while P is still on its way.
-	for i in 20:
+	# Q reaches the line first, is given the tail cell as the nearer, and
+	# enters there while P is still on its way.
+	for i in 60:
+		if q.stage == Passenger.Stage.SECURITY_QUEUE:
+			break
 		_w.world.step()
 	assert_int(q.stage).is_equal(Passenger.Stage.SECURITY_QUEUE)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_SECURITY)
