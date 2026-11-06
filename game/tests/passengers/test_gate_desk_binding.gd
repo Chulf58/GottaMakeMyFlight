@@ -113,7 +113,7 @@ func _check_waits_by_the_bound_desk() -> void:
 
 func test_a_version_15_passenger_save_is_refused() -> void:
 	_build(true)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(27)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(28)
 	# A grid edit settles on the next tick; a save waits for it.
 	_world.step()
 	var old: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
@@ -122,4 +122,4 @@ func test_a_version_15_passenger_save_is_refused() -> void:
 	assert_bool(_world.sim.from_snapshot(old)).is_false()
 	assert_str(_world.signature()).is_equal(before)
 	var current: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
-	assert_int(int(current["save_version"])).is_equal(27)
+	assert_int(int(current["save_version"])).is_equal(28)

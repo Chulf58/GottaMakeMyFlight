@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 27
+const SAVE_VERSION := 28
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -165,6 +165,9 @@ var _scheduled: Dictionary = {}
 var _queues: Dictionary = {}
 ## Derived: station id -> passengers walking to it.
 var _incoming: Dictionary = {}
+## Station -> the walker holding its claim on the line's tail
+## (StationQueue.arrive()); saved.
+var _claims: Dictionary = {}
 ## Derived: seat key -> passenger id.
 var _seat_claims: Dictionary = {}
 var _made := 0

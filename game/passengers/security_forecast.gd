@@ -78,6 +78,8 @@ var _queues := {}
 ## (_drop_members()).
 var _members := {}
 var _member_at := {}
+## The copied claims on the lines' tails (PassengerSim._claims).
+var _claims := {}
 ## The copied gate places, or null when no admission waits for one.
 var _places: GateCapacity
 ## Passenger id -> its copy.
@@ -243,6 +245,7 @@ func _setup(sim: PassengerSim, station: int, scarce: bool, candidate := 0) -> vo
 			records[at] = record
 		_queues[at] = {"lane": sim.queue_of(at), "holding": sim.holding_of(at)}
 	_runtime.helper_from = _helper_from
+	_claims = sim._claims.duplicate()
 	_runtime.restore(records)
 	for at in _stations:
 		for id: int in records.get(at, {}).get("admitted", []):
@@ -465,7 +468,7 @@ func _step() -> void:
 			before.append([u.at, u.path_end()])
 	var stranded: Array = []
 	var joined := StationQueue.arrive(
-		_sim.grid, _queues, _cells, _lines, walkers, _units, tick, stranded
+		_sim.grid, _queues, _cells, _lines, walkers, _units, tick, stranded, _claims
 	)
 	for u in joined:
 		u.stage = Passenger.Stage.SECURITY_QUEUE

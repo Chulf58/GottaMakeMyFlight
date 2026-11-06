@@ -61,6 +61,7 @@ extends RefCounted
 ## (PassengerStations); the saved shape is the same, but a 26 save's holders
 ## stand stacked on the lane's last cell. From 17 on, the version before is
 ## refused, with no migration.
+## 28: the claims on the lines' tails (one walker at a time enters a queue).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
@@ -82,6 +83,10 @@ static func to_snapshot(sim: PassengerSim) -> Dictionary:
 	data["standing"] = sim.standing.to_list()
 	data["gate_places"] = sim.gates.to_list(sim)
 	data["boarding"] = sim.files.to_dict()
+	var claims := {}
+	for station: int in sim._claims:
+		claims[str(station)] = sim._claims[station]
+	data["claims"] = claims
 	return data
 
 
@@ -127,6 +132,11 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	sim._missed = loaded["missed"]
 	sim._schedule = loaded["schedule"]
 	sim._queues = loaded["queues"]
+	var tail_claims := checked_claims(data, by_id)
+	if tail_claims.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % tail_claims["error"])
+		return false
+	sim._claims = tail_claims["claims"]
 	sim.security.restore(loaded["security"])
 	sim.cafes.restore(loaded["cafe"])
 	sim.toilets.restore(loaded["toilet"])
@@ -209,3 +219,21 @@ static func checked_boarding(sim: PassengerSim, data: Dictionary, by_id: Diction
 	if not data.has("boarding") and int(data["save_version"]) >= PassengerSim.SAVE_VERSION:
 		return {"error": "missing key 'boarding'"}
 	return files_state
+
+
+## The saved claims on the lines' tails (version 28): station -> the id of a
+## saved passenger, or an error. A version 27 save has none.
+static func checked_claims(data: Dictionary, by_id: Dictionary) -> Dictionary:
+	var claims := {}
+	if not data.has("claims"):
+		if int(data["save_version"]) >= PassengerSim.SAVE_VERSION:
+			return {"error": "claims missing"}
+		return {"claims": claims}
+	if typeof(data["claims"]) != TYPE_DICTIONARY:
+		return {"error": "claims must be a dictionary"}
+	for key: Variant in data["claims"]:
+		var id: Variant = data["claims"][key]
+		if not str(key).is_valid_int() or not WholeNumber.is_whole(id) or not by_id.has(int(id)):
+			return {"error": "claim %s is not a saved passenger" % [key]}
+		claims[int(str(key))] = int(id)
+	return {"claims": claims}

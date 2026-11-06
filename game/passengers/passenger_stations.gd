@@ -215,7 +215,15 @@ static func arrive(sim: PassengerSim) -> void:
 		return
 	var stranded: Array = []
 	var joined := StationQueue.arrive(
-		sim.grid, sim._queues, sim.layout.lanes, lines, walkers, sim._by_id, sim.tick, stranded
+		sim.grid,
+		sim._queues,
+		sim.layout.lanes,
+		lines,
+		walkers,
+		sim._by_id,
+		sim.tick,
+		stranded,
+		sim._claims
 	)
 	for p in joined:
 		_joined(sim, p)
