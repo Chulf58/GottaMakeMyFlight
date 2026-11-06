@@ -43,6 +43,12 @@ extends SceneTree
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
+const CarryContact := preload("res://spike/carry_contact.gd")
+## BODY_IN_BAG counts the body's points inside a roller guest's roller over
+## this many ticks of the sit-down: the set-down (RollerPark.TICKS_DOWN) and
+## one more. Printed, not judged; its control (the roller moved to the hips)
+## must see some.
+const SET_DOWN_TICKS := 14
 const OUT_REL := "res://../tools/blender/out/"
 const OUT_DEFAULT := "food-seats"
 ## Piece -> [venue, counter, table piece (or empty), the bodies wanted in turn].
@@ -118,6 +124,9 @@ var _only := PackedStringArray()
 var _out_dir := ""
 ## --roller-strip=a,b: a roller guest's strip ticks (empty: ROLLER_STRIP_TICKS).
 var _roller_strip: Array[float] = []
+## --side: the sit-down camera low beside the approach cell, across the seat's
+## facing, so a roller set down ahead of the feet shows clear of the shins.
+var _side_view := false
 var _failed := false
 var _main: Node3D
 var _clock: SimClock
@@ -144,6 +153,8 @@ func _initialize() -> void:
 			out = arg.get_slice("=", 1)
 		if arg.begins_with("--subjects="):
 			_only = arg.get_slice("=", 1).split(",")
+		if arg == "--side":
+			_side_view = true
 		if arg.begins_with("--roller-strip="):
 			for at in arg.get_slice("=", 1).split(","):
 				_roller_strip.append(float(at))
@@ -516,6 +527,9 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 	var last_step := -1.0
 	var jumps := {}
 	var step_max := 0.0
+	var in_bag := {}
+	var in_bag_frames := 0
+	var in_bag_control := -1
 	var piece := (_mode.get_node("BuildView") as BuildView).object_node(visit.seat["object_id"])
 	var frame := _seat_frame(visit.seat)
 	var islands := _islands(piece, frame)
@@ -574,6 +588,20 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 					jumps["k%d+%.2f" % [k, _clock.alpha]] = snappedf(step, 0.001)
 				last_step = step
 			last_bag = bag.global_position
+			if k <= SET_DOWN_TICKS:
+				# The body's points (both hands left out: one is on the handle)
+				# inside the roller's meshes, through the set-down.
+				var own := CarryContact.body_points(body, [".R", ".L"])
+				in_bag_frames += 1
+				var inside := CarryContact.inside_meshes(own, bag)
+				if inside > 0:
+					in_bag["k%d+%.2f" % [k, _clock.alpha]] = inside
+				if in_bag_control < 0:
+					# Control: the roller moved to the hips sees body points.
+					var kept := bag.global_transform
+					bag.global_position = body.global_position + Vector3.UP * 0.8
+					in_bag_control = CarryContact.inside_meshes(own, bag)
+					bag.global_transform = kept
 		var now := k + _clock.alpha + 0.01 if fine else float(k)
 		var due := strip.size() < ticks.size() and now >= ticks[strip.size()]
 		if due and p.stage == Passenger.Stage.CAFE_SITTING_DOWN:
@@ -613,6 +641,14 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 			"%s: roller points inside the piece or a wall while sitting down or seated" % label
 		)
 	if roller:
+		print(
+			(
+				"BODY_IN_BAG %s frames=%d frames_inside=%d control=%d %s"
+				% [label, in_bag_frames, in_bag.size(), in_bag_control, in_bag]
+			)
+		)
+		if in_bag_control <= 0:
+			_invalid("%s: BODY_IN_BAG control saw no body points in the bag" % label)
 		print(
 			"BAG_STEP %s largest=%.3f m frames_over=%d %s" % [label, step_max, jumps.size(), jumps]
 		)
@@ -918,7 +954,12 @@ func _aim(frame: Transform3D, seat: Dictionary) -> void:
 	var across := frame.basis.x * (signf(lateral) if absf(lateral) > 0.1 else 1.0)
 	var dir := (across * 0.6 + frame.basis.z * 0.5 + Vector3.UP * 1.2).normalized()
 	var target := (frame.origin + approach * 0.5) + Vector3.UP * 0.6
-	_cam.look_at_from_position(target + dir * 4.6, target, Vector3.UP)
+	var away := 4.6
+	if _side_view:
+		dir = (across + frame.basis.z * 0.15 + Vector3.UP * 0.3).normalized()
+		target = frame.origin + approach + Vector3.UP * 0.35
+		away = 3.0
+	_cam.look_at_from_position(target + dir * away, target, Vector3.UP)
 	_cam.current = true
 	(_mode.get_node("BuildView") as BuildView).update_cutaway(_cam.global_transform.basis.z)
 

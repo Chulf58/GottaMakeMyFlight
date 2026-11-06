@@ -117,3 +117,33 @@ func test_a_booth_roller_lay_does_not_follow_the_drawn_body() -> void:
 	print("booth lay, body moved 0.22 m and turned: largest difference %.4f m" % most)
 	assert_float(moved.origin.distance_to(park_frame.origin)).is_greater(0.2)
 	assert_float(most).is_less(0.001)
+
+
+## A guest that walked in pulling on its left and turned round to face out of
+## the booth has its roller on its right of that facing: the set-down is led by
+## the floor place's hand (the right, RollerPark.set_down_hand()) and parks the
+## roller on that side, so it is not laid across. Control: the same move with
+## the roller left on the pulling hand's side is led by that hand, parked on
+## its side and laid across.
+func test_a_turned_booth_guest_sets_down_from_the_roller_side_hand() -> void:
+	var park_frame := Transform3D(Basis.IDENTITY, Vector3(1.0, 0.0, 2.0))
+	var want := park_frame * Transform3D(Basis.IDENTITY, Vector3(-RollerPark.PARK_SIDE_M, 0, 0))
+	var looks := {"scale": 1.0, "bar_z": 0.9, "grips": [Vector3.ZERO, Vector3.ZERO]}
+	var leads: Array[int] = []
+	var crossed: Array[bool] = []
+	var parked_x: Array[float] = []
+	for side in [-1.0, 1.0]:
+		var bag := _bag(park_frame)
+		var start := park_frame * Transform3D(Basis.IDENTITY, Vector3(0.3 * side, 0.0, 0.5))
+		bag["from_world"] = start
+		leads.append(RollerPark.set_down_hand(bag))
+		var plan := RollerPark.plan(bag, 0.5, start, want, park_frame, {"to_floor": true}, looks)
+		var xf: Transform3D = plan["xf"]
+		parked_x.append((park_frame.affine_inverse() * xf.origin).x)
+		crossed.append(RollerPark.across(park_frame, xf, want))
+	print("turned booth guest: leads %s, parked x %s, crosses %s" % [leads, parked_x, crossed])
+	assert_array(leads).is_equal([0, 1])
+	assert_float(parked_x[0]).is_less(-0.2)
+	assert_bool(crossed[0]).is_false()
+	assert_float(parked_x[1]).is_greater(0.2)
+	assert_bool(crossed[1]).is_true()
