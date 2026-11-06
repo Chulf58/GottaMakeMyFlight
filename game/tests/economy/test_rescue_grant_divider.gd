@@ -53,13 +53,23 @@ func _remove_all(def_id: StringName, only_x := -1) -> void:
 ## it is its officer's only way in once the hall is gone, and a player edit may
 ## not cut a staff spot off from the entrance (decision
 ## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3).
-func _cut_landside() -> void:
+func _cut_landside(keep: Array[Vector2i] = []) -> void:
 	_remove_all(&"checkin_desk")
 	for y in range(ReferenceTerminal.DIVIDER_Y + 1, ReferenceTerminal.FLOOR_MAX.y):
 		for x in range(ReferenceTerminal.FLOOR_MIN.x, ReferenceTerminal.FLOOR_MAX.x + 1):
 			var cell := Vector2i(x, y)
-			if x != ReferenceTerminal.ENTRANCE_CELL.x and cell != OFFICER_WAY:
+			if (
+				x != ReferenceTerminal.ENTRANCE_CELL.x
+				and cell != OFFICER_WAY
+				and not keep.has(cell)
+			):
 				_world.grid.apply(BuildEdit.remove_floor(cell))
+
+
+## Takes the floor off `cells`; each must be free to lose it.
+func _bare(cells: Array[Vector2i]) -> void:
+	for cell in cells:
+		assert_bool(_world.grid.apply(BuildEdit.remove_floor(cell)).ok).is_true()
 
 
 ## The grant is paid, the new desk stands landside on bought floor, no
@@ -109,4 +119,47 @@ func test_an_exit_on_the_landside_edge_does_not_open_airside_to_a_desk() -> void
 	for step in DoorPlacement.edits_for(_world.grid, exit):
 		assert_bool(_world.grid.apply(step).ok).is_true()
 	_cut_landside()
+	_assert_landside_repair()
+
+
+## The gate seats sit in a pocket of the airside that only a thin strip of
+## floor along row 2 joins to the scanners, and a door in the divider stands on
+## the landside stub (15, 9)-(16, 10) below the pocket. Walked from the
+## landside floor, the pocket is a few steps away; walked from the scanners it
+## is far. A side label that crossed a wall would give it to landside, and a
+## desk there would need no floor, cheaper than any landside desk.
+func test_a_door_below_an_airside_pocket_does_not_open_it_to_a_desk() -> void:
+	var door := BuildEdit.place_wall(Vector2i(15, ReferenceTerminal.DIVIDER_Y), 0, 3)
+	assert_bool(_world.grid.apply(door).ok).is_true()
+	var strip: Array[Vector2i] = []
+	for y in range(3, 8):
+		strip.append(Vector2i(17, y))
+	_bare(strip)
+	var hall: Array[Vector2i] = []
+	for x in range(ReferenceTerminal.FLOOR_MIN.x, 15):
+		hall.append(Vector2i(x, ReferenceTerminal.DIVIDER_Y))
+	_bare(hall)
+	var stub: Array[Vector2i] = []
+	for x in [15, 16]:
+		stub.append(Vector2i(x, ReferenceTerminal.DIVIDER_Y + 1))
+	_cut_landside(stub)
+	_assert_landside_repair()
+
+
+## The exit stands at the foot of a floor block a desk fits on, joined to the
+## hall by one row of floor. The exit is airside, so the block is too; with
+## the exit's cell not marked airside the block would go to landside, and a
+## desk there would cost no floor (the repair's floor count would be zero).
+func test_an_exit_with_a_floor_block_beside_it_does_not_open_it_to_a_desk() -> void:
+	var exit := BuildEdit.place_object(&"exit_door", Vector2i(10, 17), 3)
+	assert_bool(DoorPlacement.check(_world.grid, exit).ok).is_true()
+	for step in DoorPlacement.edits_for(_world.grid, exit):
+		assert_bool(_world.grid.apply(step).ok).is_true()
+	var keep: Array[Vector2i] = []
+	for x in range(10, 18):
+		keep.append(Vector2i(x, 16))
+	for y in range(14, 16):
+		for x in range(10, 13):
+			keep.append(Vector2i(x, y))
+	_cut_landside(keep)
 	_assert_landside_repair()

@@ -48,9 +48,13 @@ const MIN_RAY_DOWN := 0.05
 @export var home_position := Vector3.ZERO
 @export var home_distance := 80.0
 @export var home_yaw := 0.0
-## How much roomier than the area itself a framed view is, so the area clears
-## the HUD panels around the screen edge.
-@export var frame_margin := 1.3
+## How much roomier than the area itself a framed view is. The HUD panels are
+## already cut out of the room the area is fitted in (PanelRoom, the bottom bar
+## included), so this is only a little breathing space around it.
+@export var frame_margin := 1.15
+## The height the area's walls reach, in metres: a framed view keeps the wall
+## tops inside the room too, since the far wall's top shows above its foot.
+@export var frame_height := 2.5
 
 var yaw := 0.0
 ## The chosen angle step (see AngleStep); read from the settings file at _ready,
@@ -201,7 +205,8 @@ func go_home() -> void:
 ## The focus point and distance that fit `area`, a ground rectangle in the
 ## world's x and z, seen at yaw 0 (x across the screen, z into it): the
 ## nearest distance, inside the zoom limits, at which the area grown by
-## `frame_margin` is wholly inside `free`, the share of the screen the open
+## `frame_margin`, with its walls `frame_height` high, is wholly inside `free`,
+## the share of the screen the open
 ## panels leave (fractions of the viewport; the whole viewport by default),
 ## with the focus at the middle of `free`, at the chosen angle. The distance is
 ## found by bisection.
@@ -367,9 +372,9 @@ func _eye_offset(aim: Vector2, from_distance: float) -> Vector3:
 
 
 ## True when the ground rectangle centred on the focus, `half` wide and deep
-## from its middle to its edges, is wholly inside `free` (fractions of the
-## viewport) from `from_distance` at the chosen angle, with the focus at the
-## middle of `free`.
+## from its middle to its edges, and the wall tops above it, is wholly inside
+## `free` (fractions of the viewport) from `from_distance` at the chosen angle,
+## with the focus at the middle of `free`.
 func _fits(half: Vector2, from_distance: float, free: Rect2) -> bool:
 	var pitch := deg_to_rad(pitch_degrees())
 	var half_tan := tan(deg_to_rad(_camera.fov) / 2.0)
@@ -380,14 +385,15 @@ func _fits(half: Vector2, from_distance: float, free: Rect2) -> bool:
 	var high := Vector2(free.end.x * 2.0 - 1.0, 1.0 - free.position.y * 2.0)
 	for sign_x in [-1.0, 1.0]:
 		for sign_z in [-1.0, 1.0]:
-			var to_corner := Vector3(sign_x * half.x, 0.0, sign_z * half.y) - eye
-			var depth := to_corner.dot(forward)
-			if depth <= 0.0:
-				return false
-			var across := to_corner.x / (depth * half_tan * _aspect())
-			var vertical := to_corner.dot(up) / (depth * half_tan)
-			if across < low.x or across > high.x or vertical < low.y or vertical > high.y:
-				return false
+			for height in [0.0, frame_height]:
+				var to_corner := Vector3(sign_x * half.x, height, sign_z * half.y) - eye
+				var depth := to_corner.dot(forward)
+				if depth <= 0.0:
+					return false
+				var across := to_corner.x / (depth * half_tan * _aspect())
+				var vertical := to_corner.dot(up) / (depth * half_tan)
+				if across < low.x or across > high.x or vertical < low.y or vertical > high.y:
+					return false
 	return true
 
 
