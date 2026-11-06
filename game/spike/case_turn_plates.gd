@@ -6,7 +6,7 @@ extends RefCounted
 ## sim tick). With `--case-turn-plate=<passenger id>` the probe plates that
 ## passenger's first turn to the front, when the case has turned TURN_LO to
 ## TURN_HI of the way, from each side of the body at SIDE_M, the sim clock
-## paused. The turn lasts a few ticks, so once that passenger is at security
+## paused. The turn lasts a few ticks, so once that passenger walks to security
 ## with a case in hand and no other plate runs, the plate task is held for it
 ## (no other plate starts) until the turn. `--case-turn-tag=<name>` names the
 ## plates (case_turn_<tag>_<side>), so a run with the fix switched off can be
@@ -34,7 +34,7 @@ static var _state := State.IDLE
 
 
 ## Called first on each sim tick. Holds the plate task for the target passenger
-## once it is at security with a case in hand and no other plate runs; when its
+## once it walks to security with a case in hand and no other plate runs; when its
 ## case is part way through its turn to the front, pauses the clock and starts
 ## the plates. Returns whether it holds the plate task (the tick's other plate
 ## checks are then skipped).
@@ -66,7 +66,7 @@ static func scan(probe) -> bool:
 		if kinds[i] == SecurityLooks.Kind.CASE and homes[i] == SecurityLooks.Home.HAND:
 			case = i
 	if _state == State.IDLE:
-		if p.stage != Passenger.Stage.SECURITY or case < 0:
+		if p.stage < Passenger.Stage.TO_SECURITY or case < 0:
 			return false
 		if probe._plate_task or probe._hold_frame >= 0:
 			return false
