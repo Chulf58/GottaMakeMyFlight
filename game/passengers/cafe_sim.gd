@@ -503,6 +503,10 @@ func seat_position(p: Passenger) -> Vector3:
 			# Out along the path early at a STEP_IN_PATH piece (STAND_UP_LEAD_TICKS).
 			if not visit.has_meta(TURNED_BACK):
 				left -= stand_up_lead(p, visit.piece)
+			# Turned back mid sit-down: it holds the step it had made through
+			# the roller's pick-up, then steps back from there (Relocation.reached).
+			if visit.has_meta(TURNED_BACK) and visit.relocation != null:
+				left = mini(left, visit.relocation.reached)
 			return _shuffle_at(visit, approach, root, clampf(left / float(SHUFFLE_TICKS), 0.0, 1.0))
 	return root
 
@@ -1041,11 +1045,14 @@ func _relocates(p: Passenger, visit: CafeVisit) -> bool:
 		owed = visit.relocation.left
 	match p.stage:
 		Passenger.Stage.CAFE_SITTING_DOWN:
-			visit.relocation = Relocation.leaving(visit.piece, owed)
 			# Turned back partway: getting up takes as long as sitting down took,
 			# none of it for a step-in hold at the approach cell.
 			var spent := _sim.tick - p.stage_tick - step_in_hold(p, visit.piece)
 			spent = clampi(spent, 0, PassengerSim.SIT_DOWN_TICKS)
+			# The step onto the seat it had made, which the stand-up reverses
+			# (seat_position()).
+			var reached := clampi(spent, 0, SHUFFLE_TICKS)
+			visit.relocation = Relocation.leaving(visit.piece, owed, reached)
 			_set_stage.call(p, Passenger.Stage.CAFE_STANDING_UP)
 			p.stage_tick = _sim.tick - (PassengerSim.STAND_UP_TICKS - spent)
 			visit.set_meta(TURNED_BACK, true)
