@@ -50,12 +50,21 @@ static func walled(sim: PassengerSim, front: Transform3D, towards: float) -> boo
 ## seat (board 5dc41129). Keeps, for the move, the faces of the walls on the
 ## edges of the cells under that start and under the walker (`body`'s origin),
 ## so clear_of() keeps the roller out of them. At every other seat it leaves the
-## start in the body's frame, as before. Any older record is cleared first.
+## start in the body's frame, as before. At every seat (a park stamped with a
+## face, RollerPark.stamp()'s "faced", a booth's too) it keeps the walls round
+## the walker as finite boxes ("wall_boxes", PullSide.walls_near()), which
+## RollerPark.plan() moves the park out of (ParkWalls, board a40fdbaf). Any
+## older record is cleared first.
 static func fix_start(bag: Dictionary, booth: bool, sim: PassengerSim, body: Transform3D) -> void:
 	bag.erase("wall_faces")
 	bag.erase("start_push")
+	bag.erase("wall_boxes")
 	# With no sim (CarryOnProps driven on its own, as tests do) there is no seat.
-	if not booth or sim == null:
+	if sim == null:
+		return
+	if bag.get("park", false) and bag.get("faced", false):
+		bag["wall_boxes"] = PullSide.walls_near(sim.grid, body.origin)
+	if not booth:
 		return
 	if not bag.get("park", false) or not bag.has("park_frame"):
 		return
