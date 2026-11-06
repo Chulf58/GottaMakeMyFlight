@@ -50,7 +50,9 @@ enum Stage {
 ## CROWDED is never a live status: it is only a missed passenger's cause
 ## (missed_stuck), held back in a boarding file when its doors closed
 ## (PassengerSim._finish(), BoardingFiles.held_back()).
-enum Stuck { NONE, NO_CHECKIN, NO_SECURITY, QUEUE_FULL, NO_ROUTE, EXIT_BLOCKED, CROWDED }
+## GATE_FULL: a security queue front waiting for a gate seat or standing spot
+## to reserve (GateCapacity); a miss while held so is recorded as CROWDED.
+enum Stuck { NONE, NO_CHECKIN, NO_SECURITY, QUEUE_FULL, NO_ROUTE, EXIT_BLOCKED, CROWDED, GATE_FULL }
 
 const STRAIGHT_MM := 1000
 const DIAGONAL_MM := 1414

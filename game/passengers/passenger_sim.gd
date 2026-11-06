@@ -83,9 +83,10 @@ signal checked_in(id: int, desk: int)
 ## repeat marks (PassengerThoughts). 21: each passenger's seat placement and
 ## seat_exiting (GateRelocation). 22: boarding-file wait spots (FileWaiters).
 ## 23: a Relocation saves the step its visitor had made (reached). 24: each
-## passenger's halt_tick (QueueRipple). From 17 on, the version before is
-## refused, with no migration.
-const SAVE_VERSION := 24
+## passenger's halt_tick (QueueRipple). 25: gate places reserved at security
+## admission, under "gate_places" (GateCapacity). From 17 on, the version
+## before is refused, with no migration.
+const SAVE_VERSION := 25
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -165,6 +166,8 @@ var arrivals := ArrivalBookings.new()
 ## Standing spots near the gate and the passengers' claims on them, for when
 ## every gate seat is taken (StandingSpots).
 var standing := StandingSpots.new()
+## Gate places reserved at security admission (GateCapacity).
+var gates := GateCapacity.new()
 ## The ordered files walkers keep to on the way out to the plane, so they do
 ## not walk through each other (BoardingFiles).
 var files := BoardingFiles.new()
@@ -238,7 +241,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	layout.rebuild(grid)
 	# Before the sim's own handler, so nothing reads a route an edit outdated.
 	routes.bind(grid)
-	security.bind(self, _security_admitted, _security_cleared)
+	security.bind(self, _security_admitted, _security_cleared, gates.placed.bind(self))
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	toilets.bind(self, _set_stage, _leave_station, _release_seat)
 	grid.set_meta(RoomMove.EXIT_CELLS_META, move_exit_cells)
@@ -329,8 +332,10 @@ func on_tick(new_tick: int) -> void:
 	_close_doors()
 	var stations: Array = layout.lanes.keys()
 	stations.sort()
+	gates.recover(self)
 	for station in stations:
 		_step_station(station)
+	gates.admit(self)
 	cafes.step_counters()
 	_admit_pending()
 	for p in _passengers:
@@ -472,6 +477,7 @@ func _security_admitted(p: Passenger) -> void:
 func _security_cleared(p: Passenger) -> void:
 	p.station = 0
 	p.cleared = true
+	gates.on_cleared(self, p)
 	_set_stage(p, Passenger.Stage.TO_GATE)
 
 
@@ -542,6 +548,7 @@ func bubble_text(p: Passenger) -> String:
 		Passenger.Stuck.QUEUE_FULL: "Queue full",
 		Passenger.Stuck.NO_ROUTE: "I can't get there",
 		Passenger.Stuck.EXIT_BLOCKED: "The exit is blocked",
+		Passenger.Stuck.GATE_FULL: "The gate is full",
 	}
 	if p.stage == Passenger.Stage.MISSED:
 		return "Missed my flight!"
@@ -580,6 +587,7 @@ func to_snapshot() -> Dictionary:
 	)
 	data["info_desk"] = info_desks.to_list()
 	data["standing"] = standing.to_list()
+	data["gate_places"] = gates.to_list(self)
 	data["boarding"] = files.to_dict()
 	return data
 
@@ -615,7 +623,8 @@ func from_snapshot(data: Dictionary) -> bool:
 	if boarding.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % boarding["error"])
 		return false
-	spots.restore(claims["claims"])
+	spots.restore(claims["claims"], by_id)
+	gates.restore(claims["gate"], spots, by_id)
 	standing = spots
 	files = boarding["files"]
 	tick = loaded["tick"]
@@ -640,7 +649,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		ParkRecovery.on_load(p, tick)
 		# A save from before version 14 stands passengers with no spot. Each is
 		# sent back to the gate with a cleared path; its stage tick is the next
-		# tick, so it plans a seat or spot then (_to_spot()).
+		# tick, so it plans a seat or spot then (GateCapacity.to_spot()).
 		if p.stage == Passenger.Stage.STANDING and standing.spot_of(p.id) == StandingSpots.NO_SPOT:
 			p.stage = Passenger.Stage.TO_GATE
 			p.stage_tick = tick + 1
@@ -665,6 +674,14 @@ func checked_standing(data: Dictionary, by_id: Dictionary) -> Dictionary:
 		claims = {"error": "missing key 'standing'"}
 	if claims.has("error"):
 		return claims
+	var gate := GateCapacity.checked(
+		data.get("gate_places", []), by_id, self, spots, claims["claims"]
+	)
+	if not data.has("gate_places") and current:
+		gate = {"error": "missing key 'gate_places'"}
+	if gate.has("error"):
+		return gate
+	claims["gate"] = gate
 	claims["spots"] = spots
 	return claims
 
@@ -788,11 +805,8 @@ func _close_doors() -> void:
 func _finish(p: Passenger, made: bool) -> void:
 	if not made:
 		p.missed_stage = p.stage
-		p.missed_stuck = p.stuck
-		# Held up by people traffic at boarding, the miss is the terminal's
-		# (decision a-late-passenger-held-up-by-people-traffic-at-boarding-misse).
-		if p.stuck == Passenger.Stuck.NONE and files.was_delayed(p.id):
-			p.missed_stuck = Passenger.Stuck.CROWDED
+		# Held up by people traffic or a full gate, the miss is the terminal's.
+		p.missed_stuck = GateCapacity.miss_cause(self, p)
 	_leave_station(p)
 	_release_seat(p)
 	cafes.cleanup(p)
@@ -880,14 +894,14 @@ func _prune_results() -> void:
 
 
 ## A station's tick: finished service, holding passengers moving into the
-## lane, then the next admission. Security stations go to SecurityRuntime.
+## lane, then the next admission. Security stations go to SecurityRuntime and
+## are admitted after every station's step (GateCapacity.admit()).
 func _step_station(station: int) -> void:
 	var q := _queue(station)
 	var cells: Array = layout.lanes[station]
 	if layout.passages.has(station):
 		security.advance(station)
 		_promote(q, cells)
-		security.admit(station, q, cells, _is_open(station))
 		return
 	if q["serving"] != 0:
 		var served: Passenger = _by_id[q["serving"]]
@@ -969,7 +983,7 @@ func _advance(p: Passenger) -> void:
 					next = Passenger.Stage.TO_EXIT
 				_set_stage(p, next)
 			elif p.stage == Passenger.Stage.STANDING:
-				_seat_from_spot(p)
+				GateCapacity.seat_from_spot(self, p)
 		Passenger.Stage.STANDING_UP:
 			if tick - p.stage_tick >= ParkRecovery.stand_up_ticks(p):
 				_release_seat(p)
@@ -1155,7 +1169,7 @@ func _to_gate(p: Passenger) -> void:
 		_set_stage(p, Passenger.Stage.TO_EXIT)
 		return
 	if p.seat_object == 0:
-		_to_spot(p)
+		GateCapacity.to_spot(self, p)
 		return
 	if p.is_moving():
 		return
@@ -1164,88 +1178,6 @@ func _to_gate(p: Passenger) -> void:
 		_set_stage(p, Passenger.Stage.SITTING_DOWN)
 	else:
 		_release_seat(p)
-
-
-## No seat: a free seat first, else the nearest free standing spot
-## (StandingSpots), walked to and then stood on. With neither the passenger is
-## held where it is (StandingSpots.is_held()) and tries again on the tick it
-## got here and once a beat after.
-func _to_spot(p: Passenger) -> void:
-	var spot := standing.spot_of(p.id)
-	if spot == StandingSpots.NO_SPOT:
-		if p.stage_tick != tick and not _retry_now(p):
-			return
-		if _claim_seat(p):
-			return
-		spot = _claim_spot(p)
-		if spot == StandingSpots.NO_SPOT:
-			p.clear_path()
-			return
-	if p.is_moving():
-		return
-	if p.at == standing.cell_of(spot):
-		p.clear_path()
-		_set_stage(p, Passenger.Stage.STANDING)
-	else:
-		# Its path ended elsewhere (an edit): plan again on the next beat.
-		standing.release(p.id)
-
-
-## Claims the nearest free spot that `p` has a path to (StandingSpots.TRIES
-## nearest tried) and commits that path; NO_SPOT when none.
-func _claim_spot(p: Passenger) -> int:
-	var tries := 0
-	for spot in standing.free_nearest(p.at, _gate_cells(p)):
-		var target := standing.cell_of(spot)
-		var path: Array[Vector2i] = [p.at]
-		if target != p.at:
-			path = grid.find_path(p.at, target)
-		if not path.is_empty():
-			standing.claim(p.id, spot)
-			p.set_path(path)
-			return spot
-		tries += 1
-		if tries >= StandingSpots.TRIES:
-			break
-	return StandingSpots.NO_SPOT
-
-
-## A standing passenger takes a freed gate seat on its beat, which gives up
-## its spot.
-func _seat_from_spot(p: Passenger) -> void:
-	if standing.spot_of(p.id) == StandingSpots.NO_SPOT or not _retry_now(p):
-		return
-	if _claim_seat(p):
-		standing.release(p.id)
-		_set_stage(p, Passenger.Stage.TO_GATE)
-
-
-## The free seats nearest the passenger's gate desk first, none farther than
-## GateReach.NEAR_CELLS from it, then the nearest to the passenger; with no gate
-## desk (no gates, or a flight without a gate) the nearest to the passenger.
-func _claim_seat(p: Passenger) -> bool:
-	var near := _gate_cells(p)
-	var free: Array = []
-	for seat in layout.seats:
-		if _seat_claims.has(seat["key"]):
-			continue
-		var reach := GateReach.cells_from(seat["cell"], near)
-		if near.is_empty() or reach <= GateReach.NEAR_CELLS:
-			free.append([reach, Passenger.octile_mm(p.at, seat["front"]), free.size(), seat])
-	free.sort()
-	for i in mini(free.size(), SEAT_TRIES):
-		var seat: Dictionary = free[i][3]
-		var path := grid.find_path(p.at, seat["front"])
-		if path.is_empty():
-			continue
-		_seat_claims[seat["key"]] = p.id
-		p.seat_object = seat["object_id"]
-		p.seat_cell = seat["cell"]
-		p.seat_front = seat["front"]
-		p.seat_piece = Relocation.placement(grid, seat["object_id"])
-		p.set_path(path)
-		return true
-	return false
 
 
 ## The cells of the gate desk of `p`'s flight, empty when there is none to
@@ -1559,6 +1491,7 @@ func _retry_now(p: Passenger) -> bool:
 
 
 func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
+	gates.stage_set(self, p, stage)
 	# A standing spot is held only on the way to the gate and standing there,
 	# and kept on setting off from it for the exit until the walker is off its
 	# cell (_move()), so it does not jump to the cell's centre; a visit or the

@@ -194,7 +194,10 @@ func test_each_stuck_status_has_its_exact_reason_text_and_beats_the_stage() -> v
 		Passenger.Stuck.EXIT_BLOCKED: "The exit to the plane was blocked",
 		Passenger.Stuck.CROWDED: "Held up by crowds at the gate",
 	}
-	assert_int(expected.size()).is_equal(Passenger.Stuck.size() - 1)
+	# NONE has no reason, and GATE_FULL is a live status only: a miss while held
+	# for a gate place is recorded as CROWDED (GateCapacity.miss_cause(),
+	# TestGateCapacityAdmission).
+	assert_int(expected.size()).is_equal(Passenger.Stuck.size() - 2)
 	for stuck in expected:
 		assert_str(FlightResult.reason_text(Passenger.Stage.SEATED, stuck)).is_equal(
 			expected[stuck]

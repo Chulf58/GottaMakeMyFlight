@@ -21,6 +21,16 @@ extends RefCounted
 ## gives (now when on duty, its arrival when walking there, read after the
 ## next staff step when that step will plan its path again or move it to
 ## another post), and that tick is an event the replay does not skip past.
+##
+## Gate places (decision gate-full-design-passengers-reserve-a-gate-seat-or-
+## standing, point 5): while GateCapacity.scarce() says the free room could
+## run out first, the replay plays every security station at once, against a
+## copy of the sim's gate places (GateCapacity.copy()), with the same
+## admission order as the sim (GateCapacity.admit_all(): earliest boarding
+## tick first). A front with no place then waits as in the sim, and a place
+## freed later (a passenger boarding or visiting a facility) is not foreseen,
+## so a front that never gets one is NEVER. Otherwise only the station itself
+## is played, and no admission waits for a place.
 
 ## Far enough that a replay this long has gone wrong.
 const HORIZON := 200000
@@ -30,13 +40,18 @@ var tick := 0
 var layout: TerminalLayout
 
 var _sim: PassengerSim
-var _station := 0
 var _runtime := SecurityRuntime.new()
-var _open := false
-## The first tick a helper is on duty at the station, or -1 (never).
-var _helper_from := -1
-var _cells: Array = []
-var _queue := {"lane": [], "holding": []}
+## The stations played, ascending: the forecast's own, or every security
+## station while gate places are scarce.
+var _stations: Array[int] = []
+## By station: whether it is open, the first tick a helper is on duty there
+## (-1: never), its lane cells and its {"lane", "holding"} queue.
+var _opens := {}
+var _helper_from := {}
+var _cells := {}
+var _queues := {}
+## The copied gate places, or null when no admission waits for one.
+var _places: GateCapacity
 ## Passenger id -> its copy.
 var _units := {}
 ## The copies' ids, ascending: the order PassengerSim steps passengers in.
@@ -60,18 +75,48 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 	if not sim.layout.is_usable(station):
 		return JourneyForecast.NEVER
 	var replay := SecurityForecast.new()
-	replay._setup(sim, station)
+	replay._setup(sim, station, sim.gates.scarce(sim, station, p))
 	var ticks := JourneyForecast.NEVER
-	if replay._units.has(p.id) or replay._open:
+	if replay._units.has(p.id) or replay._opens[station]:
 		if not replay._units.has(p.id):
 			# Where a newcomer walks: behind the lane, holding list and walkers.
-			var ahead: int = replay._queue["lane"].size() + replay._queue["holding"].size()
-			var slot := mini(ahead + replay._joins.size(), replay._cells.size() - 1)
-			replay._add_walker(p, maxi(join_tick, sim.tick + 1), replay._cells[slot])
+			var queue: Dictionary = replay._queues[station]
+			var ahead: int = queue["lane"].size() + queue["holding"].size()
+			var cells: Array = replay._cells[station]
+			var slot := mini(ahead + replay._walkers_to(station), cells.size() - 1)
+			replay._add_walker(p, maxi(join_tick, sim.tick + 1), cells[slot], station)
 		ticks = replay._run(p.id)
 	# The runtime holds the replay as its host: let go, or neither is freed.
 	replay._runtime.bind(null)
 	return ticks
+
+
+## eta() of each of `ids` (passengers committed to `station`: walking to,
+## queuing at or inside it) from as few replays as eta() would play: id ->
+## ticks until cleared (JourneyForecast.NEVER for one it never clears). The
+## replay does not depend on which passenger it is run for, only on whether
+## the gate places are replayed (GateCapacity.scarce(), asked for each id as
+## eta() asks it), so one replay per answer to that is run on until each of
+## its ids is cleared. Ids not in the replay are left out; none when the
+## station cannot be used. It sets up, plays and lets go of the replays.
+static func clearances(sim: PassengerSim, station: int, ids: Array) -> Dictionary:
+	var out := {}
+	if not sim.layout.passages.has(station) or not sim.layout.is_usable(station):
+		return out
+	var replays := {}
+	for id: int in ids:
+		var scarce := sim.gates.scarce(sim, station, sim.get_passenger(id))
+		if not replays.has(scarce):
+			var made := SecurityForecast.new()
+			made._setup(sim, station, scarce)
+			replays[scarce] = made
+		var replay: SecurityForecast = replays[scarce]
+		if replay._units.has(id):
+			out[id] = replay._run(id)
+	for replay: SecurityForecast in replays.values():
+		# The runtime holds the replay as its host: let go, or neither is freed.
+		replay._runtime.bind(null)
+	return out
 
 
 ## Ticks until `p`, walking to, queuing at or inside its security station, is
@@ -96,31 +141,56 @@ func _on_cleared(p: Passenger) -> void:
 	_cleared[p.id] = tick
 
 
-func _setup(sim: PassengerSim, station: int) -> void:
+## Copies `station`'s state, and with `scarce` (GateCapacity.scarce()) every
+## security station's and the gate places.
+func _setup(sim: PassengerSim, station: int, scarce: bool) -> void:
 	_sim = sim
-	_station = station
 	tick = sim.tick
 	layout = sim.layout
-	_open = sim.staff != null and sim.staff.is_open(station)
-	if sim.staff != null:
-		_helper_from = StaffPosts.helper_from(sim.staff, station)
-	_runtime.helper_from = {station: _helper_from}
-	_cells = sim.layout.lanes[station]
-	_runtime.bind(self, _on_admitted, _on_cleared)
-	var record := sim.security.record_of(station)
-	if not record.is_empty():
-		_runtime.restore({station: record})
-		for id: int in record["admitted"]:
+	_stations = [station]
+	if scarce:
+		_places = sim.gates.copy(sim)
+		_stations.clear()
+		for other: int in sim.layout.passages:
+			if sim.layout.is_usable(other):
+				_stations.append(other)
+		_stations.sort()
+	_runtime.bind(self, _on_admitted, _on_cleared, _placed)
+	var records := {}
+	for at in _stations:
+		_opens[at] = sim.staff != null and sim.staff.is_open(at)
+		_helper_from[at] = StaffPosts.helper_from(sim.staff, at) if sim.staff != null else -1
+		_cells[at] = sim.layout.lanes[at]
+		var record := sim.security.record_of(at)
+		if not record.is_empty():
+			records[at] = record
+		_queues[at] = {"lane": sim.queue_of(at), "holding": sim.holding_of(at)}
+	_runtime.helper_from = _helper_from
+	_runtime.restore(records)
+	for at in _stations:
+		for id: int in records.get(at, {}).get("admitted", []):
 			_add(sim.get_passenger(id))
-	_queue["lane"] = sim.queue_of(station)
-	_queue["holding"] = sim.holding_of(station)
-	for id: int in _queue["lane"] + _queue["holding"]:
-		_add(sim.get_passenger(id))
+		for id: int in _queues[at]["lane"] + _queues[at]["holding"]:
+			_add(sim.get_passenger(id))
 	for id in sim.passenger_ids():
 		var walker := sim.get_passenger(id)
-		if walker.station == station and walker.stage == Passenger.Stage.TO_SECURITY:
+		if _opens.has(walker.station) and walker.stage == Passenger.Stage.TO_SECURITY:
 			var arrive := sim.tick + walker.pace_ticks(walker.remaining_mm())
-			_add_walker(walker, arrive + 1, walker.path_end())
+			_add_walker(walker, arrive + 1, walker.path_end(), walker.station)
+
+
+## Whether a copy may be cleared: it holds a copied gate place, or none is
+## replayed.
+func _placed(p: Passenger) -> bool:
+	return _places == null or _places.placed(p, self)
+
+
+## The copies walking to `station`.
+func _walkers_to(station: int) -> int:
+	var count := 0
+	for id: int in _joins:
+		count += int(_units[id].station == station)
+	return count
 
 
 func _add(p: Passenger) -> Passenger:
@@ -132,6 +202,9 @@ func _add(p: Passenger) -> Passenger:
 	copy.path = p.path.duplicate()
 	copy.path_index = p.path_index
 	copy.seg_mm = p.seg_mm
+	copy.flight_id = p.flight_id
+	copy.boarding_tick = p.boarding_tick
+	copy.stuck = p.stuck
 	copy.carry_on = p.carry_on
 	copy.late = p.late
 	copy.halt_tick = p.halt_tick
@@ -148,10 +221,10 @@ func _add(p: Passenger) -> Passenger:
 
 
 ## A passenger walking to the queue: it stands on `cell` and joins on `join`.
-func _add_walker(p: Passenger, join: int, cell: Vector2i) -> void:
+func _add_walker(p: Passenger, join: int, cell: Vector2i, station: int) -> void:
 	var copy := _add(p)
 	copy.stage = Passenger.Stage.TO_SECURITY
-	copy.station = _station
+	copy.station = station
 	copy.security_phase = SecurityRuntime.Phase.NONE
 	copy.security_work = 0
 	copy.at = cell
@@ -174,16 +247,18 @@ func _run(target: int) -> int:
 
 ## One tick as PassengerSim plays it for this station and its passengers.
 func _step() -> void:
-	_runtime.advance(_station)
-	StationQueue.promote(_queue, _cells)
-	_runtime.admit(_station, _queue, _cells, _open)
+	GateCapacity.recover_all(self, _runtime, _stations, _places)
+	for at in _stations:
+		_runtime.advance(at)
+		StationQueue.promote(_queues[at], _cells[at])
+	GateCapacity.admit_all(self, _runtime, _stations, _queues, _cells, _opens, _places)
 	for id in _order:
 		var u: Passenger = _units[id]
 		if _cleared.has(id):
 			continue
 		if u.stage == Passenger.Stage.TO_SECURITY and _joins[id] <= tick:
 			_joins.erase(id)
-			StationQueue.join(_queue, _cells, id)
+			StationQueue.join(_queues[u.station], _cells[u.station], id)
 			u.stage = Passenger.Stage.SECURITY_QUEUE
 			_changed = true
 		elif u.stage == Passenger.Stage.SECURITY_QUEUE:
@@ -198,17 +273,19 @@ func _step() -> void:
 ## cells, so between two of its cells the path is the lane itself; elsewhere
 ## the grid's path is used as there.
 func _move_up(u: Passenger) -> void:
-	if not _misplaced(u) or not QueueRipple.may_step(self, u, _queue["lane"], _cells, tick, false):
+	var lane: Array = _queues[u.station]["lane"]
+	var cells: Array = _cells[u.station]
+	if not _misplaced(u) or not QueueRipple.may_step(self, u, lane, cells, tick, false):
 		return
-	var index: int = (_queue["lane"] as Array).find(u.id)
-	var from := _cells.find(u.at)
+	var index: int = lane.find(u.id)
+	var from := cells.find(u.at)
 	var path: Array[Vector2i] = []
 	if from >= 0:
 		var step := -1 if index < from else 1
 		for i in range(from, index + step, step):
-			path.append(_cells[i])
+			path.append(cells[i])
 	else:
-		path = _sim.grid.find_path(u.at, _cells[index])
+		path = _sim.grid.find_path(u.at, cells[index])
 	if path.size() >= 2:
 		u.set_path(path)
 
@@ -216,8 +293,10 @@ func _move_up(u: Passenger) -> void:
 ## A lane member standing still away from its lane place: it moves up on the
 ## next tick.
 func _misplaced(u: Passenger) -> bool:
-	var index: int = (_queue["lane"] as Array).find(u.id)
-	return index >= 0 and not u.is_moving() and u.at != _cells[index]
+	if u.stage != Passenger.Stage.SECURITY_QUEUE:
+		return false
+	var index: int = (_queues[u.station]["lane"] as Array).find(u.id)
+	return index >= 0 and not u.is_moving() and u.at != _cells[u.station][index]
 
 
 ## The next tick on which something can change, or -1 when nothing will:
@@ -229,9 +308,10 @@ func _next_event() -> int:
 		_changed = false
 		return tick + 1
 	var best := -1
-	if _helper_from > tick:
+	for at in _stations:
 		# The repack rate changes on the tick the helper arrives.
-		best = _helper_from
+		if _helper_from[at] > tick and (best < 0 or _helper_from[at] < best):
+			best = _helper_from[at]
 	for id in _order:
 		if _cleared.has(id):
 			continue
@@ -242,10 +322,19 @@ func _next_event() -> int:
 		elif u.is_moving():
 			var left := Passenger.segment_mm(u.path[u.path_index], u.path[u.path_index + 1])
 			at = tick + u.pace_ticks(left - u.seg_mm) + 1
+			# Stepping off the pickup cell, it frees it half way
+			# (SecurityRuntime._pickup_free()).
+			var off := (
+				u.security_phase in [SecurityRuntime.Phase.LEAVE, SecurityRuntime.Phase.TO_BERTH]
+			)
+			if off and u.seg_mm * 2 < left:
+				@warning_ignore("integer_division")
+				at = mini(at, tick + u.pace_ticks((left + 1) / 2 - u.seg_mm) + 1)
 		elif u.stage == Passenger.Stage.SECURITY_QUEUE and _misplaced(u):
 			at = tick + 1
-		if u.stage == Passenger.Stage.SECURITY and _works(u):
-			var rate := maxi(1, _runtime.rate(_station, u.security_phase))
+		# Work that has run out waits on something else, which is its own event.
+		if u.stage == Passenger.Stage.SECURITY and _works(u) and u.security_work > 0:
+			var rate := maxi(1, _runtime.rate(u.station, u.security_phase))
 			@warning_ignore("integer_division")
 			var ends := tick + maxi(1, (u.security_work + rate - 1) / rate)
 			at = ends if at < 0 else mini(at, ends)
@@ -264,7 +353,7 @@ func _skip(ticks: int) -> void:
 			continue
 		var u: Passenger = _units[id]
 		if u.stage == Passenger.Stage.SECURITY and _works(u):
-			u.security_work -= ticks * _runtime.rate(_station, u.security_phase)
+			u.security_work -= ticks * _runtime.rate(u.station, u.security_phase)
 		if u.is_moving():
 			u.walk(ticks * u.pace_mm())
 
