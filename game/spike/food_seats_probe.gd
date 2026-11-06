@@ -124,9 +124,6 @@ var _only := PackedStringArray()
 var _out_dir := ""
 ## --roller-strip=a,b: a roller guest's strip ticks (empty: ROLLER_STRIP_TICKS).
 var _roller_strip: Array[float] = []
-## --side: the sit-down camera low beside the approach cell, across the seat's
-## facing, so a roller set down ahead of the feet shows clear of the shins.
-var _side_view := false
 var _failed := false
 var _main: Node3D
 var _clock: SimClock
@@ -153,8 +150,6 @@ func _initialize() -> void:
 			out = arg.get_slice("=", 1)
 		if arg.begins_with("--subjects="):
 			_only = arg.get_slice("=", 1).split(",")
-		if arg == "--side":
-			_side_view = true
 		if arg.begins_with("--roller-strip="):
 			for at in arg.get_slice("=", 1).split(","):
 				_roller_strip.append(float(at))
@@ -954,12 +949,7 @@ func _aim(frame: Transform3D, seat: Dictionary) -> void:
 	var across := frame.basis.x * (signf(lateral) if absf(lateral) > 0.1 else 1.0)
 	var dir := (across * 0.6 + frame.basis.z * 0.5 + Vector3.UP * 1.2).normalized()
 	var target := (frame.origin + approach * 0.5) + Vector3.UP * 0.6
-	var away := 4.6
-	if _side_view:
-		dir = (across + frame.basis.z * 0.15 + Vector3.UP * 0.3).normalized()
-		target = frame.origin + approach + Vector3.UP * 0.35
-		away = 3.0
-	_cam.look_at_from_position(target + dir * away, target, Vector3.UP)
+	_cam.look_at_from_position(target + dir * 4.6, target, Vector3.UP)
 	_cam.current = true
 	(_mode.get_node("BuildView") as BuildView).update_cutaway(_cam.global_transform.basis.z)
 

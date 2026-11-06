@@ -723,7 +723,7 @@ static func plan(
 ) -> Dictionary:
 	var started := CarryLead.start_of(bag)
 	var off_floor: bool = started[0] == CarryLead.End.REST
-	var lead: int = CarryLead.hand_of(bag["home"]) if off_floor else set_down_hand(bag)
+	var lead: int = CarryLead.hand_of(bag["home"]) if off_floor else started[1]
 	var ahead := UP_PARK_AHEAD_M if off_floor and not bag.get("up_near", false) else PARK_AHEAD_M
 	var parked := park(bag["park_frame"], lead, body["scale"], ahead)
 	# Out of the walls beside a seat (BoothRoller.fix_start(), ParkWalls).
@@ -841,26 +841,6 @@ static func _onto_floor(
 		return [true, laid, handle, handle, 1.0]
 	var back := smoothstep(0.0, 1.0, (1.0 - k) / (1.0 - LAY_END))
 	return [false, want, handle, handle, back]
-
-
-## The hand that leads a set-down of `bag` from the pull: the one that pulled
-## it, but at a booth seat (its start fixed in the world, "from_world",
-## BoothRoller.fix_start()) the floor place's hand (ParkSide's, the open side)
-## when the pull left the roller on that hand's side of the seat's facing
-## ("park_frame"). A guest that walks in along the booth's wall pulls on the
-## side away from it (PullSide), then turns round on the spot to face out of
-## the seat: the roller is then on its other hand's side, the open one. Led by
-## the pulling hand, it was rolled across behind the turning body to a park on
-## the walled side and laid back across the front (food_seats_probe
-## booth_alt_13-1, board 2eaa9bc4). Both from fixed data, never the drawn body.
-static func set_down_hand(bag: Dictionary) -> int:
-	var held: int = CarryLead.start_of(bag)[1]
-	var home := CarryLead.hand_of(bag["home"])
-	if home == held or not bag.has("from_world") or not bag.get("faced", false):
-		return held
-	var park_frame: Transform3D = bag["park_frame"]
-	var x := (park_frame.affine_inverse() * (bag["from_world"] as Transform3D).origin).x
-	return home if (x < 0.0) == (home == 0) else held
 
 
 ## Whether a set-down parked at `parked` lays its roller at `want` (both world)
