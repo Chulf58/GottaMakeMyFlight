@@ -6,21 +6,22 @@ extends RefCounted
 ## hand's side, wherever the walls are. BoothRoller.fix_start() keeps, for such
 ## a move, the walls round the walker as finite boxes (PullSide.walls_near(),
 ## doors left out), and RollerPark.plan() moves the park out of them by
-## shift(): at the lounge sofa's west seat the park stood 0.04 m into the end
-## of the wall beside the door, and the lift, the park and the roll upright all
-## drew the roller in it (roller_park_walls_probe, wall_22_113_3).
+## shift(), and then every frame of the move as it is drawn (the lift to the
+## park, the roll upright and the tip): at the lounge sofa's west seat the
+## park stood 0.04 m into the end of the wall beside the door, and the lift,
+## the park and the roll upright all drew the roller in it
+## (roller_park_walls_probe, wall_22_113_3).
 ##
 ## The way out is the shortest one for each wall in turn, in the wall's own
 ## frame: along it, past the wall's end, or across it, out of its face. At the
-## sofa a wall's end beside the door had the park, and out past it the park
-## moves along the wall, not towards the guest's legs. The
-## shift is worked out from the park alone (its frame, hand and scale, fixed
-## for the move), never from the hand, so every frame of the move gets the
-## same one and the roller lifted, parked and rolled with the body moves with
-## it. What it does not guarantee: that the shifted park is clear of furniture,
-## of the guest's legs (a park pushed across a wall's middle comes nearer the
-## body) or of a wall the boxes left out (more than PullSide.REACH_CELLS from
-## the walker's cell as the move was stamped).
+## sofa that is along the wall, past its end, not towards the guest's legs. A
+## shift is worked out from the roller's transform alone, never from the hand:
+## the park's (its frame, hand and scale, fixed for the move) is the same on
+## every frame, so the roller lifted to it and rolled from it with the body
+## starts from the moved park. What it does not guarantee: that the shifted
+## park is clear of furniture, of the guest's legs (a park pushed across a
+## wall's middle comes nearer the body) or of a wall the boxes left out
+## (more than PullSide.REACH_CELLS from the walker's cell as the move was stamped).
 
 ## Slack past a wall's face or end, so a park moved out of it reads clear.
 const SLACK_M := 0.005

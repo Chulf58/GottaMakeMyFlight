@@ -750,6 +750,11 @@ static func plan(
 		at = _off_floor(up, bag, start, want, parked, _yawed(frame), bar, handle)
 	# Out of any wall at a booth seat (BoothRoller.fix_start()).
 	var xf := BoothRoller.drawn(at[1], bag, k, bar)
+	# The lift to the park, the roll upright and the tip, out of them too: the
+	# lift from the floor beside the sofa crossed the wall's end on its way to a
+	# park moved out of it (roller_park_walls_probe, 6 frames a pick-up).
+	if bag.has("wall_boxes"):
+		xf.origin += ParkWalls.shift(xf, bag["wall_boxes"])
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	var weights := [0.0, 0.0]
 	var keeps := [0.0, 0.0]
