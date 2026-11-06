@@ -103,20 +103,52 @@ static func resolve(
 		if lifts[i]:
 			continue
 		var bag: Dictionary = was[i] if was[i].get("kind", -1) == kinds[i] else {}
-		var at := views.tick_position(p.id, true)
-		var step := at - views.tick_position(p.id, false)
-		step.y = 0.0
-		var yaw := atan2(step.x, step.z) if step.length() > 0.001 else 0.0
-		var ahead: Array = []
-		var from := maxi(p.path_index + 1, 0)
-		for k in range(from, mini(p.path.size(), from + AHEAD_CELLS)):
-			ahead.append(sim.grid.cell_to_world(p.path[k]))
-		var frame := Transform3D(Basis(Vector3.UP, yaw), at)
+		var walk := walk_of(sim, views, p)
+		var frame: Transform3D = walk[0]
+		var step_m: float = walk[2]
 		var queued := p.stage in RollerPark.QUEUE_STAGES and p.stage != Passenger.Stage.STANDING
 		if p.carry_on == 1:
-			hands[i] = pick(bag, sim.grid, frame, ahead, step.length(), hands[i], now, queued)
+			hands[i] = pick(bag, sim.grid, frame, walk[1], step_m, hands[i], now, queued)
 		if not bag.is_empty():
-			tuck(bag, sim.grid, frame, ahead, step.length(), hands[i], now)
+			tuck(bag, sim.grid, frame, walk[1], step_m, hands[i], now)
+
+
+## [frame, ahead, step_m] of guest `p` this tick, as resolve() hands them to
+## pick() and tuck(): its pose at its tick position facing its step, the world
+## points of the next AHEAD_CELLS route cells, and how far it stepped.
+static func walk_of(sim: PassengerSim, views: PassengerViews, p: Passenger) -> Array:
+	var at := views.tick_position(p.id, true)
+	var step := at - views.tick_position(p.id, false)
+	step.y = 0.0
+	var yaw := atan2(step.x, step.z) if step.length() > 0.001 else 0.0
+	var ahead: Array = []
+	var from := maxi(p.path_index + 1, 0)
+	for k in range(from, mini(p.path.size(), from + AHEAD_CELLS)):
+		ahead.append(sim.grid.cell_to_world(p.path[k]))
+	return [Transform3D(Basis(Vector3.UP, yaw), at), ahead, step.length()]
+
+
+## tuck() for a bag record resolve() did not see (made in this sync: a new
+## guest, or every record after PassengerViews.snap() on a load): RollerPull.step()
+## calls it before the record's first draw with `frame` (the guest's pose as it
+## draws it, facing its body when it has not stepped) and `step_m`, and a tuck
+## it turns on starts in line, with no ease in (RollerPull.tuck()). It looks
+## even when the guest has not stepped (a snap puts both tick positions on one
+## spot), from where it stands.
+static func tuck_now(
+	bag: Dictionary,
+	sim: PassengerSim,
+	p: Passenger,
+	frame: Transform3D,
+	step_m: float,
+	hand: int,
+	now: float
+) -> void:
+	var ahead: Array = []
+	var from := maxi(p.path_index + 1, 0)
+	for k in range(from, mini(p.path.size(), from + AHEAD_CELLS)):
+		ahead.append(sim.grid.cell_to_world(p.path[k]))
+	tuck(bag, sim.grid, frame, ahead, maxf(step_m, STILL_M), hand, now)
 
 
 ## The hand (0 right, 1 left) bag record `bag` (CarryOnProps' record of a

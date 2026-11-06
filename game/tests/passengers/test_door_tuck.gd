@@ -55,7 +55,13 @@ func after() -> void:
 ## the apron, and the guest walks on.
 func _walk(hand: int, tucks: bool, off := 0.0, route_ends := false) -> Dictionary:
 	var last := _grid.cell_to_world(Vector2i(DOOR_X, WALL_ROW)).z
-	var bag := {"kind": ROLLER, "place": (SecurityLooks.Home.HAND * 2 + hand) * 2}
+	# Drawn already (a pull under way), so a tuck eases in; a pull not drawn
+	# yet starts tucked (test_a_pull_not_drawn_yet_starts_tucked).
+	var bag := {
+		"kind": ROLLER,
+		"place": (SecurityLooks.Home.HAND * 2 + hand) * 2,
+		"drawn_axle": Vector3.ZERO
+	}
 	var x := _grid.cell_to_world(Vector2i(DOOR_X, 0)).x + off
 	var z := _grid.cell_to_world(Vector2i(DOOR_X, START_ROW)).z
 	var end := _grid.cell_to_world(Vector2i(DOOR_X, END_ROW)).z
@@ -186,6 +192,29 @@ func test_hand_of_does_not_take_a_tucked_roller_across() -> void:
 	assert_int(told).override_failure_message("control: hand_of() moves it").is_equal(1)
 	RollerPull.tuck(bag, true, FIRST_TICK - 10.0)
 	assert_int(PullSide.pick(bag, _grid, frame, ahead, WALK_M, 1, FIRST_TICK)).is_equal(0)
+
+
+func test_a_pull_not_drawn_yet_starts_tucked() -> void:
+	var fresh := {"kind": ROLLER}
+	RollerPull.tuck(fresh, true, FIRST_TICK)
+	assert_float(RollerPull.tuck_weight(fresh, FIRST_TICK)).is_equal(1.0)
+	# Control: a pull already drawn eases in from its side.
+	var drawn := {"kind": ROLLER, "drawn_axle": Vector3.ZERO}
+	RollerPull.tuck(drawn, true, FIRST_TICK)
+	assert_float(RollerPull.tuck_weight(drawn, FIRST_TICK)).is_equal(0.0)
+
+
+func test_stopping_the_pull_clears_every_tuck_key() -> void:
+	var bag := {"kind": ROLLER, "carry": SecurityLooks.Carry.PULL, "hips_x": 0.026}
+	RollerPull.tuck(bag, true, FIRST_TICK)
+	RollerPull.tuck(bag, false, FIRST_TICK + 3.0)
+	for key in ["tuck_on", "tuck_since", "tuck_from", "hips_x"]:
+		assert_bool(bag.has(key)).override_failure_message("control: no %s" % key).is_true()
+	# Lifted (carried by hand): no longer pulled.
+	bag["carry"] = SecurityLooks.Carry.HAND
+	RollerPull.step(null, bag, null, 1, SecurityLooks.Home.HAND, 0)
+	for key in ["tuck_on", "tuck_since", "tuck_from", "hips_x"]:
+		assert_bool(bag.has(key)).override_failure_message("%s kept" % key).is_false()
 
 
 func test_left_and_right_tucked_pulls_are_as_far_from_their_own_leg() -> void:

@@ -42,6 +42,19 @@ const SWING_JUMP_M := 0.6
 ## PullSide.tuck() says when; the axle eases in and back out over TUCK_TICKS.
 const TUCK_SIDE_M := 0.12
 const TUCK_TICKS := 6.0
+## The keys of a pull step() clears when the bag stops being pulled: the
+## follower's and the tuck's.
+const RELEASED: Array[String] = [
+	"axle",
+	"walked",
+	"drawn_axle",
+	"drawn_at",
+	"axle_now",
+	"tuck_on",
+	"tuck_since",
+	"tuck_from",
+	"hips_x",
+]
 
 
 ## A roller pulled by its grip at `grip` with its axle at `axle` (on the floor,
@@ -110,9 +123,8 @@ static func step(
 	if bag["carry"] != SecurityLooks.Carry.PULL or home != SecurityLooks.Home.HAND:
 		# Not pulled now: the next pull starts its follower afresh behind the
 		# walker, not from wherever it was last drawn (perhaps metres back).
-		for key in [
-			"axle", "walked", "drawn_axle", "drawn_at", "axle_now", "tuck_on", "tuck_since"
-		]:
+		# The tuck too: a pull taken up again looks for its own doorway.
+		for key in RELEASED:
 			bag.erase(key)
 		return
 	var side := Vector3.LEFT if hand == 0 else Vector3.RIGHT
@@ -122,6 +134,14 @@ static func step(
 	var step := at - props.views.tick_position(id, false)
 	var yaw := atan2(step.x, step.z) if step.length() > 0.001 else body.rotation.y
 	var turn := Basis(Vector3.UP, yaw)
+	if not bag.has("drawn_axle") and props.sim != null:
+		# A pull not drawn yet (a new record: a new guest, every record after a
+		# snap on a load, a pull taken up again) that PullSide.resolve() has
+		# not seen: tucked now if it needs to be, before its first draw.
+		var flat := Vector3(step.x, 0.0, step.z).length()
+		var p := props.sim.get_passenger(id)
+		if p != null:
+			PullSide.tuck_now(bag, props.sim, p, Transform3D(turn, at), flat, hand, props._tick())
 	var now := at + turn * side * TRAIL_SIDE_M
 	var walked: Array = bag.get("walked", [])
 	if walked.is_empty() or (walked[-1] as Vector3).distance_to(now) > 0.01:
@@ -216,6 +236,9 @@ static func tuck_weight(bag: Dictionary, now: float) -> float:
 static func tuck(bag: Dictionary, on: bool, now: float) -> void:
 	if bag.get("tuck_on", false) == on:
 		return
-	bag["tuck_from"] = tuck_weight(bag, now)
+	# A pull with no tuck so far and not drawn yet (PullSide.tuck_now()) starts
+	# where it needs to be: there is no drawn place to ease from.
+	var fresh := not bag.has("tuck_since") and not bag.has("drawn_axle")
+	bag["tuck_from"] = (1.0 if on else 0.0) if fresh else tuck_weight(bag, now)
 	bag["tuck_since"] = now
 	bag["tuck_on"] = on
