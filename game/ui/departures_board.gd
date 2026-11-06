@@ -72,11 +72,6 @@ var _gates: Array[String] = []
 var _picker_key := ""
 var _message_key := ""
 var _message := ""
-## What FlightSim's refusal reads like: "contract Y clashes with X at gate A",
-## "... with flight X-d0 on the runway".
-var _clash := RegEx.create_from_string(
-	"^contract \\S+ clashes with (flight )?(\\S+) (at gate (\\S+)|on the runway|on the taxi lane)$"
-)
 
 
 ## The board's lines for the clock at `tick`: "Today" and its rows, then
@@ -381,36 +376,18 @@ func _on_snapshot_loaded() -> void:
 ## by the 10:00 Oslo flight". A reason that is not a clash, or a flight that
 ## cannot be resolved, reads "Gate A is busy when this flight needs it".
 func friendly_reason(reason: String, gate_id: String) -> String:
-	var found := _clash.search(reason)
-	if found == null:
+	var found := FlightLabel.parse_clash(reason)
+	if found.is_empty():
 		return BUSY_TEXT % gate_id
-	var label := _flight_label(found.get_string(1) != "", found.get_string(2))
+	var label := FlightLabel.parts(flights, found["is_flight"], found["id"])
 	if label.is_empty():
 		return BUSY_TEXT % gate_id
-	var subject := "Gate %s" % found.get_string(4)
-	if found.get_string(3) == "on the runway":
+	var subject := "Gate %s" % found["gate"]
+	if found["where"] == "on the runway":
 		subject = "The runway"
-	elif found.get_string(3) == "on the taxi lane":
+	elif found["where"] == "on the taxi lane":
 		subject = "The taxi lane"
 	return TAKEN_TEXT % [subject, label[0], label[1]]
-
-
-## [departure time, destination] of the contract (or, when `is_flight`, the
-## live flight) that FlightSim named by id, or [] when it is not known. A
-## one-off flight is named by its id.
-func _flight_label(is_flight: bool, id: String) -> PackedStringArray:
-	if is_flight:
-		var tick := flights.state_start(id, FlightSim.State.PUSHBACK)
-		if tick < 0:
-			return PackedStringArray()
-		var source := flights.contract_of(flights.flight_contract_id(id))
-		var named: String = source["destination"] if not source.is_empty() else id
-		return PackedStringArray([GameCalendar.clock_text(tick), named])
-	var contract := flights.contract_of(id)
-	if contract.is_empty():
-		return PackedStringArray()
-	var at := GameCalendar.tick_at(0, int(contract["departure_minute"]))
-	return PackedStringArray([GameCalendar.clock_text(at), contract["destination"]])
 
 
 ## B toggles; a held key's repeats and modified presses are left alone.

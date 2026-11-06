@@ -360,13 +360,14 @@ func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
 	return null
 
 
-## The live flights at any of `gates` that have not departed.
+## The live flights at any of `gates` that have not departed, each named by
+## its time, airline and destination.
 func _live_flights_at(gates: Array[String]) -> PackedStringArray:
 	var out: PackedStringArray = []
 	for flight_id in flights.flight_ids():
 		var at_gate := gates.has(flights.flight_gate(flight_id))
 		if at_gate and flights.state_of(flight_id) < FlightSim.State.DEPARTED:
-			out.append(flight_id)
+			out.append(FlightLabel.of(flights, true, flight_id))
 	return out
 
 
