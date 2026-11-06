@@ -147,13 +147,24 @@ func test_a_shoulder_bag_hangs_from_the_shoulder_outside_the_hip() -> void:
 ## A worn backpack: the top of its back panel BACK_FROM_SPINE_M behind the
 ## spine bone and just above it, its length along the bone leaning in at the
 ## top by BACK_LEAN_DEGREES (so its bottom stands further out, clear of the
-## hips), behind the body.
+## hips), behind the body. One bag on a bone tilted back (this one by 0.1 rad)
+## leans in by that much more (CarryWorn.worn_back_at(), board 4af10dd0); on
+## a bone tilted forward, or two bags' pack, by BACK_LEAN_DEGREES alone.
 func test_a_backpack_is_worn_behind_the_spine() -> void:
 	var spine := Transform3D(Basis(Vector3.RIGHT, -0.1), Vector3(0.0, 1.544, -0.047))
 	var xf := CarryWorn.worn_back(spine, 0.0, 1.0)
 	var along := xf.basis.z.normalized()
 	var lean := rad_to_deg(along.angle_to(spine.basis.y.normalized()))
-	assert_float(lean).is_equal_approx(CarryWorn.BACK_LEAN_DEGREES, 0.01)
+	assert_float(lean).is_equal_approx(CarryWorn.BACK_LEAN_DEGREES + rad_to_deg(0.1), 0.01)
+	var two := CarryWorn.worn_back(spine, 0.0, SecurityLooks.TWO_BAG_SCALE).basis.z.normalized()
+	assert_float(rad_to_deg(two.angle_to(spine.basis.y.normalized()))).is_equal_approx(
+		CarryWorn.BACK_LEAN_DEGREES, 0.01
+	)
+	var forward := Transform3D(Basis(Vector3.RIGHT, 0.1), spine.origin)
+	var bent := CarryWorn.worn_back(forward, 0.0, 1.0).basis.z.normalized()
+	assert_float(rad_to_deg(bent.angle_to(forward.basis.y.normalized()))).is_equal_approx(
+		CarryWorn.BACK_LEAN_DEGREES, 0.01
+	)
 	var top := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z
 	var top_inner := xf * Vector3(0.0, 0.0, top)
 	var bottom_inner := (
