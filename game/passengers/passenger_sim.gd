@@ -301,6 +301,7 @@ func on_tick(new_tick: int) -> void:
 		if not p.is_done():
 			_step(p)
 	_settle_lateness()
+	cafes.refresh_live_deadlines()
 	PassengerLifecycle.retire_settled(self)
 	PassengerLifecycle.prune_results(self)
 	tick_usec_last = Time.get_ticks_usec() - started

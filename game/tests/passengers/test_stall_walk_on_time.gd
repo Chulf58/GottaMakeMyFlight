@@ -83,7 +83,10 @@ func _assert_gave_up(world: PassengerTestWorld, guest: Passenger, visit: CafeVis
 
 
 func test_a_guest_on_its_way_to_the_stall_gives_up_when_security_fills() -> void:
-	var made := _admitted()
+	# 100 ticks later than LATE: with the deadline forecast at the tick's
+	# boundary (decision hold-line-rebuild-the-security-line-follows-where-
+	# people-sta) the burst leaves a guest at LATE time to reach its order.
+	var made := _admitted(LATE + 100)
 	var world: PassengerTestWorld = made[0]
 	var guest: Passenger = made[1]
 	var visit: CafeVisit = made[2]

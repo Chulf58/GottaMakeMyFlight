@@ -311,8 +311,11 @@ func beat(p: Passenger) -> void:
 	p.hunger = mini(p.hunger + 1, HUNGER_MAX) if hunger_enabled else 0
 	var visit: CafeVisit = _visits.get(p.id)
 	if visit != null:
-		# The abandon-now forecast with live queues, once a second per guest.
-		visit.deadline = _live_deadline(p, visit)
+		# The abandon-now forecast with live queues, once a second per guest;
+		# a landside guest's is forecast at every tick's boundary instead
+		# (refresh_live_deadlines()).
+		if visit.resume_stage != Passenger.Stage.TO_SECURITY:
+			visit.deadline = _live_deadline(p, visit)
 		return
 	var hungry := p.hunger >= HUNGRY_AT
 	@warning_ignore("integer_division")
@@ -425,10 +428,8 @@ func step(p: Passenger) -> void:
 		return
 	var stage := p.stage
 	if stage != Passenger.Stage.CAFE_STANDING_UP:
-		if visit.resume_stage == Passenger.Stage.TO_SECURITY:
-			# The rest of a landside journey runs through the scanners, whose
-			# queues can fill between beats: forecast it again every tick.
-			visit.deadline = _live_deadline(p, visit)
+		# A landside guest's deadline was forecast at the last tick's boundary
+		# (refresh_live_deadlines()).
 		if _sim.tick >= visit.deadline:
 			_leave_early(p, visit)
 			return
@@ -868,6 +869,24 @@ func booth_roller(p: Passenger) -> bool:
 
 
 ## The deadline of a visit under way, forecast again with the queues and
+## The deadline of every landside visit under way, forecast again at the
+## tick's boundary, after every passenger has stepped (decision hold-line-
+## rebuild-the-security-line-follows-where-people-sta): the rest of a landside
+## journey runs through the scanners, whose queues can fill between beats, so
+## it is forecast every tick, against one state. Its guest checks it on the
+## next tick.
+func refresh_live_deadlines() -> void:
+	var ids: Array = _visits.keys()
+	ids.sort()
+	for id: int in ids:
+		var visit: CafeVisit = _visits[id]
+		var p := _sim.get_passenger(id)
+		if p == null or visit.resume_stage != Passenger.Stage.TO_SECURITY:
+			continue
+		if p.stage != Passenger.Stage.CAFE_STANDING_UP:
+			visit.deadline = _live_deadline(p, visit)
+
+
 ## stations as they are now (VisitForecast.live_deadline()); the visit's own
 ## when it has no cell to leave from.
 func _live_deadline(p: Passenger, visit: CafeVisit) -> int:
@@ -980,9 +999,11 @@ func _queue_step(p: Passenger, visit: CafeVisit) -> void:
 func _serve(p: Passenger, visit: CafeVisit) -> void:
 	if visit.walk_on():
 		# The counters step before the guest's own deadline check, and this
-		# ends the visit on the spot: so the deadline is worked out again and
-		# enforced here, and a guest past it gives up unpaid.
-		visit.deadline = _live_deadline(p, visit)
+		# ends the visit on the spot: so the deadline (forecast at the last
+		# tick's boundary for a landside guest) is enforced here, and a guest
+		# past it gives up unpaid.
+		if visit.resume_stage != Passenger.Stage.TO_SECURITY:
+			visit.deadline = _live_deadline(p, visit)
 		if _sim.tick >= visit.deadline:
 			_abandon(p, visit)
 			return
