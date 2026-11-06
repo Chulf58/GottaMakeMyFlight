@@ -52,6 +52,41 @@ static func shift(parked: Transform3D, walls: Array) -> Vector3:
 	return moved
 
 
+## The shift (world) that moves the roller drawn at `xf` (a frame of a move
+## whose park is `anchor`, already out of the walls by shift()) out of `walls`
+## on one way per wall for the whole move, chosen from the park: out past the
+## wall's end, on the park's side, when the park stands past that end, else
+## out of the face on the park's side. Carried with the body out through the
+## lounge door, the roll and the tip reached 0.028 m into the door's jamb; the
+## shortest way frame by frame flipped between along and across (0.057 m in
+## a frame), and one way per move cannot.
+static func held_out(xf: Transform3D, walls: Array, anchor: Transform3D) -> Vector3:
+	var points := _points(xf)
+	var home := anchor * CarryOnProps.bag_box(SecurityLooks.Kind.ROLLER).get_center()
+	var moved := Vector3.ZERO
+	for wall: Array in walls:
+		var centre: Vector3 = wall[0]
+		var half: Vector3 = wall[2]
+		var along := _flat(wall[1][0])
+		var across := _flat(wall[1][2])
+		var hx := half.x + SLACK_M
+		var hz := half.z + SLACK_M
+		var a := Vector2(INF, -INF)
+		var c := Vector2(INF, -INF)
+		for at in points:
+			var d := at + moved - centre
+			a = Vector2(minf(a.x, d.dot(along)), maxf(a.y, d.dot(along)))
+			c = Vector2(minf(c.x, d.dot(across)), maxf(c.y, d.dot(across)))
+		if a.y <= -hx or a.x >= hx or c.y <= -hz or c.x >= hz:
+			continue
+		var side := home - centre
+		if absf(side.dot(along)) > hx:
+			moved += along * (hx - a.x if side.dot(along) > 0.0 else -hx - a.y)
+		else:
+			moved += across * (hz - c.x if side.dot(across) > 0.0 else -hz - c.y)
+	return moved
+
+
 ## Whether the roller drawn at `xf` (world) reaches into any of `walls`.
 static func inside(xf: Transform3D, walls: Array) -> bool:
 	var points := _points(xf)

@@ -309,6 +309,9 @@ func test_a_booth_roller_guest_walled_on_one_side_holds_it_on_the_open_side() ->
 				edits.append(BuildEdit.remove_wall(cell, side))
 		edits.append(BuildEdit.place_wall(cell, sides[walled]))
 		assert_bool(world.grid.apply_batch(edits)[-1].ok).is_true()
+		# The hand is chosen once per seat and kept (ParkSide's stamp): each wall
+		# layout here stands for a different seat, so it is chosen afresh.
+		world.sim.remove_meta(ParkSide.STAMPS)
 		var hand := SecurityLooks.hand_of(world.sim, p, 0)
 		var own := -1.0 if hand == 0 else 1.0
 		var lies := BoothRoller.side(world.sim, front, hand)
