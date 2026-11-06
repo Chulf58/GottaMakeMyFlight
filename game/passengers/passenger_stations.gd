@@ -15,6 +15,12 @@ extends RefCounted
 ## security place is free for it; the desk waits meanwhile.
 
 
+## The ticks a lane's main position is held by the walk through its arch, at a
+## walk (estimate()): a lane admits about every 29 ticks, unpack included
+## (TestSecurityTierBalance's stream).
+const LANE_ARCH_TICKS := 20
+
+
 ## Passengers in front of a newcomer to `station`: its lane, holding area and
 ## walkers on the way. At a desk the one being served is in the lane too.
 static func slot(sim: PassengerSim, station: int) -> int:
@@ -186,32 +192,13 @@ static func seek(sim: PassengerSim, p: Passenger) -> void:
 		if p.stuck == Passenger.Stuck.NONE or sim._retry_now(p) or _room_now(sim, p):
 			choose(sim, p)
 		return
-	if p.is_moving():
-		return
-	var line := sim.layout.line_of(p.station)
-	var q := sim._queue(p.station)
-	var n := StationQueue.size_of(q)
-	var free := StationQueue.free_index(q, line, sim._by_id)
-	var target := StationQueue.walker_free(
-		free, StationQueue.admitted_at(sim._by_id, p.station, line)
-	)
-	var ends: Array[Vector2i] = []
-	for other in sim._passengers:
-		if other != p and other.station == p.station and other.is_moving():
-			if (
-				other.stage == Passenger.Stage.TO_CHECKIN
-				or other.stage == Passenger.Stage.TO_SECURITY
-			):
-				ends.append(other.path_end())
-	if not StationQueue.head_for(sim.grid, p, line, n, target, ends):
-		sim._leave_station(p)
-		choose(sim, p)
-	elif not p.is_moving() and target == free and free < line.size() and p.at == line[free]:
-		join(sim, p)
+	# A committed walker is sent and joined by the line's pass (arrive()).
 
 
-## Walkers reaching the next free cell of their station's line join there
-## before anyone steps (StationQueue.arrive()), as SecurityForecast does.
+## The line rules for every committed walker before anyone steps
+## (StationQueue.arrive()), as SecurityForecast plays them: walkers entering a
+## line join its queue, the rest head for its tail, and one with no way there
+## leaves its station and chooses again.
 static func arrive(sim: PassengerSim) -> void:
 	var walkers: Array[Passenger] = []
 	var lines := {}
@@ -227,11 +214,68 @@ static func arrive(sim: PassengerSim) -> void:
 		walkers.append(p)
 	if walkers.is_empty():
 		return
+	var stranded: Array = []
 	var joined := StationQueue.arrive(
-		sim.grid, sim._queues, sim.layout.lanes, lines, walkers, sim._by_id, sim.tick
+		sim.grid, sim._queues, sim.layout.lanes, lines, walkers, sim._by_id, sim.tick, stranded
 	)
 	for p in joined:
 		_joined(sim, p)
+	for p: Passenger in stranded:
+		sim._leave_station(p)
+		choose(sim, p)
+
+
+## The station choice's estimate for security station `station` in `sim`
+## (estimate()), for `p` walking `walk_ticks` to its line.
+static func sim_estimate(sim: PassengerSim, station: int, walk_ticks: int, p: Passenger) -> int:
+	var walkers: Array[Passenger] = []
+	for other in sim._passengers:
+		if other != p and other.station == station and other.stage == Passenger.Stage.TO_SECURITY:
+			walkers.append(other)
+	var members := StationQueue.members(sim._queue(station))
+	return estimate(sim.security, sim, station, members, walkers, walk_ticks, p)
+
+
+## When `p`, walking `walk_ticks` to the back of security station `station`'s
+## line, would be done at its main position: the station choice of the sim and
+## of SecurityForecast alike (decision hold-line-rebuild-the-security-line-
+## follows-where-people-sta, point 2; decision passenger-sim-design-bounded-
+## queue-lanes-journey-forecast-committed-paths). A closed form, never a
+## replay: the main position's current work, then each member of the queue
+## (`members`, ids on `host`) and each walker committed to it (`walkers`)
+## held there in turn (hold_ticks()), or the walk when that is longer, then
+## its own hold. `runtime` is the station's SecurityRuntime.
+static func estimate(
+	runtime: SecurityRuntime,
+	host: Object,
+	station: int,
+	members: Array,
+	walkers: Array,
+	walk_ticks: int,
+	p: Passenger
+) -> int:
+	var lane := runtime.is_lane(station)
+	var busy := 0
+	var record := runtime.record_of(station)
+	if not record.is_empty() and record["main"] != 0:
+		var main: Passenger = host.get_passenger(record["main"])
+		if SecurityRuntime.WORK_PHASES.has(main.security_phase as SecurityRuntime.Phase):
+			var rate := maxi(1, runtime.rate(station, main.security_phase))
+			@warning_ignore("integer_division")
+			busy = (main.security_work + rate - 1) / rate
+	for id: int in members:
+		busy += hold_ticks(lane, host.get_passenger(id))
+	for w: Passenger in walkers:
+		busy += hold_ticks(lane, w)
+	return maxi(walk_ticks, busy) + hold_ticks(lane, p)
+
+
+## The ticks passenger `p` holds a station's main position: the scan at a basic
+## scanner, the unpack and the walk through the arch at a lane.
+static func hold_ticks(lane: bool, p: Passenger) -> int:
+	if not lane:
+		return SecurityRuntime.work_for(SecurityRuntime.Phase.SCAN, p)
+	return SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p) + LANE_ARCH_TICKS
 
 
 static func choose(sim: PassengerSim, p: Passenger) -> void:
@@ -253,7 +297,10 @@ static func choose(sim: PassengerSim, p: Passenger) -> void:
 		_wait_full(p)
 		return
 	var full := false
-	for station in candidates:
+	# Ties go to the lower station id.
+	var ordered := candidates.duplicate()
+	ordered.sort()
+	for station: int in ordered:
 		if not sim._is_open(station):
 			continue
 		var line := sim.layout.line_of(station)
@@ -264,7 +311,11 @@ static func choose(sim: PassengerSim, p: Passenger) -> void:
 		var path := StationQueue.approach(sim.grid, line, p.at, at)
 		if path.is_empty():
 			continue
-		var station_eta := eta(sim, station, Passenger.path_mm(path), p)
+		var station_eta := (
+			eta(sim, station, Passenger.path_mm(path), p)
+			if to_desk
+			else sim_estimate(sim, station, p.pace_ticks(Passenger.path_mm(path)), p)
+		)
 		if best == 0 or station_eta < best_eta:
 			best = station
 			best_eta = station_eta

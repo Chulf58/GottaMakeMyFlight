@@ -293,9 +293,8 @@ func test_a_same_tick_loser_turns_back_and_never_walks_through_the_winner() -> v
 	for tick in range(8, 60):
 		if (queues[1]["holding"] as Array).has(9):
 			break
-		if not loser.is_moving():
-			var free := StationQueue.free_index(queues[1], line, by_id)
-			StationQueue.head_for(grid, loser, line, 2, free, [])
+		# The line's pass sets a standing loser off for the tail itself (moved
+		# for decision hold-line-rebuild-the-security-line-follows-where-people-sta).
 		StationQueue.arrive(grid, queues, lanes, lines, [loser], by_id, tick)
 		loser.walk(PassengerSim.WALK_MM)
 		least = minf(least, loser.grid_position().distance_to(winner.grid_position()))

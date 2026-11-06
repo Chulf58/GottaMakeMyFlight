@@ -6,14 +6,17 @@ extends RefCounted
 ##
 ## A station's line is its lane cells then its hold cells
 ## (TerminalLayout.line_of()); member i of its queue (the lane, then the
-## holding list) stands on line[i] (decision full-queue-design-a-derived-
-## hold-line-behind-each-lane-gives). A walker committed to the station joins
-## when it stands on, or reaches, line[n], n being the queue's size: the next
-## free cell (arrive(), head_for()). A walker passing over line[n] on its way
-## further back takes it only when no other walker is heading for it, and one
-## standing further back waits while another is heading for a cell between,
-## so walkers keep to the cells they chose unless one would stay empty: no
-## one turns back for a cell another took.
+## holding list) has line[i] as its place (decision full-queue-design-a-derived-
+## hold-line-behind-each-lane-gives). The line's order is the order people
+## stand in (decision hold-line-rebuild-the-security-line-follows-where-people-
+## sta): a walker committed to the station enters the queue, as its last
+## member, when it stands on or steps onto a line cell at or behind the tail
+## (tail(): past every cell a member stands on or steps onto, and past an
+## admitted passenger still on the line), wherever it was heading; walkers
+## entering on one tick go by line index, then the walk still to go, then id.
+## Every other walker heads for the tail. The cell a walker chose gives it no
+## priority. All of it is settled once a tick, before anyone steps (arrive()),
+## by PassengerSim and SecurityForecast alike.
 
 
 ## Moves passengers from the holding list into free places at the back of
@@ -137,7 +140,7 @@ static func _faces_front(line: Array, index: int, from: Vector2i) -> bool:
 ## The cell index a walker to `station` waits behind: past every cell of
 ## `line` a passenger admitted there (Stage.SECURITY) still stands on, such as
 ## a security lane's first cell, where the admitted passenger unpacks; -1 when
-## none does. A walker joins only once that cell is left (walker_free()).
+## none does. A walker enters only behind that cell (tail(), may_enter()).
 static func admitted_at(by_id: Dictionary, station: int, line: Array) -> int:
 	var at := -1
 	for p: Passenger in by_id.values():
@@ -146,58 +149,45 @@ static func admitted_at(by_id: Dictionary, station: int, line: Array) -> int:
 	return at
 
 
-## The cell a walker heads for: free_index() `free`, or the cell behind one an
-## admitted passenger still stands on (`admitted`, admitted_at()). A walker
-## joins only where the two agree; behind an admitted passenger it waits, still
-## walking to the queue, one cell back.
-static func walker_free(free: int, admitted: int) -> int:
-	return maxi(free, admitted + 1)
+## The cell a walker heads for and enters the queue at, or behind: past the
+## queue's members (free_index()) and past an admitted passenger still on the
+## line (admitted_at()), and past `held`, the last line cell a walker waiting
+## behind that admitted passenger stands on (-1: none).
+static func tail(free: int, admitted: int, held := -1) -> int:
+	return maxi(maxi(free, admitted + 1), held + 1)
 
 
-## Sends a standing walker `w` toward line[free] (free_index()), unless it
-## stands further back on the line and another walker is heading for a cell
-## between (`ends`: the path ends of the other walkers to the station), or
-## every line cell is still taken by a member: it then waits where it is.
-## True when it is on its way, waits, or stands on line[free]; false when
-## the queue (`n` members) has no place left or no path leads there.
-static func head_for(
-	grid: BuildGrid, w: Passenger, line: Array, n: int, free: int, ends: Array
-) -> bool:
-	if n >= line.size():
-		return false
-	if free >= line.size():
-		return true
-	var here := line.find(w.at)
-	if here == free:
-		return true
-	for end: Vector2i in ends:
-		var there := line.find(end)
-		if here > free and there >= free and there < here:
-			return true
-	var path := approach(grid, line, w.at, free)
-	if path.size() < 2:
-		return false
-	w.set_path(path)
-	return true
+## Whether a walker may enter `queue` now: not while an admitted passenger
+## still stands on the place it would be given (index `admitted` or less).
+static func may_enter(queue: Dictionary, admitted: int) -> bool:
+	return size_of(queue) > admitted
 
 
-## One tick's joins, before anyone steps. `walkers` (in id order) are
+## One tick's line rules, before anyone steps. `walkers` (in id order) are
 ## committed to a station of `queues`, whose lane cells are `lanes` and whose
-## line is `lines`, by station. A walker standing on a line cell, or reaching
-## one at its pace on this tick (it never covers more than one cell a tick),
-## joins when that cell is the next free one (free_index()), one reaching it on its way further back
-## only when no other walker's path ends there. Those standing go first, then by line
-## index, then id, so of two reaching the line on one tick the one nearer the
-## front joins first and the next cell is then free for the other. One
-## standing on a cell the queue holds or takes steps off it (step_off()). One
-## stepping onto the cell it was heading for when the queue holds it, or onto
-## one another took on this tick, turns back on its step (turn_back()) and
-## heads on from there; one passing over a member's cell walks on. A joiner
-## that reaches its cell walks just onto it and stops there: the rest of its
-## step is dropped, it is not drawn back. Then a walker whose path ends on a
-## cell the queue now holds is sent on toward the free cell (send_on()),
-## never to stop on that cell. `by_id` maps ids to passengers. Returns the
-## joiners in join order, standing, a moving one with halt_tick `now`.
+## line is `lines`, by station; `by_id` maps ids to passengers.
+## - A walker standing on a line cell at or behind the tail (tail()), or
+##   reaching one at its pace on this tick (it never covers more than one cell
+##   a tick), enters the queue there, by line index, then the walk still to
+##   go, then id; one reaching a cell on its way on enters only when it steps
+##   onto it facing the front or across the line (_faces_front()). One that
+##   reaches its cell walks just onto it and stops; the cells it walked stay,
+##   so its last step is kept (SecurityLooks.carry_front() reads it).
+## - A walker standing on a cell a member holds or takes steps off it
+##   (step_off()); one stepping onto the cell it was heading for while the
+##   queue holds it, or onto one another entered at on this tick, turns back
+##   on its step (turn_back()); one passing over a member's cell walks on.
+## - Behind an admitted passenger still on the line a walker does not enter
+##   (may_enter()): it stops on its cell and waits there, and the tail is
+##   behind it.
+## - Then every walker about to step onto a cell a member holds, on its way to
+##   one the queue holds, is sent on toward the tail (send_on()); one further
+##   back walks on, as it may enter on its way; and every standing walker off
+##   the queue
+##   sets off for the tail (approach()) while the line has a free cell; one
+##   with no way there is put in `stranded`.
+## Returns the walkers that entered, in order, a moving one with halt_tick
+## `now`.
 static func arrive(
 	grid: BuildGrid,
 	queues: Dictionary,
@@ -205,100 +195,136 @@ static func arrive(
 	lines: Dictionary,
 	walkers: Array,
 	by_id: Dictionary,
-	now: int
+	now: int,
+	stranded: Array = []
 ) -> Array[Passenger]:
+	var indexes := {}
 	var arrivals := []
-	var ends := {}
-	for w: Passenger in walkers:
-		if w.is_moving():
-			var key := [w.station, w.path_end()]
-			ends[key] = ends.get(key, 0) + 1
 	for w: Passenger in walkers:
 		if not lines.has(w.station) or not queues.has(w.station):
 			continue
-		var line: Array = lines[w.station]
+		if not indexes.has(w.station):
+			indexes[w.station] = line_index(lines[w.station])
+		var index: Dictionary = indexes[w.station]
 		if not w.is_moving():
-			var here := line.find(w.at)
-			if here >= 0:
-				arrivals.append([w.station, here, 0, w.id, w, 0])
+			if index.has(w.at):
+				arrivals.append([w.station, index[w.at], 0, w.id, w, false])
 			continue
 		var next := w.path[w.path_index + 1]
 		var need := Passenger.segment_mm(w.at, next) - w.seg_mm
-		var there := line.find(next)
-		if there >= 0 and need <= w.pace_mm():
-			arrivals.append([w.station, there, 1, w.id, w, need])
+		if index.has(next) and need <= w.pace_mm():
+			arrivals.append([w.station, index[next], need, w.id, w, true])
 	arrivals.sort_custom(_before)
 	var joined: Array[Passenger] = []
 	var lost := {}
 	var taken := {}
 	var admitted := {}
-	var indexes := {}
+	var held := {}
 	for entry: Array in arrivals:
-		var queue: Dictionary = queues[entry[0]]
-		if not indexes.has(entry[0]):
-			indexes[entry[0]] = line_index(lines[entry[0]])
-		var free := free_index(queue, lines[entry[0]], by_id, indexes[entry[0]])
-		if not admitted.has(entry[0]):
-			admitted[entry[0]] = admitted_at(by_id, entry[0], lines[entry[0]])
-		var target := walker_free(free, admitted[entry[0]])
-		var into: Vector2i = lines[entry[0]][entry[1]]
-		var contested: bool = (
-			entry[1] < free
-			and entry[2] == 1
-			and (taken.has([entry[0], into]) or (entry[4] as Passenger).path_end() == into)
-		)
-		if contested:
-			# Stepping onto the cell it was heading for, now taken, or one another
-			# took on this tick: it loses it and turns back.
-			lost[entry[3]] = true
-			turn_back(entry[4])
-			continue
-		if entry[1] < free and entry[2] == 0:
-			# Standing on a cell a member holds or takes on this tick: it steps off.
-			lost[entry[3]] = true
-			step_off(grid, entry[4], lines[entry[0]])
-			continue
-		if entry[1] != free or target != free:
-			continue
+		var station: int = entry[0]
+		var at: int = entry[1]
 		var w: Passenger = entry[4]
-		var line: Array = lines[entry[0]]
-		var cell: Vector2i = line[entry[1]]
-		# One passing over the cell on its way on takes it only when no other
-		# walker heads there and it steps onto it facing the front.
-		var passing: bool = entry[2] == 1 and w.path_index + 2 < w.path.size()
-		if (
-			passing
-			and (ends.get([entry[0], cell], 0) > 0 or not _faces_front(line, entry[1], w.at))
-		):
+		var moving: bool = entry[5]
+		var queue: Dictionary = queues[station]
+		var line: Array = lines[station]
+		if not admitted.has(station):
+			admitted[station] = admitted_at(by_id, station, line)
+		var free := free_index(queue, line, by_id, indexes[station])
+		var into: Vector2i = line[at]
+		if at < free:
+			if not moving:
+				# Standing on a cell a member holds or takes on this tick.
+				lost[w.id] = true
+				step_off(grid, w, line)
+			elif taken.has(Vector3i(station, into.x, into.y)) or w.path_end() == into:
+				# Stepping onto the cell it was heading for, now held, or one
+				# another entered at on this tick: it turns back.
+				lost[w.id] = true
+				turn_back(w)
 			continue
-		if entry[2] == 1:
-			w.walk(entry[5])
-			# It stops on the cell it reached; the cells it walked stay, so its
-			# last step is kept (SecurityLooks.carry_front() reads it).
-			var walked: Array[Vector2i] = []
-			walked.assign(w.path.slice(0, w.path_index + 1))
-			w.path = walked
+		if at < tail(free, admitted[station], held.get(station, -1)):
+			continue
+		var passing := moving and w.path_index + 2 < w.path.size()
+		if passing and not _faces_front(line, at, w.at):
+			continue
+		if not may_enter(queue, admitted[station]):
+			# Behind an admitted passenger: it stops here and waits.
+			if moving:
+				w.walk(entry[2])
+				_stop_here(w)
+				w.halt_tick = now
+			held[station] = maxi(held.get(station, -1), at)
+			continue
+		if moving:
+			w.walk(entry[2])
+			_stop_here(w)
 			w.halt_tick = now
-		join(queue, lanes[entry[0]], w.id)
+		join(queue, lanes[station], w.id)
 		joined.append(w)
-		taken[[entry[0], cell]] = true
-	# The queues no longer change on this tick: one free cell per station.
-	var frees := {}
+		taken[Vector3i(station, into.x, into.y)] = true
+	# The queues no longer change on this tick: one tail per station.
+	var tails := {}
 	for w: Passenger in walkers:
-		if lost.has(w.id):
+		if lost.has(w.id) or not lines.has(w.station) or not queues.has(w.station):
 			continue
-		if w.is_moving() and lines.has(w.station) and queues.has(w.station):
-			var line: Array = lines[w.station]
-			if not frees.has(w.station):
-				if not indexes.has(w.station):
-					indexes[w.station] = line_index(line)
-				var free := free_index(queues[w.station], line, by_id, indexes[w.station])
-				if not admitted.has(w.station):
-					admitted[w.station] = admitted_at(by_id, w.station, line)
-				frees[w.station] = walker_free(free, admitted[w.station])
-			send_on(grid, w, line, frees[w.station])
+		if joined.has(w):
+			continue
+		var line: Array = lines[w.station]
+		if not tails.has(w.station):
+			if not indexes.has(w.station):
+				indexes[w.station] = line_index(line)
+			if not admitted.has(w.station):
+				admitted[w.station] = admitted_at(by_id, w.station, line)
+			var free := free_index(queues[w.station], line, by_id, indexes[w.station])
+			var held_at := _held_at(
+				queues[w.station], walkers, indexes[w.station], admitted[w.station], free, w.station
+			)
+			var held_to := maxi(held.get(w.station, -1), held_at)
+			var base := tail(free, admitted[w.station])
+			tails[w.station] = Vector3i(base, tail(free, admitted[w.station], held_to), free)
+		var to: int = tails[w.station].y
+		var here: int = indexes[w.station].get(w.at, -1)
+		if w.is_moving():
+			# Only one about to step onto a cell a member holds is sent on: one
+			# behind may still reach a cell it can enter at on its way.
+			var next: int = indexes[w.station].get(w.path[w.path_index + 1], -1)
+			if next >= 0 and next < tails[w.station].z:
+				send_on(grid, w, line, to)
+		elif here >= tails[w.station].x:
+			# Waiting behind an admitted passenger, on its cell.
+			continue
+		elif to < line.size():
+			var path := approach(grid, line, w.at, to)
+			if path.size() >= 2:
+				w.set_path(path)
+			elif path.is_empty():
+				stranded.append(w)
 	_pass_centres(queues, walkers, lost, by_id)
 	return joined
+
+
+## The last line cell at or behind the tail that a standing walker waits on
+## behind an admitted passenger, or -1 (arrive()).
+static func _held_at(
+	queue: Dictionary, walkers: Array, index: Dictionary, admitted: int, free: int, station: int
+) -> int:
+	if may_enter(queue, admitted):
+		return -1
+	var held := -1
+	for w: Passenger in walkers:
+		if w.station == station and not w.is_moving():
+			var at: int = index.get(w.at, -1)
+			if at >= tail(free, admitted):
+				held = maxi(held, at)
+	return held
+
+
+## Stops walker `w` on the cell it has just reached, keeping the cells it
+## walked.
+static func _stop_here(w: Passenger) -> void:
+	var walked: Array[Vector2i] = []
+	walked.assign(w.path.slice(0, w.path_index + 1))
+	w.path = walked
 
 
 ## A walker that would end this tick exactly on the centre of a cell a queue
@@ -338,11 +364,11 @@ static func step_off(grid: BuildGrid, w: Passenger, line: Array) -> void:
 			return
 
 
-## Ordering of arrive()'s entries [station, line index, moving, id, ...]: by
-## station, line index, then id. Whether a walker stands or steps onto the
-## cell on this tick plays no part.
+## Ordering of arrive()'s entries [station, line index, walk to go, id, ...]:
+## by station, line index, the walk still to go (none for one standing), then
+## id: where each stands along the line.
 static func _before(a: Array, b: Array) -> bool:
-	for i in [0, 1, 3]:
+	for i in [0, 1, 2, 3]:
 		if a[i] != b[i]:
 			return a[i] < b[i]
 	return false
