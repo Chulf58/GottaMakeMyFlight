@@ -192,6 +192,9 @@ static func seek(sim: PassengerSim, p: Passenger) -> void:
 	var q := sim._queue(p.station)
 	var n := StationQueue.size_of(q)
 	var free := StationQueue.free_index(q, line, sim._by_id)
+	var target := StationQueue.walker_free(
+		free, StationQueue.admitted_at(sim._by_id, p.station, line)
+	)
 	var ends: Array[Vector2i] = []
 	for other in sim._passengers:
 		if other != p and other.station == p.station and other.is_moving():
@@ -200,10 +203,10 @@ static func seek(sim: PassengerSim, p: Passenger) -> void:
 				or other.stage == Passenger.Stage.TO_SECURITY
 			):
 				ends.append(other.path_end())
-	if not StationQueue.head_for(sim.grid, p, line, n, free, ends):
+	if not StationQueue.head_for(sim.grid, p, line, n, target, ends):
 		sim._leave_station(p)
 		choose(sim, p)
-	elif not p.is_moving() and free < line.size() and p.at == line[free]:
+	elif not p.is_moving() and target == free and free < line.size() and p.at == line[free]:
 		join(sim, p)
 
 

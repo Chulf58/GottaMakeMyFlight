@@ -381,14 +381,17 @@ func _seek(u: Passenger) -> void:
 			ends.append(other.path_end())
 	var line: Array = _lines[u.station]
 	var free := StationQueue.free_index(queue, line, _units)
-	if not StationQueue.head_for(_sim.grid, u, line, n, free, ends):
+	var target := StationQueue.walker_free(
+		free, StationQueue.admitted_at(_units, u.station, line)
+	)
+	if not StationQueue.head_for(_sim.grid, u, line, n, target, ends):
 		# A committed walker with no place left chooses again in the sim; a
 		# waiting passenger (_add_seekers()) waits on for one.
 		if not _seekers.has(u.id):
 			_left[u.id] = true
 			_changed = true
 		return
-	if not u.is_moving() and free < line.size() and u.at == line[free]:
+	if not u.is_moving() and target == free and free < line.size() and u.at == line[free]:
 		StationQueue.join(queue, _cells[u.station], u.id)
 		u.stage = Passenger.Stage.SECURITY_QUEUE
 		_changed = true
@@ -401,7 +404,13 @@ func _seek(u: Passenger) -> void:
 ## heading for a cell ahead of it (StationQueue.head_for()).
 func _waits(u: Passenger) -> bool:
 	var line: Array = _lines[u.station]
-	var free := StationQueue.free_index(_queues[u.station], line, _units)
+	var members_free := StationQueue.free_index(_queues[u.station], line, _units)
+	var free := StationQueue.walker_free(
+		members_free, StationQueue.admitted_at(_units, u.station, line)
+	)
+	if free != members_free and line.find(u.at) == free:
+		# Behind an admitted passenger: it moves on when that one does.
+		return true
 	if free >= line.size():
 		return StationQueue.size_of(_queues[u.station]) < line.size() or _seekers.has(u.id)
 	var here := line.find(u.at)

@@ -121,6 +121,26 @@ static func _faces_front(line: Array, index: int, from: Vector2i) -> bool:
 	return step.x * front.x + step.y * front.y >= 0
 
 
+## The cell index a walker to `station` waits behind: past every cell of
+## `line` a passenger admitted there (Stage.SECURITY) still stands on, such as
+## a security lane's first cell, where the admitted passenger unpacks; -1 when
+## none does. A walker joins only once that cell is left (walker_free()).
+static func admitted_at(by_id: Dictionary, station: int, line: Array) -> int:
+	var at := -1
+	for p: Passenger in by_id.values():
+		if p.stage == Passenger.Stage.SECURITY and p.station == station:
+			at = maxi(at, line.find(p.at))
+	return at
+
+
+## The cell a walker heads for: free_index() `free`, or the cell behind one an
+## admitted passenger still stands on (`admitted`, admitted_at()). A walker
+## joins only where the two agree; behind an admitted passenger it waits, still
+## walking to the queue, one cell back.
+static func walker_free(free: int, admitted: int) -> int:
+	return maxi(free, admitted + 1)
+
+
 ## Sends a standing walker `w` toward line[free] (free_index()), unless it
 ## stands further back on the line and another walker is heading for a cell
 ## between (`ends`: the path ends of the other walkers to the station), or
@@ -198,9 +218,13 @@ static func arrive(
 	var joined: Array[Passenger] = []
 	var lost := {}
 	var taken := {}
+	var admitted := {}
 	for entry: Array in arrivals:
 		var queue: Dictionary = queues[entry[0]]
 		var free := free_index(queue, lines[entry[0]], by_id)
+		if not admitted.has(entry[0]):
+			admitted[entry[0]] = admitted_at(by_id, entry[0], lines[entry[0]])
+		var target := walker_free(free, admitted[entry[0]])
 		var into: Vector2i = lines[entry[0]][entry[1]]
 		var contested: bool = (
 			entry[1] < free
@@ -218,7 +242,7 @@ static func arrive(
 			lost[entry[3]] = true
 			step_off(grid, entry[4], lines[entry[0]])
 			continue
-		if entry[1] != free:
+		if entry[1] != free or target != free:
 			continue
 		var w: Passenger = entry[4]
 		var line: Array = lines[entry[0]]
@@ -233,7 +257,11 @@ static func arrive(
 			continue
 		if entry[2] == 1:
 			w.walk(entry[5])
-			w.clear_path()
+			# It stops on the cell it reached; the cells it walked stay, so its
+			# last step is kept (SecurityLooks.carry_front() reads it).
+			var walked: Array[Vector2i] = []
+			walked.assign(w.path.slice(0, w.path_index + 1))
+			w.path = walked
 			w.halt_tick = now
 		join(queue, lanes[entry[0]], w.id)
 		joined.append(w)
@@ -243,7 +271,10 @@ static func arrive(
 			continue
 		if w.is_moving() and lines.has(w.station) and queues.has(w.station):
 			var line: Array = lines[w.station]
-			send_on(grid, w, line, free_index(queues[w.station], line, by_id))
+			if not admitted.has(w.station):
+				admitted[w.station] = admitted_at(by_id, w.station, line)
+			var free := free_index(queues[w.station], line, by_id)
+			send_on(grid, w, line, walker_free(free, admitted[w.station]))
 	_pass_centres(queues, walkers, lost, by_id)
 	return joined
 
