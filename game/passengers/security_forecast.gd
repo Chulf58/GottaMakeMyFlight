@@ -416,13 +416,13 @@ func _step() -> void:
 		_joins.erase(_candidate)
 		_changed = true
 	var walkers: Array[Passenger] = []
-	var standing := 0
+	var before := []
 	for id in _order:
 		var u: Passenger = _units[id]
 		var walker := u.stage == Passenger.Stage.TO_SECURITY and u.station != 0
 		if walker and not _joins.has(id) and not _left.has(id):
 			walkers.append(u)
-			standing += int(not u.is_moving())
+			before.append([u.at, u.path_end()])
 	var stranded: Array = []
 	var joined := StationQueue.arrive(
 		_sim.grid, _queues, _cells, _lines, walkers, _units, tick, stranded
@@ -435,10 +435,13 @@ func _step() -> void:
 		# A committed walker with no way to the line chooses again in the sim.
 		_left[u.id] = true
 		_changed = true
-	if standing > 0 and not _changed:
-		for u in walkers:
-			# A standing walker set off for the tail.
-			_changed = _changed or u.is_moving()
+	# A walker the pass sent on, turned round or set off changes the next
+	# tick's order and cells, so that tick is played.
+	for i in walkers.size():
+		if _changed:
+			break
+		var u := walkers[i]
+		_changed = u.at != before[i][0] or u.path_end() != before[i][1]
 	_place_waiting()
 	for id in _order:
 		var u: Passenger = _units[id]
