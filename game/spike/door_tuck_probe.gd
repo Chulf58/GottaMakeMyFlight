@@ -111,10 +111,56 @@ func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> 
 	var every := LEG_EVERY_TUCKED if tucked else LEG_EVERY
 	if not _headless and int(_tuck[count]) % every == 0:
 		_legs(p, body, bag, tucked)
+	if RollerPull.tuck_weight(state, _clock.tick + _clock.alpha) >= 0.99:
+		_asym(p, body, bag, state)
 	if not _tuck.has("door_check") and p.at == Vector2i(20, 112):
 		# The door strip's doorway test, headless too (the strip runs windowed).
 		_tuck["door_check"] = DoorTuckStrip.new()._door_near(_main, body.global_position)
 		print("DOOR_CHECK id=%d at %s: doorway %s" % [p.id, p.at, _tuck["door_check"]])
+
+
+## ASYM: a fully tucked settled frame in the body's frame, mirrored so the
+## pulling hand's side is +x for both hands (x out, y up, z ahead): the axle,
+## the grip, the bar (rod top), the rod base (Pull_Reach), the pulling side's
+## and the other side's Quad, Shin and Foot, and the least gap from the rods
+## to the pulling side's thigh and shin segments. Summed per hand.
+func _asym(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> void:
+	var hand := CarryLead.hand_of(int(state.get("place", 0)))
+	var frame := Transform3D(Basis(Vector3.UP, body.rotation.y), body.global_position)
+	var to := frame.affine_inverse()
+	var flip := Vector3(-1.0 if hand == 0 else 1.0, 1.0, 1.0)
+	var top := bag.find_child("Pull_Top", true, false) as Node3D
+	var reach := bag.find_child("Pull_Reach", true, false) as Node3D
+	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var own := ".R" if hand == 0 else ".L"
+	var far := ".L" if hand == 0 else ".R"
+	var bar := top.global_transform * Vector3(0.0, 0.0, CarryOnProps.ROLLER_GRIP_PAST_TOP_M)
+	var pts := {
+		"axle": bag.global_transform * CarryOnProps.ROLLER_AXLE,
+		"grip": _views.carry_on_props().grip_of(body, hand),
+		"bar": bar,
+		"rod_base": reach.global_position,
+	}
+	for bone in LEG_BONES:
+		pts[bone + "_own"] = _bone_at(skeleton, bone + own)
+		pts[bone + "_far"] = _bone_at(skeleton, bone + far)
+	var gap := minf(
+		_segments_gap(bar, pts["rod_base"], pts["Quad_own"], pts["Shin_own"]),
+		_segments_gap(bar, pts["rod_base"], pts["Shin_own"], pts["Foot_own"])
+	)
+	var key := "asym%d" % hand
+	var acc: Dictionary = _tuck.get_or_add(key, {"n": 0, "gap_min": INF, "gap_sum": 0.0})
+	acc["n"] += 1
+	acc["gap_min"] = minf(float(acc["gap_min"]), gap)
+	acc["gap_sum"] += gap
+	for name: String in pts:
+		var local: Vector3 = (to * (pts[name] as Vector3)) * flip
+		acc[name] = (acc.get(name, Vector3.ZERO) as Vector3) + local
+		if name == "Foot_own":
+			acc["foot_z_min"] = minf(float(acc.get("foot_z_min", INF)), local.z)
+			acc["foot_z_max"] = maxf(float(acc.get("foot_z_max", -INF)), local.z)
+	if int(acc["n"]) == 1:
+		print("ASYM_FIRST hand=%d id=%d tick=%d gap=%.3f" % [hand, p.id, _clock.tick, gap])
 
 
 ## LEGS_REAL on one settled frame (see the header).
@@ -169,6 +215,18 @@ func _print_classes() -> void:
 	var tuck_text := "TUCK_SHARE seed %d: TUCK_SIDE_M %.2f, %d of %d pulled frames tucked (%.1f%%)"
 	print(tuck_text % [_seed, RollerPull.TUCK_SIDE_M, _tuck["pulled"], _all["pull"], share])
 	print("OTHER_TUCKED seed %d: %d OTHER frames tucked" % [_seed, _tuck.get("other_tucked", 0)])
+	for hand in 2:
+		var acc: Dictionary = _tuck.get("asym%d" % hand, {})
+		if acc.is_empty():
+			print("ASYM seed %d hand %d: no fully tucked settled frame" % [_seed, hand])
+			continue
+		var n := float(acc["n"])
+		var head := "ASYM seed %d hand %d: %d frames, rod-to-own-leg gap least %.3f mean %.3f"
+		print(head % [_seed, hand, acc["n"], acc["gap_min"], float(acc["gap_sum"]) / n])
+		print("  own foot z %.3f to %.3f" % [acc["foot_z_min"], acc["foot_z_max"]])
+		for name: String in acc:
+			if acc[name] is Vector3:
+				print("  mean %s (out, up, ahead) %s" % [name, (acc[name] as Vector3) / n])
 	print(
 		(
 			"TUCK seed %d: %d pulled frames tucked, %d settled, SHIN %d, HEEL %d among them"
