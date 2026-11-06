@@ -147,13 +147,16 @@ func test_a_shoulder_bag_hangs_from_the_shoulder_outside_the_hip() -> void:
 ## A worn backpack: the top of its back panel BACK_FROM_SPINE_M behind the
 ## spine bone and just above it, its length along the bone leaning in at the
 ## top by BACK_LEAN_DEGREES (so its bottom stands further out, clear of the
-## hips), behind the body.
+## hips), behind the body. That is the placement of a body with no index (or
+## one outside PassengerLooks.BODIES), whose pack was not measured.
 func test_a_backpack_is_worn_behind_the_spine() -> void:
 	var spine := Transform3D(Basis(Vector3.RIGHT, -0.1), Vector3(0.0, 1.544, -0.047))
 	var xf := CarryWorn.worn_back(spine, 0.0, 1.0)
 	var along := xf.basis.z.normalized()
 	var lean := rad_to_deg(along.angle_to(spine.basis.y.normalized()))
 	assert_float(lean).is_equal_approx(CarryWorn.BACK_LEAN_DEGREES, 0.01)
+	var outside := CarryWorn.worn_back(spine, 0.0, 1.0, PassengerLooks.BODIES.size())
+	assert_bool(outside.is_equal_approx(xf)).is_true()
 	var top := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z
 	var top_inner := xf * Vector3(0.0, 0.0, top)
 	var bottom_inner := (
@@ -168,6 +171,33 @@ func test_a_backpack_is_worn_behind_the_spine() -> void:
 	# Behind the body (it faces +Z), the bottom further back than the top.
 	assert_float(top_inner.z).is_less(spine.origin.z)
 	assert_float(bottom_inner.z).is_less(top_inner.z)
+
+
+## A body with an index (PassengerLooks.BODIES) wears the pack where
+## CarryWorn.BACK_ON_SPINE_M puts it for its size; one bag on a bone tilted
+## back (by 0.1 rad here) leans in by that much more (board 4af10dd0), two
+## bags' pack and a bone tilted forward by BACK_LEAN_DEGREES alone.
+func test_an_indexed_body_wears_the_pack_from_its_table_entry() -> void:
+	var body := 9
+	var per := CarryWorn.BACK_ON_SPINE_M[body]
+	var spine := Transform3D(Basis(Vector3.RIGHT, -0.1), Vector3(0.0, 1.455, -0.044))
+	var up := spine.basis.y.normalized()
+	var length := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z
+	for size in 2:
+		var scale_by := 1.0 if size == 0 else SecurityLooks.TWO_BAG_SCALE
+		var xf := CarryWorn.worn_back(spine, 0.0, scale_by, body)
+		var lean := rad_to_deg(xf.basis.z.normalized().angle_to(up))
+		var tilt := rad_to_deg(0.1) if size == 0 else 0.0
+		assert_float(lean).is_equal_approx(CarryWorn.BACK_LEAN_DEGREES + tilt, 0.01)
+		var top_inner := (xf * Vector3(0.0, 0.0, length)) - spine.origin
+		var want := Vector2(per.x, per.y) if size == 0 else Vector2(per.z, per.w)
+		assert_float((top_inner - up * top_inner.dot(up)).length()).is_equal_approx(want.x, 0.0001)
+		assert_float(top_inner.dot(up)).is_equal_approx(want.y, 0.0001)
+	var forward := Transform3D(Basis(Vector3.RIGHT, 0.1), spine.origin)
+	var bent := CarryWorn.worn_back(forward, 0.0, 1.0, body).basis.z.normalized()
+	assert_float(rad_to_deg(bent.angle_to(forward.basis.y.normalized()))).is_equal_approx(
+		CarryWorn.BACK_LEAN_DEGREES, 0.01
+	)
 
 
 ## The roller's axle is TRAIL_M back along the line the body walked: on a

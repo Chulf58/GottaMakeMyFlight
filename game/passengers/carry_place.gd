@@ -329,7 +329,9 @@ static func carry_transform(
 	var node: Node3D = held["bags"][i]["node"]
 	match held["bags"][i]["carry"] if carry < 0 else carry:
 		SecurityLooks.Carry.BACK:
-			return CarryWorn.worn_back(props._spine_of(body), body.rotation.y, scale_by)
+			return CarryWorn.worn_back(
+				props._spine_of(body), body.rotation.y, scale_by, body.get_meta(&"body", -1)
+			)
 		SecurityLooks.Carry.SHOULDER:
 			var side := SecurityLooks.worn_side(i)
 			var joint := props._shoulder_of(body, side)
