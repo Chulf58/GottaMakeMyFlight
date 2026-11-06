@@ -126,3 +126,40 @@ func test_the_forecast_equals_the_sim_when_walkers_reach_the_line_out_of_order()
 		. override_failure_message("[tick, id, forecast, holding, seg, measured] %s" % [wrong])
 		. is_empty()
 	)
+
+
+## Passengers waiting for a place (the line is full: QUEUE_FULL at the
+## entrance) are replayed as the sim plays them: the oldest takes the next
+## free place and walks there from where it waits. Every forecast, for the
+## waiting ones and for those on the line, equals the measured clearance.
+func test_the_forecast_equals_the_sim_for_passengers_waiting_for_a_place() -> void:
+	_w = SecurityTestWorld.make(false)
+	var sim := _w.world.sim
+	var line: Array = sim.layout.line_of(_w.station)
+	var ids: Array[int] = []
+	for i in line.size() + 5:
+		ids.append(_w.send(1))
+		_w.world.run_to(_w.world.clock.tick + 2)
+	var forecasts := []
+	var waiting := 0
+	for i in 4000:
+		if ids.all(func(id: int) -> bool: return _w.cleared.has(id)):
+			break
+		if sim.tick % 5 == 0:
+			var pending: Array = ids.filter(func(id: int) -> bool: return not _w.cleared.has(id))
+			var etas := SecurityForecast.clearances(sim, _w.station, pending)
+			for id: int in pending:
+				var p := sim.get_passenger(id)
+				var seeking := PassengerStations.is_seeking(sim, p, false)
+				waiting += int(seeking and etas.has(id))
+				forecasts.append([sim.tick, id, sim.tick + etas.get(id, -sim.tick), int(seeking), 0])
+		_w.world.step()
+	var wrong := _wrong(forecasts)
+	print("%d forecasts, %d for waiting passengers, line %d" % [forecasts.size(), waiting, line.size()])
+	assert_bool(ids.all(func(id: int) -> bool: return _w.cleared.has(id))).is_true()
+	assert_int(waiting).is_greater(0)
+	(
+		assert_array(wrong)
+		. override_failure_message("[tick, id, forecast, waiting, -, measured] %s" % [wrong])
+		. is_empty()
+	)

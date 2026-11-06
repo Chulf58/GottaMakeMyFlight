@@ -26,6 +26,16 @@ extends RefCounted
 ## next staff step when that step will plan its path again or move it to
 ## another post), and that tick is an event the replay does not skip past.
 ##
+## Waiting passengers (PassengerStations.seekers_before(): done at a desk while
+## every line is full, or walking to security with no station) are replayed as
+## the sim plays them. They wait where they are until a place is free for them:
+## the free places of the open lines (PassengerStations._room()) go to them by
+## how long they have waited, the oldest first, and each then chooses the least
+## full line for its length and walks there from where it waits. While any wait,
+## every security station is played, so the places freed anywhere are seen.
+## The candidate (clearance()) takes its place among them by its own wait, on
+## its station only; it joins on the next free cell behind the walkers there.
+##
 ## Gate places (decision gate-full-design-passengers-reserve-a-gate-seat-or-
 ## standing, point 5): while GateCapacity.scarce() says the free room could
 ## run out first, the replay plays every security station at once, against a
@@ -62,14 +72,22 @@ var _places: GateCapacity
 var _units := {}
 ## The copies' ids, ascending: the order PassengerSim steps passengers in.
 var _order: Array[int] = []
-## Passenger id -> the tick it joins the queue, for a candidate (clearance()),
-## which is not walked.
+## Passenger id -> the tick the candidate (clearance()), on its way with a
+## place, reaches it; it is not walked.
 var _joins := {}
 ## Ids of walkers that left the replay: no free cell was left for them.
 var _left := {}
-## Ids of the waiting passengers walked as committed (_add_seekers()): the
-## candidate joins behind them.
-var _seekers := {}
+## The ids of the copies waiting for a place (the waiting passengers and the
+## candidate, _add_waiting()), by how long they have waited
+## (PassengerStations.wait_key()), the oldest first.
+var _waiting: Array[int] = []
+## Copy id -> its wait key, for the waiting copies.
+var _keys := {}
+## The candidate's id (clearance()), or 0 when there is none; the station it
+## is forecast at, and the ticks it walks from where it waits to that line.
+var _candidate := 0
+var _candidate_station := 0
+var _candidate_walk := 0
 ## Passenger id -> the tick it was cleared.
 var _cleared := {}
 ## Whether a walker reached a new cell or joined the queue on the tick just
@@ -87,16 +105,13 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 	if not sim.layout.is_usable(station):
 		return JourneyForecast.NEVER
 	var replay := SecurityForecast.new()
-	replay._setup(sim, station, sim.gates.scarce(sim, station, p))
+	# One committed to `station` is replayed where it is; any other is the
+	# candidate, even one waiting for a place.
+	replay._setup(sim, station, sim.gates.scarce(sim, station, p), 0 if p.station == station else p.id)
 	var ticks := JourneyForecast.NEVER
 	if replay._units.has(p.id) or replay._opens[station]:
 		if not replay._units.has(p.id):
-			# Where a newcomer walks: behind the lane, holding list and walkers.
-			var queue: Dictionary = replay._queues[station]
-			var ahead: int = queue["lane"].size() + queue["holding"].size()
-			var line: Array = replay._lines[station]
-			var slot := mini(ahead + replay._walkers_to(station), line.size() - 1)
-			replay._add_walker(p, maxi(join_tick, sim.tick + 1), line[slot], station)
+			replay._add_walker(p, maxi(join_tick, sim.tick + 1), station)
 		ticks = replay._run(p.id)
 	# The runtime holds the replay as its host: let go, or neither is freed.
 	replay._runtime.bind(null)
@@ -153,15 +168,23 @@ func _on_cleared(p: Passenger) -> void:
 	_cleared[p.id] = tick
 
 
-## Copies `station`'s state, and with `scarce` (GateCapacity.scarce()) every
-## security station's and the gate places.
-func _setup(sim: PassengerSim, station: int, scarce: bool) -> void:
+## Copies `station`'s state, and every security station's when gate places
+## are `scarce` (GateCapacity.scarce(), the places are copied too) or when a
+## passenger waits for a place. `candidate` (0: none) is left out: clearance()
+## adds it.
+func _setup(sim: PassengerSim, station: int, scarce: bool, candidate := 0) -> void:
 	_sim = sim
 	tick = sim.tick
 	layout = sim.layout
+	_candidate = candidate
+	var waiting: Array[Passenger] = []
+	for p in sim._passengers:
+		if p.id != candidate and PassengerStations.is_seeking(sim, p, false):
+			waiting.append(p)
 	_stations = [station]
 	if scarce:
 		_places = sim.gates.copy(sim)
+	if scarce or not waiting.is_empty():
 		_stations.clear()
 		for other: int in sim.layout.passages:
 			if sim.layout.is_usable(other):
@@ -187,65 +210,32 @@ func _setup(sim: PassengerSim, station: int, scarce: bool) -> void:
 			_add(sim.get_passenger(id))
 	for id in sim.passenger_ids():
 		var walker := sim.get_passenger(id)
-		if _opens.has(walker.station) and walker.stage == Passenger.Stage.TO_SECURITY:
+		var walking := walker.stage == Passenger.Stage.TO_SECURITY and id != candidate
+		if walking and _opens.has(walker.station):
 			_add(walker)
-	_add_seekers(sim)
+	for p in waiting:
+		_add_waiting(p)
 
 
-## The passengers waiting for a security place (PassengerStations.
-## seekers_before(): done at a desk while every line is full, or walking to
-## security with no station), by how long they have waited. With one station
-## played every one of them goes to it: free places go by waiting age, so a
-## newcomer has a place only once all of them have one (an estimate that
-## leans late where several stations share them). With every station played
-## (gate places scarce) each goes to the station whose line is least full for
-## its length. They walk to it from where they are, as committed walkers do.
-func _add_seekers(sim: PassengerSim) -> void:
-	var seekers: Array[Passenger] = []
-	for p in sim._passengers:
-		if PassengerStations.is_seeking(sim, p, false):
-			seekers.append(p)
-	if seekers.is_empty():
-		return
-	seekers.sort_custom(
-		func(a: Passenger, b: Passenger) -> bool:
-			return PassengerStations.wait_key(a, false) < PassengerStations.wait_key(b, false)
-	)
-	var loads := {}
-	var sizes := {}
-	for at in sim.layout.scanners:
-		if sim._is_open(at) and sim.layout.is_usable(at):
-			loads[at] = PassengerStations.slot(sim, at)
-			sizes[at] = maxi(sim.layout.line_of(at).size(), 1)
-	for p in seekers:
-		var best := -1
-		for at: int in loads:
-			# The least full for its line's length: places free in proportion.
-			if best < 0 or loads[at] * sizes[best] < loads[best] * sizes[at]:
-				best = at
-		if best < 0:
-			return
-		if _stations.size() == 1:
-			# One station played: a newcomer gets a place only after every
-			# passenger waiting longer has one, wherever that is, so all of them
-			# are counted ahead of it here.
-			best = _stations[0]
-		loads[best] += 1
-		if not _opens.has(best):
-			continue
-		var line: Array = _lines[best]
-		var copy := _add(p)
-		_seekers[copy.id] = true
-		copy.stage = Passenger.Stage.TO_SECURITY
-		copy.station = best
-		copy.security_phase = SecurityRuntime.Phase.NONE
-		copy.security_work = 0
-		var path := StationQueue.approach(
-			_sim.grid, line, copy.at, mini(loads[best] - 1, line.size() - 1)
-		)
-		copy.clear_path()
-		if path.size() >= 2:
-			copy.set_path(path)
+## A copy of waiting passenger `p` (PassengerStations.is_seeking()): it stands
+## where it is, finishing the step it is on, with no station until a place is
+## free for it (_place_waiting()).
+func _add_waiting(p: Passenger) -> void:
+	var copy := _add(p)
+	copy.stage = Passenger.Stage.TO_SECURITY
+	copy.station = 0
+	copy.security_phase = SecurityRuntime.Phase.NONE
+	copy.security_work = 0
+	_wait(copy.id, PassengerStations.wait_key(p, false))
+
+
+## Puts `id` among the waiting copies by its wait `key`.
+func _wait(id: int, key: Vector2i) -> void:
+	_keys[id] = key
+	var at := 0
+	while at < _waiting.size() and _keys[_waiting[at]] < key:
+		at += 1
+	_waiting.insert(at, id)
 
 
 ## Whether a copy may be cleared: it holds a copied gate place, or none is
@@ -254,24 +244,63 @@ func _placed(p: Passenger) -> bool:
 	return _places == null or _places.placed(p, self)
 
 
-## Whether a waiting passenger (_add_seekers()) has not joined a queue yet:
-## the candidate, a newcomer, gets a place only after every one of them, at
-## whichever station played (`_station` is the candidate's, kept for the
-## call sites).
-func _seekers_ahead(_station: int) -> bool:
-	for id: int in _seekers:
+## Gives the free places of the played lines to the waiting copies, the oldest
+## first, as PassengerStations._room_now() and choose() do: a waiting
+## passenger chooses the least full line with a free cell for its length and
+## sets off for its next free cell from where it is; the candidate, once it
+## takes a free cell of its own station only, reached when its walk is over
+## (_joins). One with no place yet waits, and so does every one who has waited
+## less.
+func _place_waiting() -> void:
+	if _waiting.is_empty():
+		return
+	var slots := {}
+	var room := 0
+	for at in _stations:
+		if _opens[at]:
+			slots[at] = StationQueue.size_of(_queues[at]) + _walkers_to(at)
+			room += maxi((_lines[at] as Array).size() - int(slots[at]), 0)
+	while room > 0 and not _waiting.is_empty():
+		var id: int = _waiting[0]
 		var u: Passenger = _units[id]
-		if u.stage == Passenger.Stage.TO_SECURITY and not _left.has(id):
-			return true
-	return false
+		var best := -1
+		if id == _candidate:
+			var own := _candidate_station
+			if slots.has(own) and slots[own] < (_lines[own] as Array).size():
+				best = own
+		else:
+			for at: int in slots:
+				var size := (_lines[at] as Array).size()
+				# The least full for its line's length: places free in proportion.
+				if slots[at] < size and (best < 0 or slots[at] * _lines[best].size() < slots[best] * size):
+					best = at
+		if best < 0:
+			return
+		_waiting.pop_front()
+		var line: Array = _lines[best]
+		u.station = best
+		if id == _candidate:
+			u.at = line[slots[best]]
+			_joins[id] = tick + _candidate_walk
+			# Its walk ends on the tick before it gets there (QueueRipple.walk()).
+			u.halt_tick = _joins[id] - 1
+		else:
+			var path := StationQueue.approach(_sim.grid, line, u.at, slots[best])
+			u.clear_path()
+			if path.size() >= 2:
+				u.set_path(path)
+		slots[best] += 1
+		room -= 1
+		_changed = true
 
 
-## The copies walking to `station`.
+## The copies walking to `station`, the candidate with a place among them.
 func _walkers_to(station: int) -> int:
 	var count := 0
 	for id: int in _order:
 		var u: Passenger = _units[id]
-		count += int(u.stage == Passenger.Stage.TO_SECURITY and u.station == station)
+		var walking := u.stage == Passenger.Stage.TO_SECURITY and u.station == station
+		count += int(walking and not _left.has(id))
 	return count
 
 
@@ -302,19 +331,23 @@ func _add(p: Passenger) -> Passenger:
 	return copy
 
 
-## The candidate walking to the queue: it stands on `cell` and joins on
-## `join`.
-func _add_walker(p: Passenger, join: int, cell: Vector2i, station: int) -> void:
+## The candidate: it waits for a place on `station`'s line among the waiting
+## copies (_place_waiting()); with one, it takes as long to reach it as from
+## now to `join`, and is not walked.
+func _add_walker(p: Passenger, join: int, station: int) -> void:
 	var copy := _add(p)
 	copy.stage = Passenger.Stage.TO_SECURITY
-	copy.station = station
+	copy.station = 0
 	copy.security_phase = SecurityRuntime.Phase.NONE
 	copy.security_work = 0
-	copy.at = cell
 	copy.clear_path()
-	# Its walk ends on the tick before it joins (QueueRipple.walk()).
-	copy.halt_tick = join - 1
-	_joins[copy.id] = join
+	_candidate = copy.id
+	_candidate_station = station
+	_candidate_walk = join - (tick + 1)
+	# It waits as long as the passenger it stands for, when that one is in the
+	# sim (a forecast's copy of it may not carry its check-in end).
+	var own: Passenger = _sim._by_id.get(p.id, p)
+	_wait(copy.id, PassengerStations.wait_key(own, false))
 
 
 func _run(target: int) -> int:
@@ -340,22 +373,22 @@ func _step() -> void:
 	var walkers: Array[Passenger] = []
 	for id in _order:
 		var u: Passenger = _units[id]
-		if u.stage == Passenger.Stage.TO_SECURITY and not _joins.has(id) and not _left.has(id):
+		var walker := u.stage == Passenger.Stage.TO_SECURITY and u.station != 0
+		if walker and not _joins.has(id) and not _left.has(id):
 			walkers.append(u)
 	for u in StationQueue.arrive(_sim.grid, _queues, _cells, _lines, walkers, _units, tick):
 		u.stage = Passenger.Stage.SECURITY_QUEUE
 		_changed = true
+	_place_waiting()
 	for id in _order:
 		var u: Passenger = _units[id]
 		if _cleared.has(id) or _left.has(id):
 			continue
-		if u.stage == Passenger.Stage.TO_SECURITY and _joins.has(id):
-			if _joins[id] <= tick and not _seekers_ahead(u.station):
-				_joins.erase(id)
-				StationQueue.join(_queues[u.station], _cells[u.station], id)
-				u.stage = Passenger.Stage.SECURITY_QUEUE
-				_changed = true
-		elif u.stage == Passenger.Stage.TO_SECURITY:
+		if _joins.has(id) and _joins[id] <= tick:
+			# The candidate has reached its place: a walker standing there.
+			_joins.erase(id)
+			_changed = true
+		if u.stage == Passenger.Stage.TO_SECURITY and u.station != 0 and not _joins.has(id):
 			_seek(u)
 		elif u.stage == Passenger.Stage.SECURITY_QUEUE:
 			_move_up(u)
@@ -383,11 +416,9 @@ func _seek(u: Passenger) -> void:
 	var free := StationQueue.free_index(queue, line, _units)
 	var target := StationQueue.walker_free(free, StationQueue.admitted_at(_units, u.station, line))
 	if not StationQueue.head_for(_sim.grid, u, line, n, target, ends):
-		# A committed walker with no place left chooses again in the sim; a
-		# waiting passenger (_add_seekers()) waits on for one.
-		if not _seekers.has(u.id):
-			_left[u.id] = true
-			_changed = true
+		# A committed walker with no place left chooses again in the sim.
+		_left[u.id] = true
+		_changed = true
 		return
 	if not u.is_moving() and target == free and free < line.size() and u.at == line[free]:
 		StationQueue.join(queue, _cells[u.station], u.id)
@@ -414,7 +445,7 @@ func _waits(u: Passenger, frees: Dictionary) -> bool:
 		# Behind an admitted passenger: it moves on when that one does.
 		return true
 	if free >= line.size():
-		return StationQueue.size_of(_queues[u.station]) < line.size() or _seekers.has(u.id)
+		return StationQueue.size_of(_queues[u.station]) < line.size()
 	var here := line.find(u.at)
 	if here <= free:
 		return false
@@ -472,10 +503,10 @@ func _next_event() -> int:
 		var u: Passenger = _units[id]
 		var at := -1
 		if _joins.has(id):
-			# Behind waiting passengers it joins once they have: their joins
-			# are events of their own.
-			if not _seekers_ahead(u.station):
-				at = maxi(_joins[id], tick + 1)
+			at = maxi(_joins[id], tick + 1)
+		elif u.stage == Passenger.Stage.TO_SECURITY and u.station == 0 and not u.is_moving():
+			# Waiting for a place, which only an event of another frees.
+			pass
 		elif u.stage == Passenger.Stage.TO_SECURITY and not u.is_moving():
 			# A standing walker heads on or joins on the next tick, unless it
 			# waits for another (StationQueue.head_for()), which is that one's
