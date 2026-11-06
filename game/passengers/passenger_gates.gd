@@ -16,9 +16,13 @@ static func to_gate(sim: PassengerSim, p: Passenger) -> void:
 		push_error("PassengerSim: passenger %d reached the gate without clearance" % p.id)
 		return
 	if sim.tick >= p.boarding_tick:
-		# Steps onto the route when no filed walker is within a body's width
-		# (the security exit cell: hand_off_clear()).
-		if hand_off_clear(sim, p):
+		# Boarding is open: the walk to a gate place is cut at the cell it is
+		# walking to, and from rest it steps onto the route when no filed
+		# walker is within a body's width (the security exit cell:
+		# hand_off_clear()).
+		if p.is_moving() and p.path.size() > p.path_index + 2:
+			p.path = p.path.slice(0, p.path_index + 2)
+		if not p.is_moving() and hand_off_clear(sim, p):
 			sim._release_seat(p)
 			sim._set_stage(p, Passenger.Stage.TO_EXIT)
 		return
@@ -38,15 +42,22 @@ static func to_gate(sim: PassengerSim, p: Passenger) -> void:
 ## security exit cell, a gate seat's front cell), has a clear slot: no walker in
 ## a boarding file or waiting for one within a body's width plus one run step of
 ## it. The step keeps a walker on its way to the cell from closing in before `p`
-## has set off. Nothing here waits on `p`: a filed or pending walker is never
-## held for a passenger outside the files, so the wait ends.
+## has set off. Only walkers on the move or of `p`'s own flight count: the
+## forecast does not model a wait for a stopped file of another flight, which
+## could hold back a passenger it says makes its flight. Nothing here waits on
+## `p`: a filed or pending walker is never held for a passenger outside the
+## files, so the wait ends.
 static func hand_off_clear(sim: PassengerSim, p: Passenger) -> bool:
 	var at := sim.world_position(p)
 	var reach := BODY_M + PassengerSim.RUN_MM / 1000.0
 	for id in sim.passenger_ids():
 		if id == p.id or not sim.files.holds(id):
 			continue
-		var there := sim.world_position(sim.get_passenger(id))
+		var other := sim.get_passenger(id)
+		var walking := other.is_moving() or other.stage == Passenger.Stage.APRON
+		if not walking and other.flight_id != p.flight_id:
+			continue
+		var there := sim.world_position(other)
 		if Vector2(at.x, at.z).distance_to(Vector2(there.x, there.z)) < reach:
 			return false
 	return true
