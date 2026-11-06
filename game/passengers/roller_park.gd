@@ -478,6 +478,7 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"roll_tip",
 		"queue",
 		"queue_tip",
+		"faced",
 	]:
 		bag.erase(key)
 	if bag.get("queue_still", false):
@@ -496,6 +497,10 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 	bag["park_frame"] = _yawed(body)
 	if not is_nan(face) and CarryLead.start_of(bag)[0] == CarryLead.End.HELD:
 		bag["park_frame"] = Transform3D(Basis(Vector3.UP, face), body.origin)
+	# At a seat: BoothRoller.fix_start() keeps the walls round it for plan()
+	# (ParkWalls, board a40fdbaf).
+	if not is_nan(face) and not queued(bag):
+		bag["faced"] = true
 
 
 ## The yaw `p` faces once it has turned to sit or stay where it sets its bags
@@ -718,6 +723,9 @@ static func plan(
 	var lead: int = CarryLead.hand_of(bag["home"]) if off_floor else started[1]
 	var ahead := UP_PARK_AHEAD_M if off_floor and not bag.get("up_near", false) else PARK_AHEAD_M
 	var parked := park(bag["park_frame"], lead, body["scale"], ahead)
+	# Out of the walls beside a seat (BoothRoller.fix_start(), ParkWalls).
+	if bag.has("wall_boxes"):
+		parked.origin += ParkWalls.shift(parked, bag["wall_boxes"])
 	var bar := Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, body["bar_z"])
 	var handle := CarryOnProps.ROLLER_HANDLE
 	var go := flags.duplicate()

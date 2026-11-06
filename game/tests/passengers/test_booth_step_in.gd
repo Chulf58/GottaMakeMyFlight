@@ -248,6 +248,41 @@ func test_a_booth_guest_steps_out_past_the_end_panel_before_the_hips_come_forwar
 	assert_float(path[-1].y).is_greater(0.9)
 
 
+## A booth guest with a roller steps out past the end panel by the same tick
+## of the stand_up clip as one with no roller (CafeSim.stand_up_lead()), then
+## stands at the approach cell while it picks the roller up: stepping out
+## over the clip's last ticks, its body reached 8 points into the panel at
+## k18-k19 at seat 13-2 (board cfe95aad, food_seats_probe). Control: it was
+## beside the panel before, and stood out at the approach cell through the
+## pick-up.
+func test_a_booth_roller_guest_steps_out_past_the_end_panel_before_the_hips_come_forward() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var visit := world.sim.cafes.visit_of(p.id)
+	while p.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < 4000:
+		world.step()
+	visit.dwell_end = world.clock.tick + 1
+	while p.stage != Passenger.Stage.CAFE_STANDING_UP and world.clock.tick < 4000:
+		world.step()
+	var up := CafeSim.up_ticks(p, visit.piece)
+	var path := _track(world, p, Passenger.Stage.CAFE_STANDING_UP, up)
+	assert_int(path.size()).is_equal(up)
+	var beside := 0
+	for k in PassengerSim.STAND_UP_TICKS:
+		var at := path[k]
+		if k < HIPS_FORWARD_TICK:
+			beside += 1 if at.y < PANEL_FACE_M + BODY_HALF_M else 0
+			continue
+		var why := "tick %d of the stand-up the body is %.2f m across, beside the panel" % [k, at.y]
+		assert_float(at.y).override_failure_message(why).is_greater_equal(
+			PANEL_FACE_M + BODY_HALF_M
+		)
+	assert_int(beside).is_greater(2)
+	for at: Vector2 in path.slice(PassengerSim.STAND_UP_TICKS):
+		assert_float(at.distance_to(Vector2(-0.45, 1.0))).is_less(0.001)
+
+
 ## Moves object `id` to the first of `shifts` (cells) the grid accepts, as a room
 ## move does: removed and placed again under its id with its paid. A refused
 ## spot is put back as it was. True when it moved.
