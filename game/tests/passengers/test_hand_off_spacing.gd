@@ -223,3 +223,68 @@ func test_a_stopped_walker_of_another_flight_holds_a_passenger_only_inside_a_bod
 	filed.set_path(moving_path)
 	assert_bool(filed.is_moving()).is_true()
 	assert_bool(PassengerGates.hand_off_clear(_world.sim, cleared)).is_false()
+
+
+## A walker waiting on its wait spot that has just been admitted to its file
+## (admit_pending() clears its pending flag before the tick's moves) walks back
+## from the spot this tick, so it can close in on a passenger half a metre off:
+## that passenger is held though the walker's flight is another's.
+func test_a_waiter_admitted_this_tick_can_close_in_on_a_passenger_beside_it() -> void:
+	_world = TestBoardingFiles.boarding_world()
+	_world.run_to(BOARDING + 5)
+	var files := _world.sim.files
+	var group: Array[Passenger] = []
+	# On the exit's door cell, so a walker has no walk left to be on the move by.
+	var exit_id: int = _world.sim.layout.open_exits_for(_world.grid, "")[0]
+	var door: Vector2i = _world.sim.layout.door_cell(_world.grid, exit_id)
+	for i in 4:
+		group.append(TestBoardingFiles.walker(_world, door))
+	var waiter: Passenger = null
+	for i in 400:
+		_world.step()
+		PassengerGates.admit_pending(_world.sim)
+		for w in group:
+			if (
+				files.waiters.ids().has(w.id)
+				and files.waiters.at_spot(w)
+				and not files.is_pending(w.id)
+			):
+				waiter = w
+				break
+		if waiter != null:
+			break
+	assert_object(waiter).is_not_null()
+	assert_bool(waiter.is_moving()).is_false()
+	waiter.flight_id = "GMF202"
+	var other := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	TestBoardingFiles.turn_out(_world, other, waiter.at)
+	other.stage = Passenger.Stage.TO_GATE
+	# Slide the passenger along lines near the waiter until it is half a metre
+	# or a little more from it.
+	var found := false
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var from := waiter.at + Vector2i(dx, dy)
+			for dir in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+				other.at = from
+				other.set_path([from, from + dir] as Array[Vector2i])
+				for mm in range(0, 1000, 10):
+					other.seg_mm = mm
+					var d := TestBoardingFiles.apart(_world, other, waiter)
+					if d > 0.5 and d < 0.55:
+						found = true
+						break
+				if found:
+					break
+			if found:
+				break
+		if found:
+			break
+	assert_bool(found).override_failure_message("no spot half a metre from the waiter").is_true()
+	print(
+		(
+			"waiter at spot, admitted; passenger %.3f m away"
+			% TestBoardingFiles.apart(_world, other, waiter)
+		)
+	)
+	assert_bool(PassengerGates.hand_off_clear(_world.sim, other)).is_false()

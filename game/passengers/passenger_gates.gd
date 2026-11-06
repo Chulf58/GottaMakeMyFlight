@@ -60,7 +60,10 @@ static func hand_off_clear(sim: PassengerSim, p: Passenger) -> bool:
 			continue
 		var other := sim.get_passenger(id)
 		var moves := other.is_moving() or other.stage == Passenger.Stage.APRON
-		moves = moves or (shifting.has(id) and not sim.files.waiters.at_spot(other))
+		# A waiter on its spot is free to walk back once admitted, which happens
+		# before the tick's moves.
+		var waiting := sim.files.is_pending(id) and sim.files.waiters.at_spot(other)
+		moves = moves or (shifting.has(id) and not waiting)
 		var there := sim.world_position(other)
 		var apart := Vector2(at.x, at.z).distance_to(Vector2(there.x, there.z))
 		if apart < (reach if moves or other.flight_id == p.flight_id else near):
