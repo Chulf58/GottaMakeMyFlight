@@ -21,7 +21,7 @@ extends Node3D
 ## a click lays one cell, and Esc or right-click cancels. Every belt cell takes
 ## its piece from its neighbours (BeltShaper), so a line that dead-ends in a
 ## bag room ends in the belt end the room needs; after every other edit the
-## belts next to it are reshaped too (_reshape_belts()).
+## belts next to it are reshaped too (BuildDrags.reshape_belts()).
 ## Every edit is paid from `finances` through BuildTransaction; a belt cell
 ## costs the plain belt price whatever shape it takes, and a reshape is free.
 ## Ctrl+Z (build_undo) undoes the last build action and its money (UndoStack,
