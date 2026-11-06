@@ -122,17 +122,21 @@ func test_holding_shows_queue_full_until_a_slot_frees() -> void:
 		if _world.sim.holding_of(desk).size() == 1:
 			break
 		_world.step()
-	var fourth := _world.passenger(ids[3])
-	assert_array(_world.sim.holding_of(desk)).is_equal([ids[3]])
+	# Moved for decision hold-line-rebuild-the-security-line-follows-where-
+	# people-sta: the holder is the last to step onto the line, which need not
+	# be the last to choose the desk.
+	assert_int(_world.sim.holding_of(desk).size()).is_equal(1)
+	var fourth := _world.passenger(_world.sim.holding_of(desk)[0])
+	assert_bool(ids.has(fourth.id)).is_true()
 	assert_int(fourth.stuck).is_equal(Passenger.Stuck.QUEUE_FULL)
 	assert_str(_world.sim.bubble_text(fourth)).is_equal("Queue full")
 	var guard := 0
 	while _world.sim.holding_of(desk).size() > 0 and guard < 400:
 		_world.step()
 		guard += 1
-	assert_array(_world.sim.queue_of(desk)).contains([ids[3]])
+	assert_array(_world.sim.queue_of(desk)).contains([fourth.id])
 	assert_int(fourth.stuck).is_equal(Passenger.Stuck.NONE)
-	assert_int(_world.sim.queue_of(desk).find(ids[3])).is_equal(2)
+	assert_int(_world.sim.queue_of(desk).find(fourth.id)).is_equal(2)
 
 
 func test_desk_nearly_done_is_not_counted_a_full_service_slower() -> void:

@@ -307,7 +307,9 @@ static func arrive(
 			var w: Passenger = heading[j]
 			var k: int = to + j
 			if w.is_moving():
-				send_to(grid, w, line, k, free)
+				# One turning back or stepping off the line finishes that first.
+				if index.has(w.path_end()):
+					send_to(grid, w, line, k, free)
 			elif k < line.size() and w.at != line[k]:
 				var path := approach(grid, line, w.at, k)
 				if path.size() >= 2:

@@ -308,7 +308,10 @@ func test_a_same_tick_loser_turns_back_and_never_walks_through_the_winner() -> v
 	print("loser to winner: at the loss %.3f m, least after %.3f m" % [start, least])
 	assert_float(least).is_greater_equal(start)
 	assert_array(queues[1]["holding"]).is_equal([9])
-	assert_that(loser.at).is_equal(line[2])
+	# Moved for decision hold-line-rebuild-the-security-line-follows-where-
+	# people-sta: it enters where it steps onto the line behind the winner,
+	# coming round by line[3] to face the front, and moves up from there.
+	assert_int(line.find(loser.at)).is_between(2, 3)
 
 
 ## A walker of station 1 on `from`, 950 mm into the step to `to`: it reaches
