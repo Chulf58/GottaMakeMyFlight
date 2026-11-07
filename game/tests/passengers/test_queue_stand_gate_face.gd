@@ -242,3 +242,49 @@ func test_a_gate_stand_stands_in_the_same_place_after_a_load() -> void:
 	assert_that(q.stand_from).is_equal(p.stand_from)
 	assert_bool(ParkSide.stand_face(_loaded.sim, q) == face).is_true()
 	assert_float(moved).is_less(SAME_M)
+
+
+## A guest stands at the gate; the game is saved and loaded into a new world
+## and a new view (PassengerViews.snap(), as a load draws it): the body is drawn
+## facing its stand's way at once and still after its stand, as it was before
+## the save. Control: before the save the body faced that way too, and the
+## facing is not the yaw a body drawn new faces (GATE_FACE, yaw 0).
+func test_a_gate_stander_faces_its_stand_after_a_load() -> void:
+	_world = _gate_world()
+	var p := _roller_guest(_world)
+	_view(_world)
+	var limit := WALK_LIMIT
+	while p.stage != Passenger.Stage.STANDING and limit > 0:
+		await _tick(_world)
+		limit -= 1
+	assert_int(p.stage).is_equal(Passenger.Stage.STANDING)
+	await _stood_roller(_world, p)
+	var face := ParkSide.stand_face(_world.sim, p)
+	var yaw := atan2(face.x, face.y)
+	var before := _views.node_for(p.id).rotation.y
+	var save := [
+		_json(_world.clock.to_snapshot()),
+		_json(_world.flights.to_snapshot()),
+		_json(_world.sim.to_snapshot()),
+	]
+	_views.free()
+	_views = null
+	_loaded = _gate_world()
+	assert_bool(_loaded.clock.from_snapshot(save[0])).is_true()
+	assert_bool(_loaded.flights.from_snapshot(save[1])).is_true()
+	assert_bool(_loaded.sim.from_snapshot(save[2])).is_true()
+	var q := _loaded.passenger(p.id)
+	_view(_loaded)
+	var snapped := _views.node_for(q.id).rotation.y
+	await _stood_roller(_loaded, q)
+	var stood := _views.node_for(q.id).rotation.y
+	print(
+		(
+			"stand faces %.3f: drawn %.3f before the save, %.3f on the load, %.3f after its stand"
+			% [yaw, before, snapped, stood]
+		)
+	)
+	assert_float(absf(angle_difference(before, yaw))).is_less(0.05)
+	assert_float(absf(yaw)).is_greater(0.1)
+	assert_float(absf(angle_difference(snapped, yaw))).is_less(0.05)
+	assert_float(absf(angle_difference(stood, yaw))).is_less(0.05)
