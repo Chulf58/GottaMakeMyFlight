@@ -91,7 +91,9 @@ func test_the_start_turns_no_faster_than_the_trailing_roller_swings() -> void:
 				bag, _turned(began, rate, (i + 1) / 3.0), 100.0 + (i + 1) / 3.0
 			)
 		var turned := -minf(rate, RollerPull.SWING_TURN)
-		print("body turned %.3f rad, start held turned %.3f rad" % [-rate, turned])
+		var yaw := _yaw_turn(began, from, at)
+		print("body turned %.3f rad, start turned %.3f rad (want %.3f)" % [-rate, yaw, turned])
+		assert_float(yaw).is_equal_approx(turned, 0.0001)
 		var held := Transform3D(Basis(Vector3.UP, 2.0 + turned), frame.origin) * from
 		assert_vector(at.origin).is_equal_approx(held.origin, Vector3.ONE * EPS)
 	assert_float(deg_to_rad(22.0)).is_greater(RollerPull.SWING_TURN)
@@ -126,9 +128,19 @@ func test_the_start_is_the_same_however_the_frames_were_drawn() -> void:
 		)
 	)
 	assert_vector(at_late.origin).is_equal_approx(at_every.origin, Vector3.ONE * EPS)
-	assert_vector(at_late.basis.z).is_equal_approx(at_every.basis.z, Vector3.ONE * EPS)
+	# Both turned exactly SWING_TURN in the tick, not only alike.
+	for at: Transform3D in [at_every, at_late]:
+		assert_float(_yaw_turn(began, from, at)).is_equal_approx(-RollerPull.SWING_TURN, 0.0001)
 	assert_float(at_late.origin.distance_to(unturned)).is_greater(0.2)
 	assert_float(rate).is_greater(RollerPull.SWING_TURN)
+
+
+## How far (radians about world up) the start `at` is turned from the start
+## stamped with the body at `began` (`from` in its frame), read from its z axis.
+static func _yaw_turn(began: Transform3D, from: Transform3D, at: Transform3D) -> float:
+	var was := began.basis * from.basis.z
+	var now := at.basis.z
+	return angle_difference(atan2(was.x, was.z), atan2(now.x, now.z))
 
 
 ## `began` `ticks` on, turned `rate` radians a tick (yaw falling) and walked
