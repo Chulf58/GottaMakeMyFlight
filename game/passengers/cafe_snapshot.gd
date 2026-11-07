@@ -18,7 +18,10 @@ extends RefCounted
 ## spot's seat, owes no outcome until it is back, and one walking back or
 ## sitting down again has left the old seat. A guest whose sit-down was turned
 ## back saves "turned_back" (true, absent otherwise) while it gets up there, so
-## the load gives its stand-up no lead (CafeSim.TURNED_BACK). A save never holds
+## the load gives its stand-up no lead (CafeSim.TURNED_BACK) and, for a booth
+## roller guest turned back in its step-in hold, the same longer stand-up
+## (CafeSim.turn_back_hold(), from the turn-back and its saved step back, with
+## no field of its own). A save never holds
 ## stale cafe state: between a grid edit and the next tick's reconcile,
 ## PassengerSim.to_snapshot() refuses (SaveGame waits for that tick), so
 ## "deadlines_stale" is always false and a piece missing from the rebuilt
@@ -192,7 +195,14 @@ static func _visit_problem(
 		[
 			(
 				not standing
-				or _runs_from(p.stage_tick, CafeSim.up_ticks(p, _piece_of(visit, seat, grid)), tick)
+				or _runs_from(
+					p.stage_tick,
+					(
+						CafeSim.up_ticks(p, _piece_of(visit, seat, grid))
+						+ CafeSim.turn_back_hold(p, visit)
+					),
+					tick
+				)
 			),
 			"getting up did not start by the saved tick or has run out"
 		],

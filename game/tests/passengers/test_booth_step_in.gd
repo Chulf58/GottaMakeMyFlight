@@ -501,14 +501,16 @@ func test_a_booth_guest_with_a_roller_sits_down_as_one_with_no_roller() -> void:
 
 ## A roller guest's sit-down at a booth lasts its step-in hold longer, and the
 ## visit's forecast and the save check count it: a save in the hold past
-## SIT_DOWN_TICKS loads and sits down on the same tick as it would have.
+## SIT_DOWN_TICKS loads and sits down on the same tick as it would have. The
+## hold has room for the turn to face out of the seat before the set-down
+## (RollerPark.TURN_FIRST_TICKS, board 2eaa9bc4).
 func test_a_booth_roller_sit_down_is_longer_and_the_forecast_and_save_count_it() -> void:
 	var made := _sitting(&"restaurant_booth", true)
 	var world: PassengerTestWorld = made[0]
 	var p: Passenger = made[1]
 	var piece: Dictionary = world.sim.cafes.visit_of(p.id).piece
 	assert_int(CafeSim.STEP_IN_HOLD_TICKS).is_equal(
-		ceili(RollerPark.TICKS_DOWN + SitHold.LET_GO_TICKS)
+		ceili(RollerPark.TURN_FIRST_TICKS + RollerPark.TICKS_DOWN + SitHold.LET_GO_TICKS)
 	)
 	assert_int(CafeSim.sit_ticks(p, piece)).is_equal(
 		PassengerSim.SIT_DOWN_TICKS + CafeSim.STEP_IN_HOLD_TICKS
