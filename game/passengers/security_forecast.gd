@@ -15,7 +15,10 @@ extends RefCounted
 ## then each passenger in id order: a member moving up the line, every walker
 ## walking at the pace the sim gives it, Passenger.pace_mm(): a run while late,
 ## board b13ac401), but skips the ticks on which nothing can change: no work
-## runs out and nobody reaches a cell or joins. A walker with no way to the
+## runs out, nobody joins, and nobody reaches a cell that the next tick reads
+## (_reach_counts(): a queue member walking on counts only when it moves its
+## line's free cell, an admitted passenger walking on only on or off its
+## station's line or on its way back from the berth). A walker with no way to the
 ## line chooses again in the sim; it leaves the replay, and one forecast for it
 ## is NEVER. Read between
 ## ticks it is exact while no one turns late or stops being late (lateness is
@@ -97,6 +100,8 @@ var _claims := {}
 ## What StationQueue.arrive() keeps from one tick to the next: the grid and
 ## the lines do not change in a replay.
 var _known := {}
+## By station: its line's index (StationQueue.line_index()), for _frees().
+var _indexes := {}
 ## The copied gate places, or null when no admission waits for one.
 var _places: GateCapacity
 ## Passenger id -> its copy.
@@ -125,8 +130,10 @@ var _candidate_station := 0
 var _candidate_walk := 0
 ## Passenger id -> the tick it was cleared.
 var _cleared := {}
-## Whether a walker reached a new cell or joined the queue on the tick just
-## played: the next tick can then change something. True at the start, as
+## Whether a walker reached a new cell that counts (_reach_counts()), a queue
+## member moved its line's free cell (_free_moved()) or someone joined the
+## queue on the tick just played: the next tick can then change something.
+## True at the start, as
 ## the sim's state may be waiting on its next tick (a passenger who joined
 ## the queue on the first lane cell is admitted on it).
 var _changed := true
@@ -521,11 +528,17 @@ func _run(target: int) -> int:
 ## One tick as PassengerSim plays it for this station and its passengers.
 func _step() -> void:
 	GateCapacity.recover_all(self, _runtime, _stations, _places)
+	# Promotion keeps the members' order; only an admission changes them.
+	var queued := 0
 	for at in _stations:
 		_runtime.advance(at)
 		StationQueue.promote(_queues[at], _cells[at])
+		queued += StationQueue.size_of(_queues[at])
 	GateCapacity.admit_all(self, _runtime, _stations, _queues, _cells, _opens, _places)
-	_drop_members()
+	for at in _stations:
+		queued -= StationQueue.size_of(_queues[at])
+	if queued != 0:
+		_drop_members()
 	if _joins.has(_candidate) and _joins[_candidate] <= tick:
 		# The candidate has reached its place: a walker standing there.
 		_joins.erase(_candidate)
@@ -568,16 +581,24 @@ func _step() -> void:
 			var own: int = _units[_candidate].station
 			counts[own] = counts.get(own, 0) + 1
 		_place_waiting(counts)
+	# Queue member id -> what it held of its line before it set off or reached
+	# a cell on this tick (_holds()).
+	var held := {}
+	# _active holds no copy cleared or gone from the replay.
 	for id in _active:
 		var u: Passenger = _units[id]
-		if _cleared.has(id) or _left.has(id):
-			continue
-		if u.stage == Passenger.Stage.SECURITY_QUEUE:
-			_move_up(u)
+		if u.stage == Passenger.Stage.SECURITY_QUEUE and _move_up(u) and not _changed:
+			held[id] = _holds(u.station, u.at, u.at)
 		if u.is_moving():
-			var was := u.at
+			var from := u.at
+			var step := u.path_index
 			QueueRipple.walk(u, u.pace_mm(), tick)
-			_changed = _changed or u.at != was
+			if u.at != from and not _changed:
+				_changed = _reach_counts(u, from)
+				if not _changed and u.stage == Passenger.Stage.SECURITY_QUEUE and not held.has(id):
+					held[id] = _holds(u.station, from, u.path[step + 1])
+	if not _changed and not held.is_empty():
+		_changed = _free_moved(held)
 
 
 ## The members of `station`'s queue and their indexes (StationQueue.members()),
@@ -600,20 +621,21 @@ func _drop_members() -> void:
 
 
 ## PassengerStations.queue_move() on the copy, along the line as there
-## (StationQueue.path_to()).
-func _move_up(u: Passenger) -> void:
+## (StationQueue.path_to()): true when it sets off.
+func _move_up(u: Passenger) -> bool:
 	if not _misplaced(u):
-		return
+		return false
 	var members := _members_of(u.station)
 	var line: Array = _lines[u.station]
 	if not QueueRipple.may_step(self, u, members, line, tick, false):
-		return
+		return false
 	var path := StationQueue.path_to(_sim.grid, line, u.at, _member_at[u.station][u.id])
-	if path.size() >= 2:
-		u.set_path(path)
-		# The cell it steps onto is taken from now: the line's pass on the
-		# next tick may send a walker on.
-		_changed = true
+	if path.size() < 2:
+		return false
+	# The cell it steps onto is taken from now; when that moves the line's free
+	# cell, the next tick is played (_step()).
+	u.set_path(path)
+	return true
 
 
 ## A queue member standing still away from its place on the line: it moves
@@ -627,10 +649,88 @@ func _misplaced(u: Passenger) -> bool:
 	return index >= 0 and index < line.size() and u.at != line[index]
 
 
+## What a queue member of `station` standing on `at` and stepping onto `onto`
+## (`at` when standing still) holds of its line's free cell
+## (StationQueue.free_index()): one past the line index of each, 0 off the
+## line.
+func _holds(station: int, at: Vector2i, onto: Vector2i) -> int:
+	if not _indexes.has(station):
+		_indexes[station] = StationQueue.line_index(_lines[station])
+	var index: Dictionary = _indexes[station]
+	return maxi(int(index.get(at, -1)), int(index.get(onto, -1))) + 1
+
+
+## Whether a line's free cell (StationQueue.free_index()) moved on this tick,
+## when the queue members of `held` set off or reached a cell (id -> what each
+## held before, _holds()) and nobody joined or left the queue: the line rules
+## of the next tick then read another tail.
+func _free_moved(held: Dictionary) -> bool:
+	var stations := {}
+	for id: int in held:
+		stations[(_units[id] as Passenger).station] = true
+	for station: int in stations:
+		var queue: Dictionary = _queues[station]
+		var rest := StationQueue.size_of(queue)
+		var before := 0
+		var after := 0
+		for id: int in StationQueue.members(queue):
+			var p: Passenger = _units[id]
+			var now := _holds(station, p.at, p.path[p.path_index + 1] if p.is_moving() else p.at)
+			if held.has(id):
+				before = maxi(before, held[id])
+				after = maxi(after, now)
+			else:
+				rest = maxi(rest, now)
+		if maxi(rest, before) != maxi(rest, after):
+			return true
+	return false
+
+
+## Whether walker `u`, which stepped from `was` onto a new cell on this tick,
+## can change the next tick by it. One that stopped there can, and so can a
+## walker to the queue (the line rules read its next step). A queue member
+## walking on changes the next tick only through its line's free cell, which
+## _step() compares. An admitted passenger walking on can only through
+## _cell_counts().
+func _reach_counts(u: Passenger, was: Vector2i) -> bool:
+	if not u.is_moving() or u.stage == Passenger.Stage.TO_SECURITY:
+		return true
+	if u.stage == Passenger.Stage.SECURITY_QUEUE:
+		return false
+	return _cell_counts(u, was, u.at)
+
+
+## Whether admitted passenger `u`, walking on past `to` after a step from
+## `from`, changes what the next tick reads: the line rules read the line
+## cells admitted passengers stand on (StationQueue.tail()), and a returning
+## passenger gives up the berth once it has stepped off it
+## (SecurityRuntime._advance_one()). Nothing else reads where an admitted
+## passenger is while it walks on.
+func _cell_counts(u: Passenger, from: Vector2i, to: Vector2i) -> bool:
+	if u.security_phase == SecurityRuntime.Phase.RETURN:
+		return true
+	var line: Array = _lines[u.station]
+	return line.has(from) or line.has(to)
+
+
+## The walk, in mm, that moving admitted passenger `u` makes past the cell it
+## steps onto before it reaches a cell that counts (_cell_counts(), or the end
+## of its path): the ticks it walks through the cells between are not played.
+func _walk_on_mm(u: Passenger) -> int:
+	var mm := 0
+	var i := u.path_index + 1
+	while i + 1 < u.path.size() and not _cell_counts(u, u.path[i - 1], u.path[i]):
+		mm += Passenger.segment_mm(u.path[i], u.path[i + 1])
+		i += 1
+	return mm
+
+
 ## The next tick on which something can change, or -1 when nothing will:
 ## work running out, a walker reaching a cell (it counts from the tick after,
 ## so a cell reached on this tick makes the next one count; a walker to the
-## queue from the tick it reaches it) or a walker joining the queue.
+## queue from the tick it reaches it; an admitted passenger walking on from
+## the tick after the first cell that counts, _walk_on_mm()) or a walker
+## joining the queue.
 func _next_event() -> int:
 	if _changed:
 		_changed = false
@@ -663,7 +763,10 @@ func _next_event() -> int:
 			pass
 		elif u.is_moving():
 			var left := Passenger.segment_mm(u.path[u.path_index], u.path[u.path_index + 1])
-			at = tick + u.pace_ticks(left - u.seg_mm) + 1
+			var to_cell := left - u.seg_mm
+			if u.stage == Passenger.Stage.SECURITY:
+				to_cell += _walk_on_mm(u)
+			at = tick + u.pace_ticks(to_cell) + 1
 			# A walker to the queue may join on the tick it reaches the line
 			# (StationQueue.arrive()), so that tick is played, not skipped. So
 			# is the tick a queue member reaches a cell: one behind it, stepped
