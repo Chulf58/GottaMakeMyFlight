@@ -439,7 +439,8 @@ class WallEdits:
 
 	## `props`' WallEdits, watching its sim's grid.
 	static func of(props: CarryOnProps) -> WallEdits:
-		var edits: WallEdits = props.get_meta(META, null)
+		# get_meta(key, null) still prints an engine error on a missing key.
+		var edits: WallEdits = props.get_meta(META) if props.has_meta(META) else null
 		if edits == null:
 			edits = WallEdits.new()
 			props.set_meta(META, edits)
