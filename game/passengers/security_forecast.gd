@@ -91,6 +91,9 @@ var _members := {}
 var _member_at := {}
 ## The copied claims on the lines' tails (PassengerSim._claims).
 var _claims := {}
+## What StationQueue.arrive() keeps from one tick to the next: the grid and
+## the lines do not change in a replay.
+var _known := {}
 ## The copied gate places, or null when no admission waits for one.
 var _places: GateCapacity
 ## Passenger id -> its copy.
@@ -98,7 +101,8 @@ var _units := {}
 ## The copies' ids, ascending: the order PassengerSim steps passengers in.
 var _order: Array[int] = []
 ## The ids of _order the replay steps: all but the waiting copies standing
-## where they wait, which nothing moves until they have a place.
+## where they wait, which nothing moves until they have a place, and the
+## copies cleared or gone from the replay (_cleared, _left).
 var _active: Array[int] = []
 ## Passenger id -> the tick the candidate (clearance()), on its way with a
 ## place, reaches it; it is not walked.
@@ -272,6 +276,8 @@ func _on_admitted(p: Passenger) -> void:
 func _on_cleared(p: Passenger) -> void:
 	p.stage = Passenger.Stage.TO_GATE
 	_cleared[p.id] = tick
+	# Nothing is played for it from now on.
+	_active.erase(p.id)
 
 
 ## Copies `station`'s state, and every security station's when gate places
@@ -531,7 +537,7 @@ func _step() -> void:
 			before.append([u.at, u.path_end()])
 	var stranded: Array = []
 	var joined := StationQueue.arrive(
-		_sim.grid, _queues, _cells, _lines, walkers, _units, tick, stranded, _claims
+		_sim.grid, _queues, _cells, _lines, walkers, _units, tick, stranded, _claims, _known
 	)
 	for u in joined:
 		u.stage = Passenger.Stage.SECURITY_QUEUE
@@ -540,6 +546,7 @@ func _step() -> void:
 	for u: Passenger in stranded:
 		# A committed walker with no way to the line chooses again in the sim.
 		_left[u.id] = true
+		_active.erase(u.id)
 		_changed = true
 	# A walker the pass sent on, turned round or set off changes the next
 	# tick's order and cells, so that tick is played.
