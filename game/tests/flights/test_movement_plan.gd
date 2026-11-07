@@ -165,3 +165,45 @@ func test_a_pause_is_a_multiple_of_20_ticks_up_to_160_held_on_the_route() -> voi
 	for hold_s in [-1.0, 301.0]:
 		var plan := MovementPlan.taxi(path, BUDGET, {"hold_s": hold_s, "ticks": 20})
 		assert_bool(MovementPlan.is_valid(plan)).is_false()
+
+
+## Segments with no length are skipped: a repeated point mid-route changes
+## nothing, and a route ending on a repeated point exits along its last real
+## segment (+X here, not the stationary fallback +Z).
+func test_repeated_points_are_skipped() -> void:
+	var ends_twice := PackedVector3Array(
+		[Vector3(0, 0, 0), Vector3(0, 0, 30), Vector3(40, 0, 30), Vector3(40, 0, 30)]
+	)
+	var middle_twice := PackedVector3Array(
+		[Vector3(0, 0, 0), Vector3(20, 0, 0), Vector3(20, 0, 0), Vector3(40, 0, 0)]
+	)
+	print("exit of a route ending twice: %s" % MovementPlan.exit_dir(ends_twice))
+	assert_float(MovementPlan.exit_dir(ends_twice).dot(Vector3.RIGHT)).is_equal_approx(1.0, 1e-6)
+	assert_float(MovementPlan.path_length(middle_twice)).is_equal_approx(40.0, 1e-6)
+	for at in [10.0, 20.0, 30.0]:
+		var heading := MovementPlan.heading_at(middle_twice, at, Vector3.RIGHT)
+		assert_float(heading.dot(Vector3.RIGHT)).is_equal_approx(1.0, 1e-6)
+		assert_float(MovementPlan.point_at(middle_twice, at).x).is_equal_approx(at, 1e-5)
+
+
+## A stationary route (one point, or the same point twice) keeps the entry
+## heading, is no valid taxi, and has no exit direction, which is reported.
+func test_a_stationary_route_keeps_its_entry_heading_and_is_not_a_taxi() -> void:
+	var entry := Vector3(0, 1, -2)
+	var routes := [
+		PackedVector3Array([Vector3(5, 0, 5), Vector3(5, 0, 5)]),
+		PackedVector3Array([Vector3(5, 0, 5)]),
+	]
+	for route: PackedVector3Array in routes:
+		var heading := MovementPlan.heading_at(route, 0.0, entry)
+		var plan := MovementPlan.taxi(route, 600.0)
+		print("stationary %s: heading %s" % [route, heading])
+		assert_float(heading.dot(Vector3.FORWARD)).is_equal_approx(1.0, 1e-6)
+		assert_that(MovementPlan.position_at(plan, 300.0)).is_equal(Vector3(5, 0, 5))
+		assert_bool(MovementPlan.is_valid(plan)).is_false()
+		await (
+			assert_error(func() -> void: MovementPlan.exit_dir(route))
+			. is_push_error("MovementPlan: exit_dir of a stationary route")
+		)
+	var moving := MovementPlan.taxi(PackedVector3Array(STRAIGHT), 600.0)
+	assert_bool(MovementPlan.is_valid(moving)).is_true()

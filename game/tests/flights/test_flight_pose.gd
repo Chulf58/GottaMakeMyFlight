@@ -86,6 +86,47 @@ func test_a_taxi_pose_with_a_pause_stands_at_the_hold() -> void:
 	assert_float(last.origin.distance_to(Vector3(40, 0, 30))).is_less(1e-4)
 
 
+## A pause with no budget plans over the state's PHASE_TICKS (600 for
+## TAXI_IN), not over one tick: 60 ticks in, the plane is still on its way to
+## the hold (T1 = 580 * 40 / 70 = 331.4), and 340 ticks in it stands there.
+func test_a_pause_with_no_budget_plans_over_the_state_ticks() -> void:
+	var path := _path()
+	var pause := {"hold_s": 40.0, "ticks": 20}
+	var ticks := float(FlightSim.PHASE_TICKS[FlightSim.State.TAXI_IN])
+	var early := FlightPose.pose(FlightSim.State.TAXI_IN, 60.0 / ticks, path, Vector3.RIGHT, pause)
+	var explicit := FlightPose.pose(
+		FlightSim.State.TAXI_IN, 60.0 / ticks, path, Vector3.RIGHT, pause, ticks
+	)
+	var held := FlightPose.pose(FlightSim.State.TAXI_IN, 340.0 / ticks, path, Vector3.RIGHT, pause)
+	print(
+		(
+			"no budget: 60 ticks in %s, explicit %s, 340 in %s"
+			% [early.origin, explicit.origin, held.origin]
+		)
+	)
+	assert_float(early.origin.x).is_greater(1.0).is_less(39.0)
+	assert_float(early.origin.distance_to(explicit.origin)).is_less(1e-6)
+	assert_float(held.origin.distance_to(Vector3(40, 0, 0))).is_less(1e-4)
+
+
+## A pause that does not fit its budget (20 ticks in 10) is reported, and the
+## plane is drawn without it rather than stuck at the hold.
+func test_a_pause_that_does_not_fit_is_reported_and_left_out() -> void:
+	var path := _path()
+	var pause := {"hold_s": 40.0, "ticks": 20}
+	var out: Array[Transform3D] = []
+	var draw := func() -> void:
+		out.append(FlightPose.pose(FlightSim.State.TAXI_IN, 0.3, path, Vector3.RIGHT, pause, 10.0))
+	await assert_error(draw).is_push_error(
+		"FlightPose: pause %s does not fit 10 ticks; drawn without it" % pause
+	)
+	var unpaused := FlightPose.pose(FlightSim.State.TAXI_IN, 0.3, path, Vector3.RIGHT)
+	print("unfit pause drawn at %s, unpaused %s" % [out[0].origin, unpaused.origin])
+	assert_int(out.size()).is_equal(1)
+	assert_float(out[0].origin.distance_to(unpaused.origin)).is_less(1e-6)
+	assert_float(unpaused.origin.distance_to(Vector3(40, 0, 0))).is_greater(1.0)
+
+
 func test_pitch_is_light_and_signed_by_phase() -> void:
 	var path := PackedVector3Array([Vector3(0, 40, 0), Vector3(200, 0, 0)])
 	var approach := FlightPose.pose(FlightSim.State.APPROACH, 0.5, path, Vector3.RIGHT)

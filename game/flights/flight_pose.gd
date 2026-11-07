@@ -50,19 +50,20 @@ static func exit_dir(points: PackedVector3Array) -> Vector3:
 ## The plane's transform `progress` (0 to 1) through `state` along `points`,
 ## entering with its nose along `entry_dir`. A ground state (GROUND_STATES)
 ## may take a MovementPlan `pause` ({"hold_s", "ticks"}) inside a state that
-## lasts `budget` ticks; with no pause the budget does not matter.
+## lasts `budget` ticks: 0, the default, is the state's FlightSim.PHASE_TICKS.
+## With no pause the budget does not matter.
 static func pose(
 	state: int,
 	progress: float,
 	points: PackedVector3Array,
 	entry_dir: Vector3,
 	pause := {},
-	budget := 1.0
+	budget := 0.0
 ) -> Transform3D:
 	var t := clampf(progress, 0.0, 1.0)
 	var distance := 0.0
 	if GROUND_STATES.has(state):
-		distance = MovementPlan.distance_at(MovementPlan.taxi(points, budget, pause), t * budget)
+		distance = _ground_distance(state, t, points, pause, budget)
 	else:
 		if not pause.is_empty():
 			push_error("FlightPose: a pause on state %d, which is not a ground state" % state)
@@ -132,6 +133,24 @@ static func flat_speed(
 	var length := path_length(points)
 	var distance := length * _distance_fraction(state, t)
 	return _fraction_rate(state, t) * length / ticks * _flat_share(points, distance)
+
+
+## Metres along `points` `t` (0 to 1) through ground state `state`, from its
+## MovementPlan taxi plan. A pause whose plan MovementPlan.is_valid() refuses
+## is reported and left out, so the plane still covers its route.
+static func _ground_distance(
+	state: int, t: float, points: PackedVector3Array, pause: Dictionary, budget: float
+) -> float:
+	if pause.is_empty():
+		return MovementPlan.distance_at(MovementPlan.taxi(points, 1.0), t)
+	var ticks := budget if budget > 0.0 else float(FlightSim.PHASE_TICKS[state])
+	var plan := MovementPlan.taxi(points, ticks, pause)
+	if not MovementPlan.is_valid(plan):
+		push_error(
+			"FlightPose: pause %s does not fit %d ticks; drawn without it" % [pause, int(ticks)]
+		)
+		return MovementPlan.distance_at(MovementPlan.taxi(points, 1.0), t)
+	return MovementPlan.distance_at(plan, t * ticks)
 
 
 static func _sky_pose(

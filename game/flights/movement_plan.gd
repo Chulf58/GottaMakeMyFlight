@@ -14,7 +14,8 @@ extends RefCounted
 ## legs peak at the same speed, 1.5 * D / (B - p).
 ##
 ## Not checked here: whether the pause sits on a hold line, or whether the
-## route is clear. is_valid() checks only the pause's size and the peak speed.
+## route is clear. is_valid() checks only that the route has length, the
+## pause's size and the peak speed.
 
 ## Distance around a path corner over which the heading turns.
 const CORNER_BLEND := 8.0
@@ -43,13 +44,20 @@ static func point_at(points: PackedVector3Array, distance: float) -> Vector3:
 	return points[points.size() - 1]
 
 
-## Unit direction (flat) of the last segment: the next phase's entry direction.
+## Unit direction (flat) of the last segment with any length: the next phase's
+## entry direction. A stationary route (no such segment) has none, which is
+## reported, and gives Vector3.BACK.
 static func exit_dir(points: PackedVector3Array) -> Vector3:
-	return flat_dir(points[points.size() - 2], points[points.size() - 1])
+	for i in range(points.size() - 1, 0, -1):
+		if points[i - 1].distance_to(points[i]) > 0.0:
+			return flat_dir(points[i - 1], points[i])
+	push_error("MovementPlan: exit_dir of a stationary route")
+	return Vector3.BACK
 
 
 ## Flat unit heading `distance` along the path. It starts on `entry_dir` and
-## turns smoothly through each corner.
+## turns smoothly through each corner; segments with no length are skipped. On
+## a stationary route (no segment with length) it is `entry_dir`, flattened.
 static func heading_at(points: PackedVector3Array, distance: float, entry_dir: Vector3) -> Vector3:
 	var yaws: Array[float] = []
 	var starts: Array[float] = []
@@ -61,6 +69,8 @@ static func heading_at(points: PackedVector3Array, distance: float, entry_dir: V
 		yaws.append(yaw_of(flat_dir(points[i - 1], points[i])))
 		starts.append(run)
 		run += length
+	if yaws.is_empty():
+		return flat_dir(Vector3.ZERO, entry_dir)
 	var seg := starts.size() - 1
 	while seg > 0 and starts[seg] > distance:
 		seg -= 1
@@ -144,10 +154,12 @@ static func peak_speed(plan: Dictionary) -> float:
 	return 1.5 * plan["length"] / moving if moving > 0.0 else INF
 
 
-## Whether the plan may fly: the pause is 0 to MAX_PAUSE_TICKS in whole
-## PAUSE_STEP_TICKS, its hold lies on the route, and the peak speed is at most
-## MAX_PEAK_SPEED.
+## Whether the plan may fly: the route has length (a stationary route is not
+## a taxi), the pause is 0 to MAX_PAUSE_TICKS in whole PAUSE_STEP_TICKS, its
+## hold lies on the route, and the peak speed is at most MAX_PEAK_SPEED.
 static func is_valid(plan: Dictionary) -> bool:
+	if plan["length"] <= 0.0:
+		return false
 	var ticks: int = plan["pause_ticks"]
 	var hold_s: float = plan["hold_s"]
 	if ticks < 0 or ticks > MAX_PAUSE_TICKS or ticks % PAUSE_STEP_TICKS != 0:
