@@ -100,9 +100,15 @@ const STEP_IN_PATH := {
 ## and sits as a guest with no roller does, over SIT_DOWN_TICKS (board
 ## 5dc41129). Easing in over the ticks the sit-down had left took the hips
 ## back before the body was past the booth's end panel: up to 116 body points
-## inside it. The sim, the forecasts, the save check and the view read it
-## through step_in_hold() and sit_ticks().
-const STEP_IN_HOLD_TICKS := 14
+## inside it. The hold has room for the turn to face out of the seat
+## (PassengerTurns.TURN_TICKS) before the set-down too: a guest whose turn puts
+## its pulling hand on the walled side turns first and then sets the roller
+## down with the hand now on the open side (RollerPark.turns_first(), user
+## ruling of 2026-11-07, board 2eaa9bc4); the hold is the same for every booth
+## roller guest, so the sim never asks the view which hand pulls. The sim, the
+## forecasts, the save check and the view read it through step_in_hold() and
+## sit_ticks().
+const STEP_IN_HOLD_TICKS := 20
 ## Standing up from a STEP_IN_PATH seat, the guest is out along the path this
 ## many ticks before the stand-up ends, then stands at the approach cell. The
 ## stand_up clip brings the hips forward from about its tick 18, when the body

@@ -62,6 +62,10 @@ const UP_PARK_AHEAD_M := 0.7
 ## A roller laid across the front at a booth (round_front()) is fastest at
 ## this share of the lay (_across_eased()).
 const ACROSS_FASTEST := 0.6
+## A booth set-down that turns first (turns_first()) holds the roller still at
+## its start this long while the walker turns to face out of the seat
+## (PassengerTurns.TURN_TICKS), the pulling hand giving the bar to the other.
+const TURN_FIRST_TICKS := float(PassengerTurns.TURN_TICKS)
 ## Laying it down and letting go, the stoop bends the back first and the hips
 ## go down only as far as that leaves the hand short, not back (CarryStoop.
 ## drops): with the hips going back as well, the hand of a walker sitting down
@@ -482,6 +486,7 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"queue",
 		"queue_tip",
 		"faced",
+		"turn_first",
 	]:
 		bag.erase(key)
 	if bag.get("queue_still", false):
@@ -633,7 +638,7 @@ static func rods_t(k: float, bag: Dictionary) -> float:
 			return part
 		var tip: float = bag["roll_tip"]
 		return lerpf(part, 1.0, smoothstep(tip + settle, tip + TIP_UP, up))
-	return smoothstep(0.0, STAND_END, k)
+	return smoothstep(0.0, STAND_END, down_k(bag, k))
 
 
 ## How far a queue stand of `bag` (queued()) at `k` has gone from the pull to
@@ -724,6 +729,11 @@ static func plan(
 	var started := CarryLead.start_of(bag)
 	var off_floor: bool = started[0] == CarryLead.End.REST
 	var lead: int = CarryLead.hand_of(bag["home"]) if off_floor else started[1]
+	# The whole move's share, for the walls' ease at its start (BoothRoller.drawn()).
+	var move_k := k
+	if turns_first(bag):
+		lead = CarryLead.hand_of(bag["home"])
+		k = down_k(bag, k)
 	var ahead := UP_PARK_AHEAD_M if off_floor and not bag.get("up_near", false) else PARK_AHEAD_M
 	var parked := park(bag["park_frame"], lead, body["scale"], ahead)
 	# Out of the walls beside a seat (BoothRoller.fix_start(), ParkWalls).
@@ -739,6 +749,9 @@ static func plan(
 	# height fade alone the hand reaching the bar 0.6 m up beside a walker sitting
 	# down stopped 0.3 m short, the bag rising off its wheels with it.
 	var at: Array
+	var turning := move_k * CarryLead.ticks_of(bag)
+	if turns_first(bag) and turning < TURN_FIRST_TICKS:
+		return _turning(bag, move_k, turning, start, parked, bar, started[1], lead)
 	if queued(bag):
 		# Beside the body as it stands now (a guest turning to its counter takes
 		# the roller round with it), held by the bar throughout.
@@ -756,7 +769,7 @@ static func plan(
 		_taken(bag, up, start * handle, body, lead)
 		at = _off_floor(up, bag, start, want, parked, _yawed(frame), bar, handle)
 	# Out of any wall at a booth seat (BoothRoller.fix_start()).
-	var xf := BoothRoller.drawn(at[1], bag, k, bar)
+	var xf := BoothRoller.drawn(at[1], bag, move_k, bar)
 	# Every frame out of the walls one way per wall, chosen from the park
 	# (ParkWalls.held_out()): the roll and the tip carried with the body.
 	if bag.has("wall_boxes"):
@@ -841,6 +854,86 @@ static func _onto_floor(
 		return [true, laid, handle, handle, 1.0]
 	var back := smoothstep(0.0, 1.0, (1.0 - k) / (1.0 - LAY_END))
 	return [false, want, handle, handle, back]
+
+
+## Marks a booth set-down from the pull (`bag`, BoothRoller.fix_start(), its
+## start fixed in the world, "from_world") to turn first when the walker's turn
+## to face out of the seat ("park_frame") puts its pulling hand on the walled
+## side: the floor place's hand (ParkSide's, the open side) is not the pulling
+## one and the pull left the roller on the floor place's side of that facing.
+## A guest that walks in along the booth's wall pulls on the side away from it
+## (PullSide) and turns round at the approach cell. Set down from the pulling
+## hand while it turned, the roller was parked on the walled side and laid back
+## across in front of the legs (food_seats_probe booth_alt_13-1: a 0.43 m jump,
+## then 60-76 body points in the roller round the front). User ruling of
+## 2026-11-07 (board 2eaa9bc4): turn, then set down with the hand now on the
+## open side. The move is TURN_FIRST_TICKS longer; CafeSim.STEP_IN_HOLD_TICKS
+## has room for it.
+static func mark_turn_first(bag: Dictionary) -> void:
+	var held: int = CarryLead.start_of(bag)[1]
+	# The new place: CarryPlace makes it the bag's "home" just after fix_start().
+	var home := CarryLead.hand_of(bag["place"])
+	if home == held or not bag.has("from_world") or not bag.has("park_frame"):
+		return
+	var park_frame: Transform3D = bag["park_frame"]
+	var x := (park_frame.affine_inverse() * (bag["from_world"] as Transform3D).origin).x
+	if (x < 0.0) == (home == 0):
+		bag["turn_first"] = true
+		bag["ticks"] = TICKS_DOWN + TURN_FIRST_TICKS
+
+
+## Whether the set-down of `bag` turns first (mark_turn_first()).
+static func turns_first(bag: Dictionary) -> bool:
+	return bag.get("turn_first", false)
+
+
+## `k` (the share of a move of `bag`) as the share of its set-down proper: past
+## the turn of one that turns first (turns_first()), 0 through the turn; `k`
+## for any other move.
+static func down_k(bag: Dictionary, k: float) -> float:
+	if not turns_first(bag):
+		return k
+	var at := k * CarryLead.ticks_of(bag) - TURN_FIRST_TICKS
+	return clampf(at / TICKS_DOWN, 0.0, 1.0)
+
+
+## The turn of a set-down that turns first (turns_first()), `at` ticks into the
+## move of `bag` (`k` its share): the roller held still at its start (world,
+## out of the walls as plan() draws it, `parked` plan()'s park), the hand
+## that pulled it (`from_hand`) letting go of the bar over the middle third of
+## the turn as the other (`to_hand`, the hand now on its side) takes it, so
+## each frame a hand is on it. Placed by its start, not by a grip: held, it
+## swung round with the turning body.
+static func _turning(
+	bag: Dictionary,
+	k: float,
+	at: float,
+	start: Transform3D,
+	parked: Transform3D,
+	bar: Vector3,
+	from_hand: int,
+	to_hand: int
+) -> Dictionary:
+	var xf := BoothRoller.drawn(start, bag, k, bar)
+	if bag.has("wall_boxes"):
+		xf.origin += ParkWalls.held_out(xf, bag["wall_boxes"], parked)
+	var given := smoothstep(TURN_FIRST_TICKS / 3.0, TURN_FIRST_TICKS * 2.0 / 3.0, at)
+	var targets := [Vector3.ZERO, Vector3.ZERO]
+	var weights := [0.0, 0.0]
+	targets[from_hand] = xf * bar
+	targets[to_hand] = xf * bar
+	weights[from_hand] = 1.0 - given
+	weights[to_hand] = given
+	return {
+		"holder": -1,
+		"xf": xf,
+		"anchor": bar,
+		"targets": targets,
+		"weights": weights,
+		"keeps": [1.0, 1.0],
+		"drops": [PARK_HIPS, PARK_HIPS],
+		"bends": [BACK_CAP, BACK_CAP],
+	}
 
 
 ## Whether a set-down parked at `parked` lays its roller at `want` (both world)

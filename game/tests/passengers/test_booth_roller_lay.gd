@@ -117,3 +117,58 @@ func test_a_booth_roller_lay_does_not_follow_the_drawn_body() -> void:
 	print("booth lay, body moved 0.22 m and turned: largest difference %.4f m" % most)
 	assert_float(moved.origin.distance_to(park_frame.origin)).is_greater(0.2)
 	assert_float(most).is_less(0.001)
+
+
+## A guest that walked in pulling on its left and turned round to face out of
+## the booth has its roller on its right of that facing (the open side): its
+## set-down turns first (RollerPark.mark_turn_first()), TURN_FIRST_TICKS
+## longer. Through the turn the roller stands still at its start, placed by no
+## grip, and the bar goes from the left hand to the right; then the right hand
+## parks and lays it on that side, with no crossing. Control: the same move
+## with the roller left on the pulling hand's side does not turn first and is
+## laid across.
+func test_a_turned_booth_guest_turns_then_sets_down_from_the_open_side_hand() -> void:
+	var park_frame := Transform3D(Basis.IDENTITY, Vector3(1.0, 0.0, 2.0))
+	var want := park_frame * Transform3D(Basis.IDENTITY, Vector3(-RollerPark.PARK_SIDE_M, 0, 0))
+	var looks := {"scale": 1.0, "bar_z": 0.9, "grips": [Vector3.ZERO, Vector3.ZERO]}
+	var turned: Array[bool] = []
+	var crossed: Array[bool] = []
+	var still_m := 0.0
+	var holders: Array[int] = []
+	var hands: Array[Vector2] = []
+	for side in [-1.0, 1.0]:
+		var bag := _bag(park_frame)
+		bag["place"] = bag["home"]
+		var start := park_frame * Transform3D(Basis.IDENTITY, Vector3(0.3 * side, 0.0, 0.5))
+		bag["from_world"] = start
+		RollerPark.mark_turn_first(bag)
+		turned.append(RollerPark.turns_first(bag))
+		var ticks := CarryLead.ticks_of(bag)
+		var crossing := false
+		for i in int(ticks * 3.0) + 1:
+			var k := i / (ticks * 3.0)
+			var plan := RollerPark.plan(bag, k, start, want, park_frame, {"to_floor": true}, looks)
+			var xf: Transform3D = plan["xf"]
+			if RollerPark.turns_first(bag) and k * ticks < RollerPark.TURN_FIRST_TICKS:
+				still_m = maxf(still_m, xf.origin.distance_to(start.origin))
+				holders.append(plan["holder"])
+				hands.append(Vector2(plan["weights"][1], plan["weights"][0]))
+			elif (park_frame.affine_inverse() * xf.origin).x > 0.0:
+				crossing = true
+		crossed.append(crossing)
+	print(
+		(
+			(
+				"turned booth guest: turns first %s, crosses %s, still within %.4f m,"
+				+ " holders %s, [left, right] first %s, last %s"
+			)
+			% [turned, crossed, still_m, holders, hands[0], hands[-1]]
+		)
+	)
+	assert_array(turned).is_equal([true, false])
+	assert_bool(crossed[0]).is_false()
+	assert_bool(crossed[1]).is_true()
+	assert_float(still_m).is_less(0.001)
+	assert_int(holders.max()).is_equal(-1)
+	assert_vector(hands[0]).is_equal(Vector2(1.0, 0.0))
+	assert_float(hands[-1].y).is_greater(0.9)

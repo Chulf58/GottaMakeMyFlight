@@ -45,10 +45,11 @@ const PlateSight := preload("res://spike/plate_sight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 ## BODY_IN_BAG counts the body's points inside a roller guest's roller over
-## this many ticks of the sit-down: the set-down (RollerPark.TICKS_DOWN) and
-## one more. Printed, not judged; its control (the roller moved to the hips)
-## must see some.
-const SET_DOWN_TICKS := 14
+## the ticks of the sit-down the guest stands at the approach cell setting it
+## down (CafeSim.STEP_IN_HOLD_TICKS: a turn, the set-down, the let-go).
+## Printed, not judged; its control (the roller moved to the hips) must see
+## some.
+const SET_DOWN_TICKS := CafeSim.STEP_IN_HOLD_TICKS
 const OUT_REL := "res://../tools/blender/out/"
 const OUT_DEFAULT := "food-seats"
 ## Piece -> [venue, counter, table piece (or empty), the bodies wanted in turn].
@@ -64,10 +65,10 @@ const SUBJECTS := {
 	"bar": [&"bar", &"bar_counter", &"", [6, 9]],
 }
 const STRIP_TICKS: Array[int] = [0, 3, 6, 9, 12, 15, 18, 21]
-## A roller guest's sit-down is CafeSim.STEP_IN_HOLD_TICKS (14) longer at a
+## A roller guest's sit-down is CafeSim.STEP_IN_HOLD_TICKS (20) longer at a
 ## booth: two frames in the hold, then the step in and the sit as STRIP_TICKS
 ## from the hold's end.
-const ROLLER_STRIP_TICKS: Array[int] = [0, 7, 14, 18, 21, 24, 28, 34]
+const ROLLER_STRIP_TICKS: Array[int] = [0, 10, 20, 24, 27, 30, 34, 40]
 ## The guests (by their place in a subject's body list) who pull a roller: one
 ## at each end of the booth, held at the approach cell while the roller goes
 ## down (CafeSim.STEP_IN_HOLD_TICKS), then stepping in along the shuffle's path.
