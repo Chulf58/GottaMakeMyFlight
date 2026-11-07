@@ -14,6 +14,12 @@ const SNAP_SLACK_M := 0.02
 const STILL_M := 0.001
 const CONTROL_FRAMES := 5
 const CONTROL_DT := 0.1
+## A backpack's grab loop in the pack's own frame (CarryOnProps.BACKPACK_LOOP
+## and a little round it).
+const LOOP_BOX := AABB(Vector3(-0.045, 0.057, 0.205), Vector3(0.09, 0.05, 0.035))
+## Walked distance per tick (PassengerSim.WALK_MM, RUN_MM) over which a
+## passenger counts as running: half way between the two.
+const RUN_PACE_MM := (PassengerSim.WALK_MM + PassengerSim.RUN_MM) * 0.5
 
 
 ## The hand (0 right, 1 left) bag `i` of `p` is drawn in: a roller's from its
@@ -242,3 +248,72 @@ static func snap_control_ok(control: Dictionary) -> bool:
 		and control["no time passed"] == 1
 		and control["following travelled"] > 0.05
 	)
+
+
+## How many of the body points inside `bag` are fingers (CarryArm.LOOP_FINGERS)
+## of the hand holding it, `holder` (0 right, 1 left; none while -1), inside its
+## grab loop (LOOP_BOX): a hand holding the loop as a handle closes round it,
+## and they are not counted against the move (user ruling, decision
+## backpack-clip-check-ignores-holding-fingers-inside-the-grab-loop). Any other
+## body point inside the pack, or a finger outside the loop, is not in the
+## count. `gripping` is the hands holding something else (gripping()).
+static func loop_hits(body: Node3D, bag: Node3D, holder: int, gripping: Array) -> int:
+	if holder < 0:
+		return 0
+	var named: Array = CarryContact.body_points_owned(body, gripping)
+	var suffix: String = [".R", ".L"][holder]
+	var fingers := {}
+	for bone: String in CarryArm.LOOP_FINGERS:
+		fingers[bone + suffix] = true
+	var to_bag := bag.global_transform.affine_inverse()
+	var count := 0
+	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+		var to_mesh := mi.global_transform.affine_inverse()
+		var faces := mi.mesh.get_faces()
+		for k in (named[0] as PackedVector3Array).size():
+			if not fingers.has(named[1][k]):
+				continue
+			var pt: Vector3 = named[0][k]
+			var lp: Vector3 = to_mesh * pt
+			if mi.get_aabb().grow(0.001).has_point(lp) and CarryContact._odd(lp, faces):
+				count += int(LOOP_BOX.has_point(to_bag * pt))
+	return count
+
+
+## One look of a passenger's pace: `pace` is {odo, tick, peak} of the look
+## before (empty at the first). Returns the walked millimetres per tick since
+## the last look on another tick, or -1.0 (the first look, or the same tick),
+## and keeps the highest in pace["peak"].
+static func pace_look(pace: Dictionary, odo: int, tick: int) -> float:
+	var per_tick := -1.0
+	if pace.has("tick") and tick > int(pace["tick"]):
+		per_tick = float(odo - int(pace["odo"])) / (tick - int(pace["tick"]))
+		pace["peak"] = maxf(float(pace.get("peak", 0.0)), per_tick)
+	if not pace.has("tick") or tick > int(pace["tick"]):
+		pace["odo"] = odo
+		pace["tick"] = tick
+	return per_tick
+
+
+## The drawn bounds of the biggest mesh of `bag` (its body, not the rods and
+## straps: the bounds of a tilted roller with its handle out has an empty middle,
+## so sight lines to it hit nothing), as PlateSteps.detail_plate() does.
+static func bag_core(bag: Node3D) -> AABB:
+	var core := AABB()
+	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+		var b := mi.global_transform * mi.get_aabb()
+		core = b if b.get_volume() > core.get_volume() else core
+	return core
+
+
+## Hides every visible passenger body but `id`, for a detail plate (printed);
+## returns the ones hidden, to be shown again.
+static func hide_others(sim: PassengerSim, views: PassengerViews, id: int) -> Array[Node3D]:
+	var hidden: Array[Node3D] = []
+	for other in sim.passenger_ids():
+		var node := views.node_for(other)
+		if other != id and node != null and node.visible:
+			node.visible = false
+			hidden.append(node)
+	print("DETAIL_HIDE passenger=%d others_hidden=%d" % [id, hidden.size()])
+	return hidden
