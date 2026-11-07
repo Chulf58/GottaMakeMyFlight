@@ -83,10 +83,18 @@ func _free_world() -> void:
 
 ## A new world (each visit starts early in the flight's day, with every stall
 ## free) with the views drawing.
-func _new_world() -> void:
+## With `one_scanner`, the terminal keeps only its first security scanner.
+func _new_world(one_scanner := false) -> void:
 	_free_world()
 	var grid := BuildGrid.new()
 	ToiletTestLayout.build(grid)
+	if one_scanner:
+		var scanners: Array = grid.object_ids().filter(
+			func(id: int) -> bool: return grid.get_object(id)["def"] == &"security_scanner"
+		)
+		scanners.sort()
+		for id: int in scanners.slice(1):
+			assert_bool(grid.apply(BuildEdit.remove_object(id)).ok).is_true()
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.run_to(10)
 	_views = PassengerTestWorld.views()
@@ -101,8 +109,8 @@ func _new_world() -> void:
 ## security, sent to a stall in a new world. The kind is a hash of the id, so
 ## passengers whose first bag is another kind are sent without bags until one
 ## fits.
-func _visitor(kind: SecurityLooks.Kind, count := 1) -> Passenger:
-	_new_world()
+func _visitor(kind: SecurityLooks.Kind, count := 1, one_scanner := false) -> Passenger:
+	_new_world(one_scanner)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	while SecurityLooks.bag_kind(p, 0) != kind:
 		ToiletTestLayout.calm(p)
@@ -347,7 +355,11 @@ func test_a_bag_set_down_and_picked_up_in_a_stall_stays_under_its_partitions() -
 ## again by the end, its axle a trail's length behind the body, and frames
 ## of the return to the pull after it landed (LANDED <= k < 1) were measured.
 func test_a_pulled_roller_trails_only_once_its_walker_is_out_of_the_stall() -> void:
-	var frames := await _visit_frames(_visitor(SecurityLooks.Kind.ROLLER))
+	# One scanner, so the walk on from the stall is the one the frames were
+	# built on: with two, the shared station choice (decision hold-line-rebuild-
+	# the-security-line-follows-where-people-sta) takes the scanner the walk to
+	# is shorter, a tie by the forecast, and the visitor leaves the other way.
+	var frames := await _visit_frames(_visitor(SecurityLooks.Kind.ROLLER, 1, true))
 	var getting_up := false
 	var bowl := 0
 	var pulled_over := 0
@@ -487,7 +499,9 @@ func test_a_bag_on_a_stall_floor_stands_upright_against_the_door() -> void:
 ## the bag at the side (the front-carry turn not under way). Controls: frames
 ## of both swaps were measured.
 func test_a_roller_keeps_its_grip_bar_in_the_hand_through_the_swaps() -> void:
-	var frames := await _visit_frames(_visitor(SecurityLooks.Kind.ROLLER))
+	# One scanner, for the walk on from the stall the swaps were counted on
+	# (see test_a_pulled_roller_trails_only_once_its_walker_is_out_of_the_stall).
+	var frames := await _visit_frames(_visitor(SecurityLooks.Kind.ROLLER, 1, true))
 	var swaps := [0, 0]
 	var held := 0
 	var loose := 0
