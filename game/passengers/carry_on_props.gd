@@ -385,6 +385,10 @@ func sync() -> void:
 			bags[i]["carry"] = carry
 			bags[i]["by_bar"] = by_bar
 			RollerPull.step(self, bags[i], node, id, homes[i], hands[i])
+			# A roller's pick-up at a seat decides its roll on this tick, drawn or not.
+			RollerPark.roll_step(
+				bags[i], kinds[i], _tick(), views.tick_position(id, true), held["sit_face"]
+			)
 		StallCarry.stamp_bar_turn(held, near_row, _tick())
 		# The tray goes once no bag is moving out of it (the hand takes a bag
 		# from the tray before the tray is gone).

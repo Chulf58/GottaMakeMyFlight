@@ -7,7 +7,8 @@ extends GdUnitTestSuite
 ## tips it into the pull; every other floor>pull tips as before. The rolling
 ## itself is drawn and measured by spike/cafe_roller_standup_probe.gd
 ## (ROLLER_CLEAR); these cases pin the decision and its timing on the move's
-## record, and that the pick-ups which must not change cannot roll.
+## record, taken on sim ticks (RollerPark.roll_step(), board c0707a22), and
+## that the pick-ups which must not change cannot roll.
 
 const UP := RollerPark.TICKS_UP
 
@@ -28,43 +29,63 @@ func after_test() -> void:
 		_world = null
 
 
-## A floor>pull record at its park's end, standing at the origin facing +z.
+## A floor>pull record stamped on tick 0 (its "changed" and "since"), with a
+## face when `face`.
 func _bag(face: bool) -> Dictionary:
 	return {
+		"park": true,
+		"changed": 0.0,
+		"since": 0.0,
 		"up_near": face,
 		"ticks": UP,
-		"park_at": Vector3.ZERO,
-		"park_frame": Transform3D.IDENTITY,
+		"was": SecurityLooks.Home.FLOOR * 4,
+		"carry_from": SecurityLooks.Carry.PULL,
 	}
 
 
-func _at(z: float) -> Transform3D:
-	return Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, z))
+## Steps `bag` through sim ticks `from` to `to` (inclusive) with its walker at
+## z `z` (roll_step(), as CarryOnProps.sync() does each tick).
+func _ticks(bag: Dictionary, from: int, to: int, z: float, face := true) -> void:
+	for n in range(from, to + 1):
+		RollerPark.roll_step(
+			bag, SecurityLooks.Kind.ROLLER, float(n), Vector3(0.0, 0.0, z), 0.0 if face else NAN
+		)
 
 
 func test_a_faced_pick_up_rolls_until_the_body_is_clear_then_tips() -> void:
 	var bag := _bag(true)
-	var k := RollerPark.UP_PARK_END + 0.01
-	assert_bool(RollerPark._rolling(bag, k, _at(0.0))).is_true()
+	# Undecided before the park's nominal end, decided on that tick.
+	_ticks(bag, 0, int(RollerPark.ROLL_TO) - 1, 0.0)
+	assert_bool(bag.has("rolls")).is_false()
+	_ticks(bag, int(RollerPark.ROLL_TO), int(RollerPark.ROLL_TO), 0.0)
 	assert_bool(RollerPark.rolls(bag)).is_true()
 	assert_float(CarryLead.ticks_of(bag)).is_equal(UP + RollerPark.ROLL_TICKS)
+	assert_bool(RollerPark._rolling(bag, RollerPark.UP_PARK_END + 0.01)).is_true()
 	# Stepping off, still within CLEAR_M: it keeps rolling.
-	assert_bool(RollerPark._rolling(bag, 1.5, _at(RollerPark.CLEAR_M - 0.05))).is_true()
+	_ticks(bag, 12, 20, RollerPark.CLEAR_M - 0.05)
 	assert_bool(bag.has("roll_tip")).is_false()
-	# Clear: the tip starts, and the move now ends with it.
-	assert_bool(RollerPark._rolling(bag, 2.0, _at(RollerPark.CLEAR_M + 0.05))).is_false()
-	assert_float(bag["roll_tip"]).is_equal(2.0)
-	assert_float(CarryLead.ticks_of(bag)).is_equal((2.0 + RollerPark.TIP_UP) * UP)
+	assert_bool(RollerPark._rolling(bag, 21.0 / UP)).is_true()
+	# Clear on tick 21: drawn a tick behind, the tip starts on tick 22, and the
+	# move now ends with it.
+	_ticks(bag, 21, 21, RollerPark.CLEAR_M + 0.05)
+	assert_float(bag["roll_tip"]).is_equal(22.0 / UP)
+	assert_float(CarryLead.ticks_of(bag)).is_equal((22.0 / UP + RollerPark.TIP_UP) * UP)
+	assert_bool(RollerPark._rolling(bag, 21.9 / UP)).is_true()
+	assert_bool(RollerPark._rolling(bag, 22.0 / UP)).is_false()
 	# Decided for good: no rolling again if the body came back.
-	assert_bool(RollerPark._rolling(bag, 2.1, _at(0.0))).is_false()
+	_ticks(bag, 22, 23, 0.0)
+	assert_float(bag["roll_tip"]).is_equal(22.0 / UP)
 
 
 func test_a_roll_that_never_gets_clear_tips_in_time_to_end_with_its_move() -> void:
 	var bag := _bag(true)
-	assert_bool(RollerPark._rolling(bag, 0.8, _at(0.0))).is_true()
 	var last := (UP + RollerPark.ROLL_TICKS) / UP - RollerPark.TIP_UP
-	assert_bool(RollerPark._rolling(bag, last - 0.01, _at(0.0))).is_true()
-	assert_bool(RollerPark._rolling(bag, last, _at(0.0))).is_false()
+	_ticks(bag, 0, floori(last * UP) - 1, 0.0)
+	assert_bool(bag.has("roll_tip")).is_false()
+	_ticks(bag, floori(last * UP), floori(last * UP), 0.0)
+	assert_float(bag["roll_tip"]).is_equal(last)
+	assert_bool(RollerPark._rolling(bag, last - 0.01)).is_true()
+	assert_bool(RollerPark._rolling(bag, last)).is_false()
 	print("forced tip at up %.3f, move %.1f ticks" % [last, CarryLead.ticks_of(bag)])
 	assert_float(CarryLead.ticks_of(bag)).is_equal_approx(UP + RollerPark.ROLL_TICKS, 0.001)
 
@@ -75,11 +96,40 @@ func test_up_k_is_the_same_across_the_move_growing() -> void:
 	var bag := _bag(true)
 	var elapsed := 12.5
 	var before := RollerPark.up_k(bag, elapsed / CarryLead.ticks_of(bag))
-	RollerPark._rolling(bag, before, _at(0.0))
+	_ticks(bag, 0, int(RollerPark.ROLL_TO), 0.0)
 	var after := RollerPark.up_k(bag, elapsed / CarryLead.ticks_of(bag))
 	print("up_k %.4f before, %.4f after, move %.1f ticks" % [before, after, bag["ticks"]])
 	assert_float(CarryLead.ticks_of(bag)).is_greater(UP)
 	assert_float(after).is_equal_approx(before, 0.0001)
+
+
+## A rolled move has left its start (CarryLead.at_start()) by the same tick
+## as a plain one: its reach is in TICKS_UP ticks, not a share of the longer
+## move (12 ticks in, k 12/52, read as still reaching, so a new move stamped
+## then started over from the floor). Control: 3 ticks in it is reaching.
+func test_a_rolled_move_leaves_its_start_on_the_same_tick() -> void:
+	var bag := _bag(true)
+	bag["led"] = true
+	_ticks(bag, 0, int(RollerPark.ROLL_TO), 0.0)
+	var ticks := CarryLead.ticks_of(bag)
+	assert_float(ticks).is_equal(UP + RollerPark.ROLL_TICKS)
+	assert_bool(CarryLead.at_start(bag, 12.0 / ticks)).is_false()
+	assert_bool(CarryLead.at_start(bag, 3.0 / ticks)).is_true()
+
+
+## Taken late (first drawn past the lift, "park_took" 0.5625: its park and
+## SETTLE_TICKS end past k 1), the rods stay in until its park is over, rolled or not; the
+## not-rolled smoothstep's edges were the wrong way round there and drew them
+## all out on the first frame, then in again once it rolled.
+func test_a_late_take_keeps_the_rods_in_until_its_park_ends() -> void:
+	var bag := _bag(true)
+	bag["park_took"] = 9.0 / UP
+	var park := RollerPark.up_ends(bag).y + RollerPark.SETTLE_TICKS / UP
+	print("late take: park and settle end at up %.4f" % park)
+	assert_float(park).is_greater(1.0)
+	assert_float(RollerPark.rods_t(9.0 / UP, bag)).is_equal(0.0)
+	_ticks(bag, 0, int(RollerPark.ROLL_TO), 0.0)
+	assert_float(RollerPark.rods_t(11.0 / CarryLead.ticks_of(bag), bag)).is_equal(0.0)
 
 
 ## A rolled roller runs its rods out ROLL_RODS of the way while it rolls upright
@@ -87,12 +137,10 @@ func test_up_k_is_the_same_across_the_move_growing() -> void:
 ## Control: one that tips at once has them out by the move's end.
 func test_a_rolled_rollers_rods_are_part_out_until_its_tip() -> void:
 	var bag := _bag(true)
-	bag["was"] = SecurityLooks.Home.FLOOR * 4
-	bag["carry_from"] = SecurityLooks.Carry.PULL
 	assert_float(RollerPark.rods_t(0.99, bag)).is_greater(0.9)
-	RollerPark._rolling(bag, 0.8, _at(0.0))
+	_ticks(bag, 0, int(RollerPark.ROLL_TO), 0.0)
 	var rolling := RollerPark.rods_t(1.5 * UP / CarryLead.ticks_of(bag), bag)
-	RollerPark._rolling(bag, 2.0, _at(RollerPark.CLEAR_M + 0.1))
+	_ticks(bag, 31, 31, RollerPark.CLEAR_M + 0.1)
 	var tipped := RollerPark.rods_t(1.0, bag)
 	print("rods rolling %.3f, at the tip's end %.3f" % [rolling, tipped])
 	assert_float(rolling).is_equal_approx(RollerPark.ROLL_RODS, 0.001)
@@ -101,25 +149,67 @@ func test_a_rolled_rollers_rods_are_part_out_until_its_tip() -> void:
 
 ## Unchanged (1): a walker that moved during the park (a shower visitor at the
 ## door, a collecting walker with a face) tips as before; the move keeps its
-## length.
+## length. Control: the same walker moving only after ROLL_TO rolls.
 func test_a_walker_moved_in_the_park_tips_as_before() -> void:
 	var bag := _bag(true)
-	bag["park_cut"] = Vector2(0.7, 0.4)
-	assert_bool(RollerPark._rolling(bag, 0.8, _at(0.0))).is_false()
+	_ticks(bag, 0, 9, 0.0)
+	_ticks(bag, 10, 12, 0.05)
+	assert_bool(bag.has("rolls")).is_true()
 	assert_bool(RollerPark.rolls(bag)).is_false()
+	assert_bool(RollerPark._rolling(bag, 0.8)).is_false()
 	assert_float(CarryLead.ticks_of(bag)).is_equal(UP)
+	var later := _bag(true)
+	_ticks(later, 0, int(RollerPark.ROLL_TO), 0.0)
+	_ticks(later, int(RollerPark.ROLL_TO) + 1, 14, 0.05)
+	assert_bool(RollerPark.rolls(later)).is_true()
 
 
 ## Unchanged (2): a pick-up stamped with no face (a collecting walker, security
 ## repack) tips as before.
 func test_a_pick_up_with_no_face_tips_as_before() -> void:
 	var bag := _bag(false)
-	assert_bool(RollerPark._rolling(bag, 0.8, _at(0.0))).is_false()
+	_ticks(bag, 0, 14, 0.0, false)
+	assert_bool(RollerPark.rolls(bag)).is_false()
 	assert_float(CarryLead.ticks_of(bag)).is_equal(UP)
 
 
+## The record a draw stamps late (RollerPark.stamp(), on its first frame) takes
+## what the sim already decided: the face the walker had on the move's first
+## tick, not on that frame, the roll and its length, and a tip already seen.
+## Control: a stamp with no sim record yet decides nothing.
+func test_a_late_stamp_takes_the_sims_decision() -> void:
+	var bag := {
+		"kind": SecurityLooks.Kind.ROLLER,
+		"changed": 0.0,
+		"was": SecurityLooks.Home.FLOOR * 4,
+		"carry_from": SecurityLooks.Carry.PULL,
+		"from": Transform3D.IDENTITY,
+	}
+	_ticks(bag, 0, 0, 0.0)
+	_ticks(bag, 1, 14, 0.0, false)
+	assert_bool(bag.has("rolls")).is_false()
+	bag["since"] = 0.0
+	RollerPark.stamp(bag, Transform3D.IDENTITY, NAN)
+	assert_bool(bag["up_near"]).is_true()
+	assert_bool(RollerPark.rolls(bag)).is_true()
+	assert_float(CarryLead.ticks_of(bag)).is_equal(UP + RollerPark.ROLL_TICKS)
+	_ticks(bag, 15, 30, RollerPark.CLEAR_M + 0.1)
+	var tip: float = bag["roll_tip"]
+	RollerPark.stamp(bag, Transform3D.IDENTITY, 0.0)
+	assert_float(bag["roll_tip"]).is_equal(tip)
+	var fresh := {
+		"was": SecurityLooks.Home.FLOOR * 4,
+		"carry_from": SecurityLooks.Carry.PULL,
+		"from": Transform3D.IDENTITY,
+		"since": 0.0,
+	}
+	RollerPark.stamp(fresh, Transform3D.IDENTITY, 0.0)
+	assert_bool(fresh.has("rolls")).is_false()
+	assert_float(CarryLead.ticks_of(fresh)).is_equal(UP)
+
+
 ## Unchanged (3): the shower's door pick-up and a collecting walker walk off
-## before the park ends, so the park is cut ("park_cut") and they never roll.
+## before the park ends, so they move in it ("roll_moved") and never roll.
 func test_the_shower_door_and_collecting_walkers_move_before_the_park_ends() -> void:
 	var park_end := UP * RollerPark.UP_PARK_END
 	print(
@@ -165,8 +255,9 @@ func test_only_seats_give_a_pick_up_a_face() -> void:
 ## tips at once, so the move ends and the roller can be set down again.
 func test_a_walker_sitting_down_again_ends_the_roll_at_once() -> void:
 	var bag := _bag(true)
-	assert_bool(RollerPark._rolling(bag, 0.8, _at(0.0))).is_true()
+	_ticks(bag, 0, 16, 0.0)
+	assert_bool(RollerPark._rolling(bag, 17.0 / UP)).is_true()
 	bag["home_held"] = true
-	assert_bool(RollerPark._rolling(bag, 1.1, _at(0.0))).is_false()
-	assert_float(bag["roll_tip"]).is_equal(1.1)
-	assert_float(CarryLead.ticks_of(bag)).is_equal((1.1 + RollerPark.TIP_UP) * UP)
+	_ticks(bag, 17, 17, 0.0)
+	assert_float(bag["roll_tip"]).is_equal(17.0 / UP)
+	assert_float(CarryLead.ticks_of(bag)).is_equal((17.0 / UP + RollerPark.TIP_UP) * UP)
