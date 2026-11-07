@@ -2,14 +2,19 @@ class_name FlightPose
 extends RefCounted
 ## Where a plane is and how it sits, as a pure function of a flight state, the
 ## progress through that state and the state's path. The plane's local +Z is
-## its nose. Used by views only; the sim never reads it.
+## its nose. Used by views only; the sim never reads it. The ground phases'
+## distance and heading come from MovementPlan, which the sim may read, so a
+## drawn plane is where the plan says; this file adds the pitch, the pushback
+## swing and the sky poses.
 
-## Distance around a path corner over which the heading turns.
-const CORNER_BLEND := 8.0
 const APPROACH_PITCH := deg_to_rad(-4.0)
 const FLARE_PITCH := deg_to_rad(2.0)
 const CLIMB_PITCH := deg_to_rad(12.0)
 const PUSHBACK_SWING_START := 0.3
+## The ground phases, whose distance comes from a MovementPlan taxi plan.
+const GROUND_STATES: Array[int] = [
+	FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT
+]
 ## The sky phases views draw around a flight: the arrival lead-in that ends
 ## where APPROACH begins and the climb-out that begins where TAKEOFF ends. Each
 ## flies a flat track (Airside.lead_in_track, climb_out_track) whose height is
@@ -27,69 +32,42 @@ const BANK_PER_TURN_RATE := 30.0
 const MAX_BANK := deg_to_rad(20.0)
 
 
+## MovementPlan.path_length(), kept here for the callers that read it here.
 static func path_length(points: PackedVector3Array) -> float:
-	var total := 0.0
-	for i in range(1, points.size()):
-		total += points[i - 1].distance_to(points[i])
-	return total
+	return MovementPlan.path_length(points)
 
 
-## The point `distance` along the path, clamped to its ends.
+## MovementPlan.point_at(), kept here for the callers that read it here.
 static func point_at(points: PackedVector3Array, distance: float) -> Vector3:
-	var remaining := maxf(distance, 0.0)
-	for i in range(1, points.size()):
-		var length := points[i - 1].distance_to(points[i])
-		if remaining <= length:
-			return points[i - 1].lerp(points[i], remaining / length if length > 0.0 else 0.0)
-		remaining -= length
-	return points[points.size() - 1]
+	return MovementPlan.point_at(points, distance)
 
 
-## Unit direction (flat) of the last segment: the next phase's entry direction.
+## MovementPlan.exit_dir(), kept here for the callers that read it here.
 static func exit_dir(points: PackedVector3Array) -> Vector3:
-	return _flat_dir(points[points.size() - 2], points[points.size() - 1])
-
-
-## Flat unit heading `distance` along the path. It starts on `entry_dir` and
-## turns smoothly through each corner.
-static func heading_at(points: PackedVector3Array, distance: float, entry_dir: Vector3) -> Vector3:
-	var yaws: Array[float] = []
-	var starts: Array[float] = []
-	var run := 0.0
-	for i in range(1, points.size()):
-		var length := points[i - 1].distance_to(points[i])
-		if length <= 0.0:
-			continue
-		yaws.append(_yaw_of(_flat_dir(points[i - 1], points[i])))
-		starts.append(run)
-		run += length
-	var seg := starts.size() - 1
-	while seg > 0 and starts[seg] > distance:
-		seg -= 1
-	var at := clampf(distance, 0.0, run)
-	var from_start := at - starts[seg]
-	var to_end := (starts[seg + 1] if seg + 1 < starts.size() else run) - at
-	var yaw := yaws[seg]
-	if from_start < CORNER_BLEND:
-		var ratio := from_start / CORNER_BLEND
-		yaw = (
-			lerp_angle(yaws[seg - 1], yaw, 0.5 + 0.5 * ratio)
-			if seg > 0
-			else lerp_angle(_yaw_of(entry_dir), yaw, ratio)
-		)
-	if seg + 1 < yaws.size() and to_end < CORNER_BLEND:
-		yaw = lerp_angle(yaw, yaws[seg + 1], 0.5 - 0.5 * to_end / CORNER_BLEND)
-	return Vector3(sin(yaw), 0.0, cos(yaw))
+	return MovementPlan.exit_dir(points)
 
 
 ## The plane's transform `progress` (0 to 1) through `state` along `points`,
-## entering with its nose along `entry_dir`.
+## entering with its nose along `entry_dir`. A ground state (GROUND_STATES)
+## may take a MovementPlan `pause` ({"hold_s", "ticks"}) inside a state that
+## lasts `budget` ticks; with no pause the budget does not matter.
 static func pose(
-	state: int, progress: float, points: PackedVector3Array, entry_dir: Vector3
+	state: int,
+	progress: float,
+	points: PackedVector3Array,
+	entry_dir: Vector3,
+	pause := {},
+	budget := 1.0
 ) -> Transform3D:
 	var t := clampf(progress, 0.0, 1.0)
-	var distance := path_length(points) * _distance_fraction(state, t)
-	var heading := heading_at(points, distance, entry_dir)
+	var distance := 0.0
+	if GROUND_STATES.has(state):
+		distance = MovementPlan.distance_at(MovementPlan.taxi(points, budget, pause), t * budget)
+	else:
+		if not pause.is_empty():
+			push_error("FlightPose: a pause on state %d, which is not a ground state" % state)
+		distance = path_length(points) * _distance_fraction(state, t)
+	var heading := MovementPlan.heading_at(points, distance, entry_dir)
 	if state == FlightSim.State.PUSHBACK:
 		var swing := smoothstep(PUSHBACK_SWING_START, 1.0, t)
 		var yaw := lerp_angle(_yaw_of(entry_dir), _yaw_of(exit_dir(points)), swing)
@@ -124,7 +102,7 @@ static func sky_rise(base_height: float, from_join: float, join_slope: float) ->
 ## Flat unit heading along a sky track, read across SKY_HEADING_SPAN on either
 ## side, so it turns smoothly through the sampled arcs.
 static func track_heading(track: PackedVector3Array, distance: float) -> Vector3:
-	return _flat_dir(
+	return MovementPlan.flat_dir(
 		point_at(track, distance - SKY_HEADING_SPAN), point_at(track, distance + SKY_HEADING_SPAN)
 	)
 
@@ -188,7 +166,7 @@ static func _fraction_rate(state: int, t: float) -> float:
 		FlightSim.State.LANDING:
 			return 2.0 * (1.0 - t)
 		FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT, FlightSim.State.PUSHBACK:
-			return 6.0 * t * (1.0 - t)
+			return MovementPlan.fraction_rate(t)
 		FlightSim.State.TAKEOFF:
 			return 2.0 * t
 	return 1.0
@@ -199,7 +177,7 @@ static func _distance_fraction(state: int, t: float) -> float:
 		FlightSim.State.LANDING:
 			return 1.0 - (1.0 - t) * (1.0 - t)
 		FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT, FlightSim.State.PUSHBACK:
-			return smoothstep(0.0, 1.0, t)
+			return MovementPlan.fraction(t)
 		FlightSim.State.TAKEOFF:
 			return t * t
 	return t
@@ -220,10 +198,5 @@ static func _pitch(state: int, t: float) -> float:
 	return 0.0
 
 
-static func _flat_dir(from: Vector3, to: Vector3) -> Vector3:
-	var flat := Vector3(to.x - from.x, 0.0, to.z - from.z)
-	return flat.normalized() if flat.length_squared() > 0.0 else Vector3.BACK
-
-
 static func _yaw_of(dir: Vector3) -> float:
-	return atan2(dir.x, dir.z)
+	return MovementPlan.yaw_of(dir)
