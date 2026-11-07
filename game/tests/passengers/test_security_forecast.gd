@@ -122,7 +122,7 @@ func test_the_forecast_equals_measured_clearance_at_the_lane() -> void:
 	# 2230 before a walker joined on the tick it reaches its cell.
 	# 2223 before one walker at a time entered the line (decision hold-line-
 	# rebuild-the-security-line-follows-where-people-sta).
-	_check_tier(true, 2080, LANE_PHASES)
+	_check_tier(true, 2080, LANE_PHASES)
 
 
 static func _walk(mm: int) -> int:

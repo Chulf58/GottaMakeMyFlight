@@ -300,8 +300,12 @@ func on_tick(new_tick: int) -> void:
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
+	# The tick's boundary: every forecast that decides something on the next
+	# tick, against one state (SecurityForecast.begin_boundary()).
+	SecurityForecast.begin_boundary(self)
 	_settle_lateness()
 	cafes.refresh_live_deadlines()
+	SecurityForecast.end_boundary()
 	PassengerLifecycle.retire_settled(self)
 	PassengerLifecycle.prune_results(self)
 	tick_usec_last = Time.get_ticks_usec() - started
@@ -650,11 +654,9 @@ func _beat(p: Passenger) -> void:
 func _settle_lateness() -> void:
 	if _late_due.is_empty():
 		return
-	SecurityForecast.begin_boundary(self)
 	var late: Array[bool] = []
 	for p in _late_due:
 		late.append(_late_now(p))
-	SecurityForecast.end_boundary()
 	for i in _late_due.size():
 		_late_due[i].late = late[i]
 	_late_due.clear()
