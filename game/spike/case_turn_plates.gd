@@ -17,9 +17,11 @@ extends RefCounted
 ## can be told apart. Each plate is kept only when the body's and the case's
 ## drawn bounds project inside the frame, the body is shown (PlateSight.
 ## person_shown: sight lines land on it, none blocked) and the case is seen
-## (probe._bag_seen); a side tries SIDE_TURNS about the side before it gives
-## up. A side with no plate, a turn first seen past TURN_HI, or a target
-## passenger past security never plated prints PROBE_INVALID.
+## (probe._bag_seen) and no more than PlateSight.MAX_EMPTY_SHARE of the
+## plate's bottom rows are pure white (a camera outside the floor); a side
+## tries SIDE_TURNS about the side before it gives up. A side with no plate, a
+## turn first seen past TURN_HI, or a target passenger past security never
+## plated prints PROBE_INVALID.
 
 enum State { IDLE, HELD, DONE }
 
@@ -171,6 +173,14 @@ static func _side(probe, body: Node3D, bag: Node3D, side: String, yaw_off: float
 			)
 			print("INFRAME %s person=%s" % [tag, shown])
 			ok = ok and shown["ok"] and probe._bag_seen(cam, bounds["bag"], tag)
+			var empty := PlateSight.empty_bottom(img)
+			print(
+				(
+					"EMPTY_BOTTOM %s run=%d rows=%d share=%.3f max=%.2f"
+					% [tag, empty["run"], empty["rows"], empty["share"], PlateSight.MAX_EMPTY_SHARE]
+				)
+			)
+			ok = ok and empty["ok"]
 		else:
 			print("INFRAME %s no bounds or unbaked: %s" % [tag, holder.get_meta("unbaked")])
 		holder.free()
