@@ -60,7 +60,8 @@ pointing out of the fuselage toward the bridge:
   Cab_Yaw.rotation.y = atan2(-n.x, -n.z) - yaw
   h   = ROT_FLOOR - TUN_B_SINK * cos(th) + (DRIVE_Z + s) * sin(th)
   Drive_Foot.position.y = -h
-A pose with s outside [0, SLIDE_MAX] or |th| above PITCH_MAX_DEG is out of reach.
+A pose with s outside [0, SLIDE_MAX], |th| above PITCH_MAX_DEG or h above DRIVE_H_MAX
+(where the drive leg would leave its sleeve) is out of reach.
 render_airside_plates.py applies exactly this math and prints the Mount_Door error.
 """
 
@@ -105,6 +106,7 @@ TUN_B_H = 2.75
 TUN_B_SINK = 0.30       # B's floor slab underside below the floor line
 CAB_Z = TUN_A_LEN + 0.3  # B's outer end = the cab pivot at rest
 SLIDE_MAX = 5.0
+DRIVE_H_MAX = 2.90       # the leg top (foot + 2.25) stays 0.10 m inside the sleeve (bottom -0.75)
 DRIVE_Z = CAB_Z - 1.6
 CAB_HALF = 1.50
 CAB_TOP = 2.85
@@ -302,12 +304,15 @@ def build_pushback_tug(root, c):
     for sx in (-1, 1):
         gbox("Bar_Lug_%d" % sx, (sx * 0.24 - 0.04, -0.06, BAR_LEN - 0.12), (sx * 0.24 + 0.04, 0.06, BAR_LEN),
              "metal", bar, c)
-    # Two small bar wheels on a fork; at rest they touch the ground.
+    # Two small bar wheels on a fork, on their own pivot under the bar: at rest they
+    # touch the ground; hitched, the bar pitches down and the wiring raises
+    # Towbar_Wheels along Y (retracts them) so they never sink into the ground.
+    wheels = pivot(p, "Towbar_Wheels", bar, c, (0.0, 0.0, BAR_WHEEL_Z))
     wy = BAR_WHEEL_R - HITCH[1]
-    gbox("Bar_Fork", (-0.26, wy, BAR_WHEEL_Z - 0.04), (0.26, -0.06, BAR_WHEEL_Z + 0.04), "metal", bar, c)
+    gbox("Bar_Fork", (-0.26, wy, -0.04), (0.26, -0.06, 0.04), "metal", wheels, c)
     for sx in (-1, 1):
         x0, x1 = sorted((sx * 0.20, sx * 0.30))
-        gcyl_x("Bar_Wheel_%d" % sx, x0, x1, wy, BAR_WHEEL_Z, BAR_WHEEL_R, "ink", bar, c, segs=8)
+        gcyl_x("Bar_Wheel_%d" % sx, x0, x1, wy, 0.0, BAR_WHEEL_R, "ink", wheels, c, segs=8)
     pivot(p, "Mount_NoseGear", bar, c, (0.0, 0.0, BAR_LEN))
 
 
@@ -355,7 +360,9 @@ def glyph_quads(ch):
         for p in (a, b):
             key = (round(p[0], 6), round(p[1], 6))
             ends[key] = ends.get(key, 0) + 1
-    r = h / math.cos(math.pi / 8.0)
+    # In-radius 0.98 h: no octagon edge lies exactly on a stroke edge (a coincident
+    # edge left a sliver notch after the exact boolean and dissolve).
+    r = 0.98 * h / math.cos(math.pi / 8.0)
     for (x, y), n in ends.items():
         if n > 1:
             quads.append([(x + r * math.cos(math.pi / 8.0 + k * math.pi / 4.0),
@@ -469,9 +476,14 @@ def location_panel(prefix, x0, x1, back, root, c):
     gbox(prefix + "_Face", (x0, y0, fz[0]), (x1, y1, fz[1]), "ink", root, c)
     t, i = 0.035, 0.04
     bz = zr(0.004, 0.016)
-    for name, lo, hi in (("T", (x0 + i, y1 - i - t), (x1 - i, y1 - i)), ("B", (x0 + i, y0 + i), (x1 - i, y0 + i + t)),
-                         ("L", (x0 + i, y0 + i), (x0 + i + t, y1 - i)), ("R", (x1 - i - t, y0 + i), (x1 - i, y1 - i))):
-        gbox("%s_Border_%s" % (prefix, name), (lo[0], lo[1], bz[0]), (hi[0], hi[1], bz[1]), "sign_yellow", root, c)
+    strips = [gbox("%s_Border_%s" % (prefix, name), (lo[0], lo[1], bz[0]), (hi[0], hi[1], bz[1]), "sign_yellow",
+                   root, c)
+              for name, lo, hi in (("T", (x0 + i, y1 - i - t), (x1 - i, y1 - i)),
+                                   ("B", (x0 + i, y0 + i), (x1 - i, y0 + i + t)),
+                                   ("L", (x0 + i, y0 + i), (x0 + i + t, y1 - i)),
+                                   ("R", (x1 - i - t, y0 + i), (x1 - i, y1 - i)))]
+    # One shell, so the outline draws no seams where the strips overlap at the corners.
+    union(strips)
 
 
 def build_taxi_sign(root, c):
@@ -530,7 +542,7 @@ EXTRA_NODES = {
     "jet_bridge": ["Tunnel_Yaw", "Tunnel_Pitch", "Tunnel_Pitch_Mesh", "Tunnel_Slide", "Tunnel_Slide_Mesh",
                    "Drive_Level", "Drive_Level_Mesh", "Drive_Foot", "Drive_Foot_Mesh", "Cab_Level", "Cab_Yaw",
                    "Cab_Yaw_Mesh", "Mount_Door", "Mount_Link"],
-    "pushback_tug": ["Towbar_Pivot", "Towbar_Pivot_Mesh", "Mount_NoseGear"],
+    "pushback_tug": ["Towbar_Pivot", "Towbar_Pivot_Mesh", "Towbar_Wheels", "Towbar_Wheels_Mesh", "Mount_NoseGear"],
     "taxi_sign": [n for ch in LETTERS for n in ("Glyph_Loc_" + ch, "Glyph_Loc_%s_Mesh" % ch,
                                                  "Glyph_Dir_" + ch, "Glyph_Dir_%s_Mesh" % ch)]
     + ["Glyph_Arrow_L", "Glyph_Arrow_L_Mesh", "Glyph_Arrow_R", "Glyph_Arrow_R_Mesh"],
@@ -575,11 +587,19 @@ def check_rig(written):
             if got_parent != want_parent or err > 1e-4 or rot_err > 1e-5:
                 kit.fail("%s: pivot %s parent %s t %s, expected %s at %s" % (piece, name, got_parent, t, want_parent,
                                                                              want_t))
-            # A mesh hung on a pivot must share its origin (it rotates about the pivot).
-            for ch in nd.get("children", []):
-                cn = nodes[ch]
-                if "mesh" in cn and any(abs(v) > 1e-5 for v in cn.get("translation", [0, 0, 0])):
-                    kit.fail("%s: %s is offset from its pivot %s" % (piece, cn.get("name"), name))
+        # Every mesh node hangs on the node it is named after (<pivot>_Mesh on <pivot>,
+        # <Piece>_Body on the root), with no offset, so it turns about that pivot. The
+        # names come from join_groups(), which names a mesh by the parent it was built
+        # under; this checks the written file kept that pairing.
+        title = kit.piece_title(piece)
+        for i, nd in enumerate(nodes):
+            if "mesh" not in nd:
+                continue
+            owner = nodes[parent[i]].get("name") if i in parent else None
+            want = title + "_ROOT" if nd.get("name") == title + "_Body" else nd.get("name", "")[:-len("_Mesh")]
+            off = any(abs(v) > 1e-5 for v in nd.get("translation", [0, 0, 0])) or "rotation" in nd
+            if owner != want or off:
+                kit.fail("%s: mesh %s hangs on %s (expected %s) offset=%s" % (piece, nd.get("name"), owner, want, off))
     kit.log("RIG reach_min=%.2f reach_max=%.2f mount_door_z=%.2f slide_max=%.2f rot_floor=%.2f hinge_z=%.2f "
             "cab_z=%.2f drive_z=%.2f tun_b_sink=%.2f bar_len=%.2f hitch=%s"
             % (REACH_MIN, REACH_MAX, MOUNT_DOOR_Z, SLIDE_MAX, ROT_FLOOR, HINGE_Z, CAB_Z, DRIVE_Z, TUN_B_SINK, BAR_LEN,

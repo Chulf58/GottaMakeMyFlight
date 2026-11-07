@@ -139,7 +139,7 @@ def pose_bridge(o, holder, p_world, n_world, label):
         % (label, math.degrees(yaw), math.degrees(th), s, bp.SLIDE_MAX, math.degrees(cab), h, err, foot_z))
     if err > 0.005:
         invalid("%s: Mount_Door is %.4f m off the target" % (label, err))
-    if not (-1e-6 <= s <= bp.SLIDE_MAX + 1e-6) or abs(math.degrees(th)) > bp.PITCH_MAX_DEG:
+    if not (-1e-6 <= s <= bp.SLIDE_MAX + 1e-6) or abs(math.degrees(th)) > bp.PITCH_MAX_DEG or h > bp.DRIVE_H_MAX:
         invalid("%s: pose out of reach (slide %.3f, pitch %.2f)" % (label, s, math.degrees(th)))
     if abs(foot_z) > 0.005:
         invalid("%s: the drive bogie is %.4f m off the ground" % (label, foot_z))
@@ -313,6 +313,14 @@ def stand_scene(pushed_m, with_tug):
         to["Towbar_Pivot"].rotation_mode = "XYZ"
         to["Towbar_Pivot"].rotation_euler = (pitch, 0.0, 0.0)
         bpy.context.view_layer.update()
+        sunk = float(rap.world_points([to["Towbar_Wheels_Mesh"]])[:, 2].min())
+        # Retract the bar wheels (Towbar_Wheels up along its Godot Y = Blender local z).
+        to["Towbar_Wheels"].location.z += max(0.0, -sunk) + 0.04
+        bpy.context.view_layer.update()
+        lifted = float(rap.world_points([to["Towbar_Wheels_Mesh"]])[:, 2].min())
+        log("TOWBAR wheels_min_z hitched_unretracted=%.3f retracted=%.3f" % (sunk, lifted))
+        if lifted < 0.0:
+            invalid("tug: the bar wheels sink %.3f m into the ground" % -lifted)
         got = to["Mount_NoseGear"].matrix_world.translation
         tug_pts = rap.world_points([to["PushbackTug_Body"]])
         rear_g = float(-tug_pts[:, 1].min())
