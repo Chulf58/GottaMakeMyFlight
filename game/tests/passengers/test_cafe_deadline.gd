@@ -18,8 +18,11 @@ const CROWD_EVERY := 7
 const CROWD_UNTIL := 700
 ## The guest of the burst case spawns this long before boarding opens (it was
 ## tick 0 when boarding opened at tick 700), so its schedule is as tight as
-## the case needs whatever the phase lengths are.
-const SPAWN_BEFORE_BOARDING := 700
+## the case needs whatever the phase lengths are. 600, moved from 700 for
+## decision hold-line-rebuild-the-security-line-follows-where-people-sta: the
+## burst now waits for places on the full lines, and at 700 it leaves the
+## deadline (672) after the guest's beat (661) instead of passing it.
+const SPAWN_BEFORE_BOARDING := 600
 ## Passengers who check in at once, enough to make a seated guest's deadline
 ## pass (two scanners, SecurityRuntime.BASIC_SCAN_TICKS or more each).
 const BURST := 22
