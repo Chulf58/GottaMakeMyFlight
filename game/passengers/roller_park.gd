@@ -66,6 +66,9 @@ const ACROSS_FASTEST := 0.6
 ## its start this long while the walker turns to face out of the seat
 ## (PassengerTurns.TURN_TICKS), the pulling hand giving the bar to the other.
 const TURN_FIRST_TICKS := float(PassengerTurns.TURN_TICKS)
+## The share of that turn over which the roller stands up on its wheels and
+## its rods run in (turned_round(), rods_t()).
+const TURN_UP_SHARE := 0.5
 ## Laying it down and letting go, the stoop bends the back first and the hips
 ## go down only as far as that leaves the hand short, not back (CarryStoop.
 ## drops): with the hips going back as well, the hand of a walker sitting down
@@ -638,7 +641,10 @@ static func rods_t(k: float, bag: Dictionary) -> float:
 			return part
 		var tip: float = bag["roll_tip"]
 		return lerpf(part, 1.0, smoothstep(tip + settle, tip + TIP_UP, up))
-	return smoothstep(0.0, STAND_END, down_k(bag, k))
+	if turns_first(bag):
+		# In while it stands up and turns round (_turning()), in from then on.
+		return smoothstep(0.0, TURN_UP_SHARE * TURN_FIRST_TICKS, k * CarryLead.ticks_of(bag))
+	return smoothstep(0.0, STAND_END, k)
 
 
 ## How far a queue stand of `bag` (queued()) at `k` has gone from the pull to
@@ -763,7 +769,9 @@ static func plan(
 		# on the walled side is laid on the open side, round the front (across()).
 		if bag.has("wall_faces") and across(bag["park_frame"], parked, want):
 			go["across"] = bag["park_frame"]
-		at = _onto_floor(k, start, want, parked, frame, go, bar, handle)
+		# Turned first, the roller came in to the park through the turn (turned_round()).
+		var from := parked if turns_first(bag) else start
+		at = _onto_floor(k, from, want, parked, frame, go, bar, handle)
 	else:
 		var up := up_k(bag, k)
 		_taken(bag, up, start * handle, body, lead)
@@ -914,7 +922,7 @@ static func _turning(
 	from_hand: int,
 	to_hand: int
 ) -> Dictionary:
-	var xf := BoothRoller.drawn(start, bag, k, bar)
+	var xf := BoothRoller.drawn(turned_round(bag, start, parked, at), bag, k, bar)
 	if bag.has("wall_boxes"):
 		xf.origin += ParkWalls.held_out(xf, bag["wall_boxes"], parked)
 	var given := smoothstep(TURN_FIRST_TICKS / 3.0, TURN_FIRST_TICKS * 2.0 / 3.0, at)
@@ -934,6 +942,55 @@ static func _turning(
 		"drops": [PARK_HIPS, PARK_HIPS],
 		"bends": [BACK_CAP, BACK_CAP],
 	}
+
+
+## The roller of a set-down that turns first (`bag`), `at` ticks into its turn
+## (_turning()): from `start` (the pull, world) to `parked` (plan()'s park,
+## world) while the walker turns, so the set-down after the turn starts at the
+## park. It stands up on its wheels over the first TURN_UP_SHARE of the turn,
+## turns round about its own middle (its box's centre) over the middle of it,
+## and comes in to the park over the whole of it, late (the ease squared: on
+## the plain ease a knee of the walker still turning met it, 6 body points at
+## k4.67). Rolled on its axle with the
+## turn as one slerp (rolled()), its top swept through the booth's end panel
+## and the hand on its bar took the body in after it (food_seats_probe
+## booth_alt_13-1: BAG_INSIDE up to 18 and SIT_INSIDE up to 352 points). Its
+## turn goes the way that keeps its front facing the walker midway, so it
+## swings on the walker's side, not out towards the panel.
+static func turned_round(
+	bag: Dictionary, start: Transform3D, parked: Transform3D, at: float
+) -> Transform3D:
+	var middle := CarryOnProps.bag_box(SecurityLooks.Kind.ROLLER).get_center()
+	var b0 := Basis(Vector3.LEFT, Vector3.BACK, Vector3.UP)
+	var yaw_from := _heading(start.basis)
+	var yaw_to := _heading(parked.basis)
+	var lean_basis := (Basis(Vector3.UP, yaw_from) * b0).inverse() * start.basis.orthonormalized()
+	var lean := atan2(lean_basis.y.z, lean_basis.y.y)
+	var turn := angle_difference(yaw_from, yaw_to)
+	var other := turn - signf(turn) * TAU
+	var from_mid := start * middle
+	var to_mid := parked * middle
+	var walker: Vector3 = (bag["park_frame"] as Transform3D).origin
+	var towards := walker - from_mid.lerp(to_mid, 0.5)
+	# Of the two ways round, the one whose front faces the walker midway.
+	var front_a := Basis(Vector3.UP, yaw_from + turn / 2.0) * Vector3.BACK
+	var front_b := Basis(Vector3.UP, yaw_from + other / 2.0) * Vector3.BACK
+	if front_b.dot(towards) > front_a.dot(towards):
+		turn = other
+	var up_u := smoothstep(0.0, TURN_UP_SHARE * TURN_FIRST_TICKS, at)
+	var turn_u := smoothstep(0.25 * TURN_FIRST_TICKS, 0.75 * TURN_FIRST_TICKS, at)
+	var in_u := pow(smoothstep(0.0, TURN_FIRST_TICKS, at), 2.0)
+	var scale := start.basis.get_scale().lerp(parked.basis.get_scale(), in_u)
+	var basis := Basis(Vector3.UP, yaw_from + turn * turn_u) * b0
+	basis = (basis * Basis(Vector3.RIGHT, lean * (1.0 - up_u))).scaled(scale)
+	var mid := from_mid.lerp(to_mid, in_u)
+	return Transform3D(basis, mid - basis * middle)
+
+
+## The way (yaw) a roller drawn with `basis` faces: its front (+y) on the floor.
+static func _heading(basis: Basis) -> float:
+	var front := basis.y
+	return atan2(front.x, front.z)
 
 
 ## Whether a set-down parked at `parked` lays its roller at `want` (both world)

@@ -122,53 +122,67 @@ func test_a_booth_roller_lay_does_not_follow_the_drawn_body() -> void:
 ## A guest that walked in pulling on its left and turned round to face out of
 ## the booth has its roller on its right of that facing (the open side): its
 ## set-down turns first (RollerPark.mark_turn_first()), TURN_FIRST_TICKS
-## longer. Through the turn the roller stands still at its start, placed by no
-## grip, and the bar goes from the left hand to the right; then the right hand
-## parks and lays it on that side, with no crossing. Control: the same move
-## with the roller left on the pulling hand's side does not turn first and is
-## laid across.
+## longer. Through the turn the roller, placed by no grip, comes from the pull
+## (leaning back, its front away from the walker) up onto its wheels and round
+## to the park, turning the way that keeps its front towards the walker
+## midway, and the bar goes from the left hand to the right; then the right
+## hand lays it on that side, with no crossing and no step over STEP_MAX_M.
+## Control: the same move with the roller left on the pulling hand's side does
+## not turn first and is laid across.
 func test_a_turned_booth_guest_turns_then_sets_down_from_the_open_side_hand() -> void:
 	var park_frame := Transform3D(Basis.IDENTITY, Vector3(1.0, 0.0, 2.0))
 	var want := park_frame * Transform3D(Basis.IDENTITY, Vector3(-RollerPark.PARK_SIDE_M, 0, 0))
 	var looks := {"scale": 1.0, "bar_z": 0.9, "grips": [Vector3.ZERO, Vector3.ZERO]}
+	# Pulled with its front away from the walker (+z here), leaning back.
+	var pulled := Basis(Vector3.LEFT, Vector3.BACK, Vector3.UP) * Basis(Vector3.RIGHT, 0.6)
 	var turned: Array[bool] = []
 	var crossed: Array[bool] = []
-	var still_m := 0.0
+	var steps: Array[float] = []
+	var faced := -INF
 	var holders: Array[int] = []
 	var hands: Array[Vector2] = []
 	for side in [-1.0, 1.0]:
 		var bag := _bag(park_frame)
 		bag["place"] = bag["home"]
-		var start := park_frame * Transform3D(Basis.IDENTITY, Vector3(0.3 * side, 0.0, 0.5))
+		var start := park_frame * Transform3D(pulled, Vector3(0.3 * side, 0.0, 0.7))
 		bag["from_world"] = start
 		RollerPark.mark_turn_first(bag)
 		turned.append(RollerPark.turns_first(bag))
 		var ticks := CarryLead.ticks_of(bag)
 		var crossing := false
+		var last := start.origin
+		var most := 0.0
 		for i in int(ticks * 3.0) + 1:
 			var k := i / (ticks * 3.0)
 			var plan := RollerPark.plan(bag, k, start, want, park_frame, {"to_floor": true}, looks)
 			var xf: Transform3D = plan["xf"]
-			if RollerPark.turns_first(bag) and k * ticks < RollerPark.TURN_FIRST_TICKS:
-				still_m = maxf(still_m, xf.origin.distance_to(start.origin))
+			most = maxf(most, xf.origin.distance_to(last))
+			last = xf.origin
+			var at := k * ticks
+			if RollerPark.turns_first(bag) and at < RollerPark.TURN_FIRST_TICKS:
 				holders.append(plan["holder"])
 				hands.append(Vector2(plan["weights"][1], plan["weights"][0]))
+				if is_equal_approx(at, RollerPark.TURN_FIRST_TICKS / 2.0):
+					var middle := xf * CarryOnProps.bag_box(SecurityLooks.Kind.ROLLER).get_center()
+					faced = xf.basis.y.normalized().dot((park_frame.origin - middle).normalized())
 			elif (park_frame.affine_inverse() * xf.origin).x > 0.0:
 				crossing = true
 		crossed.append(crossing)
+		steps.append(most)
 	print(
 		(
 			(
-				"turned booth guest: turns first %s, crosses %s, still within %.4f m,"
-				+ " holders %s, [left, right] first %s, last %s"
+				"turned booth guest: turns first %s, crosses %s, largest steps %s,"
+				+ " front to walker midway %.2f, holders %s, [left, right] first %s, last %s"
 			)
-			% [turned, crossed, still_m, holders, hands[0], hands[-1]]
+			% [turned, crossed, steps, faced, holders, hands[0], hands[-1]]
 		)
 	)
 	assert_array(turned).is_equal([true, false])
 	assert_bool(crossed[0]).is_false()
 	assert_bool(crossed[1]).is_true()
-	assert_float(still_m).is_less(0.001)
+	assert_float(steps[0]).is_less_equal(STEP_MAX_M / 2.0)
+	assert_float(faced).is_greater(0.0)
 	assert_int(holders.max()).is_equal(-1)
 	assert_vector(hands[0]).is_equal(Vector2(1.0, 0.0))
 	assert_float(hands[-1].y).is_greater(0.9)
