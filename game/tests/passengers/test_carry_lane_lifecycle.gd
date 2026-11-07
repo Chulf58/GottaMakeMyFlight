@@ -225,7 +225,9 @@ func test_a_body_released_mid_move_keeps_no_stoop_or_reach() -> void:
 	var rig: Dictionary = body.get_meta(&"carry_rig")
 	views._release(id)
 	_assert_no_reach(rig, "released")
-	w.world.passenger(id).stage = Passenger.Stage.MADE
+	# Finished the sim's way: it stoops already in the hold line's queue, and with
+	# only its stage set it was admitted again and took the body back.
+	w.world.sim._finish(w.world.passenger(id), true)
 	# Nodes are pooled per body (PassengerLooks): the first later passenger drawn
 	# with this body takes the node; others are sent away unseen.
 	var variant: int = body.get_meta(&"variant")
