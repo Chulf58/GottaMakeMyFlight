@@ -15,7 +15,6 @@ extends RefCounted
 ## short of the line. All of it is settled once a tick, before anyone steps
 ## (arrive()), by PassengerSim and SecurityForecast alike.
 
-
 ## Moves passengers from the holding list into free places at the back of
 ## the lane, first come first; returns them. Each keeps its index in the
 ## queue, so its place on the line.
