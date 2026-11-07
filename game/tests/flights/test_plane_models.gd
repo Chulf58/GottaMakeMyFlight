@@ -144,8 +144,9 @@ func test_plane_fields_follow_from_the_bounds() -> void:
 		var middle := box.get_center() + off
 		assert_float(middle.x).is_equal_approx(0.0, 0.01)
 		assert_float(middle.z).is_equal_approx(0.0, 0.01)
+		# Each model's own swing radius: its half box diagonal, rounded up to 0.1 m.
 		var reach := Vector2(box.size.z / 2.0, box.size.x / 2.0).length()
-		var swing := float(row["swing_radius"])
+		var swing := float(row["own_swing_radius"])
 		(
 			assert_bool(swing >= reach and swing < reach + 0.1)
 			. override_failure_message("%s swing %.1f, half diagonal %.3f" % [model, swing, reach])
@@ -153,18 +154,32 @@ func test_plane_fields_follow_from_the_bounds() -> void:
 		)
 
 
-## Each plane has a door; every door point is on the fuselage side of the box,
-## the first is on the port side (+x), and they run front to back.
+## The ruled class radii (decision runway-and-taxi-technical-design-movement-
+## plan-analytic-bookings-planned-pauses; finding toon-planes-pack-census-
+## runway-pieces-plane-sizes-and-missing-airside-props) are the largest own
+## swing radius among each class's members.
+func test_class_radius_is_the_largest_member_radius() -> void:
+	var classes := [
+		[["tp_plane_03a"], 8.9],
+		[["tp_plane_04a", "tp_plane_05a"], 20.4],
+		[["tp_plane_06a", "tp_plane_07a"], 32.7],
+	]
+	for entry: Array in classes:
+		var largest := 0.0
+		for model: String in entry[0]:
+			largest = maxf(largest, float(PlaneModels.PLANES[model]["own_swing_radius"]))
+		print("CLASS %s radius %.1f, ruled %.1f" % [entry[0], largest, entry[1]])
+		assert_float(largest).is_equal_approx(entry[1], 0.001)
+
+
+## Each plane has a door, and every door point is inside the box, near the
+## centreline and above the ground.
 func test_door_points_sit_inside_the_plane() -> void:
 	for model: String in PlaneModels.PLANES:
 		var row: Dictionary = PlaneModels.PLANES[model]
 		var box: AABB = row["aabb"]
 		var doors: Array = row["doors"]
 		assert_int(doors.size()).override_failure_message("%s has no door" % model).is_greater(0)
-		if doors.is_empty():
-			continue
-		assert_float((doors[0] as Vector3).x).is_greater(0.0)
-		var last_z := INF
 		for door: Vector3 in doors:
 			(
 				assert_bool(box.grow(0.01).has_point(door))
@@ -173,5 +188,35 @@ func test_door_points_sit_inside_the_plane() -> void:
 			)
 			assert_float(absf(door.x)).is_less(2.5)
 			assert_float(door.y).is_greater(0.5)
-			assert_float(door.z).is_less_equal(last_z)
-			last_z = door.z
+
+
+## Doors come grouped by station (within 0.1 m along the plane), stations front
+## to back. Every station starts with a port door (+x); a paired station has
+## one starboard door after it, mirrored across the centreline at the same sill.
+func test_doors_run_by_station_port_first() -> void:
+	var paired := 0
+	for model: String in PlaneModels.PLANES:
+		var stations: Array[Array] = []
+		for door: Vector3 in PlaneModels.PLANES[model]["doors"]:
+			if not stations.is_empty() and absf((stations[-1][0] as Vector3).z - door.z) < 0.1:
+				stations[-1].append(door)
+			else:
+				stations.append([door])
+		var last_z := INF
+		for station in stations:
+			var port: Vector3 = station[0]
+			var msg := "%s station %s" % [model, station]
+			assert_float(port.z).override_failure_message(msg).is_less(last_z - 0.1)
+			last_z = port.z
+			assert_float(port.x).override_failure_message(msg).is_greater(0.0)
+			assert_int(station.size()).override_failure_message(msg).is_less_equal(2)
+			if station.size() == 2:
+				paired += 1
+				var star: Vector3 = station[1]
+				assert_float(star.x).override_failure_message(msg).is_less(0.0)
+				assert_float(port.x + star.x).override_failure_message(msg).is_equal_approx(
+					0.0, 0.05
+				)
+				assert_float(star.y).override_failure_message(msg).is_equal_approx(port.y, 0.05)
+	# 03A one, 06A three, 07A four paired stations.
+	assert_int(paired).is_equal(8)

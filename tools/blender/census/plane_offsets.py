@@ -10,10 +10,13 @@ For a plane it also prints the numbers game/flights/plane_models.gd records:
 - nose and tail about the origin (every plane faces +z; anything else stops the run);
 - model_offset, which puts the middle of the plane's box on the pose point, as
   PlaneView's model_offset does (its doc: "so its middle sits on the pose point");
-- half-span, and the swing radius about the pose point: the half diagonal of the box,
-  rounded up to 0.1 m (the same rule as stand_placement.gd SWING_RADIUS_M);
+- half-span, and own_swing_radius: the model's own half box diagonal about the pose
+  point, rounded up to 0.1 m (the same rule as stand_placement.gd SWING_RADIUS_M). It
+  is not a stand clearance; that is the class radius, the largest own_swing_radius
+  among the class's members (PlaneClasses, board R2);
 - one door point per *Door* part (runway_census.plane_measure), in model coordinates:
-  the door's middle along the plane, its outer face across, its sill height.
+  the door's middle along the plane, its outer face across, its sill height; ordered
+  by station front to back, port before starboard (order_doors).
 Then GDSCRIPT lines, ready to paste into the table.
 """
 
@@ -30,6 +33,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 sys.path.insert(0, HERE)
 import runway_census as census  # noqa: E402
 
+# Doors whose middles are this close along the plane share a station.
+STATION_M = 0.1
 PLANES = ["tp_plane_03a", "tp_plane_04a", "tp_plane_05a", "tp_plane_06a", "tp_plane_07a"]
 PIECES = {
     "tp_runway_01a": "airside",
@@ -72,6 +77,28 @@ def v3(v):
     return "Vector3(%.2f, %.2f, %.2f)" % tuple(0.0 if abs(c) < 0.005 else c for c in v)
 
 
+def order_doors(stem, doors):
+    """Doors grouped by station along the plane (z within STATION_M), stations front
+    (+z) to back, port (+x) before starboard in each; never in mesh order. A station
+    with two doors on one side stops the run."""
+    rest = sorted(doors, key=lambda d: -d[1][2])
+    stations = []
+    for d in rest:
+        if stations and abs(stations[-1][0][1][2] - d[1][2]) < STATION_M:
+            stations[-1].append(d)
+        else:
+            stations.append([d])
+    out = []
+    for group in stations:
+        group.sort(key=lambda d: -d[1][0])
+        sides = [d[1][0] > 0 for d in group]
+        if len(sides) != len(set(sides)):
+            die("%s: station z=%.2f has two doors on one side: %s" % (stem, group[0][1][2], [d[0] for d in group]))
+        log("  STATION %s z=%.2f doors=%s" % (stem, group[0][1][2], [d[0] for d in group]))
+        out += group
+    return out
+
+
 def plane(stem):
     rel = "game/assets/planes/%s.glb" % stem
     meshes, verts, glo, ghi = load(rel)
@@ -107,6 +134,7 @@ def plane(stem):
         doors.append((part, point, tall))
     if not doors:
         die("%s has no door part" % stem)
+    doors = order_doors(stem, doors)
     log("PLANE %s length=%.2f span=%.2f height=%.2f nose=%.2f tail=%.2f about the origin; centre_x=%.3f"
         % (stem, length, span, ghi[1] - glo[1], nose, tail, centre))
     log("  POSE %s model_offset=%s -> nose %.2f tail %.2f half_span %.2f swing_radius %.1f"
@@ -122,7 +150,7 @@ def plane(stem):
     log("GDSCRIPT\t\t\"tail\": %.2f," % tail)
     log("GDSCRIPT\t\t\"model_offset\": %s," % v3(off))
     log("GDSCRIPT\t\t\"doors\": [%s]," % ", ".join(v3(p) for _, p, _ in doors))
-    log("GDSCRIPT\t\t\"swing_radius\": %.1f," % swing)
+    log("GDSCRIPT\t\t\"own_swing_radius\": %.1f," % swing)
     log("GDSCRIPT\t},")
 
 

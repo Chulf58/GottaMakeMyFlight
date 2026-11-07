@@ -15,11 +15,15 @@ extends RefCounted
 ## - "model_offset": the position that puts the middle of the box on the pose
 ##   point, as PlaneView.model_offset does. About the pose point the nose and
 ##   the tail are then each length / 2 away.
-## - "doors": one point per passenger door, front to back, port before
-##   starboard: the door's middle along the plane, its outer face across, its
-##   sill height.
-## - "swing_radius": half the box diagonal about the pose point, rounded up to
-##   0.1 m (the rule StandPlacement.SWING_RADIUS_M uses).
+## - "doors": one point per passenger door: the door's middle along the plane,
+##   its outer face across, its sill height. Grouped by station (doors whose
+##   middles are within 0.1 m along the plane), stations front to back, port
+##   before starboard in each.
+## - "own_swing_radius": this model's own half box diagonal about the pose
+##   point, rounded up to 0.1 m (the rule StandPlacement.SWING_RADIUS_M uses).
+##   It is not a stand clearance: a stand reserves its class radius, the
+##   largest own_swing_radius among the class's members, which PlaneClasses
+##   computes (board item R2). This table carries no classes.
 ##
 ## tp_plane_05a is the model PlaneView draws today with model_offset
 ## (0, 0, 1.7); the measured middle is 1.63.
@@ -35,7 +39,7 @@ const PLANES := {
 		"tail": 6.46,
 		"model_offset": Vector3(0.00, 0.00, 1.12),
 		"doors": [Vector3(0.76, 0.79, 1.12), Vector3(-0.76, 0.79, 1.12)],
-		"swing_radius": 8.9,
+		"own_swing_radius": 8.9,
 	},
 	"tp_plane_04a":
 	{
@@ -47,7 +51,7 @@ const PLANES := {
 		"tail": 12.25,
 		"model_offset": Vector3(0.00, 0.00, 2.62),
 		"doors": [Vector3(1.30, 0.63, 0.64)],
-		"swing_radius": 15.6,
+		"own_swing_radius": 15.6,
 	},
 	"tp_plane_05a":
 	{
@@ -59,7 +63,7 @@ const PLANES := {
 		"tail": 16.25,
 		"model_offset": Vector3(0.00, 0.00, 1.63),
 		"doors": [Vector3(1.37, 1.58, 8.62)],
-		"swing_radius": 20.4,
+		"own_swing_radius": 20.4,
 	},
 	"tp_plane_06a":
 	{
@@ -79,7 +83,7 @@ const PLANES := {
 			Vector3(1.70, 2.39, -3.95),
 			Vector3(-1.70, 2.39, -3.95),
 		],
-		"swing_radius": 26.1,
+		"own_swing_radius": 26.1,
 	},
 	"tp_plane_07a":
 	{
@@ -101,7 +105,7 @@ const PLANES := {
 			Vector3(1.84, 2.91, -14.61),
 			Vector3(-1.84, 2.91, -14.61),
 		],
-		"swing_radius": 32.7,
+		"own_swing_radius": 32.7,
 	},
 }
 

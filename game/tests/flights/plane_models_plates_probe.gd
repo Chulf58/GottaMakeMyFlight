@@ -109,7 +109,7 @@ func _place_all() -> void:
 			_ball(node.position + door, Color(0.9, 0.1, 0.1))
 		_post(pose)
 		_footprint(node.position, row["aabb"])
-		_circle(pose, row["swing_radius"])
+		_circle(pose, row["own_swing_radius"])
 		_label(model, pose + Vector3(0, 0.3, float(row["length"]) / 2.0 + 4.0))
 		if x == START_X:
 			_cube(Vector3(START_X - 3.0, 0.5, POSE_Z))
@@ -395,16 +395,23 @@ func _plate_side(model: String) -> void:
 	cube_mi.material_override = _unshaded(Color(0.95, 0.95, 0.95))
 	cube_mi.position = cube
 	_main.add_child(cube_mi)
+	# Fit the plane, its swing circle and the cube, and prove all three in frame.
+	var radius := float(row["own_swing_radius"])
+	var pose: Vector3 = _placed[model]["pose"]
+	var circle_box := AABB(
+		pose - Vector3(radius, 0.0, radius), Vector3(2.0 * radius, 0.3, 2.0 * radius)
+	)
+	var cube_box := AABB(cube - Vector3.ONE * 0.5, Vector3.ONE)
+	var span := box.merge(circle_box).merge(cube_box)
 	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	_cam.keep_aspect = Camera3D.KEEP_WIDTH
-	_cam.size = box.size.z + 12.0
-	var centre := box.get_center()
+	_cam.size = span.size.z + 6.0
+	var centre := Vector3(box.get_center().x, box.get_center().y, span.get_center().z)
 	var lift: float = SIDE_LIFT.get(model, 22.0)
 	_cam.global_position = Vector3(box.end.x + 60.0, centre.y + lift, centre.z)
-	_cam.look_at(Vector3(centre.x, centre.y, centre.z), Vector3.UP)
+	_cam.look_at(centre, Vector3.UP)
 	await _frames(3)
-	var cube_box := AABB(cube - Vector3.ONE * 0.5, Vector3.ONE)
-	var ok := _in_frame("side_" + model, [box, cube_box])
+	var ok := _in_frame("side_" + model, [box, circle_box, cube_box])
 	ok = _visible("side_" + model, model, doors, 0.8) and ok
 	if ok:
 		await _save("side_%s.png" % model)
