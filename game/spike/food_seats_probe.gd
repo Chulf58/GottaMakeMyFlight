@@ -35,11 +35,21 @@ extends SceneTree
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy --fixed-fps 60 \
 ##     --path game -s res://spike/food_seats_probe.gd \
-##     [-- --seed=N --out=DIR --subjects=booth,booth_alt]
+##     [-- --seed=N --out=DIR --subjects=booth,booth_alt --roller-strip=8,8.33]
+## --roller-strip takes a roller guest's sit-down strip at these ticks (thirds
+## allowed) instead of ROLLER_STRIP_TICKS: 7 to 11 show the set-down's lay
+## (RollerPark.PARK_END to LAY_END of its 13 ticks).
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
+const CarryContact := preload("res://spike/carry_contact.gd")
+## BODY_IN_BAG counts the body's points inside a roller guest's roller over
+## the ticks of the sit-down the guest stands at the approach cell setting it
+## down (CafeSim.STEP_IN_HOLD_TICKS: a turn, the set-down, the let-go).
+## Printed, not judged; its control (the roller moved to the hips) must see
+## some.
+const SET_DOWN_TICKS := CafeSim.STEP_IN_HOLD_TICKS
 const OUT_REL := "res://../tools/blender/out/"
 const OUT_DEFAULT := "food-seats"
 ## Piece -> [venue, counter, table piece (or empty), the bodies wanted in turn].
@@ -55,10 +65,10 @@ const SUBJECTS := {
 	"bar": [&"bar", &"bar_counter", &"", [6, 9]],
 }
 const STRIP_TICKS: Array[int] = [0, 3, 6, 9, 12, 15, 18, 21]
-## A roller guest's sit-down is CafeSim.STEP_IN_HOLD_TICKS (14) longer at a
+## A roller guest's sit-down is CafeSim.STEP_IN_HOLD_TICKS (20) longer at a
 ## booth: two frames in the hold, then the step in and the sit as STRIP_TICKS
 ## from the hold's end.
-const ROLLER_STRIP_TICKS: Array[int] = [0, 7, 14, 18, 21, 24, 28, 34]
+const ROLLER_STRIP_TICKS: Array[int] = [0, 10, 20, 24, 27, 30, 34, 40]
 ## The guests (by their place in a subject's body list) who pull a roller: one
 ## at each end of the booth, held at the approach cell while the roller goes
 ## down (CafeSim.STEP_IN_HOLD_TICKS), then stepping in along the shuffle's path.
@@ -113,6 +123,8 @@ var _measure_only := false
 ## --subjects=a,b: run only these SUBJECTS (all when empty).
 var _only := PackedStringArray()
 var _out_dir := ""
+## --roller-strip=a,b: a roller guest's strip ticks (empty: ROLLER_STRIP_TICKS).
+var _roller_strip: Array[float] = []
 var _failed := false
 var _main: Node3D
 var _clock: SimClock
@@ -139,6 +151,9 @@ func _initialize() -> void:
 			out = arg.get_slice("=", 1)
 		if arg.begins_with("--subjects="):
 			_only = arg.get_slice("=", 1).split(",")
+		if arg.begins_with("--roller-strip="):
+			for at in arg.get_slice("=", 1).split(","):
+				_roller_strip.append(float(at))
 	_out_dir = ProjectSettings.globalize_path(OUT_REL + out).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print(
@@ -490,9 +505,16 @@ func _in_walls(points: PackedVector3Array, walls: Array[AABB]) -> int:
 ## Steps the guest from its walk to the seat to SETTLE_TICKS after it is
 ## seated, measuring every frame and taking the strip and the still.
 func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
-	var ticks: Array[int] = []
+	var ticks: Array[float] = []
 	if not _measure_only:
-		ticks = ROLLER_STRIP_TICKS if roller else STRIP_TICKS
+		var chosen: Array = ROLLER_STRIP_TICKS if roller else STRIP_TICKS
+		if roller and not _roller_strip.is_empty():
+			chosen = _roller_strip
+		for at in chosen:
+			ticks.append(float(at))
+	# Thirds of a tick only with --roller-strip (the clock's alpha can come to a
+	# whole tick a hair short); whole ticks otherwise, as before.
+	var fine := roller and not _roller_strip.is_empty()
 	var bag_worst := {}
 	var wall_worst := {}
 	var walls := _walls_near(visit.seat["approach"])
@@ -501,6 +523,9 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 	var last_step := -1.0
 	var jumps := {}
 	var step_max := 0.0
+	var in_bag := {}
+	var in_bag_frames := 0
+	var in_bag_control := -1
 	var piece := (_mode.get_node("BuildView") as BuildView).object_node(visit.seat["object_id"])
 	var frame := _seat_frame(visit.seat)
 	var islands := _islands(piece, frame)
@@ -559,13 +584,28 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 					jumps["k%d+%.2f" % [k, _clock.alpha]] = snappedf(step, 0.001)
 				last_step = step
 			last_bag = bag.global_position
-		var due := strip.size() < ticks.size() and k >= ticks[strip.size()]
+			if k <= SET_DOWN_TICKS:
+				# The body's points (both hands left out: one is on the handle)
+				# inside the roller's meshes, through the set-down.
+				var own := CarryContact.body_points(body, [".R", ".L"])
+				in_bag_frames += 1
+				var inside := CarryContact.inside_meshes(own, bag)
+				if inside > 0:
+					in_bag["k%d+%.2f" % [k, _clock.alpha]] = inside
+				if in_bag_control < 0:
+					# Control: the roller moved to the hips sees body points.
+					var kept := bag.global_transform
+					bag.global_position = body.global_position + Vector3.UP * 0.8
+					in_bag_control = CarryContact.inside_meshes(own, bag)
+					bag.global_transform = kept
+		var now := k + _clock.alpha + 0.01 if fine else float(k)
+		var due := strip.size() < ticks.size() and now >= ticks[strip.size()]
 		if due and p.stage == Passenger.Stage.CAFE_SITTING_DOWN:
 			# A roller strip's first frame is the first in which the roller is in
 			# clear view before its second frame is due: a walker arriving can hide
 			# the roller it pulls behind it (7% seen at 13-3, k0).
-			var retry := bag != null and strip.is_empty() and k < ticks[1]
-			var shot := await _shot("%s_k%d" % [label, k], body, bag, retry)
+			var retry := bag != null and strip.is_empty() and now < ticks[1]
+			var shot := await _shot("%s_k%.2f" % [label, now], body, bag, retry)
 			if shot != null or not retry:
 				# A frame that fails its proof is left blank, and the strip is not saved.
 				strip.append(shot)
@@ -597,6 +637,14 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 			"%s: roller points inside the piece or a wall while sitting down or seated" % label
 		)
 	if roller:
+		print(
+			(
+				"BODY_IN_BAG %s frames=%d frames_inside=%d control=%d %s"
+				% [label, in_bag_frames, in_bag.size(), in_bag_control, in_bag]
+			)
+		)
+		if in_bag_control <= 0:
+			_invalid("%s: BODY_IN_BAG control saw no body points in the bag" % label)
 		print(
 			"BAG_STEP %s largest=%.3f m frames_over=%d %s" % [label, step_max, jumps.size(), jumps]
 		)

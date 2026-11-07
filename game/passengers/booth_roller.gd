@@ -53,8 +53,10 @@ static func walled(sim: PassengerSim, front: Transform3D, towards: float) -> boo
 ## start in the body's frame, as before. At every seat (a park stamped with a
 ## face, RollerPark.stamp()'s "faced", a booth's too) it keeps the walls round
 ## the walker as finite boxes ("wall_boxes", PullSide.walls_near()), which
-## RollerPark.plan() moves the park out of (ParkWalls, board a40fdbaf). Any
-## older record is cleared first.
+## RollerPark.plan() moves the park out of (ParkWalls, board a40fdbaf). A
+## set-down whose turn to the seat puts the pulling hand on the walled side
+## turns first (RollerPark.mark_turn_first()). Any older record is cleared
+## first.
 static func fix_start(bag: Dictionary, booth: bool, sim: PassengerSim, body: Transform3D) -> void:
 	bag.erase("wall_faces")
 	bag.erase("start_push")
@@ -99,6 +101,9 @@ static func fix_start(bag: Dictionary, booth: bool, sim: PassengerSim, body: Tra
 	bag["wall_faces"] = faces
 	# How far the start itself is in a wall: eased out over EASE_TICKS (drawn()).
 	bag["start_push"] = clear_of(start, faces).origin - start.origin
+	# Turned round to face out of the seat, a pulling hand on the walled side
+	# gives the roller to the other before setting it down (RollerPark).
+	RollerPark.mark_turn_first(bag)
 
 
 ## The roller's transform `xf` as a move of `bag` draws it at `k`, kept out of
