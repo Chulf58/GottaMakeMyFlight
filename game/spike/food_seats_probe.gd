@@ -39,6 +39,11 @@ extends SceneTree
 ## --roller-strip takes a roller guest's sit-down strip at these ticks (thirds
 ## allowed) instead of ROLLER_STRIP_TICKS: 7 to 11 show the set-down's lay
 ## (RollerPark.PARK_END to LAY_END of its 13 ticks).
+## --roller-steps (off by default) prints, per roller guest, the roller's largest
+## move between two drawn frames in each phase (ROLLER_STEPS: walk to the seat,
+## the hand-led set-down, after it, lying while seated, the hand-led pick-up on
+## standing up, the walk off) with the tick it happens at; the walk is the
+## control at walking pace (board 811e4547).
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
@@ -106,6 +111,8 @@ const WALL_HEIGHT_M := 3.0
 ## frame by about 0.03 a frame, while 7648d56's push of the start out of a
 ## wall moved it 0.272 m in one frame.
 const BAG_KINK_M := 0.05
+## --roller-steps marks a roller step over this in one drawn frame (board 811e4547).
+const ROLLER_JUMP_M := 0.2
 const SETTLE_TICKS := 6
 const LIMIT_TICKS := 2400
 const MARGIN_PX := 8.0
@@ -125,6 +132,8 @@ var _only := PackedStringArray()
 var _out_dir := ""
 ## --roller-strip=a,b: a roller guest's strip ticks (empty: ROLLER_STRIP_TICKS).
 var _roller_strip: Array[float] = []
+## --roller-steps: print the roller's largest per-frame move in each phase.
+var _roller_steps := false
 var _failed := false
 var _main: Node3D
 var _clock: SimClock
@@ -151,6 +160,8 @@ func _initialize() -> void:
 			out = arg.get_slice("=", 1)
 		if arg.begins_with("--subjects="):
 			_only = arg.get_slice("=", 1).split(",")
+		if arg == "--roller-steps":
+			_roller_steps = true
 		if arg.begins_with("--roller-strip="):
 			for at in arg.get_slice("=", 1).split(","):
 				_roller_strip.append(float(at))
@@ -356,10 +367,25 @@ func _stand(
 	var missed := 0
 	var start_at := Vector3.INF
 	var moved := 0.0
+	var steps := {}
+	var prev_bag := Vector3.INF
 	var stop := _clock.tick + UP_LIMIT_TICKS
 	while _clock.tick < stop:
 		_clock.advance(SimClock.STEP / 3.0)
 		await _frames(1)
+		if roller:
+			var pulled := _bag_of(p)
+			if pulled != null:
+				if prev_bag != Vector3.INF:
+					var phase := "lying"
+					if p.stage == Passenger.Stage.CAFE_STANDING_UP:
+						phase = "pick_up"
+					elif p.stage != Passenger.Stage.CAFE_SEATED:
+						phase = "walk_off"
+					_note_step(
+						steps, phase, pulled.global_position.distance_to(prev_bag), p.stage_tick
+					)
+				prev_bag = pulled.global_position
 		if p.stage == Passenger.Stage.CAFE_SEATED:
 			continue
 		if p.stage != Passenger.Stage.CAFE_STANDING_UP:
@@ -432,6 +458,7 @@ func _stand(
 				% [label, walls.size(), wall_worst.size(), wall_worst]
 			)
 		)
+		_print_steps(label + " up", steps)
 		print("TORSO %s largest stoop bend %.1f deg at k%d" % [label, torso["deg"], torso["k"]])
 		print("HAND %s %s" % [label, FloatCheck.float_report(counts)])
 		if not bag_worst.is_empty() or not wall_worst.is_empty():
@@ -502,6 +529,28 @@ func _in_walls(points: PackedVector3Array, walls: Array[AABB]) -> int:
 	return inside
 
 
+## Notes in `steps` the roller's move `step` between two drawn frames when it is
+## the phase's largest so far, with the clock tick and `at` (the stage tick).
+func _note_step(steps: Dictionary, phase: String, step: float, at := -1) -> void:
+	if not steps.has(phase) or step > float(steps[phase][0]):
+		steps[phase] = [step, "tick=%d+%.2f stage_tick=%d" % [_clock.tick, _clock.alpha, at]]
+
+
+## Prints each phase's largest roller step (--roller-steps); a step over
+## ROLLER_JUMP_M in one drawn frame is marked.
+func _print_steps(label: String, steps: Dictionary) -> void:
+	if not _roller_steps:
+		return
+	for phase: String in steps:
+		var rec: Array = steps[phase]
+		print(
+			(
+				"ROLLER_STEPS %s %s largest=%.3f m at %s over_%.1f=%s"
+				% [label, phase, rec[0], rec[1], ROLLER_JUMP_M, float(rec[0]) > ROLLER_JUMP_M]
+			)
+		)
+
+
 ## Steps the guest from its walk to the seat to SETTLE_TICKS after it is
 ## seated, measuring every frame and taking the strip and the still.
 func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
@@ -523,6 +572,7 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 	var last_step := -1.0
 	var jumps := {}
 	var step_max := 0.0
+	var steps := {}
 	var in_bag := {}
 	var in_bag_frames := 0
 	var in_bag_control := -1
@@ -549,6 +599,7 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 			var pulled := _bag_of(p) if roller else null
 			if pulled != null and last_bag != Vector3.INF:
 				last_step = pulled.global_position.distance_to(last_bag)
+				_note_step(steps, "walk", last_step)
 			last_bag = pulled.global_position if pulled != null else Vector3.INF
 			continue
 		if sit_from < 0:
@@ -580,6 +631,7 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 			if last_bag != Vector3.INF:
 				var step := bag.global_position.distance_to(last_bag)
 				step_max = maxf(step_max, step)
+				_note_step(steps, "set_down" if k <= SET_DOWN_TICKS else "after_set_down", step, k)
 				if last_step >= 0.0 and step - last_step > BAG_KINK_M:
 					jumps["k%d+%.2f" % [k, _clock.alpha]] = snappedf(step, 0.001)
 				last_step = step
@@ -648,6 +700,7 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 		print(
 			"BAG_STEP %s largest=%.3f m frames_over=%d %s" % [label, step_max, jumps.size(), jumps]
 		)
+		_print_steps(label + " sit", steps)
 		if jumps.size() > 0 or step_max <= 0.0:
 			_invalid(
 				"%s: the roller jumped (or never moved) from the frame before the sit-down" % label
