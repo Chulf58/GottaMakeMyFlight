@@ -110,6 +110,12 @@ MATERIALS = {
 # stem -> (pack, category, fbx, idle fbx or None, source prefab or None)
 BATCH = {
     "tp_plane_05a": ("TP", "planes", "TP_Plane_05A.fbx", None, None),
+    # The other aircraft classes (decision runway-and-taxi-technical-design-movement-plan-
+    # analytic-bookings-planned-pauses, point 2); measured by census/plane_offsets.py.
+    "tp_plane_03a": ("TP", "planes", "TP_Plane_03A.fbx", None, None),
+    "tp_plane_04a": ("TP", "planes", "TP_Plane_04A.fbx", None, None),
+    "tp_plane_06a": ("TP", "planes", "TP_Plane_06A.fbx", None, None),
+    "tp_plane_07a": ("TP", "planes", "TP_Plane_07A.fbx", None, None),
     "tp_runway_01a": ("TP", "airside", "TP_Runway_01A.fbx", None, None),
     "tp_runway_02a": ("TP", "airside", "TP_Runway_02A.fbx", None, None),
     "tp_runway_03a": ("TP", "airside", "TP_Runway_03A.fbx", None, None),
