@@ -457,6 +457,7 @@ static func to_spot(sim: PassengerSim, p: Passenger) -> void:
 	else:
 		# Its path ended elsewhere (an edit): plan again on the next beat.
 		sim.standing.release(p.id)
+		p.stand_from = Passenger.NO_CELL
 
 
 ## A standing passenger takes a freed gate seat on its beat, which gives up
@@ -466,6 +467,7 @@ static func seat_from_spot(sim: PassengerSim, p: Passenger) -> void:
 		return
 	if claim_seat(sim, p):
 		sim.standing.release(p.id)
+		p.stand_from = Passenger.NO_CELL
 		sim._set_stage(p, Passenger.Stage.TO_GATE)
 
 

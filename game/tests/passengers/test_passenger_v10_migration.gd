@@ -91,6 +91,7 @@ func _v10() -> Dictionary:
 		record.erase("shop_cooldown")
 		record.erase("seat_piece")
 		record.erase("seat_exiting")
+		record.erase("stand_from")
 	return data
 
 

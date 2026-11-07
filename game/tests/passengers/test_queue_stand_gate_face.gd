@@ -131,7 +131,8 @@ func test_a_gate_stander_faces_the_way_its_body_turns() -> void:
 		)
 	)
 	assert_int(p.path.size()).is_equal(1)
-	assert_int((p.at - p.stand_from).abs().x + (p.at - p.stand_from).abs().y).is_equal(1)
+	var came := (p.at - p.stand_from).abs()
+	assert_int(maxi(came.x, came.y)).is_equal(1)
 	assert_float(Vector2(over.x, over.z).length()).is_greater(ParkSide.SPOT_STEP_M)
 	assert_bool(face != Vector2.ZERO).is_true()
 	assert_float(absf(angle_difference(yaw, atan2(face.x, face.y)))).is_less(0.05)
@@ -288,3 +289,96 @@ func test_a_gate_stander_faces_its_stand_after_a_load() -> void:
 	assert_float(absf(yaw)).is_greater(0.1)
 	assert_float(absf(angle_difference(snapped, yaw))).is_less(0.05)
 	assert_float(absf(angle_difference(stood, yaw))).is_less(0.05)
+
+
+## A gate stander standing on its spot, with the sim's save taken then
+## (JSON): [the stander, the save].
+func _stood_save() -> Array:
+	_world = _gate_world()
+	var p := TestStandingSpotClaims.cleared(_world)
+	var limit := WALK_LIMIT
+	while p.stage != Passenger.Stage.STANDING and limit > 0:
+		_world.step()
+		limit -= 1
+	return [p, _json(_world.sim.to_snapshot())]
+
+
+## `save` with the record of passenger `id` changed by `change`.
+func _with(save: Dictionary, id: int, change: Callable) -> Dictionary:
+	var out: Dictionary = save.duplicate(true)
+	for record: Dictionary in out["passengers"]:
+		if int(record["id"]) == id:
+			change.call(record)
+	return out
+
+
+## A saved stand_from that is not the cell its stander stepped from is
+## refused: two cells away, a step away but on a walker that is not standing
+## or setting off, and not a cell at all. Control: the save as taken loads, and
+## so does NO_CELL.
+func test_a_malformed_stand_from_is_refused() -> void:
+	var got := _stood_save()
+	var p: Passenger = got[0]
+	var save: Dictionary = got[1]
+	assert_int(p.stage).is_equal(Passenger.Stage.STANDING)
+	assert_bool(p.stand_from != Passenger.NO_CELL).is_true()
+	var far := p.at + (p.stand_from - p.at) * 2
+	var bad := {
+		"two cells away": func(r: Dictionary) -> void: r["stand_from"] = [far.x, far.y],
+		"not standing": func(r: Dictionary) -> void: r["stage"] = Passenger.Stage.TO_GATE,
+		"not a cell": func(r: Dictionary) -> void: r["stand_from"] = "west",
+	}
+	var loads := {}
+	for name: String in bad:
+		var world := _gate_world()
+		loads[name] = world.sim.from_snapshot(_with(save, p.id, bad[name]))
+		world.free_all()
+	var good := _gate_world()
+	var as_taken := good.sim.from_snapshot(save)
+	good.free_all()
+	var none := _gate_world()
+	var no_cell := func(r: Dictionary) -> void: r["stand_from"] = [-1, -1]
+	var with_none := none.sim.from_snapshot(_with(save, p.id, no_cell))
+	none.free_all()
+	print(
+		(
+			"stand_from %s at %s; loads %s; as taken %s, NO_CELL %s"
+			% [p.stand_from, p.at, loads, as_taken, with_none]
+		)
+	)
+	assert_bool(as_taken).is_true()
+	assert_bool(with_none).is_true()
+	for name: String in loads:
+		assert_bool(loads[name]).override_failure_message(name).is_false()
+
+
+## stand_from is kept while the guest stands and sets off from its spot, and
+## set back to NO_CELL once it walks off the spot's cell. Control: it was set,
+## one path step from the spot's cell, while it stood.
+func test_stand_from_is_cleared_once_the_stander_walks_off() -> void:
+	_world = TestStandingSpotClaims.seatless_world(PassengerTestWorld.starts_with(240, 4000))
+	var p := TestStandingSpotClaims.cleared(_world)
+	var limit := WALK_LIMIT
+	while p.stage != Passenger.Stage.STANDING and limit > 0:
+		_world.step()
+		limit -= 1
+	var standing := p.stand_from
+	var stood_on := p.at
+	var step := (standing - p.at).abs()
+	var setting_off := Passenger.NO_CELL
+	limit = 600
+	while _world.sim.standing.spot_of(p.id) != StandingSpots.NO_SPOT and limit > 0:
+		_world.step()
+		limit -= 1
+		if RollerPark.setting_off(_world.sim, p):
+			setting_off = p.stand_from
+	print(
+		(
+			"stood at %s from %s; setting off %s; off the spot (stage %d) %s"
+			% [stood_on, standing, setting_off, p.stage, p.stand_from]
+		)
+	)
+	assert_int(maxi(step.x, step.y)).is_equal(1)
+	assert_that(setting_off).is_equal(standing)
+	assert_int(_world.sim.standing.spot_of(p.id)).is_equal(StandingSpots.NO_SPOT)
+	assert_that(p.stand_from).is_equal(Passenger.NO_CELL)

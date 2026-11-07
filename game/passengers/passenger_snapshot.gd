@@ -292,8 +292,9 @@ static func _record(p: Passenger) -> Dictionary:
 ## no toilet visits. Version 10 to 11: every passenger gets the boredom
 ## BoredomSim.start_of() gives its id; its toilet need, cooldown and any toilet
 ## visit are kept as saved, and it gets no kiosk cooldown and no kiosk visits.
-## Every migrated passenger collects no roller (collect_tick 0, ParkRecovery)
-## and has no thoughts (PassengerThoughts).
+## Every migrated passenger collects no roller (collect_tick 0, ParkRecovery),
+## has no thoughts (PassengerThoughts) and came onto no standing spot's cell
+## (stand_from NO_CELL, ParkSide.stand_face()).
 ## Every step sets a field or block only when the save has none, so a value the
 ## save already holds is kept for the checks to accept or refuse. Any other save
 ## is returned as it is, for the checks to accept or refuse. The given
@@ -393,6 +394,7 @@ static func _add_boredom(out: Dictionary, passengers: Array) -> void:
 			_set_missing(record, "halt_tick", 0)
 			_set_missing(record, "sat_late", false)
 			_set_missing(record, "seat_exiting", false)
+			_set_missing(record, "stand_from", [Passenger.NO_CELL.x, Passenger.NO_CELL.y])
 			_set_missing(record, "seat_piece", {})
 			_set_missing(record, "thoughts", [])
 			_set_missing(record, "thought_marks", [])
@@ -523,12 +525,26 @@ static func _passenger(
 	var index_ok := p.path_index >= 0 and p.path_index < maxi(p.path.size(), 1)
 	if (
 		not (variant_ok and range_ok and stage_ok and stuck_ok and index_ok)
+		or not _stand_from_ok(p)
 		or not GateRelocation.valid(p)
 		or p.id < 1
 		or p.id >= next_id
 	):
 		return null
 	return p
+
+
+## Whether the stand_from of `p` is NO_CELL, or a cell one path step from `at`
+## (one of its eight neighbours: paths step diagonally too, Passenger.
+## segment_mm()) it came onto its standing spot's cell from, while it stands
+## there or sets off from it (GateCapacity.to_spot(); cleared as the spot is
+## given up).
+static func _stand_from_ok(p: Passenger) -> bool:
+	if p.stand_from == Passenger.NO_CELL:
+		return true
+	var on_spot := p.stage in [Passenger.Stage.STANDING, Passenger.Stage.TO_EXIT]
+	var step := (p.stand_from - p.at).abs()
+	return on_spot and maxi(step.x, step.y) == 1
 
 
 static func _fill(p: Passenger, record: Dictionary, grid: BuildGrid) -> bool:

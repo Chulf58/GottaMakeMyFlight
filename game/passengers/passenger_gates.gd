@@ -167,6 +167,7 @@ static func reconcile_seats(sim: PassengerSim) -> void:
 		# again this tick.
 		for id in sim.standing.drop_invalid():
 			var p: Passenger = sim._by_id[id]
+			p.stand_from = Passenger.NO_CELL
 			# One setting off for the exit just walks on from its cell.
 			if p.stage == Passenger.Stage.TO_EXIT:
 				continue

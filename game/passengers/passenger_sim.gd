@@ -606,6 +606,7 @@ func _move(p: Passenger) -> void:
 	if p.stage == Passenger.Stage.TO_EXIT and spot != StandingSpots.NO_SPOT:
 		if p.path_index > 0 or p.at != standing.cell_of(spot):
 			standing.release(p.id)
+			p.stand_from = Passenger.NO_CELL
 
 
 ## Mood and the lateness forecast, once a simulated second per passenger.
@@ -780,6 +781,7 @@ func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
 	var setting_off := stage == Passenger.Stage.TO_EXIT and p.stage == Passenger.Stage.STANDING
 	if stage != Passenger.Stage.TO_GATE and stage != Passenger.Stage.STANDING and not setting_off:
 		standing.release(p.id)
+		p.stand_from = Passenger.NO_CELL
 	# The boarding files hold walkers heading out and on the apron only; one
 	# that turns to the exit chooses its door afresh.
 	if stage != Passenger.Stage.TO_EXIT and stage != Passenger.Stage.APRON:
