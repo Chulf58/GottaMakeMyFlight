@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 ## walked onto that cell (Passenger.stand_from, which GateCapacity.to_spot()
 ## keeps as it clears the path), else ParkSide.GATE_FACE. Before, to_spot()
 ## cleared the path and stand_face() was ZERO for every gate stander (board
-## f71895c6). All of it is saved sim state (save version 29), so a save and
+## f71895c6). All of it is saved sim state (save version 30), so a save and
 ## load stands the roller in the same place.
 
 const ROLLER := SecurityLooks.Kind.ROLLER

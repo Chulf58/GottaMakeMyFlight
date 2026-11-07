@@ -184,18 +184,30 @@ func test_a_gate_stander_tips_once_its_way_is_known() -> void:
 			if not RollerPark.queued(bag) or not bag.has("queue_tip"):
 				continue
 			var at := float(_world.clock.tick) - float(bag["since"])
+			var heading := _views.walk_heading(p)
+			var yaw := _views.node_for(p.id).rotation.y
 			marks[p.id] = {
 				"tick": _world.clock.tick,
-				"heading": _views.walk_heading(p),
+				"heading": heading,
+				"yaw": yaw,
+				"off": absf(angle_difference(yaw, atan2(heading.x, heading.y))),
 				"wait": float(bag["queue_tip"]) - at,
 				"stage": p.stage,
 			}
 	print("tip marks by stander: %s" % marks)
 	assert_int(marks.size()).is_equal(GATE_STANDERS)
+	var turners := 0
 	for id: int in marks:
 		var mark: Dictionary = marks[id]
 		assert_vector(mark["heading"]).is_not_equal(Vector2.ZERO)
 		assert_array([0.0, float(PassengerTurns.TURN_TICKS)]).contains([mark["wait"]])
+		if float(mark["off"]) > RollerPark.TIP_TURN_RAD:
+			turners += 1
+			assert_float(float(mark["wait"])).is_greater(0.0)
+			assert_float(float(mark["wait"])).is_equal(float(PassengerTurns.TURN_TICKS))
+	# Control: some stander faced away from its way at the mark, so the checks
+	# above met a tip that has to wait.
+	assert_int(turners).is_greater_equal(1)
 
 
 ## A calm passenger with one roller, its liquids and alarm off.
