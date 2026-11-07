@@ -828,8 +828,9 @@ static func plan(
 		# the roller round with it), held by the bar throughout.
 		assert(body.has("look") and int(body["look"]) >= 0, "RollerPark: queued with no body look")
 		parked = queue_park(frame, lead, body["scale"], body["look"])
-		# Walled on both sides (side_first() found no open one): out of the walls
-		# kept at the stamp (CarryPlace, ParkWalls), the tip rolled from there.
+		# Walled on both sides, or a two-bag guest's (ParkSide.choose_stand() kept
+		# its side): out of the walls kept at the stamp (CarryPlace, ParkWalls),
+		# the tip rolled from there.
 		if bag.has("queue_walls"):
 			parked.origin += ParkWalls.shift(parked, bag["queue_walls"])
 		at = _queued(bag, k, start, want, parked, bar)

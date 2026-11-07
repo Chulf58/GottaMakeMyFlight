@@ -321,6 +321,8 @@ func sync() -> void:
 			RollerPark.queue_stand(
 				was[i], kinds[i], stands, _tick(), RollerPark.still_wait(p), turn
 			)
+			# Its side, from the sim (ParkSide.choose_stand()), before hold_park() holds it.
+			ParkSide.choose_stand(sim, p, was[i])
 			# A parking roller keeps home, hand and lift to the park's end; one lying, its lift.
 			RollerPark.hold_park(was[i], kinds[i], homes, hands, i, _tick(), p.collect_tick != 0)
 			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):

@@ -169,15 +169,47 @@ static func stand_hand(
 	return 1 - hand if walled[hand] and not walled[1 - hand] else hand
 
 
-## The frame (world, on the floor) a queue stand of `p` is chosen in
-## (stand_hand()): where its body `body` stands, facing what it turns to while
-## it waits (its security lane's front, its cafe counter), else the way the
-## body faces. The stand is drawn in the body's frame as it turns
-## (RollerPark.queue_park()), so the side is chosen for the facing it ends in.
-static func stand_frame(sim: PassengerSim, p: Passenger, body: Transform3D) -> Transform3D:
+## Chooses the side of the queue stand asked for on roller `bag` of guest `p`
+## (RollerPark.restamps()) on the sim tick it is asked, in CarryOnProps.sync():
+## RollerPark.side_first() with the open side's hand (stand_hand()) of the
+## walls and furniture round where `sim` has `p`, in stand_frame(). Only sim
+## state decides it, never the drawn body, so one state stands one side
+## whatever the view draws (anti-pattern view-state-stepped-on-from-the-
+## previous-draw-makes-a-carry-p). A two-bag guest keeps a bag in each hand
+## (SecurityLooks.hand_of(), PullSide), so its stand keeps its side and
+## RollerPark.plan() moves it out of the walls (ParkWalls); and so does a stand
+## with no way to face known (stand_face()).
+static func choose_stand(sim: PassengerSim, p: Passenger, bag: Dictionary) -> void:
+	if not RollerPark.restamps(bag) or p.carry_on > 1:
+		return
+	var hand := CarryLead.hand_of(bag["place"])
+	var face := stand_face(sim, p)
+	if face != Vector2.ZERO:
+		var frame := stand_frame(sim.world_position(p), face)
+		var boxes := PullSide.walls_near(sim.grid, frame.origin)
+		boxes.append_array(PullSide.pieces_near(sim.grid, frame.origin))
+		var look := PassengerLooks.body_of(p.id, p.variant)
+		hand = stand_hand(frame, hand, SecurityLooks.bag_scale(p), look, boxes)
+	RollerPark.side_first(bag, hand)
+
+
+## The ground way (x, z) `p` of `sim` waits facing in a queue, from sim state
+## only (choose_stand()): what its body turns to there (PassengerViews), its
+## security lane's front or its cafe counter, else the step of its path it
+## walks next or walked last (a boarding file's way on, the way it came to its
+## place), else ZERO when the sim keeps none (a path cleared to its cell).
+static func stand_face(sim: PassengerSim, p: Passenger) -> Vector2:
 	var face := SecurityLooks.face(sim, p)
 	if face == Vector2.ZERO:
 		face = Vector2(sim.cafes.counter_facing(p))
-	var ahead := body.basis.z
-	var yaw := atan2(face.x, face.y) if face != Vector2.ZERO else atan2(ahead.x, ahead.z)
-	return Transform3D(Basis(Vector3.UP, yaw), body.origin)
+	if face == Vector2.ZERO and p.path.size() >= 2:
+		var at := clampi(p.path_index, 0, p.path.size() - 2)
+		face = Vector2(p.path[at + 1] - p.path[at])
+	return face
+
+
+## The frame (world, on the floor) a queue stand is chosen in (stand_hand()):
+## at `at`, facing ground way `face`. The stand is drawn in the body's frame
+## (RollerPark.queue_park()), which turns to the same way as it waits.
+static func stand_frame(at: Vector3, face: Vector2) -> Transform3D:
+	return Transform3D(Basis(Vector3.UP, atan2(face.x, face.y)), at)

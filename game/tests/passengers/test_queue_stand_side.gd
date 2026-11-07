@@ -185,7 +185,10 @@ func test_a_roller_on_the_open_side_stands_at_once() -> void:
 ## point in the wall standing, nor on any frame of its tip back into the pull,
 ## which starts from where it stood. Control: the same move in the left hand,
 ## without the walls kept, stands in the wall; with them (the ParkWalls
-## backstop for a stand walled on both sides) it is moved out.
+## backstop, for a stand walled on both sides or a two-bag guest's) it is moved
+## out, and its tip starts from where it was moved to, not from the unmoved
+## stand: its first tip step is small, and far shorter than the way from the
+## unmoved stand to that first tip frame.
 func test_the_open_side_stand_and_its_tip_stay_out_of_the_wall() -> void:
 	var frame := _beside_wall()
 	var walls := _wall()
@@ -208,6 +211,20 @@ func test_the_open_side_stand_and_its_tip_stay_out_of_the_wall() -> void:
 	assert_float(right["tip_step"]).is_less(0.05)
 	assert_int(right["stood_frames"]).is_greater(0)
 	assert_int(right["tip_frames"]).is_greater(0)
+	# The moved stand tips from where it stood (kept), not from the unmoved stand.
+	var moved: float = kept["stood_at"].distance_to(left["stood_at"])
+	var from_unmoved: float = kept["first_tip"].distance_to(left["stood_at"])
+	print(
+		(
+			"backstop: moved %.4f m, first tip step %.4f m, from the unmoved stand %.4f m"
+			% [moved, kept["tip_step"], from_unmoved]
+		)
+	)
+	assert_int(kept["stood_frames"]).is_greater(0)
+	assert_int(kept["tip_frames"]).is_greater(0)
+	assert_float(moved).is_greater(0.05)
+	assert_float(kept["tip_step"]).is_less(0.05)
+	assert_float(from_unmoved).is_greater(kept["tip_step"] + 0.05)
 
 
 ## A roller's record settled in hand `hand`'s pull since tick 0.
@@ -237,8 +254,8 @@ func _stamped(bag: Dictionary, now: float) -> void:
 ## A queue stand in hand `hand` for a body standing at `frame`, planned
 ## (RollerPark.plan()) over its stand, a hold and its tip, with `walls` kept as
 ## CarryPlace keeps them for the ParkWalls backstop when `backstop`: points in
-## the wall standing and tipping, frame counts and the step from the last stood
-## frame to the first tip frame.
+## the wall standing and tipping, frame counts, the last stood and first tip
+## frames' origins and the step between them.
 func _frames(hand: int, frame: Transform3D, walls: Array, backstop := true) -> Dictionary:
 	var bag := _pulled(hand)
 	var now := 100.0
@@ -261,7 +278,15 @@ func _frames(hand: int, frame: Transform3D, walls: Array, backstop := true) -> D
 	var pull := RollerPark.park(frame, hand, 1.0, -0.9, 0.2)
 	var body := {"scale": 1.0, "look": LOOK, "bar_z": CarryOnProps.REACH_BUILT_M}
 	var flags := {"hand": hand}
-	var seen := {"stand": 0, "tip": 0, "stood_frames": 0, "tip_frames": 0, "tip_step": 0.0}
+	var seen := {
+		"stand": 0,
+		"tip": 0,
+		"stood_frames": 0,
+		"tip_frames": 0,
+		"tip_step": 0.0,
+		"stood_at": Vector3.ZERO,
+		"first_tip": Vector3.ZERO,
+	}
 	var last := Transform3D()
 	for n in SAMPLES + 1:
 		var k := float(n) / SAMPLES
@@ -274,6 +299,8 @@ func _frames(hand: int, frame: Transform3D, walls: Array, backstop := true) -> D
 		elif at >= tip:
 			if seen["tip_frames"] == 0:
 				seen["tip_step"] = xf.origin.distance_to(last.origin)
+				seen["stood_at"] = last.origin
+				seen["first_tip"] = xf.origin
 			seen["tip"] += _points_in(xf, walls)
 			seen["tip_frames"] += 1
 	return seen
