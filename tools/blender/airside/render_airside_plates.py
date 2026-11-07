@@ -14,7 +14,7 @@ and the pack's plane 05 from game/assets/planes/tp_plane_05a.glb:
 - glyphs.png: the sign from the front with each letter A-E on both panels and both
   arrows, plus its back;
 - stand.png: plane 05 parked at a medium stand (stand_placement.gd geometry: wall line
-  z 0, exit x 0, plane origin at (-3.5, 0, -16.9) Godot, nose +z), the bridge docked
+  z 0, exit x 0, stand point (-3.5, 0, -16.9) Godot plus plane_view.gd model_offset 1.7 m, nose +z), the bridge docked
   at its measured door by the build script's pose math, a taxi sign by the lead-in,
   a grey placeholder terminal, perspective from about 45 m;
 - pushback.png: pushback start: the towbarless tug cradling plane 05's nose wheel at
@@ -54,8 +54,10 @@ log = rap.log
 invalid = rap.invalid
 TERMINAL_RGB = (0.80, 0.78, 0.74)
 MARK_RGB = (0.85, 0.15, 0.15)
-# stand_placement.gd: NOSE_GAP_M 2.2 + NOSE_M 14.7, DOOR_SIDE_M 3.5.
-STAND_ORIGIN_G = (-3.5, 0.0, -(2.2 + 14.7))
+# stand_placement.gd: NOSE_GAP_M 2.2 + NOSE_M 14.7, DOOR_SIDE_M 3.5; plane_view.gd
+# then shifts the model by model_offset (0, 0, 1.7), so 05's nose sits 2.21 m off the wall.
+MODEL_OFFSET_Z = 1.7
+STAND_ORIGIN_G = (-3.5, 0.0, -(2.2 + 14.7) + MODEL_OFFSET_Z)
 
 
 def g2b(x, y, z):
@@ -295,7 +297,7 @@ def place_tug(po, plane, pushed_m):
     log("TUG wheel_x=[%.3f, %.3f] wheel_godot_z=[%.3f, %.3f]" % (wheel[:, 0].min(), wheel[:, 0].max(),
                                                                -wheel[:, 1].max(), -wheel[:, 1].min()))
     log("TUG axle_godot=(%.2f, %.3f, %.2f) wheel_r=%.3f mount_err=%.4f nose_godot_z=%.3f (%.2f ahead of the plane "
-        "origin, axle %.2f ahead) tug_front_godot_z=%.3f past_nose=%.3f (limit 2.0) wall_gap=%.3f"
+        "origin, axle %.2f ahead) tug_front_godot_z=%.3f past_nose=%.3f (limit 2.0) wall_gap=%.3f (the wall line is z 0)"
         % (axle.x, axle.z, -axle.y, r, err, nose_g, nose_g - plane_origin_g, -axle.y - plane_origin_g, front_g, past,
            -front_g))
     if err > 0.005:
