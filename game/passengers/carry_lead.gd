@@ -420,20 +420,66 @@ static func anchor(kind: SecurityLooks.Kind, bar_z: float) -> Vector3:
 	return CarryOnProps.grip_anchor(kind)
 
 
+## Whether the move of `bag` (CarryOnProps' record) passes a pulled roller
+## from one pulling hand to the other (pull.R>pull.L or pull.L>pull.R),
+## outside a toilet stall (`in_stall`).
+static func is_pull_swap(bag: Dictionary, in_stall: bool) -> bool:
+	var started := start_of(bag)
+	return (
+		bag["kind"] == SecurityLooks.Kind.ROLLER
+		and not in_stall
+		and started[0] == End.HELD
+		and end_of(bag["home"], bag["carry"]) == End.HELD
+		and started[1] != hand_of(bag["home"])
+		and bag["carry_from"] == SecurityLooks.Carry.PULL
+		and bag["carry"] == SecurityLooks.Carry.PULL
+	)
+
+
+## Where a pulled roller passed between the pulling hands starts from now
+## (world), the body drawn at `frame` at sim time `now`: where it was as the
+## move started ("from", in the body's frame then, "start_body"), carried
+## along with the walker and turned from the body's heading then toward its
+## heading now by at most RollerPull.SWING_TURN a tick of the move ("since"),
+## as fast as the trailing roller swings. Turned with the body, it swung round
+## a walker turning 22 degrees a tick 0.10 m a frame on top of the move's own
+## travel, and jumped 0.153 m a frame (test_roller_queue_stand's cafe guest,
+## changing hands in the turn onto the cafe's diagonal); held to SWING_TURN,
+## 0.137 m. Worked out from the move's start and sim time only, never from the
+## frames drawn before: stepped on from the last draw, a first draw a tick late
+## left the start unturned (Sol review of f8b021f).
+static func pull_swap_start(bag: Dictionary, frame: Transform3D, now: float) -> Transform3D:
+	var began: Transform3D = bag.get("start_body", frame)
+	var most := RollerPull.SWING_TURN * maxf(now - float(bag["since"]), 0.0)
+	var turn := angle_difference(began.basis.get_euler().y, frame.basis.get_euler().y)
+	var turned := Basis(Vector3.UP, clampf(turn, -most, most)) * began.basis
+	return Transform3D(turned, frame.origin) * (bag["from"] as Transform3D)
+
+
 ## Where a pulled roller passed between the pulling hands goes, at `t` of the
-## carry: its start (world now) mirrored across the body drawn at `frame`,
-## the same pull on the other hand (the hands mirror, CarryArm.twist_degrees),
-## eased onto `want` (the receiving hand's pull) over PULL_SWAP_END. Not
-## `want` itself, which follows the hand this move poses: reaching across for
-## the bar, the receiving hand drew the pull's end to the giving hand's side,
-## the bar half way was 0.80 m from its shoulder, out of its reach, and the bag
-## jumped 0.15 m as it was handed over (test_roller_hand_change_reach).
+## carry, the body drawn at `frame`: its grip bar (`bar`, the bag's own frame)
+## where it was as the move started (`from`, in the body's frame then)
+## mirrored across the body, the same pull on the other hand (the hands
+## mirror, CarryArm.twist_degrees), its axle where a straight pull trails it on
+## that side (RollerPull.TRAIL_SIDE_M out, TRAIL_M back), eased onto `want` (the
+## receiving hand's pull) over PULL_SWAP_END. Not `want` itself, which follows
+## the hand this move poses: reaching across for the bar, the receiving hand
+## drew the pull's end to the giving hand's side, the bar half way was 0.80 m
+## from its shoulder, out of its reach, and the bag jumped 0.15 m as it was
+## handed over (test_roller_hand_change_reach). Not the whole start mirrored:
+## stamped in a turn, the trailing roller was swung 0.18 m wider than a straight
+## pull, the goal as far out, and the receiving hand missed the bar by 0.056 m.
 static func pull_swap_goal(
-	start: Transform3D, want: Transform3D, frame: Transform3D, t: float
+	from: Transform3D, want: Transform3D, frame: Transform3D, t: float, bar: Vector3
 ) -> Transform3D:
 	var flip := Basis(Vector3(-1.0, 0.0, 0.0), Vector3.UP, Vector3.BACK)
-	var local := frame.affine_inverse() * start
-	var goal := frame * Transform3D(flip * local.basis * flip, flip * local.origin)
+	var grip := flip * (from * bar)
+	var scale_by := from.basis.get_scale().x
+	var out := 1.0 if grip.x > 0.0 else -1.0
+	var axle := Vector3(
+		out * RollerPull.TRAIL_SIDE_M, CarryOnProps.ROLLER_AXLE.y * scale_by, -RollerPull.TRAIL_M
+	)
+	var goal := frame * RollerPull.pulled(grip, axle, scale_by)
 	return goal.interpolate_with(want, smoothstep(PULL_SWAP_END.x, PULL_SWAP_END.y, t))
 
 
@@ -599,15 +645,7 @@ static func plan(
 	var anchor_to := loose
 	# Between two pulling hands a roller is held by its bar's middle in both
 	# (anchor_from above), and goes over to the other side (pull_swap_goal()).
-	var pull_swap: bool = (
-		roller
-		and not stall
-		and from_end == End.HELD
-		and to_end == End.HELD
-		and from_hand != to_hand
-		and bag["carry_from"] == SecurityLooks.Carry.PULL
-		and bag["carry"] == SecurityLooks.Carry.PULL
-	)
+	var pull_swap := is_pull_swap(bag, stall)
 	if to_end == End.HELD and not pull_swap:
 		anchor_to = want.affine_inverse() * (body["grips"][to_hand] as Vector3)
 		if roller:
@@ -681,7 +719,7 @@ static func plan(
 		var lift := flags
 		var goal := want
 		if pull_swap:
-			goal = pull_swap_goal(start, want, frame, t)
+			goal = pull_swap_goal(bag["from"], want, frame, t, loose)
 		if stall and from_end == End.REST and to_end == End.HELD:
 			lift = flags.duplicate()
 			lift["rising"] = true

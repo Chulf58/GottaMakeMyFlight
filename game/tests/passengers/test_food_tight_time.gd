@@ -1,15 +1,18 @@
 class_name TestFoodTightTime
 extends GdUnitTestSuite
-## A seated guest in a bar or a restaurant who runs short of time leaves early
-## and pays the short share (decision food-and-drink-cafe-bar-sit-down-
-## restaurant-and-grab-and-go-st, point 2). The restaurant guest still makes
-## the flight. The bar guest, already late at a walk, catches the burst's
-## boarding line and is held at its pace, so it misses behind the line, for
-## the crowding reason, and not in the bar (decision a-late-passenger-held-up-
-## by-people-traffic-at-boarding-misse). The time runs
-## short for real: the guest is admitted while security is empty, then a burst
-## of passengers fills the scanner queues behind it, so the leave deadline
-## passes while it is seated. Nothing sets a deadline by hand.
+## A seated guest in a restaurant who runs short of time leaves early and
+## pays the short share (decision food-and-drink-cafe-bar-sit-down-
+## restaurant-and-grab-and-go-st, point 2), and still makes the flight. The
+## time runs short for real: the guest is admitted while security is empty,
+## then a burst of passengers fills the scanner queues behind it, so the leave
+## deadline passes while it is seated. Nothing sets a deadline by hand.
+##
+## The bar case (a bar guest held up in the burst's boarding line, missing for
+## the crowding reason) is retired, by user ruling 2026-11-07 on the hold-line
+## rebuild (decision hold-line-rebuild-the-security-line-follows-where-people-
+## sta): the corrected security forecast lets the guest leave in time at every
+## lead it is admitted at (1000 down to 540 ticks all made the flight; at 500
+## and 460 the bar refuses it), so its premise no longer holds.
 
 ## Just checked in, between the desks and the scanner lanes.
 const CROWD_CELL := Vector2i(16, 12)
@@ -45,14 +48,14 @@ func _checked_in(world: PassengerTestWorld) -> void:
 ## A landside guest admitted to a `venue` visit and seated, then the burst.
 ## Returns {"guest", "visit", "world", "mood" (when it got up), "seated_at",
 ## "left_at", "full" (what a full visit would have paid at that mood)}.
-func _run(venue: StringName) -> Dictionary:
+func _run(venue: StringName, lead := 700) -> Dictionary:
 	var grid := BuildGrid.new()
 	CafeTestLayout.build(grid, false, venue)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
-	# The guest spawns 700 ticks before boarding opens (tick 0 when boarding
-	# opened at tick 700), so its schedule is as tight as the case needs.
-	var spawn_at := PassengerTestWorld.boarding_tick() - 700
+	# The guest spawns `lead` ticks before boarding opens (700: tick 0 when
+	# boarding opened at tick 700), so its schedule is as tight as the case needs.
+	var spawn_at := PassengerTestWorld.boarding_tick() - lead
 	world.run_to(spawn_at)
 	var guest := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	guest.hunger = 0
@@ -93,8 +96,8 @@ func _run(venue: StringName) -> Dictionary:
 
 ## With `held_up`, the guest misses the flight in the boarding line instead of
 ## making it.
-func _check_leaves_early(venue: StringName, held_up := false) -> void:
-	var seen := _run(venue)
+func _check_leaves_early(venue: StringName, lead := 700) -> void:
+	var seen := _run(venue, lead)
 	var world: PassengerTestWorld = seen["world"]
 	var guest: Passenger = seen["guest"]
 	var visit: CafeVisit = seen["visit"]
@@ -126,43 +129,12 @@ func _check_leaves_early(venue: StringName, held_up := false) -> void:
 	# An early leaver does not collect the mood lift of a full visit.
 	assert_int(guest.mood).is_equal(seen["mood"])
 	world.run_to(world.flights.doors_close_tick(guest.flight_id) + 1)
-	if not held_up:
-		# And it still makes the flight.
-		assert_int(guest.stage).is_equal(Passenger.Stage.MADE)
-		return
-	# Held up by people traffic: it missed out at the boarding line, not in
-	# the bar, and the flight's result blames the crowds.
-	var reasons: Array = FlightResult.summarize(world.sim, guest.flight_id)["reasons"]
-	print(
-		(
-			"%s guest missed at %s, %s; reasons %s"
-			% [
-				venue,
-				Passenger.Stage.keys()[guest.missed_stage],
-				Passenger.Stuck.keys()[guest.missed_stuck],
-				reasons
-			]
-		)
-	)
-	assert_int(guest.stage).is_equal(Passenger.Stage.MISSED)
-	assert_bool(guest.missed_stage in [Passenger.Stage.TO_EXIT, Passenger.Stage.APRON]).is_true()
-	assert_int(guest.missed_stuck).is_equal(Passenger.Stuck.CROWDED)
-	(
-		assert_bool(
-			reasons.any(func(r: Dictionary) -> bool: return r["text"] == FlightResult.CROWDED_TEXT)
-		)
-		. is_true()
-	)
+	# And it still makes the flight.
+	assert_int(guest.stage).is_equal(Passenger.Stage.MADE)
 
 
 func test_a_restaurant_guest_short_of_time_leaves_early_pays_less_and_makes_the_flight() -> void:
-	_check_leaves_early(&"restaurant")
-
-
-## Changed for decision a-late-passenger-held-up-by-people-traffic-at-boarding-
-## misse: this guest made the flight only by running through the burst's
-## walkers on the apron. Runners now keep a boarding line's pace, so it misses
-## there, and the miss is the terminal's crowding, not the bar's.
-func test_a_bar_guest_short_of_time_leaves_early_pays_less_and_misses_in_the_boarding_line(
-) -> void:
-	_check_leaves_early(&"bar", true)
+	# 820 ticks ahead (was 700): the forecast now counts the visit before the
+	# walk to security, so at 700 the visit no longer fits (it was forecast as
+	# the guest's own walk to its committed scanner, 116 ticks for any visit).
+	_check_leaves_early(&"restaurant", 820)

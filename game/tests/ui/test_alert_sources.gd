@@ -50,10 +50,16 @@ func _short_lane_world() -> int:
 func test_a_full_check_in_queue_is_a_cause_pointing_at_its_desk() -> void:
 	var desk := _short_lane_world()
 	assert_array(AlertSources.queue_full(_world.sim)).is_empty()
+	# Three ticks apart: the fifth walks on past the first hold cell and turns
+	# back onto the second (TerminalLayout.line_of(), StationQueue.approach()),
+	# and stands there before the first is served.
 	for i in 5:
 		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-		_world.run_to(_world.clock.tick + 12)
-	_world.run_to(_world.clock.tick + 25)
+		_world.run_to(_world.clock.tick + 3)
+	for i in 120:
+		if _world.sim.holding_of(desk).size() == 2:
+			break
+		_world.step()
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	var causes := AlertSources.queue_full(_world.sim)
 	assert_array(_keys(causes)).is_equal([AlertSources.QUEUE_CHECKIN])

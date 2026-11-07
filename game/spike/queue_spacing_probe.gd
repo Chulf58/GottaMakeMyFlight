@@ -2,23 +2,36 @@ extends SceneTree
 ## Headless probe of the spacing in desk and security lanes as they move up
 ## (board 34b0c378, QueueRipple). It boots main.tscn, builds CafeTestLayout
 ## with a gate desk, opens the airport, sends GUESTS calm passengers with a
-## roller each and EXTRA more of the first flight to check in, and plays
+## roller each and EXTRA more of the first flight to check in (SECURITY_EXTRA
+## at security, unless --extra is given), and plays
 ## TICKS ticks, one a frame. Each frame, for every lane of the place (desks
 ## for --place=checkin, scanners for --place=security), it measures each pair
 ## of lane neighbours and, at a desk, the passenger who just checked in
 ## against the new front: body to body and each body to the other's roller
 ## (QueueSpacing.pair(); node transforms only, so headless is valid for these
 ## distances, unlike body points inside a bag).
+## TRACE lines name each member's facing (yaw) and how near its own roller is
+## to the other body, so a failing pair says whose roller it is.
 ## Columns: "lane" pairs count against the ripple; "held" pairs have a member
 ## that was in a holding list or joined the lane on a cell another queue member
-## stood on (board c5b6664f) and are reported apart. Rows: "moveup" frames
-## (either member walking) and "still" frames.
+## stood on (board c5b6664f) and are reported apart; pairs of holders and the
+## lane's last member against the first holder are measured into it too.
+## Rows: "moveup" frames (either member walking) and "still" frames.
+## HOLDERS prints the most holders seen at one station and the frames on
+## which standing holders shared a cell (holders N on N distinct cells).
 ## Pass (each printed with the values it compared): in the lane column on
 ## moveup frames no body is within ROLLER_CLEAR_M of the other's roller and no
 ## two bodies are at BODY_ZERO_M. Control: lane members set off to move up
 ## (MOVE_UPS > 0), else PROBE_INVALID. THROUGHPUT prints the passengers served
 ## at the busiest station of the place over WINDOW ticks from its first
 ## service (info, for comparing builds).
+##
+## With --strip (windowed): STRIP_FRAMES frames of a full security queue
+## whose line runs on behind its lane (TerminalLayout.line_of()), STRIP_EVERY
+## ticks apart, from when STRIP_HOLDERS holders stand on their hold cells.
+## Before each save every member's feet and head project inside the frame by
+## MARGIN_PX and a sight line lands first on each holder's body (PlateSight),
+## else the frame is refused; PROBE_INVALID if not every frame is taken.
 ##
 ## Run: Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
 ##   --path game -s res://spike/queue_spacing_probe.gd -- --place=checkin \
@@ -29,6 +42,11 @@ const QueueSpacing := preload("res://spike/queue_spacing.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const NO_TAG := "nothing_has_this_tag"
 const GUESTS := 4
+const EXTRA := 16
+## With EXTRA, security seeds 2 and 4 measured no in-order lane pair moving up
+## (every move-up pair was out of order: PROBE_INVALID); with 40 all of seeds
+## 1 to 4 build lanes of 369 to 924 in-order move-up frames (board de64b195).
+const SECURITY_EXTRA := 40
 const ROLLER_CLEAR_M := 0.30
 const BODY_ZERO_M := 0.001
 const WINDOW := 1000
@@ -41,11 +59,14 @@ const MARGIN_PX := 12.0
 const OUT_REL := "res://../tools/blender/out/queue-spacing"
 ## TRACE lines printed on failing lane pairs.
 const TRACES := 12
+const STRIP_FRAMES := 4
+const STRIP_EVERY := 15
+const STRIP_HOLDERS := 3
 
 var _seed := 0
 var _place := "checkin"
 var _ticks := 2500
-var _extra := 16
+var _extra := -1
 var _main: Node3D
 var _clock: SimClock
 var _sim: PassengerSim
@@ -57,6 +78,11 @@ var _order := {}
 var _in_lane := {}
 var _moving := {}
 var _move_ups := 0
+## The most holders at one station on one frame, and the frames on which two
+## standing holders of one station shared a cell.
+var _holders_max := 0
+var _holders_shared := 0
+var _holder_frames := 0
 var _traced := 0
 ## Station -> the passenger who last left it.
 var _leaver := {}
@@ -72,6 +98,12 @@ var _plate_tries := 0
 ## [set-off tick, follower id, id ahead] of the move-up to plate, or [].
 var _shot: Array = []
 var _cam: Camera3D
+var _strip_on := false
+## The station stripped (0 until one has enough holders), the frames still to
+## take and the tick the next is due.
+var _strip_station := 0
+var _strip_left := 0
+var _strip_next := 0
 
 
 func _initialize() -> void:
@@ -87,6 +119,10 @@ func _initialize() -> void:
 			_extra = int(arg.get_slice("=", 1))
 		elif arg == "--plate":
 			_plate_on = true
+		elif arg == "--strip":
+			_strip_on = true
+	if _extra < 0:
+		_extra = SECURITY_EXTRA if _place == "security" else EXTRA
 	print("PROBE sim_seed=%d place=%s ticks=%d extra=%d" % [_seed, _place, _ticks, _extra])
 	_run.call_deferred()
 
@@ -100,6 +136,8 @@ func _run() -> void:
 		_clock.advance(SimClock.STEP)
 		await process_frame
 		_watch()
+		if _strip_on:
+			await _strip_step()
 		if _plate_on and not _plated and not _shot.is_empty():
 			if _clock.tick >= int(_shot[0]) + SHOT_AFTER:
 				await _plate(_shot[1], _shot[2])
@@ -108,7 +146,107 @@ func _run() -> void:
 		print("PROBE_INVALID no move-up plate was taken")
 		quit(1)
 		return
+	if _strip_on and (_strip_station == 0 or _strip_left > 0):
+		print("PROBE_INVALID the strip has %d frames left" % _strip_left)
+		quit(1)
+		return
 	quit(_report())
+
+
+## Starts the strip at the first scanner with STRIP_HOLDERS holders all on
+## their places, then takes a frame every STRIP_EVERY ticks.
+func _strip_step() -> void:
+	if _strip_station == 0:
+		for station in _sim.layout.scanners:
+			if _sim.holding_of(station).size() >= STRIP_HOLDERS and _all_placed(station):
+				_strip_station = station
+				_strip_left = STRIP_FRAMES
+				_strip_next = _clock.tick
+				break
+	if _strip_left > 0 and _clock.tick >= _strip_next:
+		if await _strip_frame():
+			_strip_left -= 1
+		_strip_next = _clock.tick + STRIP_EVERY
+
+
+func _all_placed(station: int) -> bool:
+	var line := _line(station)
+	var members := _sim.queue_of(station) + _sim.holding_of(station)
+	for i in members.size():
+		var p := _sim.get_passenger(members[i])
+		if p.is_moving() or p.at != line[i]:
+			return false
+	return true
+
+
+## One strip frame of the stripped station's queue; returns whether it was saved.
+func _strip_frame() -> bool:
+	var members := _sim.queue_of(_strip_station) + _sim.holding_of(_strip_station)
+	var holding := _sim.holding_of(_strip_station)
+	var mid := Vector3.ZERO
+	var tags := {}
+	for id in members:
+		var node := _views.node_for(id)
+		if node == null:
+			print("STRIP refused: %d not drawn" % id)
+			return false
+		mid += node.global_position
+		tags[node] = "m%d" % id
+	mid /= members.size()
+	if _cam == null:
+		_cam = Camera3D.new()
+		_cam.fov = 50.0
+		_main.add_child(_cam)
+	_cam.current = true
+	_cam.look_at_from_position(mid + Vector3(6.0, 12.0, 6.0), mid, Vector3.UP)
+	await process_frame
+	var frame := Rect2(Vector2.ZERO, _cam.get_viewport().get_visible_rect().size).grow(-MARGIN_PX)
+	for id in members:
+		var feet := _views.node_for(id).global_position
+		for point in [feet, feet + Vector3.UP * 1.7]:
+			var at := _cam.unproject_position(point)
+			if _cam.is_position_behind(point) or not frame.has_point(at):
+				print("STRIP refused: %d at %s out of frame %s" % [id, at, frame])
+				return false
+	var owners: Array[Node] = [_views]
+	var holder := PlateSight.colliders(root, owners, tags)
+	await physics_frame
+	var space := holder.get_world_3d().direct_space_state
+	var eye := _cam.global_position
+	var seen := 0
+	var cells := {}
+	for id in holding:
+		var chest: Array[Vector3] = [_views.node_for(id).global_position + Vector3.UP * 1.2]
+		seen += int(
+			not PlateSight.sight_lines(space, eye, chest, "m%d" % id)["on_subject"].is_empty()
+		)
+		cells[_sim.get_passenger(id).at] = true
+	var middle: Array[Vector3] = [mid + Vector3.UP * 1.2]
+	var control := PlateSight.sight_lines(space, eye, middle, NO_TAG)
+	holder.queue_free()
+	print(
+		(
+			"STRIP t%d station %d members %d holders %d on %d cells, holders seen %d, control %d (0)"
+			% [
+				_clock.tick,
+				_strip_station,
+				members.size(),
+				holding.size(),
+				cells.size(),
+				seen,
+				control["on_subject"].size()
+			]
+		)
+	)
+	if seen < holding.size():
+		print("STRIP refused: a holder is hidden")
+		return false
+	var img := await PlateSight.grab(self)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_REL))
+	var file := "/security_holdline_s%d_t%d.png" % [_seed, _clock.tick]
+	img.save_png(ProjectSettings.globalize_path(OUT_REL + file))
+	print("PLATE saved %s" % ProjectSettings.globalize_path(OUT_REL + file))
+	return true
 
 
 func _boot() -> bool:
@@ -196,7 +334,7 @@ func _watch() -> void:
 				_move_ups += 1
 				_candidate(lane, id)
 			_moving[id] = p.is_moving()
-			if not p.is_moving() and p.at == _sim.layout.lanes[station][lane.find(id)]:
+			if not p.is_moving() and p.at == _line(station)[lane.find(id)]:
 				# Alone on its own place once: from here it moves up as any lane walker.
 				var shared := (lane + _sim.holding_of(station)).any(
 					func(o: int) -> bool: return o != id and _sim.get_passenger(o).at == p.at
@@ -206,6 +344,13 @@ func _watch() -> void:
 					_order.erase(id)
 		for i in range(lane.size() - 1):
 			_measure(lane[i], lane[i + 1])
+		var holding := _sim.holding_of(station)
+		if not holding.is_empty():
+			_count_holders(station, holding)
+			if not lane.is_empty():
+				_measure(lane[lane.size() - 1], holding[0])
+			for i in range(holding.size() - 1):
+				_measure(holding[i], holding[i + 1])
 		var left: int = _leaver.get(station, 0)
 		if left != 0 and not lane.is_empty() and lane[0] != left and _views.node_for(left) != null:
 			var d := QueueSpacing.pair(_views, _sim, left, lane[0])
@@ -220,7 +365,7 @@ func _watch() -> void:
 ## member stands on: it then walks through that member to its place, the lane
 ## order not being the order on the cells ("order").
 func _joined(station: int, p: Passenger, lane: Array[int]) -> void:
-	var cells: Array = _sim.layout.lanes[station]
+	var cells: Array = _line(station)
 	for other in lane + _sim.holding_of(station):
 		if other != p.id and _sim.get_passenger(other).at == p.at:
 			_held[p.id] = true
@@ -230,6 +375,60 @@ func _joined(station: int, p: Passenger, lane: Array[int]) -> void:
 		if mine >= 0 and theirs > mine:
 			_order[p.id] = true
 			_order[other] = true
+
+
+## The places of `station`'s queue members in order: its lane cells, then its
+## hold cells where the layout derives them (TerminalLayout.line_of()).
+func _line(station: int) -> Array:
+	if _sim.layout.has_method("line_of"):
+		return _sim.layout.call("line_of", station)
+	return _sim.layout.lanes[station]
+
+
+## Counts the holders of one station on this frame and whether two of them
+## standing still share a cell.
+func _count_holders(station: int, holding: Array[int]) -> void:
+	_holders_max = maxi(_holders_max, holding.size())
+	_holder_frames += 1
+	var cells := {}
+	for id in holding:
+		var p := _sim.get_passenger(id)
+		if p.is_moving():
+			continue
+		if cells.has(p.at):
+			_holders_shared += 1
+			if _traced < TRACES:
+				_traced += 1
+				_trace_holders(station, cells[p.at], id)
+			return
+		cells[p.at] = id
+
+
+## HOLDTRACE: two standing holders `a` and `b` of `station` on one cell, each
+## with its stage, cell, place on the line and the index it holds there.
+func _trace_holders(station: int, a: int, b: int) -> void:
+	var line := _line(station)
+	var members := _sim.queue_of(station) + _sim.holding_of(station)
+	var text := (
+		"HOLDTRACE t%d station %d line %d lane %d"
+		% [_clock.tick, station, line.size(), _sim.queue_of(station).size()]
+	)
+	for id in [a, b]:
+		var p := _sim.get_passenger(id)
+		var index := members.find(id)
+		text += (
+			" | %d st%d stuck%d at %s index %d place %s halt %d"
+			% [
+				id,
+				p.stage,
+				p.stuck,
+				p.at,
+				index,
+				line[index] if index < line.size() else "none",
+				p.halt_tick
+			]
+		)
+	print(text)
 
 
 func _serve(station: int) -> void:
@@ -254,7 +453,8 @@ func _measure(a: int, b: int, leaver := false) -> void:
 	elif _order.has(a) or _order.has(b):
 		column = "order"
 	var key := "%s %s" % [column, "moveup" if moving else "still"]
-	if column == "lane" and moving and _traced < TRACES and d["roller"] < ROLLER_CLEAR_M:
+	var traced := (column == "lane" and moving) or column == "held"
+	if traced and _traced < TRACES and d["roller"] < ROLLER_CLEAR_M:
 		_traced += 1
 		_trace(a, b, d)
 	var row: Array = _rows.get_or_add(key, [0, INF, 0, INF, 0, ""])
@@ -274,11 +474,26 @@ func _measure(a: int, b: int, leaver := false) -> void:
 ## tick, and the lane.
 func _trace(a: int, b: int, d: Dictionary) -> void:
 	var line := "TRACE t%d body %.3f roller %.3f" % [_clock.tick, d["body"], d["roller"]]
-	for id in [a, b]:
-		var p := _sim.get_passenger(id)
+	for pair in [[a, b], [b, a]]:
+		var p := _sim.get_passenger(pair[0])
+		var node := _views.node_for(pair[0])
+		var other := _views.node_for(pair[1]).global_position
+		var near := INF
+		for roller in QueueSpacing.rollers(_views, _sim, pair[0]):
+			near = minf(near, QueueSpacing.least(QueueSpacing.surface(roller), other))
 		line += (
-			" | %d st%d at %s moving %s halt %d station %d"
-			% [id, p.stage, p.at, p.is_moving(), p.halt_tick, p.station]
+			" | %d st%d at %s moving %s halt %d station %d yaw %.2f its roller to %d %.3f"
+			% [
+				pair[0],
+				p.stage,
+				p.at,
+				p.is_moving(),
+				p.halt_tick,
+				p.station,
+				node.rotation.y,
+				pair[1],
+				near
+			]
 		)
 		if p.station != 0:
 			line += " lane %s" % [_sim.queue_of(p.station)]
@@ -320,6 +535,15 @@ func _report() -> int:
 		)
 		if key in ["lane moveup", "leaver moveup"] and (row[2] > 0 or row[4] > 0):
 			failed = true
+	print(
+		(
+			(
+				"HOLDERS most at one station %d; frames with holders %d, "
+				+ "with two standing holders on one cell %d"
+			)
+			% [_holders_max, _holder_frames, _holders_shared]
+		)
+	)
 	var lane_frames: int = (_rows.get("lane moveup", [0]) as Array)[0]
 	print(
 		"CONTROL move-ups %d (> 0), lane pair frames moving up %d (> 0)" % [_move_ups, lane_frames]

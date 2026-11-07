@@ -11,6 +11,11 @@ extends GdUnitTestSuite
 const CROWD_CELL := Vector2i(16, 12)
 ## Passengers who check in at once, enough to pass a landside guest's deadline.
 const BURST := 40
+## The guest of the first two cases spawns this many ticks into the run.
+## Moved for bounded lines (board c5b6664f): the burst now waits for places on
+## the full lines, so the forecast no longer puts a guest spawned at tick 0
+## past its doors; spawned later, it has too little time again.
+const LATE := 150
 
 var _worlds: Array[PassengerTestWorld] = []
 
@@ -44,14 +49,16 @@ func _burst(world: PassengerTestWorld) -> void:
 		p.clear_path()
 
 
-## A landside guest admitted to a stall visit while security is empty.
-func _admitted() -> Array:
+## A landside guest admitted to a stall visit while security is empty,
+## spawned `late` ticks into the run, its flight starting on `flight_from`.
+func _admitted(late := LATE, flight_from := 0) -> Array:
 	var grid := BuildGrid.new()
 	CafeTestLayout.build(grid, false, &"stall", false)
-	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(flight_from))
 	_worlds.append(world)
+	world.run_to(late)
 	var guest := _new_passenger(world)
-	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < 600:
+	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < late + 600:
 		world.step()
 	(
 		assert_bool(world.sim.cafes.try_visit(guest))
@@ -76,7 +83,10 @@ func _assert_gave_up(world: PassengerTestWorld, guest: Passenger, visit: CafeVis
 
 
 func test_a_guest_on_its_way_to_the_stall_gives_up_when_security_fills() -> void:
-	var made := _admitted()
+	# 100 ticks later than LATE: with the deadline forecast at the tick's
+	# boundary (decision hold-line-rebuild-the-security-line-follows-where-
+	# people-sta) the burst leaves a guest at LATE time to reach its order.
+	var made := _admitted(LATE + 100)
 	var world: PassengerTestWorld = made[0]
 	var guest: Passenger = made[1]
 	var visit: CafeVisit = made[2]
@@ -118,26 +128,49 @@ func test_a_guest_giving_its_order_gives_up_unpaid_when_security_fills() -> void
 ## very tick the order completes is therefore enforced by the order itself: the
 ## guest gives up unpaid instead of paying in full and setting off too late.
 func test_a_deadline_passing_on_the_tick_the_order_completes_gives_up_unpaid() -> void:
-	var made := _admitted()
+	# Moved for bounded lines (board c5b6664f): a burst reaches the queues over
+	# many ticks, so its size no longer lands the deadline on one chosen tick;
+	# the flight is moved a tick at a time until the deadline lands there. The
+	# guest spawns 100 ticks in, so the deadline starts before the order ends
+	# and the flight only ever moves later (a flight starting before tick 0 is
+	# not set up).
+	var shift := 0
+	var made := []
+	var service_end := 0
+	var fresh := 0
+	for attempt in 12:
+		after_test()
+		made = _admitted(100, shift)
+		var world: PassengerTestWorld = made[0]
+		var guest: Passenger = made[1]
+		var visit: CafeVisit = made[2]
+		while guest.stage != Passenger.Stage.CAFE_ORDER and world.clock.tick < 1500:
+			world.step()
+		assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_ORDER)
+		service_end = visit.service_end
+		# Two ticks before the order completes, with the deadline still ahead.
+		while world.clock.tick < service_end - 2:
+			world.step()
+		assert_int(visit.deadline).is_greater(service_end)
+		_burst(world)
+		world.step()
+		var spot: Vector2i = world.sim.cafes.layout.counter(visit.room, visit.counter)["lane"][0]
+		fresh = VisitForecast.live_deadline(world.sim, guest, spot, 0, visit.resume_stage)
+		var seen := [shift, service_end, fresh]
+		print("flight moved %d: service_end %d, deadline after the burst %d" % seen)
+		if fresh != service_end:
+			shift += service_end - fresh
+		elif guest.stage != Passenger.Stage.CAFE_ORDER:
+			# Its own check, earlier in the tick, fired: a tick later.
+			shift += 1
+		else:
+			break
 	var world: PassengerTestWorld = made[0]
 	var guest: Passenger = made[1]
 	var visit: CafeVisit = made[2]
-	while guest.stage != Passenger.Stage.CAFE_ORDER and world.clock.tick < 1500:
-		world.step()
-	assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_ORDER)
-	var service_end := visit.service_end
-	# Two ticks before the order completes, with the deadline still ahead.
-	while world.clock.tick < service_end - 2:
-		world.step()
-	assert_int(visit.deadline).is_greater(service_end)
-	_burst(world)
-	world.step()
 	# One tick before: the burst has reached the queues, the guest's own check
-	# has not fired yet, and the deadline now falls at or before the tick the
-	# order ends.
-	var spot: Vector2i = world.sim.cafes.layout.counter(visit.room, visit.counter)["lane"][0]
-	var fresh := VisitForecast.live_deadline(world.sim, guest, spot, 0, visit.resume_stage)
-	print("service_end %d, deadline after the burst %d" % [service_end, fresh])
+	# has not fired yet, and the deadline now falls on the tick the order ends.
+	assert_int(fresh).is_equal(service_end)
 	assert_int(world.clock.tick).is_equal(service_end - 1)
 	assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_ORDER)
 	assert_int(fresh).is_less_equal(service_end)
