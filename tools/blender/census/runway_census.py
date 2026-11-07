@@ -718,4 +718,6 @@ def main():
     log("CENSUS done %d pieces, %d sheets and lineups" % (len(recs), len(plates)))
 
 
-main()
+# plane_offsets.py imports this file for plane_measure() and its helpers.
+if __name__ == "__main__":
+    main()
