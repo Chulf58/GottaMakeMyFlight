@@ -109,6 +109,8 @@ static func place_bags(
 				)
 			var hand: int = held["hands"][i]
 			var in_stall: bool = held.get("in_stall", false)
+			if leading(bag, now) and CarryLead.is_pull_swap(bag, in_stall):
+				start_now = CarryLead.pull_swap_start(bag, frame, now)
 			var flags := {
 				"in_stall": in_stall,
 				"hand_carry": bag["carry"] == SecurityLooks.Carry.HAND,
