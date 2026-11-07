@@ -1,11 +1,16 @@
 class_name QueueRipple
 extends RefCounted
-## A desk or security lane moves up in a ripple (board 34b0c378). Its places
+## A desk or security line (its lane, then its hold cells) moves up in a
+## ripple (board 34b0c378). Its places
 ## are 1 m apart, and a roller in the walking pull trails its axle 1.00 to
 ## 1.04 m behind the body, so a walker that stepped up the moment the one ahead
 ## set off walked into that roller and stood on it until it was stood up
 ## beside its walker (headless measure on main 86e3011: 0.131 to 0.138 m from
 ## the follower's feet, 20 to 28 ticks a move-up).
+## - A lane walker more than a place behind the one ahead steps up at once:
+##   the cell it steps onto is clear of that walker and its trailing roller
+##   (decision hold-line-rebuild-the-security-line-follows-where-people-sta,
+##   so a hold line closes its gaps without a pause per place).
 ## - A lane walker behind a walker pulling a roller steps up only once that
 ##   walker stands on its own place and has stood still STAND_TICKS since its
 ##   walk ended (Passenger.halt_tick): RollerPark stands the roller up over its
@@ -29,16 +34,18 @@ const STAND_TICKS := 10
 const FRONT_CLEAR_MM := 1000
 
 
-## may_step() for lane member `p` of `sim`, on its tick.
+## may_step() for queue member `p` of `sim`, on its tick.
 static func sim_may_step(sim: PassengerSim, p: Passenger) -> bool:
-	var lane := sim.queue_of(p.station)
+	var members := sim.queue_of(p.station) + sim.holding_of(p.station)
 	var desk := not sim.layout.passages.has(p.station)
-	return may_step(sim, p, lane, sim.layout.lanes[p.station], sim.tick, desk)
+	return may_step(sim, p, members, sim.layout.line_of(p.station), sim.tick, desk)
 
 
-## Whether passenger `p`, in `lane` (its places `cells`), may set off
-## for its place on tick `now`. `host` has get_passenger() and, for a desk
-## (`desk`), passenger_ids(). True when it already stands on its place.
+## Whether passenger `p`, in `lane` (a queue's members, lane then holding
+## list; their places `cells`, the station's line), may set off for its place
+## on tick `now`, so a holder moves up behind the one ahead as a lane walker
+## does. `host` has get_passenger() and, for a desk (`desk`),
+## passenger_ids(). True when it already stands on its place.
 static func may_step(
 	host: Object, p: Passenger, lane: Array, cells: Array, now: int, desk: bool
 ) -> bool:
@@ -48,6 +55,12 @@ static func may_step(
 	if index > 0:
 		var ahead: Passenger = host.get_passenger(lane[index - 1])
 		var roller := pulls_roller(ahead)
+		var here := cells.find(p.at)
+		var there := cells.find(ahead.at)
+		if here > 0 and there >= 0 and here - 1 > there + 1:
+			# More than a place behind: the cell it steps onto is clear of the
+			# one ahead and of the roller trailing it, so it closes the gap now.
+			return true
 		if ahead.is_moving():
 			# Walking off without a roller it leaves nothing behind to walk into.
 			return not roller

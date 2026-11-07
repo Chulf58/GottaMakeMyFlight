@@ -16,10 +16,19 @@ const CROWD_CELL := Vector2i(16, 12)
 ## scanners serve them (one per 20 ticks), so the queue keeps growing.
 const CROWD_EVERY := 7
 const CROWD_UNTIL := 700
+## The scenario starts this many ticks into the run (it started at tick 0):
+## moved for decision hold-line-rebuild-the-security-line-follows-where-
+## people-sta, where newcomers queue behind the guest by their check-in, so a
+## guest starting at tick 0 had the slack to finish its visit (outcome
+## COMPLETE, deadline 607 at the end).
+const START := 200
 ## The guest of the burst case spawns this long before boarding opens (it was
 ## tick 0 when boarding opened at tick 700), so its schedule is as tight as
-## the case needs whatever the phase lengths are.
-const SPAWN_BEFORE_BOARDING := 700
+## the case needs whatever the phase lengths are. 600, moved from 700 for
+## decision hold-line-rebuild-the-security-line-follows-where-people-sta: the
+## burst now waits for places on the full lines, and at 700 it leaves the
+## deadline (672) after the guest's beat (661) instead of passing it.
+const SPAWN_BEFORE_BOARDING := 600
 ## Passengers who check in at once, enough to make a seated guest's deadline
 ## pass (two scanners, SecurityRuntime.BASIC_SCAN_TICKS or more each).
 const BURST := 22
@@ -50,8 +59,9 @@ func _scenario(visit_cafe: bool) -> Array:
 	CafeTestLayout.build(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
+	world.run_to(START)
 	var guest := _new_passenger(world)
-	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < 600:
+	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < START + 600:
 		world.step()
 	var admitted := 0
 	var visit: CafeVisit = null
@@ -62,7 +72,8 @@ func _scenario(visit_cafe: bool) -> Array:
 		print("admitted at %d, deadline %d" % [world.clock.tick, admitted])
 	var earliest := admitted
 	while world.clock.tick < world.flights.doors_close_tick(guest.flight_id) + 1:
-		if world.clock.tick < CROWD_UNTIL and posmod(world.clock.tick, CROWD_EVERY) == 0:
+		var crowding := world.clock.tick < START + CROWD_UNTIL
+		if crowding and posmod(world.clock.tick, CROWD_EVERY) == 0:
 			_checked_in(world)
 		var current := world.sim.cafes.visit_of(guest.id)
 		if current != null:
@@ -75,6 +86,11 @@ func _scenario(visit_cafe: bool) -> Array:
 func _checked_in(world: PassengerTestWorld) -> void:
 	var p := _new_passenger(world)
 	p.stage = Passenger.Stage.TO_SECURITY
+	# Its check-in ends now: free security places go by how long a passenger
+	# has waited since then (PassengerStations.wait_key()), so one that just
+	# checked in comes after the guest, who checked in before its visit. With
+	# no check-in end (0) every newcomer went ahead of the guest and it missed.
+	p.service_end = world.clock.tick
 	p.at = CROWD_CELL
 	p.clear_path()
 
@@ -119,12 +135,14 @@ func test_a_burst_at_security_right_after_the_guests_beat_sends_it_on_at_once() 
 	var approach: Vector2i = visit.seat["approach"]
 	var due := -1
 	while guest.stage == Passenger.Stage.CAFE_SEATED and world.clock.tick < beat_tick + 40:
-		world.step()
+		# Read before the step: the burst's waiters now count at once
+		# (SecurityForecast), so the step that makes it due also ends the visit.
 		var fresh := CafeForecast.live_deadline(
 			world.sim, guest, approach, Passenger.Stage.TO_SECURITY
 		)
-		if due < 0 and fresh <= world.clock.tick:
-			due = world.clock.tick
+		if due < 0 and fresh <= world.clock.tick + 1:
+			due = world.clock.tick + 1
+		world.step()
 	var left := world.clock.tick
 	print(
 		(

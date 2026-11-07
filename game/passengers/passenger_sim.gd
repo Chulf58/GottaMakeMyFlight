@@ -14,8 +14,10 @@ extends Node
 ## Stations are chosen by the earliest estimated service completion (walk,
 ## the service in progress and the queued workload), ties to the lower id,
 ## and the choice is kept until the station goes or the route is lost. Lanes
-## are TerminalLayout's fixed, bounded lanes; a passenger arriving at a full
-## lane waits in its station's holding list. Generic routing never crosses a
+## are TerminalLayout's fixed, bounded lanes; past a full lane a queue goes
+## on in its station's holding list, each holder on its own cell of the hold
+## line (TerminalLayout.line_of()), and a station whose line is full is not
+## chosen (PassengerStations). Generic routing never crosses a
 ## scanner; the passenger being serviced walks its passage, and only cleared
 ## passengers claim seats or head for the exit. Security service, at a basic
 ## scanner or a security lane, is SecurityRuntime's from admission on, and a
@@ -36,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 26
+const SAVE_VERSION := 28
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -163,6 +165,12 @@ var _scheduled: Dictionary = {}
 var _queues: Dictionary = {}
 ## Derived: station id -> passengers walking to it.
 var _incoming: Dictionary = {}
+## Station -> the walker holding its claim on the line's tail
+## (StationQueue.arrive()); saved.
+var _claims: Dictionary = {}
+## The passengers whose beat fell on this tick, forecast for lateness at the
+## tick's boundary (_settle_lateness()).
+var _late_due: Array[Passenger] = []
 ## Derived: seat key -> passenger id.
 var _seat_claims: Dictionary = {}
 var _made := 0
@@ -288,9 +296,16 @@ func on_tick(new_tick: int) -> void:
 	gates.admit(self)
 	cafes.step_counters()
 	PassengerGates.admit_pending(self)
+	PassengerStations.arrive(self)
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
+	# The tick's boundary: every forecast that decides something on the next
+	# tick, against one state (SecurityForecast.begin_boundary()).
+	SecurityForecast.begin_boundary(self)
+	_settle_lateness()
+	cafes.refresh_live_deadlines()
+	SecurityForecast.end_boundary()
 	PassengerLifecycle.retire_settled(self)
 	PassengerLifecycle.prune_results(self)
 	tick_usec_last = Time.get_ticks_usec() - started
@@ -628,16 +643,35 @@ func _beat(p: Passenger) -> void:
 	if not info_desks.holds(p):
 		NeedsPolicy.arbitrate(self, p)
 		info_desks.beat(p)
-	# A visiting guest walks: its visit's deadline keeps the margin for the rest.
-	if StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
-		p.late = false
+	_late_due.append(p)
+
+
+## The lateness of every passenger whose beat fell on this tick, forecast at
+## one boundary, after every passenger has stepped (decision hold-line-
+## rebuild-the-security-line-follows-where-people-sta): all against the same
+## state, from one security replay per mode (SecurityForecast.
+## begin_boundary()), and set together once all are forecast.
+func _settle_lateness() -> void:
+	if _late_due.is_empty():
 		return
-	# With no way to the plane the passenger is stuck, not late: it does not run.
+	var late: Array[bool] = []
+	for p in _late_due:
+		late.append(_late_now(p))
+	for i in _late_due.size():
+		_late_due[i].late = late[i]
+	_late_due.clear()
+
+
+## Whether `p` is late now: a visiting guest walks (its visit's deadline keeps
+## the margin for the rest), and one with no way to the plane is stuck, not
+## late.
+func _late_now(p: Passenger) -> bool:
+	if p.is_done() or StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
+		return false
 	var arrival := JourneyForecast.arrival_tick(self, p)
 	if arrival >= JourneyForecast.NEVER:
-		p.late = false
-		return
-	p.late = JourneyForecast.next_late(p.late, flights.doors_close_tick(p.flight_id) - arrival)
+		return false
+	return JourneyForecast.next_late(p.late, flights.doors_close_tick(p.flight_id) - arrival)
 
 
 ## Gives up the claim on the seat `p` holds but leaves it the seat (it gets up

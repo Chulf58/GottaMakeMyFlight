@@ -109,13 +109,27 @@ func _check_tier(use_lane: bool, count: int, phases_wanted: Array) -> void:
 
 
 func test_the_forecast_equals_measured_clearance_at_the_basic_scanner() -> void:
-	_check_tier(false, 2720, BASIC_PHASES)
+	# 2720 before a walker joined on the tick it reaches its cell
+	# (StationQueue.arrive()), not the tick after: seven passengers, a tick each.
+	# Observed again on the latched-claim line (decision hold-line-rebuild-the-
+	# security-line-follows-where-people-sta), at 3aa8696 and after the routed
+	# hand-off: this stream's walkers arrive one behind another, so each is the
+	# claimant as it reaches the tail and enters on the tick it would have
+	# joined before; the 2748 seen on the way came from an earlier draft of the
+	# rule, since replaced.
+	_check_tier(false, 2713, BASIC_PHASES)
 
 
 func test_the_forecast_equals_measured_clearance_at_the_lane() -> void:
 	# 2197 before the arch walk stopped on the arch cell to claim the pickup
 	# cell (decision gate-full-design-passengers-reserve-a-gate-seat-or-standing).
-	_check_tier(true, 2230, LANE_PHASES)
+	# 2230 before a walker joined on the tick it reaches its cell.
+	# Observed again on the latched-claim line, at 3aa8696 and after the routed
+	# hand-off: here too each walker is the claimant as it reaches the tail, and
+	# with entry behind an unpacking passenger allowed the admissions fall as
+	# they did before the rebuild; the 2074, 2096 and 2080 seen on the way came
+	# from earlier drafts of the rule, since replaced.
+	_check_tier(true, 2223, LANE_PHASES)
 
 
 static func _walk(mm: int) -> int:
@@ -124,14 +138,15 @@ static func _walk(mm: int) -> int:
 
 
 ## Two passengers sent SPACING apart from the entrance (5, 15). A walks 8000
-## mm to the first lane cell (5, 7) on ticks 1 to _walk(8000), joins on the
-## next tick and is admitted on the one after. B, choosing while A is still
-## walking, takes the second lane cell (5, 8): it walks 7000 mm from tick
-## SPACING + 1, joins, moves up 1000 mm once A has gone, and stands ready on
-## the first lane cell the tick after it arrives.
+## mm to the first lane cell (5, 7) on ticks 1 to _walk(8000), joining on the
+## tick it reaches it (StationQueue.arrive()), and is admitted on the next.
+## B, choosing while A is still walking, takes the second lane cell (5, 8): it
+## walks 7000 mm from tick SPACING + 1, joining as it arrives, moves up 1000
+## mm once A has gone, and stands ready on the first lane cell the tick after
+## it arrives.
 func _arrivals() -> Vector2i:
-	var a_admitted := _walk(8000) + 2
-	var b_ready := SecurityTestWorld.SPACING + _walk(7000) + 2 + _walk(1000)
+	var a_admitted := _walk(8000) + 1
+	var b_ready := SecurityTestWorld.SPACING + _walk(7000) + 1 + _walk(1000)
 	return Vector2i(a_admitted, b_ready)
 
 

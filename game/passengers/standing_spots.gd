@@ -31,8 +31,8 @@ extends RefCounted
 ## past that only in a trusted one, so an undivided check-in hall never gets
 ## spots far from the gate.
 ## Claims only go to spots in the passenger's own route region (cells joined
-## by can_passenger_route steps). A cell holds no spot when it is a queue lane, a
-## scanner passage or exit, a security
+## by can_passenger_route steps). A cell holds no spot when it is a queue lane
+## or hold line (TerminalLayout.holds), a scanner passage or exit, a security
 ## lane's kept-clear cell, a staff spot, an object's interaction cell, a seat
 ## access cell, a door cell or inside a room.
 ##
@@ -617,7 +617,7 @@ static func _excluded_cells(sim: PassengerSim) -> Dictionary:
 	for id in grid.object_ids():
 		out[grid.interaction_cell(id)] = true
 		out[StaffSpots.spot_of(grid, id)] = true
-	for cells: Array in layout.lanes.values():
+	for cells: Array in layout.lanes.values() + layout.holds.values():
 		for cell: Vector2i in cells:
 			out[cell] = true
 	for cells: Array in layout.passages.values():

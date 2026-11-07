@@ -8,6 +8,17 @@ extends RefCounted
 ## took, another object's interaction cell or a staff spot (StaffSpots), which
 ## passengers may cross but never queue on. Stations claim cells in id order.
 ##
+## Behind each lane a hold line runs on from the lane's last cell (decision
+## full-queue-design-a-derived-hold-line-behind-each-lane-gives): each step
+## straight on, else to the left, else to the right, onto a routable passenger
+## cell that no lane or earlier hold line took, that is not reserved like a
+## lane cell, not a door cell, a scanner passage or a seat front, not a gap
+## one cell wide, and that crosses no door wall, up to HOLD_SLOTS cells. A step that would put the
+## line beside its own earlier cells is refused, so a line ends where it would
+## turn back along itself. Hold lines are found after every lane, stations in
+## id order. A station's line (line_of()) is its lane then its hold line:
+## queue member i (lane, then holding list) stands on line_of()[i].
+##
 ## Every cell a passenger uses here passes the one eligibility rule,
 ## BuildGrid.is_passenger_cell(): walkable floor that walls close in. A lane
 ## head, a seat front, a passage cell or an exit door cell on floor that is
@@ -33,6 +44,9 @@ extends RefCounted
 ## service.
 
 const LANE_SLOTS := 6
+## At most this many hold cells behind a lane.
+const HOLD_SLOTS := 12
+const NO_LINE: Array[Vector2i] = []
 
 ## The airport site whose open ground passengers walk outside, or null (in a
 ## Toon shell or a test grid), when no door needs a walk outside.
@@ -69,6 +83,8 @@ var outside_routes: Dictionary = {}
 var out_of_service: Array[int] = []
 ## Station id -> lane cells, slot 0 first.
 var lanes: Dictionary = {}
+## Station id -> hold cells, the one nearest the lane first.
+var holds: Dictionary = {}
 ## Scanner id -> BuildGrid.passage_cells(), empty when the passage is closed.
 var passages: Dictionary = {}
 ## One entry per seat: {key, object_id, cell, front, facing}, in id order.
@@ -76,6 +92,8 @@ var seats: Array[Dictionary] = []
 ## The security lanes, recognised anew on every rebuild, so a caller holding
 ## the previous instance can compare the two (SecurityLanes.broken()).
 var security_lanes := SecurityLanes.new()
+## Station id -> lane cells then hold cells (line_of()).
+var _lines: Dictionary = {}
 
 
 static func front_of(facing: int) -> Vector2i:
@@ -91,6 +109,8 @@ func rebuild(grid: BuildGrid) -> void:
 	outside_routes.clear()
 	out_of_service.clear()
 	lanes.clear()
+	holds.clear()
+	_lines.clear()
 	passages.clear()
 	seats.clear()
 	gate_desks = GateReach.cells_of(grid, gate_desk_ids) if by_gate else {}
@@ -135,6 +155,13 @@ func rebuild(grid: BuildGrid) -> void:
 	for id in ids:
 		if desks.has(id) or scanners.has(id):
 			lanes[id] = _lane(grid, id, reserved, taken)
+	_add_holds(grid, ids, reserved, taken)
+
+
+## A station's line: its lane cells, then its hold cells. Empty for a station
+## with no lane. Read only: the same array is handed to every caller.
+func line_of(station: int) -> Array[Vector2i]:
+	return _lines.get(station, NO_LINE)
 
 
 ## Whether passengers can be served at a station: it has a lane and, for a
@@ -269,6 +296,88 @@ func _lane(
 		taken[next] = true
 		cell = next
 	return lane
+
+
+## Finds every station's hold line, in id order, after the lanes: off the
+## `reserved` cells, the door cells, the scanner passages and the seat
+## fronts, and off every cell `taken` (lanes, earlier hold lines).
+func _add_holds(grid: BuildGrid, ids: Array[int], reserved: Dictionary, taken: Dictionary) -> void:
+	var blocked := reserved.duplicate()
+	for door in entrances + exits:
+		blocked[door_cell(grid, door)] = true
+	for cells: Array in passages.values():
+		for cell: Vector2i in cells:
+			blocked[cell] = true
+	for seat in seats:
+		blocked[seat["front"]] = true
+	for id in ids:
+		if not lanes.has(id):
+			continue
+		var hold := _hold(grid, id, blocked, taken)
+		holds[id] = hold
+		var line: Array[Vector2i] = []
+		line.assign(lanes[id])
+		line.append_array(hold)
+		_lines[id] = line
+
+
+## The hold line behind `station`'s lane: from its last cell, each step
+## straight on, else to the left, else to the right, onto a cell _may_hold()
+## accepts, until none does or it holds HOLD_SLOTS cells.
+func _hold(
+	grid: BuildGrid, station: int, blocked: Dictionary, taken: Dictionary
+) -> Array[Vector2i]:
+	var hold: Array[Vector2i] = []
+	var lane: Array = lanes[station]
+	if lane.is_empty():
+		return hold
+	var own := {}
+	for cell: Vector2i in lane:
+		own[cell] = true
+	var heading := front_of(grid.get_object(station)["facing"])
+	var cell: Vector2i = lane.back()
+	while hold.size() < HOLD_SLOTS:
+		var turned := false
+		for way: Vector2i in [
+			heading, Vector2i(heading.y, -heading.x), Vector2i(-heading.y, heading.x)
+		]:
+			var next := cell + way
+			if _may_hold(grid, cell, next, blocked.has(next) or taken.has(next), own):
+				hold.append(next)
+				taken[next] = true
+				own[next] = true
+				cell = next
+				heading = way
+				turned = true
+				break
+		if not turned:
+			break
+	return hold
+
+
+## Whether a hold line on `from` may step on to `to`: free (not `in_use`), a
+## passenger cell, a routable step through no door wall, and beside none of
+## the line's own cells (`own`) but `from`, so it never runs back along
+## itself across the floor around it.
+static func _may_hold(
+	grid: BuildGrid, from: Vector2i, to: Vector2i, in_use: bool, own: Dictionary
+) -> bool:
+	if in_use or not grid.in_bounds(to) or not grid.is_passenger_cell(to):
+		return false
+	if not grid.can_passenger_route(from, to):
+		return false
+	if grid.wall_kind(from, BuildGrid.SIDE_STEP.find(to - from)) == BuildGrid.WallKind.DOOR:
+		return false
+	# A gap one cell wide (closed on both flanks of the step) is a way through:
+	# queuing in it would close it, and a walker there carries its bags in
+	# front (SecurityLooks.carry_front()).
+	var side := Vector2i(to.y - from.y, from.x - to.x)
+	if not grid.can_passenger_route(to, to + side) and not grid.can_passenger_route(to, to - side):
+		return false
+	for step in BuildGrid.SIDE_STEP:
+		if to + step != from and own.has(to + step):
+			return false
+	return true
 
 
 ## `cells`, or empty (a closed passage) when any of them is not a passenger

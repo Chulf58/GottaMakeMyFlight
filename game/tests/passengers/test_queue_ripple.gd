@@ -120,7 +120,9 @@ func test_a_lane_walker_steps_up_once_the_roller_ahead_is_stood() -> void:
 	var w := _desk_world()
 	var desk: int = w.sim.layout.desks[0]
 	var ids: Array[int] = []
-	for i in 4:
+	# Five: a walker joins on its own place (StationQueue.arrive()), so only
+	# move-ups after a service count, three, two and one of them.
+	for i in 5:
 		ids.append(_send(w, true))
 		w.run_to(w.clock.tick + 3)
 	var ups := MoveUps.new()

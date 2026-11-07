@@ -586,7 +586,14 @@ func _cafe_guest() -> Passenger:
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	while SecurityLooks.bag_kind(p, 0) != ROLLER:
+		# The others drawn on the way keep out of the cafe, so the guest orders
+		# at a free counter. Served at check-in in the order they joined
+		# (StationQueue.arrive()), two of them now reached the cafe first and
+		# held the guest in the order stage for 67 ticks, its roller stood up
+		# from the first frames, so no idle frame came before the stand.
 		p.carry_on = 0
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	p.carry_on = 1
 	p.hunger = 0
