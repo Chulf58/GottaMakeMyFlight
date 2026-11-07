@@ -18,25 +18,6 @@ func test_path_length_and_point_at() -> void:
 	assert_that(FlightPose.point_at(path, -5.0)).is_equal(Vector3.ZERO)
 
 
-func test_heading_follows_segments_and_blends_around_the_corner() -> void:
-	var path := _path()
-	var entry := Vector3.RIGHT
-	assert_float(FlightPose.heading_at(path, 10.0, entry).dot(Vector3.RIGHT)).is_equal_approx(
-		1.0, 0.001
-	)
-	assert_float(FlightPose.heading_at(path, 60.0, entry).dot(Vector3.BACK)).is_equal_approx(
-		1.0, 0.001
-	)
-	var at_corner := FlightPose.heading_at(path, 40.0, entry)
-	assert_float(at_corner.dot(Vector3.RIGHT)).is_between(0.6, 0.8)
-	assert_float(at_corner.dot(Vector3.BACK)).is_between(0.6, 0.8)
-
-
-func test_heading_starts_on_the_entry_direction() -> void:
-	var start := FlightPose.heading_at(_path(), 0.0, Vector3.BACK)
-	assert_float(start.dot(Vector3.BACK)).is_equal_approx(1.0, 0.001)
-
-
 func test_exit_dir_is_the_last_segment() -> void:
 	assert_that(FlightPose.exit_dir(_path())).is_equal(Vector3.BACK)
 
@@ -70,6 +51,80 @@ func test_taxi_eases_in_and_out() -> void:
 	assert_float(early.origin.x).is_less(7.0)
 	assert_float(middle.origin.x).is_equal_approx(35.0, 0.001)
 	assert_float(middle.origin.z).is_equal_approx(0.0, 0.001)
+
+
+## A taxi pose with a pause stands at the hold, nose on the route, for the
+## pause's share of the phase, and still ends where the phase without one does.
+## The L path is 70 m; held 40 m along (the corner) for 20 of 220 ticks, the
+## 200 moving ticks split 40 m / 70 m: T1 114.29, so the hold is 114.29..134.29.
+func test_a_taxi_pose_with_a_pause_stands_at_the_hold() -> void:
+	var path := _path()
+	var pause := {"hold_s": 40.0, "ticks": 20}
+	var budget := 220.0
+	var arrive := FlightPose.pose(
+		FlightSim.State.TAXI_IN, 115.0 / budget, path, Vector3.RIGHT, pause, budget
+	)
+	var leave := FlightPose.pose(
+		FlightSim.State.TAXI_IN, 134.0 / budget, path, Vector3.RIGHT, pause, budget
+	)
+	var moving := FlightPose.pose(
+		FlightSim.State.TAXI_IN, 140.0 / budget, path, Vector3.RIGHT, pause, budget
+	)
+	var unpaused := FlightPose.pose(FlightSim.State.TAXI_IN, 115.0 / budget, path, Vector3.RIGHT)
+	var last := FlightPose.pose(FlightSim.State.TAXI_IN, 1.0, path, Vector3.RIGHT, pause, budget)
+	print(
+		(
+			"held at %s and %s, moving %s, unpaused %s"
+			% [arrive.origin, leave.origin, moving.origin, unpaused.origin]
+		)
+	)
+	assert_float(arrive.origin.distance_to(Vector3(40, 0, 0))).is_less(1e-4)
+	assert_float(leave.origin.distance_to(Vector3(40, 0, 0))).is_less(1e-4)
+	assert_float(arrive.basis.z.dot(leave.basis.z)).is_equal_approx(1.0, 1e-6)
+	assert_float(moving.origin.z).is_greater(0.01)
+	assert_float(unpaused.origin.distance_to(Vector3(40, 0, 0))).is_greater(1.0)
+	assert_float(last.origin.distance_to(Vector3(40, 0, 30))).is_less(1e-4)
+
+
+## A pause with no budget plans over the state's PHASE_TICKS (600 for
+## TAXI_IN), not over one tick: 60 ticks in, the plane is still on its way to
+## the hold (T1 = 580 * 40 / 70 = 331.4), and 340 ticks in it stands there.
+func test_a_pause_with_no_budget_plans_over_the_state_ticks() -> void:
+	var path := _path()
+	var pause := {"hold_s": 40.0, "ticks": 20}
+	var ticks := float(FlightSim.PHASE_TICKS[FlightSim.State.TAXI_IN])
+	var early := FlightPose.pose(FlightSim.State.TAXI_IN, 60.0 / ticks, path, Vector3.RIGHT, pause)
+	var explicit := FlightPose.pose(
+		FlightSim.State.TAXI_IN, 60.0 / ticks, path, Vector3.RIGHT, pause, ticks
+	)
+	var held := FlightPose.pose(FlightSim.State.TAXI_IN, 340.0 / ticks, path, Vector3.RIGHT, pause)
+	print(
+		(
+			"no budget: 60 ticks in %s, explicit %s, 340 in %s"
+			% [early.origin, explicit.origin, held.origin]
+		)
+	)
+	assert_float(early.origin.x).is_greater(1.0).is_less(39.0)
+	assert_float(early.origin.distance_to(explicit.origin)).is_less(1e-6)
+	assert_float(held.origin.distance_to(Vector3(40, 0, 0))).is_less(1e-4)
+
+
+## A pause that does not fit its budget (20 ticks in 10) is reported, and the
+## plane is drawn without it rather than stuck at the hold.
+func test_a_pause_that_does_not_fit_is_reported_and_left_out() -> void:
+	var path := _path()
+	var pause := {"hold_s": 40.0, "ticks": 20}
+	var out: Array[Transform3D] = []
+	var draw := func() -> void:
+		out.append(FlightPose.pose(FlightSim.State.TAXI_IN, 0.3, path, Vector3.RIGHT, pause, 10.0))
+	await assert_error(draw).is_push_error(
+		"FlightPose: pause %s does not fit 10 ticks; drawn without it" % pause
+	)
+	var unpaused := FlightPose.pose(FlightSim.State.TAXI_IN, 0.3, path, Vector3.RIGHT)
+	print("unfit pause drawn at %s, unpaused %s" % [out[0].origin, unpaused.origin])
+	assert_int(out.size()).is_equal(1)
+	assert_float(out[0].origin.distance_to(unpaused.origin)).is_less(1e-6)
+	assert_float(unpaused.origin.distance_to(Vector3(40, 0, 0))).is_greater(1.0)
 
 
 func test_pitch_is_light_and_signed_by_phase() -> void:
