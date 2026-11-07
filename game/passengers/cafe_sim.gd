@@ -125,6 +125,21 @@ const STEP_IN_HOLD_TICKS := 20
 ## along the sit-down's own path, so it has no lead: the visit carries
 ## TURNED_BACK until the next stand-up.
 const STAND_UP_LEAD_TICKS := 4
+## A booth roller guest whose seat moves in its step-in hold turns back
+## (_relocates()) no sooner than this many ticks into its sit-down, so the
+## roller is down and taken up into the pull before it sets off: the longest
+## set-down (one that turns first, RollerPark.TURN_FIRST_TICKS and TICKS_DOWN)
+## and the pick-up's lift (ParkRecovery.COLLECT_TICKS) less the
+## ParkRecovery.UP_HOLD_TICKS its turn-back's stand-up stands at the approach
+## cell. Sim constants only: the sim never asks which set-down the view draws.
+## Turned back 6 ticks into a set-down that turns first, the guest set off 6
+## ticks before the roller's lift was over (Sol review of 11c61e7, board
+## 2eaa9bc4).
+const TURN_BACK_HOLD_TICKS := (
+	ceili(RollerPark.TURN_FIRST_TICKS + RollerPark.TICKS_DOWN)
+	+ ParkRecovery.COLLECT_TICKS
+	- ParkRecovery.UP_HOLD_TICKS
+)
 ## The meta a visit carries while its stand-up reverses a sit-down.
 const TURNED_BACK := &"turned_back"
 ## Seats tried per visit, nearest the counter first.
@@ -1050,6 +1065,15 @@ func _relocates(p: Passenger, visit: CafeVisit) -> bool:
 	var owed := RoomTypes.get_type(visit.venue).dwell_ticks
 	if visit.relocation != null:
 		owed = visit.relocation.left
+	var in_sit := _sim.tick - p.stage_tick
+	if (
+		p.stage == Passenger.Stage.CAFE_SITTING_DOWN
+		and step_in_hold(p, visit.piece) > 0
+		and in_sit < TURN_BACK_HOLD_TICKS
+	):
+		# Early in a booth roller guest's step-in hold: it stays at the approach
+		# cell until the roller can be down and lifted again before it sets off.
+		return true
 	match p.stage:
 		Passenger.Stage.CAFE_SITTING_DOWN:
 			# Turned back partway: getting up takes as long as sitting down took,
