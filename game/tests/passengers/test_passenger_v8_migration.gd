@@ -68,6 +68,7 @@ func _v8(work: int, bags := 2) -> Dictionary:
 		record.erase("shop_cooldown")
 		record.erase("seat_piece")
 		record.erase("seat_exiting")
+		record.erase("stand_from")
 		if int(record["id"]) == _id:
 			record["carry_on"] = bags
 			record["security_work"] = work
@@ -82,7 +83,7 @@ func _loaded_work(data: Dictionary) -> int:
 
 func test_the_fixture_is_mid_unpack_with_two_bags_at_the_current_version() -> void:
 	assert_int(int(_v9["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(29)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(30)
 	var p := _a.world.passenger(_id)
 	assert_int(p.carry_on).is_equal(2)
 	assert_int(SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p)).is_equal(11)

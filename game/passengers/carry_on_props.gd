@@ -319,8 +319,10 @@ func sync() -> void:
 			var stands := queue_still and homes[i] == SecurityLooks.Home.HAND and not lifts[i]
 			var turn := RollerPark.tip_wait(node.rotation.y, views.walk_heading(p))
 			RollerPark.queue_stand(
-				was[i], kinds[i], stands, _tick(), RollerPark.still_wait(p), turn
+				was[i], kinds[i], stands, _tick(), RollerPark.still_wait(p), turn, node.rotation.y
 			)
+			# Its side, from the sim (ParkSide.choose_stand()), before hold_park() holds it.
+			ParkSide.choose_stand(sim, p, was[i])
 			# A parking roller keeps home, hand and lift to the park's end; one lying, its lift.
 			RollerPark.hold_park(was[i], kinds[i], homes, hands, i, _tick(), p.collect_tick != 0)
 			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):

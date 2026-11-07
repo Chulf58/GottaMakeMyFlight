@@ -323,6 +323,44 @@ static func hold_park(
 	homes[i] = held_home(bag, kind, homes[i], now)
 	if _parking(bag, kind, now):
 		hands[i] = CarryLead.hand_of(bag["place"])
+	elif homes[i] == SecurityLooks.Home.HAND and _sided(bag, now):
+		hands[i] = bag["queue_hand"][1]
+
+
+## Whether the open side chosen for `bag` (side_first(), "queue_hand") holds
+## at `now`, when it changed the hand: through the still spell it was chosen
+## in, and after that spell's stand for as long as PullSide keeps a stood
+## roller in its hand (PullSide.stood()), so the walk off starts on the side
+## it stood on. A stand on its usual side is left to PullSide as before.
+static func _sided(bag: Dictionary, now: float) -> bool:
+	var mark: Array = bag.get("queue_hand", [])
+	if mark.is_empty() or not mark[2]:
+		return false
+	return float(bag.get("still_from", NAN)) == float(mark[0]) or PullSide.stood(bag, now)
+
+
+## The queue stand asked for on `bag` (restamps()) goes on the open side
+## (decision a-roller-stood-in-a-queue-beside-a-wall-goes-on-the-passenge, as
+## ParkSide does at a seat): `hand` is the hand it stands up with there
+## (ParkSide.stand_hand()). Chosen once per still spell ("queue_hand", [its
+## "still_from", the hand, whether that changed the hand]) and kept for it
+## (_sided(), hold_park()), so a body turning in the spell cannot flip it. Its
+## pull in the other hand, the ask is put off ("queue_still" cleared) and true
+## is returned: hold_park() moves the roller to that hand in a move of its own
+## (pull to pull, as PullSide does), and queue_stand() asks again once it is
+## settled there, so the stand and its tip are in that hand from their start.
+static func side_first(bag: Dictionary, hand: int) -> bool:
+	var spell := float(bag.get("still_from", NAN))
+	var mark: Array = bag.get("queue_hand", [])
+	if not mark.is_empty() and float(mark[0]) == spell:
+		return false
+	var changes := hand != CarryLead.hand_of(bag["place"])
+	bag["queue_hand"] = [spell, hand, changes]
+	if not changes:
+		return false
+	bag.erase("queue_still")
+	bag.erase("queue_asked")
+	return true
 
 
 ## Whether `p` stands in a queue, at its counter or desk or at the gate
@@ -390,7 +428,8 @@ static func queue_stand(
 	stands: bool,
 	now: float,
 	wait := STILL_TICKS,
-	turn := 0.0
+	turn := 0.0,
+	yaw := NAN
 ) -> void:
 	if kind != SecurityLooks.Kind.ROLLER or bag.get("kind", -1) != kind:
 		bag.erase("still_from")
@@ -407,7 +446,9 @@ static func queue_stand(
 			bag["ticks"] = maxf(CarryLead.ticks_of(bag), at + QUEUE_AHEAD_TICKS)
 			return
 		bag["queue_tip"] = at + turn
-		bag["ticks"] = at + turn + QUEUE_TIP_TICKS
+		bag["queue_tip_yaw"] = yaw
+		bag["queue_tip_ticks"] = QUEUE_TIP_TICKS * (1.0 + _tip_gap(bag, yaw) / PI)
+		bag["ticks"] = at + turn + tip_ticks(bag)
 		return
 	if not stands or now - float(bag["still_from"]) < wait or bag.has("queue_still"):
 		return
@@ -416,6 +457,11 @@ static func queue_stand(
 	if float(bag.get("queue_asked", -1.0)) == float(bag["still_from"]):
 		return
 	var place: int = bag.get("place", -1)
+	# Going to the open side's hand first (side_first()): asked again from there.
+	var mark: Array = bag.get("queue_hand", [])
+	if not mark.is_empty() and float(mark[0]) == float(bag["still_from"]):
+		if CarryLead.hand_of(place) != int(mark[1]):
+			return
 	var pulled: bool = (
 		place >= 0
 		and place / 4 == SecurityLooks.Home.HAND
@@ -503,6 +549,9 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"roll_tip",
 		"queue",
 		"queue_tip",
+		"queue_tip_yaw",
+		"queue_tip_ticks",
+		"queue_walls",
 		"faced",
 		"turn_first",
 	]:
@@ -631,8 +680,96 @@ static func park(
 ## (yaw only is used), led by `hand`, drawn at `scale_by`, the body's look
 ## `look` (PassengerLooks.BODIES index): park() QUEUE_SIDE_M out for its variant.
 static func queue_park(frame: Transform3D, hand: int, scale_by: float, look: int) -> Transform3D:
+	return park(_yawed(frame), hand, scale_by, PARK_AHEAD_M, queue_side(look))
+
+
+## The frame (world) the queue stand of `bag` (CarryOnProps' record) is drawn
+## in (plan()): the one ParkSide.choose_stand() chose its side in from the sim
+## ("queue_frame", kept to the move's end), else the body as drawn, `frame`
+## (no way to face known).
+static func queue_frame_of(bag: Dictionary, frame: Transform3D) -> Transform3D:
+	var kept: Array = bag.get("queue_frame", [])
+	return kept[1] if not kept.is_empty() else frame
+
+
+## What carries a stood roller with the body once its queue stand's tip has
+## started (queue_stand()'s "queue_tip"): from `chosen` (queue_frame_of()) to
+## the body as drawn, `frame`, both yaw only: the body's step from where it
+## stood and its turn from `chosen`, less the part of that turn it already had
+## when the tip started (`start_yaw`, the body's drawn yaw on that sync tick,
+## "queue_tip_yaw"; NAN for none), which comes in with the tip's own `share`
+## (tip_share()). The walker is walking off: held where it stood in the world,
+## the roller stayed behind the body walking away and the tip swung it in from
+## there, 0.2 to 0.55 m a frame against the body (test_roller_queue_stand,
+## test_roller_file_gate_stand); carried, it goes with the body. A body drawn a
+## quarter or half turn away from `chosen` when it walked off, carried in full
+## at once, swung the stood roller round it 0.53 and 0.70 m in one tick (0.36
+## not turned; test_queue_stand_side_sim); its turn eased in by the share
+## alone, the roller lagged a cafe guest turning as it walked off by 0.150 m a
+## frame against the body (test_roller_queue_stand). The identity while the
+## body is drawn where and as the sim has it stand.
+static func tip_carried(
+	chosen: Transform3D, frame: Transform3D, share: float, start_yaw := NAN
+) -> Transform3D:
+	var from := _yawed(chosen)
+	var to := _yawed(frame)
+	var turn := angle_difference(_yaw_of(from), _yaw_of(to))
+	if not is_nan(start_yaw):
+		turn -= angle_difference(_yaw_of(from), start_yaw) * (1.0 - share)
+	return Transform3D(Basis(Vector3.UP, turn), to.origin) * Transform3D(Basis(), -from.origin)
+
+
+## What carries the stood roller of the queue stand of `bag` at `k` with the
+## body drawn as `frame` (plan()): tip_carried() once its tip has started, from
+## the stand's frame (queue_frame_of()) and the yaw the tip started at; the
+## identity before. Drawn in the body's frame (no "queue_frame" kept), the
+## stand already goes with the body, so no start yaw is eased in: one was, and
+## a tip started at yaw 0 then drawn at PI / 2 swung the roller a quarter turn
+## round the body at no share of the tip (Sol re-check).
+static func tip_carry_of(bag: Dictionary, frame: Transform3D, k: float) -> Transform3D:
+	if not bag.has("queue_tip"):
+		return Transform3D.IDENTITY
+	var at_tip: float = bag.get("queue_tip_yaw", NAN) if bag.has("queue_frame") else NAN
+	return tip_carried(queue_frame_of(bag, frame), frame, tip_share(bag, k), at_tip)
+
+
+## The yaw (about +y, 0 facing +z) of a frame's ahead (+z) axis.
+static func _yaw_of(frame: Transform3D) -> float:
+	return atan2(frame.basis.z.x, frame.basis.z.z)
+
+
+## How far the tip of a queue stand of `bag` has run at `k` of its move, 0 to 1
+## (eased; "queue_tip", tip_ticks()): 0 before it starts and while it waits
+## for the body's turn (tip_wait()).
+static func tip_share(bag: Dictionary, k: float) -> float:
+	var tip: float = bag.get("queue_tip", INF)
+	return smoothstep(0.0, 1.0, (k * CarryLead.ticks_of(bag) - tip) / tip_ticks(bag))
+
+
+## How many ticks the tip of a queue stand of `bag` runs: QUEUE_TIP_TICKS, and
+## up to twice that for a body drawn turned from the stand's frame when it
+## starts ("queue_tip_ticks", _tip_gap(), a half turn doubling it): turned a
+## half turn, the stood roller crossed behind the body to the pull in the
+## usual tip's time at 0.57 m a tick (0.36 not turned; test_queue_stand_side_sim).
+static func tip_ticks(bag: Dictionary) -> float:
+	return bag.get("queue_tip_ticks", QUEUE_TIP_TICKS)
+
+
+## How far (radians, 0 to PI) a body drawn at `yaw` is turned from the frame
+## the queue stand of `bag` was placed in (queue_frame_of()); 0 with no frame
+## kept or no yaw (NAN).
+static func _tip_gap(bag: Dictionary, yaw: float) -> float:
+	var kept: Array = bag.get("queue_frame", [])
+	if kept.is_empty() or is_nan(yaw):
+		return 0.0
+	return absf(angle_difference(_yaw_of(kept[1]), yaw))
+
+
+## How far out (QUEUE_SIDE_M) a queue stand parks the axle of a body of look
+## `look` (PassengerLooks.BODIES index).
+static func queue_side(look: int) -> float:
 	var variant := clampi(look / PassengerLooks.PER_VARIANT, 0, QUEUE_SIDE_M.size() - 1)
-	return park(_yawed(frame), hand, scale_by, PARK_AHEAD_M, QUEUE_SIDE_M[variant])
+	return QUEUE_SIDE_M[variant]
 
 
 ## How far a parking move of `bag` has run its rods from their old length to
@@ -664,14 +801,14 @@ static func rods_t(k: float, bag: Dictionary) -> float:
 
 ## How far a queue stand of `bag` (queued()) at `k` has gone from the pull to
 ## standing: 0 to 1 over QUEUE_STAND_TICKS, and from where it was at
-## "queue_tip" back to 0 over QUEUE_TIP_TICKS.
+## "queue_tip" back to 0 over its tip (tip_ticks()).
 static func queue_share(bag: Dictionary, k: float) -> float:
 	var at := k * CarryLead.ticks_of(bag)
 	var tip: float = bag.get("queue_tip", INF)
 	var share := smoothstep(0.0, QUEUE_STAND_TICKS, minf(at, tip))
 	if at <= tip:
 		return share
-	return lerpf(share, 0.0, smoothstep(tip, tip + QUEUE_TIP_TICKS, at))
+	return lerpf(share, 0.0, smoothstep(tip, tip + tip_ticks(bag), at))
 
 
 ## The rods' length (the bag's units) of a queue stand of `bag` at `k`: from
@@ -774,10 +911,19 @@ static func plan(
 	if turns_first(bag) and turning < TURN_FIRST_TICKS:
 		return _turning(bag, move_k, turning, start, parked, bar, started[1], lead)
 	if queued(bag):
-		# Beside the body as it stands now (a guest turning to its counter takes
-		# the roller round with it), held by the bar throughout.
+		# Stood in the frame its side was chosen in (queue_frame_of()), held by the
+		# bar throughout: the body drawn another way, or turning, does not take the
+		# stood roller across to the side the choice was not made for. Once its
+		# tip starts it is carried with the body (tip_carried()).
 		assert(body.has("look") and int(body["look"]) >= 0, "RollerPark: queued with no body look")
-		parked = queue_park(frame, lead, body["scale"], body["look"])
+		var chosen := queue_frame_of(bag, frame)
+		parked = queue_park(chosen, lead, body["scale"], body["look"])
+		parked = tip_carry_of(bag, frame, k) * parked
+		# Walled on both sides, or a two-bag guest's (ParkSide.choose_stand() kept
+		# its side): out of the walls kept at the stamp (CarryPlace, ParkWalls),
+		# the tip rolled from there.
+		if bag.has("queue_walls"):
+			parked.origin += ParkWalls.shift(parked, bag["queue_walls"])
 		at = _queued(bag, k, start, want, parked, bar)
 	elif not off_floor:
 		# At a booth seat (BoothRoller.fix_start()'s "wall_faces") a roller pulled
@@ -1053,7 +1199,7 @@ static func round_front(park_frame: Transform3D, from: Vector3, to: Vector3, t: 
 ## Held by the bar throughout: rolled on its axle from the pull (`start`) to the
 ## park beside the body (`parked`) over QUEUE_STAND_TICKS, standing there, and
 ## from where it stood at "queue_tip" rolled back into the pull (`want`) over
-## QUEUE_TIP_TICKS, the arm easing back into its pull pose as it goes.
+## its tip (tip_ticks()), the arm easing back into its pull pose as it goes.
 static func _queued(
 	bag: Dictionary,
 	k: float,
@@ -1067,7 +1213,7 @@ static func _queued(
 	var stood := rolled(start, parked, _eased(minf(at, tip) / QUEUE_STAND_TICKS))
 	if at < tip:
 		return [true, stood, bar, bar, 1.0]
-	var u := smoothstep(0.0, 1.0, (at - tip) / QUEUE_TIP_TICKS)
+	var u := tip_share(bag, k)
 	return [true, rolled(stood, want, u), bar, bar, 1.0 - u]
 
 

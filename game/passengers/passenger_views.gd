@@ -208,8 +208,10 @@ func sync() -> void:
 ## load removed lose their view, new ones get one), then makes the previous and
 ## current positions the same so the frame draws the current one. With no
 ## interval to take a heading from, a walker faces along its current path or
-## apron leg. Every turn and clip starts over, with no ease or blend from
-## before the load.
+## apron leg, and one standing still in a queue or at the gate faces its queue
+## stand's way (ParkSide.stand_face(); drawn new it faced yaw 0, away from the
+## roller stood for that way). Every turn and clip starts over, with no ease or
+## blend from before the load.
 func snap() -> void:
 	_turns.clear()
 	_stages.clear()
@@ -245,7 +247,12 @@ func snap() -> void:
 	for id in _cur:
 		_prev[id] = _cur[id]
 		var node: Node3D = _nodes[id]
-		var heading := walk_heading(sim.get_passenger(id))
+		var p := sim.get_passenger(id)
+		var heading := walk_heading(p)
+		# One standing still in a queue or at the gate faces its queue stand's way
+		# (ParkSide.stand_face()), the way its stood roller is placed for.
+		if heading == Vector2.ZERO and RollerPark.queue_still(sim, p):
+			heading = ParkSide.stand_face(sim, p)
 		if heading != Vector2.ZERO and not _turn_locked(node):
 			_turns.place(id, atan2(heading.x, heading.y))
 	draw()

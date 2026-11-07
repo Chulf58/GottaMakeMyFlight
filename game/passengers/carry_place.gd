@@ -224,6 +224,11 @@ static func _stamp(
 		bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN), unmoved
 	)
 	BoothRoller.fix_start(bag, held.get("booth", false), props.sim, body.global_transform)
+	# A queue stand keeps the walls round where it is drawn (RollerPark.queue_frame_of())
+	# for its ParkWalls backstop (RollerPark.plan()), as a seat's park does.
+	if RollerPark.queued(bag) and props.sim != null:
+		var stood := RollerPark.queue_frame_of(bag, body.global_transform).origin
+		bag["queue_walls"] = PullSide.walls_near(props.sim.grid, stood)
 	bag["home"] = bag["place"]
 	bag["reach_from"] = props._reach_of(node, kind)
 

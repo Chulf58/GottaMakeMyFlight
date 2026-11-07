@@ -66,6 +66,9 @@ extends RefCounted
 ## offered, so a version 28 save may claim a spot that no longer exists; it is
 ## refused with no migration (decision old-saves-are-not-supported-until-after-
 ## a-release-no-save-mi).
+## 30: a gate stander's stand_from, the cell it stepped onto its spot's cell
+## from (ParkSide.stand_face()); a version 29 save has none and is refused with
+## no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
@@ -166,6 +169,7 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 			p.stage = Passenger.Stage.TO_GATE
 			p.stage_tick = sim.tick + 1
 			p.clear_path()
+			p.stand_from = Passenger.NO_CELL
 	sim.layout.rebuild(sim.grid)
 	sim.routes.clear()
 	sim._rederive()

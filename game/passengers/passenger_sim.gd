@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 29
+const SAVE_VERSION := 30
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -606,6 +606,7 @@ func _move(p: Passenger) -> void:
 	if p.stage == Passenger.Stage.TO_EXIT and spot != StandingSpots.NO_SPOT:
 		if p.path_index > 0 or p.at != standing.cell_of(spot):
 			standing.release(p.id)
+			p.stand_from = Passenger.NO_CELL
 
 
 ## Mood and the lateness forecast, once a simulated second per passenger.
@@ -780,6 +781,7 @@ func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
 	var setting_off := stage == Passenger.Stage.TO_EXIT and p.stage == Passenger.Stage.STANDING
 	if stage != Passenger.Stage.TO_GATE and stage != Passenger.Stage.STANDING and not setting_off:
 		standing.release(p.id)
+		p.stand_from = Passenger.NO_CELL
 	# The boarding files hold walkers heading out and on the apron only; one
 	# that turns to the exit chooses its door afresh.
 	if stage != Passenger.Stage.TO_EXIT and stage != Passenger.Stage.APRON:

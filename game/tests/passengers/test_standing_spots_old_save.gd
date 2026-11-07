@@ -53,7 +53,8 @@ func _standing(world: PassengerTestWorld) -> Array[int]:
 
 
 ## `data` in the shape version 10 saved: no standing claims, info desk or
-## kiosk block, and no boredom or kiosk cooldown on a passenger record.
+## kiosk block, and no boredom, kiosk cooldown or stand_from on a passenger
+## record.
 func _as_v10(data: Dictionary) -> Dictionary:
 	var out := data.duplicate(true)
 	out["save_version"] = 10
@@ -62,6 +63,7 @@ func _as_v10(data: Dictionary) -> Dictionary:
 	for record: Dictionary in out["passengers"]:
 		record.erase("boredom")
 		record.erase("shop_cooldown")
+		record.erase("stand_from")
 	return out
 
 
