@@ -283,8 +283,6 @@ static func stamp_move(
 	stamp_reach(bag, in_stall, home)
 	if not (unmoved and bag.has("start_body")):
 		bag["start_body"] = body
-		bag.erase("swap_yaw")
-		bag.erase("swap_at")
 	bag.erase("ticks")
 	bag.erase("park")
 	if RollerPark.parks(bag, in_stall, home):
@@ -441,23 +439,20 @@ static func is_pull_swap(bag: Dictionary, in_stall: bool) -> bool:
 ## Where a pulled roller passed between the pulling hands starts from now
 ## (world), the body drawn at `frame` at sim time `now`: where it was as the
 ## move started ("from", in the body's frame then, "start_body"), carried
-## along with the walker and turned round it no faster than the trailing
-## roller swings (RollerPull.SWING_TURN a tick; kept on `bag` as "swap_yaw"
-## and "swap_at", cleared by stamp_move()). Turned with the body, it swung
-## round a walker turning 22 degrees a tick 0.10 m a frame on top of the move's
-## own travel, and jumped 0.153 m a frame (test_roller_queue_stand's cafe
-## guest, changing hands in the turn onto the cafe's diagonal); held to
-## SWING_TURN, 0.137 m.
+## along with the walker and turned from the body's heading then toward its
+## heading now by at most RollerPull.SWING_TURN a tick of the move ("since"),
+## as fast as the trailing roller swings. Turned with the body, it swung round
+## a walker turning 22 degrees a tick 0.10 m a frame on top of the move's own
+## travel, and jumped 0.153 m a frame (test_roller_queue_stand's cafe guest,
+## changing hands in the turn onto the cafe's diagonal); held to SWING_TURN,
+## 0.137 m. Worked out from the move's start and sim time only, never from the
+## frames drawn before: stepped on from the last draw, a first draw a tick late
+## left the start unturned (Sol review of f8b021f).
 static func pull_swap_start(bag: Dictionary, frame: Transform3D, now: float) -> Transform3D:
 	var began: Transform3D = bag.get("start_body", frame)
-	var yaw0 := began.basis.get_euler().y
-	var yaw: float = bag.get("swap_yaw", yaw0)
-	var dt := maxf(now - float(bag.get("swap_at", now)), 0.0)
-	var turn := angle_difference(yaw, frame.basis.get_euler().y)
-	yaw += clampf(turn, -RollerPull.SWING_TURN * dt, RollerPull.SWING_TURN * dt)
-	bag["swap_yaw"] = yaw
-	bag["swap_at"] = now
-	var turned := Basis(Vector3.UP, yaw - yaw0) * began.basis
+	var most := RollerPull.SWING_TURN * maxf(now - float(bag["since"]), 0.0)
+	var turn := angle_difference(began.basis.get_euler().y, frame.basis.get_euler().y)
+	var turned := Basis(Vector3.UP, clampf(turn, -most, most)) * began.basis
 	return Transform3D(turned, frame.origin) * (bag["from"] as Transform3D)
 
 

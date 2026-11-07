@@ -82,19 +82,58 @@ func test_the_start_turns_no_faster_than_the_trailing_roller_swings() -> void:
 	var began := Transform3D(Basis(Vector3.UP, 2.0), Vector3(1.0, 0.0, 1.0))
 	var from := _pull(-0.48, 0.95)
 	for rate: float in [deg_to_rad(22.0), deg_to_rad(10.0)]:
-		var bag := {"start_body": began, "from": from}
+		var bag := {"start_body": began, "from": from, "since": 100.0}
 		var at := CarryLead.pull_swap_start(bag, began, 100.0)
 		assert_vector(at.origin).is_equal_approx((began * from).origin, Vector3.ONE * EPS)
-		var yaw := 2.0
-		var frame := began
+		var frame := _turned(began, rate, 1.0)
 		for i in 3:
-			yaw -= rate / 3.0
-			frame = Transform3D(Basis(Vector3.UP, yaw), began.origin + Vector3(0.0, 0.0, 0.03 * i))
-			at = CarryLead.pull_swap_start(bag, frame, 100.0 + (i + 1) / 3.0)
-		var turned := angle_difference(2.0, float(bag["swap_yaw"]))
-		var expected := -minf(rate, RollerPull.SWING_TURN)
-		print("body turned %.3f rad, start %.3f rad" % [-rate, turned])
-		assert_float(turned).is_equal_approx(expected, 0.0001)
+			at = CarryLead.pull_swap_start(
+				bag, _turned(began, rate, (i + 1) / 3.0), 100.0 + (i + 1) / 3.0
+			)
+		var turned := -minf(rate, RollerPull.SWING_TURN)
+		print("body turned %.3f rad, start held turned %.3f rad" % [-rate, turned])
 		var held := Transform3D(Basis(Vector3.UP, 2.0 + turned), frame.origin) * from
 		assert_vector(at.origin).is_equal_approx(held.origin, Vector3.ONE * EPS)
 	assert_float(deg_to_rad(22.0)).is_greater(RollerPull.SWING_TURN)
+
+
+## The start at a sim time does not depend on which frames were drawn before:
+## drawn every third of a tick from the move's start, or first drawn a tick in
+## (a slow frame, 3x speed), it is the same. Integrated from the last draw, the
+## late first draw left it unturned (0 against 18 degrees, 0.31 m at the
+## trail; Sol review of f8b021f). Control: the walker turned more than
+## SWING_TURN, so the start is held back in both.
+func test_the_start_is_the_same_however_the_frames_were_drawn() -> void:
+	var began := Transform3D(Basis(Vector3.UP, 2.0), Vector3(1.0, 0.0, 1.0))
+	var from := _pull(-0.48, 0.95)
+	var rate := deg_to_rad(22.0)
+	var every := {"start_body": began, "from": from, "since": 100.0}
+	var at_every := Transform3D()
+	for i in 4:
+		at_every = CarryLead.pull_swap_start(every, _turned(began, rate, i / 3.0), 100.0 + i / 3.0)
+	var late := {"start_body": began, "from": from, "since": 100.0}
+	var at_late := CarryLead.pull_swap_start(late, _turned(began, rate, 1.0), 101.0)
+	var unturned := (Transform3D(began.basis, _turned(began, rate, 1.0).origin) * from).origin
+	print(
+		(
+			"every frame %s, late first frame %s, apart %.4f, from unturned %.3f"
+			% [
+				at_every.origin,
+				at_late.origin,
+				at_every.origin.distance_to(at_late.origin),
+				at_late.origin.distance_to(unturned)
+			]
+		)
+	)
+	assert_vector(at_late.origin).is_equal_approx(at_every.origin, Vector3.ONE * EPS)
+	assert_vector(at_late.basis.z).is_equal_approx(at_every.basis.z, Vector3.ONE * EPS)
+	assert_float(at_late.origin.distance_to(unturned)).is_greater(0.2)
+	assert_float(rate).is_greater(RollerPull.SWING_TURN)
+
+
+## `began` `ticks` on, turned `rate` radians a tick (yaw falling) and walked
+## 0.09 m a tick along its z.
+static func _turned(began: Transform3D, rate: float, ticks: float) -> Transform3D:
+	return Transform3D(
+		Basis(Vector3.UP, 2.0 - rate * ticks), began.origin + Vector3(0.0, 0.0, 0.09 * ticks)
+	)
