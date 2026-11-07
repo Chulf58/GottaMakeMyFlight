@@ -94,6 +94,8 @@ const STRIP_LOW_M := 0.8
 ## Refused views a tip strip may spend (each costs a few frames) before the
 ## rest of its frames are skipped.
 const STRIP_REFUSALS := 150
+## The still hold before boarding is watched every this many ticks (_gate_stander()).
+const HOLD_WATCH_TICKS := 10
 ## Ticks the other gate standers get to stand after the first (_gate_stander()).
 const STAND_WAIT := 60
 ## Stand plate attempts (a third of a tick apart) a gate candidate gets when
@@ -123,6 +125,10 @@ var _offset := Vector2i.ZERO
 var _keep: Array[Passenger] = []
 var _desk_control := {}
 var _strip_refused := 0
+## The gate standers watched against the gate desk from boarding (_step()).
+var _board_watch: Array = []
+## Gate stander id -> its boarding DESK_OVERLAP watch (_watch_board_desk()).
+var _board_desk := {}
 
 
 func _initialize() -> void:
@@ -143,6 +149,8 @@ func _run() -> void:
 		if not gate.is_empty():
 			await _file_waiter()
 			await _stacked_diag()
+		await _board_desk_settle()
+		_board_desk_check()
 	if not _sheet.is_empty():
 		_save(_contact_sheet(_sheet), "contact_sheet.png")
 	print("PROBE done plates=%d failed=%s" % [_plates, _failed])
@@ -275,11 +283,14 @@ func _gate_stander() -> Dictionary:
 			(
 				(
 					"GATE stander id=%d cell %s tick %d stood %.2f m from the desk, "
-					+ "DESK_OVERLAP stood roller points in the desk %d, deepest %.3f m"
+					+ "DESK_OVERLAP stood roller points in the desk %d (0), deepest %.3f m, "
+					+ "of %d roller body points"
 				)
-				% [p.id, p.at - _offset, _clock.tick, away[p], in_desk[p], depth[1]]
+				% [p.id, p.at - _offset, _clock.tick, away[p], in_desk[p], depth[1], depth[2]]
 			)
 		)
+		if in_desk[p] > 0:
+			_invalid("GATE DESK_OVERLAP: stander %d stood its roller in the gate desk" % p.id)
 	order.sort_custom(
 		func(a: Passenger, b: Passenger) -> bool:
 			if (in_desk[a] == 0) != (in_desk[b] == 0):
@@ -309,13 +320,20 @@ func _gate_stander() -> Dictionary:
 		return {}
 	m["id"] = subject.id
 	print("GATE subject id=%d plated at tick %d" % [subject.id, _clock.tick])
-	# Held through the wait: fast to two ticks before boarding, watching each tick.
+	# Held through the wait: fast to two ticks before boarding, watching every
+	# HOLD_WATCH_TICKS-th tick of the still hold (each watch costs about a
+	# quarter of a second; every tick of the 3300-tick wait ran the probe past
+	# 15 minutes) and every tick of the last HOLD_WATCH_TICKS * 2.
 	while _clock.tick < subject.boarding_tick - 2 and subject.stage == Passenger.Stage.STANDING:
 		_clock.advance(SimClock.STEP)
 		await _frames(1)
-		_watch(subject, m)
+		var late := _clock.tick >= subject.boarding_tick - HOLD_WATCH_TICKS * 2
+		if late or posmod(_clock.tick, HOLD_WATCH_TICKS) == 0:
+			_watch(subject, m)
 	# The strip follows the first stander whose tip waits for its turn (the
-	# turning tip, RollerPark.tip_wait), not always the plated one.
+	# turning tip, RollerPark.tip_wait), not always the plated one. Every
+	# stander's roller is watched against the desk from here (_step()).
+	_board_watch = order.duplicate()
 	if not await _tip_strip("gate", order, m, true):
 		return {}
 	_summary("GATE", m, true)
@@ -490,8 +508,8 @@ func _desk_depth(bag: Node3D) -> Array:
 	var desks := _mode.get_node("BuildView").find_children(
 		"GateDesk*", "MeshInstance3D", true, false
 	)
-	if desks.is_empty():
-		_invalid("DESK_OVERLAP: no gate desk mesh found")
+	if desks.is_empty() or points.is_empty():
+		_invalid("DESK_OVERLAP: no gate desk mesh or no roller body points")
 	for mi in desks:
 		var desk := mi as MeshInstance3D
 		var to_local := desk.global_transform.affine_inverse()
@@ -518,7 +536,79 @@ func _desk_depth(bag: Node3D) -> Array:
 			deepest = maxf(
 				deepest, minf(minf(minf(lo.x, hi.x), minf(lo.y, hi.y)), minf(lo.z, hi.z))
 			)
-	return [count, deepest]
+	return [count, deepest, points.size()]
+
+
+## One frame of the boarding DESK_OVERLAP watch: each of _board_watch's
+## standers' roller body against the gate desk (_desk_depth()), every frame
+## from boarding until QUEUE_TIP_TICKS + 3 ticks past its tip's end.
+func _watch_board_desk() -> void:
+	var props := _views.carry_on_props()
+	var now := _clock.tick + _clock.alpha
+	for c: Passenger in _board_watch:
+		var w: Dictionary = _board_desk.get_or_add(
+			c.id, {"points": 0, "deepest": 0.0, "frames": 0, "sampled": 0, "end": INF, "at": -1.0}
+		)
+		if now > w["end"] or c.is_done() or c.stage == Passenger.Stage.APRON:
+			continue
+		if _views.node_for(c.id) == null or props.props_of(c.id).get("bags", []).is_empty():
+			continue
+		var bag := props.bag_state(c.id, 0)
+		if bag.has("queue_tip") and is_inf(float(w["end"])):
+			var tip_end := float(bag["since"]) + float(bag["queue_tip"])
+			w["end"] = tip_end + RollerPark.QUEUE_TIP_TICKS + 3.0
+		var depth := _desk_depth(props.props_of(c.id)["bags"][0])
+		w["frames"] += 1
+		w["sampled"] = maxi(int(w["sampled"]), int(depth[2]))
+		if int(depth[0]) > int(w["points"]):
+			w["points"] = int(depth[0])
+			w["at"] = now
+		w["deepest"] = maxf(float(w["deepest"]), float(depth[1]))
+
+
+## Steps until every watched stander's boarding DESK_OVERLAP window has
+## ended (it left the grid or is past its tip's end), at most 600 ticks.
+func _board_desk_settle() -> void:
+	var stop := _clock.tick + 600
+	var open := func(c: Passenger) -> bool:
+		var w: Dictionary = _board_desk.get(c.id, {})
+		var out := c.is_done() or c.stage == Passenger.Stage.APRON
+		return not out and (w.is_empty() or _clock.tick + _clock.alpha <= float(w["end"]))
+	while _clock.tick < stop and _board_watch.any(open):
+		await _step()
+
+
+## The boarding DESK_OVERLAP line per gate stander: no roller body point in
+## the gate desk from boarding to its tip's end, each measured to that end.
+func _board_desk_check() -> void:
+	if _board_watch.is_empty():
+		_invalid("GATE BOARD_DESK: no stander was watched at boarding")
+	for c: Passenger in _board_watch:
+		var w: Dictionary = _board_desk.get(c.id, {})
+		var out := c.is_done() or c.stage == Passenger.Stage.APRON
+		var ended: bool = not w.is_empty() and (out or _clock.tick + _clock.alpha > float(w["end"]))
+		print(
+			(
+				(
+					"GATE BOARD_DESK id %d DESK_OVERLAP roller body points in the desk %d (0) "
+					+ "at tick %.2f, deepest %.3f m, over %d frames of %d body points, "
+					+ "measured to the tip's end %s"
+				)
+				% [
+					c.id,
+					w.get("points", 0),
+					w.get("at", -1.0),
+					w.get("deepest", 0.0),
+					w.get("frames", 0),
+					w.get("sampled", 0),
+					ended
+				]
+			)
+		)
+		if int(w.get("frames", 0)) == 0 or not ended:
+			_invalid("GATE BOARD_DESK: stander %d not measured to its tip's end" % c.id)
+		elif int(w["points"]) > 0:
+			_invalid("GATE BOARD_DESK: stander %d's roller went into the gate desk" % c.id)
 
 
 ## The stood roller body's surface (its meshes but the rods'), a point every 2 cm.
@@ -884,6 +974,8 @@ func _summary(label: String, m: Dictionary, posture: bool) -> void:
 func _step() -> void:
 	_clock.advance(SimClock.STEP / 3.0)
 	await _frames(1)
+	if not _board_watch.is_empty():
+		_watch_board_desk()
 
 
 ## A plate of `p` and its roller from behind on the roller's side (then from
