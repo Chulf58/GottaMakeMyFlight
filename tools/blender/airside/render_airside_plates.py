@@ -17,8 +17,11 @@ and the pack's plane 05 from game/assets/planes/tp_plane_05a.glb:
   z 0, exit x 0, plane origin at (-3.5, 0, -16.9) Godot, nose +z), the bridge docked
   at its measured door by the build script's pose math, a taxi sign by the lead-in,
   a grey placeholder terminal, perspective from about 45 m;
-- pushback.png: the plane pushed back 12 m with the tug's towing head on its nose
-  wheel, the bridge parked, perspective;
+- pushback.png: pushback start: the towbarless tug cradling plane 05's nose wheel at
+  the stand, the bridge parked; pushback_tug.png and pushback_tug_side.png close up
+  (the side view is level, to show the gap under the fuselage). place_tug() checks
+  the reach past the nose (limit 2.0 m), the wall gap and a BVH overlap with the
+  plane (with a lifted-tug positive control);
 - contact_sheet.png: every plate above, downscaled.
 Each plate proves its subjects are in frame (every vertex inside the margin) and
 visible (camera rays reach the subject first); on failure PROBE_INVALID and exit 1.
@@ -33,6 +36,7 @@ import sys
 import bpy
 import numpy as np
 from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -257,7 +261,84 @@ def glyphs():
 # ---------------------------------------------------------------- stand scenes
 
 
-def stand_scene(pushed_m, with_tug):
+def world_bvh(objs):
+    """One BVH over the world-space polygons of the mesh objects."""
+    verts, polys = [], []
+    for o in rap.meshes(objs):
+        mw = o.matrix_world
+        base = len(verts)
+        verts.extend(mw @ v.co for v in o.data.vertices)
+        polys.extend([base + i for i in p.vertices] for p in o.data.polygons)
+    return BVHTree.FromPolygons(verts, polys)
+
+
+def place_tug(po, plane, pushed_m):
+    """The towbarless tug with its origin (Mount_NoseGear) on plane 05's nose wheel
+    ground contact, facing the plane's way. Checks, on the placed meshes: the mount on
+    the contact point, how far the tug reaches past the nose and toward the wall, a
+    BVH overlap test against every plane mesh (with a positive control: the same tug
+    lifted 1 m must overlap), and the vertical gap under the fuselage."""
+    wheel = rap.world_points([po["TP_Plane_05A_Wheel_F"]])
+    axle = Vector(((wheel[:, 0].min() + wheel[:, 0].max()) / 2, (wheel[:, 1].min() + wheel[:, 1].max()) / 2,
+                   (wheel[:, 2].min() + wheel[:, 2].max()) / 2))
+    r = (wheel[:, 2].max() - wheel[:, 2].min()) / 2.0
+    contact = Vector((axle.x, axle.y, 0.0))
+    tug, holder = place(prop("pushback_tug"), "pushback_tug", (contact.x, 0.0, -contact.y), 0.0)
+    to = by_name(tug)
+    err = (to["Mount_NoseGear"].matrix_world.translation - contact).length
+    plane_pts = rap.world_points(plane)
+    tug_pts = rap.world_points(tug)
+    nose_g = float(-plane_pts[:, 1].min())
+    front_g = float(-tug_pts[:, 1].min())
+    plane_origin_g = STAND_ORIGIN_G[2] - pushed_m
+    past = front_g - nose_g
+    log("TUG wheel_x=[%.3f, %.3f] wheel_godot_z=[%.3f, %.3f]" % (wheel[:, 0].min(), wheel[:, 0].max(),
+                                                               -wheel[:, 1].max(), -wheel[:, 1].min()))
+    log("TUG axle_godot=(%.2f, %.3f, %.2f) wheel_r=%.3f mount_err=%.4f nose_godot_z=%.3f (%.2f ahead of the plane "
+        "origin, axle %.2f ahead) tug_front_godot_z=%.3f past_nose=%.3f (limit 2.0) wall_gap=%.3f"
+        % (axle.x, axle.z, -axle.y, r, err, nose_g, nose_g - plane_origin_g, -axle.y - plane_origin_g, front_g, past,
+           -front_g))
+    if err > 0.005:
+        invalid("tug: Mount_NoseGear is %.4f m off the nose wheel contact" % err)
+    if past > 2.0:
+        invalid("tug: reaches %.3f m past the nose (limit 2.0)" % past)
+    if front_g > 0.0:
+        invalid("tug: reaches %.3f m into the terminal" % front_g)
+    tug_bvh = world_bvh(tug)
+    hits = {}
+    for o in rap.meshes(plane):
+        n = len(tug_bvh.overlap(world_bvh([o])))
+        if n:
+            hits[rap.base_name(o.name)] = n
+    holder.location.z += 1.0
+    bpy.context.view_layer.update()
+    control = len(world_bvh(tug).overlap(world_bvh(plane)))
+    holder.location.z -= 1.0
+    bpy.context.view_layer.update()
+    # The vertical gap: plane vertices over the tug's footprint (the nose gear, which
+    # stands in the slot, left out) against the tug's height under the plane's length.
+    lo, hi = tug_pts.min(axis=0), tug_pts.max(axis=0)
+    body = [o for o in rap.meshes(plane) if not any(k in o.name for k in ("Wheel_F", "Landing_Gear_F", "Hatch_"))]
+    bp_pts = rap.world_points(body)
+    over = bp_pts[(bp_pts[:, 0] > lo[0]) & (bp_pts[:, 0] < hi[0]) & (bp_pts[:, 1] > lo[1]) & (bp_pts[:, 1] < hi[1])]
+    under = tug_pts[tug_pts[:, 1] > plane_pts[:, 1].min()]
+    fus_min = float(over[:, 2].min()) if len(over) else float("nan")
+    doors = [o for o in rap.meshes(plane) if "Hatch_" in o.name]
+    dp = rap.world_points(doors)
+    dp = dp[(dp[:, 0] > lo[0]) & (dp[:, 0] < hi[0]) & (dp[:, 1] > lo[1]) & (dp[:, 1] < hi[1])]
+    door_min = float(dp[:, 2].min()) if len(dp) else float("nan")
+    tug_max = float(under[:, 2].max()) if len(under) else float("nan")
+    log("TUG overlap_with_plane=%s control_lifted_1m_overlaps=%d fuselage_min_height_over_footprint=%.3f "
+        "tug_max_height_under_plane=%.3f vertical_gap=%.3f gear_door_min_height_over_footprint=%.3f gap_to_doors=%.3f"
+        % (hits or "none", control, fus_min, tug_max, fus_min - tug_max, door_min, door_min - tug_max))
+    if control == 0:
+        invalid("tug: the overlap test found nothing even with the tug lifted into the fuselage")
+    if hits:
+        invalid("tug: intersects the plane %s" % hits)
+    return tug
+
+
+def stand_scene(pushed_m, with_tug, docked):
     scene = rap.reset_scene(1800, 1100, 1.2)
     ox, oy, oz = STAND_ORIGIN_G
     plane, _ph = place(PLANE, "plane_05", (ox, oy, oz - pushed_m))
@@ -283,53 +364,20 @@ def stand_scene(pushed_m, with_tug):
     rx = c.x + math.sqrt(max(want * want - dz * dz, 0.0))
     bridge, bh = place(prop("jet_bridge"), "jet_bridge", (rx, 0.0, rz), 180.0)
     bo = by_name(bridge)
-    if pushed_m == 0.0:
+    if docked:
         pose_bridge(bo, bh, p_door, Vector((1.0, 0.0, 0.0)), "stand plane_05")
     else:
         bo["Tunnel_Yaw"].rotation_mode = "XYZ"
         bo["Tunnel_Yaw"].rotation_euler = (0.0, 0.0, math.radians(-70.0))
         bpy.context.view_layer.update()
-    log("BRIDGE root_godot=(%.2f, 0, %.2f) column_to_exit_x=%.2f link_back_godot_z=%.2f"
-        % (rx, rz, rx, -bo["Mount_Link"].matrix_world.translation.y))
+    log("BRIDGE root_godot=(%.2f, 0, %.2f) column_to_exit_x=%.2f link_back_godot_z=%.2f docked=%s"
+        % (rx, rz, rx, -bo["Mount_Link"].matrix_world.translation.y, docked))
     subjects["jet_bridge"] = bridge
     # The taxi sign at the stand's lead-in, north of the bridge, facing the camera side.
     sign, _sh = place(prop("taxi_sign"), "taxi_sign", (13.0, 0.0, -26.0), 125.0)
     subjects["taxi_sign"] = show_glyphs(sign, {"Glyph_Loc_B", "Glyph_Dir_C", "Glyph_Arrow_R"})
     if with_tug:
-        wheel = rap.world_points([po["TP_Plane_05A_Wheel_F"]])
-        axle = Vector(((wheel[:, 0].min() + wheel[:, 0].max()) / 2, (wheel[:, 1].min() + wheel[:, 1].max()) / 2,
-                       (wheel[:, 2].min() + wheel[:, 2].max()) / 2))
-        r = (wheel[:, 2].max() - wheel[:, 2].min()) / 2.0
-        # The head's front face meets the wheel's front (Godot +z of the plane);
-        # the tug faces the plane (yaw 180), the bar pitched down to axle height.
-        head = Vector((axle.x, wheel[:, 1].min() - 0.02, axle.z))
-        drop = bp.HITCH[1] - head.z
-        pitch = math.asin(drop / bp.BAR_LEN)
-        reach = bp.BAR_LEN * math.cos(pitch)
-        # Facing Godot -z: the hitch is at tug + (0, 0.5, -3.1) Godot -> Blender +y.
-        tug_g = (head.x, 0.0, -(head.y) + reach + bp.HITCH[2])
-        tug, _th = place(prop("pushback_tug"), "pushback_tug", tug_g, 180.0)
-        to = by_name(tug)
-        to["Towbar_Pivot"].rotation_mode = "XYZ"
-        to["Towbar_Pivot"].rotation_euler = (pitch, 0.0, 0.0)
-        bpy.context.view_layer.update()
-        sunk = float(rap.world_points([to["Towbar_Wheels_Mesh"]])[:, 2].min())
-        # Retract the bar wheels (Towbar_Wheels up along its Godot Y = Blender local z).
-        to["Towbar_Wheels"].location.z += max(0.0, -sunk) + 0.04
-        bpy.context.view_layer.update()
-        lifted = float(rap.world_points([to["Towbar_Wheels_Mesh"]])[:, 2].min())
-        log("TOWBAR wheels_min_z hitched_unretracted=%.3f retracted=%.3f" % (sunk, lifted))
-        if lifted < 0.0:
-            invalid("tug: the bar wheels sink %.3f m into the ground" % -lifted)
-        got = to["Mount_NoseGear"].matrix_world.translation
-        tug_pts = rap.world_points([to["PushbackTug_Body"]])
-        rear_g = float(-tug_pts[:, 1].min())
-        log("TUG axle_godot=(%.2f, %.3f, %.2f) wheel_r=%.3f bar_pitch=%.2f mount_err=%.4f tug_rear_godot_z=%.2f "
-            "(wall line 0; at the stand it would be %.2f)"
-            % (axle.x, axle.z, -axle.y, r, math.degrees(pitch), (got - head).length, rear_g, rear_g + pushed_m))
-        if (got - head).length > 0.005:
-            invalid("tug: Mount_NoseGear is %.4f m off the nose wheel" % (got - head).length)
-        subjects["pushback_tug"] = tug
+        subjects["pushback_tug"] = place_tug(po, plane, pushed_m)
     return scene, subjects, term
 
 
@@ -350,7 +398,7 @@ def shoot(name, scene, subjects, target_g, az_deg, el_deg, dist, lens=35.0, need
 
 
 def stand():
-    scene, subjects, _t = stand_scene(0.0, False)
+    scene, subjects, _t = stand_scene(0.0, False, True)
     outs = [shoot("stand", scene, subjects, (-1.0, 1.5, -14.0), 125.0, 40.0, 60.0)]
     # Closer distance shots per prop, the plane in frame beside it.
     outs.append(shoot("stand_bridge", scene, {"jet_bridge": subjects["jet_bridge"]}, (3.0, 2.5, -7.0), 110.0, 30.0,
@@ -361,10 +409,14 @@ def stand():
 
 
 def pushback():
-    scene, subjects, _t = stand_scene(12.0, True)
-    outs = [shoot("pushback", scene, {k: v for k, v in subjects.items() if k != "jet_bridge"}, (-4.0, 1.0, -21.0), 125.0, 40.0, 76.0)]
-    outs.append(shoot("pushback_tug", scene, {"pushback_tug": subjects["pushback_tug"]}, (-3.5, 0.8, -12.5), 140.0,
-                      30.0, 22.0))
+    scene, subjects, _t = stand_scene(0.0, True, False)
+    keep = {k: v for k, v in subjects.items() if k in ("plane_05", "pushback_tug")}
+    outs = [shoot("pushback", scene, keep, (-2.0, 1.0, -12.0), 125.0, 40.0, 62.0)]
+    # Close: the tug under the nose, the terminal wall behind it.
+    outs.append(shoot("pushback_tug", scene, {"pushback_tug": subjects["pushback_tug"]}, (-3.5, 0.8, -4.5), 125.0,
+                      28.0, 14.0))
+    outs.append(shoot("pushback_tug_side", scene, {"pushback_tug": subjects["pushback_tug"]}, (-3.5, 0.9, -4.5),
+                      90.0, 6.0, 13.0, need=0.05))
     return outs
 
 
@@ -414,7 +466,7 @@ def main():
         made.extend(pushback())
     if "sheet" in stages:
         names = ["six_axis/jet_bridge.png", "six_axis/pushback_tug.png", "six_axis/taxi_sign.png", "poses.png",
-                 "glyphs.png", "stand.png", "stand_bridge.png", "stand_sign.png", "pushback.png", "pushback_tug.png"]
+                 "glyphs.png", "stand.png", "stand_bridge.png", "stand_sign.png", "pushback.png", "pushback_tug.png", "pushback_tug_side.png"]
         paths = [os.path.join(OUT, n) for n in names if os.path.exists(os.path.join(OUT, n))]
         sheet(paths)
     log("PLATES done stages=%s made=%d" % (stages, len(made)))

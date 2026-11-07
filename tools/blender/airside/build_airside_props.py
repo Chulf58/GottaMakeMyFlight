@@ -8,8 +8,10 @@ Pieces (written to game/assets/airside/props/<piece>.glb):
 - jet_bridge: a fixed telescoping passenger bridge, visual only. One rig serves the
   medium sill (plane 05, 1.59 m) and the large sills (06 at 2.4 m, 07 at 2.9 m) and
   every reach from REACH_MIN to REACH_MAX (see the pose math below).
-- pushback_tug: a low conventional tug with a tow bar on a yaw pivot at its front
-  hitch; Mount_NoseGear is where the bar's towing head meets the nose gear.
+- pushback_tug: a low towbarless tug (user ruling 2026-11-07) that cradles the nose
+  wheel in a slot at its rear and runs forward under and past the nose; its origin
+  and Mount_NoseGear are the nose wheel's ground contact, and Cradle_Lift raises the
+  cradle along Y.
 - taxi_sign: a two-panel taxiway sign on short legs: a location panel (yellow letter
   and border on black) and a direction panel (black letter and arrow on yellow). Every
   glyph is its own node, so the wiring shows one letter per panel and one arrow.
@@ -119,12 +121,23 @@ BOGIE_TOP = 0.60
 LINK_Z = DRUM_R + 0.9   # the stub's back face behind the column axis
 
 # ---------------------------------------------------------------- pushback tug
-TUG_HALF_L = 3.0
-TUG_HALF_W = 1.45
-HITCH = (0.0, 0.50, TUG_HALF_L + 0.10)
-BAR_LEN = 4.0           # pivot to the towing head's front face
-BAR_WHEEL_Z = 1.5
-BAR_WHEEL_R = 0.16
+# A towbarless tug; z is measured from the nose wheel's ground contact (the origin).
+# Plane 05: the nose is 2.15 m ahead of its nose axle, so the front at 4.0 m stands
+# 1.85 m past the nose (the ruling allows 2.0 m) and the cab starts 0.40 m past it.
+TUG_HALF_W = 1.40
+CRADLE_HALF = 0.55      # the slot for the nose wheel and gear strut, x +-0.55
+TUG_REAR = -0.75        # the arms' rear ends (the clamp gate)
+CRADLE_FRONT = 0.55     # the stop pad's front, where the main body starts
+TUG_FRONT = 4.00
+TUG_BUMPER = 0.12
+ARM_TOP = 0.55
+DECK_TOP = 0.70         # everything that can sit under the fuselage stays this low
+CAB_Z0 = 2.55
+CAB_GLASS_Y = 1.05
+CAB_ROOF_Y = 1.32
+TUG_TOP = 1.48          # the beacon top
+TYRE_R = 0.30
+TYRE_Z = (-0.25, 3.25)
 
 # ---------------------------------------------------------------- taxi sign
 SIGN_HALF_W = 1.20
@@ -272,48 +285,46 @@ def build_jet_bridge(root, c):
 
 
 def build_pushback_tug(root, c):
+    """A towbarless tug. The origin is the nose wheel's ground contact in the cradle;
+    the body runs forward (+z) under and past the aircraft's nose, the cradle slot is
+    open at the rear (-z) for the wheel and the gear strut."""
     p = "pushback_tug"
-    L, W = TUG_HALF_L, TUG_HALF_W
-    gbox("Chassis", (-1.33, 0.35, -L + 0.2), (1.33, 0.95, L - 0.2), "tug_yellow", root, c, bevel=0.06)
-    gbox("Deck", (-1.20, 0.95, -L + 0.45), (0.0, 1.03, L - 0.6), "frame", root, c, bevel=0.02)
-    for sz, name in ((1, "Front"), (-1, "Rear")):
-        z0, z1 = sorted((sz * (L - 0.2), sz * L))
-        gbox("Bumper_" + name, (-1.30, 0.28, z0), (1.30, 0.78, z1), "ink", root, c, bevel=0.03)
-        for sx in (-1, 1):
-            zl0, zl1 = sorted((sz * L, sz * (L + 0.01)))
-            gbox("Lamp_%s_%d" % (name, sx), (sx * 1.0 - 0.12, 0.55, zl0), (sx * 1.0 + 0.12, 0.70, zl1),
-                 "text_white" if sz > 0 else "red", root, c)
-    # Low cab on the left (Godot +x when facing +z), the driver looks both ways.
-    gbox("Cab_Body", (0.15, 0.95, 0.10), (1.30, 1.22, 2.05), "tug_yellow", root, c, bevel=0.03)
-    gbox("Cab_Glass", (0.19, 1.22, 0.14), (1.26, 1.44, 2.01), "window", root, c)
-    gbox("Cab_Roof", (0.12, 1.44, 0.07), (1.33, 1.52, 2.08), "white", root, c, bevel=0.02)
-    gcyl_y("Beacon", 0.72, 1.07, 1.52, 1.62, 0.08, "text_yellow", root, c, segs=8)
-    # Four tyres with grey hubs, the outer faces at +-TUG_HALF_W.
+    W, S = TUG_HALF_W, CRADLE_HALF
+    zr, z1, zf = TUG_REAR, CRADLE_FRONT, TUG_FRONT - TUG_BUMPER
+    # Two cradle arms either side of the slot, then the low main body ahead of it.
     for sx in (-1, 1):
-        for sz in (-1, 1):
-            x0, x1 = sorted((sx * (W - 0.36), sx * W))
-            gcyl_x("Tyre_%d_%d" % (sx, sz), x0, x1, 0.45, sz * 1.85, 0.45, "ink", root, c, segs=12)
-            hx0, hx1 = sorted((sx * (W - 0.35), sx * (W + 0.01)))
-            gcyl_x("Hub_%d_%d" % (sx, sz), hx0, hx1, 0.45, sz * 1.85, 0.20, "light_grey", root, c, segs=8)
-    gbox("Hitch", (-0.14, 0.42, L), (0.14, 0.58, HITCH[2] + 0.05), "metal", root, c)
-
-    bar = pivot(p, "Towbar_Pivot", root, c, HITCH)
-    gbox("Bar_Eye", (-0.10, -0.06, -0.08), (0.10, 0.06, 0.25), "metal", bar, c)
-    gbox("Bar_Tube", (-0.08, -0.08, 0.2), (0.08, 0.08, BAR_LEN - 0.25), "red", bar, c, bevel=0.02)
-    gbox("Bar_Head", (-0.32, -0.08, BAR_LEN - 0.25), (0.32, 0.08, BAR_LEN - 0.12), "ink", bar, c)
+        x0, x1 = sorted((sx * S, sx * (W - 0.2)))
+        gbox("Arm_%d" % sx, (x0, 0.14, zr), (x1, ARM_TOP, z1), "tug_yellow", root, c, bevel=0.04)
+        gbox("Arm_Cap_%d" % sx, (x0 + 0.02, 0.10, zr - 0.06), (x1 - 0.02, ARM_TOP - 0.08, zr), "ink", root, c)
+    gbox("Body", (-(W - 0.2), 0.14, z1), (W - 0.2, DECK_TOP, zf), "tug_yellow", root, c, bevel=0.05)
+    gbox("Deck", (-(W - 0.32), DECK_TOP, z1 + 0.12), (-0.05, DECK_TOP + 0.04, CAB_Z0 - 0.1), "frame", root, c)
+    gbox("Bumper_Front", (-(W - 0.25), 0.12, zf), (W - 0.25, 0.62, TUG_FRONT), "ink", root, c, bevel=0.03)
     for sx in (-1, 1):
-        gbox("Bar_Lug_%d" % sx, (sx * 0.24 - 0.04, -0.06, BAR_LEN - 0.12), (sx * 0.24 + 0.04, 0.06, BAR_LEN),
-             "metal", bar, c)
-    # Two small bar wheels on a fork, on their own pivot under the bar: at rest they
-    # touch the ground; hitched, the bar pitches down and the wiring raises
-    # Towbar_Wheels along Y (retracts them) so they never sink into the ground.
-    wheels = pivot(p, "Towbar_Wheels", bar, c, (0.0, 0.0, BAR_WHEEL_Z))
-    wy = BAR_WHEEL_R - HITCH[1]
-    gbox("Bar_Fork", (-0.26, wy, -0.04), (0.26, -0.06, 0.04), "metal", wheels, c)
+        gbox("Lamp_Front_%d" % sx, (sx * 0.9 - 0.12, 0.40, TUG_FRONT), (sx * 0.9 + 0.12, 0.52, TUG_FRONT + 0.01),
+             "text_white", root, c)
+        gbox("Lamp_Rear_%d" % sx, (sx * (W - 0.45) - 0.08, 0.34, zr - 0.07), (sx * (W - 0.45) + 0.08, 0.44, zr - 0.06),
+             "red", root, c)
+    # A low cab on the port side, wholly ahead of the aircraft nose (CAB_Z0).
+    gbox("Cab_Body", (0.0, DECK_TOP, CAB_Z0), (W - 0.22, CAB_GLASS_Y, zf - 0.05), "tug_yellow", root, c, bevel=0.03)
+    gbox("Cab_Glass", (0.04, CAB_GLASS_Y, CAB_Z0 + 0.04), (W - 0.26, CAB_ROOF_Y, zf - 0.09), "window", root, c)
+    gbox("Cab_Roof", (-0.03, CAB_ROOF_Y, CAB_Z0 - 0.03), (W - 0.19, CAB_ROOF_Y + 0.08, zf - 0.02), "white", root, c,
+         bevel=0.02)
+    gcyl_y("Beacon", (W - 0.22) / 2.0, (CAB_Z0 + zf) / 2.0, CAB_ROOF_Y + 0.08, TUG_TOP, 0.08, "text_yellow", root,
+           c, segs=8)
+    # Four small tyres, the outer faces at +-TUG_HALF_W.
     for sx in (-1, 1):
-        x0, x1 = sorted((sx * 0.20, sx * 0.30))
-        gcyl_x("Bar_Wheel_%d" % sx, x0, x1, wy, 0.0, BAR_WHEEL_R, "ink", wheels, c, segs=8)
-    pivot(p, "Mount_NoseGear", bar, c, (0.0, 0.0, BAR_LEN))
+        for name, z in (("Rear", TYRE_Z[0]), ("Front", TYRE_Z[1])):
+            x0, x1 = sorted((sx * (W - 0.24), sx * W))
+            gcyl_x("Tyre_%s_%d" % (name, sx), x0, x1, TYRE_R, z, TYRE_R, "ink", root, c)
+            hx0, hx1 = sorted((sx * (W - 0.23), sx * (W + 0.01)))
+            gcyl_x("Hub_%s_%d" % (name, sx), hx0, hx1, TYRE_R, z, 0.14, "light_grey", root, c, segs=8)
+    # The cradle on its lift pivot: a stop pad ahead of the wheel and a clamp gate
+    # behind it, both clear of a resting wheel up to about 0.44 m radius (nothing sits
+    # under the tyre, which touches the ground). Cradle_Lift translates up (Y).
+    lift = pivot(p, "Cradle_Lift", root, c, (0.0, 0.0, 0.0))
+    gbox("Cradle_Stop", (-S + 0.04, 0.07, z1 - 0.10), (S - 0.04, 0.42, z1), "ink", lift, c)
+    gbox("Cradle_Gate", (-S, 0.14, zr), (S, 0.26, zr + 0.10), "ink", lift, c)
+    pivot(p, "Mount_NoseGear", lift, c, (0.0, 0.0, 0.0))
 
 
 # ---------------------------------------------------------------- taxi sign
@@ -528,8 +539,8 @@ def drum_extent(r, segs=12):
 _rx, _ry = drum_extent(DRUM_R + 0.15)
 BRIDGE_LO = (-_rx, 0.0, -LINK_Z - 0.02)
 BRIDGE_HI = (_rx, ROT_FLOOR + CAB_TOP + 0.13, HINGE_Z + CAB_Z + MOUNT_DOOR_Z)
-TUG_LO = (-TUG_HALF_W - 0.01, 0.0, -TUG_HALF_L - 0.01)
-TUG_HI = (TUG_HALF_W + 0.01, 1.62, HITCH[2] + BAR_LEN)
+TUG_LO = (-TUG_HALF_W - 0.01, 0.0, TUG_REAR - 0.07)
+TUG_HI = (TUG_HALF_W + 0.01, TUG_TOP, TUG_FRONT + 0.01)
 SIGN_LO = (-SIGN_HALF_W, 0.0, -FACE_Z - 0.024)
 SIGN_HI = (SIGN_HALF_W, SIGN_Y[1], FACE_Z + 0.024)
 
@@ -542,7 +553,7 @@ EXTRA_NODES = {
     "jet_bridge": ["Tunnel_Yaw", "Tunnel_Pitch", "Tunnel_Pitch_Mesh", "Tunnel_Slide", "Tunnel_Slide_Mesh",
                    "Drive_Level", "Drive_Level_Mesh", "Drive_Foot", "Drive_Foot_Mesh", "Cab_Level", "Cab_Yaw",
                    "Cab_Yaw_Mesh", "Mount_Door", "Mount_Link"],
-    "pushback_tug": ["Towbar_Pivot", "Towbar_Pivot_Mesh", "Towbar_Wheels", "Towbar_Wheels_Mesh", "Mount_NoseGear"],
+    "pushback_tug": ["Cradle_Lift", "Cradle_Lift_Mesh", "Mount_NoseGear"],
     "taxi_sign": [n for ch in LETTERS for n in ("Glyph_Loc_" + ch, "Glyph_Loc_%s_Mesh" % ch,
                                                  "Glyph_Dir_" + ch, "Glyph_Dir_%s_Mesh" % ch)]
     + ["Glyph_Arrow_L", "Glyph_Arrow_L_Mesh", "Glyph_Arrow_R", "Glyph_Arrow_R_Mesh"],
@@ -601,9 +612,9 @@ def check_rig(written):
             if owner != want or off:
                 kit.fail("%s: mesh %s hangs on %s (expected %s) offset=%s" % (piece, nd.get("name"), owner, want, off))
     kit.log("RIG reach_min=%.2f reach_max=%.2f mount_door_z=%.2f slide_max=%.2f rot_floor=%.2f hinge_z=%.2f "
-            "cab_z=%.2f drive_z=%.2f tun_b_sink=%.2f bar_len=%.2f hitch=%s"
-            % (REACH_MIN, REACH_MAX, MOUNT_DOOR_Z, SLIDE_MAX, ROT_FLOOR, HINGE_Z, CAB_Z, DRIVE_Z, TUN_B_SINK, BAR_LEN,
-               HITCH))
+            "cab_z=%.2f drive_z=%.2f tun_b_sink=%.2f tug_front=%.2f tug_rear=%.2f deck_top=%.2f cab_z0=%.2f"
+            % (REACH_MIN, REACH_MAX, MOUNT_DOOR_Z, SLIDE_MAX, ROT_FLOOR, HINGE_Z, CAB_Z, DRIVE_Z, TUN_B_SINK, TUG_FRONT,
+               TUG_REAR, DECK_TOP, CAB_Z0))
 
 
 def guard(pieces):
