@@ -34,6 +34,12 @@ func test_of_stores_edits_on_the_props_at_the_first_call() -> void:
 	assert_bool(is_same(props.get_meta(CarryPlace.WallEdits.META), first)).is_true()
 
 
+## The first call finds no meta; reading it must print no engine error.
+func test_the_first_call_prints_no_engine_error() -> void:
+	var props := _props()
+	await assert_error(func() -> void: CarryPlace.WallEdits.of(props)).is_success()
+
+
 func test_of_returns_the_same_edits_twice() -> void:
 	var props := _props()
 	var first := CarryPlace.WallEdits.of(props)
