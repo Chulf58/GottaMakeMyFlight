@@ -189,6 +189,32 @@ func test_the_claim_passes_only_to_a_walker_pass_ticks_sooner() -> void:
 	assert_dict(claims).is_equal({1: 5})
 
 
+## The hand-off is routed: a walker walled in a cell beside the line, a
+## straight walk sooner than the far claimant, has no way to the tail and never
+## takes the claim (it would have taken it and lost it the tick after).
+func test_a_walker_with_no_way_to_the_tail_never_takes_the_claim() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(5, 5))
+	for side in BuildGrid.SIDE_STEP.size():
+		assert_bool(grid.apply(BuildEdit.place_wall(Vector2i(1, 1), side)).ok).is_true()
+	var line: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]
+	var front := Passenger.new()
+	front.id = 100
+	front.at = line[0]
+	front.clear_path()
+	var walled := _standing(9, Vector2i(1, 1))
+	var far := _standing(5, Vector2i(4, 4))
+	var queues := {1: {"lane": [100], "holding": [], "serving": 0}}
+	var by_id := {100: front, 5: far, 9: walled}
+	var claims := {1: 5}
+	for tick in range(7, 10):
+		StationQueue.arrive(
+			grid, queues, {1: line.slice(0, 2)}, {1: line}, [far, walled], by_id, tick, [], claims
+		)
+		assert_dict(claims).is_equal({1: 5})
+		far.walk(PassengerSim.WALK_MM)
+	assert_bool(walled.is_moving()).is_false()
+
+
 ## A standing walker of station 1 on `at`.
 static func _standing(id: int, at: Vector2i) -> Passenger:
 	var w := Passenger.new()

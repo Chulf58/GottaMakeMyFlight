@@ -233,7 +233,7 @@ static func arrive(
 			free = free_index(queue, line, by_id, index)
 			to = tail(free, admitted)
 		if claims.has(station):
-			_pass_claim(claims, station, by_id, mine, line, to)
+			_pass_claim(grid, claims, station, by_id, mine, line, to)
 		for w: Passenger in mine:
 			if claims.get(station, 0) == w.id:
 				var onto: int = index.get(w.path[w.path_index + 1], -1) if w.is_moving() else -1
@@ -282,41 +282,65 @@ static func _enter(
 
 
 ## The claim on `station`'s tail passes to another walker of `walkers` that
-## would reach line[`to`] at least PASS_TICKS sooner than its claimant
-## (_ticks_on()), the soonest such one (ties to the lower id), and stays
-## latched on it; the old claimant waits on as the others do.
+## would reach line[`to`] at least PASS_TICKS sooner than its claimant, by the
+## routed walk _soonest() uses (_ticks_to()), the soonest such one (ties to
+## the lower id), and stays latched on it; one with no way there never takes
+## it, and the old claimant waits on as the others do. A straight-line bound
+## (_ticks_at_least()) skips the walkers that cannot be that much sooner
+## without finding their route.
 static func _pass_claim(
-	claims: Dictionary, station: int, by_id: Dictionary, walkers: Array, line: Array, to: int
+	grid: BuildGrid,
+	claims: Dictionary,
+	station: int,
+	by_id: Dictionary,
+	walkers: Array,
+	line: Array,
+	to: int
 ) -> void:
 	if to >= line.size():
 		return
 	var holder: Passenger = by_id[claims[station]]
-	var beat := _ticks_on(holder, line[to]) - PASS_TICKS
+	# The claimant heading for the tail walks its route there already.
+	var mine := (
+		holder.pace_ticks(_rest_mm(holder))
+		if holder.is_moving() and holder.path_end() == line[to]
+		else _ticks_to(grid, holder, line, to)
+	)
+	if mine < 0:
+		return
+	var beat := mine - PASS_TICKS
 	var best: Passenger = null
 	var best_ticks := 0
 	for w: Passenger in walkers:
-		if w == holder:
+		if w == holder or _ticks_at_least(w, line[to]) > beat:
 			continue
-		var ticks := _ticks_on(w, line[to])
-		if ticks <= beat and (best == null or ticks < best_ticks):
+		var ticks := _ticks_to(grid, w, line, to)
+		if ticks >= 0 and ticks <= beat and (best == null or ticks < best_ticks):
 			best = w
 			best_ticks = ticks
 	if best != null:
 		claims[station] = best.id
 
 
-## The ticks walker `w` would take to reach `cell` on the way it has: the rest
-## of its path, then a straight walk from the path's end (octile), at its
-## pace. Cheap enough for every walker every tick, with no route found.
-static func _ticks_on(w: Passenger, cell: Vector2i) -> int:
+## The walk left on moving walker `w`'s path, in mm.
+static func _rest_mm(w: Passenger) -> int:
+	var mm := Passenger.segment_mm(w.at, w.path[w.path_index + 1]) - w.seg_mm
+	for i in range(w.path_index + 1, w.path.size() - 1):
+		mm += Passenger.segment_mm(w.path[i], w.path[i + 1])
+	return mm
+
+
+## A bound below the ticks walker `w` takes to reach `cell` by any route
+## (_ticks_to()): the rest of its step, then a straight walk (octile) from the
+## cell it steps to, at its pace.
+static func _ticks_at_least(w: Passenger, cell: Vector2i) -> int:
 	var mm := 0
+	var from := w.at
 	if w.is_moving():
-		mm = Passenger.segment_mm(w.at, w.path[w.path_index + 1]) - w.seg_mm
-		for i in range(w.path_index + 1, w.path.size() - 1):
-			mm += Passenger.segment_mm(w.path[i], w.path[i + 1])
-	var end := w.path_end()
-	var dx := absi(end.x - cell.x)
-	var dy := absi(end.y - cell.y)
+		from = w.path[w.path_index + 1]
+		mm = Passenger.segment_mm(w.at, from) - w.seg_mm
+	var dx := absi(from.x - cell.x)
+	var dy := absi(from.y - cell.y)
 	mm += mini(dx, dy) * Passenger.DIAGONAL_MM + absi(dx - dy) * Passenger.STRAIGHT_MM
 	return w.pace_ticks(mm)
 

@@ -118,6 +118,12 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	if boarding.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % boarding["error"])
 		return false
+	# Checked with the rest before anything is installed: a bad save changes
+	# nothing.
+	var tail_claims := checked_claims(data, by_id)
+	if tail_claims.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % tail_claims["error"])
+		return false
 	spots.restore(claims["claims"], by_id)
 	sim.gates.restore(claims["gate"], spots, by_id)
 	sim.standing = spots
@@ -132,10 +138,6 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	sim._missed = loaded["missed"]
 	sim._schedule = loaded["schedule"]
 	sim._queues = loaded["queues"]
-	var tail_claims := checked_claims(data, by_id)
-	if tail_claims.has("error"):
-		push_error("PassengerSim.from_snapshot: %s" % tail_claims["error"])
-		return false
 	sim._claims = tail_claims["claims"]
 	sim.security.restore(loaded["security"])
 	sim.cafes.restore(loaded["cafe"])

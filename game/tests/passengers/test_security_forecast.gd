@@ -111,6 +111,12 @@ func _check_tier(use_lane: bool, count: int, phases_wanted: Array) -> void:
 func test_the_forecast_equals_measured_clearance_at_the_basic_scanner() -> void:
 	# 2720 before a walker joined on the tick it reaches its cell
 	# (StationQueue.arrive()), not the tick after: seven passengers, a tick each.
+	# Observed again on the latched-claim line (decision hold-line-rebuild-the-
+	# security-line-follows-where-people-sta), at 3aa8696 and after the routed
+	# hand-off: this stream's walkers arrive one behind another, so each is the
+	# claimant as it reaches the tail and enters on the tick it would have
+	# joined before; the 2748 seen on the way came from an earlier draft of the
+	# rule, since replaced.
 	_check_tier(false, 2713, BASIC_PHASES)
 
 
@@ -118,6 +124,11 @@ func test_the_forecast_equals_measured_clearance_at_the_lane() -> void:
 	# 2197 before the arch walk stopped on the arch cell to claim the pickup
 	# cell (decision gate-full-design-passengers-reserve-a-gate-seat-or-standing).
 	# 2230 before a walker joined on the tick it reaches its cell.
+	# Observed again on the latched-claim line, at 3aa8696 and after the routed
+	# hand-off: here too each walker is the claimant as it reaches the tail, and
+	# with entry behind an unpacking passenger allowed the admissions fall as
+	# they did before the rebuild; the 2074, 2096 and 2080 seen on the way came
+	# from earlier drafts of the rule, since replaced.
 	_check_tier(true, 2223, LANE_PHASES)
 
 

@@ -255,3 +255,30 @@ func test_a_save_before_a_simultaneous_release_plays_on_exactly() -> void:
 		_world.step()
 		_other.step()
 		assert_str(_other.signature()).is_equal(_world.signature())
+
+
+## A save whose tail claims are not valid (a list for the station -> id map) is
+## refused before anything is installed: the populated sim, its standing
+## spots, gate places, boarding files, queues and claims included, is left
+## exactly as it was.
+func test_a_save_with_bad_claims_is_refused_and_changes_nothing() -> void:
+	var grid := BuildGrid.new()
+	CafeTestLayout.build(grid)
+	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(3000))
+	var sim := _world.sim
+	for i in 32:
+		var p := _world.passenger(sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
+		p.stage = Passenger.Stage.TO_SECURITY
+		p.at = Vector2i(16, 12)
+		p.clear_path()
+	_world.run_to(_world.clock.tick + 150)
+	assert_bool(sim._claims.is_empty()).is_false()
+	var data := sim.to_snapshot()
+	# A save from another moment, so a partial install would show.
+	_world.run_to(_world.clock.tick + 40)
+	var before := JSON.stringify(sim.to_snapshot())
+	data["claims"] = []
+	assert_bool(sim.from_snapshot(data)).is_false()
+	assert_str(JSON.stringify(sim.to_snapshot())).is_equal(before)
