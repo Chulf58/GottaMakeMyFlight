@@ -128,8 +128,18 @@ func test_claims_load_as_saved_not_allocated_again() -> void:
 func test_a_version_14_save_is_refused() -> void:
 	_a = _crowded_world()
 	var data := _save(_a)
-	assert_int(int(data["passengers"]["save_version"])).is_equal(28)
+	assert_int(int(data["passengers"]["save_version"])).is_equal(29)
 	data["passengers"]["save_version"] = 14
+	_b = PassengerTestWorld.reference_world()
+	var before := _b.signature()
+	assert_bool(_b.sim.from_snapshot(data["passengers"])).is_false()
+	assert_str(_b.signature()).is_equal(before)
+
+
+func test_a_version_28_save_is_refused() -> void:
+	_a = _crowded_world()
+	var data := _save(_a)
+	data["passengers"]["save_version"] = 28
 	_b = PassengerTestWorld.reference_world()
 	var before := _b.signature()
 	assert_bool(_b.sim.from_snapshot(data["passengers"])).is_false()
