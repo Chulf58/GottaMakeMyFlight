@@ -169,6 +169,7 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 			p.stage = Passenger.Stage.TO_GATE
 			p.stage_tick = sim.tick + 1
 			p.clear_path()
+			p.stand_from = Passenger.NO_CELL
 	sim.layout.rebuild(sim.grid)
 	sim.routes.clear()
 	sim._rederive()

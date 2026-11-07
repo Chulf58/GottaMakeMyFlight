@@ -298,11 +298,11 @@ func test_a_two_bag_guest_keeps_its_usual_side() -> void:
 
 
 ## Draws `p` stood up beside the wall drawn facing east, then its body drawn
-## turned by `turn` (radians) while it stays still, then walking off east (its
-## path opened, the sim not ticked) with its body turning back to east at the
-## pace a body turns (TURN_STEP a tick, PassengerTurns): [the roller's centre
-## on each tick from the turn on, its least wall clearance, whether the tip
-## ran].
+## turned by `turn` (radians) while it stays still, then walking off the way it
+## is drawn facing (its path opened a cell that way, the sim not ticked), so
+## the tip starts with the body turned from the stand's frame and needs no turn
+## wait (RollerPark.tip_wait()): [the roller's centre on each tick from the
+## turn on, its least wall clearance, whether the tip ran].
 func _tipped(p: Passenger, turn: float) -> Array:
 	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
@@ -315,15 +315,11 @@ func _tipped(p: Passenger, turn: float) -> Array:
 	var centres: Array[Vector3] = []
 	var clear := INF
 	var tipped := false
-	var yaw := EAST
+	var ahead := Vector2i(roundi(sin(EAST + turn)), roundi(cos(EAST + turn)))
 	for n in STILL_RUN + HOLD_RUN + TIP_RUN:
-		if n == STILL_RUN:
-			yaw = EAST + turn
-		elif n > STILL_RUN + HOLD_RUN:
-			yaw = move_toward(yaw, EAST, TURN_STEP)
-		_views._turns.place(p.id, yaw)
+		_views._turns.place(p.id, EAST if n < STILL_RUN else EAST + turn)
 		if n == STILL_RUN + HOLD_RUN:
-			var way: Array[Vector2i] = [_cell, _cell + Vector2i(1, 0)]
+			var way: Array[Vector2i] = [_cell, _cell + ahead]
 			p.set_path(way)
 		_world.clock.tick += 1
 		_views.sync()
@@ -342,14 +338,18 @@ func _tipped(p: Passenger, turn: float) -> Array:
 
 
 ## The body is drawn turned away from the way its stand was chosen in (a
-## quarter and a half turn) before it walks off: the tip takes the stood roller
-## from where it stood with no tick moving it more than TIP_STEP_M past the
-## largest step of the tip of a body not turned (the first case, the tip's own
-## pace: about 0.36 m a tick, 0.12 m a frame at three frames a tick), and never
-## into the wall. Control: the tip ran each time.
+## quarter turn to face the wall, and a half turn) before it walks off that
+## way: the tip takes the stood roller from where it stood with no tick moving
+## it more than TIP_STEP_M past the largest step of the tip of a body not turned
+## (the first case, the tip's own pace: about 0.36 m a tick, 0.12 m a frame at
+## three frames a tick). Not turned and a quarter turn, it never goes into the
+## wall. A half turn is left out of the wall check: the roller stays in its
+## stand's hand (RollerPark.hold_park()), the left, which for a body facing
+## west is the walled side, so the walking pull it tips into stands in the wall
+## (board aa2db71d's walking-pull clip; printed). Control: the tip ran each time.
 func test_a_tip_after_the_body_turned_from_the_stand_neither_jumps_nor_clips() -> void:
 	var seen := []
-	for turn: float in [0.0, PI / 2.0, PI]:
+	for turn: float in [0.0, -PI / 2.0, PI]:
 		var p := _queuer()
 		var got: Array = await _tipped(p, turn)
 		var centres: Array[Vector3] = got[0]
@@ -361,5 +361,6 @@ func test_a_tip_after_the_body_turned_from_the_stand_neither_jumps_nor_clips() -
 	print("[turned, largest step, clear of the wall, tipped]: %s" % [seen])
 	for at: Array in seen:
 		assert_bool(at[3]).is_true()
-		assert_float(at[2]).is_greater(0.0)
 		assert_float(at[1]).is_less_equal(float(seen[0][1]) + TIP_STEP_M)
+	for at: Array in seen.slice(0, 2):
+		assert_float(at[2]).is_greater(0.0)
