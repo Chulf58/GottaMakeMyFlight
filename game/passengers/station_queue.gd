@@ -141,21 +141,9 @@ static func _faces_front(line: Array, index: int, from: Vector2i) -> bool:
 	return step.x * front.x + step.y * front.y >= 0
 
 
-## The cell index a walker to `station` waits behind: past every cell of
-## `line` a passenger admitted there (Stage.SECURITY) still stands on, such as
-## a security lane's first cell, where the admitted passenger unpacks; -1 when
-## none does. A walker enters only behind that cell (tail()).
-static func admitted_at(by_id: Dictionary, station: int, line: Array) -> int:
-	var at := -1
-	for p: Passenger in by_id.values():
-		if p.stage == Passenger.Stage.SECURITY and p.station == station:
-			at = maxi(at, line.find(p.at))
-	return at
-
-
 ## The tail cell's index, where the claimant enters the queue: past the
-## queue's members (free_index()) and past an admitted passenger still on the
-## line (admitted_at()).
+## queue's members (free_index()) and past `admitted`, the last line cell an
+## admitted passenger still stands on (-1: none, _inside()).
 static func tail(free: int, admitted: int) -> int:
 	return maxi(free, admitted + 1)
 
@@ -182,6 +170,10 @@ static func tail(free: int, admitted: int) -> int:
 ##   no cell: it follows on toward the tail and stops a step short of it
 ##   (_stop_short()). No one enters by passing over a line cell.
 ## Returns the walkers that entered, a moving one with halt_tick `now`.
+## `known` keeps, by station, its line's index (line_index()) and the routes
+## approach() found on it, for the next call with the same line and a grid
+## that has not changed since (SecurityForecast keeps one per replay); it is
+## filled here, and a station whose line is another array starts over.
 static func arrive(
 	grid: BuildGrid,
 	queues: Dictionary,
@@ -191,36 +183,41 @@ static func arrive(
 	by_id: Dictionary,
 	now: int,
 	stranded: Array = [],
-	claims: Dictionary = {}
+	claims: Dictionary = {},
+	known: Dictionary = {}
 ) -> Array[Passenger]:
 	var by_station := {}
+	var held := {}
 	for w: Passenger in walkers:
 		if lines.has(w.station) and queues.has(w.station):
 			if not by_station.has(w.station):
 				by_station[w.station] = []
 			(by_station[w.station] as Array).append(w)
+			if claims.get(w.station, 0) == w.id:
+				held[w.station] = true
 	for station: int in claims.keys():
-		var held_by: int = claims[station]
-		var still := (
-			by_station.has(station)
-			and (by_station[station] as Array).any(
-				func(w: Passenger) -> bool: return w.id == held_by
-			)
-		)
-		if not still:
+		if not held.has(station):
 			claims.erase(station)
+	var inside := _inside(by_id)
 	var joined: Array[Passenger] = []
 	for station: int in by_station:
 		var line: Array = lines[station]
 		var queue: Dictionary = queues[station]
-		var index := line_index(line)
-		var admitted := admitted_at(by_id, station, line)
+		var mine_known: Array = known.get(station, [])
+		if mine_known.is_empty() or not is_same(mine_known[0], line):
+			mine_known = [line, line_index(line), {}]
+			known[station] = mine_known
+		var index: Dictionary = mine_known[1]
+		var paths: Dictionary = mine_known[2]
+		var admitted := -1
+		for cell: Vector2i in inside.get(station, []):
+			admitted = maxi(admitted, line.find(cell))
 		var mine: Array = by_station[station]
 		var free := free_index(queue, line, by_id, index)
 		var to := tail(free, admitted)
 		while true:
 			if not claims.has(station):
-				var best := _soonest(grid, mine, line, to)
+				var best := _soonest(grid, mine, line, to, paths)
 				if best == null:
 					break
 				claims[station] = best.id
@@ -233,7 +230,7 @@ static func arrive(
 			free = free_index(queue, line, by_id, index)
 			to = tail(free, admitted)
 		if claims.has(station):
-			_pass_claim(grid, claims, station, by_id, mine, line, to)
+			_pass_claim(grid, claims, station, by_id, mine, line, to, paths)
 		for w: Passenger in mine:
 			if claims.get(station, 0) == w.id:
 				var onto: int = index.get(w.path[w.path_index + 1], -1) if w.is_moving() else -1
@@ -241,11 +238,37 @@ static func arrive(
 					# Stepping onto the cell it headed for, now a member's: back
 					# first. One passing over a member's cell walks on.
 					turn_back(w)
-				_head_for_tail(grid, w, line, to, stranded)
+				_head_for_tail(grid, w, line, to, stranded, paths)
 			else:
-				_stop_short(grid, w, line, index, to, free)
+				_stop_short(grid, w, line, index, to, free, paths)
 	_pass_centres(queues, walkers, {}, by_id)
 	return joined
+
+
+## The cells passengers admitted to each station (Stage.SECURITY) stand on, by
+## station, among `by_id`'s passengers: a walker enters a line only behind
+## the last of them on it (tail()), such as a security lane's first cell,
+## where the admitted passenger unpacks.
+static func _inside(by_id: Dictionary) -> Dictionary:
+	var out := {}
+	for p: Passenger in by_id.values():
+		if p.stage == Passenger.Stage.SECURITY:
+			if not out.has(p.station):
+				out[p.station] = []
+			(out[p.station] as Array).append(p.at)
+	return out
+
+
+## approach() from `from` to line[`index`], found once per `paths` (routes
+## kept for one line on an unchanged grid, arrive()): the same array for
+## every ask, so one that commits it to a walker gives the walker a copy.
+static func _route(
+	grid: BuildGrid, line: Array, from: Vector2i, index: int, paths: Dictionary
+) -> Array[Vector2i]:
+	var key := Vector3i(from.x, from.y, index)
+	if not paths.has(key):
+		paths[key] = approach(grid, line, from, index)
+	return paths[key]
 
 
 ## Claimant `w` enters `queue` when it stands on the tail cell or reaches it on
@@ -295,7 +318,8 @@ static func _pass_claim(
 	by_id: Dictionary,
 	walkers: Array,
 	line: Array,
-	to: int
+	to: int,
+	paths: Dictionary
 ) -> void:
 	if to >= line.size():
 		return
@@ -304,7 +328,7 @@ static func _pass_claim(
 	var mine := (
 		holder.pace_ticks(_rest_mm(holder))
 		if holder.is_moving() and holder.path_end() == line[to]
-		else _ticks_to(grid, holder, line, to)
+		else _ticks_to(grid, holder, line, to, paths)
 	)
 	if mine < 0:
 		return
@@ -314,7 +338,7 @@ static func _pass_claim(
 	for w: Passenger in walkers:
 		if w == holder or _ticks_at_least(w, line[to]) > beat:
 			continue
-		var ticks := _ticks_to(grid, w, line, to)
+		var ticks := _ticks_to(grid, w, line, to, paths)
 		if ticks >= 0 and ticks <= beat and (best == null or ticks < best_ticks):
 			best = w
 			best_ticks = ticks
@@ -347,13 +371,15 @@ static func _ticks_at_least(w: Passenger, cell: Vector2i) -> int:
 
 ## Of `walkers`, the one that would reach line[`to`] soonest (ties to the
 ## lower id, as they come in id order), or null when none can.
-static func _soonest(grid: BuildGrid, walkers: Array, line: Array, to: int) -> Passenger:
+static func _soonest(
+	grid: BuildGrid, walkers: Array, line: Array, to: int, paths: Dictionary
+) -> Passenger:
 	if to >= line.size():
 		return null
 	var best: Passenger = null
 	var best_ticks := 0
 	for w: Passenger in walkers:
-		var ticks := _ticks_to(grid, w, line, to)
+		var ticks := _ticks_to(grid, w, line, to, paths)
 		if ticks >= 0 and (best == null or ticks < best_ticks):
 			best = w
 			best_ticks = ticks
@@ -362,33 +388,35 @@ static func _soonest(grid: BuildGrid, walkers: Array, line: Array, to: int) -> P
 
 ## The ticks walker `w` would take to reach line[`to`] from where it is, or -1
 ## with no way there.
-static func _ticks_to(grid: BuildGrid, w: Passenger, line: Array, to: int) -> int:
+static func _ticks_to(
+	grid: BuildGrid, w: Passenger, line: Array, to: int, paths: Dictionary
+) -> int:
 	if not w.is_moving():
 		if w.at == line[to]:
 			return 0
-		var path := approach(grid, line, w.at, to)
+		var path := _route(grid, line, w.at, to, paths)
 		return -1 if path.is_empty() else w.pace_ticks(Passenger.path_mm(path))
 	var next := w.path[w.path_index + 1]
 	var step := Passenger.segment_mm(w.at, next) - w.seg_mm
-	var on := _approach_or_here(grid, line, next, to)
+	var on := _approach_or_here(grid, line, next, to, paths)
 	return -1 if on.is_empty() else w.pace_ticks(step + Passenger.path_mm(on))
 
 
 ## The claimant heads for line[`to`]: on from the cell it steps to when it is
 ## moving, never back; one with no way there is put in `stranded`.
 static func _head_for_tail(
-	grid: BuildGrid, w: Passenger, line: Array, to: int, stranded: Array
+	grid: BuildGrid, w: Passenger, line: Array, to: int, stranded: Array, paths: Dictionary
 ) -> void:
 	if to >= line.size() or w.path_end() == line[to]:
 		return
 	if not w.is_moving():
-		var path := approach(grid, line, w.at, to)
+		var path := _route(grid, line, w.at, to, paths)
 		if path.is_empty():
 			stranded.append(w)
 		elif path.size() >= 2:
-			w.set_path(path)
+			w.set_path(path.duplicate())
 		return
-	var on := _approach_or_here(grid, line, w.path[w.path_index + 1], to)
+	var on := _approach_or_here(grid, line, w.path[w.path_index + 1], to, paths)
 	if on.is_empty():
 		stranded.append(w)
 		return
@@ -405,7 +433,13 @@ static func _head_for_tail(
 ## off it (step_off()); one standing elsewhere further off sets off toward the
 ## tail again.
 static func _stop_short(
-	grid: BuildGrid, w: Passenger, line: Array, index: Dictionary, to: int, free: int
+	grid: BuildGrid,
+	w: Passenger,
+	line: Array,
+	index: Dictionary,
+	to: int,
+	free: int,
+	paths: Dictionary
 ) -> void:
 	var limit := mini(to, line.size() - 1)
 	if w.is_moving():
@@ -424,9 +458,9 @@ static func _stop_short(
 		return
 	# The whole way to the tail cell: the step before it is cut on the way
 	# (above), so its path never ends off the line before that (fit_line()).
-	var path := approach(grid, line, w.at, limit)
+	var path := _route(grid, line, w.at, limit, paths)
 	if path.size() >= 3 and not _short_of(index, path[1], to, free):
-		w.set_path(path)
+		w.set_path(path.duplicate())
 
 
 ## Whether `cell` is the tail cell or one a member holds (index below `free`).
@@ -472,15 +506,21 @@ static func _pass_centres(
 	queues: Dictionary, walkers: Array, lost: Dictionary, by_id: Dictionary
 ) -> void:
 	var held := {}
-	for queue: Dictionary in queues.values():
-		for id: int in members(queue):
-			if by_id.has(id):
-				held[(by_id[id] as Passenger).at] = true
+	var found := false
 	for w: Passenger in walkers:
 		if lost.has(w.id) or not w.is_moving() or w.path_index + 2 >= w.path.size():
 			continue
 		var next := w.path[w.path_index + 1]
-		if held.has(next) and Passenger.segment_mm(w.at, next) - w.seg_mm == w.pace_mm():
+		if Passenger.segment_mm(w.at, next) - w.seg_mm != w.pace_mm():
+			continue
+		if not found:
+			# The members' cells, found once a walker could end on one.
+			found = true
+			for queue: Dictionary in queues.values():
+				for id: int in members(queue):
+					if by_id.has(id):
+						held[(by_id[id] as Passenger).at] = true
+		if held.has(next):
 			w.walk(1)
 
 
@@ -512,11 +552,12 @@ static func _keep_step(w: Passenger, path: Array[Vector2i]) -> void:
 	w.seg_mm = walked
 
 
-## approach(), or just [from] when it stands on line[index] already.
+## approach() (_route()), or just [from] when it stands on line[index]
+## already.
 static func _approach_or_here(
-	grid: BuildGrid, line: Array, from: Vector2i, index: int
+	grid: BuildGrid, line: Array, from: Vector2i, index: int, paths: Dictionary
 ) -> Array[Vector2i]:
 	if from == line[index]:
 		var here: Array[Vector2i] = [from]
 		return here
-	return approach(grid, line, from, index)
+	return _route(grid, line, from, index, paths)

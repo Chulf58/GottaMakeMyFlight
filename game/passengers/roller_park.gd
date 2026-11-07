@@ -326,12 +326,27 @@ static func hold_park(
 
 
 ## Whether `p` stands in a queue, at its counter or desk or at the gate
-## (QUEUE_STAGES) with no way left to walk on this tick, or waits in a boarding
-## file of `sim` (filed_still()).
+## (QUEUE_STAGES) with no way left to walk on this tick, waits in a boarding
+## file of `sim` (filed_still()), or has just set off for the exit from its
+## standing spot with no path yet (setting_off()).
 static func queue_still(sim: PassengerSim, p: Passenger) -> bool:
 	if p.stage in QUEUE_STAGES:
 		return not p.is_moving()
-	return filed_still(sim, p)
+	return setting_off(sim, p) or filed_still(sim, p)
+
+
+## Whether gate stander `p` has turned to the exit (TO_EXIT, its standing spot
+## kept until it is off the cell) and has no path yet: boarding opens with it
+## still on its spot, and it plans its way on a later tick. Its roller stays
+## stood, so the tip starts on the tick it walks, when its way is known and
+## tip_wait() can wait for the turn (board 34a0d0aa: tipped on the boarding
+## tick, every gate stander's tip went with no way and no wait).
+static func setting_off(sim: PassengerSim, p: Passenger) -> bool:
+	return (
+		p.stage == Passenger.Stage.TO_EXIT
+		and not p.is_moving()
+		and sim.standing.spot_of(p.id) != StandingSpots.NO_SPOT
+	)
 
 
 ## Whether `p` is held in a boarding file of `sim` (FILE_STAGES): in a file or

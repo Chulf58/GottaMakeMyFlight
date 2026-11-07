@@ -19,6 +19,14 @@ const SLACK_M := 0.05
 ## pass in front of the torso; two landings were the fewest seen on a guest in
 ## plain view).
 const MIN_ON := 2
+## A pixel at or above this in every channel is pure white (the clear colour
+## drawn where the camera sees past the world).
+const WHITE := 0.99
+## A row is empty when at least this share of its sampled pixels is pure white.
+const EMPTY_ROW_SHARE := 0.98
+## empty_bottom() refuses a plate whose run of empty rows at the bottom is more
+## than this share of its height.
+const MAX_EMPTY_SHARE := 0.1
 
 
 ## One static body per visible mesh of `owners`, under a new holder added to
@@ -215,6 +223,29 @@ static func to_screen(rect: Rect2, per_screen: float, plate: Vector2i) -> Rect2i
 	var lo := Vector2i((rect.position / per_screen).floor())
 	var hi := Vector2i((rect.end / per_screen).ceil())
 	return Rect2i(lo, hi - lo).intersection(Rect2i(Vector2i.ZERO, plate))
+
+
+## The run of empty (pure white) rows at the bottom of plate `img`. A camera
+## outside the building's floor draws the world's clear colour below the
+## subject, and the darkness, sight-line and in-frame checks cannot see it.
+## Every `step`th pixel of a row is sampled. Returns {run: rows, rows: height,
+## share: run / rows, ok: share <= MAX_EMPTY_SHARE}.
+static func empty_bottom(img: Image, step := 2) -> Dictionary:
+	var rows := img.get_height()
+	var run := 0
+	for y in range(rows - 1, -1, -1):
+		var sampled := 0
+		var white := 0
+		for x in range(0, img.get_width(), step):
+			var c := img.get_pixel(x, y)
+			sampled += 1
+			if c.r >= WHITE and c.g >= WHITE and c.b >= WHITE:
+				white += 1
+		if sampled == 0 or float(white) / float(sampled) < EMPTY_ROW_SHARE:
+			break
+		run += 1
+	var share := float(run) / float(maxi(rows, 1))
+	return {"run": run, "rows": rows, "share": share, "ok": share <= MAX_EMPTY_SHARE}
 
 
 static func _subject_tag(inst: Node, subjects: Dictionary) -> String:

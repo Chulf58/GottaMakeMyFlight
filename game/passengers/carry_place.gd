@@ -13,6 +13,12 @@ const ROLLER_LAND := 0.85
 ## A shoulder bag going to the shoulder is in place by this much of the move,
 ## when its strap starts to stretch (reach_blend).
 const STRAP_PLACED := 0.85
+## A roller lying on the floor whose way out of the walls a wall edit changed
+## slides to its new spot this far (m) in a tick (_off_walls()), a fifth of a
+## walk's step in a tick (0.098 m), instead of moving there in one frame: a
+## wall built on the edge of a gate chair's front cell moved it 0.079 m in a
+## tick (board 4cb91d64).
+const SLIDE_M_PER_TICK := 0.02
 
 
 ## Puts the bags of one passenger in place: those going to a hand, and those
@@ -310,7 +316,7 @@ static func bag_transform(
 				held, CarryOnProps.bag_box(kind), scale_by, i, count
 			)
 			if not fixed.is_empty():
-				return _off_walls(props, held, kind, fixed[0])
+				return _off_walls(props, held, i, kind, fixed[0])
 			# From where the sim draws the body, not where it stands while it
 			# sets its roller down (SitHold.offset()), so the bag stays put.
 			var id: int = props._body_ids.get(body, -1)
@@ -320,7 +326,7 @@ static func bag_transform(
 			var placed: Transform3D = RollerPark.lay_frame(held["bags"][i], at) * held["floor"][i]
 			placed.origin.y = props.sim.grid.origin.y
 			var scaled := Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)
-			return _off_walls(props, held, kind, scaled)
+			return _off_walls(props, held, i, kind, scaled)
 	return carry_transform(props, held, body, i, reach)
 
 
@@ -332,13 +338,45 @@ static func bag_transform(
 ## back in (board a40fdbaf). Worked out from `xf` alone, so it is the same on
 ## every frame and after a load. Not in a toilet stall, whose walls are the
 ## stall's own.
+##
+## The way out is kept on bag `i` ("wall_off": the spot `xf` it is for, the
+## grid's edit count, and a slide) and worked out again only when the spot or
+## the edit count (WallEdits) changes, not on every draw (board 4cb91d64). A
+## grid edit with the spot unchanged slides the roller from where the kept slide
+## had it at the edit's tick to the new way out (slid()); any other change, a
+## new spot or a first draw, puts it there at once, as before. What it does not
+## guarantee: two edits with no draw between them slide from the way out before
+## the first, not from where the first edit's slide had it at the second.
 static func _off_walls(
-	props: CarryOnProps, held: Dictionary, kind: SecurityLooks.Kind, xf: Transform3D
+	props: CarryOnProps, held: Dictionary, i: int, kind: SecurityLooks.Kind, xf: Transform3D
 ) -> Transform3D:
 	if kind != SecurityLooks.Kind.ROLLER or held.get("in_stall", false) or props.sim == null:
 		return xf
-	xf.origin += ParkWalls.shift(xf, PullSide.walls_near(props.sim.grid, xf.origin))
+	var edits := WallEdits.of(props)
+	var bag: Dictionary = held["bags"][i]
+	var off: Dictionary = bag.get("wall_off", {})
+	if off.is_empty() or off["at"] != xf or off["count"] != edits.count:
+		var to := ParkWalls.shift(xf, PullSide.walls_near(props.sim.grid, xf.origin))
+		var from := to
+		var since := -INF
+		if not off.is_empty() and off["at"] == xf:
+			from = slid(off, edits.at)
+			since = edits.at
+		off = {"at": xf, "count": edits.count, "from": from, "to": to, "since": since}
+		bag["wall_off"] = off
+	xf.origin += slid(off, props._tick())
 	return xf
+
+
+## The shift (world) of a floor roller's slide `off` (_off_walls()'s
+## "wall_off") at sim tick `now`: from its "from" toward its "to" by at most
+## SLIDE_M_PER_TICK a tick since its "since". Read before "since" (the clock
+## gone back) it is at its end.
+static func slid(off: Dictionary, now: float) -> Vector3:
+	var gone: float = now - float(off["since"])
+	if gone < 0.0:
+		return off["to"]
+	return (off["from"] as Vector3).move_toward(off["to"], SLIDE_M_PER_TICK * gone)
 
 
 ## A carried bag's transform, its kind's way (the header), or `carry`'s way.
@@ -378,3 +416,50 @@ static func carry_transform(
 			reach[0] = RollerPull.pull_length(grip, axle, scale_by, rods.z)
 			return RollerPull.pulled(grip, axle, scale_by)
 	return CarryHand.case_transform(props, held, body, i)
+
+
+## The edits of the grid a CarryOnProps draws on, counted, and the sim tick of
+## the last (BuildGrid.edit_applied and graph_changed, the latter also after a
+## load), so _off_walls() works a floor roller's way out again only after an
+## edit and starts its slide at the edit's tick, not at the first draw after
+## it. Kept on the CarryOnProps (META) and watching a new grid when the sim's
+## changes.
+class WallEdits:
+	extends RefCounted
+	const META := &"carry_wall_edits"
+	var count := 0
+	var at := 0.0
+	var grid: BuildGrid
+	var clock: SimClock
+
+	## `props`' WallEdits, watching its sim's grid.
+	static func of(props: CarryOnProps) -> WallEdits:
+		var edits: WallEdits = props.get_meta(META, null)
+		if edits == null:
+			edits = WallEdits.new()
+			props.set_meta(META, edits)
+		edits.clock = props.clock
+		edits.watch(props.sim.grid)
+		return edits
+
+	## Watches `on` from now (a change of grid counts as an edit).
+	func watch(on: BuildGrid) -> void:
+		if on == grid:
+			return
+		if grid != null:
+			grid.edit_applied.disconnect(_on_edit)
+			grid.graph_changed.disconnect(_on_graph)
+		grid = on
+		on.edit_applied.connect(_on_edit)
+		on.graph_changed.connect(_on_graph)
+		_bump()
+
+	func _on_edit(_edit: BuildEdit, _result: BuildResult) -> void:
+		_bump()
+
+	func _on_graph(_cells: Array[Vector2i]) -> void:
+		_bump()
+
+	func _bump() -> void:
+		count += 1
+		at = float(clock.tick) if clock != null else 0.0

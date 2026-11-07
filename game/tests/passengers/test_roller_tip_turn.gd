@@ -146,6 +146,70 @@ func test_a_turning_tip_keeps_the_bag_with_the_body() -> void:
 	assert_float(sharpest).is_greater_equal(SHARP_RAD)
 
 
+## GATE_STANDERS seatless guests stand their rollers up at the gate; at
+## boarding each walks off. Each stander's tip is marked on a tick its way is
+## known (PassengerViews.walk_heading() not zero), so tip_wait() can wait for
+## its turn, and the wait is 0 or PassengerTurns.TURN_TICKS. Before board
+## 34a0d0aa every stander's tip was marked on the boarding tick, turned to the
+## exit with no path yet: no way, so no wait.
+func test_a_gate_stander_tips_once_its_way_is_known() -> void:
+	_world = TestStandingSpotClaims.seatless_world(
+		PassengerTestWorld.starts_with(GATE_BOARDING, 4000)
+	)
+	_views = PassengerTestWorld.views()
+	_views.clock = _world.clock
+	_views.sim = _world.sim
+	add_child(_views)
+	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
+	_world.clock.ticked.connect(_keep_on_time)
+	for i in GATE_STANDERS:
+		var p := _roller_guest()
+		p.cleared = true
+		p.stage = Passenger.Stage.TO_GATE
+		p.stage_tick = _world.clock.tick + 1
+		p.at = TestStandingSpotClaims.SCANNER_EXIT
+		p.clear_path()
+		p.apron = []
+		p.apron_mm = 0
+		_followed.append(p)
+	var props := _views.carry_on_props()
+	var marks := {}
+	var stop := _world.clock.tick + GATE_BOARDING + 300
+	while _world.clock.tick < stop and not _followed.all(_gone):
+		await _tick(1.0 / 3.0)
+		for p in _followed:
+			if marks.has(p.id) or props.props_of(p.id).get("bags", []).is_empty():
+				continue
+			var bag := props.bag_state(p.id, 0)
+			if not RollerPark.queued(bag) or not bag.has("queue_tip"):
+				continue
+			var at := float(_world.clock.tick) - float(bag["since"])
+			var heading := _views.walk_heading(p)
+			var yaw := _views.node_for(p.id).rotation.y
+			marks[p.id] = {
+				"tick": _world.clock.tick,
+				"heading": heading,
+				"yaw": yaw,
+				"off": absf(angle_difference(yaw, atan2(heading.x, heading.y))),
+				"wait": float(bag["queue_tip"]) - at,
+				"stage": p.stage,
+			}
+	print("tip marks by stander: %s" % marks)
+	assert_int(marks.size()).is_equal(GATE_STANDERS)
+	var turners := 0
+	for id: int in marks:
+		var mark: Dictionary = marks[id]
+		assert_vector(mark["heading"]).is_not_equal(Vector2.ZERO)
+		assert_array([0.0, float(PassengerTurns.TURN_TICKS)]).contains([mark["wait"]])
+		if float(mark["off"]) > RollerPark.TIP_TURN_RAD:
+			turners += 1
+			assert_float(float(mark["wait"])).is_greater(0.0)
+			assert_float(float(mark["wait"])).is_equal(float(PassengerTurns.TURN_TICKS))
+	# Control: some stander faced away from its way at the mark, so the checks
+	# above met a tip that has to wait.
+	assert_int(turners).is_greater_equal(1)
+
+
 ## A calm passenger with one roller, its liquids and alarm off.
 func _roller_guest() -> Passenger:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))

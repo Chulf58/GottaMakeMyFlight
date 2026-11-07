@@ -66,6 +66,9 @@ static var _boundary := {}
 static var _candidates := {}
 ## Replays set up so far, for tests that count the work.
 static var replays_played := 0
+## Set by TestForecastSkipExact: every replay plays every tick until nothing
+## more can happen, the reference the skipped ticks are checked against.
+static var every_tick := false
 
 ## What SecurityRuntime reads from its host (see its header).
 var tick := 0
@@ -91,6 +94,9 @@ var _members := {}
 var _member_at := {}
 ## The copied claims on the lines' tails (PassengerSim._claims).
 var _claims := {}
+## What StationQueue.arrive() keeps from one tick to the next: the grid and
+## the lines do not change in a replay.
+var _known := {}
 ## The copied gate places, or null when no admission waits for one.
 var _places: GateCapacity
 ## Passenger id -> its copy.
@@ -98,7 +104,8 @@ var _units := {}
 ## The copies' ids, ascending: the order PassengerSim steps passengers in.
 var _order: Array[int] = []
 ## The ids of _order the replay steps: all but the waiting copies standing
-## where they wait, which nothing moves until they have a place.
+## where they wait, which nothing moves until they have a place, and the
+## copies cleared or gone from the replay (_cleared, _left).
 var _active: Array[int] = []
 ## Passenger id -> the tick the candidate (clearance()), on its way with a
 ## place, reaches it; it is not walked.
@@ -272,6 +279,8 @@ func _on_admitted(p: Passenger) -> void:
 func _on_cleared(p: Passenger) -> void:
 	p.stage = Passenger.Stage.TO_GATE
 	_cleared[p.id] = tick
+	# Nothing is played for it from now on.
+	_active.erase(p.id)
 
 
 ## Copies `station`'s state, and every security station's when gate places
@@ -531,7 +540,7 @@ func _step() -> void:
 			before.append([u.at, u.path_end()])
 	var stranded: Array = []
 	var joined := StationQueue.arrive(
-		_sim.grid, _queues, _cells, _lines, walkers, _units, tick, stranded, _claims
+		_sim.grid, _queues, _cells, _lines, walkers, _units, tick, stranded, _claims, _known
 	)
 	for u in joined:
 		u.stage = Passenger.Stage.SECURITY_QUEUE
@@ -540,6 +549,7 @@ func _step() -> void:
 	for u: Passenger in stranded:
 		# A committed walker with no way to the line chooses again in the sim.
 		_left[u.id] = true
+		_active.erase(u.id)
 		_changed = true
 	# A walker the pass sent on, turned round or set off changes the next
 	# tick's order and cells, so that tick is played.
@@ -630,6 +640,16 @@ func _next_event() -> int:
 		# The repack rate changes on the tick the helper arrives.
 		if _helper_from[at] > tick and (best < 0 or _helper_from[at] < best):
 			best = _helper_from[at]
+	for station: int in _claims:
+		# The claim on a tail passes to a walker PASS_TICKS sooner there
+		# (StationQueue._pass_claim()). While both walk, each one's ticks to
+		# the tail fall by one a tick until it reaches a cell, an event of its
+		# own, so the claim cannot pass between; a claimant standing still
+		# can be passed by any tick, so every tick is played.
+		var holder: Passenger = _units.get(_claims[station])
+		var walking := holder != null and holder.stage == Passenger.Stage.TO_SECURITY
+		if walking and not holder.is_moving() and not _left.has(holder.id):
+			return tick + 1
 	for id in _active:
 		if _cleared.has(id) or _left.has(id):
 			continue
@@ -645,8 +665,11 @@ func _next_event() -> int:
 			var left := Passenger.segment_mm(u.path[u.path_index], u.path[u.path_index + 1])
 			at = tick + u.pace_ticks(left - u.seg_mm) + 1
 			# A walker to the queue may join on the tick it reaches the line
-			# (StationQueue.arrive()), so that tick is played, not skipped.
-			if u.stage == Passenger.Stage.TO_SECURITY:
+			# (StationQueue.arrive()), so that tick is played, not skipped. So
+			# is the tick a queue member reaches a cell: one behind it, stepped
+			# after it, sees it there on that tick (QueueRipple.may_step()),
+			# and its halt_tick is set when its walk ends there.
+			if u.stage in [Passenger.Stage.TO_SECURITY, Passenger.Stage.SECURITY_QUEUE]:
 				at -= 1
 			# Stepping off the pickup cell, it frees it half way
 			# (SecurityRuntime._pickup_free()).
@@ -657,7 +680,7 @@ func _next_event() -> int:
 				@warning_ignore("integer_division")
 				at = mini(at, tick + u.pace_ticks((left + 1) / 2 - u.seg_mm) + 1)
 		elif u.stage == Passenger.Stage.SECURITY_QUEUE and _misplaced(u):
-			at = tick + 1
+			at = tick + 1 if every_tick else _move_up_at(u)
 		elif u.stage == Passenger.Stage.SECURITY and not (_works(u) and u.security_work > 0):
 			# Standing inside with no work left: it waits for a cell or a place
 			# that frees on a tick of its own, which is played.
@@ -670,7 +693,24 @@ func _next_event() -> int:
 			at = ends if at < 0 else mini(at, ends)
 		if at >= 0 and (best < 0 or at < best):
 			best = at
-	return best
+	return tick + 1 if every_tick and best >= 0 else best
+
+
+## The next tick misplaced queue member `u` may step up on
+## (QueueRipple.may_step()), or -1 when it waits on the one ahead walking or
+## setting off, which happens on a tick the replay plays (its cell reached,
+## its own move-up). Behind a roller that one has not stood STAND_TICKS yet,
+## it is the tick it has.
+func _move_up_at(u: Passenger) -> int:
+	var members := _members_of(u.station)
+	var line: Array = _lines[u.station]
+	if QueueRipple.may_step(self, u, members, line, tick + 1, false):
+		return tick + 1
+	var index: int = _member_at[u.station][u.id]
+	var ahead: Passenger = _units[members[index - 1]]
+	if ahead.is_moving() or ahead.at != line[index - 1]:
+		return -1
+	return ahead.halt_tick + QueueRipple.STAND_TICKS
 
 
 ## Plays `ticks` ticks on which nothing changes: work runs down and walkers

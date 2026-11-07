@@ -49,6 +49,10 @@ extends RefCounted
 ## of a taken spot whose passenger has a roller is free, and a passenger with
 ## a roller takes no spot within ROLLER_CLEAR_MM of any taken spot, so a stood
 ## roller (about 0.46 m out) never stands inside a neighbour.
+##
+## Gate desks: no spot lies within DESK_CLEAR_MM of a gate desk's footprint,
+## so a stood roller never stands in the desk, whichever way its passenger
+## faces (board 34a0d0aa).
 
 const NO_SPOT := -1
 const PITCH_MM := 600
@@ -75,6 +79,15 @@ const ROLLER_RING: Array[Vector2i] = [
 	Vector2i(0, 1),
 	Vector2i(1, 1),
 ]
+## No spot lies closer than this to a gate desk's footprint (mm). A queue-stood
+## roller (RollerPark.queue_park()) reaches about 0.78 m from its passenger's
+## spot to the far side of its shell: on the spot 0.5 m behind the reference
+## gate desk's footprint (0.58 m from its mesh, which is 8 cm in) it stood
+## 0.202 m deep in the desk (board 34a0d0aa, roller_board_gate_probe seed
+## 2012072536). Spots sit 0.1, 0.3, 0.5, 0.7 or 0.9 m from a cell edge, so any
+## value over 700 and up to 900 keeps the same spots; the nearest kept is 0.98 m
+## from the mesh.
+const DESK_CLEAR_MM := 800
 const NEAR := 0
 const OVERFLOW := 1
 ## The nearest free spots in the passenger's route region a claim tries a
@@ -162,6 +175,7 @@ func rebuild(sim: PassengerSim) -> void:
 	var depth := _walk_airside(grid, seeds, -1, components, trusted)
 	var per_row := columns(grid.size)
 	_per_row = per_row
+	var desks := _desk_rects(grid)
 	for cell: Vector2i in depth:
 		if excluded.has(cell) or not grid.is_passenger_cell(cell) or grid.room_at(cell) != 0:
 			continue
@@ -171,7 +185,8 @@ func rebuild(sim: PassengerSim) -> void:
 		for j in lattice_in(cell.y):
 			for i in lattice_in(cell.x):
 				var mm := Vector2i(OFFSET_MM + PITCH_MM * i, OFFSET_MM + PITCH_MM * j)
-				spots[j * per_row + i] = {"cell": cell, "mm": mm, "tier": tier}
+				if not _near_desk(mm, desks):
+					spots[j * per_row + i] = {"cell": cell, "mm": mm, "tier": tier}
 	_orders = {}
 	_ids.assign(spots.keys())
 	_ids.sort()
@@ -608,6 +623,31 @@ static func _route_regions(grid: BuildGrid) -> Dictionary:
 						frontier.append(other)
 			next_region += 1
 	return regions
+
+
+## Each gate desk's footprint on `grid` as a Rect2i in grid-local mm.
+static func _desk_rects(grid: BuildGrid) -> Array[Rect2i]:
+	var out: Array[Rect2i] = []
+	for desk in GateDesks.desk_ids(grid):
+		var rect := Rect2i()
+		var first := true
+		for cell in GateDesks.desk_footprint(grid, desk):
+			var square := Rect2i(cell * CELL_MM, Vector2i(CELL_MM, CELL_MM))
+			rect = square if first else rect.merge(square)
+			first = false
+		if not first:
+			out.append(rect)
+	return out
+
+
+## Whether grid-local point `mm` is closer than DESK_CLEAR_MM to any of `desks`.
+static func _near_desk(mm: Vector2i, desks: Array[Rect2i]) -> bool:
+	for rect in desks:
+		var dx := maxi(maxi(rect.position.x - mm.x, mm.x - rect.end.x), 0)
+		var dy := maxi(maxi(rect.position.y - mm.y, mm.y - rect.end.y), 0)
+		if dx * dx + dy * dy < DESK_CLEAR_MM * DESK_CLEAR_MM:
+			return true
+	return false
 
 
 static func _excluded_cells(sim: PassengerSim) -> Dictionary:
