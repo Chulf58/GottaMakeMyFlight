@@ -449,6 +449,9 @@ static func to_spot(sim: PassengerSim, p: Passenger) -> void:
 	if p.is_moving():
 		return
 	if p.at == sim.standing.cell_of(spot):
+		# The way it came in, for its queue stand's facing (ParkSide.stand_face()).
+		var walked := p.path_index > 0 and p.path_index < p.path.size()
+		p.stand_from = p.path[p.path_index - 1] if walked else Passenger.NO_CELL
 		p.clear_path()
 		sim._set_stage(p, Passenger.Stage.STANDING)
 	else:

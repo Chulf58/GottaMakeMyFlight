@@ -86,6 +86,10 @@ var service_end := 0
 var seat_object := 0
 var seat_cell := NO_CELL
 var seat_front := NO_CELL
+## The cell it stepped from onto its standing spot's cell (GateCapacity.to_spot()),
+## or NO_CELL when it walked none: the way it faces there when the spot is on
+## the cell's middle (ParkSide.stand_face()). Saved, as the path is cleared.
+var stand_from := NO_CELL
 ## The placement ({"def", "anchor", "facing"}, Relocation.placement()) of the
 ## seat row it holds, as the sim last saw it; empty with no seat. Once the row
 ## moves it stays the placement being left (GateRelocation).

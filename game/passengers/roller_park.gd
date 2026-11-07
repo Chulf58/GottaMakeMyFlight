@@ -687,6 +687,19 @@ static func queue_frame_of(bag: Dictionary, frame: Transform3D) -> Transform3D:
 	return kept[1] if not kept.is_empty() else frame
 
 
+## What carries a stood roller with the body once its queue stand's tip has
+## started (queue_stand()'s "queue_tip"): from `chosen` (queue_frame_of()) to
+## the body as drawn, `frame`, both yaw only. The walker is walking off: held
+## where it stood in the world, the roller stayed behind the body walking away
+## and the tip swung it in from there, 0.2 to 0.55 m a frame against the body
+## (test_roller_queue_stand, test_roller_file_gate_stand); carried, the tip
+## goes as it did when the stand was drawn in the body's frame, and the gate
+## tip's wait for the body's turn (tip_wait()) takes it round with the body.
+## The identity while the body is drawn where and as the sim has it stand.
+static func tip_carried(chosen: Transform3D, frame: Transform3D) -> Transform3D:
+	return _yawed(frame) * _yawed(chosen).affine_inverse()
+
+
 ## How far out (QUEUE_SIDE_M) a queue stand parks the axle of a body of look
 ## `look` (PassengerLooks.BODIES index).
 static func queue_side(look: int) -> float:
@@ -833,11 +846,15 @@ static func plan(
 	if turns_first(bag) and turning < TURN_FIRST_TICKS:
 		return _turning(bag, move_k, turning, start, parked, bar, started[1], lead)
 	if queued(bag):
-		# In the frame its side was chosen in (queue_frame_of()), held by the bar
-		# throughout: the body drawn another way, or turning, does not take the
-		# stood roller across to the side the choice was not made for.
+		# Stood in the frame its side was chosen in (queue_frame_of()), held by the
+		# bar throughout: the body drawn another way, or turning, does not take the
+		# stood roller across to the side the choice was not made for. Once its
+		# tip starts it is carried with the body (tip_carried()).
 		assert(body.has("look") and int(body["look"]) >= 0, "RollerPark: queued with no body look")
-		parked = queue_park(queue_frame_of(bag, frame), lead, body["scale"], body["look"])
+		var chosen := queue_frame_of(bag, frame)
+		parked = queue_park(chosen, lead, body["scale"], body["look"])
+		if bag.has("queue_tip"):
+			parked = tip_carried(chosen, frame) * parked
 		# Walled on both sides, or a two-bag guest's (ParkSide.choose_stand() kept
 		# its side): out of the walls kept at the stamp (CarryPlace, ParkWalls),
 		# the tip rolled from there.

@@ -54,8 +54,8 @@ const STAND_SAMPLES := 3
 ## A gate stander's step from its cell's middle onto its spot shorter than this
 ## (m) is no step (stand_face()): spots sit 0, 0.2 or 0.4 m off the middle.
 const SPOT_STEP_M := 0.05
-## The way a gate stander faces with no step onto its spot (stand_face()):
-## south, yaw 0, as a body drawn new (after a load) faces.
+## The way a gate stander faces with no step onto its spot and none walked to
+## its cell (stand_face()): south, yaw 0, as a body drawn new faces.
 const GATE_FACE := Vector2(0.0, 1.0)
 
 
@@ -229,11 +229,13 @@ static func stand_at(sim: PassengerSim, p: Passenger) -> Vector3:
 ## security lane's front or its cafe counter; at the gate (on its standing
 ## spot, standing or setting off with no path yet) the way it stepped over
 ## from the middle of the spot's cell onto the spot (PassengerSim.world_position()
-## over SHUFFLE_TICKS: the drawn body turns to that step); else the step of its
-## path it walks next or walked last (a boarding file's way on, the way it came
-## to its place); else at the gate GATE_FACE (GateCapacity.to_spot() clears a
-## stander's path, so a spot on the middle of its cell has no step to face);
-## else ZERO. Every part is saved sim state, so a load faces the same way.
+## over SHUFFLE_TICKS: the drawn body turns to that step), or with no step (a
+## spot on its cell's middle) the way it walked onto that cell (Passenger.
+## stand_from, kept by GateCapacity.to_spot(), which clears the path), as the
+## body keeps facing; else the step of its path it walks next or walked last (a
+## boarding file's way on, the way it came to its place); else at the gate
+## GATE_FACE (it walked none); else ZERO. Every part is saved sim state, so a
+## load faces the same way.
 static func stand_face(sim: PassengerSim, p: Passenger) -> Vector2:
 	var face := SecurityLooks.face(sim, p)
 	if face == Vector2.ZERO:
@@ -247,6 +249,8 @@ static func stand_face(sim: PassengerSim, p: Passenger) -> Vector2:
 		var over := sim.standing.world_of(sim.grid, spot) - sim.grid.cell_to_world(p.at)
 		if Vector2(over.x, over.z).length() > SPOT_STEP_M:
 			face = Vector2(over.x, over.z)
+	if face == Vector2.ZERO and on_spot and p.stand_from != Passenger.NO_CELL:
+		face = Vector2(p.at - p.stand_from)
 	if face == Vector2.ZERO and p.path.size() >= 2:
 		var at := clampi(p.path_index, 0, p.path.size() - 2)
 		face = Vector2(p.path[at + 1] - p.path[at])

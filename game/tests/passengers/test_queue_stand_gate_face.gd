@@ -3,10 +3,12 @@ extends GdUnitTestSuite
 ## A gate stander's queue stand faces a way known to the sim (ParkSide.
 ## stand_face()), so its open side (decision a-roller-stood-in-a-queue-beside-
 ## a-wall-goes-on-the-passenge) is chosen and drawn in one frame: the way its
-## body turns stepping from its cell's middle onto its spot, else
-## ParkSide.GATE_FACE. Before, GateCapacity.to_spot() cleared the path and
-## stand_face() was ZERO for every gate stander (board f71895c6). All of it is
-## saved sim state, so a save and load stands the roller in the same place.
+## body turns stepping from its cell's middle onto its spot, else the way it
+## walked onto that cell (Passenger.stand_from, which GateCapacity.to_spot()
+## keeps as it clears the path), else ParkSide.GATE_FACE. Before, to_spot()
+## cleared the path and stand_face() was ZERO for every gate stander (board
+## f71895c6). All of it is saved sim state (save version 29), so a save and
+## load stands the roller in the same place.
 
 const ROLLER := SecurityLooks.Kind.ROLLER
 ## A basic scanner's exit cell in the reference terminal.
@@ -102,7 +104,8 @@ func _json(data: Dictionary) -> Dictionary:
 ## A guest walks to its spot and stands: its stand faces a way, and that way
 ## is the way its body is drawn facing, so the stand is placed beside the body.
 ## Its roller stands up there. Control: its path is cleared to its cell, so the
-## way comes from the step onto the spot, not a path.
+## way comes from the step onto the spot, not a path; and the cell it came from
+## is kept, a step from its own.
 func test_a_gate_stander_faces_the_way_its_body_turns() -> void:
 	_world = _gate_world()
 	var p := _roller_guest(_world)
@@ -128,6 +131,7 @@ func test_a_gate_stander_faces_the_way_its_body_turns() -> void:
 		)
 	)
 	assert_int(p.path.size()).is_equal(1)
+	assert_int((p.at - p.stand_from).abs().x + (p.at - p.stand_from).abs().y).is_equal(1)
 	assert_float(Vector2(over.x, over.z).length()).is_greater(ParkSide.SPOT_STEP_M)
 	assert_bool(face != Vector2.ZERO).is_true()
 	assert_float(absf(angle_difference(yaw, atan2(face.x, face.y)))).is_less(0.05)
@@ -135,10 +139,10 @@ func test_a_gate_stander_faces_the_way_its_body_turns() -> void:
 
 
 ## stand_face() at the gate, from sim state alone: the step onto the spot when
-## there is one; with none (a spot on its cell's middle), GATE_FACE, standing
-## or setting off. Control: the same guest with no spot (in the check-in
-## queue) and no path has no way at all.
-func test_a_gate_stander_with_no_step_onto_its_spot_faces_south() -> void:
+## there is one; with none (a spot on its cell's middle), the way it walked
+## onto the cell, standing or setting off; walked none, GATE_FACE. Control:
+## the same guest with no spot (in the check-in queue) has no way at all.
+func test_a_gate_stander_with_no_step_onto_its_spot_faces_its_way_in() -> void:
 	_world = _gate_world()
 	var sim := _world.sim
 	var middle := StandingSpots.NO_SPOT
@@ -154,16 +158,19 @@ func test_a_gate_stander_with_no_step_onto_its_spot_faces_south() -> void:
 	assert_int(off).is_not_equal(StandingSpots.NO_SPOT)
 	var p := TestStandingSpotClaims.cleared(_world)
 	var seen := []
+	# [spot, stage, came from south (or walked none)]
 	var cases := [
-		[off, Passenger.Stage.STANDING],
-		[middle, Passenger.Stage.STANDING],
-		[middle, Passenger.Stage.TO_EXIT],
+		[off, Passenger.Stage.STANDING, true],
+		[middle, Passenger.Stage.STANDING, true],
+		[middle, Passenger.Stage.TO_EXIT, true],
+		[middle, Passenger.Stage.STANDING, false],
 	]
 	for case: Array in cases:
 		sim.standing.release(p.id)
 		sim.standing.claim(p.id, case[0])
 		p.stage = case[1]
 		p.at = sim.standing.cell_of(case[0])
+		p.stand_from = p.at + Vector2i(0, 1) if case[2] else Passenger.NO_CELL
 		p.clear_path()
 		seen.append(ParkSide.stand_face(sim, p))
 	sim.standing.release(p.id)
@@ -171,12 +178,13 @@ func test_a_gate_stander_with_no_step_onto_its_spot_faces_south() -> void:
 	var none := ParkSide.stand_face(sim, p)
 	print(
 		(
-			"onto a spot 0.4 m west, on a middle standing, setting off: %s; no spot, no path: %s"
+			"onto a spot 0.4 m west; on a middle came north, setting off, walked none: %s; no spot: %s"
 			% [seen, none]
 		)
 	)
 	assert_float((seen[0] as Vector2).normalized().dot(Vector2.LEFT)).is_greater(0.99)
-	assert_array(seen.slice(1)).is_equal([ParkSide.GATE_FACE, ParkSide.GATE_FACE])
+	var north := Vector2(0.0, -1.0)
+	assert_array(seen.slice(1)).is_equal([north, north, ParkSide.GATE_FACE])
 	assert_bool(none == Vector2.ZERO).is_true()
 
 
@@ -231,5 +239,6 @@ func test_a_gate_stand_stands_in_the_same_place_after_a_load() -> void:
 	)
 	assert_int(q.stage).is_equal(Passenger.Stage.STANDING)
 	assert_that(q.at).is_equal(p.at)
+	assert_that(q.stand_from).is_equal(p.stand_from)
 	assert_bool(ParkSide.stand_face(_loaded.sim, q) == face).is_true()
 	assert_float(moved).is_less(SAME_M)

@@ -79,7 +79,7 @@ const INT_FIELDS := [
 	"collect_tick",
 	"halt_tick",
 ]
-const CELL_FIELDS := ["at", "seat_cell", "seat_front"]
+const CELL_FIELDS := ["at", "seat_cell", "seat_front", "stand_from"]
 const BOOL_FIELDS := [
 	"late",
 	"cleared",

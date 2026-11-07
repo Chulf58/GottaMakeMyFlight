@@ -62,6 +62,10 @@ extends RefCounted
 ## stand stacked on the lane's last cell. From 17 on, the version before is
 ## refused, with no migration.
 ## 28: the claims on the lines' tails (one walker at a time enters a queue).
+## 29: a gate stander's stand_from, the cell it stepped onto its spot's cell
+## from (ParkSide.stand_face()); a version 28 save has none and is refused with
+## no migration (decision old-saves-are-not-supported-until-after-a-release-
+## no-save-mi).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
