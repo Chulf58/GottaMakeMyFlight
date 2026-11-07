@@ -40,12 +40,15 @@ const OFFER_KEYS := [
 
 ## Tuning values. A few offers a day; the starter tier has small and medium
 ## planes only (larger ones wait for reputation). AIRLINES, STARTER_SIZES and
-## FEE_MIN..FEE_MAX are tier 0 of the tier tables below.
+## FEE_MIN..FEE_MAX are tier 0 of the tier tables below. Every size's
+## passenger range sits inside its plane class's range (PlaneClasses.CLASSES,
+## decision runway-upgrade-works-wait-for-a-timetable-gap-passengers-per-
+## plane-class), and a load refuses a count outside the class's range.
 const OFFERS_PER_DAY := 3
 const AIRLINES := ["Gotta Air", "Nordic Wing", "Blue Fjord", "Sunhop"]
 const DESTINATIONS := ["Oslo", "Berlin", "Lisbon", "Rome", "Dublin", "Athens"]
 ## Plane size -> [fewest, most] booked passengers.
-const STARTER_SIZES := {"small": [12, 24], "medium": [24, 48]}
+const STARTER_SIZES := {"small": [8, 16], "medium": [24, 48]}
 const FEE_MIN := 15
 const FEE_MAX := 35
 ## Airline tiers, unlocked by the airport rating (RatingFormula.tier): tier t
@@ -332,6 +335,10 @@ func _range_problem(entry: Dictionary) -> String:
 	var tier := tier_of(entry["airline"])
 	var booked_range: Array = TIER_SIZES[tier][entry["plane_size"]]
 	var booked := int(entry["booked_passengers"])
+	if not PlaneClasses.passengers_fit(entry["plane_size"], booked):
+		return (
+			"offer %s books %d passengers outside its plane class's range" % [entry["id"], booked]
+		)
 	if booked < booked_range[0] or booked > booked_range[1]:
 		return "offer %s books %d passengers outside its size's range" % [entry["id"], booked]
 	var fee := int(entry["fee_per_passenger"])

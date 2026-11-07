@@ -26,7 +26,7 @@ static func record(id: String, day: int, minute: int, status := OfferBoard.OPEN)
 		"destination": "Oslo",
 		"departure_minute": minute,
 		"plane_size": "small",
-		"booked_passengers": 20,
+		"booked_passengers": 12,
 		"fee_per_passenger": 25,
 		"status": status,
 	}
