@@ -46,8 +46,9 @@ extends RefCounted
 ## copy of the sim's gate places (GateCapacity.copy()), with the same
 ## admission order as the sim (GateCapacity.admit_all(): earliest boarding
 ## tick first). A front with no place then waits as in the sim, and a place
-## freed later (a passenger boarding or visiting a facility) is not foreseen,
-## so a front that never gets one is NEVER. Otherwise only the station itself
+## freed later (a passenger boarding or visiting a facility) is not foreseen.
+## The front's own boarding opening is: it then needs no place
+## (GateCapacity.placed()) and is admitted on that tick. Otherwise only the station itself
 ## is played, and no admission waits for a place.
 
 ## Far enough that a replay this long has gone wrong.
@@ -69,8 +70,9 @@ static var _boundary := {}
 static var _candidates := {}
 ## Replays set up so far, for tests that count the work.
 static var replays_played := 0
-## Set by TestForecastSkipExact: every replay plays every tick until nothing
-## more can happen, the reference the skipped ticks are checked against.
+## Set by TestForecastSkipExact: every replay plays every tick until its
+## passenger is cleared or HORIZON, never asking _next_event() whether
+## anything can happen, the reference the skipped ticks are checked against.
 static var every_tick := false
 
 ## What SecurityRuntime reads from its host (see its header).
@@ -729,8 +731,9 @@ func _walk_on_mm(u: Passenger) -> int:
 ## work running out, a walker reaching a cell (it counts from the tick after,
 ## so a cell reached on this tick makes the next one count; a walker to the
 ## queue from the tick it reaches it; an admitted passenger walking on from
-## the tick after the first cell that counts, _walk_on_mm()) or a walker
-## joining the queue.
+## the tick after the first cell that counts, _walk_on_mm()), a walker
+## joining the queue, or the boarding of a front held for a gate place
+## opening.
 func _next_event() -> int:
 	if _changed:
 		_changed = false
@@ -784,6 +787,10 @@ func _next_event() -> int:
 				at = mini(at, tick + u.pace_ticks((left + 1) / 2 - u.seg_mm) + 1)
 		elif u.stage == Passenger.Stage.SECURITY_QUEUE and _misplaced(u):
 			at = tick + 1 if every_tick else _move_up_at(u)
+		elif u.stuck == Passenger.Stuck.GATE_FULL and u.boarding_tick > tick:
+			# A front held for a gate place needs none once its boarding opens
+			# (GateCapacity.placed()), and is admitted on that tick.
+			at = u.boarding_tick
 		elif u.stage == Passenger.Stage.SECURITY and not (_works(u) and u.security_work > 0):
 			# Standing inside with no work left: it waits for a cell or a place
 			# that frees on a tick of its own, which is played.
@@ -796,7 +803,7 @@ func _next_event() -> int:
 			at = ends if at < 0 else mini(at, ends)
 		if at >= 0 and (best < 0 or at < best):
 			best = at
-	return tick + 1 if every_tick and best >= 0 else best
+	return tick + 1 if every_tick else best
 
 
 ## The next tick misplaced queue member `u` may step up on
