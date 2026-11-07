@@ -20,13 +20,6 @@ const RUN_TICKS := 60
 const SAME_FROM := 21
 const SAME_M := 0.002
 const SAME_RAD := 0.005
-## First drawn past ROLL_TO, the bag is still on the floor then (the take is
-## a pose: RollerPark._taken()), so its lift and park run later and the hand
-## takes the bar again as the walker steps off: carried with the body from a
-## part of that step (FOLLOW_SPLIT), the rolled roller rides up to this far
-## from where a draw every tick has it (measured 0.078 m, first drawn 12
-## ticks late).
-const LATE_LIFT_M := 0.1
 ## The seat box (the seat frame, +z out of the front; as
 ## spike/cafe_roller_standup_probe.gd measures ROLLER_CLEAR).
 const SEAT_HALF_M := 0.6
@@ -112,7 +105,7 @@ func _guest(type: StringName) -> Passenger:
 ## "took", "first"}.
 func _play(p: Passenger, cadence: Array, seat: Dictionary) -> Dictionary:
 	var props := _views.carry_on_props()
-	var out := {"plans": {}, "ticks_at": {}, "clear": INF, "clear_at": -1}
+	var out := {"plans": {}, "ticks_at": {}, "rolls_at": {}, "clear": INF, "clear_at": -1}
 	var since := _world.clock.tick
 	var next: int = cadence[1]
 	for n in RUN_TICKS + 1:
@@ -127,6 +120,12 @@ func _play(p: Passenger, cadence: Array, seat: Dictionary) -> Dictionary:
 			out["first"] = n
 			out["since"] = float(rec.get("since", -1.0)) - since
 		out["ticks_at"][n] = CarryLead.ticks_of(rec)
+		out["rolls_at"][n] = RollerPark.rolls(rec)
+		# The drawn roller's largest move from one drawn tick to the next.
+		var drawn := (rec["node"] as Node3D).global_position
+		if out.has("last_at") and int(cadence[2]) == 1 and n <= RollerPark.ROLL_TO + 12:
+			out["step"] = maxf(float(out.get("step", 0.0)), drawn.distance_to(out["last_at"]))
+		out["last_at"] = drawn
 		out["rolled"] = out.get("rolled", false) or RollerPark.rolls(rec)
 		if CarryPlace.leading(rec, float(_world.clock.tick)) and rec.has("lead"):
 			out["plans"][n] = rec["lead"]["xf"]
@@ -226,6 +225,12 @@ func _runs(type: StringName, with_seat: bool) -> Dictionary:
 				]
 			)
 		)
+		print(
+			(
+				"%s %s: drawn roller step at most %.3f m a tick"
+				% [type, cadence[0], run.get("step", -1.0)]
+			)
+		)
 		runs[cadence[0]] = run
 		_free()
 	return runs
@@ -255,11 +260,17 @@ func _assert_same(type: StringName, runs: Dictionary, rolls: bool) -> void:
 			every["roll_tip"], 0.0001
 		)
 		var compared := 0
+		var worst := 0.0
 		for n: int in run["ticks_at"]:
-			if every["ticks_at"].has(n) and n >= SAME_FROM:
+			# The roll and the move's length on every tick both draw, from the
+			# first draw on.
+			if every["ticks_at"].has(n):
 				var at := "%s tick %d length" % [line, n]
 				assert_float(run["ticks_at"][n]).override_failure_message(at).is_equal_approx(
 					every["ticks_at"][n], 0.0001
+				)
+				assert_bool(run["rolls_at"][n]).override_failure_message(at).is_equal(
+					every["rolls_at"][n]
 				)
 			# While it rolls upright: RollerPark's alone (the tip blends into the
 			# pull's pose, which RollerPull steps once per draw).
@@ -273,11 +284,11 @@ func _assert_same(type: StringName, runs: Dictionary, rolls: bool) -> void:
 			)
 			var gap := a.origin.distance_to(b.origin)
 			var at := "%s tick %d: %.4f m %.4f rad" % [line, n, gap, turn]
-			var most := SAME_M if int(run["first"]) < RollerPark.ROLL_TO else LATE_LIFT_M
-			assert_float(gap).override_failure_message(at).is_less(most)
+			assert_float(gap).override_failure_message(at).is_less(SAME_M)
 			assert_float(turn).override_failure_message(at).is_less(SAME_RAD)
+			worst = maxf(worst, gap)
 			compared += 1
-		print("%s: %d planned poses compared" % [line, compared])
+		print("%s: %d planned poses compared, worst %.5f m" % [line, compared, worst])
 		if name != "every":
 			assert_int(compared).override_failure_message(line).is_greater(0)
 

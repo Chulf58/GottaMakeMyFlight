@@ -34,7 +34,7 @@ func after_test() -> void:
 func _bag(face: bool) -> Dictionary:
 	return {
 		"park": true,
-		"changed": 0.0,
+		"park_up": true,
 		"since": 0.0,
 		"up_near": face,
 		"ticks": UP,
@@ -118,9 +118,10 @@ func test_a_rolled_move_leaves_its_start_on_the_same_tick() -> void:
 
 
 ## Taken late (first drawn past the lift, "park_took" 0.5625: its park and
-## SETTLE_TICKS end past k 1), the rods stay in until its park is over, rolled or not; the
-## not-rolled smoothstep's edges were the wrong way round there and drew them
-## all out on the first frame, then in again once it rolled.
+## SETTLE_TICKS end past k 1), a pick-up that rolls keeps its rods in on its
+## first frame (still undecided) and once it rolls; the not-rolled smoothstep's
+## edges were the wrong way round there and drew them all out on the first
+## frame, then in again once it rolled.
 func test_a_late_take_keeps_the_rods_in_until_its_park_ends() -> void:
 	var bag := _bag(true)
 	bag["park_took"] = 9.0 / UP
@@ -130,6 +131,56 @@ func test_a_late_take_keeps_the_rods_in_until_its_park_ends() -> void:
 	assert_float(RollerPark.rods_t(9.0 / UP, bag)).is_equal(0.0)
 	_ticks(bag, 0, int(RollerPark.ROLL_TO), 0.0)
 	assert_float(RollerPark.rods_t(11.0 / CarryLead.ticks_of(bag), bag)).is_equal(0.0)
+
+
+## Taken late and not rolling (no face here; the shower's door the same), its
+## rods run out over the end of the move, smoothly, all out as it ends: never
+## held in to the end and snapped to the pull's reach (RODS_OUT_TICKS).
+func test_a_late_take_that_does_not_roll_runs_its_rods_out_by_its_end() -> void:
+	var bag := _bag(false)
+	bag["park_took"] = 9.0 / UP
+	_ticks(bag, 0, 14, 0.0, false)
+	assert_bool(bag.has("rolls")).is_true()
+	assert_bool(RollerPark.rolls(bag)).is_false()
+	var last := RollerPark.rods_t(9.0 / UP, bag)
+	var start := last
+	var most := 0.0
+	for i in range(1, 22):
+		var k := (9.0 + i / 3.0) / UP
+		var now := RollerPark.rods_t(k, bag)
+		assert_float(now).is_greater_equal(last)
+		most = maxf(most, now - last)
+		last = now
+	print("late, not rolled: rods %.3f to %.3f, most %.3f a third of a tick" % [start, last, most])
+	assert_float(start).is_equal(0.0)
+	assert_float(last).is_equal_approx(1.0, 0.0001)
+	assert_float(most).is_less(0.2)
+
+
+## A move stamped again while its hand still reaches (CarryPlace: it keeps its
+## "since", its "changed" is new) reads the same sim track and rolls as one
+## stamped once (Sol re-check of c5778e7: keyed to "changed" it never rolled).
+func test_a_move_stamped_again_while_reaching_still_rolls() -> void:
+	var bag := {
+		"kind": SecurityLooks.Kind.ROLLER,
+		"was": SecurityLooks.Home.FLOOR * 4,
+		"carry_from": SecurityLooks.Carry.PULL,
+		"from": Transform3D.IDENTITY,
+		"since": 0.0,
+		"changed": 0.0,
+	}
+	_ticks(bag, 0, 0, 0.0)
+	RollerPark.stamp(bag, Transform3D.IDENTITY, 0.0)
+	_ticks(bag, 1, 2, 0.0)
+	bag["changed"] = 2.0
+	RollerPark.stamp(bag, Transform3D.IDENTITY, 0.0)
+	_ticks(bag, 3, int(RollerPark.ROLL_TO), 0.0)
+	assert_bool(RollerPark.rolls(bag)).is_true()
+	assert_float(CarryLead.ticks_of(bag)).is_equal(UP + RollerPark.ROLL_TICKS)
+	# Stamped again after the decision too: decided the same, from the track.
+	RollerPark.stamp(bag, Transform3D.IDENTITY, 0.0)
+	assert_bool(RollerPark.rolls(bag)).is_true()
+	assert_vector(bag["roll_at"]).is_equal(Vector3.ZERO)
 
 
 ## A rolled roller runs its rods out ROLL_RODS of the way while it rolls upright

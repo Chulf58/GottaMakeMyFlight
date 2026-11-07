@@ -1,9 +1,9 @@
 extends SceneTree
 ## Windowed plates of a roller visitor's pick-up at the lounge sofa and the nap
 ## pod with a late first draw (board c0707a22): the bag leaves the floor, then
-## LATE ticks run with no frame, so the view first draws the pick-up past its
-## lift (k 0.5625), as a frame running several ticks does. From there a frame
-## a tick. The roll is decided on sim ticks (RollerPark.roll_step()), so the
+## LATES ticks (9, past the lift's k 0.55; 12, past the roll's decision) run
+## with no frame, as a frame running several ticks does. From there a frame a
+## tick. The roll is decided on sim ticks (RollerPark.roll_step()), so the
 ## roller must still be rolled upright beside the body, held by the bar, out
 ## of the seat, until the body is clear.
 ##
@@ -19,6 +19,10 @@ extends SceneTree
 ##     bar_gap=<m, hand to bar, -1 not held by the bar> seat_clear=<m, least
 ##     signed distance of its box from the seat's box> low=<m, its box's lowest
 ##     point over the floor> body_moved=<m from where it stood>
+## and checks them (_check(): a CHECK line with the value and its range each;
+## PROBE_FAIL and exit 1 outside it): a tipped, intersecting, unheld or
+## floating roller cannot pass.
+## Plates: <type>_late<N>_n<tick>.png, and contact_sheet.png (a row a pick-up).
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -30,8 +34,8 @@ extends SceneTree
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const OUT_REL := "res://../tools/blender/out/roller_roll"
-const LATE := 9
-const PLATE_TICKS: Array[int] = [9, 11, 16, 22, 28]
+const LATES: Array[int] = [9, 12]
+const PLATE_TICKS: Array[int] = [11, 16, 22, 28]
 const MARGIN_PX := 8.0
 const LIMIT_TICKS := 3000
 const HANG_MS := 120000
@@ -41,6 +45,16 @@ const SEAT_HALF_M := 0.6
 const SEAT_FRONT_M := 0.05
 const SEAT_DEPTH_M := 0.9
 const SEAT_TOP_M := 1.3
+## Pass values (_check()): the roller's own z this close to world up (upright
+## on its wheels); from HELD_FROM ticks on (past the latest lift and park) its
+## bar this close to the hand, and its box's lowest point this far over the
+## floor as it stands on its wheels (measured 0.220 m), give or take
+## LOW_SLACK_M.
+const UPRIGHT_DOT := 0.98
+const HELD_FROM := 22
+const BAR_GAP_M := 0.03
+const WHEELS_LOW_M := 0.22
+const LOW_SLACK_M := 0.02
 
 var _seed := 0
 var _main: Node3D
@@ -63,7 +77,7 @@ func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
 			_seed = int(arg.get_slice("=", 1))
-	print("PROBE sim_seed=%d late=%d" % [_seed, LATE])
+	print("PROBE sim_seed=%d lates=%s" % [_seed, LATES])
 	_out_dir = ProjectSettings.globalize_path(OUT_REL)
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_beat_ms = Time.get_ticks_msec()
@@ -74,12 +88,13 @@ func _initialize() -> void:
 
 func _run() -> void:
 	for type: StringName in [&"lounge", &"nap_pod"]:
-		if not await _boot(type):
-			_failed = true
-			break
-		await _pick_up(type)
-		_main.queue_free()
-		await process_frame
+		for late in LATES:
+			if not await _boot(type):
+				_failed = true
+				break
+			await _pick_up(type, late)
+			_main.queue_free()
+			await process_frame
 	if not _sheet.is_empty():
 		_save_sheet()
 	print("PROBE done failed=%s" % _failed)
@@ -154,7 +169,7 @@ func _tick(frame := true) -> void:
 		_beat(_stage)
 
 
-func _pick_up(type: StringName) -> void:
+func _pick_up(type: StringName, late: int) -> void:
 	var p := _visitor()
 	if _sim.shops.visit_of(p.id) == null:
 		_invalid("%s: the visitor did not commit to the room" % type)
@@ -172,15 +187,15 @@ func _pick_up(type: StringName) -> void:
 	var seat := _seat_of(p)
 	var stood := _views.node_for(p.id).global_position
 	var picked := _clock.tick
-	print("PICKUP %s tick=%d late=%d" % [type, picked, LATE])
-	for i in LATE:
+	print("PICKUP %s tick=%d late=%d" % [type, picked, late])
+	for i in late:
 		await _tick(false)
 	await process_frame
-	for n in range(LATE, PLATE_TICKS[-1] + 1):
-		if n > LATE:
+	for n in range(late, PLATE_TICKS[-1] + 1):
+		if n > late:
 			await _tick()
-		if PLATE_TICKS.has(n):
-			await _plate("%s_n%02d" % [type, n], p, seat, stood)
+		if n == late or (n > late and PLATE_TICKS.has(n)):
+			await _plate("%s_late%02d_n%02d" % [type, late, n], n, p, seat, stood)
 
 
 ## The seat of the piece `p` stays at: {"frame" (its seat frame, world), "box"
@@ -238,7 +253,7 @@ static func _signed(box: AABB, point: Vector3) -> float:
 	return maxf(out.x, maxf(out.y, out.z))
 
 
-func _plate(file: String, p: Passenger, seat: Dictionary, stood: Vector3) -> void:
+func _plate(file: String, n: int, p: Passenger, seat: Dictionary, stood: Vector3) -> void:
 	_beat(file)
 	var body := _views.node_for(p.id)
 	var props := _views.carry_on_props()
@@ -295,6 +310,17 @@ func _plate(file: String, p: Passenger, seat: Dictionary, stood: Vector3) -> voi
 	)
 	if not ok or not seen:
 		_invalid("%s: subject not shown (in_frame=%s seen=%s)" % [file, ok, seen])
+	# Pass values: upright and out of the seat on every plate, not sunk into
+	# the floor; rolled once the sim decided (ROLL_TO); from HELD_FROM held by
+	# the bar and on its wheels (not floating).
+	_check(file, "up_dot", up_dot, UPRIGHT_DOT, 1.01)
+	_check(file, "seat_clear", clear, 0.0, INF)
+	_check(file, "low", low, WHEELS_LOW_M - LOW_SLACK_M, INF)
+	if n >= RollerPark.ROLL_TO:
+		_check(file, "rolls", 1.0 if RollerPark.rolls(rec) else 0.0, 1.0, 1.0)
+	if n >= HELD_FROM:
+		_check(file, "bar_gap", props.bar_gap_of(p.id, 0), 0.0, BAR_GAP_M)
+		_check(file, "low", low, WHEELS_LOW_M - LOW_SLACK_M, WHEELS_LOW_M + LOW_SLACK_M)
 	var img := root.get_texture().get_image()
 	var path := _out_dir.path_join(file + ".png")
 	if img.save_png(path) != OK:
@@ -305,11 +331,20 @@ func _plate(file: String, p: Passenger, seat: Dictionary, stood: Vector3) -> voi
 	cam.queue_free()
 
 
-## Every plate at half size, one piece's plates to a row (contact_sheet.png).
+## Prints `value` against [`least`, `most`] and fails the probe outside it.
+func _check(file: String, name: String, value: float, least: float, most: float) -> void:
+	var ok := value >= least and value <= most
+	print("CHECK %s %s=%.3f need [%.3f, %.3f] ok=%s" % [file, name, value, least, most, ok])
+	if not ok:
+		print("PROBE_FAIL %s %s=%.3f" % [file, name, value])
+		_failed = true
+
+
+## Every plate at half size, one pick-up's plates to a row (contact_sheet.png).
 func _save_sheet() -> void:
 	var w := _sheet[0].get_width() / 2
 	var h := _sheet[0].get_height() / 2
-	var across := PLATE_TICKS.size()
+	var across := PLATE_TICKS.size() + 1
 	var rows := ceili(_sheet.size() / float(across))
 	var sheet := Image.create(w * across, h * rows, false, Image.FORMAT_RGBA8)
 	for i in _sheet.size():
