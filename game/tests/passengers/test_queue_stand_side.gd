@@ -304,3 +304,40 @@ func _frames(hand: int, frame: Transform3D, walls: Array, backstop := true) -> D
 			seen["tip"] += _points_in(xf, walls)
 			seen["tip_frames"] += 1
 	return seen
+
+
+## A queue stand with no frame kept (no way to face known, ParkSide.
+## choose_stand()) is drawn in the body's frame: its tip started at yaw 0 and
+## then drawn with the body at a quarter turn carries the stood roller with no
+## turn of its own (RollerPark.tip_carry_of() the identity) at the tip's start
+## and half way. Control: with a frame kept at yaw 0 and the body already at
+## the quarter turn when its tip started, that turn is eased in: none at the
+## tip's start, some half way.
+func test_a_tip_with_no_kept_frame_turns_with_the_body_alone() -> void:
+	var drawn := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3(1.0, 0.0, 2.0))
+	var bag := _pulled(0)
+	bag["park"] = true
+	bag["queue"] = true
+	bag["since"] = 100.0
+	bag["ticks"] = 20.0
+	bag["still_from"] = 100.0
+	RollerPark.queue_stand(bag, ROLLER, false, 110.0, RollerPark.STILL_TICKS, 0.0, 0.0)
+	assert_bool(bag.has("queue_tip")).is_true()
+	var ticks := CarryLead.ticks_of(bag)
+	var at_start := 110.0 - 100.0
+	var half := at_start + RollerPark.tip_ticks(bag) / 2.0
+	var seen := []
+	for at: float in [at_start, half]:
+		seen.append(RollerPark.tip_carry_of(bag, drawn, at / ticks))
+	var kept := bag.duplicate(true)
+	kept["queue_frame"] = [100.0, Transform3D(Basis(), drawn.origin)]
+	kept["queue_tip_yaw"] = PI / 2.0
+	var with_frame := [
+		RollerPark.tip_carry_of(kept, drawn, at_start / ticks),
+		RollerPark.tip_carry_of(kept, drawn, half / ticks),
+	]
+	print("no frame: %s; a frame at yaw 0: %s" % [seen, with_frame])
+	for carry: Transform3D in seen:
+		assert_bool(carry.is_equal_approx(Transform3D.IDENTITY)).is_true()
+	assert_bool(with_frame[0].is_equal_approx(Transform3D.IDENTITY)).is_true()
+	assert_bool(with_frame[1].is_equal_approx(Transform3D.IDENTITY)).is_false()

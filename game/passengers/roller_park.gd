@@ -719,6 +719,20 @@ static func tip_carried(
 	return Transform3D(Basis(Vector3.UP, turn), to.origin) * Transform3D(Basis(), -from.origin)
 
 
+## What carries the stood roller of the queue stand of `bag` at `k` with the
+## body drawn as `frame` (plan()): tip_carried() once its tip has started, from
+## the stand's frame (queue_frame_of()) and the yaw the tip started at; the
+## identity before. Drawn in the body's frame (no "queue_frame" kept), the
+## stand already goes with the body, so no start yaw is eased in: one was, and
+## a tip started at yaw 0 then drawn at PI / 2 swung the roller a quarter turn
+## round the body at no share of the tip (Sol re-check).
+static func tip_carry_of(bag: Dictionary, frame: Transform3D, k: float) -> Transform3D:
+	if not bag.has("queue_tip"):
+		return Transform3D.IDENTITY
+	var at_tip: float = bag.get("queue_tip_yaw", NAN) if bag.has("queue_frame") else NAN
+	return tip_carried(queue_frame_of(bag, frame), frame, tip_share(bag, k), at_tip)
+
+
 ## The yaw (about +y, 0 facing +z) of a frame's ahead (+z) axis.
 static func _yaw_of(frame: Transform3D) -> float:
 	return atan2(frame.basis.z.x, frame.basis.z.z)
@@ -904,9 +918,7 @@ static func plan(
 		assert(body.has("look") and int(body["look"]) >= 0, "RollerPark: queued with no body look")
 		var chosen := queue_frame_of(bag, frame)
 		parked = queue_park(chosen, lead, body["scale"], body["look"])
-		if bag.has("queue_tip"):
-			var at_tip: float = bag.get("queue_tip_yaw", NAN)
-			parked = tip_carried(chosen, frame, tip_share(bag, k), at_tip) * parked
+		parked = tip_carry_of(bag, frame, k) * parked
 		# Walled on both sides, or a two-bag guest's (ParkSide.choose_stand() kept
 		# its side): out of the walls kept at the stamp (CarryPlace, ParkWalls),
 		# the tip rolled from there.

@@ -342,12 +342,12 @@ func _tipped(p: Passenger, turn: float) -> Array:
 ## way: the tip takes the stood roller from where it stood with no tick moving
 ## it more than TIP_STEP_M past the largest step of the tip of a body not turned
 ## (the first case, the tip's own pace: about 0.36 m a tick, 0.12 m a frame at
-## three frames a tick). Not turned and a quarter turn, it never goes into the
-## wall. A half turn is left out of the wall check: the roller stays in its
+## three frames a tick). Wall clearance is checked only not turned and for the
+## quarter turn. A half turn is left out of the wall check: the roller stays in its
 ## stand's hand (RollerPark.hold_park()), the left, which for a body facing
 ## west is the walled side, so the walking pull it tips into stands in the wall
 ## (board aa2db71d's walking-pull clip; printed). Control: the tip ran each time.
-func test_a_tip_after_the_body_turned_from_the_stand_neither_jumps_nor_clips() -> void:
+func test_a_tip_after_the_body_turned_from_the_stand_does_not_jump() -> void:
 	var seen := []
 	for turn: float in [0.0, -PI / 2.0, PI]:
 		var p := _queuer()
