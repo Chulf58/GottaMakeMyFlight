@@ -51,6 +51,12 @@ const SHOP_STAGES: Array[Passenger.Stage] = [Passenger.Stage.SHOP_WALK, Passenge
 ## stand_hand() tries the way out to a queue stand at this many shares of its
 ## side distance: the step (0.14 m or less) is under the roller's width (0.33 m).
 const STAND_SAMPLES := 3
+## A gate stander's step from its cell's middle onto its spot shorter than this
+## (m) is no step (stand_face()): spots sit 0, 0.2 or 0.4 m off the middle.
+const SPOT_STEP_M := 0.05
+## The way a gate stander faces with no step onto its spot (stand_face()):
+## south, yaw 0, as a body drawn new (after a load) faces.
+const GATE_FACE := Vector2(0.0, 1.0)
 
 
 ## The hand (0 right, 1 left) one-bag guest `p` holds its roller in: the open
@@ -170,46 +176,86 @@ static func stand_hand(
 
 
 ## Chooses the side of the queue stand asked for on roller `bag` of guest `p`
-## (RollerPark.restamps()) on the sim tick it is asked, in CarryOnProps.sync():
-## RollerPark.side_first() with the open side's hand (stand_hand()) of the
-## walls and furniture round where `sim` has `p`, in stand_frame(). Only sim
-## state decides it, never the drawn body, so one state stands one side
-## whatever the view draws (anti-pattern view-state-stepped-on-from-the-
-## previous-draw-makes-a-carry-p). A two-bag guest keeps a bag in each hand
-## (SecurityLooks.hand_of(), PullSide), so its stand keeps its side and
-## RollerPark.plan() moves it out of the walls (ParkWalls); and so does a stand
-## with no way to face known (stand_face()).
+## (RollerPark.restamps()) on the sim tick it is asked, in CarryOnProps.sync(),
+## and the frame it is drawn in: the frame (stand_frame()) of where `sim` has
+## `p` stand (stand_at()) facing its way there (stand_face()), kept on `bag`
+## ("queue_frame", [its "still_from", the frame]) for RollerPark.plan() to
+## place the stand in, and RollerPark.side_first() with the open side's hand
+## (stand_hand()) of the walls and furniture round it in that frame. Only sim
+## state decides both, never the drawn body, so one state stands one side
+## whatever way the view draws the body, and a body turning in the stand does
+## not take the roller round or across with it (anti-pattern view-state-
+## stepped-on-from-the-previous-draw-makes-a-carry-p; a body drawn the other
+## way stood the roller chosen for its left in the wall on its right). Chosen
+## once a still spell: asked again once its change of hand is made, the side
+## and the frame are kept. A two-bag guest keeps a bag in each hand
+## (SecurityLooks.hand_of(), PullSide), so its stand keeps its side, in the
+## frame kept as well, and RollerPark.plan() moves it out of the walls
+## (ParkWalls). With no way to face known the stand is drawn in the body's
+## frame as before (no "queue_frame").
 static func choose_stand(sim: PassengerSim, p: Passenger, bag: Dictionary) -> void:
-	if not RollerPark.restamps(bag) or p.carry_on > 1:
+	if not RollerPark.restamps(bag):
 		return
-	var hand := CarryLead.hand_of(bag["place"])
+	var spell := float(bag.get("still_from", NAN))
+	var kept: Array = bag.get("queue_frame", [])
+	if not kept.is_empty() and float(kept[0]) == spell:
+		return
 	var face := stand_face(sim, p)
-	if face != Vector2.ZERO:
-		var frame := stand_frame(sim.world_position(p), face)
-		var boxes := PullSide.walls_near(sim.grid, frame.origin)
-		boxes.append_array(PullSide.pieces_near(sim.grid, frame.origin))
-		var look := PassengerLooks.body_of(p.id, p.variant)
-		hand = stand_hand(frame, hand, SecurityLooks.bag_scale(p), look, boxes)
+	if face == Vector2.ZERO:
+		bag.erase("queue_frame")
+		return
+	var frame := stand_frame(stand_at(sim, p), face)
+	bag["queue_frame"] = [spell, frame]
+	if p.carry_on > 1:
+		return
+	var boxes := PullSide.walls_near(sim.grid, frame.origin)
+	boxes.append_array(PullSide.pieces_near(sim.grid, frame.origin))
+	var look := PassengerLooks.body_of(p.id, p.variant)
+	var hand := CarryLead.hand_of(bag["place"])
+	hand = stand_hand(frame, hand, SecurityLooks.bag_scale(p), look, boxes)
 	RollerPark.side_first(bag, hand)
+
+
+## Where (world) `sim` has `p` stand while it waits still in a queue: its sim
+## position and the offset it is drawn at by a held security queue front
+## (SecurityLooks.target_offset(), which the drawn body walks to), the point
+## PassengerViews draws a queuer at once it has stood still.
+static func stand_at(sim: PassengerSim, p: Passenger) -> Vector3:
+	return sim.world_position(p) + SecurityLooks.target_offset(sim, p)
 
 
 ## The ground way (x, z) `p` of `sim` waits facing in a queue, from sim state
 ## only (choose_stand()): what its body turns to there (PassengerViews), its
-## security lane's front or its cafe counter, else the step of its path it
-## walks next or walked last (a boarding file's way on, the way it came to its
-## place), else ZERO when the sim keeps none (a path cleared to its cell).
+## security lane's front or its cafe counter; at the gate (on its standing
+## spot, standing or setting off with no path yet) the way it stepped over
+## from the middle of the spot's cell onto the spot (PassengerSim.world_position()
+## over SHUFFLE_TICKS: the drawn body turns to that step); else the step of its
+## path it walks next or walked last (a boarding file's way on, the way it came
+## to its place); else at the gate GATE_FACE (GateCapacity.to_spot() clears a
+## stander's path, so a spot on the middle of its cell has no step to face);
+## else ZERO. Every part is saved sim state, so a load faces the same way.
 static func stand_face(sim: PassengerSim, p: Passenger) -> Vector2:
 	var face := SecurityLooks.face(sim, p)
 	if face == Vector2.ZERO:
 		face = Vector2(sim.cafes.counter_facing(p))
+	var spot := sim.standing.spot_of(p.id)
+	var on_spot := (
+		spot != StandingSpots.NO_SPOT
+		and (p.stage == Passenger.Stage.STANDING or RollerPark.setting_off(sim, p))
+	)
+	if face == Vector2.ZERO and on_spot:
+		var over := sim.standing.world_of(sim.grid, spot) - sim.grid.cell_to_world(p.at)
+		if Vector2(over.x, over.z).length() > SPOT_STEP_M:
+			face = Vector2(over.x, over.z)
 	if face == Vector2.ZERO and p.path.size() >= 2:
 		var at := clampi(p.path_index, 0, p.path.size() - 2)
 		face = Vector2(p.path[at + 1] - p.path[at])
+	if face == Vector2.ZERO and on_spot:
+		face = GATE_FACE
 	return face
 
 
-## The frame (world, on the floor) a queue stand is chosen in (stand_hand()):
-## at `at`, facing ground way `face`. The stand is drawn in the body's frame
-## (RollerPark.queue_park()), which turns to the same way as it waits.
+## The frame (world, on the floor) a queue stand is chosen and drawn in
+## (stand_hand(), RollerPark.plan()): at `at`, facing ground way `face`.
 static func stand_frame(at: Vector3, face: Vector2) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, atan2(face.x, face.y)), at)

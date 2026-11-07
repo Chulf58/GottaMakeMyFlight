@@ -678,6 +678,15 @@ static func queue_park(frame: Transform3D, hand: int, scale_by: float, look: int
 	return park(_yawed(frame), hand, scale_by, PARK_AHEAD_M, queue_side(look))
 
 
+## The frame (world) the queue stand of `bag` (CarryOnProps' record) is drawn
+## in (plan()): the one ParkSide.choose_stand() chose its side in from the sim
+## ("queue_frame", kept to the move's end), else the body as drawn, `frame`
+## (no way to face known).
+static func queue_frame_of(bag: Dictionary, frame: Transform3D) -> Transform3D:
+	var kept: Array = bag.get("queue_frame", [])
+	return kept[1] if not kept.is_empty() else frame
+
+
 ## How far out (QUEUE_SIDE_M) a queue stand parks the axle of a body of look
 ## `look` (PassengerLooks.BODIES index).
 static func queue_side(look: int) -> float:
@@ -824,10 +833,11 @@ static func plan(
 	if turns_first(bag) and turning < TURN_FIRST_TICKS:
 		return _turning(bag, move_k, turning, start, parked, bar, started[1], lead)
 	if queued(bag):
-		# Beside the body as it stands now (a guest turning to its counter takes
-		# the roller round with it), held by the bar throughout.
+		# In the frame its side was chosen in (queue_frame_of()), held by the bar
+		# throughout: the body drawn another way, or turning, does not take the
+		# stood roller across to the side the choice was not made for.
 		assert(body.has("look") and int(body["look"]) >= 0, "RollerPark: queued with no body look")
-		parked = queue_park(frame, lead, body["scale"], body["look"])
+		parked = queue_park(queue_frame_of(bag, frame), lead, body["scale"], body["look"])
 		# Walled on both sides, or a two-bag guest's (ParkSide.choose_stand() kept
 		# its side): out of the walls kept at the stamp (CarryPlace, ParkWalls),
 		# the tip rolled from there.
