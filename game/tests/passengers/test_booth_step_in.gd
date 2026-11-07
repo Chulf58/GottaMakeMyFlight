@@ -663,10 +663,7 @@ func _has_wall(world: PassengerTestWorld, cell: Vector2i, towards: Vector3) -> b
 ## test_room_move_cafe drives it) during its step-in hold turns back where it
 ## stands, at the approach cell: no jump onto the seat on the turn-back tick or
 ## the tick after (it was 0.5 of the way along the step-in path with the
-## sit-down's spent ticks counting the hold). Moved 6 ticks in, it turns back
-## no sooner than CafeSim.TURN_BACK_HOLD_TICKS into its sit-down (board
-## 2eaa9bc4: the roller is down and lifted before it sets off), so the loop
-## below runs that long, not the 3 ticks it ran before.
+## sit-down's spent ticks counting the hold).
 func test_a_booth_roller_guest_turned_back_in_its_hold_stays_at_the_approach() -> void:
 	var made := _sitting(&"restaurant_booth", true)
 	var world: PassengerTestWorld = made[0]
@@ -688,8 +685,7 @@ func test_a_booth_roller_guest_turned_back_in_its_hold_stays_at_the_approach() -
 	print("booth moved by %s" % [moved])
 	assert_bool(moved != Vector2i.ZERO).override_failure_message("no move was accepted").is_true()
 	var turned := -1
-	var sat_from := p.stage_tick
-	for n in CafeSim.TURN_BACK_HOLD_TICKS:
+	for n in 3:
 		world.step()
 		if p.stage == Passenger.Stage.CAFE_STANDING_UP and turned < 0:
 			turned = world.clock.tick
@@ -704,7 +700,6 @@ func test_a_booth_roller_guest_turned_back_in_its_hold_stays_at_the_approach() -
 			)
 			assert_float(off).is_less(0.001)
 	assert_int(turned).is_greater(0)
-	assert_int(turned - sat_from).is_greater_equal(CafeSim.TURN_BACK_HOLD_TICKS)
 	assert_object(visit.relocation).is_not_null()
 
 
