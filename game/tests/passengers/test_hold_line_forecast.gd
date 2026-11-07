@@ -100,11 +100,11 @@ func test_the_forecast_equals_the_sim_for_holders_at_every_index() -> void:
 	)
 
 
-## Later but nearer: P chooses first, far from the line, and is latched as
-## the claimant on the tail; Q chooses next, beside the line. Moved for the
-## latched claim (decision hold-line-rebuild-the-security-line-follows-where-
-## people-sta): P keeps the claim, Q waits a step short of the tail and enters
-## after P (P used to come up the line from its back while Q waited for it).
+## Later but nearer, the far claimant and the near walker: P chooses first,
+## far from the line, and is latched as the claimant on the tail; Q chooses
+## next, beside the line, PASS_TICKS and more sooner. The claim passes to Q
+## (decision hold-line-rebuild-the-security-line-follows-where-people-sta,
+## round 5), Q enters first and P lines up behind it.
 func test_the_forecast_equals_the_sim_when_walkers_reach_the_line_out_of_order() -> void:
 	_w = SecurityTestWorld.make(false)
 	var sim := _w.world.sim
@@ -119,13 +119,13 @@ func test_the_forecast_equals_the_sim_when_walkers_reach_the_line_out_of_order()
 	q.clear_path()
 	_w.world.step()
 	assert_that(q.path_end()).is_equal(line[1])
-	# Q is by the line long before P gets there, and waits off its tail cell.
-	for i in 40:
+	# The claim passes to Q and Q enters while P is still on its way.
+	for i in 60:
+		if q.stage == Passenger.Stage.SECURITY_QUEUE:
+			break
 		_w.world.step()
-	assert_dict(_w.world.sim._claims).is_equal({_w.station: p.id})
-	assert_int(q.stage).is_equal(Passenger.Stage.TO_SECURITY)
+	assert_int(q.stage).is_equal(Passenger.Stage.SECURITY_QUEUE)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_SECURITY)
-	assert_bool(line.slice(0, 1).has(q.at)).is_false()
 	var ids: Array[int] = [p.id, q.id]
 	var forecasts := _forecasts(ids)
 	var mid_step := 0
@@ -134,7 +134,7 @@ func test_the_forecast_equals_the_sim_when_walkers_reach_the_line_out_of_order()
 	var wrong := _wrong(forecasts)
 	var counts := [_w.joined, forecasts.size(), mid_step, _w.cleared]
 	print("joined %s, %d forecasts, %d mid-step, cleared %s" % counts)
-	assert_array(_w.joined).is_equal([p.id, q.id])
+	assert_array(_w.joined).is_equal([q.id, p.id])
 	assert_int(mid_step).is_greater(0)
 	(
 		assert_array(wrong)

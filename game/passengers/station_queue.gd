@@ -19,6 +19,14 @@ extends RefCounted
 ## Moves passengers from the holding list into free places at the back of
 ## the lane, first come first; returns them. Each keeps its index in the
 ## queue, so its place on the line.
+## How much sooner another walker must be able to reach the tail than the one
+## holding the claim for the claim to pass to it (_pass_claim()): two cells at
+## a walk. Once passed, the new claimant heads straight for the tail and the
+## old one stops at least a step short of it, so the old one can never come
+## back that far ahead and the claim does not flip back.
+const PASS_TICKS := 20
+
+
 static func promote(queue: Dictionary, cells: Array) -> Array[int]:
 	var moved: Array[int] = []
 	var lane: Array = queue["lane"]
@@ -229,6 +237,8 @@ static func arrive(
 			claims.erase(station)
 			free = free_index(queue, line, by_id, index)
 			to = tail(free, admitted)
+		if claims.has(station):
+			_pass_claim(claims, station, by_id, mine, line, to)
 		for w: Passenger in mine:
 			if claims.get(station, 0) == w.id:
 				var onto: int = index.get(w.path[w.path_index + 1], -1) if w.is_moving() else -1
@@ -277,6 +287,46 @@ static func _enter(
 		return false
 	join(queue, cells, w.id)
 	return true
+
+
+## The claim on `station`'s tail passes to another walker of `walkers` that
+## would reach line[`to`] at least PASS_TICKS sooner than its claimant
+## (_ticks_on()), the soonest such one (ties to the lower id), and stays
+## latched on it; the old claimant waits on as the others do.
+static func _pass_claim(
+	claims: Dictionary, station: int, by_id: Dictionary, walkers: Array, line: Array, to: int
+) -> void:
+	if to >= line.size():
+		return
+	var holder: Passenger = by_id[claims[station]]
+	var beat := _ticks_on(holder, line[to]) - PASS_TICKS
+	var best: Passenger = null
+	var best_ticks := 0
+	for w: Passenger in walkers:
+		if w == holder:
+			continue
+		var ticks := _ticks_on(w, line[to])
+		if ticks <= beat and (best == null or ticks < best_ticks):
+			best = w
+			best_ticks = ticks
+	if best != null:
+		claims[station] = best.id
+
+
+## The ticks walker `w` would take to reach `cell` on the way it has: the rest
+## of its path, then a straight walk from the path's end (octile), at its
+## pace. Cheap enough for every walker every tick, with no route found.
+static func _ticks_on(w: Passenger, cell: Vector2i) -> int:
+	var mm := 0
+	if w.is_moving():
+		mm = Passenger.segment_mm(w.at, w.path[w.path_index + 1]) - w.seg_mm
+		for i in range(w.path_index + 1, w.path.size() - 1):
+			mm += Passenger.segment_mm(w.path[i], w.path[i + 1])
+	var end := w.path_end()
+	var dx := absi(end.x - cell.x)
+	var dy := absi(end.y - cell.y)
+	mm += mini(dx, dy) * Passenger.DIAGONAL_MM + absi(dx - dy) * Passenger.STRAIGHT_MM
+	return w.pace_ticks(mm)
 
 
 ## Of `walkers`, the one that would reach line[`to`] soonest (ties to the

@@ -153,41 +153,51 @@ func test_the_walker_reaching_the_tail_soonest_is_latched_and_enters_alone() -> 
 	assert_dict(claims).is_empty()
 
 
-## Moved for the latched claim (decision hold-line-rebuild-the-security-line-
-## follows-where-people-sta): a latched claimant keeps the tail. One standing
-## on the tail cell without the claim does not enter and steps off it, off the
-## line (it was the one standing there entering ahead of a lower id).
-func test_a_latched_claimant_keeps_the_tail_from_a_walker_standing_on_it() -> void:
+## The latch passes (decision hold-line-rebuild-the-security-line-follows-
+## where-people-sta, round 5): a walker standing on the tail cell, 39 ticks
+## sooner than the far claimant, takes the claim and enters; one only 5 ticks
+## sooner than the claimant (under StationQueue.PASS_TICKS) leaves it latched.
+func test_the_claim_passes_only_to_a_walker_pass_ticks_sooner() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(4, 4))
 	var line: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3)]
+	var lanes := {1: line.slice(0, 2)}
+	var lines := {1: line}
 	var front := Passenger.new()
 	front.id = 100
 	front.at = line[0]
 	front.clear_path()
-	var standing := Passenger.new()
-	standing.id = 9
-	standing.station = 1
-	standing.stage = Passenger.Stage.TO_CHECKIN
-	standing.at = line[1]
-	standing.clear_path()
-	var far := Passenger.new()
-	far.id = 5
-	far.station = 1
-	far.stage = Passenger.Stage.TO_CHECKIN
-	far.at = Vector2i(3, 3)
-	far.clear_path()
+	var standing := _standing(9, line[1])
+	var far := _standing(5, Vector2i(3, 3))
 	var queues := {1: {"lane": [100], "holding": [], "serving": 0}}
 	var by_id := {100: front, 5: far, 9: standing}
 	var claims := {1: 5}
 	var joined := StationQueue.arrive(
-		grid, queues, {1: line.slice(0, 2)}, {1: line}, [far, standing], by_id, 7, [], claims
+		grid, queues, lanes, lines, [far, standing], by_id, 7, [], claims
 	)
 	assert_array(joined).is_empty()
-	assert_array(queues[1]["lane"]).is_equal([100])
+	assert_dict(claims).is_equal({1: 9})
+	joined = StationQueue.arrive(grid, queues, lanes, lines, [far, standing], by_id, 8, [], claims)
+	assert_array(joined.map(func(w: Passenger) -> int: return w.id)).is_equal([9])
+	assert_array(queues[1]["lane"]).is_equal([100, 9])
+	# Near but not PASS_TICKS sooner: 10 ticks against the claimant's 15.
+	var near := _standing(9, Vector2i(1, 1))
+	var claimant := _standing(5, Vector2i(1, 2))
+	queues = {1: {"lane": [100], "holding": [], "serving": 0}}
+	by_id = {100: front, 5: claimant, 9: near}
+	claims = {1: 5}
+	StationQueue.arrive(grid, queues, lanes, lines, [claimant, near], by_id, 9, [], claims)
 	assert_dict(claims).is_equal({1: 5})
-	assert_that(far.path_end()).is_equal(line[1])
-	assert_bool(standing.is_moving()).is_true()
-	assert_bool(line.has(standing.path_end())).is_false()
+
+
+## A standing walker of station 1 on `at`.
+static func _standing(id: int, at: Vector2i) -> Passenger:
+	var w := Passenger.new()
+	w.id = id
+	w.station = 1
+	w.stage = Passenger.Stage.TO_CHECKIN
+	w.at = at
+	w.clear_path()
+	return w
 
 
 ## The last free cell of a full line: a lower id reaches it on the tick a
