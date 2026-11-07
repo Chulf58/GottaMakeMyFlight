@@ -212,6 +212,8 @@ static func arrive(sim: PassengerSim) -> void:
 		lines[p.station] = sim.layout.line_of(p.station)
 		walkers.append(p)
 	if walkers.is_empty():
+		# No walker holds a claim on any line's tail.
+		sim._claims.clear()
 		return
 	var stranded: Array = []
 	var joined := StationQueue.arrive(
