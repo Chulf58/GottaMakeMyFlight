@@ -48,6 +48,9 @@ const CAFE_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.CAFE_STANDING_UP,
 ]
 const SHOP_STAGES: Array[Passenger.Stage] = [Passenger.Stage.SHOP_WALK, Passenger.Stage.SHOP_BROWSE]
+## stand_hand() tries the way out to a queue stand at this many shares of its
+## side distance: the step (0.14 m or less) is under the roller's width (0.33 m).
+const STAND_SAMPLES := 3
 
 
 ## The hand (0 right, 1 left) one-bag guest `p` holds its roller in: the open
@@ -140,3 +143,41 @@ static func _near(p: Passenger, cell: Vector2i) -> bool:
 ## The frame (world, on the floor) at `cell` facing grid way `out`.
 static func _frame(sim: PassengerSim, cell: Vector2i, out: Vector2i) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, atan2(out.x, out.y)), sim.grid.cell_to_world(cell))
+
+
+## The hand (0 right, 1 left) a roller pulled in `hand` is stood up with in a
+## queue (RollerPark.queue_stand(); decision a-roller-stood-in-a-queue-beside-
+## a-wall-goes-on-the-passenge): the other hand when the way out to the stand
+## on `hand`'s side (RollerPark.queue_park() in `frame`, at `scale_by`, body
+## look `look`) meets one of `boxes` (walls and furniture, PullSide's boxes)
+## and the way to the other side's does not; else `hand`. The way is the stand
+## at STAND_SAMPLES shares of its side distance, each step less than the
+## roller's width, so a wall the stand would stand wholly past (a body 0.1 m
+## from a wall's face, the stand's near edge 0.27 m out) counts as well as one
+## it stands in. Walled on both sides or neither, the usual side stands, and
+## RollerPark.plan() moves the stand out of the walls it stands in (ParkWalls).
+static func stand_hand(
+	frame: Transform3D, hand: int, scale_by: float, look: int, boxes: Array
+) -> int:
+	var walled := [false, false]
+	var side := RollerPark.queue_side(look)
+	for h in 2:
+		for n in range(1, STAND_SAMPLES + 1):
+			var out := side * n / float(STAND_SAMPLES)
+			var at := RollerPark.park(frame, h, scale_by, RollerPark.PARK_AHEAD_M, out)
+			walled[h] = walled[h] or ParkWalls.inside(at, boxes)
+	return 1 - hand if walled[hand] and not walled[1 - hand] else hand
+
+
+## The frame (world, on the floor) a queue stand of `p` is chosen in
+## (stand_hand()): where its body `body` stands, facing what it turns to while
+## it waits (its security lane's front, its cafe counter), else the way the
+## body faces. The stand is drawn in the body's frame as it turns
+## (RollerPark.queue_park()), so the side is chosen for the facing it ends in.
+static func stand_frame(sim: PassengerSim, p: Passenger, body: Transform3D) -> Transform3D:
+	var face := SecurityLooks.face(sim, p)
+	if face == Vector2.ZERO:
+		face = Vector2(sim.cafes.counter_facing(p))
+	var ahead := body.basis.z
+	var yaw := atan2(face.x, face.y) if face != Vector2.ZERO else atan2(ahead.x, ahead.z)
+	return Transform3D(Basis(Vector3.UP, yaw), body.origin)

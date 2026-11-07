@@ -41,6 +41,8 @@ static func place_bags(
 		var node: Node3D = bag["node"]
 		var kind: SecurityLooks.Kind = bag["kind"]
 		var hand_home: bool = homes[i] == SecurityLooks.Home.HAND
+		if RollerPark.restamps(bag):
+			_stand_side(props, held, bag, body)
 		var stamp: bool = bag["home"] != bag["place"] or RollerPark.restamps(bag)
 		if (
 			not stamp
@@ -224,8 +226,35 @@ static func _stamp(
 		bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN), unmoved
 	)
 	BoothRoller.fix_start(bag, held.get("booth", false), props.sim, body.global_transform)
+	# A queue stand keeps the walls round it for its ParkWalls backstop
+	# (RollerPark.plan()), as a seat's park does.
+	if RollerPark.queued(bag) and props.sim != null:
+		bag["queue_walls"] = PullSide.walls_near(props.sim.grid, body.global_position)
 	bag["home"] = bag["place"]
 	bag["reach_from"] = props._reach_of(node, kind)
+
+
+## Chooses the side of the queue stand asked for on roller `bag` (its walker's
+## body `body`) before it is stamped (RollerPark.side_first()): the open side
+## (ParkSide.stand_hand()) of the walls and furniture round the body, for the
+## facing it waits in (ParkSide.stand_frame()). The walker has stood still
+## RollerPark.still_wait() ticks, so it is drawn where the sim has it. With no
+## sim (CarryOnProps driven on its own, as tests do) there are no walls.
+static func _stand_side(
+	props: CarryOnProps, held: Dictionary, bag: Dictionary, body: Node3D
+) -> void:
+	var id: int = props._body_ids.get(body, -1)
+	if props.sim == null or id < 0 or bag["kind"] != SecurityLooks.Kind.ROLLER:
+		return
+	var p := props.sim.get_passenger(id)
+	if p == null:
+		return
+	var frame := ParkSide.stand_frame(props.sim, p, body.global_transform)
+	var boxes := PullSide.walls_near(props.sim.grid, frame.origin)
+	boxes.append_array(PullSide.pieces_near(props.sim.grid, frame.origin))
+	var look := int(body.get_meta(&"body", -1))
+	var hand := CarryLead.hand_of(bag["place"])
+	RollerPark.side_first(bag, ParkSide.stand_hand(frame, hand, held["scale"], look, boxes))
 
 
 ## Whether a move of `bag` stamped now is hand-led (CarryLead): every move but

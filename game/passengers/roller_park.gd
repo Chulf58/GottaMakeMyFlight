@@ -323,6 +323,44 @@ static func hold_park(
 	homes[i] = held_home(bag, kind, homes[i], now)
 	if _parking(bag, kind, now):
 		hands[i] = CarryLead.hand_of(bag["place"])
+	elif homes[i] == SecurityLooks.Home.HAND and _sided(bag, now):
+		hands[i] = bag["queue_hand"][1]
+
+
+## Whether the open side chosen for `bag` (side_first(), "queue_hand") holds
+## at `now`, when it changed the hand: through the still spell it was chosen
+## in, and after that spell's stand for as long as PullSide keeps a stood
+## roller in its hand (PullSide.stood()), so the walk off starts on the side
+## it stood on. A stand on its usual side is left to PullSide as before.
+static func _sided(bag: Dictionary, now: float) -> bool:
+	var mark: Array = bag.get("queue_hand", [])
+	if mark.is_empty() or not mark[2]:
+		return false
+	return float(bag.get("still_from", NAN)) == float(mark[0]) or PullSide.stood(bag, now)
+
+
+## The queue stand asked for on `bag` (restamps()) goes on the open side
+## (decision a-roller-stood-in-a-queue-beside-a-wall-goes-on-the-passenge, as
+## ParkSide does at a seat): `hand` is the hand it stands up with there
+## (ParkSide.stand_hand()). Chosen once per still spell ("queue_hand", [its
+## "still_from", the hand, whether that changed the hand]) and kept for it
+## (_sided(), hold_park()), so a body turning in the spell cannot flip it. Its
+## pull in the other hand, the ask is put off ("queue_still" cleared) and true
+## is returned: hold_park() moves the roller to that hand in a move of its own
+## (pull to pull, as PullSide does), and queue_stand() asks again once it is
+## settled there, so the stand and its tip are in that hand from their start.
+static func side_first(bag: Dictionary, hand: int) -> bool:
+	var spell := float(bag.get("still_from", NAN))
+	var mark: Array = bag.get("queue_hand", [])
+	if not mark.is_empty() and float(mark[0]) == spell:
+		return false
+	var changes := hand != CarryLead.hand_of(bag["place"])
+	bag["queue_hand"] = [spell, hand, changes]
+	if not changes:
+		return false
+	bag.erase("queue_still")
+	bag.erase("queue_asked")
+	return true
 
 
 ## Whether `p` stands in a queue, at its counter or desk or at the gate
@@ -416,6 +454,11 @@ static func queue_stand(
 	if float(bag.get("queue_asked", -1.0)) == float(bag["still_from"]):
 		return
 	var place: int = bag.get("place", -1)
+	# Going to the open side's hand first (side_first()): asked again from there.
+	var mark: Array = bag.get("queue_hand", [])
+	if not mark.is_empty() and float(mark[0]) == float(bag["still_from"]):
+		if CarryLead.hand_of(place) != int(mark[1]):
+			return
 	var pulled: bool = (
 		place >= 0
 		and place / 4 == SecurityLooks.Home.HAND
@@ -503,6 +546,7 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"roll_tip",
 		"queue",
 		"queue_tip",
+		"queue_walls",
 		"faced",
 		"turn_first",
 	]:
@@ -631,8 +675,14 @@ static func park(
 ## (yaw only is used), led by `hand`, drawn at `scale_by`, the body's look
 ## `look` (PassengerLooks.BODIES index): park() QUEUE_SIDE_M out for its variant.
 static func queue_park(frame: Transform3D, hand: int, scale_by: float, look: int) -> Transform3D:
+	return park(_yawed(frame), hand, scale_by, PARK_AHEAD_M, queue_side(look))
+
+
+## How far out (QUEUE_SIDE_M) a queue stand parks the axle of a body of look
+## `look` (PassengerLooks.BODIES index).
+static func queue_side(look: int) -> float:
 	var variant := clampi(look / PassengerLooks.PER_VARIANT, 0, QUEUE_SIDE_M.size() - 1)
-	return park(_yawed(frame), hand, scale_by, PARK_AHEAD_M, QUEUE_SIDE_M[variant])
+	return QUEUE_SIDE_M[variant]
 
 
 ## How far a parking move of `bag` has run its rods from their old length to
@@ -778,6 +828,10 @@ static func plan(
 		# the roller round with it), held by the bar throughout.
 		assert(body.has("look") and int(body["look"]) >= 0, "RollerPark: queued with no body look")
 		parked = queue_park(frame, lead, body["scale"], body["look"])
+		# Walled on both sides (side_first() found no open one): out of the walls
+		# kept at the stamp (CarryPlace, ParkWalls), the tip rolled from there.
+		if bag.has("queue_walls"):
+			parked.origin += ParkWalls.shift(parked, bag["queue_walls"])
 		at = _queued(bag, k, start, want, parked, bar)
 	elif not off_floor:
 		# At a booth seat (BoothRoller.fix_start()'s "wall_faces") a roller pulled
