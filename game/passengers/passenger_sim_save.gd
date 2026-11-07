@@ -62,6 +62,10 @@ extends RefCounted
 ## stand stacked on the lane's last cell. From 17 on, the version before is
 ## refused, with no migration.
 ## 28: the claims on the lines' tails (one walker at a time enters a queue).
+## 29: standing spots within StandingSpots.DESK_CLEAR_MM of a gate desk are not
+## offered, so a version 28 save may claim a spot that no longer exists; it is
+## refused with no migration (decision old-saves-are-not-supported-until-after-
+## a-release-no-save-mi).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
