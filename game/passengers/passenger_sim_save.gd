@@ -145,6 +145,9 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	sim.shops.restore(loaded["shop"])
 	sim.info_desks.restore(desk_state)
 	sim._passengers = loaded["passengers"]
+	# ParkSide's stamped hands are view state made after the snapshot.
+	if sim.has_meta(ParkSide.STAMPS):
+		sim.remove_meta(ParkSide.STAMPS)
 	sim._by_id.clear()
 	for p in sim._passengers:
 		sim._by_id[p.id] = p

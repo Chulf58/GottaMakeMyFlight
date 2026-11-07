@@ -221,10 +221,18 @@ static func _rolled_up(sim: PassengerSim, p: Passenger, index: int) -> bool:
 ## walked), is closed off by a wall or holds an object (a lane part, a desk)
 ## and the left is open: then the left, so the bag passes on the open side.
 ## On an activity visit the way is the one it faces to set its bags down
-## (_stay_step), so the bag goes down on the open side.
+## (_stay_step), so the bag goes down on the open side. Near a booth seat or a
+## sofa or nap pod where a roller parks beside the guest, ParkSide has the
+## last word: the open side when only one side is walled.
 static func hand_of(sim: PassengerSim, p: Passenger, index: int) -> int:
 	if p.carry_on > 1:
 		return index
+	return ParkSide.hand(sim, p, _cell_hand(sim, p))
+
+
+## hand_of()'s one-cell look for a one-bag guest: 1 (the left) when the cell
+## beside it on its right is closed and the one on its left open, else 0.
+static func _cell_hand(sim: PassengerSim, p: Passenger) -> int:
 	var step := _stay_step(sim, p)
 	if step == Vector2i.ZERO and p.path.size() >= 2:
 		var at := clampi(p.path_index, 0, p.path.size() - 2)

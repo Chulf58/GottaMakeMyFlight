@@ -508,8 +508,9 @@ func _lead_plate_scan() -> void:
 ## On each sim tick, after the views' sync: a bag about to start a move still
 ## to be plated (PlateSteps.wanted) pauses the clock with no time left over, so
 ## the move is first drawn at k 0 and its plate steps the clock to each moment.
+## A hard case's turn to the front is plated first, when asked (CaseTurnPlates).
 func _on_tick(_tick: int) -> void:
-	if _plate_task or _hold_frame >= 0:
+	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0:
 		return
 	var props := _views.carry_on_props()
 	var lead_open := _lane_mode or _move_plated.size() >= MOVE_PLATES.size()
@@ -633,7 +634,7 @@ func _send() -> void:
 	var at := _roles.find_custom(func(r: Array) -> bool: return r[0] == kind)
 	if at < 0:
 		at = _roles.find_custom(func(r: Array) -> bool: return r[0] == -1)
-	if at < 0 or not CrossingBodies.take(p, _bodies):
+	if at < 0 or not CrossingBodies.take(p, _bodies, _lane_mode):
 		return
 	var traits: Array = _roles.pop_at(at)
 	p.carry_on = traits[1]

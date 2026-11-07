@@ -39,6 +39,15 @@ const LOOP_FINGERS: Array[String] = ["Fingers", "Fingertips", "Thumb", "Thumb_Ti
 ## Side carry: how far back from hanging straight down the kept-still part of
 ## the arm points (a hand pulling a roller trails a little behind the hip).
 @export var lean_back_degrees := 0.0
+## Side carry: how far (0 to 1) the upper arm's twist about its own axis is
+## taken from its rest, turned twist_degrees out, instead of from the clip.
+## The walk clip twists the left upper arm differently from the right, and the
+## forearm and hand are not in line with the upper arm, so a kept clip twist
+## put the left hand of a pulled roller 2.9 cm nearer its leg than the right
+## (board ed73cfb1, spike/pull_grip_asym_probe.gd). Set for the pull
+## (CarryArmPose).
+@export var rest_twist_weight := 0.0
+@export var twist_degrees := 0.0
 ## Whether this hand holds a bag (the side carry); a free hand keeps the
 ## animation's pose and only comes forward with front_weight.
 @export var holds := true
@@ -236,6 +245,9 @@ func _side(
 	# kicks back in a run.
 	var lean := deg_to_rad(lean_back_degrees)
 	pose.basis = _pointed(pose.basis, Vector3(0.0, -cos(lean), -sin(lean)), 1.0 - swing_kept)
+	if rest_twist_weight > 0.0:
+		var twisted := _rest_twisted(skeleton, bones[0], pose.basis, outward)
+		pose.basis = _blend(pose.basis, twisted, rest_twist_weight)
 	# A point below the shoulder moves toward +X for a positive turn about +Z,
 	# so the sign follows the shoulder's side.
 	pose.basis = Basis(Vector3.BACK, deg_to_rad(angle_degrees) * outward) * pose.basis
@@ -245,6 +257,16 @@ func _side(
 	for i in [1, 2]:
 		out.append(out[i - 1] * skeleton.get_bone_rest(bones[i]))
 	return out
+
+
+## The upper arm's rest (skeleton space) turned by the shortest turn onto the
+## axis of `basis`, then twisted twist_degrees about that axis, out on the
+## arm's side: the same twist on both arms, mirrored, whatever the clip's.
+func _rest_twisted(skeleton: Skeleton3D, bone: int, basis: Basis, outward: float) -> Basis:
+	var along := basis.y.normalized()
+	var rest := _pointed(skeleton.get_bone_global_rest(bone).basis, along, 1.0)
+	var spin := Basis(along, deg_to_rad(twist_degrees) * outward)
+	return (spin * rest).orthonormalized() * Basis.from_scale(basis.get_scale())
 
 
 ## The front carry: upper arm a little forward, forearm and hand aimed so

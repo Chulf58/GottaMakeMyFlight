@@ -248,6 +248,80 @@ func test_a_booth_guest_steps_out_past_the_end_panel_before_the_hips_come_forwar
 	assert_float(path[-1].y).is_greater(0.9)
 
 
+## A booth guest with a roller steps out past the end panel by the same tick
+## of the stand_up clip as one with no roller (CafeSim.stand_up_lead()), then
+## stands at the approach cell while it picks the roller up: stepping out
+## over the clip's last ticks, its body reached 8 points into the panel at
+## k18-k19 at seat 13-2 (board cfe95aad, food_seats_probe). Control: it was
+## beside the panel before, and stood out at the approach cell through the
+## pick-up.
+func test_a_booth_roller_guest_steps_out_past_the_end_panel_before_the_hips_come_forward() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var visit := world.sim.cafes.visit_of(p.id)
+	while p.stage != Passenger.Stage.CAFE_SEATED and world.clock.tick < 4000:
+		world.step()
+	visit.dwell_end = world.clock.tick + 1
+	while p.stage != Passenger.Stage.CAFE_STANDING_UP and world.clock.tick < 4000:
+		world.step()
+	var up := CafeSim.up_ticks(p, visit.piece)
+	var path := _track(world, p, Passenger.Stage.CAFE_STANDING_UP, up)
+	assert_int(path.size()).is_equal(up)
+	var beside := 0
+	for k in PassengerSim.STAND_UP_TICKS:
+		var at := path[k]
+		if k < HIPS_FORWARD_TICK:
+			beside += 1 if at.y < PANEL_FACE_M + BODY_HALF_M else 0
+			continue
+		var why := "tick %d of the stand-up the body is %.2f m across, beside the panel" % [k, at.y]
+		assert_float(at.y).override_failure_message(why).is_greater_equal(
+			PANEL_FACE_M + BODY_HALF_M
+		)
+	assert_int(beside).is_greater(2)
+	for at: Vector2 in path.slice(PassengerSim.STAND_UP_TICKS):
+		assert_float(at.distance_to(Vector2(-0.45, 1.0))).is_less(0.001)
+
+
+## A booth roller guest whose approach cell is walled on one side only holds
+## its roller in the other hand (SecurityLooks.hand_of(), ParkSide), so the
+## park on its hand's side and the floor spot (BoothRoller.side()) are on the
+## same, open side (ruling a-guest-pulling-a-roller-through-a-doorway-tucks-
+## it-in-line): parked on the walled side and laid on the open one, the roller
+## crossed 0.43 m in front of the feet in one frame (food_seats_probe BAG_STEP
+## at 13-1). Each side is walled in turn. Control: the grid took each wall.
+func test_a_booth_roller_guest_walled_on_one_side_holds_it_on_the_open_side() -> void:
+	var made := _sitting(&"restaurant_booth", true)
+	var world: PassengerTestWorld = made[0]
+	var p: Passenger = made[1]
+	var seat: Dictionary = world.sim.cafes.visit_of(p.id).seat
+	var cell: Vector2i = seat["approach"]
+	var out: Vector2i = seat["facing"]
+	var front := Transform3D(Basis(Vector3.UP, atan2(out.x, out.y)), world.grid.cell_to_world(cell))
+	var sides: Array[int] = []
+	for towards in [-1.0, 1.0]:
+		var x: Vector3 = front.basis.x * towards
+		sides.append(BuildGrid.SIDE_STEP.find(Vector2i(roundi(x.x), roundi(x.z))))
+	for walled in 2:
+		var edits: Array[BuildEdit] = []
+		for side in sides:
+			if world.grid.has_wall(cell, side):
+				edits.append(BuildEdit.remove_wall(cell, side))
+		edits.append(BuildEdit.place_wall(cell, sides[walled]))
+		assert_bool(world.grid.apply_batch(edits)[-1].ok).is_true()
+		# The hand is chosen once per seat and kept (ParkSide's stamp): each wall
+		# layout here stands for a different seat, so it is chosen afresh.
+		world.sim.remove_meta(ParkSide.STAMPS)
+		var hand := SecurityLooks.hand_of(world.sim, p, 0)
+		var own := -1.0 if hand == 0 else 1.0
+		var lies := BoothRoller.side(world.sim, front, hand)
+		print(
+			"booth walled on the %s: hand %d, lies %+.0f" % [["right", "left"][walled], hand, lies]
+		)
+		assert_int(hand).is_equal(1 - walled)
+		assert_float(lies).is_equal(own)
+
+
 ## Moves object `id` to the first of `shifts` (cells) the grid accepts, as a room
 ## move does: removed and placed again under its id with its paid. A refused
 ## spot is put back as it was. True when it moved.
@@ -427,14 +501,16 @@ func test_a_booth_guest_with_a_roller_sits_down_as_one_with_no_roller() -> void:
 
 ## A roller guest's sit-down at a booth lasts its step-in hold longer, and the
 ## visit's forecast and the save check count it: a save in the hold past
-## SIT_DOWN_TICKS loads and sits down on the same tick as it would have.
+## SIT_DOWN_TICKS loads and sits down on the same tick as it would have. The
+## hold has room for the turn to face out of the seat before the set-down
+## (RollerPark.TURN_FIRST_TICKS, board 2eaa9bc4).
 func test_a_booth_roller_sit_down_is_longer_and_the_forecast_and_save_count_it() -> void:
 	var made := _sitting(&"restaurant_booth", true)
 	var world: PassengerTestWorld = made[0]
 	var p: Passenger = made[1]
 	var piece: Dictionary = world.sim.cafes.visit_of(p.id).piece
 	assert_int(CafeSim.STEP_IN_HOLD_TICKS).is_equal(
-		ceili(RollerPark.TICKS_DOWN + SitHold.LET_GO_TICKS)
+		ceili(RollerPark.TURN_FIRST_TICKS + RollerPark.TICKS_DOWN + SitHold.LET_GO_TICKS)
 	)
 	assert_int(CafeSim.sit_ticks(p, piece)).is_equal(
 		PassengerSim.SIT_DOWN_TICKS + CafeSim.STEP_IN_HOLD_TICKS
