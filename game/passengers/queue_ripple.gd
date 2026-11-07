@@ -7,6 +7,10 @@ extends RefCounted
 ## set off walked into that roller and stood on it until it was stood up
 ## beside its walker (headless measure on main 86e3011: 0.131 to 0.138 m from
 ## the follower's feet, 20 to 28 ticks a move-up).
+## - A lane walker more than a place behind the one ahead steps up at once:
+##   the cell it steps onto is clear of that walker and its trailing roller
+##   (decision hold-line-rebuild-the-security-line-follows-where-people-sta,
+##   so a hold line closes its gaps without a pause per place).
 ## - A lane walker behind a walker pulling a roller steps up only once that
 ##   walker stands on its own place and has stood still STAND_TICKS since its
 ##   walk ended (Passenger.halt_tick): RollerPark stands the roller up over its
@@ -51,6 +55,12 @@ static func may_step(
 	if index > 0:
 		var ahead: Passenger = host.get_passenger(lane[index - 1])
 		var roller := pulls_roller(ahead)
+		var here := cells.find(p.at)
+		var there := cells.find(ahead.at)
+		if here > 0 and there >= 0 and here - 1 > there + 1:
+			# More than a place behind: the cell it steps onto is clear of the
+			# one ahead and of the roller trailing it, so it closes the gap now.
+			return true
 		if ahead.is_moving():
 			# Walking off without a roller it leaves nothing behind to walk into.
 			return not roller

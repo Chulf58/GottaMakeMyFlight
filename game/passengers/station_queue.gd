@@ -144,7 +144,7 @@ static func _faces_front(line: Array, index: int, from: Vector2i) -> bool:
 ## The cell index a walker to `station` waits behind: past every cell of
 ## `line` a passenger admitted there (Stage.SECURITY) still stands on, such as
 ## a security lane's first cell, where the admitted passenger unpacks; -1 when
-## none does. A walker enters only behind that cell (tail(), may_enter()).
+## none does. A walker enters only behind that cell (tail()).
 static func admitted_at(by_id: Dictionary, station: int, line: Array) -> int:
 	var at := -1
 	for p: Passenger in by_id.values():
@@ -160,12 +160,6 @@ static func tail(free: int, admitted: int) -> int:
 	return maxi(free, admitted + 1)
 
 
-## Whether a walker may enter `queue` now: not while an admitted passenger
-## still stands on the place it would be given (index `admitted` or less).
-static func may_enter(queue: Dictionary, admitted: int) -> bool:
-	return size_of(queue) > admitted
-
-
 ## One tick's line rules, before anyone steps, with one entrant at a time
 ## (decision hold-line-rebuild-the-security-line-follows-where-people-sta,
 ## the latched claim). `walkers` (in id order) are committed to a station of
@@ -174,9 +168,11 @@ static func may_enter(queue: Dictionary, admitted: int) -> bool:
 ## walker that holds its claim on the tail (it is changed here).
 ## - The claimant enters the queue, as its last member, when it stands on the
 ##   tail cell (tail()) or reaches it at its pace on this tick, and stops
-##   there; behind an admitted passenger still on that place it stops and
-##   waits (may_enter()). Then the next claimant is chosen, and it too enters
-##   on this tick when it can.
+##   there; behind an admitted passenger still unpacking on the lane's first
+##   cell it enters one cell back and moves up while that one unpacks
+##   (decision hold-line-rebuild-the-security-line-follows-where-people-sta:
+##   the line, not the lane, gives back the time the hold line costs). Then
+##   the next claimant is chosen, and it too enters on this tick when it can.
 ## - With no claimant, the walker that would reach the tail soonest (the walk
 ##   still to go, then id) is latched as it: it heads for the tail and keeps
 ##   heading for it as the tail moves up, on from the cell it steps to, never
@@ -253,8 +249,7 @@ static func arrive(
 
 
 ## Claimant `w` enters `queue` when it stands on the tail cell or reaches it on
-## this tick: true when it joined. Behind an admitted passenger still on its
-## place it stops on the cell and waits.
+## this tick: true when it joined.
 static func _enter(
 	queue: Dictionary,
 	cells: Array,
@@ -282,8 +277,6 @@ static func _enter(
 		w.walk(need)
 		_stop_here(w)
 		w.halt_tick = now
-	if not may_enter(queue, admitted):
-		return false
 	join(queue, cells, w.id)
 	return true
 
