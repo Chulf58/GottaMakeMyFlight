@@ -32,9 +32,6 @@ const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 90000
 const FRAME := 1.0 / 60.0
 const FOLLOW_DISTANCE := 75.0
-## The material check: the plane alone has more than 30 surfaces (34 on its model), so 30 or
-## fewer means it was not walked and the check proved nothing.
-const PLANE_SURFACES_MIN := 31
 ## The taxi paving stage: ticks between samples, the nodes whose colliders are paving
 ## (a ray hit on anything else, the Ground grass included, is not), the site
 ## paving's north edge, and the top-down plates' height of view and the z they
@@ -271,8 +268,28 @@ func _check_materials() -> void:
 			% [plane_count + airside_count, plane_count, airside_count]
 		)
 	)
-	if plane_count < PLANE_SURFACES_MIN:
-		_invalid("the plane contributed only %d surfaces, expected more than 30" % plane_count)
+	# The view holds the model on show twice (the plane and its far silhouette), so a count
+	# short of that means it was not walked and the check proved nothing.
+	var model: String = _plane.get("model_name")
+	var expected := 2 * _model_surfaces(model)
+	print("MATERIALS model=%s expected_plane_surfaces=%d" % [model, expected])
+	if expected == 0 or plane_count < expected:
+		_invalid(
+			"the plane contributed %d surfaces, expected %d for %s" % [plane_count, expected, model]
+		)
+
+
+## The surfaces of one PlaneView model's scene; 0 for a name with no scene.
+func _model_surfaces(model: String) -> int:
+	if not PlaneView.PLANE_SCENES.has(model):
+		return 0
+	var packed: PackedScene = PlaneView.PLANE_SCENES[model]
+	var scene := packed.instantiate()
+	var count := 0
+	for mi in _meshes(scene):
+		count += mi.mesh.get_surface_count() if mi.mesh != null else 0
+	scene.free()
+	return count
 
 
 ## Prints BAD_MATERIAL per broken surface under root, marks the probe failed for each, and

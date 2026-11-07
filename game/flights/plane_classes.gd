@@ -17,6 +17,12 @@ const LARGE := "large"
 ## Smallest first.
 const ORDER: Array[String] = [SMALL, MEDIUM, LARGE]
 
+## The model StandPlacement is built around (its nose, tail and span), and the
+## offset that placement assumes it is drawn with (NOSE_M 14.7 is its nose
+## 12.99 m plus 1.7 m).
+const REFERENCE_MODEL := "tp_plane_05a"
+const REFERENCE_OFFSET := Vector3(0.0, 0.0, 1.7)
+
 ## Class -> {"models": the PlaneModels.PLANES names that may draw it,
 ## "passengers": [fewest, most] booked passengers}.
 const CLASSES := {
@@ -39,7 +45,28 @@ static func model_for(airline: String, plane_class: String) -> String:
 		push_error("PlaneClasses.model_for: '%s' is not a plane class" % plane_class)
 		return ""
 	var models: Array = CLASSES[plane_class]["models"]
-	return models[airline.hash() % models.size()]
+	return models[airline_hash(airline) % models.size()]
+
+
+## FNV-1a over the airline's UTF-8 bytes, kept to 31 bits. The project owns it
+## because the model is never saved: String.hash() is not promised to stay the
+## same across Godot versions, and a changed hash would swap an airline's plane.
+static func airline_hash(airline: String) -> int:
+	var hashed := 0x811C9DC5
+	for byte in airline.to_utf8_buffer():
+		hashed = ((hashed ^ byte) * 0x01000193) & 0xFFFFFFFF
+	return hashed & 0x7FFFFFFF
+
+
+## Where a model's origin sits from the stand's plane point so that its front
+## port passenger door (the first of its PlaneModels "doors") lands where model
+## 05's does with the stand's own offset (REFERENCE_OFFSET). StandPlacement fixes
+## the stand, the door walk and the footprint to model 05, so each model is
+## moved along and across the plane to that one door rather than centred.
+static func stand_offset(model: String) -> Vector3:
+	var reference: Vector3 = PlaneModels.PLANES[REFERENCE_MODEL]["doors"][0] + REFERENCE_OFFSET
+	var door: Vector3 = PlaneModels.PLANES[model]["doors"][0]
+	return Vector3(reference.x - door.x, 0.0, reference.z - door.z)
 
 
 ## The class's stand radius in metres: the largest own_swing_radius among its

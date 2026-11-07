@@ -213,14 +213,13 @@ func test_a_bad_save_is_refused_whole_and_leaves_the_board_alone() -> void:
 
 
 ## Each of these passes FlightContract validation but is not something the
-## board could have drawn.
+## board could have drawn. A third entry is the booked count that keeps the
+## contract valid for the changed term (a large plane needs 48 or more).
 func test_terms_no_draw_could_produce_are_refused() -> void:
 	var cases: Array = [
 		["airline", "Mystery Air"],
 		["destination", "Atlantis"],
-		["plane_size", "large"],
-		["booked_passengers", OfferBoard.STARTER_SIZES["small"][0] - 1],
-		["booked_passengers", OfferBoard.STARTER_SIZES["small"][1] + 1],
+		["plane_size", "large", 48],
 		["departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE + 1],
 		["departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE - OfferBoard.DEPARTURE_STEP],
 		["departure_minute", OfferBoard.DEPARTURE_LAST_MINUTE + OfferBoard.DEPARTURE_STEP],
@@ -230,6 +229,8 @@ func test_terms_no_draw_could_produce_are_refused() -> void:
 	var before := _board.to_snapshot()
 	for case in cases:
 		var bad := with_first(case[0], case[1])
+		if case.size() > 2:
+			bad["offers"][0]["booked_passengers"] = case[2]
 		var terms := OfferBoard.terms_of(bad["offers"][0])
 		assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_empty()
 		assert_bool(_board.from_snapshot(bad)).override_failure_message(str(case)).is_false()

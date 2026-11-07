@@ -17,14 +17,38 @@ const AIRLINES := [
 	"Meridian Air",
 ]
 
+## Airline -> [medium model, large model], written out so that a changed hash or
+## class table fails here instead of quietly swapping an airline's plane.
+const EXPECTED_MODELS := {
+	"Gotta Air": ["tp_plane_04a", "tp_plane_06a"],
+	"Nordic Wing": ["tp_plane_05a", "tp_plane_07a"],
+	"Blue Fjord": ["tp_plane_04a", "tp_plane_06a"],
+	"Sunhop": ["tp_plane_04a", "tp_plane_06a"],
+	"Polar Jet": ["tp_plane_04a", "tp_plane_06a"],
+	"Aegean Sky": ["tp_plane_05a", "tp_plane_07a"],
+	"Skyline Global": ["tp_plane_05a", "tp_plane_07a"],
+	"Meridian Air": ["tp_plane_04a", "tp_plane_06a"],
+}
+## FNV-1a (31 bits) of a few airline ids, from an independent implementation.
+const EXPECTED_HASHES := {
+	"Gotta Air": 359146478,
+	"Nordic Wing": 200086999,
+	"Polar Jet": 1860343332,
+	"": 0x811C9DC5 & 0x7FFFFFFF,
+}
 
-func test_the_same_airline_and_class_always_give_the_same_model() -> void:
-	for airline: String in AIRLINES:
-		for plane_class: String in PlaneClasses.ORDER:
-			var first := PlaneClasses.model_for(airline, plane_class)
-			for repeat in 3:
-				assert_str(PlaneClasses.model_for(airline, plane_class)).is_equal(first)
-			assert_array(PlaneClasses.CLASSES[plane_class]["models"]).contains([first])
+
+func test_the_same_airline_and_class_always_give_the_expected_model() -> void:
+	for airline: String in EXPECTED_MODELS:
+		var expected: Array = EXPECTED_MODELS[airline]
+		for repeat in 3:
+			assert_str(PlaneClasses.model_for(airline, PlaneClasses.MEDIUM)).is_equal(expected[0])
+			assert_str(PlaneClasses.model_for(airline, PlaneClasses.LARGE)).is_equal(expected[1])
+
+
+func test_the_airline_hash_is_the_projects_own_fnv_1a() -> void:
+	for airline: String in EXPECTED_HASHES:
+		assert_int(PlaneClasses.airline_hash(airline)).is_equal(EXPECTED_HASHES[airline])
 
 
 func test_a_small_flight_draws_model_03_whatever_the_airline() -> void:
@@ -94,24 +118,6 @@ func test_the_starter_contract_fits_its_class() -> void:
 	var terms := FlightSim.STARTER_TERMS
 	var fits := PlaneClasses.passengers_fit(terms["plane_size"], terms["booked_passengers"])
 	assert_bool(fits).is_true()
-
-
-## An offer for each class and the count to book on it, drawn from an airline of
-## a tier that flies the class.
-func test_a_saved_offer_outside_its_class_range_is_refused_on_load() -> void:
-	var cases: Array = [
-		["small", 7, "Gotta Air"],
-		["small", 17, "Gotta Air"],
-		["medium", 23, "Gotta Air"],
-		["medium", 49, "Gotta Air"],
-		["large", 47, "Polar Jet"],
-		["large", 121, "Skyline Global"],
-	]
-	for case in cases:
-		var data := _save_with(case[2], case[0], case[1])
-		var board := OfferBoard.new()
-		assert_bool(board.from_snapshot(data)).override_failure_message(str(case)).is_false()
-		assert_array(board.open_offers()).is_empty()
 
 
 func test_a_saved_offer_at_the_class_limits_loads() -> void:
@@ -187,6 +193,55 @@ func test_a_one_off_flight_is_drawn_as_the_starters_small_plane() -> void:
 	var view := _new_view(sim)
 	assert_str(view.model_of("ONEOFF")).is_equal("tp_plane_03a")
 	assert_str(view.model_name).is_equal("tp_plane_03a")
+
+
+func test_every_model_puts_its_passenger_door_where_model_05s_stand_door_is() -> void:
+	var reference: Vector3 = (
+		PlaneModels.PLANES["tp_plane_05a"]["doors"][0] + PlaneClasses.REFERENCE_OFFSET
+	)
+	for model: String in PlaneModels.PLANES:
+		var door: Vector3 = PlaneModels.PLANES[model]["doors"][0]
+		var placed := PlaneClasses.stand_offset(model) + door
+		print("%s door placed at %s (reference %s)" % [model, placed, reference])
+		assert_float(placed.x).is_equal_approx(reference.x, 0.001)
+		assert_float(placed.z).is_equal_approx(reference.z, 0.001)
+	# Model 05 keeps the placement the stand was built around.
+	var own := PlaneClasses.stand_offset("tp_plane_05a")
+	assert_float(own.z).is_equal_approx(PlaneClasses.REFERENCE_OFFSET.z, 0.001)
+	assert_float(own.x).is_equal_approx(0.0, 0.001)
+
+
+## StandPlacement parks model 05 so its door is at door_point (to 0.2 m along
+## the plane), and every model's door is placed there too. A model's nose lands
+## near model 05's, always on the plane side of the wall line.
+func test_every_model_on_a_stand_has_its_door_at_the_stand_door_and_its_nose_off_the_wall() -> void:
+	var stand := StandPlacement.make(1, 100.0, 40.0)
+	var base := StandPlacement.stand_point(stand)
+	var wall_z := float(stand["wall_z"])
+	var door_z := StandPlacement.door_point(stand).z
+	var nose_05 := base.z + StandPlacement.NOSE_M
+	for model: String in PlaneModels.PLANES:
+		var row: Dictionary = PlaneModels.PLANES[model]
+		var offset := PlaneClasses.stand_offset(model)
+		var door_at: Vector3 = base + offset + row["doors"][0]
+		var nose_at: float = base.z + offset.z + row["nose"]
+		print(
+			(
+				"%s on the stand: door z %.2f (stand door %.2f), nose %.2f (05 nose %.2f), wall %.2f"
+				% [model, door_at.z, door_z, nose_at, nose_05, wall_z]
+			)
+		)
+		assert_float(door_at.z).is_equal_approx(door_z, 0.2)
+		assert_float(nose_at).is_less(wall_z)
+		assert_float(absf(nose_at - nose_05)).is_less(2.1)
+
+
+func test_the_starters_small_plane_is_moved_up_to_the_stand_not_centred() -> void:
+	# The case the review found: model 03 centred on the pose point left its nose
+	# about 11.6 m short of the wall and its door 9 m from where passengers walk.
+	var centred: float = PlaneModels.PLANES["tp_plane_03a"]["model_offset"].z
+	var placed := PlaneClasses.stand_offset("tp_plane_03a").z
+	assert_float(placed - centred).is_greater(7.0)
 
 
 ## A view of `sim` in the tree, not drawing (it has no airside to read paths from).

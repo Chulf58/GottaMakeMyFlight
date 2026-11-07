@@ -329,11 +329,12 @@ func show_model(model: String) -> void:
 		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-## One instance of the model on show, its middle on the pose point.
+## One instance of the model on show, its passenger door where the stand's is
+## (PlaneClasses.stand_offset).
 func _new_model() -> Node3D:
 	var packed: PackedScene = PLANE_SCENES[model_name]
 	var model: Node3D = packed.instantiate()
-	model.position = PlaneModels.PLANES[model_name]["model_offset"]
+	model.position = PlaneClasses.stand_offset(model_name)
 	model.rotation_degrees.y = model_yaw_degrees
 	return model
 

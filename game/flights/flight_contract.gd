@@ -67,7 +67,14 @@ static func problem(data: Variant, keys: Array) -> String:
 			return "%s must be a non-empty string" % key
 	if not PLANE_SIZES.has(data["plane_size"]):
 		return "plane_size must be one of %s" % [PLANE_SIZES]
-	return _number_problem(data, keys)
+	var problem := _number_problem(data, keys)
+	if problem == "" and not _fits_class(data):
+		var limits := PlaneClasses.passenger_range(data["plane_size"])
+		return (
+			"booked_passengers must be %d to %d for a %s plane"
+			% [limits[0], limits[1], data["plane_size"]]
+		)
+	return problem
 
 
 ## A read-only copy of checked `data`, whole numbers as ints.
@@ -78,6 +85,10 @@ static func make(data: Dictionary) -> Dictionary:
 		contract[key] = int(value) if typeof(value) == TYPE_FLOAT else value
 	contract.make_read_only()
 	return contract
+
+
+static func _fits_class(data: Dictionary) -> bool:
+	return PlaneClasses.passengers_fit(data["plane_size"], int(data["booked_passengers"]))
 
 
 static func _number_problem(data: Dictionary, keys: Array) -> String:

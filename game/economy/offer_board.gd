@@ -24,7 +24,9 @@ const DECLINED := "declined"
 const EXPIRED := "expired"
 const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 
-const SAVE_VERSION := 1
+## 2: small flights carry 8-16 passengers (was 12-24), so a version 1 save may
+## hold a count no small offer can have now.
+const SAVE_VERSION := 2
 const SAVE_KEYS := ["save_version", "offers"]
 const OFFER_KEYS := [
 	"id",
@@ -43,7 +45,7 @@ const OFFER_KEYS := [
 ## FEE_MIN..FEE_MAX are tier 0 of the tier tables below. Every size's
 ## passenger range sits inside its plane class's range (PlaneClasses.CLASSES,
 ## decision runway-upgrade-works-wait-for-a-timetable-gap-passengers-per-
-## plane-class), and a load refuses a count outside the class's range.
+## plane-class); FlightContract.problem refuses a count outside the class's range.
 const OFFERS_PER_DAY := 3
 const AIRLINES := ["Gotta Air", "Nordic Wing", "Blue Fjord", "Sunhop"]
 const DESTINATIONS := ["Oslo", "Berlin", "Lisbon", "Rome", "Dublin", "Athens"]
@@ -335,10 +337,6 @@ func _range_problem(entry: Dictionary) -> String:
 	var tier := tier_of(entry["airline"])
 	var booked_range: Array = TIER_SIZES[tier][entry["plane_size"]]
 	var booked := int(entry["booked_passengers"])
-	if not PlaneClasses.passengers_fit(entry["plane_size"], booked):
-		return (
-			"offer %s books %d passengers outside its plane class's range" % [entry["id"], booked]
-		)
 	if booked < booked_range[0] or booked > booked_range[1]:
 		return "offer %s books %d passengers outside its size's range" % [entry["id"], booked]
 	var fee := int(entry["fee_per_passenger"])
