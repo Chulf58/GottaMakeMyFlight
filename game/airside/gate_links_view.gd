@@ -26,6 +26,13 @@ extends Node3D
 ## meanings, and a caption under it naming why (caption_for()). The signs are
 ## not part of MissMarkers' declutter layout, like the wall-gap signs.
 ##
+## Each gate's stand envelope for its biggest plane (GateDesks.max_class,
+## StandEnvelope; decision runway-and-taxi-technical-design-movement-plan-
+## analytic-bookings-planned-pauses, section 3) is outlined on the ground in the
+## same sky blue, thinner (ENVELOPE_PX), from the stand out along the way north
+## to the taxi lane, with a caption over the stand naming the class ("Gate A: up
+## to large planes"). Both show only while build mode lasts, with the links.
+##
 ## Redrawn on every GateDesks.changed (each graph change). Draws in world space,
 ## so it sits at the world origin. View only.
 
@@ -36,6 +43,11 @@ const LINE_FILL := Color(0.38, 0.68, 0.98)
 ## The fill's opacity where something stands between the camera and the line.
 const THROUGH_ALPHA := 0.6
 const END_RADIUS_M := 0.7
+const ENVELOPE_PX := 3.0
+## The envelope caption stands this far over the stand point.
+const ENVELOPE_CAPTION_M := 6.0
+const CLASS_CAPTION := "Gate %s: up to %s planes"
+const NO_CLASS_CAPTION := "Gate %s: no room for a plane"
 ## The "Gate A" caption stands this far over the desk's top.
 const CAPTION_LIFT_M := 0.5
 const UNLINKED_PREFIX := "Unlinked: "
@@ -76,6 +88,9 @@ var _links := Node3D.new()
 var _through := MeshInstance3D.new()
 var _rim := MeshInstance3D.new()
 var _fill := MeshInstance3D.new()
+var _envelope := MeshInstance3D.new()
+var _envelope_paths: Array[PackedVector3Array] = []
+var _class_captions: Array[Label3D] = []
 var _ends: Array[MeshInstance3D] = []
 var _captions: Array[Label3D] = []
 var _signs: Array[Sprite3D] = []
@@ -94,7 +109,9 @@ func _init() -> void:
 	_through.material_override = _line_material(faint, WIDTH_PX, 0, false)
 	_rim.material_override = _line_material(MarkerIcons.OUTLINE, WIDTH_PX + 2.0 * RIM_PX, 1)
 	_fill.material_override = _line_material(LINE_FILL, WIDTH_PX, 2)
-	for line in [_through, _rim, _fill]:
+	_envelope.name = "Envelopes"
+	_envelope.material_override = _line_material(LINE_FILL, ENVELOPE_PX, 2)
+	for line in [_through, _rim, _fill, _envelope]:
 		line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		line.extra_cull_margin = 4.0
 		_links.add_child(line)
@@ -164,6 +181,10 @@ static func caption_for(reason: Dictionary) -> String:
 			return UNLINKED_PREFIX + "Gate %s uses the exit" % reason["gate"]
 		GateDesks.Unlinked.STAND_OVERLAP:
 			return UNLINKED_PREFIX + "stand would overlap Gate %s" % reason["gate"]
+		GateDesks.Unlinked.NO_ROOM:
+			return UNLINKED_PREFIX + "no room for a plane outside the exit"
+		GateDesks.Unlinked.ROUTE_BLOCKED:
+			return UNLINKED_PREFIX + "the way to the taxi lane is blocked"
 	return UNLINKED_PREFIX + "every gate letter is in use"
 
 
@@ -180,6 +201,7 @@ func rebuild() -> void:
 			desk_tops.append(_desk_top(binding["desk"]))
 	_draw_lines()
 	_draw_ends()
+	_draw_envelopes()
 	while _captions.size() < gate_texts.size():
 		_captions.append(_make_caption("GateCaption", VERTICAL_ALIGNMENT_BOTTOM, 0.0))
 		_links.add_child(_captions[-1])
@@ -200,6 +222,77 @@ func rebuild() -> void:
 			_signs[i].set_meta("desk", desks[i])
 			caption_of(_signs[i]).text = caption_for(unlinked[desks[i]])
 	update_sizes(true)
+
+
+## The outline of the `plane_class` envelope at `stand` (StandEnvelope.rects():
+## the swing square and the way north to the lane, as one shape) at height `y`,
+## a closed loop.
+static func envelope_outline(
+	stand: Dictionary, plane_class: String, y: float
+) -> PackedVector3Array:
+	var parts := StandEnvelope.rects(stand, plane_class)
+	var swing: Rect2 = parts[0]
+	var way: Rect2 = parts[1]
+	var corners: Array[Vector2] = [
+		Vector2(swing.position.x, swing.end.y),
+		swing.position,
+		Vector2(way.position.x, swing.position.y),
+		way.position,
+		Vector2(way.end.x, way.position.y),
+		Vector2(way.end.x, swing.position.y),
+		Vector2(swing.end.x, swing.position.y),
+		swing.end,
+		Vector2(swing.position.x, swing.end.y),
+	]
+	var out := PackedVector3Array()
+	for corner in corners:
+		out.append(Vector3(corner.x, y, corner.y))
+	return out
+
+
+## The envelope outlines drawn, one per gate that holds a plane, in desk order.
+func envelope_paths() -> Array[PackedVector3Array]:
+	return _envelope_paths.duplicate()
+
+
+## The shown "Gate A: up to large planes" captions.
+func class_captions() -> Array[Label3D]:
+	var out: Array[Label3D] = []
+	for caption in _class_captions:
+		if caption.visible:
+			out.append(caption)
+	return out
+
+
+func envelope_node() -> MeshInstance3D:
+	return _envelope
+
+
+## Each gate's max_class envelope outline and its caption over the stand.
+func _draw_envelopes() -> void:
+	_envelope_paths.clear()
+	var texts: Array[String] = []
+	var spots: Array[Vector3] = []
+	if _grid != null and _gates != null:
+		var y := _grid.origin.y + LIFT_M
+		for binding in _gates.bindings:
+			var stand := StandPlacement.for_exit(_grid, binding["exit"])
+			var plane_class := _gates.max_class(binding["gate"])
+			if plane_class == "":
+				texts.append(NO_CLASS_CAPTION % binding["gate"])
+			else:
+				texts.append(CLASS_CAPTION % [binding["gate"], plane_class])
+				_envelope_paths.append(envelope_outline(stand, plane_class, y))
+			spots.append(StandPlacement.stand_point(stand) + Vector3.UP * ENVELOPE_CAPTION_M)
+	_envelope.mesh = segments_mesh(_envelope_paths)
+	while _class_captions.size() < texts.size():
+		_class_captions.append(_make_caption("ClassCaption", VERTICAL_ALIGNMENT_BOTTOM, 0.0))
+		_links.add_child(_class_captions[-1])
+	for i in _class_captions.size():
+		_class_captions[i].visible = i < texts.size()
+		if i < texts.size():
+			_class_captions[i].text = texts[i]
+			_class_captions[i].position = spots[i]
 
 
 ## The link paths drawn, one per gate in desk order (for probes and tests).
@@ -272,7 +365,7 @@ func update_sizes(force := false) -> void:
 	for marker in _signs:
 		marker.pixel_size = MissMarkers.SIGN_PX * unit / MarkerIcons.SIZE
 		caption_of(marker).pixel_size = unit
-	for caption in _captions:
+	for caption in _captions + _class_captions:
 		caption.pixel_size = unit
 
 
