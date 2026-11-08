@@ -394,15 +394,16 @@ func _assert_unseen(plane_class: String) -> void:
 	]
 	var subjects: Array[Vector3] = []
 	# Each subject is the 20 m box around the pose point plus the class's
-	# widest drawn plane turned to its heading (as PlaneView draws it, moved by
-	# PlaneClasses.stand_offset), from 6 m below to its tallest tail.
+	# widest drawn plane turned to its heading (as PlaneView draws it in the sky,
+	# its box centred by PlaneModels "model_offset"; PlaneView.model_position_at),
+	# from 6 m below to its tallest tail.
 	var ahead := 0.0
 	var behind := 0.0
 	var across := 0.0
 	var tallest := 0.0
 	for model: String in PlaneClasses.CLASSES[plane_class]["models"]:
 		var shape: Dictionary = PlaneModels.PLANES[model]
-		var shift := PlaneClasses.stand_offset(model).z
+		var shift: float = shape["model_offset"].z
 		ahead = maxf(ahead, shape["nose"] + shift)
 		behind = maxf(behind, shape["tail"] - shift)
 		across = maxf(across, shape["half_span"])

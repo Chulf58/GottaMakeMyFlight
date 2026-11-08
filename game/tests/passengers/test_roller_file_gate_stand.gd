@@ -253,7 +253,7 @@ func test_a_file_waiter_and_a_gate_stander_count_as_still() -> void:
 	)
 	assert_bool(second.is_moving()).is_true()
 	assert_bool(RollerPark.queue_still(sim, second)).is_true()
-	assert_int(RollerPark.still_wait(second)).is_equal(RollerPark.FILE_STILL_TICKS)
+	assert_int(QueueStandWait.ticks(sim, second)).is_equal(RollerPark.FILE_STILL_TICKS)
 	assert_bool(RollerPark.queue_still(sim, first)).is_false()
 	# Not in a file stage: held in no file, still only with no path left.
 	second.stage = Passenger.Stage.TO_GATE
@@ -262,7 +262,7 @@ func test_a_file_waiter_and_a_gate_stander_count_as_still() -> void:
 	assert_bool(RollerPark.queue_still(sim, second)).is_false()
 	second.clear_path()
 	assert_bool(RollerPark.queue_still(sim, second)).is_true()
-	assert_int(RollerPark.still_wait(second)).is_equal(RollerPark.STILL_TICKS)
+	assert_int(QueueStandWait.ticks(sim, second)).is_equal(RollerPark.STILL_TICKS)
 	assert_int(RollerPark.FILE_STILL_TICKS).is_greater(RollerPark.STILL_TICKS)
 
 

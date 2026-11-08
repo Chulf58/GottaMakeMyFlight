@@ -30,6 +30,26 @@ extends MeshInstance3D
 ## same dict ("quad", "ts" and "line" in strips()). It is not merged with other
 ## strips and may overlap them; every taxiway on the airside today is axis-
 ## aligned, so this only keeps a future diagonal leg from being left unpaved.
+##
+## Each stand gets a pad (stand_pad()), so a parked plane of every class the
+## gate takes sits on asphalt from nose to tail and the turn at the end of its
+## pushback stays on it: for each class up to the gate's max_class (Airside.
+## stand_pads()), the class's swing square (StandEnvelope) merged with each of
+## its models' parked footprints (door-aligned, PlaneClasses.stand_offset),
+## carried south to the stand's wall line, where the site's paving starts for a
+## north-row stand. A pad never paves a larger class's space, where the player
+## may still build (decision runway-and-taxi-technical-design-movement-plan-
+## analytic-bookings-planned-pauses, point 3).
+## Pads lie PAD_DROP_M under the strips in one flat shade, the asphalt band's
+## edge, so a strip's band runs over a pad as a lead-in, and two neighbours'
+## pads overlap in the same colour without a visible seam.
+##
+## Each hold line (Airside.hold_points()) gets a yellow hold bar across its
+## leg: two HOLD_LINE_M lines HOLD_GAP_M apart, centred on the hold point, in
+## the centre line's colour and height. Every hold line sits on a north-south
+## leg, so a bar runs east-west across the strip's width. HoldIn and HoldRunway
+## lie 2 m inside the runway's 64 m wide asphalt, which would hide a bar there,
+## so their bars sit just south of it (hold_bars()).
 
 const WIDTH_M := 30.0
 ## Height of the paving's top. The runway's asphalt lies at y 0.1 and the
@@ -48,11 +68,20 @@ const LINE_LIFT_M := 0.01
 const MARKING_UV := Vector2(0.6083, 0.0067)
 ## How far apart two values may be and still count as the same, in metres.
 const SAME_M := 0.01
+## How far the stand pads lie under the strips, still over the grass (y -0.1).
+const PAD_DROP_M := 0.02
+## A hold bar's two lines: each line's depth along the leg and the gap between.
+const HOLD_LINE_M := 0.5
+const HOLD_GAP_M := 0.5
 
 ## The strips last built, as returned by strips().
 var shown: Array[Dictionary] = []
 ## The centre lines last built, as returned by centrelines().
 var lines: Array[Rect2] = []
+## The stand pads last built, one per stand (stand_pad()).
+var pads: Array[Rect2] = []
+## The hold bar lines last built (hold_bars()).
+var bars: Array[Rect2] = []
 
 
 func _init() -> void:
@@ -61,11 +90,79 @@ func _init() -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-## Builds the mesh for `routes` (world points) around the lane at `lane_z`.
-func show_routes(routes: Array[PackedVector3Array], lane_z: float) -> void:
+## Builds the mesh for `routes` (world points) around the lane at `lane_z`,
+## with the stand pads `pad_list` (stand_pad()) and a hold bar at each of
+## `holds`, kept clear of the runway asphalt south to `runway_south_z`.
+func show_routes(
+	routes: Array[PackedVector3Array],
+	lane_z: float,
+	pad_list: Array[Rect2] = [],
+	holds := PackedVector3Array(),
+	runway_south_z := -INF
+) -> void:
 	shown = strips(routes, lane_z)
 	lines = centrelines(shown, lane_z)
-	mesh = mesh_of(shown, lines)
+	pads = pad_list.duplicate()
+	bars = hold_bars(holds, WIDTH_M, runway_south_z)
+	var marks := lines.duplicate()
+	marks.append_array(bars)
+	mesh = mesh_of(shown, marks, pads)
+
+
+## The pad under the stand whose plane point is `stand_point`, as a world xz
+## Rect2: for each of `classes`, the class's swing square (StandEnvelope.rects())
+## and the parked footprint (PlaneModels bounds) of each of its models, door-
+## aligned on the stand and nose to +z, merged and carried south to the wall
+## line the stand faces.
+static func stand_pad(stand_point: Vector3, classes := PlaneClasses.ORDER) -> Rect2:
+	var wall_z := stand_point.z + StandPlacement.NOSE_GAP_M + StandPlacement.NOSE_M
+	var stand := StandPlacement.make(0, stand_point.x + StandPlacement.DOOR_SIDE_M, wall_z)
+	var pad := Rect2(stand_point.x, wall_z, 0.0, 0.0)
+	for plane_class in classes:
+		pad = pad.merge(StandEnvelope.rects(stand, plane_class)[0])
+		for model: String in PlaneClasses.CLASSES[plane_class]["models"]:
+			pad = pad.merge(parked_footprint(stand_point, model))
+	return pad
+
+
+## The ground under `model` parked at the stand point `stand_point`, door-aligned
+## (PlaneClasses.stand_offset) and nose to +z, as a world xz Rect2.
+static func parked_footprint(stand_point: Vector3, model: String) -> Rect2:
+	var shape: Dictionary = PlaneModels.PLANES[model]
+	var origin := stand_point + PlaneClasses.stand_offset(model)
+	var half: float = shape["half_span"]
+	var tail: float = shape["tail"]
+	var nose: float = shape["nose"]
+	return Rect2(origin.x - half, origin.z - tail, 2.0 * half, tail + nose)
+
+
+## The two lines of a hold bar across a north-south leg at each of `holds`,
+## `width` wide in x, centred on the hold point along the leg. A bar that would
+## reach north of `clear_of_z` (the runway asphalt's south edge, which lies over
+## the paving and would hide it) is moved south until its north line starts
+## HOLD_GAP_M clear of it.
+static func hold_bars(
+	holds: PackedVector3Array, width := WIDTH_M, clear_of_z := -INF
+) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	var reach := HOLD_GAP_M / 2.0 + HOLD_LINE_M
+	for at in holds:
+		var z := maxf(at.z, clear_of_z + HOLD_GAP_M + reach)
+		out.append(Rect2(at.x - width / 2.0, z - reach, width, HOLD_LINE_M))
+		out.append(Rect2(at.x - width / 2.0, z + HOLD_GAP_M / 2.0, width, HOLD_LINE_M))
+	return out
+
+
+## Whether (x, z) of `point` lies on one of `strip_list`'s strips or one of
+## `pad_list`'s pads.
+static func paved(strip_list: Array[Dictionary], pad_list: Array[Rect2], point: Vector3) -> bool:
+	if covers(strip_list, point):
+		return true
+	var at := Vector2(point.x, point.z)
+	for pad in pad_list:
+		if pad.grow(SAME_M).has_point(at):
+			return true
+	return false
 
 
 ## The strips covering `routes`: each {"rect": Rect2 of world x and z,
@@ -214,14 +311,24 @@ static func centrelines(
 ## One flat, upward quad per strip, its atlas band running across the strip,
 ## and one per centre line in `line_list`, LINE_LIFT_M higher, in the marking
 ## colour. An oriented strip (strips() gives it "quad") brings its own line.
-static func mesh_of(strip_list: Array[Dictionary], line_list: Array[Rect2] = []) -> ArrayMesh:
+## Each of `pad_list` is one flat quad PAD_DROP_M lower in the band's edge shade.
+static func mesh_of(
+	strip_list: Array[Dictionary], line_list: Array[Rect2] = [], pad_list: Array[Rect2] = []
+) -> ArrayMesh:
 	var out := ArrayMesh.new()
-	if strip_list.is_empty() and line_list.is_empty():
+	if strip_list.is_empty() and line_list.is_empty() and pad_list.is_empty():
 		return out
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var index := PackedInt32Array()
+	for rect in pad_list:
+		var pad_base := verts.size()
+		for corner in _corners_of(rect):
+			verts.append(Vector3(corner.x, HEIGHT_M - PAD_DROP_M, corner.y))
+			normals.append(Vector3.UP)
+			uvs.append(Vector2(ASPHALT_U, ASPHALT_V_FROM))
+		index.append_array(_quad(pad_base))
 	for strip in strip_list:
 		if strip.has("quad"):
 			var quad_base := verts.size()

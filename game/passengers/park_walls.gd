@@ -6,7 +6,7 @@ extends RefCounted
 ## seat's face (a gate chair, a cafe seat, a booth, a sofa or nap pod) parks the
 ## roller standing PARK_SIDE_M out on the hand's side. BoothRoller.fix_start()
 ## keeps, for such a move, the walls round the walker as finite boxes
-## (PullSide.walls_near(), doors left out), and RollerPark.plan() moves the park
+## (PullSide.walls_near(), doorways out, open leaves in), and RollerPark.plan() moves the park
 ## out of them by shift(), once for the move: the lift, the park, the roll
 ## upright and the tip are all drawn from that one park, so the way out is the
 ## same on every frame (moved frame by frame, a roller turning about a wall's

@@ -36,7 +36,9 @@ extends Node3D
 ## removals, and building under a gate's booked envelope, GATE_ROUTE). The
 ## save holds each gate's stand. Its GateLinksView child draws each gate's link
 ## from desk to exit to stand and its max_class envelope while build mode
-## lasts, and a sign over every gate desk that has no gate.
+## lasts, and a sign over every gate desk that has no gate. Every refresh sends
+## each gate's max_class to the airside (Airside.set_gate_classes()), which
+## sizes the gate's stand pad for it.
 ##
 ## Not guaranteed: the live stand stays where it is while no legal stand
 ## exists, even when the player builds over its apron with no plane there.
@@ -223,6 +225,13 @@ func _refresh_gates() -> void:
 		desks[binding["gate"]] = binding["desk"]
 	var moved := _stands_of(next) != _stands_of(gate_stands) or desks != _desks_sent
 	gate_stands = next
+	# Each gate's pad follows its max_class, which building can change without
+	# moving any stand.
+	if airside != null:
+		var classes := {}
+		for gate: String in next:
+			classes[gate] = next[gate]["placement"]["max_class"]
+		airside.set_gate_classes(classes)
 	if moved:
 		_apply_live()
 

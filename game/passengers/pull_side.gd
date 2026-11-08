@@ -45,11 +45,12 @@ extends RefCounted
 ## (the settled footprint meets the wall), so it never goes to and fro between
 ## two threats. Walls are BuildGrid's walled edges as BuildView draws them,
 ## their ends run on by half a wall's thickness; a door is a way through and is
-## left out. Furniture is the real meshes of each piece; it threatens the
-## pulling side as a wall does (a scanner, a cafe table) and keeps the roller
-## off the other side. A change chosen by a threat ahead does not take the
-## roller onto the inside of a corner within the look-ahead (turns_to()): the
-## follower jumps there, so the change waits until the guest has turned.
+## left out, but its open leaves are walls (walls_near()). Furniture is the
+## real meshes of each piece; it threatens the pulling side as a wall does (a
+## scanner, a cafe table) and keeps the roller off the other side. A change
+## chosen by a threat ahead does not take the roller onto the inside of a
+## corner within the look-ahead (turns_to()): the follower jumps there, so the
+## change waits until the guest has turned.
 ##
 ## What it does not do: it does not look back along the route (a replan
 ## replaces the route; the roller's drawn depth stands in for it), a change
@@ -238,7 +239,7 @@ static func pick(
 ## doorway the jambs meet both sides, so no change of hand clears them; along
 ## a wall with the other side clear pick() changes hand first and the new side
 ## is clear. Standing still it stays as it is. Walls only, as pick() has them
-## (doors left out, their ends run on).
+## (doors left out but their open leaves, their ends run on).
 static func tuck(
 	bag: Dictionary,
 	grid: BuildGrid,
@@ -416,7 +417,12 @@ static func _bag_size() -> Vector3:
 ## Every walled edge (but a door) of the cells round `at`'s cell, once each, as
 ## a box [centre, axes, half size] as BuildView draws it, its length run on by
 ## half the wall's thickness at each end. Ported from RollerGuard.walls_near
-## (branch worktree-agent-afb7a5a26eee179b7).
+## (branch worktree-agent-afb7a5a26eee179b7). A door's way through is left out,
+## but the two open leaves of a sliding door (a door wall, or an entrance or exit
+## door's piece) are in, each as its own box (door_leaves()): parked beside the
+## opening they stand proud of the wall's face (user ruling open-sliding-door-
+## leaves-count-as-obstacles-for-a-pulled-rol). The leaves are always open (no
+## door closes) and count whether or not the cutaway draws them.
 static func walls_near(grid: BuildGrid, at: Vector3) -> Array:
 	var out := []
 	var seen := {}
@@ -426,9 +432,13 @@ static func walls_near(grid: BuildGrid, at: Vector3) -> Array:
 	for dx in range(-REACH_CELLS, REACH_CELLS + 1):
 		for dy in range(-REACH_CELLS, REACH_CELLS + 1):
 			var cell := under + Vector2i(dx, dy)
+			var id := grid.object_at(cell)
+			if id != 0 and not seen.has(-id):
+				seen[-id] = true
+				out.append_array(door_leaves(grid, id))
 			for side in 4:
 				var kind := grid.wall_kind(cell, side)
-				if kind == BuildGrid.WallKind.NONE or kind == BuildGrid.WallKind.DOOR:
+				if kind == BuildGrid.WallKind.NONE:
 					continue
 				var xf := BuildView.wall_transform(grid, cell, side)
 				# An edge's middle is on a half metre in one axis: one key per edge.
@@ -436,12 +446,40 @@ static func walls_near(grid: BuildGrid, at: Vector3) -> Array:
 				if seen.has(key):
 					continue
 				seen[key] = true
+				if kind == BuildGrid.WallKind.DOOR:
+					out.append_array(_leaves_at(xf))
+					continue
 				out.append(_box(xf.translated_local(Vector3.UP * half.y), AABB(-half, half * 2.0)))
 	return out
 
 
+## The open leaves of object `object_id` as boxes when it is a door (its
+## piece's leaves where BuildView draws them), else none.
+static func door_leaves(grid: BuildGrid, object_id: int) -> Array:
+	var record := grid.get_object(object_id)
+	if record.is_empty() or not BuildCatalog.is_door(record["def"]):
+		return []
+	var def := BuildCatalog.get_def(record["def"])
+	var cells := def.footprint(record["anchor"], record["facing"])
+	var frame := BuildView.object_transform(grid, cells, record["facing"])
+	return _leaves_at(frame * Transform3D(Basis.IDENTITY, InteriorKit.object_offset(def.id)))
+
+
+## The two leaves of a sliding door piece (wall_door) drawn at `xf`, as boxes:
+## the piece's parts off its axis (test_build_view_kit pins them at 0.61 m
+## either side), the part on it being the frame round the way through.
+static func _leaves_at(xf: Transform3D) -> Array:
+	var out := []
+	for part in InteriorKit.meshes(InteriorKit.WALL_PIECES[InteriorKit.WallKind.DOOR]):
+		var local: Transform3D = part[1]
+		if absf(local.origin.x) > 0.01:
+			out.append(_box(xf * local, (part[0] as Mesh).get_aabb()))
+	return out
+
+
 ## The meshes of every piece on the cells round `at`'s cell, each as a box
-## (piece_boxes()), once per piece.
+## (piece_boxes()), once per piece. An entrance or exit door is left out: its
+## frame's box would close the way through, and walls_near() has its leaves.
 static func pieces_near(grid: BuildGrid, at: Vector3) -> Array:
 	var out := []
 	var seen := {}
@@ -450,6 +488,8 @@ static func pieces_near(grid: BuildGrid, at: Vector3) -> Array:
 		for dy in range(-REACH_CELLS, REACH_CELLS + 1):
 			var id := grid.object_at(under + Vector2i(dx, dy))
 			if id == 0 or seen.has(id):
+				continue
+			if BuildCatalog.is_door(grid.get_object(id)["def"]):
 				continue
 			seen[id] = true
 			out.append_array(piece_boxes(grid, id))

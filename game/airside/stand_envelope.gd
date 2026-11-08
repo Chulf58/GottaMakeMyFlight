@@ -22,10 +22,11 @@ extends RefCounted
 ## is allowed and lowers its max_class; GateDesks refuses building under the
 ## envelope of the largest class booked at a gate (GATE_ROUTE).
 ##
-## Not guaranteed: the envelope is the class radius about the stand point. A
-## model door-aligned on the stand (PlaneClasses.stand_offset) and turned about
-## the stand point, as FlightPose turns it today, can reach past it (the small
-## plane's corner is about 15.5 m from the stand point).
+## The drawn plane stays inside its class's swing square through the turn:
+## FlightPose.model_position() draws a model door-aligned (stand_offset) only on
+## the stand point and box-centred (model_offset) from PUSHBACK_M away, so it
+## turns about its own middle (test_stand_turn_envelope). A parked model 04, 06
+## or 07 still reaches past the square's south edge, short of the wall.
 
 ## Why a class does not fit at a stand (blocked_part()).
 enum Part { CLEAR, SWING, WAY, LANE }
