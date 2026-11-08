@@ -77,7 +77,7 @@ func test_the_gates_and_their_stands_are_saved_and_a_lost_gate_loads_back() -> v
 		"save_version %s, gates %s, apron %s" % [data["save_version"], data["gates"], data["apron"]]
 	)
 	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(12)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(13)
 	assert_int((data["gates"]["gates"] as Array).size()).is_equal(2)
 	assert_array((data["apron"]["stands"] as Dictionary).keys()).is_equal(["A", "B"])
 	var saved_bindings := _gates.bindings.duplicate(true)
@@ -177,6 +177,8 @@ func test_a_save_whose_flights_do_not_re_plan_is_refused_while_staged() -> void:
 ## gate under a booked medium plane, so the save is put together from two.) A
 ## control: the unmixed save loads.
 func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() -> void:
+	# The scene starts with a small runway, which draws and accepts no medium offer.
+	_flights.runway.size = PlaneClasses.MEDIUM
 	var floor_edit := BuildEdit.paint_floor(MEDIUM_CELL, BuildGrid.FLOOR_TILE, 1)
 	assert_bool(_mode.grid.apply(floor_edit).ok).is_true()
 	assert_str(_gates.max_class("A")).is_equal(PlaneClasses.SMALL)
@@ -184,9 +186,14 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(MEDIUM_CELL)).ok).is_true()
 	var board := (_main.get_node("OfferDesk") as OfferDesk).board
 	var taken := ""
+	# The small runway drew no medium offer, so the day-0 offers are made medium.
+	var offers := board.to_snapshot()
+	for offer: Dictionary in offers["offers"]:
+		offer["plane_size"] = PlaneClasses.MEDIUM
+		offer["booked_passengers"] = PlaneClasses.passenger_range(PlaneClasses.MEDIUM)[0]
+	assert_bool(board.from_snapshot(offers)).is_true()
 	for offer in board.open_offers():
-		var fits: bool = offer["plane_size"] == PlaneClasses.MEDIUM
-		if taken == "" and fits and _flights.accept_problem(OfferBoard.terms_of(offer)) == "":
+		if taken == "" and _flights.accept_problem(OfferBoard.terms_of(offer)) == "":
 			assert_bool(board.accept(offer["id"], _flights)).is_true()
 			taken = offer["id"]
 	assert_str(taken).is_not_empty()

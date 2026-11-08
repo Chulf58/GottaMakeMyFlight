@@ -67,7 +67,9 @@ signal loaded(ok: bool)
 ## 12: the build unlocks (part "unlocks", BuildUnlocks: the highest tier and the
 ## made-flight count); version 11 saves are refused (no migration before a
 ## release).
-const SAVE_VERSION := 12
+## 13: the runway's size (part "runway", Runway); version 12 saves are refused
+## (no migration before a release).
+const SAVE_VERSION := 13
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -128,6 +130,12 @@ func parts() -> Array[SavePart]:
 	var list: Array[SavePart] = [
 		SavePart.new("grid", build_mode.grid.to_snapshot, _stage_grid, build_mode.load_snapshot),
 		SavePart.new("clock", clock.to_snapshot, SavePart.scratch(SimClock), clock.from_snapshot),
+		SavePart.new(
+			"runway",
+			flights.runway.to_snapshot,
+			SavePart.scratch(Runway),
+			flights.runway.from_snapshot
+		),
 		# Checked against the saved gates (or, with no gate desks, the live ones).
 		SavePart.new("flights", flights.to_snapshot, _stage_flights, flights.from_snapshot),
 		SavePart.new(

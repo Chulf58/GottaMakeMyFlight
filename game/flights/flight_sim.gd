@@ -131,9 +131,18 @@ const SAVE_VERSION := 7
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
 const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT
 const QUIET_NIGHT_TEXT := "it departs in the quiet night, outside 07:00 to 21:00"
+## Formatted with the plane class the runway cannot take.
+const RUNWAY_TOO_SHORT_TEXT := "the runway is too short for a %s plane"
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock
+## The size the runway starts at. The game scene sets "small", the size of the
+## runway it draws; a sim made in code starts with a runway that takes every
+## class, so a test sets a smaller one to try the limit. A load replaces it.
+@export var runway_start: String = PlaneClasses.LARGE:
+	set(value):
+		runway_start = value
+		runway.size = value
 
 ## The tick the sim has been told about; set by the clock or a snapshot.
 var tick: int = 0
@@ -152,6 +161,10 @@ var gate_source := Callable()
 ## largest plane class it holds} for the gates of gate_source (GateDesks sets
 ## it). Unset: FlightGround.fallback() for each gate.
 var stand_source := Callable()
+## The airport's runway. Its size decides the plane classes a contract may have
+## (accept_problem) and, through OfferDesk, the classes the offer board draws.
+## SaveGame saves it as the "runway" part.
+var runway := Runway.new(PlaneClasses.LARGE)
 ## Contract id -> its recorded start day, the first day that is or will be
 ## issued (see _start_day): a copy, so readers cannot change it. Writing it is
 ## an error.
@@ -285,17 +298,19 @@ func accept_contract(terms: Dictionary) -> bool:
 	return true
 
 
-## Why accept_contract would refuse `terms` right now (bad terms, a used id,
-## no gate with a stand, a departure in the quiet night (QUIET_NIGHT_TEXT), no
-## gate that takes its plane, a clash at every gate that takes it, named for
-## the best fit, or TAXI_BUSY_TEXT when a gate is free but no taxi plan fits it
-## or it would leave an existing occurrence with none), or "" when it would
-## take them. Read-only: it pushes no error and changes nothing, so a caller
-## can ask first.
+## Why accept_contract would refuse `terms` right now (bad terms, a used id, a
+## plane class the runway cannot take (RUNWAY_TOO_SHORT_TEXT), no gate with a
+## stand, a departure in the quiet night (QUIET_NIGHT_TEXT), no gate that takes
+## its plane, a clash at every gate that takes it, named for the best fit, or
+## TAXI_BUSY_TEXT when a gate is free but no taxi plan fits it or it would
+## leave an existing occurrence with none), or "" when it would take them.
+## Read-only: it pushes no error and changes nothing, so a caller can ask first.
 func accept_problem(terms: Dictionary) -> String:
 	var problem := FlightContract.problem(terms, FlightContract.TERM_KEYS)
 	if problem == "" and not contract_of(terms["id"]).is_empty():
 		problem = "contract id '%s' is already used" % terms["id"]
+	if problem == "" and not runway.takes(terms["plane_size"]):
+		problem = RUNWAY_TOO_SHORT_TEXT % terms["plane_size"]
 	if problem != "":
 		return problem
 	return _assignment(terms)["problem"]

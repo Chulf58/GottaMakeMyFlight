@@ -52,7 +52,7 @@ func bind_clock(sim_clock: SimClock) -> void:
 	_bound = sim_clock
 	clock = sim_clock
 	_day = GameCalendar.day_of(clock.tick)
-	board.ensure_day(_day, clock.rng, _tier())
+	board.ensure_day(_day, clock.rng, _tier(), _runway_class())
 	clock.ticked.connect(on_tick)
 
 
@@ -61,7 +61,7 @@ func on_tick(tick: int) -> void:
 	if day == _day:
 		return
 	_day = day
-	board.ensure_day(day, clock.rng, _tier())
+	board.ensure_day(day, clock.rng, _tier(), _runway_class())
 	_end_contract_if_due()
 
 
@@ -80,6 +80,14 @@ func _end_contract_if_due() -> void:
 	var contract := flights.contract_of(running[0])
 	if flights.end_contract(contract["id"]):
 		contract_ended.emit(contract)
+
+
+## The biggest plane class the runway takes, so a day is drawn with offers it
+## can take; the biggest class with no flights set, which has no runway to ask.
+func _runway_class() -> String:
+	if flights == null:
+		return PlaneClasses.LARGE
+	return flights.runway.size
 
 
 ## The airline tier the rating has unlocked, 0 with no rating.
