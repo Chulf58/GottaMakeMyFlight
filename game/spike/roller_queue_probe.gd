@@ -18,20 +18,24 @@ extends SceneTree
 ##     in before it, a guest's axle trailed more than TRAIL_M behind.
 ##   QUEUE_HIPS: the subject's hips (the carry rig's pivot) while it stands are at
 ##     least HIPS_SHARE of their height standing idle just before the stand (the
-##     roller still in the pull), and the stoop at most STOOP_EPS (walking hips
+##     roller still in the pull, _idle_pulled()), and the stoop at most STOOP_EPS (walking hips
 ##     sit lower, so a walking reference hid a crouch: Opus review of 700ffaa).
 ##   BODY_IN_STOOD_BAG: per guest (its body type printed), no point of its body
 ##     (its holding hand left out) inside its stood roller's meshes on any frame
 ##     STOOD_AFTER into a stand before its tip (CarryContact, as drawn in this
 ##     window; a headless count proves nothing). At least one male and one female
 ##     guest must stand (board 03454587).
-##   REPULLED: QUEUE_TIP_TICKS + 3 ticks after the subject walks on, its move is
-##     over and the axle trails more than TRAIL_M behind again.
+##   TIP_TIME: once the subject walks on, its tip starts after the wait for the
+##     body's turn (RollerPark.tip_wait(): a desk or counter leaver keeps it) and
+##     ends at most TURN_TICKS + 2 * QUEUE_TIP_TICKS after it was marked.
+##   REPULLED: 3 ticks after that tip's end, the move is over and the axle trails
+##     more than TRAIL_M behind again (a fixed QUEUE_TIP_TICKS + 3 ticks after
+##     walking on sampled it 2 ticks into a tip that waited 6: board 03454587).
 ##   FLOAT: no frame from the order to the strip's end draws the bag floating
 ##     (spike/carry_float_check.gd).
 ## Plates: queue_stand (the subject stood at the counter or desk), one stand
 ## plate of a male and of a female guest (<place>_stand_<variant>_b<body>),
-## tip_strip (a frame each tick from the last still tick, six frames, one
+## tip_strip (a frame each tick from the tip's start, six frames, one
 ## camera) and a contact sheet. Before a save the feet, head and the roller's
 ## body (its rods left out) project inside the frame with a margin, at least
 ## MIN_ON of five sight lines land on the roller's body (its rods tagged apart,
@@ -95,6 +99,13 @@ const VIEW_UPS: Array[float] = [1.1, 2.4, 4.0]
 ## Refused views a tip strip may spend (each costs a few frames) before the
 ## rest of its frames are skipped.
 const STRIP_REFUSALS := 60
+## A character this much nearer the camera than the subject crowds a tip strip
+## view (_strip_view()).
+const NEAR_M := 0.5
+## The camera's distance from a plate's mid point (_aim()).
+const AIM_M := 3.2
+## The distances a tip strip's camera may take (_strip_view()), farthest first.
+const STRIP_DISTS: Array[float] = [AIM_M, 2.6]
 ## Per place: the queue stages, the stage at the counter or desk, the stage
 ## walking off from it.
 const PLACES := {
@@ -192,6 +203,9 @@ func _boot() -> bool:
 		return false
 	for layer in _main.find_children("*", "CanvasLayer", true, false):
 		(layer as CanvasLayer).visible = false
+	# The desk's "Queue full" sign is drawn over the world in the plates (board
+	# 03454587 item 8); it is not what they show.
+	(_views.get_node("MissMarkers") as Node3D).visible = false
 	return true
 
 
@@ -285,9 +299,9 @@ func _watch() -> void:
 		var into: int = _clock.tick - m["order_at"]
 		var stood_by := RollerPark.STILL_TICKS + RollerPark.QUEUE_STAND_TICKS + 3
 		# Standing idle before the stand, the roller still settled in the pull.
-		if subject.stage == order_stage and s["move"] == "":
-			if into >= 1 and not s["queued"]:
-				m["idle_h"] = maxf(m.get("idle_h", -1.0), s["hips"])
+		if subject.stage == order_stage and into >= 1 and _idle_pulled(s):
+			m["idle_h"] = maxf(m.get("idle_h", -1.0), s["hips"])
+			m["idle_n"] = int(m.get("idle_n", 0)) + 1
 		if subject.stage == order_stage and into >= stood_by and s["queued"] and not s["tipping"]:
 			m["stand_h"] = minf(m["stand_h"], s["hips"])
 			m["stoop"] = maxf(m.get("stoop", 0.0), s["stoop"])
@@ -316,41 +330,111 @@ func _watch() -> void:
 					_invalid("%s_queue_stand: no valid plate" % _place)
 		if subject.stage == off_stage and m["off_at"] < 0:
 			m["off_at"] = _clock.tick
-			_aim(subject)
 			_strip_on = true
 			_strip_refused = 0
 		if m["off_at"] < 0:
-			# The last still tick's frames: the strip starts on the walk-off.
 			continue
 		var after: int = _clock.tick - m["off_at"]
+		# A move running: the flags of a stand that ended stay on the record.
+		if s["tipping"] and s["move"] != "" and not m.has("tip_end"):
+			_mark_tip(m, s)
 		var tried: int = m.get("tried", 0)
 		var at_now := _clock.tick + _clock.alpha
-		if tried < STRIP_FRAMES and at_now >= m["off_at"] + tried:
+		# The strip starts on the tip's first tick: before it the roller is carried
+		# upright through the body's turn (the strip of six frames from the walk-off
+		# showed only that carry: board 03454587).
+		var strip_at: float = m.get("tip_at", INF)
+		if tried == 0 and at_now >= strip_at and not m.has("strip_view"):
+			m["strip_view"] = _strip_view(subject)
+		if tried < STRIP_FRAMES and at_now >= strip_at + tried:
 			# Frame k is tried on each third of tick k until one shows the bag
 			# body (a walker in the queue behind can hide it for a frame).
 			var img := await _plate("%s_tip_%d" % [_place, tried], subject, false, true)
 			if img != null:
 				strip.append(img)
-			if img != null or at_now + 0.34 >= m["off_at"] + tried + 1.0:
+			if img != null or at_now + 0.34 >= strip_at + tried + 1.0:
 				m["tried"] = tried + 1
 				_strip_on = tried + 1 < STRIP_FRAMES
-		if after == ceili(RollerPark.QUEUE_TIP_TICKS) + 3 and m["repulled"] < 0.0:
+		if m.has("tip_end") and _clock.tick >= m["tip_end"] + 3 and m["repulled"] < 0.0:
 			m["repulled"] = s["flat"] if s["settled"] and s["up"] < 0.8 else 0.0
 			print(
 				(
-					"REPULLED tick %d (%d after walking on) settled %s up %.3f trail %.3f m (> %.2f)"
-					% [_clock.tick, after, s["settled"], s["up"], s["flat"], TRAIL_M]
+					(
+						"REPULLED tick %d (%d after walking on, %d after the tip's end) "
+						+ "settled %s up %.3f trail %.3f m (> %.2f)"
+					)
+					% [
+						_clock.tick,
+						after,
+						_clock.tick - m["tip_end"],
+						s["settled"],
+						s["up"],
+						s["flat"],
+						TRAIL_M
+					]
 				)
 			)
 		if after >= 8 and after < 16:
 			m["walk_h"] = maxf(m["walk_h"], s["hips"])
 		var all_off := guests.all(func(p: Passenger) -> bool: return not p.stage in stages)
-		if after >= 16 and int(m.get("tried", 0)) >= STRIP_FRAMES and all_off:
+		var done: bool = m["repulled"] >= 0.0 and int(m.get("tried", 0)) >= STRIP_FRAMES
+		if after >= 16 and done and all_off:
 			break
 	if subject != null and float(m.get("idle_h", -1.0)) <= 0.0:
 		# Stood up in the queue before it reached the desk: its idle in the queue.
 		m["idle_h"] = float((by_guest[subject.id] as Dictionary).get("idle", -1.0))
 	_summary(m, strip, guests, by_guest, plated)
+
+
+## Whether sample `s` (_sample()) stands still on the idle clip with its roller
+## lying settled in the pull and no move running. A queue stand's "park" and
+## "queue" flags stay on the bag's record after its tip has ended, so
+## RollerPark.queued() alone cannot say the roller is in the pull: read that
+## way the check-in subject never stood idle and QUEUE_HIPS had no baseline
+## (board 03454587).
+func _idle_pulled(s: Dictionary) -> bool:
+	return (
+		s["still"]
+		and s["clip"] == &"idle"
+		and s["move"] == ""
+		and s["settled"]
+		and s["up"] < 0.8
+		and s["flat"] > TRAIL_M
+	)
+
+
+## The subject's tip into `m` on the first frame `s` (_sample()) has it marked
+## (RollerPark.queue_stand()'s "queue_tip"): the tick it starts, after the wait
+## for the body's turn (RollerPark.tip_wait()), and the tick it ends, its
+## RollerPark.tip_ticks() later. TIP_TIME holds the end to the most the decision
+## allows from the mark: a TURN_TICKS wait and a tip twice QUEUE_TIP_TICKS long
+## (a half turn's yaw gap, decision open-side-queue-stand-as-built).
+func _mark_tip(m: Dictionary, s: Dictionary) -> void:
+	var mark := _clock.tick + _clock.alpha
+	var start: float = s["since"] + s["tip"]
+	m["tip_at"] = start
+	m["tip_end"] = ceili(start + s["tip_ticks"])
+	var most := mark + PassengerTurns.TURN_TICKS + 2.0 * RollerPark.QUEUE_TIP_TICKS
+	print(
+		(
+			(
+				"TIP_TIME marked at tick %.2f (%d after walking on): starts at %.2f "
+				+ "(waits %.2f for the turn, <= %d), runs %.2f ticks, ends at %.2f (<= %.2f)"
+			)
+			% [
+				mark,
+				_clock.tick - m["off_at"],
+				start,
+				start - mark,
+				PassengerTurns.TURN_TICKS,
+				s["tip_ticks"],
+				start + s["tip_ticks"],
+				most
+			]
+		)
+	)
+	if start + s["tip_ticks"] > most + 0.01:
+		_invalid("TIP_TIME the tip ends later than the turn wait and the longest tip allow")
 
 
 ## One frame of guest `p` into `g`: on frames STOOD_AFTER into a queue stand in
@@ -360,8 +444,8 @@ func _track(p: Passenger, g: Dictionary, stages: Array, plated: Dictionary) -> v
 	var s := _sample(p)
 	if s.is_empty() or not p.stage in stages:
 		return
-	if s["still"] and not s["queued"] and s["move"] == "":
-		# Standing idle in the queue before any stand, the roller in the pull.
+	if _idle_pulled(s):
+		# Standing idle in the queue before a stand, the roller in the pull.
 		g["idle"] = maxf(float(g.get("idle", -1.0)), s["hips"])
 	if not s["queued"] or s["tipping"] or s["into"] < STOOD_AFTER or s["up"] < UPRIGHT_DOT:
 		return
@@ -415,6 +499,10 @@ func _sample(p: Passenger) -> Dictionary:
 		"into": now - float(bag.get("since", now)),
 		"still":
 		_views.tick_position(p.id, true).distance_to(_views.tick_position(p.id, false)) < 0.001,
+		"clip": (body.get_node("AnimationPlayer") as AnimationPlayer).current_animation,
+		"tip": float(bag.get("queue_tip", -1.0)),
+		"tip_ticks": RollerPark.tip_ticks(bag),
+		"since": float(bag.get("since", -1.0)),
 	}
 
 
@@ -444,10 +532,21 @@ func _summary(
 	print(
 		(
 			(
-				"QUEUE_HIPS lowest hips stood %.3f m, standing idle before the stand %.3f m, "
-				+ "share %.3f (>= %.2f), stoop %.3f (<= %.2f); walking after %.3f m (info)"
+				"QUEUE_HIPS lowest hips stood %.3f m, standing idle before the stand %.3f m "
+				+ "(%d idle frames at the desk, %s), share %.3f (>= %.2f), stoop %.3f (<= %.2f); "
+				+ "walking after %.3f m (info)"
 			)
-			% [m["stand_h"], idle, share, HIPS_SHARE, m.get("stoop", -1.0), STOOP_EPS, m["walk_h"]]
+			% [
+				m["stand_h"],
+				idle,
+				int(m.get("idle_n", 0)),
+				"the queue's idle instead" if int(m.get("idle_n", 0)) == 0 else "taken there",
+				share,
+				HIPS_SHARE,
+				m.get("stoop", -1.0),
+				STOOP_EPS,
+				m["walk_h"]
+			]
 		)
 	)
 	if idle <= 0.0 or share < HIPS_SHARE or float(m.get("stoop", 1.0)) > STOOP_EPS:
@@ -511,10 +610,10 @@ func _step() -> void:
 
 
 ## Places the camera on `p` and its roller: behind on the roller's side (from
-## in front, the counter or desk it faces hid it).
+## in front, the counter or desk it faces hid it), `dist` m from its mid point.
 ## `view` (VIEWS) picks the way round: in a check-in queue the walkers behind
 ## can hide the first.
-func _aim(p: Passenger, view := 0) -> void:
+func _aim(p: Passenger, view := 0, dist := AIM_M) -> void:
 	var body := _views.node_for(p.id)
 	var bag: Node3D = _views.carry_on_props().props_of(p.id)["bags"][0]
 	var target := (body.global_position + bag.global_position) * 0.5 + Vector3.UP * 0.6
@@ -531,7 +630,61 @@ func _aim(p: Passenger, view := 0) -> void:
 		_cam = Camera3D.new()
 		_cam.fov = 45.0
 		_main.add_child(_cam)
-	_cam.look_at_from_position(target + away * 3.2 + Vector3.UP * up, target, Vector3.UP)
+	_cam.look_at_from_position(target + away * dist + Vector3.UP * up, target, Vector3.UP)
+
+
+## Places the tip strip's camera (_aim()) on the first view, at each of
+## STRIP_DISTS and in VIEWS order at each of VIEW_UPS, that has the subject's
+## feet, head and roller in frame and the fewest points of other characters
+## (passengers and staff) in frame nearer the camera than `p` by NEAR_M: one
+## such walker filled a corner of every check-in tip frame (board 03454587
+## item 8). Returns [view, distance].
+func _strip_view(p: Passenger) -> Array:
+	var body := _views.node_for(p.id)
+	var bag: Node3D = _views.carry_on_props().props_of(p.id)["bags"][0]
+	var others: Array[Vector3] = []
+	for skel in _main.find_children("*", "Skeleton3D", true, false):
+		var at := (skel as Node3D).global_position
+		if not body.is_ancestor_of(skel) and (skel as Node3D).is_visible_in_tree():
+			for up in [0.3, 0.9, 1.5]:
+				others.append(at + Vector3.UP * up)
+	var own: Array[Vector3] = [
+		body.global_position, body.global_position + Vector3.UP * 1.7, bag.global_position
+	]
+	var inside := Rect2(
+		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * 2.0 * MARGIN_PX
+	)
+	var best := [0, AIM_M]
+	var fewest := -1
+	for dist in STRIP_DISTS:
+		for view in VIEWS * VIEW_UPS.size():
+			_aim(p, view, dist)
+			var framed := own.all(
+				func(at: Vector3) -> bool:
+					return (
+						not _cam.is_position_behind(at)
+						and inside.has_point(_cam.unproject_position(at))
+					)
+			)
+			var far := _cam.global_position.distance_to(body.global_position) - NEAR_M
+			var near := others.filter(
+				func(at: Vector3) -> bool:
+					return (
+						_cam.is_position_in_frustum(at)
+						and _cam.global_position.distance_to(at) < far
+					)
+			)
+			if framed and (fewest < 0 or near.size() < fewest):
+				best = [view, dist]
+				fewest = near.size()
+	_aim(p, best[0], best[1])
+	print(
+		(
+			"STRIP_VIEW view %d at %.1f m, other character points nearer the camera %d"
+			% [best[0], best[1], fewest]
+		)
+	)
+	return best
 
 
 ## A plate of `p` and its roller. `fresh`: the camera is placed on the subject
