@@ -163,3 +163,25 @@ func test_desk_nearly_done_is_not_counted_a_full_service_slower() -> void:
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.step()
 	assert_int(_world.passenger(id).station).is_equal(west)
+
+
+## A lane place freed while holders wait (an admission frees it before
+## promote() runs) goes to the holders: a newcomer joins behind them in the
+## holding list, never ahead of them in the lane (decision hold-line-as-built-
+## physical-line-order-one-latched-tail-clai, rule 1).
+func test_a_newcomer_joins_behind_waiting_holders_when_a_lane_place_frees() -> void:
+	var cells := [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2)]
+	var queue := {"lane": [1, 2], "holding": [3, 4], "serving": 0}
+	var got_lane := StationQueue.join(queue, cells, 5)
+	print("lane %s, holding %s" % [queue["lane"], queue["holding"]])
+	assert_bool(got_lane).is_false()
+	assert_array(queue["lane"]).is_equal([1, 2])
+	assert_array(queue["holding"]).is_equal([3, 4, 5])
+	# Promotion then fills the lane in that order.
+	StationQueue.promote(queue, cells)
+	assert_array(StationQueue.members(queue)).is_equal([1, 2, 3, 4, 5])
+	# Control: with no one holding, the newcomer takes the free lane place.
+	var open := {"lane": [1, 2], "holding": [], "serving": 0}
+	assert_bool(StationQueue.join(open, cells, 5)).is_true()
+	assert_array(open["lane"]).is_equal([1, 2, 5])
+	assert_array(open["holding"]).is_empty()
