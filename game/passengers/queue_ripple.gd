@@ -80,6 +80,9 @@ static func may_step(
 ## cell back of it and steps on once it moves up, instead of walking onto it
 ## (board c2336d77; decision hold-line-rebuild-the-security-line-follows-
 ## where-people-sta, rule 1: advancing targets are given out front to back).
+## A member ahead whose cell is not in front of this member's own (a walker
+## that joined the lane while the holding list waited stands behind it) is
+## never walked back to: the member walks to its own place.
 ## PassengerStations.queue_move() and SecurityForecast._move_up() both take
 ## their target here.
 static func target_index(host: Object, lane: Array, cells: Array, index: int) -> int:
@@ -87,7 +90,8 @@ static func target_index(host: Object, lane: Array, cells: Array, index: int) ->
 		return index
 	var ahead: Passenger = host.get_passenger(lane[index - 1])
 	var there := cells.find(ahead.path_end() if ahead.is_moving() else ahead.at)
-	if there < 0:
+	var here := cells.find((host.get_passenger(lane[index]) as Passenger).at)
+	if there < 0 or (here >= 0 and there >= here):
 		return index
 	return mini(maxi(index, there + 1), cells.size() - 1)
 
