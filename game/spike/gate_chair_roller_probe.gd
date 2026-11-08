@@ -36,6 +36,7 @@ extends SceneTree
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
+const FloatCheck := preload("res://spike/carry_float_check.gd")
 const OUT_REL := "res://../tools/blender/out/gate-chair-roller"
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 120.0
@@ -46,6 +47,19 @@ const LIMIT_TICKS := 200
 const SETTLE_TICKS := 12
 ## A body drawn this close (m, flat) to its chair front stands there.
 const STAND_AT_M := 0.1
+## How many views _plate() tries for one subject (_try_plate()).
+const VIEWS := 3
+## The subjects that walk in from STRIP_CELLS cells off their chair front and
+## get the hand strip (_hand_watch()): pair1_a's left hand is gap_hand()'s, sent
+## left by the rollers on its right.
+const STRIP_SUBJECTS := ["male_right", "female_right", "pair1_a"]
+const STRIP_CELLS := 3
+## A change of the drawn hand this close (m, the sim's spot to the chair front)
+## before the guest sits fails HAND_CHANGE.
+const LAST_M := 1.0
+## Ticks the strip subjects are watched after boarding opens for them (the
+## stand-up, the pick-up and the walk off).
+const PICK_TICKS := 90
 const CELL := Vector2i(640, 360)
 ## [name, variant (0 male, 1 female), hand (0 right, 1 left)] for the singles.
 const SINGLES := [
@@ -54,6 +68,8 @@ const SINGLES := [
 
 var _seed := 0
 var _no_plates := false
+## --trace=<subject>: a TRACE row for that subject on every frame of the watch.
+var _trace := ""
 var _out_dir := ""
 var _failed := false
 var _main: Node3D
@@ -80,6 +96,8 @@ func _initialize() -> void:
 			_seed = int(arg.get_slice("=", 1))
 		elif arg == "--no-plates":
 			_no_plates = true
+		elif arg.begins_with("--trace="):
+			_trace = arg.get_slice("=", 1)
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE sim_seed=%d out_dir=%s" % [_seed, _out_dir])
 	_run.call_deferred()
@@ -89,6 +107,7 @@ func _run() -> void:
 	if await _boot() and _place():
 		await _watch()
 		await _seated_plates()
+		await _pick_up()
 		_summary()
 	if not _sheet.is_empty():
 		_save_sheet()
@@ -226,11 +245,24 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int) -> void:
 	p.cleared = true
 	p.stage = Passenger.Stage.TO_GATE
 	p.stage_tick = _clock.tick
-	p.seat_object = 0
+	# Every subject walks in, so the view draws it with its roller in hand before
+	# it sits: placed sitting at its front, its roller was drawn on the floor at
+	# once (no park).
+	p.at = _walk_start(seat, STRIP_CELLS if label in STRIP_SUBJECTS else 1)
+	print("PROBE %s walks in from %s" % [label, p.at])
+	# The seat claimed and the path to its front set as GateCapacity._take_seat()
+	# does: left at seat_object 0 the sim claimed the nearest free seat for the
+	# guest itself mid-watch (GateCapacity.claim_seat()), drew it at the seat
+	# and laid its roller there (pair1_b, tick 122).
+	_sim._seat_claims[seat["key"]] = p.id
+	p.seat_object = seat["object_id"]
 	p.seat_cell = seat["cell"]
 	p.seat_front = seat["front"]
-	p.at = seat["front"]
-	p.clear_path()
+	p.seat_piece = Relocation.placement(_sim.grid, seat["object_id"])
+	var path: Array[Vector2i] = [p.at]
+	if p.at != seat["front"]:
+		path.assign(_sim.grid.find_path(p.at, seat["front"]))
+	p.set_path(path)
 	p.boarding_tick = _clock.tick + 100000
 	_clock.ticked.connect(func(_t: int) -> void: p.late = false)
 	if hand >= 0:
@@ -252,6 +284,7 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int) -> void:
 				"neighbour_max": -1,
 				"stood_shot": false,
 				"spot": Vector3.INF,
+				"strip": label in STRIP_SUBJECTS,
 			}
 		)
 	)
@@ -264,20 +297,14 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int) -> void:
 
 
 func _watch() -> void:
-	for n in 6:
-		await _step()
-	for s: Dictionary in _subjects:
-		var p: Passenger = s["p"]
-		p.seat_object = s["seat"]["object_id"]
-		p.stage = Passenger.Stage.SITTING_DOWN
-		p.clear_path()
-		p.stage_tick = _sim.tick
 	var limit := _clock.tick + LIMIT_TICKS
 	var settled := -1
 	while _clock.tick < limit:
 		await _step()
+		_trace_row()
 		var all_down := true
 		for i in _subjects.size():
+			await _hand_watch(i)
 			var down := await _measure(i)
 			all_down = all_down and down
 		if all_down and settled < 0:
@@ -285,6 +312,37 @@ func _watch() -> void:
 		if settled >= 0 and _clock.tick >= settled + SETTLE_TICKS:
 			return
 	_invalid("not every roller lay down and its guest sat within %d ticks" % LIMIT_TICKS)
+
+
+## One TRACE row for the --trace subject: stage, sim cell and spot against its
+## chair front, the drawn body, the bag's place and progress, and the hand.
+func _trace_row() -> void:
+	for s: Dictionary in _subjects:
+		if s["name"] != _trace:
+			continue
+		var p: Passenger = s["p"]
+		var front := _sim.grid.cell_to_world(p.seat_front)
+		var sim_at := _sim.world_position(p)
+		var drawn := _views.node_for(p.id).global_position
+		var props := _views.carry_on_props()
+		var bag := props.bag_state(p.id, 0)
+		print(
+			(
+				"TRACE %s tick %d stage %d at %s seat_obj %d sim %.3f drawn %.3f place %d k %.3f hand %d"
+				% [
+					s["name"],
+					_clock.tick,
+					p.stage,
+					p.at,
+					p.seat_object,
+					Vector2(sim_at.x - front.x, sim_at.z - front.z).length(),
+					Vector2(drawn.x - front.x, drawn.z - front.z).length(),
+					int(bag.get("place", -1)),
+					props.transfer_progress(p.id, 0),
+					SecurityLooks.hand_of(_sim, p, 0)
+				]
+			)
+		)
 
 
 ## Measures subject `i` this frame; whether its roller is down and it is seated.
@@ -371,7 +429,180 @@ func _seated_plates() -> void:
 		await _plate("pair%d" % n, _pairs[n], true)
 
 
+## A cell `cells` (or fewer) off `seat`'s front with a path to it, not a chair
+## front: straight out from the chair first, then along the row either way.
+func _walk_start(seat: Dictionary, cells: int) -> Vector2i:
+	var front: Vector2i = seat["front"]
+	var out: Vector2i = front - (seat["cell"] as Vector2i)
+	var left := _left(seat)
+	var fronts := {}
+	for s: Dictionary in _sim.layout.seats:
+		fronts[s["front"]] = true
+	for n in range(cells, 0, -1):
+		for step: Vector2i in [out, -left, left]:
+			var at := front + step * n
+			if not fronts.has(at) and _sim.grid.find_path(at, front).size() > n:
+				return at
+	return front
+
+
+## Boarding opens for the strip subjects: each stands up, picks its roller up
+## and walks off, watched for PICK_TICKS (_hand_watch()).
+func _pick_up() -> void:
+	for s: Dictionary in _subjects:
+		if s["strip"]:
+			(s["p"] as Passenger).boarding_tick = _clock.tick + 1
+	var limit := _clock.tick + PICK_TICKS
+	while _clock.tick < limit:
+		await _step()
+		for i in _subjects.size():
+			await _hand_watch(i)
+
+
+## The hand strip of strip subject `i` this frame: a HAND row each tick (its
+## spot's distance to the chair front, the hand SecurityLooks.hand_of() names
+## and the hand the roller is drawn in, the move's progress and the grip's gap
+## to the roller's own grip point, FloatCheck.grip_on_gap()); a change of the
+## drawn hand within LAST_M of the front before it sits; the largest grip gap
+## while a hand holds it in a park; and a plate at k 0, 0.5 and 1 of the lay-down
+## and of the pick-up, printing the grip's distance to the carry handle.
+func _hand_watch(i: int) -> void:
+	var s := _subjects[i]
+	if not s["strip"]:
+		return
+	var p: Passenger = s["p"]
+	var props := _views.carry_on_props()
+	var body := _views.node_for(p.id)
+	if body == null:
+		return
+	var bag := props.bag_state(p.id, 0)
+	var place := int(bag.get("place", -1))
+	var drawn := CarryLead.hand_of(place) if place >= 0 else -1
+	var k := props.transfer_progress(p.id, 0)
+	var front := _sim.grid.cell_to_world(p.seat_front)
+	var at := _sim.world_position(p)
+	var dist := Vector2(at.x - front.x, at.z - front.z).length()
+	var gap: Array = FloatCheck.grip_on_gap(props, p.id, 0, body)
+	var node: Node3D = props.props_of(p.id)["bags"][0]
+	var gh := INF
+	if drawn >= 0:
+		var handle := node.global_transform * CarryOnProps.ROLLER_HANDLE
+		gh = props.grip_of(body, drawn).distance_to(handle)
+	var held := int(bag.get("held_by", -1))
+	# The lay itself (RollerPark: from PARK_END the hand on the carry handle lays
+	# the bag down, and lets go once it is on the floor).
+	var laying: bool = (
+		bag.get("park", false)
+		and place / 4 == SecurityLooks.Home.FLOOR
+		and k >= RollerPark.PARK_END
+	)
+	if laying and held >= 0:
+		if not s.has("lay_take_gh"):
+			s["lay_take_gh"] = gh
+		s["lay_held"] = true
+	elif laying and s.get("lay_held", false) and not s.has("letgo_gh"):
+		s["letgo_gh"] = gh
+		s["letgo_k"] = k
+	if _clock.tick != int(s.get("row_tick", -1)):
+		s["row_tick"] = _clock.tick
+		print(
+			(
+				(
+					"HAND %s tick %d stage %d dist %.2f hand sim %d drawn %d place %d k %.3f"
+					+ " held %d grip-handle %.3f grip_on %.3f (<= %.3f)"
+				)
+				% [
+					s["name"],
+					_clock.tick,
+					p.stage,
+					dist,
+					SecurityLooks.hand_of(_sim, p, 0),
+					drawn,
+					place,
+					k,
+					held,
+					gh,
+					gap[0],
+					gap[1]
+				]
+			)
+		)
+	var to_seat := p.stage in [Passenger.Stage.TO_GATE, Passenger.Stage.SITTING_DOWN]
+	if to_seat and dist < LAST_M and drawn >= 0:
+		if int(s.get("last_hand", -1)) < 0:
+			s["last_hand"] = drawn
+		elif drawn != int(s["last_hand"]):
+			s["changes"] = int(s.get("changes", 0)) + 1
+	var parking: bool = bag.get("park", false)
+	if parking and int(bag.get("held_by", -1)) >= 0 and is_finite(float(gap[0])):
+		s["grip_max"] = maxf(float(s.get("grip_max", 0.0)), float(gap[0]))
+		s["grip_limit"] = gap[1]
+	if not parking or drawn < 0:
+		return
+	var move := "lay" if place / 4 == SecurityLooks.Home.FLOOR else "pick"
+	for mark: int in [0, 50, 100]:
+		var key := "%s%03d" % [move, mark]
+		if s.has(key) or k < mark / 100.0 - 0.0001:
+			continue
+		s[key] = true
+		print(
+			(
+				"HANDPLATE %s %s k %.3f grip-handle %.3f grip_on %.3f (<= %.3f) held_by %d"
+				% [s["name"], key, k, gh, gap[0], gap[1], held]
+			)
+		)
+		await _plate("strip_%s_%s" % [s["name"], key], [i], false)
+		break
+
+
 func _summary() -> void:
+	for s: Dictionary in _subjects:
+		if not s["strip"]:
+			continue
+		var marks: Array[String] = []
+		for key in ["lay000", "lay050", "lay100", "pick000", "pick050", "pick100"]:
+			if not s.has(key):
+				marks.append(key)
+		print(
+			(
+				(
+					"HAND_CHANGE %s drawn hand changes within %.1f m of the front %d (0),"
+					+ " hand there %d; GRIP most %.3f m (<= %.3f) in park holds; marks missing %s"
+				)
+				% [
+					s["name"],
+					LAST_M,
+					s.get("changes", 0),
+					s.get("last_hand", -1),
+					s.get("grip_max", -1.0),
+					s.get("grip_limit", -1.0),
+					marks
+				]
+			)
+		)
+		print(
+			(
+				(
+					"LETGO %s lay-down: the hand takes the carry handle %.3f m from it, lets go"
+					+ " at k %.3f with its grip %.3f m from it (<= RollerPark.TAKE_M %.2f)"
+				)
+				% [
+					s["name"],
+					s.get("lay_take_gh", INF),
+					s.get("letgo_k", -1.0),
+					s.get("letgo_gh", INF),
+					RollerPark.TAKE_M
+				]
+			)
+		)
+		if float(s.get("letgo_gh", INF)) > RollerPark.TAKE_M:
+			_invalid("%s's hand is off the handle when it lets go of the roller" % s["name"])
+		if int(s.get("changes", 0)) > 0:
+			_invalid("%s changed hand within %.1f m of its chair front" % [s["name"], LAST_M])
+		if float(s.get("grip_max", INF)) > float(s.get("grip_limit", 0.0)):
+			_invalid("%s's grip left the roller's grip point in a park" % s["name"])
+		if not marks.is_empty() or int(s.get("last_hand", -1)) < 0:
+			_invalid("%s's hand strip is short: %s" % [s["name"], marks])
 	for pair: Array in _pairs:
 		var a: Dictionary = _subjects[pair[0]]
 		var b: Dictionary = _subjects[pair[1]]
@@ -419,11 +650,21 @@ func _summary() -> void:
 
 
 ## A plate of subjects `which` (indices into _subjects): from above for a pair
-## (`top`), else from the roller's side, ahead and above.
+## (`top`), else from the roller's side, ahead and above, then from the other
+## side and from the front (VIEWS) when a view fails its proof.
 func _plate(shot: String, which: Array, top: bool) -> void:
 	if _no_plates:
 		print("PLATE %s skipped (--no-plates) tick %d" % [shot, _clock.tick])
 		return
+	for view in 1 if top else VIEWS:
+		if await _try_plate(shot, which, top, view):
+			return
+	_invalid("%s: no view proved its subjects in frame and in sight" % shot)
+
+
+## One view of _plate(): 0 the roller's side, 1 the other side, 2 the front.
+## Saves the plate and returns true when it proves its subjects.
+func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	var props := _views.carry_on_props()
 	var mid := Vector3.ZERO
 	var nodes: Array[Node3D] = []
@@ -441,8 +682,13 @@ func _plate(shot: String, which: Array, top: bool) -> void:
 		_cam.fov = 50.0
 		root.add_child(_cam)
 	var out := -1.0 if s["hand"] == 0 else 1.0
+	if view == 1:
+		out = -out
 	var at := Vector3(0.0, 3.2, 0.6) if top else Vector3(out * 1.6, 1.9, 2.6)
 	var look := Vector3(0.0, 0.3, 0.0) if top else Vector3(out * 0.25, 0.75, -0.15)
+	if view == 2:
+		at = Vector3(0.0, 2.6, 2.6)
+		look = Vector3(0.0, 0.6, -0.1)
 	_cam.look_at_from_position(frame * at, frame * look, Vector3.UP)
 	_cam.current = true
 	await _frames(2)
@@ -460,15 +706,20 @@ func _plate(shot: String, which: Array, top: bool) -> void:
 		for name: String in points:
 			var px := _cam.unproject_position(points[name])
 			if _cam.is_position_behind(points[name]) or not inside.has_point(px):
-				_invalid("%s: %s of %d at %s is out of frame %s" % [shot, name, n, px, size])
-				return
+				print(
+					(
+						"PLATE_REFUSED %s view %d: %s of %d at %s out of frame"
+						% [shot, view, name, n, px]
+					)
+				)
+				return false
 			print("PLATE %s guest %d %s at %s" % [shot, n, name, px.round()])
 		var tall := _cam.unproject_position(points["feet"]).distance_to(
 			_cam.unproject_position(points["head"])
 		)
 		if tall < MIN_BODY_PX and not top:
-			_invalid("%s: guest %d is %.0f px tall (>= %.0f)" % [shot, n, tall, MIN_BODY_PX])
-			return
+			print("PLATE_REFUSED %s view %d: guest %d is %.0f px tall" % [shot, view, n, tall])
+			return false
 	var holder := PlateSight.colliders(root, [_views, _mode.get_node("BuildView")], subjects)
 	if not (holder.get_meta("unbaked") as Array).is_empty():
 		_invalid("%s: skinned meshes without a sight collider" % shot)
@@ -488,24 +739,25 @@ func _plate(shot: String, which: Array, top: bool) -> void:
 		var on: int = (lines["on_subject"] as Array).size()
 		print(
 			(
-				"PLATE %s roller %d sight on %d past %d blockers %s"
-				% [shot, n, on, lines["past"], lines["blockers"]]
+				"PLATE %s view %d roller %d box %s sight on %d past %d blockers %s"
+				% [shot, view, n, box, on, lines["past"], lines["blockers"]]
 			)
 		)
 		if on < MIN_ON or not (lines["blockers"] as Array).is_empty():
 			holder.free()
-			_invalid("%s: roller %d is not in sight (%d of 5 lines on it)" % [shot, n, on])
-			return
+			print("PLATE_REFUSED %s view %d: roller %d %d of 5 lines on it" % [shot, view, n, on])
+			return false
 	holder.free()
 	var path := _out_dir.path_join("gate_chair_%s.png" % shot)
 	if img.save_png(path) != OK:
 		_invalid("could not save %s" % path)
-		return
+		return true
 	_saved.append(path)
 	var small := img.duplicate() as Image
 	small.resize(CELL.x, CELL.y)
 	_sheet.append(small)
-	print("PLATE saved %s" % path)
+	print("PLATE saved %s view %d" % [path, view])
+	return true
 
 
 func _bag_box(node: Node3D) -> AABB:
