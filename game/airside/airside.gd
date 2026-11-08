@@ -26,7 +26,8 @@ extends Node3D
 ## _small and _large markers (CLASS_SUFFIX). HoldIn and HoldRunway are the
 ## hold lines on the two stubs between runway and lane (point 4): a plane
 ## stopped on one keeps the reference footprint clear of the runway band.
-## They are waypoints off every route; nothing pauses at them yet.
+## They are waypoints off every route; GroundPlanner's planned pauses stop on
+## them.
 ##
 ## Also gives the two sky tracks views draw around a flight: the arrival
 ## lead-in into the class's ApproachStart and the climb-out from ClimbEnd, each
@@ -244,17 +245,23 @@ func hold_points() -> PackedVector3Array:
 ## plane heading north stops with the nose of every class's door-aligned model
 ## (PlaneClasses.stand_offset) south of the lane band (StandEnvelope.
 ## lane_band_south()). There is none when the pushback ends at or north of it,
-## as on the north row. Only the paving draws it so far; GroundPlanner will
-## pause on it.
+## as on the north row. The paving draws it and GroundPlanner pauses on it.
 static func lead_in_hold(pushback_end: Vector3) -> PackedVector3Array:
+	var hold_z := lead_in_hold_z()
+	if pushback_end.z <= hold_z:
+		return PackedVector3Array()
+	return PackedVector3Array([Vector3(pushback_end.x, pushback_end.y, hold_z)])
+
+
+## The z of every lead-in hold line (lead_in_hold()): the lane band's south
+## edge plus the farthest any model's door-aligned nose reaches ahead of its
+## pose point.
+static func lead_in_hold_z() -> float:
 	var reach := 0.0
 	for model: String in PlaneModels.PLANES:
 		var shape: Dictionary = PlaneModels.PLANES[model]
 		reach = maxf(reach, PlaneClasses.stand_offset(model).z + float(shape["nose"]))
-	var hold_z := StandEnvelope.lane_band_south() + reach
-	if pushback_end.z <= hold_z:
-		return PackedVector3Array()
-	return PackedVector3Array([Vector3(pushback_end.x, pushback_end.y, hold_z)])
+	return StandEnvelope.lane_band_south() + reach
 
 
 ## The lane chain east to west: TaxiEast, the joins in falling x, TaxiWest

@@ -35,14 +35,14 @@ func _run(clock: SimClock, target: int) -> void:
 
 
 ## AM accepted on day 0 while closed, the airport opened on day 2 (so AM's
-## days 0 to 2 are skipped), and LATE (23:00) accepted after opening.
+## days 0 to 2 are skipped), and LATE (21:00) accepted after opening.
 func _opened_world(at_tick: int) -> Array:
 	var world := _world()
 	var sim: FlightSim = world[1]
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	_run(world[0], OPENED)
 	assert_bool(sim.open_airport()).is_true()
-	assert_bool(sim.accept_contract(TestFlightContracts.terms("LATE", 1380))).is_true()
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("LATE", 1260))).is_true()
 	_run(world[0], at_tick)
 	return world
 
@@ -52,10 +52,10 @@ func _saved(world: Array) -> Dictionary:
 	return JSON.parse_string(text)
 
 
-func test_version_is_6_with_the_opening_tick_start_days_and_ended() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(6)
+func test_version_is_7_with_the_opening_tick_start_days_and_ended() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(7)
 	var data: Dictionary = _saved(_opened_world(OPENED + 100))["flights"]
-	assert_int(int(data["save_version"])).is_equal(6)
+	assert_int(int(data["save_version"])).is_equal(7)
 	assert_int(int(data["opened_tick"])).is_equal(OPENED)
 	assert_int(int(data["start_day"]["AM"])).is_equal(3)
 	assert_int(int(data["start_day"]["LATE"])).is_equal(2)
@@ -109,24 +109,24 @@ func test_an_open_save_with_skipped_days_round_trips_and_plays_out_the_same() ->
 
 ## A version 2 save has no open state: it loads as open since tick 0 with
 ## every contract starting on its first_day, and saves again as version 6.
-func test_a_version_2_save_loads_as_open() -> void:
+## Version 2 and 3 saves no longer load (version 7 re-plans taxi pauses and
+## refuses every older save; no migration).
+func test_a_version_2_or_3_save_is_refused() -> void:
 	var world := _world()
 	assert_bool(world[1].open_airport()).is_true()
 	assert_bool(world[1].accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	_run(world[0], 600)
 	var v3: Dictionary = _saved(world)["flights"]
+	v3["save_version"] = 3
+	v3.erase("ended")
 	var v2 := v3.duplicate(true)
 	v2["save_version"] = 2
 	v2.erase("opened_tick")
 	v2.erase("start_day")
-	v2.erase("ended")
-	var loaded: FlightSim = auto_free(FlightSim.new())
-	assert_bool(loaded.from_snapshot(v2)).is_true()
-	assert_int(loaded.opened_tick).is_equal(0)
-	assert_array(loaded.flight_ids()).is_equal(["AM-d0"])
-	assert_str(JSON.stringify(loaded.to_snapshot())).is_equal(
-		JSON.stringify(world[1].to_snapshot())
-	)
+	for old: Dictionary in [v2, v3]:
+		var loaded: FlightSim = auto_free(FlightSim.new())
+		assert_bool(loaded.from_snapshot(old)).is_false()
+		assert_array(loaded.flight_ids()).is_empty()
 
 
 func test_saves_of_other_versions_or_with_the_wrong_keys_for_theirs_are_refused() -> void:
@@ -141,9 +141,11 @@ func test_saves_of_other_versions_or_with_the_wrong_keys_for_theirs_are_refused(
 	v4["save_version"] = 4
 	var v5 := good.duplicate(true)
 	v5["save_version"] = 5
-	var v7 := good.duplicate(true)
-	v7["save_version"] = 7
-	for bad in [v2_with_open, v3_without, v1, v4, v5, v7]:
+	var v6 := good.duplicate(true)
+	v6["save_version"] = 6
+	var v8 := good.duplicate(true)
+	v8["save_version"] = 8
+	for bad in [v2_with_open, v3_without, v1, v4, v5, v6, v8]:
 		var target: FlightSim = auto_free(FlightSim.new())
 		assert_bool(target.from_snapshot(bad)).override_failure_message(str(bad)).is_false()
 		assert_int(target.opened_tick).is_equal(-1)

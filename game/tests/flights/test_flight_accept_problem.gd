@@ -51,9 +51,9 @@ func test_a_gate_clash_with_a_contract_names_both_and_the_gate() -> void:
 	assert_str(problem).is_equal("contract A2 clashes with A1 at gate C")
 
 
-## An hour after GMF101 the two overlap only at the gate. At the same time they
-## would also land together, which no gate avoids, so the runway is named
-## (decision gates-technical-design-gate-desks-link-to-north-exits-one-st).
+## An hour after GMF101, or at the same time, the two overlap at gate C, the
+## only gate; the shared runway is the taxi planner's, which a gate clash
+## comes before.
 func test_a_gate_clash_with_a_one_off_flight_names_the_flight() -> void:
 	assert_bool(_sim.add_default_flight()).is_true()
 	var hour_later := TestFlightContracts.bootstrap_minute() + 60
@@ -66,7 +66,7 @@ func test_a_gate_clash_with_a_one_off_flight_names_the_flight() -> void:
 				TestFlightContracts.terms("A2", TestFlightContracts.bootstrap_minute())
 			)
 		)
-		. is_equal("contract A2 clashes with flight GMF101 on the runway")
+		. is_equal("contract A2 clashes with flight GMF101 at gate C")
 	)
 
 

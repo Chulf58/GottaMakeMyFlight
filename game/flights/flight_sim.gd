@@ -27,16 +27,28 @@ extends Node
 ##
 ## Gates (decision gates-technical-design-gate-desks-link-to-north-exits-one-
 ## st, points 4 and 5): gate_ids() lists the gates with a stand, from
-## gate_source. An accepted contract gets the lowest gate its whole timetable
-## fits at; reassign_gate moves its days not yet issued to another gate, while
-## the occurrences already issued keep theirs. Flights at different gates share
-## the runway and the taxi lane, so they must not hold either at the same time
-## (FlightTimetable.flight_holds); flights at one gate must not overlap there.
+## gate_source, and gate_grounds() each one's stand and largest plane class,
+## from stand_source. Flights at one gate must not overlap there. The runway,
+## the taxi lane and neighbouring stands are booked by GroundPlanner through
+## FlightPlans (decision runway-and-taxi-technical-design-movement-plan-
+## analytic-bookings-planned-pauses, sections 3, 5, 6 and 8): every flight of a
+## day is planned in first-start order and may get a planned pause at a hold
+## line (taxi_plan()). An accepted contract gets the best-fit gate its whole
+## timetable fits at (the smallest max_class that takes its plane, then the
+## lowest letter). An offer is refused with QUIET_NIGHT_TEXT when it departs
+## outside 07:00 to 21:00, and with TAXI_BUSY_TEXT when no pause fits it or
+## when it would leave an existing contract's occurrence with none (that
+## occurrence may gain a pause). reassign_gate and move_contracts move a
+## contract's days not yet issued through the same check; the occurrences
+## already issued keep their gate, stand and plan.
 ##
 ## end_contract stops a contract's future days (decision low-rating-ends-one-
 ## airline-contract-per-low-day): what it already issued still flies and the
 ## contract stays on record, but it issues nothing more and no longer holds its
-## gate time against new contracts.
+## gate time against new contracts. Taking its flights away must never leave
+## another occurrence with no taxi plan, so when the re-plan without them would
+## (greedy planning is not monotone) the contract keeps reserving its ground:
+## FlightPlans plans its days as unrendered reservations (end_refusal()).
 ##
 ## One tick: set the tick, let the gate open the airport, issue due
 ## occurrences in time order, advance every flight, prune. PassengerSim binds
@@ -110,7 +122,15 @@ const STARTER_TERMS := {
 ## 6: TAXI_IN and TAXI_OUT last 1000 and 920 ticks (were 600 and 720), so a
 ## saved occurrence's starts differ for the same contract and day. A version 5
 ## save is refused; there is no migration.
-const SAVE_VERSION := 6
+## 7: taxi plans (Runway R7). Each flight holds the stand it was issued at
+## ("stand"), today's pruned occurrences are kept ("landed"), and a load
+## re-plans every live flight and refuses a save whose plan fails. Every older
+## version is refused; there is no migration.
+const SAVE_VERSION := 7
+## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
+## planes-use-any-stand-they-fit-neighbours-share-apron-space).
+const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT
+const QUIET_NIGHT_TEXT := "it departs in the quiet night, outside 07:00 to 21:00"
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock
@@ -128,6 +148,10 @@ var gate: AirportGate
 ## (gate_ids() sorts them). Gates slice 1b sets it from the placed gate desks;
 ## tests set it to supply more gates. Unset: DEFAULT_GATES.
 var gate_source := Callable()
+## Returns gate letter -> {"stand": StandPlacement stand, "max_class": the
+## largest plane class it holds} for the gates of gate_source (GateDesks sets
+## it). Unset: FlightGround.fallback() for each gate.
+var stand_source := Callable()
 ## Contract id -> its recorded start day, the first day that is or will be
 ## issued (see _start_day): a copy, so readers cannot change it. Writing it is
 ## an error.
@@ -154,6 +178,24 @@ var _start_day: Dictionary = {}
 ## (end_contract). The day is the contract's _next_day when it ended, so it
 ## equals its _next_day from then on.
 var _ended: Dictionary = {}
+## Contract id -> true for the ended contracts whose days not yet issued still
+## book their ground (end_contract()). Saved: it depends on the world at the
+## tick the contract ended, which a load cannot rebuild.
+var _reserving: Dictionary = {}
+## Today's occurrences pruned from _flights, as their records, so a prune never
+## changes a plan (FlightPlans). Dropped once their day is over.
+var _landed: Array[Dictionary] = []
+var _plans := FlightPlans.new()
+## Bumped on every change to the contracts or the flights that can change a
+## plan; the day plans in _day_plans are of this revision and of _grounds_key.
+var _revision := 0
+var _day_plans := {}
+var _day_plans_revision := -1
+var _grounds_key := ""
+var _grounds_tick := -1
+## Flights already reported as having no plan, so a view asking every frame
+## reports each once.
+var _reported := {}
 
 
 func _ready() -> void:
@@ -207,22 +249,25 @@ func add_default_flight() -> bool:
 	return add_flight(DEFAULT_ID, schedule_starts(0))
 
 
-## Adds a one-off flight. False (with an error) when the id is taken or has
-## the occurrence form, `starts` is not STATE_COUNT non-decreasing ticks, the
-## gate has no stand, or the flight would meet an occurrence at the gate or
-## on the runway or lane.
+## Adds a one-off flight (tests and debug only; the game adds none). False
+## (with an error) when the id is taken or has the occurrence form, `starts` is
+## not STATE_COUNT non-decreasing ticks, the gate has no stand, or the flight
+## would meet an occurrence at the gate. A one-off is not taxi-planned: it
+## books no runway, lane or stand and takes no pause (FlightPlans), so its
+## schedule may be any, as the tests' short ones are.
 func add_flight(id: String, starts: Array[int], gate := DEFAULT_GATE) -> bool:
 	var problem := _one_off_problem(id, starts, gate)
 	if problem != "":
 		push_error("FlightSim: flight '%s' %s" % [id, problem])
 		return false
 	_insert(_record(id, starts, gate, "", -1))
+	_changed()
 	return true
 
 
 ## Accepts an offer's terms (FlightContract.TERM_KEYS) as a contract whose
 ## first occurrence is the first one whose whole preparation window is still
-## ahead, at the lowest gate its timetable fits at (accept_gate). False (with
+## ahead, at the best-fit gate its timetable fits at (accept_gate). False (with
 ## an error) for bad terms, a used id or no gate it fits at. Issues the first
 ## occurrence at once when it is already due and the airport is open; while it
 ## is closed the contract waits for the opening.
@@ -235,14 +280,18 @@ func accept_contract(terms: Dictionary) -> bool:
 	_contracts.append(contract)
 	_next_day[contract["id"]] = contract["first_day"]
 	_start_day[contract["id"]] = contract["first_day"]
+	_changed()
 	_issue_due()
 	return true
 
 
 ## Why accept_contract would refuse `terms` right now (bad terms, a used id,
-## no gate with a stand, or a clash at every gate, named for the lowest one),
-## or "" when it would take them. Read-only: it pushes no error and changes
-## nothing, so a caller can ask first.
+## no gate with a stand, a departure in the quiet night (QUIET_NIGHT_TEXT), no
+## gate that takes its plane, a clash at every gate that takes it, named for
+## the best fit, or TAXI_BUSY_TEXT when a gate is free but no taxi plan fits it
+## or it would leave an existing occurrence with none), or "" when it would
+## take them. Read-only: it pushes no error and changes nothing, so a caller
+## can ask first.
 func accept_problem(terms: Dictionary) -> String:
 	var problem := FlightContract.problem(terms, FlightContract.TERM_KEYS)
 	if problem == "" and not contract_of(terms["id"]).is_empty():
@@ -252,8 +301,21 @@ func accept_problem(terms: Dictionary) -> String:
 	return _assignment(terms)["problem"]
 
 
-## The gate accept_contract would give `terms` now: the lowest gate with a
-## stand whose timetable it fits, or "" when it would refuse them.
+## The taxi refusal behind accept_problem(`terms`): {"reason": GroundPlanner.
+## TAXI_BUSY or QUIET_NIGHT, "flight": the occurrence that no plan fits, its
+## own or an existing contract's ("" for QUIET_NIGHT)}, or {} when the terms
+## are taken or refused for another reason. Read-only.
+func accept_refusal(terms: Dictionary) -> Dictionary:
+	if FlightContract.problem(terms, FlightContract.TERM_KEYS) != "":
+		return {}
+	if not contract_of(terms["id"]).is_empty():
+		return {}
+	return _assignment(terms)["refusal"]
+
+
+## The gate accept_contract would give `terms` now: the best-fit gate with a
+## stand whose timetable and taxi plans it fits, or "" when it would refuse
+## them.
 func accept_gate(terms: Dictionary) -> String:
 	if accept_problem(terms) != "":
 		return ""
@@ -278,24 +340,65 @@ func gate_ids() -> Array[String]:
 	return gates
 
 
+## Gate letter -> {"stand", "max_class"} for every gate of gate_ids(): from
+## stand_source, or FlightGround.fallback() while it is unset. A gate the
+## source gives no stand for is reported and left out.
+func gate_grounds() -> Dictionary:
+	var given: Variant = stand_source.call() if stand_source.is_valid() else null
+	var out := {}
+	for gate_id in gate_ids():
+		var ground: Dictionary = FlightGround.fallback(gate_id)
+		if given != null:
+			ground = (given as Dictionary).get(gate_id, {})
+		if not StandPlacement.is_stand(ground.get("stand")):
+			push_error("FlightSim: gate %s has no stand to plan on" % gate_id)
+			continue
+		out[gate_id] = ground
+	return out
+
+
+## The taxi pauses of live flight `id`: FlightSim.State -> MovementPlan pause
+## ({} for none) for TAXI_IN and TAXI_OUT, as FlightPlans planned its day. {}
+## for an unknown flight, and for one no plan fits, which is reported once.
+func taxi_plan(id: String) -> Dictionary:
+	var index := _index_of(id)
+	if index < 0:
+		return {}
+	var plans := _day_plan(FlightPlans.day_of(_flights[index]["starts"]))
+	if _flights[index]["contract"] == "":
+		return {}
+	var result: Dictionary = plans.get(id, {})
+	if result.get("ok", false):
+		return result["pauses"]
+	if not _reported.has(id):
+		_reported[id] = true
+		push_error(
+			(
+				"FlightSim: flight %s has no taxi plan (%s); it taxis without a pause"
+				% [id, result.get("reason", "not planned")]
+			)
+		)
+	return {}
+
+
 ## Moves a running contract's days not yet issued to `gate_id`. The
-## occurrences it already issued keep their gate and hold it until they are
+## occurrences it already issued keep their gate, stand and plan until they are
 ## pruned. False (with an error) when reassign_problem names a reason.
 func reassign_gate(contract_id: String, gate_id: String) -> bool:
 	var problem := reassign_problem(contract_id, gate_id)
 	if problem != "":
 		push_error("FlightSim.reassign_gate: %s" % problem)
 		return false
-	for i in _contracts.size():
-		if _contracts[i]["id"] == contract_id:
-			_contracts[i] = _at_gate(_contracts[i], gate_id)
+	_contracts = _replaced(_contracts, _at_gate(contract_of(contract_id), gate_id))
+	_changed()
 	return true
 
 
 ## Why reassign_gate would refuse to move `contract_id` to `gate_id` now (an
-## unknown or ended contract, a gate with no stand, the gate it is at, or a
-## clash there as accept_problem checks one, its own issued occurrences left
-## out), or "". Read-only.
+## unknown or ended contract, a gate with no stand, the gate it is at, a gate
+## too small for its plane, a clash at the gate, or TAXI_BUSY_TEXT when its
+## days there or an existing occurrence would have no taxi plan; its own issued
+## occurrences are left out), or "". Read-only.
 func reassign_problem(contract_id: String, gate_id: String) -> String:
 	var contract := contract_of(contract_id)
 	if contract.is_empty():
@@ -306,29 +409,30 @@ func reassign_problem(contract_id: String, gate_id: String) -> String:
 		return "gate '%s' has no stand" % gate_id
 	if contract["gate"] == gate_id:
 		return "contract %s is already at gate %s" % [contract_id, gate_id]
-	return _clash_problem(_at_gate(contract, gate_id))
+	return _move_problem(contract, gate_id, _contracts, gate_grounds())
 
 
 ## Where the running contracts at `from_gates` would go if those gates went:
 ## {"moves": contract id -> its new gate, "stuck": the contract ids no gate of
-## `to_gates` takes}. Oldest first, each to the lowest gate of `to_gates` its
-## timetable fits, checked as accept_problem checks one against the rest as
-## moved so far (decision gates-technical-design-gate-desks-link-to-north-
-## exits-one-st, point 6). Live flights are not moved: an issued occurrence
-## keeps its gate. Read-only; move_contracts() carries a plan out.
+## `to_gates` takes}. Oldest first, each to the best-fit gate of `to_gates` it
+## fits, checked as reassign_problem checks one against the rest as moved so
+## far (decision gates-technical-design-gate-desks-link-to-north-exits-one-st,
+## point 6). Live flights are not moved: an issued occurrence keeps its gate.
+## Read-only; move_contracts() carries a plan out.
 func move_plan(from_gates: Array[String], to_gates: Array[String]) -> Dictionary:
-	var targets := to_gates.duplicate()
-	targets.sort()
+	var grounds := gate_grounds()
 	var contracts := _contracts.duplicate()
 	var moves := {}
 	var stuck: Array[String] = []
 	for i in contracts.size():
 		var contract: Dictionary = contracts[i]
-		if _ended.has(contract["id"]) or not from_gates.has(contract["gate"]):
+		if not FlightPlans.runs(_world(grounds), contract["id"]):
+			continue
+		if not from_gates.has(contract["gate"]):
 			continue
 		var to := ""
-		for gate_id in targets:
-			if _clash_problem(_at_gate(contract, gate_id), contracts) == "":
+		for gate_id in _best_fit(grounds, contract["plane_size"]):
+			if to_gates.has(gate_id) and _move_problem(contract, gate_id, contracts, grounds) == "":
 				to = gate_id
 				break
 		if to == "":
@@ -350,6 +454,7 @@ func move_contracts(plan: Dictionary) -> bool:
 		push_error("FlightSim.move_contracts: contracts %s fit no gate" % [plan["stuck"]])
 		return false
 	var moves: Dictionary = plan["moves"]
+	var grounds := gate_grounds()
 	var scratch := _contracts.duplicate()
 	var moved := 0
 	for i in scratch.size():
@@ -357,10 +462,12 @@ func move_contracts(plan: Dictionary) -> bool:
 		if not moves.has(contract["id"]):
 			continue
 		var problem := (
-			"contract %s has ended" % contract["id"] if _ended.has(contract["id"]) else ""
+			"contract %s has ended" % contract["id"]
+			if not FlightPlans.runs(_world(grounds), contract["id"])
+			else ""
 		)
 		if problem == "":
-			problem = _clash_problem(_at_gate(contract, moves[contract["id"]]), scratch)
+			problem = _move_problem(contract, moves[contract["id"]], scratch, grounds)
 		if problem != "":
 			push_error("FlightSim.move_contracts: nothing moved: %s" % problem)
 			return false
@@ -370,14 +477,17 @@ func move_contracts(plan: Dictionary) -> bool:
 		push_error("FlightSim.move_contracts: nothing moved: the plan names unknown contracts")
 		return false
 	_contracts = scratch
+	_changed()
 	return true
 
 
 ## Ends a contract: no day from its next unissued one on is ever issued, so the
 ## occurrences already issued still fly and the contract stays on record (its
 ## fee and terms still answer for them). Its gate time is free for a new
-## contract. False (with an error) for an unknown or already ended contract or
-## while the airport is closed.
+## contract, unless taking its days away would leave another occurrence with
+## no taxi plan (end_refusal()): then its days stay booked as reservations,
+## never flown, and every plan stays as it was. False (with an error) for an
+## unknown or already ended contract or while the airport is closed.
 func end_contract(contract_id: String) -> bool:
 	if contract_of(contract_id).is_empty():
 		push_error("FlightSim.end_contract: no contract '%s'" % contract_id)
@@ -388,9 +498,32 @@ func end_contract(contract_id: String) -> bool:
 	if opened_tick < 0:
 		push_error("FlightSim.end_contract: the airport is closed")
 		return false
+	var stranded := end_refusal(contract_id)
 	_ended[contract_id] = _next_day[contract_id]
+	if not stranded.is_empty():
+		_reserving[contract_id] = true
+	_changed()
 	contract_ended.emit(contract_id)
 	return true
+
+
+## The occurrence that ending running contract `contract_id` now and freeing
+## its ground would leave with no taxi plan: {"id", "reason"}, or {} when every
+## surviving occurrence keeps one (or the contract is not running). Read-only.
+func end_refusal(contract_id: String) -> Dictionary:
+	if contract_of(contract_id).is_empty() or _ended.has(contract_id):
+		return {}
+	var world := _world()
+	var ended := _ended.duplicate()
+	ended[contract_id] = _next_day[contract_id]
+	world["ended"] = ended
+	var days := FlightPlans.days_from(world, _next_day[contract_id])
+	return _plans.refusal(world, _day_plan, days, [])
+
+
+## Whether ended contract `contract_id` still reserves its ground.
+func is_reserving(contract_id: String) -> bool:
+	return _reserving.has(contract_id)
 
 
 ## The contracts that have not ended, in acceptance order (oldest first).
@@ -506,18 +639,22 @@ func phase_progress(id: String, time: float) -> float:
 ## JSON-safe state for a save.
 func to_snapshot() -> Dictionary:
 	return FlightSnapshot.save(
-		tick, opened_tick, _contracts, _start_day, _next_day, _ended, _flights
+		tick, opened_tick, _contracts, _start_day, _next_day, _ended, _reserving, _flights, _landed
 	)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON
 ## (which turns ints into floats). Pushes an error and returns false, leaving
-## the sim unchanged, when anything is missing, mistyped or inconsistent.
-## Emits only snapshot_loaded: what the save had issued stays issued.
+## the sim unchanged, when anything is missing, mistyped or inconsistent, when
+## a live flight's stand is not its gate's, or when a live flight's re-plan
+## fails. Emits only snapshot_loaded: what the save had issued stays issued.
 func from_snapshot(data: Dictionary) -> bool:
 	var loaded := FlightSnapshot.load(data, gate_ids())
-	if loaded.has("error"):
-		push_error("FlightSim.from_snapshot: %s" % loaded["error"])
+	var problem: String = loaded.get("error", "")
+	if problem == "":
+		problem = _load_plan_problem(loaded)
+	if problem != "":
+		push_error("FlightSim.from_snapshot: %s" % problem)
 		return false
 	tick = loaded["tick"]
 	opened_tick = loaded["opened_tick"]
@@ -525,12 +662,56 @@ func from_snapshot(data: Dictionary) -> bool:
 	_start_day = loaded["start_day"]
 	_next_day = loaded["next_day"]
 	_ended = loaded["ended"]
+	_reserving = loaded["reserving"]
 	_flights = loaded["flights"]
+	_landed = loaded["landed"]
+	_changed()
 	snapshot_loaded.emit()
 	return true
 
 
-## A flight record with the state it is in at the current tick.
+## Why from_snapshot() would refuse `data` with the gates and grounds now, or
+## "": what it checks, without installing anything or pushing an error. SaveGame
+## stages a load with it.
+func load_problem(data: Dictionary) -> String:
+	var loaded := FlightSnapshot.load(data, gate_ids())
+	if loaded.has("error"):
+		return loaded["error"]
+	return _load_plan_problem(loaded)
+
+
+## Why a FlightSnapshot.load() result could not be installed with the gates'
+## grounds now: a live flight at a stand other than its gate's, or a live
+## flight its day's re-plan gives no taxi plan; "" for none.
+func _load_plan_problem(loaded: Dictionary) -> String:
+	var grounds := gate_grounds()
+	var world := {
+		"contracts": loaded["contracts"],
+		"start_day": loaded["start_day"],
+		"next_day": loaded["next_day"],
+		"ended": loaded["ended"],
+		"reserving": loaded["reserving"],
+		"flights": loaded["flights"],
+		"landed": loaded["landed"],
+		"grounds": grounds,
+	}
+	for flight: Dictionary in loaded["flights"]:
+		var ground: Dictionary = grounds.get(flight["gate"], {})
+		if ground.is_empty() or ground["stand"] != flight["stand"]:
+			return "flight %s is not at its gate's stand" % flight["id"]
+	for day in FlightPlans.live_days(world):
+		var plans := _plans.plan_day(world, day)
+		for flight: Dictionary in loaded["flights"]:
+			if FlightPlans.day_of(flight["starts"]) != day or flight["contract"] == "":
+				continue
+			var result: Dictionary = plans[flight["id"]]
+			if not result["ok"]:
+				return "flight %s has no taxi plan: %s" % [flight["id"], _ground_text(result)]
+	return ""
+
+
+## A flight record with the state it is in at the current tick, at its gate's
+## stand now.
 func _record(
 	id: String, starts: Array[int], gate: String, contract: String, day: int
 ) -> Dictionary:
@@ -541,6 +722,7 @@ func _record(
 		"gate": gate,
 		"contract": contract,
 		"day": day,
+		"stand": gate_grounds().get(gate, {}).get("stand", {}),
 	}
 
 
@@ -556,40 +738,21 @@ func _one_off_problem(id: String, starts: Array[int], gate: String) -> String:
 	return _one_off_clash(starts, gate)
 
 
-## What a one-off at `gate` with `starts` would meet: a running contract's
-## days, or an issued occurrence, at the gate or on the runway or lane.
+## What a one-off at `gate` with `starts` would meet at the gate: a running
+## contract's days, or an issued occurrence. Other one-offs at the gate are not
+## checked here (the planner books their stand).
 func _one_off_clash(starts: Array[int], gate: String) -> String:
 	for contract in _contracts:
 		if not _ended.has(contract["id"]):
-			var on := FlightTimetable.contract_meets(contract, gate, starts)
-			if on != "":
-				return "would %s during contract %s" % [_held(on, gate), contract["id"]]
+			if FlightTimetable.contract_meets(contract, gate, starts):
+				return "would hold gate %s during contract %s" % [gate, contract["id"]]
 	# Issued occurrences hold the gate they were issued at: an ended contract's,
-	# or one issued before its contract moved. Other one-offs are not checked.
+	# or one issued before its contract moved.
 	for flight in _flights:
 		if flight["contract"] != "":
-			var on := FlightTimetable.clash_on(gate, starts, flight["gate"], flight["starts"])
-			if on != "":
-				return "would %s during %s" % [_held(on, gate), flight["id"]]
+			if FlightTimetable.shares_gate(gate, starts, flight["gate"], flight["starts"]):
+				return "would hold gate %s during %s" % [gate, flight["id"]]
 	return ""
-
-
-## "hold gate C", "use the runway" or "use the taxi lane" for a clash_on answer.
-static func _held(on: String, gate_id: String) -> String:
-	if on == FlightTimetable.GATE:
-		return "hold gate %s" % gate_id
-	return "use the %s" % _ground_name(on)
-
-
-## "at gate C", "on the runway" or "on the taxi lane" for a clash_on answer.
-static func _where(on: String, gate_id: String) -> String:
-	if on == FlightTimetable.GATE:
-		return "at gate %s" % gate_id
-	return "on the %s" % _ground_name(on)
-
-
-static func _ground_name(on: String) -> String:
-	return "runway" if on == FlightTimetable.RUNWAY else "taxi lane"
 
 
 ## The contract `terms` would become now at `gate_id`, with its first day.
@@ -609,52 +772,174 @@ static func _at_gate(contract: Dictionary, gate_id: String) -> Dictionary:
 	return FlightContract.make(fields)
 
 
-## {"gate": the lowest gate the contract made of valid `terms` fits at, or "";
-## "problem": "" or why none fits}. A clash on the runway or lane fails at every
-## gate, so it is named first (a candidate at gate "" meets nothing at a gate);
-## otherwise the lowest gate's clash is.
+## `contracts` with the one of `contract`'s id replaced by it.
+static func _replaced(contracts: Array[Dictionary], contract: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for other in contracts:
+		out.append(contract if other["id"] == contract["id"] else other)
+	return out
+
+
+## The gates of `grounds` that take a `plane_class` plane, best fit first: the
+## smallest max_class, then the lowest letter (decision runway-and-taxi-
+## technical-design-movement-plan-analytic-bookings-planned-pauses, section 3).
+static func _best_fit(grounds: Dictionary, plane_class: String) -> Array[String]:
+	var out: Array[String] = []
+	for gate_id: String in grounds:
+		if FlightGround.class_fits(plane_class, grounds[gate_id]["max_class"]):
+			out.append(gate_id)
+	out.sort_custom(
+		func(a: String, b: String) -> bool:
+			var size_a := PlaneClasses.ORDER.find(grounds[a]["max_class"])
+			var size_b := PlaneClasses.ORDER.find(grounds[b]["max_class"])
+			return size_a < size_b if size_a != size_b else a < b
+	)
+	return out
+
+
+## {"gate": the best-fit gate the contract made of valid `terms` fits at, or
+## ""; "problem": "" or why none fits; "refusal": the taxi refusal behind a
+## TAXI_BUSY_TEXT or QUIET_NIGHT_TEXT problem, else {}}. A departure in the
+## quiet night fails at every gate, so it is named first. Then a gate that is
+## free but has no taxi plan names TAXI_BUSY_TEXT, else the best fit's clash.
 func _assignment(terms: Dictionary) -> Dictionary:
 	var gates := gate_ids()
 	if gates.is_empty():
-		return {"gate": "", "problem": "no gate has a stand"}
-	var shared := _clash_problem(_candidate(terms, ""))
-	if shared != "":
-		return {"gate": "", "problem": shared}
-	var first := ""
-	for gate_id in gates:
-		var problem := _clash_problem(_candidate(terms, gate_id))
-		if problem == "":
-			return {"gate": gate_id, "problem": ""}
-		if first == "":
-			first = problem
-	return {"gate": "", "problem": first}
+		return {"gate": "", "problem": "no gate has a stand", "refusal": {}}
+	var probe := _candidate(terms, gates[0])
+	if not GroundPlanner.keeps_quiet_night(FlightTimetable.starts_for(probe, probe["first_day"])):
+		var night := {"reason": GroundPlanner.QUIET_NIGHT, "flight": ""}
+		return {"gate": "", "problem": QUIET_NIGHT_TEXT, "refusal": night}
+	var grounds := gate_grounds()
+	var clash := ""
+	var busy := {}
+	for gate_id in _best_fit(grounds, terms["plane_size"]):
+		var candidate := _candidate(terms, gate_id)
+		var problem := _gate_problem(candidate, _contracts)
+		if problem != "":
+			clash = problem if clash == "" else clash
+			continue
+		var refusal := _contracts_refusal(
+			_contracts + [candidate], candidate, candidate["first_day"], grounds
+		)
+		if refusal.is_empty():
+			return {"gate": gate_id, "problem": "", "refusal": {}}
+		if busy.is_empty():
+			busy = {"reason": refusal["reason"], "flight": refusal["id"]}
+	if not busy.is_empty():
+		return {"gate": "", "problem": _ground_text(busy), "refusal": busy}
+	if clash != "":
+		return {"gate": "", "problem": clash, "refusal": {}}
+	var none := "no gate takes a %s plane" % terms["plane_size"]
+	return {"gate": "", "problem": none, "refusal": {}}
 
 
-## Why `contract` could not run beside the rest: a running contract, or a live
-## flight (a one-off, or an issued occurrence of another contract, which keeps
-## the gate it was issued at), that it would meet at its gate or on the runway
-## or lane; "" for none. Its own issued occurrences are left out: they are days
-## it no longer issues.
-func _clash_problem(contract: Dictionary, contracts: Array[Dictionary] = _contracts) -> String:
+## Why running contract `contract` could not move to `gate_id` beside
+## `contracts` (its own entry there is replaced): the gate is too small for its
+## plane, it would meet another flight at the gate, or TAXI_BUSY_TEXT; "".
+func _move_problem(
+	contract: Dictionary, gate_id: String, contracts: Array[Dictionary], grounds: Dictionary
+) -> String:
+	var ground: Dictionary = grounds.get(gate_id, {})
+	if not FlightGround.class_fits(contract["plane_size"], ground.get("max_class", "")):
+		return "gate %s takes no %s plane" % [gate_id, contract["plane_size"]]
+	var moved := _at_gate(contract, gate_id)
+	var problem := _gate_problem(moved, contracts)
+	if problem != "":
+		return problem
+	var refusal := _contracts_refusal(
+		_replaced(contracts, moved), moved, _next_day[contract["id"]], grounds
+	)
+	return _ground_text(refusal) if not refusal.is_empty() else ""
+
+
+## The taxi refusal ({"id", "reason"}) of the world with `contracts` in place
+## of the running ones, on every day from `from_day` whose plan can differ, for
+## `subject` (a contract, new or moved, whose own occurrences must plan) or an
+## existing flight it would leave with no plan; {} for none. A new contract
+## starts on its first_day.
+func _contracts_refusal(
+	contracts: Array, subject: Dictionary, from_day: int, grounds: Dictionary
+) -> Dictionary:
+	var world := _world(grounds)
+	world["contracts"] = contracts
+	if not _next_day.has(subject["id"]):
+		var start_day: Dictionary = _start_day.duplicate()
+		var next_day: Dictionary = _next_day.duplicate()
+		start_day[subject["id"]] = subject["first_day"]
+		next_day[subject["id"]] = subject["first_day"]
+		world["start_day"] = start_day
+		world["next_day"] = next_day
+	var days := FlightPlans.days_from(world, from_day)
+	return _plans.refusal(world, _day_plan, days, [subject["id"]])
+
+
+## The player's words for a taxi refusal ({"reason"}).
+static func _ground_text(refusal: Dictionary) -> String:
+	if refusal["reason"] == GroundPlanner.QUIET_NIGHT:
+		return QUIET_NIGHT_TEXT
+	if refusal["reason"] == GroundPlanner.BAD_ROUTE:
+		return "its taxi route cannot be booked"
+	return TAXI_BUSY_TEXT
+
+
+## Why `contract` could not run beside `contracts` at its gate: a running
+## contract, or a live flight (a one-off, or an issued occurrence of another
+## contract, which keeps the gate it was issued at), that it would meet there;
+## "" for none. Its own issued occurrences are left out: they are days it no
+## longer issues. The shared ground is GroundPlanner's (_contracts_refusal).
+func _gate_problem(contract: Dictionary, contracts: Array[Dictionary]) -> String:
 	for other in contracts:
 		if other["id"] == contract["id"] or _ended.has(other["id"]):
 			continue
-		var on := FlightTimetable.contracts_clash_on(contract, other)
-		if on != "":
+		if FlightTimetable.contracts_share_gate(contract, other):
 			return (
-				"contract %s clashes with %s %s"
-				% [contract["id"], other["id"], _where(on, other["gate"])]
+				"contract %s clashes with %s at gate %s"
+				% [contract["id"], other["id"], other["gate"]]
 			)
 	for flight in _flights:
 		if flight["contract"] == contract["id"]:
 			continue
-		var on := FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"])
-		if on != "":
+		if FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"]):
 			return (
-				"contract %s clashes with flight %s %s"
-				% [contract["id"], flight["id"], _where(on, flight["gate"])]
+				"contract %s clashes with flight %s at gate %s"
+				% [contract["id"], flight["id"], flight["gate"]]
 			)
 	return ""
+
+
+## The planning world of the sim now (FlightPlans), on `grounds`.
+func _world(grounds := {}) -> Dictionary:
+	return {
+		"contracts": _contracts,
+		"start_day": _start_day,
+		"next_day": _next_day,
+		"ended": _ended,
+		"reserving": _reserving,
+		"flights": _flights,
+		"landed": _landed,
+		"grounds": grounds if not grounds.is_empty() else gate_grounds(),
+	}
+
+
+## The plan of calendar day `day` for the sim now, cached until the contracts,
+## the flights or the gates' grounds change.
+func _day_plan(day: int) -> Dictionary:
+	var grounds := gate_grounds()
+	var key := str(grounds)
+	if _day_plans_revision != _revision or key != _grounds_key:
+		_day_plans.clear()
+		_day_plans_revision = _revision
+		_grounds_key = key
+	if not _day_plans.has(day):
+		_day_plans[day] = _plans.plan_day(_world(grounds), day)
+	return _day_plans[day]
+
+
+## A change to the contracts or flights that can change a plan.
+func _changed() -> void:
+	_revision += 1
+	_reported.clear()
 
 
 ## Issues every occurrence whose issue tick has come, oldest first (then by
@@ -700,6 +985,9 @@ func _insert(record: Dictionary) -> void:
 	_flights.insert(at, record)
 
 
+## Drops each departed occurrence an hour after it departs, keeping it in
+## _landed for the rest of its day, and drops the landed occurrences of days
+## gone (no plan of today depends on them).
 func _prune() -> void:
 	for i in range(_flights.size() - 1, -1, -1):
 		var flight := _flights[i]
@@ -707,7 +995,15 @@ func _prune() -> void:
 			continue
 		var contract := contract_of(flight["contract"])
 		if tick >= FlightTimetable.prune_tick(contract, flight["day"]):
+			_landed.append(flight)
 			_flights.remove_at(i)
+	var today := GameCalendar.day_of(tick)
+	for i in range(_landed.size() - 1, -1, -1):
+		if FlightPlans.day_of(_landed[i]["starts"]) < today:
+			_landed.remove_at(i)
+			for day: int in _day_plans.keys():
+				if day < today:
+					_day_plans.erase(day)
 
 
 func _advance(flight: Dictionary) -> void:

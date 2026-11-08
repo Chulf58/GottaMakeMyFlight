@@ -146,7 +146,7 @@ func test_an_ended_save_round_trips_and_continues_like_the_original() -> void:
 	)
 
 
-func test_a_save_without_an_end_has_an_empty_ended_map_and_a_version_3_save_loads() -> void:
+func test_a_save_without_an_end_has_an_empty_ended_map_and_a_version_3_save_is_refused() -> void:
 	var world := _world()
 	world[1].accept_contract(TestFlightContracts.terms("AM", 480))
 	_run(world[0], ENDED_AT)
@@ -156,9 +156,8 @@ func test_a_save_without_an_end_has_an_empty_ended_map_and_a_version_3_save_load
 	v3["save_version"] = 3
 	v3.erase("ended")
 	var loaded := auto_free(FlightSim.new()) as FlightSim
-	assert_bool(loaded.from_snapshot(v3)).is_true()
-	assert_array(loaded.active_contract_ids()).is_equal(["AM"])
-	assert_int(int(loaded.to_snapshot()["save_version"])).is_equal(FlightSim.SAVE_VERSION)
+	assert_bool(loaded.from_snapshot(v3)).is_false()
+	assert_array(loaded.active_contract_ids()).is_empty()
 
 
 func test_an_impossible_ended_state_is_refused_whole() -> void:

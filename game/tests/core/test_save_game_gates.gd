@@ -141,3 +141,28 @@ func test_a_save_missing_a_gate_is_refused_whole_and_changes_nothing() -> void:
 	assert_str(_save.message_text()).contains("no saved gate")
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
 	assert_array(_flights.gate_ids()).is_equal(["A", "B"])
+
+
+## The flights part is staged with FlightSim.load_problem() on the saved gates'
+## stands (Runway R7), so a save whose flight is at a stand other than its
+## gate's, or whose taxi re-plan fails, is refused while staged and nothing is
+## installed. (Staging used to check only FlightSnapshot.load(), and the refusal
+## came at install, over a world already half loaded.)
+func test_a_save_whose_flights_do_not_re_plan_is_refused_while_staged() -> void:
+	# Until the starter's first occurrence is issued, so the save has a flight.
+	for i in 6000:
+		if not _flights.flight_ids().is_empty():
+			break
+		SaveTestKit.step(_main)
+	var data := _taken()
+	var flights: Array = data["flights"]["flights"]
+	assert_array(flights).is_not_empty()
+	var moved: Dictionary = flights[0]["stand"]
+	moved["x"] = float(moved["x"]) + 8.0
+	for i in 5:
+		SaveTestKit.step(_main)
+	var before := SaveTestKit.checksum(_main)
+	assert_bool(_save.load_world(data)).is_false()
+	print("refused: %s" % _save.message_text())
+	assert_str(_save.message_text()).contains("is not at its gate's stand")
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)

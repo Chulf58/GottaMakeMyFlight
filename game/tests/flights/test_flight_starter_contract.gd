@@ -25,9 +25,10 @@ func test_the_starter_terms_are_a_valid_contract_that_would_be_accepted() -> voi
 
 
 ## [now, first state of its first occurrence]: whole minutes keep the lead
-## exactly, others round up, and 22:40 (tick 20000) crosses midnight.
+## exactly, others round up. (A starter that would depart in the quiet night
+## is never accepted: AirportGate looks for the first minute that fits.)
 func test_the_first_state_is_the_lead_after_now_rounded_up_to_a_minute() -> void:
-	var cases := [[0, 2400], [1000, 3400], [1007, 3420], [1019, 3420], [20000, 22400]]
+	var cases := [[0, 2400], [1000, 3400], [1007, 3420], [1019, 3420]]
 	for case: Array in cases:
 		var sim: FlightSim = auto_free(FlightSim.new())
 		for t in range(1, case[0] + 1):

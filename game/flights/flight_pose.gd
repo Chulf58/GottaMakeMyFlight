@@ -173,7 +173,12 @@ static func _ground_distance(
 ) -> float:
 	if pause.is_empty():
 		return MovementPlan.distance_at(MovementPlan.taxi(points, 1.0), t)
-	var ticks := budget if budget > 0.0 else float(FlightSim.PHASE_TICKS[state])
+	# Only an exact 0 means "the state's fixed budget"; a negative or non-finite
+	# budget is a caller's defect, never read as that default.
+	if budget < 0.0 or not is_finite(budget):
+		push_error("FlightPose: budget %s is not 0 or more; drawn without the pause" % budget)
+		return MovementPlan.distance_at(MovementPlan.taxi(points, 1.0), t)
+	var ticks := budget if budget != 0.0 else float(FlightSim.PHASE_TICKS[state])
 	var plan := MovementPlan.taxi(points, ticks, pause)
 	if not MovementPlan.is_valid(plan):
 		push_error(

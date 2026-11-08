@@ -17,27 +17,10 @@ const ISSUE_LEAD_TICKS := 2400
 ## Keep a departed occurrence listed for one game hour, then drop the record.
 const PRUNE_AFTER_TICKS := 1200
 
-## The shared ground every gate's planes use (decision gates-technical-design-
-## gate-desks-link-to-north-exits-one-st, point 4): the runway and the taxi
-## lane with its links to the runway (StandPlacement.runway_zone(), lane_zone()).
-## A flight holds each for every tick any part of the plane can be on it, at
-## any legal stand: flight_holds(). Two flights at different gates clash when
-## they hold one of them at once; at one gate the gate hold already covers it.
-const RUNWAY := "runway"
-const LANE := "lane"
-## Holds at the gate itself, from the first state to DEPARTED. A clash_on()
-## answer, beside RUNWAY and LANE.
-const GATE := "gate"
-## Cut points inside a phase, measured by test_shared_ground_holds.gd with
-## PHASE_TICKS over stands across the whole site and the shortest taxi routes
-## any stand can have, each with a margin of 10 or more ticks. With the lane at
-## z -284, the runway at -338 and TAXI_IN 1000 / TAXI_OUT 920, the arriving
-## plane is off the runway by TAXI_IN + 334 (it is still on it as it turns off
-## the runway exit); the departing one is on it from TAXI_OUT + 552 and off the
-## lane by TAKEOFF + 28 (its tail swings over the lane as it lines up).
-const RUNWAY_VACATE_TICKS := 350
-const RUNWAY_ENTER_TICKS := 540
-const LANE_CLEAR_TICKS := 40
+## The shared runway and taxi lane are not timetable holds any more: GroundPlanner
+## books them (decision runway-and-taxi-technical-design-movement-plan-analytic-
+## bookings-planned-pauses, sections 5 and 6, which supersede the whole-lane
+## holds), through FlightPlans. Only the gate itself is held here.
 
 static var _occurrence_pattern := RegEx.create_from_string("^([A-Za-z0-9]+)-d(0|[1-9][0-9]{0,9})$")
 
@@ -96,92 +79,46 @@ static func next_day(contract: Dictionary, now: int) -> int:
 	return maxi(int(contract["first_day"]), day)
 
 
-## True when two contracts would hold one gate, the runway or the lane at the
-## same time on any day (contracts_clash_on).
-static func contracts_clash(a: Dictionary, b: Dictionary) -> bool:
-	return contracts_clash_on(a, b) != ""
-
-
-## What two contracts would hold at the same time on some day: GATE when they
-## share a gate and their gate holds overlap, else RUNWAY or LANE, else "".
-## Both repeat daily for ever and every hold lies inside the gate hold, which
-## is shorter than a day, so comparing day 0 of one with day -1, 0 and 1 of the
-## other covers all.
-static func contracts_clash_on(a: Dictionary, b: Dictionary) -> String:
+## True when two contracts would hold one gate at the same time on some day:
+## they share a gate and their gate holds overlap. Both repeat daily for ever
+## and the gate hold is shorter than a day, so comparing day 0 of one with day
+## -1, 0 and 1 of the other covers all.
+static func contracts_share_gate(a: Dictionary, b: Dictionary) -> bool:
+	if a["gate"] != b["gate"]:
+		return false
 	var a_starts := starts_for(a, 0)
 	for shift in [-1, 0, 1]:
-		var on := clash_on(a["gate"], a_starts, b["gate"], starts_for(b, shift))
-		if on != "":
-			return on
-	return ""
+		if shares_gate(a["gate"], a_starts, b["gate"], starts_for(b, shift)):
+			return true
+	return false
 
 
-## What a flight at `gate` with `starts` would hold at the same time as an
-## occurrence of `contract` on a day from its first_day: GATE, RUNWAY, LANE or
-## "". Only the days whose gate hold overlaps the flight's are compared; they
-## form one contiguous range, found in closed form.
-static func contract_meets(contract: Dictionary, gate: String, starts: Array) -> String:
+## Whether a flight at `gate` with `starts` would hold the gate at the same time
+## as an occurrence of `contract` on a day from its first_day. Only the days
+## whose gate hold overlaps the flight's are compared; they form one contiguous
+## range, found in closed form.
+static func contract_meets(contract: Dictionary, gate: String, starts: Array) -> bool:
 	var start: int = starts[0]
 	var end: int = starts[FlightSim.State.DEPARTED]
-	if start >= end:
-		return ""
+	if start >= end or contract["gate"] != gate:
+		return false
 	var first := _first_start(contract, 0)
 	var day_size := GameCalendar.TICKS_PER_DAY
 	var lowest := GameCalendar.floor_div(start - first - reserved_ticks(), day_size) + 1
 	var highest := -GameCalendar.floor_div(first - end, day_size) - 1
 	for day in range(maxi(lowest, int(contract["first_day"])), highest + 1):
-		var on := clash_on(gate, starts, contract["gate"], starts_for(contract, day))
-		if on != "":
-			return on
-	return ""
+		if shares_gate(gate, starts, contract["gate"], starts_for(contract, day)):
+			return true
+	return false
 
 
-## What two flights would hold at the same time: GATE when they are at one gate
-## and their gate holds overlap, else the RUNWAY or LANE they would both hold,
-## else "".
-static func clash_on(a_gate: String, a_starts: Array, b_gate: String, b_starts: Array) -> String:
+## Whether two flights hold one gate at the same time: from the first state to
+## DEPARTED, half-open.
+static func shares_gate(a_gate: String, a_starts: Array, b_gate: String, b_starts: Array) -> bool:
 	var last := FlightSim.State.DEPARTED
-	if a_gate == b_gate:
-		if holds_overlap(a_starts[0], a_starts[last], b_starts[0], b_starts[last]):
-			return GATE
-		return ""
-	for a_hold in flight_holds(a_starts):
-		for b_hold in flight_holds(b_starts):
-			if a_hold[0] == b_hold[0] and holds_overlap(a_hold[1], a_hold[2], b_hold[1], b_hold[2]):
-				return a_hold[0]
-	return ""
-
-
-## The flight's holds on the shared ground, [zone, from, to) with zone RUNWAY or
-## LANE: the arrival holds the runway from APPROACH until it is off it in
-## TAXI_IN and the lane for all of TAXI_IN; the departure holds the lane from
-## PUSHBACK until it is lined up in TAKEOFF and the runway from late in
-## TAXI_OUT to DEPARTED. The cut points are measured for PHASE_TICKS; a flight
-## whose taxi or takeoff phases last otherwise (a one-off, tests and debug
-## only) holds those phases whole instead.
-static func flight_holds(starts: Array) -> Array:
-	var s := starts
-	var vacate: int = s[FlightSim.State.AT_STAND]
-	var enter: int = s[FlightSim.State.TAXI_OUT]
-	var lane_clear: int = s[FlightSim.State.DEPARTED]
-	if _phases_standard(starts):
-		vacate = s[FlightSim.State.TAXI_IN] + RUNWAY_VACATE_TICKS
-		enter += RUNWAY_ENTER_TICKS
-		lane_clear = s[FlightSim.State.TAKEOFF] + LANE_CLEAR_TICKS
-	return [
-		[RUNWAY, s[FlightSim.State.APPROACH], vacate],
-		[LANE, s[FlightSim.State.TAXI_IN], s[FlightSim.State.AT_STAND]],
-		[LANE, s[FlightSim.State.PUSHBACK], lane_clear],
-		[RUNWAY, enter, s[FlightSim.State.DEPARTED]],
-	]
-
-
-## Whether TAXI_IN, TAXI_OUT and TAKEOFF last as PHASE_TICKS says.
-static func _phases_standard(starts: Array) -> bool:
-	for state in [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT, FlightSim.State.TAKEOFF]:
-		if starts[state + 1] - starts[state] != FlightSim.PHASE_TICKS[state]:
-			return false
-	return true
+	return (
+		a_gate == b_gate and holds_overlap(a_starts[0], a_starts[last], b_starts[0], b_starts[last])
+	)
 
 
 ## True when the half-open gate holds [a_start, a_end) and [b_start, b_end) overlap.

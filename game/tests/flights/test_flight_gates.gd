@@ -2,21 +2,16 @@ class_name TestFlightGates
 extends GdUnitTestSuite
 ## Several gates (decision gates-technical-design-gate-desks-link-to-north-
 ## exits-one-st, points 4 and 5): FlightSim's gates come from gate_source; an
-## accepted contract gets the lowest gate its timetable fits at; contracts at
-## different gates still must not hold the shared runway or taxi lane at once,
-## on any day; reassign_gate moves a contract's days not yet issued, and the
-## occurrences already issued keep their gate as fixed holds.
+## accepted contract gets the best-fit gate its timetable fits at (with no
+## stand_source every fallback gate takes any class, so the lowest letter);
+## reassign_gate moves a contract's days not yet issued, and the occurrences
+## already issued keep their gate. The shared runway and lane are the taxi
+## planner's (test_flight_planner_wiring.gd).
 ##
 ## Times: tick 0 is 06:00. A contract departing at 10:00 (minute 600) has its
 ## first state at tick 2140, inside the issue lead, so it is issued when it is
 ## accepted at tick 0 (one departing at 10:20 starts at 2540 and is issued at
-## 140). One departing 60 minutes later overlaps it at a gate but not on the
-## runway or lane; 80 minutes later its arrival taxis while the first one
-## pushes back (the lane); 10 or 143 minutes later one arrives while the other
-## lands or takes off (the runway). Two flights whose gate holds overlap are
-## clear of each other on the shared ground only 1080 to 1300 ticks apart (or
-## in the last 100 ticks of the 3900-tick gate hold), so no three gates are
-## ever busy at once with today's phase lengths.
+## 140). One departing 60 minutes later overlaps it at a gate.
 
 const GATES: Array[String] = ["C", "A", "B"]
 
@@ -50,12 +45,6 @@ func test_each_contract_gets_the_lowest_gate_its_timetable_fits_at() -> void:
 	assert_str(_accept("Y", 660)).is_equal("B")
 	# Five hours later gate A is free again.
 	assert_str(_accept("W", 900)).is_equal("A")
-	# 12:23 would land while X takes off: no gate helps, and the refusal says
-	# why.
-	assert_str(_sim.accept_gate(TestFlightContracts.terms("V", 743))).is_equal("")
-	assert_str(_sim.accept_problem(TestFlightContracts.terms("V", 743))).is_equal(
-		"contract V clashes with X on the runway"
-	)
 
 
 func test_one_gate_refuses_a_flight_that_overlaps_at_the_gate() -> void:
@@ -64,36 +53,6 @@ func test_one_gate_refuses_a_flight_that_overlaps_at_the_gate() -> void:
 	assert_str(_sim.accept_problem(TestFlightContracts.terms("Y", 660))).is_equal(
 		"contract Y clashes with X at gate C"
 	)
-
-
-func test_flights_at_different_gates_must_not_share_the_runway_or_lane() -> void:
-	_accept("X", 600)
-	assert_str(_sim.accept_problem(TestFlightContracts.terms("R", 610))).is_equal(
-		"contract R clashes with X on the runway"
-	)
-	assert_str(_sim.accept_problem(TestFlightContracts.terms("L", 680))).is_equal(
-		"contract L clashes with X on the taxi lane"
-	)
-	assert_bool(_sim.accept_contract(TestFlightContracts.terms("R", 610))).is_false()
-	assert_array(_sim.contract_ids()).is_equal(["X"])
-
-
-func test_the_shared_check_reaches_across_midnight() -> void:
-	var late := _contract("LATE", 1430, "A")
-	var early := _contract("EARLY", 10, "B")
-	var later := _contract("LATER", 10 + 40, "B")
-	print(
-		(
-			"23:50 at A vs 00:10 at B: %s; vs 00:50 at B: '%s'"
-			% [
-				FlightTimetable.contracts_clash_on(early, late),
-				FlightTimetable.contracts_clash_on(later, late)
-			]
-		)
-	)
-	assert_str(FlightTimetable.contracts_clash_on(early, late)).is_equal(FlightTimetable.RUNWAY)
-	assert_str(FlightTimetable.contracts_clash_on(late, early)).is_equal(FlightTimetable.RUNWAY)
-	assert_bool(FlightTimetable.contracts_clash(later, late)).is_false()
 
 
 func test_reassign_moves_the_contract_with_the_same_check() -> void:
@@ -144,42 +103,6 @@ func test_issued_occurrences_keep_their_gate_as_fixed_holds() -> void:
 	assert_str(_sim.flight_gate("X-d1")).is_equal("B")
 
 
-func test_a_one_off_at_another_gate_must_not_share_the_runway() -> void:
-	_accept("X", 620)
-	var arrival := FlightTimetable.starts_for(_sim.contract_of("X"), 1)
-	var shifted: Array[int] = []
-	for start in arrival:
-		shifted.append(start + 200)
-	assert_bool(_sim.add_flight("ONE", shifted, "B")).is_false()
-	assert_array(_sim.flight_ids()).is_empty()
-	var later: Array[int] = []
-	for start in arrival:
-		later.append(start + 1200)
-	assert_bool(_sim.add_flight("ONE", later, "B")).is_true()
-
-
-func test_a_phase_lasting_otherwise_holds_its_whole_phases() -> void:
-	var starts := FlightSim.schedule_starts(1000)
-	var odd := starts.duplicate()
-	for state in range(FlightSim.State.TAXI_OUT + 1, FlightSim.STATE_COUNT):
-		odd[state] += 100
-	var holds := FlightTimetable.flight_holds(odd)
-	print("standard %s\nlonger taxi out %s" % [FlightTimetable.flight_holds(starts), holds])
-	var stand: int = odd[FlightSim.State.AT_STAND]
-	var departed: int = odd[FlightSim.State.DEPARTED]
-	(
-		assert_array(holds)
-		. is_equal(
-			[
-				[FlightTimetable.RUNWAY, odd[FlightSim.State.APPROACH], stand],
-				[FlightTimetable.LANE, odd[FlightSim.State.TAXI_IN], stand],
-				[FlightTimetable.LANE, odd[FlightSim.State.PUSHBACK], departed],
-				[FlightTimetable.RUNWAY, odd[FlightSim.State.TAXI_OUT], departed],
-			]
-		)
-	)
-
-
 func test_a_moved_occurrence_round_trips_and_bad_gates_are_refused() -> void:
 	_accept("X", 600)
 	_sim.on_tick(200)
@@ -199,28 +122,15 @@ func test_a_moved_occurrence_round_trips_and_bad_gates_are_refused() -> void:
 	)
 
 
-func test_a_save_holding_the_runway_twice_is_refused() -> void:
+func test_a_save_holding_a_gate_twice_is_refused() -> void:
 	_accept("X", 600)
 	_accept("Y", 660)
 	_sim.on_tick(200)
 	var data: Dictionary = _sim.to_snapshot()
 	assert_bool(FlightSnapshot.load(data.duplicate(true), GATES).has("error")).is_false()
-	# Y moved to 10:10 would arrive with X on the runway.
-	var runway := data.duplicate(true)
-	runway["contracts"][1]["departure_minute"] = 610
-	var problem: String = FlightSnapshot.load(runway, GATES).get("error", "")
-	print("contracts sharing the runway: %s" % problem)
-	assert_str(problem).is_equal("contracts X and Y clash")
 	# X-d0 moved onto gate B would overlap Y's days there.
 	var gate := data.duplicate(true)
 	gate["flights"][0]["gate"] = "B"
-	problem = FlightSnapshot.load(gate, GATES).get("error", "")
+	var problem: String = FlightSnapshot.load(gate, GATES).get("error", "")
 	print("occurrence moved onto a busy gate: %s" % problem)
 	assert_str(problem).is_equal("contract Y clashes with flight X-d0")
-
-
-static func _contract(id: String, minute: int, gate_id: String) -> Dictionary:
-	var fields := TestFlightContracts.terms(id, minute)
-	fields["gate"] = gate_id
-	fields["first_day"] = 0
-	return FlightContract.make(fields)
