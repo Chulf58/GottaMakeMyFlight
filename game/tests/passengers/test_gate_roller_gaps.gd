@@ -16,6 +16,9 @@ enum Bags { ONE, TWO_RIGHT, TWO_LEFT }
 
 ## The roller shell's width across (test_gate_chair_roller_spot's shell box).
 const SHELL_WIDTH_M := 0.328
+## A chair whose seat lies this far or further across from its front (the seat
+## row's middle chair, GateChairs.CHAIR_OFFSET_M 0.36).
+const FAR_SLIDE_M := 0.2
 ## How far apart neighbouring chair fronts are.
 const CELL_M := 1.0
 const ORDERS_3 := [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]
@@ -158,6 +161,51 @@ func test_the_seats_line_up() -> void:
 		)
 	)
 	assert_int(_seats.size()).is_equal(3)
+
+
+## GateRoller.slide() of each of the row's seats is its chair's sideways step
+## (GateChairs.CHAIR_OFFSET_M turned with the row) measured along the gap
+## rule's left (a step of `_left`, the left hand's side of a guest facing out),
+## so a positive slide is a shuffle into the left gap. One of the three is the
+## row's middle chair (|slide| FAR_SLIDE_M or more). Seated in every order with
+## every fallback, its guest lays on the side it does not shuffle toward
+## (decision gate-chair-roller-lies-opposite-the-sit-down-shuffle-on-a-ch), and
+## no gap holds two rollers.
+func test_the_middle_chair_lays_opposite_its_shuffle() -> void:
+	var far := -1
+	for i in _seats.size():
+		var seat: Dictionary = _seats[i]
+		var piece := Relocation.placement(_world.sim.grid, seat["object_id"])
+		var slide := GateRoller.slide(piece, seat["cell"], seat["front"])
+		var def := BuildCatalog.get_def(piece["def"])
+		var index := def.footprint(piece["anchor"], piece["facing"]).find(seat["cell"])
+		var step := BuildObjectDef.rotate_point(
+			Vector2(GateChairs.CHAIR_OFFSET_M[index], 0.0), piece["facing"]
+		)
+		var along := step.dot(Vector2(_left))
+		print("seat %d chair %d slide %+.3f along the left step %+.3f" % [i, index, slide, along])
+		assert_float(slide).is_equal_approx(along, 0.0001)
+		if absf(slide) >= FAR_SLIDE_M:
+			far = i
+	assert_int(far).is_greater_equal(0)
+	var piece := Relocation.placement(_world.sim.grid, _seats[far]["object_id"])
+	var slide := GateRoller.slide(piece, _seats[far]["cell"], _seats[far]["front"])
+	var away := 0 if slide > 0.0 else 1
+	var wrong := 0
+	var shared := 0
+	for order: Array in ORDERS_3:
+		for fallbacks: Array in [[0, 0, 0], [1, 1, 1], [1, 0, 1], [0, 1, 0]]:
+			var hands := _fill([0, 1, 2], order, fallbacks)
+			wrong += int(hands[far] != away)
+			shared += _shared(hands)
+	print(
+		(
+			"middle chair seat %d: on its shuffle side %d (0), shared gaps %d (0)"
+			% [far, wrong, shared]
+		)
+	)
+	assert_int(wrong).is_equal(0)
+	assert_int(shared).is_equal(0)
 
 
 ## Two neighbours, either arriving first, any fallbacks: no gap holds two
@@ -384,16 +432,27 @@ func test_mixed_rows_share_only_where_forced() -> void:
 							first_shared += 1
 		if walled:
 			_world.grid.apply(BuildEdit.remove_wall(_seats[0]["front"], wall_side))
-	# The most a one-bag roller and a two-bag one can overlap in one gap.
+	# The most a one-bag roller and a two-bag one can overlap in one gap of this
+	# row: seat i lays left into it, seat i + 1 right, each at its chair's
+	# GateRoller.shuffle_side() (board 4da2e8ff: the middle chair's roller lies
+	# out past the shuffling feet when it is sent to its shuffle side, so the
+	# bound takes the row's slides; it was the slide-free 0.0492 m).
+	var slides: Array[float] = []
+	for seat: Dictionary in _seats:
+		var piece := Relocation.placement(_world.sim.grid, seat["object_id"])
+		slides.append(GateRoller.slide(piece, seat["cell"], seat["front"]))
 	var bound := -INF
-	for a in 2:
-		for b in 2:
-			for h in 2:
-				var one := GateRoller.reach(a * PassengerLooks.PER_VARIANT, h)
-				var two := GateRoller.reach(
-					b * PassengerLooks.PER_VARIANT, 1 - h, SecurityLooks.TWO_BAG_SCALE
-				)
-				bound = maxf(bound, one + two - CELL_M)
+	for i in 2:
+		for a in 2:
+			for b in 2:
+				for one_left: bool in [true, false]:
+					var look_a := a * PassengerLooks.PER_VARIANT
+					var look_b := b * PassengerLooks.PER_VARIANT
+					var scale_a := 1.0 if one_left else SecurityLooks.TWO_BAG_SCALE
+					var scale_b := SecurityLooks.TWO_BAG_SCALE if one_left else 1.0
+					var left := GateRoller.reach(look_a, 1, scale_a, slides[i])
+					var right := GateRoller.reach(look_b, 0, scale_b, slides[i + 1])
+					bound = maxf(bound, left + right - CELL_M)
 	var line := "mixed rows: %d fills;" % cases
 	for kind: String in why:
 		line += " %s %d (most overlap %.4f m)" % [kind, why[kind], most[kind]]

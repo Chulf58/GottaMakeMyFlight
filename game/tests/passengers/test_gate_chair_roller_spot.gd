@@ -16,11 +16,17 @@ const MARGIN_M := 0.01
 const OLD_SIDE_M := 0.34
 ## How far apart two neighbouring chair fronts are (one cell).
 const CELL_M := 1.0
+## Steps of the shuffle from the chair front onto the chair measured.
+const SHUFFLE_STEPS := 10
 
 ## Per body (PassengerLooks.BODIES): its idle and its sit_idle poses, each the
 ## body's vertices in its own frame (facing +z).
 var _idle: Array = []
 var _sit: Array = []
+## Per body: its sit_down clip from start to end (PHASES + 1 poses), the pose
+## drawn at the chair front once the roller is down and through the shuffle
+## onto the chair (the probe's HIT rows: clip sit_down at its end).
+var _sit_down: Array = []
 ## The roller shell's box in the roller's own frame (its rods left out).
 var _shell := AABB()
 
@@ -49,13 +55,15 @@ func before() -> void:
 		add_child(node)
 		var player := node.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 		player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-		for clip in ["idle", "sit_idle"]:
+		for clip in ["idle", "sit_idle", "sit_down"]:
 			player.play(clip)
 			var poses: Array[PackedVector3Array] = []
-			for n in PHASES:
+			for n in PHASES + 1:
+				if n == PHASES and clip != "sit_down":
+					break
 				player.seek(player.current_animation_length * n / PHASES, true)
 				poses.append(TestRollerStandClearance._skinned(node))
-			(_idle if clip == "idle" else _sit).append(poses)
+			{"idle": _idle, "sit_idle": _sit, "sit_down": _sit_down}[clip].append(poses)
 		node.free()
 
 
@@ -135,6 +143,71 @@ func test_a_lying_roller_clears_the_seated_body() -> void:
 		)
 		assert_int(control).is_greater(0)
 	assert_int(hits).is_equal(0)
+
+
+## The walker's feet through the whole shuffle from the chair front onto a
+## chair whose seat lies to one side (board 4da2e8ff; GateChairs.offset() moves
+## the body that far across as it goes back): no vertex in its lying roller,
+## for every body, both ways of shuffle and both chair offsets
+## (GateChairs.CHAIR_OFFSET_M 0.08 and 0.36), one bag or two, the roller on
+## either side (ParkSide.gap_hand() lays it away from the shuffle first, but a
+## taken gap or a two-bag guest's bag hand can put it on the shuffle side), at
+## GateRoller.shuffle_side(). Poses: sit_down
+## from start to end at the front, and sit_down's end and sit_idle at every
+## SHUFFLE_STEPS share of the way. Control: on the shuffle side at
+## GateRoller.side() (the spot before), the far slide takes in many vertices
+## (the probe's 264 for pair1_b).
+func test_a_lying_roller_clears_the_shuffle_onto_an_offset_chair() -> void:
+	var hits := 0
+	var control := 0
+	for b in _sit.size():
+		var line := "body %d %s shuffle:" % [b, PassengerLooks.BODIES[b]]
+		for offset: float in [0.08, 0.36]:
+			for way: float in [1.0, -1.0]:
+				var slide := offset * way
+				for scale_by: float in [1.0, SecurityLooks.TWO_BAG_SCALE]:
+					for hand: int in [0, 1]:
+						var side := GateRoller.shuffle_side(b, hand, scale_by, slide)
+						var n := _shuffle_inside(b, slide, _lying(hand, side), scale_by)
+						hits += n
+						if n > 0:
+							line += (
+								" %+.2f %s x%.2f side %.3f: %d"
+								% [slide, ["right", "left"][hand], scale_by, side, n]
+							)
+				if offset > 0.3:
+					var toward := 1 if slide > 0.0 else 0
+					var old := _lying(toward, GateRoller.side(b, toward))
+					control += _shuffle_inside(b, slide, old, 1.0)
+		print(line + (" none" if line.ends_with(":") else ""))
+	print(
+		"shuffle vertices inside %d (0); far slide on its side at side() %d (> 0)" % [hits, control]
+	)
+	assert_int(control).is_greater(0)
+	assert_int(hits).is_equal(0)
+
+
+## How many vertices of body `b` shuffling onto a chair `slide` m across lie in
+## the shell box of a roller drawn at `lying` scaled `scale_by` (_inside()): the
+## sit_down poses at the front, then its end pose and the sit_idle poses at
+## each share of the way.
+func _shuffle_inside(b: int, slide: float, lying: Transform3D, scale_by: float) -> int:
+	var count := _inside(_sit_down[b], Transform3D.IDENTITY, lying, scale_by)
+	var seated: Array = _sit[b].duplicate()
+	seated.append(_sit_down[b][-1])
+	for step in range(1, SHUFFLE_STEPS + 1):
+		count += _inside(seated, _shuffled(b, slide, step / float(SHUFFLE_STEPS)), lying, scale_by)
+	return count
+
+
+## Where body `b` is drawn `share` of the way from the chair front onto a chair
+## `slide` m across, in the chair front's frame: GateChairs.offset() at that
+## share (the slide and SEAT_SHIFT_M) on the sim's way back to
+## PassengerSim.SIT_FORWARD_M off the seat cell.
+static func _shuffled(b: int, slide: float, share: float) -> Transform3D:
+	var shift: Vector2 = PassengerLooks.SEAT_SHIFT_M[b]
+	var back := -CELL_M + CELL_M * PassengerSim.SIT_FORWARD_M + shift.x
+	return Transform3D(Basis.IDENTITY, Vector3(slide, shift.y, back) * share)
 
 
 ## Two male guests at neighbouring chair fronts: a roller lying on the side

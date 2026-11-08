@@ -35,9 +35,11 @@ extends SceneTree
 ##     and the body's clip, crossfade weight, offset and turn off that frame.
 ## Plates: stand_<subject> (the first frame the roller is down with the walker
 ## still standing at the front), shuffle_<subject> (the first shuffle frame with
-## SHUFFLE_SHOT body points or more in its roller), seated_<subject>, pair_<n> (top-down over both
-## guests of a pair, seated) and a contact sheet. Before a save the feet, head
-## and roller of each guest in it project inside the frame by MARGIN_PX, and at
+## SHUFFLE_SHOT body points or more in its roller, or mid-shuffle onto a middle
+## chair), seated_<subject>, pair_<n> (top-down over both guests of a pair,
+## seated), row (top-down over the first two pairs) and a contact sheet. Before
+## a save the feet, head and roller of each guest in it project inside the
+## frame by MARGIN_PX, and at
 ## least MIN_ON of five sight lines to each roller land on it with nothing in
 ## front (PlateSight, its own body not a blocker), aimed at the roller's body
 ## with its rods and pull grip left out (_bag_box()). Otherwise PROBE_INVALID,
@@ -69,6 +71,11 @@ const STAND_AT_M := 0.1
 ## A shuffle frame with this many body points or more in the walker's own
 ## roller gets a plate, shuffle_<subject> (the first such frame).
 const SHUFFLE_SHOT := 20
+## A subject on a chair whose seat lies this far across from its front (the
+## seat row's middle chair, GateRoller.slide()) gets the shuffle plate anyway,
+## on the first frame it is MID_SHUFFLE_M or more off its front.
+const FAR_SLIDE_M := 0.2
+const MID_SHUFFLE_M := 0.2
 ## How many views _plate() tries for one subject (_try_plate()).
 const VIEWS := 3
 ## The subjects that walk in from STRIP_CELLS cells off their chair front and
@@ -219,11 +226,14 @@ func _place() -> bool:
 			)
 		)
 		return false
-	# Pair 0: the left guest's roller toward the neighbour (left hand), his away
-	# (left hand too), set. Pair 1: the hands ParkSide.gap_hand() chooses (-1).
-	# Pair 2: two-bag guests, a's roller bag 1 (left, into the gap), b's bag 0
-	# (right, into the same gap).
-	var hands := [[1, 1], [-1, -1], [1, 0]]
+	# Pair 0: the right guest's roller toward the neighbour (right hand), his away
+	# (right hand too), set: b on a seat row's middle chair lays it away from
+	# his shuffle (decision gate-chair-roller-lies-opposite-the-sit-down-shuffle-
+	# on-a-ch); set left, as before board 4da2e8ff, the rule sent every roller
+	# along the row to the left with it. Pair 1: the hands ParkSide.gap_hand()
+	# chooses (-1). Pair 2: two-bag guests, a's roller bag 1 (left, into the
+	# gap), b's bag 0 (right, into the same gap).
+	var hands := [[0, 0], [-1, -1], [1, 0]]
 	for n in count:
 		var first := _subjects.size()
 		for m in 2:
@@ -234,7 +244,7 @@ func _place() -> bool:
 	var toward := {}
 	for s: Dictionary in _subjects:
 		# Pair 1 is left to gap_hand(): its right gap, as it chooses at free gaps.
-		var way := _left(s["seat"]) * (1 if s["hand"] == 1 else -1)
+		var way := _left(s["seat"]) * (1 if int(s["hand"]) == 1 else -1)
 		toward[(s["seat"]["cell"] as Vector2i) + way] = true
 	for single: Array in TWO_BAG_SINGLES if _two_bag else SINGLES:
 		var seat: Dictionary = {}
@@ -452,15 +462,27 @@ func _measure(i: int) -> bool:
 	else:
 		# Off the front and not yet seated: the shuffle back onto the chair.
 		s["shuffle_max"] = maxi(int(s.get("shuffle_max", 0)), count)
-		if count >= SHUFFLE_SHOT and not s.has("shuffle_shot"):
+		var far := absf(GateRoller.slide_of(p)) >= FAR_SLIDE_M and flat.length() >= MID_SHUFFLE_M
+		if (count >= SHUFFLE_SHOT or far) and not s.has("shuffle_shot"):
 			s["shuffle_shot"] = _clock.tick
+			print(
+				(
+					"PROBE %s shuffles %.3f m off its front, slide %+.2f, %d body points in its roller"
+					% [s["name"], flat.length(), GateRoller.slide_of(p), count]
+				)
+			)
 			await _plate("shuffle_%s" % s["name"], [i], false)
 	for pair: Array in _pairs:
 		if i in pair:
 			var other: Dictionary = _subjects[pair[0] if pair[1] == i else pair[1]]
 			var them := _views.node_for((other["p"] as Passenger).id)
 			var theirs := CarryContact.inside_meshes(CarryContact.body_points(them, []), node)
-			s["neighbour_max"] = maxi(s["neighbour_max"], theirs)
+			# Walking in along the row past this front (pair1_a, from three
+			# fronts off) counts apart from standing or sitting at its own.
+			var key := (
+				"passing_max" if other["p"].stage == Passenger.Stage.TO_GATE else "neighbour_max"
+			)
+			s[key] = maxi(int(s.get(key, 0)), theirs)
 	return p.stage == Passenger.Stage.SEATED
 
 
@@ -557,6 +579,11 @@ func _seated_plates() -> void:
 			await _plate("seated_%s" % _subjects[i]["name"], [i], false)
 	for n in _pairs.size():
 		await _plate("pair%d" % n, _pairs[n], true)
+	# The row of the first two pairs from above, every roller and seated guest.
+	var row: Array = []
+	for n in mini(2, _pairs.size()):
+		row.append_array(_pairs[n])
+	await _plate("row", row, true)
 
 
 ## A cell `cells` (or fewer) off `seat`'s front with a path to it, not a chair
@@ -784,7 +811,7 @@ func _summary() -> void:
 			(
 				(
 					"BODY_IN_BAG %s stand %d shuffle %d seated %d neighbour %d (0 each);"
-					+ " control on the feet %d (> 0)"
+					+ " neighbour walking past %d; control on the feet %d (> 0)"
 				)
 				% [
 					s["name"],
@@ -792,6 +819,7 @@ func _summary() -> void:
 					s.get("shuffle_max", 0),
 					s["seated_max"],
 					s["neighbour_max"],
+					s.get("passing_max", 0),
 					s.get("control", -1)
 				]
 			)
@@ -850,7 +878,12 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	var out := -1.0 if s["hand"] == 0 else 1.0
 	if view == 1:
 		out = -out
-	var at := Vector3(0.0, 3.2, 0.6) if top else Vector3(out * 1.6, 1.9, 2.6)
+	# From above, higher the further the subjects spread from their middle.
+	var spread := 0.0
+	for i: int in which:
+		var at_front := _sim.grid.cell_to_world(_subjects[i]["seat"]["front"])
+		spread = maxf(spread, at_front.distance_to(mid))
+	var at := Vector3(0.0, 3.2 + spread * 1.6, 0.6) if top else Vector3(out * 1.6, 1.9, 2.6)
 	var look := Vector3(0.0, 0.3, 0.0) if top else Vector3(out * 0.25, 0.75, -0.15)
 	if view == 2:
 		at = Vector3(0.0, 2.6, 2.6)
