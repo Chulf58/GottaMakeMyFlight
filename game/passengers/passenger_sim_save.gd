@@ -69,6 +69,9 @@ extends RefCounted
 ## 30: a gate stander's stand_from, the cell it stepped onto its spot's cell
 ## from (ParkSide.stand_face()); a version 29 save has none and is refused with
 ## no migration (the same decision).
+## 31: ParkSide's stamps ("park_side", park_side_list()), so a one-bag guest's
+## gate chair side survives a load (board 4da2e8ff); a version 30 save has none
+## and is refused with no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
@@ -262,8 +265,9 @@ static func park_side_list(sim: PassengerSim) -> Array:
 ## The saved ParkSide stamps (park_side_list()) checked against the loaded
 ## passengers `by_id`: {"stamps": {id: [seat key, hand]}} or {"error": why}.
 ## Each names a saved passenger once, a seat key and a hand of 0 or 1. A save
-## of the current version must carry the list; one migrated from an older
-## version has none, and every guest chooses again.
+## of the current version (31 on) must carry the list; one migrated from a
+## version PassengerSnapshot still migrates has none, and every guest chooses
+## again.
 static func checked_park_side(data: Dictionary, by_id: Dictionary) -> Dictionary:
 	var stamps := {}
 	if not data.has("park_side") and int(data["save_version"]) >= PassengerSim.SAVE_VERSION:
