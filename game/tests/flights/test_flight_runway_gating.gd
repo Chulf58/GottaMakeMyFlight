@@ -21,8 +21,8 @@ func _terms(id: String, plane_class: String) -> Dictionary:
 
 
 ## A sim made in code takes every class until a test or the scene makes the
-## runway smaller; the game scene starts it small (runway_start).
-func test_a_bare_sim_takes_every_class_and_the_scene_sets_small() -> void:
+## runway smaller; the game scene starts it medium for now (runway_start).
+func test_a_bare_sim_takes_every_class_and_the_scene_starts_medium() -> void:
 	var bare := auto_free(FlightSim.new()) as FlightSim
 	assert_str(bare.runway.size).is_equal(PlaneClasses.LARGE)
 	bare.runway_start = PlaneClasses.SMALL
@@ -34,7 +34,7 @@ func test_a_bare_sim_takes_every_class_and_the_scene_sets_small() -> void:
 			for property in main.get_node_property_count(node):
 				if main.get_node_property_name(node, property) == "runway_start":
 					starts.append(main.get_node_property_value(node, property))
-	assert_array(starts).is_equal(["small"])
+	assert_array(starts).is_equal(["medium"])
 
 
 func test_a_small_runway_refuses_medium_and_large_and_takes_small() -> void:

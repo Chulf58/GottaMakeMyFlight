@@ -136,9 +136,10 @@ const RUNWAY_TOO_SHORT_TEXT := "the runway is too short for a %s plane"
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock
-## The size the runway starts at. The game scene sets "small", the size of the
-## runway it draws; a sim made in code starts with a runway that takes every
-## class, so a test sets a smaller one to try the limit. A load replaces it.
+## The size the runway starts at. The game scene starts medium until R9 (the
+## runway upgrade, board 48f9bf52) lands, then small, per the design; a sim made
+## in code starts with a runway that takes every class, so a test sets a smaller
+## one to try the limit. A load replaces it.
 @export var runway_start: String = PlaneClasses.LARGE:
 	set(value):
 		runway_start = value

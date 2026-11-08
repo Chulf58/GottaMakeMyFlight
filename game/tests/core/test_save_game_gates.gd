@@ -177,8 +177,6 @@ func test_a_save_whose_flights_do_not_re_plan_is_refused_while_staged() -> void:
 ## gate under a booked medium plane, so the save is put together from two.) A
 ## control: the unmixed save loads.
 func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() -> void:
-	# The scene starts with a small runway, which draws and accepts no medium offer.
-	_flights.runway.size = PlaneClasses.MEDIUM
 	var floor_edit := BuildEdit.paint_floor(MEDIUM_CELL, BuildGrid.FLOOR_TILE, 1)
 	assert_bool(_mode.grid.apply(floor_edit).ok).is_true()
 	assert_str(_gates.max_class("A")).is_equal(PlaneClasses.SMALL)
@@ -186,7 +184,7 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(MEDIUM_CELL)).ok).is_true()
 	var board := (_main.get_node("OfferDesk") as OfferDesk).board
 	var taken := ""
-	# The small runway drew no medium offer, so the day-0 offers are made medium.
+	# Whatever the draw gave, the day-0 offers are made medium.
 	var offers := board.to_snapshot()
 	for offer: Dictionary in offers["offers"]:
 		offer["plane_size"] = PlaneClasses.MEDIUM
