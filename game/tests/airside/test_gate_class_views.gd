@@ -3,8 +3,9 @@ extends GdUnitTestSuite
 ## Where the player sees a gate's biggest plane (GateDesks.max_class; decision
 ## runway-and-taxi-technical-design-movement-plan-analytic-bookings-planned-
 ## pauses, section 3): the desk card says "Biggest plane: Large", and in build
-## mode GateLinksView outlines that class's envelope on the ground with a
-## "Gate A: up to large planes" caption over the stand. Both follow the grid:
+## mode GateLinksView outlines that class's envelope on the ground and the
+## gate's caption over its desk reads "Gate A" then "up to large planes" (the
+## gate ribbon's form; no separate caption at the stand). Both follow the grid:
 ## building into the large-only space turns them to medium. An unlinked desk's
 ## sign names the two new reasons.
 ##
@@ -45,7 +46,7 @@ func _floor(cell: Vector2i) -> void:
 
 func _captions() -> Array:
 	var out := []
-	for caption in _view.class_captions():
+	for caption in _view.gate_captions():
 		out.append(caption.text)
 	return out
 
@@ -65,10 +66,10 @@ func test_build_mode_outlines_the_max_class_envelope_with_its_class() -> void:
 		"before %s; free cell %s; after the large-only cell %s" % [first[1], control, _captions()]
 	)
 	assert_array(first[0]).is_equal([large])
-	assert_array(first[1]).is_equal(["Gate A: up to large planes"])
-	assert_array(control).is_equal(["Gate A: up to large planes"])
+	assert_array(first[1]).is_equal(["Gate A\nup to large planes"])
+	assert_array(control).is_equal(["Gate A\nup to large planes"])
 	assert_array(_view.envelope_paths()).is_equal([medium])
-	assert_array(_captions()).is_equal(["Gate A: up to medium planes"])
+	assert_array(_captions()).is_equal(["Gate A\nup to medium planes"])
 	# The outline is the swing square and the way north as one closed shape, the
 	# way reaching the taxi lane.
 	assert_vector(large[0]).is_equal(large[-1])
@@ -81,7 +82,7 @@ func test_build_mode_outlines_the_max_class_envelope_with_its_class() -> void:
 	assert_bool(_view.envelope_node().is_visible_in_tree()).is_false()
 	_view.set_building(true)
 	assert_bool(_view.envelope_node().is_visible_in_tree()).is_true()
-	assert_bool(_view.class_captions()[0].is_visible_in_tree()).is_true()
+	assert_bool(_view.gate_captions()[0].is_visible_in_tree()).is_true()
 
 
 func test_the_desk_card_names_the_gates_biggest_plane() -> void:

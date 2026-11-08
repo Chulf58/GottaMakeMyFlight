@@ -30,8 +30,10 @@ extends Node3D
 ## StandEnvelope; decision runway-and-taxi-technical-design-movement-plan-
 ## analytic-bookings-planned-pauses, section 3) is outlined on the ground in the
 ## same sky blue, thinner (ENVELOPE_PX), from the stand out along the way north
-## to the taxi lane, with a caption over the stand naming the class ("Gate A: up
-## to large planes"). Both show only while build mode lasts, with the links.
+## to the taxi lane, and the class is the second line of the gate's caption over
+## its desk ("Gate A" / "up to large planes"), the gate ribbon's form (decision
+## gates-2-4-as-built-toon-gate-desk-model-sky-blue-link-line-f). Both show only
+## while build mode lasts, with the links.
 ##
 ## Redrawn on every GateDesks.changed (each graph change). Draws in world space,
 ## so it sits at the world origin. View only.
@@ -44,10 +46,9 @@ const LINE_FILL := Color(0.38, 0.68, 0.98)
 const THROUGH_ALPHA := 0.6
 const END_RADIUS_M := 0.7
 const ENVELOPE_PX := 3.0
-## The envelope caption stands this far over the stand point.
-const ENVELOPE_CAPTION_M := 6.0
-const CLASS_CAPTION := "Gate %s: up to %s planes"
-const NO_CLASS_CAPTION := "Gate %s: no room for a plane"
+## The gate caption's second line: its max_class, or no room.
+const CLASS_LINE := "up to %s planes"
+const NO_CLASS_LINE := "no room for a plane"
 ## The "Gate A" caption stands this far over the desk's top.
 const CAPTION_LIFT_M := 0.5
 const UNLINKED_PREFIX := "Unlinked: "
@@ -90,7 +91,6 @@ var _rim := MeshInstance3D.new()
 var _fill := MeshInstance3D.new()
 var _envelope := MeshInstance3D.new()
 var _envelope_paths: Array[PackedVector3Array] = []
-var _class_captions: Array[Label3D] = []
 var _ends: Array[MeshInstance3D] = []
 var _captions: Array[Label3D] = []
 var _signs: Array[Sprite3D] = []
@@ -197,7 +197,7 @@ func rebuild() -> void:
 		for binding in _gates.bindings:
 			var path := link_points(_grid, binding)
 			_paths.append(path)
-			gate_texts.append("Gate %s" % binding["gate"])
+			gate_texts.append(caption_text(binding["gate"], _gates.max_class(binding["gate"])))
 			desk_tops.append(_desk_top(binding["desk"]))
 	_draw_lines()
 	_draw_ends()
@@ -255,44 +255,28 @@ func envelope_paths() -> Array[PackedVector3Array]:
 	return _envelope_paths.duplicate()
 
 
-## The shown "Gate A: up to large planes" captions.
-func class_captions() -> Array[Label3D]:
-	var out: Array[Label3D] = []
-	for caption in _class_captions:
-		if caption.visible:
-			out.append(caption)
-	return out
+## The caption over gate `gate`'s desk: "Gate A", then its biggest plane
+## (GateDesks.max_class, "" for none) on a second line.
+static func caption_text(gate: String, plane_class: String) -> String:
+	var second := CLASS_LINE % plane_class if plane_class != "" else NO_CLASS_LINE
+	return "Gate %s\n%s" % [gate, second]
 
 
 func envelope_node() -> MeshInstance3D:
 	return _envelope
 
 
-## Each gate's max_class envelope outline and its caption over the stand.
+## Each gate's max_class envelope outline.
 func _draw_envelopes() -> void:
 	_envelope_paths.clear()
-	var texts: Array[String] = []
-	var spots: Array[Vector3] = []
 	if _grid != null and _gates != null:
 		var y := _grid.origin.y + LIFT_M
 		for binding in _gates.bindings:
-			var stand := StandPlacement.for_exit(_grid, binding["exit"])
 			var plane_class := _gates.max_class(binding["gate"])
-			if plane_class == "":
-				texts.append(NO_CLASS_CAPTION % binding["gate"])
-			else:
-				texts.append(CLASS_CAPTION % [binding["gate"], plane_class])
+			if plane_class != "":
+				var stand := StandPlacement.for_exit(_grid, binding["exit"])
 				_envelope_paths.append(envelope_outline(stand, plane_class, y))
-			spots.append(StandPlacement.stand_point(stand) + Vector3.UP * ENVELOPE_CAPTION_M)
 	_envelope.mesh = segments_mesh(_envelope_paths)
-	while _class_captions.size() < texts.size():
-		_class_captions.append(_make_caption("ClassCaption", VERTICAL_ALIGNMENT_BOTTOM, 0.0))
-		_links.add_child(_class_captions[-1])
-	for i in _class_captions.size():
-		_class_captions[i].visible = i < texts.size()
-		if i < texts.size():
-			_class_captions[i].text = texts[i]
-			_class_captions[i].position = spots[i]
 
 
 ## The link paths drawn, one per gate in desk order (for probes and tests).
@@ -365,7 +349,7 @@ func update_sizes(force := false) -> void:
 	for marker in _signs:
 		marker.pixel_size = MissMarkers.SIGN_PX * unit / MarkerIcons.SIZE
 		caption_of(marker).pixel_size = unit
-	for caption in _captions + _class_captions:
+	for caption in _captions:
 		caption.pixel_size = unit
 
 

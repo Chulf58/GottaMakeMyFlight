@@ -12,13 +12,19 @@ extends SceneTree
 ## builds it with a gate desk by its exit (gate B), and paints a floor patch in
 ## gate B's large-only space, so gate A takes large planes and gate B medium.
 ## Then it turns build mode's ground views on (ApronStand.set_building, which
-## BuildSession's changed signal calls) and saves two plates under
-## tools/blender/out/runway-r5/: both envelopes from above out to the taxi lane,
-## and the two stands close up with their "Gate A: up to large planes" captions.
-## Before each save every subject point (the envelope corners and the captions)
-## must project inside the window, and the stand points and the floor patch
-## must have no mesh between them and the camera (a control under the ground
-## must report one); otherwise PROBE_INVALID, exit 1. No click is pushed, so
+## BuildSession's changed signal calls), hides the open-airport checklist (the
+## StaffPanel layer) and saves two plates under tools/blender/out/runway-r5/,
+## each looking straight down: both envelopes out to the taxi lane, and the two
+## stands close up with the gate captions over the desks ("Gate A" / "up to
+## large planes"). Before each save every subject point (the envelope corners
+## and the captions) must project inside the window, and the stand points and
+## the floor patch must have no mesh between them and the camera (a control
+## under the ground must report one); otherwise PROBE_INVALID, exit 1. No two
+## shown gate captions may overlap on screen (their rectangles from the font's
+## measured text, anchored as GateLinksView anchors them); the control is the
+## old one-line class captions at the stand points, which must overlap. An
+## overlap prints PROBE_FAIL, the plate is still saved for review, and the run
+## exits 1. No click is pushed, so
 ## the click owners of anti-pattern a-main-tscn-click-test-that-calls-
 ## unhandled-input-directly-m are not in play. A guard thread ends a hang.
 
@@ -33,12 +39,17 @@ const EAST := Vector2i(19, 0)
 const DESK_EAST := Vector2i(38, 115)
 ## Gate B's stand point is at x -7: x 13.6 to 25.9 is its large-only space.
 const PATCH := Rect2i(58, 98, 3, 3)
+## The old class captions (before the class moved under the gate caption),
+## each 6 m over its stand point: the overlap check's control.
+const OLD_CAPTIONS := ["Gate A: up to large planes", "Gate B: up to medium planes"]
+const OLD_CAPTION_LIFT_M := 6.0
 
 var _guard := Thread.new()
 var _mutex := Mutex.new()
 var _beat_ms := 0
 var _stage := "boot"
 var _done := false
+var _overlap := false
 
 var _out_dir := ""
 var _main: Node
@@ -89,10 +100,18 @@ func _run() -> void:
 		_fail("expected gates A (large) and B (medium), got %s %s" % [_gates.gate_ids(), classes])
 		return
 	_apron.set_building(true)
+	(_main.get_node("StaffPanel") as CanvasLayer).visible = false
+	_rig.set_process(false)
+	_rig.set_physics_process(false)
 	await _plates()
-	if not _done:
-		print("PROBE_PASS plates")
-		_finish(0)
+	if _done:
+		return
+	if _overlap:
+		print("PROBE_FAIL gate captions overlap on screen")
+		_finish(1)
+		return
+	print("PROBE_PASS plates")
+	_finish(0)
 
 
 ## Buys the land for, and builds, a second shell 19 cells east with a gate desk
@@ -148,12 +167,13 @@ func _own(cells: Array[Vector2i]) -> bool:
 func _plates() -> void:
 	var links := _apron.links_view()
 	var paths := links.envelope_paths()
-	var captions := links.class_captions()
+	var captions := links.gate_captions()
 	var texts := []
 	for caption in captions:
 		texts.append(caption.text)
 	print("PROBE envelope outlines %d, captions %s" % [paths.size(), texts])
-	if paths.size() != 2 or texts != ["Gate A: up to large planes", "Gate B: up to medium planes"]:
+	var wanted := ["Gate A\nup to large planes", "Gate B\nup to medium planes"]
+	if paths.size() != 2 or texts != wanted:
 		_fail("the build-mode views do not show both envelopes with their classes")
 		return
 	var stand_a := StandPlacement.stand_point(_apron.gate_stands["A"]["live"])
@@ -164,36 +184,42 @@ func _plates() -> void:
 		for point in path:
 			corners.append(point)
 	var middle := (stand_a + stand_b) / 2.0
-	# From above, out to the taxi lane at z -284.
-	_view(Vector3(middle.x, 0.0, -195.0), 260.0, 0.0)
-	await _plate("a_envelopes_from_above", corners, [stand_a, stand_b, patch])
-	if _done:
-		return
 	var spots: Array = []
 	for caption in captions:
 		spots.append(caption.global_position)
-	_view(middle + Vector3(0.0, 0.0, -12.0), 110.0, 0.0)
-	await _plate("b_stands_close_with_captions", spots, [stand_a, stand_b, patch])
+	var old: Array = [
+		[OLD_CAPTIONS[0], stand_a + Vector3.UP * OLD_CAPTION_LIFT_M],
+		[OLD_CAPTIONS[1], stand_b + Vector3.UP * OLD_CAPTION_LIFT_M],
+	]
+	# Straight down, out to the taxi lane at z -284.
+	_view(Vector3(middle.x, 0.0, -190.0), 215.0)
+	await _plate("a_envelopes_from_above", corners + spots, [stand_a, stand_b, patch], old)
+	if _done:
+		return
+	_view(Vector3(middle.x, 0.0, -118.0), 90.0)
+	await _plate("b_stands_close_with_captions", spots, [stand_a, stand_b, patch], old)
 
 
-func _view(focus: Vector3, distance: float, yaw: float) -> void:
-	_rig.position = focus
-	_rig.yaw = yaw
-	_rig.distance = distance
-	_rig.zoom(1.0)
+## Puts the camera `height` metres straight over `focus`, north up. The rig
+## is stopped, so it does not tilt the camera back.
+func _view(focus: Vector3, height: float) -> void:
+	var down := Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP)
+	_cam.global_transform = Transform3D(down, focus + Vector3.UP * height)
 
 
 ## Saves a plate once every `framed` and `visible` point projects inside the
-## window and no mesh hides a `visible` point.
-func _plate(label: String, framed: Array, visible: Array) -> void:
+## window and no mesh hides a `visible` point. The shown gate captions must not
+## overlap on screen, and the `old` ([text, anchor]) captions, the control,
+## must.
+func _plate(label: String, framed: Array, visible: Array, old: Array) -> void:
 	_stage = "plate %s" % label
 	await _frames(SETTLE_FRAMES)
 	var view := root.get_visible_rect()
 	var ok := true
 	print(
 		(
-			"PLATE %s rig %s distance %.1f camera %s"
-			% [label, _rig.position, _rig.distance, _cam.global_position]
+			"PLATE %s camera %s looking %s fov %.1f"
+			% [label, _cam.global_position, -_cam.global_basis.z, _cam.fov]
 		)
 	)
 	var control := _occluder(Vector3(-27.0, -2.0, -90.0))
@@ -213,12 +239,64 @@ func _plate(label: String, framed: Array, visible: Array) -> void:
 	if not ok:
 		_fail("%s: a subject check failed" % label)
 		return
+	var shown: Array[Label3D] = _apron.links_view().gate_captions()
+	var font := _font_of(shown[0])
+	var old_rects: Array[Rect2] = []
+	for entry: Array in old:
+		old_rects.append(_caption_rect(font, entry[0], entry[1]))
+	var old_overlap := _first_overlap(old_rects)
+	print("  CAPTION CONTROL old captions %s: %s" % [old_rects, old_overlap])
+	if old_overlap == "":
+		_fail("%s: the caption overlap control found no overlap" % label)
+		return
+	var rects: Array[Rect2] = []
+	for caption in shown:
+		rects.append(_caption_rect(font, caption.text, caption.global_position))
+	var overlap := _first_overlap(rects)
+	print("  CAPTIONS %s: %s" % [rects, overlap if overlap != "" else "no overlap"])
+	if overlap != "":
+		print("PROBE_FAIL %s: gate captions overlap: %s" % [label, overlap])
+		_overlap = true
 	await RenderingServer.frame_post_draw
 	var path := _out_dir.path_join(label + ".png")
 	var err := root.get_texture().get_image().save_png(path)
 	print("PLATE saved %s err=%d" % [path, err])
 	if err != OK:
 		_fail("%s: not saved" % label)
+
+
+## The font a caption draws with: its own, or the default one.
+func _font_of(caption: Label3D) -> Font:
+	if caption.font != null:
+		return caption.font
+	var theme := ThemeDB.get_project_theme()
+	if theme != null and theme.default_font != null:
+		return theme.default_font
+	return ThemeDB.fallback_font
+
+
+## The screen rectangle (in unproject_position's units) of a GateLinksView
+## caption saying `text` anchored at `at`: centred across, its bottom on the
+## anchor, MissMarkers.CAPTION_FONT pixels per line plus the outline. A
+## fixed-size caption keeps its font size in window pixels (update_sizes), so
+## the stretch scale turns it into viewport units.
+func _caption_rect(font: Font, text: String, at: Vector3) -> Rect2:
+	var size := font.get_multiline_string_size(
+		text, HORIZONTAL_ALIGNMENT_CENTER, -1, MissMarkers.CAPTION_FONT
+	)
+	size += Vector2.ONE * MissMarkers.CAPTION_OUTLINE
+	size /= root.get_stretch_transform().get_scale().y
+	var p := _cam.unproject_position(at)
+	return Rect2(p.x - size.x / 2.0, p.y - size.y, size.x, size.y)
+
+
+## "i and j" for the first two of `rects` that overlap, or "".
+func _first_overlap(rects: Array[Rect2]) -> String:
+	for i in rects.size():
+		for j in range(i + 1, rects.size()):
+			if rects[i].intersects(rects[j]):
+				return "%d and %d" % [i, j]
+	return ""
 
 
 ## The first opaque mesh the camera-to-subject segment crosses, or "".
