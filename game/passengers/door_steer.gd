@@ -20,10 +20,15 @@ extends RefCounted
 ## steps. Over a change of hand it crosses from one side to the other in step
 ## with the roller's move (through 0 half way).
 ##
+## PassengerViews reads it after CarryOnProps.sync() has made this tick's
+## change of hand, at a tick ahead of the clock (the body is drawn between its
+## last two tick positions, the bags at the clock's time), so the body crosses
+## with the roller, and a load (snap()) records the steer it draws next.
+##
 ## Not covered: a door wall (WallKind.DOOR, an inside door) has no way of its
-## own, so it is not steered; a guest with two bags in its hands, or a roller
-## lifted by its handle, is not steered; on a load the bags start over
-## (PassengerViews.snap()), so the first tick after a load draws no offset.
+## own, so it is not steered; a roller lifted by its handle is not steered (the
+## steer eases out over the lift); a guest pulling two rollers, one in each
+## hand, has no side away from both and is not steered.
 
 ## How far off the door's axis the guest is drawn.
 const SIDE_M := 0.12
@@ -54,30 +59,36 @@ static func offset_of(views: PassengerViews, p: Passenger, now: float) -> Vector
 
 ## Which way bags `bags` (CarryOnProps' records) steer their guest at sim time
 ## `now`: 1 to its left (a roller pulled in the right hand), -1 to its right
-## (in the left), 0 unless the one bag held in a hand is a pulled roller.
-## Through a change of hand (PullSide.swapped()) it goes from the old side to
-## the new over the move's ticks.
+## (in the left), 0 with no roller pulled. Other bags in the hands (a hard case
+## in the other hand) do not change it; rollers pulled in both hands cancel.
+## While a roller's move is under way (a change of hand, a lift, a pick-up) the
+## side goes from its old place's to its new one's over the move's ticks from
+## the tick it was seen on ("changed"), through 0 half way across. The old
+## place is the one drawn ("home") until a draw stamps the move, then its start
+## ("was"), so the side does not depend on when frames are drawn.
 static func side_of(bags: Array, now: float) -> float:
-	var held := 0
-	var pulled := {}
+	var side := 0.0
 	for bag: Dictionary in bags:
+		if bag.get("kind", -1) != SecurityLooks.Kind.ROLLER:
+			continue
 		var place := int(bag.get("place", -1))
-		if not bag.has("kind"):
-			continue
-		var carry: int = bag.get("carry", SecurityLooks.KIND_CARRY[bag["kind"]])
-		if CarryLead.end_of(place, carry) != CarryLead.End.HELD:
-			continue
-		held += 1
-		if bag["kind"] == SecurityLooks.Kind.ROLLER and place % 2 == 0:
-			pulled = bag
-	if held != 1 or pulled.is_empty():
+		var own := _side(place)
+		var k := (now - float(bag.get("changed", -INF))) / CarryLead.ticks_of(bag)
+		var home := int(bag.get("home", -1))
+		var from := home if home != place else int(bag.get("was", -1))
+		if k < 1.0 and from >= 0:
+			own = lerpf(_side(from), own, clampf(k, 0.0, 1.0))
+		side += own
+	return clampf(side, -1.0, 1.0)
+
+
+## The side a roller at `place` (CarryOnProps' (home * 2 + hand) * 2 + lifted)
+## steers to: pulled in the right hand 1, in the left -1, else (lifted, set
+## down, in a tray) 0.
+static func _side(place: int) -> float:
+	if place < 0 or place / 4 != SecurityLooks.Home.HAND or place % 2 == 1:
 		return 0.0
-	var side := 1.0 if CarryLead.hand_of(int(pulled["place"])) == 0 else -1.0
-	if PullSide.swapped(pulled):
-		var since := float(pulled.get("changed", -INF))
-		var k := clampf((now - since) / CarryLead.ticks_of(pulled), 0.0, 1.0)
-		side *= lerpf(-1.0, 1.0, k)
-	return side
+	return 1.0 if CarryLead.hand_of(place) == 0 else -1.0
 
 
 ## The offset of a guest the sim puts at `here`, walking `heading` (world x, z;

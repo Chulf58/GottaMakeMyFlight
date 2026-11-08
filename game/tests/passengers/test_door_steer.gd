@@ -143,7 +143,7 @@ func test_no_offset_away_from_any_door() -> void:
 	)
 
 
-func test_no_offset_without_a_pulled_roller_in_one_hand() -> void:
+func test_no_offset_without_a_pulled_roller() -> void:
 	var hand := SecurityLooks.Home.HAND
 	var cases := {
 		"no bags": [],
@@ -151,7 +151,6 @@ func test_no_offset_without_a_pulled_roller_in_one_hand() -> void:
 		"roller on the floor": [_bag(SecurityLooks.Kind.ROLLER, SecurityLooks.Home.FLOOR, 0)],
 		"roller in a tray": [_bag(SecurityLooks.Kind.ROLLER, SecurityLooks.Home.TRAY, 0)],
 		"case in hand": [_bag(SecurityLooks.Kind.CASE, hand, 0)],
-		"roller and a case": [_roller(0), _bag(SecurityLooks.Kind.CASE, hand, 1)],
 		"no place yet": [{"kind": SecurityLooks.Kind.ROLLER}],
 	}
 	for name: String in cases:
@@ -165,20 +164,63 @@ func test_no_offset_without_a_pulled_roller_in_one_hand() -> void:
 	assert_float(DoorSteer.side_of([worn, _roller(0)], 0.0)).is_equal(1.0)
 
 
-func test_a_change_of_hand_crosses_over_smoothly() -> void:
-	var bag := _roller(1)
-	bag["was"] = _roller(0)["place"]
+func test_a_roller_with_a_hard_case_in_the_other_hand_is_steered() -> void:
+	var hand := SecurityLooks.Home.HAND
+	var right := DoorSteer.side_of([_roller(0), _bag(SecurityLooks.Kind.CASE, hand, 1)], 0.0)
+	var left := DoorSteer.side_of([_bag(SecurityLooks.Kind.CASE, hand, 0), _roller(1)], 0.0)
+	assert_float(right).is_equal(1.0)
+	assert_float(left).is_equal(-1.0)
+	var off := DoorSteer.offset_at(_grid, _at(0.0), _out, right)
+	assert_vector(off).is_equal_approx(Vector3(-DoorSteer.SIDE_M, 0.0, 0.0), Vector3.ONE * 1e-5)
+	# Rollers pulled in both hands have no side away from both.
+	assert_float(DoorSteer.side_of([_roller(0), _roller(1)], 0.0)).is_equal(0.0)
+
+
+## A roller record moved from `from` to `to` at tick 100, as CarryOnProps
+## keeps it before a draw stamps the move (`drawn` false: "home" is still the
+## old place) or after (`drawn` true: "home" the new, "was" the old).
+static func _moved(from: Dictionary, to: Dictionary, drawn: bool) -> Dictionary:
+	var bag := to.duplicate()
 	bag["changed"] = 100.0
-	assert_bool(PullSide.swapped(bag)).is_true()
-	var ticks := CarryLead.ticks_of(bag)
-	var sides := []
-	for k in int(ticks) + 2:
-		sides.append(DoorSteer.side_of([bag], 100.0 + k))
+	bag["home"] = to["place"] if drawn else from["place"]
+	if drawn:
+		bag["was"] = from["place"]
+	return bag
+
+
+func _sides(bag: Dictionary) -> Array:
+	var out := []
+	for k in int(CarryLead.ticks_of(bag)) + 2:
+		out.append(DoorSteer.side_of([bag], 100.0 + k))
+	return out
+
+
+func test_a_change_of_hand_crosses_over_smoothly_drawn_or_not() -> void:
+	var before := _moved(_roller(0), _roller(1), false)
+	var after := _moved(_roller(0), _roller(1), true)
+	var ticks := CarryLead.ticks_of(after)
+	var sides := _sides(before)
 	print("sides over the change: %s" % [sides])
+	# The same whether or not a frame has stamped the move.
+	assert_array(_sides(after)).is_equal(sides)
 	# From the right hand's side to the left hand's, through 0 half way.
 	assert_float(sides[0]).is_equal(1.0)
 	assert_float(sides[sides.size() - 1]).is_equal(-1.0)
-	assert_float(DoorSteer.side_of([bag], 100.0 + ticks * 0.5)).is_equal_approx(0.0, 1e-5)
+	assert_float(DoorSteer.side_of([after], 100.0 + ticks * 0.5)).is_equal_approx(0.0, 1e-5)
 	for i in range(1, sides.size()):
 		assert_float(float(sides[i]) - float(sides[i - 1])).is_less_equal(0.0)
 		assert_float(absf(float(sides[i]) - float(sides[i - 1]))).is_less_equal(2.0 / ticks + 1e-5)
+
+
+func test_a_lift_eases_the_steer_out_and_a_set_down_eases_it_in() -> void:
+	var lifted := _bag(SecurityLooks.Kind.ROLLER, SecurityLooks.Home.HAND, 0, true)
+	var out := _sides(_moved(_roller(0), lifted, true))
+	var back := _sides(_moved(lifted, _roller(0), false))
+	print("lift %s, back to the pull %s" % [out, back])
+	assert_float(out[0]).is_equal(1.0)
+	assert_float(out[out.size() - 1]).is_equal(0.0)
+	assert_float(back[0]).is_equal(0.0)
+	assert_float(back[back.size() - 1]).is_equal(1.0)
+	for i in range(1, out.size()):
+		assert_float(absf(float(out[i]) - float(out[i - 1]))).is_less_equal(0.2)
+		assert_float(absf(float(back[i]) - float(back[i - 1]))).is_less_equal(0.2)
