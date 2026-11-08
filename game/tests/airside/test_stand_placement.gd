@@ -111,7 +111,7 @@ func test_a_building_between_exit_and_door_rejects_the_candidate_on_passenger_re
 	assert_str(result["status"]).is_equal(StandPlacement.UNAVAILABLE)
 
 
-func test_the_deepest_legal_stand_pushes_back_onto_the_taxi_lane() -> void:
+func test_the_deepest_legal_stand_pushes_back_short_of_the_taxi_lane() -> void:
 	_grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	# The reference terminal with its exit on the grid's north row.
 	assert_bool(ReferenceTerminal.build(_grid, Vector2i(0, -2))).is_true()
@@ -123,9 +123,10 @@ func test_the_deepest_legal_stand_pushes_back_onto_the_taxi_lane() -> void:
 	assert_str(result["status"]).is_equal(StandPlacement.OK)
 	assert_int(stand["exit"]).is_equal(exit)
 	assert_float(stand["wall_z"]).is_equal_approx(-210.0, 0.001)
-	# 0.1 m short of the lane's centreline: the nose sits 2.2 m off the wall so
+	# 28.1 m short of the lane's centreline (0.1 m before the lane moved from z
+	# -256 to -284): the nose sits 2.2 m off the wall so
 	# the parked tail clears the shared lane zone (StandPlacement.NOSE_GAP_M).
-	assert_float(back.z).is_equal_approx(StandPlacement.TAXI_LANE_Z + 0.1, 0.001)
+	assert_float(back.z).is_equal_approx(StandPlacement.TAXI_LANE_Z + 28.1, 0.001)
 	assert_float(result["walk_m"]).is_between(6.9, 7.3)
 
 

@@ -49,7 +49,7 @@ func _room_without_entrance() -> PassengerTestWorld:
 func test_outcomes_are_recorded_with_the_mood_at_exit() -> void:
 	_bind(PassengerTestWorld.reference_world(3))
 	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 8)
-	_world.run_to(1900 + 5)
+	_world.run_to(2300 + 5)
 	var parts := _rating.parts()
 	assert_int(_world.sim.made_count()).is_greater(0)
 	assert_int(parts["made"]).is_equal(_world.sim.made_count())

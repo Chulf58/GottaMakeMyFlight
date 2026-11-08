@@ -57,7 +57,7 @@ func test_an_accepted_offer_leaves_the_open_list_and_cannot_be_taken_twice() -> 
 
 
 func test_a_gate_clash_refuses_the_offer_and_leaves_it_open() -> void:
-	# 10:00 and 11:00 both want gate C for 129 minutes.
+	# 10:00 and 11:00 both want gate C for 195 minutes.
 	_load([600, 660, 1200])
 	assert_bool(_board.accept("O0N1", _sim)).is_true()
 	assert_bool(_board.accept("O0N2", _sim)).is_false()

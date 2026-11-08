@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 ## never closes, and the opening accepts the starter contract.
 ##
 ## The reference terminal has a working path; PassengerTestWorld's one-off
-## GMF101 holds gate C over ticks 0 to 3300.
+## GMF101 holds gate C over ticks 0 to 3900.
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
@@ -107,14 +107,15 @@ func test_once_open_it_stays_open_after_everyone_is_fired() -> void:
 	assert_int(_w.flights.state_of(first)).is_equal(FlightSim.State.SCHEDULED)
 
 
-## Opened at 1000, a whole minute: the starter's first state is 1000 + 2400,
-## so it is issued on the opening tick and departs 113 minutes after that.
+## Opened at 1500, a whole minute: the starter's first state is 1500 + 2400,
+## the tick the one-off flight leaves the gate (3900), so it is issued on the
+## opening tick and departs 133 minutes after its first state.
 func test_the_starter_s_first_flight_starts_the_lead_after_opening_and_repeats_daily() -> void:
 	_make()
-	_w.run_to(1000)
+	_w.run_to(1500)
 	assert_bool(_gate.open()).is_true()
 	var first := FlightTimetable.occurrence_id(STARTER, 0)
-	var start := 1000 + FlightTimetable.ISSUE_LEAD_TICKS
+	var start := 1500 + FlightTimetable.ISSUE_LEAD_TICKS
 	assert_array(_w.flights.flight_ids()).contains([first])
 	assert_int(_w.flights.state_start(first, FlightSim.State.SCHEDULED)).is_equal(start)
 	var pushback := _w.flights.state_start(first, FlightSim.State.PUSHBACK)
@@ -122,7 +123,7 @@ func test_the_starter_s_first_flight_starts_the_lead_after_opening_and_repeats_d
 	var contract := _w.flights.contract_of(STARTER)
 	assert_int(contract["departure_minute"]).is_equal(GameCalendar.minute_of_day(pushback))
 	assert_int(contract["booked_passengers"]).is_equal(FlightSim.STARTER_TERMS["booked_passengers"])
-	_w.run_to(1000 + GameCalendar.TICKS_PER_DAY)
+	_w.run_to(1500 + GameCalendar.TICKS_PER_DAY)
 	var second := FlightTimetable.occurrence_id(STARTER, 1)
 	assert_array(_w.flights.flight_ids()).contains([second])
 	assert_int(_w.flights.state_start(second, FlightSim.State.SCHEDULED)).is_equal(
@@ -130,19 +131,19 @@ func test_the_starter_s_first_flight_starts_the_lead_after_opening_and_repeats_d
 	)
 
 
-## Opened at 1007, between whole minutes: the first state rounds up to 3420,
-## so the first flight is issued at 1020 and never earlier than the lead.
+## Opened at 1507, between whole minutes: the first state rounds up to 3920,
+## so the first flight is issued at 1520 and never earlier than the lead.
 func test_an_opening_between_minutes_rounds_the_starter_up_to_the_next_minute() -> void:
 	_make()
-	_w.run_to(1007)
+	_w.run_to(1507)
 	_gate.open()
 	var first := FlightTimetable.occurrence_id(STARTER, 0)
 	assert_array(_w.flights.flight_ids()).not_contains([first])
-	_w.run_to(1019)
+	_w.run_to(1519)
 	assert_array(_w.flights.flight_ids()).not_contains([first])
-	_w.run_to(1020)
+	_w.run_to(1520)
 	assert_array(_w.flights.flight_ids()).contains([first])
-	assert_int(_w.flights.state_start(first, FlightSim.State.SCHEDULED)).is_equal(3420)
+	assert_int(_w.flights.state_start(first, FlightSim.State.SCHEDULED)).is_equal(3920)
 
 
 func test_a_second_open_is_refused_and_adds_no_second_starter() -> void:

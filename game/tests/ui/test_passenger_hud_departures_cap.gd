@@ -37,7 +37,7 @@ func after_test() -> void:
 
 func _accept_many(count: int, destination: String, airline: String) -> void:
 	for i in count:
-		var terms := TestFlightContracts.terms("C%d" % i, 3 * 60 + i * 180)
+		var terms := TestFlightContracts.terms("C%d" % i, 3 * 60 + i * 200)
 		terms["destination"] = destination
 		terms["airline"] = airline
 		assert_bool(_world.flights.accept_contract(terms)).is_true()
@@ -58,7 +58,7 @@ func test_seven_contracts_still_fill_only_the_capped_lines() -> void:
 	var label := _label()
 	var lines := label.text.split("\n")
 	assert_int(lines.size()).is_equal(DepartureList.MAX_LINES)
-	# The clock is at 06:04: the 03:00 and 06:00 contracts start tomorrow, so
+	# The clock is at 06:04: the 03:00 and 06:20 contracts start tomorrow, so
 	# today lists GMF101 and the five later contracts, and 6 - 2 shown remain.
 	assert_str(lines[DepartureList.MAX_LINES - 1]).is_equal("+4 more")
 	assert_int(label.autowrap_mode).is_equal(TextServer.AUTOWRAP_OFF)

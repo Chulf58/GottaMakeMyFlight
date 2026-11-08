@@ -37,13 +37,13 @@ func test_early_passenger_walks_and_a_late_one_runs() -> void:
 	_world.run_to(40)
 	assert_bool(_world.passenger(early).late).is_false()
 	assert_int(_moved_mm(early, 5)).is_equal(5 * PassengerSim.WALK_MM)
-	_world.run_to(1450)
+	_world.run_to(1850)
 	var late := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_world.run_to(1475)
+	_world.run_to(1875)
 	var p := _world.passenger(late)
 	assert_bool(p.late).is_true()
 	assert_str(_world.sim.bubble_text(p)).is_equal("I'm late!")
-	while p.stage != Passenger.Stage.APRON and _world.clock.tick < 1890:
+	while p.stage != Passenger.Stage.APRON and _world.clock.tick < 2290:
 		_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.APRON)
 	assert_int(_moved_mm(late, 5)).is_equal(5 * PassengerSim.RUN_MM)
@@ -51,11 +51,11 @@ func test_early_passenger_walks_and_a_late_one_runs() -> void:
 
 func test_late_flag_does_not_flicker_on_the_way_to_the_plane() -> void:
 	_world = PassengerTestWorld.reference_world()
-	_world.run_to(1250)
+	_world.run_to(1650)
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var flips := 0
 	var was := false
-	while _world.clock.tick < 1899 and _world.passenger(id).stage < Passenger.Stage.MADE:
+	while _world.clock.tick < 2299 and _world.passenger(id).stage < Passenger.Stage.MADE:
 		_world.step()
 		var now := _world.passenger(id).late
 		if now != was:

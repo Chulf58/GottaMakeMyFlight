@@ -30,12 +30,13 @@ const LANE := "lane"
 const GATE := "gate"
 ## Cut points inside a phase, measured by test_shared_ground_holds.gd with
 ## PHASE_TICKS over stands across the whole site and the shortest taxi routes
-## any stand can have, each with a margin of 10 or more ticks. The arriving
-## plane is off the runway by TAXI_IN + 238 (it is still on it as it turns off
-## the runway exit); the departing one is on it from TAXI_OUT + 344 and off the
+## any stand can have, each with a margin of 10 or more ticks. With the lane at
+## z -284, the runway at -338 and TAXI_IN 1000 / TAXI_OUT 920, the arriving
+## plane is off the runway by TAXI_IN + 334 (it is still on it as it turns off
+## the runway exit); the departing one is on it from TAXI_OUT + 552 and off the
 ## lane by TAKEOFF + 28 (its tail swings over the lane as it lines up).
-const RUNWAY_VACATE_TICKS := 260
-const RUNWAY_ENTER_TICKS := 320
+const RUNWAY_VACATE_TICKS := 350
+const RUNWAY_ENTER_TICKS := 540
 const LANE_CLEAR_TICKS := 40
 
 static var _occurrence_pattern := RegEx.create_from_string("^([A-Za-z0-9]+)-d(0|[1-9][0-9]{0,9})$")

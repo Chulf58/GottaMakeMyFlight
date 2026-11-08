@@ -10,7 +10,7 @@ extends GdUnitTestSuite
 ## booked, seed 3.
 
 const BOOKED := 12
-const LIMIT := 4000
+const LIMIT := 4400
 
 var _land: LandsideTestWorld
 var _views: LandsideViews

@@ -8,13 +8,15 @@ extends GdUnitTestSuite
 ## occurrences already issued keep their gate as fixed holds.
 ##
 ## Times: tick 0 is 06:00. A contract departing at 10:00 (minute 600) has its
-## first state at tick 2540, so it is issued at tick 140. One departing 60
-## minutes later overlaps it at a gate but not on the runway or lane; 80
-## minutes later its arrival taxis while the first one pushes back (the lane);
-## 10 or 120 minutes later one arrives while the other lands or takes off (the
-## runway). Two flights whose gate holds overlap are clear of each other on the
-## shared ground only 880 to 1300 ticks apart, so no three gates are ever busy
-## at once with today's phase lengths.
+## first state at tick 2140, inside the issue lead, so it is issued when it is
+## accepted at tick 0 (one departing at 10:20 starts at 2540 and is issued at
+## 140). One departing 60 minutes later overlaps it at a gate but not on the
+## runway or lane; 80 minutes later its arrival taxis while the first one
+## pushes back (the lane); 10 or 143 minutes later one arrives while the other
+## lands or takes off (the runway). Two flights whose gate holds overlap are
+## clear of each other on the shared ground only 1080 to 1300 ticks apart (or
+## in the last 100 ticks of the 3900-tick gate hold), so no three gates are
+## ever busy at once with today's phase lengths.
 
 const GATES: Array[String] = ["C", "A", "B"]
 
@@ -48,10 +50,10 @@ func test_each_contract_gets_the_lowest_gate_its_timetable_fits_at() -> void:
 	assert_str(_accept("Y", 660)).is_equal("B")
 	# Five hours later gate A is free again.
 	assert_str(_accept("W", 900)).is_equal("A")
-	# 12:00 would land while X takes off: no gate helps, and the refusal says
+	# 12:23 would land while X takes off: no gate helps, and the refusal says
 	# why.
-	assert_str(_sim.accept_gate(TestFlightContracts.terms("V", 720))).is_equal("")
-	assert_str(_sim.accept_problem(TestFlightContracts.terms("V", 720))).is_equal(
+	assert_str(_sim.accept_gate(TestFlightContracts.terms("V", 743))).is_equal("")
+	assert_str(_sim.accept_problem(TestFlightContracts.terms("V", 743))).is_equal(
 		"contract V clashes with X on the runway"
 	)
 
@@ -143,7 +145,7 @@ func test_issued_occurrences_keep_their_gate_as_fixed_holds() -> void:
 
 
 func test_a_one_off_at_another_gate_must_not_share_the_runway() -> void:
-	_accept("X", 600)
+	_accept("X", 620)
 	var arrival := FlightTimetable.starts_for(_sim.contract_of("X"), 1)
 	var shifted: Array[int] = []
 	for start in arrival:

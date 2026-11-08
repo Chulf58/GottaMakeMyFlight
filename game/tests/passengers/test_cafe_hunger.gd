@@ -146,8 +146,8 @@ func test_a_hungry_passenger_queuing_for_check_in_waits_its_turn() -> void:
 
 func test_a_hungry_passenger_without_time_retries_later_and_loses_mood() -> void:
 	_make_with_cafes()
-	_world.run_to(1000)
-	var p := _spawn_to(Passenger.Stage.TO_SECURITY, CafeSim.HUNGRY_AT, 1600)
+	_world.run_to(1400)
+	var p := _spawn_to(Passenger.Stage.TO_SECURITY, CafeSim.HUNGRY_AT, 2000)
 	var mood := p.mood
 	assert_int(_ticks_to_visit(p, PassengerSim.BEAT_TICKS + 1)).is_equal(-1)
 	assert_int(p.cafe_cooldown).is_greater(_world.clock.tick)

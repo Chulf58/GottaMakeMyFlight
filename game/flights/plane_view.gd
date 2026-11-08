@@ -152,7 +152,7 @@ func sightings(time: float) -> Array[Dictionary]:
 	for id in sim.flight_ids():
 		if sim.flight_gate(id) != gate:
 			continue
-		var at := pose_at(starts_of(id), time, has_full_lead_in(id))
+		var at := pose_at(starts_of(id), time, has_full_lead_in(id), class_of(id))
 		if not at.is_empty():
 			at["id"] = id
 			out.append(at)
@@ -186,22 +186,25 @@ func has_full_lead_in(id: String) -> bool:
 ## Where a flight with `starts` is at sim time `time`: {phase, transform}, or
 ## {} outside its sky window (before its lead-in, after its climb-out). With
 ## `full_lead_in` false the arrival is the straight-in, drawn from SCHEDULED.
-func pose_at(starts: Array[int], time: float, full_lead_in := true) -> Dictionary:
+## `plane_class` picks the class's approach, touchdown and liftoff points.
+func pose_at(
+	starts: Array[int], time: float, full_lead_in := true, plane_class := PlaneClasses.MEDIUM
+) -> Dictionary:
 	var approach := starts[FlightSim.State.APPROACH]
 	var departed := starts[FlightSim.State.DEPARTED]
 	if time < approach:
-		var track := lead_in_track() if full_lead_in else straight_in_track()
-		var speed := lead_in_speed(starts)
+		var track := lead_in_track(plane_class) if full_lead_in else straight_in_track(plane_class)
+		var speed := lead_in_speed(starts, plane_class)
 		var to_go := speed * (approach - time)
 		if not full_lead_in:
-			to_go = straight_in_to_go(starts, time)
+			to_go = straight_in_to_go(starts, time, plane_class)
 		var distance := FlightPose.path_length(track) - to_go
 		if speed <= 0.0 or distance < 0.0 or to_go < 0.0:
 			return {}
 		return {"phase": PHASE_LEAD_IN, "transform": FlightPose.lead_in_pose(track, distance)}
 	if time >= departed:
 		var track := climb_out_track()
-		var distance := climb_out_speed(starts) * (time - departed)
+		var distance := climb_out_speed(starts, plane_class) * (time - departed)
 		if distance > FlightPose.path_length(track):
 			return {}
 		return {"phase": PHASE_CLIMB_OUT, "transform": FlightPose.climb_out_pose(track, distance)}
@@ -212,7 +215,9 @@ func pose_at(starts: Array[int], time: float, full_lead_in := true) -> Dictionar
 	var progress := 1.0
 	if not REST_AFTER.has(state) and starts[state + 1] > starts[state]:
 		progress = (time - starts[state]) / float(starts[state + 1] - starts[state])
-	var pose := FlightPose.pose(moving, progress, _path(moving), _entry_dir(moving))
+	var pose := FlightPose.pose(
+		moving, progress, _path(moving, plane_class), _entry_dir(moving, plane_class)
+	)
 	if ON_GROUND.has(moving):
 		pose.origin.y += ground_height_at(pose.origin)
 	return {"phase": state, "transform": pose}
@@ -230,48 +235,58 @@ static func ground_height_at(point: Vector3) -> float:
 
 ## Flat metres per tick of the lead-in: the approach's own flat speed, so the
 ## plane does not speed up or slow down where the two meet.
-func lead_in_speed(starts: Array[int]) -> float:
+func lead_in_speed(starts: Array[int], plane_class := PlaneClasses.MEDIUM) -> float:
 	var ticks := starts[FlightSim.State.LANDING] - starts[FlightSim.State.APPROACH]
-	var path := _path(FlightSim.State.APPROACH)
+	var path := _path(FlightSim.State.APPROACH, plane_class)
 	return FlightPose.flat_speed(FlightSim.State.APPROACH, 0.0, path, ticks)
 
 
 ## Metres the straight-in still has to fly at `time`, or -1 before SCHEDULED.
 ## It covers its whole track between SCHEDULED and APPROACH, slowing evenly so
 ## it meets the approach at the approach's own speed.
-func straight_in_to_go(starts: Array[int], time: float) -> float:
+func straight_in_to_go(
+	starts: Array[int], time: float, plane_class := PlaneClasses.MEDIUM
+) -> float:
 	var span := float(starts[FlightSim.State.APPROACH] - starts[FlightSim.State.SCHEDULED])
 	var left := float(starts[FlightSim.State.APPROACH]) - time
 	if span <= 0.0 or left > span:
 		return -1.0
-	var speed := lead_in_speed(starts)
-	var slowing := (FlightPose.path_length(straight_in_track()) - speed * span) / (span * span)
+	var speed := lead_in_speed(starts, plane_class)
+	var length := FlightPose.path_length(straight_in_track(plane_class))
+	var slowing := (length - speed * span) / (span * span)
 	return speed * left + slowing * left * left
 
 
 ## Flat metres per tick of the climb-out: the flat speed the takeoff ends at.
-func climb_out_speed(starts: Array[int]) -> float:
+func climb_out_speed(starts: Array[int], plane_class := PlaneClasses.MEDIUM) -> float:
 	var ticks := starts[FlightSim.State.DEPARTED] - starts[FlightSim.State.TAKEOFF]
-	var path := _path(FlightSim.State.TAKEOFF)
+	var path := _path(FlightSim.State.TAKEOFF, plane_class)
 	return FlightPose.flat_speed(FlightSim.State.TAKEOFF, 1.0, path, ticks)
 
 
-func lead_in_track() -> PackedVector3Array:
-	if not _paths.has(PHASE_LEAD_IN):
-		_paths[PHASE_LEAD_IN] = airside.lead_in_track()
-	return _paths[PHASE_LEAD_IN]
+func lead_in_track(plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
+	var key := _key(PHASE_LEAD_IN, plane_class)
+	if not _paths.has(key):
+		_paths[key] = airside.lead_in_track(plane_class)
+	return _paths[key]
 
 
-func straight_in_track() -> PackedVector3Array:
-	if not _paths.has(PHASE_STRAIGHT_IN):
-		_paths[PHASE_STRAIGHT_IN] = airside.straight_in_track()
-	return _paths[PHASE_STRAIGHT_IN]
+func straight_in_track(plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
+	var key := _key(PHASE_STRAIGHT_IN, plane_class)
+	if not _paths.has(key):
+		_paths[key] = airside.straight_in_track(plane_class)
+	return _paths[key]
 
 
 func climb_out_track() -> PackedVector3Array:
 	if not _paths.has(PHASE_CLIMB_OUT):
 		_paths[PHASE_CLIMB_OUT] = airside.climb_out_track()
 	return _paths[PHASE_CLIMB_OUT]
+
+
+## The _paths key of a phase or sky track that depends on the plane class.
+static func _key(phase_or_track: int, plane_class: String) -> String:
+	return "%d:%s" % [phase_or_track, plane_class]
 
 
 ## Where the sun drops the plane's origin onto the ground (y 0), or the point
@@ -301,6 +316,15 @@ func model_of(id: String) -> String:
 	if contract.is_empty():
 		return starter_model()
 	return PlaneClasses.model_for(contract["airline"], contract["plane_size"])
+
+
+## The plane class a flight flies: its contract's, or the starter's for a
+## one-off flight, the class model_of() draws it with.
+func class_of(id: String) -> String:
+	var contract := sim.contract_of(sim.flight_contract_id(id))
+	if contract.is_empty():
+		return FlightSim.STARTER_TERMS["plane_size"]
+	return contract["plane_size"]
 
 
 ## The model of the starter contract, which a one-off flight is drawn with.
@@ -362,18 +386,19 @@ func _place_far_shadow() -> void:
 	_far_material.albedo_color.a = FAR_SHADOW_ALPHA * fade
 
 
-func _path(state: int) -> PackedVector3Array:
+func _path(state: int, plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
 	if _paths_stand != airside.stand_moves or _paths_gate != gate:
 		_paths.clear()
 		_paths_stand = airside.stand_moves
 		_paths_gate = gate
-	if not _paths.has(state):
-		_paths[state] = airside.phase_path(state, gate)
-	return _paths[state]
+	var key := _key(state, plane_class)
+	if not _paths.has(key):
+		_paths[key] = airside.phase_path(state, gate, plane_class)
+	return _paths[key]
 
 
-func _entry_dir(state: int) -> Vector3:
+func _entry_dir(state: int, plane_class := PlaneClasses.MEDIUM) -> Vector3:
 	if PREVIOUS_MOVE.has(state):
-		return FlightPose.exit_dir(_path(PREVIOUS_MOVE[state]))
-	var path := _path(state)
+		return FlightPose.exit_dir(_path(PREVIOUS_MOVE[state], plane_class))
+	var path := _path(state, plane_class)
 	return (path[1] - path[0]).slide(Vector3.UP).normalized()

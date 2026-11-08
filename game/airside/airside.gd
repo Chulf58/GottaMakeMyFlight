@@ -10,13 +10,27 @@ extends Node3D
 ## design-gate-desks-link-to-north-exits-one-st, point 3) set_gate_stands()
 ## gives each gate its own Stand_<gate>, PushbackEnd_<gate> and
 ## StandLane_<gate>. Every StandLane waypoint sits on the one taxi lane, so
-## the lane is a chain: TaxiWest, the StandLane waypoints and TaxiEast joined
-## in order of x (links between two of them in `links` give way to it), and a
-## plane taxis along it past the other gates' joins. While gates have stands
-## the one stand's own StandLane is not on the chain. Also gives
-## the two sky tracks views draw around a flight: the arrival lead-in into
-## ApproachStart and the climb-out from ClimbEnd, each a flat track through its
-## turn waypoints with wide round turns.
+## the lane is a chain: TaxiEast, the StandLane waypoints in falling x, then
+## TaxiWest (links between two of them in `links` give way to it), and a plane
+## taxis along it past the other gates' joins. Planes land and take off
+## eastbound, leave the runway at its east end and join it again at its west
+## end, so every taxi route runs strictly west along the lane (decision
+## runway-and-taxi-technical-design-movement-plan-analytic-bookings-planned-
+## pauses, point 1). A join east of TaxiEast or west of TaxiWest would break
+## that, and rebuild() refuses it. While gates have stands the one stand's own
+## StandLane is not on the chain.
+##
+## Touchdown, Liftoff and ApproachStart are per plane class, never per runway
+## size (same decision, point 1): the medium class (the reference model 05)
+## uses the markers of those names, and the small and large classes their
+## _small and _large markers (CLASS_SUFFIX). HoldIn and HoldRunway are the
+## hold lines on the two stubs between runway and lane (point 4): a plane
+## stopped on one keeps the reference footprint clear of the runway band.
+## They are waypoints off every route; nothing pauses at them yet.
+##
+## Also gives the two sky tracks views draw around a flight: the arrival
+## lead-in into the class's ApproachStart and the climb-out from ClimbEnd, each
+## a flat track through its turn waypoints with wide round turns.
 ##
 ## Its TaxiPaving child paves every taxi route (taxi_routes()) after each
 ## rebuild, so the paving follows the stands (user ruling pave-the-taxi-lane-
@@ -39,11 +53,28 @@ const REQUIRED_WAYPOINTS: Array[StringName] = [
 	&"ArrivalTurnNorth",
 	&"DepartureTurn",
 	&"DepartureExit",
+	&"ApproachStart_small",
+	&"ApproachStart_large",
+	&"Touchdown_small",
+	&"Touchdown_large",
+	&"Liftoff_small",
+	&"Liftoff_large",
+	&"HoldIn",
+	&"HoldRunway",
 ]
-## The sky tracks' turn waypoints. Only their x and z count: FlightPose sets
-## the height above the join (ApproachStart or ClimbEnd).
+## Plane class -> the suffix of its Touchdown, Liftoff and ApproachStart
+## markers. Medium, the class StandPlacement's footprint is built around, uses
+## the unsuffixed ones.
+const CLASS_SUFFIX := {
+	PlaneClasses.SMALL: "_small",
+	PlaneClasses.MEDIUM: "",
+	PlaneClasses.LARGE: "_large",
+}
+## The sky tracks' turn waypoints before the class's ApproachStart. Only their
+## x and z count: FlightPose sets the height above the join (ApproachStart or
+## ClimbEnd).
 const LEAD_IN_WAYPOINTS: Array[StringName] = [
-	&"ArrivalEntry", &"ArrivalPass", &"ArrivalTurnWest", &"ArrivalTurnNorth", &"ApproachStart"
+	&"ArrivalEntry", &"ArrivalPass", &"ArrivalTurnWest", &"ArrivalTurnNorth"
 ]
 const CLIMB_OUT_WAYPOINTS: Array[StringName] = [&"ClimbEnd", &"DepartureTurn", &"DepartureExit"]
 ## The taxi lane's two ends; with every StandLane waypoint they make the lane
@@ -70,6 +101,9 @@ var stand_moves := 0
 var gate_stands: Dictionary = {}
 ## The asphalt under the taxi routes, rebuilt with the graph.
 var paving := TaxiPaving.new()
+## Whether the last rebuild() succeeded. set_gate_stands() skips a call with
+## the stands already set only while it did, so a failed call fails again.
+var _built := false
 
 
 func _init() -> void:
@@ -94,29 +128,68 @@ func rebuild() -> bool:
 			ok = false
 	for pair in links:
 		var ends := pair.split(">")
-		if ends.size() == 2 and _on_lane(ends[0]) and _on_lane(ends[1]):
+		var known := (
+			ends.size() == 2
+			and graph.has_waypoint(StringName(ends[0]))
+			and graph.has_waypoint(StringName(ends[1]))
+		)
+		# A link between two lane waypoints gives way to the chain below.
+		if known and _on_lane(ends[0]) and _on_lane(ends[1]):
 			continue
-		if ends.size() != 2 or not graph.link(StringName(ends[0]), StringName(ends[1])):
+		if not known or not graph.link(StringName(ends[0]), StringName(ends[1])):
 			push_error("Airside: bad link '%s'" % pair)
 			ok = false
 	for gate: String in gate_stands:
 		graph.link(_gate_point(&"StandLane", gate), _gate_point(&"PushbackEnd", gate))
 		graph.link(_gate_point(&"PushbackEnd", gate), _gate_point(&"Stand", gate))
-	# With gate stands the one stand's StandLane is left off the chain: it would
-	# sit on a gate's join (the starter exit's) and add a zero-length step.
-	var chain: Array[StringName] = []
-	for child in get_children():
-		if child is Marker3D and _on_lane(child.name):
-			if gate_stands.is_empty() or child.name != &"StandLane":
-				chain.append(child.name)
-	chain.sort_custom(
-		func(a: StringName, b: StringName) -> bool:
-			return graph.position_of(a).x < graph.position_of(b).x
-	)
+	var chain := _lane_chain()
+	if chain.is_empty():
+		ok = false
 	for i in range(1, chain.size()):
 		graph.link(chain[i - 1], chain[i])
 	paving.show_routes(taxi_routes(), StandPlacement.TAXI_LANE_Z)
+	_built = ok
 	return ok
+
+
+## The lane chain east to west: TaxiEast, the joins in falling x, TaxiWest
+## (each end when it is a waypoint). Empty (with an error) unless every join
+## lies strictly between the ends: east of TaxiEast or west of TaxiWest a route
+## to it would turn back, and on an end it would add a zero-length step.
+func _lane_chain() -> Array[StringName]:
+	# With gate stands the one stand's StandLane is left off the chain: it would
+	# sit on a gate's join (the starter exit's) and add a zero-length step.
+	var joins: Array[StringName] = []
+	for child in get_children():
+		if child is Marker3D and _on_lane(child.name) and not LANE_ENDS.has(child.name):
+			if gate_stands.is_empty() or child.name != &"StandLane":
+				joins.append(child.name)
+	joins.sort_custom(
+		func(a: StringName, b: StringName) -> bool:
+			return graph.position_of(a).x > graph.position_of(b).x
+	)
+	var east := INF
+	var west := -INF
+	var chain: Array[StringName] = []
+	if graph.has_waypoint(&"TaxiEast"):
+		east = graph.position_of(&"TaxiEast").x
+		chain.append(&"TaxiEast")
+	if graph.has_waypoint(&"TaxiWest"):
+		west = graph.position_of(&"TaxiWest").x
+	for join in joins:
+		var x := graph.position_of(join).x
+		if x >= east or x <= west:
+			push_error(
+				(
+					"Airside: '%s' at x %.2f is not strictly inside the lane (%.2f to %.2f)"
+					% [join, x, west, east]
+				)
+			)
+			return []
+		chain.append(join)
+	if graph.has_waypoint(&"TaxiWest"):
+		chain.append(&"TaxiWest")
+	return chain
 
 
 ## Every ground route a plane takes: taxi in, pushback and taxi out, for each
@@ -160,9 +233,10 @@ func set_stand(stand: Dictionary) -> bool:
 
 ## Gives each gate in `stands` (gate letter -> StandPlacement stand) its own
 ## stand waypoints, drops those of gates no longer listed and rebuilds the
-## graph. Nothing changes when the stands are the ones already set.
+## graph. Nothing changes when the stands are the ones already set and the
+## last rebuild succeeded.
 func set_gate_stands(stands: Dictionary) -> bool:
-	if stands == gate_stands:
+	if stands == gate_stands and _built:
 		return true
 	for gate: String in gate_stands:
 		if not stands.has(gate):
@@ -191,10 +265,14 @@ func set_gate_stands(stands: Dictionary) -> bool:
 	return rebuild()
 
 
-## The path a plane follows in `state`, or an empty array for a state that
-## stays put. `gate` names the gate whose stand it uses; a gate with no stand
-## waypoints of its own (no gate desks, one stand) uses Stand.
-func phase_path(state: int, gate := "") -> PackedVector3Array:
+## The path a plane of `plane_class` follows in `state`, or an empty array
+## for a state that stays put. `gate` names the gate whose stand it uses; a
+## gate with no stand waypoints of its own (no gate desks, one stand) uses
+## Stand. The class picks the approach, touchdown and liftoff points; the taxi
+## routes are the same for every class.
+func phase_path(state: int, gate := "", plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
+	var approach := class_point(&"ApproachStart", plane_class)
+	var touchdown := class_point(&"Touchdown", plane_class)
 	var stand := &"Stand"
 	var pushback := &"PushbackEnd"
 	if gate_stands.has(gate):
@@ -203,9 +281,9 @@ func phase_path(state: int, gate := "") -> PackedVector3Array:
 	var path := PackedVector3Array()
 	match state:
 		FlightSim.State.APPROACH:
-			path = _points([&"ApproachStart", &"Touchdown"])
+			path = _points([approach, touchdown])
 		FlightSim.State.LANDING:
-			path = _points([&"Touchdown", &"RunwayExit"])
+			path = _points([touchdown, &"RunwayExit"])
 		FlightSim.State.TAXI_IN:
 			path = graph.route(&"RunwayExit", stand)
 		FlightSim.State.PUSHBACK:
@@ -213,8 +291,17 @@ func phase_path(state: int, gate := "") -> PackedVector3Array:
 		FlightSim.State.TAXI_OUT:
 			path = graph.route(pushback, &"RunwayEntry")
 		FlightSim.State.TAKEOFF:
-			path = _points([&"RunwayEntry", &"Liftoff", &"ClimbEnd"])
+			path = _points([&"RunwayEntry", class_point(&"Liftoff", plane_class), &"ClimbEnd"])
 	return path
+
+
+## The marker `base` (Touchdown, Liftoff or ApproachStart) of `plane_class`.
+## An unknown class is an error and gets the medium marker.
+static func class_point(base: StringName, plane_class: String) -> StringName:
+	if not CLASS_SUFFIX.has(plane_class):
+		push_error("Airside: '%s' is not a plane class" % plane_class)
+		return base
+	return StringName(String(base) + CLASS_SUFFIX[plane_class])
 
 
 func _points(names: Array[StringName]) -> PackedVector3Array:
@@ -224,19 +311,21 @@ func _points(names: Array[StringName]) -> PackedVector3Array:
 	return out
 
 
-## The arrival's flat track, ending at ApproachStart on the approach heading.
-## Every point has ApproachStart's height.
-func lead_in_track() -> PackedVector3Array:
-	return _sky_track(LEAD_IN_WAYPOINTS, graph.position_of(&"ApproachStart").y)
+## The arrival's flat track, ending at the class's ApproachStart on the
+## approach heading. Every point has that ApproachStart's height.
+func lead_in_track(plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
+	var approach := class_point(&"ApproachStart", plane_class)
+	var names := LEAD_IN_WAYPOINTS.duplicate()
+	names.append(approach)
+	return _sky_track(names, graph.position_of(approach).y)
 
 
-## The short straight-in on the runway's extended centreline, ending at
-## ApproachStart, for an arrival listed too late for the full lead-in. Every
-## point has ApproachStart's height.
-func straight_in_track() -> PackedVector3Array:
-	return _sky_track(
-		[&"ArrivalStraightIn", &"ApproachStart"], graph.position_of(&"ApproachStart").y
-	)
+## The short straight-in on the runway's extended centreline, ending at the
+## class's ApproachStart, for an arrival listed too late for the full lead-in.
+## Every point has that ApproachStart's height.
+func straight_in_track(plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
+	var approach := class_point(&"ApproachStart", plane_class)
+	return _sky_track([&"ArrivalStraightIn", approach], graph.position_of(approach).y)
 
 
 ## The departure's flat track, starting at ClimbEnd on the climb heading.

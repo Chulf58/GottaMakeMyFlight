@@ -30,8 +30,14 @@ const NEAR_TICKS := 3
 ## Beyond NEAR_TICKS the window is sampled every this-many ticks.
 const FAR_STEP := 15
 ## The negative control shortens each bound of each hold by this many ticks,
-## more than the 24 the tightest measured margin leaves.
+## more than the 16 the widest measured cut margin leaves.
 const CONTROL_CUT_TICKS := 30
+## [hold index, at its end] of the bounds that stay at a phase edge with room to
+## spare since the lane moved to z -284: the arrival's lane hold ends at
+## AT_STAND although a north-row plane is off the lane about 170 ticks before,
+## and the departure's lane hold starts at PUSHBACK although it reaches the lane
+## about 87 ticks after. Holding the lane longer than needed is safe.
+const LOOSE_BOUNDS := [[1, true], [2, false]]
 ## An overlap smaller than this (m²) is two shapes sharing an edge, not a plane
 ## on the zone: a plane on the runway has its wingtips on the lane zone's edge,
 ## and single-precision poses put them up to a few hundredths of a millimetre
@@ -230,27 +236,55 @@ func test_the_shared_zones_sit_on_the_scene_runway_and_taxi_lane() -> void:
 	)
 
 
-## A plane parked on the site's north row keeps its tail 0.05 m clear of the
-## lane traffic's band (StandPlacement.NOSE_GAP_M 2.2 m), so it does not hold
-## the lane for its turnaround. Control: at the old 2.3 m gap its tail reached
-## 0.05 m into the band.
+## A plane parked on the site's north row keeps its tail clear of the lane
+## traffic's band (StandPlacement.NOSE_GAP_M 2.2 m), so it does not hold the
+## lane for its turnaround: 28.05 m since the lane moved from z -256 to -284.
+## Control: on the old lane the same tail was 0.05 m clear.
 func test_the_north_row_parked_tail_clears_the_lane() -> void:
 	var north := StandPlacement.make(1, 0.5, SITE.grid_origin.z)
 	var at := StandPlacement.stand_point(north)
-	var old := at + Vector3(0.0, 0.0, StandPlacement.NOSE_GAP_M - 2.3)
 	var edge := StandPlacement.lane_zone().end.y
+	var old_edge := -256.0 + StandPlacement.HALF_SPAN_M
 	var tail := at.z - StandPlacement.TAIL_M
 	print(
 		(
-			"north row tail z %.3f (old gap %.3f), lane band edge z %.3f, clearance %.3f m"
-			% [tail, old.z - StandPlacement.TAIL_M, edge, tail - edge]
+			"north row tail z %.3f, lane band edge z %.3f, clearance %.3f m (old lane %.3f m)"
+			% [tail, edge, tail - edge, tail - old_edge]
 		)
 	)
 	var lane := StandPlacement.lane_zone()
 	assert_bool(on_zone(footprint(Transform3D(Basis.IDENTITY, at)), lane)).is_false()
 	assert_bool(StandPlacement.clears_lane(north)).is_true()
-	assert_float(tail - edge).is_between(0.04, 0.06)
-	assert_bool(on_zone(footprint(Transform3D(Basis.IDENTITY, old)), lane)).is_true()
+	assert_float(tail - edge).is_equal_approx(28.05, 0.001)
+	assert_float(tail - old_edge).is_equal_approx(0.05, 0.001)
+
+
+## The decision's reason for the move: a large plane parked door-aligned on a
+## north-row stand (PlaneClasses.stand_offset) keeps its tail at least 0.5 m
+## clear of the band a large plane on the taxi lane sweeps (the lane's z plus
+## the widest large half span). Control: on the old lane at z -256 the same
+## tail reached far into that band.
+func test_a_north_row_large_tail_clears_the_large_lane_band() -> void:
+	var at := StandPlacement.stand_point(StandPlacement.make(1, 0.5, SITE.grid_origin.z))
+	var half_span := 0.0
+	for model: String in PlaneClasses.CLASSES[PlaneClasses.LARGE]["models"]:
+		half_span = maxf(half_span, PlaneModels.PLANES[model]["half_span"])
+	var edge := StandPlacement.TAXI_LANE_Z + half_span
+	var old_edge := -256.0 + half_span
+	var worst := INF
+	for model: String in PlaneClasses.CLASSES[PlaneClasses.LARGE]["models"]:
+		var tail: float = (
+			at.z + PlaneClasses.stand_offset(model).z - PlaneModels.PLANES[model]["tail"]
+		)
+		print(
+			(
+				"%s north row tail z %.2f, large lane band edge z %.2f: clearance %.2f m (old lane %.2f m)"
+				% [model, tail, edge, tail - edge, tail - old_edge]
+			)
+		)
+		worst = minf(worst, tail - edge)
+		assert_float(tail - old_edge).is_less(0.0)
+	assert_float(worst).is_greater_equal(0.5)
 
 
 func test_the_legal_stand_filter_agrees_with_aircraft_clear() -> void:
@@ -303,16 +337,19 @@ func test_the_holds_cover_every_tick_the_footprint_is_on_the_runway_or_lane() ->
 	var edge := {}
 	for cell in boundary_cells(legal):
 		edge[cell] = true
-	# The two door lines that put a stand on TaxiWest's and TaxiEast's x: the
-	# shortest taxi out and in any stand can have, which are the latest the
-	# arrival leaves the runway and the earliest the departure reaches it. With
-	# those the bounds hold however wide the site grows. They are sampled in
-	# full on the site's rows at both ends.
+	# The two door lines that put a stand 1 m inside TaxiWest's and TaxiEast's
+	# x (a join must lie strictly inside the lane ends): the shortest taxi out
+	# and in any stand can have, which are the latest the arrival leaves the
+	# runway and the earliest the departure reaches it. With those the bounds
+	# hold however wide the site grows. They are sampled in full on the site's
+	# rows at both ends.
 	var extra: Array[Dictionary] = []
 	var rows := [legal[0].y, legal[legal.size() - 1].y]
-	for waypoint in [&"TaxiWest", &"TaxiEast"]:
+	for end in [[&"TaxiWest", 1.0], [&"TaxiEast", -1.0]]:
 		for row in rows:
-			var x := _airside.graph.position_of(waypoint).x + StandPlacement.DOOR_SIDE_M
+			var x: float = (
+				_airside.graph.position_of(end[0]).x + end[1] + StandPlacement.DOOR_SIDE_M
+			)
 			extra.append(StandPlacement.make(1, x, SITE.grid_origin.z + row))
 	_seen = {}
 	_site_seen = {}
@@ -377,7 +414,10 @@ func test_the_holds_cover_every_tick_the_footprint_is_on_the_runway_or_lane() ->
 
 ## Negative control: with any one bound of any hold moved CONTROL_CUT_TICKS in,
 ## the stand that reached that bound is on its zone outside the holds. Hold i
-## is the one whose first and last ticks _seen records under `keys[i]`.
+## is the one whose first and last ticks _seen records under `keys[i]`. The
+## LOOSE_BOUNDS are the exception: they stay at a phase edge although the
+## plane is off the lane earlier or reaches it later, so the same cut is still
+## covered there, and the test checks that instead.
 func _assert_shorter_holds_fail(
 	starts: Array[int], holds: Array, zones: Dictionary, times: Array[float], push: int
 ) -> void:
@@ -399,27 +439,35 @@ func _assert_shorter_holds_fail(
 			_run_stand(
 				seen[keys[index]][3 if at_end else 2], times, starts, short, zones, push, false
 			)
+			var bound: int = holds[index][2 if at_end else 1]
+			var reached: int = seen[keys[index]][1 if at_end else 0]
 			print(
 				(
-					"hold %d %s cut by %d: %s"
+					"hold %d %s cut by %d: %s (bound %d, measured %d, slack %d)"
 					% [
 						index,
 						"end" if at_end else "start",
 						CONTROL_CUT_TICKS,
-						_uncovered.size() > 0
+						_uncovered.size() > 0,
+						bound,
+						reached,
+						absi(bound - reached)
 					]
 				)
 			)
-			(
-				assert_array(_uncovered)
-				. override_failure_message(
-					(
-						"hold %d %s cut by %d ticks was still enough"
-						% [index, "end" if at_end else "start", CONTROL_CUT_TICKS]
-					)
-				)
-				. is_not_empty()
+			var label := (
+				"hold %d %s cut by %d ticks"
+				% [index, "end" if at_end else "start", CONTROL_CUT_TICKS]
 			)
+			if LOOSE_BOUNDS.has([index, at_end]):
+				assert_int(absi(bound - reached)).is_greater(CONTROL_CUT_TICKS)
+				assert_array(_uncovered).override_failure_message(label + " failed").is_empty()
+			else:
+				(
+					assert_array(_uncovered)
+					. override_failure_message(label + " was still enough")
+					. is_not_empty()
+				)
 
 
 ## Poses the plane at `stand` at every one of `times` and records, in _seen,

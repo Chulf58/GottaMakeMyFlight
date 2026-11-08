@@ -1,12 +1,17 @@
 class_name TestAirsideStand
 extends GdUnitTestSuite
-## main.tscn's airside after the move north (decision plane-stand-design-
-## airside-moves-110-m-north-stand-snaps-to, points 1, 5 and 6): the runway at
-## z -310, the taxi lane at z -256, the lead-in pass kept at z -8; the taxi
-## graph and PlaneView follow Airside.set_stand(); and the peak taxi speed on
-## the longest route a legal stand gives stays at or under about 16 m/s. On
-## the ground the plane rides on the site's paving (y 0.2) and at y 0 off it,
-## with no step where it crosses the site's edge.
+## main.tscn's airside (decision runway-and-taxi-technical-design-movement-
+## plan-analytic-bookings-planned-pauses, points 1 and 4, which moves the
+## airside of decision plane-stand-design-airside-moves-110-m-north-stand-
+## snaps-to 28 m further north): the runway at z -338, the taxi lane at z -284
+## with its ends at x +-124, per-class touchdown, liftoff and approach points,
+## the hold lines on the two stubs, the lead-in pass kept at z -8 and its turns
+## at x -760; every taxi route runs strictly west; the taxi graph and PlaneView
+## follow Airside.set_stand(); and the peak taxi speed on the longest route a
+## legal stand gives stays at or under 16 m/s for every class, with no pause
+## and with the longest pause. On the ground the plane rides on the site's
+## paving (y 0.2) and at y 0 off it, with no step where it crosses the site's
+## edge.
 
 const MAIN_SCENE := "res://main/main.tscn"
 const SITE := preload("res://build/terminal_site.tres")
@@ -52,14 +57,168 @@ func _at(waypoint: StringName) -> Vector3:
 	return _airside.graph.position_of(waypoint)
 
 
-func test_the_runway_sits_at_z_minus_310_and_the_taxi_lane_at_minus_256() -> void:
-	for waypoint in [&"ApproachStart", &"Touchdown", &"RunwayExit", &"RunwayEntry", &"Liftoff"]:
-		assert_float(_at(waypoint).z).is_equal(-310.0)
+func test_the_runway_sits_at_z_minus_338_and_the_taxi_lane_at_minus_284() -> void:
+	assert_float(StandPlacement.RUNWAY_Z).is_equal(-338.0)
+	assert_float(StandPlacement.TAXI_LANE_Z).is_equal(-284.0)
+	for waypoint in [&"RunwayExit", &"RunwayEntry", &"ArrivalTurnNorth", &"ArrivalStraightIn"]:
+		assert_float(_at(waypoint).z).is_equal(StandPlacement.RUNWAY_Z)
+	for plane_class in PlaneClasses.ORDER:
+		for base in [&"ApproachStart", &"Touchdown", &"Liftoff"]:
+			assert_float(_at(Airside.class_point(base, plane_class)).z).is_equal(-338.0)
 	for waypoint in [&"TaxiEast", &"TaxiWest", &"StandLane"]:
 		assert_float(_at(waypoint).z).is_equal(StandPlacement.TAXI_LANE_Z)
-	# The lead-in pass that shadows the terminal stays.
+	# The lane's ends and the stubs to the runway.
+	assert_float(_at(&"TaxiEast").x).is_equal(124.0)
+	assert_float(_at(&"RunwayExit").x).is_equal(124.0)
+	assert_float(_at(&"TaxiWest").x).is_equal(-124.0)
+	assert_float(_at(&"RunwayEntry").x).is_equal(-124.0)
+	# The lead-in pass that shadows the terminal stays; its turns are at x -760.
 	assert_float(_at(&"ArrivalPass").z).is_equal(-8.0)
 	assert_float(_at(&"ArrivalTurnWest").z).is_equal(-8.0)
+	assert_float(_at(&"ArrivalTurnWest").x).is_equal(-760.0)
+	assert_float(_at(&"ArrivalTurnNorth").x).is_equal(-760.0)
+
+
+## Small planes touch down later and lift off sooner than medium, and large
+## ones touch down earlier and lift off later, all on the runway's 384 m
+## (x -192 to 192) and between its ends and the exits. Every approach starts
+## 230 m before its touchdown at the same height.
+func test_each_class_has_its_own_touchdown_liftoff_and_approach() -> void:
+	var touch: Array[float] = []
+	var lift: Array[float] = []
+	for plane_class in PlaneClasses.ORDER:
+		var down := _at(Airside.class_point(&"Touchdown", plane_class))
+		var up := _at(Airside.class_point(&"Liftoff", plane_class))
+		var approach := _at(Airside.class_point(&"ApproachStart", plane_class))
+		print("%s: approach %s, touchdown %s, liftoff %s" % [plane_class, approach, down, up])
+		touch.append(down.x)
+		lift.append(up.x)
+		assert_float(down.x).is_greater(-192.0).is_less(_at(&"RunwayExit").x)
+		assert_float(up.x).is_greater(_at(&"RunwayEntry").x).is_less(192.0)
+		assert_float(down.x - approach.x).is_equal(230.0)
+		assert_float(approach.y).is_equal(45.0)
+		var landing := _airside.phase_path(FlightSim.State.LANDING, "", plane_class)
+		assert_array(Array(landing)).is_equal([down, _at(&"RunwayExit")])
+		var takeoff := _airside.phase_path(FlightSim.State.TAKEOFF, "", plane_class)
+		assert_array(Array(takeoff)).is_equal([_at(&"RunwayEntry"), up, _at(&"ClimbEnd")])
+	assert_float(touch[0]).is_greater(touch[1])
+	assert_float(touch[1]).is_greater(touch[2])
+	assert_float(lift[0]).is_less(lift[1])
+	assert_float(lift[1]).is_less(lift[2])
+
+
+## A plane stopped on a hold line, heading along its stub, keeps the reference
+## footprint off the runway band: HoldIn on the east stub (heading south, away
+## from the runway), HoldRunway on the west stub (heading north, towards it).
+func test_the_hold_lines_sit_on_the_stubs_clear_of_the_runway() -> void:
+	var runway := StandPlacement.runway_zone()
+	var stubs := {
+		&"HoldIn": [&"RunwayExit", &"TaxiEast", Basis.IDENTITY],
+		&"HoldRunway": [&"TaxiWest", &"RunwayEntry", Basis(Vector3.UP, PI)],
+	}
+	for hold: StringName in stubs:
+		var stub: Array = stubs[hold]
+		var at := _at(hold)
+		var a := _at(stub[0])
+		var b := _at(stub[1])
+		assert_float(at.x).is_equal(a.x)
+		assert_float(at.z).is_between(minf(a.z, b.z), maxf(a.z, b.z))
+		var shape := TestSharedGroundHolds.footprint(Transform3D(stub[2], at))
+		var gap := INF
+		for point in shape:
+			gap = minf(gap, point.y - runway.end.y)
+		print("%s at %s: footprint %.2f m south of the runway band" % [hold, at, gap])
+		assert_bool(TestSharedGroundHolds.on_zone(shape, runway)).is_false()
+		assert_float(gap).is_greater(0.5)
+		# Control: 5 m nearer the runway the footprint is on it.
+		var near := Transform3D(stub[2], at + Vector3(0.0, 0.0, -5.0))
+		(
+			assert_bool(
+				TestSharedGroundHolds.on_zone(TestSharedGroundHolds.footprint(near), runway)
+			)
+			. is_true()
+		)
+
+
+## Every taxi route runs strictly west from the runway exit to the stand and
+## from the stand to the runway entry, for stands across the whole site and
+## for two gates at once: each step along the lane goes west (x falls), and
+## every other step (the stubs and each stand's way north) runs straight
+## north or south (x stays). Returns the metres walked along the lane.
+func _assert_westbound(path: PackedVector3Array) -> float:
+	var along_lane := 0.0
+	for i in range(1, path.size()):
+		var on_lane := (
+			path[i - 1].z == StandPlacement.TAXI_LANE_Z and path[i].z == StandPlacement.TAXI_LANE_Z
+		)
+		if on_lane:
+			assert_float(path[i].x).is_less(path[i - 1].x)
+			along_lane += path[i - 1].x - path[i].x
+		else:
+			assert_float(path[i].x).is_equal(path[i - 1].x)
+	return along_lane
+
+
+func test_every_taxi_route_runs_strictly_west() -> void:
+	var low := SITE.grid_origin
+	var high := SITE.grid_origin + Vector3(SITE.grid_size.x, 0.0, SITE.grid_size.y)
+	var checked := 0
+	var lane_metres := 0.0
+	for door_x in [low.x + 0.5, 0.5, high.x - 0.5]:
+		for wall_z in [low.z, high.z - 1.0]:
+			assert_bool(_airside.set_stand(StandPlacement.make(1, door_x, wall_z))).is_true()
+			for state in [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT]:
+				lane_metres += _assert_westbound(_airside.phase_path(state))
+				checked += 1
+	var gates := {
+		"A": StandPlacement.make(1, -30.5, low.z), "B": StandPlacement.make(2, 20.5, low.z)
+	}
+	assert_bool(_airside.set_gate_stands(gates)).is_true()
+	for gate: String in gates:
+		for state in [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT]:
+			lane_metres += _assert_westbound(_airside.phase_path(state, gate))
+			checked += 1
+	assert_bool(_airside.set_gate_stands({})).is_true()
+	print("%d westbound routes, %.0f m along the lane" % [checked, lane_metres])
+	assert_int(checked).is_equal(16)
+	assert_float(lane_metres).is_greater(1000.0)
+
+
+## A join at or east of TaxiEast would make a route turn back along the lane
+## or add a zero-length step, so the graph refuses it. Control: a join 1 m
+## inside the end is fine.
+func test_a_join_off_the_lane_ends_is_refused() -> void:
+	var east := _at(&"TaxiEast").x
+	var inside := StandPlacement.make(1, east - 1.0 + StandPlacement.DOOR_SIDE_M, -150.0)
+	assert_bool(_airside.set_stand(inside)).is_true()
+	for over in [0.0, 1.0]:
+		var outside := StandPlacement.make(1, east + over + StandPlacement.DOOR_SIDE_M, -150.0)
+		assert_bool(_airside.set_stand(outside)).is_false()
+		assert_int(_airside.phase_path(FlightSim.State.TAXI_IN).size()).is_equal(0)
+
+
+## A link naming a lane waypoint that does not exist is refused, not passed
+## over as a lane link. Control: the scene's links rebuild.
+func test_a_link_to_a_misspelt_lane_waypoint_is_refused() -> void:
+	var links := _airside.links
+	assert_bool(_airside.rebuild()).is_true()
+	_airside.links = links + PackedStringArray(["TaxiEast>StandLane_typo"])
+	assert_bool(_airside.rebuild()).is_false()
+	_airside.links = links
+	assert_bool(_airside.rebuild()).is_true()
+
+
+## The same gate stands that failed to rebuild fail again on a retry, rather
+## than counting as already set. Control: good stands rebuild.
+func test_a_failed_set_gate_stands_fails_again_on_retry() -> void:
+	var east := _at(&"TaxiEast").x
+	var bad := {"A": StandPlacement.make(1, east + 5.0 + StandPlacement.DOOR_SIDE_M, -210.0)}
+	assert_bool(_airside.set_gate_stands(bad)).is_false()
+	assert_bool(_airside.set_gate_stands(bad)).is_false()
+	var good := {"A": StandPlacement.make(1, 0.5, -210.0)}
+	assert_bool(_airside.set_gate_stands(good)).is_true()
+	assert_bool(_airside.set_gate_stands(good)).is_true()
+	assert_bool(_airside.set_gate_stands({})).is_true()
 
 
 func test_the_scene_markers_start_on_the_starter_stand() -> void:
@@ -95,11 +254,11 @@ func test_set_stand_moves_the_taxi_routes() -> void:
 	print("taxi in %s\npushback %s\ntaxi out %s" % [taxi_in, pushback, taxi_out])
 	assert_int(_airside.stand_moves).is_equal(moves + 1)
 	assert_array(Array(taxi_in)).is_equal(
-		[_at(&"RunwayExit"), _at(&"TaxiEast"), Vector3(at.x, 0, -256), back, at]
+		[_at(&"RunwayExit"), _at(&"TaxiEast"), Vector3(at.x, 0, -284), back, at]
 	)
 	assert_array(Array(pushback)).is_equal([at, back])
 	assert_array(Array(taxi_out)).is_equal(
-		[back, Vector3(at.x, 0, -256), _at(&"TaxiWest"), _at(&"RunwayEntry")]
+		[back, Vector3(at.x, 0, -284), _at(&"TaxiWest"), _at(&"RunwayEntry")]
 	)
 
 
@@ -182,33 +341,86 @@ func _peak_speed(state: int, entry: Vector3) -> float:
 	return peak
 
 
+## The fastest a MovementPlan of `state` along `path` moves when it pauses
+## MAX_PAUSE_TICKS at `hold_s`, in m/s, sampled every tick.
+func _peak_paused(state: int, path: PackedVector3Array, hold_s: float) -> float:
+	var pause := {"hold_s": hold_s, "ticks": MovementPlan.MAX_PAUSE_TICKS}
+	var plan := MovementPlan.taxi(path, FlightSim.PHASE_TICKS[state], pause)
+	assert_bool(MovementPlan.is_valid(plan)).is_true()
+	var peak := 0.0
+	var last := MovementPlan.position_at(plan, 0.0)
+	for tick in range(1, FlightSim.PHASE_TICKS[state] + 1):
+		var now := MovementPlan.position_at(plan, tick)
+		peak = maxf(peak, now.distance_to(last) * TICKS_PER_SECOND)
+		last = now
+	return peak
+
+
+## Taxi routes are the same for every class (the class changes only the
+## runway points), so each class's longest route is the same; it is checked
+## per class all the same. The longest pause sits at the route's hold line:
+## HoldIn on the way in, HoldRunway on the way out.
 func test_taxi_peak_speed_stays_under_16_m_s_on_the_longest_legal_route() -> void:
 	var low := SITE.grid_origin
 	var high := SITE.grid_origin + Vector3(SITE.grid_size.x, 0.0, SITE.grid_size.y)
+	var hold_in := _at(&"RunwayExit").distance_to(_at(&"HoldIn"))
+	var hold_out := _at(&"RunwayEntry").distance_to(_at(&"HoldRunway"))
 	var worst := 0.0
-	for door_x in [low.x + 0.5, high.x - 0.5]:
-		# Wall lines from the grid's north edge to its southmost row's.
-		for wall_z in [low.z, high.z - 1.0]:
-			_airside.set_stand(StandPlacement.make(1, door_x, wall_z))
-			var landing := _airside.phase_path(FlightSim.State.LANDING)
-			var taxi_in := _airside.phase_path(FlightSim.State.TAXI_IN)
-			var taxi_out := _airside.phase_path(FlightSim.State.TAXI_OUT)
-			var peak_in := _peak_speed(FlightSim.State.TAXI_IN, FlightPose.exit_dir(landing))
-			var peak_out := _peak_speed(FlightSim.State.TAXI_OUT, Vector3.FORWARD)
-			print(
-				(
-					"door x %.1f wall %.1f: taxi in %.1f m peak %.2f m/s, taxi out %.1f m peak %.2f m/s"
-					% [
-						door_x,
-						wall_z,
-						FlightPose.path_length(taxi_in),
-						peak_in,
-						FlightPose.path_length(taxi_out),
-						peak_out
-					]
+	var worst_paused := 0.0
+	for plane_class in PlaneClasses.ORDER:
+		var class_worst := 0.0
+		var class_paused := 0.0
+		for door_x in [low.x + 0.5, high.x - 0.5]:
+			# Wall lines from the grid's north edge to its southmost row's.
+			for wall_z in [low.z, high.z - 1.0]:
+				_airside.set_stand(StandPlacement.make(1, door_x, wall_z))
+				var landing := _airside.phase_path(FlightSim.State.LANDING, "", plane_class)
+				var taxi_in := _airside.phase_path(FlightSim.State.TAXI_IN, "", plane_class)
+				var taxi_out := _airside.phase_path(FlightSim.State.TAXI_OUT, "", plane_class)
+				assert_array(Array(taxi_in)).is_equal(
+					Array(_airside.phase_path(FlightSim.State.TAXI_IN))
 				)
+				assert_array(Array(taxi_out)).is_equal(
+					Array(_airside.phase_path(FlightSim.State.TAXI_OUT))
+				)
+				var peak_in := _peak_speed(FlightSim.State.TAXI_IN, FlightPose.exit_dir(landing))
+				var peak_out := _peak_speed(FlightSim.State.TAXI_OUT, Vector3.FORWARD)
+				var length_out := FlightPose.path_length(taxi_out)
+				var paused_in := _peak_paused(FlightSim.State.TAXI_IN, taxi_in, hold_in)
+				var paused_out := _peak_paused(
+					FlightSim.State.TAXI_OUT, taxi_out, length_out - hold_out
+				)
+				print(
+					(
+						(
+							"%s door x %.1f wall %.1f: taxi in %.1f m peak %.2f / paused %.2f m/s, "
+							+ "taxi out %.1f m peak %.2f / paused %.2f m/s"
+						)
+						% [
+							plane_class,
+							door_x,
+							wall_z,
+							FlightPose.path_length(taxi_in),
+							peak_in,
+							paused_in,
+							length_out,
+							peak_out,
+							paused_out
+						]
+					)
+				)
+				class_worst = maxf(class_worst, maxf(peak_in, peak_out))
+				class_paused = maxf(class_paused, maxf(paused_in, paused_out))
+		print(
+			(
+				"TAXI_PEAK %s %.2f m/s, with the longest pause %.2f m/s (limit %.1f)"
+				% [plane_class, class_worst, class_paused, TAXI_PEAK_LIMIT]
 			)
-			worst = maxf(worst, maxf(peak_in, peak_out))
-	print("TAXI_PEAK %.2f m/s (limit %.1f)" % [worst, TAXI_PEAK_LIMIT])
+		)
+		worst = maxf(worst, class_worst)
+		worst_paused = maxf(worst_paused, class_paused)
 	assert_float(worst).is_greater(5.0)
 	assert_float(worst).is_less_equal(TAXI_PEAK_LIMIT)
+	# The pause makes the legs faster, and still no faster than the limit.
+	assert_float(worst_paused).is_greater(worst)
+	assert_float(worst_paused).is_less_equal(TAXI_PEAK_LIMIT)

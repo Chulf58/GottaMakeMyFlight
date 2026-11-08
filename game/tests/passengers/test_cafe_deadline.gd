@@ -20,8 +20,9 @@ const CROWD_UNTIL := 700
 ## moved for decision hold-line-rebuild-the-security-line-follows-where-
 ## people-sta, where newcomers queue behind the guest by their check-in, so a
 ## guest starting at tick 0 had the slack to finish its visit (outcome
-## COMPLETE, deadline 607 at the end).
-const START := 200
+## COMPLETE, deadline 607 at the end). 600, moved from 200 when TAXI_IN grew by
+## 400 ticks and the doors closed 400 ticks later.
+const START := 600
 ## The guest of the burst case spawns this long before boarding opens (it was
 ## tick 0 when boarding opened at tick 700), so its schedule is as tight as
 ## the case needs whatever the phase lengths are. 600, moved from 700 for

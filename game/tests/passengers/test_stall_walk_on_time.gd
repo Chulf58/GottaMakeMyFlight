@@ -14,8 +14,9 @@ const BURST := 40
 ## The guest of the first two cases spawns this many ticks into the run.
 ## Moved for bounded lines (board c5b6664f): the burst now waits for places on
 ## the full lines, so the forecast no longer puts a guest spawned at tick 0
-## past its doors; spawned later, it has too little time again.
-const LATE := 150
+## past its doors; spawned later, it has too little time again. 550, moved from
+## 150 when TAXI_IN grew by 400 ticks and the doors closed 400 ticks later.
+const LATE := 550
 
 var _worlds: Array[PassengerTestWorld] = []
 
@@ -92,7 +93,7 @@ func test_a_guest_on_its_way_to_the_stall_gives_up_when_security_fills() -> void
 	var visit: CafeVisit = made[2]
 	_burst(world)
 	var phases := {}
-	while world.sim.cafes.visit_of(guest.id) != null and world.clock.tick < 1500:
+	while world.sim.cafes.visit_of(guest.id) != null and world.clock.tick < 1900:
 		phases[guest.stage] = true
 		world.step()
 	print("gave up at %d, deadline %d, from %s" % [world.clock.tick, visit.deadline, phases.keys()])
@@ -107,12 +108,12 @@ func test_a_guest_giving_its_order_gives_up_unpaid_when_security_fills() -> void
 	var world: PassengerTestWorld = made[0]
 	var guest: Passenger = made[1]
 	var visit: CafeVisit = made[2]
-	while guest.stage != Passenger.Stage.CAFE_ORDER and world.clock.tick < 1500:
+	while guest.stage != Passenger.Stage.CAFE_ORDER and world.clock.tick < 1900:
 		world.step()
 	assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_ORDER)
 	var service_end := visit.service_end
 	_burst(world)
-	while world.sim.cafes.visit_of(guest.id) != null and world.clock.tick < 1500:
+	while world.sim.cafes.visit_of(guest.id) != null and world.clock.tick < 1900:
 		world.step()
 	print(
 		"order due %d, gave up at %d, deadline %d" % [service_end, world.clock.tick, visit.deadline]
@@ -131,7 +132,8 @@ func test_a_deadline_passing_on_the_tick_the_order_completes_gives_up_unpaid() -
 	# Moved for bounded lines (board c5b6664f): a burst reaches the queues over
 	# many ticks, so its size no longer lands the deadline on one chosen tick;
 	# the flight is moved a tick at a time until the deadline lands there. The
-	# guest spawns 100 ticks in, so the deadline starts before the order ends
+	# guest spawns 500 ticks in (100 before TAXI_IN grew by 400), so the deadline
+	# starts before the order ends
 	# and the flight only ever moves later (a flight starting before tick 0 is
 	# not set up).
 	var shift := 0
@@ -140,11 +142,11 @@ func test_a_deadline_passing_on_the_tick_the_order_completes_gives_up_unpaid() -
 	var fresh := 0
 	for attempt in 12:
 		after_test()
-		made = _admitted(100, shift)
+		made = _admitted(500, shift)
 		var world: PassengerTestWorld = made[0]
 		var guest: Passenger = made[1]
 		var visit: CafeVisit = made[2]
-		while guest.stage != Passenger.Stage.CAFE_ORDER and world.clock.tick < 1500:
+		while guest.stage != Passenger.Stage.CAFE_ORDER and world.clock.tick < 1900:
 			world.step()
 		assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_ORDER)
 		service_end = visit.service_end

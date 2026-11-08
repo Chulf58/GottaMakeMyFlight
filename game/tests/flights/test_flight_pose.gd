@@ -86,9 +86,9 @@ func test_a_taxi_pose_with_a_pause_stands_at_the_hold() -> void:
 	assert_float(last.origin.distance_to(Vector3(40, 0, 30))).is_less(1e-4)
 
 
-## A pause with no budget plans over the state's PHASE_TICKS (600 for
+## A pause with no budget plans over the state's PHASE_TICKS (1000 for
 ## TAXI_IN), not over one tick: 60 ticks in, the plane is still on its way to
-## the hold (T1 = 580 * 40 / 70 = 331.4), and 340 ticks in it stands there.
+## the hold (T1 = 980 * 40 / 70 = 560), and 570 ticks in it stands there.
 func test_a_pause_with_no_budget_plans_over_the_state_ticks() -> void:
 	var path := _path()
 	var pause := {"hold_s": 40.0, "ticks": 20}
@@ -97,10 +97,10 @@ func test_a_pause_with_no_budget_plans_over_the_state_ticks() -> void:
 	var explicit := FlightPose.pose(
 		FlightSim.State.TAXI_IN, 60.0 / ticks, path, Vector3.RIGHT, pause, ticks
 	)
-	var held := FlightPose.pose(FlightSim.State.TAXI_IN, 340.0 / ticks, path, Vector3.RIGHT, pause)
+	var held := FlightPose.pose(FlightSim.State.TAXI_IN, 570.0 / ticks, path, Vector3.RIGHT, pause)
 	print(
 		(
-			"no budget: 60 ticks in %s, explicit %s, 340 in %s"
+			"no budget: 60 ticks in %s, explicit %s, 570 in %s"
 			% [early.origin, explicit.origin, held.origin]
 		)
 	)
