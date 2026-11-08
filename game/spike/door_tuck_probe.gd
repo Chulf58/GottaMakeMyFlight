@@ -32,6 +32,10 @@ extends "res://spike/roller_trail_probe.gd"
 const DoorTuckStrip := preload("res://spike/door_tuck_strip.gd")
 ## A leaf this near the roller's axle makes the frame one that could touch it.
 const LEAF_NEAR_M := 1.5
+## A door's leaf middle is this far along its wall from the door's axis
+## (wall_door.glb), and a walker this near its plane is in the doorway (STEER).
+const LEAF_ALONG_M := 0.61
+const STEER_PLANE_M := 0.3
 ## Half size of the pulling hand round its grip point (windowed only).
 const HAND_HALF := Vector3(0.04, 0.05, 0.04)
 const TOP_DEEP := 12
@@ -72,6 +76,7 @@ func _collect_walls(world: String) -> void:
 ## A fresh LEAF tally.
 static func new_leaf_tally() -> Dictionary:
 	var out := {"leaves": 0, "frames": 0, "near": 0, "touch": 0, "deep": 0.0}
+	out.merge({"steer_n": 0, "steer_sum": 0.0, "steer_min": INF, "steer_max": 0.0})
 	for part in ["bag", "rods", "bar", "hand"]:
 		out[part] = 0
 	return out
@@ -120,6 +125,8 @@ static func count_leaves(
 	if near.is_empty():
 		return
 	tally["near"] += 1
+	if walker.is_finite():
+		_steer(tally, near, walker)
 	var top := bag.find_child("Pull_Top", true, false)
 	var reach := bag.find_child("Pull_Reach", true, false)
 	var parts := []
@@ -156,6 +163,36 @@ static func count_leaves(
 		var walk := inv * walker if walker.is_finite() else Vector3.INF
 		var line := [p.id, p.at.x, p.at.y, stage, hit, inv * axle, bar, walk]
 		print("LEAF_AT id=%d cell (%d,%d) %s %s; leaf frame: axle %s bar %s walker %s" % line)
+
+
+## STEER (board 4b062450, DoorSteer): how far `walker` is off the door's axis,
+## read in the frame of the nearest of `near` (door leaves), when it is within
+## STEER_PLANE_M of the leaves' plane: booked in `tally`.
+static func _steer(tally: Dictionary, near: Array[MeshInstance3D], walker: Vector3) -> void:
+	var nearest: MeshInstance3D = near[0]
+	for leaf in near:
+		if leaf.global_position.distance_to(walker) < nearest.global_position.distance_to(walker):
+			nearest = leaf
+	var local := nearest.global_transform.affine_inverse() * walker
+	if absf(local.z) > STEER_PLANE_M:
+		return
+	var off := absf(absf(local.x) - LEAF_ALONG_M)
+	tally["steer_n"] += 1
+	tally["steer_sum"] += off
+	tally["steer_min"] = minf(float(tally["steer_min"]), off)
+	tally["steer_max"] = maxf(float(tally["steer_max"]), off)
+
+
+## The STEER line of `tally` for seed `seed`: the control that DoorSteer drew
+## the walkers off the door's axis (mean above 0.1 m, DoorSteer.SIDE_M 0.12).
+static func print_steer(tally: Dictionary, seed: int) -> void:
+	var n := int(tally["steer_n"])
+	var mean := float(tally["steer_sum"]) / maxf(float(n), 1.0)
+	var text := (
+		"STEER seed %d: %d pulled frames with the walker within %.1f m of a door's plane;"
+		+ " off the door's axis mean %.3f m, least %.3f m, most %.3f m (control, mean above 0.1)"
+	)
+	print(text % [seed, n, STEER_PLANE_M, mean, tally["steer_min"], tally["steer_max"]])
 
 
 ## The LEAF line of `tally` for seed `seed`; the hand is measured windowed only.
@@ -347,6 +384,7 @@ static func _segments_gap(a0: Vector3, a1: Vector3, b0: Vector3, b1: Vector3) ->
 func _print_classes() -> void:
 	super._print_classes()
 	print_leaves(_leaf, _seed, _headless)
+	print_steer(_leaf, _seed)
 	if int(_leaf["leaves"]) <= 0 or int(_leaf["near"]) <= 0:
 		_invalid("no door leaf was found, or no pulled roller came near one")
 	print("JAMB_DEEP seed %d: %d JAMB frames %.2f m or deeper" % [_seed, _deep, BAR_DEPTH_M])
