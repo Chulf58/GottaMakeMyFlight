@@ -631,7 +631,9 @@ func _move_up(u: Passenger) -> bool:
 	var line: Array = _lines[u.station]
 	if not QueueRipple.may_step(self, u, members, line, tick, false):
 		return false
-	var path := StationQueue.path_to(_sim.grid, line, u.at, _member_at[u.station][u.id])
+	var index: int = _member_at[u.station][u.id]
+	var target := QueueRipple.target_index(self, members, line, index)
+	var path := StationQueue.path_to(_sim.grid, line, u.at, target)
 	if path.size() < 2:
 		return false
 	# The cell it steps onto is taken from now; when that moves the line's free
