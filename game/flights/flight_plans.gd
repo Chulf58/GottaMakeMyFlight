@@ -77,25 +77,34 @@ func plan_day(world: Dictionary, day: int) -> Dictionary:
 	return planner.plan_all(requests(world, day))
 
 
-## The days from `from_day` on whose plans can differ: up to the first day on
-## which every running contract issues and no live or landed flight is left;
-## each day after it is planned exactly as that day.
+## The days from `from_day` on whose plans can differ, sorted: `from_day`, each
+## live or landed flight's day and the day after it, and each running or
+## reserving contract's next day (the days on which the set of requests
+## changes). Every other day plans exactly as the nearest one before it: it has
+## the same contracts and no flight, and a day's plan depends on no other day's.
+## A reserving contract's next day never advances (FlightSim._issue_due() skips
+## ended contracts), so a gap of years between it and a running contract costs
+## no more days than a gap of one.
 static func days_from(world: Dictionary, from_day: int) -> Array[int]:
-	var last := from_day
+	var seen := {from_day: true}
 	for contract: Dictionary in world["contracts"]:
 		if runs(world, contract["id"]):
-			last = maxi(last, int(world["next_day"][contract["id"]]))
+			var next := int(world["next_day"][contract["id"]])
+			if next >= from_day:
+				seen[next] = true
 	for day in live_days(world):
-		last = maxi(last, day + 1)
+		for sampled in [day, day + 1]:
+			if sampled >= from_day:
+				seen[sampled] = true
 	var out: Array[int] = []
-	for day in range(from_day, last + 1):
-		out.append(day)
+	out.assign(seen.keys())
+	out.sort()
 	return out
 
 
 ## Every day a sim in `world` can fly or plan: from the earliest of the live and
-## landed flights' days and the running and reserving contracts' next days, on
-## as days_from() gives; none for a world with neither.
+## landed flights' days and the running and reserving contracts' next days, as
+## days_from() samples them; none for a world with neither.
 static func horizon(world: Dictionary) -> Array[int]:
 	var first := -1
 	var days := live_days(world)

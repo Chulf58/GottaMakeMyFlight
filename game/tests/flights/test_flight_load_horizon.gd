@@ -144,3 +144,44 @@ func test_a_gate_too_small_for_a_contract_or_a_live_flight_refuses_the_save() ->
 	print("small gate, live flight: '%s'" % problem)
 	assert_str(problem).is_equal("flight X-d0 needs a medium gate, but gate A takes small")
 	assert_str(_sim().load_problem(live)).is_empty()
+
+
+## A reserving contract's next day never advances, so it can lie years behind a
+## running contract's. Only the days where the requests change are planned
+## (FlightPlans.days_from), not every day between: X reserves from day 1 and N
+## runs from day 5000, and on a shared stand their day-5000 flights collide.
+func test_a_gap_of_years_between_next_days_plans_only_the_days_that_differ() -> void:
+	var data := _quiet_night(N_MINUTE)
+	var loaded := FlightSnapshot.load(data, GATES)
+	loaded["ended"] = {"X": 1}
+	loaded["reserving"] = {"X": true}
+	loaded["next_day"] = {"X": 1, "N": 5000}
+	loaded["start_day"]["N"] = 5000
+	var world := {
+		"contracts": loaded["contracts"],
+		"start_day": loaded["start_day"],
+		"next_day": loaded["next_day"],
+		"ended": loaded["ended"],
+		"reserving": loaded["reserving"],
+		"flights": loaded["flights"],
+		"landed": loaded["landed"],
+		"grounds": _shared(),
+	}
+	var days := FlightPlans.horizon(world)
+	print("days planned across a 5000 day gap: %s" % [days])
+	assert_array(days).is_equal([1, 5000])
+	var refusal := FlightPlans.new().refusal(
+		world, func(_day: int) -> Dictionary: return {}, days, ["X", "N"]
+	)
+	print("refusal: %s" % [refusal])
+	assert_str(refusal.get("id", "")).ends_with("-d5000")
+	# Control: on their own stands the same two contracts plan on every sampled day.
+	world["grounds"] = {"A": FlightGround.fallback("A"), "B": FlightGround.fallback("B")}
+	(
+		assert_dict(
+			FlightPlans.new().refusal(
+				world, func(_day: int) -> Dictionary: return {}, days, ["X", "N"]
+			)
+		)
+		. is_empty()
+	)
