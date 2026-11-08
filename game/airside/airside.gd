@@ -33,8 +33,9 @@ extends Node3D
 ## a flat track through its turn waypoints with wide round turns.
 ##
 ## Its TaxiPaving child paves every taxi route (taxi_routes()) after each
-## rebuild, so the paving follows the stands (user ruling pave-the-taxi-lane-
-## and-the-link-from-each-stand-to-it-so-pla).
+## rebuild, with a pad at every stand in use (stand_points()) and a hold bar at
+## every hold line (hold_points()), so the paving follows the stands (user
+## ruling pave-the-taxi-lane-and-the-link-from-each-stand-to-it-so-pla).
 
 const REQUIRED_WAYPOINTS: Array[StringName] = [
 	&"ApproachStart",
@@ -81,6 +82,8 @@ const CLIMB_OUT_WAYPOINTS: Array[StringName] = [&"ClimbEnd", &"DepartureTurn", &
 ## chain.
 const LANE_ENDS: Array[StringName] = [&"TaxiWest", &"TaxiEast"]
 const STAND_LANE := "StandLane"
+## The runway's strip piece, whose width runway_south() reads.
+const RUNWAY_PIECE := "tp_runway_03a"
 ## Turn radius of the sky tracks, in metres. A corner too tight for it gets the
 ## widest turn that fits.
 const SKY_TURN_RADIUS := 160.0
@@ -99,6 +102,8 @@ var graph := TaxiGraph.new()
 var stand_moves := 0
 ## Gate letter -> the stand its waypoints were last put at (set_gate_stands()).
 var gate_stands: Dictionary = {}
+## Gate letter -> its max_class, which sizes its stand pad (set_gate_classes()).
+var gate_classes: Dictionary = {}
 ## The asphalt under the taxi routes, rebuilt with the graph.
 var paving := TaxiPaving.new()
 ## Whether the last rebuild() succeeded. set_gate_stands() skips a call with
@@ -147,9 +152,109 @@ func rebuild() -> bool:
 		ok = false
 	for i in range(1, chain.size()):
 		graph.link(chain[i - 1], chain[i])
-	paving.show_routes(taxi_routes(), StandPlacement.TAXI_LANE_Z)
+	_show_paving()
 	_built = ok
 	return ok
+
+
+## Sizes each gate's stand pad for the classes up to its max_class (gate letter ->
+## GateDesks.max_class, "" for none) and repaves when that changed. ApronStand
+## sends it on every refresh of the gates.
+func set_gate_classes(classes: Dictionary) -> void:
+	if classes == gate_classes:
+		return
+	gate_classes = classes.duplicate()
+	if _built:
+		_show_paving()
+
+
+func _show_paving() -> void:
+	paving.show_routes(
+		taxi_routes(), StandPlacement.TAXI_LANE_Z, stand_pads(), hold_points(), runway_south()
+	)
+
+
+## The pad under every stand in use (TaxiPaving.stand_pad()): a gate's for the
+## classes up to its gate_classes entry, none for a gate with no class; every
+## class's for a gate with no entry and for the one stand, which no gate sizes.
+func stand_pads() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	var points := stand_points()
+	var gates := gate_stands.keys()
+	for i in points.size():
+		var classes := PlaneClasses.ORDER
+		if i < gates.size() and gate_classes.has(gates[i]):
+			classes = classes_up_to(gate_classes[gates[i]])
+		if not classes.is_empty():
+			out.append(TaxiPaving.stand_pad(points[i], classes))
+	return out
+
+
+## The plane classes from small up to `largest`, or none for "" or an unknown class.
+static func classes_up_to(largest: String) -> Array[String]:
+	var out: Array[String] = []
+	var rank := PlaneClasses.ORDER.find(largest)
+	for i in rank + 1:
+		out.append(PlaneClasses.ORDER[i])
+	return out
+
+
+## The south edge of the runway's asphalt: the runway pieces are RUNWAY_PIECE's
+## width (PlaneModels.PIECES) about StandPlacement.RUNWAY_Z.
+static func runway_south() -> float:
+	var piece: AABB = PlaneModels.PIECES[RUNWAY_PIECE]["aabb"]
+	return StandPlacement.RUNWAY_Z + piece.end.z
+
+
+## The plane point of every stand in use: each gate's, or the one stand's while
+## no gate has one.
+func stand_points() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	if gate_stands.is_empty():
+		if graph.has_waypoint(&"Stand"):
+			out.append(graph.position_of(&"Stand"))
+		return out
+	for gate: String in gate_stands:
+		out.append(graph.position_of(_gate_point(&"Stand", gate)))
+	return out
+
+
+## The hold lines a plane may stop on (decision runway-and-taxi-technical-design-
+## movement-plan-analytic-bookings-planned-pauses, point 4): HoldIn and
+## HoldRunway on the stubs, then the lead-in hold of each stand in use whose
+## pushback ends far enough south to have one (lead_in_hold()).
+func hold_points() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for waypoint in [&"HoldIn", &"HoldRunway"]:
+		if graph.has_waypoint(waypoint):
+			out.append(graph.position_of(waypoint))
+	var ends: Array[StringName] = [&"PushbackEnd"]
+	if not gate_stands.is_empty():
+		ends.clear()
+		for gate: String in gate_stands:
+			ends.append(_gate_point(&"PushbackEnd", gate))
+	for waypoint in ends:
+		if graph.has_waypoint(waypoint):
+			out.append_array(lead_in_hold(graph.position_of(waypoint)))
+	return out
+
+
+## The hold line H_g on the lead-in from the pushback's end at `pushback_end`
+## north to the lane, as [point] or [] when there is none: the point where a
+## plane heading north stops with the nose of every class's door-aligned model
+## (PlaneClasses.stand_offset) south of the lane band (StandEnvelope.
+## lane_band_south()). There is none when the pushback ends at or north of it,
+## as on the north row. Only the paving draws it so far; GroundPlanner will
+## pause on it.
+static func lead_in_hold(pushback_end: Vector3) -> PackedVector3Array:
+	var reach := 0.0
+	for model: String in PlaneModels.PLANES:
+		var shape: Dictionary = PlaneModels.PLANES[model]
+		reach = maxf(reach, PlaneClasses.stand_offset(model).z + float(shape["nose"]))
+	var hold_z := StandEnvelope.lane_band_south() + reach
+	if pushback_end.z <= hold_z:
+		return PackedVector3Array()
+	return PackedVector3Array([Vector3(pushback_end.x, pushback_end.y, hold_z)])
 
 
 ## The lane chain east to west: TaxiEast, the joins in falling x, TaxiWest
