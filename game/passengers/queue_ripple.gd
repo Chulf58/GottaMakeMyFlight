@@ -10,7 +10,9 @@ extends RefCounted
 ## - A lane walker more than a place behind the one ahead steps up at once:
 ##   the cell it steps onto is clear of that walker and its trailing roller
 ##   (decision hold-line-rebuild-the-security-line-follows-where-people-sta,
-##   so a hold line closes its gaps without a pause per place).
+##   so a hold line closes its gaps without a pause per place). It walks no
+##   further than the cell behind the one ahead (target_index()), so one that
+##   halted short of its place is never walked onto.
 ## - A lane walker behind a walker pulling a roller steps up only once that
 ##   walker stands on its own place and has stood still STAND_TICKS since its
 ##   walk ended (Passenger.halt_tick): RollerPark stands the roller up over its
@@ -68,6 +70,26 @@ static func may_step(
 			return false
 		return not roller or now - ahead.halt_tick >= STAND_TICKS
 	return not desk or desk_clear(host, cells[0], now)
+
+
+## The index in `cells` of the place member number `index` of `lane` walks to
+## when may_step() lets it set off: its own place, but never the cell the
+## member ahead stands on or is walking to, nor a cell before it. A member
+## ahead that stands or halts short of its place (the places move up when a
+## member leaves while it walks) holds its cell, so the one behind ends one
+## cell back of it and steps on once it moves up, instead of walking onto it
+## (board c2336d77; decision hold-line-rebuild-the-security-line-follows-
+## where-people-sta, rule 1: advancing targets are given out front to back).
+## PassengerStations.queue_move() and SecurityForecast._move_up() both take
+## their target here.
+static func target_index(host: Object, lane: Array, cells: Array, index: int) -> int:
+	if index <= 0:
+		return index
+	var ahead: Passenger = host.get_passenger(lane[index - 1])
+	var there := cells.find(ahead.path_end() if ahead.is_moving() else ahead.at)
+	if there < 0:
+		return index
+	return mini(maxi(index, there + 1), cells.size() - 1)
 
 
 ## Whether no passenger who checked in at desk cell `cell` pulling a roller is

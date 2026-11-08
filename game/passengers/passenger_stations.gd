@@ -370,14 +370,17 @@ static func _joined(sim: PassengerSim, p: Passenger) -> void:
 
 
 ## A queue member steps up to its place, line[index] (StationQueue.path_to()),
-## under the QueueRipple rule.
+## under the QueueRipple rule, and no further than the cell behind the member
+## ahead (QueueRipple.target_index()).
 static func queue_move(sim: PassengerSim, p: Passenger) -> void:
-	var index := StationQueue.members(sim._queue(p.station)).find(p.id)
+	var members := StationQueue.members(sim._queue(p.station))
+	var index := members.find(p.id)
 	if index < 0 or p.is_moving() or not QueueRipple.sim_may_step(sim, p):
 		return
 	var line := sim.layout.line_of(p.station)
-	if p.at != line[index]:
-		var path := StationQueue.path_to(sim.grid, line, p.at, index)
+	var target := QueueRipple.target_index(sim, members, line, index)
+	if p.at != line[target]:
+		var path := StationQueue.path_to(sim.grid, line, p.at, target)
 		if path.is_empty():
 			requeue(sim, p)
 		else:
