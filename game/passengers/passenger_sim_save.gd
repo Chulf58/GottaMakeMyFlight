@@ -262,9 +262,12 @@ static func park_side_list(sim: PassengerSim) -> Array:
 ## The saved ParkSide stamps (park_side_list()) checked against the loaded
 ## passengers `by_id`: {"stamps": {id: [seat key, hand]}} or {"error": why}.
 ## Each names a saved passenger once, a seat key and a hand of 0 or 1. A save
-## made before the stamps were saved has none: every guest chooses again.
+## of the current version must carry the list; one migrated from an older
+## version has none, and every guest chooses again.
 static func checked_park_side(data: Dictionary, by_id: Dictionary) -> Dictionary:
 	var stamps := {}
+	if not data.has("park_side") and int(data["save_version"]) >= PassengerSim.SAVE_VERSION:
+		return {"error": "missing key 'park_side'"}
 	var list: Variant = data.get("park_side", [])
 	if typeof(list) != TYPE_ARRAY:
 		return {"error": "park_side must be a list"}
