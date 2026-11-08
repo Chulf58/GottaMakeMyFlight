@@ -94,6 +94,7 @@ static func to_snapshot(sim: PassengerSim) -> Dictionary:
 	for station: int in sim._claims:
 		claims[str(station)] = sim._claims[station]
 	data["claims"] = claims
+	data["park_side"] = park_side_list(sim)
 	return data
 
 
@@ -131,6 +132,10 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	if tail_claims.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % tail_claims["error"])
 		return false
+	var sides := checked_park_side(data, by_id)
+	if sides.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % sides["error"])
+		return false
 	spots.restore(claims["claims"], by_id)
 	sim.gates.restore(claims["gate"], spots, by_id)
 	sim.standing = spots
@@ -152,9 +157,14 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	sim.shops.restore(loaded["shop"])
 	sim.info_desks.restore(desk_state)
 	sim._passengers = loaded["passengers"]
-	# ParkSide's stamped hands are view state made after the snapshot.
+	# ParkSide's stamped hands as saved, never the ones made after the snapshot:
+	# chosen again on load, a one-bag guest's gate chair side could flip with
+	# its roller on the floor, once a two-bag neighbour had come after it chose
+	# (board 4da2e8ff).
 	if sim.has_meta(ParkSide.STAMPS):
 		sim.remove_meta(ParkSide.STAMPS)
+	if not (sides["stamps"] as Dictionary).is_empty():
+		sim.set_meta(ParkSide.STAMPS, sides["stamps"])
 	sim._by_id.clear()
 	for p in sim._passengers:
 		sim._by_id[p.id] = p
@@ -232,6 +242,47 @@ static func checked_boarding(sim: PassengerSim, data: Dictionary, by_id: Diction
 	if not data.has("boarding") and int(data["save_version"]) >= PassengerSim.SAVE_VERSION:
 		return {"error": "missing key 'boarding'"}
 	return files_state
+
+
+## ParkSide's stamps (the hand a one-bag guest lays its roller down with at a
+## seat, chosen once per seat) of `sim`'s passengers, by passenger id: a list
+## of {"passenger": id, "seat": the seat's key, "hand": 0 or 1}.
+static func park_side_list(sim: PassengerSim) -> Array:
+	var stamps: Dictionary = sim.get_meta(ParkSide.STAMPS, {})
+	var ids: Array = stamps.keys()
+	ids.sort()
+	var out := []
+	for id: int in ids:
+		if sim._by_id.has(id):
+			var stamp: Array = stamps[id]
+			out.append({"passenger": id, "seat": stamp[0], "hand": stamp[1]})
+	return out
+
+
+## The saved ParkSide stamps (park_side_list()) checked against the loaded
+## passengers `by_id`: {"stamps": {id: [seat key, hand]}} or {"error": why}.
+## Each names a saved passenger once, a seat key and a hand of 0 or 1. A save
+## made before the stamps were saved has none: every guest chooses again.
+static func checked_park_side(data: Dictionary, by_id: Dictionary) -> Dictionary:
+	var stamps := {}
+	var list: Variant = data.get("park_side", [])
+	if typeof(list) != TYPE_ARRAY:
+		return {"error": "park_side must be a list"}
+	for entry: Variant in list:
+		if (
+			typeof(entry) != TYPE_DICTIONARY
+			or (entry as Dictionary).size() != 3
+			or not WholeNumber.is_whole(entry.get("passenger"))
+			or typeof(entry.get("seat")) != TYPE_STRING
+			or not WholeNumber.is_whole(entry.get("hand"))
+			or int(entry["hand"]) not in [0, 1]
+		):
+			return {"error": "park side %s is malformed" % str(entry).left(80)}
+		var id := int(entry["passenger"])
+		if not by_id.has(id) or stamps.has(id):
+			return {"error": "park side %d is not one saved passenger's" % id}
+		stamps[id] = [entry["seat"], int(entry["hand"])]
+	return {"stamps": stamps}
 
 
 ## The saved claims on the lines' tails (version 28): station -> the id of a

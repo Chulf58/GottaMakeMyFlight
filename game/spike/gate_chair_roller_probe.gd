@@ -25,15 +25,23 @@ extends SceneTree
 ##     measured spots and both scaled half widths (GateRoller.SHELL_HALF_M).
 ##   BODY_IN_BAG: body points (CarryContact, drawn in this window, no hand left
 ##     out) inside the lying roller's meshes, the most on any frame the walker
-##     stands at the chair front with the roller down ("stand") and seated; also
-##     the neighbour's body points for the pairs. Control: the same count for the
-##     roller drawn on the walker's own feet is > 0.
+##     stands at the chair front with the roller down ("stand"), shuffles from
+##     the front onto its chair ("shuffle") and is seated; also the neighbour's
+##     body points for the pairs. Control: the same count for the roller drawn
+##     on the walker's own feet is > 0.
+##   HIT: on every frame with body points in the walker's own roller, which of
+##     the roller's meshes hold them (rods and pull grip marked "rod"), the
+##     bones they are skinned to most, where they lie in the chair front's frame,
+##     and the body's clip, crossfade weight, offset and turn off that frame.
 ## Plates: stand_<subject> (the first frame the roller is down with the walker
-## still standing at the front), seated_<subject>, pair_<n> (top-down over both
+## still standing at the front), shuffle_<subject> (the first shuffle frame with
+## SHUFFLE_SHOT body points or more in its roller), seated_<subject>, pair_<n> (top-down over both
 ## guests of a pair, seated) and a contact sheet. Before a save the feet, head
 ## and roller of each guest in it project inside the frame by MARGIN_PX, and at
 ## least MIN_ON of five sight lines to each roller land on it with nothing in
-## front (PlateSight, its own body not a blocker). Otherwise PROBE_INVALID, exit 1.
+## front (PlateSight, its own body not a blocker), aimed at the roller's body
+## with its rods and pull grip left out (_bag_box()). Otherwise PROBE_INVALID,
+## exit 1.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 600 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -41,14 +49,14 @@ extends SceneTree
 ##     --path game -s res://spike/gate_chair_roller_probe.gd [-- --seed=N] [--no-plates]
 ##     [--two-bag]
 ##
-## Plates go to tools/blender/out/gate-chair-roller/ (gate-chair-roller-two-bag/
+## Plates go to tools/blender/out/gate-chair-turned/ (gate-chair-turned-two-bag/
 ## with --two-bag).
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
-const OUT_REL := "res://../tools/blender/out/gate-chair-roller"
+const OUT_REL := "res://../tools/blender/out/gate-chair-turned"
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 120.0
 const MIN_ON := 3
@@ -58,6 +66,9 @@ const LIMIT_TICKS := 200
 const SETTLE_TICKS := 12
 ## A body drawn this close (m, flat) to its chair front stands there.
 const STAND_AT_M := 0.1
+## A shuffle frame with this many body points or more in the walker's own
+## roller gets a plate, shuffle_<subject> (the first such frame).
+const SHUFFLE_SHOT := 20
 ## How many views _plate() tries for one subject (_try_plate()).
 const VIEWS := 3
 ## The subjects that walk in from STRIP_CELLS cells off their chair front and
@@ -357,7 +368,7 @@ func _trace_row() -> void:
 		var sim_at := _sim.world_position(p)
 		var drawn := _views.node_for(p.id).global_position
 		var props := _views.carry_on_props()
-		var bag := props.bag_state(p.id, 0)
+		var bag := props.bag_state(p.id, s["bag"])
 		print(
 			(
 				"TRACE %s tick %d stage %d at %s seat_obj %d sim %.3f drawn %.3f place %d k %.3f hand %d"
@@ -370,8 +381,8 @@ func _trace_row() -> void:
 					Vector2(sim_at.x - front.x, sim_at.z - front.z).length(),
 					Vector2(drawn.x - front.x, drawn.z - front.z).length(),
 					int(bag.get("place", -1)),
-					props.transfer_progress(p.id, 0),
-					SecurityLooks.hand_of(_sim, p, 0)
+					props.transfer_progress(p.id, s["bag"]),
+					SecurityLooks.hand_of(_sim, p, s["bag"])
 				]
 			)
 		)
@@ -416,10 +427,13 @@ func _measure(i: int) -> bool:
 		)
 	# Drawn at the front (SitHold holds it there through the park and let-go,
 	# whatever the sim's stage) is standing beside the roller.
-	if flat.length() < STAND_AT_M:
+	var standing := flat.length() < STAND_AT_M
+	if count > 0:
+		var phase := "seated" if p.stage == Passenger.Stage.SEATED else "shuffle"
+		_hit_row(s, body, node, frame, "stand" if standing else phase)
+	if standing:
 		s["stand_max"] = maxi(s["stand_max"], count)
-		if not s["stood_shot"]:
-			s["stood_shot"] = true
+		if not s.has("control"):
 			s["control"] = CarryContact.inside_meshes(
 				CarryContact.body_points(body, []), _on_feet(node, body)
 			)
@@ -429,9 +443,18 @@ func _measure(i: int) -> bool:
 					% [s["name"], flat.length(), p.stage]
 				)
 			)
-			await _plate("stand_%s" % s["name"], [i], false)
+		if not s["stood_shot"]:
+			# Tried on each frame it stands there: a neighbour walking past with
+			# its roller can hide this one for a frame or two (pair1_a past pair1_b).
+			s["stood_shot"] = await _plate("stand_%s" % s["name"], [i], false, false)
 	elif p.stage == Passenger.Stage.SEATED:
 		s["seated_max"] = maxi(s["seated_max"], count)
+	else:
+		# Off the front and not yet seated: the shuffle back onto the chair.
+		s["shuffle_max"] = maxi(int(s.get("shuffle_max", 0)), count)
+		if count >= SHUFFLE_SHOT and not s.has("shuffle_shot"):
+			s["shuffle_shot"] = _clock.tick
+			await _plate("shuffle_%s" % s["name"], [i], false)
 	for pair: Array in _pairs:
 		if i in pair:
 			var other: Dictionary = _subjects[pair[0] if pair[1] == i else pair[1]]
@@ -439,6 +462,81 @@ func _measure(i: int) -> bool:
 			var theirs := CarryContact.inside_meshes(CarryContact.body_points(them, []), node)
 			s["neighbour_max"] = maxi(s["neighbour_max"], theirs)
 	return p.stage == Passenger.Stage.SEATED
+
+
+## A HIT row for a frame on which body points of subject `s` lie in its lying
+## roller `node`: which of the roller's meshes hold them (a rod or the pull
+## grip marked "rod"), the bones they are skinned to most, where they lie in the
+## chair front's frame `frame`, and the body's clip, crossfade weight, offset
+## and turn off the front's frame.
+func _hit_row(s: Dictionary, body: Node3D, node: Node3D, frame: Transform3D, phase: String) -> void:
+	var owned := CarryContact.body_points_owned(body, [])
+	var points: PackedVector3Array = owned[0]
+	var names: PackedStringArray = owned[1]
+	var rods: Array = CarryOnProps.REACH_NODES[SecurityLooks.Kind.ROLLER]
+	var by_mesh := {}
+	var by_bone := {}
+	var lo := Vector3.INF
+	var hi := -Vector3.INF
+	var meshes := []
+	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+		meshes.append([_part_label(mi, node, rods), mi])
+	for k in points.size():
+		for m: Array in meshes:
+			var mi: MeshInstance3D = m[1]
+			var lp := mi.global_transform.affine_inverse() * points[k]
+			if not mi.mesh.get_aabb().grow(0.001).has_point(lp):
+				continue
+			if not CarryContact._odd(lp, mi.mesh.get_faces()):
+				continue
+			by_mesh[m[0]] = int(by_mesh.get(m[0], 0)) + 1
+			by_bone[names[k]] = int(by_bone.get(names[k], 0)) + 1
+			var at := frame.affine_inverse() * points[k]
+			lo = lo.min(at)
+			hi = hi.max(at)
+			break
+	var local := frame.affine_inverse() * body.global_transform
+	var turn := rad_to_deg(atan2(local.basis.z.x, local.basis.z.z))
+	var fade := body.get_meta(&"crossfade") as ClipCrossfade
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	print(
+		(
+			(
+				"HIT %s %s tick %d stage %d clip %s at %.2f fade %.2f body at %s turn %.1f deg;"
+				+ " meshes %s bones %s; points x %.3f..%.3f y %.3f..%.3f z %.3f..%.3f"
+			)
+			% [
+				s["name"],
+				phase,
+				_clock.tick,
+				(s["p"] as Passenger).stage,
+				body.get_meta(&"clip", ""),
+				player.current_animation_position,
+				fade.weight if fade != null else -1.0,
+				local.origin.snapped(Vector3.ONE * 0.001),
+				turn,
+				by_mesh,
+				by_bone,
+				lo.x,
+				hi.x,
+				lo.y,
+				hi.y,
+				lo.z,
+				hi.z,
+			]
+		)
+	)
+
+
+## The name of roller mesh `mi` under `node`, with " rod" when it is part of the
+## rods or the pull grip (`rods`, CarryOnProps.REACH_NODES).
+static func _part_label(mi: MeshInstance3D, node: Node3D, rods: Array) -> String:
+	var at: Node = mi
+	while at != null and at != node:
+		if at.name in rods:
+			return "%s rod" % mi.name
+		at = at.get_parent()
+	return String(mi.name)
 
 
 ## A twin of `node` (the lying roller) moved onto `body`'s feet, for the control.
@@ -684,10 +782,14 @@ func _summary() -> void:
 		)
 		print(
 			(
-				"BODY_IN_BAG %s stand %d seated %d neighbour %d (0 each); control on the feet %d (> 0)"
+				(
+					"BODY_IN_BAG %s stand %d shuffle %d seated %d neighbour %d (0 each);"
+					+ " control on the feet %d (> 0)"
+				)
 				% [
 					s["name"],
 					s["stand_max"],
+					s.get("shuffle_max", 0),
 					s["seated_max"],
 					s["neighbour_max"],
 					s.get("control", -1)
@@ -696,19 +798,29 @@ func _summary() -> void:
 		)
 		if s["stand_max"] < 0 or s["seated_max"] < 0 or s.get("control", 0) <= 0:
 			_invalid("%s was not measured standing and seated, or its control is 0" % s["name"])
+		if not s["stood_shot"]:
+			_invalid("stand_%s: no frame standing at the front proved it in sight" % s["name"])
 
 
 ## A plate of subjects `which` (indices into _subjects): from above for a pair
 ## (`top`), else from the roller's side, ahead and above, then from the other
 ## side and from the front (VIEWS) when a view fails its proof.
-func _plate(shot: String, which: Array, top: bool) -> void:
+## Whether a view proved it; with `final` false a failure is only printed (the
+## caller tries again on a later frame).
+func _plate(shot: String, which: Array, top: bool, final := true) -> bool:
 	if _no_plates:
 		print("PLATE %s skipped (--no-plates) tick %d" % [shot, _clock.tick])
-		return
+		return true
 	for view in 1 if top else VIEWS:
 		if await _try_plate(shot, which, top, view):
-			return
-	_invalid("%s: no view proved its subjects in frame and in sight" % shot)
+			return true
+	if final:
+		_invalid("%s: no view proved its subjects in frame and in sight" % shot)
+	else:
+		print(
+			"PLATE %s: no view proved it at tick %d, tried again next frame" % [shot, _clock.tick]
+		)
+	return false
 
 
 ## One view of _plate(): 0 the roller's side, 1 the other side, 2 the front.
@@ -722,10 +834,15 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 		var p: Passenger = _subjects[i]["p"]
 		bodies.append(_views.node_for(p.id))
 		nodes.append(props.props_of(p.id)["bags"][_subjects[i]["bag"]])
-		mid += _sim.grid.cell_to_world(p.seat_front) / which.size()
+		mid += _sim.grid.cell_to_world(_subjects[i]["seat"]["front"]) / which.size()
 	var s := _subjects[which[0]]
-	var frame: Transform3D = RollerPark.chair_front(_sim, s["p"], SecurityLooks.Kind.ROLLER)
-	frame.origin = mid
+	var front: Variant = RollerPark.chair_front(_sim, s["p"], SecurityLooks.Kind.ROLLER)
+	# Off its seat (the pick-up's end, walking off) it has no chair front: the
+	# seat's own way out instead.
+	var out_of: Vector2i = (s["seat"]["front"] as Vector2i) - (s["seat"]["cell"] as Vector2i)
+	var frame := Transform3D(Basis(Vector3.UP, atan2(out_of.x, out_of.y)), mid)
+	if front != null:
+		frame = Transform3D((front as Transform3D).basis, mid)
 	if _cam == null:
 		_cam = Camera3D.new()
 		_cam.fov = 50.0
@@ -794,7 +911,13 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 		)
 		if on < MIN_ON or not (lines["blockers"] as Array).is_empty():
 			holder.free()
-			print("PLATE_REFUSED %s view %d: roller %d %d of 5 lines on it" % [shot, view, n, on])
+			_near_meshes(shot, c)
+			print(
+				(
+					"PLATE_REFUSED %s view %d: roller %d (%s) %d of 5 lines on it"
+					% [shot, view, n, _views.get_path_to(nodes[n]), on]
+				)
+			)
 			return false
 	holder.free()
 	var path := _out_dir.path_join("gate_chair_%s.png" % shot)
@@ -809,10 +932,28 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	return true
 
 
+## A NEAR row for each visible mesh drawn by the views within 1 m of `at` (a
+## refused roller's box middle): its path and box, to name what the sight
+## lines met.
+func _near_meshes(shot: String, at: Vector3) -> void:
+	for mi: MeshInstance3D in _views.find_children("*", "MeshInstance3D", true, false):
+		if not mi.is_visible_in_tree() or mi.mesh == null or mi.skin != null:
+			continue
+		var box := mi.global_transform * mi.get_aabb()
+		if box.get_center().distance_to(at) < 1.0:
+			print("NEAR %s %s box %s" % [shot, _views.get_path_to(mi), box])
+
+
+## The world box of roller `node`'s body, its rods and pull grip left out
+## (CarryOnProps.REACH_NODES): a box with the rods reached past the shell, so
+## sight lines aimed at its middle missed the roller.
 func _bag_box(node: Node3D) -> AABB:
 	var box := AABB()
 	var first := true
+	var rods: Array = CarryOnProps.REACH_NODES[SecurityLooks.Kind.ROLLER]
 	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+		if _part_label(mi, node, rods).ends_with(" rod"):
+			continue
 		var part := mi.global_transform * mi.get_aabb()
 		box = part if first else box.merge(part)
 		first = false
