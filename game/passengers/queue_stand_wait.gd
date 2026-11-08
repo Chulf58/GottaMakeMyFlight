@@ -9,7 +9,10 @@ extends RefCounted
 ## at once (decision a-queue-passenger-who-stops-behind-a-standing-member-
 ## stands, "sooner only when stuck"): it stands on its own place behind a
 ## member standing still on that member's own place (stuck()), so neither
-## moves on until the places move up. Every other stop keeps the wait: a member
+## moves on until the places move up. It keeps the wait too when the front of
+## the line leaves within STILL_TICKS (front_leaves()): the places then move
+## up at once, and a stand that began on this tick would tip (Sol re-check of
+## 24ac8fe; board e6b4e303). Every other stop keeps the wait: a member
 ## ahead still walking, or standing short of its place, may step on the next
 ## tick (QueueRipple.may_step(): at once when it pulls no roller), and the
 ## walker behind with it, which stood the roller and tipped it at once (Sol
@@ -29,13 +32,78 @@ static func ticks(sim: PassengerSim, p: Passenger) -> int:
 		return RollerPark.FILE_STILL_TICKS
 	if p.stage in LINE_STAGES:
 		var members := sim.queue_of(p.station) + sim.holding_of(p.station)
-		return line_wait(sim, p, members, sim.layout.line_of(p.station))
+		var cells := sim.layout.line_of(p.station)
+		var leaving := (
+			desk_front_leaves(sim, members, sim.tick)
+			or security_front_leaves(sim, p.station, members, cells)
+		)
+		return line_wait(sim, p, members, cells, leaving)
 	return RollerPark.STILL_TICKS
 
 
-## The still ticks line member `p` waits: none when stuck(), else STILL_TICKS.
-static func line_wait(host: Object, p: Passenger, lane: Array, cells: Array) -> int:
+## The still ticks line member `p` waits: none when stuck(), unless the front
+## of the line is `leaving` (desk_front_leaves(), security_front_leaves()) and
+## `p` would step up at once when it does (steps_at_once()), else STILL_TICKS.
+static func line_wait(
+	host: Object, p: Passenger, lane: Array, cells: Array, leaving := false
+) -> int:
+	if leaving and steps_at_once(host, p, lane):
+		return RollerPark.STILL_TICKS
 	return 0 if stuck(host, p, lane, cells) else RollerPark.STILL_TICKS
+
+
+## Whether `p` of `lane` steps up the moment the front leaves and the places
+## move up: every member between the front and `p` walks on without waiting
+## for a roller to stand (QueueRipple.may_step() lets a walker follow one
+## ahead that walks off with no roller at once, and holds it behind one that
+## pulls a roller until that one has stood STAND_TICKS), so none of them
+## pulls a roller. Board e6b4e303.
+static func steps_at_once(host: Object, p: Passenger, lane: Array) -> bool:
+	for i in range(1, lane.find(p.id)):
+		if QueueRipple.pulls_roller(host.get_passenger(lane[i])):
+			return false
+	return true
+
+
+## Whether the front of desk `lane` finishes its check-in within STILL_TICKS of
+## tick `now` (it is served until Passenger.service_end, then leaves the lane
+## and the places move up). `host` has get_passenger().
+static func desk_front_leaves(host: Object, lane: Array, now: int) -> bool:
+	if lane.is_empty():
+		return false
+	var front: Passenger = host.get_passenger(lane[0])
+	return (
+		front.stage == Passenger.Stage.CHECKIN and front.service_end - now <= RollerPark.STILL_TICKS
+	)
+
+
+## Whether the front of the security lane of `station` may be admitted within
+## STILL_TICKS: it stands ready on the first cell and the main position is free
+## (nothing admitted, or the one in it done with a passage scan within
+## STILL_TICKS), so SecurityRuntime.admit_front() takes it. A lane scanner's main
+## position frees after the arch walk, which this does not predict.
+static func security_front_leaves(
+	sim: PassengerSim, station: int, lane: Array, cells: Array
+) -> bool:
+	if lane.is_empty() or not sim.layout.passages.has(station):
+		return false
+	var front: Passenger = sim.get_passenger(lane[0])
+	if front.stage != Passenger.Stage.SECURITY_QUEUE or front.at != cells[0] or front.is_moving():
+		return false
+	var record := sim.security.record_of(station)
+	if record.is_empty():
+		return true
+	if not (record["returns"] as Array).is_empty():
+		return false
+	if record["main"] == 0:
+		return true
+	var main: Passenger = sim.get_passenger(record["main"])
+	var scan := SecurityRuntime.Phase.SCAN
+	return (
+		not sim.security.is_lane(station)
+		and main.security_phase == scan
+		and main.security_work <= RollerPark.STILL_TICKS * sim.security.rate(station, scan)
+	)
 
 
 ## Whether queue member `p` is stuck: it stands on its own place and the member

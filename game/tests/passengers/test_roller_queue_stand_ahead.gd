@@ -9,6 +9,11 @@ extends GdUnitTestSuite
 ## once (decision a-queue-passenger-who-stops-behind-a-standing-member-stands,
 ## board e7028790; QueueStandWait).
 
+## Which wait the follower in _front_leaves_run() gets: the rule as built, the
+## rule before the front-leaves case (stuck, else STILL_TICKS) or plain
+## STILL_TICKS (main before the queue stand wait).
+enum Rule { BUILT, BEFORE, PLAIN }
+
 const ROLLER := SecurityLooks.Kind.ROLLER
 const DESK_AT := Vector2i(3, 1)
 const SCANNER_AT := Vector2i(8, 6)
@@ -16,6 +21,9 @@ const CELLS: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), 
 const RUN_LIMIT := 2500
 ## Ticks a one-cell step takes in the ripple regression (a walk is 7 to 10).
 const STEP_TICKS := 7
+## A stand tipped within this many ticks of being upright was a stand for
+## nothing (queue_spacing_probe's SHORT_STOOD).
+const SHORT_STOOD := 4.0
 
 var _world: PassengerTestWorld
 
@@ -214,22 +222,182 @@ func test_a_follower_short_of_its_place_behind_a_member_about_to_step_waits() ->
 	assert_int(asked_on).is_equal(101 + STEP_TICKS)
 
 
+## A desk lane [front, A, B] (Sol re-check of 24ac8fe, board e6b4e303): the
+## front is served until tick `ends`, A has no roller, B pulls one and stopped
+## on its place at tick `stop`, with A on its place. Played tick by tick: B's
+## roller record (RollerPark.queue_stand() with the wait `rule` gives, as
+## CarryOnProps.sync() calls it), then the sim tick: the front leaves the lane
+## on `ends` and the ripple (QueueRipple) sets A and B off one place up, each
+## walk taking STEP_TICKS. Returns {"asked": tick of B's stand or -1, "tip":
+## the ticks into its stand move that B's tip was marked, or -1}.
+static func _front_leaves_run(stop: int, ends: int, rule: Rule) -> Dictionary:
+	var host := Host.new()
+	var front := _member(host, 1, CELLS[0])
+	front.stage = Passenger.Stage.CHECKIN
+	front.service_end = ends
+	var a := _member(host, 2, CELLS[1])
+	var b := _member(host, 3, CELLS[2])
+	var lane: Array[int] = [1, 2, 3]
+	var bag := _pulled()
+	var set_off := {}
+	var asked := -1
+	for t in range(stop, ends + STEP_TICKS * 2 + 4):
+		var wait := RollerPark.STILL_TICKS
+		match rule:
+			Rule.BUILT:
+				var leaving := QueueStandWait.desk_front_leaves(host, lane, t)
+				wait = QueueStandWait.line_wait(host, b, lane, CELLS, leaving)
+			Rule.BEFORE:
+				wait = QueueStandWait.line_wait(host, b, lane, CELLS)
+		RollerPark.queue_stand(bag, ROLLER, not b.is_moving(), float(t), wait)
+		if RollerPark.restamps(bag):
+			if asked < 0:
+				asked = t
+			_stamped(bag)
+		if bag.has("queue_tip"):
+			return {"asked": asked, "tip": float(bag["queue_tip"])}
+		if lane.has(1) and t + 1 >= ends:
+			lane.erase(1)
+			front.stage = Passenger.Stage.TO_SECURITY
+		for m: Passenger in [a, b]:
+			if m.is_moving() and t + 1 - int(set_off[m.id]) >= STEP_TICKS:
+				m.at = m.path_end()
+				m.clear_path()
+		for i in lane.size():
+			var m: Passenger = host.get_passenger(lane[i])
+			if m.is_moving() or not QueueRipple.may_step(host, m, lane, CELLS, t + 1, false):
+				continue
+			var target := QueueRipple.target_index(host, lane, CELLS, i)
+			if m.at != CELLS[target]:
+				var path: Array[Vector2i] = [m.at, CELLS[target]]
+				m.set_path(path)
+				set_off[m.id] = t + 1
+	return {"asked": asked, "tip": -1.0}
+
+
+## Whether the run `stood` began a stand that tipped within SHORT_STOOD ticks
+## of being upright.
+static func _tipped_soon(stood: Dictionary) -> bool:
+	return float(stood["tip"]) >= 0.0 and stood["tip"] < RollerPark.QUEUE_STAND_TICKS + SHORT_STOOD
+
+
+## B stops two ticks before the front's service ends and would have got wait 0
+## (stuck behind A): its stand must not start, so it does not tip within
+## SHORT_STOOD ticks of standing when the front leaves and the places move up.
+## Control: with the front's service ending later, B stands at once and its
+## tip, once it walks on, comes after the stand.
+func test_a_stop_just_before_the_front_leaves_starts_no_stand_that_tips() -> void:
+	var ends := 130
+	var near := _front_leaves_run(ends - 2, ends, Rule.BUILT)
+	var before := _front_leaves_run(ends - 2, ends, Rule.BEFORE)
+	var far := _front_leaves_run(ends - 12, ends, Rule.BUILT)
+	print("stop 2 before: built %s, before %s; stop 12 before: built %s" % [near, before, far])
+	# B's stand is asked for only once it has stepped up and stopped again.
+	assert_bool(_tipped_soon(near)).is_false()
+	assert_int(near["asked"]).is_greater_equal(ends + STEP_TICKS)
+	# Control: the rule before this case stood it there, and it tipped soon.
+	assert_bool(_tipped_soon(before)).is_true()
+	assert_int(far["asked"]).is_equal(ends - 12)
+	assert_bool(_tipped_soon(far)).is_false()
+
+
+## Every stop tick from long before the front leaves to the tick it does: the
+## built rule tips soon on no tick where plain STILL_TICKS (main) does not.
+func test_no_stop_tips_more_than_main_before_the_front_leaves() -> void:
+	var ends := 130
+	var worse: Array = []
+	var before_tips := 0
+	for stop in range(ends - 16, ends):
+		var built := _front_leaves_run(stop, ends, Rule.BUILT)
+		var plain := _front_leaves_run(stop, ends, Rule.PLAIN)
+		if _tipped_soon(built) and not _tipped_soon(plain):
+			worse.append(stop)
+		if _tipped_soon(_front_leaves_run(stop, ends, Rule.BEFORE)):
+			before_tips += 1
+	print("stops tipping more than main %s; tips before this case %d" % [worse, before_tips])
+	assert_array(worse).is_empty()
+	assert_int(before_tips).is_greater(0)
+
+
+## desk_front_leaves(): a served front whose service ends within STILL_TICKS.
+func test_desk_front_leaves_within_the_still_ticks_of_its_service_end() -> void:
+	var host := Host.new()
+	var front := _member(host, 1, CELLS[0])
+	var lane: Array[int] = [1, 2]
+	var queued := QueueStandWait.desk_front_leaves(host, lane, 100)
+	front.stage = Passenger.Stage.CHECKIN
+	front.service_end = 100 + RollerPark.STILL_TICKS
+	var at_window := QueueStandWait.desk_front_leaves(host, lane, 100)
+	front.service_end += 1
+	var before_window := QueueStandWait.desk_front_leaves(host, lane, 100)
+	front.service_end = 90
+	var overdue := QueueStandWait.desk_front_leaves(host, lane, 100)
+	var none := QueueStandWait.desk_front_leaves(host, [], 100)
+	print(
+		(
+			"queued %s, at window %s, before it %s, overdue %s, empty %s"
+			% [queued, at_window, before_window, overdue, none]
+		)
+	)
+	assert_bool(queued).is_false()
+	assert_bool(at_window).is_true()
+	assert_bool(before_window).is_false()
+	assert_bool(overdue).is_true()
+	assert_bool(none).is_false()
+
+
+## security_front_leaves() in a real world: on every tick it says a security
+## front leaves, that front is out of the queue within STILL_TICKS ticks
+## (admitted into the scanner), and it says so on some tick (so the check
+## cannot pass on an empty set).
+func test_security_front_leaves_is_followed_by_its_admission() -> void:
+	_world = _desk_world()
+	for i in 6:
+		_send(_world, false)
+		_world.run_to(_world.clock.tick + 3)
+	var predicted := 0
+	var wrong: Array = []
+	var due := {}
+	var stop := _world.clock.tick + RUN_LIMIT
+	while _world.clock.tick < stop and predicted < 5:
+		_world.step()
+		var sim := _world.sim
+		var scanner: int = sim.layout.scanners[0]
+		var members := sim.queue_of(scanner) + sim.holding_of(scanner)
+		var line := sim.layout.line_of(scanner)
+		for id: int in due.keys():
+			if not members.has(id):
+				due.erase(id)
+			elif sim.tick > due[id]:
+				wrong.append([sim.tick, id, "still queued"])
+				due.erase(id)
+		if QueueStandWait.security_front_leaves(sim, scanner, members, line):
+			predicted += 1
+			if not due.has(members[0]):
+				due[members[0]] = sim.tick + RollerPark.STILL_TICKS
+	print("security front leaves said %d times; wrong %s" % [predicted, wrong])
+	assert_int(predicted).is_greater(0)
+	assert_array(wrong).is_empty()
+
+
 ## In a real desk queue of walkers pulling rollers (the QueueRipple holds each
 ## behind a roller puller until its stand), every still member's wait is
 ## measured tick by tick: none when it stands on its place behind a member on
-## its own, the full STILL_TICKS otherwise. Both are seen, so the test cannot
-## pass on one kind of tick alone.
+## its own, the full STILL_TICKS otherwise, and also while the desk's front
+## leaves within STILL_TICKS. All three are seen, so the test cannot pass on
+## one kind of tick alone.
 func test_still_wait_in_a_desk_queue_follows_the_member_ahead() -> void:
 	_world = _desk_world()
 	var desk: int = _world.sim.layout.desks[0]
 	for i in 5:
-		_send(_world, true)
+		_send(_world, i != 1)
 		_world.run_to(_world.clock.tick + 3)
 	var stuck_ticks := 0
 	var other_ticks := 0
+	var leaving_ticks := 0
 	var wrong: Array = []
 	var stop := _world.clock.tick + RUN_LIMIT
-	while _world.clock.tick < stop and (stuck_ticks < 20 or other_ticks < 20):
+	while _world.clock.tick < stop and (stuck_ticks < 20 or other_ticks < 20 or leaving_ticks < 5):
 		_world.step()
 		var sim := _world.sim
 		var members := sim.queue_of(desk) + sim.holding_of(desk)
@@ -240,7 +408,16 @@ func test_still_wait_in_a_desk_queue_follows_the_member_ahead() -> void:
 			if p.is_moving() or p.stage != Passenger.Stage.CHECKIN_QUEUE:
 				continue
 			var wait := QueueStandWait.ticks(sim, p)
+			var leaving := (
+				QueueStandWait.desk_front_leaves(sim, members, sim.tick)
+				and QueueStandWait.steps_at_once(sim, p, members)
+			)
 			if p.at == line[i] and not ahead.is_moving() and ahead.at == line[i - 1]:
+				if leaving:
+					leaving_ticks += 1
+					if wait != RollerPark.STILL_TICKS:
+						wrong.append([sim.tick, p.id, "stuck, front leaving", wait])
+					continue
 				stuck_ticks += 1
 				if wait != 0:
 					wrong.append([sim.tick, p.id, "stuck", wait])
@@ -248,8 +425,14 @@ func test_still_wait_in_a_desk_queue_follows_the_member_ahead() -> void:
 				other_ticks += 1
 				if wait != RollerPark.STILL_TICKS:
 					wrong.append([sim.tick, p.id, "not stuck", wait])
-	print("still ticks stuck %d, not stuck %d; wrong %s" % [stuck_ticks, other_ticks, wrong])
+	print(
+		(
+			"still ticks stuck %d, front leaving %d, not stuck %d; wrong %s"
+			% [stuck_ticks, leaving_ticks, other_ticks, wrong]
+		)
+	)
 	assert_int(stuck_ticks).is_greater(0)
+	assert_int(leaving_ticks).is_greater(0)
 	assert_int(other_ticks).is_greater(0)
 	assert_array(wrong).is_empty()
 
