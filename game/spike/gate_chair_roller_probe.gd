@@ -4,7 +4,12 @@ extends SceneTree
 ## right and on the left, and two pairs of male guests at neighbouring chair
 ## fronts, one pair with one roller toward the neighbour (hands set), one with
 ## the hands ParkSide.gap_hand() chooses (GAP: never both in the gap between
-## them). Boots main.tscn with no starter shell, builds the
+## them). With --two-bag the singles are a male and a female two-bag guest
+## instead (the roller drawn at SecurityLooks.TWO_BAG_SCALE and laid at
+## GateRoller.TWO_BAG_SIDE_M), and a third pair is two male two-bag guests
+## whose rollers' bags face one gap (GAP: both rollers in it, apart by
+## GAP_CLEAR); the reference terminal's 12 seats hold one set or the other.
+## Boots main.tscn with no starter shell, builds the
 ## reference terminal and its gate desk, hires a member per station and opens
 ## the airport (anti-pattern a-main-tscn-probe-that-builds-its-own-terminal-at-raw-cells).
 ## Each subject is put at its chair front with one roller, its body variant
@@ -13,7 +18,11 @@ extends SceneTree
 ##
 ## Checks, each printing the values it compared:
 ##   SPOT: the lying roller's origin against the chair front, across (x) and
-##     ahead (z), with GateRoller.side() for the subject's body and hand.
+##     ahead (z), with GateRoller.side() for the subject's body, hand and bag
+##     scale.
+##   GAP_CLEAR: for the two-bag pair, how far apart (m, across) the two lying
+##     rollers' shells are in the gap between their fronts: 1 m less both
+##     measured spots and both scaled half widths (GateRoller.SHELL_HALF_M).
 ##   BODY_IN_BAG: body points (CarryContact, drawn in this window, no hand left
 ##     out) inside the lying roller's meshes, the most on any frame the walker
 ##     stands at the chair front with the roller down ("stand") and seated; also
@@ -30,8 +39,10 @@ extends SceneTree
 ##   timeout 600 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://spike/gate_chair_roller_probe.gd [-- --seed=N] [--no-plates]
+##     [--two-bag]
 ##
-## Plates go to tools/blender/out/gate-chair-roller/.
+## Plates go to tools/blender/out/gate-chair-roller/ (gate-chair-roller-two-bag/
+## with --two-bag).
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
@@ -62,12 +73,21 @@ const LAST_M := 1.0
 const PICK_TICKS := 90
 const CELL := Vector2i(640, 360)
 ## [name, variant (0 male, 1 female), hand (0 right, 1 left)] for the singles.
+## [name, variant, hand, carry-on bags]; a two-bag guest's roller is the bag
+## of its hand's index (SecurityLooks.hand_of()).
 const SINGLES := [
-	["male_right", 0, 0], ["male_left", 0, 1], ["female_right", 1, 0], ["female_left", 1, 1]
+	["male_right", 0, 0, 1],
+	["male_left", 0, 1, 1],
+	["female_right", 1, 0, 1],
+	["female_left", 1, 1, 1],
 ]
+## The singles with --two-bag.
+const TWO_BAG_SINGLES := [["two_male_left", 0, 1, 2], ["two_female_right", 1, 0, 2]]
 
 var _seed := 0
 var _no_plates := false
+## --two-bag: the two-bag singles and the two-bag pair (TWO_BAG_SINGLES).
+var _two_bag := false
 ## --trace=<subject>: a TRACE row for that subject on every frame of the watch.
 var _trace := ""
 var _out_dir := ""
@@ -89,8 +109,10 @@ var _pairs: Array = []
 
 func _initialize() -> void:
 	Engine.max_fps = SimClock.TICK_RATE * 3
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	_seed = randi()
+	_two_bag = "--two-bag" in OS.get_cmdline_user_args()
+	var out_rel := OUT_REL + ("-two-bag" if _two_bag else "")
+	_out_dir = ProjectSettings.globalize_path(out_rel).simplify_path()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
 			_seed = int(arg.get_slice("=", 1))
@@ -160,11 +182,12 @@ func _boot() -> bool:
 ## another subject's front.
 func _place() -> bool:
 	var seats: Array = _sim.layout.seats
+	var count := 3 if _two_bag else 2
 	var used := {}
 	var pairs: Array = []
 	for a: Dictionary in seats:
 		for b: Dictionary in seats:
-			if pairs.size() == 2:
+			if pairs.size() == count:
 				break
 			var step: Vector2i = (b["front"] as Vector2i) - (a["front"] as Vector2i)
 			var out: Vector2i = (a["front"] as Vector2i) - (a["cell"] as Vector2i)
@@ -177,18 +200,23 @@ func _place() -> bool:
 			pairs.append([a, b])
 			used[a["cell"]] = true
 			used[b["cell"]] = true
-	if pairs.size() < 2:
+	if pairs.size() < count:
 		_invalid(
-			"fewer than two neighbouring seat pairs (%d of %d seats)" % [pairs.size(), seats.size()]
+			(
+				"fewer than %d neighbouring seat pairs (%d of %d seats)"
+				% [count, pairs.size(), seats.size()]
+			)
 		)
 		return false
 	# Pair 0: the left guest's roller toward the neighbour (left hand), his away
 	# (left hand too), set. Pair 1: the hands ParkSide.gap_hand() chooses (-1).
-	var hands := [[1, 1], [-1, -1]]
-	for n in 2:
+	# Pair 2: two-bag guests, a's roller bag 1 (left, into the gap), b's bag 0
+	# (right, into the same gap).
+	var hands := [[1, 1], [-1, -1], [1, 0]]
+	for n in count:
 		var first := _subjects.size()
 		for m in 2:
-			_add("pair%d_%s" % [n, ["a", "b"][m]], pairs[n][m], 0, hands[n][m])
+			_add("pair%d_%s" % [n, ["a", "b"][m]], pairs[n][m], 0, hands[n][m], 2 if n == 2 else 1)
 		_pairs.append([first, first + 1])
 	# A single's roller side (the seat beside it that way) holds no subject, and
 	# no subject's roller points at it.
@@ -197,7 +225,7 @@ func _place() -> bool:
 		# Pair 1 is left to gap_hand(): its right gap, as it chooses at free gaps.
 		var way := _left(s["seat"]) * (1 if s["hand"] == 1 else -1)
 		toward[(s["seat"]["cell"] as Vector2i) + way] = true
-	for single: Array in SINGLES:
+	for single: Array in TWO_BAG_SINGLES if _two_bag else SINGLES:
 		var seat: Dictionary = {}
 		for s: Dictionary in seats:
 			var way := _left(s) * (1 if single[2] == 1 else -1)
@@ -210,7 +238,7 @@ func _place() -> bool:
 			_invalid("no free seat for %s (%d seats)" % [single[0], seats.size()])
 			return false
 		used[seat["cell"]] = true
-		_add(single[0], seat, single[1], single[2])
+		_add(single[0], seat, single[1], single[2], single[3])
 	return not _failed
 
 
@@ -228,18 +256,21 @@ func _near_used(seat: Dictionary, used: Dictionary) -> bool:
 	return false
 
 
-## A passenger with one roller at `seat`'s front, of `variant`, its roller in
-## `hand` (ParkSide's stamp), kept on time on every tick.
-func _add(label: String, seat: Dictionary, variant: int, hand: int) -> void:
+## A passenger with `bags` carry-on bags at `seat`'s front, of `variant`, its
+## roller in `hand`: one bag, the roller, held in `hand` by ParkSide's stamp;
+## two, the roller as bag `hand` (SecurityLooks.hand_of()). Kept on time on
+## every tick.
+func _add(label: String, seat: Dictionary, variant: int, hand: int, bags := 1) -> void:
 	var p: Passenger = null
-	for attempt in 200:
+	var roller := 0 if bags == 1 else hand
+	for attempt in 400:
 		p = _sim.get_passenger(_sim.spawn_now(StarterFlight.first_flight()))
-		if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER:
+		if SecurityLooks.bag_kind(p, roller) == SecurityLooks.Kind.ROLLER:
 			break
 		p.carry_on = 0
 	ToiletTestLayout.calm(p)
 	p.variant = variant
-	p.carry_on = 1
+	p.carry_on = bags
 	p.liquids = false
 	p.alarm = false
 	p.cleared = true
@@ -265,7 +296,7 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int) -> void:
 	p.set_path(path)
 	p.boarding_tick = _clock.tick + 100000
 	_clock.ticked.connect(func(_t: int) -> void: p.late = false)
-	if hand >= 0:
+	if hand >= 0 and bags == 1:
 		var stamps: Dictionary = _sim.get_meta(ParkSide.STAMPS, {})
 		stamps[p.id] = ["gate %s" % seat["cell"], hand]
 		_sim.set_meta(ParkSide.STAMPS, stamps)
@@ -278,6 +309,7 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int) -> void:
 				"p": p,
 				"seat": seat,
 				"hand": hand,
+				"bag": roller,
 				"look": look,
 				"stand_max": -1,
 				"seated_max": -1,
@@ -290,8 +322,8 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int) -> void:
 	)
 	print(
 		(
-			"PROBE subject %s id %d body %s hand %d seat %s front %s"
-			% [label, p.id, PassengerLooks.BODIES[look], hand, seat["cell"], seat["front"]]
+			"PROBE subject %s id %d body %s hand %d bags %d seat %s front %s"
+			% [label, p.id, PassengerLooks.BODIES[look], hand, bags, seat["cell"], seat["front"]]
 		)
 	)
 
@@ -350,9 +382,9 @@ func _measure(i: int) -> bool:
 	var s := _subjects[i]
 	var p: Passenger = s["p"]
 	var props := _views.carry_on_props()
-	var bag := props.bag_state(p.id, 0)
+	var bag := props.bag_state(p.id, s["bag"])
 	var place := int(bag.get("place", -1))
-	if place / 4 != SecurityLooks.Home.FLOOR or props.transfer_progress(p.id, 0) < 1.0:
+	if place / 4 != SecurityLooks.Home.FLOOR or props.transfer_progress(p.id, s["bag"]) < 1.0:
 		s["was_up"] = true
 		return false
 	if not s.get("was_up", false):
@@ -367,7 +399,7 @@ func _measure(i: int) -> bool:
 			)
 		return false
 	var body := _views.node_for(p.id)
-	var node: Node3D = props.props_of(p.id)["bags"][0]
+	var node: Node3D = props.props_of(p.id)["bags"][s["bag"]]
 	var front := _sim.grid.cell_to_world(p.seat_front)
 	var frame: Transform3D = RollerPark.chair_front(_sim, p, SecurityLooks.Kind.ROLLER)
 	s["spot"] = frame.affine_inverse() * node.global_position
@@ -375,7 +407,7 @@ func _measure(i: int) -> bool:
 	var flat := Vector2(body.global_position.x - front.x, body.global_position.z - front.z)
 	if not s.has("down_tick"):
 		s["down_tick"] = _clock.tick
-		s["hand"] = SecurityLooks.hand_of(_sim, p, 0)
+		s["hand"] = SecurityLooks.hand_of(_sim, p, s["bag"])
 		print(
 			(
 				"PROBE %s roller down tick %d, body %.3f m off its front, stage %d"
@@ -608,13 +640,25 @@ func _summary() -> void:
 		var b: Dictionary = _subjects[pair[1]]
 		# b's front is a's front plus a's left step: a's left and b's right share the gap.
 		var shared := int(a["hand"] == 1 and b["hand"] == 0)
+		var two := (a["p"] as Passenger).carry_on > 1 and (b["p"] as Passenger).carry_on > 1
 		print(
 			(
-				"GAP %s hand %d, %s hand %d: both rollers in the gap between them %d (0)"
-				% [a["name"], a["hand"], b["name"], b["hand"], shared]
+				"GAP %s hand %d, %s hand %d: both rollers in the gap between them %d (%d)"
+				% [a["name"], a["hand"], b["name"], b["hand"], shared, int(two)]
 			)
 		)
-		if shared > 0:
+		if two:
+			# Two two-bag rollers whose bags face one gap: they must lie apart.
+			var reach := 0.0
+			for t: Dictionary in [a, b]:
+				var tp: Passenger = t["p"]
+				var tspot: Vector3 = t["spot"]
+				reach += absf(tspot.x) + GateRoller.SHELL_HALF_M * SecurityLooks.bag_scale(tp)
+			var clear := 1.0 - reach
+			print("GAP_CLEAR %s and %s: shells %.3f m apart (> 0)" % [a["name"], b["name"], clear])
+			if shared != 1 or clear <= 0.0:
+				_invalid("%s and %s two-bag rollers do not lie apart" % [a["name"], b["name"]])
+		elif shared > 0:
 			_invalid("%s and %s lay their rollers into one gap" % [a["name"], b["name"]])
 	for s: Dictionary in _subjects:
 		var spot: Vector3 = s["spot"]
@@ -628,7 +672,12 @@ func _summary() -> void:
 					s["hand"],
 					spot.x,
 					spot.z,
-					out * GateRoller.side(s["look"], s["hand"]),
+					(
+						out
+						* GateRoller.side(
+							s["look"], s["hand"], SecurityLooks.bag_scale(s["p"] as Passenger)
+						)
+					),
 					RollerPark.FEET_AHEAD_M
 				]
 			)
@@ -672,7 +721,7 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	for i: int in which:
 		var p: Passenger = _subjects[i]["p"]
 		bodies.append(_views.node_for(p.id))
-		nodes.append(props.props_of(p.id)["bags"][0])
+		nodes.append(props.props_of(p.id)["bags"][_subjects[i]["bag"]])
 		mid += _sim.grid.cell_to_world(p.seat_front) / which.size()
 	var s := _subjects[which[0]]
 	var frame: Transform3D = RollerPark.chair_front(_sim, s["p"], SecurityLooks.Kind.ROLLER)
