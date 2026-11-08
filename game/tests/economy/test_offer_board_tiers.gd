@@ -199,3 +199,14 @@ func test_a_starter_airline_cannot_carry_a_higher_tiers_terms() -> void:
 	var dear := TestOfferBoard.record("O0N1", 0, 600)
 	dear["fee_per_passenger"] = OfferBoard.TIER_FEES[1][1]
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(dear))).is_false()
+
+
+## Tier 2 airlines now offer medium planes, so the offers a board saves changed.
+func test_the_offer_save_version_is_3_and_a_version_2_save_is_refused() -> void:
+	assert_int(OfferBoard.SAVE_VERSION).is_equal(3)
+	var board := OfferBoard.new()
+	board.ensure_day(0, _rng, OfferBoard.MAX_TIER)
+	var data := board.to_snapshot()
+	assert_int(int(data["save_version"])).is_equal(3)
+	data["save_version"] = 2
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()

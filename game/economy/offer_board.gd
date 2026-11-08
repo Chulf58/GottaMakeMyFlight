@@ -26,7 +26,10 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 
 ## 2: small flights carry 8-16 passengers (was 12-24), so a version 1 save may
 ## hold a count no small offer can have now.
-const SAVE_VERSION := 2
+## 3: tier 2 airlines offer medium planes while large is held back
+## (PlaneClasses.max_offer_class), so the offers a board saves changed. A
+## version 2 save is refused; there is no migration.
+const SAVE_VERSION := 3
 const SAVE_KEYS := ["save_version", "offers"]
 const OFFER_KEYS := [
 	"id",
