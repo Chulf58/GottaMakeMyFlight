@@ -150,12 +150,28 @@ const FOLLOW_SPLIT := 0.7
 ## guest walked back past; 1.3 m out, the sofa and pod clear, the chair 0.04 m.
 ## A trail tested as a segment behind the body tipped too soon: the roller
 ## rides on the hand's side, off that line.
-## The move is then ROLL_TICKS longer (stamped at the park's end), and the tip
-## starts by then whatever. The lift, the park and the tip keep their timing
-## in ticks: every phase is read in up_k(), sim ticks over TICKS_UP.
-## Walkers moving before the park's end (a collecting walker, the shower's
-## door) tip as before.
+## The move is then ROLL_TICKS longer, and the tip starts by then whatever.
+## The lift, the park and the tip keep their timing in ticks: every phase is
+## read in up_k(), sim ticks over TICKS_UP. Walkers moving before the park's
+## end (a collecting walker, the shower's door) tip as before.
+## Decided on sim ticks, never on drawn frames (roll_step(), board c0707a22):
+## a decision taken on the first frame drawing the park's end never rolled a
+## pick-up first drawn 9 ticks late (past LIFT_END), and one drawn every third
+## tick rolled the shower's door pick-up and tipped a sofa's a tick late. The
+## walker's stood point is its tick position ROLL_FROM ticks into the move and
+## it must not move from there to ROLL_TO: the tick positions drawn over the
+## park's nominal span, LIFT_END to UP_PARK_END (a body is drawn between its
+## last two tick positions, so a tick behind).
 const CLEAR_M := 1.5
+const ROLL_FROM := floorf(TICKS_UP * LIFT_END)
+const ROLL_TO := floorf(TICKS_UP * UP_PARK_END)
+## The ticks of tick positions kept on a roller's record (roll_step()): past
+## the longest rolled move (TICKS_UP + ROLL_TICKS).
+const TRACK_TICKS := 64
+## A floor>pull that does not roll runs its rods out from SETTLE_TICKS after
+## its park when that leaves this many ticks to its end, else from the park's
+## end (rods_t()).
+const RODS_OUT_TICKS := 3.0
 ## The share of the rods run out while it rolls upright. Measured hips while
 ## rolling (probe ROLL_HIPS): 0.93 to 0.96 of standing at 0.45, 0.84 to 0.89 at
 ## 0.3; with them in the bar was at 0.48 m, all out at 2.1 m.
@@ -545,8 +561,11 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		"park_tip",
 		"park_low",
 		"up_near",
+		"park_up",
 		"rolls",
 		"roll_tip",
+		"roll_at",
+		"roll_frame",
 		"queue",
 		"queue_tip",
 		"queue_tip_yaw",
@@ -562,20 +581,40 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		bag["ticks"] = QUEUE_STAND_TICKS + QUEUE_AHEAD_TICKS
 	elif CarryLead.start_of(bag)[0] == CarryLead.End.REST:
 		bag["ticks"] = TICKS_UP
+		bag["park_up"] = true
 		bag["reach"] = REACH_END
 		bag["from_world"] = body * (bag["from"] as Transform3D)
 		if bag.get("collecting", false):
 			bag["park_low"] = true
 		# Standing at a gate chair's front until the pick-up is over
-		# (ParkRecovery.stand_up_ticks()): parked beside it, not ahead.
+		# (ParkRecovery.stand_up_ticks()): parked beside it, not ahead. The
+		# face the walker had on the move's first tick (roll_step()'s track),
+		# not on the frame that first draws it.
 		bag["up_near"] = not is_nan(face)
+		var first := _slot(bag, _since_tick(bag))
+		if first >= 0:
+			bag["up_near"] = not is_nan(float(bag["roll_faces"][first]))
 	bag["park_frame"] = _yawed(body)
 	if not is_nan(face) and CarryLead.start_of(bag)[0] == CarryLead.End.HELD:
 		bag["park_frame"] = Transform3D(Basis(Vector3.UP, face), body.origin)
+	# A floor>pull with a face is parked where the sim had the walker on the
+	# move's first tick, facing that tick's face (roll_step()'s track), not the
+	# body drawn on the frame that stamps it: a pick-up first drawn late, the
+	# walker moved or turned since, parked its roller elsewhere against the
+	# same roll (Sol re-check of 57cc65f). The rolled carry (_carried()) holds
+	# it against the same sim data.
+	if bag.get("park_up", false) and bag.get("up_near", false):
+		var at := _slot(bag, _since_tick(bag))
+		if at >= 0:
+			var yaw := float(bag["roll_faces"][at])
+			bag["park_frame"] = Transform3D(Basis(Vector3.UP, yaw), bag["roll_points"][at])
 	# At a seat: BoothRoller.fix_start() keeps the walls round it for plan()
 	# (ParkWalls, board a40fdbaf).
 	if not is_nan(face) and not queued(bag):
 		bag["faced"] = true
+	# First drawn after the sim could decide its roll (or its tip): as decided,
+	# from the same track, on the stamp.
+	_apply_roll(bag)
 
 
 ## The yaw `p` faces once it has turned to sit or stay where it sets its bags
@@ -787,7 +826,17 @@ static func rods_t(k: float, bag: Dictionary) -> float:
 		var settle := SETTLE_TICKS / TICKS_UP
 		var up := up_k(bag, k)
 		if not rolls(bag):
-			return smoothstep(park + settle, 1.0, up)
+			# In through the park (the empty hand crossing to the bar), then out
+			# by the move's end: SETTLE_TICKS after the park when that leaves
+			# RODS_OUT_TICKS, else from the park's end, the run-out compressed
+			# into what is left. One taken late ends its park near or past k 1:
+			# run from the park's end plus SETTLE_TICKS, the smoothstep had its
+			# edges the wrong way round (all out at once). A park ending past
+			# k 1 keeps them in to the end, as the rest of the move snaps then.
+			var out_from := park + settle
+			if out_from > 1.0 - RODS_OUT_TICKS / TICKS_UP:
+				out_from = park
+			return 0.0 if up <= out_from else smoothstep(out_from, 1.0, up)
 		var part := ROLL_RODS * smoothstep(park + settle, park + TIP_UP, up)
 		if not bag.has("roll_tip"):
 			return part
@@ -834,7 +883,7 @@ static func up_k(bag: Dictionary, k: float) -> float:
 
 
 ## Whether the floor>pull of `bag` rolls its roller upright until clear (the
-## header's CLEAR_M), decided at the park's end (_off_floor()).
+## header's CLEAR_M), decided on a sim tick (roll_step()).
 static func rolls(bag: Dictionary) -> bool:
 	return bag.get("rolls", false)
 
@@ -1265,6 +1314,10 @@ static func _off_floor(
 			var cut: Vector2 = bag["park_cut"]
 			ends = up_ends(bag)
 			v = lerpf(cut.y, 1.0, smoothstep(cut.x, lerpf(cut.x, ends.y, CUT_ON), k))
+		if k < ends.y and rolls(bag):
+			# Rolled: carried with the body from its park on (_carried()), so a
+			# park drawn late, running into the step off, rides with the body.
+			return [false, _carried(bag, parked, body), bar, over_top(handle, bar, v), 1.0]
 		if k < ends.y:
 			bag["park_last"] = body
 			# The empty hand let go goes on with the walker by half its last step,
@@ -1274,15 +1327,15 @@ static func _off_floor(
 			var hand := parked * over_top(handle, bar, v)
 			hand += (body.origin - last.origin) * 0.5 * (1.0 - v)
 			return [false, parked, bar, parked.affine_inverse() * hand, 1.0]
-	if _rolling(bag, k, body):
-		return [true, _followed(bag, parked, body, k), bar, bar, 1.0]
+	if rolls(bag):
+		var carried := _carried(bag, parked, body)
+		if _rolling(bag, k):
+			return [true, carried, bar, bar, 1.0]
+		var tip := smoothstep(0.0, 1.0, (k - float(bag["roll_tip"])) / TIP_UP)
+		return [true, rolled(carried, want, tip), bar, bar, 1.0 - smoothstep(0.0, 1.0, tip)]
 	var tipped := _followed(bag, parked, body, k)
 	var from: float = bag.get("park_tip", ends.y)
-	var span := 1.0 - from
-	if rolls(bag):
-		from = bag["roll_tip"]
-		span = TIP_UP
-	var u := smoothstep(0.0, 1.0, (k - from) / span)
+	var u := smoothstep(0.0, 1.0, (k - from) / (1.0 - from))
 	# Into the pull's arm pose as the bag comes onto the trail, from the frame
 	# the hand took it ("park_tip"; between two frames at 3x it had rolled
 	# 0.2 m toward the trail by the first).
@@ -1290,35 +1343,145 @@ static func _off_floor(
 	return [true, tipped, bar, bar, 1.0 - smoothstep(0.0, 1.0, u)]
 
 
-## Whether the floor>pull of `bag` at `k` (up_k()), its park over and the body at
-## `body` (yaw only), still rolls its roller upright (the header's CLEAR_M). At
-## the park's end it decides once whether it rolls: stamped with a face
-## ("up_near") and the walker not moved in the park (no "park_cut"); then the
-## move is made ROLL_TICKS longer. It stops rolling, for good ("roll_tip", the
-## move then ending with the tip), once the body is CLEAR_M from where it stood
-## in the park ("park_at"), once its walker's home is no longer the hand
-## ("home_held", held_home(): one sitting down again tipped at the forced end,
-## 30 ticks on, before it could set the roller down again), or so late that the
-## tip only just ends with the move.
-static func _rolling(bag: Dictionary, k: float, body: Transform3D) -> bool:
+## Whether the floor>pull of `bag` at `k` (up_k()), its park over, still rolls
+## its roller upright: rolls() and not yet at its tip ("roll_tip"). Read only:
+## both are set on sim ticks (roll_step()), never on a drawn frame. Not decided
+## yet, it tips as before (only a walker drawn moving early in its park, its
+## park cut short, gets here before roll_step() decides).
+static func _rolling(bag: Dictionary, k: float) -> bool:
+	return rolls(bag) and k < float(bag.get("roll_tip", INF))
+
+
+## Records on `bag` (CarryOnProps' record of a bag of `kind`), on every sim
+## tick `now` (CarryOnProps.sync(), drawn or not), its walker's tick position
+## `at` (PassengerViews.tick_position()) and the yaw `face` it faced
+## (sit_face()), in a ring of the last TRACK_TICKS ticks ("roll_points",
+## "roll_faces", "roll_ticks", made once per record, written in place), then
+## applies them to its move (_apply_roll()). The track is the sim's alone, and
+## read against the move's own "since", so a move stamped again while its hand
+## still reaches (it keeps its "since") reads the same ticks, and a first draw
+## coming late (a frame running several ticks) decides the same.
+static func roll_step(
+	bag: Dictionary, kind: SecurityLooks.Kind, now: float, at: Vector3, face: float
+) -> void:
+	if kind != SecurityLooks.Kind.ROLLER:
+		return
+	if not bag.has("roll_ticks"):
+		var points: Array[Vector3] = []
+		var faces: Array[float] = []
+		var ticks: Array[int] = []
+		points.resize(TRACK_TICKS)
+		faces.resize(TRACK_TICKS)
+		ticks.resize(TRACK_TICKS)
+		ticks.fill(-1)
+		bag["roll_points"] = points
+		bag["roll_faces"] = faces
+		bag["roll_ticks"] = ticks
+	var tick := int(now)
+	var i := posmod(tick, TRACK_TICKS)
+	var slots: Array[int] = bag["roll_ticks"]
+	var spots: Array[Vector3] = bag["roll_points"]
+	var yaws: Array[float] = bag["roll_faces"]
+	slots[i] = tick
+	spots[i] = at
+	yaws[i] = face
+	bag["roll_now"] = tick
+	_apply_roll(bag)
+
+
+## The sim tick the move of `bag` started on (its "since"), -1 with none.
+static func _since_tick(bag: Dictionary) -> int:
+	return int(bag.get("since", -1.0))
+
+
+## The ring slot (roll_step()) holding sim tick `tick` on `bag`, or -1 when
+## the track does not hold it (never seen, or more than TRACK_TICKS ago).
+static func _slot(bag: Dictionary, tick: int) -> int:
+	if tick < 0 or not bag.has("roll_ticks"):
+		return -1
+	var i := posmod(tick, TRACK_TICKS)
+	return i if int(bag["roll_ticks"][i]) == tick else -1
+
+
+## Applies the sim's track (roll_step()) to the floor>pull of `bag` (stamped
+## "park_up", stamp()) as of the last tick seen ("roll_now"), on that tick or
+## on the stamp of a move first drawn late. Once its park's nominal span is
+## seen (ROLL_TO ticks in), it decides once whether it rolls: stamped with a
+## face (the face on its first tick, stamp()) and not moved more than MOVED_M,
+## ROLL_FROM to ROLL_TO, from where it stood ROLL_FROM ticks in ("roll_at"; with
+## its first tick's face, "roll_frame", what _carried() carries it in). A
+## rolled move is ROLL_TICKS longer. It stops rolling, for good ("roll_tip", the
+## move then ending with the tip), once the drawn body is CLEAR_M from where it
+## stood (drawn a tick behind its tick position, so a tick on), once its
+## walker's home is no longer the hand ("home_held", held_home(): one sitting
+## down again tipped at the forced end, 30 ticks on, before it could set the
+## roller down again), or so late that the tip only just ends with the move.
+## Each set on the tick it falls due, so a tip seen sooner still comes first.
+## A track missing a tick it reads (a record made since the move began, as
+## after a load, or a first draw more than TRACK_TICKS late) decides no roll.
+static func _apply_roll(bag: Dictionary) -> void:
+	if not bag.get("park", false) or not bag.get("park_up", false):
+		return
+	if bag.has("rolls") and (not rolls(bag) or bag.has("roll_tip")):
+		return
+	var since := _since_tick(bag)
+	var n := int(bag.get("roll_now", -1)) - since
 	if not bag.has("rolls"):
-		bag["rolls"] = bag.get("up_near", false) and not bag.has("park_cut")
+		if n < ROLL_TO:
+			return
+		bag["rolls"] = bag.get("up_near", false) and _stood_still(bag, since)
 		if not bag["rolls"]:
-			return false
+			return
+		var first := _slot(bag, since)
+		var stood: Vector3 = bag["roll_points"][_slot(bag, since + int(ROLL_FROM))]
 		bag["ticks"] = TICKS_UP + ROLL_TICKS
-		if not bag.has("park_at"):
-			bag["park_at"] = body.origin
-	if not rolls(bag) or bag.has("roll_tip"):
-		return false
+		bag["roll_at"] = stood
+		bag["roll_frame"] = Transform3D(Basis(Vector3.UP, float(bag["roll_faces"][first])), stood)
 	var last := (TICKS_UP + ROLL_TICKS) / TICKS_UP - TIP_UP
-	var near: bool = body.origin.distance_to(bag["park_at"]) < CLEAR_M
-	if near and k < last and not bag.get("home_held", false):
-		return true
-	bag["roll_tip"] = k
+	var tip := INF
+	for t in range(int(ROLL_TO) + 1, n + 1):
+		var i := _slot(bag, since + t)
+		if i >= 0 and (bag["roll_points"][i] as Vector3).distance_to(bag["roll_at"]) >= CLEAR_M:
+			tip = (t + 1.0) / TICKS_UP
+			break
+	if bag.get("home_held", false):
+		tip = minf(tip, n / TICKS_UP)
+	if (n + 1.0) / TICKS_UP < minf(tip, last):
+		return
+	tip = minf(tip, last)
+	bag["roll_tip"] = tip
 	# The move ends with the tip, not ROLL_TICKS on: its home and hand are held
 	# only while it runs (hold_park()).
-	bag["ticks"] = (k + TIP_UP) * TICKS_UP
-	return false
+	bag["ticks"] = (tip + TIP_UP) * TICKS_UP
+
+
+## Whether the track of `bag` holds the move's first tick (`since`, its face)
+## and every tick ROLL_FROM to ROLL_TO in, each within MOVED_M of where it
+## stood ROLL_FROM ticks in. A missing tick is a no.
+static func _stood_still(bag: Dictionary, since: int) -> bool:
+	var first := _slot(bag, since)
+	var stood := _slot(bag, since + int(ROLL_FROM))
+	if first < 0 or stood < 0 or is_nan(float(bag["roll_faces"][first])):
+		return false
+	var at: Vector3 = bag["roll_points"][stood]
+	for t in range(int(ROLL_FROM), int(ROLL_TO) + 1):
+		var i := _slot(bag, since + t)
+		if i < 0 or (bag["roll_points"][i] as Vector3).distance_to(at) > MOVED_M:
+			return false
+	return true
+
+
+## The parked bag `parked` (world, placed in the move's "park_frame") of a
+## rolled floor>pull of `bag` carried with the body at `body` (yaw only): held
+## where it stands against the walker as it stood on the sim's ticks
+## ("roll_frame", _apply_roll()), never against a drawn frame. Its
+## "park_frame" is sim data too (the first tick's point and face, stamp()), so
+## every draw cadence parks and carries it the same way. Not built in
+## "roll_frame" itself: a draw every tick stamps the move before the stood
+## tick is seen, and its lift and park would then jump to the new spot at the
+## decision.
+static func _carried(bag: Dictionary, parked: Transform3D, body: Transform3D) -> Transform3D:
+	return body * ((bag["roll_frame"] as Transform3D).affine_inverse() * parked)
 
 
 ## The parked bag `parked` (world) carried with the body at `body` (yaw only)

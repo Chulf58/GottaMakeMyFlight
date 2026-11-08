@@ -247,8 +247,12 @@ static func start_of(bag: Dictionary) -> Array:
 ## Whether a hand-led move of `bag` (CarryOnProps' record, "led") drawn last
 ## at `k` has not left its start: the hand was still reaching for the bag (a
 ## move that starts HELD leaves at once). A move that interrupts it starts
-## where the bag is, at that start (CarryPlace._stamp).
+## where the bag is, at that start (CarryPlace._stamp). A parking move's reach
+## is in ticks of RollerPark.TICKS_UP (RollerPark.up_k()), however long the
+## move grew (a roller rolled upright at a seat, RollerPark.roll_step()).
 static func at_start(bag: Dictionary, k: float) -> bool:
+	if bag.get("park", false):
+		k = RollerPark.up_k(bag, k)
 	return (
 		bag.get("led", false) and k < span(start_of(bag)[0], End.HELD, REACH_SHARE, reach_of(bag)).x
 	)
