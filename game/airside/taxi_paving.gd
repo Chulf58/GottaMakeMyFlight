@@ -31,11 +31,15 @@ extends MeshInstance3D
 ## strips and may overlap them; every taxiway on the airside today is axis-
 ## aligned, so this only keeps a future diagonal leg from being left unpaved.
 ##
-## Each stand gets a pad (stand_pad()), so a parked plane of any class sits on
-## asphalt from nose to tail and the turn at the end of its pushback stays on
-## it: the class's swing square (StandEnvelope) merged with every class model's
-## parked footprint (door-aligned, PlaneClasses.stand_offset), carried south to
-## the stand's wall line, where the site's paving starts for a north-row stand.
+## Each stand gets a pad (stand_pad()), so a parked plane of every class the
+## gate takes sits on asphalt from nose to tail and the turn at the end of its
+## pushback stays on it: for each class up to the gate's max_class (Airside.
+## stand_pads()), the class's swing square (StandEnvelope) merged with each of
+## its models' parked footprints (door-aligned, PlaneClasses.stand_offset),
+## carried south to the stand's wall line, where the site's paving starts for a
+## north-row stand. A pad never paves a larger class's space, where the player
+## may still build (decision runway-and-taxi-technical-design-movement-plan-
+## analytic-bookings-planned-pauses, point 3).
 ## Pads lie PAD_DROP_M under the strips in one flat shade, the asphalt band's
 ## edge, so a strip's band runs over a pad as a lead-in, and two neighbours'
 ## pads overlap in the same colour without a visible seam.
@@ -87,21 +91,18 @@ func _init() -> void:
 
 
 ## Builds the mesh for `routes` (world points) around the lane at `lane_z`,
-## with a pad at each of `stand_points` (StandPlacement.stand_point()) and a
-## hold bar at each of `holds`, kept clear of the runway asphalt south to
-## `runway_south_z`.
+## with the stand pads `pad_list` (stand_pad()) and a hold bar at each of
+## `holds`, kept clear of the runway asphalt south to `runway_south_z`.
 func show_routes(
 	routes: Array[PackedVector3Array],
 	lane_z: float,
-	stand_points := PackedVector3Array(),
+	pad_list: Array[Rect2] = [],
 	holds := PackedVector3Array(),
 	runway_south_z := -INF
 ) -> void:
 	shown = strips(routes, lane_z)
 	lines = centrelines(shown, lane_z)
-	pads = []
-	for at in stand_points:
-		pads.append(stand_pad(at))
+	pads = pad_list.duplicate()
 	bars = hold_bars(holds, WIDTH_M, runway_south_z)
 	var marks := lines.duplicate()
 	marks.append_array(bars)

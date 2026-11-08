@@ -102,6 +102,8 @@ var graph := TaxiGraph.new()
 var stand_moves := 0
 ## Gate letter -> the stand its waypoints were last put at (set_gate_stands()).
 var gate_stands: Dictionary = {}
+## Gate letter -> its max_class, which sizes its stand pad (set_gate_classes()).
+var gate_classes: Dictionary = {}
 ## The asphalt under the taxi routes, rebuilt with the graph.
 var paving := TaxiPaving.new()
 ## Whether the last rebuild() succeeded. set_gate_stands() skips a call with
@@ -150,11 +152,51 @@ func rebuild() -> bool:
 		ok = false
 	for i in range(1, chain.size()):
 		graph.link(chain[i - 1], chain[i])
-	paving.show_routes(
-		taxi_routes(), StandPlacement.TAXI_LANE_Z, stand_points(), hold_points(), runway_south()
-	)
+	_show_paving()
 	_built = ok
 	return ok
+
+
+## Sizes each gate's stand pad for the classes up to its max_class (gate letter ->
+## GateDesks.max_class, "" for none) and repaves when that changed. ApronStand
+## sends it on every refresh of the gates.
+func set_gate_classes(classes: Dictionary) -> void:
+	if classes == gate_classes:
+		return
+	gate_classes = classes.duplicate()
+	if _built:
+		_show_paving()
+
+
+func _show_paving() -> void:
+	paving.show_routes(
+		taxi_routes(), StandPlacement.TAXI_LANE_Z, stand_pads(), hold_points(), runway_south()
+	)
+
+
+## The pad under every stand in use (TaxiPaving.stand_pad()): a gate's for the
+## classes up to its gate_classes entry, none for a gate with no class; every
+## class's for a gate with no entry and for the one stand, which no gate sizes.
+func stand_pads() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	var points := stand_points()
+	var gates := gate_stands.keys()
+	for i in points.size():
+		var classes := PlaneClasses.ORDER
+		if i < gates.size() and gate_classes.has(gates[i]):
+			classes = classes_up_to(gate_classes[gates[i]])
+		if not classes.is_empty():
+			out.append(TaxiPaving.stand_pad(points[i], classes))
+	return out
+
+
+## The plane classes from small up to `largest`, or none for "" or an unknown class.
+static func classes_up_to(largest: String) -> Array[String]:
+	var out: Array[String] = []
+	var rank := PlaneClasses.ORDER.find(largest)
+	for i in rank + 1:
+		out.append(PlaneClasses.ORDER[i])
+	return out
 
 
 ## The south edge of the runway's asphalt: the runway pieces are RUNWAY_PIECE's

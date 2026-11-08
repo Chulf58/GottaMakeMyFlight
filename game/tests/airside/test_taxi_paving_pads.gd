@@ -1,6 +1,8 @@
 class_name TestTaxiPavingPads
 extends GdUnitTestSuite
-## TaxiPaving's stand pads and hold bars (board items R10 and 6a1833b8): at every
+## TaxiPaving's stand pads and hold bars (board items R10 and 6a1833b8). A pad is
+## sized for the classes up to its gate's max_class (Airside.set_gate_classes()),
+## and follows it when it changes. At every
 ## legal stand of the north and south rows, every class model parked door-aligned
 ## sits on paving from nose to tail and wingtip to wingtip, and through taxi in,
 ## pushback and taxi out its nose and its own origin (the main gear's stand-in)
@@ -60,6 +62,14 @@ func after() -> void:
 
 func after_test() -> void:
 	_airside.set_gate_stands({})
+	_airside.set_gate_classes({})
+
+
+## Gate A on `stand` with a large max_class, as GateDesks gives a gate whose whole
+## large envelope is clear.
+func _large_gate(stand: Dictionary) -> bool:
+	_airside.set_gate_classes({"A": PlaneClasses.LARGE})
+	return _airside.set_gate_stands({"A": stand})
 
 
 ## Stands out from north-facing exits on the grid's north row (wall z -210) and
@@ -106,8 +116,8 @@ func _model_points(pose: Transform3D, model: String, state: int) -> Array[Vector
 
 
 ## {"sampled": points checked, "off": "model state point" for each off the paving}
-## over gate `gate`'s ground states, every model.
-func _ground_off(gate: String) -> Dictionary:
+## over gate `gate`'s ground states, for each of `models` (every model by default).
+func _ground_off(gate: String, models: Array = PlaneModels.PLANES.keys()) -> Dictionary:
 	var sampled := 0
 	var off: Array[String] = []
 	for state in GROUND:
@@ -115,7 +125,7 @@ func _ground_off(gate: String) -> Dictionary:
 		var entry := FlightPose.exit_dir(_airside.phase_path(PREVIOUS_MOVE[state], gate))
 		for step in POSE_STEPS + 1:
 			var pose := FlightPose.pose(state, float(step) / POSE_STEPS, path, entry)
-			for model: String in PlaneModels.PLANES:
+			for model: String in models:
 				for at in _model_points(pose, model, state):
 					sampled += 1
 					if RUNWAY.has_point(Vector2(at.x, at.z)):
@@ -128,7 +138,7 @@ func _ground_off(gate: String) -> Dictionary:
 func test_every_class_parks_on_paving_at_every_legal_stand_nose_to_tail() -> void:
 	var checked := 0
 	for stand in _legal_stands():
-		assert_bool(_airside.set_gate_stands({"A": stand})).is_true()
+		assert_bool(_large_gate(stand)).is_true()
 		var at := StandPlacement.stand_point(stand)
 		assert_int(_airside.paving.pads.size()).is_equal(1)
 		print("stand %s pad %s" % [stand, _airside.paving.pads[0]])
@@ -149,7 +159,7 @@ func test_every_class_parks_on_paving_at_every_legal_stand_nose_to_tail() -> voi
 func test_the_north_row_model_07_and_05_noses_are_paved_to_the_site() -> void:
 	var stand := StandPlacement.for_cell(_grid, Vector2i(SITE.grid_size.x / 2, 0))
 	assert_float(float(stand["wall_z"])).is_equal_approx(SITE.grid_origin.z, 0.001)
-	assert_bool(_airside.set_gate_stands({"A": stand})).is_true()
+	assert_bool(_large_gate(stand)).is_true()
 	var at := StandPlacement.stand_point(stand)
 	for model in ["tp_plane_05a", "tp_plane_07a"]:
 		var rect := TaxiPaving.parked_footprint(at, model)
@@ -179,9 +189,57 @@ func test_a_small_class_pad_leaves_a_large_tail_on_grass() -> void:
 	assert_bool(TaxiPaving.stand_pad(at).encloses(pad)).is_true()
 
 
+func test_a_small_gate_gets_a_small_pad_that_still_holds_its_small_planes() -> void:
+	var stand := StandPlacement.for_cell(_grid, Vector2i(SITE.grid_size.x / 2, 0))
+	var at := StandPlacement.stand_point(stand)
+	_airside.set_gate_classes({"A": PlaneClasses.SMALL})
+	assert_bool(_airside.set_gate_stands({"A": stand})).is_true()
+	assert_int(_airside.paving.pads.size()).is_equal(1)
+	var pad: Rect2 = _airside.paving.pads[0]
+	var small: Array[String] = [PlaneClasses.SMALL]
+	print("small gate pad %s" % pad)
+	assert_object(pad).is_equal(TaxiPaving.stand_pad(at, small))
+	# It holds the small swing square and every small model parked, nose to tail.
+	var swing := StandEnvelope.rects(stand, PlaneClasses.SMALL)[0]
+	assert_bool(pad.grow(TaxiPaving.SAME_M).encloses(swing)).is_true()
+	var small_models: Array = PlaneClasses.CLASSES[PlaneClasses.SMALL]["models"]
+	for model: String in small_models:
+		assert_array(_footprint_off(at, model)).is_empty()
+	var rolling := _ground_off("A", small_models)
+	print("small gate: sampled %d, off %s" % [rolling["sampled"], rolling["off"]])
+	assert_int(rolling["sampled"]).is_greater(3 * POSE_STEPS * 2)
+	assert_array(rolling["off"]).is_empty()
+	# It paves none of the medium swing square, where the player may still build.
+	var medium := StandEnvelope.rects(stand, PlaneClasses.MEDIUM)[0]
+	assert_bool(pad.encloses(medium)).is_false()
+	assert_float(pad.size.x).is_less(medium.size.x)
+
+
+func test_the_pad_follows_a_change_of_max_class() -> void:
+	var stand := StandPlacement.for_cell(_grid, Vector2i(SITE.grid_size.x / 2, 0))
+	var at := StandPlacement.stand_point(stand)
+	assert_bool(_large_gate(stand)).is_true()
+	var large: Rect2 = _airside.paving.pads[0]
+	_airside.set_gate_classes({"A": PlaneClasses.MEDIUM})
+	var medium: Rect2 = _airside.paving.pads[0]
+	_airside.set_gate_classes({"A": PlaneClasses.SMALL})
+	var small: Rect2 = _airside.paving.pads[0]
+	print("pads large %s medium %s small %s" % [large, medium, small])
+	assert_object(large).is_equal(TaxiPaving.stand_pad(at, Airside.classes_up_to("large")))
+	assert_object(medium).is_equal(TaxiPaving.stand_pad(at, Airside.classes_up_to("medium")))
+	assert_bool(large.encloses(medium) and medium.encloses(small)).is_true()
+	assert_float(large.get_area()).is_greater(medium.get_area())
+	assert_float(medium.get_area()).is_greater(small.get_area())
+	# The mesh is rebuilt with it, and a gate with no class gets no pad.
+	var verts: int = _airside.paving.mesh.surface_get_array_len(0)
+	_airside.set_gate_classes({"A": ""})
+	assert_array(_airside.paving.pads).is_empty()
+	assert_int(_airside.paving.mesh.surface_get_array_len(0)).is_equal(verts - 4)
+
+
 func test_every_class_rolls_on_paving_through_taxi_in_pushback_and_taxi_out() -> void:
 	for stand in _legal_stands():
-		assert_bool(_airside.set_gate_stands({"A": stand})).is_true()
+		assert_bool(_large_gate(stand)).is_true()
 		var result := _ground_off("A")
 		print("stand %s: sampled %d, off %s" % [stand, result["sampled"], result["off"]])
 		assert_int(result["sampled"]).is_greater(3 * POSE_STEPS * PlaneModels.PLANES.size() * 2)

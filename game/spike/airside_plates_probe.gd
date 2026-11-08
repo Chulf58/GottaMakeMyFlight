@@ -26,8 +26,10 @@ extends SceneTree
 ## apart and runs only _two_gate_paving(). Every run prints its world seed.
 ##
 ## The class paving stage (board items R10 and 6a1833b8) ray-casts the ground under
-## every plane model (every class) at its own points, door-aligned as PlaneView draws
-## it: the whole parked footprint every CLASS_STEP_M, and through taxi in, pushback and
+## every plane model of each class the gate takes (up to its max_class, which sizes
+## its pad), door-aligned as PlaneView draws it. The north-row stand is given a large
+## max_class, as GateDesks would give it with nothing built under its envelope.
+## Points: the whole parked footprint every CLASS_STEP_M, and through taxi in, pushback and
 ## taxi out the nose and the model's origin (the main gear's stand-in; the tail too in
 ## pushback). The tail and wingtips are left out while taxiing, where a large tail
 ## swings over the grass beside the strips at the lane's corners. It runs on the
@@ -1118,13 +1120,19 @@ func _class_paving() -> void:
 	_show_hud(false)
 	var airside := _main.get_node("Airside") as Airside
 	var before := airside.gate_stands.duplicate(true)
+	var classes_before := airside.gate_classes.duplicate()
 	await _refresh_paving_collider(airside)
 	_class_samples("starter", airside)
 	await _hold_plates(airside)
+	# The north-row stand has nothing built under any envelope, so GateDesks would
+	# give it a large max_class; no grid edit happens here, so nothing resends it.
 	var north := StandPlacement.make(0, NORTH_ROW_DOOR_X, PAVING_EDGE_Z)
 	var moved := {}
+	var large := {}
 	for gate: String in before:
 		moved[gate] = north
+		large[gate] = PlaneClasses.LARGE
+	airside.set_gate_classes(large)
 	var ok := airside.set_gate_stands(moved) if not moved.is_empty() else airside.set_stand(north)
 	await _frames(6)
 	var stands := airside.stand_points()
@@ -1136,6 +1144,7 @@ func _class_paving() -> void:
 		await _refresh_paving_collider(airside)
 		_class_samples("north_row", airside)
 		await _pad_plates(airside, at)
+	airside.set_gate_classes(classes_before)
 	if not before.is_empty():
 		airside.set_gate_stands(before)
 	_show_hud(true)
@@ -1188,7 +1197,19 @@ func _class_samples(label: String, airside: Airside) -> void:
 		var stand := airside.graph.position_of(&"Stand")
 		if airside.gate_stands.has(gate):
 			stand = StandPlacement.stand_point(airside.gate_stands[gate])
-		for model: String in PlaneModels.PLANES:
+		# Only the models the gate takes: its pad is sized for its max_class.
+		var models: Array[String] = []
+		for plane_class in Airside.classes_up_to(airside.gate_classes.get(gate, "large")):
+			models.append_array(PlaneClasses.CLASSES[plane_class]["models"])
+		print(
+			(
+				"CLASS %s gate=%s max_class=%s models=%s"
+				% [label, gate, airside.gate_classes.get(gate, "large"), models]
+			)
+		)
+		if models.is_empty():
+			_invalid("class %s: gate %s takes no plane" % [label, gate])
+		for model: String in models:
 			var shape: Dictionary = PlaneModels.PLANES[model]
 			var points := _footprint_points(stand, model)
 			var parked := points.size()
