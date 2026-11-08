@@ -33,7 +33,12 @@ extends Node3D
 ## to the taxi lane, and the class is the second line of the gate's caption over
 ## its desk ("Gate A" / "up to large planes"), the gate ribbon's form (decision
 ## gates-2-4-as-built-toon-gate-desk-model-sky-blue-link-line-f). Both show only
-## while build mode lasts, with the links.
+## while build mode lasts, with the links. Gates can stand 19 m apart, closer on
+## screen than a caption is wide when zoomed out, so every frame in build mode
+## layout_captions() lifts each gate caption, in desk order, clear of the gate
+## captions already placed and of every sign and caption of `markers` (the
+## desks' Closed and "!" signs), the way MissMarkers lifts its staff-spot
+## captions (MissMarkers.CAPTION_MARGIN_PX, MAX_LIFTS).
 ##
 ## Redrawn on every GateDesks.changed (each graph change). Draws in world space,
 ## so it sits at the world origin. View only.
@@ -81,6 +86,14 @@ void fragment() {
 static var _icon: ImageTexture
 ## The line shader with the depth test, and without it (the faint pass).
 static var _shaders: Dictionary = {}
+## Text -> its caption_size(), measured once.
+static var _caption_sizes: Dictionary = {}
+
+## The MissMarkers whose signs and captions the gate captions keep clear of.
+## Unset, the first node named MissMarkers in the tree is taken, looked for
+## once.
+var markers: Node3D
+var _markers_looked := false
 
 var _grid: BuildGrid
 var _gates: GateDesks
@@ -326,6 +339,103 @@ func through_node() -> MeshInstance3D:
 
 func _process(_delta: float) -> void:
 	update_sizes()
+	if _links.visible:
+		layout_captions()
+
+
+## The screen size in pixels of a caption saying `text` at
+## MissMarkers.CAPTION_FONT, every line, outline included, as
+## MissMarkers.caption_size() measures its own one-line captions.
+static func caption_size(text: String) -> Vector2:
+	if not _caption_sizes.has(text):
+		var font := ThemeDB.fallback_font
+		var lines := text.split("\n")
+		var width := 0.0
+		for line in lines:
+			var line_size := font.get_string_size(
+				line, HORIZONTAL_ALIGNMENT_LEFT, -1.0, MissMarkers.CAPTION_FONT
+			)
+			width = maxf(width, line_size.x)
+		var size := Vector2(width, font.get_height(MissMarkers.CAPTION_FONT) * lines.size())
+		_caption_sizes[text] = size + Vector2.ONE * 2.0 * MissMarkers.CAPTION_OUTLINE
+	return _caption_sizes[text]
+
+
+## Lifts each shown gate caption, in desk order, by the fewest steps (its height
+## plus MissMarkers.CAPTION_MARGIN_PX, at most MissMarkers.MAX_LIFTS) at which,
+## grown by that margin, it meets none of the gate captions already placed and
+## none of the shown signs and captions of `markers`. With no clear lift it
+## stays on its desk. Returns the screen rectangles (pixels) placed, in desk
+## order.
+func layout_captions() -> Array[Rect2]:
+	var placed: Array[Rect2] = []
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera == null:
+		return placed
+	if markers == null and not _markers_looked:
+		_markers_looked = true
+		for node in get_tree().root.find_children("MissMarkers", "Node3D", true, false):
+			if node is MissMarkers:
+				markers = node
+				break
+	var to_output := get_viewport().get_stretch_transform().get_scale().y
+	var blocked := marker_rects(markers, camera, to_output)
+	for caption in gate_captions():
+		caption.offset = Vector2.ZERO
+		if camera.is_position_behind(caption.global_position):
+			continue
+		var point := camera.unproject_position(caption.global_position) * to_output
+		var size := caption_size(caption.text)
+		var step := size.y + MissMarkers.CAPTION_MARGIN_PX
+		var chosen := Rect2(point.x - size.x / 2.0, point.y - size.y, size.x, size.y)
+		for lifts in MissMarkers.MAX_LIFTS:
+			var rect := Rect2(chosen.position - Vector2(0.0, step * lifts), size)
+			var padded := rect.grow(MissMarkers.CAPTION_MARGIN_PX)
+			if not (placed + blocked).any(
+				func(other: Rect2) -> bool: return padded.intersects(other)
+			):
+				chosen = rect
+				break
+		caption.offset = Vector2(0.0, point.y - size.y - chosen.position.y)
+		placed.append(chosen)
+	return placed
+
+
+## The screen rectangles (pixels, `to_output` per camera unit) of every shown
+## fixed-size sign (Sprite3D) and caption (Label3D, MissMarkers.CAPTION_FONT)
+## under `root` seen by `camera`: what MissMarkers draws. Empty for no root.
+static func marker_rects(root: Node, camera: Camera3D, to_output: float) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	if root == null:
+		return out
+	var height := camera.get_viewport().get_visible_rect().size.y * to_output
+	var unit := 2.0 * tan(deg_to_rad(camera.fov) / 2.0) / height
+	for node in root.find_children("*", "GeometryInstance3D", true, false):
+		var shown := node as Node3D
+		if not shown.is_visible_in_tree() or camera.is_position_behind(shown.global_position):
+			continue
+		var point := camera.unproject_position(shown.global_position) * to_output
+		if shown is Sprite3D and (shown as Sprite3D).fixed_size:
+			var sprite := shown as Sprite3D
+			if sprite.texture == null:
+				continue
+			var scale := sprite.pixel_size / unit
+			var size := sprite.texture.get_size() * scale
+			var centre := point + Vector2(sprite.offset.x, -sprite.offset.y) * scale
+			out.append(Rect2(centre - size / 2.0, size))
+		elif shown is Label3D and (shown as Label3D).fixed_size:
+			var label := shown as Label3D
+			var size := caption_size(label.text)
+			var shift := label.offset * label.pixel_size / unit
+			var bottom := point.y - shift.y
+			match label.vertical_alignment:
+				VERTICAL_ALIGNMENT_TOP:
+					bottom += size.y
+				VERTICAL_ALIGNMENT_CENTER:
+					bottom += size.y / 2.0
+			var left := point.x + shift.x - size.x / 2.0
+			out.append(Rect2(left, bottom - size.y, size.x, size.y))
+	return out
 
 
 ## Keeps the signs MissMarkers.SIGN_PX tall and the captions at their font

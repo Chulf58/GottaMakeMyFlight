@@ -20,8 +20,10 @@ extends SceneTree
 ## and the captions) must project inside the window, and the stand points and
 ## the floor patch must have no mesh between them and the camera (a control
 ## under the ground must report one); otherwise PROBE_INVALID, exit 1. No two
-## shown gate captions may overlap on screen (their rectangles from the font's
-## measured text, anchored as GateLinksView anchors them); the control is the
+## shown gate captions may overlap on screen, nor any of them a MissMarkers sign
+## or caption (the desks' Closed and "!" signs); caption rectangles come from the
+## font's measured text, anchored and lifted as GateLinksView draws them; the
+## control is the
 ## old one-line class captions at the stand points, which must overlap. An
 ## overlap prints PROBE_FAIL, the plate is still saved for review, and the run
 ## exits 1. No click is pushed, so
@@ -251,8 +253,16 @@ func _plate(label: String, framed: Array, visible: Array, old: Array) -> void:
 		return
 	var rects: Array[Rect2] = []
 	for caption in shown:
-		rects.append(_caption_rect(font, caption.text, caption.global_position))
+		var lifted := _caption_rect(font, caption.text, caption.global_position)
+		lifted.position.y -= caption.offset.y / root.get_stretch_transform().get_scale().y
+		rects.append(lifted)
+	var signs := _sign_rects()
+	print("  SIGNS %s" % [signs])
 	var overlap := _first_overlap(rects)
+	for i in rects.size():
+		for sign: Rect2 in signs:
+			if overlap == "" and rects[i].intersects(sign):
+				overlap = "caption %d and sign %s" % [i, sign]
 	print("  CAPTIONS %s: %s" % [rects, overlap if overlap != "" else "no overlap"])
 	if overlap != "":
 		print("PROBE_FAIL %s: gate captions overlap: %s" % [label, overlap])
@@ -288,6 +298,32 @@ func _caption_rect(font: Font, text: String, at: Vector3) -> Rect2:
 	size /= root.get_stretch_transform().get_scale().y
 	var p := _cam.unproject_position(at)
 	return Rect2(p.x - size.x / 2.0, p.y - size.y, size.x, size.y)
+
+
+## The screen rectangles (unproject_position's units) of MissMarkers' shown
+## signs and captions, measured as MissMarkers lays them out: a SIGN_PX icon
+## standing on its point, a caption (MissMarkers.caption_size) bottom-aligned
+## at its offset.
+func _sign_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	var markers := _main.get_node("PassengerViews/MissMarkers")
+	var scale := root.get_stretch_transform().get_scale().y
+	for node in markers.find_children("*", "GeometryInstance3D", true, false):
+		var shown := node as Node3D
+		if not shown.is_visible_in_tree() or _cam.is_position_behind(shown.global_position):
+			continue
+		var p := _cam.unproject_position(shown.global_position)
+		if shown is Sprite3D:
+			var side := MissMarkers.SIGN_PX / scale
+			out.append(Rect2(p.x - side / 2.0, p.y - side, side, side))
+		elif shown is Label3D:
+			var label := shown as Label3D
+			var size := MissMarkers.caption_size(label.text) / scale
+			var bottom := p.y - label.offset.y / scale
+			out.append(
+				Rect2(p.x + label.offset.x / scale - size.x / 2.0, bottom - size.y, size.x, size.y)
+			)
+	return out
 
 
 ## "i and j" for the first two of `rects` that overlap, or "".
