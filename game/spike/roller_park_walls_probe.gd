@@ -24,10 +24,16 @@ extends "res://spike/roller_trail_probe.gd"
 ## equal the trail probe's PARK class frames (0 is a clean run), and frames
 ## drawn in a RollerPark move at all are above 0.
 ##
+## LEAF (board babc77e0): every pulled frame, the roller's parts that meet an
+## open door leaf, as door_tuck_probe.gd counts them (its leaf_meshes() and
+## count_leaves(); the hand is measured in a windowed run only), with its
+## control: leaves found and frames near one, both above 0.
+##
 ## Run (headless; plates are the trail probe's own and need a window):
 ##   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
 ##     --path game -s res://spike/roller_park_walls_probe.gd -- --seed=N
 
+const DoorTuckProbe := preload("res://spike/door_tuck_probe.gd")
 const SAMPLE_EVERY := 6
 
 var _park_frames := 0
@@ -36,6 +42,14 @@ var _park_frames := 0
 var _park_moves := 0
 var _by_stage := {}
 var _episodes := {}
+var _leaf := DoorTuckProbe.new_leaf_tally()
+var _leaves: Array[MeshInstance3D] = []
+
+
+func _collect_walls(world: String) -> void:
+	super._collect_walls(world)
+	_leaves = DoorTuckProbe.leaf_meshes(_build_view, _mode.grid, world)
+	_leaf["leaves"] += _leaves.size()
 
 
 func _classify(
@@ -139,6 +153,10 @@ func _test_roller(
 ) -> void:
 	if state.get("park", false) and _views.carry_on_props().transfer_progress(p.id, 0) < 1.0:
 		_park_moves += 1
+	var grip := Vector3.INF
+	if not _headless:
+		grip = _views.carry_on_props().grip_of(body, CarryLead.hand_of(int(state.get("place", 0))))
+	DoorTuckProbe.count_leaves(_leaf, _leaves, p, bag, grip)
 	super._test_roller(world, p, body, bag, kind, state, used)
 
 
@@ -158,6 +176,9 @@ func _print_classes() -> void:
 		_invalid("the PARK frames counted here differ from the trail probe's PARK class")
 	if _park_moves <= 0:
 		_invalid("no roller was drawn in a RollerPark move: the probe saw no park")
+	DoorTuckProbe.print_leaves(_leaf, _seed, _headless)
+	if int(_leaf["leaves"]) <= 0 or int(_leaf["near"]) <= 0:
+		_invalid("no door leaf was found, or no pulled roller came near one")
 
 
 ## The stage of a RollerPark move of `state` (a bag record) at `k` of its length.
