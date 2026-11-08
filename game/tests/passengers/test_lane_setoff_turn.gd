@@ -195,6 +195,96 @@ func _table_share(sim: PassengerSim, p: Passenger) -> float:
 	return absf(angle_difference(_axis_yaw(sim, p), yaw)) / (PI / 2.0)
 
 
+## Steps `w` until its passenger `id` stands on the unpack cell as the queue
+## front, not yet admitted, then makes it one that walked in from the side
+## away from the tray table (its last path step toward the table), facing that
+## way when `views` draws it. Returns whether that moment was reached.
+func _enter_from_side(w: SecurityTestWorld, id: int, views: PassengerViews) -> bool:
+	var sim := w.world.sim
+	var p := w.world.passenger(id)
+	var lane := sim.layout.security_lanes.lane(w.station)
+	var unpack: Vector2i = lane["unpack"]
+	var side: Vector2i = lane["side"]
+	for i in 1500:
+		w.world.step()
+		if views != null:
+			views.draw()
+		if p.stage == Passenger.Stage.SECURITY:
+			return false
+		if p.stage == Passenger.Stage.SECURITY_QUEUE and p.at == unpack and not p.is_moving():
+			var walked: Array[Vector2i] = [unpack - side, unpack]
+			p.path = walked
+			p.path_index = 1
+			p.seg_mm = 0
+			if views != null:
+				views._turns.place(id, atan2(side.x, side.y))
+			return true
+	return false
+
+
+## An empty lane walked into from the side: the body faces its walk as UNPACK
+## begins and turns from there, never more in a tick (drawn one tick a frame)
+## than a smoothstep turn's steepest tick, and a view first drawn during
+## UNPACK's turn back draws the same yaw. Before, UNPACK's first tick drew the
+## body near the arch's axis, 90 degrees from its walk in one tick. Control:
+## the turn back did run (the yaw left the table by more than 30 degrees).
+func test_a_side_entry_turns_smoothly_from_its_walk() -> void:
+	var w := _make()
+	var views := _views_of(w)
+	var sim := w.world.sim
+	var id := w.send(1)
+	var p := w.world.passenger(id)
+	assert_bool(_enter_from_side(w, id, views)).is_true()
+	var side: Vector2i = sim.layout.security_lanes.lane(w.station)["side"]
+	var table := atan2(side.x, side.y)
+	# The yaw it was given for its walk in (the node is drawn with it next frame).
+	var last := table
+	var steepest := 0.0
+	var off_table := 0.0
+	var stop := -1
+	for i in 60:
+		w.world.step()
+		_draw_late(w, views)
+		var yaw := views.node_for(id).rotation.y
+		steepest = maxf(steepest, absf(angle_difference(last, yaw)))
+		off_table = maxf(off_table, absf(angle_difference(table, yaw)))
+		last = yaw
+		var turning_back := p.security_work < SecurityRuntime.LANE_UNPACK_BAG_TICKS
+		if stop < 0 and p.security_phase == SecurityRuntime.Phase.UNPACK and turning_back:
+			stop = w.world.clock.tick
+		if p.security_phase == SecurityRuntime.Phase.ARCH and not SecurityLooks.setting_off(sim, p):
+			break
+	var other := _make()
+	var other_id := other.send(1)
+	assert_bool(_enter_from_side(other, other_id, null)).is_true()
+	other.world.run_to(stop)
+	var w2 := _make()
+	var steady := _views_of(w2)
+	var steady_id := w2.send(1)
+	assert_bool(_enter_from_side(w2, steady_id, steady)).is_true()
+	w2.world.run_to(stop)
+	var first := _views_of(other)
+	first.sync()
+	_draw_late(other, first)
+	_draw_late(w2, steady)
+	var apart := absf(
+		angle_difference(steady.node_for(steady_id).rotation.y, first.node_for(other_id).rotation.y)
+	)
+	print(
+		(
+			(
+				"side entry: steepest tick %.1f deg, most %.1f deg off the table;"
+				+ " first drawn at tick %d: %.5f rad apart"
+			)
+			% [rad_to_deg(steepest), rad_to_deg(off_table), stop, apart]
+		)
+	)
+	assert_float(rad_to_deg(steepest)).is_less(25.0)
+	assert_float(rad_to_deg(off_table)).is_greater(30.0)
+	assert_int(stop).is_greater(0)
+	assert_float(apart).is_less(0.001)
+
+
 ## A returner's second pass through the arch starts beside the unpack cell and
 ## is turned as any walker; at the basic scanner nothing sets off. Control: the
 ## returner did walk its second pass, and the scanner passenger was served.
