@@ -16,7 +16,9 @@ extends SceneTree
 ## pause the paused plane's drawn position must stay within STOPPED_M of the
 ## hold line (the largest drift is printed). It saves five plates under
 ## tools/blender/out/runway-r7-pause/ (before, the pause's start, middle and
-## end, after); before each save every plane in the strip must project inside
+## end, after), the paused plane at least MOVED_M off the hold on the first and
+## last; the rig is fitted to the hold and both planes' boxes, and before each
+## save every corner of every drawn plane's box must project inside
 ## the window and have no mesh between it and the camera (a control under the
 ## ground must report one), else PROBE_INVALID, exit 1. A guard thread ends a
 ## hang.
@@ -37,6 +39,14 @@ const SECOND := "GMF202"
 const STOPPED_M := 0.05
 ## Ticks before and after the pause of the first and last plates.
 const AROUND_TICKS := 60
+## The paused plane is this far from the hold at least on the first and last plates.
+const MOVED_M := 1.0
+## The rig distances tried, nearest first, to frame both planes and the hold.
+const FIT_DISTANCES: Array[float] = [140.0, 170.0, 200.0, 240.0, 280.0, 300.0]
+const FIT_FRAMES := 4
+## The fit keeps every point this far inside the window, so no plane hugs an edge.
+const FIT_MARGIN_PX := 100.0
+const VIEW_YAW_DEGREES := 200.0
 
 var _guard := Thread.new()
 var _mutex := Mutex.new()
@@ -209,7 +219,9 @@ func _pauses_with(save: Dictionary, terms: Dictionary, starter: String) -> bool:
 
 ## Runs the clock through the pause of `paused` ({"id", "state", "pause"}),
 ## checking every tick that its drawn plane stands on the hold line, and saves
-## the strip's plates with both planes framed.
+## the strip's plates with both planes framed. The plan holds the plane for
+## elapsed ticks t1 to t1 + pause_ticks, so the held ticks are the pause_ticks
+## whole ticks from ceil(start + t1) on.
 func _strip(paused: Dictionary, other: String) -> void:
 	var id: String = paused["id"]
 	var state: int = paused["state"]
@@ -221,11 +233,21 @@ func _strip(paused: Dictionary, other: String) -> void:
 	var budget := float(_flights.state_start(id, state + 1) - start)
 	var plan := MovementPlan.taxi(route, budget, paused["pause"])
 	var hold := MovementPlan.point_at(route, paused["pause"]["hold_s"])
+	var pause_ticks: int = plan["pause_ticks"]
 	var from := ceili(start + float(plan["t1"]))
-	var to := floori(start + float(plan["t1"]) + float(plan["pause_ticks"]))
-	print("PROBE %s holds at %s from tick %d to %d (%d ticks)" % [id, hold, from, to, to - from])
+	var to := from + pause_ticks - 1
+	print(
+		(
+			"PROBE %s holds at %s from tick %d to %d (%d ticks, planned %d)"
+			% [id, hold, from, to, to - from + 1, pause_ticks]
+		)
+	)
 	var ticks := [from - AROUND_TICKS, from, (from + to) / 2, to, to + AROUND_TICKS]
 	var labels := ["a_before", "b_pause_start", "c_pause_middle", "d_pause_end", "e_after"]
+	# The HUD panels are not meshes, so the occlusion rays cannot see them: with
+	# them shown, a plane in frame can sit under the Departures panel.
+	for layer in _main.find_children("*", "CanvasLayer", true, false):
+		(layer as CanvasLayer).visible = false
 	var drift := 0.0
 	var held := 0
 	for i in ticks.size():
@@ -238,31 +260,99 @@ func _strip(paused: Dictionary, other: String) -> void:
 				if view == null:
 					_fail("%s is not drawn at tick %d" % [id, _clock.tick])
 					return
-				var off := Vector2(view.global_position.x - hold.x, view.global_position.z - hold.z)
-				drift = maxf(drift, off.length())
+				drift = maxf(drift, _flat_offset(view, hold))
 				held += 1
 		if i == 3:
-			print("PROBE %s held %d ticks, largest drift from the hold %.4f m" % [id, held, drift])
-			if drift > STOPPED_M or held < to - from:
+			print(
+				(
+					"PROBE %s held %d ticks of %d planned, largest drift from the hold %.4f m"
+					% [id, held, pause_ticks, drift]
+				)
+			)
+			if drift > STOPPED_M or held != pause_ticks:
 				_fail("%s did not stand at the hold line through its pause" % id)
 				return
 		_fleet.update_views()
-		var framed: Array = []
+		var subject := _view_of_flight(id)
+		if subject == null:
+			_fail("%s is not drawn at tick %d" % [id, _clock.tick])
+			return
+		var off := _flat_offset(subject, hold)
+		print("PROBE tick %d: %s is %.3f m from the hold" % [_clock.tick, id, off])
+		var moving := i == 0 or i == 4
+		if (moving and off <= MOVED_M) or (not moving and off > STOPPED_M):
+			_fail("%s: %s is %.3f m from the hold at tick %d" % [labels[i], id, off, _clock.tick])
+			return
+		var framed: Array = [hold]
 		var on_plane: Array = []
 		for flight in [id, other]:
 			var view := _view_of_flight(flight)
 			if view != null:
-				var top := view.global_position + Vector3.UP * 3.0
-				framed.append(view.global_position)
-				on_plane.append([top, view])
-		print("PROBE tick %d: %d of 2 planes drawn" % [_clock.tick, framed.size()])
-		if framed.is_empty():
-			_fail("no plane is drawn at tick %d" % _clock.tick)
-			return
-		_view(hold + Vector3(0.0, 0.0, 20.0), 140.0, deg_to_rad(200.0))
+				var box := _aabb_of(view)
+				if not box.has_volume():
+					_fail("%s: %s is drawn with no mesh" % [labels[i], flight])
+					return
+				framed.append_array(_corners(box))
+				on_plane.append([view.global_position + Vector3.UP * 3.0, view])
+		print("PROBE tick %d: %d of 2 planes drawn" % [_clock.tick, on_plane.size()])
+		await _fit(framed)
 		await _plate(labels[i], framed, [], on_plane)
 		if _done:
 			return
+
+
+## How far `view` stands from `point` across the ground, in metres.
+func _flat_offset(view: Node3D, point: Vector3) -> float:
+	return Vector2(view.global_position.x - point.x, view.global_position.z - point.z).length()
+
+
+## Points the rig at the middle of `points` across the ground and steps out
+## through FIT_DISTANCES to the first distance that projects all of them
+## FIT_MARGIN_PX inside the window (the last when none does; _plate() then
+## checks against MARGIN_PX and fails loudly).
+func _fit(points: Array) -> void:
+	var low := Vector2(INF, INF)
+	var high := Vector2(-INF, -INF)
+	for point: Vector3 in points:
+		low = Vector2(minf(low.x, point.x), minf(low.y, point.z))
+		high = Vector2(maxf(high.x, point.x), maxf(high.y, point.z))
+	var middle := (low + high) * 0.5
+	var frame := root.get_visible_rect().grow(-FIT_MARGIN_PX)
+	for distance in FIT_DISTANCES:
+		_view(Vector3(middle.x, 0.0, middle.y), distance, deg_to_rad(VIEW_YAW_DEGREES))
+		await _frames(FIT_FRAMES)
+		var fits := true
+		for point: Vector3 in points:
+			if (
+				_cam.is_position_behind(point)
+				or not frame.has_point(_cam.unproject_position(point))
+			):
+				fits = false
+				break
+		print("  FIT distance %.0f fits=%s" % [distance, fits])
+		if fits:
+			return
+
+
+## The world box around every mesh drawn under `node`.
+func _aabb_of(node: Node3D) -> AABB:
+	var box := AABB()
+	var first := true
+	for found in node.find_children("*", "MeshInstance3D", true, false):
+		var instance := found as MeshInstance3D
+		if instance.mesh == null or not instance.is_visible_in_tree():
+			continue
+		var bounds: AABB = instance.global_transform * instance.get_aabb()
+		box = bounds if first else box.merge(bounds)
+		first = false
+	return box
+
+
+func _corners(box: AABB) -> Array:
+	var out: Array = []
+	for i in 8:
+		out.append(box.get_endpoint(i))
+	return out
 
 
 ## The PlaneView drawing flight `id`, or null.
