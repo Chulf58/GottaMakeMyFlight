@@ -24,6 +24,16 @@ extends SceneTree
 ##
 ## --two-gate boots with no starter shell, builds a terminal with gates A and B 44 cells
 ## apart and runs only _two_gate_paving(). Every run prints its world seed.
+##
+## The class paving stage (board items R10 and 6a1833b8) ray-casts the ground under
+## every plane model (every class) at its own points, door-aligned as PlaneView draws
+## it: the whole parked footprint every CLASS_STEP_M, and through taxi in, pushback and
+## taxi out the nose and the model's origin (the main gear's stand-in; the tail too in
+## pushback). The tail and wingtips are left out while taxiing, where a large tail
+## swings over the grass beside the strips at the lane's corners. It runs on the
+## starter's stand, then with the gate's stand moved to the north row. Plates: the
+## north-row pad from above with model 07 and with model 05 parked, a distance shot of
+## it, and the hold bars on the east stub and on the starter's lead-in from above.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const OUT_REL := "res://../tools/blender/out/airside_flight"
@@ -60,6 +70,12 @@ const TWO_GATE_ENTRANCE := Vector2i(18, 17)
 const TWO_GATE_EXITS: Array[Vector2i] = [Vector2i(20, 2), Vector2i(64, 2)]
 const TWO_GATE_DESKS: Array[Vector2i] = [Vector2i(19, 5), Vector2i(63, 5)]
 const TWO_GATE_SCANNER_XS: Array[int] = [17, 19]
+## The class paving stage: the parked footprint's sample spacing, the north-row stand
+## (an exit at x 0.5 on the site's north edge), and the plates' heights of view.
+const CLASS_STEP_M := 2.0
+const NORTH_ROW_DOOR_X := 0.5
+const PAD_VIEW_SIZE := 110.0
+const HOLD_VIEW_SIZE := 45.0
 ## Sim ticks sampled for the strip, four per row, with the states each row must show:
 ## landing (approach to touchdown), taxiing (TAXI_IN) and takeoff (the TAKEOFF state,
 ## ticks 3100 to 3300 from the first state).
@@ -190,6 +206,7 @@ func _run() -> void:
 	await _overview()
 	await _framing()
 	await _stand_view()
+	await _class_paving()
 	_finish()
 
 
@@ -1092,3 +1109,248 @@ func _two_gate_plates(airside: Airside) -> void:
 		_save(await _grab(), "two_gate_distance.png")
 	top.queue_free()
 	far.queue_free()
+
+
+## Every class model on paving at the starter's stand and at a north-row stand, then the
+## pad and hold bar plates (the class paving stage in this file's header).
+func _class_paving() -> void:
+	_beat("class_paving")
+	_show_hud(false)
+	var airside := _main.get_node("Airside") as Airside
+	var before := airside.gate_stands.duplicate(true)
+	await _refresh_paving_collider(airside)
+	_class_samples("starter", airside)
+	await _hold_plates(airside)
+	var north := StandPlacement.make(0, NORTH_ROW_DOOR_X, PAVING_EDGE_Z)
+	var moved := {}
+	for gate: String in before:
+		moved[gate] = north
+	var ok := airside.set_gate_stands(moved) if not moved.is_empty() else airside.set_stand(north)
+	await _frames(6)
+	var stands := airside.stand_points()
+	var at := StandPlacement.stand_point(north)
+	print("CLASS north row ok=%s stands=%s expected=%s" % [ok, stands, at])
+	if not ok or stands.size() != 1 or stands[0].distance_to(at) > 0.01:
+		_invalid("class paving: the stand did not stay on the north row (%s)" % [stands])
+	else:
+		await _refresh_paving_collider(airside)
+		_class_samples("north_row", airside)
+		await _pad_plates(airside, at)
+	if not before.is_empty():
+		airside.set_gate_stands(before)
+	_show_hud(true)
+
+
+## Replaces the taxi paving's collider with one of its current mesh: _add_colliders()
+## made it of the mesh at that time, and a stand move rebuilds the mesh.
+func _refresh_paving_collider(airside: Airside) -> void:
+	for body in airside.paving.find_children("*", "StaticBody3D", true, false):
+		body.free()
+	airside.paving.create_trimesh_collision()
+	await physics_frame
+	await physics_frame
+
+
+## The points of each stand in use's parked footprint of `model`, every CLASS_STEP_M.
+func _footprint_points(stand: Vector3, model: String) -> Array[Vector3]:
+	var rect := TaxiPaving.parked_footprint(stand, model)
+	var nx := ceili(rect.size.x / CLASS_STEP_M)
+	var nz := ceili(rect.size.y / CLASS_STEP_M)
+	var out: Array[Vector3] = []
+	for i in nx + 1:
+		for k in nz + 1:
+			var x := rect.position.x + rect.size.x * i / nx
+			out.append(Vector3(x, 0.0, rect.position.y + rect.size.y * k / nz))
+	return out
+
+
+## Ray-casts under every model at each stand in use (`label` names the run): the parked
+## footprint, then the ground states' sampled poses (PlaneView.pose_at on a made-up
+## timeline, as _two_gate_paving() reads them). Per model it needs samples, none on
+## grass and at least one on the taxi paving itself.
+func _class_samples(label: String, airside: Airside) -> void:
+	var skip: Array[RID] = []
+	for body in _plane.find_children("*", "StaticBody3D", true, false):
+		skip.append((body as StaticBody3D).get_rid())
+	var space := _plane.get_world_3d().direct_space_state
+	var starts: Array[int] = []
+	for state in FlightSim.State.DEPARTED + 1:
+		starts.append(state * POSE_STATE_TICKS)
+	var ground: Array[int] = [
+		FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT
+	]
+	var gates: Array = airside.gate_stands.keys()
+	if gates.is_empty():
+		gates = [FlightSim.DEFAULT_GATE]
+	var was_gate: String = _plane.gate
+	for gate: String in gates:
+		_plane.gate = gate
+		var stand := airside.graph.position_of(&"Stand")
+		if airside.gate_stands.has(gate):
+			stand = StandPlacement.stand_point(airside.gate_stands[gate])
+		for model: String in PlaneModels.PLANES:
+			var shape: Dictionary = PlaneModels.PLANES[model]
+			var points := _footprint_points(stand, model)
+			var parked := points.size()
+			var offset := PlaneClasses.stand_offset(model)
+			for state in ground:
+				for k in range(0, POSE_STATE_TICKS, TAXI_SAMPLE_TICKS):
+					var pose: Dictionary = _plane.pose_at(starts, float(starts[state] + k))
+					if pose.get("phase", -1) != state:
+						_invalid(
+							"class %s: gate %s tick %d not in state %d" % [label, gate, k, state]
+						)
+						_plane.gate = was_gate
+						return
+					var t: Transform3D = pose["transform"]
+					points.append(t * (offset + Vector3(0, 0, shape["nose"])))
+					points.append(t * offset)
+					if state == FlightSim.State.PUSHBACK:
+						points.append(t * (offset - Vector3(0, 0, shape["tail"])))
+			var grass := 0
+			var on_taxi_paving := 0
+			for p in points:
+				var collider: Node = _surface_hit(space, p, skip).get("collider")
+				if collider != null and str(collider.get_path()).begins_with(PAVED_OWNERS[0]):
+					on_taxi_paving += 1
+				if not _is_paving(collider):
+					grass += 1
+					if grass <= 5:
+						print(
+							"CLASS grass %s %s %s at=%s hit=%s" % [label, gate, model, p, collider]
+						)
+			print(
+				(
+					"CLASS %s gate=%s model=%s samples=%d parked=%d on_taxi_paving=%d on_grass=%d"
+					% [label, gate, model, points.size(), parked, on_taxi_paving, grass]
+				)
+			)
+			var what := "class %s gate %s %s" % [label, gate, model]
+			_require_paved(what, points.size(), grass, on_taxi_paving)
+	_plane.gate = was_gate
+
+
+## A model drawn parked at the stand point `at`, door-aligned, with colliders so the
+## visibility rays can hit it.
+func _parked_model(model: String, at: Vector3) -> Node3D:
+	var node: Node3D = (PlaneView.PLANE_SCENES[model] as PackedScene).instantiate()
+	_main.add_child(node)
+	node.global_position = at + PlaneClasses.stand_offset(model)
+	_add_colliders(node)
+	return node
+
+
+## The north-row pad from above with model 07 and then model 05 parked on it, and from
+## a distance with model 07. Each proves the model and the pad's corners are in frame
+## and the model is hit by rays; the top views also that the paving is seen.
+func _pad_plates(airside: Airside, at: Vector3) -> void:
+	_beat("pad_plates")
+	var pad: Rect2 = airside.paving.pads[0]
+	print("CLASS north-row pad %s" % pad)
+	var marks: Array[Vector3] = []
+	for x in [pad.position.x, pad.end.x]:
+		for z in [pad.position.y, pad.end.y]:
+			marks.append(Vector3(x, 0.0, z))
+	# The flight's own plane would draw on the moved stand too: hold it hidden.
+	_plane.process_mode = Node.PROCESS_MODE_DISABLED
+	_plane.visible = false
+	var top := Camera3D.new()
+	top.projection = Camera3D.PROJECTION_ORTHOGONAL
+	top.size = PAD_VIEW_SIZE
+	top.far = 1000.0
+	_main.add_child(top)
+	var centre := Vector3(pad.get_center().x, 0.0, pad.get_center().y)
+	top.look_at_from_position(centre + Vector3.UP * 400.0, centre, Vector3.FORWARD)
+	top.make_current()
+	var rig_cam := _cam
+	_cam = top
+	for model in ["tp_plane_07a", "tp_plane_05a"]:
+		var node := _parked_model(model, at)
+		await physics_frame
+		await _frames(4)
+		var label := "pad_north_%s" % model.trim_prefix("tp_plane_")
+		var points := marks.duplicate()
+		points.append_array(_corners(_aabb_of(node)))
+		if (
+			_prove_in_frame(label, points)
+			and _prove_visible(label, node)
+			and _prove_paving_visible(label, airside.paving)
+		):
+			_save(await _grab(), "%s_top.png" % label)
+		if model == "tp_plane_07a":
+			await _pad_distance(node, points, centre)
+			_cam = top
+			top.make_current()
+		node.queue_free()
+		await _frames(2)
+	_plane.process_mode = Node.PROCESS_MODE_INHERIT
+	_plane.visible = true
+	_cam = rig_cam
+	rig_cam.make_current()
+	top.queue_free()
+
+
+## The north-row pad with `node` parked, from a distance looking at `centre`.
+func _pad_distance(node: Node3D, points: Array[Vector3], centre: Vector3) -> void:
+	var far := Camera3D.new()
+	far.fov = 50.0
+	far.far = 2000.0
+	_main.add_child(far)
+	far.look_at_from_position(centre + DISTANCE_OFFSET * 0.8, centre, Vector3.UP)
+	far.make_current()
+	_cam = far
+	await _frames(4)
+	if _prove_in_frame("pad_north_distance", points) and _prove_visible("pad_north_distance", node):
+		_save(await _grab(), "pad_north_distance.png")
+	far.queue_free()
+
+
+## The hold bars from above: the east stub's (HoldIn, moved just south of the runway's
+## asphalt) and the first lead-in's. Each proves both of the bar's lines are in frame
+## and that a ray down at each line's middle hits the taxi paving first, so the runway
+## does not hide it.
+func _hold_plates(airside: Airside) -> void:
+	_beat("hold_plates")
+	var bars := airside.paving.bars
+	print("CLASS holds=%s bars=%s" % [airside.hold_points(), bars])
+	if bars.size() < 6:
+		_invalid("hold bars: %d lines, want the two stubs' and a lead-in's" % bars.size())
+		return
+	var top := Camera3D.new()
+	top.projection = Camera3D.PROJECTION_ORTHOGONAL
+	top.size = HOLD_VIEW_SIZE
+	top.far = 1000.0
+	_main.add_child(top)
+	top.make_current()
+	var rig_cam := _cam
+	_cam = top
+	var space := top.get_world_3d().direct_space_state
+	var no_skip: Array[RID] = []
+	var shots := {"hold_east_stub": 0, "hold_lead_in": 4}
+	for label: String in shots:
+		var first: int = shots[label]
+		var lines: Array[Rect2] = [bars[first], bars[first + 1]]
+		var centre := lines[0].merge(lines[1]).get_center()
+		var at := Vector3(centre.x, 0.0, centre.y)
+		top.look_at_from_position(at + Vector3.UP * 400.0, at, Vector3.FORWARD)
+		await _frames(4)
+		var points: Array[Vector3] = []
+		var hits := 0
+		for line in lines:
+			for corner in [line.position, line.end]:
+				points.append(Vector3(corner.x, TaxiPaving.HEIGHT_M, corner.y))
+			var middle := Vector3(line.get_center().x, TaxiPaving.HEIGHT_M, line.get_center().y)
+			var hit := _visible_ray_hit(
+				space, middle + Vector3.UP * 300.0, middle - Vector3.UP * 0.5, no_skip
+			)
+			var collider: Node = hit.get("collider")
+			var ok := collider != null and str(collider.get_path()).begins_with(PAVED_OWNERS[0])
+			hits += 1 if ok else 0
+			print("HOLD %s line=%s hit=%s ok=%s" % [label, line, collider, ok])
+		if hits != lines.size():
+			_invalid("%s: a hold bar line is hidden (%d of %d)" % [label, hits, lines.size()])
+		elif _prove_in_frame(label, points):
+			_save(await _grab(), "%s_top.png" % label)
+	_cam = rig_cam
+	rig_cam.make_current()
+	top.queue_free()
