@@ -48,10 +48,10 @@ func test_each_contract_gets_the_lowest_gate_its_timetable_fits_at() -> void:
 	assert_str(_accept("Y", 660)).is_equal("B")
 	# Five hours later gate A is free again.
 	assert_str(_accept("W", 900)).is_equal("A")
-	# 12:00 would land while X takes off: no gate helps, and the refusal says
+	# 12:23 would land while X takes off: no gate helps, and the refusal says
 	# why.
-	assert_str(_sim.accept_gate(TestFlightContracts.terms("V", 720))).is_equal("")
-	assert_str(_sim.accept_problem(TestFlightContracts.terms("V", 720))).is_equal(
+	assert_str(_sim.accept_gate(TestFlightContracts.terms("V", 743))).is_equal("")
+	assert_str(_sim.accept_problem(TestFlightContracts.terms("V", 743))).is_equal(
 		"contract V clashes with X on the runway"
 	)
 
@@ -143,7 +143,7 @@ func test_issued_occurrences_keep_their_gate_as_fixed_holds() -> void:
 
 
 func test_a_one_off_at_another_gate_must_not_share_the_runway() -> void:
-	_accept("X", 600)
+	_accept("X", 620)
 	var arrival := FlightTimetable.starts_for(_sim.contract_of("X"), 1)
 	var shifted: Array[int] = []
 	for start in arrival:

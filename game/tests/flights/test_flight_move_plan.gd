@@ -74,8 +74,8 @@ func test_a_gate_with_no_contracts_plans_no_moves() -> void:
 
 
 func test_a_plan_that_does_not_fit_whole_moves_nothing() -> void:
-	assert_str(_accept("X", 600)).is_equal("A")
-	assert_str(_accept("Y", 660)).is_equal("B")
+	assert_str(_accept("X", 620)).is_equal("A")
+	assert_str(_accept("Y", 680)).is_equal("B")
 	# Both to C: X fits there, then Y overlaps X at C. Checked whole, nothing
 	# moves (it used to move X and then fail halfway).
 	var stale := {"moves": {"X": "C", "Y": "C"}, "stuck": []}

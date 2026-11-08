@@ -106,16 +106,16 @@ script = ExtResource("6_airside")
 links = PackedStringArray("RunwayExit>TaxiEast", "TaxiEast>StandLane", "StandLane>TaxiWest", "StandLane>PushbackEnd", "PushbackEnd>Stand", "TaxiWest>RunwayEntry")
 
 [node name="ApproachStart" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -340, 45, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -340, 45, -338)
 
 [node name="Touchdown" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -110, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -110, 0, -338)
 
 [node name="RunwayExit" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 0, -338)
 
 [node name="TaxiEast" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0, -256)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 0, -284)
 
 [node name="PushbackEnd" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -143.9)
@@ -124,58 +124,82 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -143.9)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -114.9)
 
 [node name="StandLane" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -256)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -284)
 
 [node name="TaxiWest" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -132, 0, -256)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -124, 0, -284)
 
 [node name="RunwayEntry" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -132, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -124, 0, -338)
 
 [node name="Liftoff" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 60, 0, -338)
 
 [node name="ClimbEnd" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 260, 45, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 260, 45, -338)
 
 [node name="ArrivalEntry" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1000, 0, 736)
 
 [node name="ArrivalStraightIn" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1000, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1030, 0, -338)
 
 [node name="ArrivalPass" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 170, 0, -8)
 
 [node name="ArrivalTurnWest" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -480, 0, -8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -760, 0, -8)
 
 [node name="ArrivalTurnNorth" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -480, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -760, 0, -338)
 
 [node name="DepartureTurn" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 480, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 480, 0, -338)
 
 [node name="DepartureExit" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 900, 0, 300)
+
+[node name="ApproachStart_small" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -270, 45, -338)
+
+[node name="Touchdown_small" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 0, -338)
+
+[node name="Liftoff_small" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -338)
+
+[node name="ApproachStart_large" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -400, 45, -338)
+
+[node name="Touchdown_large" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -170, 0, -338)
+
+[node name="Liftoff_large" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 110, 0, -338)
+
+[node name="HoldIn" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 0, -308)
+
+[node name="HoldRunway" type="Marker3D" parent="Airside"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -124, 0, -308)
 
 [node name="Terminal" parent="Airside" instance=ExtResource("7_terminal")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -80)
 
 [node name="RunwayEndWest" parent="Airside" instance=ExtResource("8_end")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -144, 0, -310)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -144, 0, -338)
 
 [node name="RunwayWest" parent="Airside" instance=ExtResource("9_strip")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -96, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -96, 0, -338)
 
 [node name="RunwayMid" parent="Airside" instance=ExtResource("9_strip")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -338)
 
 [node name="RunwayEast" parent="Airside" instance=ExtResource("9_strip")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 96, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 96, 0, -338)
 
 [node name="RunwayEndEast" parent="Airside" instance=ExtResource("8_end")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 144, 0, -310)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 144, 0, -338)
 
 [node name="FlightSim" type="Node" parent="." node_paths=PackedStringArray("clock")]
 script = ExtResource("4_sim")

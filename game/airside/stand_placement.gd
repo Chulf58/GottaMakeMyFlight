@@ -35,18 +35,21 @@ const SWING_RADIUS_M := 20.6
 ## 2 x SWING_RADIUS_M wide, do not meet.
 const EXIT_SPACING_CELLS := ceili(2.0 * SWING_RADIUS_M)
 ## The gap between the wall line and the nose. 2.2 m (2.3 m in decision
-## plane-stand-design-airside-moves-110-m-north-stand-snaps-to) so that a
-## plane parked at the site's north row keeps its tail 0.05 m clear of the
-## shared lane zone (clears_lane()); at 2.3 m it reached 0.05 m into it.
+## plane-stand-design-airside-moves-110-m-north-stand-snaps-to): with the lane
+## at z -256 it kept a north-row tail 0.05 m clear of the shared lane zone
+## (clears_lane()). With the lane at TAXI_LANE_Z the clearance is 28.05 m.
 const NOSE_GAP_M := 2.2
 ## The port door: this far to the plane's left (+x, nose to +z) and behind the
 ## nose.
 const DOOR_SIDE_M := 3.5
 const DOOR_AFT_M := 4.2
 const PUSHBACK_M := 29.0
-const TAXI_LANE_Z := -256.0
-## The runway's centreline (main.tscn's Airside runway markers).
-const RUNWAY_Z := -310.0
+## The taxi lane's and the runway's centrelines (main.tscn's Airside markers),
+## 28 m north of the -256 and -310 they were, so a north-row large plane's tail
+## stays clear of the large-plane lane band (decision runway-and-taxi-
+## technical-design-movement-plan-analytic-bookings-planned-pauses).
+const TAXI_LANE_Z := -284.0
+const RUNWAY_Z := -338.0
 ## How far east and west the shared zones reach: past every waypoint and stand.
 const ZONE_HALF_LENGTH_M := 1000.0
 ## A walk from an exit to the plane door longer than this is warned about.
@@ -107,7 +110,7 @@ static func lane_zone() -> Rect2:
 
 ## Whether the plane parked at `stand` stays out of the lane zone. One whose
 ## tail reached it would hold the shared lane for its whole turnaround. Every
-## stand on the site does, the north row with 0.05 m to spare (NOSE_GAP_M);
+## stand on the site does, the north row with 28.05 m to spare (NOSE_GAP_M);
 ## test_shared_ground_holds.gd checks it.
 static func clears_lane(stand: Dictionary) -> bool:
 	return stand_point(stand).z - TAIL_M >= lane_zone().end.y

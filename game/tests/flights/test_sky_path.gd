@@ -77,17 +77,47 @@ func _angle(a: Vector3, b: Vector3) -> float:
 
 
 func test_the_sky_tracks_join_the_runway_phases() -> void:
-	var lead := _airside.lead_in_track()
-	var climb := _airside.climb_out_track()
-	var approach := _airside.phase_path(FlightSim.State.APPROACH)
-	var takeoff := _airside.phase_path(FlightSim.State.TAKEOFF)
-	assert_that(lead[lead.size() - 1]).is_equal(approach[0])
-	assert_that(climb[0]).is_equal(takeoff[takeoff.size() - 1])
-	var lead_end := FlightPose.track_heading(lead, FlightPose.path_length(lead))
-	var approach_dir := (approach[1] - approach[0]).slide(Vector3.UP).normalized()
-	assert_float(lead_end.dot(approach_dir)).is_equal_approx(1.0, 0.0001)
-	var climb_start := FlightPose.track_heading(climb, 0.0)
-	assert_float(climb_start.dot(FlightPose.exit_dir(takeoff))).is_equal_approx(1.0, 0.0001)
+	for plane_class in PlaneClasses.ORDER:
+		var lead := _airside.lead_in_track(plane_class)
+		var straight := _airside.straight_in_track(plane_class)
+		var climb := _airside.climb_out_track()
+		var approach := _airside.phase_path(FlightSim.State.APPROACH, "", plane_class)
+		var takeoff := _airside.phase_path(FlightSim.State.TAKEOFF, "", plane_class)
+		assert_that(lead[lead.size() - 1]).is_equal(approach[0])
+		assert_that(straight[straight.size() - 1]).is_equal(approach[0])
+		assert_that(climb[0]).is_equal(takeoff[takeoff.size() - 1])
+		var lead_end := FlightPose.track_heading(lead, FlightPose.path_length(lead))
+		var approach_dir := (approach[1] - approach[0]).slide(Vector3.UP).normalized()
+		assert_float(lead_end.dot(approach_dir)).is_equal_approx(1.0, 0.0001)
+		var climb_start := FlightPose.track_heading(climb, 0.0)
+		assert_float(climb_start.dot(FlightPose.exit_dir(takeoff))).is_equal_approx(1.0, 0.0001)
+	# Each class flies its own approach: the large one starts farthest west.
+	var small := _airside.phase_path(FlightSim.State.APPROACH, "", PlaneClasses.SMALL)
+	var large := _airside.phase_path(FlightSim.State.APPROACH, "", PlaneClasses.LARGE)
+	assert_float(large[0].x).is_less(small[0].x)
+
+
+## PlaneView flies each flight on its class's points: a large contract's
+## approach starts at ApproachStart_large, a one-off at the starter's class.
+func test_the_view_flies_the_flight_s_class() -> void:
+	var sim := _sim()
+	sim.open_airport()
+	var terms := TestFlightContracts.terms("LG", 500)
+	terms["plane_size"] = PlaneClasses.LARGE
+	terms["booked_passengers"] = 60
+	assert_bool(sim.accept_contract(terms)).is_true()
+	var view := _view(sim, _clock())
+	var id := "LG-d0"
+	assert_str(view.class_of(id)).is_equal(PlaneClasses.LARGE)
+	var starts := view.starts_of(id)
+	var approach_tick := float(starts[FlightSim.State.APPROACH])
+	var at: Transform3D = view.pose_at(starts, approach_tick, true, view.class_of(id))["transform"]
+	var large_start := _airside.phase_path(FlightSim.State.APPROACH, "", PlaneClasses.LARGE)[0]
+	var medium_start := _airside.phase_path(FlightSim.State.APPROACH)[0]
+	print("large approach starts at %s (medium %s)" % [at.origin, medium_start])
+	assert_float(at.origin.distance_to(large_start)).is_less(0.01)
+	assert_float(at.origin.distance_to(medium_start)).is_greater(10.0)
+	assert_str(view.class_of("one-off")).is_equal(FlightSim.STARTER_TERMS["plane_size"])
 
 
 ## Every state edge from the lead-in to the climb-out: the pose just before and
@@ -190,7 +220,7 @@ func test_the_same_sim_time_gives_the_same_pose_at_1x_3x_and_pause() -> void:
 func test_the_climb_out_finds_the_departed_flight_and_ends_before_the_prune() -> void:
 	var sim := _sim()
 	sim.open_airport()
-	assert_bool(sim.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	var view := _view(sim, _clock())
 	var starts := view.starts_of("AM-d0")
 	var departed := starts[FlightSim.State.DEPARTED]
@@ -280,7 +310,7 @@ func test_the_layout_flies_inside_the_ruled_band() -> void:
 
 
 ## Sol review regression: an offer accepted after opening whose first SCHEDULED
-## is close. AM departs 08:00, so accepted at 06:00 (tick 0) its SCHEDULED is
+## is close. AM departs 08:20, so accepted at 06:00 (tick 0) its SCHEDULED is
 ## tick 140, far inside the full lead-in. The control shows the full lead-in
 ## would already be mid-air on the first frame; the view must instead show
 ## nothing until SCHEDULED, then the straight-in from its unseen entry, joining
@@ -288,13 +318,13 @@ func test_the_layout_flies_inside_the_ruled_band() -> void:
 func test_an_offer_accepted_late_enters_unseen_on_the_straight_in() -> void:
 	var sim := _sim()
 	sim.open_airport()
-	assert_bool(sim.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	var view := _view(sim, _clock())
 	var starts := view.starts_of("AM-d0")
 	var scheduled := starts[FlightSim.State.SCHEDULED]
 	var approach := starts[FlightSim.State.APPROACH]
 	assert_int(scheduled).is_equal(
-		GameCalendar.tick_at(0, 480) - FlightTimetable.departure_offset()
+		GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
 	)
 	# Control: the full lead-in is already under way at the first frame.
 	var full: Dictionary = view.pose_at(starts, 0.0, true)
@@ -319,9 +349,15 @@ func test_an_offer_accepted_late_enters_unseen_on_the_straight_in() -> void:
 	var first_step := (
 		view.straight_in_to_go(starts, scheduled) - view.straight_in_to_go(starts, scheduled + 1)
 	)
-	# The entry lies 1000 m west, outside the view of every camera angle (the low
+	# The entry lies 1030 m west, outside the view of every camera angle (the low
 	# angle looks farthest), and the straight-in covers it in the span from
 	# SCHEDULED, so it starts at about 11 m per tick and slows to the approach's speed.
+	print(
+		(
+			"straight-in first step %.2f m, approach speed %.2f m per tick"
+			% [first_step, view.lead_in_speed(starts)]
+		)
+	)
 	assert_float(first_step).is_greater(view.lead_in_speed(starts)).is_less(12.0)
 
 
@@ -329,9 +365,15 @@ func test_an_offer_accepted_late_enters_unseen_on_the_straight_in() -> void:
 ## entry, the climb-out's end) no camera sees it, on a sample of cameras: 25
 ## focus points across the camera bounds (edges, halves, centre) x 24 yaws x 5
 ## zooms from near to full, at each of the three angle steps (the low step looks
-## farthest). A sample, not every configuration. A control point (ApproachStart)
+## farthest), for each plane class: a 20 m box and the class's widest plane at its heading. A
+## sample, not every configuration. A control point (the class's ApproachStart)
 ## is seen by some sampled camera at every step.
 func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
+	for plane_class in PlaneClasses.ORDER:
+		_assert_unseen(plane_class)
+
+
+func _assert_unseen(plane_class: String) -> void:
 	# The test runner's window is square; a 21:9 view sees wider than the
 	# game's 16:9, so it covers ultrawide windows too.
 	var screen := auto_free(SubViewport.new()) as SubViewport
@@ -342,24 +384,53 @@ func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
 	screen.add_child(rig)
 	var cam: Camera3D = rig.get_node("Camera3D")
 	var view := _view(_sim(), _clock())
-	var lead := view.lead_in_track()
+	var lead := view.lead_in_track(plane_class)
 	var climb := view.climb_out_track()
 	var hidden_points: Array[Vector3] = []
-	var subjects := [
-		FlightPose.lead_in_pose(lead, 0.0).origin,
-		FlightPose.lead_in_pose(view.straight_in_track(), 0.0).origin,
-		FlightPose.climb_out_pose(climb, FlightPose.path_length(climb)).origin,
+	var poses: Array[Transform3D] = [
+		FlightPose.lead_in_pose(lead, 0.0),
+		FlightPose.lead_in_pose(view.straight_in_track(plane_class), 0.0),
+		FlightPose.climb_out_pose(climb, FlightPose.path_length(climb)),
 	]
-	for origin: Vector3 in subjects:
+	var subjects: Array[Vector3] = []
+	# Each subject is the 20 m box around the pose point plus the class's
+	# widest drawn plane turned to its heading (as PlaneView draws it, moved by
+	# PlaneClasses.stand_offset), from 6 m below to its tallest tail.
+	var ahead := 0.0
+	var behind := 0.0
+	var across := 0.0
+	var tallest := 0.0
+	for model: String in PlaneClasses.CLASSES[plane_class]["models"]:
+		var shape: Dictionary = PlaneModels.PLANES[model]
+		var shift := PlaneClasses.stand_offset(model).z
+		ahead = maxf(ahead, shape["nose"] + shift)
+		behind = maxf(behind, shape["tail"] - shift)
+		across = maxf(across, shape["half_span"])
+		tallest = maxf(tallest, (shape["aabb"] as AABB).end.y)
+	var box := AABB(Vector3(-20, -6, -20), Vector3(40, 12, 40))
+	for pose in poses:
+		subjects.append(pose.origin)
+		var forward := pose.basis.z.slide(Vector3.UP).normalized()
+		var side := forward.cross(Vector3.UP)
 		for i in 8:
-			hidden_points.append(
-				origin + AABB(Vector3(-20, -6, -20), Vector3(40, 12, 40)).get_endpoint(i)
-			)
-	var control: Vector3 = _airside.phase_path(FlightSim.State.APPROACH)[0]
+			var along := ahead if i & 1 else -behind
+			var out := across if i & 2 else -across
+			var up := tallest if i & 4 else -6.0
+			hidden_points.append(pose.origin + forward * along + side * out + Vector3.UP * up)
+		for i in 8:
+			hidden_points.append(pose.origin + box.get_endpoint(i))
+	print(
+		(
+			"%s plane reach: ahead %.1f, behind %.1f, across %.1f, up %.1f m"
+			% [plane_class, ahead, behind, across, tallest]
+		)
+	)
+	var control: Vector3 = _airside.phase_path(FlightSim.State.APPROACH, "", plane_class)[0]
 	var edge := rig.bounds_half_extent
 	for angle in TycoonCamera.AngleStep.values():
 		rig.set_angle_step(angle)
 		var seen := 0
+		var seen_by_subject: Array[int] = [0, 0, 0]
 		var control_seen := 0
 		for fx in [-edge, -edge / 2.0, 0.0, edge / 2.0, edge]:
 			for fz in [-edge, -edge / 2.0, 0.0, edge / 2.0, edge]:
@@ -370,13 +441,22 @@ func test_planes_appear_and_vanish_where_no_camera_sees() -> void:
 						rig.distance = zoom
 						rig.zoom(1.0)
 						control_seen += int(cam.is_position_in_frustum(control))
-						for p in hidden_points:
-							seen += int(cam.is_position_in_frustum(p))
-		var label := "angle step %d" % angle
+						for k in hidden_points.size():
+							var hit := int(cam.is_position_in_frustum(hidden_points[k]))
+							seen += hit
+							seen_by_subject[k / 16] += hit
+		var label := "%s angle step %d" % [plane_class, angle]
 		print(
 			(
-				"sky unseen %s viewport=%s seen=%d control_seen=%d"
-				% [label, cam.get_viewport().get_visible_rect().size, seen, control_seen]
+				"sky unseen %s viewport=%s seen=%d %s (at %s) control_seen=%d"
+				% [
+					label,
+					cam.get_viewport().get_visible_rect().size,
+					seen,
+					seen_by_subject,
+					subjects,
+					control_seen
+				]
 			)
 		)
 		assert_int(control_seen).override_failure_message(label).is_greater(0)
