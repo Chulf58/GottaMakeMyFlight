@@ -2,11 +2,16 @@ class_name BoothRoller
 extends RefCounted
 ## Where a booth guest's roller lies and how its set-down keeps out of walls
 ## (board 5dc41129). The roller lies fixed at the approach cell
-## (RollerPark.chair_front()), RollerPark.PARK_SIDE_M (0.32 m) across from its
-## centre, along the guest's line: 0.164 m either side of that, so it keeps
-## inside the cell (0.484 m of 0.5) and 0.096 m clear of the end panel's outer
-## face on the booth's side. At SecurityLooks.CAFE_BESIDE_M (0.45 m) towards
-## the booth it lay 0.035 m inside the end panel.
+## (RollerPark.chair_front()), along the guest's line, side_m() across from its
+## centre: the guest's own seat side (RollerPark.SEAT_SIDE_M, by body and hand),
+## no nearer the bench's end panel than panel_room() leaves. At the old
+## RollerPark.PARK_SIDE_M (0.32 m) its inner edge was 0.156 m from the guest's
+## centre line and a male guest's near leg (left foot 0.15 m out, the leg's
+## mesh to 0.258 m) was inside it: food_seats_probe booth 13-3, seed
+## 1885947358, BODY_IN_BAG up to 112 points standing and 78 to 88 lying (board
+## 8a6068aa). At SecurityLooks.CAFE_BESIDE_M (0.45 m) towards the booth it lay
+## 0.035 m inside the end panel. On an open side a male guest's roller reaches
+## 0.06 to 0.09 m past the approach cell's edge.
 ##
 ## It lies on its hand's side, where the set-down parks it standing
 ## (RollerPark.park()), unless a wall stands on the approach cell's edge there:
@@ -23,6 +28,51 @@ const WALL_FACE_M := 0.5 - BuildView.WALL_THICKNESS / 2.0
 ## A set-down that starts with the roller in a wall moves it out over this
 ## many ticks (drawn()).
 const EASE_TICKS := 2.0
+## The bench's end panel's outer face (towards the approach cell), across from
+## the seat root (tools/blender/interior/build_services_kit.py: the panel at
+## x 0.86-0.92 m, the roots at x 0.5 m): 0.58 m from the approach cell's centre.
+const PANEL_FACE_M := 0.42
+## A roller beside the end panel keeps this far off its outer face.
+const PANEL_GAP_M := 0.005
+
+
+## How far out (m, across the approach cell's frame) booth guest `p`'s roller
+## stands or lies on the side of `hand` (0 the right): RollerPark.seat_side()
+## for its body, capped by panel_room() on the end panel's side. At booth 13-3
+## the panel is on the left at 0.58 m and a room wall on the right edge, so
+## the male left leg's 0.43 m is had on neither side: it gets 0.411 m. Away
+## from a booth seat, the body's seat side.
+static func side_m(sim: PassengerSim, p: Passenger, hand: int) -> float:
+	var side := RollerPark.seat_side(PassengerLooks.body_of(p.id, p.variant), hand)
+	if not sim.cafes.booth_roller(p):
+		return side
+	var front: Variant = RollerPark.chair_front(sim, p, SecurityLooks.Kind.ROLLER)
+	if front == null:
+		return side
+	return minf(side, panel_room(sim, p, front as Transform3D, -1.0 if hand == 0 else 1.0))
+
+
+## The farthest out (m, along `front`'s x from its origin, the approach cell's
+## centre facing out of the seat) a booth guest's roller axle may be on its
+## `towards` side and keep PANEL_GAP_M off the end panel, where the seat of
+## `p`'s visit lies that way; INF on the other side or with no seat.
+static func panel_room(
+	sim: PassengerSim, p: Passenger, front: Transform3D, towards: float
+) -> float:
+	var visit := sim.cafes.visit_of(p.id)
+	if visit == null or visit.seat.is_empty():
+		return INF
+	var root := BuildObjectDef.seat_root_world(sim.grid, visit.seat)
+	var across := (root - front.origin).dot(front.basis.x) * towards
+	return panel_cap(across) if across > 0.0 else INF
+
+
+## panel_room() with the seat root `across` (m) out from the approach cell's
+## centre: the end panel's outer face PANEL_FACE_M nearer, less PANEL_GAP_M and
+## half the roller's width (CarryOnProps.bag_box()).
+static func panel_cap(across: float) -> float:
+	var box := CarryOnProps.bag_box(SecurityLooks.Kind.ROLLER)
+	return across - PANEL_FACE_M - maxf(-box.position.x, box.end.x) - PANEL_GAP_M
 
 
 ## +1 or -1: the side (along `front`'s x, the approach cell's frame facing out
