@@ -24,7 +24,12 @@ const DECLINED := "declined"
 const EXPIRED := "expired"
 const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 
-const SAVE_VERSION := 1
+## 2: small flights carry 8-16 passengers (was 12-24), so a version 1 save may
+## hold a count no small offer can have now.
+## 3: tier 2 airlines offer medium planes while large is held back
+## (PlaneClasses.max_offer_class), so the offers a board saves changed. A
+## version 2 save is refused; there is no migration.
+const SAVE_VERSION := 3
 const SAVE_KEYS := ["save_version", "offers"]
 const OFFER_KEYS := [
 	"id",
@@ -40,23 +45,31 @@ const OFFER_KEYS := [
 
 ## Tuning values. A few offers a day; the starter tier has small and medium
 ## planes only (larger ones wait for reputation). AIRLINES, STARTER_SIZES and
-## FEE_MIN..FEE_MAX are tier 0 of the tier tables below.
+## FEE_MIN..FEE_MAX are tier 0 of the tier tables below. Every size's
+## passenger range sits inside its plane class's range (PlaneClasses.CLASSES,
+## decision runway-upgrade-works-wait-for-a-timetable-gap-passengers-per-
+## plane-class); FlightContract.problem refuses a count outside the class's range.
 const OFFERS_PER_DAY := 3
 const AIRLINES := ["Gotta Air", "Nordic Wing", "Blue Fjord", "Sunhop"]
 const DESTINATIONS := ["Oslo", "Berlin", "Lisbon", "Rome", "Dublin", "Athens"]
 ## Plane size -> [fewest, most] booked passengers.
-const STARTER_SIZES := {"small": [12, 24], "medium": [24, 48]}
+const STARTER_SIZES := {"small": [8, 16], "medium": [24, 48]}
 const FEE_MIN := 15
 const FEE_MAX := 35
 ## Airline tiers, unlocked by the airport rating (RatingFormula.tier): tier t
 ## draws from the airlines of tiers 0..t. An airline's own tier decides the
 ## plane sizes it flies (size -> [fewest, most] booked passengers) and its fee
-## per passenger [lowest, highest]: bigger airlines, better offers.
+## per passenger [lowest, highest]: bigger airlines, better offers. TIER_SIZES is
+## what a tier's airlines will fly once every class is on offer; what is drawn
+## now is offered_sizes(), which PlaneClasses.max_offer_class() limits. Tier 2
+## lists medium too, so its airlines stay on the board while large is held back.
 const TIER_AIRLINES: Array = [
 	AIRLINES, ["Polar Jet", "Aegean Sky"], ["Skyline Global", "Meridian Air"]
 ]
 const TIER_SIZES: Array = [
-	STARTER_SIZES, {"medium": [24, 48], "large": [48, 96]}, {"large": [64, 120]}
+	STARTER_SIZES,
+	{"medium": [24, 48], "large": [48, 96]},
+	{"medium": [24, 48], "large": [64, 120]},
 ]
 const TIER_FEES: Array = [[FEE_MIN, FEE_MAX], [25, 45], [40, 60]]
 const MAX_TIER := 2
@@ -77,6 +90,17 @@ static func tier_of(airline: String) -> int:
 		if TIER_AIRLINES[tier].has(airline):
 			return tier
 	return -1
+
+
+## The plane sizes (size -> [fewest, most] booked passengers) an airline of
+## `tier` is offered flying now: its TIER_SIZES without any class above
+## PlaneClasses.max_offer_class(). The one place the offer gate is applied.
+static func offered_sizes(tier: int) -> Dictionary:
+	var sizes := {}
+	for size: String in TIER_SIZES[tier]:
+		if PlaneClasses.is_offered(size):
+			sizes[size] = TIER_SIZES[tier][size]
+	return sizes
 
 
 ## The contract terms of `offer`, ready for FlightSim.accept_contract.
@@ -187,11 +211,13 @@ func _draw(day: int, number: int, rng: RandomNumberGenerator, tier: int) -> Dict
 		airlines.append_array(TIER_AIRLINES[unlocked])
 	var airline: String = airlines[rng.randi_range(0, airlines.size() - 1)]
 	var own := tier_of(airline)
-	var sizes: Dictionary = TIER_SIZES[own]
+	var sizes := offered_sizes(own)
 	var fees: Array = TIER_FEES[own]
 	var destination: String = DESTINATIONS[rng.randi_range(0, DESTINATIONS.size() - 1)]
 	var minute := DEPARTURE_FIRST_MINUTE + rng.randi_range(0, DEPARTURE_SLOTS) * DEPARTURE_STEP
-	var size: String = sizes.keys()[rng.randi_range(0, sizes.size() - 1)]
+	# A pick among one size would skip its draw, so the range is never below two and
+	# the RNG advances the same whatever the offered sizes are.
+	var size: String = sizes.keys()[rng.randi_range(0, maxi(sizes.size(), 2) - 1) % sizes.size()]
 	var booked_range: Array = sizes[size]
 	return {
 		"id": "O%dN%d" % [day, number],

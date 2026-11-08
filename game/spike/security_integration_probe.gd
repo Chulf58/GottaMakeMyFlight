@@ -301,6 +301,8 @@ func _staffed() -> bool:
 func _open_flight() -> void:
 	var terms := FlightSim.starter_terms(_flights.tick)
 	terms["id"] = CONTRACT_ID
+	# Medium planes carry 24 to 48; a --pax outside that is refused by the check below.
+	terms["plane_size"] = "medium"
 	terms["booked_passengers"] = _pax
 	var problem := _flights.accept_problem(terms)
 	if problem != "":

@@ -11,7 +11,7 @@ const CONTRACT := "OCC"
 const OCCURRENCE := "OCC-d0"
 const MINUTE := 518
 const FEE := 100
-const BOOKED := 4
+const BOOKED := 8
 const SETTLED := 4000
 
 var _world: PassengerTestWorld
@@ -53,6 +53,7 @@ func _make(hooked := false, with_settlement_bags := true, with_room := true) -> 
 		_settlement.baggage = _bags
 	_settlement.bind(_world.sim, _world.sim.wallet)
 	var terms := TestFlightContracts.terms(CONTRACT, MINUTE)
+	terms["plane_size"] = "small"
 	terms["booked_passengers"] = BOOKED
 	terms["fee_per_passenger"] = FEE
 	assert_bool(_world.flights.accept_contract(terms)).is_true()

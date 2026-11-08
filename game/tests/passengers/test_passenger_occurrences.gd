@@ -46,6 +46,7 @@ func _room(with_entrance := true) -> void:
 
 func _accept() -> void:
 	var terms := TestFlightContracts.terms(CONTRACT, MINUTE)
+	terms["plane_size"] = "small"
 	terms["booked_passengers"] = BOOKED
 	assert_bool(_world.flights.accept_contract(terms)).is_true()
 
