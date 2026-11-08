@@ -34,8 +34,6 @@ extends RefCounted
 
 ## A guest this many cells or fewer from where it parks chooses its hand.
 const NEAR_CELLS := 3
-## gap_hand() looks at most this many gate chair fronts along a row.
-const LINE_MAX := 32
 ## The sim metadata holding the stamps: passenger id -> [seat key, hand]. A
 ## loaded snapshot clears it (PassengerSimSave.from_snapshot()).
 const STAMPS := &"park_side_hands"
@@ -112,7 +110,8 @@ static func _open(sim: PassengerSim, seat: Dictionary) -> int:
 ## (board 1fe04f01): in the gap on its right (hand 0) between its front and the
 ## next front along the row, unless a roller lies or will lie in that gap from
 ## the next front (_line_hand()), then on its left; with its left gap taken
-## too by a roller already there (_held_hand()), on its right. Two rollers
+## too by a roller already there (_held_hand()), into the gap where the two
+## rollers reach less far into each other (_less_overlap()). Two rollers
 ## that each clear their own guest's legs (GateRoller.LIE_SIDE_M) do not fit in
 ## one gap: the male sides and the roller's width make 1.18 m, and fronts are
 ## 1 m apart. The same right-hand gap for everyone fills a row's gaps one guest
@@ -120,54 +119,97 @@ static func _open(sim: PassengerSim, seat: Dictionary) -> int:
 ## sends every roller to its left along the row with it. hand_of()'s own hand
 ## (the hand it pulled with, which turns on the way it walked in) put two
 ## guests coming from either end into the gap between them, and a third
-## between them had both gaps taken (test_gate_roller_gaps). Only sim state:
-## the seats, the walls, the stamps and who holds which chair.
+## between them had both gaps taken (test_gate_roller_gaps). A two-bag
+## guest's roller keeps its bag's hand (SecurityLooks.hand_of()), so a
+## one-bag neighbour steers round it here, and it lies closer in
+## (GateRoller.TWO_BAG_SIDE_M): two two-bag rollers whose hands face one gap
+## fit in it. Only sim state: the seats, the walls, the stamps and who holds
+## which chair.
 static func gap_hand(sim: PassengerSim, p: Passenger, front: Vector2i, out: Vector2i) -> int:
 	var left := Vector2i(out.y, -out.x)
 	# The front on the right lays into this guest's right gap with its left
 	# hand, the one on the left into the left gap with its right.
-	var right_taken := _line_hand(sim, p, front - left, out, 0) == 1
+	var right_taken := _line_hand(sim, p, front - left, out) == 1
 	var left_taken := _held_hand(sim, p, front + left, out) == 0
-	return 1 if right_taken and not left_taken else 0
+	if right_taken and left_taken:
+		return _less_overlap(sim, p, front, out)
+	return 1 if right_taken else 0
+
+
+## The hand of one-bag guest `p` at the chair front `front` (facing `out`)
+## whose gaps both hold or will hold a neighbour's roller: the gap where its
+## roller and the neighbour's reach the less far (GateRoller.reach()), the
+## right on a tie. A neighbour not there yet reaches as far as the widest
+## one-bag roller (GateRoller.LIE_SIDE_M at full size).
+static func _less_overlap(sim: PassengerSim, p: Passenger, front: Vector2i, out: Vector2i) -> int:
+	var left := Vector2i(out.y, -out.x)
+	var look := PassengerLooks.body_of(p.id, p.variant)
+	var right := GateRoller.reach(look, 0) + _reach(sim, p, front - left, out, 1)
+	var on_left := GateRoller.reach(look, 1) + _reach(sim, p, front + left, out, 0)
+	return 1 if on_left < right else 0
+
+
+## How far into the gap on its `hand` side the roller at the gate chair front
+## `front` (facing `out`) reaches: its holder's (_holder()), else the widest
+## one-bag roller's.
+static func _reach(
+	sim: PassengerSim, me: Passenger, front: Vector2i, out: Vector2i, hand: int
+) -> float:
+	var held := _holder(sim, me, front, out)
+	if not held.is_empty():
+		var q: Passenger = held[0]
+		var look := PassengerLooks.body_of(q.id, q.variant)
+		return GateRoller.reach(look, hand, SecurityLooks.bag_scale(q))
+	var widest := 0.0
+	for variant in GateRoller.LIE_SIDE_M.size():
+		widest = maxf(widest, GateRoller.reach(variant * PassengerLooks.PER_VARIANT, hand))
+	return widest
 
 
 ## The hand a roller at the gate chair whose front is `front`, facing `out`,
-## lies or will lie on, from the row to its right (`depth` fronts from where
-## the asking started): a guest's there (_held_hand()); else the open side's
-## when one side is walled (_open()); else the left when the front on its
-## right lays into its gap (the same, along the row), else the right; -1 where
-## no chair has that front. A chair nobody holds yet answers for whoever comes.
-static func _line_hand(
-	sim: PassengerSim, me: Passenger, front: Vector2i, out: Vector2i, depth: int
-) -> int:
-	if depth > LINE_MAX or not _has_chair(sim, front, out):
-		return -1
-	var held := _held_hand(sim, me, front, out)
-	if held >= 0:
-		return held
-	var walled := _open(sim, {"spots": [_frame(sim, front, out)]})
-	if walled >= 0:
-		return walled
-	var left := Vector2i(out.y, -out.x)
-	return 1 if _line_hand(sim, me, front - left, out, depth + 1) == 1 else 0
-
-
-## Whether a gate chair has its front at `front` facing `out`.
-static func _has_chair(sim: PassengerSim, front: Vector2i, out: Vector2i) -> bool:
+## lies or will lie on, from the row to its right: a guest's there
+## (_held_hand()); else the open side's when one side is walled (_open());
+## else the left when the front on its right lays into its gap (the same, along
+## the row), else the right; -1 where no chair has that front. A chair nobody
+## holds yet answers for whoever comes. The row is walked front by front to its
+## end, however long (the grid has up to BuildGrid.MAX_SIDE_CELLS a side): a
+## walk cut off at 32 fronts missed a wall past them and laid two rollers in
+## one gap.
+static func _line_hand(sim: PassengerSim, me: Passenger, front: Vector2i, out: Vector2i) -> int:
+	var fronts := {}
 	for seat: Dictionary in sim.layout.seats:
-		if (
-			seat["front"] == front
-			and (seat["front"] as Vector2i) - (seat["cell"] as Vector2i) == out
-		):
-			return true
-	return false
+		if (seat["front"] as Vector2i) - (seat["cell"] as Vector2i) == out:
+			fronts[seat["front"]] = true
+	var left := Vector2i(out.y, -out.x)
+	var at := front
+	# Each step is one front further right on a straight line, so the walk
+	# visits no front twice and ends within the count of fronts.
+	for n in fronts.size():
+		if not fronts.has(at):
+			return -1 if n == 0 else 0
+		var held := _held_hand(sim, me, at, out)
+		if held >= 0:
+			return held
+		var walled := _open(sim, {"spots": [_frame(sim, at, out)]})
+		if walled >= 0:
+			return walled
+		at -= left
+	return -1 if fronts.is_empty() else 0
 
 
 ## The hand the roller of the guest (not `me`) bound for or at the gate chair
-## whose front is `front`, facing `out`, lies or will lie on, as chosen: a
-## two-bag guest's roller's own hand (SecurityLooks.hand_of()), a one-bag
-## guest's stamp for that chair; -1 for none or none chosen yet.
+## whose front is `front`, facing `out`, lies or will lie on, as chosen
+## (_holder()); -1 for none or none chosen yet.
 static func _held_hand(sim: PassengerSim, me: Passenger, front: Vector2i, out: Vector2i) -> int:
+	var held := _holder(sim, me, front, out)
+	return -1 if held.is_empty() else int(held[1])
+
+
+## [the guest (not `me`) bound for or at the gate chair whose front is `front`,
+## facing `out`, with a roller, the hand that roller lies or will lie on]: a
+## two-bag guest's roller's own hand (SecurityLooks.hand_of()), a one-bag
+## guest's stamp for that chair; empty for none or none chosen yet.
+static func _holder(sim: PassengerSim, me: Passenger, front: Vector2i, out: Vector2i) -> Array:
 	for q in sim._passengers:
 		if q == me or q.is_done() or q.stage not in GATE_STAGES or q.seat_front != front:
 			continue
@@ -180,11 +222,11 @@ static func _held_hand(sim: PassengerSim, me: Passenger, front: Vector2i, out: V
 		if roller < 0:
 			continue
 		if q.carry_on > 1:
-			return roller
+			return [q, roller]
 		var stamp: Array = (sim.get_meta(STAMPS, {}) as Dictionary).get(q.id, [])
 		if not stamp.is_empty() and stamp[0] == "gate %s" % q.seat_cell:
-			return stamp[1]
-	return -1
+			return [q, stamp[1]]
+	return []
 
 
 ## The seat `p` is bound for or at with its roller: {"key": the seat's
