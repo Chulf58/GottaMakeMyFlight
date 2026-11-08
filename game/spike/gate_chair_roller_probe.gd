@@ -2,8 +2,9 @@ extends SceneTree
 ## Windowed plates of rollers laid down at gate chairs (GateRoller.spot(),
 ## board 1fe04f01): a male and a female guest each with the roller on the
 ## right and on the left, and two pairs of male guests at neighbouring chair
-## fronts, one pair with one roller toward the neighbour, one with both rollers
-## toward each other. Boots main.tscn with no starter shell, builds the
+## fronts, one pair with one roller toward the neighbour (hands set), one with
+## the hands ParkSide.gap_hand() chooses (GAP: never both in the gap between
+## them). Boots main.tscn with no starter shell, builds the
 ## reference terminal and its gate desk, hires a member per station and opens
 ## the airport (anti-pattern a-main-tscn-probe-that-builds-its-own-terminal-at-raw-cells).
 ## Each subject is put at its chair front with one roller, its body variant
@@ -163,8 +164,8 @@ func _place() -> bool:
 		)
 		return false
 	# Pair 0: the left guest's roller toward the neighbour (left hand), his away
-	# (left hand too). Pair 1: toward each other (left, then right).
-	var hands := [[1, 1], [1, 0]]
+	# (left hand too), set. Pair 1: the hands ParkSide.gap_hand() chooses (-1).
+	var hands := [[1, 1], [-1, -1]]
 	for n in 2:
 		var first := _subjects.size()
 		for m in 2:
@@ -174,6 +175,7 @@ func _place() -> bool:
 	# no subject's roller points at it.
 	var toward := {}
 	for s: Dictionary in _subjects:
+		# Pair 1 is left to gap_hand(): its right gap, as it chooses at free gaps.
 		var way := _left(s["seat"]) * (1 if s["hand"] == 1 else -1)
 		toward[(s["seat"]["cell"] as Vector2i) + way] = true
 	for single: Array in SINGLES:
@@ -231,9 +233,10 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int) -> void:
 	p.clear_path()
 	p.boarding_tick = _clock.tick + 100000
 	_clock.ticked.connect(func(_t: int) -> void: p.late = false)
-	var stamps: Dictionary = _sim.get_meta(ParkSide.STAMPS, {})
-	stamps[p.id] = ["gate %s" % seat["cell"], hand]
-	_sim.set_meta(ParkSide.STAMPS, stamps)
+	if hand >= 0:
+		var stamps: Dictionary = _sim.get_meta(ParkSide.STAMPS, {})
+		stamps[p.id] = ["gate %s" % seat["cell"], hand]
+		_sim.set_meta(ParkSide.STAMPS, stamps)
 	var look := PassengerLooks.body_of(p.id, p.variant)
 	(
 		_subjects
@@ -314,6 +317,7 @@ func _measure(i: int) -> bool:
 	var flat := Vector2(body.global_position.x - front.x, body.global_position.z - front.z)
 	if not s.has("down_tick"):
 		s["down_tick"] = _clock.tick
+		s["hand"] = SecurityLooks.hand_of(_sim, p, 0)
 		print(
 			(
 				"PROBE %s roller down tick %d, body %.3f m off its front, stage %d"
@@ -368,6 +372,19 @@ func _seated_plates() -> void:
 
 
 func _summary() -> void:
+	for pair: Array in _pairs:
+		var a: Dictionary = _subjects[pair[0]]
+		var b: Dictionary = _subjects[pair[1]]
+		# b's front is a's front plus a's left step: a's left and b's right share the gap.
+		var shared := int(a["hand"] == 1 and b["hand"] == 0)
+		print(
+			(
+				"GAP %s hand %d, %s hand %d: both rollers in the gap between them %d (0)"
+				% [a["name"], a["hand"], b["name"], b["hand"], shared]
+			)
+		)
+		if shared > 0:
+			_invalid("%s and %s lay their rollers into one gap" % [a["name"], b["name"]])
 	for s: Dictionary in _subjects:
 		var spot: Vector3 = s["spot"]
 		var out := -1.0 if s["hand"] == 0 else 1.0

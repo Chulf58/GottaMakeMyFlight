@@ -28,10 +28,14 @@ extends RefCounted
 ## booth seat a wall on that edge of the approach cell (BoothRoller.walled()),
 ## as BoothRoller.side() lays the roller. Walled on both sides or neither, the
 ## hand is hand_of()'s own (`fallback`) as it chooses, kept like any other,
-## and ParkWalls moves the park and the lying roller out of any wall.
+## and ParkWalls moves the park and the lying roller out of any wall; at a gate
+## chair it is the free gap's instead (gap_hand()), so no two neighbours' rollers
+## lie in one gap between chair fronts.
 
 ## A guest this many cells or fewer from where it parks chooses its hand.
 const NEAR_CELLS := 3
+## gap_hand() looks at most this many gate chair fronts along a row.
+const LINE_MAX := 32
 ## The sim metadata holding the stamps: passenger id -> [seat key, hand]. A
 ## loaded snapshot clears it (PassengerSimSave.from_snapshot()).
 const STAMPS := &"park_side_hands"
@@ -73,9 +77,12 @@ static func hand(sim: PassengerSim, p: Passenger, fallback: int) -> int:
 	if stamp.is_empty() or stamp[0] != seat["key"]:
 		if not _near(p, seat["cell"]):
 			return fallback
-		# Walled on both sides or neither: hand_of()'s own hand now, kept as
-		# well, so it cannot change mid-stay either.
+		# Walled on both sides or neither: hand_of()'s own hand now (at a gate
+		# chair the gap's, gap_hand()), kept as well, so it cannot change
+		# mid-stay either.
 		var chosen := _open(sim, seat)
+		if chosen < 0 and seat.has("out"):
+			chosen = gap_hand(sim, p, seat["cell"], seat["out"])
 		stamp = [seat["key"], chosen if chosen >= 0 else fallback]
 		stamps[p.id] = stamp
 		sim.set_meta(STAMPS, stamps)
@@ -100,6 +107,86 @@ static func _open(sim: PassengerSim, seat: Dictionary) -> int:
 	return 1 if walled[0] else 0
 
 
+## The hand a gate chair guest `p` with one roller lays it down with, at the
+## chair front `front` facing grid way `out` with no wall on either side
+## (board 1fe04f01): in the gap on its right (hand 0) between its front and the
+## next front along the row, unless a roller lies or will lie in that gap from
+## the next front (_line_hand()), then on its left; with its left gap taken
+## too by a roller already there (_held_hand()), on its right. Two rollers
+## that each clear their own guest's legs (GateRoller.LIE_SIDE_M) do not fit in
+## one gap: the male sides and the roller's width make 1.18 m, and fronts are
+## 1 m apart. The same right-hand gap for everyone fills a row's gaps one guest
+## each in any order of arrival, and a wall that sends a roller to the left
+## sends every roller to its left along the row with it. hand_of()'s own hand
+## (the hand it pulled with, which turns on the way it walked in) put two
+## guests coming from either end into the gap between them, and a third
+## between them had both gaps taken (test_gate_roller_gaps). Only sim state:
+## the seats, the walls, the stamps and who holds which chair.
+static func gap_hand(sim: PassengerSim, p: Passenger, front: Vector2i, out: Vector2i) -> int:
+	var left := Vector2i(out.y, -out.x)
+	# The front on the right lays into this guest's right gap with its left
+	# hand, the one on the left into the left gap with its right.
+	var right_taken := _line_hand(sim, p, front - left, out, 0) == 1
+	var left_taken := _held_hand(sim, p, front + left, out) == 0
+	return 1 if right_taken and not left_taken else 0
+
+
+## The hand a roller at the gate chair whose front is `front`, facing `out`,
+## lies or will lie on, from the row to its right (`depth` fronts from where
+## the asking started): a guest's there (_held_hand()); else the open side's
+## when one side is walled (_open()); else the left when the front on its
+## right lays into its gap (the same, along the row), else the right; -1 where
+## no chair has that front. A chair nobody holds yet answers for whoever comes.
+static func _line_hand(
+	sim: PassengerSim, me: Passenger, front: Vector2i, out: Vector2i, depth: int
+) -> int:
+	if depth > LINE_MAX or not _has_chair(sim, front, out):
+		return -1
+	var held := _held_hand(sim, me, front, out)
+	if held >= 0:
+		return held
+	var walled := _open(sim, {"spots": [_frame(sim, front, out)]})
+	if walled >= 0:
+		return walled
+	var left := Vector2i(out.y, -out.x)
+	return 1 if _line_hand(sim, me, front - left, out, depth + 1) == 1 else 0
+
+
+## Whether a gate chair has its front at `front` facing `out`.
+static func _has_chair(sim: PassengerSim, front: Vector2i, out: Vector2i) -> bool:
+	for seat: Dictionary in sim.layout.seats:
+		if (
+			seat["front"] == front
+			and (seat["front"] as Vector2i) - (seat["cell"] as Vector2i) == out
+		):
+			return true
+	return false
+
+
+## The hand the roller of the guest (not `me`) bound for or at the gate chair
+## whose front is `front`, facing `out`, lies or will lie on, as chosen: a
+## two-bag guest's roller's own hand (SecurityLooks.hand_of()), a one-bag
+## guest's stamp for that chair; -1 for none or none chosen yet.
+static func _held_hand(sim: PassengerSim, me: Passenger, front: Vector2i, out: Vector2i) -> int:
+	for q in sim._passengers:
+		if q == me or q.is_done() or q.stage not in GATE_STAGES or q.seat_front != front:
+			continue
+		if q.seat_cell == Passenger.NO_CELL or q.seat_front - q.seat_cell != out:
+			continue
+		var roller := -1
+		for i in mini(q.carry_on, 2):
+			if roller < 0 and SecurityLooks.bag_kind(q, i) == SecurityLooks.Kind.ROLLER:
+				roller = i
+		if roller < 0:
+			continue
+		if q.carry_on > 1:
+			return roller
+		var stamp: Array = (sim.get_meta(STAMPS, {}) as Dictionary).get(q.id, [])
+		if not stamp.is_empty() and stamp[0] == "gate %s" % q.seat_cell:
+			return stamp[1]
+	return -1
+
+
 ## The seat `p` is bound for or at with its roller: {"key": the seat's
 ## identity, "cell": where it parks, and "spots": the frames it parks from
 ## (facing out of the seat), or "booth": the approach frame}; empty when none.
@@ -107,8 +194,9 @@ static func _seat(sim: PassengerSim, p: Passenger) -> Dictionary:
 	if p.stage in GATE_STAGES and p.seat_cell != Passenger.NO_CELL:
 		if p.seat_front == Passenger.NO_CELL:
 			return {}
-		var front := _frame(sim, p.seat_front, p.seat_front - p.seat_cell)
-		return {"key": "gate %s" % p.seat_cell, "cell": p.seat_front, "spots": [front]}
+		var out := p.seat_front - p.seat_cell
+		var front := _frame(sim, p.seat_front, out)
+		return {"key": "gate %s" % p.seat_cell, "cell": p.seat_front, "spots": [front], "out": out}
 	if p.stage in CAFE_STAGES:
 		var visit := sim.cafes.visit_of(p.id)
 		if visit == null or visit.seat.is_empty():
