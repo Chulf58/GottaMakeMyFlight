@@ -46,10 +46,14 @@ extends SceneTree
 ## the other side and then a high view are tried; PROBE_INVALID unless every
 ## frame is saved. One contact sheet of the strip is saved too.
 ##
-## With --standplate (windowed, board e7028790): the same strip, TIP_SHOTS
+## With --standplate (windowed, board e7028790): the same strip, STAND_SHOTS
 ## ticks from the tick a lane walker pulling a roller stops behind a member
 ## standing still (QueueStandWait.ticks() 0, so its stand starts at once),
 ## framed on it, its roller and the member behind it within STAND_NEAR_M.
+## STANDSHARE prints each tick up to the last shot: whether the move is a queue
+## stand, its share stood (RollerPark.queue_share()) and how near upright the
+## roller's own +z is drawn. Headless it takes no frames and passes on those
+## lines alone, one for each tick to the last shot (else PROBE_INVALID).
 ##
 ## Run: Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
 ##   --path game -s res://spike/queue_spacing_probe.gd -- --place=checkin \
@@ -82,6 +86,10 @@ const STRIP_EVERY := 15
 const STRIP_HOLDERS := 3
 ## Ticks after a tip is marked that --tipplate frames are taken.
 const TIP_SHOTS: Array[int] = [0, 1, 2, 3, 4, 6]
+## Ticks after the stop that --standplate frames are taken: past the stand's
+## roll (RollerPark.QUEUE_STAND_TICKS 5.5, from a tick or two after the stop)
+## to the stood roller. With TIP_SHOTS the strip ended mid-roll.
+const STAND_SHOTS: Array[int] = [0, 2, 6, 8, 10]
 ## A queue stand whose tip starts this few ticks after the roller is up is short.
 const SHORT_STOOD := 4.0
 ## --standplate: the member behind is at most this far from the subject.
@@ -147,10 +155,14 @@ var _tip_shots: Array[Image] = []
 var _tip_auto := ""
 ## --standplate: the strip is of a stop behind a standing member (_stand_pick()).
 var _stand_auto := false
+## --standplate: STANDSHARE lines printed; run with no rendering (headless).
+var _stand_traced := 0
+var _headless := false
 
 
 func _initialize() -> void:
 	_seed = randi()
+	_headless = DisplayServer.get_name() == "headless"
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
 			_seed = int(arg.get_slice("=", 1))
@@ -200,16 +212,24 @@ func _run() -> void:
 		print("PROBE_INVALID no move-up plate was taken")
 		quit(1)
 		return
-	if _tip_id != 0 and _tip_shots.size() < TIP_SHOTS.size():
+	if _stand_auto and _stand_traced < _shots().back() + 1:
 		print(
 			(
-				"PROBE_INVALID the tip strip has %d of %d frames"
-				% [_tip_shots.size(), TIP_SHOTS.size()]
+				"PROBE_INVALID STANDSHARE printed on %d of %d ticks"
+				% [_stand_traced, _shots().back() + 1]
 			)
 		)
 		quit(1)
 		return
-	if _tip_id != 0:
+	if _stand_auto and _headless:
+		print("STANDPLATE headless: no frames taken, STANDSHARE lines only")
+	elif _tip_id != 0 and _tip_shots.size() < _shots().size():
+		print(
+			"PROBE_INVALID the tip strip has %d of %d frames" % [_tip_shots.size(), _shots().size()]
+		)
+		quit(1)
+		return
+	elif _tip_id != 0:
 		_tip_sheet()
 	if _strip_on and (_strip_station == 0 or _strip_left > 0):
 		print("PROBE_INVALID the strip has %d frames left" % _strip_left)
@@ -285,7 +305,7 @@ func _stand_pick(p: Passenger, station: int) -> void:
 
 
 ## --tipplate: marks the tick the walker's queue stand tip is set, then takes a
-## frame on each of TIP_SHOTS ticks after it.
+## frame on each of _shots() ticks after it.
 func _tip_step() -> void:
 	var node := _views.node_for(_tip_id) if _tip_id > 0 else null
 	if node == null:
@@ -297,7 +317,12 @@ func _tip_step() -> void:
 		else:
 			return
 	var at := _clock.tick - _tip_mark
-	if at in TIP_SHOTS and _tip_shots.size() == TIP_SHOTS.find(at):
+	var shots := _shots()
+	if _stand_auto and at <= shots.back():
+		_stand_share(at)
+		if _headless:
+			return
+	if at in shots and _tip_shots.size() == shots.find(at):
 		var img := await _tip_frame(at)
 		if img == null:
 			print("PROBE_INVALID tip frame +%d refused from every view" % at)
@@ -943,6 +968,56 @@ func _report() -> int:
 	)
 	print("PROBE done failed=%s" % failed)
 	return 1 if failed else 0
+
+
+## The ticks after the mark that the strip's frames are taken.
+func _shots() -> Array[int]:
+	return STAND_SHOTS if _stand_auto else TIP_SHOTS
+
+
+## STANDSHARE for the --standplate subject `at` ticks after its stop: whether
+## its roller's move is a queue stand, that move's k and share stood
+## (RollerPark.queue_share(), 0 in the pull, 1 stood), and the roller's own +z
+## (the shell's length) against straight up, as test_roller_queue_stand reads
+## it (UPRIGHT_DOT 0.95 is stood). The record read is the roller's own: a guest
+## whose first bag is not the roller showed "queued false" while its roller
+## stood up.
+func _stand_share(at: int) -> void:
+	var p := _sim.get_passenger(_tip_id)
+	var index := 0
+	for i in p.carry_on:
+		if SecurityLooks.bag_kind(p, i) == SecurityLooks.Kind.ROLLER:
+			index = i
+			break
+	var bag := _views.carry_on_props().bag_state(_tip_id, index)
+	var queued := RollerPark.queued(bag)
+	var k := -1.0
+	var share := 0.0
+	if queued:
+		var since := float(bag.get("since", _clock.tick))
+		k = clampf((float(_clock.tick) - since) / CarryLead.ticks_of(bag), 0.0, 1.0)
+		share = RollerPark.queue_share(bag, k)
+	var up := NAN
+	var rollers := QueueSpacing.rollers(_views, _sim, _tip_id)
+	if not rollers.is_empty():
+		up = rollers[0].global_transform.basis.z.normalized().dot(Vector3.UP)
+	print(
+		(
+			"STANDSHARE t%d +%d id %d bag %d queued %s k %.2f share %.2f up %.3f (%.0f deg off upright)"
+			% [
+				_clock.tick,
+				at,
+				_tip_id,
+				index,
+				queued,
+				k,
+				share,
+				up,
+				rad_to_deg(acos(clampf(up, -1, 1)))
+			]
+		)
+	)
+	_stand_traced += 1
 
 
 ## The strip's file name prefix: "stand" for --standplate, else "tip".
