@@ -26,7 +26,7 @@ const MAIN := "res://main/main.tscn"
 const CONTRACT := "ECO1"
 const OCCURRENCE := "ECO1-d0"
 const MINUTE := 700
-const BOOKED := 6
+const BOOKED := 8
 const FEE := 50
 const TICKS_PER_FRAME := 80
 const HANG_LIMIT_MS := 30000
@@ -123,7 +123,7 @@ func _setup() -> void:
 		"airline": "Gotta Air",
 		"destination": "Oslo",
 		"departure_minute": MINUTE,
-		"plane_size": "medium",
+		"plane_size": "small",
 		"booked_passengers": BOOKED,
 		"fee_per_passenger": FEE,
 	}

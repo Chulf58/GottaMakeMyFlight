@@ -9,7 +9,7 @@ const CONTRACT := "OCC"
 const OCCURRENCE := "OCC-d0"
 const MINUTE := 518
 const FEE := 37
-const BOOKED := 4
+const BOOKED := 8
 ## Past the occurrence's departure, so every booked passenger has settled.
 const SETTLED := 4000
 
@@ -51,6 +51,7 @@ func _make(working := true, flight_start := 100000) -> void:
 
 func _accept() -> void:
 	var terms := TestFlightContracts.terms(CONTRACT, MINUTE)
+	terms["plane_size"] = "small"
 	terms["booked_passengers"] = BOOKED
 	terms["fee_per_passenger"] = FEE
 	assert_bool(_world.flights.accept_contract(terms)).is_true()

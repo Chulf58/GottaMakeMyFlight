@@ -2,8 +2,9 @@ class_name TestGateCapacitySave
 extends GdUnitTestSuite
 ## The gate places in the forecast and in a save (decision gate-full-design-
 ## passengers-reserve-a-gate-seat-or-standing, point 5; PassengerSim save
-## version 25): a front blocked by a full gate forecasts NEVER, and once a
-## place frees its forecast equals its measured clearance; a save taken at a
+## version 25): a front blocked by a full gate waits until its boarding opens,
+## when it needs no place, and its forecast equals that measured clearance;
+## once a place frees its forecast equals its measured clearance; a save taken at a
 ## tick boundary while the gate is full, with a reservation held inside
 ## security, plays on exactly through JSON; a malformed "gate_places" is
 ## refused whole.
@@ -51,27 +52,56 @@ func _free_one_place() -> void:
 
 
 func test_the_forecast_waits_for_a_free_place_then_equals_the_clearance() -> void:
+	# No place frees: the front waits until its boarding opens, then needs none
+	# (GateCapacity.placed()).
+	var alone := _full_gate()
+	var start := _gate.world.sim.tick
+	var blocked := start + SecurityForecast.eta(_gate.world.sim, alone[0])
+	var alone_cleared := func() -> bool: return alone[0].cleared
+	assert_bool(_gate.run_until(alone_cleared)).is_true()
+	var blocked_measured := _gate.world.sim.tick
+	# The same world, and a place frees: the front takes it, and the one behind
+	# waits until its own boarding opens.
 	var held := _full_gate()
 	var sim := _gate.world.sim
-	var blocked := SecurityForecast.eta(sim, held[0])
 	_free_one_place()
 	var forecast := sim.tick + SecurityForecast.eta(sim, held[0])
-	var behind := SecurityForecast.eta(sim, held[1])
+	var behind := sim.tick + SecurityForecast.eta(sim, held[1])
 	var cleared := func() -> bool: return held[0].cleared
 	assert_bool(_gate.run_until(cleared, 600)).is_true()
 	var measured := sim.tick
 	_gate.world.run_to(sim.tick + 400)
+	var still_held := held[1].stuck
+	var still_cleared := held[1].cleared
+	var behind_cleared := func() -> bool: return held[1].cleared
+	assert_bool(_gate.run_until(behind_cleared)).is_true()
+	var behind_measured := sim.tick
 	print(
 		(
-			"blocked %d, after a place frees forecast %d measured %d; behind %d, cleared %s"
-			% [blocked, forecast, measured, behind, held[1].cleared]
+			(
+				"blocked forecast %d measured %d (boarding %d); after a place frees forecast %d"
+				+ " measured %d; behind forecast %d measured %d (boarding %d)"
+			)
+			% [
+				blocked,
+				blocked_measured,
+				alone[0].boarding_tick,
+				forecast,
+				measured,
+				behind,
+				behind_measured,
+				held[1].boarding_tick,
+			]
 		)
 	)
-	assert_int(blocked).is_equal(JourneyForecast.NEVER)
+	assert_int(blocked).is_equal(blocked_measured)
+	assert_int(blocked_measured).is_greater_equal(alone[0].boarding_tick)
 	assert_int(forecast).is_equal(measured)
-	assert_int(behind).is_equal(JourneyForecast.NEVER)
-	assert_bool(held[1].cleared).is_false()
-	assert_int(held[1].stuck).is_equal(Passenger.Stuck.GATE_FULL)
+	# Long after the front, the one behind is still held for a place.
+	assert_bool(still_cleared).is_false()
+	assert_int(still_held).is_equal(Passenger.Stuck.GATE_FULL)
+	assert_int(behind).is_equal(behind_measured)
+	assert_int(behind_measured).is_greater_equal(held[1].boarding_tick)
 
 
 ## Saves on the tick boundaries of a hold: the gate full, a place freed by a

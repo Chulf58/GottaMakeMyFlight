@@ -22,7 +22,9 @@ extends RefCounted
 ## issued. No two live flights may meet at a gate or on the runway or lane
 ## (FlightTimetable.clash_on), except two one-offs, which add_flight never
 ## compares; no running contract may meet another contract's live occurrence.
-## The keys are those of version 4, so the version stays 4.
+## Version 5 narrows what a contract may hold (its booked passengers must fit
+## its plane class, FlightContract.problem); the keys are those of version 4.
+## A version 4 save is refused, with no migration.
 
 const KEYS := [
 	"save_version", "tick", "opened_tick", "contracts", "start_day", "next_day", "ended", "flights"

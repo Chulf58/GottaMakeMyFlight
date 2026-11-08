@@ -25,7 +25,16 @@ extends Node3D
 ## outside the site's edge (ground_height_at()). Only the height changes; the
 ## Airside paths, and so the taxi lengths and timings, stay as they are.
 
-const PLANE_SCENE := preload("res://assets/planes/tp_plane_05a.glb")
+## The plane models by PlaneModels.PLANES name. The model drawn for a flight
+## comes from its airline and plane class (PlaneClasses.model_for) and is never
+## saved; a one-off flight, which has no contract, is drawn as the starter's.
+const PLANE_SCENES := {
+	"tp_plane_03a": preload("res://assets/planes/tp_plane_03a.glb"),
+	"tp_plane_04a": preload("res://assets/planes/tp_plane_04a.glb"),
+	"tp_plane_05a": preload("res://assets/planes/tp_plane_05a.glb"),
+	"tp_plane_06a": preload("res://assets/planes/tp_plane_06a.glb"),
+	"tp_plane_07a": preload("res://assets/planes/tp_plane_07a.glb"),
+}
 ## The terminal site, whose whole grid is paved flat at its ground_height
 ## (tools/blender/terminal_site/build_terminal_site.py; user ruling plane-guard-
 ## area-shows-only-in-build-mode-the-site-paving-ex, point 2).
@@ -72,13 +81,12 @@ const FAR_SHADOW_FLATTEN := 0.002
 @export var gate := FlightSim.DEFAULT_GATE
 ## Which of the gate's sighted flights this view draws, oldest first.
 @export var slot := 0
-## Moves the model so its middle sits on the pose point (the glb origin is near
-## the nose end).
-@export var model_offset := Vector3(0.0, 0.0, 1.7)
 @export var model_yaw_degrees := 0.0
 
 ## The flight drawn on the last update_pose(), or "".
 var flight_id := ""
+## The PlaneModels name of the model on show.
+var model_name := ""
 ## Its pose_at phase on the last update_pose().
 var phase := PHASE_LEAD_IN
 
@@ -88,15 +96,15 @@ var phase := PHASE_LEAD_IN
 var _paths: Dictionary = {}
 var _paths_stand := 0
 var _paths_gate := ""
+var _pivot: Node3D
 var _far_shadow: Node3D
 var _far_material: StandardMaterial3D
 
 
 func _ready() -> void:
-	var pivot := Node3D.new()
-	pivot.name = "Pivot"
-	add_child(pivot)
-	pivot.add_child(_new_model())
+	_pivot = Node3D.new()
+	_pivot.name = "Pivot"
+	add_child(_pivot)
 	_far_material = StandardMaterial3D.new()
 	_far_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_far_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -113,12 +121,7 @@ func _ready() -> void:
 	_far_shadow.name = "FarShadow"
 	_far_shadow.top_level = true
 	add_child(_far_shadow)
-	var silhouette := _new_model()
-	_far_shadow.add_child(silhouette)
-	for mesh in silhouette.find_children("*", "MeshInstance3D", true, false):
-		mesh.material_override = _far_material
-		mesh.material_overlay = null
-		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	show_model(starter_model())
 	visible = false
 
 
@@ -134,6 +137,7 @@ func update_pose() -> void:
 	visible = flight_id != ""
 	if not visible:
 		return
+	show_model(model_of(flight_id))
 	phase = shown[slot]["phase"]
 	transform = shown[slot]["transform"]
 	_place_far_shadow()
@@ -290,9 +294,47 @@ func far_shadow_alpha() -> float:
 	return _far_material.albedo_color.a if _far_material != null else 0.0
 
 
+## The model a flight is drawn with: its contract's airline and plane class, or
+## the starter's for a one-off flight.
+func model_of(id: String) -> String:
+	var contract := sim.contract_of(sim.flight_contract_id(id))
+	if contract.is_empty():
+		return starter_model()
+	return PlaneClasses.model_for(contract["airline"], contract["plane_size"])
+
+
+## The model of the starter contract, which a one-off flight is drawn with.
+static func starter_model() -> String:
+	var terms := FlightSim.STARTER_TERMS
+	return PlaneClasses.model_for(terms["airline"], terms["plane_size"])
+
+
+## Puts `model` on show, with its silhouette; nothing changes if it already is.
+func show_model(model: String) -> void:
+	if model == model_name or not PLANE_SCENES.has(model):
+		return
+	model_name = model
+	for child in _pivot.get_children():
+		_pivot.remove_child(child)
+		child.queue_free()
+	for child in _far_shadow.get_children():
+		_far_shadow.remove_child(child)
+		child.queue_free()
+	_pivot.add_child(_new_model())
+	var silhouette := _new_model()
+	_far_shadow.add_child(silhouette)
+	for mesh in silhouette.find_children("*", "MeshInstance3D", true, false):
+		mesh.material_override = _far_material
+		mesh.material_overlay = null
+		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## One instance of the model on show, its passenger door where the stand's is
+## (PlaneClasses.stand_offset).
 func _new_model() -> Node3D:
-	var model: Node3D = PLANE_SCENE.instantiate()
-	model.position = model_offset
+	var packed: PackedScene = PLANE_SCENES[model_name]
+	var model: Node3D = packed.instantiate()
+	model.position = PlaneClasses.stand_offset(model_name)
 	model.rotation_degrees.y = model_yaw_degrees
 	return model
 

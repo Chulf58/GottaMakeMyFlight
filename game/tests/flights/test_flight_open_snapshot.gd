@@ -52,10 +52,10 @@ func _saved(world: Array) -> Dictionary:
 	return JSON.parse_string(text)
 
 
-func test_version_is_4_with_the_opening_tick_start_days_and_ended() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(4)
+func test_version_is_5_with_the_opening_tick_start_days_and_ended() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(5)
 	var data: Dictionary = _saved(_opened_world(OPENED + 100))["flights"]
-	assert_int(int(data["save_version"])).is_equal(4)
+	assert_int(int(data["save_version"])).is_equal(5)
 	assert_int(int(data["opened_tick"])).is_equal(OPENED)
 	assert_int(int(data["start_day"]["AM"])).is_equal(3)
 	assert_int(int(data["start_day"]["LATE"])).is_equal(2)
@@ -108,7 +108,7 @@ func test_an_open_save_with_skipped_days_round_trips_and_plays_out_the_same() ->
 
 
 ## A version 2 save has no open state: it loads as open since tick 0 with
-## every contract starting on its first_day, and saves again as version 4.
+## every contract starting on its first_day, and saves again as version 5.
 func test_a_version_2_save_loads_as_open() -> void:
 	var world := _world()
 	assert_bool(world[1].open_airport()).is_true()
@@ -137,9 +137,11 @@ func test_saves_of_other_versions_or_with_the_wrong_keys_for_theirs_are_refused(
 	v3_without.erase("start_day")
 	var v1 := good.duplicate(true)
 	v1["save_version"] = 1
-	var v5 := good.duplicate(true)
-	v5["save_version"] = 5
-	for bad in [v2_with_open, v3_without, v1, v5]:
+	var v4 := good.duplicate(true)
+	v4["save_version"] = 4
+	var v6 := good.duplicate(true)
+	v6["save_version"] = 6
+	for bad in [v2_with_open, v3_without, v1, v4, v6]:
 		var target: FlightSim = auto_free(FlightSim.new())
 		assert_bool(target.from_snapshot(bad)).override_failure_message(str(bad)).is_false()
 		assert_int(target.opened_tick).is_equal(-1)

@@ -1,4 +1,5 @@
 extends SceneTree
+# gdlint:disable = max-file-lines
 ## Live windowed crossing of the basic security scanner (the interior kit's security_scanner booth)
 ## by passengers carrying their carry-on (board item
 ## basic-security-scanner-booth-is-narrower-than-the-walking-ch). Boots main/main.tscn with a new
@@ -176,6 +177,12 @@ var _runners := {}
 ## Passenger id -> true once it was measured running between the posts.
 var _arch_runners := {}
 var _arch_second := 0
+## Lane mode: passenger id -> its pace over the whole approach (CarryChecks.pace_look()).
+var _arch_pace := {}
+## "id:bag" -> body points of a backpack-holding hand's loop fingers not counted inside the pack.
+var _loop_ignored := {}
+## "id:bag" of the tray bags beside the arch already measured (_tray_aside()).
+var _tray_seen := {}
 ## Lane mode: passenger id -> {security phase: true} seen on any frame (a
 ## lane's repack berth is away from the arch, outside the checked box).
 var _phases_seen := {}
@@ -692,9 +699,19 @@ func _check(id: int) -> void:
 				# A bag in a tray rides the belt beside an arch, not the passage.
 				if homes[i] != SecurityLooks.Home.TRAY or not _lane_mode:
 					carried_points.append_array(surface)
+				else:
+					_tray_aside(id, i, surface, booth)
 				if homes[i] == SecurityLooks.Home.HAND:
 					hand_kinds.append(props["kinds"][i])
 					var hits := CarryContact.inside_meshes(own, bags[i])
+					if props["kinds"][i] == SecurityLooks.Kind.BACKPACK:
+						var held: int = props_now.bag_state(id, i).get("held_by", -1)
+						var loop := CarryChecks.loop_hits(
+							body, bags[i], held, CarryChecks.gripping(_sim, p)
+						)
+						var key := "%d:%d" % [id, i]
+						_loop_ignored[key] = _loop_ignored.get(key, 0) + loop
+						hits = maxi(0, hits - loop)
 					var why := ""
 					if hits > 0:
 						_print_self_detail(id, i, body, own, local.z)
@@ -816,7 +833,7 @@ func _check(id: int) -> void:
 				_kinds_crossed[KIND_NAMES[k]] = true
 		var arch := StringName((booth[0] as Node3D).get_meta("record", {}).get("def", ""))
 		if arch == SecurityLanes.ARCH:
-			_arch_crossing(id, p, s, local, props_now)
+			_arch_crossing(id, p, s, booth, local, props_now)
 		elif (
 			not _plated
 			and not _plate_task
@@ -829,14 +846,20 @@ func _check(id: int) -> void:
 			_plate_crossing.call_deferred(id, booth)
 
 
-## Lane mode, one frame of passenger `id` at the arch (`local`, its place in
-## the arch's frame): within the posts' depth it records its lowest tuck
-## weight and whether it ran (on which pass, measured from its walked distance
-## per tick); mid-arch, fully tucked and
-## with no plate task under way, it is plated close once.
+## Lane mode, one frame of passenger `id` near the arch (`local`, its place in
+## the arch's frame): its pace is taken over the whole approach (a runner is
+## at the posts for two or three frames only; CarryChecks.pace_look()), and
+## within the posts' depth it records its lowest tuck weight, whether it ran
+## (on which pass) and where it crossed mid-arch (across, at its nearest to the
+## arch's middle) against the arch's half opening (booth[3]); mid-arch,
+## fully tucked and with no plate task under way, it is plated close once.
 func _arch_crossing(
-	id: int, p: Passenger, s: Dictionary, local: Vector3, props_now: CarryOnProps
+	id: int, p: Passenger, s: Dictionary, booth: Array, local: Vector3, props_now: CarryOnProps
 ) -> void:
+	var pace: Dictionary = _arch_pace.get_or_add(id, {})
+	var ran := CarryChecks.pace_look(pace, p.odometer_mm, _clock.tick) > CarryChecks.RUN_PACE_MM
+	if ran:
+		_arch_runners[id] = true
 	if absf(local.x) > 0.3 or absf(local.z) > 0.3:
 		return
 	var tuck := props_now.tuck_of(id)
@@ -846,27 +869,42 @@ func _arch_crossing(
 			"tuck_min": INF,
 			"frames": 0,
 			"run_frames": 0,
-			"odo": p.odometer_mm,
-			"tick": _clock.tick,
+			"mid_z": INF,
+			"mid_x": 0.0,
+			"half": booth[3]
 		}
 		if p.incident_resolved:
 			_arch_second += 1
 	var run: Dictionary = s[key]
 	run["tuck_min"] = minf(run["tuck_min"], tuck)
 	run["frames"] += 1
-	# Running is measured, not read off the flag: the walked distance per
-	# tick since the last tick seen here, near PassengerSim.RUN_MM.
-	var ticks: int = _clock.tick - int(run["tick"])
-	if ticks > 0:
-		var per_tick := float(p.odometer_mm - int(run["odo"])) / ticks
-		if per_tick > (PassengerSim.WALK_MM + PassengerSim.RUN_MM) * 0.5:
-			run["run_frames"] += 1
-			_arch_runners[id] = true
-		run["odo"] = p.odometer_mm
-		run["tick"] = _clock.tick
+	run["run_frames"] += int(ran)
+	if absf(local.z) < run["mid_z"]:
+		run["mid_z"] = absf(local.z)
+		run["mid_x"] = local.x
 	if not _arch_plated and not _plate_task and absf(local.z) < 0.15 and tuck >= 1.0:
 		_plate_task = true
 		_plate_arch.call_deferred(id)
+
+
+## Lane mode, a bag in a tray beside the arch (left out of the passage trace
+## in _check()), once each: where it is in the arch's frame and how many of its
+## points would count as through the arch's posts if it were traced, which is
+## what the exclusion keeps out.
+func _tray_aside(id: int, i: int, surface: PackedVector3Array, booth: Array) -> void:
+	var key := "%d:%d" % [id, i]
+	if _tray_seen.has(key):
+		return
+	_tray_seen[key] = true
+	var at: Vector3 = (
+		(booth[1] as Transform3D) * _views.carry_on_props().props_of(id)["bags"][i].global_position
+	)
+	print(
+		(
+			"PROBE_INFO TRAY_ASIDE passenger=%d bag=%d at_arch_frame=%s points=%d would_be_through=%d"
+			% [id, i, at.snapped(Vector3.ONE * 0.01), surface.size(), _through(surface, booth)]
+		)
+	)
 
 
 ## Prints one body-in-own-bag frame of bag `i` of passenger `id` (points
@@ -1285,7 +1323,7 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 			print("INFRAME %s person=%s" % [tag, shown])
 			ok = ok and shown["ok"]
 			if bag != null:
-				ok = _bag_seen(cam, bounds["bag"], tag) and ok
+				ok = _bag_seen(cam, CarryChecks.bag_core(bag), tag) and ok
 			var dark := PlateSteps.dark_share(img)
 			print("INFRAME %s dark=%.2f" % [tag, dark])
 			ok = ok and dark < PlateSteps.DARK_SHARE
@@ -1302,7 +1340,12 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 				# The bag close up from the same side, for the hand and the legs.
 				if bag != null:
 					var detail := _close_dir.path_join(name + "_detail.png")
+					# Another passenger in front of the camera hid the loop and the fingers
+					# in the tray-to-back plate: the others are left out of the detail.
+					var others := CarryChecks.hide_others(_sim, _views, id)
 					await PlateSteps.detail_plate(self, cam, body, bag, owners, frame, detail)
+					for node in others:
+						node.visible = true
 			break
 	_cam.make_current()
 	cam.queue_free()
@@ -1431,6 +1474,8 @@ func _report() -> void:
 	}
 	var turn_along: Array = []
 	var worst := Vector4(INF, INF, INF, 0.0)
+	for key in _loop_ignored:
+		print("PROBE_INFO LOOP_FINGERS_IGNORED %s points=%d" % [key, _loop_ignored[key]])
 	for id in _stats:
 		var s: Dictionary = _stats[id]
 		totals["body"] += s["body_contacts"]
@@ -1578,6 +1623,36 @@ func _report_lane() -> void:
 						% [id, key, run["frames"], run["run_frames"], run["tuck_min"]]
 					)
 				)
+				print(
+					(
+						(
+							"PROBE_INFO ARCH_OFFSET passenger=%d pass=%s mid_x=%.3f at_z=%.3f"
+							+ " half_opening=%.3f centre_beyond_opening=%s body_reach=%.3f bone=%s"
+						)
+						% [
+							id,
+							key,
+							run["mid_x"],
+							run["mid_z"],
+							run["half"],
+							absf(run["mid_x"]) > run["half"],
+							_stats[id]["mid_reach"],
+							_stats[id]["mid_bone"]
+						]
+					)
+				)
+	for id in _arch_pace:
+		print(
+			(
+				"PROBE_INFO ARCH_PACE passenger=%d peak_mm_per_tick=%.0f run_threshold=%.1f ran=%s"
+				% [
+					id,
+					_arch_pace[id].get("peak", 0.0),
+					CarryChecks.RUN_PACE_MM,
+					_arch_runners.has(id)
+				]
+			)
+		)
 	print(
 		(
 			"ARCH_TOTAL runners=%s second_passes=%d plated=%s"

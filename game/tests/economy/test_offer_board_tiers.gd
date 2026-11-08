@@ -89,9 +89,37 @@ func test_every_offer_follows_the_plane_sizes_and_fees_of_its_airlines_tier() ->
 			assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_empty()
 
 
-func test_large_planes_arrive_with_tier_one_and_not_before() -> void:
-	assert_array(_large_offers(_draw_days(0))).is_empty()
-	assert_array(_large_offers(_draw_days(1))).is_not_empty()
+## Large planes are held back until stands and the lane are sized per class
+## (PlaneClasses.max_offer_class), whatever the tier or the stars behind it.
+func test_no_tier_draws_a_large_offer_and_small_and_medium_still_draw() -> void:
+	assert_str(PlaneClasses.max_offer_class()).is_equal("medium")
+	var seen := {}
+	for stars in [1.0, 2.5, 3.0, 3.5, 4.0, 5.0]:
+		var tier := RatingFormula.tier(stars)
+		var offers := _draw_days(tier)
+		print("%.1f stars -> tier %d: %d offers" % [stars, tier, offers.size()])
+		assert_array(_large_offers(offers)).override_failure_message("%s stars" % stars).is_empty()
+		for offer in offers:
+			seen[offer["plane_size"]] = true
+	assert_array(seen.keys()).contains_exactly_in_any_order(["small", "medium"])
+
+
+func test_the_offer_gate_leaves_every_tier_with_medium_and_tier_zero_untouched() -> void:
+	assert_dict(OfferBoard.offered_sizes(0)).is_equal(OfferBoard.STARTER_SIZES)
+	for tier in OfferBoard.MAX_TIER + 1:
+		var offered := OfferBoard.offered_sizes(tier)
+		assert_bool(offered.has("medium")).is_true()
+		assert_bool(offered.has("large")).is_false()
+		assert_array(OfferBoard.TIER_AIRLINES[tier]).is_not_empty()
+
+
+func test_a_saved_large_offer_still_loads_and_is_accepted_as_a_contract() -> void:
+	var board := OfferBoard.new()
+	assert_bool(board.from_snapshot(_day_with_first(_tier_one_record()))).is_true()
+	assert_str(board.offer_of("O0N1")["plane_size"]).is_equal("large")
+	var sim := auto_free(FlightSim.new()) as FlightSim
+	sim.open_airport()
+	assert_bool(board.accept("O0N1", sim)).is_true()
 
 
 func test_the_rng_advances_the_same_whatever_the_tier() -> void:
@@ -171,3 +199,14 @@ func test_a_starter_airline_cannot_carry_a_higher_tiers_terms() -> void:
 	var dear := TestOfferBoard.record("O0N1", 0, 600)
 	dear["fee_per_passenger"] = OfferBoard.TIER_FEES[1][1]
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(dear))).is_false()
+
+
+## Tier 2 airlines now offer medium planes, so the offers a board saves changed.
+func test_the_offer_save_version_is_3_and_a_version_2_save_is_refused() -> void:
+	assert_int(OfferBoard.SAVE_VERSION).is_equal(3)
+	var board := OfferBoard.new()
+	board.ensure_day(0, _rng, OfferBoard.MAX_TIER)
+	var data := board.to_snapshot()
+	assert_int(int(data["save_version"])).is_equal(3)
+	data["save_version"] = 2
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
