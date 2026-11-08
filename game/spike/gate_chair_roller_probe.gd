@@ -361,9 +361,9 @@ func _on_feet(node: Node3D, body: Node3D) -> Node3D:
 	return twin
 
 
+## The seated and pair plates, after any plate before them failed as well (each
+## failure is printed and fails the run on its own).
 func _seated_plates() -> void:
-	if _failed:
-		return
 	for i in _subjects.size():
 		if not (_subjects[i]["name"] as String).begins_with("pair"):
 			await _plate("seated_%s" % _subjects[i]["name"], [i], false)
@@ -441,8 +441,8 @@ func _plate(shot: String, which: Array, top: bool) -> void:
 		_cam.fov = 50.0
 		root.add_child(_cam)
 	var out := -1.0 if s["hand"] == 0 else 1.0
-	var at := Vector3(0.0, 3.2, 0.6) if top else Vector3(out * 1.3, 1.5, 1.9)
-	var look := Vector3(0.0, 0.3, 0.0) if top else Vector3(out * 0.2, 0.4, -0.1)
+	var at := Vector3(0.0, 3.2, 0.6) if top else Vector3(out * 1.6, 1.9, 2.6)
+	var look := Vector3(0.0, 0.3, 0.0) if top else Vector3(out * 0.25, 0.75, -0.15)
 	_cam.look_at_from_position(frame * at, frame * look, Vector3.UP)
 	_cam.current = true
 	await _frames(2)
