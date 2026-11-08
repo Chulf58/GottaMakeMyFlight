@@ -54,13 +54,18 @@ const PAVED_OWNERS: Array[String] = [
 ]
 const PAVING_EDGE_Z := -210.0
 const TOP_VIEW_SIZE := 130.0
-const TOP_VIEW_Z := -200.0
+## Halfway from the taxi lane (z -284 since Runway R4) to the paving edge, so both are
+## in the 130 m view.
+const TOP_VIEW_Z := -247.0
 ## The lane plates: the top-down view's height of view and centre (between TaxiWest and
-## TaxiEast, over the lane), and the distance camera's offset from what it looks at.
+## TaxiEast at x -124 and 124, and between the runway's centreline at z -338 and the
+## paving edge), and the distance camera's offset from what it looks at, scaled up by
+## DISTANCE_SCALES until every mark fits.
 const LANE_VIEW_SIZE := 170.0
-const LANE_VIEW_X := -51.0
-const LANE_VIEW_Z := -250.0
+const LANE_VIEW_X := 0.0
+const LANE_VIEW_Z := -274.0
 const DISTANCE_OFFSET := Vector3(110.0, 130.0, 150.0)
+const DISTANCE_SCALES: Array[float] = [1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
 ## The two-gate stage: ticks per state of the made-up timeline its poses are read on,
 ## and the terminal, in cells from ReferenceTerminal.offset_on() (gates4_plates_probe.gd's
 ## layout without seats): gate A's exit at x 20 and gate B's at x 64, 44 cells apart.
@@ -79,12 +84,14 @@ const NORTH_ROW_DOOR_X := 0.5
 const PAD_VIEW_SIZE := 110.0
 const HOLD_VIEW_SIZE := 45.0
 ## Sim ticks sampled for the strip, four per row, with the states each row must show:
-## landing (approach to touchdown), taxiing (TAXI_IN) and takeoff (the TAKEOFF state,
-## ticks 3100 to 3300 from the first state).
+## landing (approach to touchdown), taxiing (TAXI_IN) and takeoff (the TAKEOFF state).
+## Ticks count from the first state, or from the start of the state a fourth entry
+## names: the takeoff row counts from TAKEOFF's own start, which moves whenever a taxi
+## budget changes (TAXI_IN 1000 and TAXI_OUT 920 since Runway R4).
 const STRIP_ROWS := [
 	["landing", [150, 228, 280, 345], [FlightSim.State.APPROACH, FlightSim.State.LANDING]],
 	["taxiing", [420, 500, 580, 655], [FlightSim.State.TAXI_IN]],
-	["takeoff", [3110, 3170, 3230, 3290], [FlightSim.State.TAKEOFF]],
+	["takeoff", [10, 70, 130, 190], [FlightSim.State.TAKEOFF], FlightSim.State.TAKEOFF],
 ]
 
 var _out_dir := ""
@@ -406,13 +413,17 @@ func _require_paved(
 ## middle of the lane and the middle of each link (the part between the runway's south
 ## end, where the runway's own asphalt lies over the link, and the site's paving).
 ## Each point in frame must be hit first on the taxi paving's own collider; the plane's
-## bodies and the colliders of hidden meshes are passed through. At least one point
-## must be in frame, so the check cannot pass by testing nothing.
-func _prove_paving_visible(label: String, paving: TaxiPaving) -> bool:
+## bodies (and `also_pass`'s, a plane drawn by the probe itself) and the colliders of
+## hidden meshes are passed through. At least one point must be in frame, so the check
+## cannot pass by testing nothing.
+func _prove_paving_visible(label: String, paving: TaxiPaving, also_pass: Node = null) -> bool:
 	var frame := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
 	var space := _cam.get_world_3d().direct_space_state
 	var skip: Array[RID] = []
-	for body in _plane.find_children("*", "StaticBody3D", true, false):
+	var bodies := _plane.find_children("*", "StaticBody3D", true, false)
+	if also_pass != null:
+		bodies.append_array(also_pass.find_children("*", "StaticBody3D", true, false))
+	for body in bodies:
 		skip.append((body as StaticBody3D).get_rid())
 	var runway_south := _runway_south()
 	print("PAVING_VISIBLE %s runway_south_z=%.1f" % [label, runway_south])
@@ -518,8 +529,11 @@ func _strip() -> void:
 	var rows: Array[Image] = []
 	for row in STRIP_ROWS:
 		var frames: Array[Image] = []
+		var base := _t0
+		if row.size() > 3:
+			base = _sim().state_start("GMF101-d0", row[3])
 		for target in row[1]:
-			_step_to(_t0 + target)
+			_step_to(base + target)
 			_plane.update_pose()
 			# The first sample can come before the views have posed the plane (it is
 			# hidden and at the origin), and following that point leaves the frame. Let
@@ -899,7 +913,7 @@ func _lane_plates(in_state: Array, stand_x: float, top: Camera3D) -> void:
 	far.far = 2000.0
 	_main.add_child(far)
 	var lane_at := Vector3(LANE_VIEW_X, 0.0, LANE_VIEW_Z)
-	far.look_at_from_position(lane_at + DISTANCE_OFFSET, lane_at, Vector3.UP)
+	_fit_distance(far, lane_at, marks)
 	far.make_current()
 	_cam = far
 	await _frames(4)
@@ -913,6 +927,23 @@ func _lane_plates(in_state: Array, stand_x: float, top: Camera3D) -> void:
 	top.make_current()
 	far.queue_free()
 	_show_hud(true)
+
+
+## Puts `cam` on DISTANCE_OFFSET from `at`, looking at it, scaled by the first of
+## DISTANCE_SCALES that projects every one of `marks` inside the viewport's margin (the
+## last one when none does; _prove_in_frame() then fails loudly).
+func _fit_distance(cam: Camera3D, at: Vector3, marks: Array[Vector3]) -> void:
+	var frame := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
+	for scale in DISTANCE_SCALES:
+		cam.look_at_from_position(at + DISTANCE_OFFSET * scale, at, Vector3.UP)
+		var fits := true
+		for p in marks:
+			if cam.is_position_behind(p) or not frame.has_point(cam.unproject_position(p)):
+				fits = false
+				break
+		print("DISTANCE fit scale=%.2f fits=%s" % [scale, fits])
+		if fits:
+			return
 
 
 ## Shows or hides every HUD layer, so a paving plate shows the ground under the panels.
@@ -1295,7 +1326,8 @@ func _pad_plates(airside: Airside, at: Vector3) -> void:
 		if (
 			_prove_in_frame(label, points)
 			and _prove_visible(label, node)
-			and _prove_paving_visible(label, airside.paving)
+			and _prove_paving_visible(label, airside.paving, node)
+			and _prove_pad_seen(label, airside.paving.pads[0])
 		):
 			_save(await _grab(), "%s_top.png" % label)
 		if model == "tp_plane_07a":
@@ -1309,6 +1341,26 @@ func _pad_plates(airside: Airside, at: Vector3) -> void:
 	_cam = rig_cam
 	rig_cam.make_current()
 	top.queue_free()
+
+
+## Whether rays from the camera to the pad's two south corners, 2 m in, (beside the
+## parked plane's wings and south of the lane) hit the taxi paving first, nothing passed.
+func _prove_pad_seen(label: String, pad: Rect2) -> bool:
+	var space := _cam.get_world_3d().direct_space_state
+	var no_skip: Array[RID] = []
+	var hits := 0
+	for x in [pad.position.x + 2.0, pad.end.x - 2.0]:
+		var point := Vector3(x, TaxiPaving.HEIGHT_M - TaxiPaving.PAD_DROP_M, pad.end.y - 2.0)
+		var screen := _cam.unproject_position(point)
+		var from := _cam.project_ray_origin(screen)
+		var to := point + _cam.project_ray_normal(screen) * 0.5
+		var collider: Node = _visible_ray_hit(space, from, to, no_skip).get("collider")
+		var ok := collider != null and str(collider.get_path()).begins_with(PAVED_OWNERS[0])
+		hits += 1 if ok else 0
+		print("PAD_SEEN %s point=%s hit=%s ok=%s" % [label, point, collider, ok])
+	if hits != 2:
+		_invalid("%s: the pad is hidden at a corner (%d of 2)" % [label, hits])
+	return hits == 2
 
 
 ## The north-row pad with `node` parked, from a distance looking at `centre`.
