@@ -11,6 +11,9 @@ extends GdUnitTestSuite
 ## that the pick-ups which must not change cannot roll.
 
 const UP := RollerPark.TICKS_UP
+## The most a not-rolled pick-up's rods may run out in one tick: a smoothstep
+## over RODS_OUT_TICKS steps at most 0.48 a tick.
+const RODS_STEP := 0.5
 
 var _world: PassengerTestWorld
 
@@ -133,33 +136,47 @@ func test_a_late_take_keeps_the_rods_in_until_its_park_ends() -> void:
 	assert_float(RollerPark.rods_t(11.0 / CarryLead.ticks_of(bag), bag)).is_equal(0.0)
 
 
-## Taken late and not rolling (no face here; the shower's door the same), its
-## rods stay in through the park (up_ends().y, the empty hand crossing to the
-## bar), then run out, never back in, all out as the move ends: never held in
-## to the end and snapped to the pull's reach. Control: a pick-up taken on
-## time keeps SETTLE_TICKS after its park before its rods move.
+## Taken late and not rolling (no face here; the shower's door the same), first
+## drawn 9 or 12 ticks in (its park ending at up 0.94 or 1.13): its rods stay in
+## through the park, or to RODS_OUT_TICKS before the move's end when the park
+## leaves no room, then run out, never back in, all out as the move ends, no
+## tick running them out more than RODS_STEP: never held in to the end and
+## snapped to the pull's reach (Sol final re-check of af14ddf: drawn 12 ticks
+## late they stayed in to k 1), nor all run out in the park's last tick.
+## Control: a pick-up taken on time keeps SETTLE_TICKS after its park before
+## its rods move.
 func test_a_late_take_that_does_not_roll_runs_its_rods_out_by_its_end() -> void:
-	var bag := _bag(false)
-	bag["park_took"] = 9.0 / UP
-	_ticks(bag, 0, 14, 0.0, false)
-	assert_bool(bag.has("rolls")).is_true()
-	assert_bool(RollerPark.rolls(bag)).is_false()
-	var park := RollerPark.up_ends(bag).y
-	var last := 0.0
-	var moved_at := INF
-	for i in range(0, 49):
-		var k := (9.0 + i * 7.0 / 48.0) / UP
-		var now := RollerPark.rods_t(k, bag)
-		if k <= park:
-			assert_float(now).override_failure_message("k %.4f" % k).is_equal(0.0)
-		elif now > 0.0:
-			moved_at = minf(moved_at, k)
-		assert_float(now).is_greater_equal(last)
-		last = now
-	print(
-		"late, not rolled: park ends %.4f, rods out from %.4f, %.3f at k 1" % [park, moved_at, last]
-	)
-	assert_float(last).is_equal_approx(1.0, 0.0001)
+	var room := 1.0 - RollerPark.RODS_OUT_TICKS / UP
+	for late: int in [9, 12]:
+		var bag := _bag(false)
+		bag["park_took"] = late / UP
+		_ticks(bag, 0, 14, 0.0, false)
+		assert_bool(bag.has("rolls")).is_true()
+		assert_bool(RollerPark.rolls(bag)).is_false()
+		var park := RollerPark.up_ends(bag).y
+		var held_to := minf(park, room)
+		var last := 0.0
+		var step := 0.0
+		var moved_at := INF
+		for n in range(late, int(UP) + 1):
+			var k := n / UP
+			var now := RollerPark.rods_t(k, bag)
+			var line := "late%d k %.4f" % [late, k]
+			if k <= held_to:
+				assert_float(now).override_failure_message(line).is_equal(0.0)
+			elif now > 0.0:
+				moved_at = minf(moved_at, k)
+			assert_float(now).override_failure_message(line).is_greater_equal(last)
+			step = maxf(step, now - last)
+			last = now
+		print(
+			(
+				"late%d, not rolled: park ends %.4f, rods out from %.4f, %.3f at k 1, at most %.3f a tick"
+				% [late, park, moved_at, last, step]
+			)
+		)
+		assert_float(last).override_failure_message("late%d" % late).is_equal_approx(1.0, 0.0001)
+		assert_float(step).override_failure_message("late%d" % late).is_less_equal(RODS_STEP)
 	var on_time := _bag(false)
 	on_time["park_took"] = 0.3
 	var settle := RollerPark.up_ends(on_time).y + RollerPark.SETTLE_TICKS / UP
