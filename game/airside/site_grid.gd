@@ -12,6 +12,9 @@ extends BuildGrid
 ## guard, so every trial copy BuildUndo.trial_copy_of() makes (an undo, a
 ## template paste, the starter shell) refuses what the live grid would.
 ##
+## Its edit_warning() asks `warner` (GateDesks.edit_warning) what an edit the
+## guard allows still changes for the gates, for the build ghost to say.
+##
 ## It also asks `land` (LandPlots.edit_problem()) whether the edit builds on
 ## land the player does not own; clones share the same land.
 ##
@@ -23,6 +26,9 @@ var site: SiteDefinition
 ## Called as guard(grid, edit) before every validation; returns a refusal or
 ## null. Not set: nothing is guarded.
 var guard := Callable()
+## Called as warner(grid, edit); returns a warning or "". Not set: no
+## warnings.
+var warner := Callable()
 ## The site's land plots; null (a test grid): every cell counts as owned.
 var land: LandPlots = null
 
@@ -44,8 +50,14 @@ func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
 	return super(edit, check_reach)
 
 
+## What `edit` changes for the gates though it is allowed, or "".
+func edit_warning(edit: BuildEdit) -> String:
+	return warner.call(self, edit) if warner.is_valid() else ""
+
+
 func _blank_copy() -> BuildGrid:
 	var copy := SiteGrid.new(site)
 	copy.guard = guard
+	copy.warner = warner
 	copy.land = land
 	return copy

@@ -4,7 +4,8 @@ extends VBoxContainer
 ## (decision built-items-selectable-reuse-the-selection-window-move-delete-
 ## close-open): its name, then one line each for where it is, its reachable
 ## seats (only when some cannot be reached), status (open or closed and why),
-## staff, queue and upkeep, a line left out when it does not apply. Info
+## a gate desk's biggest plane, staff, queue and upkeep, a line left out when
+## it does not apply. Info
 ## only; the actions come in later slices. PassengerInspect shows this in place
 ## of the passenger rows while a BuiltSelection holds an item.
 ##
@@ -33,7 +34,12 @@ const KIND_OF_DEF := {
 	SecurityLanes.ARCH: Kind.ARCH,
 	GateDesks.DESK: Kind.GATE_DESK,
 }
-const FIELDS: Array[String] = ["where", "seats", "status", "staff", "queue", "upkeep"]
+const FIELDS: Array[String] = ["where", "seats", "status", "planes", "staff", "queue", "upkeep"]
+## A linked gate desk's biggest plane: its gate's max_class (GateDesks; decision
+## runway-and-taxi-technical-design-movement-plan-analytic-bookings-planned-
+## pauses, section 3).
+const PLANES_TEXT := "Biggest plane: %s"
+const NO_PLANE_TEXT := "Biggest plane: none, no room outside the exit"
 ## A seat piece some of whose seats a guest cannot reach (a booth with an end
 ## against a wall; decision restaurant-booth-against-a-wall-counts-only-
 ## reachable-seats) says how many of its seats count.
@@ -244,7 +250,7 @@ func _build_live() -> Dictionary:
 		Kind.ARCH:
 			out = _arch_live(_static["id"])
 		Kind.GATE_DESK:
-			out = {"status": _gate_status(_static["id"])}
+			out = {"status": _gate_status(_static["id"]), "planes": _gate_planes(_static["id"])}
 		Kind.LANE_PART:
 			var in_lane := sim.layout.security_lanes.lane_of_piece(_static["id"]) != 0
 			var text := "Part of a ready security lane" if in_lane else "Not in a whole lane"
@@ -286,6 +292,19 @@ func _gate_status(desk: int) -> String:
 	if reason.is_empty():
 		return "Status: Not linked yet"
 	return "Status: %s" % GateLinksView.caption_for(reason).to_lower()
+
+
+## "Biggest plane: Medium" for a linked desk's gate, or "" for an unlinked desk.
+func _gate_planes(desk: int) -> String:
+	if gates == null:
+		return ""
+	for binding in gates.bindings:
+		if binding["desk"] == desk:
+			var plane_class := gates.max_class(binding["gate"])
+			if plane_class == "":
+				return NO_PLANE_TEXT
+			return PLANES_TEXT % plane_class.capitalize()
+	return ""
 
 
 func _room_live() -> Dictionary:

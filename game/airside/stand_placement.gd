@@ -31,9 +31,12 @@ const TAIL_M := 14.85
 const HALF_SPAN_M := 14.2
 ## Farthest any part of the plane reaches from its stand point.
 const SWING_RADIUS_M := 20.6
-## Whole cells (1 m each) two stands' exits need between them so the swings, each
-## 2 x SWING_RADIUS_M wide, do not meet.
-const EXIT_SPACING_CELLS := ceili(2.0 * SWING_RADIUS_M)
+## Whole cells (1 m each) two gates' exits need between them so their small-
+## plane swing squares do not meet: StandEnvelope.spacing_cells(SMALL), which
+## test_stand_envelope.gd checks. Neighbouring gates share the larger envelopes
+## (decision runway-and-taxi-technical-design-movement-plan-analytic-bookings-
+## planned-pauses, section 3).
+const EXIT_SPACING_CELLS := 19
 ## The gap between the wall line and the nose. 2.2 m (2.3 m in decision
 ## plane-stand-design-airside-moves-110-m-north-stand-snaps-to): with the lane
 ## at z -256 it kept a north-row tail 0.05 m clear of the shared lane zone
@@ -195,7 +198,7 @@ static func cells_under(grid: BuildGrid, rects: Array[Rect2]) -> Dictionary:
 ## Whether nothing built stands under the plane's sweep from `stand`.
 static func aircraft_clear(grid: BuildGrid, site: SiteDefinition, stand: Dictionary) -> bool:
 	for cell: Vector2i in cells_under(grid, swept_rects(stand)):
-		if not _apron_clear(grid, site, cell):
+		if not apron_clear(grid, site, cell):
 			return false
 	return true
 
@@ -315,8 +318,8 @@ static func longest_walk(grid: BuildGrid, site: SiteDefinition, stand: Dictionar
 
 
 ## Whether a plane may pass over `cell`: no floor, object, site obstacle or
-## wall on any of its edges.
-static func _apron_clear(grid: BuildGrid, site: SiteDefinition, cell: Vector2i) -> bool:
+## wall on any of its edges. StandEnvelope asks it for each class's envelope.
+static func apron_clear(grid: BuildGrid, site: SiteDefinition, cell: Vector2i) -> bool:
 	if grid.floor_at(cell) != BuildGrid.FLOOR_NONE or grid.object_at(cell) != 0:
 		return false
 	if site != null and site.is_obstacle(cell):

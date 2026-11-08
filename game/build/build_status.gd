@@ -96,8 +96,17 @@ static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
 ## BuildMode.FRONT_OUTSIDE_ROOM for an object edit whose footprint lies wholly in
 ## a room but whose interaction (front) cell does not: the room would not count
 ## it (FacilitySlots.piece_inside), so a toilet stall placed so reads "Needs a
-## toilet stall". "" for any other edit.
+## toilet stall". Without one, on the airport site, the site grid's gate
+## warning (SiteGrid.edit_warning: "Gate A will then take planes up to
+## medium"). "" for any other edit.
 static func front_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
+	var room := _room_front_warning(on_grid, edit)
+	if room == "" and edit != null and on_grid is SiteGrid:
+		return (on_grid as SiteGrid).edit_warning(edit)
+	return room
+
+
+static func _room_front_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
 	if edit == null or edit.kind != BuildEdit.Kind.PLACE_OBJECT:
 		return ""
 	var def := BuildCatalog.get_def(edit.def_id)

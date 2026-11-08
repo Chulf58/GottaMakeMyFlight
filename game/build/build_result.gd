@@ -56,6 +56,9 @@ enum Reason {
 	MOVE_EXIT_BLOCKED,
 	MOVE_CHANGED,
 	LOCKED,
+	GATE_NO_ROOM,
+	GATE_ROUTE_BLOCKED,
+	GATE_ROUTE,
 }
 
 const REASON_TEXT := {
@@ -116,6 +119,11 @@ const REASON_TEXT := {
 	Reason.MOVE_EXIT_BLOCKED: "Keep the way out clear for the passengers leaving the room",
 	Reason.MOVE_CHANGED: "The room changed since it was picked up. Pick it up again",
 	Reason.LOCKED: "Not unlocked yet",
+	Reason.GATE_NO_ROOM: "No room for a plane outside this exit. Keep the ground north of it clear",
+	Reason.GATE_ROUTE_BLOCKED:
+	"Something blocks the way from this exit to the taxi lane. Clear a path north",
+	Reason.GATE_ROUTE:
+	"A booked flight's plane needs this ground. Move its flights in Departures first",
 }
 
 var ok: bool = true
