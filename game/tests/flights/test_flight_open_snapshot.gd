@@ -108,7 +108,7 @@ func test_an_open_save_with_skipped_days_round_trips_and_plays_out_the_same() ->
 
 
 ## A version 2 save has no open state: it loads as open since tick 0 with
-## every contract starting on its first_day, and saves again as version 5.
+## every contract starting on its first_day, and saves again as version 6.
 func test_a_version_2_save_loads_as_open() -> void:
 	var world := _world()
 	assert_bool(world[1].open_airport()).is_true()

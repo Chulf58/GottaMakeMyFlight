@@ -140,9 +140,25 @@ func test_the_hold_lines_sit_on_the_stubs_clear_of_the_runway() -> void:
 		)
 
 
-## Every taxi route runs strictly west (x never grows) from the runway exit to
-## the stand and from the stand to the runway entry, for stands across the
-## whole site and for two gates at once.
+## Every taxi route runs strictly west from the runway exit to the stand and
+## from the stand to the runway entry, for stands across the whole site and
+## for two gates at once: each step along the lane goes west (x falls), and
+## every other step (the stubs and each stand's way north) runs straight
+## north or south (x stays). Returns the metres walked along the lane.
+func _assert_westbound(path: PackedVector3Array) -> float:
+	var along_lane := 0.0
+	for i in range(1, path.size()):
+		var on_lane := (
+			path[i - 1].z == StandPlacement.TAXI_LANE_Z and path[i].z == StandPlacement.TAXI_LANE_Z
+		)
+		if on_lane:
+			assert_float(path[i].x).is_less(path[i - 1].x)
+			along_lane += path[i - 1].x - path[i].x
+		else:
+			assert_float(path[i].x).is_equal(path[i - 1].x)
+	return along_lane
+
+
 func test_every_taxi_route_runs_strictly_west() -> void:
 	var low := SITE.grid_origin
 	var high := SITE.grid_origin + Vector3(SITE.grid_size.x, 0.0, SITE.grid_size.y)
@@ -152,11 +168,7 @@ func test_every_taxi_route_runs_strictly_west() -> void:
 		for wall_z in [low.z, high.z - 1.0]:
 			assert_bool(_airside.set_stand(StandPlacement.make(1, door_x, wall_z))).is_true()
 			for state in [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT]:
-				var path := _airside.phase_path(state)
-				for i in range(1, path.size()):
-					assert_float(path[i].x).is_less_equal(path[i - 1].x)
-					if path[i].z == StandPlacement.TAXI_LANE_Z:
-						lane_metres += path[i - 1].x - path[i].x
+				lane_metres += _assert_westbound(_airside.phase_path(state))
 				checked += 1
 	var gates := {
 		"A": StandPlacement.make(1, -30.5, low.z), "B": StandPlacement.make(2, 20.5, low.z)
@@ -164,9 +176,7 @@ func test_every_taxi_route_runs_strictly_west() -> void:
 	assert_bool(_airside.set_gate_stands(gates)).is_true()
 	for gate: String in gates:
 		for state in [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT]:
-			var path := _airside.phase_path(state, gate)
-			for i in range(1, path.size()):
-				assert_float(path[i].x).is_less_equal(path[i - 1].x)
+			lane_metres += _assert_westbound(_airside.phase_path(state, gate))
 			checked += 1
 	assert_bool(_airside.set_gate_stands({})).is_true()
 	print("%d westbound routes, %.0f m along the lane" % [checked, lane_metres])
@@ -174,15 +184,41 @@ func test_every_taxi_route_runs_strictly_west() -> void:
 	assert_float(lane_metres).is_greater(1000.0)
 
 
-## A join east of TaxiEast would make a route turn back along the lane, so the
-## graph refuses it. Control: a join just inside the end is fine.
+## A join at or east of TaxiEast would make a route turn back along the lane
+## or add a zero-length step, so the graph refuses it. Control: a join 1 m
+## inside the end is fine.
 func test_a_join_off_the_lane_ends_is_refused() -> void:
 	var east := _at(&"TaxiEast").x
-	var inside := StandPlacement.make(1, east + StandPlacement.DOOR_SIDE_M, -150.0)
+	var inside := StandPlacement.make(1, east - 1.0 + StandPlacement.DOOR_SIDE_M, -150.0)
 	assert_bool(_airside.set_stand(inside)).is_true()
-	var outside := StandPlacement.make(1, east + StandPlacement.DOOR_SIDE_M + 1.0, -150.0)
-	assert_bool(_airside.set_stand(outside)).is_false()
-	assert_int(_airside.phase_path(FlightSim.State.TAXI_IN).size()).is_equal(0)
+	for over in [0.0, 1.0]:
+		var outside := StandPlacement.make(1, east + over + StandPlacement.DOOR_SIDE_M, -150.0)
+		assert_bool(_airside.set_stand(outside)).is_false()
+		assert_int(_airside.phase_path(FlightSim.State.TAXI_IN).size()).is_equal(0)
+
+
+## A link naming a lane waypoint that does not exist is refused, not passed
+## over as a lane link. Control: the scene's links rebuild.
+func test_a_link_to_a_misspelt_lane_waypoint_is_refused() -> void:
+	var links := _airside.links
+	assert_bool(_airside.rebuild()).is_true()
+	_airside.links = links + PackedStringArray(["TaxiEast>StandLane_typo"])
+	assert_bool(_airside.rebuild()).is_false()
+	_airside.links = links
+	assert_bool(_airside.rebuild()).is_true()
+
+
+## The same gate stands that failed to rebuild fail again on a retry, rather
+## than counting as already set. Control: good stands rebuild.
+func test_a_failed_set_gate_stands_fails_again_on_retry() -> void:
+	var east := _at(&"TaxiEast").x
+	var bad := {"A": StandPlacement.make(1, east + 5.0 + StandPlacement.DOOR_SIDE_M, -210.0)}
+	assert_bool(_airside.set_gate_stands(bad)).is_false()
+	assert_bool(_airside.set_gate_stands(bad)).is_false()
+	var good := {"A": StandPlacement.make(1, 0.5, -210.0)}
+	assert_bool(_airside.set_gate_stands(good)).is_true()
+	assert_bool(_airside.set_gate_stands(good)).is_true()
+	assert_bool(_airside.set_gate_stands({})).is_true()
 
 
 func test_the_scene_markers_start_on_the_starter_stand() -> void:

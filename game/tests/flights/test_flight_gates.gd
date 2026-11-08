@@ -8,13 +8,15 @@ extends GdUnitTestSuite
 ## occurrences already issued keep their gate as fixed holds.
 ##
 ## Times: tick 0 is 06:00. A contract departing at 10:00 (minute 600) has its
-## first state at tick 2540, so it is issued at tick 140. One departing 60
-## minutes later overlaps it at a gate but not on the runway or lane; 80
-## minutes later its arrival taxis while the first one pushes back (the lane);
-## 10 or 120 minutes later one arrives while the other lands or takes off (the
-## runway). Two flights whose gate holds overlap are clear of each other on the
-## shared ground only 880 to 1300 ticks apart, so no three gates are ever busy
-## at once with today's phase lengths.
+## first state at tick 2140, inside the issue lead, so it is issued when it is
+## accepted at tick 0 (one departing at 10:20 starts at 2540 and is issued at
+## 140). One departing 60 minutes later overlaps it at a gate but not on the
+## runway or lane; 80 minutes later its arrival taxis while the first one
+## pushes back (the lane); 10 or 143 minutes later one arrives while the other
+## lands or takes off (the runway). Two flights whose gate holds overlap are
+## clear of each other on the shared ground only 1080 to 1300 ticks apart (or
+## in the last 100 ticks of the 3900-tick gate hold), so no three gates are
+## ever busy at once with today's phase lengths.
 
 const GATES: Array[String] = ["C", "A", "B"]
 

@@ -67,7 +67,7 @@ func after_test() -> void:
 
 ## Steps until a vehicle is drawn on road_in and points the eye down at it.
 func _drawn_vehicle() -> int:
-	while _land.sim.tick < 4000:
+	while _land.sim.tick < 4400:
 		_land.step()
 		for id in _land.landside.vehicle_ids():
 			var v := _land.landside.get_vehicle(id)

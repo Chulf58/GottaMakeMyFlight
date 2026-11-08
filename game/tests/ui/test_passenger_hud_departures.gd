@@ -57,7 +57,7 @@ func _lines() -> PackedStringArray:
 func test_the_departures_list_today_s_flights_in_time_order() -> void:
 	(
 		assert_bool(
-			_world.flights.accept_contract(_terms("NW200", 14 * 60, "Berlin", "Nordic Wing"))
+			_world.flights.accept_contract(_terms("NW200", 14 * 60 + 20, "Berlin", "Nordic Wing"))
 		)
 		. is_true()
 	)
@@ -66,7 +66,7 @@ func test_the_departures_list_today_s_flights_in_time_order() -> void:
 		. is_true()
 	)
 	assert_array(_lines()).is_equal(
-		["06:04  GMF101  doors close 06:01", "11:00  Oslo  Gotta Air", "14:00  Berlin  Nordic Wing"]
+		["06:04  GMF101  doors close 06:01", "11:00  Oslo  Gotta Air", "14:20  Berlin  Nordic Wing"]
 	)
 
 
@@ -114,7 +114,7 @@ func test_no_flights_says_so() -> void:
 
 
 func test_a_long_day_shows_the_first_lines_and_counts_the_rest() -> void:
-	var minutes := [9 * 60, 12 * 60, 15 * 60, 18 * 60, 21 * 60]
+	var minutes := [9 * 60, 12 * 60 + 20, 15 * 60 + 40, 19 * 60, 22 * 60 + 20]
 	for i in minutes.size():
 		(
 			assert_bool(
@@ -129,7 +129,7 @@ func test_a_long_day_shows_the_first_lines_and_counts_the_rest() -> void:
 
 
 func test_departed_flights_make_room_for_later_ones() -> void:
-	var minutes := [9 * 60, 12 * 60, 15 * 60, 18 * 60, 21 * 60]
+	var minutes := [9 * 60, 12 * 60 + 20, 15 * 60 + 40, 19 * 60, 22 * 60 + 20]
 	for i in minutes.size():
 		_world.flights.accept_contract(_terms("C%d" % i, minutes[i], "Rome", "Sunhop"))
 	_world.run_to(705)
@@ -153,21 +153,21 @@ func _doors_text(contract_id: String) -> String:
 
 func test_only_the_next_departing_flight_shows_when_its_doors_close() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
-	_world.flights.accept_contract(_terms("NW200", 14 * 60, "Berlin", "Nordic Wing"))
+	_world.flights.accept_contract(_terms("NW200", 14 * 60 + 20, "Berlin", "Nordic Wing"))
 	var lines := _lines()
 	assert_str(lines[0]).ends_with("doors close 06:01")
 	assert_str(lines[1]).is_equal("11:00  Oslo  Gotta Air")
-	assert_str(lines[2]).is_equal("14:00  Berlin  Nordic Wing")
+	assert_str(lines[2]).is_equal("14:20  Berlin  Nordic Wing")
 
 
 func test_the_doors_time_moves_to_the_following_flight_once_the_doors_close() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
-	_world.flights.accept_contract(_terms("NW200", 14 * 60, "Berlin", "Nordic Wing"))
+	_world.flights.accept_contract(_terms("NW200", 14 * 60 + 20, "Berlin", "Nordic Wing"))
 	_world.run_to(21)
 	var lines := _lines()
 	assert_str(lines[0]).is_equal("06:04  GMF101  Doors closed")
 	assert_str(lines[1]).is_equal("11:00  Oslo  Gotta Air  %s" % _doors_text("GA100"))
-	assert_str(lines[2]).is_equal("14:00  Berlin  Nordic Wing")
+	assert_str(lines[2]).is_equal("14:20  Berlin  Nordic Wing")
 
 
 func test_the_doors_time_replaces_the_boarding_word() -> void:

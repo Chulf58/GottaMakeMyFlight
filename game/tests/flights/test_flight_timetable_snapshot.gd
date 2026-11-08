@@ -199,8 +199,8 @@ func test_live_flights_out_of_timetable_order_are_refused() -> void:
 	var world := _world()
 	var sim: FlightSim = world[1]
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("LATE", 1430))).is_true()
-	# NEXT departs the minute LATE's gate time ends (00:42) plus the 113 minutes
-	# between a flight's first state and its departure: 02:35.
+	# NEXT departs the minute LATE's gate time ends (00:52) plus the 133 minutes
+	# between a flight's first state and its departure: 03:05.
 	var next_minute := (
 		(1430 + FlightTimetable.reserved_ticks() / GameCalendar.TICKS_PER_MINUTE) % 1440
 	)

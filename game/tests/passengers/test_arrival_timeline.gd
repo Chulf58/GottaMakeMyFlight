@@ -6,14 +6,14 @@ extends GdUnitTestSuite
 ## them and their pending arrivals, and the flight timeline and contract
 ## fields stay as they were.
 
-## 10:00: the occurrence departs at tick 4800, its first state is at 2540, it
-## is issued at 140 and its doors close at 4740.
+## 10:20: the occurrence departs at tick 5200, its first state is at 2540, it
+## is issued at 140 and its doors close at 5140.
 const CONTRACT := "ARR"
 const OCCURRENCE := "ARR-d0"
-const MINUTE := 600
+const MINUTE := 620
 const FIRST := 2540
 const ISSUED := 140
-const DEPARTURE := 4800
+const DEPARTURE := 5200
 const BOOKED := 40
 ## The one-off flight's first state in the save tests.
 const SAVE_FIRST := 4400
@@ -85,11 +85,11 @@ func _on_spawned(id: int) -> void:
 
 
 func test_the_timeline_and_contract_fields_are_unchanged() -> void:
-	# TAXI_IN is 600 and TAXI_OUT 720 (was 300 and 300): the plane stand moved
-	# 110 m north and the taxi speed stays under 16 m/s.
-	var phases: Array[int] = [100, 120, 140, 600, 40, 1200, 60, 120, 720, 200]
+	# TAXI_IN is 1000 and TAXI_OUT 920 (were 600 and 720): the airside moved 28 m
+	# north and a planned pause still keeps the taxi speed under 16 m/s.
+	var phases: Array[int] = [100, 120, 140, 1000, 40, 1200, 60, 120, 920, 200]
 	assert_array(FlightSim.PHASE_TICKS).is_equal(phases)
-	assert_int(FlightTimetable.departure_offset()).is_equal(2260)
+	assert_int(FlightTimetable.departure_offset()).is_equal(2660)
 	(
 		assert_array(FlightContract.KEYS)
 		. is_equal(

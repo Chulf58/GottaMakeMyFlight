@@ -3,8 +3,8 @@ extends GdUnitTestSuite
 ## Accepting a contract: captured read-only terms, the first day whose whole
 ## preparation window is still ahead, and gate reservations that never overlap.
 
-## Game minutes from an occurrence's first state to its departure (113 with the
-## present timetable), and the minutes it holds its gate (165). The cases below
+## Game minutes from an occurrence's first state to its departure (133 with the
+## present timetable), and the minutes it holds its gate (195). The cases below
 ## work out their clock times from these, so a change to the phase lengths moves
 ## them and not the cases.
 var _offset_minutes := _minutes(FlightTimetable.departure_offset())
@@ -20,7 +20,7 @@ static func _minutes(ticks: int) -> int:
 
 
 ## The minute of the day the bootstrap flight (first state at tick 0, 06:00)
-## departs: 07:53.
+## departs: 08:13.
 static func bootstrap_minute() -> int:
 	return 6 * 60 + _minutes(FlightTimetable.departure_offset())
 
@@ -46,9 +46,9 @@ static func terms(id: String, minute: int) -> Dictionary:
 	}
 
 
-## 07:53 is 113 game minutes after 06:00: the bootstrap flight pushes back at
-## tick 2260, so a contract at 07:53 accepted at tick 0 is the same flight.
-func test_a_contract_at_07_53_accepted_at_start_reproduces_the_bootstrap_flight() -> void:
+## 08:13 is 133 game minutes after 06:00: the bootstrap flight pushes back at
+## tick 2660, so a contract at 08:13 accepted at tick 0 is the same flight.
+func test_a_contract_at_08_13_accepted_at_start_reproduces_the_bootstrap_flight() -> void:
 	assert_bool(_sim.accept_contract(terms("GMF101", bootstrap_minute()))).is_true()
 	assert_array(_sim.flight_ids()).is_equal(["GMF101-d0"])
 	var expected := FlightSim.schedule_starts(0)

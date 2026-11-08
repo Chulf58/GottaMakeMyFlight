@@ -337,16 +337,19 @@ func test_the_holds_cover_every_tick_the_footprint_is_on_the_runway_or_lane() ->
 	var edge := {}
 	for cell in boundary_cells(legal):
 		edge[cell] = true
-	# The two door lines that put a stand on TaxiWest's and TaxiEast's x: the
-	# shortest taxi out and in any stand can have, which are the latest the
-	# arrival leaves the runway and the earliest the departure reaches it. With
-	# those the bounds hold however wide the site grows. They are sampled in
-	# full on the site's rows at both ends.
+	# The two door lines that put a stand 1 m inside TaxiWest's and TaxiEast's
+	# x (a join must lie strictly inside the lane ends): the shortest taxi out
+	# and in any stand can have, which are the latest the arrival leaves the
+	# runway and the earliest the departure reaches it. With those the bounds
+	# hold however wide the site grows. They are sampled in full on the site's
+	# rows at both ends.
 	var extra: Array[Dictionary] = []
 	var rows := [legal[0].y, legal[legal.size() - 1].y]
-	for waypoint in [&"TaxiWest", &"TaxiEast"]:
+	for end in [[&"TaxiWest", 1.0], [&"TaxiEast", -1.0]]:
 		for row in rows:
-			var x := _airside.graph.position_of(waypoint).x + StandPlacement.DOOR_SIDE_M
+			var x: float = (
+				_airside.graph.position_of(end[0]).x + end[1] + StandPlacement.DOOR_SIDE_M
+			)
 			extra.append(StandPlacement.make(1, x, SITE.grid_origin.z + row))
 	_seen = {}
 	_site_seen = {}

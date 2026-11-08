@@ -101,6 +101,9 @@ var stand_moves := 0
 var gate_stands: Dictionary = {}
 ## The asphalt under the taxi routes, rebuilt with the graph.
 var paving := TaxiPaving.new()
+## Whether the last rebuild() succeeded. set_gate_stands() skips a call with
+## the stands already set only while it did, so a failed call fails again.
+var _built := false
 
 
 func _init() -> void:
@@ -125,9 +128,15 @@ func rebuild() -> bool:
 			ok = false
 	for pair in links:
 		var ends := pair.split(">")
-		if ends.size() == 2 and _on_lane(ends[0]) and _on_lane(ends[1]):
+		var known := (
+			ends.size() == 2
+			and graph.has_waypoint(StringName(ends[0]))
+			and graph.has_waypoint(StringName(ends[1]))
+		)
+		# A link between two lane waypoints gives way to the chain below.
+		if known and _on_lane(ends[0]) and _on_lane(ends[1]):
 			continue
-		if ends.size() != 2 or not graph.link(StringName(ends[0]), StringName(ends[1])):
+		if not known or not graph.link(StringName(ends[0]), StringName(ends[1])):
 			push_error("Airside: bad link '%s'" % pair)
 			ok = false
 	for gate: String in gate_stands:
@@ -139,12 +148,14 @@ func rebuild() -> bool:
 	for i in range(1, chain.size()):
 		graph.link(chain[i - 1], chain[i])
 	paving.show_routes(taxi_routes(), StandPlacement.TAXI_LANE_Z)
+	_built = ok
 	return ok
 
 
 ## The lane chain east to west: TaxiEast, the joins in falling x, TaxiWest
-## (each end when it is a waypoint). Empty (with an error) when a join lies
-## east of TaxiEast or west of TaxiWest, since a route to it would turn back.
+## (each end when it is a waypoint). Empty (with an error) unless every join
+## lies strictly between the ends: east of TaxiEast or west of TaxiWest a route
+## to it would turn back, and on an end it would add a zero-length step.
 func _lane_chain() -> Array[StringName]:
 	# With gate stands the one stand's StandLane is left off the chain: it would
 	# sit on a gate's join (the starter exit's) and add a zero-length step.
@@ -167,9 +178,12 @@ func _lane_chain() -> Array[StringName]:
 		west = graph.position_of(&"TaxiWest").x
 	for join in joins:
 		var x := graph.position_of(join).x
-		if x > east or x < west:
+		if x >= east or x <= west:
 			push_error(
-				"Airside: '%s' at x %.2f is off the lane (%.2f to %.2f)" % [join, x, west, east]
+				(
+					"Airside: '%s' at x %.2f is not strictly inside the lane (%.2f to %.2f)"
+					% [join, x, west, east]
+				)
 			)
 			return []
 		chain.append(join)
@@ -219,9 +233,10 @@ func set_stand(stand: Dictionary) -> bool:
 
 ## Gives each gate in `stands` (gate letter -> StandPlacement stand) its own
 ## stand waypoints, drops those of gates no longer listed and rebuilds the
-## graph. Nothing changes when the stands are the ones already set.
+## graph. Nothing changes when the stands are the ones already set and the
+## last rebuild succeeded.
 func set_gate_stands(stands: Dictionary) -> bool:
-	if stands == gate_stands:
+	if stands == gate_stands and _built:
 		return true
 	for gate: String in gate_stands:
 		if not stands.has(gate):

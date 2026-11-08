@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 ## never closes, and the opening accepts the starter contract.
 ##
 ## The reference terminal has a working path; PassengerTestWorld's one-off
-## GMF101 holds gate C over ticks 0 to 3300.
+## GMF101 holds gate C over ticks 0 to 3900.
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY

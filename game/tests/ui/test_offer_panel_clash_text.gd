@@ -47,12 +47,12 @@ func test_a_clash_with_a_contract_names_it_by_time_airline_and_destination() -> 
 
 
 func test_a_clash_with_a_one_off_flight_is_named_by_time_and_flight() -> void:
-	_open_panel([480, 900, 1200])
+	_open_panel([495, 900, 1200])
 	assert_bool(_sim.add_default_flight()).is_true()
 	_panel.accept_button("O0N1").pressed.emit()
 	var text := _panel.message()
 	print("clash text: %s" % text)
-	assert_str(text).ends_with("it clashes with the 07:53 flight on the runway")
+	assert_str(text).ends_with("it clashes with the 08:13 flight on the runway")
 	assert_str(text).not_contains("GMF101")
 	assert_str(text).contains("on the runway")
 	assert_str(text).not_contains("contract O0N1")

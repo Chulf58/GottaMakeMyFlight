@@ -9,7 +9,8 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game -s res://spike/runway_r4_plates_probe.gd
 ##
-## Boots main.tscn as the game does (starter shell, one stand) and adds two
+## Boots main.tscn as the game does (starter shell, one stand), moves the stand
+## to the north row with Airside.set_stand() so its paving follows, and adds two
 ## model 07 planes, the largest: one parked door-aligned on a north-row stand
 ## (wall z -210) and one on the lane centreline in front of it, so the plates
 ## show the large tail's clearance from the lane traffic. Plates: one top-down
@@ -51,6 +52,9 @@ func _run() -> void:
 	var at := func(waypoint: StringName) -> Vector3: return airside.graph.position_of(waypoint)
 	var north := StandPlacement.make(1, 0.5, -210.0)
 	var stand_point := StandPlacement.stand_point(north)
+	# The stand and its paving follow to the north row, under the parked plane.
+	if not airside.set_stand(north):
+		_invalid("set_stand(%s) failed" % [north])
 	var shift := PlaneClasses.stand_offset(LARGE_MODEL)
 	var parked := _plane(stand_point + shift, 0.0)
 	var on_lane := _plane(Vector3(stand_point.x + 60.0, 0.0, StandPlacement.TAXI_LANE_Z), -PI / 2.0)
@@ -63,13 +67,17 @@ func _run() -> void:
 		)
 	)
 	await _frames(10)
+	var stand_now: Vector3 = at.call(&"Stand")
+	print("Stand waypoint at %s, north-row stand point %s" % [stand_now, stand_point])
+	if stand_now.distance_to(stand_point) > 0.01:
+		_invalid("the stand moved off the north row to %s" % stand_now)
 	var subjects := {
 		"runway middle": Vector3(0.0, 0.0, StandPlacement.RUNWAY_Z),
 		"TaxiEast": at.call(&"TaxiEast"),
 		"TaxiWest": at.call(&"TaxiWest"),
 		"RunwayExit": at.call(&"RunwayExit"),
 		"RunwayEntry": at.call(&"RunwayEntry"),
-		"starter stand": at.call(&"Stand"),
+		"north-row stand": at.call(&"Stand"),
 		"parked large": parked.global_position + Vector3(0.0, 4.0, 0.0),
 		"large on lane": on_lane.global_position + Vector3(0.0, 4.0, 0.0),
 	}
