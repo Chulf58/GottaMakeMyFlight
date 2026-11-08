@@ -32,6 +32,24 @@ const CLASSES := {
 }
 
 
+## The largest class the offer board draws. Medium for now: stands, swept areas
+## and the taxi lane are still sized for model 05, so a large plane's tail would
+## reach into the lane and into neighbouring stands (decision runway-and-taxi-
+## technical-design-movement-plan-analytic-bookings-planned-pauses, section 3).
+## The runway and gate-size slice that gives each class its own stand envelope
+## raises this to LARGE, with the large runway (decision three-runway-sizes-
+## unlock-three-plane-classes). Contracts already saved or accepted as large
+## still load and fly: the passenger ranges stay valid for them.
+static func max_offer_class() -> String:
+	return MEDIUM
+
+
+## Whether the offer board may draw `plane_class` flights now.
+static func is_offered(plane_class: String) -> bool:
+	var rank := ORDER.find(plane_class)
+	return rank >= 0 and rank <= ORDER.find(max_offer_class())
+
+
 ## True for "small", "medium" and "large".
 static func is_plane_class(plane_class: String) -> bool:
 	return CLASSES.has(plane_class)

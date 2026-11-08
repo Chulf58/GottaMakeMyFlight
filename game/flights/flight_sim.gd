@@ -102,7 +102,10 @@ const STARTER_TERMS := {
 ## loads as open since tick 0.
 ## 4: ended contracts (ended: contract id -> its first day never issued). A
 ## version 2 or 3 save loads with none ended.
-const SAVE_VERSION := 4
+## 5: a contract holds its plane class's passenger range (FlightContract.problem),
+## so what a save may contain narrowed. A version 4 save is refused; there is no
+## migration.
+const SAVE_VERSION := 5
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock

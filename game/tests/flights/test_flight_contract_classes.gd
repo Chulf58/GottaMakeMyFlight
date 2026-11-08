@@ -85,3 +85,10 @@ func test_the_offer_board_refuses_a_count_just_outside_its_size_range_on_load() 
 		assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_not_empty()
 		var board := OfferBoard.new()
 		assert_bool(board.from_snapshot(TestOfferBoard.save_of(offers))).is_false()
+
+
+## The accepted save domain changed (contracts hold their class's passenger
+## range), so the version moved from 4; there is no migration.
+func test_the_flight_save_version_is_5() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(5)
+	assert_int(int(_sim.to_snapshot()["save_version"])).is_equal(5)
