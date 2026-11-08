@@ -478,7 +478,8 @@ static func _leaves_at(xf: Transform3D) -> Array:
 
 
 ## The meshes of every piece on the cells round `at`'s cell, each as a box
-## (piece_boxes()), once per piece.
+## (piece_boxes()), once per piece. An entrance or exit door is left out: its
+## frame's box would close the way through, and walls_near() has its leaves.
 static func pieces_near(grid: BuildGrid, at: Vector3) -> Array:
 	var out := []
 	var seen := {}
@@ -487,6 +488,8 @@ static func pieces_near(grid: BuildGrid, at: Vector3) -> Array:
 		for dy in range(-REACH_CELLS, REACH_CELLS + 1):
 			var id := grid.object_at(under + Vector2i(dx, dy))
 			if id == 0 or seen.has(id):
+				continue
+			if BuildCatalog.is_door(grid.get_object(id)["def"]):
 				continue
 			seen[id] = true
 			out.append_array(piece_boxes(grid, id))

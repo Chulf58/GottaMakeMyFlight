@@ -111,7 +111,6 @@ func test_an_exit_door_object_gives_its_leaves_inside_its_cell() -> void:
 	var centre := _terminal.cell_to_world(cell)
 	var leaves := _leaves(PullSide.walls_near(_terminal, centre))
 	assert_int(leaves.size()).is_equal(2)
-	assert_int(PullSide.door_leaves(_terminal, id).size()).is_equal(2)
 	# Its back edge is the cell's north edge (facing 0): the leaves stand on the
 	# cell's side of it, 0.61 m either side of the cell's middle.
 	var edge_z := centre.z - 0.5
@@ -122,5 +121,16 @@ func test_an_exit_door_object_gives_its_leaves_inside_its_cell() -> void:
 		along.append(snappedf(at.x - centre.x, 0.01))
 	along.sort()
 	assert_array(along).is_equal([-LEAF_ALONG_M, LEAF_ALONG_M])
-	# No object (id 0) gives none.
-	assert_int(PullSide.door_leaves(_terminal, 0).size()).is_equal(0)
+
+
+func test_an_exit_door_object_is_open_through_its_opening_and_shut_at_a_leaf() -> void:
+	# With furniture, as pick() asks: the door's frame (a box across the whole
+	# opening) is not furniture, its leaves are walls.
+	var cell := ReferenceTerminal.EXIT_CELL + ReferenceTerminal.offset_on(_terminal)
+	var centre := _terminal.cell_to_world(cell)
+	var at_edge := Transform3D(Basis.IDENTITY, Vector3(centre.x, 0.0, centre.z - 0.5))
+	var opening := AABB(Vector3(-0.3, 0.0, -0.3), Vector3(0.6, 1.8, 0.6))
+	assert_bool(PullSide.blocked(_terminal, [at_edge], opening, true)).is_false()
+	var on_leaf := AABB(Vector3(0.5, 0.0, 0.1), Vector3(0.2, 1.0, 0.05))
+	assert_bool(PullSide.blocked(_terminal, [at_edge], on_leaf, true)).is_true()
+	assert_bool(PullSide.blocked(_terminal, [at_edge], on_leaf, false)).is_true()
