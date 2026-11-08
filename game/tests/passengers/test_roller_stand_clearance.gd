@@ -275,10 +275,7 @@ func test_print_the_seat_side_each_body_needs() -> void:
 			worst[key] = maxf(float(worst.get(key, 0.0)), maxf(stand, booth))
 		print(line)
 	print(
-		(
-			"widest need per [variant hand]: %s; gate chair spot %.2f"
-			% [worst, RollerPark.BESIDE_FEET_M]
-		)
+		"widest need per [variant hand]: %s; gate chair spots %s" % [worst, GateRoller.LIE_SIDE_M]
 	)
 	assert_int(worst.size()).is_equal(4)
 
