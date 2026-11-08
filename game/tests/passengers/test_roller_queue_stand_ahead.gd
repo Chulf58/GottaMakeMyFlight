@@ -246,7 +246,7 @@ static func _front_leaves_run(stop: int, ends: int, rule: Rule) -> Dictionary:
 		match rule:
 			Rule.BUILT:
 				var leaving := QueueStandWait.desk_front_leaves(host, lane, t)
-				wait = QueueStandWait.line_wait(host, b, lane, CELLS, leaving)
+				wait = QueueStandWait.line_wait(host, b, lane, CELLS, leaving, true)
 			Rule.BEFORE:
 				wait = QueueStandWait.line_wait(host, b, lane, CELLS)
 		RollerPark.queue_stand(bag, ROLLER, not b.is_moving(), float(t), wait)
@@ -346,38 +346,180 @@ func test_desk_front_leaves_within_the_still_ticks_of_its_service_end() -> void:
 	assert_bool(none).is_false()
 
 
-## security_front_leaves() in a real world: on every tick it says a security
-## front leaves, that front is out of the queue within STILL_TICKS ticks
-## (admitted into the scanner), and it says so on some tick (so the check
-## cannot pass on an empty set).
+## Steps the security world `w` until security_front_leaves() says the front
+## leaves, at most RUN_LIMIT ticks; returns whether it did.
+func _until_front_leaves(w: PassengerTestWorld) -> bool:
+	var sim := w.sim
+	var scanner: int = sim.layout.scanners[0]
+	var stop := w.clock.tick + RUN_LIMIT
+	while w.clock.tick < stop:
+		w.step()
+		var members := sim.queue_of(scanner) + sim.holding_of(scanner)
+		if QueueStandWait.security_front_leaves(sim, scanner, members, sim.layout.line_of(scanner)):
+			return true
+	return false
+
+
+## security_front_leaves() in a real world: every front it says leaves is out
+## of the queue within STILL_TICKS ticks (admitted into the scanner), checked
+## for DISTINCT fronts until each deadline has passed: a front still queued on
+## its deadline tick is wrong. Five different fronts are seen, so the check
+## cannot pass on an empty set or on one front said again and again.
 func test_security_front_leaves_is_followed_by_its_admission() -> void:
+	var fronts_wanted := 5
 	_world = _desk_world()
 	for i in 6:
-		_send(_world, false)
+		_send(_world, false, Passenger.Stage.TO_SECURITY)
 		_world.run_to(_world.clock.tick + 3)
-	var predicted := 0
+	var said := {}
+	var longest := 0
+	var left := 0
 	var wrong: Array = []
 	var due := {}
+	var sim := _world.sim
+	var scanner: int = sim.layout.scanners[0]
 	var stop := _world.clock.tick + RUN_LIMIT
-	while _world.clock.tick < stop and predicted < 5:
+	while _world.clock.tick < stop and (said.size() < fronts_wanted or not due.is_empty()):
 		_world.step()
-		var sim := _world.sim
-		var scanner: int = sim.layout.scanners[0]
 		var members := sim.queue_of(scanner) + sim.holding_of(scanner)
-		var line := sim.layout.line_of(scanner)
+		longest = maxi(longest, members.size())
 		for id: int in due.keys():
 			if not members.has(id):
+				left += 1
 				due.erase(id)
-			elif sim.tick > due[id]:
+			elif sim.tick >= due[id]:
 				wrong.append([sim.tick, id, "still queued"])
 				due.erase(id)
-		if QueueStandWait.security_front_leaves(sim, scanner, members, line):
-			predicted += 1
-			if not due.has(members[0]):
-				due[members[0]] = sim.tick + RollerPark.STILL_TICKS
-	print("security front leaves said %d times; wrong %s" % [predicted, wrong])
-	assert_int(predicted).is_greater(0)
+		if said.size() >= fronts_wanted or members.is_empty() or said.has(members[0]):
+			continue
+		if QueueStandWait.security_front_leaves(sim, scanner, members, sim.layout.line_of(scanner)):
+			said[members[0]] = sim.tick
+			due[members[0]] = sim.tick + RollerPark.STILL_TICKS
+	print(
+		(
+			(
+				"security front leaves said for %d fronts, %d left in time, %d unchecked; "
+				+ "longest queue %d; wrong %s"
+			)
+			% [said.size(), left, due.size(), longest, wrong]
+		)
+	)
+	# Control: fronts did wait in a queue behind the one being scanned.
+	assert_int(longest).is_greater(2)
+	assert_int(said.size()).is_equal(fronts_wanted)
+	assert_int(left).is_equal(fronts_wanted)
 	assert_array(wrong).is_empty()
+	assert_int(due.size()).is_equal(0)
+
+
+## No cell in the line (a paused edit can leave a scanner in the passages with
+## an empty rebuilt line), or a station that is not one: false, no error.
+func test_security_front_leaves_is_false_without_a_line_or_a_station() -> void:
+	_world = _desk_world()
+	for i in 6:
+		_send(_world, false, Passenger.Stage.TO_SECURITY)
+		_world.run_to(_world.clock.tick + 3)
+	assert_bool(_until_front_leaves(_world)).is_true()
+	var sim := _world.sim
+	var scanner: int = sim.layout.scanners[0]
+	var members := sim.queue_of(scanner) + sim.holding_of(scanner)
+	var line := sim.layout.line_of(scanner)
+	var no_cells: Array[Vector2i] = []
+	var empty := QueueStandWait.security_front_leaves(sim, scanner, members, no_cells)
+	var no_station := QueueStandWait.security_front_leaves(sim, -1, members, line)
+	var control := QueueStandWait.security_front_leaves(sim, scanner, members, line)
+	print("empty line %s, no station %s, control %s" % [empty, no_station, control])
+	assert_bool(control).is_true()
+	assert_bool(empty).is_false()
+	assert_bool(no_station).is_false()
+
+
+## A front stuck GATE_FULL is not admitted, so the places do not move up: the
+## prediction is false, and a member stuck behind a standing member keeps wait
+## 0 (control: the front is ready on its first cell and the main position is
+## free, so only the gate stops it).
+func test_a_gate_full_front_does_not_leave_so_the_follower_stands_at_once() -> void:
+	var gate := GateFullWorld.make()
+	var sim := gate.world.sim
+	sim.standing.rebuild(sim)
+	gate.send_many(GateFullWorld.SPOTS + 4)
+	var full := func() -> bool:
+		var front := gate.front()
+		return front != null and front.stuck == Passenger.Stuck.GATE_FULL
+	assert_bool(gate.run_until(full)).is_true()
+	gate.world.run_to(gate.world.clock.tick + 60)
+	var members := sim.queue_of(gate.station) + sim.holding_of(gate.station)
+	var line := sim.layout.line_of(gate.station)
+	var follower := gate.world.passenger(members[2])
+	var ready := sim.security.ready_front(gate.station, {"lane": members}, line, true)
+	var main: int = sim.security.record_of(gate.station).get("main", 0)
+	var leaves := QueueStandWait.security_front_leaves(sim, gate.station, members, line)
+	var stuck := QueueStandWait.stuck(sim, follower, members, line)
+	var wait := QueueStandWait.ticks(sim, follower)
+	print(
+		(
+			"front %d stuck %d, ready %s, main %d, leaves %s; follower %d stuck %s wait %d"
+			% [
+				members[0],
+				gate.front().stuck,
+				ready != null,
+				main,
+				leaves,
+				follower.id,
+				stuck,
+				wait
+			]
+		)
+	)
+	assert_bool(ready != null).is_true()
+	assert_int(main).is_equal(0)
+	assert_bool(leaves).is_false()
+	assert_bool(stuck).is_true()
+	assert_int(wait).is_equal(0)
+	gate.world.free_all()
+
+
+## A desk front pulling a roller walks FRONT_CLEAR_MM away before the new front
+## steps onto the desk cell (QueueRipple.desk_clear()), so the walkers behind
+## are held and B stands at once; a front with no roller holds nobody, and a
+## security front's roller never holds anybody.
+func test_a_desk_front_pulling_a_roller_holds_the_places_so_the_follower_stands() -> void:
+	var host := Host.new()
+	var front := _member(host, 1, CELLS[0])
+	front.carry_on = 1
+	front.id = _roller_id()
+	host.by_id.erase(1)
+	host.by_id[front.id] = front
+	front.stage = Passenger.Stage.CHECKIN
+	front.service_end = 102
+	var a := _member(host, 2, CELLS[1])
+	var b := _member(host, 3, CELLS[2])
+	var lane: Array[int] = [front.id, a.id, b.id]
+	var roller_desk := QueueStandWait.line_wait(host, b, lane, CELLS, true, true)
+	var roller_security := QueueStandWait.line_wait(host, b, lane, CELLS, true, false)
+	front.carry_on = 0
+	var plain_desk := QueueStandWait.line_wait(host, b, lane, CELLS, true, true)
+	print(
+		(
+			"front pulls a roller: desk wait %d, security wait %d; plain front: desk wait %d"
+			% [roller_desk, roller_security, plain_desk]
+		)
+	)
+	assert_bool(QueueRipple.pulls_roller(front)).is_false()
+	assert_int(roller_desk).is_equal(0)
+	assert_int(roller_security).is_equal(RollerPark.STILL_TICKS)
+	assert_int(plain_desk).is_equal(RollerPark.STILL_TICKS)
+
+
+## A passenger id whose one carry-on is a roller (SecurityLooks.bag_kind()).
+static func _roller_id() -> int:
+	var p := Passenger.new()
+	p.carry_on = 1
+	for id in range(10, 500):
+		p.id = id
+		if QueueRipple.pulls_roller(p):
+			return id
+	return 0
 
 
 ## In a real desk queue of walkers pulling rollers (the QueueRipple holds each
@@ -390,7 +532,7 @@ func test_still_wait_in_a_desk_queue_follows_the_member_ahead() -> void:
 	_world = _desk_world()
 	var desk: int = _world.sim.layout.desks[0]
 	for i in 5:
-		_send(_world, i != 1)
+		_send(_world, i >= 2)
 		_world.run_to(_world.clock.tick + 3)
 	var stuck_ticks := 0
 	var other_ticks := 0
@@ -410,7 +552,7 @@ func test_still_wait_in_a_desk_queue_follows_the_member_ahead() -> void:
 			var wait := QueueStandWait.ticks(sim, p)
 			var leaving := (
 				QueueStandWait.desk_front_leaves(sim, members, sim.tick)
-				and QueueStandWait.steps_at_once(sim, p, members)
+				and QueueStandWait.steps_at_once(sim, p, members, true)
 			)
 			if p.at == line[i] and not ahead.is_moving() and ahead.at == line[i - 1]:
 				if leaving:
@@ -449,7 +591,7 @@ func _desk_world() -> PassengerTestWorld:
 
 ## Spawns a calm passenger walking in to check in with one bag, a roller when
 ## `roller` (test_queue_ripple's _send()). Returns its id.
-func _send(w: PassengerTestWorld, roller: bool) -> int:
+func _send(w: PassengerTestWorld, roller: bool, stage := Passenger.Stage.TO_CHECKIN) -> int:
 	for attempt in 50:
 		var id := w.sim.spawn_now(PassengerTestWorld.FLIGHT)
 		var p := w.passenger(id)
@@ -463,7 +605,7 @@ func _send(w: PassengerTestWorld, roller: bool) -> int:
 		p.alarm = false
 		p.apron = []
 		p.apron_mm = 0
-		p.stage = Passenger.Stage.TO_CHECKIN
+		p.stage = stage
 		p.clear_path()
 		return id
 	return 0
