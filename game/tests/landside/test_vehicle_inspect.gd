@@ -64,7 +64,7 @@ func test_a_car_on_its_way_before_its_unload_tick_is_on_time() -> void:
 	_land = LandsideTestWorld.make(null, [], 3)
 	_land.schedule(BOOKED)
 	var driving := 0
-	while _land.sim.tick < 4000 and driving == 0:
+	while _land.sim.tick < 4400 and driving == 0:
 		_land.step()
 		for id in _land.landside.vehicle_ids():
 			var v := _land.landside.get_vehicle(id)

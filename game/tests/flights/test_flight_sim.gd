@@ -4,12 +4,12 @@ extends GdUnitTestSuite
 const FRAME := 1.0 / 60.0
 ## Boarding lasts 1200 ticks (60 s), not 400: the walk from the farthest gate seat to the
 ## plane in the reference terminal is about 915 ticks (test_boarding_window.gd measures it).
-## TAXI_IN lasts 600 and TAXI_OUT 720 ticks (decision plane-stand-design-airside-
-## moves-110-m-north-stand-snaps-to, point 5), so the plane arrives 300 ticks
-## earlier, pushes back at 2260 and the flight ends at 3300.
-const STARTS: Array[int] = [0, 100, 220, 360, 960, 1000, 2200, 2260, 2380, 3100, 3300]
+## TAXI_IN lasts 1000 and TAXI_OUT 920 ticks (decision runway-and-taxi-technical-
+## design-movement-plan-analytic-bookings-planned-pauses), so the plane arrives
+## at 1360, pushes back at 2660 and the flight ends at 3900.
+const STARTS: Array[int] = [0, 100, 220, 360, 1360, 1400, 2600, 2660, 2780, 3700, 3900]
 ## A little after the last state starts.
-const END_TICK := 3320
+const END_TICK := 3920
 const FLIGHT := "GMF101"
 
 var _changes: Array[Vector2i] = []

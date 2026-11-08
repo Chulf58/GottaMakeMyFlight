@@ -32,14 +32,14 @@ func _run_to(target: int) -> void:
 		_most_live = maxi(_most_live, _sim.flight_ids().size())
 
 
-## 00:30 on day 1 is tick 22200. Its occurrence starts at 22:37 on day 0
-## (tick 19940), is issued two hours earlier (17540) and departs at 22200
-## (DEPARTED at 23240).
+## 00:50 on day 1 is tick 22600. Its occurrence starts at 22:37 on day 0
+## (tick 19940), is issued two hours earlier (17540) and departs at 22600
+## (DEPARTED at 23840).
 func test_an_occurrence_crosses_midnight_under_its_departure_day() -> void:
 	var first := 19940
 	var issued := first - FlightTimetable.ISSUE_LEAD_TICKS
 	var ended := first + FlightTimetable.reserved_ticks()
-	assert_bool(_sim.accept_contract(TestFlightContracts.terms("NIGHT", 30))).is_true()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("NIGHT", 50))).is_true()
 	_run_to(issued - 1)
 	assert_array(_added_ids).is_empty()
 	_run_to(issued)
@@ -48,9 +48,9 @@ func test_an_occurrence_crosses_midnight_under_its_departure_day() -> void:
 	assert_int(_sim.state_start("NIGHT-d1", FlightSim.State.SCHEDULED)).is_equal(first)
 	assert_int(GameCalendar.day_of(first)).is_equal(0)
 	var pushback := _sim.state_start("NIGHT-d1", FlightSim.State.PUSHBACK)
-	assert_int(pushback).is_equal(22200)
+	assert_int(pushback).is_equal(22600)
 	assert_int(GameCalendar.day_of(pushback)).is_equal(1)
-	assert_str(GameCalendar.clock_text(pushback)).is_equal("00:30")
+	assert_str(GameCalendar.clock_text(pushback)).is_equal("00:50")
 	var starts := FlightSim.schedule_starts(first)
 	_run_to((starts[FlightSim.State.BOARDING] + starts[FlightSim.State.DOORS_CLOSED]) / 2)
 	assert_int(_sim.state_of("NIGHT-d1")).is_equal(FlightSim.State.BOARDING)
@@ -60,8 +60,8 @@ func test_an_occurrence_crosses_midnight_under_its_departure_day() -> void:
 
 
 func test_a_departed_occurrence_is_pruned_an_hour_later_and_still_answers() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("NIGHT", 30))
-	# Departed at 23240, so dropped at 24440.
+	_sim.accept_contract(TestFlightContracts.terms("NIGHT", 50))
+	# Departed at 23840, so dropped at 25040.
 	var pruned := 19940 + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
 	_run_to(pruned - 1)
 	assert_array(_sim.flight_ids()).is_equal(["NIGHT-d1"])
@@ -77,7 +77,7 @@ func test_a_departed_occurrence_is_pruned_an_hour_later_and_still_answers() -> v
 
 
 func test_only_issued_canonical_ids_are_answered() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("NIGHT", 30))
+	_sim.accept_contract(TestFlightContracts.terms("NIGHT", 50))
 	_run_to(24440)
 	for id in ["NIGHT-d0", "NIGHT-d2", "NIGHT-d01", "NIGHT-d", "OTHER-d1", "NIGHT-d1x"]:
 		assert_int(_sim.state_of(id)).override_failure_message(id).is_equal(-1)
@@ -88,8 +88,8 @@ func test_only_issued_canonical_ids_are_answered() -> void:
 ## Two contracts over four days: one live occurrence each at most, issued in
 ## time order, and the save does not grow.
 func test_several_days_run_without_growing_state() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
-	_sim.accept_contract(TestFlightContracts.terms("PM", 840))
+	_sim.accept_contract(TestFlightContracts.terms("AM", 500))
+	_sim.accept_contract(TestFlightContracts.terms("PM", 880))
 	_run_to(GameCalendar.TICKS_PER_DAY)
 	var day_one_size := JSON.stringify(_sim.to_snapshot()).length()
 	_run_to(4 * GameCalendar.TICKS_PER_DAY)
@@ -110,10 +110,10 @@ func test_several_days_run_without_growing_state() -> void:
 ## flight_at_gate holds each day's occurrence from SCHEDULED until it departs
 ## (PlaneView also draws the sky lead-in before and the climb-out after).
 func test_flight_at_gate_follows_each_days_occurrence() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
+	_sim.accept_contract(TestFlightContracts.terms("AM", 500))
 	assert_array(_sim.flight_ids()).is_equal(["AM-d0"])
 	assert_str(_sim.flight_at_gate("C")).is_equal("")
-	# 08:00 minus 113 minutes is 06:07, tick 140; it departs 3300 ticks later.
+	# 08:20 minus 133 minutes is 06:07, tick 140; it departs 3900 ticks later.
 	var first := 140
 	var ended := first + FlightTimetable.reserved_ticks()
 	_run_to(first)
@@ -137,8 +137,8 @@ func test_the_bootstrap_flight_holds_gate_c() -> void:
 
 ## A tick that jumps past several issue ticks issues them oldest first.
 func test_a_jump_issues_overdue_occurrences_in_time_order() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("PM", 840))
-	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
+	_sim.accept_contract(TestFlightContracts.terms("PM", 860))
+	_sim.accept_contract(TestFlightContracts.terms("AM", 500))
 	assert_array(_added_ids).is_equal(["AM-d0"])
 	_sim.on_tick(2 * GameCalendar.TICKS_PER_DAY)
 	assert_array(_added_ids).is_equal(["AM-d0", "PM-d0", "AM-d1", "PM-d1", "AM-d2"])
@@ -148,11 +148,11 @@ func test_a_jump_issues_overdue_occurrences_in_time_order() -> void:
 
 ## flight_ids() is in timetable order whatever order flights were added in.
 func test_flights_are_listed_by_first_start_then_id() -> void:
-	# AM-d0 starts at tick 140 and holds the gate for 3300 ticks; the one-off
+	# AM-d0 starts at tick 140 and holds the gate for 3900 ticks; the one-off
 	# flights start after it.
 	var after := 140 + FlightTimetable.reserved_ticks()
 	assert_bool(_sim.add_flight("LATER", FlightSim.schedule_starts(after + 900))).is_true()
 	assert_bool(_sim.add_flight("SOONER", FlightSim.schedule_starts(after))).is_true()
 	assert_bool(_sim.add_flight("ALSO", FlightSim.schedule_starts(after))).is_true()
-	assert_bool(_sim.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	assert_array(_sim.flight_ids()).is_equal(["AM-d0", "ALSO", "SOONER", "LATER"])

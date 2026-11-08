@@ -114,7 +114,7 @@ func test_a_long_visit_counts_the_walk_out_after_it_and_no_boarding_wait() -> vo
 		)
 		- p.boarding_tick
 	)
-	var legs := _legs(900, AIRSIDE_CELL, Passenger.Stage.TO_GATE)
+	var legs := _legs(1300, AIRSIDE_CELL, Passenger.Stage.TO_GATE)
 	var end := CafeForecast.visit_end(_world.sim, legs)
 	var expected_end := (
 		_world.clock.tick
@@ -122,7 +122,7 @@ func test_a_long_visit_counts_the_walk_out_after_it_and_no_boarding_wait() -> vo
 		+ 90
 		+ JourneyForecast.walk_ticks(2000)
 		+ PassengerSim.SIT_DOWN_TICKS
-		+ 900
+		+ 1300
 	)
 	assert_int(end).is_equal(expected_end)
 	assert_int(end).is_greater(p.boarding_tick)

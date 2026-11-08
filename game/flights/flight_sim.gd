@@ -75,11 +75,13 @@ const STATE_COUNT := 11
 ## BOARDING is 1200 ticks (60 s): in the reference terminal the walk from the
 ## farthest gate seat out through the exit and along the apron to the plane
 ## door is about 915 ticks at walking pace (test_boarding_window.gd).
-## TAXI_IN (600) and TAXI_OUT (720) keep the peak taxi speed under 16 m/s on
-## the longest route a legal stand gives (decision plane-stand-design-airside-
-## moves-110-m-north-stand-snaps-to, point 5; test_airside_stand.gd). Departure
-## is the start of PUSHBACK, so a longer TAXI_IN only moves the arrival earlier.
-const PHASE_TICKS: Array[int] = [100, 120, 140, 600, 40, 1200, 60, 120, 720, 200]
+## TAXI_IN (1000) and TAXI_OUT (920) keep the peak taxi speed at or under
+## 16 m/s on the longest route a legal stand gives, with no pause and with the
+## longest pause MovementPlan allows (user-ruled in decision runway-and-taxi-
+## technical-design-movement-plan-analytic-bookings-planned-pauses;
+## test_airside_stand.gd). Departure is the start of PUSHBACK, so a longer
+## TAXI_IN only moves the arrival earlier.
+const PHASE_TICKS: Array[int] = [100, 120, 140, 1000, 40, 1200, 60, 120, 920, 200]
 const DEFAULT_ID := "GMF101"
 ## The gate of add_flight and add_default_flight unless told otherwise.
 const DEFAULT_GATE := "C"
@@ -105,7 +107,10 @@ const STARTER_TERMS := {
 ## 5: a contract holds its plane class's passenger range (FlightContract.problem),
 ## so what a save may contain narrowed. A version 4 save is refused; there is no
 ## migration.
-const SAVE_VERSION := 5
+## 6: TAXI_IN and TAXI_OUT last 1000 and 920 ticks (were 600 and 720), so a
+## saved occurrence's starts differ for the same contract and day. A version 5
+## save is refused; there is no migration.
+const SAVE_VERSION := 6
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock

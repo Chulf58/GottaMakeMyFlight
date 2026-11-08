@@ -3,8 +3,8 @@ extends GdUnitTestSuite
 ## Accepting a contract: captured read-only terms, the first day whose whole
 ## preparation window is still ahead, and gate reservations that never overlap.
 
-## Game minutes from an occurrence's first state to its departure (113 with the
-## present timetable), and the minutes it holds its gate (165). The cases below
+## Game minutes from an occurrence's first state to its departure (133 with the
+## present timetable), and the minutes it holds its gate (195). The cases below
 ## work out their clock times from these, so a change to the phase lengths moves
 ## them and not the cases.
 var _offset_minutes := _minutes(FlightTimetable.departure_offset())
@@ -20,7 +20,7 @@ static func _minutes(ticks: int) -> int:
 
 
 ## The minute of the day the bootstrap flight (first state at tick 0, 06:00)
-## departs: 07:53.
+## departs: 08:13.
 static func bootstrap_minute() -> int:
 	return 6 * 60 + _minutes(FlightTimetable.departure_offset())
 
@@ -46,9 +46,9 @@ static func terms(id: String, minute: int) -> Dictionary:
 	}
 
 
-## 07:53 is 113 game minutes after 06:00: the bootstrap flight pushes back at
-## tick 2260, so a contract at 07:53 accepted at tick 0 is the same flight.
-func test_a_contract_at_07_53_accepted_at_start_reproduces_the_bootstrap_flight() -> void:
+## 08:13 is 133 game minutes after 06:00: the bootstrap flight pushes back at
+## tick 2660, so a contract at 08:13 accepted at tick 0 is the same flight.
+func test_a_contract_at_08_13_accepted_at_start_reproduces_the_bootstrap_flight() -> void:
 	assert_bool(_sim.accept_contract(terms("GMF101", bootstrap_minute()))).is_true()
 	assert_array(_sim.flight_ids()).is_equal(["GMF101-d0"])
 	var expected := FlightSim.schedule_starts(0)
@@ -73,22 +73,22 @@ func test_the_contract_is_a_read_only_copy_of_the_terms() -> void:
 	assert_array(_sim.contract_ids()).is_equal(["GMF300"])
 
 
-## 08:00 starts its occurrence at tick 140 (08:00 minus 113 minutes is 06:07).
+## 08:20 starts its occurrence at tick 140 (08:20 minus 133 minutes is 06:07).
 func test_acceptance_after_todays_preparation_start_goes_to_tomorrow() -> void:
-	var start := GameCalendar.tick_at(0, 480) - FlightTimetable.departure_offset()
+	var start := GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
 	assert_int(start).is_equal(140)
 	for case in [[start - 1, 0], [start, 0], [start + 1, 1]]:
 		var sim := auto_free(FlightSim.new()) as FlightSim
 		sim.open_airport()
 		sim.on_tick(case[0])
-		assert_bool(sim.accept_contract(terms("GMF400", 480))).is_true()
+		assert_bool(sim.accept_contract(terms("GMF400", 500))).is_true()
 		assert_int(sim.contract_of("GMF400")["first_day"]).is_equal(case[1])
 		# Open, so a first_day of 0 is issued at once and a first_day of 1 is not.
 		assert_int(sim.flight_ids().size()).is_equal(1 - case[1])
 	var late := auto_free(FlightSim.new()) as FlightSim
 	late.open_airport()
 	late.on_tick(start + 1)
-	late.accept_contract(terms("GMF400", 480))
+	late.accept_contract(terms("GMF400", 500))
 	assert_array(late.flight_ids()).is_empty()
 	assert_int(late.state_start("GMF400-d1", FlightSim.State.SCHEDULED)).is_equal(-1)
 
@@ -142,40 +142,40 @@ func test_a_contract_id_is_used_once() -> void:
 	assert_array(_sim.contract_ids()).is_equal(["GMF700"])
 
 
-## 23:50 holds gate C from 21:57 to 00:42 the next day (half-open).
+## 23:50 holds gate C from 21:37 to 00:52 the next day (half-open).
 func test_gate_reservations_clash_across_midnight() -> void:
 	assert_bool(_sim.accept_contract(terms("LATE", 1430))).is_true()
-	# 00:30 would start at 22:37 the day before.
+	# 00:30 would start at 22:17 the day before.
 	assert_bool(_sim.accept_contract(terms("EARLY", 30))).is_false()
 	var leaves := 1430 - _offset_minutes + _held_minutes - 1440
-	assert_int(leaves).is_equal(42)
-	# 02:34 starts at 00:41, one minute before LATE leaves the gate.
+	assert_int(leaves).is_equal(52)
+	# 03:04 starts at 00:51, one minute before LATE leaves the gate.
 	assert_bool(_sim.accept_contract(terms("TIGHT", leaves - 1 + _offset_minutes))).is_false()
-	# 02:35 starts at 00:42, the tick LATE's reservation ends.
+	# 03:05 starts at 00:52, the tick LATE's reservation ends.
 	assert_bool(_sim.accept_contract(terms("NEXT", leaves + _offset_minutes))).is_true()
 	assert_array(_sim.contract_ids()).is_equal(["LATE", "NEXT"])
 
 
-## 00:10 starts at 22:17 the evening before; 22:40 holds the gate until 23:32.
+## 00:10 starts at 21:57 the evening before; 22:40 holds the gate until 23:42.
 func test_an_evening_contract_clashes_with_the_next_mornings_early_start() -> void:
 	assert_bool(_sim.accept_contract(terms("DAWN", 10))).is_true()
 	assert_bool(_sim.accept_contract(terms("DUSK", 1360))).is_false()
-	# 21:26 holds the gate until 22:18, the minute after DAWN starts.
+	# 20:56 holds the gate until 21:58, the minute after DAWN starts.
 	var dawn_starts := 10 + 1440 - _offset_minutes
-	assert_int(dawn_starts).is_equal(22 * 60 + 17)
+	assert_int(dawn_starts).is_equal(21 * 60 + 57)
 	var last_clear := dawn_starts - _held_minutes + _offset_minutes
 	assert_bool(_sim.accept_contract(terms("DUSK", last_clear + 1))).is_false()
-	# 21:25 holds the gate until 22:17, the minute DAWN starts.
+	# 20:55 holds the gate until 21:57, the minute DAWN starts.
 	assert_bool(_sim.accept_contract(terms("DUSK", last_clear))).is_true()
 
 
-## The bootstrap flight holds gate C from tick 0 to 3300 (06:00 to 08:45).
+## The bootstrap flight holds gate C from tick 0 to 3900 (06:00 to 09:15).
 func test_a_contract_clashing_with_the_bootstrap_flight_is_refused() -> void:
 	assert_bool(_sim.add_default_flight()).is_true()
 	assert_bool(_sim.accept_contract(terms("GMF101", bootstrap_minute()))).is_false()
-	# 10:37 starts at 08:44, 20 ticks before the bootstrap flight leaves the gate.
+	# 11:27 starts at 09:14, 20 ticks before the bootstrap flight leaves the gate.
 	var clash := 6 * 60 + _held_minutes - 1 + _offset_minutes
-	assert_int(clash).is_equal(10 * 60 + 37)
+	assert_int(clash).is_equal(11 * 60 + 27)
 	assert_bool(_sim.accept_contract(terms("GMF800", clash))).is_false()
 	assert_bool(_sim.accept_contract(terms("GMF800", clash + 1))).is_true()
 

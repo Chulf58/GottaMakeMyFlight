@@ -6,12 +6,12 @@ extends GdUnitTestSuite
 ## accepted while closed starts on its first day issued ISSUE_LEAD_TICKS or
 ## more after opening, and the days it skipped are never reported as flown.
 ##
-## AM (08:00) has its first state at 140 on day 0 and is issued at -2260; PM
-## (14:00) has its first state at 7340 and is issued at 4940.
+## AM (08:20) has its first state at 140 on day 0 and is issued at -2260; PM
+## (14:20) has its first state at 7340 and is issued at 4940.
 
 ## The first states of AM and PM on day 0 and the tick PM is issued.
-var _am_first := GameCalendar.tick_at(0, 480) - FlightTimetable.departure_offset()
-var _pm_first := GameCalendar.tick_at(0, 840) - FlightTimetable.departure_offset()
+var _am_first := GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
+var _pm_first := GameCalendar.tick_at(0, 860) - FlightTimetable.departure_offset()
 var _pm_issue := _pm_first - FlightTimetable.ISSUE_LEAD_TICKS
 
 var _sim: FlightSim
@@ -34,8 +34,8 @@ func test_a_new_flight_sim_is_closed() -> void:
 
 
 func test_a_closed_airport_issues_nothing_even_after_accept_contract() -> void:
-	assert_bool(_sim.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
-	assert_bool(_sim.accept_contract(TestFlightContracts.terms("PM", 840))).is_true()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("PM", 860))).is_true()
 	assert_array(_sim.contract_ids()).is_equal(["AM", "PM"])
 	assert_array(_sim.flight_ids()).is_empty()
 	_run_to(2 * GameCalendar.TICKS_PER_DAY)
@@ -68,7 +68,7 @@ func test_opening_records_the_tick_and_a_second_open_is_refused() -> void:
 ## Opened at tick 0, AM's day-0 issue tick (-2260) is gone, so AM starts on
 ## day 1, issued at 28800 + 140 - 2400.
 func test_an_offer_accepted_while_closed_starts_at_its_first_slot_that_leaves_the_lead() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
+	_sim.accept_contract(TestFlightContracts.terms("AM", 500))
 	assert_bool(_sim.open_airport()).is_true()
 	assert_array(_sim.flight_ids()).is_empty()
 	var issue := GameCalendar.TICKS_PER_DAY + _am_first - FlightTimetable.ISSUE_LEAD_TICKS
@@ -85,12 +85,12 @@ func test_an_offer_accepted_while_closed_starts_at_its_first_slot_that_leaves_th
 ## PM's day-0 issue tick is 4940: opening at 4940 still flies day 0, opening a
 ## tick later moves it to day 1.
 func test_the_slot_on_the_opening_tick_is_kept_and_the_one_before_it_is_not() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("PM", 840))
+	_sim.accept_contract(TestFlightContracts.terms("PM", 860))
 	_run_to(_pm_issue)
 	_sim.open_airport()
 	assert_array(_added).is_equal(["PM-d0"])
 	var late: FlightSim = auto_free(FlightSim.new())
-	late.accept_contract(TestFlightContracts.terms("PM", 840))
+	late.accept_contract(TestFlightContracts.terms("PM", 860))
 	for t in range(1, _pm_issue + 2):
 		late.on_tick(t)
 	late.open_airport()
@@ -104,7 +104,7 @@ func test_the_slot_on_the_opening_tick_is_kept_and_the_one_before_it_is_not() ->
 ## Accepted on day 0 and opened on day 2: days 0 to 2 were never flown, so
 ## they are not answered as departed, while the days that ran are.
 func test_skipped_days_leave_no_departed_flights_in_history() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
+	_sim.accept_contract(TestFlightContracts.terms("AM", 500))
 	var day_two := 2 * GameCalendar.TICKS_PER_DAY + 1000
 	_run_to(day_two)
 	_sim.open_airport()
@@ -126,7 +126,7 @@ func test_skipped_days_leave_no_departed_flights_in_history() -> void:
 func test_an_offer_accepted_after_opening_starts_as_before() -> void:
 	_sim.open_airport()
 	_run_to(100)
-	assert_bool(_sim.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	assert_array(_added).is_equal(["AM-d0"])
 	assert_int(_sim.state_start("AM-d0", FlightSim.State.SCHEDULED)).is_equal(_am_first)
 
@@ -139,7 +139,7 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 	gate.flights = _sim
 	gate.from_tick = _pm_issue
 	_sim.gate = gate
-	_sim.accept_contract(TestFlightContracts.terms("PM", 840))
+	_sim.accept_contract(TestFlightContracts.terms("PM", 860))
 	_run_to(_pm_issue - 1)
 	assert_int(_sim.opened_tick).is_equal(-1)
 	_run_to(_pm_issue)
@@ -148,7 +148,7 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 	assert_array(_sim.contract_ids()).is_equal(["PM", FlightSim.DEFAULT_ID])
 	var starter := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
 	var starter_first := _pm_first + FlightTimetable.reserved_ticks()
-	assert_int(starter_first).is_equal(10640)
+	assert_int(starter_first).is_equal(11240)
 	_run_to(starter_first - FlightTimetable.ISSUE_LEAD_TICKS - 1)
 	assert_array(_added).is_equal(["PM-d0"])
 	_run_to(starter_first - FlightTimetable.ISSUE_LEAD_TICKS)
@@ -156,17 +156,17 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 	assert_int(_sim.state_start(starter, FlightSim.State.SCHEDULED)).is_equal(starter_first)
 
 
-## Eight offers accepted while closed, at minutes 0, 165, ... 1155, each hold
-## gate C for 165 minutes and leave no 165-minute gap (120 minutes are left), so
+## Seven offers accepted while closed, at minutes 0, 195, ... 1170, each hold
+## gate C for 195 minutes and leave no 195-minute gap (75 minutes are left), so
 ## the starter has no slot: the airport still opens, with no starter and no
 ## error, and each offer starts at its first slot after the lead.
 func test_a_gate_full_all_day_opens_with_no_starter_and_no_error() -> void:
 	@warning_ignore("integer_division")
 	var held := FlightTimetable.reserved_ticks() / GameCalendar.TICKS_PER_MINUTE
-	assert_int(held).is_equal(165)
+	assert_int(held).is_equal(195)
 	@warning_ignore("integer_division")
 	var count := GameCalendar.MINUTES_PER_DAY / held
-	assert_int(count).is_equal(8)
+	assert_int(count).is_equal(7)
 	var ids: Array[String] = []
 	for i in count:
 		ids.append("S%d" % i)
@@ -195,7 +195,7 @@ func test_a_gate_full_all_day_opens_with_no_starter_and_no_error() -> void:
 
 ## start_days reads the recorded start as a copy, and refuses a write.
 func test_start_days_is_a_read_only_copy_of_the_recorded_start() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("AM", 480))
+	_sim.accept_contract(TestFlightContracts.terms("AM", 500))
 	assert_dict(_sim.start_days).is_equal({"AM": 0})
 	_sim.open_airport()
 	var days := _sim.start_days

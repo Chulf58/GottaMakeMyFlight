@@ -87,9 +87,10 @@ func before() -> void:
 	_start = starts[FlightSim.State.SCHEDULED]
 	_late_tick = starts[FlightSim.State.DOORS_CLOSED] - LATE_SPAWN_BEFORE_DOORS_TICKS
 	_end_tick = starts[FlightSim.State.DEPARTED] + END_AFTER_DEPARTURE_TICKS
-	# The first passengers arrive well before the flight's first state; the
-	# desks go and come back while they walk to check-in.
-	while _sim.passenger_ids().is_empty() and _clock.tick < _start:
+	# The desks go and come back while the first passengers walk to check-in,
+	# counted from the first arrival (with TAXI_IN 1000 the first can come after
+	# the flight's first state, so the wait runs up to the late spawn).
+	while _sim.passenger_ids().is_empty() and _clock.tick < _late_tick:
 		_run_to(_clock.tick + 1)
 	var arrived := _clock.tick
 	_run_to(arrived + DESKS_GONE_TICK)

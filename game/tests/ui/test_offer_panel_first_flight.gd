@@ -94,9 +94,9 @@ func test_a_closed_airport_names_the_lead_the_first_flight_needs_after_opening()
 	_sim.tick = GameCalendar.tick_at(0, NOON)
 	_panel.open()
 	for id in ["O0N1", "O0N2"]:
-		assert_str(_panel.card_text(id)).contains("first flight 3 h 53 min after opening")
+		assert_str(_panel.card_text(id)).contains("first flight 4 h 13 min after opening")
 	assert_str(_panel.card_text("O0N2")).contains(
-		"Departs 20:00 daily, first flight 3 h 53 min after opening"
+		"Departs 20:00 daily, first flight 4 h 13 min after opening"
 	)
 
 
@@ -124,7 +124,7 @@ func test_accepting_while_closed_repeats_the_lead_in_the_message() -> void:
 	_panel.open()
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(_panel.message()).is_equal(
-		"Accepted Gotta Air to Oslo, first flight 3 h 53 min after opening"
+		"Accepted Gotta Air to Oslo, first flight 4 h 13 min after opening"
 	)
 
 
