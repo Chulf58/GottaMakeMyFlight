@@ -65,7 +65,12 @@ static func fix_start(bag: Dictionary, booth: bool, sim: PassengerSim, body: Tra
 	if sim == null:
 		return
 	if bag.get("park", false) and bag.get("faced", false):
-		bag["wall_boxes"] = PullSide.walls_near(sim.grid, body.origin)
+		# A floor>pull's round its park's point (the first tick's, RollerPark.stamp()),
+		# not the body drawn on a late first frame.
+		var at := body.origin
+		if bag.get("park_up", false):
+			at = (bag["park_frame"] as Transform3D).origin
+		bag["wall_boxes"] = PullSide.walls_near(sim.grid, at)
 	if not booth:
 		return
 	if not bag.get("park", false) or not bag.has("park_frame"):

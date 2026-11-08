@@ -21,7 +21,8 @@ extends SceneTree
 ##     point over the floor> body_moved=<m from where it stood>
 ## and checks them (_check(): a CHECK line with the value and its range each;
 ## PROBE_FAIL and exit 1 outside it): a tipped, intersecting, unheld or
-## floating roller cannot pass.
+## floating roller cannot pass, nor one rolled away from the stood walker's
+## side (beside, _beside()).
 ## Plates: <type>_late<N>_n<tick>.png, and contact_sheet.png (a row a pick-up).
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
@@ -55,6 +56,9 @@ const HELD_FROM := 22
 const BAR_GAP_M := 0.03
 const WHEELS_LOW_M := 0.22
 const LOW_SLACK_M := 0.02
+## While it rolls with the walker still where it stood, the drawn roller's axle
+## this close to its park beside the walker (_beside()).
+const BESIDE_M := 0.02
 
 var _seed := 0
 var _main: Node3D
@@ -70,6 +74,8 @@ var _beat_ms := 0
 var _stop := false
 var _guard: Thread
 var _sheet: Array[Image] = []
+## The beside checks run on the plates of the pick-up now (_pick_up()).
+var _besides := 0
 
 
 func _initialize() -> void:
@@ -191,11 +197,15 @@ func _pick_up(type: StringName, late: int) -> void:
 	for i in late:
 		await _tick(false)
 	await process_frame
+	_besides = 0
 	for n in range(late, PLATE_TICKS[-1] + 1):
 		if n > late:
 			await _tick()
 		if n == late or (n > late and PLATE_TICKS.has(n)):
 			await _plate("%s_late%02d_n%02d" % [type, late, n], n, p, seat, stood)
+	# The beside check is skipped on a plate it cannot measure (_beside()):
+	# at least one plate of every pick-up must have run it.
+	_check("%s_late%02d" % [type, late], "beside_checks", _besides, 1.0, INF)
 
 
 ## The seat of the piece `p` stays at: {"frame" (its seat frame, world), "box"
@@ -321,6 +331,10 @@ func _plate(file: String, n: int, p: Passenger, seat: Dictionary, stood: Vector3
 	if n >= HELD_FROM:
 		_check(file, "bar_gap", props.bar_gap_of(p.id, 0), 0.0, BAR_GAP_M)
 		_check(file, "low", low, WHEELS_LOW_M - LOW_SLACK_M, WHEELS_LOW_M + LOW_SLACK_M)
+	var beside := _beside(n, p, rec, bag)
+	if beside >= 0.0:
+		_check(file, "beside", beside, 0.0, BESIDE_M)
+		_besides += 1
 	var img := root.get_texture().get_image()
 	var path := _out_dir.path_join(file + ".png")
 	if img.save_png(path) != OK:
@@ -329,6 +343,30 @@ func _plate(file: String, n: int, p: Passenger, seat: Dictionary, stood: Vector3
 		print("PLATE saved %s size=%s" % [path, img.get_size()])
 	_sheet.append(img)
 	cam.queue_free()
+
+
+## How far (m, on the floor) the drawn roller `bag` of `p` at tick `n` of its
+## pick-up (record `rec`) stands from its park beside the stood walker: its axle
+## RollerPark.PARK_SIDE_M out on the leading hand's side and PARK_AHEAD_M ahead
+## in the stood frame ("roll_frame"; board bea7e508: it could stand 0.7 m off).
+## -1 when not measured: not rolled, past the lift's end not yet, tipping, or
+## the walker off its stood point on this tick or the last.
+func _beside(n: int, p: Passenger, rec: Dictionary, bag: Node3D) -> float:
+	if not RollerPark.rolls(rec) or not rec.has("roll_frame"):
+		return -1.0
+	if n < RollerPark.up_ends(rec).x * RollerPark.TICKS_UP:
+		return -1.0
+	if n >= float(rec.get("roll_tip", INF)) * RollerPark.TICKS_UP:
+		return -1.0
+	var frame: Transform3D = rec["roll_frame"]
+	for current in [true, false]:
+		if _views.tick_position(p.id, current).distance_to(frame.origin) > RollerPark.MOVED_M:
+			return -1.0
+	var side := -1.0 if CarryLead.hand_of(rec["home"]) == 0 else 1.0
+	var axle := frame.affine_inverse() * (bag.global_transform * CarryOnProps.ROLLER_AXLE)
+	var off := Vector2(axle.x - side * RollerPark.PARK_SIDE_M, axle.z - RollerPark.PARK_AHEAD_M)
+	print("BESIDE axle x=%.4f z=%.4f in the stood frame" % [axle.x, axle.z])
+	return off.length()
 
 
 ## Prints `value` against [`least`, `most`] and fails the probe outside it.

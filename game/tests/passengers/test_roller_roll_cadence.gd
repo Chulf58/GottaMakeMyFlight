@@ -20,6 +20,9 @@ const RUN_TICKS := 60
 const SAME_FROM := 21
 const SAME_M := 0.002
 const SAME_RAD := 0.005
+## How far a rolled roller's axle may be from its park beside the stood walker
+## (RollerPark.park(): PARK_SIDE_M out on the hand's side, PARK_AHEAD_M ahead).
+const BESIDE_M := 0.02
 ## The seat box (the seat frame, +z out of the front; as
 ## spike/cafe_roller_standup_probe.gd measures ROLLER_CLEAR).
 const SEAT_HALF_M := 0.6
@@ -102,15 +105,19 @@ func _guest(type: StringName) -> Passenger:
 ## `cadence`: {"rolls", "roll_at", "roll_tip", "ticks_at" (the move's length on
 ## each drawn tick), "plans" (tick -> RollerPark's planned roller), "clear"
 ## (the least clearance of the drawn roller from `seat` on any drawn frame),
-## "took", "first"}.
+## "took", "first", "points" (the walker's tick position on every tick),
+## "roll_frame", "hand" (the leading hand), "lift_end" (in ticks)}.
 func _play(p: Passenger, cadence: Array, seat: Dictionary) -> Dictionary:
 	var props := _views.carry_on_props()
-	var out := {"plans": {}, "ticks_at": {}, "rolls_at": {}, "clear": INF, "clear_at": -1}
+	var out := {
+		"plans": {}, "ticks_at": {}, "rolls_at": {}, "points": {}, "clear": INF, "clear_at": -1
+	}
 	var since := _world.clock.tick
 	var next: int = cadence[1]
 	for n in RUN_TICKS + 1:
 		if n > 0:
 			_world.step()
+		out["points"][n] = _views.tick_position(p.id, true)
 		if n != next:
 			continue
 		next += int(cadence[2])
@@ -129,6 +136,8 @@ func _play(p: Passenger, cadence: Array, seat: Dictionary) -> Dictionary:
 		out["rolled"] = out.get("rolled", false) or RollerPark.rolls(rec)
 		if CarryPlace.leading(rec, float(_world.clock.tick)) and rec.has("lead"):
 			out["plans"][n] = rec["lead"]["xf"]
+			if not out.has("hand"):
+				out["hand"] = CarryLead.hand_of(rec["home"])
 		if not seat.is_empty():
 			var least := _clearance(seat, (rec["node"] as Node3D).global_transform)
 			if least < out["clear"]:
@@ -139,6 +148,8 @@ func _play(p: Passenger, cadence: Array, seat: Dictionary) -> Dictionary:
 	out["roll_at"] = rec.get("roll_at", Vector3.INF)
 	out["roll_tip"] = float(rec.get("roll_tip", NAN))
 	out["took"] = float(rec.get("park_took", NAN))
+	out["roll_frame"] = rec.get("roll_frame", Transform3D.IDENTITY)
+	out["lift_end"] = RollerPark.up_ends(rec).x * RollerPark.TICKS_UP
 	return out
 
 
@@ -291,6 +302,42 @@ func _assert_same(type: StringName, runs: Dictionary, rolls: bool) -> void:
 		print("%s: %d planned poses compared, worst %.5f m" % [line, compared, worst])
 		if name != "every":
 			assert_int(compared).override_failure_message(line).is_greater(0)
+		_assert_beside(line, run)
+
+
+## The planned roller of a rolled `run` stands beside the stood walker (Sol
+## final re-check of af14ddf, board bea7e508: it could stand 0.7 m off it):
+## on each planned tick past the lift (in the park a rolled roller is held at
+## its park too, RollerPark._carried()) while it rolls with the walker still at
+## its stood point (this tick and the one before, as the body is drawn a tick
+## behind), its axle is PARK_SIDE_M out on the leading hand's side and
+## PARK_AHEAD_M ahead in the stood frame ("roll_frame"), within BESIDE_M. Out
+## of the seat as well: _assert_clear().
+func _assert_beside(line: String, run: Dictionary) -> void:
+	var frame: Transform3D = run["roll_frame"]
+	var side := -1.0 if int(run["hand"]) == 0 else 1.0
+	var want := Vector3(side * RollerPark.PARK_SIDE_M, 0.0, RollerPark.PARK_AHEAD_M)
+	var checked := 0
+	var worst := 0.0
+	for n: int in run["plans"]:
+		var rolling: bool = n < float(run["roll_tip"]) * RollerPark.TICKS_UP
+		if n < float(run["lift_end"]) or not rolling:
+			continue
+		var still := true
+		for t: int in [n - 1, n]:
+			var gap := (run["points"][t] as Vector3).distance_to(frame.origin)
+			still = still and gap <= RollerPark.MOVED_M
+		if not still:
+			continue
+		var xf: Transform3D = run["plans"][n]
+		var axle := frame.affine_inverse() * (xf * CarryOnProps.ROLLER_AXLE)
+		var off := Vector3(axle.x - want.x, 0.0, axle.z - want.z).length()
+		worst = maxf(worst, off)
+		checked += 1
+		var at := "%s tick %d: axle x %.4f z %.4f, %.4f m off" % [line, n, axle.x, axle.z, off]
+		assert_float(off).override_failure_message(at).is_less(BESIDE_M)
+	print("%s: %d planned poses beside the stood walker, worst %.4f m off" % [line, checked, worst])
+	assert_int(checked).override_failure_message(line).is_greater(0)
 
 
 func test_a_sofa_pick_up_rolls_upright_at_every_draw_cadence() -> void:
