@@ -74,6 +74,8 @@ var _beat_ms := 0
 var _stop := false
 var _guard: Thread
 var _sheet: Array[Image] = []
+## The beside checks run on the plates of the pick-up now (_pick_up()).
+var _besides := 0
 
 
 func _initialize() -> void:
@@ -195,11 +197,15 @@ func _pick_up(type: StringName, late: int) -> void:
 	for i in late:
 		await _tick(false)
 	await process_frame
+	_besides = 0
 	for n in range(late, PLATE_TICKS[-1] + 1):
 		if n > late:
 			await _tick()
 		if n == late or (n > late and PLATE_TICKS.has(n)):
 			await _plate("%s_late%02d_n%02d" % [type, late, n], n, p, seat, stood)
+	# The beside check is skipped on a plate it cannot measure (_beside()):
+	# at least one plate of every pick-up must have run it.
+	_check("%s_late%02d" % [type, late], "beside_checks", _besides, 1.0, INF)
 
 
 ## The seat of the piece `p` stays at: {"frame" (its seat frame, world), "box"
@@ -328,6 +334,7 @@ func _plate(file: String, n: int, p: Passenger, seat: Dictionary, stood: Vector3
 	var beside := _beside(n, p, rec, bag)
 	if beside >= 0.0:
 		_check(file, "beside", beside, 0.0, BESIDE_M)
+		_besides += 1
 	var img := root.get_texture().get_image()
 	var path := _out_dir.path_join(file + ".png")
 	if img.save_png(path) != OK:

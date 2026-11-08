@@ -170,10 +170,17 @@ const ROLL_TO := floorf(TICKS_UP * UP_PARK_END)
 ## The ticks of tick positions kept on a roller's record (roll_step()): past
 ## the longest rolled move (TICKS_UP + ROLL_TICKS).
 const TRACK_TICKS := 64
-## A floor>pull that does not roll runs its rods out from SETTLE_TICKS after
-## its park when that leaves this many ticks to its end, else from the park's
-## end or this many ticks before its end, whichever is sooner (rods_t()).
+## A floor>pull that does not roll runs its rods out over this many ticks from
+## SETTLE_TICKS after its park, both compressed alike with the lift and the
+## park for a late take (up_ends(), rods_t()).
 const RODS_OUT_TICKS := 3.0
+## The least a late take's settle and run-out (and so its tip into the pull)
+## keep before k 1 (up_ends()), or TAIL_SHARE of what is left after the take
+## if less. At 1x (3 frames a tick) a 1.35 m tip over 2.4 ticks moved the
+## roller 0.086 m on its last frame; compressed alike with the lift and park
+## (1.6 ticks, first drawn 12 ticks late) it moved 0.11 m.
+const TAIL_MIN_TICKS := 2.4
+const TAIL_SHARE := 0.6
 ## The share of the rods run out while it rolls upright. Measured hips while
 ## rolling (probe ROLL_HIPS): 0.93 to 0.96 of standing at 0.45, 0.84 to 0.89 at
 ## 0.3; with them in the bar was at 0.48 m, all out at 2.1 m.
@@ -833,19 +840,14 @@ static func rods_t(k: float, bag: Dictionary) -> float:
 		var settle := SETTLE_TICKS / TICKS_UP
 		var up := up_k(bag, k)
 		if not rolls(bag):
-			# In through the park (the empty hand crossing to the bar), then out
-			# by the move's end: SETTLE_TICKS after the park when that leaves
-			# RODS_OUT_TICKS, else from the park's end, but never later than
-			# RODS_OUT_TICKS before k 1. One taken late ends its park near or
-			# past k 1: run from the park's end plus SETTLE_TICKS, the smoothstep
-			# had its edges the wrong way round (all out at once); from the
-			# park's end, one first drawn 9 ticks late ran them all out in its
-			# last tick, and one drawn 12 late (its park ending at k 1.13) kept
-			# them in to the end and snapped (Sol final re-check of af14ddf).
-			var room := 1.0 - RODS_OUT_TICKS / TICKS_UP
-			var out_from := park + settle
-			if out_from > room:
-				out_from = minf(park, room)
+			# In through the park (the empty hand crossing to the bar) and
+			# SETTLE_TICKS after it, then out by the move's end. A late take's
+			# park, settle and run-out are compressed alike to fit (up_ends()),
+			# so the settle is then its share of what is left after the park:
+			# started before the park's end, the rods moved the bar under a hand
+			# still crossing to it (Sol re-check of 9543dc4).
+			var share := SETTLE_TICKS / (SETTLE_TICKS + RODS_OUT_TICKS)
+			var out_from := minf(park + settle, lerpf(park, 1.0, share))
 			return 0.0 if up <= out_from else smoothstep(out_from, 1.0, up)
 		var part := ROLL_RODS * smoothstep(park + settle, park + TIP_UP, up)
 		if not bag.has("roll_tip"):
@@ -898,6 +900,13 @@ static func rolls(bag: Dictionary) -> bool:
 	return bag.get("rolls", false)
 
 
+## Whether the floor>pull of `bag` rolls or may yet: rolls(), or not decided
+## and stamped near a seat ("up_near", the face on its first tick; only those
+## roll, _apply_roll()).
+static func _may_roll(bag: Dictionary) -> bool:
+	return rolls(bag) or (not bag.has("rolls") and bag.get("up_near", false))
+
+
 ## 0 to 1 over `t` (0 to 1), still at both ends (smootherstep): a stand that
 ## eased out with smoothstep still moved 0.19 m on the last tick before the park.
 static func _eased(t: float) -> float:
@@ -908,9 +917,24 @@ static func _eased(t: float) -> float:
 ## Where the lift and the park of a floor>pull move of `bag` end (k): LIFT_END
 ## and UP_PARK_END, later when its bag was taken late ("park_took", _taken()),
 ## the park sooner when the walker moved during it ("park_cut", MOVED_M).
+## A move that will not roll (_may_roll()) and was taken so late that its
+## lift and park leave less than TAIL_MIN_TICKS (or TAIL_SHARE of what is left
+## after the take, if less) before k 1 has the two compressed alike to leave
+## it, so its settle, run-out and tip (from the park's end, _off_floor()) still
+## end at the pull's pose: first drawn 12 ticks late its park ended at k 1.13,
+## and the upright roller jumped to the pull at the move's end (Sol re-check
+## of 9543dc4). The move's length is the sim's and is not changed. One that
+## may still roll keeps them, as a rolled move is longer.
 static func up_ends(bag: Dictionary) -> Vector2:
-	var lift := maxf(LIFT_END, float(bag.get("park_took", 0.0)) + UP_PART)
+	var took := float(bag.get("park_took", 0.0))
+	var lift := maxf(LIFT_END, took + UP_PART)
 	var park := maxf(UP_PARK_END, lift + UP_PART)
+	var left := 1.0 - took
+	var tail := minf(TAIL_MIN_TICKS / TICKS_UP, TAIL_SHARE * left)
+	if not _may_roll(bag) and park + tail > 1.0 and took < 1.0:
+		var fit := (left - tail) / (park - took)
+		lift = took + (lift - took) * fit
+		park = took + (park - took) * fit
 	if bag.has("park_cut"):
 		park = minf(park, (bag["park_cut"] as Vector2).x + UP_CUT_TICKS / TICKS_UP)
 	return Vector2(lift, park)

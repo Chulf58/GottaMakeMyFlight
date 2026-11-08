@@ -11,9 +11,16 @@ extends GdUnitTestSuite
 ## that the pick-ups which must not change cannot roll.
 
 const UP := RollerPark.TICKS_UP
-## The most a not-rolled pick-up's rods may run out in one tick: a smoothstep
-## over RODS_OUT_TICKS steps at most 0.48 a tick.
-const RODS_STEP := 0.5
+## A late not-rolled pick-up planned to its end (frames a tick: 60 a second at
+## 1x over SimClock.TICK_RATE; the bar's own z with the rods in and their full
+## reach; the hand's grip, own frame): from its last frame to the pull's pose
+## it may step END_STEP_M and turn END_TURN_RAD.
+const FRAMES_A_TICK := 3
+const BAR_IN_Z := 0.4
+const REACH_Z := 0.5
+const GRIP := Vector3(-0.3, 0.8, 0.1)
+const END_STEP_M := 0.1
+const END_TURN_RAD := 0.15
 
 var _world: PassengerTestWorld
 
@@ -137,16 +144,13 @@ func test_a_late_take_keeps_the_rods_in_until_its_park_ends() -> void:
 
 
 ## Taken late and not rolling (no face here; the shower's door the same), first
-## drawn 9 or 12 ticks in (its park ending at up 0.94 or 1.13): its rods stay in
-## through the park, or to RODS_OUT_TICKS before the move's end when the park
-## leaves no room, then run out, never back in, all out as the move ends, no
-## tick running them out more than RODS_STEP: never held in to the end and
-## snapped to the pull's reach (Sol final re-check of af14ddf: drawn 12 ticks
-## late they stayed in to k 1), nor all run out in the park's last tick.
-## Control: a pick-up taken on time keeps SETTLE_TICKS after its park before
-## its rods move.
+## drawn 9 or 12 ticks in: its lift, park, settle and run-out are compressed
+## to fit before k 1 (up_ends()), so its park ends inside the move, its rods
+## stay in through the park and its settle, then run out, never back in, all
+## out as the move ends: never held in to the end and snapped to the pull's
+## reach. Control: a pick-up taken on time keeps SETTLE_TICKS after its park
+## before its rods move.
 func test_a_late_take_that_does_not_roll_runs_its_rods_out_by_its_end() -> void:
-	var room := 1.0 - RollerPark.RODS_OUT_TICKS / UP
 	for late: int in [9, 12]:
 		var bag := _bag(false)
 		bag["park_took"] = late / UP
@@ -154,34 +158,86 @@ func test_a_late_take_that_does_not_roll_runs_its_rods_out_by_its_end() -> void:
 		assert_bool(bag.has("rolls")).is_true()
 		assert_bool(RollerPark.rolls(bag)).is_false()
 		var park := RollerPark.up_ends(bag).y
-		var held_to := minf(park, room)
+		assert_float(park).override_failure_message("late%d park" % late).is_less(1.0)
 		var last := 0.0
-		var step := 0.0
 		var moved_at := INF
-		for n in range(late, int(UP) + 1):
-			var k := n / UP
+		for i in range(0, 65):
+			var k := late / UP + i * (1.0 - late / UP) / 64.0
 			var now := RollerPark.rods_t(k, bag)
 			var line := "late%d k %.4f" % [late, k]
-			if k <= held_to:
+			if k <= park:
 				assert_float(now).override_failure_message(line).is_equal(0.0)
 			elif now > 0.0:
 				moved_at = minf(moved_at, k)
 			assert_float(now).override_failure_message(line).is_greater_equal(last)
-			step = maxf(step, now - last)
 			last = now
 		print(
 			(
-				"late%d, not rolled: park ends %.4f, rods out from %.4f, %.3f at k 1, at most %.3f a tick"
-				% [late, park, moved_at, last, step]
+				"late%d, not rolled: park ends %.4f, rods out from %.4f, %.3f at k 1"
+				% [late, park, moved_at, last]
 			)
 		)
+		assert_float(moved_at).override_failure_message("late%d" % late).is_greater(park)
 		assert_float(last).override_failure_message("late%d" % late).is_equal_approx(1.0, 0.0001)
-		assert_float(step).override_failure_message("late%d" % late).is_less_equal(RODS_STEP)
 	var on_time := _bag(false)
 	on_time["park_took"] = 0.3
 	var settle := RollerPark.up_ends(on_time).y + RollerPark.SETTLE_TICKS / UP
 	assert_float(RollerPark.rods_t(settle, on_time)).is_equal(0.0)
 	assert_float(RollerPark.rods_t(settle + 0.01, on_time)).is_greater(0.0)
+
+
+## A not-rolled pick-up first drawn 9 or 12 ticks late, planned (RollerPark.plan())
+## on frames FRAMES_A_TICK a tick to its end: the drawn roller from the last
+## frame of the move to the first frame done (the pull's pose, `want`, where
+## the move ends) steps less than END_STEP_M and turns less than END_TURN_RAD
+## (Sol re-check of 9543dc4: drawn 12 late it still stood upright at k 1, then
+## jumped to the pull). The bar is drawn with the rods as rods_t() runs them
+## out, and the hand's target (world) is on the bar on every frame the rods
+## have started: they never move a bar the hand is still crossing to.
+func test_a_late_take_that_does_not_roll_ends_at_the_pull_pose() -> void:
+	var start := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(-0.34, 0.0, 0.07))
+	var want := Transform3D(Basis.IDENTITY, Vector3(-0.3, 0.0, -0.6))
+	var frames := int(UP) * FRAMES_A_TICK
+	for late: int in [9, 12]:
+		var bag := {
+			"kind": SecurityLooks.Kind.ROLLER,
+			"led": true,
+			"was": SecurityLooks.Home.FLOOR * 4,
+			"carry_from": SecurityLooks.Carry.PULL,
+			"carry": SecurityLooks.Carry.PULL,
+			"home": SecurityLooks.Home.HAND * 4,
+			"from": start,
+		}
+		RollerPark.stamp(bag, Transform3D.IDENTITY, NAN)
+		bag["park_took"] = late / UP
+		var lead := CarryLead.hand_of(bag["home"])
+		var last := Transform3D()
+		var worst_gap := 0.0
+		var started := 0
+		for f in range(late * FRAMES_A_TICK, frames):
+			var k := float(f) / frames
+			var bar_z := BAR_IN_Z + RollerPark.rods_t(k, bag) * REACH_Z
+			var body := {"bar_z": bar_z, "scale": 1.0, "grips": [GRIP, GRIP]}
+			var plan := RollerPark.plan(bag, k, start, want, Transform3D.IDENTITY, {}, body)
+			last = plan["xf"]
+			if RollerPark.rods_t(k, bag) > 0.0:
+				var bar := last * Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, bar_z)
+				var gap := (plan["targets"][lead] as Vector3).distance_to(bar)
+				worst_gap = maxf(worst_gap, gap)
+				started += 1
+		var step := last.origin.distance_to(want.origin)
+		var turn := last.basis.get_rotation_quaternion().angle_to(
+			want.basis.get_rotation_quaternion()
+		)
+		var park := RollerPark.up_ends(bag).y
+		print("late%d, not rolled: park ends %.4f" % [late, park])
+		print("late%d: last frame to done %.4f m %.4f rad" % [late, step, turn])
+		print("late%d: hand to bar %.4f m over %d frames" % [late, worst_gap, started])
+		var line := "late%d" % late
+		assert_float(step).override_failure_message(line).is_less(END_STEP_M)
+		assert_float(turn).override_failure_message(line).is_less(END_TURN_RAD)
+		assert_int(started).override_failure_message(line).is_greater(0)
+		assert_float(worst_gap).override_failure_message(line).is_less(0.001)
 
 
 ## A rolled roller runs its rods out ROLL_RODS of the way while it rolls upright
