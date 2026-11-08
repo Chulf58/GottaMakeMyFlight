@@ -319,14 +319,23 @@ func _seat_goes() -> void:
 
 ## Once the walker whose chair went has a route, a wall built on the right of
 ## its cell (its right for the way it goes), so the bag's hand for that way
-## (SecurityLooks.hand_of()) is the left. Kept: the tick it went up, whether the
-## park was in progress then, and the hand for the way after it.
+## (SecurityLooks.hand_of()) is the left. Bound for another gate chair near
+## by, the hand there is the chair's (ParkSide: the wall rule, else the free gap
+## between chair fronts, gap_hand(), not the way's), so a wall goes on the
+## right of that chair's front too, and the wall rule gives the left there as
+## well. Kept: the tick it went up, whether the park was in progress then, and
+## the hand for the way after it.
 func _wall_on_its_right() -> void:
 	var p := _on_time
 	var at := clampi(p.path_index, 0, p.path.size() - 2)
 	var right := SecurityLooks.world_dir(p.path[at + 1] - p.path[at]).cross(Vector3.UP)
 	var side := BuildGrid.SIDE_STEP.find(Vector2i(roundi(right.x), roundi(right.z)))
 	assert_bool(_world.sim.grid.apply(BuildEdit.place_wall(p.at, side)).ok).is_true()
+	if p.seat_cell != Passenger.NO_CELL and p.seat_front != Passenger.NO_CELL:
+		var out := p.seat_front - p.seat_cell
+		var chair_right := BuildGrid.SIDE_STEP.find(Vector2i(-out.y, out.x))
+		var made := _world.sim.grid.apply(BuildEdit.place_wall(p.seat_front, chair_right))
+		assert_bool(made.ok).is_true()
 	var bag := _views.carry_on_props().bag_state(p.id, 0)
 	var since := float(bag.get("since", -INF))
 	_walled = {
