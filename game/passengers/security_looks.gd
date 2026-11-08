@@ -53,6 +53,9 @@ const KIND_CARRY := {
 
 ## How far an unpacking or picking-up passenger steps toward its table.
 const STEP_M := 0.15
+## The step to the tray table eases out over this much of the arch walk, so
+## the body walks off it into the arch rather than sideways (setting_off()).
+const SETOFF_EASE_M := 0.3
 ## Where a held-back queue front stands, from the unpack cell's centre.
 const QUEUE_EDGE_M := 0.5
 ## A passenger in ARCH this near the unpack centre still holds the queue back:
@@ -117,9 +120,10 @@ static func world_dir(step: Vector2i) -> Vector3:
 
 
 ## Where `p` wants to be drawn, from its sim position: a step toward the table
-## at UNPACK and PICKUP, held back at the queue edge as the header says, and
-## zero otherwise. PassengerViews moves the drawn offset toward it at walking
-## speed.
+## at UNPACK and PICKUP, held back at the queue edge as the header says, the
+## step to the tray table easing out as it sets off into the arch
+## (setting_off()), and zero otherwise. PassengerViews moves the drawn offset
+## toward it at walking speed, and sets it exactly while setting off.
 static func target_offset(sim: PassengerSim, p: Passenger) -> Vector3:
 	var lane := lane_of(sim, p)
 	if lane.is_empty():
@@ -131,7 +135,69 @@ static func target_offset(sim: PassengerSim, p: Passenger) -> Vector3:
 	match p.security_phase:
 		SecurityRuntime.Phase.UNPACK, SecurityRuntime.Phase.PICKUP:
 			return world_dir(lane["side"]) * STEP_M
+	if setting_off(sim, p):
+		var walked := _arch_walked_mm(p) / (SETOFF_EASE_M * 1000.0)
+		return world_dir(lane["side"]) * STEP_M * (1.0 - smoothstep(0.0, 1.0, walked))
 	return Vector3.ZERO
+
+
+## Whether `p` walks its first pass's arch walk from the unpack cell (ARCH, the
+## path still the one from the unpack cell to the arch cell). The step to the
+## tray table eases out over its first SETOFF_EASE_M (target_offset()), set
+## from how far it has walked, and it faces as setoff_yaw() says.
+static func setting_off(sim: PassengerSim, p: Passenger) -> bool:
+	if p.stage != Passenger.Stage.SECURITY or p.security_phase != SecurityRuntime.Phase.ARCH:
+		return false
+	var lane := lane_of(sim, p)
+	return not lane.is_empty() and p.path.size() >= 2 and p.path[0] == lane["unpack"]
+
+
+## The yaw a lane passenger is drawn with from UNPACK until it walks into the
+## arch, or NAN where it does not apply (PassengerViews then turns it as any
+## other). It turns from the arch's axis to the tray table over
+## PassengerTurns.TURN_TICKS from the start of UNPACK, and back to the axis
+## over as many ticks from the tick its last bag goes in the tray
+## (LANE_UNPACK_BAG_TICKS of work left), so it stands turned most of the way
+## when ARCH starts and finishes the turn on its first strides, read from how
+## far it has walked at its pace. A one-bag passenger turns back before it
+## has fully faced the table. Turned only once the walk began, the body was
+## still 16 to 51 degrees off the axis at the arch's entry and its feet
+## reached 0.45 to 0.65 m out against a 0.38 m half opening (finding
+## why-does-the-body-reach-past-the-security-lane-arch-s-0-38-m). Set from the
+## work left and the walk, never stepped from the yaw drawn before, so a view
+## first drawn mid-turn (a load, a new view) draws the same yaw.
+static func setoff_yaw(sim: PassengerSim, p: Passenger) -> float:
+	if p.stage != Passenger.Stage.SECURITY:
+		return NAN
+	var lane := lane_of(sim, p)
+	if lane.is_empty():
+		return NAN
+	var turn := float(PassengerTurns.TURN_TICKS)
+	var toward := 1.0
+	var back := 0.0
+	if p.security_phase == SecurityRuntime.Phase.UNPACK:
+		var done := SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p) - p.security_work
+		toward = smoothstep(0.0, 1.0, done / turn)
+		back = SecurityRuntime.LANE_UNPACK_BAG_TICKS - p.security_work
+	elif setting_off(sim, p):
+		# UNPACK is last drawn with one tick of work left, and ARCH's first tick
+		# has walked one step already.
+		var pace := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
+		back = SecurityRuntime.LANE_UNPACK_BAG_TICKS - 1 + _arch_walked_mm(p) / float(pace)
+	else:
+		return NAN
+	var share := minf(toward, 1.0 - smoothstep(0.0, 1.0, back / turn))
+	var axis := -Vector2(lane["front"])
+	var table := Vector2(lane["side"])
+	return lerp_angle(atan2(axis.x, axis.y), atan2(table.x, table.y), share)
+
+
+## How far `p` has walked along its path, in millimetres.
+static func _arch_walked_mm(p: Passenger) -> int:
+	var mm := p.seg_mm
+	for i in mini(p.path_index, p.path.size() - 1):
+		mm += Passenger.segment_mm(p.path[i], p.path[i + 1])
+	return mm
 
 
 ## The ground direction (x, z) `p` faces while it works, or ZERO to keep its
