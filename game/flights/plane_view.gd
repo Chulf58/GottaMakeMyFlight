@@ -97,6 +97,9 @@ var _paths: Dictionary = {}
 var _paths_stand := 0
 var _paths_gate := ""
 var _pivot: Node3D
+## The model on show and its far silhouette, each placed by model_position_at().
+var _model: Node3D
+var _silhouette: Node3D
 var _far_shadow: Node3D
 var _far_material: StandardMaterial3D
 
@@ -140,6 +143,7 @@ func update_pose() -> void:
 	show_model(model_of(flight_id))
 	phase = shown[slot]["phase"]
 	transform = shown[slot]["transform"]
+	_set_model_position(model_position_at(phase, transform, class_of(flight_id)))
 	_place_far_shadow()
 
 
@@ -344,17 +348,37 @@ func show_model(model: String) -> void:
 	for child in _far_shadow.get_children():
 		_far_shadow.remove_child(child)
 		child.queue_free()
-	_pivot.add_child(_new_model())
-	var silhouette := _new_model()
-	_far_shadow.add_child(silhouette)
-	for mesh in silhouette.find_children("*", "MeshInstance3D", true, false):
+	_model = _new_model()
+	_pivot.add_child(_model)
+	_silhouette = _new_model()
+	_far_shadow.add_child(_silhouette)
+	for mesh in _silhouette.find_children("*", "MeshInstance3D", true, false):
 		mesh.material_override = _far_material
 		mesh.material_overlay = null
 		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-## One instance of the model on show, its passenger door where the stand's is
-## (PlaneClasses.stand_offset).
+## Where the model on show sits under a pose of `at_phase` (a pose_at phase)
+## for a `plane_class` flight: FlightPose.model_position() on the ground and at
+## the stand, so a parked plane has its door at the stand's door; its box
+## centred on the pose point (PlaneModels "model_offset") in the sky and on the
+## runway.
+func model_position_at(at_phase: int, pose: Transform3D, plane_class: String) -> Vector3:
+	var centred: Vector3 = PlaneModels.PLANES[model_name]["model_offset"]
+	if not ON_GROUND.has(REST_AFTER.get(at_phase, at_phase)):
+		return centred
+	var stand := _path(FlightSim.State.PUSHBACK, plane_class)[0]
+	var facing := _entry_dir(FlightSim.State.PUSHBACK, plane_class)
+	return FlightPose.model_position(model_name, pose, stand, facing)
+
+
+func _set_model_position(at: Vector3) -> void:
+	_model.position = at
+	_silhouette.position = at
+
+
+## One instance of the model on show, parked: its passenger door where the
+## stand's is (PlaneClasses.stand_offset). update_pose() moves it from there.
 func _new_model() -> Node3D:
 	var packed: PackedScene = PLANE_SCENES[model_name]
 	var model: Node3D = packed.instantiate()
