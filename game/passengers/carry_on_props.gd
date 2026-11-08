@@ -321,9 +321,8 @@ func sync() -> void:
 			var lane_front := up and sim.queue_of(p.station).find(p.id) == 0
 			var heading := views.walk_heading(p)
 			var turn := RollerPark.tip_wait(node.rotation.y, heading, was[i], up, lane_front)
-			RollerPark.queue_stand(
-				was[i], kinds[i], stands, _tick(), RollerPark.still_wait(p), turn, node.rotation.y
-			)
+			var wait := QueueStandWait.ticks(sim, p)
+			RollerPark.queue_stand(was[i], kinds[i], stands, _tick(), wait, turn, node.rotation.y)
 			# Its side, from the sim (ParkSide.choose_stand()), before hold_park() holds it.
 			ParkSide.choose_stand(sim, p, was[i])
 			# How far out a seat park stands it for each hand, by the body and a

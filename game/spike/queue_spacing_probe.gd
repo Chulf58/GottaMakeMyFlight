@@ -19,6 +19,10 @@ extends SceneTree
 ## Rows: "moveup" frames (either member walking) and "still" frames.
 ## HOLDERS prints the most holders seen at one station and the frames on
 ## which standing holders shared a cell (holders N on N distinct cells).
+## STANDS counts the queue stands of rollers (RollerPark.queued()) and those
+## whose tip started within SHORT_STOOD ticks of the roller standing up
+## (QUEUE_STAND_TICKS into the move): a stand and a tip at once (board
+## e7028790; info, for comparing builds).
 ## Pass (each printed with the values it compared): in the lane column on
 ## moveup frames no body is within ROLLER_CLEAR_M of the other's roller and no
 ## two bodies are at BODY_ZERO_M. Control: lane members set off to move up
@@ -41,6 +45,11 @@ extends SceneTree
 ## OTHER's body (PlateSight; a control tag no mesh has lands on nothing), else
 ## the other side and then a high view are tried; PROBE_INVALID unless every
 ## frame is saved. One contact sheet of the strip is saved too.
+##
+## With --standplate (windowed, board e7028790): the same strip, TIP_SHOTS
+## ticks from the tick a lane walker pulling a roller stops behind a member
+## standing still (QueueStandWait.ticks() 0, so its stand starts at once),
+## framed on it, its roller and the member behind it within STAND_NEAR_M.
 ##
 ## Run: Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
 ##   --path game -s res://spike/queue_spacing_probe.gd -- --place=checkin \
@@ -73,6 +82,10 @@ const STRIP_EVERY := 15
 const STRIP_HOLDERS := 3
 ## Ticks after a tip is marked that --tipplate frames are taken.
 const TIP_SHOTS: Array[int] = [0, 1, 2, 3, 4, 6]
+## A queue stand whose tip starts this few ticks after the roller is up is short.
+const SHORT_STOOD := 4.0
+## --standplate: the member behind is at most this far from the subject.
+const STAND_NEAR_M := 2.5
 
 var _seed := 0
 var _place := "checkin"
@@ -99,6 +112,9 @@ var _leaver_traced := 0
 ## Queue stand tips traced (_tip_trace()), by "id since".
 var _tips := {}
 var _tipped := 0
+## Queue stands seen, by "id since": the ticks into the move its tip started,
+## or -1.0 while it has not tipped.
+var _stands := {}
 ## Station -> the passenger who last left it.
 var _leaver := {}
 var _stage := {}
@@ -129,6 +145,8 @@ var _tip_shots: Array[Image] = []
 ## a lane member behind another (framed with the one ahead) or of a desk's
 ## lane front (framed with the desk's last leaver).
 var _tip_auto := ""
+## --standplate: the strip is of a stop behind a standing member (_stand_pick()).
+var _stand_auto := false
 
 
 func _initialize() -> void:
@@ -150,6 +168,9 @@ func _initialize() -> void:
 			var pick := arg.get_slice("=", 1)
 			_tip_auto = pick if pick in ["corner", "front"] else ""
 			_tip_id = -1 if _tip_auto != "" else int(pick)
+		elif arg == "--standplate":
+			_stand_auto = true
+			_tip_id = -1
 		elif arg.begins_with("--with="):
 			_tip_with = int(arg.get_slice("=", 1))
 	if _extra < 0:
@@ -233,6 +254,36 @@ func _tip_pick(p: Passenger) -> void:
 	)
 
 
+## --standplate: takes lane walker `p` of `station` as the subject on the tick
+## it stops pulling a roller behind a member standing still (no stand wait),
+## with the member behind it within STAND_NEAR_M, and marks the strip's start.
+func _stand_pick(p: Passenger, station: int) -> void:
+	if not _stand_auto or _tip_mark >= 0 or p.is_moving() or not _moving.get(p.id, false):
+		return
+	if not _pulls_roller(p) or QueueStandWait.ticks(_sim, p) != 0:
+		return
+	var members := _sim.queue_of(station) + _sim.holding_of(station)
+	var i := members.find(p.id)
+	if i < 0 or i + 1 >= members.size():
+		return
+	var body := _views.node_for(p.id)
+	var behind := _views.node_for(members[i + 1])
+	if body == null or behind == null:
+		return
+	var gap := body.global_position.distance_to(behind.global_position)
+	if gap > STAND_NEAR_M:
+		return
+	_tip_id = p.id
+	_tip_with = members[i + 1]
+	_tip_mark = _clock.tick
+	print(
+		(
+			"STANDPICK t%d id %d behind %d, followed by %d at %.2f m"
+			% [_clock.tick, p.id, members[i - 1], _tip_with, gap]
+		)
+	)
+
+
 ## --tipplate: marks the tick the walker's queue stand tip is set, then takes a
 ## frame on each of TIP_SHOTS ticks after it.
 func _tip_step() -> void:
@@ -309,7 +360,7 @@ func _tip_frame(at: int) -> Image:
 		if await _tip_seen(body, other, roller, v):
 			var img := await PlateSight.grab(self)
 			DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_REL))
-			var file := "/tip_%s_s%d_id%d_t%d.png" % [_place, _seed, _tip_id, _clock.tick]
+			var file := "/%s_%s_s%d_id%d_t%d.png" % [_kind(), _place, _seed, _tip_id, _clock.tick]
 			img.save_png(ProjectSettings.globalize_path(OUT_REL + file))
 			print("PLATE saved %s (view %d)" % [ProjectSettings.globalize_path(OUT_REL + file), v])
 			return img
@@ -390,7 +441,7 @@ func _tip_sheet() -> void:
 		img.convert(Image.FORMAT_RGBA8)
 		img.resize(w, h)
 		sheet.blit_rect(img, Rect2i(0, 0, w, h), Vector2i((i % 3) * w, (i / 3) * h))
-	var file := "/tip_%s_s%d_id%d_sheet.png" % [_place, _seed, _tip_id]
+	var file := "/%s_%s_s%d_id%d_sheet.png" % [_kind(), _place, _seed, _tip_id]
 	sheet.save_png(ProjectSettings.globalize_path(OUT_REL + file))
 	print("SHEET saved %s" % ProjectSettings.globalize_path(OUT_REL + file))
 
@@ -564,6 +615,7 @@ func _watch() -> void:
 		_stage[id] = p.stage
 		_station_of[id] = p.station
 		_tip_trace(p)
+		_count_stand(p)
 		if _tip_auto != "" and _tip_mark < 0:
 			_tip_pick(p)
 	for station in stations:
@@ -578,6 +630,7 @@ func _watch() -> void:
 			if p.is_moving() and not _moving.get(id, false):
 				_move_ups += 1
 				_candidate(lane, id)
+			_stand_pick(p, station)
 			_moving[id] = p.is_moving()
 			if not p.is_moving() and p.at == _line(station)[lane.find(id)]:
 				# Alone on its own place once: from here it moves up as any lane walker.
@@ -674,6 +727,18 @@ func _trace_holders(station: int, a: int, b: int) -> void:
 			]
 		)
 	print(text)
+
+
+## Notes the queue stand of `p`'s roller in _stands, and when its tip starts.
+func _count_stand(p: Passenger) -> void:
+	if _views.node_for(p.id) == null:
+		return
+	var bag := _views.carry_on_props().bag_state(p.id, 0)
+	if not RollerPark.queued(bag):
+		return
+	var key := "%d %.1f" % [p.id, float(bag["since"])]
+	if float(_stands.get(key, -1.0)) < 0.0:
+		_stands[key] = float(bag.get("queue_tip", -1.0))
 
 
 ## TIPTRACE once per queue stand tip (board d8a66218): the walker's stage, its
@@ -843,6 +908,18 @@ func _report() -> int:
 			% [_holders_max, _holder_frames, _holders_shared]
 		)
 	)
+	var tipped := 0
+	var short := 0
+	for tip: float in _stands.values():
+		if tip >= 0.0:
+			tipped += 1
+			short += int(tip < RollerPark.QUEUE_STAND_TICKS + SHORT_STOOD)
+	print(
+		(
+			"STANDS %s queue stands %d, tipped %d, tipped within %.0f ticks of standing up %d"
+			% [_place, _stands.size(), tipped, SHORT_STOOD, short]
+		)
+	)
 	var lane_frames: int = (_rows.get("lane moveup", [0]) as Array)[0]
 	print(
 		"CONTROL move-ups %d (> 0), lane pair frames moving up %d (> 0)" % [_move_ups, lane_frames]
@@ -866,6 +943,11 @@ func _report() -> int:
 	)
 	print("PROBE done failed=%s" % failed)
 	return 1 if failed else 0
+
+
+## The strip's file name prefix: "stand" for --standplate, else "tip".
+func _kind() -> String:
+	return "stand" if _stand_auto else "tip"
 
 
 ## Whether `p` has a roller among its bags (SecurityLooks.bag_kind()).

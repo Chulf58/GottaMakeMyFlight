@@ -468,15 +468,10 @@ static func tip_wait(
 	return turn
 
 
-## The still ticks `p` waits before its roller is stood up (queue_stand()).
-static func still_wait(p: Passenger) -> int:
-	return FILE_STILL_TICKS if p.stage in FILE_STAGES else STILL_TICKS
-
-
 ## One sim tick (`now`) of the queue stand (the header's QUEUE_STAGES) of `bag`
 ## (CarryOnProps' record, of a bag of `kind` now): `stands`, its walker stands
 ## still in a queue with the roller wanted in the pull (not lifted). Counts the
-## still ticks ("still_from"); after `wait` of them (still_wait()) a roller
+## still ticks ("still_from"); after `wait` of them (QueueStandWait) a roller
 ## settled in the pull is marked for a new move ("queue_still", restamps(), its
 ## "changed" now), which stamp() makes a queue stand. While that move runs its
 ## length is kept QUEUE_AHEAD_TICKS past `now`, and the first tick the walker no
