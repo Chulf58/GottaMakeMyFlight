@@ -681,8 +681,11 @@ func load_problem(data: Dictionary) -> String:
 
 
 ## Why a FlightSnapshot.load() result could not be installed with the gates'
-## grounds now: a live flight at a stand other than its gate's, or a live
-## flight its day's re-plan gives no taxi plan; "" for none.
+## grounds now: a live flight at a stand other than its gate's, a live flight
+## or a running or reserving contract too big for its gate's max_class, or a
+## request of any day the sim will fly (FlightPlans.horizon(): live and landed
+## flights, and every running or reserving contract's occurrences) that has no
+## taxi plan; "" for none.
 func _load_plan_problem(loaded: Dictionary) -> String:
 	var grounds := gate_grounds()
 	var world := {
@@ -699,14 +702,32 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 		var ground: Dictionary = grounds.get(flight["gate"], {})
 		if ground.is_empty() or ground["stand"] != flight["stand"]:
 			return "flight %s is not at its gate's stand" % flight["id"]
-	for day in FlightPlans.live_days(world):
+		var plane_class := FlightPlans.flight_class(world, flight)
+		if not FlightGround.class_fits(plane_class, ground["max_class"]):
+			return (
+				"flight %s needs a %s gate, but gate %s takes %s"
+				% [flight["id"], plane_class, flight["gate"], ground["max_class"]]
+			)
+	for contract: Dictionary in loaded["contracts"]:
+		if not FlightPlans.runs(world, contract["id"]):
+			continue
+		var ground: Dictionary = grounds.get(contract["gate"], {})
+		if not FlightGround.class_fits(contract["plane_size"], ground.get("max_class", "")):
+			return (
+				"contract %s needs a %s gate, but gate %s takes %s"
+				% [
+					contract["id"],
+					contract["plane_size"],
+					contract["gate"],
+					ground.get("max_class", "none")
+				]
+			)
+	for day in FlightPlans.horizon(world):
 		var plans := _plans.plan_day(world, day)
-		for flight: Dictionary in loaded["flights"]:
-			if FlightPlans.day_of(flight["starts"]) != day or flight["contract"] == "":
-				continue
-			var result: Dictionary = plans[flight["id"]]
+		for request: Dictionary in FlightPlans.requests(world, day):
+			var result: Dictionary = plans[request["id"]]
 			if not result["ok"]:
-				return "flight %s has no taxi plan: %s" % [flight["id"], _ground_text(result)]
+				return "flight %s has no taxi plan: %s" % [request["id"], _ground_text(result)]
 	return ""
 
 

@@ -13,6 +13,8 @@ extends GdUnitTestSuite
 const SEED := 4_401_017
 const EAST := Vector2i(44, 0)
 const DESK_EAST := Vector2i(63, 115)
+## In gate A's medium swing square but not its small one (test_stand_envelope.gd).
+const MEDIUM_CELL := Vector2i(32, 100)
 const STARTER := FlightSim.DEFAULT_ID
 
 var _main: Node
@@ -166,3 +168,38 @@ func test_a_save_whose_flights_do_not_re_plan_is_refused_while_staged() -> void:
 	print("refused: %s" % _save.message_text())
 	assert_str(_save.message_text()).contains("is not at its gate's stand")
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+
+
+## Gate A is a small gate (a floor built in the medium swing) in the saved
+## grid, gates and stands, while the saved flights hold a running medium
+## contract at gate A: staging refuses the save on the contract's class and
+## nothing is installed. (The build guard would not let the player shrink the
+## gate under a booked medium plane, so the save is put together from two.) A
+## control: the unmixed save loads.
+func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() -> void:
+	var floor_edit := BuildEdit.paint_floor(MEDIUM_CELL, BuildGrid.FLOOR_TILE, 1)
+	assert_bool(_mode.grid.apply(floor_edit).ok).is_true()
+	assert_str(_gates.max_class("A")).is_equal(PlaneClasses.SMALL)
+	var small := _taken()
+	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(MEDIUM_CELL)).ok).is_true()
+	var board := (_main.get_node("OfferDesk") as OfferDesk).board
+	var taken := ""
+	for offer in board.open_offers():
+		var fits: bool = offer["plane_size"] == PlaneClasses.MEDIUM
+		if taken == "" and fits and _flights.accept_problem(OfferBoard.terms_of(offer)) == "":
+			assert_bool(board.accept(offer["id"], _flights)).is_true()
+			taken = offer["id"]
+	assert_str(taken).is_not_empty()
+	assert_str(_flights.contract_of(taken)["gate"]).is_equal("A")
+	var wide := _taken()
+	var narrow := wide.duplicate(true)
+	for key in ["grid", "gates", "apron"]:
+		narrow[key] = small[key]
+	for i in 5:
+		SaveTestKit.step(_main)
+	var before := SaveTestKit.checksum(_main)
+	assert_bool(_save.load_world(narrow)).is_false()
+	print("refused: %s" % _save.message_text())
+	assert_str(_save.message_text()).contains("contract %s needs a medium gate" % taken)
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	assert_bool(_save.load_world(wide)).is_true()

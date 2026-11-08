@@ -93,6 +93,24 @@ static func days_from(world: Dictionary, from_day: int) -> Array[int]:
 	return out
 
 
+## Every day a sim in `world` can fly or plan: from the earliest of the live and
+## landed flights' days and the running and reserving contracts' next days, on
+## as days_from() gives; none for a world with neither.
+static func horizon(world: Dictionary) -> Array[int]:
+	var first := -1
+	var days := live_days(world)
+	if not days.is_empty():
+		first = days[0]
+	for contract: Dictionary in world["contracts"]:
+		if runs(world, contract["id"]):
+			var next := int(world["next_day"][contract["id"]])
+			first = next if first < 0 else mini(first, next)
+	var out: Array[int] = []
+	if first >= 0:
+		out = days_from(world, first)
+	return out
+
+
 ## The days of the live and landed flights, sorted.
 static func live_days(world: Dictionary) -> Array[int]:
 	var seen := {}
