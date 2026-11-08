@@ -84,6 +84,10 @@ var _holders_max := 0
 var _holders_shared := 0
 var _holder_frames := 0
 var _traced := 0
+var _leaver_traced := 0
+## Queue stand tips traced (_tip_trace()), by "id since".
+var _tips := {}
+var _tipped := 0
 ## Station -> the passenger who last left it.
 var _leaver := {}
 var _stage := {}
@@ -321,6 +325,7 @@ func _watch() -> void:
 			_serve(_station_of[id])
 		_stage[id] = p.stage
 		_station_of[id] = p.station
+		_tip_trace(p)
 	for station in stations:
 		var lane := _sim.queue_of(station)
 		for id in _sim.holding_of(station):
@@ -431,6 +436,41 @@ func _trace_holders(station: int, a: int, b: int) -> void:
 	print(text)
 
 
+## TIPTRACE once per queue stand tip (board d8a66218): the walker's stage, its
+## drawn yaw and way as it walks off, how far it turns (+ left), the roller's
+## hand (0 right) and the ticks the tip waits.
+func _tip_trace(p: Passenger) -> void:
+	var node := _views.node_for(p.id)
+	if node == null or _tipped >= TRACES * 4:
+		return
+	var bag := _views.carry_on_props().bag_state(p.id, 0)
+	if not RollerPark.queued(bag) or not bag.has("queue_tip"):
+		return
+	var key := "%d %.1f" % [p.id, float(bag["since"])]
+	if _tips.has(key):
+		return
+	_tips[key] = true
+	_tipped += 1
+	var heading := _views.walk_heading(p)
+	var at := float(_clock.tick) - float(bag["since"])
+	print(
+		(
+			"TIPTRACE t%d %d st%d at %s yaw %.2f way %s turn %.2f hand %d waits %.1f"
+			% [
+				_clock.tick,
+				p.id,
+				p.stage,
+				p.at,
+				node.rotation.y,
+				heading,
+				angle_difference(node.rotation.y, atan2(heading.x, heading.y)),
+				CarryLead.hand_of(int(bag.get("place", 0))),
+				float(bag["queue_tip"]) - at
+			]
+		)
+	)
+
+
 func _serve(station: int) -> void:
 	(_served.get_or_add(station, []) as Array).append(_clock.tick)
 
@@ -457,6 +497,11 @@ func _measure(a: int, b: int, leaver := false) -> void:
 	if traced and _traced < TRACES and d["roller"] < ROLLER_CLEAR_M:
 		_traced += 1
 		_trace(a, b, d)
+	# Leaver frames are traced on a budget of their own (board d8a66218): the
+	# held rows spend TRACES early in a run, before the first desk leaver.
+	if leaver and _leaver_traced < TRACES and d["roller"] < ROLLER_CLEAR_M:
+		_leaver_traced += 1
+		_trace(a, b, d)
 	var row: Array = _rows.get_or_add(key, [0, INF, 0, INF, 0, ""])
 	row[0] += 1
 	if d["body"] < row[1]:
@@ -479,10 +524,21 @@ func _trace(a: int, b: int, d: Dictionary) -> void:
 		var node := _views.node_for(pair[0])
 		var other := _views.node_for(pair[1]).global_position
 		var near := INF
+		# Where the body and its roller are drawn (x, z), so a trace says which
+		# way the roller lies from its own body (board d8a66218).
+		var bag := "none"
 		for roller in QueueSpacing.rollers(_views, _sim, pair[0]):
 			near = minf(near, QueueSpacing.least(QueueSpacing.surface(roller), other))
+			var local := node.global_transform.affine_inverse() * roller.global_position
+			bag = (
+				"(%.2f, %.2f) local (%.2f, %.2f)"
+				% [roller.global_position.x, roller.global_position.z, local.x, local.z]
+			)
 		line += (
-			" | %d st%d at %s moving %s halt %d station %d yaw %.2f its roller to %d %.3f"
+			(
+				" | %d st%d at %s moving %s halt %d station %d yaw %.2f drawn (%.2f, %.2f)"
+				+ " roller %s its roller to %d %.3f"
+			)
 			% [
 				pair[0],
 				p.stage,
@@ -491,6 +547,9 @@ func _trace(a: int, b: int, d: Dictionary) -> void:
 				p.halt_tick,
 				p.station,
 				node.rotation.y,
+				node.global_position.x,
+				node.global_position.z,
+				bag,
 				pair[1],
 				near
 			]

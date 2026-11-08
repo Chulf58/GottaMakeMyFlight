@@ -425,11 +425,29 @@ static func filed_still(sim: PassengerSim, p: Passenger) -> bool:
 ## whose body is drawn facing `yaw` on the tick it walks off and whose way is
 ## `heading` (PassengerViews.walk_heading(), x and z): PassengerTurns.TURN_TICKS
 ## when it faces more than TIP_TURN_RAD away (it turns as it sets off), else 0.
-static func tip_wait(yaw: float, heading: Vector2) -> float:
+## For a walker moving up in its queue (`moving_up`, its stage one of
+## QUEUE_STAGES) with `bag` (CarryOnProps' record of the stood roller), a turn
+## toward the side the roller stands on gives minus TURN_TICKS: the tip goes at
+## once and the move is held as long as a waiting one (queue_stand()). Held
+## stood through that turn, the roller was carried round ahead of the body into
+## the guest in front at a hold-line corner, and the new check-in front's into
+## the leaver crossing in front of it (0.20 to 0.22 m from their bodies, board
+## d8a66218). A walker leaving its counter or its gate spot keeps the wait: the
+## queue it leaves stands behind it on that side, and a desk leaver tipping at
+## once swept its roller 0.05 m from the new front.
+static func tip_wait(yaw: float, heading: Vector2, bag := {}, moving_up := false) -> float:
 	if heading == Vector2.ZERO:
 		return 0.0
-	var off := absf(angle_difference(yaw, atan2(heading.x, heading.y)))
-	return float(PassengerTurns.TURN_TICKS) if off > TIP_TURN_RAD else 0.0
+	var off := angle_difference(yaw, atan2(heading.x, heading.y))
+	if absf(off) <= TIP_TURN_RAD:
+		return 0.0
+	var turn := float(PassengerTurns.TURN_TICKS)
+	var place := int(bag.get("place", -1))
+	if moving_up and place >= 0 and place / 4 == SecurityLooks.Home.HAND:
+		# A turn to the left raises the yaw (yaw 0 faces +z, its left is +x).
+		if (off > 0.0) == (CarryLead.hand_of(place) == 1):
+			return -turn
+	return turn
 
 
 ## The still ticks `p` waits before its roller is stood up (queue_stand()).
@@ -446,7 +464,8 @@ static func still_wait(p: Passenger) -> int:
 ## length is kept QUEUE_AHEAD_TICKS past `now`, and the first tick the walker no
 ## longer stands starts its tip ("queue_tip", ticks into the move), the move
 ## then ending with it. The tip waits `turn` ticks (tip_wait()) while the body
-## turns toward its way.
+## turns toward its way; a `turn` below zero tips at once and keeps the move
+## on for as long as that wait.
 static func queue_stand(
 	bag: Dictionary,
 	kind: SecurityLooks.Kind,
@@ -470,10 +489,15 @@ static func queue_stand(
 		if stands:
 			bag["ticks"] = maxf(CarryLead.ticks_of(bag), at + QUEUE_AHEAD_TICKS)
 			return
-		bag["queue_tip"] = at + turn
+		# A turn toward the roller's side (tip_wait() below zero) tips at once,
+		# the move ending when a waiting tip's would, so its hold on the hand
+		# (hold_park(), PullSide.holds()) lasts through the turn: ended with the
+		# tip, a change of hand to hand_of()'s right after it went mid-turn and
+		# stepped the bag 1.49 m against the body (test_roller_queue_stand).
+		bag["queue_tip"] = at + maxf(turn, 0.0)
 		bag["queue_tip_yaw"] = yaw
 		bag["queue_tip_ticks"] = QUEUE_TIP_TICKS * (1.0 + _tip_gap(bag, yaw) / PI)
-		bag["ticks"] = at + turn + tip_ticks(bag)
+		bag["ticks"] = at + absf(turn) + tip_ticks(bag)
 		return
 	if not stands or now - float(bag["still_from"]) < wait or bag.has("queue_still"):
 		return
