@@ -72,6 +72,9 @@ const CrossingBodies := preload("res://spike/crossing_bodies.gd")
 const OUT_REL := "res://../tools/blender/out/security-booth"
 const CLOSE_OUT_REL := "res://../tools/blender/out/carry-selfclip"
 const REACH_OUT_REL := "res://../tools/blender/out/scanner_reach"
+## The arch's entry along its axis from the arch's centre (z, metres), in
+## front of the posts: a walker and a runner are plated close here once each.
+const ENTRY_Z := [0.40, 0.60]
 const MAIN_SCENE := "res://main/main.tscn"
 const RAY := Vector3(0.0013, 1.0, 0.0007)
 const MARGIN_PX := 8.0
@@ -464,6 +467,7 @@ func _cross() -> void:
 	var spawns := 0
 	var next_send := _clock.tick
 	var stop := Time.get_ticks_msec() + RUN_LIMIT_MS
+	_hold_runners_late()
 	_clock.ticked.connect(_on_tick)
 	while Time.get_ticks_msec() < stop:
 		await RenderingServer.frame_post_draw
@@ -477,11 +481,6 @@ func _cross() -> void:
 			_send()
 			spawns += 1
 			next_send = _clock.tick + SEND_GAP_TICKS
-		# Runners are kept late (the sim's beat may clear it) until cleared.
-		for id: int in _runners:
-			var runner := _sim.get_passenger(id)
-			if runner != null and runner.stage <= Passenger.Stage.SECURITY:
-				runner.late = true
 		for id in _sim.passenger_ids():
 			_check(id)
 		for id in _sent:
@@ -675,6 +674,31 @@ func _send() -> void:
 		_runners[id] = true
 		p.late = true
 	print("SEND passenger=%d kinds=%s role=%s" % [id, [kind, SecurityLooks.bag_kind(p, 1)], traits])
+
+
+## Keeps the runners late on every tick until they are cleared: the sim's beat
+## sets `late` from its forecast at the end of its tick, so the hold is
+## connected to the clock right after the sim and before the views sync. Held
+## once a frame instead (as before), a runner was drawn walking on the ticks
+## between a beat and the next frame, flipping its clip between run and walk
+## and starting the crossfade over (finding
+## why-does-the-body-reach-past-the-security-lane-arch-s-0-38-m).
+func _hold_runners_late() -> void:
+	var hold := func(_tick: int) -> void:
+		for id: int in _runners:
+			var runner := _sim.get_passenger(id)
+			if runner != null and runner.stage <= Passenger.Stage.SECURITY:
+				runner.late = true
+	var links := _clock.ticked.get_connections()
+	for link in links:
+		_clock.ticked.disconnect(link["callable"])
+	for link in links:
+		_clock.ticked.connect(link["callable"], link["flags"])
+		if (link["callable"] as Callable).get_object() == _sim:
+			_clock.ticked.connect(hold)
+	print("LATE_HOLD after_sim=%s links=%d" % [_clock.ticked.is_connected(hold), links.size()])
+	if not _clock.ticked.is_connected(hold):
+		_invalid("the runners' late hold found no sim tick on the clock")
 
 
 ## One frame of passenger `id` against every booth it is near.
@@ -999,6 +1023,16 @@ func _reach_frame(
 		_plate_task = true
 		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
 		_plate_reach.call_deferred(id, state, booth)
+	# One walker and one runner plated at the arch's entry, where the widest
+	# feet were before the set-off turn (finding
+	# why-does-the-body-reach-past-the-security-lane-arch-s-0-38-m).
+	var entry := "entry_runner" if _runners.has(id) else "entry_walker"
+	var at_entry := local.z >= ENTRY_Z[0] and local.z <= ENTRY_Z[1] and step_mm > 0
+	if at_entry and pass_key == "arch_first" and not _reach_plated.has(entry) and not _plate_task:
+		_reach_plated[entry] = false
+		_plate_task = true
+		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
+		_plate_reach.call_deferred(id, entry, booth)
 
 
 ## The frame's state for the max-reach diagnostic: stopped (no drawn step over
@@ -1108,6 +1142,9 @@ func _report_reach() -> void:
 					)
 				)
 	print("REACH_TOTAL max_frame_states=%s plated=%s" % [total, _reach_plated])
+	for entry in ["entry_walker", "entry_runner"]:
+		if not _reach_plated.get(entry, false):
+			_invalid("no %s plate at the arch's entry was saved" % entry)
 	for id in _sent:
 		if not _reach.has(id):
 			_invalid("sent passenger %d has no mid-arch reach frame" % id)
