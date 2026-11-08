@@ -54,12 +54,15 @@ extends RefCounted
 ##
 ## Not guaranteed: that the drawn plane stays inside its swing square through
 ## the pushback turn (board 13e98b04 owns that), and that a route is the one
-## Airside gives. A route segment off the axes is booked by its footprint's
-## bounding box, which is safe but wide.
+## Airside gives. A taxi route with a segment off the x and z axes is refused
+## loudly (BAD_ROUTE), never booked.
 
 const TAXI_BUSY := "taxi_busy"
 const TAXI_BUSY_TEXT := "taxi lane busy at that time"
 const QUIET_NIGHT := "quiet_night"
+## A taxi route with a segment off the x and z axes, which the slices cannot
+## book (axis_aligned()). Airside never gives one; reported loudly.
+const BAD_ROUTE := "bad_route"
 ## Departures 07:00 to 21:00 (OfferBoard draws only these), so every night
 ## from about 22:02 to 04:52 holds no booking.
 const FIRST_DEPARTURE_MINUTE := 7 * 60
@@ -87,7 +90,10 @@ const PREVIOUS_MOVE := {
 }
 ## A hold point this close to a route is on it.
 const ON_ROUTE_M := 0.01
+## The clash index's cells: this many ticks by this many metres along x, so a
+## booking is compared only with bookings near it in time and along the lane.
 const BUCKET_TICKS := 200.0
+const BAND_M := 64.0
 const EPSILON := 0.000001
 
 ## How many times plan_all() restarted on a quiet stretch.
@@ -95,7 +101,8 @@ var restarts := 0
 var _hold_in: Vector3
 var _hold_runway: Vector3
 var _bookings: Array[Dictionary] = []
-## Bucket index -> the bookings whose window meets that bucket.
+## Vector2i(time bucket, x band) -> the indices in _bookings of the bookings
+## whose window and rectangle meet that cell.
 var _buckets := {}
 var _held_until := -INF
 
@@ -242,6 +249,9 @@ func phase_options(req: Dictionary, state: int) -> Array[Dictionary]:
 ## corners per leg, its runway block and, with a pause, its waiting footprint.
 static func phase_bookings(req: Dictionary, state: int, pause := {}) -> Array[Dictionary]:
 	var route: PackedVector3Array = req["routes"][state]
+	if not axis_aligned(route):
+		push_error("GroundPlanner.phase_bookings: a route off the axes cannot be booked")
+		return []
 	var fp := footprint(req["class"])
 	var plan := MovementPlan.taxi(route, _budget(req, state), pause)
 	var hold_s: float = plan["hold_s"]
@@ -319,11 +329,18 @@ static func fixed_bookings(req: Dictionary) -> Array[Dictionary]:
 
 ## Whether none of `list` clashes with a booking of another owner since the
 ## last restart.
+## Each held booking is compared at most once per booking of `list`, and only
+## when the two share a cell of the index.
 func fits(list: Array) -> bool:
 	for booking: Dictionary in list:
-		for bucket in _bucket_range(booking):
-			for held: Dictionary in _buckets.get(bucket, []):
-				if held["owner"] != booking["owner"] and clash(held, booking):
+		var seen := {}
+		for key in _index_keys(booking):
+			for at: int in _buckets.get(key, []):
+				if seen.has(at):
+					continue
+				seen[at] = true
+				var held := _bookings[at]
+				if not _same_flight(held, booking) and clash(held, booking):
 					return false
 	return true
 
@@ -356,7 +373,8 @@ func works_gap(after: float, ticks: float) -> float:
 
 ## Runway works from `start` for `ticks` ticks as a fixed booking for plan_all().
 static func works_booking(start: float, ticks: float) -> Dictionary:
-	return _booking(runway_rect(PlaneClasses.LARGE), start, start + ticks, WORKS_OWNER, WORKS)
+	var block := runway_rect(PlaneClasses.LARGE)
+	return _booking(block, start, start + ticks, WORKS_OWNER, WORKS, false)
 
 
 ## Metres along `route` to `point` when it lies on the route (within
@@ -447,9 +465,19 @@ static func _in_turn(route: PackedVector3Array, entry: Vector3, at: float) -> bo
 	return false
 
 
-## Every rectangle a taxi along `route` may touch, -> its kind: the slices of
-## each straight run, reaching past its ends by the footprint's length, and
-## the box of each turn.
+## Whether every segment of `route` with length runs along x or along z (flat):
+## the only routes the slices can book (Airside's always do).
+static func axis_aligned(route: PackedVector3Array) -> bool:
+	for i in range(1, route.size()):
+		var step := _flat(route[i]) - _flat(route[i - 1])
+		if step.length() > EPSILON and absf(step.x) > EPSILON and absf(step.y) > EPSILON:
+			return false
+	return true
+
+
+## Every rectangle a taxi along `route` (axis_aligned()) may touch, -> its
+## kind: the slices of each straight run, reaching past its ends by the
+## footprint's length, and the box of each turn.
 static func _cells(route: PackedVector3Array, entry: Vector3, fp: Dictionary) -> Dictionary:
 	var out := {}
 	var reach := maxf(fp["ahead"], fp["behind"])
@@ -599,9 +627,15 @@ static func _budget(req: Dictionary, state: int) -> float:
 
 
 static func _booking(
-	rect: Rect2, from: float, to: float, owner: String, kind: String
+	rect: Rect2, from: float, to: float, owner: String, kind: String, flight := true
 ) -> Dictionary:
-	return {"rect": rect, "from": from, "to": to, "owner": owner, "kind": kind}
+	return {"rect": rect, "from": from, "to": to, "owner": owner, "kind": kind, "flight": flight}
+
+
+## Whether `a` and `b` are one flight's own bookings, which never clash. A
+## fixed booking (works) belongs to no flight, whatever its owner reads.
+static func _same_flight(a: Dictionary, b: Dictionary) -> bool:
+	return a["flight"] and b["flight"] and a["owner"] == b["owner"]
 
 
 static func _before(a: Dictionary, b: Dictionary) -> bool:
@@ -614,6 +648,12 @@ static func _before(a: Dictionary, b: Dictionary) -> bool:
 func _plan(req: Dictionary) -> Dictionary:
 	if not keeps_quiet_night(req["starts"]):
 		return {"ok": false, "reason": QUIET_NIGHT, "pauses": {}, "bookings": []}
+	for state in TAXI_STATES:
+		if not axis_aligned(req["routes"][state]):
+			push_error(
+				"GroundPlanner: %s's state %d route has a segment off the axes" % [req["id"], state]
+			)
+			return {"ok": false, "reason": BAD_ROUTE, "pauses": {}, "bookings": []}
 	var chosen := {}
 	var all := fixed_bookings(req)
 	var ok := fits(all)
@@ -638,10 +678,10 @@ func _add(list: Array) -> void:
 	for booking: Dictionary in list:
 		_bookings.append(booking)
 		_held_until = maxf(_held_until, booking["to"])
-		for bucket in _bucket_range(booking):
-			if not _buckets.has(bucket):
-				_buckets[bucket] = []
-			_buckets[bucket].append(booking)
+		for key in _index_keys(booking):
+			if not _buckets.has(key):
+				_buckets[key] = []
+			_buckets[key].append(_bookings.size() - 1)
 
 
 func _clear() -> void:
@@ -650,7 +690,16 @@ func _clear() -> void:
 	_held_until = -INF
 
 
-static func _bucket_range(booking: Dictionary) -> Array:
+## The index cells `booking` meets: every (time bucket, x band) pair its window
+## and rectangle reach. Two bookings that clash always share one.
+static func _index_keys(booking: Dictionary) -> Array[Vector2i]:
+	var rect: Rect2 = booking["rect"]
 	var first := floori(float(booking["from"]) / BUCKET_TICKS)
 	var last := floori(float(booking["to"]) / BUCKET_TICKS)
-	return range(first, last + 1)
+	var west := floori(rect.position.x / BAND_M)
+	var east := floori(rect.end.x / BAND_M)
+	var out: Array[Vector2i] = []
+	for bucket in range(first, last + 1):
+		for band in range(west, east + 1):
+			out.append(Vector2i(bucket, band))
+	return out

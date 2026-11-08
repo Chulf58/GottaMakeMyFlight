@@ -145,7 +145,7 @@ func test_issued_plans_are_unchanged_by_accept_reassign_end_and_works() -> void:
 				. is_equal(base[flight["id"]])
 			)
 		for booking in planner.bookings():
-			if booking["owner"] != GroundPlanner.WORKS_OWNER and not variants[name][1].is_empty():
+			if booking["flight"] and not variants[name][1].is_empty():
 				assert_bool(GroundPlanner.clash(booking, works)).is_false()
 	# Control: a flight that comes before an issued one in time order (B's
 	# twin, ordered first by its id) changes that one's plan.
@@ -174,6 +174,84 @@ func test_works_gap_is_the_first_clear_stretch_of_runway() -> void:
 		assert_bool(GroundPlanner.clash(booking, works)).is_false()
 		ends_at_gap = ends_at_gap or is_equal_approx(booking["to"], gap)
 	assert_bool(ends_at_gap).is_true()
+
+
+## Works belong to no flight: a flight whose id is the works' owner name still
+## clashes with them (Sol review). Control: the same flight with another id.
+func test_works_clash_with_a_flight_of_any_id() -> void:
+	var works_from := float(_req("A", MID, A_MINUTE)["starts"][0])
+	var works := GroundPlanner.works_booking(works_from, 6000.0)
+	for id in [GroundPlanner.WORKS_OWNER, "A"]:
+		var result := _kit.planner().plan_all([_req(id, MID, A_MINUTE)], [works])
+		print("flight %s during works: %s" % [id, result[id]["reason"]])
+		assert_bool(result[id]["ok"]).is_false()
+		assert_str(result[id]["reason"]).is_equal(GroundPlanner.TAXI_BUSY)
+	var after := _kit.planner().plan_all([_req(GroundPlanner.WORKS_OWNER, MID, 900)], [works])
+	assert_bool(after[GroundPlanner.WORKS_OWNER]["ok"]).is_true()
+
+
+## A taxi route with a segment off the axes is refused loudly, never booked
+## (Sol review: the slices would sit on the segment's start).
+func test_a_route_off_the_axes_is_refused() -> void:
+	var req := _req("D", MID, A_MINUTE)
+	var route: PackedVector3Array = req["routes"][FlightSim.State.TAXI_IN]
+	assert_bool(GroundPlanner.axis_aligned(route)).is_true()
+	route[1] += Vector3(5.0, 0.0, 0.0)
+	req["routes"][FlightSim.State.TAXI_IN] = route
+	assert_bool(GroundPlanner.axis_aligned(route)).is_false()
+	var planner := _kit.planner()
+	var out := [{}]
+	(
+		assert_error(func() -> void: out[0] = planner.plan_all([req]))
+		. is_push_error("GroundPlanner: D's state 3 route has a segment off the axes")
+	)
+	assert_str(out[0]["D"]["reason"]).is_equal(GroundPlanner.BAD_ROUTE)
+	assert_array(planner.bookings()).is_empty()
+	var booked := [[1]]
+	(
+		assert_error(
+			func() -> void: booked[0] = GroundPlanner.phase_bookings(req, FlightSim.State.TAXI_IN)
+		)
+		. is_push_error("GroundPlanner.phase_bookings: a route off the axes cannot be booked")
+	)
+	assert_array(booked[0]).is_empty()
+
+
+## How long planning takes under a week's load: 2 gates with a departure every
+## 2 hours from 07:00 to 21:00 (8 a day each), 7 days, then the same plus one
+## new offer, as R7 re-plans per offer. Printed, with a loose bound so a
+## return to quadratic work shows.
+func test_planning_time_for_a_week_of_two_gates() -> void:
+	var flights: Array = []
+	for day in range(1, 8):
+		for slot in 8:
+			flights.append(_req("W%d_%d" % [day, slot], WEST, 420 + 120 * slot, day))
+			flights.append(_req("E%d_%d" % [day, slot], EAST, 480 + 120 * slot, day))
+	var planner := _kit.planner()
+	var began := Time.get_ticks_usec()
+	var week := planner.plan_all(flights)
+	var first_ms := (Time.get_ticks_usec() - began) / 1000.0
+	var planned := 0
+	for id: String in week:
+		planned += 1 if week[id]["ok"] else 0
+	began = Time.get_ticks_usec()
+	var offered := planner.plan_all(flights + [_req("NEW", MID, 750, 4)])
+	var offer_ms := (Time.get_ticks_usec() - began) / 1000.0
+	print(
+		(
+			"week: %d flights, %d planned, %d bookings, %.0f ms; with one offer: %.0f ms (%s)"
+			% [
+				flights.size(),
+				planned,
+				planner.bookings().size(),
+				first_ms,
+				offer_ms,
+				offered["NEW"]["reason"] if not offered["NEW"]["ok"] else "fits"
+			]
+		)
+	)
+	assert_int(planned).is_greater(0)
+	assert_float(offer_ms).is_less(20000.0)
 
 
 ## Departures 07:00 to 21:00 leave every night from 22:02 to 04:52 free, so the
