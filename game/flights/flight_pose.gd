@@ -11,6 +11,11 @@ const APPROACH_PITCH := deg_to_rad(-4.0)
 const FLARE_PITCH := deg_to_rad(2.0)
 const CLIMB_PITCH := deg_to_rad(12.0)
 const PUSHBACK_SWING_START := 0.3
+## Share of the stand leg (StandPlacement.PUSHBACK_M from the stand point) over
+## which model_position() drops the sideways part of a model's door shift:
+## MovementPlan.fraction(PUSHBACK_SWING_START), so it is gone before the
+## pushback swing begins.
+const DOOR_ACROSS_SHARE := 0.216
 ## The ground phases, whose distance comes from a MovementPlan taxi plan.
 const GROUND_STATES: Array[int] = [
 	FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT
@@ -75,6 +80,31 @@ static func pose(
 		heading = Vector3(sin(yaw), 0.0, cos(yaw))
 	var basis := Basis(Vector3.UP, _yaw_of(heading)) * Basis(Vector3.RIGHT, -_pitch(state, t))
 	return Transform3D(basis, point_at(points, distance))
+
+
+## Where `model` sits under a ground `pose`: its local position, which
+## PlaneView gives the model node, for the stand at `stand` whose parked plane
+## faces `stand_dir`. On the stand point the model's front passenger door is
+## where the stand's is (PlaneClasses.stand_offset). From StandPlacement.
+## PUSHBACK_M away on, its box is centred on the pose point (PlaneModels
+## "model_offset"), so it turns within its own swing radius and so within its
+## class's swing square (board 13e98b04). In between, the shift follows the
+## flat distance from the stand point: the sideways part goes within
+## DOOR_ACROSS_SHARE of the leg, the part along the plane over the whole leg,
+## easing at both ends. The shift is measured in the parked plane's frame, so
+## the pushback turns the box about its own middle.
+static func model_position(
+	model: String, pose: Transform3D, stand: Vector3, stand_dir: Vector3
+) -> Vector3:
+	var centred: Vector3 = PlaneModels.PLANES[model]["model_offset"]
+	var door := PlaneClasses.stand_offset(model) - centred
+	var flat := Vector2(pose.origin.x - stand.x, pose.origin.z - stand.z)
+	var leg := flat.length() / StandPlacement.PUSHBACK_M
+	var along := 1.0 - smoothstep(0.0, 1.0, leg)
+	var across := 1.0 - smoothstep(0.0, DOOR_ACROSS_SHARE, leg)
+	var parked := Basis(Vector3.UP, _yaw_of(stand_dir))
+	var shift := parked * Vector3(door.x * across, 0.0, door.z * along)
+	return centred + pose.basis.inverse() * shift
 
 
 ## The arrival lead-in `distance` along its flat `track`. It ends on the

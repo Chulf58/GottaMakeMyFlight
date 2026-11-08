@@ -13,8 +13,9 @@ extends RefCounted
 ## - "nose", "tail": how far the nose is ahead of the origin and the tail
 ##   behind it.
 ## - "model_offset": the position that puts the middle of the box on the pose
-##   point, as PlaneView.model_offset does. About the pose point the nose and
-##   the tail are then each length / 2 away.
+##   point, as PlaneView draws every model off the stand (FlightPose.
+##   model_position). About the pose point the nose and the tail are then each
+##   length / 2 away.
 ## - "doors": one point per passenger door: the door's middle along the plane,
 ##   its outer face across, its sill height. Grouped by station (doors whose
 ##   middles are within 0.1 m along the plane), stations front to back, port
@@ -25,8 +26,8 @@ extends RefCounted
 ##   largest own_swing_radius among the class's members, which PlaneClasses
 ##   computes (board item R2). This table carries no classes.
 ##
-## tp_plane_05a is the model PlaneView draws today with model_offset
-## (0, 0, 1.7); the measured middle is 1.63.
+## tp_plane_05a is the model the stand was built around, parked with offset
+## (0, 0, 1.7) (PlaneClasses.REFERENCE_OFFSET); the measured middle is 1.63.
 
 const PLANES := {
 	"tp_plane_03a":
