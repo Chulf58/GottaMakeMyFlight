@@ -598,11 +598,13 @@ func test_a_booth_roller_guest_steps_out_then_picks_its_roller_up() -> void:
 ## down (RollerPark.chair_front(), floor_spot()), on every tick of the
 ## sit-down and seated, never in the body's frame, which carried it along the
 ## step in: on its hand's side unless a wall stands on that edge of the cell,
-## inside the cell (inside the wall's face where a wall stands), clear of the
-## end panel and of the guest's feet (BoothRoller). The walls are read from
-## the grid here; control: the layout has a booth seat with its open side
-## walled.
-func test_a_booth_roller_lies_fixed_at_the_approach_inside_its_cell() -> void:
+## out by the guest's seat side for that leg (BoothRoller.side_m()), inside the
+## wall's face where a wall stands, PANEL_GAP_M off the end panel and clear of
+## the guest's feet (BoothRoller). Renamed from "inside its cell" (board
+## 8a6068aa): a male guest's roller now reaches up to 0.09 m past an open
+## edge. The walls are read from the grid here; control: the layout has a
+## booth seat with its open side walled.
+func test_a_booth_roller_lies_fixed_at_the_approach_clear_of_walls_and_panel() -> void:
 	var made := _sitting(&"restaurant_booth", true)
 	var world: PassengerTestWorld = made[0]
 	var p: Passenger = made[1]
@@ -634,13 +636,21 @@ func test_a_booth_roller_lies_fixed_at_the_approach_inside_its_cell() -> void:
 			var lie := _seat_xy(world, visit.seat, spot)
 			var why := "hand %d: the roller lies at %s (walled %s)" % [hand, lie, walled]
 			assert_float(signf(across)).override_failure_message(why).is_equal(want)
-			var edge := 0.5
+			# Out by the guest's own seat side for the leg on that side, capped by
+			# the end panel (BoothRoller.side_m()); it was 0.32 m for everyone and
+			# inside the cell, and a male guest's near leg was in it (board 8a6068aa).
+			var leg := 0 if want < 0.0 else 1
+			var body := PassengerLooks.body_of(p.id, p.variant)
+			var side_m := BoothRoller.side_m(world.sim, p, leg)
+			assert_float(absf(across)).override_failure_message(why).is_equal_approx(side_m, 0.001)
+			assert_float(side_m).is_less_equal(RollerPark.seat_side(body, leg))
 			if _has_wall(world, visit.seat["approach"], frame.basis.x * want):
-				edge = 0.5 - BuildView.WALL_THICKNESS / 2.0
-			var reach := absf(across) + ROLLER_HALF_M
-			assert_float(reach).override_failure_message(why).is_less_equal(edge)
+				var reach := absf(across) + ROLLER_HALF_M
+				var face := 0.5 - BuildView.WALL_THICKNESS / 2.0
+				assert_float(reach).override_failure_message(why).is_less_equal(face)
 			var panel := lie.y - ROLLER_HALF_M
-			assert_float(panel).override_failure_message(why).is_greater(PANEL_FACE_M)
+			var off := PANEL_FACE_M + BoothRoller.PANEL_GAP_M - 0.001
+			assert_float(panel).override_failure_message(why).is_greater_equal(off)
 			var feet := absf(across) - ROLLER_HALF_M
 			assert_float(feet).override_failure_message(why).is_greater(FEET_HALF_M)
 		checked += 1

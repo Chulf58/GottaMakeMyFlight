@@ -44,6 +44,11 @@ extends SceneTree
 ## the hand-led set-down, after it, lying while seated, the hand-led pick-up on
 ## standing up, the walk off) with the tick it happens at; the walk is the
 ## control at walking pace (board 811e4547).
+## --in-bag-parts prints BODY_IN_BAG_PART per set-down frame of a roller guest
+## (by bone and roller mesh, with the poses in the seat's frame; board
+## 8a6068aa) and BODY_IN_BAG_REACH (the legs' and the roller's nearest reach
+## across to each other); --cam-dist=M brings the plate camera in from its
+## 4.6 m, onto the approach cell; --cam-front puts it out of the seat, low.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
@@ -124,6 +129,8 @@ const LIFT_M := 0.1
 ## A piece part whose top is in this height band and that is thinner than
 ## 0.2 m is a cushion.
 const PAN_TOP_RANGE := Vector2(0.45, 0.6)
+## BODY_IN_BAG_REACH's legs: body points below this height.
+const LEG_TOP_M := 0.6
 
 var _seed := 0
 var _measure_only := false
@@ -134,6 +141,12 @@ var _out_dir := ""
 var _roller_strip: Array[float] = []
 ## --roller-steps: print the roller's largest per-frame move in each phase.
 var _roller_steps := false
+## --in-bag-parts: print BODY_IN_BAG_PART per set-down frame (_print_in_bag_parts()).
+var _in_bag_parts := false
+## --cam-dist=M: the plate camera this far from its target (4.6 m by default).
+var _cam_dist := 4.6
+## --cam-front: the plate camera out of the seat, low (_aim()).
+var _cam_front := false
 var _failed := false
 var _main: Node3D
 var _clock: SimClock
@@ -162,6 +175,12 @@ func _initialize() -> void:
 			_only = arg.get_slice("=", 1).split(",")
 		if arg == "--roller-steps":
 			_roller_steps = true
+		if arg == "--in-bag-parts":
+			_in_bag_parts = true
+		if arg == "--cam-front":
+			_cam_front = true
+		if arg.begins_with("--cam-dist="):
+			_cam_dist = float(arg.get_slice("=", 1))
 		if arg.begins_with("--roller-strip="):
 			for at in arg.get_slice("=", 1).split(","):
 				_roller_strip.append(float(at))
@@ -639,11 +658,14 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 			if k <= SET_DOWN_TICKS:
 				# The body's points (both hands left out: one is on the handle)
 				# inside the roller's meshes, through the set-down.
-				var own := CarryContact.body_points(body, [".R", ".L"])
+				var owned := CarryContact.body_points_owned(body, [".R", ".L"])
+				var own: PackedVector3Array = owned[0]
 				in_bag_frames += 1
 				var inside := CarryContact.inside_meshes(own, bag)
 				if inside > 0:
 					in_bag["k%d+%.2f" % [k, _clock.alpha]] = inside
+				if _in_bag_parts:
+					_print_in_bag_parts(label, k, p, owned, bag, body, frame)
 				if in_bag_control < 0:
 					# Control: the roller moved to the hips sees body points.
 					var kept := bag.global_transform
@@ -658,6 +680,10 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 			# the roller it pulls behind it (7% seen at 13-3, k0).
 			var retry := bag != null and strip.is_empty() and now < ticks[1]
 			var shot := await _shot("%s_k%.2f" % [label, now], body, bag, retry)
+			if shot != null and _in_bag_parts and roller:
+				# --in-bag-parts: each proven frame of a roller guest saved on its
+				# own, so a strip with one unproven frame still leaves the rest.
+				_save(shot, "frame_%s_k%05.2f.png" % [label, now])
 			if shot != null or not retry:
 				# A frame that fails its proof is left blank, and the strip is not saved.
 				strip.append(shot)
@@ -721,6 +747,119 @@ func _sit(label: String, p: Passenger, visit: CafeVisit, roller: bool) -> void:
 	_save(still, "sitdown_%s_seated.png" % label)
 	_sheet.append(still)
 	_seats_done += 1
+
+
+## --in-bag-parts: one BODY_IN_BAG_PART line per set-down frame of a roller
+## guest: the body points inside the roller by dominant bone and by the
+## roller's mesh they are in, and in the seat's frame (x to the guest's right,
+## z out of the seat) the body's origin, the roller's origin, its up axis (z
+## of its own frame; 1 standing on its wheels, 0 lying) and its heading, the
+## feet and the hands (board 8a6068aa).
+func _print_in_bag_parts(
+	label: String, k: int, p: Passenger, owned: Array, bag: Node3D, body: Node3D, frame: Transform3D
+) -> void:
+	var pts: PackedVector3Array = owned[0]
+	var names: PackedStringArray = owned[1]
+	var meshes := []
+	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
+		if mi.mesh != null and mi.is_visible_in_tree():
+			meshes.append(
+				[
+					mi.name,
+					mi.global_transform.affine_inverse(),
+					mi.mesh.get_faces(),
+					mi.mesh.get_aabb()
+				]
+			)
+	var bones := {}
+	var parts := {}
+	var count := 0
+	for i in pts.size():
+		for m in meshes:
+			var lp: Vector3 = (m[1] as Transform3D) * pts[i]
+			if not (m[3] as AABB).grow(0.001).has_point(lp):
+				continue
+			if not _odd_hit(lp, m[2]):
+				continue
+			count += 1
+			bones[names[i]] = int(bones.get(names[i], 0)) + 1
+			parts[String(m[0])] = int(parts.get(String(m[0]), 0)) + 1
+			break
+	var to_seat := frame.affine_inverse()
+	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var joints := {}
+	for bone_name in ["Foot.L", "Foot.R", "Toes.L", "Toes.R", "Hand.L", "Hand.R"]:
+		var b := skeleton.find_bone(bone_name)
+		if b >= 0:
+			var at := skeleton.global_transform * skeleton.get_bone_global_pose(b).origin
+			joints[bone_name] = (to_seat * at).snappedf(0.01)
+	var up := (to_seat.basis * bag.global_transform.basis.z.normalized()).y
+	var front := to_seat.basis * bag.global_transform.basis.y
+	var state := _views.carry_on_props().bag_state(p.id, 0)
+	# Across the seat's x, towards the roller: the legs' farthest point (below
+	# LEG_TOP_M) and the roller's nearest, from the body's origin.
+	var centre := (to_seat * body.global_position).x
+	var towards := signf((to_seat * bag.global_position).x - centre)
+	var leg_reach := -INF
+	for q in pts:
+		var lq := to_seat * q
+		if lq.y < LEG_TOP_M:
+			leg_reach = maxf(leg_reach, (lq.x - centre) * towards)
+	var bag_inner := INF
+	for q in _mesh_points(bag):
+		bag_inner = minf(bag_inner, ((to_seat * q).x - centre) * towards)
+	var facing := to_seat.basis * body.global_transform.basis.z
+	print(
+		(
+			"BODY_IN_BAG_REACH %s k%d+%.2f body_heading=%.0f leg_reach=%.3f bag_inner=%.3f gap=%.3f"
+			% [
+				label,
+				k,
+				_clock.alpha,
+				rad_to_deg(atan2(facing.x, facing.z)),
+				leg_reach,
+				bag_inner,
+				bag_inner - leg_reach
+			]
+		)
+	)
+	print(
+		(
+			(
+				"BODY_IN_BAG_PART %s k%d+%.2f stage=%d inside=%d bones=%s meshes=%s body=%s bag=%s"
+				+ " bag_up=%.2f bag_heading=%.0f turn_first=%s held_by=%s joints=%s"
+			)
+			% [
+				label,
+				k,
+				_clock.alpha,
+				p.stage,
+				count,
+				bones,
+				parts,
+				(to_seat * body.global_position).snappedf(0.01),
+				(to_seat * bag.global_position).snappedf(0.01),
+				up,
+				rad_to_deg(atan2(front.x, front.z)),
+				state.get("turn_first", false),
+				state.get("held_by", -1),
+				joints,
+			]
+		)
+	)
+
+
+func _odd_hit(p: Vector3, faces: PackedVector3Array) -> bool:
+	var crossings := 0
+	for i in range(0, faces.size() - 2, 3):
+		if (
+			Geometry3D.ray_intersects_triangle(
+				p, CarryContact.RAY, faces[i], faces[i + 1], faces[i + 2]
+			)
+			!= null
+		):
+			crossings += 1
+	return crossings % 2 == 1
 
 
 ## The node of `p`'s first bag (its roller), or null when none is drawn.
@@ -1002,8 +1141,16 @@ func _aim(frame: Transform3D, seat: Dictionary) -> void:
 	var lateral := approach.dot(frame.basis.x)
 	var across := frame.basis.x * (signf(lateral) if absf(lateral) > 0.1 else 1.0)
 	var dir := (across * 0.6 + frame.basis.z * 0.5 + Vector3.UP * 1.2).normalized()
+	if _cam_front:
+		# --cam-front: from out of the seat, low, so the legs beside a roller set
+		# down at the approach cell are not behind the body.
+		dir = (frame.basis.z + across * 0.25 + Vector3.UP * 0.45).normalized()
 	var target := (frame.origin + approach * 0.5) + Vector3.UP * 0.6
-	_cam.look_at_from_position(target + dir * 4.6, target, Vector3.UP)
+	if _cam_dist < 4.6:
+		# Brought in (--cam-dist): on the approach cell, where a roller guest sets
+		# its roller down, at the hips, so the head stays in frame.
+		target = frame.origin + approach * 0.8 + Vector3.UP * 0.85
+	_cam.look_at_from_position(target + dir * _cam_dist, target, Vector3.UP)
 	_cam.current = true
 	(_mode.get_node("BuildView") as BuildView).update_cutaway(_cam.global_transform.basis.z)
 

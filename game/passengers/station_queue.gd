@@ -38,9 +38,13 @@ static func promote(queue: Dictionary, cells: Array) -> Array[int]:
 
 
 ## Puts passenger `id` at the back of the lane, or in the holding list when
-## the lane is full; returns whether it got a lane place.
+## the lane is full or holders still wait for a lane place (an admission frees
+## one before promote() runs again): a newcomer steps onto the line behind the
+## holders, so it is never ordered ahead of them (decision hold-line-as-built-
+## physical-line-order-one-latched-tail-clai, rule 1). Returns whether it got
+## a lane place.
 static func join(queue: Dictionary, cells: Array, id: int) -> bool:
-	if (queue["lane"] as Array).size() < cells.size():
+	if (queue["lane"] as Array).size() < cells.size() and (queue["holding"] as Array).is_empty():
 		(queue["lane"] as Array).append(id)
 		return true
 	(queue["holding"] as Array).append(id)

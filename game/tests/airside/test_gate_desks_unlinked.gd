@@ -39,6 +39,14 @@ func _desk(at: Vector2i) -> BuildResult:
 	return _grid.apply(BuildEdit.place_object(GateDesks.DESK, at, 0))
 
 
+## A north exit opened in a shell's north wall at `cell`.
+func _open_exit(cell: Vector2i) -> BuildResult:
+	assert_bool(_grid.apply(BuildEdit.remove_wall(cell, BuildGrid.Side.NORTH)).ok).is_true()
+	var exit := _grid.apply(BuildEdit.place_object(&"exit_door", cell, 0))
+	assert_bool(exit.ok).is_true()
+	return exit
+
+
 func test_linked_desks_are_not_listed() -> void:
 	assert_bool(_desk(DESK_WEST).ok).is_true()
 	assert_bool(_desk(DESK_EAST).ok).is_true()
@@ -101,13 +109,18 @@ func test_a_desk_whose_free_exit_would_overlap_a_gate_names_that_gate() -> void:
 func test_a_usable_farther_exit_means_no_letter_not_an_overlap() -> void:
 	var west := _desk(DESK_WEST)
 	var gate_a := _gates.binding_of("A")
-	# In the east shell's north wall, 40 m east of gate A's exit: its stand
-	# overlaps A's, while the east shell's own exit (44 m east) does not.
-	var near_cell := EXIT_WEST + Vector2i(40, 0)
-	assert_bool(_grid.apply(BuildEdit.remove_wall(near_cell, BuildGrid.Side.NORTH)).ok).is_true()
-	var near := _grid.apply(BuildEdit.place_object(&"exit_door", near_cell, 0))
-	assert_bool(near.ok).is_true()
-	var far := _grid.object_at(EXIT_EAST)
+	# A third shell 25 cells east of the starter, with two more exits in its
+	# north wall: the near one 16 m east of gate A's exit, under the 19 m the
+	# small swings need, so its stand overlaps A's; the far one 20 m east, so it
+	# does not.
+	for result in _grid.apply_batch(
+		ReferenceTerminal.shell_edits(SITE.starter_offset + Vector2i(25, 0))
+	):
+		assert_bool(result.ok).is_true()
+	var near_cell := EXIT_WEST + Vector2i(16, 0)
+	var far_cell := EXIT_WEST + Vector2i(20, 0)
+	var near := _open_exit(near_cell)
+	var far := _open_exit(far_cell).object_id
 	# A desk 2 cells from the near exit and 3 from the far one, built past the
 	# guard and the links (its links come from `only_a` below).
 	_grid.guard = Callable()

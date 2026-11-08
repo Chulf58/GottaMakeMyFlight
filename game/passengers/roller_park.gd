@@ -56,6 +56,7 @@ const UP_LEAD_TICKS := 9
 ## Taken off the floor it parks further ahead (UP_PARK_AHEAD_M), where the
 ## walker comes past it stepping off: parked 0.45 m ahead, the walker had gone
 ## on and the hand was 0.16 m off the bar at 3x as it took it again.
+## park()'s default; plan() takes the walker's own (SEAT_SIDE_M, "park_side").
 const PARK_SIDE_M := 0.32
 const PARK_AHEAD_M := 0.15
 const UP_PARK_AHEAD_M := 0.7
@@ -244,6 +245,13 @@ const QUEUE_BAR_M := 1.12
 ## legs clear the shell's box from 0.41 m (male_08, left hand) and 0.345 m
 ## (female_08, right hand); each has about 2 cm more.
 const QUEUE_SIDE_M: Array[float] = [0.43, 0.37]
+## Every other park (plan()) and a booth's lying spot put the axle this far
+## out, by variant (male, female) and hand (right, left): at 0.32 m a male
+## roller stood and lay in his near leg (food_seats_probe booth 13-3, board
+## 8a6068aa). Male: the shell box's widest idle clearance, standing or lying,
+## plus 1 cm (test_roller_stand_clearance). Female: as before (conductor-
+## decided). A booth's end panel can cap it (BoothRoller.side_m()).
+const SEAT_SIDE_M: Array = [[0.40, 0.43], [PARK_SIDE_M, PARK_SIDE_M]]
 ## A walker that walks off facing more than this (radians) away from its way
 ## (PassengerViews.walk_heading()) turns toward it as it sets off, over
 ## PassengerTurns.TURN_TICKS: its stood roller's tip waits that long (tip_wait()),
@@ -255,6 +263,12 @@ const QUEUE_SIDE_M: Array[float] = [0.43, 0.37]
 ## test_roller_queue_stand). Under this angle the swing is a small share of the
 ## step, and the tip goes at once.
 const TIP_TURN_RAD := 0.5
+## The share of its turn a walker moving up in its queue, not its front, waits
+## before a tip toward the roller's side (tip_wait()). Tipped at once, the pull
+## dropped back along the old line onto a queuer stacked 1.04 m behind (0.11 m
+## from its body); waiting half the turn, the stood roller still reached the
+## guest ahead (0.22 m). Board d8a66218, queue_spacing_probe seeds 1 to 4.
+const TOWARD_WAIT_SHARE := 0.1875
 
 
 ## Whether a hand-led move of `bag` (CarryOnProps' record, its "was",
@@ -425,11 +439,33 @@ static func filed_still(sim: PassengerSim, p: Passenger) -> bool:
 ## whose body is drawn facing `yaw` on the tick it walks off and whose way is
 ## `heading` (PassengerViews.walk_heading(), x and z): PassengerTurns.TURN_TICKS
 ## when it faces more than TIP_TURN_RAD away (it turns as it sets off), else 0.
-static func tip_wait(yaw: float, heading: Vector2) -> float:
+## For a walker moving up in its queue (`moving_up`, its stage one of
+## QUEUE_STAGES) with `bag` (CarryOnProps' record of the stood roller), a turn
+## toward the side the roller stands on gives a value below zero: minus the
+## ticks before the turn's end that the tip starts, all of TURN_TICKS for the
+## queue's `front` (at once) and the rest past TOWARD_WAIT_SHARE for the others.
+## The move is held as long as a waiting one either way (queue_stand()). Held
+## stood through that turn, the roller was carried round ahead of the body into
+## the guest in front at a hold-line corner, and the new check-in front's into
+## the leaver crossing in front of it (0.20 to 0.22 m from their bodies, board
+## d8a66218). A walker leaving its counter or its gate spot keeps the wait: the
+## queue it leaves stands behind it on that side, and a desk leaver tipping at
+## once swept its roller 0.05 m from the new front.
+static func tip_wait(
+	yaw: float, heading: Vector2, bag := {}, moving_up := false, front := false
+) -> float:
 	if heading == Vector2.ZERO:
 		return 0.0
-	var off := absf(angle_difference(yaw, atan2(heading.x, heading.y)))
-	return float(PassengerTurns.TURN_TICKS) if off > TIP_TURN_RAD else 0.0
+	var off := angle_difference(yaw, atan2(heading.x, heading.y))
+	if absf(off) <= TIP_TURN_RAD:
+		return 0.0
+	var turn := float(PassengerTurns.TURN_TICKS)
+	var place := int(bag.get("place", -1))
+	if moving_up and place >= 0 and place / 4 == SecurityLooks.Home.HAND:
+		# A turn to the left raises the yaw (yaw 0 faces +z, its left is +x).
+		if (off > 0.0) == (CarryLead.hand_of(place) == 1):
+			return -turn * (1.0 if front else 1.0 - TOWARD_WAIT_SHARE)
+	return turn
 
 
 ## The still ticks `p` waits before its roller is stood up (queue_stand()).
@@ -446,7 +482,8 @@ static func still_wait(p: Passenger) -> int:
 ## length is kept QUEUE_AHEAD_TICKS past `now`, and the first tick the walker no
 ## longer stands starts its tip ("queue_tip", ticks into the move), the move
 ## then ending with it. The tip waits `turn` ticks (tip_wait()) while the body
-## turns toward its way.
+## turns toward its way; a `turn` below zero starts the tip that many ticks
+## before the end of a TURN_TICKS wait and keeps the move on as long as one.
 static func queue_stand(
 	bag: Dictionary,
 	kind: SecurityLooks.Kind,
@@ -470,10 +507,16 @@ static func queue_stand(
 		if stands:
 			bag["ticks"] = maxf(CarryLead.ticks_of(bag), at + QUEUE_AHEAD_TICKS)
 			return
-		bag["queue_tip"] = at + turn
+		# A turn toward the roller's side (tip_wait() below zero) tips early, the
+		# move ending when a waiting tip's would, so its hold on the hand
+		# (hold_park(), PullSide.holds()) lasts through the turn: ended with the
+		# tip, a change of hand to hand_of()'s right after it went mid-turn and
+		# stepped the bag 1.49 m against the body (test_roller_queue_stand).
+		var held := turn if turn >= 0.0 else float(PassengerTurns.TURN_TICKS)
+		bag["queue_tip"] = at + held + minf(turn, 0.0)
 		bag["queue_tip_yaw"] = yaw
 		bag["queue_tip_ticks"] = QUEUE_TIP_TICKS * (1.0 + _tip_gap(bag, yaw) / PI)
-		bag["ticks"] = at + turn + tip_ticks(bag)
+		bag["ticks"] = at + held + tip_ticks(bag)
 		return
 	if not stands or now - float(bag["still_from"]) < wait or bag.has("queue_still"):
 		return
@@ -604,6 +647,8 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		if first >= 0:
 			bag["up_near"] = not is_nan(float(bag["roll_faces"][first]))
 	bag["park_frame"] = _yawed(body)
+	# Each hand's side as sync() read it (BoothRoller.side_m()), kept for the move.
+	bag["park_side"] = (bag.get("side_now", [PARK_SIDE_M, PARK_SIDE_M]) as Array).duplicate()
 	if not is_nan(face) and CarryLead.start_of(bag)[0] == CarryLead.End.HELD:
 		bag["park_frame"] = Transform3D(Basis(Vector3.UP, face), body.origin)
 	# A floor>pull with a face is parked where the sim had the walker on the
@@ -672,12 +717,21 @@ static func floor_spot(
 	if kind == SecurityLooks.Kind.ROLLER and sim.cafes.booth_roller(p):
 		var front: Variant = chair_front(sim, p, kind)
 		if front != null:
-			spot.origin.x = BoothRoller.side(sim, front as Transform3D, hand) * PARK_SIDE_M
+			var lies := BoothRoller.side(sim, front as Transform3D, hand)
+			# Out by the leg on the side it lies on.
+			spot.origin.x = lies * BoothRoller.side_m(sim, p, 0 if lies < 0.0 else 1)
 		return spot
 	if kind != SecurityLooks.Kind.ROLLER or where == StageKinds.Location.FACILITY_SEAT:
 		return spot
 	var out := -1.0 if hand == 0 else 1.0
 	return Transform3D(Basis.IDENTITY, Vector3(out * BESIDE_FEET_M, 0.0, FEET_AHEAD_M))
+
+
+## How far out (SEAT_SIDE_M) a seat park puts the axle of a body of look `look`
+## (PassengerLooks.BODIES index) on the side of `hand` (0 right, 1 left).
+static func seat_side(look: int, hand: int) -> float:
+	var variant := clampi(look / PassengerLooks.PER_VARIANT, 0, SEAT_SIDE_M.size() - 1)
+	return SEAT_SIDE_M[variant][hand]
 
 
 ## The frame (world, on the floor) a roller of `p` (of `kind`) lies in at a gate
@@ -976,7 +1030,8 @@ static func plan(
 		lead = CarryLead.hand_of(bag["home"])
 		k = down_k(bag, k)
 	var ahead := UP_PARK_AHEAD_M if off_floor and not bag.get("up_near", false) else PARK_AHEAD_M
-	var parked := park(bag["park_frame"], lead, body["scale"], ahead)
+	var side: float = bag.get("park_side", [PARK_SIDE_M, PARK_SIDE_M])[lead]
+	var parked := park(bag["park_frame"], lead, body["scale"], ahead, side)
 	# Out of the walls beside a seat (BoothRoller.fix_start(), ParkWalls).
 	if bag.has("wall_boxes"):
 		parked.origin += ParkWalls.shift(parked, bag["wall_boxes"])

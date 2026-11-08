@@ -106,7 +106,9 @@ func _guest(type: StringName) -> Passenger:
 ## each drawn tick), "plans" (tick -> RollerPark's planned roller), "clear"
 ## (the least clearance of the drawn roller from `seat` on any drawn frame),
 ## "took", "first", "points" (the walker's tick position on every tick),
-## "roll_frame", "hand" (the leading hand), "lift_end" (in ticks)}.
+## "roll_frame", "hand" (the leading hand), "side" (the park's side for it) and
+## "seat_side" (the body's, RollerPark.seat_side()),
+## "lift_end" (in ticks)}.
 func _play(p: Passenger, cadence: Array, seat: Dictionary) -> Dictionary:
 	var props := _views.carry_on_props()
 	var out := {
@@ -138,6 +140,10 @@ func _play(p: Passenger, cadence: Array, seat: Dictionary) -> Dictionary:
 			out["plans"][n] = rec["lead"]["xf"]
 			if not out.has("hand"):
 				out["hand"] = CarryLead.hand_of(rec["home"])
+				out["side"] = float(rec["park_side"][out["hand"]])
+				out["seat_side"] = RollerPark.seat_side(
+					PassengerLooks.body_of(p.id, p.variant), out["hand"]
+				)
 		if not seat.is_empty():
 			var least := _clearance(seat, (rec["node"] as Node3D).global_transform)
 			if least < out["clear"]:
@@ -310,13 +316,16 @@ func _assert_same(type: StringName, runs: Dictionary, rolls: bool) -> void:
 ## on each planned tick past the lift (in the park a rolled roller is held at
 ## its park too, RollerPark._carried()) while it rolls with the walker still at
 ## its stood point (this tick and the one before, as the body is drawn a tick
-## behind), its axle is PARK_SIDE_M out on the leading hand's side and
+## behind), its axle is the side its move kept ("park_side", the body's seat
+## side, RollerPark.SEAT_SIDE_M; PARK_SIDE_M before board 8a6068aa) out on
+## the leading hand's side and
 ## PARK_AHEAD_M ahead in the stood frame ("roll_frame"), within BESIDE_M. Out
 ## of the seat as well: _assert_clear().
 func _assert_beside(line: String, run: Dictionary) -> void:
 	var frame: Transform3D = run["roll_frame"]
 	var side := -1.0 if int(run["hand"]) == 0 else 1.0
-	var want := Vector3(side * RollerPark.PARK_SIDE_M, 0.0, RollerPark.PARK_AHEAD_M)
+	assert_float(float(run["side"])).override_failure_message(line).is_equal(run["seat_side"])
+	var want := Vector3(side * float(run["side"]), 0.0, RollerPark.PARK_AHEAD_M)
 	var checked := 0
 	var worst := 0.0
 	for n: int in run["plans"]:

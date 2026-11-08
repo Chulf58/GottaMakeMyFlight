@@ -78,6 +78,13 @@ var _sit_off: Dictionary = {}
 ## The yaw each view is drawn with, eased per tick (PassengerTurns); snap()
 ## starts every record over.
 var _turns := PassengerTurns.new()
+## Passenger id -> Vector3(yaw drawn at the tick before, yaw now, yaw the turn
+## started from) while a lane passenger turns to the tray table and on into the
+## arch (SecurityLooks.setoff_yaw(): set from the start yaw and the sim on each
+## tick, never stepped). The start is the yaw drawn when UNPACK began, or the
+## way it walked in (SecurityLooks.arrival_yaw()) for a view first drawn after.
+## Holds no tick; snap() and release erase it.
+var _setoffs: Dictionary = {}
 ## True while snap() syncs: the step from the pre-load position is no heading.
 var _snapping := false
 ## Working array of _declutter_bubbles, reused each frame.
@@ -214,6 +221,7 @@ func sync() -> void:
 ## blend from before the load.
 func snap() -> void:
 	_turns.clear()
+	_setoffs.clear()
 	_stages.clear()
 	for id in sim.passenger_ids():
 		if _nodes.has(id):
@@ -253,7 +261,7 @@ func snap() -> void:
 		# (ParkSide.stand_face()), the way its stood roller is placed for.
 		if heading == Vector2.ZERO and RollerPark.queue_still(sim, p):
 			heading = ParkSide.stand_face(sim, p)
-		if heading != Vector2.ZERO and not _turn_locked(node):
+		if heading != Vector2.ZERO and not _turn_locked(node) and not _setoffs.has(id):
 			_turns.place(id, atan2(heading.x, heading.y))
 	draw()
 
@@ -289,7 +297,10 @@ func draw() -> void:
 		var before: Vector3 = _prev[id]
 		var after: Vector3 = _cur[id]
 		node.position = before.lerp(after, alpha)
-		if _turns.has(id):
+		if _setoffs.has(id):
+			var yaws: Vector3 = _setoffs[id]
+			node.rotation.y = lerp_angle(yaws.x, yaws.y, alpha)
+		elif _turns.has(id):
 			node.rotation.y = _turns.drawn(id, alpha)
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
@@ -430,6 +441,7 @@ func _release(id: int) -> void:
 	ActivityPoses.dress(node, 0.0, 0.0)
 	_props.release(id)
 	_turns.release(id)
+	_setoffs.erase(id)
 	_prev.erase(id)
 	_cur.erase(id)
 	_stages.erase(id)
@@ -596,8 +608,29 @@ func _now() -> float:
 ## and so does one stepping into, using or leaving a toilet stall: its bags are
 ## kept clear of the partitions and the door for a body facing its step
 ## (StallCarry), and one turning over 0.3 s swept them through a partition
-## (test_carry_in_stall).
+## (test_carry_in_stall). A lane passenger from UNPACK until it walks into the
+## arch is drawn with SecurityLooks.setoff_yaw() instead, and the turn record
+## is placed on it each tick, so the turn after it starts from there.
 func _turn(node: Node3D, p: Passenger, face: float) -> void:
+	var alpha := clock.alpha if clock != null else 1.0
+	var from := NAN
+	if _setoffs.has(p.id):
+		from = (_setoffs[p.id] as Vector3).z
+	elif _turns.has(p.id) and not _snapping:
+		# The yaw it has as the set-off starts, kept as the turn's start.
+		from = _turns.drawn(p.id, 1.0)
+	var setoff := SecurityLooks.setoff_yaw(sim, p, from)
+	if not is_nan(setoff):
+		var before := setoff
+		if _turns.has(p.id) and not _snapping:
+			before = _turns.drawn(p.id, 1.0)
+		_turns.place(p.id, setoff)
+		if is_nan(from):
+			from = SecurityLooks.arrival_yaw(sim, p)
+		_setoffs[p.id] = Vector3(before, setoff, from)
+		node.rotation.y = lerp_angle(before, setoff, alpha)
+		return
+	_setoffs.erase(p.id)
 	var step: Vector3 = _cur[p.id] - _prev[p.id]
 	var heading := walk_heading(p)
 	var keep := atan2(heading.x, heading.y) if heading != Vector2.ZERO else node.rotation.y
@@ -612,15 +645,19 @@ func _turn(node: Node3D, p: Passenger, face: float) -> void:
 		_turns.place(p.id, target)
 	else:
 		_turns.step(p.id, target)
-	node.rotation.y = _turns.drawn(p.id, clock.alpha if clock != null else 1.0)
+	node.rotation.y = _turns.drawn(p.id, alpha)
 
 
 ## Moves a passenger's drawn offset at security one tick's walk toward its
-## target (SecurityLooks.target_offset).
+## target (SecurityLooks.target_offset), or sets it there while it sets off
+## from the tray table into the arch (SecurityLooks.setting_off()): set from
+## how far it has walked, so it is the same for a view first drawn then.
 func _chase(p: Passenger) -> void:
 	var target := SecurityLooks.target_offset(sim, p)
 	var now: Vector3 = _offsets.get(p.id, Vector3.ZERO)
 	now = now.move_toward(target, PassengerSim.WALK_MM / 1000.0)
+	if SecurityLooks.setting_off(sim, p):
+		now = target
 	if now == Vector3.ZERO:
 		_offsets.erase(p.id)
 	else:

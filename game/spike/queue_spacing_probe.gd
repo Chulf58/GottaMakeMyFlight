@@ -33,6 +33,15 @@ extends SceneTree
 ## MARGIN_PX and a sight line lands first on each holder's body (PlateSight),
 ## else the frame is refused; PROBE_INVALID if not every frame is taken.
 ##
+## With --tipplate=ID --with=OTHER (windowed, board d8a66218): a strip of the
+## queue stand tip of passenger ID, TIP_SHOTS ticks from the tick its tip is
+## marked, framed on ID, its roller and OTHER (the guest ahead, or the desk
+## leaver crossing in front). Before each save the three project inside the
+## frame by MARGIN_PX and sight lines land first on ID's body, its roller and
+## OTHER's body (PlateSight; a control tag no mesh has lands on nothing), else
+## the other side and then a high view are tried; PROBE_INVALID unless every
+## frame is saved. One contact sheet of the strip is saved too.
+##
 ## Run: Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy \
 ##   --path game -s res://spike/queue_spacing_probe.gd -- --place=checkin \
 ##   [--seed=N] [--ticks=N] [--extra=N]
@@ -62,6 +71,8 @@ const TRACES := 12
 const STRIP_FRAMES := 4
 const STRIP_EVERY := 15
 const STRIP_HOLDERS := 3
+## Ticks after a tip is marked that --tipplate frames are taken.
+const TIP_SHOTS: Array[int] = [0, 1, 2, 3, 4, 6]
 
 var _seed := 0
 var _place := "checkin"
@@ -84,6 +95,10 @@ var _holders_max := 0
 var _holders_shared := 0
 var _holder_frames := 0
 var _traced := 0
+var _leaver_traced := 0
+## Queue stand tips traced (_tip_trace()), by "id since".
+var _tips := {}
+var _tipped := 0
 ## Station -> the passenger who last left it.
 var _leaver := {}
 var _stage := {}
@@ -104,6 +119,16 @@ var _strip_on := false
 var _strip_station := 0
 var _strip_left := 0
 var _strip_next := 0
+## --tipplate: the walker and the guest framed with it, the tick its tip was
+## marked (-1 before), the frames saved.
+var _tip_id := 0
+var _tip_with := 0
+var _tip_mark := -1
+var _tip_shots: Array[Image] = []
+## --tipplate=corner or front: the first queue stand tip toward its roller of
+## a lane member behind another (framed with the one ahead) or of a desk's
+## lane front (framed with the desk's last leaver).
+var _tip_auto := ""
 
 
 func _initialize() -> void:
@@ -121,6 +146,12 @@ func _initialize() -> void:
 			_plate_on = true
 		elif arg == "--strip":
 			_strip_on = true
+		elif arg.begins_with("--tipplate="):
+			var pick := arg.get_slice("=", 1)
+			_tip_auto = pick if pick in ["corner", "front"] else ""
+			_tip_id = -1 if _tip_auto != "" else int(pick)
+		elif arg.begins_with("--with="):
+			_tip_with = int(arg.get_slice("=", 1))
 	if _extra < 0:
 		_extra = SECURITY_EXTRA if _place == "security" else EXTRA
 	print("PROBE sim_seed=%d place=%s ticks=%d extra=%d" % [_seed, _place, _ticks, _extra])
@@ -138,6 +169,8 @@ func _run() -> void:
 		_watch()
 		if _strip_on:
 			await _strip_step()
+		if _tip_id != 0:
+			await _tip_step()
 		if _plate_on and not _plated and not _shot.is_empty():
 			if _clock.tick >= int(_shot[0]) + SHOT_AFTER:
 				await _plate(_shot[1], _shot[2])
@@ -146,11 +179,220 @@ func _run() -> void:
 		print("PROBE_INVALID no move-up plate was taken")
 		quit(1)
 		return
+	if _tip_id != 0 and _tip_shots.size() < TIP_SHOTS.size():
+		print(
+			(
+				"PROBE_INVALID the tip strip has %d of %d frames"
+				% [_tip_shots.size(), TIP_SHOTS.size()]
+			)
+		)
+		quit(1)
+		return
+	if _tip_id != 0:
+		_tip_sheet()
 	if _strip_on and (_strip_station == 0 or _strip_left > 0):
 		print("PROBE_INVALID the strip has %d frames left" % _strip_left)
 		quit(1)
 		return
 	quit(_report())
+
+
+## --tipplate=corner or front: takes `p` as the subject when its queue stand
+## tip was set this tick on a turn toward its roller's side, and it is a lane
+## member behind another (corner) or a desk's lane front with a leaver (front).
+func _tip_pick(p: Passenger) -> void:
+	var node := _views.node_for(p.id)
+	if node == null or p.station == 0 or not p.stage in RollerPark.QUEUE_STAGES:
+		return
+	var bag := _views.carry_on_props().bag_state(p.id, 0)
+	if not RollerPark.queued(bag) or not bag.has("queue_tip"):
+		return
+	var heading := _views.walk_heading(p)
+	if heading == Vector2.ZERO:
+		return
+	var turn := angle_difference(node.rotation.y, atan2(heading.x, heading.y))
+	var hand := CarryLead.hand_of(int(bag.get("place", 0)))
+	if absf(turn) <= RollerPark.TIP_TURN_RAD or (turn > 0.0) != (hand == 1):
+		return
+	var lane := _sim.queue_of(p.station)
+	var i := lane.find(p.id)
+	var other := 0
+	if _tip_auto == "corner" and i > 0 and not _held.has(p.id):
+		other = lane[i - 1]
+	elif _tip_auto == "front" and i == 0:
+		other = int(_leaver.get(p.station, 0))
+	if other == 0 or _views.node_for(other) == null:
+		return
+	_tip_id = p.id
+	_tip_with = other
+	print(
+		(
+			"TIPPICK t%d %s id %d with %d turn %.2f hand %d"
+			% [_clock.tick, _tip_auto, p.id, other, turn, hand]
+		)
+	)
+
+
+## --tipplate: marks the tick the walker's queue stand tip is set, then takes a
+## frame on each of TIP_SHOTS ticks after it.
+func _tip_step() -> void:
+	var node := _views.node_for(_tip_id) if _tip_id > 0 else null
+	if node == null:
+		return
+	if _tip_mark < 0:
+		var bag := _views.carry_on_props().bag_state(_tip_id, 0)
+		if RollerPark.queued(bag) and bag.has("queue_tip"):
+			_tip_mark = _clock.tick
+		else:
+			return
+	var at := _clock.tick - _tip_mark
+	if at in TIP_SHOTS and _tip_shots.size() == TIP_SHOTS.find(at):
+		var img := await _tip_frame(at)
+		if img == null:
+			print("PROBE_INVALID tip frame +%d refused from every view" % at)
+			quit(1)
+			return
+		_tip_shots.append(img)
+
+
+## One --tipplate frame `at` ticks into the tip: the views tried in turn (each
+## side of the pair, then high); the first that proves the subjects in frame
+## and seen is saved and returned, else null.
+func _tip_frame(at: int) -> Image:
+	var body := _views.node_for(_tip_id)
+	var other := _views.node_for(_tip_with)
+	var rollers := QueueSpacing.rollers(_views, _sim, _tip_id)
+	if body == null or other == null or rollers.is_empty():
+		print("TIPPLATE refused: %d, %d or the roller not drawn" % [_tip_id, _tip_with])
+		return null
+	var roller := rollers[0]
+	var bag := _views.carry_on_props().bag_state(_tip_id, 0)
+	var k := (float(_clock.tick) - float(bag.get("since", _clock.tick))) / CarryLead.ticks_of(bag)
+	var d := QueueSpacing.pair(_views, _sim, _tip_id, _tip_with)
+	print(
+		(
+			"TIPPLATE t%d +%d id %d with %d: tip share %.2f, body %.3f m, roller to body %.3f m"
+			% [
+				_clock.tick,
+				at,
+				_tip_id,
+				_tip_with,
+				RollerPark.tip_share(bag, clampf(k, 0.0, 1.0)),
+				d.get("body", INF),
+				d.get("roller", INF)
+			]
+		)
+	)
+	var mid := (body.global_position + other.global_position) * 0.5 + Vector3.UP * 0.8
+	var along := other.global_position - body.global_position
+	along.y = 0.0
+	var side := Vector3.UP.cross(along.normalized() if along.length() > 0.01 else Vector3.FORWARD)
+	if side.dot(roller.global_position - body.global_position) < 0.0:
+		side = -side
+	# High first: from beside the pair at head height the crowd in front hid the
+	# stood roller behind a nearer guest while its handle still passed the sight
+	# test.
+	var views: Array[Vector3] = [
+		side * 2.4 + Vector3.UP * 4.6,
+		-side * 2.4 + Vector3.UP * 4.6,
+		side * 3.2 + Vector3.UP * 2.2,
+		-side * 3.2 + Vector3.UP * 2.2,
+	]
+	if _cam == null:
+		_cam = Camera3D.new()
+		_cam.fov = 45.0
+		_main.add_child(_cam)
+	_cam.current = true
+	for v in views.size():
+		_cam.look_at_from_position(mid + views[v], mid, Vector3.UP)
+		await process_frame
+		if await _tip_seen(body, other, roller, v):
+			var img := await PlateSight.grab(self)
+			DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_REL))
+			var file := "/tip_%s_s%d_id%d_t%d.png" % [_place, _seed, _tip_id, _clock.tick]
+			img.save_png(ProjectSettings.globalize_path(OUT_REL + file))
+			print("PLATE saved %s (view %d)" % [ProjectSettings.globalize_path(OUT_REL + file), v])
+			return img
+	return null
+
+
+## Whether the walker `body`, its `roller` and `other` project inside the
+## frame by MARGIN_PX and the sight lines land first on each (view `v`).
+func _tip_seen(body: Node3D, other: Node3D, roller: Node3D, v: int) -> bool:
+	var owners: Array[Node] = [_views]
+	var holder := PlateSight.colliders(
+		root, owners, {body: "walker", roller: "roller", other: "other"}
+	)
+	var boxes: Dictionary = holder.get_meta("bounds")
+	if not boxes.has("roller"):
+		holder.queue_free()
+		print("TIPPLATE view %d refused: the roller draws no mesh" % v)
+		return false
+	var bag: Vector3 = (boxes["roller"] as AABB).get_center()
+	var points := {
+		"walker feet": body.global_position,
+		"walker head": body.global_position + Vector3.UP * 1.7,
+		"roller": bag,
+		"other feet": other.global_position,
+		"other head": other.global_position + Vector3.UP * 1.7,
+	}
+	var frame := Rect2(Vector2.ZERO, _cam.get_viewport().get_visible_rect().size).grow(-MARGIN_PX)
+	for name: String in points:
+		var at := _cam.unproject_position(points[name])
+		print("TIPPLATE view %d %s at %s (frame %s)" % [v, name, at, frame])
+		if _cam.is_position_behind(points[name]) or not frame.has_point(at):
+			print("TIPPLATE view %d refused: %s out of frame" % [v, name])
+			holder.queue_free()
+			return false
+	await physics_frame
+	var space := holder.get_world_3d().direct_space_state
+	var eye := _cam.global_position
+	var skin := Array(QueueSpacing.surface(roller))
+	skin.sort_custom(
+		func(a: Vector3, b: Vector3) -> bool: return a.distance_to(eye) < b.distance_to(eye)
+	)
+	var to_roller: Array[Vector3] = []
+	to_roller.assign(skin.slice(0, 5))
+	# The bag's middle too: the nearest surface points can all be on the handle.
+	to_roller.append(bag)
+	var to_walker: Array[Vector3] = []
+	var to_other: Array[Vector3] = []
+	for up in [0.5, 1.0, 1.4]:
+		to_walker.append(body.global_position + Vector3.UP * up)
+		to_other.append(other.global_position + Vector3.UP * up)
+	var seen := true
+	for pair: Array in [[to_walker, "walker"], [to_roller, "roller"], [to_other, "other"]]:
+		var lines := PlateSight.sight_lines(space, eye, pair[0], pair[1])
+		print(
+			(
+				"TIPPLATE view %d sight %s: %d of %d on, blockers %s"
+				% [v, pair[1], lines["on_subject"].size(), pair[0].size(), lines["blockers"]]
+			)
+		)
+		# Most of each subject's lines land on it first.
+		seen = seen and lines["on_subject"].size() * 2 > pair[0].size()
+	var control := PlateSight.sight_lines(space, eye, to_walker, NO_TAG)
+	print("TIPPLATE view %d control (tag %s) on %d (0)" % [v, NO_TAG, control["on_subject"].size()])
+	holder.queue_free()
+	if not seen or not control["on_subject"].is_empty():
+		print("TIPPLATE view %d refused: a subject is hidden" % v)
+		return false
+	return true
+
+
+## The --tipplate strip as one contact sheet, frames left to right.
+func _tip_sheet() -> void:
+	var w := _tip_shots[0].get_width() / 2
+	var h := _tip_shots[0].get_height() / 2
+	var sheet := Image.create(w * 3, h * 2, false, Image.FORMAT_RGBA8)
+	for i in _tip_shots.size():
+		var img := _tip_shots[i].duplicate() as Image
+		img.convert(Image.FORMAT_RGBA8)
+		img.resize(w, h)
+		sheet.blit_rect(img, Rect2i(0, 0, w, h), Vector2i((i % 3) * w, (i / 3) * h))
+	var file := "/tip_%s_s%d_id%d_sheet.png" % [_place, _seed, _tip_id]
+	sheet.save_png(ProjectSettings.globalize_path(OUT_REL + file))
+	print("SHEET saved %s" % ProjectSettings.globalize_path(OUT_REL + file))
 
 
 ## Starts the strip at the first scanner with STRIP_HOLDERS holders all on
@@ -321,6 +563,9 @@ func _watch() -> void:
 			_serve(_station_of[id])
 		_stage[id] = p.stage
 		_station_of[id] = p.station
+		_tip_trace(p)
+		if _tip_auto != "" and _tip_mark < 0:
+			_tip_pick(p)
 	for station in stations:
 		var lane := _sim.queue_of(station)
 		for id in _sim.holding_of(station):
@@ -431,6 +676,41 @@ func _trace_holders(station: int, a: int, b: int) -> void:
 	print(text)
 
 
+## TIPTRACE once per queue stand tip (board d8a66218): the walker's stage, its
+## drawn yaw and way as it walks off, how far it turns (+ left), the roller's
+## hand (0 right) and the ticks the tip waits.
+func _tip_trace(p: Passenger) -> void:
+	var node := _views.node_for(p.id)
+	if node == null or _tipped >= TRACES * 4:
+		return
+	var bag := _views.carry_on_props().bag_state(p.id, 0)
+	if not RollerPark.queued(bag) or not bag.has("queue_tip"):
+		return
+	var key := "%d %.1f" % [p.id, float(bag["since"])]
+	if _tips.has(key):
+		return
+	_tips[key] = true
+	_tipped += 1
+	var heading := _views.walk_heading(p)
+	var at := float(_clock.tick) - float(bag["since"])
+	print(
+		(
+			"TIPTRACE t%d %d st%d at %s yaw %.2f way %s turn %.2f hand %d waits %.1f"
+			% [
+				_clock.tick,
+				p.id,
+				p.stage,
+				p.at,
+				node.rotation.y,
+				heading,
+				angle_difference(node.rotation.y, atan2(heading.x, heading.y)),
+				CarryLead.hand_of(int(bag.get("place", 0))),
+				float(bag["queue_tip"]) - at
+			]
+		)
+	)
+
+
 func _serve(station: int) -> void:
 	(_served.get_or_add(station, []) as Array).append(_clock.tick)
 
@@ -457,6 +737,11 @@ func _measure(a: int, b: int, leaver := false) -> void:
 	if traced and _traced < TRACES and d["roller"] < ROLLER_CLEAR_M:
 		_traced += 1
 		_trace(a, b, d)
+	# Leaver frames are traced on a budget of their own (board d8a66218): the
+	# held rows spend TRACES early in a run, before the first desk leaver.
+	if leaver and _leaver_traced < TRACES and d["roller"] < ROLLER_CLEAR_M:
+		_leaver_traced += 1
+		_trace(a, b, d)
 	var row: Array = _rows.get_or_add(key, [0, INF, 0, INF, 0, ""])
 	row[0] += 1
 	if d["body"] < row[1]:
@@ -479,10 +764,21 @@ func _trace(a: int, b: int, d: Dictionary) -> void:
 		var node := _views.node_for(pair[0])
 		var other := _views.node_for(pair[1]).global_position
 		var near := INF
+		# Where the body and its roller are drawn (x, z), so a trace says which
+		# way the roller lies from its own body (board d8a66218).
+		var bag := "none"
 		for roller in QueueSpacing.rollers(_views, _sim, pair[0]):
 			near = minf(near, QueueSpacing.least(QueueSpacing.surface(roller), other))
+			var local := node.global_transform.affine_inverse() * roller.global_position
+			bag = (
+				"(%.2f, %.2f) local (%.2f, %.2f)"
+				% [roller.global_position.x, roller.global_position.z, local.x, local.z]
+			)
 		line += (
-			" | %d st%d at %s moving %s halt %d station %d yaw %.2f its roller to %d %.3f"
+			(
+				" | %d st%d at %s moving %s halt %d station %d yaw %.2f drawn (%.2f, %.2f)"
+				+ " roller %s its roller to %d %.3f"
+			)
 			% [
 				pair[0],
 				p.stage,
@@ -491,6 +787,9 @@ func _trace(a: int, b: int, d: Dictionary) -> void:
 				p.halt_tick,
 				p.station,
 				node.rotation.y,
+				node.global_position.x,
+				node.global_position.z,
+				bag,
 				pair[1],
 				near
 			]

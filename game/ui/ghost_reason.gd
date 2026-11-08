@@ -65,6 +65,9 @@ const SHORT_TEXT := {
 	BuildResult.Reason.MOVE_NO_FIT: "A piece does not fit",
 	BuildResult.Reason.MOVE_EXIT_BLOCKED: "Blocks a way out",
 	BuildResult.Reason.MOVE_CHANGED: "The room changed",
+	BuildResult.Reason.GATE_NO_ROOM: "No room for the plane",
+	BuildResult.Reason.GATE_ROUTE_BLOCKED: "Way to the lane blocked",
+	BuildResult.Reason.GATE_ROUTE: "A booked plane needs it",
 }
 
 var build_mode: BuildMode

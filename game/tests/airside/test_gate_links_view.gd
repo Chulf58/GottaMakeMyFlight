@@ -98,7 +98,8 @@ func test_lines_ends_and_captions_show_only_in_build_mode() -> void:
 	)
 	assert_int(_view.paths().size()).is_equal(2)
 	assert_int(_view.ends().size()).is_equal(2)
-	assert_array(texts).is_equal(["Gate A", "Gate B"])
+	# Each caption names its gate, then its biggest plane on a second line.
+	assert_array(texts).is_equal(["Gate A\nup to large planes", "Gate B\nup to large planes"])
 	# Two segments per gate, four corners per segment, each with its other end
 	# and side in CUSTOM0.
 	assert_int(verts.size()).is_equal(2 * 2 * 4)

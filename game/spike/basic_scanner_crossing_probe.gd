@@ -46,7 +46,13 @@ extends SceneTree
 ## to the passage, which it is not in. Instead of the booth's kind, move and crossing-plate
 ## requirements, the run must see every sent passenger cross mid-arch, at least two of them
 ## running, a returner's second pass, and a close plate of a passenger with its arms tucked
-## mid-arch (each crossing prints its tuck weight there).
+## mid-arch (each crossing prints its tuck weight there). A max-reach diagnostic
+## (board item bcad1dd0) prints, per passenger and pass, the frame of the widest
+## reach across the arch's axis overall, of the arms and of the legs, with that
+## frame's drawn step, clip, crossfade, tuck, yaw, stage and phase (REACH_MAX),
+## and the widest reach per frame state (REACH_STATE); a foot past the half
+## opening between the posts is plated close once per state, to
+## tools/blender/out/scanner_reach/.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -65,6 +71,10 @@ const StarterFlight := preload("res://spike/starter_flight.gd")
 const CrossingBodies := preload("res://spike/crossing_bodies.gd")
 const OUT_REL := "res://../tools/blender/out/security-booth"
 const CLOSE_OUT_REL := "res://../tools/blender/out/carry-selfclip"
+const REACH_OUT_REL := "res://../tools/blender/out/scanner_reach"
+## The arch's entry along its axis from the arch's centre (z, metres), in
+## front of the posts: a walker and a runner are plated close here once each.
+const ENTRY_Z := [0.40, 0.60]
 const MAIN_SCENE := "res://main/main.tscn"
 const RAY := Vector3(0.0013, 1.0, 0.0007)
 const MARGIN_PX := 8.0
@@ -200,6 +210,14 @@ var _self_seen := {}
 var _self_distinct := 0
 ## Body index -> the sent passenger that showed it (CrossingBodies).
 var _bodies := {}
+## Lane mode's max-reach diagnostic (_reach_frame()): passenger id -> {pass ->
+## {"groups": {group -> [reach, frame line]}, "states": {state -> [frames,
+## arm max, leg max]}}}, each passenger's yaw on its last checked frame, the
+## states plated (true once saved) and the folder of their plates.
+var _reach := {}
+var _reach_yaw := {}
+var _reach_plated := {}
+var _reach_dir := ""
 
 
 func _initialize() -> void:
@@ -212,6 +230,8 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_close_dir = ProjectSettings.globalize_path(CLOSE_OUT_REL + run).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_close_dir)
+	_reach_dir = ProjectSettings.globalize_path(REACH_OUT_REL + run).simplify_path()
+	DirAccess.make_dir_recursive_absolute(_reach_dir)
 	_lane_mode = OS.get_cmdline_user_args().has("--lane")
 	print("PROBE out_dir=", _out_dir, " close_dir=", _close_dir, " lane_mode=", _lane_mode)
 	_run.call_deferred()
@@ -447,6 +467,7 @@ func _cross() -> void:
 	var spawns := 0
 	var next_send := _clock.tick
 	var stop := Time.get_ticks_msec() + RUN_LIMIT_MS
+	_hold_runners_late()
 	_clock.ticked.connect(_on_tick)
 	while Time.get_ticks_msec() < stop:
 		await RenderingServer.frame_post_draw
@@ -460,11 +481,6 @@ func _cross() -> void:
 			_send()
 			spawns += 1
 			next_send = _clock.tick + SEND_GAP_TICKS
-		# Runners are kept late (the sim's beat may clear it) until cleared.
-		for id: int in _runners:
-			var runner := _sim.get_passenger(id)
-			if runner != null and runner.stage <= Passenger.Stage.SECURITY:
-				runner.late = true
 		for id in _sim.passenger_ids():
 			_check(id)
 		for id in _sent:
@@ -660,6 +676,31 @@ func _send() -> void:
 	print("SEND passenger=%d kinds=%s role=%s" % [id, [kind, SecurityLooks.bag_kind(p, 1)], traits])
 
 
+## Keeps the runners late on every tick until they are cleared: the sim's beat
+## sets `late` from its forecast at the end of its tick, so the hold is
+## connected to the clock right after the sim and before the views sync. Held
+## once a frame instead (as before), a runner was drawn walking on the ticks
+## between a beat and the next frame, flipping its clip between run and walk
+## and starting the crossfade over (finding
+## why-does-the-body-reach-past-the-security-lane-arch-s-0-38-m).
+func _hold_runners_late() -> void:
+	var hold := func(_tick: int) -> void:
+		for id: int in _runners:
+			var runner := _sim.get_passenger(id)
+			if runner != null and runner.stage <= Passenger.Stage.SECURITY:
+				runner.late = true
+	var links := _clock.ticked.get_connections()
+	for link in links:
+		_clock.ticked.disconnect(link["callable"])
+	for link in links:
+		_clock.ticked.connect(link["callable"], link["flags"])
+		if (link["callable"] as Callable).get_object() == _sim:
+			_clock.ticked.connect(hold)
+	print("LATE_HOLD after_sim=%s links=%d" % [_clock.ticked.is_connected(hold), links.size()])
+	if not _clock.ticked.is_connected(hold):
+		_invalid("the runners' late hold found no sim tick on the clock")
+
+
 ## One frame of passenger `id` against every booth it is near.
 func _check(id: int) -> void:
 	var body := _views.node_for(id)
@@ -834,6 +875,8 @@ func _check(id: int) -> void:
 		var arch := StringName((booth[0] as Node3D).get_meta("record", {}).get("def", ""))
 		if arch == SecurityLanes.ARCH:
 			_arch_crossing(id, p, s, booth, local, props_now)
+			if inside:
+				_reach_frame(id, p, body, booth, local, owned)
 		elif (
 			not _plated
 			and not _plate_task
@@ -885,6 +928,244 @@ func _arch_crossing(
 	if not _arch_plated and not _plate_task and absf(local.z) < 0.15 and tuck >= 1.0:
 		_plate_task = true
 		_plate_arch.call_deferred(id)
+
+
+## Lane mode, one frame of passenger `id` mid-arch (the mid_reach window,
+## `owned` its drawn body points and their bones): the widest point across the
+## arch's axis for the arms, the legs and the rest, and with it this frame's
+## drawn step (the sim's step over the tick, which picks walk or idle), clip,
+## crossfade weight, tuck weight, yaw against the arch's axis and its change
+## since the last checked frame, stage and phase. Kept per pass (as
+## _arch_crossing() keys it) at the frame of each group's widest reach, and
+## per frame state (_reach_state_of()). Each state's first frame between the
+## posts with a foot past the arch's half opening is plated close once.
+func _reach_frame(
+	id: int, p: Passenger, body: Node3D, booth: Array, local: Vector3, owned: Array
+) -> void:
+	var to_arch: Transform3D = booth[1]
+	var points: PackedVector3Array = owned[0]
+	var names: PackedStringArray = owned[1]
+	var widest := {"arm": [0.0, ""], "leg": [0.0, ""], "torso": [0.0, ""]}
+	for k in points.size():
+		var x := absf((to_arch * points[k]).x)
+		var group := _limb(names[k])
+		if x > widest[group][0]:
+			widest[group] = [x, names[k]]
+	var widest_all: Array = widest["torso"]
+	for group in ["arm", "leg"]:
+		if widest[group][0] > widest_all[0]:
+			widest_all = widest[group]
+	widest["all"] = widest_all
+	var step := _views.tick_position(id, true) - _views.tick_position(id, false)
+	var step_mm := roundi(step.length() * 1000.0)
+	var fade: ClipCrossfade = body.get_meta(&"crossfade")
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	var ahead := to_arch.basis * body.global_basis.z
+	var yaw := rad_to_deg(atan2(ahead.x, ahead.z))
+	var off_axis := minf(absf(yaw), 180.0 - absf(yaw))
+	var turn := absf(wrapf(yaw - float(_reach_yaw.get(id, yaw)), -180.0, 180.0))
+	_reach_yaw[id] = yaw
+	var state := _reach_state_of(step_mm, fade.blending(), off_axis, turn)
+	var post_half := _post_half(booth)
+	var in_posts := absf(local.z) <= post_half
+	var pass_key := "arch_second" if p.incident_resolved else "arch_first"
+	var context := (
+		(
+			"z=%+.3f in_posts=%s yaw=%+.1f off_axis=%.1f turn_deg=%.1f step_mm=%d stopped=%s"
+			+ " clip=%s clip_at=%.2f blending=%s fade_weight=%.2f late=%s tuck=%.2f stage=%s phase=%s"
+			+ " arm=%.3f(%s) leg=%.3f(%s) torso=%.3f(%s) state=%s"
+		)
+		% [
+			local.z,
+			in_posts,
+			yaw,
+			off_axis,
+			turn,
+			step_mm,
+			step_mm == 0,
+			body.get_meta(&"clip", ""),
+			player.current_animation_position,
+			fade.blending(),
+			fade.weight,
+			p.late,
+			_views.carry_on_props().tuck_of(id),
+			Passenger.Stage.find_key(p.stage),
+			SecurityRuntime.Phase.find_key(p.security_phase),
+			widest["arm"][0],
+			widest["arm"][1],
+			widest["leg"][0],
+			widest["leg"][1],
+			widest["torso"][0],
+			widest["torso"][1],
+			state
+		]
+	)
+	var passes: Dictionary = _reach.get_or_add(id, {})
+	var run: Dictionary = passes.get_or_add(pass_key, {"groups": {}, "states": {}})
+	for group in ["all", "arm", "leg"]:
+		# Over the whole mid_reach window, and between the posts only.
+		for where in ["", "posts_"] if in_posts else [""]:
+			var best: Array = run["groups"].get(where + group, [-1.0, ""])
+			if widest[group][0] > best[0]:
+				var line := "bone=%s %s" % [widest[group][1], context]
+				run["groups"][where + group] = [widest[group][0], line]
+	var tally: Array = run["states"].get_or_add(state, [0, 0.0, 0.0])
+	tally[0] += 1
+	tally[1] = maxf(tally[1], widest["arm"][0])
+	tally[2] = maxf(tally[2], widest["leg"][0])
+	if (
+		in_posts
+		and widest["leg"][0] > booth[3]
+		and not _reach_plated.has(state)
+		and not _plate_task
+	):
+		_reach_plated[state] = false
+		_plate_task = true
+		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
+		_plate_reach.call_deferred(id, state, booth)
+	# One walker and one runner plated at the arch's entry, where the widest
+	# feet were before the set-off turn (finding
+	# why-does-the-body-reach-past-the-security-lane-arch-s-0-38-m).
+	var entry := "entry_runner" if _runners.has(id) else "entry_walker"
+	var at_entry := local.z >= ENTRY_Z[0] and local.z <= ENTRY_Z[1] and step_mm > 0
+	if at_entry and pass_key == "arch_first" and not _reach_plated.has(entry) and not _plate_task:
+		_reach_plated[entry] = false
+		_plate_task = true
+		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
+		_plate_reach.call_deferred(id, entry, booth)
+
+
+## The frame's state for the max-reach diagnostic: stopped (no drawn step over
+## the tick, so the idle clip), fading (stepping, its crossfade under way),
+## turning (stepping, more than 15 degrees off the arch's axis or turned more
+## than 2 degrees since the last checked frame) or walking.
+func _reach_state_of(step_mm: int, blending: bool, off_axis: float, turn: float) -> String:
+	if step_mm == 0:
+		return "stopped"
+	if blending:
+		return "fading"
+	if off_axis > 15.0 or turn > 2.0:
+		return "turning"
+	return "walking"
+
+
+## Which group bone `name` belongs to: "leg", "arm" or "torso" (head and hips).
+func _limb(name: String) -> String:
+	for part in ["Shin", "Foot", "Toes", "Leg", "Thigh", "Knee"]:
+		if part in name:
+			return "leg"
+	for part in ["Arm", "Hand", "Finger", "Thumb", "Shoulder", "Elbow", "Wrist", "Clav"]:
+		if part in name:
+			return "arm"
+	return "torso"
+
+
+## Half the depth of the arch's parts that stand taller than a metre (its
+## posts), along its axis.
+func _post_half(booth: Array) -> float:
+	var half := 0.0
+	for part: Array in booth[2]:
+		var box: AABB = part[1]
+		if box.size.y > 1.0:
+			half = maxf(half, maxf(absf(box.position.z), absf(box.end.z)))
+	return half
+
+
+## A close plate of passenger `id` with a foot past the arch's half opening in
+## frame state `state`, the sim clock paused for it; the reach is measured
+## again on the paused pose and printed with the plate.
+func _plate_reach(id: int, state: String, booth: Array) -> void:
+	_clock.set_paused(true)
+	await _frames(1)
+	var body := _views.node_for(id)
+	if body != null:
+		var owned := CarryContact.body_points_owned(body, [])
+		var leg := 0.0
+		var arm := 0.0
+		for k in (owned[0] as PackedVector3Array).size():
+			var x := absf(((booth[1] as Transform3D) * (owned[0] as PackedVector3Array)[k]).x)
+			if _limb((owned[1] as PackedStringArray)[k]) == "leg":
+				leg = maxf(leg, x)
+			elif _limb((owned[1] as PackedStringArray)[k]) == "arm":
+				arm = maxf(arm, x)
+		var name := "reach_%s_p%d" % [state, id]
+		print(
+			(
+				"REACH_PLATE passenger=%d state=%s paused_leg=%.3f paused_arm=%.3f half_opening=%.3f"
+				% [id, state, leg, arm, booth[3]]
+			)
+		)
+		# Headings from the arch's axis (the first looks along it at the body,
+		# the fifth from the other end), so the posts are not between; the
+		# other passengers are hidden.
+		var axis := (booth[0] as Node3D).global_basis.z
+		var others := CarryChecks.hide_others(_sim, _views, id)
+		if await _plate_close(id, null, name, _reach_dir, atan2(axis.x, axis.z)):
+			_reach_plated[state] = true
+		else:
+			_invalid("no heading framed passenger %d for the %s reach plate" % [id, state])
+		for node in others:
+			node.visible = true
+	_clock.set_paused(false)
+	_plate_task = false
+
+
+## The max-reach diagnostic's report: per passenger per pass, the frame of the
+## widest reach overall, of the arms and of the legs, with each frame's state;
+## and per pass per state, the frames and the widest arm and leg. Then a contact
+## sheet of the reach plates.
+func _report_reach() -> void:
+	var total := {}
+	for id: int in _reach:
+		for pass_key: String in _reach[id]:
+			var run: Dictionary = _reach[id][pass_key]
+			for group in ["all", "arm", "leg", "posts_all", "posts_arm", "posts_leg"]:
+				if not run["groups"].has(group):
+					continue
+				var best: Array = run["groups"][group]
+				print(
+					(
+						"REACH_MAX passenger=%d runner=%s pass=%s group=%s reach=%.3f %s"
+						% [id, _runners.has(id), pass_key, group, best[0], best[1]]
+					)
+				)
+				if group.ends_with("all"):
+					var at_state: String = best[1].get_slice("state=", 1)
+					var tally: Dictionary = total.get_or_add(group, {})
+					tally[at_state] = tally.get(at_state, 0) + 1
+			for state: String in run["states"]:
+				var tally: Array = run["states"][state]
+				print(
+					(
+						"REACH_STATE passenger=%d pass=%s state=%s frames=%d arm_max=%.3f leg_max=%.3f"
+						% [id, pass_key, state, tally[0], tally[1], tally[2]]
+					)
+				)
+	print("REACH_TOTAL max_frame_states=%s plated=%s" % [total, _reach_plated])
+	for entry in ["entry_walker", "entry_runner"]:
+		if not _reach_plated.get(entry, false):
+			_invalid("no %s plate at the arch's entry was saved" % entry)
+	for id in _sent:
+		if not _reach.has(id):
+			_invalid("sent passenger %d has no mid-arch reach frame" % id)
+	var names: Array[String] = []
+	for file in DirAccess.get_files_at(_reach_dir):
+		if file.begins_with("reach_") and file.ends_with(".png"):
+			names.append(file)
+	names.sort()
+	if names.is_empty():
+		return
+	var cell := Vector2i(480, 270)
+	var sheet := Image.create(
+		cell.x * 2, cell.y * ceili(names.size() / 2.0), false, Image.FORMAT_RGB8
+	)
+	for n in names.size():
+		var img := Image.load_from_file(_reach_dir.path_join(names[n]))
+		img.convert(Image.FORMAT_RGB8)
+		img.resize(cell.x, cell.y)
+		sheet.blit_rect(img, Rect2i(Vector2i.ZERO, cell), Vector2i(n % 2, n / 2) * cell)
+	sheet.save_png(_reach_dir.path_join("contact_sheet_reach.png"))
+	print("REACH_SHEET %s plates=%s" % [_reach_dir.path_join("contact_sheet_reach.png"), names])
 
 
 ## Lane mode, a bag in a tray beside the arch (left out of the passage trace
@@ -1260,7 +1541,8 @@ func _plate_arch(id: int) -> void:
 ## person_shown(): sight lines land on it, none blocked), and at least two of five
 ## sight lines to the bag land on it, blocked by nothing but the passenger. Each
 ## heading prints its numbers. The camera, the HUD and the game camera are put back.
-func _plate_close(id: int, bag: Node3D, name: String) -> bool:
+func _plate_close(id: int, bag: Node3D, name: String, dir := "", base_yaw := NAN) -> bool:
+	var out_dir := _close_dir if dir == "" else dir
 	var body := _views.node_for(id)
 	if body == null:
 		return false
@@ -1294,7 +1576,7 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 	var back := CLOSE_M * maxf(1.0, (top + 0.3) / 2.3) * low
 	for h in 8:
 		var look := body.global_position + Vector3(0.0, aim, 0.0)
-		var yaw := body.global_rotation.y + h * PI / 4.0
+		var yaw := (body.global_rotation.y if is_nan(base_yaw) else base_yaw) + h * PI / 4.0
 		var out := Basis(Vector3.UP, yaw) * Vector3(0.0, 0.0, back)
 		var up := Vector3(0.0, CLOSE_HEIGHT_M - AIM_M + aim, 0.0)
 		cam.global_position = body.global_position + out + up
@@ -1331,7 +1613,7 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 			print("INFRAME %s no bounds or unbaked: %s" % [tag, holder.get_meta("unbaked")])
 		holder.free()
 		if ok:
-			var path := _close_dir.path_join(name + ".png")
+			var path := out_dir.path_join(name + ".png")
 			if img.save_png(path) != OK:
 				_invalid("could not save %s" % path)
 			else:
@@ -1339,7 +1621,7 @@ func _plate_close(id: int, bag: Node3D, name: String) -> bool:
 				saved = true
 				# The bag close up from the same side, for the hand and the legs.
 				if bag != null:
-					var detail := _close_dir.path_join(name + "_detail.png")
+					var detail := out_dir.path_join(name + "_detail.png")
 					# Another passenger in front of the camera hid the loop and the fingers
 					# in the tray-to-back plate: the others are left out of the detail.
 					var others := CarryChecks.hide_others(_sim, _views, id)
@@ -1544,6 +1826,7 @@ func _report() -> void:
 	)
 	if _lane_mode:
 		_report_lane()
+		_report_reach()
 	else:
 		_report_booth()
 	if totals["frames"] < 100:

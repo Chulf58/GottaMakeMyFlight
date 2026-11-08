@@ -13,10 +13,22 @@ extends Node
 ## first letter from A that no other gate, running contract or live flight
 ## names, and keeps it.
 ##
+## A gate has no size (decision runway-and-taxi-technical-design-movement-plan-
+## analytic-bookings-planned-pauses, section 3): a desk links only to an exit
+## whose small-plane envelope (StandEnvelope) is clear and whose small swing
+## square, south of the shared lane, meets no other gate's, so exits can stand
+## StandPlacement.EXIT_SPACING_CELLS (19) apart. Each gate's max_class
+## (classes) is the largest class whose envelope is clear, worked out on every
+## refresh(); building into a gate's unused larger space is allowed and lowers
+## it (edit_warning() says so first).
+##
 ## Refused before commit (edit_problem(), asked by ApronStand's site guard): a
-## desk that would link to no exit, or whose stand's private ground (the
-## stand's sweep south of the shared lane, StandPlacement.swept_rects()) would
-## overlap another gate's; and a removal that would end a gate while a live
+## desk that would link to no exit, whose small swing square would overlap
+## another gate's (GATE_STAND_OVERLAP), whose exit has no room for a small swing
+## (GATE_NO_ROOM) or whose small way north to the lane is built over
+## (GATE_ROUTE_BLOCKED); an edit that builds under the envelope of the largest
+## class booked at a gate (GATE_ROUTE: its running contracts and the live
+## flights at it); and a removal that would end a gate while a live
 ## flight is at it, or while one of its running contracts fits no other gate.
 ## A removal that ends a gate moves its contracts to the other gates first
 ## (FlightSim.move_plan()), when the removal is applied. A desk only ever links
@@ -38,8 +50,16 @@ signal changed
 ## Why a gate desk has no gate (unlinked_on()). NO_EXIT: no north exit within
 ## LINK_CELLS. EXIT_TAKEN: every exit in reach is another gate's. STAND_OVERLAP:
 ## a free exit is in reach, but its stand would overlap a gate's. NO_LETTER: it
-## could link, but every gate letter is in use.
-enum Unlinked { NO_EXIT, EXIT_TAKEN, STAND_OVERLAP, NO_LETTER }
+## could link, but every gate letter is in use. NO_ROOM: the free exit has no
+## room for a small swing. ROUTE_BLOCKED: its small way north is built over.
+enum Unlinked { NO_EXIT, EXIT_TAKEN, STAND_OVERLAP, NO_LETTER, NO_ROOM, ROUTE_BLOCKED }
+
+## The refusal for a desk whose nearest free exit is unfit for that reason.
+const REFUSAL_OF := {
+	Unlinked.STAND_OVERLAP: BuildResult.Reason.GATE_STAND_OVERLAP,
+	Unlinked.NO_ROOM: BuildResult.Reason.GATE_NO_ROOM,
+	Unlinked.ROUTE_BLOCKED: BuildResult.Reason.GATE_ROUTE_BLOCKED,
+}
 
 const DESK := &"gate_desk"
 ## How far (in cells, either way, diagonals counting one) a desk's footprint may
@@ -49,6 +69,13 @@ const LETTERS := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const SAVE_VERSION := 1
 const SAVE_KEYS := ["save_version", "gates"]
 const GATE_KEYS := ["gate", "desk", "exit"]
+## Edits that never build: only a removal that ends a gate is ever refused.
+const REMOVALS: Array[BuildEdit.Kind] = [
+	BuildEdit.Kind.REMOVE_FLOOR,
+	BuildEdit.Kind.REMOVE_WALL,
+	BuildEdit.Kind.REMOVE_OBJECT,
+	BuildEdit.Kind.REMOVE_ROOM,
+]
 
 @export var build_mode: BuildMode
 @export var flights: FlightSim
@@ -57,6 +84,11 @@ var grid: BuildGrid
 ## {"gate": letter, "desk": desk object id, "exit": exit door id}, in desk id
 ## order.
 var bindings: Array[Dictionary] = []
+## Gate letter -> its max_class (StandEnvelope.max_class), "" when not even a
+## small plane fits; worked out on every refresh().
+var classes: Dictionary = {}
+## "x|wall_z|class" -> the envelope's cells, which only the stand decides.
+var _envelope_cells: Dictionary = {}
 
 
 func _ready() -> void:
@@ -104,7 +136,44 @@ func refresh() -> void:
 					"GateDesks: every gate letter is in use; desk %d is no gate" % link["desk"]
 				)
 	bindings.assign(links.filter(func(link: Dictionary) -> bool: return link["gate"] != ""))
+	classes = {}
+	for binding in bindings:
+		var stand := StandPlacement.for_exit(grid, binding["exit"])
+		classes[binding["gate"]] = StandEnvelope.max_class(grid, site_of(grid), stand)
 	changed.emit()
+
+
+## The largest plane class gate `gate`'s stand holds now, or "" (also for no
+## such gate).
+func max_class(gate: String) -> String:
+	return classes.get(gate, "")
+
+
+## The largest plane class booked at gate `gate`: its running contracts' and the
+## live flights' at it that have not yet taken off (a one-off flight is the
+## starter's class). "" with none.
+func booked_class(gate: String) -> String:
+	var out := ""
+	if flights == null:
+		return out
+	for contract_id in flights.active_contract_ids():
+		var contract := flights.contract_of(contract_id)
+		if contract["gate"] == gate:
+			out = StandEnvelope.larger(out, contract["plane_size"])
+	for flight_id in flights.flight_ids():
+		if flights.flight_gate(flight_id) != gate:
+			continue
+		if flights.state_of(flight_id) >= FlightSim.State.TAKEOFF:
+			continue
+		var contract := flights.contract_of(flights.flight_contract_id(flight_id))
+		var plane_class: String = contract.get("plane_size", FlightSim.STARTER_TERMS["plane_size"])
+		out = StandEnvelope.larger(out, plane_class)
+	return out
+
+
+## The site of `on_grid` (a SiteGrid's), or null.
+static func site_of(on_grid: BuildGrid) -> SiteDefinition:
+	return (on_grid as SiteGrid).site if on_grid is SiteGrid else null
 
 
 ## The links `on_grid` would have, given `kept`: each of `kept` whose desk and
@@ -171,21 +240,43 @@ static func _unlinked_reason(
 	var reach := exits_in_reach(on_grid, desk_footprint(on_grid, desk))
 	if reach.is_empty():
 		return {"why": Unlinked.NO_EXIT, "gate": ""}
-	# Every free exit in nearest_exit()'s order: one whose stand overlaps no
-	# gate's would link, so only a missing letter can stop it; the overlap is
-	# the reason only when every free exit overlaps (named for the nearest).
-	var overlap := {}
+	# Every free exit in nearest_exit()'s order: one fit for a gate would link,
+	# so only a missing letter can stop it; otherwise the nearest free exit's
+	# unfitness is the reason (an overlap named for the gate it meets).
+	var stands: Array[Dictionary] = []
+	for link in links:
+		stands.append(StandPlacement.for_exit(on_grid, link["exit"]))
+	var first := {}
 	for exit in reach:
 		if gate_of_exit.has(exit):
 			continue
-		var gate := _overlapping_gate(on_grid, StandPlacement.for_exit(on_grid, exit), links)
-		if gate == "":
+		var why := exit_unfit(on_grid, exit, stands)
+		if why < 0:
 			return {"why": Unlinked.NO_LETTER, "gate": ""}
-		if overlap.is_empty():
-			overlap = {"why": Unlinked.STAND_OVERLAP, "gate": gate}
-	if not overlap.is_empty():
-		return overlap
+		if first.is_empty():
+			var gate := ""
+			if why == Unlinked.STAND_OVERLAP:
+				gate = _overlapping_gate(on_grid, StandPlacement.for_exit(on_grid, exit), links)
+			first = {"why": why, "gate": gate}
+	if not first.is_empty():
+		return first
 	return {"why": Unlinked.EXIT_TAKEN, "gate": gate_of_exit[reach[0]]}
+
+
+## Why exit `exit` on `on_grid` cannot be a new gate's beside `stands`, as an
+## Unlinked reason (STAND_OVERLAP before NO_ROOM before ROUTE_BLOCKED), or -1
+## when it can: its small swing square must meet none of theirs and its small
+## envelope must be clear.
+static func exit_unfit(on_grid: BuildGrid, exit: int, stands: Array[Dictionary]) -> int:
+	var stand := StandPlacement.for_exit(on_grid, exit)
+	if stands.any(func(other: Dictionary) -> bool: return stands_overlap(stand, other)):
+		return Unlinked.STAND_OVERLAP
+	match StandEnvelope.blocked_part(on_grid, site_of(on_grid), stand, PlaneClasses.SMALL):
+		StandEnvelope.Part.CLEAR:
+			return -1
+		StandEnvelope.Part.WAY:
+			return Unlinked.ROUTE_BLOCKED
+	return Unlinked.NO_ROOM
 
 
 ## The first of `links`' gates whose stand overlaps `stand`, or "".
@@ -246,13 +337,15 @@ static func desk_ids(on_grid: BuildGrid) -> Array[int]:
 
 
 ## The exit door nearest `footprint` (at most LINK_CELLS away, diagonals
-## counting one) whose outside faces north, that is not in `taken` and whose
-## stand overlaps none of `stands`; ties to the lower id. 0 for none.
+## counting one) whose outside faces north and that is not in `taken`; with
+## `fit`, also one fit for a gate beside `stands` (exit_unfit()). Ties to the
+## lower id. 0 for none.
 static func nearest_exit(
 	on_grid: BuildGrid,
 	footprint: Array[Vector2i],
 	taken: Dictionary,
-	stands: Array[Dictionary] = []
+	stands: Array[Dictionary] = [],
+	fit := true
 ) -> int:
 	var best := 0
 	var best_cells := LINK_CELLS + 1
@@ -264,8 +357,7 @@ static func nearest_exit(
 		var cells := reach_cells(on_grid, footprint, id)
 		if cells >= best_cells:
 			continue
-		var stand := StandPlacement.for_exit(on_grid, id)
-		if stands.any(func(other: Dictionary) -> bool: return stands_overlap(stand, other)):
+		if fit and exit_unfit(on_grid, id, stands) >= 0:
 			continue
 		if cells < best_cells:
 			best = id
@@ -273,8 +365,8 @@ static func nearest_exit(
 	return best
 
 
-## Whether stands `a` and `b` would sweep any of the same private ground: their
-## StandPlacement.swept_rects() south of the shared lane zone.
+## Whether stands `a` and `b` would share any private ground: their small-plane
+## envelopes (StandEnvelope) south of the shared lane zone.
 static func stands_overlap(a: Dictionary, b: Dictionary) -> bool:
 	for rect_a in private_rects(a):
 		for rect_b in private_rects(b):
@@ -283,12 +375,12 @@ static func stands_overlap(a: Dictionary, b: Dictionary) -> bool:
 	return false
 
 
-## The stand's sweep south of the shared lane zone, which no other stand may
-## share.
+## The stand's small-plane envelope south of the shared lane zone, which no
+## other gate's may share. The larger envelopes are shared between neighbours.
 static func private_rects(stand: Dictionary) -> Array[Rect2]:
 	var lane_south := StandPlacement.lane_zone().end.y
 	var out: Array[Rect2] = []
-	for rect in StandPlacement.swept_rects(stand):
+	for rect in StandEnvelope.rects(stand, PlaneClasses.SMALL):
 		var north := maxf(rect.position.y, lane_south)
 		if rect.end.y > north:
 			out.append(Rect2(rect.position.x, north, rect.size.x, rect.end.y - north))
@@ -296,14 +388,20 @@ static func private_rects(stand: Dictionary) -> Array[Rect2]:
 
 
 ## The site guard's part for gates: a refusal for a gate desk that would link
-## to no exit or whose stand would overlap another gate's, or for a removal
-## that would end a gate whose flights cannot move; else null. `on_grid` is the
-## grid the edit is checked on (the live grid or a trial copy of it).
+## to no exit or to none fit for a gate, for an edit that builds under the
+## envelope of a gate's booked class, or for a removal that would end a gate
+## whose flights cannot move; else null. `on_grid` is the grid the edit is
+## checked on (the live grid or a trial copy of it).
 func edit_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
-	if edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == DESK:
-		return _placement_problem(on_grid, edit)
 	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
 		return _removal_problem(on_grid, edit.object_id)
+	if REMOVALS.has(edit.kind):
+		return null
+	var route := _route_problem(on_grid, edit)
+	if route != null:
+		return route
+	if edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == DESK:
+		return _placement_problem(on_grid, edit)
 	return null
 
 
@@ -315,12 +413,16 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	for link in links:
 		taken[link["exit"]] = true
 		stands.append(StandPlacement.for_exit(on_grid, link["exit"]))
-	var reach := nearest_exit(on_grid, footprint, taken)
+	var reach := nearest_exit(on_grid, footprint, taken, stands, false)
 	if reach == 0:
 		return BuildResult.refused(BuildResult.Reason.GATE_NO_EXIT)
 	if nearest_exit(on_grid, footprint, taken, stands) != 0:
 		return null
-	# Every exit in reach would overlap a gate's stand: name the nearest's.
+	# No exit in reach is fit for a gate: the nearest one's reason, an overlap
+	# naming the gate it meets.
+	var why := exit_unfit(on_grid, reach, stands)
+	if why != Unlinked.STAND_OVERLAP:
+		return BuildResult.refused(REFUSAL_OF[why])
 	var stand := StandPlacement.for_exit(on_grid, reach)
 	for link in links:
 		if stands_overlap(stand, StandPlacement.for_exit(on_grid, link["exit"])):
@@ -329,6 +431,65 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 				refusal.detail = "gate %s is too close" % link["gate"]
 			return refusal
 	return BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP)
+
+
+## A GATE_ROUTE refusal naming the gate and its booked class when `edit` builds
+## on a cell of the envelope of the largest class booked at any gate, else null.
+func _route_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+	var built := StandEnvelope.edit_cells(edit)
+	for binding in bindings:
+		var booked := booked_class(binding["gate"])
+		if booked == "":
+			continue
+		var under := envelope_cells(on_grid, binding["exit"], booked)
+		if built.any(func(cell: Vector2i) -> bool: return under.has(cell)):
+			var refusal := BuildResult.refused(BuildResult.Reason.GATE_ROUTE)
+			refusal.detail = "gate %s, a %s plane" % [binding["gate"], booked]
+			return refusal
+	return null
+
+
+## The cells of the `plane_class` envelope at exit `exit`'s stand on `on_grid`,
+## kept per stand and class.
+func envelope_cells(on_grid: BuildGrid, exit: int, plane_class: String) -> Dictionary:
+	var stand := StandPlacement.for_exit(on_grid, exit)
+	if stand.is_empty():
+		return {}
+	var key := "%s|%s|%s|%s" % [stand["x"], stand["wall_z"], plane_class, on_grid.size]
+	if not _envelope_cells.has(key):
+		_envelope_cells[key] = StandEnvelope.cells(on_grid, stand, plane_class)
+	return _envelope_cells[key]
+
+
+## What `edit` would do to the gates' max_class though it is allowed, for the
+## build ghost (SiteGrid.edit_warning): "Gate A will then take planes up to
+## medium" for each gate whose max_class envelope it builds in, or "".
+func edit_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
+	if REMOVALS.has(edit.kind):
+		return ""
+	var built := StandEnvelope.edit_cells(edit)
+	var lines := PackedStringArray()
+	for binding in bindings:
+		var now: String = classes.get(binding["gate"], "")
+		if now == "":
+			continue
+		# The envelopes nest, so the largest class up to now that the edit leaves
+		# clear is the class after it.
+		var after := ""
+		for plane_class in StandEnvelope.LARGEST_FIRST:
+			if PlaneClasses.ORDER.find(plane_class) > PlaneClasses.ORDER.find(now):
+				continue
+			var under := envelope_cells(on_grid, binding["exit"], plane_class)
+			if not built.any(func(cell: Vector2i) -> bool: return under.has(cell)):
+				after = plane_class
+				break
+		if after == now:
+			continue
+		if after == "":
+			lines.append("Gate %s will then have no room for a plane" % binding["gate"])
+		else:
+			lines.append("Gate %s will then take planes up to %s" % [binding["gate"], after])
+	return ". ".join(lines)
 
 
 ## A refusal for removing object `id` from `on_grid`, or null. Only a removal

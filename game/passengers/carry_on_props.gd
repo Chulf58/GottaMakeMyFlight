@@ -317,12 +317,19 @@ func sync() -> void:
 				hands[i] = (int(was[i]["place"]) / 2) % 2
 			# A roller pulled by a walker standing still in a queue is stood up beside it.
 			var stands := queue_still and homes[i] == SecurityLooks.Home.HAND and not lifts[i]
-			var turn := RollerPark.tip_wait(node.rotation.y, views.walk_heading(p))
+			var up := p.stage in RollerPark.QUEUE_STAGES
+			var lane_front := up and sim.queue_of(p.station).find(p.id) == 0
+			var heading := views.walk_heading(p)
+			var turn := RollerPark.tip_wait(node.rotation.y, heading, was[i], up, lane_front)
 			RollerPark.queue_stand(
 				was[i], kinds[i], stands, _tick(), RollerPark.still_wait(p), turn, node.rotation.y
 			)
 			# Its side, from the sim (ParkSide.choose_stand()), before hold_park() holds it.
 			ParkSide.choose_stand(sim, p, was[i])
+			# How far out a seat park stands it for each hand, by the body and a
+			# booth's end panel (BoothRoller.side_m()); a park's stamp keeps it.
+			if kinds[i] == SecurityLooks.Kind.ROLLER:
+				was[i]["side_now"] = [BoothRoller.side_m(sim, p, 0), BoothRoller.side_m(sim, p, 1)]
 			# A parking roller keeps home, hand and lift to the park's end; one lying, its lift.
 			RollerPark.hold_park(was[i], kinds[i], homes, hands, i, _tick(), p.collect_tick != 0)
 			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):
