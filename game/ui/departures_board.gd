@@ -12,12 +12,15 @@ extends VBoxContainer
 ## Each row ends in a gate button showing the gate the flight holds (decision
 ## gates-are-placed-gate-desks-each-desk-links-automatically-to: the gate is
 ## automatic, and Departures is where the player changes it). Clicking it opens
-## a picker under the row listing every other gate with a stand; choosing one
-## calls FlightSim.reassign_gate, which moves the contract's days not yet
-## issued (an occurrence already issued keeps its gate, so its row still shows
-## the old one). A gate whose time is taken is refused with FlightSim's own
-## reason, shown under the row, and the picker stays open. With no other gate
-## the picker says NO_OTHER_TEXT. A one-off flight or an ended contract shows
+## a picker under the row listing every other gate the flight fits now
+## (FlightSim.reassign_problem() is "": the gate takes its plane, is free at
+## its times and has taxi plans for it, Runway R7); choosing one calls
+## FlightSim.reassign_gate, which moves the contract's days not yet issued (an
+## occurrence already issued keeps its gate, so its row still shows the old
+## one). Should the world change between listing and choosing, the refusal is
+## shown with FlightSim's own reason under the row, and the picker stays open.
+## With no other gate the picker says NO_OTHER_TEXT, and with other gates none
+## of which fits, NO_FIT_TEXT. A one-off flight or an ended contract shows
 ## its gate on a disabled button.
 ##
 ## It is an optional piece with an on/off setting, so the HUD can be rolled
@@ -42,6 +45,7 @@ const TOMORROW_HEADING := "Tomorrow"
 const EMPTY_TEXT := "No flights scheduled"
 const NONE_TEXT := "None"
 const NO_OTHER_TEXT := "No other gate exists"
+const NO_FIT_TEXT := "No other gate fits this flight"
 const PICKER_LABEL := "Move to:"
 const MOVED_TEXT := "%s now uses gate %s for the days not yet issued"
 const TAKEN_TEXT := "%s is taken by the %s %s flight"
@@ -286,20 +290,26 @@ func _add_row(entry: Dictionary) -> void:
 		_rows.add_child(note)
 
 
-## The picker under a row: a button for each gate the contract is not at, or a
-## note when there is none.
+## The picker under a row: a button for each other gate the contract fits at
+## now, or a note when there is none.
 func _add_picker(entry: Dictionary) -> void:
 	var current: String = flights.contract_of(entry["contract"])["gate"]
 	var others: Array[String] = []
+	var any_other := false
 	for gate_id in _gates:
-		if gate_id != current:
+		if gate_id == current:
+			continue
+		any_other = true
+		if flights.reassign_problem(entry["contract"], gate_id) == "":
 			others.append(gate_id)
 	var picker := HBoxContainer.new()
 	picker.name = "Picker"
 	if others.is_empty():
 		var note := Label.new()
 		note.name = "PickerNote"
-		note.text = NO_OTHER_TEXT if not _gates.is_empty() else "No gate has a stand"
+		note.text = NO_FIT_TEXT if any_other else NO_OTHER_TEXT
+		if _gates.is_empty():
+			note.text = "No gate has a stand"
 		note.theme_type_variation = &"HudHint"
 		note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		picker.add_child(note)

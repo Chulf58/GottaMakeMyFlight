@@ -24,6 +24,11 @@ extends Node3D
 ## the site, the grass and taxiway (y 0) off it, with a PAVING_RAMP_M ramp just
 ## outside the site's edge (ground_height_at()). Only the height changes; the
 ## Airside paths, and so the taxi lengths and timings, stay as they are.
+##
+## A taxi phase plays the pause the sim planned for it (FlightSim.taxi_plan(),
+## decision runway-and-taxi-technical-design-movement-plan-analytic-bookings-
+## planned-pauses, section 4): the plane stops at the hold line for the pause's
+## ticks inside the phase's own budget, then goes on.
 
 ## The plane models by PlaneModels.PLANES name. The model drawn for a flight
 ## comes from its airline and plane class (PlaneClasses.model_for) and is never
@@ -156,7 +161,9 @@ func sightings(time: float) -> Array[Dictionary]:
 	for id in sim.flight_ids():
 		if sim.flight_gate(id) != gate:
 			continue
-		var at := pose_at(starts_of(id), time, has_full_lead_in(id), class_of(id))
+		var at := pose_at(
+			starts_of(id), time, has_full_lead_in(id), class_of(id), sim.taxi_plan(id)
+		)
 		if not at.is_empty():
 			at["id"] = id
 			out.append(at)
@@ -191,8 +198,14 @@ func has_full_lead_in(id: String) -> bool:
 ## {} outside its sky window (before its lead-in, after its climb-out). With
 ## `full_lead_in` false the arrival is the straight-in, drawn from SCHEDULED.
 ## `plane_class` picks the class's approach, touchdown and liftoff points.
+## `pauses` (FlightSim.State -> MovementPlan pause, FlightSim.taxi_plan()) are
+## the taxi pauses, each played inside its phase's budget from `starts`.
 func pose_at(
-	starts: Array[int], time: float, full_lead_in := true, plane_class := PlaneClasses.MEDIUM
+	starts: Array[int],
+	time: float,
+	full_lead_in := true,
+	plane_class := PlaneClasses.MEDIUM,
+	pauses := {}
 ) -> Dictionary:
 	var approach := starts[FlightSim.State.APPROACH]
 	var departed := starts[FlightSim.State.DEPARTED]
@@ -219,8 +232,10 @@ func pose_at(
 	var progress := 1.0
 	if not REST_AFTER.has(state) and starts[state + 1] > starts[state]:
 		progress = (time - starts[state]) / float(starts[state + 1] - starts[state])
+	var pause: Dictionary = pauses.get(moving, {})
+	var budget := float(starts[moving + 1] - starts[moving])
 	var pose := FlightPose.pose(
-		moving, progress, _path(moving, plane_class), _entry_dir(moving, plane_class)
+		moving, progress, _path(moving, plane_class), _entry_dir(moving, plane_class), pause, budget
 	)
 	if ON_GROUND.has(moving):
 		pose.origin.y += ground_height_at(pose.origin)

@@ -110,16 +110,15 @@ func test_a_day_with_no_flights_says_none_while_the_other_lists_its_own() -> voi
 
 
 func test_more_flights_than_the_cap_collapse_into_a_count() -> void:
-	_run_to(GameCalendar.tick_at(0, 6 * 60 + 5))
-	# One flight more than the cap. A gate holds each flight for
-	# FlightTimetable.reserved_ticks() (195 minutes), so the six fit only in a
-	# whole day: tomorrow's, from 00:20. Today, from 06:05, the first departure
-	# can be 08:18 and six would run past midnight (when the reservation was
-	# 165 minutes, six fitted today from 09:00).
+	_run_to(GameCalendar.tick_at(0, 22 * 60))
+	# One flight more than the cap, all tomorrow (accepted at 22:00). A gate
+	# holds each flight for FlightTimetable.reserved_ticks() (195 minutes) and
+	# departures keep to 07:00-21:00 (the quiet night, Runway R7), so one gate
+	# takes five a day: two gates take the six, 100 minutes apart, alternating.
+	_sim.gate_source = func() -> Array[String]: return ["C", "D"] as Array[String]
 	var total := DeparturesBoard.MAX_ROWS_PER_DAY + 1
-	var apart := ceili(float(FlightTimetable.reserved_ticks()) / GameCalendar.TICKS_PER_MINUTE)
 	for i in total:
-		var minute := 20 + i * apart
+		var minute := 7 * 60 + i * 100
 		assert_bool(_sim.accept_contract(_terms("F%d" % i, minute, "Oslo", "Gotta Air"))).is_true()
 	var lines := DeparturesBoard.lines_for(_sim, _clock.tick)
 	var tomorrow := lines.slice(lines.find(DeparturesBoard.TOMORROW_HEADING) + 1)

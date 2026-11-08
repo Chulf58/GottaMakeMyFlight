@@ -109,6 +109,36 @@ func test_a_pause_with_no_budget_plans_over_the_state_ticks() -> void:
 	assert_float(held.origin.distance_to(Vector3(40, 0, 0))).is_less(1e-4)
 
 
+## Only a budget of exactly 0 means the state's PHASE_TICKS (board 554cf416): a
+## negative or non-finite budget is reported and the plane is drawn without the
+## pause, never silently given the fixed budget (it was held at the hold 570
+## ticks in, as with budget 0).
+func test_a_negative_or_non_finite_budget_is_reported_not_read_as_zero() -> void:
+	var path := _path()
+	var pause := {"hold_s": 40.0, "ticks": 20}
+	var ticks := float(FlightSim.PHASE_TICKS[FlightSim.State.TAXI_IN])
+	var unpaused := FlightPose.pose(FlightSim.State.TAXI_IN, 570.0 / ticks, path, Vector3.RIGHT)
+	var zero := FlightPose.pose(
+		FlightSim.State.TAXI_IN, 570.0 / ticks, path, Vector3.RIGHT, pause, 0.0
+	)
+	assert_float(zero.origin.distance_to(Vector3(40, 0, 0))).is_less(1e-4)
+	for budget: float in [-1.0, NAN, INF, -INF]:
+		var out: Array[Transform3D] = []
+		var draw := func() -> void:
+			out.append(
+				FlightPose.pose(
+					FlightSim.State.TAXI_IN, 570.0 / ticks, path, Vector3.RIGHT, pause, budget
+				)
+			)
+		await assert_error(draw).is_push_error(
+			"FlightPose: budget %s is not 0 or more; drawn without the pause" % budget
+		)
+		print("budget %s drawn at %s, unpaused %s" % [budget, out[0].origin, unpaused.origin])
+		assert_int(out.size()).is_equal(1)
+		assert_float(out[0].origin.distance_to(unpaused.origin)).is_less(1e-6)
+		assert_float(out[0].origin.distance_to(Vector3(40, 0, 0))).is_greater(1.0)
+
+
 ## A pause that does not fit its budget (20 ticks in 10) is reported, and the
 ## plane is drawn without it rather than stuck at the hold.
 func test_a_pause_that_does_not_fit_is_reported_and_left_out() -> void:

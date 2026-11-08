@@ -38,7 +38,7 @@ func before() -> void:
 
 
 func test_kit_routes_are_the_airside_phase_paths() -> void:
-	var airside := TestSharedGroundHolds.scene_airside()
+	var airside := TestStandLaneClearance.scene_airside()
 	add_child(airside)
 	var cells: Array[Vector2i] = [MID_CELL, Vector2i(0, 0), Vector2i(85, 149), Vector2i(10, 120)]
 	var compared := 0
@@ -90,12 +90,15 @@ func test_the_footprint_covers_both_drawn_forms_of_every_member() -> void:
 ## H_IN and H_RWY sit on the stubs 30 m from the runway. H_g is on the gate's
 ## lead-in at gate_hold_z(), the lane band's south edge (the widest model half
 ## span, 21.78 m, south of the lane) plus the farthest door-aligned nose (model
-## 04, 16.70 m): z -245.52, the rule Airside.lead_in_hold() uses on the paving
-## lane. A stand has it only when its pushback ends south of that, so the
+## 04, 16.70 m): Airside.lead_in_hold_z(), which takes the lane band from
+## StandEnvelope.lane_band_south() (half spans rounded up to 0.1 m), so z
+## -245.50, the line the paving's hold bars are drawn on. A stand has it only
+## when its pushback ends south of that, so the
 ## north-row stands (pushback end -255.9) have none, row 10 (-245.9) none and
 ## row 11 (-244.9) has it.
 func test_hold_lines() -> void:
-	assert_float(GroundPlanner.gate_hold_z()).is_equal_approx(-245.52, 0.001)
+	assert_float(GroundPlanner.gate_hold_z()).is_equal_approx(-245.50, 0.001)
+	assert_float(GroundPlanner.gate_hold_z()).is_equal(Airside.lead_in_hold_z())
 	var planner := _kit.planner()
 	var mid := _kit.request("A", PlaneClasses.MEDIUM, _kit.stand(MID_CELL))
 	var in_mid := planner.holds(mid, FlightSim.State.TAXI_IN)

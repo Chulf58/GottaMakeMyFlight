@@ -156,22 +156,26 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 	assert_int(_sim.state_start(starter, FlightSim.State.SCHEDULED)).is_equal(starter_first)
 
 
-## Seven offers accepted while closed, at minutes 0, 195, ... 1170, each hold
-## gate C for 195 minutes and leave no 195-minute gap (75 minutes are left), so
-## the starter has no slot: the airport still opens, with no starter and no
+## Five offers accepted while closed, at 07:00, 10:15, ... 20:00, each hold
+## gate C for 195 minutes back to back, and the next would depart after 21:00
+## (the quiet night), so the starter has no slot: the airport still opens, with no starter and no
 ## error, and each offer starts at its first slot after the lead.
 func test_a_gate_full_all_day_opens_with_no_starter_and_no_error() -> void:
 	@warning_ignore("integer_division")
 	var held := FlightTimetable.reserved_ticks() / GameCalendar.TICKS_PER_MINUTE
 	assert_int(held).is_equal(195)
+	var first := GroundPlanner.FIRST_DEPARTURE_MINUTE
+	var last := GroundPlanner.LAST_DEPARTURE_MINUTE
 	@warning_ignore("integer_division")
-	var count := GameCalendar.MINUTES_PER_DAY / held
-	assert_int(count).is_equal(7)
+	var count := (last - first) / held + 1
+	assert_int(count).is_equal(5)
 	var ids: Array[String] = []
 	for i in count:
 		ids.append("S%d" % i)
-		assert_bool(_sim.accept_contract(TestFlightContracts.terms(ids[i], held * i))).is_true()
-	assert_int(GameCalendar.MINUTES_PER_DAY - count * held).is_less(held)
+		var minute := first + held * i
+		assert_bool(_sim.accept_contract(TestFlightContracts.terms(ids[i], minute))).is_true()
+	# The next slot would depart after 21:00, in the quiet night.
+	assert_int(first + count * held).is_greater(last)
 	var gate: AirportGate = auto_free(AirportGate.new())
 	gate.flights = _sim
 	_run_to(1000)

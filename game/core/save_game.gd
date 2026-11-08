@@ -480,7 +480,9 @@ func _stage_gates(data: Dictionary, staged: Dictionary) -> String:
 	return ""
 
 
-## The flights against the saved gates (with no gate desks, the live gate set).
+## The flights against the saved gates (with no gate desks, the live gate set)
+## and their stands on the staged grid, taxi plans included: a save whose
+## re-plan fails is refused here, before anything is installed (Runway R7).
 ## The data is kept too, for the passengers' check of their gates.
 func _stage_flights(data: Dictionary, staged: Dictionary) -> String:
 	var gate_set := flights.gate_ids()
@@ -489,6 +491,11 @@ func _stage_flights(data: Dictionary, staged: Dictionary) -> String:
 	var loaded := FlightSnapshot.load(data, gate_set)
 	if loaded.has("error"):
 		return str(loaded["error"])
+	var planner := _staged_flight_sim(staged)
+	var problem := planner.load_problem(data)
+	planner.free()
+	if problem != "":
+		return problem
 	staged["flights"] = loaded
 	staged["flights_data"] = data
 	return ""
@@ -508,6 +515,28 @@ func _stage_apron(data: Dictionary, staged: Dictionary) -> String:
 			return problem
 	staged["apron"] = loaded
 	return ""
+
+
+## An empty FlightSim on the staged gates: each saved gate's stand straight out
+## from its exit on the staged grid and its max_class there, as GateDesks
+## refresh() works them out. With no gate desks, the live sim's sources.
+func _staged_flight_sim(staged: Dictionary) -> FlightSim:
+	var sim := FlightSim.new()
+	if not staged.has("gates"):
+		sim.gate_source = flights.gate_source
+		sim.stand_source = flights.stand_source
+		return sim
+	var grid: BuildGrid = staged["grid"]
+	var bindings: Array[Dictionary] = staged["gates"]
+	var letters := _letters(bindings)
+	var grounds := {}
+	for binding in bindings:
+		var stand := StandPlacement.for_exit(grid, binding["exit"])
+		var largest := StandEnvelope.max_class(grid, GateDesks.site_of(grid), stand)
+		grounds[binding["gate"]] = {"stand": stand, "max_class": largest}
+	sim.gate_source = func() -> Array[String]: return letters
+	sim.stand_source = func() -> Dictionary: return grounds
+	return sim
 
 
 static func _letters(bindings: Array[Dictionary]) -> Array[String]:
@@ -571,9 +600,7 @@ func _stage_gate_exits(sim: PassengerSim, staged: Dictionary) -> void:
 		sim.layout.exit_gates[binding["exit"]] = binding["gate"]
 		sim.layout.gate_desk_ids[binding["gate"]] = binding["desk"]
 	sim.layout.by_gate = true
-	var staged_flights := FlightSim.new()
-	var letters := _letters(bindings)
-	staged_flights.gate_source = func() -> Array[String]: return letters
+	var staged_flights := _staged_flight_sim(staged)
 	staged_flights.from_snapshot(staged["flights_data"])
 	staged["staged_flights"] = staged_flights
 	sim.flights = staged_flights

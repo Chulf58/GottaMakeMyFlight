@@ -105,6 +105,9 @@ var _bookings: Array[Dictionary] = []
 ## whose window and rectangle meet that cell.
 var _buckets := {}
 var _held_until := -INF
+## Shape key -> the work _shape() cached for flights of that shape. Kept across
+## plan_all() calls on this planner.
+var _cache := {}
 
 
 ## `hold_in` and `hold_runway` are the hold lines on the east and west stubs
@@ -180,29 +183,18 @@ func bookings() -> Array[Dictionary]:
 	return _bookings.duplicate()
 
 
-## The z of every gate's lead-in hold line H_g: the south edge of the band lane
-## traffic sweeps (the lane plus the widest half span of any model) plus the
-## farthest any model's nose reaches ahead of its pose point, drawn door-aligned
-## (PlaneClasses.stand_offset). The same rule as the paving lane's
-## Airside.lead_in_hold() (about -245.52); point this at it once both are on
-## main.
+## The z of every gate's lead-in hold line H_g: Airside.lead_in_hold_z(), the
+## one rule the paving's hold bars use too.
 static func gate_hold_z() -> float:
-	var half_span := 0.0
-	var nose := 0.0
-	for model: String in PlaneModels.PLANES:
-		var shape: Dictionary = PlaneModels.PLANES[model]
-		half_span = maxf(half_span, shape["half_span"])
-		nose = maxf(nose, PlaneClasses.stand_offset(model).z + shape["nose"])
-	return StandPlacement.TAXI_LANE_Z + half_span + nose
+	return Airside.lead_in_hold_z()
 
 
-## Gate `stand`'s lead-in hold line H_g, or Vector3.INF when its pushback ends
-## at or north of gate_hold_z() (north-row stands have none).
+## Gate `stand`'s lead-in hold line H_g (Airside.lead_in_hold()), or
+## Vector3.INF when its pushback ends at or north of gate_hold_z() (north-row
+## stands have none).
 static func gate_hold(stand: Dictionary) -> Vector3:
-	var back := StandPlacement.pushback_end(stand)
-	if back.z <= gate_hold_z():
-		return Vector3.INF
-	return Vector3(back.x, 0.0, gate_hold_z())
+	var hold := Airside.lead_in_hold(StandPlacement.pushback_end(stand))
+	return hold[0] if not hold.is_empty() else Vector3.INF
 
 
 ## The hold lines on the route of taxi phase `state`, earliest first:
@@ -654,17 +646,21 @@ func _plan(req: Dictionary) -> Dictionary:
 				"GroundPlanner: %s's state %d route has a segment off the axes" % [req["id"], state]
 			)
 			return {"ok": false, "reason": BAD_ROUTE, "pauses": {}, "bookings": []}
+	var shape := _shape(req)
+	var base := float(req["starts"][0])
+	var owner: String = req["id"]
 	var chosen := {}
-	var all := fixed_bookings(req)
+	var all := _shifted(shape["fixed"], base, owner)
 	var ok := fits(all)
 	for state in TAXI_STATES:
 		if not ok:
 			break
 		ok = false
-		for pause in phase_options(req, state):
-			var list := phase_bookings(req, state, pause)
+		var options: Array = shape["options"][state]
+		for i in options.size():
+			var list := _shifted(_option_bookings(shape, state, i), base, owner)
 			if fits(list):
-				chosen[state] = pause
+				chosen[state] = options[i]
 				all.append_array(list)
 				ok = true
 				break
@@ -672,6 +668,51 @@ func _plan(req: Dictionary) -> Dictionary:
 		return {"ok": false, "reason": TAXI_BUSY, "pauses": {}, "bookings": []}
 	_add(all)
 	return {"ok": true, "reason": "", "pauses": chosen, "bookings": all}
+
+
+## The cached work for a flight of `req`'s shape (class, stand, routes and
+## schedule relative to its first start tick): its request moved to start at
+## tick 0, its fixed bookings and each taxi phase's options there. Every
+## plan_all() books from this, so a flight's bookings are the same sums
+## whether or not they were cached, and a contract's daily occurrences (one
+## shape a day apart) are worked out once (R7 re-plans for every offer).
+func _shape(req: Dictionary) -> Dictionary:
+	var base := float(req["starts"][0])
+	var first: Variant = req["starts"][0]
+	var relative := []
+	for start: Variant in req["starts"]:
+		relative.append(start - first)
+	var key := "%s|%s|%s|%s" % [req["class"], req["stand"], relative, req["routes"]]
+	if not _cache.has(key):
+		var zero := req.duplicate()
+		zero["starts"] = relative
+		var entry := {"req": zero, "fixed": fixed_bookings(zero), "options": {}, "bookings": {}}
+		for state in TAXI_STATES:
+			entry["options"][state] = phase_options(zero, state)
+			entry["bookings"][state] = {}
+		_cache[key] = entry
+	return _cache[key]
+
+
+## The bookings of option `index` of taxi phase `state` of a cached shape.
+static func _option_bookings(shape: Dictionary, state: int, index: int) -> Array[Dictionary]:
+	var done: Dictionary = shape["bookings"][state]
+	if not done.has(index):
+		done[index] = phase_bookings(shape["req"], state, shape["options"][state][index])
+	return done[index]
+
+
+## Copies of `list` (bookings made from tick 0) from tick `base` on, owned by
+## `owner`.
+static func _shifted(list: Array, base: float, owner: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for booking: Dictionary in list:
+		var copy := booking.duplicate()
+		copy["from"] = float(booking["from"]) + base
+		copy["to"] = float(booking["to"]) + base
+		copy["owner"] = owner
+		out.append(copy)
+	return out
 
 
 func _add(list: Array) -> void:

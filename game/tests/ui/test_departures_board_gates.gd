@@ -2,13 +2,15 @@ class_name TestDeparturesBoardGates
 extends GdUnitTestSuite
 ## The gate on each Departures row (gates 3/4, decision gates-are-placed-gate-
 ## desks-each-desk-links-automatically-to): a gate button per row, a picker
-## under the clicked row that moves the contract to another gate through
-## FlightSim.reassign_gate, FlightSim's own reason when the gate is taken, and
+## under the clicked row listing only the other gates the flight fits now
+## (Runway R7: FlightSim.reassign_problem() is ""), which moves the contract
+## through FlightSim.reassign_gate, FlightSim's own reason when a listed gate
+## was taken after the picker opened, NO_FIT_TEXT when no other gate fits and
 ## the plain note when no other gate exists. FlightSim.gate_source supplies the
 ## gates here.
 ##
 ## Tick 0 is 06:00. X leaves at 10:00 and takes gate A; Y leaves at 11:00, which
-## overlaps X at a gate but not on the runway, so Y takes gate B.
+## overlaps X at a gate, so Y takes gate B. Z (11:40) would take gate C.
 
 const GATES: Array[String] = ["C", "A", "B"]
 
@@ -72,18 +74,68 @@ func test_each_row_shows_the_gate_its_flight_holds() -> void:
 	)
 
 
+## Opens Y's picker, keeps its gate C button, then accepts Z, which takes
+## gate C, before the button is pressed: the world changed between listing
+## and choosing.
+func _press_c_once_taken() -> void:
+	_press(_board.gate_button("Y", 0))
+	var stale := _board.picker_button("C")
+	assert_object(stale).is_not_null()
+	var terms := TestFlightContracts.terms("Z", 700)
+	terms["destination"] = "Paris"
+	assert_bool(_sim.accept_contract(terms)).is_true()
+	assert_str(_sim.contract_of("Z")["gate"]).is_equal("C")
+	_press(stale)
+
+
+## A (X's) is taken and B is Y's own, so only C is listed (design point 6:
+## the picker lists gates that fit; the taken gate A used to be listed).
 func test_choosing_a_free_gate_moves_the_contract_and_confirms() -> void:
 	_three_gates()
 	_accept_x_and_y()
 	_press(_board.gate_button("Y", 0))
 	assert_object(_board.picker_button("B")).is_null()
-	assert_object(_board.picker_button("A")).is_not_null()
+	assert_object(_board.picker_button("A")).is_null()
 	_press(_board.picker_button("C"))
 	print("moved: gate=", _sim.contract_of("Y")["gate"], " message=", _board.message_text())
 	assert_str(_sim.contract_of("Y")["gate"]).is_equal("C")
 	assert_str(_board.message_text()).is_equal(DeparturesBoard.MOVED_TEXT % ["Rome", "C"])
 	assert_str(_board.gate_button("Y", 0).text).is_equal("Gate C")
 	assert_object(_board.picker_button("A")).is_null()
+
+
+## Point 6: the picker lists only the gates the flight fits now, and says
+## NO_FIT_TEXT when there are other gates but none fits: taken at its times
+## (Z at C), or too small for its plane.
+func test_the_picker_lists_only_fitting_gates_and_says_so_when_none_fits() -> void:
+	_three_gates()
+	_accept_x_and_y()
+	_press(_board.gate_button("Y", 0))
+	assert_str(_board.picker_note()).is_equal(DeparturesBoard.PICKER_LABEL)
+	assert_object(_board.picker_button("C")).is_not_null()
+	_press(_board.gate_button("Y", 0))
+	var terms := TestFlightContracts.terms("Z", 700)
+	terms["destination"] = "Paris"
+	assert_bool(_sim.accept_contract(terms)).is_true()
+	_board.refresh()
+	_press(_board.gate_button("Y", 0))
+	print("no fit: ", _board.picker_note())
+	assert_str(_board.picker_note()).is_equal(DeparturesBoard.NO_FIT_TEXT)
+	for gate_id in GATES:
+		assert_object(_board.picker_button(gate_id)).is_null()
+	# A gate too small for Y's medium plane is not listed either.
+	var small := {}
+	for gate_id in GATES:
+		small[gate_id] = FlightGround.fallback(gate_id)
+	small["C"] = {"stand": small["C"]["stand"], "max_class": PlaneClasses.SMALL}
+	_sim.stand_source = func() -> Dictionary: return small
+	assert_bool(_sim.end_contract("Z")).is_true()
+	_board.refresh()
+	_press(_board.gate_button("Y", 0))
+	_press(_board.gate_button("Y", 0))
+	assert_str(_sim.reassign_problem("Y", "C")).is_equal("gate C takes no medium plane")
+	assert_str(_board.picker_note()).is_equal(DeparturesBoard.NO_FIT_TEXT)
+	assert_object(_board.picker_button("C")).is_null()
 
 
 func test_an_occurrence_already_issued_keeps_its_gate_after_a_move() -> void:
@@ -100,25 +152,25 @@ func test_an_occurrence_already_issued_keeps_its_gate_after_a_move() -> void:
 	assert_str(_board.gate_button("Y", 1).text).is_equal("Gate C")
 
 
-func test_a_taken_gate_is_refused_with_the_reason_and_the_picker_stays() -> void:
+## A taken gate is no longer listed (point 6), so the refusal is reached when a
+## listed gate is taken after the picker opened: FlightSim's reason, in words.
+func test_a_gate_taken_after_listing_is_refused_with_the_reason_and_the_picker_stays() -> void:
 	_three_gates()
 	_accept_x_and_y()
-	_press(_board.gate_button("Y", 0))
-	_press(_board.picker_button("A"))
-	var reason := _sim.reassign_problem("Y", "A")
+	_press_c_once_taken()
+	var reason := _sim.reassign_problem("Y", "C")
 	print("refused: ", _board.message_text())
-	assert_str(reason).is_equal("contract Y clashes with X at gate A")
-	assert_str(_board.message_text()).is_equal("Gate A is taken by the 10:00 Oslo flight")
+	assert_str(reason).is_equal("contract Y clashes with Z at gate C")
+	assert_str(_board.message_text()).is_equal("Gate C is taken by the 11:40 Paris flight")
 	assert_str(_sim.contract_of("Y")["gate"]).is_equal("B")
 	assert_str(_board.gate_button("Y", 0).text).is_equal("Gate B")
-	assert_object(_board.picker_button("C")).is_not_null()
+	assert_str(_board.picker_note()).is_equal(DeparturesBoard.NO_FIT_TEXT)
 
 
 func test_the_refusal_shows_no_contract_id() -> void:
 	_three_gates()
 	_accept_x_and_y()
-	_press(_board.gate_button("Y", 0))
-	_press(_board.picker_button("A"))
+	_press_c_once_taken()
 	var shown := _board.message_text()
 	print("shown refusal: ", shown)
 	assert_str(shown).is_not_empty()
@@ -129,16 +181,21 @@ func test_the_refusal_shows_no_contract_id() -> void:
 		assert_bool(shown.contains(id)).is_false()
 
 
+## X ended: its issued X-d0 still holds gate A, and the sim names it by flight
+## id; the board names it by time and destination. A is not listed (point 6),
+## so the board's wording is asked for that reason directly.
 func test_a_clash_with_an_issued_flight_names_it_by_time_and_destination() -> void:
 	_three_gates()
 	_accept_x_and_y()
 	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 0))
-	# X ended: its issued X-d0 still holds gate A, and the sim names it by flight id.
 	assert_bool(_sim.end_contract("X")).is_true()
-	assert_str(_sim.reassign_problem("Y", "A")).contains("with flight X-d0 at gate A")
+	var reason := _sim.reassign_problem("Y", "A")
+	assert_str(reason).contains("with flight X-d0 at gate A")
+	assert_str(_board.friendly_reason(reason, "A")).is_equal(
+		"Gate A is taken by the 10:00 Oslo flight"
+	)
 	_press(_board.gate_button("Y", 0))
-	_press(_board.picker_button("A"))
-	assert_str(_board.message_text()).is_equal("Gate A is taken by the 10:00 Oslo flight")
+	assert_object(_board.picker_button("A")).is_null()
 
 
 func test_a_reason_that_cannot_be_resolved_falls_back_to_a_plain_busy_text() -> void:
@@ -147,6 +204,7 @@ func test_a_reason_that_cannot_be_resolved_falls_back_to_a_plain_busy_text() -> 
 	var busy := "Gate A is busy when this flight needs it"
 	assert_str(_board.friendly_reason("contract Q clashes with Z at gate A", "A")).is_equal(busy)
 	assert_str(_board.friendly_reason("gate 'D' has no stand", "A")).is_equal(busy)
+	assert_str(_board.friendly_reason(FlightSim.TAXI_BUSY_TEXT, "A")).is_equal(busy)
 	assert_str(_board.friendly_reason("contract Y clashes with X on the runway", "B")).is_equal(
 		"The runway is taken by the 10:00 Oslo flight"
 	)
@@ -156,12 +214,12 @@ func test_a_load_closes_an_open_picker_and_drops_its_message() -> void:
 	_three_gates()
 	_accept_x_and_y()
 	var saved := _sim.to_snapshot()
-	_press(_board.gate_button("Y", 0))
-	_press(_board.picker_button("A"))
+	_press_c_once_taken()
 	assert_str(_board.message_text()).is_not_empty()
 	assert_bool(_sim.from_snapshot(saved)).is_true()
 	print("after load: message=", _board.message_text(), " picker C=", _board.picker_button("C"))
 	assert_str(_board.message_text()).is_empty()
+	assert_str(_board.picker_note()).is_empty()
 	assert_object(_board.picker_button("C")).is_null()
 	assert_str(_board.gate_button("Y", 0).text).is_equal("Gate B")
 
@@ -170,13 +228,13 @@ func test_a_contract_that_ends_closes_its_open_picker() -> void:
 	_three_gates()
 	_accept_x_and_y()
 	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 0))
-	_press(_board.gate_button("Y", 0))
-	_press(_board.picker_button("A"))
-	assert_object(_board.picker_button("C")).is_not_null()
+	_press_c_once_taken()
+	assert_str(_board.message_text()).is_not_empty()
+	assert_str(_board.picker_note()).is_equal(DeparturesBoard.NO_FIT_TEXT)
 	assert_bool(_sim.end_contract("Y")).is_true()
 	_board.refresh()
-	print("after end: message=", _board.message_text(), " picker C=", _board.picker_button("C"))
-	assert_object(_board.picker_button("C")).is_null()
+	print("after end: message=", _board.message_text(), " note=", _board.picker_note())
+	assert_str(_board.picker_note()).is_empty()
 	assert_str(_board.message_text()).is_empty()
 	# Its issued flight still lists today, with a disabled gate button.
 	assert_array(_board.shown_lines()).contains(["11:00  Rome  Gotta Air"])
@@ -186,9 +244,10 @@ func test_a_contract_that_ends_closes_its_open_picker() -> void:
 func test_clicking_the_gate_again_closes_the_picker_and_clears_the_message() -> void:
 	_three_gates()
 	_accept_x_and_y()
+	_press_c_once_taken()
+	assert_str(_board.message_text()).is_not_empty()
 	_press(_board.gate_button("Y", 0))
-	_press(_board.picker_button("A"))
-	_press(_board.gate_button("Y", 0))
+	assert_str(_board.picker_note()).is_empty()
 	assert_object(_board.picker_button("C")).is_null()
 	assert_str(_board.message_text()).is_empty()
 

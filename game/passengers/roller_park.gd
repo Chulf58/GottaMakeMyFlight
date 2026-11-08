@@ -90,10 +90,8 @@ const PARK_HIPS := Vector3(PARK_DROP, 1.0, 0.0)
 ## move (about 45 degrees; CarryStoop.bends), the hips taking the rest: at 80
 ## degrees the head folded under the shoulders lifting the roller.
 const BACK_CAP := 45.0 / CarryStoop.STOOP_DEGREES
-## A roller laid down at a gate chair lies this far out on its hand's side of
-## the passenger's line (floor_spot()), beside the feet and the chair's front
-## corner (a chair seat is about 0.5 m wide).
-const BESIDE_FEET_M := 0.34
+## A roller laid down at a gate chair lies this far ahead of the passenger
+## (floor_spot()), out on its hand's side by the body (GateRoller.side()).
 const FEET_AHEAD_M := 0.07
 ## A collecting walker's stoop goes from LAY_HIPS to HIPS_ALL over this many
 ## ticks from the lift's end (drops_of()).
@@ -696,7 +694,7 @@ static func sit_face(sim: PassengerSim, p: Passenger) -> float:
 
 ## Where floor bag `index` of `count` of `p` (of `kind`, in hand `hand`) lies
 ## in its frame: SecurityLooks.floor_spot(), but a roller lies beside the feet
-## on its hand's side, along the passenger's line (user ruling
+## on its hand's side (GateRoller.spot()), along the passenger's line (user ruling
 ## roller-laid-down-beside-the-passenger-s-feet-not-ahead), FEET_AHEAD_M ahead;
 ## at a gate chair in the chair front's frame (chair_front()), where the walker
 ## stands to set it down and pick it up (SEAT_AHEAD_M ahead of the seated body,
@@ -718,8 +716,7 @@ static func floor_spot(
 		return spot
 	if kind != SecurityLooks.Kind.ROLLER or where == StageKinds.Location.FACILITY_SEAT:
 		return spot
-	var out := -1.0 if hand == 0 else 1.0
-	return Transform3D(Basis.IDENTITY, Vector3(out * BESIDE_FEET_M, 0.0, FEET_AHEAD_M))
+	return GateRoller.spot(p, hand)
 
 
 ## How far out (SEAT_SIDE_M) a seat park puts the axle of a body of look `look`
