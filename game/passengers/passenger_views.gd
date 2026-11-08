@@ -78,10 +78,12 @@ var _sit_off: Dictionary = {}
 ## The yaw each view is drawn with, eased per tick (PassengerTurns); snap()
 ## starts every record over.
 var _turns := PassengerTurns.new()
-## Passenger id -> Vector2(yaw drawn at the tick before, yaw now) while a lane
-## passenger turns from the tray table into the arch (SecurityLooks.setoff_yaw(),
-## set from the sim on each tick, never stepped). Holds no tick; snap() and
-## release erase it.
+## Passenger id -> Vector3(yaw drawn at the tick before, yaw now, yaw the turn
+## started from) while a lane passenger turns to the tray table and on into the
+## arch (SecurityLooks.setoff_yaw(): set from the start yaw and the sim on each
+## tick, never stepped). The start is the yaw drawn when UNPACK began, or the
+## way it walked in (SecurityLooks.arrival_yaw()) for a view first drawn after.
+## Holds no tick; snap() and release erase it.
 var _setoffs: Dictionary = {}
 ## True while snap() syncs: the step from the pre-load position is no heading.
 var _snapping := false
@@ -296,7 +298,7 @@ func draw() -> void:
 		var after: Vector3 = _cur[id]
 		node.position = before.lerp(after, alpha)
 		if _setoffs.has(id):
-			var yaws: Vector2 = _setoffs[id]
+			var yaws: Vector3 = _setoffs[id]
 			node.rotation.y = lerp_angle(yaws.x, yaws.y, alpha)
 		elif _turns.has(id):
 			node.rotation.y = _turns.drawn(id, alpha)
@@ -611,13 +613,21 @@ func _now() -> float:
 ## is placed on it each tick, so the turn after it starts from there.
 func _turn(node: Node3D, p: Passenger, face: float) -> void:
 	var alpha := clock.alpha if clock != null else 1.0
-	var setoff := SecurityLooks.setoff_yaw(sim, p)
+	var from := NAN
+	if _setoffs.has(p.id):
+		from = (_setoffs[p.id] as Vector3).z
+	elif _turns.has(p.id) and not _snapping:
+		# The yaw it has as the set-off starts, kept as the turn's start.
+		from = _turns.drawn(p.id, 1.0)
+	var setoff := SecurityLooks.setoff_yaw(sim, p, from)
 	if not is_nan(setoff):
 		var before := setoff
 		if _turns.has(p.id) and not _snapping:
 			before = _turns.drawn(p.id, 1.0)
 		_turns.place(p.id, setoff)
-		_setoffs[p.id] = Vector2(before, setoff)
+		if is_nan(from):
+			from = SecurityLooks.arrival_yaw(sim, p)
+		_setoffs[p.id] = Vector3(before, setoff, from)
 		node.rotation.y = lerp_angle(before, setoff, alpha)
 		return
 	_setoffs.erase(p.id)

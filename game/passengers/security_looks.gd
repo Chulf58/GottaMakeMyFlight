@@ -154,9 +154,10 @@ static func setting_off(sim: PassengerSim, p: Passenger) -> bool:
 
 ## The yaw a lane passenger is drawn with from UNPACK until it walks into the
 ## arch, or NAN where it does not apply (PassengerViews then turns it as any
-## other). It turns from the arch's axis to the tray table over
-## PassengerTurns.TURN_TICKS from the start of UNPACK, and back to the axis
-## over as many ticks from the tick its last bag goes in the tray
+## other). It turns from `from` (the yaw it had when UNPACK began, or NAN for
+## the way it walked onto the unpack cell, arrival_yaw()) to the tray table
+## over PassengerTurns.TURN_TICKS from the start of UNPACK, and to the arch's
+## axis over as many ticks from the tick its last bag goes in the tray
 ## (LANE_UNPACK_BAG_TICKS of work left), so it stands turned most of the way
 ## when ARCH starts and finishes the turn on its first strides, read from how
 ## far it has walked at its pace. A one-bag passenger turns back before it
@@ -164,9 +165,10 @@ static func setting_off(sim: PassengerSim, p: Passenger) -> bool:
 ## still 16 to 51 degrees off the axis at the arch's entry and its feet
 ## reached 0.45 to 0.65 m out against a 0.38 m half opening (finding
 ## why-does-the-body-reach-past-the-security-lane-arch-s-0-38-m). Set from the
-## work left and the walk, never stepped from the yaw drawn before, so a view
-## first drawn mid-turn (a load, a new view) draws the same yaw.
-static func setoff_yaw(sim: PassengerSim, p: Passenger) -> float:
+## start yaw, the work left and the walk, never stepped from the yaw drawn
+## before, so a view first drawn mid-turn (a load, a new view) draws the same
+## yaw when it started from the way it walked in.
+static func setoff_yaw(sim: PassengerSim, p: Passenger, from := NAN) -> float:
 	if p.stage != Passenger.Stage.SECURITY:
 		return NAN
 	var lane := lane_of(sim, p)
@@ -186,10 +188,26 @@ static func setoff_yaw(sim: PassengerSim, p: Passenger) -> float:
 		back = SecurityRuntime.LANE_UNPACK_BAG_TICKS - 1 + _arch_walked_mm(p) / float(pace)
 	else:
 		return NAN
-	var share := minf(toward, 1.0 - smoothstep(0.0, 1.0, back / turn))
+	if is_nan(from):
+		from = arrival_yaw(sim, p)
 	var axis := -Vector2(lane["front"])
 	var table := Vector2(lane["side"])
-	return lerp_angle(atan2(axis.x, axis.y), atan2(table.x, table.y), share)
+	var at_table := lerp_angle(from, atan2(table.x, table.y), toward)
+	return lerp_angle(at_table, atan2(axis.x, axis.y), smoothstep(0.0, 1.0, back / turn))
+
+
+## The yaw a lane passenger faces as it reaches the unpack cell: along the last
+## step of the path it walked there (an empty lane may be walked into from the
+## side), or along the arch's axis with no step (a queue front held back at the
+## cell's edge faces the lane). Read from the saved path, so a view first drawn
+## during UNPACK starts its turn from the same yaw.
+static func arrival_yaw(sim: PassengerSim, p: Passenger) -> float:
+	var lane := lane_of(sim, p)
+	var way := -Vector2(lane["front"]) if not lane.is_empty() else Vector2.ZERO
+	var last := mini(p.path_index, p.path.size() - 1)
+	if last >= 1 and p.path[last] == p.at:
+		way = Vector2(p.path[last] - p.path[last - 1])
+	return atan2(way.x, way.y)
 
 
 ## How far `p` has walked along its path, in millimetres.
