@@ -100,3 +100,42 @@ func test_a_member_never_walks_onto_the_cell_of_the_one_ahead() -> void:
 	assert_int(rest.size()).is_equal(ROLLER_MEMBERS - 1)
 	assert_bool(HoldLineKit.settled(_world, desk)).is_true()
 	assert_that(_world.passenger(rest.back()).at).is_equal(line[ROLLER_MEMBERS - 2])
+
+
+## A member ahead in queue order can stand behind the one after it on the line
+## (a walker joins the lane while the holding list waits). The one after it
+## must not walk back to the cell behind it: before, target_index() sent a
+## member on its own place six cells back and the ones after it followed, and
+## the security lane lost its tier-balance speedup (1.82 to 1.79).
+func test_a_member_never_walks_back_behind_a_member_ahead_standing_behind_it() -> void:
+	_world = HoldLineKit.desk_hall()
+	var desk: int = _world.sim.get_meta(&"desk")
+	var line: Array = _world.sim.layout.line_of(desk)
+	var members: Array[Passenger] = []
+	for i in 4:
+		members.append(HoldLineKit.member(_world, desk))
+	# The later id is third in the lane but stands on line[6]; the earlier id,
+	# stepped first each tick, is fourth and stands on line[3], its place.
+	var behind := members[3]
+	var after := members[2]
+	var lane: Array = _world.sim._queue(desk)["lane"]
+	lane[2] = behind.id
+	lane[3] = after.id
+	behind.at = line[6]
+	after.at = line[3]
+	var furthest := line.find(after.at)
+	for t in 120:
+		_world.step()
+		if after.is_moving():
+			furthest = maxi(furthest, line.find(after.path_end()))
+		furthest = maxi(furthest, line.find(after.at))
+	print(
+		(
+			"member on line[3] got as far back as line[%d]; the one ahead ended on line[%d]"
+			% [furthest, line.find(behind.at)]
+		)
+	)
+	assert_int(furthest).is_equal(3)
+	# Control: the member ahead walked up from line[6] onto its place.
+	assert_that(behind.at).is_equal(line[2])
+	assert_bool(HoldLineKit.settled(_world, desk)).is_true()
