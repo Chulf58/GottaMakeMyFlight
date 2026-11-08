@@ -9,10 +9,20 @@ extends GdUnitTestSuite
 ## may lie inside the roller shell's box (its meshes but the rods, grown by
 ## MARGIN_M) parked for either hand. The box holds the rounded shell, so it is
 ## the stricter test; the windowed BODY_IN_STOOD_BAG count (spike/
-## roller_queue_probe.gd) is the drawn one.
+## roller_queue_probe.gd) is the drawn one. The seat park's side
+## (RollerPark.SEAT_SIDE_M, board 8a6068aa) is derived and checked the same
+## way; the windowed food_seats_probe BODY_IN_BAG count is its drawn one.
 
 const PHASES := 8
 const MARGIN_M := 0.01
+## The side distances test_print_the_seat_side_each_body_needs() scans.
+const SCAN_FROM_M := 0.25
+const SCAN_TO_M := 0.6
+const SCAN_STEP_M := 0.005
+## The most idle vertices of a male body the capped roller at a booth end panel
+## may hold, in the shell box not grown (MARGIN_M would make the panel the limit:
+## grown, 12 to 20 vertices, 316 for male_08, at a 1 cm panel gap).
+const CAPPED_MAX := 0
 
 ## Per body (PassengerLooks.BODIES): its idle poses, each the body's vertices
 ## in its own frame (facing +z).
@@ -105,22 +115,201 @@ func test_the_old_park_side_fails_for_male_08() -> void:
 	assert_int(hits).is_greater(0)
 
 
-## The queue stand's spot is its own: the seat parks (pull>floor, floor>pull)
-## keep PARK_SIDE_M (decisions e4e88745 and 211c0142 pin them).
-func test_the_seat_park_keeps_its_spot() -> void:
+## park() keeps PARK_SIDE_M as its default and its ahead (decisions e4e88745
+## and 211c0142 pin the spot beside the feet); the side a seat park takes is
+## the body's (SEAT_SIDE_M, board 8a6068aa): wider for a male body, the same
+## for a female one, and a queue stand's is its own. Changed from "the seat
+## parks keep PARK_SIDE_M" when the male seat side was found in the near leg
+## at booth 13-3 (BODY_IN_BAG up to 112 points).
+func test_the_seat_park_side_is_the_body_s() -> void:
 	var seat := RollerPark.park(Transform3D.IDENTITY, 0, 1.0)
 	var axle := seat * CarryOnProps.ROLLER_AXLE
-	print("seat park axle %s, queue sides %s" % [axle, RollerPark.QUEUE_SIDE_M])
+	print(
+		(
+			"seat park axle %s, seat sides %s, queue sides %s"
+			% [axle, RollerPark.SEAT_SIDE_M, RollerPark.QUEUE_SIDE_M]
+		)
+	)
 	assert_float(axle.x).is_equal_approx(-RollerPark.PARK_SIDE_M, 0.0001)
 	assert_float(axle.z).is_equal_approx(RollerPark.PARK_AHEAD_M, 0.0001)
+	for hand in 2:
+		assert_float(RollerPark.seat_side(0, hand)).is_greater(RollerPark.PARK_SIDE_M)
+		assert_float(RollerPark.seat_side(PassengerLooks.PER_VARIANT, hand)).is_equal(
+			RollerPark.PARK_SIDE_M
+		)
 	for b in [0, PassengerLooks.PER_VARIANT]:
 		var queue := RollerPark.queue_park(Transform3D.IDENTITY, 1, 1.0, b)
 		assert_float((queue * CarryOnProps.ROLLER_AXLE).x).is_greater(RollerPark.PARK_SIDE_M)
 
 
+## A male body's seat park (RollerPark.seat_side()) holds none of his idle
+## vertices for either hand, one bag or two, standing (park()) or lying beside
+## his feet at a booth (floor_spot()). At a booth whose end panel is on his
+## left (booth 13-3: the seat root 1 m across, the panel's face 0.58 m) the
+## left side is capped (BoothRoller.panel_cap()), keeps PANEL_GAP_M off the
+## panel's face, and holds no more than CAPPED_MAX of his vertices (box not grown) standing or
+## lying, where the old PARK_SIDE_M held hundreds (the control).
+func test_a_male_seat_park_clears_his_legs_and_the_booth_end_panel() -> void:
+	var hits := 0
+	for b in PassengerLooks.PER_VARIANT:
+		for scale_by in [1.0, SecurityLooks.TWO_BAG_SCALE]:
+			for hand in 2:
+				var side := RollerPark.seat_side(b, hand)
+				var stood := RollerPark.park(
+					Transform3D.IDENTITY, hand, scale_by, RollerPark.PARK_AHEAD_M, side
+				)
+				var lying := _lying(hand, side, 0.0).scaled_local(Vector3.ONE * scale_by)
+				for points: PackedVector3Array in _poses[b]:
+					hits += _inside(points, stood, scale_by) + _inside(points, lying, scale_by)
+	print("male seat parks: %d vertices inside (0)" % hits)
+	assert_int(hits).is_equal(0)
+	var cap := BoothRoller.panel_cap(1.0)
+	var half := maxf(-_shell.position.x, _shell.end.x)
+	var face := 1.0 - BoothRoller.PANEL_FACE_M
+	var capped := minf(RollerPark.seat_side(0, 1), cap)
+	print(
+		(
+			"booth end panel face %.3f m, cap %.3f m, male left %.3f m, outer edge %.3f m"
+			% [face, cap, capped, capped + half]
+		)
+	)
+	assert_float(capped).is_less(RollerPark.seat_side(0, 1))
+	assert_float(capped + half).is_less_equal(face - BoothRoller.PANEL_GAP_M + 0.0001)
+	for b in PassengerLooks.PER_VARIANT:
+		var at_cap := 0
+		var old := 0
+		for side_and_count in [[capped, true], [RollerPark.PARK_SIDE_M, false]]:
+			var side: float = side_and_count[0]
+			var stood := RollerPark.park(
+				Transform3D.IDENTITY, 1, 1.0, RollerPark.PARK_AHEAD_M, side
+			)
+			var n := 0
+			for points: PackedVector3Array in _poses[b]:
+				n += (
+					_inside(points, stood, 1.0, 0.0)
+					+ _inside(points, _lying(1, side, 0.0), 1.0, 0.0)
+				)
+			if side_and_count[1]:
+				at_cap = n
+			else:
+				old = n
+		print(
+			(
+				"body %d %s left at the booth end panel: %d vertices inside (<= %d); at PARK_SIDE_M %d (> 0)"
+				% [b, PassengerLooks.BODIES[b], at_cap, CAPPED_MAX, old]
+			)
+		)
+		assert_int(at_cap).is_less_equal(CAPPED_MAX)
+		assert_int(old).is_greater(0)
+
+
+## A seat park (pull>floor, either hand) stands at the side CarryOnProps noted
+## for its hand ("side_now", BoothRoller.side_m()) when the move was stamped,
+## and a later note does not move it. Control: with no note it stands at
+## PARK_SIDE_M.
+func test_a_seat_park_stands_at_the_side_its_stamp_kept() -> void:
+	var hand_home := SecurityLooks.Home.HAND
+	var floor := SecurityLooks.Home.FLOOR
+	var pull := SecurityLooks.Carry.PULL
+	var noted := [0.40, 0.43]
+	var looks := {"scale": 1.0, "bar_z": 0.9, "grips": [Vector3.ZERO, Vector3.ZERO]}
+	var start := Transform3D(Basis.IDENTITY, Vector3(0.3, 0.0, -0.5))
+	var k := (RollerPark.STAND_END + RollerPark.LAY_END) / 2.0
+	for hand in 2:
+		var out := -1.0 if hand == 0 else 1.0
+		for note in [true, false]:
+			var bag := {
+				"kind": SecurityLooks.Kind.ROLLER,
+				"led": true,
+				"from": Transform3D(),
+				"was": (hand_home * 2 + hand) * 2,
+				"carry_from": pull,
+				"place": (floor * 2 + hand) * 2,
+				"carry": pull,
+			}
+			if note:
+				bag["side_now"] = noted.duplicate()
+			CarryLead.stamp_move(bag, false, floor, Transform3D.IDENTITY)
+			bag["home"] = bag["place"]
+			bag["side_now"] = [0.25, 0.25]
+			var plan := RollerPark.plan(
+				bag, k, start, start, Transform3D.IDENTITY, {"to_floor": true}, looks
+			)
+			var axle := (plan["xf"] as Transform3D) * CarryOnProps.ROLLER_AXLE
+			var want: float = noted[hand] if note else RollerPark.PARK_SIDE_M
+			print("hand %d noted %s: parked axle x %.3f (%.3f)" % [hand, note, axle.x, out * want])
+			assert_float(axle.x).is_equal_approx(out * want, 0.0001)
+
+
+## The derivation of RollerPark.SEAT_SIDE_M (printed): per body and hand, the
+## least side distance (SCAN_STEP_M apart) at which no idle vertex lies in the
+## shell box of the roller parked standing (park(), PARK_AHEAD_M ahead) or
+## lying at a booth's approach (BoothRoller: along the guest's line, beside the
+## feet) or at a gate chair (RollerPark.floor_spot(): FEET_AHEAD_M ahead).
+func test_print_the_seat_side_each_body_needs() -> void:
+	var worst := {}
+	for b in _poses.size():
+		var line := "body %d %s needs" % [b, PassengerLooks.BODIES[b]]
+		for hand in 2:
+			var stand := _clear_side(
+				b,
+				hand,
+				func(s: float) -> Transform3D:
+					return RollerPark.park(
+						Transform3D.IDENTITY, hand, 1.0, RollerPark.PARK_AHEAD_M, s
+					)
+			)
+			var booth := _clear_side(
+				b, hand, func(s: float) -> Transform3D: return _lying(hand, s, 0.0)
+			)
+			var gate := _clear_side(
+				b,
+				hand,
+				func(s: float) -> Transform3D: return _lying(hand, s, RollerPark.FEET_AHEAD_M)
+			)
+			line += (
+				" %s: stand %.3f booth %.3f gate %.3f"
+				% [["right", "left"][hand], stand, booth, gate]
+			)
+			var key := "%d %d" % [b / PassengerLooks.PER_VARIANT, hand]
+			worst[key] = maxf(float(worst.get(key, 0.0)), maxf(stand, booth))
+		print(line)
+	print(
+		(
+			"widest need per [variant hand]: %s; gate chair spot %.2f"
+			% [worst, RollerPark.BESIDE_FEET_M]
+		)
+	)
+	assert_int(worst.size()).is_equal(4)
+
+
+## The least side (from SCAN_FROM_M by SCAN_STEP_M) at which `placed` (a side
+## to the roller's transform) holds none of body `b`'s idle vertices in any phase.
+func _clear_side(b: int, _hand: int, placed: Callable) -> float:
+	var side := SCAN_FROM_M
+	while side < SCAN_TO_M:
+		var hits := 0
+		var xf: Transform3D = placed.call(side)
+		for points: PackedVector3Array in _poses[b]:
+			hits += _inside(points, xf, 1.0)
+		if hits == 0:
+			return side
+		side += SCAN_STEP_M
+	return INF
+
+
+## A roller lying on its back along the guest's line `side` out on `hand`'s
+## side and `ahead`, as RollerPark.floor_spot() lays it at a booth or gate chair.
+static func _lying(hand: int, side: float, ahead: float) -> Transform3D:
+	var out := -1.0 if hand == 0 else 1.0
+	return Transform3D(Basis.IDENTITY, Vector3(out * side, 0.0, ahead))
+
+
 ## How many of `points` lie in the shell box of a roller drawn at `parked`.
-func _inside(points: PackedVector3Array, parked: Transform3D, scale_by: float) -> int:
-	var box := _shell.grow(MARGIN_M / scale_by)
+func _inside(
+	points: PackedVector3Array, parked: Transform3D, scale_by: float, margin := MARGIN_M
+) -> int:
+	var box := _shell.grow(margin / scale_by)
 	var to_bag := parked.affine_inverse()
 	var count := 0
 	for v in points:

@@ -326,6 +326,10 @@ func sync() -> void:
 			)
 			# Its side, from the sim (ParkSide.choose_stand()), before hold_park() holds it.
 			ParkSide.choose_stand(sim, p, was[i])
+			# How far out a seat park stands it for each hand, by the body and a
+			# booth's end panel (BoothRoller.side_m()); a park's stamp keeps it.
+			if kinds[i] == SecurityLooks.Kind.ROLLER:
+				was[i]["side_now"] = [BoothRoller.side_m(sim, p, 0), BoothRoller.side_m(sim, p, 1)]
 			# A parking roller keeps home, hand and lift to the park's end; one lying, its lift.
 			RollerPark.hold_park(was[i], kinds[i], homes, hands, i, _tick(), p.collect_tick != 0)
 			if RollerPark.holds_lift(was[i], kinds[i], homes[i], _tick()):

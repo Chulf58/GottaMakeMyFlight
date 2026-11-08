@@ -56,6 +56,7 @@ const UP_LEAD_TICKS := 9
 ## Taken off the floor it parks further ahead (UP_PARK_AHEAD_M), where the
 ## walker comes past it stepping off: parked 0.45 m ahead, the walker had gone
 ## on and the hand was 0.16 m off the bar at 3x as it took it again.
+## park()'s default; plan() takes the walker's own (SEAT_SIDE_M, "park_side").
 const PARK_SIDE_M := 0.32
 const PARK_AHEAD_M := 0.15
 const UP_PARK_AHEAD_M := 0.7
@@ -244,6 +245,13 @@ const QUEUE_BAR_M := 1.12
 ## legs clear the shell's box from 0.41 m (male_08, left hand) and 0.345 m
 ## (female_08, right hand); each has about 2 cm more.
 const QUEUE_SIDE_M: Array[float] = [0.43, 0.37]
+## Every other park (plan()) and a booth's lying spot put the axle this far
+## out, by variant (male, female) and hand (right, left): at 0.32 m a male
+## roller stood and lay in his near leg (food_seats_probe booth 13-3, board
+## 8a6068aa). Male: the shell box's widest idle clearance, standing or lying,
+## plus 1 cm (test_roller_stand_clearance). Female: as before (conductor-
+## decided). A booth's end panel can cap it (BoothRoller.side_m()).
+const SEAT_SIDE_M: Array = [[0.40, 0.43], [PARK_SIDE_M, PARK_SIDE_M]]
 ## A walker that walks off facing more than this (radians) away from its way
 ## (PassengerViews.walk_heading()) turns toward it as it sets off, over
 ## PassengerTurns.TURN_TICKS: its stood roller's tip waits that long (tip_wait()),
@@ -639,6 +647,8 @@ static func stamp(bag: Dictionary, body: Transform3D, face := NAN) -> void:
 		if first >= 0:
 			bag["up_near"] = not is_nan(float(bag["roll_faces"][first]))
 	bag["park_frame"] = _yawed(body)
+	# Each hand's side as sync() read it (BoothRoller.side_m()), kept for the move.
+	bag["park_side"] = (bag.get("side_now", [PARK_SIDE_M, PARK_SIDE_M]) as Array).duplicate()
 	if not is_nan(face) and CarryLead.start_of(bag)[0] == CarryLead.End.HELD:
 		bag["park_frame"] = Transform3D(Basis(Vector3.UP, face), body.origin)
 	# A floor>pull with a face is parked where the sim had the walker on the
@@ -707,12 +717,21 @@ static func floor_spot(
 	if kind == SecurityLooks.Kind.ROLLER and sim.cafes.booth_roller(p):
 		var front: Variant = chair_front(sim, p, kind)
 		if front != null:
-			spot.origin.x = BoothRoller.side(sim, front as Transform3D, hand) * PARK_SIDE_M
+			var lies := BoothRoller.side(sim, front as Transform3D, hand)
+			# Out by the leg on the side it lies on.
+			spot.origin.x = lies * BoothRoller.side_m(sim, p, 0 if lies < 0.0 else 1)
 		return spot
 	if kind != SecurityLooks.Kind.ROLLER or where == StageKinds.Location.FACILITY_SEAT:
 		return spot
 	var out := -1.0 if hand == 0 else 1.0
 	return Transform3D(Basis.IDENTITY, Vector3(out * BESIDE_FEET_M, 0.0, FEET_AHEAD_M))
+
+
+## How far out (SEAT_SIDE_M) a seat park puts the axle of a body of look `look`
+## (PassengerLooks.BODIES index) on the side of `hand` (0 right, 1 left).
+static func seat_side(look: int, hand: int) -> float:
+	var variant := clampi(look / PassengerLooks.PER_VARIANT, 0, SEAT_SIDE_M.size() - 1)
+	return SEAT_SIDE_M[variant][hand]
 
 
 ## The frame (world, on the floor) a roller of `p` (of `kind`) lies in at a gate
@@ -1011,7 +1030,8 @@ static func plan(
 		lead = CarryLead.hand_of(bag["home"])
 		k = down_k(bag, k)
 	var ahead := UP_PARK_AHEAD_M if off_floor and not bag.get("up_near", false) else PARK_AHEAD_M
-	var parked := park(bag["park_frame"], lead, body["scale"], ahead)
+	var side: float = bag.get("park_side", [PARK_SIDE_M, PARK_SIDE_M])[lead]
+	var parked := park(bag["park_frame"], lead, body["scale"], ahead, side)
 	# Out of the walls beside a seat (BoothRoller.fix_start(), ParkWalls).
 	if bag.has("wall_boxes"):
 		parked.origin += ParkWalls.shift(parked, bag["wall_boxes"])
