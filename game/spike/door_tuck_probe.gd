@@ -101,9 +101,15 @@ static func leaf_meshes(view: BuildView, grid: BuildGrid, world: String) -> Arra
 ## (new_leaf_tally()): the roller's meshes, by part (under Pull_Top the grip
 ## bar, under Pull_Reach the rods, else the bag), and with `hand_at` finite a
 ## HAND_HALF box there, each tested against every leaf's box. Prints the first
-## TOP_DEEP touching frames.
+## TOP_DEEP touching frames, with the guest's body at `walker` (when finite)
+## in the leaf's frame, so its distance from the door's axis can be read.
 static func count_leaves(
-	tally: Dictionary, leaves: Array[MeshInstance3D], p: Passenger, bag: Node3D, hand_at: Vector3
+	tally: Dictionary,
+	leaves: Array[MeshInstance3D],
+	p: Passenger,
+	bag: Node3D,
+	hand_at: Vector3,
+	walker := Vector3.INF,
 ) -> void:
 	tally["frames"] += 1
 	var axle := bag.global_transform * CarryOnProps.ROLLER_AXLE
@@ -147,8 +153,9 @@ static func count_leaves(
 		# In the touched leaf's frame (x along the wall, z out of it, its middle 0).
 		var inv := touched.global_transform.affine_inverse()
 		var bar := inv * (top as Node3D).global_position if top != null else Vector3.INF
-		var line := [p.id, p.at.x, p.at.y, stage, hit, inv * axle, bar]
-		print("LEAF_AT id=%d cell (%d,%d) %s %s; leaf frame: axle %s bar %s" % line)
+		var walk := inv * walker if walker.is_finite() else Vector3.INF
+		var line := [p.id, p.at.x, p.at.y, stage, hit, inv * axle, bar, walk]
+		print("LEAF_AT id=%d cell (%d,%d) %s %s; leaf frame: axle %s bar %s walker %s" % line)
 
 
 ## The LEAF line of `tally` for seed `seed`; the hand is measured windowed only.
@@ -225,7 +232,7 @@ func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> 
 	var grip := Vector3.INF
 	if not _headless:
 		grip = _views.carry_on_props().grip_of(body, CarryLead.hand_of(int(state.get("place", 0))))
-	count_leaves(_leaf, _leaves, p, bag, grip)
+	count_leaves(_leaf, _leaves, p, bag, grip, body.global_position)
 	var tucked := RollerPull.tuck_weight(state, _clock.tick + _clock.alpha) > 0.0
 	_tuck["pulled"] += int(tucked)
 	if int(_axles["settled"]) == settled:
