@@ -26,7 +26,7 @@ extends SceneTree
 ## Pass (each printed with the values it compared): in the lane column on
 ## moveup frames no body is within ROLLER_CLEAR_M of the other's roller and no
 ## two bodies are at BODY_ZERO_M. Control: lane members set off to move up
-## (MOVE_UPS > 0), else PROBE_INVALID. WALKCROSS, SHARESPOT and WALKCONTROL
+## (MOVE_UPS > 0), else PROBE_INVALID. WALKCROSS, WALKROUTE, SHARESPOT and WALKCONTROL
 ## (WalkerOverlap, board 43881776; info, they do not fail the run) measure the
 ## walkers still heading to the place against its queued guests on the drawn
 ## skinned bodies, and standing queue members drawn on one spot; PROBE_INVALID

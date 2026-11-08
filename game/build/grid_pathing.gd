@@ -103,6 +103,34 @@ func find_path(grid: BuildGrid, from: Vector2i, to: Vector2i) -> Array[Vector2i]
 	return cells
 
 
+## find_path() with the cells of `shut` off for this one query: a route that
+## never steps onto one, though `from` and `to` may be among them; empty when
+## there is none. Each shut point that was on is switched off, the path is
+## found, and exactly those points are switched on again, so a point already
+## off (not indoor, set_outside()) stays off.
+func find_path_around(
+	grid: BuildGrid, from: Vector2i, to: Vector2i, shut: Array
+) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if not _may_stand(grid, from) or not _may_stand(grid, to):
+		return cells
+	var off := PackedInt32Array()
+	for cell: Vector2i in shut:
+		if cell == from or cell == to or not grid.in_bounds(cell):
+			continue
+		var id := _id(cell)
+		if not _astar.is_point_disabled(id):
+			_astar.set_point_disabled(id, true)
+			off.append(id)
+	var ids := _astar.get_id_path(_id(from), _id(to))
+	for id in off:
+		_astar.set_point_disabled(id, false)
+	for id in ids:
+		@warning_ignore("integer_division")
+		cells.append(Vector2i(id % _width, id / _width))
+	return cells
+
+
 func _relink(grid: BuildGrid, cell: Vector2i) -> void:
 	var id := _id(cell)
 	if not staff:

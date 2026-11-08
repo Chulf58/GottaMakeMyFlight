@@ -11,6 +11,11 @@ extends RefCounted
 ## CROSS_M. Its DEPTH is a proxy for how far the walker pushed in: the root
 ## (node origin) distance when the surfaces first met, minus the least root
 ## distance on a crossed frame. A pair is DEEP when that is at least DEEP_M.
+## Crossed pairs are split by whether the guest queues at the walker's own
+## station. WALKROUTE counts the walkers that step onto their own line ahead
+## of its free cell, which the route rule keeps them off (decision queue-
+## walkers-route-around-their-own-line-a-walker-heading-t), split into
+## fallbacks (no way round, the stated residual) and the rest.
 ## Load with preload(); no class_name.
 
 const QueueSpacing := preload("res://spike/queue_spacing.gd")
@@ -39,6 +44,9 @@ var _crossed := {}
 var _shared := {}
 var _near_walkers := {}
 var _points := {}
+## Walker id -> [tick, fallback, where]: the first step it took onto its own
+## line's cells ahead of the line's free cell (_route()).
+var _route_over := {}
 
 
 func _init(sim: PassengerSim, views: PassengerViews) -> void:
@@ -59,6 +67,8 @@ func watch(tick: int, stations: Array[int], walking: Passenger.Stage) -> void:
 		_share(tick, members)
 	for id in _sim.passenger_ids():
 		var w := _sim.get_passenger(id)
+		if w.stage == walking and stations.has(w.station):
+			_route(tick, w)
 		if w.stage != walking or _views.node_for(id) == null:
 			continue
 		for other: int in queued:
@@ -79,7 +89,7 @@ func _pair(tick: int, w: Passenger, q: Passenger) -> void:
 	skinned_frames += int(is_finite(gap))
 	var key := "%d/%d" % [w.id, q.id]
 	var row: Array = _crossed.get_or_add(
-		key, [tick, tick, 0, INF, INF, {}, {}, 0, INF, INF, false, ""]
+		key, [tick, tick, 0, INF, INF, {}, {}, 0, INF, INF, false, "", w.station == q.station]
 	)
 	row[7] += 1
 	row[3] = minf(row[3], gap)
@@ -95,6 +105,35 @@ func _pair(tick: int, w: Passenger, q: Passenger) -> void:
 			row[8] = root
 			row[10] = w.path.slice(w.path_index).has(q.at)
 			row[11] = "walker at %s to %s, queued at %s" % [w.at, w.path_end(), q.at]
+
+
+## Walker `w` stepping onto a cell of its own station's line ahead of the
+## line's free cell (past every member's cell), which the route rule keeps it
+## off (decision queue-walkers-route-around-their-own-line-a-walker-heading-t):
+## a FALLBACK when there was no way round from where it stands to where it
+## heads (BuildGrid.find_path_around()), else OTHER. Each walker is counted
+## once, on the tick it first does.
+func _route(tick: int, w: Passenger) -> void:
+	if not w.is_moving() or _route_over.has(w.id):
+		return
+	var line := _sim.layout.line_of(w.station)
+	var free := 0
+	for id in _sim.queue_of(w.station) + _sim.holding_of(w.station):
+		free = maxi(free, line.find(_sim.get_passenger(id).at) + 1)
+	var next := w.path[w.path_index + 1]
+	var onto := line.find(next)
+	if onto < 0 or onto >= free:
+		return
+	var shut := line.slice(0, free)
+	var fallback := _sim.grid.find_path_around(w.at, w.path_end(), shut).is_empty()
+	_route_over[w.id] = [
+		tick,
+		fallback,
+		(
+			"walker %d at %s onto %s (line %d, free %d) to %s"
+			% [w.id, w.at, next, onto, free, w.path_end()]
+		)
+	]
 
 
 ## Members of one station that are drawn on one spot.
@@ -228,6 +267,35 @@ func report(place: String) -> bool:
 			]
 		)
 	)
+	var own := rows.filter(func(k: String) -> bool: return _crossed[k][12])
+	var own_deep := own.filter(func(k: String) -> bool: return _depth(k) >= DEEP_M)
+	print(
+		(
+			"WALKCROSS %s crossed pairs by the guest's station: own %d (deep %d), other %d (deep %d)"
+			% [
+				place,
+				own.size(),
+				own_deep.size(),
+				rows.size() - own.size(),
+				deep.size() - own_deep.size()
+			]
+		)
+	)
+	var fallbacks := _route_over.keys().filter(func(id: int) -> bool: return _route_over[id][1])
+	print(
+		(
+			(
+				"WALKROUTE %s walkers stepping onto their own line ahead of its free cell %d: "
+				+ "with no way round (fallback, the stated residual) %d, with a way round %d"
+			)
+			% [place, _route_over.size(), fallbacks.size(), _route_over.size() - fallbacks.size()]
+		)
+	)
+	var listed := _route_over.keys()
+	listed.sort()
+	for id: int in listed.slice(0, LISTED):
+		var row: Array = _route_over[id]
+		print("WALKROUTE %s t%d fallback %s, %s" % [place, row[0], row[1], row[2]])
 	for key: String in near.slice(0, LISTED):
 		var row: Array = _crossed[key]
 		print(
