@@ -91,10 +91,7 @@ func test_a_contract_flight_boards_then_departs() -> void:
 
 func test_a_contract_that_starts_tomorrow_is_not_listed_today() -> void:
 	_world.run_to(3000)
-	(
-		assert_bool(_world.flights.accept_contract(_terms("EARLY", 6 * 60 + 30, "Rome", "Sunhop")))
-		. is_true()
-	)
+	assert_bool(_world.flights.accept_contract(_terms("EARLY", 7 * 60, "Rome", "Sunhop"))).is_true()
 	assert_int(_world.flights.contract_of("EARLY")["first_day"]).is_equal(1)
 	assert_str(_text()).not_contains("Rome")
 
@@ -114,7 +111,9 @@ func test_no_flights_says_so() -> void:
 
 
 func test_a_long_day_shows_the_first_lines_and_counts_the_rest() -> void:
-	var minutes := [9 * 60, 12 * 60 + 20, 15 * 60 + 40, 19 * 60, 22 * 60 + 20]
+	# Four 200 minutes apart from 09:00: a fifth at 22:20 would depart in the
+	# quiet night, which Runway R7 refuses.
+	var minutes := [9 * 60, 12 * 60 + 20, 15 * 60 + 40, 19 * 60]
 	for i in minutes.size():
 		(
 			assert_bool(
@@ -125,17 +124,19 @@ func test_a_long_day_shows_the_first_lines_and_counts_the_rest() -> void:
 	var lines := _lines()
 	assert_int(lines.size()).is_equal(DepartureList.MAX_LINES)
 	assert_str(lines[0]).is_equal("06:04  GMF101  doors close 06:01")
-	assert_str(lines[lines.size() - 1]).is_equal("+4 more")
+	assert_str(lines[lines.size() - 1]).is_equal("+3 more")
 
 
 func test_departed_flights_make_room_for_later_ones() -> void:
-	var minutes := [9 * 60, 12 * 60 + 20, 15 * 60 + 40, 19 * 60, 22 * 60 + 20]
+	# Four 200 minutes apart from 09:00: a fifth at 22:20 would depart in the
+	# quiet night, which Runway R7 refuses.
+	var minutes := [9 * 60, 12 * 60 + 20, 15 * 60 + 40, 19 * 60]
 	for i in minutes.size():
 		_world.flights.accept_contract(_terms("C%d" % i, minutes[i], "Rome", "Sunhop"))
 	_world.run_to(705)
 	var lines := _lines()
 	assert_str(lines[0]).starts_with("09:00  Rome  Sunhop  doors close ")
-	assert_str(lines[lines.size() - 1]).is_equal("+3 more")
+	assert_str(lines[lines.size() - 1]).is_equal("+2 more")
 
 
 func test_the_flight_panel_shows_the_list() -> void:

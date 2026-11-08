@@ -4,7 +4,8 @@ extends GdUnitTestSuite
 ## occurrences survive JSON, a load never re-issues, and a bad save is refused
 ## whole.
 
-const MIDNIGHT := 21600
+## NIGHT-d0 boards from 16340; a save at SAVE_AT - 10 is taken while it boards.
+const SAVE_AT := 17000
 
 var _log: Array[String] = []
 
@@ -37,12 +38,13 @@ func _run(clock: SimClock, target: int) -> void:
 		clock.advance(SimClock.STEP)
 
 
-## NIGHT (00:50) is boarding over midnight and AM (08:20) is issued the next
-## morning, so the run after the load crosses a day rollover and new issues.
+## NIGHT (21:00, the last departure the quiet night allows) is boarding and AM
+## (08:20) is issued the next morning, so the run after the load crosses a day
+## rollover and new issues.
 func _timetabled(at_tick: int) -> Array:
 	var world := _world()
 	var sim: FlightSim = world[1]
-	assert_bool(sim.accept_contract(TestFlightContracts.terms("NIGHT", 50))).is_true()
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("NIGHT", 1260))).is_true()
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	_run(world[0], at_tick)
 	return world
@@ -53,18 +55,18 @@ func _saved(world: Array) -> Dictionary:
 	return JSON.parse_string(text)
 
 
-func test_save_and_load_just_before_midnight_gives_the_same_future() -> void:
-	var source := _timetabled(MIDNIGHT - 10)
-	assert_array(source[1].flight_ids()).is_equal(["NIGHT-d1"])
+func test_save_and_load_while_boarding_gives_the_same_future_across_midnight() -> void:
+	var source := _timetabled(SAVE_AT - 10)
+	assert_array(source[1].flight_ids()).is_equal(["NIGHT-d0"])
 	var data := _saved(source)
 	_log.clear()
 	var loaded := _world()
 	assert_bool(loaded[0].from_snapshot(data["clock"])).is_true()
 	assert_bool(loaded[1].from_snapshot(data["flights"])).is_true()
 	assert_array(_log).is_empty()
-	assert_array(loaded[1].flight_ids()).is_equal(["NIGHT-d1"])
+	assert_array(loaded[1].flight_ids()).is_equal(["NIGHT-d0"])
 	assert_bool(loaded[1].contract_of("AM").is_read_only()).is_true()
-	var end := MIDNIGHT + GameCalendar.TICKS_PER_DAY
+	var end := SAVE_AT + GameCalendar.TICKS_PER_DAY
 	_run(loaded[0], end)
 	var after_load := _log.duplicate()
 	_log.clear()
@@ -73,7 +75,7 @@ func test_save_and_load_just_before_midnight_gives_the_same_future() -> void:
 	var am_first := GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
 	var am_issued := GameCalendar.TICKS_PER_DAY + am_first - FlightTimetable.ISSUE_LEAD_TICKS
 	assert_bool(_log.has("%d add AM-d1" % am_issued)).is_true()
-	assert_bool(_log.has("22600 NIGHT-d1 %d" % FlightSim.State.PUSHBACK)).is_true()
+	assert_bool(_log.has("18000 NIGHT-d0 %d" % FlightSim.State.PUSHBACK)).is_true()
 	assert_int(_log.size()).is_greater(20)
 	assert_str(JSON.stringify(loaded[1].to_snapshot())).is_equal(
 		JSON.stringify(source[1].to_snapshot())
@@ -81,13 +83,13 @@ func test_save_and_load_just_before_midnight_gives_the_same_future() -> void:
 
 
 func test_snapshot_records_version_contracts_and_issued_days() -> void:
-	var data: Dictionary = _saved(_timetabled(MIDNIGHT - 10))["flights"]
+	var data: Dictionary = _saved(_timetabled(SAVE_AT - 10))["flights"]
 	assert_int(int(data["save_version"])).is_equal(FlightSim.SAVE_VERSION)
 	assert_int(data["contracts"].size()).is_equal(2)
-	assert_int(int(data["next_day"]["NIGHT"])).is_equal(2)
+	assert_int(int(data["next_day"]["NIGHT"])).is_equal(1)
 	assert_int(int(data["next_day"]["AM"])).is_equal(1)
 	assert_str(data["flights"][0]["contract"]).is_equal("NIGHT")
-	assert_int(int(data["flights"][0]["day"])).is_equal(1)
+	assert_int(int(data["flights"][0]["day"])).is_equal(0)
 
 
 ## Version 1 saves were written with the one-hour issue lead, so their
@@ -95,14 +97,14 @@ func test_snapshot_records_version_contracts_and_issued_days() -> void:
 ## save tick. AM (08:20) has its first state at 140 and PM (14:20) at 7340.
 ## Versions 2 to 7 are in test_flight_open_snapshot.gd.
 func test_a_version_1_save_is_refused() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(6)
+	assert_int(FlightSim.SAVE_VERSION).is_equal(7)
 	var world := _world()
 	assert_bool(world[1].accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	assert_bool(world[1].accept_contract(TestFlightContracts.terms("PM", 860))).is_true()
 	# Between PM's two-hour (4940) and one-hour (6140) issue ticks.
 	_run(world[0], 6000)
 	var data: Dictionary = _saved(world)["flights"]
-	assert_int(int(data["save_version"])).is_equal(6)
+	assert_int(int(data["save_version"])).is_equal(7)
 	assert_int(int(data["next_day"]["PM"])).is_equal(1)
 	var loaded := _world()
 	assert_bool(loaded[1].from_snapshot(data.duplicate(true))).is_true()
@@ -114,19 +116,19 @@ func test_a_version_1_save_is_refused() -> void:
 
 
 func test_an_inconsistent_timetable_save_is_refused_whole() -> void:
-	var good: Dictionary = _saved(_timetabled(MIDNIGHT - 10))["flights"]
+	var good: Dictionary = _saved(_timetabled(SAVE_AT - 10))["flights"]
 	var cases: Array[Dictionary] = []
 	var edits := [
 		func(d: Dictionary) -> void: d.erase("save_version"),
 		func(d: Dictionary) -> void: d["save_version"] = 0,
 		func(d: Dictionary) -> void: d["extra"] = 1,
 		func(d: Dictionary) -> void: d["tick"] = 1e300,
-		func(d: Dictionary) -> void: d["next_day"]["NIGHT"] = 1,
+		func(d: Dictionary) -> void: d["next_day"]["NIGHT"] = 2,
 		func(d: Dictionary) -> void: d["next_day"]["AM"] = 2,
 		func(d: Dictionary) -> void: d["next_day"].erase("AM"),
 		func(d: Dictionary) -> void: d["flights"].clear(),
 		func(d: Dictionary) -> void: d["flights"][0]["starts"][0] = 20241,
-		func(d: Dictionary) -> void: d["flights"][0]["id"] = "NIGHT-d2",
+		func(d: Dictionary) -> void: d["flights"][0]["id"] = "NIGHT-d1",
 		func(d: Dictionary) -> void: d["flights"][0]["day"] = 2,
 		func(d: Dictionary) -> void: d["flights"][0]["contract"] = "GONE",
 		func(d: Dictionary) -> void: d["flights"][0]["gate"] = "A",
@@ -151,7 +153,7 @@ func test_an_inconsistent_timetable_save_is_refused_whole() -> void:
 		assert_int(target.tick).is_equal(0)
 
 
-## A raw flight copying NIGHT-d1's schedule at the same gate clashes with it.
+## A raw flight copying NIGHT-d0's schedule at the same gate clashes with it.
 static func _raw_entry(occurrence: Dictionary) -> Dictionary:
 	var raw := occurrence.duplicate(true)
 	raw["id"] = "RAW"
@@ -162,8 +164,8 @@ static func _raw_entry(occurrence: Dictionary) -> Dictionary:
 
 ## A save taken after an occurrence was pruned must not list it again.
 func test_a_pruned_occurrence_in_a_save_is_refused() -> void:
-	# NIGHT-d1 starts at 19940 and is pruned an hour after it departs.
-	var pruned := 19940 + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
+	# NIGHT-d0 starts at 15340 and is pruned an hour after it departs.
+	var pruned := 15340 + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
 	var good: Dictionary = _saved(_timetabled(pruned))["flights"]
 	assert_array(good["flights"]).is_empty()
 	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(good)).is_true()
@@ -173,21 +175,18 @@ func test_a_pruned_occurrence_in_a_save_is_refused() -> void:
 	var target := auto_free(FlightSim.new()) as FlightSim
 	assert_bool(target.from_snapshot(stale)).is_false()
 	assert_array(target.contract_ids()).is_empty()
-	assert_int(target.state_of("NIGHT-d1")).is_equal(-1)
+	assert_int(target.state_of("NIGHT-d0")).is_equal(-1)
 
 
 ## first_day must be one an acceptance between tick 0 and the save's tick could
-## give: NIGHT (00:50) could not start on day 0, and at tick 21590 AM (08:20)
-## would go to day 1 at the latest, never day 2.
+## give: at tick 16990 AM (08:20) would go to day 1 at the latest, never day 2.
 func test_a_first_day_no_acceptance_could_give_is_refused() -> void:
-	var good: Dictionary = _saved(_timetabled(MIDNIGHT - 10))["flights"]
+	var good: Dictionary = _saved(_timetabled(SAVE_AT - 10))["flights"]
 	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(good)).is_true()
-	var too_early := good.duplicate(true)
-	too_early["contracts"][0]["first_day"] = 0
 	var postponed := good.duplicate(true)
 	postponed["contracts"][1]["first_day"] = 2
 	postponed["next_day"]["AM"] = 2
-	for bad in [too_early, postponed]:
+	for bad in [postponed]:
 		var target := auto_free(FlightSim.new()) as FlightSim
 		assert_bool(target.from_snapshot(bad)).override_failure_message(str(bad)).is_false()
 		assert_array(target.contract_ids()).is_empty()
@@ -198,15 +197,13 @@ func test_a_first_day_no_acceptance_could_give_is_refused() -> void:
 func test_live_flights_out_of_timetable_order_are_refused() -> void:
 	var world := _world()
 	var sim: FlightSim = world[1]
-	assert_bool(sim.accept_contract(TestFlightContracts.terms("LATE", 1430))).is_true()
-	# NEXT departs the minute LATE's gate time ends (00:52) plus the 133 minutes
-	# between a flight's first state and its departure: 03:05.
-	var next_minute := (
-		(1430 + FlightTimetable.reserved_ticks() / GameCalendar.TICKS_PER_MINUTE) % 1440
-	)
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("EARLY", 600))).is_true()
+	# NEXT's gate time starts the tick EARLY's ends: 195 minutes later.
+	@warning_ignore("integer_division")
+	var next_minute := 600 + FlightTimetable.reserved_ticks() / GameCalendar.TICKS_PER_MINUTE
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("NEXT", next_minute))).is_true()
-	_run(world[0], 21000)
-	assert_array(sim.flight_ids()).is_equal(["LATE-d0", "NEXT-d1"])
+	_run(world[0], 5000)
+	assert_array(sim.flight_ids()).is_equal(["EARLY-d0", "NEXT-d0"])
 	var good: Dictionary = _saved(world)["flights"]
 	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(good)).is_true()
 	var reversed := good.duplicate(true)

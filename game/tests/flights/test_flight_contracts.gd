@@ -94,7 +94,7 @@ func test_acceptance_after_todays_preparation_start_goes_to_tomorrow() -> void:
 
 
 func test_an_early_morning_contract_accepted_at_start_begins_tomorrow() -> void:
-	assert_bool(_sim.accept_contract(terms("GMF500", 390))).is_true()
+	assert_bool(_sim.accept_contract(terms("GMF500", 420))).is_true()
 	assert_int(_sim.contract_of("GMF500")["first_day"]).is_equal(1)
 	assert_array(_added).is_empty()
 
@@ -142,31 +142,28 @@ func test_a_contract_id_is_used_once() -> void:
 	assert_array(_sim.contract_ids()).is_equal(["GMF700"])
 
 
-## 23:50 holds gate C from 21:37 to 00:52 the next day (half-open).
-func test_gate_reservations_clash_across_midnight() -> void:
-	assert_bool(_sim.accept_contract(terms("LATE", 1430))).is_true()
-	# 00:30 would start at 22:17 the day before.
-	assert_bool(_sim.accept_contract(terms("EARLY", 30))).is_false()
-	var leaves := 1430 - _offset_minutes + _held_minutes - 1440
-	assert_int(leaves).is_equal(52)
-	# 03:04 starts at 00:51, one minute before LATE leaves the gate.
-	assert_bool(_sim.accept_contract(terms("TIGHT", leaves - 1 + _offset_minutes))).is_false()
-	# 03:05 starts at 00:52, the tick LATE's reservation ends.
-	assert_bool(_sim.accept_contract(terms("NEXT", leaves + _offset_minutes))).is_true()
-	assert_array(_sim.contract_ids()).is_equal(["LATE", "NEXT"])
+## 10:00 holds gate C from 07:47 to 11:02 (half-open): a contract whose gate
+## time starts a minute before that is refused, one starting on that tick fits.
+func test_gate_reservations_are_half_open() -> void:
+	assert_bool(_sim.accept_contract(terms("FIRST", 600))).is_true()
+	var next := 600 + _held_minutes
+	assert_bool(_sim.accept_contract(terms("TIGHT", next - 1))).is_false()
+	assert_bool(_sim.accept_contract(terms("NEXT", next))).is_true()
+	assert_array(_sim.contract_ids()).is_equal(["FIRST", "NEXT"])
 
 
-## 00:10 starts at 21:57 the evening before; 22:40 holds the gate until 23:42.
-func test_an_evening_contract_clashes_with_the_next_mornings_early_start() -> void:
-	assert_bool(_sim.accept_contract(terms("DAWN", 10))).is_true()
-	assert_bool(_sim.accept_contract(terms("DUSK", 1360))).is_false()
-	# 20:56 holds the gate until 21:58, the minute after DAWN starts.
-	var dawn_starts := 10 + 1440 - _offset_minutes
-	assert_int(dawn_starts).is_equal(21 * 60 + 57)
-	var last_clear := dawn_starts - _held_minutes + _offset_minutes
-	assert_bool(_sim.accept_contract(terms("DUSK", last_clear + 1))).is_false()
-	# 20:55 holds the gate until 21:57, the minute DAWN starts.
-	assert_bool(_sim.accept_contract(terms("DUSK", last_clear))).is_true()
+## A departure outside 07:00 to 21:00 would take away the quiet night the taxi
+## planner restarts on, so it is refused (decision runway-and-taxi-technical-
+## design-movement-plan-analytic-bookings-planned-pauses, section 6).
+func test_a_departure_in_the_quiet_night_is_refused() -> void:
+	for minute in [0, 419, 1261, 1439]:
+		var id := "N%d" % minute
+		assert_str(_sim.accept_problem(terms(id, minute))).is_equal(FlightSim.QUIET_NIGHT_TEXT)
+		var refusal := _sim.accept_refusal(terms(id, minute))
+		assert_str(refusal["reason"]).is_equal(GroundPlanner.QUIET_NIGHT)
+	assert_str(_sim.accept_problem(terms("D420", 420))).is_empty()
+	assert_str(_sim.accept_problem(terms("D1260", 1260))).is_empty()
+	assert_array(_sim.contract_ids()).is_empty()
 
 
 ## The bootstrap flight holds gate C from tick 0 to 3900 (06:00 to 09:15).

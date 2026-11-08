@@ -37,7 +37,11 @@ extends Node
 ## make overlapping gates once it is committed.
 ##
 ## FlightSim.gate_source is gate_ids(), so a gate has a stand exactly while it
-## has a desk and an exit. `changed` fires after every refresh(), which runs on
+## has a desk and an exit, and FlightSim.stand_source is gate_grounds(), each
+## gate's stand and max_class as the last refresh() found them, so the taxi
+## planner books the stands the planes use. The moves on a removal go through
+## FlightSim's planner (move_plan()), so they never change an issued flight.
+## `changed` fires after every refresh(), which runs on
 ## each graph change, so ApronStand works the stands out after the links.
 ##
 ## Not guaranteed: when a gate ends because its exit went, its desk links again
@@ -87,6 +91,9 @@ var bindings: Array[Dictionary] = []
 ## Gate letter -> its max_class (StandEnvelope.max_class), "" when not even a
 ## small plane fits; worked out on every refresh().
 var classes: Dictionary = {}
+## Gate letter -> its stand (StandPlacement.for_exit), worked out on every
+## refresh() with classes.
+var stands: Dictionary = {}
 ## "x|wall_z|class" -> the envelope's cells, which only the stand decides.
 var _envelope_cells: Dictionary = {}
 
@@ -103,6 +110,7 @@ func bind(on_grid: BuildGrid, on_flights: FlightSim) -> void:
 	grid = on_grid
 	flights = on_flights
 	flights.gate_source = gate_ids
+	flights.stand_source = gate_grounds
 	grid.graph_changed.connect(_on_graph_changed)
 	grid.edit_applied.connect(_on_edit_applied)
 	refresh()
@@ -137,10 +145,20 @@ func refresh() -> void:
 				)
 	bindings.assign(links.filter(func(link: Dictionary) -> bool: return link["gate"] != ""))
 	classes = {}
+	stands = {}
 	for binding in bindings:
 		var stand := StandPlacement.for_exit(grid, binding["exit"])
+		stands[binding["gate"]] = stand
 		classes[binding["gate"]] = StandEnvelope.max_class(grid, site_of(grid), stand)
 	changed.emit()
+
+
+## Gate letter -> {"stand", "max_class"} for every gate (FlightSim.stand_source).
+func gate_grounds() -> Dictionary:
+	var out := {}
+	for gate: String in stands:
+		out[gate] = {"stand": stands[gate], "max_class": classes[gate]}
+	return out
 
 
 ## The largest plane class gate `gate`'s stand holds now, or "" (also for no

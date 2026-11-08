@@ -52,9 +52,11 @@ func test_a_clash_with_a_one_off_flight_is_named_by_time_and_flight() -> void:
 	_panel.accept_button("O0N1").pressed.emit()
 	var text := _panel.message()
 	print("clash text: %s" % text)
-	assert_str(text).ends_with("it clashes with the 08:13 flight on the runway")
+	# A one-off (tests and debug only) books no runway since Runway R7 (the
+	# planner books the shared ground); it still holds its gate, gate C here.
+	assert_str(text).ends_with("it clashes with the 08:13 flight at gate C")
 	assert_str(text).not_contains("GMF101")
-	assert_str(text).contains("on the runway")
+	assert_str(text).contains("at gate C")
 	assert_str(text).not_contains("contract O0N1")
 	assert_object(_ids.search(text)).is_null()
 

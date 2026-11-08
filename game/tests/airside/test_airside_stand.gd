@@ -123,18 +123,18 @@ func test_the_hold_lines_sit_on_the_stubs_clear_of_the_runway() -> void:
 		var b := _at(stub[1])
 		assert_float(at.x).is_equal(a.x)
 		assert_float(at.z).is_between(minf(a.z, b.z), maxf(a.z, b.z))
-		var shape := TestSharedGroundHolds.footprint(Transform3D(stub[2], at))
+		var shape := TestStandLaneClearance.footprint(Transform3D(stub[2], at))
 		var gap := INF
 		for point in shape:
 			gap = minf(gap, point.y - runway.end.y)
 		print("%s at %s: footprint %.2f m south of the runway band" % [hold, at, gap])
-		assert_bool(TestSharedGroundHolds.on_zone(shape, runway)).is_false()
+		assert_bool(TestStandLaneClearance.on_zone(shape, runway)).is_false()
 		assert_float(gap).is_greater(0.5)
 		# Control: 5 m nearer the runway the footprint is on it.
 		var near := Transform3D(stub[2], at + Vector3(0.0, 0.0, -5.0))
 		(
 			assert_bool(
-				TestSharedGroundHolds.on_zone(TestSharedGroundHolds.footprint(near), runway)
+				TestStandLaneClearance.on_zone(TestStandLaneClearance.footprint(near), runway)
 			)
 			. is_true()
 		)

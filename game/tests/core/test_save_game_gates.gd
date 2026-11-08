@@ -13,6 +13,8 @@ extends GdUnitTestSuite
 const SEED := 4_401_017
 const EAST := Vector2i(44, 0)
 const DESK_EAST := Vector2i(63, 115)
+## In gate A's medium swing square but not its small one (test_stand_envelope.gd).
+const MEDIUM_CELL := Vector2i(32, 100)
 const STARTER := FlightSim.DEFAULT_ID
 
 var _main: Node
@@ -141,3 +143,63 @@ func test_a_save_missing_a_gate_is_refused_whole_and_changes_nothing() -> void:
 	assert_str(_save.message_text()).contains("no saved gate")
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
 	assert_array(_flights.gate_ids()).is_equal(["A", "B"])
+
+
+## The flights part is staged with FlightSim.load_problem() on the saved gates'
+## stands (Runway R7), so a save whose flight is at a stand other than its
+## gate's, or whose taxi re-plan fails, is refused while staged and nothing is
+## installed. (Staging used to check only FlightSnapshot.load(), and the refusal
+## came at install, over a world already half loaded.)
+func test_a_save_whose_flights_do_not_re_plan_is_refused_while_staged() -> void:
+	# Until the starter's first occurrence is issued, so the save has a flight.
+	for i in 6000:
+		if not _flights.flight_ids().is_empty():
+			break
+		SaveTestKit.step(_main)
+	var data := _taken()
+	var flights: Array = data["flights"]["flights"]
+	assert_array(flights).is_not_empty()
+	var moved: Dictionary = flights[0]["stand"]
+	moved["x"] = float(moved["x"]) + 8.0
+	for i in 5:
+		SaveTestKit.step(_main)
+	var before := SaveTestKit.checksum(_main)
+	assert_bool(_save.load_world(data)).is_false()
+	print("refused: %s" % _save.message_text())
+	assert_str(_save.message_text()).contains("is not at its gate's stand")
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+
+
+## Gate A is a small gate (a floor built in the medium swing) in the saved
+## grid, gates and stands, while the saved flights hold a running medium
+## contract at gate A: staging refuses the save on the contract's class and
+## nothing is installed. (The build guard would not let the player shrink the
+## gate under a booked medium plane, so the save is put together from two.) A
+## control: the unmixed save loads.
+func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() -> void:
+	var floor_edit := BuildEdit.paint_floor(MEDIUM_CELL, BuildGrid.FLOOR_TILE, 1)
+	assert_bool(_mode.grid.apply(floor_edit).ok).is_true()
+	assert_str(_gates.max_class("A")).is_equal(PlaneClasses.SMALL)
+	var small := _taken()
+	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(MEDIUM_CELL)).ok).is_true()
+	var board := (_main.get_node("OfferDesk") as OfferDesk).board
+	var taken := ""
+	for offer in board.open_offers():
+		var fits: bool = offer["plane_size"] == PlaneClasses.MEDIUM
+		if taken == "" and fits and _flights.accept_problem(OfferBoard.terms_of(offer)) == "":
+			assert_bool(board.accept(offer["id"], _flights)).is_true()
+			taken = offer["id"]
+	assert_str(taken).is_not_empty()
+	assert_str(_flights.contract_of(taken)["gate"]).is_equal("A")
+	var wide := _taken()
+	var narrow := wide.duplicate(true)
+	for key in ["grid", "gates", "apron"]:
+		narrow[key] = small[key]
+	for i in 5:
+		SaveTestKit.step(_main)
+	var before := SaveTestKit.checksum(_main)
+	assert_bool(_save.load_world(narrow)).is_false()
+	print("refused: %s" % _save.message_text())
+	assert_str(_save.message_text()).contains("contract %s needs a medium gate" % taken)
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	assert_bool(_save.load_world(wide)).is_true()

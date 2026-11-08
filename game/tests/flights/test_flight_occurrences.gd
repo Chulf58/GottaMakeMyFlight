@@ -32,54 +32,54 @@ func _run_to(target: int) -> void:
 		_most_live = maxi(_most_live, _sim.flight_ids().size())
 
 
-## 00:50 on day 1 is tick 22600. Its occurrence starts at 22:37 on day 0
-## (tick 19940), is issued two hours earlier (17540) and departs at 22600
-## (DEPARTED at 23840).
-func test_an_occurrence_crosses_midnight_under_its_departure_day() -> void:
-	var first := 19940
+## 21:00 on day 0, the last departure the quiet night allows, is tick 18000.
+## Its occurrence starts at 18:47 (tick 15340), is issued two hours earlier
+## (12940) and departs at 18000 (DEPARTED at 19240), all on its departure day.
+func test_the_last_departure_of_the_day_runs_under_its_departure_day() -> void:
+	var first := 15340
 	var issued := first - FlightTimetable.ISSUE_LEAD_TICKS
 	var ended := first + FlightTimetable.reserved_ticks()
-	assert_bool(_sim.accept_contract(TestFlightContracts.terms("NIGHT", 50))).is_true()
+	assert_bool(_sim.accept_contract(TestFlightContracts.terms("LAST", 1260))).is_true()
 	_run_to(issued - 1)
 	assert_array(_added_ids).is_empty()
 	_run_to(issued)
-	assert_array(_added_ids).is_equal(["NIGHT-d1"])
+	assert_array(_added_ids).is_equal(["LAST-d0"])
 	assert_int(_added[0].x).is_equal(issued)
-	assert_int(_sim.state_start("NIGHT-d1", FlightSim.State.SCHEDULED)).is_equal(first)
-	assert_int(GameCalendar.day_of(first)).is_equal(0)
-	var pushback := _sim.state_start("NIGHT-d1", FlightSim.State.PUSHBACK)
-	assert_int(pushback).is_equal(22600)
-	assert_int(GameCalendar.day_of(pushback)).is_equal(1)
-	assert_str(GameCalendar.clock_text(pushback)).is_equal("00:50")
+	assert_int(_sim.state_start("LAST-d0", FlightSim.State.SCHEDULED)).is_equal(first)
+	var pushback := _sim.state_start("LAST-d0", FlightSim.State.PUSHBACK)
+	assert_int(pushback).is_equal(18000)
+	assert_int(GameCalendar.day_of(pushback)).is_equal(0)
+	assert_int(GameCalendar.day_of(ended)).is_equal(0)
+	assert_str(GameCalendar.clock_text(pushback)).is_equal("21:00")
 	var starts := FlightSim.schedule_starts(first)
 	_run_to((starts[FlightSim.State.BOARDING] + starts[FlightSim.State.DOORS_CLOSED]) / 2)
-	assert_int(_sim.state_of("NIGHT-d1")).is_equal(FlightSim.State.BOARDING)
+	assert_int(_sim.state_of("LAST-d0")).is_equal(FlightSim.State.BOARDING)
 	_run_to(ended)
-	assert_int(_sim.state_of("NIGHT-d1")).is_equal(FlightSim.State.DEPARTED)
-	assert_array(_added_ids).is_equal(["NIGHT-d1"])
+	assert_int(_sim.state_of("LAST-d0")).is_equal(FlightSim.State.DEPARTED)
+	assert_array(_added_ids).is_equal(["LAST-d0"])
 
 
 func test_a_departed_occurrence_is_pruned_an_hour_later_and_still_answers() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("NIGHT", 50))
-	# Departed at 23840, so dropped at 25040.
-	var pruned := 19940 + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
+	_sim.accept_contract(TestFlightContracts.terms("LAST", 1260))
+	# Departed at 19240, so dropped at 20440.
+	var pruned := 15340 + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
 	_run_to(pruned - 1)
-	assert_array(_sim.flight_ids()).is_equal(["NIGHT-d1"])
-	var window := _sim.boarding_window("NIGHT-d1")
+	assert_array(_sim.flight_ids()).is_equal(["LAST-d0"])
+	var window := _sim.boarding_window("LAST-d0")
 	_run_to(pruned)
 	assert_array(_sim.flight_ids()).is_empty()
-	assert_int(_sim.state_of("NIGHT-d1")).is_equal(FlightSim.State.DEPARTED)
-	assert_bool(_sim.is_doors_closed("NIGHT-d1")).is_true()
-	assert_that(_sim.boarding_window("NIGHT-d1")).is_equal(window)
-	assert_int(_sim.doors_close_tick("NIGHT-d1")).is_equal(window.y)
-	assert_float(_sim.phase_progress("NIGHT-d1", float(pruned))).is_equal(1.0)
-	assert_str(_sim.flight_contract_id("NIGHT-d1")).is_equal("NIGHT")
+	assert_int(_sim.state_of("LAST-d0")).is_equal(FlightSim.State.DEPARTED)
+	assert_bool(_sim.is_doors_closed("LAST-d0")).is_true()
+	assert_that(_sim.boarding_window("LAST-d0")).is_equal(window)
+	assert_int(_sim.doors_close_tick("LAST-d0")).is_equal(window.y)
+	assert_float(_sim.phase_progress("LAST-d0", float(pruned))).is_equal(1.0)
+	assert_str(_sim.flight_contract_id("LAST-d0")).is_equal("LAST")
 
 
 func test_only_issued_canonical_ids_are_answered() -> void:
-	_sim.accept_contract(TestFlightContracts.terms("NIGHT", 50))
+	_sim.accept_contract(TestFlightContracts.terms("LAST", 1260))
 	_run_to(24440)
-	for id in ["NIGHT-d0", "NIGHT-d2", "NIGHT-d01", "NIGHT-d", "OTHER-d1", "NIGHT-d1x"]:
+	for id in ["LAST-d1", "LAST-d2", "LAST-d00", "LAST-d", "OTHER-d0", "LAST-d0x"]:
 		assert_int(_sim.state_of(id)).override_failure_message(id).is_equal(-1)
 		assert_bool(_sim.is_doors_closed(id)).is_false()
 		assert_str(_sim.flight_contract_id(id)).is_equal("")

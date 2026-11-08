@@ -37,7 +37,8 @@ func after_test() -> void:
 
 func _accept_many(count: int, destination: String, airline: String) -> void:
 	for i in count:
-		var terms := TestFlightContracts.terms("C%d" % i, 3 * 60 + i * 200)
+		# Back to back at gate C from 07:00: five fit before the quiet night.
+		var terms := TestFlightContracts.terms("C%d" % i, 7 * 60 + i * 195)
 		terms["destination"] = destination
 		terms["airline"] = airline
 		assert_bool(_world.flights.accept_contract(terms)).is_true()
@@ -52,27 +53,27 @@ func _panel_bottom() -> float:
 	return panel.get_global_rect().end.y
 
 
-func test_seven_contracts_still_fill_only_the_capped_lines() -> void:
-	_accept_many(7, "Rome", "Sunhop")
+func test_five_contracts_still_fill_only_the_capped_lines() -> void:
+	_accept_many(5, "Rome", "Sunhop")
 	_hud.refresh()
 	var label := _label()
 	var lines := label.text.split("\n")
 	assert_int(lines.size()).is_equal(DepartureList.MAX_LINES)
-	# The clock is at 06:04: the 03:00 and 06:20 contracts start tomorrow, so
-	# today lists GMF101 and the five later contracts, and 6 - 2 shown remain.
-	assert_str(lines[DepartureList.MAX_LINES - 1]).is_equal("+4 more")
+	# The clock is at 06:04: the 07:00 contract starts tomorrow, so today lists
+	# GMF101 and the four later contracts, and 5 - 2 shown remain.
+	assert_str(lines[DepartureList.MAX_LINES - 1]).is_equal("+3 more")
 	assert_int(label.autowrap_mode).is_equal(TextServer.AUTOWRAP_OFF)
 	assert_int(label.get_line_count()).is_equal(DepartureList.MAX_LINES)
 
 
 func test_long_names_do_not_wrap_into_extra_lines() -> void:
-	_accept_many(6, "Ulaanbaatar International", "Trans Continental Regional Airways")
+	_accept_many(5, "Ulaanbaatar International", "Trans Continental Regional Airways")
 	_hud.refresh()
 	assert_int(_label().get_line_count()).is_equal(DepartureList.MAX_LINES)
 
 
 func test_the_panel_stays_clear_of_the_result_card_with_many_flights() -> void:
-	_accept_many(7, "Ulaanbaatar International", "Trans Continental Regional Airways")
+	_accept_many(5, "Ulaanbaatar International", "Trans Continental Regional Airways")
 	_hud.refresh()
 	await get_tree().process_frame
 	await get_tree().process_frame
