@@ -55,11 +55,13 @@ func test_the_tip_waits_only_for_a_turn() -> void:
 
 
 ## A walker moving up in its queue and turning toward the side its roller
-## stands on tips at once (board d8a66218): held stood through the turn, the
+## stands on tips early (board d8a66218): held stood through the turn, the
 ## roller was carried round the body ahead of it into the guest in front at a
-## hold-line corner (0.20 m from its body). Turning away from it, or leaving
-## its counter or gate spot, the tip waits the turn as before. Yaw 0 faces +z
-## and a left turn raises the yaw; hand 0 is the right.
+## hold-line corner (0.20 m from its body). The queue's front tips at once, the
+## others after TOWARD_WAIT_SHARE of the turn (below zero: minus the ticks
+## before the turn's end). Turning away from it, or leaving its counter or gate
+## spot, the tip waits the turn as before. Yaw 0 faces +z and a left turn
+## raises the yaw; hand 0 is the right.
 func test_the_tip_waits_only_for_a_turn_away_from_the_roller() -> void:
 	var way := Vector2(0.0, 1.0)
 	var faces := atan2(way.x, way.y)
@@ -72,10 +74,15 @@ func test_the_tip_waits_only_for_a_turn_away_from_the_roller() -> void:
 	# Facing left of its way (yaw above it), the walker turns right as it sets off.
 	var turns_right := faces + 1.6
 	var turns_left := faces - 1.6
-	assert_float(RollerPark.tip_wait(turns_right, way, right, true)).is_equal(-turns)
+	var early := -turns * (1.0 - RollerPark.TOWARD_WAIT_SHARE)
+	assert_float(early).is_less(0.0)
+	assert_float(RollerPark.tip_wait(turns_right, way, right, true)).is_equal(early)
 	assert_float(RollerPark.tip_wait(turns_left, way, right, true)).is_equal(turns)
-	assert_float(RollerPark.tip_wait(turns_left, way, left, true)).is_equal(-turns)
+	assert_float(RollerPark.tip_wait(turns_left, way, left, true)).is_equal(early)
 	assert_float(RollerPark.tip_wait(turns_right, way, left, true)).is_equal(turns)
+	# The queue's front tips at once, turning toward its roller only.
+	assert_float(RollerPark.tip_wait(turns_right, way, right, true, true)).is_equal(-turns)
+	assert_float(RollerPark.tip_wait(turns_left, way, right, true, true)).is_equal(turns)
 	# Control: under TIP_TURN_RAD neither waits; with no bag, or leaving the
 	# queue (not moving up), every turn waits.
 	assert_float(RollerPark.tip_wait(faces - 0.3, way, right, true)).is_equal(0.0)
@@ -114,9 +121,16 @@ func test_a_turning_walker_tips_after_the_turn() -> void:
 
 
 ## Walking off with a turn toward its roller (tip_wait() below zero), the tip
-## starts at once and is over within QUEUE_TIP_TICKS, but the move lasts as
-## long as a waiting tip's, so the hand is held through the turn.
-func test_a_walker_turning_toward_its_roller_tips_at_once() -> void:
+## starts that many ticks before the turn's end: at the queue's front (all of
+## TURN_TICKS) at once, over within QUEUE_TIP_TICKS. The move lasts as long as
+## a waiting tip's either way, so the hand is held through the turn.
+func test_a_walker_turning_toward_its_roller_tips_early() -> void:
+	var turn := float(PassengerTurns.TURN_TICKS)
+	for early in [-turn, -turn * (1.0 - RollerPark.TOWARD_WAIT_SHARE)]:
+		_tips_early(early)
+
+
+func _tips_early(early: float) -> void:
 	var bag: Dictionary = Q._pulled()
 	var now := 100.0
 	for t in RollerPark.STILL_TICKS + 1:
@@ -131,14 +145,15 @@ func test_a_walker_turning_toward_its_roller_tips_at_once() -> void:
 		RollerPark.queue_stand(bag, ROLLER, true, now)
 		now += 1.0
 	var turn := float(PassengerTurns.TURN_TICKS)
-	RollerPark.queue_stand(bag, ROLLER, false, now, RollerPark.STILL_TICKS, -turn)
+	RollerPark.queue_stand(bag, ROLLER, false, now, RollerPark.STILL_TICKS, early)
 	var at := now - float(bag["since"])
 	var ticks := CarryLead.ticks_of(bag)
-	assert_float(float(bag["queue_tip"])).is_equal(at)
+	var tip := at + turn + early
+	assert_float(float(bag["queue_tip"])).is_equal_approx(tip, 0.001)
 	assert_float(ticks).is_equal_approx(at + turn + RollerPark.QUEUE_TIP_TICKS, 0.001)
-	assert_float(RollerPark.queue_share(bag, at / ticks)).is_equal(1.0)
-	assert_float(RollerPark.queue_share(bag, (at + 1.0) / ticks)).is_less(1.0)
-	var tipped := (at + RollerPark.QUEUE_TIP_TICKS) / ticks
+	assert_float(RollerPark.queue_share(bag, tip / ticks)).is_equal(1.0)
+	assert_float(RollerPark.queue_share(bag, (tip + 1.0) / ticks)).is_less(1.0)
+	var tipped := (tip + RollerPark.QUEUE_TIP_TICKS) / ticks
 	assert_float(RollerPark.queue_share(bag, tipped)).is_equal(0.0)
 	assert_float(RollerPark.tip_share(bag, tipped)).is_equal(1.0)
 	assert_float(RollerPark.tip_share(bag, 1.0)).is_equal(1.0)

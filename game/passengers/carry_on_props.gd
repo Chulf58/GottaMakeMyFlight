@@ -318,7 +318,9 @@ func sync() -> void:
 			# A roller pulled by a walker standing still in a queue is stood up beside it.
 			var stands := queue_still and homes[i] == SecurityLooks.Home.HAND and not lifts[i]
 			var up := p.stage in RollerPark.QUEUE_STAGES
-			var turn := RollerPark.tip_wait(node.rotation.y, views.walk_heading(p), was[i], up)
+			var lane_front := up and sim.queue_of(p.station).find(p.id) == 0
+			var heading := views.walk_heading(p)
+			var turn := RollerPark.tip_wait(node.rotation.y, heading, was[i], up, lane_front)
 			RollerPark.queue_stand(
 				was[i], kinds[i], stands, _tick(), RollerPark.still_wait(p), turn, node.rotation.y
 			)
