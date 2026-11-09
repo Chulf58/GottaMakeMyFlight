@@ -26,7 +26,11 @@ extends SceneTree
 ## Pass (each printed with the values it compared): in the lane column on
 ## moveup frames no body is within ROLLER_CLEAR_M of the other's roller and no
 ## two bodies are at BODY_ZERO_M. Control: lane members set off to move up
-## (MOVE_UPS > 0), else PROBE_INVALID. THROUGHPUT prints the passengers served
+## (MOVE_UPS > 0), else PROBE_INVALID. WALKCROSS, WALKROUTE, SHARESPOT and WALKCONTROL
+## (WalkerOverlap, board 43881776; info, they do not fail the run) measure the
+## walkers still heading to the place against its queued guests on the drawn
+## skinned bodies, and standing queue members drawn on one spot; PROBE_INVALID
+## unless a walker was measured near a queued guest. THROUGHPUT prints the passengers served
 ## at the busiest station of the place over WINDOW ticks from its first
 ## service (info, for comparing builds).
 ##
@@ -62,6 +66,7 @@ extends SceneTree
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const QueueSpacing := preload("res://spike/queue_spacing.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
+const WalkerOverlap := preload("res://spike/walker_overlap.gd")
 const NO_TAG := "nothing_has_this_tag"
 const GUESTS := 4
 const EXTRA := 16
@@ -158,6 +163,7 @@ var _stand_auto := false
 ## --standplate: STANDSHARE lines printed; run with no rendering (headless).
 var _stand_traced := 0
 var _headless := false
+var _walk: WalkerOverlap
 
 
 func _initialize() -> void:
@@ -589,6 +595,7 @@ func _boot() -> bool:
 	for i in 4:
 		await process_frame
 	_sim.cafes.refresh()
+	_walk = WalkerOverlap.new(_sim, _views)
 	var staff := _main.get_node("Staff") as StaffSim
 	var hired := StarterFlight.hire_per_station(_sim, staff)
 	var doors := StarterFlight.advance_until_open(
@@ -681,6 +688,11 @@ func _watch() -> void:
 				_leaver.erase(station)
 			else:
 				_measure(left, lane[0], true)
+	_walk.watch(
+		_clock.tick,
+		stations,
+		Passenger.Stage.TO_CHECKIN if _place == "checkin" else Passenger.Stage.TO_SECURITY
+	)
 
 
 ## Marks a newcomer `p` to `lane` that joined on a queue member's cell
@@ -945,12 +957,16 @@ func _report() -> int:
 			% [_place, _stands.size(), tipped, SHORT_STOOD, short]
 		)
 	)
+	var walk_ok := _walk.report(_place)
 	var lane_frames: int = (_rows.get("lane moveup", [0]) as Array)[0]
 	print(
 		"CONTROL move-ups %d (> 0), lane pair frames moving up %d (> 0)" % [_move_ups, lane_frames]
 	)
 	if _move_ups == 0 or lane_frames == 0:
 		print("PROBE_INVALID no lane neighbours were measured moving up")
+		return 1
+	if not walk_ok:
+		print("PROBE_INVALID no walker was measured near a queued guest")
 		return 1
 	var best := 0
 	var best_station := 0

@@ -30,6 +30,19 @@ func _short_lane_world() -> PassengerTestWorld:
 	return world
 
 
+## Keeps `desk`'s passenger in service two ticks past now. In the short lane
+## world the hold cells lie past the lane, and walkers now come round the
+## lane over the desk's far side instead of through it (decision queue-
+## walkers-route-around-their-own-line-a-walker-heading-t), so the line fills
+## after the first service would end. Its service ends two ticks after the
+## last hold, so it is still seen in service once the line is full.
+func _hold_service(desk: int) -> void:
+	var serving: int = _world.sim._queue(desk)["serving"]
+	if serving != 0:
+		var p := _world.passenger(serving)
+		p.service_end = maxi(p.service_end, _world.sim.tick + 2)
+
+
 func test_first_choice_is_the_desk_that_finishes_soonest() -> void:
 	_world = PassengerTestWorld.reference_world()
 	var ids := ReferenceTerminal.object_ids(_world.grid)
@@ -85,10 +98,11 @@ func test_lane_is_bounded_and_served_first_in_first_out() -> void:
 	for i in 5:
 		spawned.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		_world.run_to(_world.clock.tick + 1)
-	for i in 120:
+	for i in 300:
 		if _world.sim.holding_of(desk).size() == 2:
 			break
 		_world.step()
+		_hold_service(desk)
 	assert_int(_world.sim.queue_of(desk).size()).is_equal(3)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	# Moved for the latched claim (decision hold-line-rebuild-the-security-
@@ -123,10 +137,11 @@ func test_holding_shows_queue_full_until_a_slot_frees() -> void:
 	for i in 4:
 		ids.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		_world.run_to(_world.clock.tick + 6)
-	for i in 120:
+	for i in 300:
 		if _world.sim.holding_of(desk).size() == 1:
 			break
 		_world.step()
+		_hold_service(desk)
 	# Moved for the latched claim (decision hold-line-rebuild-the-security-
 	# line-follows-where-people-sta): the holder is the last to enter, which
 	# need not be the last to choose the desk.

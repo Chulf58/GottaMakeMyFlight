@@ -146,7 +146,11 @@ func test_a_lane_walker_steps_up_once_the_roller_ahead_is_stood() -> void:
 func test_a_lane_walker_behind_a_walker_without_a_roller_steps_up_at_once() -> void:
 	var w := _desk_world()
 	var desk: int = w.sim.layout.desks[0]
-	for i in 4:
+	# Five (was four): walkers now come round the line instead of over it
+	# (decision queue-walkers-route-around-their-own-line-a-walker-heading-t),
+	# so the fourth joined after the first was served and only two move-ups
+	# were left to watch.
+	for i in 5:
 		_send(w, false)
 		w.run_to(w.clock.tick + 3)
 	var ups := MoveUps.new()
