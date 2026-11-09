@@ -147,3 +147,43 @@ func test_the_claimant_walks_round_the_members_and_joins() -> void:
 	assert_that(w.at).is_equal(LINE[4])
 	assert_int(cells.size()).is_greater_equal(4)
 	assert_float(least).is_greater_equal(0.70)
+
+
+## Members standing on LINE[from_index..] onward, `count` of them, as a queue
+## and its id map.
+static func _members(from_index: int, count: int) -> Array:
+	var by_id := {}
+	var lane: Array = []
+	for i in count:
+		var member := Passenger.new()
+		member.id = 100 + i
+		member.at = LINE[from_index + i]
+		member.clear_path()
+		by_id[member.id] = member
+		lane.append(member.id)
+	return [{"lane": lane, "holding": [], "serving": 0}, by_id]
+
+
+## A walker setting off for a slot past the members' block (StationQueue.
+## set_off()) keeps off the members' cells only: the empty cells between them
+## and its slot, kept for walkers still on their way, do not send it round.
+func test_set_off_keeps_off_the_members_block_but_not_the_empty_cells_past_it() -> void:
+	var got := _members(0, 2)
+	var from := Vector2i(1, 3)
+	var whole := StationQueue.approach(_grid, LINE, from, 5)
+	var path := StationQueue.set_off(_grid, got[0], LINE, got[1], from, 5)
+	print("whole line shut %s, members' block shut %s" % [whole, path])
+	assert_that(path[path.size() - 1]).is_equal(LINE[5])
+	assert_array(_over(path, 2)).is_empty()
+	assert_bool(_faces_front(path, 5)).is_true()
+	assert_int(Passenger.path_mm(path)).is_less(Passenger.path_mm(whole))
+
+
+## A slot inside the members' block (members standing further back than
+## their places) is raised to the free index.
+func test_set_off_heads_past_members_standing_behind_the_slot() -> void:
+	var got := _members(2, 2)
+	var path := StationQueue.set_off(_grid, got[0], LINE, got[1], Vector2i(1, 2), 2)
+	print("past the members: %s" % [path])
+	assert_that(path[path.size() - 1]).is_equal(LINE[4])
+	assert_array(_over(path, 4)).is_empty()

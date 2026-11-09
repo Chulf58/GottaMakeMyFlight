@@ -93,12 +93,17 @@ static func free_index(queue: Dictionary, line: Array, by_id: Dictionary, index 
 	return free
 
 
-## The line index a walker reserving place `slot` of `queue` sets off for:
-## the slot, or the free index when members stand further back (free_index()),
-## so its route shuts the whole members' block (approach()); never past the
-## line's last cell. The station choice of the sim and of SecurityForecast.
-static func target(queue: Dictionary, line: Array, by_id: Dictionary, slot: int) -> int:
-	return mini(maxi(slot, free_index(queue, line, by_id)), line.size() - 1)
+## The way a walker reserving place `slot` of `queue` sets off on from `from`,
+## the station choice of the sim and of SecurityForecast: to its slot, or to
+## the free index when members stand further back (free_index()), never past
+## the line's last cell; it keeps off the members' block, line[0..free-1],
+## but may cross the empty cells past it, which are kept for walkers still on
+## their way (approach(), `shut`).
+static func set_off(
+	grid: BuildGrid, queue: Dictionary, line: Array, by_id: Dictionary, from: Vector2i, slot: int
+) -> Array[Vector2i]:
+	var free := free_index(queue, line, by_id)
+	return approach(grid, line, from, mini(maxi(slot, free), line.size() - 1), free)
 
 
 ## Cell -> its index on `line`, the first when a cell repeats.
@@ -118,9 +123,13 @@ static func line_index(line: Array) -> Dictionary:
 ## leave its pulled roller trailing into the passenger ahead.
 ## No way here walks over the line's cells ahead of the one it heads for
 ## (_walk_to(); decision queue-walkers-route-around-their-own-line-a-walker-
-## heading-t): the queue stands there.
-static func approach(grid: BuildGrid, line: Array, from: Vector2i, index: int) -> Array[Vector2i]:
-	var path := _walk_to(grid, line, from, index, index)
+## heading-t): the queue stands there. `shut`, when given and below `index`,
+## keeps it off line[0..shut-1] only.
+static func approach(
+	grid: BuildGrid, line: Array, from: Vector2i, index: int, shut := -1
+) -> Array[Vector2i]:
+	var ahead := index if shut < 0 else mini(shut, index)
+	var path := _walk_to(grid, line, from, index, ahead)
 	if path.size() < 2 or _faces_front(line, index, path[path.size() - 2]):
 		return path
 	var cell: Vector2i = line[index]
@@ -136,7 +145,9 @@ static func approach(grid: BuildGrid, line: Array, from: Vector2i, index: int) -
 		if near != from and not grid.can_passenger_route(near, cell):
 			continue
 		# The way round keeps off line[index] too: it steps onto it last.
-		var round := _walk_to(grid, line, from, line.find(near), index + 1, near)
+		var round := _walk_to(
+			grid, line, from, line.find(near), index + 1 if ahead == index else ahead, near
+		)
 		if not round.is_empty():
 			round.append(cell)
 			return round

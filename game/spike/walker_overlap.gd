@@ -143,8 +143,9 @@ func _route(tick: int, w: Passenger) -> void:
 ## The cells around fallback walker `w` and its station's `line`, one string
 ## a row: W the walker, T where it heads, M a line cell ahead of `free` (the
 ## members' block), o a later line cell, a-z another station's line cell, .
-## a cell passengers may stand on, # one they may not. Walls on cell edges are
-## not drawn; the route check (find_path_around()) does count them.
+## a cell passengers may stand on, r one of those the walker can reach without
+## crossing the members' block, # one they may not stand on. Walls on cell
+## edges are not drawn; the reach check (find_path_around()) does count them.
 func _cell_map(tick: int, w: Passenger, line: Array, free: int) -> Array[String]:
 	var lo := w.at
 	var hi := w.at
@@ -179,7 +180,10 @@ func _cell_map(tick: int, w: Passenger, line: Array, free: int) -> Array[String]
 			elif others.has(cell):
 				row += others[cell]
 			elif _sim.grid.in_bounds(cell) and _sim.grid.is_passenger_cell(cell):
-				row += "."
+				var near := not (
+					_sim.grid.find_path_around(w.at, cell, line.slice(0, free)).is_empty()
+				)
+				row += "r" if near else "."
 			else:
 				row += "#"
 		rows.append(row)
