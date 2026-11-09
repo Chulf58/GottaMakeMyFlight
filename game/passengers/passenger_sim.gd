@@ -156,6 +156,8 @@ var ticks_measured := 0
 
 var _passengers: Array[Passenger] = []
 var _by_id: Dictionary = {}
+## Passenger ids that PassengerGates.choose_exits() advanced on this tick.
+var _chose_exit: Dictionary = {}
 var _next_id := 1
 ## Pending spawns {"tick", "flight", "variant"}, in tick order.
 var _schedule: Array[Dictionary] = []
@@ -297,6 +299,7 @@ func on_tick(new_tick: int) -> void:
 	cafes.step_counters()
 	PassengerGates.admit_pending(self)
 	PassengerStations.arrive(self)
+	PassengerGates.choose_exits(self)
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
@@ -581,7 +584,8 @@ func _advance(p: Passenger) -> void:
 		Passenger.Stage.STANDING_UP:
 			PassengerGates.step_stand_up(self, p)
 		Passenger.Stage.TO_EXIT:
-			PassengerGates.to_exit(self, p)
+			if not _chose_exit.has(p.id):
+				PassengerGates.to_exit(self, p)
 
 
 func _move(p: Passenger) -> void:

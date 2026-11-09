@@ -221,6 +221,32 @@ static func admit_pending(sim: PassengerSim) -> void:
 			sim.files.join_door(sim, p)
 
 
+## Every walker heading out with no exit yet chooses one and files or turns
+## pending (to_exit()), in passenger-list order, before anyone steps: a walker
+## early in the list that joined and walked first would step ahead of the
+## walkers later in the list that file in front of it and hold it back. The
+## walkers waiting on a re-plan are re-planned first, in the same order (as
+## PassengerSim._step() would), so a re-filed one is in its file before anyone
+## steps. A walker handled here is left out of to_exit() in its own step
+## (sim._chose_exit): one advance a tick, so it steps out on the next tick.
+## Those held back by a help visit keep to their own step.
+static func choose_exits(sim: PassengerSim) -> void:
+	sim._chose_exit.clear()
+	for p in sim._passengers:
+		if not p.is_done() and p.stage == Passenger.Stage.TO_EXIT and p.needs_replan:
+			PassengerEdits.replan(sim, p)
+	for p in sim._passengers:
+		if (
+			not p.is_done()
+			and p.stage == Passenger.Stage.TO_EXIT
+			and p.exit_object == 0
+			and not p.needs_replan
+			and not sim.info_desks.holds(p)
+		):
+			sim._chose_exit[p.id] = true
+			to_exit(sim, p)
+
+
 static func choose_exit(sim: PassengerSim, p: Passenger) -> void:
 	var exits := exits_for(sim, p)
 	if exits.is_empty():
