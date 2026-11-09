@@ -16,7 +16,8 @@ extends RefCounted
 ## edge) costs nothing extra: walking that outer row put the roller's stamped
 ## side against the wall, and PullSide sent it across and back within the last
 ## metre (female_right of the gate_chair_roller_probe). Guests there walk the
-## fronts as before. Only GateCapacity's seat claim and PassengerEdits' replan
+## fronts as before. Only GateCapacity's seat claim and its walk to a reserved
+## seat on clearance from security (on_cleared()), and PassengerEdits' replan
 ## of a guest bound for its seat walk so; every other route, the staff graph and
 ## RouteCache's walk lengths are the plain graph's (a seat walk's forecast
 ## under-reads the turn round the row a little). Nothing is saved.
@@ -55,15 +56,20 @@ static func walled_outer(grid: BuildGrid, front: Vector2i, out: Vector2i) -> boo
 static func path(
 	sim: PassengerSim, from: Vector2i, front: Vector2i, seat_cell: Vector2i
 ) -> Array[Vector2i]:
-	var cells := sim.grid.find_path_costed(from, front, costly_fronts(sim, front), FRONT_COST)
-	return square(sim.grid, cells, front - seat_cell)
+	var costly := costly_fronts(sim, front)
+	var cells := sim.grid.find_path_costed(from, front, costly, FRONT_COST)
+	return square(sim.grid, cells, front - seat_cell, costly)
 
 
 ## `cells` (a walk ending on a chair front facing grid way `out`) with a last
 ## diagonal step onto the front made two straight ones through the outer cell
 ## (the front plus `out`), when the cell before the front is a straight step
-## from that outer cell and both steps are passenger routes; else as it is.
-static func square(grid: BuildGrid, cells: Array[Vector2i], out: Vector2i) -> Array[Vector2i]:
+## from that outer cell, both steps are passenger routes and the outer cell is
+## not one of `costly` (another guest's front: with facing rows the outer cell
+## can be an opposite chair's front); else as it is.
+static func square(
+	grid: BuildGrid, cells: Array[Vector2i], out: Vector2i, costly: Array[Vector2i]
+) -> Array[Vector2i]:
 	if cells.size() < 2:
 		return cells
 	var front: Vector2i = cells[-1]
@@ -71,7 +77,7 @@ static func square(grid: BuildGrid, cells: Array[Vector2i], out: Vector2i) -> Ar
 	var outer := front + out
 	if (front - before).length_squared() != 2 or (outer - before).length_squared() != 1:
 		return cells
-	if not grid.is_passenger_cell(outer):
+	if outer in costly or not grid.is_passenger_cell(outer):
 		return cells
 	if not grid.can_passenger_route(before, outer) or not grid.can_passenger_route(outer, front):
 		return cells

@@ -149,3 +149,41 @@ func test_a_replan_keeps_the_walk_one_cell_out() -> void:
 	PassengerEdits.replan(_world.sim, p)
 	assert_array(_meets(p.path, PASSED)).is_not_empty()
 	p.stage = Passenger.Stage.MADE
+
+
+## A guest cleared from security with a seat reserved (GateCapacity.on_cleared(),
+## PassengerSim's main reserved-seat flow) walks round the other fronts and
+## turns in square at its own.
+func test_clearance_with_a_reserved_seat_walks_round_the_fronts() -> void:
+	var sim := _world.sim
+	var p := _world.passenger(sim.spawn_now(PassengerTestWorld.FLIGHT))
+	ToiletTestLayout.calm(p)
+	p.cleared = true
+	p.at = START
+	p.boarding_tick = sim.tick + 100000
+	sim.gates.seats[p.id] = _seat["key"]
+	# Control: from where it is cleared, the plain walk goes along the fronts.
+	assert_array(_meets(sim.grid.find_path(START, FRONT), PASSED)).is_not_empty()
+	sim.gates.on_cleared(sim, p)
+	assert_vector(p.seat_front).is_equal(FRONT)
+	assert_array(_meets(p.path, PASSED)).is_empty()
+	assert_vector(p.path_end()).is_equal(FRONT)
+	assert_vector(p.path[-2]).is_equal(FRONT - SEAT_STEP)
+	sim._seat_claims.erase(_seat["key"])
+	p.stage = Passenger.Stage.MADE
+
+
+## square() never steps onto another guest's front: with facing rows the
+## outer cell in front of a front can be an opposite chair's front.
+func test_square_never_inserts_another_front() -> void:
+	var grid := _world.sim.grid
+	var costly := GateRowWalk.costly_fronts(_world.sim, FRONT)
+	var cut := grid.find_path_costed(START, FRONT, costly, GateRowWalk.FRONT_COST)
+	var outer := FRONT - SEAT_STEP
+	# Control: with the outer cell free, square() goes through it.
+	var squared := GateRowWalk.square(grid, cut, -SEAT_STEP, costly)
+	assert_vector(squared[-2]).is_equal(outer)
+	# The outer cell another guest's front: the costed path, unchanged.
+	var facing: Array[Vector2i] = costly.duplicate()
+	facing.append(outer)
+	assert_array(GateRowWalk.square(grid, cut, -SEAT_STEP, facing)).is_equal(cut)
