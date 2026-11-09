@@ -70,6 +70,13 @@ const FLOOR_AHEAD_M := 0.56
 const FLOOR_APART_M := 0.16
 ## A bag at a gate chair lies at the sitter's feet, this far ahead.
 const SEAT_AHEAD_M := 0.62
+## How far ahead of a gate chair's front (m, out of the chair) each of a two-bag
+## guest's floor bags lies (gate_two_bag()), per body variant (0 male, 1
+## female) and per bag (0 on the right, 1 on the left): the toe of that foot in
+## the idle clip, the bag's back half at TWO_BAG_SCALE (0.132 m, a hard case)
+## and 1 cm (board fc38d1b2). The male idle stance has the left foot 0.347 m
+## ahead, the right 0.194 m; the female 0.190 m and 0.064 m.
+const GATE_TWO_AHEAD_M := [[0.34, 0.49], [0.21, 0.34]]
 ## A bag at a cafe seat lies beside the chair, this far to the sitter's right.
 const CAFE_BESIDE_M := 0.45
 ## A bag set down by a sofa or nap pod visitor stands upright on the floor
@@ -510,7 +517,8 @@ static func in_tray(index: int, count: int, bag_length: float) -> Vector3:
 
 
 ## Where floor bag `index` of `count` of `p` lies, in the passenger's frame
-## (+z ahead, +x its left, on the floor): at the feet of a gate chair, beside
+## (+z ahead, +x its left, on the floor): at the feet of a gate chair (a
+## two-bag guest's fixed in the chair front's frame, gate_two_bag()), beside
 ## a cafe seat (the table is ahead), upright against the door inside a toilet
 ## stall (stall_floor()), and ahead of a repacking passenger. One bag lies
 ## across the passenger's line, two lie along it side by side, each on the side
@@ -533,9 +541,37 @@ static func floor_spot(sim: PassengerSim, p: Passenger, index: int, count: int) 
 		# Beside the chair, lying along it, bag 0 ahead of bag 1.
 		var along := 0.0 if count < 2 else -side
 		return Transform3D(Basis.IDENTITY, Vector3(-CAFE_BESIDE_M, 0.0, along))
+	if where == StageKinds.Location.GATE_SEAT and count >= 2 and p.seat_cell != Passenger.NO_CELL:
+		# Fixed in the chair front's frame (gate_two_bag()), ahead of the toes of
+		# the body standing there: SEAT_AHEAD_M ahead of the sim's spot, which
+		# goes back into the seat while the body is still drawn standing at the
+		# front (SitHold), lay on its own foot (board fc38d1b2). Turned into the
+		# frame the views lay it in: the sim's spot moved onto the chair
+		# (GateChairs.offset()), facing out of the chair.
+		var front_at := sim.grid.cell_to_world(p.seat_front)
+		var out := front_at - sim.grid.cell_to_world(p.seat_cell)
+		var facing := Basis(Vector3.UP, atan2(out.x, out.z))
+		var body := Transform3D(facing, sim.world_position(p) + GateChairs.offset(sim, p))
+		var look := PassengerLooks.body_of(p.id, p.variant)
+		var spot := (
+			body.affine_inverse() * Transform3D(facing, front_at) * gate_two_bag(look, index)
+		)
+		spot.origin.y = 0.0
+		return spot
 	if where == StageKinds.Location.GATE_SEAT:
 		return Transform3D(across, Vector3(side, 0.0, SEAT_AHEAD_M))
 	return Transform3D(across, Vector3(side, 0.0, FLOOR_AHEAD_M))
+
+
+## Where floor bag `index` of a two-bag guest of body `look`
+## (PassengerLooks.BODIES index) lies at a gate chair, in the chair front's
+## frame (the front cell's centre on the floor, +z out of the chair): along the
+## line, FLOOR_APART_M out on the side of the hand that carries it, ahead of
+## that foot's toe (GATE_TWO_AHEAD_M).
+static func gate_two_bag(look: int, index: int) -> Transform3D:
+	var variant := clampi(look / PassengerLooks.PER_VARIANT, 0, GATE_TWO_AHEAD_M.size() - 1)
+	var side := -FLOOR_APART_M if index == 0 else FLOOR_APART_M
+	return Transform3D(Basis.IDENTITY, Vector3(side, 0.0, GATE_TWO_AHEAD_M[variant][index]))
 
 
 ## Where each of the `count` floor bags of an activity visitor `p` stands, in
