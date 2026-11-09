@@ -55,6 +55,20 @@ func test_worn_pack_clears_the_stride_of_bodies_9_and_11() -> void:
 				]
 			)
 		)
+		print(
+			(
+				(
+					"  sampled %d moments (%d each clip), %d with no leg or torso point or no rest gap;"
+					+ " fewest leg points %d, fewest torso points %d"
+				)
+				% [got["moments"], MOMENTS, got["empty"], got["least_legs"], got["least_torso"]]
+			)
+		)
+		assert_int(got["moments"]).is_equal(MOMENTS * CLIPS.size())
+		assert_int(got["empty"]).is_equal(0)
+		assert_int(got["least_legs"]).is_greater(0)
+		assert_int(got["least_torso"]).is_greater(0)
+		assert_bool(is_finite(got["leg_gap"])).is_true()
 		legs_in += got["legs_in"]
 		torso_in += got["torso_in"]
 		worst_rest = maxf(worst_rest, got["rest"])
@@ -69,7 +83,17 @@ func test_worn_pack_clears_the_stride_of_bodies_9_and_11() -> void:
 ## torso points inside the box ("torso_in"), and the largest of each moment's
 ## least torso gap behind the panel inside its outline ("rest").
 func _measure(b: int, scale_by: float) -> Dictionary:
-	var out := {"legs_in": 0, "torso_in": 0, "leg_gap": INF, "leg_at": "", "rest": 0.0}
+	var out := {
+		"legs_in": 0,
+		"torso_in": 0,
+		"leg_gap": INF,
+		"leg_at": "",
+		"rest": 0.0,
+		"moments": 0,
+		"empty": 0,
+		"least_legs": 1 << 30,
+		"least_torso": 1 << 30,
+	}
 	var box := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK)
 	var grown := box.grow(LEG_CLEAR_M / scale_by)
 	var node := PassengerLooks.SCENES[b].instantiate() as Node3D
@@ -94,8 +118,12 @@ func _measure(b: int, scale_by: float) -> Dictionary:
 			var xf := CarryWorn.worn_back(spine, 0.0, scale_by, b)
 			var to_bag := xf.affine_inverse()
 			var rest := INF
+			var legs := 0
+			var torso := 0
 			for k in points.size():
 				var local := to_bag * points[k]
+				legs += int(owners[k] == 1)
+				torso += int(owners[k] == 0)
 				match owners[k]:
 					1:
 						var gap := _box_gap(box, local) * scale_by
@@ -114,6 +142,13 @@ func _measure(b: int, scale_by: float) -> Dictionary:
 						)
 						if inside:
 							rest = minf(rest, (box.position.y - local.y) * scale_by)
+			# The control: every moment sampled leg and torso points, and some
+			# torso points lay behind the panel inside its outline (a finite rest
+			# gap); a body whose skin was not found would pass empty otherwise.
+			out["moments"] += 1
+			out["empty"] += int(legs == 0 or torso == 0 or rest == INF)
+			out["least_legs"] = mini(out["least_legs"], legs)
+			out["least_torso"] = mini(out["least_torso"], torso)
 			if rest < INF:
 				out["rest"] = maxf(out["rest"], rest)
 	node.free()

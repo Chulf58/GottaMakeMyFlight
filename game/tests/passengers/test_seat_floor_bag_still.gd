@@ -53,8 +53,65 @@ func test_one_bag_at_a_gate_chair_lies_still() -> void:
 	_world = PassengerTestWorld.reference_world()
 	_world.run_to(10)
 	_attach_views()
+	var got := await _gate_sit(_world.sim.layout.seats[0])
+	_check("gate one bag", got, 1)
+
+
+## The same at every chair of a seat row (footprint index 0 to 2, so each
+## GateChairs.CHAIR_OFFSET_M) and every facing of the row: the reference
+## terminal's rows taken away and one row placed in the airside hall facing
+## that way. The settled bag lies still and the seat frame is where the body
+## is drawn seated on that chair.
+func test_one_bag_lies_still_at_every_gate_chair_and_facing() -> void:
+	var runs := 0
+	for facing in 4:
+		for index in 3:
+			var grid := BuildGrid.new()
+			ReferenceTerminal.build(grid)
+			var at := ReferenceTerminal.offset_on(grid)
+			for anchor in [Vector2i(11, 3), Vector2i(14, 3), Vector2i(11, 6), Vector2i(14, 6)]:
+				var id := grid.object_at(anchor + at)
+				assert_bool(grid.apply(BuildEdit.remove_object(id)).ok).is_true()
+			var row := PassengerTestWorld.place(grid, &"seat_row", Vector2i(13, 5) + at, facing)
+			_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+			_world.run_to(10)
+			_attach_views()
+			var seat: Dictionary = {}
+			for each: Dictionary in _world.sim.layout.seats:
+				if each["key"] == "%d:%d" % [row, index]:
+					seat = each
+			(
+				assert_bool(seat.is_empty())
+				. override_failure_message("no seat %d of the row facing %d" % [index, facing])
+				. is_false()
+			)
+			if seat.is_empty():
+				continue
+			var got := await _gate_sit(seat)
+			_check("gate facing %d chair %d" % [facing, index], got, 1)
+			runs += 1
+			after_test()
+	assert_int(runs).is_equal(12)
+
+
+## A guest at a restaurant booth (CafeSim.STEP_IN_PATH: it steps in sideways
+## from the end of the bench) with a single bag that is not a roller: it lies
+## still too, and the seat frame is where the body is drawn seated.
+func test_booth_one_bag_lies_still() -> void:
+	assert_bool(CafeSim.STEP_IN_PATH.has(&"restaurant_booth")).is_true()
+	var p := await _cafe_guest(
+		func(kinds: Array) -> bool: return kinds[0] != SecurityLooks.Kind.ROLLER,
+		1,
+		[false, &"restaurant", true, &"cafe_counter", &"restaurant_booth"]
+	)
+	var got := await _watch(p, 0)
+	_check("booth one bag", got, 1)
+
+
+## A one-bag guest (not a roller) of _world bound for gate seat `seat`, a few
+## ticks at its front, then sitting down there, watched (_watch()).
+func _gate_sit(seat: Dictionary) -> Dictionary:
 	var p := _spawn(func(kinds: Array) -> bool: return kinds[0] != SecurityLooks.Kind.ROLLER, 1)
-	var seat: Dictionary = _world.sim.layout.seats[0]
 	p.stage = Passenger.Stage.TO_GATE
 	p.seat_cell = seat["cell"]
 	p.seat_front = seat["front"]
@@ -68,8 +125,7 @@ func test_one_bag_at_a_gate_chair_lies_still() -> void:
 	p.stage = Passenger.Stage.SITTING_DOWN
 	p.stage_tick = _world.sim.tick
 	p.clear_path()
-	var got := await _watch(p, 0)
-	_check("gate one bag", got, 1)
+	return await _watch(p, 0)
 
 
 ## A cafe guest with a roller and one other bag, sitting down at the airside
@@ -115,10 +171,11 @@ func _spawn(want: Callable, count: int) -> Passenger:
 
 
 ## A guest with `count` bags passing `want` at the first tick of its sit-down at
-## CafeTestLayout's airside cafe, the views drawing it.
-func _cafe_guest(want: Callable, count: int) -> Passenger:
+## CafeTestLayout's airside cafe (built with `layout`, CafeTestLayout.build()'s
+## arguments after the grid; none for its default), the views drawing it.
+func _cafe_guest(want: Callable, count: int, layout := []) -> Passenger:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid)
+	CafeTestLayout.build.callv([grid] + layout)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_attach_views()
 	var p := _spawn(want, count)

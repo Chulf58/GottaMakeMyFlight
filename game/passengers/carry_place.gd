@@ -356,50 +356,27 @@ static func bag_transform(
 
 
 ## The frame (world, on the floor) `p`'s body is drawn in once seated at a gate
-## chair or a cafe seat, worked out from the seat, never from the drawn body:
-## the sim's seat spot plus the drawing's step onto the chair (GateChairs.offset(),
-## CafeChairs.offset() at their whole share), facing out of the seat
-## (RollerPark.sit_face()). The same on every frame of the sit-down, the stay and
-## the stand-up, and after a load. Null anywhere else (a toilet stall, an
-## activity piece), or with no seat. GateChairs.offset() and CafeChairs.offset()
-## own the step; test_seat_floor_bag_still.gd checks this frame against the
+## chair or a cafe seat, worked out from the seat, never from the drawn body
+## (GateChairs.seated_frame(), CafeChairs.seated_frame(), which own it and the
+## body's own step there), dropped to the floor. The same on every frame of the
+## sit-down, the stay and the stand-up, and after a load. Null anywhere else (a
+## toilet stall, an activity piece), with no seat, or with no face to sit to
+## (RollerPark.sit_face()). test_seat_floor_bag_still.gd checks it against the
 ## seated body drawn.
 static func seat_frame(sim: PassengerSim, p: Passenger) -> Variant:
-	var face := RollerPark.sit_face(sim, p)
-	if is_nan(face) or ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
+	if is_nan(RollerPark.sit_face(sim, p)) or ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
 		return null
-	var at := Vector3.ZERO
+	var seated: Variant = null
 	match StageKinds.location(p.stage):
 		StageKinds.Location.GATE_SEAT:
-			if p.seat_cell == Passenger.NO_CELL or p.seat_front == Passenger.NO_CELL:
-				return null
-			var front := sim.grid.cell_to_world(p.seat_front)
-			var seat := sim.grid.cell_to_world(p.seat_cell)
-			at = seat + (front - seat) * PassengerSim.SIT_FORWARD_M
-			var shift := PassengerLooks.SEAT_SHIFT_M[PassengerLooks.body_of(p.id, p.variant)]
-			at += (front - seat).normalized() * shift.x
-			var record := GateRelocation.chair_of(sim, p)
-			if not record.is_empty():
-				var def := BuildCatalog.get_def(record["def"])
-				var index := def.footprint(record["anchor"], record["facing"]).find(p.seat_cell)
-				if index >= 0 and index < GateChairs.CHAIR_OFFSET_M.size():
-					var side := BuildObjectDef.rotate_point(
-						Vector2(GateChairs.CHAIR_OFFSET_M[index], 0.0), record["facing"]
-					)
-					at += Vector3(side.x, 0.0, side.y)
+			seated = GateChairs.seated_frame(sim, p)
 		StageKinds.Location.FACILITY_SEAT:
-			var visit := sim.cafes.visit_of(p.id)
-			if visit == null or visit.seat.is_empty():
-				return null
-			at = BuildObjectDef.seat_root_world(sim.grid, visit.seat)
-			var facing: Vector2i = visit.seat["facing"]
-			var shift := PassengerLooks.seat_shift(
-				StringName(visit.piece.get("def", &"")), PassengerLooks.body_of(p.id, p.variant)
-			)
-			at += Vector3(facing.x, 0.0, facing.y).normalized() * shift.x
-		_:
-			return null
-	return Transform3D(Basis(Vector3.UP, face), Vector3(at.x, sim.grid.origin.y, at.z))
+			seated = CafeChairs.seated_frame(sim, p)
+	if seated == null:
+		return null
+	var frame: Transform3D = seated
+	frame.origin.y = sim.grid.origin.y
+	return frame
 
 
 ## A roller lying on the floor at `xf` (world) moved out of the walls round it
