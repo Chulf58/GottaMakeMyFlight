@@ -77,7 +77,7 @@ func test_the_gates_and_their_stands_are_saved_and_a_lost_gate_loads_back() -> v
 		"save_version %s, gates %s, apron %s" % [data["save_version"], data["gates"], data["apron"]]
 	)
 	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(13)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(14)
 	assert_int((data["gates"]["gates"] as Array).size()).is_equal(2)
 	assert_array((data["apron"]["stands"] as Dictionary).keys()).is_equal(["A", "B"])
 	var saved_bindings := _gates.bindings.duplicate(true)
@@ -184,6 +184,8 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(MEDIUM_CELL)).ok).is_true()
 	var board := (_main.get_node("OfferDesk") as OfferDesk).board
 	var taken := ""
+	# A new game's runway is small (Runway R9); this case is about the gate's class.
+	_flights.runway.size = PlaneClasses.MEDIUM
 	# Whatever the draw gave, the day-0 offers are made medium.
 	var offers := board.to_snapshot()
 	for offer: Dictionary in offers["offers"]:

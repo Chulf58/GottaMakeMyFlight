@@ -7,17 +7,22 @@ extends RefCounted
 ## only. Touchdown, liftoff and approach points belong to the plane class, never
 ## to the runway, so a bigger runway changes no planned flight.
 ##
-## The size is the one thing a runway saves. FlightSim holds the game's runway;
-## the offer board draws only the classes it takes and FlightSim.accept_problem
-## refuses the rest.
+## A runway saves its size and its upgrade works (RunwayWorks). FlightSim holds
+## the game's runway; the offer board draws only the classes it takes and
+## FlightSim.accept_problem refuses the rest. The drawn runway (RunwayView)
+## follows size_changed.
+
+## The size changed: the works ended, a load installed one, or code set it.
+signal size_changed(new_size: String)
 
 const SMALL := PlaneClasses.SMALL
 const MEDIUM := PlaneClasses.MEDIUM
 const LARGE := PlaneClasses.LARGE
 
-## Version 1 is the first save of a runway.
-const SAVE_VERSION := 1
-const SAVE_KEYS := ["save_version", "size"]
+## Version 1 saved the size. 2 adds the upgrade works (RunwayWorks); a version 1
+## part is refused, with no migration before a release.
+const SAVE_VERSION := 2
+const SAVE_KEYS := ["save_version", "size", "works"]
 
 ## The piece that closes each end, and the one that makes up the middle.
 const END_PIECE := "tp_runway_01a"
@@ -29,7 +34,14 @@ const STRIP_LENGTH_M := 96.0
 const NAME_PREFIX := "Runway"
 
 ## The runway's size, one of PlaneClasses.ORDER. A new game starts small.
-var size: String = SMALL
+var size: String = SMALL:
+	set(value):
+		if value == size:
+			return
+		size = value
+		size_changed.emit(size)
+## The upgrade works booked or under way.
+var works := RunwayWorks.new()
 
 
 func _init(start_size := SMALL) -> void:
@@ -89,9 +101,25 @@ static func build(runway_size: String) -> Node3D:
 	return root
 
 
-## JSON-safe state for a save: the size.
+## Takes the new size when the works end at `tick` and drops their booking once
+## it has been held long enough (RunwayWorks). True when either happened.
+func settle(tick: int) -> bool:
+	var changed := false
+	if works.scheduled() and tick >= works.finish:
+		var built := works.target
+		works.target = ""
+		size = built
+		changed = true
+	var held := works.start != RunwayWorks.NO_TICK and not works.scheduled()
+	if held and tick >= works.finish + RunwayWorks.HOLD_TICKS:
+		works.clear()
+		changed = true
+	return changed
+
+
+## JSON-safe state for a save: the size and the works.
 func to_snapshot() -> Dictionary:
-	return {"save_version": SAVE_VERSION, "size": size}
+	return {"save_version": SAVE_VERSION, "size": size, "works": works.to_snapshot()}
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -103,11 +131,12 @@ func from_snapshot(data: Dictionary) -> bool:
 		push_error("Runway.from_snapshot: %s" % problem)
 		return false
 	size = data["size"]
+	works.from_snapshot(data["works"])
 	return true
 
 
-## "" when `data` is exactly SAVE_KEYS with the current version and a size, or
-## what is wrong with it.
+## "" when `data` is exactly SAVE_KEYS with the current version, a size and
+## works that build a larger size, or what is wrong with it.
 func snapshot_problem(data: Dictionary) -> String:
 	for key in data.keys():
 		if not SAVE_KEYS.has(key):
@@ -119,4 +148,11 @@ func snapshot_problem(data: Dictionary) -> String:
 		return "save_version must be %d" % SAVE_VERSION
 	if typeof(data["size"]) != TYPE_STRING or not STRIPS.has(data["size"]):
 		return "size must be one of %s" % [PlaneClasses.ORDER]
-	return ""
+	if typeof(data["works"]) != TYPE_DICTIONARY:
+		return "works must be a dictionary"
+	var problem := works.snapshot_problem(data["works"])
+	var target: String = data["works"].get("target", "")
+	if problem == "" and target != "":
+		if PlaneClasses.ORDER.find(target) <= PlaneClasses.ORDER.find(data["size"]):
+			problem = "the works must build a larger size than %s" % data["size"]
+	return "works: %s" % problem if problem != "" else ""

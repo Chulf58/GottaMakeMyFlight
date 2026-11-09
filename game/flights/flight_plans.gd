@@ -23,6 +23,9 @@ extends RefCounted
 ## issued book their ground as unrendered reservations, never flown, and every
 ## surviving occurrence keeps the plan it had.
 
+## How many days works_start() looks ahead before it gives up.
+const WORKS_SEARCH_DAYS := 3
+
 ## One planner, so its booking cache serves every re-plan.
 var planner := FlightGround.planner()
 
@@ -74,7 +77,25 @@ static func runs(world: Dictionary, id: String) -> bool:
 
 ## id -> GroundPlanner result for every flight of day `day`.
 func plan_day(world: Dictionary, day: int) -> Dictionary:
-	return planner.plan_all(requests(world, day))
+	return planner.plan_all(requests(world, day), world.get("works", []))
+
+
+## The first tick at or after `after` from which the runway stays clear of every
+## booking of `world` for `ticks` ticks, within one calendar day (no flight books
+## the runway between the last departure and the next day's first arrival, so a
+## stretch inside one day meets only that day's plan); -1 when none of the next
+## WORKS_SEARCH_DAYS days has one. The stretch is verified against the day's
+## plan, not assumed from the quiet night (ruling runway-upgrade-works-wait-for-
+## a-timetable-gap-passengers-per-plane-class).
+func works_start(world: Dictionary, after: int, ticks: int) -> int:
+	var first := GameCalendar.day_of(after)
+	for day in range(first, first + WORKS_SEARCH_DAYS):
+		plan_day(world, day)
+		var from := maxi(after, GameCalendar.day_start(day))
+		var at := ceili(planner.works_gap(float(from), float(ticks)))
+		if at + ticks <= GameCalendar.day_start(day + 1):
+			return at
+	return -1
 
 
 ## The days from `from_day` on whose plans can differ, sorted: `from_day`, each
@@ -94,6 +115,12 @@ static func days_from(world: Dictionary, from_day: int) -> Array[int]:
 				seen[next] = true
 	for day in live_days(world):
 		for sampled in [day, day + 1]:
+			if sampled >= from_day:
+				seen[sampled] = true
+	# Runway works change the plan of the days they touch and of the day after.
+	for booking: Dictionary in world.get("works", []):
+		var last := GameCalendar.day_of(int(booking["to"]))
+		for sampled in range(GameCalendar.day_of(int(booking["from"])), last + 2):
 			if sampled >= from_day:
 				seen[sampled] = true
 	var out: Array[int] = []
