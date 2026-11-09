@@ -255,7 +255,7 @@ static func tray(sim: PassengerSim, p: Passenger) -> Tray:
 		SecurityRuntime.Phase.UNPACK:
 			return Tray.IN
 		SecurityRuntime.Phase.ARCH:
-			return Tray.RIDE if _on_passage(p) else Tray.NONE
+			return Tray.RIDE if _on_passage(sim, p) else Tray.NONE
 		SecurityRuntime.Phase.PICKUP:
 			return Tray.OUT
 	return Tray.NONE
@@ -682,7 +682,7 @@ static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
 			)
 			home = Home.TRAY if done >= in_tray else Home.HAND
 		SecurityRuntime.Phase.ARCH:
-			home = Home.TRAY if _on_passage(p) else Home.HAND
+			home = Home.TRAY if _on_passage(sim, p) else Home.HAND
 		SecurityRuntime.Phase.PICKUP:
 			var out_of_tray := (
 				SecurityRuntime.LANE_PICKUP_TICKS + i * SecurityRuntime.LANE_PICKUP_BAG_TICKS
@@ -695,9 +695,16 @@ static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
 
 ## Whether a lane passenger in ARCH has reached the passage: always on the
 ## first pass; on a returner's second pass once it stands on the unpack cell
-## (its path runs from the return route's end through the passage).
-static func _on_passage(p: Passenger) -> bool:
-	return not p.incident_resolved or p.path_index >= 1
+## (its path runs from the return route's end through the passage), and from
+## then on to the end of ARCH. The arch walk's last step, from the arch cell
+## onto the pickup cell, is a new path: read by its index alone, the bags left
+## the tray with the body between the posts, and the hand reached across them
+## for the belt (user ruling "Pick up after the arch", board 0dd2c787 item b).
+static func _on_passage(sim: PassengerSim, p: Passenger) -> bool:
+	if not p.incident_resolved or p.path_index >= 1:
+		return true
+	var route: Array = lane_of(sim, p).get("return_route", [])
+	return not route.is_empty() and p.at != route.back()
 
 
 ## A queue front of a lane stops at the unpack cell's queue-side edge while
