@@ -61,13 +61,9 @@ func _close_flanks(cell: Vector2i, step: Vector2i) -> void:
 		assert_bool(_world.sim.grid.apply(BuildEdit.place_wall(cell, side)).ok).is_true()
 
 
-## A walker held in its file on a cell closed on both flanks reads no front
-## carry, though the step ahead of it runs between the same two walls. Control:
-## a walker of the same path and cell that is not held (a bare passenger the
-## files do not hold) reads the front carry, and so does the held walker's
-## copy once it has begun the step (seg_mm > 0), so the walls and the walk are
-## what the held reading differs on.
-func test_a_walker_held_in_its_file_does_not_carry_in_front_for_a_step_not_taken() -> void:
+## A file with FILE_WALKERS walkers on one cell as boarding opens, and the
+## first one held in it with no step taken on its open path (an axis step).
+func _held_in_file() -> Passenger:
 	_world = TestBoardingFiles.boarding_world()
 	_world.run_to(TestBoardingFiles.BOARDING + 5)
 	var walkers: Array[Passenger] = []
@@ -77,16 +73,27 @@ func test_a_walker_held_in_its_file_does_not_carry_in_front_for_a_step_not_taken
 		walkers.append(p)
 	var held := _held_walker(walkers)
 	assert_object(held).is_not_null()
-	var step := held.path[1] - held.path[0]
-	_close_flanks(held.at, step)
+	return held
+
+
+## The held walker reads no front carry with `walled` (the cell it stands on, or
+## the untaken next cell of its path) closed on both flanks and the other left
+## open; SecurityLooks.carry_front() looks at both cells for a walker that
+## steps, so each is closed alone. Control: a bare passenger of the same cell
+## and path that no file holds reads the front carry, at the start of the step
+## and part way along it, so the wall and the walk are what the held reading
+## differs on.
+func _assert_held_reads_standing(walled: Vector2i, held: Passenger) -> void:
 	var sim := _world.sim
+	_close_flanks(walled, held.path[1] - held.path[0])
 	print(
 		(
-			"held walker %d at %s path %s: filed_still %s, front %s"
+			"held walker %d at %s path %s, walls on %s: filed_still %s, front %s"
 			% [
 				held.id,
 				held.at,
 				held.path,
+				walled,
 				RollerPark.filed_still(sim, held),
 				SecurityLooks.carry_front(sim, held)
 			]
@@ -94,7 +101,6 @@ func test_a_walker_held_in_its_file_does_not_carry_in_front_for_a_step_not_taken
 	)
 	assert_bool(RollerPark.filed_still(sim, held)).is_true()
 	assert_bool(SecurityLooks.carry_front(sim, held)).is_false()
-	# Controls: the same cell and path, walking (a bare passenger no file holds).
 	var walking := Passenger.new()
 	walking.stage = Passenger.Stage.TO_EXIT
 	walking.at = held.at
@@ -103,6 +109,21 @@ func test_a_walker_held_in_its_file_does_not_carry_in_front_for_a_step_not_taken
 	assert_bool(SecurityLooks.carry_front(sim, walking)).is_true()
 	walking.seg_mm = 100
 	assert_bool(SecurityLooks.carry_front(sim, walking)).is_true()
+
+
+## Held with the cell it stands on closed on both flanks (the step ahead is
+## open): no front carry.
+func test_a_walker_held_in_its_file_on_a_closed_cell_does_not_carry_in_front() -> void:
+	var held := _held_in_file()
+	_assert_held_reads_standing(held.at, held)
+
+
+## Held with the untaken next cell of its path closed on both flanks (the cell it
+## stands on is open): the step it has not taken does not turn it to the front
+## carry. This is the cell the old reading (the next step) looked at.
+func test_a_walker_held_in_its_file_does_not_carry_in_front_for_a_closed_next_cell() -> void:
+	var held := _held_in_file()
+	_assert_held_reads_standing(held.path[1], held)
 
 
 ## Held part way along its path (a step taken), the cell it stands on and the
