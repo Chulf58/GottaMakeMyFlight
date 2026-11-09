@@ -11,7 +11,10 @@ extends Node3D
 ## PlaneView whose plane stands at the gate (AT_STAND, BOARDING, DOORS_CLOSED)
 ## reports its drawn front port door through dock_plane() (PlaneProps does it
 ## every frame), and the bridge docks there when the door is in the rig's
-## reach; otherwise, and once no view reports it, it parks again. The towbarless
+## reach. A plane it cannot reach (models 03 and 04) gets parked_clear(): the
+## bridge retracts and swings its tunnel along the wall, clear of the plane
+## (ruling plane-04-stops-further-out-with-the-passenger-walk-ending-at, part
+## 2). Once no view reports the gate it parks again. The towbarless
 ## tug is the plane's own prop (PlaneProps), not this node's.
 ##
 ## A turn-off is a taxi route leg that crosses the runway asphalt's south edge
@@ -47,7 +50,8 @@ const DEFAULT_SIGN_SCALE := 2.5
 			sign.scale = Vector3.ONE * value
 
 ## Gate letter -> {"node": the bridge, "joints", "root", "stand", "docked",
-## "pose" (the JetBridgePose pose applied last)}.
+## "clear" (swung clear of a plane it cannot dock), "pose" (the JetBridgePose
+## pose applied last)}.
 var bridges: Dictionary = {}
 ## The turn-off signs, in turn_offs() order.
 var signs: Array[Node3D] = []
@@ -174,8 +178,8 @@ static func _arrow(
 	return ""
 
 
-## Shows gate `gate`'s bridge docked at the first door reported for it, or
-## parked.
+## Shows gate `gate`'s bridge docked at the first door reported for it, swung
+## clear when that door is out of reach, or parked when none is reported.
 func _pose_bridge(gate: String) -> void:
 	if not bridges.has(gate) or bridges[gate]["joints"].is_empty():
 		return
@@ -184,6 +188,7 @@ func _pose_bridge(gate: String) -> void:
 	var spot := JetBridgePose.stand_door(entry["stand"])
 	var pose := JetBridgePose.parked(root, spot, Vector3.RIGHT)
 	var docked := false
+	var clear := false
 	for key: int in _reports:
 		var report: Dictionary = _reports[key]
 		if report["gate"] != gate:
@@ -192,10 +197,14 @@ func _pose_bridge(gate: String) -> void:
 		if at["ok"]:
 			pose = at
 			docked = true
+		else:
+			pose = JetBridgePose.parked_clear(root, spot, Vector3.RIGHT)
+			clear = true
 		break
 	JetBridgePose.apply(entry["joints"], pose)
 	entry["pose"] = pose
 	entry["docked"] = docked
+	entry["clear"] = clear
 
 
 func _show_signs(list: Array[Dictionary]) -> void:
