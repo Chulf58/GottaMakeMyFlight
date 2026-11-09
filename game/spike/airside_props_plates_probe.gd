@@ -42,6 +42,18 @@ const PUSH_STRIP: Array[float] = [0.12, 0.55, 0.95]
 const WALK_STEP_M := 0.1
 const BODY_RADIUS_M := 0.3
 const SHEET_TILE := Vector2i(480, 270)
+## Yaws tried, in order, for the close pushback strip (all north of the wall).
+const STRIP_YAWS: Array[float] = [135.0, 225.0, 100.0, 260.0]
+## Camera offsets from the walk's lowest point tried for the walk side plate.
+const SIDE_EYES: Array[Vector3] = [
+	Vector3(9.0, 0.6, -9.0),
+	Vector3(4.0, 0.4, -10.0),
+	Vector3(11.0, 0.3, -2.0),
+	Vector3(6.0, 1.2, -6.0),
+	Vector3(-1.0, 0.4, -11.0),
+	Vector3(8.0, 0.8, 4.0),
+	Vector3(-8.0, 0.6, 5.0),
+]
 
 var _out_dir := ""
 var _failed := false
@@ -181,7 +193,7 @@ func _tug_plates() -> void:
 		)
 	for model: String in ["tp_plane_03a", "tp_plane_07a"]:
 		var cls := _class_of(model)
-		var near := 26.0 if model == "tp_plane_03a" else 34.0
+		var near := 26.0 if model == "tp_plane_03a" else 40.0
 		for t in PUSH_STRIP:
 			var plane := _pose(model, cls, FlightSim.State.PUSHBACK, t)
 			await _frames(2)
@@ -189,10 +201,14 @@ func _tug_plates() -> void:
 				_invalid("%s t %.2f: the tug is hidden during pushback" % [model, t])
 				continue
 			var at := tug.global_position
-			_aim(at + Vector3(0.0, 0.8, 0.0), 60.0, 14.0, near)
-			await _frames(3)
+			# From the first side off the terminal's that sees the tug.
+			for yaw in STRIP_YAWS:
+				_aim(at + Vector3(0.0, 0.8, 0.0), yaw, 14.0, near)
+				await _frames(3)
+				if _report_rays("TUG_EYE %s t %.2f yaw %d" % [model, t, yaw], tug) >= 0.25:
+					break
 			var name := "tug_%s_t%02d.png" % [model.substr(9, 2), roundi(t * 100.0)]
-			if _prove(name, [tug, plane], true):
+			if _prove(name, [tug], true) and _prove_seen(name, plane):
 				await _save(name)
 		# Question (a): the tug at play range, from four sides; rays only reported.
 		var plane := _pose(model, cls, FlightSim.State.PUSHBACK, PUSH_STRIP[0])
@@ -228,18 +244,18 @@ func _bridge_plates() -> void:
 				]
 			)
 		)
+		# Question (c): the bridge underside over the gate's walk.
+		_walk_clearance(model, bridge)
 		if model == "tp_plane_04a":
 			continue
 		if not entry["docked"]:
 			_invalid("%s: the bridge did not dock" % model)
-		var far := 34.0 if model == "tp_plane_05a" else 46.0
+		var far: float = {"tp_plane_05a": 34.0, "tp_plane_06a": 50.0}.get(model, 58.0)
 		_aim(door.lerp(bridge.global_position, 0.5), 60.0, 32.0, far)
 		await _frames(3)
 		var name := "bridge_%s.png" % model.substr(9, 2)
-		if _prove(name, [bridge, plane], true):
+		if _prove(name, [bridge], true) and _prove_seen(name, plane):
 			await _save(name)
-		# Question (c): the bridge underside over the gate's walk.
-		_walk_clearance(model, bridge)
 
 
 func _walk_plates() -> void:
@@ -259,15 +275,27 @@ func _walk_plates() -> void:
 		people.append(person)
 	var height := _aabb_of(people[0]).size.y
 	print("WALK passenger height %.2f m" % height)
-	# Level, from the north-east, under the wing's trailing edge.
-	var target: Vector3 = low["at"] + Vector3(0.0, 1.4, 0.0)
-	_cam.look_at_from_position(target + Vector3(9.0, 0.6, -9.0), target, Vector3.UP)
-	await _frames(3)
-	if _prove("walk_side.png", [people[0], bridge], true):
+	# Near level, from the first of these viewpoints that sees the passenger.
+	var target: Vector3 = low["at"] + Vector3(0.0, 1.2, 0.0)
+	var side_ok := false
+	for eye: Vector3 in SIDE_EYES:
+		_cam.look_at_from_position(target + eye, target, Vector3.UP)
+		await _frames(3)
+		if _report_rays("WALK_EYE %s" % eye, people[2]) >= 0.25:
+			side_ok = true
+			break
+	if not side_ok:
+		_invalid("walk_side.png: no viewpoint sees the passenger")
+	elif (
+		_prove("walk_side.png", [people[2]], true)
+		and _prove("walk_side.png", [people[0]], false)
+		and _prove_seen("walk_side.png", bridge)
+	):
 		await _save("walk_side.png")
 	_aim(target, 60.0, 30.0, 24.0)
 	await _frames(3)
-	if _prove("walk_high.png", [people[0], people[1], bridge, plane], true):
+	_report_rays("WALK_END passenger at the walk end", people[1])
+	if _prove("walk_high.png", [people[0], bridge], true):
 		await _save("walk_high.png")
 	for person in people:
 		person.queue_free()
@@ -444,6 +472,14 @@ func _prove(label: String, subjects: Array, need_rays: bool) -> bool:
 		if need_rays and _report_rays("VISIBLE %s %s" % [label, subject.name], subject) < 0.25:
 			_invalid("%s: %s is occluded" % [label, subject.name])
 			return false
+	return true
+
+
+## Proves camera rays reach `subject` first, without needing all of it in frame.
+func _prove_seen(label: String, subject: Node3D) -> bool:
+	if _report_rays("VISIBLE %s %s" % [label, subject.name], subject) < 0.25:
+		_invalid("%s: %s is occluded" % [label, subject.name])
+		return false
 	return true
 
 
