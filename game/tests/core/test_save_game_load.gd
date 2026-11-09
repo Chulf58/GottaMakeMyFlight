@@ -126,7 +126,7 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 ## runway) are refused whole, with no migration, and change nothing.
 func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
 	assert_int(SaveGame.SAVE_VERSION).is_equal(14)
-	for version in [6, 7, 8, 9, 10, 11, 12]:
+	for version in [6, 7, 8, 9, 10, 11, 12, 13]:
 		var old := _older()
 		old["save_version"] = version
 		_assert_refused(old, "version %d" % version)

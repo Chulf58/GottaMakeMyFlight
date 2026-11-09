@@ -92,10 +92,24 @@ func works_start(world: Dictionary, after: int, ticks: int) -> int:
 	for day in range(first, first + WORKS_SEARCH_DAYS):
 		plan_day(world, day)
 		var from := maxi(after, GameCalendar.day_start(day))
-		var at := ceili(planner.works_gap(float(from), float(ticks)))
+		var at := _whole_gap(from, ticks)
 		if at + ticks <= GameCalendar.day_start(day + 1):
 			return at
 	return -1
+
+
+## The first whole tick at or after `from` from which the last plan_day() leaves
+## the runway clear for `ticks`: a start that is rounded up is searched again
+## from the whole tick, since a booking may begin inside the rounding.
+func _whole_gap(from: int, ticks: int) -> int:
+	var at := from
+	while true:
+		var gap := planner.works_gap(float(at), float(ticks))
+		var whole := ceili(gap)
+		if whole == at:
+			return at
+		at = whole
+	return at
 
 
 ## The days from `from_day` on whose plans can differ, sorted: `from_day`, each

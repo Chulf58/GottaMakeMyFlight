@@ -28,3 +28,12 @@ func test_works_that_do_not_grow_the_runway_are_refused() -> void:
 func test_a_version_1_part_is_refused() -> void:
 	var runway := Runway.new()
 	assert_str(runway.snapshot_problem({"save_version": 1, "size": "small"})).is_not_empty()
+
+
+func test_works_that_skip_a_size_are_refused() -> void:
+	var runway := Runway.new(PlaneClasses.SMALL)
+	runway.works.begin(PlaneClasses.LARGE, 900)
+	assert_str(runway.snapshot_problem(runway.to_snapshot())).contains("next size")
+	runway.works.clear()
+	runway.works.begin(PlaneClasses.MEDIUM, 900)
+	assert_str(runway.snapshot_problem(runway.to_snapshot())).is_empty()

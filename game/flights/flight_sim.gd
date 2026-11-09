@@ -595,6 +595,8 @@ func start_works(target: String) -> bool:
 		problem = "the runway is %s and the works build %s" % [runway.size, target]
 	elif runway.works.scheduled():
 		problem = RunwayWorks.BOOKED_TEXT
+	elif runway.works.start != RunwayWorks.NO_TICK:
+		problem = RunwayWorks.HELD_TEXT
 	var start := works_start(target) if problem == "" else -1
 	if problem == "" and start < 0:
 		problem = RunwayWorks.NO_GAP_TEXT

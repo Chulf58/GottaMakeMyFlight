@@ -24,6 +24,7 @@ extends RefCounted
 const LARGEST_TEXT := "The runway is already the largest size"
 const BOOKED_TEXT := "Runway works are already booked"
 const NO_GAP_TEXT := "The timetable leaves no quiet stretch for the works"
+const HELD_TEXT := "The last runway works are still held in the timetable"
 
 ## Ticks the works take, by the size they build: 1 and 2 game hours.
 const TICKS := {PlaneClasses.MEDIUM: 1200, PlaneClasses.LARGE: 2400}
@@ -68,6 +69,8 @@ static func short_text(size: String) -> String:
 static func problem(flights: FlightSim, unlocks: BuildUnlocks, wallet: Wallet) -> String:
 	var next := next_size(flights.runway.size)
 	var text := BOOKED_TEXT if flights.runway.works.scheduled() else ""
+	if text == "" and flights.runway.works.start != NO_TICK:
+		text = HELD_TEXT
 	if text == "" and next == "":
 		text = LARGEST_TEXT
 	if text == "":

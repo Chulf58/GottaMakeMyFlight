@@ -145,3 +145,53 @@ func test_works_that_do_not_grow_the_runway_are_refused() -> void:
 		"FlightSim.start_works: the runway is small and the works build small"
 	)
 	assert_bool(_sim.runway.works.scheduled()).is_false()
+
+
+## Bookings that end at 100.2 and start at 1300.25 leave 1200.05 ticks, enough for
+## 1200 ticks from 100.2 but not from the whole tick 101 the works must start on:
+## the start is rounded up before the stretch is verified, so the works move past
+## the second booking instead of overlapping it.
+func test_a_fractional_gap_too_short_once_rounded_up_is_not_used() -> void:
+	var plans := FlightPlans.new()
+	var world := {
+		"contracts": [],
+		"start_day": 0,
+		"next_day": {},
+		"ended": {},
+		"reserving": {},
+		"flights": [],
+		"landed": [],
+		"grounds": {},
+		"works":
+		[
+			GroundPlanner.works_booking(0.2, 100.0),
+			GroundPlanner.works_booking(1300.25, 100.0),
+		],
+	}
+	var start := plans.works_start(world, 0, 1200)
+	print("works start %d" % start)
+	assert_int(start).is_equal(1401)
+	var works := GroundPlanner.works_booking(float(start), 1200.0)
+	for booking: Dictionary in world["works"]:
+		assert_bool(GroundPlanner.clash(booking, works)).is_false()
+
+
+## The booking is held for HOLD_TICKS after the works end, and a second upgrade
+## in that time would overwrite it: it is refused, with the held booking kept.
+func test_an_upgrade_during_the_hold_of_the_last_works_is_refused() -> void:
+	assert_bool(_sim.start_works(PlaneClasses.MEDIUM)).is_true()
+	var finish := _sim.runway.works.finish
+	var start := _sim.runway.works.start
+	_sim.on_tick(finish)
+	assert_str(_sim.runway.size).is_equal(PlaneClasses.MEDIUM)
+	assert_bool(_sim.runway.works.scheduled()).is_false()
+	assert_int(_sim.runway.works.start).is_equal(start)
+	var refuse := func() -> void: assert_bool(_sim.start_works(PlaneClasses.LARGE)).is_false()
+	assert_error(refuse).is_push_error("FlightSim.start_works: %s" % RunwayWorks.HELD_TEXT)
+	assert_int(_sim.runway.works.start).is_equal(start)
+	assert_int(_sim.runway.works.finish).is_equal(finish)
+	assert_str(_sim.runway.size).is_equal(PlaneClasses.MEDIUM)
+	# Control: once the hold ends the upgrade is booked.
+	_sim.on_tick(finish + RunwayWorks.HOLD_TICKS)
+	assert_int(_sim.runway.works.start).is_equal(RunwayWorks.NO_TICK)
+	assert_bool(_sim.start_works(PlaneClasses.LARGE)).is_true()

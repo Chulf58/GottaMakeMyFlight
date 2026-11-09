@@ -153,6 +153,6 @@ func snapshot_problem(data: Dictionary) -> String:
 	var problem := works.snapshot_problem(data["works"])
 	var target: String = data["works"].get("target", "")
 	if problem == "" and target != "":
-		if PlaneClasses.ORDER.find(target) <= PlaneClasses.ORDER.find(data["size"]):
-			problem = "the works must build a larger size than %s" % data["size"]
+		if target != RunwayWorks.next_size(data["size"]):
+			problem = "the works must build the next size, larger than %s" % data["size"]
 	return "works: %s" % problem if problem != "" else ""

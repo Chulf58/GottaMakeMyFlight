@@ -157,3 +157,15 @@ func test_settle_switches_the_size_at_the_end_and_drops_the_booking_later() -> v
 	assert_bool(runway.settle(2200 + RunwayWorks.HOLD_TICKS)).is_true()
 	assert_int(runway.works.fixed_bookings().size()).is_equal(0)
 	assert_array(seen).is_equal([PlaneClasses.MEDIUM])
+
+
+## After the works end their booking is held, and the card refuses another
+## upgrade with its own text, without taking the price.
+func test_the_card_refuses_an_upgrade_while_the_last_works_are_held() -> void:
+	_tier(3)
+	assert_str(RunwayWorks.buy(_sim, _unlocks, _wallet)).is_empty()
+	_sim.on_tick(_sim.runway.works.finish)
+	assert_str(_sim.runway.size).is_equal(PlaneClasses.MEDIUM)
+	assert_str(RunwayWorks.problem(_sim, _unlocks, _wallet)).is_equal(RunwayWorks.HELD_TEXT)
+	assert_str(RunwayWorks.buy(_sim, _unlocks, _wallet)).is_equal(RunwayWorks.HELD_TEXT)
+	assert_int(_wallet.balance).is_equal(100000 - 15000)

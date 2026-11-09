@@ -15,7 +15,10 @@ extends SceneTree
 ## end points are inside the viewport with a margin and that the pieces drawn
 ## are the size's (RunwayView), printing the numbers it compared; failures print
 ## PROBE_INVALID and exit 1. The HUD layers are hidden for the plates, so no
-## panel covers the subject. Plates go to tools/blender/out/runway_r9/.
+## panel covers the subject. In frame is not visible: a ray from the camera to
+## each checked point must meet no collider and no other mesh first (_occluder),
+## and a plate that fails to write is invalid. Plates go to
+## tools/blender/out/runway_r9/.
 
 const OUT_REL := "res://../tools/blender/out/runway_r9"
 const MAIN_SCENE := "res://main/main.tscn"
@@ -24,6 +27,9 @@ const CAMERA_HEIGHT := 600.0
 ## The view's width in metres, set so the large runway (768 m) fits with room.
 const VIEW_WIDTH_M := 900.0
 const RUNWAY_Z := -338.0
+## The checked points sit this far above the ground so the ground itself is not
+## an occluder.
+const POINT_HEIGHT_M := 0.5
 
 var _out_dir := ""
 var _main: Node3D
@@ -65,6 +71,7 @@ func _run() -> void:
 	_cam.look_at(Vector3(0.0, 0.0, RUNWAY_Z), Vector3(0.0, 0.0, -1.0))
 	_cam.make_current()
 	await _frames(10)
+	_control_occluder()
 	await _plate("small", PlaneClasses.SMALL)
 	_flights.open_airport()
 	(_main.get_node("BuildUnlocks") as BuildUnlocks).from_snapshot({"tier": 2, "made": 50})
@@ -118,11 +125,54 @@ func _plate(label: String, size: String) -> void:
 		):
 			_invalid("%s runway end %.0f is outside the viewport" % [label, x])
 			return
+		var blocker := _occluder(Vector3(x, POINT_HEIGHT_M, RUNWAY_Z), view)
+		print("PROBE %s end x=%.0f occluder: '%s'" % [label, x, blocker])
+		if blocker != "":
+			_invalid("%s runway end %.0f is hidden behind %s" % [label, x, blocker])
+			return
 	await _frames(4)
 	await RenderingServer.frame_post_draw
 	var path := "%s/runway_%s.png" % [_out_dir, label]
 	var image := root.get_viewport().get_texture().get_image()
-	print("PROBE plate %s: %d pieces, %s, saved=%d" % [label, pieces, path, image.save_png(path)])
+	var saved := image.save_png(path)
+	print("PROBE plate %s: %d pieces, %s, save_png=%d" % [label, pieces, path, saved])
+	if saved != OK or not FileAccess.file_exists(path):
+		_invalid("the %s plate was not written to %s (error %d)" % [label, path, saved])
+
+
+## Control: the occlusion check must see a box dropped between the camera and a
+## runway point, so a clear result elsewhere means something.
+func _control_occluder() -> void:
+	var box := MeshInstance3D.new()
+	box.mesh = BoxMesh.new()
+	_main.add_child(box)
+	box.global_position = Vector3(0.0, CAMERA_HEIGHT / 2.0, RUNWAY_Z)
+	var found := _occluder(
+		Vector3(0.0, POINT_HEIGHT_M, RUNWAY_Z), _main.get_node("Airside/RunwayView")
+	)
+	print("PROBE control occluder: '%s'" % found)
+	if found == "":
+		_invalid("the occlusion check missed a box between the camera and the runway")
+	box.free()
+
+
+## The name of whatever lies between the camera and `point`, or "": a collider
+## the physics ray meets, or a mesh outside the runway view whose bounds the
+## segment crosses.
+func _occluder(point: Vector3, view: Node) -> String:
+	var from := _cam.global_position
+	var query := PhysicsRayQueryParameters3D.create(from, point)
+	var hit := root.world_3d.direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		return "collider %s" % hit["collider"]
+	for node in _main.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		if mesh.mesh == null or not mesh.is_visible_in_tree() or view.is_ancestor_of(mesh):
+			continue
+		var local := mesh.global_transform.affine_inverse()
+		if mesh.mesh.get_aabb().intersects_segment(local * from, local * point):
+			return "mesh %s" % mesh.get_path()
+	return ""
 
 
 func _invalid(why: String) -> void:
