@@ -56,6 +56,11 @@ var _cur: Dictionary = {}
 ## cafe guest is handed back from CAFE_STANDING_UP (_up_with_roller()). Holds
 ## no tick; snap() and release erase it.
 var _stages: Dictionary = {}
+## Passenger id -> its odometer_mm at the sync before this one, to read the way
+## a walker held in a boarding file walked on this tick (a drawn step across a
+## corner is a chord, shorter than the way walked). Holds no tick; snap() and
+## release erase it.
+var _odometers: Dictionary = {}
 var _ring := MeshInstance3D.new()
 ## Queue-full signs, drawn after the passengers.
 var _markers := MissMarkers.new()
@@ -223,6 +228,7 @@ func sync() -> void:
 		steers[id] = steer
 		_turn(_nodes[id], p, _pose(_nodes[id], p))
 		_stages[id] = p.stage
+		_odometers[id] = p.odometer_mm
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
@@ -263,6 +269,7 @@ func snap() -> void:
 	_turns.clear()
 	_setoffs.clear()
 	_stages.clear()
+	_odometers.clear()
 	for id in sim.passenger_ids():
 		if _nodes.has(id):
 			# A node kept through the load starts over dressed, with no foam
@@ -485,6 +492,7 @@ func _release(id: int) -> void:
 	_prev.erase(id)
 	_cur.erase(id)
 	_stages.erase(id)
+	_odometers.erase(id)
 
 
 ## Sets the clip, dress, bubble and icons for this tick and returns the yaw
@@ -500,13 +508,19 @@ func _pose(node: Node3D, p: Passenger) -> float:
 	var activity := ActivityPoses.kind(sim, p)
 	var showering := activity == ActivityPoses.Kind.SHOWER
 	var drawn_step := _at_security(p) or _stepping_in_stall(p) or showering
-	if drawn_step or sim.files.holds(p.id) or _up_with_roller(p, activity):
-		# The drawn step, so a held-back queue front or boarding-file waiter
-		# (its path still open) does not walk in place and a step to the
-		# table, into or out of a toilet stall or into or out of a shower, or
-		# a roller passenger's step off its seat after its pick-up, is not an
-		# idle slide.
+	if drawn_step or _up_with_roller(p, activity):
+		# The drawn step, so a held-back queue front (its path still open)
+		# does not walk in place and a step to the table, into or out of a
+		# toilet stall or into or out of a shower, or a roller passenger's step
+		# off its seat after its pick-up, is not an idle slide.
 		mm = roundi((_cur[p.id] - _prev[p.id]).length() * 1000.0)
+		moving = mm > 0
+	elif sim.files.holds(p.id):
+		# A boarding-file waiter (its path still open) does not walk in place
+		# either. The way it walked, not the drawn step: across a corner the
+		# drawn step is a chord, 0.71 of the way walked at a right angle, and
+		# the clip played at that speed for the tick (board 03454587).
+		mm = maxi(p.odometer_mm - _odometers.get(p.id, p.odometer_mm), 0)
 		moving = mm > 0
 	var held := 0
 	var seat_pose := StageKinds.pose(p.stage)
