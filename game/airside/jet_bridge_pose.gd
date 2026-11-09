@@ -27,7 +27,10 @@ extends RefCounted
 ##
 ## Not guaranteed: the bridge is not checked against a neighbouring gate's
 ## plane. Models 03 and 04 have sills (0.79 m, 0.63 m) below the rig's reach,
-## so their bridge stays parked.
+## so while one stands at the gate the bridge takes parked_clear(): fully
+## retracted with its tunnel swung along the wall line, clear of the plane
+## (ruling plane-04-stops-further-out-with-the-passenger-walk-ending-at, part
+## 2, "Swing it clear").
 
 ## The rig, in metres, from build_airside_props.py.
 const ROT_FLOOR := 2.75
@@ -128,8 +131,25 @@ static func parked(root: Transform3D, door: Vector3, normal: Vector3) -> Diction
 	}
 
 
+## The parked pose while a plane the rig cannot dock stands at the stand door
+## `door` (world), the fuselage facing out along `normal`: level and fully
+## retracted like parked(), with the tunnel swung toward the terminal until it
+## lies along the wall line, on the door's side of the column, and the cab
+## facing the fuselage. In the root's frame the wall line runs along x
+## (root_for() turns the root about y only), so the tunnel yaws to +-90
+## degrees. The tunnel and cab then lie within 4.4 m of the wall line, ahead
+## of the door, and the bellows stop 0.8 m short of the door's x.
+static func parked_clear(root: Transform3D, door: Vector3, normal: Vector3) -> Dictionary:
+	var pose := parked(root, door, normal)
+	var side := 1.0 if (root.affine_inverse() * door).x >= 0.0 else -1.0
+	var yaw := side * PI / 2.0
+	pose["cab_yaw"] = float(pose["cab_yaw"]) + float(pose["yaw"]) - yaw
+	pose["yaw"] = yaw
+	return pose
+
+
 ## Sets the joints of `joints` (JOINTS name -> Node3D, from joints_of()) to
-## `pose` (solve() or parked()).
+## `pose` (solve(), parked() or parked_clear()).
 static func apply(joints: Dictionary, pose: Dictionary) -> void:
 	var th: float = pose["pitch"]
 	(joints[&"Tunnel_Yaw"] as Node3D).rotation = Vector3(0.0, pose["yaw"], 0.0)

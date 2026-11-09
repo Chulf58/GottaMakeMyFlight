@@ -103,13 +103,17 @@ func test_bridge_docks_on_the_front_port_door_of_every_model_it_reaches() -> voi
 		)
 		if REACHED.has(model):
 			assert_bool(entry["docked"]).is_true()
+			assert_bool(entry["clear"]).is_false()
 			assert_float(off).is_less(DOCK_TOLERANCE_M)
 		else:
 			assert_bool(entry["docked"]).is_false()
+			# Swung clear of the plane (test_airside_props_bridge_clear.gd).
+			assert_bool(entry["clear"]).is_true()
 			assert_float(pose_now["slide"]).is_equal(0.0)
 		assert_float(absf(foot.global_position.y - entry["root"].origin.y)).is_less(0.01)
 		props.follow(true, plane, model, FlightSim.State.PUSHBACK, "A", _airside, 1)
 		assert_bool(entry["docked"]).is_false()
+		assert_bool(entry["clear"]).is_false()
 		plane.get_parent().free()
 
 

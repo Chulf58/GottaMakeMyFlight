@@ -52,7 +52,12 @@ extends MeshInstance3D
 ## analytic-bookings-planned-pauses, point 3).
 ## Pads lie PAD_DROP_M under the strips in one flat shade, the asphalt band's
 ## edge, so a strip's band runs over a pad as a lead-in, and two neighbours'
-## pads overlap in the same colour without a visible seam.
+## pads overlap in the same colour without a visible seam. A link's band runs on
+## over its pad to the pad's south edge, the wall line (run_on_to_walls()), so
+## it ends under the site's paving: a band ending on the pad's flat edge shade
+## steps from light to dark wherever the stand point lies north of the site
+## (user ruling "Run the band on", board 72617e4b). Its centre line still stops
+## at the stand point.
 ##
 ## Each hold line (Airside.hold_points()) gets a yellow hold bar across its
 ## leg: two HOLD_LINE_M lines HOLD_GAP_M apart, centred on the hold point, in
@@ -84,7 +89,7 @@ const PAD_DROP_M := 0.02
 const HOLD_LINE_M := 0.5
 const HOLD_GAP_M := 0.5
 
-## The strips last built, as returned by strips().
+## The strips last built: strips(), run on to the wall lines (run_on_to_walls()).
 var shown: Array[Dictionary] = []
 ## The centre lines last built, as returned by centrelines().
 var lines: Array[Rect2] = []
@@ -110,13 +115,42 @@ func show_routes(
 	holds := PackedVector3Array(),
 	runway_south_z := -INF
 ) -> void:
-	shown = strips(routes, lane_z)
-	lines = centrelines(shown, lane_z)
+	var route_strips := strips(routes, lane_z)
+	lines = centrelines(route_strips, lane_z)
 	pads = pad_list.duplicate()
+	shown = run_on_to_walls(route_strips, pads)
 	bars = hold_bars(holds, WIDTH_M, runway_south_z)
 	var marks := lines.duplicate()
 	marks.append_array(bars)
 	mesh = mesh_of(shown, marks, pads)
+
+
+## `strip_list` (as strips() returns them) with each north-south strip whose
+## south end is a stand point on its own pad in `pad_list` carried on to that
+## pad's south edge, the stand's wall line, so its band ends under the site's
+## paving and not on the pad. A stand's own pad is the one holding the end whose
+## south edge lies NOSE_GAP_M plus NOSE_M south of it (stand_pad()), so a
+## neighbour's overlapping pad on another wall line is never taken. Other strips
+## are returned as they are.
+static func run_on_to_walls(
+	strip_list: Array[Dictionary], pad_list: Array[Rect2]
+) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for strip in strip_list:
+		var rect: Rect2 = strip["rect"]
+		var carried := strip
+		if strip["across_x"] and not strip.has("quad"):
+			var end := Vector2(rect.get_center().x, rect.end.y)
+			var wall_z := end.y + StandPlacement.NOSE_GAP_M + StandPlacement.NOSE_M
+			for pad in pad_list:
+				if pad.grow(SAME_M).has_point(end) and absf(pad.end.y - wall_z) < SAME_M:
+					carried = strip.duplicate()
+					carried["rect"] = Rect2(
+						rect.position, Vector2(rect.size.x, pad.end.y - rect.position.y)
+					)
+					break
+		out.append(carried)
+	return out
 
 
 ## The pad under the stand whose plane point is `stand_point`, as a world xz

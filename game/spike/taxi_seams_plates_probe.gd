@@ -28,13 +28,17 @@ const OFF_LINE_M := 4.0
 const DISTANCE_OFFSET := Vector3(150.0, 170.0, 200.0)
 ## The site paving's north edge: it lies over the strips and pads south of here.
 const PAVING_EDGE_Z := -210.0
+## Gate A's wall line with --unequal: the northmost one whose pushback ends south
+## of the lead-in hold line (Airside.lead_in_hold_z(), -245.5), so gate A keeps a
+## hold bar. A stand further north has none by design, as on the north row.
+const UNEQUAL_WALL_Z := -199.0
 
 var _out_dir := ""
 ## --two-gate-19: gates A and B with stands 19 m apart, the closest two gates may
 ## be (test_gate_envelopes.gd), set on Airside directly instead of the gate desk.
 var _two_gate_19 := false
-## --unequal (with --two-gate-19): gate A on a wall line 105 m further north, so
-## its link is the shorter of the two.
+## --unequal (with --two-gate-19): gate A on the wall line UNEQUAL_WALL_Z, 101 m
+## further north, so its link is the shorter of the two.
 var _unequal := false
 var _failed := false
 var _main: Node3D
@@ -67,7 +71,7 @@ func _run() -> void:
 	var grid := (_main.get_node("BuildMode") as BuildMode).grid
 	if _two_gate_19:
 		var stands := {
-			"A": {"exit": 2, "x": -22.5, "wall_z": -203.0 if _unequal else -98.0},
+			"A": {"exit": 2, "x": -22.5, "wall_z": UNEQUAL_WALL_Z if _unequal else -98.0},
 			"B": {"exit": 3, "x": -3.5, "wall_z": -98.0},
 		}
 		if not (_main.get_node("Airside") as Airside).set_gate_stands(stands):
@@ -88,6 +92,11 @@ func _run() -> void:
 		print("STRIP rect=%s across_x=%s" % [strip["rect"], strip["across_x"]])
 	for pad in paving.pads:
 		print("PAD rect=%s" % pad)
+	var holds := airside.hold_points()
+	for hold in holds:
+		print("HOLD at=%s" % hold)
+	if paving.bars.size() != 2 * holds.size():
+		_invalid("%d hold bar lines for %d holds" % [paving.bars.size(), holds.size()])
 	_cam = Camera3D.new()
 	_cam.far = 3000.0
 	_main.add_child(_cam)
@@ -98,6 +107,8 @@ func _run() -> void:
 		var rect: Rect2 = strip["rect"]
 		all_marks.append(Vector3(rect.position.x, 0.0, rect.position.y))
 		all_marks.append(Vector3(rect.end.x, 0.0, rect.end.y))
+	for bar in paving.bars:
+		all_marks.append(Vector3(bar.get_center().x, 0.0, bar.get_center().y))
 	await _top("taxi_top", _bounds(all_marks), all_marks, seams)
 	await _distance(all_marks, seams)
 	for i in seams.size():

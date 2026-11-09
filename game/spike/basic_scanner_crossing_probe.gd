@@ -1047,6 +1047,19 @@ func _reach_frame(
 		_plate_task = true
 		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
 		_plate_reach.call_deferred(id, state, booth)
+	# An arm past the half opening at the arch (its posts and as far again
+	# beyond) is plated close once per passenger (board 0dd2c787 item b).
+	var arm_key := "arm_p%d" % id
+	if (
+		absf(local.z) <= ENTRY_Z[1]
+		and widest["arm"][0] > booth[3]
+		and not _reach_plated.has(arm_key)
+		and not _plate_task
+	):
+		_reach_plated[arm_key] = false
+		_plate_task = true
+		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
+		_plate_reach.call_deferred(id, arm_key, booth)
 	# One walker and one runner plated at the arch's entry, where the widest
 	# feet were before the set-off turn (finding
 	# why-does-the-body-reach-past-the-security-lane-arch-s-0-38-m).
@@ -1248,6 +1261,37 @@ func _print_self_detail(
 	var bag: Node3D = props["bags"][i]
 	var to_body := body.global_transform.affine_inverse()
 	var grip := to_body * props_now.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
+	# Why a worn pack meets its body when the headless sweep reads it clear:
+	# the spine the pack is placed on (the rig's attachment) against the
+	# skeleton's own bone pose now, both in the body's frame, the pack's frame,
+	# the body's scale and the clip drawn (board 0dd2c787 item a).
+	if props["carries"][i] == SecurityLooks.Carry.BACK:
+		var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+		var bone := skeleton.find_bone(CarryOnProps.SPINE_BONE)
+		var posed := to_body * skeleton.global_transform * skeleton.get_bone_global_pose(bone)
+		var rigged := to_body * props_now._spine_of(body)
+		var player := body.get_node("AnimationPlayer") as AnimationPlayer
+		print(
+			(
+				(
+					"SELF_WORN passenger=%d bag=%d spine_rig=%s spine_pose=%s up_rig=%s up_pose=%s"
+					+ " bag_origin=%s bag_y=%s body_scale=%s clip=%s at=%.2f"
+				)
+				% [
+					id,
+					i,
+					rigged.origin.snapped(Vector3.ONE * 0.001),
+					posed.origin.snapped(Vector3.ONE * 0.001),
+					rigged.basis.y.normalized().snapped(Vector3.ONE * 0.001),
+					posed.basis.y.normalized().snapped(Vector3.ONE * 0.001),
+					(to_body * bag.global_transform).origin.snapped(Vector3.ONE * 0.001),
+					(to_body.basis * bag.global_basis.y).snapped(Vector3.ONE * 0.001),
+					body.global_basis.get_scale().snapped(Vector3.ONE * 0.001),
+					body.get_meta(&"clip", ""),
+					player.current_animation_position
+				]
+			)
+		)
 	print(
 		(
 			(
