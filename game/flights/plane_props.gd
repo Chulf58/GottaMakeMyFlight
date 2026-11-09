@@ -7,7 +7,9 @@ extends Node3D
 ##   the plane faces, so it rides the whole pushback and its swing;
 ## - while the plane stands at its gate (AT_STAND, BOARDING, DOORS_CLOSED) the
 ##   model's front port door (PlaneModels "doors"[0], where the stand's door is)
-##   is reported to the Airside's AirsideProps, whose bridge docks there.
+##   is reported to the Airside's AirsideProps, whose bridge docks there; the
+##   report is withdrawn when the plane leaves the stand, hides or leaves the
+##   tree.
 ## Visual only: it reads the drawn model and never the sim.
 ##
 ## The nose wheel is found in each model by its mesh names: the meshes named
@@ -28,6 +30,10 @@ const AT_GATE: Array[int] = [
 static var _contacts: Dictionary = {}
 
 var tug: Node3D
+## The Airside this plane's door was last reported to and the key it used, so
+## the report is withdrawn when the plane leaves the tree (a freed PlaneView).
+var _reported_to: Airside
+var _reported_key := 0
 
 
 func _ready() -> void:
@@ -36,6 +42,12 @@ func _ready() -> void:
 	tug.name = "PushbackTug"
 	tug.visible = false
 	add_child(tug)
+
+
+func _exit_tree() -> void:
+	if is_instance_valid(_reported_to) and is_instance_valid(_reported_to.props):
+		_reported_to.props.release_plane(_reported_key)
+	_reported_to = null
 
 
 ## Places the props for `model` (the drawn model's root node, `model_name` its
@@ -64,8 +76,11 @@ func follow(
 		var side := signf(door.x) if door.x != 0.0 else 1.0
 		var normal := (model.global_basis.x * side).slide(Vector3.UP).normalized()
 		airside.props.dock_plane(key, gate, model.global_transform * door, normal)
+		_reported_to = airside
+		_reported_key = key
 	else:
 		airside.props.release_plane(key)
+		_reported_to = null
 
 
 ## The tug's transform for a model at `model_xform` whose nose wheel touches

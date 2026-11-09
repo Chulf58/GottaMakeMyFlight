@@ -445,10 +445,17 @@ func _aim(focus: Vector3, yaw: float, pitch: float, distance: float) -> void:
 
 
 ## Proves every subject's bounds lie in the viewport with MARGIN_PX and, when
-## `need_rays`, that camera rays reach it first.
+## `need_rays`, that camera rays reach it first. A hidden subject, or one with
+## no visible mesh (whose bounds would be an empty box at the origin), fails.
 func _prove(label: String, subjects: Array, need_rays: bool) -> bool:
 	var rect := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN_PX)
 	for subject: Node3D in subjects:
+		var shown := _meshes(subject).filter(
+			func(mi: MeshInstance3D) -> bool: return mi.is_visible_in_tree()
+		)
+		if not subject.is_visible_in_tree() or shown.is_empty():
+			_invalid("%s: %s is hidden or has no visible mesh" % [label, subject.name])
+			return false
 		var lo := Vector2(INF, INF)
 		var hi := Vector2(-INF, -INF)
 		for i in 8:

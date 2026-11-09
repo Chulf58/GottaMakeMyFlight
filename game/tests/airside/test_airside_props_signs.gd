@@ -91,11 +91,15 @@ func test_sign_scale_sizes_every_sign() -> void:
 
 func test_the_signs_follow_a_rebuild_without_doubling() -> void:
 	var before_count := _airside.props.signs.size()
+	assert_int(before_count).is_equal(STUBS.size())
+	var routes_before := _airside.taxi_routes()
 	assert_bool(_airside.set_gate_stands({"A": StandPlacement.make(1, 20.0, -230.0)})).is_true()
+	# The routes changed, so the signs were laid out again.
+	assert_bool(_airside.taxi_routes() == routes_before).is_false()
 	await get_tree().process_frame
 	var live := _airside.props.find_children("TaxiSign_*", "Node3D", false, false)
-	assert_int(live.size()).is_equal(before_count)
-	assert_int(_airside.props.signs.size()).is_equal(before_count)
+	assert_int(live.size()).is_equal(STUBS.size())
+	assert_int(_airside.props.signs.size()).is_equal(STUBS.size())
 
 
 func _shown_glyphs(sign: Node) -> Array[String]:

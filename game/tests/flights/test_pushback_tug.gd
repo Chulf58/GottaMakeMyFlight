@@ -47,6 +47,8 @@ func test_every_model_has_a_nose_wheel_on_its_centreline_ahead_of_its_main_gear(
 		assert_vector(box.size).is_not_equal(Vector3.ZERO)
 		assert_float(absf(contact.x)).is_less(0.05)
 		assert_float(absf(contact.y)).is_less(0.05)
+		# The main gear was found, so the comparison below is not against -INF.
+		assert_bool(is_finite(main_z)).is_true()
 		assert_float(contact.z).is_greater(main_z)
 		plane.free()
 
