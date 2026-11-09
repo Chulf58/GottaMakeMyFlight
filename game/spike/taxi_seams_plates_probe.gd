@@ -4,7 +4,7 @@ extends SceneTree
 ## Run (one windowed Godot run project-wide; hold the shared windowed lock):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path <game> -s res://spike/taxi_seams_plates_probe.gd -- --out=<dir>
+##     --path <game> -s res://spike/taxi_seams_plates_probe.gd -- --out=<dir> [--two-gate-19]
 ##
 ## Boots main.tscn with the starter shell and its gate desk, hides the HUD layers and
 ## shoots: a top-down plate of every paving strip and pad, a distance shot from the
@@ -29,6 +29,9 @@ const DISTANCE_OFFSET := Vector3(150.0, 170.0, 200.0)
 const PAVING_EDGE_Z := -210.0
 
 var _out_dir := ""
+## --two-gate-19: gates A and B with stands 19 m apart, the closest two gates may
+## be (test_gate_envelopes.gd), set on Airside directly instead of the gate desk.
+var _two_gate_19 := false
 var _failed := false
 var _main: Node3D
 var _cam: Camera3D
@@ -39,6 +42,8 @@ func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			_out_dir = arg.get_slice("=", 1)
+		elif arg == "--two-gate-19":
+			_two_gate_19 = true
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=", _out_dir)
 	_run.call_deferred()
@@ -54,7 +59,14 @@ func _run() -> void:
 	clock.set_process(false)
 	await _frames(10)
 	var grid := (_main.get_node("BuildMode") as BuildMode).grid
-	if not preload("res://spike/starter_flight.gd").add_gate_desk(grid):
+	if _two_gate_19:
+		var stands := {
+			"A": {"exit": 2, "x": -22.5, "wall_z": -98.0},
+			"B": {"exit": 3, "x": -3.5, "wall_z": -98.0},
+		}
+		if not (_main.get_node("Airside") as Airside).set_gate_stands(stands):
+			_invalid("the two gates 19 m apart were refused")
+	elif not preload("res://spike/starter_flight.gd").add_gate_desk(grid):
 		_invalid("the gate desk was refused")
 	await _frames(6)
 	for layer in _main.find_children("*", "CanvasLayer", true, false):
@@ -124,6 +136,17 @@ func _seams(paving: TaxiPaving, runway_south: float) -> Array[Dictionary]:
 					out.append(
 						{"at": Vector3(x, 0.0, pad.position.y), "kind": "pad", "across": -1.0}
 					)
+		# Where two links overlap (closer than a strip is wide), the cut at their
+		# midpoint, read across x halfway along the overlap north of the site paving.
+		for other in paving.shown:
+			var them: Rect2 = other["rect"]
+			if not other["across_x"] or them.get_center().x <= x or not rect.intersects(them):
+				continue
+			var top := maxf(rect.position.y, them.position.y)
+			var bottom := minf(minf(rect.end.y, them.end.y), PAVING_EDGE_Z)
+			if bottom > top:
+				var cut := Vector3((x + them.get_center().x) / 2.0, 0.0, (top + bottom) / 2.0)
+				out.append({"at": cut, "kind": "cut", "across": 1.0, "along_x": true})
 	return out
 
 
@@ -174,6 +197,9 @@ func _shoot(label: String, marks: Array[Vector3], seams: Array[Dictionary]) -> v
 		# Read off the yellow centre line, which runs along the link's middle.
 		var at: Vector3 = seam["at"] + Vector3(OFF_LINE_M, 0.0, 0.0)
 		var step := Vector3(0.0, 0.0, SIDE_M * float(seam["across"]))
+		if seam.get("along_x", false):
+			at = seam["at"]
+			step = Vector3(SIDE_M, 0.0, 0.0)
 		var line := "SEAM %s %s at=(%.1f,%.1f)" % [label, seam["kind"], at.x, at.z]
 		for side: Array in [["in", at - step], ["out", at + step]]:
 			var p: Vector3 = side[1]

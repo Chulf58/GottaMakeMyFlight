@@ -20,12 +20,13 @@ extends MeshInstance3D
 ##
 ## The lane's band runs across z and a link's across x, so a link's light middle
 ## would butt the lane's dark edge where the two meet (board 1d61370e). The lane
-## square under each link that meets its edge is mitred instead (junctions()):
-## four triangles from its centre, the one on a link's side carrying the link's
-## band on into the lane, the others the lane's. Along each diagonal the two
-## bands give the same shade, so the band never steps. A junction whose square
-## would overlap the one west of it (two links less than WIDTH_M apart) is left
-## as plain lane.
+## under each link that meets its edge is mitred instead (junctions()): in each
+## half of the lane the band follows the nearest centre line, the lane's or a
+## link's on that edge, so a link's band runs on into the lane up to the
+## diagonals from its centre. Two links on one edge closer than WIDTH_M (gates
+## can stand 19 m apart) share the lane at their midpoint, and their strips are
+## drawn only up to it (_drawn_rect()). The band is symmetric about its middle,
+## so at every diagonal and midpoint both sides give the same shade.
 ##
 ## A thin centre line runs along the lane and each link (user ruling taxiway-
 ## look-runway-asphalt-with-a-yellow-centreline), in the runway's own line
@@ -364,7 +365,8 @@ static func mesh_of(
 				_add_mitred_lane(rect, cuts, verts, normals, uvs, index)
 				continue
 		var base := verts.size()
-		for corner in _corners_of(rect):
+		var drawn := _drawn_rect(strip, strip_list) if across_x else rect
+		for corner in _corners_of(drawn):
 			verts.append(Vector3(corner.x, HEIGHT_M, corner.y))
 			normals.append(Vector3.UP)
 			var t: float = (
@@ -396,8 +398,9 @@ static func mesh_of(
 ## north-south strip as wide as the lane, inside its x range, with an end on
 ## its north or south edge), west to east: each {"x": the link's centre x,
 ## "north": a link meets the north edge there, "south": one meets the south
-## edge}. A link at the same x on both edges makes one entry. One whose square
-## would overlap the previous entry's is left out.
+## edge}. A link at the same x on both edges makes one entry. Links closer
+## than the lane is wide are all kept; _add_mitred_lane() splits the lane
+## between them.
 static func junctions(lane: Rect2, strip_list: Array[Dictionary]) -> Array[Dictionary]:
 	var width := lane.size.y
 	var by_x: Dictionary = {}
@@ -424,17 +427,16 @@ static func junctions(lane: Rect2, strip_list: Array[Dictionary]) -> Array[Dicti
 	keys.sort()
 	var out: Array[Dictionary] = []
 	for key: int in keys:
-		var entry: Dictionary = by_x[key]
-		if not out.is_empty() and entry["x"] - out[-1]["x"] < width - SAME_M:
-			continue
-		out.append(entry)
+		out.append(by_x[key])
 	return out
 
 
-## Adds the lane strip `lane` to the arrays: plain quads with the band across z
-## between mitred squares at `cuts` (junctions()). Each square is four triangles
-## from its centre; the north one's band runs across x when a link meets the
-## north edge there, the south one's likewise, and every other one's across z.
+## Adds the lane strip `lane` to the arrays, mitred under the links at `cuts`
+## (junctions()). In each half of the lane the band follows the nearest centre
+## line: the lane's, or that of a link meeting that half's edge. So a link's
+## band reaches into the lane as far as the diagonals from its centre, and two
+## links on one edge share the lane at their midpoint. The half is cut into x
+## slabs at every link's centre, edges and midpoints, where each part is linear.
 static func _add_mitred_lane(
 	lane: Rect2,
 	cuts: Array[Dictionary],
@@ -443,51 +445,113 @@ static func _add_mitred_lane(
 	uvs: PackedVector2Array,
 	index: PackedInt32Array
 ) -> void:
-	var width := lane.size.y
-	var z0 := lane.position.y
-	var z1 := lane.end.y
-	var from_x := lane.position.x
-	for cut in cuts:
-		var x0: float = cut["x"] - width / 2.0
-		var x1: float = cut["x"] + width / 2.0
-		_add_lane_quad(Rect2(from_x, z0, x0 - from_x, width), verts, normals, uvs, index)
-		var centre := Vector2(cut["x"], (z0 + z1) / 2.0)
-		var nw := Vector2(x0, z0)
-		var ne := Vector2(x1, z0)
-		var se := Vector2(x1, z1)
-		var sw := Vector2(x0, z1)
-		# Each triangle: two corners clockwise seen from above, each with its t.
-		var tris: Array[Array] = [
-			[nw, 0.0, ne, 1.0 if cut["north"] else 0.0],
-			[ne, 0.0, se, 1.0],
-			[se, 1.0, sw, 0.0 if cut["south"] else 1.0],
-			[sw, 1.0, nw, 0.0],
-		]
-		for tri in tris:
-			var base := verts.size()
-			_add_asphalt(tri[0], tri[1], verts, normals, uvs)
-			_add_asphalt(tri[2], tri[3], verts, normals, uvs)
-			_add_asphalt(centre, 0.5, verts, normals, uvs)
-			index.append_array(PackedInt32Array([base, base + 1, base + 2]))
-		from_x = x1
-	_add_lane_quad(Rect2(from_x, z0, lane.end.x - from_x, width), verts, normals, uvs, index)
+	var half := lane.size.y / 2.0
+	var mid_z := lane.get_center().y
+	for side: String in ["north", "south"]:
+		# Toward the half's outer edge: -z for the north half, +z for the south.
+		var out_dir := -1.0 if side == "north" else 1.0
+		var outer := mid_z + out_dir * half
+		var xs: Array[float] = []
+		for cut in cuts:
+			if cut[side]:
+				xs.append(cut["x"])
+		var breaks: Array[float] = [lane.position.x, lane.end.x]
+		for i in xs.size():
+			breaks.append_array([xs[i], xs[i] - half, xs[i] + half])
+			if i > 0:
+				breaks.append((xs[i - 1] + xs[i]) / 2.0)
+		breaks.sort()
+		for i in range(1, breaks.size()):
+			var a := maxf(breaks[i - 1], lane.position.x)
+			var b := minf(breaks[i], lane.end.x)
+			if b - a < SAME_M:
+				continue
+			var link_x := INF
+			for x in xs:
+				if absf((a + b) / 2.0 - x) < absf((a + b) / 2.0 - link_x):
+					link_x = x
+			var ga := minf(absf(a - link_x), half)
+			var gb := minf(absf(b - link_x), half)
+			# The lane's part, from the centre line out to the diagonal.
+			var lane_t := func(p: Vector2) -> float: return (p.y - lane.position.y) / lane.size.y
+			_add_part(
+				[
+					Vector2(a, mid_z),
+					Vector2(b, mid_z),
+					Vector2(b, mid_z + out_dir * gb),
+					Vector2(a, mid_z + out_dir * ga)
+				],
+				lane_t,
+				verts,
+				normals,
+				uvs,
+				index
+			)
+			# The link's part, from the diagonal out to the lane's edge.
+			var link_t := func(p: Vector2) -> float: return (p.x - link_x + half) / (2.0 * half)
+			_add_part(
+				[
+					Vector2(a, mid_z + out_dir * ga),
+					Vector2(b, mid_z + out_dir * gb),
+					Vector2(b, outer),
+					Vector2(a, outer)
+				],
+				link_t,
+				verts,
+				normals,
+				uvs,
+				index
+			)
 
 
-## Adds `rect`, a piece of the lane, as one quad with the band across z, unless
-## it is narrower than SAME_M.
-static func _add_lane_quad(
-	rect: Rect2,
+## Adds the flat quad `corners` (world x and z, in order around it) as two
+## triangles, each turned to face up and left out when it has no area, with
+## each corner's band position given by `t_of`.
+static func _add_part(
+	corners: Array[Vector2],
+	t_of: Callable,
 	verts: PackedVector3Array,
 	normals: PackedVector3Array,
 	uvs: PackedVector2Array,
 	index: PackedInt32Array
 ) -> void:
-	if rect.size.x < SAME_M:
-		return
-	var base := verts.size()
-	for corner in _corners_of(rect):
-		_add_asphalt(corner, (corner.y - rect.position.y) / rect.size.y, verts, normals, uvs)
-	index.append_array(_quad(base))
+	for tri: Array[Vector2] in [
+		[corners[0], corners[1], corners[2]] as Array[Vector2],
+		[corners[0], corners[2], corners[3]] as Array[Vector2]
+	]:
+		var area := _signed_area(tri)
+		if absf(area) < SAME_M * SAME_M:
+			continue
+		if area < 0.0:
+			tri.reverse()
+		var base := verts.size()
+		for p in tri:
+			_add_asphalt(p, t_of.call(p), verts, normals, uvs)
+		index.append_array(PackedInt32Array([base, base + 1, base + 2]))
+
+
+## The part of the north-south strip `strip` that is drawn: cut at the midpoint
+## with each other north-south strip in `strip_list` it overlaps (two links
+## closer than the strips are wide), so the two never draw the same ground.
+## Its band still runs across the whole strip, so both give the same shade at
+## the cut.
+static func _drawn_rect(strip: Dictionary, strip_list: Array[Dictionary]) -> Rect2:
+	var rect: Rect2 = strip["rect"]
+	var x := rect.get_center().x
+	var lo := rect.position.x
+	var hi := rect.end.x
+	for other in strip_list:
+		if other == strip or not other["across_x"] or other.has("quad"):
+			continue
+		var them: Rect2 = other["rect"]
+		var other_x := them.get_center().x
+		if absf(other_x - x) < SAME_M or not rect.grow(-SAME_M).intersects(them):
+			continue
+		if other_x < x:
+			lo = maxf(lo, (x + other_x) / 2.0)
+		else:
+			hi = minf(hi, (x + other_x) / 2.0)
+	return Rect2(lo, rect.position.y, hi - lo, rect.size.y)
 
 
 ## One upward asphalt vertex at `at` (world x and z), `t` across the band.
