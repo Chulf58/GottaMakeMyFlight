@@ -328,6 +328,17 @@ static func bag_transform(
 			var at := Transform3D(yaw, body.global_position - props.views.sit_offset(id))
 			if held["floor_at"][i] != null:
 				at = held["floor_at"][i]
+			elif kind != SecurityLooks.Kind.ROLLER and count >= 2:
+				# A two-bag guest's bag at a gate chair lies fixed at the chair
+				# front (SecurityLooks.gate_two_front()), not in the drawn body's
+				# frame, which moves off the tick's sit offset while the body
+				# eases into the seat (board fc38d1b2).
+				var p: Passenger = props.sim.get_passenger(id) if id >= 0 else null
+				var gate: Variant = (
+					SecurityLooks.gate_two_front(props.sim, p) if p != null else null
+				)
+				if gate != null:
+					at = gate
 			var laid_in := RollerPark.lay_frame(held["bags"][i], at)
 			var placed: Transform3D = laid_in * held["floor"][i]
 			placed.origin.y = props.sim.grid.origin.y

@@ -252,6 +252,29 @@ func _frames(count: int) -> void:
 	await RenderingServer.frame_post_draw
 
 
+## Every passenger but `id` hidden for a plate (CarryChecks.hide_others()), with
+## the bags and trays it holds or has down, which are not children of its body
+## and stayed drawn in the air (board c58f1719 item 2). Returns every node it
+## hid, for the caller to show again.
+func _hide_others(id: int) -> Array[Node3D]:
+	var hidden := CarryChecks.hide_others(_sim, _views, id)
+	var props := _views.carry_on_props()
+	var bags := 0
+	for other in _sim.passenger_ids():
+		if other == id:
+			continue
+		var held := props.props_of(other)
+		var nodes: Array = held["bags"].duplicate()
+		nodes.append(held["tray"])
+		for node: Node3D in nodes:
+			if node != null and node.visible:
+				node.visible = false
+				hidden.append(node)
+				bags += 1
+	print("DETAIL_HIDE passenger=%d others' bags and trays hidden=%d" % [id, bags])
+	return hidden
+
+
 func _run() -> void:
 	await _boot()
 	if not _failed:
@@ -973,7 +996,7 @@ func _reach_frame(
 		(
 			"z=%+.3f in_posts=%s yaw=%+.1f off_axis=%.1f turn_deg=%.1f step_mm=%d stopped=%s"
 			+ " clip=%s clip_at=%.2f blending=%s fade_weight=%.2f late=%s tuck=%.2f stage=%s phase=%s"
-			+ " arm=%.3f(%s) leg=%.3f(%s) torso=%.3f(%s) state=%s"
+			+ " arm=%.3f(%s) leg=%.3f(%s) torso=%.3f(%s) state=%s held=%s"
 		)
 		% [
 			local.z,
@@ -997,7 +1020,8 @@ func _reach_frame(
 			widest["leg"][1],
 			widest["torso"][0],
 			widest["torso"][1],
-			state
+			state,
+			_held_bags(p)
 		]
 	)
 	var passes: Dictionary = _reach.get_or_add(id, {})
@@ -1033,6 +1057,29 @@ func _reach_frame(
 		_plate_task = true
 		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
 		_plate_reach.call_deferred(id, entry, booth)
+
+
+## The bags `p` is drawn holding this frame, read from CarryOnProps' records
+## (not the sim's homes), for the max-reach diagnostic: a bag a hand grips
+## ("held_by", the drawn holder) as its kind and that hand ("case/right"), and
+## a bag drawn on the body with no hand on it (a backpack on the back, a tote on
+## its shoulder) as worn ("shoulder/worn"). A hand gripping a bag is held out
+## from the leg by the bag (board c58f1719 item 4); "none" for none.
+func _held_bags(p: Passenger) -> String:
+	var out: Array[String] = []
+	var props := _views.carry_on_props()
+	var kinds: Array = props.props_of(p.id)["kinds"]
+	for i in kinds.size():
+		var bag := props.bag_state(p.id, i)
+		var name: String = KIND_NAMES[kinds[i]]
+		var holder := int(bag.get("held_by", -1))
+		var carry := int(bag.get("carry", -1))
+		var on_body := int(bag.get("place", -1)) / 4 == SecurityLooks.Home.HAND
+		if holder >= 0:
+			out.append("%s/%s" % [name, ["right", "left"][holder]])
+		elif on_body and carry in [SecurityLooks.Carry.BACK, SecurityLooks.Carry.SHOULDER]:
+			out.append("%s/worn" % name)
+	return ",".join(out) if not out.is_empty() else "none"
 
 
 ## The frame's state for the max-reach diagnostic: stopped (no drawn step over
@@ -1099,7 +1146,7 @@ func _plate_reach(id: int, state: String, booth: Array) -> void:
 		# the fifth from the other end), so the posts are not between; the
 		# other passengers are hidden.
 		var axis := (booth[0] as Node3D).global_basis.z
-		var others := CarryChecks.hide_others(_sim, _views, id)
+		var others := _hide_others(id)
 		if await _plate_close(id, null, name, _reach_dir, atan2(axis.x, axis.z)):
 			_reach_plated[state] = true
 		else:
@@ -1624,7 +1671,7 @@ func _plate_close(id: int, bag: Node3D, name: String, dir := "", base_yaw := NAN
 					var detail := out_dir.path_join(name + "_detail.png")
 					# Another passenger in front of the camera hid the loop and the fingers
 					# in the tray-to-back plate: the others are left out of the detail.
-					var others := CarryChecks.hide_others(_sim, _views, id)
+					var others := _hide_others(id)
 					await PlateSteps.detail_plate(self, cam, body, bag, owners, frame, detail)
 					for node in others:
 						node.visible = true
