@@ -18,6 +18,7 @@ func before_test() -> void:
 	add_child(_port)
 	_rating = AirportRating.new()
 	_desk = OfferDesk.new()
+	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_desk.rating = _rating
 	var sim := FlightSim.new()
 	_port.add_child(_rating)
@@ -109,6 +110,7 @@ func test_the_warning_does_not_rebuild_the_cards() -> void:
 func test_a_panel_with_a_desk_that_has_no_rating_has_no_warning() -> void:
 	var sim := FlightSim.new()
 	var bare := OfferDesk.new()
+	bare.runway = Runway.new(PlaneClasses.LARGE)
 	var panel := OfferPanel.new()
 	_port.add_child(bare)
 	_port.add_child(sim)

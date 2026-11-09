@@ -18,8 +18,9 @@ extends RefCounted
 ## longer bound for or at that seat: chosen from the walls live on every call,
 ## a wall built mid-stay, or a route in and out of NEAR_CELLS, changed the hand
 ## with the roller lying on the floor. The stamp lives on the sim object as
-## metadata, never saved: after a load the first call chooses again from the
-## walls as they are, the same choice unless a wall changed meanwhile.
+## metadata and is saved (PassengerSimSave "park_side"): chosen again after a
+## load, a one-bag guest's gate chair side flipped once a two-bag neighbour had
+## come after it chose (board 4da2e8ff).
 ##
 ## A side is walled when the park on it (RollerPark.park(), scale 1) reaches
 ## into a wall (ParkWalls.inside(), PullSide.walls_near()) where the guest
@@ -35,7 +36,8 @@ extends RefCounted
 ## A guest this many cells or fewer from where it parks chooses its hand.
 const NEAR_CELLS := 3
 ## The sim metadata holding the stamps: passenger id -> [seat key, hand]. A
-## loaded snapshot clears it (PassengerSimSave.from_snapshot()).
+## loaded snapshot replaces it with the saved stamps
+## (PassengerSimSave.from_snapshot()).
 const STAMPS := &"park_side_hands"
 const GATE_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.TO_GATE,
@@ -123,8 +125,13 @@ static func _open(sim: PassengerSim, seat: Dictionary) -> int:
 ## guest's roller keeps its bag's hand (SecurityLooks.hand_of()), so a
 ## one-bag neighbour steers round it here, and it lies closer in
 ## (GateRoller.TWO_BAG_SIDE_M): two two-bag rollers whose hands face one gap
-## fit in it. Only sim state: the seats, the walls, the stamps and who holds
-## which chair.
+## fit in it. The seat row's middle chair lies 0.36 m to its guest's left
+## (GateRoller.slide()), so the right gap this rule gives first is the side
+## the guest does not shuffle toward to sit down (decision
+## gate-chair-roller-lies-opposite-the-sit-down-shuffle-on-a-ch); with that gap
+## taken the rule lays it left as for any chair, and GateRoller.shuffle_side()
+## lays it out past the feet shuffling toward it. Only sim state: the seats,
+## the walls, the stamps and who holds which chair.
 static func gap_hand(sim: PassengerSim, p: Passenger, front: Vector2i, out: Vector2i) -> int:
 	var left := Vector2i(out.y, -out.x)
 	# The front on the right lays into this guest's right gap with its left
@@ -136,6 +143,19 @@ static func gap_hand(sim: PassengerSim, p: Passenger, front: Vector2i, out: Vect
 	return 1 if right_taken else 0
 
 
+## GateRoller.slide() of the gate chair whose front is `front`, facing `out`,
+## as the grid places its row; 0 where no chair has that front.
+static func _slide_at(sim: PassengerSim, front: Vector2i, out: Vector2i) -> float:
+	for seat: Dictionary in sim.layout.seats:
+		if (
+			seat["front"] == front
+			and (seat["front"] as Vector2i) - (seat["cell"] as Vector2i) == out
+		):
+			var piece := Relocation.placement(sim.grid, seat["object_id"])
+			return GateRoller.slide(piece, seat["cell"], front)
+	return 0.0
+
+
 ## The hand of one-bag guest `p` at the chair front `front` (facing `out`)
 ## whose gaps both hold or will hold a neighbour's roller: the gap where its
 ## roller and the neighbour's reach the less far (GateRoller.reach()), the
@@ -144,8 +164,9 @@ static func gap_hand(sim: PassengerSim, p: Passenger, front: Vector2i, out: Vect
 static func _less_overlap(sim: PassengerSim, p: Passenger, front: Vector2i, out: Vector2i) -> int:
 	var left := Vector2i(out.y, -out.x)
 	var look := PassengerLooks.body_of(p.id, p.variant)
-	var right := GateRoller.reach(look, 0) + _reach(sim, p, front - left, out, 1)
-	var on_left := GateRoller.reach(look, 1) + _reach(sim, p, front + left, out, 0)
+	var slide := _slide_at(sim, front, out)
+	var right := GateRoller.reach(look, 0, 1.0, slide) + _reach(sim, p, front - left, out, 1)
+	var on_left := GateRoller.reach(look, 1, 1.0, slide) + _reach(sim, p, front + left, out, 0)
 	return 1 if on_left < right else 0
 
 
@@ -159,10 +180,12 @@ static func _reach(
 	if not held.is_empty():
 		var q: Passenger = held[0]
 		var look := PassengerLooks.body_of(q.id, q.variant)
-		return GateRoller.reach(look, hand, SecurityLooks.bag_scale(q))
+		return GateRoller.reach(look, hand, SecurityLooks.bag_scale(q), GateRoller.slide_of(q))
+	var slide := _slide_at(sim, front, out)
 	var widest := 0.0
 	for variant in GateRoller.LIE_SIDE_M.size():
-		widest = maxf(widest, GateRoller.reach(variant * PassengerLooks.PER_VARIANT, hand))
+		var look := variant * PassengerLooks.PER_VARIANT
+		widest = maxf(widest, GateRoller.reach(look, hand, 1.0, slide))
 	return widest
 
 

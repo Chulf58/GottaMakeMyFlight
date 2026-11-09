@@ -160,8 +160,14 @@ func tick_position(id: int, current: bool) -> Vector3:
 ## Where a passenger is drawn on this tick: the sim's position, moved onto
 ## its chair's pan at a gate seat (GateChairs), clear of its chair at a cafe
 ## seat (CafeChairs), onto its seat or into the shower on an activity visit
-## (ActivityPoses) and by its drawn offset at security (SecurityLooks).
+## (ActivityPoses), by its drawn offset at security (SecurityLooks) and off a
+## door's axis, away from the hand pulling its roller (DoorSteer).
 func draw_position(p: Passenger) -> Vector3:
+	return _base_position(p) + DoorSteer.offset_of(self, p, _steer_time())
+
+
+## draw_position() without the door steer.
+func _base_position(p: Passenger) -> Vector3:
 	return (
 		sim.world_position(p)
 		+ GateChairs.offset(sim, p)
@@ -169,6 +175,13 @@ func draw_position(p: Passenger) -> Vector3:
 		+ _seats.get(p.id, Vector3.ZERO)
 		+ _offsets.get(p.id, Vector3.ZERO)
 	)
+
+
+## The sim time DoorSteer reads a roller's move at: a tick ahead of the clock,
+## since a body is drawn between its last two tick positions while its bags
+## are drawn at the clock's time, so the body crosses with the roller.
+func _steer_time() -> float:
+	return (float(clock.tick) if clock != null else 0.0) + 1.0
 
 
 ## How far passenger `id` is drawn from where the sim puts it while it stands
@@ -185,6 +198,10 @@ func security_offset(id: int) -> Vector3:
 ## Records positions for the tick that just ran and updates poses and bubbles.
 func sync() -> void:
 	var seen := {}
+	# Passenger id -> the door steer in its tick position, from the carry state
+	# before _props.sync(); true for a node made on this sync.
+	var steers := {}
+	var fresh := {}
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if not _visible(p):
@@ -192,21 +209,44 @@ func sync() -> void:
 		seen[id] = true
 		_chase(p)
 		_chase_seat(p)
-		var now := draw_position(p)
+		var steer := DoorSteer.offset_of(self, p, _steer_time())
+		var now := _base_position(p) + steer
 		if not _nodes.has(id):
 			_nodes[id] = _take(p)
 			_cur[id] = now
-		now += SitHold.offset(_props, sim, p, now)
-		_sit_off[id] = now - draw_position(p)
+			fresh[id] = true
+		var sit := SitHold.offset(_props, sim, p, now)
+		_sit_off[id] = sit
+		now += sit
 		_prev[id] = _cur[id]
 		_cur[id] = now
+		steers[id] = steer
 		_turn(_nodes[id], p, _pose(_nodes[id], p))
 		_stages[id] = p.stage
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
 	_props.sync()
+	_resteer(steers, fresh)
 	_markers.sync()
+
+
+## Moves each tick position in `steers` (passenger id -> the door steer it was
+## recorded with) onto the steer of the carry state _props.sync() has just
+## made: a change of hand seen this tick, or bags made again after a load. The
+## tick position and its side then come from the same state, and
+## draw_position() afterwards returns the position recorded. `fresh` holds
+## the nodes made this sync, whose previous position moves with it.
+func _resteer(steers: Dictionary, fresh: Dictionary) -> void:
+	for id: int in steers:
+		var shift: Vector3 = (
+			DoorSteer.offset_of(self, sim.get_passenger(id), _steer_time()) - steers[id]
+		)
+		if shift == Vector3.ZERO:
+			continue
+		_cur[id] += shift
+		if fresh.has(id):
+			_prev[id] += shift
 
 
 ## Draws every view at the sim's current state now, with no tick to run: a

@@ -22,6 +22,7 @@ func before_test() -> void:
 	_menu.build_mode = _mode
 	_port.add_child(_menu)
 	_desk = OfferDesk.new()
+	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_sim = FlightSim.new()
 	_port.add_child(_desk)
 	_port.add_child(_sim)

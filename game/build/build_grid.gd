@@ -314,6 +314,16 @@ func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 	return _pathing.find_path(self, from, to)
 
 
+## find_path() that never steps onto a cell of `shut`, though `from` and `to`
+## may be among them (GridPathing.find_path_around()); empty when there is
+## none. A queue walker routes so round its line (StationQueue.approach()).
+func find_path_around(from: Vector2i, to: Vector2i, shut: Array) -> Array[Vector2i]:
+	if _pathing == null:
+		_pathing = GridPathing.new()
+		_pathing.rebuild(self)
+	return _pathing.find_path_around(self, from, to, shut)
+
+
 ## The path staff walk from `from` to `to` over can_staff_route() steps, both
 ## cells included, or empty when there is none.
 func find_staff_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:

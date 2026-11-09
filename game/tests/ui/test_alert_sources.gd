@@ -47,6 +47,19 @@ func _short_lane_world() -> int:
 	return desk
 
 
+## Keeps `desk`'s passenger in service two ticks past now. The hold cells lie
+## past the lane in this world, and walkers come round the lane over the desk's
+## far side instead of through it (decision queue-walkers-route-around-their-
+## own-line-a-walker-heading-t), so the line fills after the first service
+## would end. Its service ends two ticks after the last hold, so the lane is
+## still full once the holders stand.
+func _hold_service(desk: int) -> void:
+	var serving: int = _world.sim._queue(desk)["serving"]
+	if serving != 0:
+		var p := _world.passenger(serving)
+		p.service_end = maxi(p.service_end, _world.sim.tick + 2)
+
+
 func test_a_full_check_in_queue_is_a_cause_pointing_at_its_desk() -> void:
 	var desk := _short_lane_world()
 	assert_array(AlertSources.queue_full(_world.sim)).is_empty()
@@ -56,10 +69,11 @@ func test_a_full_check_in_queue_is_a_cause_pointing_at_its_desk() -> void:
 	for i in 5:
 		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 		_world.run_to(_world.clock.tick + 3)
-	for i in 120:
+	for i in 300:
 		if _world.sim.holding_of(desk).size() == 2:
 			break
 		_world.step()
+		_hold_service(desk)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	var causes := AlertSources.queue_full(_world.sim)
 	assert_array(_keys(causes)).is_equal([AlertSources.QUEUE_CHECKIN])
