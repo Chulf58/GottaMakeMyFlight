@@ -135,6 +135,8 @@ const LEAD_PLATES: Array[String] = [
 	"SHOULDER tray>shoulder",
 ]
 const LEAD_MOMENTS := [[0.4, 0.6], [0.8, 0.97]]
+## Failed tries of a hand-led move's plates before it is given up (_lead_tries).
+const LEAD_TRIES := 2
 ## Lane mode: the lane on the divider as the security visuals probe builds it.
 const ARCH_AT := Vector2i(20, ReferenceTerminal.DIVIDER_Y)
 const OLD_SCANNERS: Array[Vector2i] = [Vector2i(17, 8), Vector2i(19, 8)]
@@ -202,6 +204,10 @@ var _floats := FloatCheck.float_counts()
 var _float_control := []
 ## Key -> true once its hand-led move plates are saved.
 var _lead_plated := {}
+## Key -> failed tries of its hand-led move plates; at LEAD_TRIES it is not
+## tried again (a roller walk with no clear sight line on any heading was
+## retried every frame and the run spent its time limit on it, board 40d26b16).
+var _lead_tries := {}
 ## The process frame a wanted plate move paused the clock on (_on_tick), or -1.
 var _hold_frame := -1
 ## Passenger id -> its drawn pose last checked; body-in-own-bag points over
@@ -218,6 +224,11 @@ var _reach := {}
 var _reach_yaw := {}
 var _reach_plated := {}
 var _reach_dir := ""
+## Lane mode, returners' second pass through the arch's entry half
+## (_returner_entry()): passenger id -> {"frames", "arm", "arm_line", "bag",
+## "bag_line"}, the widest arm point and the widest point of a bag it holds or
+## wears, across the arch's axis (board 40d26b16).
+var _returner_reach := {}
 
 
 func _initialize() -> void:
@@ -489,7 +500,13 @@ func _cross() -> void:
 		_roles.append_array(RUNNER_ROLES.duplicate(true))
 	var spawns := 0
 	var next_send := _clock.tick
-	var stop := Time.get_ticks_msec() + RUN_LIMIT_MS
+	# --limit=<seconds> gives a slow machine more time (the checks run every frame).
+	var limit_ms := RUN_LIMIT_MS
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--limit="):
+			limit_ms = int(arg.get_slice("=", 1)) * 1000
+	print("PROBE run_limit_s=%d" % (limit_ms / 1000))
+	var stop := Time.get_ticks_msec() + limit_ms
 	_hold_runners_late()
 	_clock.ticked.connect(_on_tick)
 	while Time.get_ticks_msec() < stop:
@@ -540,7 +557,9 @@ func _lead_plate_scan() -> void:
 			var kind_name: String = SecurityLooks.Kind.keys()[kinds[i]]
 			var move := FloatCheck.move_of(props, id, i).replace(".R", "").replace(".L", "")
 			var key := kind_name + " " + (move if move != "" else "walk")
-			if _lead_plated.has(key) or not (key in LEAD_PLATES or key.ends_with(" walk")):
+			if _lead_plated.has(key) or _lead_tries.get(key, 0) >= LEAD_TRIES:
+				continue
+			if not (key in LEAD_PLATES or key.ends_with(" walk")):
 				continue
 			if move == "" and (not p.is_moving() or kinds.size() > 1):
 				continue
@@ -565,7 +584,7 @@ func _on_tick(_tick: int) -> void:
 		var p := _sim.get_passenger(id)
 		for i in kinds.size():
 			var move := PlateSteps.pending_move(props, id, i)
-			var plated: Array[Dictionary] = [_move_plated, _lead_plated]
+			var plated: Array[Dictionary] = [_move_plated, _lead_plated.merged(_lead_given_up())]
 			var repacked := p != null and p.incident_resolved
 			var near := move != "" and _near_booth(id)
 			if PlateSteps.wanted(kinds[i], move, repacked, near, plated, lead_open, LEAD_PLATES):
@@ -636,9 +655,22 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 		saved += 1
 	if saved == moments.size():
 		_lead_plated[key] = true
+	else:
+		_lead_tries[key] = _lead_tries.get(key, 0) + 1
+		if _lead_tries[key] >= LEAD_TRIES:
+			print("LEAD_PLATE_GAVE_UP %s tries=%d" % [key, _lead_tries[key]])
 	_clock.set_paused(false)
 	_hold_frame = -1
 	_plate_task = false
+
+
+## The hand-led move plates given up on (LEAD_TRIES failed tries), as a set.
+func _lead_given_up() -> Dictionary:
+	var out := {}
+	for key: String in _lead_tries:
+		if _lead_tries[key] >= LEAD_TRIES:
+			out[key] = false
+	return out
 
 
 ## One frame of the FLOAT check, and its control on the first drawn bag.
@@ -753,6 +785,8 @@ func _check(id: int) -> void:
 			if moves[i] in MOVE_PLATES and not _move_plated.has(moves[i]) and not _plate_task:
 				_plate_task = true
 				_plate_move.call_deferred(id, i, moves[i])
+		if _lane_mode and p.incident_resolved:
+			_putin_scan(id, p, bags, props_now)
 		for i in bags.size():
 			var at_lane := not SecurityLooks.lane_of(_sim, p).is_empty()
 			if homes[i] == SecurityLooks.Home.TRAY and p.station != 0 and not at_lane:
@@ -1024,6 +1058,8 @@ func _reach_frame(
 			_held_bags(p)
 		]
 	)
+	if pass_key == "arch_second":
+		_returner_entry(id, booth, local, widest["arm"], context)
 	var passes: Dictionary = _reach.get_or_add(id, {})
 	var run: Dictionary = passes.get_or_add(pass_key, {"groups": {}, "states": {}})
 	for group in ["all", "arm", "leg"]:
@@ -1047,6 +1083,23 @@ func _reach_frame(
 		_plate_task = true
 		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
 		_plate_reach.call_deferred(id, state, booth)
+	# Each returner plated once on its second pass, on its first stepping frame
+	# in the arch's entry half within ENTRY_Z[1] (board 40d26b16); before the
+	# arm plate, which would take the plate task on the same frames.
+	var back := "entry_returner_p%d" % id
+	var entry_half := local.z * float(booth[4])
+	if (
+		pass_key == "arch_second"
+		and entry_half >= 0.0
+		and entry_half <= ENTRY_Z[1]
+		and step_mm > 0
+		and not _reach_plated.has(back)
+		and not _plate_task
+	):
+		_reach_plated[back] = false
+		_plate_task = true
+		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
+		_plate_reach.call_deferred(id, back, booth)
 	# An arm past the half opening at the arch (its posts and as far again
 	# beyond) is plated close once per passenger (board 0dd2c787 item b).
 	var arm_key := "arm_p%d" % id
@@ -1070,6 +1123,159 @@ func _reach_frame(
 		_plate_task = true
 		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
 		_plate_reach.call_deferred(id, entry, booth)
+
+
+## Lane mode, a returner's second pass, one frame mid-arch (`local`, its root
+## in the arch's frame) on the entry side of the arch's centre (board
+## 40d26b16): the widest arm point (`arm`, [reach, bone]) and the widest
+## surface point of each bag it is drawn holding or wearing (held_by a hand, or
+## home HAND; a bag resting in its tray on the belt is not carried), across the
+## arch's axis, kept per passenger at their widest with the frame's `context`.
+func _returner_entry(id: int, booth: Array, local: Vector3, arm: Array, context: String) -> void:
+	if local.z * float(booth[4]) < 0.0:
+		return
+	var to_arch: Transform3D = booth[1]
+	var props := _views.carry_on_props()
+	var nodes: Array = props.props_of(id)["bags"]
+	var bag := 0.0
+	var bag_name := "none"
+	for i in nodes.size():
+		var state := props.bag_state(id, i)
+		var held := int(state.get("held_by", -1)) >= 0
+		var on_body := int(state.get("place", -1)) / 4 == SecurityLooks.Home.HAND
+		if not (nodes[i] as Node3D).is_visible_in_tree() or not (held or on_body):
+			continue
+		for point in CarryChecks.surface(nodes[i]):
+			var x := absf((to_arch * point).x)
+			if x > bag:
+				bag = x
+				bag_name = "%s/%s" % [KIND_NAMES[props.props_of(id)["kinds"][i]], i]
+	var rec: Dictionary = _returner_reach.get_or_add(
+		id, {"frames": 0, "arm": 0.0, "arm_line": "", "bag": 0.0, "bag_line": ""}
+	)
+	rec["frames"] += 1
+	if arm[0] > rec["arm"]:
+		rec["arm"] = arm[0]
+		rec["arm_line"] = "bone=%s %s" % [arm[1], context]
+	if bag > rec["bag"]:
+		rec["bag"] = bag
+		rec["bag_line"] = "bag=%s %s" % [bag_name, context]
+
+
+## Lane mode, a returner (`p`, second pass, in ARCH) whose bag is half way into
+## its tray: plated close once per passenger with the bag (board 40d26b16), so
+## the hand on the bag and the body's place before the arch can be read.
+func _putin_scan(id: int, p: Passenger, bags: Array[Node3D], props: CarryOnProps) -> void:
+	var key := "putin_p%d" % id
+	if _plate_task or _reach_plated.has(key) or p.security_phase != SecurityRuntime.Phase.ARCH:
+		return
+	for i in bags.size():
+		var k := props.transfer_progress(id, i)
+		if FloatCheck.move_of(props, id, i).ends_with(">tray") and k >= 0.4 and k <= 0.7:
+			_reach_plated[key] = false
+			_plate_task = true
+			_plate_putin.call_deferred(id, i, key)
+			return
+
+
+## The put-in plate of _putin_scan(), the sim clock paused for it: the move,
+## its progress, the bag's FLOAT state and where the body is in the arch's frame.
+func _plate_putin(id: int, i: int, key: String) -> void:
+	_clock.set_paused(true)
+	await _frames(1)
+	var props := _views.carry_on_props()
+	var body := _views.node_for(id)
+	var bags: Array = props.props_of(id)["bags"] if body != null else []
+	if body != null and i < bags.size():
+		var state := FloatCheck.float_state(_sim, _views, id, i)
+		var booth: Array = _booths[0]
+		var local: Vector3 = (booth[1] as Transform3D) * body.global_position
+		print(
+			(
+				"PUTIN_PLATE passenger=%d bag=%d move=%s k=%.2f state=%s hand_gap_m=%.3f x=%+.3f z=%+.3f"
+				% [
+					id,
+					i,
+					FloatCheck.move_of(props, id, i),
+					props.transfer_progress(id, i),
+					state[0],
+					state[1],
+					local.x,
+					local.z
+				]
+			)
+		)
+		var others := _hide_others(id)
+		if await _plate_close(id, bags[i], "reach_" + key, _reach_dir):
+			_reach_plated[key] = true
+		else:
+			# Not failed here: at least one put-in plate is required at the end.
+			print("PUTIN_PLATE_MISSED passenger=%d no heading framed it" % id)
+		for node in others:
+			node.visible = true
+	_clock.set_paused(false)
+	_plate_task = false
+
+
+## The returners' entry reach (_returner_entry()), one line per passenger and
+## pass, and a total: each arm and bag within the arch's half opening, and at
+## least one second pass sampled (the control), else PROBE_INVALID.
+func _report_returner_entry() -> void:
+	var over := 0
+	var half := 0.0
+	for booth in _booths:
+		half = maxf(half, float(booth[3]))
+	for id: int in _returner_reach:
+		var rec: Dictionary = _returner_reach[id]
+		var within: bool = rec["arm"] <= half and rec["bag"] <= half
+		over += int(not within)
+		print(
+			(
+				(
+					"RETURNER_ENTRY passenger=%d runner=%s pass=arch_second frames=%d arm_max=%.3f"
+					+ " bag_max=%.3f half_opening=%.3f within=%s"
+				)
+				% [id, _runners.has(id), rec["frames"], rec["arm"], rec["bag"], half, within]
+			)
+		)
+		print("RETURNER_ENTRY_ARM passenger=%d %s" % [id, rec["arm_line"]])
+		if rec["bag_line"] != "":
+			print("RETURNER_ENTRY_BAG passenger=%d %s" % [id, rec["bag_line"]])
+	var putins := _reach_plated.keys().filter(
+		func(key: String) -> bool: return key.begins_with("putin_p") and _reach_plated[key]
+	)
+	print(
+		(
+			"RETURNER_ENTRY_TOTAL passes=%d over=%d putin_plates=%s"
+			% [_returner_reach.size(), over, putins]
+		)
+	)
+	for id: int in _returner_reach:
+		if not _reach_plated.get("entry_returner_p%d" % id, false):
+			_invalid("no entry plate of returner %d's second pass was saved" % id)
+	if putins.is_empty():
+		_invalid("no returner's bag was plated half way into its tray")
+	var running := runner_returners(_returner_reach, _runners, _reach_plated)
+	print("RETURNER_ENTRY_RUNNERS sampled_and_plated=%s" % [running])
+	if running.is_empty():
+		_invalid("no running returner was sampled at the arch's entry with both its plates")
+	if _returner_reach.is_empty():
+		_invalid("no returner's second pass was sampled at the arch's entry")
+	if over > 0:
+		_invalid("%d returner passes reach past the arch's half opening at its entry" % over)
+
+
+## The returners sampled at the arch's entry on their second pass (`reach`,
+## _returner_reach) that are runners (`runners`, _runners) with their entry
+## plate and their put-in plate saved (`plated`, _reach_plated): the run must
+## have one, the case the board 40d26b16 fix is for (Sol re-check of 2529ca5).
+static func runner_returners(reach: Dictionary, runners: Dictionary, plated: Dictionary) -> Array:
+	var out := []
+	for id: int in reach:
+		var entry: bool = plated.get("entry_returner_p%d" % id, false)
+		if runners.has(id) and entry and plated.get("putin_p%d" % id, false):
+			out.append(id)
+	return out
 
 
 ## The bags `p` is drawn holding this frame, read from CarryOnProps' records
@@ -1918,6 +2124,7 @@ func _report() -> void:
 	if _lane_mode:
 		_report_lane()
 		_report_reach()
+		_report_returner_entry()
 	else:
 		_report_booth()
 	if totals["frames"] < 100:
@@ -1937,7 +2144,7 @@ func _report() -> void:
 	print(FloatCheck.float_report(_floats))
 	for stem in CrossingBodies.report(_bodies):
 		_invalid("no sent passenger showed body %s" % stem)
-	print("LEAD_PLATED %s" % [_lead_plated.keys()])
+	print("LEAD_PLATED %s gave_up=%s" % [_lead_plated.keys(), _lead_given_up().keys()])
 	PlateSteps.lead_sheet(_close_dir)
 	if _floats["float"] > 0 or _floats["grip_off"] > 0:
 		_invalid("bags float or are held off their grip (GRIP_ON): %s" % [_floats])

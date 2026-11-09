@@ -843,7 +843,7 @@ func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 			if trail > m["repulled"]:
 				print(
 					(
-						"REPULLED %s tick %.2f settled %s up %.3f trail %.3f m (> %.2f) move %s"
+						"REPULLED %s tick %.2f settled %s up %.3f trail %.3f m (pass above %.2f) move %s"
 						% [
 							label,
 							_clock.tick + _clock.alpha,
@@ -868,6 +868,12 @@ func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 			)
 		)
 		return false
+	print(
+		(
+			"%s tip strip %d of %d frames (%d of %d refused views spent)"
+			% [label, strip.size(), frames, _strip_refused, STRIP_REFUSALS]
+		)
+	)
 	if turn > 0:
 		var carry := _contact_sheet(strip.slice(0, turn), 3)
 		_save(carry, "%s_carry_strip.png" % label)
@@ -1002,6 +1008,12 @@ func _summary(label: String, m: Dictionary, posture: bool) -> void:
 	)
 	if m["inside"] != 0:
 		_invalid("%s BODY_IN_STOOD_BAG" % label)
+	print(
+		(
+			"%s REPULLED most trail %.3f m behind in the pull (pass above %.2f, %s)"
+			% [label, m["repulled"], TRAIL_M, "pass" if m["repulled"] > TRAIL_M else "FAIL"]
+		)
+	)
 	if m["repulled"] <= TRAIL_M:
 		_invalid("%s REPULLED failed: %.3f" % [label, m["repulled"]])
 	print("%s FLOAT frames %d (0)" % [label, m["floats"]])
@@ -1055,6 +1067,16 @@ func _plate(shot: String, p: Passenger, fresh: bool, strict := true) -> Image:
 		# Over the heads of the standers on the spots beside it (seed 2012072536
 		# and the first run of this fix: every lower view crossed a neighbour).
 		aways += [[out, 4.5], [(-fwd * 0.8 + out * 1.3).normalized(), 4.5], [-fwd, 4.5]]
+		# From the open side of the file (south of the file's row, looking north,
+		# board f610e626): the file walkers set off along the row, so the views
+		# on the roller's side and ahead meet the walkers still in the file, and
+		# on seed 44974 the east views stand behind wall_0 (the tip strip got 5
+		# of 6 frames). The vectors are short enough to keep the camera inside
+		# the airside, in front of the divider wall.
+		var south := Vector3.BACK
+		aways += [[south * 0.7, 2.6], [south * 0.8, 3.4], [south, 4.5]]
+		aways += [[(south + Vector3.LEFT * 0.7).normalized() * 0.8, 3.4]]
+		aways += [[(south + Vector3.RIGHT * 0.7).normalized() * 0.8, 3.4]]
 	# Then round the subject (board f115d5da: beside the gate desk every view on
 	# the roller's side met the desk).
 	for up in [1.6, 3.0] if strict else [1.6]:

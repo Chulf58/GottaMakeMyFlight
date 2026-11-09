@@ -286,15 +286,21 @@ func test_a_side_entry_turns_smoothly_from_its_walk() -> void:
 
 
 ## A returner's second pass through the arch starts beside the unpack cell and
-## is turned as any walker; at the basic scanner nothing sets off. Control: the
-## returner did walk its second pass, and the scanner passenger was served.
-func test_a_returner_and_the_basic_scanner_are_left_alone() -> void:
+## never sets off from it; it is drawn with SecurityLooks.setoff_yaw() only on
+## its arch walk up to the arch cell, where it turns into the arch around the
+## unpack cell's corner (board 40d26b16; before, it was turned as any walker,
+## past the corner, and a runner was 46 degrees off the axis at the arch's
+## entry). At the basic scanner nothing sets off. Control: the returner did walk
+## its second pass and was turned there, and the scanner passenger was served.
+func test_a_returner_turns_only_at_its_corner_and_the_basic_scanner_is_left_alone() -> void:
 	var w := _make()
 	var views := _views_of(w)
 	var sim := w.world.sim
 	var id := w.send(1, false, true)
 	var p := w.world.passenger(id)
 	var second := 0
+	var cornered := 0
+	var unpack: Vector2i = sim.layout.security_lanes.lane(w.station)["unpack"]
 	for i in 3000:
 		w.world.step()
 		views.draw()
@@ -303,7 +309,11 @@ func test_a_returner_and_the_basic_scanner_are_left_alone() -> void:
 		if p.incident_resolved and p.security_phase == SecurityRuntime.Phase.ARCH:
 			second += 1
 			assert_bool(SecurityLooks.setting_off(sim, p)).is_false()
-			assert_bool(is_nan(SecurityLooks.setoff_yaw(sim, p))).is_true()
+			if not is_nan(SecurityLooks.setoff_yaw(sim, p)):
+				cornered += 1
+				assert_int(p.path.size()).is_equal(3)
+				assert_bool(p.path[1] == unpack and p.path_index <= 1).is_true()
+	assert_int(cornered).is_greater(0)
 	var booth := _make(false)
 	var booth_views := _views_of(booth)
 	var bid := booth.send(1)

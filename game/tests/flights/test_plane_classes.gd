@@ -195,6 +195,9 @@ func test_a_one_off_flight_is_drawn_as_the_starters_small_plane() -> void:
 	assert_str(view.model_name).is_equal("tp_plane_03a")
 
 
+## Every model's door is placed where model 05's is, moved only by its
+## door_shift(): model 04 parks STOP_BACK_M further out, away from the terminal
+## (decision plane-04-stops-further-out-with-the-passenger-walk-ending-at).
 func test_every_model_puts_its_passenger_door_where_model_05s_stand_door_is() -> void:
 	var reference: Vector3 = (
 		PlaneModels.PLANES["tp_plane_05a"]["doors"][0] + PlaneClasses.REFERENCE_OFFSET
@@ -202,9 +205,13 @@ func test_every_model_puts_its_passenger_door_where_model_05s_stand_door_is() ->
 	for model: String in PlaneModels.PLANES:
 		var door: Vector3 = PlaneModels.PLANES[model]["doors"][0]
 		var placed := PlaneClasses.stand_offset(model) + door
-		print("%s door placed at %s (reference %s)" % [model, placed, reference])
+		var shift := PlaneClasses.door_shift(model)
+		print("%s door placed at %s (reference %s, shift %s)" % [model, placed, reference, shift])
 		assert_float(placed.x).is_equal_approx(reference.x, 0.001)
-		assert_float(placed.z).is_equal_approx(reference.z, 0.001)
+		assert_float(placed.z).is_equal_approx(reference.z + shift.z, 0.001)
+		assert_float(shift.x).is_equal(0.0)
+		var expected := -1.5 if model == "tp_plane_04a" else 0.0
+		assert_float(shift.z).is_equal_approx(expected, 0.001)
 	# Model 05 keeps the placement the stand was built around.
 	var own := PlaneClasses.stand_offset("tp_plane_05a")
 	assert_float(own.z).is_equal_approx(PlaneClasses.REFERENCE_OFFSET.z, 0.001)
@@ -212,17 +219,18 @@ func test_every_model_puts_its_passenger_door_where_model_05s_stand_door_is() ->
 
 
 ## StandPlacement parks model 05 so its door is at door_point (to 0.2 m along
-## the plane), and every model's door is placed there too. A model's nose lands
-## near model 05's, always on the plane side of the wall line.
+## the plane), and every model's door is placed at its own door_point too. A
+## model's nose lands near model 05's, always on the plane side of the wall
+## line.
 func test_every_model_on_a_stand_has_its_door_at_the_stand_door_and_its_nose_off_the_wall() -> void:
 	var stand := StandPlacement.make(1, 100.0, 40.0)
 	var base := StandPlacement.stand_point(stand)
 	var wall_z := float(stand["wall_z"])
-	var door_z := StandPlacement.door_point(stand).z
 	var nose_05 := base.z + StandPlacement.NOSE_M
 	for model: String in PlaneModels.PLANES:
 		var row: Dictionary = PlaneModels.PLANES[model]
 		var offset := PlaneClasses.stand_offset(model)
+		var door_z := StandPlacement.door_point(stand, model).z
 		var door_at: Vector3 = base + offset + row["doors"][0]
 		var nose_at: float = base.z + offset.z + row["nose"]
 		print(
