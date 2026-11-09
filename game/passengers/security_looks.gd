@@ -383,6 +383,11 @@ static func _mix(value: int) -> int:
 ## walks (decision in-a-cell-closed-on-both-sides-a-passenger-carries-their-
 ## bag). A side-carried bag reaches about 0.55-0.6 m out, more than such a
 ## cell leaves. Standing still, the cell it stands on and its last step count.
+## Held in a boarding file (RollerPark.filed_still()) its path is open but it
+## takes no step, so it counts as standing: with no step taken on the path it
+## reads as it did before the path (false), as no path does, else the cell it
+## stands on and its last step count (board aa2db71d: a stander held at the
+## gate read the step it had not taken, and its stood roller tipped).
 ## A basic scanner booth's cells count as closed on both sides, standing or
 ## walking (decision basic-scanner-booth-passengers-carry-their-bags-in-front-
 ## and): its panels leave about 0.41 m either side of the centre line.
@@ -391,14 +396,17 @@ static func carry_front(sim: PassengerSim, p: Passenger) -> bool:
 		return true
 	if p.path.size() < 2:
 		return false
-	var at := clampi(p.path_index, 0, p.path.size() - 2)
+	var held := p.is_moving() and RollerPark.filed_still(sim, p)
+	if held and p.path_index == 0:
+		return false
+	var at := p.path_index - 1 if held else clampi(p.path_index, 0, p.path.size() - 2)
 	var step := p.path[at + 1] - p.path[at]
 	if step == Vector2i.ZERO:
 		return false
 	var right := world_dir(step).cross(Vector3.UP)
 	var flank := Vector2i(signi(roundi(right.x)), signi(roundi(right.z)))
 	var cells: Array[Vector2i] = [p.at]
-	if p.is_moving():
+	if p.is_moving() and not held:
 		cells.append(p.path[at + 1])
 	for cell in cells:
 		if _closed(sim.grid, cell, flank) and _closed(sim.grid, cell, -flank):
