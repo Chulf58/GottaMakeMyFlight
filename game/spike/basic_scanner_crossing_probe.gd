@@ -1059,18 +1059,26 @@ func _reach_frame(
 		_plate_reach.call_deferred(id, entry, booth)
 
 
-## The bags `p` holds in a hand this frame, each as its kind and hand
-## ("roller/right"), for the max-reach diagnostic: a hand gripping a bag is held
-## out from the leg by the bag (board c58f1719 item 4); "none" for none.
+## The bags `p` is drawn holding this frame, read from CarryOnProps' records
+## (not the sim's homes), for the max-reach diagnostic: a bag a hand grips
+## ("held_by", the drawn holder) as its kind and that hand ("case/right"), and
+## a bag drawn on the body with no hand on it (a backpack on the back, a tote on
+## its shoulder) as worn ("shoulder/worn"). A hand gripping a bag is held out
+## from the leg by the bag (board c58f1719 item 4); "none" for none.
 func _held_bags(p: Passenger) -> String:
 	var out: Array[String] = []
-	var homes := SecurityLooks.bag_homes(_sim, p)
-	for i in homes.size():
-		if homes[i] == SecurityLooks.Home.HAND:
-			var hand := SecurityLooks.hand_of(_sim, p, i)
-			out.append(
-				"%s/%s" % [KIND_NAMES[SecurityLooks.bag_kind(p, i)], ["right", "left"][hand]]
-			)
+	var props := _views.carry_on_props()
+	var kinds: Array = props.props_of(p.id)["kinds"]
+	for i in kinds.size():
+		var bag := props.bag_state(p.id, i)
+		var name: String = KIND_NAMES[kinds[i]]
+		var holder := int(bag.get("held_by", -1))
+		var carry := int(bag.get("carry", -1))
+		var on_body := int(bag.get("place", -1)) / 4 == SecurityLooks.Home.HAND
+		if holder >= 0:
+			out.append("%s/%s" % [name, ["right", "left"][holder]])
+		elif on_body and carry in [SecurityLooks.Carry.BACK, SecurityLooks.Carry.SHOULDER]:
+			out.append("%s/worn" % name)
 	return ",".join(out) if not out.is_empty() else "none"
 
 

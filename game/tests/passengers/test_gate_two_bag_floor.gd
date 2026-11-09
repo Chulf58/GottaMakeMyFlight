@@ -10,6 +10,8 @@ extends GdUnitTestSuite
 
 const PHASES := 8
 const MARGIN_M := 0.01
+## How far (m, flat) a settled floor bag may be drawn off its spot.
+const STILL_M := 0.001
 ## The bag kinds that lie where floor_spot() puts them at a gate chair (a
 ## roller lies beside the feet, GateRoller.spot()).
 const FLOOR_KINDS: Array[SecurityLooks.Kind] = [
@@ -122,15 +124,16 @@ func test_the_old_spot_takes_in_the_standing_feet() -> void:
 
 
 ## Drawn through the views: a two-bag walker sitting down at the reference
-## terminal's first gate chair has its bag that is not a roller lie on the
-## floor at its fixed spot in the chair front's frame (gate_two_bag(), within
-## 1 mm) on every tick it is down and the drawn body did not move since the tick
-## before (standing at the front while the sim shuffles it back onto the chair,
-## the control: the sim moved it, and seated), and clear of its own feet
-## standing at the front and seated there on every tick it is down. Not held:
-## on ticks the drawn body moves (SitHold's ease from the front onto the chair),
-## CarryPlace lays the bag in the body's drawn frame less this tick's sit offset
-## (SitHold.offset()), which is off by the drawn step; that wobble is printed.
+## terminal's first gate chair has its bag that is not a roller lie at its
+## fixed spot in the chair front's frame (gate_two_bag(), within STILL_M) on
+## every frame it is on the floor and settled, the frames the drawn body eases
+## from the front onto the chair included (stepped half a tick at a time, so
+## frames between ticks are drawn too), while the sim moves the body 0.55 m (the
+## control). On each such frame no vertex of the body, posed in that frame's
+## clip at its nearest PHASES point and drawn where the views draw it, lies in
+## the bag. Before board fc38d1b2's fix round the bag was laid in the drawn
+## body's frame less the tick's sit offset and moved 0.087 m while the body
+## eased in.
 func test_the_drawn_floor_bag_lies_still_at_its_spot_clear_of_the_feet() -> void:
 	var p := await _sitting_walker()
 	var props := _views.carry_on_props()
@@ -145,59 +148,67 @@ func test_the_drawn_floor_bag_lies_still_at_its_spot_clear_of_the_feet() -> void
 	var other := 0 if SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER else 1
 	var kind := SecurityLooks.bag_kind(p, other)
 	var want := SecurityLooks.gate_two_bag(b, other).origin
-	var moved := 0.0
 	var start := _world.sim.world_position(p)
-	var still := {}
-	var wobble := 0.0
-	var laid: Array[Transform3D] = []
-	var seated := Transform3D.IDENTITY
-	for n in 60:
-		await _tick()
+	var moved := 0.0
+	var off := 0.0
+	var frames := 0
+	var moving := 0
+	var hits := 0
+	var clips := {}
+	var body := _views.node_for(p.id)
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	var drawn_was := body.global_position
+	for n in 120:
+		_world.clock.advance(SimClock.STEP * 0.5)
+		await get_tree().process_frame
 		moved = maxf(moved, start.distance_to(_world.sim.world_position(p)))
-		if p.stage == Passenger.Stage.SEATED:
-			var at := _world.sim.world_position(p) + GateChairs.offset(_world.sim, p)
-			seated = front.affine_inverse() * Transform3D(front.basis, at)
 		var bag := props.bag_state(p.id, other)
+		var stepped := body.global_position.distance_to(drawn_was) > 0.0001
+		drawn_was = body.global_position
 		if int(bag.get("place", -1)) / 4 != SecurityLooks.Home.FLOOR:
 			continue
 		if props.transfer_progress(p.id, other) < 1.0:
 			continue
 		var xf := front.affine_inverse() * (bag["node"] as Node3D).global_transform
-		laid.append(Transform3D(xf.basis, Vector3(xf.origin.x, 0.0, xf.origin.z)))
-		var off := Vector2(xf.origin.x - want.x, xf.origin.z - want.z).length()
-		if _views.tick_position(p.id, false).is_equal_approx(_views.tick_position(p.id, true)):
-			still[p.stage] = maxf(still.get(p.stage, 0.0), off)
-		else:
-			wobble = maxf(wobble, off)
-	var hits := 0
-	for xf in laid:
-		hits += _inside_scaled(_idle[b], Transform3D.IDENTITY, xf, kind)
-		hits += _inside_scaled(_sit[b], seated, xf, kind)
+		frames += 1
+		moving += int(stepped)
+		off = maxf(off, Vector2(xf.origin.x - want.x, xf.origin.z - want.z).length())
+		var clip: String = body.get_meta(&"clip", "")
+		clips[clip] = clips.get(clip, 0) + 1
+		var poses: Array = {"idle": _idle, "sit_down": _sit_down, "sit_idle": _sit}.get(clip, [])
+		assert_bool(poses.is_empty()).override_failure_message("clip %s" % clip).is_false()
+		if poses.is_empty():
+			continue
+		var phases: Array = poses[b]
+		var at := player.current_animation_position / maxf(player.current_animation_length, 0.001)
+		var pose: PackedVector3Array = phases[clampi(roundi(at * PHASES), 0, phases.size() - 1)]
+		var flat := Transform3D(xf.basis, Vector3(xf.origin.x, 0.0, xf.origin.z))
+		hits += _inside_scaled([pose], front.affine_inverse() * body.global_transform, flat, kind)
 	print(
 		(
 			(
-				"body %d bag %d %s down %d ticks, spot %s; sim moved %.3f m; off the spot on still"
-				+ " ticks by stage %s (< 0.001); wobble while the body eases in %.3f m; vertices"
-				+ " inside %d (0)"
+				"body %d bag %d %s settled on the floor %d frames (%d with the drawn body moving),"
+				+ " spot %s, most off it %.5f m (< %.3f); sim moved %.3f m; clips %s;"
+				+ " vertices inside %d (0)"
 			)
 			% [
 				b,
 				other,
 				SecurityLooks.Kind.keys()[kind],
-				laid.size(),
+				frames,
+				moving,
 				want,
+				off,
+				STILL_M,
 				moved,
-				still,
-				wobble,
+				clips,
 				hits
 			]
 		)
 	)
 	assert_float(moved).is_greater(0.3)
-	assert_bool(still.has(Passenger.Stage.SITTING_DOWN)).is_true()
-	assert_bool(still.has(Passenger.Stage.SEATED)).is_true()
-	for stage: int in still:
-		assert_float(still[stage]).is_less(0.001)
+	assert_int(moving).is_greater(4)
+	assert_float(off).is_less(STILL_M)
 	assert_int(hits).is_equal(0)
 
 
