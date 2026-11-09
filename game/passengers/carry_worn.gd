@@ -18,7 +18,11 @@ const BACK_TOP_OVER_SPINE_M := 0.06
 ## least (a top level with the shoulders meets them as they move; the male
 ## shoulders reach a one-bag pack's top corners unless it hangs 6-9 cm lower).
 ## Measured by game/spike/worn_back_sweep_probe.gd (12 bodies, both clips at
-## 64 moments, the least gap read on an outline 1 cm wider, EDGE_M).
+## 64 moments, the least gap read on an outline 1 cm wider, EDGE_M). The sweep
+## reads the torso only, so the one-bag rows of bodies 9 and 11 put the pack's
+## bottom in the left buttock (skinned to Quad.L) at the walk's stride; they
+## are set from the stride instead, 1 cm clear of the legs with the panel
+## resting on the back (test_worn_back_stride_clear.gd, board 0dd2c787).
 const BACK_ON_SPINE_M: Array[Vector4] = [
 	Vector4(0.086, -0.09, 0.097, 0.03),
 	Vector4(0.082, -0.06, 0.100, 0.00),
@@ -29,9 +33,9 @@ const BACK_ON_SPINE_M: Array[Vector4] = [
 	Vector4(0.081, -0.03, 0.110, 0.06),
 	Vector4(0.073, -0.03, 0.110, 0.06),
 	Vector4(0.072, -0.03, 0.110, 0.06),
-	Vector4(0.073, -0.03, 0.110, 0.06),
+	Vector4(0.088, 0.03, 0.110, 0.06),
 	Vector4(0.065, -0.03, 0.092, 0.03),
-	Vector4(0.072, -0.03, 0.110, 0.06),
+	Vector4(0.088, 0.03, 0.110, 0.06),
 ]
 ## The least panel gap BACK_ON_SPINE_M is measured for.
 const BACK_CLEAR_M := 0.004
