@@ -20,6 +20,7 @@ func before_test() -> void:
 	_flights = auto_free(FlightSim.new()) as FlightSim
 	_flights.open_airport()
 	_desk = auto_free(OfferDesk.new()) as OfferDesk
+	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_desk.rating = _rating
 	_desk.flights = _flights
 	_desk.contract_ended.connect(func(contract: Dictionary) -> void: _left.append(contract))

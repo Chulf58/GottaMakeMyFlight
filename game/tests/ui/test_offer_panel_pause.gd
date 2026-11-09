@@ -19,6 +19,7 @@ func before_test() -> void:
 	add_child(_port)
 	_clock = SimClock.new()
 	_desk = OfferDesk.new()
+	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_sim = FlightSim.new()
 	_port.add_child(_clock)
 	_port.add_child(_desk)

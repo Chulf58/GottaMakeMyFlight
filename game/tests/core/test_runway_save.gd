@@ -103,3 +103,27 @@ func test_a_bad_runway_part_is_refused_and_changes_nothing() -> void:
 	missing.erase("runway")
 	assert_bool(_save.load_world(missing)).is_false()
 	assert_str(_save.message_text()).contains("missing key 'runway'")
+
+
+## A runway too small for a saved offer is refused whole while the load is still
+## staged, and the world is as it was. (The same for a saved contract, in
+## test_save_game_gates.)
+func test_a_small_runway_with_a_medium_offer_is_refused_unchanged() -> void:
+	_flights.runway.size = PlaneClasses.MEDIUM
+	var board := (_main.get_node("OfferDesk") as OfferDesk).board
+	var offers := board.to_snapshot()
+	for offer: Dictionary in offers["offers"]:
+		offer["plane_size"] = PlaneClasses.MEDIUM
+		offer["booked_passengers"] = PlaneClasses.passenger_range(PlaneClasses.MEDIUM)[0]
+	assert_bool(board.from_snapshot(offers)).is_true()
+	var data := _taken()
+	var before := SaveTestKit.checksum(_main)
+	# Control: the unchanged save loads.
+	assert_bool(_save.load_world(data.duplicate(true))).is_true()
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	data["runway"]["size"] = "small"
+	assert_bool(_save.load_world(data)).is_false()
+	print("medium offers, small runway: '%s'" % _save.message_text())
+	assert_str(_save.message_text()).contains("offers: offer")
+	assert_str(_flights.runway.size).is_equal(PlaneClasses.MEDIUM)
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)

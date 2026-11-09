@@ -75,6 +75,7 @@ func test_every_offer_panel_button_is_focus_none() -> void:
 	var port := SubViewport.new()
 	add_child(port)
 	var desk := OfferDesk.new()
+	desk.runway = Runway.new(PlaneClasses.LARGE)
 	var sim := FlightSim.new()
 	port.add_child(desk)
 	port.add_child(sim)

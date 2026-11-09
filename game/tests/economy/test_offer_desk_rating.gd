@@ -15,6 +15,7 @@ func before_test() -> void:
 	_clock.seed_rng(2024)
 	_rating = auto_free(AirportRating.new()) as AirportRating
 	_desk = auto_free(OfferDesk.new()) as OfferDesk
+	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_desk.rating = _rating
 
 
@@ -121,6 +122,7 @@ func test_higher_tiers_show_up_across_days_once_the_rating_is_high() -> void:
 
 func test_a_desk_in_a_scene_without_a_rating_says_so() -> void:
 	var bare := auto_free(OfferDesk.new()) as OfferDesk
+	bare.runway = Runway.new(PlaneClasses.LARGE)
 	bare.clock = _clock
 	bare.flights = auto_free(FlightSim.new()) as FlightSim
 	await (
@@ -132,6 +134,7 @@ func test_a_desk_in_a_scene_without_a_rating_says_so() -> void:
 
 func test_a_desk_in_a_scene_without_flights_says_so() -> void:
 	var bare := auto_free(OfferDesk.new()) as OfferDesk
+	bare.runway = Runway.new(PlaneClasses.LARGE)
 	bare.clock = _clock
 	bare.rating = _rating
 	await (

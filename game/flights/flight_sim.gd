@@ -703,6 +703,12 @@ func load_problem(data: Dictionary) -> String:
 ## flights, and every running or reserving contract's occurrences) that has no
 ## taxi plan; "" for none.
 func _load_plan_problem(loaded: Dictionary) -> String:
+	for contract: Dictionary in loaded["contracts"]:
+		if not runway.takes(contract["plane_size"]):
+			return (
+				"contract %s is a %s plane but the runway is %s"
+				% [contract["id"], contract["plane_size"], runway.size]
+			)
 	var grounds := gate_grounds()
 	var world := {
 		"contracts": loaded["contracts"],

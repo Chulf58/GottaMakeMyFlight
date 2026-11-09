@@ -14,6 +14,7 @@ func before_test() -> void:
 	_clock = auto_free(SimClock.new()) as SimClock
 	_clock.seed_rng(2024)
 	_desk = auto_free(OfferDesk.new()) as OfferDesk
+	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_desk.board.changed.connect(func() -> void: _changes += 1)
 
 
@@ -126,6 +127,7 @@ func test_binding_another_clock_lets_go_of_the_first() -> void:
 
 func test_a_desk_in_a_scene_without_a_clock_fails_loudly_and_stays_empty() -> void:
 	var bare := auto_free(OfferDesk.new()) as OfferDesk
+	bare.runway = Runway.new(PlaneClasses.LARGE)
 	await (
 		assert_error(func() -> void: add_child(bare))
 		. is_push_error("OfferDesk: no clock set, so no offers will ever be drawn")

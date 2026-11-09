@@ -16,6 +16,7 @@ func before_test() -> void:
 	_port.size = Vector2i(1280, 720)
 	add_child(_port)
 	_desk = OfferDesk.new()
+	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_sim = FlightSim.new()
 	_port.add_child(_desk)
 	_port.add_child(_sim)

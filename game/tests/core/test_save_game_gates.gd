@@ -207,4 +207,12 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 	print("refused: %s" % _save.message_text())
 	assert_str(_save.message_text()).contains("contract %s needs a medium gate" % taken)
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	# The same save with a small runway holds a medium contract (and its medium
+	# offers) the runway cannot take: refused while staged, nothing installed.
+	var small_runway := wide.duplicate(true)
+	small_runway["runway"]["size"] = "small"
+	assert_bool(_save.load_world(small_runway)).is_false()
+	print("small runway: %s" % _save.message_text())
+	assert_str(_save.message_text()).contains("is a medium plane but the runway is small")
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
 	assert_bool(_save.load_world(wide)).is_true()
