@@ -113,3 +113,23 @@ func test_strips_with_no_end_on_a_pad_are_left_as_they_are() -> void:
 	assert_int(got.size()).is_equal(2)
 	assert_that(got[0]["rect"]).is_equal(lane["rect"])
 	assert_that(got[1]["rect"]).is_equal(stub["rect"])
+
+
+## Two gates 19 m apart on different wall lines: gate B's pad (wall -180) also
+## holds gate A's stand point, and comes first in the list. Each link still runs
+## on to its own stand's wall line, the pad whose south edge lies NOSE_GAP_M plus
+## NOSE_M south of the stand point.
+func test_overlapping_pads_on_other_wall_lines_carry_each_link_to_its_own_wall() -> void:
+	var gate_b := {"exit": 3, "x": -3.5, "wall_z": -180.0}
+	var at_a := StandPlacement.stand_point(NORTH_STAND)
+	var at_b := StandPlacement.stand_point(gate_b)
+	var pad_a := TaxiPaving.stand_pad(at_a)
+	var pad_b := TaxiPaving.stand_pad(at_b)
+	# Control: B's pad holds A's stand point and reaches further south.
+	assert_bool(pad_b.has_point(Vector2(at_a.x, at_a.z))).is_true()
+	assert_float(pad_b.end.y).is_greater(pad_a.end.y)
+	var routes: Array[PackedVector3Array] = [_lead_in(NORTH_STAND), _lead_in(gate_b)]
+	var got := TaxiPaving.run_on_to_walls(TaxiPaving.strips(routes, LANE_Z), [pad_b, pad_a])
+	print("A %s B %s" % [_link(got, at_a.x), _link(got, at_b.x)])
+	assert_float(_link(got, at_a.x).end.y).is_equal_approx(float(NORTH_STAND["wall_z"]), 0.001)
+	assert_float(_link(got, at_b.x).end.y).is_equal_approx(float(gate_b["wall_z"]), 0.001)

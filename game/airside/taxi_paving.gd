@@ -126,9 +126,12 @@ func show_routes(
 
 
 ## `strip_list` (as strips() returns them) with each north-south strip whose
-## south end lies on one of `pad_list`'s pads carried on to that pad's south
-## edge, the stand's wall line, so its band ends under the site's paving and not
-## on the pad. Other strips are returned as they are.
+## south end is a stand point on its own pad in `pad_list` carried on to that
+## pad's south edge, the stand's wall line, so its band ends under the site's
+## paving and not on the pad. A stand's own pad is the one holding the end whose
+## south edge lies NOSE_GAP_M plus NOSE_M south of it (stand_pad()), so a
+## neighbour's overlapping pad on another wall line is never taken. Other strips
+## are returned as they are.
 static func run_on_to_walls(
 	strip_list: Array[Dictionary], pad_list: Array[Rect2]
 ) -> Array[Dictionary]:
@@ -138,8 +141,9 @@ static func run_on_to_walls(
 		var carried := strip
 		if strip["across_x"] and not strip.has("quad"):
 			var end := Vector2(rect.get_center().x, rect.end.y)
+			var wall_z := end.y + StandPlacement.NOSE_GAP_M + StandPlacement.NOSE_M
 			for pad in pad_list:
-				if pad.grow(SAME_M).has_point(end) and pad.end.y > rect.end.y + SAME_M:
+				if pad.grow(SAME_M).has_point(end) and absf(pad.end.y - wall_z) < SAME_M:
 					carried = strip.duplicate()
 					carried["rect"] = Rect2(
 						rect.position, Vector2(rect.size.x, pad.end.y - rect.position.y)
