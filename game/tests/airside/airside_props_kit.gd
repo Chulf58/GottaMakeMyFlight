@@ -4,6 +4,19 @@ extends RefCounted
 ## scene, and a plane model parked or posed as PlaneView draws it.
 
 const MAIN_SCENE := "res://main/main.tscn"
+## How far _inside() casts each ray. Geometry3D.segment_intersects_triangle
+## drops a hit nearer the start than 1e-5 of the segment, so a 10 km ray
+## misses a face 0.1 m away; 100 m covers any plane and misses only 1 mm.
+const ENCLOSE_REACH_M := 100.0
+## The six ray directions _inside() casts: each axis both ways, skewed.
+const ENCLOSE_RAYS: Array[Vector3] = [
+	Vector3(1.0, 0.013, 0.021),
+	Vector3(-1.0, -0.017, 0.011),
+	Vector3(0.019, 1.0, -0.013),
+	Vector3(-0.011, -1.0, 0.017),
+	Vector3(0.023, -0.009, 1.0),
+	Vector3(-0.015, 0.019, -1.0),
+]
 
 
 ## A new Airside carrying main.tscn's Marker3D waypoints and links. The caller
@@ -68,21 +81,80 @@ static func crossings(a: Node3D, b: Node3D) -> Dictionary:
 	return {"count": count, "meshes": meshes}
 
 
-## The smallest gap from a vertex of `a`'s visible meshes to the bounds of one
-## of `b`'s, each box in its own mesh's frame: {"gap" (metres, 0 inside a box),
-## "a_mesh", "b_mesh"}. The boxes hold their meshes, so the gap never exceeds
-## the true clearance, and a part of `a` lying wholly inside `b` (which
-## crossings() cannot see) reads 0.
+## The parts (visible meshes) of `a` lying inside a closed mesh of `b`, and of
+## `b` inside one of `a`'s: {"count", "parts": "<part> in <mesh>" each}. A
+## part with no edge crossing (crossings()) lies wholly inside or wholly
+## outside each mesh, so one vertex of it decides (_inside()). With 0
+## crossings and 0 nested, the meshes neither meet nor nest.
+static func nested(a: Node3D, b: Node3D) -> Dictionary:
+	var parts: Array[String] = []
+	for pair: Array in [[a, b], [b, a]]:
+		for part in _visible_meshes(pair[0]):
+			var faces := part.mesh.get_faces()
+			if faces.is_empty():
+				continue
+			var at := part.global_transform * faces[0]
+			for mesh in _visible_meshes(pair[1]):
+				if _inside(at, mesh):
+					parts.append("%s in %s" % [part.name, mesh.name])
+	return {"count": parts.size(), "parts": parts}
+
+
+## Whether `point` (world) lies inside the mesh of `mi`: a ray each way
+## along every axis (skewed a little, so none grazes an axis-aligned edge)
+## meets one of its triangles. Unlike a parity count it does not need the mesh
+## closed, unless one of the six rays leaves through an opening. A point it
+## wrongly calls inside (in a deep concavity) can only fail a test, never pass
+## one.
+static func _inside(point: Vector3, mi: MeshInstance3D) -> bool:
+	var faces := mi.mesh.get_faces()
+	for i in range(0, faces.size(), 3):
+		for j in 3:
+			faces[i + j] = mi.global_transform * faces[i + j]
+	for axis: Vector3 in ENCLOSE_RAYS:
+		var far := point + axis * ENCLOSE_REACH_M
+		var met := false
+		for i in range(0, faces.size(), 3):
+			if (
+				Geometry3D.segment_intersects_triangle(
+					point, far, faces[i], faces[i + 1], faces[i + 2]
+				)
+				!= null
+			):
+				met = true
+				break
+		if not met:
+			return false
+	return true
+
+
+## The vertex-to-box gap between `a` and `b`, both ways: {"gap": the smaller
+## of "a_to_b" and "b_to_a"}, each {"gap", "from", "into"} from vertex_gap().
+## A diagnostic, not a test of contact: a box is looser than its mesh (a
+## curved fuselage's box takes in air beside it), so a 0 can be a near miss,
+## and the gap is not a bound on the true clearance either, because the
+## nearest points can lie mid-face or mid-edge, away from every vertex.
 static func clearance(a: Node3D, b: Node3D) -> Dictionary:
+	var a_to_b := vertex_gap(a, b)
+	var b_to_a := vertex_gap(b, a)
+	return {
+		"gap": minf(a_to_b["gap"], b_to_a["gap"]),
+		"a_to_b": a_to_b,
+		"b_to_a": b_to_a,
+	}
+
+
+## The smallest gap from a vertex of `from`'s visible meshes to the bounds of
+## one of `into`'s, each box in its own mesh's frame: {"gap" (metres, 0 inside
+## a box), "from", "into": the two mesh names}. Each box holds its mesh, so a
+## vertex inside a mesh reads 0.
+static func vertex_gap(from: Node3D, into: Node3D) -> Dictionary:
 	var boxes: Array[Dictionary] = []
-	for mi: MeshInstance3D in b.find_children("*", "MeshInstance3D", true, false):
-		if mi.is_visible_in_tree() and mi.mesh != null:
-			boxes.append({"inv": mi.global_transform.affine_inverse(), "box": mi.get_aabb()})
-			boxes[-1]["mesh"] = String(mi.name)
-	var out := {"gap": INF, "a_mesh": "", "b_mesh": ""}
-	for mi: MeshInstance3D in a.find_children("*", "MeshInstance3D", true, false):
-		if not mi.is_visible_in_tree() or mi.mesh == null:
-			continue
+	for mi in _visible_meshes(into):
+		var inv := mi.global_transform.affine_inverse()
+		boxes.append({"inv": inv, "box": mi.get_aabb(), "mesh": String(mi.name)})
+	var out := {"gap": INF, "from": "", "into": ""}
+	for mi in _visible_meshes(from):
 		for v in mi.mesh.get_faces():
 			var w := mi.global_transform * v
 			for entry: Dictionary in boxes:
@@ -90,7 +162,19 @@ static func clearance(a: Node3D, b: Node3D) -> Dictionary:
 				var p: Vector3 = entry["inv"] * w
 				var gap := (p.clamp(box.position, box.end) - p).length()
 				if gap < out["gap"]:
-					out = {"gap": gap, "a_mesh": String(mi.name), "b_mesh": entry["mesh"]}
+					out = {"gap": gap, "from": String(mi.name), "into": entry["mesh"]}
+	return out
+
+
+## `node` and the MeshInstance3Ds under it that are on show and have a mesh.
+static func _visible_meshes(node: Node3D) -> Array[MeshInstance3D]:
+	var out: Array[MeshInstance3D] = []
+	var found := node.find_children("*", "MeshInstance3D", true, false)
+	if node is MeshInstance3D:
+		found.append(node)
+	for mi: MeshInstance3D in found:
+		if mi.is_visible_in_tree() and mi.mesh != null:
+			out.append(mi)
 	return out
 
 
