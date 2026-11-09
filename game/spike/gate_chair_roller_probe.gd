@@ -513,7 +513,12 @@ func _measure(i: int) -> bool:
 					% [s["name"], flat.length(), GateRoller.slide_of(p), count]
 				)
 			)
-			await _plate("shuffle_%s" % s["name"], [i], false)
+		# Tried on each shuffle frame from the first one wanted until a view
+		# proves it: a guest walking past with its roller can hide this one for
+		# a frame or two (pair1_a's rods past pair1_b). _summary() fails a
+		# shuffle that never proved one.
+		if s.has("shuffle_shot") and not s.get("shuffle_ok", false):
+			s["shuffle_ok"] = await _plate("shuffle_%s" % s["name"], [i], false, false)
 	for pair: Array in _pairs:
 		if i in pair:
 			var other: Dictionary = _subjects[pair[0] if pair[1] == i else pair[1]]
@@ -995,6 +1000,8 @@ func _summary() -> void:
 		)
 		if s["stand_max"] < 0 or s["seated_max"] < 0 or s.get("control", 0) <= 0:
 			_invalid("%s was not measured standing and seated, or its control is 0" % s["name"])
+		if s.has("shuffle_shot") and not s.get("shuffle_ok", false):
+			_invalid("shuffle_%s: no shuffle frame proved it in sight" % s["name"])
 		if not s["stood_shot"]:
 			_invalid("stand_%s: no frame standing at the front proved it in sight" % s["name"])
 
