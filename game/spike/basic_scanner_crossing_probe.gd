@@ -1255,10 +1255,27 @@ func _report_returner_entry() -> void:
 			_invalid("no entry plate of returner %d's second pass was saved" % id)
 	if putins.is_empty():
 		_invalid("no returner's bag was plated half way into its tray")
+	var running := runner_returners(_returner_reach, _runners, _reach_plated)
+	print("RETURNER_ENTRY_RUNNERS sampled_and_plated=%s" % [running])
+	if running.is_empty():
+		_invalid("no running returner was sampled at the arch's entry with both its plates")
 	if _returner_reach.is_empty():
 		_invalid("no returner's second pass was sampled at the arch's entry")
 	if over > 0:
 		_invalid("%d returner passes reach past the arch's half opening at its entry" % over)
+
+
+## The returners sampled at the arch's entry on their second pass (`reach`,
+## _returner_reach) that are runners (`runners`, _runners) with their entry
+## plate and their put-in plate saved (`plated`, _reach_plated): the run must
+## have one, the case the board 40d26b16 fix is for (Sol re-check of 2529ca5).
+static func runner_returners(reach: Dictionary, runners: Dictionary, plated: Dictionary) -> Array:
+	var out := []
+	for id: int in reach:
+		var entry: bool = plated.get("entry_returner_p%d" % id, false)
+		if runners.has(id) and entry and plated.get("putin_p%d" % id, false):
+			out.append(id)
+	return out
 
 
 ## The bags `p` is drawn holding this frame, read from CarryOnProps' records

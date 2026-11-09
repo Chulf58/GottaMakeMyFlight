@@ -23,6 +23,10 @@ const SAME_M := 0.001
 ## A bag lies in its tray when drawn this near the tray's origin (m): a tray is
 ## about 0.6 m long and a bag's centre lies on its floor.
 const IN_TRAY_M := 0.35
+## The late flag is cleared on each of the first this many ticks of a runner's
+## arch walk: every tick of it that a tick of the walk follows (a runner walks
+## it in 11 ticks, from 825 mm before the unpack cell's centre to 925 mm past).
+const FLIP_TICKS := 10
 
 var _worlds: Array[SecurityTestWorld] = []
 var _views: Array[PassengerViews] = []
@@ -169,10 +173,14 @@ func test_a_view_first_drawn_mid_put_in_draws_the_same_bags_and_hands() -> void:
 ## the put-in and the turn are read from the distance walked, not the pace
 ## (Sol review of 893d5cc: read from the pace, the bags went back to the hand
 ## and the body turned back). One world per tick the flag clears on, from the
-## arch walk's first tick on. Control: every world turned and put its bag in.
+## arch walk's first tick on: the flag is set before every tick, true up to
+## that tick and false from it (the sim works lateness out again every few
+## ticks, so it is not left to clear). A world counts only when the flag was
+## true on the tick before and the next tick was walked at walking pace (the
+## flip took). Control: every world flipped, turned and put its bag in.
 func test_a_late_flag_that_clears_never_turns_the_put_in_or_the_turn_back() -> void:
 	var flips := 0
-	for clear_at in 12:
+	for clear_at in FLIP_TICKS:
 		var w := _make()
 		var p := w.world.passenger(w.send_all([[1, false, true]])[0])
 		var axis := atan2(0.0, -1.0)
@@ -182,14 +190,24 @@ func test_a_late_flag_that_clears_never_turns_the_put_in_or_the_turn_back() -> v
 		var turned_back := 0
 		var last_off := INF
 		var in_tray := 0
+		var was_late := false
+		var flipped_at := NAN
+		var after_flip := -1.0
 		for n in 3000:
 			if walked < clear_at:
 				p.late = true
+			else:
+				if is_nan(flipped_at) and was_late:
+					flipped_at = SecurityLooks.return_walk_mm(w.world.sim, p)
+				p.late = false
+			was_late = p.late
 			w.world.step()
 			if w.cleared.has(p.id):
 				break
 			if is_nan(SecurityLooks.return_walk_mm(w.world.sim, p)):
 				continue
+			if not is_nan(flipped_at) and after_flip < 0.0:
+				after_flip = SecurityLooks.return_walk_mm(w.world.sim, p) - flipped_at
 			walked += 1
 			var now: Array = SecurityLooks.bag_homes(w.world.sim, p)
 			for i in mini(now.size(), was.size()):
@@ -206,18 +224,28 @@ func test_a_late_flag_that_clears_never_turns_the_put_in_or_the_turn_back() -> v
 		print(
 			(
 				(
-					"late clears after %d arch-walk ticks: back to the hand %d, into the tray"
-					+ " %d, turned back %d, last off %.3f rad"
+					"late clears after %d of %d arch-walk ticks (at %.0f mm, next tick %.0f mm):"
+					+ " back to the hand %d, into the tray %d, turned back %d, last off %.3f rad"
 				)
-				% [clear_at, back, in_tray, turned_back, last_off]
+				% [
+					clear_at,
+					walked + 1,
+					flipped_at,
+					after_flip,
+					back,
+					in_tray,
+					turned_back,
+					last_off
+				]
 			)
 		)
+		assert_float(after_flip).is_equal(float(PassengerSim.WALK_MM))
 		assert_int(back).is_equal(0)
 		assert_int(turned_back).is_equal(0)
 		assert_int(in_tray).is_equal(1)
 		assert_float(last_off).is_less(0.01)
-		flips += 1
-	assert_int(flips).is_equal(12)
+		flips += int(after_flip == float(PassengerSim.WALK_MM))
+	assert_int(flips).is_equal(FLIP_TICKS)
 
 
 func _make() -> SecurityTestWorld:
