@@ -1,8 +1,9 @@
 extends SceneTree
 ## Windowed plate probe for the airside props (board 4c08b8e5, Runway R11): the
 ## towbarless tug in pushback, the jet bridge docked at a medium and a large
-## stand, the bridge over the passengers' apron walk, and the turn-off taxi
-## signs at play range at 1x and 2.5x. It answers the item's three open
+## stand, the bridge swung clear of planes 03 and 04, which it cannot dock
+## (board 82a139d0), the bridge over the passengers' apron walk, and the
+## turn-off taxi signs at play range at 1x and 2.5x. It answers the item's three open
 ## questions with plates and numbers; it rules nothing.
 ##
 ## Run (one windowed Godot run project-wide; hold tools/blender/out/.windowed.lock):
@@ -28,6 +29,7 @@ extends SceneTree
 ## models 05, 06 and 07 against a passenger's height (c).
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
+const Kit := preload("res://tests/airside/airside_props_kit.gd")
 const PASSENGER := preload("res://assets/people/tcp_male_character_01.glb")
 const MAIN_SCENE := "res://main/main.tscn"
 const OUT_REL := "res://../tools/blender/out/runway_r11"
@@ -42,8 +44,6 @@ const PUSH_STRIP: Array[float] = [0.12, 0.55, 0.95]
 const WALK_STEP_M := 0.1
 const BODY_RADIUS_M := 0.3
 const SHEET_TILE := Vector2i(480, 270)
-## How far the clip control lifts plane 03 into the parked bridge.
-const CLIP_LIFT_M := 1.5
 ## Yaws tried, in order, for the close pushback strip (all north of the wall).
 const STRIP_YAWS: Array[float] = [135.0, 225.0, 100.0, 260.0]
 ## Camera offsets from the walk's lowest point tried for the walk side plate.
@@ -238,7 +238,9 @@ func _tug_plates() -> void:
 func _bridge_plates() -> void:
 	var entry: Dictionary = _airside.props.bridges[_gate]
 	var bridge: Node3D = entry["node"]
-	for model: String in ["tp_plane_05a", "tp_plane_07a", "tp_plane_06a", "tp_plane_04a"]:
+	for model: String in [
+		"tp_plane_05a", "tp_plane_07a", "tp_plane_06a", "tp_plane_04a", "tp_plane_03a"
+	]:
 		var plane := _pose(model, _class_of(model), FlightSim.State.BOARDING, 0.0)
 		await _frames(2)
 		_add_colliders(bridge)
@@ -259,7 +261,8 @@ func _bridge_plates() -> void:
 		)
 		# Question (c): the bridge underside over the gate's walk.
 		_walk_clearance(model, bridge)
-		if model == "tp_plane_04a":
+		if model == "tp_plane_04a" or model == "tp_plane_03a":
+			await _clear_plates(model, plane, door, bridge)
 			continue
 		if not entry["docked"]:
 			_invalid("%s: the bridge did not dock" % model)
@@ -271,87 +274,63 @@ func _bridge_plates() -> void:
 			await _save(name)
 
 
-## Blocker 3: whether plane 03 at its stand meets the parked bridge. Counts
-## mesh edges of either that cross a triangle of the other. Control: the same
-## count with the plane lifted CLIP_LIFT_M into the bridge must be positive.
+## Planes 03 and 04, which the rig cannot dock, against the bridge swung clear
+## (JetBridgePose.parked_clear()): plates from the terminal side and from high
+## over the apron, with the bridge wholly in frame and seen.
+func _clear_plates(model: String, plane: Node3D, door: Vector3, bridge: Node3D) -> void:
+	var entry: Dictionary = _airside.props.bridges[_gate]
+	if not entry["clear"]:
+		_invalid("%s: the bridge did not swing clear" % model)
+		return
+	var focus := door.lerp(bridge.global_position, 0.5)
+	for view: Vector3 in [Vector3(60.0, 32.0, 34.0), Vector3(150.0, 62.0, 40.0)]:
+		_aim(focus, view.x, view.y, view.z)
+		await _frames(3)
+		var name := "bridge_clear_%s_yaw%03d.png" % [model.substr(9, 2), roundi(view.x)]
+		if _prove(name, [bridge], true) and _prove_seen(name, plane):
+			await _save(name)
+
+
+## Blocker 3 of R11, closed by board 82a139d0: whether planes 03 and 04 at the
+## stand meet the bridge as the game poses it (swung clear). Counts mesh edges
+## of either that cross a triangle of the other (Kit.crossings()). Control: the
+## same count against the plain parked pose (JetBridgePose.parked()), which the
+## R11 lane measured cutting plane 03, must be positive.
 func _clip_stage() -> void:
-	var plane := _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.BOARDING, 0.0)
-	await _frames(1)
 	var entry: Dictionary = _airside.props.bridges[_gate]
 	var bridge: Node3D = entry["node"]
-	var found := _crossings(plane, bridge)
-	_view.position.y += CLIP_LIFT_M
-	var control := _crossings(plane, bridge)
-	_view.position.y -= CLIP_LIFT_M
-	print(
-		(
+	for model: String in ["tp_plane_03a", "tp_plane_04a"]:
+		var plane := _pose(model, _class_of(model), FlightSim.State.BOARDING, 0.0)
+		await _frames(1)
+		var posed: Dictionary = entry["pose"]
+		var found := Kit.crossings(plane, bridge)
+		var spot := JetBridgePose.stand_door(entry["stand"])
+		JetBridgePose.apply(
+			entry["joints"], JetBridgePose.parked(entry["root"], spot, Vector3.RIGHT)
+		)
+		var control := Kit.crossings(plane, bridge)
+		JetBridgePose.apply(entry["joints"], posed)
+		print(
 			(
-				"CLIP plane 03 at the stand, bridge docked %s: %d edge crossings (plane meshes %s);"
-				+ " control, plane lifted %.1f m: %d crossings (plane meshes %s)"
-			)
-			% [
-				entry["docked"],
-				found["count"],
-				found["meshes"],
-				CLIP_LIFT_M,
-				control["count"],
-				control["meshes"],
-			]
-		)
-	)
-	if control["count"] == 0:
-		_invalid("the clip control found no crossing with the plane lifted into the bridge")
-
-
-## Edges of `a`'s visible triangles crossing `b`'s, and back: {"count",
-## "meshes": the names of `a`'s meshes involved}.
-func _crossings(a: Node3D, b: Node3D) -> Dictionary:
-	var a_tris := _world_tris(a)
-	var b_tris := _world_tris(b)
-	var count := 0
-	var meshes: Array[String] = []
-	for ta: Dictionary in a_tris:
-		var hits := 0
-		for tb: Dictionary in b_tris:
-			if not (ta["box"] as AABB).intersects(tb["box"]):
-				continue
-			hits += _edges_cross(ta["p"], tb["p"]) + _edges_cross(tb["p"], ta["p"])
-		if hits > 0:
-			count += hits
-			if not meshes.has(ta["mesh"]):
-				meshes.append(ta["mesh"])
-	return {"count": count, "meshes": meshes}
-
-
-## How many of triangle `edges`' three edges cross triangle `face`.
-func _edges_cross(edges: PackedVector3Array, face: PackedVector3Array) -> int:
-	var n := 0
-	for i in 3:
-		var hit: Variant = Geometry3D.segment_intersects_triangle(
-			edges[i], edges[(i + 1) % 3], face[0], face[1], face[2]
-		)
-		n += 1 if hit != null else 0
-	return n
-
-
-## `node`'s visible triangles in world space: {"p": three points, "box", "mesh"}.
-func _world_tris(node: Node3D) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	for mi in _meshes(node):
-		if not mi.is_visible_in_tree() or mi.mesh == null:
-			continue
-		var faces := mi.mesh.get_faces()
-		for i in range(0, faces.size(), 3):
-			var p := PackedVector3Array(
-				[
-					mi.global_transform * faces[i],
-					mi.global_transform * faces[i + 1],
-					mi.global_transform * faces[i + 2],
+				(
+					"CLIP %s at the stand, bridge clear %s docked %s yaw %.1f deg: %d edge"
+					+ " crossings (plane meshes %s); control, plain parked pose: %d crossings"
+					+ " (plane meshes %s)"
+				)
+				% [
+					model,
+					entry["clear"],
+					entry["docked"],
+					rad_to_deg(posed["yaw"]),
+					found["count"],
+					found["meshes"],
+					control["count"],
+					control["meshes"],
 				]
 			)
-			var box := AABB(p[0], Vector3.ZERO).expand(p[1]).expand(p[2]).grow(0.001)
-			out.append({"p": p, "box": box, "mesh": String(mi.name)})
-	return out
+		)
+		if control["count"] == 0:
+			_invalid("%s: the clip control found no crossing with the plain parked bridge" % model)
 
 
 func _walk_plates() -> void:
