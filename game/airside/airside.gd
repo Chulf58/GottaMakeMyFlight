@@ -107,6 +107,8 @@ var gate_stands: Dictionary = {}
 var gate_classes: Dictionary = {}
 ## The asphalt under the taxi routes, rebuilt with the graph.
 var paving := TaxiPaving.new()
+## The jet bridges and taxi signs (board 4c08b8e5), laid out with the paving.
+var props := AirsideProps.new()
 ## Whether the last rebuild() succeeded. set_gate_stands() skips a call with
 ## the stands already set only while it did, so a failed call fails again.
 var _built := false
@@ -114,6 +116,7 @@ var _built := false
 
 func _init() -> void:
 	add_child(paving)
+	add_child(props)
 
 
 func _ready() -> void:
@@ -173,6 +176,7 @@ func _show_paving() -> void:
 	paving.show_routes(
 		taxi_routes(), StandPlacement.TAXI_LANE_Z, stand_pads(), hold_points(), runway_south()
 	)
+	props.show_layout(gate_stands, taxi_routes())
 
 
 ## The pad under every stand in use (TaxiPaving.stand_pad()): a gate's for the

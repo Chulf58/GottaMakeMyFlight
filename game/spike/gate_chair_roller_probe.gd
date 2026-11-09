@@ -33,6 +33,10 @@ extends SceneTree
 ##     the roller's meshes hold them (rods and pull grip marked "rod"), the
 ##     bones they are skinned to most, where they lie in the chair front's frame,
 ##     and the body's clip, crossfade weight, offset and turn off that frame.
+##   RUN: a subject's pulled roller against every other subject's lying
+##     roller along the row (_roller_run(), board 11922532): frames near, frames
+##     with the pulled roller's points inside the lying one's meshes, with a
+##     twin control. Measured, not failed on.
 ## Plates: stand_<subject> (the first frame the roller is down with the walker
 ## still standing at the front), shuffle_<subject> (the first shuffle frame with
 ## SHUFFLE_SHOT body points or more in its roller, or mid-shuffle onto a middle
@@ -52,13 +56,17 @@ extends SceneTree
 ##     [--two-bag]
 ##
 ## Plates go to tools/blender/out/gate-chair-turned/ (gate-chair-turned-two-bag/
-## with --two-bag).
+## with --two-bag), or tools/blender/out/<dir>/ with --out=<dir>.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
-const OUT_REL := "res://../tools/blender/out/gate-chair-turned"
+const OUT_ROOT := "res://../tools/blender/out"
+const OUT_REL := OUT_ROOT + "/gate-chair-turned"
+## A pulled roller whose body box middle is this close (m) to another
+## subject's lying roller's is near it (RUN's control that the pair met).
+const RUN_NEAR_M := 1.0
 const MARGIN_PX := 8.0
 const MIN_BODY_PX := 120.0
 const MIN_ON := 3
@@ -123,6 +131,10 @@ var _sheet: Array[Image] = []
 var _subjects: Array[Dictionary] = []
 ## Pairs: [index of the left guest's record, index of the right guest's].
 var _pairs: Array = []
+## RUN records by "<pulled subject>><lying subject>" (_roller_run()).
+var _runs: Dictionary = {}
+## [plain walk m, walk round the fronts m] per subject (_add()).
+var _walks: Array = []
 
 
 func _initialize() -> void:
@@ -130,17 +142,37 @@ func _initialize() -> void:
 	_seed = randi()
 	_two_bag = "--two-bag" in OS.get_cmdline_user_args()
 	var out_rel := OUT_REL + ("-two-bag" if _two_bag else "")
-	_out_dir = ProjectSettings.globalize_path(out_rel).simplify_path()
 	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--seed="):
+		if arg.begins_with("--out="):
+			var dir := arg.get_slice("=", 1)
+			if not _out_ok(dir):
+				print("PROBE_INVALID --out=%s is not a relative folder under %s" % [dir, OUT_ROOT])
+				quit(1)
+				return
+			out_rel = OUT_ROOT.path_join(dir)
+		elif arg.begins_with("--seed="):
 			_seed = int(arg.get_slice("=", 1))
 		elif arg == "--no-plates":
 			_no_plates = true
 		elif arg.begins_with("--trace="):
 			_trace = arg.get_slice("=", 1)
+	_out_dir = ProjectSettings.globalize_path(out_rel).simplify_path()
+	var under := ProjectSettings.globalize_path(OUT_ROOT).simplify_path() + "/"
+	if not _out_dir.begins_with(under):
+		print("PROBE_INVALID plate folder %s is not under %s" % [_out_dir, under])
+		quit(1)
+		return
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE sim_seed=%d out_dir=%s" % [_seed, _out_dir])
 	_run.call_deferred()
+
+
+## Whether `dir` (--out=) names a folder under OUT_ROOT: not empty, not
+## absolute, no drive or backslash, no ".." part.
+static func _out_ok(dir: String) -> bool:
+	if dir.is_empty() or dir.is_absolute_path() or ":" in dir or "\\" in dir:
+		return false
+	return ".." not in dir.split("/")
 
 
 func _run() -> void:
@@ -313,7 +345,16 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int, bags := 1) -
 	p.seat_piece = Relocation.placement(_sim.grid, seat["object_id"])
 	var path: Array[Vector2i] = [p.at]
 	if p.at != seat["front"]:
-		path.assign(_sim.grid.find_path(p.at, seat["front"]))
+		# The walk GateCapacity gives a seat claim, round the other fronts.
+		path.assign(GateRowWalk.path(_sim, p.at, seat["front"], seat["cell"]))
+		var plain := _sim.grid.find_path(p.at, seat["front"])
+		_walks.append([_walk_m(plain), _walk_m(path)])
+		print(
+			(
+				"WALK %s plain %.2f m %s, round the fronts %.2f m %s"
+				% [label, _walk_m(plain), plain, _walk_m(path), path]
+			)
+		)
 	p.set_path(path)
 	p.boarding_tick = _clock.tick + 100000
 	_clock.ticked.connect(func(_t: int) -> void: p.late = false)
@@ -355,6 +396,7 @@ func _watch() -> void:
 	while _clock.tick < limit:
 		await _step()
 		_trace_row()
+		await _roller_run()
 		var all_down := true
 		for i in _subjects.size():
 			await _hand_watch(i)
@@ -471,7 +513,12 @@ func _measure(i: int) -> bool:
 					% [s["name"], flat.length(), GateRoller.slide_of(p), count]
 				)
 			)
-			await _plate("shuffle_%s" % s["name"], [i], false)
+		# Tried on each shuffle frame from the first one wanted until a view
+		# proves it: a guest walking past with its roller can hide this one for
+		# a frame or two (pair1_a's rods past pair1_b). _summary() fails a
+		# shuffle that never proved one.
+		if s.has("shuffle_shot") and not s.get("shuffle_ok", false):
+			s["shuffle_ok"] = await _plate("shuffle_%s" % s["name"], [i], false, false)
 	for pair: Array in _pairs:
 		if i in pair:
 			var other: Dictionary = _subjects[pair[0] if pair[1] == i else pair[1]]
@@ -612,8 +659,93 @@ func _pick_up() -> void:
 	var limit := _clock.tick + PICK_TICKS
 	while _clock.tick < limit:
 		await _step()
+		await _roller_run()
 		for i in _subjects.size():
 			await _hand_watch(i)
+
+
+## RUN (board 11922532): on every frame, each subject's roller pulled in a
+## hand (no park under way) against every other subject's roller lying on the
+## floor (the lay-down over) within RUN_NEAR_M: the frames near ("near", the
+## control that they met), the frames with points of the pulled roller's
+## meshes (rods and grip in) inside the lying roller's meshes (CarryContact),
+## the most points on one frame, and the most the two body boxes (_bag_box())
+## overlap on their least axis. Control on the first near frame: the same
+## points inside a twin of the lying roller put where the pulled one is (> 0).
+## A plate from above, run_<pulled>_<lying>, on the first frame with points in.
+func _roller_run() -> void:
+	var props := _views.carry_on_props()
+	for si in _subjects.size():
+		var s := _subjects[si]
+		var p: Passenger = s["p"]
+		var bag := props.bag_state(p.id, s["bag"])
+		var place := int(bag.get("place", -1))
+		if place / 4 != SecurityLooks.Home.HAND or place % 2 != 0 or bag.get("park", false):
+			continue
+		var pulled: Node3D = props.props_of(p.id)["bags"][s["bag"]]
+		var points := PackedVector3Array()
+		for oi in _subjects.size():
+			var o := _subjects[oi]
+			var q: Passenger = o["p"]
+			var lying_place := int(props.bag_state(q.id, o["bag"]).get("place", -1))
+			if oi == si or lying_place / 4 != SecurityLooks.Home.FLOOR:
+				continue
+			if props.transfer_progress(q.id, o["bag"]) < 1.0:
+				continue
+			var lying: Node3D = props.props_of(q.id)["bags"][o["bag"]]
+			var mine := _bag_box(pulled)
+			var theirs := _bag_box(lying)
+			if mine.get_center().distance_to(theirs.get_center()) > RUN_NEAR_M:
+				continue
+			var key := "%s>%s" % [s["name"], o["name"]]
+			if not _runs.has(key):
+				_runs[key] = {"near": 0, "hit": 0, "most": 0, "box": 0.0, "control": -1}
+			var run: Dictionary = _runs[key]
+			if points.is_empty():
+				points = _mesh_points(pulled)
+			run["near"] += 1
+			if int(run["control"]) < 0:
+				var twin := lying.duplicate() as Node3D
+				root.add_child(twin)
+				twin.global_transform = pulled.global_transform
+				twin.visible = false
+				run["control"] = CarryContact.inside_meshes(points, twin)
+				twin.free()
+			var count := CarryContact.inside_meshes(points, lying)
+			var over := mine.intersection(theirs)
+			var depth := minf(over.size.x, minf(over.size.y, over.size.z))
+			run["box"] = maxf(float(run["box"]), depth if over.has_volume() else 0.0)
+			if count <= 0:
+				continue
+			run["hit"] += 1
+			run["most"] = maxi(int(run["most"]), count)
+			print(
+				(
+					"RUN_HIT %s tick %d points %d box overlap %.3f m pulled at %s lying at %s"
+					% [key, _clock.tick, count, depth, mine.get_center(), theirs.get_center()]
+				)
+			)
+			if not run.get("shot", false):
+				var shot := "run_%s_%s" % [s["name"], o["name"]]
+				run["shot"] = await _plate(shot, [si, oi], true, false)
+
+
+## World points covering every mesh of `node` as drawn (CarryContact.SAMPLE_M
+## apart or finer over each triangle).
+static func _mesh_points(node: Node3D) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+		var faces := mi.mesh.get_faces()
+		var xf := mi.global_transform
+		for i in range(0, faces.size() - 2, 3):
+			var a := xf * faces[i]
+			var ab := xf * faces[i + 1] - a
+			var ac := xf * faces[i + 2] - a
+			var n := maxi(1, ceili(maxf(ab.length(), ac.length()) / CarryContact.SAMPLE_M))
+			for u in n + 1:
+				for v in n + 1 - u:
+					out.append(a + ab * (u / float(n)) + ac * (v / float(n)))
+	return out
 
 
 ## The hand strip of strip subject `i` this frame: a HAND row each tick (its
@@ -712,7 +844,49 @@ func _hand_watch(i: int) -> void:
 		break
 
 
+## The length (m) of the walk along cells `path`: 1 a straight step, sqrt(2)
+## a diagonal one.
+static func _walk_m(path: Array[Vector2i]) -> float:
+	var m := 0.0
+	for i in range(1, path.size()):
+		m += Vector2(path[i] - path[i - 1]).length()
+	return m
+
+
 func _summary() -> void:
+	var sums := [0.0, 0.0]
+	var most := [0.0, 0.0]
+	for walk: Array in _walks:
+		for k in 2:
+			sums[k] += float(walk[k])
+			most[k] = maxf(float(most[k]), float(walk[k]))
+	var n := maxi(_walks.size(), 1)
+	print(
+		(
+			"WALK_SUMMARY %d walks: plain mean %.2f m max %.2f m; round the fronts mean %.2f m max %.2f m"
+			% [_walks.size(), sums[0] / n, most[0], sums[1] / n, most[1]]
+		)
+	)
+	var near := 0
+	var hits := 0
+	for key: String in _runs:
+		var run: Dictionary = _runs[key]
+		near += int(run["near"])
+		hits += int(run["hit"])
+		print(
+			(
+				(
+					"RUN %s near %d frames (> 0), points inside on %d frames (0), most %d,"
+					+ " body boxes overlap most %.3f m; control twin %d (> 0)"
+				)
+				% [key, run["near"], run["hit"], run["most"], run["box"], run["control"]]
+			)
+		)
+		if int(run["control"]) <= 0:
+			_invalid("RUN %s: the twin control found no points inside" % key)
+	print("RUN_TOTAL near %d frames (> 0), points inside on %d frames (0)" % [near, hits])
+	if near <= 0:
+		_invalid("RUN: no pulled roller came near another subject's lying roller")
 	for s: Dictionary in _subjects:
 		if not s["strip"]:
 			continue
@@ -826,6 +1000,8 @@ func _summary() -> void:
 		)
 		if s["stand_max"] < 0 or s["seated_max"] < 0 or s.get("control", 0) <= 0:
 			_invalid("%s was not measured standing and seated, or its control is 0" % s["name"])
+		if s.has("shuffle_shot") and not s.get("shuffle_ok", false):
+			_invalid("shuffle_%s: no shuffle frame proved it in sight" % s["name"])
 		if not s["stood_shot"]:
 			_invalid("stand_%s: no frame standing at the front proved it in sight" % s["name"])
 
@@ -896,7 +1072,9 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	var inside := Rect2(Vector2.ONE * MARGIN_PX, size - Vector2.ONE * 2.0 * MARGIN_PX)
 	var subjects := {}
 	for n in nodes.size():
-		subjects[nodes[n]] = BAG_TAG
+		# Each roller its own tag: another roller in front of it is a blocker,
+		# never a landing that proves this one (two rollers in a RUN plate).
+		subjects[nodes[n]] = _bag_tag(n)
 		var points := {
 			"feet": bodies[n].global_position,
 			"head": bodies[n].global_position + Vector3.UP * 1.6,
@@ -928,14 +1106,17 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	for n in nodes.size():
 		var box := _bag_box(nodes[n])
 		var c := box.get_center()
-		var top_y := box.end.y - 0.02
-		var targets: Array[Vector3] = [Vector3(c.x, top_y, c.z)]
-		for d in [
-			Vector3(0.08, 0, 0), Vector3(-0.08, 0, 0), Vector3(0, 0, 0.12), Vector3(0, 0, -0.12)
-		]:
-			targets.append(Vector3(c.x, top_y, c.z) + d)
-		var lines := PlateSight.sight_lines(space, _cam.global_position, targets, BAG_TAG)
+		var lines := _bag_lines(space, c, box.end.y - 0.02, _bag_tag(n))
 		var on: int = (lines["on_subject"] as Array).size()
+		if on < MIN_ON and (lines["blockers"] as Array).is_empty():
+			# Nothing in front, but the lines passed over the shell: a roller
+			# tilted on its wheels in the pull (the lay-down's k 0) fills only
+			# one end of its box's top. Aimed at the box's middle height instead.
+			lines = _bag_lines(space, c, c.y, _bag_tag(n))
+			on = (lines["on_subject"] as Array).size()
+			print(
+				"PLATE %s view %d roller %d aimed at its middle height: on %d" % [shot, view, n, on]
+			)
 		print(
 			(
 				"PLATE %s view %d roller %d box %s sight on %d past %d blockers %s"
@@ -963,6 +1144,22 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	_sheet.append(small)
 	print("PLATE saved %s view %d" % [path, view])
 	return true
+
+
+## Five sight lines from the camera to a roller body box with middle `c`, at
+## height `y`: over the middle and 0.08 m either way across x, 0.12 m along z.
+## Only a first hit on the roller tagged `tag` (_bag_tag()) lands; a hit on
+## any other roller in front of the target is a blocker.
+func _bag_lines(space: PhysicsDirectSpaceState3D, c: Vector3, y: float, tag: String) -> Dictionary:
+	var targets: Array[Vector3] = [Vector3(c.x, y, c.z)]
+	for d in [Vector3(0.08, 0, 0), Vector3(-0.08, 0, 0), Vector3(0, 0, 0.12), Vector3(0, 0, -0.12)]:
+		targets.append(Vector3(c.x, y, c.z) + d)
+	return PlateSight.sight_lines(space, _cam.global_position, targets, tag)
+
+
+## The sight tag of the `n`th roller of a plate.
+static func _bag_tag(n: int) -> String:
+	return "%s%d" % [BAG_TAG, n]
 
 
 ## A NEAR row for each visible mesh drawn by the views within 1 m of `at` (a

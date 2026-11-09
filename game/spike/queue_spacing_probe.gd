@@ -32,7 +32,8 @@ extends SceneTree
 ## skinned bodies, and standing queue members drawn on one spot; PROBE_INVALID
 ## unless a walker was measured near a queued guest. THROUGHPUT prints the passengers served
 ## at the busiest station of the place over WINDOW ticks from its first
-## service (info, for comparing builds).
+## service (info, for comparing builds). LINE prints each desk's and
+## scanner's line (TerminalLayout.line_of()) once the airport opens (info).
 ##
 ## With --strip (windowed): STRIP_FRAMES frames of a full security queue
 ## whose line runs on behind its lane (TerminalLayout.line_of()), STRIP_EVERY
@@ -605,6 +606,8 @@ func _boot() -> bool:
 	if hired == 0 or doors < 0:
 		print("PROBE_INVALID the airport did not open")
 		return false
+	for station: int in _sim.layout.desks + _sim.layout.scanners:
+		print("LINE station %d %s" % [station, _sim.layout.line_of(station)])
 	return true
 
 

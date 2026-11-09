@@ -29,7 +29,9 @@ extends RefCounted
 ## own, so it is not steered; a roller lifted by its handle is not steered (the
 ## steer eases out over the lift); a guest with another bag in its other hand
 ## (a hard case) is not steered (user ruling "No steer with a case"), nor one
-## pulling two rollers, one in each hand.
+## pulling two rollers, one in each hand. Its case is carried in front through
+## the door instead (case_front_at(), board d52f21db), so it clears the far
+## leaf.
 
 ## How far off the door's axis the guest is drawn.
 const SIDE_M := 0.12
@@ -43,6 +45,9 @@ const LATERAL_M := 0.9
 const CROSSING := 0.5
 ## Doors are looked for on the cells this far round the guest's cell.
 const REACH_CELLS := 2
+## A hard case beside a pulled roller is carried in front this near a door's
+## plane (case_front_at()); the turn takes CarryOnProps.TRANSFER_TICKS.
+const CASE_FRONT_M := 1.2
 
 
 ## The steer of passenger `p` drawn by `views` at sim time `now`: offset_at()
@@ -126,6 +131,30 @@ static func offset_at(grid: BuildGrid, here: Vector3, heading: Vector2, side: fl
 		return Vector3.ZERO
 	var best := Vector3.ZERO
 	var best_weight := 0.0
+	for door: Array in doors_near(grid, here):
+		var out: Vector2 = door[1]
+		var weight := (
+			(1.0 - smoothstep(FULL_M, EASE_M, door[2]))
+			* (1.0 - smoothstep(LATERAL_FULL_M, LATERAL_M, door[3]))
+		)
+		if weight <= best_weight:
+			continue
+		# The way it crosses: its heading where that is across the door, else
+		# the door's own way.
+		var way := out if door[0] == &"exit_door" else -out
+		var walking := heading.normalized()
+		if absf(walking.dot(out)) >= CROSSING:
+			way = out * signf(walking.dot(out))
+		best_weight = weight
+		best = Vector3(way.y, 0.0, -way.x) * (SIDE_M * side * weight)
+	return best
+
+
+## The entrance and exit doors on `grid` within REACH_CELLS of the cell under
+## `here`, each [def, its way out (world x, z), how far `here` is from its
+## plane, how far from its axis].
+static func doors_near(grid: BuildGrid, here: Vector3) -> Array:
+	var found := []
 	var seen := {}
 	var under := grid.world_to_cell(here)
 	for dx in range(-REACH_CELLS, REACH_CELLS + 1):
@@ -141,20 +170,47 @@ static func offset_at(grid: BuildGrid, here: Vector3, heading: Vector2, side: fl
 			var out := Vector2(step)
 			var plane := grid.cell_to_world(record["anchor"]) + Vector3(step.x, 0.0, step.y) * 0.5
 			var rel := Vector2(here.x - plane.x, here.z - plane.z)
-			var along := absf(rel.dot(out))
-			var across := absf(rel.dot(Vector2(out.y, -out.x)))
-			var weight := (
-				(1.0 - smoothstep(FULL_M, EASE_M, along))
-				* (1.0 - smoothstep(LATERAL_FULL_M, LATERAL_M, across))
+			found.append(
+				[record["def"], out, absf(rel.dot(out)), absf(rel.dot(Vector2(out.y, -out.x)))]
 			)
-			if weight <= best_weight:
-				continue
-			# The way it crosses: its heading where that is across the door, else
-			# the door's own way.
-			var way := out if record["def"] == &"exit_door" else -out
-			var walking := heading.normalized()
-			if absf(walking.dot(out)) >= CROSSING:
-				way = out * signf(walking.dot(out))
-			best_weight = weight
-			best = Vector3(way.y, 0.0, -way.x) * (SIDE_M * side * weight)
-	return best
+	return found
+
+
+## Whether passenger `p` of `sim`, with bags `kinds` at homes `homes`
+## (`lifts`: lifted by the handle), carries its hard case in front now:
+## case_front_at() where the sim puts it. CarryOnProps.sync() turns the
+## guest's hand-carried bags to the front carry for it.
+static func case_front(
+	sim: PassengerSim, p: Passenger, kinds: Array, homes: Array, lifts: Array
+) -> bool:
+	return case_front_at(sim.grid, sim.world_position(p), kinds, homes, lifts)
+
+
+## Whether a guest the sim puts at `here` on `grid`, with bags `kinds` at
+## homes `homes` (`lifts`: lifted by the handle), carries its hard case in
+## front through an entrance or exit door (board d52f21db): a roller pulled in
+## one hand (in the hand, not lifted) and a hand-carried case in the other,
+## within CASE_FRONT_M of a door's plane and LATERAL_M of its axis. Such a
+## guest is not steered (side_of(), "No steer with a case"), so the case at
+## its side reached into the far open leaf; in front it is inside the body's
+## width, as through a cell closed on both sides (decision in-a-cell-closed-
+## on-both-sides-a-passenger-carries-their-bag). A case alone, or beside a
+## lifted roller, keeps its carry.
+static func case_front_at(
+	grid: BuildGrid, here: Vector3, kinds: Array, homes: Array, lifts: Array
+) -> bool:
+	var pulled := false
+	var case_held := false
+	for i in kinds.size():
+		if homes[i] != SecurityLooks.Home.HAND:
+			continue
+		if kinds[i] == SecurityLooks.Kind.ROLLER:
+			pulled = pulled or not lifts[i]
+		elif SecurityLooks.KIND_CARRY[kinds[i]] == SecurityLooks.Carry.HAND:
+			case_held = true
+	if not pulled or not case_held:
+		return false
+	for door: Array in doors_near(grid, here):
+		if door[2] < CASE_FRONT_M and door[3] < LATERAL_M:
+			return true
+	return false
