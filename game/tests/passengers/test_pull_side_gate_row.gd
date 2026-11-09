@@ -20,6 +20,8 @@ const FRONT := Vector2i(14, 4)
 const START := Vector2i(17, 4)
 const BIN_ROW := 10
 const BIN_RUN := Vector2i(8, 16)
+## A row with a bin on the north cell beside each cell: the left walking east.
+const LEFT_BIN_ROW := 20
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
@@ -45,6 +47,8 @@ func before() -> void:
 	for x in range(BIN_RUN.x, BIN_RUN.y):
 		edits.append(BuildEdit.paint_floor(Vector2i(x, BIN_ROW + 1), BuildGrid.FLOOR_TILE, 1))
 		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, BIN_ROW + 1), 0))
+		edits.append(BuildEdit.paint_floor(Vector2i(x, LEFT_BIN_ROW - 1), BuildGrid.FLOOR_TILE, 1))
+		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, LEFT_BIN_ROW - 1), 0))
 	for result in _bins.apply_batch(edits):
 		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
 
@@ -248,3 +252,53 @@ func test_furniture_on_the_stamped_side_still_wins() -> void:
 	var left := _pick_by_bins(1)
 	assert_int(int(left[0])).is_equal(1)
 	assert_int(int((left[1] as Dictionary).get("pull_side_park", 0))).is_equal(0)
+
+
+## pick() for a guest facing east at world `at`, its route straight on, the
+## stamped hand `first`, drawn in `drawn`; [hand, bag, the walk's poses].
+func _pick_east(at: Vector3, first: int, drawn: int, parked: bool) -> Array:
+	var frame := Transform3D(Basis(Vector3.UP, PI / 2.0), at)
+	var ahead: Array = []
+	for n in range(1, PullSide.AHEAD_CELLS + 1):
+		ahead.append(at + Vector3(n, 0.0, 0.0))
+	var bag := {"kind": ROLLER, "place": _place(drawn), "was": _place(1 - drawn), "changed": 0.0}
+	var now := FIRST_TICK + 50.0
+	var picked := PullSide.pick(bag, _bins, frame, ahead, WALK_M, first, now, false, parked)
+	return [picked, bag, PullSide.walk_poses(frame, ahead, WALK_M * PullSide.LOOK_TICKS)]
+
+
+func test_a_reach_only_obstacle_off_the_chair_row_still_wins() -> void:
+	# A guest walking east this far north of the bins: the right's REACH
+	# footprint meets them, its SETTLED one does not.
+	var row := _bins.cell_to_world(Vector2i(BIN_RUN.x + 2, BIN_ROW))
+	var found := 1.0
+	for k in 40:
+		var off := -0.02 * k
+		var poses: Array = _pick_east(row + Vector3(0.0, 0.0, off), 0, 0, true)[2]
+		var settled := PullSide.blocked(_bins, poses, PullSide.footprint(0, false), true)
+		var reach := PullSide.blocked(_bins, poses, PullSide.footprint(0, true), true)
+		if reach and not settled:
+			found = off
+			break
+	# Control: such a place exists, and the bin is not a gate chair.
+	assert_float(found).is_less_equal(0.0)
+	var picked := _pick_east(row + Vector3(0.0, 0.0, found), 0, 0, true)
+	var poses: Array = picked[2]
+	var but := PullSide.GATE_CHAIRS
+	assert_bool(PullSide.blocked(_bins, poses, PullSide.footprint(0, true), true, but)).is_true()
+	assert_bool(PullSide.stamp_clear(_bins, poses, 0)).is_false()
+	assert_int(int(picked[0])).is_equal(1)
+	assert_int(int((picked[1] as Dictionary).get("pull_side_swaps", 0))).is_equal(1)
+
+
+func test_a_stamped_left_onto_furniture_is_not_told_across() -> void:
+	var at := _bins.cell_to_world(Vector2i(BIN_RUN.x + 2, LEFT_BIN_ROW))
+	# Control: the stamped left's settled footprint meets the bins, and not
+	# parked, hand_of()'s left tells the roller across onto them.
+	var told := _pick_east(at, 1, 0, false)
+	var poses: Array = told[2]
+	assert_bool(PullSide.blocked(_bins, poses, PullSide.footprint(1, false), true)).is_true()
+	assert_int(int(told[0])).is_equal(1)
+	var parked := _pick_east(at, 1, 0, true)
+	assert_int(int(parked[0])).is_equal(0)
+	assert_int(int((parked[1] as Dictionary).get("pull_side_park", 0))).is_equal(0)

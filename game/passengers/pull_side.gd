@@ -86,6 +86,9 @@ const AHEAD_CELLS := 3
 const HOLD_TICKS := 2.0 * LOOK_TICKS
 ## A heading change over this along the walk ahead is a corner (degrees).
 const CORNER_DEG := 45.0
+## The gate chair row piece: its chairs reach into the REACH footprint of a
+## guest walking along the fronts to its own chair (stamp_clear()).
+const GATE_CHAIRS := &"seat_row"
 
 
 ## Sets `hands` (CarryOnProps.sync()'s, SecurityLooks.hand_of() so far) of a
@@ -205,16 +208,19 @@ static func pick(
 	if step_m < STILL_M and not told:
 		return hand
 	var poses := walk_poses(frame, ahead, step_m * LOOK_TICKS)
-	if parked and not blocked(grid, poses, footprint(first, false), true):
+	if parked and stamp_clear(grid, poses, first):
 		# The stamped side is where the roller is laid down (ParkSide.hand()):
 		# the chairs of the row reach into its REACH footprint on the way along
 		# the fronts (never its SETTLED one), and a change away from them laid it
-		# down from the other hand. Its settled footprint meeting a wall or a
-		# piece (a bin beside the stamped side) leaves the hand to the rules below.
+		# down from the other hand. Anything else in its reach, or a chair in its
+		# settled footprint, leaves the hand to the rules below.
 		if hand == first:
 			return hand
 		if not blocked(grid, poses, crossing(), true):
 			return _change(bag, "pull_side_park", first)
+	elif parked:
+		# Never told across onto a stamped side that is not clear.
+		told = false
 	if not told and not blocked(grid, poses, footprint(hand, true), true):
 		if hand == 1 and first == 0:
 			# Clear for a hold as well, so the right is not threatened again
@@ -337,6 +343,16 @@ static func gate_stamped(sim: PassengerSim, p: Passenger) -> bool:
 	return not stamp.is_empty() and stamp[0] == "gate %s" % p.seat_cell
 
 
+## Whether the stamped hand `hand`'s side is clear for a parked guest along
+## `poses`: its SETTLED footprint meets no wall and no piece, and its REACH
+## footprint meets no wall and no piece but the gate chair rows (GATE_CHAIRS),
+## which a guest walking to its own chair passes along.
+static func stamp_clear(grid: BuildGrid, poses: Array, hand: int) -> bool:
+	if blocked(grid, poses, footprint(hand, false), true):
+		return false
+	return not blocked(grid, poses, footprint(hand, true), true, GATE_CHAIRS)
+
+
 ## Whether `bag`'s last move was a queue stand (RollerPark.queued()) that
 ## ended less than LOOK_TICKS before `now`: the guest is leaving its spot.
 static func stood(bag: Dictionary, now: float) -> bool:
@@ -426,14 +442,15 @@ static func crossing() -> AABB:
 
 
 ## Whether `box` (the guest's frame) at any of `poses` meets a wall, or with
-## `furniture` a piece of furniture, of `grid`.
-static func blocked(grid: BuildGrid, poses: Array, box: AABB, furniture: bool) -> bool:
+## `furniture` a piece of furniture, of `grid`; a piece of def `but` is left
+## out (stamp_clear(): the gate chair rows).
+static func blocked(grid: BuildGrid, poses: Array, box: AABB, furniture: bool, but := &"") -> bool:
 	for pose: Transform3D in poses:
 		var shape := _box(pose, box)
 		var middle: Vector3 = shape[0]
 		var near := walls_near(grid, middle)
 		if furniture:
-			near.append_array(pieces_near(grid, middle))
+			near.append_array(pieces_near(grid, middle, but))
 		for other: Array in near:
 			if _overlap(shape, other) > 0.0:
 				return true
@@ -512,7 +529,7 @@ static func _leaves_at(xf: Transform3D) -> Array:
 ## The meshes of every piece on the cells round `at`'s cell, each as a box
 ## (piece_boxes()), once per piece. An entrance or exit door is left out: its
 ## frame's box would close the way through, and walls_near() has its leaves.
-static func pieces_near(grid: BuildGrid, at: Vector3) -> Array:
+static func pieces_near(grid: BuildGrid, at: Vector3, but := &"") -> Array:
 	var out := []
 	var seen := {}
 	var under := grid.world_to_cell(at)
@@ -521,7 +538,8 @@ static func pieces_near(grid: BuildGrid, at: Vector3) -> Array:
 			var id := grid.object_at(under + Vector2i(dx, dy))
 			if id == 0 or seen.has(id):
 				continue
-			if BuildCatalog.is_door(grid.get_object(id)["def"]):
+			var def: StringName = grid.get_object(id)["def"]
+			if BuildCatalog.is_door(def) or (but != &"" and def == but):
 				continue
 			seen[id] = true
 			out.append_array(piece_boxes(grid, id))
