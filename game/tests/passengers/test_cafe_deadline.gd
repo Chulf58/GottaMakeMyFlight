@@ -21,8 +21,13 @@ const CROWD_UNTIL := 700
 ## people-sta, where newcomers queue behind the guest by their check-in, so a
 ## guest starting at tick 0 had the slack to finish its visit (outcome
 ## COMPLETE, deadline 607 at the end). 600, moved from 200 when TAXI_IN grew by
-## 400 ticks and the doors closed 400 ticks later.
-const START := 600
+## 400 ticks and the doors closed 400 ticks later. 700, moved from 600 when a
+## hold line stopped walling off its own tail (board 6cfc0e16): scanner 4's
+## line here went from 24 cells to 13, so fewer newcomers get a place ahead of
+## the guest. Its deadline now comes forward no further than 1079, and at 600
+## the guest finished its visit before that (outcome COMPLETE); at 700 its
+## dwell would end at 1172.
+const START := 700
 ## The guest of the burst case spawns this long before boarding opens (it was
 ## tick 0 when boarding opened at tick 700), so its schedule is as tight as
 ## the case needs whatever the phase lengths are. 600, moved from 700 for
@@ -168,13 +173,14 @@ func test_a_guest_leaves_in_time_when_security_fills_during_its_visit() -> void:
 	var visit: CafeVisit = live[3]
 	print(
 		(
-			"no visit: %s; live: %s at %d, deadline %d -> %d, outcome %s served %s"
+			"no visit: %s; live: %s at %d, deadline %d -> %d, dwell end %d, outcome %s served %s"
 			% [
 				Passenger.Stage.keys()[alone.stage],
 				Passenger.Stage.keys()[guest.stage],
 				guest.outcome_tick,
 				live[1],
 				live[2],
+				visit.dwell_end,
 				CafeVisit.Outcome.keys()[visit.outcome],
 				visit.served,
 			]
