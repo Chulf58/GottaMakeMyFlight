@@ -27,8 +27,9 @@ extends RefCounted
 ##
 ## Not covered: a door wall (WallKind.DOOR, an inside door) has no way of its
 ## own, so it is not steered; a roller lifted by its handle is not steered (the
-## steer eases out over the lift); a guest pulling two rollers, one in each
-## hand, has no side away from both and is not steered.
+## steer eases out over the lift); a guest with another bag in its other hand
+## (a hard case) is not steered (user ruling "No steer with a case"), nor one
+## pulling two rollers, one in each hand.
 
 ## How far off the door's axis the guest is drawn.
 const SIDE_M := 0.12
@@ -59,36 +60,61 @@ static func offset_of(views: PassengerViews, p: Passenger, now: float) -> Vector
 
 ## Which way bags `bags` (CarryOnProps' records) steer their guest at sim time
 ## `now`: 1 to its left (a roller pulled in the right hand), -1 to its right
-## (in the left), 0 with no roller pulled. Other bags in the hands (a hard case
-## in the other hand) do not change it; rollers pulled in both hands cancel.
-## While a roller's move is under way (a change of hand, a lift, a pick-up) the
-## side goes from its old place's to its new one's over the move's ticks from
-## the tick it was seen on ("changed"), through 0 half way across. The old
-## place is the one drawn ("home") until a draw stamps the move, then its start
+## (in the left), 0 with no roller pulled. Only with the other hand free: a
+## hard case or any other bag held in the other hand stops the steer (user
+## ruling 2026-11-08, "No steer with a case"), and rollers pulled in both
+## hands cancel. While a bag's move is under way (a change of hand, a lift, a
+## pick-up, a case taken into or out of the hand) its part goes from its old
+## place's to its new one's over the move's ticks from the tick it was seen on
+## ("changed"), through 0 half way across a change of hand. The old place is
+## the one drawn ("home") until a draw stamps the move, then its start
 ## ("was"), so the side does not depend on when frames are drawn.
 static func side_of(bags: Array, now: float) -> float:
-	var side := 0.0
+	var pulls: Array[float] = []
+	var holds: Array[float] = []
 	for bag: Dictionary in bags:
-		if bag.get("kind", -1) != SecurityLooks.Kind.ROLLER:
-			continue
-		var place := int(bag.get("place", -1))
-		var own := _side(place)
-		var k := (now - float(bag.get("changed", -INF))) / CarryLead.ticks_of(bag)
-		var home := int(bag.get("home", -1))
-		var from := home if home != place else int(bag.get("was", -1))
-		if k < 1.0 and from >= 0:
-			own = lerpf(_side(from), own, clampf(k, 0.0, 1.0))
+		pulls.append(_eased(bag, now, true))
+		holds.append(_eased(bag, now, false))
+	var side := 0.0
+	for i in bags.size():
+		var own := pulls[i]
+		for j in bags.size():
+			if j != i:
+				own *= 1.0 - holds[j]
 		side += own
 	return clampf(side, -1.0, 1.0)
 
 
-## The side a roller at `place` (CarryOnProps' (home * 2 + hand) * 2 + lifted)
-## steers to: pulled in the right hand 1, in the left -1, else (lifted, set
-## down, in a tray) 0.
-static func _side(place: int) -> float:
-	if place < 0 or place / 4 != SecurityLooks.Home.HAND or place % 2 == 1:
+## `_value()` of bag record `bag` at sim time `now`, eased from its old place
+## to its new over a move still under way (see side_of()).
+static func _eased(bag: Dictionary, now: float, pull: bool) -> float:
+	var kind := int(bag.get("kind", -1))
+	var place := int(bag.get("place", -1))
+	var to := _value(place, kind, pull)
+	var k := (now - float(bag.get("changed", -INF))) / CarryLead.ticks_of(bag)
+	var home := int(bag.get("home", -1))
+	var from := home if home != place else int(bag.get("was", -1))
+	if k < 1.0 and from >= 0:
+		return lerpf(_value(from, kind, pull), to, clampf(k, 0.0, 1.0))
+	return to
+
+
+## For a bag of `kind` at `place` (CarryOnProps' (home * 2 + hand) * 2 +
+## lifted): with `pull`, the side a pulled roller steers to (right hand 1, left
+## -1, else 0); else 1 when it fills a hand without being a pulled roller (a
+## hard case, a lifted bag), else 0.
+static func _value(place: int, kind: int, pull: bool) -> float:
+	if kind < 0 or place < 0 or place / 4 != SecurityLooks.Home.HAND:
 		return 0.0
-	return 1.0 if CarryLead.hand_of(place) == 0 else -1.0
+	var lifted := place % 2 == 1
+	var roller := kind == SecurityLooks.Kind.ROLLER
+	if pull:
+		if not roller or lifted:
+			return 0.0
+		return 1.0 if CarryLead.hand_of(place) == 0 else -1.0
+	if roller:
+		return 1.0 if lifted else 0.0
+	return 1.0 if lifted or SecurityLooks.KIND_CARRY[kind] == SecurityLooks.Carry.HAND else 0.0
 
 
 ## The offset of a guest the sim puts at `here`, walking `heading` (world x, z;

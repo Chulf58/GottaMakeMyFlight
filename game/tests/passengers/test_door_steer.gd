@@ -164,16 +164,41 @@ func test_no_offset_without_a_pulled_roller() -> void:
 	assert_float(DoorSteer.side_of([worn, _roller(0)], 0.0)).is_equal(1.0)
 
 
-func test_a_roller_with_a_hard_case_in_the_other_hand_is_steered() -> void:
+func test_a_roller_with_another_bag_in_the_other_hand_is_not_steered() -> void:
 	var hand := SecurityLooks.Home.HAND
-	var right := DoorSteer.side_of([_roller(0), _bag(SecurityLooks.Kind.CASE, hand, 1)], 0.0)
-	var left := DoorSteer.side_of([_bag(SecurityLooks.Kind.CASE, hand, 0), _roller(1)], 0.0)
-	assert_float(right).is_equal(1.0)
-	assert_float(left).is_equal(-1.0)
-	var off := DoorSteer.offset_at(_grid, _at(0.0), _out, right)
-	assert_vector(off).is_equal_approx(Vector3(-DoorSteer.SIDE_M, 0.0, 0.0), Vector3.ONE * 1e-5)
+	var case_left := _bag(SecurityLooks.Kind.CASE, hand, 1)
+	var case_right := _bag(SecurityLooks.Kind.CASE, hand, 0)
+	var lifted_bag := _bag(SecurityLooks.Kind.BACKPACK, hand, 1, true)
+	assert_float(DoorSteer.side_of([_roller(0), case_left], 0.0)).is_equal(0.0)
+	assert_float(DoorSteer.side_of([case_right, _roller(1)], 0.0)).is_equal(0.0)
+	assert_float(DoorSteer.side_of([_roller(0), lifted_bag], 0.0)).is_equal(0.0)
 	# Rollers pulled in both hands have no side away from both.
 	assert_float(DoorSteer.side_of([_roller(0), _roller(1)], 0.0)).is_equal(0.0)
+	# A case resting on the floor or in a tray leaves the hand free.
+	var floor_case := _bag(SecurityLooks.Kind.CASE, SecurityLooks.Home.FLOOR, 1)
+	assert_float(DoorSteer.side_of([_roller(0), floor_case], 0.0)).is_equal(1.0)
+
+
+func test_a_case_taken_into_or_out_of_the_free_hand_eases_the_steer() -> void:
+	var held := _bag(SecurityLooks.Kind.CASE, SecurityLooks.Home.HAND, 1)
+	var down := _bag(SecurityLooks.Kind.CASE, SecurityLooks.Home.FLOOR, 1)
+	var into := []
+	var out_of := []
+	var case_in := _moved(down, held, false)
+	var case_out := _moved(held, down, true)
+	for k in int(CarryLead.ticks_of(case_in)) + 2:
+		into.append(DoorSteer.side_of([_roller(0), case_in], 100.0 + k))
+		out_of.append(DoorSteer.side_of([_roller(0), case_out], 100.0 + k))
+	print("case into the hand %s, out of it %s" % [into, out_of])
+	assert_float(into[0]).is_equal(1.0)
+	assert_float(into[into.size() - 1]).is_equal(0.0)
+	assert_float(out_of[0]).is_equal(0.0)
+	assert_float(out_of[out_of.size() - 1]).is_equal(1.0)
+	for i in range(1, into.size()):
+		assert_float(float(into[i]) - float(into[i - 1])).is_less_equal(0.0)
+		assert_float(float(out_of[i]) - float(out_of[i - 1])).is_greater_equal(0.0)
+		assert_float(absf(float(into[i]) - float(into[i - 1]))).is_less_equal(0.2)
+		assert_float(absf(float(out_of[i]) - float(out_of[i - 1]))).is_less_equal(0.2)
 
 
 ## A roller record moved from `from` to `to` at tick 100, as CarryOnProps

@@ -4,7 +4,9 @@ extends GdUnitTestSuite
 ## a roller guest coming in through an entrance is drawn off the door's axis,
 ## away from its pulling hand, by the steer DoorSteer gives for its bags; the
 ## steer does not jump on a change of hand, nor on the tick after a load
-## (snap()); a roller with a hard case in the other hand is steered too.
+## (snap()); a roller with a hard case in the other hand is not steered (user
+## ruling "No steer with a case"), and a case taken out of that hand eases the
+## steer in.
 ## The entrance faces west on a floored grid, so a guest comes in walking east
 ## (+x) and the door's plane is the grid's west edge, x = 0.
 
@@ -152,23 +154,45 @@ func test_a_load_at_the_door_draws_the_steer_and_does_not_jump_next_tick() -> vo
 	assert_float(_largest_step(offs)).is_less(STEP_MAX_M)
 
 
-func test_a_roller_with_a_hard_case_in_the_other_hand_is_steered() -> void:
+func test_a_roller_with_a_hard_case_in_the_other_hand_is_not_steered() -> void:
 	var p := _roller_guest(2)
 	_world.step()
 	var props := _views.carry_on_props()
 	var roller := props.bag_state(p.id, 0)
 	var case_bag := props.bag_state(p.id, 1)
 	print("roller %s case %s" % [roller.get("place"), case_bag.get("place")])
-	# Control: both are held, in the two hands.
+	# Control: both are held, in the two hands, the roller pulled.
+	assert_int(int(roller["place"]) / 4).is_equal(SecurityLooks.Home.HAND)
+	assert_int(roller["carry"]).is_equal(SecurityLooks.Carry.PULL)
 	assert_int(int(case_bag["place"]) / 4).is_equal(SecurityLooks.Home.HAND)
 	assert_int(case_bag["carry"]).is_equal(SecurityLooks.Carry.HAND)
 	assert_int(CarryLead.hand_of(int(case_bag["place"]))).is_not_equal(
 		CarryLead.hand_of(int(roller["place"]))
 	)
 	var offs := _walk(p, 6)
-	var most := 0.0
-	for off in offs:
-		most = maxf(most, off.length())
 	print("offsets: %s" % [offs])
-	assert_float(most).is_greater(DoorSteer.SIDE_M * 0.8)
-	assert_float(_largest_step(offs)).is_less(STEP_MAX_M)
+	for off in offs:
+		assert_vector(off).is_equal(Vector3.ZERO)
+
+
+func test_a_case_leaving_the_free_hand_at_the_door_eases_the_steer_in() -> void:
+	var p := _roller_guest(2)
+	_world.step()
+	assert_vector(_steer(p)).is_equal(Vector3.ZERO)
+	# The case goes down out of the other hand, as CarryOnProps.sync() stamps
+	# a move for the next tick: its new place, the tick, its old place drawn.
+	var bag: Dictionary = _views.carry_on_props()._held[p.id]["bags"][1]
+	var place := int(bag["place"])
+	bag["home"] = place
+	bag["place"] = (SecurityLooks.Home.FLOOR * 2 + CarryLead.hand_of(place)) * 2
+	var tick := float(_world.clock.tick + 1)
+	bag["changed"] = tick
+	var lengths: Array[float] = []
+	for k in int(CarryOnProps.TRANSFER_TICKS) + 2:
+		lengths.append(DoorSteer.offset_of(_views, p, tick + k).length())
+	print("steer over the case's move: %s" % [lengths])
+	assert_float(lengths[0]).is_equal(0.0)
+	assert_float(lengths[lengths.size() - 1]).is_greater(0.08)
+	for i in range(1, lengths.size()):
+		assert_float(lengths[i] - lengths[i - 1]).is_greater_equal(0.0)
+		assert_float(lengths[i] - lengths[i - 1]).is_less(0.03)

@@ -72,8 +72,8 @@ func _initialize() -> void:
 
 ## With `-- --two-bags`, a guest whose second bag is a hard case carries both
 ## (roller in the right hand, case in the left; SecurityLooks.hand_of() keeps
-## hand = index), so LEAF_OTHER measures the case on the side the door steer
-## moves the guest to.
+## hand = index), so LEAF_OTHER measures the case against the leaves (DoorSteer
+## does not steer such a guest).
 func _spawn(world: String, role: String, k: int) -> void:
 	super._spawn(world, role, k)
 	var p: Passenger = _ours.back()
