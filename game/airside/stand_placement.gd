@@ -80,8 +80,13 @@ static func stand_point(stand: Dictionary) -> Vector3:
 	)
 
 
-static func door_point(stand: Dictionary) -> Vector3:
-	return Vector3(float(stand["x"]), 0.0, float(stand["wall_z"]) - NOSE_GAP_M - DOOR_AFT_M)
+## Where the passengers' walk ends beside the plane door, on the apron. With
+## `model` it is beside that model's own parked door, moved by its
+## PlaneClasses.door_shift() (model 04 parks further out); with "" it is the
+## stand's door, where model 05's stands.
+static func door_point(stand: Dictionary, model := "") -> Vector3:
+	var at := Vector3(float(stand["x"]), 0.0, float(stand["wall_z"]) - NOSE_GAP_M - DOOR_AFT_M)
+	return at + PlaneClasses.door_shift(model)
 
 
 static func pushback_end(stand: Dictionary) -> Vector3:
@@ -120,9 +125,10 @@ static func clears_lane(stand: Dictionary) -> bool:
 
 
 ## The one source of the plane door for passengers: the points a walk outside
-## ends with after its last grid cell (door_seed()).
-static func apron_route(stand: Dictionary) -> PackedVector3Array:
-	return PackedVector3Array([door_point(stand)])
+## ends with after its last grid cell (door_seed()), to the door of a plane
+## drawn with `model` ("" for the stand's door).
+static func apron_route(stand: Dictionary, model := "") -> PackedVector3Array:
+	return PackedVector3Array([door_point(stand, model)])
 
 
 ## The grid cell a walk to the plane door ends in: the cell under the door,

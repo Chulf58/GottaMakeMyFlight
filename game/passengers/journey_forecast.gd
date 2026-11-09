@@ -89,7 +89,7 @@ static func own_times(
 			"trail": p.apron_mm,
 		}
 	if p.stage == Passenger.Stage.TO_EXIT and p.exit_object != 0:
-		var apron := sim.files.apron_of(sim, p.exit_object)
+		var apron := sim.files.apron_of(sim, p.exit_object, p)
 		return _times(
 			p.exit_object,
 			now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id)),
@@ -113,7 +113,7 @@ static func own_times(
 	var plane_tick := leave + walk_ticks(exit.y + exit.z)
 	if plane_tick >= NEVER:
 		return {}
-	var plane: Variant = sim.files.apron_of(sim, exit.x)["plane"]
+	var plane: Variant = sim.files.apron_of(sim, exit.x, p)["plane"]
 	return _times(exit.x, leave + walk_ticks(exit.y), plane_tick, plane)
 
 
@@ -207,11 +207,11 @@ static func _exit_of(
 		var door := nearest_exit(sim, from, p)
 		if door.x == 0:
 			return Vector3i.ZERO
-		return Vector3i(door.x, door.y, sim.files.apron_of(sim, door.x)["mm"])
+		return Vector3i(door.x, door.y, sim.files.apron_of(sim, door.x, p)["mm"])
 	var best := Vector3i.ZERO
 	for door in _exits(sim, p):
 		var mm := Passenger.octile_mm(from, sim.layout.door_cell(sim.grid, door))
-		var apron: int = sim.files.apron_of(sim, door)["mm"]
+		var apron: int = sim.files.apron_of(sim, door, p)["mm"]
 		if best.x == 0 or mm + apron < best.y + best.z:
 			best = Vector3i(door, mm, apron)
 	return best

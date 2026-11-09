@@ -38,10 +38,11 @@ static func arrival(sim: PassengerSim, entrance: int) -> Array[Vector3]:
 	return SiteRoutes.arrival(sim.grid, sim.site, sim.layout.outside_routes[entrance])
 
 
-## The walk from exit `exit_door`'s cell to the plane door, or empty when
-## there is none. With no site (a test grid): the cell's centre, its outer
-## edge, a metre beyond, then PassengerSim.apron_waypoints.
-static func departure(sim: PassengerSim, exit_door: int) -> Array[Vector3]:
+## The walk from exit `exit_door`'s cell to the door of a plane drawn with
+## `model` ("" for the stand's door), or empty when there is none. With no
+## site (a test grid): the cell's centre, its outer edge, a metre beyond, then
+## PassengerSim.apron_waypoints, whatever the model.
+static func departure(sim: PassengerSim, exit_door: int, model := "") -> Array[Vector3]:
 	if sim.site == null:
 		return _default_departure(sim, exit_door)
 	if not sim.layout.outside_routes.has(exit_door):
@@ -50,7 +51,8 @@ static func departure(sim: PassengerSim, exit_door: int) -> Array[Vector3]:
 		sim.grid,
 		sim.site,
 		sim.layout.outside_routes[exit_door],
-		sim.layout.stand_of(sim.grid, exit_door)
+		sim.layout.stand_of(sim.grid, exit_door),
+		model
 	)
 
 
@@ -94,7 +96,8 @@ static func revalidate(sim: PassengerSim) -> void:
 				p.stuck = Passenger.Stuck.NO_ROUTE
 				continue
 			var walk: Array[Vector3] = [p.apron_position()]
-			walk.append_array(SiteRoutes.to_plane(sim.grid, sim.site, cells, stand))
+			var model := PlaneClasses.flight_model(sim.flights, p.flight_id)
+			walk.append_array(SiteRoutes.to_plane(sim.grid, sim.site, cells, stand, model))
 			_take(p, walk)
 			sim.files.reroute(sim, p)
 

@@ -13,21 +13,24 @@ const MID_CELL := Vector2i(43, 60)
 ## 10:00 on day 1 (starts 30940 ... 34840), no pause. Bookings by kind, the sum
 ## of every window's length, and every booking but the slices as "kind x z
 ## width depth: from-to". The arrival is off the runway 192.153 ticks into
-## TAXI_IN; the departure is on it 803.536 ticks into TAXI_OUT.
+## TAXI_IN; the departure is on it 808.792 ticks into TAXI_OUT. Re-pinned when
+## model 04 parked 1.5 m further out (board f8c8987c): the medium footprint
+## shrank (reach 21.902 to 20.780 m), so its parked, corner and runway windows
+## did too.
 const PINNED_COUNTS := {"parked": 1, "pushback": 2, "corner": 6, "slice": 101, "runway": 2}
-const PINNED_HELD := 17011.813
+const PINNED_HELD := 16485.254
 const PINNED_LINES: Array[String] = [
-	"parked -17.170 -181.520 28.340 31.320: 32300.000-33600.000",
+	"parked -17.170 -181.520 28.340 29.820: 32300.000-33600.000",
 	"pushback -23.600 -216.500 41.200 64.300: 33600.000-33720.000",
-	"pushback -17.170 -181.520 28.340 31.320: 33600.000-33720.000",
-	"corner -145.902 -359.902 51.803 43.803: 34640.000-34707.661",
-	"corner 102.098 -359.902 43.803 51.803: 31300.000-31565.275",
-	"corner 94.098 -313.902 51.803 51.803: 31350.418-31684.969",
-	"corner -24.902 -305.902 51.803 51.803: 31767.186-31978.618",
+	"pushback -17.170 -181.520 28.340 29.820: 33600.000-33720.000",
+	"corner -144.780 -358.780 49.561 41.561: 34640.000-34706.804",
+	"corner 103.220 -358.780 41.561 49.561: 31300.000-31558.793",
+	"corner 95.220 -312.780 49.561 49.561: 31372.213-31682.319",
+	"corner -23.780 -304.780 49.561 49.561: 31773.069-31975.751",
 	"runway -1000.000 -352.170 2000.000 28.340: 31040.000-31492.153",
-	"corner -32.902 -305.902 51.803 51.803: 33951.207-34182.498",
-	"corner -145.902 -313.902 51.803 51.803: 34252.753-34535.118",
-	"runway -1000.000 -352.170 2000.000 28.340: 34443.536-34840.000",
+	"corner -31.780 -304.780 49.561 49.561: 33959.234-34179.885",
+	"corner -144.780 -312.780 49.561 49.561: 34259.034-34528.814",
+	"runway -1000.000 -352.170 2000.000 28.340: 34448.792-34840.000",
 ]
 
 var _kit: GroundPlannerKit
@@ -62,11 +65,12 @@ func test_kit_routes_are_the_airside_phase_paths() -> void:
 ## Each class's footprint covers its members drawn door-aligned (PlaneClasses.
 ## stand_offset) and centred (half the length either way), and its reach is
 ## the farthest corner. Pinned: small reaches 15.46 m and large 39.13 m, the
-## figures board 13e98b04 measured for the door-aligned turn.
+## figures board 13e98b04 measured for the door-aligned turn; medium 20.78 m
+## since model 04 parks 1.5 m further out (board f8c8987c).
 func test_the_footprint_covers_both_drawn_forms_of_every_member() -> void:
 	var expected := {
 		PlaneClasses.SMALL: [13.42, 5.345, 7.67, 15.455],
-		PlaneClasses.MEDIUM: [16.70, 14.62, 14.17, 21.902],
+		PlaneClasses.MEDIUM: [15.20, 14.62, 14.17, 20.780],
 		PlaneClasses.LARGE: [24.35, 32.15, 22.31, 39.129],
 	}
 	for plane_class in PlaneClasses.ORDER:
@@ -90,14 +94,15 @@ func test_the_footprint_covers_both_drawn_forms_of_every_member() -> void:
 ## H_IN and H_RWY sit on the stubs 30 m from the runway. H_g is on the gate's
 ## lead-in at gate_hold_z(), the lane band's south edge (the widest model half
 ## span, 21.78 m, south of the lane) plus the farthest door-aligned nose (model
-## 04, 16.70 m): Airside.lead_in_hold_z(), which takes the lane band from
+## 07, 16.55 m, since model 04 parks 1.5 m further out: board f8c8987c):
+## Airside.lead_in_hold_z(), which takes the lane band from
 ## StandEnvelope.lane_band_south() (half spans rounded up to 0.1 m), so z
-## -245.50, the line the paving's hold bars are drawn on. A stand has it only
+## -245.65, the line the paving's hold bars are drawn on. A stand has it only
 ## when its pushback ends south of that, so the
 ## north-row stands (pushback end -255.9) have none, row 10 (-245.9) none and
 ## row 11 (-244.9) has it.
 func test_hold_lines() -> void:
-	assert_float(GroundPlanner.gate_hold_z()).is_equal_approx(-245.50, 0.001)
+	assert_float(GroundPlanner.gate_hold_z()).is_equal_approx(-245.65, 0.001)
 	assert_float(GroundPlanner.gate_hold_z()).is_equal(Airside.lead_in_hold_z())
 	var planner := _kit.planner()
 	var mid := _kit.request("A", PlaneClasses.MEDIUM, _kit.stand(MID_CELL))
