@@ -25,7 +25,7 @@ extends MeshInstance3D
 ## link's on that edge, so a link's band runs on into the lane up to the
 ## diagonals from its centre. Two links on one edge closer than WIDTH_M (gates
 ## can stand 19 m apart) share the lane at their midpoint, and their strips are
-## drawn only up to it (_drawn_rect()). The band is symmetric about its middle,
+## drawn only up to it where both run (_drawn_rects()). The band is symmetric about its middle,
 ## so at every diagonal and midpoint both sides give the same shade.
 ##
 ## A thin centre line runs along the lane and each link (user ruling taxiway-
@@ -364,18 +364,21 @@ static func mesh_of(
 			if not cuts.is_empty():
 				_add_mitred_lane(rect, cuts, verts, normals, uvs, index)
 				continue
-		var base := verts.size()
-		var drawn := _drawn_rect(strip, strip_list) if across_x else rect
-		for corner in _corners_of(drawn):
-			verts.append(Vector3(corner.x, HEIGHT_M, corner.y))
-			normals.append(Vector3.UP)
-			var t: float = (
-				(corner.x - rect.position.x) / rect.size.x
-				if across_x
-				else (corner.y - rect.position.y) / rect.size.y
-			)
-			uvs.append(Vector2(ASPHALT_U, lerpf(ASPHALT_V_FROM, ASPHALT_V_TO, t)))
-		index.append_array(_quad(base))
+		var parts: Array[Rect2] = [rect]
+		if across_x:
+			parts = _drawn_rects(strip, strip_list)
+		for drawn in parts:
+			var base := verts.size()
+			for corner in _corners_of(drawn):
+				verts.append(Vector3(corner.x, HEIGHT_M, corner.y))
+				normals.append(Vector3.UP)
+				var t: float = (
+					(corner.x - rect.position.x) / rect.size.x
+					if across_x
+					else (corner.y - rect.position.y) / rect.size.y
+				)
+				uvs.append(Vector2(ASPHALT_U, lerpf(ASPHALT_V_FROM, ASPHALT_V_TO, t)))
+			index.append_array(_quad(base))
 	for rect in line_list:
 		var base := verts.size()
 		for corner in _corners_of(rect):
@@ -530,28 +533,47 @@ static func _add_part(
 		index.append_array(PackedInt32Array([base, base + 1, base + 2]))
 
 
-## The part of the north-south strip `strip` that is drawn: cut at the midpoint
-## with each other north-south strip in `strip_list` it overlaps (two links
-## closer than the strips are wide), so the two never draw the same ground.
-## Its band still runs across the whole strip, so both give the same shade at
-## the cut.
-static func _drawn_rect(strip: Dictionary, strip_list: Array[Dictionary]) -> Rect2:
+## The parts of the north-south strip `strip` that are drawn, north to south.
+## Where another north-south strip in `strip_list` overlaps it (two links closer
+## than the strips are wide), the strip is cut at their midpoint over the z
+## span they share, so the two never draw the same ground; outside that span it
+## is drawn at full width, so a longer link stays whole past a shorter one's
+## end. Its band still runs across the whole strip, so both give the same shade
+## at the cut.
+static func _drawn_rects(strip: Dictionary, strip_list: Array[Dictionary]) -> Array[Rect2]:
 	var rect: Rect2 = strip["rect"]
 	var x := rect.get_center().x
-	var lo := rect.position.x
-	var hi := rect.end.x
+	var neighbours: Array[Rect2] = []
+	var cuts: Array[float] = [rect.position.y, rect.end.y]
 	for other in strip_list:
 		if other == strip or not other["across_x"] or other.has("quad"):
 			continue
 		var them: Rect2 = other["rect"]
-		var other_x := them.get_center().x
-		if absf(other_x - x) < SAME_M or not rect.grow(-SAME_M).intersects(them):
+		if absf(them.get_center().x - x) < SAME_M or not rect.grow(-SAME_M).intersects(them):
 			continue
-		if other_x < x:
-			lo = maxf(lo, (x + other_x) / 2.0)
-		else:
-			hi = minf(hi, (x + other_x) / 2.0)
-	return Rect2(lo, rect.position.y, hi - lo, rect.size.y)
+		neighbours.append(them)
+		for z in [them.position.y, them.end.y]:
+			if z > rect.position.y and z < rect.end.y:
+				cuts.append(z)
+	cuts.sort()
+	var out: Array[Rect2] = []
+	for i in range(1, cuts.size()):
+		var top := cuts[i - 1]
+		var bottom := cuts[i]
+		if bottom - top < SAME_M:
+			continue
+		var lo := rect.position.x
+		var hi := rect.end.x
+		for them in neighbours:
+			if them.position.y >= bottom - SAME_M or them.end.y <= top + SAME_M:
+				continue
+			var other_x := them.get_center().x
+			if other_x < x:
+				lo = maxf(lo, (x + other_x) / 2.0)
+			else:
+				hi = minf(hi, (x + other_x) / 2.0)
+		out.append(Rect2(lo, top, hi - lo, bottom - top))
+	return out
 
 
 ## One upward asphalt vertex at `at` (world x and z), `t` across the band.

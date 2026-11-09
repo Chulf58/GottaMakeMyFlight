@@ -116,6 +116,44 @@ func test_two_gates_19_m_apart_have_no_step() -> void:
 	_assert_no_step(tris, Rect2(-45, -305, 56, 50))
 
 
+func test_unequal_links_19_m_apart_leave_no_bare_ground() -> void:
+	# Gate A's stand on a nearer wall line: its link ends 49 m south of the lane,
+	# gate B's runs on to 154 m. They overlap 11 m wide over the first 49 m only.
+	var short_link := {"rect": Rect2(-41, -269, 30, 49), "across_x": true}
+	var strip_list: Array[Dictionary] = [
+		_lane_strip(), STUB_WEST, short_link, GATE_B_LINK, STUB_EAST
+	]
+	var tris := _triangles(TaxiPaving.mesh_of(strip_list))
+	var ground := -11.0 * 49.0
+	for strip in strip_list:
+		ground += (strip["rect"] as Rect2).get_area()
+	var area := 0.0
+	for tri in tris:
+		area += -(tri[1] - tri[0]).cross(tri[2] - tri[0]).y / 2.0
+	print("unequal drawn area=%.2f ground=%.2f" % [area, ground])
+	assert_float(area).is_equal_approx(ground, 0.01)
+	# Every point the strips cover (TaxiPaving.covers()) has paving drawn on it.
+	var bare := 0
+	var sampled := 0
+	var x := -41.0 + 0.25
+	while x < 8.0:
+		var z := -269.0 + 0.25
+		while z < -115.0:
+			if TaxiPaving.covers(strip_list, Vector3(x, 0.0, z)):
+				sampled += 1
+				bare += int(is_nan(_t_or_nan(tris, Vector2(x, z))))
+			z += 0.5
+		x += 0.5
+	print("unequal covered samples=%d bare=%d" % [sampled, bare])
+	assert_int(sampled).is_greater(10000)
+	assert_int(bare).is_equal(0)
+	# No step where the two links share the ground, down to the short one's end.
+	# At that end (z -220), gate B's strip runs on at full width beside it, and
+	# the 5.5 m west of their midpoint changes from A's band to B's there: a step
+	# this test does not cover (board 1d61370e report).
+	_assert_no_step(tris, Rect2(-45, -275, 56, 54))
+
+
 ## Along the lane's edge under `link`, from x `span.position.x` to `span.end.x`,
 ## the lane's t just inside the edge is the link's own t there.
 func _assert_band_on_lane_edge(tris: Array[Array], link: Rect2, span: Rect2) -> void:

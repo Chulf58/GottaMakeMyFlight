@@ -4,7 +4,8 @@ extends SceneTree
 ## Run (one windowed Godot run project-wide; hold the shared windowed lock):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path <game> -s res://spike/taxi_seams_plates_probe.gd -- --out=<dir> [--two-gate-19]
+##     --path <game> -s res://spike/taxi_seams_plates_probe.gd -- --out=<dir> \
+##     [--two-gate-19 [--unequal]]
 ##
 ## Boots main.tscn with the starter shell and its gate desk, hides the HUD layers and
 ## shoots: a top-down plate of every paving strip and pad, a distance shot from the
@@ -32,6 +33,9 @@ var _out_dir := ""
 ## --two-gate-19: gates A and B with stands 19 m apart, the closest two gates may
 ## be (test_gate_envelopes.gd), set on Airside directly instead of the gate desk.
 var _two_gate_19 := false
+## --unequal (with --two-gate-19): gate A on a wall line 105 m further north, so
+## its link is the shorter of the two.
+var _unequal := false
 var _failed := false
 var _main: Node3D
 var _cam: Camera3D
@@ -44,6 +48,8 @@ func _initialize() -> void:
 			_out_dir = arg.get_slice("=", 1)
 		elif arg == "--two-gate-19":
 			_two_gate_19 = true
+		elif arg == "--unequal":
+			_unequal = true
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=", _out_dir)
 	_run.call_deferred()
@@ -61,7 +67,7 @@ func _run() -> void:
 	var grid := (_main.get_node("BuildMode") as BuildMode).grid
 	if _two_gate_19:
 		var stands := {
-			"A": {"exit": 2, "x": -22.5, "wall_z": -98.0},
+			"A": {"exit": 2, "x": -22.5, "wall_z": -203.0 if _unequal else -98.0},
 			"B": {"exit": 3, "x": -3.5, "wall_z": -98.0},
 		}
 		if not (_main.get_node("Airside") as Airside).set_gate_stands(stands):
