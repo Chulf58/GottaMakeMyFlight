@@ -27,7 +27,13 @@ extends "res://spike/roller_trail_probe.gd"
 ##     roller_park_walls_probe.gd.
 ## LEAF_OTHER: a second bag held in a hand (a hard case beside the roller)
 ##   tested against the leaves the same way; `-- --two-bags` gives the guests
-##   whose second bag is a case both bags (the default run has none).
+##   whose second bag is a case both bags (the default run has none). It
+##   prints the deepest such touch and how many of those near-leaf frames drew
+##   the case turned whole to the front carry (DoorSteer.case_front_at(),
+##   board d52f21db). With `--two-bags` the control is near-leaf frames with
+##   a case above 0, and a windowed run plates a guest pulling a roller with a
+##   case (CaseStrip: pass `--strip-hand=0`, the roller being in the right
+##   hand, and `--strip-out=res://../tools/blender/out/door-case`).
 ## In a windowed run the plates are DoorTuckStrip's (a guest crossing a one-cell
 ## doorway), not PullSwapStrip's. Same run line as roller_trail_probe.gd with
 ## res://spike/door_tuck_probe.gd.
@@ -67,7 +73,11 @@ var _leaves: Array[MeshInstance3D] = []
 func _initialize() -> void:
 	super._initialize()
 	if not _headless:
-		_strip = DoorTuckStrip.new()
+		_strip = CaseStrip.new() if _two_bags() else DoorTuckStrip.new()
+
+
+static func _two_bags() -> bool:
+	return "--two-bags" in OS.get_cmdline_user_args()
 
 
 ## With `-- --two-bags`, a guest whose second bag is a hard case carries both
@@ -77,7 +87,7 @@ func _initialize() -> void:
 func _spawn(world: String, role: String, k: int) -> void:
 	super._spawn(world, role, k)
 	var p: Passenger = _ours.back()
-	if "--two-bags" in OS.get_cmdline_user_args():
+	if _two_bags():
 		if SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.CASE:
 			p.carry_on = 2
 			print("TWO_BAGS id=%d roller and case" % p.id)
@@ -87,14 +97,17 @@ func _collect_walls(world: String) -> void:
 	super._collect_walls(world)
 	_leaves = leaf_meshes(_build_view, _mode.grid, world)
 	_leaf["leaves"] += _leaves.size()
+	if _strip is CaseStrip:
+		(_strip as CaseStrip).leaves = _leaves
 
 
 ## A fresh LEAF tally.
 static func new_leaf_tally() -> Dictionary:
 	var out := {"leaves": 0, "frames": 0, "near": 0, "touch": 0, "deep": 0.0}
 	out.merge({"steer_n": 0, "steer_sum": 0.0, "steer_min": INF, "steer_max": 0.0})
-	for part in ["bag", "rods", "bar", "hand", "other", "other_near"]:
+	for part in ["bag", "rods", "bar", "hand", "other", "other_near", "other_front"]:
 		out[part] = 0
+	out["other_deep"] = 0.0
 	return out
 
 
@@ -178,6 +191,7 @@ static func count_leaves(
 	for part: String in hit:
 		tally[part] += 1
 		tally["deep"] = maxf(float(tally["deep"]), float(hit[part]))
+	tally["other_deep"] = maxf(float(tally["other_deep"]), float(hit.get("other", 0.0)))
 	if int(tally["touch"]) <= TOP_DEEP:
 		var stage: String = Passenger.Stage.keys()[p.stage]
 		# In the touched leaf's frame (x along the wall, z out of it, its middle 0).
@@ -216,8 +230,12 @@ static func print_steer(tally: Dictionary, seed: int) -> void:
 		+ " off the door's axis mean %.3f m, least %.3f m, most %.3f m (control, mean above 0.1)"
 	)
 	print(text % [seed, n, STEER_PLANE_M, mean, tally["steer_min"], tally["steer_max"]])
-	var other := "LEAF_OTHER seed %d: %d near-leaf frames with a second bag in a hand, %d touching"
-	print(other % [seed, tally["other_near"], tally["other"]])
+	var other := (
+		"LEAF_OTHER seed %d: %d near-leaf frames with a second bag in a hand, %d touching"
+		+ " (deepest %.3f m), %d of them with the case whole in front"
+	)
+	var counts := [tally["other_near"], tally["other"], tally["other_deep"], tally["other_front"]]
+	print(other % ([seed] + counts))
 
 
 ## The LEAF line of `tally` for seed `seed`; the hand is measured windowed only.
@@ -294,7 +312,10 @@ func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> 
 	var grip := Vector3.INF
 	if not _headless:
 		grip = _views.carry_on_props().grip_of(body, CarryLead.hand_of(int(state.get("place", 0))))
+	var others_near := int(_leaf["other_near"])
 	count_leaves(_leaf, _leaves, p, bag, grip, body.global_position, _held_others(p, bag))
+	if int(_leaf["other_near"]) > others_near:
+		_leaf["other_front"] += int(_views.carry_on_props().bag_turn_of(p.id) >= 1.0)
 	var tucked := RollerPull.tuck_weight(state, _clock.tick + _clock.alpha) > 0.0
 	_tuck["pulled"] += int(tucked)
 	if int(_axles["settled"]) == settled:
@@ -426,6 +447,8 @@ func _print_classes() -> void:
 	print_steer(_leaf, _seed)
 	if int(_leaf["leaves"]) <= 0 or int(_leaf["near"]) <= 0:
 		_invalid("no door leaf was found, or no pulled roller came near one")
+	if _two_bags() and int(_leaf["other_near"]) <= 0:
+		_invalid("--two-bags: no guest came near a door leaf with a case in the other hand")
 	print("JAMB_DEEP seed %d: %d JAMB frames %.2f m or deeper" % [_seed, _deep, BAR_DEPTH_M])
 	var share := 100.0 * int(_tuck["pulled"]) / maxf(float(_all["pull"]), 1.0)
 	var tuck_text := "TUCK_SHARE seed %d: TUCK_SIDE_M %.2f, %d of %d pulled frames tucked (%.1f%%)"
@@ -467,3 +490,144 @@ func _print_classes() -> void:
 				]
 			)
 		)
+
+
+## DoorTuckStrip for `--two-bags` (board d52f21db): it plates only a guest
+## pulling a roller with a hard case held in its other hand, crossing a door
+## whose leaves are `leaves`, and each plate must also show the case: its
+## middle in frame by MARGIN_PX and at least MIN_ON of CASE_LINES sight lines
+## landing on it. The plate colliders carry no tag for the case, so a landing
+## is a first hit on a collider named after one of the case's meshes within
+## CASE_SLACK_M of the case's bounds (the colliders are built a frame or more
+## before the check, and the guest walks on meanwhile). It prints the case's
+## turn to the front carry and its least distance to a leaf's middle.
+## A moment no framing can show (the strip's own checks or the case's) is
+## skipped, printed as DOOR_CASE_SKIPPED, not saved; the strip fails unless at
+## least MIN_SAVED plates are saved. Any other problem fails it as before.
+class CaseStrip:
+	extends "res://spike/door_tuck_strip.gd"
+	const CASE_SLACK_M := 0.25
+	const MIN_SAVED := 3
+	const UNFRAMED: Array[String] = ["out of frame", "seen by"]
+	const CASE_LINES := 4
+	const LEAF_ROOM_M := 1.5
+	const LEAF_PAIR_M := 2.0 * LEAF_ALONG_M
+	const LEAF_PAIR_SLACK_M := 0.1
+
+	var leaves: Array[MeshInstance3D] = []
+	var _case: Node3D = null
+
+	func look(
+		tree: SceneTree,
+		main: Node3D,
+		views: PassengerViews,
+		p: Passenger,
+		body: Node3D,
+		bag: Node3D,
+		state: Dictionary
+	) -> void:
+		if done:
+			return
+		if _id < 0:
+			_case = held_case(views.carry_on_props(), p, bag)
+			if _case == null or _leaf_gap(body.global_position) > LEAF_ROOM_M:
+				return
+		elif p.id != _id:
+			return
+		var before := problems.size()
+		await super.look(tree, main, views, p, body, bag, state)
+		for k in range(problems.size() - 1, before - 1, -1):
+			if UNFRAMED.any(func(text: String) -> bool: return problems[k].contains(text)):
+				print("DOOR_CASE_SKIPPED %s" % problems[k])
+				problems.remove_at(k)
+		if done and saved.size() < MIN_SAVED:
+			problems.append("only %d door case plates saved, %d wanted" % [saved.size(), MIN_SAVED])
+
+	## Guest `p`'s hard case held in a hand beside `bag` (its pulled roller), or null.
+	static func held_case(props: CarryOnProps, p: Passenger, bag: Node3D) -> Node3D:
+		var nodes: Array = props.props_of(p.id)["bags"]
+		for i in nodes.size():
+			var state := props.bag_state(p.id, i)
+			var held := int(state.get("place", -1)) / 4 == SecurityLooks.Home.HAND
+			if nodes[i] != bag and held and state.get("carry", -1) == SecurityLooks.Carry.HAND:
+				return nodes[i] as Node3D
+		return null
+
+	## In place of DoorTuckStrip's one-cell doorway: the middle of a door
+	## object's two open leaves (a pair LEAF_PAIR_M apart, give or take
+	## LEAF_PAIR_SLACK_M) within START_M of `at` (level), or INF, so the strip
+	## plates a crossing of a door with leaves, not a plain gap in a wall.
+	func _door_near(_main: Node3D, at: Vector3) -> Vector3:
+		for a in leaves.size():
+			for b in range(a + 1, leaves.size()):
+				var pa := leaves[a].global_position
+				var pb := leaves[b].global_position
+				if absf(pa.distance_to(pb) - LEAF_PAIR_M) > LEAF_PAIR_SLACK_M:
+					continue
+				var mid := (pa + pb) * 0.5
+				if Vector2(mid.x - at.x, mid.z - at.z).length() < START_M:
+					return mid
+		return Vector3.INF
+
+	## The least distance from `at` to a leaf's middle.
+	func _leaf_gap(at: Vector3) -> float:
+		var least := INF
+		for leaf in leaves:
+			least = minf(least, leaf.global_position.distance_to(at))
+		return least
+
+	func _judge(
+		cam: Camera3D,
+		main: Node3D,
+		props: CarryOnProps,
+		shell: MeshInstance3D,
+		body: Node3D,
+		state: Dictionary
+	) -> Dictionary:
+		var verdict := super._judge(cam, main, props, shell, body, state)
+		var box := AABB()
+		var first := true
+		for mi: MeshInstance3D in _case.find_children("*", "MeshInstance3D", true, false):
+			var world := mi.global_transform * mi.get_aabb()
+			box = world if first else box.merge(world)
+			first = false
+		var centre := box.get_center()
+		var size := main.get_viewport().get_visible_rect().size
+		var inside := Rect2(Vector2.ONE * MARGIN_PX, size - Vector2.ONE * 2.0 * MARGIN_PX)
+		var px := cam.unproject_position(centre)
+		var framed := not cam.is_position_behind(centre) and inside.has_point(px)
+		var grown := box.grow(CASE_SLACK_M)
+		var names := {}
+		for mi in _case.find_children("*", "MeshInstance3D", true, false):
+			names[str(mi.name)] = true
+		var half := box.size * 0.3
+		var targets: Array[Vector3] = [
+			centre,
+			centre + Vector3(half.x, 0, 0),
+			centre - Vector3(half.x, 0, 0),
+			centre + Vector3(0, half.y, 0),
+		]
+		var space := main.get_world_3d().direct_space_state
+		var on := 0
+		var blockers: Array[String] = []
+		for at in targets:
+			var to := at + (at - cam.global_position).normalized() * 0.5
+			var hit := space.intersect_ray(
+				PhysicsRayQueryParameters3D.create(cam.global_position, to)
+			)
+			if hit.is_empty():
+				continue
+			var named := str((hit.collider as Node).get_meta("mesh", ""))
+			if names.has(named) and grown.has_point(hit.position):
+				on += 1
+			else:
+				blockers.append(named)
+		var turn := props.bag_turn_of(_id if _id >= 0 else -1)
+		var report := (
+			" case_px=%s case_on=%d of %d case_blocked=%s case_turn=%.2f case_to_leaf=%.2f"
+			% [px.round(), on, targets.size(), blockers, turn, _leaf_gap(centre)]
+		)
+		verdict["report"] = str(verdict["report"]) + report
+		if (verdict["bad"] as String) == "" and (not framed or on < MIN_ON):
+			verdict["bad"] = "case out of frame %s or seen by %d lines" % [not framed, on]
+		return verdict

@@ -237,6 +237,8 @@ func sync() -> void:
 			hands.append(SecurityLooks.worn_side(i) if worn else SecurityLooks.hand_of(sim, p, i))
 		# A stall is closed on both sides, its approach as good as (StallCarry).
 		var front := SecurityLooks.carry_front(sim, p) or at_stall or booth_bags
+		# A hard case beside a pulled roller goes in front through a door (DoorSteer).
+		front = front or DoorSteer.case_front(sim, p, kinds, homes, lifts)
 		var held: Dictionary = _held.get(id, {"tray": null, "bags": []})
 		_held[id] = held
 		# A tray kept for a bag still moving out of it stays where it was, on the
