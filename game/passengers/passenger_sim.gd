@@ -297,6 +297,7 @@ func on_tick(new_tick: int) -> void:
 	cafes.step_counters()
 	PassengerGates.admit_pending(self)
 	PassengerStations.arrive(self)
+	PassengerGates.choose_exits(self)
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)

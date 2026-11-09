@@ -221,6 +221,23 @@ static func admit_pending(sim: PassengerSim) -> void:
 			sim.files.join_door(sim, p)
 
 
+## Every walker heading out with no exit yet chooses one and files or turns
+## pending (to_exit()), in passenger-list order, before anyone steps: a walker
+## early in the list that joined and walked first would step ahead of the
+## walkers later in the list that file in front of it and hold it back. Those
+## held back by a help visit or waiting on a re-plan keep to their own step.
+static func choose_exits(sim: PassengerSim) -> void:
+	for p in sim._passengers:
+		if (
+			not p.is_done()
+			and p.stage == Passenger.Stage.TO_EXIT
+			and p.exit_object == 0
+			and not p.needs_replan
+			and not sim.info_desks.holds(p)
+		):
+			to_exit(sim, p)
+
+
 static func choose_exit(sim: PassengerSim, p: Passenger) -> void:
 	var exits := exits_for(sim, p)
 	if exits.is_empty():
