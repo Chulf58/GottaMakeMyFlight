@@ -136,10 +136,10 @@ const RUNWAY_TOO_SHORT_TEXT := "the runway is too short for a %s plane"
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock
-## The size the runway starts at. The game scene starts medium until R9 (the
-## runway upgrade, board 48f9bf52) lands, then small, per the design; a sim made
-## in code starts with a runway that takes every class, so a test sets a smaller
-## one to try the limit. A load replaces it.
+## The size the runway starts at. The game scene starts small, per the design,
+## and grows through runway works (RunwayWorks); a sim made in code starts with
+## a runway that takes every class, so a test sets a smaller one to try the
+## limit. A load replaces it.
 @export var runway_start: String = PlaneClasses.LARGE:
 	set(value):
 		runway_start = value
@@ -559,12 +559,56 @@ func contract_end_day(contract_id: String) -> int:
 
 func on_tick(new_tick: int) -> void:
 	tick = new_tick
+	if runway.settle(tick):
+		_changed()
 	if opened_tick < 0 and gate != null:
 		gate.try_open()
 	_issue_due()
 	for flight in _flights:
 		_advance(flight)
 	_prune()
+
+
+## The tick the runway works that build a `target` runway would start if booked
+## now: the first stretch of the timetable clear of every booking for the whole
+## works (FlightPlans.works_start), or the current tick while the airport is
+## closed, when nothing flies. -1 for a size nothing builds and when the next
+## days have no such stretch. Read-only.
+func works_start(target: String) -> int:
+	var ticks := RunwayWorks.ticks(target)
+	if ticks == 0:
+		return -1
+	if opened_tick < 0:
+		return tick
+	return _plans.works_start(_world(), tick, ticks)
+
+
+## Books the runway works that build the next size: they start at works_start()
+## and, once booked, are a fixed booking in every plan, so offers that would
+## use the runway meanwhile are refused (RunwayWorks). While the airport is
+## closed the size applies at once and nothing is booked. False (with an error)
+## when the runway has no next size, works are already booked, or the
+## timetable has no stretch for them.
+func start_works(target: String) -> bool:
+	var problem := ""
+	if target == "" or RunwayWorks.next_size(runway.size) != target:
+		problem = "the runway is %s and the works build %s" % [runway.size, target]
+	elif runway.works.scheduled():
+		problem = RunwayWorks.BOOKED_TEXT
+	elif runway.works.start != RunwayWorks.NO_TICK:
+		problem = RunwayWorks.HELD_TEXT
+	var start := works_start(target) if problem == "" else -1
+	if problem == "" and start < 0:
+		problem = RunwayWorks.NO_GAP_TEXT
+	if problem != "":
+		push_error("FlightSim.start_works: %s" % problem)
+		return false
+	if opened_tick < 0:
+		runway.size = target
+		return true
+	runway.works.begin(target, start)
+	_changed()
+	return true
 
 
 ## Live flights: one-off flights and issued occurrences not yet pruned.
@@ -719,6 +763,7 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 		"flights": loaded["flights"],
 		"landed": loaded["landed"],
 		"grounds": grounds,
+		"works": runway.works.fixed_bookings(),
 	}
 	for flight: Dictionary in loaded["flights"]:
 		var ground: Dictionary = grounds.get(flight["gate"], {})
@@ -962,6 +1007,7 @@ func _world(grounds := {}) -> Dictionary:
 		"flights": _flights,
 		"landed": _landed,
 		"grounds": grounds if not grounds.is_empty() else gate_grounds(),
+		"works": runway.works.fixed_bookings(),
 	}
 
 

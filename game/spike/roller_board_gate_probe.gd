@@ -28,7 +28,9 @@ extends SceneTree
 ##   FLOAT: no frame from the stand to the strip's end draws the bag floating.
 ##   TURN (gate): the strip subject's tip waits PassengerTurns.TURN_TICKS
 ##     (RollerPark.tip_wait()) and its body turns more than TIP_TURN_RAD over
-##     them (decision gate-full-as-built, board f115d5da).
+##     them (decision gate-full-as-built, board f115d5da). Its tick position
+##     must move over them too, else TIP_ON_STILL_WALKER: a tip on a walker that
+##     has not set off (board aa2db71d), named as such.
 ##   CARRY_UPRIGHT (gate): over those ticks the roller stays upright
 ##     (>= UPRIGHT_DOT), held and at most BESIDE_M from the feet.
 ##   CARRY_CLEAR (gate): from the mark to the tip's end no point of the roller
@@ -85,6 +87,9 @@ const LIMIT_TICKS := 6000
 const UPRIGHT_DOT := 0.95
 const BESIDE_M := 0.6
 const TRAIL_M := 0.8
+## The strip subject's tick position must move more than this from the tip's
+## mark to its start, else the tip is on a walker that has not set off.
+const STILL_WALK_M := 0.01
 const HIPS_SHARE := 0.99
 const STOOP_EPS := 0.01
 const STOOD_AFTER := RollerPark.QUEUE_STAND_TICKS + 2.0
@@ -557,6 +562,23 @@ func _watch_board_desk() -> void:
 		if bag.has("queue_tip") and is_inf(float(w["end"])):
 			var tip_end := float(bag["since"]) + float(bag["queue_tip"])
 			w["end"] = tip_end + RollerPark.QUEUE_TIP_TICKS + 3.0
+			print(
+				(
+					(
+						"GATE BOARD_TIP id %d tip marked at tick %.2f, ends %.2f, stage %d, "
+						+ "moving %s, filed_still %s, front %s"
+					)
+					% [
+						c.id,
+						now,
+						tip_end,
+						c.stage,
+						c.is_moving(),
+						RollerPark.filed_still(_sim, c),
+						SecurityLooks.carry_front(_sim, c)
+					]
+				)
+			)
 		var depth := _desk_depth(props.props_of(c.id)["bags"][0])
 		w["frames"] += 1
 		w["sampled"] = maxi(int(w["sampled"]), int(depth[2]))
@@ -781,6 +803,7 @@ func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 	var frames := STRIP_FRAMES + turn
 	var c := {"up": INF, "flat": 0.0, "free": 0, "gap": INF, "near": "", "points": 0}
 	c["yaw0"] = _views.node_for(p.id).global_rotation.y
+	c["pos0"] = _views.tick_position(p.id, true)
 	# Every candidate's yaw at the mark, for the body's turn during its tip.
 	var yaws := {}
 	for o: Passenger in candidates:
@@ -803,6 +826,7 @@ func _tip_strip(label: String, candidates: Array, m: Dictionary, turning: bool) 
 					yaws[o][1] = maxf(float(yaws[o][1]), off)
 		if tried == turn and not c.has("yaw1"):
 			c["yaw1"] = _views.node_for(p.id).global_rotation.y
+			c["pos1"] = _views.tick_position(p.id, true)
 		if tried < frames and now >= tip_at + tried:
 			var img := await _plate(
 				"%s_tip_%d" % [label, tried], p, tried == 0 and strip.is_empty(), false
@@ -894,6 +918,20 @@ func _carry_check(label: String, p: Passenger, c: Dictionary, turn: int) -> void
 			% [label, p.id, turn, PassengerTurns.TURN_TICKS, turned, RollerPark.TIP_TURN_RAD]
 		)
 	)
+	var walked := Vector3(c["pos0"]).distance_to(Vector3(c.get("pos1", c["pos0"])))
+	print(
+		(
+			"%s TURN id %d tick position moved %.3f m from the mark to the tip's start (> %.2f)"
+			% [label, p.id, walked, STILL_WALK_M]
+		)
+	)
+	if walked <= STILL_WALK_M:
+		_invalid(
+			(
+				"%s TIP_ON_STILL_WALKER id %d: its roller tips, its body has not set off"
+				% [label, p.id]
+			)
+		)
 	if turn != PassengerTurns.TURN_TICKS or turned <= RollerPark.TIP_TURN_RAD:
 		_invalid("%s TURN: the strip subject did not turn before its tip" % label)
 	print(

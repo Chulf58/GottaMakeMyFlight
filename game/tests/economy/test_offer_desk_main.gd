@@ -37,6 +37,8 @@ func test_the_desk_follows_the_scenes_own_rating_and_flights() -> void:
 
 func test_three_low_day_ends_end_the_oldest_contract_of_the_scene() -> void:
 	assert_bool(_flights.open_airport()).is_true()
+	# The test contracts are medium planes; a new game's runway is small.
+	_flights.runway.size = PlaneClasses.MEDIUM
 	assert_bool(_flights.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
 	assert_bool(_flights.accept_contract(TestFlightContracts.terms("PM", 840))).is_true()
 	var ended: Array[String] = []

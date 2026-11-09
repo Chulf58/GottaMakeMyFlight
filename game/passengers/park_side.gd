@@ -31,7 +31,8 @@ extends RefCounted
 ## hand is hand_of()'s own (`fallback`) as it chooses, kept like any other,
 ## and ParkWalls moves the park and the lying roller out of any wall; at a gate
 ## chair it is the free gap's instead (gap_hand()), so no two neighbours' rollers
-## lie in one gap between chair fronts.
+## lie in one gap between chair fronts. At a gate chair the one side the lying
+## roller fits comes before all of these (GateRoller.clear_hand()).
 
 ## A guest this many cells or fewer from where it parks chooses its hand.
 const NEAR_CELLS := 3
@@ -77,10 +78,14 @@ static func hand(sim: PassengerSim, p: Passenger, fallback: int) -> int:
 	if stamp.is_empty() or stamp[0] != seat["key"]:
 		if not _near(p, seat["cell"]):
 			return fallback
-		# Walled on both sides or neither: hand_of()'s own hand now (at a gate
-		# chair the gap's, gap_hand()), kept as well, so it cannot change
-		# mid-stay either.
-		var chosen := _open(sim, seat)
+		# At a gate chair the one side the lying roller fits is the hand first
+		# (GateRoller.clear_hand()), so a chair walled_tight() lets through never
+		# has the roller laid into a wall. Walled on both sides or neither:
+		# hand_of()'s own hand now (at a gate chair the gap's, gap_hand()), kept
+		# as well, so it cannot change mid-stay either.
+		var chosen := GateRoller.clear_hand(sim, p) if seat.has("out") else -1
+		if chosen < 0:
+			chosen = _open(sim, seat)
 		if chosen < 0 and seat.has("out"):
 			chosen = gap_hand(sim, p, seat["cell"], seat["out"])
 		stamp = [seat["key"], chosen if chosen >= 0 else fallback]

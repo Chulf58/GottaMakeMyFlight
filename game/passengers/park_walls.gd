@@ -18,7 +18,9 @@ extends RefCounted
 ##
 ## The way out is the shortest one for each wall in turn, in the wall's own
 ## frame: along it, past the wall's end, or across it, out of its face. A
-## shift is worked out from the roller's transform alone, never from the hand.
+## shift is worked out from the roller's transform and its home (the chair
+## front or walker, whose side of a wall a way out of its face keeps to),
+## never from the hand.
 ## What it does not guarantee: that the shifted roller is clear of furniture, of
 ## the guest's legs (a park pushed across a wall's middle comes nearer the
 ## body), of a wall the boxes left out (more than PullSide.REACH_CELLS from the
@@ -32,18 +34,26 @@ const SLACK_M := 0.005
 ## Passes over the walls: a move out of one wall can put the park in the next
 ## one along.
 const PASSES := 4
+## shift()'s `home` when none is given.
+const NO_HOME := Vector3(INF, INF, INF)
 
 
 ## The shift (world) that moves the roller drawn at `parked` (world, its
 ## scale in the basis) out of every one of `walls` (PullSide.walls_near()'s
-## boxes): zero when it is in none.
-static func shift(parked: Transform3D, walls: Array) -> Vector3:
+## boxes): zero when it is in none. With `home` (world: the chair front or the
+## walker the roller belongs to), a way out of a wall's face goes only to the
+## side of the wall `home` is on, never out through the far face: at a gate
+## chair walled on both sides a roller lying with its middle past a wall's
+## centre plane went the shorter way, through the wall, 0.58 m out to 0.739 m
+## (board f1fc1e54). A home on the wall's centre plane, or none, leaves both
+## faces open, as before.
+static func shift(parked: Transform3D, walls: Array, home := NO_HOME) -> Vector3:
 	var points := _points(parked)
 	var moved := Vector3.ZERO
 	for n in PASSES:
 		var any := false
 		for wall: Array in walls:
-			var out := _way_out(points, moved, wall, SLACK_M)
+			var out := _way_out(points, moved, wall, SLACK_M, home)
 			if out != Vector3.ZERO:
 				moved += out
 				any = true
@@ -110,8 +120,11 @@ static func _points(xf: Transform3D) -> Array[Vector3]:
 ## ([centre, axes, half size], axes 0 along the wall, 2 across it), the wall
 ## read `slack` thicker and longer: zero when
 ## the points' span misses the wall along or across it. A wall is taller than
-## any roller, so its height is not read.
-static func _way_out(points: Array[Vector3], by: Vector3, wall: Array, slack: float) -> Vector3:
+## any roller, so its height is not read. Across, only toward `home`'s side
+## when `home` (shift()) lies off the wall's centre plane.
+static func _way_out(
+	points: Array[Vector3], by: Vector3, wall: Array, slack: float, home := NO_HOME
+) -> Vector3:
 	var centre: Vector3 = wall[0]
 	var axes: Array = wall[1]
 	var half: Vector3 = wall[2]
@@ -129,6 +142,11 @@ static func _way_out(points: Array[Vector3], by: Vector3, wall: Array, slack: fl
 		return Vector3.ZERO
 	var on_along := _least(a, hx)
 	var on_across := _least(c, hz)
+	var side := (home - centre).dot(across) if home.is_finite() else 0.0
+	if side > 0.0:
+		on_across = hz - c.x
+	elif side < 0.0:
+		on_across = -hz - c.y
 	if absf(on_along) < absf(on_across):
 		return along * on_along
 	return across * on_across

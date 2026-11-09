@@ -1024,9 +1024,11 @@ static func plan(
 	var ahead := UP_PARK_AHEAD_M if off_floor and not bag.get("up_near", false) else PARK_AHEAD_M
 	var side: float = bag.get("park_side", [PARK_SIDE_M, PARK_SIDE_M])[lead]
 	var parked := park(bag["park_frame"], lead, body["scale"], ahead, side)
-	# Out of the walls beside a seat (BoothRoller.fix_start(), ParkWalls).
+	# Out of the walls beside a seat (BoothRoller.fix_start(), ParkWalls), on
+	# the walker's side of each.
 	if bag.has("wall_boxes"):
-		parked.origin += ParkWalls.shift(parked, bag["wall_boxes"])
+		var walker: Transform3D = bag["park_frame"]
+		parked.origin += ParkWalls.shift(parked, bag["wall_boxes"], walker.origin)
 	var bar := Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, body["bar_z"])
 	var handle := CarryOnProps.ROLLER_HANDLE
 	var go := flags.duplicate()
@@ -1047,13 +1049,14 @@ static func plan(
 		# tip starts it is carried with the body (tip_carried()).
 		assert(body.has("look") and int(body["look"]) >= 0, "RollerPark: queued with no body look")
 		var chosen := queue_frame_of(bag, frame)
-		parked = queue_park(chosen, lead, body["scale"], body["look"])
-		parked = tip_carry_of(bag, frame, k) * parked
+		var carried := tip_carry_of(bag, frame, k)
+		parked = carried * queue_park(chosen, lead, body["scale"], body["look"])
 		# Walled on both sides, or a two-bag guest's (ParkSide.choose_stand() kept
 		# its side): out of the walls kept at the stamp (CarryPlace, ParkWalls),
-		# the tip rolled from there.
+		# on the stander's side of each, the tip rolled from there.
 		if bag.has("queue_walls"):
-			parked.origin += ParkWalls.shift(parked, bag["queue_walls"])
+			var stander := carried * chosen.origin
+			parked.origin += ParkWalls.shift(parked, bag["queue_walls"], stander)
 		at = _queued(bag, k, start, want, parked, bar)
 	elif not off_floor:
 		# At a booth seat (BoothRoller.fix_start()'s "wall_faces") a roller pulled
