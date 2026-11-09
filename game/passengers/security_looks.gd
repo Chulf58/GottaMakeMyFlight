@@ -14,8 +14,9 @@ extends RefCounted
 ## the bags. REPACK puts them on the floor in front of the passenger, who faces
 ## the return route it walks next, so it picks them up ahead of it rather
 ## than behind (from where a bag would pass through the body). On the second
-## pass, after a repack, the passenger puts its bags on a tray again when it
-## reaches the unpack cell, and they ride the belt as on the first pass. At
+## pass, after a repack, the passenger puts its bags on a tray again as it
+## walks up to the unpack cell (without stopping there), and they ride the
+## belt as on the first pass. At
 ## the basic scanner: SCAN carries the bags, REPACK puts them on the floor
 ## where the passenger stands, which holds the scanner. Outside security the
 ## bags are carried, and set down while seated (bag_homes(), floor_spot()) or
@@ -56,6 +57,17 @@ const STEP_M := 0.15
 ## The step to the tray table eases out over this much of the arch walk, so
 ## the body walks off it into the arch rather than sideways (setting_off()).
 const SETOFF_EASE_M := 0.3
+## A returner's arch walk (return_walk_mm()) is drawn by how far it has walked,
+## in mm from the unpack cell's centre, never by its pace (the late flag can
+## change on the way): its bags go into the tray from PUT_IN_BEFORE_MM before
+## the centre to PUT_IN_PAST_MM past it (put_in_share()), the hand letting go
+## at the centre (CarryLead.REACH_SHARE of the move), and it turns into the
+## arch from RETURN_TURN_BEFORE_MM before to RETURN_TURN_PAST_MM past it
+## (_return_corner_yaw()). Both end 0.65 m from the arch's centre or further.
+const PUT_IN_BEFORE_MM := 750.0
+const PUT_IN_PAST_MM := 250.0
+const RETURN_TURN_BEFORE_MM := 400.0
+const RETURN_TURN_PAST_MM := 350.0
 ## Where a held-back queue front stands, from the unpack cell's centre.
 const QUEUE_EDGE_M := 0.5
 ## A passenger in ARCH this near the unpack centre still holds the queue back:
@@ -181,6 +193,9 @@ static func setoff_yaw(sim: PassengerSim, p: Passenger, from := NAN) -> float:
 	var lane := lane_of(sim, p)
 	if lane.is_empty():
 		return NAN
+	var corner := _return_corner_yaw(sim, p)
+	if not is_nan(corner):
+		return corner
 	var turn := float(PassengerTurns.TURN_TICKS)
 	var toward := 1.0
 	var back := 0.0
@@ -201,6 +216,56 @@ static func setoff_yaw(sim: PassengerSim, p: Passenger, from := NAN) -> float:
 	var table := Vector2(lane["side"])
 	var at_table := lerp_angle(from, atan2(table.x, table.y), toward)
 	return lerp_angle(at_table, atan2(axis.x, axis.y), smoothstep(0.0, 1.0, back / turn))
+
+
+## The yaw a returner (second pass, ARCH) is drawn with on its arch walk (the
+## return route's end, the unpack cell, the arch cell) around the unpack
+## cell's centre, where the walk turns from across the lane to along it, or
+## NAN before that. It turns from the first step's heading to the arch's axis
+## from RETURN_TURN_BEFORE_MM before the corner to RETURN_TURN_PAST_MM past it
+## on a smoothstep, then faces the axis to the arch cell. Turned only once past
+## the corner, a runner was still 46 degrees off the axis at the arch's entry
+## and its free arm reached 0.66 m across the 0.38 m half opening (seed 1106001
+## --lane, board 40d26b16). Set from the walked distance alone, so it never
+## turns back when the pace changes, and never stepped from the yaw drawn before.
+static func _return_corner_yaw(sim: PassengerSim, p: Passenger) -> float:
+	var past := return_walk_mm(sim, p)
+	if is_nan(past) or past < -RETURN_TURN_BEFORE_MM:
+		return NAN
+	var across := Vector2(p.path[1] - p.path[0])
+	var along := Vector2(p.path[2] - p.path[1])
+	var whole := RETURN_TURN_BEFORE_MM + RETURN_TURN_PAST_MM
+	var share := smoothstep(0.0, 1.0, (past + RETURN_TURN_BEFORE_MM) / whole)
+	return lerp_angle(atan2(across.x, across.y), atan2(along.x, along.y), share)
+
+
+## How far (mm) returner `p` has walked its arch walk past the unpack cell's
+## centre (negative before it), or NAN when it is not on that walk: a second
+## pass (incident resolved) in ARCH, its path the return route's end, the
+## unpack cell and the arch cell, short of the arch cell. Read from the saved
+## path and the distance walked on it.
+static func return_walk_mm(sim: PassengerSim, p: Passenger) -> float:
+	if p.stage != Passenger.Stage.SECURITY or not p.incident_resolved:
+		return NAN
+	if p.security_phase != SecurityRuntime.Phase.ARCH or p.path_index > 1:
+		return NAN
+	var lane := lane_of(sim, p)
+	var route: Array = lane.get("return_route", [])
+	var walk := p.path
+	if route.is_empty() or walk.size() != 3 or walk[0] != route.back():
+		return NAN
+	if walk[1] != lane["unpack"]:
+		return NAN
+	var first := Passenger.segment_mm(walk[0], walk[1])
+	return float(p.seg_mm - (first if p.path_index == 0 else 0))
+
+
+## How far a returner's bags are through their move into the tray, 0 to 1, by
+## the distance walked at `past` (return_walk_mm(), the body as drawn) over
+## PUT_IN_BEFORE_MM before the unpack cell's centre to PUT_IN_PAST_MM past it.
+static func put_in_share(past: float) -> float:
+	var whole := PUT_IN_BEFORE_MM + PUT_IN_PAST_MM
+	return clampf((past + PUT_IN_BEFORE_MM) / whole, 0.0, 1.0)
 
 
 ## The yaw a lane passenger faces as it reaches the unpack cell: along the last
@@ -694,17 +759,26 @@ static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
 
 
 ## Whether a lane passenger in ARCH has reached the passage: always on the
-## first pass; on a returner's second pass once it stands on the unpack cell
-## (its path runs from the return route's end through the passage), and from
-## then on to the end of ARCH. The arch walk's last step, from the arch cell
-## onto the pickup cell, is a new path: read by its index alone, the bags left
-## the tray with the body between the posts, and the hand reached across them
-## for the belt (user ruling "Pick up after the arch", board 0dd2c787 item b).
+## first pass; on a returner's second pass once it nears the unpack cell on
+## the step from the return route's end (PUT_IN_BEFORE_MM before the unpack
+## cell's centre; its path runs from there through the passage), and from then
+## on to the end of ARCH. The arch
+## walk's last step, from the arch cell onto the pickup cell, is a new path:
+## read by its index alone, the bags left the tray with the body between the
+## posts, and the hand reached across them for the belt (user ruling "Pick up
+## after the arch", board 0dd2c787 item b).
 static func _on_passage(sim: PassengerSim, p: Passenger) -> bool:
 	if not p.incident_resolved or p.path_index >= 1:
 		return true
 	var route: Array = lane_of(sim, p).get("return_route", [])
-	return not route.is_empty() and p.at != route.back()
+	if route.is_empty():
+		return false
+	# A returner does not stop at the unpack cell: its bags went in the tray
+	# only once it stood there, and the move ran on into the arch (a runner
+	# reached 0.64 m across the 0.38 m half opening gripping its shoulder bag,
+	# seed 1106001 --lane, board 40d26b16). By distance walked, never by pace,
+	# so a change of the late flag never sends the bags back to the hand.
+	return p.at != route.back() or return_walk_mm(sim, p) >= -PUT_IN_BEFORE_MM
 
 
 ## A queue front of a lane stops at the unpack cell's queue-side edge while
