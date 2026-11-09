@@ -78,6 +78,54 @@ func test_every_line_cell_is_reachable_past_the_cells_ahead_of_it() -> void:
 	assert_array(sealed).is_empty()
 
 
+func test_a_second_entrance_in_the_pocket_does_not_open_it() -> void:
+	# Passengers spawn at the first entrance (PassengerLifecycle), so a
+	# later one on the pocket's east wall gives none of them a way in there.
+	var made := _grid()
+	var grid: BuildGrid = made[0]
+	var second := PassengerTestWorld.place(grid, &"entrance_door", Vector2i(5, 5), 1)
+	var layout := TerminalLayout.new()
+	layout.rebuild(grid)
+	var holds: Array = layout.holds[made[1]]
+	var spawn := layout.door_cell(grid, layout.passenger_entrances[0])
+	print("entrances %s holds %s" % [layout.passenger_entrances, holds])
+	assert_array(layout.passenger_entrances).contains_exactly([made[2], second])
+	assert_that(spawn).is_equal(Vector2i(0, 0))
+	assert_array(holds.slice(0, 5)).is_equal(
+		[Vector2i(3, 8), Vector2i(3, 9), Vector2i(3, 10), Vector2i(2, 10), Vector2i(1, 10)]
+	)
+	assert_array(_sealed(grid, layout.line_of(made[1]), spawn)).is_empty()
+
+
+func test_the_line_keeps_its_way_round_when_the_last_entrance_goes() -> void:
+	# Passengers already inside still walk to the tail after the only
+	# entrance is removed: the layout keeps where they came in.
+	var made := _grid()
+	var grid: BuildGrid = made[0]
+	var layout := TerminalLayout.new()
+	layout.rebuild(grid)
+	var before := layout.line_of(made[1]).duplicate()
+	# The desk's staff spot needs a way in, which this grid has only through
+	# the entrance; no staff work here, so the reach rule is off for the edit.
+	grid.check_staff_reach = false
+	for edit in [
+		BuildEdit.remove_object(made[2]), BuildEdit.place_wall(Vector2i(0, 0), BuildGrid.Side.NORTH)
+	]:
+		var result := grid.apply(edit)
+		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
+	layout.rebuild(grid)
+	var inside := Vector2i(1, 5)
+	var line := layout.line_of(made[1])
+	print("entrances %s line %s" % [layout.passenger_entrances, line])
+	assert_array(layout.passenger_entrances).is_empty()
+	assert_array(line).is_equal(before)
+	assert_array(_sealed(grid, line, inside)).is_empty()
+	# Control: a layout that never saw the entrance runs into the pocket.
+	var fresh := TerminalLayout.new()
+	fresh.rebuild(grid)
+	assert_array(_sealed(grid, fresh.line_of(made[1]), inside)).is_not_empty()
+
+
 func test_without_an_entrance_the_hold_line_is_as_before() -> void:
 	# No walker comes in, so there is nothing to keep a way open for: the line
 	# turns left into the pocket as the greedy rule says.
