@@ -80,13 +80,16 @@ func test_a_sign_stands_at_each_turn_off_from_the_runway() -> void:
 		)
 
 
-func test_sign_scale_sizes_every_sign() -> void:
+func test_signs_stand_at_the_ruled_2_5x_and_sign_scale_sizes_every_sign() -> void:
 	var props := _airside.props
-	props.sign_scale = 2.5
+	assert_int(props.signs.size()).is_equal(STUBS.size())
+	# The default is 2.5x FAA size 3 (user ruling, 2026-11-09).
 	for sign in props.signs:
 		assert_vector(sign.scale).is_equal_approx(Vector3.ONE * 2.5, Vector3.ONE * 0.001)
 	props.sign_scale = 1.0
-	assert_int(props.signs.size()).is_greater(0)
+	for sign in props.signs:
+		assert_vector(sign.scale).is_equal_approx(Vector3.ONE, Vector3.ONE * 0.001)
+	props.sign_scale = AirsideProps.DEFAULT_SIGN_SCALE
 
 
 func test_the_signs_follow_a_rebuild_without_doubling() -> void:

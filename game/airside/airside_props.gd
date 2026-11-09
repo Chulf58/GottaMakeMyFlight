@@ -20,7 +20,9 @@ extends Node3D
 ## location panel shows the leg's letter (STUB_LETTERS, east to west) and the
 ## direction panel the taxi lane's (LANE_LETTER) with the arrow the way the
 ## route turns onto the lane. The letters are this file's, as the game has no
-## taxiway names yet. `sign_scale` sizes every sign: 1.0 is FAA size 3.
+## taxiway names yet. `sign_scale` sizes every sign: 1.0 is FAA size 3, and the
+## default is DEFAULT_SIGN_SCALE (user ruling airside-props-r11-rulings-board-
+## through-a-docked-jet-bridge, 2026-11-09), so the legend reads at play range.
 
 const BRIDGE_SCENE := preload("res://assets/airside/props/jet_bridge.glb")
 const SIGN_SCENE := preload("res://assets/airside/props/taxi_sign.glb")
@@ -34,9 +36,11 @@ const SIGN_SETBACK_M := 4.0
 const SAME_M := 1.0
 ## The runway strip piece whose width bounds the runway's asphalt.
 const RUNWAY_PIECE := "tp_runway_03a"
+## The signs' scale unless set: 2.5 x FAA size 3 (user-ruled 2026-11-09).
+const DEFAULT_SIGN_SCALE := 2.5
 
 ## Every sign's scale; 1.0 is real size.
-@export var sign_scale := 1.0:
+@export var sign_scale := DEFAULT_SIGN_SCALE:
 	set(value):
 		sign_scale = value
 		for sign in signs:

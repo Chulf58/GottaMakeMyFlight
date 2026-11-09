@@ -42,6 +42,8 @@ const PUSH_STRIP: Array[float] = [0.12, 0.55, 0.95]
 const WALK_STEP_M := 0.1
 const BODY_RADIUS_M := 0.3
 const SHEET_TILE := Vector2i(480, 270)
+## How far the clip control lifts plane 03 into the parked bridge.
+const CLIP_LIFT_M := 1.5
 ## Yaws tried, in order, for the close pushback strip (all north of the wall).
 const STRIP_YAWS: Array[float] = [135.0, 225.0, 100.0, 260.0]
 ## Camera offsets from the walk's lowest point tried for the walk side plate.
@@ -120,6 +122,7 @@ func _run() -> void:
 	_add_colliders(_main)
 	await _tug_plates()
 	await _bridge_plates()
+	await _clip_stage()
 	await _walk_plates()
 	await _sign_plates()
 	_contact_sheet()
@@ -191,6 +194,16 @@ func _tug_plates() -> void:
 				]
 			)
 		)
+	# Plane 04 at the start of pushback, where its tug meets the wall line.
+	var p04 := _pose("tp_plane_04a", PlaneClasses.MEDIUM, FlightSim.State.PUSHBACK, 0.0)
+	await _frames(2)
+	for yaw in [240.0, 300.0, 120.0, 60.0]:
+		_aim(tug.global_position + Vector3(0.0, 0.8, 0.0), yaw, 35.0, 20.0)
+		await _frames(3)
+		if _report_rays("TUG_EYE tp_plane_04a yaw %d" % yaw, tug) >= 0.25:
+			break
+	if _prove("tug_04_stand.png", [tug], true) and _prove_seen("tug_04_stand.png", p04):
+		await _save("tug_04_stand.png")
 	for model: String in ["tp_plane_03a", "tp_plane_07a"]:
 		var cls := _class_of(model)
 		var near := 26.0 if model == "tp_plane_03a" else 40.0
@@ -256,6 +269,89 @@ func _bridge_plates() -> void:
 		var name := "bridge_%s.png" % model.substr(9, 2)
 		if _prove(name, [bridge], true) and _prove_seen(name, plane):
 			await _save(name)
+
+
+## Blocker 3: whether plane 03 at its stand meets the parked bridge. Counts
+## mesh edges of either that cross a triangle of the other. Control: the same
+## count with the plane lifted CLIP_LIFT_M into the bridge must be positive.
+func _clip_stage() -> void:
+	var plane := _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.BOARDING, 0.0)
+	await _frames(1)
+	var entry: Dictionary = _airside.props.bridges[_gate]
+	var bridge: Node3D = entry["node"]
+	var found := _crossings(plane, bridge)
+	_view.position.y += CLIP_LIFT_M
+	var control := _crossings(plane, bridge)
+	_view.position.y -= CLIP_LIFT_M
+	print(
+		(
+			(
+				"CLIP plane 03 at the stand, bridge docked %s: %d edge crossings (plane meshes %s);"
+				+ " control, plane lifted %.1f m: %d crossings (plane meshes %s)"
+			)
+			% [
+				entry["docked"],
+				found["count"],
+				found["meshes"],
+				CLIP_LIFT_M,
+				control["count"],
+				control["meshes"],
+			]
+		)
+	)
+	if control["count"] == 0:
+		_invalid("the clip control found no crossing with the plane lifted into the bridge")
+
+
+## Edges of `a`'s visible triangles crossing `b`'s, and back: {"count",
+## "meshes": the names of `a`'s meshes involved}.
+func _crossings(a: Node3D, b: Node3D) -> Dictionary:
+	var a_tris := _world_tris(a)
+	var b_tris := _world_tris(b)
+	var count := 0
+	var meshes: Array[String] = []
+	for ta: Dictionary in a_tris:
+		var hits := 0
+		for tb: Dictionary in b_tris:
+			if not (ta["box"] as AABB).intersects(tb["box"]):
+				continue
+			hits += _edges_cross(ta["p"], tb["p"]) + _edges_cross(tb["p"], ta["p"])
+		if hits > 0:
+			count += hits
+			if not meshes.has(ta["mesh"]):
+				meshes.append(ta["mesh"])
+	return {"count": count, "meshes": meshes}
+
+
+## How many of triangle `edges`' three edges cross triangle `face`.
+func _edges_cross(edges: PackedVector3Array, face: PackedVector3Array) -> int:
+	var n := 0
+	for i in 3:
+		var hit: Variant = Geometry3D.segment_intersects_triangle(
+			edges[i], edges[(i + 1) % 3], face[0], face[1], face[2]
+		)
+		n += 1 if hit != null else 0
+	return n
+
+
+## `node`'s visible triangles in world space: {"p": three points, "box", "mesh"}.
+func _world_tris(node: Node3D) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for mi in _meshes(node):
+		if not mi.is_visible_in_tree() or mi.mesh == null:
+			continue
+		var faces := mi.mesh.get_faces()
+		for i in range(0, faces.size(), 3):
+			var p := PackedVector3Array(
+				[
+					mi.global_transform * faces[i],
+					mi.global_transform * faces[i + 1],
+					mi.global_transform * faces[i + 2],
+				]
+			)
+			var box := AABB(p[0], Vector3.ZERO).expand(p[1]).expand(p[2]).grow(0.001)
+			out.append({"p": p, "box": box, "mesh": String(mi.name)})
+	return out
 
 
 func _walk_plates() -> void:
@@ -349,7 +445,7 @@ func _sign_plates() -> void:
 				)
 				if _prove(name, [sign], true):
 					await _save(name)
-	props.sign_scale = 1.0
+	props.sign_scale = AirsideProps.DEFAULT_SIGN_SCALE
 
 
 ## The lowest bridge underside over the gate's walk for a docked `model`: casts
