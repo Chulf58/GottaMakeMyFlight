@@ -32,6 +32,28 @@ const TWO_BAG_SIDE_M: Array = [[0.325, 0.37], [0.345, 0.28]]
 ## Half the roller shell's width across at scale 1, centred on its middle
 ## (test_gate_chair_roller_spot measures the shell box: 0.328 m wide).
 const SHELL_HALF_M := 0.164
+## How far out the roller's middle lies on the side the guest shuffles toward
+## to sit down (shuffle_side()), by the chair's slide (short: the seat row's
+## end chairs, 0.08 m; far: its middle chair, 0.36 m; GateChairs.CHAIR_OFFSET_M),
+## body variant and hand, laid out as LIE_SIDE_M: the least side at which every
+## body of the variant, through the sit_down clip at the front and seated along
+## the whole shuffle onto the chair, leaves the shell's box (grown by 1 cm)
+## empty, plus 1 cm (test_gate_chair_roller_spot). User-ruled 2026-11-09, "Legs
+## clear, narrow shift (Recommended)" (board 4da2e8ff): the measured need, not
+## the whole slide, which laid the roller 0.06 to 0.2 m further into the gap.
+const SHUFFLE_SIDE_M: Array = [
+	[[0.435, 0.505], [0.46, 0.395]],
+	[[0.575, 0.76], [0.625, 0.58]],
+]
+## The same for a two-bag guest's roller, drawn at SecurityLooks.TWO_BAG_SCALE.
+const TWO_BAG_SHUFFLE_SIDE_M: Array = [
+	[[0.35, 0.415], [0.37, 0.305]],
+	[[0.465, 0.615], [0.48, 0.435]],
+]
+## A chair's slide (slide()) this long or longer is far (SHUFFLE_SIDE_M's
+## second row); shorter than NO_SLIDE_M is none.
+const FAR_SLIDE_M := 0.2
+const NO_SLIDE_M := 0.01
 
 
 ## How far out a roller of a body of look `look` (PassengerLooks.BODIES index)
@@ -45,16 +67,22 @@ static func side(look: int, hand: int, scale_by := 1.0) -> float:
 
 ## side() at a chair whose seat lies `slide` m to the left of its front (slide(),
 ## negative to the right): on the side the guest shuffles toward to sit down,
-## further out by the whole slide, as the seated feet move that far across
-## the roller's line on the way to the chair; on the other side, or with no
-## slide, side() itself. The seat row's middle chair (0.36 m to the left) has
-## its roller laid on its right first (ParkSide.gap_hand()), the side away from
-## the shuffle (decision gate-chair-roller-lies-opposite-the-sit-down-shuffle-
-## on-a-ch): at side() on its left, the seated feet of a guest shuffling onto
-## it were 264 body points deep in the roller (board 4da2e8ff).
+## out to SHUFFLE_SIDE_M for the chair's slide (short or far) if that is
+## further, as the seated feet move across the roller's line on the way to
+## the chair; on the other side, or with no slide, side() itself. The seat
+## row's middle chair (0.36 m to the left) has its roller laid on its right
+## first (ParkSide.gap_hand()), the side away from the shuffle (decision
+## gate-chair-roller-lies-opposite-the-sit-down-shuffle-on-a-ch): at side() on
+## its left, the seated feet of a guest shuffling onto it were 264 body points
+## deep in the roller (board 4da2e8ff).
 static func shuffle_side(look: int, hand: int, scale_by: float, slide_m: float) -> float:
 	var toward := (hand == 1 and slide_m > 0.0) or (hand == 0 and slide_m < 0.0)
-	return side(look, hand, scale_by) + (absf(slide_m) if toward else 0.0)
+	if not toward or absf(slide_m) < NO_SLIDE_M:
+		return side(look, hand, scale_by)
+	var table: Array = SHUFFLE_SIDE_M if scale_by >= 1.0 else TWO_BAG_SHUFFLE_SIDE_M
+	var variant := clampi(look / PassengerLooks.PER_VARIANT, 0, 1)
+	var far := 1 if absf(slide_m) >= FAR_SLIDE_M else 0
+	return maxf(side(look, hand, scale_by), table[far][variant][hand])
 
 
 ## How far out from its chair front the shell of that roller reaches
