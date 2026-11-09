@@ -230,7 +230,10 @@ func on_cleared(sim: PassengerSim, p: Passenger) -> void:
 	if sim.tick < p.boarding_tick:
 		var seat := _reserved_seat(sim, p)
 		if not seat.is_empty():
-			var to_seat := _path(sim, p.at, seat["front"])
+			# Round the other chair fronts, in at its own (GateRowWalk).
+			var to_seat: Array[Vector2i] = [p.at]
+			if p.at != seat["front"]:
+				to_seat = GateRowWalk.path(sim, p.at, seat["front"], seat["cell"])
 			if not to_seat.is_empty():
 				seats.erase(p.id)
 				_take_seat(sim, p, seat, to_seat)
@@ -508,7 +511,8 @@ static func claim_seat(sim: PassengerSim, p: Passenger) -> bool:
 	free.sort()
 	for i in mini(free.size(), PassengerSim.SEAT_TRIES):
 		var seat: Dictionary = free[i][3]
-		var path := sim.grid.find_path(p.at, seat["front"])
+		# Round the other chair fronts, in at its own (GateRowWalk).
+		var path := GateRowWalk.path(sim, p.at, seat["front"], seat["cell"])
 		if path.is_empty():
 			continue
 		_take_seat(sim, p, seat, path)

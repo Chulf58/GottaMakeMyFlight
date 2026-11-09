@@ -19,16 +19,16 @@ static func replan(sim: PassengerSim, p: Passenger) -> void:
 	var keep := p.seg_mm
 	var path: Array[Vector2i] = []
 	if keep == 0:
-		path = sim.grid.find_path(here, target)
+		path = _route(sim, p, here, target)
 	elif sim.grid.can_passenger_route(here, next):
-		path = sim.grid.find_path(next, target)
+		path = _route(sim, p, next, target)
 		if path.is_empty():
 			path.append(next)
 		path.push_front(here)
 	else:
 		keep = Passenger.segment_mm(here, next) - keep
 		p.at = next
-		path = sim.grid.find_path(here, target)
+		path = _route(sim, p, here, target)
 		if path.is_empty():
 			path.append(here)
 		path.push_front(next)
@@ -49,6 +49,17 @@ static func replan(sim: PassengerSim, p: Passenger) -> void:
 	# in the door file again, or waits.
 	elif sim.files.holds(p.id):
 		sim.files.reroute(sim, p)
+
+
+## replan()'s path from `from` to `target`: a guest walking to its gate chair
+## front (TO_GATE, the target its seat_front) walks round the other fronts as
+## its seat claim did (GateRowWalk.path()); any other walk is the plain path.
+static func _route(
+	sim: PassengerSim, p: Passenger, from: Vector2i, target: Vector2i
+) -> Array[Vector2i]:
+	if p.stage == Passenger.Stage.TO_GATE and target == p.seat_front:
+		return GateRowWalk.path(sim, from, target, p.seat_cell)
+	return sim.grid.find_path(from, target)
 
 
 static func graph_changed(sim: PassengerSim, cells: Array[Vector2i]) -> void:

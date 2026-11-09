@@ -131,6 +131,33 @@ func find_path_around(
 	return cells
 
 
+## find_path() with stepping onto each cell of `costly` costing `scale` times
+## as much, for this one query; `from` and `to` are never costed. Each costed
+## point's weight is set back to 1.0 after the path is found (no other code
+## sets a weight), so every other query sees the graph as it was. A gate chair
+## guest walks round the other chair fronts so (GateRowWalk.path()).
+func find_path_costed(
+	grid: BuildGrid, from: Vector2i, to: Vector2i, costly: Array, scale: float
+) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if not _may_stand(grid, from) or not _may_stand(grid, to):
+		return cells
+	var weighted := PackedInt32Array()
+	for cell: Vector2i in costly:
+		if cell == from or cell == to or not grid.in_bounds(cell):
+			continue
+		var id := _id(cell)
+		_astar.set_point_weight_scale(id, scale)
+		weighted.append(id)
+	var ids := _astar.get_id_path(_id(from), _id(to))
+	for id in weighted:
+		_astar.set_point_weight_scale(id, 1.0)
+	for id in ids:
+		@warning_ignore("integer_division")
+		cells.append(Vector2i(id % _width, id / _width))
+	return cells
+
+
 func _relink(grid: BuildGrid, cell: Vector2i) -> void:
 	var id := _id(cell)
 	if not staff:
