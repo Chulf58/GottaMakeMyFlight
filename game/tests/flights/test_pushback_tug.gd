@@ -10,6 +10,8 @@ const Kit := preload("res://tests/airside/airside_props_kit.gd")
 ## How far Mount_NoseGear may sit from the nose wheel contact, in metres.
 const GEAR_TOLERANCE_M := 0.01
 const PROGRESS: Array[float] = [0.0, 0.25, 0.5, 0.75, 1.0]
+## The least gap between the tug's front and the wall line at pushback start.
+const WALL_CLEAR_M := 0.3
 
 var _airside: Airside
 
@@ -90,6 +92,35 @@ func test_the_tug_holds_the_nose_wheel_through_the_pushback() -> void:
 		assert_float(travelled).is_greater(StandPlacement.PUSHBACK_M - 2.0)
 
 
+## At the start of pushback, with the plane still parked door-aligned on the
+## stand, the tug's front stays at least WALL_CLEAR_M short of the stand's wall
+## line (decision plane-04-stops-further-out-with-the-passenger-walk-ending-at;
+## R11 measured model 04's tug front 1.19 m through it).
+func test_the_tug_starts_its_pushback_clear_of_the_wall_line() -> void:
+	var path := _airside.phase_path(FlightSim.State.PUSHBACK, "A")
+	var entry := FlightPose.exit_dir(_airside.phase_path(FlightSim.State.TAXI_IN, "A"))
+	var wall_z := float(_airside.gate_stands["A"]["wall_z"])
+	var pose := FlightPose.pose(FlightSim.State.PUSHBACK, 0.0, path, entry)
+	for model: String in PlaneModels.PLANES:
+		var plane := Kit.posed_model(self, model, pose, path[0], entry)
+		var props := PlaneProps.new()
+		plane.get_parent().add_child(props)
+		props.follow(true, plane, model, FlightSim.State.PUSHBACK, "A", null, 0)
+		var box := _world_bounds(props.tug)
+		var nose := plane.global_position.z + float(PlaneModels.PLANES[model]["nose"])
+		print(
+			(
+				"%s pushback start: tug front z %.3f, nose z %.3f, wall z %.3f, tug clear by %.3f m"
+				% [model, box.end.z, nose, wall_z, wall_z - box.end.z]
+			)
+		)
+		# The tug was found and placed at the nose, so the gap is a real one.
+		assert_vector(box.size).is_not_equal(Vector3.ZERO)
+		assert_float(box.end.z).is_greater(plane.global_position.z)
+		assert_float(wall_z - box.end.z).is_greater_equal(WALL_CLEAR_M)
+		plane.get_parent().free()
+
+
 func test_the_tug_shows_only_during_pushback() -> void:
 	var holder := Node3D.new()
 	add_child(holder)
@@ -106,3 +137,14 @@ func test_the_tug_shows_only_during_pushback() -> void:
 	assert_bool(props.tug.visible).is_false()
 	assert_int(shown).is_equal(1)
 	holder.free()
+
+
+## The merged world bounds of every mesh under `node`.
+func _world_bounds(node: Node3D) -> AABB:
+	var box := AABB()
+	var found := false
+	for mesh: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+		var part := mesh.global_transform * mesh.get_aabb()
+		box = part if not found else box.merge(part)
+		found = true
+	return box

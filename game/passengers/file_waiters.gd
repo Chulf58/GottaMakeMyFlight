@@ -462,7 +462,7 @@ static func _way_out(
 	if p.is_moving():
 		way = Vector2(p.path[p.path_index + 1] - p.path[p.path_index])
 	elif p.exit_object != 0:
-		var points: Array = files.apron_of(sim, p.exit_object)["points"]
+		var points: Array = files.apron_of(sim, p.exit_object, p)["points"]
 		if not points.is_empty():
 			var start: Vector3 = points[0] - sim.grid.origin
 			way = Vector2(start.x, start.z) - own
