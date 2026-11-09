@@ -470,6 +470,9 @@ func _walkers_of(station: int) -> Array[Passenger]:
 func _add(p: Passenger) -> Passenger:
 	var copy := Passenger.new()
 	copy.id = p.id
+	# The body decides whether a roller fits beside a gate chair
+	# (GateRoller.walled_tight()), so a reserved place stays valid as live.
+	copy.variant = p.variant
 	copy.stage = p.stage
 	copy.stage_tick = p.stage_tick
 	copy.station = p.station
