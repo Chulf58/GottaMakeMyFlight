@@ -326,25 +326,57 @@ static func bag_transform(
 			# sets its roller down (SitHold.offset()), so the bag stays put.
 			var id: int = props._body_ids.get(body, -1)
 			var at := Transform3D(yaw, body.global_position - props.views.sit_offset(id))
-			if held["floor_at"][i] != null:
-				at = held["floor_at"][i]
-			elif kind != SecurityLooks.Kind.ROLLER and count >= 2:
+			var p: Passenger = props.sim.get_passenger(id) if id >= 0 else null
+			var gate: Variant = null
+			if kind != SecurityLooks.Kind.ROLLER and count >= 2 and p != null:
 				# A two-bag guest's bag at a gate chair lies fixed at the chair
 				# front (SecurityLooks.gate_two_front()), not in the drawn body's
 				# frame, which moves off the tick's sit offset while the body
 				# eases into the seat (board fc38d1b2).
-				var p: Passenger = props.sim.get_passenger(id) if id >= 0 else null
-				var gate: Variant = (
-					SecurityLooks.gate_two_front(props.sim, p) if p != null else null
-				)
-				if gate != null:
-					at = gate
+				gate = SecurityLooks.gate_two_front(props.sim, p)
+			# Any other bag that is not a roller at a gate chair or cafe seat lies
+			# in the body's frame as it is drawn seated (seat_frame()), fixed while
+			# the body eases in and out: the drawn body turned and slid it up to
+			# 0.67 m (board 0dd2c787).
+			var seated: Variant = null
+			if kind != SecurityLooks.Kind.ROLLER and p != null and not held.get("in_stall", false):
+				seated = seat_frame(props.sim, p)
+			if held["floor_at"][i] != null:
+				at = held["floor_at"][i]
+			elif gate != null:
+				at = gate
+			elif seated != null:
+				at = seated
 			var laid_in := RollerPark.lay_frame(held["bags"][i], at)
 			var placed: Transform3D = laid_in * held["floor"][i]
 			placed.origin.y = props.sim.grid.origin.y
 			var scaled := Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)
 			return _off_walls(props, held, i, kind, scaled, laid_in.origin)
 	return carry_transform(props, held, body, i, reach)
+
+
+## The frame (world, on the floor) `p`'s body is drawn in once seated at a gate
+## chair or a cafe seat, worked out from the seat, never from the drawn body
+## (GateChairs.seated_frame(), CafeChairs.seated_frame(), which own it and the
+## body's own step there), dropped to the floor. The same on every frame of the
+## sit-down, the stay and the stand-up, and after a load. Null anywhere else (a
+## toilet stall, an activity piece), with no seat, or with no face to sit to
+## (RollerPark.sit_face()). test_seat_floor_bag_still.gd checks it against the
+## seated body drawn.
+static func seat_frame(sim: PassengerSim, p: Passenger) -> Variant:
+	if is_nan(RollerPark.sit_face(sim, p)) or ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
+		return null
+	var seated: Variant = null
+	match StageKinds.location(p.stage):
+		StageKinds.Location.GATE_SEAT:
+			seated = GateChairs.seated_frame(sim, p)
+		StageKinds.Location.FACILITY_SEAT:
+			seated = CafeChairs.seated_frame(sim, p)
+	if seated == null:
+		return null
+	var frame: Transform3D = seated
+	frame.origin.y = sim.grid.origin.y
+	return frame
 
 
 ## A roller lying on the floor at `xf` (world) moved out of the walls round it
