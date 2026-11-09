@@ -15,7 +15,9 @@ extends RefCounted
 ## lane cell, not a door cell, a scanner passage or a seat front, not a gap
 ## one cell wide, and that crosses no door wall, up to HOLD_SLOTS cells. A step that would put the
 ## line beside its own earlier cells is refused, so a line ends where it would
-## turn back along itself. Hold lines are found after every lane, stations in
+## turn back along itself. A step onto a cell a walker could reach from the
+## spawn entrance only over the line's own cells is refused too, so the
+## line never walls off its own tail. Hold lines are found after every lane, stations in
 ## id order. A station's line (line_of()) is its lane then its hold line:
 ## queue member i (lane, then holding list) stands on line_of()[i].
 ##
@@ -46,6 +48,9 @@ extends RefCounted
 const LANE_SLOTS := 6
 ## At most this many hold cells behind a lane.
 const HOLD_SLOTS := 12
+## The longest walk off the line onto a cell already known to reach the
+## ingress before a hold cell's reach check takes a grid search (_reached()).
+const REACH_STEPS := 3
 const NO_LINE: Array[Vector2i] = []
 
 ## The airport site whose open ground passengers walk outside, or null (in a
@@ -94,6 +99,13 @@ var seats: Array[Dictionary] = []
 var security_lanes := SecurityLanes.new()
 ## Station id -> lane cells then hold cells (line_of()).
 var _lines: Dictionary = {}
+## Where walkers come in for the hold lines' reach check (_reached()): the
+## cell of the entrance passengers spawn at (passenger_entrances[0],
+## PassengerLifecycle), found anew on every rebuild so the lines depend on the
+## grid alone. NO_CELL (no check) with no entrance in service: passengers
+## already inside may then find a tail they reach only over the line (the
+## stated residual, board 6cfc0e16).
+var _ingress := BuildObjectDef.NO_CELL
 
 
 static func front_of(facing: int) -> Vector2i:
@@ -155,6 +167,9 @@ func rebuild(grid: BuildGrid) -> void:
 	for id in ids:
 		if desks.has(id) or scanners.has(id):
 			lanes[id] = _lane(grid, id, reserved, taken)
+	_ingress = BuildObjectDef.NO_CELL
+	if not passenger_entrances.is_empty():
+		_ingress = door_cell(grid, passenger_entrances[0])
 	_add_holds(grid, ids, reserved, taken)
 
 
@@ -323,7 +338,7 @@ func _add_holds(grid: BuildGrid, ids: Array[int], reserved: Dictionary, taken: D
 
 ## The hold line behind `station`'s lane: from its last cell, each step
 ## straight on, else to the left, else to the right, onto a cell _may_hold()
-## accepts, until none does or it holds HOLD_SLOTS cells.
+## and _reached() accept, until none does or it holds HOLD_SLOTS cells.
 func _hold(
 	grid: BuildGrid, station: int, blocked: Dictionary, taken: Dictionary
 ) -> Array[Vector2i]:
@@ -336,13 +351,18 @@ func _hold(
 		own[cell] = true
 	var heading := front_of(grid.get_object(station)["facing"])
 	var cell: Vector2i = lane.back()
+	var reach := {}
 	while hold.size() < HOLD_SLOTS:
 		var turned := false
 		for way: Vector2i in [
 			heading, Vector2i(heading.y, -heading.x), Vector2i(-heading.y, heading.x)
 		]:
 			var next := cell + way
-			if _may_hold(grid, cell, next, blocked.has(next) or taken.has(next), own):
+			if not _may_hold(grid, cell, next, blocked.has(next) or taken.has(next), own):
+				continue
+			var known := reach.has(next)
+			if _reached(grid, next, own, reach):
+				_cut(reach, next, known)
 				hold.append(next)
 				taken[next] = true
 				own[next] = true
@@ -378,6 +398,80 @@ static func _may_hold(
 		if to + step != from and own.has(to + step):
 			return false
 	return true
+
+
+## Whether a walker can come in to `cell` from `_ingress` without stepping on
+## the line's own cells (`own`); true when there is no ingress. A hold cell
+## reached only over the line sits in a pocket the line walls off: a walker
+## heading for it as the tail would have to walk through the members ahead of
+## it (board 6cfc0e16). Each hold cell passing this keeps every tail reachable
+## past the members' block, line[0..free-1] (StationQueue.set_off()).
+## `reach` is one line's tree of cells known to reach the ingress off the
+## line: cell -> the next cell of its walk there, the ingress -> itself. A
+## walk of up to REACH_STEPS steps onto a cell of it answers most asks; the
+## rest take one grid search from `cell`, which ends early inside a pocket,
+## and its path joins the tree.
+func _reached(grid: BuildGrid, cell: Vector2i, own: Dictionary, reach: Dictionary) -> bool:
+	if _ingress == BuildObjectDef.NO_CELL or reach.has(cell):
+		return true
+	var back := {cell: cell}
+	var ring: Array[Vector2i] = [cell]
+	for _depth in REACH_STEPS:
+		var outer: Array[Vector2i] = []
+		for at in ring:
+			for step in BuildGrid.SIDE_STEP:
+				var to := at + step
+				if back.has(to) or own.has(to) or not grid.can_passenger_route(at, to):
+					continue
+				if reach.has(to):
+					var hop := at
+					var onto := to
+					while hop != cell:
+						reach[hop] = onto
+						onto = hop
+						hop = back[hop]
+					reach[cell] = onto
+					return true
+				back[to] = at
+				outer.append(to)
+		ring = outer
+	var path := grid.find_path_around(cell, _ingress, own.keys())
+	if path.is_empty():
+		return false
+	for i in range(path.size() - 1):
+		reach[path[i]] = path[i + 1]
+	reach[_ingress] = _ingress
+	return true
+
+
+## Takes `cell`, now a cell of the line, out of `reach` (_reached()) with
+## every cell whose walk passed over it. A cell that was not in the tree
+## before it was asked for (`known` false) is a leaf: nothing walks over it.
+static func _cut(reach: Dictionary, cell: Vector2i, known: bool) -> void:
+	reach.erase(cell)
+	if not known:
+		return
+	var fine := {}
+	for key: Vector2i in reach.keys():
+		var walk: Array[Vector2i] = []
+		var at := key
+		var ok := true
+		while true:
+			if fine.has(at):
+				ok = fine[at]
+				break
+			if not reach.has(at):
+				ok = false
+				break
+			walk.append(at)
+			if reach[at] == at:
+				break
+			at = reach[at]
+		for c in walk:
+			fine[c] = ok
+	for c: Vector2i in fine:
+		if not fine[c]:
+			reach.erase(c)
 
 
 ## `cells`, or empty (a closed passage) when any of them is not a passenger
