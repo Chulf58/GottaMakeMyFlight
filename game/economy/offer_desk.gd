@@ -23,6 +23,9 @@ signal contract_ended(contract: Dictionary)
 @export var rating: AirportRating
 ## The flights whose contracts a low rating ends. Without it nothing ends.
 @export var flights: FlightSim
+## The runway whose size limits the offers drawn. Unset, the scene's flights
+## give it (FlightSim.runway); a desk with neither draws nothing and says so.
+var runway: Runway
 
 var board := OfferBoard.new()
 
@@ -52,7 +55,7 @@ func bind_clock(sim_clock: SimClock) -> void:
 	_bound = sim_clock
 	clock = sim_clock
 	_day = GameCalendar.day_of(clock.tick)
-	board.ensure_day(_day, clock.rng, _tier())
+	_draw(_day)
 	clock.ticked.connect(on_tick)
 
 
@@ -61,7 +64,7 @@ func on_tick(tick: int) -> void:
 	if day == _day:
 		return
 	_day = day
-	board.ensure_day(day, clock.rng, _tier())
+	_draw(day)
 	_end_contract_if_due()
 
 
@@ -80,6 +83,18 @@ func _end_contract_if_due() -> void:
 	var contract := flights.contract_of(running[0])
 	if flights.end_contract(contract["id"]):
 		contract_ended.emit(contract)
+
+
+## Draws `day`'s offers for the biggest plane class the runway takes, or pushes
+## an error and draws nothing when the desk has no runway to ask.
+func _draw(day: int) -> void:
+	var source := runway
+	if source == null and flights != null:
+		source = flights.runway
+	if source == null:
+		push_error("OfferDesk: no runway set, so no offers are drawn")
+		return
+	board.ensure_day(day, clock.rng, _tier(), source.size)
 
 
 ## The airline tier the rating has unlocked, 0 with no rating.

@@ -94,11 +94,13 @@ static func tier_of(airline: String) -> int:
 
 ## The plane sizes (size -> [fewest, most] booked passengers) an airline of
 ## `tier` is offered flying now: its TIER_SIZES without any class above
-## PlaneClasses.max_offer_class(). The one place the offer gate is applied.
-static func offered_sizes(tier: int) -> Dictionary:
+## PlaneClasses.max_offer_class() or above `runway_class`, the biggest class the
+## runway takes (Runway.size_takes). The one place the offer gate is applied. An
+## airline whose sizes are all above the runway offers none.
+static func offered_sizes(tier: int, runway_class := PlaneClasses.LARGE) -> Dictionary:
 	var sizes := {}
 	for size: String in TIER_SIZES[tier]:
-		if PlaneClasses.is_offered(size):
+		if PlaneClasses.is_offered(size) and Runway.size_takes(runway_class, size):
 			sizes[size] = TIER_SIZES[tier][size]
 	return sizes
 
@@ -115,10 +117,16 @@ static func terms_of(offer: Dictionary) -> Dictionary:
 ## offers for `day` are drawn from `rng` and their ids returned, or [] without
 ## touching `rng` when the day already has offers. `tier` (0..MAX_TIER, the
 ## airport rating's RatingFormula.tier) picks which airlines the new offers may
-## come from; it does not change how far `rng` advances. `changed` fires once
-## when anything expired or was drawn. A day outside 0..FlightContract.MAX_DAY,
-## or a tier outside 0..MAX_TIER, pushes an error and changes nothing.
-func ensure_day(day: int, rng: RandomNumberGenerator, tier := 0) -> Array[String]:
+## come from; it does not change how far `rng` advances. `runway_class` (the
+## runway's size, Runway.size) limits the plane classes the offers may have to
+## those the runway takes, and drops the airlines that fly none of them; it
+## does not change how far `rng` advances either, so a seed replays whatever
+## the runway. `changed` fires once when anything expired or was drawn. A day
+## outside 0..FlightContract.MAX_DAY, a tier outside 0..MAX_TIER or a runway
+## class that is not a plane class pushes an error and changes nothing.
+func ensure_day(
+	day: int, rng: RandomNumberGenerator, tier := 0, runway_class := PlaneClasses.LARGE
+) -> Array[String]:
 	var ids: Array[String] = []
 	if day < 0 or day > FlightContract.MAX_DAY:
 		push_error("OfferBoard: day %d is outside 0..%d" % [day, FlightContract.MAX_DAY])
@@ -126,11 +134,14 @@ func ensure_day(day: int, rng: RandomNumberGenerator, tier := 0) -> Array[String
 	if tier < 0 or tier > MAX_TIER:
 		push_error("OfferBoard: tier %d is outside 0..%d" % [tier, MAX_TIER])
 		return ids
+	if not PlaneClasses.is_plane_class(runway_class):
+		push_error("OfferBoard: runway class '%s' is not a plane class" % runway_class)
+		return ids
 	var expired := _expire_before(day)
 	var drawn := not _has_day(day)
 	if drawn:
 		for number in range(1, OFFERS_PER_DAY + 1):
-			var offer := _draw(day, number, rng, tier)
+			var offer := _draw(day, number, rng, tier, runway_class)
 			_offers.append(offer)
 			ids.append(offer["id"])
 	if expired or drawn:
@@ -205,13 +216,18 @@ func from_snapshot(data: Dictionary) -> bool:
 
 ## Every draw is made for every offer, in this order, so the RNG advances by
 ## the same amount whatever the values turn out to be.
-func _draw(day: int, number: int, rng: RandomNumberGenerator, tier: int) -> Dictionary:
+func _draw(
+	day: int, number: int, rng: RandomNumberGenerator, tier: int, runway_class: String
+) -> Dictionary:
 	var airlines: Array = []
 	for unlocked in range(tier + 1):
-		airlines.append_array(TIER_AIRLINES[unlocked])
+		# A tier whose airlines fly nothing the runway takes stays off the board;
+		# the pick below is still one draw.
+		if not offered_sizes(unlocked, runway_class).is_empty():
+			airlines.append_array(TIER_AIRLINES[unlocked])
 	var airline: String = airlines[rng.randi_range(0, airlines.size() - 1)]
 	var own := tier_of(airline)
-	var sizes := offered_sizes(own)
+	var sizes := offered_sizes(own, runway_class)
 	var fees: Array = TIER_FEES[own]
 	var destination: String = DESTINATIONS[rng.randi_range(0, DESTINATIONS.size() - 1)]
 	var minute := DEPARTURE_FIRST_MINUTE + rng.randi_range(0, DEPARTURE_SLOTS) * DEPARTURE_STEP

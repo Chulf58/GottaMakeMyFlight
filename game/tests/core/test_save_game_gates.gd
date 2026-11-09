@@ -77,7 +77,7 @@ func test_the_gates_and_their_stands_are_saved_and_a_lost_gate_loads_back() -> v
 		"save_version %s, gates %s, apron %s" % [data["save_version"], data["gates"], data["apron"]]
 	)
 	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(12)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(13)
 	assert_int((data["gates"]["gates"] as Array).size()).is_equal(2)
 	assert_array((data["apron"]["stands"] as Dictionary).keys()).is_equal(["A", "B"])
 	var saved_bindings := _gates.bindings.duplicate(true)
@@ -184,9 +184,14 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(MEDIUM_CELL)).ok).is_true()
 	var board := (_main.get_node("OfferDesk") as OfferDesk).board
 	var taken := ""
+	# Whatever the draw gave, the day-0 offers are made medium.
+	var offers := board.to_snapshot()
+	for offer: Dictionary in offers["offers"]:
+		offer["plane_size"] = PlaneClasses.MEDIUM
+		offer["booked_passengers"] = PlaneClasses.passenger_range(PlaneClasses.MEDIUM)[0]
+	assert_bool(board.from_snapshot(offers)).is_true()
 	for offer in board.open_offers():
-		var fits: bool = offer["plane_size"] == PlaneClasses.MEDIUM
-		if taken == "" and fits and _flights.accept_problem(OfferBoard.terms_of(offer)) == "":
+		if taken == "" and _flights.accept_problem(OfferBoard.terms_of(offer)) == "":
 			assert_bool(board.accept(offer["id"], _flights)).is_true()
 			taken = offer["id"]
 	assert_str(taken).is_not_empty()
@@ -201,5 +206,13 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 	assert_bool(_save.load_world(narrow)).is_false()
 	print("refused: %s" % _save.message_text())
 	assert_str(_save.message_text()).contains("contract %s needs a medium gate" % taken)
+	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	# The same save with a small runway holds a medium contract (and its medium
+	# offers) the runway cannot take: refused while staged, nothing installed.
+	var small_runway := wide.duplicate(true)
+	small_runway["runway"]["size"] = "small"
+	assert_bool(_save.load_world(small_runway)).is_false()
+	print("small runway: %s" % _save.message_text())
+	assert_str(_save.message_text()).contains("is a medium plane but the runway is small")
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
 	assert_bool(_save.load_world(wide)).is_true()

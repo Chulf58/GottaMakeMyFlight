@@ -67,7 +67,9 @@ signal loaded(ok: bool)
 ## 12: the build unlocks (part "unlocks", BuildUnlocks: the highest tier and the
 ## made-flight count); version 11 saves are refused (no migration before a
 ## release).
-const SAVE_VERSION := 12
+## 13: the runway's size (part "runway", Runway); version 12 saves are refused
+## (no migration before a release).
+const SAVE_VERSION := 13
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -128,6 +130,12 @@ func parts() -> Array[SavePart]:
 	var list: Array[SavePart] = [
 		SavePart.new("grid", build_mode.grid.to_snapshot, _stage_grid, build_mode.load_snapshot),
 		SavePart.new("clock", clock.to_snapshot, SavePart.scratch(SimClock), clock.from_snapshot),
+		SavePart.new(
+			"runway",
+			flights.runway.to_snapshot,
+			SavePart.scratch(Runway, &"from_snapshot", "runway"),
+			flights.runway.from_snapshot
+		),
 		# Checked against the saved gates (or, with no gate desks, the live ones).
 		SavePart.new("flights", flights.to_snapshot, _stage_flights, flights.from_snapshot),
 		SavePart.new(
@@ -443,7 +451,24 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 	var across := _ticks_problem(data)
 	if across == "":
 		across = SaveLinks.problem(data, staged)
+	if across == "":
+		across = _runway_problem(data, staged)
 	return across
+
+
+## "" or why the saved runway cannot take a saved offer's plane class. (A saved
+## contract is checked with the staged flights: FlightSim.load_problem.) The
+## runway only grows, so every offer drawn and every contract accepted had a
+## class its runway took.
+func _runway_problem(data: Dictionary, staged: Dictionary) -> String:
+	var runway: Runway = staged["runway"]
+	for offer: Dictionary in data["offers"]["offers"]:
+		if not runway.takes(offer["plane_size"]):
+			return (
+				"offers: offer %s is a %s plane but the runway is %s"
+				% [offer["id"], offer["plane_size"], runway.size]
+			)
+	return ""
 
 
 ## Every part that keeps the tick was saved on the same one.
@@ -522,6 +547,8 @@ func _stage_apron(data: Dictionary, staged: Dictionary) -> String:
 ## refresh() works them out. With no gate desks, the live sim's sources.
 func _staged_flight_sim(staged: Dictionary) -> FlightSim:
 	var sim := FlightSim.new()
+	if staged.has("runway"):
+		sim.runway.size = (staged["runway"] as Runway).size
 	if not staged.has("gates"):
 		sim.gate_source = flights.gate_source
 		sim.stand_source = flights.stand_source
