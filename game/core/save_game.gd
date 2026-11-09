@@ -599,7 +599,7 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	# runtime reads from its host's layout (a live sim binds it in bind()).
 	sim.security.bind(sim)
 	# The checks PassengerSim.from_snapshot() runs at install: info desks,
-	# standing spots, then boarding files.
+	# standing spots, boarding files, then ParkSide's saved stamps.
 	var by_id := {}
 	for p: Passenger in loaded["passengers"]:
 		by_id[p.id] = p
@@ -608,6 +608,8 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 		held = sim.checked_standing(data, by_id)
 	if not held.has("error"):
 		held = sim.checked_boarding(data, by_id)
+	if not held.has("error"):
+		held = PassengerSimSave.checked_park_side(data, by_id)
 	if held.has("error"):
 		sim.free()
 		return str(held["error"])
