@@ -8,26 +8,78 @@ extends GdUnitTestSuite
 ## then laid the roller down from the wrong hand onto the stamped side. The
 ## reference terminal's seat row at fronts (11..16, 4), seats one cell north:
 ## pair1_a of the windowed gate_chair_roller_probe (seed 4242) walks west from
-## (17, 4) to its front (14, 4), the chairs on its right.
+## (17, 4) to its front (14, 4), the chairs on its right. The stamp gives way
+## where the stamped side's SETTLED footprint meets a wall or a piece: a bin
+## grid has a bin on the south cell beside each cell of BIN_ROW, the right
+## side walking east.
 
 const ROLLER := SecurityLooks.Kind.ROLLER
 const WALK_M := PassengerSim.WALK_MM / 1000.0
 const FIRST_TICK := 100.0
 const FRONT := Vector2i(14, 4)
 const START := Vector2i(17, 4)
+const BIN_ROW := 10
+const BIN_RUN := Vector2i(8, 16)
 
+var _world: PassengerTestWorld
+var _views: PassengerViews
 var _grid: BuildGrid
+var _bins: BuildGrid
+var _seat: Dictionary = {}
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
-	_grid = BuildGrid.new()
-	assert_bool(ReferenceTerminal.build(_grid)).is_true()
+	_world = PassengerTestWorld.reference_world()
+	_world.run_to(10)
+	_grid = _world.sim.grid
+	_views = PassengerTestWorld.views()
+	_views.clock = _world.clock
+	_views.sim = _world.sim
+	add_child(_views)
+	for s: Dictionary in _world.sim.layout.seats:
+		if s["front"] == FRONT:
+			_seat = s
+	_bins = BuildGrid.new()
+	var edits: Array[BuildEdit] = []
+	for x in range(BIN_RUN.x, BIN_RUN.y):
+		edits.append(BuildEdit.paint_floor(Vector2i(x, BIN_ROW + 1), BuildGrid.FLOOR_TILE, 1))
+		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, BIN_ROW + 1), 0))
+	for result in _bins.apply_batch(edits):
+		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
 
 
 func after() -> void:
+	_views.free()
+	_world.free_all()
+	_world = null
 	_grid = null
+	_bins = null
 	PassengerTestWorld.tracker = null
+
+
+## A new one-bag roller guest bound for the seat at FRONT (TO_GATE), at `at`,
+## its path from `at` to the front.
+func _bound_guest(at: Vector2i) -> Passenger:
+	var p: Passenger = null
+	for attempt in 400:
+		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		if SecurityLooks.bag_kind(p, 0) == ROLLER:
+			break
+		p.carry_on = 0
+	ToiletTestLayout.calm(p)
+	p.carry_on = 1
+	p.cleared = true
+	p.stage = Passenger.Stage.TO_GATE
+	p.seat_object = _seat["object_id"]
+	p.seat_cell = _seat["cell"]
+	p.seat_front = _seat["front"]
+	p.at = at
+	var path: Array[Vector2i] = []
+	for x in range(at.x, FRONT.x - 1, -1):
+		path.append(Vector2i(x, FRONT.y))
+	p.set_path(path)
+	return p
 
 
 ## The place CarryOnProps gives a roller pulled in `hand`.
@@ -112,39 +164,87 @@ func test_a_roller_in_the_other_hand_goes_to_the_stamped_hand() -> void:
 
 
 func test_gate_stamped_is_true_only_for_the_stamped_chair_bound_for() -> void:
-	var world := PassengerTestWorld.reference_world()
-	world.run_to(10)
-	var seat: Dictionary = {}
-	for s: Dictionary in world.sim.layout.seats:
-		if s["front"] == FRONT:
-			seat = s
-	assert_bool(seat.is_empty()).is_false()
-	var p: Passenger = null
-	for attempt in 400:
-		p = world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-		if SecurityLooks.bag_kind(p, 0) == ROLLER:
-			break
-		p.carry_on = 0
-	ToiletTestLayout.calm(p)
-	p.carry_on = 1
-	p.cleared = true
-	p.stage = Passenger.Stage.TO_GATE
-	p.seat_object = seat["object_id"]
-	p.seat_cell = seat["cell"]
-	p.seat_front = seat["front"]
-	p.at = START + Vector2i(ParkSide.NEAR_CELLS, 0)
+	assert_bool(_seat.is_empty()).is_false()
+	var p := _bound_guest(START + Vector2i(ParkSide.NEAR_CELLS, 0))
 	# Too far out for ParkSide to choose: no stamp yet.
-	SecurityLooks.hand_of(world.sim, p, 0)
-	assert_bool(PullSide.gate_stamped(world.sim, p)).is_false()
+	SecurityLooks.hand_of(_world.sim, p, 0)
+	assert_bool(PullSide.gate_stamped(_world.sim, p)).is_false()
 	p.at = START
-	SecurityLooks.hand_of(world.sim, p, 0)
-	assert_bool(PullSide.gate_stamped(world.sim, p)).is_true()
+	SecurityLooks.hand_of(_world.sim, p, 0)
+	assert_bool(PullSide.gate_stamped(_world.sim, p)).is_true()
 	# A stamp for another seat is not this chair's.
-	var stamps: Dictionary = world.sim.get_meta(ParkSide.STAMPS)
-	stamps[p.id] = ["gate %s" % (seat["cell"] + Vector2i(1, 0)), 0]
-	assert_bool(PullSide.gate_stamped(world.sim, p)).is_false()
+	var stamps: Dictionary = _world.sim.get_meta(ParkSide.STAMPS)
+	stamps[p.id] = ["gate %s" % (_seat["cell"] + Vector2i(1, 0)), 0]
+	assert_bool(PullSide.gate_stamped(_world.sim, p)).is_false()
 	# Off to board, the guest is no longer bound for the chair.
-	SecurityLooks.hand_of(world.sim, p, 0)
+	SecurityLooks.hand_of(_world.sim, p, 0)
 	p.stage = Passenger.Stage.TO_EXIT
-	assert_bool(PullSide.gate_stamped(world.sim, p)).is_false()
-	world.free_all()
+	assert_bool(PullSide.gate_stamped(_world.sim, p)).is_false()
+
+
+## PullSide.resolve() for guest `p` drawn 2 m from FRONT on its walk west,
+## having stepped WALK_M, its roller drawn in `drawn`, last changed long ago.
+## Returns [the hand resolve() sets, the bag record].
+func _resolve(p: Passenger, drawn: int) -> Array:
+	var front := _grid.cell_to_world(FRONT)
+	var at := front + Vector3(2.0, 0.0, 0.0)
+	# Set in this call, with no frame between: the views' own sync cannot move them.
+	_views._cur[p.id] = at
+	_views._prev[p.id] = at + Vector3(WALK_M, 0.0, 0.0)
+	var now := FIRST_TICK + 50.0
+	var bag := {"kind": ROLLER, "place": _place(drawn), "was": _place(1 - drawn), "changed": 0.0}
+	var hands := [SecurityLooks.hand_of(_world.sim, p, 0)]
+	PullSide.resolve(
+		[bag], _world.sim, _views, p, [ROLLER], [SecurityLooks.Home.HAND], [false], hands, now
+	)
+	return [hands[0], bag]
+
+
+func test_resolve_keeps_a_stamped_guests_roller_in_the_stamped_hand() -> void:
+	var p := _bound_guest(Vector2i(16, FRONT.y))
+	SecurityLooks.hand_of(_world.sim, p, 0)
+	assert_bool(PullSide.gate_stamped(_world.sim, p)).is_true()
+	var stamped: int = (_world.sim.get_meta(ParkSide.STAMPS) as Dictionary)[p.id][1]
+	assert_int(stamped).is_equal(0)
+	var kept := _resolve(p, 0)
+	assert_int(int(kept[0])).is_equal(0)
+	assert_int(int((kept[1] as Dictionary).get("pull_side_swaps", 0))).is_equal(0)
+	var back := _resolve(p, 1)
+	assert_int(int(back[0])).is_equal(0)
+	assert_int(int((back[1] as Dictionary).get("pull_side_park", 0))).is_equal(1)
+	# Control: the same walk not bound for a chair (no stamp) swaps away from
+	# the chairs on the right, so it is the stamp that holds the hand.
+	p.stage = Passenger.Stage.TO_EXIT
+	assert_bool(PullSide.gate_stamped(_world.sim, p)).is_false()
+	var free := _resolve(p, 0)
+	assert_int(int(free[0])).is_equal(1)
+	assert_int(int((free[1] as Dictionary).get("pull_side_swaps", 0))).is_equal(1)
+
+
+## pick() for a guest walking east along BIN_ROW (the bins on its right) at
+## WALK_M, the stamped hand the right, parked, drawn in `drawn`.
+func _pick_by_bins(drawn: int) -> Array:
+	var at := _bins.cell_to_world(Vector2i(BIN_RUN.x + 2, BIN_ROW))
+	var frame := Transform3D(Basis(Vector3.UP, PI / 2.0), at)
+	var ahead: Array = []
+	for n in range(1, PullSide.AHEAD_CELLS + 1):
+		ahead.append(_bins.cell_to_world(Vector2i(BIN_RUN.x + 2 + n, BIN_ROW)))
+	var now := FIRST_TICK + 50.0
+	var bag := {"kind": ROLLER, "place": _place(drawn), "was": _place(1 - drawn), "changed": 0.0}
+	var picked := PullSide.pick(bag, _bins, frame, ahead, WALK_M, 0, now, false, true)
+	var poses := PullSide.walk_poses(frame, ahead, WALK_M * PullSide.LOOK_TICKS)
+	var settled := PullSide.blocked(_bins, poses, PullSide.footprint(0, false), true)
+	return [picked, bag, settled]
+
+
+func test_furniture_on_the_stamped_side_still_wins() -> void:
+	# Control: a bin meets the stamped right's settled footprint here.
+	var kept := _pick_by_bins(0)
+	assert_bool(bool(kept[2])).is_true()
+	# In the stamped right, the bin sends it left as without the stamp.
+	assert_int(int(kept[0])).is_equal(1)
+	assert_int(int((kept[1] as Dictionary).get("pull_side_swaps", 0))).is_equal(1)
+	# In the left, it is not brought across onto the bin.
+	var left := _pick_by_bins(1)
+	assert_int(int(left[0])).is_equal(1)
+	assert_int(int((left[1] as Dictionary).get("pull_side_park", 0))).is_equal(0)

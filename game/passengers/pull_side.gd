@@ -30,7 +30,8 @@ extends RefCounted
 ## cafe queue spot where hand_of() puts it on the left was stood up there on
 ## the right, and leaving the spot, with no change of hand to carry it round,
 ## its trail swung into a cafe table. So too bound for a gate chair whose side
-## ParkSide has stamped (gate_stamped()): walking along the row of fronts, the
+## ParkSide has stamped (gate_stamped()), while the stamped side's settled
+## footprint is clear: walking along the row of fronts, the
 ## chairs reached into the right's REACH footprint (never its settled one), the
 ## roller went left and back and was laid down from the left onto the stamped
 ## right (board 3c591192). The change of hand is CarryOnProps' own
@@ -171,8 +172,9 @@ static func tuck_now(
 ## but STANDING),
 ## where the roller takes `first`, as it does just after a queue stand
 ## (stood()), `parked` the guest is bound for a gate chair whose side ParkSide
-## has stamped (gate_stamped()), where it takes `first` too. A change of hand
-## starts the roller's trail afresh
+## has stamped (gate_stamped()), where, walking, it takes `first` while that
+## side's SETTLED footprint (and for a change the way across) meets no wall
+## and no furniture. A change of hand starts the roller's trail afresh
 ## (RollerPull.step() "walked"), straight behind on the new side: the old
 ## side's walked line ends in a jump across the legs.
 static func pick(
@@ -200,14 +202,19 @@ static func pick(
 		return hand
 	if queued or stood(bag, now):
 		return hand if hand == first else _change(bag, "pull_side_queue", first)
-	if parked:
-		# The stamped side is where the roller is laid down (ParkSide.hand()):
-		# the chairs of the row reach into its REACH footprint on the way along
-		# the fronts, and a change away from them laid it down from the other hand.
-		return hand if hand == first else _change(bag, "pull_side_park", first)
 	if step_m < STILL_M and not told:
 		return hand
 	var poses := walk_poses(frame, ahead, step_m * LOOK_TICKS)
+	if parked and not blocked(grid, poses, footprint(first, false), true):
+		# The stamped side is where the roller is laid down (ParkSide.hand()):
+		# the chairs of the row reach into its REACH footprint on the way along
+		# the fronts (never its SETTLED one), and a change away from them laid it
+		# down from the other hand. Its settled footprint meeting a wall or a
+		# piece (a bin beside the stamped side) leaves the hand to the rules below.
+		if hand == first:
+			return hand
+		if not blocked(grid, poses, crossing(), true):
+			return _change(bag, "pull_side_park", first)
 	if not told and not blocked(grid, poses, footprint(hand, true), true):
 		if hand == 1 and first == 0:
 			# Clear for a hold as well, so the right is not threatened again

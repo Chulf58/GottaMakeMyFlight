@@ -142,7 +142,12 @@ func _initialize() -> void:
 	var out_rel := OUT_REL + ("-two-bag" if _two_bag else "")
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
-			out_rel = OUT_ROOT.path_join(arg.get_slice("=", 1))
+			var dir := arg.get_slice("=", 1)
+			if not _out_ok(dir):
+				print("PROBE_INVALID --out=%s is not a relative folder under %s" % [dir, OUT_ROOT])
+				quit(1)
+				return
+			out_rel = OUT_ROOT.path_join(dir)
 		elif arg.begins_with("--seed="):
 			_seed = int(arg.get_slice("=", 1))
 		elif arg == "--no-plates":
@@ -150,9 +155,22 @@ func _initialize() -> void:
 		elif arg.begins_with("--trace="):
 			_trace = arg.get_slice("=", 1)
 	_out_dir = ProjectSettings.globalize_path(out_rel).simplify_path()
+	var under := ProjectSettings.globalize_path(OUT_ROOT).simplify_path() + "/"
+	if not _out_dir.begins_with(under):
+		print("PROBE_INVALID plate folder %s is not under %s" % [_out_dir, under])
+		quit(1)
+		return
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE sim_seed=%d out_dir=%s" % [_seed, _out_dir])
 	_run.call_deferred()
+
+
+## Whether `dir` (--out=) names a folder under OUT_ROOT: not empty, not
+## absolute, no drive or backslash, no ".." part.
+static func _out_ok(dir: String) -> bool:
+	if dir.is_empty() or dir.is_absolute_path() or ":" in dir or "\\" in dir:
+		return false
+	return ".." not in dir.split("/")
 
 
 func _run() -> void:
@@ -1014,7 +1032,9 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	var inside := Rect2(Vector2.ONE * MARGIN_PX, size - Vector2.ONE * 2.0 * MARGIN_PX)
 	var subjects := {}
 	for n in nodes.size():
-		subjects[nodes[n]] = BAG_TAG
+		# Each roller its own tag: another roller in front of it is a blocker,
+		# never a landing that proves this one (two rollers in a RUN plate).
+		subjects[nodes[n]] = _bag_tag(n)
 		var points := {
 			"feet": bodies[n].global_position,
 			"head": bodies[n].global_position + Vector3.UP * 1.6,
@@ -1046,13 +1066,13 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 	for n in nodes.size():
 		var box := _bag_box(nodes[n])
 		var c := box.get_center()
-		var lines := _bag_lines(space, c, box.end.y - 0.02)
+		var lines := _bag_lines(space, c, box.end.y - 0.02, _bag_tag(n))
 		var on: int = (lines["on_subject"] as Array).size()
 		if on < MIN_ON and (lines["blockers"] as Array).is_empty():
 			# Nothing in front, but the lines passed over the shell: a roller
 			# tilted on its wheels in the pull (the lay-down's k 0) fills only
 			# one end of its box's top. Aimed at the box's middle height instead.
-			lines = _bag_lines(space, c, c.y)
+			lines = _bag_lines(space, c, c.y, _bag_tag(n))
 			on = (lines["on_subject"] as Array).size()
 			print(
 				"PLATE %s view %d roller %d aimed at its middle height: on %d" % [shot, view, n, on]
@@ -1088,11 +1108,18 @@ func _try_plate(shot: String, which: Array, top: bool, view: int) -> bool:
 
 ## Five sight lines from the camera to a roller body box with middle `c`, at
 ## height `y`: over the middle and 0.08 m either way across x, 0.12 m along z.
-func _bag_lines(space: PhysicsDirectSpaceState3D, c: Vector3, y: float) -> Dictionary:
+## Only a first hit on the roller tagged `tag` (_bag_tag()) lands; a hit on
+## any other roller in front of the target is a blocker.
+func _bag_lines(space: PhysicsDirectSpaceState3D, c: Vector3, y: float, tag: String) -> Dictionary:
 	var targets: Array[Vector3] = [Vector3(c.x, y, c.z)]
 	for d in [Vector3(0.08, 0, 0), Vector3(-0.08, 0, 0), Vector3(0, 0, 0.12), Vector3(0, 0, -0.12)]:
 		targets.append(Vector3(c.x, y, c.z) + d)
-	return PlateSight.sight_lines(space, _cam.global_position, targets, BAG_TAG)
+	return PlateSight.sight_lines(space, _cam.global_position, targets, tag)
+
+
+## The sight tag of the `n`th roller of a plate.
+static func _bag_tag(n: int) -> String:
+	return "%s%d" % [BAG_TAG, n]
 
 
 ## A NEAR row for each visible mesh drawn by the views within 1 m of `at` (a
