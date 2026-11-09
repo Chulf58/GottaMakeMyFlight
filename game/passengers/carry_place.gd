@@ -177,6 +177,18 @@ static func _stamp(
 ) -> void:
 	var node: Node3D = bag["node"]
 	var kind: SecurityLooks.Kind = bag["kind"]
+	if bag.has("put_in") and progress_of(bag, props._now()) < 1.0:
+		# A returner's put-in starts where the bag is carried (carry_transform(),
+		# in the same hand or on the same side), worked out now and not taken
+		# from the frame drawn last, so a new record (a view first drawn, or
+		# after a load) starts it where a view drawn on every frame does, not in
+		# the tray (progress_of()).
+		if bag["home"] == -1:
+			bag["home"] = (SecurityLooks.Home.HAND * 2 + (int(bag["place"]) / 2) % 2) * 2
+			bag["carry_was"] = bag["carry"]
+		node.global_transform = carry_transform(props, held, body, i, [CarryOnProps.REACH_BUILT_M])
+		# Held at its kind's grip, not where a hand held it on a frame drawn before.
+		bag.erase("held_at")
 	var start := want if bag["home"] == -1 else node.global_transform
 	bag["from"] = start_frame(bag, body).affine_inverse() * start
 	# A hand-led move whose hand was still reaching for the bag has not left
@@ -285,9 +297,32 @@ static func reach_blend(kind: SecurityLooks.Kind, k: float, to_hand: bool) -> fl
 ## How far `bag` is through its move at sim time `now` (1 when settled or
 ## not started).
 static func progress_of(bag: Dictionary, now: float) -> float:
+	if bag.has("put_in"):
+		# The body as drawn: the tick's walk back by the share of it not drawn yet.
+		var put_in: Array = bag["put_in"]
+		var alpha := clampf(now - float(put_in[2]), 0.0, 1.0)
+		return SecurityLooks.put_in_share(float(put_in[0]) - (1.0 - alpha) * float(put_in[1]))
 	if not bag.has("since"):
 		return 1.0
 	return clampf((now - bag["since"]) / CarryLead.ticks_of(bag), 0.0, 1.0)
+
+
+## Keeps on `bag` (CarryOnProps' record, its home `home`) where a returner's
+## put-in of its bags into the tray is, set by the sim on each sync and never
+## stepped: `past` (SecurityLooks.return_walk_mm(), NAN off the returner's arch
+## walk), `step_mm` (how far the body was drawn to walk over this tick, from
+## the views' tick positions) and `tick`. progress_of() then reads the move's
+## share from the distance walked, so a view drawn late or after a load draws
+## it as one drawn every frame does, and a change of pace never turns it back
+## (board 40d26b16). Gone off that walk, the move's clock is used again; it has
+## run out by then (the walk to the arch cell is longer than the move).
+static func stamp_put_in(
+	bag: Dictionary, home: int, past: float, step_mm: float, tick: float
+) -> void:
+	if is_nan(past) or home != SecurityLooks.Home.TRAY:
+		bag.erase("put_in")
+		return
+	bag["put_in"] = [past, step_mm, tick]
 
 
 static func tray_transform(props: CarryOnProps, held: Dictionary, body: Node3D) -> Transform3D:
