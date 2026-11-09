@@ -29,7 +29,11 @@ extends RefCounted
 ## as before PullSide: a roller kept on the right up to a
 ## cafe queue spot where hand_of() puts it on the left was stood up there on
 ## the right, and leaving the spot, with no change of hand to carry it round,
-## its trail swung into a cafe table. The change of hand is CarryOnProps' own
+## its trail swung into a cafe table. So too bound for a gate chair whose side
+## ParkSide has stamped (gate_stamped()): walking along the row of fronts, the
+## chairs reached into the right's REACH footprint (never its settled one), the
+## roller went left and back and was laid down from the left onto the stamped
+## right (board 3c591192). The change of hand is CarryOnProps' own
 ## move from one pull to the other.
 ##
 ## The tests place the roller's footprint (footprint()) behind the guest at
@@ -109,7 +113,8 @@ static func resolve(
 		var step_m: float = walk[2]
 		var queued := p.stage in RollerPark.QUEUE_STAGES and p.stage != Passenger.Stage.STANDING
 		if p.carry_on == 1:
-			hands[i] = pick(bag, sim.grid, frame, walk[1], step_m, hands[i], now, queued)
+			var parked := gate_stamped(sim, p)
+			hands[i] = pick(bag, sim.grid, frame, walk[1], step_m, hands[i], now, queued, parked)
 		if not bag.is_empty():
 			tuck(bag, sim.grid, frame, walk[1], step_m, hands[i], now)
 
@@ -165,7 +170,9 @@ static func tuck_now(
 ## `now` sim time, `queued` the guest is in a queue (RollerPark.QUEUE_STAGES
 ## but STANDING),
 ## where the roller takes `first`, as it does just after a queue stand
-## (stood()). A change of hand starts the roller's trail afresh
+## (stood()), `parked` the guest is bound for a gate chair whose side ParkSide
+## has stamped (gate_stamped()), where it takes `first` too. A change of hand
+## starts the roller's trail afresh
 ## (RollerPull.step() "walked"), straight behind on the new side: the old
 ## side's walked line ends in a jump across the legs.
 static func pick(
@@ -176,7 +183,8 @@ static func pick(
 	step_m: float,
 	first: int,
 	now: float,
-	queued := false
+	queued := false,
+	parked := false
 ) -> int:
 	var hand := drawn_hand(bag, first)
 	# hand_of() finding a wall beside the guest on the right (and none on the
@@ -192,6 +200,11 @@ static func pick(
 		return hand
 	if queued or stood(bag, now):
 		return hand if hand == first else _change(bag, "pull_side_queue", first)
+	if parked:
+		# The stamped side is where the roller is laid down (ParkSide.hand()):
+		# the chairs of the row reach into its REACH footprint on the way along
+		# the fronts, and a change away from them laid it down from the other hand.
+		return hand if hand == first else _change(bag, "pull_side_park", first)
 	if step_m < STILL_M and not told:
 		return hand
 	var poses := walk_poses(frame, ahead, step_m * LOOK_TICKS)
@@ -303,6 +316,18 @@ static func turns_to(poses: Array, hand: int) -> bool:
 		if angle_difference(now, pose.basis.get_euler().y) * toward > deg_to_rad(CORNER_DEG):
 			return true
 	return false
+
+
+## Whether `p` is bound for or at the gate chair (ParkSide.GATE_STAGES, its
+## seat_cell) whose side ParkSide has stamped for it (ParkSide.hand(), from
+## ParkSide.NEAR_CELLS out): hand_of() is then the stamp's hand, the side the
+## roller is laid down on. A stamp for another seat is not this one's.
+static func gate_stamped(sim: PassengerSim, p: Passenger) -> bool:
+	if p.stage not in ParkSide.GATE_STAGES or p.seat_cell == Passenger.NO_CELL:
+		return false
+	var stamps: Dictionary = sim.get_meta(ParkSide.STAMPS, {})
+	var stamp: Array = stamps.get(p.id, [])
+	return not stamp.is_empty() and stamp[0] == "gate %s" % p.seat_cell
 
 
 ## Whether `bag`'s last move was a queue stand (RollerPark.queued()) that
