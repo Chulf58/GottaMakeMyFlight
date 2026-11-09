@@ -261,6 +261,78 @@ func test_the_pushback_tug_and_plane_clear_the_parked_bridge() -> void:
 		assert_int(worst).is_equal(0)
 
 
+## Positive controls for Kit.nested(), which the crossing tests above assert
+## to be 0: a small box placed inside a real fuselage and one inside the real
+## cab are found nested; a closed box wholly inside another is found whichever
+## is passed first and not once moved apart, with no edge crossings either way.
+func test_nested_finds_a_part_wholly_inside_a_real_mesh() -> void:
+	var plane := _park("tp_plane_05a")
+	var bridge := _bridge()
+	for host: Node3D in [plane, bridge]:
+		var part_name := "Fuselage" if host == plane else "Cab_Yaw_Mesh"
+		var part := host.find_child("*%s*" % part_name, true, false) as MeshInstance3D
+		var probe := _test_box(Vector3.ONE * 0.02, _inner_point(part))
+		var held := Kit.nested(host, probe)
+		print("a box inside %s nests as %s" % [part.name, held["parts"]])
+		assert_bool(held["parts"].has("%s in %s" % [probe.name, part.name])).is_true()
+		probe.free()
+	plane.get_parent().free()
+	var outer := _test_box(Vector3(4.0, 4.0, 4.0), Vector3.ZERO)
+	var inner := _test_box(Vector3(1.0, 1.0, 1.0), Vector3(0.5, 0.2, -0.3))
+	var crossed := Kit.crossings(inner, outer)
+	var inside := Kit.nested(outer, inner)
+	var inside_back := Kit.nested(inner, outer)
+	inner.position = Vector3(3.5, 0.0, 0.0)
+	var apart := Kit.nested(outer, inner)
+	print(
+		(
+			"boxes: %d crossings, nested %s and %s; apart %d"
+			% [crossed["count"], inside["parts"], inside_back["parts"], apart["count"]]
+		)
+	)
+	assert_int(crossed["count"]).is_equal(0)
+	assert_int(inside["count"]).is_equal(1)
+	assert_int(inside_back["count"]).is_equal(1)
+	assert_int(apart["count"]).is_equal(0)
+	outer.free()
+	inner.free()
+
+
+## A point inside `part`: halfway between where a ray down near the middle of
+## its bounds first enters and leaves it. The ray is set off the middle and
+## skewed a little, so it does not run along a face's diagonal.
+func _inner_point(part: MeshInstance3D) -> Vector3:
+	var box := part.global_transform * part.get_aabb()
+	var top := Vector3(box.get_center().x + 0.137, box.end.y + 1.0, box.get_center().z + 0.083)
+	var bottom := top + Vector3(0.011, -(box.size.y + 2.0), 0.007)
+	var faces := part.mesh.get_faces()
+	var hits: Array[Vector3] = []
+	for i in range(0, faces.size(), 3):
+		var hit: Variant = Geometry3D.segment_intersects_triangle(
+			top,
+			bottom,
+			part.global_transform * faces[i],
+			part.global_transform * faces[i + 1],
+			part.global_transform * faces[i + 2]
+		)
+		if hit != null:
+			hits.append(hit)
+	hits.sort_custom(func(p: Vector3, q: Vector3) -> bool: return p.y > q.y)
+	assert_int(hits.size()).is_greater_equal(2)
+	return hits[0].lerp(hits[1], 0.5) if hits.size() >= 2 else box.get_center()
+
+
+## A closed box mesh of `size` centred at `at`, in the tree.
+func _test_box(size: Vector3, at: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mi.mesh = mesh
+	mi.position = at
+	add_child(mi)
+	return mi
+
+
 func _bridge() -> Node3D:
 	return _airside.props.bridges["A"]["node"]
 
