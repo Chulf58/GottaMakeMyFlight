@@ -196,7 +196,7 @@ static func to_exit(sim: PassengerSim, p: Passenger) -> void:
 static func step_out(sim: PassengerSim, p: Passenger) -> void:
 	if not sim.files.join_plane(sim, p):
 		return
-	p.apron = (sim.files.apron_of(sim, p.exit_object)["points"] as Array).duplicate()
+	p.apron = (sim.files.apron_of(sim, p.exit_object, p)["points"] as Array).duplicate()
 	p.apron_mm = 0
 	sim._set_stage(p, Passenger.Stage.APRON)
 

@@ -30,6 +30,12 @@ const CLASSES := {
 	MEDIUM: {"models": ["tp_plane_04a", "tp_plane_05a"], "passengers": [24, 48]},
 	LARGE: {"models": ["tp_plane_06a", "tp_plane_07a"], "passengers": [48, 120]},
 }
+## Model -> how much further from the terminal it parks than door alignment
+## puts it, in metres along the plane (decision plane-04-stops-further-out-
+## with-the-passenger-walk-ending-at). Door-aligned, model 04's pushback tug
+## starts 1.19 m through the stand's wall line; 1.5 m further out leaves it
+## 0.31 m clear (test_pushback_tug.gd).
+const STOP_BACK_M := {"tp_plane_04a": 1.5}
 
 
 ## The largest class the offer board draws. Medium for now: stands, swept areas
@@ -78,13 +84,34 @@ static func airline_hash(airline: String) -> int:
 
 ## Where a model's origin sits from the stand's plane point so that its front
 ## port passenger door (the first of its PlaneModels "doors") lands where model
-## 05's does with the stand's own offset (REFERENCE_OFFSET). StandPlacement fixes
-## the stand, the door walk and the footprint to model 05, so each model is
-## moved along and across the plane to that one door rather than centred.
+## 05's does with the stand's own offset (REFERENCE_OFFSET), moved by
+## door_shift(). StandPlacement fixes the stand and the footprint to model 05,
+## so each model is moved along and across the plane to that one door rather
+## than centred.
 static func stand_offset(model: String) -> Vector3:
 	var reference: Vector3 = PlaneModels.PLANES[REFERENCE_MODEL]["doors"][0] + REFERENCE_OFFSET
 	var door: Vector3 = PlaneModels.PLANES[model]["doors"][0]
-	return Vector3(reference.x - door.x, 0.0, reference.z - door.z)
+	return Vector3(reference.x - door.x, 0.0, reference.z - door.z) + door_shift(model)
+
+
+## How far `model`'s parked front port door stands from model 05's, in the
+## parked plane's frame (nose to +z): STOP_BACK_M back along the plane, or
+## zero. StandPlacement.door_point() moves the passengers' walk end by it.
+## Zero for "" or an unknown model.
+static func door_shift(model: String) -> Vector3:
+	return Vector3(0.0, 0.0, -float(STOP_BACK_M.get(model, 0.0)))
+
+
+## The model flight `flight_id` of `flights` is drawn with: its contract's
+## airline and plane class, or the starter's for a one-off flight. "" with no
+## flights.
+static func flight_model(flights: FlightSim, flight_id: String) -> String:
+	if flights == null:
+		return ""
+	var contract := flights.contract_of(flights.flight_contract_id(flight_id))
+	if contract.is_empty():
+		contract = FlightSim.STARTER_TERMS
+	return model_for(contract["airline"], contract["plane_size"])
 
 
 ## The class's stand radius in metres: the largest own_swing_radius among its

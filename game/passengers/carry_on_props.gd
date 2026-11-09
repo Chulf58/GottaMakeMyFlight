@@ -395,6 +395,12 @@ func sync() -> void:
 				bags[i]["carry_was"] = bags[i].get("carry", carry)
 			bags[i]["carry"] = carry
 			bags[i]["by_bar"] = by_bar
+			# A returner's bags go into the tray by the distance it walks, not by
+			# a clock (SecurityLooks.put_in_share(), CarryPlace.progress_of()).
+			var step := views.tick_position(id, true).distance_to(views.tick_position(id, false))
+			CarryPlace.stamp_put_in(
+				bags[i], homes[i], SecurityLooks.return_walk_mm(sim, p), step * 1000.0, _tick()
+			)
 			RollerPull.step(self, bags[i], node, id, homes[i], hands[i])
 			# A roller's pick-up at a seat decides its roll on this tick, drawn or not.
 			RollerPark.roll_step(

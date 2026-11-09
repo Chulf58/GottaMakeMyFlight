@@ -338,10 +338,7 @@ func far_shadow_alpha() -> float:
 ## The model a flight is drawn with: its contract's airline and plane class, or
 ## the starter's for a one-off flight.
 func model_of(id: String) -> String:
-	var contract := sim.contract_of(sim.flight_contract_id(id))
-	if contract.is_empty():
-		return starter_model()
-	return PlaneClasses.model_for(contract["airline"], contract["plane_size"])
+	return PlaneClasses.flight_model(sim, id)
 
 
 ## The plane class a flight flies: its contract's, or the starter's for a

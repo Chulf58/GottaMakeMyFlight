@@ -56,7 +56,8 @@ var _pending: Dictionary = {}
 ## runner caught behind a slower walker, or waiting to join), until it leaves
 ## the walk out (forget()): a miss then counts as the terminal's crowding.
 var _delayed: Dictionary = {}
-## Derived: exit door -> {"points", "mm", "plane"}, its walk to the plane.
+## Derived: "door|model" -> {"points", "mm", "plane"}, the walk from an exit
+## door to the door of a plane drawn with that model (apron_of()).
 var _aprons: Dictionary = {}
 var _aprons_site: SiteDefinition
 ## Derived: the forecast's known walkers (own_times() entries) on _known_tick.
@@ -96,19 +97,23 @@ func clear_derived() -> void:
 
 
 ## The walk outside from exit door `door`: {"points", "mm", "plane"}, with
-## "plane" null when the door has no walk.
-func apron_of(sim: PassengerSim, door: int) -> Dictionary:
+## "plane" null when the door has no walk. For passenger `p` it ends at the
+## door of the plane its flight is drawn with (PlaneClasses.flight_model());
+## with none, at the stand's door.
+func apron_of(sim: PassengerSim, door: int, p: Passenger = null) -> Dictionary:
 	if _aprons_site != sim.site:
 		_aprons.clear()
 		_aprons_site = sim.site
-	if not _aprons.has(door):
+	var model := PlaneClasses.flight_model(sim.flights, p.flight_id) if p != null else ""
+	var key := "%d|%s" % [door, model]
+	if not _aprons.has(key):
 		var walk := Passenger.new()
-		walk.apron = OutsideWalks.departure(sim, door)
+		walk.apron = OutsideWalks.departure(sim, door, model)
 		var plane: Variant = null
 		if not walk.apron.is_empty():
 			plane = plane_key(walk.apron.back())
-		_aprons[door] = {"points": walk.apron, "mm": walk.apron_total_mm(), "plane": plane}
-	return _aprons[door]
+		_aprons[key] = {"points": walk.apron, "mm": walk.apron_total_mm(), "plane": plane}
+	return _aprons[key]
 
 
 ## Whether passenger `id` is in a file or waiting to join one.
@@ -165,7 +170,7 @@ func join_door(sim: PassengerSim, p: Passenger) -> bool:
 ## of its door's walk, or waits at the door. Returns whether it joined (a door
 ## with no walk outside has no apron file to join).
 func join_plane(sim: PassengerSim, p: Passenger) -> bool:
-	var apron := apron_of(sim, p.exit_object)
+	var apron := apron_of(sim, p.exit_object, p)
 	if apron["plane"] == null:
 		_hold(p.id, false)
 		return true
@@ -281,7 +286,7 @@ func pending_order(sim: PassengerSim) -> Array[Passenger]:
 	for id: int in _pending:
 		var p := sim.get_passenger(id)
 		if _door_of.has(id):
-			var apron := apron_of(sim, p.exit_object)
+			var apron := apron_of(sim, p.exit_object, p)
 			var plane: Vector3i = apron["plane"] if apron["plane"] != null else Vector3i.ZERO
 			keyed.append([0, plane.x, plane.y, plane.z, apron["mm"], id])
 		else:

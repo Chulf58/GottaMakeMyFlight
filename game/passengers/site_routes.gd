@@ -174,28 +174,29 @@ static func arrival(
 
 ## The walk out to the plane at `stand` along door_cells() `cells` of an exit
 ## (searched down the distances to the door's cell): the door cell's centre
-## and outer edge, the outside cells' corners and the stand's apron route.
+## and outer edge, the outside cells' corners and the stand's apron route to
+## the door of a plane drawn with `model` ("" for the stand's door).
 static func departure(
-	grid: BuildGrid, site: SiteDefinition, cells: Array[Vector2i], stand: Dictionary
+	grid: BuildGrid, site: SiteDefinition, cells: Array[Vector2i], stand: Dictionary, model := ""
 ) -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	var out := cells[1] - cells[0] if cells.size() > 1 else SiteDefinition.PLANE_STEP
 	var centre := grid.cell_to_world(cells[0])
 	points.append(centre)
 	points.append(centre + Vector3(out.x, 0.0, out.y) * 0.5)
-	points.append_array(to_plane(grid, site, cells.slice(1), stand))
+	points.append_array(to_plane(grid, site, cells.slice(1), stand, model))
 	return points
 
 
 ## The outside `cells` (ending on the plane door's cell) as corner points,
-## then the apron route of `stand`.
+## then the apron route of `stand` to the door of a plane drawn with `model`.
 static func to_plane(
-	grid: BuildGrid, site: SiteDefinition, cells: Array, stand: Dictionary
+	grid: BuildGrid, site: SiteDefinition, cells: Array, stand: Dictionary, model := ""
 ) -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	for cell: Vector2i in corners(cells):
 		points.append(ground(grid, site, cell))
-	points.append_array(Array(StandPlacement.apron_route(stand)))
+	points.append_array(Array(StandPlacement.apron_route(stand, model)))
 	return points
 
 
