@@ -62,13 +62,13 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://spike/roller_board_gate_probe.gd [-- --seed=N]
 ##
-## Plates go to tools/blender/out/gate-stand/.
+## Plates go to tools/blender/out/gate-stander/.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
-const OUT_REL := "res://../tools/blender/out/gate-stand"
+const OUT_REL := "res://../tools/blender/out/gate-stander"
 const GATE_GUESTS := 5
 ## Where the file walkers turn out: three on one cell, then one on each cell
 ## beside it, a later id each. The walkers beside wait their turn in the file
