@@ -7,8 +7,6 @@
 [ext_resource type="Script" path="res://flights/plane_view.gd" id="5_plane"]
 [ext_resource type="Script" path="res://airside/airside.gd" id="6_airside"]
 [ext_resource type="PackedScene" path="res://assets/buildings/tp_airport_site.glb" id="7_terminal"]
-[ext_resource type="PackedScene" path="res://assets/airside/tp_runway_01a.glb" id="8_end"]
-[ext_resource type="PackedScene" path="res://assets/airside/tp_runway_03a.glb" id="9_strip"]
 [ext_resource type="Script" path="res://passengers/passenger_sim.gd" id="10_pax"]
 [ext_resource type="Script" path="res://passengers/passenger_views.gd" id="11_paxview"]
 [ext_resource type="Script" path="res://ui/passenger_hud.gd" id="12_hud"]
@@ -42,6 +40,8 @@
 [ext_resource type="Script" path="res://airside/gate_desks.gd" id="36_gatedesks"]
 [ext_resource type="Script" path="res://flights/plane_fleet.gd" id="37_planefleet"]
 [ext_resource type="Script" path="res://build/build_unlocks.gd" id="43_unlocks"]
+[ext_resource type="Script" path="res://airside/runway_view.gd" id="44_runwayview"]
+[ext_resource type="Script" path="res://ui/runway_card.gd" id="45_runwaycard"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -186,25 +186,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -124, 0, -308)
 [node name="Terminal" parent="Airside" instance=ExtResource("7_terminal")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -80)
 
-[node name="RunwayEndWest" parent="Airside" instance=ExtResource("8_end")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -144, 0, -338)
-
-[node name="RunwayWest" parent="Airside" instance=ExtResource("9_strip")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -96, 0, -338)
-
-[node name="RunwayMid" parent="Airside" instance=ExtResource("9_strip")]
+[node name="RunwayView" type="Node3D" parent="Airside" node_paths=PackedStringArray("flights")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -338)
-
-[node name="RunwayEast" parent="Airside" instance=ExtResource("9_strip")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 96, 0, -338)
-
-[node name="RunwayEndEast" parent="Airside" instance=ExtResource("8_end")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 144, 0, -338)
+script = ExtResource("44_runwayview")
+flights = NodePath("../../FlightSim")
 
 [node name="FlightSim" type="Node" parent="." node_paths=PackedStringArray("clock")]
 script = ExtResource("4_sim")
 clock = NodePath("../SimClock")
-runway_start = "medium"
+runway_start = "small"
 
 [node name="PlaneView" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "airside", "sun")]
 script = ExtResource("5_plane")
@@ -367,6 +357,15 @@ script = ExtResource("18_offerpanel")
 desk = NodePath("../OfferDesk")
 flights = NodePath("../FlightSim")
 clock = NodePath("../SimClock")
+build_mode = NodePath("../BuildMode")
+save_game = NodePath("../SaveGame")
+
+[node name="RunwayCard" type="CanvasLayer" parent="." node_paths=PackedStringArray("flights", "unlocks", "finances", "build_mode", "save_game")]
+layer = 2
+script = ExtResource("45_runwaycard")
+flights = NodePath("../FlightSim")
+unlocks = NodePath("../BuildUnlocks")
+finances = NodePath("../Finances")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 

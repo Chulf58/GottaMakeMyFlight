@@ -28,6 +28,9 @@ signal unlocked(tier: int, text: String)
 ## The tier a new game starts at, and the one that opens the cafe.
 const START_TIER := 1
 const CAFE_TIER := 2
+## The tier that opens the works for each runway size (RunwayWorks; decision
+## runway-upgrade-works-wait-for-a-timetable-gap-passengers-per-plane-class).
+const RUNWAY_TIERS := {"medium": 2, "large": 3}
 ## Needed by a tool no tier lists: never met, so the tool is refused.
 const UNLISTED_TIER := 99
 ## Most made-flight passengers counted (a save above it is refused).
@@ -64,7 +67,10 @@ const TIERS := [
 		"stars": 2.0,
 		"passengers": 50,
 		"facilities":
-		"cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay",
+		(
+			"cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay,"
+			+ " medium runway"
+		),
 		"tools":
 		[
 			BuildMode.Tool.CAFE_ROOM,
@@ -97,7 +103,7 @@ const TIERS := [
 		"facilities":
 		(
 			"food and services: bar, restaurant, grab-and-go, info desk, pharmacy,"
-			+ " exchange, ATM, lounge, car park"
+			+ " exchange, ATM, lounge, car park, large runway"
 		),
 		"tools":
 		[
@@ -247,6 +253,12 @@ static func tool_for_object(def_id: StringName) -> BuildMode.Tool:
 	return _tool_by_def.get(def_id, BuildMode.Tool.NONE)
 
 
+## The tier that opens the works for a runway of `size`, UNLISTED_TIER for a
+## size nothing builds.
+static func runway_tier(size: String) -> int:
+	return RUNWAY_TIERS.get(size, UNLISTED_TIER)
+
+
 ## What tier `tier` asks for: "Unlocks at 3 stars and 200 passengers".
 static func requirement_text(tier: int) -> String:
 	if tier < 2 or tier > TIERS.size():
@@ -283,7 +295,11 @@ func cafe_open() -> bool:
 
 ## The requirement of the tier `tool` needs, and how far the game is from it.
 func unlock_text(tool: BuildMode.Tool) -> String:
-	var needed := tier_of(tool)
+	return tier_text(tier_of(tool))
+
+
+## The requirement of tier `needed`, and how far the game is from it.
+func tier_text(needed: int) -> String:
 	var text := requirement_text(needed)
 	if needed < 2 or needed > TIERS.size() or rating == null:
 		return text

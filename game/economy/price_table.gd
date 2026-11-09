@@ -133,6 +133,12 @@ const LAND_PLOT_PRICES: Array[int] = [
 	2500, 3500, 5000, 7000, 9500, 12500, 16000, 20000, 24500, 29500
 ]
 
+## What the runway works cost, by the size they build (decision runway-upgrade-
+## works-wait-for-a-timetable-gap-passengers-per-plane-class; design section 7).
+## Placeholders, to be tuned by playtest: a medium runway about two land plots,
+## a large one more than the starting budget twice over.
+const RUNWAY_PRICES := {"medium": 15000, "large": 40000}
+
 ## What a ready toilet room costs to run per stall per game day (decision
 ## toilet-design-queue-free-reservable-stalls-per-stall-daily-u, point 2),
 ## charged at midnight with the wages. A tuning value, to be checked in a
@@ -182,6 +188,12 @@ const MISSED_BAG_FEE_PERCENT := 50
 
 static func price_of_floor() -> int:
 	return FLOOR_PRICE
+
+
+## The price of the works that build a runway of `size`, NO_PRICE for a size
+## nothing builds (small is where a game starts).
+static func runway_price(size: String) -> int:
+	return RUNWAY_PRICES.get(size, NO_PRICE)
 
 
 ## The price of the next land plot after `bought` plots (LAND_PLOT_PRICES),

@@ -69,7 +69,10 @@ signal loaded(ok: bool)
 ## release).
 ## 13: the runway's size (part "runway", Runway); version 12 saves are refused
 ## (no migration before a release).
-const SAVE_VERSION := 13
+## 14: the runway part holds the upgrade works too (Runway save version 2:
+## RunwayWorks, the size they build and the ticks they run); version 13 saves
+## are refused (no migration before a release).
+const SAVE_VERSION := 14
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -462,6 +465,14 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 ## class its runway took.
 func _runway_problem(data: Dictionary, staged: Dictionary) -> String:
 	var runway: Runway = staged["runway"]
+	# The works end on a tick the sim has not reached (Runway.settle() runs on
+	# every tick), so a saved booking that is already over is not a state of play.
+	var tick := str(data["clock"]["tick"]).to_int()
+	if runway.works.scheduled() and runway.works.finish <= tick:
+		return (
+			"runway: the works end at tick %d, the clock is on tick %d"
+			% [runway.works.finish, tick]
+		)
 	for offer: Dictionary in data["offers"]["offers"]:
 		if not runway.takes(offer["plane_size"]):
 			return (
@@ -548,7 +559,7 @@ func _stage_apron(data: Dictionary, staged: Dictionary) -> String:
 func _staged_flight_sim(staged: Dictionary) -> FlightSim:
 	var sim := FlightSim.new()
 	if staged.has("runway"):
-		sim.runway.size = (staged["runway"] as Runway).size
+		sim.runway = staged["runway"]
 	if not staged.has("gates"):
 		sim.gate_source = flights.gate_source
 		sim.stand_source = flights.stand_source
