@@ -161,16 +161,20 @@ func test_the_north_row_model_07_and_05_noses_are_paved_to_the_site() -> void:
 	assert_float(float(stand["wall_z"])).is_equal_approx(SITE.grid_origin.z, 0.001)
 	assert_bool(_large_gate(stand)).is_true()
 	var at := StandPlacement.stand_point(stand)
+	# The route's own strips, as before the pads: the link stops at the stand
+	# point. The shown strips run on over the pad to the wall line
+	# (TaxiPaving.run_on_to_walls()), so they are paved there because of the pad.
+	var route_strips := TaxiPaving.strips(_airside.taxi_routes(), StandPlacement.TAXI_LANE_Z)
 	for model in ["tp_plane_05a", "tp_plane_07a"]:
 		var rect := TaxiPaving.parked_footprint(at, model)
 		var nose := Vector3(rect.get_center().x, 0.0, rect.end.y)
 		print("%s north-row nose %s, tail z %.2f" % [model, nose, rect.position.y])
 		# Before the pads only the link to the stand point was paved: the nose half
 		# lay on grass.
-		assert_bool(TaxiPaving.covers(_airside.paving.shown, nose)).is_false()
+		assert_bool(TaxiPaving.covers(route_strips, nose)).is_false()
 		assert_bool(TaxiPaving.paved(_airside.paving.shown, _airside.paving.pads, nose)).is_true()
 		var between := Vector3(nose.x, 0.0, (at.z + nose.z) / 2.0)
-		assert_bool(TaxiPaving.covers(_airside.paving.shown, between)).is_false()
+		assert_bool(TaxiPaving.covers(route_strips, between)).is_false()
 		(
 			assert_bool(TaxiPaving.paved(_airside.paving.shown, _airside.paving.pads, between))
 			. is_true()
