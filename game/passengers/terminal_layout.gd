@@ -15,7 +15,9 @@ extends RefCounted
 ## lane cell, not a door cell, a scanner passage or a seat front, not a gap
 ## one cell wide, and that crosses no door wall, up to HOLD_SLOTS cells. A step that would put the
 ## line beside its own earlier cells is refused, so a line ends where it would
-## turn back along itself. Hold lines are found after every lane, stations in
+## turn back along itself. A step onto a cell a walker could reach from a
+## passenger entrance only over the line's own cells is refused too, so the
+## line never walls off its own tail. Hold lines are found after every lane, stations in
 ## id order. A station's line (line_of()) is its lane then its hold line:
 ## queue member i (lane, then holding list) stands on line_of()[i].
 ##
@@ -323,7 +325,7 @@ func _add_holds(grid: BuildGrid, ids: Array[int], reserved: Dictionary, taken: D
 
 ## The hold line behind `station`'s lane: from its last cell, each step
 ## straight on, else to the left, else to the right, onto a cell _may_hold()
-## accepts, until none does or it holds HOLD_SLOTS cells.
+## and _reached() accept, until none does or it holds HOLD_SLOTS cells.
 func _hold(
 	grid: BuildGrid, station: int, blocked: Dictionary, taken: Dictionary
 ) -> Array[Vector2i]:
@@ -342,7 +344,8 @@ func _hold(
 			heading, Vector2i(heading.y, -heading.x), Vector2i(-heading.y, heading.x)
 		]:
 			var next := cell + way
-			if _may_hold(grid, cell, next, blocked.has(next) or taken.has(next), own):
+			var in_use := blocked.has(next) or taken.has(next)
+			if _may_hold(grid, cell, next, in_use, own) and _reached(grid, next, own):
 				hold.append(next)
 				taken[next] = true
 				own[next] = true
@@ -378,6 +381,22 @@ static func _may_hold(
 		if to + step != from and own.has(to + step):
 			return false
 	return true
+
+
+## Whether a walker can come in to `cell` from a passenger entrance without
+## stepping on the line's own cells (`own`), true when there is no entrance.
+## A hold cell reached only over the line sits in a pocket the line walls off:
+## a walker heading for it as the tail would have to walk through the members
+## ahead of it (board 6cfc0e16). Each hold cell passing this keeps every tail
+## reachable past the members' block, line[0..free-1] (StationQueue.set_off()).
+func _reached(grid: BuildGrid, cell: Vector2i, own: Dictionary) -> bool:
+	if passenger_entrances.is_empty():
+		return true
+	var shut := own.keys()
+	for door in passenger_entrances:
+		if not grid.find_path_around(door_cell(grid, door), cell, shut).is_empty():
+			return true
+	return false
 
 
 ## `cells`, or empty (a closed passage) when any of them is not a passenger
