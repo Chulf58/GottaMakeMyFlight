@@ -34,6 +34,21 @@ const FLOOR_MOUNTS: Array[String] = [
 ## How far under a mount the floor may lie, and the headroom a passenger
 ## (2.01 m tall, ruling airside-props-r11-rulings-board-through-a-docked-jet-
 ## bridge) needs over it.
+## The walk from the exit sill to the plane door, mount by mount.
+const WALK: Array[String] = [
+	"Mount_StairBottom",
+	"Mount_Vestibule",
+	"Mount_StairFoot",
+	"Mount_StairTop",
+	"Mount_Link",
+	"Mount_Rotunda",
+	"Mount_TunnelA",
+	"Mount_TunnelB",
+	"Mount_CabFloor",
+	"Mount_Door",
+]
+## Heights over the walk line that a passenger fills: feet, body and head.
+const BODY_LIFTS: Array[float] = [0.3, 1.0, 2.0]
 const FLOOR_SLACK_M := 0.05
 const HEADROOM_M := 2.05
 
@@ -194,6 +209,62 @@ func test_every_walk_mount_stands_on_a_floor_with_headroom() -> void:
 	var none: Variant = _first_hit(tris, lifted + Vector3.UP * 0.5, lifted + Vector3.DOWN * 0.5)
 	print("control: 1 m over Mount_Link the floor ray meets %s" % [none])
 	assert_bool(none == null).is_true()
+
+
+## The straight walk between each pair of consecutive walk mounts, ending at
+## Mount_Door, meets none of the bridge's own meshes at a passenger's feet,
+## body and head height (Sol review of 8c348ea: a closed rotunda put two walls
+## across Mount_Link -> Mount_Rotunda -> Mount_TunnelA), docked at 05, 06 and
+## 07 and parked. Controls: the exit sill straight to Mount_Link, skipping the
+## stair, runs into the stair box; the rotunda's centre straight out east
+## meets the rotunda's wall.
+func test_the_walk_between_mounts_runs_clear_through_the_bridge() -> void:
+	var entry: Dictionary = _airside.props.bridges["A"]
+	var bridge: Node3D = entry["node"]
+	for model: String in ["tp_plane_05a", "tp_plane_06a", "tp_plane_07a", ""]:
+		var plane: Node3D = null if model == "" else _park(model)
+		var tris := Kit.world_tris(bridge)
+		var blocked := 0
+		for i in range(1, WALK.size()):
+			var a := _at(bridge, WALK[i - 1])
+			var b := _at(bridge, WALK[i])
+			for lift in BODY_LIFTS:
+				var hit: Variant = _first_hit(tris, a + Vector3.UP * lift, b + Vector3.UP * lift)
+				if hit != null:
+					blocked += 1
+					print(
+						(
+							"%s %s -> %s at %.1f m meets the bridge at %s"
+							% [model, WALK[i - 1], WALK[i], lift, hit]
+						)
+					)
+		print(
+			(
+				"%s: %d walk segments, %d blocked"
+				% [
+					model if model != "" else "parked",
+					(WALK.size() - 1) * BODY_LIFTS.size(),
+					blocked
+				]
+			)
+		)
+		assert_int(blocked).is_equal(0)
+		if plane != null:
+			plane.get_parent().free()
+	var parked := Kit.world_tris(bridge)
+	var sill := _at(bridge, "Mount_StairBottom") + Vector3.UP * BODY_LIFTS[0]
+	var link := _at(bridge, "Mount_Link") + Vector3.UP * BODY_LIFTS[0]
+	var skip: Variant = _first_hit(parked, sill, link)
+	var centre := _at(bridge, "Mount_Rotunda") + Vector3.UP * BODY_LIFTS[1]
+	var east := centre + Vector3.RIGHT * 3.0
+	var wall: Variant = _first_hit(parked, centre, east)
+	print("controls: sill to link meets %s; rotunda centre to 3 m east meets %s" % [skip, wall])
+	assert_bool(skip != null).is_true()
+	assert_bool(wall != null).is_true()
+
+
+func _at(bridge: Node3D, mount: String) -> Vector3:
+	return (bridge.find_child(mount, true, false) as Node3D).global_position
 
 
 ## A parked plane `model` at the stand, reporting to the bridge as in BOARDING.

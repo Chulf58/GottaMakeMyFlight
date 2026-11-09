@@ -53,6 +53,11 @@ const PITCH_MAX_DEG := 9.0
 const ROOT_OUT_M := 4.0
 const EXIT_X_M := 9.7
 const LINK_Z := 2.80
+## How far the stair box's and corridor's terminal face stands off the wall
+## line, and the exit door collar in front of it (BOX_GAP, COLLAR_GAP): both
+## clear the terminal wall and stay under the roof fascia 0.25 m out.
+const BOX_GAP_M := 0.3
+const COLLAR_GAP_M := 0.16
 ## How far the swung-clear tunnel (parked_clear()) slopes down. With the
 ## column ROOT_OUT_M out, a level cab's roof (5.73 m) reaches plane 04's port
 ## rotor disc (5.46 m up, from 4.37 m out from the wall at the stand); 6

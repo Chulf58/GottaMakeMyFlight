@@ -59,7 +59,10 @@ func test_rig_constants_match_the_written_glb() -> void:
 ## Board 0adca5c6 (ruling jet-bridge-starts-at-the-gate-s-exit-door-passengers-
 ## step-fr): the bridge starts at the gate's own exit door. Before it, the link
 ## stub backed onto the wall 0.3 m off the wall line, about 9 m east of the
-## exit; that check is replaced by the stair box's sill on the exit door.
+## exit; that check is replaced by the stair box's sill on the exit door and
+## the exact offsets of the root and the corridor from the wall line (the
+## corridor's faces against the real terminal wall and roof are in
+## test_airside_props_bridge_terminal.gd).
 func test_each_gate_gets_one_bridge_starting_at_its_exit_door() -> void:
 	var props := _airside.props
 	assert_array(props.bridges.keys()).contains_exactly_in_any_order(["A", "B"])
@@ -85,10 +88,24 @@ func test_each_gate_gets_one_bridge_starting_at_its_exit_door() -> void:
 			)
 		)
 		assert_float(sill.distance_to(exit)).is_less(0.001)
-		# The link corridor runs along the wall, north of it, between the exit
-		# door and the column.
-		assert_float(link.z).is_less(float(stand["wall_z"]) - 0.3)
-		assert_float(link.x).is_between(exit.x, bridge.global_position.x + 0.001)
+		# The column stands exactly ROOT_OUT_M north of the wall line and
+		# EXIT_X_M east of the exit door; the corridor's axis LINK_Z behind it,
+		# so ROOT_OUT_M - LINK_Z (1.2 m) out from the wall, between the door and
+		# the column.
+		var wall := float(stand["wall_z"])
+		var root: Vector3 = bridge.global_position
+		print(
+			(
+				"gate %s: root %.4f m out, %.4f m east of the door; link axis %.4f m out"
+				% [gate, wall - root.z, root.x - exit.x, wall - link.z]
+			)
+		)
+		assert_float(wall - root.z).is_equal_approx(JetBridgePose.ROOT_OUT_M, 0.001)
+		assert_float(root.x - exit.x).is_equal_approx(JetBridgePose.EXIT_X_M, 0.001)
+		assert_float(wall - link.z).is_equal_approx(
+			JetBridgePose.ROOT_OUT_M - JetBridgePose.LINK_Z, 0.001
+		)
+		assert_float(link.x).is_equal_approx(root.x, 0.001)
 		assert_float(bridge.global_position.x - door.x).is_greater(JetBridgePose.MOUNT_DOOR_Z)
 
 

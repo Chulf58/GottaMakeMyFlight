@@ -7,7 +7,7 @@ Run (headless, reproducible), after build_airside_props.py has written jet_bridg
 Everything is written under tools/blender/out/jet_bridge_board/ (gitignored). The plates
 re-import the WRITTEN game/assets/airside/props/jet_bridge.glb and plane 05:
 - six_axis.png (and six_axis_<view>.png): six orthographic views at one true scale with
-  a 1 m cube beside the bridge, the tunnel straight out and half extended (slide 2.5 m)
+  a 1 m cube beside the bridge, the tunnel at the docked yaw and half extended (slide 2.5 m)
   so both tunnel sections show, and 1.75 m guest boxes (orange) standing inside tunnel
   A, tunnel B, the cab, the corridor, the stair and the vestibule;
 - stand.png: plane 05 docked at a stand (wall line Godot z 0, exit door x 0), the bridge
@@ -157,7 +157,8 @@ def six_axis():
     scene = rap.reset_scene(SIX_PX, SIX_PX, 1.5)
     objs, _h = rp.place(rp.prop("jet_bridge"), "jet_bridge")
     bo = rp.by_name(objs)
-    set_pose(bo, 0.0, 0.0, SLIDE_SIX, 0.0, bp.ROT_FLOOR - bp.TUN_B_SINK)
+    # The docked yaw every stand uses: the rotunda's openings are cut for it.
+    set_pose(bo, math.radians(bp.YAW_USED[0]), 0.0, SLIDE_SIX, 0.0, bp.ROT_FLOOR - bp.TUN_B_SINK)
     report_mounts(bo, "six_axis")
     gs = guests(bo)
     lo, hi = rap.bounds(objs)

@@ -33,7 +33,7 @@ at the gate's exit door: the terminal wall line is z = -ROOT_OUT and the exit do
 centre x = EXIT_X in the root's frame (JetBridgePose.root_for() turns the root 180
 degrees, so +x is west, toward the door). The tunnels, the cab and the stair box are
 hollow with real window openings (glass panes, TP_Glass_1A_D), so a passenger inside
-shows through them; the rotunda drum stays closed.
+shows through them. The rotunda is hollow too, its wall open where tunnel A and the stub pass.
   JetBridge_ROOT
     JetBridge_Body        column, rotunda drum and roof (static)
     StairBox              at the origin: the stair box at the exit door (vestibule,
@@ -45,7 +45,7 @@ shows through them; the rotunda drum stays closed.
     Mount_StairTop        (STAIR_TOP_X - STEP_OFF, ROT_FLOOR, -LINK_Z): past the top step
     Mount_Link            (0, ROT_FLOOR, -LINK_Z): the corridor at the stub
     Mount_Rotunda         (0, ROT_FLOOR, 0): the rotunda's centre, floor level
-    Tunnel_Yaw            at (0, ROT_FLOOR, 0): rotate about Y to aim the tunnel
+    Tunnel_Yaw            at (0, ROT_FLOOR, 0): rotate about Y to aim the tunnel; its mesh is the two drum skirts
       Tunnel_Pitch        at (0, 0, HINGE_Z) on the drum face, floor height: rotate
                           about X to slope the tunnel; its mesh is tunnel A
         Mount_TunnelA     at (0, 0, 0): tunnel A's floor at the hinge
@@ -163,10 +163,28 @@ STAIR_TOP_X = STAIR_FOOT_X - (RISERS - 1) * TREAD
 STEP_OFF = 0.1          # the stair mounts stand this far off the first and last riser
 BOX_END_X = EXIT_X + VEST_HALF       # the box's far end, past the exit door
 LINK_END_X = -1.1                    # the corridor's closed end past the stub
-STUB_HALF = 1.0
+STUB_HALF = 0.75
+STUB_END = 1.45         # the stub's far end inside the rotunda, clear of the skirts
 DOOR_HALF = 0.55        # the openings for the exit door and the apron door
 DOOR_TOP = 2.3
-COLLAR_Z0 = -(ROOT_OUT - 0.16)       # the exit door collar stops short of the wall
+COLLAR_GAP = 0.16
+COLLAR_Z0 = -(ROOT_OUT - COLLAR_GAP)  # the exit door collar stops short of the wall
+# The terminal roof (RoofView) has a fascia 0.25 m out from the wall line from 2.3 m up
+# to 5.2 m, so the collar stays under 2.3 m and the box (0.3 m out) has no roof
+# overhang on the terminal side.
+COLLAR_TOP = 2.25
+COLLAR_DOOR_TOP = 2.12
+# The rotunda: a static outer wall (DRUM_IN..DRUM_R) open where tunnel A passes at the
+# yaws the game uses (75.1 degrees docked and parked at every stand, 90 swung clear;
+# tunnel A spans +-DRUM_TUN_HALF at the outer face) and where the stub enters, and two
+# skirts under Tunnel_Yaw (SKIRT_IN..SKIRT_OUT, relative +-SKIRT_ARC) that close the
+# part of the tunnel opening the tunnel leaves bare at either yaw.
+DRUM_IN = 1.62
+YAW_USED = (75.1, 90.0)
+DRUM_TUN_HALF = 46.0      # tunnel A's band (1.22 m out) where it leaves the drum (r 1.70)
+DRUM_STUB_HALF = math.degrees(math.asin(STUB_HALF / DRUM_IN))
+SKIRT_IN, SKIRT_OUT = 1.54, 1.60
+SKIRT_ARC = (48.5, 64.0)
 WIN_LOW = (1.0, 3.3)    # box windows along the stair
 WIN_HIGH = (ROT_FLOOR + 0.85, ROT_FLOOR + 2.05)
 # The walkable floor points from the exit door to the plane door, in walk order:
@@ -327,6 +345,34 @@ def window_row(spans, v0, v1):
     return [(a, b, v0, v1, True) for a, b in spans]
 
 
+def arc_wall(name, a0, a1, r0, r1, y0, y1, pal, parent, c, step=12.0):
+    """A closed curved wall about the Godot y axis from yaw a0 to a1 (degrees from +z
+    toward +x), radii r0..r1, heights y0..y1."""
+    n = max(1, int(math.ceil((a1 - a0) / step)))
+    bm = bmesh.new()
+    rings = []
+    for i in range(n + 1):
+        a = math.radians(a0 + (a1 - a0) * i / n)
+        s, co = math.sin(a), math.cos(a)
+        rings.append([bm.verts.new(gb(r * s, y, r * co)) for r, y in ((r0, y0), (r1, y0), (r1, y1), (r0, y1))])
+    for i in range(n):
+        p, q = rings[i], rings[i + 1]
+        for k in range(4):
+            bm.faces.new([p[k], q[k], q[(k + 1) % 4], p[(k + 1) % 4]])
+    bm.faces.new(rings[0])
+    bm.faces.new(list(reversed(rings[-1])))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return kit._finish_mesh(name, bm, pal, parent, c)
+
+
+def drum_closed():
+    """The yaw spans (degrees) where the rotunda's outer wall stands: everything but
+    the tunnel opening and the stub opening (centred on 180, the -z side)."""
+    t0, t1 = YAW_USED[0] - DRUM_TUN_HALF, YAW_USED[1] + DRUM_TUN_HALF
+    s0, s1 = 180.0 - DRUM_STUB_HALF, 180.0 + DRUM_STUB_HALF
+    return [(t1, s0), (s1, t0 + 360.0)]
+
+
 # ---------------------------------------------------------------- jet bridge
 
 
@@ -337,17 +383,20 @@ def build_jet_bridge(root, c):
     gbox("Plinth", (-0.7, 0.0, -0.7), (0.7, 0.15, 0.7), "concrete", root, c, bevel=0.03)
     gcyl_y("Column", 0.0, 0.0, 0.15, ROT_FLOOR - 0.25, 0.45, "concrete", root, c)
     gcyl_y("Drum_Floor", 0.0, 0.0, ROT_FLOOR - 0.25, ROT_FLOOR, DRUM_R + 0.05, "metal", root, c)
-    gcyl_y("Drum_Wall", 0.0, 0.0, ROT_FLOOR, ROT_FLOOR + 2.35, DRUM_R, "white", root, c)
-    # The window band is an open ring: a capped band put a disc 1 m over the rotunda floor.
-    ring = bmesh.new()
-    bmesh.ops.create_cone(ring, cap_ends=False, segments=12, radius1=DRUM_R + 0.02, radius2=DRUM_R + 0.02,
-                          depth=0.6)
-    bmesh.ops.translate(ring, vec=Vector(gb(0.0, ROT_FLOOR + 1.3, 0.0)), verts=ring.verts)
-    kit._finish_mesh("Drum_Windows", ring, "window", root, c)
+    # The rotunda is hollow: its wall stands only where nothing passes through it, and
+    # its painted window band runs on the same spans.
+    for i, (a0, a1) in enumerate(drum_closed()):
+        arc_wall("Drum_Wall_%d" % i, a0, a1, DRUM_IN, DRUM_R, ROT_FLOOR, ROT_FLOOR + 2.35, "white", root, c)
+        arc_wall("Drum_Windows_%d" % i, a0, a1, DRUM_R, DRUM_R + 0.02, ROT_FLOOR + 1.0, ROT_FLOOR + 1.6, "window",
+                 root, c)
     gcyl_y("Drum_Roof", 0.0, 0.0, ROT_FLOOR + 2.35, ROT_FLOOR + 2.55, DRUM_R + 0.15, "light_grey", root, c)
     build_stair_box(p, root, c)
 
     yaw = pivot(p, "Tunnel_Yaw", root, c, (0.0, ROT_FLOOR, 0.0))
+    # The skirts turn with the tunnel and close the rotunda's tunnel opening beside it.
+    for sx in (-1, 1):
+        a0, a1 = sorted((sx * SKIRT_ARC[0], sx * SKIRT_ARC[1]))
+        arc_wall("Drum_Skirt_%d" % sx, a0, a1, SKIRT_IN, SKIRT_OUT, 0.0, 2.35, "white", yaw, c)
     pitch = pivot(p, "Tunnel_Pitch", yaw, c, (0.0, 0.0, HINGE_Z))
     pivot(p, "Mount_TunnelA", pitch, c, (0.0, 0.0, 0.0))
     # Tunnel A, hinge-local: hollow, starts inside the drum so its corners stay sunk at
@@ -448,7 +497,7 @@ def build_stair_box(p, root, c):
              "metal", box, c)
     gbox("Link_Floor", (LINK_END_X, deck, zi0), (STAIR_TOP_X, ROT_FLOOR, zi1), "metal", box, c)
     gbox("Box_Under", (STAIR_TOP_X - SKIN_T, 0.0, BOX_Z0), (STAIR_TOP_X, deck, BOX_Z1), "white", box, c)
-    gbox("Box_Roof", (LINK_END_X - 0.05, BOX_TOP - 0.1, BOX_Z0 - 0.05), (BOX_END_X + 0.05, BOX_TOP, BOX_Z1 + 0.05),
+    gbox("Box_Roof", (LINK_END_X - 0.05, BOX_TOP - 0.1, BOX_Z0), (BOX_END_X + 0.05, BOX_TOP, BOX_Z1 + 0.05),
          "light_grey", box, c, bevel=0.02)
     top = BOX_TOP - 0.1
     under = (LINK_END_X, STAIR_TOP_X, 0.0, deck, False)
@@ -475,11 +524,11 @@ def build_stair_box(p, root, c):
     # The exit door collar: a frame from the box's terminal face toward the wall.
     for sx in (-1, 1):
         x0, x1 = sorted((EXIT_X + sx * DOOR_HALF, EXIT_X + sx * (DOOR_HALF + 0.15)))
-        gbox("Box_Collar_%d" % sx, (x0, 0.0, COLLAR_Z0), (x1, DOOR_TOP + 0.15, BOX_Z0), "frame", box, c)
-    gbox("Box_Collar_Top", (EXIT_X - DOOR_HALF, DOOR_TOP, COLLAR_Z0), (EXIT_X + DOOR_HALF, DOOR_TOP + 0.15, BOX_Z0),
+        gbox("Box_Collar_%d" % sx, (x0, 0.0, COLLAR_Z0), (x1, COLLAR_TOP, BOX_Z0), "frame", box, c)
+    gbox("Box_Collar_Top", (EXIT_X - DOOR_HALF, COLLAR_DOOR_TOP, COLLAR_Z0), (EXIT_X + DOOR_HALF, COLLAR_TOP, BOX_Z0),
          "frame", box, c)
     # The stub from the corridor into the rotunda: hollow, its far end inside the drum.
-    s0, s1 = BOX_Z1 - SKIN_T, -DRUM_R + 0.4
+    s0, s1 = BOX_Z1 - SKIN_T, -STUB_END
     gbox("Stub_Floor", (-STUB_HALF, deck, s0), (STUB_HALF, ROT_FLOOR, s1), "metal", box, c)
     gbox("Stub_Roof", (-STUB_HALF, ROT_FLOOR + 2.3, s0), (STUB_HALF, ROT_FLOOR + 2.4, s1), "white", box, c)
     for sx in (-1, 1):
@@ -760,7 +809,8 @@ PIECES = {
     "taxi_sign": (build_taxi_sign, (0, 0)) + blender_bounds(SIGN_LO, SIGN_HI),
 }
 EXTRA_NODES = {
-    "jet_bridge": ["Tunnel_Yaw", "Tunnel_Pitch", "Tunnel_Pitch_Mesh", "Tunnel_Slide", "Tunnel_Slide_Mesh",
+    "jet_bridge": ["Tunnel_Yaw", "Tunnel_Yaw_Mesh", "Tunnel_Pitch", "Tunnel_Pitch_Mesh", "Tunnel_Slide",
+                   "Tunnel_Slide_Mesh",
                    "Drive_Level", "Drive_Level_Mesh", "Drive_Foot", "Drive_Foot_Mesh", "Cab_Level", "Cab_Yaw",
                    "Cab_Yaw_Mesh", "Mount_Door", "StairBox", "StairBox_Mesh"] + WALK_MOUNTS,
     "pushback_tug": ["Cradle_Lift", "Cradle_Lift_Mesh", "Mount_NoseGear"],
@@ -842,7 +892,7 @@ def walk_report(written):
         nodes = js.get("nodes", [])
         parent = {ch: i for i, nd in enumerate(nodes) for ch in nd.get("children", [])}
         by_name = {nd.get("name"): i for i, nd in enumerate(nodes)}
-        for name in WALK_MOUNTS:
+        for name in WALK_MOUNTS + ["Mount_Door"]:
             i = by_name.get(name)
             if i is None:
                 kit.fail("jet_bridge: walk mount %s missing from the written file" % name)
