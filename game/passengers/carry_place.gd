@@ -326,25 +326,80 @@ static func bag_transform(
 			# sets its roller down (SitHold.offset()), so the bag stays put.
 			var id: int = props._body_ids.get(body, -1)
 			var at := Transform3D(yaw, body.global_position - props.views.sit_offset(id))
-			if held["floor_at"][i] != null:
-				at = held["floor_at"][i]
-			elif kind != SecurityLooks.Kind.ROLLER and count >= 2:
+			var p: Passenger = props.sim.get_passenger(id) if id >= 0 else null
+			var gate: Variant = null
+			if kind != SecurityLooks.Kind.ROLLER and count >= 2 and p != null:
 				# A two-bag guest's bag at a gate chair lies fixed at the chair
 				# front (SecurityLooks.gate_two_front()), not in the drawn body's
 				# frame, which moves off the tick's sit offset while the body
 				# eases into the seat (board fc38d1b2).
-				var p: Passenger = props.sim.get_passenger(id) if id >= 0 else null
-				var gate: Variant = (
-					SecurityLooks.gate_two_front(props.sim, p) if p != null else null
-				)
-				if gate != null:
-					at = gate
+				gate = SecurityLooks.gate_two_front(props.sim, p)
+			# Any other bag that is not a roller at a gate chair or cafe seat lies
+			# in the body's frame as it is drawn seated (seat_frame()), fixed while
+			# the body eases in and out: the drawn body turned and slid it up to
+			# 0.67 m (board 0dd2c787).
+			var seated: Variant = null
+			if kind != SecurityLooks.Kind.ROLLER and p != null and not held.get("in_stall", false):
+				seated = seat_frame(props.sim, p)
+			if held["floor_at"][i] != null:
+				at = held["floor_at"][i]
+			elif gate != null:
+				at = gate
+			elif seated != null:
+				at = seated
 			var laid_in := RollerPark.lay_frame(held["bags"][i], at)
 			var placed: Transform3D = laid_in * held["floor"][i]
 			placed.origin.y = props.sim.grid.origin.y
 			var scaled := Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)
 			return _off_walls(props, held, i, kind, scaled, laid_in.origin)
 	return carry_transform(props, held, body, i, reach)
+
+
+## The frame (world, on the floor) `p`'s body is drawn in once seated at a gate
+## chair or a cafe seat, worked out from the seat, never from the drawn body:
+## the sim's seat spot plus the drawing's step onto the chair (GateChairs.offset(),
+## CafeChairs.offset() at their whole share), facing out of the seat
+## (RollerPark.sit_face()). The same on every frame of the sit-down, the stay and
+## the stand-up, and after a load. Null anywhere else (a toilet stall, an
+## activity piece), or with no seat. GateChairs.offset() and CafeChairs.offset()
+## own the step; test_seat_floor_bag_still.gd checks this frame against the
+## seated body drawn.
+static func seat_frame(sim: PassengerSim, p: Passenger) -> Variant:
+	var face := RollerPark.sit_face(sim, p)
+	if is_nan(face) or ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
+		return null
+	var at := Vector3.ZERO
+	match StageKinds.location(p.stage):
+		StageKinds.Location.GATE_SEAT:
+			if p.seat_cell == Passenger.NO_CELL or p.seat_front == Passenger.NO_CELL:
+				return null
+			var front := sim.grid.cell_to_world(p.seat_front)
+			var seat := sim.grid.cell_to_world(p.seat_cell)
+			at = seat + (front - seat) * PassengerSim.SIT_FORWARD_M
+			var shift := PassengerLooks.SEAT_SHIFT_M[PassengerLooks.body_of(p.id, p.variant)]
+			at += (front - seat).normalized() * shift.x
+			var record := GateRelocation.chair_of(sim, p)
+			if not record.is_empty():
+				var def := BuildCatalog.get_def(record["def"])
+				var index := def.footprint(record["anchor"], record["facing"]).find(p.seat_cell)
+				if index >= 0 and index < GateChairs.CHAIR_OFFSET_M.size():
+					var side := BuildObjectDef.rotate_point(
+						Vector2(GateChairs.CHAIR_OFFSET_M[index], 0.0), record["facing"]
+					)
+					at += Vector3(side.x, 0.0, side.y)
+		StageKinds.Location.FACILITY_SEAT:
+			var visit := sim.cafes.visit_of(p.id)
+			if visit == null or visit.seat.is_empty():
+				return null
+			at = BuildObjectDef.seat_root_world(sim.grid, visit.seat)
+			var facing: Vector2i = visit.seat["facing"]
+			var shift := PassengerLooks.seat_shift(
+				StringName(visit.piece.get("def", &"")), PassengerLooks.body_of(p.id, p.variant)
+			)
+			at += Vector3(facing.x, 0.0, facing.y).normalized() * shift.x
+		_:
+			return null
+	return Transform3D(Basis(Vector3.UP, face), Vector3(at.x, sim.grid.origin.y, at.z))
 
 
 ## A roller lying on the floor at `xf` (world) moved out of the walls round it
