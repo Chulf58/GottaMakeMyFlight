@@ -54,6 +54,10 @@ const TWO_BAG_SHUFFLE_SIDE_M: Array = [
 ## second row); shorter than NO_SLIDE_M is none.
 const FAR_SLIDE_M := 0.2
 const NO_SLIDE_M := 0.01
+## walled_tight() tries the way out to a lying roller at this many shares of
+## its side: the step (0.76 m / 8, 0.095 m, or less) is under a two-bag
+## roller's width (0.18 m).
+const LIE_SAMPLES := 8
 
 
 ## How far out a roller of a body of look `look` (PassengerLooks.BODIES index)
@@ -126,7 +130,53 @@ static func slide_of(p: Passenger) -> float:
 ## The roller of `p` led by `hand` lying at its gate chair, in the chair
 ## front's frame: shuffle_side() out on the hand's side, FEET_AHEAD_M ahead.
 static func spot(p: Passenger, hand: int) -> Transform3D:
+	return _lying(p, hand, slide_of(p))
+
+
+## spot() at a chair of slide `slide_m`, `share` of the way out to its side.
+static func _lying(p: Passenger, hand: int, slide_m: float, share := 1.0) -> Transform3D:
 	var out := -1.0 if hand == 0 else 1.0
 	var look := PassengerLooks.body_of(p.id, p.variant)
-	var lies := shuffle_side(look, hand, SecurityLooks.bag_scale(p), slide_of(p))
+	var lies := shuffle_side(look, hand, SecurityLooks.bag_scale(p), slide_m) * share
 	return Transform3D(Basis.IDENTITY, Vector3(out * lies, 0.0, RollerPark.FEET_AHEAD_M))
+
+
+## Whether gate seat `seat` (a TerminalLayout seat) has no room for the lying
+## roller of `p` beside its front: the roller, at its own side (spot() for
+## that chair) and size, reaches into a wall (ParkWalls.inside(),
+## PullSide.walls_near(), the sim's own walls) or lies past one, on each side
+## it could lie on. The way out is tried at LIE_SAMPLES shares of its side, each
+## step under a two-bag roller's width: the middle chair's far side (0.76 m)
+## laid it wholly past a wall on the 1 m front's edge, in no wall at its spot.
+## A one-bag guest's roller can lie on either side (ParkSide); a two-bag
+## guest's only on its own bag's hand. Such a chair is never given to a
+## guest with a roller (user ruling a-roller-guest-is-never-given-a-gate-
+## chair-walled-tight-on-b, board f1fc1e54): walled on both sides of its 1 m
+## front, no side clears the legs (finding d15d7455: ParkWalls pushed the
+## roller back into them, up to 0.179 m). False for a guest with no roller.
+## What it does not guarantee: that ParkSide picks the one side that fits
+## when only one does (it picks by the standing park).
+static func walled_tight(sim: PassengerSim, p: Passenger, seat: Dictionary) -> bool:
+	if not ParkRecovery.has_roller(p):
+		return false
+	var front: Vector2i = seat["front"]
+	var cell: Vector2i = seat["cell"]
+	var frame := ParkSide._frame(sim, front, front - cell)
+	var slide_m := slide(Relocation.placement(sim.grid, seat["object_id"]), cell, front)
+	var scale_by := SecurityLooks.bag_scale(p)
+	var walls := PullSide.walls_near(sim.grid, frame.origin)
+	var hands: Array[int] = [0, 1]
+	if p.carry_on >= 2:
+		hands = []
+		for i in 2:
+			if SecurityLooks.bag_kind(p, i) == SecurityLooks.Kind.ROLLER:
+				hands.append(i)
+	for hand in hands:
+		var blocked := false
+		for n in range(1, LIE_SAMPLES + 1):
+			var lying := frame * _lying(p, hand, slide_m, n / float(LIE_SAMPLES))
+			lying = Transform3D(lying.basis.scaled(Vector3.ONE * scale_by), lying.origin)
+			blocked = blocked or ParkWalls.inside(lying, walls)
+		if not blocked:
+			return false
+	return true

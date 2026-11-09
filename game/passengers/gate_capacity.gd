@@ -136,6 +136,9 @@ func reserve(host: Object, p: Passenger, from: Vector2i) -> bool:
 			continue
 		if region < 0 or spots.region_of(seat["front"]) != region:
 			continue
+		# No room beside its front for this guest's lying roller.
+		if GateRoller.walled_tight(sim, p, seat):
+			continue
 		var reach := GateReach.cells_from(seat["cell"], near)
 		if near.is_empty() or reach <= GateReach.NEAR_CELLS:
 			free.append([reach, Passenger.octile_mm(from, seat["front"]), free.size(), seat["key"]])
@@ -474,7 +477,8 @@ static func seat_from_spot(sim: PassengerSim, p: Passenger) -> void:
 ## The free seats nearest the passenger's gate desk first, none farther than
 ## GateReach.NEAR_CELLS from it, then the nearest to the passenger; with no gate
 ## desk (no gates, or a flight without a gate) the nearest to the passenger. A
-## seat reserved for a passenger in security is not free.
+## seat reserved for a passenger in security is not free, nor, for a guest with
+## a roller, one walled tight (GateRoller.walled_tight()).
 static func claim_seat(sim: PassengerSim, p: Passenger) -> bool:
 	var near := PassengerGates.gate_cells(sim, p)
 	var held := {}
@@ -483,6 +487,8 @@ static func claim_seat(sim: PassengerSim, p: Passenger) -> bool:
 	var free: Array = []
 	for seat in sim.layout.seats:
 		if sim._seat_claims.has(seat["key"]) or held.has(seat["key"]):
+			continue
+		if GateRoller.walled_tight(sim, p, seat):
 			continue
 		var reach := GateReach.cells_from(seat["cell"], near)
 		if near.is_empty() or reach <= GateReach.NEAR_CELLS:
