@@ -165,3 +165,64 @@ func test_a_roller_guest_with_no_case_keeps_the_side_carry_at_the_door() -> void
 	assert_float(float(weights[0][0])).is_less(DoorSteer.FULL_M + 0.5)
 	for w: Array in weights:
 		assert_float(float(w[1])).is_equal(0.0)
+
+
+## A roller-and-case guest standing still in the check-in queue on `cell`,
+## having walked east onto it (test_queue_stand_side_sim's _queuer).
+func _queuer(cell: Vector2i) -> Passenger:
+	var p := _roller_guest(2)
+	p.late = false
+	p.stage = Passenger.Stage.CHECKIN_QUEUE
+	p.at = cell
+	var path: Array[Vector2i] = [cell - Vector2i(1, 0), cell]
+	p.set_path(path)
+	p.path_index = 1
+	return p
+
+
+## Syncs `p` standing still for `ticks` ticks with the sim held (its clock
+## stepped by hand, as test_queue_stand_side_sim does), from a load (snap(),
+## so its last two tick positions are both where it stands): [roller stood in
+## a queue stand, the case's turn to the front].
+func _stand_still(p: Passenger, ticks: int) -> Array:
+	_views.snap()
+	for n in ticks:
+		_world.clock.tick += 1
+		_views.sync()
+		_views.draw()
+		# Placed as on a drawn frame (frame_pre_draw), which settles the pull.
+		_views.carry_on_props()._unposed()
+	var props := _views.carry_on_props()
+	return [RollerPark.queued(props.bag_state(p.id, 0)), props.bag_turn_of(p.id)]
+
+
+func test_a_still_queue_at_the_door_stands_the_roller_and_keeps_the_case_in_front() -> void:
+	var ticks := RollerPark.STILL_TICKS + ceili(RollerPark.QUEUE_STAND_TICKS) + 4
+	# Control: well away from the door the same still guest stands its roller,
+	# the case at its side.
+	var far := _queuer(Vector2i(6, 4))
+	assert_bool(RollerPark.queue_still(_world.sim, far)).is_true()
+	var away := _stand_still(far, ticks)
+	print("away from the door: stood %s, case turn %.2f" % away)
+	assert_bool(away[0]).is_true()
+	assert_float(float(away[1])).is_equal(0.0)
+	far.stage = Passenger.Stage.MADE
+	_views.sync()
+	# In the door cell: the roller is stood all the same, and the case is in front.
+	var near := _queuer(DOOR)
+	(
+		assert_bool(
+			DoorSteer.case_front_at(
+				_world.sim.grid,
+				_world.sim.world_position(near),
+				[ROLLER, CASE],
+				[HAND, HAND],
+				[false, false]
+			)
+		)
+		. is_true()
+	)
+	var at_door := _stand_still(near, ticks)
+	print("in the door cell: stood %s, case turn %.2f" % at_door)
+	assert_bool(at_door[0]).is_true()
+	assert_float(float(at_door[1])).is_equal(1.0)

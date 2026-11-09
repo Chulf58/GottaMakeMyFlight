@@ -45,6 +45,8 @@ const LEAF_NEAR_M := 1.5
 ## (wall_door.glb), and a walker this near its plane is in the doorway (STEER).
 const LEAF_ALONG_M := 0.61
 const STEER_PLANE_M := 0.3
+## The deepest a held case may reach into a door leaf (LEAF_OTHER): none.
+const OTHER_DEEP_MAX_M := 0.0
 ## Half size of the pulling hand round its grip point (windowed only).
 const HAND_HALF := Vector3(0.04, 0.05, 0.04)
 const TOP_DEEP := 12
@@ -449,6 +451,12 @@ func _print_classes() -> void:
 		_invalid("no door leaf was found, or no pulled roller came near one")
 	if _two_bags() and int(_leaf["other_near"]) <= 0:
 		_invalid("--two-bags: no guest came near a door leaf with a case in the other hand")
+	# The case at a door (board d52f21db): any touch of a leaf fails, however
+	# shallow (OTHER_DEEP_MAX_M 0).
+	if int(_leaf["other"]) > 0 or float(_leaf["other_deep"]) > OTHER_DEEP_MAX_M:
+		var touch := [_leaf["other"], _leaf["other_deep"], OTHER_DEEP_MAX_M]
+		print("LEAF_OTHER_FAIL %d touching frames, deepest %.3f m (most allowed %.3f m)" % touch)
+		_failed = true
 	print("JAMB_DEEP seed %d: %d JAMB frames %.2f m or deeper" % [_seed, _deep, BAR_DEPTH_M])
 	var share := 100.0 * int(_tuck["pulled"]) / maxf(float(_all["pull"]), 1.0)
 	var tuck_text := "TUCK_SHARE seed %d: TUCK_SIDE_M %.2f, %d of %d pulled frames tucked (%.1f%%)"
@@ -494,28 +502,38 @@ func _print_classes() -> void:
 
 ## DoorTuckStrip for `--two-bags` (board d52f21db): it plates only a guest
 ## pulling a roller with a hard case held in its other hand, crossing a door
-## whose leaves are `leaves`, and each plate must also show the case: its
-## middle in frame by MARGIN_PX and at least MIN_ON of CASE_LINES sight lines
-## landing on it. The plate colliders carry no tag for the case, so a landing
-## is a first hit on a collider named after one of the case's meshes within
-## CASE_SLACK_M of the case's bounds (the colliders are built a frame or more
-## before the check, and the guest walks on meanwhile). It prints the case's
-## turn to the front carry and its least distance to a leaf's middle.
+## whose leaves are `leaves` (the door's middle is its two leaves' middle,
+## _door_near()), and each plate must also show the case: its middle in frame
+## by MARGIN_PX and at least MIN_ON of its sight lines landing on it. The
+## plate's colliders are built a frame or more before each check and the arm
+## settles meanwhile, so the case's own colliders are rebuilt from its meshes
+## as drawn at each check (_refresh_case()) and tagged CASE_TAG; a landing is
+## a first hit on them, with no allowance for position.
 ## A moment no framing can show (the strip's own checks or the case's) is
-## skipped, printed as DOOR_CASE_SKIPPED, not saved; the strip fails unless at
-## least MIN_SAVED plates are saved. Any other problem fails it as before.
+## skipped, printed as DOOR_CASE_SKIPPED, not saved. The strip fails unless at
+## least MIN_SAVED plates are saved and one of them has the case's middle
+## within AT_DOOR_M of the door's plane. Any other problem fails it as before.
 class CaseStrip:
 	extends "res://spike/door_tuck_strip.gd"
-	const CASE_SLACK_M := 0.25
+	const CASE_TAG := "case"
 	const MIN_SAVED := 3
+	const AT_DOOR_M := 0.5
 	const UNFRAMED: Array[String] = ["out of frame", "seen by"]
-	const CASE_LINES := 4
 	const LEAF_ROOM_M := 1.5
 	const LEAF_PAIR_M := 2.0 * LEAF_ALONG_M
 	const LEAF_PAIR_SLACK_M := 0.1
+	## A rebuilt case collider replaces the plate's one of the same mesh
+	## nearest it, when that one is within this of it (the arm's settle).
+	const SAME_BODY_M := 0.5
 
 	var leaves: Array[MeshInstance3D] = []
 	var _case: Node3D = null
+	## Door middle -> the way along its wall (world x, z), from _door_near().
+	var _along := {}
+	## The case's distance from the door's plane at the last check, and at
+	## every saved plate.
+	var _plane_m := INF
+	var _saved_plane_m: Array[float] = []
 
 	func look(
 		tree: SceneTree,
@@ -535,13 +553,21 @@ class CaseStrip:
 		elif p.id != _id:
 			return
 		var before := problems.size()
+		var kept := saved.size()
 		await super.look(tree, main, views, p, body, bag, state)
+		if saved.size() > kept:
+			_saved_plane_m.append(_plane_m)
 		for k in range(problems.size() - 1, before - 1, -1):
 			if UNFRAMED.any(func(text: String) -> bool: return problems[k].contains(text)):
 				print("DOOR_CASE_SKIPPED %s" % problems[k])
 				problems.remove_at(k)
-		if done and saved.size() < MIN_SAVED:
+		if not done:
+			return
+		print("DOOR_CASE saved %d, case from the door plane %s" % [saved.size(), _saved_plane_m])
+		if saved.size() < MIN_SAVED:
 			problems.append("only %d door case plates saved, %d wanted" % [saved.size(), MIN_SAVED])
+		if not _saved_plane_m.any(func(m: float) -> bool: return m < AT_DOOR_M):
+			problems.append("no door case plate within %.1f m of the door plane" % AT_DOOR_M)
 
 	## Guest `p`'s hard case held in a hand beside `bag` (its pulled roller), or null.
 	static func held_case(props: CarryOnProps, p: Passenger, bag: Node3D) -> Node3D:
@@ -566,6 +592,7 @@ class CaseStrip:
 					continue
 				var mid := (pa + pb) * 0.5
 				if Vector2(mid.x - at.x, mid.z - at.z).length() < START_M:
+					_along[mid] = Vector2(pb.x - pa.x, pb.z - pa.z).normalized()
 					return mid
 		return Vector3.INF
 
@@ -576,6 +603,46 @@ class CaseStrip:
 			least = minf(least, leaf.global_position.distance_to(at))
 		return least
 
+	## Rebuilds the case's colliders under `main`'s newest plate collider
+	## holder (PlateSight.colliders()) from its meshes as drawn now, each in
+	## place of the holder's body of the same mesh nearest it, tagged CASE_TAG.
+	## Returns how many were rebuilt.
+	func _refresh_case(main: Node3D) -> int:
+		var holder: Node3D = null
+		for child in main.get_children():
+			if str(child.name).begins_with("ProbeColliders"):
+				holder = child as Node3D
+		if holder == null:
+			return 0
+		var rebuilt := 0
+		for mi: MeshInstance3D in _case.find_children("*", "MeshInstance3D", true, false):
+			if mi.mesh == null:
+				continue
+			var faces := PackedVector3Array()
+			for at in mi.mesh.get_faces():
+				faces.append(mi.global_transform * at)
+			var centre := mi.global_transform * mi.get_aabb().get_center()
+			var best: StaticBody3D = null
+			var best_m := SAME_BODY_M
+			for body: Node in holder.get_children():
+				if not body is StaticBody3D or str(body.get_meta("mesh", "")) != str(mi.name):
+					continue
+				var shape := (body.get_child(0) as CollisionShape3D).shape as ConcavePolygonShape3D
+				var was := AABB(shape.get_faces()[0], Vector3.ZERO)
+				for at in shape.get_faces():
+					was = was.expand(at)
+				if was.get_center().distance_to(centre) < best_m:
+					best_m = was.get_center().distance_to(centre)
+					best = body as StaticBody3D
+			if best == null:
+				continue
+			((best.get_child(0) as CollisionShape3D).shape as ConcavePolygonShape3D).set_faces(
+				faces
+			)
+			best.set_meta("subject", CASE_TAG)
+			rebuilt += 1
+		return rebuilt
+
 	func _judge(
 		cam: Camera3D,
 		main: Node3D,
@@ -585,6 +652,7 @@ class CaseStrip:
 		state: Dictionary
 	) -> Dictionary:
 		var verdict := super._judge(cam, main, props, shell, body, state)
+		var rebuilt := _refresh_case(main)
 		var box := AABB()
 		var first := true
 		for mi: MeshInstance3D in _case.find_children("*", "MeshInstance3D", true, false):
@@ -596,10 +664,6 @@ class CaseStrip:
 		var inside := Rect2(Vector2.ONE * MARGIN_PX, size - Vector2.ONE * 2.0 * MARGIN_PX)
 		var px := cam.unproject_position(centre)
 		var framed := not cam.is_position_behind(centre) and inside.has_point(px)
-		var grown := box.grow(CASE_SLACK_M)
-		var names := {}
-		for mi in _case.find_children("*", "MeshInstance3D", true, false):
-			names[str(mi.name)] = true
 		var half := box.size * 0.3
 		var targets: Array[Vector3] = [
 			centre,
@@ -608,26 +672,31 @@ class CaseStrip:
 			centre + Vector3(0, half.y, 0),
 		]
 		var space := main.get_world_3d().direct_space_state
-		var on := 0
-		var blockers: Array[String] = []
-		for at in targets:
-			var to := at + (at - cam.global_position).normalized() * 0.5
-			var hit := space.intersect_ray(
-				PhysicsRayQueryParameters3D.create(cam.global_position, to)
-			)
-			if hit.is_empty():
-				continue
-			var named := str((hit.collider as Node).get_meta("mesh", ""))
-			if names.has(named) and grown.has_point(hit.position):
-				on += 1
-			else:
-				blockers.append(named)
-		var turn := props.bag_turn_of(_id if _id >= 0 else -1)
+		var lines := PlateSight.sight_lines(space, cam.global_position, targets, CASE_TAG)
+		var on: int = (lines["on_subject"] as Array).size()
+		var along: Vector2 = _along.get(_door, Vector2.ZERO)
+		var rel := Vector2(centre.x - _door.x, centre.z - _door.z)
+		_plane_m = absf(rel.dot(Vector2(along.y, -along.x))) if along != Vector2.ZERO else INF
 		var report := (
-			" case_px=%s case_on=%d of %d case_blocked=%s case_turn=%.2f case_to_leaf=%.2f"
-			% [px.round(), on, targets.size(), blockers, turn, _leaf_gap(centre)]
+			(
+				" case_px=%s case_on=%d of %d case_blocked=%s case_rebuilt=%d case_turn=%.2f"
+				+ " case_to_leaf=%.2f case_to_plane=%.2f"
+			)
+			% [
+				px.round(),
+				on,
+				targets.size(),
+				lines["blockers"],
+				rebuilt,
+				props.bag_turn_of(_id),
+				_leaf_gap(centre),
+				_plane_m,
+			]
 		)
 		verdict["report"] = str(verdict["report"]) + report
-		if (verdict["bad"] as String) == "" and (not framed or on < MIN_ON):
+		if rebuilt == 0:
+			# A probe defect, not a framing: never skipped.
+			verdict["bad"] = "no case collider found to rebuild"
+		elif (verdict["bad"] as String) == "" and (not framed or on < MIN_ON):
 			verdict["bad"] = "case out of frame %s or seen by %d lines" % [not framed, on]
 		return verdict

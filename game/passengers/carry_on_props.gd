@@ -237,8 +237,9 @@ func sync() -> void:
 			hands.append(SecurityLooks.worn_side(i) if worn else SecurityLooks.hand_of(sim, p, i))
 		# A stall is closed on both sides, its approach as good as (StallCarry).
 		var front := SecurityLooks.carry_front(sim, p) or at_stall or booth_bags
-		# A hard case beside a pulled roller goes in front through a door (DoorSteer).
-		front = front or DoorSteer.case_front(sim, p, kinds, homes, lifts)
+		# A hard case beside a pulled roller goes in front through a door
+		# (DoorSteer). Kept apart: a queue stand still happens beside it.
+		var door_case := DoorSteer.case_front(sim, p, kinds, homes, lifts)
 		var held: Dictionary = _held.get(id, {"tray": null, "bags": []})
 		_held[id] = held
 		# A tray kept for a bag still moving out of it stays where it was, on the
@@ -259,17 +260,18 @@ func sync() -> void:
 		# At a booth a roller's lift into the hand ends before the front turn.
 		if booth_bags and BoothCarry.roller_rising(held, kinds, lifts, _tick()):
 			front = false
+		var turned := front or door_case
 		if not held.has("front"):
 			# A new record (a new passenger, or after a load) starts in the
 			# carry it needs, with no turn to play.
-			held["front"] = front
-		elif front != held["front"]:
+			held["front"] = turned
+		elif turned != held["front"]:
 			# Turning between side and front carry starts from where it is now,
 			# at this tick: a frame that runs several ticks stamps each one.
 			held["front_from"] = CarryHand.front_weight(held, _tick())
 			held["bag_from"] = CarryHand.bag_weight(held, _tick())
 			held["front_since"] = _tick()
-			held["front"] = front
+			held["front"] = turned
 		# A record made again after a load (PassengerViews.snap() releases every
 		# record, then syncs on the same tick) starts in the tuck it needs.
 		BoothCarry.update_tuck(held, tuck_in, _released_at.get(id, -1.0) == _tick(), _tick())
@@ -277,7 +279,8 @@ func sync() -> void:
 		var was: Array = held["bags"]
 		PullSide.resolve(was, sim, views, p, kinds, homes, lifts, hands, _tick())
 		var near_row := StallCarry.beside_row(sim, p)
-		# Standing still in a queue, not turned to a front carry (RollerPark.queue_stand()).
+		# Standing still in a queue, not turned to a front carry (RollerPark.queue_stand());
+		# a door case's turn (door_case) does not stop it.
 		var queue_still := (
 			RollerPark.queue_still(sim, p)
 			and not front
