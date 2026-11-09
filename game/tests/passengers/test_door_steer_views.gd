@@ -22,28 +22,32 @@ var _world: PassengerTestWorld
 var _views: PassengerViews
 
 
+## The world is built once for the file; each case takes a new guest at the
+## door (before_test() clears the last case's guests away first).
 func before() -> void:
 	PassengerTestWorld.tracker = self
-
-
-func after() -> void:
-	PassengerTestWorld.tracker = null
-
-
-func before_test() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(12, 9))
 	PassengerTestWorld.place(grid, &"entrance_door", DOOR, WEST)
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(9, 3), 0)
-	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(60, 80))
+	# Boarding and doors far off, so no guest is late in any case.
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(60000, 80000))
 	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)
 
 
-func after_test() -> void:
+func after() -> void:
 	_views.free()
 	_world.free_all()
+	PassengerTestWorld.tracker = null
+
+
+## Every guest of an earlier case leaves (made its flight).
+func before_test() -> void:
+	for id in _world.sim.passenger_ids():
+		_world.passenger(id).stage = Passenger.Stage.MADE
+	_world.step()
 
 
 ## A new guest whose first bag is a roller, with `bags` carry-on bags; with

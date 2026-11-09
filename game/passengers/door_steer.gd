@@ -62,7 +62,7 @@ static func offset_of(views: PassengerViews, p: Passenger, now: float) -> Vector
 ## `now`: 1 to its left (a roller pulled in the right hand), -1 to its right
 ## (in the left), 0 with no roller pulled. Only with the other hand free: a
 ## hard case or any other bag held in the other hand stops the steer (user
-## ruling 2026-11-08, "No steer with a case"), and rollers pulled in both
+## ruling 2026-11-09, "No steer with a case"), and rollers pulled in both
 ## hands cancel. While a bag's move is under way (a change of hand, a lift, a
 ## pick-up, a case taken into or out of the hand) its part goes from its old
 ## place's to its new one's over the move's ticks from the tick it was seen on
