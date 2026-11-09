@@ -7,7 +7,8 @@ extends Node3D
 ## routes, so the props follow the stands. Visual only: nothing in the sim reads
 ## it and nothing is saved.
 ##
-## A bridge stands where JetBridgePose.root_for() puts it and waits parked. A
+## A bridge stands where JetBridgePose.root_for() puts it, its stair box at the
+## gate's exit door (board 0adca5c6), and waits parked. A
 ## PlaneView whose plane stands at the gate (AT_STAND, BOARDING, DOORS_CLOSED)
 ## reports its drawn front port door through dock_plane() (PlaneProps does it
 ## every frame), and the bridge docks there when the door is in the rig's

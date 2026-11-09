@@ -356,14 +356,10 @@ def stand_scene(pushed_m, with_tug, docked):
     term = box_obj("Terminal", g2b(-26.0, 0.0, 14.0), g2b(26.0, 5.2, 0.0), TERMINAL_RGB)
     rap.floor_plane((-40.0, -14.0), (40.0, 62.0))
     subjects = {"plane_05": plane}
-    # The bridge: its link stub backs onto the wall (root turned 180 degrees, so its
-    # -z points at the terminal), the rotunda port of the door, reach mid-range.
+    # The bridge as JetBridgePose.root_for() places it (board 0adca5c6): its stair box
+    # at the exit door (x 0 on the wall line), the root turned 180 degrees.
     p_door = Vector((skin_x, mid_y, sill_z))
-    c = Vector((skin_x + bp.MOUNT_DOOR_Z, mid_y - pushed_m))  # the parked stand door
-    rz = -(bp.LINK_Z + 0.3)
-    want = bp.HINGE_Z + bp.CAB_Z + 1.5
-    dz = rz - (-c.y)
-    rx = c.x + math.sqrt(max(want * want - dz * dz, 0.0))
+    rx, rz = bp.EXIT_X, -bp.ROOT_OUT
     bridge, bh = place(prop("jet_bridge"), "jet_bridge", (rx, 0.0, rz), 180.0)
     bo = by_name(bridge)
     if docked:

@@ -41,6 +41,11 @@ func test_rig_constants_match_the_written_glb() -> void:
 		"Drive_Foot": Vector3(0.0, -(JetBridgePose.ROT_FLOOR - JetBridgePose.TUN_B_SINK), 0.0),
 		"Mount_Door": Vector3(0.0, 0.0, JetBridgePose.MOUNT_DOOR_Z),
 		"Mount_Link": Vector3(0.0, JetBridgePose.ROT_FLOOR, -JetBridgePose.LINK_Z),
+		# Board 0adca5c6: the stair box's exit sill and the rotunda's centre.
+		"Mount_StairBottom": Vector3(JetBridgePose.EXIT_X_M, 0.0, -JetBridgePose.ROOT_OUT_M),
+		"Mount_Rotunda": Vector3(0.0, JetBridgePose.ROT_FLOOR, 0.0),
+		"Mount_TunnelA": Vector3.ZERO,
+		"Mount_CabFloor": Vector3.ZERO,
 	}
 	for joint: String in rest:
 		var node := bridge.find_child(joint, true, false) as Node3D
@@ -51,21 +56,39 @@ func test_rig_constants_match_the_written_glb() -> void:
 	bridge.free()
 
 
-func test_each_gate_gets_one_bridge_backed_onto_its_wall_east_of_the_door() -> void:
+## Board 0adca5c6 (ruling jet-bridge-starts-at-the-gate-s-exit-door-passengers-
+## step-fr): the bridge starts at the gate's own exit door. Before it, the link
+## stub backed onto the wall 0.3 m off the wall line, about 9 m east of the
+## exit; that check is replaced by the stair box's sill on the exit door.
+func test_each_gate_gets_one_bridge_starting_at_its_exit_door() -> void:
 	var props := _airside.props
 	assert_array(props.bridges.keys()).contains_exactly_in_any_order(["A", "B"])
 	for gate: String in ["A", "B"]:
 		var stand: Dictionary = _stand if gate == "A" else _east
 		var bridge: Node3D = props.bridges[gate]["node"]
+		var sill := (bridge.find_child("Mount_StairBottom", true, false) as Node3D).global_position
 		var link := (bridge.find_child("Mount_Link", true, false) as Node3D).global_position
+		var exit := Vector3(stand["x"], bridge.global_position.y, stand["wall_z"])
 		var door := JetBridgePose.stand_door(stand)
 		print(
 			(
-				"gate %s: root %s, link back z %.2f (wall %.2f), door %s"
-				% [gate, bridge.global_position, link.z, stand["wall_z"], door]
+				"gate %s: root %s, stair sill %s, exit door %s (%.4f m apart), link %s, wall %.2f"
+				% [
+					gate,
+					bridge.global_position,
+					sill,
+					exit,
+					sill.distance_to(exit),
+					link,
+					stand["wall_z"]
+				]
 			)
 		)
-		assert_float(link.z).is_between(stand["wall_z"] - 0.31, stand["wall_z"] - 0.29)
+		assert_float(sill.distance_to(exit)).is_less(0.001)
+		# The link corridor runs along the wall, north of it, between the exit
+		# door and the column.
+		assert_float(link.z).is_less(float(stand["wall_z"]) - 0.3)
+		assert_float(link.x).is_between(exit.x, bridge.global_position.x + 0.001)
 		assert_float(bridge.global_position.x - door.x).is_greater(JetBridgePose.MOUNT_DOOR_Z)
 
 

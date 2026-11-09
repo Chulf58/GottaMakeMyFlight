@@ -3,8 +3,9 @@ extends GdUnitTestSuite
 ## A jet bridge whose gate holds a plane it cannot dock (models 03 and 04)
 ## swings clear of it (board 82a139d0; ruling plane-04-stops-further-out-with-
 ## the-passenger-walk-ending-at, part 2): fully retracted, its tunnel along the
-## wall line, no mesh edge of the plane or the bridge crossing the other
-## (Kit.crossings()), no part of either lying wholly inside a mesh of the other
+## wall line sloping down JetBridgePose.CLEAR_PITCH_DEG, no mesh edge of the
+## plane or the bridge crossing the other (Kit.crossings()), no part of either
+## lying wholly inside a mesh of the other
 ## (Kit.nested()), and no plane vertex inside a bridge mesh's box. The box gap
 ## the other way is printed only: a fuselage's box is loose, and tunnel A's
 ## vertices fall inside it.
@@ -78,7 +79,12 @@ func test_an_undockable_plane_gets_the_bridge_swung_clear_and_uncut() -> void:
 		assert_bool(entry["clear"]).is_true()
 		assert_bool(entry["docked"]).is_false()
 		assert_float(clear["slide"]).is_equal(0.0)
-		assert_float(clear["pitch"]).is_equal(0.0)
+		# Board 0adca5c6 moved the column 1.1 m further out for the link corridor,
+		# and a level swung cab then met plane 04's rotor disc (32 crossings), so
+		# the swung tunnel slopes down CLEAR_PITCH_DEG instead of lying level.
+		assert_float(clear["pitch"]).is_equal_approx(
+			-deg_to_rad(JetBridgePose.CLEAR_PITCH_DEG), 1e-6
+		)
 		assert_float(absf(clear["yaw"])).is_equal_approx(PI / 2.0, 1e-6)
 		assert_int(found["count"]).is_equal(0)
 		var gap := Kit.clearance(plane, bridge)
