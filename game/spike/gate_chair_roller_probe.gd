@@ -346,7 +346,7 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int, bags := 1) -
 	var path: Array[Vector2i] = [p.at]
 	if p.at != seat["front"]:
 		# The walk GateCapacity gives a seat claim, round the other fronts.
-		path.assign(GateRowWalk.path(_sim, p.at, seat["front"]))
+		path.assign(GateRowWalk.path(_sim, p.at, seat["front"], seat["cell"]))
 		var plain := _sim.grid.find_path(p.at, seat["front"])
 		_walks.append([_walk_m(plain), _walk_m(path)])
 		print(

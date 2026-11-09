@@ -58,7 +58,7 @@ static func _route(
 	sim: PassengerSim, p: Passenger, from: Vector2i, target: Vector2i
 ) -> Array[Vector2i]:
 	if p.stage == Passenger.Stage.TO_GATE and target == p.seat_front:
-		return GateRowWalk.path(sim, from, target)
+		return GateRowWalk.path(sim, from, target, p.seat_cell)
 	return sim.grid.find_path(from, target)
 
 
