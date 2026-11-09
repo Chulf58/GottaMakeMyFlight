@@ -101,10 +101,10 @@ var security_lanes := SecurityLanes.new()
 var _lines: Dictionary = {}
 ## Where walkers come in for the hold lines' reach check (_reached()): the
 ## cell of the entrance passengers spawn at (passenger_entrances[0],
-## PassengerLifecycle). With no entrance in service it stays the last one
-## while that is still a passenger cell, so passengers already inside keep a
-## way round their line; NO_CELL (no check) when there is none. A new layout,
-## such as the one made on a load, starts with none.
+## PassengerLifecycle), found anew on every rebuild so the lines depend on the
+## grid alone. NO_CELL (no check) with no entrance in service: passengers
+## already inside may then find a tail they reach only over the line (the
+## stated residual, board 6cfc0e16).
 var _ingress := BuildObjectDef.NO_CELL
 
 
@@ -167,10 +167,9 @@ func rebuild(grid: BuildGrid) -> void:
 	for id in ids:
 		if desks.has(id) or scanners.has(id):
 			lanes[id] = _lane(grid, id, reserved, taken)
+	_ingress = BuildObjectDef.NO_CELL
 	if not passenger_entrances.is_empty():
 		_ingress = door_cell(grid, passenger_entrances[0])
-	elif not (grid.in_bounds(_ingress) and grid.is_passenger_cell(_ingress)):
-		_ingress = BuildObjectDef.NO_CELL
 	_add_holds(grid, ids, reserved, taken)
 
 
