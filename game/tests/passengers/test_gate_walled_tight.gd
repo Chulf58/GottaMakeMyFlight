@@ -116,7 +116,7 @@ func test_a_walled_tight_chair_is_tight_only_for_a_roller() -> void:
 				if is_tight:
 					tight += 1
 					continue
-				var hand := 0 if kind != Bags.TWO_LEFT else 1
+				var hand := _real_hand(q, kind, s)
 				var frame := ParkSide._frame(_world.sim, _seats[s]["front"], _out(s))
 				var sc := SecurityLooks.bag_scale(q)
 				var placed := frame * GateRoller.spot(q, hand)
@@ -180,6 +180,61 @@ func test_a_roller_guest_takes_another_place() -> void:
 	assert_bool(got["claim true true"]).is_false()
 	assert_bool(got["reserve true true"]).is_false()
 	assert_bool(got["spot true true"]).is_true()
+
+
+## The hand `q` (of `kind`, bound by _bind() to seat `s`) really lays its
+## roller down with at that chair: a one-bag guest's is what the sim asks
+## (SecurityLooks.hand_of(), ParkSide.hand(), chosen once the guest is near the
+## chair and kept), a two-bag guest's its roller bag's.
+func _real_hand(q: Passenger, kind: int, s: int) -> int:
+	if kind == Bags.TWO_LEFT:
+		return 1
+	if kind == Bags.TWO_RIGHT:
+		return 0
+	_world.sim.set_meta(ParkSide.STAMPS, {})
+	q.at = _seats[s]["front"]
+	return SecurityLooks.hand_of(_world.sim, q, 0)
+
+
+## A wall on one edge of the chair front cell (a side edge, or the edge across
+## the row ahead of the feet or behind them) can leave a one-bag roller room on
+## one side only. The hand the guest really lays it down with
+## (SecurityLooks.hand_of()) is that side, at each of the row's chairs, for each
+## wall and both body variants; the roller there lies in no wall
+## (GateRoller.walled_tight() lets the chair through on that side). Control: the
+## cases where one side fits are counted and some exist.
+func test_the_real_hand_is_the_side_that_fits() -> void:
+	var q: Passenger = _pool[Bags.ONE]
+	var one_side := 0
+	var wrong := []
+	var line := "one side fits:"
+	for s in _seats.size():
+		_bind(q, s)
+		for across: Vector2i in [_left, -_left, _out(s), -_out(s)]:
+			var edge := BuildGrid.SIDE_STEP.find(across)
+			var front: Vector2i = _seats[s]["front"]
+			assert_bool(_world.grid.apply(BuildEdit.place_wall(front, edge)).ok).is_true()
+			for variant in 2:
+				q.variant = variant
+				var fits := GateRoller.clear_hand(_world.sim, q)
+				if fits < 0:
+					continue
+				one_side += 1
+				var got := _real_hand(q, Bags.ONE, s)
+				var frame := ParkSide._frame(_world.sim, front, _out(s))
+				var lying := frame * GateRoller.spot(q, got)
+				lying = Transform3D(
+					lying.basis.scaled(Vector3.ONE * SecurityLooks.bag_scale(q)), lying.origin
+				)
+				var walls := PullSide.walls_near(_world.sim.grid, lying.origin)
+				line += " s%d wall %s v%d fits %d got %d" % [s, across, variant, fits, got]
+				if got != fits or ParkWalls.inside(lying, walls):
+					wrong.append([s, across, variant, fits, got])
+			_world.grid.apply(BuildEdit.remove_wall(front, edge))
+	print(line)
+	print("walls leaving one side %d (> 0), real hand on the other %s (none)" % [one_side, wrong])
+	assert_int(one_side).is_greater(0)
+	assert_array(wrong).is_empty()
 
 
 func _out(s: int) -> Vector2i:

@@ -78,18 +78,31 @@ func holds_place(p: Passenger, host: Object) -> bool:
 
 
 ## The cell `p` walks to for its reserved seat (the seat's access cell) or
-## spot, or NO_CELL when it holds none or an edit removed it.
+## spot, or NO_CELL when it holds none or an edit removed it or walled it
+## tight (_reserved_seat()).
 func _target(host: Object, p: Passenger) -> Vector2i:
 	var spots := _spots_of(host)
 	var spot := spots.reserved_of(p.id)
 	if spot != StandingSpots.NO_SPOT and spots.spots.has(spot):
 		return spots.cell_of(spot)
+	var seat := _reserved_seat(host, p)
+	return Passenger.NO_CELL if seat.is_empty() else seat["front"]
+
+
+## The gate seat reserved for `p`, or empty when it holds none, an edit removed
+## it, or walls built since leave no room beside its front for the guest's
+## lying roller (GateRoller.walled_tight(): such a chair is never given to a
+## roller guest, so the reservation is a lost place, recovered like a removed
+## seat; decision a-roller-guest-is-never-given-a-gate-chair-walled-tight-on-b).
+func _reserved_seat(host: Object, p: Passenger) -> Dictionary:
 	var key: String = seats.get(p.id, "")
-	if key != "":
-		for seat in _sim_of(host).layout.seats:
-			if seat["key"] == key:
-				return seat["front"]
-	return Passenger.NO_CELL
+	if key == "":
+		return {}
+	var sim := _sim_of(host)
+	for seat in sim.layout.seats:
+		if seat["key"] == key:
+			return {} if GateRoller.walled_tight(sim, p, seat) else seat
+	return {}
 
 
 ## Every passenger inside the security `stations` of `host` whose boarding has
@@ -213,16 +226,15 @@ static func _stations(sim: PassengerSim) -> Array[int]:
 ## reservation becomes the seat or spot claim and it walks there. With boarding
 ## open the reservation is given up, and the passenger heads for the exit.
 func on_cleared(sim: PassengerSim, p: Passenger) -> void:
-	var key: String = seats.get(p.id, "")
 	var spot := sim.standing.reserved_of(p.id)
 	if sim.tick < p.boarding_tick:
-		for seat in sim.layout.seats:
-			if seat["key"] == key:
-				var to_seat := _path(sim, p.at, seat["front"])
-				if not to_seat.is_empty():
-					seats.erase(p.id)
-					_take_seat(sim, p, seat, to_seat)
-					return
+		var seat := _reserved_seat(sim, p)
+		if not seat.is_empty():
+			var to_seat := _path(sim, p.at, seat["front"])
+			if not to_seat.is_empty():
+				seats.erase(p.id)
+				_take_seat(sim, p, seat, to_seat)
+				return
 		if spot != StandingSpots.NO_SPOT and sim.standing.spots.has(spot):
 			var to_spot := _path(sim, p.at, sim.standing.cell_of(spot))
 			if not to_spot.is_empty():

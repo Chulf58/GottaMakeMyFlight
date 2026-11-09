@@ -154,29 +154,63 @@ static func _lying(p: Passenger, hand: int, slide_m: float, share := 1.0) -> Tra
 ## chair-walled-tight-on-b, board f1fc1e54): walled on both sides of its 1 m
 ## front, no side clears the legs (finding d15d7455: ParkWalls pushed the
 ## roller back into them, up to 0.179 m). False for a guest with no roller.
-## What it does not guarantee: that ParkSide picks the one side that fits
-## when only one does (it picks by the standing park).
+## ParkSide.hand() lays the roller on the one side that fits when only one
+## does (clear_hand()), so a guest seated here lies in neither a wall nor its
+## legs.
 static func walled_tight(sim: PassengerSim, p: Passenger, seat: Dictionary) -> bool:
 	if not ParkRecovery.has_roller(p):
 		return false
 	var front: Vector2i = seat["front"]
 	var cell: Vector2i = seat["cell"]
-	var frame := ParkSide._frame(sim, front, front - cell)
 	var slide_m := slide(Relocation.placement(sim.grid, seat["object_id"]), cell, front)
-	var scale_by := SecurityLooks.bag_scale(p)
+	var frame := ParkSide._frame(sim, front, front - cell)
 	var walls := PullSide.walls_near(sim.grid, frame.origin)
+	for hand in _hands(p):
+		if _lies_clear(p, frame, walls, slide_m, hand):
+			return false
+	return true
+
+
+## The hand (0 right, 1 left) a one-bag guest `p` bound for a gate chair lays
+## its roller down with when exactly one side has room for it (the side walled_tight()
+## lets the chair through on), else -1: both sides fit, none does, or the guest
+## has two bags (each lies on its own bag's hand) or no roller.
+static func clear_hand(sim: PassengerSim, p: Passenger) -> int:
+	if p.carry_on >= 2 or not ParkRecovery.has_roller(p):
+		return -1
+	var out := p.seat_front - p.seat_cell
+	var frame := ParkSide._frame(sim, p.seat_front, out)
+	var walls := PullSide.walls_near(sim.grid, frame.origin)
+	var slide_m := slide_of(p)
+	var fits: Array[int] = []
+	for hand in _hands(p):
+		if _lies_clear(p, frame, walls, slide_m, hand):
+			fits.append(hand)
+	return fits[0] if fits.size() == 1 else -1
+
+
+## The hands `p`'s roller can lie on: either for a one-bag guest, the roller
+## bag's own for a two-bag guest.
+static func _hands(p: Passenger) -> Array[int]:
 	var hands: Array[int] = [0, 1]
 	if p.carry_on >= 2:
 		hands = []
 		for i in 2:
 			if SecurityLooks.bag_kind(p, i) == SecurityLooks.Kind.ROLLER:
 				hands.append(i)
-	for hand in hands:
-		var blocked := false
-		for n in range(1, LIE_SAMPLES + 1):
-			var lying := frame * _lying(p, hand, slide_m, n / float(LIE_SAMPLES))
-			lying = Transform3D(lying.basis.scaled(Vector3.ONE * scale_by), lying.origin)
-			blocked = blocked or ParkWalls.inside(lying, walls)
-		if not blocked:
+	return hands
+
+
+## Whether the roller of `p` lying on `hand` at a chair whose front stands in
+## `frame` (slide `slide_m`) meets no wall of `walls` and lies past none, at
+## any of LIE_SAMPLES shares of the way out.
+static func _lies_clear(
+	p: Passenger, frame: Transform3D, walls: Array, slide_m: float, hand: int
+) -> bool:
+	var scale_by := SecurityLooks.bag_scale(p)
+	for n in range(1, LIE_SAMPLES + 1):
+		var lying := frame * _lying(p, hand, slide_m, n / float(LIE_SAMPLES))
+		lying = Transform3D(lying.basis.scaled(Vector3.ONE * scale_by), lying.origin)
+		if ParkWalls.inside(lying, walls):
 			return false
 	return true
