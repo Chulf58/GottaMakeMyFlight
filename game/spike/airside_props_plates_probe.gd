@@ -122,7 +122,6 @@ func _run() -> void:
 	_add_colliders(_main)
 	await _tug_plates()
 	await _bridge_plates()
-	await _clip_stage()
 	await _walk_plates()
 	await _sign_plates()
 	_contact_sheet()
@@ -248,20 +247,20 @@ func _bridge_plates() -> void:
 		var mount := (bridge.find_child("Mount_Door", true, false) as Node3D).global_position
 		print(
 			(
-				"BRIDGE %s docked=%s Mount_Door %.4f m off the door %s slide %.2f pitch %.2f"
+				"BRIDGE %s docked=%s Mount_Door %.4f m off the door %s slide %.2f height %.2f"
 				% [
 					model,
 					entry["docked"],
 					mount.distance_to(door),
 					door,
 					entry["pose"]["slide"],
-					rad_to_deg(entry["pose"]["pitch"]),
+					entry["pose"]["height"],
 				]
 			)
 		)
 		# Question (c): the bridge underside over the gate's walk.
 		_walk_clearance(model, bridge)
-		if model == "tp_plane_04a" or model == "tp_plane_03a":
+		if not JetBridgePose.docks(model):
 			await _clear_plates(model, plane, door, bridge)
 			continue
 		if not entry["docked"]:
@@ -274,13 +273,13 @@ func _bridge_plates() -> void:
 			await _save(name)
 
 
-## Planes 03 and 04, which the rig cannot dock, against the bridge swung clear
-## (JetBridgePose.parked_clear()): plates from the terminal side and from high
+## Plane 03, which the nose-loader does not dock (board 0adca5c6), with the
+## bridge parked over its wing: plates from the terminal side and from high
 ## over the apron, with the bridge wholly in frame and seen.
 func _clear_plates(model: String, plane: Node3D, door: Vector3, bridge: Node3D) -> void:
 	var entry: Dictionary = _airside.props.bridges[_gate]
-	if not entry["clear"]:
-		_invalid("%s: the bridge did not swing clear" % model)
+	if entry["docked"]:
+		_invalid("%s: the bridge docked a plane that boards on foot" % model)
 		return
 	var focus := door.lerp(bridge.global_position, 0.5)
 	for view: Vector3 in [Vector3(60.0, 32.0, 34.0), Vector3(150.0, 62.0, 40.0)]:
@@ -289,48 +288,6 @@ func _clear_plates(model: String, plane: Node3D, door: Vector3, bridge: Node3D) 
 		var name := "bridge_clear_%s_yaw%03d.png" % [model.substr(9, 2), roundi(view.x)]
 		if _prove(name, [bridge], true) and _prove_seen(name, plane):
 			await _save(name)
-
-
-## Blocker 3 of R11, closed by board 82a139d0: whether planes 03 and 04 at the
-## stand meet the bridge as the game poses it (swung clear). Counts mesh edges
-## of either that cross a triangle of the other (Kit.crossings()). Control: the
-## same count against the plain parked pose (JetBridgePose.parked()), which the
-## R11 lane measured cutting plane 03, must be positive.
-func _clip_stage() -> void:
-	var entry: Dictionary = _airside.props.bridges[_gate]
-	var bridge: Node3D = entry["node"]
-	for model: String in ["tp_plane_03a", "tp_plane_04a"]:
-		var plane := _pose(model, _class_of(model), FlightSim.State.BOARDING, 0.0)
-		await _frames(1)
-		var posed: Dictionary = entry["pose"]
-		var found := Kit.crossings(plane, bridge)
-		var spot := JetBridgePose.stand_door(entry["stand"])
-		JetBridgePose.apply(
-			entry["joints"], JetBridgePose.parked(entry["root"], spot, Vector3.RIGHT)
-		)
-		var control := Kit.crossings(plane, bridge)
-		JetBridgePose.apply(entry["joints"], posed)
-		print(
-			(
-				(
-					"CLIP %s at the stand, bridge clear %s docked %s yaw %.1f deg: %d edge"
-					+ " crossings (plane meshes %s); control, plain parked pose: %d crossings"
-					+ " (plane meshes %s)"
-				)
-				% [
-					model,
-					entry["clear"],
-					entry["docked"],
-					rad_to_deg(posed["yaw"]),
-					found["count"],
-					found["meshes"],
-					control["count"],
-					control["meshes"],
-				]
-			)
-		)
-		if control["count"] == 0:
-			_invalid("%s: the clip control found no crossing with the plain parked bridge" % model)
 
 
 func _walk_plates() -> void:
@@ -440,7 +397,8 @@ func _walk_clearance(model: String, bridge: Node3D) -> Dictionary:
 	var walk := _walk()
 	if walk.size() < 2:
 		_invalid("gate %s has no walk to its plane door" % _gate)
-		return {"clearance": INF, "at": JetBridgePose.stand_door(_stand)}
+		var ref := JetBridgePose.plane_door(_stand, PlaneClasses.REFERENCE_MODEL)
+		return {"clearance": INF, "at": ref["door"]}
 	var best := {"clearance": INF, "at": walk[walk.size() - 1]}
 	var covered := 0
 	var samples := 0

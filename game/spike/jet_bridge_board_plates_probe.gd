@@ -1,12 +1,13 @@
 extends SceneTree
-## Windowed plate probe for the jet bridge rooted at the gate's exit door
-## (board 0adca5c6; rulings jet-bridge-starts-at-the-gate-s-exit-door-
-## passengers-step-fr and jet-bridge-boarding-design-stair-box-at-the-exit-
-## door-real-w). For planes 05, 06 and 07 docked at the gate it saves a plate
-## through a tunnel B window with a guest-height marker (1.75 m, orange) on the
-## tunnel floor, and a context plate with the stair box, the tunnel and the
-## plane; then one plate of the stair box at the exit door seen over the
-## terminal. It rules nothing.
+## Windowed plate probe for the nose-loader jet bridge (board 0adca5c6; rulings
+## jet-bridges-are-nose-loader-pedestal-bridges-an-enclosed-wal, nose-loader-
+## bridge-design-stair-landing-and-cab-share-one-fl and plane-03-boards-on-
+## foot-from-the-apron-plane-04-docks-the-no). Saves, for planes 04, 05, 06 and
+## 07 docked at the gate, a plate through the cab's side window with a
+## guest-height marker (1.75 m, orange) on the cab floor; a context plate at 05;
+## plane 03 parked with its apron walk drawn (green posts from the exit sill to
+## the apron door and on to its door); and a top-down plate of the docked walk
+## at 05 (blue posts, drawn over the roofs) with its turn. It rules nothing.
 ##
 ## Run (one windowed Godot run project-wide; hold tools/blender/out/.windowed.lock):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -22,7 +23,7 @@ extends SceneTree
 ## at them before it is saved. The rays meet trimesh colliders on every mesh
 ## except the bridge's glass panes (TP_Glass_1A_D surfaces), which a passenger
 ## is seen through. On failure it prints PROBE_INVALID and exits 1. The HUD is
-## hidden. Prints the world seed.
+## hidden. Prints the world seed, every walk mount and the walk's turns.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const MAIN_SCENE := "res://main/main.tscn"
@@ -31,14 +32,14 @@ const MARGIN_PX := 8.0
 const FOV := 55.0
 const GLASS := "TP_Glass_1A_D"
 const MARKER_H := 1.75
-## Where the marker stands in Tunnel_Slide's frame: tunnel B's floor top, in
-## the middle of its second window (build_airside_props.py panels()).
-const MARKER_AT := Vector3(0.0, -0.02, 3.15)
-const MODELS: Array[String] = ["tp_plane_05a", "tp_plane_06a", "tp_plane_07a"]
-## The share of rays that must reach the marker through the window, and the
-## bridge in a context plate.
+const DOCKING: Array[String] = ["tp_plane_04a", "tp_plane_05a", "tp_plane_06a", "tp_plane_07a"]
+const ON_FOOT := "tp_plane_03a"
+## The share of rays that must reach the marker through the window, and a
+## subject in a context plate.
 const MARKER_SEEN := 0.2
 const SUBJECT_SEEN := 0.25
+## How high over the roofs the top-down plate draws the walk.
+const TOP_LINE_Y := 6.0
 
 var _out_dir := ""
 var _failed := false
@@ -88,16 +89,16 @@ func _run() -> void:
 	_stand = _airside.gate_stands[_gate]
 	_view.gate = _gate
 	var bridge: Node3D = _airside.props.bridges[_gate]["node"]
-	var sill := (bridge.find_child("Mount_StairBottom", true, false) as Node3D).global_position
+	var sill := (bridge.find_child("Mount_ExitSill", true, false) as Node3D).global_position
 	var exit := Vector3(_stand["x"], sill.y, _stand["wall_z"])
 	print(
 		(
-			"PROBE gate=%s stand=%s root=%s stair sill %s exit door %s (%.4f m apart)"
-			% [_gate, _stand, bridge.global_position, sill, exit, sill.distance_to(exit)]
+			"PROBE gate=%s stand=%s exit sill %s, exit door %s (%.4f m apart)"
+			% [_gate, _stand, sill, exit, sill.distance_to(exit)]
 		)
 	)
 	if sill.distance_to(exit) > 0.01:
-		_invalid("the stair box's sill is not on the exit door")
+		_invalid("the exit sill mount is not on the exit door")
 	_show_hud(false)
 	_cam = Camera3D.new()
 	_cam.fov = FOV
@@ -108,14 +109,17 @@ func _run() -> void:
 	_main.add_child(_marker)
 	_add_colliders(_main, bridge)
 	_add_bridge_colliders(bridge)
-	for model in MODELS:
-		await _model_plates(model, bridge)
-	await _exit_plate(bridge, exit)
+	for model in DOCKING:
+		await _docked_plates(model, bridge)
+	await _apron_plate(bridge)
+	await _turn_plate(bridge)
 	_contact_sheet()
 	_finish()
 
 
-func _model_plates(model: String, bridge: Node3D) -> void:
+## Docked at `model`: the marker on the cab floor, seen through the cab's side
+## window from the apron (north); at 05 also a context plate from the north-east.
+func _docked_plates(model: String, bridge: Node3D) -> void:
 	var entry: Dictionary = _airside.props.bridges[_gate]
 	var plane := _pose(model)
 	await _frames(3)
@@ -124,59 +128,115 @@ func _model_plates(model: String, bridge: Node3D) -> void:
 	var pose: Dictionary = entry["pose"]
 	print(
 		(
-			"BRIDGE %s docked=%s Mount_Door %.4f m off the door %s slide %.2f pitch %.2f"
-			% [
-				model,
-				entry["docked"],
-				mount.distance_to(door),
-				door,
-				pose["slide"],
-				rad_to_deg(pose["pitch"])
-			]
+			"BRIDGE %s docked=%s Mount_Door %.4f m off the door %s slide %.2f height %.2f"
+			% [model, entry["docked"], mount.distance_to(door), door, pose["slide"], pose["height"]]
 		)
 	)
 	if not entry["docked"]:
 		_invalid("%s: the bridge did not dock" % model)
 		return
-	var slide := bridge.find_child("Tunnel_Slide", true, false) as Node3D
-	var feet := slide.global_transform * MARKER_AT
-	_marker.global_position = feet + Vector3.UP * MARKER_H / 2.0
+	var cab := (bridge.find_child("Mount_CabFloor", true, false) as Node3D).global_position
+	_marker.global_position = cab + Vector3(0.6, MARKER_H / 2.0, 0.0)
 	_marker.visible = true
 	await _frames(2)
-	# The window plate: from the apron side of tunnel B, square to its windows.
-	var along := slide.global_basis.z.slide(Vector3.UP).normalized()
-	var side := along.cross(Vector3.UP).normalized()
-	if side.z > 0.0:
-		side = -side
-	_aim(_marker.global_position, rad_to_deg(atan2(side.x, side.z)), 5.0, 8.0)
+	_aim(_marker.global_position, 180.0, 6.0, 9.0)
 	await _frames(3)
 	var name := "board_window_%s.png" % model.substr(9, 2)
-	print("MARKER %s feet %s (tunnel B floor), camera %s" % [model, feet, _cam.global_position])
 	if _prove(name, _marker, MARKER_SEEN):
 		await _save(name)
-	# The context plate: the stair box, the tunnel and the plane from the north-east.
-	var focus := (bridge.global_position + door) / 2.0 + Vector3.UP * 2.0
-	_aim(focus, 135.0, 28.0, 36.0)
+	if model == "tp_plane_05a":
+		_aim((bridge.global_position + door) / 2.0 + Vector3.UP * 2.0, 135.0, 28.0, 30.0)
+		await _frames(3)
+		name = "board_context_05.png"
+		if _prove(name, bridge, SUBJECT_SEEN) and _seen(name, plane, SUBJECT_SEEN):
+			await _save(name)
+	_marker.visible = false
+
+
+## Plane 03 parked under the parked bridge, its apron walk drawn as green posts
+## from the exit sill out of the apron door to its door.
+func _apron_plate(bridge: Node3D) -> void:
+	var entry: Dictionary = _airside.props.bridges[_gate]
+	var plane := _pose(ON_FOOT)
 	await _frames(3)
-	name = "board_context_%s.png" % model.substr(9, 2)
+	var want := JetBridgePose.pose_for(_stand, ON_FOOT, false, float(entry["root"].origin.y))
+	var walk: PackedVector3Array = want["apron_walk"]
+	print("APRON 03 docked=%s walk %s" % [entry["docked"], walk])
+	if entry["docked"] or walk.size() != 3:
+		_invalid("03: the bridge docked or the apron walk is missing")
+		return
+	# The stretch inside the vestibule is drawn but hidden by its walls; the
+	# stretch outside, from the apron door to the plane door, must be seen.
+	var inside := _posts(walk.slice(0, 2), Color(0.1, 0.8, 0.2), 1.0)
+	var outside := _posts(walk.slice(1, 3), Color(0.1, 0.8, 0.2), 1.0)
+	_main.add_child(inside)
+	_main.add_child(outside)
+	_add_colliders(outside, null)
+	await _frames(2)
+	# From the apron (north-east), low, under the parked cab and the 03's wing.
+	_aim(walk[1].lerp(walk[2], 0.5) + Vector3.UP * 0.5, 150.0, 7.0, 15.0)
+	await _frames(3)
+	var name := "board_03_apron_walk.png"
 	if (
-		_prove(name, bridge, SUBJECT_SEEN)
-		and _prove(name, _marker, 0.0)
+		_prove(name, outside, MARKER_SEEN)
+		and _prove(name, bridge, SUBJECT_SEEN)
 		and _seen(name, plane, SUBJECT_SEEN)
 	):
 		await _save(name)
+	inside.queue_free()
+	outside.queue_free()
 
 
-## The stair box at the exit door, seen over the terminal from the south-west:
-## the door in the wall and the stair box behind it.
-func _exit_plate(bridge: Node3D, exit: Vector3) -> void:
-	_marker.visible = false
-	var box := bridge.find_child("StairBox_Mesh", true, false) as MeshInstance3D
-	_aim(exit + Vector3(3.0, 1.5, -2.0), 325.0, 42.0, 22.0)
+## Docked at 05, from straight above: the walk drawn over the roofs as blue
+## posts, with the turn angles printed from the mounts.
+func _turn_plate(bridge: Node3D) -> void:
+	var entry: Dictionary = _airside.props.bridges[_gate]
+	_pose("tp_plane_05a")
 	await _frames(3)
-	var name := "board_exit_door.png"
-	if _prove(name, box, SUBJECT_SEEN):
+	var want := JetBridgePose.pose_for(_stand, "tp_plane_05a", true, float(entry["root"].origin.y))
+	var walk: PackedVector3Array = want["walk"]
+	var turns: Array[String] = []
+	var length := 0.0
+	for i in range(1, walk.size()):
+		length += walk[i - 1].distance_to(walk[i])
+		if i < walk.size() - 1:
+			var a := walk[i] - walk[i - 1]
+			var b := walk[i + 1] - walk[i]
+			turns.append("%.1f" % absf(rad_to_deg(Vector2(a.x, a.z).angle_to(Vector2(b.x, b.z)))))
+	print("TURN 05 walk %s: turns %s deg, length %.2f m" % [walk, turns, length])
+	var high := PackedVector3Array()
+	for p in walk:
+		high.append(Vector3(p.x, TOP_LINE_Y + float(entry["root"].origin.y), p.z))
+	var line := _posts(high, Color(0.15, 0.4, 0.95), 0.3)
+	_main.add_child(line)
+	await _frames(2)
+	var mid := (walk[0] + walk[walk.size() - 1]) / 2.0
+	_cam.look_at_from_position(mid + Vector3(0.0, 26.0, 0.01), mid, Vector3.FORWARD)
+	await _frames(3)
+	var name := "board_turn_top.png"
+	if _prove(name, line, 0.0) and _prove(name, bridge, SUBJECT_SEEN):
 		await _save(name)
+	line.queue_free()
+
+
+## Small posts every 0.25 m along the polyline `points`, `tall` m high.
+func _posts(points: PackedVector3Array, color: Color, tall: float) -> Node3D:
+	var holder := Node3D.new()
+	holder.name = "WalkLine"
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var box := BoxMesh.new()
+	box.size = Vector3(0.12, tall, 0.12)
+	box.material = mat
+	for i in range(1, points.size()):
+		var n := ceili(points[i - 1].distance_to(points[i]) / 0.25)
+		for k in n + 1:
+			var post := MeshInstance3D.new()
+			post.mesh = box
+			post.position = points[i - 1].lerp(points[i], float(k) / n) + Vector3.UP * tall / 2.0
+			holder.add_child(post)
+	return holder
 
 
 func _finish() -> void:
