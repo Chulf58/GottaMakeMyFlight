@@ -105,6 +105,9 @@ static func admits(sim: PassengerSim, p: Passenger, arrival_tick: int) -> bool:
 static func _leaving(p: Passenger, cell: Vector2i, resume: Passenger.Stage) -> Passenger:
 	var after := Passenger.new()
 	after.id = p.id
+	# The body decides whether a roller fits beside a gate chair
+	# (GateRoller.walled_tight()), which the security forecast asks of it.
+	after.variant = p.variant
 	after.flight_id = p.flight_id
 	after.boarding_tick = p.boarding_tick
 	after.cleared = p.cleared

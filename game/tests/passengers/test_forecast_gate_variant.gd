@@ -126,3 +126,24 @@ func test_a_forecast_copy_keeps_the_variant_and_the_reservation_agrees_with_live
 	assert_int(copy.variant).is_equal(_guest.variant)
 	assert_bool(forecast).is_equal(live)
 	assert_bool(forecast).is_true()
+
+
+## The same guest leaving a landside visit (VisitForecast._leaving(), the copy
+## the journey forecast hands the security forecast as its candidate) is
+## walled tight at the chair exactly when the guest is live.
+func test_a_visit_forecast_copy_of_the_guest_agrees_with_live_at_the_chair() -> void:
+	_world = PassengerTestWorld.reference_world()
+	assert_bool(_find_variant_sensitive_guest()).is_true()
+	var sim := _world.sim
+	var after := VisitForecast._leaving(_guest, _guest.at, Passenger.Stage.TO_SECURITY)
+	var live := GateRoller.walled_tight(sim, _guest, _seat)
+	var forecast := GateRoller.walled_tight(sim, after, _seat)
+	print(
+		(
+			"guest %d variant %d, visit copy variant %d; walled tight live %s, visit copy %s"
+			% [_guest.id, _guest.variant, after.variant, live, forecast]
+		)
+	)
+	assert_bool(live).is_false()
+	assert_int(after.variant).is_equal(_guest.variant)
+	assert_bool(forecast).is_equal(live)
