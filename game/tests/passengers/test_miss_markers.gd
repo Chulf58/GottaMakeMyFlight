@@ -49,6 +49,19 @@ func _short_lane_world() -> PassengerTestWorld:
 	return world
 
 
+## Keeps `desk`'s passenger in service two ticks past now. The hold cells lie
+## past the lane in this world, and walkers come round the lane over the desk's
+## far side instead of through it (decision queue-walkers-route-around-their-
+## own-line-a-walker-heading-t), so the line fills after the first service
+## would end. Its service ends two ticks after the last hold, so the lane is
+## still full once the holders stand.
+func _hold_service(desk: int) -> void:
+	var serving: int = _world.sim._queue(desk)["serving"]
+	if serving != 0:
+		var p := _world.passenger(serving)
+		p.service_end = maxi(p.service_end, _world.sim.tick + 2)
+
+
 func _spawn_spaced(count: int, spacing := 12) -> void:
 	for i in count:
 		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
@@ -85,10 +98,11 @@ func test_the_sign_caption_counts_the_passengers_held_outside_the_lane() -> void
 	# back onto the second (TerminalLayout.line_of(), StationQueue.approach()),
 	# and stands there before the first is served.
 	_spawn_spaced(5, 3)
-	for i in 120:
+	for i in 300:
 		if _world.sim.holding_of(desk).size() == 2:
 			break
 		_world.step()
+		_hold_service(desk)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
 	assert_str(_markers.sign_text(desk)).is_equal("Queue full · +2 waiting")
 
