@@ -1047,6 +1047,19 @@ func _reach_frame(
 		_plate_task = true
 		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
 		_plate_reach.call_deferred(id, state, booth)
+	# An arm past the half opening at the arch (its posts and as far again
+	# beyond) is plated close once per passenger (board 0dd2c787 item b).
+	var arm_key := "arm_p%d" % id
+	if (
+		absf(local.z) <= ENTRY_Z[1]
+		and widest["arm"][0] > booth[3]
+		and not _reach_plated.has(arm_key)
+		and not _plate_task
+	):
+		_reach_plated[arm_key] = false
+		_plate_task = true
+		print("REACH_PLATE_WANTED passenger=%d pass=%s %s" % [id, pass_key, context])
+		_plate_reach.call_deferred(id, arm_key, booth)
 	# One walker and one runner plated at the arch's entry, where the widest
 	# feet were before the set-off turn (finding
 	# why-does-the-body-reach-past-the-security-lane-arch-s-0-38-m).
