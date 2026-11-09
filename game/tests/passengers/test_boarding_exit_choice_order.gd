@@ -56,3 +56,22 @@ func test_a_walker_early_in_the_list_is_held_by_the_ones_filing_after_it() -> vo
 	for i in TICKS:
 		_world.step()
 		assert_str(TestBoardingFiles.spacing_problem(_world, gaps)).is_empty()
+
+
+## A walker standing on its exit's door cell when it turns out chooses its
+## exit on that tick and steps out on the next: choosing it ahead of the steps
+## (choose_exits()) is not a second advance in the same tick.
+func test_a_walker_on_its_door_cell_steps_out_on_the_tick_after_it_chooses() -> void:
+	_world = TestBoardingFiles.boarding_world()
+	_world.run_to(BOARDING + 5)
+	var scout := TestBoardingFiles.walker(_world, FRONT_CELL)
+	_world.step()
+	var door_cell := _world.sim.layout.door_cell(_world.sim.grid, scout.exit_object)
+	var p := TestBoardingFiles.walker(_world, door_cell)
+	_world.step()
+	print("on its door cell %s: stage %d, door %d" % [door_cell, p.stage, p.exit_object])
+	assert_int(p.exit_object).is_equal(scout.exit_object)
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_EXIT)
+	assert_int(_world.sim.files.door_of(p.id)).is_equal(p.exit_object)
+	_world.step()
+	assert_int(p.stage).is_not_equal(Passenger.Stage.TO_EXIT)
