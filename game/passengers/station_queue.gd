@@ -93,6 +93,14 @@ static func free_index(queue: Dictionary, line: Array, by_id: Dictionary, index 
 	return free
 
 
+## The line index a walker reserving place `slot` of `queue` sets off for:
+## the slot, or the free index when members stand further back (free_index()),
+## so its route shuts the whole members' block (approach()); never past the
+## line's last cell. The station choice of the sim and of SecurityForecast.
+static func target(queue: Dictionary, line: Array, by_id: Dictionary, slot: int) -> int:
+	return mini(maxi(slot, free_index(queue, line, by_id)), line.size() - 1)
+
+
 ## Cell -> its index on `line`, the first when a cell repeats.
 static func line_index(line: Array) -> Dictionary:
 	var index := {}

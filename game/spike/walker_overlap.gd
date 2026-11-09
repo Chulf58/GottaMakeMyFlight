@@ -47,6 +47,8 @@ var _points := {}
 ## Walker id -> [tick, fallback, where]: the first step it took onto its own
 ## line's cells ahead of the line's free cell (_route()).
 var _route_over := {}
+## The cell map of the first fallback (_cell_map()), printed as WALKMAP lines.
+var _map: Array[String] = []
 
 
 func _init(sim: PassengerSim, views: PassengerViews) -> void:
@@ -126,6 +128,8 @@ func _route(tick: int, w: Passenger) -> void:
 		return
 	var shut := line.slice(0, free)
 	var fallback := _sim.grid.find_path_around(w.at, w.path_end(), shut).is_empty()
+	if fallback and _map.is_empty():
+		_map = _cell_map(tick, w, line, free)
 	_route_over[w.id] = [
 		tick,
 		fallback,
@@ -134,6 +138,52 @@ func _route(tick: int, w: Passenger) -> void:
 			% [w.id, w.at, next, onto, free, w.path_end()]
 		)
 	]
+
+
+## The cells around fallback walker `w` and its station's `line`, one string
+## a row: W the walker, T where it heads, M a line cell ahead of `free` (the
+## members' block), o a later line cell, a-z another station's line cell, .
+## a cell passengers may stand on, # one they may not. Walls on cell edges are
+## not drawn; the route check (find_path_around()) does count them.
+func _cell_map(tick: int, w: Passenger, line: Array, free: int) -> Array[String]:
+	var lo := w.at
+	var hi := w.at
+	for cell: Vector2i in line + [w.path_end()]:
+		lo = Vector2i(mini(lo.x, cell.x), mini(lo.y, cell.y))
+		hi = Vector2i(maxi(hi.x, cell.x), maxi(hi.y, cell.y))
+	var others := {}
+	var letter := 0
+	for station: int in _sim.layout.desks + _sim.layout.scanners:
+		if station == w.station:
+			continue
+		for cell: Vector2i in _sim.layout.line_of(station):
+			others[cell] = char(97 + letter % 26)
+		letter += 1
+	var rows: Array[String] = [
+		(
+			"t%d walker %d station %d, x %d..%d, y %d..%d"
+			% [tick, w.id, w.station, lo.x - 2, hi.x + 2, lo.y - 2, hi.y + 2]
+		)
+	]
+	for y in range(lo.y - 2, hi.y + 3):
+		var row := "%4d " % y
+		for x in range(lo.x - 2, hi.x + 3):
+			var cell := Vector2i(x, y)
+			var at := line.find(cell)
+			if cell == w.at:
+				row += "W"
+			elif cell == w.path_end():
+				row += "T"
+			elif at >= 0:
+				row += "M" if at < free else "o"
+			elif others.has(cell):
+				row += others[cell]
+			elif _sim.grid.in_bounds(cell) and _sim.grid.is_passenger_cell(cell):
+				row += "."
+			else:
+				row += "#"
+		rows.append(row)
+	return rows
 
 
 ## Members of one station that are drawn on one spot.
@@ -296,6 +346,8 @@ func report(place: String) -> bool:
 	for id: int in listed.slice(0, LISTED):
 		var row: Array = _route_over[id]
 		print("WALKROUTE %s t%d fallback %s, %s" % [place, row[0], row[1], row[2]])
+	for line: String in _map:
+		print("WALKMAP %s %s" % [place, line])
 	for key: String in near.slice(0, LISTED):
 		var row: Array = _crossed[key]
 		print(

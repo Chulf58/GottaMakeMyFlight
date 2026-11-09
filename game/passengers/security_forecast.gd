@@ -431,7 +431,8 @@ func _place_waiting(counts: Dictionary) -> void:
 			var line: Array = _lines[station]
 			if not slots.has(station) or slots[station] >= line.size():
 				continue
-			var path := StationQueue.approach(_sim.grid, line, u.at, slots[station])
+			var to := StationQueue.target(_queues[station], line, _units, slots[station])
+			var path := StationQueue.approach(_sim.grid, line, u.at, to)
 			if path.is_empty():
 				continue
 			var walk := u.pace_ticks(Passenger.path_mm(path))

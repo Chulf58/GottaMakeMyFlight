@@ -317,7 +317,8 @@ static func choose(sim: PassengerSim, p: Passenger) -> void:
 		if at >= line.size():
 			full = full or not line.is_empty()
 			continue
-		var path := StationQueue.approach(sim.grid, line, p.at, at)
+		var to := StationQueue.target(sim._queue(station), line, sim._by_id, at)
+		var path := StationQueue.approach(sim.grid, line, p.at, to)
 		if path.is_empty():
 			continue
 		var station_eta := (
