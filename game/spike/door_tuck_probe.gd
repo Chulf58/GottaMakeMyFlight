@@ -25,6 +25,9 @@ extends "res://spike/roller_trail_probe.gd"
 ##     control: leaves found and pulled frames with a leaf within LEAF_NEAR_M,
 ##     both above 0. leaf_meshes() and count_leaves() are shared with
 ##     roller_park_walls_probe.gd.
+## LEAF_OTHER: a second bag held in a hand (a hard case beside the roller)
+##   tested against the leaves the same way; `-- --two-bags` gives the guests
+##   whose second bag is a case both bags (the default run has none).
 ## In a windowed run the plates are DoorTuckStrip's (a guest crossing a one-cell
 ## doorway), not PullSwapStrip's. Same run line as roller_trail_probe.gd with
 ## res://spike/door_tuck_probe.gd.
@@ -32,6 +35,10 @@ extends "res://spike/roller_trail_probe.gd"
 const DoorTuckStrip := preload("res://spike/door_tuck_strip.gd")
 ## A leaf this near the roller's axle makes the frame one that could touch it.
 const LEAF_NEAR_M := 1.5
+## A door's leaf middle is this far along its wall from the door's axis
+## (wall_door.glb), and a walker this near its plane is in the doorway (STEER).
+const LEAF_ALONG_M := 0.61
+const STEER_PLANE_M := 0.3
 ## Half size of the pulling hand round its grip point (windowed only).
 const HAND_HALF := Vector3(0.04, 0.05, 0.04)
 const TOP_DEEP := 12
@@ -63,6 +70,19 @@ func _initialize() -> void:
 		_strip = DoorTuckStrip.new()
 
 
+## With `-- --two-bags`, a guest whose second bag is a hard case carries both
+## (roller in the right hand, case in the left; SecurityLooks.hand_of() keeps
+## hand = index), so LEAF_OTHER measures the case against the leaves (DoorSteer
+## does not steer such a guest).
+func _spawn(world: String, role: String, k: int) -> void:
+	super._spawn(world, role, k)
+	var p: Passenger = _ours.back()
+	if "--two-bags" in OS.get_cmdline_user_args():
+		if SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.CASE:
+			p.carry_on = 2
+			print("TWO_BAGS id=%d roller and case" % p.id)
+
+
 func _collect_walls(world: String) -> void:
 	super._collect_walls(world)
 	_leaves = leaf_meshes(_build_view, _mode.grid, world)
@@ -72,7 +92,8 @@ func _collect_walls(world: String) -> void:
 ## A fresh LEAF tally.
 static func new_leaf_tally() -> Dictionary:
 	var out := {"leaves": 0, "frames": 0, "near": 0, "touch": 0, "deep": 0.0}
-	for part in ["bag", "rods", "bar", "hand"]:
+	out.merge({"steer_n": 0, "steer_sum": 0.0, "steer_min": INF, "steer_max": 0.0})
+	for part in ["bag", "rods", "bar", "hand", "other", "other_near"]:
 		out[part] = 0
 	return out
 
@@ -101,9 +122,18 @@ static func leaf_meshes(view: BuildView, grid: BuildGrid, world: String) -> Arra
 ## (new_leaf_tally()): the roller's meshes, by part (under Pull_Top the grip
 ## bar, under Pull_Reach the rods, else the bag), and with `hand_at` finite a
 ## HAND_HALF box there, each tested against every leaf's box. Prints the first
-## TOP_DEEP touching frames.
+## TOP_DEEP touching frames, with the guest's body at `walker` (when finite)
+## in the leaf's frame, so its distance from the door's axis can be read.
+## `others` are the guest's other bags held in a hand (a hard case beside the
+## roller), booked as part "other".
 static func count_leaves(
-	tally: Dictionary, leaves: Array[MeshInstance3D], p: Passenger, bag: Node3D, hand_at: Vector3
+	tally: Dictionary,
+	leaves: Array[MeshInstance3D],
+	p: Passenger,
+	bag: Node3D,
+	hand_at: Vector3,
+	walker := Vector3.INF,
+	others: Array[Node3D] = [],
 ) -> void:
 	tally["frames"] += 1
 	var axle := bag.global_transform * CarryOnProps.ROLLER_AXLE
@@ -114,6 +144,9 @@ static func count_leaves(
 	if near.is_empty():
 		return
 	tally["near"] += 1
+	if walker.is_finite():
+		_steer(tally, near, walker)
+	tally["other_near"] += int(not others.is_empty())
 	var top := bag.find_child("Pull_Top", true, false)
 	var reach := bag.find_child("Pull_Reach", true, false)
 	var parts := []
@@ -124,6 +157,9 @@ static func count_leaves(
 		elif reach != null and (reach == mi or reach.is_ancestor_of(mi)):
 			part = "rods"
 		parts.append([part, _obb(mi.global_transform, mi.get_aabb())])
+	for other in others:
+		for mi: MeshInstance3D in other.find_children("*", "MeshInstance3D", true, false):
+			parts.append(["other", _obb(mi.global_transform, mi.get_aabb())])
 	if hand_at.is_finite():
 		var box := AABB(-HAND_HALF, HAND_HALF * 2.0)
 		parts.append(["hand", _obb(Transform3D(Basis.IDENTITY, hand_at), box)])
@@ -147,8 +183,41 @@ static func count_leaves(
 		# In the touched leaf's frame (x along the wall, z out of it, its middle 0).
 		var inv := touched.global_transform.affine_inverse()
 		var bar := inv * (top as Node3D).global_position if top != null else Vector3.INF
-		var line := [p.id, p.at.x, p.at.y, stage, hit, inv * axle, bar]
-		print("LEAF_AT id=%d cell (%d,%d) %s %s; leaf frame: axle %s bar %s" % line)
+		var walk := inv * walker if walker.is_finite() else Vector3.INF
+		var line := [p.id, p.at.x, p.at.y, stage, hit, inv * axle, bar, walk]
+		print("LEAF_AT id=%d cell (%d,%d) %s %s; leaf frame: axle %s bar %s walker %s" % line)
+
+
+## STEER (board 4b062450, DoorSteer): how far `walker` is off the door's axis,
+## read in the frame of the nearest of `near` (door leaves), when it is within
+## STEER_PLANE_M of the leaves' plane: booked in `tally`.
+static func _steer(tally: Dictionary, near: Array[MeshInstance3D], walker: Vector3) -> void:
+	var nearest: MeshInstance3D = near[0]
+	for leaf in near:
+		if leaf.global_position.distance_to(walker) < nearest.global_position.distance_to(walker):
+			nearest = leaf
+	var local := nearest.global_transform.affine_inverse() * walker
+	if absf(local.z) > STEER_PLANE_M:
+		return
+	var off := absf(absf(local.x) - LEAF_ALONG_M)
+	tally["steer_n"] += 1
+	tally["steer_sum"] += off
+	tally["steer_min"] = minf(float(tally["steer_min"]), off)
+	tally["steer_max"] = maxf(float(tally["steer_max"]), off)
+
+
+## The STEER line of `tally` for seed `seed`: the control that DoorSteer drew
+## the walkers off the door's axis (mean above 0.1 m, DoorSteer.SIDE_M 0.12).
+static func print_steer(tally: Dictionary, seed: int) -> void:
+	var n := int(tally["steer_n"])
+	var mean := float(tally["steer_sum"]) / maxf(float(n), 1.0)
+	var text := (
+		"STEER seed %d: %d pulled frames with the walker within %.1f m of a door's plane;"
+		+ " off the door's axis mean %.3f m, least %.3f m, most %.3f m (control, mean above 0.1)"
+	)
+	print(text % [seed, n, STEER_PLANE_M, mean, tally["steer_min"], tally["steer_max"]])
+	var other := "LEAF_OTHER seed %d: %d near-leaf frames with a second bag in a hand, %d touching"
+	print(other % [seed, tally["other_near"], tally["other"]])
 
 
 ## The LEAF line of `tally` for seed `seed`; the hand is measured windowed only.
@@ -225,7 +294,7 @@ func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> 
 	var grip := Vector3.INF
 	if not _headless:
 		grip = _views.carry_on_props().grip_of(body, CarryLead.hand_of(int(state.get("place", 0))))
-	count_leaves(_leaf, _leaves, p, bag, grip)
+	count_leaves(_leaf, _leaves, p, bag, grip, body.global_position, _held_others(p, bag))
 	var tucked := RollerPull.tuck_weight(state, _clock.tick + _clock.alpha) > 0.0
 	_tuck["pulled"] += int(tucked)
 	if int(_axles["settled"]) == settled:
@@ -245,6 +314,20 @@ func _check_axle(p: Passenger, body: Node3D, bag: Node3D, state: Dictionary) -> 
 		# The door strip's doorway test, headless too (the strip runs windowed).
 		_tuck["door_check"] = DoorTuckStrip.new()._door_near(_main, body.global_position)
 		print("DOOR_CHECK id=%d at %s: doorway %s" % [p.id, p.at, _tuck["door_check"]])
+
+
+## Guest `p`'s bags held in a hand (a hard case, a lifted bag) other than
+## `bag`, its pulled roller.
+func _held_others(p: Passenger, bag: Node3D) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	var props := _views.carry_on_props()
+	var nodes: Array = props.props_of(p.id)["bags"]
+	for i in nodes.size():
+		var state := props.bag_state(p.id, i)
+		var held := int(state.get("place", -1)) / 4 == SecurityLooks.Home.HAND
+		if nodes[i] != bag and held and state.get("carry", -1) == SecurityLooks.Carry.HAND:
+			out.append(nodes[i] as Node3D)
+	return out
 
 
 ## ASYM: a fully tucked settled frame in the body's frame, mirrored so the
@@ -340,6 +423,7 @@ static func _segments_gap(a0: Vector3, a1: Vector3, b0: Vector3, b1: Vector3) ->
 func _print_classes() -> void:
 	super._print_classes()
 	print_leaves(_leaf, _seed, _headless)
+	print_steer(_leaf, _seed)
 	if int(_leaf["leaves"]) <= 0 or int(_leaf["near"]) <= 0:
 		_invalid("no door leaf was found, or no pulled roller came near one")
 	print("JAMB_DEEP seed %d: %d JAMB frames %.2f m or deeper" % [_seed, _deep, BAR_DEPTH_M])
