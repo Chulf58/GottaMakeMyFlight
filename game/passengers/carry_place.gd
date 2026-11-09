@@ -328,10 +328,11 @@ static func bag_transform(
 			var at := Transform3D(yaw, body.global_position - props.views.sit_offset(id))
 			if held["floor_at"][i] != null:
 				at = held["floor_at"][i]
-			var placed: Transform3D = RollerPark.lay_frame(held["bags"][i], at) * held["floor"][i]
+			var laid_in := RollerPark.lay_frame(held["bags"][i], at)
+			var placed: Transform3D = laid_in * held["floor"][i]
 			placed.origin.y = props.sim.grid.origin.y
 			var scaled := Transform3D(placed.basis.scaled(Vector3.ONE * scale_by), placed.origin)
-			return _off_walls(props, held, i, kind, scaled)
+			return _off_walls(props, held, i, kind, scaled, laid_in.origin)
 	return carry_transform(props, held, body, i, reach)
 
 
@@ -340,9 +341,11 @@ static func bag_transform(
 ## (this is that move's end, "want") and as it lies settled after it: at a
 ## seat walled on both sides the floor spot beside the feet reached into the
 ## wall, and only the move was kept out of it, so the settled roller snapped
-## back in (board a40fdbaf). Worked out from `xf` alone, so it is the same on
-## every frame and after a load. Not in a toilet stall, whose walls are the
-## stall's own.
+## back in (board a40fdbaf). Worked out from `xf` and `home` (the frame it is
+## laid in: the chair front at a gate chair, ParkWalls.shift()'s home, so it
+## never goes out through a wall's far face, board f1fc1e54; none for an
+## activity visit's fixed spot), so it is the same on every frame and after a
+## load. Not in a toilet stall, whose walls are the stall's own.
 ##
 ## The way out is kept on bag `i` ("wall_off": the spot `xf` it is for, the
 ## grid's edit count, and a slide) and worked out again only when the spot or
@@ -353,21 +356,27 @@ static func bag_transform(
 ## guarantee: two edits with no draw between them slide from the way out before
 ## the first, not from where the first edit's slide had it at the second.
 static func _off_walls(
-	props: CarryOnProps, held: Dictionary, i: int, kind: SecurityLooks.Kind, xf: Transform3D
+	props: CarryOnProps,
+	held: Dictionary,
+	i: int,
+	kind: SecurityLooks.Kind,
+	xf: Transform3D,
+	home := ParkWalls.NO_HOME
 ) -> Transform3D:
 	if kind != SecurityLooks.Kind.ROLLER or held.get("in_stall", false) or props.sim == null:
 		return xf
 	var edits := WallEdits.of(props)
 	var bag: Dictionary = held["bags"][i]
 	var off: Dictionary = bag.get("wall_off", {})
-	if off.is_empty() or off["at"] != xf or off["count"] != edits.count:
-		var to := ParkWalls.shift(xf, PullSide.walls_near(props.sim.grid, xf.origin))
+	var same: bool = not off.is_empty() and off["at"] == xf and off.get("home") == home
+	if not same or off["count"] != edits.count:
+		var to := ParkWalls.shift(xf, PullSide.walls_near(props.sim.grid, xf.origin), home)
 		var from := to
 		var since := -INF
-		if not off.is_empty() and off["at"] == xf:
+		if same:
 			from = slid(off, edits.at)
 			since = edits.at
-		off = {"at": xf, "count": edits.count, "from": from, "to": to, "since": since}
+		off = {"at": xf, "home": home, "count": edits.count, "from": from, "to": to, "since": since}
 		bag["wall_off"] = off
 	xf.origin += slid(off, props._tick())
 	return xf

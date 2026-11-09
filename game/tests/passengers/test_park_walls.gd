@@ -118,3 +118,29 @@ func test_a_faced_pick_up_draws_its_park_out_of_the_kept_walls() -> void:
 	print("faced pick-up in the wall: no boxes %s, boxes kept %s" % drawn)
 	assert_bool(drawn[0]).is_true()
 	assert_bool(drawn[1]).is_false()
+
+
+## A lying roller whose middle lies past the wall's centre plane, seen from its
+## home (the chair front or walker it belongs to, on the wall's -z side), is
+## moved out of the wall on the home's side, and is then clear of it, with
+## its whole box on that side. Control: worked out from the roller alone
+## (no home), the shorter way took it out through the far face (board
+## f1fc1e54: 0.58 m out to 0.739 m at a gate chair walled on both sides).
+func test_a_roller_past_the_wall_middle_moves_back_to_its_home_side() -> void:
+	var walls := _wall()
+	var across := _span(Transform3D.IDENTITY, Vector3.BACK)
+	# Its box's middle 0.08 m past the wall's centre plane, on the far side.
+	var middle := 0.08 - (across.x + across.y) / 2.0
+	var lying := Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, middle))
+	var home := Vector3(0.0, 0.0, -0.5)
+	assert_bool(ParkWalls.inside(lying, walls)).is_true()
+	var alone := ParkWalls.shift(lying, walls)
+	var homed := ParkWalls.shift(lying, walls, home)
+	var out := Transform3D(lying.basis, lying.origin + alone)
+	var back := Transform3D(lying.basis, lying.origin + homed)
+	print("past the wall's middle: alone %s, to its home %s" % [alone, homed])
+	assert_float(alone.z).is_greater(0.0)
+	assert_float(_span(out, Vector3.BACK).x).is_greater(HALF.z)
+	assert_float(homed.z).is_less(0.0)
+	assert_bool(ParkWalls.inside(back, walls)).is_false()
+	assert_float(_span(back, Vector3.BACK).y).is_less_equal(-HALF.z)

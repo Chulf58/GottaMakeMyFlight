@@ -1,3 +1,4 @@
+class_name TestGateRollerGaps
 extends GdUnitTestSuite
 ## Guests at neighbouring gate chair fronts never lay two rollers in one gap
 ## between the fronts (ParkSide.gap_hand(), board 1fe04f01): two rollers that
