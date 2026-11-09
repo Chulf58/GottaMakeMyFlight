@@ -133,6 +133,8 @@ var _subjects: Array[Dictionary] = []
 var _pairs: Array = []
 ## RUN records by "<pulled subject>><lying subject>" (_roller_run()).
 var _runs: Dictionary = {}
+## [plain walk m, walk round the fronts m] per subject (_add()).
+var _walks: Array = []
 
 
 func _initialize() -> void:
@@ -343,7 +345,16 @@ func _add(label: String, seat: Dictionary, variant: int, hand: int, bags := 1) -
 	p.seat_piece = Relocation.placement(_sim.grid, seat["object_id"])
 	var path: Array[Vector2i] = [p.at]
 	if p.at != seat["front"]:
-		path.assign(_sim.grid.find_path(p.at, seat["front"]))
+		# The walk GateCapacity gives a seat claim, round the other fronts.
+		path.assign(GateRowWalk.path(_sim, p.at, seat["front"]))
+		var plain := _sim.grid.find_path(p.at, seat["front"])
+		_walks.append([_walk_m(plain), _walk_m(path)])
+		print(
+			(
+				"WALK %s plain %.2f m %s, round the fronts %.2f m %s"
+				% [label, _walk_m(plain), plain, _walk_m(path), path]
+			)
+		)
 	p.set_path(path)
 	p.boarding_tick = _clock.tick + 100000
 	_clock.ticked.connect(func(_t: int) -> void: p.late = false)
@@ -828,7 +839,29 @@ func _hand_watch(i: int) -> void:
 		break
 
 
+## The length (m) of the walk along cells `path`: 1 a straight step, sqrt(2)
+## a diagonal one.
+static func _walk_m(path: Array[Vector2i]) -> float:
+	var m := 0.0
+	for i in range(1, path.size()):
+		m += Vector2(path[i] - path[i - 1]).length()
+	return m
+
+
 func _summary() -> void:
+	var sums := [0.0, 0.0]
+	var most := [0.0, 0.0]
+	for walk: Array in _walks:
+		for k in 2:
+			sums[k] += float(walk[k])
+			most[k] = maxf(float(most[k]), float(walk[k]))
+	var n := maxi(_walks.size(), 1)
+	print(
+		(
+			"WALK_SUMMARY %d walks: plain mean %.2f m max %.2f m; round the fronts mean %.2f m max %.2f m"
+			% [_walks.size(), sums[0] / n, most[0], sums[1] / n, most[1]]
+		)
+	)
 	var near := 0
 	var hits := 0
 	for key: String in _runs:

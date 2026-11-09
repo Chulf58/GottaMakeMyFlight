@@ -324,6 +324,16 @@ func find_path_around(from: Vector2i, to: Vector2i, shut: Array) -> Array[Vector
 	return _pathing.find_path_around(self, from, to, shut)
 
 
+## find_path() with each cell of `costly` costing `scale` times its step for
+## this one query (GridPathing.find_path_costed()); other queries are
+## unchanged. A gate chair guest walks round other chair fronts (GateRowWalk).
+func find_path_costed(from: Vector2i, to: Vector2i, costly: Array, scale: float) -> Array[Vector2i]:
+	if _pathing == null:
+		_pathing = GridPathing.new()
+		_pathing.rebuild(self)
+	return _pathing.find_path_costed(self, from, to, costly, scale)
+
+
 ## The path staff walk from `from` to `to` over can_staff_route() steps, both
 ## cells included, or empty when there is none.
 func find_staff_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:

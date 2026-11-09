@@ -508,7 +508,8 @@ static func claim_seat(sim: PassengerSim, p: Passenger) -> bool:
 	free.sort()
 	for i in mini(free.size(), PassengerSim.SEAT_TRIES):
 		var seat: Dictionary = free[i][3]
-		var path := sim.grid.find_path(p.at, seat["front"])
+		# Round the other chair fronts, in at its own (GateRowWalk).
+		var path := GateRowWalk.path(sim, p.at, seat["front"])
 		if path.is_empty():
 			continue
 		_take_seat(sim, p, seat, path)
