@@ -229,6 +229,10 @@ var _reach_dir := ""
 ## "bag_line"}, the widest arm point and the widest point of a bag it holds or
 ## wears, across the arch's axis (board 40d26b16).
 var _returner_reach := {}
+## Lane mode, two-bag returners' put-in (_bag_in_bag_scan()): passenger id ->
+## {"frames", "max", "line"}, the most surface points of one of its bags inside
+## the other's meshes on any frame of its arch walk (board 521e46a5).
+var _bag_in_bag := {}
 
 
 func _initialize() -> void:
@@ -523,6 +527,8 @@ func _cross() -> void:
 			next_send = _clock.tick + SEND_GAP_TICKS
 		for id in _sim.passenger_ids():
 			_check(id)
+			if _lane_mode:
+				_bag_in_bag_scan(id)
 		for id in _sent:
 			var sent := _sim.get_passenger(id)
 			if _lane_mode and sent != null and sent.stage == Passenger.Stage.SECURITY:
@@ -1163,13 +1169,17 @@ func _returner_entry(id: int, booth: Array, local: Vector3, arm: Array, context:
 
 
 ## Lane mode, a returner (`p`, second pass, in ARCH) whose bag is half way into
-## its tray: plated close once per passenger with the bag (board 40d26b16), so
-## the hand on the bag and the body's place before the arch can be read.
+## its tray: plated close once per passenger and bag (board 40d26b16; each of
+## two bags since board 521e46a5), so the hand on the bag, the body's place
+## before the arch and the other bag beside it can be read.
 func _putin_scan(id: int, p: Passenger, bags: Array[Node3D], props: CarryOnProps) -> void:
-	var key := "putin_p%d" % id
-	if _plate_task or _reach_plated.has(key) or p.security_phase != SecurityRuntime.Phase.ARCH:
+	if _plate_task or p.security_phase != SecurityRuntime.Phase.ARCH:
 		return
 	for i in bags.size():
+		# Each bag of two plated half way in (board 521e46a5), the first as before.
+		var key := "putin_p%d" % id + ("_b%d" % i if i > 0 else "")
+		if _reach_plated.has(key):
+			continue
 		var k := props.transfer_progress(id, i)
 		if FloatCheck.move_of(props, id, i).ends_with(">tray") and k >= 0.4 and k <= 0.7:
 			_reach_plated[key] = false
@@ -1263,6 +1273,133 @@ func _report_returner_entry() -> void:
 		_invalid("no returner's second pass was sampled at the arch's entry")
 	if over > 0:
 		_invalid("%d returner passes reach past the arch's half opening at its entry" % over)
+
+
+## Lane mode, one frame of a returner with two bags on its arch walk (from the
+## return route's end through the unpack cell, SecurityLooks.return_walk_mm(),
+## where its bags go into the tray): how many surface points of each bag lie
+## inside the other's meshes (CarryContact.inside_meshes(), a ray-parity test,
+## not the bounding box), the larger kept per passenger with its frame's walk,
+## each bag's move and progress, and the bag centres in the body's frame.
+func _bag_in_bag_scan(id: int) -> void:
+	var p := _sim.get_passenger(id)
+	var body := _views.node_for(id)
+	if p == null or body == null or not body.is_visible_in_tree():
+		return
+	var walk := SecurityLooks.return_walk_mm(_sim, p)
+	var props := _views.carry_on_props()
+	var nodes: Array = props.props_of(id).get("bags", [])
+	if is_nan(walk) or nodes.size() != 2:
+		return
+	var a: Node3D = nodes[0]
+	var b: Node3D = nodes[1]
+	if not (a.is_visible_in_tree() and b.is_visible_in_tree()):
+		return
+	var on_a := CarryChecks.surface(a)
+	var on_b := CarryChecks.surface(b)
+	var a_in_b := CarryContact.inside_meshes(on_a, b)
+	var b_in_a := CarryContact.inside_meshes(on_b, a)
+	var rec: Dictionary = _bag_in_bag.get_or_add(
+		id, {"frames": 0, "max": -1, "line": "", "gap": INF, "control": 0}
+	)
+	if rec["frames"] == 0:
+		# The control: b's surface moved to a's centre has points inside a (or
+		# a's inside b), so the parity test sees these meshes' insides at all.
+		var shift := _centre_of(a) - _centre_of(b)
+		var moved := PackedVector3Array()
+		for point in on_b:
+			moved.append(point + shift)
+		var back := PackedVector3Array()
+		for point in on_a:
+			back.append(point - shift)
+		rec["control"] = maxi(
+			CarryContact.inside_meshes(moved, a), CarryContact.inside_meshes(back, b)
+		)
+	rec["frames"] += 1
+	# The nearest two surface points while a bag moves into the tray, a
+	# diagnostic of how close they pass (settled, they lie end to end).
+	var moving := false
+	for i in 2:
+		var move := FloatCheck.move_of(props, id, i)
+		moving = moving or (move.ends_with(">tray") and props.transfer_progress(id, i) < 1.0)
+	if moving:
+		rec["moving"] = rec.get("moving", 0) + 1
+	var gap := INF
+	if moving:
+		for x in on_a:
+			for y in on_b:
+				gap = minf(gap, x.distance_to(y))
+	var worst := maxi(a_in_b, b_in_a)
+	# The line of the frame with the most points inside, or with none, the
+	# closest moving frame.
+	var closer: bool = gap < rec["gap"]
+	rec["gap"] = minf(rec["gap"], gap)
+	if worst > rec["max"] or (worst == rec["max"] and closer):
+		rec["max"] = worst
+		var to_body := body.global_transform.affine_inverse()
+		var kinds: Array = props.props_of(id)["kinds"]
+		rec["line"] = (
+			"walk_mm=%.0f a_in_b=%d b_in_a=%d bag0=%s/%s k=%.2f at=%s bag1=%s/%s k=%.2f at=%s"
+			% [
+				walk,
+				a_in_b,
+				b_in_a,
+				KIND_NAMES[kinds[0]],
+				FloatCheck.move_of(props, id, 0),
+				props.transfer_progress(id, 0),
+				(to_body * a.global_position).snapped(Vector3.ONE * 0.01),
+				KIND_NAMES[kinds[1]],
+				FloatCheck.move_of(props, id, 1),
+				props.transfer_progress(id, 1),
+				(to_body * b.global_position).snapped(Vector3.ONE * 0.01)
+			]
+		)
+
+
+## The centre of `node`'s drawn meshes' bounds, in the world.
+func _centre_of(node: Node3D) -> Vector3:
+	var box := AABB()
+	var first := true
+	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+		var world := mi.global_transform * mi.get_aabb()
+		box = world if first else box.merge(world)
+		first = false
+	return box.get_center()
+
+
+## The two-bag returners' put-in (_bag_in_bag_scan()), one line per passenger
+## and a total: no surface point of one bag inside the other, and at least one
+## two-bag returner sampled (the control), else PROBE_INVALID.
+func _report_bag_in_bag() -> void:
+	var worst := 0
+	for id: int in _bag_in_bag:
+		var rec: Dictionary = _bag_in_bag[id]
+		worst = maxi(worst, rec["max"])
+		print(
+			(
+				(
+					"BAG_IN_BAG passenger=%d runner=%s frames=%d moving_frames=%d max_points=%d"
+					+ " moving_min_gap_m=%.3f control=%d %s"
+				)
+				% [
+					id,
+					_runners.has(id),
+					rec["frames"],
+					rec.get("moving", 0),
+					rec["max"],
+					rec["gap"],
+					rec["control"],
+					rec["line"]
+				]
+			)
+		)
+		if rec["control"] <= 0:
+			_invalid("passenger %d's bags, centred together, showed no point inside" % id)
+	print("BAG_IN_BAG_TOTAL returners=%d max_points=%d" % [_bag_in_bag.size(), worst])
+	if _bag_in_bag.is_empty():
+		_invalid("no two-bag returner was sampled on its arch walk")
+	if worst > 0:
+		_invalid("a two-bag returner's bags are drawn one inside the other (%d points)" % worst)
 
 
 ## The returners sampled at the arch's entry on their second pass (`reach`,
@@ -2125,6 +2262,7 @@ func _report() -> void:
 		_report_lane()
 		_report_reach()
 		_report_returner_entry()
+		_report_bag_in_bag()
 	else:
 		_report_booth()
 	if totals["frames"] < 100:

@@ -301,7 +301,9 @@ static func progress_of(bag: Dictionary, now: float) -> float:
 		# The body as drawn: the tick's walk back by the share of it not drawn yet.
 		var put_in: Array = bag["put_in"]
 		var alpha := clampf(now - float(put_in[2]), 0.0, 1.0)
-		return SecurityLooks.put_in_share(float(put_in[0]) - (1.0 - alpha) * float(put_in[1]))
+		return SecurityLooks.put_in_share(
+			float(put_in[0]) - (1.0 - alpha) * float(put_in[1]), put_in[3]
+		)
 	if not bag.has("since"):
 		return 1.0
 	return clampf((now - bag["since"]) / CarryLead.ticks_of(bag), 0.0, 1.0)
@@ -311,18 +313,22 @@ static func progress_of(bag: Dictionary, now: float) -> float:
 ## put-in of its bags into the tray is, set by the sim on each sync and never
 ## stepped: `past` (SecurityLooks.return_walk_mm(), NAN off the returner's arch
 ## walk), `step_mm` (how far the body was drawn to walk over this tick, from
-## the views' tick positions) and `tick`. progress_of() then reads the move's
-## share from the distance walked, so a view drawn late or after a load draws
-## it as one drawn every frame does, and a change of pace never turns it back
-## (board 40d26b16). Gone off that walk, the move's clock is used again; it has
-## run out by then (the walk to the arch cell is longer than the move).
+## the views' tick positions), `tick` and the bag's `window`
+## (SecurityLooks.put_in_window(), two bags go in one after the other, board
+## 521e46a5). progress_of() then reads the move's share from the distance
+## walked, so a view drawn late or after a load draws it as one drawn every
+## frame does, and a change of pace never turns it back (board 40d26b16). Gone
+## off that walk, the move's clock is used again; it has run out by then (the
+## walk to the arch cell is longer than the move: a runner's second bag of two,
+## stamped 300 mm before the unpack centre, ends 750 mm past it, a tick before
+## the walk ends at 925 mm, test_lane_returner_two_bags_apart.gd).
 static func stamp_put_in(
-	bag: Dictionary, home: int, past: float, step_mm: float, tick: float
+	bag: Dictionary, home: int, past: float, step_mm: float, tick: float, window: Vector2
 ) -> void:
 	if is_nan(past) or home != SecurityLooks.Home.TRAY:
 		bag.erase("put_in")
 		return
-	bag["put_in"] = [past, step_mm, tick]
+	bag["put_in"] = [past, step_mm, tick, window]
 
 
 static func tray_transform(props: CarryOnProps, held: Dictionary, body: Node3D) -> Transform3D:
