@@ -107,6 +107,8 @@ var _model: Node3D
 var _silhouette: Node3D
 var _far_shadow: Node3D
 var _far_material: StandardMaterial3D
+## The tug and the bridge reports that go with the plane (board 4c08b8e5).
+var _props: PlaneProps
 
 
 func _ready() -> void:
@@ -129,6 +131,9 @@ func _ready() -> void:
 	_far_shadow.name = "FarShadow"
 	_far_shadow.top_level = true
 	add_child(_far_shadow)
+	_props = PlaneProps.new()
+	_props.name = "Props"
+	add_child(_props)
 	show_model(starter_model())
 	visible = false
 
@@ -144,12 +149,14 @@ func update_pose() -> void:
 	flight_id = shown[slot]["id"] if slot < shown.size() else ""
 	visible = flight_id != ""
 	if not visible:
+		_follow_props()
 		return
 	show_model(model_of(flight_id))
 	phase = shown[slot]["phase"]
 	transform = shown[slot]["transform"]
 	_set_model_position(model_position_at(phase, transform, class_of(flight_id)))
 	_place_far_shadow()
+	_follow_props()
 
 
 ## The gate's flights in their sky window at sim time `time` (a tick plus the
@@ -385,6 +392,10 @@ func model_position_at(at_phase: int, pose: Transform3D, plane_class: String) ->
 	var stand := _path(FlightSim.State.PUSHBACK, plane_class)[0]
 	var facing := _entry_dir(FlightSim.State.PUSHBACK, plane_class)
 	return FlightPose.model_position(model_name, pose, stand, facing)
+
+
+func _follow_props() -> void:
+	_props.follow(visible, _model, model_name, phase, gate, airside, get_instance_id())
 
 
 func _set_model_position(at: Vector3) -> void:
