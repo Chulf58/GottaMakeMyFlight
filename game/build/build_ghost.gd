@@ -5,8 +5,12 @@ extends RefCounted
 ## helpers over the BuildMode `mode` that owns the ghost node, its materials and
 ## the hover key; BuildMode keeps one-line delegates for what tests call.
 
-## How much thicker than a wall ghost the blocking-wall bar is drawn.
-const WALL_BLOCK_GROW := 2.0
+## The bar on the wall that refuses a Belt line lies on the floor along the wall
+## line, in the form of the roof's wall-gap bar (GapMarkers). It is as tall as a
+## cut-away wall stub, the height an interior wall is drawn at, so it never
+## stands over the room, and this deep across the wall line.
+const WALL_BLOCK_HEIGHT := InteriorKit.STUB_HEIGHT
+const WALL_BLOCK_DEPTH := 0.5
 
 
 ## A tinted ghost material; `through` draws it over what stands in front of it.
@@ -68,13 +72,7 @@ static func draw_belt(mode: BuildMode, from: Vector2i, to: Vector2i) -> void:
 			if mode.grid.in_bounds(cell):
 				tile(mode, cell, tint)
 		if mode._belt_plan.wall_side >= 0:
-			wall(
-				mode,
-				mode._belt_plan.wall_cell,
-				mode._belt_plan.wall_side,
-				mode._wall_block_material,
-				WALL_BLOCK_GROW
-			)
+			wall_block(mode, mode._belt_plan.wall_cell, mode._belt_plan.wall_side)
 	mode._show_status(result)
 
 
@@ -187,6 +185,16 @@ static func wall(mode: BuildMode, cell: Vector2i, side: int, tint: Material, gro
 		extent += Vector3(0.04, 0.1, 0.0)
 	var box_node := box(mode, extent, tint)
 	box_node.transform = BuildView.wall_transform(mode.grid, cell, side).translated_local(
+		Vector3(0.0, extent.y / 2.0, 0.0)
+	)
+
+
+## The low see-through red bar on the wall edge of `cell` on `side` that refuses a
+## Belt line, standing on the floor.
+static func wall_block(mode: BuildMode, cell: Vector2i, side: int) -> void:
+	var extent := Vector3(1.04, WALL_BLOCK_HEIGHT, WALL_BLOCK_DEPTH)
+	var bar := box(mode, extent, mode._wall_block_material)
+	bar.transform = BuildView.wall_transform(mode.grid, cell, side).translated_local(
 		Vector3(0.0, extent.y / 2.0, 0.0)
 	)
 

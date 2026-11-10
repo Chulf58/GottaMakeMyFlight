@@ -85,8 +85,14 @@ func test_the_ghost_draws_a_see_through_red_bar_on_the_blocking_edge() -> void:
 	var material := bar.material_override as StandardMaterial3D
 	assert_bool(material.no_depth_test).is_true()
 	assert_that(material.albedo_color).is_equal(BuildMode.INVALID_TINT)
-	# Thicker than the wall it covers, so it reads at range.
-	assert_float((bar.mesh as BoxMesh).size.z).is_greater(BuildView.WALL_THICKNESS * 1.5)
+	# A low bar on the floor, no taller than the cut-away wall stub it marks
+	# (GapMarkers' form), and much thicker than the wall, so it reads at range.
+	var size := (bar.mesh as BoxMesh).size
+	print("bar size=%s stub=%.2f" % [size, InteriorKit.STUB_HEIGHT])
+	# BoxMesh keeps its size in 32-bit floats, so 0.3 reads back a hair over.
+	assert_float(size.y).is_less_equal(InteriorKit.STUB_HEIGHT + 0.001)
+	assert_float(bar.transform.origin.y - edge.origin.y).is_equal_approx(size.y / 2.0, 0.001)
+	assert_float(size.z).is_greater(BuildView.WALL_THICKNESS * 3.0)
 
 
 func test_a_clear_line_draws_no_bar() -> void:
