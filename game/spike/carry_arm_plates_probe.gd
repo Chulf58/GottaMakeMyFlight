@@ -20,10 +20,10 @@ extends SceneTree
 ## (crowd_walking).
 ## Every plate proves its points in frame (the bag, the hip, the feet, and for a
 ## stall plate the partition's front corners; projected through the camera with
-## a margin), that sight lines land on the bag (PlateSteps.lines_on_bag), that
-## the palm is seen where asked and that it is not dark, or tries the next
-## camera; none passing prints PROBE_INVALID and exits 1. A guard thread calls
-## OS.crash() on a stalled main thread.
+## a margin), that sight lines land inside the bag (PlateSteps.lines_on_points
+## over CarryChecks.bag_aims), that the palm is seen where asked and that it is
+## not dark, or tries the next camera; none passing prints PROBE_INVALID and
+## exits 1. A guard thread calls OS.crash() on a stalled main thread.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 900 Godot_v4.7.2-stable_win64_console.exe --path game \
@@ -31,6 +31,7 @@ extends SceneTree
 ##     -s res://spike/carry_arm_plates_probe.gd [-- --seed=N --out=C:/dir --only=crowd]
 ## Plates go to tools/blender/out/carry-arm-scoped/ unless --out is given.
 
+const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const PlateSteps := preload("res://spike/carry_plate_steps.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
@@ -607,7 +608,6 @@ func _shoot(
 	var frame := Rect2(
 		Vector2.ONE * MARGIN_PX, root.get_visible_rect().size - Vector2.ONE * MARGIN_PX * 2
 	)
-	var core := _core(bag)
 	var saved := false
 	var img: Image
 	for n in eyes.size():
@@ -625,7 +625,7 @@ func _shoot(
 		var ok := (holder.get_meta("unbaked") as Array).is_empty()
 		for key: String in points:
 			ok = _in_frame(cam, points[key], frame, "%s %s" % [tag, key]) and ok
-		var on := PlateSteps.lines_on_bag(cam, core)
+		var on := PlateSteps.lines_on_points(cam, CarryChecks.bag_aims(bag))
 		var dark := PlateSteps.dark_share(img)
 		print("INFRAME %s bag_lines_on=%d/5 dark=%.2f" % [tag, on, dark])
 		var need := 2 if name.begins_with("case") else 1
@@ -677,15 +677,6 @@ func _lower_body(body: Node3D, bag: AABB) -> AABB:
 		Vector3(whole.size.x, maxf(hi - lo, 0.1), whole.size.z)
 	)
 	return cut.merge(bag)
-
-
-## The biggest mesh of `bag`, world (the case itself, not the rods' air).
-func _core(bag: Node3D) -> AABB:
-	var core := AABB()
-	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
-		var b := mi.global_transform * mi.get_aabb()
-		core = b if b.get_volume() > core.get_volume() else core
-	return core
 
 
 func _bounds(node: Node3D) -> AABB:
