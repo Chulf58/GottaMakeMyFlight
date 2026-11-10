@@ -50,7 +50,9 @@ func test_the_button_sits_outside_the_bar_and_opens_the_page() -> void:
 	assert_object(found).is_same(_page.button)
 	var dock := _page.dock.get_global_rect()
 	var bar := _menu.bar().get_global_rect()
-	assert_float(dock.position.x).is_equal(BuildMenu.MARGIN)
+	# Changed from BuildMenu.MARGIN (8): the panel sits on the 16 px grid margin
+	# (decision hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra).
+	assert_float(dock.position.x).is_equal(float(HudLayout.MARGIN))
 	assert_float(dock.end.y).is_equal(bar.position.y - BuildMenu.GAP)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	_menu.press_category(BuildMenu.TEMPLATES_PAGE)

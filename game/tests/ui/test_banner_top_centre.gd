@@ -1,9 +1,11 @@
 class_name TestBannerTopCentre
 extends GdUnitTestSuite
-## On the real main scene, the status banner and the first-time hint sit at the
-## top centre (decision status-banner-and-first-time-hints-sit-at-the-top-
-## centre): in the top band, centred, clear of the top HUD controls, and the
-## alert cards step down under them. A 1920x1080 and a 1280x720 window have the
+## On the real main scene, the status banner and the first-time hint sit in the
+## top-left column (decision checklist-card-moves-to-the-top-left-column-slim-
+## at-304-px-t, which moved them from the top centre): on the margin, LIST_W
+## wide, under the toggles, clear of the top HUD controls and the alert cards.
+## (The file keeps its name; the column's own layout is in test_left_column.)
+## A 1920x1080 and a 1280x720 window have the
 ## same layout: canvas_items stretch over a 1920x1080 base at scale 1.25 gives
 ## 1536x864 layout pixels for any 16:9 window, and aspect expand never goes
 ## narrower than 1536 across. So the layout is checked once, at that size.
@@ -23,8 +25,6 @@ const TOP_CONTROLS: Array[String] = [
 	"DeparturesToggle",
 	"BuildModeSign",
 ]
-## The banner starts under the Build mode sign, which ends at about 64.
-const SIGN_BOTTOM := 64.0
 ## The top band: the banner's top edge is within this share of a 16:9 screen's
 ## height (the headless window is not 16:9, so the width gives the height).
 const TOP_BAND := 0.35
@@ -87,14 +87,15 @@ func _control(node_name: String) -> Control:
 	return _main.find_child(node_name, true, false) as Control
 
 
-## Asserts `banner` is in the top band, centred, and clear of every top control
-## and alert card that shows; prints the rectangles it compared.
-func _assert_top_centre(label: String, banner: Rect2) -> void:
+## Asserts `banner` is in the top-left column slot and clear of every top
+## control and alert card that shows; prints the rectangles it compared.
+func _assert_in_column(label: String, banner: Rect2) -> void:
 	var view := _view()
 	print("BANNER %s view=%s rect=%s" % [label, view, banner])
 	assert_bool(banner.has_area()).is_true()
-	assert_float(banner.get_center().x).is_equal_approx(view.x / 2.0, 1.0)
-	assert_float(banner.position.y).is_greater_equal(SIGN_BOTTOM)
+	assert_float(banner.position.x).is_equal_approx(HudLayout.MARGIN, 1.0)
+	assert_float(banner.size.x).is_equal_approx(HudLayout.LIST_W, 1.0)
+	assert_float(banner.position.y).is_greater_equal(LeftColumn.LIST_TOP - 1.0)
 	assert_float(banner.position.y).is_less(view.x * 9.0 / 16.0 * TOP_BAND)
 	assert_bool(Rect2(Vector2.ZERO, view).encloses(banner)).is_true()
 	var others: Array[Control] = []
@@ -136,11 +137,11 @@ func test_the_layout_is_the_one_both_window_sizes_get() -> void:
 	assert_float(_view().x).is_equal(LAYOUT_W)
 
 
-func test_the_banner_sits_at_the_top_centre() -> void:
+func test_the_banner_sits_in_the_left_column() -> void:
 	await _settle()
 	assert_bool(_staff.hint_card().is_visible_in_tree()).is_true()
 	print("BANNER_TEXT rows=%d" % _staff.checklist().rows().size())
-	_assert_top_centre("banner", _staff.hint_card().get_global_rect())
+	_assert_in_column("banner", _staff.hint_card().get_global_rect())
 
 
 func test_the_banner_stays_put_when_a_build_tray_opens() -> void:
@@ -150,22 +151,22 @@ func test_the_banner_stays_put_when_a_build_tray_opens() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var open := _staff.hint_card().get_global_rect()
-	_assert_top_centre("banner over tray", open)
+	_assert_in_column("banner over tray", open)
 	assert_bool(open.is_equal_approx(closed)).is_true()
 	_menu.press_category(_menu.open_category())
 
 
-func test_the_hint_card_sits_at_the_top_centre() -> void:
+func test_the_hint_card_sits_in_the_left_column() -> void:
 	var hints := _showing_hint()
 	# The HUD's own Hints is off in a test run, so the stack is pointed at this one.
 	_stack.avoid = func() -> Rect2: return hints.card().get_global_rect()
 	_menu.press_category(0)
 	await _settle()
 	assert_bool(_staff.hint_card().is_visible_in_tree()).is_false()
-	_assert_top_centre("hint", hints.card().get_global_rect())
+	_assert_in_column("hint", hints.card().get_global_rect())
 
 
-func test_the_alert_cards_step_down_under_the_banner() -> void:
+func test_the_alert_cards_stay_clear_of_the_banner() -> void:
 	_spills()
 	await _settle()
 	assert_array(_stack.card_keys()).is_equal([DirtyAlert.KEY])
@@ -174,7 +175,7 @@ func test_the_alert_cards_step_down_under_the_banner() -> void:
 	print("ALERTS view=%s banner=%s cards=%s" % [_view(), banner, cards])
 	assert_bool(cards.has_area()).is_true()
 	assert_bool(banner.intersects(cards)).is_false()
-	_assert_top_centre("banner with alerts", banner)
+	_assert_in_column("banner with alerts", banner)
 
 
 ## PanelRoom reads the card in the banner slot, whichever it is: with a first-time

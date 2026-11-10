@@ -1,5 +1,5 @@
 class_name DeparturesBoard
-extends VBoxContainer
+extends Control
 ## The departures board (HUD 3/7, decision hud-steal-list-self-clearing-alert-
 ## cards-money-hover-departu): a panel listing the flights leaving today that
 ## have not departed and the flights leaving tomorrow, each in time order,
@@ -52,11 +52,6 @@ const TAKEN_TEXT := "%s is taken by the %s %s flight"
 const TAKEN_ONE_OFF_TEXT := "%s is taken by the %s flight"
 const BUSY_TEXT := "Gate %s is busy when this flight needs it"
 const MAX_ROWS_PER_DAY := 5
-const BOARD_LEFT := 16.0
-## Below the room panel's usual place (top-left, under the money slot) and
-## above the follow text at the bottom.
-const BOARD_TOP := 330.0
-const BOARD_W := 300.0
 
 @export var flights: FlightSim
 @export var clock: SimClock
@@ -142,15 +137,21 @@ static func _day_entries(sim: FlightSim, day: int, drop_departed: bool) -> Array
 func _ready() -> void:
 	name = "DeparturesBoard"
 	theme = BuildMenu.HUD_THEME
-	position = Vector2(BOARD_LEFT, BOARD_TOP)
-	custom_minimum_size = Vector2(BOARD_W, 0.0)
+	# The board's origin is the column's top-left; its toggle is the column's
+	# second button and its list opens under the third (LeftColumn).
+	position = Vector2(HudLayout.MARGIN, LeftColumn.TOP)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toggle.name = "DeparturesToggle"
 	_toggle.text = "Departures (B)"
+	LeftColumn.size_toggle(_toggle)
+	_toggle.position.y = LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES) - LeftColumn.TOP
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
-	_toggle.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	add_child(_toggle)
 	_panel.name = "DeparturesPanel"
+	_panel.custom_minimum_size = Vector2(HudLayout.LIST_W, 0.0)
+	_panel.position.y = LeftColumn.LIST_TOP - LeftColumn.TOP
+	_panel.add_to_group(LeftColumn.LIST_GROUP)
 	add_child(_panel)
 	_rows.add_theme_constant_override("separation", 1)
 	_panel.add_child(_rows)

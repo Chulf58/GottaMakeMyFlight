@@ -1,19 +1,13 @@
 class_name ChecklistCard
 extends VBoxContainer
 ## The checklist card's contents (decision checklist-card-shows-what-the-airport-
-## still-needs): a title, then one row per Checklist line, each with a tick box
-## that is ticked when the line is done. A done line is dimmed; a line still to
-## do is in the HUD's attention colour, as the status banner was. StaffPanel
-## puts this in its banner card at the top centre (decision status-banner-and-
-## first-time-hints-sit-at-the-top-centre) and fills it on each refresh.
-## The Nunito HUD font has no check mark glyph, so the tick is drawn.
+## still-needs): a title, then one row per Checklist line still to do, each with
+## an empty box, in the HUD's attention colour. A ticked line is folded away, so
+## only the unmet needs show (decision checklist-card-moves-to-the-top-left-
+## column-slim-at-304-px-t). StaffPanel puts this in its card in the top-left
+## column and fills it on each refresh. The rows take the card's width and wrap.
 
-## Width of a row's text, in layout pixels.
-const TEXT_W := 520.0
 const BOX := 18.0
-## Opacity of a done row.
-const DONE_ALPHA := 0.55
-const TICK_COLOUR := Color(0.12, 0.55, 0.5)
 const BOX_COLOUR := Color(0.6, 0.38, 0.0)
 
 var _title := Label.new()
@@ -29,7 +23,7 @@ func _init() -> void:
 	_title.name = "ChecklistTitle"
 	_title.theme_type_variation = &"HudCardName"
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title.custom_minimum_size = Vector2(TEXT_W + BOX + 8.0, 0.0)
+	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_title)
@@ -43,7 +37,8 @@ func title_label() -> Label:
 	return _title
 
 
-## Shows `title` over `lines` (Checklist lines). An empty title hides the title.
+## Shows `title` over the `lines` (Checklist lines) not yet done; a done line is
+## folded away. An empty title hides the title.
 func show_lines(title: String, lines: Array[Dictionary]) -> void:
 	_title.text = title
 	_title.visible = title != ""
@@ -54,7 +49,8 @@ func show_lines(title: String, lines: Array[Dictionary]) -> void:
 		_rows.remove_child(child)
 		child.queue_free()
 	for entry in lines:
-		_rows.add_child(_row(entry["text"], entry["done"]))
+		if not entry["done"]:
+			_rows.add_child(_row(entry["text"]))
 
 
 func lines() -> Array[Dictionary]:
@@ -82,32 +78,27 @@ func row_texts() -> PackedStringArray:
 	return out
 
 
-func _row(text: String, done: bool) -> Control:
+func _row(text: String) -> Control:
 	var row := HBoxContainer.new()
 	row.name = "Row"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 8)
-	var tick := Tick.new()
-	tick.done = done
-	row.add_child(tick)
+	row.add_child(Tick.new())
 	var label := Label.new()
 	label.name = "Text"
 	label.text = text
-	label.theme_type_variation = &"HudSmall" if done else &"HudAttentionText"
-	label.custom_minimum_size = Vector2(TEXT_W, 0.0)
+	label.theme_type_variation = &"HudAttentionText"
+	label.add_theme_font_size_override("font_size", HudLayout.CAPTION)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(label)
-	if done:
-		row.modulate.a = DONE_ALPHA
 	return row
 
 
-## A tick box: an outline, filled with a check mark when done.
+## A tick box: an empty outline for a line still to do.
 class Tick:
 	extends Control
-
-	var done := false
 
 	func _init() -> void:
 		name = "Tick"
@@ -117,11 +108,4 @@ class Tick:
 
 	func _draw() -> void:
 		var box := Rect2(Vector2(1.0, 2.0), Vector2(BOX - 2.0, BOX - 2.0))
-		if done:
-			draw_rect(box, TICK_COLOUR)
-			var points := PackedVector2Array(
-				[Vector2(4.5, 10.5), Vector2(8.0, 14.0), Vector2(14.0, 6.0)]
-			)
-			draw_polyline(points, Color.WHITE, 2.5, true)
-		else:
-			draw_rect(box, BOX_COLOUR, false, 2.0)
+		draw_rect(box, BOX_COLOUR, false, 2.0)

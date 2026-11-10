@@ -32,8 +32,6 @@ const LIFT_M := 0.06
 ## The tint is redrawn when the sim has moved on this many ticks (a quarter
 ## of a second). A grid edit redraws it on the next frame regardless.
 const REFRESH_TICKS := 5
-const BUTTON_LEFT := 16.0
-const BUTTON_TOP := 292.0
 
 @export var sim: PassengerSim
 ## Where the on/off choice is kept; tests point it at a per-process file.
@@ -147,10 +145,11 @@ func _build_controls() -> Control:
 	var row := HBoxContainer.new()
 	row.name = "MoodOverlayControls"
 	row.theme = BuildMenu.HUD_THEME
-	row.position = Vector2(BUTTON_LEFT, BUTTON_TOP)
+	row.position = Vector2(HudLayout.MARGIN, LeftColumn.slot_top(LeftColumn.SLOT_MOOD))
 	row.add_theme_constant_override("separation", 8)
 	_toggle.name = "MoodToggle"
 	_toggle.text = "Mood (M)"
+	LeftColumn.size_toggle(_toggle)
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
 	row.add_child(_toggle)

@@ -2,7 +2,7 @@ class_name TestChecklistCard
 extends GdUnitTestSuite
 ## The checklist card (decision checklist-card-shows-what-the-airport-still-
 ## needs): while the airport is closed it lists every unmet opening need, not
-## only the first blocker, each line ticking off when done; seats are advice
+## only the first blocker, a line folding away when done; seats are advice
 ## (decision checklist-card-seats-line-is-advice-not-an-opening-blocker-s); once
 ## open it lists the current gaps, and it hides when nothing is left.
 
@@ -110,8 +110,9 @@ func test_a_closed_bare_floor_card_lists_all_its_needs() -> void:
 	assert_array(Array(todo)).contains(["Security scanner and an officer: place a scanner"])
 	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
 	assert_bool(_panel.hint_card().visible).is_true()
-	# One row per line, each with its tick box.
-	assert_int(_panel.checklist().rows().size()).is_equal(_panel.card_lines().size())
+	# One row per unmet line, each with its box; a met line is folded away.
+	var open_lines := _panel.card_lines().filter(func(l: Dictionary) -> bool: return not l["done"])
+	assert_int(_panel.checklist().rows().size()).is_equal(open_lines.size())
 
 
 func test_the_reference_card_ticks_what_stands_and_hides_once_open_with_nothing_left() -> void:
@@ -179,14 +180,14 @@ func test_a_gap_whose_tool_is_locked_names_the_unlock_instead() -> void:
 	assert_array(open).contains_exactly([Checklist.GAPS[HintRules.FOOD]])
 
 
-func test_done_rows_are_ticked_and_dimmed() -> void:
+func test_done_rows_are_folded_away_and_unmet_rows_show() -> void:
+	# Changed from "ticked and dimmed": a ticked line now folds away so the card
+	# in the top-left column shows only unmet needs (decision checklist-card-
+	# moves-to-the-top-left-column-slim-at-304-px-t).
 	var card: ChecklistCard = auto_free(ChecklistCard.new())
 	var lines: Array[Dictionary] = [Checklist.line("a", true), Checklist.line("b", false)]
 	card.show_lines("Title", lines)
 	var rows := card.rows()
-	assert_int(rows.size()).is_equal(2)
-	assert_bool((rows[0].get_node("Tick") as ChecklistCard.Tick).done).is_true()
-	assert_bool((rows[1].get_node("Tick") as ChecklistCard.Tick).done).is_false()
-	assert_float((rows[0] as Control).modulate.a).is_equal_approx(ChecklistCard.DONE_ALPHA, 0.001)
-	assert_float((rows[1] as Control).modulate.a).is_equal(1.0)
-	assert_str((rows[1].get_node("Text") as Label).text).is_equal("b")
+	assert_int(rows.size()).is_equal(1)
+	assert_str((rows[0].get_node("Text") as Label).text).is_equal("b")
+	assert_float((rows[0] as Control).modulate.a).is_equal(1.0)
