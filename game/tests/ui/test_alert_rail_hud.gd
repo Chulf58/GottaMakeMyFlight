@@ -205,7 +205,11 @@ func test_opening_the_build_tray_sends_cards_that_would_meet_it_to_more() -> voi
 	for i in 3:
 		var card := PanelContainer.new()
 		var label := Label.new()
-		label.text = "Notice %d\nwith a second line\nand a third\nand a fourth" % i
+		# Taller than the HUD 3/7 notices: the status card is one line now, so the
+		# open tray's stack is shorter and the control below needs more height.
+		label.text = (
+			"Notice %d\nwith a second line\nand a third\nand a fourth\nand a fifth\nand a sixth" % i
+		)
 		card.add_child(label)
 		stack.post_notice(StringName("n%d" % i), card, 0.0, "Notice %d" % i, "")
 	await _settle()

@@ -1,8 +1,8 @@
 class_name BuildMenuLayout
 extends RefCounted
 ## The build menu's UI built in code: the category bar, the item tray and its
-## cards, the status line, the cost line and the money slot (split out of
-## BuildMenu, which calls these from _ready). Static only: each function takes
+## cards, the status card (status line, rotate hint and cost line) and the money
+## slot (split out of BuildMenu, which calls these from _ready). Static only: each function takes
 ## the menu and fills its node and lookup members in the order the menu always
 ## did, so node names, paths and draw order stay as they were.
 
@@ -171,61 +171,62 @@ static func size_text(tool: BuildMode.Tool) -> String:
 	return BuildMenuCatalog.item(tool)[2]
 
 
-static func build_status(menu: BuildMenu) -> void:
-	var status := menu._status
-	status.name = "StatusLine"
+## The status card (HUD 5/7): the status line, the "R rotate" hint and the cost
+## line side by side on one HudTopCard, TRAY_W wide and BUTTON_H tall, GAP above
+## the tray and centred. The status text takes the room the hint and the cost
+## leave and is cut short with an ellipsis when it is longer; the hint and the
+## cost keep their own width, so neither wraps. The card never takes a click.
+static func build_status_card(menu: BuildMenu) -> void:
+	var card := menu._status_card
+	card.name = "StatusCard"
 	var bottom := (
 		BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP + BuildMenu.TRAY_H + BuildMenu.GAP
 	)
-	status.anchor_left = 0.5
-	status.anchor_right = 0.5
-	status.anchor_top = 1.0
-	status.anchor_bottom = 1.0
-	status.offset_left = -BuildMenu.COLUMN_W / 2.0
-	status.offset_right = BuildMenu.COLUMN_W / 2.0
-	status.offset_top = -bottom - BuildMenu.STATUS_H
-	status.offset_bottom = -bottom
-	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status.max_lines_visible = 2
-	status.theme = BuildMenu.HUD_THEME
-	status.theme_type_variation = &"HudFloatText"
+	card.anchor_left = 0.5
+	card.anchor_right = 0.5
+	card.anchor_top = 1.0
+	card.anchor_bottom = 1.0
+	card.offset_left = -BuildMenu.COLUMN_W / 2.0
+	card.offset_right = BuildMenu.COLUMN_W / 2.0
+	card.offset_top = -bottom - BuildMenu.STATUS_H
+	card.offset_bottom = -bottom
+	card.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	card.theme = BuildMenu.HUD_THEME
+	card.theme_type_variation = &"HudTopCard"
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.visible = false
+	menu.add_child(card)
+	var row := HBoxContainer.new()
+	row.name = "StatusRow"
+	row.add_theme_constant_override("separation", HudLayout.GAP)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(row)
+	var status := menu._status
+	status.name = "StatusLine"
+	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status.autowrap_mode = TextServer.AUTOWRAP_OFF
+	status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	status.max_lines_visible = 3
+	status.clip_text = true
+	status.theme_type_variation = &"HudCardName"
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	menu.add_child(status)
-
-
-## The cost line, centred over the status line's box. It sits on the theme's
-## HudCostCard (the bar's cream, dark-outlined card) with dark text, and the card is only
-## as wide as the text, so it reads over the busy apron stripes.
-static func build_cost(menu: BuildMenu) -> void:
+	row.add_child(status)
+	var hint := menu._rotate_hint
+	hint.name = "RotateHint"
+	hint.text = RotateHint.TEXT
+	hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hint.theme_type_variation = &"HudHint"
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint.visible = false
+	row.add_child(hint)
 	var cost := menu._cost
 	cost.name = "CostLine"
-	var bottom := (
-		BuildMenu.MARGIN
-		+ BuildMenu.BAR_H
-		+ BuildMenu.GAP
-		+ BuildMenu.TRAY_H
-		+ BuildMenu.GAP
-		+ BuildMenu.STATUS_H
-	)
-	cost.anchor_left = 0.5
-	cost.anchor_right = 0.5
-	cost.anchor_top = 1.0
-	cost.anchor_bottom = 1.0
-	cost.offset_left = 0.0
-	cost.offset_right = 0.0
-	cost.offset_top = -bottom - BuildMenu.COST_H
-	cost.offset_bottom = -bottom
-	cost.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	cost.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	cost.theme = BuildMenu.HUD_THEME
-	cost.theme_type_variation = &"HudCostCard"
+	cost.theme_type_variation = &"HudCardName"
 	cost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cost.visible = false
-	menu.add_child(cost)
+	row.add_child(cost)
 
 
 static func build_money(menu: BuildMenu) -> void:

@@ -43,8 +43,8 @@ const INTRO_LAYER := 10
 const DEBUG_BATCH := 300
 const DEBUG_POLICY_TEXT := "Debug only: the terminal is free with no refunds; passengers pay fees."
 ## Where the follow text's bottom edge sits, up from the bottom of the screen.
-const FOLLOW_BOTTOM := 64.0
-const FOLLOW_TOP := 96.0
+const FOLLOW_BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
+const FOLLOW_TOP := FOLLOW_BOTTOM + 32.0
 const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 ## The Debug panel's fixed width; its labels wrap inside it.
 const DEBUG_W := 260.0
@@ -636,15 +636,15 @@ func _build_debug() -> void:
 	corner.add_child(toggle)
 
 
-## A column anchored to the bottom-right corner, 16 px in, with its bottom edge
+## A column anchored to the bottom-right corner, MARGIN in, with its bottom edge
 ## `bottom` px up; it grows up and to the left.
 func _bottom_right_dock(dock_name: String, bottom: float) -> VBoxContainer:
 	var dock := VBoxContainer.new()
 	dock.name = dock_name
 	dock.theme = BuildMenu.HUD_THEME
 	dock.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	dock.offset_left = -16.0
-	dock.offset_right = -16.0
+	dock.offset_left = -float(HudLayout.MARGIN)
+	dock.offset_right = -float(HudLayout.MARGIN)
 	dock.offset_top = -bottom
 	dock.offset_bottom = -bottom
 	dock.grow_horizontal = Control.GROW_DIRECTION_BEGIN

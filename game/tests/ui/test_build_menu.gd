@@ -164,8 +164,10 @@ func test_the_status_line_shows_a_refusal_above_the_tray_and_never_moves() -> vo
 	_mode.set_tool(BuildMode.Tool.DESK)
 	var result := _mode.apply_at(_mode.grid.cell_to_world(Vector2i(4, 4)))
 	assert_bool(result.ok).is_false()
-	# A desk can turn, so the line is the refusal then the rotate hint.
-	assert_str(_menu.status_label().text).is_equal(RotateHint.compose(_mode.status_text(), _mode))
+	# A desk can turn: the "R rotate" hint has its own label on the status card
+	# now (HUD 5/7), so the line is the refusal alone.
+	assert_bool(RotateHint.applies(_mode)).is_true()
+	assert_str(_menu.status_label().text).is_equal(_mode.status_text())
 	assert_str(_menu.status_label().text).contains(result.reason_text())
 	await get_tree().process_frame
 	var status := _menu.status_label().get_global_rect()

@@ -32,7 +32,7 @@ var _cards: Array[Button] = []
 var _save_card: Button
 
 
-## Puts the page in `menu`'s tray and its button at the left edge above the bar.
+## Puts the page in `menu`'s tray and its button on the left margin, on the bar's baseline.
 func attach(menu: BuildMenu) -> void:
 	_menu = menu
 	name = "TemplatesPage"
@@ -57,9 +57,9 @@ func attach(menu: BuildMenu) -> void:
 	dock.anchor_top = 1.0
 	dock.anchor_bottom = 1.0
 	dock.offset_left = HudLayout.MARGIN
-	var bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
-	dock.offset_top = -bottom
-	dock.offset_bottom = -bottom
+	# On the bar's baseline: its bottom edge is the bar's, MARGIN off the screen's.
+	dock.offset_top = -BuildMenu.MARGIN
+	dock.offset_bottom = -BuildMenu.MARGIN
 	dock.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	dock.add_child(button)
 	menu.add_child(dock)

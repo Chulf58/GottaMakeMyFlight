@@ -193,11 +193,11 @@ func _plates() -> void:
 	var template := _paste.library.get_template(0)
 	_point_at(FREE_CENTRE)
 	await _frames(6)
-	var hint := RotateHint.compose(TemplatePaste.PLACE_HINT % template.name, _build)
+	var hint := TemplatePaste.PLACE_HINT % template.name
 	await _ghost_plate("valid", template.rect_at(FREE_CENTRE, 0), true, hint, true)
 	_point_at(OVER_CAFE)
 	await _frames(6)
-	var refused := RotateHint.compose("%s  %s" % [template.name, "Overlaps another room"], _build)
+	var refused := "%s  %s" % [template.name, "Overlaps another room"]
 	await _ghost_plate("refused", template.rect_at(OVER_CAFE, 0), false, refused, false)
 	_paste.rotate_turns()
 	_point_at(FREE_CENTRE)
@@ -270,6 +270,10 @@ func _ghost_plate(label: String, expected: Rect2i, fits: bool, status: String, p
 		return
 	if _menu.status_label().text != status:
 		_invalid("%s: status '%s', expected '%s'" % [label, _menu.status_label().text, status])
+		return
+	# The "R rotate" hint is its own label on the status card (HUD 5/7).
+	if not _menu.rotate_hint_label().visible:
+		_invalid("%s: the R rotate hint is not showing" % label)
 		return
 	if fits and not _menu.preview_label().text.begins_with("Cost "):
 		_invalid("%s: cost line '%s'" % [label, _menu.preview_label().text])

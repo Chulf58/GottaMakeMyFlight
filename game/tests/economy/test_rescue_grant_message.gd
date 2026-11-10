@@ -45,7 +45,9 @@ func test_a_paid_grant_shows_its_message_on_the_status_line() -> void:
 	assert_array(said).has_size(1)
 	assert_str(_menu.status_label().text).is_equal(said[0])
 	assert_str(said[0]).contains("rescue grant")
-	assert_object(_menu.status_label().theme).is_same(BuildMenu.HUD_THEME)
+	# The theme is set once, on the status card the line sits on (HUD 5/7).
+	assert_object(_menu.status_card().theme).is_same(BuildMenu.HUD_THEME)
+	assert_bool(_menu.status_card().is_ancestor_of(_menu.status_label())).is_true()
 
 
 func test_no_grant_leaves_the_status_line_alone() -> void:
