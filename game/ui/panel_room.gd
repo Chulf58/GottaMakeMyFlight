@@ -3,18 +3,19 @@ extends Node
 ## Keeps the terminal out from under the HUD panels (decision camera-makes-
 ## room-for-open-panels-the-build-tray-banner-and). It finds which panels are
 ## open (the build tray with its status and cost lines, the Staff card, the
-## banner at the top centre, the Offers sheet and the flight result card), and the
-## alert cards with their history tray (AlertStack.room_rect()), and the category
-## bar across the bottom while no tray covers it, takes the
+## banner at the top centre and the Offers sheet), and the right rail's drawn
+## cards (alert cards and the flight result card) with its history tray
+## (AlertStack.room_rect()), and the category bar across the bottom while no
+## tray covers it, takes the
 ## largest screen rectangle they leave free, and tells the TycoonCamera, which
 ## puts its focus at the middle of that rectangle and, while it is still on the
 ## start view, refits the start area inside it.
 ##
 ## Only a panel opening or closing refits the distance; a panel that merely
 ## changes size moves the view a little and never zooms it (the banner is the
-## exception while the tray is open: see the build stack below). The alert
-## cards are counted the same way: a card coming or going only shifts the
-## view. The camera does nothing on a build edit.
+## exception while the tray is open: see the build stack below). The rail is
+## counted the same way: a card coming or going only shifts the view. The
+## camera does nothing on a build edit.
 ##
 ## The build stack (the tray, and the banner at the top centre) makes room once,
 ## when the tray opens (decision camera-makes-room-once-per-build-mode-open-not-on-
@@ -42,10 +43,8 @@ var scene_root: Node
 ## banner or a first-time hint), empty while none shows. PassengerHud sets it;
 ## without one the status banner's card alone is read.
 var banner_rect := Callable()
-## The result card, held by PassengerHud.
-var result_card: Control
-## The alert card stack, held by PassengerHud; its rect is cut but never
-## counts as a panel opening or closing.
+## The right rail, held by PassengerHud; its rect is cut but never counts as
+## a panel opening or closing.
 var alert_stack: AlertStack
 
 var _last_key := 0
@@ -175,7 +174,7 @@ func open_key() -> int:
 	return key
 
 
-## The screen rectangle of every open panel, then the alert cards.
+## The screen rectangle of every open panel, then the right rail.
 func open_rects() -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	var menu := _menu()
@@ -196,15 +195,14 @@ func open_rects() -> Array[Rect2]:
 	return rects
 
 
-## The Staff card, the Offers sheet and the result card, in the order their
-## rectangles are cut; the banner slot is `_banner()`.
+## The Staff card and the Offers sheet, in the order their rectangles are cut;
+## the banner slot is `_banner()`.
 func _panels() -> Array[Control]:
 	var panels: Array[Control] = []
 	var staff := _find("StaffPanel") as StaffPanel
 	panels.append(null if staff == null else staff.card())
 	var offers := _find("OfferPanel") as OfferPanel
 	panels.append(null if offers == null else offers.sheet())
-	panels.append(result_card)
 	return panels
 
 

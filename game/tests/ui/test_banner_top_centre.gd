@@ -3,9 +3,9 @@ extends GdUnitTestSuite
 ## On the real main scene, the status banner and the first-time hint sit in the
 ## top-left column (decision checklist-card-moves-to-the-top-left-column-slim-
 ## at-304-px-t, which moved them from the top centre): on the margin, LIST_W
-## wide, under the toggles, clear of the top HUD controls and the alert cards.
-## (The file keeps its name; the column's own layout is in test_left_column.)
-## A 1920x1080 and a 1280x720 window have the
+## wide, under the toggles, clear of the top HUD controls, and the alert rail
+## never meets them. (The file keeps its name; the column's own layout is in
+## test_left_column.) A 1920x1080 and a 1280x720 window have the
 ## same layout: canvas_items stretch over a 1920x1080 base at scale 1.25 gives
 ## 1536x864 layout pixels for any 16:9 window, and aspect expand never goes
 ## narrower than 1536 across. So the layout is checked once, at that size.
@@ -38,7 +38,6 @@ var _menu: BuildMenu
 var _staff: StaffPanel
 var _stack: AlertStack
 var _sim: PassengerSim
-var _avoid := Callable()
 
 
 func before() -> void:
@@ -52,7 +51,6 @@ func before() -> void:
 	_staff = _main.get_node("StaffPanel")
 	_sim = _main.get_node("PassengerSim")
 	_stack = _hud.find_child("AlertStack", false, false) as AlertStack
-	_avoid = _stack.avoid
 
 
 func after() -> void:
@@ -63,7 +61,6 @@ func after() -> void:
 
 
 func before_test() -> void:
-	_stack.avoid = _avoid
 	if _menu.is_tray_open():
 		_menu.press_category(_menu.open_category())
 	_staff.set_hint_yielded(false)
@@ -158,15 +155,13 @@ func test_the_banner_stays_put_when_a_build_tray_opens() -> void:
 
 func test_the_hint_card_sits_in_the_left_column() -> void:
 	var hints := _showing_hint()
-	# The HUD's own Hints is off in a test run, so the stack is pointed at this one.
-	_stack.avoid = func() -> Rect2: return hints.card().get_global_rect()
 	_menu.press_category(0)
 	await _settle()
 	assert_bool(_staff.hint_card().is_visible_in_tree()).is_false()
 	_assert_in_column("hint", hints.card().get_global_rect())
 
 
-func test_the_alert_cards_stay_clear_of_the_banner() -> void:
+func test_the_alert_rail_never_meets_the_banner() -> void:
 	_spills()
 	await _settle()
 	assert_array(_stack.card_keys()).is_equal([DirtyAlert.KEY])
