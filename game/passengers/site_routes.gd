@@ -189,14 +189,17 @@ static func departure(
 
 
 ## The outside `cells` (ending on the plane door's cell) as corner points,
-## then the apron route of `stand` to the door of a plane drawn with `model`.
+## then the apron route of `stand` to the door of a plane drawn with `model`,
+## on the site's ground height (the route's points are at y 0, and a walk is
+## measured in 3D, so a drop there would cost time and sink the walker).
 static func to_plane(
 	grid: BuildGrid, site: SiteDefinition, cells: Array, stand: Dictionary, model := ""
 ) -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	for cell: Vector2i in corners(cells):
 		points.append(ground(grid, site, cell))
-	points.append_array(Array(StandPlacement.apron_route(stand, model)))
+	for point in StandPlacement.apron_route(stand, model):
+		points.append(Vector3(point.x, site.ground_height, point.z))
 	return points
 
 

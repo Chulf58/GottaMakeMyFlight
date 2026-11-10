@@ -61,7 +61,9 @@ func test_an_entrance_walks_in_from_the_road_and_an_exit_out_to_the_plane() -> v
 	assert_float(into[0].z).is_equal(SITE.road_z)
 	assert_vector(into.back()).is_equal(_grid.cell_to_world(ReferenceTerminal.ENTRANCE_CELL + AT))
 	assert_vector(out[0]).is_equal(_grid.cell_to_world(ReferenceTerminal.EXIT_CELL + AT))
-	assert_vector(out.back()).is_equal(StandPlacement.door_point(stand))
+	# The apron route stands on the site's ground (SiteRoutes.to_plane()).
+	var end := StandPlacement.door_point(stand)
+	assert_vector(out.back()).is_equal(Vector3(end.x, SITE.ground_height, end.z))
 
 
 func test_an_exit_on_another_wall_walks_round_to_the_plane_door() -> void:
@@ -77,7 +79,8 @@ func test_an_exit_on_another_wall_walks_round_to_the_plane_door() -> void:
 	print("east exit cells %d, walk %s" % [cells.size(), walk])
 	assert_that(cells[1]).is_equal(cell + Vector2i(1, 0))
 	assert_that(cells.back()).is_equal(StandPlacement.door_seed(_grid, stand))
-	assert_vector(walk.back()).is_equal(StandPlacement.door_point(stand))
+	var end := StandPlacement.door_point(stand)
+	assert_vector(walk.back()).is_equal(Vector3(end.x, SITE.ground_height, end.z))
 	assert_float(StandPlacement.walk_length(walk)).is_greater(15.0)
 
 

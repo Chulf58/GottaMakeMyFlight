@@ -7,8 +7,8 @@ extends SceneTree
 ## the cab's door opening, 0.8 m short of the plane door (nearer, the opaque
 ## bellows hide it). It saves a plate of the stair from the east and one of the
 ## cab and the door from the east, both through the glazing. For plane 03 it
-## saves one with a passenger just out of the apron door and one on its walk to
-## the plane.
+## saves one with a passenger just out of the apron door, one on its walk to
+## the plane and one at the walk's end beside its door.
 ##
 ## Run (one windowed Godot run project-wide; hold tools/blender/out/.windowed.lock):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -190,6 +190,15 @@ func _apron_plates() -> void:
 	await _frames(3)
 	name = "bridge_board_03_apron_walk.png"
 	if _proved(name, [out]):
+		await _save(name)
+	_clear_guests()
+	# One at the walk's end, out from the 03's door, from the north-east.
+	var at_end := _guest(walk, walker.apron_total_mm() - 1)
+	await _show_guests()
+	_aim(walk[3] + Vector3.UP * 0.9, 135.0, 6.0, 5.0)
+	await _frames(3)
+	name = "bridge_board_03_walk_end.png"
+	if _proved(name, [at_end]):
 		await _save(name)
 	_clear_guests()
 

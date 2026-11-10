@@ -32,6 +32,10 @@ const ONE_OFF_03_MIN := 900
 ## sample must be to count as off the apron.
 const SAMPLE_M := 0.25
 const RAISED_M := 0.3
+## A standing passenger's slab along the plane either side of its point, and
+## its head height, in metres, for the fuselage clearance check.
+const BODY_SLAB_M := 0.3
+const HEAD_M := 1.9
 
 var _world: PassengerTestWorld
 var _gates: GateDesks
@@ -95,7 +99,7 @@ func test_a_docking_models_walk_is_the_door_cell_then_the_bridge_and_never_the_a
 	var ground_walk := OutsideWalks.departure(_world.sim, exit)
 	for model in DOCKING:
 		var walk := OutsideWalks.departure(_world.sim, exit, model)
-		var pose := JetBridgePose.pose_for(stand, model, true, SITE.ground_height)
+		var pose := JetBridgePose.pose_for(stand, model, true, JetBridgePose.ground_y(stand))
 		var want: Array[Vector3] = [centre]
 		want.append_array(Array(pose["walk"]))
 		var on_apron := _on_apron(walk, stand, pose["pose"])
@@ -134,7 +138,7 @@ func test_a_docking_models_walk_is_the_door_cell_then_the_bridge_and_never_the_a
 func test_a_plane_03_passenger_leaves_by_the_apron_door() -> void:
 	var exit := _exit_of(MODEL_03)
 	var stand := _world.sim.layout.stand_of(_world.grid, exit)
-	var pose := JetBridgePose.pose_for(stand, MODEL_03, false, SITE.ground_height)
+	var pose := JetBridgePose.pose_for(stand, MODEL_03, false, JetBridgePose.ground_y(stand))
 	var apron_door: Vector3 = pose["mounts"][&"Mount_ApronDoor"]
 	var p := _stepped_out(MODEL_03)
 	var docking := OutsideWalks.departure(_world.sim, _exit_of(MODEL_05), MODEL_05)
@@ -157,8 +161,9 @@ func test_a_plane_03_passenger_leaves_by_the_apron_door() -> void:
 	assert_int(p.apron.size()).is_equal(4)
 	assert_vector(p.apron[1]).is_equal(pose["mounts"][&"Mount_ExitSill"])
 	assert_vector(p.apron[2]).is_equal(apron_door)
-	var door: Vector3 = pose["door"]
-	assert_vector(p.apron[3]).is_equal(Vector3(door.x, SITE.ground_height, door.z))
+	# It ends on the ground, out from the door along the fuselage normal.
+	var out: Vector3 = pose["door"] + (pose["normal"] as Vector3) * JetBridgePose.APRON_END_OUT_M
+	assert_vector(p.apron[3]).is_equal(Vector3(out.x, JetBridgePose.ground_y(stand), out.z))
 	# The control: a docking walk does not pass the apron door.
 	assert_float(_nearest(docking, _pose_of(MODEL_05)["mounts"][&"Mount_ApronDoor"])).is_greater(
 		0.5
@@ -378,9 +383,200 @@ func test_the_drawn_bridge_docks_from_the_flight_model_the_walk_uses() -> void:
 	airside.props.release_plane(1)
 
 
+## Plane 03's walk ends with the passenger clear of the plane. At the end,
+## facing along its last leg (side-on to the fuselage), its body is the merged
+## bounds of every passenger model for height and depth, and FileWaiters.BODY_M
+## either side (the models rest in a T-pose, so their measured width is the
+## arms' span). That body meets no triangle of the parked 03 (its main wheel
+## stands 0.6 m out), and it stays out of the door's face.
+func test_plane_03s_walk_ends_with_the_passenger_clear_of_the_plane() -> void:
+	var exit := _exit_of(MODEL_03)
+	var stand := _world.sim.layout.stand_of(_world.grid, exit)
+	var walk := OutsideWalks.departure(_world.sim, exit, MODEL_03)
+	var at := JetBridgePose.plane_door(stand, MODEL_03, JetBridgePose.ground_y(stand))
+	var door: Vector3 = at["door"]
+	var normal: Vector3 = at["normal"]
+	var body := AABB()
+	for i in PassengerLooks.SCENES.size():
+		var guest: Node3D = PassengerLooks.SCENES[i].instantiate()
+		var box := _mesh_bounds(guest, Transform3D.IDENTITY)
+		body = box if i == 0 else body.merge(box)
+		guest.free()
+	var half_depth := maxf(-body.position.z, body.end.z)
+	var arms := body.size.x
+	var side := FileWaiters.BODY_M
+	body = AABB(
+		Vector3(-side, body.position.y, body.position.z),
+		Vector3(2.0 * side, body.size.y, body.size.z)
+	)
+	var plane: Node3D = PlaneView.PLANE_SCENES[MODEL_03].instantiate()
+	var origin := StandPlacement.stand_point(stand) + PlaneClasses.stand_offset(MODEL_03)
+	origin.y = JetBridgePose.ground_y(stand)
+	var faces := _mesh_points(plane, Transform3D(Basis.IDENTITY, origin))
+	plane.free()
+	var end: Vector3 = walk.back()
+	var old_end := Vector3(door.x, end.y, door.z)
+	var hits := _edges_in_body(faces, body, end, end - walk[walk.size() - 2])
+	var old_hits := _edges_in_body(faces, body, old_end, old_end - walk[walk.size() - 2])
+	print(
+		(
+			(
+				"03 walk end %s, %.3f m out from the door; body %s (measured half-depth %.3f m,"
+				+ " T-pose span %.3f m); plane triangles in the body %d of %d; at the door's face %d"
+			)
+			% [
+				end,
+				(end - door).dot(normal),
+				body,
+				half_depth,
+				arms,
+				hits,
+				faces.size() / 3,
+				old_hits
+			]
+		)
+	)
+	assert_float(half_depth).is_greater(0.05)
+	assert_float(half_depth).is_less(side)
+	assert_float((end - door).dot(normal) - side).is_greater(0.0)
+	assert_int(hits).is_equal(0)
+	# The control: the old end on the door's face puts the body in the plane.
+	assert_int(old_hits).is_greater(0)
+
+
+## A plane 03 walker rerouted round floor laid across its walk out of the
+## apron door still ends where its walk did, out by the 03's door (its apron
+## file's plane key), not at the stand's door beside the plane.
+func test_a_rerouted_plane_03_walker_keeps_its_walks_end() -> void:
+	var p := _stepped_out(MODEL_03)
+	p.apron_mm = 1500
+	var end: Vector3 = p.apron.back()
+	var before := p.apron.duplicate()
+	var file := _world.sim.files.plane_file_of(p.id)
+	var stand := _world.sim.layout.stand_of(_world.grid, p.exit_object)
+	var stand_door := StandPlacement.door_point(stand, MODEL_03)
+	var cells: Array[BuildEdit] = []
+	for x in [17, 18, 19]:
+		cells.append(BuildEdit.paint_floor(Vector2i(x, EXIT_A.y - 5), BuildGrid.FLOOR_TILE, 1))
+	_world.grid.apply_batch(cells)
+	print(
+		(
+			"03 walker stuck %s, walk %s -> %s; end %s, stand's door %s (%.3f m apart)"
+			% [
+				Passenger.Stuck.keys()[p.stuck],
+				before,
+				p.apron,
+				p.apron.back(),
+				stand_door,
+				Vector2(end.x, end.z).distance_to(Vector2(stand_door.x, stand_door.z))
+			]
+		)
+	)
+	assert_int(p.stuck).is_equal(Passenger.Stuck.NONE)
+	assert_bool(p.apron == before).is_false()
+	assert_vector(p.apron.back()).is_equal(end)
+	assert_array(_world.sim.files.plane_file_of(p.id)).is_equal(file)
+	var own := JourneyForecast.own_times(_world.sim, p, 0, true)
+	assert_that(own["plane"]).is_equal(BoardingFiles.plane_key(end))
+	# The control: the route's own end, the stand's door, is elsewhere.
+	assert_float(Vector2(end.x, end.z).distance_to(Vector2(stand_door.x, stand_door.z))).is_greater(
+		1.0
+	)
+
+
+## A ground walk (no plane named) ends on the site's ground, so its 3D length
+## is its ground length but for the cell centre's 0.02 m step down.
+func test_a_ground_walk_ends_on_the_site_ground_and_costs_no_drop() -> void:
+	var exit := _exit_of(MODEL_05)
+	var walk := Passenger.new()
+	walk.apron = OutsideWalks.departure(_world.sim, exit)
+	var flat := 0.0
+	for i in range(1, walk.apron.size()):
+		var a := walk.apron[i - 1]
+		var b := walk.apron[i]
+		flat += Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
+	var sunk := Passenger.new()
+	sunk.apron = walk.apron.duplicate()
+	var last: Vector3 = sunk.apron.back()
+	sunk.apron[sunk.apron.size() - 1] = Vector3(last.x, 0.0, last.z)
+	print(
+		(
+			"ground walk %s: %d mm in 3D, %.0f mm on the ground; with its end at y 0, %d mm"
+			% [walk.apron, walk.apron_total_mm(), flat * 1000.0, sunk.apron_total_mm()]
+		)
+	)
+	assert_float(last.y).is_equal_approx(SITE.ground_height, 0.0001)
+	assert_int(walk.apron_total_mm() - roundi(flat * 1000.0)).is_between(0, 2)
+	# The control: an end left at y 0 costs the drop.
+	assert_int(sunk.apron_total_mm() - walk.apron_total_mm()).is_greater(100)
+
+
+## How many triangles of `faces` (world, three points a triangle) meet `body`
+## (a passenger's bounds in its own frame) standing at `at` facing along
+## `heading` (its +z, as PassengerViews turns it): a triangle edge crosses the
+## box, or a box edge crosses the triangle.
+func _edges_in_body(faces: PackedVector3Array, body: AABB, at: Vector3, heading: Vector3) -> int:
+	var frame := Transform3D(Basis(Vector3.UP, atan2(heading.x, heading.z)), at).affine_inverse()
+	var box_edges: Array[PackedVector3Array] = []
+	for i in 8:
+		for j in range(i + 1, 8):
+			var p := body.get_endpoint(i)
+			var q := body.get_endpoint(j)
+			var differ := int(p.x != q.x) + int(p.y != q.y) + int(p.z != q.z)
+			if differ == 1:
+				box_edges.append(PackedVector3Array([p, q]))
+	var count := 0
+	for t in range(0, faces.size() - 2, 3):
+		var a := frame * faces[t]
+		var b := frame * faces[t + 1]
+		var c := frame * faces[t + 2]
+		var met: bool = (
+			body.intersects_segment(a, b)
+			or body.intersects_segment(b, c)
+			or body.intersects_segment(c, a)
+		)
+		for edge in box_edges:
+			if met:
+				break
+			met = Geometry3D.segment_intersects_triangle(edge[0], edge[1], a, b, c) != null
+		count += 1 if met else 0
+	return count
+
+
+func _mesh_bounds(node: Node3D, at: Transform3D) -> AABB:
+	var points := _mesh_points(node, at)
+	var box := AABB(points[0], Vector3.ZERO)
+	for v in points:
+		box = box.expand(v)
+	return box
+
+
+## Every mesh vertex under `node` in world space, with `node` placed at `at`.
+func _mesh_points(node: Node3D, at: Transform3D) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var meshes: Array[Node] = node.find_children("*", "MeshInstance3D", true, false)
+	for mi: MeshInstance3D in meshes:
+		var xform := at * _local_to(node, mi)
+		for v in mi.mesh.get_faces():
+			out.append(xform * v)
+	return out
+
+
+## `child`'s transform relative to `root`, outside the tree.
+func _local_to(root: Node3D, child: Node3D) -> Transform3D:
+	var xform := Transform3D.IDENTITY
+	var node: Node = child
+	while node != root and node != null:
+		if node is Node3D:
+			xform = (node as Node3D).transform * xform
+		node = node.get_parent()
+	return xform
+
+
 func _pose_of(model: String) -> Dictionary:
 	var stand := _world.sim.layout.stand_of(_world.grid, _exit_of(model))
-	return JetBridgePose.pose_for(stand, model, JetBridgePose.docks(model), SITE.ground_height)
+	var ground := JetBridgePose.ground_y(stand)
+	return JetBridgePose.pose_for(stand, model, JetBridgePose.docks(model), ground)
 
 
 ## The contract `id` of `airline`'s medium plane, leaving `later_min` after
@@ -440,7 +636,7 @@ func _put_on_walk(model: String) -> Passenger:
 ## vestibule floor, the stair's slope or the landing's height; or when it is
 ## RAISED_M or more up (the cab). Any other sample is on the apron.
 func _on_apron(walk: Array[Vector3], stand: Dictionary, pose: Dictionary) -> Vector2i:
-	var inv := JetBridgePose.root_for(stand, SITE.ground_height).affine_inverse()
+	var inv := JetBridgePose.root_for(stand, JetBridgePose.ground_y(stand)).affine_inverse()
 	var foot: float = JetBridgePose.STAIR_Z0 - JetBridgePose.STEP_OFF + pose["slide"]
 	var top: float = JetBridgePose.STAIR_Z1 + JetBridgePose.STEP_OFF + pose["slide"]
 	var height: float = pose["height"]

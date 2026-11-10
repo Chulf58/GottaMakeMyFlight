@@ -78,7 +78,9 @@ static func departure(sim: PassengerSim, exit_door: int, model := "") -> Array[V
 ## it is saved.
 static func docks_at(sim: PassengerSim, exit_door: int, model: String) -> bool:
 	var stand := _bridge_stand(sim, exit_door)
-	return not stand.is_empty() and JetBridgePose.reaches(stand, model, sim.site.ground_height)
+	if stand.is_empty():
+		return false
+	return JetBridgePose.reaches(stand, model, JetBridgePose.ground_y(stand))
 
 
 ## Whether a road walker at the end of its walk may come in through the
@@ -128,7 +130,7 @@ static func revalidate(sim: PassengerSim) -> void:
 			var walk: Array[Vector3] = [p.apron_position()]
 			var tail := SiteRoutes.to_plane(sim.grid, sim.site, cells, stand, model)
 			# It walks on to where its walk ended, its apron file's plane door:
-			# beside the plane, or plane 03's door on the ground.
+			# beside the plane, or out on the ground by plane 03's door.
 			tail[tail.size() - 1] = p.apron.back()
 			walk.append_array(tail)
 			_take(p, walk)
@@ -327,7 +329,7 @@ static func _bridge_walk(sim: PassengerSim, exit_door: int, model: String) -> Ar
 	var stand := _bridge_stand(sim, exit_door)
 	if stand.is_empty() or not PlaneModels.PLANES.has(model):
 		return walk
-	var ground := sim.site.ground_height
+	var ground := JetBridgePose.ground_y(stand)
 	var docked := JetBridgePose.reaches(stand, model, ground)
 	if JetBridgePose.docks(model) and not docked:
 		return walk

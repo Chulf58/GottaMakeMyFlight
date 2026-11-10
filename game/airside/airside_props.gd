@@ -84,9 +84,9 @@ func show_layout(stands: Dictionary, routes: Array[PackedVector3Array]) -> void:
 			node.name = "JetBridge_%s" % gate
 			add_child(node)
 			bridges[gate] = {"node": node, "joints": JetBridgePose.joints_of(node)}
-		# On the ground the parked plane stands on, so its door heights match.
-		var spot := StandPlacement.stand_point(stand)
-		var root := JetBridgePose.root_for(stand, PlaneView.ground_height_at(spot))
+		# On the ground the parked plane stands on, so its door heights match
+		# and the sim walks the same floors (JetBridgePose.ground_y()).
+		var root := JetBridgePose.root_for(stand, JetBridgePose.ground_y(stand))
 		bridges[gate]["root"] = root
 		bridges[gate]["stand"] = stand.duplicate()
 		(bridges[gate]["node"] as Node3D).transform = root

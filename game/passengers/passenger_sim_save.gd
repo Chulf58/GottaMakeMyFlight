@@ -72,6 +72,10 @@ extends RefCounted
 ## 31: ParkSide's stamps ("park_side", park_side_list()), so a one-bag guest's
 ## gate chair side survives a load (board 4da2e8ff); a version 30 save has none
 ## and is refused with no migration (the same decision).
+## 32: a walk outside is measured in 3D (Passenger.apron_segment_mm()), and a
+## walker of a docking plane boards through the jet bridge (board 927ed9e0), so
+## a version 31 save's apron_mm is ground distance along a ground walk; it is
+## refused with no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
