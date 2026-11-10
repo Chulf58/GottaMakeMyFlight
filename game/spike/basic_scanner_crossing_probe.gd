@@ -2253,7 +2253,7 @@ func _plate_close(
 			print("INFRAME %s person=%s" % [tag, shown])
 			ok = ok and shown["ok"]
 			if bag != null:
-				ok = _bag_seen(cam, CarryChecks.bag_core(bag), tag) and ok
+				ok = _bag_seen(cam, bag, tag) and ok
 			var dark := PlateSteps.dark_share(img)
 			print("INFRAME %s dark=%.2f" % [tag, dark])
 			ok = ok and dark < PlateSteps.DARK_SHARE
@@ -2301,19 +2301,14 @@ func _box_in_frame(cam: Camera3D, box: AABB, frame: Rect2, tag: String) -> bool:
 	return ok
 
 
-## Whether at least two of five sight lines from `cam` to `box` (its centre
-## and four points 30% out across and up) first hit the bag, and none first
-## hits anything but the bag or its own passenger before reaching it.
-func _bag_seen(cam: Camera3D, box: AABB, tag: String) -> bool:
+## Whether at least two of the five sight lines from `cam` to the bag's body
+## (CarryChecks.bag_aims()) first hit the bag, and none first hits anything but
+## the bag or its own passenger before reaching its point.
+func _bag_seen(cam: Camera3D, bag: Node3D, tag: String) -> bool:
 	var space := cam.get_world_3d().direct_space_state
-	var right := cam.global_transform.basis.x
-	var up := cam.global_transform.basis.y
-	var centre := box.get_center()
-	var reach := box.size.length() * 0.3
 	var on := 0
 	var blocked: Array[String] = []
-	for off in [Vector3.ZERO, right * reach, -right * reach, up * reach, -up * reach]:
-		var at: Vector3 = centre + off * 0.5
+	for at: Vector3 in CarryChecks.bag_aims(bag):
 		var to := at + (at - cam.global_position).normalized() * 3.0
 		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(cam.global_position, to))
 		if hit.is_empty():
