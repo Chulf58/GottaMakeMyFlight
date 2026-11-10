@@ -167,6 +167,43 @@ func test_the_off_switch_hides_alert_cards_but_not_notices() -> void:
 	assert_int(_stack.more_count()).is_equal(0)
 
 
+## A posted card that frees itself (its owner's queue_free) leaves the rail with
+## it: a later layout and the expiry of its time touch nothing freed, and
+## notice_card() is null. Posting under the key again works.
+func test_a_card_freed_from_outside_leaves_the_rail_cleanly() -> void:
+	_post(&"self", FlightResultPanel.SHOW_SECONDS)
+	_post(&"kept")
+	_stack.refresh()
+	var card := _stack.notice_card(&"self")
+	card.queue_free()
+	await get_tree().process_frame
+	assert_bool(is_instance_valid(card)).is_false()
+	_stack.refresh()
+	_stack.advance(FlightResultPanel.SHOW_SECONDS + 1.0)
+	_stack.refresh()
+	assert_object(_stack.notice_card(&"self")).is_null()
+	assert_array(_stack.shown_keys()).is_equal([&"kept"])
+	assert_int(_stack.more_count()).is_equal(0)
+	_post(&"self")
+	_stack.refresh()
+	assert_array(_stack.shown_keys()).is_equal([&"self", &"kept"])
+
+
+## The rail freeing a card itself (a drop, or a post under the same key) runs
+## the same exit callback afterwards; the newer card under that key is kept.
+func test_a_replaced_card_leaving_does_not_drop_its_replacement() -> void:
+	_post(&"twice")
+	var first := _stack.notice_card(&"twice")
+	_post(&"twice")
+	var second := _stack.notice_card(&"twice")
+	await get_tree().process_frame
+	assert_bool(is_instance_valid(first)).is_false()
+	assert_object(_stack.notice_card(&"twice")).is_same(second)
+	_stack.drop_notice(&"twice")
+	await get_tree().process_frame
+	assert_object(_stack.notice_card(&"twice")).is_null()
+
+
 func test_a_reset_drops_the_notices() -> void:
 	_post(&"note")
 	_stack.refresh()

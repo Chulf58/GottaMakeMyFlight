@@ -194,10 +194,12 @@ func post_notice(
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	card.gui_input.connect(_on_notice_input.bind(key))
 	card.minimum_size_changed.connect(_on_card_resized.bind(card.get_instance_id()))
+	card.tree_exiting.connect(_on_notice_exiting.bind(key, card.get_instance_id()))
 	# Hidden until _layout_cards() has measured it and found it fits.
 	card.visible = false
 	_cards.add_child(card)
-	_notices[key] = {"card": card, "left": seconds if seconds > 0.0 else INF}
+	var left := seconds if seconds > 0.0 else INF
+	_notices[key] = {"card": card, "id": card.get_instance_id(), "left": left}
 	_layout_dirty = true
 	_board.note(key, title, detail, sim.tick if sim != null else 0)
 	_sync_tray()
@@ -217,6 +219,18 @@ func drop_notice(key: StringName) -> void:
 	_heights.erase(card.get_instance_id())
 	_layout_dirty = true
 	_layout_cards()
+
+
+## A posted card is leaving the tree: freed by the rail (drop_notice() has
+## already let it go, so nothing matches) or from outside, which drops its
+## notice here so nothing later touches a freed card. Only the dictionaries are
+## touched; the next refresh lays the rail out again. A later card posted under
+## the same key has another id and is kept.
+func _on_notice_exiting(key: StringName, id: int) -> void:
+	if _notices.has(key) and _notices[key]["id"] == id:
+		_notices.erase(key)
+	_heights.erase(id)
+	_layout_dirty = true
 
 
 ## The card of the notice up under `key`, or null when none is up.
@@ -500,6 +514,7 @@ func _card_height(card: Control) -> float:
 		return _heights[id]
 	measures += 1
 	var was := card.visible
+	# Cards posted to the rail must not act on visibility_changed: this shows them.
 	card.visible = true
 	var parts: Array[Control] = [card]
 	for node in card.find_children("*", "Control", true, false):
