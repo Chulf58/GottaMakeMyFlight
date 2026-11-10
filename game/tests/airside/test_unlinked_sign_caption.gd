@@ -252,3 +252,64 @@ func test_a_wall_gap_sign_on_the_unlinked_sign_moves_it_sideways() -> void:
 	_view.layout_signs()
 	assert_float(marker.offset.x).is_equal(0.0)
 	assert_vector(caption.offset).is_equal(Vector2(0.0, GateLinksView.SIGN_OVER_PX))
+
+
+func test_an_unchanged_camera_and_marks_lay_out_once() -> void:
+	_look(25.0, 54.0)
+	var first := _view.layout_signs()
+	var runs := _view.sign_layouts
+	var caption := _view.caption_of(_view.signs()[0])
+	var offset := caption.offset
+	for i in 3:
+		var again := _view.layout_signs()
+		assert_array(again).is_equal(first)
+	print("layouts after 4 calls, nothing changed: %d (was %d)" % [_view.sign_layouts, runs])
+	assert_int(_view.sign_layouts).is_equal(runs)
+	# The cached answer leaves the drawn place as it was.
+	assert_vector(caption.offset).is_equal(offset)
+
+
+func test_moving_the_camera_lays_out_again() -> void:
+	_look(25.0, 54.0)
+	_view.layout_signs()
+	var runs := _view.sign_layouts
+	_look(26.0, 54.0)
+	_view.layout_signs()
+	print("layouts after a camera move: %d (was %d)" % [_view.sign_layouts, runs])
+	assert_int(_view.sign_layouts).is_equal(runs + 1)
+	_view.layout_signs()
+	assert_int(_view.sign_layouts).is_equal(runs + 1)
+
+
+func test_a_wall_gap_mark_coming_and_going_lays_out_again_with_the_camera_still() -> void:
+	_look(25.0, 54.0)
+	_view.layout_signs()
+	var marker: Sprite3D = _view.signs()[0]
+	var caption := _view.caption_of(marker)
+	var runs := _view.sign_layouts
+	assert_float(marker.offset.x).is_equal(0.0)
+	assert_vector(caption.offset).is_equal(Vector2(0.0, GateLinksView.SIGN_OVER_PX))
+	# A wall-gap sign up and to the right, its caption over the grey sign.
+	var foot := _camera.unproject_position(marker.global_position)
+	var depth := _camera.global_position.distance_to(marker.global_position)
+	var gaps := _gap_marks(_camera.project_position(foot + Vector2(20.0, -40.0), depth))
+	_view.gaps = gaps
+	_view.layout_signs()
+	print("layouts after a mark came: %d (was %d)" % [_view.sign_layouts, runs])
+	assert_int(_view.sign_layouts).is_equal(runs + 1)
+	# The control: the sign slid off the mark, so the answer is not the old one.
+	assert_float(marker.offset.x).is_not_equal(0.0)
+	# The mark stays put: nothing more to do.
+	_view.layout_signs()
+	assert_int(_view.sign_layouts).is_equal(runs + 1)
+	# The mark vanishes, `gaps` itself still set and the camera still.
+	for child in gaps.get_children():
+		gaps.remove_child(child)
+		child.free()
+	_view.layout_signs()
+	print("layouts after the mark went: %d" % _view.sign_layouts)
+	assert_int(_view.sign_layouts).is_equal(runs + 2)
+	assert_float(marker.offset.x).is_equal(0.0)
+	assert_vector(caption.offset).is_equal(Vector2(0.0, GateLinksView.SIGN_OVER_PX))
+	_view.gaps = null
+	gaps.free()

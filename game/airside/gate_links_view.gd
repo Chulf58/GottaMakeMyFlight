@@ -115,6 +115,9 @@ var markers: Node3D
 ## captions keep clear of (taking a gate's exit away leaves a gap by its
 ## desk). Unset, the first GapMarkers in the tree is taken, looked for once.
 var gaps: Node3D
+## How many times layout_signs() ran its layout rather than answering from the
+## cache (tests read it).
+var sign_layouts := 0
 var _markers_looked := false
 
 var _grid: BuildGrid
@@ -135,6 +138,12 @@ var _sign_boxes: Array = []
 ## The screen rectangles of the shown signs and their captions, from the last
 ## layout_signs(); the gate captions keep clear of them.
 var _sign_rects: Array[Rect2] = []
+## What the cached layout_signs() layout was made from, and its result: while
+## the key is the same the layout is too. Bumped by rebuild() (signs, texts,
+## obstacle boxes).
+var _layout_key: Array = []
+var _layout_placed: Array[Rect2] = []
+var _signs_revision := 0
 var _paths: Array[PackedVector3Array] = []
 var _unit := 0.0
 
@@ -242,6 +251,7 @@ static func sign_text(reason: Dictionary) -> String:
 ## Draws the links and the unlinked signs again from the gates.
 func rebuild() -> void:
 	_paths.clear()
+	_signs_revision += 1
 	var gate_texts: Array[String] = []
 	var desk_tops: Array[Vector3] = []
 	if _grid != null and _gates != null:
@@ -465,15 +475,41 @@ func _find_markers() -> void:
 ## MissMarkers.MAX_LIFTS) at which it meets none of them; with no clear lift it
 ## stays right over its sign, so the reason always shows. Returns the caption
 ## rectangles (pixels) placed, in desk order, and keeps them with the signs'
-## own for layout_captions().
+## own for layout_captions(). The layout is kept (as MissMarkers.draw() keeps
+## its own) while its inputs are the same: the camera (identity, transform,
+## field of view), the viewport, the signs (rebuild(), their places and
+## visibility) and the rectangles of the marks of `markers` and `gaps`, which
+## can appear, move or vanish with the camera still. The returned array is the
+## kept one, so a caller must not change it.
 func layout_signs() -> Array[Rect2]:
-	var placed: Array[Rect2] = []
-	_sign_rects.clear()
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	if camera == null or signs().is_empty():
-		return placed
+		_sign_rects.clear()
+		_layout_key = []
+		_layout_placed = []
+		return _layout_placed
 	_find_markers()
-	var to_output := get_viewport().get_stretch_transform().get_scale().y
+	var view := get_viewport()
+	var to_output := view.get_stretch_transform().get_scale().y
+	var gap_marks := marker_rects(gaps, camera, to_output)
+	var shown_markers := marker_rects(markers, camera, to_output) + gap_marks
+	var key := [
+		camera.get_instance_id(),
+		camera.global_transform,
+		camera.fov,
+		to_output,
+		view.get_visible_rect().size,
+		_signs_revision,
+		_sign_state(),
+		gap_marks,
+		shown_markers,
+	]
+	if key == _layout_key:
+		return _layout_placed
+	_layout_key = key
+	sign_layouts += 1
+	var placed: Array[Rect2] = []
+	_sign_rects.clear()
 	# Each shown sign's icon, by _signs index, where it stands unshifted.
 	var icons := {}
 	for i in _signs.size():
@@ -484,8 +520,6 @@ func layout_signs() -> Array[Rect2]:
 			var foot := camera.unproject_position(marker.global_position) * to_output
 			var side := MissMarkers.SIGN_PX
 			icons[i] = Rect2(foot.x - side / 2.0, foot.y - side, side, side)
-	var gap_marks := marker_rects(gaps, camera, to_output)
-	var shown_markers := marker_rects(markers, camera, to_output) + gap_marks
 	for i in _signs.size():
 		if not icons.has(i):
 			continue
@@ -523,7 +557,17 @@ func layout_signs() -> Array[Rect2]:
 		placed.append(chosen)
 	_sign_rects.assign(icons.values())
 	_sign_rects.append_array(placed)
-	return placed
+	_layout_placed = placed
+	return _layout_placed
+
+
+## Where each sign stands in the world, INF while it is hidden: what the
+## layout_signs() cache needs of the signs beyond rebuild().
+func _sign_state() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for marker in _signs:
+		out.append(marker.global_position if marker.visible else Vector3.INF)
+	return out
 
 
 ## How far (pixels, + right) an unlinked sign at `icon` slides sideways off the
