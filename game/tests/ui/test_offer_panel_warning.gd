@@ -250,12 +250,14 @@ func test_both_notices_are_in_the_history() -> void:
 	assert_str("\n".join(_stack.history_lines())).contains("below 2 stars")
 
 
-func test_a_load_clears_the_posted_words_so_a_low_rating_posts_again() -> void:
+func test_a_load_drops_the_ending_and_keeps_one_warning() -> void:
 	_miss(10)
 	_desk.contract_ended.emit(_airline_left())
 	_panel._on_loaded(true)
-	assert_object(_stack.notice_card(OfferPanel.WARNING_KEY)).is_null()
 	assert_object(_stack.notice_card(OfferPanel.ENDED_KEY)).is_null()
 	await await_idle_frame()
 	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 2 stars")
-	assert_object(_stack.notice_card(OfferPanel.ENDED_KEY)).is_null()
+	var warnings := 0
+	for line in _stack.history_lines():
+		warnings += 1 if line.contains(OfferPanel.WARNING_TITLE) else 0
+	assert_int(warnings).is_equal(1)

@@ -72,6 +72,24 @@ func test_a_replaced_rail_gets_the_warning_with_the_rating_unchanged() -> void:
 	assert_str(_warning_words()).contains("below 2 stars")
 
 
+func test_resetting_the_old_rail_does_not_repost_on_the_new_one() -> void:
+	_miss(10)
+	var old_rail := _stack
+	var new_rail := AlertStack.new()
+	new_rail.settings_path = _path
+	_port.add_child(new_rail)
+	_panel.alerts = new_rail
+	_miss(2)
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	assert_object(new_rail.notice_card(OfferPanel.WARNING_KEY)).is_not_null()
+	new_rail.notice_card(OfferPanel.WARNING_KEY).gui_input.emit(click)
+	old_rail.reset()
+	assert_object(new_rail.notice_card(OfferPanel.WARNING_KEY)).is_null()
+	assert_object(old_rail.notice_card(OfferPanel.WARNING_KEY)).is_null()
+
+
 func test_a_click_dismissal_still_holds_on_the_same_rail() -> void:
 	_miss(10)
 	var click := InputEventMouseButton.new()

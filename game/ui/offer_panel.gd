@@ -64,6 +64,8 @@ var _warning_text := ""
 var _warning_posted := ""
 ## Instance id of the rail the warning was posted to (0 before any).
 var _posted_rail := 0
+## The rail whose reset_done this panel listens to (only ever one).
+var _watched_rail: AlertStack
 var _ended_text := ""
 var _offers_waiting := false
 var _card_nodes: Dictionary = {}
@@ -213,6 +215,7 @@ func close() -> void:
 	if not _sheet.visible:
 		return
 	_sheet.visible = false
+	_clear_refusals()
 	_restore_clock()
 
 
@@ -334,13 +337,12 @@ func _on_loaded(ok: bool) -> void:
 		return
 	_holding_clock = false
 	close()
-	# The rail starts again with the loaded world (and the ending notice is not
-	# saved), so a warning still due is posted again once the rating is loaded.
+	# The ending notice is not saved. The rail's own reset (reset_done) posts a
+	# warning still due once, whichever of the two handlers runs first, so this
+	# only drops the ending and lets the warning follow the loaded rating.
 	var rail := _rail()
 	if rail != null:
-		rail.drop_notice(WARNING_KEY)
 		rail.drop_notice(ENDED_KEY)
-	_warning_posted = ""
 	_ended_text = ""
 	_refresh_warning.call_deferred()
 
@@ -428,6 +430,12 @@ func _rail() -> AlertStack:
 	if not is_instance_valid(alerts):
 		alerts = get_tree().get_first_node_in_group(AlertStack.GROUP) as AlertStack
 	if alerts != null and alerts.get_instance_id() != _posted_rail:
+		if (
+			is_instance_valid(_watched_rail)
+			and _watched_rail.reset_done.is_connected(_on_rail_reset)
+		):
+			_watched_rail.reset_done.disconnect(_on_rail_reset)
+		_watched_rail = alerts
 		_posted_rail = alerts.get_instance_id()
 		_warning_posted = ""
 		alerts.reset_done.connect(_on_rail_reset)
@@ -571,12 +579,17 @@ func _say(text: String) -> void:
 ## Shows a refusal on the offer's own card, in place of any refusal on another.
 func _refuse(id: String, text: String) -> void:
 	_say("")
-	for other: String in _refusal_labels:
-		(_refusal_labels[other] as Label).text = ""
-		(_refusal_labels[other] as Label).visible = false
+	_clear_refusals()
 	var label: Label = _refusal_labels[id]
 	label.text = text
 	label.visible = true
+
+
+## Empties every card's refusal line.
+func _clear_refusals() -> void:
+	for id: String in _refusal_labels:
+		(_refusal_labels[id] as Label).text = ""
+		(_refusal_labels[id] as Label).visible = false
 
 
 func _on_decline(id: String) -> void:
