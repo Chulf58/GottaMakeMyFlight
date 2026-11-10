@@ -267,6 +267,8 @@ func _ready() -> void:
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu
 	if menu != null:
 		_inspect.actions.session = menu.build_session
+		_alerts.build_tray_open = func() -> bool:
+			return menu.is_node_ready() and menu.is_tray_open()
 	_outline.selection = _built
 	_outline.build_mode = build_mode
 	add_child(_outline)

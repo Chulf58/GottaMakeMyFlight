@@ -74,6 +74,9 @@ var scans := 0
 ## True while something covers the stack's place (the open offer sheet); the
 ## stack stays down then and comes back when it is false.
 var covered := Callable()
+## True while the build item tray is open; the rail then stops above the tray
+## stack instead of the category bar. PassengerHud sets it from BuildMenu.
+var build_tray_open := Callable()
 
 var _board := AlertBoard.new()
 var _dirty := DirtyAlert.new()
@@ -480,7 +483,9 @@ static func _widen(control: Control, width: float) -> void:
 		inner -= panel.get_theme_stylebox("panel").get_minimum_size().x
 	for child in control.get_children():
 		var part := child as Control
-		if part != null and not part.top_level:
+		# Only what fills the width gets it, as the container gives it; a part
+		# that shrinks (the Dismiss button) keeps the width it was laid out at.
+		if part != null and not part.top_level and part.size_flags_horizontal & Control.SIZE_FILL:
 			_widen(part, inner)
 	control.update_minimum_size()
 
@@ -513,11 +518,15 @@ func _place() -> void:
 		offset_top = top
 
 
-## The lowest screen y the rail may reach: GROUP_GAP above the build tray's
-## stack, open or not, so the rail does not move when the tray opens.
+## The lowest screen y the rail may reach: GROUP_GAP above the category bar, or
+## above the build tray's whole stack while the tray is open, so opening it
+## sends the cards that would run into it to '+N more'.
 func _stop_y() -> float:
 	var view := get_viewport().get_visible_rect().size.y
-	return view - BuildMenu.tray_stack_top() - HudLayout.GROUP_GAP
+	var below := BuildMenu.MARGIN + BuildMenu.BAR_H
+	if build_tray_open.is_valid() and build_tray_open.call():
+		below = BuildMenu.tray_stack_top()
+	return view - below - HudLayout.GROUP_GAP
 
 
 ## Orders the cards newest first and draws as many as fit: at most MAX_CARDS,

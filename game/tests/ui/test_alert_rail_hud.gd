@@ -108,7 +108,7 @@ func test_the_result_card_sits_on_the_rail_clear_of_the_panel_and_the_tray() -> 
 	assert_bool(_hud.is_result_open()).is_true()
 	var card := _stack().notice_card(PassengerHud.RESULT_KEY).get_global_rect()
 	var panel := _panel()
-	var stop := VIEW.y - BuildMenu.tray_stack_top()
+	var stop := _stop(false)
 	print("RAIL_RESULT card=%s panel=%s stop=%.1f" % [card, panel, stop])
 	assert_float(card.size.y).is_greater(HudLayout.BUTTON_H)
 	assert_bool(card.intersects(panel)).is_false()
@@ -134,7 +134,7 @@ func test_a_card_that_does_not_fit_is_never_visible() -> void:
 		var card := PanelContainer.new()
 		var column := VBoxContainer.new()
 		card.add_child(column)
-		for line in 2:
+		for line in 4:
 			var label := Label.new()
 			label.text = "%s (%d)" % [long, i]
 			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -157,7 +157,7 @@ func test_a_card_that_does_not_fit_is_never_visible() -> void:
 	assert_int(stack.more_count()).is_equal(cards.size() - shown.size())
 	for i in cards.size() - shown.size():
 		assert_bool(seen.has(i)).override_failure_message("card %d was visible" % i).is_false()
-	var stop := VIEW.y - BuildMenu.tray_stack_top()
+	var stop := _stop(false)
 	assert_float(stack.room_rect().end.y).is_less_equal(stop)
 
 
@@ -186,6 +186,50 @@ func test_cards_that_fit_show_as_soon_as_the_tray_closes() -> void:
 	assert_int(stack.more_count()).is_equal(0)
 
 
+## The rail's lowest y: GROUP_GAP above the category bar, or above the whole
+## build tray stack while the tray is open.
+func _stop(tray_open: bool) -> float:
+	var below := BuildMenu.tray_stack_top() if tray_open else BuildMenu.MARGIN + BuildMenu.BAR_H
+	return VIEW.y - below - HudLayout.GROUP_GAP
+
+
+## With the build tray closed the rail runs down to the bar; opening the tray
+## sends the cards that would run into it to '+N more', and closing it brings
+## them back.
+func test_opening_the_build_tray_sends_cards_that_would_meet_it_to_more() -> void:
+	await _settle()
+	var stack := _stack()
+	var tray := [false]
+	stack.build_tray_open = func() -> bool: return tray[0]
+	for i in 3:
+		var card := PanelContainer.new()
+		var label := Label.new()
+		label.text = "Notice %d\nwith a second line\nand a third\nand a fourth" % i
+		card.add_child(label)
+		stack.post_notice(StringName("n%d" % i), card, 0.0, "Notice %d" % i, "")
+	await _settle()
+	var closed := stack.room_rect()
+	print(
+		"RAIL_TRAY closed shown=%s rail=%s stop=%.0f" % [stack.shown_keys(), closed, _stop(false)]
+	)
+	assert_int(stack.shown_keys().size()).is_equal(3)
+	assert_float(closed.end.y).is_less_equal(_stop(false))
+	# Control: the three cards reach below where the open tray's stack starts.
+	assert_float(closed.end.y).is_greater(_stop(true))
+	tray[0] = true
+	await _settle()
+	var opened := stack.room_rect()
+	print(
+		"RAIL_TRAY open shown=%s more=%d rail=%s" % [stack.shown_keys(), stack.more_count(), opened]
+	)
+	assert_int(stack.shown_keys().size()).is_less(3)
+	assert_int(stack.more_count()).is_equal(3 - stack.shown_keys().size())
+	assert_float(opened.end.y).is_less_equal(_stop(true))
+	tray[0] = false
+	await _settle()
+	assert_int(stack.shown_keys().size()).is_equal(3)
+
+
 func _note_visible(cards: Array[Control], seen: Dictionary) -> void:
 	for i in cards.size():
 		if cards[i].is_visible_in_tree():
@@ -206,6 +250,21 @@ func test_a_left_column_and_the_rail_leave_the_middle_free() -> void:
 	assert_float(free.position.x).is_equal_approx(column.end.x, 0.5)
 	assert_float(free.end.x).is_equal_approx(rail.position.x, 0.5)
 	assert_float(free.size.y).is_equal_approx(VIEW.y, 0.5)
+
+
+## Measuring a card must not resize what its container laid out: the result
+## card's Dismiss button (shrink to the end) keeps its own width inside the card
+## frame after frame, as the windowed plate showed when it did not.
+func test_measuring_keeps_the_dismiss_button_inside_the_result_card() -> void:
+	_close_doors_with_misses(1)
+	await _settle()
+	var card := _stack().notice_card(PassengerHud.RESULT_KEY)
+	var button := card.find_child("DismissResult", true, false) as Button
+	var rect := card.get_global_rect()
+	var at := button.get_global_rect()
+	print("RAIL_DISMISS card=%s button=%s min=%s" % [rect, at, button.get_combined_minimum_size()])
+	assert_float(at.size.x).is_equal_approx(button.get_combined_minimum_size().x, 0.5)
+	assert_bool(rect.encloses(at)).is_true()
 
 
 func test_panel_room_cuts_the_rail_rect_with_the_result_card_in_it() -> void:
