@@ -82,13 +82,31 @@ func alert(key: StringName) -> Dictionary:
 	return _active.get(key, {})
 
 
-## Every card that came up, newest first: key, title, detail (as it read when it
-## came up), raised_tick and cleared_tick (-1 while it is still up). Copies.
+## Every card that came up and every notice (note()), newest first: key,
+## title, detail (as it read when it came up), raised_tick and cleared_tick (-1
+## while it is still up, and for a notice). Copies.
 func history() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for i in range(_history.size() - 1, -1, -1):
 		out.append(_history[i].duplicate())
 	return out
+
+
+## Puts a notice in the history at `tick`: a card the rail holds itself (the
+## flight result), which has no cause and no clear tick. Its entry has
+## "notice" true and cleared_tick -1.
+func note(key: StringName, title: String, detail: String, tick: int) -> void:
+	_add_history(
+		{
+			"key": key,
+			"title": title,
+			"detail": detail,
+			"raised_tick": tick,
+			"cleared_tick": -1,
+			"notice": true,
+		}
+	)
+	revision += 1
 
 
 ## Drops every card, wait and history entry.
@@ -110,15 +128,19 @@ func _raise(cause: Dictionary, tick: int) -> void:
 		"raised_tick": tick,
 		"cleared_tick": -1,
 	}
-	_history.append(entry)
-	if _history.size() > HISTORY_CAP:
-		_history.pop_front()
+	_add_history(entry)
 	var alert := cause.duplicate()
 	alert["raised_tick"] = tick
 	alert["entry"] = entry
 	_active[key] = alert
 	_order.append(key)
 	_pending.erase(key)
+
+
+func _add_history(entry: Dictionary) -> void:
+	_history.append(entry)
+	if _history.size() > HISTORY_CAP:
+		_history.pop_front()
 
 
 ## Takes the cause's current words and targets for the card up; true when its

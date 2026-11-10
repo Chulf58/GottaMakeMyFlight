@@ -14,10 +14,10 @@ extends CanvasLayer
 ## goes once someone of that role is hired.
 ## The hint is the checklist card (decision checklist-card-shows-what-the-
 ## airport-still-needs, ChecklistCard and Checklist): while the airport is
-## closed it lists every opening need (AirportGate.unmet()), each ticked when
-## done; once it opens it lists the current gaps instead (HintRules causes,
-## read every GAP_POLL_S), with the wall gap and hiring lines in both. It hides
-## when nothing is left.
+## closed it lists the opening needs still unmet (AirportGate.unmet(); a met
+## need is folded away); once it opens it lists the current gaps instead
+## (HintRules causes, read every GAP_POLL_S), with the wall gap and hiring
+## lines in both. It hides when nothing is left.
 ##
 ## The card belongs to the bottom category bar (decision hud-layout-bottom-
 ## category-bar-with-an-item-tray-time-and-fl): the bar's Staff button opens it
@@ -61,13 +61,9 @@ const GAPS_HINT := "%d wall gaps: close the open edges of the outer wall, marked
 const OPEN_CUE := "Open! Starter contract: %s to %s, daily"
 ## A column's least width: four roles fit centred over the bar.
 const ROLE_WIDTH := 180.0
-## Width of the hint card's text, in layout pixels. With its padding the card
-## ends left of PassengerHud's flight panel on every window shape: the layout is
-## at least 1536 wide (1920 over the 1.25 stretch scale, aspect expand).
-const HINT_W := 560.0
-## The banner's top edge, under the top row and the Build mode sign (which ends
-## at about 64).
-const BANNER_TOP := 72.0
+## The banner's top edge with the departures list off: under the three toggles.
+## With the list open the card sits under it (LeftColumn.follow()).
+const BANNER_TOP := LeftColumn.LIST_TOP
 ## The hint card's opacity while the build ghost is over it, and how fast it
 ## fades to that or back (opacity per second).
 const FADED_ALPHA := 0.35
@@ -251,21 +247,6 @@ func set_hint_yielded(yielded: bool) -> void:
 	_hint_box.visible = _hint.visible and not _hint_yielded
 
 
-## Anchors `card` at the top centre, growing down from BANNER_TOP. The
-## first-time hint card uses it too, so the two sit in the same place.
-static func anchor_banner(card: Control) -> void:
-	card.anchor_left = 0.5
-	card.anchor_right = 0.5
-	card.anchor_top = 0.0
-	card.anchor_bottom = 0.0
-	card.offset_left = 0.0
-	card.offset_right = 0.0
-	card.offset_top = BANNER_TOP
-	card.offset_bottom = BANNER_TOP
-	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	card.grow_vertical = Control.GROW_DIRECTION_END
-
-
 func refresh() -> void:
 	_track_opening()
 	for role in ROLES:
@@ -419,8 +400,8 @@ func _build() -> void:
 	_build_hint()
 
 
-## The hint sits in a HUD card of its own at the top centre, growing down from
-## BANNER_TOP, so it has a backing to read against.
+## The hint sits in a HUD card of its own in the top-left column, LIST_W wide,
+## so it has a backing to read against.
 func _build_hint() -> void:
 	_hint_box.name = "StaffHintCard"
 	_hint_box.theme = BuildMenu.HUD_THEME
@@ -428,12 +409,12 @@ func _build_hint() -> void:
 	_hint_box.visible = false
 	add_child(_hint_box)
 	_hint.name = "StaffHint"
-	_hint.custom_minimum_size = Vector2(HINT_W, 0.0)
 	_hint_box.add_child(_checklist)
-	anchor_banner(_hint_box)
+	LeftColumn.dock_card(_hint_box)
 
 
 func _process(delta: float) -> void:
+	LeftColumn.follow(_hint_box)
 	if gate != null and gate.is_open():
 		_since_poll += delta
 		if _since_poll >= GAP_POLL_S:

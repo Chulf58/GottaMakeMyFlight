@@ -227,7 +227,7 @@ func test_the_off_setting_hides_the_cards_but_keeps_the_history() -> void:
 	_stack.set_cards_on(false)
 	_spills()
 	_stack.refresh()
-	assert_bool(_cards(_stack).is_visible_in_tree()).is_false()
+	assert_bool(_stack.card_node(DirtyAlert.KEY).is_visible_in_tree()).is_false()
 	assert_int(_stack.history_lines().size()).is_equal(1)
 	assert_str(_stack.history_lines()[0]).contains(DirtyAlert.TITLE)
 	# The choice is saved: a stack made later starts off.
@@ -237,7 +237,7 @@ func test_the_off_setting_hides_the_cards_but_keeps_the_history() -> void:
 	# On again: the card that is up shows at once.
 	_stack.set_cards_on(true)
 	_stack.refresh()
-	assert_bool(_cards(_stack).is_visible_in_tree()).is_true()
+	assert_bool(_stack.card_node(DirtyAlert.KEY).is_visible_in_tree()).is_true()
 	assert_array(_stack.card_keys()).is_equal([DirtyAlert.KEY])
 
 
@@ -298,10 +298,16 @@ func test_a_new_sim_drops_the_cards_and_the_history() -> void:
 	other.free_all()
 
 
-func test_the_width_shrinks_with_the_viewport_down_to_a_floor() -> void:
-	assert_float(AlertStack.width_for(1536.0)).is_equal(AlertStack.WIDTH)
-	assert_float(AlertStack.width_for(1280.0)).is_equal(AlertStack.WIDTH)
-	assert_float(AlertStack.width_for(800.0)).is_equal(
-		800.0 - AlertStack.RIGHT_GAP - AlertStack.LEFT_MARGIN
-	)
-	assert_float(AlertStack.width_for(400.0)).is_equal(AlertStack.MIN_WIDTH)
+## The rail is RAIL_W wide on the right margin (decision hud-grid-and-rails-one-
+## spacing-grid-centred-top-row-right-ra, part 1); with no clock panel above it
+## starts on the top margin.
+func test_the_rail_sits_rail_w_wide_on_the_right_margin() -> void:
+	_spills()
+	_stack.refresh()
+	await get_tree().process_frame
+	var view := _stack.get_viewport().get_visible_rect().size
+	var rect := _stack.get_global_rect()
+	print("RAIL_PLACE view=%s rail=%s" % [view, rect])
+	assert_float(rect.end.x).is_equal_approx(view.x - HudLayout.MARGIN, 0.5)
+	assert_float(rect.size.x).is_equal_approx(HudLayout.RAIL_W, 0.5)
+	assert_float(rect.position.y).is_equal_approx(HudLayout.MARGIN, 0.5)

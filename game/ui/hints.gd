@@ -2,9 +2,10 @@ class_name Hints
 extends Node
 ## The first-time hints (HUD 7/7, decision first-time-hints-above-the-build-bar-
 ## moment-of-need-per-profile-memory): one small card at a time in the banner
-## slot at the top centre (decision status-banner-and-first-time-hints-sit-at-
-## the-top-centre), shared with the status banner (StaffPanel), which waits while
-## a hint shows. HintRules says what each hint teaches and when its cause is true.
+## slot of the top-left column (decision checklist-card-moves-to-the-top-left-
+## column-slim-at-304-px-t, LeftColumn), shared with the status banner
+## (StaffPanel), which waits while a hint shows. The Hints toggle is the column's
+## third button. HintRules says what each hint teaches and when its cause is true.
 ##
 ## A hint is due on an opportunity, not a timer: the player opens the build
 ## category it is about, or its cause has just become true. A player who does
@@ -48,9 +49,6 @@ const MIN_GAP_S := 20.0
 const IDLE_S := 45.0
 ## How often the world is read, in seconds.
 const READ_EVERY_S := 0.25
-## The settings row, under the alert cards' column and above the Mood button.
-const ROW_LEFT := 16.0
-const ROW_TOP := 254.0
 
 ## Tests set the mode; a launch works it out in _ready().
 var forced_mode := -1
@@ -286,6 +284,7 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	LeftColumn.follow(_card)
 	fade_for(_ghost_rect(), delta)
 	if not reads_world:
 		return
@@ -478,19 +477,21 @@ func _build() -> void:
 	column.add_child(_caption)
 	_body.name = "HintText"
 	_body.theme_type_variation = &"HudAttentionText"
-	_body.custom_minimum_size = Vector2(StaffPanel.HINT_W, 0.0)
+	_body.add_theme_font_size_override("font_size", HudLayout.CAPTION)
+	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(_body)
-	StaffPanel.anchor_banner(_card)
+	LeftColumn.dock_card(_card)
 	_row.name = "HintsControls"
 	_row.theme = BuildMenu.HUD_THEME
-	_row.position = Vector2(ROW_LEFT, ROW_TOP)
+	_row.position = Vector2(HudLayout.MARGIN, LeftColumn.slot_top(LeftColumn.SLOT_HINTS))
 	_row.add_theme_constant_override("separation", 8)
 	add_child(_row)
 	_toggle.name = "HintsToggle"
 	_toggle.text = "Hints (H)"
+	LeftColumn.size_toggle(_toggle)
 	_toggle.toggle_mode = true
 	_toggle.button_pressed = true
 	_toggle.focus_mode = Control.FOCUS_NONE

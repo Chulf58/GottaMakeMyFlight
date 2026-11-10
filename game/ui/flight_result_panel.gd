@@ -1,24 +1,30 @@
 class_name FlightResultPanel
 extends PanelContainer
-## The result of one flight, shown by PassengerHud when its doors close: made,
-## missed and the main reasons passengers missed. Hidden until shown, then
-## dismissed with its button or, failing that, when the game day changes.
+## The result of one flight, a green card on the right rail (AlertStack,
+## decision hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, part
+## 5): made, missed and the main reasons passengers missed. PassengerHud makes
+## one when a flight's doors close and posts it to the rail, which takes it
+## down after SHOW_SECONDS of real time or on a click and keeps its text in the
+## alerts history. Its Dismiss button takes it down too.
+
+## The Dismiss button was pressed.
+signal dismissed
 
 ## The most reasons listed; the rest are summed into one "Other" row, so the
 ## rows add up to every reason.
 const MAX_REASONS := 3
-const WIDTH := 440.0
+## Real seconds the card stays on the rail, also while the game is paused.
+const SHOW_SECONDS := 20.0
 
 var _label := Label.new()
-## The game day the card was shown on; it is stale once the day moves on.
-var _day := 0
 
 
 func _init() -> void:
 	name = "FlightResultPanel"
 	visible = false
-	custom_minimum_size = Vector2(WIDTH, 0.0)
+	custom_minimum_size = Vector2(HudLayout.RAIL_W, 0.0)
 	theme = BuildMenu.HUD_THEME
+	add_theme_stylebox_override("panel", green_card())
 	var column := VBoxContainer.new()
 	add_child(column)
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -28,10 +34,21 @@ func _init() -> void:
 	dismiss.text = "Dismiss"
 	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_END
 	dismiss.focus_mode = Control.FOCUS_NONE
-	# The panel's accent: it waits for the player to dismiss it.
-	dismiss.theme_type_variation = &"HudButtonYellow"
+	# A normal action, so teal; yellow means needs-you (decision
+	# hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
+	dismiss.theme_type_variation = &"HudButtonTeal"
 	dismiss.pressed.connect(dismiss_result)
 	column.add_child(dismiss)
+
+
+## The theme's card (border, corners, margins, shadow) in the theme's green,
+## the colour for good news (decision 0b50e074). The theme has no green card
+## variation, so the card takes the green of its green button.
+static func green_card() -> StyleBoxFlat:
+	var theme := BuildMenu.HUD_THEME
+	var card := theme.get_stylebox("panel", "PanelContainer").duplicate() as StyleBoxFlat
+	card.bg_color = (theme.get_stylebox("normal", "HudButtonGreen") as StyleBoxFlat).bg_color
+	return card
 
 
 ## The flight number a player knows: a daily occurrence id ("GMF101-d0") shows
@@ -73,20 +90,14 @@ static func text_for(summary: Dictionary) -> String:
 	return "\n".join(lines)
 
 
-func show_result(summary: Dictionary, day: int) -> void:
+func show_result(summary: Dictionary) -> void:
 	_label.text = text_for(summary)
-	_day = day
 	visible = true
-
-
-## Hides the card once `today` is not the day it was shown on.
-func expire_on_new_day(today: int) -> void:
-	if visible and today != _day:
-		dismiss_result()
 
 
 func dismiss_result() -> void:
 	visible = false
+	dismissed.emit()
 
 
 func result_text() -> String:

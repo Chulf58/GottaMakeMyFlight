@@ -11,7 +11,9 @@ extends ScrollContainer
 ## picture is a plain tile with the room type's name until template thumbnails
 ## exist.
 ##
-## The button sits on its own small panel at the left edge, just above the
+## The button sits on its own small panel on the 16 px grid margin (decision
+## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, part 1; the
+## panel stays beside the bar, decision ad966308), just above the
 ## height of the category bar, not in the bar: every bar button carries a drawn icon and
 ## the bar keeps 200 px clear of each edge at 1536 px wide (HUD 6/7), and
 ## there is no Templates icon yet. Where it finally goes is open.
@@ -54,7 +56,7 @@ func attach(menu: BuildMenu) -> void:
 	dock.custom_minimum_size = Vector2(0.0, BuildMenu.BAR_H)
 	dock.anchor_top = 1.0
 	dock.anchor_bottom = 1.0
-	dock.offset_left = BuildMenu.MARGIN
+	dock.offset_left = HudLayout.MARGIN
 	var bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 	dock.offset_top = -bottom
 	dock.offset_bottom = -bottom

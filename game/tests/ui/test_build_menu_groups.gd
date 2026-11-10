@@ -6,7 +6,7 @@ extends GdUnitTestSuite
 ## the place of the one Furniture button and its pages (decision hud-6-7-
 ## furniture-groups-five-icon-buttons-decor-food-servic); the number keys still
 ## pick their tools; prices are in the neutral text colour, never red or green;
-## the panels are rounder.
+## the panels and buttons are rounded, radius 12 on all of them since HUD 1/7.
 
 ## The ruling's groups and the pages it put in each.
 const RULED := {
@@ -235,8 +235,10 @@ func test_the_panels_and_buttons_are_rounder() -> void:
 		(theme.get_stylebox("panel", "TooltipPanel") as StyleBoxFlat).corner_radius_top_left,
 	}
 	print("corner radii %s" % [radii])
-	assert_int(radii["HudBar"]).is_equal(16)
-	assert_int(radii["PanelContainer"]).is_equal(16)
+	# HUD 1/7 (decision hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra
+	# part 1) set one radius, 12, on every card and button; HUD 6/7 had 16 on panels.
+	assert_int(radii["HudBar"]).is_equal(12)
+	assert_int(radii["PanelContainer"]).is_equal(12)
 	assert_int(radii["Button"]).is_equal(12)
 	assert_int(radii["HudSubCard"]).is_equal(12)
 	assert_int(radii["TooltipPanel"]).is_equal(12)

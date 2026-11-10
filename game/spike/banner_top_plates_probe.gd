@@ -74,7 +74,6 @@ func _run() -> void:
 	_staff = _main.get_node("StaffPanel")
 	_hud = _main.get_node("PassengerHud")
 	_stack = _hud.find_child("AlertStack", false, false) as AlertStack
-	var hud_avoid := _stack.avoid
 	await _frames(30)
 	var lines: Array[Dictionary] = [
 		Checklist.line(Checklist.STAFF_SPOT, false), Checklist.line(StaffPanel.GAP_HINT, false)
@@ -86,9 +85,6 @@ func _run() -> void:
 	_hints = _make_hints()
 	for size in SIZES:
 		root.size = size
-		# The hint plate points the alert stack at the hint card; the banner plate
-		# gives it back the HUD's banner rect, as the game wires it.
-		_stack.avoid = hud_avoid
 		await _frames(30)
 		_hud.refresh()
 		await _plate("banner", size, _staff.hint_card())
@@ -125,7 +121,6 @@ func _show_hint() -> void:
 		_hints.advance(0.25, world, ["Check-in"])
 	if not _hints.is_showing():
 		_invalid("no hint is showing")
-	_stack.avoid = func() -> Rect2: return _hints.card().get_global_rect()
 
 
 func _plate(label: String, size: Vector2i, card: Control) -> void:

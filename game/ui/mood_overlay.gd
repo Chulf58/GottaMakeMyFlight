@@ -32,8 +32,6 @@ const LIFT_M := 0.06
 ## The tint is redrawn when the sim has moved on this many ticks (a quarter
 ## of a second). A grid edit redraws it on the next frame regardless.
 const REFRESH_TICKS := 5
-const BUTTON_LEFT := 16.0
-const BUTTON_TOP := 292.0
 
 @export var sim: PassengerSim
 ## Where the on/off choice is kept; tests point it at a per-process file.
@@ -52,6 +50,8 @@ var _tint := MultiMeshInstance3D.new()
 var _layer := CanvasLayer.new()
 var _toggle := Button.new()
 var _legend := Label.new()
+## The legend's card: bare text is unreadable over the dark ground at the top left.
+var _legend_card := PanelContainer.new()
 
 
 func _init() -> void:
@@ -147,10 +147,11 @@ func _build_controls() -> Control:
 	var row := HBoxContainer.new()
 	row.name = "MoodOverlayControls"
 	row.theme = BuildMenu.HUD_THEME
-	row.position = Vector2(BUTTON_LEFT, BUTTON_TOP)
+	row.position = Vector2(HudLayout.MARGIN, LeftColumn.slot_top(LeftColumn.SLOT_MOOD))
 	row.add_theme_constant_override("separation", 8)
 	_toggle.name = "MoodToggle"
 	_toggle.text = "Mood (M)"
+	LeftColumn.size_toggle(_toggle)
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
 	row.add_child(_toggle)
@@ -159,7 +160,10 @@ func _build_controls() -> Control:
 	_legend.theme_type_variation = &"HudHint"
 	_legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_legend.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_legend)
+	_legend_card.name = "MoodLegendCard"
+	_legend_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_legend_card.add_child(_legend)
+	row.add_child(_legend_card)
 	return row
 
 
@@ -194,6 +198,7 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 func _apply_shown() -> void:
 	_tint.visible = _shown
 	_legend.visible = _shown
+	_legend_card.visible = _shown
 	_toggle.set_pressed_no_signal(_shown)
 	if not _shown:
 		_cells = {}

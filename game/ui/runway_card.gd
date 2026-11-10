@@ -1,8 +1,9 @@
 class_name RunwayCard
 extends CanvasLayer
 ## The runway upgrade card (Runway R9; ruling runway-upgrade-works-wait-for-a-
-## timetable-gap-passengers-per-plane-class): a button at the top, left of the
-## offers button, opens a cream card with the runway's size and length, the next
+## timetable-gap-passengers-per-plane-class): a button in the centred top row
+## (TopRow's middle slot, between the Build mode sign and Offers) opens a cream
+## card with the runway's size and length, the next
 ## size with its price and how long the works take, the Upgrade button, and
 ## either what stops the upgrade (RunwayWorks.problem(): the build tier with the
 ## stars and passengers the game has, the money, or no quiet stretch) or, once
@@ -14,12 +15,7 @@ extends CanvasLayer
 ## changes, a tier opens, the works are booked and a game minute passes. It
 ## closes on Esc, when a build tool is picked and on a load.
 
-const SHEET_W := 360.0
-const TOP := 12.0
-## Clear of the offers button, which ends 472 px from the right edge and is
-## 170 px wide, with a gap.
-const RIGHT_CLEARANCE := 472.0 + 170.0 + 8.0
-const BUTTON_W := 130.0
+const SHEET_W := TopRow.SHEET_W
 ## Ticks between refreshes while the sheet is open: the card shows clock times.
 const REFRESH_TICKS := GameCalendar.TICKS_PER_MINUTE
 
@@ -65,7 +61,8 @@ func _ready() -> void:
 		set_process(false)
 		set_process_unhandled_input(false)
 		return
-	layer = 2
+	layer = TopRow.SHEET_LAYER
+	add_to_group(TopRow.SHEET_GROUP)
 	_build()
 	flights.runway.size_changed.connect(_on_changed)
 	finances.wallet.changed.connect(_on_changed)
@@ -95,6 +92,7 @@ func is_open() -> bool:
 
 
 func open() -> void:
+	TopRow.close_others(self)
 	_sheet.visible = true
 	_refresh()
 
@@ -142,29 +140,20 @@ func _build() -> void:
 	_schedule = Label.new()
 	_problem = Label.new()
 	_upgrade = Button.new()
-	var column := VBoxContainer.new()
-	column.name = "RunwayColumn"
-	column.theme = BuildMenu.HUD_THEME
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.custom_minimum_size = Vector2(SHEET_W, 0.0)
-	column.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE)
-	column.offset_right = -RIGHT_CLEARANCE
-	column.offset_left = -RIGHT_CLEARANCE - SHEET_W
-	column.offset_top = TOP
-	column.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	add_child(column)
 	_button.name = "RunwayButton"
 	_button.text = "Runway"
-	_button.size_flags_horizontal = Control.SIZE_SHRINK_END
-	_button.custom_minimum_size = Vector2(BUTTON_W, 40.0)
+	_button.theme = BuildMenu.HUD_THEME
+	TopRow.place_in_slot(_button, TopRow.RUNWAY_SLOT)
 	_button.focus_mode = Control.FOCUS_NONE
 	_button.theme_type_variation = &"HudButtonTeal"
 	_button.pressed.connect(_on_toggle)
-	column.add_child(_button)
+	add_child(_button)
 	_sheet.name = "RunwaySheet"
+	_sheet.theme = BuildMenu.HUD_THEME
 	_sheet.visible = false
 	_sheet.mouse_filter = Control.MOUSE_FILTER_STOP
-	column.add_child(_sheet)
+	TopRow.place_sheet(_sheet)
+	add_child(_sheet)
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 6)
 	_sheet.add_child(rows)

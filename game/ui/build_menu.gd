@@ -74,9 +74,6 @@ const GAP := 6.0
 const TRAY_H := 196.0
 const STATUS_H := 52.0
 const COST_H := 26.0
-## The cost card's padding around its text.
-const COST_PAD_X := 14.0
-const COST_PAD_Y := 2.0
 ## Width of the centre column the tray and status line live in; PassengerHud
 ## keeps the follow text left of it.
 const COLUMN_W := 640.0

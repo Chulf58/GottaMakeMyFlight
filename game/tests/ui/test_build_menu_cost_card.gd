@@ -50,9 +50,21 @@ func test_the_card_is_a_copy_not_the_shared_hud_bar_style() -> void:
 	assert_object(_card_style()).is_not_same(hud)
 
 
+## The card is the theme's HudCostCard style, not one built in code (board
+## 30d6a3e0); HudCostCard is based on HudCardName, so the text matches the
+## tray's card names.
+func test_the_card_is_the_theme_cost_card_variation() -> void:
+	var label := _menu.preview_label()
+	assert_str(str(label.theme_type_variation)).is_equal("HudCostCard")
+	assert_bool(label.has_theme_stylebox_override("normal")).is_false()
+	var theme_card := BuildMenu.HUD_THEME.get_stylebox("normal", "HudCostCard")
+	assert_object(_card_style()).is_same(theme_card)
+	var base := BuildMenu.HUD_THEME.get_type_variation_base(&"HudCostCard")
+	assert_str(str(base)).is_equal("HudCardName")
+
+
 func test_the_cost_text_is_dark_on_the_card_and_neutral() -> void:
 	var label := _menu.preview_label()
-	assert_str(str(label.theme_type_variation)).is_equal("HudCardName")
 	var dark := BuildMenu.HUD_THEME.get_color("font_color", "HudCardName")
 	assert_object(label.get_theme_color("font_color")).is_equal(dark)
 	assert_int(label.get_theme_constant("outline_size")).is_equal(0)

@@ -93,8 +93,12 @@ func test_the_hint_card_sits_where_the_banner_sits() -> void:
 	var card := hints.card().get_global_rect()
 	assert_bool(card.has_area()).is_true()
 	var screen := get_viewport().get_visible_rect().size
-	assert_float(card.position.y).is_equal_approx(StaffPanel.BANNER_TOP, 1.5)
-	assert_float(card.get_center().x).is_equal_approx(screen.x / 2.0, 1.5)
+	# Changed from the top centre: the slot is the top-left column's, LIST_W wide
+	# (decision checklist-card-moves-to-the-top-left-column-slim-at-304-px-t).
+	assert_float(card.position.y).is_equal_approx(LeftColumn.card_top(get_tree()), 1.5)
+	assert_float(card.position.x).is_equal_approx(HudLayout.MARGIN, 1.5)
+	assert_float(card.size.x).is_equal_approx(HudLayout.LIST_W, 1.5)
+	assert_bool(Rect2(Vector2.ZERO, screen).encloses(card)).is_true()
 	var banner := _panel().hint_card().get_global_rect()
 	assert_float(card.position.y).is_equal_approx(banner.position.y, 1.5)
 
@@ -138,5 +142,5 @@ func test_a_probe_can_stop_the_world_reading_and_keep_the_card_docking() -> void
 	hints._process(1.0)
 	assert_object(hints._sim).is_null()
 	assert_float(hints.card().get_global_rect().position.y).is_equal_approx(
-		StaffPanel.BANNER_TOP, 1.5
+		LeftColumn.card_top(get_tree()), 1.5
 	)

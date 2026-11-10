@@ -92,7 +92,9 @@ func test_the_real_tooltip_path_places_the_popup_under_the_slot() -> void:
 	# these.
 	assert_int(popup.position.x).is_equal(roundi(origin.x))
 	var expected_y := origin.y + (_slot.size.y + MoneySlot.CARD_GAP) * scale_y
-	assert_int(popup.position.y).is_equal(roundi(expected_y))
+	# The popup position truncates a fractional screen y (the 40 px slot puts
+	# this one at 77.5), so it may sit one pixel above the rounded value.
+	assert_int(popup.position.y).is_between(roundi(expected_y) - 1, roundi(expected_y))
 	assert_int(popup.position.y).is_greater_equal(roundi(origin.y + _slot.size.y * scale_y))
 
 

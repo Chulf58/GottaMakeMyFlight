@@ -23,7 +23,8 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game -s res://tests/ui/build_hud_plates_probe.gd
 
-const OUT_REL := "res://../tools/blender/out/hud-6-7"
+const OUT_BASE := "res://../tools/blender/out"
+const OUT_REL := OUT_BASE + "/hud-6-7"
 ## The least gap between the bar's right end and the Debug button.
 const DEBUG_GAP := 24.0
 ## How long the pointer rests on a bar icon before its tooltip is plated.
@@ -60,12 +61,35 @@ func _initialize() -> void:
 	var probe_seed := randi()
 	seed(probe_seed)
 	print("PROBE seed=", probe_seed)
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	_out_dir = _pick_out_dir()
+	if _out_dir == "":
+		quit(1)
+		return
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=", _out_dir)
 	_start_ms = Time.get_ticks_msec()
 	_guard.start(_watch)
 	_run.call_deferred()
+
+
+## The plate folder: OUT_REL, or `-- --out=<dir>` for another folder under
+## tools/blender/out/. An absolute path, a `..` part or a folder that ends up
+## outside OUT_BASE prints PROBE_INVALID and returns "".
+func _pick_out_dir() -> String:
+	var base := ProjectSettings.globalize_path(OUT_BASE).simplify_path()
+	var out := ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	for arg in OS.get_cmdline_user_args():
+		if not arg.begins_with("--out="):
+			continue
+		var sub := arg.trim_prefix("--out=").replace("\\", "/")
+		if sub == "" or sub.is_absolute_path() or ".." in sub.split("/") or ":" in sub:
+			print("PROBE_INVALID: --out must be a folder under %s, got '%s'" % [base, sub])
+			return ""
+		out = base.path_join(sub).simplify_path()
+	if not out.begins_with(base + "/"):
+		print("PROBE_INVALID: plate folder %s is outside %s" % [out, base])
+		return ""
+	return out
 
 
 func _watch() -> void:

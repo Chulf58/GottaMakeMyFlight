@@ -195,8 +195,8 @@ static func build_status(menu: BuildMenu) -> void:
 	menu.add_child(status)
 
 
-## The cost line, centred over the status line's box. It sits on the HUD card
-## (the bar's cream, dark-outlined style) with dark text, and the card is only
+## The cost line, centred over the status line's box. It sits on the theme's
+## HudCostCard (the bar's cream, dark-outlined card) with dark text, and the card is only
 ## as wide as the text, so it reads over the busy apron stripes.
 static func build_cost(menu: BuildMenu) -> void:
 	var cost := menu._cost
@@ -222,13 +222,7 @@ static func build_cost(menu: BuildMenu) -> void:
 	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	cost.theme = BuildMenu.HUD_THEME
-	cost.theme_type_variation = &"HudCardName"
-	var card := BuildMenu.HUD_THEME.get_stylebox("panel", "HudBar").duplicate() as StyleBoxFlat
-	card.content_margin_left = BuildMenu.COST_PAD_X
-	card.content_margin_right = BuildMenu.COST_PAD_X
-	card.content_margin_top = BuildMenu.COST_PAD_Y
-	card.content_margin_bottom = BuildMenu.COST_PAD_Y
-	cost.add_theme_stylebox_override("normal", card)
+	cost.theme_type_variation = &"HudCostCard"
 	cost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cost.visible = false
 	menu.add_child(cost)
@@ -238,9 +232,11 @@ static func build_money(menu: BuildMenu) -> void:
 	var panel := menu._money_slot
 	panel.name = "MoneySlot"
 	panel.theme = BuildMenu.HUD_THEME
-	panel.position = Vector2(16.0, 12.0)
-	panel.custom_minimum_size = Vector2(220.0, 0.0)
+	panel.theme_type_variation = &"HudTopCard"
+	panel.position = Vector2(HudLayout.MARGIN, HudLayout.MARGIN)
+	panel.custom_minimum_size = Vector2(HudLayout.MONEY_W, HudLayout.BUTTON_H)
 	menu.add_child(panel)
 	menu._money.text = BuildMenu.MONEY_TEXT
 	menu._money.theme_type_variation = &"HudMoney"
+	menu._money.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	panel.add_child(menu._money)

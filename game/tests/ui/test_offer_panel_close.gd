@@ -149,7 +149,8 @@ func test_a_real_click_on_the_button_closes_the_sheet_after_scrolling_over_it() 
 	_mouse(MOUSE_BUTTON_LEFT, at)
 	await await_idle_frame()
 	assert_bool(_panel.is_open()).is_true()
-	var sheet := _panel.get_node("OfferColumn/OfferSheet") as Control
+	# The sheet is a direct child of the layer now (HUD 2/7 dropped OfferColumn).
+	var sheet := _panel.sheet()
 	for i in 4:
 		_mouse(MOUSE_BUTTON_WHEEL_UP, sheet.get_global_rect().get_center())
 	await await_idle_frame()
