@@ -15,9 +15,11 @@ var _finances: Finances
 var _mode: BuildMode
 var _menu: BuildMenu
 var _grid: SiteGrid
+## How many times the guard saw a removal: one per BuildMode.check().
+var _checks := 0
 
 
-func before() -> void:
+func before_test() -> void:
 	_finances = Finances.new()
 	add_child(_finances)
 	_mode = BuildMode.new()
@@ -33,21 +35,13 @@ func before() -> void:
 	assert_bool(_grid.apply(BuildEdit.remove_wall(EXIT_CELL, BuildGrid.Side.NORTH)).ok).is_true()
 	var door := _grid.apply(BuildEdit.place_object(&"exit_door", EXIT_CELL, 0))
 	assert_bool(door.ok).is_true()
-
-
-func after() -> void:
-	for node in [_menu, _mode, _finances]:
-		node.free()
-
-
-func before_test() -> void:
 	_mode.set_tool(BuildMode.Tool.REMOVE)
 	_mode._update_ghost(_grid.cell_to_world(EXIT_CELL))
 
 
 func after_test() -> void:
-	_grid.guard = Callable()
-	_set_balance(PriceTable.STARTING_BUDGET)
+	for node in [_menu, _mode, _finances]:
+		node.free()
 
 
 func _set_balance(amount: int) -> void:
@@ -56,6 +50,7 @@ func _set_balance(amount: int) -> void:
 
 func _refuse_removals(_on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
+		_checks += 1
 		return BuildResult.refused(BuildResult.Reason.GATE_IN_USE)
 	return null
 
@@ -87,3 +82,17 @@ func test_a_removal_the_wallet_cannot_pay_still_shows_its_shortfall() -> void:
 	assert_int(_mode.check(edit).reason).is_equal(BuildResult.Reason.CANT_AFFORD)
 	assert_str(_menu.preview_text()).starts_with("Cost ")
 	assert_str(_menu.preview_text()).contains("Short by")
+
+
+func test_the_refusal_is_checked_once_until_the_hover_or_wallet_changes() -> void:
+	_grid.guard = _refuse_removals
+	_checks = 0
+	for frame in 5:
+		assert_str(_menu.preview_text()).is_equal("")
+	print("checks after 5 cost lines: %d" % _checks)
+	assert_int(_checks).is_equal(1)
+	_set_balance(PriceTable.STARTING_BUDGET - 1)
+	for frame in 5:
+		assert_str(_menu.preview_text()).is_equal("")
+	print("checks after the balance changed: %d" % _checks)
+	assert_int(_checks).is_equal(2)
