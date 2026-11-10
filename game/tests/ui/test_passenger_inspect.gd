@@ -175,9 +175,12 @@ func test_the_card_sits_bottom_left_above_the_templates_button() -> void:
 	assert_float(_inspect.anchor_top).is_equal(1.0)
 	assert_float(_inspect.offset_left).is_equal(label.offset_left)
 	assert_float(_inspect.offset_right).is_less_equal(label.offset_right)
-	# The Templates dock's top edge, up from the bottom (TemplatesPage.attach()).
-	var dock_top := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP + BuildMenu.BAR_H
-	assert_float(-_inspect.offset_bottom).is_greater(dock_top)
+	# Changed for HUD 5/7: the Templates dock now stands on the bar's baseline, so
+	# the card docks one GAP above the category bar, the follow text's place,
+	# and clear of the dock's top edge (MARGIN + BAR_H up from the bottom).
+	var bar_top := BuildMenu.MARGIN + BuildMenu.BAR_H
+	assert_float(-_inspect.offset_bottom).is_equal(bar_top + BuildMenu.GAP)
+	assert_float(-_inspect.offset_bottom).is_equal(PassengerHud.FOLLOW_BOTTOM)
 	assert_float(_inspect.offset_right - _inspect.offset_left).is_less_equal(PassengerInspect.MAX_W)
 	assert_int(_inspect.grow_vertical).is_equal(Control.GROW_DIRECTION_BEGIN)
 

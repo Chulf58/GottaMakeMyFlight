@@ -18,10 +18,10 @@ extends PanelContainer
 ## The card's widest, so it stays a card on a wide screen.
 const MAX_W := 420.0
 const MIN_W := 160.0
-## The card's bottom edge, up from the bottom of the screen: one GAP above
-## BuildMenu's Templates button, which docks at the left edge one bar's height
-## above the category bar (TemplatesPage.attach()).
-const BOTTOM := BuildMenu.MARGIN + 2.0 * BuildMenu.BAR_H + 2.0 * BuildMenu.GAP
+## The card's bottom edge, up from the bottom of the screen: one GAP above the
+## category bar, as the follow text sits. The Templates button stands on the bar's
+## baseline at the left margin (TemplatesPage.attach()), so the card lies above it.
+const BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 
 var sim: PassengerSim
 var views: PassengerViews

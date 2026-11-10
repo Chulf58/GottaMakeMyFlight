@@ -678,6 +678,14 @@ static func tray_stack_top() -> float:
 	return MARGIN + BAR_H + GAP + TRAY_H + GAP + STATUS_H
 
 
+## tray_stack_top() with the status card's height as it is now: a held rescue or
+## wages message wraps and grows the card upward, and what docks above the stack
+## must clear that too. A hidden card reserves its usual STATUS_H.
+func stack_top() -> float:
+	var card_h := _status_card.size.y if _status_card.visible else STATUS_H
+	return MARGIN + BAR_H + GAP + TRAY_H + GAP + maxf(STATUS_H, card_h)
+
+
 ## Anchors a control to the bottom centre with its bottom edge `bottom` px up;
 ## it grows up and out to both sides from there.
 static func anchor_bottom_centre(control: Control, bottom: float) -> void:

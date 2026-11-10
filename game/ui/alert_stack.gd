@@ -88,6 +88,9 @@ var covered := Callable()
 ## True while the build item tray is open; the rail then stops above the tray
 ## stack instead of the category bar. PassengerHud sets it from BuildMenu.
 var build_tray_open := Callable()
+## Returns the open build tray stack's current height from the bottom edge
+## (BuildMenu.stack_top()); without it the stack's usual height is used.
+var build_stack_top := Callable()
 
 var _board := AlertBoard.new()
 var _dirty := DirtyAlert.new()
@@ -583,7 +586,9 @@ func _stop_y() -> float:
 	var view := get_viewport().get_visible_rect().size.y
 	var below := BuildMenu.MARGIN + BuildMenu.BAR_H
 	if build_tray_open.is_valid() and build_tray_open.call():
-		below = BuildMenu.tray_stack_top()
+		below = (
+			build_stack_top.call() if build_stack_top.is_valid() else BuildMenu.tray_stack_top()
+		)
 	return view - below - HudLayout.GROUP_GAP
 
 

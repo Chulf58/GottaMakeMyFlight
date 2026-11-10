@@ -44,6 +44,8 @@ func before_test() -> void:
 	_port.add_child(_mode)
 	_mode.set_process(false)
 	_menu = BuildMenu.new()
+	# The name PassengerHud looks the menu up by, so the rail is wired to it.
+	_menu.name = "BuildMenu"
 	_menu.build_mode = _mode
 	_port.add_child(_menu)
 	_hud = PassengerHud.new()
@@ -67,6 +69,13 @@ func _settle() -> void:
 	await await_idle_frame()
 
 
+## Opens the Seats tray by picking its tool, as a player does (pressing a
+## category button alone is closed again by the build session in this fixture).
+func _open_tray() -> void:
+	_mode.set_tool(BuildMode.Tool.SEATS)
+	assert_bool(_menu.is_tray_open()).is_true()
+
+
 ## Puts the pointer over a grid cell, so the status line shows.
 func _point_at_grid() -> void:
 	_mode._update_ghost(_mode.grid.cell_to_world(Vector2i(3, 3)))
@@ -81,7 +90,7 @@ func _open_tray_with_status(text: String) -> void:
 
 
 func test_the_bar_stands_on_the_margin_and_the_tray_a_gap_above_it() -> void:
-	_menu.press_category(0)
+	_open_tray()
 	await _settle()
 	var bar := _menu.bar().get_global_rect()
 	var tray := _menu.tray().get_global_rect()
@@ -92,7 +101,7 @@ func test_the_bar_stands_on_the_margin_and_the_tray_a_gap_above_it() -> void:
 
 
 func test_status_and_cost_are_one_card_above_the_tray() -> void:
-	_menu.press_category(0)
+	_open_tray()
 	_mode.set_tool(BuildMode.Tool.DESK)
 	_point_at_grid()
 	_mode.status_changed.emit("Placed 1")
@@ -129,13 +138,13 @@ func test_status_and_cost_are_one_card_above_the_tray() -> void:
 
 
 func test_the_card_is_hidden_while_nothing_is_said_and_costs_nothing() -> void:
-	_menu.press_category(0)
+	_open_tray()
 	await _settle()
 	assert_bool(_menu.status_card().visible).is_false()
 
 
 func test_the_card_fades_under_the_ghost_and_comes_back() -> void:
-	_menu.press_category(0)
+	_open_tray()
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	_point_at_grid()
 	_mode.status_changed.emit("Placed 1")
@@ -161,7 +170,7 @@ func test_the_card_fades_under_the_ghost_and_comes_back() -> void:
 ## a second status line. The hint has its own slot in the card now; the refusal
 ## is the part that is cut short.
 func test_a_long_refusal_never_pushes_the_rotate_hint_onto_a_second_line() -> void:
-	_menu.press_category(0)
+	_open_tray()
 	await _open_tray_with_status(LONG_REFUSAL)
 	var card := _menu.status_card()
 	var hint := _menu.rotate_hint_label()
@@ -183,7 +192,7 @@ func test_a_long_refusal_never_pushes_the_rotate_hint_onto_a_second_line() -> vo
 
 
 func test_a_long_refusal_with_a_cost_keeps_hint_and_cost_whole() -> void:
-	_menu.press_category(0)
+	_open_tray()
 	_mode.set_tool(BuildMode.Tool.DESK)
 	_point_at_grid()
 	_mode.status_changed.emit(LONG_REFUSAL)
@@ -213,7 +222,7 @@ func test_no_hint_when_the_tool_places_nothing() -> void:
 ## A rescue grant message is long on purpose and is held for seconds: it wraps
 ## and the card grows up from its bottom edge, so it is still readable.
 func test_a_held_message_wraps_and_the_card_grows_upward() -> void:
-	_menu.press_category(0)
+	_open_tray()
 	await _settle()
 	var bottom := _menu.status_card().get_global_rect().end.y
 	var message := (
@@ -266,7 +275,7 @@ func test_the_rail_stop_line_and_panel_room_clear_the_bar() -> void:
 	var closed := stack._stop_y()
 	assert_float(closed).is_equal(bar_top - float(HudLayout.GROUP_GAP))
 	tray[0] = true
-	_menu.press_category(0)
+	_open_tray()
 	await _settle()
 	var card_top := _menu.status_card().get_global_rect().position.y
 	assert_float(stack._stop_y()).is_equal(card_top - float(HudLayout.GROUP_GAP))
@@ -277,7 +286,7 @@ func test_the_rail_stop_line_and_panel_room_clear_the_bar() -> void:
 
 
 func test_nothing_in_the_bottom_band_overlaps() -> void:
-	_menu.press_category(0)
+	_open_tray()
 	_mode.set_tool(BuildMode.Tool.SEATS)
 	_point_at_grid()
 	_mode.status_changed.emit(LONG_REFUSAL)
@@ -304,3 +313,47 @@ func test_nothing_in_the_bottom_band_overlaps() -> void:
 				. override_failure_message("%s %s overlaps %s %s" % [keys[i], a, keys[j], b])
 				. is_false()
 			)
+
+
+## A held rescue or wages message wraps and grows the card upward, so what docks
+## above the open tray's stack (the rail's stop line, PanelRoom's stack
+## rectangle) clears the grown card, not the 40 px one. And the refusal card's
+## nudge sees the card, also while it is faded under the ghost.
+func test_a_wrapped_hold_moves_the_rail_stop_line_and_panel_room_and_the_nudge_sees_it() -> void:
+	var stack := _hud.find_child("AlertStack", false, false) as AlertStack
+	assert_bool(stack.build_stack_top.is_valid()).is_true()
+	_open_tray()
+	await _settle()
+	var plain_top := _menu.status_card().get_global_rect().position.y
+	var plain_stop := stack._stop_y()
+	assert_float(plain_stop).is_equal(plain_top - float(HudLayout.GROUP_GAP))
+	var message := (
+		"The airport authority has sent a rescue grant of 5000 to rebuild: a check-in desk, "
+		+ "a scanner, floor. It is a one-off. A further 300 clears the owed wages (200) and "
+		+ "upkeep (100)."
+	)
+	_menu._on_granted(5300, message)
+	_menu.refresh_preview()
+	await _settle()
+	var card := _menu.status_card().get_global_rect()
+	print("hold: plain_top=%s card=%s stop=%s" % [plain_top, card, stack._stop_y()])
+	assert_float(card.position.y).is_less(plain_top)
+	assert_float(_menu.stack_top()).is_equal(VIEW.y - card.position.y)
+	assert_float(stack._stop_y()).is_equal(card.position.y - float(HudLayout.GROUP_GAP))
+	assert_float(stack._stop_y()).is_less(plain_stop)
+	var room := auto_free(PanelRoom.new()) as PanelRoom
+	_port.add_child(room)
+	assert_float(room._tray_stack(_menu).position.y).is_equal(card.position.y)
+	# The nudge: the card, faded under a ghost, is among the HUD rectangles.
+	for i in 30:
+		_menu.fade_for(card.grow(-4.0), 0.1)
+	assert_float(_menu.status_card().modulate.a).is_equal_approx(StaffPanel.FADED_ALPHA, 0.001)
+	var seen := false
+	for rect in GhostCardNudge.hud_rects(_menu.ghost_reason()):
+		if rect.is_equal_approx(card):
+			seen = true
+	assert_bool(seen).is_true()
+	# Back to one line, the stop line is back where it was.
+	_menu.end_grant_hold()
+	await _settle()
+	assert_float(stack._stop_y()).is_equal(plain_stop)

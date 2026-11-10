@@ -44,7 +44,7 @@ const DEBUG_BATCH := 300
 const DEBUG_POLICY_TEXT := "Debug only: the terminal is free with no refunds; passengers pay fees."
 ## Where the follow text's bottom edge sits, up from the bottom of the screen.
 const FOLLOW_BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
-const FOLLOW_TOP := FOLLOW_BOTTOM + 32.0
+const FOLLOW_TOP := FOLLOW_BOTTOM + HudLayout.CHIP_H
 const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 ## The Debug panel's fixed width; its labels wrap inside it.
 const DEBUG_W := 260.0
@@ -260,6 +260,7 @@ func _ready() -> void:
 		_inspect.actions.session = menu.build_session
 		_alerts.build_tray_open = func() -> bool:
 			return menu.is_node_ready() and menu.is_tray_open()
+		_alerts.build_stack_top = menu.stack_top
 	_outline.selection = _built
 	_outline.build_mode = build_mode
 	add_child(_outline)
