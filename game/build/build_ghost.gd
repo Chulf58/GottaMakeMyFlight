@@ -5,12 +5,19 @@ extends RefCounted
 ## helpers over the BuildMode `mode` that owns the ghost node, its materials and
 ## the hover key; BuildMode keeps one-line delegates for what tests call.
 
+## How much thicker than a wall ghost the blocking-wall bar is drawn.
+const WALL_BLOCK_GROW := 2.0
 
-static func material(tint: Color) -> StandardMaterial3D:
+
+## A tinted ghost material; `through` draws it over what stands in front of it.
+static func material(tint: Color, through := false) -> StandardMaterial3D:
 	var standard := StandardMaterial3D.new()
 	standard.albedo_color = tint
 	standard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	standard.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if through:
+		standard.no_depth_test = true
+		standard.render_priority = 10
 	return standard
 
 
@@ -39,6 +46,9 @@ static func hover_belt(mode: BuildMode, point: Variant) -> void:
 
 ## The shaped pieces a Belt line from `from` to `to` would lay or reshape,
 ## tinted by whether it can be laid; a refused line tints its cells instead.
+## A line a wall refuses also draws a red bar, seen through other pieces, on
+## the wall edge the plan says blocked it (decision
+## a-belt-refused-by-a-wall-draws-a-red-bar-on-the-blocking-wal).
 static func draw_belt(mode: BuildMode, from: Vector2i, to: Vector2i) -> void:
 	var key := "belt:%s:%s:%d" % [from, to, mode.facing]
 	if key == mode._hover_key:
@@ -57,6 +67,14 @@ static func draw_belt(mode: BuildMode, from: Vector2i, to: Vector2i) -> void:
 		for cell in mode._belt_plan.cells:
 			if mode.grid.in_bounds(cell):
 				tile(mode, cell, tint)
+		if mode._belt_plan.wall_side >= 0:
+			wall(
+				mode,
+				mode._belt_plan.wall_cell,
+				mode._belt_plan.wall_side,
+				mode._wall_block_material,
+				WALL_BLOCK_GROW
+			)
 	mode._show_status(result)
 
 

@@ -328,6 +328,8 @@ var _invalid_material := BuildGhost.material(INVALID_TINT)
 var _marker_material := BuildGhost.material(MARKER_TINT)
 var _area_remove_material := BuildGhost.material(AREA_REMOVE_TINT)
 var _coverage_material := BuildGhost.material(COVERAGE_TINT)
+## The red bar on the wall that refuses a Belt line, drawn through other pieces.
+var _wall_block_material := BuildGhost.material(INVALID_TINT, true)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
