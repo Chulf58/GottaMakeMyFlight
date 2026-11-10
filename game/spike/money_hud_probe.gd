@@ -207,8 +207,8 @@ func _fill_the_day() -> void:
 		_expect("probe contract %d accepted" % i, flights.accept_contract(terms), true)
 
 
-## The flight panel with a full list sits clear of the result panel, and the
-## list is at its line cap.
+## With a full list the right rail (alert and result cards) hangs GROUP_GAP
+## under the flight panel, and the list is at its line cap.
 func _check_layout() -> void:
 	var hud: PassengerHud = _main.get_node("PassengerHud")
 	var label := hud.find_child("Departures", true, false) as Label
@@ -216,8 +216,9 @@ func _check_layout() -> void:
 	_expect("list lines", label.text.split("\n").size(), DepartureList.MAX_LINES)
 	var panel := hud.get_node("FlightPanel") as Control
 	var bottom := panel.get_global_rect().end.y
-	print("LAYOUT flight panel bottom=%.0f result top=%.0f" % [bottom, PassengerHud.RESULT_TOP])
-	_expect("flight panel clear of the result panel", bottom <= PassengerHud.RESULT_TOP, true)
+	var rail := (hud.find_child("AlertStack", false, false) as Control).get_global_rect()
+	print("LAYOUT flight panel bottom=%.0f rail top=%.0f" % [bottom, rail.position.y])
+	_expect("rail top", rail.position.y, bottom + HudLayout.GROUP_GAP)
 
 
 func _expect(what: String, actual: Variant, expected: Variant) -> void:

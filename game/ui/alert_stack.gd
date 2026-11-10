@@ -78,6 +78,7 @@ var covered := Callable()
 var _board := AlertBoard.new()
 var _dirty := DirtyAlert.new()
 var _cards_on := true
+var _header := HBoxContainer.new()
 var _cards := VBoxContainer.new()
 var _more := Button.new()
 var _tray := PanelContainer.new()
@@ -177,7 +178,8 @@ func post_notice(
 	card.set_meta(META_SEQ, _take_seq())
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	card.gui_input.connect(_on_notice_input.bind(key))
-	card.visible = true
+	# Hidden until _layout_cards() has measured it and found it fits.
+	card.visible = false
 	_cards.add_child(card)
 	_notices[key] = {"card": card, "left": seconds if seconds > 0.0 else INF}
 	_board.note(key, title, detail, sim.tick if sim != null else 0)
@@ -326,7 +328,7 @@ func history_lines() -> PackedStringArray:
 
 
 func _build() -> void:
-	var header := HBoxContainer.new()
+	var header := _header
 	header.name = "AlertsHeader"
 	header.alignment = BoxContainer.ALIGNMENT_END
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -402,6 +404,7 @@ func _sync_cards() -> void:
 func _new_card(key: StringName) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.name = _card_name(key)
+	card.visible = false
 	card.set_meta(META_KEY, key)
 	card.set_meta(META_SEQ, _take_seq())
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -458,6 +461,30 @@ static func _card_name(key: StringName) -> String:
 	return "AlertCard_%s" % key
 
 
+## A card's height at the rail's width, drawn or not. A hidden card is never
+## laid out, and a wrapped label measures at its own current width, so each
+## control down the card is given its width first (a panel's children lose its
+## style's margins; a column's children fill it) and its minimum size taken
+## afresh. A row (HBoxContainer) that splits its width is not modelled: keep
+## wrapped text in columns.
+static func _card_height(card: Control) -> float:
+	_widen(card, HudLayout.RAIL_W)
+	return card.get_combined_minimum_size().y
+
+
+static func _widen(control: Control, width: float) -> void:
+	control.size.x = width
+	var inner := width
+	var panel := control as PanelContainer
+	if panel != null:
+		inner -= panel.get_theme_stylebox("panel").get_minimum_size().x
+	for child in control.get_children():
+		var part := child as Control
+		if part != null and not part.top_level:
+			_widen(part, inner)
+	control.update_minimum_size()
+
+
 static func _newer(a: Control, b: Control) -> bool:
 	return int(a.get_meta(META_SEQ)) > int(b.get_meta(META_SEQ))
 
@@ -495,9 +522,10 @@ func _stop_y() -> float:
 
 ## Orders the cards newest first and draws as many as fit: at most MAX_CARDS,
 ## and only while the next one ends above _stop_y() with room left for '+N
-## more' (the newest is always drawn). A card's height is its last laid-out
-## one, so a card that has not been laid out yet is drawn for a frame and
-## measured. None are drawn while the history tray is open in their place.
+## more' (the newest is always drawn). Each card is measured at the rail's
+## width before it is shown (_card_height()), so a card that does not fit is
+## never drawn, not even for a frame. None are drawn while the history tray is
+## open in their place.
 func _layout_cards() -> void:
 	if not is_inside_tree():
 		return
@@ -512,17 +540,22 @@ func _layout_cards() -> void:
 		else:
 			card.visible = false
 	var tray_open := _tray.visible
-	var room := _stop_y() - _cards.global_position.y
-	var sep := float(_cards.get_theme_constant("separation"))
+	# The cards' top from the rail's own top, not from the column's laid-out
+	# position, which lags a frame behind a move.
+	var sep := float(get_theme_constant("separation"))
+	var top := global_position.y + _header.get_combined_minimum_size().y + sep
+	var room := _stop_y() - top
+	sep = float(_cards.get_theme_constant("separation"))
 	var heights: Array[float] = []
 	var used := 0.0
 	for card in drawable:
 		var fits := not tray_open and heights.size() < MAX_CARDS
-		fits = fits and (heights.is_empty() or used + card.size.y <= room)
+		var height := _card_height(card)
+		fits = fits and (heights.is_empty() or used + height <= room)
 		if not fits:
 			break
-		heights.append(card.size.y + sep)
-		used += card.size.y + sep
+		heights.append(height + sep)
+		used += height + sep
 	while (
 		heights.size() > 1 and heights.size() < drawable.size() and used + HudLayout.BUTTON_H > room
 	):

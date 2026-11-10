@@ -117,6 +117,81 @@ func test_the_result_card_sits_on_the_rail_clear_of_the_panel_and_the_tray() -> 
 	assert_float(card.size.x).is_equal_approx(HudLayout.RAIL_W, 0.5)
 
 
+## Five wrapped cards arrive while the history tray is open, so none has been
+## laid out, and then the tray closes: more than the room above the build tray
+## holds. The newest shows, and a card that does not fit is never visible, not
+## after the tray closes, not after a refresh and not on any frame, including
+## the frame before it is first laid out. The fit rule, not the cap, holds
+## them back.
+func test_a_card_that_does_not_fit_is_never_visible() -> void:
+	await _settle()
+	var stack := _stack()
+	var cards: Array[Control] = []
+	var seen := {}
+	stack.set_tray_open(true)
+	var long := "Check-in queue full: three desks full, passengers wait outside the hall"
+	for i in 5:
+		var card := PanelContainer.new()
+		var column := VBoxContainer.new()
+		card.add_child(column)
+		for line in 2:
+			var label := Label.new()
+			label.text = "%s (%d)" % [long, i]
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			column.add_child(label)
+		cards.append(card)
+		stack.post_notice(StringName("tall%d" % i), card, 0.0, "Tall %d" % i, long)
+	_note_visible(cards, seen)
+	assert_bool(seen.is_empty()).is_true()
+	stack.set_tray_open(false)
+	_note_visible(cards, seen)
+	for frame in 4:
+		_hud.refresh()
+		_note_visible(cards, seen)
+		await get_tree().process_frame
+		_note_visible(cards, seen)
+	var shown := stack.shown_keys()
+	print("RAIL_FIT shown=%s more=%d ever_visible=%s" % [shown, stack.more_count(), seen.keys()])
+	assert_bool(seen.has(4)).is_true()
+	assert_int(shown.size()).is_less(AlertStack.MAX_CARDS)
+	assert_int(stack.more_count()).is_equal(cards.size() - shown.size())
+	for i in cards.size() - shown.size():
+		assert_bool(seen.has(i)).override_failure_message("card %d was visible" % i).is_false()
+	var stop := VIEW.y - BuildMenu.tray_stack_top()
+	assert_float(stack.room_rect().end.y).is_less_equal(stop)
+
+
+## Two wrapped cards that fit together arrive while the tray is open; once it
+## closes both show at once. A card that was never laid out is measured at the
+## rail's width, not at the 1 px its wrapped labels have while hidden, which
+## would keep it hidden for good.
+func test_cards_that_fit_show_as_soon_as_the_tray_closes() -> void:
+	await _settle()
+	var stack := _stack()
+	stack.set_tray_open(true)
+	for i in 2:
+		var card := PanelContainer.new()
+		var label := Label.new()
+		label.text = "A short wrapped notice that takes two lines on the rail (%d)" % i
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		card.add_child(label)
+		stack.post_notice(StringName("short%d" % i), card, 0.0, "Short %d" % i, "")
+	stack.set_tray_open(false)
+	print("RAIL_SHORT shown=%s more=%d" % [stack.shown_keys(), stack.more_count()])
+	assert_array(stack.shown_keys()).is_equal([&"short1", &"short0"])
+	for frame in 3:
+		_hud.refresh()
+		await get_tree().process_frame
+	assert_array(stack.shown_keys()).is_equal([&"short1", &"short0"])
+	assert_int(stack.more_count()).is_equal(0)
+
+
+func _note_visible(cards: Array[Control], seen: Dictionary) -> void:
+	for i in cards.size():
+		if cards[i].is_visible_in_tree():
+			seen[i] = true
+
+
 ## HUD 4/7 puts the checklist and hint cards in a top-left column (x 16, 304
 ## wide, from y 216); with the rail on the right, the camera's free room is the
 ## band between them, the full height, not a strip above or below either.
