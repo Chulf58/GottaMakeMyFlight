@@ -1600,9 +1600,12 @@ func _report_bag_in_bag() -> void:
 			_invalid("passenger %d's bags, centred together, showed no edge crossing" % id)
 		if rec["control"] <= 0:
 			_invalid("passenger %d's bags, centred together, showed no point inside" % id)
+		# The put-in itself was measured mesh against mesh, and no edge crossed.
+		if rec.get("moving", 0) == 0 or rec.get("cross", -1) < 0:
+			_invalid("passenger %d's put-in was never measured with a bag moving" % id)
+		elif rec["cross"] > 0:
+			_invalid("passenger %d's bags cross mesh into mesh (%d edges)" % [id, rec["cross"]])
 	print("BAG_IN_BAG_TOTAL returners=%d max_points=%d" % [_bag_in_bag.size(), worst])
-	if not _pins.is_empty():
-		_invalid("pinned draws never reached: %s" % [_pins])
 	if _bag_in_bag.is_empty():
 		_invalid("no two-bag returner was sampled on its arch walk")
 	if worst > 0:
@@ -2494,6 +2497,12 @@ func _report() -> void:
 	for stem in CrossingBodies.report(_bodies):
 		_invalid("no sent passenger showed body %s" % stem)
 	print("LEAD_PLATED %s gave_up=%s" % [_lead_plated.keys(), _lead_given_up().keys()])
+	# A move given up after LEAD_TRIES unframed tries is not plated: it fails,
+	# by name, rather than counting as covered (Sol review of 354e95a).
+	if not _lead_given_up().is_empty():
+		_invalid("hand-led move plates given up: %s" % [_lead_given_up().keys()])
+	if not _pins.is_empty():
+		_invalid("pinned draws never reached: %s" % [_pins])
 	PlateSteps.lead_sheet(_close_dir)
 	if _floats["float"] > 0 or _floats["grip_off"] > 0:
 		_invalid("bags float or are held off their grip (GRIP_ON): %s" % [_floats])
