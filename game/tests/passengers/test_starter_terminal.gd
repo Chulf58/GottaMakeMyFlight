@@ -48,6 +48,7 @@ func test_both_doors_have_a_walk_outside_and_are_in_service() -> void:
 	# the plane door.
 	assert_float(walk_in[0].z).is_equal_approx(SITE.road_z, 0.01)
 	var door := StandPlacement.door_point(layout.live_stand(_world.grid))
+	door.y = SITE.ground_height
 	assert_vector(walk_out[-1]).is_equal_approx(door, Vector3.ONE * 0.01)
 
 

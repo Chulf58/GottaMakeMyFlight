@@ -6,10 +6,9 @@ extends Node3D
 ##   Mount_NoseGear on the model's nose wheel ground contact, facing the way
 ##   the plane faces, so it rides the whole pushback and its swing;
 ## - while the plane stands at its gate (AT_STAND, BOARDING, DOORS_CLOSED) the
-##   model's front port door (PlaneModels "doors"[0], where the stand's door is)
-##   is reported to the Airside's AirsideProps, whose bridge docks there; the
-##   report is withdrawn when the plane leaves the stand, hides or leaves the
-##   tree.
+##   drawn model's name (its flight's model) is reported to the Airside's
+##   AirsideProps, whose bridge docks at that model's door; the report is
+##   withdrawn when the plane leaves the stand, hides or leaves the tree.
 ## Visual only: it reads the drawn model and never the sim.
 ##
 ## The nose wheel is found in each model by its mesh names: the meshes named
@@ -72,10 +71,7 @@ func follow(
 	if airside == null:
 		return
 	if shown and model != null and AT_GATE.has(phase) and PlaneModels.PLANES.has(model_name):
-		var door: Vector3 = PlaneModels.PLANES[model_name]["doors"][0]
-		var side := signf(door.x) if door.x != 0.0 else 1.0
-		var normal := (model.global_basis.x * side).slide(Vector3.UP).normalized()
-		airside.props.dock_plane(key, gate, model.global_transform * door, normal)
+		airside.props.dock_plane(key, gate, model_name)
 		_reported_to = airside
 		_reported_key = key
 	else:

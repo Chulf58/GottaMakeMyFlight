@@ -6,7 +6,8 @@ extends RefCounted
 ## boards-on-foot-from-the-apron-plane-04-docks-the-no). Pure: from a stand,
 ## a plane model and whether it is docked it returns the rig's pose and every
 ## walk mount in world space; AirsideProps applies the pose to jet_bridge.glb,
-## and the passenger sim can read the same walk later.
+## and the passenger sim walks the same walk (OutsideWalks.departure(), board
+## 927ed9e0). Both decide docking from the flight's model (reaches()).
 ##
 ## The bridge's root is the gate's exit door sill on the stand's wall line,
 ## (stand x, wall_z), turned 180 degrees so its +z points out from the wall
@@ -69,8 +70,12 @@ const PARK_HEIGHT := 3.05
 const PARK_EXTEND := -0.15
 ## How far the cab's front may turn off the walkway's square, in degrees.
 const FRONT_MAX_DEG := 25.0
-## How near a reported door must lie to a model's parked door to name it.
-const SAME_DOOR_M := 0.05
+## How far out from plane 03's door, along its fuselage normal, its apron walk
+## ends: a passenger's body reach (FileWaiters.BODY_M, 0.25 m; the measured
+## characters are 0.24 m deep) plus 0.05 m. The 03's main wheel stands 0.6 m
+## out beside the door, so the body keeps clear of both
+## (test_bridge_boarding_walk.gd).
+const APRON_END_OUT_M := 0.30
 ## Slack on the joint ranges, so a pose exactly on a limit counts.
 const LIMIT_SLACK := 1e-4
 ## The models that dock (ruling plane-03-boards-on-foot-from-the-apron-plane-
@@ -92,6 +97,15 @@ const JOINTS: Array[StringName] = [
 	&"Cab_Yaw",
 	&"Bellows_Extend",
 ]
+
+
+## The ground the bridge at `stand` stands on: the surface under the parked
+## plane (PlaneView.ground_height_at() of its stand point), so the docked
+## floor meets the drawn door. The sim's walk (OutsideWalks) and the drawn
+## bridge (AirsideProps) both use it. Off the paved site, at a north-row gate,
+## it is below the site's ground height.
+static func ground_y(stand: Dictionary) -> float:
+	return PlaneView.ground_height_at(StandPlacement.stand_point(stand))
 
 
 ## The bridge root's transform at `stand` (a StandPlacement stand, whose x and
@@ -118,15 +132,15 @@ static func plane_door(stand: Dictionary, model: String, ground_y := 0.0) -> Dic
 	return {"door": Vector3(at.x, ground_y + door.y, at.z), "normal": Vector3(side, 0.0, 0.0)}
 
 
-## The model whose front port door, parked at `stand`, lies within SAME_DOOR_M
-## of `door` (world), or "" for none. Every model's door sits at its own sill
-## height (0.63 to 2.91 m, 0.16 m apart at the closest), so a reported door
-## names its model.
-static func model_at(stand: Dictionary, door: Vector3, ground_y := 0.0) -> String:
-	for model: String in PlaneModels.PLANES:
-		if (plane_door(stand, model, ground_y)["door"] as Vector3).distance_to(door) < SAME_DOOR_M:
-			return model
-	return ""
+## Whether plane `model` parked at `stand` docks the bridge: the model docks
+## and the bridge reaches its door. It never pushes an error (pose_for() does
+## for a docking model out of reach), so the passenger sim and AirsideProps ask
+## it routinely, and pose_for(stand, model, reaches(...)) then never errs.
+static func reaches(stand: Dictionary, model: String, ground_y := 0.0) -> bool:
+	if not docks(model):
+		return false
+	var at := plane_door(stand, model, ground_y)
+	return solve(root_for(stand, ground_y), at["door"], at["normal"])["ok"]
 
 
 ## The pose that puts Mount_Door on `door` (world) with the cab facing back
@@ -162,8 +176,9 @@ static func parked() -> Dictionary:
 ## pose reaches its door), "door" and "normal" (the plane's door, model only),
 ## "mounts" (every mount name -> world point), "walk" (the docked walk from
 ## the exit sill to the plane door, else empty), "apron_walk" (exit sill,
-## apron door, then the plane door on the ground, for a model that does not
-## dock, else empty)}. A docking model whose door is out of reach is parked.
+## apron door, then on the ground APRON_END_OUT_M out from the plane door, for
+## a model that does not dock, else empty)}. A docking model whose door is out
+## of reach is parked.
 static func pose_for(stand: Dictionary, model: String, docked: bool, ground_y := 0.0) -> Dictionary:
 	var root := root_for(stand, ground_y)
 	var out := {"root": root, "docks": docks(model), "docked": false}
@@ -190,8 +205,10 @@ static func pose_for(stand: Dictionary, model: String, docked: bool, ground_y :=
 	elif model != "" and not docks(model):
 		for name in APRON:
 			apron.append(mounts[name])
-		var door: Vector3 = out["door"]
-		apron.append(Vector3(door.x, ground_y, door.z))
+		# The walk ends out on the ground beside the door, the passenger's body
+		# clear of the fuselage skin.
+		var end: Vector3 = out["door"] + (out["normal"] as Vector3) * APRON_END_OUT_M
+		apron.append(Vector3(end.x, ground_y, end.z))
 	out["walk"] = walk
 	out["apron_walk"] = apron
 	return out

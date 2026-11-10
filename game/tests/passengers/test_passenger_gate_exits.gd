@@ -112,13 +112,21 @@ func test_a_gate_b_passenger_boards_through_b_onto_bs_plane() -> void:
 		if p.stage == Passenger.Stage.APRON:
 			var end: Vector3 = p.apron[p.apron.size() - 1]
 			exits["plane"] = Vector2(end.x, end.z)
-	var door := StandPlacement.door_point(_apron.gate_stands["B"]["live"])
+	# A one-off flight flies the starter's plane 03, whose passengers walk out
+	# of the jet bridge's apron door to its door on the ground (ruling plane-03-
+	# boards-on-foot-from-the-apron-plane-04-docks-the-no).
+	var model := PlaneClasses.flight_model(_world.flights, FLIGHT_B)
+	var stand: Dictionary = _apron.gate_stands["B"]["live"]
+	# It ends on the ground out from the 03's door, clear of the fuselage.
+	var at := JetBridgePose.plane_door(stand, model)
+	var door: Vector3 = at["door"] + (at["normal"] as Vector3) * JetBridgePose.APRON_END_OUT_M
 	print(
 		(
 			"stage %s at tick %d, exits used %s, B's plane door %s"
 			% [Passenger.Stage.keys()[p.stage], _world.clock.tick, exits, door]
 		)
 	)
+	assert_str(model).is_equal("tp_plane_03a")
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 	assert_array(exits.keys()).contains_exactly_in_any_order([_exit_b, "plane"])
 	assert_vector(exits["plane"]).is_equal_approx(Vector2(door.x, door.z), Vector2.ONE * 0.001)

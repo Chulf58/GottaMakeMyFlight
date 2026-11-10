@@ -10,9 +10,13 @@ extends Node3D
 ## A bridge is a nose-loader rooted on the gate's exit door
 ## (JetBridgePose.root_for(), board 0adca5c6) and waits parked. A PlaneView
 ## whose plane stands at the gate (AT_STAND, BOARDING, DOORS_CLOSED) reports
-## its drawn front port door through dock_plane() (PlaneProps does it every
-## frame); the bridge names the model from that door (JetBridgePose.model_at())
-## and docks there when the model docks (04 to 07) and the door is in reach.
+## the model it draws, its flight's model (PlaneClasses.flight_model()), through
+## dock_plane() (PlaneProps does it every frame); the bridge docks at that
+## model's door when the model docks (04 to 07) and the door is in reach
+## (JetBridgePose.reaches()). The passenger sim decides its walk out from the
+## same flight model (OutsideWalks.departure(), decision bridge-boarding-sim-
+## route-chosen-at-departure-from-the-fligh), so the drawn bridge and the walk
+## agree.
 ## Model 03 does not dock: the bridge stays parked over its wing and its
 ## passengers walk out of the apron door (ruling plane-03-boards-on-foot-from-
 ## the-apron-plane-04-docks-the-no). Once no view reports the gate it parks
@@ -58,7 +62,7 @@ var bridges: Dictionary = {}
 var signs: Array[Node3D] = []
 ## The turn-offs the signs stand at (turn_offs()).
 var turn_off_list: Array[Dictionary] = []
-## Reporter key -> {"gate", "door", "normal"} of a plane standing at a gate.
+## Reporter key -> {"gate", "model"} of a plane standing at a gate.
 var _reports: Dictionary = {}
 var _routes: Array[PackedVector3Array] = []
 
@@ -80,9 +84,9 @@ func show_layout(stands: Dictionary, routes: Array[PackedVector3Array]) -> void:
 			node.name = "JetBridge_%s" % gate
 			add_child(node)
 			bridges[gate] = {"node": node, "joints": JetBridgePose.joints_of(node)}
-		# On the ground the parked plane stands on, so its door heights match.
-		var spot := StandPlacement.stand_point(stand)
-		var root := JetBridgePose.root_for(stand, PlaneView.ground_height_at(spot))
+		# On the ground the parked plane stands on, so its door heights match
+		# and the sim walks the same floors (JetBridgePose.ground_y()).
+		var root := JetBridgePose.root_for(stand, JetBridgePose.ground_y(stand))
 		bridges[gate]["root"] = root
 		bridges[gate]["stand"] = stand.duplicate()
 		(bridges[gate]["node"] as Node3D).transform = root
@@ -92,12 +96,13 @@ func show_layout(stands: Dictionary, routes: Array[PackedVector3Array]) -> void:
 		_show_signs(turn_offs(routes, runway_north(), Airside.runway_south()))
 
 
-## Docks gate `gate`'s bridge at `door` (world) with the fuselage facing out
-## along `normal`, for the reporter `key` (a PlaneView's instance id). The last
-## report of each key counts; a key moving to another gate leaves the old one.
-func dock_plane(key: int, gate: String, door: Vector3, normal: Vector3) -> void:
+## Docks gate `gate`'s bridge at the door of plane `model` (a PlaneModels
+## name) parked at its stand, for the reporter `key` (a PlaneView's instance
+## id). The last report of each key counts; a key moving to another gate
+## leaves the old one.
+func dock_plane(key: int, gate: String, model: String) -> void:
 	var before: Dictionary = _reports.get(key, {})
-	var report := {"gate": gate, "door": door, "normal": normal}
+	var report := {"gate": gate, "model": model}
 	if before == report:
 		return
 	_reports[key] = report
@@ -180,13 +185,13 @@ static func _arrow(
 	return ""
 
 
-## Shows gate `gate`'s bridge docked at the first door reported for it when
-## that door's model docks and is in reach, and parked otherwise.
+## Shows gate `gate`'s bridge docked at the first model reported for it when
+## that model docks and its door is in reach, and parked otherwise.
 func _pose_bridge(gate: String) -> void:
 	if not bridges.has(gate) or bridges[gate]["joints"].is_empty():
 		return
 	var entry: Dictionary = bridges[gate]
-	var root: Transform3D = entry["root"]
+	var ground: float = (entry["root"] as Transform3D).origin.y
 	var pose := JetBridgePose.parked()
 	var docked := false
 	var model := ""
@@ -194,12 +199,10 @@ func _pose_bridge(gate: String) -> void:
 		var report: Dictionary = _reports[key]
 		if report["gate"] != gate:
 			continue
-		model = JetBridgePose.model_at(entry["stand"], report["door"], root.origin.y)
-		if JetBridgePose.docks(model):
-			var at := JetBridgePose.solve(root, report["door"], report["normal"])
-			if at["ok"]:
-				pose = at
-				docked = true
+		model = report["model"]
+		if JetBridgePose.reaches(entry["stand"], model, ground):
+			pose = JetBridgePose.pose_for(entry["stand"], model, true, ground)["pose"]
+			docked = true
 		break
 	JetBridgePose.apply(entry["joints"], pose)
 	entry["pose"] = pose

@@ -189,14 +189,20 @@ static func departure(
 
 
 ## The outside `cells` (ending on the plane door's cell) as corner points,
-## then the apron route of `stand` to the door of a plane drawn with `model`.
+## then the apron route of `stand` to the door of a plane drawn with `model`,
+## each point on the ground the plane is drawn on there
+## (PlaneView.ground_height_at(), as JetBridgePose.ground_y() reads it): the
+## site's ground height on the paved site, lower off it, at a north-row stand.
+## The route's own points are at y 0, and a walk is measured in 3D, so a
+## wrong height would cost time and float or sink the walker.
 static func to_plane(
 	grid: BuildGrid, site: SiteDefinition, cells: Array, stand: Dictionary, model := ""
 ) -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	for cell: Vector2i in corners(cells):
 		points.append(ground(grid, site, cell))
-	points.append_array(Array(StandPlacement.apron_route(stand, model)))
+	for point in StandPlacement.apron_route(stand, model):
+		points.append(Vector3(point.x, PlaneView.ground_height_at(point), point.z))
 	return points
 
 

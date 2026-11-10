@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 31
+const SAVE_VERSION := 32
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -461,9 +461,10 @@ func bubble_text(p: Passenger) -> String:
 	return ""
 
 
-## The apron walk from an exit door to the plane, in millimetres.
-func apron_length_mm(exit_door: int) -> int:
-	return PassengerGates.apron_length_mm(self, exit_door)
+## The apron walk from an exit door to the door of a plane drawn with `model`
+## ("" for the ground walk to the stand's door), in millimetres.
+func apron_length_mm(exit_door: int, model := "") -> int:
+	return PassengerGates.apron_length_mm(self, exit_door, model)
 
 
 ## JSON-safe state for a save. Reads only: it changes nothing in the sim or
