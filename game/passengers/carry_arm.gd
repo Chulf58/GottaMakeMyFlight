@@ -69,9 +69,6 @@ var reach_target := Vector3.ZERO
 ## _reach_loop()): the hand level and the elbow down (LOOP_POLE), so the fingers
 ## stay over the loop, out of the pack. Set by CarryOnProps with the reach.
 var loop_grip := false
-## The pack's top's normal (world) for a loop_grip reach: the palm goes on the
-## top, square to it (_palm_on()). Set by CarryOnProps with the reach.
-var loop_up := Vector3.UP
 
 
 func _process_modification_with_delta(_delta: float) -> void:
@@ -119,15 +116,10 @@ func _process_modification_with_delta(_delta: float) -> void:
 
 
 ## A hand over a backpack's grab loop (loop_grip): its fingers and thumb turned
-## `weight` of the way from the clip's curl to straight on from the bone they
-## hang from (each bone's rest turned so its axis lies along its parent's).
-## Curled as the clips hold them, they went up to 6 cm under the grip, into the
-## loop and the pack's top below it (backpack_pickup_probe, board 41c159bc); at
-## their rest the fingertips still bent down 4 to 5 cm under the grip of a
-## hand flat on the pack, and the thumb's tip 10 cm, into the pack's top
-## (crossing probe seed 1106001 --lane, board bcad1dd0). The thumb, whose root
-## is under the hand's line on the palm side, is tipped up to come back to
-## that line at its tip (_thumb_up()).
+## `weight` of the way from the clip's curl to their rest, straight on from the
+## hand. Curled as the clips hold them, they went up to 6 cm under the grip,
+## into the loop and the pack's top below it (backpack_pickup_probe, board
+## 41c159bc).
 func _straighten_fingers(skeleton: Skeleton3D, weight: float) -> void:
 	var suffix: String = [".R", ".L"][side]
 	for name in LOOP_FINGERS:
@@ -135,32 +127,8 @@ func _straighten_fingers(skeleton: Skeleton3D, weight: float) -> void:
 		if bone < 0:
 			continue
 		var rest := skeleton.get_bone_rest(bone).basis.get_rotation_quaternion()
-		var axis := (rest * Vector3.UP).normalized()
-		var along := Vector3.UP
-		if name == "Thumb":
-			along = _thumb_up(skeleton, bone)
-		var straight := Quaternion(axis, along) * rest
 		var now := skeleton.get_bone_pose_rotation(bone)
-		skeleton.set_bone_pose_rotation(bone, now.slerp(straight, weight))
-
-
-## The way (in its parent's frame) a loop_grip thumb at `bone` points: along
-## the hand, tipped away from the palm so its two segments end level with the
-## hand's line, not under it: laid straight from its root, the thumb's tip
-## stayed 2.5 cm under the grip of a male hand flat on the pack (test_carry_
-## arm_loop_palm). Straight along the hand when its parent is not the hand.
-func _thumb_up(skeleton: Skeleton3D, bone: int) -> Vector3:
-	var hand := skeleton.find_bone(HANDS[side])
-	var tip := skeleton.find_bone("Thumb_Tip" + [".R", ".L"][side])
-	if skeleton.get_bone_parent(bone) != hand or tip < 0:
-		return Vector3.UP
-	var rest_hand := skeleton.get_bone_global_rest(hand).basis.orthonormalized()
-	var palm := rest_hand.inverse() * Vector3.DOWN
-	palm = (palm - Vector3.UP * palm.y).normalized()
-	var under := skeleton.get_bone_rest(bone).origin.dot(palm)
-	var reach := skeleton.get_bone_rest(tip).origin.length() * 2.0
-	var lift := asin(clampf(under / maxf(reach, 0.001), 0.0, 0.5))
-	return (Vector3.UP * cos(lift) - palm * sin(lift)).normalized()
+		skeleton.set_bone_pose_rotation(bone, now.slerp(rest, weight))
 
 
 ## The arm `chain` (arm, forearm, hand; skeleton space) turned so the grip
@@ -191,38 +159,28 @@ func _reach(skeleton: Skeleton3D, chain: Array[Transform3D], outward: float) -> 
 	return [arm, fore, fore * hand_in_fore]
 
 
-## _reach() for a hand holding a backpack by its grab loop: the hand flat on
-## the pack's top (_palm_on(): its axis along the way from the shoulder to the
-## target, square to loop_up, the palm toward the pack), so the fingers lie
-## over the loop, not down into the pack below it, and the elbow down
-## (LOOP_POLE), not out and back. The wrist is put where that hand's grip lands
-## on the target. Posed as _reach() poses any other hand, the hand pointed down
-## at the loop and the fingers were up to 6 cm under it inside the pack
-## (backpack_pickup_probe, seed 2811556352, board 41c159bc). Turned only to
-## point level, the hand kept the clip's roll, stood on its edge with the thumb
-## up, and its little-finger side hung 6 to 8 cm under the grip into the pack's
-## top out of a lane tray (crossing probe seed 1106001, board bcad1dd0).
+## _reach() for a hand holding a backpack by its grab loop: the hand level
+## (its axis along the way from the shoulder to the target, seen from above),
+## so the fingers lie over the loop, not down into the pack below it, and the
+## elbow down (LOOP_POLE), not out and back. The wrist is put where the level
+## hand's grip lands on the target. Posed as _reach() poses any other hand, the
+## hand pointed down at the loop and the fingers were up to 6 cm under it
+## inside the pack (backpack_pickup_probe, seed 2811556352, board 41c159bc).
 func _reach_loop(
 	skeleton: Skeleton3D, chain: Array[Transform3D], outward: float
 ) -> Array[Transform3D]:
-	var to_skeleton := skeleton.global_transform.affine_inverse()
-	var target := to_skeleton * reach_target
-	var up := to_skeleton.basis * loop_up
-	up = up.normalized() if up.length() > 0.001 else Vector3.UP
+	var target := skeleton.global_transform.affine_inverse() * reach_target
 	var shoulder := chain[0].origin
 	var elbow := chain[1].origin
 	var wrist := chain[2].origin
-	var along := target - shoulder
-	along -= up * along.dot(up)
-	if along.length() < 0.001:
-		along = Vector3(outward, 0.0, 0.0) - up * up.x * outward
-	var flat := _palm_on(skeleton, along.normalized(), up, chain[2].basis.get_scale())
-	var grip := _grip(skeleton, Transform3D(flat, Vector3.ZERO))
+	var hand_len := wrist.distance_to(_grip(skeleton, chain[2]))
+	var level := Vector3(target.x - shoulder.x, 0.0, target.z - shoulder.z)
+	level = level.normalized() if level.length() > 0.001 else Vector3(outward, 0.0, 0.0)
 	var joints := CarryStoop.two_bone(
 		shoulder,
 		elbow.distance_to(shoulder),
 		wrist.distance_to(elbow),
-		target - grip,
+		target - level * hand_len,
 		LOOP_POLE * Vector3(outward, 1.0, 1.0)
 	)
 	var arm := chain[0]
@@ -233,21 +191,7 @@ func _reach_loop(
 	var wrist_now := (fore * hand_in_fore).origin
 	fore.basis = CarryStoop.aim(fore.basis, wrist_now - fore.origin, joints[1] - fore.origin)
 	var hand := fore * hand_in_fore
-	return [arm, fore, Transform3D(flat, hand.origin)]
-
-
-## The hand's basis (skeleton space, at `scale_by`) pointing along `along` with
-## the palm toward -`up`: its rest (palm down, the Toon rest pose) turned so
-## its axis goes onto `along` and its downward side onto -`up`. `along` is
-## square to `up`.
-func _palm_on(skeleton: Skeleton3D, along: Vector3, up: Vector3, scale_by: Vector3) -> Basis:
-	var rest := skeleton.get_bone_global_rest(skeleton.find_bone(HANDS[side])).basis
-	rest = rest.orthonormalized()
-	var axis := rest.y
-	var down := (Vector3.DOWN - axis * axis.dot(Vector3.DOWN)).normalized()
-	var from := Basis(axis, down, axis.cross(down))
-	var to := Basis(along, -up, along.cross(-up))
-	return (to * from.inverse() * rest) * Basis.from_scale(scale_by)
+	return [arm, fore, Transform3D(_pointed(hand.basis, level, 1.0), hand.origin)]
 
 
 ## Where the grip is (skeleton space) for the hand bone at `hand`: the Fingers
