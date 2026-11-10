@@ -357,3 +357,19 @@ func test_a_wrapped_hold_moves_the_rail_stop_line_and_panel_room_and_the_nudge_s
 	_menu.end_grant_hold()
 	await _settle()
 	assert_float(stack._stop_y()).is_equal(plain_stop)
+
+
+## A freed BuildMenu leaves the rail with no tray to clear: the stop line falls
+## back to the bar's, with no error from the freed object.
+func test_a_freed_menu_leaves_the_rail_stop_at_the_bar() -> void:
+	var stack := _hud.find_child("AlertStack", false, false) as AlertStack
+	_open_tray()
+	await _settle()
+	assert_bool(stack.build_tray_open.call()).is_true()
+	var open_stop := stack._stop_y()
+	_menu.free()
+	await _settle()
+	assert_bool(stack.build_tray_open.call()).is_false()
+	var bar_top := float(VIEW.y) - BuildMenu.MARGIN - BuildMenu.BAR_H
+	assert_float(stack._stop_y()).is_equal(bar_top - float(HudLayout.GROUP_GAP))
+	assert_float(stack._stop_y()).is_greater(open_stop)

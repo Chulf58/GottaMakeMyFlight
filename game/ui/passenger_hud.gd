@@ -259,7 +259,7 @@ func _ready() -> void:
 	if menu != null:
 		_inspect.actions.session = menu.build_session
 		_alerts.build_tray_open = func() -> bool:
-			return menu.is_node_ready() and menu.is_tray_open()
+			return is_instance_valid(menu) and menu.is_node_ready() and menu.is_tray_open()
 		_alerts.build_stack_top = menu.stack_top
 	_outline.selection = _built
 	_outline.build_mode = build_mode

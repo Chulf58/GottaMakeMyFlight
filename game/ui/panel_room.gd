@@ -237,8 +237,9 @@ func _bar_strip() -> Rect2:
 
 
 ## The tray, its status and cost lines and the bar under them, from the top of
-## the stack to the bottom of the screen. The status line comes and goes with
-## the pointer, so the fixed height of the stack is used, not the line.
+## the stack to the bottom of the screen. Its height is the menu's stack_top():
+## the status card's slot, taller while a held message wraps and grows the card,
+## and not the line, which comes and goes with the pointer.
 func _tray_stack(menu: BuildMenu) -> Rect2:
 	var size := get_viewport().get_visible_rect().size
 	var tray := menu.tray().get_global_rect()
