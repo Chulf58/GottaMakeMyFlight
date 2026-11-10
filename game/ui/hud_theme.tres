@@ -456,11 +456,27 @@ variation_opentype = {
 2003265652: 700
 }
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_topcard"]
+content_margin_left = 8.0
+content_margin_top = 4.0
+content_margin_right = 8.0
+content_margin_bottom = 4.0
+bg_color = Color(0.96, 0.93, 0.86, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.1, 0.13, 0.26, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bsign"]
 content_margin_left = 18.0
-content_margin_top = 4.0
+content_margin_top = 3.0
 content_margin_right = 18.0
-content_margin_bottom = 4.0
+content_margin_bottom = 3.0
 bg_color = Color(0.99, 0.8, 0.1, 1)
 border_width_left = 3
 border_width_top = 3
@@ -689,6 +705,8 @@ IntroRole/font_sizes/font_size = 16
 Label/colors/font_color = Color(0.1, 0.13, 0.26, 1)
 Panel/styles/panel = SubResource("StyleBoxFlat_udfx2")
 PanelContainer/styles/panel = SubResource("StyleBoxFlat_udfx2")
+HudTopCard/base_type = &"PanelContainer"
+HudTopCard/styles/panel = SubResource("StyleBoxFlat_topcard")
 RatingStars/base_type = &"Control"
 RatingStars/colors/star_empty = Color(0.87, 0.85, 0.81, 1)
 RatingStars/colors/star_fill = Color(1, 0.82, 0.25, 1)

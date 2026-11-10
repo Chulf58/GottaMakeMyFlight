@@ -11,13 +11,11 @@ extends CanvasLayer
 ## It reads AirportRating.stars() and parts() on the rating's changed signal,
 ## which also fires when the day rolls over, so it never polls.
 
-## Left edge: the money slot's 16 px margin, its 220 px width, and a gap.
-const LEFT := 248.0
-## The money slot's top edge.
-const TOP := 12.0
+## Left edge: the money slot's margin, its width, and a gap.
+const LEFT := float(HudLayout.MARGIN + HudLayout.MONEY_W + HudLayout.GAP)
 const STAR_COUNT := 5
-const STAR_SIZE := 24.0
-const STAR_GAP := 3.0
+const STAR_SIZE := 22.0
+const STAR_GAP := 2.0
 const NO_DATA_TEXT := "No flights yet"
 const NO_DATA_TIP := "No flights yet: the rating starts when passengers make or miss a flight."
 @export var rating: AirportRating
@@ -109,11 +107,15 @@ static func star_fills(value: float) -> Array[float]:
 func _build() -> void:
 	_card.name = "RatingCard"
 	_card.theme = BuildMenu.HUD_THEME
-	_card.position = Vector2(LEFT, TOP)
+	_card.theme_type_variation = &"HudTopCard"
+	_card.position = Vector2(LEFT, HudLayout.MARGIN)
+	_card.custom_minimum_size = Vector2(0.0, HudLayout.BUTTON_H)
 	_card.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(_card)
+	# The card is BUTTON_H tall like the rest of the top row and ends before the
+	# centred top row, which starts 496 px from the left edge: 22 px stars and a
+	# BODY label keep it inside 240 px.
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(row)
 	_star_row.fills = star_fills(0.0)
@@ -124,7 +126,8 @@ func _build() -> void:
 	_star_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(_star_row)
 	_label.name = "RatingText"
-	_label.theme_type_variation = &"HudLarge"
+	_label.theme_type_variation = &"HudSmall"
+	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(_label)
 
