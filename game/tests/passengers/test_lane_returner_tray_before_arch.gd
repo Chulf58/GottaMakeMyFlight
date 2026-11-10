@@ -110,8 +110,11 @@ func test_runner_faces_the_arch_before_its_entry() -> void:
 ## after a load) draws the same bags and hands as a view drawn on every tick,
 ## at the same sim time: the same move, not the bag already in the tray (Sol
 ## review of 893d5cc). Two worlds of one seed; one is drawn every tick, the
-## other first on the tick its put-in is half way, both late in that tick.
-## Control: the move was under way (share between 0 and 1) and a bag was held.
+## other first on the tick its put-in is half way, both late in that tick: half
+## way through the second bag's window, since two bags go in one after the
+## other (SecurityLooks.put_in_window(), board 521e46a5), the first is then in
+## the tray and the second in the hand that puts it in. Control: the move was
+## under way (share between 0 and 1) and a bag was held.
 func test_a_view_first_drawn_mid_put_in_draws_the_same_bags_and_hands() -> void:
 	var every := _make()
 	var late := _make()
@@ -124,8 +127,12 @@ func test_a_view_first_drawn_mid_put_in_draws_the_same_bags_and_hands() -> void:
 		late.world.step()
 		views_a.draw()
 		var past := SecurityLooks.return_walk_mm(every.world.sim, a)
-		if not is_nan(past) and SecurityLooks.put_in_share(past) >= 0.5:
-			share = SecurityLooks.put_in_share(past)
+		if is_nan(past):
+			continue
+		var second := 1 - SecurityLooks.put_in_first(every.world.sim, a)
+		var window := SecurityLooks.put_in_window(every.world.sim, a, second)
+		if SecurityLooks.put_in_share(past, window) >= 0.5:
+			share = SecurityLooks.put_in_share(past, window)
 			break
 	assert_float(share).is_between(0.5, 0.99)
 	var views_b := _views_of(late)

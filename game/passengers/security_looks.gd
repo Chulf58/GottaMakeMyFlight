@@ -66,6 +66,14 @@ const SETOFF_EASE_M := 0.3
 ## (_return_corner_yaw()). Both end 0.65 m from the arch's centre or further.
 const PUT_IN_BEFORE_MM := 750.0
 const PUT_IN_PAST_MM := 250.0
+## A returner with two bags puts them in one after the other, each over this
+## much of that walk (put_in_window()): the bag on the tray's side first, from
+## PUT_IN_BEFORE_MM before the centre, and the other ending PUT_IN_PAST_MM past
+## it. Put in together, the bag from the far hand crossed in front of the body
+## through the other on its way over (board 521e46a5). At 550 mm the first is
+## down in the tray (CarryLead.REACH_SHARE short of its end) 37 mm before the
+## other leaves its hand.
+const PUT_IN_TWO_MM := 550.0
 const RETURN_TURN_BEFORE_MM := 400.0
 const RETURN_TURN_PAST_MM := 350.0
 ## Where a held-back queue front stands, from the unpack cell's centre.
@@ -260,12 +268,49 @@ static func return_walk_mm(sim: PassengerSim, p: Passenger) -> float:
 	return float(p.seg_mm - (first if p.path_index == 0 else 0))
 
 
-## How far a returner's bags are through their move into the tray, 0 to 1, by
-## the distance walked at `past` (return_walk_mm(), the body as drawn) over
-## PUT_IN_BEFORE_MM before the unpack cell's centre to PUT_IN_PAST_MM past it.
-static func put_in_share(past: float) -> float:
-	var whole := PUT_IN_BEFORE_MM + PUT_IN_PAST_MM
-	return clampf((past + PUT_IN_BEFORE_MM) / whole, 0.0, 1.0)
+## How far a returner's bag is through its move into the tray, 0 to 1, by the
+## distance walked at `past` (return_walk_mm(), the body as drawn) over its
+## `window` (put_in_window(), mm from the unpack cell's centre): by default
+## PUT_IN_BEFORE_MM before the centre to PUT_IN_PAST_MM past it.
+static func put_in_share(
+	past: float, window := Vector2(-PUT_IN_BEFORE_MM, PUT_IN_PAST_MM)
+) -> float:
+	return clampf((past - window.x) / (window.y - window.x), 0.0, 1.0)
+
+
+## The stretch of a returner's arch walk (mm from the unpack cell's centre, as
+## return_walk_mm()) over which its bag `i` goes into the tray: the whole of
+## PUT_IN_BEFORE_MM before to PUT_IN_PAST_MM past for one bag; for two, the bag
+## on the tray's side (put_in_first()) over the first PUT_IN_TWO_MM of it and
+## the other over the last, so the far bag crosses in front of the body only
+## once the near one is down in the tray (board 521e46a5).
+static func put_in_window(sim: PassengerSim, p: Passenger, i: int) -> Vector2:
+	var whole := Vector2(-PUT_IN_BEFORE_MM, PUT_IN_PAST_MM)
+	if p.carry_on < 2:
+		return whole
+	if i == put_in_first(sim, p):
+		return Vector2(whole.x, whole.x + PUT_IN_TWO_MM)
+	return Vector2(whole.y - PUT_IN_TWO_MM, whole.y)
+
+
+## Which of a two-bag returner's bags goes into the tray first: the one on the
+## tray table's side (lane "side") of the body facing the arch (bag i is in
+## hand i, or worn on side i, 0 the right). Read from the lane alone, so it is
+## the same on every draw, after a load too.
+static func put_in_first(sim: PassengerSim, p: Passenger) -> int:
+	var lane := lane_of(sim, p)
+	if lane.is_empty():
+		return 0
+	var facing := -Vector2(lane["front"])
+	var right := Vector2(-facing.y, facing.x)
+	return 0 if Vector2(lane["side"]).dot(right) > 0.0 else 1
+
+
+## Whether returner `p`'s bag `i` has reached the start of its put-in window
+## (put_in_window()) on its arch walk; true off that walk (_on_passage() decides).
+static func _put_in_begun(sim: PassengerSim, p: Passenger, i: int) -> bool:
+	var past := return_walk_mm(sim, p)
+	return is_nan(past) or past >= put_in_window(sim, p, i).x
 
 
 ## The yaw a lane passenger faces as it reaches the unpack cell: along the last
@@ -747,7 +792,9 @@ static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
 			)
 			home = Home.TRAY if done >= in_tray else Home.HAND
 		SecurityRuntime.Phase.ARCH:
-			home = Home.TRAY if _on_passage(sim, p) else Home.HAND
+			# A returner's second bag of two stays in the hand to its window.
+			var begun := _on_passage(sim, p) and _put_in_begun(sim, p, i)
+			home = Home.TRAY if begun else Home.HAND
 		SecurityRuntime.Phase.PICKUP:
 			var out_of_tray := (
 				SecurityRuntime.LANE_PICKUP_TICKS + i * SecurityRuntime.LANE_PICKUP_BAG_TICKS

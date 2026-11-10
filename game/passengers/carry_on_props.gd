@@ -399,7 +399,12 @@ func sync() -> void:
 			# a clock (SecurityLooks.put_in_share(), CarryPlace.progress_of()).
 			var step := views.tick_position(id, true).distance_to(views.tick_position(id, false))
 			CarryPlace.stamp_put_in(
-				bags[i], homes[i], SecurityLooks.return_walk_mm(sim, p), step * 1000.0, _tick()
+				bags[i],
+				homes[i],
+				SecurityLooks.return_walk_mm(sim, p),
+				step * 1000.0,
+				_tick(),
+				SecurityLooks.put_in_window(sim, p, i)
 			)
 			RollerPull.step(self, bags[i], node, id, homes[i], hands[i])
 			# A roller's pick-up at a seat decides its roll on this tick, drawn or not.
