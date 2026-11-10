@@ -84,7 +84,14 @@ func test_the_ghost_draws_a_see_through_red_bar_on_the_blocking_edge() -> void:
 	assert_float(bar.transform.origin.z).is_equal_approx(edge.origin.z, 0.001)
 	var material := bar.material_override as StandardMaterial3D
 	assert_bool(material.no_depth_test).is_true()
-	assert_that(material.albedo_color).is_equal(BuildMode.INVALID_TINT)
+	# The ghost's red, but stronger than the half-clear red of the line's cells.
+	var tint := material.albedo_color
+	print("bar tint=%s cells=%s" % [tint, BuildMode.INVALID_TINT])
+	assert_float(tint.r).is_equal_approx(BuildMode.INVALID_TINT.r, 0.001)
+	assert_float(tint.g).is_equal_approx(BuildMode.INVALID_TINT.g, 0.001)
+	assert_float(tint.b).is_equal_approx(BuildMode.INVALID_TINT.b, 0.001)
+	assert_float(tint.a).is_greater(BuildMode.INVALID_TINT.a)
+	assert_float(tint.a).is_greater_equal(0.85)
 	# A low bar on the floor, no taller than the cut-away wall stub it marks
 	# (GapMarkers' form), and much thicker than the wall, so it reads at range.
 	var size := (bar.mesh as BoxMesh).size
