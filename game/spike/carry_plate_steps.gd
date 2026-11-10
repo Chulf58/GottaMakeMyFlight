@@ -8,6 +8,7 @@ extends RefCounted
 
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
+const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 
 ## A plate whose sampled pixels are darker than DARK_LEVEL (every channel) over
 ## more than DARK_SHARE of the frame is a camera inside or against a mesh.
@@ -231,8 +232,8 @@ static func lead_sheet(dir: String) -> void:
 
 ## A detail plate of `bag`: `cam` DETAIL_M from the bag's middle, or further
 ## for the whole bag to fit (a roller with its rods out), aimed at it; the
-## sight lines go to its biggest mesh (its case: the whole bag's middle can be
-## in the air between the rods),
+## sight lines go to points inside its body (CarryChecks.bag_aims(): the whole
+## bag's middle can be in the air between the rods),
 ## tried from the side `cam` is on now and then DETAIL_TURNS about the bag;
 ## saved to `path` from the first side where the bag's drawn bounds project
 ## inside `frame` (probe._box_in_frame), at least DETAIL_ON of five sight lines
@@ -251,12 +252,10 @@ static func detail_plate(
 	path: String
 ) -> bool:
 	var box := AABB()
-	var core := AABB()
 	var first := true
 	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
 		var b := mi.global_transform * mi.get_aabb()
 		box = b if first else box.merge(b)
-		core = b if b.get_volume() > core.get_volume() else core
 		first = false
 	var centre := box.get_center()
 	var reach := maxf(DETAIL_M, box.size.length() * 0.55 / tan(deg_to_rad(cam.fov) * 0.5))
@@ -287,7 +286,7 @@ static func detail_plate(
 		var ok: bool = (
 			bounds.has("bag") and probe.call("_box_in_frame", cam, bounds["bag"], frame, side)
 		)
-		var on := lines_on_bag(cam, core)
+		var on := lines_on_points(cam, CarryChecks.bag_aims(bag))
 		var dark := dark_share(img)
 		print("INFRAME %s bag_lines_first_on=%d/5 dark=%.2f" % [side, on, dark])
 		ok = ok and on >= DETAIL_ON and dark < DARK_SHARE
@@ -341,6 +340,19 @@ static func palm_seen(cam: Camera3D, palm: Vector3, frame: Rect2, tag: String) -
 		)
 	)
 	return ok
+
+
+## How many sight lines from `cam` to `aims` (world points inside the bag,
+## CarryChecks.bag_aims()) hit a body tagged "bag" first.
+static func lines_on_points(cam: Camera3D, aims: Array[Vector3]) -> int:
+	var space := cam.get_world_3d().direct_space_state
+	var on := 0
+	for at in aims:
+		var to := at + (at - cam.global_position).normalized() * 3.0
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(cam.global_position, to))
+		if not hit.is_empty() and str((hit.collider as Node).get_meta("subject", "")) == "bag":
+			on += 1
+	return on
 
 
 ## How many of five sight lines from `cam` to `box` (its middle and four points

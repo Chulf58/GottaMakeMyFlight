@@ -2302,13 +2302,13 @@ func _box_in_frame(cam: Camera3D, box: AABB, frame: Rect2, tag: String) -> bool:
 
 
 ## Whether at least two of the five sight lines from `cam` to the bag's body
-## (_bag_aims()) first hit the bag, and none first hits anything but the bag or
-## its own passenger before reaching its point.
+## (CarryChecks.bag_aims()) first hit the bag, and none first hits anything but
+## the bag or its own passenger before reaching its point.
 func _bag_seen(cam: Camera3D, bag: Node3D, tag: String) -> bool:
 	var space := cam.get_world_3d().direct_space_state
 	var on := 0
 	var blocked: Array[String] = []
-	for at: Vector3 in _bag_aims(bag):
+	for at: Vector3 in CarryChecks.bag_aims(bag):
 		var to := at + (at - cam.global_position).normalized() * 3.0
 		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(cam.global_position, to))
 		if hit.is_empty():
@@ -2321,34 +2321,6 @@ func _bag_seen(cam: Camera3D, bag: Node3D, tag: String) -> bool:
 			blocked.append(str((hit.collider as Node).get_meta("mesh", "")))
 	print("INFRAME %s bag_lines_on=%d/5 blocked=%s" % [tag, on, blocked])
 	return on >= 2 and blocked.is_empty()
-
-
-## Five points inside the bag's body (world): the centre of its mesh whose own
-## bounds, unscaled, are the biggest, and points a quarter of those bounds out
-## each way along their two longest sides, in the mesh's own frame. Not the
-## biggest drawn bounds (CarryChecks.bag_core()): a pulled roller's rods are
-## drawn scaled about 51 times along their length, and with the roller tilted
-## their world bounds outgrew the body's, so every line aimed at the empty
-## middle of the rods and missed (ROLLER walk and hand>pull never plated, seed
-## 1106001 --lane, board bcad1dd0).
-func _bag_aims(bag: Node3D) -> Array[Vector3]:
-	var body: MeshInstance3D = null
-	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
-		if body == null or mi.get_aabb().get_volume() > body.get_aabb().get_volume():
-			body = mi
-	var aims: Array[Vector3] = []
-	if body == null:
-		return aims
-	var box := body.get_aabb()
-	var sides := [0, 1, 2]
-	sides.sort_custom(func(a: int, b: int) -> bool: return box.size[a] > box.size[b])
-	aims.append(body.global_transform * box.get_center())
-	for side: int in sides.slice(0, 2):
-		for sign_of in [1.0, -1.0]:
-			var off := Vector3.ZERO
-			off[side] = box.size[side] * 0.25 * sign_of
-			aims.append(body.global_transform * (box.get_center() + off))
-	return aims
 
 
 ## Whether every visible bag of `id` projects inside the frame, in front of

@@ -295,15 +295,33 @@ static func pace_look(pace: Dictionary, odo: int, tick: int) -> float:
 	return per_tick
 
 
-## The drawn bounds of the biggest mesh of `bag` (its body, not the rods and
-## straps: the bounds of a tilted roller with its handle out has an empty middle,
-## so sight lines to it hit nothing), as PlateSteps.detail_plate() does.
-static func bag_core(bag: Node3D) -> AABB:
-	var core := AABB()
+## Five points inside the bag's body (world), for sight lines to aim at: the
+## centre of its mesh whose own bounds, unscaled, are the biggest, and points a
+## quarter of those bounds out each way along their two longest sides, in the
+## mesh's own frame. Not the mesh with the biggest drawn bounds (the pick
+## before): a pulled roller's rods are drawn scaled about 51 times along their
+## length, and with the roller tilted their world bounds outgrew the body's, so
+## every line aimed at the empty middle of the rods and missed (ROLLER walk and
+## hand>pull never plated on seed 1106001 --lane, and no roller detail plate
+## was saved, board bcad1dd0).
+static func bag_aims(bag: Node3D) -> Array[Vector3]:
+	var body: MeshInstance3D = null
 	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
-		var b := mi.global_transform * mi.get_aabb()
-		core = b if b.get_volume() > core.get_volume() else core
-	return core
+		if body == null or mi.get_aabb().get_volume() > body.get_aabb().get_volume():
+			body = mi
+	var aims: Array[Vector3] = []
+	if body == null:
+		return aims
+	var box := body.get_aabb()
+	var sides := [0, 1, 2]
+	sides.sort_custom(func(a: int, b: int) -> bool: return box.size[a] > box.size[b])
+	aims.append(body.global_transform * box.get_center())
+	for side: int in sides.slice(0, 2):
+		for sign_of in [1.0, -1.0]:
+			var off := Vector3.ZERO
+			off[side] = box.size[side] * 0.25 * sign_of
+			aims.append(body.global_transform * (box.get_center() + off))
+	return aims
 
 
 ## Hides every visible passenger body but `id`, for a detail plate (printed);
