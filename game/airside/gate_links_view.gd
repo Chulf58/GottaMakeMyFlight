@@ -23,8 +23,17 @@ extends Node3D
 ## queue-full-marker-a-red-sign-with-a-queue-full-n-waiting-cap: MarkerIcons'
 ## rounded square and outline, 56 px on screen, over walls and roof) in the
 ## closed-station slate, with its own broken-link glyph so the "!" keeps its
-## meanings, and a caption under it naming why (caption_for()). The signs are
-## not part of MissMarkers' declutter layout, like the wall-gap signs.
+## meanings, and a two-line caption naming why (sign_text(): "Unlinked" over
+## the short reason, the gate caption's two-line form). The signs are not part
+## of MissMarkers' declutter layout, like the wall-gap signs. The sign stands on
+## its desk, so its caption sits over the sign, not under it: every frame
+## layout_signs() puts each one there, lifted MissMarkers' way clear of its own
+## desk, of the seat pieces within GateReach.NEAR_CELLS of it, of every sign and
+## of the captions already placed (smoke playtest 11, board f0fbae3c (g): the
+## old one-line caption under the sign was drawn across the desk and its seats).
+## A sign that meets a wall-gap sign (GapMarkers) slides sideways off it
+## instead, its caption still right over it (round 2, user ruling "Separate the
+## two signs").
 ##
 ## Each gate's stand envelope for its biggest plane (GateDesks.max_class,
 ## StandEnvelope; decision runway-and-taxi-technical-design-movement-plan-
@@ -57,6 +66,16 @@ const NO_CLASS_LINE := "no room for a plane"
 ## The "Gate A" caption stands this far over the desk's top.
 const CAPTION_LIFT_M := 0.5
 const UNLINKED_PREFIX := "Unlinked: "
+## The unlinked sign's first caption line; the reason is the second.
+const UNLINKED_LINE := "Unlinked"
+## The gate seats piece, whose seats the unlinked sign's caption keeps off.
+const SEAT_ROW := &"seat_row"
+## The unlinked sign's caption bottom, in pixels over the sign's point: the
+## sign, then CAPTION_GAP_PX.
+const SIGN_OVER_PX := MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX
+## The steps an unlinked sign slides sideways off a wall-gap sign by.
+const SHIFT_STEP_PX := 14.0
+const MAX_SHIFT_STEPS := 16
 const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
 const LINE_SHADER := """
@@ -90,9 +109,15 @@ static var _shaders: Dictionary = {}
 static var _caption_sizes: Dictionary = {}
 
 ## The MissMarkers whose signs and captions the gate captions keep clear of.
-## Unset, the first node named MissMarkers in the tree is taken, looked for
-## once.
+## Unset, the first MissMarkers in the tree is taken, looked for once.
 var markers: Node3D
+## The GapMarkers whose wall-gap signs and captions the unlinked signs'
+## captions keep clear of (taking a gate's exit away leaves a gap by its
+## desk). Unset, the first GapMarkers in the tree is taken, looked for once.
+var gaps: Node3D
+## How many times layout_signs() ran its layout rather than answering from the
+## cache (tests read it).
+var sign_layouts := 0
 var _markers_looked := false
 
 var _grid: BuildGrid
@@ -107,6 +132,18 @@ var _envelope_paths: Array[PackedVector3Array] = []
 var _ends: Array[MeshInstance3D] = []
 var _captions: Array[Label3D] = []
 var _signs: Array[Sprite3D] = []
+## Per entry of _signs: the boxes (8 world corners each) its caption keeps
+## clear of, its own desk first.
+var _sign_boxes: Array = []
+## The screen rectangles of the shown signs and their captions, from the last
+## layout_signs(); the gate captions keep clear of them.
+var _sign_rects: Array[Rect2] = []
+## What the cached layout_signs() layout was made from, and its result: while
+## the key is the same the layout is too. Bumped by rebuild() (signs, texts,
+## obstacle boxes).
+var _layout_key: Array = []
+var _layout_placed: Array[Rect2] = []
+var _signs_revision := 0
 var _paths: Array[PackedVector3Array] = []
 var _unit := 0.0
 
@@ -185,25 +222,36 @@ static func _leave_t(box: Rect2, from: Vector2, to: Vector2) -> float:
 	return t
 
 
-## What the sign over an unlinked desk says, from a GateDesks.unlinked() entry.
-static func caption_for(reason: Dictionary) -> String:
+## Why a desk is unlinked, short, from a GateDesks.unlinked() entry.
+static func reason_text(reason: Dictionary) -> String:
 	match reason["why"]:
 		GateDesks.Unlinked.NO_EXIT:
-			return UNLINKED_PREFIX + "no north exit within %d cells" % GateDesks.LINK_CELLS
+			return "no north exit in %d cells" % GateDesks.LINK_CELLS
 		GateDesks.Unlinked.EXIT_TAKEN:
-			return UNLINKED_PREFIX + "Gate %s uses the exit" % reason["gate"]
+			return "Gate %s uses the exit" % reason["gate"]
 		GateDesks.Unlinked.STAND_OVERLAP:
-			return UNLINKED_PREFIX + "stand would overlap Gate %s" % reason["gate"]
+			return "stand would overlap Gate %s" % reason["gate"]
 		GateDesks.Unlinked.NO_ROOM:
-			return UNLINKED_PREFIX + "no room for a plane outside the exit"
+			return "no room for a plane"
 		GateDesks.Unlinked.ROUTE_BLOCKED:
-			return UNLINKED_PREFIX + "the way to the taxi lane is blocked"
-	return UNLINKED_PREFIX + "every gate letter is in use"
+			return "way to the lane blocked"
+	return "every gate letter in use"
+
+
+## The reason on one line ("Unlinked: ..."), as the desk card's status shows it.
+static func caption_for(reason: Dictionary) -> String:
+	return UNLINKED_PREFIX + reason_text(reason)
+
+
+## What the sign over an unlinked desk says: "Unlinked", then the reason.
+static func sign_text(reason: Dictionary) -> String:
+	return "%s\n%s" % [UNLINKED_LINE, reason_text(reason)]
 
 
 ## Draws the links and the unlinked signs again from the gates.
 func rebuild() -> void:
 	_paths.clear()
+	_signs_revision += 1
 	var gate_texts: Array[String] = []
 	var desk_tops: Array[Vector3] = []
 	if _grid != null and _gates != null:
@@ -228,12 +276,14 @@ func rebuild() -> void:
 	desks.sort()
 	while _signs.size() < desks.size():
 		_signs.append(_make_sign())
+	_sign_boxes.clear()
 	for i in _signs.size():
 		_signs[i].visible = i < desks.size()
+		_sign_boxes.append(sign_obstacles(_grid, desks[i]) if i < desks.size() else [])
 		if i < desks.size():
 			_signs[i].position = _desk_top(desks[i]) + Vector3.UP * MissMarkers.SIGN_LIFT_M
 			_signs[i].set_meta("desk", desks[i])
-			caption_of(_signs[i]).text = caption_for(unlinked[desks[i]])
+			caption_of(_signs[i]).text = sign_text(unlinked[desks[i]])
 	update_sizes(true)
 
 
@@ -339,6 +389,7 @@ func through_node() -> MeshInstance3D:
 
 func _process(_delta: float) -> void:
 	update_sizes()
+	layout_signs()
 	if _links.visible:
 		layout_captions()
 
@@ -372,14 +423,9 @@ func layout_captions() -> Array[Rect2]:
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	if camera == null:
 		return placed
-	if markers == null and not _markers_looked:
-		_markers_looked = true
-		for node in get_tree().root.find_children("MissMarkers", "Node3D", true, false):
-			if node is MissMarkers:
-				markers = node
-				break
+	_find_markers()
 	var to_output := get_viewport().get_stretch_transform().get_scale().y
-	var blocked := marker_rects(markers, camera, to_output)
+	var blocked := marker_rects(markers, camera, to_output) + _sign_rects
 	for caption in gate_captions():
 		caption.offset = Vector2.ZERO
 		if camera.is_position_behind(caption.global_position):
@@ -399,6 +445,223 @@ func layout_captions() -> Array[Rect2]:
 		caption.offset = Vector2(0.0, point.y - size.y - chosen.position.y)
 		placed.append(chosen)
 	return placed
+
+
+## Takes the first MissMarkers and GapMarkers in the tree as `markers` and
+## `gaps` when they are unset, looked for once.
+func _find_markers() -> void:
+	if _markers_looked:
+		return
+	_markers_looked = true
+	for node in get_tree().root.find_children("*", "Node3D", true, false):
+		if markers == null and node is MissMarkers:
+			markers = node
+		elif gaps == null and node is GapMarkers:
+			gaps = node
+
+
+## Places each shown unlinked sign and its caption, in desk order. The caption
+## stands over its sign (bottom-aligned CAPTION_GAP_PX over the sign's top).
+## Where the sign meets a wall-gap sign or caption of `gaps` on screen (taking
+## a gate's exit away leaves one by its desk), the sign slides sideways off it
+## (user ruling, board f0fbae3c (g) round 2: "Separate the two signs"), first
+## away from the wall-gap mark, by the fewest SHIFT_STEP_PX steps (at most
+## MAX_SHIFT_STEPS each way) at which the sign, grown by
+## MissMarkers.CAPTION_MARGIN_PX, meets no mark of `gaps` or `markers`, no other
+## sign and no seat row, and its caption, right over it and grown the same,
+## meets none of those, none of its sign_obstacles() boxes and none of the
+## captions already placed. Otherwise the sign stays and its caption is lifted
+## by the fewest steps (its height plus the margin, at most
+## MissMarkers.MAX_LIFTS) at which it meets none of them; with no clear lift it
+## stays right over its sign, so the reason always shows. Returns the caption
+## rectangles (pixels) placed, in desk order, and keeps them with the signs'
+## own for layout_captions(). The layout is kept (as MissMarkers.draw() keeps
+## its own) while its inputs are the same: the camera (identity, transform,
+## field of view), the viewport, the signs (rebuild(), their places and
+## visibility) and the rectangles of the marks of `markers` and `gaps`, which
+## can appear, move or vanish with the camera still. The returned array is the
+## kept one, so a caller must not change it.
+func layout_signs() -> Array[Rect2]:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera == null or signs().is_empty():
+		_sign_rects.clear()
+		_layout_key = []
+		_layout_placed = []
+		return _layout_placed
+	_find_markers()
+	var view := get_viewport()
+	var to_output := view.get_stretch_transform().get_scale().y
+	var gap_marks := marker_rects(gaps, camera, to_output)
+	var shown_markers := marker_rects(markers, camera, to_output) + gap_marks
+	var key := [
+		camera.get_instance_id(),
+		camera.global_transform,
+		camera.fov,
+		to_output,
+		view.get_visible_rect().size,
+		_signs_revision,
+		_sign_state(),
+		gap_marks,
+		shown_markers,
+	]
+	if key == _layout_key:
+		return _layout_placed
+	_layout_key = key
+	sign_layouts += 1
+	var placed: Array[Rect2] = []
+	_sign_rects.clear()
+	# Each shown sign's icon, by _signs index, where it stands unshifted.
+	var icons := {}
+	for i in _signs.size():
+		var marker := _signs[i]
+		marker.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
+		caption_of(marker).offset = Vector2(0.0, SIGN_OVER_PX)
+		if marker.visible and not camera.is_position_behind(marker.global_position):
+			var foot := camera.unproject_position(marker.global_position) * to_output
+			var side := MissMarkers.SIGN_PX
+			icons[i] = Rect2(foot.x - side / 2.0, foot.y - side, side, side)
+	for i in _signs.size():
+		if not icons.has(i):
+			continue
+		var caption := caption_of(_signs[i])
+		var blocked: Array[Rect2] = shown_markers.duplicate()
+		for other: int in icons:
+			if other != i:
+				blocked.append(icons[other])
+		var boxes: Array[Rect2] = []
+		for corners: PackedVector3Array in _sign_boxes[i]:
+			var box := screen_box(camera, corners, to_output)
+			if box.has_area():
+				boxes.append(box)
+		var size := caption_size(caption.text)
+		var icon: Rect2 = icons[i]
+		var shift := sign_shift(icon, size, gap_marks, placed + blocked, boxes)
+		var chosen := sign_caption_home(icon, size, shift)
+		if shift == 0.0:
+			# Not moved: the caption is lifted, MissMarkers' way, when its home
+			# over the sign is taken.
+			var step := size.y + MissMarkers.CAPTION_MARGIN_PX
+			var home := chosen
+			for lifts in MissMarkers.MAX_LIFTS:
+				var rect := Rect2(home.position - Vector2(0.0, step * lifts), size)
+				if not _meets_any(
+					rect.grow(MissMarkers.CAPTION_MARGIN_PX), placed + blocked + boxes
+				):
+					chosen = rect
+					break
+			caption.offset.y = SIGN_OVER_PX + home.position.y - chosen.position.y
+		else:
+			_signs[i].offset.x = shift * MarkerIcons.SIZE / MissMarkers.SIGN_PX
+			caption.offset.x = shift
+			icons[i] = Rect2(icon.position + Vector2(shift, 0.0), icon.size)
+		placed.append(chosen)
+	_sign_rects.assign(icons.values())
+	_sign_rects.append_array(placed)
+	_layout_placed = placed
+	return _layout_placed
+
+
+## Where each sign stands in the world, INF while it is hidden: what the
+## layout_signs() cache needs of the signs beyond rebuild().
+func _sign_state() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for marker in _signs:
+		out.append(marker.global_position if marker.visible else Vector3.INF)
+	return out
+
+
+## How far (pixels, + right) an unlinked sign at `icon` slides sideways off the
+## wall-gap marks `gap_marks`, its caption of `size` right over it: 0 when the
+## sign meets none of them, else the fewest SHIFT_STEP_PX steps, away from the
+## first mark it meets before toward it, at which the sign grown by the margin
+## meets no mark, nothing in `blocked` and none of `boxes` but the first (its
+## own desk, which the sign stands over), and the caption grown the same meets
+## none of those nor its own desk. 0 when no shift up to MAX_SHIFT_STEPS clears.
+static func sign_shift(
+	icon: Rect2, size: Vector2, gap_marks: Array[Rect2], blocked: Array[Rect2], boxes: Array[Rect2]
+) -> float:
+	var margin := MissMarkers.CAPTION_MARGIN_PX
+	var met := gap_marks.filter(
+		func(mark: Rect2) -> bool: return icon.grow(margin).intersects(mark)
+	)
+	if met.is_empty():
+		return 0.0
+	var away := 1.0 if icon.get_center().x >= (met[0] as Rect2).get_center().x else -1.0
+	var others: Array[Rect2] = gap_marks + blocked
+	for steps in range(1, MAX_SHIFT_STEPS + 1):
+		for side in [away, -away]:
+			var shift: float = side * steps * SHIFT_STEP_PX
+			var moved := Rect2(icon.position + Vector2(shift, 0.0), icon.size)
+			var home := sign_caption_home(icon, size, shift)
+			if _meets_any(moved.grow(margin), others + boxes.slice(1)):
+				continue
+			if not _meets_any(home.grow(margin), others + boxes):
+				return shift
+	return 0.0
+
+
+## The caption rectangle of `size` right over a sign at `icon` slid `shift`
+## pixels sideways: centred over it, its bottom CAPTION_GAP_PX over its top.
+static func sign_caption_home(icon: Rect2, size: Vector2, shift: float) -> Rect2:
+	var centre := icon.get_center().x + shift
+	var bottom := icon.position.y - MissMarkers.CAPTION_GAP_PX
+	return Rect2(centre - size.x / 2.0, bottom - size.y, size.x, size.y)
+
+
+static func _meets_any(rect: Rect2, others: Array[Rect2]) -> bool:
+	return others.any(func(other: Rect2) -> bool: return rect.intersects(other))
+
+
+## The boxes (8 world corners each) the caption of unlinked desk `desk`'s sign
+## keeps clear of on `grid`: the desk itself, then every gate seat row
+## (SEAT_ROW) and other piece with seats that has a cell within
+## GateReach.NEAR_CELLS of the desk's footprint, each from the floor up to its
+## catalog height.
+static func sign_obstacles(grid: BuildGrid, desk: int) -> Array[PackedVector3Array]:
+	var footprint := GateDesks.desk_footprint(grid, desk)
+	var near := _cells_rect(footprint).grow(GateReach.NEAR_CELLS)
+	var out: Array[PackedVector3Array] = [
+		_box(grid, footprint, BuildCatalog.get_def(GateDesks.DESK).height)
+	]
+	for id in grid.object_ids():
+		var record := grid.get_object(id)
+		var def := BuildCatalog.get_def(record["def"])
+		if id == desk or def == null or (def.id != SEAT_ROW and def.seats.is_empty()):
+			continue
+		var cells := def.footprint(record["anchor"], record["facing"])
+		if near.intersects(_cells_rect(cells)):
+			out.append(_box(grid, cells, def.height))
+	return out
+
+
+static func _cells_rect(cells: Array[Vector2i]) -> Rect2i:
+	var area := Rect2i(cells[0], Vector2i.ONE)
+	for cell in cells:
+		area = area.merge(Rect2i(cell, Vector2i.ONE))
+	return area
+
+
+## The 8 world corners of `cells` on `grid`, from the floor up to `height`.
+static func _box(grid: BuildGrid, cells: Array[Vector2i], height: float) -> PackedVector3Array:
+	var area := _cells_rect(cells)
+	var out := PackedVector3Array()
+	for y in [0.0, height]:
+		for x in [area.position.x, area.end.x]:
+			for z in [area.position.y, area.end.y]:
+				out.append(grid.origin + Vector3(x, y, z))
+	return out
+
+
+## The screen rectangle (pixels, `to_output` per camera unit) around `corners`
+## seen by `camera`; empty when any corner is behind the camera.
+static func screen_box(camera: Camera3D, corners: PackedVector3Array, to_output: float) -> Rect2:
+	var box := Rect2()
+	for i in corners.size():
+		if camera.is_position_behind(corners[i]):
+			return Rect2()
+		var point := camera.unproject_position(corners[i]) * to_output
+		box = Rect2(point, Vector2.ZERO) if i == 0 else box.expand(point)
+	return box
 
 
 ## The screen rectangles (pixels, `to_output` per camera unit) of every shown
@@ -600,8 +863,9 @@ func _make_sign() -> Sprite3D:
 	marker.render_priority = 11
 	marker.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	marker.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
-	# Under the sign: its top edge a gap below the sign's foot.
-	var caption := _make_caption("Caption", VERTICAL_ALIGNMENT_TOP, -MissMarkers.CAPTION_GAP_PX)
+	# Over the sign: its bottom edge a gap over the sign's top (layout_signs()
+	# lifts it further when something is in the way).
+	var caption := _make_caption("Caption", VERTICAL_ALIGNMENT_BOTTOM, SIGN_OVER_PX)
 	marker.add_child(caption)
 	add_child(marker)
 	return marker

@@ -81,8 +81,16 @@ const REMOVALS: Array[BuildEdit.Kind] = [
 	BuildEdit.Kind.REMOVE_ROOM,
 ]
 
+## The key and title of the rail notice that says which flights a removal moved.
+const MOVED_KEY := &"gate_moves"
+const MOVED_TITLE := "Flights moved"
+
 @export var build_mode: BuildMode
 @export var flights: FlightSim
+
+## The right rail the moved-flights notice goes to; found through its group the
+## first time it is needed when not set.
+var alerts: AlertStack
 
 var grid: BuildGrid
 ## {"gate": letter, "desk": desk object id, "exit": exit door id}, in desk id
@@ -479,10 +487,14 @@ func envelope_cells(on_grid: BuildGrid, exit: int, plane_class: String) -> Dicti
 	return _envelope_cells[key]
 
 
-## What `edit` would do to the gates' max_class though it is allowed, for the
-## build ghost (SiteGrid.edit_warning): "Gate A will then take planes up to
-## medium" for each gate whose max_class envelope it builds in, or "".
+## What `edit` would do to the gates though it is allowed, for the build ghost
+## (SiteGrid.edit_warning): "Gate A will then take planes up to medium" for each
+## gate whose max_class envelope it builds in; for removing a desk or exit,
+## where the flights of the gate it ends move ("Blue Fjord to Oslo moves to
+## Gate A", moves_text()). "" when it changes nothing.
 func edit_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
+	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
+		return moves_text(flights, _removal_plan(on_grid, edit.object_id)["moves"], false)
 	if REMOVALS.has(edit.kind):
 		return ""
 	var built := StandEnvelope.edit_cells(edit)
@@ -515,6 +527,29 @@ func edit_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
 ## lost their desk or exit on `on_grid` (earlier edits of the same batch) are
 ## counted as ended too, since their contracts have not moved yet.
 func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
+	var plan := _removal_plan(on_grid, id)
+	var ending: Array[String] = plan["ending"]
+	if ending.is_empty() or flights == null:
+		return null
+	var busy := _live_flights_at(ending)
+	if not busy.is_empty():
+		var refusal := BuildResult.refused(BuildResult.Reason.GATE_IN_USE)
+		refusal.detail = ", ".join(busy)
+		return refusal
+	if not (plan["stuck"] as Array).is_empty():
+		var refusal := BuildResult.refused(BuildResult.Reason.GATE_FLIGHTS_STUCK)
+		var stuck := PackedStringArray()
+		for contract_id: String in plan["stuck"]:
+			stuck.append(FlightLabel.of(flights, false, contract_id))
+		refusal.detail = ", ".join(stuck)
+		return refusal
+	return null
+
+
+## What removing object `id` from `on_grid` does to the gates: {"ending": the
+## gates it ends, "moves", "stuck"} as FlightSim.move_plan() has them for those
+## gates' running contracts. No moves and nothing stuck when no gate ends.
+func _removal_plan(on_grid: BuildGrid, id: int) -> Dictionary:
 	var ending: Array[String] = []
 	var staying: Array[String] = []
 	for binding in bindings:
@@ -524,22 +559,50 @@ func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
 			staying.append(binding["gate"])
 		else:
 			ending.append(binding["gate"])
-	if ending.is_empty() or flights == null:
-		return null
-	var busy := _live_flights_at(ending)
-	if not busy.is_empty():
-		var refusal := BuildResult.refused(BuildResult.Reason.GATE_IN_USE)
-		refusal.detail = ", ".join(busy)
-		return refusal
-	var plan := flights.move_plan(ending, staying)
-	if not (plan["stuck"] as Array).is_empty():
-		var refusal := BuildResult.refused(BuildResult.Reason.GATE_FLIGHTS_STUCK)
-		var stuck := PackedStringArray()
-		for contract_id: String in plan["stuck"]:
-			stuck.append(FlightLabel.of(flights, false, contract_id))
-		refusal.detail = ", ".join(stuck)
-		return refusal
-	return null
+	var plan := {"ending": ending, "moves": {}, "stuck": []}
+	if not ending.is_empty() and flights != null:
+		var moving := flights.move_plan(ending, staying)
+		plan["moves"] = moving["moves"]
+		plan["stuck"] = moving["stuck"]
+	return plan
+
+
+## The moves of a FlightSim.move_plan() in words, one line: "Blue Fjord to Oslo
+## moves to Gate A" for one flight to a gate, "3 flights move to Gate A" for
+## several, gates in letter order, joined by ". ". `past` reads "moved" for the
+## notice after the removal; the preview before it reads "moves". "" with no moves.
+static func moves_text(sim: FlightSim, moves: Dictionary, past: bool) -> String:
+	var by_gate := {}
+	for contract_id: String in moves:
+		var ids: Array = by_gate.get(moves[contract_id], [])
+		ids.append(contract_id)
+		by_gate[moves[contract_id]] = ids
+	var gates := by_gate.keys()
+	gates.sort()
+	var lines := PackedStringArray()
+	for gate: String in gates:
+		var ids: Array = by_gate[gate]
+		if ids.size() == 1:
+			var contract := sim.contract_of(ids[0])
+			var named := "%s to %s" % [contract["airline"], contract["destination"]]
+			lines.append("%s %s to Gate %s" % [named, "moved" if past else "moves", gate])
+		else:
+			lines.append(
+				"%d flights %s to Gate %s" % [ids.size(), "moved" if past else "move", gate]
+			)
+	return ". ".join(lines)
+
+
+## Tells the player, with one notice on the right rail, which flights a removal
+## moved. Without a rail the words are a warning, never passed over silently.
+func _post_moved(text: String) -> void:
+	if not is_instance_valid(alerts) and is_inside_tree():
+		alerts = get_tree().get_first_node_in_group(AlertStack.GROUP) as AlertStack
+	if not is_instance_valid(alerts):
+		push_warning("GateDesks: no alert rail to tell the player: %s" % text)
+		return
+	var card := OfferPanel.coral_card(MOVED_KEY, MOVED_TITLE, text)
+	alerts.post_notice(MOVED_KEY, card, 0.0, MOVED_TITLE, text)
 
 
 ## The live flights at any of `gates` that have not departed, each named by
@@ -688,3 +751,6 @@ func _on_edit_applied(edit: BuildEdit, _result: BuildResult) -> void:
 	if not flights.move_contracts(plan):
 		push_error("GateDesks: the contracts of gates %s could not move: %s" % [ending, plan])
 		assert(false, "GateDesks: a removal that was checked left contracts unmoved")
+		return
+	if not (plan["moves"] as Dictionary).is_empty():
+		_post_moved(moves_text(flights, plan["moves"], true))

@@ -126,5 +126,5 @@ func test_an_unlinked_sign_names_no_room_and_a_blocked_way() -> void:
 	var no_room := GateLinksView.caption_for({"why": GateDesks.Unlinked.NO_ROOM, "gate": ""})
 	var blocked := GateLinksView.caption_for({"why": GateDesks.Unlinked.ROUTE_BLOCKED, "gate": ""})
 	print("signs: '%s', '%s'" % [no_room, blocked])
-	assert_str(no_room).is_equal("Unlinked: no room for a plane outside the exit")
-	assert_str(blocked).is_equal("Unlinked: the way to the taxi lane is blocked")
+	assert_str(no_room).is_equal("Unlinked: no room for a plane")
+	assert_str(blocked).is_equal("Unlinked: way to the lane blocked")
