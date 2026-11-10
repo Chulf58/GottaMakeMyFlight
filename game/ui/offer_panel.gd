@@ -495,7 +495,7 @@ func _in_words(problem: String) -> String:
 	var ran_into := FlightLabel.clash_with(flights, problem)
 	if ran_into != "":
 		return "it clashes with %s" % ran_into
-	if problem.contains("clashes"):
+	if problem.begins_with("contract ") and problem.contains(" clashes with "):
 		push_warning("OfferPanel: unreadable clash refusal from FlightSim: %s" % problem)
 		return "it clashes with another flight"
 	return problem

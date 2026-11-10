@@ -61,7 +61,18 @@ static func preview_price(menu: BuildMenu) -> Vector2i:
 	var net := 0
 	for step in plan:
 		net += BuildTransaction.quote(mode.grid, step).net()
+	if net > 0 and edit.kind == BuildEdit.Kind.REMOVE_OBJECT and _removal_refused(mode, edit):
+		return Vector2i.ZERO
 	return Vector2i(maxi(0, net), maxi(0, BuildTransaction.needed(mode.grid, plan)))
+
+
+## Whether the removal `edit` is refused for a reason of its own (a gate with a
+## flight due), so nothing would be paid and the status line says why. A wallet
+## too short for the wall a door removal leaves behind is not one: that keeps its
+## cost and shortfall.
+static func _removal_refused(mode: BuildMode, edit: BuildEdit) -> bool:
+	var result := mode.check(edit)
+	return not result.ok and result.reason != BuildResult.Reason.CANT_AFFORD
 
 
 ## The price of the room in hand (RoomMoveTool) or of the armed template paste.
